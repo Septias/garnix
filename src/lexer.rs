@@ -1,13 +1,7 @@
-use std::{fs::read_to_string, path::Path};
+//! Lexer for the Nix language.
 
-use log::warn;
 use logos::Logos;
-use std::ops::Range;
-
-use nom::{
-    bytes::complete::is_not, character::complete::char, multi::separated_list0,
-    sequence::delimited, IResult,
-};
+use nom::{Compare, InputIter, InputLength, InputTake};
 
 #[derive(Logos, Debug, PartialEq)]
 #[logos(skip r"[ \t\n\f]+")]
@@ -37,30 +31,66 @@ enum Token {
     Text,
 }
 
-fn parse_file(path: &Path) {
-    let source = read_to_string(path).expect("Failed to read file");
-    let tree = parse(&source);
+pub struct NixTokens<'a>(Vec<(Token, &'a str)>);
+
+impl<'a> InputTake for &NixTokens<'a> {
+    fn take(&self, count: usize) -> Self {
+        todo!()
+    }
+
+    fn take_split(&self, count: usize) -> (Self, Self) {
+        todo!()
+    }
 }
 
-fn parse(source: &str) {
-    lex(source);
+impl<'a> InputLength for &NixTokens<'a> {
+    fn input_len(&self) -> usize {
+        todo!()
+    }
 }
 
-fn lex(source: &str) -> NixTokens {
+impl<'a> InputIter for &NixTokens<'a> {
+    type Item = u8;
+
+    type Iter;
+
+    type IterElem;
+
+    fn iter_indices(&self) -> Self::Iter {
+        todo!()
+    }
+
+    fn iter_elements(&self) -> Self::IterElem {
+        todo!()
+    }
+
+    fn position<P>(&self, predicate: P) -> Option<usize>
+    where
+        P: Fn(Self::Item) -> bool,
+    {
+        todo!()
+    }
+
+    fn slice_index(&self, count: usize) -> Result<usize, nom::Needed> {
+        todo!()
+    }
+}
+
+impl<'a, T> Compare<T> for &NixTokens<'a> {
+    fn compare(&self, t: T) -> nom::CompareResult {
+        todo!()
+    }
+
+    fn compare_no_case(&self, t: T) -> nom::CompareResult {
+        todo!()
+    }
+}
+
+pub fn lex(source: &str) -> NixTokens {
     let mut lex = Token::lexer(source);
     let tokens = lex
         .spanned()
-        .map(|(token, span)| (token, &source[span]))
+        .map(|(token, span)| (token.unwrap(), &source[span]))
         .collect::<Vec<_>>();
     NixTokens(tokens)
 }
-
-fn name_list(input: &str) -> IResult<&str, Vec<&str>> {
-    separated_list0(char(','), is_not("}"))(input)
-}
-
-fn parens(input: &str) -> IResult<&str, &str> {
-    delimited(char('{'), name_list, char('}'))(input)
-}
-
-struct NixTokens(Vec<(Token, Range<usize>)>);
