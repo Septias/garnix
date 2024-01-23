@@ -2,11 +2,16 @@
 
 use std::{fs::read_to_string, path::Path};
 
+use logos::Logos;
 use nom::{
-    bytes::complete::{is_not, tag}, character::complete::char, multi::separated_list0, sequence::delimited, IResult, InputLength, InputTake
+    bytes::complete::{is_not, tag},
+    character::complete::char,
+    multi::separated_list0,
+    sequence::delimited,
+    IResult, InputLength, InputTake,
 };
 
-use crate::lexer::{lex, NixTokens};
+use crate::lexer::{NixTokens, Token};
 
 /// Ast for the the nix language
 #[repr(u8)]
@@ -23,17 +28,13 @@ enum Ast<'a> {
     todo!()
 } */
 
-fn identifier<'src, 'slice>(
-    input: &'slice NixTokens<'src>,
-) -> IResult<&'slice NixTokens<'src>, Ast<'src>> {
+fn identifier<'src, 'slice>(input: NixTokens<'src>) -> IResult<NixTokens<'src>, Ast<'src>> {
     let (input, name) = is_not(r#" \t\n\f"#)(input)?;
     assert!(name.input_len() == 0, "Expected identifier");
     Ok((input, Ast::Identifier(name[0].1)))
 }
 
-fn name_list<'src, 'slice>(
-    input: &'slice NixTokens<'src>,
-) -> IResult<&'slice NixTokens<'src>, Vec<Ast<'src>>> {
+fn name_list<'src, 'slice>(input: NixTokens<'src>) -> IResult<NixTokens<'src>, Vec<Ast<'src>>> {
     separated_list0(char(','), identifier)(input)
 }
 
@@ -44,8 +45,8 @@ fn parse_expr<'src, 'slice>(
 }
 
 fn set_lambda<'src, 'slice>(
-    input: &'slice NixTokens<'src>,
-) -> IResult<&'slice NixTokens<'src>, &'slice NixTokens<'src>> {
+    input: NixTokens<'src>,
+) -> IResult<NixTokens<'src>, &'slice NixTokens<'src>> {
     let (input, names) = name_list(input)?;
     let (input, _) = char(':')(input)?;
     let (input, body) = delimited(char('{'), is_not("}"), char('}'))(input)?;
@@ -61,5 +62,9 @@ pub fn parse_file(path: &Path) {
 
 /// Parse a string containing nix-code.
 pub fn parse(source: &str) {
-    let tokens = lex(source);
+    let mut lex = Token::lexer(source);
+    let tokens = lex
+        .spanned()
+        .map(|(token, span)| (token.unwrap(), &source[span]))
+        .collect::<Vec<_>>();
 }

@@ -32,18 +32,21 @@ pub enum Token {
     Text,
 }
 #[derive(Clone)]
-pub struct NixTokens<'a>(Vec<(Token, &'a str)>);
+pub struct NixTokens<'a>(&'a [(Token, &'a str)]);
 
 mod nom_interop {
     use std::{
-        iter::{Cloned, Enumerate}, ops::Index, slice::Iter
+        iter::{Cloned, Enumerate},
+        ops::{Index, Range},
+        slice::Iter,
     };
 
     use super::{NixTokens, Token};
-    use nom::{InputIter, InputLength, InputTake, Slice, UnspecializedInput};
-    impl<'a> From<&[(Token, &'a str)]> for NixTokens<'a> {
-        fn from(value: &[(Token, &'a str)]) -> Self {
-            todo!()
+    use nom::{InputIter, InputLength, InputTake, Needed, Slice, UnspecializedInput};
+
+    impl<'a> From<&'a [(Token, &'a str)]> for NixTokens<'a> {
+        fn from(value: &'a [(Token, &'a str)]) -> Self {
+            Self(value)
         }
     }
 
@@ -55,62 +58,57 @@ mod nom_interop {
         }
     }
 
-    impl<'a> InputTake for &NixTokens<'a> {
+    impl<'a> InputTake for NixTokens<'a> {
         fn take(&self, count: usize) -> Self {
-            //self.0[..count].to_vec()
-            todo!()
+            Self(&self.0[..count])
         }
 
         fn take_split(&self, count: usize) -> (Self, Self) {
-            todo!()
+            let (l, r) = self.0.split_at(count);
+            (Self(l), Self(r))
         }
     }
 
-    impl<'a, R> Slice<R> for &NixTokens<'a> {
-        fn slice(&self, range: R) -> Self {
-            todo!()
+    impl<'a> Slice<Range<usize>> for NixTokens<'a> {
+        fn slice(&self, range: Range<usize>) -> Self {
+            Self(&self.0[range])
         }
     }
 
-    impl<'a> InputLength for &NixTokens<'a> {
+    impl<'a> InputLength for NixTokens<'a> {
         fn input_len(&self) -> usize {
             self.0.len()
         }
     }
 
-    impl<'a> InputIter for &NixTokens<'a> {
-        type Item = u8;
+    impl<'a> InputIter for NixTokens<'a> {
+        type Item = (Token, &'a str);
         type Iter = Enumerate<Self::IterElem>;
-        type IterElem = Cloned<Iter<'a, u8>>;
+        type IterElem = Cloned<Iter<'a, (Token, &'a str)>>;
 
         fn iter_indices(&self) -> Self::Iter {
-            todo!()
+            self.iter_elements().enumerate()
         }
 
         fn iter_elements(&self) -> Self::IterElem {
-            todo!()
+            self.0.iter().cloned()
         }
 
         fn position<P>(&self, predicate: P) -> Option<usize>
         where
             P: Fn(Self::Item) -> bool,
         {
-            todo!()
+            self.0.iter().position(|b| predicate(*b))
         }
 
         fn slice_index(&self, count: usize) -> Result<usize, nom::Needed> {
-            todo!()
+            if self.0.len() >= count {
+                Ok(count)
+            } else {
+                Err(Needed::new(count - self.0.len()))
+            }
         }
     }
 
-    impl<'a> UnspecializedInput for &NixTokens<'a> {}
-}
-
-pub fn lex(source: &str) -> NixTokens {
-    let mut lex = Token::lexer(source);
-    let tokens = lex
-        .spanned()
-        .map(|(token, span)| (token.unwrap(), &source[span]))
-        .collect::<Vec<_>>();
-    NixTokens(tokens)
+    impl<'a> UnspecializedInput for NixTokens<'a> {}
 }
