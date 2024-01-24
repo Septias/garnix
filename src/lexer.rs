@@ -2,6 +2,7 @@
 //! Lexer for the Nix language.
 
 use logos::Logos;
+use nom::InputTake;
 use std::usize;
 
 #[derive(Clone, Logos, Debug, PartialEq)]
@@ -30,19 +31,33 @@ pub enum Token {
 
     #[regex("[a-zA-Z]+")]
     Text,
+
+    #[token("{")]
+    LBrace,
+
+    #[token("}")]
+    RBrace,
+
+    #[token(",")]
+    Comma,
+
+    WS,
 }
-#[derive(Clone)]
-pub struct NixTokens<'a>(&'a [(Token, &'a str)]);
+#[derive(Copy, Clone)]
+pub struct NixTokens<'a>(pub &'a [(Token, &'a str)]);
 
 mod nom_interop {
     use std::{
         iter::{Cloned, Enumerate},
-        ops::{Index, Range},
+        ops::{Index, Range, RangeFrom},
         slice::Iter,
     };
 
     use super::{NixTokens, Token};
-    use nom::{InputIter, InputLength, InputTake, Needed, Slice, UnspecializedInput};
+    use nom::{
+        FindToken, InputIter, InputLength, InputTake, InputTakeAtPosition, Needed, Slice,
+        UnspecializedInput,
+    };
 
     impl<'a> From<&'a [(Token, &'a str)]> for NixTokens<'a> {
         fn from(value: &'a [(Token, &'a str)]) -> Self {
@@ -75,6 +90,12 @@ mod nom_interop {
         }
     }
 
+    impl<'a> Slice<RangeFrom<usize>> for NixTokens<'a> {
+        fn slice(&self, range: RangeFrom<usize>) -> Self {
+            Self(&self.0[range])
+        }
+    }
+
     impl<'a> InputLength for NixTokens<'a> {
         fn input_len(&self) -> usize {
             self.0.len()
@@ -98,7 +119,7 @@ mod nom_interop {
         where
             P: Fn(Self::Item) -> bool,
         {
-            self.0.iter().position(|b| predicate(*b))
+            self.0.iter().position(|b| predicate(b.clone()))
         }
 
         fn slice_index(&self, count: usize) -> Result<usize, nom::Needed> {
@@ -107,6 +128,12 @@ mod nom_interop {
             } else {
                 Err(Needed::new(count - self.0.len()))
             }
+        }
+    }
+
+    impl<'a> FindToken<(Token, &'a str)> for NixTokens<'a> {
+        fn find_token(&self, token: <NixTokens<'a> as InputIter>::Item) -> bool {
+            todo!()
         }
     }
 
