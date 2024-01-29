@@ -28,6 +28,7 @@
             extensions = ["rust-src" "rustfmt" "rust-docs" "clippy"];
           };
         in {
+          formatter = pkgs.alejandra;
           packages = {
             default = naerskLib.buildPackage {
               inherit name buildInputs nativeBuildInputs;
