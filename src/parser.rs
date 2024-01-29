@@ -12,51 +12,168 @@ use nom::{
     IResult, InputIter, InputLength, InputTake, Slice,
 };
 
-use crate::lexer::{NixTokens, Token::{self, *}};
+use crate::lexer::{
+    nom_interop::token,
+    NixTokens,
+    Token::{self, *},
+};
+
+/// Binary operators of the Nix language ordered by precedence.
+enum BinOp {
+    /// Arithmetic operators
+    Mul,
+    Div,
+
+    Add,
+    Sub,
+
+    /// String & Path operators
+    ConcatString,
+    ConcatPath,
+    ConcatStringPath,
+    ConcatPathString,
+
+    /// Set operators
+    Update,
+
+    /// Comparison operators
+    LessThan,
+    LessThanOrEqual,
+    GreaterThan,
+    GreaterThanOrEqual,
+
+    /// Logical operators
+    Equal,
+    NotEqual,
+    And,
+    Or,
+    Implication,
+}
+
+use BinOp::*;
 
 /// Ast for the the nix language
 #[repr(u8)]
 enum Ast<'a> {
-    Lambda,
-    Application,
+    /// ----------------- Operators -----------------
+    /// No associativity
+    /// Precendence: 1
+    AttributeSelection {
+        /// Attrset
+        set: Box<Ast<'a>>,
+        /// Attrpath
+        attribute: Box<Ast<'a>>,
+        /// or Expr
+        or: Option<Box<Ast<'a>>>,
+    },
+
+    /// Left associativity
+    /// Precendence: 2
+    /// Func expr
+    Application {
+        function: Box<Ast<'a>>,
+        argument: Box<Ast<'a>>,
+    },
+
+    /// No Associativity
+    /// Precendence: 3
+    Negation(Box<Ast<'a>>),
+
+    /// No Associativity
+    /// Precendence: 4
+    HasAttribute {
+        /// Attrset
+        set: Box<Ast<'a>>,
+        /// Attrpath
+        attribute: Box<Ast<'a>>,
+    },
+
+    /// Right associativity
+    /// Precendence: 5
+    ListConcat {
+        lhs: Box<Ast<'a>>,
+        rhs: Box<Ast<'a>>,
+    },
+
+    /// Associativity: Left
+    /// [Mul], [Div] Presedence: 6
+    /// [Sub], [Add], String con, path con Presedence: 7
+    /// -- logical Negation Presedence: 8
+    /// [Update] Presedence: 9
+    /// [LessThan], [LessThanOrEqual], [GreaterThan], [GreaterThanOrEqual] Presedence: 10
+    /// [Equal], [NotEqual] Presedence: 11
+    /// [And] Presedence: 12
+    /// [Or] Presedence: 13
+    /// [Implication]
+    BinOp {
+        op: BinOp,
+        lhs: Box<Ast<'a>>,
+        rhs: Box<Ast<'a>>,
+    },
+
+    /// Associativity: Right
+    /// Precendence: 8
+    LogicalNegation(Box<Ast<'a>>),
+
+    /// ----------------- Lange Constructs -----------------
+
+    /// Attributeset
+    /// rec-attrset = rec { [ name = expr ; ]... }
+    AttrSet {
+        /// A set of attributes
+        attrs: Vec<(&'a str, Ast<'a>)>,
+        is_recursive: bool,
+    },
+     
+    /// Let expression
+    /// let-expr = let [ identifier = expr ; ]... in expr
+    Let {
+        /// A set of bindings
+        bindings: Vec<(&'a str, Ast<'a>)>,
+        /// The expression to evaluate
+        body: Box<Ast<'a>>,
+        /// A list of identifiers to inherit from the parent scope
+        inherit: Option<Vec<&'a str>>,
+    },
+
+    /// Function
+    /// func = pattern: body
+    Lambda {
+        pattern: Box<Ast<'a>>,
+        body: Box<Ast<'a>>,
+        arg_binding: Option<&'a str>,
+    },
+
+    /// Conditional
+    /// if-expr = if expr then expr else expr
+    Conditional {
+        /// The condition to evaluate
+        condition: Box<Ast<'a>>,
+        /// The expression to evaluate if the condition is true
+        then: Box<Ast<'a>>,
+        /// The expression to evaluate if the condition is false
+        else_: Box<Ast<'a>>,
+    },
+
+    Assertion {
+        /// The condition to evaluate
+        condition: Box<Ast<'a>>,
+        /// The expression to evaluate if the condition is true
+        then: Box<Ast<'a>>,
+    },
+
+    With {
+        /// The set to evaluate
+        set: Box<Ast<'a>>,
+        /// The expression to evaluate
+        body: Box<Ast<'a>>,
+    },
+
+    Comment(&'a str),
     Identifier(&'a str),
-    SetLambda(Vec<Ast<'a>>, Box<Ast<'a>>),
-    Text(&'a str),
-    BinOp,
 }
 
-/* fn token(input: &NixTokens) -> IResult<&NixTokens, Ast> {
-    todo!()
-
-pub fn token<NixTokens, Error: ParseError<NixTokens>>(c: char) -> impl Fn(I) -> IResult<NixTokens, char, Error>
-where
-  I: Slice<RangeFrom<usize>> + InputIter,
-  <I as InputIter>::Item: AsChar,
-{
-  move |i: I| match (i).iter_elements().next().map(|t| {
-    let b = t.as_char() == c;
-    (&c, b)
-  }) {
-    Some((c, true)) => Ok((i.slice(c.len()..), c.as_char())),
-    _ => Err(Err::Error(Error::from_char(i, c))),
-  }
-}
-} */
-
-pub fn token<'a, Error: ParseError<NixTokens<'a>>>(
-    c: Token,
-) -> impl Fn(NixTokens<'a>) -> IResult<NixTokens<'a>, (Token, &'a str), Error> {
-    move |i: NixTokens<'_>| match (i).iter_elements().next().map(|t| {
-        let b = t.0 == c;
-        (t, b)
-    }) {
-        Some((c, true)) => Ok((i.slice(1..), c.clone())),
-        _ => Err(nom::Err::Error(Error::from_error_kind(
-            i.clone(),
-            nom::error::ErrorKind::Char,
-        ))),
-    }
-}
+use Ast::*;
 
 /// Parse a single identifier.
 fn identifier<'src, 'slice>(input: NixTokens<'src>) -> IResult<NixTokens<'src>, Ast<'src>> {
@@ -82,7 +199,11 @@ fn set_lambda<'src, 'slice>(
 ) -> IResult<NixTokens<'src>, &'slice NixTokens<'src>> {
     let (input, names) = name_list(input)?;
     let (input, _) = token(DoubleColon)(input)?;
-    let (input, body) = delimited(token(LBrace), is_not(NixTokens(&[(Token::RBrace, "")])), token(RBrace))(input)?;
+    let (input, body) = delimited(
+        token(LBrace),
+        is_not(NixTokens(&[(Token::RBrace, "")])),
+        token(RBrace),
+    )(input)?;
     //Ok((input, Ast::SetLambda(names, Box::new(Ast::Text(body)))))
     todo!()
 }
@@ -95,9 +216,7 @@ fn recursive_set<'src, 'slice>(
 }
 
 /// Parse a set definition
-fn set<'src, 'slice>(
-    input: NixTokens<'src>,
-) -> IResult<NixTokens<'src>, &'slice NixTokens<'src>> {
+fn set<'src, 'slice>(input: NixTokens<'src>) -> IResult<NixTokens<'src>, &'slice NixTokens<'src>> {
     todo!()
 }
 
@@ -105,7 +224,6 @@ fn set<'src, 'slice>(
 fn pattern<'src, 'slice>(
     input: NixTokens<'src>,
 ) -> IResult<NixTokens<'src>, &'slice NixTokens<'src>> {
-
     // Identifier is a pattern
     // A set might be a pattern
     // A set pattern might contain default values

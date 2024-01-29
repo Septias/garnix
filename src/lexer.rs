@@ -62,7 +62,7 @@ pub enum Token {
     #[token("+")]
     Add,
 
-    #[token("-")]
+    #[token("-", priority = 2)]
     Sub,
 
     // Comparisons
@@ -105,7 +105,7 @@ pub enum Token {
     ListConcat,
 
     // Paths
-    #[regex(r#"./|~/|/"#)]
+    #[regex(r#"(./|~/|/)[a-zA-Z/]+"#)]
     Path,
 
     // Patterns
@@ -164,12 +164,16 @@ pub enum Token {
 
     #[token(";")]
     Semi,
+
+    #[token("-", priority = 1)]
+    ArithNegation,
 }
+
 #[derive(Copy, Clone)]
 pub struct NixTokens<'a>(pub &'a [(Token, &'a str)]);
 
 /// Interop between [NixTokens] and nom.
-mod nom_interop {
+pub mod nom_interop {
     use std::{
         iter::{Cloned, Enumerate},
         ops::{Index, Range, RangeFrom},
@@ -178,8 +182,7 @@ mod nom_interop {
 
     use super::{NixTokens, Token};
     use nom::{
-        FindToken, InputIter, InputLength, InputTake, InputTakeAtPosition, Needed, Slice,
-        UnspecializedInput,
+        error::ParseError, FindToken, IResult, InputIter, InputLength, InputTake, InputTakeAtPosition, Needed, Slice, UnspecializedInput
     };
 
     impl<'a> From<&'a [(Token, &'a str)]> for NixTokens<'a> {
@@ -261,4 +264,19 @@ mod nom_interop {
     }
 
     impl<'a> UnspecializedInput for NixTokens<'a> {}
+
+    pub fn token<'a, Error: ParseError<NixTokens<'a>>>(
+        c: Token,
+    ) -> impl Fn(NixTokens<'a>) -> IResult<NixTokens<'a>, (Token, &'a str), Error> {
+        move |i: NixTokens<'_>| match (i).iter_elements().next().map(|t| {
+            let b = t.0 == c;
+            (t, b)
+        }) {
+            Some((c, true)) => Ok((i.slice(1..), c.clone())),
+            _ => Err(nom::Err::Error(Error::from_error_kind(
+                i.clone(),
+                nom::error::ErrorKind::Char,
+            ))),
+        }
+    }
 }
