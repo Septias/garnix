@@ -7,7 +7,7 @@ x: let
     then 1
     else 2;
 
-  ifxlambad = x: y: z:
+  ifxlamba = x: y: z:
     if y
     then x
     else z;
@@ -17,7 +17,7 @@ x: let
 
   bracketing = (1 + 2) * 3;
 in {
-  inherit setfun setIdentFn bracketing ifs ifxlambad;
+  inherit setfun setIdentFn bracketing ifs ifxlamba;
   fun = fun;
   arithm = arithm;
 }

@@ -26,6 +26,9 @@ pub enum Token {
     #[token("/**")]
     DocCommentStart,
 
+    #[token("#")]
+    LineComment,
+
     // Sets
     #[token("...")]
     Dots,
@@ -164,6 +167,12 @@ pub enum Token {
 
     #[token(";")]
     Semi,
+
+    #[token("(")]
+    LParen,
+
+    #[token(")")]
+    RParen,
 
     #[token("-", priority = 1)]
     ArithNegation,

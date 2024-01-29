@@ -1,3 +1,8 @@
+mod ast;
+mod error;
+mod infer;
 mod lexer;
 mod parser;
-mod infer;
+
+#[cfg(test)]
+mod test;
