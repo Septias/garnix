@@ -58,12 +58,14 @@ pub fn token<'a, Error: ParseError<NixTokens<'a>>>(
     }
 }
 
+/// Parse a single identifier.
 fn identifier<'src, 'slice>(input: NixTokens<'src>) -> IResult<NixTokens<'src>, Ast<'src>> {
-    let (input, name) = is_not(NixTokens(&[(Token::WS, "")]))(input)?;
-    assert!(name.input_len() != 0, "Expected identifier");
-    Ok((input, Ast::Identifier(name[0].1)))
+    let (input, (_, name)) = token(Text)(input)?;
+    assert!(name.len() != 0, "Expected identifier");
+    Ok((input, Ast::Identifier(name)))
 }
 
+/// Parse a list of identifiers.
 fn name_list<'src, 'slice>(input: NixTokens<'src>) -> IResult<NixTokens<'src>, Vec<Ast<'src>>> {
     separated_list0(token(Comma), identifier)(input)
 }
@@ -74,6 +76,7 @@ fn parse_expr<'src, 'slice>(
     todo!()
 }
 
+/// Parse a set lambda.
 fn set_lambda<'src, 'slice>(
     input: NixTokens<'src>,
 ) -> IResult<NixTokens<'src>, &'slice NixTokens<'src>> {
@@ -81,6 +84,38 @@ fn set_lambda<'src, 'slice>(
     let (input, _) = token(DoubleColon)(input)?;
     let (input, body) = delimited(token(LBrace), is_not(NixTokens(&[(Token::RBrace, "")])), token(RBrace))(input)?;
     //Ok((input, Ast::SetLambda(names, Box::new(Ast::Text(body)))))
+    todo!()
+}
+
+/// Parse a recursive set definition.
+fn recursive_set<'src, 'slice>(
+    input: NixTokens<'src>,
+) -> IResult<NixTokens<'src>, &'slice NixTokens<'src>> {
+    todo!()
+}
+
+/// Parse a set definition
+fn set<'src, 'slice>(
+    input: NixTokens<'src>,
+) -> IResult<NixTokens<'src>, &'slice NixTokens<'src>> {
+    todo!()
+}
+
+/// Parse a pattern.
+fn pattern<'src, 'slice>(
+    input: NixTokens<'src>,
+) -> IResult<NixTokens<'src>, &'slice NixTokens<'src>> {
+
+    // Identifier is a pattern
+    // A set might be a pattern
+    // A set pattern might contain default values
+    todo!()
+}
+
+/// Parse a lambda function.
+fn lambda<'src, 'slice>(
+    input: NixTokens<'src>,
+) -> IResult<NixTokens<'src>, &'slice NixTokens<'src>> {
     todo!()
 }
 

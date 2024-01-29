@@ -1,2 +1,2 @@
-- Use const generics everywher
-- Add rowan
+- String interpolation
+- Nested Set definitions

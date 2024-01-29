@@ -5,23 +5,20 @@ use logos::Logos;
 use nom::InputTake;
 use std::usize;
 
+/// All tokens from the Nix language.
 #[derive(Clone, Logos, Debug, PartialEq)]
 #[logos(skip r"[ \t\n\f]+")]
 pub enum Token {
+    // Let Bindings
     #[token("let")]
     Let,
 
     #[token("in")]
     In,
 
+    // Comments
     #[token("/*")]
     CommentStart,
-
-    #[token("...")]
-    Dots,
-
-    #[token(":")]
-    DoubleColon,
 
     #[token("*/")]
     CommentEnd,
@@ -29,8 +26,9 @@ pub enum Token {
     #[token("/**")]
     DocCommentStart,
 
-    #[regex("[a-zA-Z]+")]
-    Text,
+    // Sets
+    #[token("...")]
+    Dots,
 
     #[token("{")]
     LBrace,
@@ -38,14 +36,139 @@ pub enum Token {
     #[token("}")]
     RBrace,
 
+    #[token(".")]
+    Dot,
+
     #[token(",")]
     Comma,
 
-    WS,
+    #[token("//")]
+    Update,
+
+    #[token("inherit")]
+    Inherit,
+
+    // Lambdas
+    #[token(":")]
+    DoubleColon,
+
+    // Arith Operators
+    #[token("*")]
+    Mul,
+
+    #[token("/")]
+    Div,
+
+    #[token("+")]
+    Add,
+
+    #[token("-")]
+    Sub,
+
+    // Comparisons
+    #[token("<")]
+    LessThan,
+
+    #[token(">")]
+    GreaterThan,
+
+    #[token("<=")]
+    LessThanEqual,
+
+    #[token(">=")]
+    GreaterThanEqual,
+
+    #[token("==")]
+    Equal,
+
+    #[token("!=")]
+    NotEqual,
+
+    // Boolean Operators
+    #[token("&&")]
+    And,
+
+    #[token("||")]
+    Or,
+
+    #[token("!")]
+    Not,
+
+    // Lists
+    #[token("[")]
+    LBracket,
+
+    #[token("]")]
+    RBracket,
+
+    #[token("++")]
+    ListConcat,
+
+    // Paths
+    #[regex(r#"./|~/|/"#)]
+    Path,
+
+    // Patterns
+    #[token("@")]
+    At,
+
+    #[token("?")]
+    Default,
+
+    // Conditionals
+    #[token("if")]
+    If,
+
+    #[token("then")]
+    Then,
+
+    #[token("else")]
+    Else,
+
+    // Booleans
+    #[token("true")]
+    True,
+
+    #[token("false")]
+    False,
+
+    // Strings
+    #[token("''")]
+    MultiString,
+
+    #[token("\"")]
+    SingleString,
+
+    // Literals
+    #[token("null")]
+    Null,
+
+    #[token("rec")]
+    Rec,
+
+    #[token("import")]
+    Import,
+
+    #[token("assert")]
+    Assert,
+
+    #[token("with")]
+    With,
+
+    #[regex(r"-?[0-9]+")]
+    Number,
+
+    // Misc
+    #[regex("[a-zA-Z]+")]
+    Text,
+
+    #[token(";")]
+    Semi,
 }
 #[derive(Copy, Clone)]
 pub struct NixTokens<'a>(pub &'a [(Token, &'a str)]);
 
+/// Interop between [NixTokens] and nom.
 mod nom_interop {
     use std::{
         iter::{Cloned, Enumerate},
