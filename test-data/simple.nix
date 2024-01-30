@@ -13,7 +13,7 @@ x: let
     else z;
 
   setfun = {}: {};
-  setIdentFn = x: {y}: x + y;
+  setIdentFn = x: {y, { b }}: x + y;
 
   bracketing = (1 + 2) * 3;
 in {

@@ -178,7 +178,7 @@ pub enum Token {
     ArithNegation,
 }
 
-#[derive(Copy, Clone)]
+#[derive(Debug, Copy, Clone)]
 pub struct NixTokens<'a>(pub &'a [(Token, &'a str)]);
 
 /// Interop between [NixTokens] and nom.
@@ -191,7 +191,8 @@ pub mod nom_interop {
 
     use super::{NixTokens, Token};
     use nom::{
-        error::ParseError, FindToken, IResult, InputIter, InputLength, InputTake, InputTakeAtPosition, Needed, Slice, UnspecializedInput
+        error::ParseError, FindToken, IResult, InputIter, InputLength, InputTake,
+        InputTakeAtPosition, Needed, Slice, UnspecializedInput,
     };
 
     impl<'a> From<&'a [(Token, &'a str)]> for NixTokens<'a> {

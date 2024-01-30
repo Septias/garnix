@@ -10,7 +10,7 @@ use nom::{
     combinator::opt,
     error::ParseError,
     multi::{many0, many1, separated_list0, separated_list1},
-    sequence::{delimited, pair, tuple},
+    sequence::{delimited, pair, tuple, Tuple},
     IResult, InputIter, InputLength, InputTake, Parser, Slice,
 };
 
@@ -23,55 +23,55 @@ use crate::{
     },
 };
 
-type PResult<'a, R> = IResult<NixTokens<'a>, R>;
+pub type PResult<'a, R> = IResult<NixTokens<'a>, R>;
 
 /// Parse a single identifier.
 fn ident<'a>(input: NixTokens<'a>) -> PResult<'a, Ast<'a>> {
-    let (input, (_, name)) = token(Text)(input)?;
-    Ok((input, Ast::Identifier(name)))
+    token(Text)
+        .map(|(_, name)| Ast::Identifier(name))
+        .parse(input)
 }
 
-/// Parse a single identifier with given default valueo.
+/// Parse a single identifier with given default value.
 fn identifier_w_default<'a>(input: NixTokens<'a>) -> PResult<'a, Ast<'a>> {
-    let (input, (_, name)) = token(Text)(input)?;
-    Ok((input, Ast::Identifier(name)))
+    tuple((ident, token(Default), expr))
+        .map(|(ident, _, expr)| IdentifierWDefault(ident.to_string(), Box::new(expr)))
+        .parse(input)
 }
 
 /// Parse a set pattern.
 /// - Default values
+/// - Recursive set patterns
 fn set_pattern<'a>(input: NixTokens<'a>) -> PResult<'a, Ast<'a>> {
     let element = alt((ident, identifier_w_default, set_pattern));
     let elements = separated_list1(token(Comma), element);
     let has_dots = opt(token(Dots)).map(|a| a.is_some());
-    let (input, (_, elems, has_dots, _)) =
-        tuple((token(LBrace), elements, has_dots, token(RBrace)))(input)?;
-    Ok((
-        input,
-        Pattern {
+    tuple((token(LBrace), elements, has_dots, token(RBrace)))
+        .map(|(_, elems, has_dots, _)| Pattern {
             patterns: elems,
             is_wildcard: has_dots,
-        },
-    ))
+        })
+        .parse(input)
 }
 
-/// Parse a pattern
+/// Parse a pattern.
 /// pattern = identifier | set-pattern
 fn pattern<'a>(input: NixTokens<'a>) -> PResult<'a, Ast<'a>> {
     alt((ident, set_pattern))(input)
 }
 
+/// Parse the body of a lambda expression.
 fn body<'a>(input: NixTokens<'a>) -> PResult<'a, Ast<'a>> {
     //delimited(token(LBrace), f, token(RBrace))(input)
     todo!()
 }
 
 /// Parse a set lambda.
-/// TODO: Clean up binding taking
 fn set_lambda<'a>(input: NixTokens<'a>) -> PResult<Ast<'a>> {
     let (input, (binding1, pattern, binding2)) = tuple((
-        opt(pair(ident, token(At))),
+        opt(pair(ident, token(At)).map(|(ident, _)| ident.to_string())),
         pattern,
-        opt(pair(token(At), ident)),
+        opt(pair(token(At), ident).map(|(_, ident)| ident.to_string())),
     ))(input)?;
 
     let (input, _) = token(DoubleColon)(input)?;
@@ -83,15 +83,12 @@ fn set_lambda<'a>(input: NixTokens<'a>) -> PResult<Ast<'a>> {
         "double bindings are not allowed"
     );
 
-    // swap
-    let binding2 = binding2.map(|(a, b)| (b, a));
-
     Ok((
         input,
         Lambda {
             pattern: Box::new(pattern),
             body: Box::new(body),
-            arg_binding: binding1.or(binding2).map(|(_, (_, name))| name),
+            arg_binding: binding1.or(binding2),
         },
     ))
 }
@@ -109,12 +106,7 @@ fn rec_set<'a>(input: NixTokens<'a>) -> PResult<'a, Ast<'a>> {
     })
 }
 
-/// Parse an expression.
-fn expr<'a>(input: NixTokens<'a>) -> PResult<'a, Ast<'a>> {
-    todo!()
-}
-
-/// Parse a set definition
+/// Parse a none-recursive set definition.
 fn non_rec_set<'a>(input: NixTokens<'a>) -> PResult<'a, HashMap<&str, Ast<'a>>> {
     let assigment = tuple((ident, token(Equal), expr));
     delimited(
@@ -123,14 +115,15 @@ fn non_rec_set<'a>(input: NixTokens<'a>) -> PResult<'a, HashMap<&str, Ast<'a>>> 
         token(RBrace),
     )
     .map(|assignments| {
-        assignments.into_iter()
+        assignments
+            .into_iter()
             .map(|((ident, _, expr), _)| (ident.to_string(), expr))
             .collect()
     })
     .parse(input)
 }
 
-/// Parse a none-recursive set definition.
+/// Parse a set definition.
 fn set<'a>(input: NixTokens<'a>) -> PResult<'a, Ast<'a>> {
     let (input, is_recursive) = opt(token(Rec)).map(|a| a.is_some()).parse(input)?;
     non_rec_set
@@ -174,17 +167,7 @@ fn if_else<'a>(input: NixTokens<'a>) -> PResult<'a, Ast<'a>> {
         .parse(input)
 }
 
-/// Parse a file containing nix-code.
-pub fn parse_file(path: &Path) {
-    let source = read_to_string(path).expect("Failed to read file");
-    let tree = parse(&source);
-}
-
-/// Parse a string containing nix-code.
-pub fn parse(source: &str) {
-    let mut lex = Token::lexer(source);
-    let tokens = lex
-        .spanned()
-        .map(|(token, span)| (token.unwrap(), &source[span]))
-        .collect::<Vec<_>>();
+/// Parse an expression.
+pub fn expr<'a, 'b>(input: NixTokens<'a>) -> PResult<'a, Ast<'a>> {
+    todo!()
 }

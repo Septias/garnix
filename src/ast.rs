@@ -168,14 +168,13 @@ pub enum Ast<'a> {
     DocComment(&'a str),
     LineComment(&'a str),
     Identifier(&'a str),
-    IndetifierWDefault(&'a str, Box<Ast<'a>>),
+    IdentifierWDefault(&'a str, Box<Ast<'a>>),
     Boolean(bool),
     Integer(i64),
     Float(f64),
     String(&'a str),
     Path(&'a str),
     Null,
-    
 }
 
 impl<'a> Ast<'a> {
