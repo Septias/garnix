@@ -160,7 +160,7 @@ pub enum Ast<'a> {
         body: Box<Ast<'a>>,
     },
 
-
+    IdentifierWDefault(&'a str, Box<Ast<'a>>),
 
     /// ----------------- Literals -----------------
 
@@ -168,12 +168,11 @@ pub enum Ast<'a> {
     DocComment(&'a str),
     LineComment(&'a str),
     Identifier(&'a str),
-    IdentifierWDefault(&'a str, Box<Ast<'a>>),
     Boolean(bool),
-    Integer(i64),
-    Float(f64),
-    String(&'a str),
-    Path(&'a str),
+    Integer(i32),
+    Float(f32),
+    NixString(&'a str),
+    NixPath(&'a str),
     Null,
 }
 

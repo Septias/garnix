@@ -7,10 +7,10 @@ use nom::{
     branch::alt,
     bytes::complete::{is_not, tag},
     character::complete::char,
-    combinator::opt,
-    error::ParseError,
+    combinator::{opt, success},
+    error::{ParseError, VerboseError},
     multi::{many0, many1, separated_list0, separated_list1},
-    sequence::{delimited, pair, tuple, Tuple},
+    sequence::{delimited, pair, preceded, terminated, tuple, Tuple},
     IResult, InputIter, InputLength, InputTake, Parser, Slice,
 };
 
@@ -19,7 +19,10 @@ use crate::{
     lexer::{
         nom_interop::token,
         NixTokens,
-        Token::{self, *},
+        Token::{
+            self, At, Comma, Default, Dots, DoubleColon, Else, Equal, If, LBrace, Minus, RBrace,
+            Rec, Semi, Text, Then,
+        },
     },
 };
 
@@ -42,6 +45,7 @@ fn identifier_w_default<'a>(input: NixTokens<'a>) -> PResult<'a, Ast<'a>> {
 /// Parse a set pattern.
 /// - Default values
 /// - Recursive set patterns
+/// TODO: no recursive set patterns
 fn set_pattern<'a>(input: NixTokens<'a>) -> PResult<'a, Ast<'a>> {
     let element = alt((ident, identifier_w_default, set_pattern));
     let elements = separated_list1(token(Comma), element);
@@ -69,9 +73,9 @@ fn body<'a>(input: NixTokens<'a>) -> PResult<'a, Ast<'a>> {
 /// Parse a set lambda.
 fn set_lambda<'a>(input: NixTokens<'a>) -> PResult<Ast<'a>> {
     let (input, (binding1, pattern, binding2)) = tuple((
-        opt(pair(ident, token(At)).map(|(ident, _)| ident.to_string())),
+        opt(terminated(ident, token(At))),
         pattern,
-        opt(pair(token(At), ident).map(|(_, ident)| ident.to_string())),
+        opt(preceded(token(At), ident)),
     ))(input)?;
 
     let (input, _) = token(DoubleColon)(input)?;
@@ -88,7 +92,7 @@ fn set_lambda<'a>(input: NixTokens<'a>) -> PResult<Ast<'a>> {
         Lambda {
             pattern: Box::new(pattern),
             body: Box::new(body),
-            arg_binding: binding1.or(binding2),
+            arg_binding: binding1.or(binding2).map(|a| a.to_string()),
         },
     ))
 }
@@ -165,6 +169,23 @@ fn if_else<'a>(input: NixTokens<'a>) -> PResult<'a, Ast<'a>> {
             expr2: Box::new(expr2),
         })
         .parse(input)
+}
+
+/// Parse a literal.
+fn parse_literal<'a>(input: NixTokens<'a>) -> PResult<'a, Ast<'a>> {
+    alt((
+        token(Token::Integer(12)).map(|(token, _)| Integer(token.as_i32().unwrap())),
+        token(Token::Float(12.0)).map(|(token, _)| Float(token.as_f32().unwrap())),
+        token(Token::Boolean(true)).map(|(token, _)| Boolean(token.as_bool().unwrap())),
+        token(Token::Null).map(|_| Null),
+        token(Token::Comment).map(|(_, comment)| Comment(comment)),
+        token(Token::DocComment).map(|(_, comment)| DocComment(comment)),
+        token(Token::LineComment).map(|(_, comment)| LineComment(comment)),
+        token(Token::SingleString).map(|(_, string)| NixString(string)),
+        // TODO: concatenate string
+        token(Token::MultiString).map(|(_, string)| NixString(string)),
+        token(Token::Path).map(|(_, path)| NixPath(path)),
+    ))(input)
 }
 
 /// Parse an expression.

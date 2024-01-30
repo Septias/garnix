@@ -17,16 +17,13 @@ pub enum Token {
     In,
 
     // Comments
-    #[token("/*")]
-    CommentStart,
+    #[regex(r"/\*.*\*/")]
+    Comment,
 
-    #[token("*/")]
-    CommentEnd,
+    #[regex(r"/\*\*.*\*/")]
+    DocComment,
 
-    #[token("/**")]
-    DocCommentStart,
-
-    #[token("#")]
+    #[regex(r"#.*\n")]
     LineComment,
 
     // Sets
@@ -64,9 +61,6 @@ pub enum Token {
 
     #[token("+")]
     Add,
-
-    #[token("-", priority = 2)]
-    Sub,
 
     // Comparisons
     #[token("<")]
@@ -108,7 +102,7 @@ pub enum Token {
     ListConcat,
 
     // Paths
-    #[regex(r#"(./|~/|/)[a-zA-Z/]+"#)]
+    #[regex("(./|~/|/)[a-zA-Z/]+")]
     Path,
 
     // Patterns
@@ -129,17 +123,14 @@ pub enum Token {
     Else,
 
     // Booleans
-    #[token("true")]
-    True,
-
-    #[token("false")]
-    False,
+    #[token("(true)|(false)", |lex| lex.slice() == "true")]
+    Boolean(bool),
 
     // Strings
-    #[token("''")]
+    #[regex("''.*''")]
     MultiString,
 
-    #[token("\"")]
+    #[regex(r#"".*""#)]
     SingleString,
 
     // Literals
@@ -158,8 +149,11 @@ pub enum Token {
     #[token("with")]
     With,
 
-    #[regex(r"-?[0-9]+")]
-    Number,
+    #[regex(r"-?[0-9]+", |lex| lex.slice().parse().ok())]
+    Integer(i32),
+
+    #[regex(r"-?[0-9]{0, 1}\.[0-9]+", |lex| lex.slice().parse().ok())]
+    Float(f32),
 
     // Misc
     #[regex("[a-zA-Z]+")]
@@ -174,8 +168,31 @@ pub enum Token {
     #[token(")")]
     RParen,
 
-    #[token("-", priority = 1)]
-    ArithNegation,
+    #[token("-")]
+    Minus,
+}
+
+impl Token {
+    pub fn as_i32(&self) -> Option<i32> {
+        match self {
+            Self::Integer(n) => Some(*n),
+            _ => None,
+        }
+    }
+
+    pub fn as_f32(&self) -> Option<f32> {
+        match self {
+            Self::Float(n) => Some(*n),
+            _ => None,
+        }
+    }
+
+    pub fn as_bool(&self) -> Option<bool> {
+        match self {
+            Self::Boolean(b) => Some(*b),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Debug, Copy, Clone)]

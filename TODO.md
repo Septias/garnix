@@ -1,3 +1,4 @@
 - String interpolation
-- Nested Set definitions
 - fix livetimes for parse return
+- Add verbose error
+- Add error handling
