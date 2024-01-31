@@ -202,6 +202,7 @@ pub struct NixTokens<'a>(pub &'a [(Token, &'a str)]);
 pub mod nom_interop {
     use std::{
         iter::{Cloned, Enumerate},
+        mem::discriminant,
         ops::{Index, Range, RangeFrom},
         slice::Iter,
     };
@@ -286,7 +287,10 @@ pub mod nom_interop {
 
     impl<'a> FindToken<(Token, &'a str)> for NixTokens<'a> {
         fn find_token(&self, token: <NixTokens<'a> as InputIter>::Item) -> bool {
-            todo!()
+            let token_disc = discriminant(&token.0);
+            self.0
+                .iter()
+                .fold(false, |acc, (token, _)| discriminant(token) == token_disc || acc)
         }
     }
 
