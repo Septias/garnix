@@ -12,8 +12,11 @@
     if y
     then x else z;
 
+  x = {};
   setfun = {}: {};
+  setInherit = {}: {inherit x;};
   setIdentFn = x: {y}: x + y;
+  settest = x.${x.y or ""};
   set = x: x.0 <- 0;
   string = "
   
@@ -26,7 +29,7 @@
   /* */
   bracketing = (1 + 2) * 3;
 in {
-  inherit setfun setIdentFn bracketing ifs ifxlamba string stringMulti t;
+  inherit setfun setIdentFn bracketing ifs ifxlamba string stringMulti t x set setInherit settest;
   fun = fun;
   arithm = arithm;
 }

@@ -20,8 +20,8 @@ use crate::{
         nom_interop::token,
         NixTokens,
         Token::{
-            self, At, Comma, Default, Dots, DoubleColon, Else, Equal, If, LBrace, Minus, RBrace,
-            Rec, Semi, Text, Then,
+            self, At, Comma, Default, Dots, DoubleColon, Else, Equal, If, In, Inherit, LBrace, Let,
+            Minus, RBrace, Rec, Semi, Text, Then,
         },
     },
 };
@@ -83,7 +83,7 @@ pub(crate) fn statement<'a>(input: NixTokens<'a>) -> PResult<'a, (&'a str, Ast<'
 }
 
 /// Parse a set definition.
-fn set<'a>(input: NixTokens<'a>) -> PResult<'a, Ast<'a>> {
+pub(crate) fn set<'a>(input: NixTokens<'a>) -> PResult<'a, Ast<'a>> {
     let (input, is_recursive) = opt(token(Rec)).map(|a| a.is_some()).parse(input)?;
     delimited(
         token(LBrace),
@@ -96,6 +96,7 @@ fn set<'a>(input: NixTokens<'a>) -> PResult<'a, Ast<'a>> {
 }
 
 /// Parse a lambda function.
+/// lambda = ?
 pub(crate) fn lambda<'a>(input: NixTokens<'a>) -> PResult<'a, Ast<'a>> {
     let patterns = many1(terminated(pattern, token(DoubleColon)));
     pair(patterns, expr)
@@ -108,6 +109,7 @@ pub(crate) fn lambda<'a>(input: NixTokens<'a>) -> PResult<'a, Ast<'a>> {
 }
 
 /// Parse a conditional.
+/// conditional = if expr then expr else expr
 pub(crate) fn conditional<'a>(input: NixTokens<'a>) -> PResult<'a, Ast<'a>> {
     tuple((token(If), expr, token(Then), expr, token(Else), expr))
         .map(|(_, condition, _, expr1, _, expr2)| Conditional {
@@ -119,6 +121,7 @@ pub(crate) fn conditional<'a>(input: NixTokens<'a>) -> PResult<'a, Ast<'a>> {
 }
 
 /// Parse an assertion.
+/// assert = assert expr;
 pub(crate) fn assert<'a>(input: NixTokens<'a>) -> PResult<'a, Ast<'a>> {
     tuple((token(Token::Assert), expr, token(Token::Semi)))
         .map(|(_, condition, _)| Assertion {
@@ -128,10 +131,48 @@ pub(crate) fn assert<'a>(input: NixTokens<'a>) -> PResult<'a, Ast<'a>> {
         .parse(input)
 }
 
+fn inherit<'a>(input: NixTokens<'a>) -> PResult<'a, Vec<Ast<'a>>> {
+    delimited(token(Inherit), many0(ident), token(Semi))(input)
+}
+
 /// Parse a let binding.
-/// let-expr = let [ identifier = expr ; ]... in expr
+/// let-expr = let [ identifier = expr ; with ;]... in expr
 pub(crate) fn let_binding<'a>(input: NixTokens<'a>) -> PResult<'a, Ast<'a>> {
-    todo!()
+    pair(
+        token(Let),
+        cut(pair(
+            many0(alt((
+                statement.map(|(name, ast)| vec![(name, ast)]),
+                inherit.map(|items| {
+                    items
+                        .into_iter()
+                        .map(|ast| (ast.to_string(), ast))
+                        .collect()
+                }),
+            ))),
+            preceded(token(In), set),
+        )),
+    )
+    .map(|(_, (bindings, body))| LetBinding {
+        bindings: bindings.into_iter().flatten().collect(),
+        body: Box::new(body),
+        inherit: None,
+    })
+    .parse(input)
+}
+
+/// Parse a with-statement.
+/// with-expr = with ident ; expr
+pub(crate) fn with<'a>(input: NixTokens<'a>) -> PResult<'a, Ast<'a>> {
+    preceded(
+        token(Token::With),
+        cut(pair(terminated(ident, token(Semi)), expr)),
+    )
+    .map(|(set, body)| With {
+        set: Box::new(set),
+        body: Box::new(body),
+    })
+    .parse(input)
 }
 
 /// Parse a literal.
