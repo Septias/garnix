@@ -149,10 +149,10 @@ pub enum Token {
     #[token("with")]
     With,
 
-    #[regex(r"-?[0-9]+", |lex| lex.slice().parse().ok())]
+    #[regex(r"[0-9]+", |lex| lex.slice().parse().ok())]
     Integer(i32),
 
-    #[regex(r"-?[0-9]{0, 1}\.[0-9]+", |lex| lex.slice().parse().ok())]
+    #[regex(r"[0-9]{0, 1}\.[0-9]+", |lex| lex.slice().parse().ok())]
     Float(f32),
 
     // Misc
