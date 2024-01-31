@@ -1,7 +1,10 @@
 //! Abstract syntax tree for the nix language.
 #![allow(unused)]
 
-use std::{collections::HashMap, hash::Hash};
+use std::{
+    collections::{HashMap, HashSet},
+    hash::Hash,
+};
 
 /// Binary operators of the Nix language ordered by precedence.
 pub enum BinOp {
@@ -33,6 +36,20 @@ pub enum BinOp {
     And,
     Or,
     Implication,
+}
+
+pub enum PatternElement<'a> {
+    /// Pattern of the form `ident`
+    Identifier(&'a str),
+    /// Pattern of the form `ident ? <default>`
+    DefaultIdentifier(&'a str, Ast<'a>),
+}
+
+pub struct Pattern<'a> {
+    /// A list of patterns
+    pub patterns: Vec<PatternElement<'a>>,
+    /// Is widcard
+    pub is_wildcard: bool,
 }
 
 /// Ast for the the nix language
@@ -98,10 +115,10 @@ pub enum Ast<'a> {
     /// Precendence: 8
     LogicalNegation(Box<Ast<'a>>),
 
-    /// ----------------- Lange Constructs -----------------
+    /// ----------------- Language Constructs -----------------
 
     /// Attributeset
-    /// rec-attrset = rec { [ name = expr ; ]... }
+    /// parsed by [crate::parser::rec_set]
     AttrSet {
         /// A set of attributes
         attrs: HashMap<&'a str, (Ast<'a>)>,
@@ -109,7 +126,7 @@ pub enum Ast<'a> {
     },
 
     /// Let expression
-    /// let-expr = let [ identifier = expr ; ]... in expr
+    /// parsed by [crate::parser::let_binding]
     Let {
         /// A set of bindings
         bindings: Vec<(&'a str, Ast<'a>)>,
@@ -121,22 +138,16 @@ pub enum Ast<'a> {
 
     /// Function
     /// func = pattern: body
+    /// parsed by [crate::parser::lambda]
     Lambda {
-        pattern: Box<Ast<'a>>,
+        arguments: Vec<Pattern<'a>>,
         body: Box<Ast<'a>>,
         arg_binding: Option<&'a str>,
     },
 
-    /// Pattern
-    Pattern {
-        /// A list of patterns
-        patterns: Vec<Ast<'a>>,
-        /// Is widcard
-        is_wildcard: bool,
-    },
-
     /// Conditional
     /// if-expr = if expr then expr else expr
+    /// parsed by [crate::parser::conditional]
     Conditional {
         /// The condition to evaluate
         condition: Box<Ast<'a>>,
@@ -146,6 +157,9 @@ pub enum Ast<'a> {
         expr2: Box<Ast<'a>>,
     },
 
+    /// An assert statement.
+    /// assert-expr = assert expr [ ; expr ]
+    /// parsed by [crate::parser::assert]
     Assertion {
         /// The condition to evaluate
         condition: Box<Ast<'a>>,
@@ -153,6 +167,7 @@ pub enum Ast<'a> {
         then: Box<Ast<'a>>,
     },
 
+    /// A with-statement.
     With {
         /// The set to evaluate
         set: Box<Ast<'a>>,
@@ -160,10 +175,7 @@ pub enum Ast<'a> {
         body: Box<Ast<'a>>,
     },
 
-    IdentifierWDefault(&'a str, Box<Ast<'a>>),
-
     /// ----------------- Literals -----------------
-
     Comment(&'a str),
     DocComment(&'a str),
     LineComment(&'a str),

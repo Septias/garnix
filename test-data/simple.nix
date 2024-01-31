@@ -1,6 +1,6 @@
 # Set lambda
 
-{}: let
+{path }: let
   fun = x: x;
   arithm = x: y: (x + y) * 3;
   ifs =
@@ -10,11 +10,11 @@
 
   ifxlamba = x: y: z:
     if y
-    then x
-    else z;
+    then x else z;
 
   setfun = {}: {};
   setIdentFn = x: {y}: x + y;
+  set = x: x.0 <- 0;
   string = "
   
   ";
@@ -26,7 +26,7 @@
   /* */
   bracketing = (1 + 2) * 3;
 in {
-  inherit setfun setIdentFn bracketing ifs ifxlamba string stringMulti;
+  inherit setfun setIdentFn bracketing ifs ifxlamba string stringMulti t;
   fun = fun;
   arithm = arithm;
 }
