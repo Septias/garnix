@@ -24,7 +24,6 @@ pub struct Pattern<'a> {
 
 /// Binary operators of the Nix language ordered by precedence.
 pub enum BinOp {
-
     /// Precedence: 1
     AttributeFallback,
 
@@ -163,7 +162,7 @@ pub enum Ast<'a> {
 
     /// ----------------- Literals -----------------
     Identifier(&'a str),
-    
+
     /// Primitives
     NixString(&'a str),
     NixPath(&'a str),
@@ -179,7 +178,7 @@ pub enum Ast<'a> {
 }
 
 impl<'a> Ast<'a> {
-    pub fn to_string(&self) -> &'a str {
+    pub fn as_str(&self) -> &'a str {
         match &self {
             Self::Identifier(s) => s,
             _ => "",

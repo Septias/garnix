@@ -38,7 +38,7 @@ fn ident<'a>(input: NixTokens<'a>) -> PResult<'a, Ast<'a>> {
 /// Parse an identifier with a default value.
 fn ident_default_pattern<'a>(input: NixTokens<'a>) -> PResult<'a, PatternElement<'a>> {
     tuple((ident, token(Default), cut(expr)))
-        .map(|(ident, _, expr)| PatternElement::DefaultIdentifier(ident.to_string(), expr))
+        .map(|(ident, _, expr)| PatternElement::DefaultIdentifier(ident.as_str(), expr))
         .parse(input)
 }
 
@@ -47,7 +47,7 @@ fn set_pattern<'a>(input: NixTokens<'a>) -> PResult<'a, Pattern<'a>> {
     let elements = separated_list1(
         token(Comma),
         alt((
-            ident.map(|ast| PatternElement::Identifier(ast.to_string())),
+            ident.map(|ast| PatternElement::Identifier(ast.as_str())),
             ident_default_pattern,
         )),
     );
@@ -65,8 +65,8 @@ fn set_pattern<'a>(input: NixTokens<'a>) -> PResult<'a, Pattern<'a>> {
 pub(crate) fn pattern<'a>(input: NixTokens<'a>) -> PResult<'a, Pattern<'a>> {
     alt((
         ident.map(|ast| Pattern {
-            patterns: todo!(),
-            is_wildcard: todo!(),
+            patterns: vec![PatternElement::Identifier(ast.as_str())],
+            is_wildcard: false,
         }),
         set_pattern,
     ))(input)
@@ -75,11 +75,7 @@ pub(crate) fn pattern<'a>(input: NixTokens<'a>) -> PResult<'a, Pattern<'a>> {
 /// Parse a single statement.
 /// ident = expr;
 pub(crate) fn statement<'a>(input: NixTokens<'a>) -> PResult<'a, (&'a str, Ast<'a>)> {
-    pair(
-        ident.map(|ast| ast.to_string()),
-        preceded(token(Equal), expr),
-    )
-    .parse(input)
+    pair(ident.map(|ast| ast.as_str()), preceded(token(Equal), expr)).parse(input)
 }
 
 /// Parse a set definition.
@@ -143,12 +139,7 @@ pub(crate) fn let_binding<'a>(input: NixTokens<'a>) -> PResult<'a, Ast<'a>> {
         cut(pair(
             many0(alt((
                 statement.map(|(name, ast)| vec![(name, ast)]),
-                inherit.map(|items| {
-                    items
-                        .into_iter()
-                        .map(|ast| (ast.to_string(), ast))
-                        .collect()
-                }),
+                inherit.map(|items| items.into_iter().map(|ast| (ast.as_str(), ast)).collect()),
             ))),
             preceded(token(In), set),
         )),
