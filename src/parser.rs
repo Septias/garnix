@@ -167,7 +167,7 @@ pub(crate) fn with<'a>(input: NixTokens<'a>) -> PResult<'a, Ast<'a>> {
 }
 
 /// Parse a literal.
-fn parse_literal<'a>(input: NixTokens<'a>) -> PResult<'a, Ast<'a>> {
+fn literal<'a>(input: NixTokens<'a>) -> PResult<'a, Ast<'a>> {
     alt((
         token(Token::Integer(12)).map(|(token, _)| Integer(token.as_i32().unwrap())),
         token(Token::Float(12.0)).map(|(token, _)| Float(token.as_f32().unwrap())),
@@ -186,4 +186,60 @@ fn parse_literal<'a>(input: NixTokens<'a>) -> PResult<'a, Ast<'a>> {
 /// Parse an expression.
 pub fn expr<'a, 'b>(input: NixTokens<'a>) -> PResult<'a, Ast<'a>> {
     todo!()
+}
+
+pub fn atom<'a, 'b>(input: NixTokens<'a>) -> PResult<'a, Ast<'a>> {
+    alt((let_binding, conditional, set, literal, with))(input)
+}
+
+fn prett_parsing<'a>(mut input: NixTokens<'a>, min_bp: u8) -> PResult<'a, Ast<'a>> {
+    let (input, lhs) = match input.peek().unwrap().0 {
+        // Anything that resembles an atom
+        Token::Path
+        | If
+        | Let
+        | Rec
+        | Token::LBrace
+        | Token::With
+        | Token::Boolean(_)
+        | Token::MultiString
+        | Token::SingleString
+        | Token::Null
+        | Token::Integer(_)
+        | Token::Float(_)
+        | Text => atom(input)?,
+
+        // Skip these
+        Token::Comment | Token::DocComment | Token::LineComment => {
+            unimplemented!("Comments are not yet implemented")
+        }
+
+        Token::LParen => {
+            let lhs = prett_parsing(input, 0)?;
+            assert_eq!(input.peek().unwrap().0, Token::RParen);
+            lhs
+        }
+
+        Token::Dot
+        | Token::Update
+        | Token::Mul
+        | Token::Div
+        | Token::Add
+        | Token::LessThan
+        | Token::GreaterThan
+        | Token::LessThanEqual
+        | Token::GreaterThanEqual
+        | Equal
+        | Token::NotEqual
+        | Token::And
+        | Token::Or
+        | Token::Not
+        | Token::ListConcat
+        | Minus => {}
+
+        // Error
+        _ => panic!("Unexpected token"),
+    };
+
+    Ok((input, expr))
 }

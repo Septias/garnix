@@ -198,6 +198,28 @@ impl Token {
 #[derive(Debug, Copy, Clone)]
 pub struct NixTokens<'a>(pub &'a [(Token, &'a str)]);
 
+impl<'a> NixTokens<'a> {
+    pub fn next(&mut self) -> Option<(Token, &'a str)> {
+        if self.0.is_empty() {
+            None
+        } else {
+            let (token, text) = self.0[0];
+            self.0 = &self.0[1..];
+            Some((token, text))
+        }
+    }
+
+    pub fn peek(&self) -> Option<&(Token, &'a str)> {
+        self.0.get(0).as_deref()
+    }
+}
+
+impl<'a> From<&'a [(Token, &'a str)]> for NixTokens<'a> {
+    fn from(value: &'a [(Token, &'a str)]) -> Self {
+        Self(value)
+    }
+}
+
 /// Interop between [NixTokens] and nom.
 pub mod nom_interop {
     use std::{
@@ -212,12 +234,6 @@ pub mod nom_interop {
         error::ParseError, FindToken, IResult, InputIter, InputLength, InputTake,
         InputTakeAtPosition, Needed, Slice, UnspecializedInput,
     };
-
-    impl<'a> From<&'a [(Token, &'a str)]> for NixTokens<'a> {
-        fn from(value: &'a [(Token, &'a str)]) -> Self {
-            Self(value)
-        }
-    }
 
     impl<'a> Index<usize> for NixTokens<'a> {
         type Output = (Token, &'a str);
@@ -288,9 +304,9 @@ pub mod nom_interop {
     impl<'a> FindToken<(Token, &'a str)> for NixTokens<'a> {
         fn find_token(&self, token: <NixTokens<'a> as InputIter>::Item) -> bool {
             let token_disc = discriminant(&token.0);
-            self.0
-                .iter()
-                .fold(false, |acc, (token, _)| discriminant(token) == token_disc || acc)
+            self.0.iter().fold(false, |acc, (token, _)| {
+                discriminant(token) == token_disc || acc
+            })
         }
     }
 

@@ -5,7 +5,6 @@
 ## Improvements
 - fix livetimes for parse return
 - Add verbose error
-- Add error handling
 - nice discard implementation
 - Make Pattern generic
 
