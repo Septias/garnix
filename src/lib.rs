@@ -11,9 +11,6 @@ mod infer;
 mod lexer;
 mod parser;
 
-#[cfg(test)]
-mod test;
-
 /// Parse a file containing nix-code into [Ast].
 pub fn parse_file(path: &Path) -> Ast {
     let source = read_to_string(path).expect("Failed to read file");
