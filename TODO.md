@@ -1,6 +1,5 @@
 ## Features
 - String interpolation
-- Parse expressions
 
 ## Improvements
 - fix livetimes for parse return
