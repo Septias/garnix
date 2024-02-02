@@ -6,6 +6,8 @@ use std::{
     hash::Hash,
 };
 
+use crate::lexer::Token;
+
 /// Part of a [Pattern].
 pub enum PatternElement<'a> {
     /// Pattern of the form `ident`
@@ -22,80 +24,116 @@ pub struct Pattern<'a> {
     pub is_wildcard: bool,
 }
 
-/// Binary operators of the Nix language ordered by precedence.
+/// Binary operators.
 pub enum BinOp {
-    /// Precedence: 1
-    AttributeFallback,
-
-    /// Precedence: 1
-    AttributeSelection,
-
-    /// Precendence: 2
+    // Function application
     Application,
-
-    /// Precendence: 4
-    HasAttribute,
-
-    /// Right associativity
-    /// Precendence: 5
+    // List operators
     ListConcat,
-
-    /// Precedence: 6
+    // Arithematic operators
     Mul,
     Div,
-
-    /// Precedence: 7
     Add,
     Sub,
-
-    /// String & Path operators
-    /// Precedence: 7
-    ConcatString,
-    ConcatPath,
-    ConcatStringPath,
-    ConcatPathString,
-
-    /// Set operators
-    /// Precedence: 9
+    // Set operators
     Update,
-
-    /// Comparison operators
-    /// Precedence: 10
+    HasAttribute,
+    AttributeSelection,
+    AttributeFallback,
+    // Comparison operators
     LessThan,
-    LessThanOrEqual,
+    LessThanEqual,
     GreaterThan,
-    GreaterThanOrEqual,
-
-    /// Logical operators
-    /// Precedence: 11
+    GreaterThanEqual,
     Equal,
     NotEqual,
-
-    /// Precedence: 12
+    // Logic operators
     And,
-
-    /// Precedence: 13
     Or,
-
-    /// Precedence: 14
     Implication,
 }
+
+impl BinOp {
+    pub fn get_precedence(&self) -> (u8, u8) {
+        match self {
+            Self::AttributeFallback => (1, 2),
+            Self::AttributeSelection => (3, 4),
+            Self::Application => (5, 6),
+            // Arithematic negation with 7
+            Self::HasAttribute => (9, 10),
+            Self::ListConcat => (12, 11), // Right associative
+            Self::Mul | Self::Div => (13, 14),
+            Self::Add | Self::Sub => (15, 16),
+            // Logic negation with 17
+            Self::Update => (20, 19), // Right associative
+            Self::LessThan | Self::LessThanEqual | Self::GreaterThan | Self::GreaterThanEqual => {
+                (21, 22)
+            }
+            Self::Equal | Self::NotEqual => (23, 24),
+            Self::And => (25, 26),
+            Self::Or => (27, 28),
+            Self::Implication => (29, 30),
+        }
+    }
+
+    pub fn from_token(token: Token) -> Option<Self> {
+        use Token::*;
+        match token {
+            Equal => Some(BinOp::Equal),
+            NotEqual => Some(BinOp::NotEqual),
+            LessThan => Some(BinOp::LessThan),
+            LessThanEqual => Some(BinOp::LessThanEqual),
+            GreaterThan => Some(BinOp::GreaterThan),
+            GreaterThanEqual => Some(BinOp::GreaterThanEqual),
+            And => Some(BinOp::And),
+            Or => Some(BinOp::Or),
+            Implication => Some(BinOp::Implication),
+            Plus => Some(BinOp::Add),
+            Minus => Some(BinOp::Sub),
+            Star => Some(BinOp::Mul),
+            Slash => Some(BinOp::Div),
+            Update => Some(BinOp::Update),
+            ListConcat => Some(BinOp::ListConcat),
+            AttributeFallback => Some(BinOp::AttributeFallback),
+            Dot => Some(BinOp::AttributeSelection),
+            Question => Some(BinOp::HasAttribute),
+            _ => {
+                // TODO: handle this
+                Some(BinOp::Application)
+            }
+        }
+    }
+}
+
+/// Unary operator.
+pub enum UnOp {
+    Negation,
+    LogicalNegation,
+}
+
+impl UnOp {
+    pub fn get_precedence(&self) -> u8 {
+        match self {
+            Self::Negation => 7,
+            Self::LogicalNegation => 17,
+        }
+    }
+}
+
 
 /// Ast for the the nix language
 #[repr(u8)]
 pub enum Ast<'a> {
     /// ----------------- Operators -----------------
-    /// No Associativity
-    /// Precendence: 3
-    Negation(Box<Ast<'a>>),
 
-    /// Associativity: Right
-    /// Precendence: 8
-    LogicalNegation(Box<Ast<'a>>),
+    /// Unary Operators
+    UnaryOperator {
+        op: UnOp,
+        rhs: Box<Ast<'a>>,
+    },
 
     /// Binary Operators
-    /// Precendence: 2, 4, 5, 6, 7, 9, 10, 11, 12, 13, 14
-    BinOp {
+    BinaryOperator {
         op: BinOp,
         lhs: Box<Ast<'a>>,
         rhs: Box<Ast<'a>>,

@@ -6,7 +6,7 @@ use nom::InputTake;
 use std::usize;
 
 /// All tokens from the Nix language.
-#[derive(Clone, Logos, Debug, PartialEq)]
+#[derive(Clone, Copy, Logos, Debug, PartialEq)]
 #[logos(skip r"[ \t\n\f]+")]
 pub enum Token {
     // Let Bindings
@@ -54,13 +54,13 @@ pub enum Token {
 
     // Arith Operators
     #[token("*")]
-    Mul,
+    Star,
 
     #[token("/")]
-    Div,
+    Slash,
 
     #[token("+")]
-    Add,
+    Plus,
 
     // Comparisons
     #[token("<")]
@@ -91,6 +91,9 @@ pub enum Token {
     #[token("!")]
     Not,
 
+    #[token("->")]
+    Implication,
+
     // Lists
     #[token("[")]
     LBracket,
@@ -110,7 +113,7 @@ pub enum Token {
     At,
 
     #[token("?")]
-    Default,
+    Question,
 
     // Conditionals
     #[token("if")]
@@ -170,6 +173,9 @@ pub enum Token {
 
     #[token("-")]
     Minus,
+
+    #[token("or")]
+    AttributeFallback,
 }
 
 impl Token {
@@ -210,7 +216,7 @@ impl<'a> NixTokens<'a> {
     }
 
     pub fn peek(&self) -> Option<&(Token, &'a str)> {
-        self.0.get(0).as_deref()
+        self.0.get(0)
     }
 }
 

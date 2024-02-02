@@ -14,14 +14,14 @@ use std::{collections::HashMap, fs::read_to_string, ops::RangeFrom, path::Path};
 use crate::{
     ast::{
         Ast::{self, *},
-        Pattern, PatternElement,
+        BinOp, Pattern, PatternElement, UnOp,
     },
     lexer::{
         nom_interop::token,
         NixTokens,
         Token::{
-            self, At, Comma, Default, Dots, DoubleColon, Else, Equal, If, In, Inherit, LBrace, Let,
-            Minus, RBrace, Rec, Semi, Text, Then,
+            self, At, Comma, Dots, DoubleColon, Else, Equal, If, In, Inherit, LBrace, Let, Minus,
+            Question, RBrace, Rec, Semi, Text, Then,
         },
     },
 };
@@ -37,7 +37,7 @@ fn ident<'a>(input: NixTokens<'a>) -> PResult<'a, Ast<'a>> {
 
 /// Parse an identifier with a default value.
 fn ident_default_pattern<'a>(input: NixTokens<'a>) -> PResult<'a, PatternElement<'a>> {
-    tuple((ident, token(Default), cut(expr)))
+    tuple((ident, token(Question), cut(expr)))
         .map(|(ident, _, expr)| PatternElement::DefaultIdentifier(ident.as_str(), expr))
         .parse(input)
 }
@@ -185,15 +185,15 @@ fn literal<'a>(input: NixTokens<'a>) -> PResult<'a, Ast<'a>> {
 
 /// Parse an expression.
 pub fn expr<'a, 'b>(input: NixTokens<'a>) -> PResult<'a, Ast<'a>> {
-    todo!()
+    prett_parsing(input, 0)
 }
 
 pub fn atom<'a, 'b>(input: NixTokens<'a>) -> PResult<'a, Ast<'a>> {
-    alt((let_binding, conditional, set, literal, with))(input)
+    alt((let_binding, conditional, set, literal))(input)
 }
 
 fn prett_parsing<'a>(mut input: NixTokens<'a>, min_bp: u8) -> PResult<'a, Ast<'a>> {
-    let (input, lhs) = match input.peek().unwrap().0 {
+    let (mut input, mut lhs) = match input.peek().unwrap().0 {
         // Anything that resembles an atom
         Token::Path
         | If
@@ -214,32 +214,74 @@ fn prett_parsing<'a>(mut input: NixTokens<'a>, min_bp: u8) -> PResult<'a, Ast<'a
             unimplemented!("Comments are not yet implemented")
         }
 
+        // Bracketed result in an atom
         Token::LParen => {
             let lhs = prett_parsing(input, 0)?;
             assert_eq!(input.peek().unwrap().0, Token::RParen);
             lhs
         }
 
-        Token::Dot
-        | Token::Update
-        | Token::Mul
-        | Token::Div
-        | Token::Add
-        | Token::LessThan
-        | Token::GreaterThan
-        | Token::LessThanEqual
-        | Token::GreaterThanEqual
-        | Equal
-        | Token::NotEqual
-        | Token::And
-        | Token::Or
-        | Token::Not
-        | Token::ListConcat
-        | Minus => {}
+        Minus => {
+            let right_bp = 7;
+            let (input, rhs) = prett_parsing(input, right_bp)?;
+            (
+                input,
+                Ast::UnaryOperator {
+                    op: UnOp::Negation,
+                    rhs: Box::new(rhs),
+                },
+            )
+        }
 
-        // Error
+        Token::Not => {
+            let right_bp = 17;
+            let (input, rhs) = prett_parsing(input, right_bp)?;
+            (
+                input,
+                Ast::UnaryOperator {
+                    op: UnOp::LogicalNegation,
+                    rhs: Box::new(rhs),
+                },
+            )
+        }
+
         _ => panic!("Unexpected token"),
     };
 
-    Ok((input, expr))
+    loop {
+        let op = BinOp::from_token(input.peek().unwrap().0);
+
+        if let Some(op) = op {
+            let (left_bp, right_bp) = op.get_precedence();
+            if left_bp < min_bp {
+                break;
+            }
+
+            input.next();
+
+            let (_input, rhs) = prett_parsing(input, right_bp)?;
+            input = _input;
+            lhs = Ast::BinaryOperator {
+                op,
+                lhs: Box::new(lhs),
+                rhs: Box::new(rhs),
+            };
+
+            continue;
+        };
+        break;
+    }
+
+    Ok((input, lhs))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_expr() {
+        
+
+    }
 }

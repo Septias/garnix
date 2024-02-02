@@ -28,6 +28,7 @@
   t = .0;
   /* */
   bracketing = (1 + 2) * 3;
+  application = fun fun builtins.map  (1 + 1) 2+2;
 in {
   inherit setfun setIdentFn bracketing ifs ifxlamba string stringMulti t x set setInherit settest;
   fun = fun;
