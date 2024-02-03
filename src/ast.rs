@@ -1,25 +1,26 @@
 //! Abstract syntax tree for the nix language.
-#![allow(unused)]
 
 use std::{
     collections::{HashMap, HashSet},
     hash::Hash,
 };
 
+use logos::Span;
+
 use crate::lexer::Token;
 
 /// Part of a [Pattern].
-pub enum PatternElement<'a> {
+pub enum PatternElement {
     /// Pattern of the form `ident`
-    Identifier(&'a str),
+    Identifier(Span),
     /// Pattern of the form `ident ? <default>`
-    DefaultIdentifier(&'a str, Ast<'a>),
+    DefaultIdentifier(Span, Ast),
 }
 
 /// A pattern.
-pub struct Pattern<'a> {
+pub struct Pattern {
     /// A list of patterns
-    pub patterns: Vec<PatternElement<'a>>,
+    pub patterns: Vec<PatternElement>,
     /// Is widcard
     pub is_wildcard: bool,
 }
@@ -120,23 +121,22 @@ impl UnOp {
     }
 }
 
-
 /// Ast for the the nix language
 #[repr(u8)]
-pub enum Ast<'a> {
+pub enum Ast {
     /// ----------------- Operators -----------------
 
     /// Unary Operators
     UnaryOperator {
         op: UnOp,
-        rhs: Box<Ast<'a>>,
+        rhs: Box<Ast>,
     },
 
     /// Binary Operators
     BinaryOperator {
         op: BinOp,
-        lhs: Box<Ast<'a>>,
-        rhs: Box<Ast<'a>>,
+        lhs: Box<Ast>,
+        rhs: Box<Ast>,
     },
 
     /// ----------------- Language Constructs -----------------
@@ -145,7 +145,7 @@ pub enum Ast<'a> {
     /// parsed by [crate::parser::set]
     AttrSet {
         /// A set of attributes
-        attrs: HashMap<&'a str, (Ast<'a>)>,
+        attrs: Vec<(Span, Ast)>,
         is_recursive: bool,
     },
 
@@ -153,73 +153,73 @@ pub enum Ast<'a> {
     /// parsed by [crate::parser::let_binding]
     LetBinding {
         /// A set of bindings
-        bindings: Vec<(&'a str, Ast<'a>)>,
+        bindings: Vec<(Span, Ast)>,
         /// The expression to evaluate
-        body: Box<Ast<'a>>,
+        body: Box<Ast>,
         /// A list of identifiers to inherit from the parent scope
-        inherit: Option<Vec<&'a str>>,
+        inherit: Option<Vec<Span>>,
     },
 
     /// Function
     /// func = pattern: body
     /// parsed by [crate::parser::lambda]
     Lambda {
-        arguments: Vec<Pattern<'a>>,
-        body: Box<Ast<'a>>,
-        arg_binding: Option<&'a str>,
+        arguments: Vec<Pattern>,
+        body: Box<Ast>,
+        arg_binding: Option<Span>,
     },
 
     /// Conditional
     /// parsed by [crate::parser::conditional]
     Conditional {
         /// The condition to evaluate
-        condition: Box<Ast<'a>>,
+        condition: Box<Ast>,
         /// The expression to evaluate if the condition is true
-        expr1: Box<Ast<'a>>,
+        expr1: Box<Ast>,
         /// The expression to evaluate if the condition is false
-        expr2: Box<Ast<'a>>,
+        expr2: Box<Ast>,
     },
 
     /// An assert statement.
     /// parsed by [crate::parser::assert]
     Assertion {
         /// The condition to evaluate
-        condition: Box<Ast<'a>>,
+        condition: Box<Ast>,
         /// The expression to evaluate if the condition is true
-        then: Box<Ast<'a>>,
+        then: Box<Ast>,
     },
 
     /// A with-statement.
     /// parsed by [crate::parser::with]
     With {
         /// The set-identifier to add
-        set: Box<Ast<'a>>,
+        set: Box<Ast>,
         /// The expression to evaluate
-        body: Box<Ast<'a>>,
+        body: Box<Ast>,
     },
 
     /// ----------------- Literals -----------------
-    Identifier(&'a str),
+    Identifier(Span),
 
     /// Primitives
-    NixString(&'a str),
-    NixPath(&'a str),
+    NixString(Span),
+    NixPath(Span),
     Boolean(bool),
     Integer(i32),
     Float(f32),
     Null,
 
     /// Comments
-    Comment(&'a str),
-    DocComment(&'a str),
-    LineComment(&'a str),
+    Comment(Span),
+    DocComment(Span),
+    LineComment(Span),
 }
 
-impl<'a> Ast<'a> {
-    pub fn as_str(&self) -> &'a str {
+impl Ast {
+    pub fn as_span(&self) -> Span {
         match &self {
-            Self::Identifier(s) => s,
-            _ => "",
+            Self::Identifier(s) => s.clone(),
+            _ => Span::default(),
         }
     }
 }

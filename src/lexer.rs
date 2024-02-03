@@ -1,7 +1,6 @@
-#![allow(unused)]
 //! Lexer for the Nix language.
 
-use logos::Logos;
+use logos::{Logos, Span};
 use nom::InputTake;
 use std::usize;
 
@@ -201,27 +200,29 @@ impl Token {
     }
 }
 
+type SpannedToken = (Token, Span);
+
 #[derive(Debug, Copy, Clone)]
-pub struct NixTokens<'a>(pub &'a [(Token, &'a str)]);
+pub struct NixTokens<'a>(pub &'a [SpannedToken]);
 
 impl<'a> NixTokens<'a> {
-    pub fn next(&mut self) -> Option<(Token, &'a str)> {
+    pub fn next(&mut self) -> Option<SpannedToken> {
         if self.0.is_empty() {
             None
         } else {
-            let (token, text) = self.0[0];
+            let (token, ref text) = self.0[0];
             self.0 = &self.0[1..];
-            Some((token, text))
+            Some((token, text.clone()))
         }
     }
 
-    pub fn peek(&self) -> Option<&(Token, &'a str)> {
+    pub fn peek(&self) -> Option<&SpannedToken> {
         self.0.get(0)
     }
 }
 
-impl<'a> From<&'a [(Token, &'a str)]> for NixTokens<'a> {
-    fn from(value: &'a [(Token, &'a str)]) -> Self {
+impl<'a> From<&'a [SpannedToken]> for NixTokens<'a> {
+    fn from(value: &'a [SpannedToken]) -> Self {
         Self(value)
     }
 }
@@ -235,14 +236,14 @@ pub mod nom_interop {
         slice::Iter,
     };
 
-    use super::{NixTokens, Token};
+    use super::{NixTokens, SpannedToken, Token};
     use nom::{
         error::ParseError, FindToken, IResult, InputIter, InputLength, InputTake,
         InputTakeAtPosition, Needed, Slice, UnspecializedInput,
     };
 
     impl<'a> Index<usize> for NixTokens<'a> {
-        type Output = (Token, &'a str);
+        type Output = SpannedToken;
 
         fn index(&self, index: usize) -> &Self::Output {
             &self.0[index]
@@ -279,9 +280,9 @@ pub mod nom_interop {
     }
 
     impl<'a> InputIter for NixTokens<'a> {
-        type Item = (Token, &'a str);
+        type Item = SpannedToken;
         type Iter = Enumerate<Self::IterElem>;
-        type IterElem = Cloned<Iter<'a, (Token, &'a str)>>;
+        type IterElem = Cloned<Iter<'a, SpannedToken>>;
 
         fn iter_indices(&self) -> Self::Iter {
             self.iter_elements().enumerate()
@@ -307,8 +308,8 @@ pub mod nom_interop {
         }
     }
 
-    impl<'a> FindToken<(Token, &'a str)> for NixTokens<'a> {
-        fn find_token(&self, token: <NixTokens<'a> as InputIter>::Item) -> bool {
+    impl<'a> FindToken<SpannedToken> for NixTokens<'a> {
+        fn find_token(&self, token: SpannedToken) -> bool {
             let token_disc = discriminant(&token.0);
             self.0.iter().fold(false, |acc, (token, _)| {
                 discriminant(token) == token_disc || acc
@@ -320,7 +321,7 @@ pub mod nom_interop {
 
     pub fn token<'a, Error: ParseError<NixTokens<'a>>>(
         c: Token,
-    ) -> impl Fn(NixTokens<'a>) -> IResult<NixTokens<'a>, (Token, &'a str), Error> {
+    ) -> impl Fn(NixTokens<'a>) -> IResult<NixTokens<'a>, SpannedToken, Error> {
         move |i: NixTokens<'_>| match (i).iter_elements().next().map(|t| {
             let b = t.0 == c;
             (t, b)
