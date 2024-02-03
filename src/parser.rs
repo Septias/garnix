@@ -1,15 +1,11 @@
-use logos::{Logos, Span};
+use logos::Span;
 use nom::{
     branch::alt,
-    bytes::complete::{is_not, tag},
-    character::complete::char,
-    combinator::{cut, map, opt, success},
-    error::{ParseError, VerboseError},
-    multi::{many0, many1, separated_list0, separated_list1},
-    sequence::{delimited, pair, preceded, terminated, tuple, Tuple},
-    IResult, InputIter, InputLength, InputTake, Parser, Slice,
+    combinator::{cut, opt},
+    multi::{many0, many1, separated_list1},
+    sequence::{delimited, pair, preceded, terminated, tuple},
+    IResult, Parser,
 };
-use std::{collections::HashMap, fs::read_to_string, ops::RangeFrom, path::Path};
 
 use crate::{
     ast::{
@@ -20,7 +16,7 @@ use crate::{
         nom_interop::token,
         NixTokens,
         Token::{
-            self, At, Comma, Dots, DoubleColon, Else, Equal, If, In, Inherit, LBrace, Let, Minus,
+            self, Comma, Dots, DoubleColon, Else, Equal, If, In, Inherit, LBrace, Let, Minus,
             Question, RBrace, Rec, Semi, Text, Then,
         },
     },
@@ -29,21 +25,21 @@ use crate::{
 pub type PResult<'a, R> = IResult<NixTokens<'a>, R>;
 
 /// Parse a single identifier.
-fn ident<'a>(input: NixTokens<'a>) -> PResult<'a, Ast> {
+fn ident(input: NixTokens<'_>) -> PResult<'_, Ast> {
     token(Text)
         .map(|(_, name)| Ast::Identifier(name))
         .parse(input)
 }
 
 /// Parse an identifier with a default value.
-fn ident_default_pattern<'a>(input: NixTokens<'a>) -> PResult<'a, PatternElement> {
+fn ident_default_pattern(input: NixTokens<'_>) -> PResult<'_, PatternElement> {
     tuple((ident, token(Question), cut(expr)))
         .map(|(ident, _, expr)| PatternElement::DefaultIdentifier(ident.as_span(), expr))
         .parse(input)
 }
 
 /// Parse a set pattern.
-fn set_pattern<'a>(input: NixTokens<'a>) -> PResult<'a, Pattern> {
+fn set_pattern(input: NixTokens<'_>) -> PResult<'_, Pattern> {
     let elements = separated_list1(
         token(Comma),
         alt((
@@ -62,7 +58,7 @@ fn set_pattern<'a>(input: NixTokens<'a>) -> PResult<'a, Pattern> {
 
 /// Parse a pattern.
 /// pattern = identifier | set-pattern
-pub(crate) fn pattern<'a>(input: NixTokens<'a>) -> PResult<'a, Pattern> {
+pub(crate) fn pattern(input: NixTokens<'_>) -> PResult<'_, Pattern> {
     alt((
         ident.map(|ast| Pattern {
             patterns: vec![PatternElement::Identifier(ast.as_span())],
@@ -74,12 +70,12 @@ pub(crate) fn pattern<'a>(input: NixTokens<'a>) -> PResult<'a, Pattern> {
 
 /// Parse a single statement.
 /// ident = expr;
-pub(crate) fn statement<'a>(input: NixTokens<'a>) -> PResult<'a, (Span, Ast)> {
+pub(crate) fn statement(input: NixTokens<'_>) -> PResult<'_, (Span, Ast)> {
     pair(ident.map(|ast| ast.as_span()), preceded(token(Equal), expr)).parse(input)
 }
 
 /// Parse a set definition.
-pub(crate) fn set<'a>(input: NixTokens<'a>) -> PResult<'a, Ast> {
+pub(crate) fn set(input: NixTokens<'_>) -> PResult<'_, Ast> {
     let (input, is_recursive) = opt(token(Rec)).map(|a| a.is_some()).parse(input)?;
     delimited(
         token(LBrace),
@@ -93,7 +89,7 @@ pub(crate) fn set<'a>(input: NixTokens<'a>) -> PResult<'a, Ast> {
 
 /// Parse a lambda function.
 /// lambda = ?
-pub(crate) fn lambda<'a>(input: NixTokens<'a>) -> PResult<'a, Ast> {
+pub(crate) fn lambda(input: NixTokens<'_>) -> PResult<'_, Ast> {
     let patterns = many1(terminated(pattern, token(DoubleColon)));
     pair(patterns, expr)
         .map(|(patterns, body)| Lambda {
@@ -106,7 +102,7 @@ pub(crate) fn lambda<'a>(input: NixTokens<'a>) -> PResult<'a, Ast> {
 
 /// Parse a conditional.
 /// conditional = if expr then expr else expr
-pub(crate) fn conditional<'a>(input: NixTokens<'a>) -> PResult<'a, Ast> {
+pub(crate) fn conditional(input: NixTokens<'_>) -> PResult<'_, Ast> {
     tuple((token(If), expr, token(Then), expr, token(Else), expr))
         .map(|(_, condition, _, expr1, _, expr2)| Conditional {
             condition: Box::new(condition),
@@ -118,7 +114,7 @@ pub(crate) fn conditional<'a>(input: NixTokens<'a>) -> PResult<'a, Ast> {
 
 /// Parse an assertion.
 /// assert = assert expr;
-pub(crate) fn assert<'a>(input: NixTokens<'a>) -> PResult<'a, Ast> {
+pub(crate) fn assert(input: NixTokens<'_>) -> PResult<'_, Ast> {
     tuple((token(Token::Assert), expr, token(Token::Semi)))
         .map(|(_, condition, _)| Assertion {
             condition: Box::new(condition),
@@ -127,13 +123,13 @@ pub(crate) fn assert<'a>(input: NixTokens<'a>) -> PResult<'a, Ast> {
         .parse(input)
 }
 
-fn inherit<'a>(input: NixTokens<'a>) -> PResult<'a, Vec<Ast>> {
+fn inherit(input: NixTokens<'_>) -> PResult<'_, Vec<Ast>> {
     delimited(token(Inherit), many0(ident), token(Semi))(input)
 }
 
 /// Parse a let binding.
 /// let-expr = let [ identifier = expr ; with ;]... in expr
-pub(crate) fn let_binding<'a>(input: NixTokens<'a>) -> PResult<'a, Ast> {
+pub(crate) fn let_binding(input: NixTokens<'_>) -> PResult<'_, Ast> {
     pair(
         token(Let),
         cut(pair(
@@ -154,7 +150,7 @@ pub(crate) fn let_binding<'a>(input: NixTokens<'a>) -> PResult<'a, Ast> {
 
 /// Parse a with-statement.
 /// with-expr = with ident ; expr
-pub(crate) fn with<'a>(input: NixTokens<'a>) -> PResult<'a, Ast> {
+pub(crate) fn with(input: NixTokens<'_>) -> PResult<'_, Ast> {
     preceded(
         token(Token::With),
         cut(pair(terminated(ident, token(Semi)), expr)),
@@ -167,7 +163,7 @@ pub(crate) fn with<'a>(input: NixTokens<'a>) -> PResult<'a, Ast> {
 }
 
 /// Parse a literal.
-fn literal<'a>(input: NixTokens<'a>) -> PResult<'a, Ast> {
+fn literal(input: NixTokens<'_>) -> PResult<'_, Ast> {
     alt((
         token(Token::Integer(12)).map(|(token, _)| Integer(token.as_i32().unwrap())),
         token(Token::Float(12.0)).map(|(token, _)| Float(token.as_f32().unwrap())),
@@ -184,15 +180,15 @@ fn literal<'a>(input: NixTokens<'a>) -> PResult<'a, Ast> {
 }
 
 /// Parse an expression.
-pub fn expr<'a, 'b>(input: NixTokens<'a>) -> PResult<'a, Ast> {
+pub fn expr<'b>(input: NixTokens<'_>) -> PResult<'_, Ast> {
     prett_parsing(input, 0)
 }
 
-pub fn atom<'a, 'b>(input: NixTokens<'a>) -> PResult<'a, Ast> {
+pub fn atom<'b>(input: NixTokens<'_>) -> PResult<'_, Ast> {
     alt((let_binding, conditional, set, literal))(input)
 }
 
-fn prett_parsing<'a>(mut input: NixTokens<'a>, min_bp: u8) -> PResult<'a, Ast> {
+fn prett_parsing(input: NixTokens<'_>, min_bp: u8) -> PResult<'_, Ast> {
     let (mut input, mut lhs) = match input.peek().unwrap().0 {
         // Anything that resembles an atom
         Token::Path
@@ -277,7 +273,6 @@ fn prett_parsing<'a>(mut input: NixTokens<'a>, min_bp: u8) -> PResult<'a, Ast> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
 
     #[test]
     fn test_expr() {}
