@@ -7,4 +7,6 @@
 - Make Pattern generic
 
 ## Restrictions
-- Restrictions: comment positions
+- Comment positions
+- Line comments have to end in '\n'
+

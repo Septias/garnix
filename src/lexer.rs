@@ -16,13 +16,13 @@ pub enum Token {
     In,
 
     // Comments
-    #[regex(r"/\*.*\*/")]
+    #[regex(r"/\*[a-zA-Z ]*\*/")]
     Comment,
 
-    #[regex(r"/\*\*.*\*/")]
+    #[regex(r"/\*\*[a-zA-Z ]*\*/")]
     DocComment,
 
-    #[regex(r"#.*\n")]
+    #[regex(r"#[a-zA-Z ]*\n")]
     LineComment,
 
     // Sets
@@ -129,10 +129,10 @@ pub enum Token {
     Boolean(bool),
 
     // Strings
-    #[regex("''.*''")]
+    #[regex("''[a-zA-Z ]*''")]
     MultiString,
 
-    #[regex(r#"".*""#)]
+    #[regex(r#""[a-zA-Z ]*""#)]
     SingleString,
 
     // Literals
@@ -151,10 +151,10 @@ pub enum Token {
     #[token("with")]
     With,
 
-    #[regex(r"[0-9]+", |lex| lex.slice().parse().ok())]
+    #[regex("[0-9]+", |lex| lex.slice().parse().ok())]
     Integer(i32),
 
-    #[regex(r"[0-9]{0, 1}\.[0-9]+", |lex| lex.slice().parse().ok())]
+    #[regex(r"[0-9]*\.[0-9]+", |lex| lex.slice().parse().ok())]
     Float(f32),
 
     // Misc

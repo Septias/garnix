@@ -9,6 +9,9 @@ pub mod ast;
 pub mod lexer;
 pub mod parser;
 
+#[cfg(test)]
+mod test;
+
 /// Result of parsing a String containing nix code.
 pub struct ParseResult {
     pub ast: Ast,
@@ -24,7 +27,12 @@ pub fn parse_file(path: &Path) -> ParseResult {
 pub(crate) fn lex(source: &str) -> Vec<(Token, logos::Span)> {
     let lex = Token::lexer(source);
     lex.spanned()
-        .map(|(token, span)| (token.unwrap(), span))
+        .map(|(token, span)| {
+            (
+                token.expect(&format!("Unknown token: {}", &source[span.clone()])),
+                span,
+            )
+        })
         .collect()
 }
 

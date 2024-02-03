@@ -1,3 +1,4 @@
+#![allow(unused)]
 use logos::Span;
 use nom::{
     branch::alt,
@@ -26,21 +27,21 @@ use crate::{
 pub type PResult<'a, R> = IResult<NixTokens<'a>, R, VerboseError<NixTokens<'a>>>;
 
 /// Parse a single identifier.
-fn ident(input: NixTokens<'_>) -> PResult<'_, Ast> {
+pub(crate) fn ident(input: NixTokens<'_>) -> PResult<'_, Ast> {
     token(Text)
         .map(|(_, name)| Ast::Identifier(name))
         .parse(input)
 }
 
 /// Parse an identifier with a default value.
-fn ident_default_pattern(input: NixTokens<'_>) -> PResult<'_, PatternElement> {
+pub(crate) fn ident_default_pattern(input: NixTokens<'_>) -> PResult<'_, PatternElement> {
     tuple((ident, token(Question), cut(expr)))
         .map(|(ident, _, expr)| PatternElement::DefaultIdentifier(ident.as_span(), expr))
         .parse(input)
 }
 
 /// Parse a literal.
-fn literal(input: NixTokens<'_>) -> PResult<'_, Ast> {
+pub(crate) fn literal(input: NixTokens<'_>) -> PResult<'_, Ast> {
     context(
         "literal",
         alt((
@@ -60,7 +61,7 @@ fn literal(input: NixTokens<'_>) -> PResult<'_, Ast> {
 }
 
 /// Parse a set pattern.
-fn set_pattern(input: NixTokens<'_>) -> PResult<'_, Pattern> {
+pub(crate) fn set_pattern(input: NixTokens<'_>) -> PResult<'_, Pattern> {
     let elements = separated_list1(
         token(Comma),
         alt((
@@ -174,7 +175,7 @@ pub(crate) fn assert(input: NixTokens<'_>) -> PResult<'_, Ast> {
         .parse(input)
 }
 
-fn inherit(input: NixTokens<'_>) -> PResult<'_, Vec<Ast>> {
+pub(crate) fn inherit(input: NixTokens<'_>) -> PResult<'_, Vec<Ast>> {
     delimited(token(Inherit), many0(ident), token(Semi))(input)
 }
 
@@ -205,12 +206,12 @@ pub(crate) fn with(input: NixTokens<'_>) -> PResult<'_, Ast> {
     preceded(token(Token::With), cut(terminated(expr, token(Semi))))(input)
 }
 
-pub fn atom<'b>(input: NixTokens<'_>) -> PResult<'_, Ast> {
+pub(crate) fn atom<'b>(input: NixTokens<'_>) -> PResult<'_, Ast> {
     alt((let_binding, conditional, set, literal))(input)
 }
 
 /// Parse an expression.
-pub fn expr<'b>(input: NixTokens<'_>) -> PResult<'_, Ast> {
+pub(crate) fn expr<'b>(input: NixTokens<'_>) -> PResult<'_, Ast> {
     context(
         "expr",
         pair(opt(with), alt((literal, ident, set, assert, lambda))).map(|(with, expr)| {
@@ -226,7 +227,7 @@ pub fn expr<'b>(input: NixTokens<'_>) -> PResult<'_, Ast> {
     )(input)
 }
 
-fn prett_parsing(input: NixTokens<'_>, min_bp: u8) -> PResult<'_, Ast> {
+pub(crate) fn prett_parsing(mut input: NixTokens<'_>, min_bp: u8, eof: Token) -> PResult<'_, Ast> {
     let (mut input, mut lhs) = match input.peek().unwrap().0 {
         // Anything that resembles an atom
         Token::Path
@@ -234,7 +235,6 @@ fn prett_parsing(input: NixTokens<'_>, min_bp: u8) -> PResult<'_, Ast> {
         | Let
         | Rec
         | Token::LBrace
-        | Token::With
         | Token::Boolean(_)
         | Token::MultiString
         | Token::SingleString
@@ -248,19 +248,22 @@ fn prett_parsing(input: NixTokens<'_>, min_bp: u8) -> PResult<'_, Ast> {
             unimplemented!("Comments are not yet implemented")
         }
 
-        // Bracketed result in an atom
         Token::LParen => {
-            let lhs = prett_parsing(input, 0)?;
-            assert_eq!(input.peek().unwrap().0, Token::RParen);
-            lhs
+            input.next();
+            println!("before: {input:?}");
+            let (mut input, lhs) = prett_parsing(input, 0, eof)?;
+            println!("{input:?}");
+            assert_eq!(input.next().unwrap().0, Token::RParen);
+            (input, lhs)
         }
 
         Minus => {
-            let right_bp = 7;
-            let (input, rhs) = prett_parsing(input, right_bp)?;
+            input.next();
+            let right_bp = 23;
+            let (input, rhs) = prett_parsing(input, right_bp, eof)?;
             (
                 input,
-                Ast::UnaryOperator {
+                Ast::UnaryOp {
                     op: UnOp::Negation,
                     rhs: Box::new(rhs),
                 },
@@ -268,21 +271,26 @@ fn prett_parsing(input: NixTokens<'_>, min_bp: u8) -> PResult<'_, Ast> {
         }
 
         Token::Not => {
-            let right_bp = 17;
-            let (input, rhs) = prett_parsing(input, right_bp)?;
+            input.next();
+            let right_bp = 13;
+            let (input, rhs) = prett_parsing(input, right_bp, eof)?;
             (
                 input,
-                Ast::UnaryOperator {
+                Ast::UnaryOp {
                     op: UnOp::LogicalNegation,
                     rhs: Box::new(rhs),
                 },
             )
         }
 
-        _ => panic!("Unexpected token"),
+        t => panic!("Unexpected token: {t:?}"),
     };
 
     loop {
+        if input.peek().unwrap().0 == eof {
+            break;
+        }
+
         let op = BinOp::from_token(input.peek().unwrap().0);
 
         if let Some(op) = op {
@@ -293,9 +301,9 @@ fn prett_parsing(input: NixTokens<'_>, min_bp: u8) -> PResult<'_, Ast> {
 
             input.next();
 
-            let (_input, rhs) = prett_parsing(input, right_bp)?;
+            let (_input, rhs) = prett_parsing(input, right_bp, eof)?;
             input = _input;
-            lhs = Ast::BinaryOperator {
+            lhs = Ast::BinaryOp {
                 op,
                 lhs: Box::new(lhs),
                 rhs: Box::new(rhs),
@@ -307,302 +315,4 @@ fn prett_parsing(input: NixTokens<'_>, min_bp: u8) -> PResult<'_, Ast> {
     }
 
     Ok((input, lhs))
-}
-
-#[cfg(test)]
-mod tests {
-    use std::ops::Range;
-
-    use super::{
-        assert, atom, conditional, expr, ident, ident_default_pattern, inherit, lambda,
-        let_binding, literal, pattern, prett_parsing, set, set_pattern, statement, with,
-    };
-    use crate::{
-        ast::{Ast, Pattern, PatternElement},
-        lex,
-        lexer::NixTokens,
-    };
-
-    #[test]
-    fn test_ident() {
-        let tokens = lex("player");
-        let (input, ast) = ident(NixTokens(&tokens)).unwrap();
-        assert!(input.0.is_empty());
-        assert_eq!(ast, Ast::Identifier(Range { start: 0, end: 6 }));
-    }
-
-    #[test]
-    fn test_ident_default_pattern() {
-        let tokens = lex("player ? 12");
-        let (input, ast) = ident_default_pattern(NixTokens(&tokens)).unwrap();
-        assert!(input.0.is_empty());
-        assert_eq!(
-            ast,
-            PatternElement::DefaultIdentifier(Range { start: 0, end: 6 }, Ast::Integer(12))
-        );
-    }
-
-    #[test]
-    fn test_set_pattern() {
-        let tokens = lex("{ player, position , ... }");
-        let (input, ast) = set_pattern(NixTokens(&tokens)).unwrap();
-        assert!(input.0.is_empty());
-        assert_eq!(
-            ast,
-            Pattern {
-                patterns: vec![
-                    PatternElement::Identifier(Range { start: 2, end: 8 }),
-                    PatternElement::Identifier(Range { start: 10, end: 18 })
-                ],
-                is_wildcard: true,
-            }
-        );
-
-        let tokens = lex("{ ... }");
-        let (input, ast) = set_pattern(NixTokens(&tokens)).unwrap();
-        assert!(input.0.is_empty());
-        assert_eq!(
-            ast,
-            Pattern {
-                patterns: vec![],
-                is_wildcard: true,
-            }
-        );
-
-        let tokens = lex("{ }");
-        let (input, ast) = set_pattern(NixTokens(&tokens)).unwrap();
-        assert!(input.0.is_empty());
-        assert_eq!(
-            ast,
-            Pattern {
-                patterns: vec![],
-                is_wildcard: false,
-            }
-        );
-    }
-
-    #[test]
-    fn test_pattern() {
-        let tokens = lex("player");
-        let (input, ast) = pattern(NixTokens(&tokens)).unwrap();
-        assert!(input.0.is_empty());
-        assert_eq!(
-            ast,
-            Pattern {
-                patterns: vec![PatternElement::Identifier(Range { start: 0, end: 6 })],
-                is_wildcard: false,
-            }
-        );
-    }
-
-    #[test]
-    fn test_statement() {
-        let tokens = lex("player = 12;");
-        let (input, (name, ast)) = statement(NixTokens(&tokens)).unwrap();
-        assert!(input.0.is_empty());
-        assert_eq!(name, Range { start: 0, end: 6 });
-        assert_eq!(ast, Ast::Integer(12));
-    }
-
-    #[test]
-    fn test_set() {
-        let tokens = lex("{ player = 12; position = 13; }");
-        let (input, ast) = set(NixTokens(&tokens))
-            .map_err(|err| println!("{:#?}", err))
-            .unwrap();
-        assert!(input.0.is_empty());
-        assert_eq!(
-            ast,
-            Ast::AttrSet {
-                attrs: vec![
-                    (Range { start: 2, end: 8 }, Ast::Integer(12)),
-                    (Range { start: 15, end: 23 }, Ast::Integer(13))
-                ],
-                is_recursive: false,
-            }
-        );
-
-        let tokens = lex("{ }");
-        let (input, ast) = set(NixTokens(&tokens))
-            .map_err(|err| println!("{:#?}", err))
-            .unwrap();
-        assert!(input.0.is_empty());
-        assert_eq!(
-            ast,
-            Ast::AttrSet {
-                attrs: vec![],
-                is_recursive: false,
-            }
-        );
-
-        let tokens = lex("rec { }");
-        let (input, ast) = set(NixTokens(&tokens))
-            .map_err(|err| println!("{:#?}", err))
-            .unwrap();
-        assert!(input.0.is_empty());
-        assert_eq!(
-            ast,
-            Ast::AttrSet {
-                attrs: vec![],
-                is_recursive: true,
-            }
-        )
-    }
-
-    #[test]
-    fn test_lambda() {
-        let tokens = lex("player: 12");
-        let (input, ast) = lambda(NixTokens(&tokens)).unwrap();
-        assert!(input.0.is_empty());
-        assert_eq!(
-            ast,
-            Ast::Lambda {
-                arguments: vec![Pattern {
-                    patterns: vec![PatternElement::Identifier(Range { start: 0, end: 6 })],
-                    is_wildcard: false,
-                }],
-                body: Box::new(Ast::Integer(12)),
-                arg_binding: None,
-            }
-        );
-
-        let tokens = lex("player: position: 12");
-        let (input, ast) = lambda(NixTokens(&tokens)).unwrap();
-        assert!(input.0.is_empty());
-        assert_eq!(
-            ast,
-            Ast::Lambda {
-                arguments: vec![
-                    Pattern {
-                        patterns: vec![PatternElement::Identifier(Range { start: 0, end: 6 })],
-                        is_wildcard: false,
-                    },
-                    Pattern {
-                        patterns: vec![PatternElement::Identifier(Range { start: 8, end: 16 })],
-                        is_wildcard: false,
-                    }
-                ],
-                body: Box::new(Ast::Integer(12)),
-                arg_binding: None,
-            }
-        );
-
-        let tokens = lex("{player}: 12");
-
-        let (input, ast) = lambda(NixTokens(&tokens)).unwrap();
-        assert!(input.0.is_empty());
-        assert_eq!(
-            ast,
-            Ast::Lambda {
-                arguments: vec![Pattern {
-                    patterns: vec![PatternElement::Identifier(Range { start: 1, end: 7 })],
-                    is_wildcard: false,
-                }],
-                body: Box::new(Ast::Integer(12)),
-                arg_binding: None,
-            }
-        );
-    }
-
-    #[test]
-    fn test_conditional() {
-        let tokens = lex("if true then 12 else 13");
-        println!("{:?}", tokens);
-        let (input, ast) = conditional(NixTokens(&tokens)).unwrap();
-        assert!(input.0.is_empty());
-        assert_eq!(
-            ast,
-            Ast::Conditional {
-                condition: Box::new(Ast::Boolean(true)),
-                expr1: Box::new(Ast::Integer(12)),
-                expr2: Box::new(Ast::Integer(13)),
-            }
-        );
-    }
-
-    #[test]
-    fn test_assert() {
-        let tokens = lex("assert true;");
-        let (input, ast) = assert(NixTokens(&tokens)).unwrap();
-        assert!(input.0.is_empty());
-        assert_eq!(
-            ast,
-            Ast::Assertion {
-                condition: Box::new(Ast::Boolean(true)),
-                then: Box::new(Ast::Null),
-            }
-        );
-    }
-
-    #[test]
-    fn test_inherit() {
-        let tokens = lex("inherit player;");
-        let (input, ast) = inherit(NixTokens(&tokens)).unwrap();
-        assert!(input.0.is_empty());
-        assert_eq!(ast, vec![Ast::Identifier(Range { start: 8, end: 14 })]);
-
-        let tokens = lex("inherit player position borders;");
-        let (input, ast) = inherit(NixTokens(&tokens)).unwrap();
-        assert!(input.0.is_empty());
-        assert_eq!(
-            ast,
-            vec![
-                Ast::Identifier(Range { start: 8, end: 14 }),
-                Ast::Identifier(Range { start: 15, end: 23 }),
-                Ast::Identifier(Range { start: 24, end: 31 })
-            ]
-        );
-    }
-
-    #[test]
-    fn test_let_binding() {
-        let tokens = lex("let player = 12; in player");
-        let (input, ast) = let_binding(NixTokens(&tokens)).unwrap();
-        assert!(input.0.is_empty());
-        assert_eq!(
-            ast,
-            Ast::LetBinding {
-                bindings: vec![(Range { start: 4, end: 10 }, Ast::Integer(12))],
-                body: Box::new(Ast::Identifier(Range { start: 20, end: 26 })),
-                inherit: None,
-            }
-        );
-
-        let tokens = lex("let player = 12; position = 13; in {}");
-        let (input, ast) = let_binding(NixTokens(&tokens)).unwrap();
-        assert!(input.0.is_empty());
-        assert_eq!(
-            ast,
-            Ast::LetBinding {
-                bindings: vec![
-                    (Range { start: 4, end: 10 }, Ast::Integer(12)),
-                    (Range { start: 17, end: 25 }, Ast::Integer(13))
-                ],
-                body: Box::new(Ast::AttrSet {
-                    attrs: vec![],
-                    is_recursive: false
-                }),
-                inherit: None,
-            }
-        );
-    }
-
-    #[test]
-    fn test_with() {
-        let tokens = lex("with player;");
-        let (input, ast) = with(NixTokens(&tokens)).unwrap();
-        assert!(input.0.is_empty());
-        assert_eq!(ast, Ast::Identifier(Range { start: 5, end: 11 }));
-
-        let tokens = lex("with { a = 1; };");
-        let (input, ast) = with(NixTokens(&tokens)).unwrap();
-        assert!(input.0.is_empty());
-        assert_eq!(
-            ast,
-            Ast::AttrSet {
-                attrs: vec![(Range { start: 7, end: 8 }, Ast::Integer(1))],
-                is_recursive: false,
-            }
-        );
-    }
 }

@@ -55,23 +55,23 @@ pub enum BinOp {
 impl BinOp {
     pub fn get_precedence(&self) -> (u8, u8) {
         match self {
-            Self::AttributeFallback => (1, 2),
-            Self::AttributeSelection => (3, 4),
-            Self::Application => (5, 6),
-            // Arithematic negation with 7
-            Self::HasAttribute => (9, 10),
-            Self::ListConcat => (12, 11), // Right associative
-            Self::Mul | Self::Div => (13, 14),
-            Self::Add | Self::Sub => (15, 16),
-            // Logic negation with 17
-            Self::Update => (20, 19), // Right associative
+            Self::Implication => (2, 1),
+            Self::Or => (3, 4),
+            Self::And => (5, 6),
+            Self::Equal | Self::NotEqual => (7, 8),
             Self::LessThan | Self::LessThanEqual | Self::GreaterThan | Self::GreaterThanEqual => {
-                (21, 22)
-            }
-            Self::Equal | Self::NotEqual => (23, 24),
-            Self::And => (25, 26),
-            Self::Or => (27, 28),
-            Self::Implication => (29, 30),
+                (9, 10)
+            } // Right associative
+            Self::Update => (12, 11),
+            // Negotaion with 13
+            Self::Add | Self::Sub => (15, 16), // Right associative
+            Self::Mul | Self::Div => (17, 18),
+            Self::ListConcat => (20, 19),
+            Self::HasAttribute => (21, 22),
+            // Arithmetic negation with 23
+            Self::Application => (25, 26),
+            Self::AttributeSelection => (27, 28),
+            Self::AttributeFallback => (29, 30),
         }
     }
 
@@ -97,8 +97,8 @@ impl BinOp {
             Dot => Some(BinOp::AttributeSelection),
             Question => Some(BinOp::HasAttribute),
             _ => {
-                // TODO: handle this
-                Some(BinOp::Application)
+                // TODO: Add application here
+                None
             }
         }
     }
@@ -127,13 +127,13 @@ pub enum Ast {
     /// ----------------- Operators -----------------
 
     /// Unary Operators
-    UnaryOperator {
+    UnaryOp {
         op: UnOp,
         rhs: Box<Ast>,
     },
 
     /// Binary Operators
-    BinaryOperator {
+    BinaryOp {
         op: BinOp,
         lhs: Box<Ast>,
         rhs: Box<Ast>,
