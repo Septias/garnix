@@ -1,9 +1,6 @@
-//! Abstract syntax tree for the nix language.
+//! Abstract syntax tree for the Nix language.
 
-use std::{
-    collections::{HashMap, HashSet},
-    hash::Hash,
-};
+
 
 use logos::Span;
 

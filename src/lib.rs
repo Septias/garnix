@@ -1,17 +1,17 @@
-#![allow(unused)]
 use std::{fs::read_to_string, path::Path};
 
 use ast::Ast;
 use lexer::{NixTokens, Token};
-use logos::{Logos, Span};
+use logos::Logos;
 
 mod ast;
 mod lexer;
 mod parser;
 
+/// Result of parsing a String containing nix code.
 pub struct ParseResult {
     pub ast: Ast,
-    source: String,
+    pub source: String,
 }
 
 /// Parse a file containing Nix code.

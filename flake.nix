@@ -1,5 +1,5 @@
 {
-  description = "Typeinferenz für nix";
+  description = "Type-inference for Nix";
   inputs = {
     rust-overlay.url = "github:oxalica/rust-overlay";
     flake-utils.follows = "rust-overlay/flake-utils";

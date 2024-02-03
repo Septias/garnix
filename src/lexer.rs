@@ -1,7 +1,7 @@
 //! Lexer for the Nix language.
 
 use logos::{Logos, Span};
-use nom::InputTake;
+
 use std::usize;
 
 /// All tokens from the Nix language.
@@ -238,8 +238,7 @@ pub mod nom_interop {
 
     use super::{NixTokens, SpannedToken, Token};
     use nom::{
-        error::ParseError, FindToken, IResult, InputIter, InputLength, InputTake,
-        InputTakeAtPosition, Needed, Slice, UnspecializedInput,
+        error::ParseError, FindToken, IResult, InputIter, InputLength, InputTake, Needed, Slice, UnspecializedInput,
     };
 
     impl<'a> Index<usize> for NixTokens<'a> {
@@ -328,7 +327,7 @@ pub mod nom_interop {
         }) {
             Some((c, true)) => Ok((i.slice(1..), c.clone())),
             _ => Err(nom::Err::Error(Error::from_error_kind(
-                i.clone(),
+                i,
                 nom::error::ErrorKind::Char,
             ))),
         }
