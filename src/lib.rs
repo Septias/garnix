@@ -1,12 +1,13 @@
+//! A library for parsing Nix code.
 use std::{fs::read_to_string, path::Path};
 
 use ast::Ast;
 use lexer::{NixTokens, Token};
 use logos::Logos;
 
-mod ast;
-mod lexer;
-mod parser;
+pub mod ast;
+pub mod lexer;
+pub mod parser;
 
 /// Result of parsing a String containing nix code.
 pub struct ParseResult {
@@ -20,14 +21,16 @@ pub fn parse_file(path: &Path) -> ParseResult {
     parse(source)
 }
 
+pub(crate) fn lex(source: &str) -> Vec<(Token, logos::Span)> {
+    let lex = Token::lexer(source);
+    lex.spanned()
+        .map(|(token, span)| (token.unwrap(), span))
+        .collect()
+}
+
 /// Parse a string containing Nix code.
 pub fn parse(source: String) -> ParseResult {
-    let lex = Token::lexer(&source);
-    let tokens = lex
-        .spanned()
-        .map(|(token, span)| (token.unwrap(), span))
-        .collect::<Vec<_>>();
-
+    let tokens = lex(&source);
     let (_, ast) = parser::expr(NixTokens(&tokens)).unwrap();
 
     ParseResult { ast, source }

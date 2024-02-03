@@ -13,7 +13,7 @@
     then x else z;
 
   x = {};
-  setfun = {}: {};
+  setfun = {...}: {};
   setInherit = {}: {inherit x;};
   setIdentFn = x: {y}: x + y;
   settest = x.${x.y or ""};
@@ -29,6 +29,7 @@
   /* */
   bracketing = (1 + 2) * 3;
   application = fun fun builtins.map  (1 + 1) 2+2;
+  let_in = with 1+1; let x = 1; in 1+1;
 in {
   inherit setfun setIdentFn bracketing ifs ifxlamba string stringMulti t x set setInherit settest;
   fun = fun;

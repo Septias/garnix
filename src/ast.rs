@@ -1,12 +1,11 @@
 //! Abstract syntax tree for the Nix language.
 
-
-
 use logos::Span;
 
 use crate::lexer::Token;
 
 /// Part of a [Pattern].
+#[derive(Debug, Clone, PartialEq)]
 pub enum PatternElement {
     /// Pattern of the form `ident`
     Identifier(Span),
@@ -15,6 +14,7 @@ pub enum PatternElement {
 }
 
 /// A pattern.
+#[derive(Debug, Clone, PartialEq)]
 pub struct Pattern {
     /// A list of patterns
     pub patterns: Vec<PatternElement>,
@@ -23,6 +23,7 @@ pub struct Pattern {
 }
 
 /// Binary operators.
+#[derive(Debug, Clone, PartialEq)]
 pub enum BinOp {
     // Function application
     Application,
@@ -104,6 +105,7 @@ impl BinOp {
 }
 
 /// Unary operator.
+#[derive(Debug, Clone, PartialEq)]
 pub enum UnOp {
     Negation,
     LogicalNegation,
@@ -120,6 +122,7 @@ impl UnOp {
 
 /// Ast for the the nix language
 #[repr(u8)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Ast {
     /// ----------------- Operators -----------------
 

@@ -125,7 +125,7 @@ pub enum Token {
     Else,
 
     // Booleans
-    #[token("(true)|(false)", |lex| lex.slice() == "true")]
+    #[regex("true|false", |lex| lex.slice() == "true")]
     Boolean(bool),
 
     // Strings
@@ -175,6 +175,9 @@ pub enum Token {
 
     #[token("or")]
     AttributeFallback,
+
+    #[token("=")]
+    Assignment,
 }
 
 impl Token {
@@ -238,7 +241,8 @@ pub mod nom_interop {
 
     use super::{NixTokens, SpannedToken, Token};
     use nom::{
-        error::ParseError, FindToken, IResult, InputIter, InputLength, InputTake, Needed, Slice, UnspecializedInput,
+        error::ParseError, FindToken, IResult, InputIter, InputLength, InputTake, Needed, Slice,
+        UnspecializedInput,
     };
 
     impl<'a> Index<usize> for NixTokens<'a> {
@@ -322,13 +326,13 @@ pub mod nom_interop {
         c: Token,
     ) -> impl Fn(NixTokens<'a>) -> IResult<NixTokens<'a>, SpannedToken, Error> {
         move |i: NixTokens<'_>| match (i).iter_elements().next().map(|t| {
-            let b = t.0 == c;
+            let b = discriminant(&t.0) == discriminant(&c);
             (t, b)
         }) {
             Some((c, true)) => Ok((i.slice(1..), c.clone())),
             _ => Err(nom::Err::Error(Error::from_error_kind(
                 i,
-                nom::error::ErrorKind::Char,
+                nom::error::ErrorKind::IsNot,
             ))),
         }
     }
