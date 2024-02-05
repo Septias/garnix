@@ -21,17 +21,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3f9eec918d3f24069decb9af1554cad7c880e2da24a9afd88aca000531ab82c1"
 
 [[package]]
-name = "garnix"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "log",
- "logos",
- "nom",
- "thiserror",
-]
-
-[[package]]
 name = "log"
 version = "0.4.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -70,6 +59,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "lsp"
+version = "0.1.0"
+dependencies = [
+ "parser",
+]
+
+[[package]]
 name = "memchr"
 version = "2.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -89,6 +85,17 @@ checksum = "d273983c5a657a70a3e8f2a01329822f3b8c8172b73826411a55751e404a0a4a"
 dependencies = [
  "memchr",
  "minimal-lexical",
+]
+
+[[package]]
+name = "parser"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "log",
+ "logos",
+ "nom",
+ "thiserror",
 ]
 
 [[package]]

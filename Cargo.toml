@@ -1,11 +1,2 @@
-[package]
-name = "garnix"
-version = "0.1.0"
-edition = "2021"
-
-[dependencies]
-logos = "*"
-nom = "*"
-log = "*"
-anyhow = "*"
-thiserror = "*"
+[workspace]
+members = ["lsp", "parser"]
