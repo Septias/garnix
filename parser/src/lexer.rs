@@ -209,6 +209,7 @@ type SpannedToken = (Token, Span);
 pub struct NixTokens<'a>(pub &'a [SpannedToken]);
 
 impl<'a> NixTokens<'a> {
+    #[allow(clippy::should_implement_trait)]
     pub fn next(&mut self) -> Option<SpannedToken> {
         if self.0.is_empty() {
             None
@@ -220,7 +221,7 @@ impl<'a> NixTokens<'a> {
     }
 
     pub fn peek(&self) -> Option<&SpannedToken> {
-        self.0.get(0)
+        self.0.first()
     }
 }
 

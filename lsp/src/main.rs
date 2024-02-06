@@ -24,7 +24,7 @@ fn map_idents(input: &Ast, source: &str, map: &mut Vec<(Range<usize>, String)>) 
             for (_, v) in attrs {
                 map_idents(v, source, map);
             }
-            if let Some((range, _)) = attrs.get(0) {
+            if let Some((range, _)) = attrs.first() {
                 map.push((
                     range.clone(),
                     format!(

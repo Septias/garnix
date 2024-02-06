@@ -31,7 +31,7 @@ pub(crate) fn lex(source: &str) -> Vec<(Token, logos::Span)> {
     lex.spanned()
         .map(|(token, span)| {
             (
-                token.expect(&format!("Unknown token: {}", &source[span.clone()])),
+                token.unwrap_or_else(|_| panic!("Unknown token: {}", &source[span.clone()])),
                 span,
             )
         })

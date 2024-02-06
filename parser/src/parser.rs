@@ -205,12 +205,12 @@ pub(crate) fn with(input: NixTokens<'_>) -> PResult<'_, Ast> {
     preceded(token(Token::With), cut(terminated(expr, token(Semi))))(input)
 }
 
-pub(crate) fn atom<'b>(input: NixTokens<'_>) -> PResult<'_, Ast> {
+pub(crate) fn atom(input: NixTokens<'_>) -> PResult<'_, Ast> {
     alt((let_binding, conditional, set, literal))(input)
 }
 
 /// Parse an expression.
-pub(crate) fn expr<'b>(input: NixTokens<'_>) -> PResult<'_, Ast> {
+pub(crate) fn expr(input: NixTokens<'_>) -> PResult<'_, Ast> {
     context(
         "expr",
         pair(

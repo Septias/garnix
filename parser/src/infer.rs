@@ -92,16 +92,12 @@ fn hm(context: &mut Context, expr: &Ast) -> Result<Type, InferError> {
     match expr {
         Ast::UnaryOp { op, rhs } => {
             let ty = hm(context, rhs)?;
-            match op {
-                _ => todo!(),
-            }
+            todo!()
         }
         Ast::BinaryOp { op, lhs, rhs } => {
             let ty1 = hm(context, lhs)?;
             let ty2 = hm(context, rhs)?;
-            match op {
-                _ => todo!(),
-            }
+            todo!()
         }
         Ast::AttrSet {
             attrs,
