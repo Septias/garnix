@@ -44,9 +44,9 @@ pub(crate) fn literal(input: NixTokens<'_>) -> PResult<'_, Ast> {
     context(
         "literal",
         alt((
-            token(Token::Integer(12)).map(|(token, _)| Integer(token.as_i32().unwrap())),
+            token(Token::Integer(12)).map(|(token, _)| Int(token.as_i32().unwrap())),
             token(Token::Float(12.0)).map(|(token, _)| Float(token.as_f32().unwrap())),
-            token(Token::Boolean(true)).map(|(token, _)| Boolean(token.as_bool().unwrap())),
+            token(Token::Boolean(true)).map(|(token, _)| Bool(token.as_bool().unwrap())),
             token(Token::Null).map(|_| Null),
             token(Token::Comment).map(|(_, comment)| Comment(comment)),
             token(Token::DocComment).map(|(_, comment)| DocComment(comment)),

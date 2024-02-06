@@ -205,8 +205,8 @@ pub enum Ast {
     /// Primitives
     NixString(Span),
     NixPath(Span),
-    Boolean(bool),
-    Integer(i32),
+    Bool(bool),
+    Int(i32),
     Float(f32),
     Null,
 

@@ -1,10 +1,10 @@
 ## Features
-- String interpolation
 
 ## Improvements
-- Add verbose error
 - nice discard implementation
-- Make Pattern generic
+- Add `application` in prett parsing
+- String interpolation
+- Doc comment type parsing
 
 ## Restrictions
 - Comment positions

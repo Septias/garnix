@@ -28,7 +28,7 @@ fn test_ident_default_pattern() {
     assert!(input.0.is_empty());
     assert_eq!(
         ast,
-        PatternElement::DefaultIdentifier(Range { start: 0, end: 6 }, Ast::Integer(12))
+        PatternElement::DefaultIdentifier(Range { start: 0, end: 6 }, Ast::Int(12))
     );
 }
 
@@ -91,7 +91,7 @@ fn test_statement() {
     let (input, (name, ast)) = statement(NixTokens(&tokens)).unwrap();
     assert!(input.0.is_empty());
     assert_eq!(name, Range { start: 0, end: 6 });
-    assert_eq!(ast, Ast::Integer(12));
+    assert_eq!(ast, Ast::Int(12));
 
     let tokens = lex("player = 12 + 13;");
     let (input, (name, ast)) = statement(NixTokens(&tokens)).unwrap();
@@ -100,8 +100,8 @@ fn test_statement() {
     assert_eq!(
         ast,
         Ast::BinaryOp {
-            lhs: Box::new(Ast::Integer(12)),
-            rhs: Box::new(Ast::Integer(13)),
+            lhs: Box::new(Ast::Int(12)),
+            rhs: Box::new(Ast::Int(13)),
             op: BinOp::Add,
         }
     );
@@ -118,8 +118,8 @@ fn test_set() {
         ast,
         Ast::AttrSet {
             attrs: vec![
-                (Range { start: 2, end: 8 }, Ast::Integer(12)),
-                (Range { start: 15, end: 23 }, Ast::Integer(13))
+                (Range { start: 2, end: 8 }, Ast::Int(12)),
+                (Range { start: 15, end: 23 }, Ast::Int(13))
             ],
             is_recursive: false,
         }
@@ -164,7 +164,7 @@ fn test_lambda() {
                 patterns: vec![PatternElement::Identifier(Range { start: 0, end: 6 })],
                 is_wildcard: false,
             }],
-            body: Box::new(Ast::Integer(12)),
+            body: Box::new(Ast::Int(12)),
             arg_binding: None,
         }
     );
@@ -185,7 +185,7 @@ fn test_lambda() {
                     is_wildcard: false,
                 }
             ],
-            body: Box::new(Ast::Integer(12)),
+            body: Box::new(Ast::Int(12)),
             arg_binding: None,
         }
     );
@@ -201,7 +201,7 @@ fn test_lambda() {
                 patterns: vec![PatternElement::Identifier(Range { start: 1, end: 7 })],
                 is_wildcard: false,
             }],
-            body: Box::new(Ast::Integer(12)),
+            body: Box::new(Ast::Int(12)),
             arg_binding: None,
         }
     );
@@ -216,9 +216,9 @@ fn test_conditional() {
     assert_eq!(
         ast,
         Ast::Conditional {
-            condition: Box::new(Ast::Boolean(true)),
-            expr1: Box::new(Ast::Integer(12)),
-            expr2: Box::new(Ast::Integer(13)),
+            condition: Box::new(Ast::Bool(true)),
+            expr1: Box::new(Ast::Int(12)),
+            expr2: Box::new(Ast::Int(13)),
         }
     );
 }
@@ -231,7 +231,7 @@ fn test_assert() {
     assert_eq!(
         ast,
         Ast::Assertion {
-            condition: Box::new(Ast::Boolean(true)),
+            condition: Box::new(Ast::Bool(true)),
             then: Box::new(Ast::Null),
         }
     );
@@ -265,7 +265,7 @@ fn test_let_binding() {
     assert_eq!(
         ast,
         Ast::LetBinding {
-            bindings: vec![(Range { start: 4, end: 10 }, Ast::Integer(12))],
+            bindings: vec![(Range { start: 4, end: 10 }, Ast::Int(12))],
             body: Box::new(Ast::Identifier(Range { start: 20, end: 26 })),
             inherit: None,
         }
@@ -278,8 +278,8 @@ fn test_let_binding() {
         ast,
         Ast::LetBinding {
             bindings: vec![
-                (Range { start: 4, end: 10 }, Ast::Integer(12)),
-                (Range { start: 17, end: 25 }, Ast::Integer(13))
+                (Range { start: 4, end: 10 }, Ast::Int(12)),
+                (Range { start: 17, end: 25 }, Ast::Int(13))
             ],
             body: Box::new(Ast::AttrSet {
                 attrs: vec![],
@@ -303,7 +303,7 @@ fn test_with() {
     assert_eq!(
         ast,
         Ast::AttrSet {
-            attrs: vec![(Range { start: 7, end: 8 }, Ast::Integer(1))],
+            attrs: vec![(Range { start: 7, end: 8 }, Ast::Int(1))],
             is_recursive: false,
         }
     );
@@ -319,17 +319,17 @@ fn test_literal() {
     let tokens = lex("true");
     let (input, ast) = literal(NixTokens(&tokens)).unwrap();
     assert!(input.0.is_empty());
-    assert_eq!(ast, Ast::Boolean(true));
+    assert_eq!(ast, Ast::Bool(true));
 
     let tokens = lex("false");
     let (input, ast) = literal(NixTokens(&tokens)).unwrap();
     assert!(input.0.is_empty());
-    assert_eq!(ast, Ast::Boolean(false));
+    assert_eq!(ast, Ast::Bool(false));
 
     let tokens = lex("12");
     let (input, ast) = literal(NixTokens(&tokens)).unwrap();
     assert!(input.0.is_empty());
-    assert_eq!(ast, Ast::Integer(12));
+    assert_eq!(ast, Ast::Int(12));
 
     let tokens = lex("12.12");
     println!("{:?}", tokens);
@@ -387,7 +387,7 @@ fn test_expression() {
     assert_eq!(
         ast,
         Ast::LetBinding {
-            bindings: vec![(Range { start: 4, end: 10 }, Ast::Integer(12))],
+            bindings: vec![(Range { start: 4, end: 10 }, Ast::Int(12))],
             body: Box::new(Ast::Identifier(Range { start: 20, end: 26 })),
             inherit: None,
         }
@@ -405,10 +405,10 @@ fn test_prett_parsing() {
     assert_eq!(
         ast,
         Ast::BinaryOp {
-            lhs: Box::new(Ast::Integer(12)),
+            lhs: Box::new(Ast::Int(12)),
             rhs: Box::new(Ast::BinaryOp {
-                lhs: Box::new(Ast::Integer(12)),
-                rhs: Box::new(Ast::Integer(13)),
+                lhs: Box::new(Ast::Int(12)),
+                rhs: Box::new(Ast::Int(13)),
                 op: Mul,
             }),
             op: Add,
@@ -423,11 +423,11 @@ fn test_prett_parsing() {
         ast,
         Ast::BinaryOp {
             lhs: Box::new(Ast::BinaryOp {
-                lhs: Box::new(Ast::Integer(12)),
-                rhs: Box::new(Ast::Integer(12)),
+                lhs: Box::new(Ast::Int(12)),
+                rhs: Box::new(Ast::Int(12)),
                 op: Add,
             }),
-            rhs: Box::new(Ast::Integer(13)),
+            rhs: Box::new(Ast::Int(13)),
             op: Mul,
         }
     );
