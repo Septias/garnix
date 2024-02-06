@@ -92,6 +92,19 @@ fn test_statement() {
     assert!(input.0.is_empty());
     assert_eq!(name, Range { start: 0, end: 6 });
     assert_eq!(ast, Ast::Integer(12));
+
+    let tokens = lex("player = 12 + 13;");
+    let (input, (name, ast)) = statement(NixTokens(&tokens)).unwrap();
+    assert!(input.0.is_empty());
+    assert_eq!(name, Range { start: 0, end: 6 });
+    assert_eq!(
+        ast,
+        Ast::BinaryOp {
+            lhs: Box::new(Ast::Integer(12)),
+            rhs: Box::new(Ast::Integer(13)),
+            op: BinOp::Add,
+        }
+    );
 }
 
 #[test]
@@ -418,4 +431,17 @@ fn test_prett_parsing() {
             op: Mul,
         }
     );
+}
+
+#[test]
+fn test_long_lambda() {
+    let tokens = lex(r#"let player = 12; position = 12 * 11; name = "bob"; in {}"#);
+    let (input, ast) = expr(NixTokens(&tokens)).unwrap();
+    assert!(input.0.is_empty());
+
+    let tokens = lex(
+        r#"let player = "hi"; position = (12 * 11) + 1; name = "bob"; set = {x = "1";}; in {}"#,
+    );
+    let (input, ast) = expr(NixTokens(&tokens)).unwrap();
+    assert!(input.0.is_empty());
 }

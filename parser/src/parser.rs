@@ -1,9 +1,8 @@
-#![allow(unused)]
 use logos::Span;
 use nom::{
     branch::alt,
     combinator::{cut, opt, success},
-    error::{context, VerboseError},
+    error::{context, ParseError, VerboseError},
     multi::{many0, many1, separated_list1},
     sequence::{delimited, pair, preceded, terminated, tuple},
     IResult, Parser,
@@ -214,7 +213,23 @@ pub(crate) fn atom<'b>(input: NixTokens<'_>) -> PResult<'_, Ast> {
 pub(crate) fn expr<'b>(input: NixTokens<'_>) -> PResult<'_, Ast> {
     context(
         "expr",
-        pair(opt(with), alt((literal, ident, set, assert, lambda))).map(|(with, expr)| {
+        pair(
+            opt(with),
+            alt((
+                |input| prett_parsing(input, 0, Token::Semi),
+                literal,
+                ident,
+                set,
+                assert,
+                lambda,
+                let_binding,
+            )),
+        )
+        .map(|(with, expr)| {
+            #[cfg(test)]
+            {
+                println!("expr: {:#?}", expr);
+            }
             if let Some(with) = with {
                 With {
                     set: Box::new(with),
@@ -250,9 +265,7 @@ pub(crate) fn prett_parsing(mut input: NixTokens<'_>, min_bp: u8, eof: Token) ->
 
         Token::LParen => {
             input.next();
-            println!("before: {input:?}");
             let (mut input, lhs) = prett_parsing(input, 0, eof)?;
-            println!("{input:?}");
             assert_eq!(input.next().unwrap().0, Token::RParen);
             (input, lhs)
         }
@@ -287,8 +300,15 @@ pub(crate) fn prett_parsing(mut input: NixTokens<'_>, min_bp: u8, eof: Token) ->
     };
 
     loop {
-        if input.peek().unwrap().0 == eof {
-            break;
+        if let Some((token, _)) = input.peek() {
+            if *token == eof {
+                break;
+            }
+        } else {
+            return Err(nom::Err::Error(VerboseError::from_error_kind(
+                input,
+                nom::error::ErrorKind::Eof,
+            )));
         }
 
         let op = BinOp::from_token(input.peek().unwrap().0);

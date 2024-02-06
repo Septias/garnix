@@ -132,7 +132,7 @@ pub enum Token {
     #[regex("''[a-zA-Z ]*''")]
     MultiString,
 
-    #[regex(r#""[a-zA-Z ]*""#)]
+    #[regex(r#""[a-zA-Z0-9\\/{}\[\]\(\) ]*""#)]
     SingleString,
 
     // Literals

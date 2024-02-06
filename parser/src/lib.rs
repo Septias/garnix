@@ -12,6 +12,7 @@ pub mod parser;
 #[cfg(test)]
 mod test;
 
+#[derive(Debug, Clone)]
 /// Result of parsing a String containing nix code.
 pub struct ParseResult {
     pub ast: Ast,

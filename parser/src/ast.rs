@@ -1,6 +1,7 @@
 //! Abstract syntax tree for the Nix language.
 
 use logos::Span;
+use strum_macros::AsRefStr;
 
 use crate::lexer::Token;
 
@@ -122,7 +123,7 @@ impl UnOp {
 
 /// Ast for the the nix language
 #[repr(u8)]
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, AsRefStr)]
 pub enum Ast {
     /// ----------------- Operators -----------------
 
@@ -218,7 +219,12 @@ pub enum Ast {
 impl Ast {
     pub fn as_span(&self) -> Span {
         match &self {
-            Self::Identifier(s) => s.clone(),
+            Ast::Identifier(s)
+            | Ast::NixString(s)
+            | Ast::NixPath(s)
+            | Ast::Comment(s)
+            | Ast::DocComment(s)
+            | Ast::LineComment(s) => s.clone(),
             _ => Span::default(),
         }
     }
