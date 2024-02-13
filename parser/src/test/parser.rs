@@ -1,4 +1,3 @@
-#![allow(unused)]
 use std::ops::Range;
 
 use crate::ast::BinOp;
@@ -436,12 +435,33 @@ fn test_prett_parsing() {
 #[test]
 fn test_long_lambda() {
     let tokens = lex(r#"let player = 12; position = 12 * 11; name = "bob"; in {}"#);
-    let (input, ast) = expr(NixTokens(&tokens)).unwrap();
+    let (input, _) = expr(NixTokens(&tokens)).unwrap();
     assert!(input.0.is_empty());
 
     let tokens = lex(
         r#"let player = "hi"; position = (12 * 11) + 1; name = "bob"; set = {x = "1";}; in {}"#,
     );
-    let (input, ast) = expr(NixTokens(&tokens)).unwrap();
+    let (input, _) = expr(NixTokens(&tokens)).unwrap();
     assert!(input.0.is_empty());
+}
+
+#[test]
+fn test_application() {
+    let tokens = lex(r#"map 1;"#);
+    let (input, _) = expr(NixTokens(&tokens)).unwrap();
+    assert_eq!(input.0.get(0).unwrap().0, Token::Semi);
+
+    let tokens = lex(r#"map (1+1);"#);
+    let (input, _) = expr(NixTokens(&tokens)).unwrap();
+    assert_eq!(input.0.get(0).unwrap().0, Token::Semi);
+
+    let tokens = lex(r#"map map (1+1);"#);
+    let (input, _) = expr(NixTokens(&tokens)).unwrap();
+    assert_eq!(input.0.get(0).unwrap().0, Token::Semi);
+}
+
+
+#[test]
+fn test_attribute_access() {
+    todo!()
 }

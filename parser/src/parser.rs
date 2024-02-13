@@ -206,7 +206,7 @@ pub(crate) fn with(input: NixTokens<'_>) -> PResult<'_, Ast> {
 }
 
 pub(crate) fn atom(input: NixTokens<'_>) -> PResult<'_, Ast> {
-    alt((let_binding, conditional, set, literal))(input)
+    alt((let_binding, conditional, set, literal, ident))(input)
 }
 
 /// Parse an expression.
@@ -217,19 +217,18 @@ pub(crate) fn expr(input: NixTokens<'_>) -> PResult<'_, Ast> {
             opt(with),
             alt((
                 |input| prett_parsing(input, 0, Token::Semi),
-                literal,
+                lambda,
                 ident,
+                literal,
                 set,
                 assert,
-                lambda,
                 let_binding,
             )),
         )
         .map(|(with, expr)| {
             #[cfg(test)]
-            {
-                println!("expr: {:#?}", expr);
-            }
+            println!("expr: {:#?}", expr);
+
             if let Some(with) = with {
                 With {
                     set: Box::new(with),
@@ -243,6 +242,7 @@ pub(crate) fn expr(input: NixTokens<'_>) -> PResult<'_, Ast> {
 }
 
 pub(crate) fn prett_parsing(mut input: NixTokens<'_>, min_bp: u8, eof: Token) -> PResult<'_, Ast> {
+    println!("{:?}", input);
     let (mut input, mut lhs) = match input.peek().unwrap().0 {
         // Anything that resembles an atom
         Token::Path
@@ -311,7 +311,12 @@ pub(crate) fn prett_parsing(mut input: NixTokens<'_>, min_bp: u8, eof: Token) ->
             )));
         }
 
-        let op = BinOp::from_token(input.peek().unwrap().0);
+        let mut op = BinOp::from_token(input.peek().unwrap().0);
+
+        if op.is_none() && matches!(lhs, Ast::Identifier(..)) {
+            println!("Application, {:?}", input);
+            op = Some(BinOp::Application)
+        }
 
         if let Some(op) = op {
             let (left_bp, right_bp) = op.get_precedence();
@@ -319,7 +324,9 @@ pub(crate) fn prett_parsing(mut input: NixTokens<'_>, min_bp: u8, eof: Token) ->
                 break;
             }
 
-            input.next();
+            if !matches!(lhs, Ast::Identifier(..)) {
+                input.next();
+            }
 
             let (_input, rhs) = prett_parsing(input, right_bp, eof)?;
             input = _input;
