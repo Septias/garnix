@@ -314,7 +314,6 @@ pub(crate) fn prett_parsing(mut input: NixTokens<'_>, min_bp: u8, eof: Token) ->
         let mut op = BinOp::from_token(input.peek().unwrap().0);
 
         if op.is_none() && matches!(lhs, Ast::Identifier(..)) {
-            println!("Application, {:?}", input);
             op = Some(BinOp::Application)
         }
 

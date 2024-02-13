@@ -1,6 +1,6 @@
 # Set lambda
 
-{path }: let
+{ }: let
   fun = x: x;
   arithm = x: y: (x + y) * 3;
   ifs =
@@ -28,10 +28,10 @@
   t = .0;
   /* */
   bracketing = (1 + 2) * 3;
-  application = fun fun builtins.map  (1 + 1) 2+2;
+  application = map (x: x*x) (map (x: x*x) [1 2 3]);
   let_in = with 1+1; let x = 1; in 1+1;
 in {
-  inherit setfun setIdentFn bracketing ifs ifxlamba string stringMulti t x set setInherit settest;
+  inherit setfun setIdentFn bracketing ifs ifxlamba string stringMulti t x set setInherit settest application;
   fun = fun;
   arithm = arithm;
 }

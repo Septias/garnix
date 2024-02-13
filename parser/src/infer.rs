@@ -7,7 +7,9 @@ use anyhow::Context as _;
 use strum_macros::Display;
 use thiserror::Error;
 
-use crate::ast::{Ast as ParserAst, BinOp, Pattern, PatternElement, UnOp};
+use crate::ast::{
+    Ast as ParserAst, BinOp, Pattern as ParserPattern, PatternElement as ParserPatternElement, UnOp,
+};
 
 #[derive(Debug, Error)]
 pub enum InferError {
@@ -21,20 +23,39 @@ pub enum InferError {
     UnexpectedAssertion,
 }
 
-pub(crate) enum Ast<'a> {
+/// Part of a [Pattern].
+#[derive(Debug, Clone, PartialEq)]
+pub enum PatternElement {
+    /// Pattern of the form `ident`
+    Identifier(usize),
+    /// Pattern of the form `ident ? <default>`
+    DefaultIdentifier(usize, Ast),
+}
+
+/// A pattern.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Pattern {
+    /// A list of patterns
+    pub patterns: Vec<PatternElement>,
+    /// Is widcard
+    pub is_wildcard: bool,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum Ast {
     /// ----------------- Operators -----------------
 
     /// Unary Operators
     UnaryOp {
         op: UnOp,
-        rhs: Box<Ast<'a>>,
+        rhs: Box<Ast>,
     },
 
     /// Binary Operators
     BinaryOp {
         op: BinOp,
-        lhs: Box<Ast<'a>>,
-        rhs: Box<Ast<'a>>,
+        lhs: Box<Ast>,
+        rhs: Box<Ast>,
     },
 
     /// ----------------- Language Constructs -----------------
@@ -43,7 +64,7 @@ pub(crate) enum Ast<'a> {
     /// parsed by [crate::parser::set]
     AttrSet {
         /// A set of attributes
-        attrs: Vec<(&'a str, Ast<'a>)>,
+        attrs: Vec<(usize, Ast)>,
         is_recursive: bool,
     },
 
@@ -51,11 +72,11 @@ pub(crate) enum Ast<'a> {
     /// parsed by [crate::parser::let_binding]
     LetBinding {
         /// A set of bindings
-        bindings: Vec<(&'a str, Ast<'a>)>,
+        bindings: Vec<(usize, Ast)>,
         /// The expression to evaluate
-        body: Box<Ast<'a>>,
+        body: Box<Ast>,
         /// A list of identifiers to inherit from the parent scope
-        inherit: Option<Vec<&'a str>>,
+        inherit: Option<Vec<usize>>,
     },
 
     /// Function
@@ -63,54 +84,145 @@ pub(crate) enum Ast<'a> {
     /// parsed by [crate::parser::lambda]
     Lambda {
         arguments: Vec<Pattern>,
-        body: Box<Ast<'a>>,
-        arg_binding: Option<&'a str>,
+        body: Box<Ast>,
+        arg_binding: Option<usize>,
     },
 
     /// Conditional
     /// parsed by [crate::parser::conditional]
     Conditional {
         /// The condition to evaluate
-        condition: Box<Ast<'a>>,
+        condition: Box<Ast>,
         /// The expression to evaluate if the condition is true
-        expr1: Box<Ast<'a>>,
+        expr1: Box<Ast>,
         /// The expression to evaluate if the condition is false
-        expr2: Box<Ast<'a>>,
+        expr2: Box<Ast>,
     },
 
     /// An assert statement.
     /// parsed by [crate::parser::assert]
     Assertion {
         /// The condition to evaluate
-        condition: Box<Ast<'a>>,
+        condition: Box<Ast>,
         /// The expression to evaluate if the condition is true
-        then: Box<Ast<'a>>,
+        then: Box<Ast>,
     },
 
     /// A with-statement.
     /// parsed by [crate::parser::with]
     With {
         /// The set-identifier to add
-        set: Box<Ast<'a>>,
+        set: Box<Ast>,
         /// The expression to evaluate
-        body: Box<Ast<'a>>,
+        body: Box<Ast>,
     },
 
     /// ----------------- Literals -----------------
-    Identifier(&'a str),
+    Identifier(usize),
 
     /// Primitives
-    NixString(&'a str),
-    NixPath(&'a str),
+    NixString(String),
+    NixPath(String),
     Bool(bool),
     Int(i32),
     Float(f32),
     Null,
 }
 
-impl<'a> Ast<'a> {
+impl Ast {
     fn from_parser_ast(value: &ParserAst) -> Self {
+        let vars = Cache::new();
         todo!()
+    }
+}
+
+fn transform_ast<'a>(
+    value: ParserAst,
+    cache: &mut Cache<'a>,
+    source: &'a str,
+    bindings: usize,
+) -> Ast {
+    match value {
+        ParserAst::UnaryOp { op, box rhs } => Ast::UnaryOp {
+            op: op,
+            rhs: Box::new(transform_ast(rhs, cache, source, bindings)),
+        },
+        ParserAst::BinaryOp {
+            op,
+            box lhs,
+            box rhs,
+        } => Ast::BinaryOp {
+            op: op,
+            lhs: Box::new(transform_ast(lhs, cache, source, bindings)),
+            rhs: Box::new(transform_ast(rhs, cache, source, bindings)),
+        },
+        ParserAst::AttrSet {
+            attrs,
+            is_recursive,
+        } => {
+            let attrs = attrs
+                .into_iter()
+                .map(|(name, expr)| (cache.get(&source[name]), transform_ast(expr, cache, source, bindings)))
+                .collect();
+            Ast::AttrSet {
+                attrs,
+                is_recursive: is_recursive,
+            }
+        }
+        ParserAst::LetBinding {
+            bindings,
+            body,
+            inherit,
+        } => todo!(),
+        ParserAst::Lambda {
+            arguments,
+            body,
+            arg_binding,
+        } => {
+            
+        },
+        ParserAst::Conditional {
+            condition,
+            expr1,
+            expr2,
+        } => todo!(),
+        ParserAst::Assertion { condition, then } => todo!(),
+        ParserAst::With { set, body } => todo!(),
+        ParserAst::Identifier(_) => todo!(),
+        ParserAst::NixString(_) => todo!(),
+        ParserAst::NixPath(_) => todo!(),
+        ParserAst::Bool(_) => todo!(),
+        ParserAst::Int(_) => todo!(),
+        ParserAst::Float(_) => todo!(),
+        ParserAst::Null => todo!(),
+        ParserAst::Comment(_) => todo!(),
+        ParserAst::DocComment(_) => todo!(),
+        ParserAst::LineComment(_) => todo!(),
+    }
+}
+
+/// A cache.
+struct Cache<'a> {
+    map: HashMap<&'a str, usize>,
+    count: usize,
+}
+
+impl<'a> Cache<'a> {
+    fn new() -> Self {
+        Self {
+            map: HashMap::new(),
+            count: 0,
+        }
+    }
+
+    fn get(&mut self, var: &'a str) -> usize {
+        if let Some(number) = self.map.get(var) {
+            *number
+        } else {
+            self.map.insert(var, self.count);
+            self.count += 1;
+            self.count - 1
+        }
     }
 }
 
@@ -129,8 +241,9 @@ pub enum Type {
     Set(HashMap<String, Type>),
     Var(String),
 }
-pub(crate) struct Context(Vec<Vec<(String, Type)>>);
+pub(crate) struct Context(Vec<Vec<(usize, Type)>>);
 
+/// Context to save variables and their types.
 impl Context {
     pub(crate) fn new() -> Self {
         Self(vec![Vec::new()])
@@ -144,11 +257,11 @@ impl Context {
         self.0.pop();
     }
 
-    pub(crate) fn insert(&mut self, name: String, ty: Type) {
+    pub(crate) fn insert(&mut self, name: usize, ty: Type) {
         self.0.last_mut().unwrap().push((name, ty));
     }
 
-    pub(crate) fn lookup(&self, name: &str) -> Option<&Type> {
+    pub(crate) fn lookup(&self, name: &usize) -> Option<&Type> {
         for scope in self.0.iter().rev() {
             for (n, ty) in scope.iter().rev() {
                 if n == name {
@@ -169,9 +282,9 @@ fn lookup_set_bindigs(context: &mut Context, bindings: &Ast) -> Result<(), Infer
         } => {
             for (name, expr) in attrs {
                 let ty = context
-                    .lookup("todo")
+                    .lookup(name)
                     .ok_or(InferError::UnknownIdentifier("todo".to_string()))?;
-                context.insert("todo".to_string(), ty.clone());
+                context.insert(*name, ty.clone());
             }
         }
         Ast::Identifier(_) => {}
@@ -180,6 +293,7 @@ fn lookup_set_bindigs(context: &mut Context, bindings: &Ast) -> Result<(), Infer
     Ok(())
 }
 
+/// Infer the type of an expression.
 fn hm(context: &mut Context, expr: &Ast) -> Result<Type, InferError> {
     use Type::*;
     match expr {
@@ -208,14 +322,14 @@ fn hm(context: &mut Context, expr: &Ast) -> Result<Type, InferError> {
             context.push_scope();
             for (name, expr) in bindings {
                 let ty = hm(context, expr)?;
-                context.insert("todo".to_string(), ty);
+                context.insert(*name, ty);
             }
             if let Some(inherit) = inherit {
                 for name in inherit {
                     let ty = context
-                        .lookup("")
+                        .lookup(name)
                         .ok_or(InferError::UnknownIdentifier("".to_string()))?; // Maybe don't make this a hard error
-                    context.insert("".to_string(), ty.clone());
+                    context.insert(*name, ty.clone());
                 }
             }
             let ty = hm(context, body)?;
@@ -231,15 +345,15 @@ fn hm(context: &mut Context, expr: &Ast) -> Result<Type, InferError> {
             for patt in arguments {
                 for patt in &patt.patterns {
                     match patt {
-                        PatternElement::Identifier(_) => {
+                        PatternElement::Identifier(name) => {
                             let ty = context
-                                .lookup("todo")
+                                .lookup(name)
                                 .ok_or(InferError::UnknownIdentifier("todo".to_string()))?;
-                            context.insert("todo".to_string(), ty.clone());
+                            context.insert(*name, ty.clone());
                         }
-                        PatternElement::DefaultIdentifier(_, default) => {
-                            let ty1 = context.lookup("todo").cloned();
-                            let ty2 = hm(context, &Ast::from_parser_ast(default))?;
+                        PatternElement::DefaultIdentifier(name, default) => {
+                            let ty1 = context.lookup(name).cloned();
+                            let ty2 = hm(context, default)?;
 
                             if let Some(ty1) = ty1 {
                                 if ty1 != ty2 {
@@ -250,7 +364,7 @@ fn hm(context: &mut Context, expr: &Ast) -> Result<Type, InferError> {
                                 }
                             }
 
-                            context.insert("todo".to_string(), ty2);
+                            context.insert(*name, ty2);
                         }
                     }
                 }
@@ -284,10 +398,10 @@ fn hm(context: &mut Context, expr: &Ast) -> Result<Type, InferError> {
         Ast::Assertion { condition, then } => Err(InferError::UnexpectedComment),
         Ast::With { set, body } => {
             context.push_scope();
-            lookup_set_bindigs(context, set.as_ref().clone())?;
+            lookup_set_bindigs(context, &set.as_ref().clone())?;
             hm(context, body)
         }
-        Ast::Identifier(name) => Ok(context.lookup("").cloned().unwrap_or(Undefined)),
+        Ast::Identifier(name) => Ok(context.lookup(name).cloned().unwrap_or(Undefined)),
         Ast::NixString(_) => Ok(String),
         Ast::NixPath(_) => Ok(Path),
         Ast::Bool(_) => Ok(Bool),

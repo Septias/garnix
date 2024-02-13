@@ -24,7 +24,7 @@
             openssl
           ];
           nativeBuildInputs = with pkgs; [pkg-config];
-          rust-toolchain = pkgs.rust-bin.stable.latest.default.override {
+          rust-toolchain = pkgs.rust-bin.nightly.latest.default.override {
             extensions = ["rust-src" "rustfmt" "rust-docs" "clippy"];
           };
         in {

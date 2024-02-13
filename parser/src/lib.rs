@@ -1,3 +1,4 @@
+#![feature(box_patterns)]
 //! A library for parsing Nix code.
 use std::{fs::read_to_string, path::Path};
 
