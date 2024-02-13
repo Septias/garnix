@@ -7,7 +7,7 @@ use anyhow::Context as _;
 use strum_macros::Display;
 use thiserror::Error;
 
-use crate::ast::{Ast, PatternElement};
+use crate::ast::{Ast as ParserAst, BinOp, Pattern, PatternElement, UnOp};
 
 #[derive(Debug, Error)]
 pub enum InferError {
@@ -19,6 +19,99 @@ pub enum InferError {
     UnexpectedComment,
     #[error("Can't infer type of assert")]
     UnexpectedAssertion,
+}
+
+pub(crate) enum Ast<'a> {
+    /// ----------------- Operators -----------------
+
+    /// Unary Operators
+    UnaryOp {
+        op: UnOp,
+        rhs: Box<Ast<'a>>,
+    },
+
+    /// Binary Operators
+    BinaryOp {
+        op: BinOp,
+        lhs: Box<Ast<'a>>,
+        rhs: Box<Ast<'a>>,
+    },
+
+    /// ----------------- Language Constructs -----------------
+
+    /// Attribute set
+    /// parsed by [crate::parser::set]
+    AttrSet {
+        /// A set of attributes
+        attrs: Vec<(&'a str, Ast<'a>)>,
+        is_recursive: bool,
+    },
+
+    /// Let expression
+    /// parsed by [crate::parser::let_binding]
+    LetBinding {
+        /// A set of bindings
+        bindings: Vec<(&'a str, Ast<'a>)>,
+        /// The expression to evaluate
+        body: Box<Ast<'a>>,
+        /// A list of identifiers to inherit from the parent scope
+        inherit: Option<Vec<&'a str>>,
+    },
+
+    /// Function
+    /// func = pattern: body
+    /// parsed by [crate::parser::lambda]
+    Lambda {
+        arguments: Vec<Pattern>,
+        body: Box<Ast<'a>>,
+        arg_binding: Option<&'a str>,
+    },
+
+    /// Conditional
+    /// parsed by [crate::parser::conditional]
+    Conditional {
+        /// The condition to evaluate
+        condition: Box<Ast<'a>>,
+        /// The expression to evaluate if the condition is true
+        expr1: Box<Ast<'a>>,
+        /// The expression to evaluate if the condition is false
+        expr2: Box<Ast<'a>>,
+    },
+
+    /// An assert statement.
+    /// parsed by [crate::parser::assert]
+    Assertion {
+        /// The condition to evaluate
+        condition: Box<Ast<'a>>,
+        /// The expression to evaluate if the condition is true
+        then: Box<Ast<'a>>,
+    },
+
+    /// A with-statement.
+    /// parsed by [crate::parser::with]
+    With {
+        /// The set-identifier to add
+        set: Box<Ast<'a>>,
+        /// The expression to evaluate
+        body: Box<Ast<'a>>,
+    },
+
+    /// ----------------- Literals -----------------
+    Identifier(&'a str),
+
+    /// Primitives
+    NixString(&'a str),
+    NixPath(&'a str),
+    Bool(bool),
+    Int(i32),
+    Float(f32),
+    Null,
+}
+
+impl<'a> Ast<'a> {
+    fn from_parser_ast(value: &ParserAst) -> Self {
+        todo!()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Display)]
@@ -68,7 +161,7 @@ impl Context {
 }
 
 /// Lookup all bindings that are part of a `with`-expression
-fn lookup_set_bindigs(context: &mut Context, bindings: Ast) -> Result<(), InferError> {
+fn lookup_set_bindigs(context: &mut Context, bindings: &Ast) -> Result<(), InferError> {
     match bindings {
         Ast::AttrSet {
             attrs,
@@ -106,6 +199,7 @@ fn hm(context: &mut Context, expr: &Ast) -> Result<Type, InferError> {
             .iter()
             .map(|(name, expr)| ("".to_string(), hm(context, expr).unwrap()))
             .collect::<HashMap<_, _>>())),
+
         Ast::LetBinding {
             bindings,
             body,
@@ -145,7 +239,7 @@ fn hm(context: &mut Context, expr: &Ast) -> Result<Type, InferError> {
                         }
                         PatternElement::DefaultIdentifier(_, default) => {
                             let ty1 = context.lookup("todo").cloned();
-                            let ty2 = hm(context, default)?;
+                            let ty2 = hm(context, &Ast::from_parser_ast(default))?;
 
                             if let Some(ty1) = ty1 {
                                 if ty1 != ty2 {
@@ -200,9 +294,6 @@ fn hm(context: &mut Context, expr: &Ast) -> Result<Type, InferError> {
         Ast::Int(_) => Ok(Int),
         Ast::Float(_) => Ok(Float),
         Ast::Null => Ok(Null),
-        Ast::Comment(_) | Ast::DocComment(_) | Ast::LineComment(_) => {
-            Err(InferError::UnexpectedComment)
-        }
     }
 }
 
