@@ -589,7 +589,9 @@ fn hm(context: &mut Context, expr: &Ast) -> Result<Type, InferError> {
         Ast::Int(_) => Ok(Int),
         Ast::Float(_) => Ok(Float),
         Ast::Null => Ok(Null),
-        Ast::List(_) => todo!(),
+        Ast::List(ast) => Ok(Type::List(
+            ast.iter().map(|ast| hm(context, ast)).flatten().collect(),
+        )),
     }
 }
 
