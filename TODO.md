@@ -6,7 +6,7 @@
 ## Improvements
 - fix application
 - Think good about error reporting
-
+- store constraints inside ast?
 
 ## Restrictions
 - Comment positions

@@ -23,6 +23,8 @@ pub enum InferError {
     UnexpectedAssertion,
     #[error("Unknown function call")]
     UnknownFunction,
+    #[error(transparent)]
+    Other(#[from] anyhow::Error),
 }
 
 /// Part of a [Pattern].
@@ -157,6 +159,21 @@ impl Ast {
         }
     }
 
+    /// Return not only an identifier, but also try to mixmize it by following
+    /// accesses.
+    fn as_path(&self) -> Result<usize, InferError> {
+        match self {
+            Ast::Identifier(name) => Ok(*name),
+            e => Err(InferError::TypeMismatch {
+                expected: Type::Identifier(Identifier {
+                    name: 69,
+                    path: None,
+                }),
+                found: e.as_type(),
+            }),
+        }
+    }
+
     fn as_list(&self) -> InferResult<&Vec<Ast>> {
         match self {
             Ast::List(elems) => Ok(elems),
@@ -183,6 +200,8 @@ impl Ast {
     }
 }
 
+// Convert spans to De' Brujin indices
+// this should support path-wise set accesses
 fn transform_ast<'a>(
     value: ParserAst,
     cache: &mut Cache<'a>,
@@ -394,31 +413,31 @@ fn lookup_set_bindigs(context: &mut Context, bindings: &Ast) -> Result<(), Infer
 fn reduce_function<'a>(
     function: &'a Type,
     arguments: &Ast,
-) -> InferResult<(Type, Vec<Constraint>)> {
-    let (from, to) = function.as_function()?;
+    constraints: &mut Vec<Constraint>,
+) -> InferResult<&'a Type> {
+    let (from, to) = function.as_function().context("can't unpack function")?;
 
-    let mut constraints = vec![];
-    let next_fn = to.as_function();
-
-    match next_fn {
-        Ok((from_next, to)) => {
-            let (arg, next) = arguments.to_application()?;
-            if let Ok(ident) = arg.as_ident() {
+    // find out if this is a stacked function
+    if matches!(to, Type::Function(_, _)) {
+        // extract the first argument from the chain
+        if let Ok((arg, next)) = arguments.to_application() {
+            // if it is an identifier we can formulate a constraint
+            if let Ok(ident) = arg.as_path() {
                 constraints.push((ident, from.clone()));
             }
-            let (ret, new_constraints) = reduce_function(
-                &Type::Function(Box::new(from_next.clone()), Box::new(to.clone())),
-                arguments,
-            )?;
-            constraints.extend(new_constraints);
-            Ok((ret, constraints))
+
+            // further reduce the function
+            let ret = reduce_function(to, arguments, constraints)?;
+            Ok(ret)
+        } else {
+            // If there is no argument to apply, just return a partial function
+            Ok(function.as_function().context("can't unpack' function")?.1)
         }
-        Err(_) => {
-            if let Ok(ident) = arguments.as_ident() {
-                constraints.push((ident, from.clone()));
-            }
-            Ok((to.clone(), constraints))
+    } else {
+        if let Ok(ident) = arguments.as_ident() {
+            constraints.push((ident, from.clone()));
         }
+        Ok(to)
     }
 }
 
@@ -440,8 +459,9 @@ fn hm(context: &mut Context, expr: &Ast) -> Result<Type, InferError> {
                     if let Some(path) = fun.path {
                         todo!()
                     }
-                    let (typ, new_constraints) = reduce_function(fun_type, rhs)?;
-                    Ok(typ)
+                    let mut constraint = vec![];
+                    let typ = reduce_function(fun_type, rhs, &mut constraint)?;
+                    Ok(typ.clone())
                 }
                 BinOp::ListConcat => {
                     let mut lhs = ty1.as_list()?;
