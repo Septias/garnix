@@ -3,8 +3,8 @@ use std::ops::Range;
 use crate::ast::BinOp;
 use crate::lexer::Token;
 use crate::parser::{
-    assert, conditional, expr, ident, ident_default_pattern, inherit, lambda, let_binding, literal,
-    pattern, prett_parsing, set, set_pattern, statement, with,
+    application, assert, conditional, expr, ident, ident_default_pattern, inherit, lambda,
+    let_binding, literal, pattern, prett_parsing, set, set_pattern, statement, with,
 };
 use crate::{
     ast::{Ast, Pattern, PatternElement},
@@ -448,18 +448,72 @@ fn test_long_lambda() {
 #[test]
 fn test_application() {
     let tokens = lex(r#"map 1;"#);
-    let (input, _) = expr(NixTokens(&tokens)).unwrap();
-    assert_eq!(input.0.get(0).unwrap().0, Token::Semi);
+    let (input, ast) = application(NixTokens(&tokens)).unwrap();
+    assert!(input.0.is_empty());
+    assert_eq!(
+        ast,
+        Ast::BinaryOp {
+            lhs: Box::new(Ast::Identifier(Range { start: 0, end: 3 })),
+            rhs: Box::new(Ast::Int(1)),
+            op: BinOp::Application
+        }
+    );
 
     let tokens = lex(r#"map (1+1);"#);
-    let (input, _) = expr(NixTokens(&tokens)).unwrap();
-    assert_eq!(input.0.get(0).unwrap().0, Token::Semi);
+    let (input, ast) = application(NixTokens(&tokens)).unwrap();
+    assert!(input.0.is_empty());
+    assert_eq!(
+        ast,
+        Ast::BinaryOp {
+            lhs: Box::new(Ast::Identifier(Range { start: 0, end: 3 })),
+            rhs: Box::new(Ast::BinaryOp {
+                lhs: Box::new(Ast::Int(1)),
+                rhs: Box::new(Ast::Int(1)),
+                op: BinOp::Add
+            }),
+            op: BinOp::Application
+        }
+    );
 
     let tokens = lex(r#"map map (1+1);"#);
-    let (input, _) = expr(NixTokens(&tokens)).unwrap();
-    assert_eq!(input.0.get(0).unwrap().0, Token::Semi);
-}
+    let (input, ast) = application(NixTokens(&tokens)).unwrap();
+    assert!(input.0.is_empty());
+    assert_eq!(
+        ast,
+        Ast::BinaryOp {
+            lhs: Box::new(Ast::Identifier(Range { start: 0, end: 3 })),
+            rhs: Box::new(Ast::BinaryOp {
+                lhs: Box::new(Ast::Identifier(Range { start: 4, end: 7 })),
+                rhs: Box::new(Ast::BinaryOp {
+                    lhs: Box::new(Ast::Int(1)),
+                    rhs: Box::new(Ast::Int(1)),
+                    op: BinOp::Add
+                }),
+                op: BinOp::Application
+            }),
+            op: BinOp::Application
+        }
+    );
 
+    let tokens = lex(r#"map map (1+1);"#);
+    let (input, ast) = expr(NixTokens(&tokens)).unwrap();
+    assert_eq!(
+        ast,
+        Ast::BinaryOp {
+            lhs: Box::new(Ast::Identifier(Range { start: 0, end: 3 })),
+            rhs: Box::new(Ast::BinaryOp {
+                lhs: Box::new(Ast::Identifier(Range { start: 4, end: 7 })),
+                rhs: Box::new(Ast::BinaryOp {
+                    lhs: Box::new(Ast::Int(1)),
+                    rhs: Box::new(Ast::Int(1)),
+                    op: BinOp::Add
+                }),
+                op: BinOp::Application
+            }),
+            op: BinOp::Application
+        }
+    );
+}
 
 #[test]
 fn test_attribute_access() {

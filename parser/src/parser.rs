@@ -209,6 +209,34 @@ pub(crate) fn atom(input: NixTokens<'_>) -> PResult<'_, Ast> {
     alt((let_binding, conditional, set, literal, ident))(input)
 }
 
+pub(crate) fn application(input: NixTokens<'_>) -> PResult<'_, Ast> {
+    let (input, lhs) = ident.map(|a| Box::new(a)).parse(input)?;
+    let (input, rhs) = terminated(many1(expr).map(|a| Box::new(a)), token(Token::Semi))(input)?;
+
+    let acc = rhs.into_iter().fold(lhs, |acc, rhs| {
+        Box::new(Ast::BinaryOp {
+            op: BinOp::Application,
+            lhs: acc,
+            rhs: Box::new(rhs),
+        })
+    });
+    Ok((input, *acc))
+}
+
+pub(crate) fn application_2(input: NixTokens<'_>) -> PResult<'_, Ast> {
+    let (input, box mut rhs) =
+        terminated(many1(expr).map(|a| Box::new(a)), token(Token::Semi))(input)?;
+    let fst = Box::new(rhs.remove(0));
+    let acc = rhs.into_iter().fold(fst, |acc, rhs| {
+        Box::new(Ast::BinaryOp {
+            op: BinOp::Application,
+            lhs: acc,
+            rhs: Box::new(rhs),
+        })
+    });
+    Ok((input, *acc))
+}
+
 /// Parse an expression.
 pub(crate) fn expr(input: NixTokens<'_>) -> PResult<'_, Ast> {
     context(
@@ -293,7 +321,13 @@ pub(crate) fn prett_parsing(mut input: NixTokens<'_>, min_bp: u8, eof: Token) ->
             )
         }
 
-        t => panic!("Unexpected token: {t:?}"),
+        e => {
+            println!("unexpected token: {:?}", e);
+            return Err(nom::Err::Error(VerboseError::from_error_kind(
+                input,
+                nom::error::ErrorKind::Tag,
+            )));
+        }
     };
 
     loop {
@@ -311,13 +345,13 @@ pub(crate) fn prett_parsing(mut input: NixTokens<'_>, min_bp: u8, eof: Token) ->
         let mut op = BinOp::from_token(input.peek().unwrap().0);
 
         if op.is_none() && matches!(lhs, Ast::Identifier(..)) {
-            op = Some(BinOp::Application)
-            // Application
+            println!("application");
+            return application_2(input);
         }
 
         if let Some(op) = op {
             let (left_bp, right_bp) = op.get_precedence();
-            
+
             if left_bp < min_bp {
                 break;
             }
