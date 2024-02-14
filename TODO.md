@@ -4,9 +4,8 @@
 
 
 ## Improvements
-- fix application
-- Think good about error reporting
-- store constraints inside ast?
+- Custom error type
+- ranged ast
 
 ## Restrictions
 - Comment positions

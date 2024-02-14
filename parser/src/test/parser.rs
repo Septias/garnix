@@ -3,8 +3,8 @@ use std::ops::Range;
 use crate::ast::BinOp;
 use crate::lexer::Token;
 use crate::parser::{
-    application, assert, conditional, expr, ident, ident_default_pattern, inherit, lambda,
-    let_binding, literal, pattern, prett_parsing, set, set_pattern, statement, with,
+    assert, conditional, expr, ident, ident_default_pattern, inherit, lambda, let_binding, literal,
+    pattern, prett_parsing, set, set_pattern, statement, with,
 };
 use crate::{
     ast::{Ast, Pattern, PatternElement},
@@ -383,14 +383,10 @@ fn test_expression() {
     let (input, ast) = expr(NixTokens(&tokens)).unwrap();
 
     assert!(input.0.is_empty());
-    assert_eq!(
-        ast,
-        Ast::LetBinding {
-            bindings: vec![(Range { start: 4, end: 10 }, Ast::Int(12))],
-            body: Box::new(Ast::Identifier(Range { start: 20, end: 26 })),
-            inherit: None,
-        }
-    );
+    assert_eq!(ast, Ast::Identifier(Range { start: 0, end: 1 }));
+
+    let tokens = lex(";");
+    assert!(expr(NixTokens(&tokens)).is_err());
 }
 
 #[test]
@@ -447,70 +443,45 @@ fn test_long_lambda() {
 
 #[test]
 fn test_application() {
-    let tokens = lex(r#"map 1;"#);
-    let (input, ast) = application(NixTokens(&tokens)).unwrap();
-    assert!(input.0.is_empty());
-    assert_eq!(
-        ast,
-        Ast::BinaryOp {
-            lhs: Box::new(Ast::Identifier(Range { start: 0, end: 3 })),
-            rhs: Box::new(Ast::Int(1)),
-            op: BinOp::Application
-        }
-    );
-
-    let tokens = lex(r#"map (1+1);"#);
-    let (input, ast) = application(NixTokens(&tokens)).unwrap();
-    assert!(input.0.is_empty());
-    assert_eq!(
-        ast,
-        Ast::BinaryOp {
-            lhs: Box::new(Ast::Identifier(Range { start: 0, end: 3 })),
-            rhs: Box::new(Ast::BinaryOp {
-                lhs: Box::new(Ast::Int(1)),
-                rhs: Box::new(Ast::Int(1)),
-                op: BinOp::Add
-            }),
-            op: BinOp::Application
-        }
-    );
-
-    let tokens = lex(r#"map map (1+1);"#);
-    let (input, ast) = application(NixTokens(&tokens)).unwrap();
-    assert!(input.0.is_empty());
-    assert_eq!(
-        ast,
-        Ast::BinaryOp {
-            lhs: Box::new(Ast::Identifier(Range { start: 0, end: 3 })),
-            rhs: Box::new(Ast::BinaryOp {
-                lhs: Box::new(Ast::Identifier(Range { start: 4, end: 7 })),
-                rhs: Box::new(Ast::BinaryOp {
-                    lhs: Box::new(Ast::Int(1)),
-                    rhs: Box::new(Ast::Int(1)),
-                    op: BinOp::Add
-                }),
-                op: BinOp::Application
-            }),
-            op: BinOp::Application
-        }
-    );
-
     let tokens = lex(r#"map map (1+1);"#);
     let (_input, ast) = expr(NixTokens(&tokens)).unwrap();
     assert_eq!(
         ast,
         Ast::BinaryOp {
-            lhs: Box::new(Ast::Identifier(Range { start: 0, end: 3 })),
-            rhs: Box::new(Ast::BinaryOp {
-                lhs: Box::new(Ast::Identifier(Range { start: 4, end: 7 })),
-                rhs: Box::new(Ast::BinaryOp {
-                    lhs: Box::new(Ast::Int(1)),
-                    rhs: Box::new(Ast::Int(1)),
-                    op: BinOp::Add
-                }),
-                op: BinOp::Application
+            op: BinOp::Application,
+            lhs: Box::new(Ast::BinaryOp {
+                op: BinOp::Application,
+                lhs: Box::new(Ast::Identifier(Range { start: 0, end: 3 })),
+                rhs: Box::new(Ast::Identifier(Range { start: 4, end: 7 }))
             }),
-            op: BinOp::Application
+            rhs: Box::new(Ast::BinaryOp {
+                op: BinOp::Add,
+                lhs: Box::new(Ast::Int(1)),
+                rhs: Box::new(Ast::Int(1))
+            }),
+        }
+    );
+
+    let tokens = lex(r#"map map.map (1+1);"#);
+    let (_input, ast) = expr(NixTokens(&tokens)).unwrap();
+    assert_eq!(
+        ast,
+        Ast::BinaryOp {
+            op: BinOp::Application,
+            lhs: Box::new(Ast::BinaryOp {
+                op: BinOp::Application,
+                lhs: Box::new(Ast::Identifier(Range { start: 0, end: 3 })),
+                rhs: Box::new(Ast::BinaryOp {
+                    op: BinOp::AttributeSelection,
+                    lhs: Box::new(Ast::Identifier(Range { start: 4, end: 7 })),
+                    rhs: Box::new(Ast::Identifier(Range { start: 8, end: 11 }))
+                })
+            }),
+            rhs: Box::new(Ast::BinaryOp {
+                op: BinOp::Add,
+                lhs: Box::new(Ast::Int(1)),
+                rhs: Box::new(Ast::Int(1))
+            }),
         }
     );
 }

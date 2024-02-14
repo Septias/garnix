@@ -65,7 +65,7 @@ impl BinOp {
             } // Right associative
             Self::Update => (12, 11),
             // Negotaion with 13
-            Self::Add | Self::Sub => (15, 16), // Right associative
+            Self::Add | Self::Sub => (15, 16),
             Self::Mul | Self::Div => (17, 18),
             Self::ListConcat => (20, 19),
             Self::HasAttribute => (21, 22),
