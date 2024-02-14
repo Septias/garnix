@@ -280,7 +280,7 @@ impl<'a> Cache<'a> {
 }
 
 #[derive(Debug, Clone, PartialEq, Default)]
-struct Identifier {
+pub struct Identifier {
     name: usize,
     path: Option<String>,
 }

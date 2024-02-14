@@ -496,7 +496,7 @@ fn test_application() {
     );
 
     let tokens = lex(r#"map map (1+1);"#);
-    let (input, ast) = expr(NixTokens(&tokens)).unwrap();
+    let (_input, ast) = expr(NixTokens(&tokens)).unwrap();
     assert_eq!(
         ast,
         Ast::BinaryOp {
