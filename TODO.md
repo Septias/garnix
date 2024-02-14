@@ -1,14 +1,13 @@
 ## Features
-
-## Improvements
-
-- nice discard implementation
 - String interpolation
 - Doc comment type parsing
+
+
+## Improvements
 - fix application
-- put spans
+- Think good about error reporting
+
 
 ## Restrictions
-
 - Comment positions
 - Line comments have to end in '\n'

@@ -21,6 +21,8 @@ pub enum InferError {
     UnexpectedComment,
     #[error("Can't infer type of assert")]
     UnexpectedAssertion,
+    #[error("Unknown function call")]
+    UnknownFunction,
 }
 
 /// Part of a [Pattern].
@@ -146,7 +148,10 @@ impl Ast {
         match self {
             Ast::Identifier(name) => Ok(*name),
             e => Err(InferError::TypeMismatch {
-                expected: Type::Identifier,
+                expected: Type::Identifier(Identifier {
+                    name: 69,
+                    path: None,
+                }),
                 found: e.as_type(),
             }),
         }
@@ -156,6 +161,20 @@ impl Ast {
         match self {
             Ast::List(elems) => Ok(elems),
             e => infer_error(Type::List(vec![]), e.as_type()),
+        }
+    }
+
+    fn to_application(&self) -> InferResult<(&Ast, &Ast)> {
+        match self {
+            Ast::BinaryOp {
+                op,
+                box lhs,
+                box rhs,
+            } => match op {
+                BinOp::Application => return Ok((lhs, rhs)),
+                _ => panic!("expected function arguments"),
+            },
+            _ => panic!("expected function arguments"),
         }
     }
 
@@ -260,13 +279,19 @@ impl<'a> Cache<'a> {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Default)]
+struct Identifier {
+    name: usize,
+    path: Option<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Display)]
 pub enum Type {
     Int,
     Float,
     Bool,
     String,
-    Identifier,
+    Identifier(Identifier),
     Null,
     Undefined,
     List(Vec<Type>),
@@ -274,16 +299,43 @@ pub enum Type {
     Union(Box<Type>, Box<Type>),
     Set(HashMap<String, Type>),
     Var(String),
+    Default,
+}
+
+impl Default for Type {
+    fn default() -> Self {
+        Type::Default
+    }
 }
 
 impl Type {
     fn as_list(self) -> InferResult<Vec<Type>> {
         match self {
             Type::List(elems) => Ok(elems),
-            e => infer_error(Type::List(vec![]), e.clone()),
+            t => infer_error(Type::List(vec![]), t.clone()),
+        }
+    }
+
+    fn as_ident(self) -> InferResult<Identifier> {
+        match self {
+            Type::Identifier(i) => Ok(i),
+            t => infer_error(Type::Identifier(Identifier::default()), t),
+        }
+    }
+
+    fn as_function(&self) -> InferResult<(&Type, &Type)> {
+        match self {
+            Type::Function(box lhs, box rhs) => Ok((lhs, rhs)),
+            t => infer_error(
+                Type::Function(Box::new(Type::default()), Box::new(Type::default())),
+                t.clone(),
+            ),
         }
     }
 }
+
+type Constraint = (usize, Type);
+
 pub(crate) struct Context(Vec<Vec<(usize, Type)>>);
 
 /// Context to save variables and their types.
@@ -336,17 +388,61 @@ fn lookup_set_bindigs(context: &mut Context, bindings: &Ast) -> Result<(), Infer
     Ok(())
 }
 
+/// Arguments:
+/// - the function type
+/// - the arguments that should be supplied to the function in form of application(lhs, application(lhs, ..))
+fn reduce_function<'a>(
+    function: &'a Type,
+    arguments: &Ast,
+) -> InferResult<(Type, Vec<Constraint>)> {
+    let (from, to) = function.as_function()?;
+
+    let mut constraints = vec![];
+    let next_fn = to.as_function();
+
+    match next_fn {
+        Ok((from_next, to)) => {
+            let (arg, next) = arguments.to_application()?;
+            if let Ok(ident) = arg.as_ident() {
+                constraints.push((ident, from.clone()));
+            }
+            let (ret, new_constraints) = reduce_function(
+                &Type::Function(Box::new(from_next.clone()), Box::new(to.clone())),
+                arguments,
+            )?;
+            constraints.extend(new_constraints);
+            Ok((ret, constraints))
+        }
+        Err(_) => {
+            if let Ok(ident) = arguments.as_ident() {
+                constraints.push((ident, from.clone()));
+            }
+            Ok((to.clone(), constraints))
+        }
+    }
+}
+
 /// Infer the type of an expression.
 fn hm(context: &mut Context, expr: &Ast) -> Result<Type, InferError> {
     use Type::*;
     match expr {
         Ast::UnaryOp { rhs, .. } => hm(context, rhs),
-        Ast::BinaryOp { op, lhs, rhs } => {
+        Ast::BinaryOp { op, lhs, box rhs } => {
             let ty1 = hm(context, lhs)?;
             let ty2 = hm(context, rhs)?;
 
             match op {
-                BinOp::Application => todo!(),
+                BinOp::Application => {
+                    let fun = ty1.as_ident()?;
+                    let fun_type = context
+                        .lookup(&fun.name)
+                        .ok_or(InferError::UnknownFunction)?;
+                    if let Some(path) = fun.path {
+                        todo!()
+                    }
+                    let (typ, new_constraints) = reduce_function(fun_type, rhs)?;
+                    Ok(typ)
+                }
                 BinOp::ListConcat => {
                     let mut lhs = ty1.as_list()?;
                     let rhs = ty2.as_list()?;
@@ -468,7 +564,7 @@ fn hm(context: &mut Context, expr: &Ast) -> Result<Type, InferError> {
         }
         Ast::Identifier(name) => Ok(context.lookup(name).cloned().unwrap_or(Undefined)),
         Ast::NixString(_) => Ok(String),
-        Ast::NixPath(_) => Ok(Identifier),
+        Ast::NixPath(_) => Ok(String),
         Ast::Bool(_) => Ok(Bool),
         Ast::Int(_) => Ok(Int),
         Ast::Float(_) => Ok(Float),
