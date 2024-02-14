@@ -242,9 +242,7 @@ pub(crate) fn expr(input: NixTokens<'_>) -> PResult<'_, Ast> {
 }
 
 pub(crate) fn prett_parsing(mut input: NixTokens<'_>, min_bp: u8, eof: Token) -> PResult<'_, Ast> {
-    println!("{:?}", input);
     let (mut input, mut lhs) = match input.peek().unwrap().0 {
-        // Anything that resembles an atom
         Token::Path
         | If
         | Let
@@ -258,7 +256,6 @@ pub(crate) fn prett_parsing(mut input: NixTokens<'_>, min_bp: u8, eof: Token) ->
         | Token::Float(_)
         | Text => atom(input)?,
 
-        // Skip these
         Token::Comment | Token::DocComment | Token::LineComment => {
             unimplemented!("Comments are not yet implemented")
         }
@@ -315,10 +312,12 @@ pub(crate) fn prett_parsing(mut input: NixTokens<'_>, min_bp: u8, eof: Token) ->
 
         if op.is_none() && matches!(lhs, Ast::Identifier(..)) {
             op = Some(BinOp::Application)
+            // Application
         }
 
         if let Some(op) = op {
             let (left_bp, right_bp) = op.get_precedence();
+            
             if left_bp < min_bp {
                 break;
             }

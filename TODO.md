@@ -6,6 +6,7 @@
 - String interpolation
 - Doc comment type parsing
 - fix application
+- put spans
 
 ## Restrictions
 

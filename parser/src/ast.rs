@@ -201,6 +201,7 @@ pub enum Ast {
 
     /// ----------------- Literals -----------------
     Identifier(Span),
+    List(Vec<Ast>),
 
     /// Primitives
     NixString(Span),

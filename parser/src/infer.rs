@@ -119,6 +119,7 @@ pub enum Ast {
 
     /// ----------------- Literals -----------------
     Identifier(usize),
+    List(Vec<Ast>),
 
     /// Primitives
     NixString(String),
@@ -129,9 +130,36 @@ pub enum Ast {
     Null,
 }
 
+type InferResult<T> = Result<T, InferError>;
+
+fn infer_error<T>(expected: Type, found: Type) -> Result<T, InferError> {
+    Err(InferError::TypeMismatch { expected, found })
+}
+
 impl Ast {
     fn from_parser_ast(value: &ParserAst) -> Self {
         let vars = Cache::new();
+        todo!()
+    }
+
+    fn as_ident(&self) -> Result<usize, InferError> {
+        match self {
+            Ast::Identifier(name) => Ok(*name),
+            e => Err(InferError::TypeMismatch {
+                expected: Type::Identifier,
+                found: e.as_type(),
+            }),
+        }
+    }
+
+    fn as_list(&self) -> InferResult<&Vec<Ast>> {
+        match self {
+            Ast::List(elems) => Ok(elems),
+            e => infer_error(Type::List(vec![]), e.as_type()),
+        }
+    }
+
+    fn as_type(&self) -> Type {
         todo!()
     }
 }
@@ -162,7 +190,12 @@ fn transform_ast<'a>(
         } => {
             let attrs = attrs
                 .into_iter()
-                .map(|(name, expr)| (cache.get(&source[name]), transform_ast(expr, cache, source, bindings)))
+                .map(|(name, expr)| {
+                    (
+                        cache.get(&source[name]),
+                        transform_ast(expr, cache, source, bindings),
+                    )
+                })
                 .collect();
             Ast::AttrSet {
                 attrs,
@@ -179,8 +212,8 @@ fn transform_ast<'a>(
             body,
             arg_binding,
         } => {
-            
-        },
+            todo!()
+        }
         ParserAst::Conditional {
             condition,
             expr1,
@@ -198,6 +231,7 @@ fn transform_ast<'a>(
         ParserAst::Comment(_) => todo!(),
         ParserAst::DocComment(_) => todo!(),
         ParserAst::LineComment(_) => todo!(),
+        ParserAst::List(_) => todo!(),
     }
 }
 
@@ -232,14 +266,23 @@ pub enum Type {
     Float,
     Bool,
     String,
-    Path,
+    Identifier,
     Null,
     Undefined,
-    List(Box<Type>),
+    List(Vec<Type>),
     Function(Box<Type>, Box<Type>),
     Union(Box<Type>, Box<Type>),
     Set(HashMap<String, Type>),
     Var(String),
+}
+
+impl Type {
+    fn as_list(self) -> InferResult<Vec<Type>> {
+        match self {
+            Type::List(elems) => Ok(elems),
+            e => infer_error(Type::List(vec![]), e.clone()),
+        }
+    }
 }
 pub(crate) struct Context(Vec<Vec<(usize, Type)>>);
 
@@ -297,14 +340,36 @@ fn lookup_set_bindigs(context: &mut Context, bindings: &Ast) -> Result<(), Infer
 fn hm(context: &mut Context, expr: &Ast) -> Result<Type, InferError> {
     use Type::*;
     match expr {
-        Ast::UnaryOp { op, rhs } => {
-            let ty = hm(context, rhs)?;
-            todo!()
-        }
+        Ast::UnaryOp { rhs, .. } => hm(context, rhs),
         Ast::BinaryOp { op, lhs, rhs } => {
             let ty1 = hm(context, lhs)?;
             let ty2 = hm(context, rhs)?;
-            todo!()
+
+            match op {
+                BinOp::Application => todo!(),
+                BinOp::ListConcat => {
+                    let mut lhs = ty1.as_list()?;
+                    let rhs = ty2.as_list()?;
+                    Ok(Type::List([lhs, rhs].concat()))
+                }
+                BinOp::Mul => todo!(),
+                BinOp::Div => todo!(),
+                BinOp::Add => todo!(),
+                BinOp::Sub => todo!(),
+                BinOp::Update => todo!(),
+                BinOp::HasAttribute => todo!(),
+                BinOp::AttributeSelection => todo!(),
+                BinOp::AttributeFallback => todo!(),
+                BinOp::LessThan => todo!(),
+                BinOp::LessThanEqual => todo!(),
+                BinOp::GreaterThan => todo!(),
+                BinOp::GreaterThanEqual => todo!(),
+                BinOp::Equal => todo!(),
+                BinOp::NotEqual => todo!(),
+                BinOp::And => todo!(),
+                BinOp::Or => todo!(),
+                BinOp::Implication => todo!(),
+            }
         }
         Ast::AttrSet {
             attrs,
@@ -403,11 +468,12 @@ fn hm(context: &mut Context, expr: &Ast) -> Result<Type, InferError> {
         }
         Ast::Identifier(name) => Ok(context.lookup(name).cloned().unwrap_or(Undefined)),
         Ast::NixString(_) => Ok(String),
-        Ast::NixPath(_) => Ok(Path),
+        Ast::NixPath(_) => Ok(Identifier),
         Ast::Bool(_) => Ok(Bool),
         Ast::Int(_) => Ok(Int),
         Ast::Float(_) => Ok(Float),
         Ast::Null => Ok(Null),
+        Ast::List(_) => todo!(),
     }
 }
 
