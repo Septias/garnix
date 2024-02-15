@@ -254,6 +254,14 @@ pub mod nom_interop {
         }
     }
 
+    impl<'a> Index<Range<usize>> for NixTokens<'a> {
+        type Output = [(Token, Range<usize>)];
+
+        fn index(&self, range: Range<usize>) -> &Self::Output {
+            &self.0[range]
+        }
+    }
+
     impl<'a> InputTake for NixTokens<'a> {
         fn take(&self, count: usize) -> Self {
             Self(&self.0[..count])
