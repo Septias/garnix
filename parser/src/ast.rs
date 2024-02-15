@@ -1,7 +1,7 @@
 //! Abstract syntax tree for the Nix language.
 
 use logos::Span;
-use strum_macros::AsRefStr;
+use strum_macros::{AsRefStr, Display, EnumDiscriminants};
 
 use crate::lexer::Token;
 
@@ -28,7 +28,8 @@ pub struct Pattern {
 }
 
 /// Binary operators.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, AsRefStr, EnumDiscriminants)]
+#[strum_discriminants(derive(AsRefStr, Display))]
 pub enum BinOp {
     // Function application
     Application,

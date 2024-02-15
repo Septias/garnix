@@ -1,15 +1,17 @@
 #![allow(unused)]
 //! Type inference using HM type system.
 
-use std::collections::HashMap;
+use core::str;
+use std::{collections::HashMap, os::unix::fs::FileTypeExt};
 
 use anyhow::Context as _;
 use logos::Span;
-use strum_macros::Display;
+use strum_macros::{AsRefStr, Display, EnumDiscriminants};
 use thiserror::Error;
 
 use crate::ast::{
-    Ast as ParserAst, BinOp, Pattern as ParserPattern, PatternElement as ParserPatternElement, UnOp,
+    Ast as ParserAst, BinOp, BinOpDiscriminants, Pattern as ParserPattern,
+    PatternElement as ParserPatternElement, UnOp,
 };
 
 #[derive(Debug, Error)]
@@ -18,6 +20,8 @@ pub enum InferError {
     UnknownIdentifier(String),
     #[error("Type mismatch: expected {expected}, found {found}")]
     TypeMismatch { expected: Type, found: Type },
+    #[error("Can't convert {from} to {to}")]
+    ConversionError { from: String, to: &'static str },
     #[error("Can't infer type of comment")]
     UnexpectedComment,
     #[error("Can't infer type of assert")]
@@ -46,7 +50,8 @@ pub struct Pattern {
     pub is_wildcard: bool,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, AsRefStr, EnumDiscriminants)]
+#[strum_discriminants(derive(Display, AsRefStr))]
 /// Mirror of [ParserAst], but with identifiers replaced by DeBrujin indices.
 pub enum Ast {
     /// ----------------- Operators -----------------
@@ -172,7 +177,7 @@ fn fold_path(ast: &Ast, path: &mut Vec<String>) -> InferResult<()> {
         Ast::BinaryOp { op, lhs, rhs, span } => match op {
             BinOp::AttributeSelection => {
                 fold_path(lhs, path);
-                path.push(rhs.to_string()?);
+                path.push(rhs.to_identifier_string()?);
             }
             _ => (),
         },
@@ -182,13 +187,13 @@ fn fold_path(ast: &Ast, path: &mut Vec<String>) -> InferResult<()> {
 }
 
 impl Ast {
+    /// Convert a parser ast to an infer ast.
     fn from_parser_ast(value: ParserAst, source: String) -> Self {
         let mut vars = Cache::new();
         transform_ast(value, &mut vars, &source, 0)
     }
 
-    /// Return not only an identifier, but also try to mixmize it by following
-    /// accesses.
+    /// Tries to convert the ast to an [Identifier] and adds as many path elements as possible.
     fn as_ident(&self) -> InferResult<Identifier> {
         match self {
             Ast::Identifier { debrujin, .. } => Ok(Identifier {
@@ -208,23 +213,25 @@ impl Ast {
                     path: Some(path),
                 })
             }
-            e => Err(InferError::TypeMismatch {
-                expected: Type::Identifier(Identifier {
-                    name: 69,
-                    path: None,
-                }),
-                found: e.as_type(),
+            e => Err(InferError::ConversionError {
+                from: e.as_ref().to_string(),
+                to: AstDiscriminants::Identifier.as_ref(),
             }),
         }
     }
 
+    /// Tries to convert the ast to a list.
     fn as_list(&self) -> InferResult<&Vec<Ast>> {
         match self {
             Ast::List { items, span } => Ok(items),
-            e => infer_error(Type::List(vec![]), e.as_type()),
+            e => Err(InferError::ConversionError {
+                from: e.as_ref().to_string(),
+                to: AstDiscriminants::List.as_ref(),
+            }),
         }
     }
 
+    /// Tries to convert the ast to a function and then return the arguments.
     fn to_application(&self) -> InferResult<(&Ast, &Ast)> {
         match self {
             Ast::BinaryOp {
@@ -234,38 +241,36 @@ impl Ast {
                 span,
             } => match op {
                 BinOp::Application => Ok((lhs, rhs)),
-                _ => panic!("expected function arguments"),
-            },
-            _ => panic!("expected function arguments"),
-        }
-    }
-
-    fn as_type(&self) -> Type {
-        todo!()
-    }
-
-    fn to_string(&self) -> InferResult<String> {
-        match self {
-            Ast::Identifier { name: text, .. } => Ok(text.to_string()),
-            e => Err(InferError::TypeMismatch {
-                expected: Type::Identifier(Identifier {
-                    name: 69,
-                    path: None,
+                _ => Err(InferError::ConversionError {
+                    from: op.as_ref().to_string(),
+                    to: BinOpDiscriminants::Application.as_ref(),
                 }),
-                found: e.as_type(),
+            },
+            _ => Err(InferError::ConversionError {
+                from: self.as_ref().to_string(),
+                to: AstDiscriminants::BinaryOp.as_ref(),
             }),
         }
     }
 
+    /// Tries to convert the ast to an identifier and then return name as string.
+    fn to_identifier_string(&self) -> InferResult<String> {
+        match self {
+            Ast::Identifier { name: text, .. } => Ok(text.to_string()),
+            e => Err(InferError::ConversionError {
+                from: e.as_ref().to_string(),
+                to: AstDiscriminants::Identifier.as_ref(),
+            }),
+        }
+    }
+
+    /// Tries to convert the ast to an identifier and then return the De Bruijn index.
     fn as_debrujin(&self) -> InferResult<usize> {
         match self {
             Ast::Identifier { debrujin, .. } => Ok(*debrujin),
-            e => Err(InferError::TypeMismatch {
-                expected: Type::Identifier(Identifier {
-                    name: 69,
-                    path: None,
-                }),
-                found: e.as_type(),
+            e => Err(InferError::ConversionError {
+                from: e.as_ref().to_string(),
+                to: AstDiscriminants::Identifier.as_ref(),
             }),
         }
     }
@@ -411,8 +416,8 @@ pub struct Identifier {
     path: Option<Vec<String>>,
 }
 
-#[derive(Debug, Clone, PartialEq, Display)]
-#[derive(Default)]
+#[derive(Debug, Clone, PartialEq, Display, Default, EnumDiscriminants)]
+#[strum_discriminants(derive(AsRefStr, Display))]
 pub enum Type {
     Int,
     Float,
@@ -429,8 +434,6 @@ pub enum Type {
     #[default]
     Default,
 }
-
-
 
 impl Type {
     fn as_list(self) -> InferResult<Vec<Type>> {
@@ -450,10 +453,7 @@ impl Type {
     fn as_function(&self) -> InferResult<(&Type, &Type)> {
         match self {
             Type::Function(box lhs, box rhs) => Ok((lhs, rhs)),
-            t => infer_error(
-                Type::Function(Box::default(), Box::default()),
-                t.clone(),
-            ),
+            t => infer_error(Type::Function(Box::default(), Box::default()), t.clone()),
         }
     }
 }
@@ -492,8 +492,9 @@ impl Context {
     }
 }
 
-/// Lookup all bindings that are part of a `with`-expression
-fn lookup_set_bindigs(context: &mut Context, bindings: &Ast) -> Result<(), InferError> {
+/// Lookup all bindings that are part of a `with`-expression and add them to the context.
+/// This does not create a new scope
+fn lookup_set_bindigs(context: &mut Context, bindings: &Ast) -> InferResult<()> {
     match bindings {
         Ast::AttrSet {
             attrs,
@@ -507,7 +508,6 @@ fn lookup_set_bindigs(context: &mut Context, bindings: &Ast) -> Result<(), Infer
                 context.insert(*name, ty.clone());
             }
         }
-        Ast::Identifier { .. } => {}
         _ => todo!(),
     }
     Ok(())
