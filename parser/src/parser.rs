@@ -25,22 +25,27 @@ use crate::{
 
 pub type PResult<'a, R> = IResult<NixTokens<'a>, R, VerboseError<NixTokens<'a>>>;
 
+pub(crate) fn span_diff(input: &NixTokens<'_>, new_input: &NixTokens<'_>) -> Span {
+    let spans = &input[0..input.input_len() - new_input.input_len()];
+
+    if spans.len() == 0 {
+        Span { start: 0, end: 0 }
+    } else {
+        Span {
+            start: spans[0].1.start,
+            end: spans.last().unwrap().1.end,
+        }
+    }
+}
+
+/// Take the output of a parser and combine it with the span it took from the input to create a new value.
 pub(crate) fn spanned<'a, T, X>(
     mut parser: impl Parser<NixTokens<'a>, T, VerboseError<NixTokens<'a>>>,
     spanned: impl Fn(Span, T) -> X,
 ) -> impl FnMut(NixTokens<'a>) -> PResult<'a, X> {
     move |input| {
         let (new_input, res) = parser.parse(input.clone())?;
-        let spans = &input[0..input.input_len() - new_input.input_len()];
-
-        let range = if spans.len() == 0 {
-            Span { start: 0, end: 0 }
-        } else {
-            Span {
-                start: spans[0].1.start,
-                end: spans.last().unwrap().1.end,
-            }
-        };
+        let range = span_diff(&input, &new_input);
         Ok((new_input, spanned(range, res)))
     }
 }
@@ -69,10 +74,19 @@ pub(crate) fn literal(input: NixTokens<'_>) -> PResult<'_, Ast> {
     context(
         "literal",
         alt((
-            token(Token::Integer(12)).map(|(token, _)| Int(token.as_i32().unwrap())),
-            token(Token::Float(12.0)).map(|(token, _)| Float(token.as_f32().unwrap())),
-            token(Token::Boolean(true)).map(|(token, _)| Bool(token.as_bool().unwrap())),
-            token(Token::Null).map(|_| Null),
+            token(Token::Integer(12)).map(|(token, span)| Int {
+                val: token.as_i32().unwrap(),
+                span,
+            }),
+            token(Token::Float(12.0)).map(|(token, span)| Float {
+                val: token.as_f32().unwrap(),
+                span,
+            }),
+            token(Token::Boolean(true)).map(|(token, span)| Bool {
+                val: token.as_bool().unwrap(),
+                span,
+            }),
+            token(Token::Null).map(|(_, span)| Null(span)),
             token(Token::Comment).map(|(_, comment)| Comment(comment)),
             token(Token::DocComment).map(|(_, comment)| DocComment(comment)),
             token(Token::LineComment).map(|(_, comment)| LineComment(comment)),
@@ -136,7 +150,7 @@ pub(crate) fn pattern(input: NixTokens<'_>) -> PResult<'_, Pattern> {
 /// ident = expr;
 pub(crate) fn statement(input: NixTokens<'_>) -> PResult<'_, (Span, Ast)> {
     context(
-        "Statement",
+        "statement",
         terminated(
             pair(
                 ident.map(|ast| ast.as_span()),
@@ -148,18 +162,29 @@ pub(crate) fn statement(input: NixTokens<'_>) -> PResult<'_, (Span, Ast)> {
     .parse(input)
 }
 
-/// Parse a set definition.
-pub(crate) fn set(input: NixTokens<'_>) -> PResult<'_, Ast> {
-    context(
-        "Set",
-        pair(
-            opt(token(Rec)).map(|a| a.is_some()),
-            delimited(token(LBrace), many0(statement), token(RBrace)),
-        )
-        .map(|(is_recursive, statements)| AttrSet {
+/*
+.map(|(is_recursive, statements)| AttrSet {
             attrs: statements.into_iter().collect(),
             is_recursive,
         }),
+
+*/
+
+/// Parse a set definition.
+pub(crate) fn set(input: NixTokens<'_>) -> PResult<'_, Ast> {
+    context(
+        "set",
+        spanned(
+            pair(
+                opt(token(Rec)).map(|a| a.is_some()),
+                delimited(token(LBrace), many0(statement), token(RBrace)),
+            ),
+            |span, (is_recursive, statements)| AttrSet {
+                attrs: statements.into_iter().collect(),
+                is_recursive,
+                span,
+            },
+        ),
     )(input)
 }
 
@@ -167,36 +192,38 @@ pub(crate) fn set(input: NixTokens<'_>) -> PResult<'_, Ast> {
 /// lambda = ?
 pub(crate) fn lambda(input: NixTokens<'_>) -> PResult<'_, Ast> {
     let patterns = many1(terminated(pattern, token(DoubleColon)));
-    pair(patterns, expr)
-        .map(|(patterns, body)| Lambda {
-            arguments: patterns,
-            body: Box::new(body),
-            arg_binding: None,
-        })
-        .parse(input)
+    spanned(pair(patterns, expr), |span, (patterns, body)| Lambda {
+        arguments: patterns,
+        body: Box::new(body),
+        arg_binding: None,
+        span,
+    })(input)
 }
 
 /// Parse a conditional.
 /// conditional = if expr then expr else expr
 pub(crate) fn conditional(input: NixTokens<'_>) -> PResult<'_, Ast> {
-    tuple((token(If), expr, token(Then), expr, token(Else), expr))
-        .map(|(_, condition, _, expr1, _, expr2)| Conditional {
+    spanned(
+        tuple((token(If), expr, token(Then), expr, token(Else), expr)),
+        |span, (_, condition, _, expr1, _, expr2)| Conditional {
             condition: Box::new(condition),
             expr1: Box::new(expr1),
             expr2: Box::new(expr2),
-        })
-        .parse(input)
+            span,
+        },
+    )(input)
 }
 
 /// Parse an assertion.
 /// assert = assert expr;
 pub(crate) fn assert(input: NixTokens<'_>) -> PResult<'_, Ast> {
-    tuple((token(Token::Assert), expr, token(Token::Semi)))
-        .map(|(_, condition, _)| Assertion {
+    spanned(
+        tuple((token(Token::Assert), expr, token(Token::Semi))),
+        |span, (_, condition, _)| Assertion {
             condition: Box::new(condition),
-            then: Box::new(Null),
-        })
-        .parse(input)
+            span,
+        },
+    )(input)
 }
 
 pub(crate) fn inherit(input: NixTokens<'_>) -> PResult<'_, Vec<Ast>> {
@@ -206,21 +233,25 @@ pub(crate) fn inherit(input: NixTokens<'_>) -> PResult<'_, Vec<Ast>> {
 /// Parse a let binding.
 /// let-expr = let [ identifier = expr ; with ;]... in expr
 pub(crate) fn let_binding(input: NixTokens<'_>) -> PResult<'_, Ast> {
-    pair(
-        token(Let),
-        cut(pair(
-            many0(alt((
-                statement.map(|(name, ast)| vec![(name, ast)]),
-                inherit.map(|items| items.into_iter().map(|ast| (ast.as_span(), ast)).collect()),
-            ))),
-            preceded(token(In), expr),
-        )),
+    spanned(
+        pair(
+            token(Let),
+            cut(pair(
+                many0(alt((
+                    statement.map(|(name, ast)| vec![(name, ast)]),
+                    inherit
+                        .map(|items| items.into_iter().map(|ast| (ast.as_span(), ast)).collect()),
+                ))),
+                preceded(token(In), expr),
+            )),
+        ),
+        |span, (_, (bindings, body))| LetBinding {
+            bindings: bindings.into_iter().flatten().collect(),
+            body: Box::new(body),
+            inherit: None,
+            span,
+        },
     )
-    .map(|(_, (bindings, body))| LetBinding {
-        bindings: bindings.into_iter().flatten().collect(),
-        body: Box::new(body),
-        inherit: None,
-    })
     .parse(input)
 }
 
@@ -238,31 +269,33 @@ pub(crate) fn atom(input: NixTokens<'_>) -> PResult<'_, Ast> {
 pub(crate) fn expr(input: NixTokens<'_>) -> PResult<'_, Ast> {
     context(
         "expr",
-        pair(
-            opt(with),
-            alt((
-                |input| prett_parsing(input, 0, Token::Semi),
-                lambda,
-                ident,
-                literal,
-                set,
-                assert,
-                let_binding,
-            )),
-        )
-        .map(|(with, expr)| {
-            #[cfg(test)]
-            println!("expr: {:#?}", expr);
-
-            if let Some(with) = with {
-                With {
-                    set: Box::new(with),
-                    body: Box::new(expr),
+        spanned(
+            pair(
+                opt(with),
+                alt((
+                    |input| prett_parsing(input, 0, Token::Semi),
+                    lambda,
+                    ident,
+                    literal,
+                    set,
+                    assert,
+                    let_binding,
+                )),
+            ),
+            |span, (with, expr)| {
+                #[cfg(test)]
+                println!("expr: {:#?}", expr);
+                if let Some(with) = with {
+                    With {
+                        set: Box::new(with),
+                        body: Box::new(expr),
+                        span,
+                    }
+                } else {
+                    expr
                 }
-            } else {
-                expr
-            }
-        }),
+            },
+        ),
     )(input)
 }
 
@@ -302,12 +335,13 @@ pub(crate) fn prett_parsing(mut input: NixTokens<'_>, min_bp: u8, eof: Token) ->
         Minus => {
             input.next();
             let right_bp = 23;
-            let (input, rhs) = prett_parsing(input, right_bp, eof)?;
+            let (new_input, rhs) = prett_parsing(input, right_bp, eof)?;
             (
-                input,
+                new_input,
                 Ast::UnaryOp {
                     op: UnOp::Negation,
                     rhs: Box::new(rhs),
+                    span: span_diff(&input, &new_input),
                 },
             )
         }
@@ -315,12 +349,13 @@ pub(crate) fn prett_parsing(mut input: NixTokens<'_>, min_bp: u8, eof: Token) ->
         Token::Not => {
             input.next();
             let right_bp = 13;
-            let (input, rhs) = prett_parsing(input, right_bp, eof)?;
+            let (new_input, rhs) = prett_parsing(input, right_bp, eof)?;
             (
-                input,
+                new_input,
                 Ast::UnaryOp {
                     op: UnOp::LogicalNegation,
                     rhs: Box::new(rhs),
+                    span: span_diff(&input, &new_input),
                 },
             )
         }
@@ -371,6 +406,10 @@ pub(crate) fn prett_parsing(mut input: NixTokens<'_>, min_bp: u8, eof: Token) ->
                 op,
                 lhs: Box::new(lhs),
                 rhs: Box::new(rhs),
+                span: Span {
+                    start: lhs.as_span().start,
+                    end: rhs.as_span().end,
+                },
             };
 
             continue;

@@ -64,11 +64,10 @@ impl BinOp {
             Self::Or => (3, 4),
             Self::And => (5, 6),
             Self::Equal | Self::NotEqual => (7, 8),
-            Self::LessThan | Self::LessThanEqual | Self::GreaterThan | Self::GreaterThanEqual => {
-                (9, 10)
-            } // Right associative
-            Self::Update => (12, 11),
-            // Negotaion with 13
+            Self::LessThan | Self::LessThanEqual => (9, 10),
+            Self::GreaterThan | Self::GreaterThanEqual => (9, 10),
+            Self::Update => (12, 11), // Right associative
+            // Negation with 13
             Self::Add | Self::Sub => (15, 16),
             Self::Mul | Self::Div => (17, 18),
             Self::ListConcat => (20, 19),
@@ -101,10 +100,7 @@ impl BinOp {
             AttributeFallback => Some(BinOp::AttributeFallback),
             Dot => Some(BinOp::AttributeSelection),
             Question => Some(BinOp::HasAttribute),
-            _ => {
-                // TODO: Add application here
-                None
-            }
+            _ => None,
         }
     }
 }
@@ -135,6 +131,7 @@ pub enum Ast {
     UnaryOp {
         op: UnOp,
         rhs: Box<Ast>,
+        span: Span,
     },
 
     /// Binary Operators
@@ -142,6 +139,7 @@ pub enum Ast {
         op: BinOp,
         lhs: Box<Ast>,
         rhs: Box<Ast>,
+        span: Span,
     },
 
     /// ----------------- Language Constructs -----------------
@@ -152,6 +150,7 @@ pub enum Ast {
         /// A set of attributes
         attrs: Vec<(Span, Ast)>,
         is_recursive: bool,
+        span: Span,
     },
 
     /// Let expression
@@ -163,6 +162,7 @@ pub enum Ast {
         body: Box<Ast>,
         /// A list of identifiers to inherit from the parent scope
         inherit: Option<Vec<Span>>,
+        span: Span,
     },
 
     /// Function
@@ -172,6 +172,7 @@ pub enum Ast {
         arguments: Vec<Pattern>,
         body: Box<Ast>,
         arg_binding: Option<Span>,
+        span: Span,
     },
 
     /// Conditional
@@ -183,6 +184,7 @@ pub enum Ast {
         expr1: Box<Ast>,
         /// The expression to evaluate if the condition is false
         expr2: Box<Ast>,
+        span: Span,
     },
 
     /// An assert statement.
@@ -191,7 +193,7 @@ pub enum Ast {
         /// The condition to evaluate
         condition: Box<Ast>,
         /// The expression to evaluate if the condition is true
-        then: Box<Ast>,
+        span: Span,
     },
 
     /// A with-statement.
@@ -201,19 +203,32 @@ pub enum Ast {
         set: Box<Ast>,
         /// The expression to evaluate
         body: Box<Ast>,
+        span: Span,
     },
 
     /// ----------------- Literals -----------------
     Identifier(Span),
-    List(Vec<Ast>),
+    List {
+        items: Vec<Ast>,
+        span: Span,
+    },
 
     /// Primitives
     NixString(Span),
     NixPath(Span),
-    Bool(bool),
-    Int(i32),
-    Float(f32),
-    Null,
+    Bool {
+        val: bool,
+        span: Span,
+    },
+    Int {
+        val: i32,
+        span: Span,
+    },
+    Float {
+        val: f32,
+        span: Span,
+    },
+    Null(Span),
 
     /// Comments
     Comment(Span),
@@ -224,13 +239,25 @@ pub enum Ast {
 impl Ast {
     pub fn as_span(&self) -> Span {
         match &self {
-            Ast::Identifier(s)
-            | Ast::NixString(s)
-            | Ast::NixPath(s)
-            | Ast::Comment(s)
-            | Ast::DocComment(s)
-            | Ast::LineComment(s) => s.clone(),
-            _ => Span::default(),
+            Ast::Identifier(span)
+            | Ast::NixString(span)
+            | Ast::NixPath(span)
+            | Ast::Comment(span)
+            | Ast::DocComment(span)
+            | Ast::LineComment(span) 
+            | Ast::UnaryOp { span, .. }
+            | Ast::BinaryOp { span, .. }
+            | Ast::AttrSet { span, .. }
+            | Ast::LetBinding { span, .. }
+            | Ast::Lambda { span, .. }
+            | Ast::Conditional { span, .. }
+            | Ast::Assertion { span, .. }
+            | Ast::With { span, .. }
+            | Ast::List { span, .. }
+            | Ast::Bool { span, .. }
+            | Ast::Int { span, .. }
+            | Ast::Float { span, .. }
+            | Ast::Null(span) => span.clone(),
         }
     }
 }
