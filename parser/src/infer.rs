@@ -209,7 +209,7 @@ fn transform_ast<'a>(
     fun_depth: usize,
 ) -> Ast {
     match value {
-        ParserAst::UnaryOp { op, box rhs } => Ast::UnaryOp {
+        ParserAst::UnaryOp { op, box rhs, span } => Ast::UnaryOp {
             op: op,
             rhs: Box::new(transform_ast(rhs, cache, source, fun_depth)),
         },
@@ -217,6 +217,7 @@ fn transform_ast<'a>(
             op,
             box lhs,
             box rhs,
+            span,
         } => Ast::BinaryOp {
             op: op,
             lhs: Box::new(transform_ast(lhs, cache, source, fun_depth)),
@@ -225,6 +226,7 @@ fn transform_ast<'a>(
         ParserAst::AttrSet {
             attrs,
             is_recursive,
+            span,
         } => {
             let attrs = attrs
                 .into_iter()
@@ -244,6 +246,7 @@ fn transform_ast<'a>(
             bindings,
             body,
             inherit,
+            span,
         } => {
             let bindings = bindings
                 .into_iter()
@@ -270,6 +273,7 @@ fn transform_ast<'a>(
             arguments,
             body,
             arg_binding,
+            span,
         } => {
             todo!()
         }
@@ -277,24 +281,26 @@ fn transform_ast<'a>(
             condition,
             expr1,
             expr2,
+            span,
         } => todo!(),
-        ParserAst::Assertion { condition, then } => todo!(),
-        ParserAst::With { set, body } => todo!(),
+        ParserAst::Assertion { condition, span } => todo!(),
+        ParserAst::With { set, body, span } => todo!(),
         ParserAst::Identifier(_) => todo!(),
         ParserAst::NixString(_) => todo!(),
         ParserAst::NixPath(_) => todo!(),
-        ParserAst::Bool(_) => todo!(),
-        ParserAst::Int(_) => todo!(),
-        ParserAst::Float(_) => todo!(),
-        ParserAst::Null => Ast::Null,
-        ParserAst::List(l) => Ast::List(
-            l.into_iter()
+        ParserAst::List { items, span } => Ast::List(
+            items
+                .into_iter()
                 .map(|l| transform_ast(l, cache, source, fun_depth))
                 .collect(),
         ),
         ParserAst::Comment(_) | ParserAst::DocComment(_) | ParserAst::LineComment(_) => {
             unimplemented!()
         }
+        ParserAst::Bool { val, span } => todo!(),
+        ParserAst::Int { val, span } => todo!(),
+        ParserAst::Float { val, span } => todo!(),
+        ParserAst::Null(_) => todo!(),
     }
 }
 

@@ -30,7 +30,10 @@ fn test_ident_default_pattern() {
         PatternElement::DefaultIdentifier {
             identifier: Range { start: 0, end: 6 },
             span: Range { start: 0, end: 11 },
-            ast: Ast::Int(12)
+            ast: Ast::Int {
+                val: 12,
+                span: Range { start: 9, end: 11 }
+            },
         }
     );
 }
@@ -94,7 +97,13 @@ fn test_statement() {
     let (input, (name, ast)) = statement(NixTokens(&tokens)).unwrap();
     assert!(input.0.is_empty());
     assert_eq!(name, Range { start: 0, end: 6 });
-    assert_eq!(ast, Ast::Int(12));
+    assert_eq!(
+        ast,
+        Ast::Int {
+            val: 12,
+            span: Range { start: 9, end: 11 }
+        }
+    );
 
     let tokens = lex("player = 12 + 13;");
     let (input, (name, ast)) = statement(NixTokens(&tokens)).unwrap();
@@ -103,9 +112,16 @@ fn test_statement() {
     assert_eq!(
         ast,
         Ast::BinaryOp {
-            lhs: Box::new(Ast::Int(12)),
-            rhs: Box::new(Ast::Int(13)),
+            lhs: Box::new(Ast::Int {
+                val: 12,
+                span: Range { start: 9, end: 11 }
+            }),
+            rhs: Box::new(Ast::Int {
+                val: 13,
+                span: Range { start: 14, end: 16 }
+            }),
             op: BinOp::Add,
+            span: Range { start: 9, end: 16 }
         }
     );
 }
@@ -121,10 +137,23 @@ fn test_set() {
         ast,
         Ast::AttrSet {
             attrs: vec![
-                (Range { start: 2, end: 8 }, Ast::Int(12)),
-                (Range { start: 15, end: 23 }, Ast::Int(13))
+                (
+                    Range { start: 2, end: 8 },
+                    Ast::Int {
+                        val: 12,
+                        span: Range { start: 11, end: 13 }
+                    }
+                ),
+                (
+                    Range { start: 15, end: 23 },
+                    Ast::Int {
+                        val: 13,
+                        span: Range { start: 26, end: 28 }
+                    }
+                )
             ],
             is_recursive: false,
+            span: Range { start: 0, end: 31 }
         }
     );
 
@@ -138,19 +167,19 @@ fn test_set() {
         Ast::AttrSet {
             attrs: vec![],
             is_recursive: false,
+            span: Range { start: 0, end: 3 }
         }
     );
 
     let tokens = lex("rec { }");
-    let (input, ast) = set(NixTokens(&tokens))
-        .map_err(|err| println!("{:#?}", err))
-        .unwrap();
+    let (input, ast) = set(NixTokens(&tokens)).unwrap();
     assert!(input.0.is_empty());
     assert_eq!(
         ast,
         Ast::AttrSet {
             attrs: vec![],
             is_recursive: true,
+            span: Range { start: 0, end: 7 }
         }
     )
 }
@@ -167,8 +196,12 @@ fn test_lambda() {
                 patterns: vec![PatternElement::Identifier(Range { start: 0, end: 6 })],
                 is_wildcard: false,
             }],
-            body: Box::new(Ast::Int(12)),
+            body: Box::new(Ast::Int {
+                val: 12,
+                span: Range { start: 8, end: 10 }
+            }),
             arg_binding: None,
+            span: Range { start: 0, end: 10 }
         }
     );
 
@@ -188,8 +221,12 @@ fn test_lambda() {
                     is_wildcard: false,
                 }
             ],
-            body: Box::new(Ast::Int(12)),
+            body: Box::new(Ast::Int {
+                val: 12,
+                span: Range { start: 18, end: 20 }
+            }),
             arg_binding: None,
+            span: Range { start: 0, end: 20 }
         }
     );
 
@@ -204,8 +241,12 @@ fn test_lambda() {
                 patterns: vec![PatternElement::Identifier(Range { start: 1, end: 7 })],
                 is_wildcard: false,
             }],
-            body: Box::new(Ast::Int(12)),
+            body: Box::new(Ast::Int {
+                val: 12,
+                span: Range { start: 10, end: 12 }
+            }),
             arg_binding: None,
+            span: Range { start: 0, end: 12 }
         }
     );
 }
@@ -219,9 +260,19 @@ fn test_conditional() {
     assert_eq!(
         ast,
         Ast::Conditional {
-            condition: Box::new(Ast::Bool(true)),
-            expr1: Box::new(Ast::Int(12)),
-            expr2: Box::new(Ast::Int(13)),
+            condition: Box::new(Ast::Bool {
+                val: true,
+                span: Range { start: 3, end: 7 }
+            }),
+            expr1: Box::new(Ast::Int {
+                val: 12,
+                span: Range { start: 13, end: 15 }
+            }),
+            expr2: Box::new(Ast::Int {
+                val: 13,
+                span: Range { start: 21, end: 23 }
+            }),
+            span: Range { start: 0, end: 23 }
         }
     );
 }
@@ -234,8 +285,11 @@ fn test_assert() {
     assert_eq!(
         ast,
         Ast::Assertion {
-            condition: Box::new(Ast::Bool(true)),
-            then: Box::new(Ast::Null),
+            condition: Box::new(Ast::Bool {
+                val: true,
+                span: Range { start: 7, end: 11 }
+            }),
+            span: Range { start: 0, end: 12 }
         }
     );
 }
@@ -268,9 +322,16 @@ fn test_let_binding() {
     assert_eq!(
         ast,
         Ast::LetBinding {
-            bindings: vec![(Range { start: 4, end: 10 }, Ast::Int(12))],
+            bindings: vec![(
+                Range { start: 4, end: 10 },
+                Ast::Int {
+                    val: 12,
+                    span: Range { start: 13, end: 15 }
+                }
+            )],
             body: Box::new(Ast::Identifier(Range { start: 20, end: 26 })),
             inherit: None,
+            span: Range { start: 0, end: 26 }
         }
     );
 
@@ -281,14 +342,28 @@ fn test_let_binding() {
         ast,
         Ast::LetBinding {
             bindings: vec![
-                (Range { start: 4, end: 10 }, Ast::Int(12)),
-                (Range { start: 17, end: 25 }, Ast::Int(13))
+                (
+                    Range { start: 4, end: 10 },
+                    Ast::Int {
+                        val: 12,
+                        span: Range { start: 13, end: 15 }
+                    }
+                ),
+                (
+                    Range { start: 17, end: 25 },
+                    Ast::Int {
+                        val: 13,
+                        span: Range { start: 28, end: 30 }
+                    }
+                )
             ],
             body: Box::new(Ast::AttrSet {
                 attrs: vec![],
-                is_recursive: false
+                is_recursive: false,
+                span: Range { start: 35, end: 37 }
             }),
             inherit: None,
+            span: Range { start: 0, end: 37 }
         }
     );
 }
@@ -306,8 +381,15 @@ fn test_with() {
     assert_eq!(
         ast,
         Ast::AttrSet {
-            attrs: vec![(Range { start: 7, end: 8 }, Ast::Int(1))],
+            attrs: vec![(
+                Range { start: 7, end: 8 },
+                Ast::Int {
+                    val: 1,
+                    span: Range { start: 11, end: 12 }
+                }
+            )],
             is_recursive: false,
+            span: Range { start: 5, end: 15 }
         }
     );
 }
@@ -317,28 +399,52 @@ fn test_literal() {
     let tokens = lex("null");
     let (input, ast) = literal(NixTokens(&tokens)).unwrap();
     assert!(input.0.is_empty());
-    assert_eq!(ast, Ast::Null);
+    assert_eq!(ast, Ast::Null(Range { start: 0, end: 4 }));
 
     let tokens = lex("true");
     let (input, ast) = literal(NixTokens(&tokens)).unwrap();
     assert!(input.0.is_empty());
-    assert_eq!(ast, Ast::Bool(true));
+    assert_eq!(
+        ast,
+        Ast::Bool {
+            val: true,
+            span: Range { start: 0, end: 4 }
+        }
+    );
 
     let tokens = lex("false");
     let (input, ast) = literal(NixTokens(&tokens)).unwrap();
     assert!(input.0.is_empty());
-    assert_eq!(ast, Ast::Bool(false));
+    assert_eq!(
+        ast,
+        Ast::Bool {
+            val: false,
+            span: Range { start: 0, end: 5 }
+        }
+    );
 
     let tokens = lex("12");
     let (input, ast) = literal(NixTokens(&tokens)).unwrap();
     assert!(input.0.is_empty());
-    assert_eq!(ast, Ast::Int(12));
+    assert_eq!(
+        ast,
+        Ast::Int {
+            val: 12,
+            span: Range { start: 0, end: 2 }
+        }
+    );
 
     let tokens = lex("12.12");
     println!("{:?}", tokens);
     let (input, ast) = literal(NixTokens(&tokens)).unwrap();
     assert!(input.0.is_empty());
-    assert_eq!(ast, Ast::Float(12.12));
+    assert_eq!(
+        ast,
+        Ast::Float {
+            val: 12.12,
+            span: Range { start: 0, end: 5 }
+        }
+    );
 
     let tokens = lex("/** hi */");
     let (input, ast) = literal(NixTokens(&tokens)).unwrap();
@@ -404,13 +510,24 @@ fn test_prett_parsing() {
     assert_eq!(
         ast,
         Ast::BinaryOp {
-            lhs: Box::new(Ast::Int(12)),
+            lhs: Box::new(Ast::Int {
+                val: 12,
+                span: Range { start: 0, end: 2 }
+            }),
             rhs: Box::new(Ast::BinaryOp {
-                lhs: Box::new(Ast::Int(12)),
-                rhs: Box::new(Ast::Int(13)),
+                lhs: Box::new(Ast::Int {
+                    val: 12,
+                    span: Range { start: 5, end: 7 }
+                }),
+                rhs: Box::new(Ast::Int {
+                    val: 13,
+                    span: Range { start: 10, end: 12 }
+                }),
+                span: Range { start: 5, end: 12 },
                 op: Mul,
             }),
             op: Add,
+            span: Range { start: 0, end: 12 }
         }
     );
 
@@ -422,12 +539,23 @@ fn test_prett_parsing() {
         ast,
         Ast::BinaryOp {
             lhs: Box::new(Ast::BinaryOp {
-                lhs: Box::new(Ast::Int(12)),
-                rhs: Box::new(Ast::Int(12)),
+                lhs: Box::new(Ast::Int {
+                    val: 12,
+                    span: Range { start: 1, end: 3 }
+                }),
+                rhs: Box::new(Ast::Int {
+                    val: 12,
+                    span: Range { start: 6, end: 8 }
+                }),
+                span: Range { start: 1, end: 8 },
                 op: Add,
             }),
-            rhs: Box::new(Ast::Int(13)),
+            rhs: Box::new(Ast::Int {
+                val: 13,
+                span: Range { start: 12, end: 14 }
+            }),
             op: Mul,
+            span: Range { start: 1, end: 14 },
         }
     );
 }
@@ -456,13 +584,22 @@ fn test_application() {
             lhs: Box::new(Ast::BinaryOp {
                 op: BinOp::Application,
                 lhs: Box::new(Ast::Identifier(Range { start: 0, end: 3 })),
-                rhs: Box::new(Ast::Identifier(Range { start: 4, end: 7 }))
+                rhs: Box::new(Ast::Identifier(Range { start: 4, end: 7 })),
+                span: Range { start: 0, end: 7 }
             }),
             rhs: Box::new(Ast::BinaryOp {
                 op: BinOp::Add,
-                lhs: Box::new(Ast::Int(1)),
-                rhs: Box::new(Ast::Int(1))
+                lhs: Box::new(Ast::Int {
+                    val: 1,
+                    span: Range { start: 9, end: 10 }
+                }),
+                rhs: Box::new(Ast::Int {
+                    val: 1,
+                    span: Range { start: 11, end: 12 }
+                }),
+                span: Range { start: 9, end: 12 }
             }),
+            span: Range { start: 0, end: 12 }
         }
     );
 
@@ -478,19 +615,56 @@ fn test_application() {
                 rhs: Box::new(Ast::BinaryOp {
                     op: BinOp::AttributeSelection,
                     lhs: Box::new(Ast::Identifier(Range { start: 4, end: 7 })),
-                    rhs: Box::new(Ast::Identifier(Range { start: 8, end: 11 }))
-                })
+                    rhs: Box::new(Ast::Identifier(Range { start: 8, end: 11 })),
+                    span: Range { start: 4, end: 11 }
+                }),
+                span: Range { start: 0, end: 11 }
             }),
             rhs: Box::new(Ast::BinaryOp {
                 op: BinOp::Add,
-                lhs: Box::new(Ast::Int(1)),
-                rhs: Box::new(Ast::Int(1))
+                lhs: Box::new(Ast::Int {
+                    val: 1,
+                    span: Range { start: 13, end: 14 }
+                }),
+                rhs: Box::new(Ast::Int {
+                    val: 1,
+                    span: Range { start: 15, end: 16 }
+                }),
+                span: Range { start: 13, end: 16 }
             }),
+            span: Range { start: 0, end: 16 }
         }
     );
 }
 
 #[test]
 fn test_attribute_access() {
-    todo!()
+    let tokens = lex(r#"map.map;"#);
+    let (_input, ast) = expr(NixTokens(&tokens)).unwrap();
+    assert_eq!(
+        ast,
+        Ast::BinaryOp {
+            op: BinOp::AttributeSelection,
+            lhs: Box::new(Ast::Identifier(Range { start: 0, end: 3 })),
+            rhs: Box::new(Ast::Identifier(Range { start: 4, end: 7 })),
+            span: Range { start: 0, end: 7 }
+        }
+    );
+
+    let tokens = lex(r#"map.map.map;"#);
+    let (_input, ast) = expr(NixTokens(&tokens)).unwrap();
+    assert_eq!(
+        ast,
+        Ast::BinaryOp {
+            op: BinOp::AttributeSelection,
+            lhs: Box::new(Ast::BinaryOp {
+                op: BinOp::AttributeSelection,
+                lhs: Box::new(Ast::Identifier(Range { start: 0, end: 3 })),
+                rhs: Box::new(Ast::Identifier(Range { start: 4, end: 7 })),
+                span: Range { start: 0, end: 7 }
+            }),
+            rhs: Box::new(Ast::Identifier(Range { start: 8, end: 11 })),
+            span: Range { start: 0, end: 11 }
+        }
+    );
 }

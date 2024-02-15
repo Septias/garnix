@@ -162,14 +162,6 @@ pub(crate) fn statement(input: NixTokens<'_>) -> PResult<'_, (Span, Ast)> {
     .parse(input)
 }
 
-/*
-.map(|(is_recursive, statements)| AttrSet {
-            attrs: statements.into_iter().collect(),
-            is_recursive,
-        }),
-
-*/
-
 /// Parse a set definition.
 pub(crate) fn set(input: NixTokens<'_>) -> PResult<'_, Ast> {
     context(
@@ -300,6 +292,7 @@ pub(crate) fn expr(input: NixTokens<'_>) -> PResult<'_, Ast> {
 }
 
 pub(crate) fn prett_parsing(mut input: NixTokens<'_>, min_bp: u8, eof: Token) -> PResult<'_, Ast> {
+    println!("input: {:?}", input);
     let (mut input, mut lhs) = match input
         .peek()
         .ok_or(nom::Err::Error(VerboseError::from_error_kind(
@@ -404,12 +397,12 @@ pub(crate) fn prett_parsing(mut input: NixTokens<'_>, min_bp: u8, eof: Token) ->
             input = _input;
             lhs = Ast::BinaryOp {
                 op,
-                lhs: Box::new(lhs),
-                rhs: Box::new(rhs),
                 span: Span {
                     start: lhs.as_span().start,
                     end: rhs.as_span().end,
                 },
+                lhs: Box::new(lhs),
+                rhs: Box::new(rhs),
             };
 
             continue;
