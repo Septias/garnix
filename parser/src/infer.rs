@@ -131,7 +131,11 @@ pub enum Ast {
         span: Span,
     },
 
-    Identifier(usize),
+    Identifier {
+        debrujin: usize,
+        name: String,
+        span: Span,
+    },
     List {
         items: Vec<Ast>,
         span: Span,
@@ -163,30 +167,47 @@ fn infer_error<T>(expected: Type, found: Type) -> Result<T, InferError> {
     Err(InferError::TypeMismatch { expected, found })
 }
 
+fn fold_path(ast: &Ast, path: &mut Vec<String>) -> InferResult<()> {
+    match ast {
+        Ast::BinaryOp { op, lhs, rhs, span } => match op {
+            BinOp::AttributeSelection => {
+                fold_path(lhs, path);
+                path.push(rhs.to_string()?);
+            }
+            _ => (),
+        },
+        _ => (),
+    }
+    Ok(())
+}
+
 impl Ast {
     fn from_parser_ast(value: ParserAst, source: String) -> Self {
         let mut vars = Cache::new();
         transform_ast(value, &mut vars, &source, 0)
     }
 
-    fn as_ident(&self) -> Result<usize, InferError> {
-        match self {
-            Ast::Identifier(name) => Ok(*name),
-            e => Err(InferError::TypeMismatch {
-                expected: Type::Identifier(Identifier {
-                    name: 69,
-                    path: None,
-                }),
-                found: e.as_type(),
-            }),
-        }
-    }
-
     /// Return not only an identifier, but also try to mixmize it by following
     /// accesses.
-    fn as_path(&self) -> Result<usize, InferError> {
+    fn as_ident(&self) -> InferResult<Identifier> {
         match self {
-            Ast::Identifier(name) => Ok(*name),
+            Ast::Identifier { debrujin, .. } => Ok(Identifier {
+                name: *debrujin,
+                path: None,
+            }),
+            Ast::BinaryOp {
+                op: BinOp::AttributeSelection,
+                lhs,
+                rhs,
+                span,
+            } => {
+                let mut path = vec![];
+                fold_path(rhs, &mut path)?;
+                Ok(Identifier {
+                    name: lhs.as_debrujin()?,
+                    path: Some(path),
+                })
+            }
             e => Err(InferError::TypeMismatch {
                 expected: Type::Identifier(Identifier {
                     name: 69,
@@ -221,6 +242,32 @@ impl Ast {
 
     fn as_type(&self) -> Type {
         todo!()
+    }
+
+    fn to_string(&self) -> InferResult<String> {
+        match self {
+            Ast::Identifier { name: text, .. } => Ok(text.to_string()),
+            e => Err(InferError::TypeMismatch {
+                expected: Type::Identifier(Identifier {
+                    name: 69,
+                    path: None,
+                }),
+                found: e.as_type(),
+            }),
+        }
+    }
+
+    fn as_debrujin(&self) -> InferResult<usize> {
+        match self {
+            Ast::Identifier { debrujin, .. } => Ok(*debrujin),
+            e => Err(InferError::TypeMismatch {
+                expected: Type::Identifier(Identifier {
+                    name: 69,
+                    path: None,
+                }),
+                found: e.as_type(),
+            }),
+        }
     }
 }
 
@@ -361,7 +408,7 @@ impl<'a> Cache<'a> {
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Identifier {
     name: usize,
-    path: Option<String>,
+    path: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Display)]
@@ -413,7 +460,7 @@ impl Type {
     }
 }
 
-type Constraint = (usize, Type);
+type Constraint = (Identifier, Type);
 
 pub(crate) struct Context(Vec<Vec<(usize, Type)>>);
 
@@ -462,7 +509,7 @@ fn lookup_set_bindigs(context: &mut Context, bindings: &Ast) -> Result<(), Infer
                 context.insert(*name, ty.clone());
             }
         }
-        Ast::Identifier(_) => {}
+        Ast::Identifier { .. } => {}
         _ => todo!(),
     }
     Ok(())
@@ -480,15 +527,16 @@ fn reduce_function<'a>(
 
     // find out if this is a stacked function
     if matches!(to, Type::Function(_, _)) {
-        // extract the first argument from the chain
+        // extract the last argument from the chain
         if let Ok((arg, next)) = arguments.to_application() {
-            // if it is an identifier we can formulate a constraint
-            if let Ok(ident) = arg.as_path() {
-                constraints.push((ident, from.clone()));
-            }
-
             // further reduce the function
             let ret = reduce_function(to, arguments, constraints)?;
+
+            // if it is an identifier we can formulate a constraint
+            if let Ok(ident) = arg.as_ident() {
+                constraints.push((ident, ret.clone()));
+            }
+
             Ok(ret)
         } else {
             // If there is no argument to apply, just return a partial function
@@ -656,7 +704,9 @@ fn hm(context: &mut Context, expr: &Ast) -> Result<Type, InferError> {
             lookup_set_bindigs(context, &set.as_ref().clone())?;
             hm(context, body)
         }
-        Ast::Identifier(name) => Ok(context.lookup(name).cloned().unwrap_or(Undefined)),
+        Ast::Identifier { debrujin, .. } => {
+            Ok(context.lookup(debrujin).cloned().unwrap_or(Undefined))
+        }
         Ast::NixString(_) => Ok(String),
         Ast::NixPath(_) => Ok(String),
         Ast::List { items, span } => Ok(Type::List(
