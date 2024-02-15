@@ -28,7 +28,7 @@ pub type PResult<'a, R> = IResult<NixTokens<'a>, R, VerboseError<NixTokens<'a>>>
 pub(crate) fn span_diff(input: &NixTokens<'_>, new_input: &NixTokens<'_>) -> Span {
     let spans = &input[0..input.input_len() - new_input.input_len()];
 
-    if spans.len() == 0 {
+    if spans.is_empty() {
         Span { start: 0, end: 0 }
     } else {
         Span {
@@ -44,7 +44,7 @@ pub(crate) fn spanned<'a, T, X>(
     spanned: impl Fn(Span, T) -> X,
 ) -> impl FnMut(NixTokens<'a>) -> PResult<'a, X> {
     move |input| {
-        let (new_input, res) = parser.parse(input.clone())?;
+        let (new_input, res) = parser.parse(input)?;
         let range = span_diff(&input, &new_input);
         Ok((new_input, spanned(range, res)))
     }

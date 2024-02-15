@@ -233,7 +233,7 @@ impl Ast {
                 box rhs,
                 span,
             } => match op {
-                BinOp::Application => return Ok((lhs, rhs)),
+                BinOp::Application => Ok((lhs, rhs)),
                 _ => panic!("expected function arguments"),
             },
             _ => panic!("expected function arguments"),
@@ -281,7 +281,7 @@ fn transform_ast<'a>(
 ) -> Ast {
     match value {
         ParserAst::UnaryOp { op, box rhs, span } => Ast::UnaryOp {
-            op: op,
+            op,
             rhs: Box::new(transform_ast(rhs, cache, source, fun_depth)),
             span,
         },
@@ -291,7 +291,7 @@ fn transform_ast<'a>(
             box rhs,
             span,
         } => Ast::BinaryOp {
-            op: op,
+            op,
             lhs: Box::new(transform_ast(lhs, cache, source, fun_depth)),
             rhs: Box::new(transform_ast(rhs, cache, source, fun_depth)),
             span,
@@ -312,7 +312,7 @@ fn transform_ast<'a>(
                 .collect();
             Ast::AttrSet {
                 attrs,
-                is_recursive: is_recursive,
+                is_recursive,
                 span,
             }
         }
@@ -368,7 +368,7 @@ fn transform_ast<'a>(
                 .into_iter()
                 .map(|l| transform_ast(l, cache, source, fun_depth))
                 .collect(),
-            span: span,
+            span,
         },
         ParserAst::Comment(_) | ParserAst::DocComment(_) | ParserAst::LineComment(_) => {
             unimplemented!()
@@ -412,6 +412,7 @@ pub struct Identifier {
 }
 
 #[derive(Debug, Clone, PartialEq, Display)]
+#[derive(Default)]
 pub enum Type {
     Int,
     Float,
@@ -425,14 +426,11 @@ pub enum Type {
     Union(Box<Type>, Box<Type>),
     Set(HashMap<String, Type>),
     Var(String),
+    #[default]
     Default,
 }
 
-impl Default for Type {
-    fn default() -> Self {
-        Type::Default
-    }
-}
+
 
 impl Type {
     fn as_list(self) -> InferResult<Vec<Type>> {
@@ -453,7 +451,7 @@ impl Type {
         match self {
             Type::Function(box lhs, box rhs) => Ok((lhs, rhs)),
             t => infer_error(
-                Type::Function(Box::new(Type::default()), Box::new(Type::default())),
+                Type::Function(Box::default(), Box::default()),
                 t.clone(),
             ),
         }
@@ -710,7 +708,7 @@ fn hm(context: &mut Context, expr: &Ast) -> Result<Type, InferError> {
         Ast::NixString(_) => Ok(String),
         Ast::NixPath(_) => Ok(String),
         Ast::List { items, span } => Ok(Type::List(
-            items.iter().map(|ast| hm(context, ast)).flatten().collect(),
+            items.iter().flat_map(|ast| hm(context, ast)).collect(),
         )),
         Ast::Bool { val, span } => todo!(),
         Ast::Int { val, span } => todo!(),

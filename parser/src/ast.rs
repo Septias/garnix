@@ -244,7 +244,7 @@ impl Ast {
             | Ast::NixPath(span)
             | Ast::Comment(span)
             | Ast::DocComment(span)
-            | Ast::LineComment(span) 
+            | Ast::LineComment(span)
             | Ast::UnaryOp { span, .. }
             | Ast::BinaryOp { span, .. }
             | Ast::AttrSet { span, .. }
