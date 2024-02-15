@@ -4,6 +4,7 @@
 use std::collections::HashMap;
 
 use anyhow::Context as _;
+use logos::Span;
 use strum_macros::Display;
 use thiserror::Error;
 
@@ -46,6 +47,7 @@ pub struct Pattern {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+/// Mirror of [ParserAst], but with identifiers replaced by DeBrujin indices.
 pub enum Ast {
     /// ----------------- Operators -----------------
 
@@ -53,6 +55,7 @@ pub enum Ast {
     UnaryOp {
         op: UnOp,
         rhs: Box<Ast>,
+        span: Span,
     },
 
     /// Binary Operators
@@ -60,6 +63,7 @@ pub enum Ast {
         op: BinOp,
         lhs: Box<Ast>,
         rhs: Box<Ast>,
+        span: Span,
     },
 
     /// ----------------- Language Constructs -----------------
@@ -70,6 +74,7 @@ pub enum Ast {
         /// A set of attributes
         attrs: Vec<(usize, Ast)>,
         is_recursive: bool,
+        span: Span,
     },
 
     /// Let expression
@@ -81,6 +86,7 @@ pub enum Ast {
         body: Box<Ast>,
         /// A list of identifiers to inherit from the parent scope
         inherit: Option<Vec<usize>>,
+        span: Span,
     },
 
     /// Function
@@ -90,6 +96,7 @@ pub enum Ast {
         arguments: Vec<Pattern>,
         body: Box<Ast>,
         arg_binding: Option<usize>,
+        span: Span,
     },
 
     /// Conditional
@@ -101,6 +108,7 @@ pub enum Ast {
         expr1: Box<Ast>,
         /// The expression to evaluate if the condition is false
         expr2: Box<Ast>,
+        span: Span,
     },
 
     /// An assert statement.
@@ -110,6 +118,7 @@ pub enum Ast {
         condition: Box<Ast>,
         /// The expression to evaluate if the condition is true
         then: Box<Ast>,
+        span: Span,
     },
 
     /// A with-statement.
@@ -119,19 +128,33 @@ pub enum Ast {
         set: Box<Ast>,
         /// The expression to evaluate
         body: Box<Ast>,
+        span: Span,
     },
 
-    /// ----------------- Literals -----------------
     Identifier(usize),
-    List(Vec<Ast>),
+    List {
+        items: Vec<Ast>,
+        span: Span,
+    },
 
-    /// Primitives
-    NixString(String),
-    NixPath(String),
-    Bool(bool),
-    Int(i32),
-    Float(f32),
-    Null,
+    NixString(Span),
+    NixPath(Span),
+    Bool {
+        val: bool,
+        span: Span,
+    },
+    Int {
+        val: i32,
+        span: Span,
+    },
+    Float {
+        val: f32,
+        span: Span,
+    },
+    Null(Span),
+    Comment(Span),
+    DocComment(Span),
+    LineComment(Span),
 }
 
 type InferResult<T> = Result<T, InferError>;
@@ -176,7 +199,7 @@ impl Ast {
 
     fn as_list(&self) -> InferResult<&Vec<Ast>> {
         match self {
-            Ast::List(elems) => Ok(elems),
+            Ast::List { items, span } => Ok(items),
             e => infer_error(Type::List(vec![]), e.as_type()),
         }
     }
@@ -187,6 +210,7 @@ impl Ast {
                 op,
                 box lhs,
                 box rhs,
+                span,
             } => match op {
                 BinOp::Application => return Ok((lhs, rhs)),
                 _ => panic!("expected function arguments"),
@@ -212,6 +236,7 @@ fn transform_ast<'a>(
         ParserAst::UnaryOp { op, box rhs, span } => Ast::UnaryOp {
             op: op,
             rhs: Box::new(transform_ast(rhs, cache, source, fun_depth)),
+            span,
         },
         ParserAst::BinaryOp {
             op,
@@ -222,6 +247,7 @@ fn transform_ast<'a>(
             op: op,
             lhs: Box::new(transform_ast(lhs, cache, source, fun_depth)),
             rhs: Box::new(transform_ast(rhs, cache, source, fun_depth)),
+            span,
         },
         ParserAst::AttrSet {
             attrs,
@@ -240,6 +266,7 @@ fn transform_ast<'a>(
             Ast::AttrSet {
                 attrs,
                 is_recursive: is_recursive,
+                span,
             }
         }
         ParserAst::LetBinding {
@@ -267,6 +294,7 @@ fn transform_ast<'a>(
                 bindings,
                 body: Box::new(transform_ast(*body, cache, source, fun_depth)),
                 inherit,
+                span,
             }
         }
         ParserAst::Lambda {
@@ -288,12 +316,13 @@ fn transform_ast<'a>(
         ParserAst::Identifier(_) => todo!(),
         ParserAst::NixString(_) => todo!(),
         ParserAst::NixPath(_) => todo!(),
-        ParserAst::List { items, span } => Ast::List(
-            items
+        ParserAst::List { items, span } => Ast::List {
+            items: items
                 .into_iter()
                 .map(|l| transform_ast(l, cache, source, fun_depth))
                 .collect(),
-        ),
+            span: span,
+        },
         ParserAst::Comment(_) | ParserAst::DocComment(_) | ParserAst::LineComment(_) => {
             unimplemented!()
         }
@@ -424,6 +453,7 @@ fn lookup_set_bindigs(context: &mut Context, bindings: &Ast) -> Result<(), Infer
         Ast::AttrSet {
             attrs,
             is_recursive,
+            span,
         } => {
             for (name, expr) in attrs {
                 let ty = context
@@ -477,7 +507,12 @@ fn hm(context: &mut Context, expr: &Ast) -> Result<Type, InferError> {
     use Type::*;
     match expr {
         Ast::UnaryOp { rhs, .. } => hm(context, rhs),
-        Ast::BinaryOp { op, lhs, box rhs } => {
+        Ast::BinaryOp {
+            op,
+            lhs,
+            box rhs,
+            span,
+        } => {
             let ty1 = hm(context, lhs)?;
             let ty2 = hm(context, rhs)?;
 
@@ -521,6 +556,7 @@ fn hm(context: &mut Context, expr: &Ast) -> Result<Type, InferError> {
         Ast::AttrSet {
             attrs,
             is_recursive,
+            span,
         } => Ok(Set(attrs
             .iter()
             .map(|(name, expr)| ("".to_string(), hm(context, expr).unwrap()))
@@ -530,6 +566,7 @@ fn hm(context: &mut Context, expr: &Ast) -> Result<Type, InferError> {
             bindings,
             body,
             inherit,
+            span,
         } => {
             context.push_scope();
             for (name, expr) in bindings {
@@ -552,6 +589,7 @@ fn hm(context: &mut Context, expr: &Ast) -> Result<Type, InferError> {
             arguments,
             body,
             arg_binding,
+            span,
         } => {
             context.push_scope();
             for patt in arguments {
@@ -591,6 +629,7 @@ fn hm(context: &mut Context, expr: &Ast) -> Result<Type, InferError> {
             condition,
             expr1,
             expr2,
+            span,
         } => {
             let ty = hm(context, condition)?;
             if ty != Bool {
@@ -607,8 +646,12 @@ fn hm(context: &mut Context, expr: &Ast) -> Result<Type, InferError> {
                 Ok(ty1)
             }
         }
-        Ast::Assertion { condition, then } => Err(InferError::UnexpectedComment),
-        Ast::With { set, body } => {
+        Ast::Assertion {
+            condition,
+            then,
+            span,
+        } => Err(InferError::UnexpectedComment),
+        Ast::With { set, body, span } => {
             context.push_scope();
             lookup_set_bindigs(context, &set.as_ref().clone())?;
             hm(context, body)
@@ -616,13 +659,16 @@ fn hm(context: &mut Context, expr: &Ast) -> Result<Type, InferError> {
         Ast::Identifier(name) => Ok(context.lookup(name).cloned().unwrap_or(Undefined)),
         Ast::NixString(_) => Ok(String),
         Ast::NixPath(_) => Ok(String),
-        Ast::Bool(_) => Ok(Bool),
-        Ast::Int(_) => Ok(Int),
-        Ast::Float(_) => Ok(Float),
-        Ast::Null => Ok(Null),
-        Ast::List(ast) => Ok(Type::List(
-            ast.iter().map(|ast| hm(context, ast)).flatten().collect(),
+        Ast::List { items, span } => Ok(Type::List(
+            items.iter().map(|ast| hm(context, ast)).flatten().collect(),
         )),
+        Ast::Bool { val, span } => todo!(),
+        Ast::Int { val, span } => todo!(),
+        Ast::Float { val, span } => todo!(),
+        Ast::Null(_) => todo!(),
+        Ast::Comment(_) => todo!(),
+        Ast::DocComment(_) => todo!(),
+        Ast::LineComment(_) => todo!(),
     }
 }
 
