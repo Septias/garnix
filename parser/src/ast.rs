@@ -11,7 +11,11 @@ pub enum PatternElement {
     /// Pattern of the form `ident`
     Identifier(Span),
     /// Pattern of the form `ident ? <default>`
-    DefaultIdentifier(Span, Span, Ast),
+    DefaultIdentifier {
+        identifier: Span,
+        span: Span,
+        ast: Ast,
+    },
 }
 
 /// A pattern.

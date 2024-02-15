@@ -141,9 +141,9 @@ fn infer_error<T>(expected: Type, found: Type) -> Result<T, InferError> {
 }
 
 impl Ast {
-    fn from_parser_ast(value: &ParserAst) -> Self {
-        let vars = Cache::new();
-        todo!()
+    fn from_parser_ast(value: ParserAst, source: String) -> Self {
+        let mut vars = Cache::new();
+        transform_ast(value, &mut vars, &source, 0)
     }
 
     fn as_ident(&self) -> Result<usize, InferError> {
@@ -206,12 +206,12 @@ fn transform_ast<'a>(
     value: ParserAst,
     cache: &mut Cache<'a>,
     source: &'a str,
-    bindings: usize,
+    fun_depth: usize,
 ) -> Ast {
     match value {
         ParserAst::UnaryOp { op, box rhs } => Ast::UnaryOp {
             op: op,
-            rhs: Box::new(transform_ast(rhs, cache, source, bindings)),
+            rhs: Box::new(transform_ast(rhs, cache, source, fun_depth)),
         },
         ParserAst::BinaryOp {
             op,
@@ -219,8 +219,8 @@ fn transform_ast<'a>(
             box rhs,
         } => Ast::BinaryOp {
             op: op,
-            lhs: Box::new(transform_ast(lhs, cache, source, bindings)),
-            rhs: Box::new(transform_ast(rhs, cache, source, bindings)),
+            lhs: Box::new(transform_ast(lhs, cache, source, fun_depth)),
+            rhs: Box::new(transform_ast(rhs, cache, source, fun_depth)),
         },
         ParserAst::AttrSet {
             attrs,
@@ -231,7 +231,7 @@ fn transform_ast<'a>(
                 .map(|(name, expr)| {
                     (
                         cache.get(&source[name]),
-                        transform_ast(expr, cache, source, bindings),
+                        transform_ast(expr, cache, source, fun_depth),
                     )
                 })
                 .collect();
@@ -244,7 +244,28 @@ fn transform_ast<'a>(
             bindings,
             body,
             inherit,
-        } => todo!(),
+        } => {
+            let bindings = bindings
+                .into_iter()
+                .map(|(name, expr)| {
+                    (
+                        cache.get(&source[name]),
+                        transform_ast(expr, cache, source, fun_depth),
+                    )
+                })
+                .collect();
+            let inherit = inherit.map(|inherit| {
+                inherit
+                    .into_iter()
+                    .map(|name| cache.get(&source[name]))
+                    .collect()
+            });
+            Ast::LetBinding {
+                bindings,
+                body: Box::new(transform_ast(*body, cache, source, fun_depth)),
+                inherit,
+            }
+        }
         ParserAst::Lambda {
             arguments,
             body,
@@ -265,11 +286,15 @@ fn transform_ast<'a>(
         ParserAst::Bool(_) => todo!(),
         ParserAst::Int(_) => todo!(),
         ParserAst::Float(_) => todo!(),
-        ParserAst::Null => todo!(),
-        ParserAst::Comment(_) => todo!(),
-        ParserAst::DocComment(_) => todo!(),
-        ParserAst::LineComment(_) => todo!(),
-        ParserAst::List(_) => todo!(),
+        ParserAst::Null => Ast::Null,
+        ParserAst::List(l) => Ast::List(
+            l.into_iter()
+                .map(|l| transform_ast(l, cache, source, fun_depth))
+                .collect(),
+        ),
+        ParserAst::Comment(_) | ParserAst::DocComment(_) | ParserAst::LineComment(_) => {
+            unimplemented!()
+        }
     }
 }
 

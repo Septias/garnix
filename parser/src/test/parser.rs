@@ -27,7 +27,11 @@ fn test_ident_default_pattern() {
     assert!(input.0.is_empty());
     assert_eq!(
         ast,
-        PatternElement::DefaultIdentifier(Range { start: 0, end: 6 }, Range {start: 0, end: 11},Ast::Int(12))
+        PatternElement::DefaultIdentifier {
+            identifier: Range { start: 0, end: 6 },
+            span: Range { start: 0, end: 11 },
+            ast: Ast::Int(12)
+        }
     );
 }
 

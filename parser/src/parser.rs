@@ -26,22 +26,23 @@ use crate::{
 pub type PResult<'a, R> = IResult<NixTokens<'a>, R, VerboseError<NixTokens<'a>>>;
 
 pub(crate) fn spanned<'a, T, X>(
-    input: NixTokens<'a>,
     mut parser: impl Parser<NixTokens<'a>, T, VerboseError<NixTokens<'a>>>,
-    spanned: impl Fn(NixTokens<'a>, Span, T) -> PResult<'a, X>,
-) -> PResult<'a, X> {
-    let (new_input, res) = parser.parse(input.clone())?;
-    let spans = &input[0..input.input_len() - new_input.input_len()];
+    spanned: impl Fn(Span, T) -> X,
+) -> impl FnMut(NixTokens<'a>) -> PResult<'a, X> {
+    move |input| {
+        let (new_input, res) = parser.parse(input.clone())?;
+        let spans = &input[0..input.input_len() - new_input.input_len()];
 
-    let range = if spans.len() == 0 {
-        Span { start: 0, end: 0 }
-    } else {
-        Span {
-            start: spans[0].1.start,
-            end: spans.last().unwrap().1.end,
-        }
-    };
-    spanned(new_input, range, res)
+        let range = if spans.len() == 0 {
+            Span { start: 0, end: 0 }
+        } else {
+            Span {
+                start: spans[0].1.start,
+                end: spans.last().unwrap().1.end,
+            }
+        };
+        Ok((new_input, spanned(range, res)))
+    }
 }
 
 /// Parse a single identifier.
@@ -54,15 +55,13 @@ pub(crate) fn ident(input: NixTokens<'_>) -> PResult<'_, Ast> {
 /// Parse an identifier with a default value.
 pub(crate) fn ident_default_pattern(input: NixTokens<'_>) -> PResult<'_, PatternElement> {
     spanned(
-        input,
-        tuple((ident, token(Question), cut(expr))).map(|(ident, _, expr)| (ident.as_span(), expr)),
-        |new_input, span, res| {
-            Ok((
-                new_input,
-                PatternElement::DefaultIdentifier(res.0, span, res.1),
-            ))
+        tuple((ident, token(Question), cut(expr))),
+        |span, (identifier, _, ast)| PatternElement::DefaultIdentifier {
+            identifier: identifier.as_span(),
+            span,
+            ast,
         },
-    )
+    )(input)
 }
 
 /// Parse a literal.
