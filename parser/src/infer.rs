@@ -122,7 +122,6 @@ pub enum Ast {
         /// The condition to evaluate
         condition: Box<Ast>,
         /// The expression to evaluate if the condition is true
-        then: Box<Ast>,
         span: Span,
     },
 
@@ -284,8 +283,9 @@ fn transform_ast<'a>(
     source: &'a str,
     fun_depth: usize,
 ) -> Ast {
+    use Ast::*;
     match value {
-        ParserAst::UnaryOp { op, box rhs, span } => Ast::UnaryOp {
+        ParserAst::UnaryOp { op, box rhs, span } => UnaryOp {
             op,
             rhs: Box::new(transform_ast(rhs, cache, source, fun_depth)),
             span,
@@ -295,7 +295,7 @@ fn transform_ast<'a>(
             box lhs,
             box rhs,
             span,
-        } => Ast::BinaryOp {
+        } => BinaryOp {
             op,
             lhs: Box::new(transform_ast(lhs, cache, source, fun_depth)),
             rhs: Box::new(transform_ast(rhs, cache, source, fun_depth)),
@@ -342,7 +342,7 @@ fn transform_ast<'a>(
                     .map(|name| cache.get(&source[name]))
                     .collect()
             });
-            Ast::LetBinding {
+            LetBinding {
                 bindings,
                 body: Box::new(transform_ast(*body, cache, source, fun_depth)),
                 inherit,
@@ -358,30 +358,53 @@ fn transform_ast<'a>(
             todo!()
         }
         ParserAst::Conditional {
-            condition,
-            expr1,
-            expr2,
+            box condition,
+            box expr1,
+            box expr2,
             span,
-        } => todo!(),
-        ParserAst::Assertion { condition, span } => todo!(),
-        ParserAst::With { set, body, span } => todo!(),
-        ParserAst::Identifier(_) => todo!(),
-        ParserAst::NixString(_) => todo!(),
-        ParserAst::NixPath(_) => todo!(),
-        ParserAst::List { items, span } => Ast::List {
+        } => Conditional {
+            condition: Box::new(transform_ast(condition, cache, source, fun_depth)),
+            expr1: Box::new(transform_ast(expr1, cache, source, fun_depth)),
+            expr2: Box::new(transform_ast(expr2, cache, source, fun_depth)),
+            span,
+        },
+        ParserAst::Assertion {
+            box condition,
+            span,
+        } => Assertion {
+            condition: Box::new(transform_ast(condition, cache, source, fun_depth)),
+            span,
+        },
+        ParserAst::With {
+            box set,
+            box body,
+            span,
+        } => With {
+            set: Box::new(transform_ast(set, cache, source, fun_depth)),
+            body: Box::new(transform_ast(body, cache, source, fun_depth)),
+            span,
+        },
+        ParserAst::Identifier(span) => Identifier {
+            debrujin: todo!(),
+            name: source[span].to_string(),
+            span,
+        },
+        ParserAst::NixString(span) => NixString(span),
+        ParserAst::NixPath(span) => NixPath(span),
+        ParserAst::List { items, span } => List {
             items: items
                 .into_iter()
                 .map(|l| transform_ast(l, cache, source, fun_depth))
                 .collect(),
             span,
         },
+        ParserAst::Bool { val, span } => Bool { val, span },
+        ParserAst::Int { val, span } => Int { val, span },
+        ParserAst::Float { val, span } => Float { val, span },
+        ParserAst::Null(span) => Null(span),
         ParserAst::Comment(_) | ParserAst::DocComment(_) | ParserAst::LineComment(_) => {
             unimplemented!()
         }
-        ParserAst::Bool { val, span } => todo!(),
-        ParserAst::Int { val, span } => todo!(),
-        ParserAst::Float { val, span } => todo!(),
-        ParserAst::Null(_) => todo!(),
     }
 }
 
@@ -692,11 +715,7 @@ fn hm(context: &mut Context, expr: &Ast) -> Result<Type, InferError> {
                 Ok(ty1)
             }
         }
-        Ast::Assertion {
-            condition,
-            then,
-            span,
-        } => Err(InferError::UnexpectedComment),
+        Ast::Assertion { condition, span } => Err(InferError::UnexpectedComment),
         Ast::With { set, body, span } => {
             context.push_scope();
             lookup_set_bindigs(context, &set.as_ref().clone())?;
@@ -705,18 +724,16 @@ fn hm(context: &mut Context, expr: &Ast) -> Result<Type, InferError> {
         Ast::Identifier { debrujin, .. } => {
             Ok(context.lookup(debrujin).cloned().unwrap_or(Undefined))
         }
-        Ast::NixString(_) => Ok(String),
-        Ast::NixPath(_) => Ok(String),
         Ast::List { items, span } => Ok(Type::List(
             items.iter().flat_map(|ast| hm(context, ast)).collect(),
         )),
-        Ast::Bool { val, span } => todo!(),
-        Ast::Int { val, span } => todo!(),
-        Ast::Float { val, span } => todo!(),
-        Ast::Null(_) => todo!(),
-        Ast::Comment(_) => todo!(),
-        Ast::DocComment(_) => todo!(),
-        Ast::LineComment(_) => todo!(),
+        Ast::NixString(_) => Ok(String),
+        Ast::NixPath(_) => Ok(String),
+        Ast::Bool { val, span } => Ok(Bool),
+        Ast::Int { val, span } => Ok(Int),
+        Ast::Float { val, span } => Ok(Float),
+        Ast::Null(_) => Ok(Null),
+        Ast::Comment(_) | Ast::DocComment(_) | Ast::LineComment(_) => unimplemented!(),
     }
 }
 
