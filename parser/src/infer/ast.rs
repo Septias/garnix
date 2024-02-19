@@ -139,7 +139,7 @@ impl Ast {
     }
 
     /// Tries to convert the ast to an [Identifier] and adds as many path elements as possible.
-    pub fn as_ident(&self) -> InferResult<Ident> {
+    pub fn as_ident(&self) -> Result<Ident, InferError> {
         match self {
             Ast::Identifier { debrujin, .. } => Ok(Ident {
                 name: *debrujin,

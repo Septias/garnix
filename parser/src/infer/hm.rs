@@ -1,9 +1,13 @@
-use super::{ast::Ast, Constraint, Context, InferError, InferResult, Type, TypeName};
+use super::{
+    ast::Ast, Constraint, Context, InferError, InferResult, SpannedError, SpannedInferResult, Type,
+    TypeName,
+};
 use crate::{
     ast::BinOp,
-    infer::{ast::PatternElement, infer_error},
+    infer::{ast::PatternElement, spanned_infer_error},
 };
 use anyhow::Context as _;
+use logos::Span;
 use std::collections::HashMap;
 
 /// Lookup all bindings that are part of a `with`-expression and add them to the context.
@@ -11,9 +15,7 @@ use std::collections::HashMap;
 fn lookup_set_bindigs(context: &mut Context, bindings: &Ast) -> InferResult<()> {
     let attrs = bindings.as_attr_set()?;
     for (name, _expr) in attrs {
-        let ty = context
-            .lookup(name)
-            .ok_or(InferError::UnknownIdentifier("todo".to_string()))?;
+        let ty = context.lookup(name).ok_or(InferError::UnknownIdentifier)?;
         context.insert(*name, ty.clone());
     }
     Ok(())
@@ -26,7 +28,7 @@ fn reduce_function<'a>(
     function: &'a Type,
     arguments: &Ast,
     constraints: &mut Vec<Constraint>,
-) -> InferResult<&'a Type> {
+) -> Result<&'a Type, InferError> {
     let (from, to) = function.as_function().context("can't unpack function")?;
 
     // find out if this is a stacked function
@@ -34,7 +36,7 @@ fn reduce_function<'a>(
         // extract the last argument from the chain
         if let Ok((arg, _next)) = arguments.as_application() {
             // further reduce the function
-            let ret = reduce_function(to, arguments, constraints)?;
+            let ret = reduce_function(&to, arguments, constraints)?;
 
             // if it is an identifier we can formulate a constraint
             if let Ok(ident) = arg.as_ident() {
@@ -54,7 +56,8 @@ fn reduce_function<'a>(
     }
 }
 
-fn expect_numerals(ty1: Type, ty2: Type) -> InferResult<Type> {
+/// Expect two types to be numerals.
+fn expect_numerals(ty1: Type, ty2: Type, span: &Span) -> SpannedInferResult<Type> {
     use Type::*;
     if ty1 == Int {
         if ty2 == Int {
@@ -62,33 +65,34 @@ fn expect_numerals(ty1: Type, ty2: Type) -> InferResult<Type> {
         } else if ty2 == Float {
             Ok(Float)
         } else {
-            infer_error(TypeName::Int, ty2.get_name())
+            spanned_infer_error(TypeName::Int, ty2.get_name(), span)
         }
     } else if ty1 == Float {
         if ty2 == Int || ty2 == Float {
             Ok(Float)
         } else {
-            infer_error(TypeName::Float, ty2.get_name())
+            spanned_infer_error(TypeName::Float, ty2.get_name(), span)
         }
     } else {
         // TODO: this could be int or float
-        infer_error(Int.get_name(), ty1.get_name())
+        spanned_infer_error(Int.get_name(), ty1.get_name(), span)
     }
 }
 
-fn expect_bools(ty1: Type, ty2: Type) -> InferResult<Type> {
+/// Expect two types to be booleans.
+fn expect_bools(ty1: Type, ty2: Type, span: &Span) -> SpannedInferResult<Type> {
     use Type::*;
     if ty1 == Bool && ty2 == Bool {
         Ok(Bool)
     } else if ty1 != Bool {
-        infer_error(TypeName::Bool, ty1.get_name())
+        spanned_infer_error(TypeName::Bool, ty1.get_name(), span)
     } else {
-        infer_error(TypeName::Bool, ty2.get_name())
+        spanned_infer_error(TypeName::Bool, ty2.get_name(), span)
     }
 }
 
 /// Infer the type of an expression.
-fn hm(context: &mut Context, expr: &Ast) -> Result<Type, InferError> {
+fn hm(context: &mut Context, expr: &Ast) -> Result<Type, SpannedError> {
     use Type::*;
     match expr {
         Ast::UnaryOp { rhs, .. } => hm(context, rhs),
@@ -96,32 +100,39 @@ fn hm(context: &mut Context, expr: &Ast) -> Result<Type, InferError> {
             op,
             lhs,
             box rhs,
-            span: _,
+            span,
         } => {
             let ty1 = hm(context, lhs)?;
             let ty2 = hm(context, rhs)?;
 
             match op {
                 BinOp::Application => {
-                    let fun = ty1.as_ident()?;
+                    let fun = ty1
+                        .as_ident()
+                        .map_err(|err| SpannedError::from((span, err)))?;
                     let fun_type = context
                         .lookup(&fun.name)
-                        .ok_or(InferError::UnknownFunction)?;
+                        .ok_or(SpannedError::from((span, InferError::UnknownFunction)))?;
                     if let Some(_path) = fun.path {
                         todo!()
                     }
                     let mut constraint = vec![];
-                    let typ = reduce_function(fun_type, rhs, &mut constraint)?;
+                    let typ = reduce_function(fun_type, rhs, &mut constraint)
+                        .map_err(|err| SpannedError::from((span, err)))?;
                     Ok(typ.clone())
                 }
                 BinOp::ListConcat => {
-                    let lhs = ty1.as_list()?;
-                    let rhs = ty2.as_list()?;
+                    let lhs = ty1
+                        .as_list()
+                        .map_err(|err| SpannedError::from((span, err)))?;
+                    let rhs = ty2
+                        .as_list()
+                        .map_err(|err| SpannedError::from((span, err)))?;
                     Ok(Type::List([lhs, rhs].concat()))
                 }
-                BinOp::Mul => expect_numerals(ty1, ty2),
-                BinOp::Div => expect_numerals(ty1, ty2),
-                BinOp::Sub => expect_numerals(ty1, ty2),
+                BinOp::Mul => expect_numerals(ty1, ty2, span),
+                BinOp::Div => expect_numerals(ty1, ty2, span),
+                BinOp::Sub => expect_numerals(ty1, ty2, span),
                 BinOp::Add => {
                     if ty1 == String && ty2 == String {
                         Ok(String)
@@ -132,7 +143,7 @@ fn hm(context: &mut Context, expr: &Ast) -> Result<Type, InferError> {
                     } else if ty1 == Path && ty2 == Path {
                         Ok(Path)
                     } else {
-                        expect_numerals(ty1, ty2)
+                        expect_numerals(ty1, ty2, span)
                     }
                 }
                 BinOp::Update => {
@@ -141,10 +152,10 @@ fn hm(context: &mut Context, expr: &Ast) -> Result<Type, InferError> {
                             bindings.extend(new_bindings);
                             Ok(Set(bindings))
                         } else {
-                            infer_error(TypeName::Set, ty2.get_name())
+                            spanned_infer_error(TypeName::Set, ty2.get_name(), span)
                         }
                     } else {
-                        infer_error(TypeName::Set, ty1.get_name())
+                        spanned_infer_error(TypeName::Set, ty1.get_name(), span)
                     }
                 }
                 BinOp::HasAttribute => {
@@ -156,10 +167,10 @@ fn hm(context: &mut Context, expr: &Ast) -> Result<Type, InferError> {
                                 Ok(Null)
                             }
                         } else {
-                            infer_error(TypeName::Identifier, ty2.get_name())
+                            spanned_infer_error(TypeName::Identifier, ty2.get_name(), span)
                         }
                     } else {
-                        infer_error(TypeName::Set, ty1.get_name())
+                        spanned_infer_error(TypeName::Set, ty1.get_name(), span)
                     }
                 }
                 BinOp::AttributeSelection => {
@@ -171,10 +182,10 @@ fn hm(context: &mut Context, expr: &Ast) -> Result<Type, InferError> {
                                 Ok(Undefined)
                             }
                         } else {
-                            infer_error(TypeName::Identifier, ty2.get_name())
+                            spanned_infer_error(TypeName::Identifier, ty2.get_name(), span)
                         }
                     } else {
-                        infer_error(TypeName::Set, ty1.get_name())
+                        spanned_infer_error(TypeName::Set, ty1.get_name(), span)
                     }
                 }
                 BinOp::AttributeFallback => {
@@ -184,15 +195,15 @@ fn hm(context: &mut Context, expr: &Ast) -> Result<Type, InferError> {
                         Ok(ty1)
                     }
                 }
-                BinOp::LessThan => expect_numerals(ty1, ty2),
-                BinOp::LessThanEqual => expect_numerals(ty1, ty2),
-                BinOp::GreaterThan => expect_numerals(ty1, ty2),
-                BinOp::GreaterThanEqual => expect_numerals(ty1, ty2),
-                BinOp::Equal => expect_numerals(ty1, ty2),
-                BinOp::NotEqual => expect_bools(ty1, ty2),
-                BinOp::And => expect_bools(ty1, ty2),
-                BinOp::Or => expect_bools(ty1, ty2),
-                BinOp::Implication => expect_bools(ty1, ty2),
+                BinOp::LessThan => expect_numerals(ty1, ty2, span),
+                BinOp::LessThanEqual => expect_numerals(ty1, ty2, span),
+                BinOp::GreaterThan => expect_numerals(ty1, ty2, span),
+                BinOp::GreaterThanEqual => expect_numerals(ty1, ty2, span),
+                BinOp::Equal => expect_numerals(ty1, ty2, span),
+                BinOp::NotEqual => expect_bools(ty1, ty2, span),
+                BinOp::And => expect_bools(ty1, ty2, span),
+                BinOp::Or => expect_bools(ty1, ty2, span),
+                BinOp::Implication => expect_bools(ty1, ty2, span),
             }
         }
         Ast::AttrSet {
@@ -208,7 +219,7 @@ fn hm(context: &mut Context, expr: &Ast) -> Result<Type, InferError> {
             bindings,
             body,
             inherit,
-            span: _,
+            span,
         } => {
             context.push_scope();
             for (name, expr) in bindings {
@@ -217,9 +228,10 @@ fn hm(context: &mut Context, expr: &Ast) -> Result<Type, InferError> {
             }
             if let Some(inherit) = inherit {
                 for name in inherit {
-                    let ty = context
-                        .lookup(name)
-                        .ok_or(InferError::UnknownIdentifier("".to_string()))?; // Maybe don't make this a hard error
+                    let ty = context.lookup(name).ok_or(SpannedError {
+                        error: InferError::UnknownIdentifier,
+                        span: span.clone(),
+                    })?; // Maybe don't make this a hard error
                     context.insert(*name, ty.clone());
                 }
             }
@@ -231,16 +243,17 @@ fn hm(context: &mut Context, expr: &Ast) -> Result<Type, InferError> {
             arguments,
             body,
             arg_binding: _,
-            span: _,
+            span,
         } => {
             context.push_scope();
             for patt in arguments {
                 for patt in &patt.patterns {
                     match patt {
                         PatternElement::Identifier(name) => {
-                            let ty = context
-                                .lookup(name)
-                                .ok_or(InferError::UnknownIdentifier("todo".to_string()))?;
+                            let ty = context.lookup(name).ok_or(SpannedError {
+                                error: InferError::UnknownIdentifier,
+                                span: span.clone(),
+                            })?;
                             context.insert(*name, ty.clone());
                         }
                         PatternElement::DefaultIdentifier(name, default) => {
@@ -249,9 +262,12 @@ fn hm(context: &mut Context, expr: &Ast) -> Result<Type, InferError> {
 
                             if let Some(ty1) = ty1 {
                                 if ty1 != ty2 {
-                                    return Err(InferError::TypeMismatch {
-                                        expected: ty2.get_name(),
-                                        found: ty1.get_name(),
+                                    return Err(SpannedError {
+                                        error: InferError::TypeMismatch {
+                                            expected: ty2.get_name(),
+                                            found: ty1.get_name(),
+                                        },
+                                        span: span.clone(),
                                     });
                                 }
                             }
@@ -271,13 +287,16 @@ fn hm(context: &mut Context, expr: &Ast) -> Result<Type, InferError> {
             condition,
             expr1,
             expr2,
-            span: _,
+            span,
         } => {
             let ty = hm(context, condition)?;
             if ty != Bool {
-                return Err(InferError::TypeMismatch {
-                    expected: TypeName::Bool,
-                    found: ty.get_name(),
+                return Err(SpannedError {
+                    error: InferError::TypeMismatch {
+                        expected: TypeName::Bool,
+                        found: ty.get_name(),
+                    },
+                    span: span.clone(),
                 });
             }
             let ty1 = hm(context, expr1)?;
@@ -291,10 +310,11 @@ fn hm(context: &mut Context, expr: &Ast) -> Result<Type, InferError> {
         Ast::Assertion {
             condition: _,
             span: _,
-        } => Err(InferError::UnexpectedComment),
-        Ast::With { set, body, span: _ } => {
+        } => todo!(),
+        Ast::With { set, body, span } => {
             context.push_scope();
-            lookup_set_bindigs(context, &set.as_ref().clone())?;
+            lookup_set_bindigs(context, &set.as_ref().clone())
+                .map_err(|err| SpannedError::from((span, err)))?;
             hm(context, body)
         }
         Ast::Identifier { debrujin, .. } => {
@@ -313,7 +333,8 @@ fn hm(context: &mut Context, expr: &Ast) -> Result<Type, InferError> {
     }
 }
 
-pub fn infer(expr: &Ast) -> Result<Type, InferError> {
+/// Infer the type of an expression.
+pub fn infer(expr: &Ast) -> SpannedInferResult<Type> {
     let mut context = Context::new();
     hm(&mut context, expr)
 }

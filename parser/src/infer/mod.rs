@@ -1,5 +1,7 @@
 use core::str;
+use logos::Span;
 use std::collections::HashMap;
+use strum::EnumTryAs;
 use strum_macros::{AsRefStr, Display, EnumDiscriminants};
 use thiserror::Error;
 
@@ -10,8 +12,8 @@ pub mod hm;
 /// An error that occured during type inference.
 #[derive(Debug, Error)]
 pub enum InferError {
-    #[error("Unknown identifier: {0}")]
-    UnknownIdentifier(String),
+    #[error("Unknown identifier")]
+    UnknownIdentifier,
     #[error("Type mismatch: expected {expected}, found {found}")]
     TypeMismatch { expected: TypeName, found: TypeName },
     #[error("Can't convert {from} to {to}")]
@@ -26,15 +28,58 @@ pub enum InferError {
     Other(#[from] anyhow::Error),
 }
 
+/// An Error that also contains the span in the source.
+#[derive(Debug)]
+pub struct SpannedError {
+    pub span: Span,
+    pub error: InferError,
+}
+
+impl From<(Span, TypeName, TypeName)> for SpannedError {
+    fn from((span, expected, found): (Span, TypeName, TypeName)) -> Self {
+        Self {
+            span,
+            error: InferError::TypeMismatch { expected, found },
+        }
+    }
+}
+
+impl From<(String, &'static str)> for InferError {
+    fn from((from, to): (String, &'static str)) -> Self {
+        InferError::ConversionError { from, to }
+    }
+}
+
+impl From<(&Span, InferError)> for SpannedError {
+    fn from((span, error): (&Span, InferError)) -> Self {
+        Self {
+            span: span.clone(),
+            error,
+        }
+    }
+}
+
+pub type SpannedInferResult<T> = Result<T, SpannedError>;
 pub type InferResult<T> = Result<T, InferError>;
 
 /// Create an infer error.
+pub(crate) fn spanned_infer_error<T>(
+    expected: TypeName,
+    found: TypeName,
+    span: &Span,
+) -> Result<T, SpannedError> {
+    Err(SpannedError {
+        error: InferError::TypeMismatch { expected, found },
+        span: span.clone(),
+    })
+}
+
 pub(crate) fn infer_error<T>(expected: TypeName, found: TypeName) -> Result<T, InferError> {
     Err(InferError::TypeMismatch { expected, found })
 }
 
 /// A nix language type.
-#[derive(Debug, Clone, PartialEq, Display, Default, EnumDiscriminants)]
+#[derive(Debug, Clone, PartialEq, Display, Default, EnumDiscriminants, EnumTryAs)]
 #[strum_discriminants(derive(AsRefStr, Display))]
 #[strum_discriminants(name(TypeName))]
 pub enum Type {
