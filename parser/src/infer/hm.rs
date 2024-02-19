@@ -1,13 +1,10 @@
-use std::collections::HashMap;
-
-use anyhow::Context as _;
-
+use super::{ast::Ast, Constraint, Context, InferError, InferResult, Type, TypeName};
 use crate::{
     ast::BinOp,
-    infer::{ast::PatternElement, infer_error, Ident},
+    infer::{ast::PatternElement, infer_error},
 };
-
-use super::{ast::Ast, Constraint, Context, InferError, InferResult, Type};
+use anyhow::Context as _;
+use std::collections::HashMap;
 
 /// Lookup all bindings that are part of a `with`-expression and add them to the context.
 /// This does not create a new scope
@@ -65,17 +62,17 @@ fn expect_numerals(ty1: Type, ty2: Type) -> InferResult<Type> {
         } else if ty2 == Float {
             Ok(Float)
         } else {
-            infer_error(Int, ty2.clone())
+            infer_error(TypeName::Int, ty2.get_name())
         }
     } else if ty1 == Float {
         if ty2 == Int || ty2 == Float {
             Ok(Float)
         } else {
-            infer_error(Float, ty2.clone())
+            infer_error(TypeName::Float, ty2.get_name())
         }
     } else {
         // TODO: this could be int or float
-        infer_error(Int, ty1.clone())
+        infer_error(Int.get_name(), ty1.get_name())
     }
 }
 
@@ -84,9 +81,9 @@ fn expect_bools(ty1: Type, ty2: Type) -> InferResult<Type> {
     if ty1 == Bool && ty2 == Bool {
         Ok(Bool)
     } else if ty1 != Bool {
-        infer_error(Bool, ty1)
+        infer_error(TypeName::Bool, ty1.get_name())
     } else {
-        infer_error(Bool, ty2)
+        infer_error(TypeName::Bool, ty2.get_name())
     }
 }
 
@@ -144,10 +141,10 @@ fn hm(context: &mut Context, expr: &Ast) -> Result<Type, InferError> {
                             bindings.extend(new_bindings);
                             Ok(Set(bindings))
                         } else {
-                            infer_error(Set(HashMap::new()), ty2)
+                            infer_error(TypeName::Set, ty2.get_name())
                         }
                     } else {
-                        infer_error(Set(HashMap::new()), ty1)
+                        infer_error(TypeName::Set, ty1.get_name())
                     }
                 }
                 BinOp::HasAttribute => {
@@ -159,10 +156,10 @@ fn hm(context: &mut Context, expr: &Ast) -> Result<Type, InferError> {
                                 Ok(Null)
                             }
                         } else {
-                            infer_error(Identifier(Ident::default()), ty2)
+                            infer_error(TypeName::Identifier, ty2.get_name())
                         }
                     } else {
-                        infer_error(Set(HashMap::new()), ty1)
+                        infer_error(TypeName::Set, ty1.get_name())
                     }
                 }
                 BinOp::AttributeSelection => {
@@ -174,10 +171,10 @@ fn hm(context: &mut Context, expr: &Ast) -> Result<Type, InferError> {
                                 Ok(Undefined)
                             }
                         } else {
-                            infer_error(Identifier(Ident::default()), ty2)
+                            infer_error(TypeName::Identifier, ty2.get_name())
                         }
                     } else {
-                        infer_error(Set(HashMap::new()), ty1)
+                        infer_error(TypeName::Set, ty1.get_name())
                     }
                 }
                 BinOp::AttributeFallback => {
@@ -253,8 +250,8 @@ fn hm(context: &mut Context, expr: &Ast) -> Result<Type, InferError> {
                             if let Some(ty1) = ty1 {
                                 if ty1 != ty2 {
                                     return Err(InferError::TypeMismatch {
-                                        expected: ty2,
-                                        found: ty1,
+                                        expected: ty2.get_name(),
+                                        found: ty1.get_name(),
                                     });
                                 }
                             }
@@ -279,8 +276,8 @@ fn hm(context: &mut Context, expr: &Ast) -> Result<Type, InferError> {
             let ty = hm(context, condition)?;
             if ty != Bool {
                 return Err(InferError::TypeMismatch {
-                    expected: Bool,
-                    found: ty,
+                    expected: TypeName::Bool,
+                    found: ty.get_name(),
                 });
             }
             let ty1 = hm(context, expr1)?;

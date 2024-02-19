@@ -1,6 +1,5 @@
-use crate::{ast::BinOp, infer::ast::Ast};
-
 use super::InferResult;
+use crate::{ast::BinOp, infer::ast::Ast};
 
 /// Create the longest possible path access-path for this identifier.
 pub(crate) fn fold_path(ast: &Ast, path: &mut Vec<String>) -> InferResult<()> {

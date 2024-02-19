@@ -1,12 +1,9 @@
-use core::str;
-use std::collections::HashMap;
-
-use logos::Span;
-use strum_macros::{AsRefStr, Display, EnumDiscriminants};
-
-use crate::ast::{Ast as ParserAst, BinOp, BinOpDiscriminants, UnOp};
-
 use super::{helpers::fold_path, Ident, InferError, InferResult};
+use crate::ast::{Ast as ParserAst, BinOp, BinOpDiscriminants, UnOp};
+use core::str;
+use logos::Span;
+use std::collections::HashMap;
+use strum_macros::{AsRefStr, Display, EnumDiscriminants};
 
 /// Part of a [Pattern].
 #[derive(Debug, Clone, PartialEq)]

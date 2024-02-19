@@ -1,6 +1,5 @@
 use core::str;
 use std::collections::HashMap;
-
 use strum_macros::{AsRefStr, Display, EnumDiscriminants};
 use thiserror::Error;
 
@@ -8,12 +7,13 @@ pub mod ast;
 pub mod helpers;
 pub mod hm;
 
+/// An error that occured during type inference.
 #[derive(Debug, Error)]
 pub enum InferError {
     #[error("Unknown identifier: {0}")]
     UnknownIdentifier(String),
     #[error("Type mismatch: expected {expected}, found {found}")]
-    TypeMismatch { expected: Type, found: Type },
+    TypeMismatch { expected: TypeName, found: TypeName },
     #[error("Can't convert {from} to {to}")]
     ConversionError { from: String, to: &'static str },
     #[error("Can't infer type of comment")]
@@ -28,12 +28,15 @@ pub enum InferError {
 
 pub type InferResult<T> = Result<T, InferError>;
 
-pub(crate) fn infer_error<T>(expected: Type, found: Type) -> Result<T, InferError> {
+/// Create an infer error.
+pub(crate) fn infer_error<T>(expected: TypeName, found: TypeName) -> Result<T, InferError> {
     Err(InferError::TypeMismatch { expected, found })
 }
 
+/// A nix language type.
 #[derive(Debug, Clone, PartialEq, Display, Default, EnumDiscriminants)]
 #[strum_discriminants(derive(AsRefStr, Display))]
+#[strum_discriminants(name(TypeName))]
 pub enum Type {
     Int,
     Float,
@@ -53,43 +56,47 @@ pub enum Type {
 }
 
 impl Type {
+    /// Try to convert this type to a list.
     fn as_list(self) -> InferResult<Vec<Type>> {
         match self {
             Type::List(elems) => Ok(elems),
-            t => infer_error(Type::List(vec![]), t.clone()),
+            t => infer_error(TypeName::List, t.get_name()),
         }
     }
 
+    /// Try to convert this type to an identifier.
     fn as_ident(self) -> InferResult<Ident> {
         match self {
             Type::Identifier(ident) => Ok(ident),
-            t => infer_error(Type::Identifier(Ident::default()), t),
+            t => infer_error(TypeName::Identifier, t.get_name()),
         }
     }
 
+    /// Try to convert this type to a function.
     fn as_function(&self) -> InferResult<(&Type, &Type)> {
         match self {
             Type::Function(box lhs, box rhs) => Ok((lhs, rhs)),
-            t => infer_error(Type::Function(Box::default(), Box::default()), t.clone()),
+            t => infer_error(TypeName::Function, t.get_name()),
         }
     }
 
-    fn to_discriminant(&self) -> TypeDiscriminants {
+    /// Returns the enum descriminant of this type.
+    fn get_name(&self) -> TypeName {
         match self {
-            Type::Int => TypeDiscriminants::Int,
-            Type::Float => TypeDiscriminants::Float,
-            Type::Bool => TypeDiscriminants::Bool,
-            Type::String => TypeDiscriminants::String,
-            Type::Path => TypeDiscriminants::Path,
-            Type::Identifier(_) => TypeDiscriminants::Identifier,
-            Type::Null => TypeDiscriminants::Null,
-            Type::Undefined => TypeDiscriminants::Undefined,
-            Type::List(_) => TypeDiscriminants::List,
-            Type::Function(_, _) => TypeDiscriminants::Function,
-            Type::Union(_, _) => TypeDiscriminants::Union,
-            Type::Set(_) => TypeDiscriminants::Set,
-            Type::Var(_) => TypeDiscriminants::Var,
-            Type::Default => TypeDiscriminants::Default,
+            Type::Int => TypeName::Int,
+            Type::Float => TypeName::Float,
+            Type::Bool => TypeName::Bool,
+            Type::String => TypeName::String,
+            Type::Path => TypeName::Path,
+            Type::Identifier(_) => TypeName::Identifier,
+            Type::Null => TypeName::Null,
+            Type::Undefined => TypeName::Undefined,
+            Type::List(_) => TypeName::List,
+            Type::Function(_, _) => TypeName::Function,
+            Type::Union(_, _) => TypeName::Union,
+            Type::Set(_) => TypeName::Set,
+            Type::Var(_) => TypeName::Var,
+            Type::Default => TypeName::Default,
         }
     }
 }
@@ -130,7 +137,7 @@ impl Context {
 }
 
 /// A single identifier.
-/// The name should be a debrujin index and the path is used for set-accesses.
+/// The name should be a debrujin index and the path is used for set accesses.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Ident {
     name: usize,
