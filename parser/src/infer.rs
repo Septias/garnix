@@ -281,7 +281,7 @@ fn transform_ast<'a>(
     value: ParserAst,
     cache: &mut Cache<'a>,
     source: &'a str,
-    fun_depth: usize,
+    mut fun_depth: usize,
 ) -> Ast {
     use Ast::*;
     match value {
@@ -310,7 +310,7 @@ fn transform_ast<'a>(
                 .into_iter()
                 .map(|(name, expr)| {
                     (
-                        cache.get(&source[name]),
+                        cache.get(&source[name], &mut fun_depth),
                         transform_ast(expr, cache, source, fun_depth),
                     )
                 })
@@ -331,7 +331,7 @@ fn transform_ast<'a>(
                 .into_iter()
                 .map(|(name, expr)| {
                     (
-                        cache.get(&source[name]),
+                        cache.get(&source[name], &mut fun_depth),
                         transform_ast(expr, cache, source, fun_depth),
                     )
                 })
@@ -339,7 +339,7 @@ fn transform_ast<'a>(
             let inherit = inherit.map(|inherit| {
                 inherit
                     .into_iter()
-                    .map(|name| cache.get(&source[name]))
+                    .map(|name| cache.get(&source[name], &mut fun_depth))
                     .collect()
             });
             LetBinding {
@@ -411,24 +411,22 @@ fn transform_ast<'a>(
 /// A cache.
 struct Cache<'a> {
     map: HashMap<&'a str, usize>,
-    count: usize,
 }
 
 impl<'a> Cache<'a> {
     fn new() -> Self {
         Self {
             map: HashMap::new(),
-            count: 0,
         }
     }
 
-    fn get(&mut self, var: &'a str) -> usize {
+    fn get(&mut self, var: &'a str, count: &mut usize) -> usize {
         if let Some(number) = self.map.get(var) {
             *number
         } else {
-            self.map.insert(var, self.count);
-            self.count += 1;
-            self.count - 1
+            self.map.insert(var, *count);
+            *count += 1;
+            *count - 1
         }
     }
 }
@@ -503,9 +501,9 @@ impl Type {
 
 type Constraint = (Ident, Type);
 
+/// Context to save variables and their types.
 pub(crate) struct Context(Vec<Vec<(usize, Type)>>);
 
-/// Context to save variables and their types.
 impl Context {
     pub(crate) fn new() -> Self {
         Self(vec![Vec::new()])
