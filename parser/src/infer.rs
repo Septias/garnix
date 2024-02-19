@@ -4,7 +4,7 @@
 use core::str;
 use std::{collections::HashMap, os::unix::fs::FileTypeExt};
 
-use anyhow::Context as _;
+use anyhow::{anyhow, bail, Context as _};
 use logos::Span;
 use strum_macros::{AsRefStr, Display, EnumDiscriminants};
 use thiserror::Error;
@@ -193,9 +193,9 @@ impl Ast {
     }
 
     /// Tries to convert the ast to an [Identifier] and adds as many path elements as possible.
-    fn as_ident(&self) -> InferResult<Identifier> {
+    fn as_ident(&self) -> InferResult<Ident> {
         match self {
-            Ast::Identifier { debrujin, .. } => Ok(Identifier {
+            Ast::Identifier { debrujin, .. } => Ok(Ident {
                 name: *debrujin,
                 path: None,
             }),
@@ -207,7 +207,7 @@ impl Ast {
             } => {
                 let mut path = vec![];
                 fold_path(rhs, &mut path)?;
-                Ok(Identifier {
+                Ok(Ident {
                     name: lhs.as_debrujin()?,
                     path: Some(path),
                 })
@@ -231,7 +231,7 @@ impl Ast {
     }
 
     /// Tries to convert the ast to a function and then return the arguments.
-    fn to_application(&self) -> InferResult<(&Ast, &Ast)> {
+    fn as_application(&self) -> InferResult<(&Ast, &Ast)> {
         match self {
             Ast::BinaryOp {
                 op,
@@ -434,7 +434,7 @@ impl<'a> Cache<'a> {
 }
 
 #[derive(Debug, Clone, PartialEq, Default)]
-pub struct Identifier {
+pub struct Ident {
     name: usize,
     path: Option<Vec<String>>,
 }
@@ -446,7 +446,8 @@ pub enum Type {
     Float,
     Bool,
     String,
-    Identifier(Identifier),
+    Path,
+    Identifier(Ident),
     Null,
     Undefined,
     List(Vec<Type>),
@@ -466,10 +467,10 @@ impl Type {
         }
     }
 
-    fn as_ident(self) -> InferResult<Identifier> {
+    fn as_ident(self) -> InferResult<Ident> {
         match self {
             Type::Identifier(i) => Ok(i),
-            t => infer_error(Type::Identifier(Identifier::default()), t),
+            t => infer_error(Type::Identifier(Ident::default()), t),
         }
     }
 
@@ -479,9 +480,28 @@ impl Type {
             t => infer_error(Type::Function(Box::default(), Box::default()), t.clone()),
         }
     }
+
+    fn to_discriminant(&self) -> TypeDiscriminants {
+        match self {
+            Type::Int => TypeDiscriminants::Int,
+            Type::Float => TypeDiscriminants::Float,
+            Type::Bool => TypeDiscriminants::Bool,
+            Type::String => TypeDiscriminants::String,
+            Type::Path => TypeDiscriminants::Path,
+            Type::Identifier(_) => TypeDiscriminants::Identifier,
+            Type::Null => TypeDiscriminants::Null,
+            Type::Undefined => TypeDiscriminants::Undefined,
+            Type::List(_) => TypeDiscriminants::List,
+            Type::Function(_, _) => TypeDiscriminants::Function,
+            Type::Union(_, _) => TypeDiscriminants::Union,
+            Type::Set(_) => TypeDiscriminants::Set,
+            Type::Var(_) => TypeDiscriminants::Var,
+            Type::Default => TypeDiscriminants::Default,
+        }
+    }
 }
 
-type Constraint = (Identifier, Type);
+type Constraint = (Ident, Type);
 
 pub(crate) struct Context(Vec<Vec<(usize, Type)>>);
 
@@ -531,7 +551,12 @@ fn lookup_set_bindigs(context: &mut Context, bindings: &Ast) -> InferResult<()> 
                 context.insert(*name, ty.clone());
             }
         }
-        _ => todo!(),
+        _ => {
+            return Err(InferError::TypeMismatch {
+                expected: TypeDiscriminants::Set,
+                found: bindings(),
+            })
+        }
     }
     Ok(())
 }
@@ -549,7 +574,7 @@ fn reduce_function<'a>(
     // find out if this is a stacked function
     if matches!(to, Type::Function(_, _)) {
         // extract the last argument from the chain
-        if let Ok((arg, next)) = arguments.to_application() {
+        if let Ok((arg, next)) = arguments.as_application() {
             // further reduce the function
             let ret = reduce_function(to, arguments, constraints)?;
 
@@ -568,6 +593,41 @@ fn reduce_function<'a>(
             constraints.push((ident, from.clone()));
         }
         Ok(to)
+    }
+}
+
+fn expect_numerals(ty1: Type, ty2: Type) -> InferResult<Type> {
+    use Type::*;
+    if ty1 == Int {
+        if ty2 == Int {
+            Ok(Int)
+        } else if ty2 == Float {
+            Ok(Float)
+        } else {
+            infer_error(Int, ty2.clone())
+        }
+    } else if ty1 == Float {
+        if ty2 == Int || ty2 == Float {
+            Ok(Float)
+        } else {
+            infer_error(Float, ty2.clone())
+        }
+    } else {
+        // TODO: this could be int or float
+        infer_error(Int, ty1.clone())
+    }
+}
+
+fn expect_bools(ty1: Type, ty2: Type) -> InferResult<Type> {
+    use Type::*;
+    if ty1 == Bool && ty2 == Bool {
+        Ok(Bool)
+    } else {
+        if ty1 != Bool {
+            infer_error(Bool, ty1)
+        } else {
+            infer_error(Bool, ty2)
+        }
     }
 }
 
@@ -603,23 +663,80 @@ fn hm(context: &mut Context, expr: &Ast) -> Result<Type, InferError> {
                     let rhs = ty2.as_list()?;
                     Ok(Type::List([lhs, rhs].concat()))
                 }
-                BinOp::Mul => todo!(),
-                BinOp::Div => todo!(),
-                BinOp::Add => todo!(),
-                BinOp::Sub => todo!(),
-                BinOp::Update => todo!(),
-                BinOp::HasAttribute => todo!(),
-                BinOp::AttributeSelection => todo!(),
-                BinOp::AttributeFallback => todo!(),
-                BinOp::LessThan => todo!(),
-                BinOp::LessThanEqual => todo!(),
-                BinOp::GreaterThan => todo!(),
-                BinOp::GreaterThanEqual => todo!(),
-                BinOp::Equal => todo!(),
-                BinOp::NotEqual => todo!(),
-                BinOp::And => todo!(),
-                BinOp::Or => todo!(),
-                BinOp::Implication => todo!(),
+                BinOp::Mul => expect_numerals(ty1, ty2),
+                BinOp::Div => expect_numerals(ty1, ty2),
+                BinOp::Sub => expect_numerals(ty1, ty2),
+                BinOp::Add => {
+                    if ty1 == String && ty2 == String {
+                        Ok(String)
+                    } else if ty1 == Path && ty2 == String {
+                        Ok(Path)
+                    } else if ty1 == String && ty2 == Path {
+                        Ok(Path)
+                    } else if ty1 == Path && ty2 == Path {
+                        Ok(Path)
+                    } else {
+                        expect_numerals(ty1, ty2)
+                    }
+                }
+                BinOp::Update => {
+                    if let Set(mut bindings) = ty1 {
+                        if let Set(new_bindings) = ty2 {
+                            bindings.extend(new_bindings);
+                            Ok(Set(bindings))
+                        } else {
+                            infer_error(Set(HashMap::new()), ty2)
+                        }
+                    } else {
+                        infer_error(Set(HashMap::new()), ty1)
+                    }
+                }
+                BinOp::HasAttribute => {
+                    if let Set(bindings) = ty1 {
+                        if let Identifier(ident) = ty2 {
+                            if let Some(_) = bindings.get(&ident.name.to_string()) {
+                                Ok(Bool)
+                            } else {
+                                Ok(Null)
+                            }
+                        } else {
+                            infer_error(Identifier(Ident::default()), ty2)
+                        }
+                    } else {
+                        infer_error(Set(HashMap::new()), ty1)
+                    }
+                }
+                BinOp::AttributeSelection => {
+                    if let Set(bindings) = ty1 {
+                        if let Identifier(ident) = ty2 {
+                            if let Some(ty) = bindings.get(&ident.name.to_string()) {
+                                Ok(ty.clone())
+                            } else {
+                                Ok(Undefined)
+                            }
+                        } else {
+                            infer_error(Identifier(Ident::default()), ty2)
+                        }
+                    } else {
+                        infer_error(Set(HashMap::new()), ty1)
+                    }
+                }
+                BinOp::AttributeFallback => {
+                    if ty1 == Null {
+                        Ok(ty2)
+                    } else {
+                        Ok(ty1)
+                    }
+                }
+                BinOp::LessThan => expect_numerals(ty1, ty2),
+                BinOp::LessThanEqual => expect_numerals(ty1, ty2),
+                BinOp::GreaterThan => expect_numerals(ty1, ty2),
+                BinOp::GreaterThanEqual => expect_numerals(ty1, ty2),
+                BinOp::Equal => expect_numerals(ty1, ty2),
+                BinOp::NotEqual => expect_bools(ty1, ty2),
+                BinOp::And => expect_bools(ty1, ty2),
+                BinOp::Or => expect_bools(ty1, ty2),
+                BinOp::Implication => expect_bools(ty1, ty2),
             }
         }
         Ast::AttrSet {

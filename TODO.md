@@ -5,6 +5,7 @@
 ## Improvements
 - Nice error handling
 - Remove scopesx
+- Use descriminants for type errors
 
 ## Restrictions
 - Comment positions
