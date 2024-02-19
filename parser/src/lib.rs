@@ -11,6 +11,8 @@ pub mod infer;
 pub mod lexer;
 pub mod parser;
 
+pub use infer::hm::infer;
+
 #[cfg(test)]
 mod test;
 
