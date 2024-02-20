@@ -27,8 +27,6 @@ pub struct Pattern {
 #[strum_discriminants(derive(Display, AsRefStr))]
 /// Mirror of [ParserAst], but with identifiers replaced by DeBrujin indices.
 pub enum Ast {
-    /// ----------------- Operators -----------------
-
     /// Unary Operators
     UnaryOp {
         op: UnOp,
@@ -44,11 +42,8 @@ pub enum Ast {
         span: Span,
     },
 
-    /// ----------------- Language Constructs -----------------
-
     /// Attribute set
     AttrSet {
-        /// A set of attributes
         attrs: Vec<(usize, Ast)>,
         is_recursive: bool,
         span: Span,
@@ -56,11 +51,8 @@ pub enum Ast {
 
     /// Let expression
     LetBinding {
-        /// A set of bindings
         bindings: Vec<(usize, Ast)>,
-        /// The expression to evaluate
         body: Box<Ast>,
-        /// A list of identifiers to inherit from the parent scope
         inherit: Option<Vec<usize>>,
         span: Span,
     },
@@ -75,42 +67,39 @@ pub enum Ast {
 
     /// Conditional
     Conditional {
-        /// The condition to evaluate
         condition: Box<Ast>,
-        /// The expression to evaluate if the condition is true
         expr1: Box<Ast>,
-        /// The expression to evaluate if the condition is false
         expr2: Box<Ast>,
         span: Span,
     },
 
     /// An assert statement.
     Assertion {
-        /// The condition to evaluate
         condition: Box<Ast>,
-        /// The expression to evaluate if the condition is true
         span: Span,
     },
 
     /// A with-statement.
     With {
-        /// The set-identifier to add
         set: Box<Ast>,
-        /// The expression to evaluate
         body: Box<Ast>,
         span: Span,
     },
 
+    /// Identifier
     Identifier {
         debrujin: usize,
         name: String,
         span: Span,
     },
+
+    /// List
     List {
         items: Vec<Ast>,
         span: Span,
     },
 
+    /// ----- Primitives --------
     NixString(Span),
     NixPath(Span),
     Bool {
