@@ -135,7 +135,7 @@ impl Ast {
     /// Convert a parser ast to an infer ast.
     pub fn from_parser_ast(value: ParserAst, source: String) -> Self {
         let mut vars = Cache::new();
-        transform_ast(value, &mut vars, &source, 0)
+        transform_ast(value, &mut vars, &source)
     }
 
     /// Tries to convert the ast to an [Identifier] and adds as many path elements as possible.
@@ -201,7 +201,7 @@ impl Ast {
     /// Tries to convert the ast to an identifier and then return name as string.
     pub fn to_identifier_string(&self) -> InferResult<String> {
         match self {
-            Ast::Identifier { name: text, .. } => Ok(text.to_string()),
+            Ast::Identifier { name, .. } => Ok(name.to_string()),
             e => Err(InferError::ConversionError {
                 from: e.as_ref().to_string(),
                 to: AstDiscriminants::Identifier.as_ref(),
@@ -220,6 +220,7 @@ impl Ast {
         }
     }
 
+    /// Tries to convert the ast to a set.
     pub fn as_attr_set(&self) -> InferResult<&Vec<(usize, Ast)>> {
         match self {
             Ast::AttrSet { attrs, .. } => Ok(attrs),
@@ -231,19 +232,14 @@ impl Ast {
     }
 }
 
-// Convert spans to De' Brujin indices
-// this should support path-wise set accesses
-fn transform_ast<'a>(
-    value: ParserAst,
-    cache: &mut Cache<'a>,
-    source: &'a str,
-    mut fun_depth: usize,
-) -> Ast {
+/// Convert [ParserAst] to [Ast].
+/// Replace every occurence of an identifier with a number.
+fn transform_ast<'a>(value: ParserAst, cache: &mut Cache<'a>, source: &'a str) -> Ast {
     use Ast::*;
     match value {
         ParserAst::UnaryOp { op, box rhs, span } => UnaryOp {
             op,
-            rhs: Box::new(transform_ast(rhs, cache, source, fun_depth)),
+            rhs: Box::new(transform_ast(rhs, cache, source)),
             span,
         },
         ParserAst::BinaryOp {
@@ -253,8 +249,8 @@ fn transform_ast<'a>(
             span,
         } => BinaryOp {
             op,
-            lhs: Box::new(transform_ast(lhs, cache, source, fun_depth)),
-            rhs: Box::new(transform_ast(rhs, cache, source, fun_depth)),
+            lhs: Box::new(transform_ast(lhs, cache, source)),
+            rhs: Box::new(transform_ast(rhs, cache, source)),
             span,
         },
         ParserAst::AttrSet {
@@ -264,12 +260,7 @@ fn transform_ast<'a>(
         } => {
             let attrs = attrs
                 .into_iter()
-                .map(|(name, expr)| {
-                    (
-                        cache.get(&source[name], &mut fun_depth),
-                        transform_ast(expr, cache, source, fun_depth),
-                    )
-                })
+                .map(|(name, expr)| (cache.get(&source[name]), transform_ast(expr, cache, source)))
                 .collect();
             Ast::AttrSet {
                 attrs,
@@ -285,22 +276,17 @@ fn transform_ast<'a>(
         } => {
             let bindings = bindings
                 .into_iter()
-                .map(|(name, expr)| {
-                    (
-                        cache.get(&source[name], &mut fun_depth),
-                        transform_ast(expr, cache, source, fun_depth),
-                    )
-                })
+                .map(|(name, expr)| (cache.get(&source[name]), transform_ast(expr, cache, source)))
                 .collect();
             let inherit = inherit.map(|inherit| {
                 inherit
                     .into_iter()
-                    .map(|name| cache.get(&source[name], &mut fun_depth))
+                    .map(|name| cache.get(&source[name]))
                     .collect()
             });
             LetBinding {
                 bindings,
-                body: Box::new(transform_ast(*body, cache, source, fun_depth)),
+                body: Box::new(transform_ast(*body, cache, source)),
                 inherit,
                 span,
             }
@@ -319,16 +305,16 @@ fn transform_ast<'a>(
             box expr2,
             span,
         } => Conditional {
-            condition: Box::new(transform_ast(condition, cache, source, fun_depth)),
-            expr1: Box::new(transform_ast(expr1, cache, source, fun_depth)),
-            expr2: Box::new(transform_ast(expr2, cache, source, fun_depth)),
+            condition: Box::new(transform_ast(condition, cache, source)),
+            expr1: Box::new(transform_ast(expr1, cache, source)),
+            expr2: Box::new(transform_ast(expr2, cache, source)),
             span,
         },
         ParserAst::Assertion {
             box condition,
             span,
         } => Assertion {
-            condition: Box::new(transform_ast(condition, cache, source, fun_depth)),
+            condition: Box::new(transform_ast(condition, cache, source)),
             span,
         },
         ParserAst::With {
@@ -336,12 +322,12 @@ fn transform_ast<'a>(
             box body,
             span,
         } => With {
-            set: Box::new(transform_ast(set, cache, source, fun_depth)),
-            body: Box::new(transform_ast(body, cache, source, fun_depth)),
+            set: Box::new(transform_ast(set, cache, source)),
+            body: Box::new(transform_ast(body, cache, source)),
             span,
         },
         ParserAst::Identifier(span) => Identifier {
-            debrujin: cache.get(&source[span.clone()], &mut fun_depth),
+            debrujin: 0,
             name: source[span.clone()].to_string(),
             span,
         },
@@ -350,7 +336,7 @@ fn transform_ast<'a>(
         ParserAst::List { items, span } => List {
             items: items
                 .into_iter()
-                .map(|l| transform_ast(l, cache, source, fun_depth))
+                .map(|l| transform_ast(l, cache, source))
                 .collect(),
             span,
         },
@@ -364,25 +350,27 @@ fn transform_ast<'a>(
     }
 }
 
-/// A cache.
+/// A cache which maps variable names to the numbers 0..n.
 struct Cache<'a> {
     map: HashMap<&'a str, usize>,
+    count: usize,
 }
 
 impl<'a> Cache<'a> {
     fn new() -> Self {
         Self {
             map: HashMap::new(),
+            count: 0,
         }
     }
 
-    fn get(&mut self, var: &'a str, count: &mut usize) -> usize {
+    fn get(&mut self, var: &'a str) -> usize {
         if let Some(number) = self.map.get(var) {
             *number
         } else {
-            self.map.insert(var, *count);
-            *count += 1;
-            *count - 1
+            self.map.insert(var, self.count);
+            self.count += 1;
+            self.count - 1
         }
     }
 }
