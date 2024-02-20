@@ -11,12 +11,11 @@ use logos::Span;
 use std::collections::HashMap;
 
 /// Lookup all bindings that are part of a `with`-expression and add them to the context.
-/// This does not create a new scope
-fn lookup_set_bindigs(context: &mut Context, bindings: &Ast) -> InferResult<()> {
+/// This does not create a new scope.
+fn introduce_set_bindigs(context: &mut Context, bindings: &Ast) -> InferResult<()> {
     let attrs = bindings.as_attr_set()?;
     for (name, _expr) in attrs {
-        let ty = context.lookup(name).ok_or(InferError::UnknownIdentifier)?;
-        context.insert(*name, ty.clone());
+        context.reintroduce(*name);
     }
     Ok(())
 }
@@ -110,7 +109,7 @@ fn hm(context: &mut Context, expr: &Ast) -> Result<Type, SpannedError> {
                         .as_ident()
                         .map_err(|err| SpannedError::from((span, err)))?;
                     let fun_type = context
-                        .lookup(&fun.name)
+                        .lookup_type(fun.name)
                         .ok_or(SpannedError::from((span, InferError::UnknownFunction)))?;
                     if let Some(_path) = fun.path {
                         todo!()
@@ -220,14 +219,15 @@ fn hm(context: &mut Context, expr: &Ast) -> Result<Type, SpannedError> {
             inherit,
             span,
         } => {
-            context.push_scope();
+            context.push_scope(bindings.iter().map(|(name, _)| *name).collect());
             for (name, expr) in bindings {
                 let ty = hm(context, expr)?;
-                context.insert(*name, ty);
+                let debrujin = context.lookup_debrujin(*name);
+                context.add_constraint(debrujin, ty);
             }
             if let Some(inherit) = inherit {
                 for name in inherit {
-                    let ty = context.lookup(name).ok_or(SpannedError {
+                    let ty = context.lookup_type(name).ok_or(SpannedError {
                         error: InferError::UnknownIdentifier,
                         span: span.clone(),
                     })?; // Maybe don't make this a hard error
@@ -249,14 +249,14 @@ fn hm(context: &mut Context, expr: &Ast) -> Result<Type, SpannedError> {
                 for patt in &patt.patterns {
                     match patt {
                         PatternElement::Identifier(name) => {
-                            let ty = context.lookup(name).ok_or(SpannedError {
+                            let ty = context.lookup_type(name).ok_or(SpannedError {
                                 error: InferError::UnknownIdentifier,
                                 span: span.clone(),
                             })?;
                             context.insert(*name, ty.clone());
                         }
                         PatternElement::DefaultIdentifier(name, default) => {
-                            let ty1 = context.lookup(name).cloned();
+                            let ty1 = context.lookup_type(name).cloned();
                             let ty2 = hm(context, default)?;
 
                             if let Some(ty1) = ty1 {
@@ -313,12 +313,12 @@ fn hm(context: &mut Context, expr: &Ast) -> Result<Type, SpannedError> {
         } => todo!(),
         Ast::With { set, body, span } => {
             context.push_scope();
-            lookup_set_bindigs(context, &set.as_ref().clone())
+            introduce_set_bindigs(context, &set.as_ref().clone())
                 .map_err(|err| SpannedError::from((span, err)))?;
             hm(context, body)
         }
         Ast::Identifier { debrujin, .. } => {
-            Ok(context.lookup(debrujin).cloned().unwrap_or(Undefined))
+            Ok(context.lookup_type(debrujin).cloned().unwrap_or(Undefined))
         }
         Ast::List { items, span: _ } => Ok(Type::List(
             items.iter().flat_map(|ast| hm(context, ast)).collect(),

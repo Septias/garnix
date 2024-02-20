@@ -23,6 +23,15 @@ pub struct Pattern {
     pub is_wildcard: bool,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+/// An Identifier.
+pub struct Identifier {
+    pub debrujin: usize,
+    pub name: String,
+    pub usize_name: usize,
+    pub span: Span,
+}
+
 #[derive(Debug, Clone, PartialEq, AsRefStr, EnumDiscriminants)]
 #[strum_discriminants(derive(Display, AsRefStr))]
 /// Mirror of [ParserAst], but with identifiers replaced by DeBrujin indices.
@@ -88,11 +97,7 @@ pub enum Ast {
     },
 
     /// Identifier
-    Identifier {
-        debrujin: usize,
-        name: String,
-        span: Span,
-    },
+    Identifier(Identifier),
 
     /// List
     List {
@@ -131,8 +136,14 @@ impl Ast {
     /// Tries to convert the ast to an [Identifier] and adds as many path elements as possible.
     pub fn as_ident(&self) -> Result<Ident, InferError> {
         match self {
-            Ast::Identifier { debrujin, .. } => Ok(Ident {
-                name: *debrujin,
+            Ast::Identifier(Identifier {
+                debrujin,
+                name,
+                span,
+                usize_name,
+            }) => Ok(Ident {
+                name: *usize_name,
+                debrujin: *debrujin,
                 path: None,
             }),
             Ast::BinaryOp {
@@ -144,7 +155,8 @@ impl Ast {
                 let mut path = vec![];
                 fold_path(rhs, &mut path)?;
                 Ok(Ident {
-                    name: lhs.as_debrujin()?,
+                    name: lhs.to_identifier()?,
+                    debrujin: lhs.as_debrujin()?,
                     path: Some(path),
                 })
             }
@@ -191,7 +203,17 @@ impl Ast {
     /// Tries to convert the ast to an identifier and then return name as string.
     pub fn to_identifier_string(&self) -> InferResult<String> {
         match self {
-            Ast::Identifier { name, .. } => Ok(name.to_string()),
+            Ast::Identifier(Identifier { name, .. }) => Ok(name.to_string()),
+            e => Err(InferError::ConversionError {
+                from: e.as_ref().to_string(),
+                to: AstDiscriminants::Identifier.as_ref(),
+            }),
+        }
+    }
+
+    pub fn to_identifier(&self) -> InferResult<usize> {
+        match self {
+            Ast::Identifier(Identifier { usize_name, .. }) => Ok(*usize_name),
             e => Err(InferError::ConversionError {
                 from: e.as_ref().to_string(),
                 to: AstDiscriminants::Identifier.as_ref(),
@@ -202,7 +224,7 @@ impl Ast {
     /// Tries to convert the ast to an identifier and then return the De Bruijn index.
     pub fn as_debrujin(&self) -> InferResult<usize> {
         match self {
-            Ast::Identifier { debrujin, .. } => Ok(*debrujin),
+            Ast::Identifier(Identifier { debrujin, .. }) => Ok(*debrujin),
             e => Err(InferError::ConversionError {
                 from: e.as_ref().to_string(),
                 to: AstDiscriminants::Identifier.as_ref(),
@@ -318,11 +340,13 @@ fn transform_ast<'a>(value: ParserAst, cache: &mut Cache<'a>, source: &'a str) -
             body: Box::new(transform_ast(body, cache, source)),
             span,
         },
-        ParserAst::Identifier(span) => Identifier {
+        ParserAst::Identifier(span) => Identifier(super::ast::Identifier {
             debrujin: 0,
-            name: source[span.clone()].to_string(),
+            usize_name: cache.get(&source[span]),
+            name: source[span].to_string(),
             span,
-        },
+        }),
+
         ParserAst::NixString(span) => NixString(span),
         ParserAst::NixPath(span) => NixPath(span),
         ParserAst::List { items, span } => List {

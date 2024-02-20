@@ -1,9 +1,12 @@
+use anyhow::Context as _;
 use core::str;
 use logos::Span;
 use std::collections::HashMap;
 use strum::EnumTryAs;
 use strum_macros::{AsRefStr, Display, EnumDiscriminants};
 use thiserror::Error;
+
+use self::ast::Identifier;
 
 pub mod ast;
 pub mod helpers;
@@ -35,6 +38,9 @@ pub struct SpannedError {
     pub error: InferError,
 }
 
+pub type SpannedInferResult<T> = Result<T, SpannedError>;
+pub type InferResult<T> = Result<T, InferError>;
+
 impl From<(Span, TypeName, TypeName)> for SpannedError {
     fn from((span, expected, found): (Span, TypeName, TypeName)) -> Self {
         Self {
@@ -59,10 +65,12 @@ impl From<(&Span, InferError)> for SpannedError {
     }
 }
 
-pub type SpannedInferResult<T> = Result<T, SpannedError>;
-pub type InferResult<T> = Result<T, InferError>;
-
 /// Create an infer error.
+pub(crate) fn infer_error<T>(expected: TypeName, found: TypeName) -> Result<T, InferError> {
+    Err(InferError::TypeMismatch { expected, found })
+}
+
+/// Create a spaned infer error.
 pub(crate) fn spanned_infer_error<T>(
     expected: TypeName,
     found: TypeName,
@@ -72,10 +80,6 @@ pub(crate) fn spanned_infer_error<T>(
         error: InferError::TypeMismatch { expected, found },
         span: span.clone(),
     })
-}
-
-pub(crate) fn infer_error<T>(expected: TypeName, found: TypeName) -> Result<T, InferError> {
-    Err(InferError::TypeMismatch { expected, found })
 }
 
 /// A nix language type.
@@ -148,38 +152,105 @@ impl Type {
     }
 }
 
+struct ContextIdentifier {
+    name: usize,
+    debrujin: usize,
+}
+
+impl ContextIdentifier {
+    fn new(debrujin: usize, name: usize, span: Span) -> Self {
+        Self { name, debrujin }
+    }
+}
+
 /// A constraint for some identifier.
 type Constraint = (Ident, Type);
 
 /// Context to save variables and their types.
-pub(crate) struct Context(Vec<Vec<(usize, Type)>>);
+pub(crate) struct Context {
+    bindings: Vec<Vec<Constraint>>,
+    depth: usize,
+}
 
 impl Context {
     pub(crate) fn new() -> Self {
-        Self(vec![Vec::new()])
+        Self {
+            bindings: vec![Vec::new()],
+            depth: 0,
+        }
     }
 
-    pub(crate) fn push_scope(&mut self) {
-        self.0.push(Vec::new());
+    /// Create a new function scope with all it's bindings.
+    pub(crate) fn push_scope(&mut self, bindings: Vec<usize>) {
+        let inserts = bindings
+            .into_iter()
+            .map(|name| {
+                let debrujin = self.depth;
+                self.depth += 1;
+                (Ident::new(name, debrujin, None), Type::Undefined)
+            })
+            .collect();
+        self.bindings.push(inserts);
+        self.depth += bindings.len();
     }
 
+    /// Pop a function scope.
     pub(crate) fn pop_scope(&mut self) {
-        self.0.pop();
+        let removed = self.bindings.pop();
+        if let Some(removed) = removed {
+            self.depth -= removed.len();
+        }
     }
 
-    pub(crate) fn insert(&mut self, name: usize, ty: Type) {
-        self.0.last_mut().unwrap().push((name, ty));
+    pub(crate) fn insert(&mut self, ident: Ident, ty: Type) {
+        self.bindings.last_mut().unwrap().push((ident, ty));
     }
 
-    pub(crate) fn lookup(&self, name: &usize) -> Option<&Type> {
-        for scope in self.0.iter().rev() {
+    pub(crate) fn reintroduce(&mut self, debrujin: usize) -> anyhow::Result<()> {
+        let binding = self.lookup(debrujin).context("can't find")?;
+        let ty = self.lookup_type(debrujin).context("can't find")?;
+        self.bindings
+            .last_mut()
+            .unwrap()
+            .insert(0, (binding.clone(), ty.clone()));
+        Ok(())
+    }
+
+    pub(crate) fn lookup_debrujin(&self, name: usize) -> Option<usize> {
+        for scope in self.bindings.iter().rev() {
             for (n, ty) in scope.iter().rev() {
-                if n == name {
+                if n.name == name {
+                    return Some(n.debrujin);
+                }
+            }
+        }
+        None
+    }
+
+    pub(crate) fn lookup_type(&self, debrujin: usize) -> Option<&Type> {
+        for scope in self.bindings.iter().rev() {
+            for (n, ty) in scope.iter().rev() {
+                if n.debrujin == debrujin {
                     return Some(ty);
                 }
             }
         }
         None
+    }
+
+    pub(crate) fn lookup(&self, debrujin: usize) -> Option<&Ident> {
+        for scope in self.bindings.iter().rev() {
+            for (n, ty) in scope.iter().rev() {
+                if n.debrujin == debrujin {
+                    return Some(n);
+                }
+            }
+        }
+        None
+    }
+
+    pub(crate) fn add_constraint(&mut self, debrujin: usize, ty: Type) {
+        todo!()
     }
 }
 
@@ -188,5 +259,16 @@ impl Context {
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Ident {
     name: usize,
+    debrujin: usize,
     path: Option<Vec<String>>,
+}
+
+impl Ident {
+    fn new(name: usize, debrujin: usize, path: Option<Vec<String>>) -> Self {
+        Self {
+            name,
+            debrujin,
+            path,
+        }
+    }
 }
