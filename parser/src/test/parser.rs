@@ -279,7 +279,7 @@ fn test_conditional() {
 
 #[test]
 fn test_assert() {
-    let tokens = lex("assert true;");
+    let tokens = lex("assert true;1");
     let (input, ast) = assert(NixTokens(&tokens)).unwrap();
     assert!(input.0.is_empty());
     assert_eq!(
@@ -289,7 +289,11 @@ fn test_assert() {
                 val: true,
                 span: Range { start: 7, end: 11 }
             }),
-            span: Range { start: 0, end: 12 }
+            span: Range { start: 0, end: 12 },
+            expr: Box::new(Ast::Int {
+                val: 1,
+                span: Range { start: 13, end: 14 }
+            }),
         }
     );
 }
