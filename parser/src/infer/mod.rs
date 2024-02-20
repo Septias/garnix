@@ -85,6 +85,7 @@ pub(crate) fn infer_error<T>(expected: TypeName, found: TypeName) -> Result<T, I
 pub enum Type {
     Int,
     Float,
+    Number, // Type used only to represent both int and float
     Bool,
     String,
     Path,
@@ -130,6 +131,7 @@ impl Type {
         match self {
             Type::Int => TypeName::Int,
             Type::Float => TypeName::Float,
+            Type::Number => TypeName::Number,
             Type::Bool => TypeName::Bool,
             Type::String => TypeName::String,
             Type::Path => TypeName::Path,

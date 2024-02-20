@@ -91,7 +91,6 @@ pub(crate) fn literal(input: NixTokens<'_>) -> PResult<'_, Ast> {
             token(Token::DocComment).map(|(_, comment)| DocComment(comment)),
             token(Token::LineComment).map(|(_, comment)| LineComment(comment)),
             token(Token::SingleString).map(|(_, string)| NixString(string)),
-            // TODO: concatenate string
             token(Token::MultiString).map(|(_, string)| NixString(string)),
             token(Token::Path).map(|(_, path)| NixPath(path)),
         )),
@@ -210,9 +209,10 @@ pub(crate) fn conditional(input: NixTokens<'_>) -> PResult<'_, Ast> {
 /// assert = assert expr;
 pub(crate) fn assert(input: NixTokens<'_>) -> PResult<'_, Ast> {
     spanned(
-        tuple((token(Token::Assert), expr, token(Token::Semi))),
-        |span, (_, condition, _)| Assertion {
+        tuple((token(Token::Assert), expr, token(Token::Semi), expr)),
+        |span, (_, condition, _, expr)| Assertion {
             condition: Box::new(condition),
+            expr: Box::new(expr),
             span,
         },
     )(input)

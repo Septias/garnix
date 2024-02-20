@@ -76,6 +76,7 @@ pub enum Ast {
     /// An assert statement.
     Assertion {
         condition: Box<Ast>,
+        expr: Box<Ast>,
         span: Span,
     },
 
@@ -302,8 +303,10 @@ fn transform_ast<'a>(value: ParserAst, cache: &mut Cache<'a>, source: &'a str) -
         ParserAst::Assertion {
             box condition,
             span,
+            box expr,
         } => Assertion {
             condition: Box::new(transform_ast(condition, cache, source)),
+            expr: Box::new(transform_ast(expr, cache, source)),
             span,
         },
         ParserAst::With {

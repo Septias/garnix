@@ -1,6 +1,7 @@
 ## Features
 - String interpolation
 - Doc comment type parsing
+- Lookup paths
 
 ## Restrictions
 - Comment positions

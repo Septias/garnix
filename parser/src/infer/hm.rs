@@ -74,8 +74,7 @@ fn expect_numerals(ty1: Type, ty2: Type, span: &Span) -> SpannedInferResult<Type
             spanned_infer_error(TypeName::Float, ty2.get_name(), span)
         }
     } else {
-        // TODO: this could be int or float
-        spanned_infer_error(Int.get_name(), ty1.get_name(), span)
+        spanned_infer_error(Number.get_name(), ty1.get_name(), span)
     }
 }
 
@@ -310,6 +309,7 @@ fn hm(context: &mut Context, expr: &Ast) -> Result<Type, SpannedError> {
         Ast::Assertion {
             condition: _,
             span: _,
+            expr: _,
         } => todo!(),
         Ast::With { set, body, span } => {
             context.push_scope();

@@ -194,6 +194,7 @@ pub enum Ast {
         /// The condition to evaluate
         condition: Box<Ast>,
         /// The expression to evaluate if the condition is true
+        expr: Box<Ast>,
         span: Span,
     },
 
