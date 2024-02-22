@@ -3,6 +3,9 @@
 - Doc comment type parsing
 - Lookup paths
 
+## Improvements
+- Nice Verbose error
+
 ## Restrictions
 - Comment positions
 - Line comments have to end in '\n'
