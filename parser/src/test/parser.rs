@@ -1,10 +1,11 @@
+use core::panic;
 use std::ops::Range;
 
 use crate::ast::BinOp;
 use crate::lexer::Token;
 use crate::parser::{
     assert, conditional, expr, ident, ident_default_pattern, inherit, lambda, let_binding, literal,
-    pattern, prett_parsing, set, set_pattern, statement, with,
+    pattern, prett_parsing, set, set_pattern, statement, with, Statement,
 };
 use crate::{
     ast::{Ast, Pattern, PatternElement},
@@ -94,36 +95,44 @@ fn test_pattern() {
 #[test]
 fn test_statement() {
     let tokens = lex("player = 12;");
-    let (input, (name, ast)) = statement(NixTokens(&tokens)).unwrap();
-    assert!(input.0.is_empty());
-    assert_eq!(name, Range { start: 0, end: 6 });
-    assert_eq!(
-        ast,
-        Ast::Int {
-            val: 12,
-            span: Range { start: 9, end: 11 }
-        }
-    );
-
-    let tokens = lex("player = 12 + 13;");
-    let (input, (name, ast)) = statement(NixTokens(&tokens)).unwrap();
-    assert!(input.0.is_empty());
-    assert_eq!(name, Range { start: 0, end: 6 });
-    assert_eq!(
-        ast,
-        Ast::BinaryOp {
-            lhs: Box::new(Ast::Int {
+    let (input, stmnt) = statement(NixTokens(&tokens)).unwrap();
+    if let Statement::Assignment(name, ast) = stmnt {
+        assert!(input.0.is_empty());
+        assert_eq!(name, Range { start: 0, end: 6 });
+        assert_eq!(
+            ast,
+            Ast::Int {
                 val: 12,
                 span: Range { start: 9, end: 11 }
-            }),
-            rhs: Box::new(Ast::Int {
-                val: 13,
-                span: Range { start: 14, end: 16 }
-            }),
-            op: BinOp::Add,
-            span: Range { start: 9, end: 16 }
-        }
-    );
+            }
+        );
+    } else {
+        panic!("Expected an assignment statement");
+    }
+
+    let tokens = lex("player = 12 + 13;");
+    let (input, stmnt) = statement(NixTokens(&tokens)).unwrap();
+    if let Statement::Assignment(name, ast) = stmnt {
+        assert!(input.0.is_empty());
+        assert_eq!(name, Range { start: 0, end: 6 });
+        assert_eq!(
+            ast,
+            Ast::BinaryOp {
+                lhs: Box::new(Ast::Int {
+                    val: 12,
+                    span: Range { start: 9, end: 11 }
+                }),
+                rhs: Box::new(Ast::Int {
+                    val: 13,
+                    span: Range { start: 14, end: 16 }
+                }),
+                op: BinOp::Add,
+                span: Range { start: 9, end: 16 }
+            }
+        );
+    } else {
+        panic!("Expected an assignment statement");
+    }
 }
 
 #[test]
@@ -152,6 +161,7 @@ fn test_set() {
                     }
                 )
             ],
+            inherit: vec![],
             is_recursive: false,
             span: Range { start: 0, end: 31 }
         }
@@ -167,7 +177,8 @@ fn test_set() {
         Ast::AttrSet {
             attrs: vec![],
             is_recursive: false,
-            span: Range { start: 0, end: 3 }
+            span: Range { start: 0, end: 3 },
+            inherit: vec![],
         }
     );
 
@@ -179,7 +190,21 @@ fn test_set() {
         Ast::AttrSet {
             attrs: vec![],
             is_recursive: true,
-            span: Range { start: 0, end: 7 }
+            span: Range { start: 0, end: 7 },
+            inherit: vec![],
+        }
+    );
+
+    let tokens = lex("rec { inherit test; }");
+    let (input, ast) = set(NixTokens(&tokens)).unwrap();
+    assert!(input.0.is_empty());
+    assert_eq!(
+        ast,
+        Ast::AttrSet {
+            attrs: vec![],
+            is_recursive: true,
+            inherit: vec![Range { start: 14, end: 18}],
+            span: Range { start: 0, end: 21 }
         }
     )
 }
@@ -249,6 +274,59 @@ fn test_lambda() {
             span: Range { start: 0, end: 12 }
         }
     );
+
+    let tokens = lex("{}: 12");
+
+    let (input, ast) = lambda(NixTokens(&tokens)).unwrap();
+    assert!(input.0.is_empty());
+    assert_eq!(
+        ast,
+        Ast::Lambda {
+            arguments: vec![Pattern {
+                patterns: vec![],
+                is_wildcard: false,
+            }],
+            body: Box::new(Ast::Int {
+                val: 12,
+                span: Range { start: 4, end: 6 }
+            }),
+            arg_binding: None,
+            span: Range { start: 0, end: 6 }
+        }
+    );
+
+    let tokens = lex("{}: let x = 12; in {}");
+
+    let (input, ast) = lambda(NixTokens(&tokens)).unwrap();
+    assert!(input.0.is_empty());
+    assert_eq!(
+        ast,
+        Ast::Lambda {
+            arguments: vec![Pattern {
+                patterns: vec![],
+                is_wildcard: false,
+            }],
+            body: Box::new(Ast::LetBinding {
+                bindings: vec![(
+                    Range { start: 8, end: 9 },
+                    Ast::Int {
+                        val: 12,
+                        span: Range { start: 12, end: 14 }
+                    }
+                )],
+                body: Box::new(Ast::AttrSet {
+                    attrs: vec![],
+                    is_recursive: false,
+                    inherit: vec![],
+                    span: Range { start: 19, end: 21 }
+                }),
+                inherit: None,
+                span: Range { start: 4, end: 21 }
+            }),
+            arg_binding: None,
+            span: Range { start: 0, end: 21 }
+        }
+    );
 }
 
 #[test]
@@ -289,10 +367,10 @@ fn test_assert() {
                 val: true,
                 span: Range { start: 7, end: 11 }
             }),
-            span: Range { start: 0, end: 12 },
+            span: Range { start: 0, end: 13 },
             expr: Box::new(Ast::Int {
                 val: 1,
-                span: Range { start: 13, end: 14 }
+                span: Range { start: 12, end: 13 }
             }),
         }
     );
@@ -364,6 +442,7 @@ fn test_let_binding() {
             body: Box::new(Ast::AttrSet {
                 attrs: vec![],
                 is_recursive: false,
+                inherit: vec![],
                 span: Range { start: 35, end: 37 }
             }),
             inherit: None,
@@ -393,6 +472,7 @@ fn test_with() {
                 }
             )],
             is_recursive: false,
+            inherit: vec![],
             span: Range { start: 5, end: 15 }
         }
     );

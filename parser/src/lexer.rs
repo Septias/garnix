@@ -129,7 +129,7 @@ pub enum Token {
     Boolean(bool),
 
     // Strings
-    #[regex("''[a-zA-Z ]*''")]
+    #[regex("''[a-zA-Z\n ]*''")]
     MultiString,
 
     #[regex(r#""[a-zA-Z0-9\\/{}\[\]\(\) ]*""#)]
@@ -158,7 +158,7 @@ pub enum Token {
     Float(f32),
 
     // Misc
-    #[regex("[a-zA-Z]+")]
+    #[regex("[a-zA-Z_]+")]
     Text,
 
     #[token(";")]

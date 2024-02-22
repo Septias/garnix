@@ -5,7 +5,7 @@ use nom::{
     error::{context, ParseError, VerboseError},
     multi::{many0, many1, separated_list1},
     sequence::{delimited, pair, preceded, terminated, tuple},
-    IResult, InputLength, Parser,
+    Err, IResult, InputLength, Parser,
 };
 
 use crate::{
@@ -147,16 +147,22 @@ pub(crate) fn pattern(input: NixTokens<'_>) -> PResult<'_, Pattern> {
 
 /// Parse a single statement.
 /// ident = expr;
-pub(crate) fn statement(input: NixTokens<'_>) -> PResult<'_, (Span, Ast)> {
+pub(crate) fn statement(input: NixTokens<'_>) -> PResult<'_, Statement> {
     context(
         "statement",
-        terminated(
-            pair(
-                ident.map(|ast| ast.as_span()),
-                cut(preceded(token(Assignment), expr)),
-            ),
-            token(Semi),
-        ),
+        alt((
+            terminated(
+                pair(
+                    ident.map(|ast| ast.as_span()),
+                    cut(preceded(token(Assignment), expr)),
+                ),
+                token(Semi),
+            )
+            .map(|statement| Statement::Assignment(statement.0, statement.1)),
+            inherit.map(|inherit| {
+                Statement::Inherit(inherit.into_iter().map(|ast| ast.as_span()).collect())
+            }),
+        )),
     )
     .parse(input)
 }
@@ -170,18 +176,37 @@ pub(crate) fn set(input: NixTokens<'_>) -> PResult<'_, Ast> {
                 opt(token(Rec)).map(|a| a.is_some()),
                 delimited(token(LBrace), many0(statement), token(RBrace)),
             ),
-            |span, (is_recursive, statements)| AttrSet {
-                attrs: statements.into_iter().collect(),
-                is_recursive,
-                span,
+            |span, (is_recursive, statements)| {
+                let (attrs, inherits): (Vec<Statement>, Vec<Statement>) = statements
+                    .into_iter()
+                    .partition(|stmt| matches!(stmt, Statement::Assignment(..)));
+                AttrSet {
+                    attrs: attrs
+                        .into_iter()
+                        .map(|stmt| match stmt {
+                            Statement::Assignment(name, ast) => (name, ast),
+                            _ => unreachable!(),
+                        })
+                        .collect(),
+                    is_recursive,
+                    inherit: inherits
+                        .into_iter()
+                        .map(|stmt| match stmt {
+                            Statement::Inherit(inherit) => inherit,
+                            _ => unreachable!(),
+                        })
+                        .flatten()
+                        .collect(),
+                    span,
+                }
             },
         ),
     )(input)
 }
 
 /// Parse a lambda function.
-/// lambda = ?
-pub(crate) fn lambda(input: NixTokens<'_>) -> PResult<'_, Ast> {
+/// lambda = pat : expr
+pub fn lambda(input: NixTokens<'_>) -> PResult<'_, Ast> {
     let patterns = many1(terminated(pattern, token(DoubleColon)));
     spanned(pair(patterns, expr), |span, (patterns, body)| Lambda {
         arguments: patterns,
@@ -222,26 +247,49 @@ pub(crate) fn inherit(input: NixTokens<'_>) -> PResult<'_, Vec<Ast>> {
     delimited(token(Inherit), many0(ident), token(Semi))(input)
 }
 
+pub(crate) enum Statement {
+    Inherit(Vec<Span>),
+    Assignment(Span, Ast),
+}
+
 /// Parse a let binding.
 /// let-expr = let [ identifier = expr ; with ;]... in expr
 pub(crate) fn let_binding(input: NixTokens<'_>) -> PResult<'_, Ast> {
     spanned(
         pair(
             token(Let),
-            cut(pair(
-                many0(alt((
-                    statement.map(|(name, ast)| vec![(name, ast)]),
-                    inherit
-                        .map(|items| items.into_iter().map(|ast| (ast.as_span(), ast)).collect()),
-                ))),
-                preceded(token(In), expr),
-            )),
+            cut(pair(many0(statement), preceded(token(In), expr))),
         ),
-        |span, (_, (bindings, body))| LetBinding {
-            bindings: bindings.into_iter().flatten().collect(),
-            body: Box::new(body),
-            inherit: None,
-            span,
+        |span, (_, (statements, body))| {
+            let (attrs, inherits): (Vec<Statement>, Vec<Statement>) = statements
+                .into_iter()
+                .partition(|stmt| matches!(stmt, Statement::Assignment(..)));
+
+            let inherits: Vec<_> = inherits
+                .into_iter()
+                .map(|stmt| match stmt {
+                    Statement::Inherit(inherit) => inherit,
+                    _ => unreachable!(),
+                })
+                .flatten()
+                .collect();
+
+            LetBinding {
+                bindings: attrs
+                    .into_iter()
+                    .map(|stmt| match stmt {
+                        Statement::Assignment(name, ast) => (name, ast),
+                        _ => unreachable!(),
+                    })
+                    .collect(),
+                body: Box::new(body),
+                inherit: if inherits.len() > 0 {
+                    Some(inherits)
+                } else {
+                    None
+                },
+                span,
+            }
         },
     )
     .parse(input)
@@ -265,13 +313,13 @@ pub(crate) fn expr(input: NixTokens<'_>) -> PResult<'_, Ast> {
             pair(
                 opt(with),
                 alt((
-                    |input| prett_parsing(input, 0, Token::Semi),
-                    lambda,
-                    ident,
-                    literal,
                     set,
+                    lambda,
                     assert,
                     let_binding,
+                    |input| prett_parsing(input, 0, Token::Semi),
+                    literal,
+                    ident,
                 )),
             ),
             |span, (with, expr)| {

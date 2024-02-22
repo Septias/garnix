@@ -150,6 +150,7 @@ pub enum Ast {
     AttrSet {
         /// A set of attributes
         attrs: Vec<(Span, Ast)>,
+        inherit: Vec<Span>,
         is_recursive: bool,
         span: Span,
     },

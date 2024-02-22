@@ -138,9 +138,8 @@ impl Ast {
         match self {
             Ast::Identifier(Identifier {
                 debrujin,
-                name,
-                span,
                 usize_name,
+                ..
             }) => Ok(Ident {
                 name: *usize_name,
                 debrujin: *debrujin,
@@ -269,6 +268,7 @@ fn transform_ast<'a>(value: ParserAst, cache: &mut Cache<'a>, source: &'a str) -
             attrs,
             is_recursive,
             span,
+            inherit: _,
         } => {
             let attrs = attrs
                 .into_iter()
@@ -342,8 +342,8 @@ fn transform_ast<'a>(value: ParserAst, cache: &mut Cache<'a>, source: &'a str) -
         },
         ParserAst::Identifier(span) => Identifier(super::ast::Identifier {
             debrujin: 0,
-            usize_name: cache.get(&source[span]),
-            name: source[span].to_string(),
+            usize_name: cache.get(&source[span.clone()]),
+            name: source[span.clone()].to_string(),
             span,
         }),
 
