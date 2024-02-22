@@ -191,11 +191,10 @@ pub(crate) fn set(input: NixTokens<'_>) -> PResult<'_, Ast> {
                     is_recursive,
                     inherit: inherits
                         .into_iter()
-                        .map(|stmt| match stmt {
+                        .flat_map(|stmt| match stmt {
                             Statement::Inherit(inherit) => inherit,
                             _ => unreachable!(),
                         })
-                        .flatten()
                         .collect(),
                     span,
                 }
@@ -267,11 +266,10 @@ pub(crate) fn let_binding(input: NixTokens<'_>) -> PResult<'_, Ast> {
 
             let inherits: Vec<_> = inherits
                 .into_iter()
-                .map(|stmt| match stmt {
+                .flat_map(|stmt| match stmt {
                     Statement::Inherit(inherit) => inherit,
                     _ => unreachable!(),
                 })
-                .flatten()
                 .collect();
 
             LetBinding {
@@ -283,7 +281,7 @@ pub(crate) fn let_binding(input: NixTokens<'_>) -> PResult<'_, Ast> {
                     })
                     .collect(),
                 body: Box::new(body),
-                inherit: if inherits.len() > 0 {
+                inherit: if !inherits.is_empty() {
                     Some(inherits)
                 } else {
                     None

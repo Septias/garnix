@@ -105,7 +105,7 @@ pub enum Type {
 
 impl Type {
     /// Try to convert this type to a list.
-    fn as_list(self) -> InferResult<Vec<Type>> {
+    fn into_list(self) -> InferResult<Vec<Type>> {
         match self {
             Type::List(elems) => Ok(elems),
             t => infer_error(TypeName::List, t.get_name()),
@@ -113,7 +113,7 @@ impl Type {
     }
 
     /// Try to convert this type to an identifier.
-    fn as_ident(self) -> InferResult<Ident> {
+    fn into_ident(self) -> InferResult<Ident> {
         match self {
             Type::Identifier(ident) => Ok(ident),
             t => infer_error(TypeName::Identifier, t.get_name()),

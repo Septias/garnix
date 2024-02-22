@@ -36,7 +36,7 @@ fn reduce_function<'a>(
         // extract the last argument from the chain
         if let Ok((arg, _next)) = arguments.as_application() {
             // further reduce the function
-            let ret = reduce_function(&to, arguments, constraints)?;
+            let ret = reduce_function(to, arguments, constraints)?;
 
             // if it is an identifier we can formulate a constraint
             if let Ok(ident) = arg.as_ident() {
@@ -107,7 +107,7 @@ fn hm(context: &mut Context, expr: &Ast) -> Result<Type, SpannedError> {
             match op {
                 BinOp::Application => {
                     let fun = ty1
-                        .as_ident()
+                        .into_ident()
                         .map_err(|err| SpannedError::from((span, err)))?;
                     let fun_type = context
                         .lookup_type(fun.name)
@@ -122,10 +122,10 @@ fn hm(context: &mut Context, expr: &Ast) -> Result<Type, SpannedError> {
                 }
                 BinOp::ListConcat => {
                     let lhs = ty1
-                        .as_list()
+                        .into_list()
                         .map_err(|err| SpannedError::from((span, err)))?;
                     let rhs = ty2
-                        .as_list()
+                        .into_list()
                         .map_err(|err| SpannedError::from((span, err)))?;
                     Ok(Type::List([lhs, rhs].concat()))
                 }
