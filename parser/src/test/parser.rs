@@ -194,7 +194,6 @@ fn test_set() {
             inherit: vec![],
         }
     );
-
     let tokens = lex("rec { inherit test; }");
     let (input, ast) = set(NixTokens(&tokens)).unwrap();
     assert!(input.0.is_empty());
@@ -203,7 +202,7 @@ fn test_set() {
         Ast::AttrSet {
             attrs: vec![],
             is_recursive: true,
-            inherit: vec![Range { start: 14, end: 18}],
+            inherit: vec![Range { start: 14, end: 18 }],
             span: Range { start: 0, end: 21 }
         }
     )
@@ -327,6 +326,9 @@ fn test_lambda() {
             span: Range { start: 0, end: 21 }
         }
     );
+
+    let tokens = lex("x = {}: {inherit x;};");
+    statement(NixTokens(&tokens)).unwrap();
 }
 
 #[test]
@@ -719,6 +721,9 @@ fn test_application() {
             span: Range { start: 0, end: 16 }
         }
     );
+
+    let tokens = lex(r#"map (x: x*x) (map (x: x*x) [1 2 3]);"#);
+    expr(NixTokens(&tokens)).unwrap();
 }
 
 #[test]

@@ -110,7 +110,7 @@ pub(crate) fn set_pattern(input: NixTokens<'_>) -> PResult<'_, Pattern> {
         "Pattern",
         preceded(
             token(LBrace),
-            cut(terminated(
+            terminated(
                 pair(
                     elements,
                     opt(preceded(token(Comma), token(Dots))).map(|a| a.is_some()),
@@ -128,7 +128,7 @@ pub(crate) fn set_pattern(input: NixTokens<'_>) -> PResult<'_, Pattern> {
                     is_wildcard: false,
                 })),
                 token(RBrace),
-            )),
+            ),
         ),
     )(input)
 }
@@ -305,6 +305,16 @@ pub(crate) fn atom(input: NixTokens<'_>) -> PResult<'_, Ast> {
     alt((let_binding, conditional, set, literal, ident))(input)
 }
 
+pub(crate) fn list(input: NixTokens<'_>) -> PResult<'_, Ast> {
+    context(
+        "list",
+        spanned(
+            delimited(token(Token::LBracket), many0(expr), token(Token::RBracket)),
+            |span, exprs| List { exprs, span },
+        ),
+    )(input)
+}
+
 /// Parse an expression.
 pub(crate) fn expr(input: NixTokens<'_>) -> PResult<'_, Ast> {
     context(
@@ -313,8 +323,8 @@ pub(crate) fn expr(input: NixTokens<'_>) -> PResult<'_, Ast> {
             pair(
                 opt(with),
                 alt((
-                    set,
                     lambda,
+                    set,
                     assert,
                     let_binding,
                     |input| prett_parsing(input, 0, Token::Semi),
@@ -338,6 +348,8 @@ pub(crate) fn expr(input: NixTokens<'_>) -> PResult<'_, Ast> {
         ),
     )(input)
 }
+
+const ILLEGAL: [Token; 7] = [RBrace, In, Let, Rec, Token::With, Token::Else, Token::Then];
 
 pub(crate) fn prett_parsing(mut input: NixTokens<'_>, min_bp: u8, eof: Token) -> PResult<'_, Ast> {
     println!("input: {:?}", input);
@@ -365,12 +377,21 @@ pub(crate) fn prett_parsing(mut input: NixTokens<'_>, min_bp: u8, eof: Token) ->
         Token::Comment | Token::DocComment | Token::LineComment => {
             unimplemented!("Comments are not yet implemented")
         }
+        Token::LBracket => {
+            let (new_input, lhs) = list(input)?;
+            (new_input, lhs)
+        }
 
         Token::LParen => {
             input.next();
-            let (mut input, lhs) = prett_parsing(input, 0, eof)?;
-            assert_eq!(input.next().unwrap().0, Token::RParen);
-            (input, lhs)
+            if let Ok((mut input, lhs)) = lambda(input) {
+                assert_eq!(input.next().unwrap().0, Token::RParen);
+                (input, lhs)
+            } else {
+                let (mut input, lhs) = prett_parsing(input, 0, eof)?;
+                assert_eq!(input.next().unwrap().0, Token::RParen);
+                (input, lhs)
+            }
         }
 
         Minus => {
@@ -413,7 +434,7 @@ pub(crate) fn prett_parsing(mut input: NixTokens<'_>, min_bp: u8, eof: Token) ->
     let mut application = false;
     loop {
         if let Some((token, _)) = input.peek() {
-            if *token == eof {
+            if *token == eof || *token == Token::RParen || *token == Token::RBracket {
                 break;
             }
         } else {
@@ -425,8 +446,17 @@ pub(crate) fn prett_parsing(mut input: NixTokens<'_>, min_bp: u8, eof: Token) ->
 
         let mut op = BinOp::from_token(input.peek().unwrap().0);
 
-        if op.is_none() && (matches!(lhs, Ast::Identifier(..))) || application {
+        if op.is_none() && matches!(lhs, Ast::Identifier(..)) {
+            if let Some((token, _)) = input.peek() {
+                if ILLEGAL.contains(token) {
+                    break;
+                }
+            }
             application = true;
+            op = Some(BinOp::Application);
+        }
+
+        if application {
             op = Some(BinOp::Application);
         }
 

@@ -101,7 +101,7 @@ pub enum Ast {
 
     /// List
     List {
-        items: Vec<Ast>,
+        exprs: Vec<Ast>,
         span: Span,
     },
 
@@ -169,7 +169,7 @@ impl Ast {
     /// Tries to convert the ast to a list.
     pub fn as_list(&self) -> InferResult<&Vec<Ast>> {
         match self {
-            Ast::List { items, span: _ } => Ok(items),
+            Ast::List { exprs, span: _ } => Ok(exprs),
             e => Err(InferError::ConversionError {
                 from: e.as_ref().to_string(),
                 to: AstDiscriminants::List.as_ref(),
@@ -349,8 +349,8 @@ fn transform_ast<'a>(value: ParserAst, cache: &mut Cache<'a>, source: &'a str) -
 
         ParserAst::NixString(span) => NixString(span),
         ParserAst::NixPath(span) => NixPath(span),
-        ParserAst::List { items, span } => List {
-            items: items
+        ParserAst::List { exprs, span } => List {
+            exprs: exprs
                 .into_iter()
                 .map(|l| transform_ast(l, cache, source))
                 .collect(),

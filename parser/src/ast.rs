@@ -212,7 +212,7 @@ pub enum Ast {
     /// ----------------- Literals -----------------
     Identifier(Span),
     List {
-        items: Vec<Ast>,
+        exprs: Vec<Ast>,
         span: Span,
     },
 

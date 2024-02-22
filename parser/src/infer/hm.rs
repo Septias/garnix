@@ -317,8 +317,8 @@ fn hm(context: &mut Context, expr: &Ast) -> Result<Type, SpannedError> {
         Ast::Identifier(super::ast::Identifier { debrujin, .. }) => {
             Ok(context.lookup_type(*debrujin).cloned().unwrap_or(Undefined))
         }
-        Ast::List { items, span: _ } => Ok(Type::List(
-            items.iter().flat_map(|ast| hm(context, ast)).collect(),
+        Ast::List { exprs, span: _ } => Ok(Type::List(
+            exprs.iter().flat_map(|ast| hm(context, ast)).collect(),
         )),
         Ast::NixString(_) => Ok(String),
         Ast::NixPath(_) => Ok(String),

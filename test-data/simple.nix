@@ -1,4 +1,3 @@
-# Set lambda
 
 { }: let
   fun = x: x;
@@ -16,23 +15,21 @@
   setfun = {...}: {};
   setInherit = {}: {inherit x;};
   setIdentFn = x: {y}: x + y;
-  settest = x.${x.y or ""};
-  set = x: x.0 <- 0;
+  set = x: x.x < 1;
   string = "
-  
+  aa
   ";
   stringMulti = ''
-  aaaa**->aa🙈
+  aaaa
   bbbb
   '';
   t = .0;
-  /* */
   bracketing = (1 + 2) * 3;
   assertion = x: assert 1; 1;
   application = map (x: x*x) (map (x: x*x) [1 2 3]);
   let_in = with 1+1; let x = 1; in 1+1;
 in {
-  inherit setfun setIdentFn bracketing ifs ifxlamba string stringMulti t x set setInherit settest application;
+  inherit setfun setIdentFn bracketing ifs ifxlamba string stringMulti t x set setInherit application;
   fun = fun;
   arithm = arithm;
 }

@@ -5,6 +5,7 @@
 
 ## Improvements
 - Nice Verbose error
+- Use oxalica test-suite
 
 ## Restrictions
 - Comment positions
