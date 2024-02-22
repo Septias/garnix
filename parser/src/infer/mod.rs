@@ -6,8 +6,6 @@ use strum::EnumTryAs;
 use strum_macros::{AsRefStr, Display, EnumDiscriminants};
 use thiserror::Error;
 
-use self::ast::Identifier;
-
 pub mod ast;
 pub mod helpers;
 pub mod hm;
@@ -152,17 +150,6 @@ impl Type {
     }
 }
 
-struct ContextIdentifier {
-    name: usize,
-    debrujin: usize,
-}
-
-impl ContextIdentifier {
-    fn new(debrujin: usize, name: usize, span: Span) -> Self {
-        Self { name, debrujin }
-    }
-}
-
 /// A constraint for some identifier.
 type Constraint = (Ident, Type);
 
@@ -191,7 +178,6 @@ impl Context {
             })
             .collect();
         self.bindings.push(inserts);
-        self.depth += bindings.len();
     }
 
     /// Pop a function scope.
@@ -202,13 +188,13 @@ impl Context {
         }
     }
 
-    pub(crate) fn insert(&mut self, ident: Ident, ty: Type) {
+    pub(crate) fn _insert(&mut self, ident: Ident, ty: Type) {
         self.bindings.last_mut().unwrap().push((ident, ty));
     }
 
     pub(crate) fn reintroduce(&mut self, debrujin: usize) -> anyhow::Result<()> {
-        let binding = self.lookup(debrujin).context("can't find")?;
-        let ty = self.lookup_type(debrujin).context("can't find")?;
+        let binding = self.lookup(debrujin).context("can't find")?.clone();
+        let ty = self.lookup_type(debrujin).context("can't find")?.clone();
         self.bindings
             .last_mut()
             .unwrap()
@@ -218,7 +204,7 @@ impl Context {
 
     pub(crate) fn lookup_debrujin(&self, name: usize) -> Option<usize> {
         for scope in self.bindings.iter().rev() {
-            for (n, ty) in scope.iter().rev() {
+            for (n, _) in scope.iter().rev() {
                 if n.name == name {
                     return Some(n.debrujin);
                 }
@@ -240,7 +226,7 @@ impl Context {
 
     pub(crate) fn lookup(&self, debrujin: usize) -> Option<&Ident> {
         for scope in self.bindings.iter().rev() {
-            for (n, ty) in scope.iter().rev() {
+            for (n, _) in scope.iter().rev() {
                 if n.debrujin == debrujin {
                     return Some(n);
                 }
@@ -249,7 +235,7 @@ impl Context {
         None
     }
 
-    pub(crate) fn add_constraint(&mut self, debrujin: usize, ty: Type) {
+    pub(crate) fn add_constraint(&mut self, _debrujin: usize, _ty: Type) {
         todo!()
     }
 }

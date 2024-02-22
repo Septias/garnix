@@ -1,3 +1,4 @@
+#![allow(unused)]
 use super::{
     ast::Ast, Constraint, Context, InferError, InferResult, SpannedError, SpannedInferResult, Type,
     TypeName,
@@ -222,16 +223,12 @@ fn hm(context: &mut Context, expr: &Ast) -> Result<Type, SpannedError> {
             context.push_scope(bindings.iter().map(|(name, _)| *name).collect());
             for (name, expr) in bindings {
                 let ty = hm(context, expr)?;
-                let debrujin = context.lookup_debrujin(*name);
+                let debrujin = context.lookup_debrujin(*name).unwrap();
                 context.add_constraint(debrujin, ty);
             }
             if let Some(inherit) = inherit {
                 for name in inherit {
-                    let ty = context.lookup_type(name).ok_or(SpannedError {
-                        error: InferError::UnknownIdentifier,
-                        span: span.clone(),
-                    })?; // Maybe don't make this a hard error
-                    context.insert(*name, ty.clone());
+                    context.reintroduce(*name).unwrap();
                 }
             }
             let ty = hm(context, body)?;
@@ -244,7 +241,7 @@ fn hm(context: &mut Context, expr: &Ast) -> Result<Type, SpannedError> {
             arg_binding: _,
             span,
         } => {
-            context.push_scope();
+            /* context.push_lambda_scope();
             for patt in arguments {
                 for patt in &patt.patterns {
                     match patt {
@@ -279,8 +276,8 @@ fn hm(context: &mut Context, expr: &Ast) -> Result<Type, SpannedError> {
             let ty = hm(context, body)?;
             context.pop_scope();
 
-            // TODO: somehow create curry style functions here
-            Ok(Function(Box::new(Undefined), Box::new(ty)))
+            // TODO: somehow create curry style functions here */
+            Ok(Function(Box::new(Undefined), Box::new(Type::Undefined)))
         }
         Ast::Conditional {
             condition,
@@ -312,13 +309,13 @@ fn hm(context: &mut Context, expr: &Ast) -> Result<Type, SpannedError> {
             expr: _,
         } => todo!(),
         Ast::With { set, body, span } => {
-            context.push_scope();
+            //context.push_scope();
             introduce_set_bindigs(context, &set.as_ref().clone())
                 .map_err(|err| SpannedError::from((span, err)))?;
             hm(context, body)
         }
-        Ast::Identifier { debrujin, .. } => {
-            Ok(context.lookup_type(debrujin).cloned().unwrap_or(Undefined))
+        Ast::Identifier(super::ast::Identifier { debrujin, .. }) => {
+            Ok(context.lookup_type(*debrujin).cloned().unwrap_or(Undefined))
         }
         Ast::List { items, span: _ } => Ok(Type::List(
             items.iter().flat_map(|ast| hm(context, ast)).collect(),
