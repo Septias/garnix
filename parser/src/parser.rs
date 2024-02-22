@@ -393,7 +393,10 @@ pub(crate) fn prett_parsing(mut input: NixTokens<'_>, min_bp: u8, eof: Token) ->
                 input.next();
             }
 
-            let (_input, rhs) = prett_parsing(input, right_bp, eof).unwrap();
+            let (_input, rhs) = prett_parsing(input, right_bp, eof).map_err(|e| match e {
+                Err::Incomplete(_) => todo!(),
+                Err::Error(e) | Err::Failure(e) => Err::Failure(e),
+            })?;
             input = _input;
             lhs = Ast::BinaryOp {
                 op,

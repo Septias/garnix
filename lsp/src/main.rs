@@ -59,14 +59,15 @@ fn map_idents(input: &Ast, source: &str, map: &mut Vec<(Range<usize>, String)>) 
     };
 }
 
-fn load_file(st: &mut ServerState, uri: &Url) {
+fn load_file(st: &mut ServerState, uri: &Url) -> anyhow::Result<()> {
     let content = fs::read_to_string(uri.path()).unwrap();
-    let ast = parse(content);
+    let ast = parse(content)?;
     let mut map = Vec::new();
     eprintln!("Opened file: {}", uri);
     map_idents(&ast.ast, &ast.source, &mut map);
     st.files.insert(uri.as_str().to_string(), map);
     eprintln!("Parsed AST: {:?}", ast.ast);
+    Ok(())
 }
 
 struct ServerState {
@@ -118,7 +119,7 @@ async fn main() {
                         range: None,
                     }))
                 } else {
-                    load_file(st, &a.text_document_position_params.text_document.uri);
+                    load_file(st, &a.text_document_position_params.text_document.uri).ok();
                     eprintln!(
                         "file was not loaded: {}",
                         a.text_document_position_params.text_document.uri.as_str()
@@ -137,11 +138,11 @@ async fn main() {
             .notification::<notification::Initialized>(|_, _| ControlFlow::Continue(()))
             .notification::<notification::DidChangeConfiguration>(|_, _| ControlFlow::Continue(()))
             .notification::<notification::DidOpenTextDocument>(|st, file| {
-                load_file(st, &file.text_document.uri);
+                load_file(st, &file.text_document.uri).ok();
                 ControlFlow::Continue(())
             })
             .notification::<notification::DidChangeTextDocument>(|st, file| {
-                load_file(st, &file.text_document.uri);
+                load_file(st, &file.text_document.uri).ok();
                 ControlFlow::Continue(())
             })
             .notification::<notification::DidCloseTextDocument>(|st, file| {
