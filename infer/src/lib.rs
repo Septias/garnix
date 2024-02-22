@@ -1,3 +1,4 @@
+#![feature(box_patterns)]
 use anyhow::Context as _;
 use core::str;
 use logos::Span;

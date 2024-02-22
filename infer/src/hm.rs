@@ -3,12 +3,10 @@ use super::{
     ast::Ast, Constraint, Context, InferError, InferResult, SpannedError, SpannedInferResult, Type,
     TypeName,
 };
-use crate::{
-    ast::BinOp,
-    infer::{ast::PatternElement, spanned_infer_error},
-};
+use crate::{ast::PatternElement, spanned_infer_error};
 use anyhow::Context as _;
 use logos::Span;
+use parser::ast::BinOp;
 use std::collections::HashMap;
 
 /// Lookup all bindings that are part of a `with`-expression and add them to the context.

@@ -7,11 +7,9 @@ use lexer::{NixTokens, Token};
 use logos::{Logos, Span};
 
 pub mod ast;
-pub mod infer;
 pub mod lexer;
 pub mod parser;
 
-pub use infer::hm::infer;
 use parser::PResult;
 
 #[cfg(test)]
@@ -30,6 +28,7 @@ pub fn parse_file(path: &Path) -> anyhow::Result<ParseResult> {
     parse(source)
 }
 
+/// Lex a string containing Nix code.
 pub fn lex(source: &str) -> Vec<(Token, logos::Span)> {
     let lex = Token::lexer(source);
     lex.spanned()
@@ -42,13 +41,15 @@ pub fn lex(source: &str) -> Vec<(Token, logos::Span)> {
         .collect()
 }
 
+/// Create a String Error from a nom error.
 pub fn map_err<'a, T>(
     err: PResult<'a, T>,
     source: &str,
 ) -> Result<(NixTokens<'a>, T), nom::Err<std::string::String>> {
     err.map_err(|err| {
-        let err = err.map(|e| {
-            e.errors
+        err.map(|errors| {
+            errors
+                .errors
                 .into_iter()
                 .map(|(tokens, kind)| {
                     let tokens = tokens.0;
@@ -60,12 +61,19 @@ pub fn map_err<'a, T>(
                             end: tokens.last().unwrap().1.end,
                         }
                     };
-                    format!("{} <- {:?}", &source[span], kind)
+                    let mut lines = format!("{}", &source[span])
+                        .split('\n')
+                        .map(|s| s.to_string())
+                        .collect::<Vec<String>>();
+                    lines
+                        .get_mut(0)
+                        .map(|a| a.push_str(&format!(" <- {:?}", kind)));
+
+                    lines.join("\n")
                 })
                 .collect::<Vec<String>>()
                 .join("\n\n -------------------------------------------\n")
-        });
-        err
+        })
     })
 }
 

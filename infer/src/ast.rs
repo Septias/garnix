@@ -1,5 +1,5 @@
 use super::{helpers::fold_path, Ident, InferError, InferResult};
-use crate::ast::{Ast as ParserAst, BinOp, BinOpDiscriminants, UnOp};
+use parser::ast::{Ast as ParserAst, BinOp, BinOpDiscriminants, UnOp};
 use core::str;
 use logos::Span;
 use std::collections::HashMap;

@@ -2,4 +2,4 @@ edition = "2021"
 
 [workspace]
 resolver = "2"
-members = ["lsp", "parser"]
+members = [ "infer", "lsp", "parser"]

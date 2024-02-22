@@ -6,6 +6,7 @@
 ## Improvements
 - Nice Verbose error
 - Use oxalica test-suite
+- Clean up dependencies
 
 ## Restrictions
 - Comment positions

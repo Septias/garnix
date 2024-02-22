@@ -228,6 +228,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "infer"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "logos",
+ "nom",
+ "parser",
+ "strum",
+ "strum_macros",
+ "thiserror",
+]
+
+[[package]]
 name = "itoa"
 version = "1.0.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
