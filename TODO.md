@@ -6,7 +6,7 @@
 ## Improvements
 - Nice Verbose error
 - Use oxalica test-suite
-- Clean up dependencies
+- Use own implementation of Span
 
 ## Restrictions
 - Comment positions
@@ -15,3 +15,13 @@
 ## Useless
 - Add macros for span
 - `Result<T, InferError>.span(span)`
+
+
+## TODO 01.03
+- Inferenz
+    - Unify constraints
+- Language Server
+    - Type hints
+    - Hover hints
+- Parser
+    - Case study für den Parser

@@ -66,7 +66,6 @@ fn load_file(st: &mut ServerState, uri: &Url) -> anyhow::Result<()> {
     eprintln!("Opened file: {}", uri);
     map_idents(&ast.ast, &ast.source, &mut map);
     st.files.insert(uri.as_str().to_string(), map);
-    eprintln!("Parsed AST: {:?}", ast.ast);
     Ok(())
 }
 
