@@ -1,7 +1,7 @@
 use super::{helpers::fold_path, Ident, InferError, InferResult};
-use parser::ast::{Ast as ParserAst, BinOp, BinOpDiscriminants, UnOp};
 use core::str;
 use logos::Span;
+use parser::ast::{Ast as ParserAst, BinOp, BinOpDiscriminants, UnOp};
 use std::collections::HashMap;
 use strum_macros::{AsRefStr, Display, EnumDiscriminants};
 
@@ -240,6 +240,149 @@ impl Ast {
                 to: AstDiscriminants::AttrSet.as_ref(),
             }),
         }
+    }
+
+    pub fn get_span(&self) -> &Span {
+        match self {
+            Ast::UnaryOp { span, .. }
+            | Ast::BinaryOp { span, .. }
+            | Ast::AttrSet { span, .. }
+            | Ast::LetBinding { span, .. }
+            | Ast::Lambda { span, .. }
+            | Ast::Conditional { span, .. }
+            | Ast::Assertion { span, .. }
+            | Ast::With { span, .. }
+            | Ast::Identifier(Identifier { span, .. })
+            | Ast::List { span, .. }
+            | Ast::NixString(span)
+            | Ast::NixPath(span)
+            | Ast::Bool { span, .. }
+            | Ast::Int { span, .. }
+            | Ast::Float { span, .. }
+            | Ast::Null(span)
+            | Ast::Comment(span)
+            | Ast::DocComment(span)
+            | Ast::LineComment(span) => span,
+        }
+    }
+
+    pub fn get_node_at(&self, position: usize) -> Option<&Ast> {
+        let containing = match self {
+            Ast::UnaryOp { rhs, .. } => {
+                if rhs.get_span().contains(&position) {
+                    rhs.get_node_at(position)
+                } else {
+                    None
+                }
+            }
+            Ast::BinaryOp { lhs, rhs, .. } => {
+                if lhs.get_span().contains(&position) {
+                    lhs.get_node_at(position)
+                } else if rhs.get_span().contains(&position) {
+                    rhs.get_node_at(position)
+                } else {
+                    None
+                }
+            }
+            Ast::AttrSet { attrs, .. } => attrs.iter().find_map(|(_, expr)| {
+                if expr.get_span().contains(&position) {
+                    expr.get_node_at(position)
+                } else {
+                    None
+                }
+            }),
+            Ast::LetBinding { bindings, body, .. } => {
+                if body.get_span().contains(&position) {
+                    body.get_node_at(position)
+                } else {
+                    bindings.iter().find_map(|(_, expr)| {
+                        if expr.get_span().contains(&position) {
+                            expr.get_node_at(position)
+                        } else {
+                            None
+                        }
+                    })
+                }
+            }
+            Ast::Lambda { body, .. } => {
+                if body.get_span().contains(&position) {
+                    body.get_node_at(position)
+                } else {
+                    None
+                }
+            }
+            Ast::Conditional {
+                condition,
+                expr1,
+                expr2,
+                ..
+            } => {
+                if condition.get_span().contains(&position) {
+                    condition.get_node_at(position)
+                } else if expr1.get_span().contains(&position) {
+                    expr1.get_node_at(position)
+                } else if expr2.get_span().contains(&position) {
+                    expr2.get_node_at(position)
+                } else {
+                    None
+                }
+            }
+            Ast::Assertion {
+                condition, expr, ..
+            } => {
+                if condition.get_span().contains(&position) {
+                    condition.get_node_at(position)
+                } else if expr.get_span().contains(&position) {
+                    expr.get_node_at(position)
+                } else {
+                    None
+                }
+            }
+            Ast::With { set, body, .. } => {
+                if set.get_span().contains(&position) {
+                    set.get_node_at(position)
+                } else if body.get_span().contains(&position) {
+                    body.get_node_at(position)
+                } else {
+                    None
+                }
+            }
+            Ast::Identifier(Identifier { span, .. }) => {
+                if span.contains(&position) {
+                    Some(self)
+                } else {
+                    None
+                }
+            }
+            Ast::List { exprs, .. } => exprs.iter().find_map(|expr| {
+                if expr.get_span().contains(&position) {
+                    expr.get_node_at(position)
+                } else {
+                    None
+                }
+            }),
+            Ast::NixString(span)
+            | Ast::NixPath(span)
+            | Ast::Bool { span, .. }
+            | Ast::Int { span, .. }
+            | Ast::Float { span, .. }
+            | Ast::Null(span)
+            | Ast::Comment(span)
+            | Ast::DocComment(span)
+            | Ast::LineComment(span) => {
+                if span.contains(&position) {
+                    Some(self)
+                } else {
+                    None
+                }
+            }
+        };
+
+        containing.or(if self.get_span().contains(&position) {
+            Some(self)
+        } else {
+            None
+        })
     }
 }
 
