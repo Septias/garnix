@@ -1,4 +1,3 @@
-#![allow(unused)]
 use super::{
     ast::Ast, Context, InferError, InferResult, SpannedError, SpannedInferResult, Type, TypeName,
 };
@@ -7,7 +6,7 @@ use crate::{
     spanned_infer_error,
 };
 use anyhow::Context as _;
-use itertools::{fold, Either, Itertools};
+use itertools::{Either, Itertools};
 use logos::Span;
 use parser::ast::BinOp;
 use std::collections::HashMap;
@@ -224,10 +223,8 @@ fn hm<'a>(context: &mut Context<'a>, expr: &'a Ast) -> Result<Type, SpannedError
             }
             let ok = lookup_inherits(&context, inherit).map_err(|e| e.span(span))?;
             // TODO: add error handling
-            context.insert(ok);
-            let ty = hm(context, body)?;
-            context.pop_scope();
-            Ok(Type::Undefined)
+
+            context.with_scope(ok, |context| hm(context, body))
         }
         Ast::Lambda {
             arguments,
@@ -322,10 +319,11 @@ fn hm<'a>(context: &mut Context<'a>, expr: &'a Ast) -> Result<Type, SpannedError
             body,
             span,
         } => {
-            //context.push_scope();
-            /* introduce_set_bindigs(context, &set.as_ref().clone())
-            .map_err(|err| SpannedError::from((span, err)))?; */
-            hm(context, body)
+            context.push_scope(vec![]);
+            introduce_set_bindigs(context, set).map_err(|err| SpannedError::from((span, err)))?;
+            let ty = hm(context, body);
+            context.pop_scope();
+            ty
         }
         Ast::Identifier(super::ast::Identifier { debrujin, .. }) => {
             Ok(context.lookup_type(*debrujin).cloned().unwrap_or(Undefined))

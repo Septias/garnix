@@ -1,5 +1,4 @@
 #![feature(box_patterns)]
-use anyhow::Context as _;
 use ast::Identifier;
 use core::str;
 use logos::Span;
@@ -179,13 +178,13 @@ impl<'a> Context<'a> {
         }
     }
 
-    /// Create a new function scope with all it's bindings.
+    /// Create a new scope with the given bindings.
     pub(crate) fn push_scope(&mut self, bindings: Vec<&'a Identifier>) {
         self.depth += bindings.len();
         self.bindings.push(bindings);
     }
 
-    /// Pop a function scope.
+    /// Pop the list scope.
     pub(crate) fn pop_scope(&mut self) {
         let removed = self.bindings.pop();
         if let Some(removed) = removed {
@@ -193,10 +192,24 @@ impl<'a> Context<'a> {
         }
     }
 
+    /// Create a new scope and run a function with it.
+    pub(crate) fn with_scope<T>(
+        &mut self,
+        scope: Vec<&'a Identifier>,
+        f: impl FnOnce(&mut Self) -> T,
+    ) -> T {
+        self.push_scope(scope);
+        let t = f(self);
+        self.pop_scope();
+        t
+    }
+
+    /// Insert a list of [Identifier] into the current scope.
     pub(crate) fn insert(&mut self, ident: Vec<&'a Identifier>) {
         self.bindings.last_mut().unwrap().extend(ident);
     }
 
+    /// Lookup an [Identifier] by it's name.
     pub(crate) fn lookup_by_name(&self, name: &str) -> Option<&'a Identifier> {
         for scope in self.bindings.iter().rev() {
             for n in scope.iter().rev() {
@@ -208,6 +221,7 @@ impl<'a> Context<'a> {
         None
     }
 
+    /// Lookup an [Identifier]s [Type] by it's debrujin index.
     pub(crate) fn lookup_type(&self, debrujin: usize) -> Option<&Type> {
         for scope in self.bindings.iter().rev() {
             for n in scope.iter().rev() {
@@ -219,6 +233,7 @@ impl<'a> Context<'a> {
         None
     }
 
+    /// Lookup an [Identifier] by it's debrujin index.
     pub(crate) fn lookup(&self, debrujin: usize) -> Option<&Identifier> {
         for scope in self.bindings.iter().rev() {
             for ident in scope.iter().rev() {
@@ -228,10 +243,6 @@ impl<'a> Context<'a> {
             }
         }
         None
-    }
-
-    pub(crate) fn add_constraint(&mut self, _debrujin: usize, _ty: Type) {
-        todo!()
     }
 }
 
