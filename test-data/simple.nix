@@ -27,7 +27,7 @@
   bracketing = (1 + 2) * 3;
   assertion = x: assert 1; 1;
   application = map (x: x*x) (map (x: x*x) [1 2 3]);
-  let_in = with 1+1; let x = 1; in 1+1;
+  let_in = with 1+1; let inherit bracketing; x = 1; in 1+1;
 in {
   inherit setfun setIdentFn bracketing ifs ifxlamba string stringMulti t x set setInherit application;
   fun = fun;

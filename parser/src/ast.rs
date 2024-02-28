@@ -107,7 +107,7 @@ impl BinOp {
 }
 
 /// Unary operator.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum UnOp {
     Negation,
     LogicalNegation,

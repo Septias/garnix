@@ -1,3 +1,5 @@
+use crate::{ast, Type};
+
 use super::{helpers::fold_path, Ident, InferError, InferResult};
 use core::str;
 use logos::Span;
@@ -23,13 +25,22 @@ pub struct Pattern {
     pub is_wildcard: bool,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 /// An Identifier.
 pub struct Identifier {
     pub debrujin: usize,
     pub name: String,
-    pub usize_name: usize,
     pub span: Span,
+}
+
+impl Identifier {
+    pub fn add_constraint(&self, ty: Type) {
+        todo!()
+    }
+
+    pub fn get_type(&self) -> &Type {
+        todo!()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, AsRefStr, EnumDiscriminants)]
@@ -53,16 +64,17 @@ pub enum Ast {
 
     /// Attribute set
     AttrSet {
-        attrs: Vec<(usize, Ast)>,
+        attrs: HashMap<Identifier, Ast>,
         is_recursive: bool,
+        inherit: Vec<String>,
         span: Span,
     },
 
     /// Let expression
     LetBinding {
-        bindings: Vec<(usize, Ast)>,
+        bindings: Vec<(Identifier, Ast)>,
         body: Box<Ast>,
-        inherit: Option<Vec<usize>>,
+        inherit: Vec<String>,
         span: Span,
     },
 
@@ -136,12 +148,8 @@ impl Ast {
     /// Tries to convert the ast to an [Identifier] and adds as many path elements as possible.
     pub fn as_ident(&self) -> Result<Ident, InferError> {
         match self {
-            Ast::Identifier(Identifier {
-                debrujin,
-                usize_name,
-                ..
-            }) => Ok(Ident {
-                name: *usize_name,
+            Ast::Identifier(Identifier { debrujin, name, .. }) => Ok(Ident {
+                name: name.to_string(),
                 debrujin: *debrujin,
                 path: None,
             }),
@@ -210,9 +218,9 @@ impl Ast {
         }
     }
 
-    pub fn to_identifier(&self) -> InferResult<usize> {
+    pub fn to_identifier(&self) -> InferResult<String> {
         match self {
-            Ast::Identifier(Identifier { usize_name, .. }) => Ok(*usize_name),
+            Ast::Identifier(Identifier { name, .. }) => Ok(name.clone()),
             e => Err(InferError::ConversionError {
                 from: e.as_ref().to_string(),
                 to: AstDiscriminants::Identifier.as_ref(),
@@ -232,9 +240,9 @@ impl Ast {
     }
 
     /// Tries to convert the ast to a set.
-    pub fn as_attr_set(&self) -> InferResult<&Vec<(usize, Ast)>> {
+    pub fn as_attr_set(&self) -> InferResult<(&HashMap<Identifier, Ast>, &Vec<String>)> {
         match self {
-            Ast::AttrSet { attrs, .. } => Ok(attrs),
+            Ast::AttrSet { attrs, inherit, .. } => Ok((attrs, inherit)),
             e => Err(InferError::ConversionError {
                 from: e.as_ref().to_string(),
                 to: AstDiscriminants::AttrSet.as_ref(),
@@ -411,15 +419,22 @@ fn transform_ast<'a>(value: ParserAst, cache: &mut Cache<'a>, source: &'a str) -
             attrs,
             is_recursive,
             span,
-            inherit: _,
+            inherit,
         } => {
             let attrs = attrs
                 .into_iter()
-                .map(|(name, expr)| (cache.get(&source[name]), transform_ast(expr, cache, source)))
+                .map(|(name, expr)| {
+                    let ident = cache.lookup(&source[name], name.clone());
+                    (ident, transform_ast(expr, cache, source))
+                })
                 .collect();
             Ast::AttrSet {
                 attrs,
                 is_recursive,
+                inherit: inherit
+                    .into_iter()
+                    .map(|inherit| source[inherit].to_string())
+                    .collect(),
                 span,
             }
         }
@@ -431,14 +446,20 @@ fn transform_ast<'a>(value: ParserAst, cache: &mut Cache<'a>, source: &'a str) -
         } => {
             let bindings = bindings
                 .into_iter()
-                .map(|(name, expr)| (cache.get(&source[name]), transform_ast(expr, cache, source)))
+                .map(|(span, expr)| {
+                    let ident = cache.lookup(&source[span], span.clone());
+                    cache.insert(&ident);
+                    (ident, transform_ast(expr, cache, source))
+                })
                 .collect();
-            let inherit = inherit.map(|inherit| {
-                inherit
-                    .into_iter()
-                    .map(|name| cache.get(&source[name]))
-                    .collect()
-            });
+            let inherit = inherit
+                .map(|inherit| {
+                    inherit
+                        .into_iter()
+                        .map(|name| source[name].to_string())
+                        .collect()
+                })
+                .unwrap_or_default();
             LetBinding {
                 bindings,
                 body: Box::new(transform_ast(*body, cache, source)),
@@ -483,12 +504,11 @@ fn transform_ast<'a>(value: ParserAst, cache: &mut Cache<'a>, source: &'a str) -
             body: Box::new(transform_ast(body, cache, source)),
             span,
         },
-        ParserAst::Identifier(span) => Identifier(super::ast::Identifier {
-            debrujin: 0,
-            usize_name: cache.get(&source[span.clone()]),
-            name: source[span.clone()].to_string(),
-            span,
-        }),
+        ParserAst::Identifier(span) => {
+            let ident = cache.lookup(&source[span.clone()], span.clone());
+            cache.insert(&ident);
+            Identifier(ident)
+        }
 
         ParserAst::NixString(span) => NixString(span),
         ParserAst::NixPath(span) => NixPath(span),
@@ -511,25 +531,49 @@ fn transform_ast<'a>(value: ParserAst, cache: &mut Cache<'a>, source: &'a str) -
 
 /// A cache which maps variable names to the numbers 0..n.
 struct Cache<'a> {
-    map: HashMap<&'a str, usize>,
+    bindings: Vec<Vec<&'a Identifier>>,
     count: usize,
 }
 
 impl<'a> Cache<'a> {
     fn new() -> Self {
         Self {
-            map: HashMap::new(),
+            bindings: vec![],
             count: 0,
         }
     }
 
-    fn get(&mut self, var: &'a str) -> usize {
-        if let Some(number) = self.map.get(var) {
-            *number
-        } else {
-            self.map.insert(var, self.count);
-            self.count += 1;
-            self.count - 1
+    /// Pop a function scope.
+    pub(crate) fn pop_scope(&mut self) {
+        let removed = self.bindings.pop();
+    }
+
+    pub(crate) fn insert(&mut self, ident: &Identifier) {
+        self.bindings.last_mut().unwrap().push(ident);
+    }
+
+    pub(crate) fn len(&self) -> usize {
+        self.count
+    }
+
+    pub(crate) fn lookup(&self, name: &str, span: Span) -> Identifier {
+        let mut n = 0;
+        for scope in self.bindings.iter().rev() {
+            for ident in scope.iter().rev() {
+                n += 1;
+                if ident.name == name {
+                    return Identifier {
+                        debrujin: n,
+                        name: name.to_string(),
+                        span,
+                    };
+                }
+            }
+        }
+        Identifier {
+            debrujin: n,
+            name: name.to_string(),
+            span,
         }
     }
 }

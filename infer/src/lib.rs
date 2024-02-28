@@ -1,5 +1,6 @@
 #![feature(box_patterns)]
 use anyhow::Context as _;
+use ast::Identifier;
 use core::str;
 use logos::Span;
 use std::collections::HashMap;
@@ -16,6 +17,8 @@ pub mod hm;
 pub enum InferError {
     #[error("Unknown identifier")]
     UnknownIdentifier,
+    #[error("Unknown inherit")]
+    UnknownInherit,
     #[error("Type mismatch: expected {expected}, found {found}")]
     TypeMismatch { expected: TypeName, found: TypeName },
     #[error("Can't convert {from} to {to}")]
@@ -28,6 +31,15 @@ pub enum InferError {
     UnknownFunction,
     #[error(transparent)]
     Other(#[from] anyhow::Error),
+}
+
+impl InferError {
+    fn span(self, span: &Span) -> SpannedError {
+        SpannedError {
+            span: span.clone(),
+            error: self,
+        }
+    }
 }
 
 /// An Error that also contains the span in the source.
@@ -151,12 +163,9 @@ impl Type {
     }
 }
 
-/// A constraint for some identifier.
-type Constraint = (Ident, Type);
-
 /// Context to save variables and their types.
 pub(crate) struct Context {
-    bindings: Vec<Vec<Constraint>>,
+    bindings: Vec<Vec<Identifier>>,
     depth: usize,
 }
 
@@ -169,16 +178,9 @@ impl Context {
     }
 
     /// Create a new function scope with all it's bindings.
-    pub(crate) fn push_scope(&mut self, bindings: Vec<usize>) {
-        let inserts = bindings
-            .into_iter()
-            .map(|name| {
-                let debrujin = self.depth;
-                self.depth += 1;
-                (Ident::new(name, debrujin, None), Type::Undefined)
-            })
-            .collect();
-        self.bindings.push(inserts);
+    pub(crate) fn push_scope(&mut self, bindings: Vec<&Identifier>) {
+        self.depth += bindings.len();
+        self.bindings.push(bindings);
     }
 
     /// Pop a function scope.
@@ -189,25 +191,21 @@ impl Context {
         }
     }
 
-    pub(crate) fn _insert(&mut self, ident: Ident, ty: Type) {
-        self.bindings.last_mut().unwrap().push((ident, ty));
+    pub(crate) fn insert(&mut self, ident: Vec<&Identifier>) {
+        self.bindings.last_mut().unwrap().extend(ident);
     }
 
     pub(crate) fn reintroduce(&mut self, debrujin: usize) -> anyhow::Result<()> {
-        let binding = self.lookup(debrujin).context("can't find")?.clone();
-        let ty = self.lookup_type(debrujin).context("can't find")?.clone();
-        self.bindings
-            .last_mut()
-            .unwrap()
-            .insert(0, (binding.clone(), ty.clone()));
+        let binding = self.lookup(debrujin).context("can't find")?;
+        self.bindings.last_mut().unwrap().insert(0, binding);
         Ok(())
     }
 
-    pub(crate) fn lookup_debrujin(&self, name: usize) -> Option<usize> {
+    pub(crate) fn lookup_by_name(&self, name: &str) -> Option<&Identifier> {
         for scope in self.bindings.iter().rev() {
-            for (n, _) in scope.iter().rev() {
+            for n in scope.iter().rev() {
                 if n.name == name {
-                    return Some(n.debrujin);
+                    return Some(n);
                 }
             }
         }
@@ -216,20 +214,20 @@ impl Context {
 
     pub(crate) fn lookup_type(&self, debrujin: usize) -> Option<&Type> {
         for scope in self.bindings.iter().rev() {
-            for (n, ty) in scope.iter().rev() {
+            for n in scope.iter().rev() {
                 if n.debrujin == debrujin {
-                    return Some(ty);
+                    return Some(n.get_type());
                 }
             }
         }
         None
     }
 
-    pub(crate) fn lookup(&self, debrujin: usize) -> Option<&Ident> {
+    pub(crate) fn lookup(&self, debrujin: usize) -> Option<&Identifier> {
         for scope in self.bindings.iter().rev() {
-            for (n, _) in scope.iter().rev() {
-                if n.debrujin == debrujin {
-                    return Some(n);
+            for ident in scope.iter().rev() {
+                if ident.debrujin == debrujin {
+                    return Some(ident);
                 }
             }
         }
@@ -245,13 +243,13 @@ impl Context {
 /// The name should be a debrujin index and the path is used for set accesses.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Ident {
-    name: usize,
+    name: String,
     debrujin: usize,
     path: Option<Vec<String>>,
 }
 
 impl Ident {
-    fn new(name: usize, debrujin: usize, path: Option<Vec<String>>) -> Self {
+    fn new(name: String, debrujin: usize, path: Option<Vec<String>>) -> Self {
         Self {
             name,
             debrujin,

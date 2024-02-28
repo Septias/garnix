@@ -1,35 +1,33 @@
 #![allow(unused)]
 use super::{
-    ast::Ast, Constraint, Context, InferError, InferResult, SpannedError, SpannedInferResult, Type,
-    TypeName,
+    ast::Ast, Context, InferError, InferResult, SpannedError, SpannedInferResult, Type, TypeName,
 };
-use crate::{ast::PatternElement, spanned_infer_error};
+use crate::{
+    ast::{Identifier, PatternElement},
+    spanned_infer_error,
+};
 use anyhow::Context as _;
+use itertools::{Either, Itertools};
 use logos::Span;
 use parser::ast::BinOp;
 use std::collections::HashMap;
 
 /// Lookup all bindings that are part of a `with`-expression and add them to the context.
-/// This does not create a new scope.
+/// This creates a new scope.
 fn introduce_set_bindigs(context: &mut Context, bindings: &Ast) -> InferResult<()> {
-    let attrs = bindings.as_attr_set()?;
-    for (name, _expr) in attrs {
-        context.reintroduce(*name);
-    }
+    let (bindings, inherit) = bindings.as_attr_set()?;
+    context.insert(bindings.keys().collect());
+    context.insert(lookup_inherits(&context, inherit)?);
     Ok(())
 }
 
 /// Arguments:
 /// - the function type
 /// - the arguments that should be supplied to the function in form of application(lhs, application(lhs, ..))
-fn reduce_function<'a>(
-    function: &'a Type,
-    arguments: &Ast,
-    constraints: &mut Vec<Constraint>,
-) -> Result<&'a Type, InferError> {
+fn reduce_function<'a>(function: &'a Type, arguments: &Ast) -> Result<&'a Type, InferError> {
     let (from, to) = function.as_function().context("can't unpack function")?;
 
-    // find out if this is a stacked function
+    /* // find out if this is a stacked function
     if matches!(to, Type::Function(_, _)) {
         // extract the last argument from the chain
         if let Ok((arg, _next)) = arguments.as_application() {
@@ -51,7 +49,8 @@ fn reduce_function<'a>(
             constraints.push((ident, from.clone()));
         }
         Ok(to)
-    }
+    } */
+    todo!()
 }
 
 /// Expect two types to be numerals.
@@ -108,13 +107,12 @@ fn hm(context: &mut Context, expr: &Ast) -> Result<Type, SpannedError> {
                         .into_ident()
                         .map_err(|err| SpannedError::from((span, err)))?;
                     let fun_type = context
-                        .lookup_type(fun.name)
+                        .lookup_type(fun.debrujin)
                         .ok_or(SpannedError::from((span, InferError::UnknownFunction)))?;
                     if let Some(_path) = fun.path {
                         todo!()
                     }
-                    let mut constraint = vec![];
-                    let typ = reduce_function(fun_type, rhs, &mut constraint)
+                    let typ = reduce_function(fun_type, rhs)
                         .map_err(|err| SpannedError::from((span, err)))?;
                     Ok(typ.clone())
                 }
@@ -207,6 +205,7 @@ fn hm(context: &mut Context, expr: &Ast) -> Result<Type, SpannedError> {
             attrs,
             is_recursive: _,
             span: _,
+            inherit: _,
         } => Ok(Set(attrs
             .iter()
             .map(|(_name, expr)| ("".to_string(), hm(context, expr).unwrap()))
@@ -218,17 +217,14 @@ fn hm(context: &mut Context, expr: &Ast) -> Result<Type, SpannedError> {
             inherit,
             span,
         } => {
-            context.push_scope(bindings.iter().map(|(name, _)| *name).collect());
-            for (name, expr) in bindings {
+            context.push_scope(bindings.iter().map(|(ident, _)| ident).collect());
+            for (ident, expr) in bindings {
                 let ty = hm(context, expr)?;
-                let debrujin = context.lookup_debrujin(*name).unwrap();
-                context.add_constraint(debrujin, ty);
+                ident.add_constraint(ty);
             }
-            if let Some(inherit) = inherit {
-                for name in inherit {
-                    context.reintroduce(*name).unwrap();
-                }
-            }
+            let ok = lookup_inherits(&context, inherit).map_err(|e| e.span(span))?;
+            // TODO: add error handling
+            context.insert(ok);
             let ty = hm(context, body)?;
             context.pop_scope();
             Ok(ty)
@@ -326,6 +322,20 @@ fn hm(context: &mut Context, expr: &Ast) -> Result<Type, SpannedError> {
         Ast::Null(_) => Ok(Null),
         Ast::Comment(_) | Ast::DocComment(_) | Ast::LineComment(_) => unimplemented!(),
     }
+}
+
+fn lookup_inherits<'a>(
+    context: &'a Context,
+    inherit: &[String],
+) -> InferResult<Vec<&'a Identifier>> {
+    let (ok, err): (Vec<_>, Vec<_>) = inherit
+        .iter()
+        .map(|e| context.lookup_by_name(e).ok_or(InferError::UnknownInherit))
+        .partition_map(|r| match r {
+            Ok(v) => Either::Left(v),
+            Err(v) => Either::Right(v),
+        });
+    Ok(ok)
 }
 
 /// Infer the type of an expression.

@@ -14,3 +14,4 @@ anyhow = "*"
 thiserror = "*"
 parser = { path = "../parser" }
 nom = "*"
+itertools = "*"
