@@ -14,7 +14,7 @@ use std::collections::HashMap;
 
 /// Lookup all bindings that are part of a `with`-expression and add them to the context.
 /// This creates a new scope.
-fn introduce_set_bindigs(context: &mut Context, bindings: &Ast) -> InferResult<()> {
+fn introduce_set_bindigs<'a>(context: &mut Context<'a>, bindings: &'a Ast) -> InferResult<()> {
     let (bindings, inherit) = bindings.as_attr_set()?;
     context.insert(bindings.keys().collect());
     context.insert(lookup_inherits(&context, inherit)?);
@@ -88,7 +88,7 @@ fn expect_bools(ty1: Type, ty2: Type, span: &Span) -> SpannedInferResult<Type> {
 }
 
 /// Infer the type of an expression.
-fn hm(context: &mut Context, expr: &Ast) -> Result<Type, SpannedError> {
+fn hm<'a>(context: &mut Context<'a>, expr: &'a Ast) -> Result<Type, SpannedError> {
     use Type::*;
     match expr {
         Ast::UnaryOp { rhs, .. } => hm(context, rhs),
@@ -227,7 +227,7 @@ fn hm(context: &mut Context, expr: &Ast) -> Result<Type, SpannedError> {
             context.insert(ok);
             let ty = hm(context, body)?;
             context.pop_scope();
-            Ok(ty)
+            Ok(Type::Undefined)
         }
         Ast::Lambda {
             arguments,
@@ -302,10 +302,14 @@ fn hm(context: &mut Context, expr: &Ast) -> Result<Type, SpannedError> {
             span: _,
             expr: _,
         } => todo!(),
-        Ast::With { set, body, span } => {
+        Ast::With {
+            box set,
+            body,
+            span,
+        } => {
             //context.push_scope();
-            introduce_set_bindigs(context, &set.as_ref().clone())
-                .map_err(|err| SpannedError::from((span, err)))?;
+            /* introduce_set_bindigs(context, &set.as_ref().clone())
+                .map_err(|err| SpannedError::from((span, err)))?; */
             hm(context, body)
         }
         Ast::Identifier(super::ast::Identifier { debrujin, .. }) => {
@@ -325,7 +329,7 @@ fn hm(context: &mut Context, expr: &Ast) -> Result<Type, SpannedError> {
 }
 
 fn lookup_inherits<'a>(
-    context: &'a Context,
+    context: &Context<'a>,
     inherit: &[String],
 ) -> InferResult<Vec<&'a Identifier>> {
     let (ok, err): (Vec<_>, Vec<_>) = inherit

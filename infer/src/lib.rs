@@ -164,12 +164,12 @@ impl Type {
 }
 
 /// Context to save variables and their types.
-pub(crate) struct Context {
-    bindings: Vec<Vec<Identifier>>,
+pub(crate) struct Context<'a> {
+    bindings: Vec<Vec<&'a Identifier>>,
     depth: usize,
 }
 
-impl Context {
+impl<'a> Context<'a> {
     pub(crate) fn new() -> Self {
         Self {
             bindings: vec![Vec::new()],
@@ -178,7 +178,7 @@ impl Context {
     }
 
     /// Create a new function scope with all it's bindings.
-    pub(crate) fn push_scope(&mut self, bindings: Vec<&Identifier>) {
+    pub(crate) fn push_scope(&mut self, bindings: Vec<&'a Identifier>) {
         self.depth += bindings.len();
         self.bindings.push(bindings);
     }
@@ -191,17 +191,11 @@ impl Context {
         }
     }
 
-    pub(crate) fn insert(&mut self, ident: Vec<&Identifier>) {
+    pub(crate) fn insert(&mut self, ident: Vec<&'a Identifier>) {
         self.bindings.last_mut().unwrap().extend(ident);
     }
 
-    pub(crate) fn reintroduce(&mut self, debrujin: usize) -> anyhow::Result<()> {
-        let binding = self.lookup(debrujin).context("can't find")?;
-        self.bindings.last_mut().unwrap().insert(0, binding);
-        Ok(())
-    }
-
-    pub(crate) fn lookup_by_name(&self, name: &str) -> Option<&Identifier> {
+    pub(crate) fn lookup_by_name(&self, name: &str) -> Option<&'a Identifier> {
         for scope in self.bindings.iter().rev() {
             for n in scope.iter().rev() {
                 if n.name == name {
