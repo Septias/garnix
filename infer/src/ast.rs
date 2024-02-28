@@ -396,7 +396,7 @@ impl Ast {
 
 /// Convert [ParserAst] to [Ast].
 /// Replace every occurence of an identifier with a number.
-fn transform_ast<'a>(value: ParserAst, cache: &mut Cache<'a>, source: &'a str) -> Ast {
+fn transform_ast<'a>(value: ParserAst, cache: &mut Cache, source: &'a str) -> Ast {
     use Ast::*;
     match value {
         ParserAst::UnaryOp { op, box rhs, span } => UnaryOp {
@@ -424,7 +424,7 @@ fn transform_ast<'a>(value: ParserAst, cache: &mut Cache<'a>, source: &'a str) -
             let attrs = attrs
                 .into_iter()
                 .map(|(name, expr)| {
-                    let ident = cache.lookup(&source[name], name.clone());
+                    let ident = cache.lookup(&source[name.clone()], name);
                     (ident, transform_ast(expr, cache, source))
                 })
                 .collect();
@@ -447,8 +447,8 @@ fn transform_ast<'a>(value: ParserAst, cache: &mut Cache<'a>, source: &'a str) -
             let bindings = bindings
                 .into_iter()
                 .map(|(span, expr)| {
-                    let ident = cache.lookup(&source[span], span.clone());
-                    cache.insert(&ident);
+                    let ident = cache.lookup(&source[span.clone()], span);
+                    cache.insert(ident.clone());
                     (ident, transform_ast(expr, cache, source))
                 })
                 .collect();
@@ -506,7 +506,7 @@ fn transform_ast<'a>(value: ParserAst, cache: &mut Cache<'a>, source: &'a str) -
         },
         ParserAst::Identifier(span) => {
             let ident = cache.lookup(&source[span.clone()], span.clone());
-            cache.insert(&ident);
+            cache.insert(ident.clone());
             Identifier(ident)
         }
 
@@ -530,12 +530,12 @@ fn transform_ast<'a>(value: ParserAst, cache: &mut Cache<'a>, source: &'a str) -
 }
 
 /// A cache which maps variable names to the numbers 0..n.
-struct Cache<'a> {
-    bindings: Vec<Vec<&'a Identifier>>,
+struct Cache {
+    bindings: Vec<Vec<Identifier>>,
     count: usize,
 }
 
-impl<'a> Cache<'a> {
+impl Cache {
     fn new() -> Self {
         Self {
             bindings: vec![],
@@ -548,12 +548,8 @@ impl<'a> Cache<'a> {
         let removed = self.bindings.pop();
     }
 
-    pub(crate) fn insert(&mut self, ident: &Identifier) {
+    pub(crate) fn insert(&mut self, ident: Identifier) {
         self.bindings.last_mut().unwrap().push(ident);
-    }
-
-    pub(crate) fn len(&self) -> usize {
-        self.count
     }
 
     pub(crate) fn lookup(&self, name: &str, span: Span) -> Identifier {
