@@ -7,7 +7,7 @@ use crate::{
     spanned_infer_error,
 };
 use anyhow::Context as _;
-use itertools::{Either, Itertools};
+use itertools::{fold, Either, Itertools};
 use logos::Span;
 use parser::ast::BinOp;
 use std::collections::HashMap;
@@ -235,43 +235,58 @@ fn hm<'a>(context: &mut Context<'a>, expr: &'a Ast) -> Result<Type, SpannedError
             arg_binding: _,
             span,
         } => {
-            /* context.push_lambda_scope();
+            let mut items = vec![];
             for patt in arguments {
                 for patt in &patt.patterns {
-                    match patt {
+                    items.push(match patt {
                         PatternElement::Identifier(name) => {
-                            let ty = context.lookup_type(name).ok_or(SpannedError {
+                            let ident = context.lookup_by_name(&name).ok_or(SpannedError {
                                 error: InferError::UnknownIdentifier,
                                 span: span.clone(),
                             })?;
-                            context.insert(*name, ty.clone());
+                            Ok(ident)
                         }
-                        PatternElement::DefaultIdentifier(name, default) => {
-                            let ty1 = context.lookup_type(name).cloned();
-                            let ty2 = hm(context, default)?;
+                        PatternElement::DefaultIdentifier(ident, default) => {
+                            let ty1 = context.lookup_by_name(&ident.name);
+                            let ty2 = hm(context, &default)?;
 
                             if let Some(ty1) = ty1 {
-                                if ty1 != ty2 {
-                                    return Err(SpannedError {
+                                if *ty1.get_type() != ty2 {
+                                    Err(SpannedError {
                                         error: InferError::TypeMismatch {
                                             expected: ty2.get_name(),
-                                            found: ty1.get_name(),
+                                            found: ty1.get_type().get_name(),
                                         },
                                         span: span.clone(),
-                                    });
+                                    })
+                                } else {
+                                    Ok(ty1)
                                 }
+                            } else {
+                                Ok(ident)
                             }
-
-                            context.insert(*name, ty2);
                         }
-                    }
+                    })
                 }
             }
+
+            let (mut ok, err): (Vec<_>, Vec<_>) = items.into_iter().partition_map(|r| match r {
+                Ok(v) => Either::Left(v),
+                Err(v) => Either::Right(v),
+            });
+
+            context.push_scope(ok.clone());
             let ty = hm(context, body)?;
             context.pop_scope();
-
-            // TODO: somehow create curry style functions here */
-            Ok(Function(Box::new(Undefined), Box::new(Type::Undefined)))
+            let first = ok
+                .pop()
+                .map(|i| i.get_type().clone())
+                .ok_or(InferError::TooFewArguments.span(span))?;
+            Ok(ok
+                .into_iter()
+                .fold(Function(Box::new(first), Box::new(ty)), |acc, elem| {
+                    Function(Box::new(elem.get_type().clone()), Box::new(acc))
+                }))
         }
         Ast::Conditional {
             condition,
@@ -309,7 +324,7 @@ fn hm<'a>(context: &mut Context<'a>, expr: &'a Ast) -> Result<Type, SpannedError
         } => {
             //context.push_scope();
             /* introduce_set_bindigs(context, &set.as_ref().clone())
-                .map_err(|err| SpannedError::from((span, err)))?; */
+            .map_err(|err| SpannedError::from((span, err)))?; */
             hm(context, body)
         }
         Ast::Identifier(super::ast::Identifier { debrujin, .. }) => {

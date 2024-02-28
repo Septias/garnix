@@ -29,6 +29,8 @@ pub enum InferError {
     UnexpectedAssertion,
     #[error("Unknown function call")]
     UnknownFunction,
+    #[error("Function has to accept at least one argument")]
+    TooFewArguments,
     #[error(transparent)]
     Other(#[from] anyhow::Error),
 }
@@ -240,14 +242,4 @@ pub struct Ident {
     name: String,
     debrujin: usize,
     path: Option<Vec<String>>,
-}
-
-impl Ident {
-    fn new(name: String, debrujin: usize, path: Option<Vec<String>>) -> Self {
-        Self {
-            name,
-            debrujin,
-            path,
-        }
-    }
 }

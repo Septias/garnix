@@ -1,6 +1,5 @@
-use crate::{ast, Type};
-
 use super::{helpers::fold_path, Ident, InferError, InferResult};
+use crate::Type;
 use core::str;
 use logos::Span;
 use parser::ast::{Ast as ParserAst, BinOp, BinOpDiscriminants, UnOp};
@@ -11,9 +10,9 @@ use strum_macros::{AsRefStr, Display, EnumDiscriminants};
 #[derive(Debug, Clone, PartialEq)]
 pub enum PatternElement {
     /// Pattern of the form `ident`
-    Identifier(usize),
+    Identifier(String),
     /// Pattern of the form `ident ? <default>`
-    DefaultIdentifier(usize, Ast),
+    DefaultIdentifier(Identifier, Ast),
 }
 
 /// A pattern.
@@ -34,7 +33,7 @@ pub struct Identifier {
 }
 
 impl Identifier {
-    pub fn add_constraint(&self, ty: Type) {
+    pub fn add_constraint(&self, _ty: Type) {
         todo!()
     }
 
@@ -82,7 +81,7 @@ pub enum Ast {
     Lambda {
         arguments: Vec<Pattern>,
         body: Box<Ast>,
-        arg_binding: Option<usize>,
+        arg_binding: Option<Identifier>,
         span: Span,
     },
 
@@ -532,14 +531,12 @@ fn transform_ast<'a>(value: ParserAst, cache: &mut Cache, source: &'a str) -> As
 /// A cache which maps variable names to the numbers 0..n.
 struct Cache {
     bindings: Vec<Vec<Identifier>>,
-    count: usize,
 }
 
 impl Cache {
     fn new() -> Self {
         Self {
             bindings: vec![],
-            count: 0,
         }
     }
 
