@@ -230,14 +230,38 @@ fn hm<'a>(context: &mut Context<'a>, expr: &'a Ast) -> Result<Type, SpannedError
         }
         Ast::AttrSet {
             attrs,
-            is_recursive: _,
-            span: _,
-            inherit: _,
-        } => Ok(Set(attrs
-            .iter()
-            .map(|(_name, expr)| ("".to_string(), hm(context, expr).unwrap()))
-            .collect::<HashMap<_, _>>())),
+            is_recursive: _, // TODO: handle recursiveness
+            span,
+            inherit,
+        } => {
+            let mut items: HashMap<_, _> = attrs
+                .iter()
+                .map(|(name, expr)| (name.name.to_string(), hm(context, expr).unwrap()))
+                .collect();
 
+            let (ok, err): (Vec<_>, Vec<_>) = inherit
+                .iter()
+                .map(|(name, range)| {
+                    Result::<_, SpannedError>::Ok((
+                        name.to_string(),
+                        context
+                            .lookup_by_name(name)
+                            .ok_or(InferError::UnknownIdentifier.span(range))?
+                            .get_type()
+                            .unwrap_or_default(),
+                    ))
+                })
+                .partition_map(|r| match r {
+                    Ok(v) => Either::Left(v),
+                    Err(v) => Either::Right(v),
+                });
+
+            if !err.is_empty() {
+                return Err(InferError::MultipleErrors(err).span(span));
+            }
+            items.extend(ok.into_iter());
+            Ok(Set(items))
+        }
         Ast::LetBinding {
             bindings,
             body,
