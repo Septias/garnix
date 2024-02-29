@@ -259,3 +259,12 @@ pub struct Ident {
     name: String,
     debrujin: usize,
 }
+
+/// Infer the type of an ast.
+/// Returns the final type as well as the ast which has been annotated with types.
+pub fn infer(source: &str) -> (Type, Ast) {
+    let ast = parser::parse(source).unwrap();
+    let ast = Ast::from_parser_ast(ast, &source);
+    let ty = hm::infer(&ast).unwrap();
+    (ty, ast)
+}

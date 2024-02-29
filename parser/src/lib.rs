@@ -16,17 +16,10 @@ use parser::PResult;
 #[cfg(test)]
 mod test;
 
-#[derive(Debug, Clone)]
-/// Result of parsing a String containing nix code.
-pub struct ParseResult {
-    pub ast: Ast,
-    pub source: String,
-}
-
 /// Parse a file containing Nix code.
-pub fn parse_file(path: &Path) -> anyhow::Result<ParseResult> {
+pub fn parse_file(path: &Path) -> anyhow::Result<Ast> {
     let source = read_to_string(path).expect("Failed to read file");
-    parse(source)
+    parse(&source)
 }
 
 /// Lex a string containing Nix code.
@@ -79,8 +72,8 @@ pub fn map_err<'a, T>(
 }
 
 /// Parse a string containing Nix code.
-pub fn parse(source: String) -> anyhow::Result<ParseResult> {
+pub fn parse(source: &str) -> anyhow::Result<Ast> {
     let tokens: Vec<(Token, std::ops::Range<usize>)> = lex(&source);
     let (_, ast) = map_err(parser::expr(NixTokens(&tokens)), &source)?;
-    Ok(ParseResult { ast, source })
+    Ok(ast)
 }

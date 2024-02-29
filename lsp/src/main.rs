@@ -12,16 +12,16 @@ use tower::ServiceBuilder;
 use tracing::Level;
 
 use infer::hm::infer;
-use parser::{parse, ParseResult};
+use parser::parse;
 
 fn load_file(st: &mut ServerState, uri: &Url) -> anyhow::Result<()> {
     let content = fs::read_to_string(uri.path()).unwrap();
-    let ParseResult { ast, source } = parse(content)?;
-    let ast = infer::Ast::from_parser_ast(ast, &source);
+    let ast = parse(&content)?;
+    let ast = infer::Ast::from_parser_ast(ast, &content);
     if let Err(e) = infer(&ast) {
         eprintln!("[Inference] Error: {:?}", e);
     };
-    st.files.insert(uri.as_str().to_string(), (ast, source));
+    st.files.insert(uri.as_str().to_string(), (ast, content));
     Ok(())
 }
 
