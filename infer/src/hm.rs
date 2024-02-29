@@ -24,17 +24,17 @@ fn introduce_set_bindigs<'a>(context: &mut Context<'a>, bindings: &'a Ast) -> In
 /// - the arguments that should be supplied to the function in form of application(lhs, application(lhs, ..))
 fn reduce_function<'a>(
     context: &mut Context<'a>,
-    function: &'a Type,
+    function: Type,
     arguments: &'a Ast,
-) -> SpannedInferResult<&'a Type> {
-    let (from, to) = function.as_function().expect("can't unpack function");
+) -> SpannedInferResult<Type> {
+    let (from, to) = function.to_function().expect("can't unpack function");
 
     // find out if this is a stacked function
     if matches!(to, Type::Function(_, _)) {
         // extract the last argument from the chain
         if let Ok((arg, next)) = arguments.as_application() {
             let ty = hm(context, arg)?;
-            if *from != ty {
+            if from != ty {
                 return Err(SpannedError {
                     error: InferError::TypeMismatch {
                         expected: from.get_name(),
@@ -58,12 +58,12 @@ fn reduce_function<'a>(
             Ok(ret)
         } else {
             // If there is no argument to apply, just return a partial function
-            Ok(function.as_function().expect("can't unpack' function").1)
+            Ok(from)
         }
     } else {
         let ty = hm(context, arguments)?;
 
-        if *from != ty {
+        if from != ty {
             return Err(SpannedError {
                 error: InferError::TypeMismatch {
                     expected: from.get_name(),
@@ -135,10 +135,10 @@ fn hm<'a>(context: &mut Context<'a>, expr: &'a Ast) -> Result<Type, SpannedError
             match op {
                 BinOp::Application => {
                     let fun = ty1
-                        .into_ident()
+                        .into_debrujin()
                         .map_err(|err| SpannedError::from((span, err)))?;
                     let fun_type = context
-                        .lookup_type(fun.debrujin)
+                        .lookup_type(fun)
                         .ok_or(SpannedError::from((span, InferError::UnknownFunction)))?;
                     let typ = reduce_function(context, fun_type, rhs)?;
                     Ok(typ.clone())
@@ -275,17 +275,18 @@ fn hm<'a>(context: &mut Context<'a>, expr: &'a Ast) -> Result<Type, SpannedError
                             let ty1 = context.lookup_by_name(&ident.name);
                             let ty2 = hm(context, &default)?;
 
-                            if let Some(ty1) = ty1 {
-                                if *ty1.get_type() != ty2 {
+                            if let Some(ident) = ty1 {
+                                let ty1 = ident.get_type().unwrap();
+                                if ty1 != ty2 {
                                     Err(SpannedError {
                                         error: InferError::TypeMismatch {
                                             expected: ty2.get_name(),
-                                            found: ty1.get_type().get_name(),
+                                            found: ty1.get_name(),
                                         },
                                         span: span.clone(),
                                     })
                                 } else {
-                                    Ok(ty1)
+                                    Ok(ident)
                                 }
                             } else {
                                 Ok(ident)
@@ -306,11 +307,12 @@ fn hm<'a>(context: &mut Context<'a>, expr: &'a Ast) -> Result<Type, SpannedError
             let first = ok
                 .pop()
                 .map(|i| i.get_type().clone())
+                .flatten()
                 .ok_or(InferError::TooFewArguments.span(span))?;
             Ok(ok
                 .into_iter()
                 .fold(Function(Box::new(first), Box::new(ty)), |acc, elem| {
-                    Function(Box::new(elem.get_type().clone()), Box::new(acc))
+                    Function(Box::new(elem.get_type().unwrap().clone()), Box::new(acc))
                 }))
         }
         Ast::Conditional {
@@ -354,7 +356,7 @@ fn hm<'a>(context: &mut Context<'a>, expr: &'a Ast) -> Result<Type, SpannedError
             ty
         }
         Ast::Identifier(super::ast::Identifier { debrujin, .. }) => {
-            Ok(context.lookup_type(*debrujin).cloned().unwrap_or(Undefined))
+            Ok(context.lookup_type(*debrujin).unwrap_or(Undefined))
         }
         Ast::List { exprs, span: _ } => Ok(Type::List(
             exprs.iter().flat_map(|ast| hm(context, ast)).collect(),

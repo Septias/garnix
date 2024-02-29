@@ -3,7 +3,11 @@ use crate::Type;
 use core::str;
 use logos::Span;
 use parser::ast::{Ast as ParserAst, BinOp, BinOpDiscriminants, UnOp};
-use std::collections::HashMap;
+use std::{
+    cell::RefCell,
+    collections::HashMap,
+    hash::{self, Hasher},
+};
 use strum_macros::{AsRefStr, Display, EnumDiscriminants};
 
 /// Part of a [Pattern].
@@ -24,25 +28,35 @@ pub struct Pattern {
     pub is_wildcard: bool,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Default, Debug, Clone, PartialEq, Eq)]
 /// An Identifier.
+/// TODO: is this Eq implemenation correct?
 pub struct Identifier {
     pub debrujin: usize,
     pub name: String,
     pub span: Span,
+    pub constraint: RefCell<Vec<Type>>,
+    pub ty: RefCell<Option<Type>>,
 }
 
 impl Identifier {
-    pub fn add_constraint(&self, _ty: Type) {
-        todo!()
+    pub fn add_constraint(&self, ty: Type) {
+        self.constraint.borrow_mut().push(ty);
     }
 
-    pub fn get_type(&self) -> &Type {
-        todo!()
+    pub fn get_type(&self) -> Option<Type> {
+        self.ty.borrow().clone()
     }
 
     pub fn get_constraints(&self) -> Vec<Type> {
-        todo!()
+        self.constraint.borrow().clone()
+    }
+}
+
+impl hash::Hash for Identifier {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.debrujin.hash(state);
+        self.name.hash(state);
     }
 }
 
@@ -549,6 +563,7 @@ impl Cache {
                         debrujin: n,
                         name: name.to_string(),
                         span,
+                        ..Default::default()
                     };
                 }
             }
@@ -557,6 +572,7 @@ impl Cache {
             debrujin: n,
             name: name.to_string(),
             span,
+            ..Default::default()
         }
     }
 }

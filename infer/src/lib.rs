@@ -99,7 +99,7 @@ pub(crate) fn spanned_infer_error<T>(
 }
 
 /// A nix language type.
-#[derive(Debug, Clone, PartialEq, Display, Default, EnumDiscriminants, EnumTryAs)]
+#[derive(Debug, Clone, PartialEq, Eq, Display, Default, EnumDiscriminants, EnumTryAs)]
 #[strum_discriminants(derive(AsRefStr, Display))]
 #[strum_discriminants(name(TypeName))]
 pub enum Type {
@@ -131,15 +131,23 @@ impl Type {
     }
 
     /// Try to convert this type to an identifier.
-    fn into_ident(self) -> InferResult<Ident> {
+    fn into_debrujin(self) -> InferResult<usize> {
         match self {
-            Type::Identifier(ident) => Ok(ident),
+            Type::Identifier(ident) => Ok(ident.debrujin),
             t => infer_error(TypeName::Identifier, t.get_name()),
         }
     }
 
     /// Try to convert this type to a function.
     fn as_function(&self) -> InferResult<(&Type, &Type)> {
+        match self {
+            Type::Function(box lhs, box rhs) => Ok((lhs, rhs)),
+            t => infer_error(TypeName::Function, t.get_name()),
+        }
+    }
+
+    /// Try to convert this type to a function.
+    fn to_function(self) -> InferResult<(Type, Type)> {
         match self {
             Type::Function(box lhs, box rhs) => Ok((lhs, rhs)),
             t => infer_error(TypeName::Function, t.get_name()),
@@ -226,11 +234,11 @@ impl<'a> Context<'a> {
     }
 
     /// Lookup an [Identifier]s [Type] by it's debrujin index.
-    pub(crate) fn lookup_type(&self, debrujin: usize) -> Option<&'a Type> {
+    pub(crate) fn lookup_type(&self, debrujin: usize) -> Option<Type> {
         for scope in self.bindings.iter().rev() {
             for n in scope.iter().rev() {
                 if n.debrujin == debrujin {
-                    return Some(n.get_type());
+                    return n.get_type();
                 }
             }
         }
@@ -252,7 +260,7 @@ impl<'a> Context<'a> {
 
 /// A single identifier.
 /// The name should be a debrujin index and the path is used for set accesses.
-#[derive(Debug, Clone, PartialEq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Ident {
     name: String,
     debrujin: usize,
