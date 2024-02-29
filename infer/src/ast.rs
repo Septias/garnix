@@ -13,18 +13,14 @@ use strum_macros::{AsRefStr, Display, EnumDiscriminants};
 /// Part of a [Pattern].
 #[derive(Debug, Clone, PartialEq)]
 pub enum PatternElement {
-    /// Pattern of the form `ident`
-    Identifier(String),
-    /// Pattern of the form `ident ? <default>`
+    Identifier(Identifier),
     DefaultIdentifier(Identifier, Ast),
 }
 
 /// A pattern.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Pattern {
-    /// A list of patterns
     pub patterns: Vec<PatternElement>,
-    /// Is widcard
     pub is_wildcard: bool,
 }
 
@@ -40,6 +36,16 @@ pub struct Identifier {
 }
 
 impl Identifier {
+    pub fn new(debrujin: usize, name: String, span: Span) -> Self {
+        Self {
+            debrujin,
+            name,
+            span,
+            constraint: RefCell::new(vec![]),
+            ty: RefCell::new(None),
+        }
+    }
+
     pub fn add_constraint(&self, ty: Type) {
         self.constraint.borrow_mut().push(ty);
     }
@@ -401,7 +407,7 @@ impl Ast {
 }
 
 /// Convert [ParserAst] to [Ast].
-/// Replace every occurence of an identifier with a number.
+/// Replace every occurence of an identifier with an [Identifier].
 fn transform_ast(value: ParserAst, cache: &mut Cache, source: &str) -> Ast {
     use Ast::*;
     match value {
@@ -430,7 +436,8 @@ fn transform_ast(value: ParserAst, cache: &mut Cache, source: &str) -> Ast {
             let attrs = attrs
                 .into_iter()
                 .map(|(name, expr)| {
-                    let ident = cache.lookup(&source[name.clone()], name);
+                    let ident = crate::Identifier::new(0, source[name.clone()].to_string(), name);
+                    // TODO: Add recursion here
                     (ident, transform_ast(expr, cache, source))
                 })
                 .collect();
@@ -450,36 +457,93 @@ fn transform_ast(value: ParserAst, cache: &mut Cache, source: &str) -> Ast {
             inherit,
             span,
         } => {
-            let bindings = bindings
+            let bindings: Vec<(crate::Identifier, Ast)> = bindings
                 .into_iter()
                 .map(|(span, expr)| {
-                    let ident = cache.lookup(&source[span.clone()], span);
-                    cache.insert(ident.clone());
+                    let ident = crate::Identifier::new(0, source[span.clone()].to_string(), span);
                     (ident, transform_ast(expr, cache, source))
                 })
                 .collect();
-            let inherit = inherit
-                .map(|inherit| {
-                    inherit
-                        .into_iter()
-                        .map(|name| (source[name.clone()].to_string(), name))
-                        .collect()
-                })
-                .unwrap_or_default();
+
+            let mut new = vec![];
+            let inherit = if let Some(inherit) = inherit {
+                let mut inherits = Vec::with_capacity(inherit.len());
+                for name in inherit {
+                    let name_name = &source[name.clone()];
+                    inherits.push((name_name.to_string(), name.clone()));
+                    // TODO: maybe this should only be lookup instead of lookup & create
+                    let identifier = cache.lookup(name_name, name.clone());
+                    new.push(identifier);
+                }
+                inherits
+            } else {
+                vec![]
+            };
+
+            new.extend(bindings.iter().map(|(ident, _)| ident.clone()));
+            let body = cache.with_scope(new, |cache| transform_ast(*body, cache, source));
+
             LetBinding {
                 bindings,
-                body: Box::new(transform_ast(*body, cache, source)),
+                body: Box::new(body),
                 inherit,
                 span,
             }
         }
         ParserAst::Lambda {
-            arguments: _,
-            body: _,
-            arg_binding: _,
-            span: _,
+            arguments,
+            body,
+            arg_binding,
+            span,
         } => {
-            todo!()
+            let mut idents = vec![];
+            let arguments = arguments
+                .into_iter()
+                .map(|pat| {
+                    let patterns = pat
+                        .patterns
+                        .into_iter()
+                        .map(|patt| match patt {
+                            parser::ast::PatternElement::Identifier(name) => {
+                                let ident = crate::Identifier::new(
+                                    0,
+                                    source[name.clone()].to_string(),
+                                    name,
+                                );
+                                idents.push(ident.clone());
+                                PatternElement::Identifier(ident)
+                            }
+                            parser::ast::PatternElement::DefaultIdentifier {
+                                identifier,
+                                span,
+                                ast,
+                            } => {
+                                let ident =
+                                    crate::Identifier::new(0, source[identifier].to_string(), span);
+                                idents.push(ident.clone());
+                                PatternElement::DefaultIdentifier(
+                                    ident,
+                                    transform_ast(ast, cache, source),
+                                )
+                            }
+                        })
+                        .collect();
+                    Pattern {
+                        patterns,
+                        is_wildcard: pat.is_wildcard,
+                    }
+                })
+                .collect();
+
+            let body = cache.with_scope(idents, |cache| transform_ast(*body, cache, source));
+
+            Lambda {
+                arguments,
+                body: Box::new(body),
+                arg_binding: arg_binding
+                    .map(|span| crate::Identifier::new(0, source[span.clone()].to_string(), span)), //TODO: reintroduce
+                span,
+            }
         }
         ParserAst::Conditional {
             box condition,
@@ -545,15 +609,25 @@ impl Cache {
         Self { bindings: vec![] }
     }
 
-    /// Pop a function scope.
-    pub(crate) fn pop_scope(&mut self) {
-        let _removed = self.bindings.pop();
-    }
-
+    /// Insert a new identifier into the current scope.
     pub(crate) fn insert(&mut self, ident: Identifier) {
         self.bindings.last_mut().unwrap().push(ident);
     }
 
+    /// Add the given scope and execute the given function.
+    pub(crate) fn with_scope<T>(
+        &mut self,
+        bindings: Vec<Identifier>,
+        f: impl FnOnce(&mut Self) -> T,
+    ) -> T {
+        self.bindings.push(bindings);
+        let ret = f(self);
+        self.bindings.pop();
+        ret
+    }
+
+    /// Lookup the given name all scopes.
+    /// Create a new Identifier if it does not exist.
     pub(crate) fn lookup(&self, name: &str, span: Span) -> Identifier {
         let mut n = 0;
         for scope in self.bindings.iter().rev() {
