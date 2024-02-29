@@ -244,15 +244,16 @@ fn hm<'a>(context: &mut Context<'a>, expr: &'a Ast) -> Result<Type, SpannedError
             inherit,
             span,
         } => {
-            context.push_scope(bindings.iter().map(|(ident, _)| ident).collect());
-            for (ident, expr) in bindings {
-                let ty = hm(context, expr)?;
-                ident.add_constraint(ty);
-            }
-            let ok = lookup_inherits(&context, inherit).map_err(|e| e.span(span))?;
-            // TODO: add error handling
-
-            context.with_scope(ok, |context| hm(context, body))
+            let mut inherits = lookup_inherits(&context, inherit).map_err(|e| e.span(span))?;
+            inherits.extend(bindings.iter().map(|(ident, _)| ident));
+            
+            context.with_scope(inherits, |context| {
+                for (ident, expr) in bindings {
+                    let ty = hm(context, expr)?;
+                    ident.add_constraint(ty);
+                }
+                hm(context, body)
+            })
         }
         Ast::Lambda {
             arguments,
