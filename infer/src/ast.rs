@@ -245,6 +245,7 @@ impl Ast {
     }
 
     /// Tries to convert the ast to a set.
+    #[allow(clippy::type_complexity)]
     pub fn as_attr_set(&self) -> InferResult<(&HashMap<Identifier, Ast>, &Vec<(String, Span)>)> {
         match self {
             Ast::AttrSet { attrs, inherit, .. } => Ok((attrs, inherit)),
@@ -401,7 +402,7 @@ impl Ast {
 
 /// Convert [ParserAst] to [Ast].
 /// Replace every occurence of an identifier with a number.
-fn transform_ast<'a>(value: ParserAst, cache: &mut Cache, source: &'a str) -> Ast {
+fn transform_ast(value: ParserAst, cache: &mut Cache, source: &str) -> Ast {
     use Ast::*;
     match value {
         ParserAst::UnaryOp { op, box rhs, span } => UnaryOp {
@@ -546,7 +547,7 @@ impl Cache {
 
     /// Pop a function scope.
     pub(crate) fn pop_scope(&mut self) {
-        let removed = self.bindings.pop();
+        let _removed = self.bindings.pop();
     }
 
     pub(crate) fn insert(&mut self, ident: Identifier) {

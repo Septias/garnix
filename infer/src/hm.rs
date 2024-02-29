@@ -15,7 +15,7 @@ use std::collections::HashMap;
 fn introduce_set_bindigs<'a>(context: &mut Context<'a>, bindings: &'a Ast) -> InferResult<()> {
     let (bindings, inherit) = bindings.as_attr_set()?;
     context.insert(bindings.keys().collect());
-    context.insert(lookup_inherits(&context, inherit)?);
+    context.insert(lookup_inherits(context, inherit)?);
     Ok(())
 }
 
@@ -27,7 +27,7 @@ fn reduce_function<'a>(
     function: Type,
     arguments: &'a Ast,
 ) -> SpannedInferResult<Type> {
-    let (from, to) = function.to_function().expect("can't unpack function");
+    let (from, to) = function.into_function().expect("can't unpack function");
 
     // find out if this is a stacked function
     if matches!(to, Type::Function(_, _)) {
@@ -244,9 +244,8 @@ fn hm<'a>(context: &mut Context<'a>, expr: &'a Ast) -> Result<Type, SpannedError
             inherit,
             span,
         } => {
-            let mut inherits = lookup_inherits(&context, inherit).map_err(|e| e.span(span))?;
+            let mut inherits = lookup_inherits(context, inherit).map_err(|e| e.span(span))?;
             inherits.extend(bindings.iter().map(|(ident, _)| ident));
-            
             context.with_scope(inherits, |context| {
                 for (ident, expr) in bindings {
                     let ty = hm(context, expr)?;
@@ -266,7 +265,7 @@ fn hm<'a>(context: &mut Context<'a>, expr: &'a Ast) -> Result<Type, SpannedError
                 for patt in &patt.patterns {
                     items.push(match patt {
                         PatternElement::Identifier(name) => {
-                            let ident = context.lookup_by_name(&name).ok_or(SpannedError {
+                            let ident = context.lookup_by_name(name).ok_or(SpannedError {
                                 error: InferError::UnknownIdentifier,
                                 span: span.clone(),
                             })?;
@@ -274,7 +273,7 @@ fn hm<'a>(context: &mut Context<'a>, expr: &'a Ast) -> Result<Type, SpannedError
                         }
                         PatternElement::DefaultIdentifier(ident, default) => {
                             let ty1 = context.lookup_by_name(&ident.name);
-                            let ty2 = hm(context, &default)?;
+                            let ty2 = hm(context, default)?;
 
                             if let Some(ident) = ty1 {
                                 let ty1 = ident.get_type().unwrap();
@@ -302,7 +301,7 @@ fn hm<'a>(context: &mut Context<'a>, expr: &'a Ast) -> Result<Type, SpannedError
                 Err(v) => Either::Right(v),
             });
 
-            if err.len() > 0 {
+            if !err.is_empty() {
                 return Err(InferError::MultipleErrors(err).span(span));
             }
 
@@ -311,8 +310,7 @@ fn hm<'a>(context: &mut Context<'a>, expr: &'a Ast) -> Result<Type, SpannedError
             context.pop_scope();
             let first = ok
                 .pop()
-                .map(|i| i.get_type().clone())
-                .flatten()
+                .and_then(|i| i.get_type().clone())
                 .ok_or(InferError::TooFewArguments.span(span))?;
             Ok(ok
                 .into_iter()
@@ -391,7 +389,7 @@ fn lookup_inherits<'a>(
             Ok(v) => Either::Left(v),
             Err(v) => Either::Right(v),
         });
-    if err.len() > 0 {
+    if !err.is_empty() {
         return Err(InferError::MultipleErrors(err));
     }
     Ok(ok)

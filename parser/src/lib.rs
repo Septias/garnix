@@ -62,13 +62,13 @@ pub fn map_err<'a, T>(
                             end: tokens.last().unwrap().1.end,
                         }
                     };
-                    let mut lines = format!("{}", &source[span])
+                    let mut lines = source[span]
                         .split('\n')
                         .map(|s| s.to_string())
                         .collect::<Vec<String>>();
-                    lines
-                        .get_mut(0)
-                        .map(|a| a.push_str(&format!(" <- {:?}", kind)));
+                    if let Some(a) = lines.get_mut(0) {
+                        a.push_str(&format!(" <- {:?}", kind))
+                    }
 
                     lines.join("\n")
                 })

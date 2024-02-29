@@ -141,15 +141,7 @@ impl Type {
     }
 
     /// Try to convert this type to a function.
-    fn as_function(&self) -> InferResult<(&Type, &Type)> {
-        match self {
-            Type::Function(box lhs, box rhs) => Ok((lhs, rhs)),
-            t => infer_error(TypeName::Function, t.get_name()),
-        }
-    }
-
-    /// Try to convert this type to a function.
-    fn to_function(self) -> InferResult<(Type, Type)> {
+    fn into_function(self) -> InferResult<(Type, Type)> {
         match self {
             Type::Function(box lhs, box rhs) => Ok((lhs, rhs)),
             t => infer_error(TypeName::Function, t.get_name()),

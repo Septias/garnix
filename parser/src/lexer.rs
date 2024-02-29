@@ -334,6 +334,7 @@ pub mod nom_interop {
     pub fn token<'a, Error: ParseError<NixTokens<'a>>>(
         c: Token,
     ) -> impl Fn(NixTokens<'a>) -> IResult<NixTokens<'a>, SpannedToken, Error> {
+        #[allow(clippy::blocks_in_conditions)]
         move |i: NixTokens<'_>| match (i).iter_elements().next().map(|t| {
             let b = discriminant(&t.0) == discriminant(&c);
             (t, b)
