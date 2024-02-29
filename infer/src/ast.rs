@@ -1,4 +1,4 @@
-use super::{helpers::fold_path, Ident, InferError, InferResult};
+use super::{helpers::fold_path, InferError, InferResult};
 use crate::Type;
 use core::str;
 use logos::Span;
@@ -145,27 +145,14 @@ impl Ast {
     }
 
     /// Tries to convert the ast to an [Identifier] and adds as many path elements as possible.
-    pub fn as_ident(&self) -> Result<Ident, InferError> {
+    pub fn last_debrujin(&self) -> Result<usize, InferError> {
         match self {
-            Ast::Identifier(Identifier { debrujin, name, .. }) => Ok(Ident {
-                name: name.to_string(),
-                debrujin: *debrujin,
-                path: None,
-            }),
+            Ast::Identifier(Identifier { debrujin, .. }) => Ok(*debrujin),
             Ast::BinaryOp {
                 op: BinOp::AttributeSelection,
-                lhs,
                 rhs,
-                span: _,
-            } => {
-                let mut path = vec![];
-                fold_path(rhs, &mut path)?;
-                Ok(Ident {
-                    name: lhs.to_identifier()?,
-                    debrujin: lhs.as_debrujin()?,
-                    path: Some(path),
-                })
-            }
+                ..
+            } => Ok(fold_path(rhs)?),
             e => Err(InferError::ConversionError {
                 from: e.as_ref().to_string(),
                 to: AstDiscriminants::Identifier.as_ref(),
@@ -227,7 +214,7 @@ impl Ast {
         }
     }
 
-    /// Tries to convert the ast to an identifier and then return the De Bruijn index.
+    /// Tries to convert the ast to an [Identifier] and then return the De Bruijn index.
     pub fn as_debrujin(&self) -> InferResult<usize> {
         match self {
             Ast::Identifier(Identifier { debrujin, .. }) => Ok(*debrujin),
@@ -535,9 +522,7 @@ struct Cache {
 
 impl Cache {
     fn new() -> Self {
-        Self {
-            bindings: vec![],
-        }
+        Self { bindings: vec![] }
     }
 
     /// Pop a function scope.

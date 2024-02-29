@@ -1,20 +1,26 @@
-use super::InferError;
-use crate::ast::Ast;
+use crate::{
+    ast::{self, Ast},
+    InferResult,
+};
+use anyhow::anyhow;
 use parser::ast::BinOp;
 
-/// Create the longest possible path access-path for this identifier.
-pub(crate) fn fold_path(ast: &Ast, path: &mut Vec<String>) -> Result<(), InferError> {
-    if let Ast::BinaryOp {
-        op,
-        lhs,
-        rhs,
-        span: _,
-    } = ast
-    {
-        if op == &BinOp::AttributeSelection {
-            fold_path(lhs, path)?;
-            path.push(rhs.to_identifier_string()?);
+/// Create the last debrujin index in an access chain.
+pub(crate) fn fold_path(ast: &Ast) -> InferResult<usize> {
+    match ast {
+        Ast::BinaryOp {
+            op,
+            lhs,
+            rhs,
+            span: _,
+        } => {
+            if op == &BinOp::AttributeSelection {
+                fold_path(rhs)
+            } else {
+                lhs.as_debrujin()
+            }
         }
+        Ast::Identifier(ast::Identifier { debrujin, .. }) => Ok(*debrujin),
+        _ => Err(anyhow!("Path error").into()),
     }
-    Ok(())
 }
