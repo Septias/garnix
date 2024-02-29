@@ -606,7 +606,7 @@ struct Cache {
 
 impl Cache {
     fn new() -> Self {
-        Self { bindings: vec![] }
+        Self { bindings: vec![vec![]] }
     }
 
     /// Insert a new identifier into the current scope.

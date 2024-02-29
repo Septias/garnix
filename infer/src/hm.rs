@@ -354,7 +354,7 @@ fn hm<'a>(context: &mut Context<'a>, expr: &'a Ast) -> Result<Type, SpannedError
             exprs.iter().flat_map(|ast| hm(context, ast)).collect(),
         )),
         Ast::NixString(_) => Ok(String),
-        Ast::NixPath(_) => Ok(String),
+        Ast::NixPath(_) => Ok(Path),
         Ast::Bool { val: _, span: _ } => Ok(Bool),
         Ast::Int { val: _, span: _ } => Ok(Int),
         Ast::Float { val: _, span: _ } => Ok(Float),

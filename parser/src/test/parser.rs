@@ -557,6 +557,11 @@ fn test_literal() {
     assert!(input.0.is_empty());
     assert_eq!(ast, Ast::NixString(Range { start: 0, end: 9 }));
 
+    let tokens = lex("./.");
+    let (input, ast) = literal(NixTokens(&tokens)).unwrap();
+    assert!(input.0.is_empty());
+    assert_eq!(ast, Ast::NixPath(Range { start: 0, end: 3 }));
+
     let tokens = lex("./files/pictures");
     let (input, ast) = literal(NixTokens(&tokens)).unwrap();
     assert!(input.0.is_empty());

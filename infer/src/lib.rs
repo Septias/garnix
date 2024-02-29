@@ -2,7 +2,7 @@
 use ast::Identifier;
 use core::str;
 use logos::Span;
-use std::collections::HashMap;
+use std::{collections::HashMap, fmt};
 use strum::EnumTryAs;
 use strum_macros::{AsRefStr, Display, EnumDiscriminants};
 use thiserror::Error;
@@ -11,6 +11,9 @@ pub mod ast;
 pub mod helpers;
 pub mod hm;
 pub use ast::Ast;
+
+#[cfg(test)]
+mod tests;
 
 /// An error that occured during type inference.
 #[derive(Debug, Error)]
@@ -128,7 +131,6 @@ pub enum Type {
     Function(Box<Type>, Box<Type>),
     Union(Box<Type>, Box<Type>),
     Set(HashMap<String, Type>),
-    Var(String),
     #[default]
     Default,
 }
@@ -174,7 +176,6 @@ impl Type {
             Type::Function(_, _) => TypeName::Function,
             Type::Union(_, _) => TypeName::Union,
             Type::Set(_) => TypeName::Set,
-            Type::Var(_) => TypeName::Var,
             Type::Default => TypeName::Default,
         }
     }
