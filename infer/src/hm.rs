@@ -1,9 +1,7 @@
-use super::{
-    ast::Ast, Context, InferError, InferResult, SpannedError, SpannedInferResult, Type, TypeName,
-};
 use crate::{
-    ast::{Identifier, PatternElement},
-    spanned_infer_error,
+    ast::{Ast, Identifier, PatternElement},
+    spanned_infer_error, Context, InferError, InferResult, SpannedError, SpannedInferResult, Type,
+    TypeName,
 };
 use itertools::{Either, Itertools};
 use logos::Span;
@@ -288,55 +286,22 @@ fn hm<'a>(context: &mut Context<'a>, expr: &'a Ast) -> Result<Type, SpannedError
             for patt in arguments {
                 for patt in &patt.patterns {
                     items.push(match patt {
-                        PatternElement::Identifier(name) => {
-                            let ident = context.lookup_by_name(name).ok_or(SpannedError {
-                                error: InferError::UnknownIdentifier,
-                                span: span.clone(),
-                            })?;
-                            Ok(ident)
-                        }
+                        PatternElement::Identifier(ident) => ident,
                         PatternElement::DefaultIdentifier(ident, default) => {
-                            let ty1 = context.lookup_by_name(&ident.name);
                             let ty2 = hm(context, default)?;
-
-                            if let Some(ident) = ty1 {
-                                let ty1 = ident.get_type().unwrap();
-                                if ty1 != ty2 {
-                                    Err(SpannedError {
-                                        error: InferError::TypeMismatch {
-                                            expected: ty2.get_name(),
-                                            found: ty1.get_name(),
-                                        },
-                                        span: span.clone(),
-                                    })
-                                } else {
-                                    Ok(ident)
-                                }
-                            } else {
-                                Ok(ident)
-                            }
+                            ident.add_constraint(ty2.clone());
+                            ident
                         }
                     })
                 }
             }
 
-            let (mut ok, err): (Vec<_>, Vec<_>) = items.into_iter().partition_map(|r| match r {
-                Ok(v) => Either::Left(v),
-                Err(v) => Either::Right(v),
-            });
-
-            if !err.is_empty() {
-                return Err(InferError::MultipleErrors(err).span(span));
-            }
-
-            context.push_scope(ok.clone());
-            let ty = hm(context, body)?;
-            context.pop_scope();
-            let first = ok
+            let ty = context.with_scope(items.clone(), |context| hm(context, body))?;
+            let first = items
                 .pop()
                 .and_then(|i| i.get_type().clone())
                 .ok_or(InferError::TooFewArguments.span(span))?;
-            Ok(ok
+            Ok(items
                 .into_iter()
                 .fold(Function(Box::new(first), Box::new(ty)), |acc, elem| {
                     Function(Box::new(elem.get_type().unwrap().clone()), Box::new(acc))
