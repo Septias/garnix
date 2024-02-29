@@ -5,7 +5,6 @@ use crate::{
     ast::{Identifier, PatternElement},
     spanned_infer_error,
 };
-use anyhow::Context as _;
 use itertools::{Either, Itertools};
 use logos::Span;
 use parser::ast::BinOp;
@@ -23,33 +22,66 @@ fn introduce_set_bindigs<'a>(context: &mut Context<'a>, bindings: &'a Ast) -> In
 /// Arguments:
 /// - the function type
 /// - the arguments that should be supplied to the function in form of application(lhs, application(lhs, ..))
-fn reduce_function<'a>(function: &'a Type, arguments: &Ast) -> Result<&'a Type, InferError> {
-    let (from, to) = function.as_function().context("can't unpack function")?;
+fn reduce_function<'a>(
+    context: &mut Context<'a>,
+    function: &'a Type,
+    arguments: &'a Ast,
+) -> SpannedInferResult<&'a Type> {
+    let (from, to) = function.as_function().expect("can't unpack function");
 
-    /* // find out if this is a stacked function
+    // find out if this is a stacked function
     if matches!(to, Type::Function(_, _)) {
         // extract the last argument from the chain
-        if let Ok((arg, _next)) = arguments.as_application() {
-            // further reduce the function
-            let ret = reduce_function(to, arguments, constraints)?;
-
-            // if it is an identifier we can formulate a constraint
-            if let Ok(ident) = arg.as_ident() {
-                constraints.push((ident, ret.clone()));
+        if let Ok((arg, next)) = arguments.as_application() {
+            let ty = hm(context, arg)?;
+            if *from != ty {
+                return Err(SpannedError {
+                    error: InferError::TypeMismatch {
+                        expected: from.get_name(),
+                        found: ty.get_name(),
+                    },
+                    span: arg.get_span().clone(),
+                });
             }
 
+            // further reduce the function
+            let ret = reduce_function(context, to, next)?;
+
+            // if it is an identifier we can formulate a constraint
+            if let Ok(debrujin) = arg.as_debrujin() {
+                let identi = context.lookup(debrujin).ok_or(SpannedError {
+                    error: InferError::UnknownIdentifier,
+                    span: arg.get_span().clone(),
+                })?;
+                identi.add_constraint(from.clone())
+            }
             Ok(ret)
         } else {
             // If there is no argument to apply, just return a partial function
-            Ok(function.as_function().context("can't unpack' function")?.1)
+            Ok(function.as_function().expect("can't unpack' function").1)
         }
     } else {
-        if let Ok(ident) = arguments.as_ident() {
-            constraints.push((ident, from.clone()));
+        let ty = hm(context, arguments)?;
+
+        if *from != ty {
+            return Err(SpannedError {
+                error: InferError::TypeMismatch {
+                    expected: from.get_name(),
+                    found: ty.get_name(),
+                },
+                span: arguments.get_span().clone(),
+            });
+        }
+
+        if let Ok(debrujin) = arguments.as_debrujin() {
+            let identi = context.lookup(debrujin).ok_or(SpannedError {
+                error: InferError::UnknownIdentifier,
+                span: arguments.get_span().clone(),
+            })?;
+            identi.add_constraint(from.clone())
         }
         Ok(to)
-    } */
-    todo!()
+    }
 }
 
 /// Expect two types to be numerals.
@@ -108,11 +140,7 @@ fn hm<'a>(context: &mut Context<'a>, expr: &'a Ast) -> Result<Type, SpannedError
                     let fun_type = context
                         .lookup_type(fun.debrujin)
                         .ok_or(SpannedError::from((span, InferError::UnknownFunction)))?;
-                    if let Some(_path) = fun.path {
-                        todo!()
-                    }
-                    let typ = reduce_function(fun_type, rhs)
-                        .map_err(|err| SpannedError::from((span, err)))?;
+                    let typ = reduce_function(context, fun_type, rhs)?;
                     Ok(typ.clone())
                 }
                 BinOp::ListConcat => {

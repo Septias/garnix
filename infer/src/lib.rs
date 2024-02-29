@@ -222,7 +222,7 @@ impl<'a> Context<'a> {
     }
 
     /// Lookup an [Identifier]s [Type] by it's debrujin index.
-    pub(crate) fn lookup_type(&self, debrujin: usize) -> Option<&Type> {
+    pub(crate) fn lookup_type(&self, debrujin: usize) -> Option<&'a Type> {
         for scope in self.bindings.iter().rev() {
             for n in scope.iter().rev() {
                 if n.debrujin == debrujin {
@@ -252,5 +252,4 @@ impl<'a> Context<'a> {
 pub struct Ident {
     name: String,
     debrujin: usize,
-    path: Option<Vec<String>>,
 }
