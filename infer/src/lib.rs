@@ -47,10 +47,20 @@ impl InferError {
 }
 
 /// An Error that also contains the span in the source.
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub struct SpannedError {
     pub span: Span,
     pub error: InferError,
+}
+
+impl fmt::Display for SpannedError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{} at [{}, {}]",
+            self.error, self.span.start, self.span.end
+        )
+    }
 }
 
 /// [InferResult] with a [Span] attached.
@@ -262,9 +272,9 @@ pub struct Ident {
 
 /// Infer the type of an ast.
 /// Returns the final type as well as the ast which has been annotated with types.
-pub fn infer(source: &str) -> (Type, Ast) {
-    let ast = parser::parse(source).unwrap();
+pub fn infer(source: &str) -> anyhow::Result<(Type, Ast)> {
+    let ast = parser::parse(source)?;
     let ast = Ast::from_parser_ast(ast, &source);
-    let ty = hm::infer(&ast).unwrap();
-    (ty, ast)
+    let ty = hm::infer(&ast)?;
+    Ok((ty, ast))
 }
