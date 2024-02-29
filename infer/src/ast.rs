@@ -83,7 +83,7 @@ pub enum Ast {
     AttrSet {
         attrs: HashMap<Identifier, Ast>,
         is_recursive: bool,
-        inherit: Vec<String>,
+        inherit: Vec<(String, Span)>,
         span: Span,
     },
 
@@ -91,7 +91,7 @@ pub enum Ast {
     LetBinding {
         bindings: Vec<(Identifier, Ast)>,
         body: Box<Ast>,
-        inherit: Vec<String>,
+        inherit: Vec<(String, Span)>,
         span: Span,
     },
 
@@ -245,7 +245,7 @@ impl Ast {
     }
 
     /// Tries to convert the ast to a set.
-    pub fn as_attr_set(&self) -> InferResult<(&HashMap<Identifier, Ast>, &Vec<String>)> {
+    pub fn as_attr_set(&self) -> InferResult<(&HashMap<Identifier, Ast>, &Vec<(String, Span)>)> {
         match self {
             Ast::AttrSet { attrs, inherit, .. } => Ok((attrs, inherit)),
             e => Err(InferError::ConversionError {
@@ -438,7 +438,7 @@ fn transform_ast<'a>(value: ParserAst, cache: &mut Cache, source: &'a str) -> As
                 is_recursive,
                 inherit: inherit
                     .into_iter()
-                    .map(|inherit| source[inherit].to_string())
+                    .map(|inherit| (source[inherit.clone()].to_string(), inherit))
                     .collect(),
                 span,
             }
@@ -461,7 +461,7 @@ fn transform_ast<'a>(value: ParserAst, cache: &mut Cache, source: &'a str) -> As
                 .map(|inherit| {
                     inherit
                         .into_iter()
-                        .map(|name| source[name].to_string())
+                        .map(|name| (source[name.clone()].to_string(), name))
                         .collect()
                 })
                 .unwrap_or_default();

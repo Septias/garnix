@@ -31,6 +31,8 @@ pub enum InferError {
     UnknownFunction,
     #[error("Function has to accept at least one argument")]
     TooFewArguments,
+    #[error("Multiple")]
+    MultipleErrors(Vec<SpannedError>),
     #[error(transparent)]
     Other(#[from] anyhow::Error),
 }

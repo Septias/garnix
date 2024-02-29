@@ -301,6 +301,10 @@ fn hm<'a>(context: &mut Context<'a>, expr: &'a Ast) -> Result<Type, SpannedError
                 Err(v) => Either::Right(v),
             });
 
+            if err.len() > 0 {
+                return Err(InferError::MultipleErrors(err).span(span));
+            }
+
             context.push_scope(ok.clone());
             let ty = hm(context, body)?;
             context.pop_scope();
@@ -373,15 +377,22 @@ fn hm<'a>(context: &mut Context<'a>, expr: &'a Ast) -> Result<Type, SpannedError
 
 fn lookup_inherits<'a>(
     context: &Context<'a>,
-    inherit: &[String],
+    inherit: &[(String, Span)],
 ) -> InferResult<Vec<&'a Identifier>> {
     let (ok, err): (Vec<_>, Vec<_>) = inherit
         .iter()
-        .map(|e| context.lookup_by_name(e).ok_or(InferError::UnknownInherit))
+        .map(|(inherit, span)| {
+            context
+                .lookup_by_name(inherit)
+                .ok_or(InferError::UnknownInherit.span(span))
+        })
         .partition_map(|r| match r {
             Ok(v) => Either::Left(v),
             Err(v) => Either::Right(v),
         });
+    if err.len() > 0 {
+        return Err(InferError::MultipleErrors(err));
+    }
     Ok(ok)
 }
 

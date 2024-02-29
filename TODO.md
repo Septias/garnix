@@ -16,7 +16,7 @@
 - Add macros for span
 - `Result<T, InferError>.span(span)`
 - Add `with_scope`
-
+- Move Inhertits (source[name], name) -> (name, source[name])
 
 ## TODO 01.03
 - Inferenz
