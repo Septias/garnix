@@ -10,6 +10,7 @@ use thiserror::Error;
 pub mod ast;
 pub mod helpers;
 pub mod hm;
+pub use ast::Ast;
 
 /// An error that occured during type inference.
 #[derive(Debug, Error)]
@@ -50,7 +51,10 @@ pub struct SpannedError {
     pub error: InferError,
 }
 
+/// [InferResult] with a [Span] attached.
 pub type SpannedInferResult<T> = Result<T, SpannedError>;
+
+/// Type infercence result.
 pub type InferResult<T> = Result<T, InferError>;
 
 impl From<(Span, TypeName, TypeName)> for SpannedError {
@@ -77,17 +81,17 @@ impl From<(&Span, InferError)> for SpannedError {
     }
 }
 
-/// Create an infer error.
-pub(crate) fn infer_error<T>(expected: TypeName, found: TypeName) -> Result<T, InferError> {
+/// Create an infer error [InferResult].
+pub(crate) fn infer_error<T>(expected: TypeName, found: TypeName) -> InferResult<T> {
     Err(InferError::TypeMismatch { expected, found })
 }
 
-/// Create a spaned infer error.
+/// Create a spanned [SpannedInferResult].
 pub(crate) fn spanned_infer_error<T>(
     expected: TypeName,
     found: TypeName,
     span: &Span,
-) -> Result<T, SpannedError> {
+) -> SpannedInferResult<T> {
     Err(SpannedError {
         error: InferError::TypeMismatch { expected, found },
         span: span.clone(),

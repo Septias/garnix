@@ -384,6 +384,7 @@ fn lookup_inherits<'a>(
 }
 
 /// Infer the type of an expression.
+/// Insert constraints for all [Identifier]s on the way.
 pub fn infer(expr: &Ast) -> SpannedInferResult<Type> {
     let mut context = Context::new();
     hm(&mut context, expr)

@@ -1,77 +1,88 @@
-use std::collections::HashMap;
-use std::ops::Range;
-use std::{fs, ops::ControlFlow};
-
-use async_lsp::client_monitor::ClientProcessMonitorLayer;
-use async_lsp::concurrency::ConcurrencyLayer;
-use async_lsp::panic::CatchUnwindLayer;
-use async_lsp::router::Router;
-use async_lsp::server::LifecycleLayer;
-use async_lsp::tracing::TracingLayer;
-use async_lsp::ClientSocket;
+use async_lsp::{
+    client_monitor::ClientProcessMonitorLayer, concurrency::ConcurrencyLayer,
+    panic::CatchUnwindLayer, router::Router, server::LifecycleLayer, tracing::TracingLayer,
+    ClientSocket,
+};
 use lsp_types::{
     notification, request, Hover, HoverContents, HoverProviderCapability, InitializeResult,
-    MarkedString, ServerCapabilities, Url,
+    MarkedString, Position, ServerCapabilities, Url,
 };
-use parser::ast::Ast;
-use parser::parse;
+use std::{collections::HashMap, fs, ops::ControlFlow};
 use tower::ServiceBuilder;
 use tracing::Level;
 
-fn map_idents(input: &Ast, source: &str, map: &mut Vec<(Range<usize>, String)>) {
-    match input {
-        Ast::AttrSet { attrs, .. } => {
-            for (_, v) in attrs {
-                map_idents(v, source, map);
-            }
-            if let Some((range, _)) = attrs.first() {
-                map.push((
-                    range.clone(),
-                    format!(
-                        "{{{}}}",
-                        attrs
-                            .iter()
-                            .map(|(k, _)| source[k.clone()].to_string())
-                            .collect::<Vec<_>>()
-                            .join(", ")
-                    ),
-                ));
-            }
-        }
-        Ast::LetBinding { bindings, body, .. } => {
-            for (k, v) in bindings {
-                map_idents(v, source, map);
-                map.push((k.clone(), v.as_ref().to_string()));
-            }
-            map_idents(body, source, map);
-        }
-
-        e @ Ast::NixPath(span)
-        | e @ Ast::Comment(span)
-        | e @ Ast::DocComment(span)
-        | e @ Ast::LineComment(span)
-        | e @ Ast::Identifier(span)
-        | e @ Ast::NixString(span) => {
-            map.push((span.clone(), source[e.as_span()].to_string()));
-        }
-
-        _ => {}
-    };
-}
+use infer::hm::infer;
+use parser::{parse, ParseResult};
 
 fn load_file(st: &mut ServerState, uri: &Url) -> anyhow::Result<()> {
     let content = fs::read_to_string(uri.path()).unwrap();
-    let ast = parse(content)?;
-    let mut map = Vec::new();
-    eprintln!("Opened file: {}", uri);
-    map_idents(&ast.ast, &ast.source, &mut map);
-    st.files.insert(uri.as_str().to_string(), map);
+    let ParseResult { ast, source } = parse(content)?;
+    let ast = infer::Ast::from_parser_ast(ast, &source);
+    if let Err(e) = infer(&ast) {
+        eprintln!("[Inference] Error: {:?}", e);
+    };
+    st.files.insert(uri.as_str().to_string(), (ast, source));
     Ok(())
+}
+
+fn to_lsp_range(span: &parser::Span, source: &str) -> lsp_types::Range {
+    let mut start = 0;
+    let mut line = 0;
+    source
+        .lines()
+        .take_while(|source_line| {
+            let new = start + source_line.len();
+            if new < span.start {
+                start = new;
+                line += 1;
+                true
+            } else {
+                false
+            }
+        })
+        .for_each(|_| ());
+
+    lsp_types::Range {
+        start: Position {
+            line,
+            character: (span.start - start) as u32,
+        },
+        end: Position {
+            line,
+            character: (span.end - start) as u32,
+        },
+    }
+}
+
+fn _from_lsp_range(range: &lsp_types::Range, source: &str) -> parser::Span {
+    let start_offset = source
+        .lines()
+        .take(range.start.line as usize)
+        .fold(0, |acc, b| acc + b.len());
+
+    let end_offset = source
+        .lines()
+        .take(range.end.line as usize)
+        .fold(0, |acc, b| acc + b.len());
+
+    parser::Span {
+        start: start_offset + range.start.character as usize,
+        end: end_offset + range.end.character as usize,
+    }
+}
+
+fn from_lsp_position(pos: Position, source: &str) -> usize {
+    let start_offset = source
+        .lines()
+        .take(pos.line as usize)
+        .fold(0, |acc, b| acc + b.len());
+
+    start_offset + pos.character as usize
 }
 
 struct ServerState {
     _client: ClientSocket,
-    files: HashMap<String, Vec<(Range<usize>, String)>>,
+    files: HashMap<String, (infer::Ast, String)>,
 }
 
 #[tokio::main(flavor = "current_thread")]
@@ -94,39 +105,44 @@ async fn main() {
                 })
             })
             .request::<request::HoverRequest, _>(|st, a| {
-                let map = st
+                let ast = st
                     .files
                     .get(a.text_document_position_params.text_document.uri.as_str());
 
-                let ret = if let Some(map) = map {
-                    let t = map
-                        .iter()
-                        .find(|(range, _)| {
-                            range.contains(
-                                &(a.text_document_position_params.position.character as usize),
-                            )
-                        })
-                        .map(|(_, str)| str)
-                        .cloned();
+                let ret = if let Some((ast, source)) = ast {
+                    let info = (move || {
+                        let position =
+                            from_lsp_position(a.text_document_position_params.position, source);
+                        let node = ast.get_node_at(position)?;
 
-                    Ok(Some(Hover {
-                        contents: HoverContents::Scalar(MarkedString::String(format!(
-                            "Hovering: {:?} which is: {}",
-                            a.text_document_position_params.position,
-                            t.unwrap_or("None".to_string())
-                        ))),
-                        range: None,
+                        let name = node.as_ref();
+                        let constraints = node
+                            .get_identifier()
+                            .ok()
+                            .map(|ident| ident.get_constraints());
+                        let ty = node.get_identifier().ok().map(|ident| ident.get_type());
+
+                        let mut ret = format!("Node: `{:?}`\n", name);
+                        if let Some(constraints) = constraints {
+                            ret.push_str(&format!("Constraints: `{:?}`\n", constraints));
+                        }
+                        if let Some(ty) = ty {
+                            ret.push_str(&format!("Type: `{:?}`\n", ty));
+                        }
+
+                        Some((ret, ast.get_span()))
+                    })();
+
+                    Ok(info.map(|(info, span)| Hover {
+                        contents: HoverContents::Scalar(MarkedString::String(info)),
+                        range: Some(to_lsp_range(span, source)),
                     }))
                 } else {
                     load_file(st, &a.text_document_position_params.text_document.uri).ok();
-                    eprintln!(
-                        "file was not loaded: {}",
-                        a.text_document_position_params.text_document.uri.as_str()
-                    );
-                    eprintln!("loaded: {:?}", st.files);
+                    eprintln!("loaded file: {:?}", st.files);
                     Ok(Some(Hover {
                         contents: HoverContents::Scalar(MarkedString::String(format!(
-                            "file not loaded {}",
+                            "file not yet read {}",
                             a.text_document_position_params.text_document.uri
                         ))),
                         range: None,

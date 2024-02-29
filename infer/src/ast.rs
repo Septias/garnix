@@ -40,6 +40,10 @@ impl Identifier {
     pub fn get_type(&self) -> &Type {
         todo!()
     }
+
+    pub fn get_constraints(&self) -> Vec<Type> {
+        todo!()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, AsRefStr, EnumDiscriminants)]
@@ -139,9 +143,9 @@ pub enum Ast {
 
 impl Ast {
     /// Convert a parser ast to an infer ast.
-    pub fn from_parser_ast(value: ParserAst, source: String) -> Self {
+    pub fn from_parser_ast(value: ParserAst, source: &str) -> Self {
         let mut vars = Cache::new();
-        transform_ast(value, &mut vars, &source)
+        transform_ast(value, &mut vars, source)
     }
 
     /// Tries to convert the ast to an [Identifier] and adds as many path elements as possible.
@@ -194,7 +198,7 @@ impl Ast {
     }
 
     /// Tries to convert the ast to an identifier and then return name as string.
-    pub fn to_identifier_string(&self) -> InferResult<String> {
+    pub fn as_identifier_str(&self) -> InferResult<String> {
         match self {
             Ast::Identifier(Identifier { name, .. }) => Ok(name.to_string()),
             e => Err(InferError::ConversionError {
@@ -204,9 +208,10 @@ impl Ast {
         }
     }
 
-    pub fn to_identifier(&self) -> InferResult<String> {
+    /// TODO: remove
+    pub fn get_identifier(&self) -> InferResult<&Identifier> {
         match self {
-            Ast::Identifier(Identifier { name, .. }) => Ok(name.clone()),
+            Ast::Identifier(ident) => Ok(ident),
             e => Err(InferError::ConversionError {
                 from: e.as_ref().to_string(),
                 to: AstDiscriminants::Identifier.as_ref(),

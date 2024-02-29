@@ -4,11 +4,12 @@ use std::{fs::read_to_string, path::Path};
 
 use ast::Ast;
 use lexer::{NixTokens, Token};
-use logos::{Logos, Span};
+use logos::Logos;
 
 pub mod ast;
 pub mod lexer;
 pub mod parser;
+pub use logos::Span;
 
 use parser::PResult;
 
