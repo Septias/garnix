@@ -1,6 +1,7 @@
 use crate::{infer, Type};
 use std::collections::HashMap;
 use Type::*;
+
 #[test]
 fn test_primitve() {
     let source = "{}";
@@ -21,7 +22,10 @@ fn test_primitve() {
 
     let source = "{ x = true; y = false;}";
     let (ty, _) = infer(source).unwrap();
-    assert_eq!(ty, Set([("x".to_string(), Bool), ("y".to_string(), Bool)].into()));
+    assert_eq!(
+        ty,
+        Set([("x".to_string(), Bool), ("y".to_string(), Bool)].into())
+    );
 
     let source = "{ x = ./.;}";
     let (ty, _) = infer(source).unwrap();
@@ -49,4 +53,21 @@ fn test_primitve() {
     let source = r#"if true then 1 else "hi";"#;
     let (ty, _) = infer(source).unwrap();
     assert_eq!(ty, Union(Box::new(Int), Box::new(String)));
+}
+
+#[test]
+fn test_inherit() {
+    let source = "let x = 1; in {inherit x;};";
+    let (ty, _) = infer(source).unwrap();
+    assert_eq!(ty, Set([("x".to_string(), Int)].into()));
+}
+
+#[test]
+fn test_with() {
+    let source = "let x = {y = 1;}; in with x; {z = y;};";
+    let (ty, _) = infer(source).unwrap();
+    assert_eq!(
+        ty,
+        Set([("x".to_string(), Int), ("y".to_string(), Int)].into())
+    );
 }

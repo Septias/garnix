@@ -31,6 +31,7 @@
   let_in2 = let a = a + 1; b = 1; in {y = x ; inherit x; c = a + b;};
   let_in3 = let a = x: {inherit setfun;}; in a;
   let_in4 = let inherit x; in {};
+  z = let x = {y = 1;}; in with x; [y];
 in {
   inherit setfun setIdentFn bracketing ifs ifxlamba string stringMulti t x set setInherit application let_in2;
   inherit let_in let_in3 assertion;

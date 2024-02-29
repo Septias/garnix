@@ -46,12 +46,16 @@ impl Identifier {
         }
     }
 
-    pub fn add_constraint(&self, ty: Type) {
-        self.constraint.borrow_mut().push(ty);
+    pub fn set_type(&self, ty: Type) {
+        *self.ty.borrow_mut() = Some(ty);
     }
 
     pub fn get_type(&self) -> Option<Type> {
         self.ty.borrow().clone()
+    }
+
+    pub fn add_constraint(&self, ty: Type) {
+        self.constraint.borrow_mut().push(ty);
     }
 
     pub fn get_constraints(&self) -> Vec<Type> {
@@ -606,7 +610,9 @@ struct Cache {
 
 impl Cache {
     fn new() -> Self {
-        Self { bindings: vec![vec![]] }
+        Self {
+            bindings: vec![vec![]],
+        }
     }
 
     /// Insert a new identifier into the current scope.

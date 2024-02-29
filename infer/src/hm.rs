@@ -271,7 +271,7 @@ fn hm<'a>(context: &mut Context<'a>, expr: &'a Ast) -> Result<Type, SpannedError
             context.with_scope(inherits, |context| {
                 for (ident, expr) in bindings {
                     let ty = hm(context, expr)?;
-                    ident.add_constraint(ty);
+                    ident.set_type(ty);
                 }
                 hm(context, body)
             })
