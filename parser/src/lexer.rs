@@ -104,7 +104,7 @@ pub enum Token {
     ListConcat,
 
     // Paths
-    #[regex("(./|~/|/)[a-zA-Z/.]+")]
+    #[regex("(./|~/|/)([a-zA-Z.]+/?)+")]
     Path,
 
     // Patterns
