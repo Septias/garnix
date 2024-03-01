@@ -154,3 +154,41 @@ async fn main() {
 
     server.run_buffered(stdin, stdout).await.unwrap();
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_to_lsp_range() {
+        let source = "aaaaaa\nbeeeeeee\nceeeeee";
+        assert_eq!(
+            to_lsp_range(&parser::Span { start: 11, end: 13 }, source),
+            lsp_types::Range {
+                start: Position {
+                    line: 2,
+                    character: 5
+                },
+                end: Position {
+                    line: 2,
+                    character: 7
+                }
+            }
+        );
+    }
+
+    #[test]
+    fn test_from_lsp_position() {
+        let source = "aaaaaa\nbeeeeeee\nceeeeee";
+        assert_eq!(
+            from_lsp_position(
+                Position {
+                    line: 1,
+                    character: 5
+                },
+                source
+            ),
+            12
+        );
+    }
+}
