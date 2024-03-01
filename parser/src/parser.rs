@@ -300,7 +300,7 @@ pub(crate) fn with(input: NixTokens<'_>) -> PResult<'_, Ast> {
 }
 
 pub(crate) fn atom(input: NixTokens<'_>) -> PResult<'_, Ast> {
-    alt((let_binding, conditional, set, literal, ident))(input)
+    alt((let_binding, conditional, set, list, literal, ident))(input)
 }
 
 pub(crate) fn list(input: NixTokens<'_>) -> PResult<'_, Ast> {
@@ -322,7 +322,6 @@ pub(crate) fn expr(input: NixTokens<'_>) -> PResult<'_, Ast> {
                 opt(with),
                 alt((
                     lambda,
-                    set,
                     assert,
                     let_binding,
                     |input| prett_parsing(input, 0, Token::Semi),
@@ -350,6 +349,7 @@ pub(crate) fn expr(input: NixTokens<'_>) -> PResult<'_, Ast> {
 const ILLEGAL: [Token; 7] = [RBrace, In, Let, Rec, Token::With, Token::Else, Token::Then];
 
 pub(crate) fn prett_parsing(mut input: NixTokens<'_>, min_bp: u8, eof: Token) -> PResult<'_, Ast> {
+    #[cfg(test)]
     println!("input: {:?}", input);
     let (mut input, mut lhs) = match input
         .peek()
@@ -368,16 +368,13 @@ pub(crate) fn prett_parsing(mut input: NixTokens<'_>, min_bp: u8, eof: Token) ->
         | Token::MultiString
         | Token::SingleString
         | Token::Null
+        | Token::LBracket
         | Token::Integer(_)
         | Token::Float(_)
         | Text => atom(input)?,
 
         Token::Comment | Token::DocComment | Token::LineComment => {
             unimplemented!("Comments are not yet implemented")
-        }
-        Token::LBracket => {
-            let (new_input, lhs) = list(input)?;
-            (new_input, lhs)
         }
 
         Token::LParen => {
@@ -420,8 +417,7 @@ pub(crate) fn prett_parsing(mut input: NixTokens<'_>, min_bp: u8, eof: Token) ->
             )
         }
 
-        e => {
-            println!("unexpected token: {:?}", e);
+        _ => {
             return Err(nom::Err::Error(VerboseError::from_error_kind(
                 input,
                 nom::error::ErrorKind::Tag,
