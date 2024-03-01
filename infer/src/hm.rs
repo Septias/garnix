@@ -9,12 +9,26 @@ use parser::ast::BinOp;
 use std::collections::HashMap;
 
 /// Lookup all bindings that are part of a `with`-expression and add them to the context.
-/// This creates a new scope.
-fn introduce_set_bindigs<'a>(context: &mut Context<'a>, bindings: &'a Ast) -> InferResult<()> {
-    let (bindings, inherit) = bindings.as_attr_set()?;
-    context.insert(bindings.keys().collect());
-    context.insert(lookup_inherits(context, inherit)?);
-    Ok(())
+fn introduce_set_bindigs<'a>(
+    context: &Context<'a>,
+    bindings: &'a Ast,
+) -> InferResult<Vec<&'a Identifier>> {
+    let binds = match bindings {
+        Ast::AttrSet { attrs, inherit, .. } => {
+            let mut binds = lookup_inherits(context, inherit)?;
+            binds.extend(attrs.keys());
+            binds
+        }
+        Ast::Identifier(ident) => {
+            // TODO: actually insert bindings from this set
+            let ident = context
+                .lookup(ident.debrujin)
+                .ok_or(InferError::UnknownIdentifier)?;
+            vec![ident]
+        }
+        _ => panic!(),
+    };
+    Ok(binds)
 }
 
 /// Arguments:
@@ -83,7 +97,7 @@ fn reduce_function<'a>(
 }
 
 /// Expect two types to be numerals.
-fn expect_numerals(ty1: Type, ty2: Type, span: &Span) -> SpannedInferResult<Type> {
+fn expect_numerals(ty1: Type, ty2: Type, span1: &Span, span2: &Span) -> SpannedInferResult<Type> {
     use Type::*;
     if ty1 == Int {
         if ty2 == Int {
@@ -91,16 +105,16 @@ fn expect_numerals(ty1: Type, ty2: Type, span: &Span) -> SpannedInferResult<Type
         } else if ty2 == Float {
             Ok(Float)
         } else {
-            spanned_infer_error(TypeName::Int, ty2.get_name(), span)
+            spanned_infer_error(Number.get_name(), ty2.get_name(), span2)
         }
     } else if ty1 == Float {
         if ty2 == Int || ty2 == Float {
             Ok(Float)
         } else {
-            spanned_infer_error(TypeName::Float, ty2.get_name(), span)
+            spanned_infer_error(TypeName::Number, ty2.get_name(), span2)
         }
     } else {
-        spanned_infer_error(Number.get_name(), ty1.get_name(), span)
+        spanned_infer_error(Number.get_name(), ty1.get_name(), span1)
     }
 }
 
@@ -124,10 +138,31 @@ fn hm<'a>(context: &mut Context<'a>, expr: &'a Ast) -> Result<Type, SpannedError
         Ast::BinaryOp {
             op,
             lhs,
-            box rhs,
+            rhs,
             span,
         } => {
             let ty1 = hm(context, lhs)?;
+
+            if op == &BinOp::HasAttribute {
+                if let Set(bindings) = ty1 {
+                    if let Ok(ident) = rhs.get_identifier() {
+                        return Ok(if bindings.get(&ident.name).is_some() {
+                            Bool
+                        } else {
+                            Null
+                        });
+                    } else {
+                        return spanned_infer_error(
+                            TypeName::Identifier,
+                            hm(context, rhs)?.get_name(),
+                            span,
+                        );
+                    }
+                } else {
+                    return spanned_infer_error(TypeName::Set, ty1.get_name(), span);
+                }
+            }
+
             let ty2 = hm(context, rhs)?;
 
             match op {
@@ -150,9 +185,9 @@ fn hm<'a>(context: &mut Context<'a>, expr: &'a Ast) -> Result<Type, SpannedError
                         .map_err(|err| SpannedError::from((span, err)))?;
                     Ok(Type::List([lhs, rhs].concat()))
                 }
-                BinOp::Mul => expect_numerals(ty1, ty2, span),
-                BinOp::Div => expect_numerals(ty1, ty2, span),
-                BinOp::Sub => expect_numerals(ty1, ty2, span),
+                BinOp::Mul => expect_numerals(ty1, ty2, lhs.get_span(), rhs.get_span()),
+                BinOp::Div => expect_numerals(ty1, ty2, lhs.get_span(), rhs.get_span()),
+                BinOp::Sub => expect_numerals(ty1, ty2, lhs.get_span(), rhs.get_span()),
                 BinOp::Add => {
                     if ty1 == String && ty2 == String {
                         Ok(String)
@@ -163,7 +198,7 @@ fn hm<'a>(context: &mut Context<'a>, expr: &'a Ast) -> Result<Type, SpannedError
                     } else if ty1 == Path && ty2 == Path {
                         Ok(Path)
                     } else {
-                        expect_numerals(ty1, ty2, span)
+                        expect_numerals(ty1, ty2, lhs.get_span(), rhs.get_span())
                     }
                 }
                 BinOp::Update => {
@@ -178,21 +213,7 @@ fn hm<'a>(context: &mut Context<'a>, expr: &'a Ast) -> Result<Type, SpannedError
                         spanned_infer_error(TypeName::Set, ty1.get_name(), span)
                     }
                 }
-                BinOp::HasAttribute => {
-                    if let Set(bindings) = ty1 {
-                        if let Identifier(ident) = ty2 {
-                            if bindings.get(&ident.name.to_string()).is_some() {
-                                Ok(Bool)
-                            } else {
-                                Ok(Null)
-                            }
-                        } else {
-                            spanned_infer_error(TypeName::Identifier, ty2.get_name(), span)
-                        }
-                    } else {
-                        spanned_infer_error(TypeName::Set, ty1.get_name(), span)
-                    }
-                }
+                BinOp::HasAttribute => panic!(),
                 BinOp::AttributeSelection => {
                     if let Set(bindings) = ty1 {
                         if let Identifier(ident) = ty2 {
@@ -215,11 +236,13 @@ fn hm<'a>(context: &mut Context<'a>, expr: &'a Ast) -> Result<Type, SpannedError
                         Ok(ty1)
                     }
                 }
-                BinOp::LessThan => expect_numerals(ty1, ty2, span),
-                BinOp::LessThanEqual => expect_numerals(ty1, ty2, span),
-                BinOp::GreaterThan => expect_numerals(ty1, ty2, span),
-                BinOp::GreaterThanEqual => expect_numerals(ty1, ty2, span),
-                BinOp::Equal => expect_numerals(ty1, ty2, span),
+                BinOp::LessThan => expect_numerals(ty1, ty2, lhs.get_span(), rhs.get_span()),
+                BinOp::LessThanEqual => expect_numerals(ty1, ty2, lhs.get_span(), rhs.get_span()),
+                BinOp::GreaterThan => expect_numerals(ty1, ty2, lhs.get_span(), rhs.get_span()),
+                BinOp::GreaterThanEqual => {
+                    expect_numerals(ty1, ty2, lhs.get_span(), rhs.get_span())
+                }
+                BinOp::Equal => expect_numerals(ty1, ty2, lhs.get_span(), rhs.get_span()),
                 BinOp::NotEqual => expect_bools(ty1, ty2, span),
                 BinOp::And => expect_bools(ty1, ty2, span),
                 BinOp::Or => expect_bools(ty1, ty2, span),
@@ -232,7 +255,7 @@ fn hm<'a>(context: &mut Context<'a>, expr: &'a Ast) -> Result<Type, SpannedError
             span,
             inherit,
         } => {
-            let mut items: HashMap<_, _> = attrs
+            let mut attrs: HashMap<_, _> = attrs
                 .iter()
                 .map(|(name, expr)| (name.name.to_string(), hm(context, expr).unwrap()))
                 .collect();
@@ -257,8 +280,8 @@ fn hm<'a>(context: &mut Context<'a>, expr: &'a Ast) -> Result<Type, SpannedError
             if !err.is_empty() {
                 return Err(InferError::MultipleErrors(err).span(span));
             }
-            items.extend(ok.into_iter());
-            Ok(Set(items))
+            attrs.extend(ok.into_iter());
+            Ok(Set(attrs))
         }
         Ast::LetBinding {
             bindings,
@@ -299,8 +322,10 @@ fn hm<'a>(context: &mut Context<'a>, expr: &'a Ast) -> Result<Type, SpannedError
             let ty = context.with_scope(items.clone(), |context| hm(context, body))?;
             let first = items
                 .pop()
-                .and_then(|i| i.get_type().clone())
-                .ok_or(InferError::TooFewArguments.span(span))?;
+                .ok_or(InferError::TooFewArguments.span(span))?
+                .get_type()
+                .unwrap_or_default()
+                .clone();
             Ok(items
                 .into_iter()
                 .fold(Function(Box::new(first), Box::new(ty)), |acc, elem| {
@@ -332,19 +357,23 @@ fn hm<'a>(context: &mut Context<'a>, expr: &'a Ast) -> Result<Type, SpannedError
             }
         }
         Ast::Assertion {
-            condition: _,
+            condition,
             span: _,
-            expr: _,
-        } => todo!(),
+            expr,
+        } => {
+            hm(context, &condition)?;
+            hm(context, expr)
+        }
         Ast::With {
-            box set,
+            set,
             body,
             span,
         } => {
-            context.push_scope(vec![]);
-            introduce_set_bindigs(context, set).map_err(|err| SpannedError::from((span, err)))?;
-            let ty = hm(context, body);
-            context.pop_scope();
+            let ty = context.with_scope(
+                introduce_set_bindigs(context, set)
+                    .map_err(|err| SpannedError::from((span, err)))?,
+                |context| hm(context, body),
+            );
             ty
         }
         Ast::Identifier(super::ast::Identifier { debrujin, .. }) => {
