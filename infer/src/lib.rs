@@ -42,6 +42,36 @@ pub enum InferError {
     Other(#[from] anyhow::Error),
 }
 
+impl PartialEq for InferError {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (
+                Self::TypeMismatch {
+                    expected: l_expected,
+                    found: l_found,
+                },
+                Self::TypeMismatch {
+                    expected: r_expected,
+                    found: r_found,
+                },
+            ) => l_expected == r_expected && l_found == r_found,
+            (
+                Self::ConversionError {
+                    from: l_from,
+                    to: l_to,
+                },
+                Self::ConversionError {
+                    from: r_from,
+                    to: r_to,
+                },
+            ) => l_from == r_from && l_to == r_to,
+            (Self::MultipleErrors(l0), Self::MultipleErrors(r0)) => l0 == r0,
+            (Self::Other(l0), Self::Other(r0)) => l0.to_string() == r0.to_string(),
+            _ => core::mem::discriminant(self) == core::mem::discriminant(other),
+        }
+    }
+}
+
 impl InferError {
     fn span(self, span: &Span) -> SpannedError {
         SpannedError {
@@ -52,7 +82,7 @@ impl InferError {
 }
 
 /// An Error that also contains the span in the source.
-#[derive(Debug, Error)]
+#[derive(Debug, Error, PartialEq)]
 pub struct SpannedError {
     pub span: Span,
     pub error: InferError,
@@ -159,11 +189,6 @@ impl<'a> Context<'a> {
         t
     }
 
-    /// Insert a list of [Identifier] into the current scope.
-    pub(crate) fn insert(&mut self, ident: Vec<&'a Identifier>) {
-        self.bindings.last_mut().unwrap().extend(ident);
-    }
-
     /// Lookup an [Identifier] by it's name.
     pub(crate) fn lookup_by_name(&self, name: &str) -> Option<&'a Identifier> {
         for scope in self.bindings.iter().rev() {
@@ -177,7 +202,7 @@ impl<'a> Context<'a> {
     }
 
     /// Lookup an [Identifier]s [Type] by it's debrujin index.
-    pub(crate) fn lookup_type(&self, debrujin: usize) -> Option<Type> {
+    pub(crate) fn lookup_type(&self, mut debrujin: usize) -> Option<Type> {
         for scope in self.bindings.iter().rev() {
             for n in scope.iter().rev() {
                 if n.debrujin == debrujin {
@@ -189,7 +214,7 @@ impl<'a> Context<'a> {
     }
 
     /// Lookup an [Identifier] by it's debrujin index.
-    pub(crate) fn lookup(&self, debrujin: usize) -> Option<&Identifier> {
+    pub(crate) fn lookup(&self, debrujin: usize) -> Option<&'a Identifier> {
         for scope in self.bindings.iter().rev() {
             for ident in scope.iter().rev() {
                 if ident.debrujin == debrujin {
@@ -203,8 +228,8 @@ impl<'a> Context<'a> {
 
 /// Infer the type of an ast.
 /// Returns the final type as well as the ast which has been annotated with types.
-pub fn infer(source: &str) -> anyhow::Result<(Type, Ast)> {
-    let ast = parser::parse(source)?;
+pub fn infer(source: &str) -> SpannedInferResult<(Type, Ast)> {
+    let ast = parser::parse(source).map_err(|e| InferError::from(e).span(&Span::default()))?;
     let ast = Ast::from_parser_ast(ast, &source);
     let ty = infer::infer(&ast)?;
     Ok((ty, ast))
