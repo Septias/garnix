@@ -322,9 +322,9 @@ pub(crate) fn expr(input: NixTokens<'_>) -> PResult<'_, Ast> {
                 opt(with),
                 alt((
                     lambda,
+                    |input| prett_parsing(input, 0, Token::Semi),
                     assert,
                     let_binding,
-                    |input| prett_parsing(input, 0, Token::Semi),
                     literal,
                     ident,
                 )),

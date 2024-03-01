@@ -18,6 +18,7 @@ fn load_file(st: &mut ServerState, uri: &Url) -> anyhow::Result<()> {
     let content = fs::read_to_string(uri.path()).unwrap();
     let ast = parse(&content)?;
     let ast = infer::Ast::from_parser_ast(ast, &content);
+    eprintln!("ast: {:#?}", ast);
     if let Err(e) = infer(&ast) {
         eprintln!("[Inference] Error: {:?}", e);
     };
@@ -75,8 +76,7 @@ fn from_lsp_position(pos: Position, source: &str) -> usize {
     let start_offset = source
         .lines()
         .take(pos.line as usize)
-        .fold(0, |acc, b| acc + b.len());
-
+        .fold(0, |acc, b| acc + b.len() + 1);
     start_offset + pos.character as usize
 }
 
@@ -139,7 +139,7 @@ async fn main() {
                     }))
                 } else {
                     load_file(st, &a.text_document_position_params.text_document.uri).ok();
-                    eprintln!("loaded file: {:?}", st.files);
+                    eprintln!("loaded files: {:?}", st.files.keys());
                     Ok(Some(Hover {
                         contents: HoverContents::Scalar(MarkedString::String(format!(
                             "file not yet read {}",
@@ -195,4 +195,42 @@ async fn main() {
     );
 
     server.run_buffered(stdin, stdout).await.unwrap();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_to_lsp_range() {
+        let source = "aaaaaa\nbeeeeeee\nceeeeee";
+        assert_eq!(
+            to_lsp_range(&parser::Span { start: 11, end: 13 }, source),
+            lsp_types::Range {
+                start: Position {
+                    line: 2,
+                    character: 5
+                },
+                end: Position {
+                    line: 2,
+                    character: 7
+                }
+            }
+        );
+    }
+
+    #[test]
+    fn test_from_lsp_position() {
+        let source = "aaaaaa\nbeeeeeee\nceeeeee";
+        assert_eq!(
+            from_lsp_position(
+                Position {
+                    line: 1,
+                    character: 5
+                },
+                source
+            ),
+            12
+        );
+    }
 }
