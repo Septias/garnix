@@ -14,7 +14,7 @@ use tower::ServiceBuilder;
 use tracing::Level;
 use utils::*;
 
-use infer::hm::infer;
+use infer::infer::infer;
 use parser::parse;
 
 mod utils;

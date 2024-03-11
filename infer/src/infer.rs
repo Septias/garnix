@@ -1,7 +1,8 @@
 use crate::{
     ast::{Ast, Identifier, PatternElement},
-    infer_error, spanned_infer_error, Context, InferError, InferResult, SpannedError,
-    SpannedInferResult, Type, TypeName,
+    spanned_infer_error,
+    types::{SimpleType, Type, Var},
+    Context, InferError, InferResult, SpannedError, SpannedInferResult, TypeName,
 };
 use itertools::{Either, Itertools};
 use logos::Span;
@@ -15,73 +16,6 @@ fn introduce_set_bindigs<'a>(context: &mut Context<'a>, bindings: &'a Ast) -> In
     context.insert(bindings.keys().collect());
     context.insert(lookup_inherits(context, inherit)?);
     Ok(())
-}
-
-/// Arguments:
-/// - the function type
-/// - the arguments that should be supplied to the function in form of application(lhs, application(lhs, ..))
-fn reduce_function<'a>(
-    context: &mut Context<'a>,
-    function: Type,
-    arguments: &'a Ast,
-) -> SpannedInferResult<Type> {
-    let (from, to) = function.into_function().expect("can't unpack function");
-
-    // find out if this is a stacked function
-    if matches!(to, Type::Function(_, _)) {
-        // extract the last argument from the chain
-        if let Ok((arg, next)) = arguments.as_application() {
-            let ty = type_term(context, arg)?;
-            if from != ty {
-                return Err(SpannedError {
-                    error: InferError::TypeMismatch {
-                        expected: from.get_name(),
-                        found: ty.get_name(),
-                    },
-                    span: arg.get_span().clone(),
-                });
-            }
-
-            // further reduce the function
-            let ret = reduce_function(context, to, next)?;
-
-            // if it is an identifier we can formulate a constraint
-            // TODO: should we do this?
-            /* if let Ok(debrujin) = arguments.as_debrujin() {
-                let identi = context.lookup(debrujin).ok_or(SpannedError {
-                    error: InferError::UnknownIdentifier,
-                    span: arguments.get_span().clone(),
-                })?;
-                identi.add_constraint(from.clone())
-            } */
-            Ok(ret)
-        } else {
-            // If there is no argument to apply, just return a partial function
-            Ok(from)
-        }
-    } else {
-        let ty = type_term(context, arguments)?;
-
-        if from != ty {
-            return Err(SpannedError {
-                error: InferError::TypeMismatch {
-                    expected: from.get_name(),
-                    found: ty.get_name(),
-                },
-                span: arguments.get_span().clone(),
-            });
-        }
-
-        // TODO: should we do this?
-        /* if let Ok(debrujin) = arguments.as_debrujin() {
-            let identi = context.lookup(debrujin).ok_or(SpannedError {
-                error: InferError::UnknownIdentifier,
-                span: arguments.get_span().clone(),
-            })?;
-            identi.add_constraint(from.clone())
-        } */
-        Ok(to)
-    }
 }
 
 /// Lookup inherits from the context and return the ones that existed.
@@ -106,58 +40,146 @@ fn lookup_inherits<'a>(
     Ok(ok)
 }
 
-fn constrain(lhs: Type, rhs: Type, cache: &mut HashSet<(Type, Type)>) -> InferResult<()> {
-    if cache.contains(&(lhs.clone(), rhs.clone())) {
+fn constrain(lhs: &Type, rhs: &Type, cache: &mut HashSet<(Type, Type)>) -> InferResult<()> {
+    if lhs == rhs {
         return Ok(());
-    } else {
-        cache.insert((lhs.clone(), rhs.clone()));
     }
 
-    use Type::*;
+    let lhs_rhs = (lhs, rhs);
+
     match (lhs, rhs) {
-        ty @ (Primitive(p1), Primitive(p2)) => {
-            if p1 != p2 {
-                Err(InferError::TypeMismatch {
-                    expected: ty.0.get_name(),
-                    found: ty.1.get_name(),
-                })
-            } else {
-                Ok(())
+        (Type::Var(..), _) | (_, Type::Var(..)) => {
+            if cache.contains(&lhs_rhs) {
+                return Ok(());
+            }
+            cache.insert(lhs_rhs);
+        }
+        _ => (),
+    }
+
+    match (lhs, rhs) {
+        (Type::Function(l0, r0), Type::Function(l1, r1)) => {
+            constrain(l1, l0, cache)?;
+            constrain(r0, r1, cache)?;
+        }
+        (Type::Record(fs0), Type::Record(fs1)) => {
+            for (n1, t1) in fs1 {
+                match fs0.iter().find(|(n0, _)| *n0 == n1) {
+                    Some((_, t0)) => constrain(t0, t1, cache)?,
+                    None => return Err(InferError::MissingRecordField { field: n1.clone() }),
+                }
             }
         }
-        (Identifier(l), Identifier(r)) => {
-            
+        (Type::Var(lhs), rhs) if rhs.level() <= lhs.level => {
+            lhs.upper_bounds.push(rhs.clone());
+            for lower_bound in &lhs.lower_bounds {
+                constrain(lower_bound, rhs, cache)?;
+            }
+        }
+        (lhs, Type::Var(rhs)) if lhs.level() <= rhs.level => {
+            rhs.lower_bounds.push(lhs.clone());
+            for upper_bound in &rhs.upper_bounds {
+                constrain(lhs, upper_bound, cache)?;
+            }
+        }
+        (Type::Var(_), rhs) => {
+            let rhs_extruded = extrude(rhs, false, lhs.level(), &mut HashMap::new());
+            constrain(lhs, &rhs_extruded, cache)?;
+        }
+        (lhs, Type::Var(_)) => {
+            let lhs_extruded = extrude(lhs, true, rhs.level(), &mut HashMap::new());
+            constrain(&lhs_extruded, rhs, cache)?;
+        }
 
+        // TODO: complete types
+        _ => {
+            return Err(InferError::CannotConstrain {
+                lhs: lhs.clone(),
+                rhs: rhs.clone(),
+            })
         }
-        (Function(l0, r0), Function(l1, r1)) => {
-            constrain(*l0, *l1, cache);
-            constrain(*r0, *r1, cache);
+    }
+
+    Ok(())
+}
+
+struct Inferrer(usize);
+
+fn extrude(ty: &Type, pol: bool, lvl: usize, c: &mut HashMap<Var, Var>) -> Type {
+    if ty.level() <= lvl {
+        return ty.clone();
+    }
+
+    match ty {
+        Type::Primitive(_) => ty.clone(),
+        Type::Function(l, r) => Type::Function(
+            Box::new(extrude(l, !pol, lvl, c)),
+            Box::new(extrude(r, pol, lvl, c)),
+        ),
+        Type::Record(fs) => Type::Record(
+            fs.iter()
+                .map(|(name, t)| (name.clone(), extrude(t, pol, lvl, c)))
+                .collect(),
+        ),
+        Type::Var(vs) => {
+            if let Some(nvs) = c.get(vs) {
+                Type::Var(nvs.clone())
+            } else {
+                let nvs = fresh_var();
+                c.insert(vs.clone(), nvs.clone());
+
+                if pol {
+                    // Logic for adjusting upper bounds
+                    // Placeholder: the actual manipulation depends on how bounds are represented and modified
+                } else {
+                    // Logic for adjusting lower bounds
+                    // Placeholder: the actual manipulation depends on how bounds are represented and modified
+                }
+
+                Type::Var(nvs)
+            }
         }
-        (_, _) => panic!("don't"),
+        Type::List(ls) => Type::List(ls.iter().map(|t| extrude(t, pol, lvl, c)).collect()),
+        Type::Optional(ty) => Type::Optional(Box::new(extrude(ty, pol, lvl, c))),
+        Type::Top | Type::Bottom | Type::Union(..) | Type::Inter(..) => {
+            panic!("Not a simple type")
+        }
+    }
+}
+
+// TODO: don't reuse level
+fn fresh_var() -> Var {
+    Var {
+        lower_bounds: vec![],
+        upper_bounds: vec![],
+        debrujin: 0,
+        level: 0,
     }
 }
 
 /// Infer the type of an expression.
-fn type_term<'a>(context: &mut Context<'a>, term: &'a Ast) -> Result<Type, SpannedError> {
+fn type_term<'a>(ctx: &mut Context<'a>, term: &'a Ast, lvl: usize) -> Result<Type, SpannedError> {
     use Type::*;
     match term {
-        Ast::UnaryOp { rhs, .. } => type_term(context, rhs),
+        Ast::UnaryOp { rhs, .. } => type_term(ctx, rhs, lvl),
         Ast::BinaryOp {
             op,
             lhs,
             box rhs,
             span,
         } => {
-            let ty1 = type_term(context, lhs)?;
-            let ty2 = type_term(context, rhs)?;
+            let ty1 = type_term(ctx, lhs, lvl)?;
+            let ty2 = type_term(ctx, rhs, lvl)?;
 
             match op {
                 BinOp::Application => {
-                    let fun = ty1.into_debrujin().map_err(|err| err.span(span))?;
-                    let fun_type = context
-                        .lookup_type(fun)
-                        .ok_or(SpannedError::from((span, InferError::UnknownFunction)))?;
-                    let typ = reduce_function(context, fun_type, rhs)?;
+                    let f_ty = type_term(ctx, f, lvl);
+                    let a_ty = type_term(ctx, a, lvl);
+                    constrain(
+                        &f_ty,
+                        &Type::Function(Box::new(a_ty), Box::new(res.clone())),
+                        ctx,
+                    );
                     Ok(typ.clone())
                 }
                 BinOp::ListConcat => {
@@ -172,12 +194,12 @@ fn type_term<'a>(context: &mut Context<'a>, term: &'a Ast) -> Result<Type, Spann
                 BinOp::Mul => constrain(lhs, rhs, cache),
                 BinOp::Div => expect_numerals(ty1, ty2, span),
                 BinOp::Sub => expect_numerals(ty1, ty2, span),
-                BinOp::Add => { ex }
+                BinOp::Add => ex,
                 BinOp::Update => {
-                    if let Set(mut bindings) = ty1 {
-                        if let Set(new_bindings) = ty2 {
+                    if let Record(mut bindings) = ty1 {
+                        if let Record(new_bindings) = ty2 {
                             bindings.extend(new_bindings);
-                            Ok(Set(bindings))
+                            Ok(Record(bindings))
                         } else {
                             spanned_infer_error(TypeName::Set, ty2.get_name(), span)
                         }
@@ -186,8 +208,8 @@ fn type_term<'a>(context: &mut Context<'a>, term: &'a Ast) -> Result<Type, Spann
                     }
                 }
                 BinOp::HasAttribute => {
-                    if let Set(bindings) = ty1 {
-                        if let Identifier(ident) = ty2 {
+                    if let Record(bindings) = ty1 {
+                        if let Var(ident) = ty2 {
                             if bindings.get(&ident.name.to_string()).is_some() {
                                 Ok(Bool)
                             } else {
@@ -201,8 +223,8 @@ fn type_term<'a>(context: &mut Context<'a>, term: &'a Ast) -> Result<Type, Spann
                     }
                 }
                 BinOp::AttributeSelection => {
-                    if let Set(bindings) = ty1 {
-                        if let Identifier(ident) = ty2 {
+                    if let Record(bindings) = ty1 {
+                        if let Var(ident) = ty2 {
                             if let Some(ty) = bindings.get(&ident.name.to_string()) {
                                 Ok(ty.clone())
                             } else {
@@ -241,7 +263,7 @@ fn type_term<'a>(context: &mut Context<'a>, term: &'a Ast) -> Result<Type, Spann
         } => {
             let mut items: HashMap<_, _> = attrs
                 .iter()
-                .map(|(name, expr)| (name.name.to_string(), type_term(context, expr).unwrap())) // TODO: remove unwrap
+                .map(|(name, expr)| (name.name.to_string(), type_term(ctx, expr).unwrap())) // TODO: remove unwrap
                 .collect();
 
             let (ok, err): (Vec<_>, Vec<_>) = inherit
@@ -249,8 +271,7 @@ fn type_term<'a>(context: &mut Context<'a>, term: &'a Ast) -> Result<Type, Spann
                 .map(|(name, range)| {
                     Result::<_, SpannedError>::Ok((
                         name.to_string(),
-                        context
-                            .lookup_by_name(name)
+                        ctx.lookup_by_name(name)
                             .ok_or(InferError::UnknownIdentifier.span(range))?
                             .get_type() // TODO: does this have to copied too?
                             .unwrap_or_default(),
@@ -265,7 +286,7 @@ fn type_term<'a>(context: &mut Context<'a>, term: &'a Ast) -> Result<Type, Spann
                 return Err(InferError::MultipleErrors(err).span(span));
             }
             items.extend(ok.into_iter());
-            Ok(Set(items))
+            Ok(Record(items))
         }
         Ast::LetBinding {
             bindings,
@@ -273,9 +294,9 @@ fn type_term<'a>(context: &mut Context<'a>, term: &'a Ast) -> Result<Type, Spann
             inherit,
             span,
         } => {
-            let mut inherits = lookup_inherits(context, inherit).map_err(|e| e.span(span))?;
+            let mut inherits = lookup_inherits(ctx, inherit).map_err(|e| e.span(span))?;
             inherits.extend(bindings.iter().map(|(ident, _)| ident));
-            context.with_scope(inherits, |context| {
+            ctx.with_scope(inherits, |context| {
                 for (ident, expr) in bindings {
                     let ty = type_term(context, expr)?;
                     ident.set_type(ty);
@@ -295,7 +316,7 @@ fn type_term<'a>(context: &mut Context<'a>, term: &'a Ast) -> Result<Type, Spann
                     items.push(match patt {
                         PatternElement::Identifier(ident) => ident,
                         PatternElement::DefaultIdentifier(ident, default) => {
-                            let ty2 = type_term(context, default)?;
+                            let ty2 = type_term(ctx, default)?;
                             ident.add_ub(ty2.clone());
                             ident
                         }
@@ -303,7 +324,7 @@ fn type_term<'a>(context: &mut Context<'a>, term: &'a Ast) -> Result<Type, Spann
                 }
             }
 
-            let ty = context.with_scope(items.clone(), |context| type_term(context, body))?;
+            let ty = ctx.with_scope(items.clone(), |context| type_term(context, body))?;
             let first = items
                 .pop()
                 .and_then(|i| i.get_type().clone())
@@ -320,7 +341,7 @@ fn type_term<'a>(context: &mut Context<'a>, term: &'a Ast) -> Result<Type, Spann
             expr2,
             span,
         } => {
-            let ty = type_term(context, condition)?;
+            let ty = type_term(ctx, condition)?;
             if ty != Bool {
                 return Err(SpannedError {
                     error: InferError::TypeMismatch {
@@ -330,8 +351,8 @@ fn type_term<'a>(context: &mut Context<'a>, term: &'a Ast) -> Result<Type, Spann
                     span: span.clone(),
                 });
             }
-            let ty1 = type_term(context, expr1)?;
-            let ty2 = type_term(context, expr2)?;
+            let ty1 = type_term(ctx, expr1)?;
+            let ty2 = type_term(ctx, expr2)?;
             if ty1 != ty2 {
                 Ok(Union(Box::new(ty1), Box::new(ty2)))
             } else {
@@ -349,20 +370,17 @@ fn type_term<'a>(context: &mut Context<'a>, term: &'a Ast) -> Result<Type, Spann
             body,
             span,
         } => {
-            context.push_scope(vec![]);
-            introduce_set_bindigs(context, set).map_err(|err| SpannedError::from((span, err)))?;
-            let ty = type_term(context, body);
-            context.pop_scope();
+            ctx.push_scope(vec![]);
+            introduce_set_bindigs(ctx, set).map_err(|err| SpannedError::from((span, err)))?;
+            let ty = type_term(ctx, body);
+            ctx.pop_scope();
             ty
         }
-        Ast::Identifier(super::ast::Identifier { debrujin, span, .. }) => context
+        Ast::Identifier(super::ast::Identifier { debrujin, span, .. }) => ctx
             .lookup_type(*debrujin)
             .ok_or(InferError::UnknownIdentifier.span(span)),
         Ast::List { exprs, span: _ } => Ok(Type::List(
-            exprs
-                .iter()
-                .flat_map(|ast| type_term(context, ast))
-                .collect(),
+            exprs.iter().flat_map(|ast| type_term(ctx, ast)).collect(),
         )),
         Ast::NixString(_) => Ok(String),
         Ast::NixPath(_) => Ok(Path),
@@ -372,18 +390,6 @@ fn type_term<'a>(context: &mut Context<'a>, term: &'a Ast) -> Result<Type, Spann
         Ast::Null(_) => Ok(Null),
         Ast::Comment(_) | Ast::DocComment(_) | Ast::LineComment(_) => unimplemented!(),
     }
-}
-
-fn extrude() {
-    todo!()
-}
-
-fn simplify() {
-    todo!()
-}
-
-fn go() {
-    todo!()
 }
 
 /// Infer the type of an expression.

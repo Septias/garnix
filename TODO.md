@@ -6,7 +6,7 @@
   - [] Handle `multi-argument` functions
   - [] Handle String interpolation
   - [] Load flake inputs
-  - Doc comment type parsing
+  - [] Return error array
 
 - Parser
   - [] Handle `inherit (lib)`
@@ -17,17 +17,12 @@
 - LSP
   - [] Inlay type hints
     - [] Enable Capability
-    - [] Collect all identifiers hints
+    - [] Collect all identifiers
     - [] Listen for request
   - [] Error reporting
   - [] Goto source
   - [] When to load files?
   - [] Reduce get_node_at()
-
-- Schriftlich
-  - [] Introduce Language
-  - [] 
-
 
 
 ## Improvements
