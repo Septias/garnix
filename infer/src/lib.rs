@@ -2,15 +2,15 @@
 use ast::Identifier;
 use core::str;
 use logos::Span;
-use std::{collections::HashMap, fmt};
-use strum::EnumTryAs;
-use strum_macros::{AsRefStr, Display, EnumDiscriminants};
+use std::fmt;
 use thiserror::Error;
+use types::{Type, TypeName};
 
 pub mod ast;
 pub mod helpers;
-pub mod hm;
+pub mod infer;
 pub use ast::Ast;
+pub mod types;
 
 #[cfg(test)]
 mod tests;
@@ -22,14 +22,16 @@ pub enum InferError {
     UnknownIdentifier,
     #[error("Unknown inherit")]
     UnknownInherit,
+    #[error("The record field {field} is missing")]
+    MissingRecordField { field: String },
+    #[error("cannot constrain {lhs} <: {rhs}")]
+    CannotConstrain { lhs: Type, rhs: Type },
     #[error("Type mismatch: expected {expected}, found {found}")]
     TypeMismatch { expected: TypeName, found: TypeName },
     #[error("Can't convert {from} to {to}")]
     ConversionError { from: String, to: &'static str },
     #[error("Can't infer type of comment")]
     UnexpectedComment,
-    #[error("Can't infer type of assert")]
-    UnexpectedAssertion,
     #[error("Unknown function call")]
     UnknownFunction,
     #[error("Function has to accept at least one argument")]
@@ -143,78 +145,6 @@ impl From<(&Span, InferError)> for SpannedError {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum Primitives {
-    Number,
-    Bool,
-    String,
-    Path,
-    Null,
-    Undefined,
-}
-
-/// A nix language type.
-#[derive(Debug, Clone, PartialEq, Eq, Display, Hash, Default, EnumDiscriminants, EnumTryAs)]
-#[strum_discriminants(derive(AsRefStr, Display))]
-#[strum_discriminants(name(TypeName))]
-pub enum Type {
-    Top,
-    Bottom,
-    Primitive(Primitives),
-    Identifier(Ident),
-    Function(Box<Type>, Box<Type>),
-    List(Vec<Type>),
-    Set(HashMap<String, Type>),
-    Optional(Box<Type>),
-    // Complexe types only created by simplification
-    Union(Box<Type>, Box<Type>),
-    Inter(Box<Type>, Box<Type>),
-    #[default]
-    Default,
-}
-
-impl Type {
-    /// Try to convert this type to a list.
-    fn into_list(self) -> InferResult<Vec<Type>> {
-        match self {
-            Type::List(elems) => Ok(elems),
-            t => infer_error(TypeName::List, t.get_name()),
-        }
-    }
-
-    /// Try to convert this type to an identifier.
-    fn into_debrujin(self) -> InferResult<usize> {
-        match self {
-            Type::Identifier(ident) => Ok(ident.debrujin),
-            t => infer_error(TypeName::Identifier, t.get_name()),
-        }
-    }
-
-    /// Try to convert this type to a function.
-    fn into_function(self) -> InferResult<(Type, Type)> {
-        match self {
-            Type::Function(box lhs, box rhs) => Ok((lhs, rhs)),
-            t => infer_error(TypeName::Function, t.get_name()),
-        }
-    }
-
-    /// Returns the enum descriminant of this type.
-    fn get_name(&self) -> TypeName {
-        match self {
-            Type::Identifier(_) => TypeName::Identifier,
-            Type::Primitive(_) => TypeName::Primitive,
-            Type::List(_) => TypeName::List,
-            Type::Function(_, _) => TypeName::Function,
-            Type::Union(_, _) => TypeName::Union,
-            Type::Set(_) => TypeName::Set,
-            Type::Default => TypeName::Default,
-            Type::Top => TypeName::Top,
-            Type::Bottom => TypeName::Bottom,
-            Type::Inter(_, _) => TypeName::Inter,
-        }
-    }
-}
-
 /// Context to save variables and their types.
 pub(crate) struct Context<'a> {
     bindings: Vec<Vec<&'a Identifier>>,
@@ -296,21 +226,11 @@ impl<'a> Context<'a> {
     }
 }
 
-/// A single identifier.
-/// The name should be a debrujin index and the path is used for set accesses.
-#[derive(Debug, Clone, PartialEq, Eq, Default, Hash)]
-pub struct Ident {
-    lower_boundsd: Vec<Type>,
-    upper_bounds: Vec<Type>,
-    debrujin: usize,
-}
-
 /// Infer the type of an ast.
 /// Returns the final type as well as the ast which has been annotated with types.
 pub fn infer(source: &str) -> SpannedInferResult<(Type, Ast)> {
     let ast = parser::parse(source).map_err(|e| InferError::from(e).span(&Span::default()))?;
     let ast = Ast::from_parser_ast(ast, &source);
-    // println!("ast: {:?}", ast);
-    let ty = hm::infer(&ast)?;
+    let ty = infer::infer(&ast)?;
     Ok((ty, ast))
 }
