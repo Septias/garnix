@@ -66,11 +66,28 @@ impl fmt::Display for SpannedError {
     }
 }
 
+/// Type infercence result.
+pub type InferResult<T> = Result<T, InferError>;
+
+/// Create an [InferResult].
+pub(crate) fn infer_error<T>(expected: TypeName, found: TypeName) -> InferResult<T> {
+    Err(InferError::TypeMismatch { expected, found })
+}
+
 /// [InferResult] with a [Span] attached.
 pub type SpannedInferResult<T> = Result<T, SpannedError>;
 
-/// Type infercence result.
-pub type InferResult<T> = Result<T, InferError>;
+/// Create a [SpannedInferResult].
+pub(crate) fn spanned_infer_error<T>(
+    expected: TypeName,
+    found: TypeName,
+    span: &Span,
+) -> SpannedInferResult<T> {
+    Err(SpannedError {
+        error: InferError::TypeMismatch { expected, found },
+        span: span.clone(),
+    })
+}
 
 impl From<(Span, TypeName, TypeName)> for SpannedError {
     fn from((span, expected, found): (Span, TypeName, TypeName)) -> Self {
@@ -96,41 +113,32 @@ impl From<(&Span, InferError)> for SpannedError {
     }
 }
 
-/// Create an infer error [InferResult].
-pub(crate) fn infer_error<T>(expected: TypeName, found: TypeName) -> InferResult<T> {
-    Err(InferError::TypeMismatch { expected, found })
-}
-
-/// Create a spanned [SpannedInferResult].
-pub(crate) fn spanned_infer_error<T>(
-    expected: TypeName,
-    found: TypeName,
-    span: &Span,
-) -> SpannedInferResult<T> {
-    Err(SpannedError {
-        error: InferError::TypeMismatch { expected, found },
-        span: span.clone(),
-    })
-}
-
-/// A nix language type.
-#[derive(Debug, Clone, PartialEq, Eq, Display, Default, EnumDiscriminants, EnumTryAs)]
-#[strum_discriminants(derive(AsRefStr, Display))]
-#[strum_discriminants(name(TypeName))]
-pub enum Type {
-    Int,
-    Float,
-    Number, // Type used only to represent both int and float
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum Primitives {
+    Number,
     Bool,
     String,
     Path,
-    Identifier(Ident),
     Null,
     Undefined,
-    List(Vec<Type>),
+}
+
+/// A nix language type.
+#[derive(Debug, Clone, PartialEq, Eq, Display, Hash, Default, EnumDiscriminants, EnumTryAs)]
+#[strum_discriminants(derive(AsRefStr, Display))]
+#[strum_discriminants(name(TypeName))]
+pub enum Type {
+    Top,
+    Bottom,
+    Primitive(Primitives),
+    Identifier(Ident),
     Function(Box<Type>, Box<Type>),
-    Union(Box<Type>, Box<Type>),
+    List(Vec<Type>),
     Set(HashMap<String, Type>),
+    Optional(Box<Type>),
+    // Complexe types only created by simplification
+    Union(Box<Type>, Box<Type>),
+    Inter(Box<Type>, Box<Type>),
     #[default]
     Default,
 }
@@ -163,20 +171,16 @@ impl Type {
     /// Returns the enum descriminant of this type.
     fn get_name(&self) -> TypeName {
         match self {
-            Type::Int => TypeName::Int,
-            Type::Float => TypeName::Float,
-            Type::Number => TypeName::Number,
-            Type::Bool => TypeName::Bool,
-            Type::String => TypeName::String,
-            Type::Path => TypeName::Path,
             Type::Identifier(_) => TypeName::Identifier,
-            Type::Null => TypeName::Null,
-            Type::Undefined => TypeName::Undefined,
+            Type::Primitive(_) => TypeName::Primitive,
             Type::List(_) => TypeName::List,
             Type::Function(_, _) => TypeName::Function,
             Type::Union(_, _) => TypeName::Union,
             Type::Set(_) => TypeName::Set,
             Type::Default => TypeName::Default,
+            Type::Top => TypeName::Top,
+            Type::Bottom => TypeName::Bottom,
+            Type::Inter(_, _) => TypeName::Inter,
         }
     }
 }
@@ -184,6 +188,8 @@ impl Type {
 /// Context to save variables and their types.
 pub(crate) struct Context<'a> {
     bindings: Vec<Vec<&'a Identifier>>,
+    with: Option<&'a Identifier>,
+    errors: Vec<SpannedError>,
     depth: usize,
 }
 
@@ -192,6 +198,8 @@ impl<'a> Context<'a> {
         Self {
             bindings: vec![Vec::new()],
             depth: 0,
+            with: None,
+            errors: Vec::new(),
         }
     }
 
@@ -243,7 +251,7 @@ impl<'a> Context<'a> {
         for scope in self.bindings.iter().rev() {
             for n in scope.iter().rev() {
                 if n.debrujin == debrujin {
-                    return n.get_type();
+                    return;
                 }
             }
         }
@@ -265,9 +273,10 @@ impl<'a> Context<'a> {
 
 /// A single identifier.
 /// The name should be a debrujin index and the path is used for set accesses.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, Hash)]
 pub struct Ident {
-    name: String,
+    lower_boundsd: Vec<Type>,
+    upper_bounds: Vec<Type>,
     debrujin: usize,
 }
 

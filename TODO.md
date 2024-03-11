@@ -1,28 +1,43 @@
-## Features
-- String interpolation
-- Doc comment type parsing
-- Lookup paths
+## TODO (17.03)
+
+- Type Inference
+  - [] Handle `with`
+  - [] Handle `inherit`
+  - [] Handle `multi-argument` functions
+  - [] Handle String interpolation
+  - [] Load flake inputs
+  - Doc comment type parsing
+
+- Parser
+  - [] Handle `inherit (lib)`
+  - [] Add type-parsing
+  - [] Don't use expr as base
+  - [] out: Use case analysis nixpkgs
+
+- LSP
+  - [] Inlay type hints
+    - [] Enable Capability
+    - [] Collect all identifiers hints
+    - [] Listen for request
+  - [] Error reporting
+  - [] Goto source
+  - [] When to load files?
+  - [] Reduce get_node_at()
+
+- Schriftlich
+  - [] Introduce Language
+  - [] 
+
+
 
 ## Improvements
 - Nice Verbose error
-- Use oxalica test-suite
 - Use own implementation of Span
 
 ## Restrictions
 - Comment positions
+- Errors while parsing
 - Line comments have to end in '\n'
 
 ## Useless
-- Add macros for span
 - `Result<T, InferError>.span(span)`
-- Add `with_scope`
-- Move Inhertits (source[name], name) -> (name, source[name])
-
-## TODO 01.03
-- Inferenz
-    - Unify constraints
-- Language Server
-    - Type hints
-    - Hover hints
-- Parser
-    - Case study für den Parser
