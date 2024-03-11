@@ -40,8 +40,8 @@ pub struct Identifier {
     pub debrujin: usize,
     pub name: String,
     pub span: Span,
-    pub constraint: RefCell<Vec<Type>>,
-    pub ty: RefCell<Option<Type>>,
+    pub lower_bounds: RefCell<Vec<Type>>,
+    pub upper_bounds: RefCell<Vec<Type>>,
 }
 
 impl Identifier {
@@ -50,25 +50,17 @@ impl Identifier {
             debrujin,
             name,
             span,
-            constraint: RefCell::new(vec![]),
-            ty: RefCell::new(None),
+            lower_bounds: RefCell::new(vec![]),
+            upper_bounds: RefCell::new(vec![]),
         }
     }
 
-    pub fn set_type(&self, ty: Type) {
-        *self.ty.borrow_mut() = Some(ty);
+    pub fn add_lb(&self, ty: Type) {
+        self.lower_bounds.borrow_mut().push(ty);
     }
 
-    pub fn get_type(&self) -> Option<Type> {
-        self.ty.borrow().clone()
-    }
-
-    pub fn add_constraint(&self, ty: Type) {
-        self.constraint.borrow_mut().push(ty);
-    }
-
-    pub fn get_constraints(&self) -> Vec<Type> {
-        self.constraint.borrow().clone()
+    pub fn add_ub(&self, ty: Type) {
+        self.upper_bounds.borrow_mut().push(ty);
     }
 }
 
