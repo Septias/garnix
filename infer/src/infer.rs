@@ -40,7 +40,7 @@ fn lookup_inherits<'a>(
     Ok(ok)
 }
 
-fn constrain(lhs: &Type, rhs: &Type, cache: &mut HashSet<(Type, Type)>) -> InferResult<()> {
+fn constrain(lhs: &Type, rhs: &Type, cache: &mut HashSet<(&Type, &Type)>) -> InferResult<()> {
     if lhs == rhs {
         return Ok(());
     }
@@ -148,65 +148,61 @@ fn extrude(ty: &Type, pol: bool, lvl: usize, c: &mut HashMap<Var, Var>) -> Type 
 }
 
 // TODO: don't reuse level
-fn fresh_var() -> Var {
-    Var {
+fn fresh_var() -> Type {
+    Type::Var(Var {
         lower_bounds: vec![],
         upper_bounds: vec![],
         debrujin: 0,
         level: 0,
+    })
+}
+
+fn is_var_and(tup: (&Type, &Type), ty: TypeName) -> bool {
+    match tup {
+        (Type::Var(_), _) | (_, Type::Var(_)) => true,
+        _ => false,
     }
 }
 
 /// Infer the type of an expression.
 fn type_term<'a>(ctx: &mut Context<'a>, term: &'a Ast, lvl: usize) -> Result<Type, SpannedError> {
+    let cache = &mut HashSet::new();
     use Type::*;
     match term {
         Ast::UnaryOp { rhs, .. } => type_term(ctx, rhs, lvl),
-        Ast::BinaryOp {
-            op,
-            lhs,
-            box rhs,
-            span,
-        } => {
+        Ast::BinaryOp { op, lhs, rhs, span } => {
             let ty1 = type_term(ctx, lhs, lvl)?;
             let ty2 = type_term(ctx, rhs, lvl)?;
 
             match op {
                 BinOp::Application => {
-                    let f_ty = type_term(ctx, f, lvl);
-                    let a_ty = type_term(ctx, a, lvl);
+                    let res = fresh_var();
                     constrain(
-                        &f_ty,
-                        &Type::Function(Box::new(a_ty), Box::new(res.clone())),
-                        ctx,
+                        &ty1,
+                        &Type::Function(Box::new(ty2), Box::new(res.clone())),
+                        cache,
                     );
-                    Ok(typ.clone())
+                    Ok(res)
                 }
                 BinOp::ListConcat => {
+                    if is_var_and((&ty1, &ty2), TypeName::List) {
+                        constrain(&ty1, &ty2, cache);
+                    }
+
                     let lhs = ty1
                         .into_list()
                         .map_err(|err| SpannedError::from((span, err)))?;
                     let rhs = ty2
                         .into_list()
                         .map_err(|err| SpannedError::from((span, err)))?;
+
                     Ok(Type::List([lhs, rhs].concat()))
                 }
                 BinOp::Mul => constrain(lhs, rhs, cache),
                 BinOp::Div => expect_numerals(ty1, ty2, span),
                 BinOp::Sub => expect_numerals(ty1, ty2, span),
-                BinOp::Add => ex,
-                BinOp::Update => {
-                    if let Record(mut bindings) = ty1 {
-                        if let Record(new_bindings) = ty2 {
-                            bindings.extend(new_bindings);
-                            Ok(Record(bindings))
-                        } else {
-                            spanned_infer_error(TypeName::Set, ty2.get_name(), span)
-                        }
-                    } else {
-                        spanned_infer_error(TypeName::Set, ty1.get_name(), span)
-                    }
-                }
+                BinOp::Add => expect_numerals(ty1, ty2, span),
+                BinOp::Update => constrain_update(),
                 BinOp::HasAttribute => {
                     if let Record(bindings) = ty1 {
                         if let Var(ident) = ty2 {
@@ -223,19 +219,21 @@ fn type_term<'a>(ctx: &mut Context<'a>, term: &'a Ast, lvl: usize) -> Result<Typ
                     }
                 }
                 BinOp::AttributeSelection => {
-                    if let Record(bindings) = ty1 {
-                        if let Var(ident) = ty2 {
-                            if let Some(ty) = bindings.get(&ident.name.to_string()) {
-                                Ok(ty.clone())
-                            } else {
-                                Ok(Undefined)
-                            }
-                        } else {
-                            spanned_infer_error(TypeName::Identifier, ty2.get_name(), span)
-                        }
-                    } else {
-                        spanned_infer_error(TypeName::Set, ty1.get_name(), span)
-                    }
+                    let res = fresh_var();
+                    constrain(
+                        &ty1,
+                        &Type::Record(
+                            [(
+                                lhs.as_identifier_str()
+                                    .map_err(|e| e.span(lhs.get_span()))?,
+                                res.clone(),
+                            )]
+                            .into_iter()
+                            .collect(),
+                        ),
+                        cache,
+                    );
+                    Ok(res)
                 }
                 BinOp::AttributeFallback => {
                     if ty1 == Null {

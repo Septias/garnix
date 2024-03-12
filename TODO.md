@@ -1,7 +1,6 @@
 ## TODO (17.03)
 
 - Type Inference
-
   - [] Handle `with`
   - [] Handle `inherit`
   - [] Handle `multi-argument` functions
@@ -10,14 +9,13 @@
   - [] Return error array
 
 - Parser
-
   - [] Handle `inherit (lib)`
   - [] Add type-parsing
   - [] Don't use expr as base
   - [] out: Use case analysis nixpkgs
+  - [] import
 
 - LSP
-
   - [] Inlay type hints
     - [] Enable Capability
     - [] Collect all identifiers
@@ -30,11 +28,14 @@
 - Writing
   - [x] Abstract
   - [x] Language introduction
-  - [] Language definition
-  - Subtyping introduction?
+  - [x] Language definition
+  - [x] Nix language support
+
+- Misc
   - Read Thiemann papers
-  - Multi-let as syntactic sugar?
-  - Mutli-arguments as syntatcti sugar?
+  - Read original paper
+  - Read Timpe paper
+
 
 ## Improvements
 

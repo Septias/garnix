@@ -111,6 +111,10 @@ impl Type {
         }
     }
 
+    pub fn is_var(&self) -> bool {
+        matches!(self, Type::Var(_))
+    }
+
     /// Returns the enum descriminant of this type.
     pub fn get_name(&self) -> TypeName {
         match self {
