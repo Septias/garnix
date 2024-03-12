@@ -302,6 +302,12 @@ fn test_lambda() {
 
     let tokens = lex("x = {}: {inherit x;};");
     statement(NixTokens(&tokens)).unwrap();
+
+    let tokens = lex(
+        r#"let negate = x: !x; concat = x: y: x + y; in if negate true then concat "foo" "bar" else ""#,
+    );
+    let (input, ast) = expr(NixTokens(&tokens)).unwrap();
+    assert!(input.0.is_empty());
 }
 
 #[test]
