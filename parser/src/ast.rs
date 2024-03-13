@@ -232,6 +232,7 @@ pub enum Ast {
         span: Span,
     },
     Null(Span),
+    SearchPath(Span),
 
     /// Comments
     Comment(Span),
@@ -260,7 +261,9 @@ impl Ast {
             | Ast::Bool { span, .. }
             | Ast::Int { span, .. }
             | Ast::Float { span, .. }
+            | Ast::SearchPath(span)
             | Ast::Null(span) => span.clone(),
+
         }
     }
 }

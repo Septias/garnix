@@ -107,6 +107,9 @@ pub enum Token {
     #[regex("(./|~/|/)([a-zA-Z.]+/?)+")]
     Path,
 
+    #[regex("<[a-zA-Z.][a-zA-Z./]+>")]
+    SearchPath,
+
     // Patterns
     #[token("@")]
     At,
