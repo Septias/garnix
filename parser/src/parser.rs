@@ -86,6 +86,7 @@ pub(crate) fn literal(input: NixTokens<'_>) -> PResult<'_, Ast> {
                 val: token.as_bool().unwrap(),
                 span,
             }),
+            token(Token::SearchPath).map(|(_, span)| SearchPath(span)),
             token(Token::Null).map(|(_, span)| Null(span)),
             token(Token::Comment).map(|(_, comment)| Comment(comment)),
             token(Token::DocComment).map(|(_, comment)| DocComment(comment)),

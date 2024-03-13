@@ -573,6 +573,11 @@ fn test_literal() {
     let (input, ast) = literal(NixTokens(&tokens)).unwrap();
     assert!(input.0.is_empty());
     assert_eq!(ast, Ast::NixPath(Range { start: 0, end: 16 }));
+
+    let tokens = lex("<pictures.md>");
+    let (input, ast) = literal(NixTokens(&tokens)).unwrap();
+    assert!(input.0.is_empty());
+    assert_eq!(ast, Ast::SearchPath(Range { start: 0, end: 13 }));
 }
 
 #[test]
