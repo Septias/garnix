@@ -274,6 +274,7 @@ impl Ast {
             | Ast::Float { span, .. }
             | Ast::SearchPath(span)
             | Ast::Null(span) => span.clone(),
+
         }
     }
 }
