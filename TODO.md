@@ -1,12 +1,7 @@
 ## TODO (17.03)
 
 - Type Inference
-  - [] Handle `with`
-  - [] Handle `inherit`
-  - [] Handle `multi-argument` functions
-  - [] Handle String interpolation
-  - [] Load flake inputs
-  - [] Return error array
+  - All
 
 - Parser
   - [x] Handle `inherit (lib)`
