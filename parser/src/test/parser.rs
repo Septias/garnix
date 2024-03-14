@@ -1,7 +1,7 @@
 use core::panic;
 use std::ops::Range;
 
-use crate::ast::BinOp;
+use crate::ast::{BinOp, Inherit};
 use crate::lexer::Token;
 use crate::parser::{
     assert, conditional, expr, ident, ident_default_pattern, inherit, lambda, let_binding, literal,
@@ -18,7 +18,7 @@ fn test_ident() {
     let tokens = lex("player");
     let (input, ast) = ident(NixTokens(&tokens)).unwrap();
     assert!(input.0.is_empty());
-    assert_eq!(ast, Ast::Identifier(Range { start: 0, end: 6 }));
+    assert_eq!(ast, Range { start: 0, end: 6 });
 }
 
 #[test]
@@ -46,36 +46,24 @@ fn test_set_pattern() {
     assert!(input.0.is_empty());
     assert_eq!(
         ast,
-        Pattern {
-            patterns: vec![
+        (
+            vec![
                 PatternElement::Identifier(Range { start: 2, end: 8 }),
                 PatternElement::Identifier(Range { start: 10, end: 18 })
             ],
-            is_wildcard: true,
-        }
+            true
+        )
     );
 
     let tokens = lex("{ ... }");
     let (input, ast) = set_pattern(NixTokens(&tokens)).unwrap();
     assert!(input.0.is_empty());
-    assert_eq!(
-        ast,
-        Pattern {
-            patterns: vec![],
-            is_wildcard: true,
-        }
-    );
+    assert_eq!(ast, (vec![], true));
 
     let tokens = lex("{ }");
     let (input, ast) = set_pattern(NixTokens(&tokens)).unwrap();
     assert!(input.0.is_empty());
-    assert_eq!(
-        ast,
-        Pattern {
-            patterns: vec![],
-            is_wildcard: false,
-        }
-    );
+    assert_eq!(ast, (vec![], false));
 }
 
 #[test]
@@ -83,13 +71,7 @@ fn test_pattern() {
     let tokens = lex("player");
     let (input, ast) = pattern(NixTokens(&tokens)).unwrap();
     assert!(input.0.is_empty());
-    assert_eq!(
-        ast,
-        Pattern {
-            patterns: vec![PatternElement::Identifier(Range { start: 0, end: 6 })],
-            is_wildcard: false,
-        }
-    );
+    assert_eq!(ast, Pattern::Identifier(Range { start: 0, end: 6 }));
 }
 
 #[test]
@@ -198,7 +180,10 @@ fn test_set() {
         Ast::AttrSet {
             attrs: vec![],
             is_recursive: true,
-            inherit: vec![Range { start: 14, end: 18 }],
+            inherit: vec![Inherit {
+                name: None,
+                items: vec![Range { start: 14, end: 18 }]
+            }],
             span: Range { start: 0, end: 21 }
         }
     )
@@ -212,10 +197,7 @@ fn test_lambda() {
     assert_eq!(
         ast,
         Ast::Lambda {
-            arguments: vec![Pattern {
-                patterns: vec![PatternElement::Identifier(Range { start: 0, end: 6 })],
-                is_wildcard: false,
-            }],
+            arguments: vec![Pattern::Identifier(Range { start: 0, end: 6 })],
             body: Box::new(Ast::Int {
                 val: 12,
                 span: Range { start: 8, end: 10 }
@@ -232,14 +214,8 @@ fn test_lambda() {
         ast,
         Ast::Lambda {
             arguments: vec![
-                Pattern {
-                    patterns: vec![PatternElement::Identifier(Range { start: 0, end: 6 })],
-                    is_wildcard: false,
-                },
-                Pattern {
-                    patterns: vec![PatternElement::Identifier(Range { start: 8, end: 16 })],
-                    is_wildcard: false,
-                }
+                Pattern::Identifier(Range { start: 0, end: 6 }),
+                Pattern::Identifier(Range { start: 8, end: 16 }),
             ],
             body: Box::new(Ast::Int {
                 val: 12,
@@ -257,9 +233,10 @@ fn test_lambda() {
     assert_eq!(
         ast,
         Ast::Lambda {
-            arguments: vec![Pattern {
+            arguments: vec![Pattern::Set {
                 patterns: vec![PatternElement::Identifier(Range { start: 1, end: 7 })],
                 is_wildcard: false,
+                name: None,
             }],
             body: Box::new(Ast::Int {
                 val: 12,
@@ -277,9 +254,10 @@ fn test_lambda() {
     assert_eq!(
         ast,
         Ast::Lambda {
-            arguments: vec![Pattern {
+            arguments: vec![Pattern::Set {
                 patterns: vec![],
                 is_wildcard: false,
+                name: None,
             }],
             body: Box::new(Ast::Int {
                 val: 12,
@@ -295,9 +273,10 @@ fn test_lambda() {
     assert_eq!(
         ast,
         Ast::Lambda {
-            arguments: vec![Pattern {
+            arguments: vec![Pattern::Set {
                 patterns: vec![],
                 is_wildcard: false,
+                name: None,
             }],
             body: Box::new(Ast::LetBinding {
                 bindings: vec![(
@@ -313,7 +292,7 @@ fn test_lambda() {
                     inherit: vec![],
                     span: Range { start: 19, end: 21 }
                 }),
-                inherit: None,
+                inherit: vec![],
                 span: Range { start: 4, end: 21 }
             }),
             arg_binding: None,
@@ -382,19 +361,61 @@ fn test_inherit() {
     let tokens = lex("inherit player;");
     let (input, ast) = inherit(NixTokens(&tokens)).unwrap();
     assert!(input.0.is_empty());
-    assert_eq!(ast, vec![Ast::Identifier(Range { start: 8, end: 14 })]);
+    assert_eq!(
+        ast,
+        Inherit {
+            name: None,
+            items: vec![Range { start: 8, end: 14 }]
+        }
+    );
 
     let tokens = lex("inherit player position borders;");
     let (input, ast) = inherit(NixTokens(&tokens)).unwrap();
     assert!(input.0.is_empty());
     assert_eq!(
         ast,
-        vec![
-            Ast::Identifier(Range { start: 8, end: 14 }),
-            Ast::Identifier(Range { start: 15, end: 23 }),
-            Ast::Identifier(Range { start: 24, end: 31 })
-        ]
+        Inherit {
+            items: vec![
+                Range { start: 8, end: 14 },
+                Range { start: 15, end: 23 },
+                Range { start: 24, end: 31 }
+            ],
+            name: None
+        }
     );
+
+    let tokens = lex("inherit (lib) player position borders;");
+    let (input, ast) = inherit(NixTokens(&tokens)).unwrap();
+    assert!(input.0.is_empty());
+    assert_eq!(
+        ast,
+        Inherit {
+            items: vec![
+                Range { start: 14, end: 20 },
+                Range { start: 21, end: 29 },
+                Range { start: 30, end: 37 }
+            ],
+            name: Some(vec![Range { start: 9, end: 12 }])
+        }
+    );
+
+    let tokens = lex("inherit (lib.pkgs) player position borders;");
+    let (input, ast) = inherit(NixTokens(&tokens)).unwrap();
+    assert!(input.0.is_empty());
+    assert_eq!(
+        ast,
+        Inherit {
+            items: vec![
+                Range { start: 19, end: 25 },
+                Range { start: 26, end: 34 },
+                Range { start: 35, end: 42 }
+            ],
+            name: Some(vec![Range { start: 9, end: 12 }, Range { start: 13, end: 17 }])
+        }
+    );
+
+    let tokens = lex("inherit () player position borders;");
+    assert!(inherit(NixTokens(&tokens)).is_err());
 }
 
 #[test]
@@ -413,7 +434,7 @@ fn test_let_binding() {
                 }
             )],
             body: Box::new(Ast::Identifier(Range { start: 20, end: 26 })),
-            inherit: None,
+            inherit: vec![],
             span: Range { start: 0, end: 26 }
         }
     );
@@ -445,7 +466,7 @@ fn test_let_binding() {
                 inherit: vec![],
                 span: Range { start: 35, end: 37 }
             }),
-            inherit: None,
+            inherit: vec![],
             span: Range { start: 0, end: 37 }
         }
     );
@@ -689,7 +710,7 @@ fn test_expression() {
                 inherit: vec![],
                 span: Range { start: 27, end: 29 }
             }),
-            inherit: None,
+            inherit: vec![],
             span: Range { start: 0, end: 29 }
         }
     );
