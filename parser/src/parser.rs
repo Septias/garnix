@@ -308,28 +308,20 @@ pub(crate) fn let_binding(input: NixTokens<'_>) -> PResult<'_, Ast> {
     .parse(input)
 }
 
-/// Parse a with-statement.
-/// with-expr = with expr;
+/// with-statement = with expr; expr;
 pub(crate) fn with(input: NixTokens<'_>) -> PResult<'_, Ast> {
     preceded(token(Token::With), cut(terminated(expr, token(Semi))))(input)
-}
-
-pub(crate) fn atom(input: NixTokens<'_>) -> PResult<'_, Ast> {
-    alt((
-        let_binding,
-        conditional,
-        set,
-        list,
-        literal,
-        ident.map(|ast| Ast::Identifier(ast)),
-    ))(input)
 }
 
 pub(crate) fn list(input: NixTokens<'_>) -> PResult<'_, Ast> {
     context(
         "list",
         spanned(
-            delimited(token(Token::LBracket), many0(expr), token(Token::RBracket)),
+            delimited(
+                token(Token::LBracket),
+                many0(alt((ident.map(|ast| Ast::Identifier(ast)), literal))),
+                token(Token::RBracket),
+            ),
             |span, exprs| List { exprs, span },
         ),
     )(input)
@@ -370,6 +362,17 @@ pub(crate) fn expr(input: NixTokens<'_>) -> PResult<'_, Ast> {
 
 const ILLEGAL: [Token; 7] = [RBrace, In, Let, Rec, Token::With, Token::Else, Token::Then];
 
+pub(crate) fn pratt_atom(input: NixTokens<'_>) -> PResult<'_, Ast> {
+    alt((
+        let_binding,
+        conditional,
+        set,
+        list,
+        literal,
+        ident.map(|ast| Ast::Identifier(ast)),
+    ))(input)
+}
+
 pub(crate) fn prett_parsing(mut input: NixTokens<'_>, min_bp: u8, eof: Token) -> PResult<'_, Ast> {
     #[cfg(test)]
     println!("input: {:?}", input);
@@ -393,7 +396,7 @@ pub(crate) fn prett_parsing(mut input: NixTokens<'_>, min_bp: u8, eof: Token) ->
         | Token::LBracket
         | Token::Integer(_)
         | Token::Float(_)
-        | Text => atom(input)?,
+        | Text => pratt_atom(input)?,
 
         Token::Comment | Token::DocComment | Token::LineComment => {
             unimplemented!("Comments are not yet implemented")
@@ -454,10 +457,7 @@ pub(crate) fn prett_parsing(mut input: NixTokens<'_>, min_bp: u8, eof: Token) ->
                 break;
             }
         } else {
-            return Err(nom::Err::Error(VerboseError::from_error_kind(
-                input,
-                nom::error::ErrorKind::Eof,
-            )));
+            break;
         }
 
         let mut op = BinOp::from_token(input.peek().unwrap().0);

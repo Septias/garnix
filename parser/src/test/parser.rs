@@ -331,7 +331,7 @@ fn test_conditional() {
 
 #[test]
 fn test_assert() {
-    let tokens = lex("assert true;1");
+    let tokens = lex("assert true; 1");
     let (input, ast) = assert(NixTokens(&tokens)).unwrap();
     assert!(input.0.is_empty());
     assert_eq!(
@@ -341,10 +341,10 @@ fn test_assert() {
                 val: true,
                 span: Range { start: 7, end: 11 }
             }),
-            span: Range { start: 0, end: 13 },
+            span: Range { start: 0, end: 14 },
             expr: Box::new(Ast::Int {
                 val: 1,
-                span: Range { start: 12, end: 13 }
+                span: Range { start: 13, end: 14 }
             }),
         }
     );
@@ -404,7 +404,10 @@ fn test_inherit() {
                 Range { start: 26, end: 34 },
                 Range { start: 35, end: 42 }
             ],
-            name: Some(vec![Range { start: 9, end: 12 }, Range { start: 13, end: 17 }])
+            name: Some(vec![
+                Range { start: 9, end: 12 },
+                Range { start: 13, end: 17 }
+            ])
         }
     );
 
@@ -433,8 +436,9 @@ fn test_let_binding() {
         }
     );
 
-    let tokens = lex("let player = 12; position = 13; in {};");
-    let (_input, ast) = let_binding(NixTokens(&tokens)).unwrap();
+    let tokens = lex("let player = 12; position = 13; in {}");
+    let (input, ast) = let_binding(NixTokens(&tokens)).unwrap();
+    assert!(input.0.is_empty());
     assert_eq!(
         ast,
         Ast::LetBinding {
@@ -489,6 +493,23 @@ fn test_with() {
             is_recursive: false,
             inherit: vec![],
             span: Range { start: 5, end: 15 }
+        }
+    );
+
+    let tokens = lex("with player; {}");
+    let (input, ast) = expr(NixTokens(&tokens)).unwrap();
+    assert!(input.0.is_empty());
+    assert_eq!(
+        ast,
+        Ast::With {
+            set: Box::new(Ast::Identifier(Range { start: 5, end: 11 })),
+            body: Box::new(Ast::AttrSet {
+                attrs: vec![],
+                inherit: vec![],
+                is_recursive: false,
+                span: Range { start: 13, end: 15 }
+            }),
+            span: Range { start: 0, end: 15 }
         }
     );
 }
@@ -639,8 +660,9 @@ fn test_expression() {
         }
     );
 
-    let tokens = r#"{ x = 1; } // { y = 2; };"#;
-    let (_input, ast) = expr(NixTokens(&lex(tokens))).unwrap();
+    let tokens = lex(r#"{ x = 1; } // { y = 2; }"#);
+    let (input, ast) = expr(NixTokens(&tokens)).unwrap();
+    assert!(input.0.is_empty());
     assert_eq!(
         ast,
         Ast::BinaryOp {
@@ -673,8 +695,9 @@ fn test_expression() {
         }
     );
 
-    let tokens = lex("let t = { x = 1; } ? x; in {};");
-    let (_input, ast) = expr(NixTokens(&tokens)).unwrap();
+    let tokens = lex("let t = { x = 1; } ? x; in {}");
+    let (input, ast) = expr(NixTokens(&tokens)).unwrap();
+    assert!(input.0.is_empty());
     assert_eq!(
         ast,
         Ast::LetBinding {
@@ -717,9 +740,8 @@ fn test_expression() {
 fn test_prett_parsing() {
     use BinOp::*;
 
-    let tokens = lex("12 + 12 * 13;");
-    let (mut input, ast) = prett_parsing(NixTokens(&tokens), 0, Token::Semi).unwrap();
-    input.next();
+    let tokens = lex("12 + 12 * 13");
+    let (input, ast) = prett_parsing(NixTokens(&tokens), 0, Token::Semi).unwrap();
     assert!(input.0.is_empty());
     assert_eq!(
         ast,
@@ -745,9 +767,8 @@ fn test_prett_parsing() {
         }
     );
 
-    let tokens = lex("(12 + 12) * 13;");
-    let (mut input, ast) = prett_parsing(NixTokens(&tokens), 0, Token::Semi).unwrap();
-    input.next();
+    let tokens = lex("(12 + 12) * 13");
+    let (input, ast) = prett_parsing(NixTokens(&tokens), 0, Token::Semi).unwrap();
     assert!(input.0.is_empty());
     assert_eq!(
         ast,
@@ -776,18 +797,20 @@ fn test_prett_parsing() {
 
 #[test]
 fn test_long_lambda() {
-    let tokens = lex(r#"let player = 12; position = 12 * 11; name = "bob"; in {};"#);
-    let (_input, _) = expr(NixTokens(&tokens)).unwrap();
+    let tokens = lex(r#"let player = 12; position = 12 * 11; name = "bob"; in {}"#);
+    let (input, _) = expr(NixTokens(&tokens)).unwrap();
+    assert!(input.0.is_empty());
 
     let tokens = lex(
-        r#"let player = "hi"; position = (12 * 11) + 1; name = "bob"; set = {x = "1";}; in {};"#,
+        r#"let player = "hi"; position = (12 * 11) + 1; name = "bob"; set = {x = "1";}; in {}"#,
     );
-    let (_input, _) = expr(NixTokens(&tokens)).unwrap();
+    let (input, _) = expr(NixTokens(&tokens)).unwrap();
+    assert!(input.0.is_empty());
 }
 
 #[test]
 fn test_application() {
-    let tokens = lex(r#"map map (1+1);"#);
+    let tokens = lex(r#"map map (1+1)"#);
     let (_input, ast) = expr(NixTokens(&tokens)).unwrap();
     assert_eq!(
         ast,
@@ -815,8 +838,9 @@ fn test_application() {
         }
     );
 
-    let tokens = lex(r#"map map.map (1+1);"#);
-    let (_input, ast) = expr(NixTokens(&tokens)).unwrap();
+    let tokens = lex(r#"map map.map (1+1)"#);
+    let (input, ast) = expr(NixTokens(&tokens)).unwrap();
+    assert!(input.0.is_empty());
     assert_eq!(
         ast,
         Ast::BinaryOp {
@@ -848,14 +872,15 @@ fn test_application() {
         }
     );
 
-    let tokens = lex(r#"map (x: x*x) (map (x: x*x) [1 2 3]);"#);
+    let tokens = lex(r#"map (x: x*x) (map (x: x*x) [1 2 3])"#);
     expr(NixTokens(&tokens)).unwrap();
 }
 
 #[test]
 fn test_attribute_access() {
-    let tokens = lex(r#"map.map;"#);
-    let (_input, ast) = expr(NixTokens(&tokens)).unwrap();
+    let tokens = lex(r#"map.map"#);
+    let (input, ast) = expr(NixTokens(&tokens)).unwrap();
+    assert!(input.0.is_empty());
     assert_eq!(
         ast,
         Ast::BinaryOp {
@@ -866,8 +891,9 @@ fn test_attribute_access() {
         }
     );
 
-    let tokens = lex(r#"map.map.map;"#);
-    let (_input, ast) = expr(NixTokens(&tokens)).unwrap();
+    let tokens = lex(r#"map.map.map"#);
+    let (input, ast) = expr(NixTokens(&tokens)).unwrap();
+    assert!(input.0.is_empty());
     assert_eq!(
         ast,
         Ast::BinaryOp {
