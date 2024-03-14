@@ -1,3 +1,4 @@
+use itertools::Itertools;
 use std::collections::HashMap;
 use strum::EnumTryAs;
 use strum_macros::{AsRefStr, Display, EnumDiscriminants};
@@ -12,7 +13,9 @@ pub trait SimpleType: TypeScheme {
     fn level(&self) -> usize;
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Display)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Display, EnumDiscriminants)]
+#[strum_discriminants(derive(AsRefStr, Display))]
+#[strum_discriminants(name(PrimitiveName))]
 pub enum Primitives {
     Number,
     Bool,
@@ -134,15 +137,15 @@ impl Type {
     pub fn show(&self) -> String {
         match self {
             Type::Var(ident) => format!("Var({})", ident.debrujin),
-            Type::Primitive(p) => format!("Primitive({})", p),
-            Type::List(elems) => format!("List({:?})", elems),
-            Type::Function(lhs, rhs) => format!("Function({:?}, {:?})", lhs, rhs),
-            Type::Union(lhs, rhs) => format!("Union({:?}, {:?})", lhs, rhs),
-            Type::Record(fields) => format!("Record({:?})", fields),
-            Type::Top => "Top".to_string(),
-            Type::Bottom => "Bottom".to_string(),
-            Type::Inter(lhs, rhs) => format!("Inter({:?}, {:?})", lhs, rhs),
-            Type::Optional(t) => format!("Optional({:?})", t),
+            Type::Primitive(p) => format!("{}", p),
+            Type::List(elems) => format!("[ {} ]", elems.iter().map(|t| t.show()).join(" ")),
+            Type::Function(lhs, rhs) => format!("{} -> {}", lhs.show(), rhs.show()),
+            Type::Union(lhs, rhs) => format!("{} ∨ {}", lhs, rhs),
+            Type::Record(fields) => format!("{:?}", fields),
+            Type::Top => TypeName::Top.to_string(),
+            Type::Bottom => TypeName::Bottom.to_string(),
+            Type::Inter(lhs, rhs) => format!("{} ∧ {}", lhs.show(), rhs.show()),
+            Type::Optional(t) => format!("Optional<{}>", t.show()),
         }
     }
 }

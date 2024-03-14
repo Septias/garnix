@@ -9,11 +9,11 @@
   - [] Return error array
 
 - Parser
-  - [] Handle `inherit (lib)`
-  - [] Add type-parsing
-  - [] Don't use expr as base
-  - [] out: Use case analysis nixpkgs
+  - [x] Handle `inherit (lib)`
+  - [x] Don't use expr as base
+  - [] out: String interpolation
   - [] import
+  - [] Add type-parsing
 
 - LSP
   - [] Inlay type hints
@@ -22,7 +22,6 @@
     - [] Listen for request
   - [] Error reporting
   - [] Goto source
-  - [] When to load files?
   - [] Reduce get_node_at()
 
 - Writing
@@ -30,12 +29,12 @@
   - [x] Language introduction
   - [x] Language definition
   - [x] Nix language support
+  - [] One-step Semantic
 
 - Misc
   - Read Thiemann papers
   - Read original paper
   - Read Timpe paper
-
 
 ## Improvements
 
@@ -47,7 +46,3 @@
 - Comment positions
 - Errors while parsing
 - Line comments have to end in '\n'
-
-## Useless
-
-- `Result<T, InferError>.span(span)`

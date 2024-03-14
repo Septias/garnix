@@ -1,44 +1,13 @@
 use crate::{
     ast::{Ast, Identifier, PatternElement},
     spanned_infer_error,
-    types::{SimpleType, Type, Var},
+    types::{PrimitiveName, Primitives, SimpleType, Type, Var},
     Context, InferError, InferResult, SpannedError, SpannedInferResult, TypeName,
 };
 use itertools::{Either, Itertools};
 use logos::Span;
 use parser::ast::BinOp;
 use std::collections::{HashMap, HashSet};
-
-/// Lookup all bindings that are part of a `with`-expression and add them to the context.
-/// This creates a new scope.
-fn introduce_set_bindigs<'a>(context: &mut Context<'a>, bindings: &'a Ast) -> InferResult<()> {
-    let (bindings, inherit) = bindings.as_attr_set()?;
-    context.insert(bindings.keys().collect());
-    context.insert(lookup_inherits(context, inherit)?);
-    Ok(())
-}
-
-/// Lookup inherits from the context and return the ones that existed.
-fn lookup_inherits<'a>(
-    context: &Context<'a>,
-    inherit: &[(String, Span)],
-) -> InferResult<Vec<&'a Identifier>> {
-    let (ok, err): (Vec<_>, Vec<_>) = inherit
-        .iter()
-        .map(|(inherit, span)| {
-            context
-                .lookup_by_name(inherit)
-                .ok_or(InferError::UnknownInherit.span(span))
-        })
-        .partition_map(|r| match r {
-            Ok(v) => Either::Left(v),
-            Err(v) => Either::Right(v),
-        });
-    if !err.is_empty() {
-        return Err(InferError::MultipleErrors(err));
-    }
-    Ok(ok)
-}
 
 fn constrain(lhs: &Type, rhs: &Type, cache: &mut HashSet<(&Type, &Type)>) -> InferResult<()> {
     if lhs == rhs {
@@ -101,6 +70,44 @@ fn constrain(lhs: &Type, rhs: &Type, cache: &mut HashSet<(&Type, &Type)>) -> Inf
     }
 
     Ok(())
+}
+
+fn constrain_numerals(
+    lhs: Type,
+    rhs: Type,
+    cache: &mut HashSet<(&Type, &Type)>,
+) -> InferResult<()> {
+    match lhs {
+        Type::Primitive(prim) => {
+            if prim == Primitives::Number {
+                return Ok(());
+            } else {
+                return Err(InferError::PrimitiveMismatch {
+                    expected: PrimitiveName::Number,
+                    found: lhs.to_string(),
+                });
+            }
+        }
+        _ => (),
+    };
+
+    match rhs {
+        Type::Primitive(prim) => {
+            if prim == Primitives::Number {
+                return Ok(());
+            } else {
+                return Err(InferError::PrimitiveMismatch {
+                    expected: PrimitiveName::Number,
+                    found: rhs.to_string(),
+                });
+            }
+        }
+        _ => (),
+    };
+
+    // TODO: right side for constraint?
+    constrain(&lhs, &Type::Primitive(Primitives::Number), cache)?;
+    constrain(&rhs, &Type::Primitive(Primitives::Number), cache)
 }
 
 struct Inferrer(usize);
@@ -169,12 +176,18 @@ fn type_term<'a>(ctx: &mut Context<'a>, term: &'a Ast, lvl: usize) -> Result<Typ
     let cache = &mut HashSet::new();
     use Type::*;
     match term {
+        Ast::Identifier(super::ast::Identifier { debrujin, span, .. }) => ctx
+            .lookup_type(*debrujin)
+            .ok_or(InferError::UnknownIdentifier.span(span)),
+        
         Ast::UnaryOp { rhs, .. } => type_term(ctx, rhs, lvl),
+        
         Ast::BinaryOp { op, lhs, rhs, span } => {
             let ty1 = type_term(ctx, lhs, lvl)?;
             let ty2 = type_term(ctx, rhs, lvl)?;
 
             match op {
+                // Application etc.
                 BinOp::Application => {
                     let res = fresh_var();
                     constrain(
@@ -183,40 +196,6 @@ fn type_term<'a>(ctx: &mut Context<'a>, term: &'a Ast, lvl: usize) -> Result<Typ
                         cache,
                     );
                     Ok(res)
-                }
-                BinOp::ListConcat => {
-                    if is_var_and((&ty1, &ty2), TypeName::List) {
-                        constrain(&ty1, &ty2, cache);
-                    }
-
-                    let lhs = ty1
-                        .into_list()
-                        .map_err(|err| SpannedError::from((span, err)))?;
-                    let rhs = ty2
-                        .into_list()
-                        .map_err(|err| SpannedError::from((span, err)))?;
-
-                    Ok(Type::List([lhs, rhs].concat()))
-                }
-                BinOp::Mul => constrain(lhs, rhs, cache),
-                BinOp::Div => expect_numerals(ty1, ty2, span),
-                BinOp::Sub => expect_numerals(ty1, ty2, span),
-                BinOp::Add => expect_numerals(ty1, ty2, span),
-                BinOp::Update => constrain_update(),
-                BinOp::HasAttribute => {
-                    if let Record(bindings) = ty1 {
-                        if let Var(ident) = ty2 {
-                            if bindings.get(&ident.name.to_string()).is_some() {
-                                Ok(Bool)
-                            } else {
-                                Ok(Null)
-                            }
-                        } else {
-                            spanned_infer_error(TypeName::Identifier, ty2.get_name(), span)
-                        }
-                    } else {
-                        spanned_infer_error(TypeName::Set, ty1.get_name(), span)
-                    }
                 }
                 BinOp::AttributeSelection => {
                     let res = fresh_var();
@@ -235,24 +214,50 @@ fn type_term<'a>(ctx: &mut Context<'a>, term: &'a Ast, lvl: usize) -> Result<Typ
                     );
                     Ok(res)
                 }
-                BinOp::AttributeFallback => {
-                    if ty1 == Null {
-                        Ok(ty2)
-                    } else {
-                        Ok(ty1)
+
+                // Object modifications
+                BinOp::ListConcat => {
+                    if is_var_and((&ty1, &ty2), TypeName::List) {
+                        constrain(&ty1, &ty2, cache);
                     }
+                    let lhs = ty1
+                        .into_list()
+                        .map_err(|err| SpannedError::from((span, err)))?;
+                    let rhs = ty2
+                        .into_list()
+                        .map_err(|err| SpannedError::from((span, err)))?;
+
+                    Ok(Type::List([lhs, rhs].concat()))
                 }
+                BinOp::Update => todo!(),
+
+                // Primitives
+                BinOp::Mul | BinOp::Div | BinOp::Sub => {
+                    constrain_numerals(ty1, ty2, cache).map_err(|err| err.span(term.get_span()))?;
+                    Ok(Primitive(Primitives::Number))
+                }
+                BinOp::Add => todo!(),
+
+                // Misc
+                BinOp::HasAttribute => todo!(),
+                BinOp::AttributeFallback => todo!(),
+
+                // Comparisons
                 BinOp::LessThan => expect_numerals(ty1, ty2, span),
                 BinOp::LessThanEqual => expect_numerals(ty1, ty2, span),
                 BinOp::GreaterThan => expect_numerals(ty1, ty2, span),
                 BinOp::GreaterThanEqual => expect_numerals(ty1, ty2, span),
                 BinOp::Equal => expect_numerals(ty1, ty2, span),
                 BinOp::NotEqual => expect_bools(ty1, ty2, span),
+
+                // Logical oprators
                 BinOp::And => expect_bools(ty1, ty2, span),
                 BinOp::Or => expect_bools(ty1, ty2, span),
                 BinOp::Implication => expect_bools(ty1, ty2, span),
             }
         }
+
+        // Language constructs
         Ast::AttrSet {
             attrs,
             is_recursive: _, // TODO: handle recursiveness
@@ -374,12 +379,12 @@ fn type_term<'a>(ctx: &mut Context<'a>, term: &'a Ast, lvl: usize) -> Result<Typ
             ctx.pop_scope();
             ty
         }
-        Ast::Identifier(super::ast::Identifier { debrujin, span, .. }) => ctx
-            .lookup_type(*debrujin)
-            .ok_or(InferError::UnknownIdentifier.span(span)),
+
         Ast::List { exprs, span: _ } => Ok(Type::List(
             exprs.iter().flat_map(|ast| type_term(ctx, ast)).collect(),
         )),
+
+        // Primitives
         Ast::NixString(_) => Ok(String),
         Ast::NixPath(_) => Ok(Path),
         Ast::Bool { val: _, span: _ } => Ok(Bool),

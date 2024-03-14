@@ -1,10 +1,10 @@
-#![feature(box_patterns)]
+#![feature(box_patterns, iter_intersperse)]
 use ast::Identifier;
 use core::str;
 use logos::Span;
 use std::fmt;
 use thiserror::Error;
-use types::{Type, TypeName};
+use types::{PrimitiveName, Type, TypeName};
 
 pub mod ast;
 pub mod helpers;
@@ -28,6 +28,11 @@ pub enum InferError {
     CannotConstrain { lhs: Type, rhs: Type },
     #[error("Type mismatch: expected {expected}, found {found}")]
     TypeMismatch { expected: TypeName, found: TypeName },
+    #[error("Primitve Mismatch: expected {expected}, found {found}")]
+    PrimitiveMismatch {
+        expected: PrimitiveName,
+        found: String,
+    },
     #[error("Can't convert {from} to {to}")]
     ConversionError { from: String, to: &'static str },
     #[error("Can't infer type of comment")]
