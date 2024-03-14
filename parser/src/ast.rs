@@ -20,11 +20,16 @@ pub enum PatternElement {
 
 /// A pattern.
 #[derive(Debug, Clone, PartialEq)]
-pub struct Pattern {
-    /// A list of patterns
-    pub patterns: Vec<PatternElement>,
-    /// Is widcard
-    pub is_wildcard: bool,
+pub enum Pattern {
+    Set {
+        /// A list of Identifiers
+        patterns: Vec<PatternElement>,
+        /// Is widcard
+        is_wildcard: bool,
+        /// An optional name binding
+        name: Option<Span>,
+    },
+    Identifier(Span),
 }
 
 /// Binary operators.
@@ -122,6 +127,12 @@ impl UnOp {
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct Inherit {
+    pub name: Option<Vec<Span>>,
+    pub items: Vec<Span>,
+}
+
 /// Ast for the the nix language
 #[repr(u8)]
 #[derive(Debug, Clone, PartialEq, AsRefStr)]
@@ -150,7 +161,7 @@ pub enum Ast {
     AttrSet {
         /// A set of attributes
         attrs: Vec<(Span, Ast)>,
-        inherit: Vec<Span>,
+        inherit: Vec<Inherit>,
         is_recursive: bool,
         span: Span,
     },
@@ -163,7 +174,7 @@ pub enum Ast {
         /// The expression to evaluate
         body: Box<Ast>,
         /// A list of identifiers to inherit from the parent scope
-        inherit: Option<Vec<Span>>,
+        inherit: Vec<Inherit>,
         span: Span,
     },
 
@@ -263,7 +274,6 @@ impl Ast {
             | Ast::Float { span, .. }
             | Ast::SearchPath(span)
             | Ast::Null(span) => span.clone(),
-
         }
     }
 }

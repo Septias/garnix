@@ -11,14 +11,14 @@ use nom::{
 use crate::{
     ast::{
         Ast::{self, *},
-        BinOp, Pattern, PatternElement, UnOp,
+        BinOp, Inherit, Pattern, PatternElement, UnOp,
     },
     lexer::{
         nom_interop::token,
         NixTokens,
         Token::{
-            self, Assignment, Comma, Dots, DoubleColon, Else, If, In, Inherit, LBrace, Let, Minus,
-            Question, RBrace, Rec, Semi, Text, Then,
+            self, Assignment, Comma, Dots, DoubleColon, Else, If, In, LBrace, Let, Minus, Question,
+            RBrace, Rec, Semi, Text, Then,
         },
     },
 };
@@ -51,10 +51,8 @@ pub(crate) fn spanned<'a, T, X>(
 }
 
 /// Parse a single identifier.
-pub(crate) fn ident(input: NixTokens<'_>) -> PResult<'_, Ast> {
-    token(Text)
-        .map(|(_, name)| Ast::Identifier(name))
-        .parse(input)
+pub(crate) fn ident(input: NixTokens<'_>) -> PResult<'_, Span> {
+    token(Text).map(|(_, name)| name).parse(input)
 }
 
 /// Parse an identifier with a default value.
@@ -62,7 +60,7 @@ pub(crate) fn ident_default_pattern(input: NixTokens<'_>) -> PResult<'_, Pattern
     spanned(
         tuple((ident, token(Question), cut(expr))),
         |span, (identifier, _, ast)| PatternElement::DefaultIdentifier {
-            identifier: identifier.as_span(),
+            identifier,
             span,
             ast,
         },
@@ -99,14 +97,15 @@ pub(crate) fn literal(input: NixTokens<'_>) -> PResult<'_, Ast> {
 }
 
 /// Parse a set pattern.
-pub(crate) fn set_pattern(input: NixTokens<'_>) -> PResult<'_, Pattern> {
+pub(crate) fn set_pattern(input: NixTokens<'_>) -> PResult<'_, (Vec<PatternElement>, bool)> {
     let elements = separated_list1(
         token(Comma),
         alt((
-            ident.map(|ast| PatternElement::Identifier(ast.as_span())),
+            ident.map(|ast| PatternElement::Identifier(ast)),
             ident_default_pattern,
         )),
     );
+
     context(
         "Pattern",
         preceded(
@@ -116,18 +115,9 @@ pub(crate) fn set_pattern(input: NixTokens<'_>) -> PResult<'_, Pattern> {
                     elements,
                     opt(preceded(token(Comma), token(Dots))).map(|a| a.is_some()),
                 )
-                .map(|elem| Pattern {
-                    patterns: elem.0,
-                    is_wildcard: elem.1,
-                })
-                .or(token(Dots).map(|_| Pattern {
-                    patterns: vec![],
-                    is_wildcard: true,
-                }))
-                .or(success(Pattern {
-                    patterns: vec![],
-                    is_wildcard: false,
-                })),
+                .map(|elem| (elem.0, elem.1))
+                .or(token(Dots).map(|_| (vec![], true)))
+                .or(success((vec![], false))),
                 token(RBrace),
             ),
         ),
@@ -138,31 +128,37 @@ pub(crate) fn set_pattern(input: NixTokens<'_>) -> PResult<'_, Pattern> {
 /// pattern = identifier | set-pattern
 pub(crate) fn pattern(input: NixTokens<'_>) -> PResult<'_, Pattern> {
     alt((
-        ident.map(|ast| Pattern {
-            patterns: vec![PatternElement::Identifier(ast.as_span())],
-            is_wildcard: false,
-        }),
-        set_pattern,
+        ident.map(|ast| Pattern::Identifier(ast)),
+        pair(opt(terminated(ident, token(Token::At))), set_pattern).map(
+            |(name, (patterns, is_wildcard))| Pattern::Set {
+                patterns,
+                name,
+                is_wildcard,
+            },
+        ),
+        pair(set_pattern, opt(terminated(ident, token(Token::At)))).map(
+            |((patterns, is_wildcard), name)| Pattern::Set {
+                patterns,
+                name,
+                is_wildcard,
+            },
+        ),
     ))(input)
 }
 
 /// Parse a single statement.
 /// ident = expr;
+/// inherit [()] [ident ];
 pub(crate) fn statement(input: NixTokens<'_>) -> PResult<'_, Statement> {
     context(
         "statement",
         alt((
             terminated(
-                pair(
-                    ident.map(|ast| ast.as_span()),
-                    cut(preceded(token(Assignment), expr)),
-                ),
+                pair(ident, cut(preceded(token(Assignment), expr))),
                 token(Semi),
             )
             .map(|statement| Statement::Assignment(statement.0, statement.1)),
-            inherit.map(|inherit| {
-                Statement::Inherit(inherit.into_iter().map(|ast| ast.as_span()).collect())
-            }),
+            inherit.map(|inherit| Statement::Inherit(inherit)),
         )),
     )
     .parse(input)
@@ -192,7 +188,7 @@ pub(crate) fn set(input: NixTokens<'_>) -> PResult<'_, Ast> {
                     is_recursive,
                     inherit: inherits
                         .into_iter()
-                        .flat_map(|stmt| match stmt {
+                        .map(|stmt| match stmt {
                             Statement::Inherit(inherit) => inherit,
                             _ => unreachable!(),
                         })
@@ -243,12 +239,34 @@ pub(crate) fn assert(input: NixTokens<'_>) -> PResult<'_, Ast> {
     )(input)
 }
 
-pub(crate) fn inherit(input: NixTokens<'_>) -> PResult<'_, Vec<Ast>> {
-    delimited(token(Inherit), many0(ident), token(Semi))(input)
+pub(crate) fn inherit_root(input: NixTokens<'_>) -> PResult<'_, Vec<Span>> {
+    delimited(
+        token(Token::LParen),
+        pair(
+            context("Root Brackets are not allowed to be empty", cut(ident)),
+            many0(preceded(token(Token::Dot), ident)),
+        ),
+        token(Token::RParen),
+    )
+    .map(|(first, mut other)| {
+        other.insert(0, first);
+        other
+    })
+    .parse(input)
+}
+
+pub(crate) fn inherit(input: NixTokens<'_>) -> PResult<'_, Inherit> {
+    delimited(
+        token(Token::Inherit),
+        pair(opt(inherit_root), many0(ident)),
+        token(Semi),
+    )
+    .map(|(name, items)| Inherit { name, items })
+    .parse(input)
 }
 
 pub(crate) enum Statement {
-    Inherit(Vec<Span>),
+    Inherit(Inherit),
     Assignment(Span, Ast),
 }
 
@@ -265,11 +283,11 @@ pub(crate) fn let_binding(input: NixTokens<'_>) -> PResult<'_, Ast> {
                 .into_iter()
                 .partition(|stmt| matches!(stmt, Statement::Assignment(..)));
 
-            let inherits: Vec<_> = inherits
+            let inherit: Vec<_> = inherits
                 .into_iter()
-                .flat_map(|stmt| match stmt {
+                .map(|stmt| match stmt {
                     Statement::Inherit(inherit) => inherit,
-                    _ => unreachable!(),
+                    Statement::Assignment(_, _) => unreachable!(),
                 })
                 .collect();
 
@@ -282,11 +300,7 @@ pub(crate) fn let_binding(input: NixTokens<'_>) -> PResult<'_, Ast> {
                     })
                     .collect(),
                 body: Box::new(body),
-                inherit: if !inherits.is_empty() {
-                    Some(inherits)
-                } else {
-                    None
-                },
+                inherit,
                 span,
             }
         },
@@ -301,7 +315,14 @@ pub(crate) fn with(input: NixTokens<'_>) -> PResult<'_, Ast> {
 }
 
 pub(crate) fn atom(input: NixTokens<'_>) -> PResult<'_, Ast> {
-    alt((let_binding, conditional, set, list, literal, ident))(input)
+    alt((
+        let_binding,
+        conditional,
+        set,
+        list,
+        literal,
+        ident.map(|ast| Ast::Identifier(ast)),
+    ))(input)
 }
 
 pub(crate) fn list(input: NixTokens<'_>) -> PResult<'_, Ast> {
@@ -327,7 +348,7 @@ pub(crate) fn expr(input: NixTokens<'_>) -> PResult<'_, Ast> {
                     assert,
                     let_binding,
                     literal,
-                    ident,
+                    ident.map(|ast| Ast::Identifier(ast)),
                 )),
             ),
             |span, (with, expr)| {
