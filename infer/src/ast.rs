@@ -1,5 +1,5 @@
 use super::{helpers::fold_path, InferError, InferResult};
-use crate::Type;
+use crate::{ast, Type};
 use core::str;
 use logos::Span;
 use parser::ast::{Ast as ParserAst, BinOp, BinOpDiscriminants, UnOp};
@@ -19,9 +19,18 @@ pub enum PatternElement {
 
 /// A pattern.
 #[derive(Debug, Clone, PartialEq)]
-pub struct Pattern {
-    pub patterns: Vec<PatternElement>,
-    pub is_wildcard: bool,
+pub enum Pattern {
+    Record {
+        patterns: Vec<PatternElement>,
+        is_wildcard: bool,
+    },
+    Identifier(Identifier),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Inherit {
+    pub name: Option<Vec<Span>>,
+    pub items: Vec<Span>,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Eq)]
@@ -85,7 +94,7 @@ pub enum Ast {
     AttrSet {
         attrs: HashMap<Identifier, Ast>,
         is_recursive: bool,
-        inherit: Vec<(String, Span)>,
+        inherit: Vec<Inherit>,
         span: Span,
     },
 
@@ -93,7 +102,7 @@ pub enum Ast {
     LetBinding {
         bindings: Vec<(Identifier, Ast)>,
         body: Box<Ast>,
-        inherit: Vec<(String, Span)>,
+        inherit: Vec<Inherit>,
         span: Span,
     },
 
@@ -248,7 +257,7 @@ impl Ast {
 
     /// Tries to convert the ast to a set.
     #[allow(clippy::type_complexity)]
-    pub fn as_attr_set(&self) -> InferResult<(&HashMap<Identifier, Ast>, &Vec<(String, Span)>)> {
+    pub fn as_attr_set(&self) -> InferResult<(&HashMap<Identifier, Ast>, &Vec<Inherit>)> {
         match self {
             Ast::AttrSet { attrs, inherit, .. } => Ok((attrs, inherit)),
             e => Err(InferError::ConversionError {
@@ -440,10 +449,7 @@ fn transform_ast(value: ParserAst, cache: &mut Cache, source: &str) -> Ast {
             Ast::AttrSet {
                 attrs,
                 is_recursive,
-                inherit: inherit
-                    .into_iter()
-                    .map(|inherit| (source[inherit.clone()].to_string(), inherit))
-                    .collect(),
+                inherit: todo!(),
                 span,
             }
         }
@@ -462,27 +468,13 @@ fn transform_ast(value: ParserAst, cache: &mut Cache, source: &str) -> Ast {
                 .collect();
 
             let mut new = vec![];
-            let inherit = if let Some(inherit) = inherit {
-                let mut inherits = Vec::with_capacity(inherit.len());
-                for name in inherit {
-                    let name_name = &source[name.clone()];
-                    inherits.push((name_name.to_string(), name.clone()));
-                    // TODO: maybe this should only be lookup instead of lookup & create
-                    let identifier = cache.lookup(name_name, name.clone());
-                    new.push(identifier);
-                }
-                inherits
-            } else {
-                vec![]
-            };
-
             new.extend(bindings.iter().map(|(ident, _)| ident.clone()));
             let body = cache.with_scope(new, |cache| transform_ast(*body, cache, source));
 
             LetBinding {
                 bindings,
                 body: Box::new(body),
-                inherit,
+                inherit: todo!(),
                 span,
             }
         }
