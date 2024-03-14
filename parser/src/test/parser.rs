@@ -442,8 +442,9 @@ fn test_let_binding() {
         }
     );
 
-    let tokens = lex("let player = 12; position = 13; in {};");
-    let (_input, ast) = let_binding(NixTokens(&tokens)).unwrap();
+    let tokens = lex("let player = 12; position = 13; in {}");
+    let (input, ast) = let_binding(NixTokens(&tokens)).unwrap();
+    assert!(input.0.is_empty());
     assert_eq!(
         ast,
         Ast::LetBinding {
@@ -802,13 +803,15 @@ fn test_prett_parsing() {
 
 #[test]
 fn test_long_lambda() {
-    let tokens = lex(r#"let player = 12; position = 12 * 11; name = "bob"; in {};"#);
-    let (_input, _) = expr(NixTokens(&tokens)).unwrap();
+    let tokens = lex(r#"let player = 12; position = 12 * 11; name = "bob"; in {}"#);
+    let (input, _) = expr(NixTokens(&tokens)).unwrap();
+    assert!(input.0.is_empty());
 
     let tokens = lex(
-        r#"let player = "hi"; position = (12 * 11) + 1; name = "bob"; set = {x = "1";}; in {};"#,
+        r#"let player = "hi"; position = (12 * 11) + 1; name = "bob"; set = {x = "1";}; in {}"#,
     );
-    let (_input, _) = expr(NixTokens(&tokens)).unwrap();
+    let (input, _) = expr(NixTokens(&tokens)).unwrap();
+    assert!(input.0.is_empty());
 }
 
 #[test]
