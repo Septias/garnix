@@ -203,13 +203,15 @@ pub(crate) fn set(input: NixTokens<'_>) -> PResult<'_, Ast> {
 /// Parse a lambda function.
 /// lambda = pat : expr
 pub fn lambda(input: NixTokens<'_>) -> PResult<'_, Ast> {
-    let patterns = many1(terminated(pattern, token(DoubleColon)));
-    spanned(pair(patterns, expr), |span, (patterns, body)| Lambda {
-        arguments: patterns,
-        body: Box::new(body),
-        arg_binding: None,
-        span,
-    })(input)
+    spanned(
+        pair(terminated(pattern, token(DoubleColon)), expr),
+        |span, (pattern, body)| Lambda {
+            pattern,
+            body: Box::new(body),
+            arg_binding: None,
+            span,
+        },
+    )(input)
 }
 
 /// Parse a conditional.

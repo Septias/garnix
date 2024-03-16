@@ -182,7 +182,7 @@ pub enum Ast {
     /// func = pattern: body
     /// parsed by [crate::parser::lambda]
     Lambda {
-        arguments: Vec<Pattern>,
+        pattern: Pattern,
         body: Box<Ast>,
         arg_binding: Option<Span>,
         span: Span,
