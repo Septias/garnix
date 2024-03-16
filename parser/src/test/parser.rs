@@ -397,7 +397,7 @@ fn test_inherit() {
                 Range { start: 21, end: 29 },
                 Range { start: 30, end: 37 }
             ],
-            name: Some(vec![Range { start: 9, end: 12 }])
+            name: Some(Ast::Identifier(Range { start: 9, end: 12 }))
         }
     );
 
@@ -412,10 +412,12 @@ fn test_inherit() {
                 Range { start: 26, end: 34 },
                 Range { start: 35, end: 42 }
             ],
-            name: Some(vec![
-                Range { start: 9, end: 12 },
-                Range { start: 13, end: 17 }
-            ])
+            name: Some(Ast::BinaryOp {
+                lhs: Box::new(Ast::Identifier(Range { start: 9, end: 12 })),
+                rhs: Box::new(Ast::Identifier(Range { start: 13, end: 17 })),
+                op: BinOp::AttributeSelection,
+                span: Range { start: 9, end: 17 }
+            })
         }
     );
 
