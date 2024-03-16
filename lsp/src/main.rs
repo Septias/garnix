@@ -5,9 +5,9 @@ use async_lsp::{
 };
 use lsp_types::{
     notification,
-    request::{self, InlayHintRequest},
-    Hover, HoverContents, HoverProviderCapability, InitializeResult, InlayHintServerCapabilities,
-    MarkedString, ServerCapabilities, Url,
+    request::{self, DocumentDiagnosticRequest, InlayHintRequest},
+    Diagnostic, Hover, HoverContents, HoverProviderCapability, InitializeResult, InlayHintLabel,
+    InlayHintServerCapabilities, MarkedString, ServerCapabilities, Url,
 };
 use std::{collections::HashMap, fs, ops::ControlFlow};
 use tower::ServiceBuilder;
@@ -22,16 +22,57 @@ mod utils;
 struct ServerState {
     _client: ClientSocket,
     files: HashMap<String, (infer::Ast, String)>,
+    errors: HashMap<String, Vec<Diagnostic>>,
 }
 
 impl ServerState {
     pub fn load_file(&mut self, uri: &Url) -> anyhow::Result<()> {
         let content = fs::read_to_string(uri.path()).unwrap();
-        let ast = parse(&content)?;
-        let ast = infer::Ast::from_parser_ast(ast, &content);
-        if let Err(e) = infer(&ast) {
-            eprintln!("[Inference] Error: {:?}", e);
+        match parse(&content) {
+            Ok(ast) => {
+                let ast = infer::Ast::from_parser_ast(ast, &content);
+                if let Err(e) = infer(&ast) {
+                    if !self.errors.contains_key(&uri.as_str()) {
+                        let errors = self.errors.get_mut(uri.as_str()).unwrap();
+                        errors.push(Diagnostic {
+                            range: to_lsp_range(&e.span, &content),
+                            message: format!("{:?}", e),
+                            severity: Some(lsp_types::DiagnosticSeverity::Error),
+                            ..Default::default()
+                        });
+                    } else {
+                        self.errors.insert(
+                            uri.to_string(),
+                            vec![Diagnostic {
+                                range: to_lsp_range(&e.span, &content),
+                                message: format!("{:?}", e),
+                                severity: Some(lsp_types::DiagnosticSeverity::Error),
+                                ..Default::default()
+                            }],
+                        );
+                    }
+                };
+            }
+            Err(err) => {
+                self.errors.insert(uri.to_string(), vec![]);
+                let errors = self.errors.get_mut(uri.as_str()).unwrap();
+                match err {
+                    parser::ParseError::MultipleErrors { errors } => {
+                        for (kind, span) in errors {
+                            let diagnostic = Diagnostic {
+                                range: to_lsp_range(&span, &content),
+                                message: format!("{:?}", kind),
+                                severity: Some(lsp_types::DiagnosticSeverity::Error),
+                                ..Default::default()
+                            };
+                            errors.push(diagnostic);
+                        }
+                    }
+                }
+                errors.extend(err)
+            }
         };
+
         self.files.insert(uri.as_str().to_string(), (ast, content));
         Ok(())
     }
@@ -43,6 +84,7 @@ async fn main() {
         let mut router = Router::new(ServerState {
             _client: client.clone(),
             files: HashMap::new(),
+            errors: HashMap::new(),
         });
 
         router
@@ -52,6 +94,7 @@ async fn main() {
                     capabilities: ServerCapabilities {
                         hover_provider: Some(HoverProviderCapability::Simple(true)),
                         inlay_hint_provider: Some(lsp_types::OneOf::Left(true)),
+                        diagnostic_provider: Some(true),
                         ..ServerCapabilities::default()
                     },
                     server_info: None,
@@ -105,7 +148,39 @@ async fn main() {
                 async move { ret }
             })
             .request::<InlayHintRequest, _>(|st, params| {
-                let ret = todo!();
+                let ret = st
+                    .files
+                    .get(&params.text_document.uri)
+                    .map(|(ast, source)| {
+                        let idents = ast.collect_identifiers();
+                        idents.into_iter().map(|ident| lsp_types::InlayHint {
+                            position: to_lsp_range(ast.get_span(), source),
+                            label: InlayHintLabel::String(ident.ty),
+                            ..Default::default()
+                        });
+
+                        hints
+                    });
+                async move { ret }
+            })
+            .request::<DocumentDiagnosticRequest>(|st, params| {
+                let ret = st
+                    .files
+                    .get(&params.text_document.uri)
+                    .map(|(ast, source)| {
+                        let mut diagnostics = vec![];
+                        for error in ast.errors.iter() {
+                            let range = to_lsp_range(&error.span, source);
+                            let diagnostic = Diagnostic {
+                                range,
+                                message: error.message.clone(),
+                                severity: Some(lsp_types::DiagnosticSeverity::Error),
+                                ..Default::default()
+                            };
+                            diagnostics.push(diagnostic);
+                        }
+                        diagnostics
+                    });
                 async move { ret }
             })
             .notification::<notification::Initialized>(|_, _| ControlFlow::Continue(()))

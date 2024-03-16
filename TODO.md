@@ -7,24 +7,22 @@
   - [x] Handle `inherit (lib)`
   - [x] Don't use expr as base
   - [] out: String interpolation
-  - [] import
   - [] Add type-parsing
 
 - LSP
-  - [] Inlay type hints
-    - [] Enable Capability
-    - [] Collect all identifiers
-    - [] Listen for request
+  - [x] Inlay type hints
   - [] Error reporting
   - [] Goto source
   - [] Reduce get_node_at()
 
 - Writing
   - [x] Abstract
+  - [x] Motivation
   - [x] Language introduction
   - [x] Language definition
   - [x] Nix language support
   - [] One-step Semantic
+  - [] Ausblick
 
 - Misc
   - Read Thiemann papers

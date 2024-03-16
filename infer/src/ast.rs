@@ -42,6 +42,7 @@ pub struct Identifier {
     pub span: Span,
     pub lower_bounds: RefCell<Vec<Type>>,
     pub upper_bounds: RefCell<Vec<Type>>,
+    pub ty: RefCell<Option<Type>>,
 }
 
 impl Identifier {
@@ -52,6 +53,7 @@ impl Identifier {
             span,
             lower_bounds: RefCell::new(vec![]),
             upper_bounds: RefCell::new(vec![]),
+            ty: RefCell::new(None),
         }
     }
 
@@ -267,6 +269,7 @@ impl Ast {
         }
     }
 
+    /// Get the span of the ast.
     pub fn get_span(&self) -> &Span {
         match self {
             Ast::UnaryOp { span, .. }
@@ -291,6 +294,8 @@ impl Ast {
         }
     }
 
+    /// Tries to get the nod at the given position.
+    /// If not possible, return the next bigger node.
     pub fn get_node_at(&self, position: usize) -> Option<&Ast> {
         let containing = match self {
             Ast::UnaryOp { rhs, .. } => {
@@ -408,6 +413,72 @@ impl Ast {
         } else {
             None
         })
+    }
+
+    /// Collect all identifiers in the ast.
+    pub fn collect_identifiers(&self) -> Vec<&Identifier> {
+        let mut ret = vec![];
+        self.collect_identifiers_inner(&mut ret);
+        ret
+    }
+
+    fn collect_identifiers_inner<'a>(&'a self, ret: &mut Vec<&'a Identifier>) {
+        match self {
+            Ast::UnaryOp { rhs, .. } => rhs.collect_identifiers_inner(ret),
+            Ast::BinaryOp { lhs, rhs, .. } => {
+                lhs.collect_identifiers_inner(ret);
+                rhs.collect_identifiers_inner(ret);
+            }
+            Ast::AttrSet { attrs, .. } => {
+                for (_, expr) in attrs.iter() {
+                    expr.collect_identifiers_inner(ret);
+                }
+            }
+            Ast::LetBinding { bindings, body, .. } => {
+                for (ident, expr) in bindings.iter() {
+                    ret.push(ident);
+                    expr.collect_identifiers_inner(ret);
+                }
+                body.collect_identifiers_inner(ret);
+            }
+            Ast::Lambda {
+                body, arguments, ..
+            } => {
+                body.collect_identifiers_inner(ret);
+                for argument in arguments {
+                    if let Pattern::Identifier(ident) = argument {
+                        ret.push(ident);
+                    }
+                }
+            }
+            Ast::Conditional {
+                condition,
+                expr1,
+                expr2,
+                ..
+            } => {
+                condition.collect_identifiers_inner(ret);
+                expr1.collect_identifiers_inner(ret);
+                expr2.collect_identifiers_inner(ret);
+            }
+            Ast::Assertion {
+                condition, expr, ..
+            } => {
+                condition.collect_identifiers_inner(ret);
+                expr.collect_identifiers_inner(ret);
+            }
+            Ast::With { set, body, .. } => {
+                set.collect_identifiers_inner(ret);
+                body.collect_identifiers_inner(ret);
+            }
+            Ast::Identifier(ident) => ret.push(ident),
+            Ast::List { exprs, .. } => {
+                for expr in exprs.iter() {
+                    expr.collect_identifiers_inner(ret);
+                }
+            }
+            _ => {}
+        }
     }
 }
 
