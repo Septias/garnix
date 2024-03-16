@@ -6,7 +6,7 @@ fn main() -> anyhow::Result<()> {
     if let Some(filename) = &args.get(1) {
         let input = std::fs::read_to_string(filename)?;
         let tokens = lex(&input);
-        match map_err(parser::parser::lambda(NixTokens(&tokens)), &input) {
+        match parser::parser::lambda(NixTokens(&tokens)) {
             Ok((_, ast)) => {
                 let ast = infer::Ast::from_parser_ast(ast, &input);
                 println!("ast: {:#?}", ast);
@@ -15,7 +15,7 @@ fn main() -> anyhow::Result<()> {
                 };
             }
             Err(e) => match e {
-                nom::Err::Error(e) | nom::Err::Failure(e) => println!("{}", e),
+                nom::Err::Error(e) | nom::Err::Failure(e) => println!("{:?}", e),
                 nom::Err::Incomplete(e) => println!("{:?}", e),
             },
         }

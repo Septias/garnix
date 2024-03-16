@@ -9,12 +9,6 @@
   - [] out: String interpolation
   - [] Add type-parsing
 
-- LSP
-  - [x] Inlay type hints
-  - [] Error reporting
-  - [] Goto source
-  - [] Reduce get_node_at()
-
 - Writing
   - [x] Abstract
   - [x] Motivation

@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use strum::EnumTryAs;
 use strum_macros::{AsRefStr, Display, EnumDiscriminants};
 
-use crate::{infer_error, InferResult};
+use crate::{ast::Identifier, infer_error, InferResult};
 
 pub trait TypeScheme {
     fn instantiate(self, lvl: usize) -> Type;
@@ -13,17 +13,6 @@ pub trait SimpleType: TypeScheme {
     fn level(&self) -> usize;
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Display, EnumDiscriminants)]
-#[strum_discriminants(derive(AsRefStr, Display))]
-#[strum_discriminants(name(PrimitiveName))]
-pub enum Primitives {
-    Number,
-    Bool,
-    String,
-    Path,
-    Null,
-    Undefined,
-}
 /// A single identifier.
 /// The name should be a debrujin index and the path is used for set accesses.
 #[derive(Debug, Clone, PartialEq, Eq, Default, Hash)]
@@ -34,16 +23,33 @@ pub struct Var {
     pub level: usize,
 }
 
+impl From<&Identifier> for Var {
+    fn from(ident: &Identifier) -> Self {
+        Self {
+            debrujin: ident.debrujin,
+            level: ident.level,
+            ..Default::default()
+        }
+    }
+}
+
 pub type PolarVar = (Var, bool);
 
 /// A nix language type.
-#[derive(Debug, Clone, PartialEq, Eq, Display, EnumDiscriminants, EnumTryAs)]
+#[derive(Debug, Clone, PartialEq, Eq, Display, EnumDiscriminants, AsRefStr)]
 #[strum_discriminants(derive(AsRefStr, Display))]
 #[strum_discriminants(name(TypeName))]
 pub enum Type {
     Top,
     Bottom,
-    Primitive(Primitives),
+
+    Number,
+    Bool,
+    String,
+    Path,
+    Null,
+    Undefined,
+
     Var(Var),
     Function(Box<Type>, Box<Type>),
     List(Vec<Type>),
@@ -53,6 +59,15 @@ pub enum Type {
     // Complexe types only created by simplification
     Union(Box<Type>, Box<Type>),
     Inter(Box<Type>, Box<Type>),
+}
+
+impl Type {
+    pub fn get_var(&self) -> InferResult<&Var> {
+        match self {
+            Type::Var(ident) => Ok(ident),
+            t => infer_error(TypeName::Var, t.get_name()),
+        }
+    }
 }
 
 impl std::hash::Hash for Type {
@@ -81,7 +96,12 @@ impl SimpleType for Type {
             Type::Function(lhs, rhs) => lhs.level().max(rhs.level()),
             Type::List(ls) => ls.iter().map(|t| t.level()).max().unwrap_or(0),
             Type::Record(rc) => rc.values().map(|t| t.level()).max().unwrap_or(0),
-            Type::Primitive(_) => 0,
+            Type::Bool
+            | Type::Number
+            | Type::String
+            | Type::Path
+            | Type::Null
+            | Type::Undefined => 0,
             Type::Top | Type::Bottom | Type::Union(..) | Type::Inter(..) => {
                 panic!("Not a simple type")
             }
@@ -122,7 +142,6 @@ impl Type {
     pub fn get_name(&self) -> TypeName {
         match self {
             Type::Var(_) => TypeName::Var,
-            Type::Primitive(_) => TypeName::Primitive,
             Type::List(_) => TypeName::List,
             Type::Function(_, _) => TypeName::Function,
             Type::Union(_, _) => TypeName::Union,
@@ -131,13 +150,24 @@ impl Type {
             Type::Bottom => TypeName::Bottom,
             Type::Inter(_, _) => TypeName::Inter,
             Type::Optional(_) => TypeName::Optional,
+            Type::Number => TypeName::Number,
+            Type::Bool => TypeName::Bool,
+            Type::String => TypeName::String,
+            Type::Path => TypeName::Path,
+            Type::Null => TypeName::Null,
+            Type::Undefined => TypeName::Undefined,
         }
     }
 
     pub fn show(&self) -> String {
         match self {
             Type::Var(ident) => format!("Var({})", ident.debrujin),
-            Type::Primitive(p) => format!("{}", p),
+            t @ Type::Number
+            | t @ Type::Bool
+            | t @ Type::String
+            | t @ Type::Path
+            | t @ Type::Null
+            | t @ Type::Undefined => t.as_ref().to_string(),
             Type::List(elems) => format!("[ {} ]", elems.iter().map(|t| t.show()).join(" ")),
             Type::Function(lhs, rhs) => format!("{} -> {}", lhs.show(), rhs.show()),
             Type::Union(lhs, rhs) => format!("{} ∨ {}", lhs, rhs),

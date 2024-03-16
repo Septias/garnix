@@ -23,6 +23,7 @@ pub enum Pattern {
     Record {
         patterns: Vec<PatternElement>,
         is_wildcard: bool,
+        name: Option<String>,
     },
     Identifier(Identifier),
 }
@@ -43,6 +44,7 @@ pub struct Identifier {
     pub lower_bounds: RefCell<Vec<Type>>,
     pub upper_bounds: RefCell<Vec<Type>>,
     pub ty: RefCell<Option<Type>>,
+    pub level: usize,
 }
 
 impl Identifier {
@@ -54,6 +56,7 @@ impl Identifier {
             lower_bounds: RefCell::new(vec![]),
             upper_bounds: RefCell::new(vec![]),
             ty: RefCell::new(None),
+            level: 0,
         }
     }
 
@@ -95,24 +98,24 @@ pub enum Ast {
     /// Attribute set
     AttrSet {
         attrs: HashMap<Identifier, Ast>,
-        is_recursive: bool,
         inherit: Vec<Inherit>,
+        is_recursive: bool,
         span: Span,
     },
 
     /// Let expression
     LetBinding {
         bindings: Vec<(Identifier, Ast)>,
-        body: Box<Ast>,
         inherit: Vec<Inherit>,
+        body: Box<Ast>,
         span: Span,
     },
 
     /// Function
     Lambda {
-        arguments: Vec<Pattern>,
-        body: Box<Ast>,
+        pattern: Pattern,
         arg_binding: Option<Identifier>,
+        body: Box<Ast>,
         span: Span,
     },
 
@@ -442,7 +445,9 @@ impl Ast {
                 body.collect_identifiers_inner(ret);
             }
             Ast::Lambda {
-                body, arguments, ..
+                body,
+                pattern: arguments,
+                ..
             } => {
                 body.collect_identifiers_inner(ret);
                 for argument in arguments {
@@ -550,7 +555,7 @@ fn transform_ast(value: ParserAst, cache: &mut Cache, source: &str) -> Ast {
             }
         }
         ParserAst::Lambda {
-            arguments,
+            pattern: arguments,
             body,
             arg_binding,
             span,
@@ -597,7 +602,7 @@ fn transform_ast(value: ParserAst, cache: &mut Cache, source: &str) -> Ast {
             let body = cache.with_scope(idents, |cache| transform_ast(*body, cache, source));
 
             Lambda {
-                arguments,
+                pattern: arguments,
                 body: Box::new(body),
                 arg_binding: arg_binding
                     .map(|span| crate::Identifier::new(0, source[span.clone()].to_string(), span)), //TODO: reintroduce

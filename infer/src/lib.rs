@@ -4,7 +4,7 @@ use core::str;
 use logos::Span;
 use std::fmt;
 use thiserror::Error;
-use types::{PrimitiveName, Type, TypeName};
+use types::{Type, TypeName, Var};
 
 pub mod ast;
 pub mod helpers;
@@ -28,11 +28,6 @@ pub enum InferError {
     CannotConstrain { lhs: Type, rhs: Type },
     #[error("Type mismatch: expected {expected}, found {found}")]
     TypeMismatch { expected: TypeName, found: TypeName },
-    #[error("Primitve Mismatch: expected {expected}, found {found}")]
-    PrimitiveMismatch {
-        expected: PrimitiveName,
-        found: String,
-    },
     #[error("Can't convert {from} to {to}")]
     ConversionError { from: String, to: &'static str },
     #[error("Can't infer type of comment")]
@@ -45,6 +40,9 @@ pub enum InferError {
     MultipleErrors(Vec<SpannedError>),
     #[error(transparent)]
     Other(#[from] anyhow::Error),
+
+    #[error(transparent)]
+    Parser(#[from] parser::ParseError),
 }
 
 impl PartialEq for InferError {
@@ -211,7 +209,7 @@ impl<'a> Context<'a> {
         for scope in self.bindings.iter().rev() {
             for n in scope.iter().rev() {
                 if n.debrujin == debrujin {
-                    return;
+                    return Some(Type::Var(Var::from(*n)));
                 }
             }
         }
