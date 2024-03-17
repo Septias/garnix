@@ -1,7 +1,7 @@
 use crate::{
     ast::{Ast, Identifier, Inherit, Pattern, PatternElement},
     spanned_infer_error,
-    types::{SimpleType, Type, Var},
+    types::{SimpleType, Type},
     Context, InferError, InferResult, SpannedError, SpannedInferResult, TypeName,
 };
 use itertools::{Either, Itertools};

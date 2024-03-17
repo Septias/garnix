@@ -129,7 +129,7 @@ impl UnOp {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Inherit {
-    pub name: Option<Vec<Span>>,
+    pub name: Option<Ast>,
     pub items: Vec<Span>,
 }
 

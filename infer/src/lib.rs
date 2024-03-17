@@ -4,10 +4,9 @@ use core::str;
 use logos::Span;
 use std::fmt;
 use thiserror::Error;
-use types::{Type, TypeName, Var};
+use types::{Type, TypeName};
 
 pub mod ast;
-pub mod helpers;
 pub mod infer;
 pub use ast::Ast;
 pub mod types;
