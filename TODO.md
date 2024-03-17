@@ -21,7 +21,11 @@
 - Misc
   - Read Thiemann papers
   - Read original paper
-  - Read Timpe paper
+  - Allow intersections in positive positions?
+  - Add if with f: bool -> a -> a -> a
+  - typeTerm is similar to algorithm W in HM
+  - contra and co-variance of parameters
+  - records: width and depth subtyping
 
 ## Improvements
 
