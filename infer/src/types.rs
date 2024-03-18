@@ -41,7 +41,7 @@ impl From<&Identifier> for Var {
     }
 }
 
-pub type PolarVar = (Var, bool);
+pub type PolarVar = (&Var, bool);
 
 /// A nix language type.
 #[derive(Debug, Clone, PartialEq, Eq, Display, EnumDiscriminants, AsRefStr)]
@@ -67,6 +67,7 @@ pub enum Type {
     // Complexe types only created by simplification
     Union(Box<Type>, Box<Type>),
     Inter(Box<Type>, Box<Type>),
+    Recursive(Var, Box<Type>),
 }
 
 impl Type {
@@ -110,7 +111,7 @@ impl SimpleType for Type {
             | Type::Path
             | Type::Null
             | Type::Undefined => 0,
-            Type::Top | Type::Bottom | Type::Union(..) | Type::Inter(..) => {
+            Type::Top | Type::Bottom | Type::Union(..) | Type::Inter(..) | Type::Recursive(..) => {
                 panic!("Not a simple type")
             }
         }
@@ -156,6 +157,7 @@ impl Type {
             Type::Path => TypeName::Path,
             Type::Null => TypeName::Null,
             Type::Undefined => TypeName::Undefined,
+            Type::Recursive(_, _) => TypeName::Recursive,
         }
     }
 
@@ -176,6 +178,7 @@ impl Type {
             Type::Bottom => TypeName::Bottom.to_string(),
             Type::Inter(lhs, rhs) => format!("{} ∧ {}", lhs.show(), rhs.show()),
             Type::Optional(t) => format!("Optional<{}>", t.show()),
+            Type::Recursive(ident, ty) => format!("Rec({}) {}", ident.id, ty.show()),
         }
     }
 }

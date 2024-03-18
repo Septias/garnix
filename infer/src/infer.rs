@@ -447,6 +447,55 @@ fn type_term<'a>(ctx: &mut Context<'a>, term: &'a Ast, lvl: usize) -> Result<Typ
     }
 }
 
+fn coalsce_type(ty: &Type) -> Type {
+    let mut map = HashMap::new();
+    let mut processing = HashSet::new();
+    coalsce_type_inner(ty, true, &mut map, &mut processing)
+}
+
+
+fn coalsce_type_inner(ty: &Type, polarity: bool, rec: &mut HashMap<PolarVar, Var>, processing: &mut HashSet<PolarVar>) -> Type {
+    match ty {
+        Type::Number |
+        Type::Bool |
+        Type::String |
+        Type::Path |
+        Type::Null |
+        Type::Undefined => ty.clone(),
+        tyvar @ Type::Var(var) => {
+            let pol_var = (var, polarity);
+            if processing.contains(&pol_var) {
+                return tyvar.clone()
+            } else {
+                processing.insert(pol_var);
+                let bounds = if polarity {
+                    &var.lower_bounds
+                } else {
+                    &var.upper_bounds
+                };
+                let bound_types = bounds.iter().map(|t| {
+                    processing.insert(pol_var);
+                    let t = coalsce_type_inner(t, polarity, rec, processing);
+                    processing.remove(&pol_var);
+                    t
+                });
+                let res = if polarity {
+                    bound_types.reduce( |a, b| Type::Union(Box::new(a), Box::new(b)))
+                } else {
+                    bound_types.reduce( |a, b| Type::Inter(Box::new(a), Box::new(b)))
+                };
+                rec.get(&pol_var).map(|var| Type::Recursive(var.clone(), Box::new(res.unwrap())));
+                todo!()
+            }
+        },
+        Type::Function(l, r) => Type::Function(Box::new(coalsce_type_inner(ty, !polarity, rec, processing)), Box::new(coalsce_type_inner(ty, polarity, rec, processing))),
+        Type::List(l) => Type::List(l.iter().map(|t| coalsce_type_inner(t, polarity, rec, processing)).collect()),
+        Type::Record(r) => Type::Record(r.iter().map(|(n, t)| (n.clone(), coalsce_type_inner(t, polarity, rec, processing))).collect()),
+        Type::Optional(o) => Type::Optional(Box::new(coalsce_type_inner(o, polarity, rec, processing))),
+        _ => unreachable!(),
+    }
+}
+
 /// Infer the type of an expression.
 /// Insert constraints for all [Identifier]s on the way.
 pub fn infer(expr: &Ast) -> SpannedInferResult<Type> {
