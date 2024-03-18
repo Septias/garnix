@@ -45,19 +45,19 @@ impl<'a> Context<'a> {
         t
     }
 
-    /// Lookup an [Identifier] by it's name.
-    pub(crate) fn lookup_by_name(&self, name: &str) -> Option<&'a Identifier> {
+    /// Lookup an [Var] by it's name.
+    pub(crate) fn lookup(&self, name: &str) -> Option<&Var> {
         for scope in self.bindings.iter().rev() {
             for n in scope.iter().rev() {
                 if n.name == name {
-                    return Some(n);
+                    todo!();
                 }
             }
         }
         None
     }
 
-    pub(crate) fn new_var(&mut self, lvl: usize) -> Var {
+    pub(crate) fn fresh_var(&mut self, lvl: usize) -> Var {
         let res = Var::new(lvl, self.count);
         self.count += 1;
         res
