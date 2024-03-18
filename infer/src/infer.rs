@@ -152,23 +152,47 @@ fn freshen_above(context: &mut Context, ty: &Type, lim: usize, lvl: usize) -> Ty
 
 }
 
+fn freshen(context: &mut Context, ty: &Type,lim: usize, lvl: usize, freshened: &mut HashMap<Var, Var>) -> Type {
+    if ty.level() <= lim {
+        return ty.clone()
+    } 
 
-// TODO: don't reuse level
-fn fresh_var() -> Type {
-    Type::Var(Var {
-        lower_bounds: vec![],
-        upper_bounds: vec![],
-        debrujin: 0,
-        level: 0,
-    })
-}
-
-fn is_var_and(tup: (&Type, &Type), ty: TypeName) -> bool {
-    match tup {
-        (Type::Var(_), _) | (_, Type::Var(_)) => true,
-        _ => false,
+    match ty {
+        Type::Var(var) => {
+            Type::Var(freshened.get(&var).cloned().unwrap_or_else(|| {
+                let new_v = Var {
+                    level: lvl,
+                    id: context.count,
+                    lower_bounds: var.lower_bounds.iter().rev().map(|ty| freshen(context, ty, lim, lvl, freshened)).rev().collect(),
+                    upper_bounds: var.upper_bounds.iter().rev().map(|ty| freshen(context, ty, lim, lvl, freshened)).rev().collect(),
+                };
+                context.count += 1;
+                freshened.insert(var.clone(), new_v.clone());
+                new_v
+            }))
+        },
+        Type::Top |
+        Type::Bottom |
+        Type::Union(_, _) |
+        Type::Inter(_, _)  => unreachable!(),
+        Type::Number |
+        Type::Bool |
+        Type::String |
+        Type::Path |
+        Type::Null |
+        Type::Undefined => ty.clone(),
+        Type::Function(ty1, ty2) => Type::Function(
+            Box::new(freshen(context, ty1, lim, lvl, freshened)),
+            Box::new(freshen(context, ty2, lim, lvl, freshened)),
+        ),
+        Type::List(list) => Type::List(list.iter().map(|t| freshen(context, t, lim, lvl, freshened)).collect()),
+        Type::Record(rc) => Type::Record(
+            rc.iter().map(|(name, ty)| (name.clone(), freshen(context, ty, lim, lvl, freshened))).collect()
+        ),
+        Type::Optional(opt) => Type::Optional(Box::new(freshen(context, opt, lim, lvl, freshened))),
     }
 }
+
 
 /// Infer the type of an expression.
 fn type_term<'a>(ctx: &mut Context<'a>, term: &'a Ast, lvl: usize) -> Result<Type, SpannedError> {
