@@ -1,6 +1,5 @@
 use itertools::Itertools;
 use std::collections::HashMap;
-use strum::EnumTryAs;
 use strum_macros::{AsRefStr, Display, EnumDiscriminants};
 
 use crate::{ast::Identifier, infer_error, InferResult};
@@ -19,14 +18,23 @@ pub trait SimpleType: TypeScheme {
 pub struct Var {
     pub lower_bounds: Vec<Type>,
     pub upper_bounds: Vec<Type>,
-    pub debrujin: usize,
     pub level: usize,
+    pub id: usize,
+}
+
+impl Var {
+    pub fn new(level: usize, id: usize) -> Self {
+        Self {
+            level,
+            id,
+            ..Default::default()
+        }
+    }
 }
 
 impl From<&Identifier> for Var {
     fn from(ident: &Identifier) -> Self {
         Self {
-            debrujin: ident.debrujin,
             level: ident.level,
             ..Default::default()
         }
@@ -118,14 +126,6 @@ impl Type {
         }
     }
 
-    /// Try to convert this type to an identifier.
-    pub fn into_debrujin(self) -> InferResult<usize> {
-        match self {
-            Type::Var(ident) => Ok(ident.debrujin),
-            t => infer_error(TypeName::Var, t.get_name()),
-        }
-    }
-
     /// Try to convert this type to a function.
     pub fn into_function(self) -> InferResult<(Type, Type)> {
         match self {
@@ -161,7 +161,7 @@ impl Type {
 
     pub fn show(&self) -> String {
         match self {
-            Type::Var(ident) => format!("Var({})", ident.debrujin),
+            Type::Var(ident) => format!("Var({})", ident.id),
             t @ Type::Number
             | t @ Type::Bool
             | t @ Type::String

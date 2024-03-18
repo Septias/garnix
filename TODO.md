@@ -1,7 +1,22 @@
 ## TODO (17.03)
 
 - Type Inference
-  - All
+  - [] type_term
+    - [] let bindings
+    - [] with-statements
+    - [] inherit-statements
+  - [] constrain
+  - [x] extrude
+  - [x] fresh_var
+  - [x] freshen_above
+  - [] coalsce_type
+  - [] polymorphic type
+  - [] builtins
+  - [] Simplification
+    - [] compact Type
+    - [] canonicalize-type
+    - [] simplify-type
+    - [] coalesceCompactType
 
 - Parser
   - [x] Handle `inherit (lib)`
@@ -28,12 +43,9 @@
   - records: width and depth subtyping
 
 ## Improvements
-
 - Nice Verbose error
 - Use own implementation of Span
 
 ## Restrictions
-
 - Comment positions
-- Errors while parsing
 - Line comments have to end in '\n'

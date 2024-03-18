@@ -63,14 +63,6 @@ impl Identifier {
             level: 0,
         }
     }
-
-    pub fn add_lb(&self, ty: Type) {
-        self.lower_bounds.borrow_mut().push(ty);
-    }
-
-    pub fn add_ub(&self, ty: Type) {
-        self.upper_bounds.borrow_mut().push(ty);
-    }
 }
 
 impl hash::Hash for Identifier {

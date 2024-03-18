@@ -1,20 +1,16 @@
 use crate::{
-    ast::{Ast, Identifier, Inherit, Pattern, PatternElement},
-    spanned_infer_error,
-    types::{SimpleType, Type},
+    ast::{Ast, Identifier, Pattern, PatternElement},
+    types::{SimpleType, Type, Var},
     Context, InferError, InferResult, SpannedError, SpannedInferResult, TypeName,
 };
-use itertools::{Either, Itertools};
-use logos::Span;
 use parser::ast::BinOp;
 use std::collections::{HashMap, HashSet};
 
-fn constrain(lhs: &Type, rhs: &Type) -> InferResult<()> {
-    constrain_inner(lhs, rhs, &mut HashSet::new())
+fn constrain(context: &mut Context, lhs: &Type, rhs: &Type) -> InferResult<()> {
+    constrain_inner(context, lhs, rhs, &mut HashSet::new())
 }
 
-
-fn constrain_inner(lhs: &Type, rhs: &Type, cache: &mut HashSet<(&Type, &Type)>) -> InferResult<()> {
+fn constrain_inner(context: &mut Context, lhs: &Type, rhs: &Type, cache: &mut HashSet<(&Type, &Type)>) -> InferResult<()> {
     if lhs == rhs {
         return Ok(());
     }
@@ -33,13 +29,13 @@ fn constrain_inner(lhs: &Type, rhs: &Type, cache: &mut HashSet<(&Type, &Type)>) 
 
     match (lhs, rhs) {
         (Type::Function(l0, r0), Type::Function(l1, r1)) => {
-            constrain_inner(l1, l0, cache)?;
-            constrain_inner(r0, r1, cache)?;
+            constrain_inner(context, l1, l0, cache)?;
+            constrain_inner(context,r0, r1, cache)?;
         }
         (Type::Record(fs0), Type::Record(fs1)) => {
             for (n1, t1) in fs1 {
                 match fs0.iter().find(|(n0, _)| *n0 == n1) {
-                    Some((_, t0)) => constrain_inner(t0, t1, cache)?,
+                    Some((_, t0)) => constrain_inner(context,t0, t1, cache)?,
                     None => return Err(InferError::MissingRecordField { field: n1.clone() }),
                 }
             }
@@ -47,22 +43,22 @@ fn constrain_inner(lhs: &Type, rhs: &Type, cache: &mut HashSet<(&Type, &Type)>) 
         (Type::Var(lhs), rhs) if rhs.level() <= lhs.level => {
             lhs.upper_bounds.push(rhs.clone());
             for lower_bound in &lhs.lower_bounds {
-                constrain_inner(lower_bound, rhs, cache)?;
+                constrain_inner(context,lower_bound, rhs, cache)?;
             }
         }
         (lhs, Type::Var(rhs)) if lhs.level() <= rhs.level => {
             rhs.lower_bounds.push(lhs.clone());
             for upper_bound in &rhs.upper_bounds {
-                constrain_inner(lhs, upper_bound, cache)?;
+                constrain_inner(context,lhs, upper_bound, cache)?;
             }
         }
         (Type::Var(_), rhs) => {
-            let rhs_extruded = extrude(rhs, false, lhs.level(), &mut HashMap::new());
-            constrain_inner(lhs, &rhs_extruded, cache)?;
+            let rhs_extruded = extrude(context, rhs, false, lhs.level(), &mut HashMap::new());
+            constrain_inner(context,lhs, &rhs_extruded, cache)?;
         }
         (lhs, Type::Var(_)) => {
-            let lhs_extruded = extrude(lhs, true, rhs.level(), &mut HashMap::new());
-            constrain_inner(&lhs_extruded, rhs, cache)?;
+            let lhs_extruded = extrude(context, lhs, true, rhs.level(), &mut HashMap::new());
+            constrain_inner(context,&lhs_extruded, rhs, cache)?;
         }
 
         // TODO: complete types
@@ -78,6 +74,7 @@ fn constrain_inner(lhs: &Type, rhs: &Type, cache: &mut HashSet<(&Type, &Type)>) 
 }
 
 fn constrain_numerals(
+    context: &mut Context, 
     lhs: Type,
     rhs: Type,
 ) -> InferResult<()> {
@@ -96,13 +93,13 @@ fn constrain_numerals(
     }
 
     // TODO: right side for constraint?
-    constrain(&lhs, &Type::Number)?;
-    constrain(&rhs, &Type::Number)
+    constrain(context,&lhs, &Type::Number)?;
+    constrain(context,&rhs, &Type::Number)
 }
 
 struct Inferrer(usize);
 
-fn extrude(ty: &Type, pol: bool, lvl: usize, c: &mut HashMap<Var, Var>) -> Type {
+fn extrude(context: &mut Context, ty: &Type, pol: bool, lvl: usize, c: &mut HashMap<Var, Var>) -> Type {
     if ty.level() <= lvl {
         return ty.clone();
     }
@@ -115,20 +112,20 @@ fn extrude(ty: &Type, pol: bool, lvl: usize, c: &mut HashMap<Var, Var>) -> Type 
         | t @ Type::Null
         | t @ Type::Undefined => ty.clone(),
         Type::Function(l, r) => Type::Function(
-            Box::new(extrude(l, !pol, lvl, c)),
-            Box::new(extrude(r, pol, lvl, c)),
+            Box::new(extrude(context, l, !pol, lvl, c)),
+            Box::new(extrude(context, r, pol, lvl, c)),
         ),
         Type::Record(fs) => Type::Record(
             fs.iter()
-                .map(|(name, t)| (name.clone(), extrude(t, pol, lvl, c)))
+                .map(|(name, t)| (name.clone(), extrude(context, t, pol, lvl, c)))
                 .collect(),
         ),
         Type::Var(vs) => {
             if let Some(nvs) = c.get(vs) {
                 Type::Var(nvs.clone())
             } else {
-                let nvs = fresh_var();
-                c.insert(vs.clone(), nvs.get_var().unwrap().clone());
+                let nvs = context.fresh_var(lvl);
+                c.insert(vs.clone(), nvs.clone());
 
                 if pol {
                     // Logic for adjusting upper bounds
@@ -138,16 +135,23 @@ fn extrude(ty: &Type, pol: bool, lvl: usize, c: &mut HashMap<Var, Var>) -> Type 
                     // Placeholder: the actual manipulation depends on how bounds are represented and modified
                 }
 
-                nvs
+                Type::Var(nvs)
             }
         }
-        Type::List(ls) => Type::List(ls.iter().map(|t| extrude(t, pol, lvl, c)).collect()),
-        Type::Optional(ty) => Type::Optional(Box::new(extrude(ty, pol, lvl, c))),
+        Type::List(ls) => Type::List(ls.iter().map(|t| extrude(context, t, pol, lvl, c)).collect()),
+        Type::Optional(ty) => Type::Optional(Box::new(extrude(context, ty, pol, lvl, c))),
         Type::Top | Type::Bottom | Type::Union(..) | Type::Inter(..) => {
             panic!("Not a simple type")
         }
     }
 }
+
+fn freshen_above(context: &mut Context, ty: &Type, lim: usize, lvl: usize) -> Type {
+    let mut freshened = HashMap::new();
+    freshen(context, &ty, lim, lvl, &mut freshened)
+
+}
+
 
 // TODO: don't reuse level
 fn fresh_var() -> Type {
@@ -170,9 +174,9 @@ fn is_var_and(tup: (&Type, &Type), ty: TypeName) -> bool {
 fn type_term<'a>(ctx: &mut Context<'a>, term: &'a Ast, lvl: usize) -> Result<Type, SpannedError> {
     use Type::*;
     match term {
-        Ast::Identifier(super::ast::Identifier { debrujin, span, .. }) => ctx
-            .lookup_type(*debrujin)
-            .ok_or(InferError::UnknownIdentifier.span(span)),
+        Ast::Identifier(super::ast::Identifier { name, span, .. }) => ctx
+            .lookup(name)
+            .ok_or(InferError::UnknownIdentifier.span(span)).map(|val| Type::Var(val)),
 
         Ast::UnaryOp { rhs, .. } => type_term(ctx, rhs, lvl),
 
@@ -183,16 +187,19 @@ fn type_term<'a>(ctx: &mut Context<'a>, term: &'a Ast, lvl: usize) -> Result<Typ
             match op {
                 // Application etc.
                 BinOp::Application => {
-                    let res = fresh_var();
+                    let res = Type::Var(ctx.fresh_var(lvl));
                     constrain(
+                        ctx,
                         &ty1,
                         &Type::Function(Box::new(ty2), Box::new(res.clone())),
                     );
                     Ok(res)
                 }
                 BinOp::AttributeSelection => {
-                    let res = fresh_var();
+                    let res = Type::Var(ctx.fresh_var(lvl));
+
                     constrain(
+                        ctx,
                         &ty1,
                         &Type::Record(
                             [(
@@ -209,9 +216,6 @@ fn type_term<'a>(ctx: &mut Context<'a>, term: &'a Ast, lvl: usize) -> Result<Typ
 
                 // Object modifications
                 BinOp::ListConcat => {
-                    if is_var_and((&ty1, &ty2), TypeName::List) {
-                        constrain(&ty1, &ty2);
-                    }
                     let lhs = ty1
                         .into_list()
                         .map_err(|err| SpannedError::from((span, err)))?;
@@ -225,7 +229,7 @@ fn type_term<'a>(ctx: &mut Context<'a>, term: &'a Ast, lvl: usize) -> Result<Typ
 
                 // Primitives
                 BinOp::Mul | BinOp::Div | BinOp::Sub => {
-                    constrain_numerals(ty1, ty2).map_err(|err| err.span(term.get_span()))?;
+                    constrain_numerals(ctx, ty1, ty2).map_err(|err| err.span(term.get_span()))?;
                     Ok(Type::Number)
                 }
                 BinOp::Add => todo!(),
@@ -286,7 +290,6 @@ fn type_term<'a>(ctx: &mut Context<'a>, term: &'a Ast, lvl: usize) -> Result<Typ
         }
         Ast::LetBinding {
             bindings,
-            inherit,
             body,
             span,
         } => {
@@ -299,7 +302,7 @@ fn type_term<'a>(ctx: &mut Context<'a>, term: &'a Ast, lvl: usize) -> Result<Typ
 
                 for (name, ty) in names.iter().zip(types) {
                     let ty = ty?;
-                    constrain(&ty, &Type::Var(names))
+                    constrain(ctx, &ty, &Type::Var(names))
                         .map_err(|e| e.span(&name.span))?
                 }
 
@@ -329,7 +332,7 @@ fn type_term<'a>(ctx: &mut Context<'a>, term: &'a Ast, lvl: usize) -> Result<Typ
                             }
                             PatternElement::DefaultIdentifier(name, expr) => {
                                 let ty = type_term(ctx, expr, lvl)?;
-                                constrain(&Type::Var(name), &ty);
+                                constrain(ctx, &Type::Var(name), &ty);
                                 item.push((name, ty));
                                 added.push(name);
                             }
@@ -338,9 +341,9 @@ fn type_term<'a>(ctx: &mut Context<'a>, term: &'a Ast, lvl: usize) -> Result<Typ
 
                     let ty = Type::Record(item.collect())
                     if let Some(Name) = name {
-                        let var = new_var();
-                        constrain(var, &ty)
-                        added.push(var)
+                        let var = ctx.fresh_var(lvl);
+                        constrain(ctx, var, &ty);
+                        added.push(var);
                     }
                     ty
                 }
