@@ -1,6 +1,6 @@
 use crate::{
     ast::{Ast, Identifier, Pattern, PatternElement},
-    types::{SimpleType, Type, Var},
+    types::{PolarVar, SimpleType, Type, Var},
     Context, InferError, InferResult, SpannedError, SpannedInferResult, TypeName,
 };
 use parser::ast::BinOp;
@@ -140,7 +140,7 @@ fn extrude(context: &mut Context, ty: &Type, pol: bool, lvl: usize, c: &mut Hash
         }
         Type::List(ls) => Type::List(ls.iter().map(|t| extrude(context, t, pol, lvl, c)).collect()),
         Type::Optional(ty) => Type::Optional(Box::new(extrude(context, ty, pol, lvl, c))),
-        Type::Top | Type::Bottom | Type::Union(..) | Type::Inter(..) => {
+        Type::Top | Type::Bottom | Type::Union(..) | Type::Inter(..) | Type::Recursive(..) => {
             panic!("Not a simple type")
         }
     }
@@ -171,10 +171,6 @@ fn freshen(context: &mut Context, ty: &Type,lim: usize, lvl: usize, freshened: &
                 new_v
             }))
         },
-        Type::Top |
-        Type::Bottom |
-        Type::Union(_, _) |
-        Type::Inter(_, _)  => unreachable!(),
         Type::Number |
         Type::Bool |
         Type::String |
@@ -190,6 +186,10 @@ fn freshen(context: &mut Context, ty: &Type,lim: usize, lvl: usize, freshened: &
             rc.iter().map(|(name, ty)| (name.clone(), freshen(context, ty, lim, lvl, freshened))).collect()
         ),
         Type::Optional(opt) => Type::Optional(Box::new(freshen(context, opt, lim, lvl, freshened))),
+        Type::Top |
+        Type::Bottom |
+        Type::Union(_, _) |
+        Type::Inter(_, _)  | Type::Recursive(..) => unreachable!(),
     }
 }
 
@@ -280,7 +280,6 @@ fn type_term<'a>(ctx: &mut Context<'a>, term: &'a Ast, lvl: usize) -> Result<Typ
             attrs,
             is_recursive, // TODO: handle recursiveness
             span,
-            inherit,
         } => {
             /* if is_recursive {
             } else {
@@ -439,10 +438,9 @@ fn type_term<'a>(ctx: &mut Context<'a>, term: &'a Ast, lvl: usize) -> Result<Typ
         // Primitives
         Ast::NixString(_) => Ok(String),
         Ast::NixPath(_) => Ok(Path),
-        Ast::Bool { val: _, span: _ } => Ok(Bool),
-        Ast::Int { val: _, span: _ } => Ok(Number),
-        Ast::Float { val: _, span: _ } => Ok(Number),
         Ast::Null(_) => Ok(Null),
+        Ast::Bool { .. } => Ok(Bool),
+        Ast::Int { .. } | Ast::Float { .. } => Ok(Number),
         Ast::Comment(_) | Ast::DocComment(_) | Ast::LineComment(_) => unimplemented!(),
     }
 }

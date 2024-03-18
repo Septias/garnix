@@ -9,7 +9,7 @@
   - [x] extrude
   - [x] fresh_var
   - [x] freshen_above
-  - [] coalsce_type
+  - [x] coalsce_type
   - [] polymorphic type
   - [] builtins
   - [] Simplification
