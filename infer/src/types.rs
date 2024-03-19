@@ -58,7 +58,7 @@ pub enum Type {
     Null,
     Undefined,
 
-    Var(Var),
+    Var(&'a Var),
     Function(Box<Type>, Box<Type>),
     List(Vec<Type>),
     Record(HashMap<String, Type>),
@@ -124,6 +124,13 @@ impl Type {
         match self {
             Type::List(elems) => Ok(elems),
             t => infer_error(TypeName::List, t.get_name()),
+        }
+    }
+
+    pub fn into_record(self) -> InferResult<HashMap<String, Type>> {
+        match self {
+            Type::Record(fields) => Ok(fields),
+            t => infer_error(TypeName::Record, t.get_name()),
         }
     }
 

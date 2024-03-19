@@ -57,7 +57,7 @@ impl<'a> Context<'a> {
         None
     }
 
-    pub(crate) fn fresh_var(&mut self, lvl: usize) -> Var {
+    pub(crate) fn fresh_var(&mut self, lvl: usize) -> &Var {
         let res = Var::new(lvl, self.count);
         self.count += 1;
         res

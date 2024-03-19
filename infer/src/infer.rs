@@ -73,19 +73,20 @@ fn constrain_inner(context: &mut Context, lhs: &Type, rhs: &Type, cache: &mut Ha
     Ok(())
 }
 
-fn constrain_numerals(
+
+fn constrain_bools(
     context: &mut Context, 
     lhs: Type,
     rhs: Type,
 ) -> InferResult<()> {
-    if lhs != Type::Number && matches!(lhs, Type::Var(_)) {
+    if lhs != Type::Bool && matches!(lhs, Type::Var(_)) {
         return Err(InferError::TypeMismatch {
             expected: TypeName::Number,
             found: lhs.get_name(),
         });
     }
 
-    if rhs != Type::Number && matches!(rhs, Type::Var(_)) {
+    if rhs != Type::Bool && matches!(rhs, Type::Var(_)) {
         return Err(InferError::TypeMismatch {
             expected: TypeName::Number,
             found: rhs.get_name(),
@@ -93,8 +94,8 @@ fn constrain_numerals(
     }
 
     // TODO: right side for constraint?
-    constrain(context,&lhs, &Type::Number)?;
-    constrain(context,&rhs, &Type::Number)
+    constrain(context,&lhs, &Type::Bool)?;
+    constrain(context,&rhs, &Type::Bool)
 }
 
 struct Inferrer(usize);
@@ -152,7 +153,7 @@ fn freshen_above(context: &mut Context, ty: &Type, lim: usize, lvl: usize) -> Ty
 
 }
 
-fn freshen(context: &mut Context, ty: &Type,lim: usize, lvl: usize, freshened: &mut HashMap<Var, Var>) -> Type {
+fn freshen(context: &mut Context, ty: &Type, lim: usize, lvl: usize, freshened: &mut HashMap<Var, Var>) -> Type {
     if ty.level() <= lim {
         return ty.clone()
     } 
@@ -186,6 +187,8 @@ fn freshen(context: &mut Context, ty: &Type,lim: usize, lvl: usize, freshened: &
             rc.iter().map(|(name, ty)| (name.clone(), freshen(context, ty, lim, lvl, freshened))).collect()
         ),
         Type::Optional(opt) => Type::Optional(Box::new(freshen(context, opt, lim, lvl, freshened))),
+        
+        
         Type::Top |
         Type::Bottom |
         Type::Union(_, _) |
@@ -200,7 +203,8 @@ fn type_term<'a>(ctx: &mut Context<'a>, term: &'a Ast, lvl: usize) -> Result<Typ
     match term {
         Ast::Identifier(super::ast::Identifier { name, span, .. }) => ctx
             .lookup(name)
-            .ok_or(InferError::UnknownIdentifier.span(span)).map(|val| Type::Var(val)),
+            .map(|val| Type::Var(val))
+            .ok_or(InferError::UnknownIdentifier.span(span)),
 
         Ast::UnaryOp { rhs, .. } => type_term(ctx, rhs, lvl),
 
@@ -227,7 +231,7 @@ fn type_term<'a>(ctx: &mut Context<'a>, term: &'a Ast, lvl: usize) -> Result<Typ
                         &ty1,
                         &Type::Record(
                             [(
-                                lhs.as_identifier_str()
+                                rhs.as_identifier_str()
                                     .map_err(|e| e.span(lhs.get_span()))?,
                                 res.clone(),
                             )]
@@ -246,21 +250,85 @@ fn type_term<'a>(ctx: &mut Context<'a>, term: &'a Ast, lvl: usize) -> Result<Typ
                     let rhs = ty2
                         .into_list()
                         .map_err(|err| SpannedError::from((span, err)))?;
-
+                    
                     Ok(Type::List([lhs, rhs].concat()))
                 }
-                BinOp::Update => todo!(),
+
+                BinOp::Update => {
+                    let rc1 = ty1
+                        .into_record()
+                        .map_err(|err| SpannedError::from((span, err)))?;
+                    let rc2 = ty2
+                        .into_record()
+                        .map_err(|err| SpannedError::from((span, err)))?;
+                    
+                    // overwrite first record with fields from second one
+                    rc1.extend(rc2);
+
+                    Ok(Type::Record(rc1))
+                },
 
                 // Primitives
                 BinOp::Mul | BinOp::Div | BinOp::Sub => {
-                    constrain_numerals(ctx, ty1, ty2).map_err(|err| err.span(term.get_span()))?;
+                    constrain(ctx, &ty1, &Type::Number).map_err(|e| e.span(lhs.get_span()))?;
+                    constrain(ctx, &ty2, &Type::Number).map_err(|e| e.span(rhs.get_span()))?;
                     Ok(Type::Number)
                 }
-                BinOp::Add => todo!(),
+                BinOp::Add => {
+                    if ty1 == Type::Number {
+                        match ty2 {
+                            Type::Number => Ok(Type::Number),
+                            Type::Var(var) => {constrain(ctx, &ty2, &ty1); Ok(Number)},
+                            _ => Err(SpannedError {
+                                error: InferError::TypeMismatch {
+                                    expected: TypeName::Number,
+                                    found: ty2.get_name(),
+                                },
+                                span: span.clone(),
+                            }),
+                        }
+                    } else if ty1 == Type::String {
+                        match ty2 {
+                            Type::String | Type::Path => Ok(Type::String),
+                            Type::Var(var) => {constrain(ctx, &ty2, &ty1); Ok(String)},
+                            _ => Err(SpannedError {
+                                error: InferError::TypeMismatch {
+                                    expected: TypeName::String, // TODO: improve
+                                    found: ty2.get_name(),
+                                },
+                                span: span.clone(),
+                            }),
+                        }
+                    } 
+                    else if ty1 == Type::Path {
+                        match ty2 {
+                            Type::String => Ok(Type::String),
+                            Type::Var(var) => {constrain(ctx, &ty2, &ty1); Ok(Path)},
+                            _ => Err(SpannedError {
+                                error: InferError::TypeMismatch {
+                                    expected: TypeName::Path, // TODO: improve
+                                    found: ty2.get_name(),
+                                },
+                                span: span.clone(),
+                            }),
+                        }
+                    }else {
+                        Err(SpannedError {
+                            error: InferError::TypeMismatch {
+                                expected: TypeName::Number, // TODO: improve
+                                found: ty1.get_name(),
+                            },
+                            span: span.clone(),
+                        })
+                    }
+                },
 
                 // Misc
-                BinOp::HasAttribute => todo!(),
-                BinOp::AttributeFallback => todo!(),
+                BinOp::HasAttribute => Ok(Bool),
+                BinOp::AttributeFallback => {
+                    // maybe typeunion?
+                    todo!()
+                },
 
                 // Comparisons
                 BinOp::LessThan
@@ -268,7 +336,11 @@ fn type_term<'a>(ctx: &mut Context<'a>, term: &'a Ast, lvl: usize) -> Result<Typ
                 | BinOp::GreaterThan
                 | BinOp::GreaterThanEqual
                 | BinOp::Equal
-                | BinOp::NotEqual => todo!(),
+                | BinOp::NotEqual => {
+                    constrain(ctx, &ty1, &Type::Bool).map_err(|e| e.span(lhs.get_span()))?;
+                    constrain(ctx, &ty2, &Type::Bool).map_err(|e| e.span(rhs.get_span()))?;
+                    Ok(Bool)
+                },
 
                 // Logical oprators
                 BinOp::And | BinOp::Or | BinOp::Implication => todo!(),
@@ -406,7 +478,7 @@ fn type_term<'a>(ctx: &mut Context<'a>, term: &'a Ast, lvl: usize) -> Result<Typ
             span,
         } => {
             let ty = type_term(ctx, condition, lvl)?;
-            if ty != Type::Bool {
+            if ty != Type::Bool || !matches!(ty, Type::Var(_)) {
                 return Err(SpannedError {
                     error: InferError::TypeMismatch {
                         expected: TypeName::Bool,
