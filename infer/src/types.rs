@@ -1,11 +1,11 @@
 use itertools::Itertools;
-use std::collections::HashMap;
+use std::{cell::RefCell, collections::HashMap};
 use strum_macros::{AsRefStr, Display, EnumDiscriminants};
 
-use crate::{ast::Identifier, infer_error, InferResult};
+use crate::{ast::Identifier, infer::freshen_above, infer_error, Context, InferResult};
 
 pub trait TypeScheme {
-    fn instantiate(self, lvl: usize) -> Type;
+    fn instantiate(self, context: &mut Context, lvl: usize) -> Type;
 }
 
 pub trait SimpleType: TypeScheme {
@@ -14,12 +14,18 @@ pub trait SimpleType: TypeScheme {
 
 /// A single identifier.
 /// The name should be a debrujin index and the path is used for set accesses.
-#[derive(Debug, Clone, PartialEq, Eq, Default, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Var {
-    pub lower_bounds: Vec<Type>,
-    pub upper_bounds: Vec<Type>,
+    pub lower_bounds: RefCell<Vec<Type>>,
+    pub upper_bounds: RefCell<Vec<Type>>,
     pub level: usize,
     pub id: usize,
+}
+
+impl std::hash::Hash for Var {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.id.hash(state);
+    }
 }
 
 impl Var {
@@ -41,7 +47,24 @@ impl From<&Identifier> for Var {
     }
 }
 
-pub type PolarVar = (&Var, bool);
+pub type PolarVar = (&'a Var, bool);
+
+struct PolymorhicType {
+    lvl: usize,
+    body: Type,
+}
+
+impl TypeScheme for PolymorhicType {
+    fn instantiate(self, context: &mut Context, lvl: usize) -> Type {
+        freshen_above(context, &self.body, self.lvl, lvl)
+    }
+}
+
+impl SimpleType for PolymorhicType {
+    fn level(&self) -> usize {
+        self.lvl
+    }
+}
 
 /// A nix language type.
 #[derive(Debug, Clone, PartialEq, Eq, Display, EnumDiscriminants, AsRefStr)]
@@ -63,11 +86,12 @@ pub enum Type {
     List(Vec<Type>),
     Record(HashMap<String, Type>),
     Optional(Box<Type>),
+    Pattern(HashMap<String, Type>, bool),
 
     // Complexe types only created by simplification
     Union(Box<Type>, Box<Type>),
     Inter(Box<Type>, Box<Type>),
-    Recursive(Var, Box<Type>),
+    Recursive(&'a Var, Box<Type>),
 }
 
 impl Type {
@@ -86,13 +110,19 @@ impl std::hash::Hash for Type {
     }
 }
 
-struct PolymorphicType {
+pub struct PolymorphicType {
     body: Type,
     level: usize,
 }
 
+impl PolymorphicType {
+    pub fn new(body: Type, level: usize) -> Self {
+        Self { body, level }
+    }
+}
+
 impl TypeScheme for Type {
-    fn instantiate(self, lvl: usize) -> Type {
+    fn instantiate(self, context: &mut Context, lvl: usize) -> Type {
         self
     }
 }

@@ -35,7 +35,7 @@ impl<'a> Context<'a> {
     /// Create a new scope and run a function with it.
     pub(crate) fn with_scope<T>(
         &mut self,
-        scope: Vec<&'a Identifier>,
+        scope: Vec<&'a Var>,
         f: impl FnOnce(&mut Self) -> T,
     ) -> T {
         self.bindings.push(scope);

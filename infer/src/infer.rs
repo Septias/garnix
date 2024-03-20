@@ -1,6 +1,6 @@
 use crate::{
-    ast::{Ast, Identifier, Pattern, PatternElement},
-    types::{PolarVar, SimpleType, Type, Var},
+    ast::{Ast, Pattern, PatternElement},
+    types::{PolarVar, PolymorphicType, SimpleType, Type, Var},
     Context, InferError, InferResult, SpannedError, SpannedInferResult, TypeName,
 };
 use parser::ast::BinOp;
@@ -10,7 +10,12 @@ fn constrain(context: &mut Context, lhs: &Type, rhs: &Type) -> InferResult<()> {
     constrain_inner(context, lhs, rhs, &mut HashSet::new())
 }
 
-fn constrain_inner(context: &mut Context, lhs: &Type, rhs: &Type, cache: &mut HashSet<(&Type, &Type)>) -> InferResult<()> {
+fn constrain_inner(
+    context: &mut Context,
+    lhs: &Type,
+    rhs: &Type,
+    cache: &mut HashSet<(&Type, &Type)>,
+) -> InferResult<()> {
     if lhs == rhs {
         return Ok(());
     }
@@ -30,38 +35,48 @@ fn constrain_inner(context: &mut Context, lhs: &Type, rhs: &Type, cache: &mut Ha
     match (lhs, rhs) {
         (Type::Function(l0, r0), Type::Function(l1, r1)) => {
             constrain_inner(context, l1, l0, cache)?;
-            constrain_inner(context,r0, r1, cache)?;
+            constrain_inner(context, r0, r1, cache)?;
         }
         (Type::Record(fs0), Type::Record(fs1)) => {
             for (n1, t1) in fs1 {
                 match fs0.iter().find(|(n0, _)| *n0 == n1) {
-                    Some((_, t0)) => constrain_inner(context,t0, t1, cache)?,
+                    Some((_, t0)) => constrain_inner(context, t0, t1, cache)?,
                     None => return Err(InferError::MissingRecordField { field: n1.clone() }),
                 }
             }
         }
+
+
+        (Type::Var(lhs), Pattern) => {
+            todo!()
+        }
+
+        (Pattern, Type::Var(rhs))  => {
+            todo!()
+        }
+
         (Type::Var(lhs), rhs) if rhs.level() <= lhs.level => {
-            lhs.upper_bounds.push(rhs.clone());
-            for lower_bound in &lhs.lower_bounds {
-                constrain_inner(context,lower_bound, rhs, cache)?;
+            lhs.upper_bounds.borrow_mut().push(rhs.clone());
+            for lower_bound in lhs.lower_bounds.borrow().iter() {
+                constrain_inner(context, lower_bound, rhs, cache)?;
             }
         }
         (lhs, Type::Var(rhs)) if lhs.level() <= rhs.level => {
-            rhs.lower_bounds.push(lhs.clone());
-            for upper_bound in &rhs.upper_bounds {
-                constrain_inner(context,lhs, upper_bound, cache)?;
+            rhs.lower_bounds.borrow_mut().push(lhs.clone());
+            for upper_bound in rhs.upper_bounds.borrow().iter() {
+                constrain_inner(context, lhs, upper_bound, cache)?;
             }
         }
         (Type::Var(_), rhs) => {
             let rhs_extruded = extrude(context, rhs, false, lhs.level(), &mut HashMap::new());
-            constrain_inner(context,lhs, &rhs_extruded, cache)?;
+            constrain_inner(context, lhs, &rhs_extruded, cache)?;
         }
         (lhs, Type::Var(_)) => {
             let lhs_extruded = extrude(context, lhs, true, rhs.level(), &mut HashMap::new());
-            constrain_inner(context,&lhs_extruded, rhs, cache)?;
+            constrain_inner(context, &lhs_extruded, rhs, cache)?;
         }
 
-        // TODO: complete types
+        
         _ => {
             return Err(InferError::CannotConstrain {
                 lhs: lhs.clone(),
@@ -73,34 +88,15 @@ fn constrain_inner(context: &mut Context, lhs: &Type, rhs: &Type, cache: &mut Ha
     Ok(())
 }
 
-
-fn constrain_bools(
-    context: &mut Context, 
-    lhs: Type,
-    rhs: Type,
-) -> InferResult<()> {
-    if lhs != Type::Bool && matches!(lhs, Type::Var(_)) {
-        return Err(InferError::TypeMismatch {
-            expected: TypeName::Number,
-            found: lhs.get_name(),
-        });
-    }
-
-    if rhs != Type::Bool && matches!(rhs, Type::Var(_)) {
-        return Err(InferError::TypeMismatch {
-            expected: TypeName::Number,
-            found: rhs.get_name(),
-        });
-    }
-
-    // TODO: right side for constraint?
-    constrain(context,&lhs, &Type::Bool)?;
-    constrain(context,&rhs, &Type::Bool)
-}
-
 struct Inferrer(usize);
 
-fn extrude(context: &mut Context, ty: &Type, pol: bool, lvl: usize, c: &mut HashMap<Var, Var>) -> Type {
+fn extrude(
+    context: &mut Context,
+    ty: &Type,
+    pol: bool,
+    lvl: usize,
+    c: &mut HashMap<&Var, &Var>,
+) -> Type {
     if ty.level() <= lvl {
         return ty.clone();
     }
@@ -123,23 +119,25 @@ fn extrude(context: &mut Context, ty: &Type, pol: bool, lvl: usize, c: &mut Hash
         ),
         Type::Var(vs) => {
             if let Some(nvs) = c.get(vs) {
-                Type::Var(nvs.clone())
+                Type::Var(nvs)
             } else {
                 let nvs = context.fresh_var(lvl);
-                c.insert(vs.clone(), nvs.clone());
+                c.insert(vs, nvs);
 
                 if pol {
-                    // Logic for adjusting upper bounds
-                    // Placeholder: the actual manipulation depends on how bounds are represented and modified
+                    // TODO
                 } else {
-                    // Logic for adjusting lower bounds
-                    // Placeholder: the actual manipulation depends on how bounds are represented and modified
+                    // TODO
                 }
 
                 Type::Var(nvs)
             }
         }
-        Type::List(ls) => Type::List(ls.iter().map(|t| extrude(context, t, pol, lvl, c)).collect()),
+        Type::List(ls) => Type::List(
+            ls.iter()
+                .map(|t| extrude(context, t, pol, lvl, c))
+                .collect(),
+        ),
         Type::Optional(ty) => Type::Optional(Box::new(extrude(context, ty, pol, lvl, c))),
         Type::Top | Type::Bottom | Type::Union(..) | Type::Inter(..) | Type::Recursive(..) => {
             panic!("Not a simple type")
@@ -147,55 +145,66 @@ fn extrude(context: &mut Context, ty: &Type, pol: bool, lvl: usize, c: &mut Hash
     }
 }
 
-fn freshen_above(context: &mut Context, ty: &Type, lim: usize, lvl: usize) -> Type {
+pub fn freshen_above(context: &mut Context, ty: &Type, lim: usize, lvl: usize) -> Type {
     let mut freshened = HashMap::new();
     freshen(context, &ty, lim, lvl, &mut freshened)
-
 }
 
-fn freshen(context: &mut Context, ty: &Type, lim: usize, lvl: usize, freshened: &mut HashMap<Var, Var>) -> Type {
+fn freshen(
+    context: &mut Context,
+    ty: &Type,
+    lim: usize,
+    lvl: usize,
+    freshened: &mut HashMap<&Var, &Var>,
+) -> Type {
     if ty.level() <= lim {
-        return ty.clone()
-    } 
+        return ty.clone();
+    }
 
     match ty {
-        Type::Var(var) => {
-            Type::Var(freshened.get(&var).cloned().unwrap_or_else(|| {
-                let new_v = Var {
-                    level: lvl,
-                    id: context.count,
-                    lower_bounds: var.lower_bounds.iter().rev().map(|ty| freshen(context, ty, lim, lvl, freshened)).rev().collect(),
-                    upper_bounds: var.upper_bounds.iter().rev().map(|ty| freshen(context, ty, lim, lvl, freshened)).rev().collect(),
-                };
-                context.count += 1;
-                freshened.insert(var.clone(), new_v.clone());
-                new_v
-            }))
-        },
-        Type::Number |
-        Type::Bool |
-        Type::String |
-        Type::Path |
-        Type::Null |
-        Type::Undefined => ty.clone(),
+        Type::Var(var) => Type::Var(freshened.get(var).cloned().unwrap_or_else(|| {
+            let mut new_v = context.fresh_var(lvl);
+            let lower = var
+                .lower_bounds
+                .borrow()
+                .iter()
+                .map(|ty| freshen(context, ty, lim, lvl, freshened))
+                .collect();
+            let upper = var
+                .upper_bounds
+                .borrow()
+                .iter()
+                .map(|ty| freshen(context, ty, lim, lvl, freshened))
+                .collect();
+            *new_v.lower_bounds.borrow_mut() = lower;
+            *new_v.upper_bounds.borrow_mut() = upper;
+            freshened.insert(var.clone(), new_v);
+            new_v
+        })),
+        Type::Number | Type::Bool | Type::String | Type::Path | Type::Null | Type::Undefined => {
+            ty.clone()
+        }
         Type::Function(ty1, ty2) => Type::Function(
             Box::new(freshen(context, ty1, lim, lvl, freshened)),
             Box::new(freshen(context, ty2, lim, lvl, freshened)),
         ),
-        Type::List(list) => Type::List(list.iter().map(|t| freshen(context, t, lim, lvl, freshened)).collect()),
+        Type::List(list) => Type::List(
+            list.iter()
+                .map(|t| freshen(context, t, lim, lvl, freshened))
+                .collect(),
+        ),
         Type::Record(rc) => Type::Record(
-            rc.iter().map(|(name, ty)| (name.clone(), freshen(context, ty, lim, lvl, freshened))).collect()
+            rc.iter()
+                .map(|(name, ty)| (name.clone(), freshen(context, ty, lim, lvl, freshened)))
+                .collect(),
         ),
         Type::Optional(opt) => Type::Optional(Box::new(freshen(context, opt, lim, lvl, freshened))),
-        
-        
-        Type::Top |
-        Type::Bottom |
-        Type::Union(_, _) |
-        Type::Inter(_, _)  | Type::Recursive(..) => unreachable!(),
+
+        Type::Top | Type::Bottom | Type::Union(_, _) | Type::Inter(_, _) | Type::Recursive(..) => {
+            unreachable!()
+        }
     }
 }
-
 
 /// Infer the type of an expression.
 fn type_term<'a>(ctx: &mut Context<'a>, term: &'a Ast, lvl: usize) -> Result<Type, SpannedError> {
@@ -250,7 +259,7 @@ fn type_term<'a>(ctx: &mut Context<'a>, term: &'a Ast, lvl: usize) -> Result<Typ
                     let rhs = ty2
                         .into_list()
                         .map_err(|err| SpannedError::from((span, err)))?;
-                    
+
                     Ok(Type::List([lhs, rhs].concat()))
                 }
 
@@ -261,12 +270,12 @@ fn type_term<'a>(ctx: &mut Context<'a>, term: &'a Ast, lvl: usize) -> Result<Typ
                     let rc2 = ty2
                         .into_record()
                         .map_err(|err| SpannedError::from((span, err)))?;
-                    
+
                     // overwrite first record with fields from second one
                     rc1.extend(rc2);
 
                     Ok(Type::Record(rc1))
-                },
+                }
 
                 // Primitives
                 BinOp::Mul | BinOp::Div | BinOp::Sub => {
@@ -278,7 +287,10 @@ fn type_term<'a>(ctx: &mut Context<'a>, term: &'a Ast, lvl: usize) -> Result<Typ
                     if ty1 == Type::Number {
                         match ty2 {
                             Type::Number => Ok(Type::Number),
-                            Type::Var(var) => {constrain(ctx, &ty2, &ty1); Ok(Number)},
+                            Type::Var(var) => {
+                                constrain(ctx, &ty2, &ty1);
+                                Ok(Number)
+                            }
                             _ => Err(SpannedError {
                                 error: InferError::TypeMismatch {
                                     expected: TypeName::Number,
@@ -290,7 +302,10 @@ fn type_term<'a>(ctx: &mut Context<'a>, term: &'a Ast, lvl: usize) -> Result<Typ
                     } else if ty1 == Type::String {
                         match ty2 {
                             Type::String | Type::Path => Ok(Type::String),
-                            Type::Var(var) => {constrain(ctx, &ty2, &ty1); Ok(String)},
+                            Type::Var(var) => {
+                                constrain(ctx, &ty2, &ty1);
+                                Ok(String)
+                            }
                             _ => Err(SpannedError {
                                 error: InferError::TypeMismatch {
                                     expected: TypeName::String, // TODO: improve
@@ -299,11 +314,13 @@ fn type_term<'a>(ctx: &mut Context<'a>, term: &'a Ast, lvl: usize) -> Result<Typ
                                 span: span.clone(),
                             }),
                         }
-                    } 
-                    else if ty1 == Type::Path {
+                    } else if ty1 == Type::Path {
                         match ty2 {
                             Type::String => Ok(Type::String),
-                            Type::Var(var) => {constrain(ctx, &ty2, &ty1); Ok(Path)},
+                            Type::Var(var) => {
+                                constrain(ctx, &ty2, &ty1);
+                                Ok(Path)
+                            }
                             _ => Err(SpannedError {
                                 error: InferError::TypeMismatch {
                                     expected: TypeName::Path, // TODO: improve
@@ -312,7 +329,7 @@ fn type_term<'a>(ctx: &mut Context<'a>, term: &'a Ast, lvl: usize) -> Result<Typ
                                 span: span.clone(),
                             }),
                         }
-                    }else {
+                    } else {
                         Err(SpannedError {
                             error: InferError::TypeMismatch {
                                 expected: TypeName::Number, // TODO: improve
@@ -321,14 +338,14 @@ fn type_term<'a>(ctx: &mut Context<'a>, term: &'a Ast, lvl: usize) -> Result<Typ
                             span: span.clone(),
                         })
                     }
-                },
+                }
 
                 // Misc
                 BinOp::HasAttribute => Ok(Bool),
                 BinOp::AttributeFallback => {
                     // maybe typeunion?
                     todo!()
-                },
+                }
 
                 // Comparisons
                 BinOp::LessThan
@@ -340,7 +357,7 @@ fn type_term<'a>(ctx: &mut Context<'a>, term: &'a Ast, lvl: usize) -> Result<Typ
                     constrain(ctx, &ty1, &Type::Bool).map_err(|e| e.span(lhs.get_span()))?;
                     constrain(ctx, &ty2, &Type::Bool).map_err(|e| e.span(rhs.get_span()))?;
                     Ok(Bool)
-                },
+                }
 
                 // Logical oprators
                 BinOp::And | BinOp::Or | BinOp::Implication => todo!(),
@@ -348,66 +365,70 @@ fn type_term<'a>(ctx: &mut Context<'a>, term: &'a Ast, lvl: usize) -> Result<Typ
         }
 
         // Language constructs
+        // TODO: inherits should should not be rewritten to create nice errors
         Ast::AttrSet {
             attrs,
-            is_recursive, // TODO: handle recursiveness
+            is_recursive,
             span,
         } => {
-            /* if is_recursive {
-            } else {
-            } */
-            let mut items: HashMap<_, _> = attrs
-                .iter()
-                .map(|(name, expr)| (name.name.to_string(), type_term(ctx, expr, lvl).unwrap())) // TODO: remove unwrap
-                .collect();
+            if *is_recursive {
+                let mut idents = attrs
+                    .iter()
+                    .filter_map(|(ident, expr)| ctx.lookup(&ident.name)) // TODO: partition
+                    .collect();
 
-            /* let (ok, err): (Vec<_>, Vec<_>) = inherit
-                .iter()
-                .map(|Inherit { name, items }| {
-                    Result::<_, SpannedError>::Ok((
-                        name.to_string(),
-                        ctx.lookup_by_name(name)
-                            .ok_or(InferError::UnknownIdentifier.span(range))?
-                            .get_type() // TODO: does this have to copied too?
-                            .unwrap_or_default(),
-                    ))
+                ctx.with_scope(idents, |ctx| {
+                    let mut items: HashMap<_, _> = attrs
+                        .iter()
+                        .map(|(ident, expr)| {
+                            (ident.name.to_string(), type_term(ctx, expr, lvl).unwrap())
+                        })
+                        .collect();
+                    Ok(Type::Record(items))
                 })
-                .partition_map(|r| match r {
-                    Ok(v) => Either::Left(v),
-                    Err(v) => Either::Right(v),
-                });
-
-            if !err.is_empty() {
-                return Err(InferError::MultipleErrors(err).span(span));
+            } else {
+                let mut items: HashMap<_, _> = attrs
+                    .iter()
+                    .map(|(ident, expr)| {
+                        (ident.name.to_string(), type_term(ctx, expr, lvl).unwrap())
+                    }) // TODO: remove unwrap
+                    .collect();
+                Ok(Record(items))
             }
-            items.extend(ok.into_iter());*/
-            Ok(Record(items))
         }
+
+        // TODO: inherits should should not be rewritten to create nice errors
         Ast::LetBinding {
             bindings,
             body,
             span,
         } => {
-            //let mut inherits = lookup_inherits(ctx, inherit).map_err(|e| e.span(span))?;
-            //inherits.extend(bindings.iter().map(|(ident, _)| ident));
-            let names: Vec<&Identifier> = bindings.iter().map(|(name, _)| name).collect();
+            let names = bindings
+                .iter()
+                .map(|(name, _)| ctx.fresh_var(lvl))
+                .collect();
             let expressions = bindings.iter().map(|(_, expr)| expr);
-            ctx.with_scope(names, |context| {
-                let types = expressions.map(|ast| type_term(context, ast, lvl));
+            let types = ctx
+                .with_scope(names, |context| {
+                    // TODO: type should we wrapped in polymorphicType
+                    names.iter().zip(expressions).map(|(name, rhs)| {
+                        let e_ty = ctx.fresh_var(lvl + 1);
+                        let ty = type_term(ctx, rhs, lvl + 1)?;
+                        constrain(ctx, &ty, &Type::Var(e_ty))
+                            .map_err(|e| e.span(rhs.get_span()))?;
+                        Ok(PolymorphicType::new(Type::Var(e_ty), lvl))
+                    })
+                })
+                .filter_map(|val| val.ok())
+                .collect();
 
-                for (name, ty) in names.iter().zip(types) {
-                    let ty = ty?;
-                    constrain(ctx, &ty, &Type::Var(names))
-                        .map_err(|e| e.span(&name.span))?
-                }
-
-                type_term(context, body, lvl)
-            })
+            let ret = ctx.with_scope(types, |context| type_term(ctx, body, lvl))?;
+            Ok(ret)
         }
+
         Ast::Lambda {
             pattern,
             body,
-            arg_binding: _,
             span,
         } => {
             let mut added = vec![];
@@ -422,27 +443,28 @@ fn type_term<'a>(ctx: &mut Context<'a>, term: &'a Ast, lvl: usize) -> Result<Typ
                     for pattern in patterns {
                         match pattern {
                             PatternElement::Identifier(ident) => {
-                                item.push((ident, Type::Undefined));
-                                added.push(ident);
+                                item.push((ident.name, Type::Undefined));
+                                added.push(ctx.fresh_var(lvl));
                             }
                             PatternElement::DefaultIdentifier(name, expr) => {
                                 let ty = type_term(ctx, expr, lvl)?;
-                                constrain(ctx, &Type::Var(name), &ty);
-                                item.push((name, ty));
-                                added.push(name);
+                                let var = ctx.fresh_var(lvl);
+                                constrain(ctx, &Type::Var(var), &ty);
+                                item.push((name.name, ty));
+                                added.push(var);
                             }
                         }
                     }
 
-                    let ty = Type::Record(item.collect())
+                    let ty = Type::Pattern(item.into_iter().collect(), *is_wildcard);
                     if let Some(Name) = name {
                         let var = ctx.fresh_var(lvl);
-                        constrain(ctx, var, &ty);
+                        constrain(ctx, &Type::Var(var), &ty);
                         added.push(var);
                     }
                     ty
                 }
-                Pattern::Identifier(ident) => Type::Var(ident),
+                crate::ast::Pattern::Identifier(ident) => Type::Var(ctx.fresh_var(lvl)),
             };
 
             let ret = ctx.with_scope(added, |context| type_term(context, body, lvl))?;
@@ -523,19 +545,20 @@ fn coalsce_type(ty: &Type) -> Type {
     coalsce_type_inner(ty, true, &mut map, &mut processing)
 }
 
-
-fn coalsce_type_inner(ty: &Type, polarity: bool, rec: &mut HashMap<PolarVar, Var>, processing: &mut HashSet<PolarVar>) -> Type {
+fn coalsce_type_inner(
+    ty: &Type,
+    polarity: bool,
+    rec: &mut HashMap<PolarVar, &Var>,
+    processing: &mut HashSet<PolarVar>,
+) -> Type {
     match ty {
-        Type::Number |
-        Type::Bool |
-        Type::String |
-        Type::Path |
-        Type::Null |
-        Type::Undefined => ty.clone(),
+        Type::Number | Type::Bool | Type::String | Type::Path | Type::Null | Type::Undefined => {
+            ty.clone()
+        }
         tyvar @ Type::Var(var) => {
-            let pol_var = (var, polarity);
+            let pol_var = (*var, polarity);
             if processing.contains(&pol_var) {
-                return tyvar.clone()
+                return tyvar.clone();
             } else {
                 processing.insert(pol_var);
                 let bounds = if polarity {
@@ -543,25 +566,39 @@ fn coalsce_type_inner(ty: &Type, polarity: bool, rec: &mut HashMap<PolarVar, Var
                 } else {
                     &var.upper_bounds
                 };
-                let bound_types = bounds.iter().map(|t| {
+                let bound_types = bounds.borrow().iter().map(|t| {
                     processing.insert(pol_var);
                     let t = coalsce_type_inner(t, polarity, rec, processing);
                     processing.remove(&pol_var);
                     t
                 });
                 let res = if polarity {
-                    bound_types.reduce( |a, b| Type::Union(Box::new(a), Box::new(b)))
+                    bound_types.reduce(|a, b| Type::Union(Box::new(a), Box::new(b)))
                 } else {
-                    bound_types.reduce( |a, b| Type::Inter(Box::new(a), Box::new(b)))
+                    bound_types.reduce(|a, b| Type::Inter(Box::new(a), Box::new(b)))
                 };
-                rec.get(&pol_var).map(|var| Type::Recursive(var.clone(), Box::new(res.unwrap())));
+                rec.get(&pol_var)
+                    .map(|var| Type::Recursive(var, Box::new(res.unwrap())));
                 todo!()
             }
-        },
-        Type::Function(l, r) => Type::Function(Box::new(coalsce_type_inner(ty, !polarity, rec, processing)), Box::new(coalsce_type_inner(ty, polarity, rec, processing))),
-        Type::List(l) => Type::List(l.iter().map(|t| coalsce_type_inner(t, polarity, rec, processing)).collect()),
-        Type::Record(r) => Type::Record(r.iter().map(|(n, t)| (n.clone(), coalsce_type_inner(t, polarity, rec, processing))).collect()),
-        Type::Optional(o) => Type::Optional(Box::new(coalsce_type_inner(o, polarity, rec, processing))),
+        }
+        Type::Function(l, r) => Type::Function(
+            Box::new(coalsce_type_inner(ty, !polarity, rec, processing)),
+            Box::new(coalsce_type_inner(ty, polarity, rec, processing)),
+        ),
+        Type::List(l) => Type::List(
+            l.iter()
+                .map(|t| coalsce_type_inner(t, polarity, rec, processing))
+                .collect(),
+        ),
+        Type::Record(r) => Type::Record(
+            r.iter()
+                .map(|(n, t)| (n.clone(), coalsce_type_inner(t, polarity, rec, processing)))
+                .collect(),
+        ),
+        Type::Optional(o) => {
+            Type::Optional(Box::new(coalsce_type_inner(o, polarity, rec, processing)))
+        }
         _ => unreachable!(),
     }
 }
