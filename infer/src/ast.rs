@@ -107,7 +107,6 @@ pub enum Ast {
     /// Function
     Lambda {
         pattern: Pattern,
-        arg_binding: Option<Identifier>,
         body: Box<Ast>,
         span: Span,
     },
@@ -488,7 +487,6 @@ fn transform_ast(value: ParserAst, source: &str) -> Ast {
         ParserAst::Lambda {
             pattern,
             body,
-            arg_binding,
             span,
         } => {
             let mut idents = vec![];
@@ -531,8 +529,6 @@ fn transform_ast(value: ParserAst, source: &str) -> Ast {
             Lambda {
                 pattern,
                 body: Box::new(body),
-                arg_binding: arg_binding
-                    .map(|span| crate::Identifier::new(source[span.clone()].to_string(), span)), //TODO: reintroduce
                 span,
             }
         }

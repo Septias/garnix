@@ -184,7 +184,6 @@ pub enum Ast {
     Lambda {
         pattern: Pattern,
         body: Box<Ast>,
-        arg_binding: Option<Span>,
         span: Span,
     },
 

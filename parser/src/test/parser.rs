@@ -202,7 +202,6 @@ fn test_lambda() {
                 val: 12,
                 span: Range { start: 8, end: 10 }
             }),
-            arg_binding: None,
             span: Range { start: 0, end: 10 }
         }
     );
@@ -220,10 +219,8 @@ fn test_lambda() {
                     val: 12,
                     span: Range { start: 18, end: 20 }
                 }),
-                arg_binding: None,
                 span: Range { start: 8, end: 20 }
             }),
-            arg_binding: None,
             span: Range { start: 0, end: 20 }
         }
     );
@@ -244,7 +241,6 @@ fn test_lambda() {
                 val: 12,
                 span: Range { start: 10, end: 12 }
             }),
-            arg_binding: None,
             span: Range { start: 0, end: 12 }
         }
     );
@@ -265,7 +261,6 @@ fn test_lambda() {
                 val: 12,
                 span: Range { start: 4, end: 6 }
             }),
-            arg_binding: None,
             span: Range { start: 0, end: 6 }
         }
     );
@@ -297,7 +292,6 @@ fn test_lambda() {
                 inherit: vec![],
                 span: Range { start: 4, end: 21 }
             }),
-            arg_binding: None,
             span: Range { start: 0, end: 21 }
         }
     );

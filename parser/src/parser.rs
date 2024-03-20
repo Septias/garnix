@@ -208,7 +208,6 @@ pub fn lambda(input: NixTokens<'_>) -> PResult<'_, Ast> {
         |span, (pattern, body)| Lambda {
             pattern,
             body: Box::new(body),
-            arg_binding: None,
             span,
         },
     )(input)
