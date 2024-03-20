@@ -2,6 +2,8 @@
 
 - Type Inference
   - [] type_term
+    - [] functions
+      - Restricting set patterns
     - [] let bindings
     - [] with-statements
     - [] inherit-statements
@@ -29,7 +31,7 @@
   - [x] Motivation
   - [x] Language introduction
   - [x] Language definition
-  - [x] Nix language support
+  - [] Nix language support
   - [] One-step Semantic
   - [] Ausblick
 
