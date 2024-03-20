@@ -1,6 +1,6 @@
 use crate::{
-    ast::{Ast, Pattern, PatternElement},
-    types::{PolarVar, PolymorphicType, SimpleType, Type, Var},
+    ast::{Ast, PatternElement},
+    types::{PolarVar, PolymorphicType, Type, Var},
     Context, InferError, InferResult, SpannedError, SpannedInferResult, TypeName,
 };
 use parser::ast::BinOp;
@@ -46,12 +46,11 @@ fn constrain_inner(
             }
         }
 
-
         (Type::Var(lhs), Pattern) => {
             todo!()
         }
 
-        (Pattern, Type::Var(rhs))  => {
+        (Pattern, Type::Var(rhs)) => {
             todo!()
         }
 
@@ -76,7 +75,6 @@ fn constrain_inner(
             constrain_inner(context, &lhs_extruded, rhs, cache)?;
         }
 
-        
         _ => {
             return Err(InferError::CannotConstrain {
                 lhs: lhs.clone(),
@@ -107,6 +105,7 @@ fn extrude(
         | t @ Type::String
         | t @ Type::Path
         | t @ Type::Null
+        | t @ Type::Pattern(..)
         | t @ Type::Undefined => ty.clone(),
         Type::Function(l, r) => Type::Function(
             Box::new(extrude(context, l, !pol, lvl, c)),
@@ -181,9 +180,13 @@ fn freshen(
             freshened.insert(var.clone(), new_v);
             new_v
         })),
-        Type::Number | Type::Bool | Type::String | Type::Path | Type::Null | Type::Undefined => {
-            ty.clone()
-        }
+        Type::Number
+        | Type::Bool
+        | Type::String
+        | Type::Path
+        | Type::Null
+        | Type::Undefined
+        | Type::Pattern(..) => ty.clone(),
         Type::Function(ty1, ty2) => Type::Function(
             Box::new(freshen(context, ty1, lim, lvl, freshened)),
             Box::new(freshen(context, ty2, lim, lvl, freshened)),

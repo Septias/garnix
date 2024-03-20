@@ -2,15 +2,7 @@ use itertools::Itertools;
 use std::{cell::RefCell, collections::HashMap};
 use strum_macros::{AsRefStr, Display, EnumDiscriminants};
 
-use crate::{ast::Identifier, infer::freshen_above, infer_error, Context, InferResult};
-
-pub trait TypeScheme {
-    fn instantiate(self, context: &mut Context, lvl: usize) -> Type;
-}
-
-pub trait SimpleType: TypeScheme {
-    fn level(&self) -> usize;
-}
+use crate::{ast::Identifier, infer_error, Context, InferResult};
 
 /// A single identifier.
 /// The name should be a debrujin index and the path is used for set accesses.
@@ -49,21 +41,9 @@ impl From<&Identifier> for Var {
 
 pub type PolarVar = (&'a Var, bool);
 
-struct PolymorhicType {
-    lvl: usize,
-    body: Type,
-}
-
-impl TypeScheme for PolymorhicType {
-    fn instantiate(self, context: &mut Context, lvl: usize) -> Type {
-        freshen_above(context, &self.body, self.lvl, lvl)
-    }
-}
-
-impl SimpleType for PolymorhicType {
-    fn level(&self) -> usize {
-        self.lvl
-    }
+pub struct PolymorhicType {
+    pub lvl: usize,
+    pub body: Type,
 }
 
 /// A nix language type.
@@ -121,14 +101,12 @@ impl PolymorphicType {
     }
 }
 
-impl TypeScheme for Type {
-    fn instantiate(self, context: &mut Context, lvl: usize) -> Type {
+impl Type {
+    pub fn instantiate(self, context: &mut Context, lvl: usize) -> Type {
         self
     }
-}
 
-impl SimpleType for Type {
-    fn level(&self) -> usize {
+    pub fn level(&self) -> usize {
         match self {
             Type::Var(ident) => ident.level,
             Type::Optional(ty) => ty.level(),
@@ -140,15 +118,14 @@ impl SimpleType for Type {
             | Type::String
             | Type::Path
             | Type::Null
+            | Type::Pattern(..)
             | Type::Undefined => 0,
             Type::Top | Type::Bottom | Type::Union(..) | Type::Inter(..) | Type::Recursive(..) => {
                 panic!("Not a simple type")
             }
         }
     }
-}
 
-impl Type {
     /// Try to convert this type to a list.
     pub fn into_list(self) -> InferResult<Vec<Type>> {
         match self {
@@ -195,6 +172,7 @@ impl Type {
             Type::Null => TypeName::Null,
             Type::Undefined => TypeName::Undefined,
             Type::Recursive(_, _) => TypeName::Recursive,
+            Type::Pattern(_, _) => TypeName::Pattern,
         }
     }
 
@@ -216,6 +194,13 @@ impl Type {
             Type::Inter(lhs, rhs) => format!("{} ∧ {}", lhs.show(), rhs.show()),
             Type::Optional(t) => format!("Optional<{}>", t.show()),
             Type::Recursive(ident, ty) => format!("Rec({}) {}", ident.id, ty.show()),
+            Type::Pattern(fields, _) => format!(
+                "{{ {} }}",
+                fields
+                    .iter()
+                    .map(|(k, v)| format!("{}: {}", k, v.show()))
+                    .join(", ")
+            ),
         }
     }
 }

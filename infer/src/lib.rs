@@ -1,8 +1,9 @@
 #![feature(box_patterns, iter_intersperse)]
 use ast::Identifier;
 use core::str;
+use infer::freshen_above;
 use logos::Span;
-use types::{Type, TypeName, Var};
+use types::{PolymorhicType, Type, TypeName, Var};
 
 pub mod ast;
 pub mod infer;
@@ -14,28 +15,49 @@ pub use error::*;
 #[cfg(test)]
 mod tests;
 
+pub enum PackagedItem {
+    Type(Type),
+    PolymorhicType(PolymorhicType),
+}
+
+impl PackagedItem {
+    fn level(&self) -> usize {
+        match self {
+            PackagedItem::Type(ty) => ty.level(),
+            PackagedItem::PolymorhicType(pty) => pty.lvl,
+        }
+    }
+
+    fn instantiate(&self, context: &mut Context, lvl: usize) -> Type {
+        match self {
+            PackagedItem::Type(ty) => ty.instantiate(context, lvl),
+            PackagedItem::PolymorhicType(pty) => freshen_above(context, &pty.body, pty.lvl, lvl),
+        }
+    }
+}
+
 /// Context to save variables and their types.
 pub(crate) struct Context<'a> {
-    bindings: Vec<Vec<&'a Identifier>>,
+    bindings: Vec<Vec<(&'a str, PackagedItem)>>,
+    vars: Vec<Var>,
     with: Option<&'a Identifier>,
-    errors: Vec<SpannedError>,
     count: usize,
 }
 
 impl<'a> Context<'a> {
     pub(crate) fn new() -> Self {
         Self {
-            bindings: vec![Vec::new()],
+            bindings: vec![vec![]],
             count: 0,
             with: None,
-            errors: Vec::new(),
+            vars: Vec::new(),
         }
     }
 
     /// Create a new scope and run a function with it.
     pub(crate) fn with_scope<T>(
         &mut self,
-        scope: Vec<&'a Var>,
+        scope: Vec<(&'a str, PackagedItem)>,
         f: impl FnOnce(&mut Self) -> T,
     ) -> T {
         self.bindings.push(scope);
@@ -48,8 +70,8 @@ impl<'a> Context<'a> {
     /// Lookup an [Var] by it's name.
     pub(crate) fn lookup(&self, name: &str) -> Option<&Var> {
         for scope in self.bindings.iter().rev() {
-            for n in scope.iter().rev() {
-                if n.name == name {
+            for (name, item) in scope.iter().rev() {
+                if name == name {
                     todo!();
                 }
             }
@@ -60,7 +82,8 @@ impl<'a> Context<'a> {
     pub(crate) fn fresh_var(&mut self, lvl: usize) -> &Var {
         let res = Var::new(lvl, self.count);
         self.count += 1;
-        res
+        self.vars.push(res);
+        &res
     }
 }
 
