@@ -240,13 +240,14 @@ pub(crate) fn assert(input: NixTokens<'_>) -> PResult<'_, Ast> {
     )(input)
 }
 
-
-
 pub(crate) fn inherit(input: NixTokens<'_>) -> PResult<'_, Inherit> {
     let inherit_root = delimited(token(Token::LParen), expr, token(Token::RParen));
     delimited(
         token(Token::Inherit),
-        pair(opt(inherit_root), many0(ident)),
+        pair(
+            opt(inherit_root),
+            many1(alt((ident, token(Token::SingleString).map(|a| a.1)))),
+        ),
         token(Semi),
     )
     .map(|(name, items)| Inherit { name, items })

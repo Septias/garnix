@@ -93,6 +93,7 @@ pub enum Ast {
     /// Attribute set
     AttrSet {
         attrs: HashMap<Identifier, Ast>,
+        inherit: Vec<Inherit>,
         is_recursive: bool,
         span: Span,
     },
@@ -100,6 +101,7 @@ pub enum Ast {
     /// Let expression
     LetBinding {
         bindings: Vec<(Identifier, Ast)>,
+        inherit: Vec<Inherit>,
         body: Box<Ast>,
         span: Span,
     },
@@ -416,10 +418,6 @@ impl Ast {
     }
 }
 
-fn append_name(ast: &Ast, name: Identifier) -> Ast {
-    todo!()
-}
-
 /// Convert [ParserAst] to [Ast].
 /// Replace every occurence of an identifier with an [Identifier].
 fn transform_ast(value: ParserAst, source: &str) -> Ast {
@@ -453,11 +451,21 @@ fn transform_ast(value: ParserAst, source: &str) -> Ast {
                     let ident = crate::Identifier::new(source[name.clone()].to_string(), name);
                     (ident, transform_ast(expr, source))
                 })
-                .chain(inline_inherits(inherit, source))
                 .collect();
             Ast::AttrSet {
                 attrs,
                 is_recursive,
+                inherit: inherit
+                    .iter()
+                    .map(|inherit| Inherit {
+                        name: inherit.name.map(|name| transform_ast(name, source)),
+                        items: inherit
+                            .items
+                            .into_iter()
+                            .map(|item| source[item].to_string())
+                            .collect(),
+                    })
+                    .collect(),
                 span,
             }
         }
@@ -473,13 +481,23 @@ fn transform_ast(value: ParserAst, source: &str) -> Ast {
                     let ident = crate::Identifier::new(source[span.clone()].to_string(), span);
                     (ident, transform_ast(expr, source))
                 })
-                .chain(inline_inherits(inherit, source))
                 .collect();
 
             let body = transform_ast(*body, source);
 
             LetBinding {
                 bindings,
+                inherit: inherit
+                    .iter()
+                    .map(|inherit| Inherit {
+                        name: inherit.name.map(|name| transform_ast(name, source)),
+                        items: inherit
+                            .items
+                            .into_iter()
+                            .map(|item| source[item].to_string())
+                            .collect(),
+                    })
+                    .collect(),
                 body: Box::new(body),
                 span,
             }
@@ -582,22 +600,4 @@ fn transform_ast(value: ParserAst, source: &str) -> Ast {
             unimplemented!()
         }
     }
-}
-
-fn inline_inherits(inherit: Vec<parser::ast::Inherit>, source: &str) -> Vec<(Identifier, Ast)> {
-    inherit
-        .into_iter()
-        .map(|inherit| {
-            let root = inherit.name.map(|name| transform_ast(name, source));
-            inherit.items.into_iter().map(|inherit| {
-                let ident = crate::Identifier::new(source[inherit.clone()].to_string(), inherit);
-                (
-                    ident,
-                    root.map(|root| append_name(&root, ident))
-                        .unwrap_or(ast::Ast::Identifier(ident)),
-                )
-            })
-        })
-        .flatten()
-        .collect_vec()
 }
