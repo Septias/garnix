@@ -1,11 +1,9 @@
 use super::{InferError, InferResult};
-use crate::{ast, Type};
+use crate::ast;
 use core::str;
-use itertools::Itertools;
 use logos::Span;
 use parser::ast::{Ast as ParserAst, BinOp, UnOp};
 use std::{
-    cell::RefCell,
     collections::HashMap,
     hash::{self, Hasher},
 };
@@ -32,17 +30,13 @@ pub enum Pattern {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Inherit {
     pub name: Option<Ast>,
-    pub items: Vec<Ast>,
+    pub items: Vec<String>,
 }
 
 #[derive(Default, Debug, Clone, Eq)]
 /// An Identifier.
 pub struct Identifier {
     pub name: String,
-    pub lower_bounds: RefCell<Vec<Type>>,
-    pub upper_bounds: RefCell<Vec<Type>>,
-    pub ty: RefCell<Option<Type>>,
-    pub level: usize,
     pub span: Span,
 }
 
@@ -54,17 +48,11 @@ impl PartialEq for Identifier {
 
 impl Identifier {
     pub fn new(name: String, span: Span) -> Self {
-        Self {
-            name,
-            span,
-            lower_bounds: RefCell::new(vec![]),
-            upper_bounds: RefCell::new(vec![]),
-            ty: RefCell::new(None),
-            level: 0,
-        }
+        Self { name, span }
     }
 }
 
+// TODO: needed?
 impl hash::Hash for Identifier {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.name.hash(state);

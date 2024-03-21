@@ -1,6 +1,7 @@
 ## TODO (17.03)
 
 - Type Inference
+
   - [] type_term
     - [] functions
       - Restricting set patterns
@@ -12,7 +13,7 @@
   - [x] fresh_var
   - [x] freshen_above
   - [x] coalsce_type
-  - [] polymorphic type
+  - [x] polymorphic type
   - [] builtins
   - [] Simplification
     - [] compact Type
@@ -21,8 +22,10 @@
     - [] coalesceCompactType
 
 - Parser
+
   - [x] Handle `inherit (lib)`
   - [x] Don't use expr as base
+  - [] Error reporting
   - [] out: String interpolation
   - [] Add type-parsing
 
@@ -32,22 +35,30 @@
   - [x] Language introduction
   - [x] Language definition
   - [] Nix language support
+  - [] Builtins
   - [] One-step Semantic
   - [] Ausblick
 
-- Misc
-  - Read Thiemann papers
-  - Read original paper
-  - Allow intersections in positive positions?
-  - Add if with f: bool -> a -> a -> a
-  - typeTerm is similar to algorithm W in HM
-  - contra and co-variance of parameters
-  - records: width and depth subtyping
+## Zentrale Fragen
+
+- Soll ich überall die Syntax schön definieren?
+- Schaffe ich es den Soundness Beweis zu machen?
+- Allow intersections in negative positions?
+- **Kann ich nachher module parsen?**
+- **Wie funktioniert import?**
+- **Lazy inferenz**
+
+## TODO
+
+- Read Thiemann papers
+- typeTerm is similar to algorithm W in HM
 
 ## Improvements
+
 - Nice Verbose error
 - Use own implementation of Span
 
 ## Restrictions
+
 - Comment positions
 - Line comments have to end in '\n'

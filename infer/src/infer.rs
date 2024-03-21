@@ -59,7 +59,6 @@ fn constrain_inner(
         | (Type::List(..), Type::List(..))
         | (Type::Undefined, Type::Undefined) => (),
 
-
         // application?
         // function constraints
         // selection
@@ -237,7 +236,11 @@ fn freshen(
 }
 
 /// Infer the type of an expression.
-fn type_term<'a>(ctx: &mut Context<'a>, term: &'a Ast, lvl: usize) -> Result<Type, SpannedError> {
+fn type_term<'a>(
+    ctx: &mut Context<'a>,
+    term: &'a Ast,
+    lvl: usize,
+) -> Result<Type<'a>, SpannedError> {
     use Type::*;
     match term {
         Ast::Identifier(super::ast::Identifier { name, span, .. }) => ctx
@@ -359,6 +362,8 @@ fn type_term<'a>(ctx: &mut Context<'a>, term: &'a Ast, lvl: usize) -> Result<Typ
                                 span: span.clone(),
                             }),
                         }
+                    } else if matches!(ty1, Type::Var(_)) {
+                        todo!()
                     } else {
                         Err(SpannedError {
                             error: InferError::TypeMismatch {
@@ -384,20 +389,23 @@ fn type_term<'a>(ctx: &mut Context<'a>, term: &'a Ast, lvl: usize) -> Result<Typ
                 | BinOp::GreaterThanEqual
                 | BinOp::Equal
                 | BinOp::NotEqual => {
-                    constrain(ctx, &ty1, &Type::Bool).map_err(|e| e.span(lhs.get_span()))?;
-                    constrain(ctx, &ty2, &Type::Bool).map_err(|e| e.span(rhs.get_span()))?;
+                    // TODO: type this as function f: α -> α -> Bool
                     Ok(Bool)
                 }
 
                 // Logical oprators
-                BinOp::And | BinOp::Or | BinOp::Implication => todo!(),
+                BinOp::And | BinOp::Or | BinOp::Implication => {
+                    constrain(ctx, &ty1, &Type::Bool).map_err(|e| e.span(lhs.get_span()))?;
+                    constrain(ctx, &ty2, &Type::Bool).map_err(|e| e.span(rhs.get_span()))?;
+                    Ok(Bool)
+                }
             }
         }
 
         // Language constructs
-        // TODO: inherits should should not be rewritten to create nice errors
         Ast::AttrSet {
             attrs,
+            inherit: _,
             is_recursive,
             span,
         } => {
@@ -421,15 +429,15 @@ fn type_term<'a>(ctx: &mut Context<'a>, term: &'a Ast, lvl: usize) -> Result<Typ
                     .iter()
                     .map(|(ident, expr)| {
                         (ident.name.to_string(), type_term(ctx, expr, lvl).unwrap())
-                    }) // TODO: remove unwrap
+                    })
                     .collect();
                 Ok(Record(items))
             }
         }
 
-        // TODO: inherits should should not be rewritten to create nice errors
         Ast::LetBinding {
             bindings,
+            inherit: _,
             body,
             span,
         } => {
@@ -488,6 +496,9 @@ fn type_term<'a>(ctx: &mut Context<'a>, term: &'a Ast, lvl: usize) -> Result<Typ
 
                     let ty = Type::Pattern(item.into_iter().collect(), *is_wildcard);
                     if let Some(Name) = name {
+                        if *is_wildcard {
+                            todo!()
+                        }
                         let var = ctx.fresh_var(lvl);
                         constrain(ctx, &Type::Var(var), &ty);
                         added.push(var);

@@ -7,7 +7,7 @@ use crate::{ast::Identifier, infer_error, Context, InferResult};
 /// A single identifier.
 /// The name should be a debrujin index and the path is used for set accesses.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub struct Var {
+pub struct Var<'a> {
     pub lower_bounds: RefCell<Vec<Type>>,
     pub upper_bounds: RefCell<Vec<Type>>,
     pub level: usize,
@@ -50,7 +50,7 @@ pub struct PolymorhicType {
 #[derive(Debug, Clone, PartialEq, Eq, Display, EnumDiscriminants, AsRefStr)]
 #[strum_discriminants(derive(AsRefStr, Display))]
 #[strum_discriminants(name(TypeName))]
-pub enum Type {
+pub enum Type<'a> {
     Top,
     Bottom,
 
@@ -61,17 +61,17 @@ pub enum Type {
     Null,
     Undefined,
 
-    Var(&'a Var),
-    Function(Box<Type>, Box<Type>),
-    List(Vec<Type>),
-    Record(HashMap<String, Type>),
-    Optional(Box<Type>),
-    Pattern(HashMap<String, Type>, bool),
+    Var(&'a Var<'a>),
+    Function(Box<Type<'a>>, Box<Type<'a>>),
+    List(Vec<Type<'a>>),
+    Record(HashMap<String, Type<'a>>),
+    Optional(Box<Type<'a>>),
+    Pattern(HashMap<String, Type<'a>>, bool),
 
-    // Complexe types only created by simplification
-    Union(Box<Type>, Box<Type>),
-    Inter(Box<Type>, Box<Type>),
-    Recursive(&'a Var, Box<Type>),
+    // Complexe Types only created by simplification
+    Union(Box<Type<'a>>, Box<Type<'a>>),
+    Inter(Box<Type<'a>>, Box<Type<'a>>),
+    Recursive(&'a Var<'a>, Box<Type<'a>>),
 }
 
 impl Type {
