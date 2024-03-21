@@ -15,30 +15,30 @@ pub use error::*;
 #[cfg(test)]
 mod tests;
 
-pub enum PackagedItem {
+pub enum ContextType {
     Type(Type),
     PolymorhicType(PolymorhicType),
 }
 
-impl PackagedItem {
+impl ContextType {
     fn level(&self) -> usize {
         match self {
-            PackagedItem::Type(ty) => ty.level(),
-            PackagedItem::PolymorhicType(pty) => pty.lvl,
+            ContextType::Type(ty) => ty.level(),
+            ContextType::PolymorhicType(pty) => pty.lvl,
         }
     }
 
     fn instantiate(&self, context: &mut Context, lvl: usize) -> Type {
         match self {
-            PackagedItem::Type(ty) => ty.instantiate(context, lvl),
-            PackagedItem::PolymorhicType(pty) => freshen_above(context, &pty.body, pty.lvl, lvl),
+            ContextType::Type(ty) => ty.instantiate(context, lvl),
+            ContextType::PolymorhicType(pty) => freshen_above(context, &pty.body, pty.lvl, lvl),
         }
     }
 }
 
 /// Context to save variables and their types.
 pub(crate) struct Context<'a> {
-    bindings: Vec<Vec<(&'a str, PackagedItem)>>,
+    bindings: Vec<Vec<(&'a str, ContextType)>>,
     vars: Vec<Var>,
     with: Option<&'a Identifier>,
     count: usize,
@@ -57,7 +57,7 @@ impl<'a> Context<'a> {
     /// Create a new scope and run a function with it.
     pub(crate) fn with_scope<T>(
         &mut self,
-        scope: Vec<(&'a str, PackagedItem)>,
+        scope: Vec<(&'a str, ContextType)>,
         f: impl FnOnce(&mut Self) -> T,
     ) -> T {
         self.bindings.push(scope);
@@ -68,11 +68,11 @@ impl<'a> Context<'a> {
     }
 
     /// Lookup an [Var] by it's name.
-    pub(crate) fn lookup(&self, name: &str) -> Option<&Var> {
+    pub(crate) fn lookup(&self, name: &str) -> Option<&ContextType> {
         for scope in self.bindings.iter().rev() {
             for (name, item) in scope.iter().rev() {
                 if name == name {
-                    todo!();
+                    return Some(item)
                 }
             }
         }
