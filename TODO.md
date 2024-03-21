@@ -7,7 +7,7 @@
     - [] let bindings
     - [] with-statements
     - [] inherit-statements
-  - [] constrain
+  - [x] constrain
   - [x] extrude
   - [x] fresh_var
   - [x] freshen_above

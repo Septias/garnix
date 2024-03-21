@@ -37,6 +37,7 @@ fn constrain_inner(
             constrain_inner(context, l1, l0, cache)?;
             constrain_inner(context, r0, r1, cache)?;
         }
+
         (Type::Record(fs0), Type::Record(fs1)) => {
             for (n1, t1) in fs1 {
                 match fs0.iter().find(|(n0, _)| *n0 == n1) {
@@ -46,20 +47,31 @@ fn constrain_inner(
             }
         }
 
-        (Type::Var(lhs), Pattern) => {
-            todo!()
+        (Type::Optional(o1), Type::Optional(o0)) => {
+            constrain_inner(context, o0, o1, cache)?;
         }
 
-        (Pattern, Type::Var(rhs)) => {
-            todo!()
-        }
+        (Type::Bool, Type::Bool)
+        | (Type::Number, Type::Number)
+        | (Type::String, Type::String)
+        | (Type::Path, Type::Path)
+        | (Type::Null, Type::Null)
+        | (Type::List(..), Type::List(..))
+        | (Type::Undefined, Type::Undefined) => (),
 
+
+        // application?
+        // function constraints
+        // selection
         (Type::Var(lhs), rhs) if rhs.level() <= lhs.level => {
             lhs.upper_bounds.borrow_mut().push(rhs.clone());
             for lower_bound in lhs.lower_bounds.borrow().iter() {
                 constrain_inner(context, lower_bound, rhs, cache)?;
             }
         }
+
+        // let-binding
+        // record typing
         (lhs, Type::Var(rhs)) if lhs.level() <= rhs.level => {
             rhs.lower_bounds.borrow_mut().push(lhs.clone());
             for upper_bound in rhs.upper_bounds.borrow().iter() {
