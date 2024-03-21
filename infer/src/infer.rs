@@ -93,7 +93,7 @@ fn extrude(
     ty: &Type,
     pol: bool,
     lvl: usize,
-    c: &mut HashMap<&Var, &Var>,
+    c: &mut HashMap<PolarVar, &Var>,
 ) -> Type {
     if ty.level() <= lvl {
         return ty.clone();
@@ -107,6 +107,36 @@ fn extrude(
         | t @ Type::Null
         | t @ Type::Pattern(..)
         | t @ Type::Undefined => ty.clone(),
+
+        Type::Var(vs) => {
+            if let Some(nvs) = c.get(&(*vs, pol)) {
+                Type::Var(nvs)
+            } else {
+                let nvs = context.fresh_var(lvl);
+                c.insert((*vs, pol), nvs);
+
+                if pol {
+                    vs.upper_bounds.borrow_mut().push(Type::Var(nvs));
+                    *nvs.lower_bounds.borrow_mut() = vs
+                        .lower_bounds
+                        .borrow()
+                        .iter()
+                        .map(|t| extrude(context, t, pol, lvl, c))
+                        .collect();
+                } else {
+                    vs.lower_bounds.borrow_mut().push(Type::Var(nvs));
+                    *nvs.upper_bounds.borrow_mut() = vs
+                        .upper_bounds
+                        .borrow()
+                        .iter()
+                        .map(|t| extrude(context, t, pol, lvl, c))
+                        .collect();
+                }
+
+                Type::Var(nvs)
+            }
+        }
+
         Type::Function(l, r) => Type::Function(
             Box::new(extrude(context, l, !pol, lvl, c)),
             Box::new(extrude(context, r, pol, lvl, c)),
@@ -116,22 +146,7 @@ fn extrude(
                 .map(|(name, t)| (name.clone(), extrude(context, t, pol, lvl, c)))
                 .collect(),
         ),
-        Type::Var(vs) => {
-            if let Some(nvs) = c.get(vs) {
-                Type::Var(nvs)
-            } else {
-                let nvs = context.fresh_var(lvl);
-                c.insert(vs, nvs);
 
-                if pol {
-                    // TODO
-                } else {
-                    // TODO
-                }
-
-                Type::Var(nvs)
-            }
-        }
         Type::List(ls) => Type::List(
             ls.iter()
                 .map(|t| extrude(context, t, pol, lvl, c))

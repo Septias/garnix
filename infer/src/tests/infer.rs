@@ -129,8 +129,8 @@ fn test_with() {
         Record([("x".to_string(), Int), ("y".to_string(), Int)].into())
     );
 
-    // TODO: lookup by name
     let _source = "let x = {y = 1;}; in with x; {z = y;};";
+    let (ty, _) = infer(source).unwrap();
 }
 
 #[test]
