@@ -1,10 +1,9 @@
 ## TODO (17.03)
 
-- Type Inference
-
+- Type Inference (1d)
   - [] type_term
     - [] functions
-      - Restricting set patterns
+      - [] Restricting set patterns
     - [] let bindings
     - [] with-statements
     - [] inherit-statements
@@ -14,8 +13,8 @@
   - [x] freshen_above
   - [x] coalsce_type
   - [x] polymorphic type
-  - [] builtins
-  - [] Simplification
+  - [] builtins (2h)
+  - [] Simplification (1d)
     - [] compact Type
     - [] canonicalize-type
     - [] simplify-type
@@ -25,8 +24,9 @@
 
   - [x] Handle `inherit (lib)`
   - [x] Don't use expr as base
-  - [] String interpolation
-  - [] Type-parsing
+  - [] Error reporting
+  - [] **String interpolation**
+  - [] Add type-parsing
 
 - Writing
 
@@ -38,6 +38,9 @@
   - [x] levels
   - [x] Ausblick
   - [] Proof
+  - [] Add novelty of only constraining variables
+  - [] Reference Kiselyov [2013]
+
 
 - Lsp
   - [] Error reporting
@@ -51,6 +54,8 @@
 - **Wie funktioniert import?** <- Nein
 - **Lazy inferenz** <- Nein
 - **Wie Typing Regeln für Typvariablen**
+- **Was sind fixpoints?**
+- **What does nix use?**
 
 ## Improvements
 
