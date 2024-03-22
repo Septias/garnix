@@ -3,7 +3,7 @@ use ast::Identifier;
 use core::str;
 use infer::freshen_above;
 use logos::Span;
-use types::{PolymorhicType, Type, TypeName, Var};
+use types::{PolymorphicType, Type, TypeName, Var};
 
 pub mod ast;
 pub mod infer;
@@ -15,31 +15,31 @@ pub use error::*;
 #[cfg(test)]
 mod tests;
 
-pub enum ContextType {
-    Type(Type),
-    PolymorhicType(PolymorhicType),
+pub enum ContextType<'a> {
+    Type(Type<'a>),
+    PolymorhicType(PolymorphicType<'a>),
 }
 
-impl ContextType {
+impl<'a> ContextType<'a> {
     fn level(&self) -> usize {
         match self {
             ContextType::Type(ty) => ty.level(),
-            ContextType::PolymorhicType(pty) => pty.lvl,
+            ContextType::PolymorhicType(pty) => pty.level,
         }
     }
 
-    fn instantiate(&self, context: &mut Context, lvl: usize) -> Type {
+    fn instantiate(&'a self, context: &'a Context<'a>, level: usize) -> Type {
         match self {
-            ContextType::Type(ty) => ty.instantiate(context, lvl),
-            ContextType::PolymorhicType(pty) => freshen_above(context, &pty.body, pty.lvl, lvl),
+            ContextType::Type(ty) => ty.instantiate(),
+            ContextType::PolymorhicType(pty) => freshen_above(context, &pty.body, pty.level, level),
         }
     }
 }
 
 /// Context to save variables and their types.
 pub(crate) struct Context<'a> {
-    bindings: Vec<Vec<(&'a str, ContextType)>>,
-    vars: Vec<Var>,
+    bindings: Vec<Vec<(&'a str, ContextType<'a>)>>,
+    vars: Vec<Var<'a>>,
     with: Option<&'a Identifier>,
     count: usize,
 }
@@ -57,7 +57,7 @@ impl<'a> Context<'a> {
     /// Create a new scope and run a function with it.
     pub(crate) fn with_scope<T>(
         &mut self,
-        scope: Vec<(&'a str, ContextType)>,
+        scope: Vec<(&'a str, ContextType<'a>)>,
         f: impl FnOnce(&mut Self) -> T,
     ) -> T {
         self.bindings.push(scope);
@@ -68,28 +68,28 @@ impl<'a> Context<'a> {
     }
 
     /// Lookup an [Var] by it's name.
-    pub(crate) fn lookup(&self, name: &str) -> Option<&ContextType> {
+    pub(crate) fn lookup(&self, name: &str) -> Option<&ContextType<'a>> {
         for scope in self.bindings.iter().rev() {
             for (name, item) in scope.iter().rev() {
                 if name == name {
-                    return Some(item)
+                    return Some(item);
                 }
             }
         }
         None
     }
 
-    pub(crate) fn fresh_var(&mut self, lvl: usize) -> &Var {
+    pub(crate) fn fresh_var(&'a self, lvl: usize) -> &'a Var<'a> {
         let res = Var::new(lvl, self.count);
-        self.count += 1;
-        self.vars.push(res);
-        &res
+        //self.count += 1;
+        //self.vars.push(res);
+        self.vars.last().unwrap()
     }
 }
 
 /// Infer the type of an ast.
 /// Returns the final type as well as the ast which has been annotated with types.
-pub fn infer(source: &str) -> SpannedInferResult<(Type, Ast)> {
+pub fn infer(source: &str) -> SpannedInferResult<((Type, Context), Ast)> {
     let ast = parser::parse(source).map_err(|e| InferError::from(e).span(&Span::default()))?;
     let ast = Ast::from_parser_ast(ast, &source);
     let ty = infer::infer(&ast)?;

@@ -3,18 +3,19 @@ use crate::{
     types::{PolarVar, PolymorphicType, Type, Var},
     Context, InferError, InferResult, SpannedError, SpannedInferResult, TypeName,
 };
+use itertools::Itertools;
 use parser::ast::BinOp;
 use std::collections::{HashMap, HashSet};
 
-fn constrain(context: &mut Context, lhs: &Type, rhs: &Type) -> InferResult<()> {
+fn constrain<'a>(context: &'a Context<'a>, lhs: &Type<'a>, rhs: &Type<'a>) -> InferResult<()> {
     constrain_inner(context, lhs, rhs, &mut HashSet::new())
 }
 
-fn constrain_inner(
-    context: &mut Context,
-    lhs: &Type,
-    rhs: &Type,
-    cache: &mut HashSet<(&Type, &Type)>,
+fn constrain_inner<'a, 'b>(
+    context: &'b Context<'a>,
+    lhs: &'b Type<'a>,
+    rhs: &'b Type<'a>,
+    cache: &mut HashSet<(&'b Type<'a>, &'b Type<'a>)>,
 ) -> InferResult<()> {
     if lhs == rhs {
         return Ok(());
@@ -88,8 +89,8 @@ fn constrain_inner(
 
         _ => {
             return Err(InferError::CannotConstrain {
-                lhs: lhs.clone(),
-                rhs: rhs.clone(),
+                lhs: lhs.show(),
+                rhs: rhs.show(),
             })
         }
     }
@@ -99,13 +100,13 @@ fn constrain_inner(
 
 struct Inferrer(usize);
 
-fn extrude(
-    context: &mut Context,
-    ty: &Type,
+fn extrude<'a>(
+    context: &'a Context<'a>,
+    ty: &Type<'a>,
     pol: bool,
     lvl: usize,
-    c: &mut HashMap<PolarVar, &Var>,
-) -> Type {
+    c: &mut HashMap<PolarVar<'a>, &'a Var<'a>>,
+) -> Type<'a> {
     if ty.level() <= lvl {
         return ty.clone();
     }
@@ -170,18 +171,23 @@ fn extrude(
     }
 }
 
-pub fn freshen_above(context: &mut Context, ty: &Type, lim: usize, lvl: usize) -> Type {
+pub fn freshen_above<'a>(
+    context: &'a Context<'a>,
+    ty: &Type<'a>,
+    lim: usize,
+    lvl: usize,
+) -> Type<'a> {
     let mut freshened = HashMap::new();
     freshen(context, &ty, lim, lvl, &mut freshened)
 }
 
-fn freshen(
-    context: &mut Context,
-    ty: &Type,
+fn freshen<'a>(
+    context: &'a Context<'a>,
+    ty: &Type<'a>,
     lim: usize,
     lvl: usize,
-    freshened: &mut HashMap<&Var, &Var>,
-) -> Type {
+    freshened: &mut HashMap<&'a Var<'a>, &'a Var<'a>>,
+) -> Type<'a> {
     if ty.level() <= lim {
         return ty.clone();
     }
@@ -237,7 +243,7 @@ fn freshen(
 
 /// Infer the type of an expression.
 fn type_term<'a>(
-    ctx: &mut Context<'a>,
+    ctx: &'a Context<'a>,
     term: &'a Ast,
     lvl: usize,
 ) -> Result<Type<'a>, SpannedError> {
@@ -245,7 +251,7 @@ fn type_term<'a>(
     match term {
         Ast::Identifier(super::ast::Identifier { name, span, .. }) => ctx
             .lookup(name)
-            .map(|val| Type::Var(val))
+            .map(|val| val.instantiate(ctx, lvl))
             .ok_or(InferError::UnknownIdentifier.span(span)),
 
         Ast::UnaryOp { rhs, .. } => type_term(ctx, rhs, lvl),
@@ -297,7 +303,7 @@ fn type_term<'a>(
                 }
 
                 BinOp::Update => {
-                    let rc1 = ty1
+                    let mut rc1 = ty1
                         .into_record()
                         .map_err(|err| SpannedError::from((span, err)))?;
                     let rc2 = ty2
@@ -409,7 +415,7 @@ fn type_term<'a>(
             is_recursive,
             span,
         } => {
-            if *is_recursive {
+            /* if *is_recursive {
                 let mut idents = attrs
                     .iter()
                     .filter_map(|(ident, expr)| ctx.lookup(&ident.name)) // TODO: partition
@@ -432,7 +438,8 @@ fn type_term<'a>(
                     })
                     .collect();
                 Ok(Record(items))
-            }
+            } */
+            todo!()
         }
 
         Ast::LetBinding {
@@ -441,7 +448,7 @@ fn type_term<'a>(
             body,
             span,
         } => {
-            let names = bindings
+            /* let names = bindings
                 .iter()
                 .map(|(name, _)| ctx.fresh_var(lvl))
                 .collect();
@@ -461,7 +468,8 @@ fn type_term<'a>(
                 .collect();
 
             let ret = ctx.with_scope(types, |context| type_term(ctx, body, lvl))?;
-            Ok(ret)
+            Ok(ret) */
+            todo!()
         }
 
         Ast::Lambda {
@@ -481,14 +489,14 @@ fn type_term<'a>(
                     for pattern in patterns {
                         match pattern {
                             PatternElement::Identifier(ident) => {
-                                item.push((ident.name, Type::Undefined));
+                                item.push((ident.name.clone(), Type::Undefined));
                                 added.push(ctx.fresh_var(lvl));
                             }
                             PatternElement::DefaultIdentifier(name, expr) => {
                                 let ty = type_term(ctx, expr, lvl)?;
                                 let var = ctx.fresh_var(lvl);
                                 constrain(ctx, &Type::Var(var), &ty);
-                                item.push((name.name, ty));
+                                item.push((name.name.clone(), ty));
                                 added.push(var);
                             }
                         }
@@ -508,8 +516,8 @@ fn type_term<'a>(
                 crate::ast::Pattern::Identifier(ident) => Type::Var(ctx.fresh_var(lvl)),
             };
 
-            let ret = ctx.with_scope(added, |context| type_term(context, body, lvl))?;
-            Ok(Function(Box::new(ty), Box::new(ret)))
+            //let ret = ctx.with_scope(added, |context| type_term(context, body, lvl))?;
+            Ok(Function(Box::new(ty), Box::new(todo!() /*ret */)))
         }
         Ast::Conditional {
             condition,
@@ -580,18 +588,18 @@ fn type_term<'a>(
     }
 }
 
-fn coalsce_type(ty: &Type) -> Type {
+fn coalsce_type<'a>(ty: &Type<'a>) -> Type<'a> {
     let mut map = HashMap::new();
     let mut processing = HashSet::new();
     coalsce_type_inner(ty, true, &mut map, &mut processing)
 }
 
-fn coalsce_type_inner(
-    ty: &Type,
+fn coalsce_type_inner<'a>(
+    ty: &Type<'a>,
     polarity: bool,
-    rec: &mut HashMap<PolarVar, &Var>,
-    processing: &mut HashSet<PolarVar>,
-) -> Type {
+    rec: &mut HashMap<PolarVar, &Var<'a>>,
+    processing: &'a mut HashSet<PolarVar>,
+) -> Type<'a> {
     match ty {
         Type::Number | Type::Bool | Type::String | Type::Path | Type::Null | Type::Undefined => {
             ty.clone()
@@ -607,16 +615,24 @@ fn coalsce_type_inner(
                 } else {
                     &var.upper_bounds
                 };
-                let bound_types = bounds.borrow().iter().map(|t| {
-                    processing.insert(pol_var);
-                    let t = coalsce_type_inner(t, polarity, rec, processing);
-                    processing.remove(&pol_var);
-                    t
-                });
+                let bound_types = bounds
+                    .borrow()
+                    .iter()
+                    .map(|t| {
+                        processing.insert(pol_var);
+                        let t = coalsce_type_inner(t, polarity, rec, processing);
+                        processing.remove(&pol_var);
+                        t
+                    })
+                    .collect_vec();
                 let res = if polarity {
-                    bound_types.reduce(|a, b| Type::Union(Box::new(a), Box::new(b)))
+                    bound_types
+                        .into_iter()
+                        .reduce(|a, b| Type::Union(Box::new(a), Box::new(b)))
                 } else {
-                    bound_types.reduce(|a, b| Type::Inter(Box::new(a), Box::new(b)))
+                    bound_types
+                        .into_iter()
+                        .reduce(|a, b| Type::Inter(Box::new(a), Box::new(b)))
                 };
                 rec.get(&pol_var)
                     .map(|var| Type::Recursive(var, Box::new(res.unwrap())));
@@ -646,7 +662,7 @@ fn coalsce_type_inner(
 
 /// Infer the type of an expression.
 /// Insert constraints for all [Identifier]s on the way.
-pub fn infer(expr: &Ast) -> SpannedInferResult<Type> {
+pub fn infer(expr: &Ast) -> SpannedInferResult<(Type, Context)> {
     let mut context = Context::new();
-    type_term(&mut context, expr, 0)
+    type_term(&mut context, expr, 0).map(|ret| (ret, context))
 }

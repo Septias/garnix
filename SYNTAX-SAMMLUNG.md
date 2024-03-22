@@ -1,0 +1,1 @@
+We assume the set L of record labels and the set A of type variables to be finite, but arbitrary.

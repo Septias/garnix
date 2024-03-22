@@ -444,7 +444,7 @@ fn transform_ast(value: ParserAst, source: &str) -> Ast {
                 attrs,
                 is_recursive,
                 inherit: inherit
-                    .iter()
+                    .into_iter()
                     .map(|inherit| Inherit {
                         name: inherit.name.map(|name| transform_ast(name, source)),
                         items: inherit
@@ -476,7 +476,7 @@ fn transform_ast(value: ParserAst, source: &str) -> Ast {
             LetBinding {
                 bindings,
                 inherit: inherit
-                    .iter()
+                    .into_iter()
                     .map(|inherit| Inherit {
                         name: inherit.name.map(|name| transform_ast(name, source)),
                         items: inherit
@@ -587,5 +587,6 @@ fn transform_ast(value: ParserAst, source: &str) -> Ast {
         ParserAst::Comment(_) | ParserAst::DocComment(_) | ParserAst::LineComment(_) => {
             unimplemented!()
         }
+        ParserAst::SearchPath(String) => todo!(),
     }
 }

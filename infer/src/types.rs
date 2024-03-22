@@ -2,25 +2,25 @@ use itertools::Itertools;
 use std::{cell::RefCell, collections::HashMap};
 use strum_macros::{AsRefStr, Display, EnumDiscriminants};
 
-use crate::{ast::Identifier, infer_error, Context, InferResult};
+use crate::{infer_error, Context, InferResult};
 
 /// A single identifier.
 /// The name should be a debrujin index and the path is used for set accesses.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Var<'a> {
-    pub lower_bounds: RefCell<Vec<Type>>,
-    pub upper_bounds: RefCell<Vec<Type>>,
+    pub lower_bounds: RefCell<Vec<Type<'a>>>,
+    pub upper_bounds: RefCell<Vec<Type<'a>>>,
     pub level: usize,
     pub id: usize,
 }
 
-impl std::hash::Hash for Var {
+impl<'a> std::hash::Hash for Var<'a> {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.id.hash(state);
     }
 }
 
-impl Var {
+impl<'a> Var<'a> {
     pub fn new(level: usize, id: usize) -> Self {
         Self {
             level,
@@ -30,21 +30,7 @@ impl Var {
     }
 }
 
-impl From<&Identifier> for Var {
-    fn from(ident: &Identifier) -> Self {
-        Self {
-            level: ident.level,
-            ..Default::default()
-        }
-    }
-}
-
-pub type PolarVar = (&'a Var, bool);
-
-pub struct PolymorhicType {
-    pub lvl: usize,
-    pub body: Type,
-}
+pub type PolarVar<'a> = (&'a Var<'a>, bool);
 
 /// A nix language type.
 #[derive(Debug, Clone, PartialEq, Eq, Display, EnumDiscriminants, AsRefStr)]
@@ -74,8 +60,8 @@ pub enum Type<'a> {
     Recursive(&'a Var<'a>, Box<Type<'a>>),
 }
 
-impl Type {
-    pub fn get_var(&self) -> InferResult<&Var> {
+impl<'a> Type<'a> {
+    pub fn get_var(&'a self) -> InferResult<&Var> {
         match self {
             Type::Var(ident) => Ok(ident),
             t => infer_error(TypeName::Var, t.get_name()),
@@ -83,27 +69,27 @@ impl Type {
     }
 }
 
-impl std::hash::Hash for Type {
+impl<'a> std::hash::Hash for Type<'a> {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         // TODO: proper implementation
         core::mem::discriminant(self).hash(state);
     }
 }
 
-pub struct PolymorphicType {
-    body: Type,
-    level: usize,
+pub struct PolymorphicType<'a> {
+    pub level: usize,
+    pub body: Type<'a>,
 }
 
-impl PolymorphicType {
-    pub fn new(body: Type, level: usize) -> Self {
+impl<'a> PolymorphicType<'a> {
+    pub fn new(body: Type<'a>, level: usize) -> Self {
         Self { body, level }
     }
 }
 
-impl Type {
-    pub fn instantiate(self, context: &mut Context, lvl: usize) -> Type {
-        self
+impl<'a> Type<'a> {
+    pub fn instantiate(&self) -> Type<'a> {
+        self.clone()
     }
 
     pub fn level(&self) -> usize {
@@ -127,14 +113,14 @@ impl Type {
     }
 
     /// Try to convert this type to a list.
-    pub fn into_list(self) -> InferResult<Vec<Type>> {
+    pub fn into_list(self) -> InferResult<Vec<Type<'a>>> {
         match self {
             Type::List(elems) => Ok(elems),
             t => infer_error(TypeName::List, t.get_name()),
         }
     }
 
-    pub fn into_record(self) -> InferResult<HashMap<String, Type>> {
+    pub fn into_record(self) -> InferResult<HashMap<String, Type<'a>>> {
         match self {
             Type::Record(fields) => Ok(fields),
             t => infer_error(TypeName::Record, t.get_name()),
@@ -142,7 +128,7 @@ impl Type {
     }
 
     /// Try to convert this type to a function.
-    pub fn into_function(self) -> InferResult<(Type, Type)> {
+    pub fn into_function(self) -> InferResult<(Type<'a>, Type<'a>)> {
         match self {
             Type::Function(box lhs, box rhs) => Ok((lhs, rhs)),
             t => infer_error(TypeName::Function, t.get_name()),
