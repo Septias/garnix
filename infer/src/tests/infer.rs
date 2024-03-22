@@ -1,4 +1,4 @@
-use crate::{infer, InferError, Type};
+use crate::{infer, types::Var, InferError, Type};
 use std::collections::HashMap;
 use Type::*;
 
@@ -10,7 +10,7 @@ fn test_primitve() {
 
     let source = "{ x = 2;}";
     let (ty, _) = infer(source).unwrap();
-    assert_eq!(ty, Record([("x".to_string(), Int)].into()));
+    assert_eq!(ty, Record([("x".to_string(), Number)].into()));
 
     let source = r#"{ x = "hi";}"#;
     let (ty, _) = infer(source).unwrap();
@@ -18,7 +18,7 @@ fn test_primitve() {
 
     let source = "{ x = 2.1;}";
     let (ty, _) = infer(source).unwrap();
-    assert_eq!(ty, Record([("x".to_string(), Float)].into()));
+    assert_eq!(ty, Record([("x".to_string(), Number)].into()));
 
     let source = "{ x = true; y = false;}";
     let (ty, _) = infer(source).unwrap();
@@ -41,13 +41,16 @@ fn test_primitve() {
 
     let source = "{ x = [2 1];}";
     let (ty, _) = infer(source).unwrap();
-    assert_eq!(ty, Record([("x".to_string(), List(vec![Int, Int]))].into()));
+    assert_eq!(
+        ty,
+        Record([("x".to_string(), List(vec![Number, Number]))].into())
+    );
 
     let source = "{ x = {y = 1;};}";
     let (ty, _) = infer(source).unwrap();
     assert_eq!(
         ty,
-        Record([("x".to_string(), Record([("y".to_string(), Int)].into()))].into())
+        Record([("x".to_string(), Record([("y".to_string(), Number)].into()))].into())
     );
 }
 
@@ -55,23 +58,23 @@ fn test_primitve() {
 fn test_numbers() {
     let source = "1 + 1;";
     let (ty, _) = infer(source).unwrap();
-    assert_eq!(ty, Int);
+    assert_eq!(ty, Number);
 
     let source = "1 + 1.0;";
     let (ty, _) = infer(source).unwrap();
-    assert_eq!(ty, Float);
+    assert_eq!(ty, Number);
 
     let source = "1 * 1.0;";
     let (ty, _) = infer(source).unwrap();
-    assert_eq!(ty, Float);
+    assert_eq!(ty, Number);
 
     let source = "1 / 1.0;";
     let (ty, _) = infer(source).unwrap();
-    assert_eq!(ty, Float);
+    assert_eq!(ty, Number);
 
     let source = "1 - 1.0;";
     let (ty, _) = infer(source).unwrap();
-    assert_eq!(ty, Float);
+    assert_eq!(ty, Number);
 
     let source = r#"1 + "hi";"#;
     let res = infer(source);
@@ -107,7 +110,7 @@ fn test_bools() {
             e.error,
             InferError::TypeMismatch {
                 expected: Bool.get_name(),
-                found: Int.get_name()
+                found: Number.get_name()
             }
         );
     }
@@ -117,7 +120,7 @@ fn test_bools() {
 fn test_inherit() {
     let source = "let x = 1; in {inherit x;};";
     let (ty, _) = infer(source).unwrap();
-    assert_eq!(ty, Record([("x".to_string(), Int)].into()));
+    assert_eq!(ty, Record([("x".to_string(), Number)].into()));
 }
 
 #[test]
@@ -126,24 +129,24 @@ fn test_with() {
     let (ty, _) = infer(source).unwrap();
     assert_eq!(
         ty,
-        Record([("x".to_string(), Int), ("y".to_string(), Int)].into())
+        Record([("x".to_string(), Number), ("y".to_string(), Number)].into())
     );
 
     let _source = "let x = {y = 1;}; in with x; {z = y;};";
-    let (ty, _) = infer(source).unwrap();
+    infer(source).unwrap();
 }
 
 #[test]
 fn test_joining() {
     let source = r#"[1 2] ++ ["hi" "di"];"#;
     let res = infer(source).unwrap();
-    assert_eq!(res.0, List(vec![Int, Int, String, String]));
+    assert_eq!(res.0, List(vec![Number, Number, String, String]));
 
     let source = r#"{ x = 1; } // { y = 2; };"#;
     let res = infer(source).unwrap();
     assert_eq!(
         res.0,
-        Set([("x".to_string(), Int), ("y".to_string(), Int)].into())
+        Record([("x".to_string(), Number), ("y".to_string(), Number)].into())
     );
 }
 
@@ -158,7 +161,7 @@ fn test_attribute_fallback() {
 fn test_has_attribute() {
     let source = r#"let t = { x = 1; } ? x; in {t = t;};"#;
     let (ty, _ast) = infer(source).unwrap();
-    assert_eq!(ty, Set([("t".to_string(), Bool)].into()));
+    assert_eq!(ty, Record([("t".to_string(), Bool)].into()));
 }
 
 #[test]
@@ -167,7 +170,7 @@ fn test_let_binding() {
     let (ty, _ast) = infer(source).unwrap();
     assert_eq!(
         ty,
-        Set([("t".to_string(), Set([("x".to_string(), Int)].into()))].into())
+        Record([("t".to_string(), Record([("x".to_string(), Number)].into()))].into())
     );
 }
 
@@ -177,24 +180,24 @@ fn test_function() {
     let (ty, _) = infer(source).unwrap();
     assert_eq!(
         ty,
-        Set([(
-            "t".to_string(),
-            Function(Box::new(Default), Box::new(Undefined))
-        )]
-        .into())
+        Record(
+            [(
+                "t".to_string(),
+                Function(Box::new(Var(Var::new(0, 1))), Box::new(Undefined))
+            )]
+            .into()
+        )
     );
 }
 
 #[test]
-fn test_application() {
-    
-}
+fn test_application() {}
 
 #[test]
 fn test_assert() {
     let source = r#"assert true; {};"#;
     let (ty, _) = infer(source).unwrap();
-    assert_eq!(ty, Set([].into()));
+    assert_eq!(ty, Record([].into()));
 
     // TODO: why though
     let source = r#"assert 1; {};"#;
@@ -204,7 +207,7 @@ fn test_assert() {
             e.error,
             InferError::TypeMismatch {
                 expected: Bool.get_name(),
-                found: Int.get_name()
+                found: Number.get_name()
             }
         );
     }
@@ -214,11 +217,11 @@ fn test_assert() {
 fn test_if_conditions() {
     let source = r#"if true then 1 else "hi";"#;
     let (ty, _) = infer(source).unwrap();
-    assert_eq!(ty, Union(Box::new(Int), Box::new(String)));
+    assert_eq!(ty, Union(Box::new(Number), Box::new(String)));
 
     let source = r#"if true then 1 else 2;"#;
     let (ty, _) = infer(source).unwrap();
-    assert_eq!(ty, Int);
+    assert_eq!(ty, Number);
 
     let source = r#"if "true" then 1 else 2;"#;
     let res = infer(source);
