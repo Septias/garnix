@@ -11,7 +11,7 @@ fn constrain<'a>(context: &'a Context<'a>, lhs: &Type<'a>, rhs: &Type<'a>) -> In
     constrain_inner(context, lhs, rhs, &mut HashSet::new())
 }
 
-fn constrain_inner<'a, 'b>(
+fn constrain_inner<'a, 'b>( 
     context: &'b Context<'a>,
     lhs: &'b Type<'a>,
     rhs: &'b Type<'a>,
