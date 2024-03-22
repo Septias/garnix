@@ -28,9 +28,9 @@ impl ContextType {
         }
     }
 
-    fn instantiate(&self, context: &mut Context, lvl: usize) -> Type {
+    fn instantiate(&self, context: &Context, lvl: usize) -> Type {
         match self {
-            ContextType::Type(ty) => ty.instantiate(context, lvl),
+            ContextType::Type(ty) => ty.instantiate(),
             ContextType::PolymorhicType(pty) => freshen_above(context, &pty.body, pty.lvl, lvl),
         }
     }
@@ -39,7 +39,6 @@ impl ContextType {
 /// Context to save variables and their types.
 pub(crate) struct Context<'a> {
     bindings: Vec<Vec<(&'a str, ContextType)>>,
-    vars: Vec<Var>,
     with: Option<&'a Identifier>,
     count: usize,
 }
@@ -50,7 +49,6 @@ impl<'a> Context<'a> {
             bindings: vec![vec![]],
             count: 0,
             with: None,
-            vars: Vec::new(),
         }
     }
 
@@ -61,29 +59,27 @@ impl<'a> Context<'a> {
         f: impl FnOnce(&mut Self) -> T,
     ) -> T {
         self.bindings.push(scope);
-
         let t = f(self);
-        let removed = self.bindings.pop();
+        self.bindings.pop();
         t
     }
 
     /// Lookup an [Var] by it's name.
     pub(crate) fn lookup(&self, name: &str) -> Option<&ContextType> {
         for scope in self.bindings.iter().rev() {
-            for (name, item) in scope.iter().rev() {
-                if name == name {
-                    return Some(item)
+            for (item_name, item) in scope.iter().rev() {
+                if *item_name == name {
+                    return Some(item);
                 }
             }
         }
         None
     }
 
-    pub(crate) fn fresh_var(&mut self, lvl: usize) -> &Var {
+    pub(crate) fn fresh_var(&self, lvl: usize) -> Var {
         let res = Var::new(lvl, self.count);
-        self.count += 1;
-        self.vars.push(res);
-        &res
+        // self.count += 1;
+        res
     }
 }
 

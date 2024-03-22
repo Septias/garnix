@@ -1,20 +1,21 @@
 use crate::{
     ast::{Ast, PatternElement},
-    types::{PolarVar, PolymorphicType, Type, Var},
+    types::{PolarVar, Type, Var},
     Context, InferError, InferResult, SpannedError, SpannedInferResult, TypeName,
 };
+use itertools::Itertools;
 use parser::ast::BinOp;
 use std::collections::{HashMap, HashSet};
 
-fn constrain(context: &mut Context, lhs: &Type, rhs: &Type) -> InferResult<()> {
-    constrain_inner(context, lhs, rhs, &mut HashSet::new())
+fn constrain(context: &Context, lhs: &Type, rhs: &Type) -> InferResult<()> {
+    constrain_inner(context, lhs, rhs, HashSet::new())
 }
 
-fn constrain_inner(
-    context: &mut Context,
-    lhs: &Type,
-    rhs: &Type,
-    cache: &mut HashSet<(&Type, &Type)>,
+fn constrain_inner<'a>(
+    context: &Context,
+    lhs: &'a Type,
+    rhs: &'a Type,
+    mut cache: HashSet<(&'a Type, &'a Type)>,
 ) -> InferResult<()> {
     if lhs == rhs {
         return Ok(());
@@ -27,21 +28,21 @@ fn constrain_inner(
             if cache.contains(&lhs_rhs) {
                 return Ok(());
             }
-            cache.insert(lhs_rhs);
+            cache.insert(lhs_rhs.clone());
         }
         _ => (),
     }
 
     match (lhs, rhs) {
         (Type::Function(l0, r0), Type::Function(l1, r1)) => {
-            constrain_inner(context, l1, l0, cache)?;
+            constrain_inner(context, l1, l0, cache.clone())?;
             constrain_inner(context, r0, r1, cache)?;
         }
 
         (Type::Record(fs0), Type::Record(fs1)) => {
             for (n1, t1) in fs1 {
                 match fs0.iter().find(|(n0, _)| *n0 == n1) {
-                    Some((_, t0)) => constrain_inner(context, t0, t1, cache)?,
+                    Some((_, t0)) => constrain_inner(context, t0, t1, cache.clone())?,
                     None => return Err(InferError::MissingRecordField { field: n1.clone() }),
                 }
             }
@@ -65,7 +66,7 @@ fn constrain_inner(
         (Type::Var(lhs), rhs) if rhs.level() <= lhs.level => {
             lhs.upper_bounds.borrow_mut().push(rhs.clone());
             for lower_bound in lhs.lower_bounds.borrow().iter() {
-                constrain_inner(context, lower_bound, rhs, cache)?;
+                constrain_inner(context, lower_bound, rhs, cache.clone())?;
             }
         }
 
@@ -74,15 +75,15 @@ fn constrain_inner(
         (lhs, Type::Var(rhs)) if lhs.level() <= rhs.level => {
             rhs.lower_bounds.borrow_mut().push(lhs.clone());
             for upper_bound in rhs.upper_bounds.borrow().iter() {
-                constrain_inner(context, lhs, upper_bound, cache)?;
+                constrain_inner(context, lhs, upper_bound, cache.clone())?;
             }
         }
         (Type::Var(_), rhs) => {
-            let rhs_extruded = extrude(context, rhs, false, lhs.level(), &mut HashMap::new());
+            let rhs_extruded = extrude(context, rhs, false, lhs.level(), HashMap::new());
             constrain_inner(context, lhs, &rhs_extruded, cache)?;
         }
         (lhs, Type::Var(_)) => {
-            let lhs_extruded = extrude(context, lhs, true, rhs.level(), &mut HashMap::new());
+            let lhs_extruded = extrude(context, lhs, true, rhs.level(), HashMap::new());
             constrain_inner(context, &lhs_extruded, rhs, cache)?;
         }
 
@@ -97,50 +98,49 @@ fn constrain_inner(
     Ok(())
 }
 
-struct Inferrer(usize);
-
-fn extrude(
-    context: &mut Context,
-    ty: &Type,
+fn extrude<'a>(
+    context: &Context,
+    ty: &'a Type,
     pol: bool,
     lvl: usize,
-    c: &mut HashMap<PolarVar, &Var>,
+    mut c: HashMap<PolarVar, Var>,
 ) -> Type {
     if ty.level() <= lvl {
         return ty.clone();
     }
 
     match ty {
-        t @ Type::Number
-        | t @ Type::Bool
-        | t @ Type::String
-        | t @ Type::Path
-        | t @ Type::Null
-        | t @ Type::Pattern(..)
-        | t @ Type::Undefined => ty.clone(),
+        Type::Number
+        | Type::Bool
+        | Type::String
+        | Type::Path
+        | Type::Null
+        | Type::Pattern(..)
+        | Type::Undefined => ty.clone(),
 
         Type::Var(vs) => {
-            if let Some(nvs) = c.get(&(*vs, pol)) {
-                Type::Var(nvs)
+            let pol_var = (vs.clone(), pol);
+            if let Some(nvs) = c.get(&pol_var) {
+                Type::Var(nvs.clone())
             } else {
                 let nvs = context.fresh_var(lvl);
-                c.insert((*vs, pol), nvs);
+                c.insert(pol_var, nvs.clone()); // check
 
                 if pol {
-                    vs.upper_bounds.borrow_mut().push(Type::Var(nvs));
+                    vs.upper_bounds.borrow_mut().push(Type::Var(nvs.clone()));
                     *nvs.lower_bounds.borrow_mut() = vs
                         .lower_bounds
                         .borrow()
                         .iter()
-                        .map(|t| extrude(context, t, pol, lvl, c))
+                        .map(|t| extrude(context, t, pol, lvl, c.clone()))
                         .collect();
                 } else {
-                    vs.lower_bounds.borrow_mut().push(Type::Var(nvs));
+                    vs.lower_bounds.borrow_mut().push(Type::Var(nvs.clone()));
                     *nvs.upper_bounds.borrow_mut() = vs
                         .upper_bounds
                         .borrow()
                         .iter()
-                        .map(|t| extrude(context, t, pol, lvl, c))
+                        .map(|t| extrude(context, t, pol, lvl, c.clone()))
                         .collect();
                 }
 
@@ -149,18 +149,18 @@ fn extrude(
         }
 
         Type::Function(l, r) => Type::Function(
-            Box::new(extrude(context, l, !pol, lvl, c)),
+            Box::new(extrude(context, l, !pol, lvl, c.clone())),
             Box::new(extrude(context, r, pol, lvl, c)),
         ),
         Type::Record(fs) => Type::Record(
             fs.iter()
-                .map(|(name, t)| (name.clone(), extrude(context, t, pol, lvl, c)))
+                .map(|(name, t)| (name.clone(), extrude(context, t, pol, lvl, c.clone())))
                 .collect(),
         ),
 
         Type::List(ls) => Type::List(
             ls.iter()
-                .map(|t| extrude(context, t, pol, lvl, c))
+                .map(|t| extrude(context, t, pol, lvl, c.clone()))
                 .collect(),
         ),
         Type::Optional(ty) => Type::Optional(Box::new(extrude(context, ty, pol, lvl, c))),
@@ -170,17 +170,16 @@ fn extrude(
     }
 }
 
-pub fn freshen_above(context: &mut Context, ty: &Type, lim: usize, lvl: usize) -> Type {
-    let mut freshened = HashMap::new();
-    freshen(context, &ty, lim, lvl, &mut freshened)
+pub(crate) fn freshen_above(context: &Context, ty: &Type, lim: usize, lvl: usize) -> Type {
+    freshen(context, &ty, lim, lvl, HashMap::new())
 }
 
-fn freshen(
-    context: &mut Context,
-    ty: &Type,
+fn freshen<'a>(
+    context: &Context,
+    ty: &'a Type,
     lim: usize,
     lvl: usize,
-    freshened: &mut HashMap<&Var, &Var>,
+    mut freshened: HashMap<&'a Var, Var>,
 ) -> Type {
     if ty.level() <= lim {
         return ty.clone();
@@ -188,22 +187,22 @@ fn freshen(
 
     match ty {
         Type::Var(var) => Type::Var(freshened.get(var).cloned().unwrap_or_else(|| {
-            let mut new_v = context.fresh_var(lvl);
+            let new_v = context.fresh_var(lvl);
             let lower = var
                 .lower_bounds
                 .borrow()
                 .iter()
-                .map(|ty| freshen(context, ty, lim, lvl, freshened))
+                .map(|ty| freshen(context, ty, lim, lvl, freshened.clone()))
                 .collect();
             let upper = var
                 .upper_bounds
                 .borrow()
                 .iter()
-                .map(|ty| freshen(context, ty, lim, lvl, freshened))
+                .map(|ty| freshen(context, ty, lim, lvl, freshened.clone()))
                 .collect();
             *new_v.lower_bounds.borrow_mut() = lower;
             *new_v.upper_bounds.borrow_mut() = upper;
-            freshened.insert(var.clone(), new_v);
+            freshened.insert(var, new_v.clone());
             new_v
         })),
         Type::Number
@@ -214,17 +213,22 @@ fn freshen(
         | Type::Undefined
         | Type::Pattern(..) => ty.clone(),
         Type::Function(ty1, ty2) => Type::Function(
-            Box::new(freshen(context, ty1, lim, lvl, freshened)),
+            Box::new(freshen(context, ty1, lim, lvl, freshened.clone())),
             Box::new(freshen(context, ty2, lim, lvl, freshened)),
         ),
         Type::List(list) => Type::List(
             list.iter()
-                .map(|t| freshen(context, t, lim, lvl, freshened))
+                .map(|t| freshen(context, t, lim, lvl, freshened.clone()))
                 .collect(),
         ),
         Type::Record(rc) => Type::Record(
             rc.iter()
-                .map(|(name, ty)| (name.clone(), freshen(context, ty, lim, lvl, freshened)))
+                .map(|(name, ty)| {
+                    (
+                        name.clone(),
+                        freshen(context, ty, lim, lvl, freshened.clone()),
+                    )
+                })
                 .collect(),
         ),
         Type::Optional(opt) => Type::Optional(Box::new(freshen(context, opt, lim, lvl, freshened))),
@@ -236,16 +240,12 @@ fn freshen(
 }
 
 /// Infer the type of an expression.
-fn type_term<'a>(
-    ctx: &mut Context<'a>,
-    term: &'a Ast,
-    lvl: usize,
-) -> Result<Type<'a>, SpannedError> {
+fn type_term<'a>(ctx: &Context<'a>, term: &'a Ast, lvl: usize) -> Result<Type, SpannedError> {
     use Type::*;
     match term {
         Ast::Identifier(super::ast::Identifier { name, span, .. }) => ctx
             .lookup(name)
-            .map(|val| Type::Var(val))
+            .map(|val| val.instantiate(ctx, lvl))
             .ok_or(InferError::UnknownIdentifier.span(span)),
 
         Ast::UnaryOp { rhs, .. } => type_term(ctx, rhs, lvl),
@@ -262,7 +262,8 @@ fn type_term<'a>(
                         ctx,
                         &ty1,
                         &Type::Function(Box::new(ty2), Box::new(res.clone())),
-                    );
+                    )
+                    .map_err(|e| e.span(lhs.get_span()))?;
                     Ok(res)
                 }
                 BinOp::AttributeSelection => {
@@ -280,7 +281,8 @@ fn type_term<'a>(
                             .into_iter()
                             .collect(),
                         ),
-                    );
+                    )
+                    .map_err(|e| e.span(lhs.get_span()))?;
                     Ok(res)
                 }
 
@@ -297,7 +299,7 @@ fn type_term<'a>(
                 }
 
                 BinOp::Update => {
-                    let rc1 = ty1
+                    let mut rc1 = ty1
                         .into_record()
                         .map_err(|err| SpannedError::from((span, err)))?;
                     let rc2 = ty2
@@ -318,10 +320,10 @@ fn type_term<'a>(
                 }
                 BinOp::Add => {
                     if ty1 == Type::Number {
-                        match ty2 {
+                        match &ty2 {
                             Type::Number => Ok(Type::Number),
-                            Type::Var(var) => {
-                                constrain(ctx, &ty2, &ty1);
+                            Type::Var(_) => {
+                                constrain(ctx, &ty2, &ty1).map_err(|e| e.span(rhs.get_span()))?;
                                 Ok(Number)
                             }
                             _ => Err(SpannedError {
@@ -333,10 +335,10 @@ fn type_term<'a>(
                             }),
                         }
                     } else if ty1 == Type::String {
-                        match ty2 {
+                        match &ty2 {
                             Type::String | Type::Path => Ok(Type::String),
-                            Type::Var(var) => {
-                                constrain(ctx, &ty2, &ty1);
+                            Type::Var(_) => {
+                                constrain(ctx, &ty2, &ty1).map_err(|e| e.span(rhs.get_span()))?;
                                 Ok(String)
                             }
                             _ => Err(SpannedError {
@@ -348,10 +350,10 @@ fn type_term<'a>(
                             }),
                         }
                     } else if ty1 == Type::Path {
-                        match ty2 {
+                        match &ty2 {
                             Type::String => Ok(Type::String),
-                            Type::Var(var) => {
-                                constrain(ctx, &ty2, &ty1);
+                            Type::Var(_) => {
+                                constrain(ctx, &ty2, &ty1).map_err(|e| e.span(rhs.get_span()))?;
                                 Ok(Path)
                             }
                             _ => Err(SpannedError {
@@ -409,7 +411,7 @@ fn type_term<'a>(
             is_recursive,
             span,
         } => {
-            if *is_recursive {
+            /*  if *is_recursive {
                 let mut idents = attrs
                     .iter()
                     .filter_map(|(ident, expr)| ctx.lookup(&ident.name)) // TODO: partition
@@ -432,7 +434,8 @@ fn type_term<'a>(
                     })
                     .collect();
                 Ok(Record(items))
-            }
+            } */
+            todo!()
         }
 
         Ast::LetBinding {
@@ -441,7 +444,7 @@ fn type_term<'a>(
             body,
             span,
         } => {
-            let names = bindings
+            /* let names = bindings
                 .iter()
                 .map(|(name, _)| ctx.fresh_var(lvl))
                 .collect();
@@ -460,8 +463,8 @@ fn type_term<'a>(
                 .filter_map(|val| val.ok())
                 .collect();
 
-            let ret = ctx.with_scope(types, |context| type_term(ctx, body, lvl))?;
-            Ok(ret)
+            let ret = ctx.with_scope(types, |context| type_term(ctx, body, lvl))?; */
+            todo!()
         }
 
         Ast::Lambda {
@@ -481,35 +484,36 @@ fn type_term<'a>(
                     for pattern in patterns {
                         match pattern {
                             PatternElement::Identifier(ident) => {
-                                item.push((ident.name, Type::Undefined));
+                                item.push((ident.name.clone(), Type::Undefined));
                                 added.push(ctx.fresh_var(lvl));
                             }
                             PatternElement::DefaultIdentifier(name, expr) => {
                                 let ty = type_term(ctx, expr, lvl)?;
                                 let var = ctx.fresh_var(lvl);
-                                constrain(ctx, &Type::Var(var), &ty);
-                                item.push((name.name, ty));
+                                constrain(ctx, &Type::Var(var.clone()), &ty)
+                                    .map_err(|e| e.span(span))?;
+                                item.push((name.name.clone(), ty));
                                 added.push(var);
                             }
                         }
                     }
 
                     let ty = Type::Pattern(item.into_iter().collect(), *is_wildcard);
-                    if let Some(Name) = name {
+                    if let Some(name) = name {
                         if *is_wildcard {
                             todo!()
                         }
                         let var = ctx.fresh_var(lvl);
-                        constrain(ctx, &Type::Var(var), &ty);
+                        constrain(ctx, &Type::Var(var.clone()), &ty).map_err(|e| e.span(span))?;
                         added.push(var);
                     }
                     ty
                 }
-                crate::ast::Pattern::Identifier(ident) => Type::Var(ctx.fresh_var(lvl)),
+                crate::ast::Pattern::Identifier(_) => Type::Var(ctx.fresh_var(lvl)),
             };
 
-            let ret = ctx.with_scope(added, |context| type_term(context, body, lvl))?;
-            Ok(Function(Box::new(ty), Box::new(ret)))
+            // let ret = ctx.with_scope(added, |context| type_term(context, body, lvl))?;
+            Ok(Function(Box::new(ty), Box::new(todo!())))
         }
         Ast::Conditional {
             condition,
@@ -554,9 +558,9 @@ fn type_term<'a>(
         }
 
         Ast::With {
-            box set,
+            set: _,
             body,
-            span,
+            span: _,
         } => {
             // TODO: handle
             let ty = type_term(ctx, body, lvl);
@@ -581,60 +585,77 @@ fn type_term<'a>(
 }
 
 fn coalsce_type(ty: &Type) -> Type {
-    let mut map = HashMap::new();
-    let mut processing = HashSet::new();
-    coalsce_type_inner(ty, true, &mut map, &mut processing)
+    coalsce_type_inner(ty, true, HashMap::new(), HashSet::new())
 }
 
 fn coalsce_type_inner(
     ty: &Type,
     polarity: bool,
-    rec: &mut HashMap<PolarVar, &Var>,
-    processing: &mut HashSet<PolarVar>,
+    mut rec: HashMap<PolarVar, Var>,
+    mut processing: HashSet<PolarVar>,
 ) -> Type {
     match ty {
         Type::Number | Type::Bool | Type::String | Type::Path | Type::Null | Type::Undefined => {
             ty.clone()
         }
         tyvar @ Type::Var(var) => {
-            let pol_var = (*var, polarity);
+            let pol_var = (var.clone(), polarity);
             if processing.contains(&pol_var) {
                 return tyvar.clone();
             } else {
-                processing.insert(pol_var);
+                processing.insert(pol_var.clone());
                 let bounds = if polarity {
                     &var.lower_bounds
                 } else {
                     &var.upper_bounds
                 };
-                let bound_types = bounds.borrow().iter().map(|t| {
-                    processing.insert(pol_var);
-                    let t = coalsce_type_inner(t, polarity, rec, processing);
-                    processing.remove(&pol_var);
-                    t
-                });
+                let bound_types = bounds
+                    .borrow()
+                    .iter()
+                    .map(|t| {
+                        let mut processing = processing.clone();
+                        processing.insert(pol_var.clone());
+
+                        let t = coalsce_type_inner(t, polarity, rec.clone(), processing);
+                        t
+                    })
+                    .collect_vec();
                 let res = if polarity {
-                    bound_types.reduce(|a, b| Type::Union(Box::new(a), Box::new(b)))
+                    bound_types
+                        .into_iter()
+                        .reduce(|a, b| Type::Union(Box::new(a), Box::new(b)))
                 } else {
-                    bound_types.reduce(|a, b| Type::Inter(Box::new(a), Box::new(b)))
+                    bound_types
+                        .into_iter()
+                        .reduce(|a, b| Type::Inter(Box::new(a), Box::new(b)))
                 };
                 rec.get(&pol_var)
-                    .map(|var| Type::Recursive(var, Box::new(res.unwrap())));
+                    .map(|var| Type::Recursive(var.clone(), Box::new(res.unwrap())));
                 todo!()
             }
         }
         Type::Function(l, r) => Type::Function(
-            Box::new(coalsce_type_inner(ty, !polarity, rec, processing)),
-            Box::new(coalsce_type_inner(ty, polarity, rec, processing)),
+            Box::new(coalsce_type_inner(
+                l,
+                !polarity,
+                rec.clone(),
+                processing.clone(),
+            )),
+            Box::new(coalsce_type_inner(r, polarity, rec, processing)),
         ),
         Type::List(l) => Type::List(
             l.iter()
-                .map(|t| coalsce_type_inner(t, polarity, rec, processing))
+                .map(|t| coalsce_type_inner(t, polarity, rec.clone(), processing.clone()))
                 .collect(),
         ),
         Type::Record(r) => Type::Record(
             r.iter()
-                .map(|(n, t)| (n.clone(), coalsce_type_inner(t, polarity, rec, processing)))
+                .map(|(n, t)| {
+                    (
+                        n.clone(),
+                        coalsce_type_inner(t, polarity, rec.clone(), processing.clone()),
+                    )
+                })
                 .collect(),
         ),
         Type::Optional(o) => {

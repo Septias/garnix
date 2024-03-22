@@ -1,5 +1,6 @@
-use infer::hm;
-use parser::{lex, lexer::NixTokens, map_err};
+use ::infer::Ast;
+use infer::infer;
+use parser::{lex, lexer::NixTokens};
 
 fn main() -> anyhow::Result<()> {
     let args: Vec<String> = std::env::args().collect();
@@ -8,9 +9,9 @@ fn main() -> anyhow::Result<()> {
         let tokens = lex(&input);
         match parser::parser::lambda(NixTokens(&tokens)) {
             Ok((_, ast)) => {
-                let ast = infer::Ast::from_parser_ast(ast, &input);
+                let ast = Ast::from_parser_ast(ast, &input);
                 println!("ast: {:#?}", ast);
-                if let Err(e) = hm::infer(&ast) {
+                if let Err(e) = infer::infer(&ast) {
                     println!("[Inference] Error: {:?}", e);
                 };
             }

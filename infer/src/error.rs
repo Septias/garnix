@@ -102,7 +102,7 @@ pub(crate) fn infer_error<T>(expected: TypeName, found: TypeName) -> InferResult
 pub type SpannedInferResult<T> = Result<T, SpannedError>;
 
 /// Create a [SpannedInferResult].
-pub(crate) fn spanned_infer_error<T>(
+pub fn spanned_infer_error<T>(
     expected: TypeName,
     found: TypeName,
     span: &Span,

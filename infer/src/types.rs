@@ -1,15 +1,15 @@
 use itertools::Itertools;
-use std::{cell::RefCell, collections::HashMap};
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
 use strum_macros::{AsRefStr, Display, EnumDiscriminants};
 
-use crate::{ast::Identifier, infer_error, Context, InferResult};
+use crate::{infer_error, InferResult};
 
 /// A single identifier.
 /// The name should be a debrujin index and the path is used for set accesses.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub struct Var<'a> {
-    pub lower_bounds: RefCell<Vec<Type>>,
-    pub upper_bounds: RefCell<Vec<Type>>,
+pub struct Var {
+    pub lower_bounds: Rc<RefCell<Vec<Type>>>,
+    pub upper_bounds: Rc<RefCell<Vec<Type>>>,
     pub level: usize,
     pub id: usize,
 }
@@ -30,16 +30,7 @@ impl Var {
     }
 }
 
-impl From<&Identifier> for Var {
-    fn from(ident: &Identifier) -> Self {
-        Self {
-            level: ident.level,
-            ..Default::default()
-        }
-    }
-}
-
-pub type PolarVar = (&'a Var, bool);
+pub type PolarVar<'a> = (Var, bool);
 
 pub struct PolymorhicType {
     pub lvl: usize,
@@ -50,7 +41,7 @@ pub struct PolymorhicType {
 #[derive(Debug, Clone, PartialEq, Eq, Display, EnumDiscriminants, AsRefStr)]
 #[strum_discriminants(derive(AsRefStr, Display))]
 #[strum_discriminants(name(TypeName))]
-pub enum Type<'a> {
+pub enum Type {
     Top,
     Bottom,
 
@@ -61,17 +52,17 @@ pub enum Type<'a> {
     Null,
     Undefined,
 
-    Var(&'a Var<'a>),
-    Function(Box<Type<'a>>, Box<Type<'a>>),
-    List(Vec<Type<'a>>),
-    Record(HashMap<String, Type<'a>>),
-    Optional(Box<Type<'a>>),
-    Pattern(HashMap<String, Type<'a>>, bool),
+    Var(Var),
+    Function(Box<Type>, Box<Type>),
+    List(Vec<Type>),
+    Record(HashMap<String, Type>),
+    Optional(Box<Type>),
+    Pattern(HashMap<String, Type>, bool),
 
     // Complexe Types only created by simplification
-    Union(Box<Type<'a>>, Box<Type<'a>>),
-    Inter(Box<Type<'a>>, Box<Type<'a>>),
-    Recursive(&'a Var<'a>, Box<Type<'a>>),
+    Union(Box<Type>, Box<Type>),
+    Inter(Box<Type>, Box<Type>),
+    Recursive(Var, Box<Type>),
 }
 
 impl Type {
@@ -102,8 +93,9 @@ impl PolymorphicType {
 }
 
 impl Type {
-    pub fn instantiate(self, context: &mut Context, lvl: usize) -> Type {
-        self
+    pub fn instantiate(&self) -> Type {
+        // TODO: optimize
+        self.clone()
     }
 
     pub fn level(&self) -> usize {
