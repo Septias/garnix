@@ -11,6 +11,7 @@ pub struct Var {
     pub lower_bounds: Rc<RefCell<Vec<Type>>>,
     pub upper_bounds: Rc<RefCell<Vec<Type>>>,
     pub level: usize,
+    pub name: String,
     pub id: usize,
 }
 

@@ -1,7 +1,5 @@
 use crate::{
-    ast::{Ast, PatternElement},
-    types::{PolarVar, Type, Var},
-    Context, InferError, InferResult, SpannedError, SpannedInferResult, TypeName,
+    ast::{Ast, PatternElement}, types::{PolarVar, Type, Var}, Context, InferError, InferResult, SpannedError, SpannedInferResult, TContext, TypeName
 };
 use itertools::Itertools;
 use parser::ast::BinOp;
@@ -240,7 +238,7 @@ fn freshen<'a>(
 }
 
 /// Infer the type of an expression.
-fn type_term<'a>(ctx: &Context<'a>, term: &'a Ast, lvl: usize) -> Result<Type, SpannedError> {
+fn type_term<'a>(ctx: &mut Context, term: &'a Ast, lvl: usize) -> Result<Type, SpannedError> {
     use Type::*;
     match term {
         Ast::Identifier(super::ast::Identifier { name, span, .. }) => ctx
@@ -411,7 +409,7 @@ fn type_term<'a>(ctx: &Context<'a>, term: &'a Ast, lvl: usize) -> Result<Type, S
             is_recursive,
             span,
         } => {
-            /*  if *is_recursive {
+            if *is_recursive {
                 let mut idents = attrs
                     .iter()
                     .filter_map(|(ident, expr)| ctx.lookup(&ident.name)) // TODO: partition
@@ -434,8 +432,7 @@ fn type_term<'a>(ctx: &Context<'a>, term: &'a Ast, lvl: usize) -> Result<Type, S
                     })
                     .collect();
                 Ok(Record(items))
-            } */
-            todo!()
+            }
         }
 
         Ast::LetBinding {
@@ -515,6 +512,17 @@ fn type_term<'a>(ctx: &Context<'a>, term: &'a Ast, lvl: usize) -> Result<Type, S
             // let ret = ctx.with_scope(added, |context| type_term(context, body, lvl))?;
             Ok(Function(Box::new(ty), Box::new(todo!())))
         }
+
+        Ast::With {
+            set: _,
+            body,
+            span: _,
+        } => {
+            // TODO: handle
+            let ty = type_term(ctx, body, lvl);
+            ty
+        }
+
         Ast::Conditional {
             condition,
             expr1,
@@ -557,16 +565,6 @@ fn type_term<'a>(ctx: &Context<'a>, term: &'a Ast, lvl: usize) -> Result<Type, S
             type_term(ctx, expr, lvl)
         }
 
-        Ast::With {
-            set: _,
-            body,
-            span: _,
-        } => {
-            // TODO: handle
-            let ty = type_term(ctx, body, lvl);
-            ty
-        }
-
         Ast::List { exprs, span: _ } => Ok(Type::List(
             exprs
                 .iter()
@@ -581,6 +579,35 @@ fn type_term<'a>(ctx: &Context<'a>, term: &'a Ast, lvl: usize) -> Result<Type, S
         Ast::Bool { .. } => Ok(Bool),
         Ast::Int { .. } | Ast::Float { .. } => Ok(Number),
         Ast::Comment(_) | Ast::DocComment(_) | Ast::LineComment(_) => unimplemented!(),
+    }
+}
+
+#[derive(PartialEq)]
+enum State<'a> {
+    Untouched(&'a Ast),
+    Processing,
+    Done(Type),
+}
+
+fn load_record(context: &mut Context, lvl: usize, bindings: HashMap<String, Ast>) {
+    let mut jobs = bindings.iter().map(|(ident, expr)| (ident)).collect_vec();
+    let mut types: HashMap<&String, State> = bindings
+        .iter()
+        .map(|(ident, expr)| (ident, State::Untouched(expr)))
+        .collect();
+
+    while let Some(job) = jobs.pop() {
+        let state = types.get_mut(job).unwrap();
+        match state {
+            State::Untouched(expr) => {
+                let ty = type_term(context, expr, lvl).unwrap();
+                types.insert(job, State::Done(ty));
+            }
+            State::Processing => {
+                // recursion encountered
+            }
+            State::Done(_) => (),
+        }
     }
 }
 

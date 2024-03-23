@@ -1,9 +1,10 @@
 use super::{InferError, InferResult};
-use crate::ast;
+use crate::{ast, types::Var};
 use core::str;
 use logos::Span;
 use parser::ast::{Ast as ParserAst, BinOp, UnOp};
 use std::{
+    cell::OnceCell,
     collections::HashMap,
     hash::{self, Hasher},
 };
@@ -38,6 +39,7 @@ pub struct Inherit {
 pub struct Identifier {
     pub name: String,
     pub span: Span,
+    pub var: OnceCell<Var>,
 }
 
 impl PartialEq for Identifier {
@@ -48,7 +50,11 @@ impl PartialEq for Identifier {
 
 impl Identifier {
     pub fn new(name: String, span: Span) -> Self {
-        Self { name, span }
+        Self {
+            name,
+            span,
+            var: OnceCell::new(),
+        }
     }
 }
 
@@ -583,6 +589,6 @@ fn transform_ast(value: ParserAst, source: &str) -> Ast {
         ParserAst::Comment(_) | ParserAst::DocComment(_) | ParserAst::LineComment(_) => {
             unimplemented!()
         }
-        ParserAst::SearchPath(_) => todo!(),
+        ParserAst::SearchPath(path) => todo!(),
     }
 }

@@ -1,6 +1,7 @@
 ## TODO (17.03)
 - Type Inference
   - [] type_term
+    - [] operators
     - [] functions
       - Restricting set patterns
     - [] let bindings
@@ -12,7 +13,7 @@
   - [x] freshen_above
   - [x] coalsce_type
   - [x] polymorphic type
-  - [] builtins
+  - [] Type annotations
   - [] Simplification
     - [] compact Type
     - [] canonicalize-type
@@ -35,6 +36,7 @@
   - [] levels
   - [] Builtins
   - [] Ausblick
+  - [] Nice references
 
 ## Zentrale Fragen
 - Soll ich überall die Syntax schön definieren?
