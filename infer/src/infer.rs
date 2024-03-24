@@ -1,5 +1,7 @@
 use crate::{
-    ast::{Ast, PatternElement}, types::{PolarVar, Type, Var}, Context, InferError, InferResult, SpannedError, SpannedInferResult, TContext, TypeName
+    ast::{Ast, PatternElement},
+    types::{PolarVar, Type, Var},
+    Context, ContextType, InferError, InferResult, SpannedError, SpannedInferResult, TypeName,
 };
 use itertools::Itertools;
 use parser::ast::BinOp;
@@ -238,7 +240,7 @@ fn freshen<'a>(
 }
 
 /// Infer the type of an expression.
-fn type_term<'a>(ctx: &mut Context, term: &'a Ast, lvl: usize) -> Result<Type, SpannedError> {
+fn type_term<'a>(ctx: &mut Context<'a>, term: &'a Ast, lvl: usize) -> Result<Type, SpannedError> {
     use Type::*;
     match term {
         Ast::Identifier(super::ast::Identifier { name, span, .. }) => ctx
@@ -410,12 +412,17 @@ fn type_term<'a>(ctx: &mut Context, term: &'a Ast, lvl: usize) -> Result<Type, S
             span,
         } => {
             if *is_recursive {
-                let mut idents = attrs
+                let mut vars = attrs
                     .iter()
-                    .filter_map(|(ident, expr)| ctx.lookup(&ident.name)) // TODO: partition
+                    .map(|(ident, expr)| {
+                        (
+                            ident.name.as_str(),
+                            ContextType::Type(Type::Var(ctx.fresh_var(lvl))),
+                        )
+                    })
                     .collect();
 
-                ctx.with_scope(idents, |ctx| {
+                ctx.with_scope(vars, |ctx| {
                     let mut items: HashMap<_, _> = attrs
                         .iter()
                         .map(|(ident, expr)| {
@@ -579,35 +586,6 @@ fn type_term<'a>(ctx: &mut Context, term: &'a Ast, lvl: usize) -> Result<Type, S
         Ast::Bool { .. } => Ok(Bool),
         Ast::Int { .. } | Ast::Float { .. } => Ok(Number),
         Ast::Comment(_) | Ast::DocComment(_) | Ast::LineComment(_) => unimplemented!(),
-    }
-}
-
-#[derive(PartialEq)]
-enum State<'a> {
-    Untouched(&'a Ast),
-    Processing,
-    Done(Type),
-}
-
-fn load_record(context: &mut Context, lvl: usize, bindings: HashMap<String, Ast>) {
-    let mut jobs = bindings.iter().map(|(ident, expr)| (ident)).collect_vec();
-    let mut types: HashMap<&String, State> = bindings
-        .iter()
-        .map(|(ident, expr)| (ident, State::Untouched(expr)))
-        .collect();
-
-    while let Some(job) = jobs.pop() {
-        let state = types.get_mut(job).unwrap();
-        match state {
-            State::Untouched(expr) => {
-                let ty = type_term(context, expr, lvl).unwrap();
-                types.insert(job, State::Done(ty));
-            }
-            State::Processing => {
-                // recursion encountered
-            }
-            State::Done(_) => (),
-        }
     }
 }
 

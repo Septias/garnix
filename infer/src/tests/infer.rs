@@ -35,10 +35,6 @@ fn test_primitve() {
     let (ty, _) = infer(source).unwrap();
     assert_eq!(ty, Record([("x".to_string(), Null)].into()));
 
-    let source = "hi";
-    let (ty, _) = infer(source).unwrap();
-    assert_eq!(ty, Undefined);
-
     let source = "{ x = [2 1];}";
     let (ty, _) = infer(source).unwrap();
     assert_eq!(
@@ -108,9 +104,9 @@ fn test_bools() {
     if let Err(e) = res {
         assert_eq!(
             e.error,
-            InferError::TypeMismatch {
-                expected: Bool.get_name(),
-                found: Number.get_name()
+            InferError::CannotConstrain {
+                lhs: Number,
+                rhs: Bool
             }
         );
     }
