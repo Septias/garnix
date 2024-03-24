@@ -3,7 +3,7 @@ use ast::Identifier;
 use core::str;
 use infer::freshen_above;
 use logos::Span;
-use types::{PolymorhicType, Type, TypeName, Var};
+use types::{PolymorphicType, Type, TypeName, Var};
 
 pub mod ast;
 pub mod infer;
@@ -15,34 +15,34 @@ pub use error::*;
 #[cfg(test)]
 mod tests;
 
+#[derive(Debug, Clone)]
 pub enum ContextType {
     Type(Type),
-    PolymorhicType(PolymorhicType),
+    PolymorhicType(PolymorphicType),
 }
 
 impl ContextType {
     fn level(&self) -> usize {
         match self {
             ContextType::Type(ty) => ty.level(),
-            ContextType::PolymorhicType(pty) => pty.lvl,
+            ContextType::PolymorhicType(pty) => pty.level,
         }
     }
 
     fn instantiate(&self, context: &Context, lvl: usize) -> Type {
         match self {
             ContextType::Type(ty) => ty.instantiate(),
-            ContextType::PolymorhicType(pty) => freshen_above(context, &pty.body, pty.lvl, lvl),
+            ContextType::PolymorhicType(pty) => freshen_above(context, &pty.body, pty.level, lvl),
         }
     }
 }
 
 /// Context to save variables and their types.
 pub(crate) struct Context<'a> {
-    bindings: Vec<Vec<(&'a str, ContextType)>>,
-    with: Option<&'a Identifier>,
+    bindings: Vec<Vec<(String, ContextType)>>,
+    with: Option<Type>,
     count: usize,
 }
-
 
 impl<'a> Context<'a> {
     pub(crate) fn new() -> Self {
@@ -56,7 +56,7 @@ impl<'a> Context<'a> {
     /// Create a new scope and run a function with it.
     pub(crate) fn with_scope<T>(
         &mut self,
-        scope: Vec<(&'a str, ContextType)>,
+        scope: Vec<(String, ContextType)>,
         f: impl FnOnce(&mut Self) -> T,
     ) -> T {
         self.bindings.push(scope);
@@ -81,6 +81,22 @@ impl<'a> Context<'a> {
         let res = Var::new(lvl, self.count);
         // self.count += 1;
         res
+    }
+
+    pub(crate) fn fresh_context_var(&self, lvl: usize) -> ContextType {
+        ContextType::Type(Type::Var(self.fresh_var(lvl)))
+    }
+
+    pub(crate) fn set_with(&mut self, with: Type) {
+        self.with = Some(with);
+    }
+
+    pub(crate) fn get_with(&self) -> Option<&Type> {
+        self.with.as_ref()
+    }
+
+    pub(crate) fn remove_with(&mut self) {
+        self.with = None;
     }
 }
 

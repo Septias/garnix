@@ -31,7 +31,7 @@ pub enum Pattern {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Inherit {
     pub name: Option<Ast>,
-    pub items: Vec<String>,
+    pub items: Vec<(Span, String)>,
 }
 
 #[derive(Default, Debug, Clone, Eq)]
@@ -452,7 +452,7 @@ fn transform_ast(value: ParserAst, source: &str) -> Ast {
                         items: inherit
                             .items
                             .into_iter()
-                            .map(|item| source[item].to_string())
+                            .map(|item| (item.clone(), source[item].to_string()))
                             .collect(),
                     })
                     .collect(),
@@ -484,7 +484,7 @@ fn transform_ast(value: ParserAst, source: &str) -> Ast {
                         items: inherit
                             .items
                             .into_iter()
-                            .map(|item| source[item].to_string())
+                            .map(|item| (item.clone(), source[item].to_string()))
                             .collect(),
                     })
                     .collect(),

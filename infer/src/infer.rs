@@ -1,11 +1,16 @@
 use crate::{
-    ast::{Ast, PatternElement},
-    types::{PolarVar, Type, Var},
+    ast::{Ast, Inherit, PatternElement},
+    types::{PolarVar, PolymorphicType, Type, Var},
     Context, ContextType, InferError, InferResult, SpannedError, SpannedInferResult, TypeName,
 };
-use itertools::Itertools;
+use itertools::{Either, Itertools};
+use logos::Span;
+use nom::error::context;
 use parser::ast::BinOp;
-use std::collections::{HashMap, HashSet};
+use std::{
+    collections::{HashMap, HashSet},
+    ops::Deref,
+};
 
 fn constrain(context: &Context, lhs: &Type, rhs: &Type) -> InferResult<()> {
     constrain_inner(context, lhs, rhs, HashSet::new())
@@ -407,68 +412,116 @@ fn type_term<'a>(ctx: &mut Context<'a>, term: &'a Ast, lvl: usize) -> Result<Typ
         // Language constructs
         Ast::AttrSet {
             attrs,
-            inherit: _,
+            inherit,
             is_recursive,
             span,
         } => {
             if *is_recursive {
-                let mut vars = attrs
+                let mut vars: Vec<_> = attrs
                     .iter()
                     .map(|(ident, expr)| {
                         (
-                            ident.name.as_str(),
+                            ident.name.to_string(),
                             ContextType::Type(Type::Var(ctx.fresh_var(lvl))),
                         )
                     })
                     .collect();
 
+                let ok = load_inherit(ctx, span.clone(), lvl, inherit)?;
+                vars.extend(ok);
+
                 ctx.with_scope(vars, |ctx| {
-                    let mut items: HashMap<_, _> = attrs
+                    let (items, errs): (Vec<_>, Vec<_>) = attrs
                         .iter()
                         .map(|(ident, expr)| {
-                            (ident.name.to_string(), type_term(ctx, expr, lvl).unwrap())
+                            Ok::<_, SpannedError>((
+                                ident.name.to_string(),
+                                type_term(ctx, expr, lvl)?,
+                            ))
                         })
-                        .collect();
-                    Ok(Type::Record(items))
+                        .partition_map(|r| match r {
+                            Ok(v) => Either::Left(v),
+                            Err(v) => Either::Right(v),
+                        });
+                    if errs.is_empty() {
+                        Ok(Type::Record(items.into_iter().collect()))
+                    } else {
+                        Err(SpannedError {
+                            error: InferError::MultipleErrors(errs),
+                            span: span.clone(),
+                        })
+                    }
                 })
             } else {
-                let mut items: HashMap<_, _> = attrs
+                let mut vars: HashMap<_, _> = attrs
                     .iter()
                     .map(|(ident, expr)| {
                         (ident.name.to_string(), type_term(ctx, expr, lvl).unwrap())
                     })
                     .collect();
-                Ok(Record(items))
+                let ok = load_inherit(ctx, span.clone(), lvl, inherit);
+                vars.extend(
+                    ok?.into_iter()
+                        .map(|(name, ty)| (name.to_string(), ty.instantiate(ctx, lvl))),
+                );
+                Ok(Record(vars))
             }
         }
 
         Ast::LetBinding {
             bindings,
-            inherit: _,
+            inherit,
             body,
             span,
         } => {
-            /* let names = bindings
+            let binds = bindings
                 .iter()
-                .map(|(name, _)| ctx.fresh_var(lvl))
-                .collect();
-            let expressions = bindings.iter().map(|(_, expr)| expr);
-            let types = ctx
-                .with_scope(names, |context| {
-                    // TODO: type should we wrapped in polymorphicType
-                    names.iter().zip(expressions).map(|(name, rhs)| {
-                        let e_ty = ctx.fresh_var(lvl + 1);
-                        let ty = type_term(ctx, rhs, lvl + 1)?;
-                        constrain(ctx, &ty, &Type::Var(e_ty))
-                            .map_err(|e| e.span(rhs.get_span()))?;
-                        Ok(PolymorphicType::new(Type::Var(e_ty), lvl))
-                    })
+                .map(|(name, _)| {
+                    (
+                        name.name.to_string(),
+                        ContextType::Type(Type::Var(ctx.fresh_var(lvl))),
+                    )
                 })
-                .filter_map(|val| val.ok())
                 .collect();
 
-            let ret = ctx.with_scope(types, |context| type_term(ctx, body, lvl))?; */
-            todo!()
+            let (ok, err): (Vec<_>, Vec<_>) = ctx
+                .with_scope(binds, |ctx| {
+                    let names = bindings.iter().map(|(name, _)| name.name.as_str());
+                    let expressions = bindings.iter().map(|(_, expr)| expr);
+
+                    names
+                        .into_iter()
+                        .zip(expressions)
+                        .map(move |(name, rhs)| {
+                            let e_ty = ctx.fresh_var(lvl + 1);
+                            let ty = type_term(ctx, rhs, lvl + 1)?;
+                            constrain(ctx, &ty, &Type::Var(e_ty.clone()))
+                                .map_err(|e| e.span(rhs.get_span()))?;
+                            Ok((
+                                name.to_string(),
+                                ContextType::PolymorhicType(PolymorphicType::new(
+                                    Type::Var(e_ty),
+                                    lvl,
+                                )),
+                            ))
+                        })
+                        .collect_vec()
+                })
+                .into_iter()
+                .partition_map(|r| match r {
+                    Ok(v) => Either::Left(v),
+                    Err(v) => Either::Right(v),
+                });
+
+            if !err.is_empty() {
+                return Err(SpannedError {
+                    error: InferError::MultipleErrors(err),
+                    span: span.clone(),
+                });
+            }
+
+            let ret = ctx.with_scope(ok, |ctx| type_term(ctx, body, lvl))?;
+            Ok(ret)
         }
 
         Ast::Lambda {
@@ -489,7 +542,7 @@ fn type_term<'a>(ctx: &mut Context<'a>, term: &'a Ast, lvl: usize) -> Result<Typ
                         match pattern {
                             PatternElement::Identifier(ident) => {
                                 item.push((ident.name.clone(), Type::Undefined));
-                                added.push(ctx.fresh_var(lvl));
+                                added.push((ident.name.to_string(), ctx.fresh_context_var(lvl)));
                             }
                             PatternElement::DefaultIdentifier(name, expr) => {
                                 let ty = type_term(ctx, expr, lvl)?;
@@ -497,7 +550,7 @@ fn type_term<'a>(ctx: &mut Context<'a>, term: &'a Ast, lvl: usize) -> Result<Typ
                                 constrain(ctx, &Type::Var(var.clone()), &ty)
                                     .map_err(|e| e.span(span))?;
                                 item.push((name.name.clone(), ty));
-                                added.push(var);
+                                added.push((name.name.to_string(), ContextType::Type(Type::Var(var))));
                             }
                         }
                     }
@@ -509,25 +562,40 @@ fn type_term<'a>(ctx: &mut Context<'a>, term: &'a Ast, lvl: usize) -> Result<Typ
                         }
                         let var = ctx.fresh_var(lvl);
                         constrain(ctx, &Type::Var(var.clone()), &ty).map_err(|e| e.span(span))?;
-                        added.push(var);
+                        added.push((name.to_string(), ContextType::Type(Type::Var(var))));
                     }
                     ty
                 }
                 crate::ast::Pattern::Identifier(_) => Type::Var(ctx.fresh_var(lvl)),
             };
 
-            // let ret = ctx.with_scope(added, |context| type_term(context, body, lvl))?;
-            Ok(Function(Box::new(ty), Box::new(todo!())))
+            let ret = ctx.with_scope(added, |context| type_term(context, body, lvl))?;
+            Ok(Function(Box::new(ty), Box::new(ret)))
         }
 
-        Ast::With {
-            set: _,
-            body,
-            span: _,
-        } => {
-            // TODO: handle
-            let ty = type_term(ctx, body, lvl);
-            ty
+        Ast::With { set, body, span } => {
+            let ty = type_term(ctx, set, lvl)?;
+            match ty {
+                var @ Type::Var(_) => {
+                    ctx.set_with(var);
+                    let ret = type_term(ctx, body, lvl);
+                    ctx.remove_with();
+                    ret
+                }
+                Type::Record(rc) => ctx.with_scope(
+                    rc.iter()
+                        .map(|(name, ty)| (name.to_string(), ContextType::Type(ty.clone())))
+                        .collect(),
+                    |ctx| type_term(ctx, body, lvl),
+                ),
+                _ => Err(SpannedError {
+                    error: InferError::TypeMismatch {
+                        expected: TypeName::Record,
+                        found: ty.get_name(),
+                    },
+                    span: span.clone(),
+                }),
+            }
         }
 
         Ast::Conditional {
@@ -586,6 +654,118 @@ fn type_term<'a>(ctx: &mut Context<'a>, term: &'a Ast, lvl: usize) -> Result<Typ
         Ast::Bool { .. } => Ok(Bool),
         Ast::Int { .. } | Ast::Float { .. } => Ok(Number),
         Ast::Comment(_) | Ast::DocComment(_) | Ast::LineComment(_) => unimplemented!(),
+    }
+}
+
+fn load_inherit<'a>(
+    ctx: &mut Context,
+    span: Span,
+    lvl: usize,
+    inherit: &'a Vec<Inherit>,
+) -> Result<Vec<(String, ContextType)>, SpannedError> {
+    let (ok, err): (Vec<_>, Vec<_>) = inherit
+        .into_iter()
+        .map(|Inherit { name, items }| {
+            if let Some(expr) = name {
+                // load path
+                let ty = type_term(ctx, expr, lvl)?;
+
+                match &ty {
+                    //
+                    ty @ Type::Var(_) => {
+                        let vars = items
+                            .iter()
+                            .map(|(_span, name)| (name.to_string(), Type::Var(ctx.fresh_var(lvl))));
+                        let record = Type::Record(
+                            vars.clone()
+                                .map(|(name, ty)| (name, ty))
+                                .collect(),
+                        );
+                        constrain(ctx, &ty, &record);
+                        Ok(vars
+                            .map(|(name, ty)| (name, ContextType::Type(ty)))
+                            .collect())
+                    }
+                    Type::Record(rc_items) => {
+                        let (ok, err): (Vec<_>, Vec<_>) = items
+                            .iter()
+                            .map(|(range, name)| {
+                                Ok((
+                                    name.to_string(),
+                                    ContextType::Type(
+                                        rc_items
+                                            .get(name)
+                                            .ok_or(
+                                                InferError::MissingRecordField {
+                                                    field: name.clone(),
+                                                }
+                                                .span(range),
+                                            )?
+                                            .clone(),
+                                    ),
+                                ))
+                            })
+                            .partition_map(|r| match r {
+                                Ok(ty) => Either::Left(ty),
+                                Err(e) => Either::Right(e),
+                            });
+                        if err.is_empty() {
+                            Ok(ok)
+                        } else {
+                            Err(SpannedError {
+                                error: InferError::MultipleErrors(err),
+                                span: span.clone(),
+                            })
+                        }
+                    }
+                    _ => Err(SpannedError {
+                        error: InferError::TypeMismatch {
+                            expected: TypeName::Record,
+                            found: ty.get_name(),
+                        },
+                        span: span.clone(),
+                    }),
+                }
+            } else {
+                let (ok, err): (Vec<_>, Vec<_>) = items
+                    .iter()
+                    .map(|(range, name)| {
+                        Ok((
+                            name.to_string(),
+                            ctx.lookup(name)
+                                .ok_or(InferError::UnknownIdentifier.span(range))?
+                                .clone(),
+                        ))
+                    })
+                    .partition_map(|r| match r {
+                        Ok(v) => Either::Left(v),
+                        Err(v) => Either::Right(v),
+                    });
+
+                if err.is_empty() {
+                    Ok(ok)
+                } else {
+                    Err(SpannedError {
+                        error: InferError::MultipleErrors(err),
+                        span: span.clone(),
+                    })
+                }
+            }
+        })
+        .partition_map(
+            |r| match r {
+                Ok(v) => Either::Left(v),
+                Err(v) => Either::Right(v),
+            },
+        );
+
+    if !err.is_empty() {
+        Err(SpannedError {
+            error: InferError::MultipleErrors(err),
+            span: span.clone(),
+        })
+    } else {
+        Ok(ok.into_iter().flatten().collect())
     }
 }
 

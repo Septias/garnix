@@ -33,11 +33,6 @@ impl Var {
 
 pub type PolarVar<'a> = (Var, bool);
 
-pub struct PolymorhicType {
-    pub lvl: usize,
-    pub body: Type,
-}
-
 /// A nix language type.
 #[derive(Debug, Clone, PartialEq, Eq, Display, EnumDiscriminants, AsRefStr)]
 #[strum_discriminants(derive(AsRefStr, Display))]
@@ -82,9 +77,10 @@ impl std::hash::Hash for Type {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct PolymorphicType {
-    body: Type,
-    level: usize,
+    pub body: Type,
+    pub level: usize,
 }
 
 impl PolymorphicType {
