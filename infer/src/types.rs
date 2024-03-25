@@ -68,6 +68,13 @@ impl Type {
             t => infer_error(TypeName::Var, t.get_name()),
         }
     }
+
+    pub fn into_var(self) -> Option<Var> {
+        match self {
+            Type::Var(ident) => Some(ident),
+            _ => None,
+        }
+    }
 }
 
 impl std::hash::Hash for Type {
@@ -91,7 +98,6 @@ impl PolymorphicType {
 
 impl Type {
     pub fn instantiate(&self) -> Type {
-        // TODO: optimize
         self.clone()
     }
 
@@ -175,9 +181,12 @@ impl Type {
             | t @ Type::Null
             | t @ Type::Undefined => t.as_ref().to_string(),
             Type::List(elems) => format!("[ {} ]", elems.iter().map(|t| t.show()).join(" ")),
-            Type::Function(lhs, rhs) => format!("{} -> {}", lhs.show(), rhs.show()),
+            Type::Function(lhs, rhs) => format!("{} -> ({})", lhs.show(), rhs.show()),
             Type::Union(lhs, rhs) => format!("{} ∨ {}", lhs, rhs),
-            Type::Record(fields) => format!("{:?}", fields),
+            Type::Record(fields) => fields
+                .iter()
+                .map(|(k, v)| format!("{}: {}", k, v.show()))
+                .join(", "),
             Type::Top => TypeName::Top.to_string(),
             Type::Bottom => TypeName::Bottom.to_string(),
             Type::Inter(lhs, rhs) => format!("{} ∧ {}", lhs.show(), rhs.show()),

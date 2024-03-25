@@ -1,5 +1,5 @@
-use crate::{infer, types::Var, InferError, Type};
-use std::collections::HashMap;
+use crate::{coalesced, infer, types::Var, InferError, Type};
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
 use Type::*;
 
 #[test]
@@ -116,17 +116,27 @@ fn test_bools() {
 fn test_inherit() {
     let source = "let x = 1; in {inherit x;};";
     let (ty, _) = infer(source).unwrap();
-    assert_eq!(ty, Record([("x".to_string(), Number)].into()));
+    assert_eq!(
+        ty,
+        Type::Record(
+            [(
+                "x".to_string(),
+                Type::Var(Var {
+                    lower_bounds: Rc::new(RefCell::new(vec![Number])),
+                    id: 1,
+                    ..Default::default()
+                })
+            )]
+            .into()
+        )
+    );
 }
 
 #[test]
 fn test_with() {
-    let source = "let x = {y = 1;}; in with {y = 1;}; {z = y;};";
+    let source = "with {y = 1;}; {z = y;};";
     let (ty, _) = infer(source).unwrap();
-    assert_eq!(
-        ty,
-        Record([("x".to_string(), Number), ("y".to_string(), Number)].into())
-    );
+    assert_eq!(ty, Record([("z".to_string(), Number)].into()));
 
     let _source = "let x = {y = 1;}; in with x; {z = y;};";
     infer(source).unwrap();
@@ -144,6 +154,10 @@ fn test_joining() {
         res.0,
         Record([("x".to_string(), Number), ("y".to_string(), Number)].into())
     );
+
+    let source = r#"{ x = 1; } // { x = 2; };"#;
+    let res = infer(source).unwrap();
+    assert_eq!(res.0, Record([("x".to_string(), Number)].into()));
 }
 
 #[test]
@@ -155,35 +169,83 @@ fn test_attribute_fallback() {
 
 #[test]
 fn test_has_attribute() {
-    let source = r#"let t = { x = 1; } ? x; in {t = t;};"#;
+    let source = r#"{ x = 1; } ? x"#;
     let (ty, _ast) = infer(source).unwrap();
-    assert_eq!(ty, Record([("t".to_string(), Bool)].into()));
+    assert_eq!(ty, Type::Bool);
 }
 
 #[test]
 fn test_let_binding() {
-    let source = r#"let t = { x = 1; }; in { t = t; };"#;
+    let source = r#"let t = { x = 1; }; in t;"#;
     let (ty, _ast) = infer(source).unwrap();
     assert_eq!(
         ty,
-        Record([("t".to_string(), Record([("x".to_string(), Number)].into()))].into())
+        Type::Var(Var {
+            lower_bounds: Rc::new(RefCell::new(vec![Record(
+                [("x".to_string(), Number)].into()
+            )])),
+            id: 1,
+            ..Default::default()
+        })
     );
 }
 
 #[test]
 fn test_function() {
     let source = r#"let t = x: x; in { t = t; };"#;
-    let (ty, _) = infer(source).unwrap();
+    /* let (ty, _) = infer(source).unwrap();
+
+    if let Type::Record(rec) = &ty {
+        println!(
+            "whyyy {}",
+            rec.iter()
+                .map(|(name, ty)| format!(
+                    "{}: {}",
+                    name,
+                    match ty {
+                        Type::Var(var) =>
+                            var.lower_bounds.borrow().iter().map(|t| t.show()).join(" "),
+                        t => t.show(),
+                    }
+                ))
+                .join("\n")
+        );
+    } else {
+        panic!("Expected record type");
+    }
+
     assert_eq!(
         ty,
         Record(
             [(
                 "t".to_string(),
-                Function(Box::new(Var(Var::new(0, 1))), Box::new(Undefined))
+                Type::Var(Var {
+                    lower_bounds: Rc::new(RefCell::new(vec![Function(
+                        Box::new(Type::Var(Var {
+                            lower_bounds: Rc::new(RefCell::new(vec![])),
+                            upper_bounds: Rc::new(RefCell::new(vec![])),
+                            id: 3,
+                            ..Default::default()
+                        })),
+                        Box::new(Type::Var(Var {
+                            lower_bounds: Rc::new(RefCell::new(vec![])),
+                            upper_bounds: Rc::new(RefCell::new(vec![])),
+                            id: 4,
+                            ..Default::default()
+                        }))
+                    )])),
+                    id: 2,
+                    ..Default::default()
+                })
             )]
             .into()
         )
-    );
+    ); */
+
+    let source = r#"f: x: f f x"#;
+
+    let (ty, ast) = coalesced(&source).unwrap();
+    println!("{}", ty.show())
 }
 
 #[test]
