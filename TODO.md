@@ -1,7 +1,6 @@
 ## TODO (17.03)
 
 - Type Inference
-
   - [x] type_term
     - [x] operators
     - [x] functions
@@ -22,7 +21,6 @@
   - [] List type creation
 
 - Parser
-
   - [x] Handle `inherit (lib)`
   - [x] Don't use expr as base
   - [x] Error reporting
@@ -36,14 +34,12 @@
   - [x] recursive types
   - [x] levels
   - [x] Ausblick
-  - [] Nice references
-  - [] Soundness
-  - [] Test section
+  - [x] Nice references (NixOs, Dolan etc.)
+  - [x] check bool naming in typing rules
   - [] Interpolation
-  - [] check bool naming in typing rules
-  - [] type constraints (ident, bool etc.)
-  - [] link option-completion
-  - [] Annotate handling in operator definitions
+  - [] Lengthen introducition
+  - [] Examples section
+  - [] Soundness
 
 ## Zentrale Fragen
 
