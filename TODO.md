@@ -17,6 +17,7 @@
   - [x] freshen_above
   - [x] coalsce_type
   - [x] polymorphic type
+  - [] Check extend
   - [] List subsumption
   - [] List type creation
 
