@@ -651,6 +651,7 @@ fn type_term<'a>(ctx: &mut Context, term: &'a Ast, lvl: usize) -> Result<Type, S
 
                     let ty = Type::Pattern(item.clone().into_iter().collect(), *is_wildcard);
                     if let Some(name) = name {
+                        // TODO: not always add a variable
                         let var = ctx.fresh_var(lvl);
                         if *is_wildcard {
                             constrain(

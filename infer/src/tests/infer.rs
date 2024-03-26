@@ -8,8 +8,6 @@ fn test_primitve() {
     let (ty, _) = infer(source).unwrap();
     assert_eq!(ty, Type::Record(HashMap::new()));
 
-    let source = "rec {f = x: x + y; y = 1;}";
-
     let source = "{ x = 2;}";
     let (ty, _) = infer(source).unwrap();
     assert_eq!(ty, Record([("x".to_string(), Number)].into()));
@@ -376,6 +374,10 @@ fn test_with() {
             Box::new(Record([("z".to_string(), Var(Var::new(0, 1)))].into()))
         )
     );
+
+    // shadowing
+    let source = r#"let y = "hi"; with {y = 1;}; {z = y;};"#;
+
 }
 
 #[test]
@@ -465,10 +467,20 @@ fn test_has_attribute() {
     let source = r#"{ x = 1; } ? x"#;
     let (ty, _ast) = infer(source).unwrap();
     assert_eq!(ty, Bool);
+
+    let source = r#"x: x ? y"#;
+
+
 }
 
 #[test]
-fn test_attr_set() {}
+fn test_attr_set() {
+    let source = "{f = x: x + y; y = 1;}";
+    let source = "rec {f = x: x + y; y = 1;}";
+    let source = "rec {x = {y = x;};}";
+
+
+}
 
 #[test]
 fn test_let_binding() {
@@ -690,7 +702,16 @@ fn test_function() {
 }
 
 #[test]
-fn test_application() {}
+fn test_application() {
+    let source = "x: x 1;";
+    let source = "let f = x: x; f 1;";
+    let source = "let f = { x }: x; f { x = 1;};";
+    let source = "let f = { x }: x; f 1;";
+
+
+
+
+}
 
 #[test]
 fn test_assert() {
@@ -713,7 +734,7 @@ fn test_assert() {
 }
 
 #[test]
-fn test_if_conditions() {
+fn test_conditionals() {
     let source = r#"if true then 1 else "hi";"#;
     let (ty, _) = infer(source).unwrap();
     assert_eq!(ty, Union(Box::new(Number), Box::new(String)));
@@ -721,6 +742,11 @@ fn test_if_conditions() {
     let source = r#"if true then 1 else 2;"#;
     let (ty, _) = infer(source).unwrap();
     assert_eq!(ty, Number);
+
+    let source = r#"x: if x then 1 else 2;"#;
+    let source = r#"x: if true then x else 2;"#;
+    let source = r#"x: if true then 1 else x;"#;
+
 
     let source = r#"if "true" then 1 else 2;"#;
     let res = infer(source);
