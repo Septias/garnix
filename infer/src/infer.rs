@@ -8,7 +8,7 @@ use logos::Span;
 use parser::ast::BinOp;
 use std::collections::{HashMap, HashSet};
 
-fn constrain(context: &Context, lhs: &Type, rhs: &Type) -> InferResult<()> {
+pub fn constrain(context: &Context, lhs: &Type, rhs: &Type) -> InferResult<()> {
     constrain_inner(context, lhs, rhs, HashSet::new())
 }
 
@@ -244,18 +244,82 @@ fn type_term<'a>(ctx: &mut Context, term: &'a Ast, lvl: usize) -> Result<Type, S
     // println!("type_term: {:?}", term);
     use Type::*;
     match term {
-        Ast::Identifier(super::ast::Identifier { name, span, .. }) => ctx
-            .lookup(name)
-            .map(|val| val.instantiate(ctx, lvl))
-            .ok_or(InferError::UnknownIdentifier.span(span)),
+        Ast::Identifier(super::ast::Identifier { name, span, .. }) => {
+            if let Some(with) = &ctx.with {
+                println!("trying lookup");
+                if let Type::Var(var) = with {
+                    if let Some(rec) = var.as_record() {
+                        if let Some(ty) = rec.get(name).map(|ty| ty.clone()) {
+                            return Ok(ty);
+                        }
+                    }
+                }
+            }
+
+            if let Some(var) = ctx.lookup(name) {
+                return Ok(var.instantiate(ctx, lvl));
+            }
+
+            if let Some(with) = ctx.with.as_ref() {
+                if let ty @ Type::Var(_var) = with {
+                    let res = Type::Var(ctx.fresh_var(lvl));
+                    constrain(
+                        ctx,
+                        ty,
+                        &Type::Record([(name.to_string(), res.clone())].into()),
+                    )
+                    .map_err(|e| e.span(span))?;
+                    Ok(res)
+                } else {
+                    Err(InferError::UnknownIdentifier.span(span))
+                }
+            } else {
+                Err(InferError::UnknownIdentifier.span(span))
+            }
+        }
 
         Ast::UnaryOp { rhs, .. } => type_term(ctx, rhs, lvl),
 
         Ast::BinaryOp { op, lhs, rhs, span } => {
-            if let BinOp::HasAttribute = op {
-                return Ok(Bool);
-            }
+            match op {
+                BinOp::HasAttribute => return Ok(Bool),
+                BinOp::AttributeSelection => {
+                    let ty = type_term(ctx, lhs, lvl)?;
+                    let name = rhs
+                        .as_identifier_str()
+                        .map_err(|e| e.span(rhs.get_span()))?;
 
+                    return match ty {
+                        Type::Var(_) => {
+                            let res = Type::Var(ctx.fresh_var(lvl));
+                            constrain(ctx, &ty, &Type::Record([(name, res.clone())].into()))
+                                .map_err(|e| e.span(lhs.get_span()))?;
+                            Ok(res)
+                        }
+                        Record(rc) => {
+                            let name = rhs
+                                .as_identifier_str()
+                                .map_err(|e| e.span(rhs.get_span()))?;
+                            if let Some(ty) = rc.get(&name) {
+                                Ok(ty.clone())
+                            } else {
+                                Err(SpannedError {
+                                    error: InferError::MissingRecordField { field: name },
+                                    span: span.clone(),
+                                })
+                            }
+                        }
+                        _ => Err(SpannedError {
+                            error: InferError::TypeMismatch {
+                                expected: TypeName::Record,
+                                found: ty.get_name(),
+                            },
+                            span: lhs.get_span().clone(),
+                        }),
+                    };
+                }
+                _ => (),
+            }
             let ty1 = type_term(ctx, lhs, lvl)?;
             let ty2 = type_term(ctx, rhs, lvl)?;
 
@@ -263,8 +327,6 @@ fn type_term<'a>(ctx: &mut Context, term: &'a Ast, lvl: usize) -> Result<Type, S
                 // Application etc.
                 BinOp::Application => {
                     let res = Type::Var(ctx.fresh_var(lvl));
-                    println!("ty1: {:?}", ty1);
-
                     constrain(
                         ctx,
                         &ty1,
@@ -273,51 +335,66 @@ fn type_term<'a>(ctx: &mut Context, term: &'a Ast, lvl: usize) -> Result<Type, S
                     .map_err(|e| e.span(lhs.get_span()))?;
                     Ok(res)
                 }
-                BinOp::AttributeSelection => {
-                    let res = Type::Var(ctx.fresh_var(lvl));
-
-                    constrain(
-                        ctx,
-                        &ty1,
-                        &Type::Record(
-                            [(
-                                rhs.as_identifier_str()
-                                    .map_err(|e| e.span(lhs.get_span()))?,
-                                res.clone(),
-                            )]
-                            .into_iter()
-                            .collect(),
-                        ),
-                    )
-                    .map_err(|e| e.span(lhs.get_span()))?;
-                    Ok(res)
-                }
 
                 // Object modifications
-                BinOp::ListConcat => {
-                    let lhs = ty1
-                        .into_list()
-                        .map_err(|err| SpannedError::from((span, err)))?;
-                    let rhs = ty2
-                        .into_list()
-                        .map_err(|err| SpannedError::from((span, err)))?;
+                BinOp::ListConcat => match (&ty1, &ty2) {
+                    (Type::List(l), Type::List(l2)) => {
+                        Ok(Type::List([l.clone(), l2.clone()].concat()))
+                    }
+                    (Type::Var(_), Type::Var(_)) => todo!(),
 
-                    Ok(Type::List([lhs, rhs].concat()))
-                }
+                    (Type::List(l), var @ Type::Var(_)) | (var @ Type::Var(_), Type::List(l)) => {
+                        constrain(ctx, var, &Type::List(vec![]))
+                            .map_err(|e| e.span(rhs.get_span()))?;
+                        Ok(Type::List(l.clone()))
+                    }
+                    (Type::List(_), ty2) => Err(SpannedError {
+                        error: InferError::TypeMismatch {
+                            expected: TypeName::List,
+                            found: ty2.get_name(),
+                        },
+                        span: rhs.get_span().clone(),
+                    }),
+                    (ty1, _) => Err(SpannedError {
+                        error: InferError::TypeMismatch {
+                            expected: TypeName::List,
+                            found: ty1.get_name(),
+                        },
+                        span: lhs.get_span().clone(),
+                    }),
+                },
 
-                BinOp::Update => {
-                    let mut rc1 = ty1
-                        .into_record()
-                        .map_err(|err| SpannedError::from((span, err)))?;
-                    let rc2 = ty2
-                        .into_record()
-                        .map_err(|err| SpannedError::from((span, err)))?;
+                BinOp::Update => match (&ty1, &ty2) {
+                    (Type::Record(rc1), Type::Record(rc2)) => {
+                        let mut rc = rc1.clone();
+                        rc.extend(rc2.clone().into_iter());
+                        Ok(Type::Record(rc))
+                    }
 
-                    // overwrite first record with fields from second one
-                    rc1.extend(rc2);
+                    (Type::Var(_), Type::Var(_)) => todo!(),
 
-                    Ok(Type::Record(rc1))
-                }
+                    (Type::Record(rc1), var @ Type::Var(_))
+                    | (var @ Type::Var(_), Type::Record(rc1)) => {
+                        constrain(ctx, var, &Type::Record(HashMap::new()))
+                            .map_err(|e| e.span(rhs.get_span()))?;
+                        Ok(Type::Record(rc1.clone()))
+                    }
+                    (Type::Record(_), ty2) => Err(SpannedError {
+                        error: InferError::TypeMismatch {
+                            expected: TypeName::Record,
+                            found: ty2.get_name(),
+                        },
+                        span: rhs.get_span().clone(),
+                    }),
+
+                    (ty1, _) => Err(SpannedError {
+                        error: InferError::TypeMismatch {
+                            expected: TypeName::Record,
+                            found: ty1.get_name(),
+                        },
+                        span: lhs.get_span().clone(),
+                    }),
+                },
 
                 // Primitives
                 BinOp::Mul | BinOp::Div | BinOp::Sub => {
@@ -326,69 +403,54 @@ fn type_term<'a>(ctx: &mut Context, term: &'a Ast, lvl: usize) -> Result<Type, S
                     Ok(Type::Number)
                 }
                 BinOp::Add => {
-                    if ty1 == Type::Number {
-                        match &ty2 {
-                            Type::Number => Ok(Type::Number),
-                            Type::Var(_) => {
-                                constrain(ctx, &ty2, &ty1).map_err(|e| e.span(rhs.get_span()))?;
-                                Ok(Number)
-                            }
-                            _ => Err(SpannedError {
-                                error: InferError::TypeMismatch {
-                                    expected: TypeName::Number,
-                                    found: ty2.get_name(),
-                                },
-                                span: span.clone(),
-                            }),
+                    match (&ty1, &ty2) {
+                        (Type::Number, Type::Number) => Ok(Type::Number),
+                        (Type::String | Type::Path, Type::String | Type::Path) => Ok(Type::String),
+                        (Type::Var(_), Type::Var(_)) => todo!(),
+
+                        (var @ Type::Var(_), Type::Number) | (Type::Number, var @ Type::Var(_)) => {
+                            constrain(ctx, var, &Type::Number)
+                                .map_err(|e| e.span(lhs.get_span()))?;
+                            Ok(Type::Number)
                         }
-                    } else if ty1 == Type::String {
-                        match &ty2 {
-                            Type::String | Type::Path => Ok(Type::String),
-                            Type::Var(_) => {
-                                constrain(ctx, &ty2, &ty1).map_err(|e| e.span(rhs.get_span()))?;
-                                Ok(String)
-                            }
-                            _ => Err(SpannedError {
-                                error: InferError::TypeMismatch {
-                                    expected: TypeName::String, // TODO: improve
-                                    found: ty2.get_name(),
-                                },
-                                span: span.clone(),
-                            }),
+                        (var @ Type::Var(_), Type::String) | (Type::String, var @ Type::Var(_)) => {
+                            constrain(ctx, var, &Type::String)
+                                .map_err(|e| e.span(lhs.get_span()))?;
+                            Ok(Type::String)
                         }
-                    } else if ty1 == Type::Path {
-                        match &ty2 {
-                            Type::String => Ok(Type::String),
-                            Type::Var(_) => {
-                                constrain(ctx, &ty2, &ty1).map_err(|e| e.span(rhs.get_span()))?;
-                                Ok(Path)
-                            }
-                            _ => Err(SpannedError {
-                                error: InferError::TypeMismatch {
-                                    expected: TypeName::Path, // TODO: improve
-                                    found: ty2.get_name(),
-                                },
-                                span: span.clone(),
-                            }),
+                        (var @ Type::Var(_), Type::Path) | (Type::Path, var @ Type::Var(_)) => {
+                            constrain(ctx, var, &Type::Path).map_err(|e| e.span(lhs.get_span()))?;
+                            Ok(Type::Path)
                         }
-                    } else if matches!(ty1, Type::Var(_)) {
-                        todo!()
-                    } else {
-                        Err(SpannedError {
+                        (Type::Number | Type::Path | Type::String, ty2) => Err(SpannedError {
                             error: InferError::TypeMismatch {
-                                expected: TypeName::Number, // TODO: improve
+                                // TODO: this should be union of Number, String, Path
+                                expected: TypeName::Number,
+                                found: ty2.get_name(),
+                            },
+                            span: rhs.get_span().clone(),
+                        }),
+                        (ty1, _) => Err(SpannedError {
+                            error: InferError::TypeMismatch {
+                                // TODO: this should be union of Number, String, Path
+                                expected: TypeName::Number,
                                 found: ty1.get_name(),
                             },
-                            span: span.clone(),
-                        })
+                            span: lhs.get_span().clone(),
+                        }),
                     }
                 }
 
                 // Misc
-                BinOp::HasAttribute => Ok(Bool),
+                BinOp::HasAttribute => {
+                    // TODO: this could add optional type
+                    Ok(Bool)
+                }
+
                 BinOp::AttributeFallback => {
-                    // maybe typeunion?
-                    todo!()
+                    constrain(&ctx, &ty1, &ty2).map_err(|e| e.span(lhs.get_span()))?;
+                    constrain(&ctx, &ty1, &ty2).map_err(|e| e.span(rhs.get_span()))?;
+                    Ok(ty1)
                 }
 
                 // Comparisons
@@ -397,10 +459,21 @@ fn type_term<'a>(ctx: &mut Context, term: &'a Ast, lvl: usize) -> Result<Type, S
                 | BinOp::GreaterThan
                 | BinOp::GreaterThanEqual
                 | BinOp::Equal
-                | BinOp::NotEqual => {
-                    // TODO: type this as function f: α -> α -> Bool
-                    Ok(Bool)
-                }
+                | BinOp::NotEqual => match (&ty1, &ty2) {
+                    (Type::Var(_), Type::Var(_)) => todo!(),
+                    (ty @ Type::Var(_), _) | (_, ty @ Type::Var(_)) => {
+                        constrain(ctx, ty, &ty2).map_err(|e| e.span(lhs.get_span()))?;
+                        Ok(Bool)
+                    }
+                    (ty1, ty2) if ty1 != ty2 => Err(SpannedError {
+                        error: InferError::TypeMismatch {
+                            expected: ty1.get_name(),
+                            found: ty2.get_name(),
+                        },
+                        span: rhs.get_span().clone(),
+                    }),
+                    _ => Ok(Bool),
+                },
 
                 // Logical oprators
                 BinOp::And | BinOp::Or | BinOp::Implication => {
@@ -408,6 +481,7 @@ fn type_term<'a>(ctx: &mut Context, term: &'a Ast, lvl: usize) -> Result<Type, S
                     constrain(ctx, &ty2, &Type::Bool).map_err(|e| e.span(rhs.get_span()))?;
                     Ok(Bool)
                 }
+                _ => panic!("unimplemented binary operator: {:?}", op),
             }
         }
 
@@ -421,7 +495,7 @@ fn type_term<'a>(ctx: &mut Context, term: &'a Ast, lvl: usize) -> Result<Type, S
             if *is_recursive {
                 let mut vars: Vec<_> = attrs
                     .iter()
-                    .map(|(ident, expr)| {
+                    .map(|(ident, _expr)| {
                         (
                             ident.name.to_string(),
                             ContextType::Type(Type::Var(ctx.fresh_var(lvl))),
@@ -566,7 +640,7 @@ fn type_term<'a>(ctx: &mut Context, term: &'a Ast, lvl: usize) -> Result<Type, S
                                 let var = ctx.fresh_var(lvl);
                                 constrain(ctx, &Type::Var(var.clone()), &ty)
                                     .map_err(|e| e.span(span))?;
-                                item.push((name.name.clone(), ty));
+                                item.push((name.name.clone(), Type::Optional(Box::new(ty))));
                                 added.push((
                                     name.name.to_string(),
                                     ContextType::Type(Type::Var(var)),
@@ -575,13 +649,20 @@ fn type_term<'a>(ctx: &mut Context, term: &'a Ast, lvl: usize) -> Result<Type, S
                         }
                     }
 
-                    let ty = Type::Pattern(item.into_iter().collect(), *is_wildcard);
+                    let ty = Type::Pattern(item.clone().into_iter().collect(), *is_wildcard);
                     if let Some(name) = name {
-                        if *is_wildcard {
-                            todo!()
-                        }
                         let var = ctx.fresh_var(lvl);
-                        constrain(ctx, &Type::Var(var.clone()), &ty).map_err(|e| e.span(span))?;
+                        if *is_wildcard {
+                            constrain(
+                                ctx,
+                                &Type::Var(var.clone()),
+                                &Type::Record(item.into_iter().collect()),
+                            )
+                            .map_err(|e| e.span(span))?;
+                        } else {
+                            constrain(ctx, &Type::Var(var.clone()), &ty)
+                                .map_err(|e| e.span(span))?;
+                        }
                         added.push((name.to_string(), ContextType::Type(Type::Var(var))));
                     }
                     ty
@@ -698,19 +779,25 @@ fn load_inherit<'a>(
         .into_iter()
         .map(|Inherit { name, items }| {
             if let Some(expr) = name {
-                // load path
                 let ty = type_term(ctx, expr, lvl)?;
 
                 match &ty {
-                    //
                     ty @ Type::Var(_) => {
                         let vars = items
                             .iter()
-                            .map(|(_span, name)| (name.to_string(), Type::Var(ctx.fresh_var(lvl))));
-                        let record =
-                            Type::Record(vars.clone().map(|(name, ty)| (name, ty)).collect());
-                        constrain(ctx, &ty, &record);
+                            .map(|(_span, name)| (name.to_string(), Type::Var(ctx.fresh_var(lvl))))
+                            .collect_vec();
+                        let record = Type::Record(
+                            vars.clone()
+                                .into_iter()
+                                .map(|(name, ty)| (name, ty))
+                                .collect(),
+                        );
+
+                        constrain(ctx, &ty, &record).map_err(|e| e.span(expr.get_span()))?;
+
                         Ok(vars
+                            .into_iter()
                             .map(|(name, ty)| (name, ContextType::Type(ty)))
                             .collect())
                     }
@@ -837,16 +924,16 @@ fn coalesce_type_inner(
                 let res = if polarity {
                     bound_types
                         .into_iter()
-                        .reduce(|a, b| Type::Union(Box::new(a), Box::new(b)))
+                        .fold(tyvar.clone(), |a, b| Type::Union(Box::new(a), Box::new(b)))
                 } else {
                     bound_types
                         .into_iter()
-                        .reduce(|a, b| Type::Inter(Box::new(a), Box::new(b)))
+                        .fold(tyvar.clone(), |a, b| Type::Inter(Box::new(a), Box::new(b)))
                 };
                 if let Some(rec) = rec.get(&pol_var) {
-                    Type::Recursive(var.clone(), Box::new(res.unwrap()))
+                    Type::Recursive(var.clone(), Box::new(res))
                 } else {
-                    res.unwrap()
+                    res
                 }
             }
         }

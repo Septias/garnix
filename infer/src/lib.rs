@@ -75,12 +75,12 @@ impl Context {
         t
     }
 
-    /// Lookup an [Var] by it's name.
-    pub(crate) fn lookup(&self, name: &str) -> Option<&ContextType> {
+    /// Lookup a [Var] by it's name.
+    pub(crate) fn lookup(&self, name: &str) -> Option<ContextType> {
         for scope in self.bindings.iter().rev() {
             for (item_name, item) in scope.iter().rev() {
                 if *item_name == name {
-                    return Some(item);
+                    return Some(item.clone());
                 }
             }
         }
@@ -100,10 +100,6 @@ impl Context {
 
     pub(crate) fn set_with(&mut self, with: Type) {
         self.with = Some(with);
-    }
-
-    pub(crate) fn get_with(&self) -> Option<&Type> {
-        self.with.as_ref()
     }
 
     pub(crate) fn remove_with(&mut self) {

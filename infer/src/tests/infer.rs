@@ -83,6 +83,66 @@ fn test_numbers() {
             }
         );
     }
+
+    let source = "x: x - 1;";
+    let (ty, _) = infer(source).unwrap();
+    assert_eq!(
+        ty,
+        Type::Function(
+            Box::new(Var(Var {
+                upper_bounds: Rc::new(RefCell::new(vec![Number])),
+                id: 0,
+                ..Default::default()
+            })),
+            Box::new(Number)
+        )
+    );
+
+    let source = "x: x + 1;";
+    let (ty, _) = infer(source).unwrap();
+    assert_eq!(
+        ty,
+        Type::Function(
+            Box::new(Var(Var {
+                upper_bounds: Rc::new(RefCell::new(vec![Number])),
+                id: 0,
+                ..Default::default()
+            })),
+            Box::new(Number)
+        )
+    );
+
+    let source = r#"x: x + "hi";"#;
+
+    let (ty, _) = infer(source).unwrap();
+    assert_eq!(
+        ty,
+        Type::Function(
+            Box::new(Var(Var {
+                upper_bounds: Rc::new(RefCell::new(vec![String])),
+                id: 0,
+                ..Default::default()
+            })),
+            Box::new(String)
+        )
+    );
+
+    let source = r#"x: x + ./yeet/;"#;
+
+    let (ty, _) = infer(source).unwrap();
+    assert_eq!(
+        ty,
+        Type::Function(
+            Box::new(Var(Var {
+                upper_bounds: Rc::new(RefCell::new(vec![Path])),
+                id: 0,
+                ..Default::default()
+            })),
+            Box::new(Path)
+        )
+    );
+    // TODO: test errors
+    let source = r#"x: y: x + y;"#;
 }
 
 #[test]
@@ -110,6 +170,79 @@ fn test_bools() {
             }
         );
     }
+
+    let source = "x: x && true;";
+    let (ty, _) = infer(source).unwrap();
+    assert_eq!(
+        ty,
+        Type::Function(
+            Box::new(Var(Var {
+                upper_bounds: Rc::new(RefCell::new(vec![Bool])),
+                id: 0,
+                ..Default::default()
+            })),
+            Box::new(Bool)
+        )
+    );
+}
+
+#[test]
+fn test_comparisons() {
+    // TODO
+}
+
+#[test]
+fn test_record_access() {
+    let source = "x: x.y";
+    let (ty, _) = infer(source).unwrap();
+    assert_eq!(
+        ty,
+        Type::Function(
+            Box::new(Var(Var {
+                upper_bounds: Rc::new(RefCell::new(vec![Record(
+                    [(
+                        "y".to_string(),
+                        Var(Var {
+                            id: 1,
+                            ..Default::default()
+                        })
+                    )]
+                    .into()
+                )])),
+                id: 0,
+                ..Default::default()
+            })),
+            Box::new(Var(Var::new(0, 1)))
+        )
+    );
+
+    let source = "{y = 1;}.y";
+    let (ty, _) = infer(source).unwrap();
+    assert_eq!(ty, Number);
+
+    let source = r#"{y = {z = "hi";};}.y.z"#;
+    let (ty, _) = infer(source).unwrap();
+    assert_eq!(ty, String);
+
+    let source = r#"{y = {};}.y.x"#;
+    let res = infer(source);
+    assert_eq!(
+        res,
+        Err(InferError::MissingRecordField {
+            field: "x".to_string()
+        }
+        .span(&(0..13)))
+    );
+
+    let source = r#"x: {y = {};}.y.x"#;
+    let res = infer(source);
+    assert_eq!(
+        res,
+        Err(InferError::MissingRecordField {
+            field: "x".to_string()
+        }
+        .span(&(3..16)))
+    )
 }
 
 #[test]
@@ -121,7 +254,7 @@ fn test_inherit() {
         Type::Record(
             [(
                 "x".to_string(),
-                Type::Var(Var {
+                Var(Var {
                     lower_bounds: Rc::new(RefCell::new(vec![Number])),
                     id: 1,
                     ..Default::default()
@@ -130,6 +263,83 @@ fn test_inherit() {
             .into()
         )
     );
+
+    let source = "x: {inherit x;};";
+    let (ty, _) = infer(source).unwrap();
+    assert_eq!(
+        ty,
+        Type::Function(
+            Box::new(Var(Var {
+                id: 0,
+                ..Default::default()
+            })),
+            Box::new(Record(
+                [(
+                    "x".to_string(),
+                    Var(Var {
+                        id: 0,
+                        ..Default::default()
+                    })
+                )]
+                .into()
+            ))
+        )
+    );
+
+    let source = "x: {inherit (x) y z;};";
+    let (ty, _) = infer(source).unwrap();
+    assert_eq!(
+        ty,
+        Type::Function(
+            Box::new(Var(Var {
+                id: 0,
+                upper_bounds: Rc::new(RefCell::new(vec![Record(
+                    [
+                        (
+                            "y".to_string(),
+                            Var(Var {
+                                id: 1,
+                                ..Default::default()
+                            })
+                        ),
+                        (
+                            "z".to_string(),
+                            Var(Var {
+                                id: 2,
+                                ..Default::default()
+                            })
+                        )
+                    ]
+                    .into()
+                )])),
+                ..Default::default()
+            })),
+            Box::new(Record(
+                [
+                    (
+                        "y".to_string(),
+                        Var(Var {
+                            id: 1,
+                            ..Default::default()
+                        })
+                    ),
+                    (
+                        "z".to_string(),
+                        Var(Var {
+                            id: 2,
+                            ..Default::default()
+                        })
+                    )
+                ]
+                .into()
+            ))
+        )
+    );
+
+    let source = "{inherit ({x = 1;}) x;};";
+    let (ty, _) = infer(source).unwrap();
+
+    assert_eq!(ty, Record([("x".to_string(), Number)].into()));
 }
 
 #[test]
@@ -138,8 +348,32 @@ fn test_with() {
     let (ty, _) = infer(source).unwrap();
     assert_eq!(ty, Record([("z".to_string(), Number)].into()));
 
-    let _source = "let x = {y = 1;}; in with x; {z = y;};";
+    let source = "let x = {y = 1;}; in with x; {z = y;};";
     infer(source).unwrap();
+    assert_eq!(ty, Record([("z".to_string(), Number)].into()));
+
+    let source = "x: with x; {z = y;};";
+    let (ty, _) = infer(source).unwrap();
+    assert_eq!(
+        ty,
+        Type::Function(
+            Box::new(Var(Var {
+                id: 0,
+                upper_bounds: Rc::new(RefCell::new(vec![Record(
+                    [(
+                        "y".to_string(),
+                        Var(Var {
+                            id: 1,
+                            ..Default::default()
+                        })
+                    )]
+                    .into()
+                )])),
+                ..Default::default()
+            })),
+            Box::new(Record([("z".to_string(), Var(Var::new(0, 1)))].into()))
+        )
+    );
 }
 
 #[test]
@@ -147,6 +381,34 @@ fn test_joining() {
     let source = r#"[1 2] ++ ["hi" "di"];"#;
     let res = infer(source).unwrap();
     assert_eq!(res.0, List(vec![Number, Number, String, String]));
+
+    let source = r#"x: x ++ ["hi" "di"];"#;
+    let res = infer(source).unwrap();
+    assert_eq!(
+        res.0,
+        Type::Function(
+            Box::new(Var(Var {
+                id: 0,
+                upper_bounds: Rc::new(RefCell::new(vec![List(vec![])])),
+                ..Default::default()
+            })),
+            Box::new(List(vec![String, String]))
+        )
+    );
+
+    let source = r#"x: ["hi" "di"] ++ x;"#;
+    let res = infer(source).unwrap();
+    assert_eq!(
+        res.0,
+        Type::Function(
+            Box::new(Var(Var {
+                id: 0,
+                upper_bounds: Rc::new(RefCell::new(vec![List(vec![])])),
+                ..Default::default()
+            })),
+            Box::new(List(vec![String, String]))
+        )
+    );
 
     let source = r#"{ x = 1; } // { y = 2; };"#;
     let res = infer(source).unwrap();
@@ -158,6 +420,35 @@ fn test_joining() {
     let source = r#"{ x = 1; } // { x = 2; };"#;
     let res = infer(source).unwrap();
     assert_eq!(res.0, Record([("x".to_string(), Number)].into()));
+
+    let source = r#"x: x // { x = 2; };"#;
+    let res = infer(source).unwrap();
+    assert_eq!(
+        res.0,
+        Type::Function(
+            Box::new(Var(Var {
+                id: 0,
+                upper_bounds: Rc::new(RefCell::new(vec![Record(HashMap::new())])),
+                ..Default::default()
+            })),
+            Box::new(Record([("x".to_string(), Number)].into()))
+        )
+    );
+
+    let source = r#"x: {x = 2;} // x;"#;
+    let res = infer(source).unwrap();
+
+    assert_eq!(
+        res.0,
+        Type::Function(
+            Box::new(Var(Var {
+                id: 0,
+                upper_bounds: Rc::new(RefCell::new(vec![Record([].into())])),
+                ..Default::default()
+            })),
+            Box::new(Record([("x".to_string(), Number)].into()))
+        )
+    );
 }
 
 #[test]
@@ -171,8 +462,11 @@ fn test_attribute_fallback() {
 fn test_has_attribute() {
     let source = r#"{ x = 1; } ? x"#;
     let (ty, _ast) = infer(source).unwrap();
-    assert_eq!(ty, Type::Bool);
+    assert_eq!(ty, Bool);
 }
+
+#[test]
+fn test_attr_set() {}
 
 #[test]
 fn test_let_binding() {
@@ -180,7 +474,7 @@ fn test_let_binding() {
     let (ty, _ast) = infer(source).unwrap();
     assert_eq!(
         ty,
-        Type::Var(Var {
+        Var(Var {
             lower_bounds: Rc::new(RefCell::new(vec![Record(
                 [("x".to_string(), Number)].into()
             )])),
@@ -188,46 +482,91 @@ fn test_let_binding() {
             ..Default::default()
         })
     );
+
+    let source = r#"let t = { x = 1; }; f = 1; in {inherit f t;};"#;
+    let (ty, _ast) = infer(source).unwrap();
+    assert_eq!(
+        ty,
+        Record(
+            [
+                (
+                    "f".to_string(),
+                    Var(Var {
+                        id: 2,
+                        lower_bounds: Rc::new(RefCell::new(vec![Number])),
+                        ..Default::default()
+                    })
+                ),
+                (
+                    "t".to_string(),
+                    Var(Var {
+                        id: 3,
+                        lower_bounds: Rc::new(RefCell::new(vec![Record(
+                            [("x".to_string(), Number)].into()
+                        )])),
+                        ..Default::default()
+                    })
+                )
+            ]
+            .into()
+        )
+    );
+
+    let source = r#"let t = { x = 1; }; f = t; in {inherit f t;};"#;
+    let (ty, _ast) = infer(source).unwrap();
+    assert_eq!(
+        ty,
+        Record(
+            [
+                (
+                    "f".to_string(),
+                    Var(Var {
+                        id: 2,
+                        upper_bounds: Rc::new(RefCell::new(vec![Var(Var {
+                            id: 3,
+                            lower_bounds: Rc::new(RefCell::new(vec![Record(
+                                [("x".to_string(), Number)].into()
+                            )])),
+                            ..Default::default()
+                        })])),
+                        ..Default::default()
+                    })
+                ),
+                (
+                    "t".to_string(),
+                    Var(Var {
+                        id: 3,
+                        lower_bounds: Rc::new(RefCell::new(vec![Record(
+                            [("x".to_string(), Number)].into()
+                        )])),
+                        ..Default::default()
+                    })
+                )
+            ]
+            .into()
+        )
+    );
 }
 
 #[test]
 fn test_function() {
     let source = r#"let t = x: x; in { t = t; };"#;
-    /* let (ty, _) = infer(source).unwrap();
-
-    if let Type::Record(rec) = &ty {
-        println!(
-            "whyyy {}",
-            rec.iter()
-                .map(|(name, ty)| format!(
-                    "{}: {}",
-                    name,
-                    match ty {
-                        Type::Var(var) =>
-                            var.lower_bounds.borrow().iter().map(|t| t.show()).join(" "),
-                        t => t.show(),
-                    }
-                ))
-                .join("\n")
-        );
-    } else {
-        panic!("Expected record type");
-    }
+    let (ty, _) = infer(source).unwrap();
 
     assert_eq!(
         ty,
         Record(
             [(
                 "t".to_string(),
-                Type::Var(Var {
+                Var(Var {
                     lower_bounds: Rc::new(RefCell::new(vec![Function(
-                        Box::new(Type::Var(Var {
+                        Box::new(Var(Var {
                             lower_bounds: Rc::new(RefCell::new(vec![])),
                             upper_bounds: Rc::new(RefCell::new(vec![])),
                             id: 3,
                             ..Default::default()
                         })),
-                        Box::new(Type::Var(Var {
+                        Box::new(Var(Var {
                             lower_bounds: Rc::new(RefCell::new(vec![])),
                             upper_bounds: Rc::new(RefCell::new(vec![])),
                             id: 4,
@@ -240,12 +579,112 @@ fn test_function() {
             )]
             .into()
         )
-    ); */
+    );
 
-    let source = r#"f: x: f f x"#;
+    // Example taken from the paper
+    let source = r#"f: x: f (f x)"#;
+    let (ty, _) = coalesced(&source).unwrap();
+    assert_eq!(
+        ty.show(),
+        "Var(0) ∧ Var(1) -> (Var(2)) ∧ Var(2) -> (Var(3)) -> (Var(1) -> (Var(3)))".to_string()
+    );
 
-    let (ty, ast) = coalesced(&source).unwrap();
-    println!("{}", ty.show())
+    let source = r#"{ x, y }: y"#;
+    let (ty, _) = infer(&source).unwrap();
+    assert_eq!(
+        ty,
+        Type::Function(
+            Box::new(Type::Pattern(
+                [
+                    ("x".to_string(), Type::Undefined),
+                    ("y".to_string(), Type::Undefined)
+                ]
+                .into(),
+                false
+            )),
+            Box::new(Var(Var {
+                id: 1,
+                ..Default::default()
+            }))
+        )
+    );
+
+    let source = r#"{ x ? 1, y }: x"#;
+    let (ty, _) = infer(&source).unwrap();
+
+    assert_eq!(
+        ty,
+        Type::Function(
+            Box::new(Type::Pattern(
+                [
+                    ("x".to_string(), Type::Optional(Box::new(Type::Number))),
+                    ("y".to_string(), Type::Undefined)
+                ]
+                .into(),
+                false
+            )),
+            Box::new(Var(Var {
+                id: 0,
+                upper_bounds: Rc::new(RefCell::new(vec![Type::Number])),
+                ..Default::default()
+            }))
+        )
+    );
+
+    let source = r#"{ x ? 1, y } @ bind: bind"#;
+    let (ty, _) = infer(&source).unwrap();
+    assert_eq!(
+        ty,
+        Type::Function(
+            Box::new(Type::Pattern(
+                [
+                    ("x".to_string(), Type::Optional(Box::new(Type::Number))),
+                    ("y".to_string(), Type::Undefined)
+                ]
+                .into(),
+                false
+            )),
+            Box::new(Var(Var {
+                id: 2,
+                upper_bounds: Rc::new(RefCell::new(vec![Type::Pattern(
+                    [
+                        ("x".to_string(), Type::Optional(Box::new(Type::Number))),
+                        ("y".to_string(), Type::Undefined)
+                    ]
+                    .into(),
+                    false
+                )])),
+                ..Default::default()
+            }))
+        )
+    );
+
+    let source = r#"{ x ? 1, y, ... } @ bind: bind"#;
+    let (ty, _) = infer(&source).unwrap();
+    assert_eq!(
+        ty,
+        Type::Function(
+            Box::new(Type::Pattern(
+                [
+                    ("x".to_string(), Type::Optional(Box::new(Type::Number))),
+                    ("y".to_string(), Type::Undefined)
+                ]
+                .into(),
+                true
+            )),
+            Box::new(Var(Var {
+                id: 2,
+                upper_bounds: Rc::new(RefCell::new(vec![Type::Record(
+                    [
+                        ("x".to_string(), Type::Optional(Box::new(Type::Number))),
+                        ("y".to_string(), Type::Undefined)
+                    ]
+                    .into()
+                )])),
+                ..Default::default()
+            }))
+        )
+    );
 }
 
 #[test]

@@ -8,11 +8,11 @@ use crate::{infer_error, InferResult};
 /// The name should be a debrujin index and the path is used for set accesses.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Var {
-    pub lower_bounds: Rc<RefCell<Vec<Type>>>,
-    pub upper_bounds: Rc<RefCell<Vec<Type>>>,
     pub level: usize,
     pub name: String,
     pub id: usize,
+    pub lower_bounds: Rc<RefCell<Vec<Type>>>,
+    pub upper_bounds: Rc<RefCell<Vec<Type>>>,
 }
 
 impl std::hash::Hash for Var {
@@ -27,6 +27,18 @@ impl Var {
             level,
             id,
             ..Default::default()
+        }
+    }
+
+    pub fn as_record(&self) -> Option<HashMap<String, Type>> {
+        let up = self.upper_bounds.borrow();
+        if up.len() == 1 {
+            match up.first().unwrap() {
+                Type::Record(rc) => Some(rc.clone()),
+                _ => None,
+            }
+        } else {
+            None
         }
     }
 }
@@ -121,28 +133,6 @@ impl Type {
         }
     }
 
-    /// Try to convert this type to a list.
-    pub fn into_list(self) -> InferResult<Vec<Type>> {
-        match self {
-            Type::List(elems) => Ok(elems),
-            t => infer_error(TypeName::List, t.get_name()),
-        }
-    }
-
-    pub fn into_record(self) -> InferResult<HashMap<String, Type>> {
-        match self {
-            Type::Record(fields) => Ok(fields),
-            t => infer_error(TypeName::Record, t.get_name()),
-        }
-    }
-
-    /// Try to convert this type to a function.
-    pub fn into_function(self) -> InferResult<(Type, Type)> {
-        match self {
-            Type::Function(box lhs, box rhs) => Ok((lhs, rhs)),
-            t => infer_error(TypeName::Function, t.get_name()),
-        }
-    }
 
     pub fn is_var(&self) -> bool {
         matches!(self, Type::Var(_))

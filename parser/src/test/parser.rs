@@ -64,6 +64,24 @@ fn test_set_pattern() {
     let (input, ast) = set_pattern(NixTokens(&tokens)).unwrap();
     assert!(input.0.is_empty());
     assert_eq!(ast, (vec![], false));
+
+    let tokens = lex("{ x ? 1 }");
+    let (input, ast) = set_pattern(NixTokens(&tokens)).unwrap();
+    assert!(input.0.is_empty());
+    assert_eq!(
+        ast,
+        (
+            vec![PatternElement::DefaultIdentifier {
+                identifier: Range { start: 2, end: 3 },
+                span: Range { start: 2, end: 7 },
+                ast: Ast::Int {
+                    val: 1,
+                    span: Range { start: 6, end: 7 }
+                },
+            }],
+            false
+        )
+    );
 }
 
 #[test]
@@ -72,6 +90,30 @@ fn test_pattern() {
     let (input, ast) = pattern(NixTokens(&tokens)).unwrap();
     assert!(input.0.is_empty());
     assert_eq!(ast, Pattern::Identifier(Range { start: 0, end: 6 }));
+
+    let tokens = lex("{ x } @ recl");
+    let (input, ast) = pattern(NixTokens(&tokens)).unwrap();
+    assert!(input.0.is_empty());
+    assert_eq!(
+        ast,
+        Pattern::Set {
+            patterns: vec![PatternElement::Identifier(Range { start: 2, end: 3 })],
+            is_wildcard: false,
+            name: Some(Range { start: 8, end: 12 }),
+        }
+    );
+
+    let tokens = lex("recl @ { x }");
+    let (input, ast) = pattern(NixTokens(&tokens)).unwrap();
+    assert!(input.0.is_empty());
+    assert_eq!(
+        ast,
+        Pattern::Set {
+            patterns: vec![PatternElement::Identifier(Range { start: 9, end: 10 })],
+            is_wildcard: false,
+            name: Some(Range { start: 0, end: 4 }),
+        }
+    );
 }
 
 #[test]

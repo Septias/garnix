@@ -57,13 +57,16 @@ pub(crate) fn ident(input: NixTokens<'_>) -> PResult<'_, Span> {
 
 /// Parse an identifier with a default value.
 pub(crate) fn ident_default_pattern(input: NixTokens<'_>) -> PResult<'_, PatternElement> {
-    spanned(
-        tuple((ident, token(Question), cut(expr))),
-        |span, (identifier, _, ast)| PatternElement::DefaultIdentifier {
-            identifier,
-            span,
-            ast,
-        },
+    context(
+        "Default pattern",
+        spanned(
+            tuple((ident, token(Question), cut(expr))),
+            |span, (identifier, _, ast)| PatternElement::DefaultIdentifier {
+                identifier,
+                span,
+                ast,
+            },
+        ),
     )(input)
 }
 
@@ -101,8 +104,8 @@ pub(crate) fn set_pattern(input: NixTokens<'_>) -> PResult<'_, (Vec<PatternEleme
     let elements = separated_list1(
         token(Comma),
         alt((
-            ident.map(|ast| PatternElement::Identifier(ast)),
             ident_default_pattern,
+            ident.map(|ast| PatternElement::Identifier(ast)),
         )),
     );
 
@@ -128,19 +131,22 @@ pub(crate) fn set_pattern(input: NixTokens<'_>) -> PResult<'_, (Vec<PatternEleme
 /// pattern = identifier | set-pattern
 pub(crate) fn pattern(input: NixTokens<'_>) -> PResult<'_, Pattern> {
     alt((
-        ident.map(|ast| Pattern::Identifier(ast)),
-        pair(opt(terminated(ident, token(Token::At))), set_pattern).map(
+        pair(terminated(ident, token(Token::At)), set_pattern).map(
             |(name, (patterns, is_wildcard))| Pattern::Set {
                 patterns,
-                name,
+                name: Some(name),
                 is_wildcard,
             },
         ),
-        pair(set_pattern, opt(terminated(ident, token(Token::At)))).map(
-            |((patterns, is_wildcard), name)| Pattern::Set {
-                patterns,
-                name,
-                is_wildcard,
+        ident.map(|ast| Pattern::Identifier(ast)),
+        pair(set_pattern, opt(preceded(token(Token::At), ident))).map(
+            |((patterns, is_wildcard), name)| {
+                println!("name: {:?}", name);
+                Pattern::Set {
+                    patterns,
+                    name,
+                    is_wildcard,
+                }
             },
         ),
     ))(input)
