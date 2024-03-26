@@ -21,6 +21,8 @@ pub enum InferError {
     ConversionError { from: String, to: &'static str },
     #[error("Can't infer type of comment")]
     UnexpectedComment,
+    #[error("The supplied argument has too many fields {field}")]
+    TooManyField { field: String },
     #[error("Unknown function call")]
     UnknownFunction,
     #[error("Function has to accept at least one argument")]

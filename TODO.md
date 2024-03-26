@@ -1,6 +1,7 @@
 ## TODO (17.03)
 
 - Type Inference
+
   - [x] type_term
     - [x] operators
     - [x] functions
@@ -20,6 +21,7 @@
   - [] Check extend
   - [] List subsumption
   - [] List type creation
+  - [] Remove Undefined
 
 - Parser
   - [x] Handle `inherit (lib)`
@@ -37,20 +39,13 @@
   - [x] Ausblick
   - [x] Nice references (NixOs, Dolan etc.)
   - [x] check bool naming in typing rules
-  - [] Interpolation
-  - [] Lengthen introducition
-  - [] Examples section
-  - [] Soundness
-
-## Zentrale Fragen
-
-- Allow intersections in negative positions?
+  - [] Examples section (morgen)
+  - [] Typing rules finalisieren
+  - [] out: String interpolation
 
 ## Improvements
-
 - Nice Verbose error
 - Use own implementation of Span
 
 ## Restrictions
-
 - Comment positions

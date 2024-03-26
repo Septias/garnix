@@ -41,6 +41,18 @@ impl Var {
             None
         }
     }
+
+    pub fn as_list(&self) -> Option<Vec<Type>> {
+        let up = self.upper_bounds.borrow();
+        if up.len() == 1 {
+            match up.first().unwrap() {
+                Type::List(ls) => Some(ls.clone()),
+                _ => None,
+            }
+        } else {
+            None
+        }
+    }
 }
 
 pub type PolarVar<'a> = (Var, bool);
@@ -65,7 +77,7 @@ pub enum Type {
     List(Vec<Type>),
     Record(HashMap<String, Type>),
     Optional(Box<Type>),
-    Pattern(HashMap<String, Type>, bool),
+    Pattern(HashMap<String, (Type, Option<Type>)>, bool),
 
     // Complexe Types only created by simplification
     Union(Box<Type>, Box<Type>),
@@ -133,7 +145,6 @@ impl Type {
         }
     }
 
-
     pub fn is_var(&self) -> bool {
         matches!(self, Type::Var(_))
     }
@@ -186,7 +197,7 @@ impl Type {
                 "{{ {} }}",
                 fields
                     .iter()
-                    .map(|(k, v)| format!("{}: {}", k, v.show()))
+                    .map(|(k, (v, _))| format!("{}: {}", k, v.show()))
                     .join(", ")
             ),
         }
