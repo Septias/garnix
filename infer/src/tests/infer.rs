@@ -8,6 +8,8 @@ fn test_primitve() {
     let (ty, _) = infer(source).unwrap();
     assert_eq!(ty, Type::Record(HashMap::new()));
 
+    let source = "rec {f = x: x + y; y = 1;}";
+
     let source = "{ x = 2;}";
     let (ty, _) = infer(source).unwrap();
     assert_eq!(ty, Record([("x".to_string(), Number)].into()));
