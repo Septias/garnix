@@ -94,10 +94,6 @@ impl Context {
         res
     }
 
-    pub(crate) fn fresh_context_var(&self, lvl: usize) -> ContextType {
-        ContextType::Type(Type::Var(self.fresh_var(lvl)))
-    }
-
     pub(crate) fn set_with(&mut self, with: Type) {
         self.with = Some(with);
     }

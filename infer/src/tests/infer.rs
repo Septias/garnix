@@ -990,8 +990,18 @@ fn test_conditionals() {
     assert_eq!(ty, Number);
 
     let source = r#"x: if x then 1 else 2;"#;
-    let source = r#"x: if true then x else 2;"#;
-    let source = r#"x: if true then 1 else x;"#;
+    let (ty, _) = infer(source).unwrap();
+    assert_eq!(
+        ty,
+        Type::Function(
+            Box::new(Var(Var {
+                upper_bounds: Rc::new(RefCell::new(vec![Bool])),
+                id: 0,
+                ..Default::default()
+            })),
+            Box::new(Number)
+        )
+    );
 
     let source = r#"if "true" then 1 else 2;"#;
     let res = infer(source);

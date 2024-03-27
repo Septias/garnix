@@ -806,14 +806,20 @@ fn type_term<'a>(ctx: &mut Context, term: &'a Ast, lvl: usize) -> Result<Type, S
             span,
         } => {
             let ty = type_term(ctx, condition, lvl)?;
-            if ty != Type::Bool {
-                return Err(SpannedError {
-                    error: InferError::TypeMismatch {
-                        expected: TypeName::Bool,
-                        found: ty.get_name(),
-                    },
-                    span: span.clone(),
-                });
+            match ty {
+                Type::Var(_) => {
+                    constrain(ctx, &ty, &Type::Bool).map_err(|e| e.span(condition.get_span()))?;
+                }
+                Type::Bool => (),
+                _ => {
+                    return Err(SpannedError {
+                        error: InferError::TypeMismatch {
+                            expected: TypeName::Bool,
+                            found: ty.get_name(),
+                        },
+                        span: span.clone(),
+                    })
+                }
             }
             let ty1 = type_term(ctx, expr1, lvl)?;
             let ty2 = type_term(ctx, expr2, lvl)?;
@@ -1029,7 +1035,7 @@ fn coalesce_type_inner(
                         .fold(tyvar.clone(), |a, b| Type::Inter(Box::new(a), Box::new(b)))
                 };
                 if let Some(rec) = rec.get(&pol_var) {
-                    Type::Recursive(var.clone(), Box::new(res))
+                    Type::Recursive(rec.clone(), Box::new(res))
                 } else {
                     res
                 }

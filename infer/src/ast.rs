@@ -589,6 +589,6 @@ fn transform_ast(value: ParserAst, source: &str) -> Ast {
         ParserAst::Comment(_) | ParserAst::DocComment(_) | ParserAst::LineComment(_) => {
             unimplemented!()
         }
-        ParserAst::SearchPath(path) => todo!(),
+        ParserAst::SearchPath(_path) => todo!(),
     }
 }
