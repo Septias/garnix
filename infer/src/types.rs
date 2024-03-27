@@ -132,7 +132,7 @@ impl Type {
             Type::List(ls) => ls.iter().map(|t| t.level()).max().unwrap_or(0),
             Type::Record(rc) => rc.values().map(|t| t.level()).max().unwrap_or(0),
             Type::Pattern(fields, _) => fields.values().map(|(t, _)| t.level()).max().unwrap_or(0),
-            Type::Union(left, right) => left.level().max(right.level()), 
+            Type::Union(left, right) => left.level().max(right.level()),
             Type::Bool
             | Type::Number
             | Type::String
