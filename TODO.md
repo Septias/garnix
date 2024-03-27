@@ -1,4 +1,4 @@
-## TODO (17.03)
+##
 
 - Type Inference
 
@@ -12,22 +12,37 @@
     - [x] if-statements
     - [] Recursive records
   - [x] constrain
-    - [] functions with pattern
+    - [x] functions with pattern
+    - [] recursive
+    - [] unions
   - [x] extrude
+    - [] Pattern
+    - [] Union
+    - [] Recursive
   - [x] fresh_var
   - [x] freshen_above
+    - [] Recursive
   - [x] coalsce_type
+    - [] pattern
+    - [] union
+    - [] recursive
+    - [] cache
+    - [] rec
   - [x] polymorphic type
-  - [] Check extend
-  - [] List subsumption
-  - [] List type creation
-  - [] Remove Undefined
+  - [x] List subsumption
+  - [x] List type creation
+  - [x] fix let-binding order
+  - [x] fix argument type fordwarding
 
 - Parser
   - [x] Handle `inherit (lib)`
   - [x] Don't use expr as base
   - [x] Error reporting
   - [] out: String interpolation
+
+- LSP
+  - [] Error reporting
+  - [] inlay hints
 
 - Writing
   - [x] Abstract
@@ -39,9 +54,9 @@
   - [x] Ausblick
   - [x] Nice references (NixOs, Dolan etc.)
   - [x] check bool naming in typing rules
-  - [] Examples section (morgen)
-  - [] Typing rules finalisieren
-  - [] out: String interpolation
+  - [x] Typing rules finalisieren
+  - [x] More subsumption rules
+  - [] Examples section
 
 ## Improvements
 - Nice Verbose error

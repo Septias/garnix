@@ -9,7 +9,6 @@ use crate::{infer_error, InferResult};
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Var {
     pub level: usize,
-    pub name: String,
     pub id: usize,
     pub lower_bounds: Rc<RefCell<Vec<Type>>>,
     pub upper_bounds: Rc<RefCell<Vec<Type>>>,
@@ -132,14 +131,15 @@ impl Type {
             Type::Function(lhs, rhs) => lhs.level().max(rhs.level()),
             Type::List(ls) => ls.iter().map(|t| t.level()).max().unwrap_or(0),
             Type::Record(rc) => rc.values().map(|t| t.level()).max().unwrap_or(0),
+            Type::Pattern(fields, _) => fields.values().map(|(t, _)| t.level()).max().unwrap_or(0),
+            Type::Union(left, right) => left.level().max(right.level()), 
             Type::Bool
             | Type::Number
             | Type::String
             | Type::Path
             | Type::Null
-            | Type::Pattern(..)
             | Type::Undefined => 0,
-            Type::Top | Type::Bottom | Type::Union(..) | Type::Inter(..) | Type::Recursive(..) => {
+            Type::Top | Type::Bottom | Type::Inter(..) | Type::Recursive(..) => {
                 panic!("Not a simple type")
             }
         }
@@ -194,7 +194,7 @@ impl Type {
             Type::Optional(t) => format!("Optional<{}>", t.show()),
             Type::Recursive(ident, ty) => format!("Rec({}) {}", ident.id, ty.show()),
             Type::Pattern(fields, _) => format!(
-                "{{ {} }}",
+                "Pat: {{ {} }}",
                 fields
                     .iter()
                     .map(|(k, (v, _))| format!("{}: {}", k, v.show()))

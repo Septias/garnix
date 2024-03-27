@@ -9,19 +9,19 @@ use parser::ast::BinOp;
 use std::collections::{HashMap, HashSet};
 
 pub fn constrain(context: &Context, lhs: &Type, rhs: &Type) -> InferResult<()> {
-    constrain_inner(context, lhs, rhs, HashSet::new())
+    constrain_inner(context, lhs, rhs, &mut HashSet::new())
 }
 
 fn constrain_inner<'a>(
     context: &Context,
     lhs: &'a Type,
     rhs: &'a Type,
-    mut cache: HashSet<(&'a Type, &'a Type)>,
+    cache: &mut HashSet<(Type, Type)>,
 ) -> InferResult<()> {
     if lhs == rhs {
         return Ok(());
     }
-    let lhs_rhs = (lhs, rhs);
+    let lhs_rhs = (lhs.clone(), rhs.clone());
 
     match (lhs, rhs) {
         (Type::Var(..), _) | (_, Type::Var(..)) => {
@@ -35,14 +35,14 @@ fn constrain_inner<'a>(
 
     match (lhs, rhs) {
         (Type::Function(l0, r0), Type::Function(l1, r1)) => {
-            constrain_inner(context, l1, l0, cache.clone())?;
+            constrain_inner(context, l1, l0, cache)?;
             constrain_inner(context, r0, r1, cache)?;
         }
 
         (Type::Record(fs0), Type::Record(fs1)) => {
             for (n1, t1) in fs1 {
                 match fs0.iter().find(|(n0, _)| *n0 == n1) {
-                    Some((_, t0)) => constrain_inner(context, t0, t1, cache.clone())?,
+                    Some((_, t0)) => constrain_inner(context, t0, t1, cache)?,
                     None => return Err(InferError::MissingRecordField { field: n1.clone() }),
                 }
             }
@@ -52,7 +52,7 @@ fn constrain_inner<'a>(
             if *wildcart {
                 for (pat, (t1, optional)) in pat.iter() {
                     match rcd.iter().find(|(n0, _)| *n0 == pat) {
-                        Some((_, t0)) => constrain_inner(context, t0, t1, cache.clone())?,
+                        Some((_, t0)) => constrain_inner(context, t0, t1, cache)?,
                         None => {
                             if optional.is_none() {
                                 return Err(InferError::MissingRecordField { field: pat.clone() });
@@ -65,7 +65,10 @@ fn constrain_inner<'a>(
                 for (n1, (t1, optional)) in pat.iter() {
                     match rcd.iter().find(|(n0, _)| *n0 == n1) {
                         Some((_, t0)) => {
-                            constrain_inner(context, t1, t1, cache.clone())?;
+                            if let Some(opt) = optional {
+                                constrain_inner(context, t0, opt, cache)?;
+                            }
+                            constrain_inner(context, t0, t1, cache)?;
                             keys.remove(n1);
                         }
                         None => {
@@ -76,7 +79,7 @@ fn constrain_inner<'a>(
                     }
                 }
                 if !keys.is_empty() {
-                    return Err(InferError::MissingRecordField {
+                    return Err(InferError::TooManyField {
                         field: keys.into_iter().next().unwrap().clone(),
                     });
                 }
@@ -87,24 +90,24 @@ fn constrain_inner<'a>(
             constrain_inner(context, o0, o1, cache)?;
         }
 
+        (Type::List(ls1), Type::List(ls2)) if ls1.len() == 1 && ls2.len() == 1 => {
+            constrain_inner(context, &ls1[0], &ls2[0], cache)?;
+        }
+
         (Type::Bool, Type::Bool)
         | (Type::Number, Type::Number)
         | (Type::String, Type::String)
         | (Type::Path, Type::Path)
         | (Type::Null, Type::Null)
-        | (Type::List(..), Type::List(..))
-        | (Type::Undefined, Type::Undefined)
         | (Type::Undefined, _) => (),
 
         // application?
         // function constraints
         // selection
         (Type::Var(lhs), rhs) if rhs.level() <= lhs.level => {
-            if let Type::Pattern(pat, bool) = rhs {};
-
             lhs.upper_bounds.borrow_mut().push(rhs.clone());
             for lower_bound in lhs.lower_bounds.borrow().iter() {
-                constrain_inner(context, lower_bound, rhs, cache.clone())?;
+                constrain_inner(context, lower_bound, rhs, cache)?;
             }
         }
 
@@ -113,15 +116,15 @@ fn constrain_inner<'a>(
         (lhs, Type::Var(rhs)) if lhs.level() <= rhs.level => {
             rhs.lower_bounds.borrow_mut().push(lhs.clone());
             for upper_bound in rhs.upper_bounds.borrow().iter() {
-                constrain_inner(context, lhs, upper_bound, cache.clone())?;
+                constrain_inner(context, lhs, upper_bound, cache)?;
             }
         }
         (Type::Var(_), rhs) => {
-            let rhs_extruded = extrude(context, rhs, false, lhs.level(), HashMap::new());
+            let rhs_extruded = extrude(context, rhs, false, lhs.level(), &mut HashMap::new());
             constrain_inner(context, lhs, &rhs_extruded, cache)?;
         }
         (lhs, Type::Var(_)) => {
-            let lhs_extruded = extrude(context, lhs, true, rhs.level(), HashMap::new());
+            let lhs_extruded = extrude(context, lhs, true, rhs.level(), &mut HashMap::new());
             constrain_inner(context, &lhs_extruded, rhs, cache)?;
         }
 
@@ -141,7 +144,7 @@ fn extrude<'a>(
     ty: &'a Type,
     pol: bool,
     lvl: usize,
-    mut c: HashMap<PolarVar, Var>,
+    c: &mut HashMap<PolarVar, Var>,
 ) -> Type {
     if ty.level() <= lvl {
         return ty.clone();
@@ -162,7 +165,7 @@ fn extrude<'a>(
                 Type::Var(nvs.clone())
             } else {
                 let nvs = context.fresh_var(lvl);
-                c.insert(pol_var, nvs.clone()); // check
+                c.insert(pol_var, nvs.clone()); // TODO: check
 
                 if pol {
                     vs.upper_bounds.borrow_mut().push(Type::Var(nvs.clone()));
@@ -170,7 +173,7 @@ fn extrude<'a>(
                         .lower_bounds
                         .borrow()
                         .iter()
-                        .map(|t| extrude(context, t, pol, lvl, c.clone()))
+                        .map(|t| extrude(context, t, pol, lvl, c))
                         .collect();
                 } else {
                     vs.lower_bounds.borrow_mut().push(Type::Var(nvs.clone()));
@@ -178,7 +181,7 @@ fn extrude<'a>(
                         .upper_bounds
                         .borrow()
                         .iter()
-                        .map(|t| extrude(context, t, pol, lvl, c.clone()))
+                        .map(|t| extrude(context, t, pol, lvl, c))
                         .collect();
                 }
 
@@ -187,18 +190,18 @@ fn extrude<'a>(
         }
 
         Type::Function(l, r) => Type::Function(
-            Box::new(extrude(context, l, !pol, lvl, c.clone())),
+            Box::new(extrude(context, l, !pol, lvl, c)),
             Box::new(extrude(context, r, pol, lvl, c)),
         ),
         Type::Record(fs) => Type::Record(
             fs.iter()
-                .map(|(name, t)| (name.clone(), extrude(context, t, pol, lvl, c.clone())))
+                .map(|(name, t)| (name.clone(), extrude(context, t, pol, lvl, c)))
                 .collect(),
         ),
 
         Type::List(ls) => Type::List(
             ls.iter()
-                .map(|t| extrude(context, t, pol, lvl, c.clone()))
+                .map(|t| extrude(context, t, pol, lvl, c))
                 .collect(),
         ),
         Type::Optional(ty) => Type::Optional(Box::new(extrude(context, ty, pol, lvl, c))),
@@ -209,7 +212,7 @@ fn extrude<'a>(
 }
 
 pub(crate) fn freshen_above(context: &Context, ty: &Type, lim: usize, lvl: usize) -> Type {
-    freshen(context, &ty, lim, lvl, HashMap::new())
+    freshen(context, &ty, lim, lvl, &mut HashMap::new())
 }
 
 fn freshen<'a>(
@@ -217,12 +220,11 @@ fn freshen<'a>(
     ty: &'a Type,
     lim: usize,
     lvl: usize,
-    mut freshened: HashMap<&'a Var, Var>,
+    freshened: &mut HashMap<Var, Var>,
 ) -> Type {
     if ty.level() <= lim {
         return ty.clone();
     }
-
     match ty {
         Type::Var(var) => Type::Var(freshened.get(var).cloned().unwrap_or_else(|| {
             let new_v = context.fresh_var(lvl);
@@ -230,48 +232,59 @@ fn freshen<'a>(
                 .lower_bounds
                 .borrow()
                 .iter()
-                .map(|ty| freshen(context, ty, lim, lvl, freshened.clone()))
+                .map(|ty| freshen(context, ty, lim, lvl, freshened))
                 .collect();
             let upper = var
                 .upper_bounds
                 .borrow()
                 .iter()
-                .map(|ty| freshen(context, ty, lim, lvl, freshened.clone()))
+                .map(|ty| freshen(context, ty, lim, lvl, freshened))
                 .collect();
             *new_v.lower_bounds.borrow_mut() = lower;
             *new_v.upper_bounds.borrow_mut() = upper;
-            freshened.insert(var, new_v.clone());
+            freshened.insert(var.clone(), new_v.clone());
             new_v
         })),
-        Type::Number
-        | Type::Bool
-        | Type::String
-        | Type::Path
-        | Type::Null
-        | Type::Undefined
-        | Type::Pattern(..) => ty.clone(),
-        Type::Function(ty1, ty2) => Type::Function(
-            Box::new(freshen(context, ty1, lim, lvl, freshened.clone())),
-            Box::new(freshen(context, ty2, lim, lvl, freshened)),
-        ),
+        Type::Function(ty1, ty2) => {
+            let left = freshen(context, ty1, lim, lvl, freshened);
+            let right = freshen(context, ty2, lim, lvl, freshened);
+            Type::Function(Box::new(left), Box::new(right))
+        }
         Type::List(list) => Type::List(
             list.iter()
-                .map(|t| freshen(context, t, lim, lvl, freshened.clone()))
+                .map(|t| freshen(context, t, lim, lvl, freshened))
                 .collect(),
         ),
         Type::Record(rc) => Type::Record(
             rc.iter()
-                .map(|(name, ty)| {
+                .map(|(name, ty)| (name.clone(), freshen(context, ty, lim, lvl, freshened)))
+                .collect(),
+        ),
+        Type::Pattern(pat, wildcart) => Type::Pattern(
+            pat.iter()
+                .map(|(name, (ty, opt))| {
                     (
                         name.clone(),
-                        freshen(context, ty, lim, lvl, freshened.clone()),
+                        (
+                            freshen(context, ty, lim, lvl, freshened),
+                            opt.as_ref()
+                                .map(|opt| freshen(context, opt, lim, lvl, freshened)),
+                        ),
                     )
                 })
                 .collect(),
+            *wildcart,
         ),
-        Type::Optional(opt) => Type::Optional(Box::new(freshen(context, opt, lim, lvl, freshened))),
 
-        Type::Top | Type::Bottom | Type::Union(_, _) | Type::Inter(_, _) | Type::Recursive(..) => {
+        Type::Optional(opt) => Type::Optional(Box::new(freshen(context, opt, lim, lvl, freshened))),
+        Type::Number | Type::Bool | Type::String | Type::Path | Type::Null | Type::Undefined => {
+            ty.clone()
+        }
+        Type::Union(left, right) => Type::Union(
+            Box::new(freshen(context, left, lim, lvl, freshened)),
+            Box::new(freshen(context, right, lim, lvl, freshened)),
+        ),
+        Type::Top | Type::Bottom | Type::Inter(_, _) | Type::Recursive(..) => {
             unreachable!()
         }
     }
@@ -752,7 +765,6 @@ fn type_term<'a>(ctx: &mut Context, term: &'a Ast, lvl: usize) -> Result<Type, S
                     ty
                 }
             };
-
             let ret = ctx.with_scope(added, |context| type_term(context, body, lvl))?;
             println!(
                 "function type: {}",
@@ -829,12 +841,21 @@ fn type_term<'a>(ctx: &mut Context, term: &'a Ast, lvl: usize) -> Result<Type, S
             type_term(ctx, expr, lvl)
         }
 
-        Ast::List { exprs, span: _ } => Ok(Type::List(
-            exprs
+        Ast::List { exprs, span: _ } => Ok({
+            let expr = exprs
                 .iter()
                 .flat_map(|ast| type_term(ctx, ast, lvl))
-                .collect(),
-        )),
+                .collect_vec();
+
+            if let Some(fst) = expr.first() {
+                let homo = expr.iter().fold(true, |acc, r| acc && r == fst);
+                if homo {
+                    return Ok(Type::List(vec![fst.clone()]));
+                }
+            }
+
+            Type::List(expr)
+        }),
 
         // Primitives
         Ast::NixString(_) => Ok(String),
@@ -1042,7 +1063,12 @@ fn coalesce_type_inner(
         Type::Optional(o) => Type::Optional(Box::new(coalesce_type_inner(
             context, o, polarity, rec, processing,
         ))),
-        _ => unreachable!(),
+        Type::Top
+        | Type::Bottom
+        | Type::Pattern(_, _)
+        | Type::Union(_, _)
+        | Type::Inter(_, _)
+        | Type::Recursive(_, _) => unreachable!(),
     }
 }
 

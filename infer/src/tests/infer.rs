@@ -37,9 +37,13 @@ fn test_primitve() {
 
     let source = "{ x = [2 1];}";
     let (ty, _) = infer(source).unwrap();
+    assert_eq!(ty, Record([("x".to_string(), List(vec![Number]))].into()));
+
+    let source = r#"{ x = ["hi" 1];}"#;
+    let (ty, _) = infer(source).unwrap();
     assert_eq!(
         ty,
-        Record([("x".to_string(), List(vec![Number, Number]))].into())
+        Record([("x".to_string(), List(vec![String, Number]))].into())
     );
 
     let source = "{ x = {y = 1;};}";
@@ -421,7 +425,7 @@ fn test_with() {
 fn test_joining() {
     let source = r#"[1 2] ++ ["hi" "di"];"#;
     let res = infer(source).unwrap();
-    assert_eq!(res.0, List(vec![Number, Number, String, String]));
+    assert_eq!(res.0, List(vec![Number, String]));
 
     let source = r#"x: x ++ ["hi" "di"];"#;
     let res = infer(source).unwrap();
@@ -433,7 +437,7 @@ fn test_joining() {
                 upper_bounds: Rc::new(RefCell::new(vec![List(vec![])])),
                 ..Default::default()
             })),
-            Box::new(List(vec![String, String]))
+            Box::new(List(vec![String]))
         )
     );
 
@@ -447,7 +451,7 @@ fn test_joining() {
                 upper_bounds: Rc::new(RefCell::new(vec![List(vec![])])),
                 ..Default::default()
             })),
-            Box::new(List(vec![String, String]))
+            Box::new(List(vec![String]))
         )
     );
 
@@ -630,13 +634,9 @@ fn test_let_binding() {
                     "f".to_string(),
                     Var(Var {
                         id: 2,
-                        upper_bounds: Rc::new(RefCell::new(vec![Var(Var {
-                            id: 3,
-                            lower_bounds: Rc::new(RefCell::new(vec![Record(
-                                [("x".to_string(), Number)].into()
-                            )])),
-                            ..Default::default()
-                        })])),
+                        lower_bounds: Rc::new(RefCell::new(vec![Record(
+                            [("x".to_string(), Number)].into()
+                        )])),
                         ..Default::default()
                     })
                 ),
@@ -647,6 +647,13 @@ fn test_let_binding() {
                         lower_bounds: Rc::new(RefCell::new(vec![Record(
                             [("x".to_string(), Number)].into()
                         )])),
+                        upper_bounds: Rc::new(RefCell::new(vec![Var(Var {
+                            id: 4,
+                            lower_bounds: Rc::new(RefCell::new(vec![Record(
+                                [("x".to_string(), Number)].into()
+                            )])),
+                            ..Default::default()
+                        })])),
                         ..Default::default()
                     })
                 )
@@ -665,13 +672,9 @@ fn test_let_binding() {
                     "f".to_string(),
                     Var(Var {
                         id: 2,
-                        upper_bounds: Rc::new(RefCell::new(vec![Var(Var {
-                            id: 3,
-                            lower_bounds: Rc::new(RefCell::new(vec![Record(
-                                [("x".to_string(), Number)].into()
-                            )])),
-                            ..Default::default()
-                        })])),
+                        lower_bounds: Rc::new(RefCell::new(vec![Record(
+                            [("x".to_string(), Number)].into()
+                        )])),
                         ..Default::default()
                     })
                 ),
@@ -682,6 +685,13 @@ fn test_let_binding() {
                         lower_bounds: Rc::new(RefCell::new(vec![Record(
                             [("x".to_string(), Number)].into()
                         )])),
+                        upper_bounds: Rc::new(RefCell::new(vec![Var(Var {
+                            id: 4,
+                            lower_bounds: Rc::new(RefCell::new(vec![Record(
+                                [("x".to_string(), Number)].into()
+                            )])),
+                            ..Default::default()
+                        })])),
                         ..Default::default()
                     })
                 )
@@ -689,10 +699,14 @@ fn test_let_binding() {
             .into()
         )
     );
+
+    let source = r#"let t = t + 1; in t;"#;
+    let (ty, _) = coalesced(source).unwrap();
+    println!("{:?}", ty.show());
 }
 
 #[test]
-fn test_function() {
+fn test_lambda() {
     let source = r#"let t = x: x; in { t = t; };"#;
     let (ty, _) = infer(source).unwrap();
 
@@ -712,7 +726,7 @@ fn test_function() {
                         Box::new(Var(Var {
                             lower_bounds: Rc::new(RefCell::new(vec![])),
                             upper_bounds: Rc::new(RefCell::new(vec![])),
-                            id: 4,
+                            id: 3,
                             ..Default::default()
                         }))
                     )])),
@@ -841,24 +855,108 @@ fn test_application() {
     assert_eq!(
         ty,
         Var(Var {
-            id: 5,
-            upper_bounds: Rc::new(RefCell::new(vec![])),
-            ..Default::default()
-        })
-    );
-
-    let source = "let f = { x }: x; in f { x = 1;};";
-    let (ty, _) = infer(source).unwrap();
-    assert_eq!(
-        ty,
-        Var(Var {
-            id: 1,
+            id: 4,
             lower_bounds: Rc::new(RefCell::new(vec![Number])),
             ..Default::default()
         })
     );
 
-    let source = "let f = { x }: x; f 1;";
+    let source = "let f = { x }: x; in f { x = 1; };";
+    let (ty, _) = infer(source).unwrap();
+    assert_eq!(
+        ty,
+        Var(Var {
+            id: 4,
+            lower_bounds: Rc::new(RefCell::new(vec![Number])),
+            ..Default::default()
+        })
+    );
+
+    let source = "let f = { x }: x; in f 1";
+    let err = infer(source);
+    assert_eq!(
+        err,
+        Err(InferError::CannotConstrain {
+            lhs: Number,
+            rhs: Pattern(
+                [("x".to_string(), (Var(Var::new(1, 1)), None))].into(),
+                false
+            )
+        }
+        .span(&(21..22)))
+    );
+
+    let source = "y: let f = { x }: x; in f y";
+    let (ty, _) = infer(source).unwrap();
+    assert_eq!(
+        ty,
+        Type::Function(
+            Box::new(Var(Var {
+                id: 0,
+                upper_bounds: Rc::new(RefCell::new(vec![Pattern(
+                    [(
+                        "x".to_string(),
+                        (
+                            Var(Var {
+                                id: 4,
+                                upper_bounds: Rc::new(RefCell::new(vec![Var(Var {
+                                    id: 5,
+                                    ..Default::default()
+                                })])),
+                                ..Default::default()
+                            }),
+                            None
+                        )
+                    )]
+                    .into(),
+                    false
+                )])),
+                ..Default::default()
+            })),
+            Box::new(Var(Var {
+                id: 5,
+                ..Default::default()
+            }))
+        )
+    );
+
+    let source = "let f = { x }: x; in f {y = 1;}";
+    let err = infer(source);
+    assert_eq!(
+        err,
+        Err(InferError::MissingRecordField {
+            field: "x".to_string()
+        }
+        .span(&(21..22)))
+    );
+
+    let source = "let f = { x }: x; in f {x = 1; y = 2;}";
+    let err = infer(source);
+    assert_eq!(
+        err,
+        Err(InferError::TooManyField {
+            field: "y".to_string()
+        }
+        .span(&(21..22)))
+    );
+
+    let source = "let f = { x, ... }: x; in f {x = 1; y = 2;}";
+    let ok = infer(source);
+    assert!(ok.is_ok());
+
+    let source = "let f = { x ? 1 }: x; in f {x = 1;}";
+    infer(source).unwrap();
+
+    let source = r#"let f = { x ? 1 }: x; in f {x = "hi";}"#;
+    let err = infer(source);
+    assert_eq!(
+        err,
+        Err(InferError::CannotConstrain {
+            lhs: String,
+            rhs: Number,
+        }
+        .span(&(25..26)))
+    );
 }
 
 #[test]
