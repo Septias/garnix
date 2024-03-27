@@ -139,9 +139,9 @@ fn constrain_inner<'a>(
     Ok(())
 }
 
-fn extrude<'a>(
+fn extrude(
     context: &Context,
-    ty: &'a Type,
+    ty: &Type,
     pol: bool,
     lvl: usize,
     c: &mut HashMap<PolarVar, Var>,
@@ -212,12 +212,12 @@ fn extrude<'a>(
 }
 
 pub(crate) fn freshen_above(context: &Context, ty: &Type, lim: usize, lvl: usize) -> Type {
-    freshen(context, &ty, lim, lvl, &mut HashMap::new())
+    freshen(context, ty, lim, lvl, &mut HashMap::new())
 }
 
-fn freshen<'a>(
+fn freshen(
     context: &Context,
-    ty: &'a Type,
+    ty: &Type,
     lim: usize,
     lvl: usize,
     freshened: &mut HashMap<Var, Var>,
@@ -291,7 +291,7 @@ fn freshen<'a>(
 }
 
 /// Infer the type of an expression.
-fn type_term<'a>(ctx: &mut Context, term: &'a Ast, lvl: usize) -> Result<Type, SpannedError> {
+fn type_term(ctx: &mut Context, term: &Ast, lvl: usize) -> Result<Type, SpannedError> {
     // println!("type_term: {:?}", term);
     use Type::*;
     match term {
@@ -304,7 +304,7 @@ fn type_term<'a>(ctx: &mut Context, term: &'a Ast, lvl: usize) -> Result<Type, S
             if let Some(with) = &ctx.with {
                 if let ty @ Type::Var(var) = with {
                     if let Some(rec) = var.as_record() {
-                        if let Some(ty) = rec.get(name).map(|ty| ty.clone()) {
+                        if let Some(ty) = rec.get(name).cloned() {
                             return Ok(ty);
                         }
                     } else {
@@ -401,9 +401,9 @@ fn type_term<'a>(ctx: &mut Context, term: &'a Ast, lvl: usize) -> Result<Type, S
                         Ok(Type::List([l.clone(), l2.clone()].concat()))
                     }
                     (var1 @ Type::Var(v1), var2 @ Type::Var(v2)) => {
-                        constrain(ctx, &var1, &Type::List(vec![]))
+                        constrain(ctx, var1, &Type::List(vec![]))
                             .map_err(|e| e.span(lhs.get_span()))?;
-                        constrain(ctx, &var2, &Type::List(vec![]))
+                        constrain(ctx, var2, &Type::List(vec![]))
                             .map_err(|e| e.span(rhs.get_span()))?;
                         Ok(Type::List(
                             [
@@ -438,7 +438,7 @@ fn type_term<'a>(ctx: &mut Context, term: &'a Ast, lvl: usize) -> Result<Type, S
                 BinOp::Update => match (&ty1, &ty2) {
                     (Type::Record(rc1), Type::Record(rc2)) => {
                         let mut rc = rc1.clone();
-                        rc.extend(rc2.clone().into_iter());
+                        rc.extend(rc2.clone());
                         Ok(Type::Record(rc))
                     }
 
@@ -449,7 +449,7 @@ fn type_term<'a>(ctx: &mut Context, term: &'a Ast, lvl: usize) -> Result<Type, S
                             .map_err(|e| e.span(rhs.get_span()))?;
 
                         let mut rc1 = v1.as_record().unwrap_or_default();
-                        rc1.extend(v2.as_record().unwrap_or_default().into_iter());
+                        rc1.extend(v2.as_record().unwrap_or_default());
                         Ok(Type::Record(rc1))
                     }
 
@@ -488,13 +488,17 @@ fn type_term<'a>(ctx: &mut Context, term: &'a Ast, lvl: usize) -> Result<Type, S
                         (Type::String | Type::Path, Type::String | Type::Path) => Ok(Type::String),
                         (Type::Var(v1), Type::Var(v2)) => {
                             // TODO: is this correct?
-                            v1.lower_bounds
-                                .borrow_mut()
-                                .extend([Type::Number, Type::String, Type::Path].into_iter());
+                            v1.lower_bounds.borrow_mut().extend([
+                                Type::Number,
+                                Type::String,
+                                Type::Path,
+                            ]);
 
-                            v2.lower_bounds
-                                .borrow_mut()
-                                .extend([Type::Number, Type::String, Type::Path].into_iter());
+                            v2.lower_bounds.borrow_mut().extend([
+                                Type::Number,
+                                Type::String,
+                                Type::Path,
+                            ]);
 
                             Ok(Type::Union(
                                 Box::new(Type::Number),
@@ -537,8 +541,8 @@ fn type_term<'a>(ctx: &mut Context, term: &'a Ast, lvl: usize) -> Result<Type, S
 
                 // Misc
                 BinOp::AttributeFallback => {
-                    constrain(&ctx, &ty1, &ty2).map_err(|e| e.span(lhs.get_span()))?;
-                    constrain(&ctx, &ty1, &ty2).map_err(|e| e.span(rhs.get_span()))?;
+                    constrain(ctx, &ty1, &ty2).map_err(|e| e.span(lhs.get_span()))?;
+                    constrain(ctx, &ty1, &ty2).map_err(|e| e.span(rhs.get_span()))?;
                     Ok(Type::Union(Box::new(ty1), Box::new(ty2)))
                 }
 
@@ -650,12 +654,12 @@ fn type_term<'a>(ctx: &mut Context, term: &'a Ast, lvl: usize) -> Result<Type, S
                 .collect();
 
             let inherits = load_inherit(ctx, span.clone(), lvl, inherit)?;
-            binds.extend(inherits.into_iter());
+            binds.extend(inherits);
             let (ok, err): (Vec<_>, Vec<_>) = ctx
                 .with_scope(binds.clone(), |ctx| {
                     let names = binds
                         .into_iter()
-                        .map(|(name, var)| (name, var.as_type().unwrap().into_var().unwrap()));
+                        .map(|(name, var)| (name, var.into_type().unwrap().into_var().unwrap()));
                     let expressions = bindings.iter().map(|(_, expr)| expr);
 
                     names
@@ -784,7 +788,7 @@ fn type_term<'a>(ctx: &mut Context, term: &'a Ast, lvl: usize) -> Result<Type, S
                 }
                 Type::Record(rc) => ctx.with_scope(
                     rc.iter()
-                        .filter(|(name, _)| ctx.with.is_some() || !ctx.lookup(name).is_some())
+                        .filter(|(name, _)| ctx.with.is_some() || ctx.lookup(name).is_none())
                         .map(|(name, ty)| (name.to_string(), ContextType::Type(ty.clone())))
                         .collect(),
                     |ctx| type_term(ctx, body, lvl),
@@ -854,7 +858,7 @@ fn type_term<'a>(ctx: &mut Context, term: &'a Ast, lvl: usize) -> Result<Type, S
                 .collect_vec();
 
             if let Some(fst) = expr.first() {
-                let homo = expr.iter().fold(true, |acc, r| acc && r == fst);
+                let homo = expr.iter().all(|r| r == fst);
                 if homo {
                     return Ok(Type::List(vec![fst.clone()]));
                 }
@@ -873,14 +877,14 @@ fn type_term<'a>(ctx: &mut Context, term: &'a Ast, lvl: usize) -> Result<Type, S
     }
 }
 
-fn load_inherit<'a>(
+fn load_inherit(
     ctx: &mut Context,
     span: Span,
     lvl: usize,
-    inherit: &'a Vec<Inherit>,
+    inherit: &[Inherit],
 ) -> Result<Vec<(String, ContextType)>, SpannedError> {
     let (ok, err): (Vec<_>, Vec<_>) = inherit
-        .into_iter()
+        .iter()
         .map(|Inherit { name, items }| {
             if let Some(expr) = name {
                 let ty = type_term(ctx, expr, lvl)?;
@@ -891,14 +895,9 @@ fn load_inherit<'a>(
                             .iter()
                             .map(|(_span, name)| (name.to_string(), Type::Var(ctx.fresh_var(lvl))))
                             .collect_vec();
-                        let record = Type::Record(
-                            vars.clone()
-                                .into_iter()
-                                .map(|(name, ty)| (name, ty))
-                                .collect(),
-                        );
+                        let record = Type::Record(vars.clone().into_iter().collect());
 
-                        constrain(ctx, &ty, &record).map_err(|e| e.span(expr.get_span()))?;
+                        constrain(ctx, ty, &record).map_err(|e| e.span(expr.get_span()))?;
 
                         Ok(vars
                             .into_iter()
@@ -1090,5 +1089,5 @@ pub fn infer(expr: &Ast) -> SpannedInferResult<Type> {
 pub fn coalesced(expr: &Ast) -> SpannedInferResult<Type> {
     let mut context = Context::new();
     let ty = &type_term(&mut context, expr, 0)?;
-    Ok(coalesc_type(&context, &ty))
+    Ok(coalesc_type(&context, ty))
 }

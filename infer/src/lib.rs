@@ -39,7 +39,7 @@ impl ContextType {
         }
     }
 
-    fn as_type(self) -> Option<Type> {
+    fn into_type(self) -> Option<Type> {
         match self {
             ContextType::Type(ty) => Some(ty),
             ContextType::PolymorhicType(_) => None,
@@ -107,7 +107,7 @@ impl Context {
 /// Returns the final type as well as the ast which has been annotated with types.
 pub fn infer(source: &str) -> SpannedInferResult<(Type, Ast)> {
     let ast = parser::parse(source).map_err(|e| InferError::from(e).span(&Span::default()))?;
-    let ast = Ast::from_parser_ast(ast, &source);
+    let ast = Ast::from_parser_ast(ast, source);
     let ty = infer::infer(&ast)?;
     Ok((ty, ast))
 }
@@ -116,7 +116,7 @@ pub fn infer(source: &str) -> SpannedInferResult<(Type, Ast)> {
 /// Returns the final type as well as the ast which has been annotated with types.
 pub fn coalesced(source: &str) -> SpannedInferResult<(Type, Ast)> {
     let ast = parser::parse(source).map_err(|e| InferError::from(e).span(&Span::default()))?;
-    let ast = Ast::from_parser_ast(ast, &source);
+    let ast = Ast::from_parser_ast(ast, source);
     let ty = infer::coalesced(&ast)?;
     Ok((ty, ast))
 }

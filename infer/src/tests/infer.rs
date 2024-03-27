@@ -740,14 +740,14 @@ fn test_lambda() {
 
     // Example taken from the paper
     let source = r#"f: x: f (f x)"#;
-    let (ty, _) = coalesced(&source).unwrap();
+    let (ty, _) = coalesced(source).unwrap();
     assert_eq!(
         ty.show(),
         "Var(0) ∧ Var(1) -> (Var(2)) ∧ Var(2) -> (Var(3)) -> (Var(1) -> (Var(3)))".to_string()
     );
 
     let source = r#"{ x, y }: y"#;
-    let (ty, _) = infer(&source).unwrap();
+    let (ty, _) = infer(source).unwrap();
     assert_eq!(
         ty,
         Type::Function(
@@ -767,7 +767,7 @@ fn test_lambda() {
     );
 
     let source = r#"{ x ? 1, y }: x"#;
-    let (ty, _) = infer(&source).unwrap();
+    let (ty, _) = infer(source).unwrap();
     let out = Var(Var {
         id: 0,
         upper_bounds: Rc::new(RefCell::new(vec![Type::Number])),
@@ -789,7 +789,7 @@ fn test_lambda() {
     );
 
     let source = r#"{ x ? 1, y } @ bind: bind"#;
-    let (ty, _) = infer(&source).unwrap();
+    let (ty, _) = infer(source).unwrap();
     let pat = Type::Pattern(
         [
             ("x".to_string(), (out.clone(), Some(Type::Number))),
@@ -811,7 +811,7 @@ fn test_lambda() {
     );
 
     let source = r#"{ ... } @ bind: bind"#;
-    let (ty, _) = infer(&source).unwrap();
+    let (ty, _) = infer(source).unwrap();
     assert_eq!(
         ty,
         Type::Function(

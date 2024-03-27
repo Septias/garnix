@@ -105,7 +105,7 @@ pub(crate) fn set_pattern(input: NixTokens<'_>) -> PResult<'_, (Vec<PatternEleme
         token(Comma),
         alt((
             ident_default_pattern,
-            ident.map(|ast| PatternElement::Identifier(ast)),
+            ident.map(PatternElement::Identifier),
         )),
     );
 
@@ -138,7 +138,7 @@ pub(crate) fn pattern(input: NixTokens<'_>) -> PResult<'_, Pattern> {
                 is_wildcard,
             },
         ),
-        ident.map(|ast| Pattern::Identifier(ast)),
+        ident.map(Pattern::Identifier),
         pair(set_pattern, opt(preceded(token(Token::At), ident))).map(
             |((patterns, is_wildcard), name)| {
                 println!("name: {:?}", name);
@@ -164,7 +164,7 @@ pub(crate) fn statement(input: NixTokens<'_>) -> PResult<'_, Statement> {
                 token(Semi),
             )
             .map(|statement| Statement::Assignment(statement.0, statement.1)),
-            inherit.map(|inherit| Statement::Inherit(inherit)),
+            inherit.map(Statement::Inherit),
         )),
     )
     .parse(input)
@@ -314,7 +314,7 @@ pub(crate) fn list(input: NixTokens<'_>) -> PResult<'_, Ast> {
         spanned(
             delimited(
                 token(Token::LBracket),
-                many0(alt((ident.map(|ast| Ast::Identifier(ast)), literal))),
+                many0(alt((ident.map(Ast::Identifier), literal))),
                 token(Token::RBracket),
             ),
             |span, exprs| List { exprs, span },
@@ -335,7 +335,7 @@ pub(crate) fn expr(input: NixTokens<'_>) -> PResult<'_, Ast> {
                     assert,
                     let_binding,
                     literal,
-                    ident.map(|ast| Ast::Identifier(ast)),
+                    ident.map(Ast::Identifier),
                 )),
             ),
             |span, (with, expr)| {
@@ -364,7 +364,7 @@ pub(crate) fn pratt_atom(input: NixTokens<'_>) -> PResult<'_, Ast> {
         set,
         list,
         literal,
-        ident.map(|ast| Ast::Identifier(ast)),
+        ident.map(Ast::Identifier),
     ))(input)
 }
 

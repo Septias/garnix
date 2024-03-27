@@ -41,7 +41,7 @@ pub enum ParseError {
 }
 
 /// Create a String Error from a nom error.
-pub fn map_err<'a>(err: Err<VerboseError<NixTokens<'a>>>) -> ParseError {
+pub fn map_err(err: Err<VerboseError<NixTokens<'_>>>) -> ParseError {
     let errors = match err {
         nom::Err::Incomplete(_) => vec![],
         nom::Err::Error(e) | nom::Err::Failure(e) => e
@@ -66,7 +66,7 @@ pub fn map_err<'a>(err: Err<VerboseError<NixTokens<'a>>>) -> ParseError {
 
 /// Parse a string containing Nix code.
 pub fn parse(source: &str) -> Result<Ast, ParseError> {
-    let tokens: Vec<(Token, std::ops::Range<usize>)> = lex(&source);
+    let tokens: Vec<(Token, std::ops::Range<usize>)> = lex(source);
     let (_, ast) = parser::expr(NixTokens(&tokens)).map_err(|err| map_err(err))?;
     Ok(ast)
 }
