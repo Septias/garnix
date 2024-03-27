@@ -214,11 +214,6 @@ fn test_bools() {
 }
 
 #[test]
-fn test_comparisons() {
-    // TODO
-}
-
-#[test]
 fn test_record_access() {
     let source = "x: x.y";
     let (ty, _) = infer(source).unwrap();
@@ -497,13 +492,6 @@ fn test_joining() {
 }
 
 #[test]
-fn test_attribute_fallback() {
-    let source = r#"let t = y: y or 1; in {t = t;};"#;
-    let (_ty, _ast) = infer(source).unwrap();
-    println!("ast: {:?}", _ast);
-}
-
-#[test]
 fn test_has_attribute() {
     let source = r#"{ x = 1; } ? x"#;
     let (ty, _ast) = infer(source).unwrap();
@@ -528,45 +516,14 @@ fn test_has_attribute() {
 
 #[test]
 fn test_attr_set() {
-    /* let source = "rec {f = x: x + y; y = 1;}";
-    let (ty, _ast) = infer(source).unwrap();
-    assert_eq!(
-        ty,
-        Record(
-            [
-                (
-                    "f".to_string(),
-                    Var(Var {
-                        id: 1,
-                        lower_bounds: Rc::new(RefCell::new(vec![Function(
-                            Box::new(Var(Var {
-                                upper_bounds: Rc::new(RefCell::new(vec![Number])),
-                                id: 2,
-                                ..Default::default()
-                            })),
-                            Box::new(Var(Var {
-                                id: 3,
-                                upper_bounds: Rc::new(RefCell::new(vec![Number])),
-                                ..Default::default()
-                            }))
-                        )])),
-                        ..Default::default()
-                    })
-                ),
-                (
-                    "y".to_string(),
-                    Var(Var {
-                        id: 3,
-                        upper_bounds: Rc::new(RefCell::new(vec![Number])),
-                        ..Default::default()
-                    })
-                )
-            ]
-            .into()
-        )
-    );
+    let source = "rec {x = y; y = x;}";
+    let (_ty, _ast) = infer(source).unwrap();
 
-    let source = "rec {x = {y = x;};}"; */
+    let source = "rec {f = x: x + y; y = 1;}";
+    let (_ty, _ast) = infer(source).unwrap();
+
+    let source = "rec {x = {y = x;};}";
+    let (_ty, _ast) = infer(source).unwrap();
 }
 
 #[test]
@@ -1014,4 +971,51 @@ fn test_conditionals() {
             }
         );
     }
+}
+
+#[test]
+fn test_coalesce() {
+    let source = "{ x = true; y = false;}";
+    let (coa, _) = coalesced(source).unwrap();
+    println!("{:?}", coa.show());
+
+    let source = r#"{ x = ["hi" 1];}"#;
+    let (coa, _) = coalesced(source).unwrap();
+    println!("{:?}", coa.show());
+
+    let source = r#"{ x = [1 1];}"#;
+    let (coa, _) = coalesced(source).unwrap();
+    println!("{:?}", coa.show());
+
+    let source = "{ x = {y = 1;};}";
+    let (coa, _) = coalesced(source).unwrap();
+    println!("{:?}", coa.show());
+
+    let source = r#"x: x + "hi";"#;
+    let (coa, _) = coalesced(source).unwrap();
+    println!("{:?}", coa.show());
+
+    let source = "x: x.y";
+    let (coa, _) = coalesced(source).unwrap();
+    println!("{:?}", coa.show());
+
+    let source = "let x = 1; in {inherit x;};";
+    let (coa, _) = coalesced(source).unwrap();
+    println!("{:?}", coa.show());
+
+    let source = "with {y = 1;}; {z = y;};";
+    let (coa, _) = coalesced(source).unwrap();
+    println!("{:?}", coa.show());
+
+    let source = "let f = { x, ... }: x; in f {x = 1; y = 2;}";
+    let (coa, _) = coalesced(source).unwrap();
+    println!("{:?}", coa.show());
+
+    let source = r#"x: x ? y"#;
+    let (coa, _) = coalesced(source).unwrap();
+    println!("{:?}", coa.show());
+
+    let source = r#"let t = { x = 1; }; f = t; in {inherit f t;};"#;
+    let (coa, _) = coalesced(source).unwrap();
+    println!("{:?}", coa.show());
 }

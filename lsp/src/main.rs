@@ -114,7 +114,10 @@ async fn main() {
                             .into_iter()
                             .map(|ident| lsp_types::InlayHint {
                                 position: to_lsp_range(ast.get_span(), source).start,
-                                label: InlayHintLabel::String(format!("{:?}", ident.var)),
+                                label: InlayHintLabel::String(format!(
+                                    "{}",
+                                    ident.var.get().unwrap().show()
+                                )),
                                 kind: None,
                                 text_edits: None,
                                 tooltip: None,

@@ -34,6 +34,13 @@ fn constrain_inner<'a>(
     }
 
     match (lhs, rhs) {
+        (Type::Bool, Type::Bool)
+        | (Type::Number, Type::Number)
+        | (Type::String, Type::String)
+        | (Type::Path, Type::Path)
+        | (Type::Null, Type::Null)
+        | (Type::Undefined, _) => (),
+
         (Type::Function(l0, r0), Type::Function(l1, r1)) => {
             constrain_inner(context, l1, l0, cache)?;
             constrain_inner(context, r0, r1, cache)?;
@@ -94,14 +101,7 @@ fn constrain_inner<'a>(
             constrain_inner(context, &ls1[0], &ls2[0], cache)?;
         }
 
-        (Type::Bool, Type::Bool)
-        | (Type::Number, Type::Number)
-        | (Type::String, Type::String)
-        | (Type::Path, Type::Path)
-        | (Type::Null, Type::Null)
-        | (Type::Undefined, _) => (),
-
-        // application?
+        // application
         // function constraints
         // selection
         (Type::Var(lhs), rhs) if rhs.level() <= lhs.level => {
@@ -151,13 +151,9 @@ fn extrude(
     }
 
     match ty {
-        Type::Number
-        | Type::Bool
-        | Type::String
-        | Type::Path
-        | Type::Null
-        | Type::Pattern(..)
-        | Type::Undefined => ty.clone(),
+        Type::Number | Type::Bool | Type::String | Type::Path | Type::Null | Type::Undefined => {
+            ty.clone()
+        }
 
         Type::Var(vs) => {
             let pol_var = (vs.clone(), pol);
@@ -205,7 +201,21 @@ fn extrude(
                 .collect(),
         ),
         Type::Optional(ty) => Type::Optional(Box::new(extrude(context, ty, pol, lvl, c))),
-        Type::Top | Type::Bottom | Type::Union(..) | Type::Inter(..) | Type::Recursive(..) => {
+        Type::Union(lhs, rhs) => Type::Union(
+            Box::new(extrude(context, lhs, pol, lvl, c)),
+            Box::new(extrude(context, rhs, pol, lvl, c)),
+        ),
+        Type::Pattern(lhs, rhs) => {
+            let mut lhs = lhs.clone();
+            for (_, (ty, opt)) in lhs.iter_mut() {
+                *ty = extrude(context, ty, !pol, lvl, c);
+                if let Some(opt) = opt {
+                    *opt = extrude(context, opt, pol, lvl, c);
+                }
+            }
+            Type::Pattern(lhs, *rhs)
+        }
+        Type::Top | Type::Bottom | Type::Inter(..) | Type::Recursive(..) => {
             panic!("Not a simple type")
         }
     }
@@ -673,6 +683,11 @@ fn type_term(ctx: &mut Context, term: &Ast, lvl: usize) -> Result<Type, SpannedE
                                 )],
                                 |ctx| type_term(ctx, rhs, lvl + 1),
                             )?;
+                            let bind = bindings.iter().find(|(n, _)| n.name == *name).unwrap();
+                            bind.0
+                                .var
+                                .set(coalesc_type(ctx, &ty))
+                                .unwrap();
                             constrain(ctx, &ty, &Type::Var(e_ty.clone()))
                                 .map_err(|e| e.span(rhs.get_span()))?;
                             Ok((
@@ -698,12 +713,6 @@ fn type_term(ctx: &mut Context, term: &Ast, lvl: usize) -> Result<Type, SpannedE
                 });
             }
 
-            println!(
-                "let binding scope: {}",
-                ok.iter()
-                    .map(|(name, ty)| format!("{name}, {}", ty.show()))
-                    .join(", ")
-            );
             let ret = ctx.with_scope(ok, |ctx| type_term(ctx, body, lvl))?;
             Ok(ret)
         }
@@ -986,15 +995,15 @@ fn load_inherit(
 }
 
 pub fn coalesc_type(context: &Context, ty: &Type) -> Type {
-    coalesce_type_inner(context, ty, true, HashMap::new(), HashSet::new())
+    coalesce_type_inner(context, ty, true, &mut HashMap::new(), HashSet::new())
 }
 
 fn coalesce_type_inner(
     context: &Context,
     ty: &Type,
     polarity: bool,
-    mut rec: HashMap<PolarVar, Var>,
-    processing: HashSet<PolarVar>,
+    rec: &mut HashMap<PolarVar, Var>,
+    mut processing: HashSet<PolarVar>,
 ) -> Type {
     match ty {
         Type::Number | Type::Bool | Type::String | Type::Path | Type::Null | Type::Undefined => {
@@ -1015,14 +1024,11 @@ fn coalesce_type_inner(
                 } else {
                     &var.upper_bounds
                 };
+                processing.insert(pol_var.clone());
                 let bound_types = bounds
                     .borrow()
                     .iter()
-                    .map(|t| {
-                        let mut processing = processing.clone();
-                        processing.insert(pol_var.clone());
-                        coalesce_type_inner(context, t, polarity, rec.clone(), processing)
-                    })
+                    .map(|t| coalesce_type_inner(context, t, polarity, rec, processing.clone()))
                     .collect_vec();
                 let res = if polarity {
                     bound_types
@@ -1045,14 +1051,14 @@ fn coalesce_type_inner(
                 context,
                 l,
                 !polarity,
-                rec.clone(),
+                rec,
                 processing.clone(),
             )),
             Box::new(coalesce_type_inner(context, r, polarity, rec, processing)),
         ),
         Type::List(l) => Type::List(
             l.iter()
-                .map(|t| coalesce_type_inner(context, t, polarity, rec.clone(), processing.clone()))
+                .map(|t| coalesce_type_inner(context, t, polarity, rec, processing.clone()))
                 .collect(),
         ),
         Type::Record(r) => Type::Record(
@@ -1060,7 +1066,7 @@ fn coalesce_type_inner(
                 .map(|(n, t)| {
                     (
                         n.clone(),
-                        coalesce_type_inner(context, t, polarity, rec.clone(), processing.clone()),
+                        coalesce_type_inner(context, t, polarity, rec, processing.clone()),
                     )
                 })
                 .collect(),
@@ -1068,12 +1074,25 @@ fn coalesce_type_inner(
         Type::Optional(o) => Type::Optional(Box::new(coalesce_type_inner(
             context, o, polarity, rec, processing,
         ))),
-        Type::Top
-        | Type::Bottom
-        | Type::Pattern(_, _)
-        | Type::Union(_, _)
-        | Type::Inter(_, _)
-        | Type::Recursive(_, _) => unreachable!(),
+
+        Type::Union(u1, u2) => {
+            let u1 = coalesce_type_inner(context, u1, polarity, rec, processing.clone());
+            let u2 = coalesce_type_inner(context, u2, polarity, rec, processing);
+            Type::Union(Box::new(u1), Box::new(u2))
+        }
+
+        Type::Pattern(elem, widcart) => {
+            let mut elem = elem.clone();
+            for (_, (ty, opt)) in elem.iter_mut() {
+                *ty = coalesce_type_inner(context, ty, !polarity, rec, processing.clone());
+                if let Some(opt) = opt {
+                    *opt = coalesce_type_inner(context, opt, polarity, rec, processing.clone());
+                }
+            }
+            Type::Pattern(elem, *widcart)
+        }
+
+        Type::Top | Type::Bottom | Type::Inter(_, _) | Type::Recursive(_, _) => unreachable!(),
     }
 }
 

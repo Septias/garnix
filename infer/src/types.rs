@@ -186,7 +186,7 @@ impl Type {
             Type::Union(lhs, rhs) => format!("{} ∨ {}", lhs, rhs),
             Type::Record(fields) => fields
                 .iter()
-                .map(|(k, v)| format!("{}: {}", k, v.show()))
+                .map(|(k, v)| format!("{{{}: {}}}", k, v.show()))
                 .join(", "),
             Type::Top => TypeName::Top.to_string(),
             Type::Bottom => TypeName::Bottom.to_string(),

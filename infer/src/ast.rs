@@ -1,5 +1,5 @@
 use super::{InferError, InferResult};
-use crate::{ast, types::Var};
+use crate::{ast, types::Type};
 use core::str;
 use logos::Span;
 use parser::ast::{Ast as ParserAst, BinOp, UnOp};
@@ -39,7 +39,7 @@ pub struct Inherit {
 pub struct Identifier {
     pub name: String,
     pub span: Span,
-    pub var: OnceCell<Var>,
+    pub var: OnceCell<Type>,
 }
 
 impl PartialEq for Identifier {
