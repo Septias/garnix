@@ -102,7 +102,6 @@ impl Type {
 
 impl std::hash::Hash for Type {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        // TODO: proper implementation
         core::mem::discriminant(self).hash(state);
     }
 }

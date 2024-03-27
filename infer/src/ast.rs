@@ -58,7 +58,6 @@ impl Identifier {
     }
 }
 
-// TODO: needed?
 impl hash::Hash for Identifier {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.name.hash(state);

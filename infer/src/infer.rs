@@ -93,6 +93,12 @@ fn constrain_inner<'a>(
             }
         }
 
+        //
+        (Type::Pattern(pat, wild), Type::Var(_)) => {}
+
+        // @-ident is accessed
+        (Type::Pattern(pat, wild), Type::Record(rcd)) => {}
+
         (Type::Optional(o1), Type::Optional(o0)) => {
             constrain_inner(context, o0, o1, cache)?;
         }
@@ -161,7 +167,7 @@ fn extrude(
                 Type::Var(nvs.clone())
             } else {
                 let nvs = context.fresh_var(lvl);
-                c.insert(pol_var, nvs.clone()); // TODO: check
+                c.insert(pol_var, nvs.clone());
 
                 if pol {
                     vs.upper_bounds.borrow_mut().push(Type::Var(nvs.clone()));
@@ -563,7 +569,6 @@ fn type_term(ctx: &mut Context, term: &Ast, lvl: usize) -> Result<Type, SpannedE
                 | BinOp::GreaterThanEqual
                 | BinOp::Equal
                 | BinOp::NotEqual => match (&ty1, &ty2) {
-                    (Type::Var(_), Type::Var(_)) => todo!(),
                     (ty @ Type::Var(_), _) | (_, ty @ Type::Var(_)) => {
                         constrain(ctx, ty, &ty2).map_err(|e| e.span(lhs.get_span()))?;
                         Ok(Bool)
@@ -761,7 +766,6 @@ fn type_term(ctx: &mut Context, term: &Ast, lvl: usize) -> Result<Type, SpannedE
 
                     let ty = Type::Pattern(item.clone().into_iter().collect(), *is_wildcard);
                     if let Some(name) = name {
-                        // TODO: not always add a variable
                         let var = ctx.fresh_var(lvl);
                         if *is_wildcard {
                             constrain(
@@ -858,15 +862,22 @@ fn type_term(ctx: &mut Context, term: &Ast, lvl: usize) -> Result<Type, SpannedE
             span: _,
         } => {
             let ty = type_term(ctx, condition, lvl)?;
-            if ty != Type::Bool && !matches!(ty, Type::Var(_)) {
-                return Err(SpannedError {
-                    error: InferError::TypeMismatch {
-                        expected: TypeName::Bool,
-                        found: ty.get_name(),
-                    },
-                    span: condition.get_span().clone(),
-                });
+            match ty {
+                Type::Bool => (),
+                Type::Var(_) => {
+                    constrain(ctx, &ty, &Type::Bool).map_err(|e| e.span(condition.get_span()))?;
+                }
+                _ => {
+                    return Err(SpannedError {
+                        error: InferError::TypeMismatch {
+                            expected: TypeName::Bool,
+                            found: ty.get_name(),
+                        },
+                        span: condition.get_span().clone(),
+                    });
+                }
             }
+
             type_term(ctx, expr, lvl)
         }
 

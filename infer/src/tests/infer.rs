@@ -145,7 +145,6 @@ fn test_numbers() {
             Box::new(Path)
         )
     );
-    // TODO: test errors
     let source = r#"x: y: x + y;"#;
     let (ty, _) = infer(source).unwrap();
 
@@ -925,7 +924,6 @@ fn test_assert() {
     let (ty, _) = infer(source).unwrap();
     assert_eq!(ty, Record([].into()));
 
-    // TODO: why though
     let source = r#"assert 1; {};"#;
     let res = infer(source);
     if let Err(e) = res {
