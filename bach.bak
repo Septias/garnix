@@ -1,18 +1,6 @@
+#let title = [SimpleNix: Type Inference for Nix]
 
-
-#let title = [Typeinference for Nix]
-
-#set page(
-  header: align(
-    right + horizon,
-    title
-  ),
-  numbering: "1",
-  number-align: right,
-  //margin: (x: 3cm, y: 4cm),
-)
-
-
+#page(footer: align(center, "Departement of Computer Science University Freiburg"))[
 #align(center, text(25pt)[
   #image("logo.png", width: 30%)
   *#title*
@@ -41,40 +29,58 @@
   #set par(justify: true)
   #pad(x: 15pt, top: 10pt, bottom: 20pt)[
   = Abstract
-    Nix is a cross-platform package manager for Linux and macOS that focuses on reproducibility and security. Unlike other package managers, nix uses a functional programming language to build packages, configure systems, and perform all kinds of metaprogramming. Even though nix and nixOS have found great adoption recently, the nix language still lacks common developer support in language servers, documentation, and type inference, making it a burden to write even simple scripts. My contribution is a parser for Nix written in Rust and a language server that provides type inference for the language.
+    Nix is a cross-platform package manager for Linux and MacOS focusing on reproducibility and security. Unlike other package managers, Nix uses a functional programming language to build packages, configure systems, and perform all kinds of metaprogramming. Even though Nix and NixOS have found great adoption in recent years, the Nix language still lacks common developer support in language servers, documentation, and type inference, making it a burden to write even simple scripts. My contribution is a parser for Nix written in Rust and a language server that provides type inference for the language.
   ]
 ]
+]
+#set page(
+  header: align(
+    right,
+    smallcaps("Nix Type Inference"),
+  ),
+   
+  numbering: "1",
+  number-align: right,
+  //margin: (x: 3cm, y: 4cm),
+)
 
+#set heading(numbering: "1.")
+
+#show outline.entry.where(
+  level: 1
+): it => {
+  v(12pt, weak: true)
+  strong(it)
+}
 
 #page[
-  #outline()
+  #outline(indent :auto)
 ]
 
-#set heading(numbering: "1.1")
 = Motivation
 The Nix package manager sits on top of a staggering package repository of over 80.000 user-contributed packages and can be used as a drop-in replacement for most modern package managers like cargo, yarn, PNPM, and many more. It provides not only the dependencies needed to run a local program but also virtually every other development tool, such as language servers, IDEs, built tools, linters, and formatters, making it the all-in-one solution for every dependency.
-The great distinction to other package managers and its greatest strength is the underlying nix language upon which the whole ecosystem is built. Having a programming language as its base makes the package manager incredibly powerful, but it comes at the cost of a steep learning curve. New developers not only have to learn a new programming language, but they also have to remember hundreds of fields needed for configuration. A language server with good type inference should make it easier to write syntactically and logically correct programs while reducing the time needed to do so.
+The great distinction to other package managers and its greatest strength is the underlying Nix language upon which the whole ecosystem is built. Having a programming language as its base makes the package manager incredibly powerful, but it comes at the cost of a steep learning curve. New developers not only have to learn a new programming language, but they also have to remember hundreds of configuration fields. A language server with good type inference should make it easier to write syntactically and logically correct programs while reducing the time needed to do so.
 
-For the 20 years that Nix has existed, the problem of missing type inference and a language server has not been solved. Only recently have some projects popped up that want to improve the developer experience of Nix. The latest great addition (a year ago) is Oxcalica's language server #link("https://github.com/oxalica/nil")[nil] that adds simple type inference with a Hindley Milner style approach adopted for sets, but also some useful code actions like `jump to source` and `dead code analysis.` In this paper, I introduce SimpleNix, a type-inference algorithm based upon the great works of Lionel Parreaux @main that produces type information using Hindley Milner as a base but adds subtyping to the language. This way, polymorphism, subtyping, global type inference, and principal types are supported, which is a much stronger typing system than the one used by Oxalica.
+For the 20 years that Nix has existed, the problem of missing type inference and a language server has not been solved. Only recently have some projects popped up that want to improve the developer experience of Nix. The latest addition (2022) is Oxcalica's language server #link("https://github.com/oxalica/nil")[Nil] that adds simple type inference with a Hindley Milner style approach adopted for sets, but also some useful code actions like `jump to source` and `dead code analysis.` In this paper, I introduce SimpleNix, a type-inference algorithm based upon the great works of Lionel Parreaux @main that produces type information using Hindley Milner as a base but adds subtyping to the language. This way, polymorphism, subtyping, global type inference, and principal types are supported, which is a much stronger typing system than the one used by Oxalica.
 
-Nixd is another year-old project that combines a language evaluator and type inference. Unlike Nil, it is not static but rather dynamic in that it lazily loads set fields, showing a way to tackle the problem of very big evaluation trees that are inherent to the Nix package repository.
+Nixd is another new project (2023) that combines a language evaluator and type inference. Unlike Nil, it is not static but rather dynamic in that it lazily loads set fields, showing a way to tackle the problem of very big evaluation trees that are inherent to the Nix package repository.
 
-Another important aspect of developer experience is documentation. Nix has very bad documentation. There is no agreed-upon style guide for documentation, which led to vastly different documentation styles and many undocumented functions. Developers must refer to the actual source code of functions to learn about what they are doing. That said, there have also been great efforts to improve documentation recently. Just half a year ago, #link("https://github.com/NixOS/rfcs/pull/145")[RFC 145] was approved, which adds documentation comments that allow one to distinguish between outwards and inwards facing documentation. This creates the opportunity to greatly improve tools like #link("https://noogle.dev/")[Noogle], which can be used to search for function documentation. With documentation comments, type annotations are the next logical step and an RFC already exists for this. The unofficial syntax definition at https://typednix.dev/ provides simple HM-style type definitions similar to the one used by SimpleSub @main.
+Another important aspect of developer experience is documentation. Nix has very bad documentation. There is no agreed-upon style guide for documentation, which led to vastly different documentation styles and many undocumented functions. Developers must refer to the actual source code of functions to learn about what they are doing. That said, there have also been great efforts to improve documentation recently. Mid 2023, #link("https://github.com/NixOS/rfcs/pull/145")[RFC 145] was approved, which adds documentation comments that allow one to distinguish between outwards and inwards facing documentation. This creates the opportunity to greatly improve tools like #link("https://noogle.dev/")[Noogle], which can be used to search for function documentation. With documentation comments, type annotations are the next logical step and an RFC already exists for this. The unofficial syntax definition at https://typednix.dev/ provides simple HM-style type definitions similar to the one used by SimpleSub @main.
 
-NixOs and Home-manager are both projects that enable users to manage their environments with configuration files. Home Manager lets one configure the locally installed programs and their configuration. NixOs goes even further by allowing one to create the whole operating system from a single configuration file. The configuration file provides a function taking dependencies as input and outputs the user configuration. This configuration is a record (key-value mapping) that the executor then uses to determine what to build. To improve developer experience, both projects have introduced 'local types', with the convention that the `__type` field contains the type name as a string. While this does not provide any inference, it at least helps users add the proper fields in their configuration. The provided types can easily be parsed and converted to internal SimpleNix types, but module system completion is out of the scope of this thesis.
+NixOs @nixos and Home-manager are both projects that enable users to manage their environments with configuration files. Home Manager lets one configure the locally installed programs and their configuration, while NixOs goes even further by allowing one to create the whole operating system, including partitions, secure boot, window managers, journaling system, and other core components from a single configuration file. The configuration file provides a function taking dependencies as input and outputs the user configuration. This configuration is a record (key-value mapping) that the executor then uses to determine what to build. To improve developer experience, both projects have introduced 'local types', with the convention that the `__type` field contains the type name as a string. While this does not provide any inference, it at least helps users add the proper fields in their configuration. The provided types can easily be parsed and converted to internal SimpleNix types, but module system completion is out of the scope of this thesis.
 
 
 = The Nix Language
-The Nix language is a declarative, pure, functional, lazy, and dynamically typed language that is very domain-specific for its use case. Declarativeness stems from the execution model of Nix, where dependencies between files are tracked through paths. These dependencies are used to create a built plan, which is then used to create the final package. All imports are cached as derivations in the global nix store so other packages with the same dependencies can reuse them. To achieve perfect reproducibility, the language tries to remain pure, not allowing side effects in functions. This way, the same derivation executed on two machines creates the same output, upholding Nix's reproducibility guarantee. It is possible to lift this restriction only for specific use cases to give more freedom in package builds. The reproducibility constraint is then passed to the reviewer, who finally accepts code changes. Because all 80.000 packages are part of one big package tree, laziness is another fundamental property of the Nix language. Without it, even building a single package would take ages because all packages would have to be evaluated. The problem of huge evaluation trees is also a problem that language servers and type inference algorithms face, as they also can't evaluate the whole package tree.
+The Nix language is a declarative, pure, functional, lazy, and dynamically typed language that is very domain-specific for its use case. Declarativeness stems from the execution model of Nix, where dependencies between files are tracked through paths. These dependencies are used to create a built plan, which is then used to create the final package. All imports are cached as derivations in the global Nix store, so other packages with the same dependencies can reuse them. To achieve perfect reproducibility, the language tries to remain pure, not allowing side effects in functions. This way, the same derivation executed on two machines creates the same output, upholding Nix's reproducibility guarantee. It is possible to lift this restriction only for specific use cases to give more freedom in package builds. The reproducibility constraint is then passed to the reviewer, who finally accepts code changes. Because all 80.000 packages are part of one big package tree, laziness is another fundamental property of the Nix language. Without it, even building a single package would take ages because all packages would have to be evaluated. The problem of huge evaluation trees is also a problem that language servers and type inference algorithms face, as they also can't evaluate the whole package tree. What follows is an overview of the language based on the official documentation at https://nixos.org/manual/nix/stable/language/.
 
 == Primitives
 The Nix language supports all primitive types well-known from other languages, such as Bool, String, Int, and Float. It also adds the domain-specific type `Path` as paths are fundamentally important for configurations and tracking dependencies. The Nix package managers can create appropriate errors for non-existing paths instead of generic lookup errors and create the appropriate store paths, which would not be possible with ordinary strings. From a typing perspective, adding another primitive is trivial and only allows one to create more elaborate errors when types mismatch. 
 
 === Operators
-Nix supports all common arithmetic, logic, and comparison operators, which are further discussed in @operators.
+Nix supports all common arithmetic, logic, and comparison operators, further discussed in @operators.
 
 == Language Constructs
-Nix supports many common functional programming language constructs, like let-bindings, first-class functions, and conditionals. It also adds its own domain-specific language constructs, like `with` and `inherit` statements, as well as utilities for functions, making it much stronger than the simple language MLSub which is discussed in @main and @original.
+Nix supports many common functional programming language constructs, like let-bindings, first-class functions, and conditionals. It also adds its own domain-specific language constructs, like `with` @with and `inherit` @inherit  statements, as well as utilities for functions, making it much stronger than the simple language MLSub discussed in @main and @original.
 
 === AttrSets
 AttrSets (Records) are the most important language constructs in the Nix language, as they create all configuration files. AttrSets sets are enclosed in braces and can contain arbitrarily many statements of the form `name = expr;` where the computed value of `expr` is bound to `name`. The _rec_ keyword is another Nix-specific novelty that can mark a set as _recursive_, allowing fields to reference other fields defined in the set.
@@ -88,7 +94,7 @@ AttrSets (Records) are the most important language constructs in the Nix languag
     # A recursive set that references itself in the definition.
     set2 = rec { age = 35; age2 = age; };
   
-    # A recursive set with self-recursion (TODO)
+    # A recursive set with self-recursion
     sset3 = rec { x = { y = x;}};
     
     # A recursive set with illegal infinite mutual recursion.
@@ -137,7 +143,7 @@ let
   # A function that expects a set to have two fields and 
   # returns the whole set
   fun = {name, surname} @ person: person;  
-  out = fun {name = "James"; surname = "bond";}; 
+  out = fun {name = "James"; surname = "Bond";}; 
 in 
   assert out.name && out.surname; {}
 ```
@@ -174,7 +180,7 @@ Let bindings can be used to introduce new named variables accessible in the body
   ```
 ])
 
-=== With
+=== With <with>
 With-statements can precede any expression and introduce all fields of the given set in the following body. This is a utility construct to reduce repetition in cases where many fields from an AttrSet are needed. When specifying the packages for nixOS or home-manager, it is not uncommon to prefix the list with `with pkgs` as the package list oftentimes has 
 
 #figure(caption: "with-statement", [
@@ -190,89 +196,92 @@ With-statements can precede any expression and introduce all fields of the given
   ```
 ])
 
-=== Inherit
-Inherits can be used as syntactic sugar to reintroduce known bindings into let-bindings or AttrSets.
-For AttrSets using an inhert-statement is the same as assigning the value of a known name to the same name again.
+=== Inherit <inherit>
+Inherits statements are syntactic sugar to reintroduce known bindings into let-bindings or AttrSets. Using an inherit statement is essentially the same as just re-declaring a variable `x = x;` but it comes in very handy for sets and records. During configuration, it is oftentimes important to reexport a lot of expressions, maybe from a deeply nested record. Inherit bindings allow to specify a record from which expressions should be imported making it easy to reintroduce a lot of bindings quickly. The same applies for let-bindings where it is oftentimes needed to import some functions.
 
-```nix
-let 
-  set1 = { y = 1; };
-  set2 = { inherit set1; };
-in {};
+  #figure(caption: "Inherit used in records", [
+    ```nix
+    # A simple inherit statement
+    let 
+      set1 = { y = 1; };
+      set2 = { inherit set1; };
+    in {};
+    # Is equivalent to
+    let 
+      set1 = { y = 1; }; 
+      set2 = { y = y; }; 
+    in {};
 
-# Is equivalent to
+    # Inherit in a let-binding
+    let 
+      x = { name = "john"; surname = "smith";}; 
+    in
+      let 
+        inherit (x) name surname;
+        full_name = name + surname; 
+      in
+        full_name; 
+    # Is equivalent to
+    let x = { name = "john"; surname = "smith";}; in 
+      let name = x.name; surname = x.surname; in {}; 
+    
+  
+    # Inherit using a base-path
+    let x = { y = { z = 1; };}; in { 
+      inherit (x.y) z;
+    };
+    # This is equivalent to 
+    let x = { y = { z = 1; };}; in { 
+      z = x.y.z;
+    }
+    
+    ```
+  ])
 
-let 
-  set1 = { y = 1; }; 
-  set2 = { y = y; }; 
-in {};
-```
-
-For let-bindings, an inherit statement can be used to bring multiple names from a set into scope.
-
-#figure(caption: "Inherit for Let-bindings", [
-```nix
-let 
-  x = { name = "john"; surname = "smith";}; 
-in
-  let 
-    inherit (x) name surname;
-    full_name = name + surname; 
-  in
-    full_name; 
-
-# Is equivalent to
-
-let x = { name = "john"; surname = "smith"} in 
-  let name = x.name; surname = x.surname; in {} 
-
-```])
-
-Inherit also allows the specification of a lexical scope from which the names should be inherited. This is done with a bracket syntax and comes in handy for when multiple items from a deeply nested AttrSet should be extracted.
-
-```nix
-let x = { y = { z = 1; }} in { 
-  inherit (x.y) z
-}
-
-// This is equivalent to 
-
-let x = { y = { z = 1; }} in { 
-  z = x.y.z;
-}
-
-```
-
+  
 === String Interpolation
-String interpolation allows one to add arbitrary expressions to strings, paths, and AttrSets by enclosing them in `${ }.`
+String interpolation is used to add the evaluated content of any expression into strings and paths and to access and mutate records dynamically.
 
-```nix
-let path = ./home/${user}/.config/${program}/config.toml;
-let string = "Toms surname is ${surname}";
-let attrset = { ${field} = value;};
-let name = { name = "John"; surname = "Smith"; }.${"name"};
-```
+#figure(caption: "String interpolation", [
+  ```nix
+  {
+    # String interpolation for paths
+    path = ./home/${user}/.config/${program}/config.toml;
+
+    # String interpolation for strings
+    string = "Toms surname is ${surname}";
+
+    # String interpolation for records.
+    attrset = { ${field} = value;};
+    name = { name = "John"; surname = "Smith"; }.${"name"};
+  }
+  ```
+])
 
 = Parser
-Part of my contribution is a parser for the previously defined subset of the nix language written in Rust, which is available as part of the mono repo at https://github.com/Septias/garnix.git. The parser is written with the combinator style crate `nom` and uses #link("https://matklad.github.io/2020/04/13/simple-but-powerful-pratt-parsing.html")[Pratt Parsing] to parse expressions with different operator precedence.
+Part of my contribution is a parser for the previously defined nix language written in Rust, which is available as part of the mono repo at https://github.com/Septias/garnix.git. The parser is written with the combinator style crate `nom` and uses #link("https://matklad.github.io/2020/04/13/simple-but-powerful-pratt-parsing.html")[Pratt Parsing] to parse expressions with different operator precedence.
 
 = Inference
-The Nix language was created as a configuration language to build packages and configure environments easily. Static type inference was not intended for the language, making it hard to create a complete and sound type inference algorithm.
-Flow Analysis is a gradual type inference method that works well for languages that do not have type inference built in and has already been applied successfully for languages like JavaScript with its superset Typescript. Grudal Typing algorithms analyze the flow of programs and create constraints based on the usage of functions and identifiers. For example, a program `f 1`, which only applies `1` to the function `f`, creates a simple constraint for the function f `f: int -> a` degrading the polymorphic type `a -> a` to subtype that only allows arguments of type `int` to be supplied to the function. Lionel Parreaux, in `The Simple Essence of Algebraic Subtyping` @main, created a type system for a simple programming language, MLSub, that only supports simple unary functions, sets, and unary let-bindings. This paper extends his algorithm SimpleSub to handle the much more powerful Nix programming language, which supports a greater set of primitives and more versatile language constructs.
+The Nix language was created as a configuration language to build packages and configure environments easily. Static type inference was not intended for the language, leaving it with many suboptimal rules for type inference. For such languages that do not have type inference built in, flow analysis is an inference method that works well and has already been applied successfully for languages like JavaScript with its superset Typescript. Grudal typing algorithms that only partially infer types analyze the flow of programs and create constraints based on the usage of functions and identifiers. An example function execution `f 1`, which only applies `1` to the function `f`, can be constrained with `f: int -> a` degrading the polymorphic function type `a -> a` to subtype that only allows arguments of type `int` to be supplied to the function. Lionel Parreaux, in `The Simple Essence of Algebraic Subtyping` @main, created a type system for a simple programming language, MLSub, that supports functions, sets, and unary let-bindings.
 
-== Structure
-What follows is a brief introduction to the inference algorithm Simple-Sub behind MLSub @main and its main properties. The inference algorithm for the Nix language (SimpleNix) uses this algorithm and extends it where necessary to account for more complex types, different syntax, and other liberations.
+What follows is a brief introduction to the inference algorithm SimpleSub behind MLSub @main and its main properties. The inference algorithm for the Nix language (SimpleNix) uses this algorithm and extends it where necessary to account for more complex types, different syntax, and other liberations.
 
 == An Introduction to Algebraic Subtyping
-Simple-Sub @main, as introduced by Lionel Parreux, is a practically implemented algorithm based upon the work of Dolan, Stephen, Mycroft, and Alan @original, but simplified to be used by people with a less strong theoretical background. Instead of arguing about types in terms of sets, creating a distributive lattice, and simplifying terms with bi-unification, SimpleSub has a practical implementation at its root. The implementation is similar to Hindley-Milner style inference with similar properties in that it does not need type annotations and can always infer the principal type of expressions. The main difference is its usage of subtyping to add polymorphism to the language while preserving global type inference and principal types.
-The Minimal MLSub language supports Records, Functions, a singular Primitive (int), field accesses, and simple let-bindings. The formal definition is given below, followed by the syntax definition for types.
+Simple-Sub @main, as introduced by Lionel Parreux, is a practically implemented algorithm based upon the work of Dolan, Stephen, Mycroft, and Alan @original, but simplified and with explicit code examples to make it accessible for people with the less theoretical background. Instead of arguing about types in terms of sets, creating a distributive lattice, and simplifying terms with bi-unification, SimpleSub has a practical implementation in scalar at its root. The implementation is similar to Hindley-Milner style inference and upholds its properties in that it does not need type annotations and can always infer the principal type of expressions. This means it can always find the most general type that subsumes all other possible types without needing hints from the programmer. The main difference is that it adds subtyping polymorphism to the language while still upholding these strong properties. The Minimal MLSub language supports records, functions, a singular primitive (int), field accesses, and simple let-bindings. The formal definition is given below, followed by the syntax definition for types.
 
-$
-t := x | λ x.t | t space t | {l_0 = t; ...;l_n = t} | t.l | "let rec" x = t "in" t
-$
-$
-τ ::= "primitive" | τ -> τ | {l_0 : τ; ...;l_n: τ} | α | top | ⊥ | τ union.sq τ | τ sect.sq τ | μ α.τ
-$
+#figure(caption: "Syntax and type definition of SimpleSub", [
+  $
+  t := x | λ x.t | t space t | {l_0 = t; ...;l_n = t} | t.l | "let rec" x = t "in" t
+  $
+  $
+  τ ::= "primitive" | τ -> τ | {l_0 : τ; ...;l_n: τ} | α | top | ⊥ | τ union.sq τ | τ sect.sq τ | μ α.τ
+  $
+  #v(8pt)
+]) <SimpleSubDefinition>
+
+(NEW)
+The syntax specification extends the known λ-calculus rules for functions and applications with records, field accesses, and let bindings. Although it is not imminent from the typing rules, the `rec` keyword that marks a let binding as recursive is optional. The type definition contains the usual λ-calculus types and extends them with SimpleSub-specific types needed for subtyping. $top$ and $bot$ are the unit and empty type, the union and intersection type $τ union.sq τ$ and $τ sect.sq τ$ as well as the recursive type $μ α. τ$ are further discussed in @union and @recursion.
+
 
 At the basis of Simple-Sub and SimpleNix is the traversal of an abstract syntax tree (AST) by a typing function `type_term`.
 
@@ -311,7 +320,8 @@ fn type_term<'a>(ctx: &mut Context<'a>, term: &'a Ast, lvl: usize) -> Result<Typ
 }
 ```
 
-The recursive function `type-term` takes a context that contains all bound identifiers and a term that should be reduced. It then matches on the AST, which a singular enum can model in rust, and computes the type of the given variant. The novelty of SimpleSub is using subtyping to create constraints for expressions by only constraining type variables. Every Identifier from the parser is replaced by an Identifier-struct in Rust that holds lower and upper bounds for the type variables.
+The recursive function `type-term` takes a context that contains all bound identifiers and a term that should be reduced. It then matches the AST's variants and computes the type of the given expression. SimpleSub's novelty is that it adds subtyping by only constraining type variables with lower and upper bounds during AST traversal. The lower and upper bounds are stored in mutable vectors and are the only source of mutability in the algorithm.
+
 
 ```rust
 pub struct Var {
@@ -322,7 +332,7 @@ pub struct Var {
 }
 ```
 
-Constraining happens during ast-traversal when functions are called, record fields are accessed, or operators are evaluated. Constraining is put into a stand-alone function `constrain` that constrains the first type to be a subtype of the second and errors if not possible.
+Type variables are created mainly for function arguments but also return types, let-bindings, and applications. Constraints on variables are only added implicitly when the `constrain` function is called for two types, and one of them happens to be a type variable. The `constrain` function is called during ast traversal and tries to constrain the first argument to be a subtype of the second. If constraining is not possible an error is returned.
 
 ```rust
 fn constrain_inner(lhs: &Type, rhs: &Type, cache: &mut HashSet<(&Type, &Type)>) -> InferResult<()> {
@@ -386,31 +396,29 @@ fn constrain_inner(lhs: &Type, rhs: &Type, cache: &mut HashSet<(&Type, &Type)>) 
 
 ```
 
-Functions are subtyped as where $f_1: τ_1 -> τ_2$ is a subtype of $f_2: τ_3 -> τ_3$ if and only if $τ_1 < τ_3 ∧ τ_4 < τ_2 $. Records use the usual depth and width subtyping; variables are constraints based on usage. One important thing to note is using levels to handle let-polymorphism correctly.
+Functions are subtyped as usual where $f_1: τ_1 -> τ_2$ is a subtype of $f_2: τ_3 -> τ_4$ if and only if $τ_1 < τ_3 "and" τ_4 < τ_2 $. Records use the usual depth and width subtyping; variables are constraints based on usage. One important thing to note is using levels to handle let-polymorphism correctly.
 
 
 === Levels
-Let-bindings and λ-bindings are two ways to add new names to a program. While let-bindings allow polymorphism by writing an expression once and using it in different places and with different types, λ-bindings are introduced empty, and their type is automatically inferred from their usage in the function body. Let-bindings are described by type schemes with generalized ($forall$-quantified) variables that can be instantiated at different types based on usage.
-As soon as a let binding refers to λ-bindings, it gets tricky as it is impossible to generalize the whole argument. To solve this, partial generalization is needed, which @original handles by prefixing a variable with bounds $[Δ] τ$ so that λ-bound variables can be chosen partially free depending on their general structure. @main takes another approach with levels. Levels start at 0, and the level increases once a let-binding is created. Every variable of that let-binding is initialized with level + 1. Upon instantiating that type scheme, the level defined from which upward variables should be considered generalized ($forall$-quantified). The effect is similar to adding a local context but works in a practical programming environment. 
+Let-bindings and λ-bindings are two ways to add polymorphism to a program. While let-bindings allow polymorphism by writing an expression once and using it in different places, λ-bindings types are inferred from their usage in the function body. \
+To make let-bindings versatile, they must be formalized with generalized ($forall$-quantified) type variables that can be instantiated at different types based on the let-bindings usage. Otherwise, it would not be possible to apply a function like $"id": a -> a $ to different types because the first application would lock the let-bindings type.\
 
-=== Intersection and Union Types
-Union and intersection types that are also part of the type syntax are used to model subtype relations and are restricted to negative and positive positions, respectively. Positive positions are taken by types that a function outputs and can only be intersections ($α sect.sq β -> α$). From a typing perspective, this liberates the function output to a supertype of both α and β so either α or β can be returned. Conversely, negative positions are taken by function arguments and strictly unions ($α union.sq β -> α$), constraining the arguments to a subtype of both α and β.
-
-This limitation also restricts the manual type definitions that programmers can write as a type definition like $"str" sect.sq "int" -> "int" $ that describes a function taking an argument of either type `str` or `int` is not allowed by the type system.
-
-=== Recursive Types
-Recursive types are types that reference themselves in their definition. These types are generally of the form $μ α. (T -> α)$ and can be unrolled indefinitely $T -> μ α. (T -> α)$, $T -> T ->μ α. (T -> α)$, $T -> T -> T -> ...$ to create, in theory, infinitely sized types. A practical example of recursive types is the call-by-value Y-Combinator of ML that throws away its arguments and returns itself. This function is not typeable in ML at all, but MLsub supports it and could type it with any of the following types $T -> T, T -> (T -> T), T -> (T -> (T -> T), ...$. To concisely express this type, the recursive type μ α. (T -> α) is needed.
+As soon as a let binding refers to λ-bindings, it can no longer be fully generalized as the λ-binding must not be variable. The only solution to this is a partial generalization that only generalizes a subset of all available expressions. Dolan @original does this by prefixing a type with bounds $[Δ] τ$ so that only the none-referred types are generalized. Parreaux @main takes another approach with levels, which is the practical way to achieve the same thing in a programming language. The initial level is 0 and increases once a let-binding is created. Every variable of that let-binding is initialized with level + 1 to mark them as generalized. Upon instantiating that type scheme, only the type variable with a level higher than the threshold is generalized (newly created).
 
 
-=== Recursions
-- During constraining ( type -> type ) map to solve this
-- Extrusion (cyclic bounds in lower)
+=== Intersection and Union Types <union>
+Union and intersection types are used to model subtype relations between types on a distributive lattice where types are order $τ_1 <= τ_2$ when $τ_1$ subsumes the type of $τ_2$, i.e., is less general. The union between two types (also join) is the least upper bound between those types, and the intersection (meet) is the greatest lower bound. $top$ and $bot$ are the biggest (union) and smallest (empty) type, respectively. Subtyping with arbitrary bounds forms a directed constraint graph that may contain cycles and is hard to reduce. Using constraint types like $(α → "bool") → α → β → γ | α ≤ γ, β ≤ γ$ only redirects the problem to the programmer @original, which also not solves the problem. In his Ph.D. thesis, Pottier showed that when restricting unions to negative (input) and intersections to positive (output) positions, the constraint graph is bipartite and can be solved efficiently. To make this distinction, the distributive type lattice $cal(T)$ is split into two subsets of polar variables $τ^+$ and $τ^-$, which are annotated by their negative or positive position, respectively. This limitation also restricts the manual type definitions that programmers can write as a type definition like $"str" union.sq "int" -> "int" $ that describes a function taking an argument of either type `str` or `int` is in an illegal negative position.
+
+=== Recursive Types <recursion>
+Recursive types are types of the form $μ α. (T -> α)$ that references themselves in their definition and can be unrolled indefinitely $T -> μ α. (T -> α)$, $T -> T ->μ α. (T -> α)$, $T -> T -> T -> ...$. A practical example of a recursive type is the call-by-value Y-Combinator of ML that throws away its arguments and returns itself. This function is not typeable in ML at all, but SimpleSub and SimpleNix support it and could type it with any of the following types $T -> T, T -> (T -> T), T -> (T -> (T -> T), ...$. To concisely express this type, the recursive type $μ α. (T -> α)$ is needed. In MLsub, as specified by Lionel Parreaux @main, recursiveness is introduced with recursive let-bindings that can reference themselves in their definition. 
+SimpleNix supports the same let-recursion and also recursion in set definitions. By allowing recursion in sets and multi-let bindings, two types of recursion can happen: primitive recursion of the shown form that can be typed using $μ α. (T -> a)$ and mutual recursion between two types. While primitive recursion is allowed in Nix, mutual recursion is detected by the evaluator and results in an error.
+
 
 === Type Simplification
-Even though type-condescending is enough to create principle types, types produced by type inference contain unnecessary structures and type variables that can be unified, making the provided types bloated and hard to comprehend. A simplification step is thus needed to create actually usable types. While @original draws the line between types and finite automata, which enables one to leverage existing techniques for automata reduction, the SimpleSub Paper @main uses a more naive approach with a collection of hands-on reductions that can directly be applied to the output types. Even though code was not shown in the paper and simplification was only briefly discussed, the \_ repository provides simplification code that SimpleNix heavily relies on.
+Even though type-coalescing is enough to create principle types, types produced by type inference contain unnecessary structures and type variables, making the types bloated and hard to comprehend. A simplification step is thus needed to create actually usable types. While Dolan @original draws the line between types and finite automata, which enables one to leverage existing techniques for automata reduction, the SimpleSub Paper by Parreaux @main uses a more naive approach with a collection of hands-on reductions that can directly be applied to the output types. Even though the code was not shown in the paper and simplification was only briefly discussed, the associated repository provides simplification code that SimpleNix can leverage in the future.
 
 
-=== Specification of SimpleSub
+
 #let derive(name, prem, conclusion) = [
   #table(
       stroke: none, 
@@ -443,20 +451,28 @@ Even though type-condescending is enough to create principle types, types produc
   caption: caption,
 ) 
 
-#typings("Typing rules for SimpleSub", (
+=== Specification of SimpleSub
+(New)
+What follows is the specification of SimpleSub @main that refers to the syntax and type definition in @SimpleSubDefinition. The typing rules in @simplesub-typings contain the usual λ-calculus rules for variables and functions #smallcaps("T-Var, T-Abs, T-App") and extends them with the record and let-binding rules #smallcaps("T-Rcd, T-Proj") and #smallcaps("T-Let"). #smallcaps("T-Sub") is needed for subtyping. \
+
+#typings([Typing rules for SimpleSub@main slightly adjusted for notation.], (
   (
-    derive("T-Var", ($Γ(x) = forall arrow(α). space τ $,), $Γ tack x: τ[arrow(α) \\ arrow(τ)]$), 
+    derive("T-Var", ($x: forall arrow(α). space τ in Γ$,), $Γ tack x: τ[arrow(α) \\ arrow(τ)]$), 
     derive("T-Abs", ($Γ, x: τ_1 tack t: τ_2$,), $Γ tack λ x. t: τ_1  → τ_2$),
-    derive("T-App", ($ Γ tack t_0: τ_1 → t_2$, $Γ tack t_0: τ_1$ ), $t_0 t_1: τ_2$),
+    derive("T-App", ($ Γ tack t_1: τ_1 → τ_2$, $Γ tack t_2: τ_1$ ), $t_1 t_2: τ_2$),
 ),(
-    derive("T-Rcd", ($Γ: t_0: τ_0$, "...",$Γ: t_0: τ_n$,), $Γ tack {arrow(t)}: {arrow(τ)}$),
-    derive("T-Proj", ($ Γ: t: {l: τ} $,), $Γ tack t.l: τ$),
-    derive("T-Sub", ($Γ: t: τ_1$, $τ_1 <= τ_2$), $Γ tack t: τ_2$)
+    derive("T-Rcd", ($Γ tack t_0: τ_0$, "...",$Γ tack t_n: τ_n$,), $Γ tack {arrow(l): arrow(t)}: {arrow(l): arrow(τ)}$),
+    derive("T-Proj", ($ Γ tack t: {l: τ} $,), $Γ tack t.l: τ$),
+    derive("T-Sub", ($Γ tack t: τ_1$, $τ_1 <= τ_2$), $Γ tack t: τ_2$)
   ),
   (
-   derive("T-Let", ($Γ, x: τ_1 tack t_1 : τ_1$, $Γ, x: arrow(α). τ_1: t_2: τ_2$), $Γ tack "let rec" x = t_1 "in" t_2: τ_2$) 
+   derive("T-Let", ($Γ, x: τ_1 tack t_1 : τ_1$, $Γ, x: forall arrow(α). τ_1 tack t_2: τ_2$), $Γ tack "let rec" x = t_1 "in" t_2: τ_2$) 
   ,)
-))
+)) <simplesub-typings>
+
+The subtyping rules in @subtypingrules use the subtyping hypotheses $H$, which are added during constraining and their respective rules #smallcaps("S-Weaken, S-Assum and S-Hyp"). The rules #smallcaps("S-Refl") and #smallcaps("S-Trans") are common subtyping rules, and rules #smallcaps("S-Rec") are used for recursive types. The remain rules #smallcaps("S-Or, S-And, S-Fun, S-Rcd") and #smallcaps("S-Depth") are the known subtyping rules for unions, intersections, functions and records.
+
+The environment $Σ$ is used to store subtyping rules which are later applied by #smallcaps("S-Hyp"). Newly assumed subtyping hypotheses must not be applied directly as this would obviously be unsound so the "later" modality $gt.tri$ is used to delay the application of hypotheses. When adding a hypothesis with #smallcaps("S-Assum"), the later modality is inserted in the context, which stops the application of #smallcaps("S-Hyp") until the assumption passes through a function or record rules.
 
 #figure(
   align(center,
@@ -472,208 +488,310 @@ Even though type-condescending is enough to create principle types, types produc
         derive("S-Hyp", ($H in Σ$,), $Σ tack H$),
         derive("S-Rec", (), $μ α.τ eq.triple [μ α.τ slash α]τ$),
         derive("S-Or", ($forall i, exists j,Σ tack τ_i <= τ'_j$,), $Σ tack union.sq_i τ_i <= union.sq_j τ'_j$),
-        derive("S-And",($forall i, exists j,Σ tack τ_i <= τ'_j$,), $Σ tack sect.sq_i τ_i <= sect.sq_j τ'_j$),
+        derive("S-And",($forall i, exists j,Σ tack τ_j <= τ'_i$,), $Σ tack sect.sq_j τ_j <= sect.sq_i τ'_i$),
       )),
       pad_stack((
-        derive("S-Fun", ($lt.tri Σ tack τ_0 <= τ_1$, $lt.tri Σ tack τ_2 <= τ_3$), $Σ tack τ_1 -> τ_2 <= τ_0 -> τ_3$),
-        derive("S-Rcd", (), ${overline(t_i : t_i)^i} eq.triple sect.sq_i {l_i : t_i}$),
-        derive("S-Depth", ($lt.tri Σ tack τ_i <= τ_2$,), $σ tack {l: τ_1} <= { l: τ_2}$)
+        derive("S-Fun", ($lt.tri Σ tack τ_0 <= τ_1$, $lt.tri Σ tack τ_2 <= τ_3$), $Σ tack τ_1 arrow.long τ_2 <= τ_0 arrow.long τ_3$),
+        derive("S-Rcd", (), ${arrow(t) : arrow(τ)} eq.triple sect.sq_i {l_i : t_i}$),
+        derive("S-Depth", ($lt.tri Σ tack τ_1 <= τ_2$,), $Σ tack {l: τ_1} <= { l: τ_2}$)
+      )),
+      v(10pt)
+      ,
+      pad_stack((
+        $lt.tri(H_0, H_1) = lt.tri H_0, lt.tri H_1$,
+        $lt.tri(gt.tri H) = H$,
+        $lt.tri ( τ_0 <= τ_1) = τ_0 <= τ_1$
       ))
+      ,
+      v(10pt)
     )
   ),
-  caption: "Subtyping rules of SimpleSub"
-)
+  caption: [Subtyping rules of SimpleSub@main slightly adjusted for notation.]
+) <subtypingrules>
 
 
 == Static Type Inference for Nix
-The nix language is a much stronger language than MLSub in that it supports many more primitive types and language constructs and makes the core features like sets, let-bindings, and functions more expressive. The following section discusses the differences between the type inference algorithm for MLSub, Simple-Sub, and the type inference algorithm for Nix, SimpleNix.
+The Nix language is a much stronger language than MLSub in that it supports many more primitive types and language constructs and makes the core features like sets, let-bindings, and functions more expressive. The following section discusses the differences between the type inference algorithm for MLSub, Simple-Sub, and the type inference algorithm for Nix, SimpleNix.
 
-The nix language supports the same primitive operations as SimpleSub, so the basic syntax and type definition look very similar to SimpleSub. The only changes are due to different syntax and the removal of `primitive` in favor of five explicit primitive types.
+The Nix language supports the same primitive operations as SimpleSub, so the basic syntax and type definition look very similar to SimpleSub. The only changes are slight syntax extensions and the removal of `primitive` and functions, as they will be added later with advanced syntax and more variety. 
 
 \
 
 #figure(caption: "Basic Syntax and Type definition for SimpleNix", align(left)[
-  $t := x | x: t | t space t | {l_0 = t; ...;l_n = t} | t.l | "let" x_0 = t_0; ... ; x_n = t_n; "in" t $
+  $t ::= x | t space t | {l_i = t} | t.l | "let" x_0 = t; ... ; x_n = t; "in" t$
   
-  $τ ::= "bool" | "num" | "string" | "path" | "lst" | τ -> τ | {l_0 : τ; ...;l_n: τ} | α | top | ⊥ | τ union.sq τ | τ sect.sq τ | μ α.τ $ 
+  $τ ::=   τ -> τ | {l_0 : τ; ...;l_n: τ} | α | top | ⊥ | τ union.sq τ | τ sect.sq τ | μ α.τ$ 
   
-  \
+  #v(8pt)
 ])
 
-=== Operator Constraints <operators>
+=== Primitives
+(New)
+The Nix language, instead of only one primitive, supports booleans, strings, paths, floats, and integers. From a typing perspective and semantically, there is no difference between integers and floats, so we use a combined type `num` which represents both types.
 
-The Nix language has arithmetic, logic, comparison operators, and some specialized operators for sets and lists. Operators need special handling because of their runtime semantics, which allows them to combine and mix some of their operator types but not all.
-
-The logic operators $and, or, ->, ¬$ and arithmetic operators $+, -, \/, *$ are trivial as they only allow numbers and, respectively, booleans as operands. `T-Op-Arith` and `T-Op-Logic` rules are used to handle these operators.
-
-Addition is defined for strings, paths, and numbers, and it is also possible to mix strings and paths under addition. The first operand is always the deciding factor for the type of the operation. These operators also trivially come with a syntax extension:
-
-The comparison operators $<, <=, >, >=, !=$, and $==$ behave as expected for numbers. Paths and strings are determined lexicographically, but it is worth noting that cross-comparisons between strings and paths are not allowed perpendicular to how addition behaves. Arrays are compared element-wise, up to the first deciding element, and records do not support comparisons even though a depth and width-based comparison would, in theory, be possible. To handle monotone operators with no crossed types, we check if the first operand is a primitive type and constrain the second type based on that. If the first operand is a type variable, we check the second one and constrain it equally. The only unhandled case is when both operands are type variables, leaving us with the only option to add lower bounds for all supported operands on all variables. During simplification, we can then find a fitting type.
-
-
-Besides the common operators, Nix adds operators for specialized use cases, namely `++` (concat), which concatenates two lists, and `//` (update), which updates the first record with fields from the second one. Both operators are easy in that they force their operands to be of type list or record, respectively, but they have non-trivial meanings for type inference, which is further discussed in @mutating_lists_and_records.
-
-Finally, Nix also introduces some helper operators like `?` that check if some Record has an attribute. However, this operator does not provide information about the object itself, leaving it as a no-op during type inference. Another operator, `or`, returns a default value in case the requested field of a set does not exist. In this case, we can return the union of the requested field type and the default value as type. (TODO)
-
-#figure(caption: "Operator Snytax extension", align(left)[
-  _Syntax Extension (arithmetic):_ $t = t + t | t - t | t * t | t space \/ space t$
+#figure(caption: "Syntax and typing rules for primitives", 
+align(left)[
+  _Syntaxt (bools)_: $b ::= "true" | "false"$
   
-  _Syntax Extension (logic):_ $t = (t "&&" t) | (t "||" t) | (t -> t) | !t$
+  _Syntaxt (strings)_: $s ::=$ `[a-zA-Z_]*`
   
-  _Syntax Extension (comparisons):_ $t =  t < t | t <= t | t >= t | t > t | t == t | t != t$
+  _Syntaxt (Paths)_: $p ::=$ `(./|~/|/)([a-zA-Z.]+/?)+`
   
-  Syntax Extension (helpers): $t = t "? " l | t "//" t | t "++" t | t.l "or" t $
+  _Syntax (numbers)_: $n ::= $ `([0-9]*\.)?[0-9]+`
+  
+  _Syntax extension (primitives)_: $t ::= ... | b | s | p | n $
+  
+  _Type extension (list)_: $τ ::= ... | "bool" | "string" | "path" | "num" $ 
 
-  \
+  #v(8pt)
 ])
+
+
 
 === Records
-Records are primitives in @main and can be typed with `S-Rcd` from SimpleSub. The only distinction between MLSub and  Nix is that Nix allows self-referential records with the `rec` keyword, which has two important implications. Firstly, the order of evaluation can no longer be arbitrary because fields can reference each other in arbitrary order. To account for this, the context has to be extended with all record fields up-front, and inference has to jump to unevaluated fields in case they are referenced. By allowing self-references, it is possible to create two forms of recursion: primitive and mutual recursion. While the first one is allowed, the second is not.
+Records are primitives in @main and can be typed with (`S-Rcd`) @simplesub-typings from SimpleSub. The only distinction between MLSub and  Nix is that Nix allows self-referential records with the `rec` keyword, which has two important implications. Firstly, the order of evaluation can no longer be arbitrary because fields can reference each other in arbitrary order. To account for this, the context has to be extended with all record fields up-front, and inference has to jump to unevaluated fields in case they are referenced. By allowing self-references, it is possible to create two forms of recursion: primitive and mutual recursion. While the first one is allowed, the second is not.
 
-To type a recursive record, we keep a list of the record's identifiers and start by looking at the first element. This element is marked as seen, and we proceed with typing its associated term. If a lookup happens during that inference, the list of record identifiers is checked, and if it contains the requested identifier, the item gets marked as well, and typing continues for that item. If the requested item is already marked, a cycle is encountered, and it has to be checked whether this recursion is mutual or simple. Only if the requested identifier does not yet have an associated complete type or it is unmarked do we know it is mutual recursion and throw an error. Otherwise, a recursive type has to be returned.
+To type a recursive record, we keep a list of the record's identifiers and start by looking at the first element. This element is marked as seen, and we proceed with typing its associated term. If a lookup happens during that inference, the list of record identifiers is checked, and if it contains the requested identifier, the item gets marked as well, and typing continues for the respective expression. If the requested item is already marked, a cycle is encountered, and it has to be checked whether this recursion is mutual or not. Only if the requested identifier does not yet have an associated complete type or it is unmarked do we know it is mutual recursion and throw an error. Otherwise, a recursive type has to be returned.
 
 #align(center)[
-  _Syntax extension(recursive records):_ $t := "rec" {l_0 : t; ...; l_0 : t}$
+  _Syntax extension (recursive records):_ $t ::= ... | "rec" {l_0 : t; ...; l_n : t}$
 ]
 
 === Lists
-The list type in nix is very versatile in that it allows the concatenation of any arbitrary elements to each other. While this gives the most power to the programmer, it is notoriously hard to derive a type for these lists. A list type that aggregates all item types to a list type best describes the underlying structure but is very rigid and impossible to apply to generic functions like maps that would expect a homogenous list with elements of type T. Optimistically checking every list item and creating a homogenous list type for arrays that only inhabit one type of element is possible but would already be useless for lists that consist of string and path elements. An aggregate type would be created for these lists because string and path are principally different, even though they are used interchangeably in practice. SimpleNix thus resorts to only aggregate types for lists and leaves it for the programmer to define the actual structure of the list with type annotations.
-
-=== Mutating Lists and Records <mutating_lists_and_records>
-Concatenating two lists is pretty straightforward, as we can create a new list type with all elements of the second list. During type simplification, all occurrences of list constraints should be concatenated to one singular list constraint, similar to how record constraints are unified. To improve 
-We could do the same for record fields, but it's unclear whether solving conflicting constraints at this stage or later during type simplification would be useful.
-
+The list type in Nix is very versatile in that it allows the concatenation of any arbitrary elements to each other. While this gives the most power to the programmer, it is notoriously hard to derive a type for these lists. A list type that aggregates all item types to a list type best describes the underlying structure but is very rigid and impossible to apply to generic functions like maps that would expect a homogenous list with elements of type T. Optimistically checking every list item and creating a homogenous list type for arrays that only inhabit one type of element is possible but would already be useless for lists that consist of string and path elements. An aggregate type would be created for these lists because string and path are principally different, even though they are used interchangeably in practice. SimpleNix still tries to create a pure list and resorts to an enumeration otherwise.
 
 #figure(
-  align(
-    center,
-      stack(
-      dir: ltr,
-      spacing: 1.5em,
-      derive("S-List-Concat", ($Γ tack a: "lst"$, $Γ tack b: "lst"$ ), $Γ tack a "++" b: "lst"$),
-      
-      derive("S-Rec-Update", ($Γ tack a: { l_i: t_i }$, $Γ tack b: { l_j: t_j }$), $Γ tack a "//" b: a backslash b union b $) ,
+  align(left)[
+  _Syntax extension (lists)_: $t ::= ... | [ space t_0 space t_1 space ... space t_n space] $
+  
+  _Type extension (list)_: $τ ::= ... | [" "arrow(τ)" "] $ 
 
-      derive("S-Rec-Default", ($Γ tack a: {l_i : τ_i}$, [*_ident_* $b$]), $Γ tack a ? b: "bool"$)
-      
-    )
+  
+  ]  
+)
+
+(New) The simple subtyping rule for homogenous lists is also added: 
+
+#align(center)[
+  #derive("S-Lst", ($ Γ tack τ_1 <= τ_2 $,), $ Γ tack [τ_1] <=  [τ_2]$)
+]
+
+
+=== Operators <operators>
+
+The Nix language has arithmetic, logic, comparison operators, and some specialized operators for sets and lists. Operators need special handling because of their runtime semantics, which allows them to combine and mix some of their operator types but not all. \
+The logic operators $and, or, ->, ¬$ and arithmetic operators $+, -, \/, *$ are trivial as they only allow numbers and, respectively, booleans as operands. #smallcaps("T-Op-Arith") and #smallcaps("T-Op-Logic") (@operator_typing_rules) rules are used to handle these operators. Addition $(+)$ is defined for strings, paths, and numbers, and it is also possible to mix strings and paths under addition. The first operand is always the deciding factor for the type of the operation. Due to this heavy overloading, three typing rules #smallcaps("T-Add-Num, T-Add-Str, T-Add-Path") are needed.
+rules for this reason. \
+The comparison operators $<, <=, >, >=, !=$, and $==$ behave as expected for numbers. Paths and strings are determined lexicographically, but it is worth noting that cross-comparisons between strings and paths are not allowed perpendicular to how addition behaves. Arrays are compared element-wise, up to the first deciding element, and records do not support comparisons even though a depth and width-based comparison would, in theory, be possible.
+
+To type and constrain the above monotone operators with no crossed types, the first operand is checked, and if it is a primitive type, the second type is constrained to the same type. If the first operand is a type variable, the second operand might give a hint upon which the type variable can be constrained. The only unhandled case is when both operands are type variables, leaving us with the only option to add lower bounds for all supported operands on all variables.
+
+Besides the common operators, Nix adds operators for specialized use cases, namely `_++_` (concat), which concatenates two lists, and `_//_` (update), which updates the first record with fields from the second one. Both operators are easy in that they force their operands to be of type list or record, respectively, but they have non-trivial meanings for type inference, which is further discussed in @mutating_lists_and_records.
+
+Finally, Nix introduces helper operators like `?` and `or` that operate on records. The check operator (?) returns a bool, signaling whether the given record has the requested field. If the left operand is a proper record, the check operator is a no-op that trivially returns a bool. If it is a type variable, a record-field constraint with the value `optional<undefined>` can be made on the type variable. While this is not really needed, it can improve record-field completions during configuration, making it unnecessary for Nix developers to look up possible fields manually.
+The `or` operator extends the check operator in that it returns a default value in case the requested field of a set does not exist. The type of this operator is $f: α → β → α union.sq  β$.
+
+\
+
+#figure(caption: "Operator Syntax extension", align(left)[
+
+  _Syntax extension (arithmetic):_ $t ::=  ... | t + t | t - t | t * t | t space \/ space t$
+  
+  _Syntax extension (logic):_ $t ::= ... | (t "&&" t) | (t "||" t) | (t -> t) | !t$
+  
+  _Syntax extension (comparisons):_ $t ::= ... | t < t | t <= t | t >= t | t > t | t == t | t != t$
+  
+  Syntax extension (helpers): $t ::= ... | t "? " l | t "//" t | t "++" t | t.l "or" t $
+  #v(8pt)
+])
+
+#typings("Operator typing rules 1", (
+  (
+    derive("T-Op-Arith", ($Γ tack t_1: "num"$, $Γ tack t_2: "num"$, $"op" ϵ space [-, +, \/, *]$), $ Γ tack t_1 "op" t_2: "num"$),
+    derive("T-Op-Logic", ($Γ tack t_1: "bool"$, $Γ tack t_2: "bool"$, $"op" ϵ space [->, ∨, ∧]$), $ Γ tack t_1 "op" t_2: "bool"$),
+  ),
+  (
+    derive("T-Add-Num", ($Γ tack t_1: "num"$, $Γ tack t_2: "num"$), $ Γ tack t_1 + t_2: "num"$),
+    derive("T-Add-Str", ($Γ tack t_1: "str"$, $Γ tack t_2: "str" union.sq "path"$), $ Γ tack t_1 + t_2: "str"$),
+    derive("T-Add-Path", ($Γ tack t_1: "path"$, $Γ tack t_2: "path" union.sq "str"$), $ Γ tack t_1 + t_2: "path"$), 
   ), 
-  caption: "Operator typing rules"
+  (
+    derive("T-Compare", ($Γ tack t_1: τ_1$, $Γ tack t_2: τ_2$, $τ_1 eq.triple τ_2$, $"op" in [<, <=, >=, >, ==, !=]$), $ Γ tack t_1 "op" t_2: "bool"$),
+  ),
+  (
+    derive("T-Negate", ($Γ tack e: "bool"$,), $ Γ tack !e: "bool"$),
+    derive("T-Check", ($Γ tack e: {l: τ}$,), $Γ tack e ? l: "bool"$),
+    derive("T-Or", ($Γ tack t_1: {l: τ_1}$, $Γ tack t_2: τ_2$), $Γ tack t_1.l "or" t_2: τ_1 union.sq τ_2$)
+  )
+)) <operator_typing_rules>
+
+
+=== Mutating Lists and Records <mutating_lists_and_records>
+Concatenating two lists is pretty straightforward if both types are proper lists, as a new list type with all elements of the first and second list can be concatenated. Type variables complicate the matter because they don't have a single associated type. During type inference, it is optimistically checked if the variable has a list constraint, and if yes, that constraint is used. Otherwise, the partial list type  from the know operand is returned, and the type variable is constrained with an empty list type.
+
+#typings("Operator typing rules 2",
+((
+      derive("S-List-Concat-Hom", ($Γ tack a: "[τ]"$, $Γ tack b: "[τ]"$ ), $Γ tack a "++" b: "lst[τ]"$),
+
+      derive("S-List-Concat-Mutli", ($Γ tack a: [arrow(τ_1)]$, $Γ tack b: [arrow(τ_2)]$ ), $Γ tack a "++" b: "lst"[arrow(τ_1)arrow(τ_2)]$),
+
+      ),(
+      derive("T-Rec-Update", ($Γ tack a: { l_i: t_i }$, $Γ tack b: { l_j: t_j }$), $Γ tack a "//" b: a backslash b union b $) ,
+    ),)
 )
 
 
 === Let-Bindings
-Let-bindings in the Nix language supersede let-bindings in MLsub because Nix allows multiple variable bindings as part of one let binding instead of only one. Normally, one could build an isomorphism between the two let-bindings by breaking apart an n-multi-let and creating a chain of n let-bindings to introduce all bindings. This is inapplicable in practice because the name bindings in a multi-let can refer to each other. These references can come in arbitrary order and form cycles like records. The same approach for records has to be taken for let-bindings.
+Let-bindings in the Nix language supersede let-bindings in MLsub because Nix allows multiple variable bindings as part of one let binding instead of only one. Normally, one could build an isomorphism between the two let-bindings by breaking apart an n-multi-let and creating a chain of n let-bindings to introduce all bindings. This, however, is inapplicable in practice because the name bindings in a multi-let can refer to each other. These references can come in arbitrary order and form cycles like records. To solve this, every new identifier of the let-binding has to be added to the context up-front so that it can be referred to during typing. 
 
-#figure(caption: "Let typing rules",
-  derive("T-Mutli-Let", ($overline(Γ x_i: τ_(1,i) tack t_(1, i) : τ_(1, i) #h(1cm) Γ x_i: arrow(α). τ_(1, i): t_(2, i): τ_(2, i))^i$,), $Γ tack "let" x_0 = t_(1, I); ... ; x_n = t_(1,n)  "in" t_(2, n): τ_(2, n)$)
+
+#figure(caption: "Let typing rule",
+  derive("T-Mutli-Let", ($Γ overline(x_i: τ_i tack t_i : τ_i)^i$, $Γ overline(x_i: forall arrow(α). τ_i)^i tack t: τ$,), $Γ tack "let" x_0 = t_1; ... ; x_n = t_n  "in" t: τ$)
 )
 
 === Functions
-Compared to MLSub, Nix allows identifier arguments and destructuring set patterns. To add them to the language, a new type, `Pattern,` is added, which mirrors the record type but also has a boolean flag that expresses whether the pattern allows any non-enumerated record fields. Only when this flag is set is it allowed to call the function with a record that contains more than the requested fields.
-Pattern constraining flows perpendicular to how identifier arguments are constrained. Identifiers are introduced as empty type variables and get constrained based on their usage in the function's body. Patterns already define a structure that only partially changes with the function's body. All fields of the pattern are added to the context as new empty variables if they define no default value or are wrapped in the `optional` type and with a constraint for the default value if it exists. The alias that can be specified with the \@-sytax and refers to the whole record value also has to be added to the context and is either a static record type in case the pattern is not a wild-cart or a type variable with a record constraint for the needed fields so that new fields can be added in the function body.
+In extension to MLSub, Nix allows identifier and destructuring set patterns as function arguments. To add them to the language, a new type, `Pattern,` is added. This type mirrors the record type but adds a boolean flag that expresses whether the pattern allows any non-enumerated record fields, i.e. if the pattern is a wild-card pattern. Only when this flag is set is it allowed to call the function with a record that contains more than the requested fields.
+Pattern constraining flows contrary to how identifier arguments are constrained. Identifiers are introduced as empty type variables and constrained based on their usage in the function's body. Patterns already define a structure that only partially changes with the function's body. All fields of the pattern are added to the context as new empty variables if they define no default value or are wrapped in the `optional` type and with a constraint for the default value if it exists. The alias that can be specified with the \@-syntax and refers to the whole record value has to be added to the context as well. This alias is either added as a static record type in case the pattern is not a wild-cart or a type variable with a record constraint for the needed fields so that new fields can be added in the function body.
 
-Due to the new pattern type, constraining has to account for the case that a function with a pattern argument is called. If the given value is a record itself, the provided fields can be compared one by another, and if all fields exist and subsumed the pattern fields, constraining succeeds. In case the pattern is not a wildcard pattern, it has to be checked that the given record does not have any additional fields, and an error has to be raised otherwise. In case the value given to the function is a type variable, we can only constrain the type variable. When the function pattern is a wildcard, a normal record constraint can be added. Otherwise, a pattern constraint has to be added so that simplification can limit the record to the exact requested fields.
+Due to the new pattern type, constraining has to account for the case that a function with a pattern argument is called. If the given value is a record itself, the provided fields can be compared one by another, and if all fields exist and subsume the pattern fields, constraining succeeds. In case the pattern is not a wildcard pattern, it has to be checked that the given record does not have any additional fields, and an error has to be raised otherwise. If the value given to the function is a type variable, we can only constrain the type variable. When the function pattern is a wildcard, a normal record constraint can be added. Otherwise, a pattern constraint has to be added so that simplification can limit the record to the exact requested fields.
 
 #figure(caption: "Function syntax definition", align(left)[
-  _Type extension(pattern)_: $τ := ({l_0: τ; ...; l_n: τ }, "bool") | "optional" τ$
   
-  _Pattern Definition:_ $p :=  x | x space ? space t$
+  _Pattern Element Syntax:_ $"elem" ::=  x | x space ? space t$
   
-  _Language extension(pattern)_: $t := { space p_i space } | { space p_i , space ... space},$
+  _Pattern Syntax_: $"pat" ::= { space "elem"_i space } | { space "elem"_i , space ... space} | x$
   
-  _Language extension(function)_: $t := ... | p: t$ 
+  _Language extension(function)_: $t ::= ... | "pat": t$ 
 
-  \
+  _Type extension(pattern)_: $τ ::= ... | ({l_0: τ; ...; l_n: τ }, "bool")$
+  
+  #v(8pt)
 ])
 
 === Conditionals
-Conditional are not part of the core language specification for SimpleSub, as they can easily be added to the language by prefilling the context with `f: bool → α → α → α` and rewriting the if construct as an application to this function. It has been shown by @main that `f: bool → α → α → α` is a subtype of the more natural looking type for if-statement $f: "bool" → α → β → α union.sq β$ that explicitly allows both branches to have different types. Nix has the exact same syntax and semantics for if statements, so a similar approach can be used. In practice, it is again important to create errors referencing proper code locations so that they have to be handled explicitly, but that is only an implementation decision.
+Conditionals are not part of the core language specification for SimpleSub, as they can easily be added to the language by prefilling the context with `f: bool → α → α → α` and rewriting the if construct as an application to this function. It has been shown by Dolan @original that `f: bool → α → α → α` is a subtype of the more natural-looking type $f: "bool" → γ → β → γ union.sq β$ that explicitly allows both branches to have different types by substituting $α = γ union.sq β$. Nix has the same syntax and semantics for if statements, so a similar approach can be used. In practice, it is again important to create errors referencing proper code locations so that they have to be handled explicitly, but that is only an implementation decision.
 
-#figure(caption: "Typing rules for conditionals",
-derive("T-If", ($ Γ tack e_1: "bool"$, $Γ tack e_2: τ$, $Γ tack e_3: τ$), $ "if" e_1 "then" e_2 "else" e_3: τ $))
+#figure(caption: "Syntax and typing rules for conditionals", [
+  _Syntax extension (conditionals)_: $t ::= ... | "if" t "then" t "else" t $  
+  #derive("T-If", ($ Γ tack t_1: "bool"$, $Γ tack t_2: τ$, $Γ tack t_3: τ$), $ "if" t_1 "then" t_2 "else" t_3: τ $)
+])
 
 === Inherit Statements
-The inherit statement is syntactic sugar to reintroduce bindings from the context Γ into a let-binding or record. Inherit statements of the form `inherit (path) x` can be rewritten to an assignment `x = path.x`, where x is an identifier and path is a sequence of field accesses to a deeply nested record. From a typing perspective, rewriting is the proper solution as it does not introduce any new typing rules, but for a language server, that is not quite enough. To create good errors, it is necessary to strictly relate to the source code instead of internal rewrites. Inherits, thus, have to be handled with a bit more caution, delaying lookup to the latest possible point so that in case the identifier does not exist, a respective error referencing the proper location in code can be created.
+The inherit statement is syntactic sugar to reintroduce bindings from the context Γ into a let-binding or record. Inherit statements of the form `inherit (path) x` can be rewritten to an assignment `x = path.x`, where x is an identifier and path is a sequence of field accesses to a deeply nested record. From a typing perspective, rewriting is the proper solution as it does not introduce any new typing rules, but for a language server, that is not quite enough. To create good errors, it is necessary to relate to the source code instead of internal rewrites. That is why inherits must be handled more cautiously, delaying lookup to the latest possible point so that if identifiers do not exist, a respective error referencing the proper location in code can be thrown.
 
-#figure(caption: "Let-binding syntax extension", align(left)[
+#figure(caption: "Syntax rules for let-bindings", align(left)[
   _Syntax Path_: $p ::= x | p.x$
   
-  _Syntax Inherit_: $s := "inherit" x; | "inherit" (p) " " x;$
+  _Syntax Inherit_: $s ::= "inherit" x; | "inherit" (p) " " x;$
   
   _Syntax overwrite(records)_: $t ::= ... | { " " s_i " " }$
   
   _Let variable assignment_: $a ::= x = t; | s$
   
   _Syntax extension(let)_: $t ::= ... | "let" a_i "in" t$
+  #v(8pt)
 
-  \
 ])
-
 
 === With Statements
-Another language extension of Nix is the `with` statement. The with statement brings all names bound by a record into scope for the following expression. If the relevant item is a proper record, all its fields can be brought into scope, similar to how a let binding would. The only distinction is that bindings introduced by a with-statement never shadow variables introduced by other means, meaning every new name has to be checked if it is already part of the context and only be added if not. \
-If the added term is a type variable, however, the constraint direction reverses, and we constrain the variable based on its usage in the sub-expression. This prohibits the existence of free variables in the sub-expression because every variable will be associated with the new type variable. To accomplish that, the type variable has to be remembered so that it can be constrained.
+Another language extension of Nix is the `with` statement. The with statement brings all fields from a record into scope for the following expression. If the imported record has a proper record type, all its fields can be brought into scope, similar to how a let binding would. The only distinction is that bindings introduced by a with-statement never shadow variables introduced by other means, meaning every new name has to be checked if it is already part of the context and only be added if it is not. \
+If the added record is a type variable, the constraint direction reverses, such that the type variable is constrained based on its usage in the following expression. This prohibits the existence of free variables in the sub-expression because every variable will be associated with the new type variable. To account for this in code, a single field `with-statement` is added to the context struct that remembers the last with-statement.
+Because fields from a with-statement never shadow variables introduced by other means, with-statements are not mere syntax sugar and need to be handled by their own typing rule #smallcaps("T-With").
+  
+#figure(caption: "Syntax and typing rules for With statement",
+  grid(columns: 2, gutter: 1cm, align(left)[
+      #v(12pt)
+      _Syntax set_: $"set"::= {l_i: t_i} | x$
+      
+      _Syntax extension(with)_: $t::= ... | "with" "set"; t;$
+    ],
+    derive("T-With", ($Γ tack t_1 : {arrow(l): arrow(τ)}$, $Γ, l_0 : τ_0, ..., l_n: τ_n tack t_2: τ$, $l_i in.not Γ$), $Γ tack "with" t_1; t_2 : τ$)
+  )
+)
 
-#figure(caption: "With statement syntax specification", align(left)[
-_Syntax Set_: $"set"::= {l_i: t_i} | x$
-
-_Syntax extension(with)_: $t::= ... | "with" "set"; t;$
-
-#derive("T-With", ($Γ tack a : overline({l_i: τ_i})^i $,), $Γ tack "let inherit" a; space : "let" overline(l_i = τ_i)^i$)
-])
 
 === Assert Statements
-Assertions precede expressions and allow early program exit in case some conditions do not hold. From a typing perspective, assertions do not differ from normal sequential execution and can be inferred by just evaluating the first and then the second expression. 
+Assertions precede expressions and allow for early program exit if some condition does not hold. From a typing perspective, assertions do not differ from normal sequential execution and can be inferred by just evaluating the first and then the second expression. 
 
-#align(center)[
-_Syntax extension(assert)_: $t::= ... | "assert" t; t;$
+#figure(caption: "Syntax and typing rules for assert statements")[
+  
+  #align(left)[
+  _Syntax extension(assert)_: $t::= ... | "assert" t; t;$
+  ]
+  
+  #derive("T-Assert", ($Γ tack t_1: τ_1$, $Γ tack t_2: τ_2$), $Γ tack "assert" t_1; t_2: t_2$)
 ]
 
 === Interpolation
 TODO
 
 
-== Soundness
-In this section, we discuss SimpleNix's soundness. @main made a structural proof of SimpleSub's soundness without let-bindings, and @original made an algebraic proof of its soundness with let-bindings.
-The soundness of both systems loosely implies the soundness of SimpleNix, which does not fundamentally change the central aspects of the algorithm... TODO
 
-
-== Shortcomings of Type Inference
-What follows is a brief discussion of Nix's advanced language features and their implications for type inference and SimpleNix's usability.
-
-=== Free Variables
-Because of Nix's lazy evaluation, upon notice, unbound variables are looked up from the context as if they were normally bound variables. This silently adds implicit arguments to functions, which change the function's output based on the surrounding context. While this is a neat trick for programmers, implicit arguments are tricky from a type inference perspective. A function definition, say `let f = a: b: a + c` containing a free variable $c$, could be used in different contexts that relate `c` to variables with different types. If `c` is bound to a value of type bool, the function type would be $f: "bool" -> b -> "bool"$ and if it was bound to a string $f: "string" -> b -> "string"$. To salvage this flexibility, the context would have to be checked and all function types that refer to a variable would have to be recomputed when new variables are bound. While this is, in theory, possible, it is out of the scope of this paper.
-Even though free variables are, in principle, allowed, there is room for discussion about their usefulness in practice and whether they belong to a language that boasts itself with perfect reproducibility. Allowing functions to depend on the context obfuscates program flow and adds many implicit assumptions that are hard to follow for humans and a source of error. This is probably also why the import function errors when the surrounding context fills free variables in the imported expression.
-
-
-=== Large Expressions and Lazy Inference
-The Nix package repository contains over 80.000 packages and is the largest package repository in existence. The public #link("https://github.com/NixOS/nixpkgs")[nixpkgs] Github mono repository provides all packages, the standard library, NixOS, and a lot of utility functions from its root nix file. Importing this root file and evaluating the whole package tree takes an unfeasible amount of time on personal computers, making type inference unpractically slow. This is why SimpleNix is not (yet) applicable for common practical tasks like configuration writing and flaking. \
+=== Large Expressions and Lazy Type Inference
+The Nix package repository contains over 80.000 packages and is the largest package repository in existence. The public #link("https://github.com/NixOS/nixpkgs")[nixpkgs] Github mono repository provides all packages, the standard library, NixOS, and a lot of utility functions from its root Nix file. Importing this root file and evaluating the whole package tree takes an unfeasible amount of time, making type inference unpractically slow. This is why SimpleNix is not (yet) applicable for common practical tasks like configuration writing and flaking. \
 For now, the Garnix project restricts itself to single-file type inference without multi-file support, as adding even the most basic import for the nixpkgs would make type inference unusable and slow. 
 
-TODO: Der Paragraph nen bisschen unnötig und arsch, order?\
-What follows is a short discussion on overcoming the problem of code trees that are too big to be evaluated by lazy evaluation of expressions. During type inference, only the root file and all workspace-related files should be inferred in full, as these files are probably of interest to the programmer. All other files should be lazily evaluated, stopping type inference upon import statements, saving the context, and continuing with the next expression.
-Only when an uninitialized field is needed for constraining the related file should be loaded and inferred. This should, in principle, make package completion possible as those are located in one big record between the package name and import statements, greatly improving the developer experience. A smart language server could thus create the full list of packages and lazily load more information about it upon selection. Similar approaches should be possible for option and module auto-completion, which have similar structures.
+What follows is a short discussion on overcoming the problem of code trees that are too big to be evaluated by lazy expression evaluation. Import statements usually aren't located at the top of the file but rather in code wherever they are needed. This makes import statements a good candidate for code splitting during type inference. Only when an uninitialized field is needed during tree traversal should the related expression be imported and inferred. This should, in theory, make package completion possible as packages are defined in one big record(mapping) between the package name and import statements for that package. A smart language server could thus create the full list of packages and lazily load more information about them upon package selection, greatly improving the developer experience. Similar approaches should be possible for option and module auto-completion, which have similar structures.
+
+== Examples
+The associated repository 
+
 
 = Language Server
-Part of my contribution is a language server for the Nix language. It acts as a frontend to play with the implementation but is also usable in real-world projects. The language server protocol supports a huge variety of programming assists, from which Garnix supports only type hints and error reporting.
+Part of my contribution is a language server for the Nix language. It acts as a frontend to play with the implementation but is also usable in real-world projects. The language server protocol supports various code actions, from which Garnix supports type hints and error reporting. Type hints are supported in the form of `Inlay hints`, small text boxes that are shown behind every identifier and show the type of variables. Errors reported during type inference and parsing are collected together with their position in the document. These errors are then displayed in the document for quick and interactive error fixing.
 
-== Type Hints
-Type hints are supported in the form of `Inlay hints`, small text boxes that are shown behind every identifier and show the type of variables.
-
-== Error Reporting
-Errors reported during type inference are collected together with their position in the document. These errors are then displayed in the document to improve quick error fixing.
+= Discussion and Further Work
+This thesis implements and extends the SimpleSub type inference algorithm, finally bringing type inference to the Nix programming language by providing a language server and a rust parser for the Nix language. This, together with other great recent improvements in documentation, language servers, and evaluators, lays the first stepping stones for great developer experience in Nix. \
+To make Garnix applicable in general, the remaining problems of type simplification and unbound variables, which were out of the scope of this thesis, need to be resolved. The Garnix repository is left with a permissive Apache 3.0 license, making it a public domain, and will undergo continuous development in the future to eventually overcome these problems.
 
 
-== Discussion and Further Work
-This thesis implements and extends the SimpleSub type inference algorithm, finally bringing sound type inference to the Nix programming language by providing a language server as well as a rust parser for the Nix language. This, together with other great recent improvements in documentation, language servers, and evaluators, lays the first stepping stones for great developer experience in Nix. \
-In the future, I want to tackle the remaining problems of lazy evaluation, type simplification, and unbound variables, which were out of the scope of this thesis but are still important to solve before Garnix can search for great community adoption.
-
-== Acknowledgements
-A great Thanks goes to all my peer reviewers and especially Marius Weidner for great support during and after writing my thesis.
+= Acknowledgements
+Thanks to all peer reviewers, and especially Marius Weidner and Christian Weber, for their great support during and after writing this thesis.
 
 
-#bibliography(("types.bib", "original.bib"))
+#page[
+  #bibliography(("types.bib", "original.bib", "nixos.bib"))
+]
 
 
+#page[
+  #text(size: 15pt)[*Declaration*]
 
+  I hereby declare that I am the sole author and composer of my thesis and
+  that no other sources or learning aids other than those listed have been used.
+  Furthermore, I declare that I have acknowledged the work of others by providing
+  detailed references of said work.
+  I also hereby declare that my thesis has not been prepared for another examination or assignment, either in its entirety or excerpts thereof.
+
+  \
+  \
+  
+  #grid(
+    columns: (1fr, 1fr),
+    gutter: 2cm,
+    grid(
+      rows: (0.3cm),
+      columns: 1fr,
+      gutter: 7pt,
+      "Freiburg den 27.03.2024",
+      grid.hline(),
+      [
+        #v(7pt)
+        Place, Date
+      ]
+      
+    ),
+    grid(
+      rows: (0.3cm),
+      columns: 1fr,
+      gutter: 7pt,
+      "",
+      grid.hline(),
+      [
+        #v(7pt)
+        Signature
+      ],
+      
+    ),
+  )
+]
