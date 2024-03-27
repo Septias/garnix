@@ -516,14 +516,17 @@ fn test_has_attribute() {
 
 #[test]
 fn test_attr_set() {
+    // Can't test because record fields are undeterministically chosen
     let source = "rec {x = y; y = x;}";
     let (_ty, _ast) = infer(source).unwrap();
 
+    // Can't test because record fields are undeterministically chosen
     let source = "rec {f = x: x + y; y = 1;}";
     let (_ty, _ast) = infer(source).unwrap();
 
     let source = "rec {x = {y = x;};}";
-    let (_ty, _ast) = infer(source).unwrap();
+    let (ty, _ast) = coalesced(source).unwrap();
+    assert_eq!(ty.show(), "{x: Rec(1) Var ∨ Record}");
 }
 
 #[test]

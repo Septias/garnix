@@ -596,7 +596,7 @@ fn type_term(ctx: &mut Context, term: &Ast, lvl: usize) -> Result<Type, SpannedE
             span,
         } => {
             if *is_recursive {
-                let mut vars: Vec<_> = attrs
+                let vars: Vec<_> = attrs
                     .iter()
                     .map(|(ident, _expr)| {
                         (
@@ -606,24 +606,37 @@ fn type_term(ctx: &mut Context, term: &Ast, lvl: usize) -> Result<Type, SpannedE
                     })
                     .collect();
 
-                let ok = load_inherit(ctx, span.clone(), lvl, inherit)?;
-                vars.extend(ok);
+                let mut inherits = load_inherit(ctx, span.clone(), lvl, inherit)?;
+                inherits.extend(vars.clone());
 
-                ctx.with_scope(vars, |ctx| {
-                    let (items, errs): (Vec<_>, Vec<_>) = attrs
-                        .iter()
-                        .map(|(ident, expr)| {
-                            Ok::<_, SpannedError>((
-                                ident.name.to_string(),
-                                type_term(ctx, expr, lvl)?,
-                            ))
+                ctx.with_scope(inherits, |ctx| {
+                    let names = vars
+                        .into_iter()
+                        .map(|(name, var)| (name, var.into_type().unwrap().into_var().unwrap()));
+                    let expressions = attrs.iter().map(|(_, expr)| expr);
+
+                    let (ok, errs): (Vec<_>, Vec<_>) = names
+                        .into_iter()
+                        .zip(expressions)
+                        .map(move |((name, e_ty), rhs)| {
+                            let ty = ctx.with_scope(
+                                vec![(
+                                    name.to_string(),
+                                    ContextType::Type(Type::Var(e_ty.clone())),
+                                )],
+                                |ctx| type_term(ctx, rhs, lvl + 1),
+                            )?;
+                            constrain(ctx, &ty, &Type::Var(e_ty.clone()))
+                                .map_err(|e| e.span(rhs.get_span()))?;
+                            Ok((name, Type::Var(e_ty)))
                         })
                         .partition_map(|r| match r {
                             Ok(v) => Either::Left(v),
                             Err(v) => Either::Right(v),
                         });
+
                     if errs.is_empty() {
-                        Ok(Type::Record(items.into_iter().collect()))
+                        Ok(Type::Record(ok.into_iter().collect()))
                     } else {
                         Err(SpannedError {
                             error: InferError::MultipleErrors(errs),
@@ -653,7 +666,7 @@ fn type_term(ctx: &mut Context, term: &Ast, lvl: usize) -> Result<Type, SpannedE
             body,
             span,
         } => {
-            let mut binds: Vec<_> = bindings
+            let binds: Vec<_> = bindings
                 .iter()
                 .map(|(name, _)| {
                     (
@@ -663,10 +676,10 @@ fn type_term(ctx: &mut Context, term: &Ast, lvl: usize) -> Result<Type, SpannedE
                 })
                 .collect();
 
-            let inherits = load_inherit(ctx, span.clone(), lvl, inherit)?;
-            binds.extend(inherits);
+            let mut inherits = load_inherit(ctx, span.clone(), lvl, inherit)?;
+            inherits.extend(binds.clone());
             let (ok, err): (Vec<_>, Vec<_>) = ctx
-                .with_scope(binds.clone(), |ctx| {
+                .with_scope(inherits, |ctx| {
                     let names = binds
                         .into_iter()
                         .map(|(name, var)| (name, var.into_type().unwrap().into_var().unwrap()));
@@ -684,10 +697,7 @@ fn type_term(ctx: &mut Context, term: &Ast, lvl: usize) -> Result<Type, SpannedE
                                 |ctx| type_term(ctx, rhs, lvl + 1),
                             )?;
                             let bind = bindings.iter().find(|(n, _)| n.name == *name).unwrap();
-                            bind.0
-                                .var
-                                .set(coalesc_type(ctx, &ty))
-                                .unwrap();
+                            bind.0.var.set(coalesc_type(ctx, &ty)).unwrap();
                             constrain(ctx, &ty, &Type::Var(e_ty.clone()))
                                 .map_err(|e| e.span(rhs.get_span()))?;
                             Ok((
