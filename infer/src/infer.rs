@@ -93,11 +93,16 @@ fn constrain_inner<'a>(
             }
         }
 
-        //
-        (Type::Pattern(pat, wild), Type::Var(_)) => {}
-
         // @-ident is accessed
-        (Type::Pattern(pat, wild), Type::Record(rcd)) => {}
+        (Type::Pattern(pat, false), Type::Record(rcd)) => {
+            for field in rcd.keys() {
+                if !pat.contains_key(field) {
+                    return Err(InferError::TooManyField {
+                        field: field.clone(),
+                    });
+                }
+            }
+        }
 
         (Type::Optional(o1), Type::Optional(o0)) => {
             constrain_inner(context, o0, o1, cache)?;
@@ -115,6 +120,20 @@ fn constrain_inner<'a>(
             for lower_bound in lhs.lower_bounds.borrow().iter() {
                 constrain_inner(context, lower_bound, rhs, cache)?;
             }
+        }
+
+        (Type::Pattern(pat, _), rhs @ Type::Var(_)) => {
+            constrain_inner(
+                context,
+                &Type::Record(
+                    pat.clone()
+                        .into_iter()
+                        .map(|(name, (_ty, opt))| (name, opt.unwrap_or(Type::Undefined)))
+                        .collect(),
+                ),
+                rhs,
+                cache,
+            )?;
         }
 
         // let-binding

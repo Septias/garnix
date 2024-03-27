@@ -1,3 +1,0 @@
-- Type Inference
-  - [] constrain(patt, var)
-  - [] constrain(patt, rec)
