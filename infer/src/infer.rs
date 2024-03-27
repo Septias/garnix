@@ -93,17 +93,6 @@ fn constrain_inner<'a>(
             }
         }
 
-        // @-ident is accessed
-        (Type::Pattern(pat, false), Type::Record(rcd)) => {
-            for field in rcd.keys() {
-                if !pat.contains_key(field) {
-                    return Err(InferError::TooManyField {
-                        field: field.clone(),
-                    });
-                }
-            }
-        }
-
         (Type::Optional(o1), Type::Optional(o0)) => {
             constrain_inner(context, o0, o1, cache)?;
         }
