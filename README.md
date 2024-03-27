@@ -3,7 +3,7 @@
 **Garnix** is another **parser** and **language server** for the Nix programming language. It's theoretical foundation is the SimpleSub [Lionel Parreaux: The simple essence of Subtyping] algorithm which is much stronger than normal HM-style type inferce.
 
 ### Structure
-This project is a mono repository and contains the parser, inference algorithm and language server in three respective folder:
+This project is a mono repository and contains the parser, inference algorithm and language server in three respective folders:
 
 | Folder | Content |
 | ------ | ------- |
@@ -13,7 +13,6 @@ This project is a mono repository and contains the parser, inference algorithm a
 
 ### Theoretical foundation
 The repository is related to the Bachelor Thesis of Sebastian Klähn at []. It contains a discussion about the current state of developer toolings in the nix ecosystem, a thorough language definition and the theoretical background for the type inference algorithm and it's drawbacks.
-
 
 ### Development
 This project uses common development guidlines. To contribut PRs have to be made against this repository that comply to the cargo format and clippy guidlines. Tests also have to run through.
