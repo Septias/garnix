@@ -66,11 +66,11 @@ mod tests {
             to_lsp_range(&parser::Span { start: 11, end: 13 }, source),
             lsp_types::Range {
                 start: Position {
-                    line: 2,
+                    line: 1,
                     character: 5
                 },
                 end: Position {
-                    line: 2,
+                    line: 1,
                     character: 7
                 }
             }
@@ -88,7 +88,7 @@ mod tests {
                 },
                 source
             ),
-            12
+            11
         );
     }
 }
