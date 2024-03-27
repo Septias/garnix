@@ -6,8 +6,9 @@ use async_lsp::{
 use lsp_types::{
     notification,
     request::{self, DocumentDiagnosticRequest, InlayHintRequest},
-    Diagnostic, DocumentDiagnosticReport, FullDocumentDiagnosticReport, HoverProviderCapability,
-    InitializeResult, InlayHintLabel, RelatedFullDocumentDiagnosticReport, ServerCapabilities, Url,
+    Diagnostic, DocumentDiagnosticReport, FullDocumentDiagnosticReport, Hover, HoverContents,
+    HoverProviderCapability, InitializeResult, InlayHintLabel, MarkedString,
+    RelatedFullDocumentDiagnosticReport, ServerCapabilities, Url,
 };
 use std::{collections::HashMap, fs, ops::ControlFlow};
 use tower::ServiceBuilder;
@@ -27,32 +28,31 @@ struct ServerState {
 
 impl ServerState {
     pub fn load_file(&mut self, uri: &Url) -> anyhow::Result<()> {
+        eprintln!("load file: {:?}", uri);
         let content = fs::read_to_string(uri.path()).unwrap();
+        self.load_text(&content, uri)?;
+        Ok(())
+    }
+
+    pub fn load_text(&mut self, content: &str, uri: &Url) -> anyhow::Result<()> {
+        eprintln!("load text: {:?}", content);
         match parse(&content) {
             Ok(ast) => {
                 let ast = infer::Ast::from_parser_ast(ast, &content);
+                self.errors.remove(&uri.to_string());
                 if let Err(e) = infer(&ast) {
-                    if !self.errors.contains_key(uri.as_str()) {
-                        let errors = self.errors.get_mut(uri.as_str()).unwrap();
-                        errors.push(Diagnostic {
+                    self.errors.insert(
+                        uri.to_string(),
+                        vec![Diagnostic {
                             range: to_lsp_range(&e.span, &content),
                             message: format!("{:?}", e),
-                            severity: Some(lsp_types::DiagnosticSeverity::ERROR),
+                            severity: Some(lsp_types::DiagnosticSeverity::WARNING),
                             ..Default::default()
-                        });
-                    } else {
-                        self.errors.insert(
-                            uri.to_string(),
-                            vec![Diagnostic {
-                                range: to_lsp_range(&e.span, &content),
-                                message: format!("{:?}", e),
-                                severity: Some(lsp_types::DiagnosticSeverity::ERROR),
-                                ..Default::default()
-                            }],
-                        );
-                    }
+                        }],
+                    );
                 };
-                self.files.insert(uri.as_str().to_string(), (ast, content));
+                self.files
+                    .insert(uri.as_str().to_string(), (ast, content.to_string()));
             }
             Err(err) => {
                 self.errors.insert(uri.to_string(), vec![]);
@@ -92,6 +92,19 @@ async fn main() {
                     capabilities: ServerCapabilities {
                         hover_provider: Some(HoverProviderCapability::Simple(true)),
                         inlay_hint_provider: Some(lsp_types::OneOf::Left(true)),
+                        text_document_sync: Some(lsp_types::TextDocumentSyncCapability::Options(
+                            lsp_types::TextDocumentSyncOptions {
+                                open_close: Some(true),
+                                change: Some(lsp_types::TextDocumentSyncKind::FULL),
+                                will_save: None,
+                                will_save_wait_until: None,
+                                save: Some(lsp_types::TextDocumentSyncSaveOptions::SaveOptions(
+                                    lsp_types::SaveOptions {
+                                        include_text: Some(true),
+                                    },
+                                )),
+                            },
+                        )),
                         diagnostic_provider: Some(
                             lsp_types::DiagnosticServerCapabilities::Options(
                                 lsp_types::DiagnosticOptions {
@@ -113,10 +126,14 @@ async fn main() {
                         idents
                             .into_iter()
                             .map(|ident| lsp_types::InlayHint {
-                                position: to_lsp_range(ast.get_span(), source).start,
+                                position: {
+                                    let mut pos = to_lsp_range(&ident.span, source).end;
+                                    pos.character += 1;
+                                    pos
+                                },
                                 label: InlayHintLabel::String(format!(
                                     "{}",
-                                    ident.var.get().unwrap().show()
+                                    ident.var.get().map(|var| var.show()).unwrap_or_default()
                                 )),
                                 kind: None,
                                 text_edits: None,
@@ -128,6 +145,44 @@ async fn main() {
                             .collect()
                     });
                 async move { Ok(ret) }
+            })
+            .request::<request::HoverRequest, _>(|st, a| {
+                let ast = st
+                    .files
+                    .get(a.text_document_position_params.text_document.uri.as_str());
+
+                let ret = if let Some((ast, source)) = ast {
+                    let info: Option<(String, &std::ops::Range<usize>)> = (move || {
+                        let position =
+                            from_lsp_position(a.text_document_position_params.position, source);
+                        let node = ast.get_ident_at(position)?;
+
+                        let constraints = node.var.get().map(|var| var.show());
+
+                        let mut ret = format!("Node: `{:?}`\n", node.name);
+                        if let Some(constraints) = constraints {
+                            ret.push_str(&format!("Constraints: `{:?}`\n", constraints));
+                        }
+
+                        Some((ret, ast.get_span()))
+                    })();
+
+                    Ok(info.map(|(info, span)| Hover {
+                        contents: HoverContents::Scalar(MarkedString::String(info)),
+                        range: Some(to_lsp_range(span, source)),
+                    }))
+                } else {
+                    st.load_file(&a.text_document_position_params.text_document.uri)
+                        .ok();
+                    Ok(Some(Hover {
+                        contents: HoverContents::Scalar(MarkedString::String(format!(
+                            "file not yet read {}",
+                            a.text_document_position_params.text_document.uri
+                        ))),
+                        range: None,
+                    }))
+                };
+                async move { ret }
             })
             .request::<DocumentDiagnosticRequest, _>(|st, params| {
                 let ret = st
@@ -149,15 +204,20 @@ async fn main() {
             .notification::<notification::Initialized>(|_, _| ControlFlow::Continue(()))
             .notification::<notification::DidChangeConfiguration>(|_, _| ControlFlow::Continue(()))
             .notification::<notification::DidOpenTextDocument>(|st, file| {
-                st.load_file(&file.text_document.uri).ok();
+                st.load_text(&file.text_document.text, &file.text_document.uri)
+                    .ok();
                 ControlFlow::Continue(())
             })
-            .notification::<notification::DidChangeTextDocument>(|st, file| {
-                st.load_file(&file.text_document.uri).ok();
+            .notification::<notification::DidChangeTextDocument>(|_, _| {
                 ControlFlow::Continue(())
             })
             .notification::<notification::DidCloseTextDocument>(|st, file| {
                 st.files.remove(file.text_document.uri.as_str());
+                ControlFlow::Continue(())
+            })
+            .notification::<notification::DidSaveTextDocument>(|st, file| {
+                st.load_text(&file.text.unwrap(), &file.text_document.uri)
+                    .ok();
                 ControlFlow::Continue(())
             })
             .notification::<notification::DidChangeWatchedFiles>(|_, _| ControlFlow::Continue(()));

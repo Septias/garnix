@@ -316,7 +316,6 @@ fn freshen(
 
 /// Infer the type of an expression.
 fn type_term(ctx: &mut Context, term: &Ast, lvl: usize) -> Result<Type, SpannedError> {
-    // println!("type_term: {:?}", term);
     use Type::*;
     match term {
         Ast::Identifier(super::ast::Identifier { name, span, .. }) => {
@@ -801,10 +800,6 @@ fn type_term(ctx: &mut Context, term: &Ast, lvl: usize) -> Result<Type, SpannedE
                 }
             };
             let ret = ctx.with_scope(added, |context| type_term(context, body, lvl))?;
-            println!(
-                "function type: {}",
-                Function(Box::new(ty.clone()), Box::new(ret.clone())).show()
-            );
             Ok(Function(Box::new(ty), Box::new(ret)))
         }
 

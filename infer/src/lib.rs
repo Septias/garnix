@@ -30,15 +30,6 @@ impl ContextType {
         }
     }
 
-    fn show(&self) -> String {
-        match self {
-            ContextType::Type(ty) => ty.show(),
-            ContextType::PolymorhicType(pty) => {
-                format!("{}@{}", pty.body.show(), pty.level)
-            }
-        }
-    }
-
     fn into_type(self) -> Option<Type> {
         match self {
             ContextType::Type(ty) => Some(ty),
@@ -89,7 +80,6 @@ impl Context {
 
     pub(crate) fn fresh_var(&self, lvl: usize) -> Var {
         let res = Var::new(lvl, *self.count.borrow());
-        println!("fresh_var: {:?}", res);
         *self.count.borrow_mut() += 1;
         res
     }

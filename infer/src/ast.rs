@@ -212,38 +212,40 @@ impl Ast {
 
     /// Tries to get the nod at the given position.
     /// If not possible, return smallest surrounding node.
-    pub fn get_node_at(&self, position: usize) -> Option<&Ast> {
+    pub fn get_ident_at(&self, position: usize) -> Option<&Identifier> {
         let containing = match self {
             Ast::UnaryOp { rhs, .. } => {
                 if rhs.get_span().contains(&position) {
-                    rhs.get_node_at(position)
+                    rhs.get_ident_at(position)
                 } else {
                     None
                 }
             }
             Ast::BinaryOp { lhs, rhs, .. } => {
                 if lhs.get_span().contains(&position) {
-                    lhs.get_node_at(position)
+                    lhs.get_ident_at(position)
                 } else if rhs.get_span().contains(&position) {
-                    rhs.get_node_at(position)
+                    rhs.get_ident_at(position)
                 } else {
                     None
                 }
             }
             Ast::AttrSet { attrs, .. } => attrs.iter().find_map(|(_, expr)| {
                 if expr.get_span().contains(&position) {
-                    expr.get_node_at(position)
+                    expr.get_ident_at(position)
                 } else {
                     None
                 }
             }),
             Ast::LetBinding { bindings, body, .. } => {
                 if body.get_span().contains(&position) {
-                    body.get_node_at(position)
+                    body.get_ident_at(position)
                 } else {
-                    bindings.iter().find_map(|(_, expr)| {
-                        if expr.get_span().contains(&position) {
-                            expr.get_node_at(position)
+                    bindings.iter().find_map(|(ident, expr)| {
+                        if ident.span.contains(&position) {
+                            Some(ident)
+                        } else if expr.get_span().contains(&position) {
+                            expr.get_ident_at(position)
                         } else {
                             None
                         }
@@ -252,7 +254,7 @@ impl Ast {
             }
             Ast::Lambda { body, .. } => {
                 if body.get_span().contains(&position) {
-                    body.get_node_at(position)
+                    body.get_ident_at(position)
                 } else {
                     None
                 }
@@ -264,11 +266,11 @@ impl Ast {
                 ..
             } => {
                 if condition.get_span().contains(&position) {
-                    condition.get_node_at(position)
+                    condition.get_ident_at(position)
                 } else if expr1.get_span().contains(&position) {
-                    expr1.get_node_at(position)
+                    expr1.get_ident_at(position)
                 } else if expr2.get_span().contains(&position) {
-                    expr2.get_node_at(position)
+                    expr2.get_ident_at(position)
                 } else {
                     None
                 }
@@ -277,32 +279,32 @@ impl Ast {
                 condition, expr, ..
             } => {
                 if condition.get_span().contains(&position) {
-                    condition.get_node_at(position)
+                    condition.get_ident_at(position)
                 } else if expr.get_span().contains(&position) {
-                    expr.get_node_at(position)
+                    expr.get_ident_at(position)
                 } else {
                     None
                 }
             }
             Ast::With { set, body, .. } => {
                 if set.get_span().contains(&position) {
-                    set.get_node_at(position)
+                    set.get_ident_at(position)
                 } else if body.get_span().contains(&position) {
-                    body.get_node_at(position)
+                    body.get_ident_at(position)
                 } else {
                     None
                 }
             }
-            Ast::Identifier(Identifier { span, .. }) => {
+            Ast::Identifier(ident @ Identifier { span, .. }) => {
                 if span.contains(&position) {
-                    Some(self)
+                    Some(ident)
                 } else {
                     None
                 }
             }
             Ast::List { exprs, .. } => exprs.iter().find_map(|expr| {
                 if expr.get_span().contains(&position) {
-                    expr.get_node_at(position)
+                    expr.get_ident_at(position)
                 } else {
                     None
                 }
@@ -315,20 +317,9 @@ impl Ast {
             | Ast::Null(span)
             | Ast::Comment(span)
             | Ast::DocComment(span)
-            | Ast::LineComment(span) => {
-                if span.contains(&position) {
-                    Some(self)
-                } else {
-                    None
-                }
-            }
+            | Ast::LineComment(span) => None,
         };
-
-        containing.or(if self.get_span().contains(&position) {
-            Some(self)
-        } else {
-            None
-        })
+        containing
     }
 
     /// Collect all identifiers in the ast.

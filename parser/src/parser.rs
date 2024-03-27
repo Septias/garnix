@@ -103,10 +103,7 @@ pub(crate) fn literal(input: NixTokens<'_>) -> PResult<'_, Ast> {
 pub(crate) fn set_pattern(input: NixTokens<'_>) -> PResult<'_, (Vec<PatternElement>, bool)> {
     let elements = separated_list1(
         token(Comma),
-        alt((
-            ident_default_pattern,
-            ident.map(PatternElement::Identifier),
-        )),
+        alt((ident_default_pattern, ident.map(PatternElement::Identifier))),
     );
 
     context(
@@ -140,13 +137,10 @@ pub(crate) fn pattern(input: NixTokens<'_>) -> PResult<'_, Pattern> {
         ),
         ident.map(Pattern::Identifier),
         pair(set_pattern, opt(preceded(token(Token::At), ident))).map(
-            |((patterns, is_wildcard), name)| {
-                println!("name: {:?}", name);
-                Pattern::Set {
-                    patterns,
-                    name,
-                    is_wildcard,
-                }
+            |((patterns, is_wildcard), name)| Pattern::Set {
+                patterns,
+                name,
+                is_wildcard,
             },
         ),
     ))(input)
@@ -339,8 +333,6 @@ pub(crate) fn expr(input: NixTokens<'_>) -> PResult<'_, Ast> {
                 )),
             ),
             |span, (with, expr)| {
-                #[cfg(test)]
-                println!("expr: {:#?}", expr);
                 if let Some(with) = with {
                     With {
                         set: Box::new(with),
@@ -369,8 +361,6 @@ pub(crate) fn pratt_atom(input: NixTokens<'_>) -> PResult<'_, Ast> {
 }
 
 pub(crate) fn prett_parsing(mut input: NixTokens<'_>, min_bp: u8, eof: Token) -> PResult<'_, Ast> {
-    #[cfg(test)]
-    println!("input: {:?}", input);
     let (mut input, mut lhs) = match input
         .peek()
         .ok_or(nom::Err::Error(VerboseError::from_error_kind(
