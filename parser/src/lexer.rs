@@ -22,7 +22,7 @@ pub enum Token {
     #[regex(r"/\*\*[a-zA-Z ]*\*/")]
     DocComment,
 
-    #[regex(r"#[a-zA-Z ]*\n")]
+    #[regex(r"#.*\n")]
     LineComment,
 
     // Sets
@@ -161,7 +161,7 @@ pub enum Token {
     Float(f32),
 
     // Misc
-    #[regex("[a-zA-Z_]+")]
+    #[regex("[a-zA-Z_]+[a-zA-Z_0-9]*")]
     Text,
 
     #[token(";")]

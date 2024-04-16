@@ -558,6 +558,10 @@ fn test_with() {
             span: Range { start: 0, end: 15 }
         }
     );
+
+    let tokens = lex("let with1 = with {y = 1;}; {z = y;}; in {}");
+    let (input, _ast) = expr(NixTokens(&tokens)).unwrap();
+    assert!(input.0.is_empty());
 }
 
 #[test]
