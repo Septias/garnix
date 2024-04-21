@@ -12,11 +12,11 @@ fn main() -> anyhow::Result<()> {
             Ok((_, ast)) => {
                 let ast = Ast::from_parser_ast(ast, &input);
                 println!("ast: {:#?}", ast);
-                match infer::infer(&ast) {
+                match infer::coalesced(&ast) {
                     Err(e) => {
                         println!("[Inference] Error: {:?}", e);
                     }
-                    Ok(ty) => println!("type: {:?}", ty),
+                    Ok(ty) => println!("Inferred type: {:?}", ty.show()),
                 };
             }
             Err(e) => match e {

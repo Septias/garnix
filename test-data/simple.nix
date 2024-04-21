@@ -19,9 +19,9 @@ let
   setInherit = {}: {inherit pos;};
   setIdentFn = x: {y}: x + y;
   set = x: x.x < 1;
-  assertion = x: assert 1; 1;
+  assertion = x: assert true; 1;
   f = { x, ... }: x;
   res = f {x = 1; y = 2;};
   w1 = with {y = 1;}; {z = y;};
   opt = x: x ? y;
-  in {  }
+  in { inherit fun arithm ifs ifxlamba access arr1 arr2 player setfun position name pos setInherit setIdentFn set assertion f res w1 opt;}
