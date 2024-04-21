@@ -317,7 +317,7 @@ pub(crate) fn list(input: NixTokens<'_>) -> PResult<'_, Ast> {
 }
 
 /// Parse an expression.
-pub(crate) fn expr(input: NixTokens<'_>) -> PResult<'_, Ast> {
+pub fn expr(input: NixTokens<'_>) -> PResult<'_, Ast> {
     context(
         "expr",
         spanned(
