@@ -17,5 +17,26 @@ The repository is related to the Bachelor Thesis of Sebastian Klähn at []. It c
 ### Development
 This project uses common development guidlines. To contribut PRs have to be made against this repository that comply to the cargo format and clippy guidlines. Tests also have to run through.
 
+This project uses the nightly rust compiler wich can be run by adding `+stable` to cargo or by setting the default for a given directory.
+
+```
+cargo +nightly run
+```
+
+```
+rustup override set nightly
+```
+
+### Using the language server
+After compiling the project in release or debug mode, the language server binary `lsp` can be found in the `target` directory.
+By setting the binary as language server, garnix can be used in IDEs. For VScode it might look like this:
+
+```json
+// settings.json
+{
+  "nix.serverPath": "home/user/garnix/target/release/lsp",
+}
+```
+
 #### Testing
 The parser and inference module have extensive tests in the respective `tests` subfolders. These tests can be used to test new implementations and learn more about the capabiliets of the current project.
