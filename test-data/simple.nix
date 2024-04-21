@@ -1,34 +1,27 @@
-
-{ }: let
+let 
   fun = x: x;
-  arithm = x: y: (x + y) * 3;
+  arithm = x: y: (x + 1);
   ifs =
     if true
-    then 1
+    then "hi"
     else 2;
-
   ifxlamba = x: y: z:
     if y
     then x else z;
-
-  x = { a = 1;};
-  setfun = {...}: {};
-  setInherit = {}: {inherit x;};
+  access = x: x.y;
+  arr1 = [1 1 6];
+  arr2 = [1 "h1" ./.];
+  player = 12;
+  setfun = {...}: null;
+  position = 12 * 11; 
+  name = "bob"; 
+  pos = {x = 1; y = 2;}; 
+  setInherit = {}: {inherit pos;};
   setIdentFn = x: {y}: x + y;
   set = x: x.x < 1;
-  string = "
-  aa
-  ";
-  stringMulti = ''
-  aaaa
-  bbbb
-  '';
-  t = .0;
-  bracketing = (1 + 2) * 3;
   assertion = x: assert 1; 1;
-in {
-  inherit setfun setIdentFn bracketing ifs ifxlamba string stringMulti t x set setInherit application let_in2;
-  inherit let_in let_in3 assertion;
-  fun = fun;
-  arithm = arithm;
-};
+  f = { x, ... }: x;
+  res = f {x = 1; y = 2;};
+  w1 = with {y = 1;}; {z = y;};
+  opt = x: x ? y;
+  in {  }
