@@ -2,7 +2,7 @@
   description = "Type-inference for Nix";
   inputs = {
     rust-overlay.url = "github:oxalica/rust-overlay";
-    flake-utils.follows = "rust-overlay/flake-utils";
+    flake-utils.url = "github:numtide/flake-utils";
     nixpkgs.follows = "rust-overlay/nixpkgs";
     naersk.url = "github:nix-community/naersk";
   };

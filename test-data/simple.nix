@@ -1,5 +1,5 @@
 let 
-  fun = x: x;
+  fun = x: y: x + y;
   arithm = x: y: (x + 1);
   ifs =
     if true
