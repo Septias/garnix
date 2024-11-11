@@ -13,7 +13,7 @@ pub enum InferError {
     UnknownInherit,
     #[error("The record field {field} is missing")]
     MissingRecordField { field: String },
-    #[error("cannot constrain {lhs} <: {rhs}")]
+    #[error("Cannot constrain {lhs} <: {rhs}")]
     CannotConstrain { lhs: Type, rhs: Type },
     #[error("Type mismatch: expected {expected}, found {found}")]
     TypeMismatch { expected: TypeName, found: TypeName },
