@@ -210,7 +210,7 @@ impl Ast {
         }
     }
 
-    /// Tries to get the nod at the given position.
+    /// Tries to get the node at the given position.
     /// If not possible, return smallest surrounding node.
     pub fn get_ident_at(&self, position: usize) -> Option<&Identifier> {
         let containing = match self {
@@ -309,15 +309,15 @@ impl Ast {
                     None
                 }
             }),
-            Ast::NixString(span)
-            | Ast::NixPath(span)
-            | Ast::Bool { span, .. }
-            | Ast::Int { span, .. }
-            | Ast::Float { span, .. }
-            | Ast::Null(span)
-            | Ast::Comment(span)
-            | Ast::DocComment(span)
-            | Ast::LineComment(span) => None,
+            Ast::NixString(..)
+            | Ast::NixPath(..)
+            | Ast::Bool { .. }
+            | Ast::Int { .. }
+            | Ast::Float { .. }
+            | Ast::Null(..)
+            | Ast::Comment(..)
+            | Ast::DocComment(..)
+            | Ast::LineComment(..) => None,
         };
         containing
     }

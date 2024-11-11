@@ -78,7 +78,7 @@ pub enum Type {
     Optional(Box<Type>),
     Pattern(HashMap<String, (Type, Option<Type>)>, bool),
 
-    // Complexe Types only created by simplification
+    // Complex Types only created by simplification
     Union(Box<Type>, Box<Type>),
     Inter(Box<Type>, Box<Type>),
     Recursive(Var, Box<Type>),

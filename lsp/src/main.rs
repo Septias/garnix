@@ -146,15 +146,15 @@ async fn main() {
                     });
                 async move { Ok(ret) }
             })
-            .request::<request::HoverRequest, _>(|st, a| {
+            .request::<request::HoverRequest, _>(|st, hover_params| {
                 let ast = st
                     .files
-                    .get(a.text_document_position_params.text_document.uri.as_str());
+                    .get(hover_params.text_document_position_params.text_document.uri.as_str());
 
                 let ret = if let Some((ast, source)) = ast {
                     let info: Option<(String, &std::ops::Range<usize>)> = (move || {
                         let position =
-                            from_lsp_position(a.text_document_position_params.position, source);
+                            from_lsp_position(hover_params.text_document_position_params.position, source);
                         let node = ast.get_ident_at(position)?;
 
                         let constraints = node.var.get().map(|var| var.show());
@@ -172,12 +172,12 @@ async fn main() {
                         range: Some(to_lsp_range(span, source)),
                     }))
                 } else {
-                    st.load_file(&a.text_document_position_params.text_document.uri)
+                    st.load_file(&hover_params.text_document_position_params.text_document.uri)
                         .ok();
                     Ok(Some(Hover {
                         contents: HoverContents::Scalar(MarkedString::String(format!(
                             "file not yet read {}",
-                            a.text_document_position_params.text_document.uri
+                            hover_params.text_document_position_params.text_document.uri
                         ))),
                         range: None,
                     }))
