@@ -33,7 +33,7 @@ impl Var {
         let up = self.upper_bounds.borrow();
         if up.len() == 1 {
             match up.first().unwrap() {
-                Type::Record(rc) => Some(rc.clone()),
+                Type::AttrSet(rc) => Some(rc.clone()),
                 _ => None,
             }
         } else {
@@ -72,9 +72,9 @@ pub enum Type {
     Undefined,
 
     Var(Var),
-    Function(Box<Type>, Box<Type>),
+    Lambda(Box<Type>, Box<Type>),
     List(Vec<Type>),
-    Record(HashMap<String, Type>),
+    AttrSet(HashMap<String, Type>),
     Optional(Box<Type>),
     Pattern(HashMap<String, (Type, Option<Type>)>, bool),
 
@@ -127,9 +127,9 @@ impl Type {
         match self {
             Type::Var(ident) => ident.level,
             Type::Optional(ty) => ty.level(),
-            Type::Function(lhs, rhs) => lhs.level().max(rhs.level()),
+            Type::Lambda(lhs, rhs) => lhs.level().max(rhs.level()),
             Type::List(ls) => ls.iter().map(|t| t.level()).max().unwrap_or(0),
-            Type::Record(rc) => rc.values().map(|t| t.level()).max().unwrap_or(0),
+            Type::AttrSet(rc) => rc.values().map(|t| t.level()).max().unwrap_or(0),
             Type::Pattern(fields, _) => fields.values().map(|(t, _)| t.level()).max().unwrap_or(0),
             Type::Union(left, right) => left.level().max(right.level()),
             Type::Bool
@@ -153,9 +153,9 @@ impl Type {
         match self {
             Type::Var(_) => TypeName::Var,
             Type::List(_) => TypeName::List,
-            Type::Function(_, _) => TypeName::Function,
+            Type::Lambda(_, _) => TypeName::Function,
             Type::Union(_, _) => TypeName::Union,
-            Type::Record(_) => TypeName::Record,
+            Type::AttrSet(_) => TypeName::Record,
             Type::Top => TypeName::Top,
             Type::Bottom => TypeName::Bottom,
             Type::Inter(_, _) => TypeName::Inter,
@@ -181,9 +181,9 @@ impl Type {
             | t @ Type::Null
             | t @ Type::Undefined => t.as_ref().to_string(),
             Type::List(elems) => format!("[ {} ]", elems.iter().map(|t| t.show()).join(" ")),
-            Type::Function(lhs, rhs) => format!("{} -> ({})", lhs.show(), rhs.show()),
+            Type::Lambda(lhs, rhs) => format!("{} -> ({})", lhs.show(), rhs.show()),
             Type::Union(lhs, rhs) => format!("{} ∨ {}", lhs, rhs),
-            Type::Record(fields) => fields
+            Type::AttrSet(fields) => fields
                 .iter()
                 .map(|(k, v)| format!("{{{}: {}}}", k, v.show()))
                 .join(", "),

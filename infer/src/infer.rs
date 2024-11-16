@@ -41,12 +41,12 @@ fn constrain_inner<'a>(
         | (Type::Null, Type::Null)
         | (Type::Undefined, _) => (),
 
-        (Type::Function(l0, r0), Type::Function(l1, r1)) => {
+        (Type::Lambda(l0, r0), Type::Lambda(l1, r1)) => {
             constrain_inner(context, l1, l0, cache)?;
             constrain_inner(context, r0, r1, cache)?;
         }
 
-        (Type::Record(fs0), Type::Record(fs1)) => {
+        (Type::AttrSet(fs0), Type::AttrSet(fs1)) => {
             for (n1, t1) in fs1 {
                 match fs0.iter().find(|(n0, _)| *n0 == n1) {
                     Some((_, t0)) => constrain_inner(context, t0, t1, cache)?,
@@ -55,7 +55,7 @@ fn constrain_inner<'a>(
             }
         }
 
-        (Type::Record(rcd), Type::Pattern(pat, wildcart)) => {
+        (Type::AttrSet(rcd), Type::Pattern(pat, wildcart)) => {
             if *wildcart {
                 for (pat, (t1, optional)) in pat.iter() {
                     match rcd.iter().find(|(n0, _)| *n0 == pat) {
@@ -114,7 +114,7 @@ fn constrain_inner<'a>(
         (Type::Pattern(pat, _), rhs @ Type::Var(_)) => {
             constrain_inner(
                 context,
-                &Type::Record(
+                &Type::AttrSet(
                     pat.clone()
                         .into_iter()
                         .map(|(name, (_ty, opt))| (name, opt.unwrap_or(Type::Undefined)))
@@ -199,11 +199,11 @@ fn extrude(
             }
         }
 
-        Type::Function(l, r) => Type::Function(
+        Type::Lambda(l, r) => Type::Lambda(
             Box::new(extrude(context, l, !pol, lvl, c)),
             Box::new(extrude(context, r, pol, lvl, c)),
         ),
-        Type::Record(fs) => Type::Record(
+        Type::AttrSet(fs) => Type::AttrSet(
             fs.iter()
                 .map(|(name, t)| (name.clone(), extrude(context, t, pol, lvl, c)))
                 .collect(),
@@ -269,17 +269,17 @@ fn freshen(
             freshened.insert(var.clone(), new_v.clone());
             new_v
         })),
-        Type::Function(ty1, ty2) => {
+        Type::Lambda(ty1, ty2) => {
             let left = freshen(context, ty1, lim, lvl, freshened);
             let right = freshen(context, ty2, lim, lvl, freshened);
-            Type::Function(Box::new(left), Box::new(right))
+            Type::Lambda(Box::new(left), Box::new(right))
         }
         Type::List(list) => Type::List(
             list.iter()
                 .map(|t| freshen(context, t, lim, lvl, freshened))
                 .collect(),
         ),
-        Type::Record(rc) => Type::Record(
+        Type::AttrSet(rc) => Type::AttrSet(
             rc.iter()
                 .map(|(name, ty)| (name.clone(), freshen(context, ty, lim, lvl, freshened)))
                 .collect(),
@@ -335,7 +335,7 @@ fn type_term(ctx: &mut Context, term: &Ast, lvl: usize) -> Result<Type, SpannedE
                         constrain(
                             ctx,
                             ty,
-                            &Type::Record([(name.to_string(), res.clone())].into()),
+                            &Type::AttrSet([(name.to_string(), res.clone())].into()),
                         )
                         .map_err(|e| e.span(span))?;
                         return Ok(res);
@@ -359,7 +359,7 @@ fn type_term(ctx: &mut Context, term: &Ast, lvl: usize) -> Result<Type, SpannedE
                         constrain(
                             ctx,
                             &ty1,
-                            &Record([(name, Type::Optional(Box::new(Type::Undefined)))].into()),
+                            &AttrSet([(name, Type::Optional(Box::new(Type::Undefined)))].into()),
                         )
                         .map_err(|e| e.span(lhs.get_span()))?;
                     };
@@ -374,11 +374,11 @@ fn type_term(ctx: &mut Context, term: &Ast, lvl: usize) -> Result<Type, SpannedE
                     return match ty {
                         Type::Var(_) => {
                             let res = Type::Var(ctx.fresh_var(lvl));
-                            constrain(ctx, &ty, &Type::Record([(name, res.clone())].into()))
+                            constrain(ctx, &ty, &Type::AttrSet([(name, res.clone())].into()))
                                 .map_err(|e| e.span(lhs.get_span()))?;
                             Ok(res)
                         }
-                        Record(rc) => {
+                        AttrSet(rc) => {
                             let name = rhs
                                 .as_identifier_str()
                                 .map_err(|e| e.span(rhs.get_span()))?;
@@ -412,7 +412,7 @@ fn type_term(ctx: &mut Context, term: &Ast, lvl: usize) -> Result<Type, SpannedE
                     constrain(
                         ctx,
                         &ty1,
-                        &Type::Function(Box::new(ty2), Box::new(res.clone())),
+                        &Type::Lambda(Box::new(ty2), Box::new(res.clone())),
                     )
                     .map_err(|e| e.span(lhs.get_span()))?;
                     Ok(res)
@@ -459,30 +459,30 @@ fn type_term(ctx: &mut Context, term: &Ast, lvl: usize) -> Result<Type, SpannedE
                 },
 
                 BinOp::Update => match (&ty1, &ty2) {
-                    (Type::Record(rc1), Type::Record(rc2)) => {
+                    (Type::AttrSet(rc1), Type::AttrSet(rc2)) => {
                         let mut rc = rc1.clone();
                         rc.extend(rc2.clone());
-                        Ok(Type::Record(rc))
+                        Ok(Type::AttrSet(rc))
                     }
 
                     (Type::Var(v1), Type::Var(v2)) => {
-                        constrain(ctx, &ty1, &Type::Record(HashMap::new()))
+                        constrain(ctx, &ty1, &Type::AttrSet(HashMap::new()))
                             .map_err(|e| e.span(lhs.get_span()))?;
-                        constrain(ctx, &ty2, &Type::Record(HashMap::new()))
+                        constrain(ctx, &ty2, &Type::AttrSet(HashMap::new()))
                             .map_err(|e| e.span(rhs.get_span()))?;
 
                         let mut rc1 = v1.as_record().unwrap_or_default();
                         rc1.extend(v2.as_record().unwrap_or_default());
-                        Ok(Type::Record(rc1))
+                        Ok(Type::AttrSet(rc1))
                     }
 
-                    (Type::Record(rc1), var @ Type::Var(_))
-                    | (var @ Type::Var(_), Type::Record(rc1)) => {
-                        constrain(ctx, var, &Type::Record(HashMap::new()))
+                    (Type::AttrSet(rc1), var @ Type::Var(_))
+                    | (var @ Type::Var(_), Type::AttrSet(rc1)) => {
+                        constrain(ctx, var, &Type::AttrSet(HashMap::new()))
                             .map_err(|e| e.span(rhs.get_span()))?;
-                        Ok(Type::Record(rc1.clone()))
+                        Ok(Type::AttrSet(rc1.clone()))
                     }
-                    (Type::Record(_), ty2) => Err(SpannedError {
+                    (Type::AttrSet(_), ty2) => Err(SpannedError {
                         error: InferError::TypeMismatch {
                             expected: TypeName::Record,
                             found: ty2.get_name(),
@@ -648,7 +648,7 @@ fn type_term(ctx: &mut Context, term: &Ast, lvl: usize) -> Result<Type, SpannedE
                         });
 
                     if errs.is_empty() {
-                        Ok(Type::Record(ok.into_iter().collect()))
+                        Ok(Type::AttrSet(ok.into_iter().collect()))
                     } else {
                         Err(SpannedError {
                             error: InferError::MultipleErrors(errs),
@@ -668,7 +668,7 @@ fn type_term(ctx: &mut Context, term: &Ast, lvl: usize) -> Result<Type, SpannedE
                     ok?.into_iter()
                         .map(|(name, ty)| (name.to_string(), ty.instantiate(ctx, lvl))),
                 );
-                Ok(Record(vars))
+                Ok(AttrSet(vars))
             }
         }
 
@@ -778,7 +778,7 @@ fn type_term(ctx: &mut Context, term: &Ast, lvl: usize) -> Result<Type, SpannedE
                             constrain(
                                 ctx,
                                 &Type::Var(var.clone()),
-                                &Type::Record(
+                                &Type::AttrSet(
                                     item.into_iter()
                                         .map(|(name, (var, _))| (name, var))
                                         .collect(),
@@ -800,7 +800,7 @@ fn type_term(ctx: &mut Context, term: &Ast, lvl: usize) -> Result<Type, SpannedE
                 }
             };
             let ret = ctx.with_scope(added, |context| type_term(context, body, lvl))?;
-            Ok(Function(Box::new(ty), Box::new(ret)))
+            Ok(Lambda(Box::new(ty), Box::new(ret)))
         }
 
         Ast::With { set, body, span } => {
@@ -812,7 +812,7 @@ fn type_term(ctx: &mut Context, term: &Ast, lvl: usize) -> Result<Type, SpannedE
                     ctx.remove_with();
                     ret
                 }
-                Type::Record(rc) => ctx.with_scope(
+                Type::AttrSet(rc) => ctx.with_scope(
                     rc.iter()
                         .filter(|(name, _)| ctx.with.is_some() || ctx.lookup(name).is_none())
                         .map(|(name, ty)| (name.to_string(), ContextType::Type(ty.clone())))
@@ -928,7 +928,7 @@ fn load_inherit(
                             .iter()
                             .map(|(_span, name)| (name.to_string(), Type::Var(ctx.fresh_var(lvl))))
                             .collect_vec();
-                        let record = Type::Record(vars.clone().into_iter().collect());
+                        let record = Type::AttrSet(vars.clone().into_iter().collect());
 
                         constrain(ctx, ty, &record).map_err(|e| e.span(expr.get_span()))?;
 
@@ -937,7 +937,7 @@ fn load_inherit(
                             .map(|(name, ty)| (name, ContextType::Type(ty)))
                             .collect())
                     }
-                    Type::Record(rc_items) => {
+                    Type::AttrSet(rc_items) => {
                         let (ok, err): (Vec<_>, Vec<_>) = items
                             .iter()
                             .map(|(range, name)| {
@@ -1070,7 +1070,7 @@ fn coalesce_type_inner(
                 }
             }
         }
-        Type::Function(l, r) => Type::Function(
+        Type::Lambda(l, r) => Type::Lambda(
             Box::new(coalesce_type_inner(
                 context,
                 l,
@@ -1085,7 +1085,7 @@ fn coalesce_type_inner(
                 .map(|t| coalesce_type_inner(context, t, polarity, rec, processing.clone()))
                 .collect(),
         ),
-        Type::Record(r) => Type::Record(
+        Type::AttrSet(r) => Type::AttrSet(
             r.iter()
                 .map(|(n, t)| {
                     (
