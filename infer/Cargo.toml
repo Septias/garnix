@@ -12,6 +12,5 @@ strum = "*"
 strum_macros = "*"
 anyhow = "*"
 thiserror = "*"
-parser = { path = "../parser" }
 nom = "*"
 itertools = "*"

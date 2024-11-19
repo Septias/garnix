@@ -2,7 +2,6 @@ use super::{InferError, InferResult};
 use crate::{ast, types::Type};
 use core::str;
 use logos::Span;
-use parser::ast::{Ast as ParserAst, BinOp, UnOp};
 use std::{
     cell::OnceCell,
     collections::HashMap,
@@ -160,8 +159,8 @@ pub enum Ast {
 
 impl Ast {
     /// Convert a parser ast to an infer ast.
-    pub fn from_parser_ast(value: ParserAst, source: &str) -> Self {
-        transform_ast(value, source)
+    pub fn from_parser_ast(source: &str) -> Self {
+        todo!()
     }
 
     /// Tries to convert the ast to an identifier and then return name as string.
@@ -395,190 +394,5 @@ impl Ast {
             }
             _ => {}
         }
-    }
-}
-
-/// Convert [ParserAst] to [Ast].
-/// Replace every occurence of an identifier with an [Identifier].
-fn transform_ast(value: ParserAst, source: &str) -> Ast {
-    use Ast::*;
-    match value {
-        ParserAst::UnaryOp { op, box rhs, span } => UnaryOp {
-            op,
-            rhs: Box::new(transform_ast(rhs, source)),
-            span,
-        },
-        ParserAst::BinaryOp {
-            op,
-            box lhs,
-            box rhs,
-            span,
-        } => BinaryOp {
-            op,
-            lhs: Box::new(transform_ast(lhs, source)),
-            rhs: Box::new(transform_ast(rhs, source)),
-            span,
-        },
-        ParserAst::AttrSet {
-            attrs,
-            is_recursive,
-            span,
-            inherit,
-        } => {
-            let attrs = attrs
-                .into_iter()
-                .map(|(name, expr)| {
-                    let ident = crate::Identifier::new(source[name.clone()].to_string(), name);
-                    (ident, transform_ast(expr, source))
-                })
-                .collect();
-            Ast::AttrSet {
-                attrs,
-                is_recursive,
-                inherit: inherit
-                    .into_iter()
-                    .map(|inherit| Inherit {
-                        name: inherit.name.map(|name| transform_ast(name, source)),
-                        items: inherit
-                            .items
-                            .into_iter()
-                            .map(|item| (item.clone(), source[item].to_string()))
-                            .collect(),
-                    })
-                    .collect(),
-                span,
-            }
-        }
-        ParserAst::LetBinding {
-            bindings,
-            body,
-            inherit,
-            span,
-        } => {
-            let bindings: Vec<(crate::Identifier, Ast)> = bindings
-                .into_iter()
-                .map(|(span, expr)| {
-                    let ident = crate::Identifier::new(source[span.clone()].to_string(), span);
-                    (ident, transform_ast(expr, source))
-                })
-                .collect();
-
-            let body = transform_ast(*body, source);
-
-            LetBinding {
-                bindings,
-                inherit: inherit
-                    .into_iter()
-                    .map(|inherit| Inherit {
-                        name: inherit.name.map(|name| transform_ast(name, source)),
-                        items: inherit
-                            .items
-                            .into_iter()
-                            .map(|item| (item.clone(), source[item].to_string()))
-                            .collect(),
-                    })
-                    .collect(),
-                body: Box::new(body),
-                span,
-            }
-        }
-        ParserAst::Lambda {
-            pattern,
-            body,
-            span,
-        } => {
-            let mut idents = vec![];
-            let pattern = match pattern {
-                parser::ast::Pattern::Set {
-                    patterns,
-                    is_wildcard,
-                    name,
-                } => {
-                    let patterns = patterns.into_iter().map(|patt| match patt {
-                        parser::ast::PatternElement::Identifier(name) => {
-                            let ident =
-                                crate::Identifier::new(source[name.clone()].to_string(), name);
-                            idents.push(ident.clone());
-                            PatternElement::Identifier(ident)
-                        }
-                        parser::ast::PatternElement::DefaultIdentifier {
-                            identifier,
-                            span,
-                            ast,
-                        } => {
-                            let ident =
-                                crate::Identifier::new(source[identifier].to_string(), span);
-                            idents.push(ident.clone());
-                            PatternElement::DefaultIdentifier(ident, transform_ast(ast, source))
-                        }
-                    });
-                    Pattern::Record {
-                        patterns: patterns.collect(),
-                        is_wildcard,
-                        name: name.map(|name| source[name].to_string()),
-                    }
-                }
-                parser::ast::Pattern::Identifier(ident) => Pattern::Identifier(
-                    crate::Identifier::new(source[ident.clone()].to_string(), ident),
-                ),
-            };
-
-            let body = transform_ast(*body, source);
-            Lambda {
-                pattern,
-                body: Box::new(body),
-                span,
-            }
-        }
-        ParserAst::Conditional {
-            box condition,
-            box expr1,
-            box expr2,
-            span,
-        } => Conditional {
-            condition: Box::new(transform_ast(condition, source)),
-            expr1: Box::new(transform_ast(expr1, source)),
-            expr2: Box::new(transform_ast(expr2, source)),
-            span,
-        },
-        ParserAst::Assertion {
-            box condition,
-            span,
-            box expr,
-        } => Assertion {
-            condition: Box::new(transform_ast(condition, source)),
-            expr: Box::new(transform_ast(expr, source)),
-            span,
-        },
-        ParserAst::With {
-            box set,
-            box body,
-            span,
-        } => With {
-            set: Box::new(transform_ast(set, source)),
-            body: Box::new(transform_ast(body, source)),
-            span,
-        },
-        ParserAst::Identifier(span) => {
-            Identifier(ast::Identifier::new(source[span.clone()].to_string(), span))
-        }
-
-        ParserAst::NixString(span) => NixString(span),
-        ParserAst::NixPath(span) => NixPath(span),
-        ParserAst::List { exprs, span } => List {
-            exprs: exprs
-                .into_iter()
-                .map(|l| transform_ast(l, source))
-                .collect(),
-            span,
-        },
-        ParserAst::Bool { val, span } => Bool { val, span },
-        ParserAst::Int { val, span } => Int { val, span },
-        ParserAst::Float { val, span } => Float { val, span },
-        ParserAst::Null(span) => Null(span),
-        ParserAst::Comment(_) | ParserAst::DocComment(_) | ParserAst::LineComment(_) => {
-            unimplemented!()
-        }
-        ParserAst::SearchPath(_path) => todo!(),
     }
 }
