@@ -50,6 +50,6 @@ This project can be broken down into three major phases, each posing its own tec
 
 ### Describe the ecosystem of the project, and how you will engage with relevant actors and promote the outcomes? (2500c)
 During this project I aim to collaboration closeley with the following stakeholder:
-- Nil’s maintainer, [@oxalica](https://github.com/oxalica)
+- Nil’s maintainer, [@oxalica](https://github.com/oxalica) which I have contacted but sadly not yet received a response.
 - Nixos team (I have not yet had the chance to meet them but I would be happy to get in touch)
 
