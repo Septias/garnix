@@ -3,9 +3,10 @@ propose: <https://nlnet.nl/propose/>
 
 ### Abstract: Can you explain the **whole project** and its expected outcome(s) (1200c)
 
-One of Nlnets goals is fediversity, the creation of a more diverse and decentralized internet. One foundational building block for decentralized and secure software is the the Nixos operating system which enables the creation of reproducible, secure and reliable software. Even though it has a lot of great benefits, it still lacks _general adoption_, mainly because of its steep learning curve. This is mainly because of the the nix programming language that inmplementors have to learn in addition to the inner workings of an operating system.
-
 This project aims to enhance the Nix developer experience by expanding the [nil](https://github.com/oxalica/nil), a Language Server Protocol (LSP) for the nix language. The contributions I want to make are twofold, first, I want to implement a more sophisticated type inference algorithm to Nil, and second, I want to expand the LSP features that Nil currently supports. By doing so, I hope to provide Nix developers with a more robust and user-friendly experience, ultimately broadening adoption and strengthening the ecosystem.
+
+One of Nlnets goals is fediversity, the creation of a more diverse and decentralized internet. One foundational building block for decentralized and secure software is the the Nixos operating system which enables the creation of reproducible, secure and reliable software. Even though it has a lot of great benefits, it still lacks _general adoption_, mainly because of its steep learning curve. This is mainly because of the the nix programming language that inmplementors have to learn in addition to the inner workings of an operating system and the reason for this proposal.
+
 
 ### Have you been involved with projects or organisations relevant to this project before? And if so, can you tell us a bit about your contributions?(2500c)
 I currently work at the Chair of Programming Languages at the University of Freiburg, where I have gained a strong foundation in programming languages. My Bachelor thesis explored the type inference options of the nix programming language and in combination with it I implemented a simple type inference algorithm for the nix language. In combination with this proposal I want to attribute my masters project to the theoretical foundation of the language.
