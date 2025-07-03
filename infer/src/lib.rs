@@ -84,10 +84,12 @@ impl Context {
         res
     }
 
+    /// TODO: with can be stacked.
     pub(crate) fn set_with(&mut self, with: Type) {
         self.with = Some(with);
     }
 
+    /// TODO: with can be stacked.
     pub(crate) fn remove_with(&mut self) {
         self.with = None;
     }
