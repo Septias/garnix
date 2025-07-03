@@ -4,7 +4,7 @@ use core::str;
 use infer::freshen_above;
 use logos::Span;
 use std::cell::RefCell;
-use types::{PolymorphicType, Type, TypeName, Var};
+use types::{PolymorphicType, Ty, TypeName, Var};
 
 pub mod ast;
 pub mod infer;
@@ -18,19 +18,19 @@ mod tests;
 
 #[derive(Debug, Clone)]
 pub enum ContextType {
-    Type(Type),
+    Type(Ty),
     PolymorhicType(PolymorphicType),
 }
 
 impl ContextType {
-    fn instantiate(&self, context: &Context, lvl: usize) -> Type {
+    fn instantiate(&self, context: &Context, lvl: usize) -> Ty {
         match self {
             ContextType::Type(ty) => ty.instantiate(),
             ContextType::PolymorhicType(pty) => freshen_above(context, &pty.body, pty.level, lvl),
         }
     }
 
-    fn into_type(self) -> Option<Type> {
+    fn into_type(self) -> Option<Ty> {
         match self {
             ContextType::Type(ty) => Some(ty),
             ContextType::PolymorhicType(_) => None,
@@ -41,7 +41,7 @@ impl ContextType {
 /// Context to save variables and their types.
 pub struct Context {
     bindings: Vec<Vec<(String, ContextType)>>,
-    with: Option<Type>,
+    with: Option<Ty>,
     count: RefCell<usize>,
 }
 
@@ -85,7 +85,7 @@ impl Context {
     }
 
     /// TODO: with can be stacked.
-    pub(crate) fn set_with(&mut self, with: Type) {
+    pub(crate) fn set_with(&mut self, with: Ty) {
         self.with = Some(with);
     }
 
@@ -97,7 +97,7 @@ impl Context {
 
 /// Infer the type of an ast.
 /// Returns the final type as well as the ast which has been annotated with types.
-pub fn infer(source: &str) -> SpannedInferResult<(Type, Ast)> {
+pub fn infer(source: &str) -> SpannedInferResult<(Ty, Ast)> {
     let ast = parser::parse(source).map_err(|e| InferError::from(e).span(&Span::default()))?;
     let ast = Ast::from_parser_ast(ast, source);
     let ty = infer::infer(&ast)?;
@@ -106,7 +106,7 @@ pub fn infer(source: &str) -> SpannedInferResult<(Type, Ast)> {
 
 /// Infer the type of an ast.
 /// Returns the final type as well as the ast which has been annotated with types.
-pub fn coalesced(source: &str) -> SpannedInferResult<(Type, Ast)> {
+pub fn coalesced(source: &str) -> SpannedInferResult<(Ty, Ast)> {
     let ast = parser::parse(source).map_err(|e| InferError::from(e).span(&Span::default()))?;
     let ast = Ast::from_parser_ast(ast, source);
     let ty = infer::coalesced(&ast)?;

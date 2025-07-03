@@ -1,5 +1,5 @@
 use super::{InferError, InferResult};
-use crate::{ast, types::Type};
+use crate::{ast, types::Ty};
 use core::str;
 use logos::Span;
 use parser::ast::{Ast as ParserAst, BinOp, UnOp};
@@ -28,18 +28,19 @@ pub enum Pattern {
     Identifier(Identifier),
 }
 
+/// An inherit statement.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Inherit {
     pub name: Option<Ast>,
     pub items: Vec<(Span, String)>,
 }
 
-#[derive(Default, Debug, Clone, Eq)]
 /// An Identifier.
+#[derive(Default, Debug, Clone, Eq)]
 pub struct Identifier {
     pub name: String,
     pub span: Span,
-    pub var: OnceCell<Type>,
+    pub var: OnceCell<Ty>,
 }
 
 impl PartialEq for Identifier {

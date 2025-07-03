@@ -1,12 +1,12 @@
-use crate::{coalesced, infer, types::Var, InferError, Type};
+use crate::{coalesced, infer, types::Var, InferError, Ty};
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
-use Type::*;
+use Ty::*;
 
 #[test]
 fn test_primitve() {
     let source = "{}";
     let (ty, _) = infer(source).unwrap();
-    assert_eq!(ty, Type::Record(HashMap::new()));
+    assert_eq!(ty, Ty::Record(HashMap::new()));
 
     let source = "{ x = 2;}";
     let (ty, _) = infer(source).unwrap();
@@ -92,7 +92,7 @@ fn test_numbers() {
     let (ty, _) = infer(source).unwrap();
     assert_eq!(
         ty,
-        Type::Function(
+        Ty::Function(
             Box::new(Var(Var {
                 upper_bounds: Rc::new(RefCell::new(vec![Number])),
                 id: 0,
@@ -106,7 +106,7 @@ fn test_numbers() {
     let (ty, _) = infer(source).unwrap();
     assert_eq!(
         ty,
-        Type::Function(
+        Ty::Function(
             Box::new(Var(Var {
                 upper_bounds: Rc::new(RefCell::new(vec![Number])),
                 id: 0,
@@ -121,7 +121,7 @@ fn test_numbers() {
     let (ty, _) = infer(source).unwrap();
     assert_eq!(
         ty,
-        Type::Function(
+        Ty::Function(
             Box::new(Var(Var {
                 upper_bounds: Rc::new(RefCell::new(vec![String])),
                 id: 0,
@@ -136,7 +136,7 @@ fn test_numbers() {
     let (ty, _) = infer(source).unwrap();
     assert_eq!(
         ty,
-        Type::Function(
+        Ty::Function(
             Box::new(Var(Var {
                 upper_bounds: Rc::new(RefCell::new(vec![Path])),
                 id: 0,
@@ -150,21 +150,21 @@ fn test_numbers() {
 
     assert_eq!(
         ty,
-        Type::Function(
+        Ty::Function(
             Box::new(Var(Var {
                 lower_bounds: Rc::new(RefCell::new(vec![Number, String, Path])),
                 id: 0,
                 ..Default::default()
             })),
-            Box::new(Type::Function(
+            Box::new(Ty::Function(
                 Box::new(Var(Var {
                     lower_bounds: Rc::new(RefCell::new(vec![Number, String, Path])),
                     id: 1,
                     ..Default::default()
                 })),
-                Box::new(Type::Union(
-                    Box::new(Type::Number),
-                    Box::new(Type::Union(Box::new(Type::String), Box::new(Type::Path)))
+                Box::new(Ty::Union(
+                    Box::new(Ty::Number),
+                    Box::new(Ty::Union(Box::new(Ty::String), Box::new(Ty::Path)))
                 ))
             ))
         )
@@ -201,7 +201,7 @@ fn test_bools() {
     let (ty, _) = infer(source).unwrap();
     assert_eq!(
         ty,
-        Type::Function(
+        Ty::Function(
             Box::new(Var(Var {
                 upper_bounds: Rc::new(RefCell::new(vec![Bool])),
                 id: 0,
@@ -218,7 +218,7 @@ fn test_record_access() {
     let (ty, _) = infer(source).unwrap();
     assert_eq!(
         ty,
-        Type::Function(
+        Ty::Function(
             Box::new(Var(Var {
                 upper_bounds: Rc::new(RefCell::new(vec![Record(
                     [(
@@ -272,7 +272,7 @@ fn test_inherit() {
     let (ty, _) = infer(source).unwrap();
     assert_eq!(
         ty,
-        Type::Record(
+        Ty::Record(
             [(
                 "x".to_string(),
                 Var(Var {
@@ -289,7 +289,7 @@ fn test_inherit() {
     let (ty, _) = infer(source).unwrap();
     assert_eq!(
         ty,
-        Type::Function(
+        Ty::Function(
             Box::new(Var(Var {
                 id: 0,
                 ..Default::default()
@@ -311,7 +311,7 @@ fn test_inherit() {
     let (ty, _) = infer(source).unwrap();
     assert_eq!(
         ty,
-        Type::Function(
+        Ty::Function(
             Box::new(Var(Var {
                 id: 0,
                 upper_bounds: Rc::new(RefCell::new(vec![Record(
@@ -377,7 +377,7 @@ fn test_with() {
     let (ty, _) = infer(source).unwrap();
     assert_eq!(
         ty,
-        Type::Function(
+        Ty::Function(
             Box::new(Var(Var {
                 id: 0,
                 upper_bounds: Rc::new(RefCell::new(vec![Record(
@@ -425,7 +425,7 @@ fn test_joining() {
     let res = infer(source).unwrap();
     assert_eq!(
         res.0,
-        Type::Function(
+        Ty::Function(
             Box::new(Var(Var {
                 id: 0,
                 upper_bounds: Rc::new(RefCell::new(vec![List(vec![])])),
@@ -439,7 +439,7 @@ fn test_joining() {
     let res = infer(source).unwrap();
     assert_eq!(
         res.0,
-        Type::Function(
+        Ty::Function(
             Box::new(Var(Var {
                 id: 0,
                 upper_bounds: Rc::new(RefCell::new(vec![List(vec![])])),
@@ -464,7 +464,7 @@ fn test_joining() {
     let res = infer(source).unwrap();
     assert_eq!(
         res.0,
-        Type::Function(
+        Ty::Function(
             Box::new(Var(Var {
                 id: 0,
                 upper_bounds: Rc::new(RefCell::new(vec![Record(HashMap::new())])),
@@ -479,7 +479,7 @@ fn test_joining() {
 
     assert_eq!(
         res.0,
-        Type::Function(
+        Ty::Function(
             Box::new(Var(Var {
                 id: 0,
                 upper_bounds: Rc::new(RefCell::new(vec![Record([].into())])),
@@ -500,11 +500,11 @@ fn test_has_attribute() {
     let (ty, _ast) = infer(source).unwrap();
     assert_eq!(
         ty,
-        Type::Function(
+        Ty::Function(
             Box::new(Var(Var {
                 id: 0,
                 upper_bounds: Rc::new(RefCell::new(vec![Record(
-                    [("y".to_string(), Type::Optional(Box::new(Type::Undefined)))].into()
+                    [("y".to_string(), Ty::Optional(Box::new(Ty::Undefined)))].into()
                 )])),
                 ..Default::default()
             })),
@@ -709,11 +709,11 @@ fn test_lambda() {
     let (ty, _) = infer(source).unwrap();
     assert_eq!(
         ty,
-        Type::Function(
-            Box::new(Type::Pattern(
+        Ty::Function(
+            Box::new(Ty::Pattern(
                 [
-                    ("x".to_string(), (Type::Var(Var::new(0, 0)), None)),
-                    ("y".to_string(), (Type::Var(Var::new(0, 1)), None))
+                    ("x".to_string(), (Ty::Var(Var::new(0, 0)), None)),
+                    ("y".to_string(), (Ty::Var(Var::new(0, 1)), None))
                 ]
                 .into(),
                 false
@@ -729,16 +729,16 @@ fn test_lambda() {
     let (ty, _) = infer(source).unwrap();
     let out = Var(Var {
         id: 0,
-        upper_bounds: Rc::new(RefCell::new(vec![Type::Number])),
+        upper_bounds: Rc::new(RefCell::new(vec![Ty::Number])),
         ..Default::default()
     });
     assert_eq!(
         ty,
-        Type::Function(
-            Box::new(Type::Pattern(
+        Ty::Function(
+            Box::new(Ty::Pattern(
                 [
-                    ("x".to_string(), (out.clone(), Some(Type::Number))),
-                    ("y".to_string(), (Type::Var(Var::new(0, 1)), None))
+                    ("x".to_string(), (out.clone(), Some(Ty::Number))),
+                    ("y".to_string(), (Ty::Var(Var::new(0, 1)), None))
                 ]
                 .into(),
                 false
@@ -749,17 +749,17 @@ fn test_lambda() {
 
     let source = r#"{ x ? 1, y } @ bind: bind"#;
     let (ty, _) = infer(source).unwrap();
-    let pat = Type::Pattern(
+    let pat = Ty::Pattern(
         [
-            ("x".to_string(), (out.clone(), Some(Type::Number))),
-            ("y".to_string(), (Type::Var(Var::new(0, 1)), None)),
+            ("x".to_string(), (out.clone(), Some(Ty::Number))),
+            ("y".to_string(), (Ty::Var(Var::new(0, 1)), None)),
         ]
         .into(),
         false,
     );
     assert_eq!(
         ty,
-        Type::Function(
+        Ty::Function(
             Box::new(pat.clone()),
             Box::new(Var(Var {
                 id: 2,
@@ -773,11 +773,11 @@ fn test_lambda() {
     let (ty, _) = infer(source).unwrap();
     assert_eq!(
         ty,
-        Type::Function(
-            Box::new(Type::Pattern(HashMap::new(), true)),
+        Ty::Function(
+            Box::new(Ty::Pattern(HashMap::new(), true)),
             Box::new(Var(Var {
                 id: 0,
-                upper_bounds: Rc::new(RefCell::new(vec![Type::Record(HashMap::new())])),
+                upper_bounds: Rc::new(RefCell::new(vec![Ty::Record(HashMap::new())])),
                 ..Default::default()
             }))
         )
@@ -790,7 +790,7 @@ fn test_application() {
     let (ty, _) = infer(source).unwrap();
     assert_eq!(
         ty,
-        Type::Function(
+        Ty::Function(
             Box::new(Var(Var {
                 id: 0,
                 upper_bounds: Rc::new(RefCell::new(vec![Function(
@@ -849,7 +849,7 @@ fn test_application() {
     let (ty, _) = infer(source).unwrap();
     assert_eq!(
         ty,
-        Type::Function(
+        Ty::Function(
             Box::new(Var(Var {
                 id: 0,
                 upper_bounds: Rc::new(RefCell::new(vec![Pattern(
@@ -951,7 +951,7 @@ fn test_conditionals() {
     let (ty, _) = infer(source).unwrap();
     assert_eq!(
         ty,
-        Type::Function(
+        Ty::Function(
             Box::new(Var(Var {
                 upper_bounds: Rc::new(RefCell::new(vec![Bool])),
                 id: 0,

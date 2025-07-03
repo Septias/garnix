@@ -2,7 +2,7 @@ use logos::Span;
 use std::fmt;
 use thiserror::Error;
 
-use crate::types::{Type, TypeName};
+use crate::types::{Ty, TypeName};
 
 /// An error that occured during type inference.
 #[derive(Debug, Error)]
@@ -14,7 +14,7 @@ pub enum InferError {
     #[error("The record field {field} is missing")]
     MissingRecordField { field: String },
     #[error("Cannot constrain {lhs} <: {rhs}")]
-    CannotConstrain { lhs: Type, rhs: Type },
+    CannotConstrain { lhs: Ty, rhs: Ty },
     #[error("Type mismatch: expected {expected}, found {found}")]
     TypeMismatch { expected: TypeName, found: TypeName },
     #[error("Can't convert {from} to {to}")]
