@@ -11,7 +11,6 @@
       flake-utils.lib.eachDefaultSystem (
         system: let
           name = "garnix";
-
           pkgs = import nixpkgs {
             overlays = [(import rust-overlay)];
             inherit system;
@@ -25,7 +24,7 @@
           ];
           nativeBuildInputs = with pkgs; [pkg-config];
           rust-toolchain = pkgs.rust-bin.nightly.latest.default.override {
-            extensions = ["rust-src" "rustfmt" "rust-docs" "clippy"];
+            extensions = ["rust-src" "rustfmt" "rust-docs" "clippy" "rust-analyzer"];
           };
         in {
           formatter = pkgs.alejandra;
@@ -37,7 +36,7 @@
           };
           devShells.default = pkgs.mkShell {
             inherit buildInputs;
-            nativeBuildInputs = nativeBuildInputs ++ [rust-toolchain pkgs.rust-analyzer];
+            nativeBuildInputs = nativeBuildInputs ++ [rust-toolchain];
             RUST_BACKTRACE = 1;
           };
         }
