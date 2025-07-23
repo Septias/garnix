@@ -65,9 +65,9 @@ impl hash::Hash for Identifier {
     }
 }
 
+/// Mirror of [ParserAst], but with identifiers replaced by DeBrujin indices.
 #[derive(Debug, Clone, PartialEq, AsRefStr, EnumDiscriminants)]
 #[strum_discriminants(derive(Display, AsRefStr))]
-/// Mirror of [ParserAst], but with identifiers replaced by DeBrujin indices.
 pub enum Ast {
     /// Unary Operators
     UnaryOp {
