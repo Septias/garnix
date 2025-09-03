@@ -486,9 +486,8 @@ version = "1.0.0"
 dependencies = [
  "anyhow",
  "itertools 0.10.5",
- "logos",
- "nom",
- "parser",
+ "parser2",
+ "salsa",
  "strum",
  "strum_macros",
  "thiserror",

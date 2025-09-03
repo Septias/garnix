@@ -5,4 +5,4 @@ version = "0.1.0"
 resolver = "2"
 package.version = "1.0.0"
 package.edition = "2021"
-members = [ "infer", "lsp", "parser", "parser2"]
+members = [ "infer", "lsp", "parser2"]
