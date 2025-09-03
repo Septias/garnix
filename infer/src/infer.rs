@@ -1,11 +1,10 @@
 use crate::{
-    ast::{Ast, Identifier, Inherit, PatternElement},
     types::{PolarVar, PolymorphicType, Ty, Var},
     Context, ContextType, InferError, InferResult, SpannedError, SpannedInferResult, TypeName,
 };
 use itertools::{Either, Itertools};
 use logos::Span;
-use parser::ast::BinOp;
+use parser2::ast::BinOp;
 use std::collections::{HashMap, HashSet};
 
 pub fn constrain(context: &Context, lhs: &Ty, rhs: &Ty) -> InferResult<()> {
@@ -165,9 +164,7 @@ fn extrude(
     }
 
     match ty {
-        Ty::Number | Ty::Bool | Ty::String | Ty::Path | Ty::Null | Ty::Undefined => {
-            ty.clone()
-        }
+        Ty::Number | Ty::Bool | Ty::String | Ty::Path | Ty::Null | Ty::Undefined => ty.clone(),
 
         Ty::Var(vs) => {
             let pol_var = (vs.clone(), pol);
@@ -301,9 +298,7 @@ fn freshen(
         ),
 
         Ty::Optional(opt) => Ty::Optional(Box::new(freshen(context, opt, lim, lvl, freshened))),
-        Ty::Number | Ty::Bool | Ty::String | Ty::Path | Ty::Null | Ty::Undefined => {
-            ty.clone()
-        }
+        Ty::Number | Ty::Bool | Ty::String | Ty::Path | Ty::Null | Ty::Undefined => ty.clone(),
         Ty::Union(left, right) => Ty::Union(
             Box::new(freshen(context, left, lim, lvl, freshened)),
             Box::new(freshen(context, right, lim, lvl, freshened)),
@@ -420,9 +415,7 @@ fn type_term(ctx: &mut Context, term: &Ast, lvl: usize) -> Result<Ty, SpannedErr
 
                 // Object modifications
                 BinOp::ListConcat => match (&ty1, &ty2) {
-                    (Ty::List(l), Ty::List(l2)) => {
-                        Ok(Ty::List([l.clone(), l2.clone()].concat()))
-                    }
+                    (Ty::List(l), Ty::List(l2)) => Ok(Ty::List([l.clone(), l2.clone()].concat())),
                     (var1 @ Ty::Var(v1), var2 @ Ty::Var(v2)) => {
                         constrain(ctx, var1, &Ty::List(vec![]))
                             .map_err(|e| e.span(lhs.get_span()))?;
@@ -476,8 +469,7 @@ fn type_term(ctx: &mut Context, term: &Ast, lvl: usize) -> Result<Ty, SpannedErr
                         Ok(Ty::Record(rc1))
                     }
 
-                    (Ty::Record(rc1), var @ Ty::Var(_))
-                    | (var @ Ty::Var(_), Ty::Record(rc1)) => {
+                    (Ty::Record(rc1), var @ Ty::Var(_)) | (var @ Ty::Var(_), Ty::Record(rc1)) => {
                         constrain(ctx, var, &Ty::Record(HashMap::new()))
                             .map_err(|e| e.span(rhs.get_span()))?;
                         Ok(Ty::Record(rc1.clone()))
@@ -511,17 +503,13 @@ fn type_term(ctx: &mut Context, term: &Ast, lvl: usize) -> Result<Ty, SpannedErr
                         (Ty::String | Ty::Path, Ty::String | Ty::Path) => Ok(Ty::String),
                         (Ty::Var(v1), Ty::Var(v2)) => {
                             // TODO: is this correct?
-                            v1.lower_bounds.borrow_mut().extend([
-                                Ty::Number,
-                                Ty::String,
-                                Ty::Path,
-                            ]);
+                            v1.lower_bounds
+                                .borrow_mut()
+                                .extend([Ty::Number, Ty::String, Ty::Path]);
 
-                            v2.lower_bounds.borrow_mut().extend([
-                                Ty::Number,
-                                Ty::String,
-                                Ty::Path,
-                            ]);
+                            v2.lower_bounds
+                                .borrow_mut()
+                                .extend([Ty::Number, Ty::String, Ty::Path]);
 
                             Ok(Ty::Union(
                                 Box::new(Ty::Number),
@@ -530,13 +518,11 @@ fn type_term(ctx: &mut Context, term: &Ast, lvl: usize) -> Result<Ty, SpannedErr
                         }
 
                         (var @ Ty::Var(_), Ty::Number) | (Ty::Number, var @ Ty::Var(_)) => {
-                            constrain(ctx, var, &Ty::Number)
-                                .map_err(|e| e.span(lhs.get_span()))?;
+                            constrain(ctx, var, &Ty::Number).map_err(|e| e.span(lhs.get_span()))?;
                             Ok(Ty::Number)
                         }
                         (var @ Ty::Var(_), Ty::String) | (Ty::String, var @ Ty::Var(_)) => {
-                            constrain(ctx, var, &Ty::String)
-                                .map_err(|e| e.span(lhs.get_span()))?;
+                            constrain(ctx, var, &Ty::String).map_err(|e| e.span(lhs.get_span()))?;
                             Ok(Ty::String)
                         }
                         (var @ Ty::Var(_), Ty::Path) | (Ty::Path, var @ Ty::Var(_)) => {
@@ -632,10 +618,7 @@ fn type_term(ctx: &mut Context, term: &Ast, lvl: usize) -> Result<Ty, SpannedErr
                         .zip(expressions)
                         .map(move |((name, e_ty), rhs)| {
                             let ty = ctx.with_scope(
-                                vec![(
-                                    name.to_string(),
-                                    ContextType::Type(Ty::Var(e_ty.clone())),
-                                )],
+                                vec![(name.to_string(), ContextType::Type(Ty::Var(e_ty.clone())))],
                                 |ctx| type_term(ctx, rhs, lvl + 1),
                             )?;
                             constrain(ctx, &ty, &Ty::Var(e_ty.clone()))
@@ -702,10 +685,7 @@ fn type_term(ctx: &mut Context, term: &Ast, lvl: usize) -> Result<Ty, SpannedErr
                         .zip(expressions)
                         .map(move |((name, e_ty), rhs)| {
                             let ty = ctx.with_scope(
-                                vec![(
-                                    name.to_string(),
-                                    ContextType::Type(Ty::Var(e_ty.clone())),
-                                )],
+                                vec![(name.to_string(), ContextType::Type(Ty::Var(e_ty.clone())))],
                                 |ctx| type_term(ctx, rhs, lvl + 1),
                             )?;
                             let bind = bindings.iter().find(|(n, _)| n.name == *name).unwrap();
@@ -786,8 +766,7 @@ fn type_term(ctx: &mut Context, term: &Ast, lvl: usize) -> Result<Ty, SpannedErr
                             )
                             .map_err(|e| e.span(span))?;
                         } else {
-                            constrain(ctx, &Ty::Var(var.clone()), &ty)
-                                .map_err(|e| e.span(span))?;
+                            constrain(ctx, &Ty::Var(var.clone()), &ty).map_err(|e| e.span(span))?;
                         }
                         added.push((name.to_string(), ContextType::Type(Ty::Var(var))));
                     }
@@ -1030,9 +1009,7 @@ fn coalesce_type_inner(
     mut processing: HashSet<PolarVar>,
 ) -> Ty {
     match ty {
-        Ty::Number | Ty::Bool | Ty::String | Ty::Path | Ty::Null | Ty::Undefined => {
-            ty.clone()
-        }
+        Ty::Number | Ty::Bool | Ty::String | Ty::Path | Ty::Null | Ty::Undefined => ty.clone(),
         tyvar @ Ty::Var(var) => {
             let pol_var = (var.clone(), polarity);
             if processing.contains(&pol_var) {

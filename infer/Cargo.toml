@@ -7,11 +7,10 @@ edition.workspace = true
 
 [dependencies]
 
-logos = "*"
 strum = "*"
 strum_macros = "*"
 anyhow = "*"
 thiserror = "*"
-parser = { path = "../parser" }
-nom = "*"
+parser2 = { path = "../parser2" }
+salsa = "*"
 itertools = "*"

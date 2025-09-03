@@ -1,15 +1,12 @@
 #![feature(box_patterns, iter_intersperse)]
-use ast::Identifier;
 use core::str;
 use infer::freshen_above;
 use logos::Span;
 use std::cell::RefCell;
 use types::{PolymorphicType, Ty, TypeName, Var};
 
-pub mod ast;
-pub mod infer;
-pub use ast::Ast;
 pub mod error;
+pub mod infer;
 pub mod types;
 pub use error::*;
 

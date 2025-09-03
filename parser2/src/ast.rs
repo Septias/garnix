@@ -229,7 +229,7 @@ enums! {
         Apply,
         Assert,
         AttrSet,
-        BinaryOp,
+        BinOp,
         HasAttr,
         IfThenElse,
         IndentString,
@@ -242,7 +242,7 @@ enums! {
         Ref,
         Select,
         String,
-        UnaryOp,
+        UnOp,
         With,
     },
     Attr {
@@ -278,7 +278,7 @@ impl Expr {
                 | Expr::Assert(_) => MIN_BP,
 
                 // Binary and unary ops. They follow `infix_bp` in parser.
-                Expr::BinaryOp(e) => match e.op_kind()? {
+                Expr::BinOp(e) => match e.op_kind()? {
                     BinaryOpKind::PipeLeft | BinaryOpKind::PipeRight => 0,
                     BinaryOpKind::Imply => 1,
                     BinaryOpKind::Or => 3,
@@ -293,7 +293,7 @@ impl Expr {
                     BinaryOpKind::Mul | BinaryOpKind::Div => 17,
                     BinaryOpKind::Concat => 19,
                 },
-                Expr::UnaryOp(e) => match e.op_kind()? {
+                Expr::UnOp(e) => match e.op_kind()? {
                     UnaryOpKind::Not => 13,
                     UnaryOpKind::Negate => 23,
                 },
@@ -376,7 +376,7 @@ asts! {
                 .filter(|tok| tok.kind() == T![rec])
         }
     },
-    BINARY_OP = BinaryOp {
+    BINARY_OP = BinOp {
         lhs: Expr,
         rhs[1]: Expr,
 
@@ -519,7 +519,7 @@ asts! {
         start_dquote_token: T!['"'],
         end_dquote_token[1]: T!['"'],
     },
-    UNARY_OP = UnaryOp {
+    UNARY_OP = UnOp {
         arg: Expr,
 
         pub fn op_details(&self) -> Option<(SyntaxToken, UnaryOpKind)> {
@@ -642,7 +642,7 @@ mod tests {
 
     #[test]
     fn binary_op() {
-        let e = parse::<BinaryOp>("1 + 2");
+        let e = parse::<BinOp>("1 + 2");
         assert_eq!(e.op_kind(), Some(BinaryOpKind::Add));
         e.op_token().unwrap().should_eq("+");
         e.lhs().unwrap().syntax().should_eq("1");
@@ -906,7 +906,7 @@ mod tests {
 
     #[test]
     fn unary_op() {
-        let e = parse::<UnaryOp>("-1");
+        let e = parse::<UnOp>("-1");
         assert_eq!(e.op_kind(), Some(UnaryOpKind::Negate));
         e.op_token().unwrap().should_eq("-");
         e.arg().unwrap().syntax().should_eq("1");
