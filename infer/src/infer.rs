@@ -318,7 +318,7 @@ fn type_term(ctx: &mut Context, term: &Ast, lvl: usize) -> Result<Ty, SpannedErr
                 return Ok(var.instantiate(ctx, lvl));
             }
 
-            // Handle with statement which could be used to supply vars
+            // Handle with-statement which could be used to supply vars
             if let Some(with) = &ctx.with {
                 if let ty @ Ty::Var(var) = with {
                     if let Some(rec) = var.as_record() {
