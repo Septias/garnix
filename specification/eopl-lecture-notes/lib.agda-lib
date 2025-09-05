@@ -1,0 +1,3 @@
+name: nix-spec
+include: .
+depend: standard-library
