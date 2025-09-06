@@ -61,7 +61,7 @@ E₂ ⟶ E₂′
 
 Now: (cst k) + ((cst m) + (cst n)) ⟶ (cst k) + (cst (m+n))
 
-We want to iterate reduction, so we consider ⟶* , the multi-step reduction relation
+We want to iterate reduction, so we consider ⟶* , the **multi-step reduction relation**
 (the reflexive, transitive closure of ⟶)
 
 What if E₁ ⟶ E₂ , does it hold that ⟦ E₁ ⟧ = ⟦ E₂ ⟧ ?
@@ -118,7 +118,6 @@ To do so ʻ we write the property as the *type* of a function:
 ```
 
 ### Agda for safe programming
-
 
 Recurring problem: buffer overflows causing security breaches
 

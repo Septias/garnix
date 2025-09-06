@@ -8,8 +8,6 @@ open import Data.Nat.Properties using (+-assoc)
 ```
 
 ## Notes for chapter "Induction"
-
-
 Towards proving commutativity of addition, we need two lemmas.
 
 Instead of using `rewrite` we write equality proofs using equational reasoning (a convenient notation).

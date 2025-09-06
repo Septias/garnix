@@ -144,9 +144,6 @@ introduces the `with` abstraction: to pattern match on a computed value, here th
 ```
 
 
-
-
-
 ### Monotonicity
 
 ```
