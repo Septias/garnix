@@ -6,15 +6,15 @@ edition.workspace = true
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-strum = "*"
-strum_macros = "*"
-anyhow = "*"
-thiserror = "*"
+strum = { workspace = true }
+strum_macros = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
 parser2 = { path = "../parser2" }
-salsa = "*"
-itertools = "*"
-annotate-snippets = "*"
-ordered-float = "*"
-smol_str = "*"
-la-arena = "*"
-expect-test.workspace = true
+salsa = { workspace = true }
+itertools = { workspace = true }
+annotate-snippets = { workspace = true }
+ordered-float = { workspace = true }
+smol_str = { workspace = true }
+la-arena = { workspace = true }
+expect-test = { workspace = true }

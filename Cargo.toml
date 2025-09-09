@@ -9,3 +9,25 @@ members = [ "infer", "lsp", "parser2"]
 
 [workspace.dependencies]
 expect-test = "1.5.1"
+async-lsp = { version = "0.2.0", features = ["tokio"] }
+tokio = { version = "1.27.0", features = ["macros", "rt", "time"] }
+tokio-util = { version = "0.7.8", features = ["compat"] }
+lsp-types = "*"
+tower = "*"
+tracing = "*"
+tracing-subscriber = "0.3.16"
+anyhow = "1.0.44"
+strum = "*"
+strum_macros = "*"
+thiserror = "*"
+salsa = "0.23"
+itertools = "*"
+annotate-snippets = "*"
+ordered-float = "*"
+smol_str = "*"
+la-arena = "*"
+once_cell = "1.17.0"
+regex-automata = "0.4.0"
+rowan = "0.16"
+criterion = "0.6"
+walkdir = "2.3.3"
