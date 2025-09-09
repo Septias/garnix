@@ -1,14 +1,17 @@
 #![feature(box_patterns, iter_intersperse)]
 use core::str;
 use infer::freshen_above;
-use logos::Span;
+use parser2::Parse;
 use std::cell::RefCell;
 use types::{PolymorphicType, Ty, TypeName, Var};
 
 pub mod error;
 pub mod infer;
+pub mod module;
 pub mod types;
 pub use error::*;
+
+use crate::module::{ExprData, ExprId};
 
 #[cfg(test)]
 mod tests;
@@ -36,36 +39,30 @@ impl ContextType {
 }
 
 /// Context to save variables and their types.
-pub struct Context {
+#[derive(Debug)]
+#[salsa::tracked]
+pub struct Context<'a> {
     bindings: Vec<Vec<(String, ContextType)>>,
-    with: Option<Ty>,
-    count: RefCell<usize>,
 }
 
-impl Context {
-    pub(crate) fn new() -> Self {
-        Self {
-            bindings: vec![vec![]],
-            count: RefCell::new(0),
-            with: None,
-        }
-    }
+pub type Scope = Vec<(String, ContextType)>;
 
+impl<'a> Context<'a> {
     /// Create a new scope and run a function with it.
     pub(crate) fn with_scope<T>(
-        &mut self,
+        &self,
+        db: &dyn salsa::Database,
         scope: Vec<(String, ContextType)>,
-        f: impl FnOnce(&mut Self) -> T,
+        f: impl FnOnce(Scope) -> T,
     ) -> T {
-        self.bindings.push(scope);
-        let t = f(self);
-        self.bindings.pop();
-        t
+        let new = self.bindings(db).clone();
+        new.push(scope);
+        f(new);
     }
 
     /// Lookup a [Var] by it's name.
-    pub(crate) fn lookup(&self, name: &str) -> Option<ContextType> {
-        for scope in self.bindings.iter().rev() {
+    pub(crate) fn lookup(&self, db: &dyn salsa::Database, name: &str) -> Option<ContextType> {
+        for scope in self.bindings(db).iter().rev() {
             for (item_name, item) in scope.iter().rev() {
                 if *item_name == name {
                     return Some(item.clone());
@@ -74,38 +71,24 @@ impl Context {
         }
         None
     }
+}
 
-    pub(crate) fn fresh_var(&self, lvl: usize) -> Var {
-        let res = Var::new(lvl, *self.count.borrow());
-        *self.count.borrow_mut() += 1;
-        res
-    }
-
-    /// TODO: with can be stacked.
-    pub(crate) fn set_with(&mut self, with: Ty) {
-        self.with = Some(with);
-    }
-
-    /// TODO: with can be stacked.
-    pub(crate) fn remove_with(&mut self) {
-        self.with = None;
-    }
+#[salsa::input]
+struct SourceProgramm {
+    #[returns(ref)]
+    pub text: String,
 }
 
 /// Infer the type of an ast.
 /// Returns the final type as well as the ast which has been annotated with types.
-pub fn infer(source: &str) -> SpannedInferResult<(Ty, Ast)> {
-    let ast = parser::parse(source).map_err(|e| InferError::from(e).span(&Span::default()))?;
-    let ast = Ast::from_parser_ast(ast, source);
-    let ty = infer::infer(&ast)?;
-    Ok((ty, ast))
+#[salsa::tracked]
+pub fn infer_program(db: &dyn salsa::Database, program: SourceProgramm) -> Vec<Diagnostic> {
+    infer::infer(db, program.expr(db))
 }
 
-/// Infer the type of an ast.
-/// Returns the final type as well as the ast which has been annotated with types.
-pub fn coalesced(source: &str) -> SpannedInferResult<(Ty, Ast)> {
-    let ast = parser::parse(source).map_err(|e| InferError::from(e).span(&Span::default()))?;
-    let ast = Ast::from_parser_ast(ast, source);
-    let ty = infer::coalesced(&ast)?;
-    Ok((ty, ast))
+#[salsa::tracked]
+fn parse_file(db: &dyn salsa::Database, file: SourceProgramm) -> ExprData {
+    let contents: &str = file.text(db);
+    let parser = parser2::parse_file(db, contents);
+    parser.root.expr()
 }

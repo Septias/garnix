@@ -1,11 +1,15 @@
 use crate::{
+    add_diag,
+    module::{Bindings, Expr, ExprData},
     types::{PolarVar, PolymorphicType, Ty, Var},
-    Context, ContextType, InferError, InferResult, SpannedError, SpannedInferResult, TypeName,
+    Context, ContextType, Diagnostic, InferError, InferResult, TypeName,
 };
 use itertools::{Either, Itertools};
-use logos::Span;
 use parser2::ast::BinOp;
-use std::collections::{HashMap, HashSet};
+use std::{
+    collections::{HashMap, HashSet},
+    pin::PinCoerceUnsized,
+};
 
 pub fn constrain(context: &Context, lhs: &Ty, rhs: &Ty) -> InferResult<()> {
     constrain_inner(context, lhs, rhs, &mut HashSet::new())
@@ -310,11 +314,20 @@ fn freshen(
 }
 
 /// Infer the type of an expression.
-fn type_term(ctx: &mut Context, term: &Ast, lvl: usize) -> Result<Ty, SpannedError> {
+#[salsa::tracked]
+fn type_term<'a>(
+    db: &'a dyn salsa::Database,
+    expr: Expr<'a>,
+    ctx: Context<'a>,
+    with: Vec<Ty>,
+    lvl: usize,
+    count: usize,
+) -> Option<Ty> {
     use Ty::*;
-    match term {
-        Ast::Identifier(super::ast::Identifier { name, span, .. }) => {
-            if let Some(var) = ctx.lookup(name) {
+
+    match expr {
+        ExprData::Reference(smol_str) => {
+            if let Some(var) = ctx.lookup(smol_str) {
                 return Ok(var.instantiate(ctx, lvl));
             }
 
@@ -341,9 +354,9 @@ fn type_term(ctx: &mut Context, term: &Ast, lvl: usize) -> Result<Ty, SpannedErr
             Err(InferError::UnknownIdentifier.span(span))
         }
 
-        Ast::UnaryOp { rhs, .. } => type_term(ctx, rhs, lvl),
+        ExprData::UnaryOp { rhs, .. } => type_term(ctx, rhs, lvl),
 
-        Ast::BinaryOp { op, lhs, rhs, span } => {
+        ExprData::BinaryOp { op, lhs, rhs, span } => {
             match op {
                 BinOp::HasAttribute => {
                     let ty1 = type_term(ctx, lhs, lvl)?;
@@ -587,12 +600,12 @@ fn type_term(ctx: &mut Context, term: &Ast, lvl: usize) -> Result<Ty, SpannedErr
         }
 
         // Language constructs
-        Ast::AttrSet {
+        ExprData::AttrSet(Bindings {
             attrs,
             inherit,
+            dynamics,
             is_recursive,
-            span,
-        } => {
+        }) => {
             if *is_recursive {
                 let vars: Vec<_> = attrs
                     .iter()
@@ -607,7 +620,7 @@ fn type_term(ctx: &mut Context, term: &Ast, lvl: usize) -> Result<Ty, SpannedErr
                 let mut inherits = load_inherit(ctx, span.clone(), lvl, inherit)?;
                 inherits.extend(vars.clone());
 
-                ctx.with_scope(inherits, |ctx| {
+                ctx.with_scope(inherits, db, |ctx| {
                     let names = vars
                         .into_iter()
                         .map(|(name, var)| (name, var.into_type().unwrap().into_var().unwrap()));
@@ -633,10 +646,7 @@ fn type_term(ctx: &mut Context, term: &Ast, lvl: usize) -> Result<Ty, SpannedErr
                     if errs.is_empty() {
                         Ok(Ty::Record(ok.into_iter().collect()))
                     } else {
-                        Err(SpannedError {
-                            error: InferError::MultipleErrors(errs),
-                            span: span.clone(),
-                        })
+                        add_diag(db, span, error);
                     }
                 })
             } else {
@@ -655,12 +665,12 @@ fn type_term(ctx: &mut Context, term: &Ast, lvl: usize) -> Result<Ty, SpannedErr
             }
         }
 
-        Ast::LetBinding {
-            bindings,
+        ExprData::LetAttrset(Bindings {
+            attrs,
             inherit,
-            body,
-            span,
-        } => {
+            dynamics,
+            is_recursive,
+        }) => {
             let binds: Vec<_> = bindings
                 .iter()
                 .map(|(name, _)| {
@@ -719,11 +729,7 @@ fn type_term(ctx: &mut Context, term: &Ast, lvl: usize) -> Result<Ty, SpannedErr
             Ok(ret)
         }
 
-        Ast::Lambda {
-            pattern,
-            body,
-            span,
-        } => {
+        ExprData::Lambda(name, pat, expr) => {
             let mut added = vec![];
             let ty = match pattern {
                 crate::ast::Pattern::Record {
@@ -782,7 +788,7 @@ fn type_term(ctx: &mut Context, term: &Ast, lvl: usize) -> Result<Ty, SpannedErr
             Ok(Function(Box::new(ty), Box::new(ret)))
         }
 
-        Ast::With { set, body, span } => {
+        ExprData::With(set, body) => {
             let ty = type_term(ctx, set, lvl)?;
             match ty {
                 var @ Ty::Var(_) => {
@@ -808,12 +814,7 @@ fn type_term(ctx: &mut Context, term: &Ast, lvl: usize) -> Result<Ty, SpannedErr
             }
         }
 
-        Ast::Conditional {
-            condition,
-            expr1,
-            expr2,
-            span,
-        } => {
+        ExprData::Conditional(cond, expr1, expr2) => {
             let ty = type_term(ctx, condition, lvl)?;
             match ty {
                 Ty::Var(_) => {
@@ -838,11 +839,7 @@ fn type_term(ctx: &mut Context, term: &Ast, lvl: usize) -> Result<Ty, SpannedErr
                 Ok(ty1)
             }
         }
-        Ast::Assertion {
-            condition,
-            expr,
-            span: _,
-        } => {
+        ExprData::Assert(cond, expr) => {
             let ty = type_term(ctx, condition, lvl)?;
             match ty {
                 Ty::Bool => (),
@@ -863,7 +860,7 @@ fn type_term(ctx: &mut Context, term: &Ast, lvl: usize) -> Result<Ty, SpannedErr
             type_term(ctx, expr, lvl)
         }
 
-        Ast::List { exprs, span: _ } => Ok({
+        ExprData::List(expr) => Ok({
             let expr = exprs
                 .iter()
                 .flat_map(|ast| type_term(ctx, ast, lvl))
@@ -878,23 +875,24 @@ fn type_term(ctx: &mut Context, term: &Ast, lvl: usize) -> Result<Ty, SpannedErr
 
             Ty::List(expr)
         }),
-
         // Primitives
-        Ast::NixString(_) => Ok(String),
-        Ast::NixPath(_) => Ok(Path),
-        Ast::Null(_) => Ok(Null),
-        Ast::Bool { .. } => Ok(Bool),
-        Ast::Int { .. } | Ast::Float { .. } => Ok(Number),
-        Ast::Comment(_) | Ast::DocComment(_) | Ast::LineComment(_) => unimplemented!(),
+        // Ast::NixString(_) => Ok(String),
+        // Ast::NixPath(_) => Ok(Path),
+        // Ast::Null(_) => Ok(Null),
+        // Ast::Bool { .. } => Ok(Bool),
+        // Ast::Int { .. } | Ast::Float { .. } => Ok(Number),
+        // Ast::Comment(_) | Ast::DocComment(_) | Ast::LineComment(_) => unimplemented!(),
     }
 }
 
-fn load_inherit(
-    ctx: &mut Context,
+#[salsa::tracked]
+fn load_inherit<'db>(
+    db: &'db dyn salsa::Database,
+    ctx: Context<'db>,
     span: Span,
     lvl: usize,
     inherit: &[Inherit],
-) -> Result<Vec<(String, ContextType)>, SpannedError> {
+) -> Vec<(String, ContextType)> {
     let (ok, err): (Vec<_>, Vec<_>) = inherit
         .iter()
         .map(|Inherit { name, items }| {
@@ -987,14 +985,7 @@ fn load_inherit(
             Err(v) => Either::Right(v),
         });
 
-    if !err.is_empty() {
-        Err(SpannedError {
-            error: InferError::MultipleErrors(err),
-            span: span.clone(),
-        })
-    } else {
-        Ok(ok.into_iter().flatten().collect())
-    }
+    ok.into_iter().flatten().collect()
 }
 
 pub fn coalesc_type(context: &Context, ty: &Ty) -> Ty {
@@ -1099,16 +1090,8 @@ fn coalesce_type_inner(
 
 /// Infer the type of an expression.
 /// Insert constraints for all [Identifier]s on the way.
-pub fn infer(expr: &Ast) -> SpannedInferResult<Ty> {
-    let mut context = Context::new();
-    type_term(&mut context, expr, 0)
-}
-
-/// Infer the type of an expression.
-/// Insert constraints for all [Identifier]s on the way.
-/// Coalesce the resulting type.
-pub fn coalesced(expr: &Ast) -> SpannedInferResult<Ty> {
-    let mut context = Context::new();
-    let ty = &type_term(&mut context, expr, 0)?;
-    Ok(coalesc_type(&context, ty))
+#[salsa::tracked]
+pub fn infer<'db>(db: &'db dyn salsa::Database, expr: Expr<'db>) -> Vec<Diagnostic> {
+    let mut context = Context::new(db, vec![]);
+    type_term(db, expr, context, vec![], 0, 0);
 }

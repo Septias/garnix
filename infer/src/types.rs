@@ -2,7 +2,7 @@ use itertools::Itertools;
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 use strum_macros::{AsRefStr, Display, EnumDiscriminants};
 
-use crate::{infer_error, InferResult};
+use crate::{type_mismatch, InferResult};
 
 /// A single identifier.
 /// The name should be a debrujin index and the path is used for set accesses.
@@ -71,7 +71,7 @@ pub enum Ty {
     Null,
     Undefined,
 
-    Var(Var),
+    // Var(Var),
     Function(Box<Ty>, Box<Ty>),
     List(Vec<Ty>),
     Record(HashMap<String, Ty>),
@@ -81,14 +81,14 @@ pub enum Ty {
     // Complex Types only created by simplification
     Union(Box<Ty>, Box<Ty>),
     Inter(Box<Ty>, Box<Ty>),
-    Recursive(Var, Box<Ty>),
+    // Recursive(Var, Box<Ty>),
 }
 
 impl Ty {
     pub fn get_var(&self) -> InferResult<&Var> {
         match self {
             Ty::Var(ident) => Ok(ident),
-            t => infer_error(TypeName::Var, t.get_name()),
+            t => type_mismatch(TypeName::Var, t.get_name()),
         }
     }
 

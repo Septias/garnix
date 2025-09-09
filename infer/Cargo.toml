@@ -14,3 +14,7 @@ thiserror = "*"
 parser2 = { path = "../parser2" }
 salsa = "*"
 itertools = "*"
+annotate-snippets = "*"
+ordered-float = "*"
+smol_str = "*"
+la-arena = "*"

@@ -1,5 +1,4 @@
-use logos::Span;
-use std::fmt;
+use salsa::Accumulator;
 use thiserror::Error;
 
 use crate::types::{Ty, TypeName};
@@ -27,13 +26,8 @@ pub enum InferError {
     UnknownFunction,
     #[error("Function has to accept at least one argument")]
     TooFewArguments,
-    #[error("Multiple")]
-    MultipleErrors(Vec<SpannedError>),
     #[error(transparent)]
     Other(#[from] anyhow::Error),
-
-    #[error(transparent)]
-    Parser(#[from] parser::ParseError),
 }
 
 impl PartialEq for InferError {
@@ -66,29 +60,42 @@ impl PartialEq for InferError {
     }
 }
 
-impl InferError {
-    pub fn span(self, span: &Span) -> SpannedError {
-        SpannedError {
-            span: span.clone(),
-            error: self,
-        }
-    }
-}
-
 /// An Error that also contains the span in the source.
-#[derive(Debug, Error, PartialEq)]
-pub struct SpannedError {
-    pub span: Span,
+#[salsa::accumulator]
+pub struct Diagnostic {
+    pub start: usize,
+    pub end: usize,
     pub error: InferError,
 }
 
-impl fmt::Display for SpannedError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{} at [{}, {}]",
-            self.error, self.span.start, self.span.end
-        )
+#[salsa::tracked(debug)]
+pub struct Span<'db> {
+    #[tracked]
+    pub start: usize,
+    #[tracked]
+    pub end: usize,
+}
+
+impl Diagnostic {
+    pub fn new(start: usize, end: usize, error: InferError) -> Self {
+        Diagnostic { start, end, error }
+    }
+
+    #[cfg(test)]
+    pub fn render(&self, db: &dyn salsa::Database, src: SourceProgram) -> String {
+        use annotate_snippets::*;
+        let line_start = src.text(db)[..self.start].lines().count() + 1;
+        Renderer::plain()
+            .render(
+                Level::Error.title(&self.message).snippet(
+                    Snippet::source(src.text(db))
+                        .line_start(line_start)
+                        .origin("input")
+                        .fold(true)
+                        .annotation(Level::Error.span(self.start..self.end).label("here")),
+                ),
+            )
+            .to_string()
     }
 }
 
@@ -96,32 +103,13 @@ impl fmt::Display for SpannedError {
 pub type InferResult<T> = Result<T, InferError>;
 
 /// Create an [InferResult].
-pub(crate) fn infer_error<T>(expected: TypeName, found: TypeName) -> InferResult<T> {
+pub(crate) fn type_mismatch<T>(expected: TypeName, found: TypeName) -> InferResult<T> {
     Err(InferError::TypeMismatch { expected, found })
 }
 
-/// [InferResult] with a [Span] attached.
-pub type SpannedInferResult<T> = Result<T, SpannedError>;
-
-/// Create a [SpannedInferResult].
-pub fn spanned_infer_error<T>(
-    expected: TypeName,
-    found: TypeName,
-    span: &Span,
-) -> SpannedInferResult<T> {
-    Err(SpannedError {
-        error: InferError::TypeMismatch { expected, found },
-        span: span.clone(),
-    })
-}
-
-impl From<(Span, TypeName, TypeName)> for SpannedError {
-    fn from((span, expected, found): (Span, TypeName, TypeName)) -> Self {
-        Self {
-            span,
-            error: InferError::TypeMismatch { expected, found },
-        }
-    }
+/// Add diagnostic to the accumulator.
+pub(crate) fn add_diag(db: &dyn salsa::Database, span: Span, error: InferError) {
+    Diagnostic::new(span.start(db), span.end(db), error).accumulate(db);
 }
 
 impl From<(String, &'static str)> for InferError {
@@ -130,7 +118,7 @@ impl From<(String, &'static str)> for InferError {
     }
 }
 
-impl From<(&Span, InferError)> for SpannedError {
+impl From<(&Span, InferError)> for Diagnostic {
     fn from((span, error): (&Span, InferError)) -> Self {
         Self {
             span: span.clone(),
