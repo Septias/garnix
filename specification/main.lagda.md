@@ -1,3 +1,5 @@
+
+```
 module main where
 open import Data.Empty using (⊥)
 open import Data.Nat using (ℕ; zero; suc)
@@ -11,10 +13,14 @@ open import Relation.Nullary using (¬_; contradiction)
 open import Relation.Nullary.Decidable using (Dec; yes; no; False; toWitnessFalse; ¬?)
 open import Data.Fin using (Fin)
 
+
 Id : Set
 Id = String
 
-infix  5  ƛ_⇒_
+Label : Set
+Label = String
+
+infixr 5 _∷_
 infix  5  μ_⇒_
 infixl 7  _·_
 infix  8  `suc_
@@ -24,82 +30,81 @@ data List (A : Set) : Set where
   []  : List A
   _∷_ : A → List A → List A
 
-infixr 5 _∷_
-
 
 data Expr (n m : ℕ) : Set
-data Label : Set
 
 data Record : Set where
   empty     : Record
-  _∣_       : ∀ {n m : ℕ} → Expr n m -> Label -> Record
+  _∣_       : ∀ {n m : ℕ} → Label → (Expr n m) → Record
+  ‵let_‵in_ : ∀ {n m : ℕ} → Expr n m → Expr n m → Record 
 
 data Kind : Set where
   ★  : Kind
+
 
 data Type (n : ℕ) : Set where
   `_       : Fin n → Type n 
   ∀[α:_]_  : Type (suc n) → Type n
   _⇒_      : Type n → Type n → Type n
 
-data Expr (n m : ℕ) where
-  `_   : Fin m → Expr n m
-  λx_  : Expr n (suc m) → Expr n m
-  Λα_  : Expr (suc n) m → Expr n m
-  _·_  : Expr n m → Expr n m → Expr n m
-  _•_  : Expr n m → Type n → Expr n m
+
+data AttrPath : Set where
+  _•_      : Label → AttrPath → AttrPath
+  ε        : AttrPath
+ 
+
+data Expr n m where
+  `_                      : Fin m → Expr n m
+  λx_                     : Expr n (suc m) → Expr n m
+  Λα_                     : Expr (suc n) m → Expr n m
+  _·_                     : Expr n m → Expr n m → Expr n m
+  _•_                     : Expr n m → Type n → Expr n m
 
   `zero                   : Expr n m
   `suc_                   : Expr n m → Expr n m
-  case_[zero⇒_|suc_⇒_]    : Expr n m → Expr n m → Id → Expr n m → Expr n m
-  μ_⇒_                    : Id → Expr n m → Expr n m
-  withh_⨟_                : Expr n m → Expr n m → Expr n m
-  lett_inn_               : Expr n m → Expr n m → Expr n m
+  
+  -- Language constructs
+  μ_⇒_                    : Id → Expr n m → Expr n m         
+  ‵with_⨟_                : Expr n m → Expr n m → Expr n m   -- with Record ; Expr --> Introduce all fields of Record into scope 
+  ‵let_inn_               : Expr n m → Expr n m → Expr n m
   if_then_else_           : Expr n m → Expr n m → Expr n m
+  assert_                 : Expr n m → Expr n m              -- assert false       --> Program termination 
+  _‵?_                    : Expr n m → Expr n m → Expr n m   -- Record ? file      -> boolean
+  ‵lambda _⇒_             : Label → Expr n m → Expr n m   
+
+  -- Binary operators
+  _+_                     : Expr n m → Expr n m → Expr n m
+  _-_                     : Expr n m → Expr n m → Expr n m
+  _*_                     : Expr n m → Expr n m → Expr n m
+  _/_                     : Expr n m → Expr n m → Expr n m
+  _==_                    : Expr n m → Expr n m → Expr n m
+  _<_                     : Expr n m → Expr n m → Expr n m
+  _≤_                     : Expr n m → Expr n m → Expr n m
+  _>_                     : Expr n m → Expr n m → Expr n m
+  _≥_                     : Expr n m → Expr n m → Expr n m
+  _&&_                    : Expr n m → Expr n m → Expr n m
+  _||_                    : Expr n m → Expr n m → Expr n m
 
 
-
--- Global variables
-variable
-  L L′ M M′ N N′ V : Expr
-
-{- 
 -- Definition of values
-data Value : Expr → Set where
-  λx_⇒_ : (x : Id) (N : Expr)
-      ---------------
-    → Value (λx x ⇒ N)
+data Value (n m : ℕ) : Expr n m → Set where
+  λx_ : (N : Expr n m) → Value n m _
+
+  Λα_ : (N : Expr n m) → Value n m _
+
   `zero :
       -----------
-      Value `zero
+      Value n m `zero
+
   `suc_ : ∀ {V}
-    → Value V
+    → Value n m V
       --------------
-    → Value (`suc V)
-
-
--- Define substitution
-_[_:=_] : Expr → Id → Expr → Expr
-do-binder : Id → Expr → Id → Expr  → Expr
-do-binder x N y V with x ≟ y
-... | yes _         = N
-... | no  _         = N [ y := V ]
-
-(` x) [ y := V ] with x ≟ y
-... | yes _         = V
-... | no  _         = ` x
-(ƛ x ⇒ N) [ y := V ] = ƛ x ⇒ do-binder x N y V
-(L · M) [ y := V ]  = L [ y := V ] · M [ y := V ]
-(`zero) [ y := V ]  = `zero
-(`suc M) [ y := V ] = `suc M [ y := V ]
-(case L [zero⇒ M |suc x ⇒ N ]) [ y := V ] = case L [ y := V ] [zero⇒ M [ y := V ] |suc x ⇒ do-binder x N y V ]
-(μ x ⇒ N) [ y := V ] = μ x ⇒ do-binder x N y V
-
+    → Value n m (`suc V)
 
 
 -- Define reduction rules
 infix 4 _—→_
-data _—→_ : Expr → Expr → Set where
+data _—→_ : ∀ { n m : ℕ} → Expr n m → Expr n m → Set where
 
   ξ-·₁ : ∀ {L L′ M}
     → L —→ L′
@@ -112,10 +117,10 @@ data _—→_ : Expr → Expr → Set where
       -----------------
     → V · M —→ V · M′
 
-  β-ƛ : ∀ {x N V}
+  β-λx : ∀ {x N V}
     → Value V
       ------------------------------
-    → (ƛ x ⇒ N) · V —→ N [ x := V ]
+    → (λx ) · V —→ N [ x := V ]
 
   ξ-suc : ∀ {M M′}
     → M —→ M′
@@ -139,6 +144,31 @@ data _—→_ : Expr → Expr → Set where
   β-μ : ∀ {x M}
       ------------------------------
     → μ x ⇒ M —→ M [ x := μ x ⇒ M ]
+
+
+
+{- 
+-- Global variables
+variable
+  L L′ M M′ N N′ V : Expr
+
+
+-- Define substitution
+_[_:=_] : Expr → Id → Expr → Expr
+do-binder : Id → Expr → Id → Expr  → Expr
+do-binder x N y V with x ≟ y
+... | yes _         = N
+... | no  _         = N [ y := V ]
+
+(` x) [ y := V ] with x ≟ y
+... | yes _         = V
+... | no  _         = ` x
+(ƛ x ⇒ N) [ y := V ] = ƛ x ⇒ do-binder x N y V
+(L · M) [ y := V ]  = L [ y := V ] · M [ y := V ]
+(`zero) [ y := V ]  = `zero
+(`suc M) [ y := V ] = `suc M [ y := V ]
+(case L [zero⇒ M |suc x ⇒ N ]) [ y := V ] = case L [ y := V ] [zero⇒ M [ y := V ] |suc x ⇒ do-binder x N y V ]
+(μ x ⇒ N) [ y := V ] = μ x ⇒ do-binder x N y V
 
 
 -- define steps
@@ -178,3 +208,4 @@ postulate
     → ∃[ P ] ((M —↠ P) × (N —↠ P))
 
  -}
+```
