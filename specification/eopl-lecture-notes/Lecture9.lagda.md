@@ -51,7 +51,7 @@ Taken together, an induction on `_—↠_` (multi-step reduction) yields the fol
 
 Type safety: If `∅ ⊢ M ⦂ A` and `M —↠ M′`, then either `Value M′` or there some `M′` such that `M ⟶ M′`.
 
-That is, each reduction sequence of a type term either ends in a value or it does not terminate.
+That is, each reduction sequence of a type term either ends in a value or it does not terminate.`
 Thus, it will never reach a stuck term.
 
 
@@ -60,10 +60,6 @@ consider reduction of open terms (i.e., with free variables) , too.
 In this context, we want *subject reduction*, which is
 
 Subject reduction: If `Γ ⊢ M ⦂ A` and `M ⟶ M′`, then `Γ ⊢ M′ ⦂ A`.
-
-
-
-
 
 
 ## Progress
@@ -110,9 +106,6 @@ progress (⊢case ⊢M ⊢M₁ ⊢M₂)
 ... | done (`suc val-M) = step (β-suc val-M)
 progress (⊢μ ⊢M) = step β-μ
 ```
-
-
-
 
 
 ## Preservation

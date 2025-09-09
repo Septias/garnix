@@ -19,25 +19,53 @@ infixl 7  _·_
 infix  8  `suc_
 infix  9  `_
 
+data List (A : Set) : Set where
+  []  : List A
+  _∷_ : A → List A → List A
 
--- Definition of terms
-data Term : Set where
-  `_                      :  Id → Term
-  ƛ_⇒_                    :  Id → Term → Term
-  _·_                     :  Term → Term → Term
-  `zero                   :  Term
-  `suc_                   :  Term → Term
-  case_[zero⇒_|suc_⇒_]    :  Term → Term → Id → Term → Term
-  μ_⇒_                    :  Id → Term → Term
+infixr 5 _∷_
+
+
+data Expr (n m : ℕ) : Set
+data Label : Set
+
+data Record : Set where
+  empty      : Record
+  _∣_ : Expr -> Label -> Record
+
+data Kind : Set where
+  ★  : Kind
+
+data Type (n : ℕ) : Set where
+  `_       : Fin n → Type n 
+  ∀[α:_]_  : Type (suc n) → Type n
+  _⇒_      : Type n → Type n → Type n
+
+data Expr (n m : ℕ) : Set where
+  `_   : Fin m → Expr n m
+  λx_  : Expr n (suc m) → Expr n m
+  Λα_  : Expr (suc n) m → Expr n m
+  _·_  : Expr n m → Expr n m → Expr n m
+  _•_  : Expr n m → Type n → Expr n m
+
+  `zero                   : Expr n m
+  `suc_                   : Expr n m → Expr n m
+  case_[zero⇒_|suc_⇒_]    : Expr n m → Expr n m → Id → Expr n m → Expr n m
+  μ_⇒_                    : Id → Expr n m → Expr n m
+  withh_⨟_                : Expr n m → Expr n m → Expr n m
+  lett_inn_               : Expr n m → Expr n m → Expr n m
+  if_then_else_           : Expr n m → Expr n m → Expr n m
+
+
 
 -- Global variables
 variable
-  L L′ M M′ N N′ V : Term
+  L L′ M M′ N N′ V : Expr
 
 
 -- Definition of values
-data Value : Term → Set where
-  ƛ_⇒_ : (x : Id) (N : Term)
+data Value : Expr → Set where
+  ƛ_⇒_ : (x : Id) (N : Expr)
       ---------------
     → Value (ƛ x ⇒ N)
   `zero :
@@ -50,8 +78,8 @@ data Value : Term → Set where
 
 
 -- Define substitution
-_[_:=_] : Term → Id → Term → Term
-do-binder : Id → Term → Id → Term  → Term
+_[_:=_] : Expr → Id → Expr → Expr
+do-binder : Id → Expr → Id → Expr  → Expr
 do-binder x N y V with x ≟ y
 ... | yes _         = N
 ... | no  _         = N [ y := V ]
@@ -70,7 +98,7 @@ do-binder x N y V with x ≟ y
 
 -- Define reduction rules
 infix 4 _—→_
-data _—→_ : Term → Term → Set where
+data _—→_ : Expr → Expr → Set where
 
   ξ-·₁ : ∀ {L L′ M}
     → L —→ L′
@@ -118,7 +146,7 @@ infix  1 begin_
 infixr 2 _—→⟨_⟩_
 infix  3 _∎
 
-data _—↠_ : Term → Term → Set where
+data _—↠_ : Expr → Expr → Set where
   _∎ : ∀ M
       ---------
     → M —↠ M
