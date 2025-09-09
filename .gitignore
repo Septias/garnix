@@ -1,3 +1,4 @@
 /target
 .direnv
 specification/_build
+.aider*

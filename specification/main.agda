@@ -9,6 +9,7 @@ open import Function using (_∘_)
 open import Relation.Binary.PropositionalEquality using (_≡_; _≢_; refl; cong; sym; trans)
 open import Relation.Nullary using (¬_; contradiction)
 open import Relation.Nullary.Decidable using (Dec; yes; no; False; toWitnessFalse; ¬?)
+open import Data.Fin using (Fin)
 
 Id : Set
 Id = String
@@ -30,8 +31,8 @@ data Expr (n m : ℕ) : Set
 data Label : Set
 
 data Record : Set where
-  empty      : Record
-  _∣_ : Expr -> Label -> Record
+  empty     : Record
+  _∣_       : ∀ {n m : ℕ} → Expr n m -> Label -> Record
 
 data Kind : Set where
   ★  : Kind
@@ -41,7 +42,7 @@ data Type (n : ℕ) : Set where
   ∀[α:_]_  : Type (suc n) → Type n
   _⇒_      : Type n → Type n → Type n
 
-data Expr (n m : ℕ) : Set where
+data Expr (n m : ℕ) where
   `_   : Fin m → Expr n m
   λx_  : Expr n (suc m) → Expr n m
   Λα_  : Expr (suc n) m → Expr n m
@@ -62,12 +63,12 @@ data Expr (n m : ℕ) : Set where
 variable
   L L′ M M′ N N′ V : Expr
 
-
+{- 
 -- Definition of values
 data Value : Expr → Set where
-  ƛ_⇒_ : (x : Id) (N : Expr)
+  λx_⇒_ : (x : Id) (N : Expr)
       ---------------
-    → Value (ƛ x ⇒ N)
+    → Value (λx x ⇒ N)
   `zero :
       -----------
       Value `zero
@@ -176,3 +177,4 @@ postulate
       --------------------
     → ∃[ P ] ((M —↠ P) × (N —↠ P))
 
+ -}
