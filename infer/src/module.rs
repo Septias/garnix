@@ -1,6 +1,7 @@
 use std::{
     collections::{HashMap, HashSet},
     ops,
+    sync::Arc,
 };
 
 use la_arena::{Arena, ArenaMap, Idx};
@@ -131,26 +132,26 @@ pub struct Expr<'db> {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ExprData {
-    Missing,
-    Reference(SmolStr),
-    Literal(Literal),
-    Lambda(Option<NameId>, Option<Pat>, ExprId),
-    With(ExprId, ExprId),
+    Apply(ExprId, ExprId), // Binop
     Assert(ExprId, ExprId),
-    Conditional(ExprId, ExprId, ExprId),
+    AttrSet(Bindings),
     // Binary(Option<BinOp>, ExprId, ExprId),
-    Apply(ExprId, ExprId),
-    // Unary(Option<UnOp>, ExprId),
-    HasAttr(ExprId, Attrpath),
+    Conditional(ExprId, ExprId, ExprId),
+    CurPos,                    // Added
+    HasAttr(ExprId, Attrpath), // Binop
+    Lambda(Option<NameId>, Option<Pat>, ExprId),
+    LetAttrset(Bindings), // Added
+    LetIn(Bindings, ExprId),
+    List(Box<[ExprId]>),
+    Literal(Literal),
+    Missing,
+    PathInterpolation(Box<[ExprId]>), // Added
+    RecAttrset(Bindings),             // Why two?
+    Reference(SmolStr),               // Literal?
     Select(ExprId, Attrpath, Option<ExprId>),
     StringInterpolation(Box<[ExprId]>),
-    PathInterpolation(Box<[ExprId]>),
-    List(Box<[ExprId]>),
-    LetIn(Bindings, ExprId),
-    AttrSet(Bindings),
-    LetAttrset(Bindings),
-    RecAttrset(Bindings),
-    CurPos,
+    With(ExprId, ExprId),
+    // Unary(Option<UnOp>, ExprId),
 }
 
 impl ExprData {
@@ -228,6 +229,7 @@ pub enum Literal {
     Float(OrderedFloat<f64>),
     String(SmolStr),
     Path(Path),
+    Null,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

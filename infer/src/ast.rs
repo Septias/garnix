@@ -69,18 +69,10 @@ impl hash::Hash for Identifier {
 #[derive(Debug, Clone, PartialEq, AsRefStr, EnumDiscriminants)]
 #[strum_discriminants(derive(Display, AsRefStr))]
 pub enum Ast {
-    /// Unary Operators
-    UnaryOp {
-        op: UnOp,
-        rhs: Box<Ast>,
-        span: Span,
-    },
-
-    /// Binary Operators
-    BinaryOp {
-        op: BinOp,
-        lhs: Box<Ast>,
-        rhs: Box<Ast>,
+    /// An assert statement.
+    Assertion {
+        condition: Box<Ast>,
+        expr: Box<Ast>,
         span: Span,
     },
 
@@ -92,11 +84,41 @@ pub enum Ast {
         span: Span,
     },
 
-    /// Let expression
-    LetBinding {
-        bindings: Vec<(Identifier, Ast)>,
-        inherit: Vec<Inherit>,
-        body: Box<Ast>,
+    /// Binary Operators
+    BinaryOp {
+        op: BinOp,
+        lhs: Box<Ast>,
+        rhs: Box<Ast>,
+        span: Span,
+    },
+
+    Bool {
+        val: bool,
+        span: Span,
+    },
+
+    Comment(Span),
+
+    /// Conditional
+    Conditional {
+        condition: Box<Ast>,
+        expr1: Box<Ast>,
+        expr2: Box<Ast>,
+        span: Span,
+    },
+
+    DocComment(Span),
+
+    Float {
+        val: f32,
+        span: Span,
+    },
+
+    /// Identifier
+    Identifier(Identifier),
+
+    Int {
+        val: i32,
         span: Span,
     },
 
@@ -107,18 +129,31 @@ pub enum Ast {
         span: Span,
     },
 
-    /// Conditional
-    Conditional {
-        condition: Box<Ast>,
-        expr1: Box<Ast>,
-        expr2: Box<Ast>,
+    /// Let expression
+    LetBinding {
+        bindings: Vec<(Identifier, Ast)>,
+        inherit: Vec<Inherit>,
+        body: Box<Ast>,
         span: Span,
     },
 
-    /// An assert statement.
-    Assertion {
-        condition: Box<Ast>,
-        expr: Box<Ast>,
+    LineComment(Span),
+
+    /// List
+    List {
+        exprs: Vec<Ast>,
+        span: Span,
+    },
+
+    Null(Span),
+
+    NixPath(Span),
+    NixString(Span),
+
+    /// Unary Operators
+    UnaryOp {
+        op: UnOp,
+        rhs: Box<Ast>,
         span: Span,
     },
 
@@ -128,35 +163,6 @@ pub enum Ast {
         body: Box<Ast>,
         span: Span,
     },
-
-    /// Identifier
-    Identifier(Identifier),
-
-    /// List
-    List {
-        exprs: Vec<Ast>,
-        span: Span,
-    },
-
-    /// ----- Primitives --------
-    NixString(Span),
-    NixPath(Span),
-    Bool {
-        val: bool,
-        span: Span,
-    },
-    Int {
-        val: i32,
-        span: Span,
-    },
-    Float {
-        val: f32,
-        span: Span,
-    },
-    Null(Span),
-    Comment(Span),
-    DocComment(Span),
-    LineComment(Span),
 }
 
 impl Ast {
