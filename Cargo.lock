@@ -499,6 +499,7 @@ version = "1.0.0"
 dependencies = [
  "annotate-snippets",
  "anyhow",
+ "expect-test",
  "itertools 0.13.0",
  "la-arena",
  "ordered-float",

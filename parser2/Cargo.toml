@@ -11,8 +11,8 @@ salsa = "0.23"
 
 [dev-dependencies]
 criterion = "0.6"
-expect-test = "1.4.0"
 walkdir = "2.3.3"
+expect-test.workspace = true
 
 [[bench]]
 name = "parse"

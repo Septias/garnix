@@ -6,7 +6,6 @@ edition.workspace = true
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-
 strum = "*"
 strum_macros = "*"
 anyhow = "*"
@@ -18,3 +17,4 @@ annotate-snippets = "*"
 ordered-float = "*"
 smol_str = "*"
 la-arena = "*"
+expect-test.workspace = true
