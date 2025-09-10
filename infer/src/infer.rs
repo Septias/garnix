@@ -6,10 +6,7 @@ use crate::{
 };
 use itertools::{Either, Itertools};
 use parser2::ast::BinOp;
-use std::{
-    collections::{HashMap, HashSet},
-    pin::PinCoerceUnsized,
-};
+use std::collections::{HashMap, HashSet};
 
 pub fn constrain(context: &Context, lhs: &Ty, rhs: &Ty) -> InferResult<()> {
     constrain_inner(context, lhs, rhs, &mut HashSet::new())

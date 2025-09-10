@@ -10,6 +10,8 @@ use parser2::ast::{BinOp, UnOp};
 use smol_str::SmolStr;
 
 use crate::{Diagnostic, Span};
+pub type ExprId = Idx<ExprData>;
+pub type NameId = Idx<Name>;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Module {
@@ -17,9 +19,23 @@ pub struct Module {
     names: Arena<Name>,
     entry_expr: ExprId,
 }
+#[derive(Default, Debug, Clone, PartialEq, Eq)]
+pub struct NameReference {
+    // Assume almost all defs are referenced somewhere.
+    def_refs: ArenaMap<NameId, Vec<ExprId>>,
+    // But there are just some "with"s.
+    with_refs: HashMap<ExprId, Vec<ExprId>>,
+}
 
-pub type ExprId = Idx<ExprData>;
-pub type NameId = Idx<Name>;
+pub struct ModuleSourceMap {
+    expr_map: HashMap<AstPtr, ExprId>,
+    expr_map_rev: HashMap<ExprId, AstPtr>,
+    name_map: HashMap<AstPtr, NameId>,
+    name_map_rev: ArenaMap<NameId, Vec<AstPtr>>,
+
+    // This contains locations, thus is quite volatile.
+    diagnostics: Vec<Diagnostic>,
+}
 
 impl ops::Index<ExprId> for Module {
     type Output = ExprData;
