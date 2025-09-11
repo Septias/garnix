@@ -1,17 +1,22 @@
-use itertools::Itertools;
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
-use strum_macros::{AsRefStr, Display, EnumDiscriminants};
+//! Types that are used during inferences
 
 use crate::{type_mismatch, InferResult};
+use itertools::Itertools;
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
+};
+use strum_macros::{AsRefStr, Display, EnumDiscriminants};
 
-/// A single identifier.
-/// The name should be a debrujin index and the path is used for set accesses.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+/// A forall-quantified variable.
+/// This variable has lower and upper bounds on types.
+/// TODO: should this be tracked?
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct Var {
     pub level: usize,
     pub id: usize,
-    pub lower_bounds: Rc<RefCell<Vec<Ty>>>,
-    pub upper_bounds: Rc<RefCell<Vec<Ty>>>,
+    pub lower_bounds: Arc<Mutex<Vec<Ty>>>,
+    pub upper_bounds: Arc<Mutex<Vec<Ty>>>,
 }
 
 impl std::hash::Hash for Var {
@@ -54,10 +59,12 @@ impl Var {
     }
 }
 
+/// A polar variable.
+/// These variables can either be positive or negative, based on their position in functions (argument or return type).
 pub type PolarVar<'a> = (Var, bool);
 
 /// A nix language type.
-#[derive(Debug, Clone, PartialEq, Eq, Display, EnumDiscriminants, AsRefStr)]
+#[derive(Debug, Clone, PartialEq, Display, EnumDiscriminants, AsRefStr)]
 #[strum_discriminants(derive(AsRefStr, Display))]
 #[strum_discriminants(name(TypeName))]
 pub enum Ty {
@@ -71,7 +78,7 @@ pub enum Ty {
     Null,
     Undefined,
 
-    // Var(Var),
+    Var(Var),
     Function(Box<Ty>, Box<Ty>),
     List(Vec<Ty>),
     Record(HashMap<String, Ty>),
@@ -81,10 +88,20 @@ pub enum Ty {
     // Complex Types only created by simplification
     Union(Box<Ty>, Box<Ty>),
     Inter(Box<Ty>, Box<Ty>),
-    // Recursive(Var, Box<Ty>),
+    Recursive(Var, Box<Ty>),
+}
+
+impl std::hash::Hash for Ty {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        core::mem::discriminant(self).hash(state);
+    }
 }
 
 impl Ty {
+    pub fn is_var(&self) -> bool {
+        matches!(self, Ty::Var(_))
+    }
+
     pub fn get_var(&self) -> InferResult<&Var> {
         match self {
             Ty::Var(ident) => Ok(ident),
@@ -98,27 +115,7 @@ impl Ty {
             _ => None,
         }
     }
-}
 
-impl std::hash::Hash for Ty {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        core::mem::discriminant(self).hash(state);
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct PolymorphicType {
-    pub body: Ty,
-    pub level: usize,
-}
-
-impl PolymorphicType {
-    pub fn new(body: Ty, level: usize) -> Self {
-        Self { body, level }
-    }
-}
-
-impl Ty {
     pub fn instantiate(&self) -> Ty {
         self.clone()
     }
@@ -137,10 +134,6 @@ impl Ty {
                 panic!("Not a simple type")
             }
         }
-    }
-
-    pub fn is_var(&self) -> bool {
-        matches!(self, Ty::Var(_))
     }
 
     /// Returns the enum descriminant of this type.
@@ -195,5 +188,19 @@ impl Ty {
                     .join(", ")
             ),
         }
+    }
+}
+
+/// A polymorphic type.
+/// These types are used for let-polymorphism.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PolymorphicType {
+    pub body: Ty,
+    pub level: usize,
+}
+
+impl PolymorphicType {
+    pub fn new(body: Ty, level: usize) -> Self {
+        Self { body, level }
     }
 }

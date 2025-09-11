@@ -1,40 +1,20 @@
-use std::{
-    collections::{HashMap, HashSet},
-    ops,
-    sync::Arc,
-};
-
+//! Syntax definitions of nix.
 use la_arena::{Arena, ArenaMap, Idx};
 use ordered_float::OrderedFloat;
-use parser2::ast::{BinOp, UnOp};
 use smol_str::SmolStr;
-
-use crate::{Diagnostic, Span};
+use std::{collections::HashMap, ops};
 pub type ExprId = Idx<ExprData>;
 pub type NameId = Idx<Name>;
 
+pub type AstPtr = parser2::SyntaxNodePtr;
+
+/// A module => a nix file.
+/// Basically a container of exprs and names.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Module {
     exprs: Arena<ExprData>,
     names: Arena<Name>,
     entry_expr: ExprId,
-}
-#[derive(Default, Debug, Clone, PartialEq, Eq)]
-pub struct NameReference {
-    // Assume almost all defs are referenced somewhere.
-    def_refs: ArenaMap<NameId, Vec<ExprId>>,
-    // But there are just some "with"s.
-    with_refs: HashMap<ExprId, Vec<ExprId>>,
-}
-
-pub struct ModuleSourceMap {
-    expr_map: HashMap<AstPtr, ExprId>,
-    expr_map_rev: HashMap<ExprId, AstPtr>,
-    name_map: HashMap<AstPtr, NameId>,
-    name_map_rev: ArenaMap<NameId, Vec<AstPtr>>,
-
-    // This contains locations, thus is quite volatile.
-    diagnostics: Vec<Diagnostic>,
 }
 
 impl ops::Index<ExprId> for Module {
@@ -68,42 +48,25 @@ impl Module {
     pub fn names(&self) -> impl ExactSizeIterator<Item = (NameId, &'_ Name)> + '_ {
         self.names.iter()
     }
-
-    pub(crate) fn module_references_query(
-        db: &dyn DefDatabase,
-        file_id: FileId,
-    ) -> Arc<HashSet<FileId>> {
-        let source_root = db.source_root(db.file_source_root(file_id));
-        let mut refs = db
-            .module(file_id)
-            .exprs()
-            .filter_map(|(_, kind)| {
-                let &ExprData::Literal(Literal::Path(path)) = kind else {
-                    return None;
-                };
-                let mut vpath = path.resolve(db)?;
-                source_root.file_for_path(&vpath).or_else(|| {
-                    vpath.push(DEFAULT_IMPORT_FILE)?;
-                    source_root.file_for_path(&vpath)
-                })
-            })
-            .collect::<HashSet<_>>();
-        refs.shrink_to_fit();
-        Arc::new(refs)
-    }
 }
 
-pub type AstPtr = parser2::SyntaxNodePtr;
-
+/// Resolution of names.
 #[derive(Default, Debug, Clone, PartialEq, Eq)]
+pub struct NameReference {
+    // Assume almost all defs are referenced somewhere.
+    def_refs: ArenaMap<NameId, Vec<ExprId>>,
+    // But there are just some "with"s.
+    with_refs: HashMap<ExprId, Vec<ExprId>>,
+}
+
+/// Module Source Map
+/// This map bridges between the lowered [Expr] and syntaxtree ([AstPtr]).
+// #[salsa::tracked]
 pub struct ModuleSourceMap {
     expr_map: HashMap<AstPtr, ExprId>,
     expr_map_rev: HashMap<ExprId, AstPtr>,
     name_map: HashMap<AstPtr, NameId>,
     name_map_rev: ArenaMap<NameId, Vec<AstPtr>>,
-
-    // This contains locations, thus is quite volatile.
-    diagnostics: Vec<Diagnostic>,
 }
 
 impl ModuleSourceMap {
@@ -112,7 +75,6 @@ impl ModuleSourceMap {
         self.expr_map_rev.shrink_to_fit();
         self.name_map.shrink_to_fit();
         self.name_map_rev.shrink_to_fit();
-        self.diagnostics.shrink_to_fit();
     }
 
     pub fn expr_for_node(&self, node: AstPtr) -> Option<ExprId> {
@@ -134,28 +96,23 @@ impl ModuleSourceMap {
             .flatten()
             .cloned()
     }
-
-    pub fn diagnostics(&self) -> &[Diagnostic] {
-        &self.diagnostics
-    }
 }
 
 #[salsa::tracked]
 pub struct Expr<'db> {
-    span: Span<'db>,
-    data: ExprData,
+    pub data: ExprData,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum ExprData {
     Apply(ExprId, ExprId), // Binop
     Assert(ExprId, ExprId),
     AttrSet(Bindings),
-    // Binary(Option<BinOp>, ExprId, ExprId),
+    Binary(Option<BinOp>, ExprId, ExprId),
     Conditional(ExprId, ExprId, ExprId),
     CurPos,                    // Added
     HasAttr(ExprId, Attrpath), // Binop
-    Lambda(Option<NameId>, Option<Pat>, ExprId),
+    Lambda(Option<NameId>, Option<Pattern>, ExprId),
     LetAttrset(Bindings), // Added
     LetIn(Bindings, ExprId),
     List(Box<[ExprId]>),
@@ -167,7 +124,7 @@ pub enum ExprData {
     Select(ExprId, Attrpath, Option<ExprId>),
     StringInterpolation(Box<[ExprId]>),
     With(ExprId, ExprId),
-    // Unary(Option<UnOp>, ExprId),
+    Unary(Option<UnOp>, ExprId),
 }
 
 impl ExprData {
@@ -244,19 +201,19 @@ pub enum Literal {
     Int(i64),
     Float(OrderedFloat<f64>),
     String(SmolStr),
-    Path(Path),
+    // Path(Path),
     Null,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Pat {
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct Pattern {
     pub fields: Box<[(Option<NameId>, Option<ExprId>)]>,
     pub ellipsis: bool,
 }
 
 pub type Attrpath = Box<[ExprId]>;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Bindings {
     pub attrs: Box<[(NameId, BindingValue)]>,
     pub inherit: Box<[ExprId]>,
@@ -294,4 +251,35 @@ impl Bindings {
             .iter()
             .find_map(|&(name_id, value)| (module[name_id].text == name).then_some(value))
     }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum BinOp {
+    Imply,
+    Or,
+    And,
+
+    Equal,
+    NotEqual,
+    Less,
+    Greater,
+    LessEqual,
+    GreaterEqual,
+
+    Update,
+    Concat,
+
+    Add,
+    Sub,
+    Mul,
+    Div,
+
+    PipeLeft,
+    PipeRight,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum UnOp {
+    Not,
+    Negate,
 }

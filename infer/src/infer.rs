@@ -1,312 +1,68 @@
 use crate::{
     add_diag,
-    module::{Bindings, Expr, ExprData},
+    module::{Bindings, Expr, ExprData, NameId},
+    parreaux::{constrain, freshen_above},
     types::{PolarVar, PolymorphicType, Ty, Var},
-    Context, ContextType, Diagnostic, InferError, InferResult, TypeName,
+    Diagnostic, InferError,
 };
 use itertools::{Either, Itertools};
 use parser2::ast::BinOp;
 use std::collections::{HashMap, HashSet};
 
-pub fn constrain(context: &Context, lhs: &Ty, rhs: &Ty) -> InferResult<()> {
-    constrain_inner(context, lhs, rhs, &mut HashSet::new())
+pub type Scope = Vec<(NameId, ContextType)>;
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum ContextType {
+    Type(Ty),
+    PolymorhicType(PolymorphicType),
 }
 
-fn constrain_inner<'a>(
-    context: &Context,
-    lhs: &'a Ty,
-    rhs: &'a Ty,
-    cache: &mut HashSet<(Ty, Ty)>,
-) -> InferResult<()> {
-    if lhs == rhs {
-        return Ok(());
-    }
-    let lhs_rhs = (lhs.clone(), rhs.clone());
-
-    match (lhs, rhs) {
-        (Ty::Var(..), _) | (_, Ty::Var(..)) => {
-            if cache.contains(&lhs_rhs) {
-                return Ok(());
-            }
-            cache.insert(lhs_rhs.clone());
-        }
-        _ => (),
-    }
-
-    match (lhs, rhs) {
-        (Ty::Bool, Ty::Bool)
-        | (Ty::Number, Ty::Number)
-        | (Ty::String, Ty::String)
-        | (Ty::Path, Ty::Path)
-        | (Ty::Null, Ty::Null)
-        | (Ty::Undefined, _) => (),
-
-        (Ty::Function(l0, r0), Ty::Function(l1, r1)) => {
-            constrain_inner(context, l1, l0, cache)?;
-            constrain_inner(context, r0, r1, cache)?;
-        }
-
-        (Ty::Record(fs0), Ty::Record(fs1)) => {
-            for (n1, t1) in fs1 {
-                match fs0.iter().find(|(n0, _)| *n0 == n1) {
-                    Some((_, t0)) => constrain_inner(context, t0, t1, cache)?,
-                    None => return Err(InferError::MissingRecordField { field: n1.clone() }),
-                }
-            }
-        }
-
-        (Ty::Record(rcd), Ty::Pattern(pat, wildcart)) => {
-            if *wildcart {
-                for (pat, (t1, optional)) in pat.iter() {
-                    match rcd.iter().find(|(n0, _)| *n0 == pat) {
-                        Some((_, t0)) => constrain_inner(context, t0, t1, cache)?,
-                        None => {
-                            if optional.is_none() {
-                                return Err(InferError::MissingRecordField { field: pat.clone() });
-                            }
-                        }
-                    }
-                }
-            } else {
-                let mut keys = rcd.iter().map(|(n, _)| n).collect::<HashSet<_>>();
-                for (n1, (t1, optional)) in pat.iter() {
-                    match rcd.iter().find(|(n0, _)| *n0 == n1) {
-                        Some((_, t0)) => {
-                            if let Some(opt) = optional {
-                                constrain_inner(context, t0, opt, cache)?;
-                            }
-                            constrain_inner(context, t0, t1, cache)?;
-                            keys.remove(n1);
-                        }
-                        None => {
-                            if optional.is_none() {
-                                return Err(InferError::MissingRecordField { field: n1.clone() });
-                            }
-                        }
-                    }
-                }
-                if !keys.is_empty() {
-                    return Err(InferError::TooManyField {
-                        field: keys.into_iter().next().unwrap().clone(),
-                    });
-                }
-            }
-        }
-
-        (Ty::Optional(o1), Ty::Optional(o0)) => {
-            constrain_inner(context, o0, o1, cache)?;
-        }
-
-        (Ty::List(ls1), Ty::List(ls2)) if ls1.len() == 1 && ls2.len() == 1 => {
-            constrain_inner(context, &ls1[0], &ls2[0], cache)?;
-        }
-
-        // application
-        // function constraints
-        // selection
-        (Ty::Var(lhs), rhs) if rhs.level() <= lhs.level => {
-            lhs.upper_bounds.borrow_mut().push(rhs.clone());
-            for lower_bound in lhs.lower_bounds.borrow().iter() {
-                constrain_inner(context, lower_bound, rhs, cache)?;
-            }
-        }
-
-        (Ty::Pattern(pat, _), rhs @ Ty::Var(_)) => {
-            constrain_inner(
-                context,
-                &Ty::Record(
-                    pat.clone()
-                        .into_iter()
-                        .map(|(name, (_ty, opt))| (name, opt.unwrap_or(Ty::Undefined)))
-                        .collect(),
-                ),
-                rhs,
-                cache,
-            )?;
-        }
-
-        // let-binding
-        // record typing
-        (lhs, Ty::Var(rhs)) if lhs.level() <= rhs.level => {
-            rhs.lower_bounds.borrow_mut().push(lhs.clone());
-            for upper_bound in rhs.upper_bounds.borrow().iter() {
-                constrain_inner(context, lhs, upper_bound, cache)?;
-            }
-        }
-        (Ty::Var(_), rhs) => {
-            let rhs_extruded = extrude(context, rhs, false, lhs.level(), &mut HashMap::new());
-            constrain_inner(context, lhs, &rhs_extruded, cache)?;
-        }
-        (lhs, Ty::Var(_)) => {
-            let lhs_extruded = extrude(context, lhs, true, rhs.level(), &mut HashMap::new());
-            constrain_inner(context, &lhs_extruded, rhs, cache)?;
-        }
-
-        _ => {
-            return Err(InferError::CannotConstrain {
-                lhs: lhs.clone(),
-                rhs: rhs.clone(),
-            })
+impl ContextType {
+    fn instantiate(&self, context: &Context, lvl: usize) -> Ty {
+        match self {
+            ContextType::Type(ty) => ty.instantiate(),
+            ContextType::PolymorhicType(pty) => freshen_above(context, &pty.body, pty.level, lvl),
         }
     }
 
-    Ok(())
-}
-
-fn extrude(
-    context: &Context,
-    ty: &Ty,
-    pol: bool,
-    lvl: usize,
-    c: &mut HashMap<PolarVar, Var>,
-) -> Ty {
-    if ty.level() <= lvl {
-        return ty.clone();
-    }
-
-    match ty {
-        Ty::Number | Ty::Bool | Ty::String | Ty::Path | Ty::Null | Ty::Undefined => ty.clone(),
-
-        Ty::Var(vs) => {
-            let pol_var = (vs.clone(), pol);
-            if let Some(nvs) = c.get(&pol_var) {
-                Ty::Var(nvs.clone())
-            } else {
-                let nvs = context.fresh_var(lvl);
-                c.insert(pol_var, nvs.clone());
-
-                if pol {
-                    vs.upper_bounds.borrow_mut().push(Ty::Var(nvs.clone()));
-                    *nvs.lower_bounds.borrow_mut() = vs
-                        .lower_bounds
-                        .borrow()
-                        .iter()
-                        .map(|t| extrude(context, t, pol, lvl, c))
-                        .collect();
-                } else {
-                    vs.lower_bounds.borrow_mut().push(Ty::Var(nvs.clone()));
-                    *nvs.upper_bounds.borrow_mut() = vs
-                        .upper_bounds
-                        .borrow()
-                        .iter()
-                        .map(|t| extrude(context, t, pol, lvl, c))
-                        .collect();
-                }
-
-                Ty::Var(nvs)
-            }
-        }
-
-        Ty::Function(l, r) => Ty::Function(
-            Box::new(extrude(context, l, !pol, lvl, c)),
-            Box::new(extrude(context, r, pol, lvl, c)),
-        ),
-        Ty::Record(fs) => Ty::Record(
-            fs.iter()
-                .map(|(name, t)| (name.clone(), extrude(context, t, pol, lvl, c)))
-                .collect(),
-        ),
-
-        Ty::List(ls) => Ty::List(
-            ls.iter()
-                .map(|t| extrude(context, t, pol, lvl, c))
-                .collect(),
-        ),
-        Ty::Optional(ty) => Ty::Optional(Box::new(extrude(context, ty, pol, lvl, c))),
-        Ty::Union(lhs, rhs) => Ty::Union(
-            Box::new(extrude(context, lhs, pol, lvl, c)),
-            Box::new(extrude(context, rhs, pol, lvl, c)),
-        ),
-        Ty::Pattern(lhs, rhs) => {
-            let mut lhs = lhs.clone();
-            for (_, (ty, opt)) in lhs.iter_mut() {
-                *ty = extrude(context, ty, !pol, lvl, c);
-                if let Some(opt) = opt {
-                    *opt = extrude(context, opt, pol, lvl, c);
-                }
-            }
-            Ty::Pattern(lhs, *rhs)
-        }
-        Ty::Top | Ty::Bottom | Ty::Inter(..) | Ty::Recursive(..) => {
-            panic!("Not a simple type")
+    fn into_type(self) -> Option<Ty> {
+        match self {
+            ContextType::Type(ty) => Some(ty),
+            ContextType::PolymorhicType(_) => None,
         }
     }
 }
 
-pub(crate) fn freshen_above(context: &Context, ty: &Ty, lim: usize, lvl: usize) -> Ty {
-    freshen(context, ty, lim, lvl, &mut HashMap::new())
+/// Context to save variables and their types.
+#[derive(Debug)]
+#[salsa::tracked]
+pub struct Context<'a> {
+    pub bindings: Vec<Scope>,
 }
 
-fn freshen(
-    context: &Context,
-    ty: &Ty,
-    lim: usize,
-    lvl: usize,
-    freshened: &mut HashMap<Var, Var>,
-) -> Ty {
-    if ty.level() <= lim {
-        return ty.clone();
+impl<'a> Context<'a> {
+    /// Create a new scope and run a function with it.
+    pub(crate) fn with_scope<T>(
+        &self,
+        db: &dyn salsa::Database,
+        scope: Vec<(NameId, ContextType)>,
+        f: impl FnOnce(Vec<Scope>) -> T,
+    ) -> T {
+        let mut new = self.bindings(db).clone();
+        new.push(scope);
+        f(new)
     }
-    match ty {
-        Ty::Var(var) => Ty::Var(freshened.get(var).cloned().unwrap_or_else(|| {
-            let new_v = context.fresh_var(lvl);
-            let lower = var
-                .lower_bounds
-                .borrow()
-                .iter()
-                .map(|ty| freshen(context, ty, lim, lvl, freshened))
-                .collect();
-            let upper = var
-                .upper_bounds
-                .borrow()
-                .iter()
-                .map(|ty| freshen(context, ty, lim, lvl, freshened))
-                .collect();
-            *new_v.lower_bounds.borrow_mut() = lower;
-            *new_v.upper_bounds.borrow_mut() = upper;
-            freshened.insert(var.clone(), new_v.clone());
-            new_v
-        })),
-        Ty::Function(ty1, ty2) => {
-            let left = freshen(context, ty1, lim, lvl, freshened);
-            let right = freshen(context, ty2, lim, lvl, freshened);
-            Ty::Function(Box::new(left), Box::new(right))
-        }
-        Ty::List(list) => Ty::List(
-            list.iter()
-                .map(|t| freshen(context, t, lim, lvl, freshened))
-                .collect(),
-        ),
-        Ty::Record(rc) => Ty::Record(
-            rc.iter()
-                .map(|(name, ty)| (name.clone(), freshen(context, ty, lim, lvl, freshened)))
-                .collect(),
-        ),
-        Ty::Pattern(pat, wildcart) => Ty::Pattern(
-            pat.iter()
-                .map(|(name, (ty, opt))| {
-                    (
-                        name.clone(),
-                        (
-                            freshen(context, ty, lim, lvl, freshened),
-                            opt.as_ref()
-                                .map(|opt| freshen(context, opt, lim, lvl, freshened)),
-                        ),
-                    )
-                })
-                .collect(),
-            *wildcart,
-        ),
 
-        Ty::Optional(opt) => Ty::Optional(Box::new(freshen(context, opt, lim, lvl, freshened))),
-        Ty::Number | Ty::Bool | Ty::String | Ty::Path | Ty::Null | Ty::Undefined => ty.clone(),
-        Ty::Union(left, right) => Ty::Union(
-            Box::new(freshen(context, left, lim, lvl, freshened)),
-            Box::new(freshen(context, right, lim, lvl, freshened)),
-        ),
-        Ty::Top | Ty::Bottom | Ty::Inter(_, _) | Ty::Recursive(..) => {
-            unreachable!()
+    /// Lookup a [Var] by it's name.
+    pub(crate) fn lookup(&self, db: &dyn salsa::Database, name: NameId) -> Option<ContextType> {
+        for scope in self.bindings(db).iter().rev() {
+            for (item_name, item) in scope.iter().rev() {
+                if *item_name == name {
+                    return Some(item.clone());
+                }
+            }
         }
+        None
     }
 }
 
@@ -314,22 +70,23 @@ fn freshen(
 #[salsa::tracked]
 fn type_term<'a>(
     db: &'a dyn salsa::Database,
-    expr: Expr<'a>,
+    expr: Expr<'a>, // Should this be ExprId?
     ctx: Context<'a>,
-    with: Vec<Ty>,
+    with: &'a [Ty],
     lvl: usize,
     count: usize,
 ) -> Option<Ty> {
     use Ty::*;
 
-    match expr {
+    Ok(match expr.data(db) {
         ExprData::Reference(smol_str) => {
-            if let Some(var) = ctx.lookup(smol_str) {
-                return Ok(var.instantiate(ctx, lvl));
+            let name = todo!();
+            if let Some(var) = ctx.lookup(db, name) {
+                return Ok(var.instantiate(&ctx, lvl));
             }
 
             // Handle with-statement which could be used to supply vars
-            if let Some(with) = &ctx.with {
+            if let Some(with) = with {
                 if let ty @ Ty::Var(var) = with {
                     if let Some(rec) = var.as_record() {
                         if let Some(ty) = rec.get(name).cloned() {
@@ -879,14 +636,14 @@ fn type_term<'a>(
         // Ast::Bool { .. } => Ok(Bool),
         // Ast::Int { .. } | Ast::Float { .. } => Ok(Number),
         // Ast::Comment(_) | Ast::DocComment(_) | Ast::LineComment(_) => unimplemented!(),
-    }
+    })
 }
 
+/// Load the bindings from an `inherit (x) arar` statement.
 #[salsa::tracked]
 fn load_inherit<'db>(
     db: &'db dyn salsa::Database,
     ctx: Context<'db>,
-    span: Span,
     lvl: usize,
     inherit: &[Inherit],
 ) -> Vec<(String, ContextType)> {

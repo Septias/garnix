@@ -1,4 +1,8 @@
-use crate::{coalesced, infer, types::Var, InferError, Ty};
+use crate::{
+    infer,
+    types::{Ty, Var},
+    InferError,
+};
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 use Ty::*;
 

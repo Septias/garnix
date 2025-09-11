@@ -11,7 +11,7 @@ fn main() -> anyhow::Result<()> {
             Ok((_, ast)) => {
                 let ast = Ast::from_parser_ast(ast, &input);
                 println!("ast: {:#?}", ast);
-                match infer::coalesced(&ast) {
+                match infer::infer(&ast) {
                     Err(e) => {
                         eprintln!("[Inference] Error: {:?}", e);
                     }

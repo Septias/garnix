@@ -1,10 +1,27 @@
-use salsa::Accumulator;
+use salsa::{Accumulator, Update};
 use thiserror::Error;
 
-use crate::types::{Ty, TypeName};
+use crate::{
+    module::ExprId,
+    types::{Ty, TypeName},
+};
+
+/// An Error that also contains location.
+#[derive(Clone, Debug, Update, PartialEq)]
+#[salsa::accumulator]
+pub struct Diagnostic {
+    pub expr: ExprId,
+    pub error: InferError,
+}
+
+impl Diagnostic {
+    pub fn new(expr: ExprId, error: InferError) -> Self {
+        Diagnostic { expr, error }
+    }
+}
 
 /// An error that occured during type inference.
-#[derive(Debug, Error)]
+#[derive(Debug, Clone, Error, Update)]
 pub enum InferError {
     #[error("Unknown identifier")]
     UnknownIdentifier,
@@ -26,8 +43,6 @@ pub enum InferError {
     UnknownFunction,
     #[error("Function has to accept at least one argument")]
     TooFewArguments,
-    #[error(transparent)]
-    Other(#[from] anyhow::Error),
 }
 
 impl PartialEq for InferError {
@@ -53,49 +68,8 @@ impl PartialEq for InferError {
                     to: r_to,
                 },
             ) => l_from == r_from && l_to == r_to,
-            (Self::MultipleErrors(l0), Self::MultipleErrors(r0)) => l0 == r0,
-            (Self::Other(l0), Self::Other(r0)) => l0.to_string() == r0.to_string(),
             _ => core::mem::discriminant(self) == core::mem::discriminant(other),
         }
-    }
-}
-
-/// An Error that also contains the span in the source.
-#[salsa::accumulator]
-pub struct Diagnostic {
-    pub start: usize,
-    pub end: usize,
-    pub error: InferError,
-}
-
-#[salsa::tracked(debug)]
-pub struct Span<'db> {
-    #[tracked]
-    pub start: usize,
-    #[tracked]
-    pub end: usize,
-}
-
-impl Diagnostic {
-    pub fn new(start: usize, end: usize, error: InferError) -> Self {
-        Diagnostic { start, end, error }
-    }
-
-    #[cfg(test)]
-    pub fn render(&self, db: &dyn salsa::Database, src: SourceProgram) -> String {
-        use annotate_snippets::*;
-        let line_start = src.text(db)[..self.start].lines().count() + 1;
-        Renderer::plain()
-            .render(
-                Level::Error.title(&self.message).snippet(
-                    Snippet::source(src.text(db))
-                        .line_start(line_start)
-                        .origin("input")
-                        .fold(true)
-                        .annotation(Level::Error.span(self.start..self.end).label("here")),
-                ),
-            )
-            .to_string()
     }
 }
 
@@ -108,21 +82,12 @@ pub(crate) fn type_mismatch<T>(expected: TypeName, found: TypeName) -> InferResu
 }
 
 /// Add diagnostic to the accumulator.
-pub(crate) fn add_diag(db: &dyn salsa::Database, span: Span, error: InferError) {
-    Diagnostic::new(span.start(db), span.end(db), error).accumulate(db);
+pub(crate) fn add_diag(db: &dyn salsa::Database, expr: ExprId, error: InferError) {
+    Diagnostic::new(expr, error).accumulate(db);
 }
 
 impl From<(String, &'static str)> for InferError {
     fn from((from, to): (String, &'static str)) -> Self {
         InferError::ConversionError { from, to }
-    }
-}
-
-impl From<(&Span, InferError)> for Diagnostic {
-    fn from((span, error): (&Span, InferError)) -> Self {
-        Self {
-            span: span.clone(),
-            error,
-        }
     }
 }
