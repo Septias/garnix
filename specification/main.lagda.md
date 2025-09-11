@@ -13,7 +13,6 @@ open import Relation.Nullary using (¬_; contradiction)
 open import Relation.Nullary.Decidable using (Dec; yes; no; False; toWitnessFalse; ¬?)
 open import Data.Fin using (Fin)
 
-
 Id : Set
 Id = String
 
@@ -21,37 +20,77 @@ Label : Set
 Label = String
 
 infixr 5 _∷_
-infix  5  μ_⇒_
 infixl 7  _·_
 infix  8  `suc_
 infix  9  `_
 
-data List (A : Set) : Set where
-  []  : List A
-  _∷_ : A → List A → List A
 
 
+-- Defining the syntax of the language
 data Expr (n m : ℕ) : Set
+
+
+```
+Records are defined similarly to lists, but each field has a label and a distinct type.
+
+@Operations:
+- Record lookup
+- Record concatenation
+
+```
 
 data Record : Set where
   empty     : Record
   _∣_       : ∀ {n m : ℕ} → Label → (Expr n m) → Record
   ‵let_‵in_ : ∀ {n m : ℕ} → Expr n m → Expr n m → Record 
 
+
+-- Recursive Record
+data RecRecord : Set where
+  empty     : RecRecord
+  _∣_       : ∀ {n m : ℕ} → Label → (Expr n m) → RecRecord
+  ‵let_‵in_ : ∀ {n m : ℕ} → Expr n m → Expr n m → RecRecord 
+
+
+
+```
+Lists are defined inductively with a base case (empty list) and a recursive case (cons cell).
+
+@Operations:
+- List concatenation
+
+```
+
+data List (A : Set) : Set where
+  []  : List A
+  _∷_ : A → List A → List A
+
+
+```
+We need kinds because of @marius work
+
+``` 
+
 data Kind : Set where
-  ★  : Kind
+  ★   : Kind
+
 
 
 data Type (n : ℕ) : Set where
-  `_       : Fin n → Type n 
+  `_       : Fin n → Type n
   ∀[α:_]_  : Type (suc n) → Type n
   _⇒_      : Type n → Type n → Type n
 
 
+```
+An attribute path is a sequence of labels leading to a specific attribute within a nested structure.
+```
+
 data AttrPath : Set where
-  _•_      : Label → AttrPath → AttrPath
+  _–_      : Label → AttrPath → AttrPath
   ε        : AttrPath
  
+
 
 data Expr n m where
   `_                      : Fin m → Expr n m
@@ -64,7 +103,7 @@ data Expr n m where
   `suc_                   : Expr n m → Expr n m
   
   -- Language constructs
-  μ_⇒_                    : Id → Expr n m → Expr n m         
+  μx_                    :  Expr n m → Expr n m         -- TODO: this should be intrinsic too, no?
   ‵with_⨟_                : Expr n m → Expr n m → Expr n m   -- with Record ; Expr --> Introduce all fields of Record into scope 
   ‵let_inn_               : Expr n m → Expr n m → Expr n m
   if_then_else_           : Expr n m → Expr n m → Expr n m
@@ -88,9 +127,8 @@ data Expr n m where
 
 -- Definition of values
 data Value (n m : ℕ) : Expr n m → Set where
-  λx_ : (N : Expr n m) → Value n m _
-
-  Λα_ : (N : Expr n m) → Value n m _
+  λx_ : (N : Expr n (suc m)) → Value n m (λx N)
+  Λα_ : (N : Expr (suc n) m) → Value n m (Λα N)
 
   `zero :
       -----------
@@ -117,33 +155,20 @@ data _—→_ : ∀ { n m : ℕ} → Expr n m → Expr n m → Set where
       -----------------
     → V · M —→ V · M′
 
-  β-λx : ∀ {x N V}
+  β-λx : ∀ {V m n} -- Beta reduction for lambda
     → Value V
       ------------------------------
-    → (λx ) · V —→ N [ x := V ]
+    → (λx n m) · V —→ (λx n (suc m))
 
   ξ-suc : ∀ {M M′}
     → M —→ M′
       ------------------
     → `suc M —→ `suc M′
 
-  ξ-case : ∀ {x L L′ M N}
-    → L —→ L′
-      -----------------------------------------------------------------
-    → case L [zero⇒ M |suc x ⇒ N ] —→ case L′ [zero⇒ M |suc x ⇒ N ]
-
-  β-zero : ∀ {x M N}
-      ----------------------------------------
-    → case `zero [zero⇒ M |suc x ⇒ N ] —→ M
-
-  β-suc : ∀ {x V M N}
-    → Value V
-      ---------------------------------------------------
-    → case `suc V [zero⇒ M |suc x ⇒ N ] —→ N [ x := V ]
 
   β-μ : ∀ {x M}
       ------------------------------
-    → μ x ⇒ M —→ M [ x := μ x ⇒ M ]
+    → μx M —→ μx M
 
 
 
