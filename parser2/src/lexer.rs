@@ -19,6 +19,7 @@ pub const KEYWORDS: &[(&str, SyntaxKind)] = &[
     ("rec", T![rec]),
     ("then", T![then]),
     ("with", T![with]),
+    ("import", T![import]),
 ];
 
 struct Dfa {

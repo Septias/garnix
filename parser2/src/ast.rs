@@ -244,6 +244,7 @@ enums! {
         String,
         UnOp,
         With,
+        Import,
     },
     Attr {
         Dynamic,
@@ -272,12 +273,11 @@ impl Expr {
         fn bp(e: &Expr) -> Option<i8> {
             Some(match e {
                 Expr::With(_)
+                | Expr::Import(_)
                 | Expr::Lambda(_)
                 | Expr::LetIn(_)
                 | Expr::IfThenElse(_)
                 | Expr::Assert(_) => MIN_BP,
-
-                // Binary and unary ops. They follow `infix_bp` in parser.
                 Expr::BinOp(e) => match e.op_kind()? {
                     BinaryOpKind::PipeLeft | BinaryOpKind::PipeRight => 0,
                     BinaryOpKind::Imply => 1,
@@ -299,21 +299,14 @@ impl Expr {
                 },
                 Expr::HasAttr(_) => 21,
                 Expr::Apply(_) => 25,
-
-                // Lists can contain Select.
                 Expr::List(_) => 27,
-
                 Expr::Select(_) => 29,
-
-                // Atoms.
                 Expr::AttrSet(_)
                 | Expr::String(_)
                 | Expr::IndentString(_)
                 | Expr::Literal(_)
                 | Expr::PathInterpolation(_)
                 | Expr::Ref(_) => 29,
-
-                // Special. See below.
                 Expr::Paren(_) => MAX_BP,
             })
         }
@@ -345,6 +338,10 @@ asts! {
         condition: Expr,
         semicolon_token: T![;],
         body[1]: Expr,
+    },
+    IMPORT = Import {
+        import_token: T![import],
+        path: Expr,
     },
     ATTR_PATH = Attrpath {
         attrs: [Attr],
@@ -910,6 +907,14 @@ mod tests {
         assert_eq!(e.op_kind(), Some(UnaryOpKind::Negate));
         e.op_token().unwrap().should_eq("-");
         e.arg().unwrap().syntax().should_eq("1");
+    }
+
+    #[test]
+    fn import() {
+        let e = parse::<Import>("import 1");
+        println!("{e:?}");
+        e.import_token().unwrap().should_eq("import");
+        e.path().unwrap().syntax().should_eq("./hi.txt");
     }
 
     #[test]

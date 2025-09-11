@@ -102,7 +102,7 @@ impl rowan::Language for NixLanguage {
 /// # Example:
 ///
 /// ```
-/// # use syntax::{SyntaxNode, match_ast, ast};
+/// # use parser2::{SyntaxNode, match_ast, ast};
 /// # fn main() {
 /// # let node: SyntaxNode = return;
 /// match_ast! {

@@ -3,7 +3,6 @@ use crate::lexer::LexTokens;
 use crate::SyntaxKind::{self, *};
 use crate::{lexer, Error, ErrorKind, SyntaxNode};
 use rowan::{Checkpoint, GreenNode, GreenNodeBuilder, TextRange, TextSize};
-use salsa::Database;
 
 const MAX_STEPS: usize = 100_000_000;
 const MAX_DEPTHS: usize = 500;
@@ -38,7 +37,7 @@ impl Parse {
 ///
 /// # Panics
 /// Panic if the source is longer than `u32::MAX`.
-pub fn parse_file(db: &dyn Database, src: &str) -> Parse {
+pub fn parse_file(src: &str) -> Parse {
     let tokens = lexer::lex(src.as_bytes());
     parse_file_tokens(src, tokens)
 }
@@ -249,6 +248,17 @@ impl Parser<'_> {
                 self.expr_function_opt();
                 self.finish_node();
             }
+            Some(T![import]) => {
+                println!("{:?}", self.peek_full());
+                self.start_node(IMPORT);
+                self.bump(); // import
+                self.bump(); // ws
+                             // self.start_node(PATH);
+                             // self.bump();
+                             // self.finish_node();
+                self.expr_function_opt();
+                self.finish_node();
+            }
             Some(T![let]) => {
                 if matches!(self.peek_iter_non_ws().nth(1), Some(T!['{'])) {
                     self.expr_operator_opt();
@@ -402,7 +412,7 @@ impl Parser<'_> {
                     break;
                 }
 
-                // Currently we have only `HAS_ATTR` as a postfix operator.
+                // Currently we only have `HAS_ATTR` as a postfix operator.
                 assert_eq!(tok, T![?]);
                 self.start_node_at(cp, HAS_ATTR);
                 self.bump(); // `?`

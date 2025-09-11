@@ -10,6 +10,7 @@ use std::path::Path;
 pub fn parse<N: AstNode<Language = NixLanguage>>(src: &str) -> N {
     let parse = crate::parse_file(src);
     assert!(parse.errors().is_empty());
+    println!("parse: {parse:?}");
     parse.syntax_node().descendants().find_map(N::cast).unwrap()
 }
 
