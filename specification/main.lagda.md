@@ -24,6 +24,15 @@ infixl 7  _·_
 infix  8  `suc_
 infix  9  `_
 
+```
+## General Questions
+
+- Should we define labels as a datatype
+- Should 
+
+
+```
+
 
 
 -- Defining the syntax of the language
@@ -37,8 +46,15 @@ Records are defined similarly to lists, but each field has a label and a distinc
 - Record lookup
 - Record concatenation
 
+
+## TODO
+- Reordering
+- ...
+
+
 ```
 
+-- Normal record
 data Record : Set where
   empty     : Record
   _∣_       : ∀ {n m : ℕ} → Label → (Expr n m) → Record
@@ -59,21 +75,23 @@ Lists are defined inductively with a base case (empty list) and a recursive case
 @Operations:
 - List concatenation
 
-```
-
-data List (A : Set) : Set where
-  []  : List A
-  _∷_ : A → List A → List A
-
+## TODO:
+- Homogenous types?
+- Normally you can put in whatever you want
 
 ```
-We need kinds because of @marius work
 
+data List : Set₁ where
+  []  : List
+  _∷_ : ∀ {a : Set} → a → List -> List
+
+
+```
+We need kinds because of @marius specs, do we need it here?
 ``` 
 
 data Kind : Set where
   ★   : Kind
-
 
 
 data Type (n : ℕ) : Set where
@@ -85,11 +103,11 @@ data Type (n : ℕ) : Set where
 ```
 An attribute path is a sequence of labels leading to a specific attribute within a nested structure.
 ```
-
 data AttrPath : Set where
   _–_      : Label → AttrPath → AttrPath
   ε        : AttrPath
- 
+
+
 
 
 data Expr n m where
@@ -103,7 +121,7 @@ data Expr n m where
   `suc_                   : Expr n m → Expr n m
   
   -- Language constructs
-  μx_                    :  Expr n m → Expr n m         -- TODO: this should be intrinsic too, no?
+  μx_                    :  Expr n m → Expr n m              -- TODO: this should be intrinsic too, no?, what kind of Recursion do we have?
   ‵with_⨟_                : Expr n m → Expr n m → Expr n m   -- with Record ; Expr --> Introduce all fields of Record into scope 
   ‵let_inn_               : Expr n m → Expr n m → Expr n m
   if_then_else_           : Expr n m → Expr n m → Expr n m
