@@ -140,7 +140,7 @@ swap : ∀ {Γ}{x}{y} → x ≢ y → Ren (Γ , x ⦂ A , y ⦂ B) (Γ , y ⦂ B
 subst-preserves {x = x} (⊢` Z) ⊢M
   with x ≟ x
 ... | yes x≡x = weaken ⊢M
-... | no x≢x  = contradiction refl x≢x
+... | no x≢x  = {!   !}
 subst-preserves {x = x} (⊢` {x = y} (S y≢x y∈)) ⊢M
   with y ≟ x
 ... | yes y≡x = contradiction y≡x y≢x 
@@ -175,14 +175,6 @@ swap x≢y (S x Z) = Z
 swap x≢y (S x (S x₁ z∈Γ)) = S x₁ (S x z∈Γ)
 ```
 
-
-
-
-
-
-
-
-
 ## Type Safety
 
 
@@ -194,8 +186,6 @@ type-safety ⊢M (_ —→⟨ M⟶ ⟩ M—↠) = type-safety (preserve ⊢M M�
 
 
 ## Evaluation
-
-
 
 ```
 record Gas : Set where

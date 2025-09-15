@@ -30,19 +30,6 @@ Syntax of the classical while language
       s ; s
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
 ## formal syntax of the While language
 
 ```
@@ -60,7 +47,7 @@ data Expr : Set where
   _⟨_⟩_  : (e₁ : Expr) → (⊕ : Op ℕ) → (e₂ : Expr) → Expr
 
 data BExpr : Set where
-  `not      : (b : BExpr) → BExpr
+  `not      : (b : BExpr) → BExpraaaa
   `and `or  : (b₁ : BExpr) → (b₂ : BExpr) → BExpr
   _⟨_⟩_     : (e₁ : Expr) → (∼ : BOp ℕ) → (e₂ : Expr) → BExpr
 
@@ -86,8 +73,6 @@ example3 = Whl ((`# 0) ⟨ _<ᵇ_ ⟩ (` "x")) (Ass "x" ((` "x") ⟨ _∸_ ⟩ (
 ```
 
 
-
-
 ## Semantics I : small-step operational
 
 A configuration of the semantics comprises two parts
@@ -100,18 +85,6 @@ and keep track of the state as it is transformed by each statement
 
 The state is initialized to all zeroes.
 A program run corresponds to a sequence of configurations.
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
@@ -371,10 +344,7 @@ maybe-just : ∀ {A B : Set} (m : Maybe A) {f : A → Maybe B} {x : B} → m ⟫
 maybe-just (just y) mf=jx = y , refl
 ```
 
-
-
 ### Compositional denotational semantics using the gas-indexed Maybe monad
-
 
 ```
 -- the monad type

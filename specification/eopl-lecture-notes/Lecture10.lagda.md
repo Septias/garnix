@@ -31,7 +31,6 @@ infix  9 S_
 ```
 
 
-
 # The Simply-Typed Lambda Calculus, Again
 
 In this lecture, we take two steps away from the previous development for the simply typed lambda calculus.
@@ -81,16 +80,6 @@ This system relies on *de Bruijn indices* to represent binding structure without
 Introduced in de Bruijn's paper "Lambda Calculus Notation with Nameless Dummies: A Tool for Automatic Formula Manipulation, with
 Application to the Church-Rosser Theorem".
 
-
-
-
-
-
-
-
-
-
-
 Idea of de Bruijn indices:
 Instead of referring to the binding location of a variable by name, we refer to it by distance to the binder.
 That is, the encoding of a use of a variable is a natural number that tells us how many binders we have to traverse
@@ -127,11 +116,6 @@ Lambda:
 (λ M) [j ↦ N] = λ (M[j+1 ↦ N])
 
 
-
-
-
-
-
 If N does contain free variables, we have to shift them at each lambda because their binding site is one step further away.
 
 (λ M) [j ↦ N] = λ (M[j+1 ↦ N ^ 0])
@@ -143,11 +127,7 @@ i ^ j    = i+1 if i >= j else i
 (λ M) ^j = λ (M ^ j+1)
 
 
-
-
-
-
-## Curry vs. Church style
+## Curry vs. Church styleaaaa
 
 Question: what is a legal term?
 
@@ -160,8 +140,6 @@ In the previous chapter, we discussed a Curry-style encoding of lambda calculus.
 Now we switch to Church style.
 
 At the same time, we switch to a typed variable representation, which is inspired by de Bruijn indices.
-
-
 
 
 # Syntax
@@ -193,10 +171,6 @@ variable
 
 Contexts are isomorphic to `List Type`.
 
-
-
-
-
 ## Variable lookup
 
 `Γ ∋ A` is the index of a variable of type `A` in context `Γ`
@@ -214,8 +188,6 @@ data _∋_ : Context → Type → Set where
       ---------
     → Γ , B ∋ A
 ```
-
-
 
 
 ## Terms and typing
@@ -272,7 +244,6 @@ We already know that a proper definition of substitution requires renaming.
 This time, we start bottom up...
 
 
-
 ## Renaming
 
 As before, a renaming is a mapping between variable lookups in different environments:
@@ -305,17 +276,6 @@ rename ρ (`suc ⊢A) = `suc (rename ρ ⊢A)
 rename ρ (case ⊢A ⊢A₁ ⊢A₂) = case (rename ρ ⊢A) (rename ρ ⊢A₁) (rename (extr ρ) ⊢A₂)
 rename ρ (μ ⊢A) = μ (rename (extr ρ) ⊢A)
 ```
-
-
-
-
-
-
-
-
-
-
-
 
 
 ## Substitution
@@ -356,16 +316,6 @@ subst σ (case ⊢A ⊢A₁ ⊢A₂) = case (subst σ ⊢A) (subst σ ⊢A₁) (
 subst σ (μ ⊢A) = μ (subst (exts σ) ⊢A)
 ```
 
-
-
-
-
-
-
-
-
-
-
 ### special case: single substitution
 
 Required case for type preservation / β reduction
@@ -384,8 +334,6 @@ _[_] : ∀ {Γ A B}
 _[_] {Γ} {A} {B} N M = subst (σ₀ M) N
 
 ```
-
-
 
 ## Values
 

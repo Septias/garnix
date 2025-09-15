@@ -148,24 +148,6 @@ mult : Γ ⊢ `ℕ ⇒ `ℕ ⇒ `ℕ
 mult = ƛ ƛ recnat (` (S Z)) `zero (ƛ ƛ (plus · ` (S (S Z))) · ` Z)
 ```
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 ## Denotational semantics
 
 The semantic domain of a type is defined by induction.
@@ -239,19 +221,11 @@ _ : 𝓔⟦ mult ⟧ γ∅ (𝓔⟦ two ⟧ γ∅) (𝓔⟦ three ⟧ γ∅) ≡
 _ = refl
 ```
 
-
-
-
 To compare with an operational semantics, we need to recapitulate some of the definitions
 of the last chapter.
 
 
-
-
-
 ## Revised small-step semantis
-
-
 ### Renaming
 
 As before, a renaming is a mapping between variable lookups in different environments:
@@ -337,7 +311,6 @@ _[_] {Γ} {A} {B} N M = subst (σ₀ M) N
 
 ```
 data Value  {Γ} : ∀ {A} → Γ ⊢ A → Set where
-
   ƛ_ : (N : Γ , A ⊢ B)
       ---------------------------
     → Value (ƛ N)
@@ -406,9 +379,6 @@ Taking a step in the small-step reduction does not change the denotation.
 sound⟶ : ∀ {M N : Γ ⊢ A} → M ⟶ N → (γ : 𝓒⟦ Γ ⟧) → 𝓔⟦ M ⟧ γ ≡ 𝓔⟦ N ⟧ γ
 ```
 
-
-
-
 Renamings acting on semantic substitutions
 
 ```
@@ -464,11 +434,6 @@ extc-σ₀ γ W = ext λ B → ext λ{ Z → refl ; (S x) → refl}
 
 
 
-
-
-
-
-
 ```
 -- sound⟶ : ∀ {M N : Γ ⊢ A} → M ⟶ N → (γ : 𝓒⟦ Γ ⟧) → 𝓔⟦ M ⟧ γ ≡ 𝓔⟦ N ⟧ γ
 sound⟶ (ξ-·₁ M⟶N) γ               rewrite sound⟶ M⟶N γ = refl
@@ -479,8 +444,6 @@ sound⟶ (ξ-recnat M⟶N) γ          rewrite sound⟶ M⟶N γ = refl
 sound⟶ β-zero γ = refl
 sound⟶ (β-suc x) γ = refl
 ```
-
-
 
 Soundness of the small-step semantics: making a reduction does not change the semantics
 

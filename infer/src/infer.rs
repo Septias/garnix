@@ -11,7 +11,7 @@ use std::collections::{HashMap, HashSet};
 
 pub type Scope = Vec<(NameId, ContextType)>;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Hash)]
 pub enum ContextType {
     Type(Ty),
     PolymorhicType(PolymorphicType),
@@ -48,9 +48,10 @@ impl<'a> Context<'a> {
         scope: Vec<(NameId, ContextType)>,
         f: impl FnOnce(Vec<Scope>) -> T,
     ) -> T {
-        let mut new = self.bindings(db).clone();
-        new.push(scope);
-        f(new)
+        // let mut new = self.bindings(db).clone();
+        // new.push(scope);
+        // f(new)
+        todo!()
     }
 
     /// Lookup a [Var] by it's name.

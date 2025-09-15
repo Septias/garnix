@@ -193,7 +193,7 @@ impl Ty {
 
 /// A polymorphic type.
 /// These types are used for let-polymorphism.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Hash)]
 pub struct PolymorphicType {
     pub body: Ty,
     pub level: usize,

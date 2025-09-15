@@ -52,9 +52,6 @@ We generally stick with the simply-typed lambda calculus.
 
 
 
-
-
-
 # Big step semantics
 
 ```
