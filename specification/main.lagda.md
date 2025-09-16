@@ -27,12 +27,12 @@ infix  9  `_
 ```
 ## General Questions
 
-- Should we define labels as a datatype
-- Should 
+- Should labels be defined as a datatype?
+- How to define constraints
+- What kind of operational semantics ?
 
 
 ```
-
 
 
 -- Defining the syntax of the language
@@ -53,7 +53,6 @@ Records are defined similarly to lists, but each field has a label and a distinc
 
 
 ```
-
 -- Normal record
 data Record : Set where
   empty     : Record
@@ -68,8 +67,8 @@ data RecRecord : Set where
   ‵let_‵in_ : ∀ {n m : ℕ} → Expr n m → Expr n m → RecRecord 
 
 
-
 ```
+
 Lists are defined inductively with a base case (empty list) and a recursive case (cons cell).
 
 @Operations:
@@ -122,10 +121,10 @@ data Expr n m where
   
   -- Language constructs
   μx_                    :  Expr n m → Expr n m              -- TODO: this should be intrinsic too, no?, what kind of Recursion do we have?
-  ‵with_⨟_                : Expr n m → Expr n m → Expr n m   -- with Record ; Expr --> Introduce all fields of Record into scope 
+  ‵with_⨟_                : Expr n m → Expr n m → Expr n m   -- With Record ; Expr -> Introduce all fields of Record into scope 
   ‵let_inn_               : Expr n m → Expr n m → Expr n m
   if_then_else_           : Expr n m → Expr n m → Expr n m
-  assert_                 : Expr n m → Expr n m              -- assert false       --> Program termination 
+  assert_                 : Expr n m → Expr n m              -- assert false       -> Program termination 
   _‵?_                    : Expr n m → Expr n m → Expr n m   -- Record ? file      -> boolean
   ‵lambda _⇒_             : Label → Expr n m → Expr n m   
 
@@ -193,14 +192,6 @@ data _—→_ : ∀ { n m : ℕ} → Expr n m → Expr n m → Set where
 data Context : Set where
   ∅     : Context
   _,_⦂_ : Context → Id → Type → Context
-
-
-data Type : Set where
-  _⇒_ : Type → Type → Type
-  `ℕ : Type
-
-variable
-  A B C : Type
 
 
 
