@@ -18,3 +18,4 @@ ordered-float = { workspace = true }
 smol_str = { workspace = true }
 la-arena = { workspace = true }
 expect-test = { workspace = true }
+indexmap = { workspace = true }

@@ -1,6 +1,8 @@
+#![allow(unused)]
 use crate::{
     add_diag,
-    module::{Bindings, Expr, ExprData, NameId},
+    context::{Context, ContextType},
+    module::{Bindings, Expr, Name},
     parreaux::{constrain, freshen_above},
     types::{PolarVar, PolymorphicType, Ty, Var},
     Diagnostic, InferError,
@@ -9,77 +11,19 @@ use itertools::{Either, Itertools};
 use parser2::ast::BinOp;
 use std::collections::{HashMap, HashSet};
 
-pub type Scope = Vec<(NameId, ContextType)>;
-
-#[derive(Debug, Clone, PartialEq, Hash)]
-pub enum ContextType {
-    Type(Ty),
-    PolymorhicType(PolymorphicType),
-}
-
-impl ContextType {
-    fn instantiate(&self, context: &Context, lvl: usize) -> Ty {
-        match self {
-            ContextType::Type(ty) => ty.instantiate(),
-            ContextType::PolymorhicType(pty) => freshen_above(context, &pty.body, pty.level, lvl),
-        }
-    }
-
-    fn into_type(self) -> Option<Ty> {
-        match self {
-            ContextType::Type(ty) => Some(ty),
-            ContextType::PolymorhicType(_) => None,
-        }
-    }
-}
-
-/// Context to save variables and their types.
-#[derive(Debug)]
-#[salsa::tracked]
-pub struct Context<'a> {
-    pub bindings: Vec<Scope>,
-}
-
-impl<'a> Context<'a> {
-    /// Create a new scope and run a function with it.
-    pub(crate) fn with_scope<T>(
-        &self,
-        db: &dyn salsa::Database,
-        scope: Vec<(NameId, ContextType)>,
-        f: impl FnOnce(Vec<Scope>) -> T,
-    ) -> T {
-        // let mut new = self.bindings(db).clone();
-        // new.push(scope);
-        // f(new)
-        todo!()
-    }
-
-    /// Lookup a [Var] by it's name.
-    pub(crate) fn lookup(&self, db: &dyn salsa::Database, name: NameId) -> Option<ContextType> {
-        for scope in self.bindings(db).iter().rev() {
-            for (item_name, item) in scope.iter().rev() {
-                if *item_name == name {
-                    return Some(item.clone());
-                }
-            }
-        }
-        None
-    }
-}
-
 /// Infer the type of an expression.
 #[salsa::tracked]
 fn type_term<'a>(
     db: &'a dyn salsa::Database,
-    expr: Expr<'a>, // Should this be ExprId?
     ctx: Context<'a>,
+    expr: Expr<'a>,
     with: &'a [Ty],
     lvl: usize,
     count: usize,
 ) -> Option<Ty> {
     use Ty::*;
 
-    Ok(match expr.data(db) {
+    match expr.data(db) {
         ExprData::Reference(smol_str) => {
             let name = todo!();
             if let Some(var) = ctx.lookup(db, name) {
@@ -108,7 +52,8 @@ fn type_term<'a>(
 
             Err(InferError::UnknownIdentifier.span(span))
         }
-
+    }
+    /*
         ExprData::UnaryOp { rhs, .. } => type_term(ctx, rhs, lvl),
 
         ExprData::BinaryOp { op, lhs, rhs, span } => {
@@ -637,7 +582,8 @@ fn type_term<'a>(
         // Ast::Bool { .. } => Ok(Bool),
         // Ast::Int { .. } | Ast::Float { .. } => Ok(Number),
         // Ast::Comment(_) | Ast::DocComment(_) | Ast::LineComment(_) => unimplemented!(),
-    })
+    } )*/
+    todo!()
 }
 
 /// Load the bindings from an `inherit (x) arar` statement.
@@ -646,201 +592,103 @@ fn load_inherit<'db>(
     db: &'db dyn salsa::Database,
     ctx: Context<'db>,
     lvl: usize,
-    inherit: &[Inherit],
 ) -> Vec<(String, ContextType)> {
-    let (ok, err): (Vec<_>, Vec<_>) = inherit
-        .iter()
-        .map(|Inherit { name, items }| {
-            if let Some(expr) = name {
-                let ty = type_term(ctx, expr, lvl)?;
+    /*
+        let (ok, err): (Vec<_>, Vec<_>) = inherit
+            .iter()
+            .map(|Inherit { name, items }| {
+                if let Some(expr) = name {
+                    let ty = type_term(ctx, expr, lvl)?;
 
-                match &ty {
-                    ty @ Ty::Var(_) => {
-                        let vars = items
-                            .iter()
-                            .map(|(_span, name)| (name.to_string(), Ty::Var(ctx.fresh_var(lvl))))
-                            .collect_vec();
-                        let record = Ty::Record(vars.clone().into_iter().collect());
+                    match &ty {
+                        ty @ Ty::Var(_) => {
+                            let vars = items
+                                .iter()
+                                .map(|(_span, name)| (name.to_string(), Ty::Var(ctx.fresh_var(lvl))))
+                                .collect_vec();
+                            let record = Ty::Record(vars.clone().into_iter().collect());
 
-                        constrain(ctx, ty, &record).map_err(|e| e.span(expr.get_span()))?;
+                            constrain(ctx, ty, &record).map_err(|e| e.span(expr.get_span()))?;
 
-                        Ok(vars
-                            .into_iter()
-                            .map(|(name, ty)| (name, ContextType::Type(ty)))
-                            .collect())
-                    }
-                    Ty::Record(rc_items) => {
-                        let (ok, err): (Vec<_>, Vec<_>) = items
-                            .iter()
-                            .map(|(range, name)| {
-                                Ok((
-                                    name.to_string(),
-                                    ContextType::Type(
-                                        rc_items
-                                            .get(name)
-                                            .ok_or(
-                                                InferError::MissingRecordField {
-                                                    field: name.clone(),
-                                                }
-                                                .span(range),
-                                            )?
-                                            .clone(),
-                                    ),
-                                ))
-                            })
-                            .partition_map(|r| match r {
-                                Ok(ty) => Either::Left(ty),
-                                Err(e) => Either::Right(e),
-                            });
-                        if err.is_empty() {
-                            Ok(ok)
-                        } else {
-                            Err(SpannedError {
-                                error: InferError::MultipleErrors(err),
-                                span: span.clone(),
-                            })
+                            Ok(vars
+                                .into_iter()
+                                .map(|(name, ty)| (name, ContextType::Type(ty)))
+                                .collect())
                         }
+                        Ty::Record(rc_items) => {
+                            let (ok, err): (Vec<_>, Vec<_>) = items
+                                .iter()
+                                .map(|(range, name)| {
+                                    Ok((
+                                        name.to_string(),
+                                        ContextType::Type(
+                                            rc_items
+                                                .get(name)
+                                                .ok_or(
+                                                    InferError::MissingRecordField {
+                                                        field: name.clone(),
+                                                    }
+                                                    .span(range),
+                                                )?
+                                                .clone(),
+                                        ),
+                                    ))
+                                })
+                                .partition_map(|r| match r {
+                                    Ok(ty) => Either::Left(ty),
+                                    Err(e) => Either::Right(e),
+                                });
+                            if err.is_empty() {
+                                Ok(ok)
+                            } else {
+                                Err(SpannedError {
+                                    error: InferError::MultipleErrors(err),
+                                    span: span.clone(),
+                                })
+                            }
+                        }
+                        _ => Err(SpannedError {
+                            error: InferError::TypeMismatch {
+                                expected: TypeName::Record,
+                                found: ty.get_name(),
+                            },
+                            span: span.clone(),
+                        }),
                     }
-                    _ => Err(SpannedError {
-                        error: InferError::TypeMismatch {
-                            expected: TypeName::Record,
-                            found: ty.get_name(),
-                        },
-                        span: span.clone(),
-                    }),
+                } else {
+                    let (ok, err): (Vec<_>, Vec<_>) = items
+                        .iter()
+                        .map(|(range, name)| {
+                            Ok((
+                                name.to_string(),
+                                ctx.lookup(name)
+                                    .ok_or(InferError::UnknownIdentifier.span(range))?
+                                    .clone(),
+                            ))
+                        })
+                        .partition_map(|r| match r {
+                            Ok(v) => Either::Left(v),
+                            Err(v) => Either::Right(v),
+                        });
+
+                    if err.is_empty() {
+                        Ok(ok)
+                    } else {
+                        Err(SpannedError {
+                            error: InferError::MultipleErrors(err),
+                            span: span.clone(),
+                        })
+                    }
                 }
-            } else {
-                let (ok, err): (Vec<_>, Vec<_>) = items
-                    .iter()
-                    .map(|(range, name)| {
-                        Ok((
-                            name.to_string(),
-                            ctx.lookup(name)
-                                .ok_or(InferError::UnknownIdentifier.span(range))?
-                                .clone(),
-                        ))
-                    })
-                    .partition_map(|r| match r {
-                        Ok(v) => Either::Left(v),
-                        Err(v) => Either::Right(v),
-                    });
+            })
+            .partition_map(|r| match r {
+                Ok(v) => Either::Left(v),
+                Err(v) => Either::Right(v),
+            });
 
-                if err.is_empty() {
-                    Ok(ok)
-                } else {
-                    Err(SpannedError {
-                        error: InferError::MultipleErrors(err),
-                        span: span.clone(),
-                    })
-                }
-            }
-        })
-        .partition_map(|r| match r {
-            Ok(v) => Either::Left(v),
-            Err(v) => Either::Right(v),
-        });
-
-    ok.into_iter().flatten().collect()
-}
-
-pub fn coalesc_type(context: &Context, ty: &Ty) -> Ty {
-    coalesce_type_inner(context, ty, true, &mut HashMap::new(), HashSet::new())
-}
-
-fn coalesce_type_inner(
-    context: &Context,
-    ty: &Ty,
-    polarity: bool,
-    rec: &mut HashMap<PolarVar, Var>,
-    mut processing: HashSet<PolarVar>,
-) -> Ty {
-    match ty {
-        Ty::Number | Ty::Bool | Ty::String | Ty::Path | Ty::Null | Ty::Undefined => ty.clone(),
-        tyvar @ Ty::Var(var) => {
-            let pol_var = (var.clone(), polarity);
-            if processing.contains(&pol_var) {
-                return if let Some(var) = rec.get(&pol_var) {
-                    Ty::Var(var.clone())
-                } else {
-                    rec.insert(pol_var.clone(), context.fresh_var(0));
-                    tyvar.clone()
-                };
-            } else {
-                let bounds = if polarity {
-                    &var.lower_bounds
-                } else {
-                    &var.upper_bounds
-                };
-                processing.insert(pol_var.clone());
-                let bound_types = bounds
-                    .borrow()
-                    .iter()
-                    .map(|t| coalesce_type_inner(context, t, polarity, rec, processing.clone()))
-                    .collect_vec();
-                let res = if polarity {
-                    bound_types
-                        .into_iter()
-                        .fold(tyvar.clone(), |a, b| Ty::Union(Box::new(a), Box::new(b)))
-                } else {
-                    bound_types
-                        .into_iter()
-                        .fold(tyvar.clone(), |a, b| Ty::Inter(Box::new(a), Box::new(b)))
-                };
-                if let Some(rec) = rec.get(&pol_var) {
-                    Ty::Recursive(rec.clone(), Box::new(res))
-                } else {
-                    res
-                }
-            }
-        }
-        Ty::Function(l, r) => Ty::Function(
-            Box::new(coalesce_type_inner(
-                context,
-                l,
-                !polarity,
-                rec,
-                processing.clone(),
-            )),
-            Box::new(coalesce_type_inner(context, r, polarity, rec, processing)),
-        ),
-        Ty::List(l) => Ty::List(
-            l.iter()
-                .map(|t| coalesce_type_inner(context, t, polarity, rec, processing.clone()))
-                .collect(),
-        ),
-        Ty::Record(r) => Ty::Record(
-            r.iter()
-                .map(|(n, t)| {
-                    (
-                        n.clone(),
-                        coalesce_type_inner(context, t, polarity, rec, processing.clone()),
-                    )
-                })
-                .collect(),
-        ),
-        Ty::Optional(o) => Ty::Optional(Box::new(coalesce_type_inner(
-            context, o, polarity, rec, processing,
-        ))),
-
-        Ty::Union(u1, u2) => {
-            let u1 = coalesce_type_inner(context, u1, polarity, rec, processing.clone());
-            let u2 = coalesce_type_inner(context, u2, polarity, rec, processing);
-            Ty::Union(Box::new(u1), Box::new(u2))
-        }
-
-        Ty::Pattern(elem, widcart) => {
-            let mut elem = elem.clone();
-            for (_, (ty, opt)) in elem.iter_mut() {
-                *ty = coalesce_type_inner(context, ty, !polarity, rec, processing.clone());
-                if let Some(opt) = opt {
-                    *opt = coalesce_type_inner(context, opt, polarity, rec, processing.clone());
-                }
-            }
-            Ty::Pattern(elem, *widcart)
-        }
-
-        Ty::Top | Ty::Bottom | Ty::Inter(_, _) | Ty::Recursive(_, _) => unreachable!(),
-    }
+        ok.into_iter().flatten().collect()
+    */
+    todo!()
 }
 
 /// Infer the type of an expression.
@@ -848,5 +696,6 @@ fn coalesce_type_inner(
 #[salsa::tracked]
 pub fn infer<'db>(db: &'db dyn salsa::Database, expr: Expr<'db>) -> Vec<Diagnostic> {
     let mut context = Context::new(db, vec![]);
-    type_term(db, expr, context, vec![], 0, 0);
+    type_term(db, expr, context, &vec![], 0, 0);
+    todo!()
 }

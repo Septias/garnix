@@ -2,7 +2,7 @@ use salsa::{Accumulator, Update};
 use thiserror::Error;
 
 use crate::{
-    module::ExprId,
+    module::Expr,
     types::{Ty, TypeName},
 };
 
@@ -10,16 +10,40 @@ use crate::{
 #[derive(Clone, Debug, Update, PartialEq)]
 #[salsa::accumulator]
 pub struct Diagnostic {
-    pub expr: ExprId,
+    // pub expr: AstP,
     pub error: InferError,
 }
 
 impl Diagnostic {
-    pub fn new(expr: ExprId, error: InferError) -> Self {
+    pub fn new(expr: Expr, error: InferError) -> Self {
         Diagnostic { expr, error }
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DiagnosticKind {
+    // Syntax.
+    // SyntaxError(SynErrorKind),
+
+    // Lowering.
+    InvalidDynamic,
+    DuplicatedKey,
+    DuplicatedParam,
+    EmptyInherit,
+    EmptyLetIn,
+    LetAttrset,
+    UriLiteral,
+    MergePlainRecAttrset,
+    MergeRecAttrset,
+
+    // Name resolution.
+    UndefinedName,
+
+    // Liveness.
+    UnusedBinding,
+    UnusedWith,
+    UnusedRec,
+}
 /// An error that occured during type inference.
 #[derive(Debug, Clone, Error, Update)]
 pub enum InferError {
@@ -82,7 +106,7 @@ pub(crate) fn type_mismatch<T>(expected: TypeName, found: TypeName) -> InferResu
 }
 
 /// Add diagnostic to the accumulator.
-pub(crate) fn add_diag(db: &dyn salsa::Database, expr: ExprId, error: InferError) {
+pub(crate) fn add_diag(db: &dyn salsa::Database, expr: Expr, error: InferError) {
     Diagnostic::new(expr, error).accumulate(db);
 }
 

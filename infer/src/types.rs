@@ -11,29 +11,16 @@ use strum_macros::{AsRefStr, Display, EnumDiscriminants};
 /// A forall-quantified variable.
 /// This variable has lower and upper bounds on types.
 /// TODO: should this be tracked?
-#[derive(Debug, Clone, PartialEq, Default)]
-pub struct Var {
+#[salsa::tracked]
+#[derive(Debug)]
+pub struct Var<'db> {
     pub level: usize,
     pub id: usize,
-    pub lower_bounds: Arc<Mutex<Vec<Ty>>>,
-    pub upper_bounds: Arc<Mutex<Vec<Ty>>>,
+    // pub lower_bounds: &'db [Ty],
+    // pub upper_bounds: Arc<Mutex<Vec<Ty>>>,
 }
 
-impl std::hash::Hash for Var {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.id.hash(state);
-    }
-}
-
-impl Var {
-    pub fn new(level: usize, id: usize) -> Self {
-        Self {
-            level,
-            id,
-            ..Default::default()
-        }
-    }
-
+impl<'db> Var<'db> {
     pub fn as_record(&self) -> Option<HashMap<String, Ty>> {
         let up = self.upper_bounds.borrow();
         if up.len() == 1 {
@@ -61,10 +48,11 @@ impl Var {
 
 /// A polar variable.
 /// These variables can either be positive or negative, based on their position in functions (argument or return type).
-pub type PolarVar<'a> = (Var, bool);
+pub type PolarVar<'a> = (TyVar, bool);
+type TyVar = u32;
 
 /// A nix language type.
-#[derive(Debug, Clone, PartialEq, Display, EnumDiscriminants, AsRefStr)]
+#[derive(Debug, Clone, PartialEq, Eq, Display, EnumDiscriminants, AsRefStr, salsa::Update)]
 #[strum_discriminants(derive(AsRefStr, Display))]
 #[strum_discriminants(name(TypeName))]
 pub enum Ty {
@@ -78,7 +66,7 @@ pub enum Ty {
     Null,
     Undefined,
 
-    Var(Var),
+    Var(TyVar),
     Function(Box<Ty>, Box<Ty>),
     List(Vec<Ty>),
     Record(HashMap<String, Ty>),
@@ -88,7 +76,7 @@ pub enum Ty {
     // Complex Types only created by simplification
     Union(Box<Ty>, Box<Ty>),
     Inter(Box<Ty>, Box<Ty>),
-    Recursive(Var, Box<Ty>),
+    Recursive(TyVar, Box<Ty>),
 }
 
 impl std::hash::Hash for Ty {
