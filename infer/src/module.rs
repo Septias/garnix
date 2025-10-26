@@ -1,4 +1,5 @@
 //! Syntax definitions of nix.
+use la_arena::Arena;
 use ordered_float::OrderedFloat;
 use std::{collections::HashMap, ops};
 
@@ -9,15 +10,11 @@ pub(crate) struct File {
     pub content: String,
 }
 
-/// A module => a nix file.
-/// Basically a container of exprs and names.
-
-#[salsa::tracked]
 #[derive(Debug)]
 pub struct Module<'db> {
-    exprs: &'db [Expr<'db>],
-    // names: &'db [Name<'db>],
-    // entry_expr: Expr<'db>,
+    exprs: Arena<Expr<'db>>,
+    names: Arena<Name<'db>>,
+    entry_expr: Expr<'db>,
 }
 
 // impl<'db> ops::Index<Expr<'db>> for Module<'db> {
@@ -45,9 +42,9 @@ pub struct NameReference<'db> {
 
 /// Module Source Map
 /// This map bridges between the lowered [Expr] and syntaxtree ([AstPtr]).
-#[salsa::tracked]
+#[derive(salsa::Update)]
 pub struct ModuleSourceMap<'db> {
-    // expr_map: HashMap<AstPtr, Expr<'db>>,
+    expr_map: HashMap<bool, Expr<'db>>,
     // expr_map_rev: HashMap<Expr<'db>, AstPtr>,
     // name_map: HashMap<AstPtr, Name<'db>>,
     // name_map_rev: HashMap<Name<'db>, Vec<AstPtr>>,
@@ -85,27 +82,27 @@ pub struct ModuleSourceMap<'db> {
 
 #[salsa::tracked]
 #[derive(Debug)]
-struct Apply<'db> {
+pub(crate) struct Apply<'db> {
     fun: Expr<'db>,
     arg: Expr<'db>,
 }
 
 #[salsa::tracked]
 #[derive(Debug)]
-struct Assert<'db> {
+pub(crate) struct Assert<'db> {
     condition: Expr<'db>,
     body: Expr<'db>,
 }
 
 #[salsa::tracked]
 #[derive(Debug)]
-struct AttrSet<'db> {
+pub(crate) struct AttrSet<'db> {
     bindings: Bindings<'db>,
 }
 
 #[salsa::tracked]
 #[derive(Debug)]
-struct Binary<'db> {
+pub(crate) struct Binary<'db> {
     op: Option<BinOp>,
     left: Expr<'db>,
     right: Expr<'db>,
@@ -113,7 +110,7 @@ struct Binary<'db> {
 
 #[salsa::tracked]
 #[derive(Debug)]
-struct Conditional<'db> {
+pub(crate) struct Conditional<'db> {
     condition: Expr<'db>,
     then_branch: Expr<'db>,
     else_branch: Expr<'db>,
@@ -121,14 +118,14 @@ struct Conditional<'db> {
 
 #[salsa::tracked]
 #[derive(Debug)]
-struct HasAttr<'db> {
+pub(crate) struct HasAttr<'db> {
     expr: Expr<'db>,
     attrpath: Attrpath<'db>,
 }
 
 #[salsa::tracked]
 #[derive(Debug)]
-struct Lambda<'db> {
+pub(crate) struct Lambda<'db> {
     name: Option<Name<'db>>,
     pattern: Option<Pattern<'db>>,
     body: Expr<'db>,
@@ -136,38 +133,38 @@ struct Lambda<'db> {
 
 #[salsa::tracked]
 #[derive(Debug)]
-struct LetAttrset<'db> {
+pub(crate) struct LetAttrset<'db> {
     bindings: Bindings<'db>,
 }
 
 #[salsa::tracked]
 #[derive(Debug)]
-struct LetIn<'db> {
+pub(crate) struct LetIn<'db> {
     bindings: Bindings<'db>,
     body: Expr<'db>,
 }
 
 #[salsa::tracked]
 #[derive(Debug)]
-struct List<'db> {
+pub(crate) struct List<'db> {
     items: Box<[Expr<'db>]>,
 }
 
 #[salsa::tracked]
 #[derive(Debug)]
-struct PathInterpolation<'db> {
+pub(crate) struct PathInterpolation<'db> {
     parts: Box<[Expr<'db>]>,
 }
 
 #[salsa::tracked]
 #[derive(Debug)]
-struct RecAttrset<'db> {
+pub(crate) struct RecAttrset<'db> {
     bindings: Bindings<'db>,
 }
 
 #[salsa::tracked]
 #[derive(Debug)]
-struct Select<'db> {
+pub(crate) struct Select<'db> {
     expr: Expr<'db>,
     attrpath: Attrpath<'db>,
     default: Option<Expr<'db>>,
@@ -175,20 +172,20 @@ struct Select<'db> {
 
 #[salsa::tracked]
 #[derive(Debug)]
-struct StringInterpolation<'db> {
+pub(crate) struct StringInterpolation<'db> {
     parts: Box<[Expr<'db>]>,
 }
 
 #[salsa::tracked]
 #[derive(Debug)]
-struct With<'db> {
+pub(crate) struct With<'db> {
     namespace: Expr<'db>,
     body: Expr<'db>,
 }
 
 #[salsa::tracked]
 #[derive(Debug)]
-struct Unary<'db> {
+pub(crate) struct Unary<'db> {
     op: Option<UnOp>,
     operand: Expr<'db>,
 }
@@ -197,24 +194,24 @@ struct Unary<'db> {
 pub enum Expr<'db> {
     Apply(Apply<'db>),
     Assert(Assert<'db>),
-    // AttrSet(AttrSet<'db>),
-    // Binary(Binary<'db>),
-    // Conditional(Conditional<'db>),
+    AttrSet(AttrSet<'db>),
+    Binary(Binary<'db>),
+    Conditional(Conditional<'db>),
     // // CurPos,
-    // HasAttr(HasAttr<'db>),
-    // Lambda(Lambda<'db>),
-    // LetAttrset(LetAttrset<'db>),
-    // LetIn(LetIn<'db>),
-    // List(List<'db>),
+    HasAttr(HasAttr<'db>),
+    Lambda(Lambda<'db>),
+    LetAttrset(LetAttrset<'db>),
+    LetIn(LetIn<'db>),
+    List(List<'db>),
     // // Literal(Literal),
     // // Missing,
-    // PathInterpolation(PathInterpolation<'db>),
-    // RecAttrset(RecAttrset<'db>),
+    PathInterpolation(PathInterpolation<'db>),
+    RecAttrset(RecAttrset<'db>),
     // // Reference(SmolStr),
-    // Select(Select<'db>),
-    // StringInterpolation(StringInterpolation<'db>),
-    // With(With<'db>),
-    // Unary(Unary<'db>),
+    Select(Select<'db>),
+    StringInterpolation(StringInterpolation<'db>),
+    With(With<'db>),
+    Unary(Unary<'db>),
 }
 
 #[salsa::tracked]
