@@ -11,13 +11,12 @@ use strum_macros::{AsRefStr, Display, EnumDiscriminants};
 /// A forall-quantified variable.
 /// This variable has lower and upper bounds on types.
 /// TODO: should this be tracked?
-#[salsa::tracked]
 #[derive(Debug)]
 pub struct Var<'db> {
     pub level: usize,
     pub id: usize,
-    // pub lower_bounds: &'db [Ty],
-    // pub upper_bounds: Arc<Mutex<Vec<Ty>>>,
+    pub lower_bounds: Vec<Ty>,
+    pub upper_bounds: Arc<Mutex<Vec<Ty>>>,
 }
 
 impl<'db> Var<'db> {

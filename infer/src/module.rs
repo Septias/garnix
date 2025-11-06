@@ -5,11 +5,6 @@ use std::{collections::HashMap, ops};
 
 pub type AstPtr = parser2::SyntaxNodePtr;
 
-#[salsa::input]
-pub(crate) struct File {
-    pub content: String,
-}
-
 #[derive(Debug)]
 pub struct Module<'db> {
     exprs: Arena<Expr<'db>>,
@@ -42,12 +37,11 @@ pub struct NameReference<'db> {
 
 /// Module Source Map
 /// This map bridges between the lowered [Expr] and syntaxtree ([AstPtr]).
-#[derive(salsa::Update)]
 pub struct ModuleSourceMap<'db> {
     expr_map: HashMap<bool, Expr<'db>>,
-    // expr_map_rev: HashMap<Expr<'db>, AstPtr>,
-    // name_map: HashMap<AstPtr, Name<'db>>,
-    // name_map_rev: HashMap<Name<'db>, Vec<AstPtr>>,
+    expr_map_rev: HashMap<Expr<'db>, AstPtr>,
+    name_map: HashMap<AstPtr, Name<'db>>,
+    name_map_rev: HashMap<Name<'db>, Vec<AstPtr>>,
 }
 
 // impl<'db> ModuleSourceMap<'db> {
@@ -83,8 +77,8 @@ pub struct ModuleSourceMap<'db> {
 #[salsa::tracked]
 #[derive(Debug)]
 pub(crate) struct Apply<'db> {
-    fun: Expr<'db>,
-    arg: Expr<'db>,
+    pub(crate) fun: Expr<'db>,
+    pub(crate) arg: Expr<'db>,
 }
 
 #[salsa::tracked]

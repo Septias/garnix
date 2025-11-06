@@ -1,21 +1,86 @@
 #![allow(unused)]
 use crate::{
     add_diag,
-    context::{Context, ContextType},
-    module::{Bindings, Expr, Name},
+    module::{Apply, Bindings, Expr, Name},
     parreaux::{constrain, freshen_above},
     types::{PolarVar, PolymorphicType, Ty, Var},
     Diagnostic, InferError,
 };
 use itertools::{Either, Itertools};
 use parser2::ast::BinOp;
+use salsa::Database;
 use std::collections::{HashMap, HashSet};
+
+pub type Scope<'a> = Vec<(Name<'a>, ContextType)>;
+
+#[derive(Debug, Clone, PartialEq, Hash)]
+pub enum ContextType {
+    Type(Ty),
+    PolymorhicType(PolymorphicType),
+}
+
+impl ContextType {
+    fn instantiate(&self, context: &Context, lvl: usize) -> Ty {
+        match self {
+            ContextType::Type(ty) => ty.instantiate(),
+            ContextType::PolymorhicType(pty) => freshen_above(context, &pty.body, pty.level, lvl),
+        }
+    }
+
+    fn into_type(self) -> Option<Ty> {
+        match self {
+            ContextType::Type(ty) => Some(ty),
+            ContextType::PolymorhicType(_) => None,
+        }
+    }
+}
+
+/// Context to save variables and their types.
+#[derive(Debug)]
+pub struct Context<'a> {
+    pub bindings: Vec<Scope<'a>>,
+    pub with: Vec<Ty>,
+}
+
+impl<'a> Context<'a> {
+    fn type_term(self, expr: Expr<'a>) {
+        match expr {
+            Expr::Apply(apply) => self.type_application(apply),
+            Expr::Assert(assert) => todo!(),
+            Expr::AttrSet(attr_set) => todo!(),
+            Expr::Binary(binary) => todo!(),
+            Expr::Conditional(conditional) => todo!(),
+            Expr::HasAttr(has_attr) => todo!(),
+            Expr::Lambda(lambda) => todo!(),
+            Expr::LetAttrset(let_attrset) => todo!(),
+            Expr::LetIn(let_in) => todo!(),
+            Expr::List(list) => todo!(),
+            Expr::PathInterpolation(path_interpolation) => todo!(),
+            Expr::RecAttrset(rec_attrset) => todo!(),
+            Expr::Select(select) => todo!(),
+            Expr::StringInterpolation(string_interpolation) => todo!(),
+            Expr::With(with) => todo!(),
+            Expr::Unary(unary) => todo!(),
+        }
+    }
+
+    fn type_application(&self, db: &dyn Database, apply: Apply, lvl: u32) {
+        let res = Ty::Var(self.fresh_var(lvl));
+        let ty1 = apply.fun(db);
+        let ty2 = apply.arg(db);
+        constrain(&ty1, &Ty::Function(Box::new(ty2), Box::new(res.clone())))
+            .map_err(|e| e.span(lhs.get_span()))?;
+    }
+
+    fn fresh_var(&self, lvl: u32) -> u32 {
+        todo!()
+    }
+}
 
 /// Infer the type of an expression.
 #[salsa::tracked]
 fn type_term<'a>(
     db: &'a dyn salsa::Database,
-    ctx: Context<'a>,
     expr: Expr<'a>,
     with: &'a [Ty],
     lvl: usize,
@@ -23,36 +88,36 @@ fn type_term<'a>(
 ) -> Option<Ty> {
     use Ty::*;
 
-    match expr.data(db) {
-        ExprData::Reference(smol_str) => {
-            let name = todo!();
-            if let Some(var) = ctx.lookup(db, name) {
-                return Ok(var.instantiate(&ctx, lvl));
-            }
+    // match expr.data(db) {
+    //     ExprData::Reference(smol_str) => {
+    //         let name = todo!();
+    //         if let Some(var) = ctx.lookup(db, name) {
+    //             return Ok(var.instantiate(&ctx, lvl));
+    //         }
 
-            // Handle with-statement which could be used to supply vars
-            if let Some(with) = with {
-                if let ty @ Ty::Var(var) = with {
-                    if let Some(rec) = var.as_record() {
-                        if let Some(ty) = rec.get(name).cloned() {
-                            return Ok(ty);
-                        }
-                    } else {
-                        let res = Ty::Var(ctx.fresh_var(lvl));
-                        constrain(
-                            ctx,
-                            ty,
-                            &Ty::Record([(name.to_string(), res.clone())].into()),
-                        )
-                        .map_err(|e| e.span(span))?;
-                        return Ok(res);
-                    }
-                }
-            }
+    //         // Handle with-statement which could be used to supply vars
+    //         if let Some(with) = with {
+    //             if let ty @ Ty::Var(var) = with {
+    //                 if let Some(rec) = var.as_record() {
+    //                     if let Some(ty) = rec.get(name).cloned() {
+    //                         return Ok(ty);
+    //                     }
+    //                 } else {
+    //                     let res = Ty::Var(ctx.fresh_var(lvl));
+    //                     constrain(
+    //                         ctx,
+    //                         ty,
+    //                         &Ty::Record([(name.to_string(), res.clone())].into()),
+    //                     )
+    //                     .map_err(|e| e.span(span))?;
+    //                     return Ok(res);
+    //                 }
+    //             }
+    //         }
 
-            Err(InferError::UnknownIdentifier.span(span))
-        }
-    }
+    //         Err(InferError::UnknownIdentifier.span(span))
+    //     }
+    // }
     /*
         ExprData::UnaryOp { rhs, .. } => type_term(ctx, rhs, lvl),
 
@@ -691,11 +756,109 @@ fn load_inherit<'db>(
     todo!()
 }
 
+/* fn coalesce_type_inner(
+    context: &Context,
+    ty: &Ty,
+    polarity: bool,
+    rec: &mut HashMap<PolarVar, Var>,
+    mut processing: HashSet<PolarVar>,
+) -> Ty {
+    match ty {
+        Ty::Number | Ty::Bool | Ty::String | Ty::Path | Ty::Null | Ty::Undefined => {
+            ty.clone()
+        }
+        tyvar @ Ty::Var(var) => {
+            let pol_var = (var.clone(), polarity);
+            if processing.contains(&pol_var) {
+                return if let Some(var) = rec.get(&pol_var) {
+                    Ty::Var(var.clone())
+                } else {
+                    rec.insert(pol_var.clone(), context.fresh_var(0));
+                    tyvar.clone()
+                };
+            } else {
+                let bounds = if polarity {
+                    &var.lower_bounds
+                } else {
+                    &var.upper_bounds
+                };
+                processing.insert(pol_var.clone());
+                let bound_types = bounds
+                    .borrow()
+                    .iter()
+                    .map(|t| coalesce_type_inner(context, t, polarity, rec, processing.clone()))
+                    .collect_vec();
+                let res = if polarity {
+                    bound_types
+                        .into_iter()
+                        .fold(tyvar.clone(), |a, b| Ty::Union(Box::new(a), Box::new(b)))
+                } else {
+                    bound_types
+                        .into_iter()
+                        .fold(tyvar.clone(), |a, b| Ty::Inter(Box::new(a), Box::new(b)))
+                };
+                if let Some(rec) = rec.get(&pol_var) {
+                    Ty::Recursive(rec.clone(), Box::new(res))
+                } else {
+                    res
+                }
+            }
+        }
+        Ty::Function(l, r) => Ty::Function(
+            Box::new(coalesce_type_inner(
+                context,
+                l,
+                !polarity,
+                rec,
+                processing.clone(),
+            )),
+            Box::new(coalesce_type_inner(context, r, polarity, rec, processing)),
+        ),
+        Ty::List(l) => Ty::List(
+            l.iter()
+                .map(|t| coalesce_type_inner(context, t, polarity, rec, processing.clone()))
+                .collect(),
+        ),
+        Ty::Record(r) => Ty::Record(
+            r.iter()
+                .map(|(n, t)| {
+                    (
+                        n.clone(),
+                        coalesce_type_inner(context, t, polarity, rec, processing.clone()),
+                    )
+                })
+                .collect(),
+        ),
+        Ty::Optional(o) => Ty::Optional(Box::new(coalesce_type_inner(
+            context, o, polarity, rec, processing,
+        ))),
+
+        Ty::Union(u1, u2) => {
+            let u1 = coalesce_type_inner(context, u1, polarity, rec, processing.clone());
+            let u2 = coalesce_type_inner(context, u2, polarity, rec, processing);
+            Ty::Union(Box::new(u1), Box::new(u2))
+        }
+
+        Ty::Pattern(elem, widcart) => {
+            let mut elem = elem.clone();
+            for (_, (ty, opt)) in elem.iter_mut() {
+                *ty = coalesce_type_inner(context, ty, !polarity, rec, processing.clone());
+                if let Some(opt) = opt {
+                    *opt = coalesce_type_inner(context, opt, polarity, rec, processing.clone());
+                }
+            }
+            Ty::Pattern(elem, *widcart)
+        }
+
+        Ty::Top | Ty::Bottom | Ty::Inter(_, _) | Ty::Recursive(_, _) => unreachable!(),
+    }
+} */
+
 /// Infer the type of an expression.
 /// Insert constraints for all [Identifier]s on the way.
 #[salsa::tracked]
 pub fn infer<'db>(db: &'db dyn salsa::Database, expr: Expr<'db>) -> Vec<Diagnostic> {
-    let mut context = Context::new(db, vec![]);
-    type_term(db, expr, context, &vec![], 0, 0);
+    let mut context = todo!();
+    type_term(db, context, expr, &vec![], 0, 0);
     todo!()
 }

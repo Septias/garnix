@@ -17,12 +17,8 @@ use std::collections::HashMap;
 /// <https://docs.lix.systems/manual/lix/stable/language/constructs.html#keywords-__curPos>
 const KW_CUR_POS: &str = "__curPos";
 
-#[salsa::tracked]
-pub(super) fn lower<'db>(
-    db: &'db dyn Database,
-    file: File,
-    parse: Parse,
-) -> (Module<'db>, ModuleSourceMap<'db>) {
+pub(super) fn lower<'db>(db: &'db dyn Database, file: File, parse: Parse) -> () {
+    //(Module<'db>, ModuleSourceMap<'db>) {
     // let mut ctx = LowerCtx {
     //     db,
     //     file,

@@ -1,161 +1,170 @@
-//! Everything related to parreax' type inference algorithm.
+#![allow(unused)]
+// //! Everything related to parreax' type inference algorithm.
 
 use std::collections::{HashMap, HashSet};
 
+use salsa::{Accumulator, Database};
+
 use crate::{
     context::Context,
+    error::{Diagnostic, InferError},
     module::Expr,
     types::{PolarVar, Ty, Var},
     InferResult,
 };
 
-// pub fn constrain(context: &Context, lhs: &(Ty, Expr), rhs: &(Ty, Expr)) {
-//     constrain_inner(context, lhs, rhs, &mut HashSet::new())
-// }
+impl<'a> Context<'a> {
+    pub fn constrain(&self, db: &dyn Database, lhs: Ty, rhs: Ty) {
+        self.constrain_inner(db, lhs, rhs, &mut HashSet::new())
+    }
 
-// fn constrain_inner<'a>(
-//     context: &Context,
-//     lhs: &'a (Ty, Expr),
-//     rhs: &'a (Ty, Expr),
-//     cache: &mut HashSet<(Ty, Ty)>,
-// ) {
-//     let (lhs, lexpr) = lhs;
-//     let (rhs, rexpr) = rhs;
+    fn constrain_inner(&self, db: &dyn Database, lhs: Ty, rhs: Ty, cache: &mut HashSet<(Ty, Ty)>) {
+        if lhs == rhs {
+            return;
+        }
+        let lhs_rhs = (lhs.clone(), rhs.clone());
 
-//     if lhs == rhs {
-//         return;
-//     }
-//     let lhs_rhs = (lhs.clone(), rhs.clone());
+        match (lhs, rhs) {
+            (Ty::Var(..), _) | (_, Ty::Var(..)) => {
+                if cache.contains(&lhs_rhs) {
+                    return;
+                }
+                cache.insert(lhs_rhs.clone());
+            }
+            _ => (),
+        }
 
-//     match (lhs, rhs) {
-//         (Ty::Var(..), _) | (_, Ty::Var(..)) => {
-//             if cache.contains(&lhs_rhs) {
-//                 return;
-//             }
-//             cache.insert(lhs_rhs.clone());
-//         }
-//         _ => (),
-//     }
+        match (lhs, rhs) {
+            (Ty::Bool, Ty::Bool)
+            | (Ty::Number, Ty::Number)
+            | (Ty::String, Ty::String)
+            | (Ty::Path, Ty::Path)
+            | (Ty::Null, Ty::Null)
+            | (Ty::Undefined, _) => (),
 
-//     match (lhs, rhs) {
-//         (Ty::Bool, Ty::Bool)
-//         | (Ty::Number, Ty::Number)
-//         | (Ty::String, Ty::String)
-//         | (Ty::Path, Ty::Path)
-//         | (Ty::Null, Ty::Null)
-//         | (Ty::Undefined, _) => (),
+            (Ty::Function(l0, r0), Ty::Function(l1, r1)) => {
+                self.constrain_inner(db, *l1, *l0, cache);
+                self.constrain_inner(db, *r0, *r1, cache);
+            }
 
-//         (Ty::Function(l0, r0), Ty::Function(l1, r1)) => {
-//             constrain_inner(context, l1, l0, cache);
-//             constrain_inner(context, r0, r1, cache);
-//         }
+            (Ty::Record(fs0), Ty::Record(fs1)) => {
+                for (n1, t1) in fs1 {
+                    match fs0.iter().find(|(n0, _)| **n0 == n1) {
+                        Some((_, t0)) => self.constrain_inner(db, t0, t1, cache)?,
+                        None => {
+                            Diagnostic::new(
+                                expr,
+                                InferError::MissingRecordField { field: n1.clone() },
+                            )
+                            .accumulate(db);
+                        }
+                    }
+                }
+            }
 
-//         (Ty::Record(fs0), Ty::Record(fs1)) => {
-//             for (n1, t1) in fs1 {
-//                 match fs0.iter().find(|(n0, _)| *n0 == n1) {
-//                     Some((_, t0)) => constrain_inner(context, t0, t1, cache)?,
-//                     None => return Err(InferError::MissingRecordField { field: n1.clone() }),
-//                 }
-//             }
-//         }
+            // (Ty::Record(rcd), Ty::Pattern(pat, wildcart)) => {
+            //     if *wildcart {
+            //         for (pat, (t1, optional)) in pat.iter() {
+            //             match rcd.iter().find(|(n0, _)| *n0 == pat) {
+            //                 Some((_, t0)) => constrain_inner(context, t0, t1, cache)?,
+            //                 None => {
+            //                     if optional.is_none() {
+            //                         return Err(InferError::MissingRecordField {
+            //                             field: pat.clone(),
+            //                         });
+            //                     }
+            //                 }
+            //             }
+            //         }
+            //     } else {
+            //         let mut keys = rcd.iter().map(|(n, _)| n).collect::<HashSet<_>>();
+            //         for (n1, (t1, optional)) in pat.iter() {
+            //             match rcd.iter().find(|(n0, _)| *n0 == n1) {
+            //                 Some((_, t0)) => {
+            //                     if let Some(opt) = optional {
+            //                         constrain_inner(context, t0, opt, cache)?;
+            //                     }
+            //                     constrain_inner(context, t0, t1, cache)?;
+            //                     keys.remove(n1);
+            //                 }
+            //                 None => {
+            //                     if optional.is_none() {
+            //                         return Err(InferError::MissingRecordField {
+            //                             field: n1.clone(),
+            //                         });
+            //                     }
+            //                 }
+            //             }
+            //         }
+            //         if !keys.is_empty() {
+            //             return Err(InferError::TooManyField {
+            //                 field: keys.into_iter().next().unwrap().clone(),
+            //             });
+            //         }
+            //     }
+            // }
 
-//         (Ty::Record(rcd), Ty::Pattern(pat, wildcart)) => {
-//             if *wildcart {
-//                 for (pat, (t1, optional)) in pat.iter() {
-//                     match rcd.iter().find(|(n0, _)| *n0 == pat) {
-//                         Some((_, t0)) => constrain_inner(context, t0, t1, cache)?,
-//                         None => {
-//                             if optional.is_none() {
-//                                 return Err(InferError::MissingRecordField { field: pat.clone() });
-//                             }
-//                         }
-//                     }
-//                 }
-//             } else {
-//                 let mut keys = rcd.iter().map(|(n, _)| n).collect::<HashSet<_>>();
-//                 for (n1, (t1, optional)) in pat.iter() {
-//                     match rcd.iter().find(|(n0, _)| *n0 == n1) {
-//                         Some((_, t0)) => {
-//                             if let Some(opt) = optional {
-//                                 constrain_inner(context, t0, opt, cache)?;
-//                             }
-//                             constrain_inner(context, t0, t1, cache)?;
-//                             keys.remove(n1);
-//                         }
-//                         None => {
-//                             if optional.is_none() {
-//                                 return Err(InferError::MissingRecordField { field: n1.clone() });
-//                             }
-//                         }
-//                     }
-//                 }
-//                 if !keys.is_empty() {
-//                     return Err(InferError::TooManyField {
-//                         field: keys.into_iter().next().unwrap().clone(),
-//                     });
-//                 }
-//             }
-//         }
+            // (Ty::Optional(o1), Ty::Optional(o0)) => {
+            //     constrain_inner(context, o0, o1, cache)?;
+            // }
 
-//         (Ty::Optional(o1), Ty::Optional(o0)) => {
-//             constrain_inner(context, o0, o1, cache)?;
-//         }
+            // (Ty::List(ls1), Ty::List(ls2)) if ls1.len() == 1 && ls2.len() == 1 => {
+            //     constrain_inner(context, &ls1[0], &ls2[0], cache)?;
+            // }
 
-//         (Ty::List(ls1), Ty::List(ls2)) if ls1.len() == 1 && ls2.len() == 1 => {
-//             constrain_inner(context, &ls1[0], &ls2[0], cache)?;
-//         }
+            // // application
+            // // function constraints
+            // // selection
+            // (Ty::Var(lhs), rhs) if rhs.level() <= lhs.level => {
+            //     lhs.upper_bounds.borrow_mut().push(rhs.clone());
+            //     for lower_bound in lhs.lower_bounds.borrow().iter() {
+            //         constrain_inner(context, lower_bound, rhs, cache)?;
+            //     }
+            // }
 
-//         // application
-//         // function constraints
-//         // selection
-//         (Ty::Var(lhs), rhs) if rhs.level() <= lhs.level => {
-//             lhs.upper_bounds.borrow_mut().push(rhs.clone());
-//             for lower_bound in lhs.lower_bounds.borrow().iter() {
-//                 constrain_inner(context, lower_bound, rhs, cache)?;
-//             }
-//         }
+            // (Ty::Pattern(pat, _), rhs @ Ty::Var(_)) => {
+            //     constrain_inner(
+            //         context,
+            //         &Ty::Record(
+            //             pat.clone()
+            //                 .into_iter()
+            //                 .map(|(name, (_ty, opt))| (name, opt.unwrap_or(Ty::Undefined)))
+            //                 .collect(),
+            //         ),
+            //         rhs,
+            //         cache,
+            //     )?;
+            // }
 
-//         (Ty::Pattern(pat, _), rhs @ Ty::Var(_)) => {
-//             constrain_inner(
-//                 context,
-//                 &Ty::Record(
-//                     pat.clone()
-//                         .into_iter()
-//                         .map(|(name, (_ty, opt))| (name, opt.unwrap_or(Ty::Undefined)))
-//                         .collect(),
-//                 ),
-//                 rhs,
-//                 cache,
-//             )?;
-//         }
-
-//         // let-binding
-//         // record typing
-//         (lhs, Ty::Var(rhs)) if lhs.level() <= rhs.level => {
-//             rhs.lower_bounds.borrow_mut().push(lhs.clone());
-//             for upper_bound in rhs.upper_bounds.borrow().iter() {
-//                 constrain_inner(context, lhs, upper_bound, cache)?;
-//             }
-//         }
-//         (Ty::Var(_), rhs) => {
-//             let rhs_extruded = extrude(context, rhs, false, lhs.level(), &mut HashMap::new());
-//             constrain_inner(context, lhs, &rhs_extruded, cache)?;
-//         }
-//         (lhs, Ty::Var(_)) => {
-//             let lhs_extruded = extrude(context, lhs, true, rhs.level(), &mut HashMap::new());
-//             constrain_inner(context, &lhs_extruded, rhs, cache)?;
-//         }
-
-//         _ => {
-//             return Err(InferError::CannotConstrain {
-//                 lhs: lhs.clone(),
-//                 rhs: rhs.clone(),
-//             })
-//         }
-//     }
-
-//     Ok(())
-// }
+            // // let-binding
+            // // record typing
+            // (lhs, Ty::Var(rhs)) if lhs.level() <= rhs.level => {
+            //     rhs.lower_bounds.borrow_mut().push(lhs.clone());
+            //     for upper_bound in rhs.upper_bounds.borrow().iter() {
+            //         constrain_inner(context, lhs, upper_bound, cache)?;
+            //     }
+            // }
+            // (Ty::Var(_), rhs) => {
+            //     let rhs_extruded = extrude(context, rhs, false, lhs.level(), &mut HashMap::new());
+            //     constrain_inner(context, lhs, &rhs_extruded, cache)?;
+            // }
+            // (lhs, Ty::Var(_)) => {
+            //     let lhs_extruded = extrude(context, lhs, true, rhs.level(), &mut HashMap::new());
+            //     constrain_inner(context, &lhs_extruded, rhs, cache)?;
+            // }
+            _ => {
+                Diagnostic::new(
+                    expr,
+                    InferError::CannotConstrain {
+                        lhs: lhs.clone(),
+                        rhs: rhs.clone(),
+                    },
+                )
+                .accumulate(db);
+            }
+        }
+    }
+}
 
 // fn fresh_var(level: usize) -> Var {
 //     Var {

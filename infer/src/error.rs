@@ -2,7 +2,7 @@ use salsa::{Accumulator, Update};
 use thiserror::Error;
 
 use crate::{
-    module::Expr,
+    module::{AstPtr, Expr},
     types::{Ty, TypeName},
 };
 
@@ -10,12 +10,12 @@ use crate::{
 #[derive(Clone, Debug, Update, PartialEq)]
 #[salsa::accumulator]
 pub struct Diagnostic {
-    // pub expr: AstP,
+    pub expr: AstPtr,
     pub error: InferError,
 }
 
 impl Diagnostic {
-    pub fn new(expr: Expr, error: InferError) -> Self {
+    pub fn new(expr: AstPtr, error: InferError) -> Self {
         Diagnostic { expr, error }
     }
 }

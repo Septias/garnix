@@ -6,8 +6,13 @@ mod lower;
 mod module;
 mod parreaux;
 mod types;
-use crate::module::{Expr, File};
+use crate::module::Expr;
 use error::*;
+
+#[salsa::input]
+pub(crate) struct File {
+    pub content: String,
+}
 
 #[salsa::tracked]
 pub fn infer_program<'a>(db: &'a dyn salsa::Database, program: Expr<'a>) -> Vec<Diagnostic> {
