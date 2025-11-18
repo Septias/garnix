@@ -186,26 +186,26 @@ pub(crate) struct Unary<'db> {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, salsa::Update, salsa::Supertype)]
 pub enum Expr<'db> {
-    Apply(Apply<'db>),
-    Assert(Assert<'db>),
-    AttrSet(AttrSet<'db>),
-    Binary(Binary<'db>),
-    Conditional(Conditional<'db>),
+    Apply(Apply<'db>), // elimination  (constrain new type to be subtype of application (bounds installed with previous types))
+    Assert(Assert<'db>), // concatenation
+    AttrSet(AttrSet<'db>), // construction
+    Binary(Binary<'db>), // eliminition (constraining for args, similar to application)
+    Conditional(Conditional<'db>), // elimination
     // // CurPos,
-    HasAttr(HasAttr<'db>),
-    Lambda(Lambda<'db>),
-    LetAttrset(LetAttrset<'db>),
-    LetIn(LetIn<'db>),
-    List(List<'db>),
-    // // Literal(Literal),
-    // // Missing,
-    PathInterpolation(PathInterpolation<'db>),
-    RecAttrset(RecAttrset<'db>),
-    // // Reference(SmolStr),
-    Select(Select<'db>),
-    StringInterpolation(StringInterpolation<'db>),
-    With(With<'db>),
-    Unary(Unary<'db>),
+    HasAttr(HasAttr<'db>),       // trasformation
+    Lambda(Lambda<'db>),         // introduction (constrain arguments and return new typevar)
+    LetAttrset(LetAttrset<'db>), // introduction (constrain arguments and return new typevars)
+    LetIn(LetIn<'db>),           // introduction (constrain arguments and return new typevars)
+    List(List<'db>),             // introduction
+    // Literal(Literal),
+    // Missing,
+    PathInterpolation(PathInterpolation<'db>), // introduction (constrain to be string?)
+    RecAttrset(RecAttrset<'db>),               // Introduction
+    // Reference(SmolStr),
+    Select(Select<'db>), // elimination (constrain record to have field)
+    StringInterpolation(StringInterpolation<'db>), // introduction (constrain to be string?)
+    With(With<'db>),     // concatenation (constrains and introduces)
+    Unary(Unary<'db>),   // multiple options
 }
 
 #[salsa::tracked]

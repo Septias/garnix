@@ -1,0 +1,66 @@
+// colors
+#let red_700 = rgb(185, 28, 28)
+#let red = oklch(42.1%, 0.095, 57.708deg);
+
+// shorthand to create a simple overline and index i
+#let oi(body) = $overline(body)^i$
+#let oj(body) = $overline(body)^j$
+
+#let type_name(name) = text(size: 9pt, fill: black, weight: "bold", name)
+#let b(body) = text(weight: "bold", body)
+
+#let colored_box(title: "", color: blue, content) = {
+  block(breakable: false, {
+    stack(
+      dir: ttb,
+      spacing: 0.5em,
+      align(left, {
+        show heading: set text(
+          fill: color,
+          font: "DejaVu Sans",
+          weight: "medium",
+          size: 10pt,
+        )
+        heading(title, level: 2)
+      }),
+      rect(stroke: 1pt + color, radius: 4pt, width: 100%, inset: 8pt, content),
+    )
+  })
+}
+
+#let subbox(body, caption: "") = box([
+  #align(left, text(weight: "bold", smallcaps(caption)))
+  #body
+])
+
+#let rule_name(name) = [
+  #text(
+    // fill: if name.starts-with("T") { maroon } else if name.starts-with("S") {
+    //   purple
+    // } else if name.starts-with("C") { orange } else if name.starts-with("R") {
+    //   blue
+    // } else { black },
+    weight: "bold",
+    smallcaps(name),
+  )
+]
+
+#let derive(name, prem, conclusion) = [
+  #table(
+    stroke: none,
+    inset: (x: 0pt, y: 5pt),
+    align: center,
+    table.cell(align: start, rule_name(name)),
+    table.cell(inset: (y: 5pt), [#prem.join("     ")]),
+    table.hline(),
+    table.cell(inset: (y: 10pt), [#conclusion]),
+  )
+]
+
+#let pad_stack(ct) = stack(dir: ltr, spacing: 3em, ..ct)
+
+
+#let typings(caption, items) = figure(align(center, grid(
+  align: center,
+  ..items.map(pad_stack)
+)))
