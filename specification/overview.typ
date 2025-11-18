@@ -100,24 +100,23 @@ The language consists of the standard base types string, boolean, number and lab
   rect(width: 100%, inset: 20pt)[
     #align(left, rect($t arrow.long t'$))
     $
-      (l: t_2)t_1 & arrow.long t_2[l := t_1] &&#rule_name("R-Fun") \
-      ({oi(l_i)}: t){oi(l_i \= t_i)} & arrow.long t [oi(l_i := t_i)] &&#rule_name("R-Fun-Pat") \
-      ({oi(l_i)\, ...}: t) {oj(l_i = t_i)} & arrow.long t [oi(l_i := a_i)] #h(0.5cm) ∀i. ∃ j. i eq j &&#rule_name("R-Fun-Pat-Open") \
-      {oi(l_i" ? "t_i), overline(l_j)^j}: t_2{overline(l_k = t_k)^k; oj(l_j = t_j)} & arrow.long
-      t_2 [overline(l_m := a_m)^m] [overline(l_n = a_n)^n] [overline(l_j := a_j)^j] &&#rule_name("R-Fun-Pat-Default") \
-      "Where" &m ∈ {i: ∃k. l_i = l_k}; n ∈ {i: exists.not k. l_i = l_k} \
-      {oi(l_i\: t_i)}.l & arrow.long t_i #h(0.5cm) "if" ∃i. l_i = l &&#rule_name("R-Lookup") \
-      {oi(l_i \= t_i)}.l & arrow.long "null    if" ∄i. l_i = l &&#rule_name("R-Lookup-Null") \
-      {oi(l_i\: t_i)}.l" or "t & arrow.long t_i "   if" ∃i. l_i = l &&#rule_name("R-Lookup-Default-Pos") \
-      {oi(l_i\: t_i)}.l" or "t & arrow.long t "   if" ∄i. l_i = l &&#rule_name("R-Lookup-Default-Neg") \
-      {oi(l_i\: t_i)}.l" ? "t & arrow.long "true   if" ∃i. l_i = l &&#rule_name("R-Has-Pos") \
-      {oi(l_i\: t_i)}.l" ? "t & arrow.long "false  if" ∄i. l_i = l &&#rule_name("R-Has-Neg") \
-      #b[let] oi(l_i \= t_i\;) "in" t_2 & arrow.long t_2 [oi(l_i = v_i)] &&#rule_name("R-Let") \
-      #b[with] {oi(l_i \= t_i\;)}; t_2 & arrow.long t_2[oi(l_i "⊜ " a_i) ] &&#rule_name("R-With") \
-      "if true then "t_1" else "t_2 & arrow.long t_1 &&#rule_name("R-Cond-True") \
-      "if false then "t_1" else "t_2 & arrow.long t_2 &&#rule_name("R-Cond-False") \
-      t_1 ⧺ t_2 & arrow.long [ oi(t_(1i)), oj(t_(2j)) ] &&#rule_name("R-Array-Concat") \
-      t_1 " //" t_2 & arrow.long {…t_2 , …t_1} &&#rule_name("R-Record-Concat") \
+      #rule_name("R-Fun")&& (l: t_2)t_1 & arrow.long t_2[l := t_1] \
+      #rule_name("R-Fun-Pat")&& ({oi(l_i)}: t){oi(l_i \= t_i)} & arrow.long t [oi(l_i := t_i)] \
+      #rule_name("R-Fun-Pat-Open")&& ({oi(l_i)\, ...}: t) {oj(l_i = t_i)} & arrow.long t [oi(l_i := a_i)] #h(0.5cm) &&&∀i. ∃ j. i eq j \
+      // #rule_name("R-Fun-Pat-Default")&&{oi(l_i" ? "t_i), overline(l_j)^j}: t_2{overline(l_k = t_k)^k; oj(l_j = t_j)} & arrow.long t_2 [overline(l_m := a_m)^m] [overline(l_n = a_n)^n] [overline(l_j := a_j)^j] \
+      // &&"Where" &m ∈ {i: ∃k. l_i = l_k}; n ∈ {i: exists.not k. l_i = l_k} \
+      #rule_name("R-Lookup")&& {oi(l_i\: t_i)}.l & arrow.long t_i #h(0.5cm) &&&"if" ∃i. l_i = l \
+      #rule_name("R-Lookup-Null")&& {oi(l_i \= t_i)}.l & arrow.long "null" &&&"if" ∄i. l_i = l \
+      #rule_name("R-Lookup-Default-Pos")&& {oi(l_i\: t_i)}.l" or "t & arrow.long t_i &&&"if" ∃i. l_i = l \
+      #rule_name("R-Lookup-Default-Neg")&& {oi(l_i\: t_i)}.l" or "t & arrow.long t &&&"if" ∄i. l_i = l \
+      #rule_name("R-Has-Pos")&& {oi(l_i\: t_i)}.l" ? "t & arrow.long "true" &&&"if" ∃i. l_i = l \
+      #rule_name("R-Has-Neg")&& {oi(l_i\: t_i)}.l" ? "t & arrow.long "false" &&&"if" ∄i. l_i = l \
+      #rule_name("R-Let")&& #b[let] oi(l_i \= t_i\;) "in" t_2 & arrow.long t_2 [oi(l_i = v_i)] \
+      #rule_name("R-With")&& #b[with] {oi(l_i \= t_i\;)}; t_2 & arrow.long t_2[oi(l_i "⊜ " a_i) ] \
+      #rule_name("R-Cond-True")&& "if " "true" " then "t_1" else "t_2 & arrow.long t_1 \
+      #rule_name("R-Cond-False")&& "if" "false" "then "t_1" else "t_2 & arrow.long t_2 \
+      #rule_name("R-Array-Concat")&& t_1 ⧺ t_2 & arrow.long [ oi(t_(1i)), oj(t_(2j)) ] \
+      #rule_name("R-Record-Concat")&& t_1 " //" t_2 & arrow.long {…t_2 , …t_1} \
     $
     #eval_context
     #linebreak()
@@ -182,7 +181,7 @@ What follows are the typing and subtyping rules as well as an overview over the 
       ),
       derive(
         "T-App",
-        ($Ξ, Γ tack t_1: τ_1 → τ_2$, $Γ tack t_2: τ_1$),
+        ($Γ tack t_1: τ_1 → τ_2$, $Γ tack t_2: τ_1$),
         $t_1 t_2: τ_2$,
       ),
       derive("T-Abs", ($Γ, x: τ_1 tack t: τ_2$,), $Γ tack (x: t): τ_1 → τ_2$),
