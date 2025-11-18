@@ -8,7 +8,7 @@ In this document I try to lay out the current efforts of creating a type system 
 
 = Syntax <syn>
 
-The language consists of the standard base types string, boolean, number and label. Labels are distinct here, because we need a syntactic class in some places where only labels are allowed. An example is a path that is constructed from labels interspersed by dots, i.e. `hm.packages.git`.
+The language consists of the standard base types string, boolean, number and label. Labels are distinct here, because we need a syntactic class in some places where only labels are allowed. An example is a path that is constructed from labels interspersed by dots, i.e. `hm.packages.git`. $oi(E)$ denots $0 … n$ repititions of a syntax construct and the index $i$ is omitted if obvious.
 
 
 #let basetypes = box([
@@ -92,16 +92,16 @@ The language consists of the standard base types string, boolean, number and lab
 #let eval_context = subbox(
   $
     // A & := V | "let "x = m " in "A                                         \
-    E & := [] | E e | (E).l | (v).E | "if " E " then " t " else "t | E + t | v + E
+    E & := • | E e | (E).l | (v).E | "if " E " then " t " else "t | E + t | v + E
   $,
   caption: "Evaluation Context",
 )
 #figure(
   rect(width: 100%, inset: 20pt)[
-    Let $t, t_1$ and $t_2$ range over syntax terms and $l$ over identifiers (labels and variables).
+    #align(left, rect($t arrow.long t'$))
     $
       (l: t_2)t_1 & arrow.long t_2[l := t_1] &&#rule_name("R-Fun") \
-      ({oi(l_i)}: t){oi(l_i \= t_i\;)} & arrow.long t [oi(l_i := t_i)] &&#rule_name("R-Fun-Pat") \
+      ({oi(l_i)}: t){oi(l_i \= t_i)} & arrow.long t [oi(l_i := t_i)] &&#rule_name("R-Fun-Pat") \
       ({oi(l_i)\, ...}: t) {oj(l_i = t_i)} & arrow.long t [oi(l_i := a_i)] #h(0.5cm) ∀i. ∃ j. i eq j &&#rule_name("R-Fun-Pat-Open") \
       {oi(l_i" ? "t_i), overline(l_j)^j}: t_2{overline(l_k = t_k)^k; oj(l_j = t_j)} & arrow.long
       t_2 [overline(l_m := a_m)^m] [overline(l_n = a_n)^n] [overline(l_j := a_j)^j] &&#rule_name("R-Fun-Pat-Default") \
@@ -119,24 +119,13 @@ The language consists of the standard base types string, boolean, number and lab
       t_1 ⧺ t_2 & arrow.long [ oi(t_(1i)), oj(t_(2j)) ] &&#rule_name("R-Array-Concat") \
       t_1 " //" t_2 & arrow.long {…t_2 , …t_1} &&#rule_name("R-Record-Concat") \
     $
+    #eval_context
+    #linebreak()
     $e → e' ==> E[e] → E[e']$
   ],
   caption: "Reduction rules of nix",
-)
-
-// #colored_box(title: "Evaluation Rules", color: blue)[
-//   #stack(
-//     dir: ltr,
-//     spacing: 1cm,
-//     derive(
-//       "F-Force-Step",
-//       ($⟨a, H[a -> e]⟩$, $⟨e, H⟩ -> ⟨e', H'⟩$),
-//       $⟨a, H⟩ -> ⟨a, H'[a -> e']⟩$,
-//     ),
-//     derive("F-Force-Value", ($H[a -> v]$, $v: "Value"$), $⟨a, H⟩ -> ⟨v, H⟩$),
-//   )
-// ]
-
+) <reduction>
+- @reduction shows the small-step reduction rules of the language. Let $t, t_1$ and $t_2$ range over syntax terms and $l$ over identifiers (labels and variables).
 - The _spread syntax_ ${…"rc"}$ is used to create a new record from the fields of `rc` where `rc` is a record. These new fields never overwrite existing fields, meaning `{a : int, …{a : string}}` will reduce to `{a: int}`. Similar is possible for arrays, but naturally without deduplication. For two records $A: {l_i: t_i}$ and $B: {l_i: t_i}$ this means ${..A, ..B} = {l_a = t_a; l_b = t_b;}$ where $a ∈ {i: l_i ∈ A }$ and $b ∈ { i: l_i ∈ ( B \\ A) }$. $B \\ A$ is the Record B where every label i has been removed if it is in A.
 - R-Fun is the standard β-reduction for functions where the argument is replaced by the supplied argument's value in the body. `b[l := a]` means that the variable $l$ is assigned value $a$ in the body $b$.
 - To reduce with statements the first term has to reduce to a record and I don't like the formalization of that currently. For the next expression the record fields are added to the scope without shadowing existing bindings. I use the `⊜` operator to get this behavior. See @with for further discussion.
@@ -145,33 +134,37 @@ The language consists of the standard base types string, boolean, number and lab
 What follows are the typing and subtyping rules as well as an overview over the constraint subroutine.
 
 
-#figure(caption: "Types of nix.", rect(width: 100%, grid(
-  columns: 2,
-  align: left,
-  inset: 8pt,
-  grid.cell(rowspan: 2, subbox(
-    caption: "Types",
-    $
-      tau ::= & tau -> tau | alpha | top | bot        \
-              & | tau union.sq tau | tau inter.sq tau \
-              & | mu alpha space tau                  \
-              & | "bool" | "string" | "path" | "num"  \
-              & | {l: τ}                              \
-              & | [" "tau" "] | [ overline(τ)]        \
-              & | {l_0: p; ...; l_n: p }^b            \
-    $,
-  )),
-  subbox(
-    caption: "Pattern element",
-    $
-      p & := τ | τ^?
-    $,
+#figure(
+  caption: "Types of nix.",
+  rect(
+    grid(
+      columns: 2,
+      align: left,
+      inset: 8pt,
+      grid.cell(
+        rowspan: 2,
+        subbox(
+          caption: "Types",
+          $
+            tau ::= & "bool" | "string" | "path" | "num"                                \
+                    & | τ -> τ | alpha | top | ⊥ | τ union.sq τ | τ inter.sq τ | μ α. τ \
+                    & | {l: τ} | [τ] | [overline(τ)] | ⦃ oi(p) ⦄^b                      \
+          $,
+        ),
+      ),
+      subbox(
+        caption: "Pattern element",
+        $
+          p & := τ | τ^?
+        $,
+      ),
+      subbox(caption: "Values")[$
+          p: t"  |  "x; "  |  "{..}"  |  rec" {..}
+        $
+      ],
+    ),
   ),
-  subbox(caption: "Values")[$
-      p: t"  |  "x; "  |  "{..}"  |  rec" {..}
-    $
-  ],
-)))
+)
 
 #import "@preview/biceps:0.0.1": flexwrap
 
@@ -189,7 +182,7 @@ What follows are the typing and subtyping rules as well as an overview over the 
       ),
       derive(
         "T-App",
-        ($Γ tack t_1: τ_1 → τ_2$, $Γ tack t_2: τ_1$),
+        ($Ξ, Γ tack t_1: τ_1 → τ_2$, $Γ tack t_2: τ_1$),
         $t_1 t_2: τ_2$,
       ),
       derive("T-Abs", ($Γ, x: τ_1 tack t: τ_2$,), $Γ tack (x: t): τ_1 → τ_2$),
