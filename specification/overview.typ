@@ -165,103 +165,97 @@ What follows are the typing and subtyping rules as well as an overview over the 
   ),
 )
 
-#import "@preview/biceps:0.0.1": flexwrap
 
 #figure(
   caption: "Typing rules",
-  rect(
-    inset: 20pt,
-    flexwrap(
-      main-spacing: 2em,
-      cross-spacing: 16pt,
-      derive(
-        "T-Var",
-        ($x: ∀ arrow(α). space τ in Γ$,),
-        $Γ tack x: τ[arrow(α) \\ arrow(τ)]$,
+  border_box(
+    derive(
+      "T-Var",
+      ($x: ∀ arrow(α). space τ in Γ$,),
+      $Γ tack x: τ[arrow(α) \\ arrow(τ)]$,
+    ),
+    derive(
+      "T-App",
+      ($Γ tack t_1: τ_1 → τ_2$, $Γ tack t_2: τ_1$),
+      $t_1 t_2: τ_2$,
+    ),
+    derive("T-Abs", ($Γ, x: τ_1 tack t: τ_2$,), $Γ tack (x: t): τ_1 → τ_2$),
+    derive(
+      "T-Abs-Pat",
+      ($Γ, oi(x\: τ) tack t: τ_2$,),
+      $Γ tack ({oi(x)}: t): oi(τ) → τ_2$,
+    ),
+    derive("T-Abs-Pat-Opt", ($"TODO"$,), $"TODO"$),
+    derive(
+      "T-Rcd",
+      ($Γ tack t_0: τ_0$, "...", $Γ tack t_n: τ_n$),
+      $Γ tack {arrow(l): arrow(t)}: {arrow(l): arrow(τ)}$,
+    ),
+    derive("T-Proj", ($ Γ tack t: {l: τ} $,), $Γ tack t.l: τ$),
+    derive("T-Sub", ($Γ tack t: τ_1$, $τ_1 <= τ_2$), $Γ tack t: τ_2$),
+    derive("T-Negate", ($Γ tack e: "bool"$,), $Γ tack !e: "bool"$),
+    derive("T-Check", ($Γ tack e: {..}$,), $Γ tack e ? l: "bool"$),
+    derive(
+      "T-Or-Neg",
+      ($Γ tack t_1: {l: τ_1}$, $Γ tack t_2: τ_2$),
+      $Γ tack (t_1).l "or" t_2: τ_1$,
+    ),
+    derive(
+      "T-Or-Pos",
+      ($Γ tack t_1: τ_1$, $l ∉ τ_1$, $Γ tack t_2: τ_2$),
+      $Γ tack (t_1).l "or" t_2: τ_2$,
+    ),
+    derive(
+      "T-Lst-Hom",
+      ($Γ tack t_0: τ$, "...", $Γ tack t_n: τ$),
+      $Γ tack [ " " t_0 " " t_1 " " ... " " t_n " "]: [τ]$,
+    ),
+    derive(
+      "T-Lst-Agg",
+      ($Γ tack t_0: τ_0$, "...", $Γ tack t_n: τ_n$, $∃ i, j. τ_i != τ_j$),
+      $Γ tack [space t_0 space t_1 space ... " " t_n] : [ τ_0 space τ_1 space ... space τ_n]$,
+    ),
+    derive(
+      "T-List-Concat-Hom",
+      ($Γ tack a: "[τ]"$, $Γ tack b: "[τ]"$),
+      $Γ tack a "⧺" b: "[τ]"$,
+    ),
+    derive(
+      "T-List-Concat-Multi",
+      ($Γ tack a: [arrow(τ_1)]$, $Γ tack b: [arrow(τ_2)]$),
+      $Γ tack a "⧺" b: [arrow(τ_1)arrow(τ_2)]$,
+    ),
+    derive(
+      "T-Rec-Concat",
+      ($Γ tack a: { oi(l\: τ) }$, $Γ tack b: { l_j: τ_j }$),
+      $Γ tack a "//" b: {..b, ..a}$,
+    ),
+    derive(
+      "T-Multi-Let",
+      (
+        $Γ overline([x_i: τ_i tack t_i : τ_i]^i)$,
+        $Γ overline([x_i:∀ arrow(α). τ_i]^i) tack t: τ$,
       ),
-      derive(
-        "T-App",
-        ($Γ tack t_1: τ_1 → τ_2$, $Γ tack t_2: τ_1$),
-        $t_1 t_2: τ_2$,
+      $Γ tack "let" x_0 = t_0; ... ; x_n = t_n "in" t: τ$,
+    ),
+    derive(
+      "T-If",
+      ($Γ tack t_1: "bool"$, $Γ tack t_2: τ$, $Γ tack t_3: τ$),
+      $ "if" t_1 "then" t_2 "else" t_3: τ $,
+    ),
+    derive(
+      "T-With",
+      (
+        $Γ tack t_1 : {arrow(l): arrow(τ)}$,
+        $Γ, l_0 : τ_0, ..., l_n: τ_n tack t_2: τ$,
+        $l_i in.not Γ$,
       ),
-      derive("T-Abs", ($Γ, x: τ_1 tack t: τ_2$,), $Γ tack (x: t): τ_1 → τ_2$),
-      derive(
-        "T-Abs-Pat",
-        ($Γ, oi(x\: τ) tack t: τ_2$,),
-        $Γ tack ({oi(x)}: t): oi(τ) → τ_2$,
-      ),
-      derive("T-Abs-Pat-Opt", ($"TODO"$,), $"TODO"$),
-      derive(
-        "T-Rcd",
-        ($Γ tack t_0: τ_0$, "...", $Γ tack t_n: τ_n$),
-        $Γ tack {arrow(l): arrow(t)}: {arrow(l): arrow(τ)}$,
-      ),
-      derive("T-Proj", ($ Γ tack t: {l: τ} $,), $Γ tack t.l: τ$),
-      derive("T-Sub", ($Γ tack t: τ_1$, $τ_1 <= τ_2$), $Γ tack t: τ_2$),
-      derive("T-Negate", ($Γ tack e: "bool"$,), $Γ tack !e: "bool"$),
-      derive("T-Check", ($Γ tack e: {..}$,), $Γ tack e ? l: "bool"$),
-      derive(
-        "T-Or-Neg",
-        ($Γ tack t_1: {l: τ_1}$, $Γ tack t_2: τ_2$),
-        $Γ tack (t_1).l "or" t_2: τ_1$,
-      ),
-      derive(
-        "T-Or-Pos",
-        ($Γ tack t_1: τ_1$, $l ∉ τ_1$, $Γ tack t_2: τ_2$),
-        $Γ tack (t_1).l "or" t_2: τ_2$,
-      ),
-      derive(
-        "T-Lst-Hom",
-        ($Γ tack t_0: τ$, "...", $Γ tack t_n: τ$),
-        $Γ tack [ " " t_0 " " t_1 " " ... " " t_n " "]: [τ]$,
-      ),
-      derive(
-        "T-Lst-Agg",
-        ($Γ tack t_0: τ_0$, "...", $Γ tack t_n: τ_n$, $∃ i, j. τ_i != τ_j$),
-        $Γ tack [space t_0 space t_1 space ... " " t_n] : [ τ_0 space τ_1 space ... space τ_n]$,
-      ),
-      derive(
-        "T-List-Concat-Hom",
-        ($Γ tack a: "[τ]"$, $Γ tack b: "[τ]"$),
-        $Γ tack a "⧺" b: "[τ]"$,
-      ),
-      derive(
-        "T-List-Concat-Multi",
-        ($Γ tack a: [arrow(τ_1)]$, $Γ tack b: [arrow(τ_2)]$),
-        $Γ tack a "⧺" b: [arrow(τ_1)arrow(τ_2)]$,
-      ),
-      derive(
-        "T-Rec-Concat",
-        ($Γ tack a: { oi(l\: τ) }$, $Γ tack b: { l_j: τ_j }$),
-        $Γ tack a "//" b: {..b, ..a}$,
-      ),
-      derive(
-        "T-Multi-Let",
-        (
-          $Γ overline([x_i: τ_i tack t_i : τ_i]^i)$,
-          $Γ overline([x_i:∀ arrow(α). τ_i]^i) tack t: τ$,
-        ),
-        $Γ tack "let" x_0 = t_0; ... ; x_n = t_n "in" t: τ$,
-      ),
-      derive(
-        "T-If",
-        ($Γ tack t_1: "bool"$, $Γ tack t_2: τ$, $Γ tack t_3: τ$),
-        $ "if" t_1 "then" t_2 "else" t_3: τ $,
-      ),
-      derive(
-        "T-With",
-        (
-          $Γ tack t_1 : {arrow(l): arrow(τ)}$,
-          $Γ, l_0 : τ_0, ..., l_n: τ_n tack t_2: τ$,
-          $l_i in.not Γ$,
-        ),
-        $Γ tack "with" t_1; t_2 : τ$,
-      ),
-      derive(
-        "T-Assert-Pos",
-        ($Γ tack t_1: "bool"$, $Γ tack t_2: τ_2$),
-        $Γ tack "assert" t_1; t_2: τ_2$,
-      ),
+      $Γ tack "with" t_1; t_2 : τ$,
+    ),
+    derive(
+      "T-Assert-Pos",
+      ($Γ tack t_1: "bool"$, $Γ tack t_2: τ_2$),
+      $Γ tack "assert" t_1; t_2: τ_2$,
     ),
   ),
 )
@@ -274,60 +268,51 @@ What follows are the typing and subtyping rules as well as an overview over the 
 - TODO: T-multi-let can be made simpler because we can always rewrite multi-let to let-chains. Recursion has to be accounted for, that is still an open question.
 - TODO: T-With $l_i in.not Γ$ is too restrictive because shadowing labels are allowed, they will just not be used.
 
-#figure(caption: "Suptyping rules", rect([
-  #typings([], (
-    (
-      derive("S-Refl", (), $τ <= τ$),
-      derive(
-        "S-Trans",
-        ($Σ tack τ_0 <= τ_1$, $Σ tack τ_1 <= τ_2$),
-        $Σ tack τ_0 <= τ_2$,
-      ),
-      derive("S-Weaken", ($H$,), $Σ tack H$),
-      derive("S-Assume", ($Σ,gt.tri H tack H$,), $Σ tack H$),
+#figure(caption: "Suptyping rules", rect(inset: 20pt)[
+  #flexwrap(
+    main-spacing: 20pt,
+    cross-spacing: 10pt,
+    derive("S-Refl", (), $τ <= τ$),
+    derive(
+      "S-Trans",
+      ($Σ tack τ_0 <= τ_1$, $Σ tack τ_1 <= τ_2$),
+      $Σ tack τ_0 <= τ_2$,
     ),
-    (
-      derive("S-Hyp", ($H in Σ$,), $Σ tack H$),
-      derive("S-Rec", (), $μ α.τ eq.triple [μ α.τ slash α]τ$),
-      derive(
-        "S-Or",
-        ($∀ i, exists j,Σ tack τ_i <= τ'_j$,),
-        $Σ tack union.sq_i τ_i <= union.sq_j τ'_j$,
-      ),
-      derive(
-        "S-And",
-        ($∀ i, exists j,Σ tack τ_j <= τ'_i$,),
-        $Σ tack inter.sq_j τ_j <= inter.sq_i τ'_i$,
-      ),
+    derive("S-Weaken", ($H$,), $Σ tack H$),
+    derive("S-Assume", ($Σ,gt.tri H tack H$,), $Σ tack H$),
+    derive("S-Hyp", ($H in Σ$,), $Σ tack H$),
+    derive("S-Rec", (), $μ α.τ eq.triple [μ α.τ slash α]τ$),
+    derive(
+      "S-Or",
+      ($∀ i, exists j,Σ tack τ_i <= τ'_j$,),
+      $Σ tack union.sq_i τ_i <= union.sq_j τ'_j$,
     ),
-    (
-      derive(
-        "S-Fun",
-        ($lt.tri Σ tack τ_0 <= τ_1$, $lt.tri Σ tack τ_2 <= τ_3$),
-        $Σ tack τ_1 arrow.long τ_2 <= τ_0 arrow.long τ_3$,
-      ),
-      derive(
-        "S-Rcd",
-        (),
-        ${arrow(t) : arrow(τ)} eq.triple inter.sq_i {l_i : t_i}$,
-      ),
-      derive(
-        "S-Depth",
-        ($lt.tri Σ tack τ_1 <= τ_2$,),
-        $Σ tack {l: τ_1} <= { l: τ_2}$,
-      ),
+    derive(
+      "S-And",
+      ($∀ i, exists j,Σ tack τ_j <= τ'_i$,),
+      $Σ tack inter.sq_j τ_j <= inter.sq_i τ'_i$,
     ),
-    (
-      derive("S-Lst", ($ Γ tack τ_1 <= τ_2 $,), $Γ tack [τ_1] <= [τ_2]$),
+    derive(
+      "S-Fun",
+      ($lt.tri Σ tack τ_0 <= τ_1$, $lt.tri Σ tack τ_2 <= τ_3$),
+      $Σ tack τ_1 arrow.long τ_2 <= τ_0 arrow.long τ_3$,
     ),
-  ))
-  // TODO: no two child elements?
-  // #pad_stack((
-  //   $lt.tri(H_0, H_1) = lt.tri H_0, lt.tri H_1$,
-  //   $lt.tri(gt.tri H) = H$,
-  //   $lt.tri ( τ_0 <= τ_1) = τ_0 <= τ_1$,
-  // ))
-]))
+    derive(
+      "S-Rcd",
+      (),
+      ${arrow(t) : arrow(τ)} eq.triple inter.sq_i {l_i : t_i}$,
+    ),
+    derive(
+      "S-Depth",
+      ($lt.tri Σ tack τ_1 <= τ_2$,),
+      $Σ tack {l: τ_1} <= { l: τ_2}$,
+    ),
+    derive("S-Lst", ($ Γ tack τ_1 <= τ_2 $,), $Γ tack [τ_1] <= [τ_2]$),
+  )
+  $lt.tri(H_0, H_1) = lt.tri H_0, lt.tri H_1$
+  $lt.tri(gt.tri H) = H$
+  $lt.tri ( τ_0 <= τ_1) = τ_0 <= τ_1$
+])
 
 - ⊳ and ⊲ are used to add and remove _typing hypotheses_ that are formed during subtyping. Since applying such a hypothesis right after assumption, the later modality ⊳ is added and can only be removed after subtyping passed through a function or record construct. *TODO: check*
 - The general idea of the typing algorithm is, that typing progresses and finally constraints are installed on type-variables. The rules need to be chosen in a way, that this general approach is possible.

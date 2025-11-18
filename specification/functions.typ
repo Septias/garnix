@@ -1,3 +1,5 @@
+#import "@preview/biceps:0.0.1": flexwrap
+
 // colors
 #let red_700 = rgb(185, 28, 28)
 #let red = oklch(42.1%, 0.095, 57.708deg);
@@ -27,6 +29,12 @@
     )
   })
 }
+
+#let border_box(..body) = rect(inset: 20pt, flexwrap(
+  main-spacing: 20pt,
+  cross-spacing: 10pt,
+  ..body,
+))
 
 #let subbox(body, caption: "") = box([
   #align(left, text(weight: "bold", smallcaps(caption)))
