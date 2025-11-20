@@ -10,7 +10,6 @@ In this document I try to lay out the current efforts of creating a type system 
 
 The language consists of the standard base types string, boolean, number and label. Labels are distinct here, because we need a syntactic class in some places where only labels are allowed. An example is a path that is constructed from labels interspersed by dots, i.e. `hm.packages.git`. $oi(E)$ denots $0 … n$ repititions of a syntax construct and the index $i$ is omitted if obvious.
 
-
 #let basetypes = box([
   #text(weight: "bold", smallcaps("Basetypes"))
   $
@@ -90,37 +89,42 @@ The language consists of the standard base types string, boolean, number and lab
 
 == Reduction Rules
 #let eval_context = subbox(
-  $
-    // A & := V | "let "x = m " in "A                                         \
-    E & := • | E e | (E).l | (v).E | "if " E " then " t " else "t | E + t | v + E
-  $,
   caption: "Evaluation Context",
+  $
+    E & := • | E t | (E).l | (v).E | "if " E " then " t " else " t | E + t | v + E
+  $,
 )
 #figure(
   rect(width: 100%, inset: 20pt)[
-    #align(left, rect($t arrow.long t'$))
-    $
-      #rule_name("R-Fun")&& (l: t_2)t_1 & arrow.long t_2[l := t_1] \
-      #rule_name("R-Fun-Pat")&& ({oi(l_i)}: t){oi(l_i \= t_i)} & arrow.long t [oi(l_i := t_i)] \
-      #rule_name("R-Fun-Pat-Open")&& ({oi(l_i)\, ...}: t) {oj(l_i = t_i)} & arrow.long t [oi(l_i := a_i)] #h(0.5cm) &&&∀i. ∃ j. i eq j \
-      // #rule_name("R-Fun-Pat-Default")&&{oi(l_i" ? "t_i), overline(l_j)^j}: t_2{overline(l_k = t_k)^k; oj(l_j = t_j)} & arrow.long t_2 [overline(l_m := a_m)^m] [overline(l_n = a_n)^n] [overline(l_j := a_j)^j] \
-      // &&"Where" &m ∈ {i: ∃k. l_i = l_k}; n ∈ {i: exists.not k. l_i = l_k} \
-      #rule_name("R-Lookup")&& {oi(l_i\: t_i)}.l & arrow.long t_i #h(0.5cm) &&&"if" ∃i. l_i = l \
-      #rule_name("R-Lookup-Null")&& {oi(l_i \= t_i)}.l & arrow.long "null" &&&"if" ∄i. l_i = l \
-      #rule_name("R-Lookup-Default-Pos")&& {oi(l_i\: t_i)}.l" or "t & arrow.long t_i &&&"if" ∃i. l_i = l \
-      #rule_name("R-Lookup-Default-Neg")&& {oi(l_i\: t_i)}.l" or "t & arrow.long t &&&"if" ∄i. l_i = l \
-      #rule_name("R-Has-Pos")&& {oi(l_i\: t_i)}.l" ? "t & arrow.long "true" &&&"if" ∃i. l_i = l \
-      #rule_name("R-Has-Neg")&& {oi(l_i\: t_i)}.l" ? "t & arrow.long "false" &&&"if" ∄i. l_i = l \
-      #rule_name("R-Let")&& #b[let] oi(l_i \= t_i\;) "in" t_2 & arrow.long t_2 [oi(l_i = v_i)] \
-      #rule_name("R-With")&& #b[with] {oi(l_i \= t_i\;)}; t_2 & arrow.long t_2[oi(l_i "⊜ " a_i) ] \
-      #rule_name("R-Cond-True")&& "if " "true" " then "t_1" else "t_2 & arrow.long t_1 \
-      #rule_name("R-Cond-False")&& "if" "false" "then "t_1" else "t_2 & arrow.long t_2 \
-      #rule_name("R-Array-Concat")&& t_1 ⧺ t_2 & arrow.long [ oi(t_(1i)), oj(t_(2j)) ] \
-      #rule_name("R-Record-Concat")&& t_1 " //" t_2 & arrow.long {…t_2 , …t_1} \
-    $
-    #eval_context
-    #linebreak()
-    $e → e' ==> E[e] → E[e']$
+    #align(
+      left,
+      stack(
+        spacing: 20pt,
+        $
+          #rule_name("R-Fun")&& (l: t_2)t_1 & arrow.long t_2[l := t_1] \
+          #rule_name("R-Fun-Pat")&& ({oi(l_i)}: t){oi(l_i \= t_i)} & arrow.long t [oi(l_i := t_i)] \
+          #rule_name("R-Fun-Pat-Open")&& ({oi(l_i)\, ...}: t) {oj(l_i = t_i)} & arrow.long t [oi(l_i := a_i)] #h(0.5cm) &&&∀i. ∃ j. i eq j \
+          #rule_name("R-Fun-Pat-Default")&&{oi(l_i" ? "t_i), overline(l_j)^j}: t_2{overline(l_k = t_k)^k; oj(l_j = t_j)} & arrow.long t_2 [overline(l_m := a_m)^m] [overline(l_n = a_n)^n] [overline(l_j := a_j)^j] \
+          &&"Where" &m ∈ {i: ∃k. l_i = l_k}; n ∈ {i: exists.not k. l_i = l_k} \
+          #rule_name("R-Lookup")&& {oi(l_i\: t_i)}.l & arrow.long t_i #h(0.5cm) &&&"if" ∃i. l_i = l \
+          #rule_name("R-Lookup-Null")&& {oi(l_i \= t_i)}.l & arrow.long "null" &&&"if" ∄i. l_i = l \
+          #rule_name("R-Lookup-Default-Pos")&& {oi(l_i\: t_i)}.l" or "t & arrow.long t_i &&&"if" ∃i. l_i = l \
+          #rule_name("R-Lookup-Default-Neg")&& {oi(l_i\: t_i)}.l" or "t & arrow.long t &&&"if" ∄i. l_i = l \
+          #rule_name("R-Has-Pos")&& {oi(l_i\: t_i)}.l" ? "t & arrow.long "true" &&&"if" ∃i. l_i = l \
+          #rule_name("R-Has-Neg")&& {oi(l_i\: t_i)}.l" ? "t & arrow.long "false" &&&"if" ∄i. l_i = l \
+          #rule_name("R-Let")&& #b[let] oi(l_i \= t_i\;) "in" t_2 & arrow.long t_2 [oi(l_i = v_i)] \
+          #rule_name("R-With")&& #b[with] {oi(l_i \= t_i\;)}; t_2 & arrow.long t_2[oi(l_i "⊜ " a_i) ] \
+          #rule_name("R-Cond-True")&& "if " "true" " then "t_1" else "t_2 & arrow.long t_1 \
+          #rule_name("R-Cond-False")&& "if" "false" "then "t_1" else "t_2 & arrow.long t_2 \
+          #rule_name("R-Array-Concat")&& t_1 ⧺ t_2 & arrow.long [ oi(t_(1i)), oj(t_(2j)) ] \
+          #rule_name("R-Record-Concat")&& t_1 " //" t_2 & arrow.long {…t_2 , …t_1} \
+          && t arrow.long t' &==> E[t] → E[t']
+        $,
+        subbox(caption: "Values")[$ p: t"  |  "x; "  |  "{..}"  |  rec" {..} $],
+        eval_context,
+        linebreak(),
+      ),
+    )
   ],
   caption: "Reduction rules of nix",
 ) <reduction>
@@ -157,10 +161,6 @@ What follows are the typing and subtyping rules as well as an overview over the 
           p & := τ | τ^?
         $,
       ),
-      subbox(caption: "Values")[$
-          p: t"  |  "x; "  |  "{..}"  |  rec" {..}
-        $
-      ],
     ),
   ),
 )
@@ -168,68 +168,101 @@ What follows are the typing and subtyping rules as well as an overview over the 
 
 #figure(
   caption: "Typing rules",
-  border_box(
-    derive(
-      "T-Var",
-      ($x: ∀ arrow(α). space τ in Γ$,),
-      $Γ tack x: τ[arrow(α) \\ arrow(τ)]$,
+  rect(
+    inset: 20pt,
+    stack(
+      spacing: 3em,
+
+      sub_typing_rules(
+        caption: "Standartrules",
+        derive(
+          "T-Var",
+          ($x: ∀ arrow(α). space τ in Γ$,),
+          $Γ tack x: τ[arrow(α) \\ arrow(τ)]$,
+        ),
+        derive(
+          "T-App",
+          ($Γ tack t_1: τ_1 → τ_2$, $Γ tack t_2: τ_1$),
+          $t_1 t_2: τ_2$,
+        ),
+        derive("T-Sub", ($Γ tack t: τ_1$, $τ_1 <= τ_2$), $Γ tack t: τ_2$),
+      ),
+      line(length: 100%),
+      sub_typing_rules(
+        caption: "Functions",
+        derive("T-Abs", ($Γ, x: τ_1 tack t: τ_2$,), $Γ tack (x: t): τ_1 → τ_2$),
+        derive(
+          "T-Abs-Pat",
+          ($Γ, oi(x\: τ) tack t: τ_2$,),
+          $Γ tack ({oi(x)}: t): oi(τ) → τ_2$,
+        ),
+        derive("T-Abs-Pat-Opt", ($"TODO"$,), $"TODO"$),
+      ),
+      line(length: 100%),
+      sub_typing_rules(
+        caption: "Records",
+        derive(
+          "T-Rcd",
+          ($Γ tack t_0: τ_0$, "...", $Γ tack t_n: τ_n$),
+          $Γ tack {arrow(l): arrow(t)}: {arrow(l): arrow(τ)}$,
+        ),
+        derive("T-Proj", ($ Γ tack t: {l: τ} $,), $Γ tack t.l: τ$),
+        derive(
+          "T-Rec-Concat",
+          ($Γ tack a: { oi(l\: τ) }$, $Γ tack b: { l_j: τ_j }$),
+          $Γ tack a "//" b: {..b, ..a}$,
+        ),
+      ),
+      line(length: 100%),
+      sub_typing_rules(
+        caption: "Lists",
+
+        derive(
+          "T-Lst-Hom",
+          ($Γ tack t_0: τ$, "...", $Γ tack t_n: τ$),
+          $Γ tack [ " " t_0 " " t_1 " " ... " " t_n " "]: [τ]$,
+        ),
+        derive(
+          "T-Lst-Agg",
+          ($Γ tack t_0: τ_0$, "...", $Γ tack t_n: τ_n$, $∃ i, j. τ_i != τ_j$),
+          $Γ tack [space t_0 space t_1 space ... " " t_n] : [ τ_0 space τ_1 space ... space τ_n]$,
+        ),
+        derive(
+          "T-List-Concat-Hom",
+          ($Γ tack a: "[τ]"$, $Γ tack b: "[τ]"$),
+          $Γ tack a "⧺" b: "[τ]"$,
+        ),
+        derive(
+          "T-List-Concat-Multi",
+          ($Γ tack a: [arrow(τ_1)]$, $Γ tack b: [arrow(τ_2)]$),
+          $Γ tack a "⧺" b: [arrow(τ_1)arrow(τ_2)]$,
+        ),
+      ),
+
+      line(length: 100%),
+      sub_typing_rules(
+        caption: "Operators",
+        derive(
+          "T-Or-Neg",
+          ($Γ tack t_1: {l: τ_1}$, $Γ tack t_2: τ_2$),
+          $Γ tack (t_1).l "or" t_2: τ_1$,
+        ),
+        derive(
+          "T-Or-Pos",
+          ($Γ tack t_1: τ_1$, $l ∉ τ_1$, $Γ tack t_2: τ_2$),
+          $Γ tack (t_1).l "or" t_2: τ_2$,
+        ),
+        derive("T-Negate", ($Γ tack e: "bool"$,), $Γ tack !e: "bool"$),
+        derive("T-Check", ($Γ tack e: {..}$,), $Γ tack e ? l: "bool"$),
+      ),
     ),
-    derive(
-      "T-App",
-      ($Γ tack t_1: τ_1 → τ_2$, $Γ tack t_2: τ_1$),
-      $t_1 t_2: τ_2$,
-    ),
-    derive("T-Abs", ($Γ, x: τ_1 tack t: τ_2$,), $Γ tack (x: t): τ_1 → τ_2$),
-    derive(
-      "T-Abs-Pat",
-      ($Γ, oi(x\: τ) tack t: τ_2$,),
-      $Γ tack ({oi(x)}: t): oi(τ) → τ_2$,
-    ),
-    derive("T-Abs-Pat-Opt", ($"TODO"$,), $"TODO"$),
-    derive(
-      "T-Rcd",
-      ($Γ tack t_0: τ_0$, "...", $Γ tack t_n: τ_n$),
-      $Γ tack {arrow(l): arrow(t)}: {arrow(l): arrow(τ)}$,
-    ),
-    derive("T-Proj", ($ Γ tack t: {l: τ} $,), $Γ tack t.l: τ$),
-    derive("T-Sub", ($Γ tack t: τ_1$, $τ_1 <= τ_2$), $Γ tack t: τ_2$),
-    derive("T-Negate", ($Γ tack e: "bool"$,), $Γ tack !e: "bool"$),
-    derive("T-Check", ($Γ tack e: {..}$,), $Γ tack e ? l: "bool"$),
-    derive(
-      "T-Or-Neg",
-      ($Γ tack t_1: {l: τ_1}$, $Γ tack t_2: τ_2$),
-      $Γ tack (t_1).l "or" t_2: τ_1$,
-    ),
-    derive(
-      "T-Or-Pos",
-      ($Γ tack t_1: τ_1$, $l ∉ τ_1$, $Γ tack t_2: τ_2$),
-      $Γ tack (t_1).l "or" t_2: τ_2$,
-    ),
-    derive(
-      "T-Lst-Hom",
-      ($Γ tack t_0: τ$, "...", $Γ tack t_n: τ$),
-      $Γ tack [ " " t_0 " " t_1 " " ... " " t_n " "]: [τ]$,
-    ),
-    derive(
-      "T-Lst-Agg",
-      ($Γ tack t_0: τ_0$, "...", $Γ tack t_n: τ_n$, $∃ i, j. τ_i != τ_j$),
-      $Γ tack [space t_0 space t_1 space ... " " t_n] : [ τ_0 space τ_1 space ... space τ_n]$,
-    ),
-    derive(
-      "T-List-Concat-Hom",
-      ($Γ tack a: "[τ]"$, $Γ tack b: "[τ]"$),
-      $Γ tack a "⧺" b: "[τ]"$,
-    ),
-    derive(
-      "T-List-Concat-Multi",
-      ($Γ tack a: [arrow(τ_1)]$, $Γ tack b: [arrow(τ_2)]$),
-      $Γ tack a "⧺" b: [arrow(τ_1)arrow(τ_2)]$,
-    ),
-    derive(
-      "T-Rec-Concat",
-      ($Γ tack a: { oi(l\: τ) }$, $Γ tack b: { l_j: τ_j }$),
-      $Γ tack a "//" b: {..b, ..a}$,
-    ),
+  ),
+)
+
+#figure(caption: "Typing rules (continued)", rect(inset: 20pt, stack(
+  spacing: 3em,
+  sub_typing_rules(
+    caption: "Language Constructs",
     derive(
       "T-Multi-Let",
       (
@@ -258,8 +291,7 @@ What follows are the typing and subtyping rules as well as an overview over the 
       $Γ tack "assert" t_1; t_2: τ_2$,
     ),
   ),
-)
-
+)))
 - We have a standard typing context Γ, pre-filled with the standard library functions from @prelude and functions to handle the basic logic, arithmetic and comparison operators.
 - $∀ arrow(a)$ represents a _type scheme_ with many polymorphic variables α_i. These are used for let-polymorphism.
 
@@ -320,7 +352,7 @@ What follows are the typing and subtyping rules as well as an overview over the 
 What follows are the constraining rules used in the constrain subroutine of the implementation. It uses the subtyping rules and applies them to types. The underlying algorithm uses _levels_ to distinguish type variables that should be generalized and not. When entering a let-binding, the level is increased as every new type variable should adhere to _let-polymorphism_. During type inference, the algorithm also keeps track of the current level and only generalizes variables that are above the current level.
 Instatiation is done by cloning the inherent structure of the type but adding new type variables above the current level which is done by the `freshen_above()` function.
 
-#colored_box(title: "Constraining rules", color: purple)[
+#figure(caption: "Constraining rules")[
   Constraining takes two types τ₁ and τ₂ and constraints the first type to be subtype of the other.
   #v(1cm)
   $

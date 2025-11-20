@@ -4,43 +4,31 @@
 #let red_700 = rgb(185, 28, 28)
 #let red = oklch(42.1%, 0.095, 57.708deg);
 
-// shorthand to create a simple overline and index i
+// shorthands
 #let oi(body) = $overline(body)^i$
 #let oj(body) = $overline(body)^j$
-
-#let type_name(name) = text(size: 9pt, fill: black, weight: "bold", name)
 #let b(body) = text(weight: "bold", body)
 
-#let colored_box(title: "", color: blue, content) = {
-  block(breakable: false, {
-    stack(
-      dir: ttb,
-      spacing: 0.5em,
-      align(left, {
-        show heading: set text(
-          fill: color,
-          font: "DejaVu Sans",
-          weight: "medium",
-          size: 10pt,
-        )
-        heading(title, level: 2)
-      }),
-      rect(stroke: 1pt + color, radius: 4pt, width: 100%, inset: 8pt, content),
-    )
-  })
-}
-
-#let border_box(..body) = rect(inset: 20pt, flexwrap(
+#let boxed_type_rules(..body) = rect(inset: 20pt, flexwrap(
   main-spacing: 20pt,
   cross-spacing: 10pt,
   ..body,
 ))
 
-#let subbox(body, caption: "") = box([
-  #align(left, text(weight: "bold", smallcaps(caption)))
-  #body
-])
+#let subbox(caption: "", ..body) = stack(
+  spacing: 10pt,
+  align(left, text(weight: "bold", smallcaps(caption))),
+  ..body,
+)
 
+#let sub_typing_rules(caption: "", ..body) = stack(
+  spacing: 10pt,
+
+  box(width: 100%, align(left, text(weight: "bold", smallcaps(caption)))),
+  flexwrap(main-spacing: 20pt, cross-spacing: 10pt, ..body),
+)
+
+#let type_name(name) = text(size: 9pt, fill: black, weight: "bold", name)
 #let rule_name(name) = [
   #text(
     // fill: if name.starts-with("T") { maroon } else if name.starts-with("S") {
@@ -65,10 +53,3 @@
   )
 ]
 
-#let pad_stack(ct) = stack(dir: ltr, spacing: 3em, ..ct)
-
-
-#let typings(caption, items) = figure(align(center, grid(
-  align: center,
-  ..items.map(pad_stack)
-)))
