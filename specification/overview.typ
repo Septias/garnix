@@ -13,14 +13,14 @@ The language consists of the standard base types string, boolean, number and lab
 #let basetypes = box([
   #text(weight: "bold", smallcaps("Basetypes"))
   $
-                           c & ::= "[^\"$\\] | $(?!{) | \\."  \
-                     "inter" & ::= "${"\^} *"}"               \
-      #type_name("String") s & ::= "\"(c"*" inter)"*" c"*"\"" \
-     #type_name("Boolean") b & ::= "true" | "false"           \
-        #type_name("Path") p & ::= "(./|~/|/)([a-zA-Z.]+/?)+" \
-      #type_name("Number") n & ::= "([0-9]*\.)?[0-9]+"        \
-       #type_name("Label") l & ::= "[A-Za-z_][A-Za-z0-9_'-]*" \
-    #type_name("Variable") v & ::= "[A-Za-z_][A-Za-z0-9_'-]*" \
+                          c & ::= "[^\"$\\] | $(?!{) | \\."  \
+                    "inter" & ::= "${"\^} *"}"               \
+     #type_name("String") s & ::= "\"(c"*" inter)"*" c"*"\"" \
+    #type_name("Boolean") b & ::= "true" | "false"           \
+       #type_name("Path") p & ::= "(./|~/|/)([a-zA-Z.]+/?)+" \
+     #type_name("Number") n & ::= "([0-9]*\.)?[0-9]+"        \
+      #type_name("Label") l & ::= "[A-Za-z_][A-Za-z0-9_'-]*" \
+    // #type_name("Variable") v & ::= "[A-Za-z_][A-Za-z0-9_'-]*" \
   $
 ])
 
@@ -81,11 +81,8 @@ The language consists of the standard base types string, boolean, number and lab
 - Let statements can have multiple bindings $a_1 = t_1; … ; a_n = t_n$ before the `in` keyword appears.
 - Both let-statements and records allow _inherit statements_ to be placed between ordinary field declarations. Inherit statements take a known label for a value and _reintroduce_ the label as "label = value;" to the record or let expression. This feature is only syntactic sugar to build records and let-expressions easier.
 - The _with statement_ expects an arbitrary expression that reduces to a record. Every field from the record is then added to the scope of the next expression without shadowing existing variables. This is further discussed in @with.
-
 - Let statements can take a root path $p$ which is prefixed to all following lookups. This way, a deep record can be referenced from which all values are taken. For example, the statement `inherit (world.objects.players) robert anders;` will add `robert = world.objects.players.robert; anders = world.objects.players.anders;` to the surrounding record or let-expression.
-
-
-- Patterns can be _open_ marked by the bold ellipsis (#text(weight: "bold")[…]) or _closed_ and can also be given default arguments with the `?` syntax. An example would be `{a, b ? "pratt", …}` which is an _open_ pattern with a default value of "pratt" for the label $b$.
+- Patterns can be marked _open_ with the bold ellipsis (#text(weight: "bold")[…]), otherwise their are regarded as _closed_. Thye can also be given default arguments with the `?` syntax. An example would be `{a, b ? "pratt", …}` which is an _open_ pattern with a default value of "pratt" for the label $b$.
 
 == Reduction Rules
 #let eval_context = subbox(
@@ -172,7 +169,6 @@ What follows are the typing and subtyping rules as well as an overview over the 
     inset: 20pt,
     stack(
       spacing: 3em,
-
       sub_typing_rules(
         caption: "Standartrules",
         derive(
