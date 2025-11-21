@@ -7,58 +7,55 @@ In this document I try to lay out the current efforts of creating a type system 
 
 
 = Syntax <syn>
+$oi(E)$ denotes $0 … n$ repititions of a syntax construct and the index $i$ is omitted if obvious.
 
-The language consists of the standard base types string, boolean, number and label. Labels are distinct here, because we need a syntactic class in some places where only labels are allowed. An example is a path that is constructed from labels interspersed by dots, i.e. `hm.packages.git`. $oi(E)$ denots $0 … n$ repititions of a syntax construct and the index $i$ is omitted if obvious.
-
-#let basetypes = box([
-  #text(weight: "bold", smallcaps("Basetypes"))
+#let basetypes = subbox(caption: "Basetypes")[
   $
-                          c & ::= "[^\"$\\] | $(?!{) | \\."  \
-                    "inter" & ::= "${"\^} *"}"               \
-     #type_name("String") s & ::= "\"(c"*" inter)"*" c"*"\"" \
-    #type_name("Boolean") b & ::= "true" | "false"           \
-       #type_name("Path") p & ::= "(./|~/|/)([a-zA-Z.]+/?)+" \
-     #type_name("Number") n & ::= "([0-9]*\.)?[0-9]+"        \
-      #type_name("Label") l & ::= "[A-Za-z_][A-Za-z0-9_'-]*" \
+                                  c & ::= "[^\"$\\] | $(?!{) | \\."  \
+                            "inter" & ::= "${"\^} *"}"               \
+             #type_name("String") s & ::= "\"(c"*" inter)"*" c"*"\"" \
+            #type_name("Boolean") b & ::= "true" | "false"           \
+    #type_name("File-Path") rho.alt & ::= "(./|~/|/)([a-zA-Z.]+/?)+" \
+             #type_name("Number") n & ::= "([0-9]*\.)?[0-9]+"        \
+              #type_name("Label") l & ::= "[A-Za-z_][A-Za-z0-9_'-]*" \
     // #type_name("Variable") v & ::= "[A-Za-z_][A-Za-z0-9_'-]*" \
   $
-])
+]
 
 
-#let general = box([
-  #text(weight: "bold", smallcaps("Terms"))
+#let general = subbox(caption: "Terms")[
   $
-    t ::= &| b | s | p | n | l | v | "null" \
-    #type_name("Record") &| {overline(a)} | #b[rec] {overline(a)} \
+    t ::= &| b | s | rho.alt | n | l | v | "null" \
+    #type_name("Record") &| {overline(a\;)} | #b[rec] {overline(a\;)} \
     #type_name("Array") &| [ space t_0 space t_1 space ... space t_n space] \
     #type_name("Has-Attribute") &| t #text(weight: "bold", " ? ") l \
     #type_name("Has-Attribute-Or") &| t.l #b[or] t \
     #type_name("Record-Concat") &| t "//" t \
     #type_name("Array-Concat") &| t "⧺" t \
     #type_name("Lookup") &| t "." l \
-    #type_name("Dynamic-Lookup") &| t "." t \
+    (#type_name("Dynamic-Lookup") &| t "." t )\
     #type_name("Function") &| overline(p) "@ "h : t \
-    #type_name("Let-statements") &| #b[let] overline(a) #b[in] t \
+    #type_name("Let-statements") &| #b[let] overline(a\;) #b[in] t \
     #type_name("Conditionals") &| #b[if] t #b[then] t #b[else] t \
     #type_name("With-Statement") &| #b[with] t; t \
     #type_name("Assert-Statement") &| #b[assert] t; t \
   $
-])
+]
 
-#let inherit = box([
-  #text(weight: "bold", smallcaps("Assignment"))
+#let inherit = subbox(caption: "Assignment")[
   $
-    "ι" & ::= #text(weight: "bold")[inherit] l_0 " … " l_n; " | " #text(weight: "bold")[inherit] (ρ) " " l_0 " … " l_n; \
-    ρ & ::= l | ρ.l \
-    a & ::= l = t; " | " ι \
-  $])
+    #type_name("Inherit") "ι" & ::= #b[inherit] overline(l\;) | #b[inherit] (ρ) space overline(l\;) \
+    #type_name("Path") ρ & ::= l | ρ.l \
+    #type_name("Assignment") a & ::= l = t; " | " ι \
+  $
+]
 
 #let patterns = box([
   #text(weight: "bold", smallcaps("Patterns"))
   $
-    "e" & ::= l | l space ? space t                        \
-      p & ::= { overline(e) } | { overline(e), #b[…] } | l \
-      h & ::= ε | l                                        \
+    "e" & ::= l | l space ? space t                           \
+      p & ::= { overline(e\,) } | { overline(e\,) #b[…] } | l \
+      h & ::= ε | l                                           \
   $])
 
 #figure(
@@ -70,6 +67,10 @@ The language consists of the standard base types string, boolean, number and lab
     basetypes,
     inherit,
     patterns,
+    subbox(caption: "Shorthands", flexwrap(
+      main-spacing: 10pt,
+      $p : t space @ space ε = p : t$,
+    ))
   )),
   caption: "Supported Syntax of Nix",
 )
@@ -85,14 +86,10 @@ The language consists of the standard base types string, boolean, number and lab
 - Patterns can be marked _open_ with the bold ellipsis (#text(weight: "bold")[…]), otherwise their are regarded as _closed_. Thye can also be given default arguments with the `?` syntax. An example would be `{a, b ? "pratt", …}` which is an _open_ pattern with a default value of "pratt" for the label $b$.
 
 == Reduction Rules
-#let eval_context = subbox(
-  caption: "Evaluation Context",
-  $
-    E & := • | E t | (E).l | (v).E | "if " E " then " t " else " t | E + t | v + E
-  $,
-)
+
 #figure(
-  rect(width: 100%, inset: 20pt)[
+  caption: "Reduction rules of nix",
+  rect(width: 107%, inset: 20pt)[
     #align(
       left,
       stack(
@@ -110,20 +107,24 @@ The language consists of the standard base types string, boolean, number and lab
           #rule_name("R-Has-Pos")&& {oi(l_i\: t_i)}.l" ? "t & arrow.long "true" &&&"if" ∃i. l_i = l \
           #rule_name("R-Has-Neg")&& {oi(l_i\: t_i)}.l" ? "t & arrow.long "false" &&&"if" ∄i. l_i = l \
           #rule_name("R-Let")&& #b[let] oi(l_i \= t_i\;) "in" t_2 & arrow.long t_2 [oi(l_i = v_i)] \
-          #rule_name("R-With")&& #b[with] {oi(l_i \= t_i\;)}; t_2 & arrow.long t_2[oi(l_i "⊜ " a_i) ] \
-          #rule_name("R-Cond-True")&& "if " "true" " then "t_1" else "t_2 & arrow.long t_1 \
-          #rule_name("R-Cond-False")&& "if" "false" "then "t_1" else "t_2 & arrow.long t_2 \
+          #rule_name("R-With")&& #b[with] {oi(l_i \= t_i\;)}; t_2 & arrow.long t_2[oi(l_i = a_i) ] &&& i ∈ {i : i in.not Γ} \
+          #rule_name("R-Cond-True")&& #b[if ] "true" #b[ then ] t_1 #b[ else ]t_2 & arrow.long t_1 \
+          #rule_name("R-Cond-False")&& #b[if] "false" #b[then ] t_1 #b[ else ]t_2 & arrow.long t_2 \
           #rule_name("R-Array-Concat")&& t_1 ⧺ t_2 & arrow.long [ oi(t_(1i)), oj(t_(2j)) ] \
           #rule_name("R-Record-Concat")&& t_1 " //" t_2 & arrow.long {…t_2 , …t_1} \
           && t arrow.long t' &==> E[t] → E[t']
         $,
         subbox(caption: "Values")[$ p: t"  |  "x; "  |  "{..}"  |  rec" {..} $],
-        eval_context,
+        subbox(
+          caption: "Evaluation Context",
+          $
+            E & := • | E t | (E).l | (v).E | "if " E " then " t " else " t | E + t | v + E
+          $,
+        ),
         linebreak(),
       ),
     )
   ],
-  caption: "Reduction rules of nix",
 ) <reduction>
 - @reduction shows the small-step reduction rules of the language. Let $t, t_1$ and $t_2$ range over syntax terms and $l$ over identifiers (labels and variables).
 - The _spread syntax_ ${…"rc"}$ is used to create a new record from the fields of `rc` where `rc` is a record. These new fields never overwrite existing fields, meaning `{a : int, …{a : string}}` will reduce to `{a: int}`. Similar is possible for arrays, but naturally without deduplication. For two records $A: {l_i: t_i}$ and $B: {l_i: t_i}$ this means ${..A, ..B} = {l_a = t_a; l_b = t_b;}$ where $a ∈ {i: l_i ∈ A }$ and $b ∈ { i: l_i ∈ ( B \\ A) }$. $B \\ A$ is the Record B where every label i has been removed if it is in A.
