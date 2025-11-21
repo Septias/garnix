@@ -9,7 +9,7 @@ In this document I try to lay out the current efforts of creating a type system 
 = Syntax <syn>
 $oi(E)$ denotes $0 … n$ repititions of a syntax construct and the index $i$ is omitted if obvious.
 
-#let basetypes = subbox(caption: "Basetypes")[
+#let basetypes = subbox(caption: "Literals")[
   $
                                   c & ::= "[^\"$\\] | $(?!{) | \\."  \
                             "inter" & ::= "${"\^} *"}"               \
@@ -25,7 +25,7 @@ $oi(E)$ denotes $0 … n$ repititions of a syntax construct and the index $i$ is
 
 #let general = subbox(caption: "Terms")[
   $
-    t ::= &| b | s | rho.alt | n | l | v | "null" \
+    t, t_1, t_2 ::= &| b | s | rho.alt | n | l | v | "null" \
     #type_name("Record") &| {overline(a\;)} | #b[rec] {overline(a\;)} \
     #type_name("Array") &| [ space t_0 space t_1 space ... space t_n space] \
     #type_name("Has-Attribute") &| t #text(weight: "bold", " ? ") l \
@@ -44,7 +44,7 @@ $oi(E)$ denotes $0 … n$ repititions of a syntax construct and the index $i$ is
 
 #let inherit = subbox(caption: "Assignment")[
   $
-    #type_name("Inherit") "ι" & ::= #b[inherit] overline(l\;) | #b[inherit] (ρ) space overline(l\;) \
+    #type_name("Inherit") ι & ::= #b[inherit] overline(l\;) | #b[inherit] (ρ) space overline(l\;) \
     #type_name("Path") ρ & ::= l | ρ.l \
     #type_name("Assignment") a & ::= l = t; " | " ι \
   $
@@ -53,9 +53,9 @@ $oi(E)$ denotes $0 … n$ repititions of a syntax construct and the index $i$ is
 #let patterns = box([
   #text(weight: "bold", smallcaps("Patterns"))
   $
-    "e" & ::= l | l space ? space t                           \
-      p & ::= { overline(e\,) } | { overline(e\,) #b[…] } | l \
-      h & ::= ε | l                                           \
+    d, h & ::= t | ε                                       \
+       e & ::= l | l space ? space d                       \
+       p & ::= { overline(e\,) } | { overline(e\,) … } | l \
   $])
 
 #figure(
@@ -68,24 +68,56 @@ $oi(E)$ denotes $0 … n$ repititions of a syntax construct and the index $i$ is
     inherit,
     patterns,
     subbox(caption: "Shorthands", flexwrap(
-      main-spacing: 10pt,
-      $p : t space @ space ε = p : t$,
+      main-spacing: 20pt,
+      $(1) p : t space @ space ε = p : t$,
+      $(2) l space ? space ε : l$,
     ))
   )),
   caption: "Supported Syntax of Nix",
 )
 
+Since nix is a real-world language it supports a big range of _literals_ in comparison to purely technical languages that get along with only one literal to form the simplest kind of syntax. The syntax is given following the official regex formulas to follow the specification \@typedef. _Records_ follow a standart notation where multiple fields can be defined using `key = value;` assignments to define multiple fields. In addition, records can be marked _recursive_ with the `rec` keyword and are non-recursive otherwise. _Arrays_ are introduced in a similar fashion where multiple values can be concatenated with the only unintuitive nix-specific distinction that a space is used as seperator. Both datatypes are generally _immutable_, but there are concat operations (Record-Concat and Array-Concat) that can be used to create new, bigger datatypes. Other than that, records come equipped with the usual lookup syntax and two specialities. The first being a dynamic label check that returns a boolean as a result and secondly a way to specify a default value in case the previous check turned out to be negative.
 
-- Functions take one argument which can be a _pattern_. This pattern has a _record-like_ structure, allowing multiple fields to be present and also _default arguments_. This way a function taking multiple arguments can be created without resorting to currying.
-- Records can be marked _recursive_ with the `rec` keyword. Records and Arrays are _immutable_ but there are concat operations (*Record-Concat* and *Array-Concat*) that can be used to create new, bigger datatypes.
-- Record lookups can be static (with a given label) or dynamic, with an arbitrary expression t, that has to reduce to a string. This is further discussed in @dynamic_lookup.
-- Let statements can have multiple bindings $a_1 = t_1; … ; a_n = t_n$ before the `in` keyword appears.
-- Both let-statements and records allow _inherit statements_ to be placed between ordinary field declarations. Inherit statements take a known label for a value and _reintroduce_ the label as "label = value;" to the record or let expression. This feature is only syntactic sugar to build records and let-expressions easier.
-- The _with statement_ expects an arbitrary expression that reduces to a record. Every field from the record is then added to the scope of the next expression without shadowing existing variables. This is further discussed in @with.
-- Let statements can take a root path $p$ which is prefixed to all following lookups. This way, a deep record can be referenced from which all values are taken. For example, the statement `inherit (world.objects.players) robert anders;` will add `robert = world.objects.players.robert; anders = world.objects.players.anders;` to the surrounding record or let-expression.
-- Patterns can be marked _open_ with the bold ellipsis (#text(weight: "bold")[…]), otherwise their are regarded as _closed_. Thye can also be given default arguments with the `?` syntax. An example would be `{a, b ? "pratt", …}` which is an _open_ pattern with a default value of "pratt" for the label $b$.
+Functions take one argument, a _pattern_. This pattern can be a single label or adher to a _record-like_ structure, allowing multiple fields to be present, possibly with _default arguments_. This way a function taking multiple arguments can be created without resorting to currying. These functions can then be called with a record from which the "single arguments" are taken. This forms a neat syntax ambiguity where function definitions and their supplied arguments can be read as functions taking records or as elaborate functions with multiple arguments and possibly default arguments.
+Patterns can alse be marked _open_ with the ellipsis (…), otherwise their are regarded as _closed_. Thye can also be given default arguments with the `?` syntax. An example would be `{a, b ? "pratt", …}` which is an _open_ pattern with a default value of "pratt" for the label $b$.
+
+Let-expressions can have multiple bindings $a_1 = t_1; … ; a_n = t_n$ before the `in` keyword appears, possibly referencing each other in a _recursive way_. Both let-statements and records allow _inherit statements_ to be placed between ordinary field declarations. Inherit statements take a known label for a value and _reintroduce_ the label as "label = value;" to the record or let expression. This feature is only syntactic sugar to build records and let-expressions easier and does not complicate the typesystem.
+Let statements can also take a root path $p$ which is prefixed to all following labels. This way, a deep record can be referenced from which all values are taken. For example, the statement `inherit (world.objects.players) robert anders;` will desugar to `robert = world.objects.players.robert; anders = world.objects.players.anders;` in the surrounding record or let-expression.
+
+The _with statement_ expects an arbitrary expression that reduces to a record. Every field from this record is then added to the scope of the next expression without shadowing existing variables. This is further discussed in @with.
+
 
 == Reduction Rules
+
+#figure(
+  caption: "Function reduction",
+  rect(width: 100%, inset: 20pt)[
+    #align(
+      left,
+      stack(
+        spacing: 20pt,
+        $
+          #rule_name("R-Fun")&& (l: t_2)t_1 & arrow.long t_2[l := t_1] \
+          #rule_name("R-Fun-Pat")&& ({oi(l_i)}: t){oi(l_i \= t_i)} & arrow.long
+          t [oi(l_i := t_i)] \
+          #rule_name("R-Fun-Pat-Open")&& ({oi(l_i)\, ...}: t) {oj(l_i = t_i)} & arrow.long
+          t [oi(l_i := t_i)] #h(0.5cm) &&&∀i. ∃ j. i eq j \
+          #rule_name("R-Fun-Pat-Default")&&({oi(e_i)}): t{oj(l_j = t_j)} & arrow.long
+          t [oi(l_i := d_i)] [oj(l_j = t_j)] \
+          #rule_name("R-Fun-Pat-Default-Open")&&({oi(e_i), …}): t{oj(l_j = t_j), …} & arrow.long
+          t [oi(l_i := d_i)] [oj(l_j = t_j)] &&&∀i. ∃ j. i eq j\
+        $,
+      ),
+    )
+  ],
+)
+
+Since nix supports patterns with default values and the _open_ modifiers, the function reduction rules become quite verbose. The simplest case is R-Fun which takes an argument t₁ and replaces the occurences of $l$ with said argument in the function body t₂. The next function rules R-Fun-Pat-∗ reduces functions taking patterns, the R-Fun-Pat being the simplest of such. We draw i,j from the index Set ℐ and range them over labels such that if i = j then l_i = l_j.
+Since the same index $i$ is used for both the argument and pattern in R-Fun-Pat, they must agree on the same labels which resembles closed-pattern function calls. In the contrary case where the pattern is open, the argument-record can range over arbitray labels (possibly more than in the pattern). In this case, the side-condition enforces that at least the pattern fields are present (R-Fun-Pat-Open).
+
+The R-fun-Pat-Default-∗ rules range over pattern elements $e$ which can be either single labels $l$ or labels with a default values like $l : d$. The former case can be converted to the latter with ε-extension transforming $l$ to $l ? ε$ which is equivalent to $l$ due to the shorthands (TODO: can you do this?). The variables of the body are then substituted twice. First with the default values of the pattern and then with the given value from the argument. A value substituted to ε in the first run will just stay undefined as if it wasn't touched at all. The second substition then overwrites the just installed default values with the values given in the record. In the implementation, this double iteration is removed for a performance-improved version needing only one run, but the current rules are kept for simplicity of proofs and comprehension. The open case needs a side-condition analogous to the former open case.
+
+Since ${oi(e_i)}$ strictly subsumes ${oi(l_i)}$ due to its inner structure, rule 2 and 3 are only stated as a mental stepping stone for the reader but not mentioned further.
 
 #figure(
   caption: "Reduction rules of nix",
@@ -95,30 +127,30 @@ $oi(E)$ denotes $0 … n$ repititions of a syntax construct and the index $i$ is
       stack(
         spacing: 20pt,
         $
-          #rule_name("R-Fun")&& (l: t_2)t_1 & arrow.long t_2[l := t_1] \
-          #rule_name("R-Fun-Pat")&& ({oi(l_i)}: t){oi(l_i \= t_i)} & arrow.long t [oi(l_i := t_i)] \
-          #rule_name("R-Fun-Pat-Open")&& ({oi(l_i)\, ...}: t) {oj(l_i = t_i)} & arrow.long t [oi(l_i := a_i)] #h(0.5cm) &&&∀i. ∃ j. i eq j \
-          #rule_name("R-Fun-Pat-Default")&&{oi(l_i" ? "t_i), overline(l_j)^j}: t_2{overline(l_k = t_k)^k; oj(l_j = t_j)} & arrow.long t_2 [overline(l_m := a_m)^m] [overline(l_n = a_n)^n] [overline(l_j := a_j)^j] \
-          &&"Where" &m ∈ {i: ∃k. l_i = l_k}; n ∈ {i: exists.not k. l_i = l_k} \
-          #rule_name("R-Lookup")&& {oi(l_i\: t_i)}.l & arrow.long t_i #h(0.5cm) &&&"if" ∃i. l_i = l \
-          #rule_name("R-Lookup-Null")&& {oi(l_i \= t_i)}.l & arrow.long "null" &&&"if" ∄i. l_i = l \
-          #rule_name("R-Lookup-Default-Pos")&& {oi(l_i\: t_i)}.l" or "t & arrow.long t_i &&&"if" ∃i. l_i = l \
-          #rule_name("R-Lookup-Default-Neg")&& {oi(l_i\: t_i)}.l" or "t & arrow.long t &&&"if" ∄i. l_i = l \
-          #rule_name("R-Has-Pos")&& {oi(l_i\: t_i)}.l" ? "t & arrow.long "true" &&&"if" ∃i. l_i = l \
-          #rule_name("R-Has-Neg")&& {oi(l_i\: t_i)}.l" ? "t & arrow.long "false" &&&"if" ∄i. l_i = l \
-          #rule_name("R-Let")&& #b[let] oi(l_i \= t_i\;) "in" t_2 & arrow.long t_2 [oi(l_i = v_i)] \
-          #rule_name("R-With")&& #b[with] {oi(l_i \= t_i\;)}; t_2 & arrow.long t_2[oi(l_i = a_i) ] &&& i ∈ {i : i in.not Γ} \
+          #rule_name("R-Lookup")&& {oi(l_i = t_i\;)}.l & arrow.long t_i #h(0.5cm) &&&"if" ∃i. l_i = l \
+          #rule_name("R-Lookup-Null")&& {oi(l_i = t_i\;)}.l & arrow.long "null" &&&"if" ∄i. l_i = l \
+          #rule_name("R-Lookup-Default-Pos")&& {oi(l_i = t_i\;)}.l" or "t & arrow.long
+          t_i &&&"if" ∃i. l_i = l \
+          #rule_name("R-Lookup-Default-Neg")&& {oi(l_i = t_i\;)}.l" or "t & arrow.long
+          t &&&"if" ∄i. l_i = l \
+          #rule_name("R-Has-Pos")&& {oi(l_i = t_i\;)}.l" ? "t & arrow.long "true" &&&"if" ∃i. l_i = l \
+          #rule_name("R-Has-Neg")&& {oi(l_i = t_i\;)}.l" ? "t & arrow.long "false" &&&"if" ∄i. l_i = l \
+          #rule_name("R-Let")&& #b[let] oi(l_i \= t_i\;) "in" t_2 & arrow.long t_2 [oi(l_i = t_i)] \
+          #rule_name("R-With")&& #b[with] {oi(l_i \= t_i\;)}; t_2 & arrow.long
+          t_2[oi(l_i = t_i) ] &&& i ∈ {i : i in.not Γ} \
           #rule_name("R-Cond-True")&& #b[if ] "true" #b[ then ] t_1 #b[ else ]t_2 & arrow.long t_1 \
           #rule_name("R-Cond-False")&& #b[if] "false" #b[then ] t_1 #b[ else ]t_2 & arrow.long t_2 \
-          #rule_name("R-Array-Concat")&& t_1 ⧺ t_2 & arrow.long [ oi(t_(1i)), oj(t_(2j)) ] \
-          #rule_name("R-Record-Concat")&& t_1 " //" t_2 & arrow.long {…t_2 , …t_1} \
+          #rule_name("R-Array-Concat")&& [ oi(t_(1i))] ⧺ [oj(t_(2j))] & arrow.long
+          [ oi(t_(1i)) oj(t_(2j)) ] \
+          #rule_name("R-Record-Concat")&& {oi(l_i = t_i\;)} "//" {oj(l_j \= t_j\;)} & arrow.long
+          {oi(l_i = t_i\;) space overline(l_b = t_b\;)^b} &&& b ∈ { j: exists.not i. l_i = l_j } \
           && t arrow.long t' &==> E[t] → E[t']
         $,
         subbox(caption: "Values")[$ p: t"  |  "x; "  |  "{..}"  |  rec" {..} $],
         subbox(
           caption: "Evaluation Context",
           $
-            E & := • | E t | (E).l | (v).E | "if " E " then " t " else " t | E + t | v + E
+            E & := • | E space t | (E).l | (v).E | #b[if ] E #b[ then ] t #b[ else ] t | E + t | v + E
           $,
         ),
         linebreak(),
@@ -126,10 +158,6 @@ $oi(E)$ denotes $0 … n$ repititions of a syntax construct and the index $i$ is
     )
   ],
 ) <reduction>
-- @reduction shows the small-step reduction rules of the language. Let $t, t_1$ and $t_2$ range over syntax terms and $l$ over identifiers (labels and variables).
-- The _spread syntax_ ${…"rc"}$ is used to create a new record from the fields of `rc` where `rc` is a record. These new fields never overwrite existing fields, meaning `{a : int, …{a : string}}` will reduce to `{a: int}`. Similar is possible for arrays, but naturally without deduplication. For two records $A: {l_i: t_i}$ and $B: {l_i: t_i}$ this means ${..A, ..B} = {l_a = t_a; l_b = t_b;}$ where $a ∈ {i: l_i ∈ A }$ and $b ∈ { i: l_i ∈ ( B \\ A) }$. $B \\ A$ is the Record B where every label i has been removed if it is in A.
-- R-Fun is the standard β-reduction for functions where the argument is replaced by the supplied argument's value in the body. `b[l := a]` means that the variable $l$ is assigned value $a$ in the body $b$.
-- To reduce with statements the first term has to reduce to a record and I don't like the formalization of that currently. For the next expression the record fields are added to the scope without shadowing existing bindings. I use the `⊜` operator to get this behavior. See @with for further discussion.
 
 = Type System
 What follows are the typing and subtyping rules as well as an overview over the constraint subroutine.
