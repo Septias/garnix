@@ -3,6 +3,8 @@
 // colors
 #let red_700 = rgb(185, 28, 28)
 #let red = oklch(42.1%, 0.095, 57.708deg);
+#let zink_700 = oklch(44.2%, 0.017, 285.786deg)
+#let zink_900 = oklch(21%, 0.006, 285.885deg)
 
 // shorthands
 #let oi(body) = $overline(body)^i$
@@ -23,23 +25,19 @@
 
 #let sub_typing_rules(caption: "", ..body) = stack(
   spacing: 10pt,
-
   box(width: 100%, align(left, text(weight: "bold", smallcaps(caption)))),
   flexwrap(main-spacing: 20pt, cross-spacing: 10pt, ..body),
 )
 
-#let type_name(name) = text(size: 9pt, fill: black, weight: "bold", name)
-#let rule_name(name) = [
-  #text(
-    // fill: if name.starts-with("T") { maroon } else if name.starts-with("S") {
-    //   purple
-    // } else if name.starts-with("C") { orange } else if name.starts-with("R") {
-    //   blue
-    // } else { black },
-    weight: "bold",
-    smallcaps(name),
-  )
+#let type_name(name) = [
+  #text(fill: zink_700, style: "italic", size: 9pt, font: "NotoSerif NF", name)
+  #v(10pt)
 ]
+#let rule_name(name) = [
+  #text(fill: zink_900, size: 9pt, font: "NotoSerif NF", smallcaps(name))
+  #v(10pt)
+]
+
 
 #let derive(name, prem, conclusion) = [
   #table(
