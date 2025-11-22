@@ -121,7 +121,7 @@ Since ${oi(e_i)}$ strictly subsumes ${oi(l_i)}$ due to its inner structure, rule
 
 #figure(
   caption: "Reduction rules of nix",
-  rect(width: 107%, inset: 20pt)[
+  rect(width: 100%, inset: 20pt)[
     #align(
       left,
       stack(
@@ -153,6 +153,13 @@ Since ${oi(e_i)}$ strictly subsumes ${oi(l_i)}$ due to its inner structure, rule
             E & := • | E space t | (E).l | (v).E | #b[if ] E #b[ then ] t #b[ else ] t | E + t | v + E
           $,
         ),
+        subbox(
+          caption: "Other Context",
+          $
+            #rule_name("Types") Γ \
+            #rule_name("Subtyping") Xi \
+          $,
+        ),
         linebreak(),
       ),
     )
@@ -163,33 +170,30 @@ Since ${oi(e_i)}$ strictly subsumes ${oi(l_i)}$ due to its inner structure, rule
 What follows are the typing and subtyping rules as well as an overview over the constraint subroutine.
 
 
-#figure(
-  caption: "Types of nix.",
-  rect(
-    grid(
-      columns: 2,
-      align: left,
-      inset: 8pt,
-      grid.cell(
-        rowspan: 2,
-        subbox(
-          caption: "Types",
-          $
-            tau ::= & "bool" | "string" | "path" | "num"                                \
-                    & | τ -> τ | alpha | top | ⊥ | τ union.sq τ | τ inter.sq τ | μ α. τ \
-                    & | {l: τ} | [τ] | [overline(τ)] | ⦃ oi(p) ⦄^b                      \
-          $,
-        ),
-      ),
-      subbox(
-        caption: "Pattern element",
-        $
-          p & := τ | τ^?
-        $,
-      ),
-    ),
+#figure(caption: "Types of nix.", rect(grid(
+  columns: 2,
+  align: left,
+  inset: 8pt,
+  grid.cell(rowspan: 2, subbox(
+    caption: "Types",
+    $
+      tau ::= & "bool" | "string" | "path" | "num"               \
+              & | τ -> τ | {l: τ} | [τ] | [overline(τ)] | alpha  \
+              & | top | ⊥ | τ union.sq τ | τ inter.sq τ | μ α. τ \
+              & | ⦃ oi(p) ⦄^b                                    \
+    $,
+  )),
+  subbox(
+    caption: "Pattern element",
+    $
+      p & := τ | τ^?
+    $,
   ),
-)
+)))
+
+Garnix models all literal syntax categories with the respective atom types bool, string, path and num. Notice, that we do not distinguish between float and int as they are coerced during interpretation and thus used interspersely in practice. We also add the usual types for fuctions, records and arrays and note that records types only define a _single_ label to type mapping instead of multiple. This is due to the use of subtyping constraints and their accumuation on type variables during type inferene. This mechanism is further discussed in \@section_todo. Also, we introduce two types for arrays, one for homogenous arrays of the same type and one accumulative for the case that an array has many distinct elements.
+To form a boolean algebra of types we add the expected type connectives $union.sq, inter.sq, ~$ as well as a top and bottom type which represent the least type which is subsumed by every other type and the greatest type which subsumes every other type respectively.
+Lastely, we add a single type for patterns. Even thought a pattern is similar in strucuter to a record, the pattern type is an accumulated type with multiple fields. This distinction is made due to the syntactical difference of the two. Patterns are introduced and eliminated atomically unlike a record where every fild acces $"record.field"$ results in new independent constraints. The superscript b can be true or false, ascribing whether the pattern is _open_ or _closed_.
 
 
 #figure(
