@@ -173,19 +173,20 @@ What follows are the typing and subtyping rules as well as an overview over the 
       grid.cell(rowspan: 2, subbox(
         caption: "Types",
         $
-          tau ::= & "bool" | "string" | "path" | "num"               \
-                  & | τ -> τ | {l: τ} | [τ] | [overline(τ)] | alpha  \
-                  & | top | ⊥ | τ union.sq τ | τ inter.sq τ | μ α. τ \
-                  & | ⦃ oi(p) ⦄^b                                    \
-                p & := τ | τ^?                                       \
+          #type_name("Type") tau ::= & "bool" | "string" | "path" | "num" \
+          & | τ -> τ | {l: τ} | [τ] | [overline(τ)] | alpha \
+          & | top | ⊥ | τ union.sq τ | τ inter.sq τ | μ α. τ \
+          & | ⦃ oi(p) ⦄^b \
+          #type_name("Pattern Element") p & := τ | τ^? \
+          #type_name("Polymorphic type") σ & := ∀Xi. τ \
         $,
       )),
       subbox(
         caption: "Contexts",
         $
-          #type_name("Types") Γ & ::= ε | Γ · (l : τ) | Γ · (l : σ) \
-          #type_name("Subtyping") Σ & ::= Xi | Σ · (τ ≤ τ) | Σ · ⊳(τ ≤ τ) \
-          #type_name("Constraint") Xi & ::= ε | Xi · (τ ≤ τ) | Xi · (τ ≤ α) | Xi · #text(weight: "bold", "err") \
+          #type_name("Typing Context") Γ & ::= ε | Γ · (l : τ) | Γ · (l : σ) \
+          #type_name("Subtyping Context") Σ & ::= Xi | Σ · (τ ≤ τ) | Σ · ⊳(τ ≤ τ) \
+          #type_name("Constraint Context") Xi & ::= ε | Xi · (τ ≤ τ) | Xi · (τ ≤ α) | Xi · #text(weight: "bold", "err") \
         $,
       ),
     ),
