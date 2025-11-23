@@ -67,11 +67,11 @@ $oi(E)$ denotes $0 … n$ repititions of a syntax construct and the index $i$ is
     basetypes,
     inherit,
     patterns,
-    subbox(caption: "Shorthands", flexwrap(
-      main-spacing: 20pt,
-      $(1) p : t space @ space ε = p : t$,
-      $(2) l space ? space ε : l$,
-    ))
+    subbox(caption: "Shorthands")[
+      #set math.equation(numbering: "(1)")
+      $ p : t space @ space ε = p : t $
+      $ l space ? space ε : l $
+    ]
   )),
   caption: "Supported Syntax of Nix",
 )
@@ -153,13 +153,6 @@ Since ${oi(e_i)}$ strictly subsumes ${oi(l_i)}$ due to its inner structure, rule
             E & := • | E space t | (E).l | (v).E | #b[if ] E #b[ then ] t #b[ else ] t | E + t | v + E
           $,
         ),
-        subbox(
-          caption: "Other Context",
-          $
-            #rule_name("Types") Γ \
-            #rule_name("Subtyping") Xi \
-          $,
-        ),
         linebreak(),
       ),
     )
@@ -170,26 +163,34 @@ Since ${oi(e_i)}$ strictly subsumes ${oi(l_i)}$ due to its inner structure, rule
 What follows are the typing and subtyping rules as well as an overview over the constraint subroutine.
 
 
-#figure(caption: "Types of nix.", rect(grid(
-  columns: 2,
-  align: left,
-  inset: 8pt,
-  grid.cell(rowspan: 2, subbox(
-    caption: "Types",
-    $
-      tau ::= & "bool" | "string" | "path" | "num"               \
-              & | τ -> τ | {l: τ} | [τ] | [overline(τ)] | alpha  \
-              & | top | ⊥ | τ union.sq τ | τ inter.sq τ | μ α. τ \
-              & | ⦃ oi(p) ⦄^b                                    \
-    $,
-  )),
-  subbox(
-    caption: "Pattern element",
-    $
-      p & := τ | τ^?
-    $,
+#figure(
+  caption: "Types of nix.",
+  rect(
+    grid(
+      columns: 1,
+      align: left,
+      inset: 8pt,
+      grid.cell(rowspan: 2, subbox(
+        caption: "Types",
+        $
+          tau ::= & "bool" | "string" | "path" | "num"               \
+                  & | τ -> τ | {l: τ} | [τ] | [overline(τ)] | alpha  \
+                  & | top | ⊥ | τ union.sq τ | τ inter.sq τ | μ α. τ \
+                  & | ⦃ oi(p) ⦄^b                                    \
+                p & := τ | τ^?                                       \
+        $,
+      )),
+      subbox(
+        caption: "Contexts",
+        $
+          #type_name("Types") Γ & ::= ε | Γ · (l : τ) | Γ · (l : σ) \
+          #type_name("Subtyping") Σ & ::= Xi | Σ · (τ ≤ τ) | Σ · ⊳(τ ≤ τ) \
+          #type_name("Constraint") Xi & ::= ε | Xi · (τ ≤ τ) | Xi · (τ ≤ α) | Xi · #text(weight: "bold", "err") \
+        $,
+      ),
+    ),
   ),
-)))
+)
 
 Garnix models all literal syntax categories with the respective atom types bool, string, path and num. Notice, that we do not distinguish between float and int as they are coerced during interpretation and thus used interspersely in practice. We also add the usual types for fuctions, records and arrays and note that records types only define a _single_ label to type mapping instead of multiple. This is due to the use of subtyping constraints and their accumuation on type variables during type inferene. This mechanism is further discussed in \@section_todo. Also, we introduce two types for arrays, one for homogenous arrays of the same type and one accumulative for the case that an array has many distinct elements.
 To form a boolean algebra of types we add the expected type connectives $union.sq, inter.sq, ~$ as well as a top and bottom type which represent the least type which is subsumed by every other type and the greatest type which subsumes every other type respectively.
