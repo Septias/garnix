@@ -1,9 +1,10 @@
 #import "functions.typ": *
 #set heading(numbering: "1.")
-#set page(margin: 2em)
+#set page(margin: 2em, height: auto)
 
 = Current Efforts of Typing the Nix Language and Coding a LSP
-In this document I try to lay out the current efforts of creating a type system and its implementation as a language server written in Rust. This document should act as an overview such that we (Peter Thiemann, Taro Sekiyama and I) have a common ground to discuss next steps and current efforts. Most of it is WIP and there are many loose ends and even contradictions.
+The nix programming language was created in the process of creating nix, the package manager.
+
 
 
 = Syntax <syn>
@@ -14,14 +15,18 @@ $oi(E)$ denotes $0 … n$ repititions of a syntax construct and the index $i$ is
                                   c & ::= "[^\"$\\] | $(?!{) | \\."  \
                             "inter" & ::= "${"\^} *"}"               \
              #type_name("String") s & ::= "\"(c"*" inter)"*" c"*"\"" \
+       #type_name("Ident String") s & ::= "''todo''"                 \
             #type_name("Boolean") b & ::= "true" | "false"           \
     #type_name("File-Path") rho.alt & ::= "(./|~/|/)([a-zA-Z.]+/?)+" \
              #type_name("Number") n & ::= "([0-9]*\.)?[0-9]+"        \
               #type_name("Label") l & ::= "[A-Za-z_][A-Za-z0-9_'-]*" \
+        #type_name("Search Path") l & ::= "<[A-Za-z_]*> TODO"        \
     // #type_name("Variable") v & ::= "[A-Za-z_][A-Za-z0-9_'-]*" \
   $
 ]
 
+// TODO: convert to code
+// TODO: Note that uri is deprecated
 
 #let general = subbox(caption: "Terms")[
   $
