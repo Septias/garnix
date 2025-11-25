@@ -33,7 +33,7 @@ $oi(E)$ denotes $0 … n$ repititions of a syntax construct and the index $i$ is
     t, t_1, t_2 ::= &| b | s | rho.alt | n | l | v | "null" \
     #type_name("Record") &| {overline(a\;)} | #b[rec] {overline(a\;)} \
     #type_name("Array") &| [ space t_0 space t_1 space ... space t_n space] \
-    #type_name("Has-Attribute") &| t #text(weight: "bold", " ? ") l \
+    #type_name("Has-Attribute") &| t #b[ ? ] l \
     #type_name("Has-Attribute-Or") &| t.l #b[or] t \
     #type_name("Record-Concat") &| t "//" t \
     #type_name("Array-Concat") &| t "⧺" t \
@@ -44,6 +44,8 @@ $oi(E)$ denotes $0 … n$ repititions of a syntax construct and the index $i$ is
     #type_name("Conditionals") &| #b[if] t #b[then] t #b[else] t \
     #type_name("With-Statement") &| #b[with] t; t \
     #type_name("Assert-Statement") &| #b[assert] t; t \
+    #type_name("Operator") &| t • t \
+    • = #b[or] | "//" | ⧺ | ? \
   $
 ]
 
@@ -155,7 +157,11 @@ Since ${oi(e_i)}$ strictly subsumes ${oi(l_i)}$ due to its inner structure, rule
         subbox(
           caption: "Evaluation Context",
           $
-            E & := • | E space t | (E).l | (v).E | #b[if ] E #b[ then ] t #b[ else ] t | E + t | v + E
+            E[□] & := □ | □ space t | (□).l | (v).□      \
+                 & | #b[if ] □ #b[ then ] t #b[ else ] t \
+                 & | #b[with ] □; t | #b[with ] v; □     \
+                 & | #b[inherit ] (ρ) □                  \
+                 & | □ • t | v • t                       \
           $,
         ),
         linebreak(),
