@@ -475,6 +475,7 @@ To handle these, all expected record fields need to be present in the function a
 
 == Dunder Methods
 There seem to be some special dunder methods for representations which are handled specially by the evaluator. I have not had the chance to look into it further.
+An example is the `__functor` field that can be set on a record and lets the function be used as a functor.
 
 == Closures
 Its possible to capture variables in nix:
