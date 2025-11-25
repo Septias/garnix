@@ -135,3 +135,39 @@ articleno = {48},
 numpages = {33},
 keywords = {type inference, first-class polymorphism, subtyping, constraint solving}
 }
+
+@article{max_lazy,
+title = {Maximal Laziness: An Efficient Interpretation Technique for Purely Functional DSLs},
+journal = {Electronic Notes in Theoretical Computer Science},
+volume = {238},
+number = {5},
+pages = {81-99},
+year = {2009},
+note = {Proceedings of the 8th Workshop on Language Descriptions, Tools and Applications (LDTA 2008)},
+issn = {1571-0661},
+doi = {https://doi.org/10.1016/j.entcs.2009.09.042},
+url = {https://www.sciencedirect.com/science/article/pii/S157106610900396X},
+author = {Eelco Dolstra},
+keywords = {Lazy functional language, maximallaziness, maximal sharing},
+abstract = {In lazy functional languages, any variable is evaluated at most once. This paper proposes the notion of maximal laziness, in which syntactically equal terms are evaluated at most once: if two terms e1 and e2 arising during the evaluation of a program have the same abstract syntax representation, then only one will be evaluated, while the other will reuse the former's evaluation result. Maximal laziness can be implemented easily in interpreters for purely functional languages based on term rewriting systems that have the property of maximal sharing — if two terms are equal, they have the same address. It makes it easier to write interpreters, as techniques such as closure updating, which would otherwise be required for efficiency, are not needed. Instead, a straight-forward translation of call-by-name semantic rules yields a call-by-need interpreter, reducing the gap between the language specification and its implementation. Moreover, maximal laziness obviates the need for optimisations such as memoisation and let-floating.}
+}
+
+@inproceedings{nixos_short,
+author = {Dolstra, Eelco and L\"{o}h, Andres},
+title = {NixOS: a purely functional Linux distribution},
+year = {2008},
+isbn = {9781595939197},
+publisher = {Association for Computing Machinery},
+address = {New York, NY, USA},
+url = {https://doi.org/10.1145/1411204.1411255},
+doi = {10.1145/1411204.1411255},
+abstract = {Existing package and system configuration management tools suffer from an imperative model, where system administration actions such as upgrading packages or changes to system configuration files are stateful: they destructively update the state of the system. This leads to many problems, such as the inability to roll back changes easily, to run multiple versions of a package side-by-side, to reproduce a configuration deterministically on another machine, or to reliably upgrade a system. In this paper we show that we can overcome these problems by moving to a purely functional system configuration model. This means that all static parts of a system (such as software packages, configuration files and system startup scripts) are built by pure functions and are immutable, stored in a way analogously to a heap in a purely function language. We have implemented this model in NixOS, a non-trivial Linux distribution that uses the Nix package manager to build the entire system configuration from a purely functional specification.},
+booktitle = {Proceedings of the 13th ACM SIGPLAN International Conference on Functional Programming},
+pages = {367–378},
+numpages = {12},
+keywords = {NixOS, nix, package management, purely functional deployment model, purely functional language, software deployment, system configuration management},
+location = {Victoria, BC, Canada},
+series = {ICFP '08}
+}
+
+
