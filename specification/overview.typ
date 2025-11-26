@@ -110,9 +110,9 @@ The _with statement_ expects an arbitrary expression that reduces to a record. E
           #rule_name("R-Fun-Pat-Open")&& ({oi(l_i)\, ...}: t) {oj(l_i = t_i)} & arrow.long
           t [oi(l_i := t_i)] #h(0.5cm) &&&∀i. ∃ j. i eq j \
           #rule_name("R-Fun-Pat-Default")&&({oi(e_i)}): t{oj(l_j = t_j)} & arrow.long
-          t [oi(l_i := d_i)] [oj(l_j = t_j)] \
+          t [oj(l_j = t_j)][oi(l_i := d_i)] \
           #rule_name("R-Fun-Pat-Default-Open")&&({oi(e_i), …}): t{oj(l_j = t_j), …} & arrow.long
-          t [oi(l_i := d_i)] [oj(l_j = t_j)] &&&∀i. ∃ j. i eq j\
+          t [oj(l_j = t_j)][oi(l_i := d_i)] &&&∀i. ∃ j. i eq j\
         $,
       ),
     )
@@ -122,7 +122,7 @@ The _with statement_ expects an arbitrary expression that reduces to a record. E
 Since nix supports patterns with default values and the _open_ modifiers, the function reduction rules become quite verbose. The simplest case is R-Fun which takes an argument t₁ and replaces the occurences of $l$ with said argument in the function body t₂. The next function rules R-Fun-Pat-∗ reduces functions taking patterns, the R-Fun-Pat being the simplest of such. We draw i,j from the index Set ℐ and range them over labels such that if i = j then l_i = l_j.
 Since the same index $i$ is used for both the argument and pattern in R-Fun-Pat, they must agree on the same labels which resembles closed-pattern function calls. In the contrary case where the pattern is open, the argument-record can range over arbitray labels (possibly more than in the pattern). In this case, the side-condition enforces that at least the pattern fields are present (R-Fun-Pat-Open).
 
-The R-fun-Pat-Default-∗ rules range over pattern elements $e$ which can be either single labels $l$ or labels with a default values like $l : d$. The former case can be converted to the latter with ε-extension transforming $l$ to $l ? ε$ which is equivalent to $l$ due to the shorthands (TODO: can you do this?). The variables of the body are then substituted twice. First with the default values of the pattern and then with the given value from the argument. A value substituted to ε in the first run will just stay undefined as if it wasn't touched at all. The second substition then overwrites the just installed default values with the values given in the record. In the implementation, this double iteration is removed for a performance-improved version needing only one run, but the current rules are kept for simplicity of proofs and comprehension. The open case needs a side-condition analogous to the former open case.
+The R-fun-Pat-Default-∗ rules range over pattern elements $e$ which can be either single labels $l$ or labels with a default values like $l : d$. The former case can be converted to the latter with ε-extension transforming $l$ to $l ? ε$ which is equivalent to $l$ due to the shorthands (TODO: can you do this?). The variables of the body are then substituted twice. First with the argument values and then with the default values to "fill the gaps". The open case needs a side-condition analogous to the former open case.
 
 Since ${oi(e_i)}$ strictly subsumes ${oi(l_i)}$ due to its inner structure, rule 2 and 3 are only stated as a mental stepping stone for the reader but not mentioned further.
 
@@ -160,7 +160,7 @@ Since ${oi(e_i)}$ strictly subsumes ${oi(l_i)}$ due to its inner structure, rule
             E[□] & := □ | □ space t | (□).l | (v).□      \
                  & | #b[if ] □ #b[ then ] t #b[ else ] t \
                  & | #b[with ] □; t | #b[with ] v; □     \
-                 & | #b[inherit ] (ρ) □                  \
+                 & | #b[inherit ] (ρ) space □;           \
                  & | □ • t | v • t                       \
           $,
         ),
@@ -186,10 +186,10 @@ What follows are the typing and subtyping rules as well as an overview over the 
         $
           #type_name("Type") tau ::= & "bool" | "string" | "path" | "num" \
           & | τ -> τ | {l: τ} | [τ] | [overline(τ)] | alpha \
-          & | top | ⊥ | τ union.sq τ | τ inter.sq τ | μ α. τ \
-          & | ⦃ oi(p) ⦄^b \
+          & | ⊥^diamond.small | τ ∨^diamond.small τ | ⦃ oi(p) ⦄^b \
           #type_name("Pattern Element") p & := τ | τ^? \
           #type_name("Polymorphic type") σ & := ∀Xi. τ \
+          #type_name("Mode") diamond.small & := · | ↻\
         $,
       )),
       subbox(
