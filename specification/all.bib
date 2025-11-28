@@ -152,6 +152,13 @@ keywords = {Lazy functional language, maximallaziness, maximal sharing},
 abstract = {In lazy functional languages, any variable is evaluated at most once. This paper proposes the notion of maximal laziness, in which syntactically equal terms are evaluated at most once: if two terms e1 and e2 arising during the evaluation of a program have the same abstract syntax representation, then only one will be evaluated, while the other will reuse the former's evaluation result. Maximal laziness can be implemented easily in interpreters for purely functional languages based on term rewriting systems that have the property of maximal sharing — if two terms are equal, they have the same address. It makes it easier to write interpreters, as techniques such as closure updating, which would otherwise be required for efficiency, are not needed. Instead, a straight-forward translation of call-by-name semantic rules yields a call-by-need interpreter, reducing the gap between the language specification and its implementation. Moreover, maximal laziness obviates the need for optimisations such as memoisation and let-floating.}
 }
 
+@inproceedings{dolstra_phd,
+  title={The purely functional software deployment model},
+  author={Eelco Dolstra},
+  year={2006},
+  url={https://api.semanticscholar.org/CorpusID:8511820}
+}
+
 @inproceedings{nixos_short,
 author = {Dolstra, Eelco and L\"{o}h, Andres},
 title = {NixOS: a purely functional Linux distribution},

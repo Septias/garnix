@@ -2,9 +2,55 @@
 #set heading(numbering: "1.")
 #set page(margin: 2em, height: auto)
 
-= Current Efforts of Typing the Nix Language and Coding a LSP
-The nix programming language was created in the process of creating nix, the package manager.
+= Abstract
+The nix programming language is a pure and lazy programming languge with real-world usage in the nix package manager and NixOs operating system,
+and even though it has existed for over 15 years and is used close to exclusively in the nix-ecosystem with over 100.000 files written in it,
+it has not received a proper type system yet. The reason for that is not clear to the authors, but we suspect it roots from the unique features
+of the language, its unintuitive shadowing behaviour and laziness asspects, that complicate principled type inference in a broader sense.
+Only the recent works of Lionell Parreux and Stephen Dolan surrounding _algebraic subtyping_ have opened a new perspective to type inference
+for such an expressive languagage and motiviated this paper where we try to lay out the current state of type inference in nix,
+define an comprehensive operational semantic and ultimately a type system for a reduced part fo the language.
+We also provide an implementation of a language server written in rust.
 
+== Origin of the Nix Language
+During his phd. Eelco Dolstra developed the package manager `nix` @dolstra_phd that has two unique properties: _reproducibly_ and _purity_.
+Together, these properties allow for predictable builds on different machines, fearless package upgrades, overcoming the DDL-hell and
+easy rollbacks in case something goes wrong. Since its initial release in 2002 the ecosystem has seen continuous growth ,surging especially
+in the last two years. The reason for this great success are the underlying properties which result from the underling nix language
+that was created in conjunction with the package manager and deeply integrates with the ecosystem.
+
+The conceptual idea behind nix the development is quite easy: In a pure language the output of a function is soley defined by its inputs. Since
+no interior mutability can change the functions output, it can be stored and reused if the function is called with the same arguments again.
+The meat of Eelco Dostras phd. was then to elevate this simple concept to package managing and to create a system, that can be defined by a graph.
+
+
+
+The nix language was created merely as a byproduct during the developments of _reproducible and reliable_ software by Eelco dolstra @nixos_long @dolstra_phd during
+his phd. and the time thereafter. It is thus not of great suprise, that this domain specific language is equipped with exactly the features needed to develop a build-system,
+that produces reproducible software, independent of the host machine.
+
+A package in this sense is merely all the files (a file system root) that were created during a build process.
+Every build-process is initiated from a _derivation_ in the nix language and a derivation simply abstracts over single packages and their dependencies.
+In a sense, it elevates the traditional pure programming style to packages and their dependencies, where dependencies represent the inputs to a (function / derivation) and
+the artifacts created during the build-process form the output. By promoting file-paths to first-class citizens in a pure language, the strong reproducabilty guarantees
+are inherited for the resulting build-system.
+
+== Features of the Language
+
+Nix abstracts over packages by wrapping them into _derivations_,
+single code units that take in other derivations as inputs and output build-artifacts, binaries, documentation, etc. from their evaluation.
+
+
+It boasts a lot of features like records, pattern accepting functions, arrays and language specific constructs like the with- and inherit-statements.
+
+== Things done in this paper
+
+
+== Things not done in this paper
+
+
+== What I want to say
+- Add specific
 
 
 = Syntax <syn>
