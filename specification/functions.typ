@@ -38,6 +38,7 @@
   #v(10pt)
 ]
 
+#let todo(..body) = rect(fill: red_700, ..body)
 
 #let derive(name, prem, conclusion) = [
   #table(
