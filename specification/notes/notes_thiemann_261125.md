@@ -9,11 +9,26 @@ Vielleicht hilft folgende Idee: man unterscheidet zwischen exact record types !{
 Wenn nun beim t.l or t' das t einen exact type hat, dann kann man den Typ ohne Probleme exakt bestimmen. Andernfalls bleibt nur \top als Ergebnis. 
 Noch anders sieht es aus, wenn es Typen gibt, deren Wert auch null sein darf: Wenn t.l einen "nullbaren" Typ TL hat, dann ist das Ergebnis tatsächlich TL \/ T, wenn T der Type von t' ist.
 
-Die Zeile Operator in Fig. 1 ist eine Dublette, oder?
+- [x] Die Zeile Operator in Fig. 1 ist eine Dublette, oder?
+  - Ja
 
 R-Fun-Pat-Open: ich verstehe, was gemeint ist, aber die Verwendung von dem \forall\exists würde ich als sloppy und ungenau bewerten.
+
+- [ ] Wie könnte man das besser machen?
+
 Bei den -Default Regeln fragt man sich, wo die d_i herkommen. Mit dem "substitute twice" ist es so eine Sache.  Was wenn die ursprünglichen t_j selbst wieder l_is enthalten?
+
+- [ ] Recursive substitution? 
+
 R-Lookup-Default-Neg: was wenn \exists i. l_i = l, aber t_i = null?
 Die Values in Fig. 3 verstehe ich nicht: ok p:t ist ein Lambda, aber was ist x;? und was wird durch {..} abgekürzt? Es fehlt wohl v ::= ...
+
+- [ ] Fix value definition
+
 Letzte Zeile Evaluationkontext muss enden mit v \bullet \Box
+
+- [ ] Extend Evaluation context
+
 Regeln für die Pattern Types habe ich nicht gefunden und mir fehlt auch die Intuition dafür??
+
+- [ ] Pattern types erklären
