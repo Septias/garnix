@@ -4,42 +4,37 @@
 
 #text("Improving Nothing", size: 17pt)
 #linebreak()
-
-The nix programming language is a pure and lazy programming languge with real-world usage in the nix package manager and NixOs operating system, and even though it has existed for over 15 years and is used close to exclusively in the nix-ecosystem with over 100.000 files written in it, it has not received a proper type system yet. The reason for that is not clear to the authors, but we suspect it roots from the unique features of the language, its unintuitive shadowing behaviour and laziness, that complicate principled type inference in a broader sense.
+The nix programming language is a pure and lazy programming languge with real-world usage in the nix package manager and NixOs operating system, and even though it has existed for over 15 years and is used close to exclusively in the nix-ecosystem with over 100.000 files written in it, it has not received a proper type system yet. The reason for that is not clear to the authors, but we suspect it roots from the unique features of the language, its unintuitive shadowing behaviour and laziness, that complicate principled type inference in a general sense.
 Only the recent works of Lionell Parreux and Stephen Dolan surrounding _algebraic subtyping_ have opened a new perspective to type inference for such an expressive languagage and motiviated this paper where we try to lay out the current state of type inference in nix, define a comprehensive operational semantic and ultimately a type system for a reduced part fo the language. We also provide an implementation of a language server written in rust.
 
 = Origin of the Nix Language
-During his phd. Eelco Dolstra developed the package manager `nix` @dolstra_phd that has two unique properties: _reproducibly_ and _purity_. Together, these properties allow for predictable builds on different machines, fearless package upgrades, overcoming the DDL-hell and easy rollbacks in case something goes wrong. Since its initial release in 2002, the ecosystem has seen continuous growth, surging especially in the last two years. The reason for this great success are the underlying properties which make dependency sharing and shipping fearless and reliable. The greates disjunction and integral origin of these properties is the underling nix language that was created in conjunction with the package manager and deeply integrates with the ecosystem, boasting features that are a perfect fit for the usecase.
+During his phd. Eelco Dolstra developed the package manager `nix` @dolstra_phd that has two unique properties: _reproducibly_ and _purity_. Together, these properties allow for predictable builds on different machines, fearless package upgrades, overcoming the DDL-hell @nixos_long and easy rollbacks in case something goes wrong. Since its initial release in 2002, the ecosystem has seen continuous growth, surging especially in the last two years. The reason for this great success are the underlying properties which make dependency sharing and shipping fearless and reliable. The greates disjunction and integral origin of these properties is the underling nix language that was created in conjunction with the package manager and deeply integrates with the ecosystem, boasting features that are a perfect fit for the usecase.
 
 The conceptual idea behind the nix the development is quite easy: In a pure language, the output of a function is soley defined by its inputs. Since no interior mutability can change the functions output, it can be stored and _reused_ if the function is called with the same arguments again. Every output is also a strict result of its inputs making it a lot easier to understand the computation. The meat of Eelco Dostras phd. was then to elevate this simple concept to package managing and creating a system, that redefines dependency management.
 
-To lift functional pureness to pure package management, it has to be possible to create packages in the first place. In the nix language, a package can be created using the `derivation` function. This function is built into the language and is exectued by the _evaluator_ which creates an isolated environment and runs the build script defined in it. This build script can refer to (a) other packages by dynamically adding them in the build srcript or (b) system paths which form a base type in the nix language. The nix evaluator tracks these references and upon instantiation, builds them before the current package. The build script can then write the build-artifacts to `$out` which is similar to function output. (a) and (b) give motivation for _dyanmic accsess_ and `path` as a pritimive in the final language.
+To lift functional pureness to pure package management, it has to be possible to create packages in the first place. We continue distributable software packages even though Eelco Dostra calls them components since we believe package is the more intuitive wording in this context. In the nix language, a package can be created using the `derivation` function. This function is built into the language and is exectued by the _evaluator_ which creates an isolated environment and runs the build script defined in it. This build script can refer to (a) other packages by dynamically adding them in the build srcript or (b) system paths which form a base type in the nix language. The nix evaluator tracks these references and upon instantiation, builds them before the current package. The build script can then write the build-artifacts to `$out` which is similar to function output. (a) and (b) give motivation for _dyanmic accsess_ and `path` as a pritimive in the final language.
 
-Also an integral part of the language, _laziness_, is founded by a need. The need to not build packages if they are not really needed because building or downloading a package can take multiple hours which is way to long if you just want to read the package meta-data. Laziness is thus integrated into the language to distinguish between what has to be evaluated and what not. A package can thus be referenced in a file but will never be built, if the outpot does not depend on it.
+Also the very integral part of the language, _laziness_, is founded by a need. The need to not build packages if they are not really needed because building or downloading a package can take multiple hours and such must not happen if one only wants to acces the package meta-data. Laziness is thus integrated into the language to distinguish between what has to be evaluated and what not. A package can then be referenced in a file but will never be built, if the outpot does not depend on it.
 
-It is also a product of writing configurations that the language revolves largely around records (attr-sets in nix) which turn out to be essetial to define key-value maps of usual configurations. Function patterns only revoled from the easier use of pattern destructuring at the beginnign of a function and the inherit-statement is only syntactic sugar to create records more easy. The problematic with-statement is used to open a record for easier access in following expressions.
+It is also a product of writing configurations, that the language revolves largely around records (attr-sets in nix) which turn out to be essetial to define key-value maps of usual configurations. Function patterns only revoled from the easier use of pattern destructuring at the beginnign of a function and the inherit-statement is only syntactic sugar to create records more easy. The problematic with-statement is used to open a record for easier access in following expressions and as such, also a usability feature.
 
 
 == Things done in this paper
-Since nix was built as a domain specfic language with usability as its greatest design goal, the system boasts a lot of features that make type inference
-hard or even impossible. In language theory, the approach is mostly the opposit where one starts from a simple calculus like ML, SystemF, λ and carefully adds features
-to form a wieldy and interesting semantics. When trying to retrofit a type-system onto a language like \@typescript \@flow \@castagna_elixier one has to decide which features
-on can and wants to support.
+Since nix was built as a domain specfic language with usability as its greatest design goal, the system boasts a lot of features that make type inference hard or even impossible. In language theory, the approach is mostly the opposit where one starts from a simple calculus like ML, SystemF, λ and carefully extends it with features to form a wieldy and interesting semantics. When trying to retrofit a type-system onto a language like \@typescript \@flow \@castagna_elixier one has to decide which features one can and wants to support.
 
 In this paper we restrict ourselves to:
-- Basetypes (Record, Array)
-- Datatype Operators (Record-extension, Array-concatenation)
-- Special language constructs (with-statements, inherit-statements)
+1. Basetypes (Record, Array)
+2. Datatype Operators (Record-extension, Array-concatenation)
+3. Special language constructs (with-statements, inherit-statements)
 
 We defer these features to later efforts of research:
-- Dynamic accesses
-- Assert statements?
+1. Dynamic accesses
+2. Assert statements?
 
 In essence our contributions are:
 
 1. A comprehensive operational semantic for the nix language
 2. A Typesystem based on Mlstruct
-
 
 = Syntax <syn>
 $oi(E)$ denotes $0 … n$ repititions of a syntax construct and the index $i$ is omitted if obvious.
