@@ -30,6 +30,8 @@ In this paper we restrict ourselves to:
 We defer these features to later efforts of research:
 1. Dynamic accesses
 2. Assert statements?
+3. Deprecated let-attrset
+4. Deprecated uris
 
 In essence our contributions are:
 
