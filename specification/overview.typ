@@ -475,15 +475,8 @@ Instatiation is done by cloning the inherent structure of the type but adding ne
     τ^n , ("lo", "up")^m "if" n <= m &arrow.squiggly "lo" ⩲ τ; ∀u ∈ "ul". "constrain"(τ, u) &&#rule_name("C-⋆-Var")\
     τ_1, t_2^m &arrow.squiggly "constrain(extrude("τ_1", true, m), "τ_2")" &&#rule_name("C-⋆-Var")\
   $
-  #v(1cm)
-  *Conditions*:
-  - A: Fields in $τ_2$ must be present in $τ_1$
-  - B: $τ_1$ must only have the fields in $τ_2$
-
-  *Remarks*
-  - $("lo", "up")^n$ is used to match a _type variable_ and their lower and upper bounds. The superscript gives the _level_ of the variable that is used to handle generalization of variables.
-  - $"lo" ⩲ τ$ is a shorthand for $"lo" = "lo" + τ$ and used to extend the list of upper or lower bounds.
 ]
+
 
 - C-Fun is standard function subtyping.
 - C-Rec implements width-subtyping of records in the standard manner. It also adds depth-subtyping due to recursion.
