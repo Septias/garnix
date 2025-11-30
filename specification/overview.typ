@@ -251,34 +251,36 @@ Lastely, we add a single type for patterns. Even thought a pattern is similar in
       spacing: 3em,
       sub_typing_rules(
         caption: "Standartrules",
+        derive("T-Var1", ($Γ(x) = τ$,), $Ξ, Γ tack x: τ$),
         derive(
-          "T-Var",
-          ($x: ∀ arrow(α). space τ in Γ$,),
-          $Xi, Γ tack x: τ[arrow(α) \\ arrow(τ)]$,
+          "T-Var2",
+          ($Γ(x) = σ$, $Ξ tack σ ≤^∀ ∀ε.τ$),
+          $Ξ, Γ tack x: τ[arrow(α) \\ arrow(τ)]$,
+        ),
+        derive(
+          "T-Abs",
+          ($Ξ, Γ · (x: τ_1) tack t: τ_2$,),
+          $Ξ, Γ tack (x: t): τ_1 → τ_2$,
         ),
         derive(
           "T-App",
-          ($Xi, Γ tack t_1: τ_1 → τ_2$, $Xi, Γ tack t_2: τ_1$),
-          $t_1 t_2: τ_2$,
+          ($Ξ, Γ tack t_1: τ_1 → τ_2$, $Ξ, Γ tack t_2: τ_1$),
+          $Ξ,Γ tack t_1 t_2: τ_2$,
         ),
         derive(
           "T-Sub",
-          ($Xi, Γ tack t: τ_1$, $τ_1 <= τ_2$),
-          $Xi, Γ tack t: τ_2$,
+          ($Ξ, Γ tack t: τ_1$, $Ξ, Γ tack τ_1 <= τ_2$),
+          $Ξ, Γ tack t: τ_2$,
         ),
+        derive("T-Asc", ($Ξ,Γ ⊢ t : τ$,), $Ξ,Γ ⊢ (t: τ) : τ$),
       ),
       line(length: 100%),
       sub_typing_rules(
         caption: "Functions",
         derive(
-          "T-Abs",
-          ($Xi, Γ, x: τ_1 tack t: τ_2$,),
-          $Xi, Γ tack (x: t): τ_1 → τ_2$,
-        ),
-        derive(
           "T-Abs-Pat",
-          ($Xi, Γ, oi(x\: τ) tack t: τ_2$,),
-          $Xi, Γ tack ({oi(x)}: t): oi(τ) → τ_2$,
+          ($Ξ, Γ, oi(x\: τ) tack t: τ_2$,),
+          $Ξ, Γ tack ({oi(x)}: t): oi(τ) → τ_2$,
         ),
         derive("T-Abs-Pat-Opt", ($"TODO"$,), $"TODO"$),
       ),
@@ -287,14 +289,14 @@ Lastely, we add a single type for patterns. Even thought a pattern is similar in
         caption: "Records",
         derive(
           "T-Rcd",
-          ($Xi, Γ tack t_0: τ_0$, "...", $Xi, Γ tack t_n: τ_n$),
-          $Xi, Γ tack {arrow(l): arrow(t)}: {arrow(l): arrow(τ)}$,
+          ($Ξ, Γ tack t_0: τ_0$, "...", $Ξ, Γ tack t_n: τ_n$),
+          $Ξ, Γ tack {arrow(l): arrow(t)}: {arrow(l): arrow(τ)}$,
         ),
-        derive("T-Proj", ($ Xi, Γ tack t: {l: τ} $,), $Xi, Γ tack t.l: τ$),
+        derive("T-Proj", ($ Ξ, Γ tack t: {l: τ} $,), $Ξ, Γ tack t.l: τ$),
         derive(
           "T-Rec-Concat",
-          ($Xi, Γ tack a: { oi(l\: τ) }$, $Xi, Γ tack b: { l_j: τ_j }$),
-          $Xi, Γ tack a "//" b: {..b, ..a}$,
+          ($Ξ, Γ tack a: { oi(l\: τ) }$, $Ξ, Γ tack b: { l_j: τ_j }$),
+          todo[$Ξ, Γ tack a "//" b: {..b, ..a}$],
         ),
       ),
       line(length: 100%),
@@ -303,53 +305,56 @@ Lastely, we add a single type for patterns. Even thought a pattern is similar in
 
         derive(
           "T-Lst-Hom",
-          ($Xi, Γ tack t_0: τ$, "...", $Xi, Γ tack t_n: τ$),
-          $Xi, Γ tack [ " " t_0 " " t_1 " " ... " " t_n " "]: [τ]$,
+          ($Ξ, Γ tack t_0: τ$, "...", $Ξ, Γ tack t_n: τ$),
+          $Ξ, Γ tack [ " " t_0 " " t_1 " " ... " " t_n " "]: [τ]$,
         ),
         derive(
           "T-Lst-Agg",
           (
-            $Xi, Γ tack t_0: τ_0$,
+            $Ξ, Γ tack t_0: τ_0$,
             "...",
-            $Xi, Γ tack t_n: τ_n$,
+            $Ξ, Γ tack t_n: τ_n$,
             $∃ i, j. τ_i != τ_j$,
           ),
-          $Xi, Γ tack [space t_0 space t_1 space ... " " t_n] : [ τ_0 space τ_1 space ... space τ_n]$,
+          $Ξ, Γ tack [space t_0 space t_1 space ... " " t_n] : [ τ_0 space τ_1 space ... space τ_n]$,
         ),
         derive(
           "T-List-Concat-Hom",
-          ($Xi, Γ tack a: "[τ]"$, $Xi, Γ tack b: "[τ]"$),
-          $Xi, Γ tack a "⧺" b: "[τ]"$,
+          ($Ξ, Γ tack a: "[τ]"$, $Ξ, Γ tack b: "[τ]"$),
+          $Ξ, Γ tack a "⧺" b: "[τ]"$,
         ),
         derive(
           "T-List-Concat-Multi",
-          ($Xi, Γ tack a: [arrow(τ_1)]$, $Xi, Γ tack b: [arrow(τ_2)]$),
-          $Xi, Γ tack a "⧺" b: [arrow(τ_1)arrow(τ_2)]$,
+          ($Ξ, Γ tack a: [arrow(τ_1)]$, $Ξ, Γ tack b: [arrow(τ_2)]$),
+          $Ξ, Γ tack a "⧺" b: [arrow(τ_1)arrow(τ_2)]$,
         ),
-      ),
-
-      line(length: 100%),
-      sub_typing_rules(
-        caption: "Operators",
-        derive(
-          "T-Or-Neg",
-          ($Xi, Γ tack t_1: {l: τ_1}$, $Xi, Γ tack t_2: τ_2$),
-          $Xi, Γ tack (t_1).l "or" t_2: τ_1$,
-        ),
-        derive(
-          "T-Or-Pos",
-          ($Xi, Γ tack t_1: τ_1$, $l ∉ τ_1$, $Xi, Γ tack t_2: τ_2$),
-          $Xi, Γ tack (t_1).l "or" t_2: τ_2$,
-        ),
-        derive("T-Negate", ($Xi, Γ tack e: "bool"$,), $Xi, Γ tack !e: "bool"$),
-        derive("T-Check", ($Xi, Γ tack e: {..}$,), $Xi, Γ tack e ? l: "bool"$),
       ),
     ),
   ),
 )
+#figure(caption: "Mlstruct things", rect(inset: 20pt, stack(
+  spacing: 3em,
+  sub_typing_rules(),
+)))
 
 #figure(caption: "Typing rules (continued)", rect(inset: 20pt, stack(
   spacing: 3em,
+  sub_typing_rules(
+    caption: "Operators",
+    derive(
+      "T-Or-Neg",
+      ($Xi, Γ tack t_1: {l: τ_1}$, $Xi, Γ tack t_2: τ_2$),
+      $Xi, Γ tack (t_1).l "or" t_2: τ_1$,
+    ),
+    derive(
+      "T-Or-Pos",
+      ($Xi, Γ tack t_1: τ_1$, $l ∉ τ_1$, $Xi, Γ tack t_2: τ_2$),
+      $Xi, Γ tack (t_1).l "or" t_2: τ_2$,
+    ),
+    derive("T-Negate", ($Xi, Γ tack e: "bool"$,), $Xi, Γ tack !e: "bool"$),
+    derive("T-Check", ($Xi, Γ tack e: {..}$,), $Xi, Γ tack e ? l: "bool"$),
+  ),
+  line(length: 100%),
   sub_typing_rules(
     caption: "Language Constructs",
     derive(
