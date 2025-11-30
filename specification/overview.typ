@@ -185,7 +185,9 @@ Since ${oi(e_i)}$ strictly subsumes ${oi(l_i)}$ due to its inner structure, rule
           {oi(l_i = t_i\;) space overline(l_b = t_b\;)^b} &&& b ∈ { j: exists.not i. l_i = l_j } \
           && t arrow.long t' &==> E[t] → E[t']
         $,
-        subbox(caption: "Values")[$ p: t"  |  "x; "  |  "{..}"  |  rec" {..} $],
+        subbox(caption: "Values")[$
+            v ::= p: t | todo(l) | {overline(a\;)} | #b[rec] {overline(a\;)}
+          $],
         subbox(
           caption: "Evaluation Context",
           $
