@@ -76,7 +76,6 @@ $oi(E)$ denotes $0 … n$ repititions of a syntax construct and the index $i$ is
     #type_name("With-Statement") &| #b[with] t; t \
     #type_name("Assert-Statement") &| #b[assert] t; t \
     #type_name("Operator") &| t • t \
-    • = #b[or] | "//" | ⧺ | ? \
   $
 ]
 
@@ -101,9 +100,13 @@ $oi(E)$ denotes $0 … n$ repititions of a syntax construct and the index $i$ is
     columns: 2,
     align: left,
     inset: 8pt,
-    grid.cell(rowspan: 3, general),
+    grid.cell(rowspan: 2, general),
     basetypes,
     inherit,
+    subbox(caption: "Operators")[
+      $• ::= #b[or] | "//" | ⧺ | " ? "$
+
+    ],
     patterns,
     subbox(caption: "Shorthands")[
       #set math.equation(numbering: "(1)")
