@@ -188,15 +188,15 @@ The _with statement_ expects an arbitrary expression that reduces to a record. E
           t [oi(l_i := t_i)] \
           #rule_name("R-Fun-Pat-Open")&& ({oi(l_i)\, ...}: t) {oj(l_i = t_i)} & arrow.long
           t [oi(l_i := t_i)] #h(0.5cm) &&&∀i. ∃ j. i eq j \
-          #rule_name("R-Fun-Pat-Default")&&({oi(e_i)}): t{oj(l_j = t_j)} & arrow.long
+          #rule_name("R-Fun-Pat-Default")&&({oi(e_i)}: t){oj(l_j = t_j)} & arrow.long
           t [oj(l_j = t_j)][oi(l_i := d_i)] \
-          #rule_name("R-Fun-Pat-Default-Open")&&({oi(e_i), …}): t{oj(l_j = t_j), …} & arrow.long
+          #rule_name("R-Fun-Pat-Default-Open")&&({oi(e_i), …}: t){oj(l_j = t_j), …} & arrow.long
           t [oj(l_j = t_j)][oi(l_i := d_i)] &&&∀i. ∃ j. i eq j\
         $,
       ),
     )
   ],
-)
+) <function_reduction>
 
 Since nix supports patterns with default values and the _open_ modifiers, the function reduction rules become quite verbose. The simplest case is R-Fun which takes an argument t₁ and replaces the occurences of $l$ with said argument in the function body t₂. The next function rules R-Fun-Pat-∗ reduces functions taking patterns, the R-Fun-Pat being the simplest of such. We draw i,j from the index Set ℐ and range them over labels such that if i = j then l_i = l_j.
 Since the same index $i$ is used for both the argument and pattern in R-Fun-Pat, they must agree on the same labels which resembles closed-pattern function calls. In the contrary case where the pattern is open, the argument-record can range over arbitray labels (possibly more than in the pattern). In this case, the side-condition enforces that at least the pattern fields are present (R-Fun-Pat-Open).
@@ -205,9 +205,9 @@ The R-fun-Pat-Default-∗ rules range over pattern elements $e$ which can be eit
 
 Since ${oi(e_i)}$ strictly subsumes ${oi(l_i)}$ due to its inner structure, rule 2 and 3 are only stated as a mental stepping stone for the reader but not mentioned further.
 
+
 = Type System
 What follows are the typing and subtyping rules as well as an overview over the constraint subroutine.
-
 
 #figure(
   caption: "Types of nix.",
@@ -237,7 +237,7 @@ What follows are the typing and subtyping rules as well as an overview over the 
       ),
     ),
   ),
-)
+)<types>
 
 Garnix models all literal syntax categories with the respective atom types bool, string, path and num. Notice, that we do not distinguish between float and int as they are coerced during interpretation and thus used interspersely in practice. We also add the usual types for fuctions, records and arrays and note that records types only define a _single_ label to type mapping instead of multiple. This is due to the use of subtyping constraints and their accumuation on type variables during type inferene. This mechanism is further discussed in \@section_todo. Also, we introduce two types for arrays, one for homogenous arrays of the same type and one accumulative for the case that an array has many distinct elements.
 To form a boolean algebra of types we add the expected type connectives $union.sq, inter.sq, ~$ as well as a top and bottom type which represent the least type which is subsumed by every other type and the greatest type which subsumes every other type respectively.
@@ -277,13 +277,17 @@ Lastely, we add a single type for patterns. Even thought a pattern is similar in
       ),
       line(length: 100%),
       sub_typing_rules(
-        caption: "Functions",
+        caption: "Functions with Patterns",
         derive(
           "T-Abs-Pat",
-          ($Ξ, Γ, oi(x\: τ) tack t: τ_2$,),
-          $Ξ, Γ tack ({oi(x)}: t): oi(τ) → τ_2$,
+          (todo[$Ξ, Γ, oi(x\: τ) tack t: τ_2$],),
+          $Ξ, Γ tack ({oi(e_i)}: t): oi(τ) → τ_2$,
         ),
-        derive("T-Abs-Pat-Opt", ($"TODO"$,), $"TODO"$),
+        derive(
+          "T-Abs-Pat-Open",
+          (todo[$Ξ, Γ, oi(x\: τ) tack t: τ_2$],),
+          $Ξ, Γ tack ({oi(e_i), …}: t): oi(τ) → τ_2$,
+        ),
       ),
       line(length: 100%),
       sub_typing_rules(
@@ -332,7 +336,8 @@ Lastely, we add a single type for patterns. Even thought a pattern is similar in
       ),
     ),
   ),
-)
+)<typing_rules>
+
 #figure(caption: "Mlstruct things", rect(inset: 20pt, stack(
   spacing: 3em,
   sub_typing_rules(),
@@ -386,74 +391,69 @@ Lastely, we add a single type for patterns. Even thought a pattern is similar in
       $Γ tack "assert" t_1; t_2: τ_2$,
     ),
   ),
-)))
-- We have a standard typing context Γ, pre-filled with the standard library functions from @prelude and functions to handle the basic logic, arithmetic and comparison operators.
-- $∀ arrow(a)$ represents a _type scheme_ with many polymorphic variables α_i. These are used for let-polymorphism.
-
-- TODO: Handle function type inference for patterns with default values
-- TODO: "T-Rec-Concat" doesn't work really because of the generic subtyping rule. Further discussed in @records
-- TODO: T-multi-let can be made simpler because we can always rewrite multi-let to let-chains. Recursion has to be accounted for, that is still an open question.
-- TODO: T-With $l_i in.not Γ$ is too restrictive because shadowing labels are allowed, they will just not be used.
-
-#let di = $diamond.small$
-#figure(caption: "Suptyping rules", rect(inset: 20pt)[
-  #flexwrap(
-    main-spacing: 20pt,
-    cross-spacing: 10pt,
-    derive("S-Refl", (), $τ <= τ$),
-    derive("S-ToB", (), $τ ≤^di top^di$),
-    derive("S-CompL", (), $τ ∨ ¬τ ≥^di top^di$),
-    derive("S-NegInv", ($Σ tack τ_1 ≤ τ_2$,), $Σ tack ¬τ_1 <= ¬τ_2$),
-    derive("S-AndOr11", (), $τ_1 ∨^di τ_2 ≥^di τ_1$),
-    derive("S-AndOr11", (), $τ_1 ∨^di τ_2 ≥^di τ_2$),
-    derive("S-AndOr2", (), $τ_1 ∨^di τ_2 ≥^di τ_2$),
-    derive(
-      "S-Distrib",
-      (),
-      $τ ∧^di (τ_1 ∨^di τ_2) ≤^di (τ ∧^di τ_1) ∨^di(τ∧^di τ_2)$,
-    ),
+)))<typing_rules_cont>
 
 
-    derive(
-      "S-Trans",
-      ($Σ tack τ_0 <= τ_1$, $Σ tack τ_1 <= τ_2$),
-      $Σ tack τ_0 <= τ_2$,
-    ),
-    derive("S-Weaken", ($H$,), $Σ tack H$),
-    derive("S-Assume", ($Σ,gt.tri H tack H$,), $Σ tack H$),
-    derive("S-Hyp", ($H in Σ$,), $Σ tack H$),
-    derive("S-Rec", (), $μ α.τ eq.triple [μ α.τ slash α]τ$),
-    derive(
-      "S-Or",
-      ($∀ i, exists j,Σ tack τ_i <= τ'_j$,),
-      $Σ tack union.sq_i τ_i <= union.sq_j τ'_j$,
-    ),
-    derive(
-      "S-And",
-      ($∀ i, exists j,Σ tack τ_j <= τ'_i$,),
-      $Σ tack inter.sq_j τ_j <= inter.sq_i τ'_i$,
-    ),
-    derive(
-      "S-Fun",
-      ($lt.tri Σ tack τ_0 <= τ_1$, $lt.tri Σ tack τ_2 <= τ_3$),
-      $Σ tack τ_1 arrow.long τ_2 <= τ_0 arrow.long τ_3$,
-    ),
-    derive(
-      "S-Rcd",
-      (),
-      ${arrow(t) : arrow(τ)} eq.triple inter.sq_i {l_i : t_i}$,
-    ),
-    derive(
-      "S-Depth",
-      ($lt.tri Σ tack τ_1 <= τ_2$,),
-      $Σ tack {l: τ_1} <= { l: τ_2}$,
-    ),
-    derive("S-Lst", ($ Γ tack τ_1 <= τ_2 $,), $Γ tack [τ_1] <= [τ_2]$),
-  )
-  $lt.tri(H_0, H_1) = lt.tri H_0, lt.tri H_1$
-  $lt.tri(gt.tri H) = H$
-  $lt.tri ( τ_0 <= τ_1) = τ_0 <= τ_1$
-])
+#figure(
+  caption: "Suptyping rules",
+  rect(inset: 20pt)[
+    #flexwrap(
+      main-spacing: 20pt,
+      cross-spacing: 10pt,
+      derive("S-Refl", (), $τ <= τ$),
+      derive("S-ToB", (), $τ rotate(≤) rotate(top)$),
+      derive("S-CompL", (), $τ ∨ ¬τ rotate(≥) rotate(top)$),
+      derive("S-NegInv", ($Σ tack τ_1 ≤ τ_2$,), $Σ tack ¬τ_1 <= ¬τ_2$),
+      derive("S-AndOr11", (), $τ_1 rotate(∨) τ_2 rotate(≥) τ_1$),
+      derive("S-AndOr11", (), $τ_1 rotate(∨) τ_2 rotate(≥) τ_2$),
+      derive("S-AndOr2", (), $τ_1 rotate(∨) τ_2 rotate(≥) τ_2$),
+      derive(
+        "S-Distrib",
+        (),
+        $τ rotate(∧) (τ_1 rotate(∨) τ_2) rotate(≤) (τ rotate(∧) τ_1) rotate(∨)(τ rotate(∧) τ_2)$,
+      ),
+
+      derive(
+        "S-Trans",
+        ($Σ tack τ_0 <= τ_1$, $Σ tack τ_1 <= τ_2$),
+        $Σ tack τ_0 <= τ_2$,
+      ),
+      derive("S-Weaken", ($H$,), $Σ tack H$),
+      derive("S-Assume", ($Σ,gt.tri H tack H$,), $Σ tack H$),
+      derive("S-Hyp", ($H in Σ$,), $Σ tack H$),
+      derive("S-Rec", (), $μ α.τ eq.triple [μ α.τ slash α]τ$),
+      derive(
+        "S-Or",
+        ($∀ i, exists j,Σ tack τ_i <= τ'_j$,),
+        $Σ tack union.sq_i τ_i <= union.sq_j τ'_j$,
+      ),
+      derive(
+        "S-And",
+        ($∀ i, exists j,Σ tack τ_j <= τ'_i$,),
+        $Σ tack inter.sq_j τ_j <= inter.sq_i τ'_i$,
+      ),
+      derive(
+        "S-Fun",
+        ($lt.tri Σ tack τ_0 <= τ_1$, $lt.tri Σ tack τ_2 <= τ_3$),
+        $Σ tack τ_1 arrow.long τ_2 <= τ_0 arrow.long τ_3$,
+      ),
+      derive(
+        "S-Rcd",
+        (),
+        ${arrow(t) : arrow(τ)} eq.triple inter.sq_i {l_i : t_i}$,
+      ),
+      derive(
+        "S-Depth",
+        ($lt.tri Σ tack τ_1 <= τ_2$,),
+        $Σ tack {l: τ_1} <= { l: τ_2}$,
+      ),
+      derive("S-Lst", ($ Γ tack τ_1 <= τ_2 $,), $Γ tack [τ_1] <= [τ_2]$),
+    )
+    $lt.tri(H_0, H_1) = lt.tri H_0, lt.tri H_1$
+    $lt.tri(gt.tri H) = H$
+    $lt.tri ( τ_0 <= τ_1) = τ_0 <= τ_1$
+  ],
+)
 
 - ⊳ and ⊲ are used to add and remove _typing hypotheses_ that are formed during subtyping. Since applying such a hypothesis right after assumption, the later modality ⊳ is added and can only be removed after subtyping passed through a function or record construct. *TODO: check*
 - The general idea of the typing algorithm is, that typing progresses and finally constraints are installed on type-variables. The rules need to be chosen in a way, that this general approach is possible.

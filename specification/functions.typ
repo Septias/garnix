@@ -10,7 +10,10 @@
 #let oi(body) = $overline(body)^i$
 #let oj(body) = $overline(body)^j$
 #let b(body) = text(weight: "bold", body)
+#let rotate(..body) = $attach(tr: diamond.small, ..body)$
+#let todo(..body) = rect(fill: red_700, ..body)
 
+// bigger constructs
 #let boxed_type_rules(..body) = rect(inset: 20pt, flexwrap(
   main-spacing: 20pt,
   cross-spacing: 10pt,
@@ -38,7 +41,6 @@
   #v(10pt)
 ]
 
-#let todo(..body) = rect(fill: red_700, ..body)
 
 #let derive(name, prem, conclusion) = [
   #table(
