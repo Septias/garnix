@@ -26,6 +26,12 @@
   ..body,
 )
 
+#let subrules(caption: math, ..body) = box(width: 100%, stack(
+  spacing: 10pt,
+  align(left, rect()[#caption]),
+  ..body,
+))
+
 #let sub_typing_rules(caption: "", ..body) = stack(
   spacing: 10pt,
   box(width: 100%, align(left, text(weight: "bold", smallcaps(caption)))),

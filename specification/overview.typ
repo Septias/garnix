@@ -478,13 +478,69 @@ Instatiation is done by cloning the inherent structure of the type but adding ne
   $
 ]
 
-
 - C-Fun is standard function subtyping.
 - C-Rec implements width-subtyping of records in the standard manner. It also adds depth-subtyping due to recursion.
 - C-Pat-open handles open patterns and has similar semantics to record constraining. The rule C-pat-Closed handles closed patterns with the extra condition that $t_1$ can not have any additional fields to $t_2$ which is inforced in condition $B$.
 - Homogenous arrays are constrained as one would expect. Heterogenous arrays with many different field types, are constrained in order.
 - What follows are the typvariable constraining rules. These depend on the levels of variables and their bounds $("lo", "up")$. C-Var-∗ handles the case where the constrained var is of higher type than the constraining var.
 - $"extrude"(t)$ is used to create a new type of similar shape to the input but fixed type variables. We need this because lower bounds could refer to variables of higher level than the vars level letting them "escape".
+
+#figure(caption: "New Constraining Rules using normal forms", rect(inset: 20pt)[
+  #subrules(
+    caption: $Σ ⊢ τ ≪ τ => Ξ$,
+    flexwrap(
+      main-spacing: 20pt,
+      cross-spacing: 10pt,
+      derive("C-Hyp", ($(τ_1 ≪ τ_2) ∈ Σ$,), $Σ ⊢ τ_1 ≪ τ_2 => ε$),
+      derive(
+        "C-Assum",
+        ($(τ_1 ≪τ_2) ∉ Σ$, $Σ ·⊳(τ_1 ≤ τ_2) ⊢ "dnf"^0_Σ (τ_1 ∧ ¬τ_2) => Ξ$),
+        $$,
+      ),
+      derive(
+        "C-Or",
+        ($Σ ⊢ D^0 => Ξ$, $Ξ · Σ ⊢ C^0 => Ξ'$),
+        $D^0 ∨ C^0 => Ξ · Ξ'$,
+      ),
+      derive("C-Bot", ($$,), $Σ ⊢ ⊥ => ε$),
+      derive("C-Not-Bot", ($$,), $Σ ⊢ I^0 ∧ ¬⊥ => #b[err]$),
+    ),
+  ),
+  #subrules(caption: $Σ ⊢ τ ≪ τ => Ξ$, flexwrap(
+    main-spacing: 20pt,
+    cross-spacing: 10pt,
+    derive(
+      "C-Fun1",
+      ($⊲Σ ⊢ D_3 ≪ D_1 => Ξ$, $Ξ ·⊲Σ ⊢ D_2 ≪ D_4 => Ξ'$),
+      $Σ ⊢ 𝓘[D_1 -> D_2] ∧ ¬(D_3 -> D_4) => Ξ ·Ξ'$,
+    ),
+    derive("C-Fun2", ($$,), $Σ ⊢ 𝓘^-> [top]∧¬(D_1 -> D_2) => #b[err]$),
+    derive(
+      "C-Rcd1",
+      ($y ∈ S$, $⊲Σ ⊢ D_y ≪ D => Ξ$),
+      $Σ ⊢ I[{#overline[x: D_x]^{x ∈ S}}]∧¬{y: D} => Ξ$,
+    ),
+    derive(
+      "C-Rcd2",
+      ($y ∉ S$,),
+      $Σ ⊢ I[{#overline[x: D_x]^{x ∈ S}}]∧¬{y: D} => #b[err]$,
+    ),
+    derive("C-Rcd3", ($$,), $Σ ⊢ 𝓘^({})[top] ∧ ¬{x: D} => #b[err]$),
+    derive(
+      "C-Var1",
+      ($Σ ·(α ≪ ¬C) ⊢ "lb"_Σ ≪ ¬C => Ξ$,),
+      $Σ ⊢ C ∧ a => Ξ ·(α ≪ ¬C)$,
+    ),
+    derive(
+      "C-Var2",
+      ($Σ ·(C ≤ a) ⊢ C ≪ "ub"_Σ(α) => Ξ$,),
+      $Σ ⊢ C ∧ ¬α => Ξ · (C ≤ α)$,
+    ),
+  ))
+])
+
+
+
 
 
 = Equality
