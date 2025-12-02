@@ -465,31 +465,6 @@ Lastely, we add a single type for patterns. Even thought a pattern is similar in
 - ⊳ and ⊲ are used to add and remove _typing hypotheses_ that are formed during subtyping. Since applying such a hypothesis right after assumption, the later modality ⊳ is added and can only be removed after subtyping passed through a function or record construct. *TODO: check*
 - The general idea of the typing algorithm is, that typing progresses and finally constraints are installed on type-variables. The rules need to be chosen in a way, that this general approach is possible.
 
-What follows are the constraining rules used in the constrain subroutine of the implementation. It uses the subtyping rules and applies them to types. The underlying algorithm uses _levels_ to distinguish type variables that should be generalized and not. When entering a let-binding, the level is increased as every new type variable should adhere to _let-polymorphism_. During type inference, the algorithm also keeps track of the current level and only generalizes variables that are above the current level.
-Instatiation is done by cloning the inherent structure of the type but adding new type variables above the current level which is done by the `freshen_above()` function.
-
-#figure(caption: "Constraining rules")[
-  Constraining takes two types τ₁ and τ₂ and constraints the first type to be subtype of the other.
-  #v(1cm)
-  $
-    "constrain"((τ_1 → τ_2), (τ_3 → τ_4)) &arrow.squiggly "constrain"(τ_3, τ_1); "constrain"(τ_2, τ_4) &&#rule_name("C-Fun")\
-    {τ_1}, {τ_2} &arrow.squiggly ∀i ∈ τ_2. "constrain"(τ_(1i), τ_(2i)) "  if A" &&#rule_name("C-Rec")\
-    {τ_1},({τ_2}, #text("true", weight: "bold")) &arrow.squiggly ∀i ∈ τ_2. "constrain"(τ_(1i), τ_(2i))"   if A" &&#rule_name("C-Pat-Open") \
-    {τ_1} , ({τ_2}, #text("false", weight: "bold")) &arrow.squiggly ∀i ∈ τ_2. "constrain"(τ_(1i), τ_(2i)) "  if A ∧ B  "&&#rule_name("C-Pat-Closed")\
-    [τ_1] , [τ_2] &arrow.squiggly "constrain"(τ_1, τ_2) &&#rule_name("C-Array") \
-    ("lo", "up")^n, τ^m "  if" m <= n &arrow.squiggly "up" ⩲ τ; ∀l ∈ "lo". "constrain"(l, τ) &&#rule_name("C-Var-⋆")\
-    τ_1^n, τ_2 &arrow.squiggly "constrain("τ_1", extrude("τ_2", false, n))" &&#rule_name("C-Var-⋆")\
-    τ^n , ("lo", "up")^m "if" n <= m &arrow.squiggly "lo" ⩲ τ; ∀u ∈ "ul". "constrain"(τ, u) &&#rule_name("C-⋆-Var")\
-    τ_1, t_2^m &arrow.squiggly "constrain(extrude("τ_1", true, m), "τ_2")" &&#rule_name("C-⋆-Var")\
-  $
-]
-
-- C-Fun is standard function subtyping.
-- C-Rec implements width-subtyping of records in the standard manner. It also adds depth-subtyping due to recursion.
-- C-Pat-open handles open patterns and has similar semantics to record constraining. The rule C-pat-Closed handles closed patterns with the extra condition that $t_1$ can not have any additional fields to $t_2$ which is inforced in condition $B$.
-- Homogenous arrays are constrained as one would expect. Heterogenous arrays with many different field types, are constrained in order.
-- What follows are the typvariable constraining rules. These depend on the levels of variables and their bounds $("lo", "up")$. C-Var-∗ handles the case where the constrained var is of higher type than the constraining var.
-- $"extrude"(t)$ is used to create a new type of similar shape to the input but fixed type variables. We need this because lower bounds could refer to variables of higher level than the vars level letting them "escape".
 
 #figure(caption: "New Constraining Rules using normal forms", rect(inset: 20pt)[
   #subrules(
