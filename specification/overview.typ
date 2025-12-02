@@ -1,6 +1,13 @@
 #import "functions.typ": *
 #set heading(numbering: "1.")
 #set page(margin: 4em)
+#set document(
+  title: "Improing Nothing",
+  description: "Type inference for the Nix Language",
+  author: "Sebastian Klähn",
+  keywords: ("Type inference", "Laziness", "Records"),
+)
+
 
 #text("Improving Nothing", size: 17pt)
 #linebreak()
