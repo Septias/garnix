@@ -2,7 +2,7 @@
 #set heading(numbering: "1.")
 #set page(margin: 4em, height: auto)
 #set document(
-  title: "Improing Nothing",
+  title: "Improving Nothing",
   description: "Type inference for the Nix Language",
   author: "Sebastian Klähn",
   keywords: ("Type inference", "Laziness", "Records"),
@@ -13,18 +13,28 @@
 The nix programming language is a pure and lazy programming languge with real-world usage in the nix package manager and NixOs operating system, and even though it existed for over 15 years and is used close to exclusively in the nix-ecosystem with over 100.000 files written in it, it has not received a proper type system yet. The reason for that is not clear to the authors, but we suspect it roots from the unique features of the language, its unintuitive shadowing behaviour and laziness, that complicate principled type inference in a general sense.
 Only the recent works of Lionell Parreaux and Stephen Dolan surrounding _algebraic subtyping_ have opened a new perspective to type inference for such an expressive languagage and motiviated this paper where we try to lay out the current state of type inference in nix, define a comprehensive operational semantic and ultimately a type system for a reduced part of the language. We also provide an implementation of a language server written in rust.
 
+== Preface
+I refer to this document as "paper" even though it could be a master-project/thesis etc. and the subject might still change.
+
 = Origin of the Nix Language
 During his phd. Eelco Dolstra developed the package manager `nix` @dolstra_phd that has two unique properties: _reproducibly_ and _purity_. Together, these properties allow for predictable builds on different machines, fearless package upgrades, overcoming the DDL-hell @nixos_long and easy rollbacks in case something goes wrong @nixos_long. Since its initial release in 2002, the ecosystem has seen continuous growth, surging especially in the last two years with people longing for the underlying properties which make dependency sharing and shipping fearless and reliable. The greates distinction to other package managers and origin of these properties is the underling nix language that was created in conjunction with the package manager and deeply integrates with the ecosystem, boasting features that are a perfect fit for the usecase.
 
 The conceptual idea behind the nix the development is quite easy: In a pure language, the output of a function is soley defined by its inputs. Since no interior mutability can change the functions output, it can be stored and _reused_ if the function is called with the same arguments again. Every output is also a strict result of its inputs making it a lot easier to understand the underlying computation. The meat of Eelco Dostras phd. was then to elevate this simple concept to package managing and thereby creating a package manager that redefines dependency management @dolstra_phd.
 
-To lift functional pureness to _pure package management_, it has to be possible to create packages in the first place. We continue to call distributable software _packages_, even though Eelco Dostra calls them components @dolstra_phd, since we believe package is the more intuitive wording in this context. In the nix language, a package can be created using the `derivation` function. This function is built into the language and is executed by the _evaluator_ which creates an isolated environment and runs the build script defined in it. This build script can refer to (a) other packages by dynamically adding them in the build srcript or (b) system paths which form a base type in the nix language. The nix evaluator tracks these references and upon instantiation, builds them before the current package. The build script can then write the build-artifacts to `$out` which is similar to function output. (a) and (b) give motivation for _dynamic accsess_ and `path` as a primitive in the final language.
+To lift functional pureness to _pure package management_, it has to be possible to create packages in the first place. We continue to call distributable software _packages_, even though Eelco Dostra calls them components @dolstra_phd, since we believe package is the more intuitive wording in this context. In the nix language, a package can be created using the `derivation` function. This function is built into the language and is executed by the _evaluator_ which creates an isolated environment and runs the build script defined in it. This build script can refer to other packages by dynamically adding them in the build script or system paths which form a base type in the nix language. The nix evaluator tracks these references and upon instantiation, builds them before the current package. The build script can then write the build-artifacts to `$out` which is similar to function output.
 
+
+== A domain specific language
+We have seen that
 Also the very integral property of the language, _laziness_, is founded by a need. The need to not build packages if they are not really needed, since building or downloading a package can take multiple hours and such must not happen if one only wants to acces for example the package meta-data. Laziness is thus integrated into the language to distinguish between what has to be evaluated and what not. A package can then be referenced in a file but will never be built, if the outpot does not depend on it.
 
 It is also a product of writing configurations, that the language revolves largely around records (attr-sets in nix) which turn out to be essetial to define key-value maps of usual configurations. Function patterns only revoled from the easier use of pattern destructuring at the beginnign of a function and the inherit-statement is only syntactic sugar to create records more easy. The problematic with-statement is used to open a record for easier access in following expressions and as such, also a usability feature.
 
 - TODO: The last two paragraphs lack a red thread, make it clear that
+
+== Quirk of the nix language
+1.
+
 
 == Things done in this paper
 Since nix was built as a domain specfic language with usability as its greatest design goal, the system boasts a lot of features that make type inference hard or even impossible. In language theory, the approach is mostly the opposit where one starts from a simple calculus like ML, SystemF, λ and carefully extends it with features to form a wieldy and interesting semantics. When trying to retrofit a type-system onto a language like \@typescript \@flow \@castagna_elixier one has to decide which features one can and wants to support.
@@ -45,20 +55,23 @@ In essence our contributions are:
 1. A comprehensive operational semantic for the nix language
 2. A Typesystem based on Mlstruct
 
+== Algebraic Subtyping
+
+
 = Syntax <syn>
 $oi(E)$ denotes $0 … n$ repititions of a syntax construct and the index $i$ is omitted if obvious.
 
 #let basetypes = subbox(caption: "Literals")[
   $
-                                  c & ::= "[^\"$\\] | $(?!{) | \\."  \
-                            "inter" & ::= "${"\^} *"}"               \
+                                  c & ::= "[^\"$\\] | $(?!{) | \\." \
+                            "inter" & ::= "${"\^} *"}" \
              #type_name("String") s & ::= "\"(c"*" inter)"*" c"*"\"" \
-       #type_name("Ident String") s & ::= "''todo''"                 \
-            #type_name("Boolean") b & ::= "true" | "false"           \
+       #type_name("Ident String") s & ::= "''todo''" \
+            #type_name("Boolean") b & ::= "true" | "false" \
     #type_name("File-Path") rho.alt & ::= "(./|~/|/)([a-zA-Z.]+/?)+" \
-             #type_name("Number") n & ::= "([0-9]*\.)?[0-9]+"        \
+             #type_name("Number") n & ::= "([0-9]*\.)?[0-9]+" \
               #type_name("Label") l & ::= "[A-Za-z_][A-Za-z0-9_'-]*" \
-        #type_name("Search Path") l & ::= "<[A-Za-z_]*> TODO"        \
+        #type_name("Search Path") l & ::= "<[A-Za-z_]*> TODO" \
     // #type_name("Variable") v & ::= "[A-Za-z_][A-Za-z0-9_'-]*" \
   $
 ]
@@ -97,8 +110,8 @@ $oi(E)$ denotes $0 … n$ repititions of a syntax construct and the index $i$ is
 #let patterns = box([
   #text(weight: "bold", smallcaps("Patterns"))
   $
-    d, h & ::= t | ε                                       \
-       e & ::= l | l space ? space d                       \
+    d, h & ::= t | ε \
+       e & ::= l | l space ? space d \
        p & ::= { overline(e\,) } | { overline(e\,) … } | l \
   $])
 
@@ -119,7 +132,7 @@ $oi(E)$ denotes $0 … n$ repititions of a syntax construct and the index $i$ is
       #set math.equation(numbering: "(1)")
       $ p : t space @ space ε = p : t $
       $ l space ? space ε : l $
-    ]
+    ],
   )),
   caption: "Supported Syntax of Nix",
 )
@@ -164,16 +177,16 @@ The _with statement_ expects an arbitrary expression that reduces to a record. E
           && t arrow.long t' &==> E[t] → E[t']
         $,
         subbox(caption: "Values")[$
-            v ::= p: t | todo(l) | {overline(a\;)} | #b[rec] {overline(a\;)}
-          $],
+          v ::= p: t | todo(l) | {overline(a\;)} | #b[rec] {overline(a\;)}
+        $],
         subbox(
           caption: "Evaluation Context",
           $
-            E[□] & := □ | □ space t | (□).l | (v).□      \
+            E[□] & := □ | □ space t | (□).l | (v).□ \
                  & | #b[if ] □ #b[ then ] t #b[ else ] t \
-                 & | #b[with ] □; t | #b[with ] v; □     \
-                 & | #b[inherit ] (ρ) space □;           \
-                 & | □ • t | v • t                       \
+                 & | #b[with ] □; t | #b[with ] v; □ \
+                 & | #b[inherit ] (ρ) space □; \
+                 & | □ • t | v • t \
           $,
         ),
         linebreak(),
@@ -362,7 +375,7 @@ Lastely, we add a single type for patterns. Even thought a pattern is similar in
     derive(
       "T-Or-Pos",
       ($Xi, Γ tack t_1: τ_1$, $l ∉ τ_1$, $Xi, Γ tack t_2: τ_2$),
-      $Xi, Γ tack (t_1).l "or" t_2: τ_2$,
+      todo($Xi, Γ tack (t_1).l "or" t_2: τ_2$),
     ),
     derive("T-Negate", ($Xi, Γ tack e: "bool"$,), $Xi, Γ tack !e: "bool"$),
     derive("T-Check", ($Xi, Γ tack e: {..}$,), $Xi, Γ tack e ? l: "bool"$),
@@ -467,26 +480,23 @@ Lastely, we add a single type for patterns. Even thought a pattern is similar in
 
 
 #figure(caption: "New Constraining Rules using normal forms", rect(inset: 20pt)[
-  #subrules(
-    caption: $Σ ⊢ τ ≪ τ => Ξ$,
-    flexwrap(
-      main-spacing: 20pt,
-      cross-spacing: 10pt,
-      derive("C-Hyp", ($(τ_1 ≪ τ_2) ∈ Σ$,), $Σ ⊢ τ_1 ≪ τ_2 => ε$),
-      derive(
-        "C-Assum",
-        ($(τ_1 ≪τ_2) ∉ Σ$, $Σ ·⊳(τ_1 ≤ τ_2) ⊢ "dnf"^0_Σ (τ_1 ∧ ¬τ_2) => Ξ$),
-        $$,
-      ),
-      derive(
-        "C-Or",
-        ($Σ ⊢ D^0 => Ξ$, $Ξ · Σ ⊢ C^0 => Ξ'$),
-        $D^0 ∨ C^0 => Ξ · Ξ'$,
-      ),
-      derive("C-Bot", ($$,), $Σ ⊢ ⊥ => ε$),
-      derive("C-Not-Bot", ($$,), $Σ ⊢ I^0 ∧ ¬⊥ => #b[err]$),
+  #subrules(caption: $Σ ⊢ τ ≪ τ => Ξ$, flexwrap(
+    main-spacing: 20pt,
+    cross-spacing: 10pt,
+    derive("C-Hyp", ($(τ_1 ≪ τ_2) ∈ Σ$,), $Σ ⊢ τ_1 ≪ τ_2 => ε$),
+    derive(
+      "C-Assum",
+      ($(τ_1 ≪τ_2) ∉ Σ$, $Σ ·⊳(τ_1 ≤ τ_2) ⊢ "dnf"^0_Σ (τ_1 ∧ ¬τ_2) => Ξ$),
+      $$,
     ),
-  ),
+    derive(
+      "C-Or",
+      ($Σ ⊢ D^0 => Ξ$, $Ξ · Σ ⊢ C^0 => Ξ'$),
+      $D^0 ∨ C^0 => Ξ · Ξ'$,
+    ),
+    derive("C-Bot", ($$,), $Σ ⊢ ⊥ => ε$),
+    derive("C-Not-Bot", ($$,), $Σ ⊢ I^0 ∧ ¬⊥ => #b[err]$),
+  )),
   #subrules(caption: $Σ ⊢ τ ≪ τ => Ξ$, flexwrap(
     main-spacing: 20pt,
     cross-spacing: 10pt,
