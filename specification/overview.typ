@@ -1,6 +1,6 @@
 #import "functions.typ": *
 #set heading(numbering: "1.")
-#set page(margin: 4em, height: auto)
+#set page(margin: 4em) //, height: auto)
 #set document(
   title: "Improving Nothing",
   description: "Type inference for the Nix Language",
@@ -17,7 +17,6 @@ Only the recent works of Lionell Parreaux and Stephen Dolan surrounding _algebra
 I refer to this document as "paper" even though it could be a master-project/thesis etc. and the subject might still change to some extend.
 
 = Origin of the Nix Language
-== A domain specific language
 
 The nix package manager distinguishes itself from other package managers by one prominent feature: It has a built-in domain-specific programming language at its foundation. And while it is a major reason for the steep learning curve and a source of major frustation, it is what enables nix to have two great properties: purity and functionality.
 
@@ -38,6 +37,17 @@ In this section we look more closely on nix specific features and their suprisin
 
 === Laziness
 The
+
+== 3. Finding a type system
+
+The literatur on type systems is as wide as the ocean with many typesystems studied over the last 70 years of research. Finding a typesystem for a language is thus similar to traversing a jungle with the alluring dangers of getting sidetracked behind every corner. Since records are such a central aspect of the language, starting from them is not a bad idea.
+
+=== 3.1 Record theory
+Records have been studied in a variety of papers [..] and can be partitioned in roughly 3 groups. The first model of records is a syntactic model where the syntax defines what a record is. This approach is simple but hard to extend because everything has to be encoded in its syntax. To overcome its shortcommings, \@? studied _row polymorphism_. Row polymorphism extend record with a generic row r, effectively making them polymorphic in their "rest". By extending the row to lacks-predicates not only extension but also restriction of record types can be achieved, giving a lot of flexibility in theory. While strong in theory, their theory gets complex and unwildy fast, making it hard to integrate into fully-fledged type systems. _Semantic subtyping_, developed over multiple years by \@castagna tries to remedie this by shortcomming by giving records a set-theoretic semantic model. By also adding type connectives (negation, union and intersection), his systems are impressively expressive, especially in combination with _gradual typing_. The strength comes of a cost though, namely _backtracking_. Since polymorphic type inference is undecidable in general \@?ref, the model has to rely on backtracking and its performance overhead. It also lacks principle types, a strong selling point of ml-like systems. Last but not least, it is possible to model records in constraint based type system. A record field lookup in these systems produces a constrained which is collected and simplified later. Due to the generality, these systems usually don't exhibit good and effective properties.
+
+Only recently in 2017, Stephen Dolan proposed a new family of type systems, named _algebraic type systems_. These systems tackle language construction from a new point of view. Instead of adding types first and then trying to find a semantic model for them, Dolan argues one should pay more attiontion to finding a semantic model for the types _first_. The types in _algebraic type systems_ form a distributive lattice (thus algebraic) and inherit the lattice' properties. By further restricting the the occurences for union and intersections to positive and negative positions, a distributive lattice can be constructed that allows for lossless reduction of subtyping constraints. In essence, the system is standart ML, with a lattice of types and unification replaced by bi-unification, a subroutine that handles subtyping constraints instead of equality constraints. The final algorithms for subsumption checking and type inference are short as well as simple, all thanks to the initial focus on well-formed types. The final algorthims have the standart ML properties, namely _principled type inference_, no need for type annotations and effectiveness i.e no backtracking.
+
+Since batracking in nix' huge syntax tree that roots in a single file and relies heavily on laziness, the properties of algebraic subtyping come as a perfect fit. The formalization of algebraic subtyping depends heavily on order-theory and some form of category theory and the proofs are far from simple \@ . Thakfully, Lionell Parreaux showed how to get from a algebraic domain to a syntactic by showing the equivalence between constraint accumulation on type variables and biunification, making algebraic subtyping more accessible. In the seminal Bachelor Thesis from the first author, he showed how to extend the SimpleSub to the more expressive type system features of nix. Even though the work pintpointed a direction, it oversimplified on the operational semantic and derived type rules, leaving lots of room for improvement.
 
 
 
@@ -60,7 +70,7 @@ In essence, our contributions are:
 1. A comprehensive operational semantic for the nix language
 2. A Typesystem based on Mlstruct
 
-== Algebraic Subtyping
+
 
 = Syntax <syn>
 $oi(E)$ denotes $0 … n$ repititions of a syntax construct and the index $i$ is omitted if obvious.
@@ -80,8 +90,8 @@ $oi(E)$ denotes $0 … n$ repititions of a syntax construct and the index $i$ is
   $
 ]
 
-// TODO: convert to code
-// TODO: Note that uri is deprecated
+// TODO(isolated): convert to code
+// TODO(isolated): Note that uri is deprecated
 
 #let general = subbox(caption: "Terms")[
   $
@@ -734,5 +744,8 @@ I am currently working to transition from salsa 0.17-pre2 to salsa 0.24 which is
 - *parseDrvName* `s` : Parse a derivation name into components.
 
 #page[
-  #bibliography(("bib/misc.bib", "bib/parreaux.bib", "bib/nix.bib"))
+  #bibliography(
+    ("bib/misc.bib", "bib/parreaux.bib", "bib/nix.bib"),
+    style: "iso-690-author-date",
+  )
 ]
