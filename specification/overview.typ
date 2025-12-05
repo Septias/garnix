@@ -10,39 +10,42 @@
 
 #text("Improving Nothing", size: 17pt)
 #linebreak()
-The nix programming language is a pure and lazy programming languge with real-world usage in the nix package manager and NixOs operating system, and even though it existed for over 15 years and is used close to exclusively in the nix-ecosystem with over 100.000 files written in it, it has not received a proper type system yet. The reason for that is not clear to the authors, but we suspect it roots from the unique features of the language, its unintuitive shadowing behaviour and laziness, that complicate principled type inference in a general sense.
+The nix programming language is a pure and lazy programming languge with real-world usage in the nix package manager and NixOs operating system, and even though it existed for over 20 years and is used close to exclusively in the nix-ecosystem with over 100.000 files written in it, it has not received a proper type system yet. The reason for that is not clear to the authors, but we suspect it roots from the unique features of the language, its unintuitive shadowing behaviour and laziness, that complicate principled type inference in a general sense.
 Only the recent works of Lionell Parreaux and Stephen Dolan surrounding _algebraic subtyping_ have opened a new perspective to type inference for such an expressive languagage and motiviated this paper where we try to lay out the current state of type inference in nix, define a comprehensive operational semantic and ultimately a type system for a reduced part of the language. We also provide an implementation of a language server written in rust.
 
 == Preface
 I refer to this document as "paper" even though it could be a master-project/thesis etc. and the subject might still change to some extend.
 
 = Origin of the Nix Language
-
 == A domain specific language
-The nix package manager distinguishes itself from every other package manager by one single feature: It has a built-in domain-specific programming language at its foundation. And while the language is a major reason for the steep learning curve and a source of major frustation, it can be argued it is also nix' biggest strength and the underlyign reason for its inherent properties.
 
-Nix, the package manager, was born in an attempt to overcome the fundamental problem of distributing software packages (components) between different environments without breaking them. The problem is more subtle than one might expect and the reason why there exist over a bazillian package managers that try to tackle the problem differently. The approach take in @memory_to_software is to "apply a memory management discipline to package management", effectively interpreting files as memory locations and references as pointers between them @memory_to_software.
-It's major achievement is a garbage-collector inspired technique to consistently track dependencies during package construction and deriving a _closure_ that captures all dependencies. The final closure that pictorally resembles a tree of (sub-) dependencies with the built package at its root can then be _extracted_ and sent to another machine by sending every sub-component and reassembling on the other side. This effectively repotts the tree without it dying.
+The nix package manager distinguishes itself from other package managers by one prominent feature: It has a built-in domain-specific programming language at its foundation. And while it is a major reason for the steep learning curve and a source of major frustation, it is what enables nix to have two great properties: purity and functionality.
 
-While reproducability is its greatest showpiece, the ~parallel implementation of the _nix store_ gives even more shiny properties. The nix store is a read-only location that stores the immutable artifacts of builds. It uses hashes to identify components and allows for quick equality checks and therefore reusability of components. All its items live in the same location, but isolated such that different version of the same package that would otherwise interfer, can be used simultaneously. Since every package is a pure derivation of its dependencies, one can also change the "head" to a newer version easily without having to worry about older versions. These can not interfere which makes package upgrades fearless. If something should still break, the old version lives perfectly preserved in the store and can be rolled back in O(1) at any time @memory_to_software. By tracking roots of packages, a garbage collector can easily identify unreferenced store items and delete them to reclaim disk space.
+Nix, the package manager, was born in an attempt to overcome the problem of distributing software packages (components) between different environments without breaking them. The problem is more subtle than one might expect and the reason why so many package managers exist that try to tackle the problem differently. The approach take by Eelco Dolstra et al. to overcome this problem is to »apply a memory management discipline to package management«, effectively interpreting files as memory locations and references as pointers between them @memory_to_software. It's major achievement is a garbage-collector inspired technique to consistently track dependencies during package construction. The final _closure_ that pictorally resembles a tree of (sub-) dependencies with the built package at its root, can then be _extracted_ from the local filesystem and sent to other machines by sending every sub-component and reassembling on the other side.
 
-The need for this colorful pallete of features heavily affected the nix language in its design. First and foremost, it is _essential_ for reproducable packages due to its pure and functional design. When abstracting files and references to memory menagement, one can notice that pure functionality boasts all the features needed for airtight dependency management. A pure function computes its output solely given its input fields. The final value can then be memoized and reused should it be needed again. The nix package manager uses _pure functions without side effects_ to build packages in a clean and sandboxed environment and since no externalities can affect the build, the outcome is guaranteed to be equal if run twice, even on differing machines.
+While perfect\* reproducability is its greatest showpiece, the simultaneous developement of the _nix store_ gives even more shiny properties. The nix store is a read-only location that stores the immutable artifacts of builds. It uses hashes to identify components and allows for quick equality checks, and therefore reusability of components. All its components live in the same location, but isolated such that different version of the same package, can be used simultaneously without infering or overwriting each other. Since every package is a pure derivation of its dependencies, new version can easily be added to the store without having to worry about older versions such that package ugrades become fearless. If something should still break, the old version lives perfectly preserved in the store and can be rolled-back to in O(1) at any time @memory_to_software. By tracking roots of packages, a garbage collector can identify unreachable store locations and delete them to reclaim disk space.
 
-Package managing is a harsh and costly environment because a single action – building a package – can be very expensive, possibly taking multiple hours to complete. It is thus of utmost importance, that packages are only built if actually needed. In a lazy language, values of function application are substituted as-is without further reduction i.e computation on them. It can be thought of as not working on something if no one asked for it. In the nix case, where packages are stored in lazy record fields, lazy evaluation of record fields fits like a glove to never build packages if it is not _actually needed_.
+The need for this colorful pallete of features heavily affected the nix language design. First and foremost, one of nix' greatest strength –_reproducibility_– is only possible due to the languages' functional design. When abstracting files and references to memory menagement, one can notice that pure functionality boasts all the features needed for airtight dependency management. A pure function computes its output solely given its input fields. The final value can then be memoized and reused should it be needed again. The nix package manager uses _pure functions without side effects_ to build packages in a clean and sandboxed environment and since no externalities can affect the build, the outcome is guaranteed to be equal if run twice, even on differing machines.
 
-When using the nix package manager, declarative configuration management is the major activity and the nix language thus optimized to do so as painless as possible. Namely the inherit- and with-statement are strong language constructs that help in creating new records or extracting fields from existing ones. For dependency management, key-value fields an expressive primitive that strikes the balance between verbosity and simplicity. Standing at its core, the langue revolves largely around records, taking them as function arguments, in with statements and for its builtin functions. Using their recursiveness it is possible to build strong self-referntial structures that enable users to overwrite single fields effortlessly and extending them with _record concatenation_ is a breeze.
+Package managing is a costly environment because a single action – building a package – can be very expensive, possibly taking multiple hours to complete. It is thus of utmost importance, that packages are only built if actually needed. In a lazy language, values of function application are substituted as-is without further reduction i.e computation on them. In nix, where packages are stored in lazy record fields, lazyness of record fields is the essential ingredient to not build packages if not _actually needed_.
 
-Combining all these features, the nix language is a wild zoo of constructs, theoretical properties and poses tricky shadowing and termination properties because of the combination thereof. Retrofitting a typesystem that captures all these features is thus not an easy undergoing.
+When using the nix package manager, declarative configuration management is the major activity and the nix language thus optimized to do so. Namely, the inherit- and with-statement are powerful language constructs, that help in creating new records or extracting fields from existing ones. For dependency management, key-value fields strike the balance between verbosity and simplicity. The language thus resolves largely around record fields, taking them as function arguments, in with-statements and for its builtin functions. Using their recursiveness it is possible to build self-referntial structures that enable implementors to overwrite single fields effortlessly. The record concat operator is used to create bigger record fields.
 
-== Quirk of the nix language
-1.
+Combining all these features, the nix language is a wild zoo of constructs, theoretical properties and poses tricky shadowing and termination properties because of the combination thereof.
+
+== Quirks of the Nix Language
+In this section we look more closely on nix specific features and their suprising interactions.
+
+=== Laziness
+The
+
 
 
 == Things done in this paper
-Since nix was built as a domain specfic language with usability as its greatest design goal, the system boasts a lot of features that make type inference hard or even impossible. In language theory, the approach is mostly the opposit where one starts from a simple calculus like ML, SystemF, λ and carefully extends it with features to form a wieldy and interesting semantics. When trying to retrofit a type-system onto a language like \@typescript \@flow \@castagna_elixier one has to decide which features one can and wants to support.
+Since nix was built as a domain specfic language with usability as its greatest design goal, the system boasts a lot of features that make retrofitting a type inference hard or even impossible. In traditional language theory, the flow is mostly reversed where one starts from a simple calculus like ML, SystemF, λ and carefully extends it with features to form a wieldy and interesting semantics. When trying to retrofit a type-system onto a language like \@typescript \@flow \@castagna_elixier one has to decide which features one can and wants to support.
 
 In this paper we restrict ourselves to:
-1. Basetypes (Record, Array)
+1. Basetypes (Record, Array, ..Primitive Types)
 2. Datatype Operators (Record-extension, Array-concatenation)
 3. Special language constructs (with-statements, inherit-statements)
 
@@ -52,13 +55,12 @@ We defer these features to later efforts of research:
 3. Deprecated let-attrset
 4. Deprecated uris
 
-In essence our contributions are:
+In essence, our contributions are:
 
 1. A comprehensive operational semantic for the nix language
 2. A Typesystem based on Mlstruct
 
 == Algebraic Subtyping
-
 
 = Syntax <syn>
 $oi(E)$ denotes $0 … n$ repititions of a syntax construct and the index $i$ is omitted if obvious.
@@ -533,9 +535,6 @@ Lastely, we add a single type for patterns. Even thought a pattern is similar in
 ])
 
 
-
-
-
 = Equality
 Attribute sets and lists are compared recursively, and are therefore fully evaluated.
 
@@ -566,9 +565,6 @@ The second problem is what I call the _attribution problem_. It occurs when ther
 == Inherit Statements
 Inherit statements can be handled as syntactic sugar.
 
-== Function Patterns
-Functions are pure and functional which helps in inferring a proper type. Patterns are given as records, showing which exact fields are wanted "as parameters". The ellipsis `(…)` allSows for arbitrary extra fields, and the `?` question mark syntax for default values.
-To handle these, all expected record fields need to be present in the function argument so a record constraint with these fields can be added to the argument of the function. If a default value is given for some record fields, a constraint can be made on the arguments as well.
 
 == Dunder Methods
 There seem to be some special dunder methods for representations which are handled specially by the evaluator. I have not had the chance to look into it further.
