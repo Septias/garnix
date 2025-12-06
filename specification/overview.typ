@@ -1,6 +1,10 @@
 #import "functions.typ": *
 #set heading(numbering: "1.")
-#set page(margin: 4em) //, height: auto)
+#set page(height: auto)
+#show figure: set block(breakable: true)
+// #set figure(placement: auto)
+
+// #show stack: set block(breakable: true)
 #set document(
   title: "Improving Nothing",
   description: "Type inference for the Nix Language",
