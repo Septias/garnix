@@ -43,6 +43,13 @@ numpages = {30},
 keywords = {union and intersection types, structural typing, principal type inference}
 }
 
+/*
+
+Odersky et al. [1999] gave them a unified account by proposing a general framework called HM(X), where the ‘X’ stands for a constraint solver to plug into their generic system. While these approaches often claimed a form of principal type inference (also called minimality29), the constrained types they inferred were often large and unwieldy.
+
+*/
+
+
 @article{superF,
 author = {Parreaux, Lionel and Boruch-Gruszecki, Aleksander and Fan, Andong and Chau, Chun Yin},
 title = {When Subtyping Constraints Liberate: A Novel Type Inference Approach for First-Class Polymorphism},
@@ -61,6 +68,12 @@ articleno = {48},
 numpages = {33},
 keywords = {type inference, first-class polymorphism, subtyping, constraint solving}
 }
+
+/*
+
+We saw that intersections were better at expressing requirements on the types of inputs, since making these requirements as weak as possible conversely strengthens the overall typ
+*/
+
 
 @article{invalml,
 author = {Gao, Cunyuan and Parreaux, Lionel},
@@ -81,4 +94,11 @@ numpages = {31},
 keywords = {effect systems, higher-rank polymorphism, type inference}
 }
 
+/*
 
+Higher-rank polymorphism and polymorphic recursion, which we need, are not amenable to full type inference (for which they are both undecidable in general [36, 41]).
+
+However, traditional unification-based row polymorphism has severe limitations which are exacerbated in the context of effect systems [52] and notably sufefrs from the well-known poisoning problem [93]. ReML [24] adopts Tofte and Birkedal [85]’s region labels that are similar to a simple form of row polymorphism. Row polymorphism was originally preferred over subtyping to model extensible records [75, 77, 91], but more recent work showed that subtype inference could be made more tractable by adopting an algebraic approach [20, 21, 64, 71],
+
+Since complete type inference for higher-rank systems is undecidable [69]
+*/
