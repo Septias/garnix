@@ -3,8 +3,8 @@
 #set page(height: auto)
 #show figure: set block(breakable: true)
 // #set figure(placement: auto)
-
 // #show stack: set block(breakable: true)
+
 #set document(
   title: "Improving Nothing",
   description: "Type inference for the Nix Language",
@@ -26,9 +26,9 @@ The nix package manager distinguishes itself from other package managers by one 
 
 Nix, the package manager, was born in an attempt to overcome the problem of distributing software packages (components) between different environments without breaking them. The problem is more subtle than one might expect and the reason why so many package managers exist that try to tackle the problem differently. The approach take by Eelco Dolstra et al. to overcome this problem is to »apply a memory management discipline to package management«, effectively interpreting files as memory locations and references as pointers between them @memory_to_software. It's major achievement is a garbage-collector inspired technique to consistently track dependencies during package construction. The final _closure_ that pictorally resembles a tree of (sub-) dependencies with the built package at its root, can then be _extracted_ from the local filesystem and sent to other machines by sending every sub-component and reassembling on the other side.
 
-While perfect\* reproducability is its greatest showpiece, the simultaneous developement of the _nix store_ gives even more shiny properties. The nix store is a read-only location that stores the immutable artifacts of builds. It uses hashes to identify components and allows for quick equality checks, and therefore reusability of components. All its components live in the same location, but isolated such that different version of the same package, can be used simultaneously without infering or overwriting each other. Since every package is a pure derivation of its dependencies, new version can easily be added to the store without having to worry about older versions such that package ugrades become fearless. If something should still break, the old version lives perfectly preserved in the store and can be rolled-back to in O(1) at any time @memory_to_software. By tracking roots of packages, a garbage collector can identify unreachable store locations and delete them to reclaim disk space.
+While perfect\* reproducability is its greatest showpiece, the simultaneous developement of the _nix store_ gives equally many good properties. The nix store is a read-only location that stores the immutable artifacts of builds. It uses hashes to identify components and allows for quick equality checks, and therefore reusability of components. All its components live in the same location, but isolated such that different version of the same package, can be used simultaneously without infering or overwriting each other. Since every package is a pure derivation of its dependencies, new version can easily be added to the store without having to worry about older versions such that package ugrades become fearless. If something should still break, the old version lives perfectly preserved in the store and can be rolled-back to in O(1) at any time @memory_to_software. By tracking roots of packages, a garbage collector can identify unreachable store locations and delete them to reclaim disk space.
 
-The need for this colorful pallete of features heavily affected the nix language design. First and foremost, one of nix' greatest strength –_reproducibility_– is only possible due to the languages' functional design. When abstracting files and references to memory menagement, one can notice that pure functionality boasts all the features needed for airtight dependency management. A pure function computes its output solely given its input fields. The final value can then be memoized and reused should it be needed again. The nix package manager uses _pure functions without side effects_ to build packages in a clean and sandboxed environment and since no externalities can affect the build, the outcome is guaranteed to be equal if run twice, even on differing machines.
+The need for this colorful pallete of features heavily affected the nix language design. First and foremost, one of nix' greatest strength – _reproducibility_ – is only possible due to the languages' functional design. When abstracting files and references to memory menagement, one can notice that pure functionality boasts all the features needed for airtight dependency management. A pure function computes its output solely given its input fields. The final value can then be memoized and reused should it be needed again. The nix package manager uses _pure functions without side effects_ to build packages in a clean and sandboxed environment and since no externalities can affect the build, the outcome is guaranteed to be equal if run twice, even on differing machines.
 
 Package managing is a costly environment because a single action – building a package – can be very expensive, possibly taking multiple hours to complete. It is thus of utmost importance, that packages are only built if actually needed. In a lazy language, values of function application are substituted as-is without further reduction i.e computation on them. In nix, where packages are stored in lazy record fields, lazyness of record fields is the essential ingredient to not build packages if not _actually needed_.
 
@@ -40,20 +40,72 @@ Combining all these features, the nix language is a wild zoo of constructs, theo
 In this section we look more closely on nix specific features and their suprising interactions.
 
 === Laziness
-The
+Laziness is an ~existential nix feature since without it, the package manager would be unpractically slow. Nix adds lazyiness virtually everywhere: record-fields, functions, let-bindings, arrays, and patterns.
 
-== 3. Finding a type system
+
+=== Shadowing
+Nix with statement has special shadowing behavior in that it does not shado let-bount variables. An expression `let a = 1; with {a = 2}; a` will thus reduce to 1 instead of two, because a is "not taken from the record". This is a major source of confusion, also, because it behaves differently for stacked with-statemnts. The expression `with {a = 1;}; with {a=2;}; a` will evaluate to 2, because the latest with-statement shadows outer ones. 
+
+
+
+== Finding a Type System
 
 The literatur on type systems is as wide as the ocean with many typesystems studied over the last 70 years of research. Finding a typesystem for a language is thus similar to traversing a jungle with the alluring dangers of getting sidetracked behind every corner. Since records are such a central aspect of the language, starting from them is not a bad idea.
 
-=== 3.1 Record theory
+=== Record theory
 Records have been studied in a variety of papers [..] and can be partitioned in roughly 3 groups. The first model of records is a syntactic model where the syntax defines what a record is. This approach is simple but hard to extend because everything has to be encoded in its syntax. To overcome its shortcommings, \@? studied _row polymorphism_. Row polymorphism extend record with a generic row r, effectively making them polymorphic in their "rest". By extending the row to lacks-predicates not only extension but also restriction of record types can be achieved, giving a lot of flexibility in theory. While strong in theory, their theory gets complex and unwildy fast, making it hard to integrate into fully-fledged type systems. _Semantic subtyping_, developed over multiple years by \@castagna tries to remedie this by shortcomming by giving records a set-theoretic semantic model. By also adding type connectives (negation, union and intersection), his systems are impressively expressive, especially in combination with _gradual typing_. The strength comes of a cost though, namely _backtracking_. Since polymorphic type inference is undecidable in general \@?ref, the model has to rely on backtracking and its performance overhead. It also lacks principle types, a strong selling point of ml-like systems. Last but not least, it is possible to model records in constraint based type system. A record field lookup in these systems produces a constrained which is collected and simplified later. Due to the generality, these systems usually don't exhibit good and effective properties.
 
 Only recently in 2017, Stephen Dolan proposed a new family of type systems, named _algebraic type systems_. These systems tackle language construction from a new point of view. Instead of adding types first and then trying to find a semantic model for them, Dolan argues one should pay more attiontion to finding a semantic model for the types _first_. The types in _algebraic type systems_ form a distributive lattice (thus algebraic) and inherit the lattice' properties. By further restricting the the occurences for union and intersections to positive and negative positions, a distributive lattice can be constructed that allows for lossless reduction of subtyping constraints. In essence, the system is standart ML, with a lattice of types and unification replaced by bi-unification, a subroutine that handles subtyping constraints instead of equality constraints. The final algorithms for subsumption checking and type inference are short as well as simple, all thanks to the initial focus on well-formed types. The final algorthims have the standart ML properties, namely _principled type inference_, no need for type annotations and effectiveness i.e no backtracking.
 
 Since batracking in nix' huge syntax tree that roots in a single file and relies heavily on laziness, the properties of algebraic subtyping come as a perfect fit. The formalization of algebraic subtyping depends heavily on order-theory and some form of category theory and the proofs are far from simple \@ . Thakfully, Lionell Parreaux showed how to get from a algebraic domain to a syntactic by showing the equivalence between constraint accumulation on type variables and biunification, making algebraic subtyping more accessible. In the seminal Bachelor Thesis from the first author, he showed how to extend the SimpleSub to the more expressive type system features of nix. Even though the work pintpointed a direction, it oversimplified on the operational semantic and derived type rules, leaving lots of room for improvement.
 
+== Comparing Nix Features
+#figure(caption: "Garnix and NixLang Features" ,table(
+  columns: (1fr, 2fr, auto, auto),
+  inset: 10pt,
+  align: (left, left, center, center),
+  table.header([*Feature*], [*Example*], [*Garnix*], [*NixLang*]),
+  table.cell(colspan: 4)[*Basic Types*],
+  [Boolean], `true`,                              `●`, ` `,
+  [String], `"single line"`,                      `●`, ` `,
+  [Ident String], `'' multi \n line ''`,          `●`, ` `,
+  [Number], `1.23, 3`,                            `●`, `◌`,
+  [Path], [./home/user],                          `●`, ` `,
+  [Uri], `https://github.com`,                    `` , ` `,
+  [Array], `[ 1 2 ]`,                             `●`, ` `,
+  [Record], `{a = 1; b = "2";}`,                  `●`, `◌`,
+  [Rec-Record], `rec {a = b; b = a;}`,            `●`, `◌`,
+  [Searchpath], `<nixpkgs>`,                      `●`, ` `,
+  [Null], `null`,                             `●`, ` `,
+  table.cell(colspan: 4)[*Language Constructs*],
+  [Let-Bindings], `let a = 1; in ()`,             `●`, `◌`,
+  [Function], `x: x + 1`,                         `●`, `◌`,
+  [Pattern-Functions], `{ a }: a`,                `●`, `◌`,
+  [Open-Pattern], `{ a, ... }: a`,                `●`, `◌`,
+  [Default-values], `a ? 2: a`,                   `●`, `◌`,
+  [Global-bindings], `{a} @ b: b.a`,              `●`, ` `,
+  [Conditionals], `if cond then null else 1`,     `●`, `◌`,
+  [Inherit], `inherit (players) bob;`,            `●`, `◌`,
+  [With], `with {a = 1;}; a`,                     `●`, `◌`,
+  [Dynamic Lookup], `{a = 1;}.${"a"}`,            ` `, ` `,
+  [String-Interpolation], `The name is: ${name}`, ` `, ` `,
+  table.cell(colspan: 4)[*Operators*],
+  [Arithmetic], `1 + 2 / 3 * 4`,                  `●`, ` `,
+  [Logic], `true | false & true → false`,         `●`, ` `,
+  [Lookup], `{ a = 2;}.a`,                        `●`, ` `,
+  [Has-Attr], `{ a = 2;}.a`,                      `●`, ` `,
+  [Or], `{a = 2;}.b or 5`,                        `●`, ` `,
+  [Array-Concat], `[1 2] ++ [3 4]`,               `●`, ` `,
+  [Record-Concat], `{a = 2;} // {b = 3;}`,        `●`, ` `,
+  [Pipe], `|> <|`,                                ` `, ` `,
+  // [], [], [], [],
+)) <comparison>
 
+The table shows a comparison between garnix and NixLang \@verified. A dotted circle represents feature compatibility in the reduction semantic, where as a full circle tells that type inference was implemented for that feature. The works in \@verified develop an interpreter instead of type inference, so no full circles are expected on that side. To do the paper justic, another circle kind could be added for features that are covered by an interpreter, but that is not the subject of this paper.
+
+== Algebraic Subtying
+Algebraic subtypign @dolstra_phd is a technique to get well-behaved types and neat type inference. After @simplesub and @mlstruct we know how to pratically implement it. The first thing one needs to do is to form a boolean algbebra of types that is well behaved. If given, constraints of the form τ₁ <= τ₂ can be "grained down" into sub-constraints, eventually landing at primitive constraints like $"Bool" < top$ that can be solved trivially.
+ 
 
 == Things done in this paper
 Since nix was built as a domain specfic language with usability as its greatest design goal, the system boasts a lot of features that make retrofitting a type inference hard or even impossible. In traditional language theory, the flow is mostly reversed where one starts from a simple calculus like ML, SystemF, λ and carefully extends it with features to form a wieldy and interesting semantics. When trying to retrofit a type-system onto a language like \@typescript \@flow \@castagna_elixier one has to decide which features one can and wants to support.
@@ -73,7 +125,6 @@ In essence, our contributions are:
 
 1. A comprehensive operational semantic for the nix language
 2. A Typesystem based on Mlstruct
-
 
 
 = Syntax <syn>
@@ -134,28 +185,25 @@ $oi(E)$ denotes $0 … n$ repititions of a syntax construct and the index $i$ is
   $])
 
 #figure(
+  caption: "Supported Syntax of Nix",
   rect(width: 100%, grid(
     columns: 2,
     align: left,
     inset: 8pt,
-    grid.cell(rowspan: 2, general),
+    grid.cell(rowspan: 3, general),
     basetypes,
     inherit,
-    subbox(caption: "Operators")[
-      $• ::= #b[or] | "//" | ⧺ | " ? "$
-
-    ],
     patterns,
     subbox(caption: "Shorthands")[
       #set math.equation(numbering: "(1)")
       $ p : t space @ space ε = p : t $
       $ l space ? space ε : l $
+      $ • ::= #b[or] | "//" | ⧺ | " ? " $
     ],
   )),
-  caption: "Supported Syntax of Nix",
 )
 
-Since nix is a real-world language it supports a big range of _literals_ in comparison to purely technical languages that get along with only one literal to form the simplest kind of syntax. The syntax is given following the official regex formulas to follow the specification \@typedef. _Records_ follow a standart notation where multiple fields can be defined using `key = value;` assignments to define multiple fields. In addition, records can be marked _recursive_ with the `rec` keyword and are non-recursive otherwise. _Arrays_ are introduced in a similar fashion where multiple values can be concatenated with the only unintuitive nix-specific distinction that a space is used as seperator. Both datatypes are generally _immutable_, but there are concat operations (Record-Concat and Array-Concat) that can be used to create new, bigger datatypes. Other than that, records come equipped with the usual lookup syntax and two specialities. The first being a dynamic label check that returns a boolean as a result and secondly a way to specify a default value in case the previous check turned out to be negative.
+Nix supports the usual _literals_ of fully fledged languages as well as a multi-line string and paths. The syntax is given following the official regex formulas to follow the specification \@typedef. _Records_ follow a standart notation where multiple fields can be defined using `key = value;` assignments to define multiple fields. In addition, records can be marked _recursive_ with the `rec` keyword and are non-recursive otherwise. _Arrays_ are introduced in a similar fashion where multiple values can be concatenated with the only unintuitive nix-specific distinction that a space is used as seperator. Both datatypes are generally _immutable_, but there are concat operations (Record-Concat and Array-Concat) that can be used to create new, bigger datatypes. Other than that, records come equipped with the usual lookup syntax and two specialities. The first being a dynamic label check that returns a boolean as a result and secondly, a way to specify a default value in case the previous check turned out to be negative.
 
 Functions take one argument, a _pattern_. This pattern can be a single label or adher to a _record-like_ structure, allowing multiple fields to be present, possibly with _default arguments_. This way a function taking multiple arguments can be created without resorting to currying. These functions can then be called with a record from which the "single arguments" are taken. This forms a neat syntax ambiguity where function definitions and their supplied arguments can be read as functions taking records or as elaborate functions with multiple arguments and possibly default arguments.
 Patterns can alse be marked _open_ with the ellipsis (…), otherwise their are regarded as _closed_. Thye can also be given default arguments with the `?` syntax. An example would be `{a, b ? "pratt", …}` which is an _open_ pattern with a default value of "pratt" for the label $b$.
@@ -169,9 +217,7 @@ The _with statement_ expects an arbitrary expression that reduces to a record. E
 
 #figure(
   caption: "Reduction rules of nix",
-  rect(width: 100%, inset: 20pt)[
-    #align(
-      left,
+  rect(width: 100%, inset: 20pt,
       stack(
         spacing: 20pt,
         $
@@ -208,9 +254,8 @@ The _with statement_ expects an arbitrary expression that reduces to a record. E
           $,
         ),
         linebreak(),
-      ),
-    )
-  ],
+      ))
+    
 ) <reduction>
 
 #figure(
@@ -277,7 +322,7 @@ What follows are the typing and subtyping rules as well as an overview over the 
   ),
 )<types>
 
-Garnix models all literal syntax categories with the respective atom types bool, string, path and num. Notice, that we do not distinguish between float and int as they are coerced during interpretation and thus used interspersely in practice. We also add the usual types for fuctions, records and arrays and note that records types only define a _single_ label to type mapping instead of multiple. This is due to the use of subtyping constraints and their accumuation on type variables during type inferene. This mechanism is further discussed in \@section_todo. Also, we introduce two types for arrays, one for homogenous arrays of the same type and one accumulative for the case that an array has many distinct elements.
+Garnix models all literal syntax categories with the respective atom types bool, string, path and num. Notice, that we do not distinguish between float and int as they are coerced during interpretation and thus used interspersely in practice. We also add the usual types for fuctions, records and arrays and note that record  types only define a _single_ label to type mapping instead of multiple. This is due to the use of subtyping constraints and their accumuation on type variables during type inferene. This mechanism is further discussed in \@section_todo. Also, we introduce two types for arrays, one for homogenous arrays of the same type and one accumulative for the case that an array has many distinct elements.
 To form a boolean algebra of types we add the expected type connectives $union.sq, inter.sq, ~$ as well as a top and bottom type which represent the least type which is subsumed by every other type and the greatest type which subsumes every other type respectively.
 Lastely, we add a single type for patterns. Even thought a pattern is similar in strucuter to a record, the pattern type is an accumulated type with multiple fields. This distinction is made due to the syntactical difference of the two. Patterns are introduced and eliminated atomically unlike a record where every fild acces $"record.field"$ results in new independent constraints. The superscript b can be true or false, ascribing whether the pattern is _open_ or _closed_.
 
