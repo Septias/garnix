@@ -20,13 +20,15 @@
   ..body,
 ))
 
+// Caption in smallcaps
 #let subbox(caption: "", ..body) = stack(
   spacing: 10pt,
   align(left, text(weight: "bold", smallcaps(caption))),
   ..body,
 )
 
-#let subrules(caption: math, ..body) = box(width: 100%, stack(
+// Caption in a box
+#let subrules(caption: math, ..body) = block(breakable: true,  stack(
   spacing: 10pt,
   align(left, rect()[#caption]),
   ..body,
@@ -34,7 +36,7 @@
 
 #let sub_typing_rules(caption: "", ..body) = stack(
   spacing: 10pt,
-  box(width: 100%, align(left, text(weight: "bold", smallcaps(caption)))),
+  block(width: 100%, breakable: true, align(left, text(weight: "bold", smallcaps(caption)))),
   flexwrap(main-spacing: 20pt, cross-spacing: 10pt, ..body),
 )
 
