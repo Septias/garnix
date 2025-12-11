@@ -5,7 +5,7 @@
 
 
 #let char = `[^\"$\\] | $(?!{) | \\.`
-#let inter = `${"\^} *"}`
+#let interstr = `${"\^} *"}`
 #let string = `\"(c"*" inter)"*" c"*"\"`
 #let identstring = `''todo''` 
 #let boolean = `true | false`
@@ -17,7 +17,7 @@
 #let basetypes = subbox(caption: "Literals")[
   $
                                   c & ::= char \
-                            "inter" & ::= inter \
+                            "inter" & ::= interstr \
              #type_name("String") s & ::= string\
        #type_name("Ident String") s & ::= identstring\
             #type_name("Boolean") b & ::= boolean\
