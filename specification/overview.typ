@@ -109,7 +109,6 @@ The _with statement_ expects an arbitrary expression that reduces to a record. E
 
 #reduction <reduction>
 
-#function_reduction <function_reduction>
 
 Since nix supports patterns with default values and the _open_ modifiers, the function reduction rules become quite verbose. The simplest case is R-Fun which takes an argument t₁ and replaces the occurences of $l$ with said argument in the function body t₂. The next function rules R-Fun-Pat-∗ reduces functions taking patterns, the R-Fun-Pat being the simplest of such. We draw i,j from the index Set ℐ and range them over labels such that if i = j then l_i = l_j.
 Since the same index $i$ is used for both the argument and pattern in R-Fun-Pat, they must agree on the same labels which resembles closed-pattern function calls. In the contrary case where the pattern is open, the argument-record can range over arbitray labels (possibly more than in the pattern). In this case, the side-condition enforces that at least the pattern fields are present (R-Fun-Pat-Open).
@@ -130,8 +129,6 @@ Lastely, we add a single type for patterns. Even thought a pattern is similar in
 
 
 #typing_rules <typing_rules>
-#typing_rules_cont <typing_rules_cont>
-
 
 #subtyping <subtyping>
 
