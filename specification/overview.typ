@@ -1,5 +1,7 @@
 #import "functions.typ": *
+#import "comparison.typ": *
 #import "typesystem.typ": *
+
 #set heading(numbering: "1.")
 #set page(height: auto)
 #show figure: set block(breakable: true)

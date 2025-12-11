@@ -1,151 +1,30 @@
 #import "functions.typ": *
+#import "comparison.typ": *
+#set page(height: auto)
+#set box(width: 100%)
 
 
-#let comparison = figure(caption: "Garnix and NixLang Features" ,table(
-  columns: (1fr, 2fr, auto, auto),
-  inset: 10pt,
-  align: (left, left, center, center),
-  table.header([*Feature*], [*Example*], [*Garnix*], [*NixLang*]),
-  table.cell(colspan: 4)[*Basic Types*],
-  [Boolean], `true`,                              `●`, `◌`,
-  [String], `"single line"`,                      `●`, `◌`,
-  [Ident String], `'' multi \n line ''`,          `●`, ` `,
-  [Number], `1.23, 3`,                            `●`, `◌`,
-  [Path], [./home/user],                          `●`, ` `,
-  [Uri], `https://github.com`,                    `` , ` `,
-  [Array], `[ 1 2 ]`,                             `●`, `◌`,
-  [Record], `{a = 1; b = "2";}`,                  `●`, `◌`,
-  [Rec-Record], `rec {a = b; b = a;}`,            `●`, `◌`,
-  [Searchpath], `<nixpkgs>`,                      `●`, ` `,
-  [Null], `null`,                                 `●`, ` `,
-  table.cell(colspan: 4)[*Language Constructs*],
-  [Let-Bindings], `let a = 1; in ()`,             `●`, `◌`,
-  [Function], `x: x + 1`,                         `●`, `◌`,
-  [Pattern-Functions], `{ a }: a`,                `●`, `◌`,
-  [Open-Pattern], `{ a, ... }: a`,                `●`, `◌`,
-  [Default-values], `a ? 2: a`,                   `●`, `◌`,
-  [Global-bindings], `{a} @ b: b.a`,              `●`, ` `,
-  [Conditionals], `if cond then null else 1`,     `●`, `◌`,
-  [Inherit], `inherit (players) bob;`,            `●`, `◌`,
-  [With], `with {a = 1;}; a`,                     `●`, `◌`,
-  [Dynamic Lookup], `{a = 1;}.${"a"}`,            ` `, ` `,
-  [String-Interpolation], `The name is: ${name}`, ` `, ` `,
-  table.cell(colspan: 4)[*Operators*],
-  [Arithmetic], `1 + 2 / 3 * 4`,                  `●`, ` `,
-  [Logic], `true | false & true → false`,         `●`, ` `,
-  [Lookup], `{ a = 2;}.a`,                        `●`, ` `,
-  [Has-Attr], `{ a = 2;}.a`,                      `●`, ` `,
-  [Or], `{a = 2;}.b or 5`,                        `●`, ` `,
-  [Array-Concat], `[1 2] ++ [3 4]`,               `●`, ` `,
-  [Record-Concat], `{a = 2;} // {b = 3;}`,        `●`, ` `,
-  [Pipe], `|> <|`,                                ` `, ` `,
-))
-
-#let typing_rules = figure(
-  caption: "Typing rules",
-  rect(
-    inset: 20pt,
-    stack(
-      spacing: 3em,
-      sub_typing_rules(
-        caption: "Standartrules",
-        derive("T-Var1", ($Γ(x) = τ$,), $Ξ, Γ tack x: τ$),
-        derive(
-          "T-Var2",
-          ($Γ(x) = σ$, $Ξ tack σ ≤^∀ ∀ε.τ$),
-          $Ξ, Γ tack x: τ[arrow(α) \\ arrow(τ)]$,
-        ),
-        derive(
-          "T-Abs",
-          ($Ξ, Γ · (x: τ_1) tack t: τ_2$,),
-          $Ξ, Γ tack (x: t): τ_1 → τ_2$,
-        ),
-        derive(
-          "T-App",
-          ($Ξ, Γ tack t_1: τ_1 → τ_2$, $Ξ, Γ tack t_2: τ_1$),
-          $Ξ,Γ tack t_1 t_2: τ_2$,
-        ),
-        derive(
-          "T-Sub",
-          ($Ξ, Γ tack t: τ_1$, $Ξ, Γ tack τ_1 <= τ_2$),
-          $Ξ, Γ tack t: τ_2$,
-        ),
-        derive("T-Asc", ($Ξ,Γ ⊢ t : τ$,), $Ξ,Γ ⊢ (t: τ) : τ$),
-      ),
-      line(length: 100%),
-      sub_typing_rules(
-        caption: "Functions with Patterns",
-        derive(
-          "T-Abs-Pat",
-          (todo[$Ξ, Γ, oi(x\: τ) tack t: τ_2$],),
-          $Ξ, Γ tack ({oi(e_i)}: t): oi(τ) → τ_2$,
-        ),
-        derive(
-          "T-Abs-Pat-Open",
-          (todo[$Ξ, Γ, oi(x\: τ) tack t: τ_2$],),
-          $Ξ, Γ tack ({oi(e_i), …}: t): oi(τ) → τ_2$,
-        ),
-      ),
-      line(length: 100%),
-      sub_typing_rules(
-        caption: "Records",
-        derive(
-          "T-Rcd",
-          ($Ξ, Γ tack t_0: τ_0$, "...", $Ξ, Γ tack t_n: τ_n$),
-          $Ξ, Γ tack {arrow(l): arrow(t)}: {arrow(l): arrow(τ)}$,
-        ),
-        derive("T-Proj", ($ Ξ, Γ tack t: {l: τ} $,), $Ξ, Γ tack t.l: τ$),
-        derive(
-          "T-Rec-Concat",
-          ($Ξ, Γ tack a: { oi(l\: τ) }$, $Ξ, Γ tack b: { l_j: τ_j }$),
-          todo[$Ξ, Γ tack a "//" b: {..b, ..a}$],
-        ),
-      ),
-      line(length: 100%),
-      sub_typing_rules(
-        caption: "Lists",
-
-        derive(
-          "T-Lst-Hom",
-          ($Ξ, Γ tack t_0: τ$, "...", $Ξ, Γ tack t_n: τ$),
-          $Ξ, Γ tack [ " " t_0 " " t_1 " " ... " " t_n " "]: [τ]$,
-        ),
-        derive(
-          "T-Lst-Agg",
-          (
-            $Ξ, Γ tack t_0: τ_0$,
-            "...",
-            $Ξ, Γ tack t_n: τ_n$,
-            $∃ i, j. τ_i != τ_j$,
-          ),
-          $Ξ, Γ tack [space t_0 space t_1 space ... " " t_n] : [ τ_0 space τ_1 space ... space τ_n]$,
-        ),
-        derive(
-          "T-List-Concat-Hom",
-          ($Ξ, Γ tack a: "[τ]"$, $Ξ, Γ tack b: "[τ]"$),
-          $Ξ, Γ tack a "⧺" b: "[τ]"$,
-        ),
-        derive(
-          "T-List-Concat-Multi",
-          ($Ξ, Γ tack a: [arrow(τ_1)]$, $Ξ, Γ tack b: [arrow(τ_2)]$),
-          $Ξ, Γ tack a "⧺" b: [arrow(τ_1)arrow(τ_2)]$,
-        ),
-      ),
-    ),
-  ),
-)
+#let char = `[^\"$\\] | $(?!{) | \\.`
+#let inter = `${"\^} *"}`
+#let string = `\"(c"*" inter)"*" c"*"\"`
+#let identstring = `''todo''` 
+#let boolean = `true | false`
+#let filepath = `(./|~/|/)([a-zA-Z.]+/?)+`
+#let number = `([0-9]*\.)?[0-9]+`
+#let label = `[A-Za-z_][A-Za-z0-9_'-]*`
+#let searchpath = `<[A-Za-z_]*> TODO`
 
 #let basetypes = subbox(caption: "Literals")[
   $
-                                  c & ::= "[^\"$\\] | $(?!{) | \\." \
-                            "inter" & ::= "${"\^} *"}" \
-             #type_name("String") s & ::= "\"(c"*" inter)"*" c"*"\"" \
-       #type_name("Ident String") s & ::= "''todo''" \
-            #type_name("Boolean") b & ::= "true" | "false" \
-    #type_name("File-Path") rho.alt & ::= "(./|~/|/)([a-zA-Z.]+/?)+" \
-             #type_name("Number") n & ::= "([0-9]*\.)?[0-9]+" \
-              #type_name("Label") l & ::= "[A-Za-z_][A-Za-z0-9_'-]*" \
-        #type_name("Search Path") l & ::= "<[A-Za-z_]*> TODO" \
+                                  c & ::= char \
+                            "inter" & ::= inter \
+             #type_name("String") s & ::= string\
+       #type_name("Ident String") s & ::= identstring\
+            #type_name("Boolean") b & ::= boolean\
+    #type_name("File-Path") rho.alt & ::= filepath\
+             #type_name("Number") n & ::= number\
+              #type_name("Label") l & ::= label\
+        #type_name("Search Path") l & ::= searchpath\
     // #type_name("Variable") v & ::= "[A-Za-z_][A-Za-z0-9_'-]*" \
   $
 ]
@@ -248,16 +127,6 @@
           $,
         ),
         linebreak(),
-      ))
-)
-
-#let function_reduction = figure(
-  caption: "Function reduction",
-  rect(width: 100%, inset: 20pt)[
-    #align(
-      left,
-      stack(
-        spacing: 20pt,
         $
           #rule_name("R-Fun")&& (l: t_2)t_1 & arrow.long t_2[l := t_1] \
           #rule_name("R-Fun-Pat")&& ({oi(l_i)}: t){oi(l_i \= t_i)} & arrow.long
@@ -271,7 +140,7 @@
         $,
       ),
     )
-  ],
+  )
 )
 
 
@@ -304,6 +173,101 @@
     ),
   ),
 )
+#let typing_rules = figure(
+  caption: "Typing rules",
+  rect(
+    inset: 20pt,
+    stack(
+      spacing: 3em,
+      sub_typing_rules(
+        caption: "Standartrules",
+        derive("T-Var1", ($Γ(x) = τ$,), $Ξ, Γ tack x: τ$),
+        derive(
+          "T-Var2",
+          ($Γ(x) = σ$, $Ξ tack σ ≤^∀ ∀ε.τ$),
+          $Ξ, Γ tack x: τ[arrow(α) \\ arrow(τ)]$,
+        ),
+        derive(
+          "T-Abs",
+          ($Ξ, Γ · (x: τ_1) tack t: τ_2$,),
+          $Ξ, Γ tack (x: t): τ_1 → τ_2$,
+        ),
+        derive(
+          "T-App",
+          ($Ξ, Γ tack t_1: τ_1 → τ_2$, $Ξ, Γ tack t_2: τ_1$),
+          $Ξ,Γ tack t_1 t_2: τ_2$,
+        ),
+        derive(
+          "T-Sub",
+          ($Ξ, Γ tack t: τ_1$, $Ξ, Γ tack τ_1 <= τ_2$),
+          $Ξ, Γ tack t: τ_2$,
+        ),
+        derive("T-Asc", ($Ξ,Γ ⊢ t : τ$,), $Ξ,Γ ⊢ (t: τ) : τ$),
+      ),
+      line(length: 100%),
+      sub_typing_rules(
+        caption: "Functions with Patterns",
+        derive(
+          "T-Abs-Pat",
+          (todo[$Ξ, Γ, oi(x\: τ) tack t: τ_2$],),
+          $Ξ, Γ tack ({oi(e_i)}: t): oi(τ) → τ_2$,
+        ),
+        derive(
+          "T-Abs-Pat-Open",
+          (todo[$Ξ, Γ, oi(x\: τ) tack t: τ_2$],),
+          $Ξ, Γ tack ({oi(e_i), …}: t): oi(τ) → τ_2$,
+        ),
+      ),
+      line(length: 100%),
+      sub_typing_rules(
+        caption: "Records",
+        derive(
+          "T-Rcd",
+          ($Ξ, Γ tack t_0: τ_0$, "...", $Ξ, Γ tack t_n: τ_n$),
+          $Ξ, Γ tack {arrow(l): arrow(t)}: {arrow(l): arrow(τ)}$,
+        ),
+        derive("T-Proj", ($ Ξ, Γ tack t: {l: τ} $,), $Ξ, Γ tack t.l: τ$),
+        derive(
+          "T-Rec-Concat",
+          ($Ξ, Γ tack a: { oi(l\: τ) }$, $Ξ, Γ tack b: { l_j: τ_j }$),
+          todo[$Ξ, Γ tack a "//" b: {..b, ..a}$],
+        ),
+      ),
+      line(length: 100%),
+      sub_typing_rules(
+        caption: "Lists",
+
+        derive(
+          "T-Lst-Hom",
+          ($Ξ, Γ tack t_0: τ$, "...", $Ξ, Γ tack t_n: τ$),
+          $Ξ, Γ tack [ " " t_0 " " t_1 " " ... " " t_n " "]: [τ]$,
+        ),
+        derive(
+          "T-Lst-Agg",
+          (
+            $Ξ, Γ tack t_0: τ_0$,
+            "...",
+            $Ξ, Γ tack t_n: τ_n$,
+            $∃ i, j. τ_i != τ_j$,
+          ),
+          $Ξ, Γ tack [space t_0 space t_1 space ... " " t_n] : [ τ_0 space τ_1 space ... space τ_n]$,
+        ),
+        derive(
+          "T-List-Concat-Hom",
+          ($Ξ, Γ tack a: "[τ]"$, $Ξ, Γ tack b: "[τ]"$),
+          $Ξ, Γ tack a "⧺" b: "[τ]"$,
+        ),
+        derive(
+          "T-List-Concat-Multi",
+          ($Ξ, Γ tack a: [arrow(τ_1)]$, $Ξ, Γ tack b: [arrow(τ_2)]$),
+          $Ξ, Γ tack a "⧺" b: [arrow(τ_1)arrow(τ_2)]$,
+        ),
+      ),
+    ),
+  ),
+)
+
+
 #let typing_rules_cont = figure(caption: "Typing rules (continued)", rect(inset: 20pt, stack(
   spacing: 3em,
   sub_typing_rules(
@@ -465,3 +429,12 @@
     ),
   ))
 ])
+
+
+#syntax
+#reduction
+#types
+#typing_rules
+#typing_rules_cont
+#subtyping
+#constraining
