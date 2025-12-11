@@ -1,4 +1,5 @@
 #import "functions.typ": *
+#import "typesystem.typ": *
 #set heading(numbering: "1.")
 #set page(height: auto)
 #show figure: set block(breakable: true)
@@ -9,7 +10,7 @@
   title: "Improving Nothing",
   description: "Type inference for the Nix Language",
   author: "Sebastian Klähn",
-  keywords: ("Type inference", "Laziness", "Records"),
+  keywords: ("Nix", "Type inference", "Laziness", "Records"),
 )
 
 #text("Improving Nothing", size: 17pt)
@@ -52,7 +53,7 @@ Nix with statement has special shadowing behavior in that it does not shado let-
 
 The literatur on type systems is as wide as the ocean with many typesystems studied over the last 70 years of research. Finding a typesystem for a language is thus similar to traversing a jungle with the alluring dangers of getting sidetracked behind every corner. Since records are such a central aspect of the language, starting from them is not a bad idea.
 
-=== Record theory
+=== Record Theory
 Records have been studied in a variety of papers [..] and can be partitioned in roughly 3 groups. The first model of records is a syntactic model where the syntax defines what a record is. This approach is simple but hard to extend because everything has to be encoded in its syntax. To overcome its shortcommings, \@? studied _row polymorphism_. Row polymorphism extend record with a generic row r, effectively making them polymorphic in their "rest". By extending the row to lacks-predicates not only extension but also restriction of record types can be achieved, giving a lot of flexibility in theory. While strong in theory, their theory gets complex and unwildy fast, making it hard to integrate into fully-fledged type systems. _Semantic subtyping_, developed over multiple years by \@castagna tries to remedie this by shortcomming by giving records a set-theoretic semantic model. By also adding type connectives (negation, union and intersection), his systems are impressively expressive, especially in combination with _gradual typing_. The strength comes of a cost though, namely _backtracking_. Since polymorphic type inference is undecidable in general \@?ref, the model has to rely on backtracking and its performance overhead. It also lacks principle types, a strong selling point of ml-like systems. Last but not least, it is possible to model records in constraint based type system. A record field lookup in these systems produces a constrained which is collected and simplified later. Due to the generality, these systems usually don't exhibit good and effective properties.
 
 Only recently in 2017, Stephen Dolan proposed a new family of type systems, named _algebraic type systems_. These systems tackle language construction from a new point of view. Instead of adding types first and then trying to find a semantic model for them, Dolan argues one should pay more attiontion to finding a semantic model for the types _first_. The types in _algebraic type systems_ form a distributive lattice (thus algebraic) and inherit the lattice' properties. By further restricting the the occurences for union and intersections to positive and negative positions, a distributive lattice can be constructed that allows for lossless reduction of subtyping constraints. In essence, the system is standart ML, with a lattice of types and unification replaced by bi-unification, a subroutine that handles subtyping constraints instead of equality constraints. The final algorithms for subsumption checking and type inference are short as well as simple, all thanks to the initial focus on well-formed types. The final algorthims have the standart ML properties, namely _principled type inference_, no need for type annotations and effectiveness i.e no backtracking.
@@ -60,53 +61,13 @@ Only recently in 2017, Stephen Dolan proposed a new family of type systems, name
 Since batracking in nix' huge syntax tree that roots in a single file and relies heavily on laziness, the properties of algebraic subtyping come as a perfect fit. The formalization of algebraic subtyping depends heavily on order-theory and some form of category theory and the proofs are far from simple \@ . Thakfully, Lionell Parreaux showed how to get from a algebraic domain to a syntactic by showing the equivalence between constraint accumulation on type variables and biunification, making algebraic subtyping more accessible. In the seminal Bachelor Thesis from the first author, he showed how to extend the SimpleSub to the more expressive type system features of nix. Even though the work pintpointed a direction, it oversimplified on the operational semantic and derived type rules, leaving lots of room for improvement.
 
 == Comparing Nix Features
-#figure(caption: "Garnix and NixLang Features" ,table(
-  columns: (1fr, 2fr, auto, auto),
-  inset: 10pt,
-  align: (left, left, center, center),
-  table.header([*Feature*], [*Example*], [*Garnix*], [*NixLang*]),
-  table.cell(colspan: 4)[*Basic Types*],
-  [Boolean], `true`,                              `●`, ` `,
-  [String], `"single line"`,                      `●`, ` `,
-  [Ident String], `'' multi \n line ''`,          `●`, ` `,
-  [Number], `1.23, 3`,                            `●`, `◌`,
-  [Path], [./home/user],                          `●`, ` `,
-  [Uri], `https://github.com`,                    `` , ` `,
-  [Array], `[ 1 2 ]`,                             `●`, ` `,
-  [Record], `{a = 1; b = "2";}`,                  `●`, `◌`,
-  [Rec-Record], `rec {a = b; b = a;}`,            `●`, `◌`,
-  [Searchpath], `<nixpkgs>`,                      `●`, ` `,
-  [Null], `null`,                             `●`, ` `,
-  table.cell(colspan: 4)[*Language Constructs*],
-  [Let-Bindings], `let a = 1; in ()`,             `●`, `◌`,
-  [Function], `x: x + 1`,                         `●`, `◌`,
-  [Pattern-Functions], `{ a }: a`,                `●`, `◌`,
-  [Open-Pattern], `{ a, ... }: a`,                `●`, `◌`,
-  [Default-values], `a ? 2: a`,                   `●`, `◌`,
-  [Global-bindings], `{a} @ b: b.a`,              `●`, ` `,
-  [Conditionals], `if cond then null else 1`,     `●`, `◌`,
-  [Inherit], `inherit (players) bob;`,            `●`, `◌`,
-  [With], `with {a = 1;}; a`,                     `●`, `◌`,
-  [Dynamic Lookup], `{a = 1;}.${"a"}`,            ` `, ` `,
-  [String-Interpolation], `The name is: ${name}`, ` `, ` `,
-  table.cell(colspan: 4)[*Operators*],
-  [Arithmetic], `1 + 2 / 3 * 4`,                  `●`, ` `,
-  [Logic], `true | false & true → false`,         `●`, ` `,
-  [Lookup], `{ a = 2;}.a`,                        `●`, ` `,
-  [Has-Attr], `{ a = 2;}.a`,                      `●`, ` `,
-  [Or], `{a = 2;}.b or 5`,                        `●`, ` `,
-  [Array-Concat], `[1 2] ++ [3 4]`,               `●`, ` `,
-  [Record-Concat], `{a = 2;} // {b = 3;}`,        `●`, ` `,
-  [Pipe], `|> <|`,                                ` `, ` `,
-  // [], [], [], [],
-)) <comparison>
+#comparison <comparison>
 
 The table shows a comparison between garnix and NixLang \@verified. A dotted circle represents feature compatibility in the reduction semantic, where as a full circle tells that type inference was implemented for that feature. The works in \@verified develop an interpreter instead of type inference, so no full circles are expected on that side. To do the paper justic, another circle kind could be added for features that are covered by an interpreter, but that is not the subject of this paper.
 
 == Algebraic Subtying
 Algebraic subtypign @dolstra_phd is a technique to get well-behaved types and neat type inference. After @simplesub and @mlstruct we know how to pratically implement it. The first thing one needs to do is to form a boolean algbebra of types that is well behaved. If given, constraints of the form τ₁ <= τ₂ can be "grained down" into sub-constraints, eventually landing at primitive constraints like $"Bool" < top$ that can be solved trivially.
  
-
 == Things done in this paper
 Since nix was built as a domain specfic language with usability as its greatest design goal, the system boasts a lot of features that make retrofitting a type inference hard or even impossible. In traditional language theory, the flow is mostly reversed where one starts from a simple calculus like ML, SystemF, λ and carefully extends it with features to form a wieldy and interesting semantics. When trying to retrofit a type-system onto a language like \@typescript \@flow \@castagna_elixier one has to decide which features one can and wants to support.
 
@@ -130,78 +91,7 @@ In essence, our contributions are:
 = Syntax <syn>
 $oi(E)$ denotes $0 … n$ repititions of a syntax construct and the index $i$ is omitted if obvious.
 
-#let basetypes = subbox(caption: "Literals")[
-  $
-                                  c & ::= "[^\"$\\] | $(?!{) | \\." \
-                            "inter" & ::= "${"\^} *"}" \
-             #type_name("String") s & ::= "\"(c"*" inter)"*" c"*"\"" \
-       #type_name("Ident String") s & ::= "''todo''" \
-            #type_name("Boolean") b & ::= "true" | "false" \
-    #type_name("File-Path") rho.alt & ::= "(./|~/|/)([a-zA-Z.]+/?)+" \
-             #type_name("Number") n & ::= "([0-9]*\.)?[0-9]+" \
-              #type_name("Label") l & ::= "[A-Za-z_][A-Za-z0-9_'-]*" \
-        #type_name("Search Path") l & ::= "<[A-Za-z_]*> TODO" \
-    // #type_name("Variable") v & ::= "[A-Za-z_][A-Za-z0-9_'-]*" \
-  $
-]
-
-// TODO(isolated): convert to code
-// TODO(isolated): Note that uri is deprecated
-
-#let general = subbox(caption: "Terms")[
-  $
-    t, t_1, t_2 ::= &| b | s | rho.alt | n | l | v | "null" \
-    #type_name("Record") &| {overline(a\;)} | #b[rec] {overline(a\;)} \
-    #type_name("Array") &| [ space t_0 space t_1 space ... space t_n space] \
-    #type_name("Has-Attribute") &| t #b[ ? ] l \
-    #type_name("Has-Attribute-Or") &| t.l #b[or] t \
-    #type_name("Record-Concat") &| t "//" t \
-    #type_name("Array-Concat") &| t "⧺" t \
-    #type_name("Lookup") &| t "." l \
-    (#type_name("Dynamic-Lookup") &| t "." t )\
-    #type_name("Function") &| overline(p) "@ "h : t \
-    #type_name("Let-statements") &| #b[let] overline(a\;) #b[in] t \
-    #type_name("Conditionals") &| #b[if] t #b[then] t #b[else] t \
-    #type_name("With-Statement") &| #b[with] t; t \
-    #type_name("Assert-Statement") &| #b[assert] t; t \
-    #type_name("Operator") &| t • t \
-  $
-]
-
-#let inherit = subbox(caption: "Assignment")[
-  $
-    #type_name("Inherit") ι & ::= #b[inherit] overline(l\;) | #b[inherit] (ρ) space overline(l\;) \
-    #type_name("Path") ρ & ::= l | ρ.l \
-    #type_name("Assignment") a & ::= l = t; " | " ι \
-  $
-]
-
-#let patterns = box([
-  #text(weight: "bold", smallcaps("Patterns"))
-  $
-    d, h & ::= t | ε \
-       e & ::= l | l space ? space d \
-       p & ::= { overline(e\,) } | { overline(e\,) … } | l \
-  $])
-
-#figure(
-  caption: "Supported Syntax of Nix",
-  rect(width: 100%, grid(
-    columns: 2,
-    align: left,
-    inset: 8pt,
-    grid.cell(rowspan: 3, general),
-    basetypes,
-    inherit,
-    patterns,
-    subbox(caption: "Shorthands")[
-      #set math.equation(numbering: "(1)")
-      $ p : t space @ space ε = p : t $
-      $ l space ? space ε : l $
-      $ • ::= #b[or] | "//" | ⧺ | " ? " $
-    ],
-  )),
-)
+#syntax
 
 Nix supports the usual _literals_ of fully fledged languages as well as a multi-line string and paths. The syntax is given following the official regex formulas to follow the specification \@typedef. _Records_ follow a standart notation where multiple fields can be defined using `key = value;` assignments to define multiple fields. In addition, records can be marked _recursive_ with the `rec` keyword and are non-recursive otherwise. _Arrays_ are introduced in a similar fashion where multiple values can be concatenated with the only unintuitive nix-specific distinction that a space is used as seperator. Both datatypes are generally _immutable_, but there are concat operations (Record-Concat and Array-Concat) that can be used to create new, bigger datatypes. Other than that, records come equipped with the usual lookup syntax and two specialities. The first being a dynamic label check that returns a boolean as a result and secondly, a way to specify a default value in case the previous check turned out to be negative.
 
@@ -215,71 +105,9 @@ The _with statement_ expects an arbitrary expression that reduces to a record. E
 
 == Reduction Rules
 
-#figure(
-  caption: "Reduction rules of nix",
-  rect(width: 100%, inset: 20pt,
-      stack(
-        spacing: 20pt,
-        $
-          #rule_name("R-Lookup")&& {oi(l_i = t_i\;)}.l & arrow.long t_i #h(0.5cm) &&&"if" ∃i. l_i = l \
-          #rule_name("R-Lookup-Null")&& {oi(l_i = t_i\;)}.l & arrow.long "null" &&&"if" ∄i. l_i = l \
-          #rule_name("R-Lookup-Default-Pos")&& {oi(l_i = t_i\;)}.l" or "t & arrow.long
-          t_i &&&"if" ∃i. l_i = l \
-          #rule_name("R-Lookup-Default-Neg")&& {oi(l_i = t_i\;)}.l" or "t & arrow.long
-          t &&&"if" ∄i. l_i = l \
-          #rule_name("R-Has-Pos")&& {oi(l_i = t_i\;)}.l" ? "t & arrow.long "true" &&&"if" ∃i. l_i = l \
-          #rule_name("R-Has-Neg")&& {oi(l_i = t_i\;)}.l" ? "t & arrow.long "false" &&&"if" ∄i. l_i = l \
-          #rule_name("R-Let")&& #b[let] oi(l_i \= t_i\;) "in" t_2 & arrow.long t_2 [oi(l_i = t_i)] \
-          #rule_name("R-With")&& #b[with] {oi(l_i \= t_i\;)}; t_2 & arrow.long
-          t_2[oi(l_i = t_i) ] &&& i ∈ {i : i in.not Γ} \
-          #rule_name("R-Cond-True")&& #b[if ] "true" #b[ then ] t_1 #b[ else ]t_2 & arrow.long t_1 \
-          #rule_name("R-Cond-False")&& #b[if] "false" #b[then ] t_1 #b[ else ]t_2 & arrow.long t_2 \
-          #rule_name("R-Array-Concat")&& [ oi(t_(1i))] ⧺ [oj(t_(2j))] & arrow.long
-          [ oi(t_(1i)) oj(t_(2j)) ] \
-          #rule_name("R-Record-Concat")&& {oi(l_i = t_i\;)} "//" {oj(l_j \= t_j\;)} & arrow.long
-          {oi(l_i = t_i\;) space overline(l_b = t_b\;)^b} &&& b ∈ { j: exists.not i. l_i = l_j } \
-          && t arrow.long t' &==> E[t] → E[t']
-        $,
-        subbox(caption: "Values")[$
-          v ::= p: t | todo(l) | {overline(a\;)} | #b[rec] {overline(a\;)}
-        $],
-        subbox(
-          caption: "Evaluation Context",
-          $
-            E[□] & := □ | □ space t | (□).l | (v).□ \
-                 & | #b[if ] □ #b[ then ] t #b[ else ] t \
-                 & | #b[with ] □; t | #b[with ] v; □ \
-                 & | #b[inherit ] (ρ) space □; \
-                 & | □ • t | v • t \
-          $,
-        ),
-        linebreak(),
-      ))
-    
-) <reduction>
+#reduction <reduction>
 
-#figure(
-  caption: "Function reduction",
-  rect(width: 100%, inset: 20pt)[
-    #align(
-      left,
-      stack(
-        spacing: 20pt,
-        $
-          #rule_name("R-Fun")&& (l: t_2)t_1 & arrow.long t_2[l := t_1] \
-          #rule_name("R-Fun-Pat")&& ({oi(l_i)}: t){oi(l_i \= t_i)} & arrow.long
-          t [oi(l_i := t_i)] \
-          #rule_name("R-Fun-Pat-Open")&& ({oi(l_i)\, ...}: t) {oj(l_i = t_i)} & arrow.long
-          t [oi(l_i := t_i)] #h(0.5cm) &&&∀i. ∃ j. i eq j \
-          #rule_name("R-Fun-Pat-Default")&&({oi(e_i)}: t){oj(l_j = t_j)} & arrow.long
-          t [oj(l_j = t_j)][oi(l_i := d_i)] \
-          #rule_name("R-Fun-Pat-Default-Open")&&({oi(e_i), …}: t){oj(l_j = t_j), …} & arrow.long
-          t [oj(l_j = t_j)][oi(l_i := d_i)] &&&∀i. ∃ j. i eq j\
-        $,
-      ),
-    )
-  ],
-) <function_reduction>
+#function_reduction <function_reduction>
 
 Since nix supports patterns with default values and the _open_ modifiers, the function reduction rules become quite verbose. The simplest case is R-Fun which takes an argument t₁ and replaces the occurences of $l$ with said argument in the function body t₂. The next function rules R-Fun-Pat-∗ reduces functions taking patterns, the R-Fun-Pat being the simplest of such. We draw i,j from the index Set ℐ and range them over labels such that if i = j then l_i = l_j.
 Since the same index $i$ is used for both the argument and pattern in R-Fun-Pat, they must agree on the same labels which resembles closed-pattern function calls. In the contrary case where the pattern is open, the argument-record can range over arbitray labels (possibly more than in the pattern). In this case, the side-condition enforces that at least the pattern fields are present (R-Fun-Pat-Open).
@@ -292,306 +120,24 @@ Since ${oi(e_i)}$ strictly subsumes ${oi(l_i)}$ due to its inner structure, rule
 = Type System
 What follows are the typing and subtyping rules as well as an overview over the constraint subroutine.
 
-#figure(
-  caption: "Types of nix.",
-  rect(
-    grid(
-      columns: 1,
-      align: left,
-      inset: 8pt,
-      grid.cell(rowspan: 2, subbox(
-        caption: "Types",
-        $
-          #type_name("Type") tau ::= & "bool" | "string" | "path" | "num" \
-          & | τ -> τ | {l: τ} | [τ] | [overline(τ)] | alpha \
-          & | ⊥^diamond.small | τ ∨^diamond.small τ | ⦃ oi(p) ⦄^b \
-          #type_name("Pattern Element") p & := τ | τ^? \
-          #type_name("Polymorphic type") σ & := ∀Xi. τ \
-          #type_name("Mode") diamond.small & := · | ↻\
-        $,
-      )),
-      subbox(
-        caption: "Contexts",
-        $
-          #type_name("Typing Context") Γ & ::= ε | Γ · (l : τ) | Γ · (l : σ) \
-          #type_name("Subtyping Context") Σ & ::= Xi | Σ · (τ ≤ τ) | Σ · ⊳(τ ≤ τ) \
-          #type_name("Constraint Context") Xi & ::= ε | Xi · (τ ≤ τ) | Xi · (τ ≤ α) | Xi · #text(weight: "bold", "err") \
-        $,
-      ),
-    ),
-  ),
-)<types>
+#types <types>
 
 Garnix models all literal syntax categories with the respective atom types bool, string, path and num. Notice, that we do not distinguish between float and int as they are coerced during interpretation and thus used interspersely in practice. We also add the usual types for fuctions, records and arrays and note that record  types only define a _single_ label to type mapping instead of multiple. This is due to the use of subtyping constraints and their accumuation on type variables during type inferene. This mechanism is further discussed in \@section_todo. Also, we introduce two types for arrays, one for homogenous arrays of the same type and one accumulative for the case that an array has many distinct elements.
 To form a boolean algebra of types we add the expected type connectives $union.sq, inter.sq, ~$ as well as a top and bottom type which represent the least type which is subsumed by every other type and the greatest type which subsumes every other type respectively.
 Lastely, we add a single type for patterns. Even thought a pattern is similar in strucuter to a record, the pattern type is an accumulated type with multiple fields. This distinction is made due to the syntactical difference of the two. Patterns are introduced and eliminated atomically unlike a record where every fild acces $"record.field"$ results in new independent constraints. The superscript b can be true or false, ascribing whether the pattern is _open_ or _closed_.
 
 
-#figure(
-  caption: "Typing rules",
-  rect(
-    inset: 20pt,
-    stack(
-      spacing: 3em,
-      sub_typing_rules(
-        caption: "Standartrules",
-        derive("T-Var1", ($Γ(x) = τ$,), $Ξ, Γ tack x: τ$),
-        derive(
-          "T-Var2",
-          ($Γ(x) = σ$, $Ξ tack σ ≤^∀ ∀ε.τ$),
-          $Ξ, Γ tack x: τ[arrow(α) \\ arrow(τ)]$,
-        ),
-        derive(
-          "T-Abs",
-          ($Ξ, Γ · (x: τ_1) tack t: τ_2$,),
-          $Ξ, Γ tack (x: t): τ_1 → τ_2$,
-        ),
-        derive(
-          "T-App",
-          ($Ξ, Γ tack t_1: τ_1 → τ_2$, $Ξ, Γ tack t_2: τ_1$),
-          $Ξ,Γ tack t_1 t_2: τ_2$,
-        ),
-        derive(
-          "T-Sub",
-          ($Ξ, Γ tack t: τ_1$, $Ξ, Γ tack τ_1 <= τ_2$),
-          $Ξ, Γ tack t: τ_2$,
-        ),
-        derive("T-Asc", ($Ξ,Γ ⊢ t : τ$,), $Ξ,Γ ⊢ (t: τ) : τ$),
-      ),
-      line(length: 100%),
-      sub_typing_rules(
-        caption: "Functions with Patterns",
-        derive(
-          "T-Abs-Pat",
-          (todo[$Ξ, Γ, oi(x\: τ) tack t: τ_2$],),
-          $Ξ, Γ tack ({oi(e_i)}: t): oi(τ) → τ_2$,
-        ),
-        derive(
-          "T-Abs-Pat-Open",
-          (todo[$Ξ, Γ, oi(x\: τ) tack t: τ_2$],),
-          $Ξ, Γ tack ({oi(e_i), …}: t): oi(τ) → τ_2$,
-        ),
-      ),
-      line(length: 100%),
-      sub_typing_rules(
-        caption: "Records",
-        derive(
-          "T-Rcd",
-          ($Ξ, Γ tack t_0: τ_0$, "...", $Ξ, Γ tack t_n: τ_n$),
-          $Ξ, Γ tack {arrow(l): arrow(t)}: {arrow(l): arrow(τ)}$,
-        ),
-        derive("T-Proj", ($ Ξ, Γ tack t: {l: τ} $,), $Ξ, Γ tack t.l: τ$),
-        derive(
-          "T-Rec-Concat",
-          ($Ξ, Γ tack a: { oi(l\: τ) }$, $Ξ, Γ tack b: { l_j: τ_j }$),
-          todo[$Ξ, Γ tack a "//" b: {..b, ..a}$],
-        ),
-      ),
-      line(length: 100%),
-      sub_typing_rules(
-        caption: "Lists",
-
-        derive(
-          "T-Lst-Hom",
-          ($Ξ, Γ tack t_0: τ$, "...", $Ξ, Γ tack t_n: τ$),
-          $Ξ, Γ tack [ " " t_0 " " t_1 " " ... " " t_n " "]: [τ]$,
-        ),
-        derive(
-          "T-Lst-Agg",
-          (
-            $Ξ, Γ tack t_0: τ_0$,
-            "...",
-            $Ξ, Γ tack t_n: τ_n$,
-            $∃ i, j. τ_i != τ_j$,
-          ),
-          $Ξ, Γ tack [space t_0 space t_1 space ... " " t_n] : [ τ_0 space τ_1 space ... space τ_n]$,
-        ),
-        derive(
-          "T-List-Concat-Hom",
-          ($Ξ, Γ tack a: "[τ]"$, $Ξ, Γ tack b: "[τ]"$),
-          $Ξ, Γ tack a "⧺" b: "[τ]"$,
-        ),
-        derive(
-          "T-List-Concat-Multi",
-          ($Ξ, Γ tack a: [arrow(τ_1)]$, $Ξ, Γ tack b: [arrow(τ_2)]$),
-          $Ξ, Γ tack a "⧺" b: [arrow(τ_1)arrow(τ_2)]$,
-        ),
-      ),
-    ),
-  ),
-)<typing_rules>
-
-#figure(caption: "Mlstruct things", rect(inset: 20pt, stack(
-  spacing: 3em,
-  sub_typing_rules(),
-)))
-
-#figure(caption: "Typing rules (continued)", rect(inset: 20pt, stack(
-  spacing: 3em,
-  sub_typing_rules(
-    caption: "Operators",
-    derive(
-      "T-Or-Neg",
-      ($Xi, Γ tack t_1: {l: τ_1}$, $Xi, Γ tack t_2: τ_2$),
-      $Xi, Γ tack (t_1).l "or" t_2: τ_1$,
-    ),
-    derive(
-      "T-Or-Pos",
-      ($Xi, Γ tack t_1: τ_1$, $l ∉ τ_1$, $Xi, Γ tack t_2: τ_2$),
-      todo($Xi, Γ tack (t_1).l "or" t_2: τ_2$),
-    ),
-    derive("T-Negate", ($Xi, Γ tack e: "bool"$,), $Xi, Γ tack !e: "bool"$),
-    derive("T-Check", ($Xi, Γ tack e: {..}$,), $Xi, Γ tack e ? l: "bool"$),
-  ),
-  line(length: 100%),
-  sub_typing_rules(
-    caption: "Language Constructs",
-    derive(
-      "T-Multi-Let",
-      (
-        $Γ overline([x_i: τ_i tack t_i : τ_i]^i)$,
-        $Γ overline([x_i:∀ arrow(α). τ_i]^i) tack t: τ$,
-      ),
-      $Γ tack "let" x_0 = t_0; ... ; x_n = t_n "in" t: τ$,
-    ),
-    derive(
-      "T-If",
-      ($Γ tack t_1: "bool"$, $Γ tack t_2: τ$, $Γ tack t_3: τ$),
-      $ "if" t_1 "then" t_2 "else" t_3: τ $,
-    ),
-    derive(
-      "T-With",
-      (
-        $Γ tack t_1 : {arrow(l): arrow(τ)}$,
-        $Γ, l_0 : τ_0, ..., l_n: τ_n tack t_2: τ$,
-        $l_i in.not Γ$,
-      ),
-      $Γ tack "with" t_1; t_2 : τ$,
-    ),
-    derive(
-      "T-Assert-Pos",
-      ($Γ tack t_1: "bool"$, $Γ tack t_2: τ_2$),
-      $Γ tack "assert" t_1; t_2: τ_2$,
-    ),
-  ),
-)))<typing_rules_cont>
+#typing_rules <typing_rules>
+#typing_rules_cont <typing_rules_cont>
 
 
-#figure(
-  caption: "Suptyping rules",
-  rect(inset: 20pt)[
-    #flexwrap(
-      main-spacing: 20pt,
-      cross-spacing: 10pt,
-      derive("S-Refl", (), $τ <= τ$),
-      derive("S-ToB", (), $τ rotate(≤) rotate(top)$),
-      derive("S-CompL", (), $τ ∨ ¬τ rotate(≥) rotate(top)$),
-      derive("S-NegInv", ($Σ tack τ_1 ≤ τ_2$,), $Σ tack ¬τ_1 <= ¬τ_2$),
-      derive("S-AndOr11", (), $τ_1 rotate(∨) τ_2 rotate(≥) τ_1$),
-      derive("S-AndOr11", (), $τ_1 rotate(∨) τ_2 rotate(≥) τ_2$),
-      derive("S-AndOr2", (), $τ_1 rotate(∨) τ_2 rotate(≥) τ_2$),
-      derive(
-        "S-Distrib",
-        (),
-        $τ rotate(∧) (τ_1 rotate(∨) τ_2) rotate(≤) (τ rotate(∧) τ_1) rotate(∨)(τ rotate(∧) τ_2)$,
-      ),
-
-      derive(
-        "S-Trans",
-        ($Σ tack τ_0 <= τ_1$, $Σ tack τ_1 <= τ_2$),
-        $Σ tack τ_0 <= τ_2$,
-      ),
-      derive("S-Weaken", ($H$,), $Σ tack H$),
-      derive("S-Assume", ($Σ,gt.tri H tack H$,), $Σ tack H$),
-      derive("S-Hyp", ($H in Σ$,), $Σ tack H$),
-      derive("S-Rec", (), $μ α.τ eq.triple [μ α.τ slash α]τ$),
-      derive(
-        "S-Or",
-        ($∀ i, exists j,Σ tack τ_i <= τ'_j$,),
-        $Σ tack union.sq_i τ_i <= union.sq_j τ'_j$,
-      ),
-      derive(
-        "S-And",
-        ($∀ i, exists j,Σ tack τ_j <= τ'_i$,),
-        $Σ tack inter.sq_j τ_j <= inter.sq_i τ'_i$,
-      ),
-      derive(
-        "S-Fun",
-        ($lt.tri Σ tack τ_0 <= τ_1$, $lt.tri Σ tack τ_2 <= τ_3$),
-        $Σ tack τ_1 arrow.long τ_2 <= τ_0 arrow.long τ_3$,
-      ),
-      derive(
-        "S-Rcd",
-        (),
-        ${arrow(t) : arrow(τ)} eq.triple inter.sq_i {l_i : t_i}$,
-      ),
-      derive(
-        "S-Depth",
-        ($lt.tri Σ tack τ_1 <= τ_2$,),
-        $Σ tack {l: τ_1} <= { l: τ_2}$,
-      ),
-      derive("S-Lst", ($ Γ tack τ_1 <= τ_2 $,), $Γ tack [τ_1] <= [τ_2]$),
-    )
-    $lt.tri(H_0, H_1) = lt.tri H_0, lt.tri H_1$
-    $lt.tri(gt.tri H) = H$
-    $lt.tri ( τ_0 <= τ_1) = τ_0 <= τ_1$
-  ],
-)
+#subtyping <subtyping>
 
 - ⊳ and ⊲ are used to add and remove _typing hypotheses_ that are formed during subtyping. Since applying such a hypothesis right after assumption, the later modality ⊳ is added and can only be removed after subtyping passed through a function or record construct. *TODO: check*
 - The general idea of the typing algorithm is, that typing progresses and finally constraints are installed on type-variables. The rules need to be chosen in a way, that this general approach is possible.
 
 
-#figure(caption: "New Constraining Rules using normal forms", rect(inset: 20pt)[
-  #subrules(caption: $Σ ⊢ τ ≪ τ => Ξ$, flexwrap(
-    main-spacing: 20pt,
-    cross-spacing: 10pt,
-    derive("C-Hyp", ($(τ_1 ≪ τ_2) ∈ Σ$,), $Σ ⊢ τ_1 ≪ τ_2 => ε$),
-    derive(
-      "C-Assum",
-      ($(τ_1 ≪τ_2) ∉ Σ$, $Σ ·⊳(τ_1 ≤ τ_2) ⊢ "dnf"^0_Σ (τ_1 ∧ ¬τ_2) => Ξ$),
-      $$,
-    ),
-    derive(
-      "C-Or",
-      ($Σ ⊢ D^0 => Ξ$, $Ξ · Σ ⊢ C^0 => Ξ'$),
-      $D^0 ∨ C^0 => Ξ · Ξ'$,
-    ),
-    derive("C-Bot", ($$,), $Σ ⊢ ⊥ => ε$),
-    derive("C-Not-Bot", ($$,), $Σ ⊢ I^0 ∧ ¬⊥ => #b[err]$),
-  )),
-  #subrules(caption: $Σ ⊢ τ ≪ τ => Ξ$, flexwrap(
-    main-spacing: 20pt,
-    cross-spacing: 10pt,
-    derive(
-      "C-Fun1",
-      ($⊲Σ ⊢ D_3 ≪ D_1 => Ξ$, $Ξ ·⊲Σ ⊢ D_2 ≪ D_4 => Ξ'$),
-      $Σ ⊢ 𝓘[D_1 -> D_2] ∧ ¬(D_3 -> D_4) => Ξ ·Ξ'$,
-    ),
-    derive("C-Fun2", ($$,), $Σ ⊢ 𝓘^-> [top]∧¬(D_1 -> D_2) => #b[err]$),
-    derive(
-      "C-Rcd1",
-      ($y ∈ S$, $⊲Σ ⊢ D_y ≪ D => Ξ$),
-      $Σ ⊢ I[{#overline[x: D_x]^{x ∈ S}}]∧¬{y: D} => Ξ$,
-    ),
-    derive(
-      "C-Rcd2",
-      ($y ∉ S$,),
-      $Σ ⊢ I[{#overline[x: D_x]^{x ∈ S}}]∧¬{y: D} => #b[err]$,
-    ),
-    derive("C-Rcd3", ($$,), $Σ ⊢ 𝓘^({})[top] ∧ ¬{x: D} => #b[err]$),
-    derive(
-      "C-Var1",
-      ($Σ ·(α ≪ ¬C) ⊢ "lb"_Σ ≪ ¬C => Ξ$,),
-      $Σ ⊢ C ∧ a => Ξ ·(α ≪ ¬C)$,
-    ),
-    derive(
-      "C-Var2",
-      ($Σ ·(C ≤ a) ⊢ C ≪ "ub"_Σ(α) => Ξ$,),
-      $Σ ⊢ C ∧ ¬α => Ξ · (C ≤ α)$,
-    ),
-  ))
-])
+#constraining <constraining>
 
 
 = Equality
