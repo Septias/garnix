@@ -41,11 +41,11 @@
 )
 
 #let type_name(name) = [
-  #text(fill: zink_700, style: "italic", size: 9pt, font: "NotoSerif NF", name)
+  #text(fill: zink_700, style: "italic", size: 9pt, name)
   #v(10pt)
 ]
 #let rule_name(name) = [
-  #text(fill: zink_900, size: 9pt, font: "NotoSerif NF", smallcaps(name))
+  #text(fill: zink_900, size: 9pt, smallcaps(name))
   #v(10pt)
 ]
 
