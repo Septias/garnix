@@ -28,7 +28,7 @@
 )
 
 // Caption in a box
-#let subrules(caption: math, ..body) = block(breakable: true,  stack(
+#let subrules(caption: math, ..body) = block(breakable: true, stack(
   spacing: 10pt,
   align(left, rect()[#caption]),
   ..body,
@@ -36,7 +36,10 @@
 
 #let sub_typing_rules(caption: "", ..body) = stack(
   spacing: 10pt,
-  block(width: 100%, breakable: true, align(left, text(weight: "bold", smallcaps(caption)))),
+  block(width: 100%, breakable: true, align(left, text(
+    weight: "bold",
+    smallcaps(caption),
+  ))),
   flexwrap(main-spacing: 20pt, cross-spacing: 10pt, ..body),
 )
 
