@@ -1,0 +1,52 @@
+Things to do for algebraic subtyping:
+
+== Form the distributive lattice of types (part of subtyping rules basically)
+
+- Every language construct neends to be in order
+- There needs to a top and bottom type
+- Distributivity rules τ₁ ∧ (τ₂ ∨ τ₃) == τ₁ ∧ τ₂ ∧ τ₁ ∧ τ₃
+- Meet and Join for every two elements τ₁, τ₂
+- every τ has a complement ¬τ where τ ∧ ¬τ === T and τ ∨ ¬τ === ⊥
+
+== Define Contexts
+- Typing Γ
+- Constraints (Bounds) Ξ
+- Subtyping Σ
+
+== Define declarative typing rules
+- Simple type rules but they need to be sound
+
+== Define algorithmic typing rules
+=== Bounds
+- Bounds are of the form τ ≤ τ 
+
+=== Hypotheses
+- Hypotheses must be guarded against immediate use
+
+=== Levels
+- Levels are used such that more that bounds do not escape functions
+- Skolem: A skolem is used to fix a more polymorphic type (let-var inside a function)
+- Rigid Variable: A rigid variable is used fix a less polymorhpic type (function parameter)
+
+==== Examples
+```
+
+
+```
+
+=== Recursion
+- Manual unfolding
+- Building types
+- Noticing cycles
+
+=== Consistency
+- New ∀-quantified variable bounds have to be propagated
+
+=== Normal Forms
+- Needed to get efficient inference in face of boolean algebra
+
+=== Constraining
+- Subroutine to create new bounds
+
+
+
