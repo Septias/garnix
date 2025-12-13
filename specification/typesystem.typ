@@ -6,7 +6,7 @@
 == Todo
 1. Proper shadowing behaviour
 2. Proper substitutions (rec and none-rec)
-
+3. Paste in other semantic
 
 #let char = `[^"$\] | $(?!{) | \.`
 #let interstr = `${^}*}`
@@ -154,7 +154,7 @@
         caption: "Types",
         $
           #type_name("Type") tau ::= & "bool" | "string" | "path" | "num" \
-          & | τ -> τ | ⦃ oi(p) ⦄^b_τ -> τ| {l: τ} | [τ] | [overline(τ)] | alpha \
+          & | τ -> τ | ⦃ oi(p) ⦄^(b,τ) -> τ| {l: τ} | [τ] | [overline(τ)] | alpha \
           & | ⊥^diamond.small | τ ∨^diamond.small τ \
           #type_name("Pattern Element") p & := τ | τ^? \
           #type_name("Polymorphic type") σ & := ∀Xi. τ \
@@ -203,9 +203,39 @@
           ($Ξ, Γ tack t: τ_1$, $Ξ, Γ tack τ_1 <= τ_2$),
           $Ξ, Γ tack t: τ_2$,
         ),
-        derive("T-Asc", ($Ξ,Γ ⊢ t : τ$,), $Ξ,Γ ⊢ (t: τ) : τ$),
+        // derive("T-Asc", ($Ξ,Γ ⊢ t : τ$,), $Ξ,Γ ⊢ (t: τ) : τ$),
       ),
       // line(length: 100%),
+      sub_typing_rules(
+        caption: "Language Constructs",
+        derive(
+          "T-Multi-Let",
+          (
+            $Γ overline([x_i: τ_i tack t_i : τ_i]^i)$,
+            $Γ overline([x_i:∀ arrow(α). τ_i]^i) tack t: τ$,
+          ),
+          $Γ tack "let" x_0 = t_0; ... ; x_n = t_n "in" t: τ$,
+        ),
+        derive(
+          "T-If",
+          ($Γ tack t_1: "bool"$, $Γ tack t_2: τ$, $Γ tack t_3: τ$),
+          $ "if" t_1 "then" t_2 "else" t_3: τ $,
+        ),
+        derive(
+          "T-With",
+          (
+            $Γ tack t_1 : {arrow(l): arrow(τ)}$,
+            $Γ, l_0 : τ_0, ..., l_n: τ_n tack t_2: τ$,
+            $l_i in.not Γ$,
+          ),
+          $Γ tack "with" t_1; t_2 : τ$,
+        ),
+        derive(
+          "T-Assert-Pos",
+          ($Γ tack t_1: "bool"$, $Γ tack t_2: τ_2$),
+          $Γ tack "assert" t_1; t_2: τ_2$,
+        ),
+      ),
       sub_typing_rules(
         caption: "Functions with Patterns",
         derive(
@@ -280,36 +310,6 @@
         derive("T-Check", ($Xi, Γ tack e: {..}$,), $Xi, Γ tack e ? l: "bool"$),
       ),
       // line(length: 100%),
-      sub_typing_rules(
-        caption: "Language Constructs",
-        derive(
-          "T-Multi-Let",
-          (
-            $Γ overline([x_i: τ_i tack t_i : τ_i]^i)$,
-            $Γ overline([x_i:∀ arrow(α). τ_i]^i) tack t: τ$,
-          ),
-          $Γ tack "let" x_0 = t_0; ... ; x_n = t_n "in" t: τ$,
-        ),
-        derive(
-          "T-If",
-          ($Γ tack t_1: "bool"$, $Γ tack t_2: τ$, $Γ tack t_3: τ$),
-          $ "if" t_1 "then" t_2 "else" t_3: τ $,
-        ),
-        derive(
-          "T-With",
-          (
-            $Γ tack t_1 : {arrow(l): arrow(τ)}$,
-            $Γ, l_0 : τ_0, ..., l_n: τ_n tack t_2: τ$,
-            $l_i in.not Γ$,
-          ),
-          $Γ tack "with" t_1; t_2 : τ$,
-        ),
-        derive(
-          "T-Assert-Pos",
-          ($Γ tack t_1: "bool"$, $Γ tack t_2: τ_2$),
-          $Γ tack "assert" t_1; t_2: τ_2$,
-        ),
-      ),
     ),
   ),
 )
@@ -436,3 +436,4 @@
 #typing_rules
 #subtyping
 #constraining
+#comparison
