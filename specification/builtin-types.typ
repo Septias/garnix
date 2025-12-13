@@ -1,0 +1,101 @@
+#import "./functions.typ": *
+
+#let str = "str"
+#let null = "null"
+#let drv = "drv"
+#let path = "path"
+#let bool = "bool"
+#let int = "int"
+#let float = "float"
+#let number = "float"
+#let openPat = $⦃oi(l_i : τ_i)⦄^◌$
+#let record = ${oi(l_i : τ_i)}$
+#let manyTypes = $[oi(τ_i)]$
+#let manyTerms = todo($[oi(t_i)]$)
+
+#let types = table(
+  columns: (1fr, 1fr),
+  table.header([*Builtin*], [*Type*]),
+  [abort `s`                   ], $ τ -> ⊥ $,
+  [add `e1 e2`                 ], $ {α <= int}. α -> α -> α $,
+  [addDrvOutputDependencies `s`], $ {α <= str}. α -> α -> α $,
+  [all `pred list`             ], $ manyTerms -> bool $,
+  [any `pred list`             ], $ manyTerms -> bool $,
+  [attrNames `set`             ], $ openPat -> [oi(l_i)] $,
+  [| attrValues `set`          ], $ openPat -> [oi(τ_i)] $,
+  [baseNameOf `x`              ], $ {a <= str ∨ path}. a -> str $,
+  [bitAnd `e1 e2`              ], $ int -> int -> int $,
+  [bitOr `e1 e2`               ], $ int -> int -> int $,
+  [bitXor `e1 e2`              ], $ int -> int -> int $,
+  [break `v`                   ], $ α -> α ∨ ⊥ $,
+  [builtins                    ], $ {} $,
+  [| catAttrs `attr list`      ], $ str -> [oj(record)_j] -> todo([oj(τ_j)]) $,
+  [) ceil `double`             ], $ number -> int $,
+  [compareVersions `s1 s2`     ], $ str -> str -> (-1 ∨ 0 ∨ 1) $,
+  [| concatLists `lists`       ], $ [oj([oi(τ_i)])] -> [oi(τ_(i 1)) … oi(τ_(i j))] $,
+  [concatMap `f list`          ], $ (α -> β) -> [α] -> [β] $,
+  [concatStringsSep `sep list` ], $ str -> [str] -> str $,
+  [convertHash `args`          ], $ str -> str $,
+  [m currentSystem             ], $ () -> str $,
+  [m currentTime               ], $ () -> int $,
+  [deepSeq `e1 e2`             ], $ τ₁ -> τ₂ -> τ₂ $,
+  [dirOf `s`                   ], $ {α <= str ∨ path}. α -> str $,
+  [div `e1 e2`                 ], $ number -> number -> number $,
+  [elem `x xs`                 ], $ openPat -> l -> bool $,
+  [elemAt `xs n`               ], $ manyTypes -> todo(int -> τ_(int)) $,
+  [false                       ], $ bool $,
+  [fetchClosure `args`         ], $ todo({}) -> path $,
+  [fetchGit `args`             ], $ todo({}) -> path $,
+  [fetchTarball `args`         ], $ todo({}) -> path $,
+  [fetchTree `input`           ], $ todo({}) -> path $,
+  [fetchurl `arg`              ], $ todo({}) -> path $,
+  [filter `f list`             ], $ (α -> bool) -> [α] -> [α] $,
+  [filterSource `pred path`    ], $ (path -> bool) -> path -> [path] $,
+  [findFile `search lookup`    ], $ ? $,
+  [floor `double`              ], $ number -> int $,
+  [foldl' `op null list`       ], $ (α -> β -> α) -> α -> [β] -> α $,
+  [fromJSON `e`                ], $ str -> {} $,
+  [fromTOML `e`                ], $ str -> {} $,
+  [functionArgs `f`            ], $ (openPat -> α) -> manyTypes $,
+  [genList `generator length`  ], $ ? $,
+  [genericClosure `attrset`    ], $ ? $,
+  [getAttr `s set`             ], $ l -> openPat -> todo(τ_l) $,
+  [getContext `s`              ], $ str -> todo({}) $,
+  [i getEnv `s`                ], $ str -> str -> str $,
+  [getFlake `args`             ], $ todo({}) -> path $,
+  [groupBy `f list`            ], $ (α -> bool) -> [α] -> ([α], [α]) $,
+  [hasAttr `s set`             ], $ openPat -> l -> bool $,
+  [hasContext `s`              ], $ str -> bool $,
+  [hashFile `type p`           ], $ path ∨ str -> str $,
+  [hashString `type s`         ], $ str -> str $,
+  [head `list`                 ], $ [α] -> α $,
+  [import `path`               ], $ path -> τ $,
+  [intersectAttrs `e1 e2`      ], $ openPat -> openPat -> todo(record) $,
+  [isAttrs `e`                 ], $ τ -> bool $,
+  [isBool `e`                  ], $ τ -> bool $,
+  [isFloat `e`                 ], $ τ -> bool $,
+  [isFunction `e`              ], $ τ -> bool $,
+  [isInt `e`                   ], $ τ -> bool $,
+  [isList `e`                  ], $ τ -> bool $,
+  [isNull `e`                  ], $ τ -> bool $,
+  [isPath `e`                  ], $ τ -> bool $,
+  [isString `e`                ], $ τ -> bool $,
+  [langVersion                 ], $ () -> str $,
+  [length `e`                  ], $ [α] -> int $,
+  [lessThan `e1 e2`            ], $ number -> number -> bool $,
+  [listToAttrs `e`             ], $ [todo(oi((l,τ))] -> record) $,
+  [map `f list`                ], $ (α -> β) -> [α] -> [β] $,
+  [mapAttrs `f attrset`        ], $ (α -> β) -> openPat -> todo("yay") $,
+  [match `regex str`           ], $ str -> str -> [str] $,
+  [mul `e1 e2`                 ], $ number -> number -> number $,
+  [nixPath                     ], $ () -> [str] $,
+  [nixVersion                  ], $ () -> str $,
+  [null                        ], $ null $,
+  [outputOf `drv out`          ], $ drv -> path $,
+  [parseDrvName `s`            ], $ str -> [str] $,
+)
+
+#types
+
+
+
