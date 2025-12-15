@@ -1,5 +1,5 @@
 #import "functions.typ": *
-#import "comparison.typ": *
+#import "comparison.typ": comparison
 #set page(height: auto)
 #set box(width: 100%)
 
@@ -94,7 +94,7 @@
   rect(width: 100%, inset: 20pt, stack(
     spacing: 20pt,
     subbox(caption: "Values")[$
-      v ::= p: t | todo(l) | {overline(a\;)} | #b[rec] {overline(a\;)}
+      v ::= p: t | l | {overline(a\;)} | #b[rec] {overline(a\;)}
     $],
     subbox(
       caption: "Evaluation Context",
@@ -158,7 +158,7 @@
           & | ⊥^diamond.small | τ ∨^diamond.small τ \
           #type_name("Pattern Element") p & := τ | τ^? \
           #type_name("Polymorphic type") σ & := ∀Xi. τ \
-          #type_name("Mode") diamond.small & := · | ↻\
+          #type_name("Mode") diamond.small & := · | arrow.r.turn\
         $,
       )),
       subbox(
