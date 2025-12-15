@@ -23,12 +23,12 @@ Bei den -Default Regeln fragt man sich, wo die d_i herkommen. Mit dem "substitut
 R-Lookup-Default-Neg: was wenn \exists i. l_i = l, aber t_i = null?
 Die Values in Fig. 3 verstehe ich nicht: ok p:t ist ein Lambda, aber was ist x;? und was wird durch {..} abgekürzt? Es fehlt wohl v ::= ...
 
-- [ ] Fix value definition
+- [x] Fix value definition
 
 Letzte Zeile Evaluationkontext muss enden mit v \bullet \Box
 
-- [ ] Extend Evaluation context
+- [x] Extend Evaluation context
 
 Regeln für die Pattern Types habe ich nicht gefunden und mir fehlt auch die Intuition dafür??
 
-- [ ] Pattern types erklären
+- [x] Pattern types erklären
