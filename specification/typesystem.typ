@@ -18,6 +18,7 @@
 #let label = `[A-Za-z_][A-Za-z0-9_'-]*`
 #let searchpath = `<[A-Za-z_]*>`
 
+== Syntax
 #let basetypes = subbox(caption: "Literals")[
   $
                                   c & ::= char \
@@ -29,7 +30,6 @@
              #type_name("Number") n & ::= number \
               #type_name("Label") l & ::= label \
         #type_name("Search Path") l & ::= searchpath \
-    // #type_name("Variable") v & ::= "[A-Za-z_][A-Za-z0-9_'-]*" \
   $
 ]
 
@@ -49,7 +49,6 @@
     #type_name("Conditionals") &| #b[if] t #b[then] t #b[else] t \
     #type_name("With-Statement") &| #b[with] t; t \
     #type_name("Assert-Statement") &| #b[assert] t; t \
-    #type_name("Operator") &| t • t \
   $
 ]
 
@@ -87,8 +86,11 @@
     ],
   )),
 )
+#syntax
 
 
+
+== Reduction Rules
 #let reduction = figure(
   caption: "Nix reduction rules, context and values.",
   rect(width: 100%, inset: 20pt, stack(
@@ -142,7 +144,9 @@
     ),
   )),
 )
+#reduction
 
+== Types
 #let types = figure(
   caption: "Types of nix.",
   rect(
@@ -172,8 +176,9 @@
     ),
   ),
 )
+#types
 
-
+== Typing Rules
 #let typing_rules = figure(
   caption: "Nix typing rules",
   rect(
@@ -203,6 +208,7 @@
           ($Ξ, Γ tack t: τ_1$, $Ξ, Γ tack τ_1 <= τ_2$),
           $Ξ, Γ tack t: τ_2$,
         ),
+        derive("T-Negate", ($Xi, Γ tack e: "bool"$,), $Xi, Γ tack !e: "bool"$),
         // derive("T-Asc", ($Ξ,Γ ⊢ t : τ$,), $Ξ,Γ ⊢ (t: τ) : τ$),
       ),
       // line(length: 100%),
@@ -214,12 +220,12 @@
             $Γ overline([x_i: τ_i tack t_i : τ_i]^i)$,
             $Γ overline([x_i:∀ arrow(α). τ_i]^i) tack t: τ$,
           ),
-          $Γ tack "let" x_0 = t_0; ... ; x_n = t_n "in" t: τ$,
+          $Γ tack #b[let] x_0 = t_0; ... ; x_n = t_n #b[in] t: τ$,
         ),
         derive(
           "T-If",
           ($Γ tack t_1: "bool"$, $Γ tack t_2: τ$, $Γ tack t_3: τ$),
-          $ "if" t_1 "then" t_2 "else" t_3: τ $,
+          $ #b[if] t_1 #b[then] t_2 #b[else] t_3: τ $,
         ),
         derive(
           "T-With",
@@ -228,12 +234,12 @@
             $Γ, l_0 : τ_0, ..., l_n: τ_n tack t_2: τ$,
             $l_i in.not Γ$,
           ),
-          $Γ tack "with" t_1; t_2 : τ$,
+          $Γ tack #b[with] t_1; t_2 : τ$,
         ),
         derive(
           "T-Assert-Pos",
           ($Γ tack t_1: "bool"$, $Γ tack t_2: τ_2$),
-          $Γ tack "assert" t_1; t_2: τ_2$,
+          $Γ tack #b[assert] t_1; t_2: τ_2$,
         ),
       ),
       sub_typing_rules(
@@ -259,10 +265,21 @@
         ),
         derive("T-Proj", ($ Ξ, Γ tack t: {l: τ} $,), $Ξ, Γ tack t.l: τ$),
         derive(
+          "T-Or-Neg",
+          ($Xi, Γ tack t_1: {l: τ_1}$, $Xi, Γ tack t_2: τ_2$),
+          $Xi, Γ tack (t_1).l #b[or] t_2: τ_1$,
+        ),
+        derive(
+          "T-Or-Pos",
+          ($Xi, Γ tack t_1: τ_1$, $l ∉ τ_1$, $Xi, Γ tack t_2: τ_2$),
+          todo($Xi, Γ tack (t_1).l #b[or] t_2: τ_2$),
+        ),
+        derive(
           "T-Rec-Concat",
           ($Ξ, Γ tack a: { oi(l\: τ) }$, $Ξ, Γ tack b: { l_j: τ_j }$),
           todo[$Ξ, Γ tack a "//" b: {..b, ..a}$],
         ),
+        derive("T-Check", ($Xi, Γ tack e: {..}$,), $Xi, Γ tack e #b[#v(0.1pt)?#v(0.1pt)] l: "bool"$),
       ),
       // line(length: 100%),
       sub_typing_rules(
@@ -294,26 +311,16 @@
           $Ξ, Γ tack a "⧺" b: [arrow(τ_1)arrow(τ_2)]$,
         ),
       ),
-      sub_typing_rules(
-        caption: "Operators",
-        derive(
-          "T-Or-Neg",
-          ($Xi, Γ tack t_1: {l: τ_1}$, $Xi, Γ tack t_2: τ_2$),
-          $Xi, Γ tack (t_1).l "or" t_2: τ_1$,
-        ),
-        derive(
-          "T-Or-Pos",
-          ($Xi, Γ tack t_1: τ_1$, $l ∉ τ_1$, $Xi, Γ tack t_2: τ_2$),
-          todo($Xi, Γ tack (t_1).l "or" t_2: τ_2$),
-        ),
-        derive("T-Negate", ($Xi, Γ tack e: "bool"$,), $Xi, Γ tack !e: "bool"$),
-        derive("T-Check", ($Xi, Γ tack e: {..}$,), $Xi, Γ tack e ? l: "bool"$),
-      ),
+      // sub_typing_rules(
+      //   caption: "Operators",
+      // ),
       // line(length: 100%),
     ),
   ),
 )
+#typing_rules
 
+== Subtyping Rules
 #let subtyping = figure(
   caption: "Nix suptyping rules.",
   rect(inset: 20pt)[
@@ -374,7 +381,9 @@
     $lt.tri ( τ_0 <= τ_1) = τ_0 <= τ_1$
   ],
 )
+#subtyping
 
+== Constraining
 #let constraining = figure(
   caption: "New Constraining Rules using normal forms",
   rect(inset: 20pt)[
@@ -428,12 +437,4 @@
     ))
   ],
 )
-
-
-#syntax
-#reduction
-#types
-#typing_rules
-#subtyping
 #constraining
-#comparison
