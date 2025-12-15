@@ -2,6 +2,8 @@
 
 // colors
 #let red_700 = rgb(185, 28, 28)
+#let red_700 = rgb(185, 28, 28)
+#let orange_500 = rgb(249, 115, 22)
 #let red = oklch(42.1%, 0.095, 57.708deg);
 #let zink_700 = oklch(44.2%, 0.017, 285.786deg)
 #let zink_900 = oklch(21%, 0.006, 285.885deg)
@@ -11,7 +13,20 @@
 #let oj(body) = $overline(body)^j$
 #let b(body) = text(weight: "bold", body)
 #let rotate(..body) = $attach(tr: diamond.small, ..body)$
-#let todo(..body) = rect(fill: red_700, ..body)
+#let todo(..body) = rect(stroke: orange_500, radius: 2pt, ..body)
+
+// reused syntax
+#let str = "str"
+#let null = "null"
+#let drv = "drv"
+#let path = "path"
+#let bool = "bool"
+#let int = "int"
+#let float = "float"
+#let number = "float"
+#let openPat = $⦃oi(l_i : τ_i)⦄^◌$
+#let record = ${oi(l_i : τ_i)}$
+#let manyTypes = $[oi(τ_i)]$
 
 // bigger constructs
 #let boxed_type_rules(..body) = rect(inset: 20pt, flexwrap(

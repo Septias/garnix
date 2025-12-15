@@ -1,17 +1,5 @@
 #import "./functions.typ": *
 
-#let str = "str"
-#let null = "null"
-#let drv = "drv"
-#let path = "path"
-#let bool = "bool"
-#let int = "int"
-#let float = "float"
-#let number = "float"
-#let openPat = $⦃oi(l_i : τ_i)⦄^◌$
-#let record = ${oi(l_i : τ_i)}$
-#let manyTypes = $[oi(τ_i)]$
-#let manyTerms = todo($[oi(t_i)]$)
 
 #let types = table(
   columns: (1fr, 1fr),
@@ -19,8 +7,8 @@
   [abort `s`                   ], $ τ -> ⊥ $,
   [add `e1 e2`                 ], $ {α <= int}. α -> α -> α $,
   [addDrvOutputDependencies `s`], $ {α <= str}. α -> α -> α $,
-  [all `pred list`             ], $ manyTerms -> bool $,
-  [any `pred list`             ], $ manyTerms -> bool $,
+  [all `pred list`             ], $ manyTypes -> bool $,
+  [any `pred list`             ], $ manyTypes -> bool $,
   [attrNames `set`             ], $ openPat -> [oi(l_i)] $,
   [| attrValues `set`          ], $ openPat -> [oi(τ_i)] $,
   [baseNameOf `x`              ], $ {a <= str ∨ path}. a -> str $,
