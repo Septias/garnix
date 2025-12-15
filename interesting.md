@@ -1,3 +1,34 @@
+### Misc
+
+Defaults might be recursive, so ({ x ? x }: x) {} diverges, while ({ x ? x }: true) {} returns true because of laziness.
+
+
+```nix
+g: let r = { x = 10; y = 12; }; in (with r; (with g {}; x + y))
+
+````
+
+```nix
+{a=1;}.${{}.a or "a"}
+```
+
+
+```nix
+with {a = 1;}; with {a = 2;}; a
+```
+
+
+```nix
+(bs ? x.y.z) as.x.y.bla or bs.f-o-o.bar or "xyzzy"`  
+```
+
+For this it is impossible to truely attribute a:
+```nix
+f: g: (with f; (with g; a))
+```
+
+
+
 ### eval-fail-assert-equal-function-direct.nix
 ```nix
 # Note: functions in nested structures, e.g. attributes, may be optimized away by pointer identity optimization.
