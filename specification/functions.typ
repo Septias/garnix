@@ -1,6 +1,6 @@
 #import "@preview/biceps:0.0.1": flexwrap
 
-// colors
+// ------------- Colors
 #let red_700 = rgb(185, 28, 28)
 #let red_700 = rgb(185, 28, 28)
 #let orange_500 = rgb(249, 115, 22)
@@ -8,14 +8,16 @@
 #let zink_700 = oklch(44.2%, 0.017, 285.786deg)
 #let zink_900 = oklch(21%, 0.006, 285.885deg)
 
-// shorthands
+
+// ------------- Shorthands
 #let oi(body) = $overline(body)^i$
 #let oj(body) = $overline(body)^j$
 #let b(body) = text(weight: "bold", body)
 #let rotate(..body) = $attach(tr: diamond.small, ..body)$
 #let todo(..body) = rect(stroke: orange_500, radius: 2pt, ..body)
 
-// reused syntax
+
+// -------------  Syntax Shorthands
 #let str = "str"
 #let null = "null"
 #let drv = "drv"
@@ -28,44 +30,53 @@
 #let record = ${oi(l_i : τ_i)}$
 #let manyTypes = $[oi(τ_i)]$
 
-// bigger constructs
-#let boxed_type_rules(..body) = rect(inset: 20pt, flexwrap(
-  main-spacing: 20pt,
-  cross-spacing: 10pt,
-  ..body,
-))
 
-// Caption in smallcaps
+// -------------  Bigger Constructs
+
+// For example: Boolean
+#let type_name(name) = [
+  #text(fill: zink_700, style: "italic", size: 9pt, name)
+  #v(10pt)
+]
+
+// For example: T-Rec
+#let rule_name(name) = [
+  #text(fill: zink_900, size: 9pt, smallcaps(name))
+  #v(10pt)
+]
+
+
+#let boxed_type_rules(..body) = block(
+  inset: 20pt,
+  flexwrap(
+    main-spacing: 20pt,
+    cross-spacing: 10pt,
+    ..body,
+  ),
+)
+
+// Logical unit in a bigger figure
 #let subbox(caption: "", ..body) = stack(
   spacing: 10pt,
   align(left, text(weight: "bold", smallcaps(caption))),
   ..body,
 )
 
-// Caption in a box
+// Rules underlying one syntax
 #let subrules(caption: math, ..body) = block(breakable: true, stack(
   spacing: 10pt,
   align(left, rect()[#caption]),
   ..body,
 ))
 
-#let sub_typing_rules(caption: "", ..body) = stack(
+#let many_wrapping_derives(caption: "", ..body) = stack(
   spacing: 10pt,
-  block(width: 100%, breakable: true, align(left, text(
+  align(left, text(
     weight: "bold",
     smallcaps(caption),
-  ))),
+  )),
   flexwrap(main-spacing: 20pt, cross-spacing: 10pt, ..body),
 )
-
-#let type_name(name) = [
-  #text(fill: zink_700, style: "italic", size: 9pt, name)
-  #v(10pt)
-]
-#let rule_name(name) = [
-  #text(fill: zink_900, size: 9pt, smallcaps(name))
-  #v(10pt)
-]
 
 
 #let derive(name, prem, conclusion) = [
@@ -74,9 +85,9 @@
     inset: (x: 0pt, y: 5pt),
     align: center,
     table.cell(align: start, rule_name(name)),
-    table.cell(inset: (y: 5pt), [#prem.join("     ")]),
+    table.cell(inset: (y: 5pt), prem.join("     ")),
     table.hline(),
-    table.cell(inset: (y: 10pt), [#conclusion]),
+    table.cell(inset: (y: 10pt), conclusion),
   )
 ]
 
