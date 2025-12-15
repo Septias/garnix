@@ -178,6 +178,28 @@
 )
 #types
 
+== Shorthands
+#let shorthands = figure(
+  caption: "Shorthands",
+  rect(width: 100%, inset: 20pt, stack(
+    derive(
+      "T-with",
+      (
+        $#b[let] _"with" {overline(#b[nonrec] d)} #b[in] t$,
+      ),
+      $#b[with] {overline(#b[nonrec] d)}; t_2$,
+    ),
+    derive(
+      "T-let-in",
+      (
+        $#b[let] _"abs" {overline(#b[nonrec] d)} #b[in] t$,
+      ),
+      $#b[let] oi(l_i \= t_i\;) #b[in] t$,
+    ),
+  )),
+)
+#shorthands
+
 == Typing Rules
 #let typing_rules = figure(
   caption: "Nix typing rules",
