@@ -18,7 +18,7 @@ Things to do for algebraic subtyping:
 
 == Define algorithmic typing rules
 === Bounds
-- Bounds are of the form τ ≤ τ 
+- Bounds are of the form τ ≤ τ
 
 === Hypotheses
 - Hypotheses must be guarded against immediate use
@@ -28,11 +28,25 @@ Things to do for algebraic subtyping:
 - Skolem: A skolem is used to fix a more polymorphic type (let-var inside a function)
 - Rigid Variable: A rigid variable is used fix a less polymorhpic type (function parameter)
 
-==== Examples
+==== Skolem
+> used to fix a more polymorphic type
+
+```nix
+x: let
+  f = y: x (y, y);
+in E f
+
 ```
+It would be problematic if we constrain α (typvar from x) with types from β (typevar from f) since f might be instantiated to different explicit types in the function body. These constraints are no longer connected to the initial α.
 
 
+==== Rigid Variable
+> used to fix a less polymorphic type
+
 ```
+
+```
+
 
 === Recursion
 - Manual unfolding
