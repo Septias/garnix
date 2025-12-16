@@ -248,29 +248,12 @@
     many_wrapping_derives(
       caption: "Language Constructs",
       derive(
-        "T-Multi-Let",
-        (
-          $Γ overline([x_i: τ_i tack t_i : τ_i]^i)$,
-          $Γ overline([x_i:∀ arrow(α). τ_i]^i) tack t: τ$,
-        ),
-        $Γ tack #b[let] x_0 = t_0; ... ; x_n = t_n #b[in] t: τ$,
-      ),
-      derive(
         "T-If",
         ($Γ tack t_1: "bool"$, $Γ tack t_2: τ$, $Γ tack t_3: τ$),
         $ #b[if] t_1 #b[then] t_2 #b[else] t_3: τ $,
       ),
       derive(
-        "T-With",
-        (
-          $Γ tack t_1 : {arrow(l): arrow(τ)}$,
-          $Γ, l_0 : τ_0, ..., l_n: τ_n tack t_2: τ$,
-          $l_i in.not Γ$,
-        ),
-        $Γ tack #b[with] t_1; t_2 : τ$,
-      ),
-      derive(
-        "T-Assert-Pos",
+        "T-Assert",
         ($Γ tack t_1: "bool"$, $Γ tack t_2: τ_2$),
         $Γ tack #b[assert] t_1; t_2: τ_2$,
       ),
