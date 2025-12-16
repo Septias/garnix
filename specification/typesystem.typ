@@ -339,6 +339,44 @@
 )
 #typing_rules
 
+
+== Matching
+
+#let matching = figure(
+  caption: "Matching",
+  rect(width: 100%, inset: 20pt, stack(
+    align(left, rect($m ~ overline(d) arrow.squiggly overline(α)$)),
+    ${∅, …} ~ overline(d) arrow.squiggly ∅$,
+    derive(
+      "",
+      (
+        ${oi(e?), …} ~ overline(d) arrow.squiggly overline(α)$,
+        $x ∉ "dom "oi(e?)$,
+        $x ∉ "dom "overline(d)$,
+      ),
+      ${oi(e?)⟨x := e^?⟩, …} ~ overline(d)⟨x := d⟩ arrow.squiggly overline(α)⟨x := #b[nonrec] d⟩$,
+    ),
+    derive(
+      "",
+      (
+        ${oi(e?), …} ~ overline(d) arrow.squiggly overline(α)$,
+        $x ∉ "dom" oi(e?)$,
+        $x ∉ "dom" overline(d)$,
+      ),
+      ${oi(e?)⟨x := "Some" e⟩, …} ~ overline(d) arrow.squiggly overline(α)⟨x := #b[rec] e⟩$,
+    ),
+    derive(
+      "",
+      (
+        ${oi(e?), …} ~ overline(d) arrow.squiggly overline(α)$,
+        $"dom "overline(d) subset.eq "dom "oi(e?)$,
+      ),
+      ${oi(e?)} ~ overline(d) arrow.squiggly overline(α)$,
+    ),
+  )),
+)
+#matching
+
 == Subtyping Rules
 #let subtyping = figure(
   caption: "Nix suptyping rules.",
