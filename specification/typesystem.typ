@@ -179,8 +179,8 @@
 
 == Shorthands
 #let shorthands = figure(
-  caption: "Shorthands",
-  rect(width: 100%, inset: 20pt, stack(
+  caption: "Shorthands to morph syntax into a let-attrsets that have a typing rule.",
+  rect(width: 100%, inset: 20pt, many_wrapping_derives(
     derive(
       "T-with",
       (
@@ -199,14 +199,15 @@
 )
 #shorthands
 
+
 == Auxiliaries
 #let auxiliaries = figure(
   caption: "Auxiliary functions. Unfolding instantiates recursive references to non-recursive values on the outer level. Indirections are used to tie the knots",
   rect(width: 100%, inset: 20pt, stack(
     $
-      "unfold"_1 overline(α) := &{ x := #b[nonrec] t | x := #b[nonrec] t ∈ overline(α)} attach(union, tr: <) \
-      &{ x := #b[nonrec] t["indirects" overline(α)] | x := #b[rec] t ∈ overline(α)} \
-      "indirects" overline(α) := &{x := #b[abs] {overline(α)}.x | x ∈ overline(α) }
+      "unfold"_1 oα := &{ x := #b[nonrec] t | x := #b[nonrec] t ∈ oα} attach(union, tr: <) \
+      &{ x := #b[nonrec] t["indirects" oα] | x := #b[rec] t ∈ oα} \
+      "indirects" oα := &{x := #b[abs] {oα}.x | x ∈ oα }
     $,
   )),
 )
@@ -257,21 +258,12 @@
         ($Γ tack t_1: "bool"$, $Γ tack t_2: τ_2$),
         $Γ tack #b[assert] t_1; t_2: τ_2$,
       ),
-    ),
-    many_wrapping_derives(
-      caption: "Functions with Patterns",
       derive(
-        "T-Abs-Pat",
-        (todo[$Ξ, Γ, oi(x\: τ) tack t: τ_2$],),
-        $Ξ, Γ tack ({oi(e_i)}: t): oi(τ) → τ_2$,
-      ),
-      derive(
-        "T-Abs-Pat-Open",
-        (todo[$Ξ, Γ, oi(x\: τ) tack t: τ_2$],),
-        $Ξ, Γ tack ({oi(e_i), …}: t): oi(τ) → τ_2$,
+        "T-Match",
+        ($m ~ overline(d) arrow.squiggly oα$,),
+        $(x: t) {oi(#b[nonrec] d)} ->_μ t["indirects" oα]$,
       ),
     ),
-    // line(length: 100%),
     many_wrapping_derives(
       caption: "Records",
       derive(
@@ -345,33 +337,33 @@
 #let matching = figure(
   caption: "Matching",
   rect(width: 100%, inset: 20pt, stack(
-    align(left, rect($m ~ overline(d) arrow.squiggly overline(α)$)),
+    align(left, rect($m ~ overline(d) arrow.squiggly oα$)),
     ${∅, …} ~ overline(d) arrow.squiggly ∅$,
     derive(
       "",
       (
-        ${oi(e?), …} ~ overline(d) arrow.squiggly overline(α)$,
+        ${oi(e?), …} ~ overline(d) arrow.squiggly oα$,
         $x ∉ "dom "oi(e?)$,
         $x ∉ "dom "overline(d)$,
       ),
-      ${oi(e?)⟨x := e^?⟩, …} ~ overline(d)⟨x := d⟩ arrow.squiggly overline(α)⟨x := #b[nonrec] d⟩$,
+      ${oi(e?)⟨x := e^?⟩, …} ~ overline(d)⟨x := d⟩ arrow.squiggly oα⟨x := #b[nonrec] d⟩$,
     ),
     derive(
       "",
       (
-        ${oi(e?), …} ~ overline(d) arrow.squiggly overline(α)$,
+        ${oi(e?), …} ~ overline(d) arrow.squiggly oα$,
         $x ∉ "dom" oi(e?)$,
         $x ∉ "dom" overline(d)$,
       ),
-      ${oi(e?)⟨x := "Some" e⟩, …} ~ overline(d) arrow.squiggly overline(α)⟨x := #b[rec] e⟩$,
+      ${oi(e?)⟨x := "Some" e⟩, …} ~ overline(d) arrow.squiggly oα⟨x := #b[rec] e⟩$,
     ),
     derive(
       "",
       (
-        ${oi(e?), …} ~ overline(d) arrow.squiggly overline(α)$,
+        ${oi(e?), …} ~ overline(d) arrow.squiggly oα$,
         $"dom "overline(d) subset.eq "dom "oi(e?)$,
       ),
-      ${oi(e?)} ~ overline(d) arrow.squiggly overline(α)$,
+      ${oi(e?)} ~ overline(d) arrow.squiggly oα$,
     ),
   )),
 )
