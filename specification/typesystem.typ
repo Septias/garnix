@@ -199,6 +199,20 @@
 )
 #shorthands
 
+== Auxiliaries
+#let auxiliaries = figure(
+  caption: "Auxiliary functions. Unfolding instantiates recursive references to non-recursive values on the outer level. Indirections are used to tie the knots",
+  rect(width: 100%, inset: 20pt, stack(
+    $
+      "unfold"_1 overline(α) := &{ x := #b[nonrec] t | x := #b[nonrec] t ∈ overline(α)} attach(union, tr: <) \
+      &{ x := #b[nonrec] t["indirects" overline(α)] | x := #b[rec] t ∈ overline(α)} \
+      "indirects" overline(α) := &{x := #b[abs] {overline(α)}.x | x ∈ overline(α) }
+    $,
+  )),
+)
+#auxiliaries
+
+
 == Typing Rules
 #let typing_rules = figure(
   caption: "Nix typing rules",
