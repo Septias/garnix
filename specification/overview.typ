@@ -45,6 +45,40 @@ In this section we look more closely on nix specific features and their suprisin
 === Laziness
 Laziness is an ~existential nix feature since without it, the package manager would be unpractically slow. Nix adds lazyiness virtually everywhere: record-fields, functions, let-bindings, arrays, and patterns.
 
+== Context Strings
+Context strings and dynamic lookup share the same syntax in that you can insert some arbitrary term `t` into braces with the following syntax `${t}`. For ordinary strings and paths, the value of `t` will be coerced into a string and added literally. From a typing perspective, this is the easy case because inserted values get a constraint of string and that's it. For dynamic lookup it gets trickier though.
+
+
+== Dynamic Lookup <dynamic_lookup>
+Context strings allow lookups of the form `a.${t}` where t is allowed to be any expression that ultimately reduces to a string. The reduced string is then used to index the record which a is supposed to be. Since a type system only computes a type and not the actual value, the only possible approach to handle first-class labels is to evaluate nix expressions to some extent. Writing a full evaluator is probably too much, but there could be heuristics for simple evaluation. One approach would be to work backwards from return statements in functions up until it gets too unwieldy.
+This would also mean implementing the standard library functions like map, readToString etc. One ray of hope is that these were probably already implemented in Tvix.
+
+
+= Constructs
+== With Statements <with>
+With statements allow introducing all bindings of a record into the following expression. For this, the first expression (A) in $"with " A"; "B$ has to reduce to a record. If that does not work, typing should raise an _error_. For explicit records, the following typing is straightforward. Just introduce all fields to the scope without shadowing and continue typechecking $B$. For the case that A is a type variable, it gets tricky however because of the generic subsumption rule. When A is subtyped like follows $A: {X: "int"} arrow A: {}$, then the field X would not be accessible in the function body.
+The second problem is what I call the _attribution problem_. It occurs when there is a chain of with statements $"with "A; ("with "B;) t$ and A and B are type variables. Now when trying to lookup $x$ in t, it is unclear whether x came from B or A.
+
+
+== Dunder Methods
+There seem to be some special dunder methods for representations which are handled specially by the evaluator. I have not had the chance to look into it further.
+An example is the `__functor` field that can be set on a record and lets the function be used as a functor.
+
+
+= Laziness and Recursiveness
+Laziness and recursion occur in two language constructs. The first one being _recursive records_ and the second one being _let bindings_. To evaluate them, a lazy evaluation scheme is needed which is currently implemented as follows:
+When typing a let binding or record, the algorithm adds all name bindings to the context up-front. This way, referenced values will not be undefined when looked up, even if their definition was not type checked yet. The typecheck algorithm then starts with some arbitrary first label $A$ which may contain an unchecked expression labeled $B$.
+When this undefined label $B$ is found, it is simply used to create upper and lower bounds (constraints). For empty type variables that is fine to do, but when we actually check this $B$, it will unfold and be constrained with upper and lower bounds. These bounds are missing on the typecheck run of $A$ then. An example would be `let f = a: a + 1; x = f b; b = "hi" in {}` In this case b would be constrained to be a number (because of the application and its implication) but afterwards it will get its "real" type which is string. Currently, the constraint error would be placed at the wrong location (that of the true definition).
+
+#figure(
+  ```nix
+  rec { x = { x = x;};}.x;       # → { x = «repeated»; }
+  let x = {x = y;}; y = x; in x  # → { x = «repeated»; }
+  ```,
+  caption: [Examples of recursive patterns from the nix repl],
+)
+
+
 
 === Shadowing
 Nix with statement has special shadowing behavior in that it does not shado let-bount variables. An expression `let a = 1; with {a = 2}; a` will thus reduce to 1 instead of two, because a is "not taken from the record". This is a major source of confusion, also, because it behaves differently for stacked with-statemnts. The expression `with {a = 1;}; with {a=2;}; a` will evaluate to 2, because the latest with-statement shadows outer ones.
@@ -140,122 +174,6 @@ Lastely, we add a single type for patterns. Even thought a pattern is similar in
 #constraining <constraining>
 
 
-= Equality
-Attribute sets and lists are compared recursively, and are therefore fully evaluated.
-
-= Datatypes
-== Records <records>
-Records are defined very simply in this type system. The only supported record type is a list of `label: type` mappings which can be added during subtyping. There is no way to reorder them, or remove some. During typing, multiple object constraints are concatenated, so there is a way to add new fields.
-
-Two problems occur with the current implementation. Firstly, we have the `//` operator which implements _open record extension_. Given two records `A: { X: string, Y: int }` and `B: { X: int }` the open record concatenation between the two records `(C = A \\ B)` is `C: {X: int, Y: int}`. This together with the generic subtyping rule T-Sub leaves the type system unsound, because fields can be removed, leaving the record B empty (`T-SUB: B -> {}`). In this case, the type system would predict `A.X` to be of type `string` which is simply wrong after the application.
-
-Since there is no way to remove labels from a record, we don't need lacks predicates! The only thing we need to care about is, how to merge record constraints.
-
-
-== Context Strings
-Context strings and dynamic lookup share the same syntax in that you can insert some arbitrary term `t` into braces with the following syntax `${t}`. For ordinary strings and paths, the value of `t` will be coerced into a string and added literally. From a typing perspective, this is the easy case because inserted values get a constraint of string and that's it. For dynamic lookup it gets trickier though.
-
-
-== Dynamic Lookup <dynamic_lookup>
-Context strings allow lookups of the form `a.${t}` where t is allowed to be any expression that ultimately reduces to a string. The reduced string is then used to index the record which a is supposed to be. Since a type system only computes a type and not the actual value, the only possible approach to handle first-class labels is to evaluate nix expressions to some extent. Writing a full evaluator is probably too much, but there could be heuristics for simple evaluation. One approach would be to work backwards from return statements in functions up until it gets too unwieldy.
-This would also mean implementing the standard library functions like map, readToString etc. One ray of hope is that these were probably already implemented in Tvix.
-
-
-= Constructs
-== With Statements <with>
-With statements allow introducing all bindings of a record into the following expression. For this, the first expression (A) in $"with " A"; "B$ has to reduce to a record. If that does not work, typing should raise an _error_. For explicit records, the following typing is straightforward. Just introduce all fields to the scope without shadowing and continue typechecking $B$. For the case that A is a type variable, it gets tricky however because of the generic subsumption rule. When A is subtyped like follows $A: {X: "int"} arrow A: {}$, then the field X would not be accessible in the function body.
-The second problem is what I call the _attribution problem_. It occurs when there is a chain of with statements $"with "A; ("with "B;) t$ and A and B are type variables. Now when trying to lookup $x$ in t, it is unclear whether x came from B or A.
-
-
-== Inherit Statements
-Inherit statements can be handled as syntactic sugar.
-
-
-== Dunder Methods
-There seem to be some special dunder methods for representations which are handled specially by the evaluator. I have not had the chance to look into it further.
-An example is the `__functor` field that can be set on a record and lets the function be used as a functor.
-
-== Closures
-Its possible to capture variables in nix:
-
-nix-repl> (let a = 2; in (b: a + b)) 3
-5
-
-
-= Laziness and Recursiveness
-Laziness and recursion occur in two language constructs. The first one being _recursive records_ and the second one being _let bindings_. To evaluate them, a lazy evaluation scheme is needed which is currently implemented as follows:
-When typing a let binding or record, the algorithm adds all name bindings to the context up-front. This way, referenced values will not be undefined when looked up, even if their definition was not type checked yet. The typecheck algorithm then starts with some arbitrary first label $A$ which may contain an unchecked expression labeled $B$.
-When this undefined label $B$ is found, it is simply used to create upper and lower bounds (constraints). For empty type variables that is fine to do, but when we actually check this $B$, it will unfold and be constrained with upper and lower bounds. These bounds are missing on the typecheck run of $A$ then. An example would be `let f = a: a + 1; x = f b; b = "hi" in {}` In this case b would be constrained to be a number (because of the application and its implication) but afterwards it will get its "real" type which is string. Currently, the constraint error would be placed at the wrong location (that of the true definition).
-
-#figure(
-  ```nix
-  rec { x = { x = x;};}.x;       # → { x = «repeated»; }
-  let x = {x = y;}; y = x; in x  # → { x = «repeated»; }
-  ```,
-  caption: [Examples of recursive patterns from the nix repl],
-)
-
-= A Note on Implementation
-One unique problem of nix is that everything (all 100,000 packages, the operating system, and the standard library) are rooted in a _single file_ at #link("https://github.com/NixOS/nixpkgs/blob/master/flake.nix") or #link("https://github.com/NixOS/nixpkgs/blob/master/default.nix"), depending on whether you use a flake based system or not. To not get lost in the weeds, the nix evaluator heavily relies on the laziness features of the language to not evaluate all of the packages exhaustively. For the ultimate goal of auto-completing nixos options one would have to parse and type this very file with the goal to resolve the module system. This includes the standard library and bootstrapping code for the module system. To even reach it, the type inference algorithm has to support the same kind of laziness the nix evaluator uses to not get lost.
-
-
-== Practical Type Inference in Face of Huge Syntax
-Code inference in the general case is similar to depth-first search, digging down one syntax tree and only returning as soon as all branches have been exhausted. Since nix trees are huge, this approach is not feasible and one has to lean towards a breadth-first search style, which focuses on the currently inferred file and stops when "too far away". To achieve this behavior, the inference algorithm at some point has to decide to stop inference and jump to another unfinished function, remembering at which place it left off.
-In the nix language, there are two natural places to do so. Laziness of records and let statements gives the natural approach that every newly named binding is a stop-point at which inference only proceeds as far as needed. One heuristic could be to go two more functions down and then return to the let or record to generate at least some approximation of the final type.
-
-The import statement semantics of nix come in very handy at this point. Import statements act just as function calls with the only difference being, that the goto location is defined by path and not by name. Other than that, they can take arguments just as a function, and then try to apply given arguments to the file's expression.
-
-This language design comes in very handy because that way, import statements do not occur at the top of the file where it would need to be decided how to continue typechecking them. They occur right at the location where they are needed, sometimes in let-expressions or record fields. This way, the laziness of records and let-expressions could already be enough to get laziness into the language.
-As for the practical approach, I propose a new marker type which can be set to bindings of a context. This marker type should contain all the information to go back to type inference at a previous location. This probably means cloning the context or restoring it to the previous state – cloning is probably easier. Another approach could be to keep the names undefined and add another mapping between names and reconstruction information somewhere that acts as a fallback.
-
-
-Some real-world example of import:
-```nix
-let
-  overrides = {
-    builtins = builtins // overrides;
-  }
-  // import ./lib.nix;
-in
-scopedImport overrides ./imported.nix
-```
-
-== Type Inference in a Language Server Setting
-A language server setting adds one more level of complexity. A language server has to handle the communication between client (an editor like vim, emacs, vscode, etc.) and the server itself. It will be notified frequently of code changes and has to adapt to these changes almost immediately to not annoy the user. This is why rust-analyzer and nil, which I take as template for my own efforts, have chosen to use or create _incremental computation_ frameworks for the rust language.
-The one used by rust-analyzer and nil (which is based off of rust-analyzer) is _salsa_. The name stems from the underlying red-green algorithm that decides whether a function needs to be reevaluated because its arguments changed or whether the memoized return value can be returned immediately.
-In the end, salsa consists of _inputs_, _tracked functions_ and _tracked structs_. Inputs are divided into their durability and given to tracked functions. These tracked functions record the inputs and do some arbitrary computation with them. During these computations, the functions might create immutable tracked structs which can act as new inputs to other tracked functions. TraScked structs are interned into a db and act as a single identifier which are cheap to copy around and provide great performance benefits. With these components alone it is possible to create a hierarchy of pure functions that allow for reproducibility.
-
-When implementing this incrementality framework one has to decide where to draw the line between tracking everything too closely such that the framework bloat adds latency and tracking too few intermediate results such that recomputation is heavy again. I currently choose to track inputs, and functions as well as initial calls.
-
-The generalized structure of the three language servers has this structure. A user opens a file and the lsp client sends the text to the language server. The language server stores the text somewhere and adds it to the typing pipeline. The first step of this pipeline is of course lexing and parsing the file. Nil already provides a parser for lossless syntax trees that are handy for error reporting. The file is then lowered into another HIR which is more or less syntax independent and thus changes less frequently. This is necessary because otherwise everything would have to be recomputed all the time. After this, the HIR is given to the inference algorithm that tries to infer a type.
-
-I am currently working to transition from salsa 0.17-pre2 to salsa 0.24 which is the newest version of salsa. As a lot has changed and virtually every part of code is touched, this is very time consuming.
-
-= Code Overview
-*Inputs of LSP*:
-- `File {content: string, }`
-
-*Inputs of infer:*
-- `AST { With(ExprId, ExprId) }` (lowered AST with expressions from the arena)
-
-*Tracked structs:*
-- `Ty { Lambda(Ty), With(Ty, Ty)}` (enum that stores the whole AST)
-- `Context {bindings: Vec<_>, }`
-- `TyVar {lower_bounds: Vec<Ty>, upper_bounds: Vec<Ty>, level: int}`
-
-*Functions:*
-- `infer` (main work)
-  - calls itself with subtrees of the AST and new contexts
-  - *Mutates* context
-- `constrain` (constrains two types to be the same)
-  - calls itself with subtrees of Ty and might cycle
-  - *Mutates* Type variables → *Changes context*
-- `coalesce` (reduce types to unions and intersections)
-  - Create new types
-- `extrude` (fix levels of problematic variables in a type scheme)
-  - only creates new types
-- `freshen_above` (Add new type variables at level > x)
-  - only creates new types
 
 #pagebreak()
 = Appendix A <prelude>
