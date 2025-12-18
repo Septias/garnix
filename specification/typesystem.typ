@@ -261,7 +261,7 @@
       derive(
         "T-Match",
         ($m ~ overline(d) arrow.squiggly oα$,),
-        $(x: t) {oi(#b[nonrec] d)} ->_μ t["indirects" oα]$,
+        $(x: t) {oi(#b[nonrec] d)} arrow.long_a t["indirects" oα]$,
       ),
     ),
     many_wrapping_derives(
@@ -443,7 +443,7 @@
       derive(
         "C-Assum",
         ($(τ_1 ≪τ_2) ∉ Σ$, $Σ ·⊳(τ_1 ≤ τ_2) ⊢ "dnf"^0_Σ (τ_1 ∧ ¬τ_2) => Ξ$),
-        $$,
+        $Σ ⊢ τ_1 ≪ τ_2 => Ξ$,
       ),
       derive(
         "C-Or",
@@ -465,12 +465,12 @@
       derive(
         "C-Rcd1",
         ($y ∈ S$, $⊲Σ ⊢ D_y ≪ D => Ξ$),
-        $Σ ⊢ I[{#overline[x: D_x]^{x ∈ S}}]∧¬{y: D} => Ξ$,
+        $Σ ⊢ I[{overline(x\: D_x)^(x ∈ S)}]∧¬{y: D} => Ξ$,
       ),
       derive(
         "C-Rcd2",
         ($y ∉ S$,),
-        $Σ ⊢ I[{#overline[x: D_x]^{x ∈ S}}]∧¬{y: D} => #b[err]$,
+        $Σ ⊢ I[{overline(x\: D_x)^(x ∈ S)}]∧¬{y: D} => #b[err]$,
       ),
       derive("C-Rcd3", ($$,), $Σ ⊢ 𝓘^({})[top] ∧ ¬{x: D} => #b[err]$),
       derive(
