@@ -3,13 +3,29 @@
 #set page(height: auto)
 
 == Todo
-1. Proper shadowing behaviour
-2. Proper substitutions (rec and none-rec)
-3. Paste in other semantic
-4. Reduction of
-5. Document dunder methods
+
+=== Theoretical
+1. Explain what to do in lionels systems
+  - Find out if dolan is still an option?
+2. Do I have to force record values?
+3. How are width-constraints reduced?
 
 
+=== Operational Semantics
+1. Document dunder methods
+2. Labels can be nested `{ c.d = false; }`
+3. Paste in shadowing-preserving substitutions
+4. Add indexing by strings
+5. Add dynamic lookups
+6. Add operators (functions or derivations?)
+
+
+=== Other
+1. Add operator rules (Constraining etc.)
+
+
+
+== Syntax
 #let char = `[^"$\] | $(?!{) | \.`
 #let interstr = `${^}*}`
 #let string = `"(c* inter)* c*`
@@ -20,7 +36,6 @@
 #let label = `[A-Za-z_][A-Za-z0-9_'-]*`
 #let searchpath = `<[A-Za-z_]*>`
 
-== Syntax
 #let basetypes = subbox(caption: "Literals")[
   $
                                   c & ::= char \
