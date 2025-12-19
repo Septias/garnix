@@ -28,6 +28,7 @@
 #let number = "float"
 #let openPat = $⦃oi(l_i : τ_i)⦄^◌$
 #let record = ${oi(l_i : τ_i)}$
+#let label = $l$
 #let manyTypes = $[oi(τ_i)]$
 #let oα = $overline(α)$
 
