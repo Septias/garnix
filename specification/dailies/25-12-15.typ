@@ -16,7 +16,7 @@
 
 
 == Rewrites
-- let-in to let-attribute
+- [x] let-in to let-attribute
 - Path accesses to ?
 - Path definition to ?
 
