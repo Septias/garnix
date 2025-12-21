@@ -1,3 +1,11 @@
+### Extra
+nix-repl> { x.y = 3; x = {z = 3;}; }.x
+{
+  y = 3;
+  z = 3;
+}
+
+
 ### eval-fail-assert-equal-function-direct.nix
 ```nix
 # Note: functions in nested structures, e.g. attributes, may be optimized away by pointer identity optimization.
@@ -326,6 +334,7 @@ in {
 { binds = true; hasAttrs = true; multiAttrs = true; recBinds = true; selectAttrs = true; selectOrAttrs = true; }
 
 ```
+
 ### eval-okay-dynamic-attrs.nix
 
 ```nix
@@ -532,7 +541,7 @@ error: attribute 'x' already defined at «stdin»:6:13
 {x, y, x}: x
 ```
 
-#### Expected 
+#### Expected args.x
 
 ```text
 error: duplicate formal function argument 'x'
@@ -541,15 +550,6 @@ error: duplicate formal function argument 'x'
              |        ^
 
 ```
-
-
-
-### Extra
-nix-repl> { x.y = 3; x = {z = 3;}; }.x
-{
-  y = 3;
-  z = 3;
-}
 
 
 ### parse-fail-patterns-1.nix
@@ -568,4 +568,4 @@ error: duplicate formal function argument 'args'
             2|
 
 ```
-
+args.x

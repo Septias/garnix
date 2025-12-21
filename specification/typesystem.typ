@@ -59,7 +59,7 @@
     #type_name("Has-Attribute-Or") &| t.l #b[or] t \
     #type_name("Record-Concat") &| t "//" t \
     #type_name("Array-Concat") &| t "⧺" t \
-    #type_name("Lookup") &| t "." l \
+    #type_name("Lookup") &| t "." ρ \
     (#type_name("Dynamic-Lookup") &| t "." t )\
     #type_name("Function") &| overline(p) "@ "h : t \
     #type_name("Let-statements") &| #b[let] overline(a\;) #b[in] t \

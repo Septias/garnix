@@ -54,6 +54,11 @@ Context strings allow lookups of the form `a.${t}` where t is allowed to be any 
 This would also mean implementing the standard library functions like map, readToString etc. One ray of hope is that these were probably already implemented in Tvix.
 
 
+== Dunder Function
+- "__overrides__"
+- "__functor__"
+
+
 = Constructs
 == With Statements <with>
 With statements allow introducing all bindings of a record into the following expression. For this, the first expression (A) in $"with " A"; "B$ has to reduce to a record. If that does not work, typing should raise an _error_. For explicit records, the following typing is straightforward. Just introduce all fields to the scope without shadowing and continue typechecking $B$. For the case that A is a type variable, it gets tricky however because of the generic subsumption rule. When A is subtyped like follows $A: {X: "int"} arrow A: {}$, then the field X would not be accessible in the function body.
