@@ -18,7 +18,7 @@ R-Fun-Pat-Open: ich verstehe, was gemeint ist, aber die Verwendung von dem \fora
 
 Bei den -Default Regeln fragt man sich, wo die d_i herkommen. Mit dem "substitute twice" ist es so eine Sache.  Was wenn die ursprünglichen t_j selbst wieder l_is enthalten?
 
-- [ ] Recursive substitution? 
+- [ ] Recursive substitution?
 
 R-Lookup-Default-Neg: was wenn \exists i. l_i = l, aber t_i = null?
 Die Values in Fig. 3 verstehe ich nicht: ok p:t ist ein Lambda, aber was ist x;? und was wird durch {..} abgekürzt? Es fehlt wohl v ::= ...

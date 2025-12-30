@@ -3,7 +3,7 @@
 
 * [~] du hast call-by-need erwähnt. Das ist formal ziemlich nervig und ich würde daher davon abraten (es sei denn du willst etwas über Effizienz beweisen). Stattdessen würde ich call-by-name verwenden. Das ist nämlich observationally equivalent zu call-by-need und formal viel einfacher.
 
-* [ ] in 2.5 ist bei einigen Regeln unklar, welche Indizes eine Wiederholung abkürzen sollen. Manche Autoren verwenden ein overline um das anzudeuten. Beispiel: bei R-Fun-Pat-Default ist mir nicht mehr klar, was genau passieren soll. Mittlerweile ist mir klar, was du willst, aber die Nebenbedingung kannst du so nicht hinschreiben.
+* [x] in 2.5 ist bei einigen Regeln unklar, welche Indizes eine Wiederholung abkürzen sollen. Manche Autoren verwenden ein overline um das anzudeuten. Beispiel: bei R-Fun-Pat-Default ist mir nicht mehr klar, was genau passieren soll. Mittlerweile ist mir klar, was du willst, aber die Nebenbedingung kannst du so nicht hinschreiben.
 
 * [x] was soll das "\l" in R-Lookup-Null? Es ist keine Syntax und ich denke du willst sagen, dass l nicht in dem Record vorkommt. Also so was wie `{ l_i:t_i } .l -> null  if not exists j, l_j = l
 (der "removed" Operator funktioniert da nicht, auch nicht "I use the syntax to create")
@@ -15,7 +15,7 @@
 * [x] R-Array-Concat: auf der rechten Seite sollten doch schon Arrays stehen? Das kommt hier nicht zum Ausdruck
 * [x] R-Record-Concat: dito, 
 
-* 2.7 Unterschied { ...} und <...>
+* 2.7 Unterschied {...} und <...>
 * [x] option type: du braucht keinen allgemeinen option type, sondern nur eine Typsyntax für Funktionsargumente, die wie patterns funktioniert. D.h. im record type darf auch l_i :? \tau vorkommen, aber nur in Funktionsargumenten.
 
 * [x] Patterns und Kinds verstehe ich gerade nicht

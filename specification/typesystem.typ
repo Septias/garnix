@@ -5,25 +5,20 @@
 == Todo
 
 === Theoretical
-1. Explain what to do in lionels systems
+1. Explain what to do in lionells systems
   - Find out if dolan is still an option?
 2. Do I have to force record values?
 3. How are width-constraints reduced?
 
 
-=== Operational Semantics
-1. Document dunder methods
-2. Labels can be nested `{ c.d = false; }`
-3. Paste in shadowing-preserving substitutions
-4. Add indexing by strings
-5. Add dynamic lookups
-6. Add operators (functions or derivations?)
-
-
-=== Other
-1. Add operator rules (Constraining etc.)
-
-
+=== Practical
+1. Paste in shadowing-preserving substitutions
+2. Add dynamic lookups
+3. Add operators (functions or derivations?)
+4. Pattern reduction (algorithmic and declarative)
+5. fix or rule (recursive function)
+6. fix ? rule
+7. Labels can be strings
 
 == Syntax
 #let char = `[^"$\] | $(?!{) | \.`
@@ -96,10 +91,12 @@
     inherit,
     patterns,
     subbox(caption: "Shorthands")[
-      #set math.equation(numbering: "(1)")
-      $ p : t space @ space ε = p : t $
-      $ l space ? space ε : l $
-      $ • ::= #b[or] | "//" | ⧺ | " ? " $
+      // #set math.equation(numbering: "(1)")
+      $
+        p : t space @ space ε & eq.def p : t \
+            l space ? space ε & eq.def l \
+                            • & eq.def #b[or] | "//" | ⧺ | " ? " \
+      $
     ],
   )),
 )
@@ -192,25 +189,47 @@
 )
 #types
 
-== Shorthands
+== Dynamic Lookups
+#let lookups = figure(
+  caption: "Lookup syntax and semantic",
+  rect(
+    width: 100%,
+    inset: 20pt,
+    [
+      ```
+      hasAttrs = { a.b = null; } ? ${aString}.b;
+
+      selectAttrs = { a.b = true; }.a.${bString};
+
+      selectOrAttrs = { }.${aString} or true;
+
+      binds = { ${aString}."${bString}c" = true; }.a.bc;
+
+      recBinds = rec { ${bString} = a; a = true; }.b;
+
+      multiAttrs = { ${aString} = true; ${bString} = false; }.a;
+
+      ```
+    ],
+  ),
+)
+#lookups
+
+== Rewrites
 #let shorthands = figure(
   caption: "Shorthands to morph syntax into a let-attrsets that have a typing rule.",
-  rect(width: 100%, inset: 20pt, many_wrapping_derives(
-    derive(
-      "T-with",
-      (
-        $#b[let] _"with" {overline(#b[nonrec] d)} #b[in] t$,
-      ),
-      $#b[with] {overline(#b[nonrec] d)}; t_2$,
-    ),
-    derive(
-      "T-let-in",
-      (
-        $#b[let] _"abs" {overline(#b[nonrec] d)} #b[in] t$,
-      ),
-      $#b[let] oi(l_i \= t_i\;) #b[in] t$,
-    ),
-  )),
+  rect(
+    width: 100%,
+    inset: 20pt,
+    $
+      #type_name("R-With")&& #b[let] _"with" {overline(#b[nonrec] d)} #b[in] t &arrow.twohead #b[with] {overline(#b[nonrec] d)}; t_2 \
+      #type_name("R-Let-In")&& #b[let] _"abs" {overline(#b[nonrec] d)} #b[in] t &arrow.twohead #b[let] oi(l_i \= t_i\;) #b[in] t \
+      #type_name("R-Rec-Inner")&& { l_1 . l_2 space … space .l_n = t; } &arrow.twohead {l_1 = { l_2 = {l_n = t;};};} \
+      #type_name("R-Str-Dyn")&& t.s &arrow.twohead t.\${s} \
+      #type_name("R-functor")&& {"__functor" = self: x : t } &arrow.twohead x: t
+      #type_name("R-overrides")&& {"__overrides" = x : t } &arrow.twohead x: t
+    $,
+  ),
 )
 #shorthands
 
@@ -427,6 +446,16 @@
         "S-Fun",
         ($lt.tri Σ tack τ_0 <= τ_1$, $lt.tri Σ tack τ_2 <= τ_3$),
         $Σ tack τ_1 arrow.long τ_2 <= τ_0 arrow.long τ_3$,
+      ),
+      derive(
+        "S-Rcd",
+        (),
+        ${arrow(t) : arrow(τ)} eq.triple inter.sq_i {l_i : t_i}$,
+      ),
+      derive(
+        "S-Rcd",
+        (),
+        ${arrow(t) : arrow(τ)} eq.triple inter.sq_i {l_i : t_i}$,
       ),
       derive(
         "S-Rcd",

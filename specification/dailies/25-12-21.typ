@@ -43,7 +43,7 @@ a: b: (with a; with b; b.a)
 
 
 == To: Deep/Shallow Execution
-Using a relation following the operator application is kind of weird. I think it works out, but there should be an easier solution maybe? Kontexs are also very verbose.
+Using a relation following the operator application is kind of weird. I think it works out, but there should be an easier solution maybe? Contexs are also very verbose.
 
 Things that actually need to be deep:
 1. Equality operations (if not short-circuting)

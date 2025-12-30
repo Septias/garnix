@@ -1,10 +1,18 @@
 ### Extra
+```nix
 nix-repl> { x.y = 3; x = {z = 3;}; }.x
 {
   y = 3;
   z = 3;
 }
 
+let x = {inherit x;}; in x
+
+rec {x = y; y = 2;} // rec {y = x; x = 3;}
+{ ${null} = true; } == {}
+
+let a = {} // b; b = {} // a ; in a
+```
 
 ### eval-fail-assert-equal-function-direct.nix
 ```nix
