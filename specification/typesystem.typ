@@ -12,13 +12,11 @@
 
 
 === Practical
-1. Paste in shadowing-preserving substitutions
-2. Add dynamic lookups
-3. Add operators (functions or derivations?)
-4. Pattern reduction (algorithmic and declarative)
-5. fix or rule (recursive function)
-6. fix ? rule
-7. Labels can be strings
+1. Add dynamic lookups
+2. Add operators (functions or derivations?)
+3. Pattern reduction (algorithmic and declarative)
+4. fix or-rule (recursive function)
+5. fix ?-rule
 
 == Syntax
 #let char = `[^"$\] | $(?!{) | \.`
@@ -226,8 +224,9 @@
       #type_name("R-Let-In")&& #b[let] _"abs" {overline(#b[nonrec] d)} #b[in] t &arrow.twohead #b[let] oi(l_i \= t_i\;) #b[in] t \
       #type_name("R-Rec-Inner")&& { l_1 . l_2 space … space .l_n = t; } &arrow.twohead {l_1 = { l_2 = {l_n = t;};};} \
       #type_name("R-Str-Dyn")&& t.s &arrow.twohead t.\${s} \
-      #type_name("R-functor")&& {"__functor" = self: x : t } &arrow.twohead x: t
+      #type_name("R-functor")&& {"__functor" = "self": x : t } &arrow.twohead x: t \
       #type_name("R-overrides")&& {"__overrides" = x : t } &arrow.twohead x: t
+      #type_name("R-global")&& l @ p: t &arrow.twohead p @ l: t
     $,
   ),
 )
