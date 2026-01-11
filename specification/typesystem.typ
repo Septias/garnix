@@ -53,7 +53,7 @@
 
 #let general = subbox(caption: "Terms")[
   $
-    t, t_1, t_2 ::= &| b | s | rho.alt | Rho | n | l | v | "null" \
+    t, t_1, t_2 ::= b &| s | rho.alt | Rho | n | l | v | "null" \
     #type_name("Record") &| {overline(a\;)} | #b[rec] {overline(a\;)} \
     #type_name("Array") &| [ space t_0 space t_1 space ... space t_n space] \
     #type_name("Has-Attribute") &| t #b[ ? ] l \
@@ -70,7 +70,16 @@
   $
 ]
 
-#let inherit = subbox(caption: "Assignment")[
+#let operators = subbox(caption: "Operators")[
+  $
+    #type_name("Algebraic") & t := ... | + | - | * | \/ \
+        #type_name("Logic") & t := ... | -> | ! | "&&" \
+       #type_name("Binary") & t := ... | < | <= | == | "!=" | > | >= \
+        #type_name("Pipes") & t := ... | #b[<|] | #b[|>]
+  $
+]
+
+#let assignment = subbox(caption: "Assignment")[
   $
     #type_name("Inherit") ι & ::= #b[inherit] overline(l\;) | #b[inherit] (ρ) space overline(l\;) \
     #type_name("Path") ρ & ::= l | ρ.l \
@@ -92,9 +101,10 @@
     columns: 2,
     align: left,
     inset: 8pt,
-    grid.cell(rowspan: 3, general),
+    grid.cell(rowspan: 2, general),
+    assignment,
     basetypes,
-    inherit,
+    operators,
     patterns,
     subbox(caption: "Shorthands")[
       // #set math.equation(numbering: "(1)")
