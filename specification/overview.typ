@@ -68,36 +68,13 @@ The second problem is what I call the _attribution problem_. It occurs when ther
 == Dunder Methods
 There seem to be some special dunder methods for representations which are handled specially by the evaluator. I have not had the chance to look into it further.
 An example is the `__functor` field that can be set on a record and lets the function be used as a functor.
-
-
-= Laziness and Recursiveness
-Laziness and recursion occur in two language constructs. The first one being _recursive records_ and the second one being _let bindings_. To evaluate them, a lazy evaluation scheme is needed which is currently implemented as follows:
-When typing a let binding or record, the algorithm adds all name bindings to the context up-front. This way, referenced values will not be undefined when looked up, even if their definition was not type checked yet. The typecheck algorithm then starts with some arbitrary first label $A$ which may contain an unchecked expression labeled $B$.
-When this undefined label $B$ is found, it is simply used to create upper and lower bounds (constraints). For empty type variables that is fine to do, but when we actually check this $B$, it will unfold and be constrained with upper and lower bounds. These bounds are missing on the typecheck run of $A$ then. An example would be `let f = a: a + 1; x = f b; b = "hi" in {}` In this case b would be constrained to be a number (because of the application and its implication) but afterwards it will get its "real" type which is string. Currently, the constraint error would be placed at the wrong location (that of the true definition).
-
-#figure(
-  ```nix
-  rec { x = { x = x;};}.x;       # → { x = «repeated»; }
-  let x = {x = y;}; y = x; in x  # → { x = «repeated»; }
-  ```,
-  caption: [Examples of recursive patterns from the nix repl],
-)
+- `__overrides__`
+- `__functor__`
 
 
 === Shadowing
 Nix with statement has special shadowing behavior in that it does not shadow let-bount variables. An expression `let a = 1; with {a = 2}; a` will thus reduce to 1 instead of two, because a is "not taken from the record". This is a major source of confusion, also, because it behaves differently for stacked with-statemnts. The expression `with {a = 1;}; with {a=2;}; a` will evaluate to 2, because the latest with-statement shadows outer ones.
 
-
-== Finding a Type System
-
-The literatur on type systems is as wide as the ocean with many typesystems studied over the last 70 years of research. Finding a typesystem for a language is thus similar to traversing a jungle with the alluring dangers of getting sidetracked behind every corner. Since records are such a central aspect of the language, starting from them is not a bad idea.
-
-=== Record Theory
-Records have been studied in a variety of papers [..] and can be partitioned in roughly 3 groups. The first model of records is a syntactic model where the syntax defines what a record is. This approach is simple but hard to extend because everything has to be encoded in its syntax. To overcome its shortcommings, \@? studied _row polymorphism_. Row polymorphism extend record with a generic row r, effectively making them polymorphic in their "rest". By extending the row to lacks-predicates not only extension but also restriction of record types can be achieved, giving a lot of flexibility in theory. While strong in theory, their theory gets complex and unwildy fast, making it hard to integrate into fully-fledged type systems. _Semantic subtyping_, developed over multiple years by \@castagna tries to remedie this by shortcomming by giving records a set-theoretic semantic model. By also adding type connectives (negation, union and intersection), his systems are impressively expressive, especially in combination with _gradual typing_. The strength comes of a cost though, namely _backtracking_. Since polymorphic type inference is undecidable in general \@?ref, the model has to rely on backtracking and its performance overhead. It also lacks principle types, a strong selling point of ml-like systems. Last but not least, it is possible to model records in constraint based type system. A record field lookup in these systems produces a constrained which is collected and simplified later. Due to the generality, these systems usually don't exhibit good and effective properties.
-
-Only recently in 2017, Stephen Dolan proposed a new family of type systems, named _algebraic type systems_. These systems tackle language construction from a new point of view. Instead of adding types first and then trying to find a semantic model for them, Dolan argues one should pay more attention to finding a semantic model for the types _first_. The types in _algebraic type systems_ form a distributive lattice (thus algebraic) and inherit the lattice' properties. By further restricting the the occurences for union and intersections to positive and negative positions, a distributive lattice can be constructed that allows for lossless reduction of subtyping constraints. In essence, the system is standart ML, with a lattice of types and unification replaced by bi-unification, a subroutine that handles subtyping constraints instead of equality constraints. The final algorithms for subsumption checking and type inference are short as well as simple, all thanks to the initial focus on well-formed types. The final algorithms inherit the standart ML properties, namely _principled type inference_, no need for type annotations and effectiveness i.e no backtracking.
-
-Since batracking in nix' huge syntax tree that roots in a single file and relies heavily on laziness is insufficient, the properties of algebraic subtyping come as a perfect fit. The formalization of algebraic subtyping depends heavily on order-theory and some form of category theory and the proofs are far from simple @simplesub. Thankfully, @simplesub showed how to get from a algebraic domain to a syntactic one by creating an  equivalent using constraint accumulation on type variables and biunification, making algebraic subtyping more accessible. In the seminal Bachelor Thesis from the first author, he showed how to extend the SimpleSub to the more expressive type system features of nix. Even though the work pintpointed a direction, it oversimplified on the operational semantic and derived type rules, leaving lots of room for improvement.
 
 
 == Comparing Nix Features
@@ -155,6 +132,19 @@ Since the same index $i$ is used for both the argument and pattern in R-Fun-Pat,
 The R-fun-Pat-Default-∗ rules range over pattern elements $e$ which can be either single labels $l$ or labels with a default values like $l : d$. The former case can be converted to the latter with ε-extension transforming $l$ to $l ? ε$ which is equivalent to $l$ due to the shorthands (TODO: can you do this?). The variables of the body are then substituted twice. First with the argument values and then with the default values to "fill the gaps". The open case needs a side-condition analogous to the former open case.
 
 Since ${oi(e_i)}$ strictly subsumes ${oi(l_i)}$ due to its inner structure, rule 2 and 3 are only stated as a mental stepping stone for the reader but not mentioned further.
+
+
+== Finding a Type System
+
+The literatur on type systems is as wide as the ocean with many typesystems studied over the last 70 years of research. Finding a typesystem for a language is thus similar to traversing a jungle with the alluring dangers of getting sidetracked behind every corner. Since records are such a central aspect of the language, starting from them is not a bad idea.
+
+=== Record Theory
+Records have been studied in a variety of papers [..] and can be partitioned in roughly 3 groups. The first model of records is a syntactic model where the syntax defines what a record is. This approach is simple but hard to extend because everything has to be encoded in its syntax. To overcome its shortcommings, \@? studied _row polymorphism_. Row polymorphism extend record with a generic row r, effectively making them polymorphic in their "rest". By extending the row to lacks-predicates not only extension but also restriction of record types can be achieved, giving a lot of flexibility in theory. While strong in theory, their theory gets complex and unwildy fast, making it hard to integrate into fully-fledged type systems. _Semantic subtyping_, developed over multiple years by \@castagna tries to remedie this by shortcomming by giving records a set-theoretic semantic model. By also adding type connectives (negation, union and intersection), his systems are impressively expressive, especially in combination with _gradual typing_. The strength comes of a cost though, namely _backtracking_. Since polymorphic type inference is undecidable in general \@?ref, the model has to rely on backtracking and its performance overhead. It also lacks principle types, a strong selling point of ml-like systems. Last but not least, it is possible to model records in constraint based type system. A record field lookup in these systems produces a constrained which is collected and simplified later. Due to the generality, these systems usually don't exhibit good and effective properties.
+
+Only recently in 2017, Stephen Dolan proposed a new family of type systems, named _algebraic type systems_. These systems tackle language construction from a new point of view. Instead of adding types first and then trying to find a semantic model for them, Dolan argues one should pay more attention to finding a semantic model for the types _first_. The types in _algebraic type systems_ form a distributive lattice (thus algebraic) and inherit the lattice' properties. By further restricting the the occurences for union and intersections to positive and negative positions, a distributive lattice can be constructed that allows for lossless reduction of subtyping constraints. In essence, the system is standart ML, with a lattice of types and unification replaced by bi-unification, a subroutine that handles subtyping constraints instead of equality constraints. The final algorithms for subsumption checking and type inference are short as well as simple, all thanks to the initial focus on well-formed types. The final algorithms inherit the standart ML properties, namely _principled type inference_, no need for type annotations and effectiveness i.e no backtracking.
+
+Since batracking in nix' huge syntax tree that roots in a single file and relies heavily on laziness is insufficient, the properties of algebraic subtyping come as a perfect fit. The formalization of algebraic subtyping depends heavily on order-theory and some form of category theory and the proofs are far from simple @simplesub. Thankfully, @simplesub showed how to get from a algebraic domain to a syntactic one by creating an  equivalent using constraint accumulation on type variables and biunification, making algebraic subtyping more accessible. In the seminal Bachelor Thesis from the first author, he showed how to extend the SimpleSub to the more expressive type system features of nix. Even though the work pintpointed a direction, it oversimplified on the operational semantic and derived type rules, leaving lots of room for improvement.
+
 
 
 = Type System
