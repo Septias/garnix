@@ -22,40 +22,38 @@
 1. Fix
 
 == Syntax
-#let interpol = "${ t }"
-
-#let strChar = `[^"$\\]|\$(?!\{)|\\.`
-#let string = `"(strChar* interpol)* strChar*"`
-#let iStrChr = ```
-[^$']|\$\$|\$(?!\{)|
-
-''[$']|''\\.|'(?!')
-```
-#let identStr = `''(iStrChr* interpol)* iStrChr*''`
-#let boolean = `true | false`
-#let filepath = `(./|~/|/)([a-zA-Z.]+/?)+`
-#let number = `([0-9]*.)?[0-9]+`
-#let label = `[A-Za-z_][A-Za-z0-9_'-]*`
-#let searchpath = `<[A-Za-z_]*>`
 
 #let basetypes = subbox(caption: "Literals")[
+  #show raw: set text(fill: red)
+
+  #let strChar = `[^"$\\]|\$(?!\{)|\\.`
+  #let iStrChr = `[^$']|\$\$|\$(?!\{)|''[$']|''\\.|'(?!')`
+
+  #let interpol = `${ t }`
+  #let string = `"(c* interpol)* c*"`
+  #let boolean = `true | false`
+  #let filepath = `(./|~/|/)([a-zA-Z.]+/?)+`
+  #let number = `([0-9]*.)?[0-9]+`
+  #let label = `[A-Za-z_][A-Za-z0-9_'-]*`
+  #let searchpath = `<[A-Za-z_]*>`
+
   $
-             #type_name("interpol") & ::= interpol \
-              #type_name("strChar") & ::= strChar \
+           #type_name("interpol") i & ::= interpol \
              #type_name("String") s & ::= string \
-             #type_name("iStrChar") & ::= iStrChr \
-       #type_name("Ident String") s & ::= identStr \
+                                    & "where" c ::= strChar \
+       #type_name("Ident String") s & ::= string \
+                                    & "where" c ::= "omitted" \
             #type_name("Boolean") b & ::= boolean \
     #type_name("File-Path") rho.alt & ::= filepath \
              #type_name("Number") n & ::= number \
               #type_name("Label") l & ::= label \
-        #type_name("Search Path") l & ::= searchpath \
+      #type_name("Search Path") Rho & ::= searchpath \
   $
 ]
 
 #let general = subbox(caption: "Terms")[
   $
-    t, t_1, t_2 ::= &| b | s | rho.alt | n | l | v | "null" \
+    t, t_1, t_2 ::= &| b | s | rho.alt | Rho | n | l | v | "null" \
     #type_name("Record") &| {overline(a\;)} | #b[rec] {overline(a\;)} \
     #type_name("Array") &| [ space t_0 space t_1 space ... space t_n space] \
     #type_name("Has-Attribute") &| t #b[ ? ] l \
@@ -90,7 +88,7 @@
 
 #let syntax = figure(
   caption: "Subset of Nix Syntax.",
-  rect(width: 110%, grid(
+  rect(width: 100%, grid(
     columns: 2,
     align: left,
     inset: 8pt,
