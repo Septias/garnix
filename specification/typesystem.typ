@@ -18,11 +18,20 @@
 4. fix or-rule (recursive function)
 5. fix ?-rule
 
+=== Low-hanging
+1. Fix
+
 == Syntax
-#let char = `[^"$\] | $(?!{) | \.`
-#let interstr = `${^}*}`
-#let string = `"(c* inter)* c*`
-#let identstring = `''todo''`
+#let interpol = "${ t }"
+
+#let strChar = `[^"$\\]|\$(?!\{)|\\.`
+#let string = `"(strChar* interpol)* strChar*"`
+#let iStrChr = ```
+[^$']|\$\$|\$(?!\{)|
+
+''[$']|''\\.|'(?!')
+```
+#let identStr = `''(iStrChr* interpol)* iStrChr*''`
 #let boolean = `true | false`
 #let filepath = `(./|~/|/)([a-zA-Z.]+/?)+`
 #let number = `([0-9]*.)?[0-9]+`
@@ -31,10 +40,11 @@
 
 #let basetypes = subbox(caption: "Literals")[
   $
-                                  c & ::= char \
-                            "inter" & ::= interstr \
+             #type_name("interpol") & ::= interpol \
+              #type_name("strChar") & ::= strChar \
              #type_name("String") s & ::= string \
-       #type_name("Ident String") s & ::= identstring \
+             #type_name("iStrChar") & ::= iStrChr \
+       #type_name("Ident String") s & ::= identStr \
             #type_name("Boolean") b & ::= boolean \
     #type_name("File-Path") rho.alt & ::= filepath \
              #type_name("Number") n & ::= number \
@@ -80,7 +90,7 @@
 
 #let syntax = figure(
   caption: "Subset of Nix Syntax.",
-  rect(width: 100%, grid(
+  rect(width: 110%, grid(
     columns: 2,
     align: left,
     inset: 8pt,
