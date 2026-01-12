@@ -13,13 +13,9 @@
 
 === Practical
 1. Add dynamic lookups
-2. Add operators (functions or derivations?)
-3. Pattern reduction (algorithmic and declarative)
-4. fix or-rule (recursive function)
-5. fix ?-rule
-
-=== Low-hanging
-1. Fix
+2. Pattern reduction (algorithmic and declarative)
+3. fix or-rule (recursive function)
+4. fix ?-rule
 
 == Syntax
 

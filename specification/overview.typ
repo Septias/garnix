@@ -1,6 +1,7 @@
 #import "functions.typ": *
 #import "comparison.typ": comparison
 #import "typesystem.typ": *
+#import "builtin-types.typ": types
 
 #set heading(numbering: "1.")
 #set page(height: auto)
@@ -40,41 +41,57 @@ When using the nix package manager, declarative configuration management is the 
 Combining all these features, the nix language is a wild zoo of constructs, theoretical properties and poses tricky shadowing and termination properties because of the combination thereof.
 
 == Quirks of the Nix Language
-In this section we look more closely on nix specific features and their suprising interactions.
+The following section gives a briev overview of nix-specific language features and their suprising interactions. Nix follows one inherent design principle: allow at most as possible and make it lazy. And while doing so, provide as many nice-to-have features as possible.
 
-=== Laziness
-Laziness is an ~existential nix feature since without it, the package manager would be unpractically slow. Nix adds lazyiness virtually everywhere: record-fields, functions, let-bindings, arrays, and patterns.
+
+== Lazy & Recursive
+Laziness is an existential nix feature since without it, the package manager would be unpractically slow. This is why it existists in plenty of positions: record-fields, let-bindings, arrays, and patterns.
+
+#figure(
+  ```nix
+  rec { x = { x = x;};}.x;       # → { x = «repeated»; }
+  let x = {x = y;}; y = x; in x  # → { x = «repeated»; }
+  ```,
+  caption: [Examples of recursive patterns from the nix repl],
+)
+
 
 == Context Strings
 Context strings and dynamic lookup share the same syntax in that you can insert some arbitrary term `t` into braces with the following syntax `${t}`. For ordinary strings and paths, the value of `t` will be coerced into a string and added literally. From a typing perspective, this is the easy case because inserted values get a constraint of string and that's it. For dynamic lookup it gets trickier though.
 
+#figure(
+  ```nix
+  {
+    hasAttrs = { a.b = null; } ? ${aString}.b;
+
+    selectAttrs = { a.b = true; }.a.${bString};
+
+    selectOrAttrs = { }.${aString} or true;
+
+    binds = { ${aString}."${bString}c" = true; }.a.bc;
+
+    recBinds = rec { ${bString} = a; a = true; }.b;
+
+    multiAttrs = { ${aString} = true; ${bString} = false; }.a;
+  }
+  ```,
+  caption: [Examples of recursive patterns from the nix repl],
+)
 
 == Dynamic Lookup <dynamic_lookup>
 Context strings allow lookups of the form `a.${t}` where t is allowed to be any expression that ultimately reduces to a string. The reduced string is then used to index the record which a is supposed to be. Since a type system only computes a type and not the actual value, the only possible approach to handle first-class labels is to evaluate nix expressions to some extent. Writing a full evaluator is probably too much, but there could be heuristics for simple evaluation. One approach would be to work backwards from return statements in functions up until it gets too unwieldy.
 This would also mean implementing the standard library functions like map, readToString etc. One ray of hope is that these were probably already implemented in Tvix.
 
 
-== Dunder Function
-- "__overrides__"
-- "__functor__"
-
-
-= Constructs
-== With Statements <with>
+== With Statements & Inherit <with>
 With statements allow introducing all bindings of a record into the following expression. For this, the first expression (A) in $"with " A"; "B$ has to reduce to a record. If that does not work, typing should raise an _error_. For explicit records, the following typing is straightforward. Just introduce all fields to the scope without shadowing and continue typechecking $B$. For the case that A is a type variable, it gets tricky however because of the generic subsumption rule. When A is subtyped like follows $A: {X: "int"} arrow A: {}$, then the field X would not be accessible in the function body.
 The second problem is what I call the _attribution problem_. It occurs when there is a chain of with statements $"with "A; ("with "B;) t$ and A and B are type variables. Now when trying to lookup $x$ in t, it is unclear whether x came from B or A.
+Nix with statement has special shadowing behavior in that it does not shadow let-bound variables. An expression `let a = 1; with {a = 2}; a` will thus reduce to 1 instead of two, because a is "not taken from the record". This is a major source of confusion, also, because it behaves differently for stacked with-statemnts. The expression `with {a = 1;}; with {a=2;}; a` will evaluate to 2, because the latest with-statement shadows outer ones.
 
 
 == Dunder Methods
-There seem to be some special dunder methods for representations which are handled specially by the evaluator. I have not had the chance to look into it further.
-An example is the `__functor` field that can be set on a record and lets the function be used as a functor.
 - `__overrides__`
 - `__functor__`
-
-
-=== Shadowing
-Nix with statement has special shadowing behavior in that it does not shadow let-bount variables. An expression `let a = 1; with {a = 2}; a` will thus reduce to 1 instead of two, because a is "not taken from the record". This is a major source of confusion, also, because it behaves differently for stacked with-statemnts. The expression `with {a = 1;}; with {a=2;}; a` will evaluate to 2, because the latest with-statement shadows outer ones.
-
 
 
 == Comparing Nix Features
@@ -111,20 +128,27 @@ $oi(E)$ denotes $0 … n$ repititions of a syntax construct and the index $i$ is
 
 #syntax
 
-Nix supports the usual _literals_ of fully fledged languages as well as a multi-line string and paths. The syntax is given following the official regex formulas to follow the specification @nix-language-2-28. _Records_ follow a standart notation where multiple fields can be defined using `key = value;` assignments to define multiple fields. In addition, records can be marked _recursive_ with the `rec` keyword and are non-recursive otherwise. _Arrays_ are introduced in a similar fashion where multiple values can be concatenated with the only unintuitive nix-specific distinction that a space is used as seperator. Both datatypes are generally _immutable_, but there are concat operations (Record-Concat and Array-Concat) that can be used to create new, bigger datatypes. Other than that, records come equipped with the usual lookup syntax and two specialities. The first being a dynamic label check that returns a boolean as a result and secondly, a way to specify a default value in case the previous check turned out to be negative.
+Nix supports the usual _literals_ of fully fledged languages as well as a multi-line string and paths. The syntax is given following the official regex formulas to follow the specification @nix-language-2-28. _Records_ follow a standart notation where multiple fields can be defined using `key = value;` assignments to define multiple fields. In addition, records can be marked _recursive_ with the `rec` keyword and are non-recursive otherwise. _Arrays_ are introduced in a similar fashion, where multiple values can be concatenated with the only unintuitive nix-specific distinction that a space is used as seperator. Both datatypes are generally _immutable_, but there are concat operations (Record-Concat and Array-Concat) that can be used to create new, bigger datatypes. Other than that, records come equipped with the usual lookup syntax and two specialities. The first being a dynamic label check that returns a boolean as a result and secondly, a way to specify a default value in case the previous check turned out to be negative.
 
-Functions take one argument, a _pattern_. This pattern can be a single label or adher to a _record-like_ structure, allowing multiple fields to be present, possibly with _default arguments_. This way a function taking multiple arguments can be created without resorting to currying. These functions can then be called with a record from which the "single arguments" are taken. This forms a neat syntax ambiguity where function definitions and their supplied arguments can be read as functions taking records or as elaborate functions with multiple arguments and possibly default arguments.
-Patterns can alse be marked _open_ with the ellipsis (…), otherwise their are regarded as _closed_. Thye can also be given default arguments with the `?` syntax. An example would be `{a, b ? "pratt", …}` which is an _open_ pattern with a default value of "pratt" for the label $b$.
+Functions take one argument, a _pattern_. This pattern can be a single label or adher to a _record-like_ structure, allowing multiple fields to be present, possibly with _default arguments_. This way a function taking multiple arguments can be created without resorting to currying. These functions can be called with a record from which the "single arguments" are taken and form a neat syntax ambiguity where function definitions and their supplied arguments can be read as functions taking records or as elaborate functions with multiple arguments and possibly default arguments.
+Patterns can be marked _open_ with the ellipsis (…), otherwise their are regarded as _closed_. Arguments can be gievn a defautl value using the `?` syntax. The examplary function pattern `{a, b ? "pratt", …}` is an _open_ pattern with a default value of "pratt" for the label $b$ and a mandatory argument $a$.
 
-Let-expressions can have multiple bindings $a_1 = t_1; … ; a_n = t_n$ before the `in` keyword appears, possibly referencing each other in a _recursive way_. Both let-statements and records allow _inherit statements_ to be placed between ordinary field declarations. Inherit statements take a known label for a value and _reintroduce_ the label as "label = value;" to the record or let expression. This feature is only syntactic sugar to build records and let-expressions easier and does not complicate the typesystem.
+Let-expressions can consist of multiple bindings $a_1 = t_1; … ; a_n = t_n$, possibly referencing each other in a _recursive way_. Both let-statements and records allow _inherit statements_ to be placed between ordinary field declarations. Inherit statements take a known label for a value and _reintroduce_ the label as "label = value;" to the record or let expression.
+
 Let statements can also take a root path $p$ which is prefixed to all following labels. This way, a deep record can be referenced from which all values are taken. For example, the statement `inherit (world.objects.players) robert anders;` will desugar to `robert = world.objects.players.robert; anders = world.objects.players.anders;` in the surrounding record or let-expression.
 
 The _with statement_ expects an arbitrary expression that reduces to a record. Every field from this record is then added to the scope of the next expression without shadowing existing variables. This is further discussed in @with.
 
+=== Paths
+There are three different syntactic objects that deserve the name `path` in our formalization. The first one is the syntactic path-object $rho.alt$ that points to a location in a filesystem. A path can be _absolute_, starting with a `/`, _relative_ from the home directory `~/` or relative to the file where it is stated `./`. All tese notations are standart in the linux world. The second construct is a search-path Roh of the form `<nixpkgs>`, where everything entangled is looked up in the static path `todo`. The usecase of this construct is to easily refer to a package entry that is assumed to be "globally accessible" – a quality of life feature.
+
+The last path-like construct is a sequence of record accesses ρ `r.l.l.l` that "reach" to a field of a deeply nested record like `{a: {b: {c: {}}}}`. It is to note that even though nix does have a null-type, lookups of fields that do not exist immediately trigger an error instead of return null. To mitigate unwanted exception raising it is possible to check for
+
+
+
 == Reduction Rules
 
 #reduction <reduction>
-
 
 Since nix supports patterns with default values and the _open_ modifiers, the function reduction rules become quite verbose. The simplest case is R-Fun which takes an argument t₁ and replaces the occurences of $l$ with said argument in the function body t₂. The next function rules R-Fun-Pat-∗ reduces functions taking patterns, the R-Fun-Pat being the simplest of such. We draw i,j from the index Set ℐ and range them over labels such that if i = j then l_i = l_j.
 Since the same index $i$ is used for both the argument and pattern in R-Fun-Pat, they must agree on the same labels which resembles closed-pattern function calls. In the contrary case where the pattern is open, the argument-record can range over arbitray labels (possibly more than in the pattern). In this case, the side-condition enforces that at least the pattern fields are present (R-Fun-Pat-Open).
@@ -166,7 +190,6 @@ Lastely, we add a single type for patterns. Even thought a pattern is similar in
 
 
 #constraining <constraining>
-
 
 
 #page[
