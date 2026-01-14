@@ -1,0 +1,64 @@
+
+
+@inproceedings{gentle_intro,
+author = {Castagna, Giuseppe and Frisch, Alain},
+title = {A gentle introduction to semantic subtyping},
+year = {2005},
+isbn = {1595930906},
+publisher = {Association for Computing Machinery},
+address = {New York, NY, USA},
+url = {https://doi.org/10.1145/1069774.1069793},
+doi = {10.1145/1069774.1069793},
+abstract = {Subtyping relations are usually defined either syntactically by a formal system or semantically by an interpretation of types into an untyped denotational model. In this work we show step by step how to define a subtyping relation semantically in the presence of functional types and dynamic dispatch on types, without the complexity of denotational models, and how to derive a complete subtyping algorithm. It also provides a recipe to add set-theoretic union, intersection, and negation types to your favourite language.The presentation is voluntarily kept informal and discursive and the technical details are reduced to a minimum since we rather insist on the motivations, the intuition, and the guidelines to apply the approach.},
+booktitle = {Proceedings of the 7th ACM SIGPLAN International Conference on Principles and Practice of Declarative Programming},
+pages = {198–208},
+numpages = {11},
+keywords = {union, typing, subtyping, negation types, intersection},
+location = {Lisbon, Portugal},
+series = {PPDP '05}
+}
+
+@article{typing_records_etc,
+author = {Castagna, Giuseppe},
+title = {Typing Records, Maps, and Structs},
+year = {2023},
+issue_date = {August 2023},
+publisher = {Association for Computing Machinery},
+address = {New York, NY, USA},
+volume = {7},
+number = {ICFP},
+url = {https://doi.org/10.1145/3607838},
+doi = {10.1145/3607838},
+abstract = {Records are finite functions from keys to values. In this work we focus on two main distinct usages of records: structs and maps. The former associate different keys to values of different types, they are accessed by providing nominal keys, and trying to access a non-existent key yields an error. The latter associate all keys to values of the same type, they are accessed by providing expressions that compute a key, and trying to access a non-existent key usually yields some default value such as Null or nil. Here, we propose a type theory that covers both kinds of usage, where record types may associate to different types either single keys (as for structs) or sets of keys (as for maps) and where the same record expression can be accessed and used both in the struct-like style and in the map-like style we just described. Since we target dynamically-typed languages our type theory includes union and intersection types, characterized by a subtyping relation. We define the subtyping relation for our record types via a semantic interpretation and derive the decomposition rules to decide it, define a backtracking-free subtyping algorithm that we prove to be correct, and provide a canonical representation for record types that is used to define various type operators needed to type record operations such as selection, concatenation, and field deletion.},
+journal = {Proc. ACM Program. Lang.},
+month = aug,
+articleno = {196},
+numpages = {44},
+keywords = {dictionaries, dynamic languages, intersection types, subtyping, union types}
+}
+/*
+
+They also identify static typing of record concatenation as a particularly difficult problem because of label conflicts.
+
+types record concatenation by solving subtyping constraint systems in which the type “Abs” for undefined fields is separated from all other types,
+
+*/
+
+@article{poly_records,
+author = {Castagna, Giuseppe and Peyrot, Lo\"{\i}c},
+title = {Polymorphic Records for Dynamic Languages},
+year = {2025},
+issue_date = {April 2025},
+publisher = {Association for Computing Machinery},
+address = {New York, NY, USA},
+volume = {9},
+number = {OOPSLA1},
+url = {https://doi.org/10.1145/3720497},
+doi = {10.1145/3720497},
+abstract = {We study row polymorphism for records types in systems with set-theoretic types, specifically, union, intersection, and negation types. We consider record types that embed row variables and define a subtyping relation by interpreting record types into sets of record values, and row variables into sets of rows, that is, “chunks” of record values where some record keys are left out: subtyping is then containment of the interpretations.   We define a λ-calculus equipped with operations for field extension, selection, and deletion, its operational semantics, and a type system that we prove to be sound. We provide algorithms for deciding the typing and subtyping relations, and to decide whether two types can be instantiated to make one subtype of the other.           This research is motivated by the current trend of defining static type systems for dynamic languages and, in our case, by an ongoing effort of endowing the Elixir programming language with a gradual type system.},
+journal = {Proc. ACM Program. Lang.},
+month = apr,
+articleno = {132},
+numpages = {28},
+keywords = {intersection types, record types, row polymorphism, subtyping, union types}
+}

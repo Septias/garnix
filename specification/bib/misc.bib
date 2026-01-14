@@ -45,34 +45,6 @@ keywords = {Type Inference, Subtyping, Polymorphism, Algebra}
 }
 
   
-@article{10.1145/3607838,
-author = {Castagna, Giuseppe},
-title = {Typing Records, Maps, and Structs},
-year = {2023},
-issue_date = {August 2023},
-publisher = {Association for Computing Machinery},
-address = {New York, NY, USA},
-volume = {7},
-number = {ICFP},
-url = {https://doi.org/10.1145/3607838},
-doi = {10.1145/3607838},
-abstract = {Records are finite functions from keys to values. In this work we focus on two main distinct usages of records: structs and maps. The former associate different keys to values of different types, they are accessed by providing nominal keys, and trying to access a non-existent key yields an error. The latter associate all keys to values of the same type, they are accessed by providing expressions that compute a key, and trying to access a non-existent key usually yields some default value such as Null or nil. Here, we propose a type theory that covers both kinds of usage, where record types may associate to different types either single keys (as for structs) or sets of keys (as for maps) and where the same record expression can be accessed and used both in the struct-like style and in the map-like style we just described. Since we target dynamically-typed languages our type theory includes union and intersection types, characterized by a subtyping relation. We define the subtyping relation for our record types via a semantic interpretation and derive the decomposition rules to decide it, define a backtracking-free subtyping algorithm that we prove to be correct, and provide a canonical representation for record types that is used to define various type operators needed to type record operations such as selection, concatenation, and field deletion.},
-journal = {Proc. ACM Program. Lang.},
-month = aug,
-articleno = {196},
-numpages = {44},
-keywords = {dictionaries, dynamic languages, intersection types, subtyping, union types}
-}
-
-
-/*
-
-They also identify static typing of record concatenation as a particularly difficult problem because of label conflicts.
-
-types record concatenation by solving subtyping constraint systems in which the type “Abs” for undefined fields is separated from all other types,
-
-*/
-
 @manual{nix-language-2-28,
   title        = {Nix Language — Nix 2.28 Reference Manual},
   organization = {Nix.dev},
