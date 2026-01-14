@@ -1,4 +1,4 @@
-#import "./functions.typ": *
+#import "../functions.typ": *
 
 
 #let types = table(
@@ -20,7 +20,9 @@
   [| catAttrs `attr list`      ], $ str -> [oj(record)_j] -> todo([oj(τ_j)]) $,
   [) ceil `double`             ], $ number -> int $,
   [compareVersions `s1 s2`     ], $ str -> str -> (-1 ∨ 0 ∨ 1) $,
-  [| concatLists `lists`       ], $ [oj([oi(τ_i)])] -> [oi(τ_(i 1)) … oi(τ_(i j))] $,
+  [| concatLists `lists`       ],
+  $ [oj([oi(τ_i)])] -> [oi(τ_(i 1)) … oi(τ_(i j))] $,
+
   [concatMap `f list`          ], $ (α -> β) -> [α] -> [β] $,
   [concatStringsSep `sep list` ], $ str -> [str] -> str $,
   [convertHash `args`          ], $ str -> str $,

@@ -1,5 +1,5 @@
 #import "functions.typ": *
-#import "comparison.typ": comparison
+#import "./snips/comparison.typ": comparison
 #set page(height: auto)
 
 == Todo
