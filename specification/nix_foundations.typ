@@ -79,7 +79,9 @@ This is a non-trivial feature, because it allows for (arguably unneccessary) rec
 ) <module_example>
 
 == Context Strings
-Context strings and dynamic lookup share the same syntax in that you can insert some arbitrary term `t` into braces with the following syntax `${t}`. For ordinary strings and paths, the value of `t` will be coerced into a string and added literally. From a typing perspective, this is the easy case because inserted values get a constraint of string and that's it. For dynamic lookup it gets trickier though.
+Context strings are a common feature in mondern programming lanugages, because of their handyness aggregate substrings into complex strings. In nix, the syntax `${t}` is used to create a string  For ordinary strings and paths, the value of `t` will be coerced into a string and added literally.
+
+Context strings allow lookups of the form `a.${t}` where t is allowed to be any expression that ultimately reduces to a string. The reduced string is then used to index the record which a is supposed to be.
 
 #figure(
   ```nix
@@ -100,15 +102,6 @@ Context strings and dynamic lookup share the same syntax in that you can insert 
   caption: [Examples of recursive patterns from the nix repl],
 )
 
-== Dynamic Lookup <dynamic_lookup>
-Context strings allow lookups of the form `a.${t}` where t is allowed to be any expression that ultimately reduces to a string. The reduced string is then used to index the record which a is supposed to be. Since a type system only computes a type and not the actual value, the only possible approach to handle first-class labels is to evaluate nix expressions to some extent. Writing a full evaluator is probably too much, but there could be heuristics for simple evaluation. One approach would be to work backwards from return statements in functions up until it gets too unwieldy.
-This would also mean implementing the standard library functions like map, readToString etc. One ray of hope is that these were probably already implemented in Tvix.
-
-
-== With Statements & Inherit <with>
-With statements allow introducing all bindings of a record into the following expression. For this, the first expression (A) in $"with " A"; "B$ has to reduce to a record. If that does not work, typing should raise an _error_. For explicit records, the following typing is straightforward. Just introduce all fields to the scope without shadowing and continue typechecking $B$. For the case that A is a type variable, it gets tricky however because of the generic subsumption rule. When A is subtyped like follows $A: {X: "int"} arrow A: {}$, then the field X would not be accessible in the function body.
-The second problem is what I call the _attribution problem_. It occurs when there is a chain of with statements $"with "A; ("with "B;) t$ and A and B are type variables. Now when trying to lookup $x$ in t, it is unclear whether x came from B or A.
-Nix with statement has special shadowing behavior in that it does not shadow let-bound variables. An expression `let a = 1; with {a = 2}; a` will thus reduce to 1 instead of two, because a is "not taken from the record". This is a major source of confusion, also, because it behaves differently for stacked with-statemnts. The expression `with {a = 1;}; with {a=2;}; a` will evaluate to 2, because the latest with-statement shadows outer ones.
 
 
 == Dunder Methods
