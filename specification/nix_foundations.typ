@@ -17,7 +17,7 @@
 )
 
 = Securing Nix' Foundations
-The Nix programming language is used in over 100.000 files, showing its prominance, but was neglected in theorectical work until recentently when work was picked up indepentently by S. Klähn and Breokhoff et. al. @verified @simplenix. Both works gave a reduced syntax definition and operational semantic to account for their uses, not the language in their full expressiveness.
+The Nix programming language is used in over 100.000 files, showing its prominance, but was neglected in theorectical work until recentently when work was picked up indepentently by S. Klähn and Breokhoff et. al. @verified @simplenix. Both works gave a reduced syntax definition and operational semantic to account for their uses, but not the language in their full expressiveness. This work closes the gap by showing nix in its full expressiveness.
 
 
 = Origin of the Nix Language <intro>
@@ -36,32 +36,47 @@ When using the nix package manager, declarative configuration management is the 
 Combining all these features, the nix language is a wild zoo of constructs, theoretical properties and poses tricky shadowing and termination properties because of the combination thereof.
 
 == Quirks of the Nix Language
-The following section gives a briev overview of nix-specific language features and their suprising interactions. Nix follows one inherent design principle: allow at most as possible and make it lazy. And while doing so, provide as many nice-to-have features as possible.
+The following section gives a briev overview of nix-specific language features and their suprising interactions.
+
+The nix programming language heavily resolves around records. A primitive record is a set of key-value bindings like `{a = 2; b = 3;}` but by adding the `rec` keyword in front, record fields are allowed to reference each other like `rec {a = b; b = 2}; -> {a = 2; b = 2;}`. Using self-referencial records and the lazyness of the language, it is then possible to all kinds of infinite recursion, not all of them well-behaved. A bad example is the directly recursive `rec {x = x;}` or mutual recursive `rec {a = b; b = a;}`. Whilest the first definition is rejected by the interpreter instantaneously because `x` is unknown, the second definition does not have such a problem. It still fails because of infinite recursion during reduction by the evaluator that raises an error instead of diverging. To form a well-behaved recursive definitions, one has to utility nix' lazyness and go through a lazy constructor like a record, array, pattern-field or let-binding. Consequently, both `rec {x = {x = x;}}` and `let x = {x = y;}; y = x; in x` don't result in erronous program termination and can be unrolled indefinitely in their x-field.
+
+The let-binding of the second example is very similar to a recursive record in that it allows for _multiple_, possibly mutal-referencial bindings, `let a = b; b = 2 in b`. It is also not permitted to create mutual recursive non-constructice recursion like `let a = b; b = 2; in b`, because, again, there is no lazy constructor that remedies infinite computation. Their similarity is best shown by the let-rec-in-binding `let {a = 2; b = 3;} in t` that encloses the semicolor-seperated key-value bindings of the usual let-binding in braces. It is trivial to see that both forms can be rewritten to one another by removing or adding the enclosing braces, rendering the latter notation valid, but obsolete.
+The remaining difference between the two is, that a record definition is a terminating expression whilest a let-binding is followed by an arbitrary possibly diverging computation. This subtle difference can be partially removed using the with-construct. The with construct is a nix-specific feature that takes a record as first "operand" and "opens" it in the following expression, adding all the bindings to the scope. It is thus possible to write `with {a = 2; b = 2;}; a + 2` to compute the sum of two record-fields.
+By using the with-construct in conjunction with records, it were in theory possible to form an equivalence between the two like this: `with (rec {a = b; b = 2}); t == let {a = b; b = 2} in t` – if it werent for with' unexpected shadowing behaviour.
+
+A with statement binds weakly, meaning it will not shadow any binding that was added by any other means. An expression like `let a = 2; in (with {a = 3;}; a)` will thus evaluate to 2 instead of 3 even though `a = 3;` binds "after" the initial binding of `a = 2;`. Similar is the case for function bindings `a: (with {a = 2;}; a) arrow.squiggly a`, inherited bindings, and records `rec {a = 3; b = (with {a=4}; a);}`. When stacking with-bindings, the shadowing behaviour is as expected: `with {a=1;}; with {a=2;}; a -> 2`.
 
 
-== Lazy & Recursive
-Laziness is an existential nix feature since without it, the package manager would be unpractically slow. This is why it existists in plenty of positions: record-fields, let-bindings, arrays, and patterns.
+The reason for this unexpected shadowing behaviour is the intended use as a mean to simulate a module system. From a module-perspective, a record encapsulates its definitions and by using the width-statement, one can open a module, effectively adding all its definitions to the following expression. Since modules tend to have quite a lot of definitions, their binding was weakened such that they don't overwrite locals. The "module-system" shows its full potential when used together with the builtin `import` function, that takes a file, evaluates the content and returns the computed value. Using these two constructs in unison, one can import a fiel `modules.nix` and make all its definitions available in the following scope `with (import modules.nix);`, very similar to a global module import.
+
+The import-statement can occurre anywhere in the syntax-tree, including recursive functions, struct-fields, arrays and literally every other construct. Since the import statement will "fill in" the files evaluated content quite literally, it is possible to follow the statement up with an arbitrary value. A statement like `import ./modulse.nix {system = "nixos_x86"}` will then first evalute the file `modules.nix` and interprete the following term as an argument to a function, resulting in a function application. The integrity of functions in files is not checked statically, but it is a frequently used pattern in the community. To illustrate the point, see @module_example for a full example.
+
+Calling a function with a record enjoys its own syntactic sugar. By using a _pattern-function_ , one can destructure a given record-argument into its fields, giving a semantic with functions that can take multiple arguments, possibly with default-arguments. If we think of the record constructor `{}` as introduction-rule, then functions with patterns are the logical equivalent that eliminate them. It is thus a natural choice to encapsulate function patterns in the very same brackets that records use. A function with the signature `{a, b}: a + b` expects one argument of record-type and "extracts" the fields a, b from it, making them accessible in the function body. Together, records and pattern-functions act as inverses to one another `({a}: a) {a} == a`.
+
+A function pattern in the primitive case `{a, b}: a` will expect exactly the fields a and b in a given record argument. But this is not all of it, since it is also possible to create open patterns like `{a, ...}` that only require a single field a and allow the argument to have arbitrary many other fields. Likewise, one can give default arguments `{a ? "nikita", ...}` that are supplied in case the argument lacks said field. An unexpected behaviour of patterns is their lazyness and recursiveness, closing the cycle to the introduction. Similar to records and let-bindings, a patterns which shares a similar brace-notation, can refer to other fields and is lazy in default-arguments.
+
+This is a non-trivial feature, because it allows for (arguably unneccessary) recursion in patterns `{a ? b, b }: a` and monstrosities like these `({a ? (with {b = 2;}; b), b }: a){b = 2;}` that make shadowing behaviour and termination qualities hard to judge. For example, the given example will evaluate to 2 in its current form, but changing the with-bound variables name to b as in `({a ? (with {a = 2;}; a), b }: a){b = 2;}` leads to erronous termination because a of infinite recursion. To see why, one has to remember that with-bindings are weakly-binding and hence when looked up, the evaluator will refer to the pattern variable a instead of the with-bound one.
+
 
 #figure(
   ```nix
+  # strings.nix
+  { pkgs, lib, hasher } : {
+    concat = a: b: (/* */);
+    captalize = s: (/* */);
+    to_camel = s: (/* */);
+    hash = s: hasher(s);
+  };
+
+  # configuration.nix
   {
-    pattern = { x ? y, y }: x;
-    arr = [ [throw a] 1 2 3 ];
-    b = (let a = (throw "hi"); b = 2; in b);
-    b = rec {a = 2; b = c; c = 2;};
+    f = with; import ./strings.nix {pkgs, lib, hasher}; (name: surname:
+      concat(capitalize(name), capitalize(surname))
+  )
   }
   ```,
-  caption: [Examples of Laziness],
-)
-
-#figure(
-  ```nix
-  rec { x = { x = x;};}.x;       # → { x = «repeated»; }
-  let x = {x = y;}; y = x; in x  # → { x = «repeated»; }
-  ```,
-  caption: [Examples of recursive patterns from the nix repl],
-)
-
+  caption: [A typical model structure],
+) <module_example>
 
 == Context Strings
 Context strings and dynamic lookup share the same syntax in that you can insert some arbitrary term `t` into braces with the following syntax `${t}`. For ordinary strings and paths, the value of `t` will be coerced into a string and added literally. From a typing perspective, this is the easy case because inserted values get a constraint of string and that's it. For dynamic lookup it gets trickier though.
