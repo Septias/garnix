@@ -35,7 +35,7 @@ When using the nix package manager, declarative configuration management is the 
 
 Combining all these features, the nix language is a wild zoo of constructs, theoretical properties and poses tricky shadowing and termination properties because of the combination thereof.
 
-== Quirks of the Nix Language
+== Quirks of the Nix Language <quirks>
 The following section gives a briev overview of nix-specific language features and their suprising interactions.
 
 The nix programming language heavily resolves around records. A primitive record is a set of key-value bindings like `{a = 2; b = 3;}` but by adding the `rec` keyword in front, record fields are allowed to reference each other like `rec {a = b; b = 2}; -> {a = 2; b = 2;}`. Using self-referencial records and the lazyness of the language, it is then possible to all kinds of infinite recursion, not all of them well-behaved. A bad example is the directly recursive `rec {x = x;}` or mutual recursive `rec {a = b; b = a;}`. Whilest the first definition is rejected by the interpreter instantaneously because `x` is unknown, the second definition does not have such a problem. It still fails because of infinite recursion during reduction by the evaluator that raises an error instead of diverging. To form a well-behaved recursive definitions, one has to utility nix' lazyness and go through a lazy constructor like a record, array, pattern-field or let-binding. Consequently, both `rec {x = {x = x;}}` and `let x = {x = y;}; y = x; in x` don't result in erronous program termination and can be unrolled indefinitely in their x-field.
@@ -57,6 +57,7 @@ A function pattern in the primitive case `{a, b}: a` will expect exactly the fie
 
 This is a non-trivial feature, because it allows for (arguably unneccessary) recursion in patterns `{a ? b, b }: a` and monstrosities like these `({a ? (with {b = 2;}; b), b }: a){b = 2;}` that make shadowing behaviour and termination qualities hard to judge. For example, the given example will evaluate to 2 in its current form, but changing the with-bound variables name to b as in `({a ? (with {a = 2;}; a), b }: a){b = 2;}` leads to erronous termination because a of infinite recursion. To see why, one has to remember that with-bindings are weakly-binding and hence when looked up, the evaluator will refer to the pattern variable a instead of the with-bound one.
 
+- Inherit statement
 
 #figure(
   ```nix
@@ -112,10 +113,9 @@ Context strings allow lookups of the form `a.${t}` where t is allowed to be any 
 == Comparing Nix Features
 #comparison <comparison>
 
-The table shows a comparison between garnix and NixLang @verified. A dotted circle represents feature compatibility in the reduction semantic, where as a full circle tells that type inference was implemented for that feature. The works in @verified develop an interpreter instead of type inference, so no full circles are expected on that side. To do the paper justic, another circle kind could be added for features that are covered by an interpreter, but that is not the subject of this paper.
 
 == Algebraic Subtying
-Algebraic subtypign @dolstra_phd is a technique to get well-behaved types and neat type inference. After @simplesub and @mlstruct we know how to pratically implement it. The first thing one needs to do is to form a boolean algbebra of types that is well behaved. If given, constraints of the form τ₁ <= τ₂ can be "grained down" into sub-constraints, eventually landing at primitive constraints like $"Bool" < top$ that can be solved trivially.
+Algebraic subtyping @dolstra_phd is a technique to get well-behaved types and neat type inference. After @simplesub and @mlstruct we know how to pratically implement it. The first thing one needs to do is to form a boolean algbebra of types that is well behaved. If given, constraints of the form τ₁ <= τ₂ can be "grained down" into sub-constraints, eventually landing at primitive constraints like $"Bool" < top$ that can be solved trivially.
 
 
 == Things done in this paper
@@ -125,17 +125,13 @@ In this paper we restrict ourselves to:
 1. Basetypes (Record, Array, ..Primitive Types)
 2. Datatype Operators (Record-extension, Array-concatenation)
 3. Special language constructs (with-statements, inherit-statements)
+4. Deprecated let-attrset
+5. Deprecated uris
 
 We defer these features to later efforts of research:
 1. Dynamic accesses
 2. Assert statements?
-3. Deprecated let-attrset
-4. Deprecated uris
 
-In essence, our contributions are:
-
-1. A comprehensive operational semantic for the nix language
-2. A Typesystem based on Mlstruct
 
 
 = Syntax <syn>
@@ -143,22 +139,19 @@ $oi(E)$ denotes $0 … n$ repititions of a syntax construct and the index $i$ is
 
 #syntax
 
-Nix supports the usual _literals_ of fully fledged languages as well as a multi-line string and paths. The syntax is given following the official regex formulas to follow the specification @nix-language-2-28. _Records_ follow a standart notation where multiple fields can be defined using `key = value;` assignments to define multiple fields. In addition, records can be marked _recursive_ with the `rec` keyword and are non-recursive otherwise. _Arrays_ are introduced in a similar fashion, where multiple values can be concatenated with the only unintuitive nix-specific distinction that a space is used as seperator. Both datatypes are generally _immutable_, but there are concat operations (Record-Concat and Array-Concat) that can be used to create new, bigger datatypes. Other than that, records come equipped with the usual lookup syntax and two specialities. The first being a dynamic label check that returns a boolean as a result and secondly, a way to specify a default value in case the previous check turned out to be negative.
+Nix supports the usual _literals_ of fully fledged languages as well as a multi-line string and paths. The syntax is given following the official regex formulas to follow the specification @nix-language-2-28. _Records_ follow a standart notation where multiple fields can be defined using `key = value;` assignments to define multiple fields. In addition, records can be marked _recursive_ with the `rec` keyword and are non-recursive otherwise. _Arrays_ are introduced in a similar fashion, where multiple values can be concatenated with the only unintuitive nix-specific distinction that a space is used as seperator. Both datatypes are generally _immutable_, but there are concat operations (Record-Concat and Array-Concat) that can be used to create new, bigger datatypes. Other than that, records come equipped with the usual lookup syntax and special operators. A dynamic label check that returns a boolean as a result, a way to specify a default value in case the previous check turned out to be negative and dynamic lookups.
 
-Functions take one argument, a _pattern_. This pattern can be a single label or adher to a _record-like_ structure, allowing multiple fields to be present, possibly with _default arguments_. This way a function taking multiple arguments can be created without resorting to currying. These functions can be called with a record from which the "single arguments" are taken and form a neat syntax ambiguity where function definitions and their supplied arguments can be read as functions taking records or as elaborate functions with multiple arguments and possibly default arguments.
-Patterns can be marked _open_ with the ellipsis (…), otherwise their are regarded as _closed_. Arguments can be gievn a defautl value using the `?` syntax. The examplary function pattern `{a, b ? "pratt", …}` is an _open_ pattern with a default value of "pratt" for the label $b$ and a mandatory argument $a$.
+Functions take one argument, a _pattern_. This pattern can be a single label or adher to a record-structure, allowing multiple fields to be present, possibly with _default arguments_. This way a function taking multiple arguments can be created without resorting to currying. These functions can be called with a record from which the "single arguments" are taken and form a neat syntax ambiguity where function definitions and their supplied arguments can be read as functions taking records or as elaborate functions with multiple arguments and possibly default arguments.
+Patterns can be marked _open_ with the ellipsis (…), otherwise their are regarded as _closed_. Arguments can be given a defautl value using the `?` syntax. The examplary function pattern `{a, b ? "pratt", …}` is an _open_ pattern with a default value of "pratt" for the label $b$ and a mandatory argument $a$. If one wants to refer to the whole argument in the function body, it is possible to create a global-binding for it using the \@-syntax `contact @ { name, surname, tel, email}: contact.name`. The global binding can also occur behind the argument like `{} @ glob: glob`.
 
-Let-expressions can consist of multiple bindings $a_1 = t_1; … ; a_n = t_n$, possibly referencing each other in a _recursive way_. Both let-statements and records allow _inherit statements_ to be placed between ordinary field declarations. Inherit statements take a known label for a value and _reintroduce_ the label as "label = value;" to the record or let expression.
+Let-expressions can consist of multiple bindings $a_1 = t_1; … ; a_n = t_n$, possibly referencing each other in a _recursive way_. It is also allowed but regarded deprecated to enclose these bindings in braces. Both let-statements and records allow _inherit statements_ to be placed between ordinary field declarations. Inherit statements take a known label for a value and _reintroduce_ the label as "label = value;" to the record or let expression. They can also take a root path $p$ which is prefixed to all following labels. This way, a deep record can be referenced from which all values are taken. For example, the statement `inherit (world.objects.players) robert anders;` will desugar to `robert = world.objects.players.robert; anders = world.objects.players.anders;` in the surrounding record or let-expression.
 
-Let statements can also take a root path $p$ which is prefixed to all following labels. This way, a deep record can be referenced from which all values are taken. For example, the statement `inherit (world.objects.players) robert anders;` will desugar to `robert = world.objects.players.robert; anders = world.objects.players.anders;` in the surrounding record or let-expression.
-
-The _with statement_ expects an arbitrary expression that reduces to a record. Every field from this record is then added to the scope of the next expression without shadowing existing variables. This is further discussed in @with.
+The _with statement_ expects an arbitrary expression that reduces to a record. Every field from this record is then added to the scope of the next expression without shadowing variables bound by other means. See @quirks for further details.
 
 === Paths
-There are three different syntactic objects that deserve the name `path` in our formalization. The first one is the syntactic path-object $rho.alt$ that points to a location in a filesystem. A path can be _absolute_, starting with a `/`, _relative_ from the home directory `~/` or relative to the file where it is stated `./`. All tese notations are standart in the linux world. The second construct is a search-path Roh of the form `<nixpkgs>`, where everything entangled is looked up in the static path `todo`. The usecase of this construct is to easily refer to a package entry that is assumed to be "globally accessible" – a quality of life feature.
+There are three different syntactic objects that deserve the name `path` in our formalization. The first one is the syntactic path-object $rho.alt$ that points to a location in a filesystem. A path can be _absolute_, starting with a `/`, _relative_ from the home directory `~/` or relative to the file where it is stated `./`. All tese notations are standart in the linux world. The second construct is a search-path $Rho$ of the form `<nixpkgs>`, where everything entangled is looked up in the static path `todo`. The usecase of this construct is to easily refer to a package entry that is assumed to be "globally accessible" – a quality of life feature.
 
-The last path-like construct is a sequence of record accesses ρ `r.l.l.l` that "reach" to a field of a deeply nested record like `{a: {b: {c: {}}}}`. It is to note that even though nix does have a null-type, lookups of fields that do not exist immediately trigger an error instead of return null. To mitigate unwanted exception raising it is possible to check for
-
+The last path-like construct is a sequence of record accesses ρ `r.l.l.l` that "reach" to a field of a deeply nested record like `{a: {b: {c: {}}}}`. It is to note that even though nix does have a null-type, lookups of fields that do not exist immediately trigger an error instead of return null. To mitigate unwanted exception raising it is possible to check for the presence of fields in an argument using the ?-operator. This operator expects a record as first operand and a path as second. A subroutine will then iteratively access the fields, short-fusing with false in case any path-element is missing. As mentioned in @quirks, a path element can be an arbitrary expression using the context-string mechanism.
 
 
 == Reduction Rules
@@ -177,12 +170,19 @@ Since ${oi(e_i)}$ strictly subsumes ${oi(l_i)}$ due to its inner structure, rule
 
 The literatur on type systems is as wide as the ocean with many typesystems studied over the last 70 years of research. Finding a typesystem for a language is thus similar to traversing a jungle with the alluring dangers of getting sidetracked behind every corner. Since records are such a central aspect of the language, starting from them is not a bad idea.
 
+
 === Record Theory
-Records have been studied in a variety of papers [..] and can be partitioned in roughly 3 groups. The first model of records is a syntactic model where the syntax defines what a record is. This approach is simple but hard to extend because everything has to be encoded in its syntax. To overcome its shortcommings, \@? studied _row polymorphism_. Row polymorphism extend record with a generic row r, effectively making them polymorphic in their "rest". By extending the row to lacks-predicates not only extension but also restriction of record types can be achieved, giving a lot of flexibility in theory. While strong in theory, their theory gets complex and unwildy fast, making it hard to integrate into fully-fledged type systems. _Semantic subtyping_, developed over multiple years by \@castagna tries to remedie this by shortcomming by giving records a set-theoretic semantic model. By also adding type connectives (negation, union and intersection), his systems are impressively expressive, especially in combination with _gradual typing_. The strength comes of a cost though, namely _backtracking_. Since polymorphic type inference is undecidable in general \@?ref, the model has to rely on backtracking and its performance overhead. It also lacks principle types, a strong selling point of ml-like systems. Last but not least, it is possible to model records in constraint based type system. A record field lookup in these systems produces a constrained which is collected and simplified later. Due to the generality, these systems usually don't exhibit good and effective properties.
+Records have been studied in a variety of papers [..] and can be partitioned in roughly 3 groups. The first model of records is a syntactic model where the syntax defines what a record is. This approach is conceptually simple but hard to extend because everything has to be encoded in its syntax. To overcome its shortcommings, \@? studied _row polymorphism_. Row polymorphism extend record with a generic row r, effectively making them polymorphic in their "rest". By extending the row to lacks-predicates not only extension but also restriction of record types can be achieved, giving a lot of flexibility in theory. While strong in theory, their theory gets complex and unwildy fast, making it hard to integrate into fully-fledged type systems. _Semantic subtyping_, developed over multiple years by Castagna et. al. @gentle_intro @poly_records @typing_records_etc to name a few, tries to remedie this by shortcomming by giving records a set-theoretic semantic model. By also adding type connectives (negation, union and intersection), his systems are impressively expressive, especially in combination with _gradual typing_. The strength comes of a cost though, namely _backtracking_. Since polymorphic type inference is undecidable in general \@?ref, the model has to rely on backtracking and its performance overhead. It also lacks principle types, a strong selling point of ml-like systems. Last but not least, it is possible to model records in constraint based type system. A record field lookup in these systems produces a constrained which is collected and simplified later. Due to the generality, these systems usually don't exhibit good and effective properties.
 
 Only recently in 2017, Stephen Dolan proposed a new family of type systems, named _algebraic type systems_. These systems tackle language construction from a new point of view. Instead of adding types first and then trying to find a semantic model for them, Dolan argues one should pay more attention to finding a semantic model for the types _first_. The types in _algebraic type systems_ form a distributive lattice (thus algebraic) and inherit the lattice' properties. By further restricting the the occurences for union and intersections to positive and negative positions, a distributive lattice can be constructed that allows for lossless reduction of subtyping constraints. In essence, the system is standart ML, with a lattice of types and unification replaced by bi-unification, a subroutine that handles subtyping constraints instead of equality constraints. The final algorithms for subsumption checking and type inference are short as well as simple, all thanks to the initial focus on well-formed types. The final algorithms inherit the standart ML properties, namely _principled type inference_, no need for type annotations and effectiveness i.e no backtracking.
 
 Since batracking in nix' huge syntax tree that roots in a single file and relies heavily on laziness is insufficient, the properties of algebraic subtyping come as a perfect fit. The formalization of algebraic subtyping depends heavily on order-theory and some form of category theory and the proofs are far from simple @simplesub. Thankfully, @simplesub showed how to get from a algebraic domain to a syntactic one by creating an  equivalent using constraint accumulation on type variables and biunification, making algebraic subtyping more accessible. In the seminal Bachelor Thesis from the first author, he showed how to extend the SimpleSub to the more expressive type system features of nix. Even though the work pintpointed a direction, it oversimplified on the operational semantic and derived type rules, leaving lots of room for improvement.
+
+=== First class Labels
+- TODO
+
+=== Related Work
+We decided to diverge from the formulation given in \@verified by not adding inherit as syntactic sugar but as a inference rule with a premise that ensures that no new recursion was introduced during type inference. This is done by checking the context whether this variable exists.
 
 
 
@@ -193,8 +193,7 @@ What follows are the typing and subtyping rules as well as an overview over the 
 
 Garnix models all literal syntax categories with the respective atom types bool, string, path and num. Notice, that we do not distinguish between float and int as they are coerced during interpretation and thus used interspersely in practice. We also add the usual types for fuctions, records and arrays and note that record  types only define a _single_ label to type mapping instead of multiple. This is due to the use of subtyping constraints and their accumuation on type variables during type inferene. This mechanism is further discussed in \@section_todo. Also, we introduce two types for arrays, one for homogenous arrays of the same type and one accumulative for the case that an array has many distinct elements.
 To form a boolean algebra of types we add the expected type connectives $union.sq, inter.sq, ~$ as well as a top and bottom type which represent the least type which is subsumed by every other type and the greatest type which subsumes every other type respectively.
-Lastely, we add a single type for patterns. Even thought a pattern is similar in strucuter to a record, the pattern type is an accumulated type with multiple fields. This distinction is made due to the syntactical difference of the two. Patterns are introduced and eliminated atomically unlike a record where every fild acces $"record.field"$ results in new independent constraints. The superscript b can be true or false, ascribing whether the pattern is _open_ or _closed_.
-
+Lastely, we add a single type for patterns. Even thought a pattern is similar in structere to a record, the pattern type is an accumulated type with multiple fields. This distinction is made due to the syntactical difference of the two. Patterns are introduced and eliminated atomically unlike a record where every fild acces `record.field` results in new independent constraints. The superscript b can be true or false, ascribing whether the pattern is _open_ or _closed_.
 
 #typing_rules <typing_rules>
 
