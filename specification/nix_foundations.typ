@@ -1,10 +1,10 @@
 #import "functions.typ": *
-#import "comparison.typ": comparison
+#import "./snips/comparison.typ": comparison
+#import "./snips/builtin-types.typ": types
 #import "typesystem.typ": *
-#import "builtin-types.typ": types
 
 #set heading(numbering: "1.")
-#set page(height: auto)
+// #set page(height: auto)
 #show figure: set block(breakable: true)
 // #set figure(placement: auto)
 // #show stack: set block(breakable: true)
@@ -16,9 +16,11 @@
   keywords: ("Nix", "Type inference", "Laziness", "Records"),
 )
 
+= Securing Nix' Foundations
+The Nix programming language is used in over 100.000 files, showing its prominance, but was neglected in theorectical work until recentently when work was picked up indepentently by S. Klähn and Breokhoff et. al. @verified @simplenix. Both works gave a reduced syntax definition and operational semantic to account for their uses, not the language in their full expressiveness.
 
-= Origin of the Nix Language
 
+= Origin of the Nix Language <intro>
 The nix package manager distinguishes itself from other package managers by one prominent feature: It has a built-in domain-specific programming language at its foundation. The homonymous programming language – nix – is a major reason for the steep learning curve to enter the ecosystem, but it is also the reason nix inhabits two fundamental properties: purity and functionality.
 
 The nix package manager was created in an attempt to overcome the problem of distributing software (components) between different environments (machines) without breaking them. This problem is more subtle than one might expect and the reason why so many package managers exist that try to tackle the problem differently. The approach take by Eelco Dolstra et al. to overcome this problem is to »apply a memory management discipline to package management«, effectively interpreting files as memory locations and references as pointers between them @memory_to_software. It's major achievement is a garbage-collector inspired technique to consistently track dependencies during package construction. The final _closure_ that pictorally resembles a tree of (sub-) dependencies with the built package at its root, can then be _extracted_ from the local filesystem and sent to other machines by sending every sub-component and reassembling on the other side. Because all dependencies have been transfered to the new machine, the program is virtually not dependent on the new environment.
@@ -102,7 +104,7 @@ Nix with statement has special shadowing behavior in that it does not shadow let
 == Comparing Nix Features
 #comparison <comparison>
 
-The table shows a comparison between garnix and NixLang \@verified. A dotted circle represents feature compatibility in the reduction semantic, where as a full circle tells that type inference was implemented for that feature. The works in \@verified develop an interpreter instead of type inference, so no full circles are expected on that side. To do the paper justic, another circle kind could be added for features that are covered by an interpreter, but that is not the subject of this paper.
+The table shows a comparison between garnix and NixLang @verified. A dotted circle represents feature compatibility in the reduction semantic, where as a full circle tells that type inference was implemented for that feature. The works in @verified develop an interpreter instead of type inference, so no full circles are expected on that side. To do the paper justic, another circle kind could be added for features that are covered by an interpreter, but that is not the subject of this paper.
 
 == Algebraic Subtying
 Algebraic subtypign @dolstra_phd is a technique to get well-behaved types and neat type inference. After @simplesub and @mlstruct we know how to pratically implement it. The first thing one needs to do is to form a boolean algbebra of types that is well behaved. If given, constraints of the form τ₁ <= τ₂ can be "grained down" into sub-constraints, eventually landing at primitive constraints like $"Bool" < top$ that can be solved trivially.
@@ -200,6 +202,6 @@ Lastely, we add a single type for patterns. Even thought a pattern is similar in
 #page[
   #bibliography(
     ("bib/misc.bib", "bib/parreaux.bib", "bib/nix.bib"),
-    style: "iso-690-author-date",
+    style: "association-for-computing-machinery",
   )
 ]
