@@ -23,11 +23,11 @@ The Nix programming language is used in over 100.000 files, showing its prominan
 = Origin of the Nix Language <intro>
 The nix package manager distinguishes itself from other package managers by one prominent feature: It has a built-in domain-specific programming language at its foundation. The homonymous programming language – nix – is a major reason for the steep learning curve to enter the ecosystem, but it is also the reason nix inhabits two fundamental properties: purity and functionality.
 
-The nix package manager was created in an attempt to overcome the problem of distributing software (components) between different environments (machines) without breaking them. This problem is more subtle than one might expect and the reason why so many package managers exist that try to tackle the problem differently. The approach take by Eelco Dolstra et al. to overcome this problem is to »apply a memory management discipline to package management«, effectively interpreting files as memory locations and references as pointers between them @memory_to_software. It's major achievement is a garbage-collector inspired technique to consistently track dependencies during package construction. The final _closure_ that pictorally resembles a tree of (sub-) dependencies with the built package at its root, can then be _extracted_ from the local filesystem and sent to other machines by sending every sub-component and reassembling on the other side. Because all dependencies have been transfered to the new machine, the program is virtually not dependent on the new environment.
+The nix package manager was created in an attempt to overcome the problem of distributing software (components) between different environments (machines) without breaking them. This problem is more subtle than one might expect and the reason why so many package managers exist that try to tackle the problem differently. The approach take by Eelco Dolstra et al. to overcome this problem is to »apply a memory management discipline to package management«, effectively interpreting files as memory locations and references as pointers between them @memory_to_software @dolstra_phd @nixos_long. It's major achievement is a garbage-collector inspired technique to consistently track dependencies during package construction. The final _closure_ that pictorally resembles a tree of (sub-) dependencies with the built package at its root, can then be _extracted_ from the local filesystem and sent to other machines by sending every sub-component and reassembling on the other side. Because all dependencies have been transfered to the new machine, the program is virtually not dependent on the new environment.
 
 While this simplification already explains the key ingredients, one can only understand the entirety of the package manager after beeing introduced to the _nix store_. The nix store is a read-only location that stores the immutable artifacts of builds. It uses hashes to identify components and allows for quick equality checks, and therefore reusability of components. All its components live in the same location, but isolated such that different version of the same package, can be used simultaneously without infering or overwriting each other. Since every package is a pure derivation of its dependencies, new version can easily be added to the store without having to worry about older versions such that package ugrades become _fearless_. If something should still break, the old version lives perfectly preserved in the store and can be rolled-back to in O(1) at any time @memory_to_software. It is also possible for a garbage collector to identify unreachable store locations by tracking "roots" and delete them to reclaim disk space.
 
-To support this colorfull palett of features, Eelco Dostra decidde to implement a _domain specific_ language that makes em a inherent part property instead of a retrofitted qualities. First and foremost, one of nix' greatest strength – _reproducibility_ – is only possible due to the languages' functional design. This is done by taking a concept from language theory and applying it to package management. When abstracting files and references, one can notice that _pure functionality_ boasts all the features needed for airtight dependency management. A pure function computes its output solely given its input fields. The final value can then be memoized and reused should it be needed again. The nix package manager uses _pure functions without side effects_ to build packages in a clean and sandboxed environment and since no externalities can affect the build, the outcome is guaranteed to be equal if run twice, even on differing machines.
+To support this colorfull palett of features, Eelco Dostra decided to implement a _domain specific_ language that makes em an inherent property instead of a retrofitted qualities. First and foremost, one of nix' greatest strength – _reproducibility_ – is only possible due to the languages' functional design. This is done by taking a concept from language theory and applying it to package management. When abstracting files and references, one can notice that _pure functionality_ boasts all the features needed for airtight dependency management. A pure function computes its output solely given its input fields. The final value can then be memoized and reused, should it be needed again. The nix package manager uses _pure functions without side effects_ to build packages in a clean and sandboxed environment and since no externalities can affect the build, the outcome is guaranteed to be equal if run twice, even on differing machines.
 
 To understand why the language needs to be lazy, we have to look at the application of it and notice that package management is a costly environment. Even a single action – building a package – can already be very expensive, possibly taking multiple hours to complete. It is thus of utmost importance, that packages are only realised if actually needed. In a lazy language, values of function application are substituted as-is without further reduction i.e computation on them. In nix, where packages are stored in lazy record fields, lazyness of record fields is the essential ingredient to not build packages if not _actually needed_ and saving valuable computation resources.
 
@@ -38,7 +38,7 @@ Combining all these features, the nix language is a wild zoo of constructs, theo
 == Quirks of the Nix Language <quirks>
 The following section gives a briev overview of nix-specific language features and their suprising interactions.
 
-The nix programming language heavily resolves around records. A primitive record is a set of key-value bindings like `{a = 2; b = 3;}` but by adding the `rec` keyword in front, record fields are allowed to reference each other like `rec {a = b; b = 2}; -> {a = 2; b = 2;}`. Using self-referencial records and the lazyness of the language, it is then possible to all kinds of infinite recursion, not all of them well-behaved. A bad example is the directly recursive `rec {x = x;}` or mutual recursive `rec {a = b; b = a;}`. Whilest the first definition is rejected by the interpreter instantaneously because `x` is unknown, the second definition does not have such a problem. It still fails because of infinite recursion during reduction by the evaluator that raises an error instead of diverging. To form a well-behaved recursive definitions, one has to utility nix' lazyness and go through a lazy constructor like a record, array, pattern-field or let-binding. Consequently, both `rec {x = {x = x;}}` and `let x = {x = y;}; y = x; in x` don't result in erronous program termination and can be unrolled indefinitely in their x-field.
+The nix programming language heavily resolves around records. A primitive record is a set of key-value bindings like `{a = 2; b = 3;}` but by adding the `rec` keyword in front, record fields are allowed to reference each other like `rec {a = b; b = 2}; -> {a = 2; b = 2;}`. Using self-referencial records and the lazyness of the language, it is then possible to all kinds of infinite recursion, not all of them well-behaved. A bad example is the directly recursive `rec {x = x;}` or mutual recursive `rec {a = b; b = a;}`. Both definitions fail because of infinite recursion during reduction by the evaluator that raises an error instead of diverging. To form a well-behaved recursive definitions, one has to utility nix' lazyness and go through a lazy constructor like a record, array, pattern-field or let-binding. Consequently, both `rec {x = {x = x;}}` and `let x = {x = y;}; y = x; in x` don't result in erronous program termination and can be unrolled indefinitely in their x-field.
 
 The let-binding of the second example is very similar to a recursive record in that it allows for _multiple_, possibly mutal-referencial bindings, `let a = b; b = 2 in b`. It is also not permitted to create mutual recursive non-constructice recursion like `let a = b; b = 2; in b`, because, again, there is no lazy constructor that remedies infinite computation. Their similarity is best shown by the let-rec-in-binding `let {a = 2; b = 3;} in t` that encloses the semicolor-seperated key-value bindings of the usual let-binding in braces. It is trivial to see that both forms can be rewritten to one another by removing or adding the enclosing braces, rendering the latter notation valid, but obsolete.
 The remaining difference between the two is, that a record definition is a terminating expression whilest a let-binding is followed by an arbitrary possibly diverging computation. This subtle difference can be partially removed using the with-construct. The with construct is a nix-specific feature that takes a record as first "operand" and "opens" it in the following expression, adding all the bindings to the scope. It is thus possible to write `with {a = 2; b = 2;}; a + 2` to compute the sum of two record-fields.
@@ -57,8 +57,6 @@ A function pattern in the primitive case `{a, b}: a` will expect exactly the fie
 
 This is a non-trivial feature, because it allows for (arguably unneccessary) recursion in patterns `{a ? b, b }: a` and monstrosities like these `({a ? (with {b = 2;}; b), b }: a){b = 2;}` that make shadowing behaviour and termination qualities hard to judge. For example, the given example will evaluate to 2 in its current form, but changing the with-bound variables name to b as in `({a ? (with {a = 2;}; a), b }: a){b = 2;}` leads to erronous termination because a of infinite recursion. To see why, one has to remember that with-bindings are weakly-binding and hence when looked up, the evaluator will refer to the pattern variable a instead of the with-bound one.
 
-- Inherit statement
-
 #figure(
   ```nix
   # strings.nix
@@ -66,7 +64,7 @@ This is a non-trivial feature, because it allows for (arguably unneccessary) rec
     concat = a: b: (/* */);
     captalize = s: (/* */);
     to_camel = s: (/* */);
-    hash = s: hasher(s);
+    hash = s: hasher(s);https://conferenceindex.org/conferences/programming-languages
   };
 
   # configuration.nix
@@ -79,58 +77,30 @@ This is a non-trivial feature, because it allows for (arguably unneccessary) rec
   caption: [A typical model structure],
 ) <module_example>
 
-== Context Strings
-Context strings are a common feature in mondern programming lanugages, because of their handyness aggregate substrings into complex strings. In nix, the syntax `${t}` is used to create a string  For ordinary strings and paths, the value of `t` will be coerced into a string and added literally.
+== String Interpolation <string_interpolation>
+Context strings are a common feature in mondern programming lanugages, because of their handyness to build complex strings from pieces that are string-convertible. In nix, the syntax `${t}` is used to insert the evaluated value of t into a string or path. This can be used to create structural strings `let name = "john"; greeting = "Hello ${name}"; in greeting` or programatically access file locations `let conf_file_of = name: readString /home/${name}/.config/nu in conf_file_of "john"`.
 
-Context strings allow lookups of the form `a.${t}` where t is allowed to be any expression that ultimately reduces to a string. The reduced string is then used to index the record which a is supposed to be.
+The context string syntax is not limited to strings and paths alone, it can also be used in dynamic bindings, field accesses and field-checks. 
 
 #figure(
   ```nix
   {
     hasAttrs = { a.b = null; } ? ${aString}.b;
-
     selectAttrs = { a.b = true; }.a.${bString};
-
     selectOrAttrs = { }.${aString} or true;
-
     binds = { ${aString}."${bString}c" = true; }.a.bc;
-
     recBinds = rec { ${bString} = a; a = true; }.b;
-
     multiAttrs = { ${aString} = true; ${bString} = false; }.a;
   }
   ```,
-  caption: [Examples of recursive patterns from the nix repl],
+  caption: [Example usages of context strings.],
 )
 
-
+Dynamically looking up or setting.
 
 == Dunder Methods
 - `__overrides__`
 - `__functor__`
-
-
-== Comparing Nix Features
-#comparison <comparison>
-
-
-== Algebraic Subtying
-Algebraic subtyping @dolstra_phd is a technique to get well-behaved types and neat type inference. After @simplesub and @mlstruct we know how to pratically implement it. The first thing one needs to do is to form a boolean algbebra of types that is well behaved. If given, constraints of the form τ₁ <= τ₂ can be "grained down" into sub-constraints, eventually landing at primitive constraints like $"Bool" < top$ that can be solved trivially.
-
-
-== Things done in this paper
-Since nix was built as a domain specfic language with usability as its greatest design goal, the system boasts a lot of features that make retrofitting a type inference hard or even impossible. In traditional language theory, the flow is mostly reversed where one starts from a simple calculus like ML, SystemF, λ and carefully extends it with features to form a wieldy and interesting semantics. When trying to retrofit a type-system onto a language like @nix-language-2-28 \@flow \@castagna_elixier one has to decide which features one can and wants to support.
-
-In this paper we restrict ourselves to:
-1. Basetypes (Record, Array, ..Primitive Types)
-2. Datatype Operators (Record-extension, Array-concatenation)
-3. Special language constructs (with-statements, inherit-statements)
-4. Deprecated let-attrset
-5. Deprecated uris
-
-We defer these features to later efforts of research:
-1. Dynamic accesses
-2. Assert statements?
 
 
 
@@ -149,9 +119,9 @@ Let-expressions can consist of multiple bindings $a_1 = t_1; … ; a_n = t_n$, p
 The _with statement_ expects an arbitrary expression that reduces to a record. Every field from this record is then added to the scope of the next expression without shadowing variables bound by other means. See @quirks for further details.
 
 === Paths
-There are three different syntactic objects that deserve the name `path` in our formalization. The first one is the syntactic path-object $rho.alt$ that points to a location in a filesystem. A path can be _absolute_, starting with a `/`, _relative_ from the home directory `~/` or relative to the file where it is stated `./`. All tese notations are standart in the linux world. The second construct is a search-path $Rho$ of the form `<nixpkgs>`, where everything entangled is looked up in the static path `todo`. The usecase of this construct is to easily refer to a package entry that is assumed to be "globally accessible" – a quality of life feature.
+There are three different syntactic objects that deserve the name `path` in our formalization. The first one is the syntactic path-object $rho.alt$ that points to a location in a filesystem. A path can be _absolute_, starting with a `/`, _relative_ from the home directory `~/` or relative to the file where it is stated `./`. All tese notations are standart in the linux world. The second construct is a search-path $Rho$ of the form `<nixpkgs>`, where everything entangled is looked up in the path returned by `builtins.nixPath`. The usecase of this construct is to easily refer to a package entry that is assumed to be "globally accessible" – a quality of life feature.
 
-The last path-like construct is a sequence of record accesses ρ `r.l.l.l` that "reach" to a field of a deeply nested record like `{a: {b: {c: {}}}}`. It is to note that even though nix does have a null-type, lookups of fields that do not exist immediately trigger an error instead of return null. To mitigate unwanted exception raising it is possible to check for the presence of fields in an argument using the ?-operator. This operator expects a record as first operand and a path as second. A subroutine will then iteratively access the fields, short-fusing with false in case any path-element is missing. As mentioned in @quirks, a path element can be an arbitrary expression using the context-string mechanism.
+The last path-like construct is a sequence of record accesses ρ `r.l.l.l` that "reach" to a field of a deeply nested record like `{a: {b: {c: {}}}}`. It is to note that even though nix does have a null-type, lookups of fields that do not exist immediately trigger an error instead of returning null. To mitigate unwanted exception raising it is possible to check for the presence of fields in an argument using the ?-operator. This operator expects a record as first operand and a path as second `{} ? a.b.c.d`. A subroutine will then iteratively access the fields, short-fusing with false in case any path-element is missing. As mentioned in @string_interpolation, a path element can be have string interpolation elements.
 
 
 == Reduction Rules
@@ -166,23 +136,25 @@ The R-fun-Pat-Default-∗ rules range over pattern elements $e$ which can be eit
 Since ${oi(e_i)}$ strictly subsumes ${oi(l_i)}$ due to its inner structure, rule 2 and 3 are only stated as a mental stepping stone for the reader but not mentioned further.
 
 
-== Finding a Type System
+= Finding a Type System
 
 The literatur on type systems is as wide as the ocean with many typesystems studied over the last 70 years of research. Finding a typesystem for a language is thus similar to traversing a jungle with the alluring dangers of getting sidetracked behind every corner. Since records are such a central aspect of the language, starting from them is not a bad idea.
 
 
-=== Record Theory
+== Record Theory
 Records have been studied in a variety of papers [..] and can be partitioned in roughly 3 groups. The first model of records is a syntactic model where the syntax defines what a record is. This approach is conceptually simple but hard to extend because everything has to be encoded in its syntax. To overcome its shortcommings, \@? studied _row polymorphism_. Row polymorphism extend record with a generic row r, effectively making them polymorphic in their "rest". By extending the row to lacks-predicates not only extension but also restriction of record types can be achieved, giving a lot of flexibility in theory. While strong in theory, their theory gets complex and unwildy fast, making it hard to integrate into fully-fledged type systems. _Semantic subtyping_, developed over multiple years by Castagna et. al. @gentle_intro @poly_records @typing_records_etc to name a few, tries to remedie this by shortcomming by giving records a set-theoretic semantic model. By also adding type connectives (negation, union and intersection), his systems are impressively expressive, especially in combination with _gradual typing_. The strength comes of a cost though, namely _backtracking_. Since polymorphic type inference is undecidable in general \@?ref, the model has to rely on backtracking and its performance overhead. It also lacks principle types, a strong selling point of ml-like systems. Last but not least, it is possible to model records in constraint based type system. A record field lookup in these systems produces a constrained which is collected and simplified later. Due to the generality, these systems usually don't exhibit good and effective properties.
 
 Only recently in 2017, Stephen Dolan proposed a new family of type systems, named _algebraic type systems_. These systems tackle language construction from a new point of view. Instead of adding types first and then trying to find a semantic model for them, Dolan argues one should pay more attention to finding a semantic model for the types _first_. The types in _algebraic type systems_ form a distributive lattice (thus algebraic) and inherit the lattice' properties. By further restricting the the occurences for union and intersections to positive and negative positions, a distributive lattice can be constructed that allows for lossless reduction of subtyping constraints. In essence, the system is standart ML, with a lattice of types and unification replaced by bi-unification, a subroutine that handles subtyping constraints instead of equality constraints. The final algorithms for subsumption checking and type inference are short as well as simple, all thanks to the initial focus on well-formed types. The final algorithms inherit the standart ML properties, namely _principled type inference_, no need for type annotations and effectiveness i.e no backtracking.
 
 Since batracking in nix' huge syntax tree that roots in a single file and relies heavily on laziness is insufficient, the properties of algebraic subtyping come as a perfect fit. The formalization of algebraic subtyping depends heavily on order-theory and some form of category theory and the proofs are far from simple @simplesub. Thankfully, @simplesub showed how to get from a algebraic domain to a syntactic one by creating an  equivalent using constraint accumulation on type variables and biunification, making algebraic subtyping more accessible. In the seminal Bachelor Thesis from the first author, he showed how to extend the SimpleSub to the more expressive type system features of nix. Even though the work pintpointed a direction, it oversimplified on the operational semantic and derived type rules, leaving lots of room for improvement.
 
-=== First class Labels
+== First class Labels
 - TODO
 
-=== Related Work
-We decided to diverge from the formulation given in \@verified by not adding inherit as syntactic sugar but as a inference rule with a premise that ensures that no new recursion was introduced during type inference. This is done by checking the context whether this variable exists.
+== Flow Typing
+
+== Related Work
+We decided to diverge from the formulation given in @verified by not adding inherit as syntactic sugar but as a inference rule with a premise that ensures that no new recursion was introduced during type inference. This is done by checking the context whether this variable exists.
 
 
 
@@ -203,12 +175,9 @@ Lastely, we add a single type for patterns. Even thought a pattern is similar in
 - The general idea of the typing algorithm is, that typing progresses and finally constraints are installed on type-variables. The rules need to be chosen in a way, that this general approach is possible.
 
 
-#constraining <constraining>
-
-
 #page[
   #bibliography(
-    ("bib/misc.bib", "bib/parreaux.bib", "bib/nix.bib"),
+    ("bib/misc.bib", "bib/parreaux.bib", "bib/nix.bib", "bib/castagna.bib"),
     style: "association-for-computing-machinery",
   )
 ]
