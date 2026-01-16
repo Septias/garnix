@@ -1,6 +1,6 @@
 #import "functions.typ": *
 #import "./snips/comparison.typ": comparison
-#import "./snips/builtin-types.typ": types
+#import "./snips/builtin-types.typ": builtin_types
 #import "typesystem.typ": *
 
 #set heading(numbering: "1.")
@@ -17,7 +17,7 @@
 )
 
 = Securing Nix' Foundations
-The Nix programming language is used in over 100.000 files, showing its prominance, but was neglected in theorectical work until recentently when work was picked up indepentently by S. Klähn and Breokhoff et. al. @verified @simplenix. Both works gave a reduced syntax definition and operational semantic to account for their uses, but not the language in their full expressiveness. This work closes the gap by showing nix in its full expressiveness.
+The Nix programming language is used in over 100.000 files, showing its prominance, but was neglected in theorectical work until recentently when work was picked up indepentently by S. Klähn and Breokhoff et. al. @verified @simplenix. Both works gave a reduced syntax definition and operational semantic to account for their uses, but not the language in their full expressiveness. This work closes the gap by showing nix in its full expressiveness. We also try to give an overview of possible type inference approaches.
 
 
 = Origin of the Nix Language <intro>
@@ -136,11 +136,21 @@ Since ${oi(e_i)}$ strictly subsumes ${oi(l_i)}$ due to its inner structure, rule
 
 = Finding a Type System
 
-The literatur on type systems is as wide as the ocean with many typesystems studied over the last 70 years of research. Finding a typesystem for a language is thus similar to traversing a jungle with the alluring dangers of getting sidetracked behind every corner. Since records are such a central aspect of the language, starting from them is not a bad idea.
+The literatur on type systems is as wide as the ocean with many typesystems studied over the last 70 years of research. Finding a typesystem for a language is thus similar to traversing a jungle with the alluring dangers of getting sidetracked behind every corner, but there are a few beacons we that we can use to find a general direction.
+
+Over the years, logical _type connectives_ like union $τ ∨ τ$, intersection $τ ∧ τ$ and negation $¬τ$ have found their way into many mainstream languages @flow @typescript @typed_racket, proving their usefullness by giving an intuitive method to combine otherwise unrelated types. The type systems that epitomize this idea are typesystem called  _semantic subtyping_, mainly developed by Castagna et. al. The principal idea of this approach is to relate types to their set of inhabited types, that is, the set of types that can be given a specific type, in this regard giving types a _semantic meaning_. In the set-theoretic model of types, type-union relates to set-unions $⟦τ⟧ ∪ ⟦τ⟧$, type-intersection to set-intersections $⟦τ⟧∩⟦τ⟧$ and type negation to set-removal $𝟙 without ⟦τ⟧$. In these systems, one can encode pattern-matching, function-overloading and subtyping. Furthermore, these type connectives naturally combine with _flow typing_, a technique that is used to give reason to untyped languges such as nix.
+
+_Flow typing_ uses the "flow" of the language to deduce static properties like field-existance and null-safety. For example in typescript one often uses quick field-checks in if-conditions like this ` if (person.age && age > 18) {}`. If it were not for the `person.age` check, this program would produce an error if the person object does not have an age field. With this check though, the conditional short-fuses if the field is not present and continuos normally with the following statements. Nix has the same mechanism with the explicit check operation `{} ? a` that helps on in guarding an otherwise error producing field-access.
+
+When all three type connictives (¬, ∨, ∧) are present in a system, we can laverage the full power of (turing-complete) boolean algbera to build our types. This expressiveness of these typesystem usually come at the cost of complexity with these systems usually not exhibiting principle types and needing backtracking during type inference.
+
 
 
 == Record Theory
-Records have been studied in a variety of papers [..] and can be partitioned in roughly 3 groups. The first model of records is a syntactic model where the syntax defines what a record is. This approach is conceptually simple but hard to extend because everything has to be encoded in its syntax. To overcome its shortcommings, \@? studied _row polymorphism_. Row polymorphism extend record with a generic row r, effectively making them polymorphic in their "rest". By extending the row to lacks-predicates not only extension but also restriction of record types can be achieved, giving a lot of flexibility in theory. While strong in theory, their theory gets complex and unwildy fast, making it hard to integrate into fully-fledged type systems. _Semantic subtyping_, developed over multiple years by Castagna et. al. @gentle_intro @poly_records @typing_records_etc to name a few, tries to remedie this by shortcomming by giving records a set-theoretic semantic model. By also adding type connectives (negation, union and intersection), his systems are impressively expressive, especially in combination with _gradual typing_. The strength comes of a cost though, namely _backtracking_. Since polymorphic type inference is undecidable in general \@?ref, the model has to rely on backtracking and its performance overhead. It also lacks principle types, a strong selling point of ml-like systems. Last but not least, it is possible to model records in constraint based type system. A record field lookup in these systems produces a constrained which is collected and simplified later. Due to the generality, these systems usually don't exhibit good and effective properties.
+Records have been studied in a variety of papers [..] and can be partitioned in roughly 3 groups. The first model of records is a syntactic model where the syntax defines what a record is. This approach is conceptually simple but hard to extend because of its verbose nature and exploding rule-complex.
+To overcome these shortcommings, \@? studied _row polymorphism_. Row polymorphism extend record with a generic row r, effectively making them polymorphic in their "rest". By extending the row to lacks-predicates not only extension but also restriction of record types can be achieved, giving a lot of flexibility in theory. While strong in theory, their theory gets complex and unwildy fast, making it hard to integrate into fully-fledged type systems. _Semantic subtyping_, developed over multiple years by Castagna et. al. @gentle_intro @poly_records @typing_records_etc to name a few, tries to remedie this by shortcomming by giving records a set-theoretic semantic model.
+
+Since polymorphic type inference is undecidable in general \@?ref, the model has to rely on backtracking and its performance overhead. It also lacks principle types, a strong selling point of ml-like systems. Last but not least, it is possible to model records in constraint based type system. A record field lookup in these systems produces a constrained which is collected and simplified later. Due to the generality, these systems usually don't exhibit good and effective properties.
 
 Only recently in 2017, Stephen Dolan proposed a new family of type systems, named _algebraic type systems_. These systems tackle language construction from a new point of view. Instead of adding types first and then trying to find a semantic model for them, Dolan argues one should pay more attention to finding a semantic model for the types _first_. The types in _algebraic type systems_ form a distributive lattice (thus algebraic) and inherit the lattice' properties. By further restricting the the occurences for union and intersections to positive and negative positions, a distributive lattice can be constructed that allows for lossless reduction of subtyping constraints. In essence, the system is standart ML, with a lattice of types and unification replaced by bi-unification, a subroutine that handles subtyping constraints instead of equality constraints. The final algorithms for subsumption checking and type inference are short as well as simple, all thanks to the initial focus on well-formed types. The final algorithms inherit the standart ML properties, namely _principled type inference_, no need for type annotations and effectiveness i.e no backtracking.
 
@@ -149,42 +159,41 @@ Since batracking in nix' huge syntax tree that roots in a single file and relies
 == First class Labels
 - TODO
 
-
 == Flow Typing
-
+Besides the afore-mentioned record-field-check, nix provides function that can dynamically check the type of expressions. It is thus possible to write expressions like `if isStr t then {} else {}` where we can type t as $t ∧ str$ in the positive case and $t ∧ ¬str$ in the negative else-branch.
 
 
 == Impurities
+On the one hand nix is a pure and function language without sideffects but on the other hand it is one, that tightly integrates with the file-system to properly track built operations, their dependencies and outputs. The standart library @builtins thus boasts a few functions that make typing undecidable for systems that don't evaluate the language themselves.
+
 
 
 == Related Work
 We decided to diverge from the formulation given in @verified by not adding inherit as syntactic sugar but as a inference rule with a premise that ensures that no new recursion was introduced during type inference. This is done by checking the context whether this variable exists.
 
 
-
-
-
-
-
-
-
-
 = Type System
-What follows are the typing and subtyping rules as well as an overview over the constraint subroutine.
+What follows are the the types used to type the nix language.
 
 #types <types>
 
-Garnix models all literal syntax categories with the respective atom types bool, string, path and num. Notice, that we do not distinguish between float and int as they are coerced during interpretation and thus used interspersely in practice. We also add the usual types for fuctions, records and arrays and note that record  types only define a _single_ label to type mapping instead of multiple. This is due to the use of subtyping constraints and their accumuation on type variables during type inferene. This mechanism is further discussed in \@section_todo. Also, we introduce two types for arrays, one for homogenous arrays of the same type and one accumulative for the case that an array has many distinct elements.
-To form a boolean algebra of types we add the expected type connectives $union.sq, inter.sq, ~$ as well as a top and bottom type which represent the least type which is subsumed by every other type and the greatest type which subsumes every other type respectively.
-Lastely, we add a single type for patterns. Even thought a pattern is similar in structere to a record, the pattern type is an accumulated type with multiple fields. This distinction is made due to the syntactical difference of the two. Patterns are introduced and eliminated atomically unlike a record where every fild acces `record.field` results in new independent constraints. The superscript b can be true or false, ascribing whether the pattern is _open_ or _closed_.
 
-#typing_rules <typing_rules>
+== The Standart Library
+Nix includes a palette of 78 builtin types that are implemented by the evaluator and thus need to be implemented in a complete type inference algorithm.
 
-#subtyping <subtyping>
+#figure(
+  caption: [The nix language builtins and their respective types given @types],
+  builtin_types,
+)<builtins>
 
-- ⊳ and ⊲ are used to add and remove _typing hypotheses_ that are formed during subtyping. Since applying such a hypothesis right after assumption, the later modality ⊳ is added and can only be removed after subtyping passed through a function or record construct. *TODO: check*
-- The general idea of the typing algorithm is, that typing progresses and finally constraints are installed on type-variables. The rules need to be chosen in a way, that this general approach is possible.
+=== Problematic Children
 
+- *Records*: attrNames, attrValues, getAttr, hasAttr, intersectAttrs, mapAttrs
+- *Array*: elem, elemAt, head, length, listToAttrs
+- *Inspecting*: functionArgs
+- *Too general*:
+- *Impure*: currentSystem, currentTime, fetch\*, findFile, langVersion, nixVersion
+- *flow*: isAttrs, isBool, isFloat, isFunction, isInt, isList, isNull, isPath, isString
 
 #page[
   #bibliography(

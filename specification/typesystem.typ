@@ -152,7 +152,7 @@
       caption: "Reduction rules",
       $
         #rule_name("R-Lookup")&& {oi(l_i = t_i\;)}.l & arrow.long t_i #h(0.5cm) &&&"if" ∃i. l_i = l \
-        #rule_name("R-Lookup-Null")&& {oi(l_i = t_i\;)}.l & arrow.long "null" &&&"if" ∄i. l_i = l \
+        #rule_name("R-Lookup-Null")&& {oi(l_i = t_i\;)}.l & arrow.long #b[err] &&&"if" ∄i. l_i = l \
         #rule_name("R-Lookup-Default-Pos")&& {oi(l_i = t_i\;)}.l" or "t & arrow.long
         t_i &&&"if" ∃i. l_i = l \
         #rule_name("R-Lookup-Default-Neg")&& {oi(l_i = t_i\;)}.l" or "t & arrow.long
