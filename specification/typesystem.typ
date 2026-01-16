@@ -4,62 +4,54 @@
 
 == Todo
 
-=== Theoretical
-1. Explain what to do in lionells systems
-  - Find out if dolan is still an option?
-2. Do I have to force record values?
-3. How are width-constraints reduced?
-
-
 === Practical
 1. Add dynamic lookups
 2. Pattern reduction (algorithmic and declarative)
 3. fix or-rule (recursive function)
 4. fix ?-rule
+5.
+
 
 == Syntax
 
-#let basetypes = subbox(caption: "Literals")[
+#let literals = subbox(caption: "Literals")[
   #show raw: set text(fill: red)
 
   #let strChar = `[^"$\\]|\$(?!\{)|\\.`
   #let iStrChr = `[^$']|\$\$|\$(?!\{)|''[$']|''\\.|'(?!')`
 
-  #let interpol = `${ t }`
-  #let string = `"(c* interpol)* c*"`
+  #let interpol = $\${ t }$
+  #let string = `"(c* i)* c*"`
   #let boolean = `true | false`
   #let filepath = `(./|~/|/)([a-zA-Z.]+/?)+`
   #let number = `([0-9]*.)?[0-9]+`
   #let label = `[A-Za-z_][A-Za-z0-9_'-]*`
   #let searchpath = `<[A-Za-z_]*>`
+  #let uri = `[a-zA-Z][a-zA-Z0-9+.-]*://[^[ ]]+`
+
 
   $
            #type_name("interpol") i & ::= interpol \
              #type_name("String") s & ::= string \
                                     & "where" c ::= strChar \
-       #type_name("Ident String") s & ::= string \
+         #type_name("Ident String") & | string \
                                     & "where" c ::= "omitted" \
             #type_name("Boolean") b & ::= boolean \
     #type_name("File-Path") rho.alt & ::= filepath \
              #type_name("Number") n & ::= number \
               #type_name("Label") l & ::= label \
       #type_name("Search Path") Rho & ::= searchpath \
+                #type_name("Uri") u & ::= uri \
   $
 ]
 
 #let general = subbox(caption: "Terms")[
   $
-    t, t_1, t_2 ::= b &| s | rho.alt | Rho | n | l | v | "null" \
+    t, t_1, t_2 ::= b &| s | rho.alt | Rho | n | l | v | #b[null] \
     #type_name("Record") &| {overline(a\;)} | #b[rec] {overline(a\;)} \
     #type_name("Array") &| [ space t_0 space t_1 space ... space t_n space] \
-    #type_name("Has-Attribute") &| t #b[ ? ] l \
-    #type_name("Has-Attribute-Or") &| t.l #b[or] t \
-    #type_name("Record-Concat") &| t "//" t \
-    #type_name("Array-Concat") &| t "⧺" t \
-    #type_name("Lookup") &| t "." ρ \
-    (#type_name("Dynamic-Lookup") &| t "." t )\
-    #type_name("Function") &| overline(p) "@ "h : t \
-    #type_name("Let-statements") &| #b[let] overline(a\;) #b[in] t \
+    #type_name("Function") &| p "@ "h : t \
+    #type_name("Let-statements") &| #b[let] {overline(a\;)} #b[in] t\
     #type_name("Conditionals") &| #b[if] t #b[then] t #b[else] t \
     #type_name("With-Statement") &| #b[with] t; t \
     #type_name("Assert-Statement") &| #b[assert] t; t \
@@ -68,48 +60,71 @@
 
 #let operators = subbox(caption: "Operators")[
   $
-    #type_name("Algebraic") & t := ... | + | - | * | \/ \
-        #type_name("Logic") & t := ... | -> | ! | "&&" \
-       #type_name("Binary") & t := ... | < | <= | == | "!=" | > | >= \
-        #type_name("Pipes") & t := ... | #b[<|] | #b[|>]
+    #type_name("Algebraic") & o := && | t + t | t - t | t * t | t \/ t \
+        #type_name("Logic") &      && | t -> t | ! t | t "&&" t \
+       #type_name("Binary") &      && | t < t | t <= t | t == t \
+                            &      && | t "!=" t | t > t | t >= t \
+        #type_name("Pipes") &      && | #b[<|] | #b[|>] \
+      #type_name("Records") &      && | t space ? ρ | t.ρ #b[or] t | t \/\/ t | t.l \
   $
 ]
 
+#type_name("Has-Attribute") &| t #b[ ? ] l \
+#type_name("Has-Attribute-Or") &| t.l #b[or] t \
+#type_name("Record-Concat") &| t "//" t \
+#type_name("Array-Concat") &| t "⧺" t \
+#type_name("Lookup") &| t "." ρ \
 #let assignment = subbox(caption: "Assignment")[
   $
     #type_name("Inherit") ι & ::= #b[inherit] overline(l\;) | #b[inherit] (ρ) space overline(l\;) \
-    #type_name("Path") ρ & ::= l | ρ.l \
+    #type_name("Path") ρ & ::= l | ρ.l | ρ.i \
     #type_name("Assignment") a & ::= l = t; " | " ι \
   $
 ]
+
+#let rewrites = subbox(
+  caption: "Rewrites",
+  $
+    #type_name("R-With")&& #b[with] {overline(#b[nonrec] d)}; t_2 &arrow.twohead #b[let] _"with" {overline(#b[nonrec] d)} #b[in] t \
+    #type_name("R-Let-In")&& #b[let] oi(l_i \= t_i\;) #b[in] t &arrow.twohead#b[let] _"abs" {overline(#b[nonrec] d)} #b[in] t \
+    #type_name("R-Rec-Inner")&& { l_1 . l_2 space … space .l_n = t; } &arrow.twohead {l_1 = { l_2 = {l_n = t;};};} \
+    #type_name("R-Str-Dyn")&& t.s &arrow.twohead t.\${s} \
+    #type_name("R-functor")&& {"__functor" = "self": x : t } &arrow.twohead x: t \
+    #type_name("R-overrides")&& {"__overrides" = x : t } &arrow.twohead x: t \
+    #type_name("R-global")&&
+  $,
+)
+
+#rewrites
+
 
 #let patterns = box([
   #text(weight: "bold", smallcaps("Patterns"))
   $
     d, h & ::= t | ε \
-       e & ::= l | l space ? space d \
+       e & ::= l | l space ¿ space d \
        p & ::= { overline(e\,) } | { overline(e\,) … } | l \
   $])
 
 #let syntax = figure(
   caption: "Subset of Nix Syntax.",
-  rect(width: 100%, grid(
+  rect(width: 120%, grid(
     columns: 2,
     align: left,
     inset: 8pt,
-    grid.cell(rowspan: 2, general),
-    assignment,
-    basetypes,
-    operators,
+    general, literals,
+    operators, assignment,
     patterns,
+
     subbox(caption: "Shorthands")[
       // #set math.equation(numbering: "(1)")
       $
         p : t space @ space ε & eq.def p : t \
-            l space ? space ε & eq.def l \
-                            • & eq.def #b[or] | "//" | ⧺ | " ? " \
+                   l" @ "p: t & eq.def p" @ "l: t \
+            l space ¿ space ε & eq.def l \
       $
     ],
+    grid.cell(colspan: 2, rewrites),
   )),
 )
 #syntax
@@ -226,25 +241,6 @@
   ),
 )
 #lookups
-
-== Rewrites
-#let shorthands = figure(
-  caption: "Shorthands to morph syntax into a let-attrsets that have a typing rule.",
-  rect(
-    width: 100%,
-    inset: 20pt,
-    $
-      #type_name("R-With")&& #b[let] _"with" {overline(#b[nonrec] d)} #b[in] t &arrow.twohead #b[with] {overline(#b[nonrec] d)}; t_2 \
-      #type_name("R-Let-In")&& #b[let] _"abs" {overline(#b[nonrec] d)} #b[in] t &arrow.twohead #b[let] oi(l_i \= t_i\;) #b[in] t \
-      #type_name("R-Rec-Inner")&& { l_1 . l_2 space … space .l_n = t; } &arrow.twohead {l_1 = { l_2 = {l_n = t;};};} \
-      #type_name("R-Str-Dyn")&& t.s &arrow.twohead t.\${s} \
-      #type_name("R-functor")&& {"__functor" = "self": x : t } &arrow.twohead x: t \
-      #type_name("R-overrides")&& {"__overrides" = x : t } &arrow.twohead x: t
-      #type_name("R-global")&& l @ p: t &arrow.twohead p @ l: t
-    $,
-  ),
-)
-#shorthands
 
 
 == Auxiliaries
