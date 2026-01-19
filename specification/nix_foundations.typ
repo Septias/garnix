@@ -10,8 +10,8 @@
 // #show stack: set block(breakable: true)
 
 #set document(
-  title: "Improving Nothing",
-  description: "Type inference for the Nix Language",
+  title: "Securing Nix' Foundations",
+  description: "",
   author: "Sebastian Klähn",
   keywords: ("Nix", "Type inference", "Laziness", "Records"),
 )
@@ -92,7 +92,7 @@ To complete this presentation, we want to stress that interpolated strings are a
 If the unusual language features were placed in an iceberg-chart, we would now be entering deep-blue water, looking at features that are grosely underdocument and can only be found by nix-wizzards and language implementors.
 
 `TODO`
-- `__overrsides__`
+- `__overrides__`
 - `__functor__`
 - `__currentSystem`
 - `__nixPath`
@@ -143,7 +143,6 @@ Over the years, logical _type connectives_ like union $τ ∨ τ$, intersection 
 _Flow typing_ uses the "flow" of the language to deduce static properties like field-existance and null-safety. For example in typescript one often uses quick field-checks in if-conditions like this ` if (person.age && age > 18) {}`. If it were not for the `person.age` check, this program would produce an error if the person object does not have an age field. With this check though, the conditional short-fuses if the field is not present and continuos normally with the following statements. Nix has the same mechanism with the explicit check operation `{} ? a` that helps on in guarding an otherwise error producing field-access.
 
 When all three type connictives (¬, ∨, ∧) are present in a system, we can laverage the full power of (turing-complete) boolean algbera to build our types. This expressiveness of these typesystem usually come at the cost of complexity with these systems usually not exhibiting principle types and needing backtracking during type inference.
-
 
 
 == Record Theory
