@@ -7,11 +7,20 @@ Lastely, we add a single type for patterns. Even thought a pattern is similar in
 When trying to retrofit a typesystem onto a language that is effectively defined by an interpreter, the natural question arises, how close one should model the interpreters behaviour. In many cases the interpreter needs to be followed closely, but in cases of "higher theoretical properties" like infinite-recursion it might be benefical to extrapolate or simplify the intepreter quirks, effectiely deviating from the instantiated operational semantic.
 
 
+== Things done in this paper
+Since nix was built as a domain specific language with usability as its greatest design goal, the system boasts a lot of features that make retrofitting a type inference hard or even impossible. In traditional language theory, the flow is mostly reversed where one starts from a simple calculus like ML, SystemF, λ and carefully extends it with features to form a wieldy and interesting semantics. When trying to retrofit a type-system onto a language like @nix-language-2-28 @flow @typescript @elixir_design_principles @typed_racket one has to decide which features one can and wants to support.
+
+
+
+= Archive
 == Algebraic Subtying
 Algebraic subtyping \@dolstra_phd is a technique to get well-behaved types and neat type inference. After \@simplesub and \@mlstruct we know how to pratically implement it. The first thing one needs to do is to form a boolean algbebra of types that is well behaved. If given, constraints of the form τ₁ <= τ₂ can be "grained down" into sub-constraints, eventually landing at primitive constraints like $"Bool" < top$ that can be solved trivially.
 
-== Things done in this paper
-Since nix was built as a domain specific language with usability as its greatest design goal, the system boasts a lot of features that make retrofitting a type inference hard or even impossible. In traditional language theory, the flow is mostly reversed where one starts from a simple calculus like ML, SystemF, λ and carefully extends it with features to form a wieldy and interesting semantics. When trying to retrofit a type-system onto a language like @nix-language-2-28 @flow @typescript @elixir_design_principles @typed_racket one has to decide which features one can and wants to support.
+Since batracking in nix' huge syntax tree that roots in a single file and relies heavily on laziness is insufficient, the properties of algebraic subtyping come as a perfect fit. The formalization of algebraic subtyping depends heavily on order-theory and some form of category theory and the proofs are far from simple @simplesub. Thankfully, @simplesub showed how to get from a algebraic domain to a syntactic one by creating an  equivalent using constraint accumulation on type variables and biunification, making algebraic subtyping more accessible. In the seminal Bachelor Thesis from the first author, he showed how to extend the SimpleSub to the more expressive type system features of nix. Even though the work pintpointed a direction, it oversimplified on the operational semantic and derived type rules, leaving lots of room for improvement.
+
+
+
+
 
 #page[
   #bibliography(
