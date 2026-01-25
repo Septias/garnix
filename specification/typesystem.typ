@@ -3,17 +3,14 @@
 #set page(height: auto)
 
 == Todo
-
 === Practical
 1. Add dynamic lookups
 2. Pattern reduction (algorithmic and declarative)
 3. fix or-rule (recursive function)
 4. fix ?-rule
-5.
 
 
 == Syntax
-
 #let literals = subbox(caption: "Literals")[
   #show raw: set text(fill: red)
 
@@ -31,7 +28,7 @@
 
 
   $
-           #type_name("interpol") i & ::= interpol \
+           #type_name("Interpol") i & ::= interpol \
              #type_name("String") s & ::= string \
                                     & "where" c ::= strChar \
          #type_name("Ident String") & | string \
@@ -85,12 +82,12 @@
 #let rewrites = subbox(
   caption: "Rewrites",
   $
-    #type_name("R-With")&& #b[with] {overline(#b[nonrec] d)}; t_2 &arrow.twohead #b[let] _"with" {overline(#b[nonrec] d)} #b[in] t \
-    #type_name("R-Let-In")&& #b[let] oi(l_i \= t_i\;) #b[in] t &arrow.twohead#b[let] _"abs" {overline(#b[nonrec] d)} #b[in] t \
-    #type_name("R-Rec-Inner")&& { l_1 . l_2 space … space .l_n = t; } &arrow.twohead {l_1 = { l_2 = {l_n = t;};};} \
+    #type_name("R-With")&& #b[with] record; t &arrow.twohead #b[let] _"with" record #b[in] t \
+    #type_name("R-Let-In")&& #b[let] oi(l_i \= t_i\;) #b[in] t &arrow.twohead#b[let] _"abs" record #b[in] t \
+    #type_name("R-Def-Inner")&& { l_1 . l_2 space … space .l_n = t; } &arrow.twohead {l_1 = { l_2 = {l_n = t;};};} \
     #type_name("R-Str-Dyn")&& t.s &arrow.twohead t.\${s} \
     #type_name("R-functor")&& {"__functor" = "self": x : t } &arrow.twohead x: t \
-    #type_name("R-overrides")&& {"__overrides" = x : t } &arrow.twohead x: t \
+    #type_name("R-overrides")&& {"__overrides" = record; oj(l_j = t_j) } &arrow.twohead {oj(l_j = t_j)} \/\/ record \
     #type_name("R-global")&&
   $,
 )
@@ -107,7 +104,7 @@
   $])
 
 #let syntax = figure(
-  caption: "Subset of Nix Syntax.",
+  caption: "The Nix language.",
   rect(width: 120%, grid(
     columns: 2,
     align: left,
