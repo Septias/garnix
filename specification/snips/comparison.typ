@@ -29,6 +29,7 @@
   [Inherit], `inherit (players) bob;`,            `●`, `●`,
   [With], `with {a = 1;}; a`,                     `●`, `●`,
   [Dynamic Lookup], `{a = 1;}.${"a"}`,            ` `, ` `,
+  [Dynamic Binding], `{${"a"} = 1;}`,             ` `, ` `,
   [String-Interpolation], `The name is: ${name}`, ` `, ` `,
   [Assert], `assert false;`,                      `●`, ` `,
   table.cell(colspan: 4)[*Operators*],
