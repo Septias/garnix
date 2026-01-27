@@ -2,8 +2,8 @@ Things to do for algebraic subtyping:
 
 == Form the distributive lattice of types (part of subtyping rules basically)
 
-- Every language construct needs to be in the order
-- There needs to a top and bottom type
+- Every type needs to be in lattice
+- There needs to a top and bottom type (such that every element has glb an lup)
 - Distributivity rules τ₁ ∧ (τ₂ ∨ τ₃) == τ₁ ∧ τ₂ ∧ τ₁ ∧ τ₃
 - Meet and Join for every two elements τ₁, τ₂
 - Every τ has a complement ¬τ where τ ∧ ¬τ === T and τ ∨ ¬τ === ⊥
@@ -55,11 +55,14 @@ It would be problematic if we constrain α (typvar from x) with types from β (t
 - Building types
 - Noticing cycles
 
+
 === Consistency
 - New ∀-quantified variable bounds have to be propagated
 
+
 === Normal Forms
 - Needed to get efficient inference in face of boolean algebra
+
 
 === Constraining
 - Subroutine to create new bounds

@@ -4,10 +4,10 @@
 
 == Todo
 === Practical
-1. Add dynamic lookups
-2. Pattern reduction (algorithmic and declarative)
-3. fix or-rule (recursive function)
-4. fix ?-rule
+- Dynamic lookups
+- Function Patterns
+- fix or-rule (recursive function)
+- fix ?-rule
 
 
 == Syntax

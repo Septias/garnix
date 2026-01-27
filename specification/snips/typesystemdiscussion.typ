@@ -1,7 +1,13 @@
 #import "../functions.typ": *
 
+== Related Work
+We decided to diverge from the formulation given in @verified by not adding inherit as syntactic sugar but as a inference rule with a premise that ensures that no new recursion was introduced during type inference. This is done by checking the context whether this variable exists.
+
+We also yeet the distinction between deep and shallow evaluation as that does not have an effect on type systems. Also, it is to too important for the program language semantics. Due to this shift of focus, we finally drop operators that are modeled with relations and replace them with inference rules. These inference rules
+
+
 == First Class Labels
-First class labels allow computation on record labels. It is thus possible to acces record fields with a label, that is computed during evaluation. In general this lookis like `r.t` where r is a record and t is an arbitrary expression. Since nix' string interpolatio is allowed in paths and as record acesses, we need to add it to the language.
+First class labels allow computation on record labels. It is thus possible to access record fields with a label, that is computed during evaluation. In general this lookis like `r.t` where r is a record and t is an arbitrary expression. Since nix' string interpolatio is allowed in paths and as record accesses, we need to add it to the language.
 
 In research there exist different approaches to the problem of first-class labels.
 
@@ -43,10 +49,6 @@ An idea I had for this one is, that you keep the constraint lying around, that a
 One good thing is, that type inference is always as complete as an evaluator could be. We might get non-termination from it, but that is generally not too bad maybe?
 
 
-== Related Work
-We decided to diverge from the formulation given in @verified by not adding inherit as syntactic sugar but as a inference rule with a premise that ensures that no new recursion was introduced during type inference. This is done by checking the context whether this variable exists.
-
-We also yeet the distinction between deep and shallow evaluation as that does not have an effect on type systems. Also, it is to too important for the program language semantics. Due to this shift of focus, we finally drop operators that are modeled with relations and replace them with inference rules. These inference rules
 
 
 == Inspection
