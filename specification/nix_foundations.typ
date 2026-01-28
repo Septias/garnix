@@ -16,6 +16,34 @@
   keywords: ("Nix", "Type inference", "Laziness", "Records"),
 )
 
+= Structure (Wanted)
+== Nix analysis
+- Syntax
+- Reduction Semantic
+
+
+== TS Discussion
+- Gradual Typing
+  - Nix: Width-construct
+  - Nix: Impurities
+  - Nix: Inspection
+- Type connectives
+  - Boolean-Algebra
+- First Class Labels
+- Record Calculus
+  - Parreaux
+  - Castagna
+  - Nix: extension, lookups, etc.
+- Nix: Module TS *TODO*
+
+== Related Work @verified
+-
+
+== Further Work
+- Basically what I could do in the Msc.
+
+
+
 = Securing Nix' Foundations
 The Nix programming language is used in over 100.000 files, showing its prominence, but was neglected in theoretical work until recently when work was picked up independently by S. Klähn and Breokhoff et. al. @verified @simplenix. Both works gave a syntax definition and operational semantic to account for their uses, but did not cover the language in their full expressiveness. This work closes the gap by showing nix in its full expressiveness and giving an overview of possible type inference approaches.
 
@@ -148,11 +176,6 @@ In an example match-statement `match x with bool(x) -> .. | rec(x) -> .. | _ -> 
 Using negation types, it is also possibl to add record field removal to a language like `{a: τ} ∧ ¬{b : τ}`.
 
 
-== A gradual type system
-TODO: explain in more detail why a gradual type system is needed.
-
-
-The type systems that epitomizes this idea are typesystem called  _semantic subtyping_, mainly developed by Castagna et. al. The principal idea of this approach is to relate types to their set of inhabited types, that is, the set of types that can be given a specific type, in this regard giving types a _semantic meaning_. In the set-theoretic model of types, type-union relates to set-unions $⟦τ⟧ ∪ ⟦τ⟧$, type-intersection to set-intersections $⟦τ⟧∩⟦τ⟧$ and type negation to set-removal $𝟙 without ⟦τ⟧$.
 
 
 == Record Theory
