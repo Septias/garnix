@@ -15,4 +15,3 @@ We decided to diverge from the formulation given in \@verified by not adding inh
 )
 
 
-Regarding

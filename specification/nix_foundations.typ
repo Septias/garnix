@@ -121,7 +121,7 @@ If the unusual language features were placed in an iceberg-chart, we would now b
 
 `__overrides__` is a record-field, that is recognized by the language evaluator and can be used to override fields of the record. `{ a = 1; __overrides = { b = 2; }; -> {a = 1; b = 2;}`. The other field special to nix is the `__functor__` field that can be used to turn a record into a function. `({ __functor = self: x: self.foo && x; foo = false; } // { foo = true; }) true -> true`. Lastly, the `__toString` dunder allows one to define a string representation for a record.
 
-Nix also provides three impure dunder variables `__currentSystem` ,`__nixPath` and  `__currPos` that give information about the current system, where the nix executable is stored and the current evaluators position in the file. These structs bring the execution environment into scope and are further discussed in @impurities.
+Nix also provides three impure dunder variables `__currentSystem` ,`__nixPath` and  `__currPos` that give information about the current system, where the nix executable is stored and the current evaluators position in the file. These structs bring the execution environment into scope and are further discussed in \@impurities.
 
 
 = Syntax <syn>
@@ -168,6 +168,18 @@ Over the years, logical _type connectives_ like union $τ ∨ τ$, intersection 
 
 *overloading*: Using intersection types, one can define functions that have many types. For example, the function `if isBool(x) then !x else x + 1` is a function that either inverts a bool or increments integer. We would like to describe the argument x with an unbound type-variable α, but from the function body it is clear, that this function is only well-behaved on integers and bools. This function can be given two types. The first one $(bool ∨ int) -> (bool ∨ int)$ states that the function accepts argument of either bool or int and will return either an int or bool. But using intersection types, the functiontype can be refined to the more specific type $(int -> int) ∧ (bool -> bool)$, stating that if the function is called with an integer, it will also return one (instead of the union $int ∨ bool$). TODO: reference SystemF?
 
+$
+  #b[add]: str -> str ∨ path -> str
+  #b[add]: path -> str ∨ path -> path
+  #b[add]: int -> int -> int
+  #b[add]: float ∨ int -> float -> float
+  #b[add]: float -> float ∨ int -> float
+  // records
+  #b[?]: record -> label -> bool
+  #b[or] null -> τ -> τ
+  #b[or] τ₁ ∧ ¬null -> τ₂ -> τ₁
+$
+
 The nix addition operator can be used on strings and paths likewise. It is such possible to write expressions like `/home/ + "john" -> /home/john` that will return a _path_ and `"/home/" + "john"` which will return a _string_. The most general type is thus `(str -> (str ∨ path) -> string) ∧ (path -> (str ∨ path) -> path)`, needing intersection types.
 
 *pattern-matching and flow typing* _Flow typing_ and the more rigid _occurrence typing_ are techniques used in _gradual type systems_ that narrow a type based on its usage. For example, the function `if isBool(x) then !x else x + 1` checks the runtime value of x to be of type bool. After this conditional check, one can obviously type the positive branch under the assumption, that x is of type bool @typescript. A similar technique can be used to refine the consecutive branches of pattern matching statements.
@@ -175,20 +187,6 @@ In an example match-statement `match x with bool(x) -> .. | rec(x) -> .. | _ -> 
 
 Using negation types, it is also possibl to add record field removal to a language like `{a: τ} ∧ ¬{b : τ}`.
 
-
-
-
-== Record Theory
-Records have been studied in a variety of papers [..] and can be partitioned in roughly 3 groups. The first model of records is a syntactic model where the syntax defines what a record is. This approach is conceptually simple but hard to extend because of its verbose nature and exploding rule-complex.
-To overcome these shortcomings, \@? studied _row polymorphism_. Row polymorphism extend record with a generic row r, effectively making them polymorphic in their "rest". By extending the row to lacks-predicates not only extension but also restriction of record types can be achieved, giving a lot of flexibility in theory. While strong in theory, their theory gets complex and unwildy fast, making it hard to integrate into fully-fledged type systems. _Semantic subtyping_, developed over multiple years by Castagna et. al. @gentle_intro @poly_records @typing_records_etc to name a few, tries to remedie this by shortcoming by giving records a set-theoretic semantic model.
-
-TODO: dolan vs. castagna vs. parreaux
-
-
-== Impurities <impurities>
-On the one hand nix is a pure and function language without sideffects but on the other hand it is one, that tightly integrates with the file-system to properly track built operations, their dependencies and outputs. The standard library thus boasts a few functions that make typing undecidable for systems that don't evaluate the language themselves.
-
-`currentSystem, currentTime, fetch\*, findFile, langVersion, nixVersion` these functions can return arbitrary values. Since nix can use them them in combination with dynamic accesses, the type systems becomes an evaluator. We thus _need_ a gradual type system.
 
 
 = Type System
@@ -209,9 +207,4 @@ Nix includes a palette of 78 builtin types that are implemented by the evaluator
 
 TODO: discussion of problematic functions.
 
-#page[
-  #bibliography(
-    ("bib/misc.bib", "bib/parreaux.bib", "bib/nix.bib", "bib/castagna.bib"),
-    style: "association-for-computing-machinery",
-  )
-]
+#bib

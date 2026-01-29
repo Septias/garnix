@@ -5,9 +5,32 @@ We decided to diverge from the formulation given in @verified by not adding inhe
 
 We also yeet the distinction between deep and shallow evaluation as that does not have an effect on type systems. Also, it is to too important for the program language semantics. Due to this shift of focus, we finally drop operators that are modeled with relations and replace them with inference rules. These inference rules
 
+@verified has made three interesting decisions in their formalization:
+
+1. Rec/nonrec attribution
+2. Deep/shallow evaluation
+3. Operators as relations
+4. Matching
+
+We diverge from this representation quite a bit. First and foremost, NixLang @verified follows the first semantic of Dolan @memory_to_software @dolstra_phd and annotates every record field as recursive or not. The reason being a subtlety of the inherit statement. Both systems handle inherit by adding rewriting rules, that turn expressions of the form `inherit (a) x;` into something like `x = a.x;` in records or let-bindings. When used in conjunction with recursive records, this leads to unwanted recursion. The statement `inherit x;` will be desugared into `x = x;` and in a record `rec {x = x;}` this will lead to infinite recursion. That is why there needs to be distinction between the two and annotating every field is one way to solve it – albeit a very noisy one. We choose to handle inherit with a reduction rule that makes sure in the side-codition, that make sure x exists in the context.
+
+@verified also makes a distinction between deep and shallow evaluation. In a lazy equi-recursive language, recursive definitions have to be unrolled one at a time, usually only on the surface level. It might be of interest though to
+
+#derive(
+  "T-Inherit",
+  (${ p.l = l }$, $p.l ∈ Γ$),
+  ${ #b[inherit] (p) l }$,
+)
+
+#derive(
+  "T-Inherit-2",
+  (${ l = l; }$, $l ∈ Γ$),
+  ${ #b[inherit] l; }$,
+)
+
 
 == First Class Labels
-First class labels allow computation on record labels. It is thus possible to access record fields with a label, that is computed during evaluation. In general this lookis like `r.t` where r is a record and t is an arbitrary expression. Since nix' string interpolatio is allowed in paths and as record accesses, we need to add it to the language.
+First class labels allow computation on record labels. It is thus possible to access record fields with a computed label. In general this lookis like `r.t` where r is a record and t is an arbitrary expression. Since nix' string interpolatio is allowed in paths and as record accesses, we need to add it to the language.
 
 In research there exist different approaches to the problem of first-class labels.
 
@@ -99,24 +122,4 @@ The Workhorse in Castagna: Boolean Formulas, Reduced to Normal-Forms
 Stephen Dolan proposed a new family of type systems, named _algebraic type systems_. These systems tackle language construction from a new point of view. Instead of adding types first and then trying to find a semantic model for them, Dolan argues one should pay more attention to finding a semantic model for the types _first_. The types in _algebraic type systems_ form a distributive lattice (thus algebraic) and inherit the lattice' properties. By further restricting the the occurences for union and intersections to positive and negative positions, a distributive lattice can be constructed that allows for lossless reduction of subtyping constraints. In essence, the system is standart ML, with a lattice of types and unification replaced by bi-unification, a subroutine that handles subtyping constraints instead of equality constraints. The final algorithms for subsumption checking and type inference are short as well as simple, all thanks to the initial focus on well-formed types. The final algorithms inherit the standart ML properties, namely _principled type inference_, no need for type annotations and effectiveness i.e no backtracking.
 
 
-== The Nix Type System
-Nix does bring some weird typesystem to the table.
-
-It is a DSL inside the module system, that does type-checking during evaluation. This helps during module system configuration, because on build, you can see what might go wrong instead of in practice due to experiments or no at all. The typesystem provides the basic types and a combination thereof. It does not bring type connectives to the table I can imagine.
-
-
-
-
-
-
-#page[
-  #bibliography(
-    (
-      "../bib/misc.bib",
-      "../bib/parreaux.bib",
-      "../bib/nix.bib",
-      "../bib/castagna.bib",
-    ),
-    style: "association-for-computing-machinery",
-  )
-]
+#bib

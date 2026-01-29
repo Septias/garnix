@@ -94,3 +94,14 @@
   )
 ]
 
+// ------------------- BIB
+#let bib = page(bibliography(
+  (
+    "./bib/misc.bib",
+    "./bib/parreaux.bib",
+    "./bib/nix.bib",
+    "./bib/castagna.bib",
+    "./bib/gradual.bib",
+  ),
+  style: "association-for-computing-machinery",
+))
