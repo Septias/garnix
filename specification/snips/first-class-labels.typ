@@ -1,4 +1,6 @@
 #import "../functions.typ": *
+
+
 == First Class Labels
 First class labels allow computation on record labels. It is thus possible to access record fields with a computed label. In general this lookis like `r.t` where r is a record and t is an arbitrary expression. Since nix' string interpolatio is allowed in paths and as record accesses, we need to add it to the language.
 
