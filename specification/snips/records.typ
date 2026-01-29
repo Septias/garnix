@@ -1,6 +1,6 @@
-#import "functions.typ": *
+#import "../functions.typ": *
 
-
+== TODO
 - Are row-varibles actually better in gradual systems?
 
 
@@ -22,3 +22,16 @@ To overcome these shortcomings, \@? studied _row polymorphism_. Row polymorphism
 TODO: dolan vs. castagna vs. parreaux
 
 Algebraic subtyping \@dolstra_phd is a technique to get well-behaved types and neat type inference. After \@simplesub and \@mlstruct we know how to pratically implement it. The first thing one needs to do is to form a boolean algbebra of types that is well behaved. If given, constraints of the form τ₁ <= τ₂ can be "grained down" into sub-constraints, eventually landing at primitive constraints like $"Bool" < top$ that can be solved trivially.
+
+- Dolan: Lattice of types, Extensional,
+- Castagna: Sets, Denotational, Universes, Occurrence, Functino-annotations,
+- Parreaux: Boolean Algebraic, Syntactic, Verbose, Levels, Bounds, Skolems, Rigid Vars,
+
+It is funny, how the approaches of Parreaux and Castagna are generally similar. They both want to have fully fledged boolean types and they use some strategy to grind down constraints. They also both use some strategy to bring them into a normal form and they use some non-standart¿ subtyping rules to complete the lattice. One difference are upper and lower bounds, that are only used in the Work of Parreaux. On the other hand, I think, Castagna uses constraint types? What are coercion type systems again?
+
+The Workhorse in Parreaux: Carefully crafted inference rules, Normal-Forms
+The Workhorse in Castagna: Boolean Formulas, Reduced to Normal-Forms
+
+
+Stephen Dolan proposed a new family of type systems, named _algebraic type systems_. These systems tackle language construction from a new point of view. Instead of adding types first and then trying to find a semantic model for them, Dolan argues one should pay more attention to finding a semantic model for the types _first_. The types in _algebraic type systems_ form a distributive lattice (thus algebraic) and inherit the lattice' properties. By further restricting the the occurences for union and intersections to positive and negative positions, a distributive lattice can be constructed that allows for lossless reduction of subtyping constraints. In essence, the system is standart ML, with a lattice of types and unification replaced by bi-unification, a subroutine that handles subtyping constraints instead of equality constraints. The final algorithms for subsumption checking and type inference are short as well as simple, all thanks to the initial focus on well-formed types. The final algorithms inherit the standart ML properties, namely _principled type inference_, no need for type annotations and effectiveness i.e no backtracking.
+
