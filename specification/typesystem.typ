@@ -6,8 +6,9 @@
 === Practical
 - Dynamic lookups
 - Function Patterns
-- fix or-rule (recursive function)
-- fix ?-rule
+- Fix or-rule (recursive function)
+- Fix ?-rule
+- Fix reduction rules
 
 
 == Syntax
@@ -66,11 +67,6 @@
   $
 ]
 
-#type_name("Has-Attribute") &| t #b[ ? ] l \
-#type_name("Has-Attribute-Or") &| t.l #b[or] t \
-#type_name("Record-Concat") &| t "//" t \
-#type_name("Array-Concat") &| t "⧺" t \
-#type_name("Lookup") &| t "." ρ \
 #let assignment = subbox(caption: "Assignment")[
   $
     #type_name("Inherit") ι & ::= #b[inherit] overline(l\;) | #b[inherit] (ρ) space overline(l\;) \
@@ -91,9 +87,6 @@
     #type_name("R-global")&&
   $,
 )
-
-#rewrites
-
 
 #let patterns = box([
   #text(weight: "bold", smallcaps("Patterns"))
