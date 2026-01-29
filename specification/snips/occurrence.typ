@@ -1,7 +1,14 @@
 #import "../functions.typ": *
 
-== Gradual Type Systems
-We are finally arriving at an approximative typesystem that tries to infer types at a best-effort basis. Maybe we can even help the situation with a bit of _bidirectional type systems_? We anyways have to add an `Any` type that allows the system to be inexplicit from time to time. What does that mean for the subtyping hirarchy? If I have an any type it should be applicable to any function, because we can not make assumptions about it. It should thus be the subtype of every possible type. Should it be a supertype aswell?
+== About Gradual Typing
+- Neg: We don't want type annotations
+- Neg: We can not insert dynamic checks
+
+== Graduality
+- We need a type system that can approximate (check builtins, untypable)
+- If I have an any type it should be applicable to any function, because we can not make assumptions about it.
+- It should thus be the subtype of every possible type.
+- Should it be a supertype aswell?
 
 
 == Flow Typing
