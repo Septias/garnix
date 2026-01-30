@@ -17,16 +17,18 @@
 )
 
 = Structure (Wanted)
-== Nix analysis
+== Nix Analysis
+- Origin
+- Quirks
 - Syntax
 - Reduction Semantic
-
 
 == TS Discussion
 - Gradual Typing
   - Nix: Width-construct
   - Nix: Impurities
   - Nix: Inspection
+  - Occurence Typing
 - Type connectives
   - Boolean-Algebra
 - First Class Labels
@@ -34,7 +36,10 @@
   - Parreaux
   - Castagna
   - Nix: extension, lookups, etc.
-- Nix: Module TS *TODO*
+- Nix: Module TS
+
+== Practical Considerations
+- Huge syntax trees
 
 == Related Work @verified
 -
@@ -160,32 +165,37 @@ Since ${oi(e_i)}$ strictly subsumes ${oi(l_i)}$ due to its inner structure, rule
 
 
 = Finding a Type System
-TODO: Make this more about nix
+Nix is a dynamically typed, lazy and pure language. It features extensible records, functions with patterns, first-class-labels, overloaded operators, dynamic variable binding (with-construct) and also boasts 78 builtin function, that manipulate records and arrays, access the execution environment and reflect about the languages types. There exist no type systems powerfull enough to handle the full suite of properties needed to statically type such a language. All we can do then is to pick a subset of features we want to support. The following section will discuss possible typing approaches for the nix language.
 
-The literatur on type systems is as wide as the ocean with many typesystems studied over the last 70 years of research. Finding a typesystem for a language is thus similar to traversing a jungle with the alluring dangers of getting sidetracked behind every corner, but there are a few beacons we can use to find a general direction.
+The first thing that comes to mind when trying to retrofit
 
-Over the years, logical _type connectives_ like union $τ ∨ τ$, intersection $τ ∧ τ$ and negation $¬τ$ have found their way into many mainstream languages @flow @typescript @typed_racket @mlstruct, proving their usefulness by giving an intuitive method to combine otherwise unrelated types. For example, a function that uses a conditional `x: y: z: if x then y else z` is a function that that returns either y or z based on whether x is true or false. This function can be typed at $bool -> α -> β -> (α ∨ β)$, intersecting the possible return types. This is a great improvement to previous ml-like systems that would have to _unify_ α and β in this situation which is already not possible for integers and strings @algebraic_subtyping. The intersection type respects the variable _flow_, only merging α and β because they flow together in the output, not merging them in the input.
 
-*overloading*: Using intersection types, one can define functions that have many types. For example, the function `if isBool(x) then !x else x + 1` is a function that either inverts a bool or increments integer. We would like to describe the argument x with an unbound type-variable α, but from the function body it is clear, that this function is only well-behaved on integers and bools. This function can be given two types. The first one $(bool ∨ int) -> (bool ∨ int)$ states that the function accepts argument of either bool or int and will return either an int or bool. But using intersection types, the functiontype can be refined to the more specific type $(int -> int) ∧ (bool -> bool)$, stating that if the function is called with an integer, it will also return one (instead of the union $int ∨ bool$). TODO: reference SystemF?
+Over the years, logical _type connectives_ like union $τ ∨ τ$, intersection $τ ∧ τ$ and negation $¬τ$ have found their way into many mainstream languages @flow @typescript @typed_racket @mlstruct, proving their usefulness by giving an intuitive relation of otherwise unrelatable types. For example, a function that uses a conditional `x: y: z: if x then y else z` is a function that returns either y or z based on whether x is true or false. This function can be typed at $bool -> α -> β -> (α ∨ β)$, intersecting the possible return types. This is a great improvement to previous ml-like systems that would have to _unify_ α and β in this situation which is already fails for integers and strings @algebraic_subtyping. The intersection type respects the variable _flow_, only merging α and β because they flow together in the output, not merging them in the input.
+
+*overloading*: Using intersection types, one can define functions that have many types. For example, the function `if isBool(x) then !x else x + 1` is a function that either inverts a bool or increments an integer. We would like to describe the argument x with an unbound type-variable α, but from the function body it is clear, that this function is only well-behaved on integers and bools. This function can be given two types. The first one $(bool ∨ int) -> (bool ∨ int)$ states that the function accepts argument of either bool or int and will return either an int or bool. But using intersection types, the functiontype can be refined to the more specific type $(int -> int) ∧ (bool -> bool)$, stating that if the function is called with an integer, it will also return one (instead of the union $int ∨ bool$).
 
 $
-  #b[add]: str -> str ∨ path -> str
-  #b[add]: path -> str ∨ path -> path
-  #b[add]: int -> int -> int
-  #b[add]: float ∨ int -> float -> float
-  #b[add]: float -> float ∨ int -> float
+  #b[add]: str -> str ∨ path -> str \
+  #b[add]: path -> str ∨ path -> path \
+  #b[add]: int -> int -> int \
+  #b[add]: float ∨ int -> float -> float \
+  #b[add]: float -> float ∨ int -> float \
   // records
-  #b[?]: record -> label -> bool
-  #b[or] null -> τ -> τ
-  #b[or] τ₁ ∧ ¬null -> τ₂ -> τ₁
+  #b[?]: record -> label -> bool \
+  #b[or] null -> τ -> τ \
+  #b[or] τ₁ ∧ ¬null -> τ₂ -> τ₁ \
 $
 
-The nix addition operator can be used on strings and paths likewise. It is such possible to write expressions like `/home/ + "john" -> /home/john` that will return a _path_ and `"/home/" + "john"` which will return a _string_. The most general type is thus `(str -> (str ∨ path) -> string) ∧ (path -> (str ∨ path) -> path)`, needing intersection types.
+This form of overloading is needed for nix' addition operator that can be used on strings and paths alike. It is possible to write expressions like `/home/ + "john" -> /home/john` that will return a _path_ and `"/home/" + "john"` which will return a _string_. The most general type is thus `(str -> (str ∨ path) -> string) ∧ (path -> (str ∨ path) -> path)`, needing an intersection type.
 
-*pattern-matching and flow typing* _Flow typing_ and the more rigid _occurrence typing_ are techniques used in _gradual type systems_ that narrow a type based on its usage. For example, the function `if isBool(x) then !x else x + 1` checks the runtime value of x to be of type bool. After this conditional check, one can obviously type the positive branch under the assumption, that x is of type bool @typescript. A similar technique can be used to refine the consecutive branches of pattern matching statements.
+We want to note that because of the overloading usage of intersection types, it is not possible to restrict unions to output positions and intersections to input positions as Dolan did @mlsub. It is thus not possible to easily destructure constraints without a normalization routine similar to the one of Parreaux.
+
+
+*pattern-matching and flow typing* _Flow typing_ and the more rigid _occurrence typing_ are techniques that narrow a type based on its usage. For example, the function `if isBool(x) then !x else x + 1` checks the runtime value of x to be of type bool. After this conditional check, one can obviously type the positive branch under the assumption, that x is of type bool @typescript. Also, a negative type is needed to type the else-branch under the assumption, that x is not a bool. A similar technique can be used to refine the consecutive branches of pattern matching statements.
+
 In an example match-statement `match x with bool(x) -> .. | rec(x) -> .. | _ -> x` one matches the single branches in order. The branches behave like conditionals, forcing a type on the variable, the interesting case is the default-case. This one can be typed under the assumption, that it is not of type bool or record and show why one would like to use negation types.
 
-Using negation types, it is also possibl to add record field removal to a language like `{a: τ} ∧ ¬{b : τ}`.
+Using negation types, it is possible to add record field removal to a language like `{a: τ} ∧ ¬{b : τ}`.
 
 
 
@@ -198,11 +208,10 @@ What follows are the the types used to type the nix language.
 == The Standard Library
 Nix includes a palette of 78 builtin types that are implemented by the evaluator and thus need to be implemented in a complete type inference algorithm.
 
-#box(width: 110%, [
-  #figure(
-    caption: [The nix language builtins and their respective types given @types],
-    builtin_types,
-  )<builtins>])
+#figure(
+  caption: [The nix language builtins and their respective types given @types],
+  builtin_types,
+)<builtins>)
 
 
 TODO: discussion of problematic functions.

@@ -12,9 +12,6 @@
 
 
 == Flow Typing
-Besides the afore-mentioned record-field-check, nix provides function that can dynamically check the type of expressions. It is thus possible to write expressions like `if isStr t then {} else {}` where we can type t as $t ∧ str$ in the positive case and $t ∧ ¬str$ in the negative else-branch but for this we _need_ negative types.
-
-There at least are no patterns, but one could also argue, that patterns are just a generalization of conditionals.
 
 The last constructs help in narrowing down value types. They actually just check the type of values `isAttrs, isBool, isFloat, isFunction, isInt, isList, isNull, isPath, isString`.
 

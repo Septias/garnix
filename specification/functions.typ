@@ -18,14 +18,14 @@
 
 
 // -------------  Syntax Shorthands
-#let str = "str"
+#let str = "s"
 #let null = "null"
 #let drv = "drv"
 #let path = "path"
 #let bool = "bool"
 #let int = "int"
 #let float = "float"
-#let number = "float"
+#let number = "(float ∨ int)"
 #let openPat = $⦃oi(l_i : τ_i)⦄^◌$
 #let recordType = ${oi(l_i : τ_i)}$
 #let record = ${oi(l_i \= t_i\;)}$
