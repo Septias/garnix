@@ -45,7 +45,7 @@
 
 #let general = subbox(caption: "Terms")[
   $
-    t, t_1, t_2 ::= b &| s | rho.alt | Rho | n | l | v | #b[null] \
+    t, t_1, t_2 ::= b &| s | rho.alt | Rho | n | l | #b[null] \
     #type_name("Record") &| {overline(a\;)} | #b[rec] {overline(a\;)} \
     #type_name("Array") &| [ space t_0 space t_1 space ... space t_n space] \
     #type_name("Function") &| p "@ "h : t \
@@ -69,7 +69,7 @@
 
 #let assignment = subbox(caption: "Assignment")[
   $
-    #type_name("Inherit") ι & ::= #b[inherit] overline(l\;) | #b[inherit] (ρ) space overline(l\;) \
+    #type_name("Inherit") ι & ::= #b[inherit] overline(l); | #b[inherit] (ρ) space overline(l); \
     #type_name("Path") ρ & ::= l | ρ.l | ρ.i \
     #type_name("Assignment") a & ::= l = t; " | " ι \
   $

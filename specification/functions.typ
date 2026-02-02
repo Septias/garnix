@@ -32,7 +32,7 @@
 #let label = $l$
 #let manyTypes = $[oi(τ_i)]$
 #let oα = $overline(α)$
-
+#let otherwise = math.italic("otherwise")
 
 // -------------  Bigger Constructs
 
