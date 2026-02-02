@@ -40,7 +40,7 @@ $
 )
 
 *Path-resolution* @revisiting_occurrence
-#many_wrapping_derives(
+#flexbox(
   "",
   $e arrow.b ε = e$,
   $e_0e_1 arrow.b i.pi.alt = e_i$,
@@ -64,7 +64,7 @@ $
 $
 
 = Typing
-#many_wrapping_derives(
+#flexbox(
   derive("T-sub", ($t: τ_1$, $τ_2 ≤ τ_1$), $t: τ_2$),
   derive("T-Abs", ($Γ, x: τ_1 ⊢ t: τ_2$,), $Γ ⊢ λ x. t: (τ_1 → τ_2)$),
   derive("T-App", ($Γ ⊢ x: τ_1$, $Γ ⊢ t: (τ_1 → τ_2)$), $Γ ⊢ (λ x. t) x : τ_2$),
@@ -79,11 +79,13 @@ $
 = Matching
 Given a type τ and a pattern p with $bag.l p bag.r ≤ τ$, the operator t/p produces the type environment assumed for the variables in p when a value of type t is matched against p and the matching succeeds.
 
-#many_wrapping_derives()
+#flexbox(
+  $t/t' =$,
+)
 
 
 = Subtyping
-#many_wrapping_derives(
+#flexbox(
   derive(
     "S-depth",
     (

@@ -72,7 +72,7 @@
   ..body,
 ))
 
-#let many_wrapping_derives(caption: "", ..body) = stack(
+#let flexbox(caption: "", ..body) = stack(
   spacing: 10pt,
   align(left, text(
     weight: "bold",

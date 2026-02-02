@@ -252,7 +252,7 @@
   caption: "Nix typing rules",
   rect(width: 100%, inset: 20pt, stack(
     spacing: 3em,
-    many_wrapping_derives(
+    flexbox(
       caption: "Standartrules",
       derive("T-Var1", ($Γ(x) = τ$,), $Ξ, Γ tack x: τ$),
       derive(
@@ -279,7 +279,7 @@
       // derive("T-Asc", ($Ξ,Γ ⊢ t : τ$,), $Ξ,Γ ⊢ (t: τ) : τ$),
     ),
     // line(length: 100%),
-    many_wrapping_derives(
+    flexbox(
       caption: "Language Constructs",
       derive(
         "T-If",
@@ -297,7 +297,7 @@
         $(x: t) {oi(#b[nonrec] d)} arrow.long_a t["indirects" oα]$,
       ),
     ),
-    many_wrapping_derives(
+    flexbox(
       caption: "Records",
       derive(
         "T-Rcd",
@@ -327,7 +327,7 @@
       ),
     ),
     // line(length: 100%),
-    many_wrapping_derives(
+    flexbox(
       caption: "Lists",
 
       derive(
