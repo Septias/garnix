@@ -7,6 +7,7 @@
   $ ~ $, [Consistency],
   $ lt.double $, [Constraining],
   $ ≤ $, [Subtyping],
+  $ eq.triple $, [Equality],
   $ ⊢ $, [Proves],
   $ tack.double $, [ Variation of proves ],
   $ models $, [ Models ],
@@ -17,9 +18,12 @@
   $ x, y, z $, [ Object-lang: Unkown but fixed variable ],
   $ t, e $, [ Meta-lang: Expression or terms ],
   $ α, β, γ $, [ Typevariable ],
+  $t ⊲ s$, [Type cast],
+  $t arrow.double^p s$, [blame],
 )
 
-= Occurrence Typing
+
+t= Occurrence Typing
 *Domain-merging* @revisiting_occurrence
 
 $
@@ -56,7 +60,7 @@ $
     {
       u | ∀l ∈ "Labels"
       cases(
-                                 u.l ≥ t_2.l & "if" t_2.l ≤ ¬"Udef" \
+        u.l ≥ t_2.l & "if" t_2.l ≤ ¬"Udef",
         u.l ≥ t_1.l ∨ (t_2.l without "Udef") & otherwise
       )
     }
@@ -77,11 +81,33 @@ $
 )
 
 = Matching
-Given a type τ and a pattern p with $bag.l p bag.r ≤ τ$, the operator t/p produces the type environment assumed for the variables in p when a value of type t is matched against p and the matching succeeds.
+Given any pattern p, we can define a type $bag.l p bag.r$ that characterizes exactly the set of values that match the pattern:
+
+#let pat(x) = $bag.l #x bag.r$
 
 #flexbox(
-  $t/t' =$,
+  $pat(p) = 𝟙$,
+  $pat(t) = t$,
+  $pat((x := c)) = 𝟙$,
+  $pat({l = p}) = {l = pat(p)}$,
+  $pat(p_1 ∧ p_2) = pat(p_1) ∧ pat(p_2)$,
+  $pat(p_1 ∨ p_2) = pat(p_1) ∨ pat(p_2)$,
 )
+
+It can be shown that for every pattern p and well-typed value we have $v/p != "fail"$ iff $∅ ⊢ v : pat(v)$.
+
+Given a type τ and a pattern p with $bag.l p bag.r ≤ τ$, the operator τ/p produces the _type environment_ assumed for the variables in p when a value of type τ is matched against p and the matching succeeds. It is defined as:
+
+#flexbox(
+  $τ\/τ' = ∅$,
+  $τ\/x = x: τ$,
+  $τ\/(x := c) = x : b_c$,
+  $τ\/{ l = p} = τ.l \/ p$,
+  $p_1 ∧ p_2 = (t \/ p_1) ∪ (t \/ p_2)$,
+  $p_1 ∨ p_2 = ((t ∧ pat(p_1)) \/ p_1) ∪ (t ∧ (pat(p_2)) \/ p_2)$,
+)
+
+and satisfies the property that for every τ, p and v, if $∅ ⊢ v: τ$ and $v \/ p = σ$, then, for every variable x in p, the judgment $∅ ⊢ x σ : (τ\/p)(x)$ holds.
 
 
 = Subtyping
@@ -98,6 +124,59 @@ Given a type τ and a pattern p with $bag.l p bag.r ≤ τ$, the operator t/p pr
   derive("S-width", ($$,), $$),
 )
 
+
+= Deferred Substitutions
+#derive(
+  "T-str",
+  ($$,),
+  $x_("Some" k space e) -> e$,
+)
+
+#let subs = $overline(sigma.alt)$
+
+$
+       x_(σ?)[subs] & := cases(
+                        x_("Some" ("abs" d)) & "if" x = "with" e ∈ subs "and" sigma^? = "Some"(abs d),
+                        x_("Some" (k space e)) & "if" x = k space e ∈ subs,
+                        x_(σ^?) & otherwise,
+                      ) \
+     (λ x. e)[subs] & := λ x. e[subs] \
+  (λ {p?}. e)[subs] & := λ {p[subs]}: e[subs] \
+$
+
+= Records
+
+#let cast_fn = $λ^{ and_(i∈I) τ_i → τ_i}$
+
+#derive("Sel", ($Γ ⊢ e: τ ≤ { l = 𝟙}$,), $Γ ⊢ e.l : τ.l$)
+#derive("Del", ($Γ ⊢ e: τ ≤ {}$,), $Γ ⊢ e without l : τ without l$)
+#derive(
+  "Conc",
+  ($Γ ⊢ e_1: τ_1 ≤ {}$, $Γ ⊢ e_2: τ_2 ≤ {}$),
+  $e_1 + e_2 : τ_1 + t_2$,
+)
+
+$(r_1 +_t r_2)(l) = cases(r_2(l) &r_2(l) ∧ t ≤ 𝟘, (r_2(l) without t) ∨ r_1(l) &otherwise)$
+
+
+= Gradual typing
+
+The gradual type: $star.op$
+
+#let uk = $star.op$
+
+#flexbox(
+  "Consistency",
+  $A ~ A$,
+  $A ~ uk$,
+  $uk ~ A$,
+  derive(
+    "",
+    ($A_1 ~ B_1$, $A_1 ~ B_1$),
+    $A_1 → A_2 ~ B_1 → B_2$,
+  ),
+  derive("", ($A ~ B$,), $∀a. A ~ ∀α. B$),
+)
 
 
 #bib
