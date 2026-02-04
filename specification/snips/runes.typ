@@ -178,5 +178,8 @@ The gradual type: $star.op$
   derive("", ($A ~ B$,), $∀a. A ~ ∀α. B$),
 )
 
+#derive("ForallL", ($Γ, α ⊢ A <= B$,), $ A <= ∀α. B $)
+#derive("ForallL", ($Γ ⊢ τ$, $Γ, α ⊢ A[α -> τ] <= B$), $ ∀α. A <= B $)
+
 
 #bib
