@@ -182,24 +182,57 @@ Since ${oi(e_i)}$ strictly subsumes ${oi(l_i)}$ due to its inner structure, rule
 = Finding a Type System
 Nix is a dynamically typed, lazy and pure language. It features extensible records, functions with patterns, first-class-labels, overloaded operators, dynamic variable binding (with-construct) and also boasts 78 builtin function, that manipulate records and arrays, access the execution environment and reflect on the languages types. There exist no type systems powerfull enough to handle the full suite of properties needed to statically type such a language yet, leaving us with the only option to pick a subset of nix' features to form a well-behaved type system.
 
-A type system is noting without a usecase. The gain of research languages is advancing the field in general, creating typesystems that infer more properties, reject less valid programs and run faster. For typestems that have an existing language as foundation, usability is the most important heuristic. In the following section we will discuss we whant to give a broader overview over type system features and their applicability for nix.
+A type system is nothing without a usecase. The gain of research languages is advancing the field in general, creating typesystems that infer more properties, reject less valid programs and run faster. For typestems that have an existing language as a foundation, _usability_ is the most important heuristic. In the following section we want to give a broader overview over type system features and their applicability for nix.
 
-First of all one has to analyze how practinioneers use the language and in nix, the usual user writes configuration files. That is, utilizing the existing module system of nixos and home-manager to configure the operating system or user environment. The most benificial feature would thus be to _infer option values_. Both module systems provide online services (citation-needed) (citation-needed) to provide this information with examples and even types, but up to this date no satisfactory solution exists that works in IDEs. The module systems structure, its domain specific rudimentary type system and possibl integrations will be discussed in @modulesystem.
+First of all one has to analyze how practinioneers use the language and in nix, the usual user writes configuration files. That is, utilizing the existing module system of nixos and home-manager to configure the operating system or user environment. The most beneficial feature would thus be to _infer option values_. Both module systems provide online services (citation-needed) (citation-needed) to provide this information with examples and even types, but up to this date, no satisfactory solution exists that works in IDEs. The module systems structure, its domain specific rudimentary type system and possibl integrations will be discussed in @modulesystem.
 
-The module system is a part of the nix standart library and utilizes most of the languages core features, such that full option inference is a feature that needs nix language type inference as a foundation and even then, is not clear whether it brings satisfactory results.
+The module system is a part of the nix standart library and utilizes most of the languages core features, such that full option inference is a feature that builds upon nix-language type inference and even if it existed, is not clear whether it brings satisfactory results. There might be ways to add option completion to a languge server without nix type inference, hard-coding the module-system into its foundation and using the existing type hints in conjunction, but this will (for now) not be the topic.
 
+The second class of users use nix as a programming language. The use of nix as a language is mostly done the nix standart library and software packages around the nix ecosystem. Even though this might only be a fraction of the overall nix users, the benefit of good type inference is still huge. A good typesystem would also reduce the hurdle to get into nix programming which normal users mostly avoid.
 
-
-== From Static vs. Dynamic to Gradual
-Static type systems operate on the meta-level of programs to deduce program properties without running the program.
-This can help to enforce safety properties like _null-saftety_, _panic-freeness_, and _no use-after-free_ @rust and assist the programmer to write well-behaved programs. Especially static type inference can help programmers to argue about complicated function calls, destructure nested datatypes and interact with unkown libraries. But  static type checking is a compile-time abstraction over a programs runtime behaviour and thus neccessarily an incomplete approximation @coldwar. This leads to valid programs being rejected or lots of work to "make the compiler happy".
-
-Dynamic languages form the other side of the spectrum by not imposing any static properties on the program, giving ultimate expressiveness to the programmer at the cost of possibly unexpected runtime errors. That is why most _scripting languages_ come without a static type system to help in rapid prototyping of applications. Only when programs get bigger and connections more complex, static type systems and their strong guarantees show their strength. The growing popularity of flow and typescript @flow @typescript shows the general trend towards type safe programming in the inherently dynamic javascript ecosystem.
-
-Gradual type systems @gradual_siek @gradual_tobin try to strike the balance between static type inference and fully dynamic languages by allowing both to coexist. It is thus common that the language has two type systems in its torso, one is annotatede and static while the other remains dynamic. The boundary between the two is formed by an any type $star.op$ that is used in the dynamic part and casts that lift any to a concrete type. The blame calculus
+We want to derive a typestem that helps in writing the language itself instead of a DSL that can only handle the module system. To grapsh nixos in its entirety, a few properties need to be saftisfied...
 
 
-== Type connectives
+== Lets talk properties
+The type system should be  _lazy_ because the nix syntax tree is the biggest repository in existance and hard to calculate (todo: check). Adding mandatory type annotations to a language with the size of the nix ecosystem would mean, that all files would have to be rewritten at once, an undertaking too big to succeed. It might be possible to add type annotations to comments or try to add a gradual type system to the laungage itself, but  _ull type inference_ à la ml seems to be the best option. At best it would be _principaled_ type inference with one most general type that can always be inferred without _backtracking_.
+
+As a next topic, we talk about expressiveness. Most if not all typesystem want to have some form of polymorphism, a feature that allows one to abstract over variables and allows to write generic code. A whole suite of polymorphism types exist `parametric polymorphism`, `first-class polymorphism`, `subtyping polymorphism`, `Ad-hoc polymorphsim`, `Presence polymorphism`, `Explicit Polymorphism`, `Implicit Polymorphsim` and its hard to judge which one is the right one for your type system. For nix, ad-hoc polymorphism is needed becauese nix features let-bindings. We definitiely don't want `explicit polymorphism` because we don't have type annotations. The polymorphism of ?????.
+
+Last but not least, `subtype polymorphism` is a common technique that has proven useful especially in conjunction with _type-connectives_. Type connectives are borrowed from logic and add a way to connect othewise unrelated types with unions, intersection and negation. They are especially handy when used together with _flow-respective typing_, a technique used in flow to narrow types in conditionals.
+
+Now we also have to talk about properties/features needed becaus of the language itself. First of all, the language allows to reflect over its types using the builtin (isBool, isAttr, etc.) functions so we need a type system that is _reflective_. Nix also allows to compute record labels and such labels need to be _first class_ in the language. Last but not least, nix is a lazy and recursive language with hard-to-track shadowing semantics. The language definition thus needs to adapt to the lazy behaviour, _recursive types_ need to be baked into the language and one needs a substitution logic, that respect the different levels of binding and the hard-to-calculate with-binding.
+
+The final list of wanted properties is thus:
+1. Principaled type inference
+2. Support for Record concatenation
+3. Support for dynamic lookups
+4. Recursive Types
+5. Occurrence typing
+6. Gradual typing
+7. Lazyness
+8. Subtype Polymorphism
+9. Type connectives
+
+
+== To be continue...
+The following sections will discuss the wanted properties in no particular order.
+
+
+== From Static vs. Dynamic to Gradual to Occurrence
+Static type systems operate on the meta-level to deduce program properties without running the program. This can help to enforce safety properties like _null-saftety_, _panic-freeness_, and _no use-after-free_ @rust and assist the programmer to write well-behaved programs. Especially static type inference can help programmers to argue about complicated function calls, destructure nested datatypes and interact with unkown libraries. But  static type checking is a compile-time abstraction over a programs runtime behaviour and thus necessarily an incomplete approximation @coldwar. This leads to valid programs being rejected or lots of work to "make the compiler happy".
+
+For scripting, many ¿ have thus turned towards Dynamic languages. Dynamic languages form the other side of the spectrum by not imposing any static properties on the program, giving ultimate expressiveness to the programmer at the cost of possibly unexpected runtime errors. This reduces the overhead of creating types and helps in rapid prototyping of applications. Only when programs get bigger and interactions between modules, functions, classes and services more complex, static type systems and their strong guarantees show their strength. The growing popularity of flow and typescript @flow @typescript shows the general trend towards type safe programming in the inherently dynamic javascript ecosystem and the need to mix the two approaches.
+
+Gradual type systems @gradual_siek @gradual_tobin try to strike the balance between static type inference and fully dynamic languages by allowing both to coexist. These typesystems actually have two type systems in their torso, one annotated with static guarantees and a dynamic one. The boundary between the two is formed by an any type $star.op$ that is used in the dynamic part and casts that lift any to a concrete type. There exist quite a bit of research around the topic (\@blame \@agt \@sekiyama \@cosistent_sub \@cant_be_blamed) but most of the type systems come with type annotations, a feature we would like to dodge in this work.
+
+A more promising approach is thus _flow typing_ and the more rigid _occurrence typing_ @revisiting_occurrence  that narrow a type based on its usage. For example, the function `if isBool(x) then !x else x + 1` checks the runtime value of x to be of type bool. After this conditional check, one can obviously type the positive branch under the assumption, that x is of type bool @typescript. Also, a negative type is needed to type the else-branch under the assumption, that x is not a bool. A similar technique can be used to refine the consecutive branches of pattern matching statements.
+
+In an example match-statement `match x with bool(x) -> .. | rec(x) -> .. | _ -> x` one matches the single branches in order. The branches behave like conditionals, forcing a type on the variable, the interesting case is the default-case. This one can be typed under the assumption, that it is not of type bool or record and show why one would like to use negation types.
+
+Using negation types, it is possible to add record field removal to a language like `{a: τ} ∧ ¬{b : τ}`.
+
+
+== Type Connectives
 
 Over the years, logical _type connectives_ like union $τ ∨ τ$, intersection $τ ∧ τ$ and negation $¬τ$ have found their way into many mainstream languages @flow @typescript @typed_racket @mlstruct, proving their usefulness by giving an intuitive relation of otherwise unrelatable types. For example, a function that uses a conditional `x: y: z: if x then y else z` is a function that returns either y or z based on whether x is true or false. This function can be typed at $bool -> α -> β -> (α ∨ β)$, intersecting the possible return types. This is a great improvement to previous ml-like systems that would have to _unify_ α and β in this situation which is already fails for integers and strings @algebraic_subtyping. The intersection type respects the variable _flow_, only merging α and β because they flow together in the output, not merging them in the input.
 
@@ -222,13 +255,6 @@ This form of overloading is needed for nix' addition operator that can be used o
 We want to note that because of the overloading usage of intersection types, it is not possible to restrict unions to output positions and intersections to input positions as Dolan did @mlsub. It is thus not possible to easily destructure constraints without a normalization routine similar to the one of Parreaux.
 
 
-*pattern-matching and flow typing* _Flow typing_ and the more rigid _occurrence typing_ are techniques that narrow a type based on its usage. For example, the function `if isBool(x) then !x else x + 1` checks the runtime value of x to be of type bool. After this conditional check, one can obviously type the positive branch under the assumption, that x is of type bool @typescript. Also, a negative type is needed to type the else-branch under the assumption, that x is not a bool. A similar technique can be used to refine the consecutive branches of pattern matching statements.
-
-In an example match-statement `match x with bool(x) -> .. | rec(x) -> .. | _ -> x` one matches the single branches in order. The branches behave like conditionals, forcing a type on the variable, the interesting case is the default-case. This one can be typed under the assumption, that it is not of type bool or record and show why one would like to use negation types.
-
-Using negation types, it is possible to add record field removal to a language like `{a: τ} ∧ ¬{b : τ}`.
-
-
 
 = Type System
 What follows are the the types used to type the nix language.
@@ -238,9 +264,6 @@ What follows are the the types used to type the nix language.
 
 == The module system <modulesystem>
 
-
-== The Standard Library
-Nix includes a palette of 78 builtin types that are implemented by the evaluator and thus need to be implemented in a complete type inference algorithm.
 
 #figure(
   caption: [The nix language builtins and their respective types given @types],
