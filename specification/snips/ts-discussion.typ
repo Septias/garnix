@@ -4,7 +4,7 @@
 
 == Recursiveness
 You can decide between equi-recursive and iso-recursive when modeling a typesystem.
-Equi-recursive has the benefit that you can just declre the infinite rollout of recursive type _euqal_ to their un-rolled out form. In iso-recursive type systems, you need explicit rollout operations. The main drawback of equi-recursiveness is is that it comes with high algorithmic complexity and heavey metatheory due to its co-recursive definition. 
+Equi-recursive has the benefit that you can just declre the infinite rollout of recursive type _euqal_ to their un-rolled out form. In iso-recursive type systems, you need explicit rollout operations. The main drawback of equi-recursiveness is is that it comes with high algorithmic complexity and heavey metatheory due to its co-recursive definition.
 
 In addition, despite being less convenient, iso-recursive types are known to have the same expressive power as equi-recursive types @quicksub.
 
@@ -35,7 +35,7 @@ We diverge from this representation quite a bit. First and foremost, NixLang @ve
 
 
 == Impurities <impurities>
-On the one hand nix is a pure and function language without sideffects but on the other hand it is one, that tightly integrates with the file-system to properly track built operations, their dependencies and outputs. The standart library thus boasts a few functions that make typing undecidable for systems that don't evaluate the language themselves. For example the expression `g.${builtins.currentSystem}` that takes an attribute from a record `g` based on the currentSystem variable, that is baked into nix, is used 207 times in public code\*. 
+On the one hand nix is a pure and function language without sideffects but on the other hand it is one, that tightly integrates with the file-system to properly track built operations, their dependencies and outputs. The standart library thus boasts a few functions that make typing undecidable for systems that don't evaluate the language themselves. For example the expression `g.${builtins.currentSystem}` that takes an attribute from a record `g` based on the currentSystem variable, that is baked into nix, is used 207 times in public code\*.
 
 While currentSystem could be computed by a typesystem in theory, predicting the variable `builtins.currentTime` is virtually impossible, as it would allow you to predict the future. A list of other impure functions are `currentSystem, currentTime, fetch\*, findFile, langVersion, nixVersion`. These functions can return arbitrary values.
 
@@ -57,19 +57,6 @@ There are a few functions that allow the program logic to take into account the 
 
 
 === Problematic Children
-The standart library extends the languag' features beyond the simply syntactic ones. There are functions that extract the keys and values from records, namely `attrNames` and `attrValues`. These give inspection/reflection like features to the language, since they can be used to access fields: `r: map (attrNames rec) (x: r.x)`.
-
-The `getAttr` field is the simple case of the former attrNames and the `hasAttr` can be used to gain flow information. The other two functions `interspectAttr` and `mapAttr` don't add too much. For arrays, we get some general property asserting functions, but since we are not a depent type system, that does not really help.
-
-Inspecting of function args is also a funny feature. `functionArgs {a, b ? 2}: 3  -> { a = false; b = true;}` so this way one can programatically find out which arguments to supply to a function. An llm-call could then actually synthesis some arguments before calling a function xd.
-
-- *Records*: attrNames, attrValues, getAttr, hasAttr, intersectAttrs, mapAttrs
-- *Array*: elem, elemAt, head, length, listToAttrs
-- *Inspecting*: functionArgs
-- *Impure*: currentSystem, currentTime, fetch\*, findFile, langVersion, nixVersion
-- *flow*: isAttrs, isBool, isFloat, isFunction, isInt, isList, isNull, isPath, isString
-
-
 
 #bib
-*https://sourcegraph.com/search?q=context:global+%24%7Bbuiltins.currentSystem%7D&patternType=keyword&sm=0
+\*https://sourcegraph.com/search?q=context:global+%24%7Bbuiltins.currentSystem%7D&patternType=keyword&sm=0

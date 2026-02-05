@@ -129,6 +129,23 @@ If the unusual language features were placed in an iceberg-chart, we would now b
 Nix also provides three impure dunder variables `__currentSystem` ,`__nixPath` and  `__currPos` that give information about the current system, where the nix executable is stored and the current evaluators position in the file. These structs bring the execution environment into scope and are further discussed in \@impurities.
 
 
+== The Standart Library <standartlib>
+
+The standart library extends the languag' features beyond the simply syntactic ones. There are functions that manipulate the languages datatypes like `attrNames` and `attrValues` for records and `elemAt`, `head`, `length` for lists. These give inspection/reflection like features to the language, since they can be used to access fields: `r: map (attrNames rec) (x: r.x)`.
+
+The `getAttr` field is the simple case of the former attrNames and the `hasAttr` can be used to gain flow information. The other two functions `interspectAttr` and `mapAttr` don't add too much. For arrays, we get some general property asserting functions, but since we are not a depent type system, that does not really help.
+
+Inspecting of function args is also a funny feature. `functionArgs {a, b ? 2}: 3  -> { a = false; b = true;}` so this way one can programatically find out which arguments to supply to a function. An llm-call could then actually synthesis some arguments before calling a function xd.
+
+- *Records*: attrNames, attrValues, getAttr, hasAttr, intersectAttrs, mapAttrs
+- *Array*: elem, elemAt, head, length, listToAttrs
+- *Inspecting*: functionArgs
+- *Impure*: currentSystem, currentTime, fetch\*, findFile, langVersion, nixVersion
+- *flow*: isAttrs, isBool, isFloat, isFunction, isInt, isList, isNull, isPath, isString
+
+
+
+
 = Syntax <syn>
 #set raw(lang: none)
 $overline(E)^{i ∈ 𝓘}$ denotes a repetition of a syntax construct indexed by $i ∈ 𝓘$. The index $i ∈ 𝓘$ is omitted if obvious.
@@ -137,7 +154,7 @@ $overline(E)^{i ∈ 𝓘}$ denotes a repetition of a syntax construct indexed by
 
 Nix supports the usual _literals_ of fully fledged languages as well as a multi-line string and paths. The syntax is given following the official regex formulas of the informal nix specification @nix-language-2-28. _Records_ follow a standard notation where multiple fields can be defined using `key = value;` assignments to define multiple fields. In addition, records can be marked _recursive_ with the `rec` keyword and are non-recursive otherwise. _Arrays_ are introduced in a similar fashion, where multiple values can be concatenated with the only unintuitive nix-specific distinction that a space is used as separator. Both datatypes are generally _immutable_, but there are concat operations (Record-Concat and Array-Concat) that can be used to create new, bigger datatypes. Other than that, records come equipped with the usual lookup, a dynamic label check that returns a boolean as a result, a way to specify a default value in case the previous check turned out to be negative and dynamic lookups.
 
-Functions take one argument, a _pattern_. This pattern can be a single label or adher to a record-structure, allowing multiple fields to be present, possibly with _default arguments_. This way, a function taking multiple arguments can be created without resorting to currying. These functions can be called with a record from which the "single arguments" are taken and form a neat syntax ambiguity where function definitions and their supplied arguments can be read as functions taking records or as elaborate functions with multiple arguments and possibly default arguments.
+Functions take one argument, a _pattern_. This pattern can be a single label or adhere to a record-structure, allowing multiple fields to be present, possibly with _default arguments_. This way, a function taking multiple arguments can be created without resorting to currying. These functions can be called with a record from which the "single arguments" are taken and form a neat syntax ambiguity where function definitions and their supplied arguments can be read as functions taking records or as elaborate functions with multiple arguments and possibly default arguments.
 
 Patterns can be marked _open_ with the ellipsis (…), otherwise their are regarded as _closed_. Arguments can be given a default value using the `?` syntax. The exemplary function pattern `{a, b ? "pratt", …}` is an _open_ pattern with a default value of "pratt" for the label $b$ and a mandatory argument $a$. If one wants to refer to the whole argument in the function body, it is possible to create a global-binding for it using the \@-syntax `contact @ { name, surname, tel, email}: contact.name`. The global binding can also occur behind the argument like `{} @ glob: glob` but we use a rewrite rule to catch this case instead of adding it to the syntax definition.
 
@@ -165,10 +182,26 @@ Since ${oi(e_i)}$ strictly subsumes ${oi(l_i)}$ due to its inner structure, rule
 
 
 = Finding a Type System
-Nix is a dynamically typed, lazy and pure language. It features extensible records, functions with patterns, first-class-labels, overloaded operators, dynamic variable binding (with-construct) and also boasts 78 builtin function, that manipulate records and arrays, access the execution environment and reflect about the languages types. There exist no type systems powerfull enough to handle the full suite of properties needed to statically type such a language. All we can do then is to pick a subset of features we want to support. The following section will discuss possible typing approaches for the nix language.
+Nix is a dynamically typed, lazy and pure language. It features extensible records, functions with patterns, first-class-labels, overloaded operators, dynamic variable binding (with-construct) and also boasts 78 builtin function, that manipulate records and arrays, access the execution environment and reflect on the languages types. There exist no type systems powerfull enough to handle the full suite of properties needed to statically type such a language, leaving us with the only option to pick a subset of nix' features to form a well-behaved type system.
 
-The first thing that comes to mind when trying to retrofit
+A type system is noting without a usecase. The gain of research languages is advancing the field in general, creating typesystems that infer more properties, reject less valid programs and run faster. For typestems that have an existing language as foundation, usability is the most important heuristic. In the following section we will discuss we whant to give a broader overview over type system features and their applicability for nix.
 
+First of all one has to analyze how practinioneers use the language and in nix, the usual user writes configuration files. That is, utilizing the existing module system of nixos and home-manager to configure the operating system or user environment. The most benificial feature would thus be to _infer option values_. Both module systems provide online services (citation-needed) (citation-needed) to provide this information with examples and even types, but up to this date no satisfactory solution exists that works in IDEs. The module systems structure, its domain specific rudimentary type system and possibl integrations will be discussed in @modulesystem.
+
+The module system is a part of the nix standart library and utilizes most of the languages core features, such that full option inference is a feature that needs nix language type inference as a foundation and even then, is not clear whether it brings satisfactory results.
+
+
+
+== From Static vs. Dynamic to Gradual
+Static type systems operate on the meta-level of programs to deduce program properties without running the program.
+This can help to enforce safety properties like _null-saftety_, _panic-freeness_, and _no use-after-free_ @rust and assist the programmer to write well-behaved programs. Especially static type inference can help programmers to argue about complicated function calls, destructure nested datatypes and interact with unkown libraries. But  static type checking is a compile-time abstraction over a programs runtime behaviour and thus neccessarily an incomplete approximation @coldwar. This leads to valid programs being rejected or lots of work to "make the compiler happy".
+
+Dynamic languages form the other side of the spectrum by not imposing any static properties on the program, giving ultimate expressiveness to the programmer at the cost of possibly unexpected runtime errors. That is why most _scripting languages_ come without a static type system to help in rapid prototyping of applications. Only when programs get bigger and connections more complex, static type systems and their strong guarantees show their strength. The growing popularity of flow and typescript @flow @typescript shows the general trend towards type safe programming in the inherently dynamic javascript ecosystem.
+
+Gradual type systems @gradual_siek @gradual_tobin try to strike the balance between static type inference and fully dynamic languages by allowing both to coexist. It is thus common that the language has two type systems in its torso, one is annotatede and static while the other remains dynamic. The boundary between the two is formed by an any type $star.op$ that is used in the dynamic part and casts that lift any to a concrete type. The blame calculus
+
+
+== Type connectives
 
 Over the years, logical _type connectives_ like union $τ ∨ τ$, intersection $τ ∧ τ$ and negation $¬τ$ have found their way into many mainstream languages @flow @typescript @typed_racket @mlstruct, proving their usefulness by giving an intuitive relation of otherwise unrelatable types. For example, a function that uses a conditional `x: y: z: if x then y else z` is a function that returns either y or z based on whether x is true or false. This function can be typed at $bool -> α -> β -> (α ∨ β)$, intersecting the possible return types. This is a great improvement to previous ml-like systems that would have to _unify_ α and β in this situation which is already fails for integers and strings @algebraic_subtyping. The intersection type respects the variable _flow_, only merging α and β because they flow together in the output, not merging them in the input.
 
@@ -203,6 +236,9 @@ Using negation types, it is possible to add record field removal to a language l
 What follows are the the types used to type the nix language.
 
 #types <types>
+
+
+== The module system <modulesystem>
 
 
 == The Standard Library
