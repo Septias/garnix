@@ -33,7 +33,7 @@
              #type_name("String") s & ::= string \
                                     & "where" c ::= strChar \
          #type_name("Ident String") & | string \
-                                    & "where" c ::= "omitted" \
+                                    & "where" c ::= #text(fill: zink_700, style: "italic", "omitted") \
             #type_name("Boolean") b & ::= boolean \
     #type_name("File-Path") rho.alt & ::= filepath \
              #type_name("Number") n & ::= number \
@@ -45,12 +45,12 @@
 
 #let general = subbox(caption: "Terms")[
   $
-    t, t_1, t_2 ::= b &| s | rho.alt | Rho | n | l | #b[null] \
+    t ::= b &| s | rho.alt | Rho | n | l | #b[null] \
     #type_name("Record") &| {overline(a\;)} | #b[rec] {overline(a\;)} \
     #type_name("Array") &| [ space t_0 space t_1 space ... space t_n space] \
     #type_name("Function") &| p "@ "h : t \
-    #type_name("Let-statements") &| #b[let] {overline(a\;)} #b[in] t\
-    #type_name("Conditionals") &| #b[if] t #b[then] t #b[else] t \
+    #type_name("Let-statement") &| #b[let] {overline(a\;)} #b[in] t\
+    #type_name("Conditional") &| #b[if] t #b[then] t #b[else] t \
     #type_name("With-Statement") &| #b[with] t; t \
     #type_name("Assert-Statement") &| #b[assert] t; t \
   $
@@ -59,11 +59,11 @@
 #let operators = subbox(caption: "Operators")[
   $
     #type_name("Algebraic") & o := && | t + t | t - t | t * t | t \/ t \
-        #type_name("Logic") &      && | t -> t | ! t | t "&&" t \
-       #type_name("Binary") &      && | t < t | t <= t | t == t \
-                            &      && | t "!=" t | t > t | t >= t \
-        #type_name("Pipes") &      && | #b[<|] | #b[|>] \
-      #type_name("Records") &      && | t space ? ρ | t.ρ #b[or] t | t \/\/ t | t.l \
+    #type_name("Logic") & && | t -> t | ! t | t "&&" t \
+    #type_name("Binary") & && | t < t | t <= t | t == t \
+    & && | t "!=" t | t > t | t >= t \
+    #type_name("Pipes") & && | #b[<|] | #b[|>] \
+    #type_name("Records") & && | t space ? ρ | t.ρ #b[or] t | t \/\/ t | t.l | t.\${t} \
   $
 ]
 
@@ -83,8 +83,7 @@
     #type_name("R-Def-Inner")&& { l_1 . l_2 space … space .l_n = t; } &arrow.twohead {l_1 = { l_2 = {l_n = t;};};} \
     #type_name("R-Str-Dyn")&& t.s &arrow.twohead t.\${s} \
     #type_name("R-functor")&& {"__functor" = "self": x : t } &arrow.twohead x: t \
-    #type_name("R-overrides")&& {"__overrides" = record; oj(l_j = t_j) } &arrow.twohead {oj(l_j = t_j)} \/\/ record \
-    #type_name("R-global")&&
+    #type_name("R-overrides")&& {"__overrides" = record; oj(l_j = t_j) } &arrow.twohead todo({}) \
   $,
 )
 
