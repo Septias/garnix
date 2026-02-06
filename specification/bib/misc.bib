@@ -183,3 +183,42 @@ keywords = {affine type systems, memory management, rust, systems programming},
 location = {Portland, Oregon, USA},
 series = {HILT '14}
 }
+
+
+@article{bool_alg_in_effect,
+author = {Lee, Edward and Starup, Jonathan Lindegaard and Lhot\'{a}k, Ond\v{r}ej and Madsen, Magnus},
+title = {Qualified Types with Boolean Algebras},
+year = {2025},
+issue_date = {October 2025},
+publisher = {Association for Computing Machinery},
+address = {New York, NY, USA},
+volume = {9},
+number = {OOPSLA2},
+url = {https://doi.org/10.1145/3763096},
+doi = {10.1145/3763096},
+abstract = {We propose type qualifiers based on Boolean algebras. Traditional type systems with type qualifiers have been based on lattices, but lattices lack the ability to express exclusion. We argue that Boolean algebras, which permit exclusion, are a practical and useful choice of domain for qualifiers.    In this paper, we present a calculus System F<:B that extends System F<: with type qualifiers over Boolean algebras and has support for negation, qualifier polymorphism, and subqualification. We illustrate how System F<:B can be used as a design recipe for a type and effect system, System F<:BE, with effect polymorphism, subeffecting, and polymorphic effect exclusion. We use System F<:BE to establish formal foundations of the type and effect system of the Flix programming language. We also pinpoint and implement a practical form of subeffecting: abstraction-site subeffecting. Experimental results show that abstraction-site subeffecting allows us to eliminate all effect upcasts present in the current Flix Standard Library.},
+journal = {Proc. ACM Program. Lang.},
+month = oct,
+articleno = {318},
+numpages = {27},
+keywords = {Boolean Algebras, Flix, System F<:, Type Qualifiers, Type Systems}
+}
+
+@InProceedings{pearce_flowtyping,
+author="Pearce, David J.",
+editor="Giacobazzi, Roberto
+and Berdine, Josh
+and Mastroeni, Isabella",
+title="Sound and Complete Flow Typing with Unions, Intersections and Negations",
+booktitle="Verification, Model Checking, and Abstract Interpretation",
+year="2013",
+publisher="Springer Berlin Heidelberg",
+address="Berlin, Heidelberg",
+pages="335--354",
+abstract="Flow typing is becoming a popular mechanism for typing existing programs written in untyped languages (e.g. JavaScript, Racket, Groovy). Such systems require intersections for the true-branch of a type test, negations for the false-branch, and unions to capture the flow of information at meet points. Type systems involving unions, intersections and negations require a subtype operator which is non-trivial to implement. Frisch et al. demonstrated that this problem was decidable. However, their proof was not constructive and does not lend itself naturally to an implementation. In this paper, we present a sound and complete algorithm for subtype testing in the presence of unions, intersections and negations.",
+isbn="978-3-642-35873-9"
+}
+
+
+Non-null
+flowtyping
