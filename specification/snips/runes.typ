@@ -20,10 +20,11 @@
   $ α, β, γ $, [ Typevariable ],
   $t ⊲ s$, [Type cast],
   $t arrow.double^p s$, [blame],
+  $t[x arrow.bar v]$, [x substituted *by* v],
 )
 
 
-t= Occurrence Typing
+== Occurrence Typing
 *Domain-merging* @revisiting_occurrence
 
 $
@@ -180,6 +181,28 @@ The gradual type: $star.op$
 
 #derive("ForallL", ($Γ, α ⊢ A <= B$,), $ A <= ∀α. B $)
 #derive("ForallL", ($Γ ⊢ τ$, $Γ, α ⊢ A[α -> τ] <= B$), $ ∀α. A <= B $)
+
+
+= Flow Typing @pearce_flowtyping
+
+- No recursion
+#derive(
+  "T-app",
+  ($Γ ⊢ t_1: τ_1$, $Γ ⊢ f: τ_2 → T_3$, $Γ ⊢ τ_1 ≤ τ_2$),
+  $Γ ⊢ f t_1: τ_3$,
+)
+
+#derive(
+  "T-dec",
+  ($Γ [x arrow.bar τ_1] ⊢ t_2 : τ_2$, $Γ [f arrow.bar τ_1 → τ_2 ] ⊢ t_3 : τ_3$),
+  $Γ ⊢ f (τ_1 x) = t_2 in t_3: τ_3$,
+)
+
+#derive(
+  "T-if",
+  ($Γ[x arrow.bar Γ(x) ∧ τ_1] ⊢ τ_3$, $Γ[x arrow.bar Γ(x) ∧ ¬τ_1] ⊢ τ_3$),
+  $"if" (x "is" τ_1) t_2 "else" t_3: τ_2 ∨ τ_3$,
+)
 
 
 #bib

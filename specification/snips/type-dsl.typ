@@ -1,5 +1,34 @@
 https://github.com/NixOS/nixpkgs/blob/master/lib/types.nix
 
+== Modules
+
+```nix
+let
+  systemModule = { lib, config, ... }: {
+    options.toplevel = lib.mkOption {
+      type = lib.types.str;
+    };
+
+    options.enableFoo = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+    };
+
+    config.toplevel = ''
+      Is foo enabled? ${lib.boolToString config.enableFoo}
+    '';
+  };
+
+  userModule = {
+    enableFoo = true;
+  };
+
+in (import <nixpkgs/lib>).evalModules {
+  modules = [ systemModule userModule ];
+}
+```
+
+
 == Simple Types
 anything: Useful when it is used under a meta-type.
 bool: A Boolean useful for enable flags. The merge function is a logical OR between all definitions.

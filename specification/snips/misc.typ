@@ -22,6 +22,7 @@ Algebraic subtyping \@dolstra_phd is a technique to get well-behaved types and n
 Since batracking in nix' huge syntax tree that roots in a single file and relies heavily on laziness is insufficient, the properties of algebraic subtyping come as a perfect fit. The formalization of algebraic subtyping depends heavily on order-theory and some form of category theory and the proofs are far from simple @simplesub. Thankfully, @simplesub showed how to get from a algebraic domain to a syntactic one by creating an  equivalent using constraint accumulation on type variables and biunification, making algebraic subtyping more accessible. In the seminal Bachelor Thesis from the first author, he showed how to extend the SimpleSub to the more expressive type system features of nix. Even though the work pintpointed a direction, it oversimplified on the operational semantic and derived type rules, leaving lots of room for improvement.
 
 
+Properties of a typesystem describe what guarantees and benefits a typesystem brings to the table. For example, a typesystem that is null-save will ensure at compile-time that when the program is executed, values of null will never be dereferenced and thus eliminates a whole class of problems (todo:check). The first decision is whether one wants to limit the features of the typesystem and making it incomplete silently,
 
 
 
