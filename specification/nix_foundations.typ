@@ -300,6 +300,7 @@ in (import <nixpkgs/lib>).evalModules {
 }
 ```
 
+https://github.com/NixOS/nixpkgs/blob/master/lib/types.nix
 
 == Simple Types
 anything: Useful when it is used under a meta-type.
