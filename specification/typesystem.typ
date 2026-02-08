@@ -203,11 +203,11 @@
 
 
 == Typing Rules
-#let typing_rules = figure(
+
+#let basic_typing_rules = figure(
   caption: "Nix typing rules",
-  rect(width: 100%, inset: 20pt, stack(
-    spacing: 3em,
-    flexbox(
+  rect(width: 100%, inset: 20pt, [
+    #flexbox(
       caption: "Standartrules",
       derive("T-Var1", ($Γ(x) = τ$,), $Ξ, Γ tack x: τ$),
       derive(
@@ -234,7 +234,7 @@
       // derive("T-Asc", ($Ξ,Γ ⊢ t : τ$,), $Ξ,Γ ⊢ (t: τ) : τ$),
     ),
     // line(length: 100%),
-    flexbox(
+    #flexbox(
       caption: "Language Constructs",
       derive(
         "T-If",
@@ -251,73 +251,116 @@
         ($m ~ overline(d) arrow.squiggly oα$,),
         $(x: t) {oi(#b[nonrec] d)} arrow.long_a t["indirects" oα]$,
       ),
-    ),
-    flexbox(
-      caption: "Records",
-      derive(
-        "T-Rcd",
-        ($Ξ, Γ tack t_0: τ_0$, "...", $Ξ, Γ tack t_n: τ_n$),
-        $Ξ, Γ tack {arrow(l): arrow(t)}: {arrow(l): arrow(τ)}$,
-      ),
-      derive("T-Proj", ($ Ξ, Γ tack t: {l: τ} $,), $Ξ, Γ tack t.l: τ$),
-      derive(
-        "T-Or-Neg",
-        ($Xi, Γ tack t_1: {l: τ_1}$, $Xi, Γ tack t_2: τ_2$),
-        $Xi, Γ tack (t_1).l #b[or] t_2: τ_1$,
-      ),
-      derive(
-        "T-Or-Pos",
-        ($Xi, Γ tack t_1: τ_1$, $l ∉ τ_1$, $Xi, Γ tack t_2: τ_2$),
-        todo($Xi, Γ tack (t_1).l #b[or] t_2: τ_2$),
-      ),
-      derive(
-        "T-Rec-Concat",
-        ($Ξ, Γ tack a: { oi(l\: τ) }$, $Ξ, Γ tack b: { l_j: τ_j }$),
-        todo[$Ξ, Γ tack a "//" b: {..b, ..a}$],
-      ),
-      derive(
-        "T-Check",
-        ($Xi, Γ tack e: {..}$,),
-        $Xi, Γ tack e #b[#v(0.1pt)?#v(0.1pt)] l: "bool"$,
-      ),
-    ),
-    // line(length: 100%),
-    flexbox(
-      caption: "Lists",
-
-      derive(
-        "T-Lst-Hom",
-        ($Ξ, Γ tack t_0: τ$, "...", $Ξ, Γ tack t_n: τ$),
-        $Ξ, Γ tack [ " " t_0 " " t_1 " " ... " " t_n " "]: [τ]$,
-      ),
-      derive(
-        "T-Lst-Agg",
-        (
-          $Ξ, Γ tack t_0: τ_0$,
-          "...",
-          $Ξ, Γ tack t_n: τ_n$,
-          $∃ i, j. τ_i != τ_j$,
-        ),
-        $Ξ, Γ tack [space t_0 space t_1 space ... " " t_n] : [ τ_0 space τ_1 space ... space τ_n]$,
-      ),
-      derive(
-        "T-List-Concat-Hom",
-        ($Ξ, Γ tack a: "[τ]"$, $Ξ, Γ tack b: "[τ]"$),
-        $Ξ, Γ tack a "⧺" b: "[τ]"$,
-      ),
-      derive(
-        "T-List-Concat-Multi",
-        ($Ξ, Γ tack a: [arrow(τ_1)]$, $Ξ, Γ tack b: [arrow(τ_2)]$),
-        $Ξ, Γ tack a "⧺" b: [arrow(τ_1)arrow(τ_2)]$,
-      ),
-    ),
-    // sub_typing_rules(
-    //   caption: "Operators",
-    // ),
-    // line(length: 100%),
-  )),
+    )
+  ]),
 )
-#typing_rules
+#basic_typing_rules
+
+#let list_typing_rules = flexbox(
+  caption: "Lists",
+
+  derive(
+    "T-Lst-Hom",
+    ($Ξ, Γ tack t_0: τ$, "...", $Ξ, Γ tack t_n: τ$),
+    $Ξ, Γ tack [ " " t_0 " " t_1 " " ... " " t_n " "]: [τ]$,
+  ),
+  derive(
+    "T-Lst-Agg",
+    (
+      $Ξ, Γ tack t_0: τ_0$,
+      "...",
+      $Ξ, Γ tack t_n: τ_n$,
+      $∃ i, j. τ_i != τ_j$,
+    ),
+    $Ξ, Γ tack [space t_0 space t_1 space ... " " t_n] : [ τ_0 space τ_1 space ... space τ_n]$,
+  ),
+  derive(
+    "T-List-Concat-Hom",
+    ($Ξ, Γ tack a: "[τ]"$, $Ξ, Γ tack b: "[τ]"$),
+    $Ξ, Γ tack a "⧺" b: "[τ]"$,
+  ),
+  derive(
+    "T-List-Concat-Multi",
+    ($Ξ, Γ tack a: [arrow(τ_1)]$, $Ξ, Γ tack b: [arrow(τ_2)]$),
+    $Ξ, Γ tack a "⧺" b: [arrow(τ_1)arrow(τ_2)]$,
+  ),
+)
+
+#let record_typing_rules = flexbox(
+  caption: "Records",
+  derive(
+    "T-Rcd",
+    ($Ξ, Γ tack t_0: τ_0$, "...", $Ξ, Γ tack t_n: τ_n$),
+    $Ξ, Γ tack {arrow(l): arrow(t)}: {arrow(l): arrow(τ)}$,
+  ),
+  derive("T-Proj", ($ Ξ, Γ tack t: {l: τ} $,), $Ξ, Γ tack t.l: τ$),
+  derive(
+    "T-Or-Neg",
+    ($Xi, Γ tack t_1: {l: τ_1}$, $Xi, Γ tack t_2: τ_2$),
+    $Xi, Γ tack (t_1).l #b[or] t_2: τ_1$,
+  ),
+  derive(
+    "T-Or-Pos",
+    ($Xi, Γ tack t_1: τ_1$, $l ∉ τ_1$, $Xi, Γ tack t_2: τ_2$),
+    todo($Xi, Γ tack (t_1).l #b[or] t_2: τ_2$),
+  ),
+  derive(
+    "T-Rec-Concat",
+    ($Ξ, Γ tack a: { oi(l\: τ) }$, $Ξ, Γ tack b: { l_j: τ_j }$),
+    todo[$Ξ, Γ tack a "//" b: {..b, ..a}$],
+  ),
+  derive(
+    "T-Check",
+    ($Xi, Γ tack e: {..}$,),
+    $Xi, Γ tack e #b[#v(0.1pt)?#v(0.1pt)] l: "bool"$,
+  ),
+)
+
+#let operator_typing_rules = flexbox(
+  derive(
+    "T-Op-Arith",
+    ($Γ tack t_1: "num"$, $Γ tack t_2: "num"$, $"op" ϵ space [-, +, \/, *]$),
+    $Γ tack t_1 "op" t_2: "num"$,
+  ),
+  derive(
+    "T-Op-Logic",
+    ($Γ tack t_1: "bool"$, $Γ tack t_2: "bool"$, $"op" ϵ space [->, ∨, ∧]$),
+    $Γ tack t_1 "op" t_2: "bool"$,
+  ),
+  derive(
+    "T-Add-Num",
+    ($Γ tack t_1: "num"$, $Γ tack t_2: "num"$),
+    $Γ tack t_1 + t_2: "num"$,
+  ),
+  derive(
+    "T-Add-Str",
+    ($Γ tack t_1: "str"$, $Γ tack t_2: "str" union.sq "path"$),
+    $Γ tack t_1 + t_2: "str"$,
+  ),
+  derive(
+    "T-Add-Path",
+    ($Γ tack t_1: "path"$, $Γ tack t_2: "path" union.sq "str"$),
+    $Γ tack t_1 + t_2: "path"$,
+  ),
+  derive(
+    "T-Compare",
+    (
+      $Γ tack t_1: τ_1$,
+      $Γ tack t_2: τ_2$,
+      $τ_1 eq.triple τ_2$,
+      $"op" in [<, <=, >=, >, ==, !=]$,
+    ),
+    $Γ tack t_1 "op" t_2: "bool"$,
+  ),
+  derive("T-Negate", ($Γ tack e: "bool"$,), $Γ tack !e: "bool"$),
+  derive("T-Check", ($Γ tack e: {l: τ}$,), $Γ tack e ? l: "bool"$),
+  derive(
+    "T-Or",
+    ($Γ tack t_1: {l: τ_1}$, $Γ tack t_2: τ_2$),
+    $Γ tack t_1.l "or" t_2: τ_1 union.sq τ_2$,
+  ),
+)
+
 
 
 == Matching
