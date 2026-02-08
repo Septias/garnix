@@ -22,39 +22,6 @@
   keywords: ("Nix", "Type inference", "Laziness", "Records"),
 )
 
-= Structure (Wanted)
-== Nix Analysis
-- [x] Origin
-- [x] Quirks
-- Syntax
-- Reduction Semantic
-
-== TS Discussion
-- Gradual Typing
-  - Nix: Width-construct
-  - Nix: Impurities
-  - Nix: Inspection
-  - Occurence Typing
-- Type connectives
-  - Boolean-Algebra
-- First Class Labels
-- Record Calculus
-  - Parreaux
-  - Castagna
-  - Nix: extension, lookups, etc.
-- Nix: Module TS
-
-== Practical Considerations
-- Huge syntax trees
-
-== Related Work @verified
--
-
-== Further Work
-- Basically what I could do in the Msc.
-
-
-
 = Securing Nix' Foundations
 The Nix programming language is used in over 40.000 files, showing its prominence, but was neglected in theoretical work until recently when work was picked up independently by S. Klähn and Breokhoff et. al. @verified @simplenix. Both works give a syntax definition and operational semantics to account for their uses, but did not cover the language in their full expressiveness. This work closes the gap by showing nix in its full expressiveness and giving an overview of possible type inference approaches.
 
