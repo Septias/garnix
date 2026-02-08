@@ -129,10 +129,8 @@
       caption: "Evaluation Context",
       $
         E[□] & := □ | □ space t | (□).l | (v).□ \
-             & | #b[if ] □ #b[ then ] t #b[ else ] t \
-             & | #b[with ] □; t | #b[with ] v; □ \
-             & | #b[inherit ] (ρ) space □; \
-             & | □ • t | v • t \
+             & | #b[if ] □ #b[ then ] t #b[ else ] t | #b[with ] □; t | #b[with ] v; □ \
+             & | #b[inherit ] (ρ) space □; | □ • t | v • t \
       $,
     ),
     subbox(
