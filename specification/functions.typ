@@ -33,6 +33,7 @@
 #let manyTypes = $[oi(τ_i)]$
 #let oα = $overline(α)$
 #let otherwise = math.italic("otherwise")
+#let omitted = text(fill: zink_700, style: "italic", "omitted")
 
 // -------------  Bigger Constructs
 
