@@ -95,7 +95,7 @@
 
 #let syntax = figure(
   caption: "The Nix language.",
-  rect(width: 120%, grid(
+  box(width: 120%, grid(
     columns: 2,
     align: left,
     inset: 8pt,
@@ -120,7 +120,7 @@
 == Reduction Rules
 #let reduction = figure(
   caption: "Nix reduction rules, context and values.",
-  rect(width: 100%, inset: 20pt, stack(
+  box(width: 100%, inset: 20pt, stack(
     spacing: 20pt,
     subbox(caption: "Values")[$
       v ::= p: t | l | {overline(a\;)} | #b[rec] {overline(a\;)}
@@ -174,7 +174,7 @@
 == Types
 #let types = figure(
   caption: "Types of nix.",
-  rect(width: 100%, inset: 20pt, grid(
+  box(width: 100%, inset: 20pt, grid(
     columns: 1,
     align: left,
     inset: 8pt,
@@ -206,7 +206,7 @@
 
 #let basic_typing_rules = figure(
   caption: "Nix typing rules",
-  rect(width: 100%, inset: 20pt, [
+  box(width: 100%, inset: 20pt, [
     #flexbox(
       caption: "Standartrules",
       derive("T-Var1", ($Γ(x) = τ$,), $Ξ, Γ tack x: τ$),
