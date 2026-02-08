@@ -12,6 +12,7 @@
 
 == Syntax
 #let literals = subbox(caption: "Literals")[
+  #set raw(lang: none)
   #show raw: set text(fill: red)
 
   #let strChar = `[^"$\\]|\$(?!\{)|\\.`
@@ -19,6 +20,7 @@
 
   #let interpol = $\${ t }$
   #let string = `"(c* i)* c*"`
+  #let identstring = `''(c* i)* c*''`
   #let boolean = `true | false`
   #let filepath = `(./|~/|/)([a-zA-Z.]+/?)+`
   #let number = `([0-9]*.)?[0-9]+`
@@ -28,17 +30,17 @@
 
 
   $
-    #type_name("Interpol") i & ::= interpol \
-    #type_name("String") s & ::= string \
-    & "where" c ::= strChar \
-    #type_name("Ident String") & | string \
-    & "where" c ::= #text(fill: zink_700, style: "italic", "omitted") \
-    #type_name("Boolean") b & ::= boolean \
+           #type_name("Interpol") i & ::= interpol \
+             #type_name("String") s & ::= string \
+                                    & "where" c ::= strChar \
+         #type_name("Ident String") & | identstring \
+                                    & "where" c ::= omitted) \
+            #type_name("Boolean") b & ::= boolean \
     #type_name("File-Path") rho.alt & ::= filepath \
-    #type_name("Number") n & ::= number \
-    #type_name("Label") l & ::= label \
-    #type_name("Search Path") Rho & ::= searchpath \
-    #type_name("Uri") u & ::= uri \
+             #type_name("Number") n & ::= number \
+              #type_name("Label") l & ::= label \
+      #type_name("Search Path") Rho & ::= searchpath \
+                #type_name("Uri") u & ::= uri \
   $
 ]
 

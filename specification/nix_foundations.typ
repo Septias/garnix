@@ -9,12 +9,12 @@
 #import "sections/first-class-labels.typ"
 #import "sections/modulesystem.typ"
 
+// Styling
 #set heading(numbering: "1.")
 #show ref: set text(fill: rgb("#781C7D"))
 #show cite: set text(fill: black)
 #show figure: set block(breakable: true)
 #set figure(placement: auto)
-// #show stack: set block(breakable: true)
 
 #set document(
   title: "Securing Nix' Foundations",
@@ -59,7 +59,7 @@ A with statement binds _weakly_, meaning it will not shadow any binding that was
 
 The reason for this unexpected shadowing behaviour is the intended use to simulate a _module system_. A record viewed as module encapsulates its definitions and by using the width-statement, it can be opened, effectively adding all its definitions to the following expression. Since modules tend to have quite a lot of definitions, the weak binding prevents unwanted shadowing of existing variables. This module system shows its full potential when used together with the built-in `import` function, that takes a file, evaluates the content and returns the computed value. Using these two constructs in unison, one can import a file `modules.nix` and make all its definitions available in the following scope `with (import ./modules.nix); t`, very similar to a global module import.
 
-The import-statement can occur anywhere in the syntax-tree, including recursive functions, struct-fields, arrays and literally every other construct. Since the import statement will "fill in" the files evaluated content literally, it is possible to follow the statement up with an arbitrary value. A statement like `import ./modules.nix {system = "nixos_x86"}` will first evaluate the file `modules.nix` and interpret the following term as an argument to a function, resulting in a function application. `import ./modules.nix {system = "nixos_x86";} → f {system = ""}`. The integrity of functions in files is not checked statically, but it is a frequently used pattern to separate code into different files. To illustrate the point, see @module_example for a full example.
+The import-statement can occur anywhere in the syntax-tree, including recursive functions, struct-fields, arrays and literally every other construct. Since the import statement will "fill in" the files evaluated content literally, it is possible to follow the statement up with an arbitrary value. A statement like `import ./modules.nix {system = "nixos_x86"}` will first evaluate the file `modules.nix` and interpret the following term as an argument to a function, resulting in a function application. `import ./modules.nix {system = "nixos_x86";} → f {system = "nixos_x86"}`. The integrity of functions in files is not checked statically, but it is a frequently used pattern to separate code into different files. To illustrate the point, see @module_example for a full example.
 
 Calling a function with a record argument enjoys its own syntactic sugar. By using a _pattern-functions_, one can destructure a given record-argument into its fields, giving a semantic with functions that can take multiple arguments, possibly with default-arguments. If we think of the record constructor `{}` as introduction-rule, then functions with patterns are the logical equivalent that eliminate them. It is thus a natural choice to encapsulate function patterns in the very same brackets that records use. A function with the signature `{a, b}: a + b` expects one argument of record-type and "extracts" the fields a, b from it, making them accessible in the function body. Together, record construction and pattern-function application act as inverses to one another `a: ({a}: a) {a = a;} == a`.
 
@@ -221,10 +221,10 @@ The following sections will further discuss the wanted properties in no particul
 #bib
 
 // -------------- Appendix
-#outline(target: heading.where(supplement: [Appendix]), title: [Appendix])
 
-#show: appendix
 #set figure(placement: none)
+#outline(target: heading.where(supplement: [Appendix]), title: [Appendix])
+#show: appendix
 
 = List of Nix Features <all-features>
 #comparison
