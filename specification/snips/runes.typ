@@ -205,4 +205,10 @@ The gradual type: $star.op$
 )
 
 
+== Auxiliaries
+$ "unfold"_1 oα := &{ x := #b[nonrec] t | x := #b[nonrec] t ∈ oα} attach(union, tr: <) \
+&{ x := #b[nonrec] t["indirects" oα] | x := #b[rec] t ∈ oα} \
+"indirects" oα := &{x := #b[abs] {oα}.x | x ∈ oα } $,
+
+
 #bib

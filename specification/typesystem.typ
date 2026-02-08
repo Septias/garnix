@@ -201,46 +201,6 @@
 )
 #types
 
-== Dynamic Lookups
-#let lookups = figure(
-  caption: "Lookup syntax and semantic",
-  rect(
-    width: 100%,
-    inset: 20pt,
-    [
-      ```
-      hasAttrs = { a.b = null; } ? ${aString}.b;
-
-      selectAttrs = { a.b = true; }.a.${bString};
-
-      selectOrAttrs = { }.${aString} or true;
-
-      binds = { ${aString}."${bString}c" = true; }.a.bc;
-
-      recBinds = rec { ${bString} = a; a = true; }.b;
-
-      multiAttrs = { ${aString} = true; ${bString} = false; }.a;
-
-      ```
-    ],
-  ),
-)
-#lookups
-
-
-== Auxiliaries
-#let auxiliaries = figure(
-  caption: "Auxiliary functions. Unfolding instantiates recursive references to non-recursive values on the outer level. Indirections are used to tie the knots",
-  rect(width: 100%, inset: 20pt, stack(
-    $
-      "unfold"_1 oα := &{ x := #b[nonrec] t | x := #b[nonrec] t ∈ oα} attach(union, tr: <) \
-      &{ x := #b[nonrec] t["indirects" oα] | x := #b[rec] t ∈ oα} \
-      "indirects" oα := &{x := #b[abs] {oα}.x | x ∈ oα }
-    $,
-  )),
-)
-#auxiliaries
-
 
 == Typing Rules
 #let typing_rules = figure(
