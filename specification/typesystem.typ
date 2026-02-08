@@ -29,17 +29,17 @@
 
 
   $
-           #type_name("Interpol") i & ::= interpol \
-             #type_name("String") s & ::= string \
-                                    & "where" c ::= strChar \
-         #type_name("Ident String") & | string \
-                                    & "where" c ::= #text(fill: zink_700, style: "italic", "omitted") \
-            #type_name("Boolean") b & ::= boolean \
+    #type_name("Interpol") i & ::= interpol \
+    #type_name("String") s & ::= string \
+    & "where" c ::= strChar \
+    #type_name("Ident String") & | string \
+    & "where" c ::= #text(fill: zink_700, style: "italic", "omitted") \
+    #type_name("Boolean") b & ::= boolean \
     #type_name("File-Path") rho.alt & ::= filepath \
-             #type_name("Number") n & ::= number \
-              #type_name("Label") l & ::= label \
-      #type_name("Search Path") Rho & ::= searchpath \
-                #type_name("Uri") u & ::= uri \
+    #type_name("Number") n & ::= number \
+    #type_name("Label") l & ::= label \
+    #type_name("Search Path") Rho & ::= searchpath \
+    #type_name("Uri") u & ::= uri \
   $
 ]
 
@@ -63,7 +63,7 @@
     #type_name("Binary") & && | t < t | t <= t | t == t \
     & && | t "!=" t | t > t | t >= t \
     #type_name("Pipes") & && | #b[<|] | #b[|>] \
-    #type_name("Records") & && | t space ? ρ | t.ρ #b[or] t | t \/\/ t | t.l | t.\${t} \
+    #type_name("Records") & && | t space ? ρ | t.ρ #b[or] t | t \/\/ t | t.l | t.i \
   $
 ]
 

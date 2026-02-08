@@ -4,9 +4,8 @@
 
 == Recursiveness
 You can decide between equi-recursive and iso-recursive when modeling a typesystem.
-Equi-recursive has the benefit that you can just declre the infinite rollout of recursive type _euqal_ to their un-rolled out form. In iso-recursive type systems, you need explicit rollout operations. The main drawback of equi-recursiveness is is that it comes with high algorithmic complexity and heavey metatheory due to its co-recursive definition.
+Equi-recursive has the benefit that you can just declare the infinite rollout of recursive type _euqal_ to their un-rolled out form whereas in iso-recursive type systems, you need explicit rollout operations. The main drawback of equi-recursiveness is is that it comes with high algorithmic complexity and heavy metatheory due to its co-recursive definition. Zhou et. al showed how to create an efficient algrothim for iso-recursive type systems in their develpment of Quicksub @quicksub. In addition, despite being less convenient, iso-recursive types are known to have the same expressive power as equi-recursive types @quicksub.
 
-In addition, despite being less convenient, iso-recursive types are known to have the same expressive power as equi-recursive types @quicksub.
 
 == Related Work
 @verified has made three interesting decisions in their formalization:
@@ -20,8 +19,8 @@ The distinction between rec ond non-rec is due to this problematic example: `rec
 
 We decided to diverge from the formulation given in @verified by not adding inherit as syntactic sugar but as a inference rule with a premise that ensures x is defined. This is done by checking the context whether this variable exists.
 
-#derive("T-inherit", ($x ∈ Γ$), $inherit x; -> x = x;$)
-#derive("T-inherit2", ($x ∈ Γ$), $inherit (ρ) x; -> x = ρ.x;$)
+#derive("T-inherit", ($x ∈ Γ$), $"inherit" x; -> x = x;$)
+#derive("T-inherit2", ($x ∈ Γ$), $"inherit" (ρ) x; -> x = ρ.x;$)
 
 We also yeet the distinction between deep and shallow evaluation. For an interpreter that conforms to the spec it is important to diverge iff the previous implementation diverges. In our typesystem we do not want to derive termination properties (which would solve the halting problem) so we don't need to make this distinction.
 Due to this shift of focus, we finally also drop operators that are modeled with relations and replace them with inference rules. We argue that these give a better intuitive understanding of the operators. A set of (key, val) pairs from which the operator value can be taken does not immediately show of which type the returned value is. For example, the addition operator is defined on strings and paths. The returned set would thus be of type {str ∨ path -> str ∨ path}, loosing precision.
