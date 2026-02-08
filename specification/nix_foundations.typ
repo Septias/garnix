@@ -1,7 +1,8 @@
 #import "functions.typ": *
+#import "typesystem.typ": *
 #import "./figures/comparison.typ": comparison
 #import "./figures/builtin-types.typ": builtin_types
-#import "typesystem.typ": *
+#import "./figures/module-types.typ": module_types
 
 #set heading(numbering: "1.")
 // #set page(height: auto)
@@ -337,9 +338,7 @@ nullOr t: This type allows an option to be null or type t.
 
 
 = Nix Builtins <all-builtins>
-#figure(
-  caption: [The nix language builtins and their respective types],
-  builtin_types,
-)<builtins>
+#builtin_types 
 
-
+= Nix module system types <module-types>
+#module_types

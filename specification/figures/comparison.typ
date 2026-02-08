@@ -1,7 +1,7 @@
 #let depr(t) = [#t #text(fill: red, "@deprecated")]
 
 
-#let comparison = figure(caption: "Garnix and NixLang Features" ,table(
+#let comparison = figure(caption: "Nix language features and their presence in NixLang and Garnix." ,table(
   columns: (1fr, 2fr, auto, auto),
   inset: 10pt,
   align: (left, left, center, center),

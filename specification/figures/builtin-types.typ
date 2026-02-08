@@ -1,7 +1,7 @@
 #import "../functions.typ": *
 
 
-#let builtin_types = figure(table(
+#let builtin_types = figure(caption: [The nix language builtins and their respective types.], table(
   columns: (auto, 1fr),
   table.header([*Builtin*], [*Type*]),
   [abort `s`                   ], $ τ -> ⊥ $,
