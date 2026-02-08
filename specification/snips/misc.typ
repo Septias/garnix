@@ -24,6 +24,26 @@ Since batracking in nix' huge syntax tree that roots in a single file and relies
 
 Properties of a typesystem describe what guarantees and benefits a typesystem brings to the table. For example, a typesystem that is null-save will ensure at compile-time that when the program is executed, values of null will never be dereferenced and thus eliminates a whole class of problems (todo:check). The first decision is whether one wants to limit the features of the typesystem and making it incomplete silently,
 
+== Bad function reduction
+
+$ #rule_name("R-Fun")&& (l: t_2)t_1 & arrow.long t_2[l := t_1] \
+#rule_name("R-Fun-Pat")&& ({oi(l_i)}: t){oi(l_i \= t_i)} & arrow.long
+t [oi(l_i := t_i)] \
+#rule_name("R-Fun-Pat-Open")&& ({oi(l_i)\, ...}: t) {oj(l_i = t_i)} & arrow.long
+t [oi(l_i := t_i)] #h(0.5cm) &&&∀i. ∃ j. i eq j \
+#rule_name("R-Fun-Pat-Default")&&({oi(e_i)}: t){oj(l_j = t_j)} & arrow.long
+t [oj(l_j = t_j)][oi(l_i := d_i)] \
+#rule_name("R-Fun-Pat-Default-Open")&&({oi(e_i), …}: t){oj(l_j = t_j), …} & arrow.long
+t [oj(l_j = t_j)][oi(l_i := d_i)] &&&∀i. ∃ j. i eq j\ $,
+
+Since nix supports patterns with default values and the _open_ modifiers, the function reduction rules become quite verbose. The simplest case is R-Fun which takes an argument t₁ and replaces the occurrences of $l$ with said argument in the function body t₂. The next function rules R-Fun-Pat-∗ reduces functions taking patterns, the R-Fun-Pat being the simplest of such. We draw i,j from the index Set ℐ and range them over labels such that if i = j then l_i = l_j.
+
+Since the same index $i$ is used for both the argument and pattern in R-Fun-Pat, they must agree on the same labels which resembles closed-pattern function calls. In the contrary case where the pattern is open, the argument-record can range over arbitrary labels (possibly more than in the pattern). In this case, the side-condition enforces that at least the pattern fields are present (R-Fun-Pat-Open).
+
+The R-fun-Pat-Default-∗ rules range over pattern elements $e$ which can be either single labels $l$ or labels with a default values like $l : d$. The former case can be converted to the latter with ε-extension transforming $l$ to $l ? ε$ which is equivalent to $l$ due to the shorthands (TODO: can you do this?). The variables of the body are then substituted twice. First with the argument values and then with the default values to "fill the gaps". The open case needs a side-condition analogous to the former open case.
+
+Since ${oi(e_i)}$ strictly subsumes ${oi(l_i)}$ due to its inner structure, rule 2 and 3 are only stated as a mental stepping stone for the reader but not mentioned further.
+
 
 
 #page[

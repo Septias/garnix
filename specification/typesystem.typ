@@ -157,17 +157,6 @@
         {oi(l_i = t_i\;) space overline(l_b = t_b\;)^b} &&& b ∈ { j: exists.not i. l_i = l_j } \
         && t arrow.long t' &==> E[t] → E[t']
       $,
-      $
-        #rule_name("R-Fun")&& (l: t_2)t_1 & arrow.long t_2[l := t_1] \
-        #rule_name("R-Fun-Pat")&& ({oi(l_i)}: t){oi(l_i \= t_i)} & arrow.long
-        t [oi(l_i := t_i)] \
-        #rule_name("R-Fun-Pat-Open")&& ({oi(l_i)\, ...}: t) {oj(l_i = t_i)} & arrow.long
-        t [oi(l_i := t_i)] #h(0.5cm) &&&∀i. ∃ j. i eq j \
-        #rule_name("R-Fun-Pat-Default")&&({oi(e_i)}: t){oj(l_j = t_j)} & arrow.long
-        t [oj(l_j = t_j)][oi(l_i := d_i)] \
-        #rule_name("R-Fun-Pat-Default-Open")&&({oi(e_i), …}: t){oj(l_j = t_j), …} & arrow.long
-        t [oj(l_j = t_j)][oi(l_i := d_i)] &&&∀i. ∃ j. i eq j\
-      $,
     ),
   )),
 )
