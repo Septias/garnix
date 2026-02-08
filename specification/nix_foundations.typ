@@ -10,9 +10,10 @@
 #import "sections/modulesystem.typ"
 
 #set heading(numbering: "1.")
-// #set page(height: auto)
+#show ref: set text(fill: rgb("#781C7D"))
+#show cite: set text(fill: black)
 #show figure: set block(breakable: true)
-// #set figure(placement: auto)
+#set figure(placement: auto)
 // #show stack: set block(breakable: true)
 
 #set document(
@@ -129,10 +130,12 @@ Inspecting of function args is also a funny feature. `functionArgs {a, b ? 2}: 3
 
 
 = Syntax <syn>
-#set raw(lang: none)
+
 $overline(E)^{i ∈ 𝓘}$ denotes a repetition of a syntax construct indexed by $i ∈ 𝓘$. The index $i ∈ 𝓘$ is omitted if obvious.
 
 #syntax
+
+#set raw(lang: "nix")
 
 Nix supports the usual _literals_ of fully fledged languages as well as a multi-line string and paths. The syntax is given following the official regex formulas of the informal nix specification @nix-language-2-28. _Records_ follow a standart notation where multiple fields can be defined using `key = value;` assignments to define multiple fields. In addition, records can be marked _recursive_ with the `rec` keyword and are non-recursive otherwise. _Arrays_ are introduced in a similar fashion, where multiple values can be concatenated with the only unintuitive nix-specific distinction that a space is used as separator. Both datatypes are generally _immutable_, but there are concat operations (Record-Concat and Array-Concat) that can be used to create new, bigger datatypes. Furthermore, records come equipped with the usual lookup, a dynamic label check that returns a boolean as a result, a way to specify a default value in case the previous check turned out to be negative and dynamic lookups.
 
@@ -172,7 +175,7 @@ Nix is a dynamically typed, lazy and pure language. It features extensible recor
 
 A type system is nothing without a usecase. The gain of research languages is advancing the field in general, creating typesystems that infer more properties, reject less valid programs and run faster. For typestems that have an existing language as a foundation, _usability_ is the most important metric. In the following section we want to give a broader overview over type system features and their applicability for nix.
 
-The everyday user of nix utilizes the module systems of nixos and home-manager to configure their operating system or user environment. The most beneficial feature is thus autocompletion for option values that consist of a type, default-value, example and description. Both module systems provide online services @config-search @option-search to provide this information, but up to this date, no satisfactory solution exists that works in IDEs.
+The everyday user of nix utilizes the module systems of nixos and home-manager to configure their operating system or user environment. The most beneficial feature is thus autocompletion for option values that consist of a type, default-value, example and description. Both module systems provide online services @config-search @option-search to provide this information, but up to this date, no satisfactory solution exists that works in IDEs #footnote("Integrated Development Environment").
 
 The module system is a part of the nix standart library and utilizes most of the languages core features, such that full option inference is a feature that builds upon nix-language type inference and even if it existed, is it not clear whether it would bring satisfactory results. There might be ways to add option completion to a languge server without nix type inference, hard-coding the module-system into its foundation and using the existing type hints in conjunction, but this will (for now) not be the topic of this work.
 
@@ -221,6 +224,7 @@ The following sections will further discuss the wanted properties in no particul
 #outline(target: heading.where(supplement: [Appendix]), title: [Appendix])
 
 #show: appendix
+#set figure(placement: none)
 
 = List of Nix Features <all-features>
 #comparison
