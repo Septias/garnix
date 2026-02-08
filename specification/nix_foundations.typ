@@ -1,6 +1,6 @@
 #import "functions.typ": *
-#import "./snips/comparison.typ": comparison
-#import "./snips/builtin-types.typ": builtin_types
+#import "./figures/comparison.typ": comparison
+#import "./figures/builtin-types.typ": builtin_types
 #import "typesystem.typ": *
 
 #set heading(numbering: "1.")
