@@ -13,12 +13,13 @@
   In an example match-statement `match x with bool(x) -> .. | rec(x) -> .. | _ -> x` one matches the single branches in order. The branches behave like conditionals, forcing a type on the variable, the interesting case is the default-case. This one can be typed under the assumption, that it is not of type bool or record and show why one would like to use negation types.
 
   Using negation types, it is possible to add record field removal to a language like `{a: τ} ∧ ¬{b : τ}`.
+
+  == Impurities <impurities>
+  On the one hand nix is a pure and functional language without sideffects but on the other hand it is one, that tightly integrates with the file-system to properly track built operations, their dependencies and outputs. The standard library thus boasts a few functions that make typing undecidable for systems that don't evaluate the language themselves.
+
+  `currentSystem, currentTime, fetch\*, findFile, langVersion, nixVersion` these functions can return arbitrary values. Since nix can use them them in combination with dynamic accesses, the type systems becomes an evaluator. We thus _need_ a gradual type system.
+
 ]
-
-
-== About Gradual Typing
-- Neg: We don't want type annotations
-- Neg: We can not insert dynamic checks
 
 == Graduality
 - We need a type system that can approximate (check builtins, untypable)
@@ -27,17 +28,4 @@
 - Should it be a supertype aswell?
 
 
-== Flow Typing
-
-The last constructs help in narrowing down value types. They actually just check the type of values `isAttrs, isBool, isFloat, isFunction, isInt, isList, isNull, isPath, isString`.
-
-`isAttr(t): And -> bool`, but this should also result in `t ∧ bool` in positive-branch and `t ∧ ¬bool` in the negative.
-
-This can actually implement _type cases_!?
-
-
-== Impurities <impurities>
-On the one hand nix is a pure and function language without sideffects but on the other hand it is one, that tightly integrates with the file-system to properly track built operations, their dependencies and outputs. The standard library thus boasts a few functions that make typing undecidable for systems that don't evaluate the language themselves.
-
-`currentSystem, currentTime, fetch\*, findFile, langVersion, nixVersion` these functions can return arbitrary values. Since nix can use them them in combination with dynamic accesses, the type systems becomes an evaluator. We thus _need_ a gradual type system.
 

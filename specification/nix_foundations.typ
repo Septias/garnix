@@ -162,13 +162,17 @@ The R-fun-Pat-Default-∗ rules range over pattern elements $e$ which can be eit
 
 Since ${oi(e_i)}$ strictly subsumes ${oi(l_i)}$ due to its inner structure, rule 2 and 3 are only stated as a mental stepping stone for the reader but not mentioned further.
 
+#basic_typing_rules
+#record_typing_rules
+#list_typing_rules
+
 
 = Finding a Type System
 Nix is a dynamically typed, lazy and pure language. It features extensible records, functions with expressive patterns, first-class-labels, overloaded operators, dynamic variable binding (with-construct) and also boasts 78 builtin function, that manipulate records and arrays, access the execution environment and reflect on the languages types. There exist no type systems powerfull enough to handle the full suite of properties needed to statically type such a language yet, leaving us with the only option to pick a subset of nix' features to form a well-behaved type system.
 
-A type system is nothing without a usecase. The gain of research languages is advancing the field in general, creating typesystems that infer more properties, reject less valid programs and run faster. For typestems that have an existing language as a foundation, _usability_ is the most important heuristic. In the following section we want to give a broader overview over type system features and their applicability for nix.
+A type system is nothing without a usecase. The gain of research languages is advancing the field in general, creating typesystems that infer more properties, reject less valid programs and run faster. For typestems that have an existing language as a foundation, _usability_ is the most important metric. In the following section we want to give a broader overview over type system features and their applicability for nix.
 
-One prominent way to find a subset of important features is to analyze how a language is used in practice. The everyday user of nix utilizes the existing module system of nixos and home-manager to configure their operating system or user environment. The most beneficial feature is thus autocompletion for option values that consist of a type, default-value, example and description. Both module systems provide online services @config-search @option-search to provide this information, but up to this date, no satisfactory solution exists that works in IDEs.
+The everyday user of nix utilizes the module systems of nixos and home-manager to configure their operating system or user environment. The most beneficial feature is thus autocompletion for option values that consist of a type, default-value, example and description. Both module systems provide online services @config-search @option-search to provide this information, but up to this date, no satisfactory solution exists that works in IDEs.
 
 The module system is a part of the nix standart library and utilizes most of the languages core features, such that full option inference is a feature that builds upon nix-language type inference and even if it existed, is it not clear whether it would bring satisfactory results. There might be ways to add option completion to a languge server without nix type inference, hard-coding the module-system into its foundation and using the existing type hints in conjunction, but this will (for now) not be the topic of this work.
 
