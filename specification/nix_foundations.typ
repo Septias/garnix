@@ -3,6 +3,11 @@
 #import "./figures/comparison.typ": comparison
 #import "./figures/builtin-types.typ": builtin_types
 #import "./figures/module-types.typ": module_types
+#import "sections/occurrence.typ"
+#import "sections/connectives.typ"
+#import "sections/records.typ"
+#import "sections/first-class-labels.typ"
+#import "sections/modulesystem.typ"
 
 #set heading(numbering: "1.")
 // #set page(height: auto)
@@ -229,106 +234,19 @@ The final list of wanted properties is thus:
 == To be continue...
 The following sections will further discuss the wanted properties in no particular order.
 
-
-== From Static vs. Dynamic to Gradual to Occurrence
-Static type systems operate on the meta-level to deduce program properties without running the program. This can help to enforce safety properties like _null-saftety_ @pearce_flowtyping, _panic-freeness_, and _no use-after-free_ @rust, assisting programmers to write well-behaved programs. Especially type inference helps programmers to argue about complicated function calls, destructure nested datatypes and interact with unkown libraries. But  static type checking is a compile-time abstraction over a programs runtime behaviour and thus necessarily an incomplete approximation thereof @coldwar. This leads to valid programs being rejected or lots of work to "make the compiler happy".
-
-For scripting, many languages have thus turned towards dynamic typing. Dynamic languages form the other side of the spectrum by not imposing any static properties on the program, giving ultimate expressiveness to the programmer at the cost of possibly unexpected runtime errors. This reduces the overhead of creating types and helps in rapid prototyping of applications and features like reflection are handy techniques. Only when programs get bigger and interactions between modules, functions, classes and services more complex, static type systems and their strong guarantees show their strength. The growing popularity of flow and typescript @flow @typescript shows the general trend towards type safe programming in the inherently dynamic languages like javascript and the need to mix the two approaches.
-
-Gradual type systems @gradual_siek @gradual_tobin try to strike the balance between static type inference and fully dynamic languages by allowing both to coexist. These typesystems accomodate two type systems in their torso, one annotated with static guarantees and a dynamic one. The boundary between the two is formed by an "any" type $star.op$ that is used in the dynamic part and casts that lift any to a concrete type. There exist quite a bit of research around the topic (@gradual_siek @gradual_tobin @cantblamethis @agt @gradual_extensible_rows @consistent-subtyping @blame_for_all) but most of the type systems come with type annotations, a feature we would like to dodge in this work.
-
-A more promising approach is thus _flow typing_ and the more rigid _occurrence typing_ @revisiting_occurrence  that narrow a type based on its usage. For example, the function `if isBool(x) then !x else x + 1` checks the runtime value of x to be of type bool. After this conditional check, one can obviously type the positive branch under the assumption, that x is of type bool @typescript. Also, a negative type is needed to type the else-branch under the assumption, that x is not a bool. A similar technique can be used to refine the consecutive branches of pattern matching statements.
-
-In an example match-statement `match x with bool(x) -> .. | rec(x) -> .. | _ -> x` one matches the single branches in order. The branches behave like conditionals, forcing a type on the variable, the interesting case is the default-case. This one can be typed under the assumption, that it is not of type bool or record and show why one would like to use negation types.
-
-Using negation types, it is possible to add record field removal to a language like `{a: τ} ∧ ¬{b : τ}`.
+// ------------- Section
+#occurrence.export
+#connectives.export
+#records.export
+#first-class-labels.export
+#modulesystem.export
 
 
-== Type Connectives
-
-Over the years, logical _type connectives_ like union $τ ∨ τ$, intersection $τ ∧ τ$ and negation $¬τ$ have found their way into many mainstream languages @flow @typescript @typed_racket @mlstruct, proving their usefulness by giving an intuitive relation of otherwise unrelatable types. For example, a function that uses a conditional `x: y: z: if x then y else z` is a function that returns either y or z based on whether x is true or false. This function can be typed at $bool -> α -> β -> (α ∨ β)$, intersecting the possible return types. This is a great improvement to previous ml-like systems that would have to _unify_ α and β in this situation which is already fails for integers and strings @algebraic_subtyping. The intersection type respects the variable _flow_, only merging α and β because they flow together in the output, not merging them in the input.
-
-*overloading*: Using intersection types, one can define functions that have many types. For example, the function `if isBool(x) then !x else x + 1` is a function that either inverts a bool or increments an integer. We would like to describe the argument x with an unbound type-variable α, but from the function body it is clear, that this function is only well-behaved on integers and bools. This function can be given two types. The first one $(bool ∨ int) -> (bool ∨ int)$ states that the function accepts argument of either bool or int and will return either an int or bool. But using intersection types, the functiontype can be refined to the more specific type $(int -> int) ∧ (bool -> bool)$, stating that if the function is called with an integer, it will also return one (instead of the union $int ∨ bool$).
-
-Togethe they form a boolean algbra of types that has shown useful @bool_alg_in_effect @mlstruct.
-
-$
-  #b[add]: str -> str ∨ path -> str \
-  #b[add]: path -> str ∨ path -> path \
-  #b[add]: int -> int -> int \
-  #b[add]: float ∨ int -> float -> float \
-  #b[add]: float -> float ∨ int -> float \
-  // records
-  #b[?]: record -> label -> bool \
-  #b[or] null -> τ -> τ \
-  #b[or] τ₁ ∧ ¬null -> τ₂ -> τ₁ \
-$
-
-This form of overloading is needed for nix' addition operator that can be used on strings and paths alike. It is possible to write expressions like `/home/ + "john" -> /home/john` that will return a _path_ and `"/home/" + "john"` which will return a _string_. The most general type is thus `(str -> (str ∨ path) -> string) ∧ (path -> (str ∨ path) -> path)`, needing an intersection type.
-
-We want to note that because of the overloading usage of intersection types, it is not possible to restrict unions to output positions and intersections to input positions as Dolan did @mlsub. It is thus not possible to easily destructure constraints without a normalization routine similar to the one of Parreaux.
-
-
-== The Module System <modulesystem>
-
-The nix module system is a framework and part of the nix standart library.
-It is a DSL inside the module system, that does type-checking during evaluation. This helps during module system configuration, because on build, you can see what might go wrong instead of in practice due to experiments or no at all. The typesystem provides the basic types and a combination thereof. It does not bring type connectives to the table I can imagine.
-
-
-```nix
-let
-  systemModule = { lib, config, ... }: {
-    options.toplevel = lib.mkOption {
-      type = lib.types.str;
-    };
-
-    options.enableFoo = lib.mkOption {
-      type = lib.types.bool;
-      default = false;
-    };
-
-    config.toplevel = ''
-      Is foo enabled? ${lib.boolToString config.enableFoo}
-    '';
-  };
-
-  userModule = {
-    enableFoo = true;
-  };
-
-in (import <nixpkgs/lib>).evalModules {
-  modules = [ systemModule userModule ];
-}
-```
-
-https://github.com/NixOS/nixpkgs/blob/master/lib/types.nix
-
-== Simple Types
-anything: Useful when it is used under a meta-type.
-bool: A Boolean useful for enable flags. The merge function is a logical OR between all definitions.
-int: An Integer.
-str: A string where all definitions are concatenated.
-envVar: A string where all definitions are concatenated with a colon between all definitions.
-attrs: An attribute set. (you should prefer attrsOf inferred)
-package: A derivation.
-
-
-== Meta Types
-=== Data meta-types:
-
-listOf t: A list of elements with the type t.
-attrsOf t: An attribute set of elements with the type t. The merge function zip all attribute sets into one. Attribute values of the resulting attribute set are merged with the merge function of the type t.
-
-=== Definition meta-types:
-uniq t: This type define raise an error if more than one definitions exists. All other properties are inherited from the type t. This is useful to avoid ambiguous definitions.
-none t: This type define raise an error if at least one definitions exists. All other properties are inherited from the type t. This is useful to provide a computation result to other modules. See also the apply function of option declarations.
-nullOr t: This type allows an option to be null or type t.
-
-
+// -------------- Bibliography
 #pagebreak()
-
 #bib
 
+// -------------- Appendix
 #outline(target: heading.where(supplement: [Appendix]), title: [Appendix])
 
 #show: appendix
@@ -336,9 +254,8 @@ nullOr t: This type allows an option to be null or type t.
 = List of Nix Features <all-features>
 #comparison
 
-
 = Nix Builtins <all-builtins>
-#builtin_types 
+#builtin_types
 
 = Nix module system types <module-types>
 #module_types
