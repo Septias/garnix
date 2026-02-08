@@ -62,7 +62,7 @@
     #type_name("Binary") & && | t < t | t <= t | t == t \
     & && | t "!=" t | t > t | t >= t \
     #type_name("Pipes") & && | #b[<|] | #b[|>] \
-    #type_name("Records") & && | t space ? ρ | t.ρ #b[or] t | t \/\/ t | t.l | t.i \
+    #type_name("Records") & && | t space ? ρ | t.ρ #b[or] t | t \/\/ t | t.l | t.i | t.s \
   $
 ]
 
@@ -80,7 +80,6 @@
     #type_name("R-With")&& #b[with] record; t &arrow.twohead #b[let] _"with" record #b[in] t \
     #type_name("R-Let-In")&& #b[let] oi(l_i \= t_i\;) #b[in] t &arrow.twohead#b[let] _"abs" record #b[in] t \
     #type_name("R-Def-Inner")&& { l_1 . l_2 space … space .l_n = t; } &arrow.twohead {l_1 = { l_2 = {l_n = t;};};} \
-    #type_name("R-Str-Dyn")&& t.s &arrow.twohead t.\${s} \
     #type_name("R-functor")&& {"__functor" = "self": x : t } &arrow.twohead x: t \
     #type_name("R-overrides")&& {"__overrides" = record; oj(l_j = t_j) } &arrow.twohead todo({}) \
   $,
