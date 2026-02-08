@@ -256,7 +256,7 @@
 )
 #basic_typing_rules
 
-#let list_typing_rules = flexbox(
+#let list_typing_rules = figure(caption: "List typing rules.", flexbox(
   caption: "Lists",
 
   derive(
@@ -284,9 +284,9 @@
     ($Ξ, Γ tack a: [arrow(τ_1)]$, $Ξ, Γ tack b: [arrow(τ_2)]$),
     $Ξ, Γ tack a "⧺" b: [arrow(τ_1)arrow(τ_2)]$,
   ),
-)
+))
 
-#let record_typing_rules = flexbox(
+#let record_typing_rules = figure(caption: "Record typing rules", flexbox(
   caption: "Records",
   derive(
     "T-Rcd",
@@ -314,9 +314,9 @@
     ($Xi, Γ tack e: {..}$,),
     $Xi, Γ tack e #b[#v(0.1pt)?#v(0.1pt)] l: "bool"$,
   ),
-)
+))
 
-#let operator_typing_rules = flexbox(
+#let operator_typing_rules = figure(caption: "operator typing rules", flexbox(
   derive(
     "T-Op-Arith",
     ($Γ tack t_1: "num"$, $Γ tack t_2: "num"$, $"op" ϵ space [-, +, \/, *]$),
@@ -359,7 +359,7 @@
     ($Γ tack t_1: {l: τ_1}$, $Γ tack t_2: τ_2$),
     $Γ tack t_1.l "or" t_2: τ_1 union.sq τ_2$,
   ),
-)
+))
 
 
 
