@@ -76,3 +76,22 @@ isbn="978-1-4842-1392-6",
 doi="10.1007/978-1-4842-1392-6_14",
 url="https://doi.org/10.1007/978-1-4842-1392-6_14"
 }
+
+@article{verified,
+author = {Broekhoff, Rutger and Krebbers, Robbert},
+title = {Verified Interpreters for Dynamic Languages with Applications to the Nix Expression Language},
+year = {2025},
+issue_date = {August 2025},
+publisher = {Association for Computing Machinery},
+address = {New York, NY, USA},
+volume = {9},
+number = {ICFP},
+url = {https://doi.org/10.1145/3747537},
+doi = {10.1145/3747537},
+abstract = {To study the semantics of a programming language, it is useful to consider different specification forms—e.g., a substitution-based small-step operational semantics and an environment-based interpreter—because they have mutually exclusive benefits. Developing these specifications and proving correspondences is challenging for ‘dynamic’/‘scripting’ languages such as JavaScript, PHP and Bash. We study this challenge in the context of the Nix expression language, a dynamic language used in the eponymous package manager and operating system. Nix is a Turing-complete, untyped functional language designed for the manipulation of JSON-style attribute sets, with tricky features such as overloaded use of variables for lambda bindings and attribute members, subtle shadowing rules, a mixture of evaluation strategies, and tricky mechanisms for recursion.We show that our techniques are applicable beyond Nix by starting from the call-by-name lambda calculus, which we extend to a core lambda calculus with dynamically computed variable names and dynamic binder names, and finally to Nix. Our key novelty is the use of a form of deferred substitutions, which enables us to give a concise substitution-based semantics for dynamic variable binding. We develop corresponding environment-based interpreters, which we prove to be sound and complete (for terminating, faulty and diverging programs) w.r.t. our operational semantics based on deferred substitutions.We mechanize all our results in the Rocq prover and showcase a new feature of the Rocq-std++ library for representing syntax with maps in recursive positions. We use Rocq’s extraction mechanism to turn our Nix interpreter into executable OCaml code, which we apply to the official Nix language tests.   Altogether this gives rise to the most comprehensive formal semantics for the Nix expression language to date.},
+journal = {Proc. ACM Program. Lang.},
+month = aug,
+articleno = {268},
+numpages = {30},
+keywords = {Interpreters, Nix, Rocq, lambda calculus, substitution}
+}

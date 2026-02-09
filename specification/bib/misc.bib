@@ -44,35 +44,6 @@ numpages = {13},
 keywords = {Type Inference, Subtyping, Polymorphism, Algebra}
 }
 
-  
-@manual{nix-language-2-28,
-  title        = {Nix Language — Nix 2.28 Reference Manual},
-  organization = {Nix.dev},
-  year         = {2025},
-  url          = {https://nix.dev/manual/nix/2.28/language/index.html},
-  note         = {Accessed: 2026-01-11},
-}
-
-
-@article{verified,
-author = {Broekhoff, Rutger and Krebbers, Robbert},
-title = {Verified Interpreters for Dynamic Languages with Applications to the Nix Expression Language},
-year = {2025},
-issue_date = {August 2025},
-publisher = {Association for Computing Machinery},
-address = {New York, NY, USA},
-volume = {9},
-number = {ICFP},
-url = {https://doi.org/10.1145/3747537},
-doi = {10.1145/3747537},
-abstract = {To study the semantics of a programming language, it is useful to consider different specification forms—e.g., a substitution-based small-step operational semantics and an environment-based interpreter—because they have mutually exclusive benefits. Developing these specifications and proving correspondences is challenging for ‘dynamic’/‘scripting’ languages such as JavaScript, PHP and Bash. We study this challenge in the context of the Nix expression language, a dynamic language used in the eponymous package manager and operating system. Nix is a Turing-complete, untyped functional language designed for the manipulation of JSON-style attribute sets, with tricky features such as overloaded use of variables for lambda bindings and attribute members, subtle shadowing rules, a mixture of evaluation strategies, and tricky mechanisms for recursion.We show that our techniques are applicable beyond Nix by starting from the call-by-name lambda calculus, which we extend to a core lambda calculus with dynamically computed variable names and dynamic binder names, and finally to Nix. Our key novelty is the use of a form of deferred substitutions, which enables us to give a concise substitution-based semantics for dynamic variable binding. We develop corresponding environment-based interpreters, which we prove to be sound and complete (for terminating, faulty and diverging programs) w.r.t. our operational semantics based on deferred substitutions.We mechanize all our results in the Rocq prover and showcase a new feature of the Rocq-std++ library for representing syntax with maps in recursive positions. We use Rocq’s extraction mechanism to turn our Nix interpreter into executable OCaml code, which we apply to the official Nix language tests.   Altogether this gives rise to the most comprehensive formal semantics for the Nix expression language to date.},
-journal = {Proc. ACM Program. Lang.},
-month = aug,
-articleno = {268},
-numpages = {30},
-keywords = {Interpreters, Nix, Rocq, lambda calculus, substitution}
-}
-
 
 /*
 This example thus shows that the basic property of closedness—which arguably every program should satisfy—is not statically checkable in dynamic languages
@@ -81,32 +52,6 @@ Similarly, one cannot statically check if a variable is shadowed:
 
 */
 
-@BachelorThesis{simplenix,
-  author  = {Sebastian Klähn},
-  title   = {SimpleNix: Type Inference for Nix},
-  school  = {Universität Freiburg},
-  year    = {2023},
-  type    = {Bachelor's Thesis},
-  url     = {https://github.com/Septias/bachelor-thesis/blob/main/main.pdf}
-}
-
-
-@misc{typescript,
-  title        = {TypeScript},
-  author       = {{Microsoft}},
-  year         = {2012},
-  howpublished = {\url{https://www.typescriptlang.org/}},
-  note         = {Accessed: 2026-01-14}
-}
-
-
-@misc{flow,
-  title        = {Flow: A Static Type Checker for JavaScript},
-  author       = {{Meta Platforms, Inc.}},
-  year         = {2014},
-  howpublished = {\url{https://flow.org/}},
-  note         = {Accessed: 2026-01-14}
-}
 
 @inproceedings{typed_racket,
 author = {Tobin-Hochstadt, Sam and Felleisen, Matthias},
@@ -124,19 +69,6 @@ numpages = {12},
 keywords = {type systems, scheme},
 location = {San Francisco, California, USA},
 series = {POPL '08}
-}
-
-@article{revisiting_occurrence,
-   title={Revisiting occurrence typing},
-   volume={217},
-   ISSN={0167-6423},
-   url={http://dx.doi.org/10.1016/j.scico.2022.102781},
-   DOI={10.1016/j.scico.2022.102781},
-   journal={Science of Computer Programming},
-   publisher={Elsevier BV},
-   author={Castagna, Giuseppe and Lanvin, Victor and Laurent, Mickaël and Nguyen, Kim},
-   year={2022},
-   month=may, pages={102781}
 }
 
 @article{quicksub,
@@ -238,22 +170,6 @@ flowtyping
   note   = {Accessed: 2026-02-06},
 }
 
-@misc{option-search,
-  title  = {Home Manager - Option Search},
-  author = {{ Home Manager }},
-  year   = {2026},
-  url    = {https://home-manager-options.extranix.com/},
-  note   = {Accessed: 2026-02-06},
-}
-
-@misc{config-search,
-  title  = {Nixos Search - Options},
-  author = {{ NixOs }},
-  year   = {2026},
-  url    = {https://search.nixos.org/options},
-  note   = {Accessed: 2026-02-06},
-}
-
 @misc{nix-ts-issue,
   title  = {Static type system #14},
   author = {{ Eelco Dolstra }},
@@ -261,6 +177,42 @@ flowtyping
   url    = {https://github.com/NixOS/nix/issues/14},
   note   = {Accessed: 2026-02-06},
 }
+
+@manual{nix-language-2-28,
+  title        = {Nix Language — Nix 2.28 Reference Manual},
+  organization = {Nix.dev},
+  year         = {2025},
+  url          = {https://nix.dev/manual/nix/2.28/language/index.html},
+  note         = {Accessed: 2026-01-11},
+}
+
+@BachelorThesis{simplenix,
+  author  = {Sebastian Klähn},
+  title   = {SimpleNix: Type Inference for Nix},
+  school  = {Universität Freiburg},
+  year    = {2023},
+  type    = {Bachelor's Thesis},
+  url     = {https://github.com/Septias/bachelor-thesis/blob/main/main.pdf}
+}
+
+
+@misc{typescript,
+  title        = {TypeScript},
+  author       = {{Microsoft}},
+  year         = {2012},
+  howpublished = {\url{https://www.typescriptlang.org/}},
+  note         = {Accessed: 2026-01-14}
+}
+
+
+@misc{flow,
+  title        = {Flow: A Static Type Checker for JavaScript},
+  author       = {{Meta Platforms, Inc.}},
+  year         = {2014},
+  howpublished = {\url{https://flow.org/}},
+  note         = {Accessed: 2026-01-14}
+}
+
 
 @techreport{undecidable,
 author = {Wells, J. B.},
