@@ -121,8 +121,8 @@
 
 == Reduction Rules
 #let reduction = figure(
-  caption: "Nix reduction rules, context and values.",
-  box(width: 100%, inset: 20pt, stack(
+  caption: "Nix reduction rules, evaluation context and values.",
+  box(stack(
     spacing: 20pt,
     subbox(caption: "Values")[$
       v ::= p: t | l | {overline(a\;)} | #b[rec] {overline(a\;)}
@@ -165,7 +165,7 @@
 == Types
 #let types = figure(
   caption: "Types of nix.",
-  box(width: 100%, inset: 20pt, grid(
+  box(grid(
     columns: 1,
     align: left,
     inset: 8pt,
@@ -197,7 +197,7 @@
 
 #let basic_typing_rules = figure(
   caption: "Nix typing rules",
-  box(width: 100%, inset: 20pt, [
+  box([
     #flexbox(
       caption: "Standartrules",
       derive("T-Var1", ($Γ(x) = τ$,), $Ξ, Γ tack x: τ$),
@@ -223,7 +223,7 @@
       ),
       derive("T-Negate", ($Xi, Γ tack e: "bool"$,), $Xi, Γ tack !e: "bool"$),
       // derive("T-Asc", ($Ξ,Γ ⊢ t : τ$,), $Ξ,Γ ⊢ (t: τ) : τ$),
-    ),
+    )
     // line(length: 100%),
     #flexbox(
       caption: "Language Constructs",
@@ -358,7 +358,7 @@
 
 #let matching = figure(
   caption: "Matching",
-  rect(width: 100%, inset: 20pt, stack(
+  box(stack(
     align(left, rect($m ~ overline(d) arrow.squiggly oα$)),
     ${∅, …} ~ overline(d) arrow.squiggly ∅$,
     derive(
@@ -394,7 +394,7 @@
 == Subtyping Rules
 #let subtyping = figure(
   caption: "Nix suptyping rules.",
-  rect(width: 100%, inset: 20pt)[
+  [
     #flexwrap(
       main-spacing: 20pt,
       cross-spacing: 10pt,
@@ -467,7 +467,7 @@
 == Constraining
 #let constraining = figure(
   caption: "New Constraining Rules using normal forms",
-  rect(width: 100%, inset: 20pt)[
+  [
     #subrules(caption: $Σ ⊢ τ ≪ τ => Ξ$, flexwrap(
       main-spacing: 20pt,
       cross-spacing: 10pt,
