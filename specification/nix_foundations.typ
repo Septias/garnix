@@ -107,10 +107,45 @@ Nix also provides three impure _dunder variables_ `__currentSystem` ,`__nixPath`
 In the nixpkgs repository, there are further occurences of `__structuredAttrs`, `__splicedPackages`, `__allowFileset`, `__impure`, ... that could also have effects on the evaluator, but their use seems to be mixed with standart variable naming schemes for "hidden" variables such that a clear distinction needs further work.
 
 
-== The Standart Library
+== Nix Builtins
 
-The standart library extends the languag' features beyond the simply syntactic ones. It comprehends functions that manipulate the languages datatypes, functions for type inspections, impure functions that bring the execution environment into scope and functions that infer with the usual program execution flow. We will now give a short overview over the builtin functions relevant to type inference. The full specification with possible types is given in @all-builtins.
+The nix builtins extends the languag' features beyond the simply syntactic ones. It comprehends functions that manipulate the languages datatypes, functions that inspect types, impure functions that bring the execution environment into scope and functions that infer with the usual program execution flow. We will now give a short overview over the builtin functions relevant to type inference. The full specification with possible types is given in @all-builtins.
 
+#figure(caption: [The nix language builtins and their respective types.], table(
+  columns: (auto, 1fr),
+  table.header([*Builtin*], [*Type*]),
+  [abort `s`                   ], $ τ -> ⊥ $,
+
+  table.cell(colspan: 2, [ Record-related builtins ]),
+
+  [attrNames `set`             ], $ recordType -> [ str ] $,
+  [attrValues `set`            ], $ recordType -> [ or.big oi(τ_i) ] $,
+  [catAttrs `attr list`      ],
+  $ str -> [oj(recordType)_j] -> [or.big τ_(j i)] "where" l_(j i) = str $,
+
+  table.cell(colspan: 2, [ List-related builtins]),
+
+  [concatLists `lists`       ], $ [[α]] -> [α] $,
+  [elem `x xs`                 ], $ recordType -> l -> bool $,
+  [elemAt `xs n`               ], $ [α] -> n -> α $,
+  [concatMap `f list`          ], $ (α -> β) -> [[α]] -> [β] $,
+  [concatStringsSep `sep list` ], $ str -> [str] -> str $,
+
+  table.cell(colspan: 2, [ Impure biultins ]),
+
+  [m currentSystem             ], $ () -> str $,
+  [m currentTime               ], $ () -> int $,
+
+  [fromJSON `e`                ], $ str -> {} $,
+  [fromTOML `e`                ], $ str -> {} $,
+
+  table.cell(colspan: 2, [ Inspection builtins ]),
+
+  [functionArgs `f`            ], $ (openPat -> α) -> {l_i: bool} $,
+  [isAttrs `e`                 ], $ τ -> bool $,
+  [isBool `e`                  ], $ τ -> bool $,
+  [isFloat `e`                 ], $ τ -> bool $,
+))
 
 like `attrNames` and `attrValues` for records and `elemAt`, `head`, `length` for lists. These give inspection/reflection like features to the language, since they can be used to access fields: `r: map (attrNames rec) (x: r.x)`.
 
