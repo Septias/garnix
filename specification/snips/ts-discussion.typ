@@ -29,10 +29,6 @@ Due to this shift of focus, we finally also drop operators that are modeled with
 and in a record `rec {x = x;}` this will lead to infinite recursion. That is why there needs to be distinction between the two and annotating every field is one way to solve it – albeit a very noisy one. We choose to handle inherit with a reduction rule that makes sure in the side-codition, that make sure x exists in the context.
 
 
-== Archive
-We diverge from this representation quite a bit. First and foremost, NixLang @verified follows the first semantic of Dolan @memory_to_software @dolstra_phd and annotates every record field as recursive or not. The reason being a subtlety of the inherit statement. Both systems handle inherit by adding rewriting rules, that turn expressions of the form `inherit (a) x;` into something like `x = a.x;` in records or let-bindings. When used in conjunction with recursive records, this leads to unwanted recursion. The statement `inherit x;` will be desugared into `x = x;`
-
-
 == Impurities <impurities>
 On the one hand nix is a pure and function language without sideffects but on the other hand it is one, that tightly integrates with the file-system to properly track built operations, their dependencies and outputs. The standart library thus boasts a few functions that make typing undecidable for systems that don't evaluate the language themselves. For example the expression `g.${builtins.currentSystem}` that takes an attribute from a record `g` based on the currentSystem variable, that is baked into nix, is used 207 times in public code\*.
 

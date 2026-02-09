@@ -8,6 +8,7 @@
   $ lt.double $, [Constraining],
   $ ≤ $, [Subtyping],
   $ eq.triple $, [Equality],
+  $ tilde.eq $, [Equality of types due to sets? castagna ],
   $ ⊢ $, [Proves],
   $ tack.double $, [ Variation of proves ],
   $ models $, [ Models ],
@@ -67,6 +68,48 @@ $
     }
   )
 $
+
+= On Type-Cases, Union Elimination, and Occurrence Typing
+
+#derive(
+  "T-case1",
+  ($Γ ⊢ e : τ$, $Γ ⊢ e_1: τ_1$),
+  $Γ ⊢ ((e ∈ τ)? e_1 : e_2): τ_1$,
+)
+
+#derive(
+  "T-case2",
+  ($Γ ⊢ e : ¬τ$, $Γ ⊢ e_2: τ_2$),
+  $Γ ⊢ ((e ∈ τ)? e_1 : e_2): τ_2$,
+)
+
+#derive(
+  "Union-Elim",
+  ($Γ ⊢ e' : τ_1 ∨ τ_2$, $Γ, x : τ_1: τ$, $Γ, x : τ_2: τ$),
+  $Γ ⊢ e{x / e'}: τ$,
+)
+
+
+= Flow Typing @pearce_flowtyping
+
+- No recursion
+#derive(
+  "T-app",
+  ($Γ ⊢ t_1: τ_1$, $Γ ⊢ f: τ_2 → T_3$, $Γ ⊢ τ_1 ≤ τ_2$),
+  $Γ ⊢ f t_1: τ_3$,
+)
+
+#derive(
+  "T-dec",
+  ($Γ [x arrow.bar τ_1] ⊢ t_2 : τ_2$, $Γ [f arrow.bar τ_1 → τ_2 ] ⊢ t_3 : τ_3$),
+  $Γ ⊢ f (τ_1 x) = t_2 in t_3: τ_3$,
+)
+
+#derive(
+  "T-if",
+  ($Γ[x arrow.bar Γ(x) ∧ τ_1] ⊢ τ_3$, $Γ[x arrow.bar Γ(x) ∧ ¬τ_1] ⊢ τ_3$),
+  $"if" (x "is" τ_1) t_2 "else" t_3: τ_2 ∨ τ_3$,
+)
 
 = Typing
 #flexbox(
@@ -183,26 +226,6 @@ The gradual type: $star.op$
 #derive("ForallL", ($Γ ⊢ τ$, $Γ, α ⊢ A[α -> τ] <= B$), $ ∀α. A <= B $)
 
 
-= Flow Typing @pearce_flowtyping
-
-- No recursion
-#derive(
-  "T-app",
-  ($Γ ⊢ t_1: τ_1$, $Γ ⊢ f: τ_2 → T_3$, $Γ ⊢ τ_1 ≤ τ_2$),
-  $Γ ⊢ f t_1: τ_3$,
-)
-
-#derive(
-  "T-dec",
-  ($Γ [x arrow.bar τ_1] ⊢ t_2 : τ_2$, $Γ [f arrow.bar τ_1 → τ_2 ] ⊢ t_3 : τ_3$),
-  $Γ ⊢ f (τ_1 x) = t_2 in t_3: τ_3$,
-)
-
-#derive(
-  "T-if",
-  ($Γ[x arrow.bar Γ(x) ∧ τ_1] ⊢ τ_3$, $Γ[x arrow.bar Γ(x) ∧ ¬τ_1] ⊢ τ_3$),
-  $"if" (x "is" τ_1) t_2 "else" t_3: τ_2 ∨ τ_3$,
-)
 
 
 == Auxiliaries
