@@ -1,5 +1,15 @@
 #import "@preview/biceps:0.0.1": flexwrap
 
+// ------------ Template
+#let template(doc) = [
+  #set heading(numbering: "1.")
+  #show ref: set text(fill: rgb("#781C7D"))
+  #show link: set text(fill: rgb("#005596"))
+  #show cite: set text(fill: black)
+  #show figure: set block(breakable: true)
+  #doc
+]
+
 // ------------- Colors
 #let red_700 = rgb(185, 28, 28)
 #let red_700 = rgb(185, 28, 28)
