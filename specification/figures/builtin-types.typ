@@ -19,7 +19,7 @@
   [break `v`                   ], $ α -> α $,
   [builtins                    ], $ {"abort": τ → bot, "all": (α -> bool) -> [α] -> bool, .. } $,
   table.cell(colspan: 2, [This type has to be filled with all the builtins.] ),
-  [ catAttrs `attr list`      ], $ str -> [oj(recordType)_j] -> [or.big τ_(j i)] "where" l_(j i) =  str $,
+  [catAttrs `attr list`      ], $ str -> [oj(recordType)_j] -> [or.big τ_(j i)] "where" l_(j i) =  str $,
   [ceil `double`             ], $ number -> int $,
   [compareVersions `s1 s2`     ], $ str -> str -> int$,
   [concatLists `lists`       ],   $ [[α]] -> [α] $,

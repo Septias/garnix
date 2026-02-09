@@ -109,72 +109,64 @@ In the nixpkgs repository, there are further occurences of `__structuredAttrs`, 
 
 == Nix Builtins
 
-The nix builtins extends the languag' features beyond the simply syntactic ones. It comprehends functions that manipulate the languages datatypes, functions that inspect types, impure functions that bring the execution environment into scope and functions that infer with the usual program execution flow. We will now give a short overview over the builtin functions relevant to type inference. The full specification with possible types is given in @all-builtins.
+The nix builtins extends the languag' features beyond the simply syntactic ones. It comprehends functions that manipulate the languages datatypes, functions that inspect types, impure functions that bring the execution environment into scope and functions that infer with the usual program execution flow. We will now give a short overview over the builtin functions relevant to type inference.
 
-#figure(caption: [The nix language builtins and their respective types.], table(
-  columns: (auto, 1fr),
-  table.header([*Builtin*], [*Type*]),
-  [abort `s`                   ], $ τ -> ⊥ $,
+#figure(
+  caption: [Selected nix builtins. See @all-builtins for a full list.],
+  table(
+    columns: (auto, 1fr),
+    table.header([*Builtin*], [*Type*]),
+    table.cell(colspan: 2, [ Record-related builtins ]),
 
-  table.cell(colspan: 2, [ Record-related builtins ]),
+    [attrNames `set`             ], $ recordType -> [ str ] $,
+    [attrValues `set`            ], $ recordType -> [ or.big oi(τ_i) ] $,
+    [catAttrs `attr list`        ],
+    $ str -> [oj(recordType)_j] -> [or.big τ_(j i)] "where" l_(j i) = str $,
 
-  [attrNames `set`             ], $ recordType -> [ str ] $,
-  [attrValues `set`            ], $ recordType -> [ or.big oi(τ_i) ] $,
-  [catAttrs `attr list`      ],
-  $ str -> [oj(recordType)_j] -> [or.big τ_(j i)] "where" l_(j i) = str $,
+    table.cell(colspan: 2, [ List-related builtins]),
 
-  table.cell(colspan: 2, [ List-related builtins]),
+    [concatLists `lists`         ], $ [[α]] -> [α] $,
+    [elem `x xs`                 ], $ recordType -> l -> bool $,
+    [elemAt `xs n`               ], $ [α] -> n -> α $,
+    [concatMap `f list`          ], $ (α -> β) -> [[α]] -> [β] $,
+    [concatStringsSep `sep list` ], $ str -> [str] -> str $,
 
-  [concatLists `lists`       ], $ [[α]] -> [α] $,
-  [elem `x xs`                 ], $ recordType -> l -> bool $,
-  [elemAt `xs n`               ], $ [α] -> n -> α $,
-  [concatMap `f list`          ], $ (α -> β) -> [[α]] -> [β] $,
-  [concatStringsSep `sep list` ], $ str -> [str] -> str $,
+    table.cell(colspan: 2, [ Impure builtins ]),
 
-  table.cell(colspan: 2, [ Impure biultins ]),
+    [m currentSystem             ], $ () -> str $,
+    [m currentTime               ], $ () -> int $,
 
-  [m currentSystem             ], $ () -> str $,
-  [m currentTime               ], $ () -> int $,
+    [fromJSON `e`                ], $ str -> {} $,
+    [fromTOML `e`                ], $ str -> {} $,
 
-  [fromJSON `e`                ], $ str -> {} $,
-  [fromTOML `e`                ], $ str -> {} $,
+    table.cell(colspan: 2, [ Inspection builtins ]),
 
-  table.cell(colspan: 2, [ Inspection builtins ]),
+    [functionArgs `f`            ], $ (openPat -> α) -> {l_i: bool} $,
+    [isAttrs `e`                 ], $ τ -> bool $,
+    [isBool `e`                  ], $ τ -> bool $,
+    [isFloat `e`                 ], $ τ -> bool $,
 
-  [functionArgs `f`            ], $ (openPat -> α) -> {l_i: bool} $,
-  [isAttrs `e`                 ], $ τ -> bool $,
-  [isBool `e`                  ], $ τ -> bool $,
-  [isFloat `e`                 ], $ τ -> bool $,
-))
+    table.cell(colspan: 2, [ Control Flow ]),
+    [abort `s`                   ], $ τ -> ⊥ $,
+  ),
+)
+TODO: explain
 
-like `attrNames` and `attrValues` for records and `elemAt`, `head`, `length` for lists. These give inspection/reflection like features to the language, since they can be used to access fields: `r: map (attrNames rec) (x: r.x)`.
-
-The `getAttr` field is the simple case of the former attrNames and the `hasAttr` can be used to gain flow information. The other two functions `interspectAttr` and `mapAttr` don't add too much. For arrays, we get some general property asserting functions, but since we are not a depent type system, that does not really help.
-
-Inspecting of function args is also a funny feature. `functionArgs {a, b ? 2}: 3  -> { a = false; b = true;}` so this way one can programatically find out which arguments to supply to a function. An llm-call could then actually synthesis some arguments before calling a function xd.
-
-- *Records*: attrNames, attrValues, getAttr, hasAttr, intersectAttrs, mapAttrs
-- *Array*: elem, elemAt, head, length, listToAttrs
-- *Inspecting*: functionArgs
-- *Impure*: currentSystem, currentTime, fetch\*, findFile, langVersion, nixVersion
-- *flow*: isAttrs, isBool, isFloat, isFunction, isInt, isList, isNull, isPath, isString
+The list and record related builtins extend the capabilities of records and arrays beyond the purle syntactic ones. We give type definitions before we formally introduce them in @types.
 
 
 = Syntax <syn>
+#syntax
 
 $overline(E)^{i ∈ 𝓘}$ denotes a repetition of a syntax construct indexed by $i ∈ 𝓘$. The index $i ∈ 𝓘$ is omitted if obvious.
 
-#syntax
-
-#set raw(lang: "nix")
-
-Nix supports the usual _literals_ of fully fledged languages as well as a multi-line string and paths. The syntax is given following the official regex formulas of the informal nix specification @nix-language-2-28. _Records_ follow a standart notation where multiple fields can be defined using `key = value;` assignments to define multiple fields. In addition, records can be marked _recursive_ with the `rec` keyword and are non-recursive otherwise. _Arrays_ are introduced in a similar fashion, where multiple values can be concatenated with the only unintuitive nix-specific distinction that a space is used as separator. Both datatypes are generally _immutable_, but there are concat operations (Record-Concat and Array-Concat) that can be used to create new, bigger datatypes. Furthermore, records come equipped with the usual lookup, a dynamic label check that returns a boolean as a result, a way to specify a default value in case the previous check turned out to be negative and dynamic lookups.
+Nix supports the usual literals of fully fledged languages as well as a multi-line string and paths. The syntax is given following the official regex formulas of the informal nix specification @nix-language-2-28. Records follow a standart notation with multiple `key = value;` assignments. In addition, records can be marked _recursive_ with the `rec` keyword and are non-recursive otherwise. Arrays are introduced in a similar fashion, where multiple values can be concatenated with the only unintuitive nix-specific distinction that a space is used as separator. Both datatypes are generally _immutable_, but there are concat operations that can be used to create new, bigger datatypes. Furthermore, records can be accessed using labels, strings and a dynamically computed expression. Label access is standart and access by string a common technique in real world programming languages to allow more characters in records keys. Records also have a check operation $t space ? ρ$ that returns a boolean as a result and the or-operator to specify a default value in case the previous check turned out to be negative.
 
 Functions take one argument, a _pattern_. This pattern can be a single label or adhere to a record-structure, allowing multiple fields to be present, possibly with _default arguments_. This way, a function taking multiple arguments can be created without resorting to currying. These functions can be called with a record from which the "single arguments" are taken and form a neat syntax ambiguity where function definitions and their supplied arguments can be read as functions taking records or as elaborate functions with multiple arguments and possibly default arguments.
 
-Patterns can be marked _open_ with the ellipsis (…), otherwise their are regarded as _closed_. Arguments can be given a default value using the `?` syntax. The exemplary function pattern `{a, b ? "pratt", …}` is an _open_ pattern with a default value of "pratt" for the label $b$ and a mandatory argument $a$. If one wants to refer to the whole argument in the function body, it is possible to create a global-binding for it using the \@-syntax `contact @ { name, surname, tel, email}: contact.name`. The global binding can also occur behind the argument like `{} @ glob: glob` but we use a rewrite rule to catch this case instead of adding it to the syntax definition.
+Patterns can be marked _open_ with the ellipsis (…), otherwise their are regarded as _closed_. Arguments can be given a default value using the `?` syntax. The exemplary function pattern `{a, b ? "pratt", …}` is an _open_ pattern with a default value of "pratt" for the label $b$ and a mandatory argument $a$. The whole argument can be referred to in the function body by rebinding it to variable using the \@-syntax `contact @ { name, surname, tel, email}: contact.name`. This binding can also occur behind the argument but we use a rewrite rule to catch this case instead of adding it to the syntax definition.
 
-Let-expressions can consist of multiple bindings $a_1 = t_1; … ; a_n = t_n$, possibly referencing each other in a _recursive way_. It is also allowed but regarded deprecated to enclose these bindings in braces. Both let-statements and records allow _inherit statements_ to be placed between ordinary field declarations. Inherit statements take a known label for a value and _reintroduce_ the label as "label = value;" to the record or let expression. They can also take a root path $p$ which is prefixed to all following labels. This way, a deep record can be referenced from which all values are taken. For example, the statement `inherit (world.objects.players) robert anders;` will desugar to `robert = world.objects.players.robert; anders = world.objects.players.anders;` in the surrounding record or let-expression.
+Let-expressions can define multiple bindings $a_1 = t_1; … ; a_n = t_n$, possibly referencing each other in a _recursive way_. It is also allowed but regarded deprecated to enclose these bindings in braces. Both let-statements and records allow _inherit statements_ to be placed between ordinary field declarations. Inherit statements take a known label for a value and _reintroduce_ the label as "label = value;" to the record or let expression. They can also take a root path $p$ which is prefixed to all following labels. This way, a deep record can be referenced from which all values are taken. For example, the statement `inherit (world.objects.players) robert anders;` will desugar to `robert = world.objects.players.robert; anders = world.objects.players.anders;` in the surrounding record or let-expression.
 
 The _with statement_ expects an arbitrary expression that reduces to a record. Every field from this record is then added to the scope of the next expression without shadowing variables bound by other means. See @quirks for further details.
 
@@ -183,15 +175,15 @@ There are three different syntactic objects that deserve the name `path` in our 
 
 The last path-like construct is a sequence of record accesses ρ `r.l.l.l` that "reach" to a field of a deeply nested record like `{a: {b: {c: {}}}}`. It is to note, that even though nix does have a null-type, lookups of fields that do not exist, immediately trigger an error instead of returning null. To mitigate unwanted exceptions, it is possible to check for the presence of fields in an argument using the ?-operator. This operator expects a record as first operand and a path as second `{} ? a.b.c.d`. A subroutine will then iteratively access the fields and short-fuse with false in case any path-element is missing. As mentioned in @string_interpolation, a path can contain string interpolation elements.
 
-
 == Reduction Rules
 
 #reduction <reduction>
 
+TODO: explain
 
-#basic_typing_rules
-#record_typing_rules
-#list_typing_rules
+#matching
+
+TODO: explain
 
 
 = Finding a Type System
@@ -199,46 +191,78 @@ Nix is a dynamically typed, lazy and pure language. It features extensible recor
 
 A type system is nothing without a usecase. The gain of research languages is advancing the field in general, creating typesystems that infer more properties, reject less valid programs and run faster. For typestems that have an existing language as a foundation, _usability_ is the most important metric. In the following section we want to give a broader overview over type system features and their applicability for nix.
 
-The everyday user of nix utilizes the module systems of nixos and home-manager to configure their operating system or user environment. The most beneficial feature is thus autocompletion for option values that consist of a type, default-value, example and description. Both module systems provide online services @config-search @option-search to provide this information, but up to this date, no satisfactory solution exists that works in IDEs #footnote("Integrated Development Environment").
+The everyday user of nix utilizes the module systems of nixos and home-manager to configure their operating system or user environment. The most beneficial feature is thus autocompletion for option values that consist of a type, default-value, example and description. Both module systems provide online services #footnote(link("https://home-manager-options.extranix.com/")) #footnote(link("https://search.nixos.org/options")) to provide this information, but up to this date, no satisfactory solution exists that works in IDEs #footnote("Integrated Development Environment").
 
-The module system is a part of the nix standart library and utilizes most of the languages core features, such that full option inference is a feature that builds upon nix-language type inference and even if it existed, is it not clear whether it would bring satisfactory results. There might be ways to add option completion to a languge server without nix type inference, hard-coding the module-system into its foundation and using the existing type hints in conjunction, but this will (for now) not be the topic of this work.
+The module system is a part of the nix standart library and utilizes most of the languages core features, such that full option inference is a feature that builds upon nix-language type inference. With nix-type inference it could in theory be possible to infer the exact type for option values and help programmes complete these but "example" sections would probably still be missing. It is thus an interesting topic for further research to estimate the gains of type inference in nix in regard to option-autocompletion.
 
-The second class of users use nix as a programming language. The use of nix as a language is mostly in the standart library and software packages around the nix ecosystem. Even though this might only be a fraction of the usage, the benefit of good type inference is still huge and as Eelco Dolstra would say "needed to make the language complete" @nix-ts-issue. A good typesystem would also reduce the hurdle to get into nix programming which normal users mostly avoid.
+The second class of users use nix as a programming language. The use of nix as a language is mostly in the standart library and software packages around the nix ecosystem. Even though this might only represent a fraction of the usage, the benefit of good type inference is still huge and "needed to make the language complete" @nix-ts-issue. A good typesystem would also reduce the hurdle to get into nix programming which normal users mostly avoid.
 
 We want to derive a typestem that helps in writing the language itself instead of a DSL that can only handle the module system. To grasp nix in its entirety, a few properties need to be saftisfied...
 
 
-== Lets talk properties
-The type system should be  _lazy_ because the nix syntax tree is the biggest software package repository in existance and hard to calculate (todo: check). Adding mandatory type annotations to an ecosystem with more than 40.000 files written in it would be an undertaking too big to succeed. It might be possible to add type annotations to comments or try to add a gradual type system to the language itself, but  _full type inference_ à la. ml seems to be the best option. At best it would be _principaled_ type inference with one most general type that can always be inferred without _backtracking_ because that would, again, be unusabl regarding the size of the ecosystem. #footnote([All of nix' features root in a single file at #link("https://github.com/NixOS/nixpkgs/blob/master/flake.nix") or #link("https://github.com/NixOS/nixpkgs/blob/master/default.nix"), depending on whether you use a flake based system or not.])
+== Wanted Properties
+The type system should be  _lazy_ because the nix syntax tree is the biggest software package repository in existance and hard to calculate. Adding mandatory type annotations to an ecosystem with more than 40.000 files written in it, would be an undertaking too big to succeed. It might be possible to add type annotations to comments or try to add a gradual type system to the language, but _full type inference_ à la. ml seems where no annotations have to be given is the preferred solution. At best it would be _principaled_ type inference with one most general type that can always be inferred without _backtracking_, because that would, again, be unusabl regarding the size of the ecosystem. #footnote([All of nix' features root in a single file at #link("https://github.com/NixOS/nixpkgs/blob/master/flake.nix") or #link("https://github.com/NixOS/nixpkgs/blob/master/default.nix"), depending on whether you use a flake based system or not.])
 
-Another important consideration is expressiveness. It is obviously easy to type every variable at an `any` type but that would not give any meaningful insight for the user. On the other hand, making a typesystem to complex might lead to unwanted properties like undecidability or non-termination @undecidable. Again, the proper path strikes the balance between capability and simplicity. No matter the complexity of the typesystem, most general purpose typesystem want to have some form of polymorphism, to abstract over generic program behaviour. A whole suite of polymorphism sorts exist `parametric polymorphism`, `first-class polymorphism`, `subtyping polymorphism`, `Ad-hoc polymorphsim`, `Presence polymorphism`, `Explicit Polymorphism`, `Implicit Polymorphsim` and its hard to judge which one is the right one for your type system. Parametric type inference a la System F is powerful, but needs explicit type application, a feature we can not add because we don't have type annotations. On the other hand, it is obvious that we need ad-hoc polymorphism is needed because nix features let-bindings.
+Another important consideration is expressiveness. It is obviously easy to type every variable at an _unknown_ type $star.op$  but that would not give meaningful insight for the user. On the other hand, making a typesystem to complex might lead to unwanted properties like undecidability or non-termination @undecidable. Again, the proper path strikes the balance between capability and simplicity.
 
-Last but not least, `subtype polymorphism` is a common technique that has proven useful especially in conjunction with _type-connectives_. Type connectives are borrowed from logic and add a way to connect othewise unrelated types with unions, intersection and negation. They are especially handy when used together with _flow-respective typing_, a technique used in flow to narrow types in conditionals. (!check naming)
+No matter the complexity of the typesystem, most general purpose typesystem want to have some form of polymorphism, to abstract over generic program behaviour. A whole suite of polymorphism sorts exist _parametric polymorphism_, _first-class polymorphism_, _subtyping polymorphism_, _Ad-hoc polymorphsim_, _Presence polymorphism_, _Explicit Polymorphism_, _Implicit Polymorphsim_ and its hard to judge which one is the right one for your type system. Parametric type inference a la System F is powerful, but needs explicit type application, a feature we can not add because we don't have type annotations. On the other hand, it is obvious that we need ad-hoc polymorphism is needed because nix features let-bindings.
+
+Last but not least, _subtype polymorphism_ is a common technique that has proven useful especially in conjunction with _type-connectives_. Type connectives are borrowed from logic and add a way to connect othewise unrelated types with unions, intersection and negation. They are especially handy when used together with _flow-respective typing_, a technique used in flow to narrow types in conditionals.
 
 Now we also have to talk about properties/features needed becaus of the language itself. First of all, the language allows to reflect over its types using the builtin (isBool, isAttr, etc.) functions so we need a type system that is _reflective_. Nix also allows to compute record labels and such labels need to be _first class_ in the language. Last but not least, nix is a lazy and recursive language with hard-to-track shadowing semantics. The language definition thus needs to adapt to the lazy behaviour, _recursive types_ need to be baked into the language and one needs a substitution logic, that respect the different strengths of binding and the hard-to-calculate with-binding.
 
 The final list of wanted properties is thus:
-1. Principaled type inference
-2. Support for Record concatenation
-3. Support for dynamic lookups
-4. Recursive Types
-5. Occurrence typing
-6. Gradual typing
-7. Lazyness
-8. Subtype Polymorphism
-9. Type connectives
+- Principaled type inference
+- Record concatenation
+- First class labels
+- Recursive Types
+- Occurrence typing
+- Gradual typing
+- Lazyness
+- Subtype Polymorphism
+- Type connectives
 
 
-== To be continue...
+= Types
 The following sections will further discuss the wanted properties in no particular order.
+
+#types <types>
+TODO: explain
+
+#basic_typing_rules
+TODO: explain
+
+@types shows the basic typing rules of a \_ derived type system.
+
 
 // ------------- Section
 #occurrence.export
 #connectives.export
 #records.export
+#record_typing_rules
 #first-class-labels.export
 #modulesystem.export
 
+== Recursiveness
+You can decide between equi-recursive and iso-recursive when modeling a typesystem.
+Equi-recursive has the benefit that you can just declare the infinite rollout of recursive type _euqal_ to their un-rolled out form whereas in iso-recursive type systems, you need explicit rollout operations. The main drawback of equi-recursiveness is is that it comes with high algorithmic complexity and heavy metatheory due to its co-recursive definition. Zhou et. al showed how to create an efficient algrothim for iso-recursive type systems in their develpment of Quicksub @quicksub. In addition, despite being less convenient, iso-recursive types are known to have the same expressive power as equi-recursive types @quicksub.
+
+
+== Related Work
+@verified has made three interesting decisions in their formalization:
+
+1. Rec/nonrec attribution
+2. Deep/shallow evaluation
+3. Operators as relations
+4. Matching
+
+The distinction between rec ond non-rec is due to this problematic example: `rec {inherit x;} -> rec {x = x;}`. If we were to add a simple rewrite rule for inherits, we would falsly add a new recursive binding in the example which is not how the interpreter handles it. The interpreter tries to lookup x in the context without the record-bindings. Meaning if x is defined, there will be a binding `x = x'` and if it is not defined, an error will be thrown. We decided to diverge from the formulation given in @verified by not adding inherit as syntactic sugar but as a inference rule with a premise that ensures x is defined. This is done by checking the context whether this variable exists.
+
+#derive("T-inherit", ($x ∈ Γ$,), $"inherit" x; -> x = x;$)
+#derive("T-inherit2", ($x ∈ Γ$,), $"inherit" (ρ) x; -> x = ρ.x;$)
+
+We also yeet the distinction between deep and shallow evaluation. For an interpreter that conforms to the spec it is important to diverge iff the previous implementation diverges. In our typesystem we do not want to derive termination properties (which would solve the halting problem) so we don't need to make this distinction.
+Due to this shift of focus, we finally also drop operators that are modeled with relations that accounts for the lazyness of the second operand.
 
 // -------------- Bibliography
 #pagebreak()
@@ -249,6 +273,7 @@ The following sections will further discuss the wanted properties in no particul
 #set figure(placement: none)
 #outline(target: heading.where(supplement: [Appendix]), title: [Appendix])
 #show: appendix
+#show figure: set block(breakable: true)
 
 = List of Nix Features <all-features>
 #comparison

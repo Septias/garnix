@@ -2,7 +2,7 @@
 
 #let builtin_types = table(
   columns: (auto, 1fr, 1fr),
-  table.header([*Property*] , [*Castagna*]  , [*Parreaux*]  , [*Dolan*]  , [**], [**]),
+  table.header([*Property*] , [*Castagna*]  , [*Parreaux*]  , [*Dolan*]  ,),
   [*Extensible*]            , [ ]           , [ ]           , [●]        ,
   [*Principal*]             , [ ]           , [ ]           , [●]        ,
   [*Effective*]             , [ ]           , [ ]           , [●]        ,

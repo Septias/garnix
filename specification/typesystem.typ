@@ -1,14 +1,6 @@
 #import "functions.typ": *
 #set page(height: auto)
 
-== Todo
-=== Practical
-- Dynamic lookups
-- Function Patterns
-- Fix or-rule (recursive function)
-- Fix ?-rule
-- Fix reduction rules
-
 
 == Syntax
 #let literals = subbox(caption: "Literals")[
@@ -59,12 +51,13 @@
 
 #let operators = subbox(caption: "Operators")[
   $
-    #type_name("Algebraic") & o := && | t + t | t - t | t * t | t \/ t \
+    #type_name("Algebraic") & ast.op.o := && | t + t | t - t | t * t | t \/ t \
     #type_name("Logic") & && | t -> t | ! t | t "&&" t \
-    #type_name("Binary") & && | t < t | t <= t | t == t \
+    #type_name("Comparison") & && | t < t | t <= t | t == t \
     & && | t "!=" t | t > t | t >= t \
-    #type_name("Pipes") & && | #b[<|] | #b[|>] \
-    #type_name("Records") & && | t space ? ρ | t.ρ #b[or] t | t \/\/ t | t.l | t.i | t.s \
+    #type_name("Pipe") & && | #b[<|] | #b[|>] \
+    #type_name("Record") & && | t space ? ρ | t.ρ #b[or] t | t \/\/ t | t.l | t.i | t.s \
+    #type_name("Array") & && | t ⧺ t \
   $
 ]
 
@@ -72,7 +65,7 @@
   $
     #type_name("Inherit") ι & ::= #b[inherit] overline(l); | #b[inherit] (ρ) space overline(l); \
     #type_name("Path") ρ & ::= l | ρ.l | ρ.i \
-    #type_name("Assignment") a & ::= l = t; " | " ι \
+    #type_name("Assignment") a & ::= l = t; | s = t; | ι \
   $
 ]
 
@@ -82,8 +75,6 @@
     #type_name("R-With")&& #b[with] record; t &arrow.twohead #b[let] _"with" record #b[in] t \
     #type_name("R-Let-In")&& #b[let] oi(l_i \= t_i\;) #b[in] t &arrow.twohead#b[let] _"abs" record #b[in] t \
     #type_name("R-Def-Inner")&& { l_1 . l_2 space … space .l_n = t; } &arrow.twohead {l_1 = { l_2 = {l_n = t;};};} \
-    #type_name("R-functor")&& {"__functor" = "self": x : t } &arrow.twohead x: t \
-    #type_name("R-overrides")&& {"__overrides" = record; oj(l_j = t_j) } &arrow.twohead todo({}) \
   $,
 )
 
@@ -119,10 +110,11 @@
 #syntax
 
 
+
 == Reduction Rules
 #let reduction = figure(
   caption: "Nix reduction rules, evaluation context and values.",
-  box(stack(
+  box(width: 100%, stack(
     spacing: 20pt,
     subbox(caption: "Values")[$
       v ::= p: t | l | {overline(a\;)} | #b[rec] {overline(a\;)}
@@ -132,31 +124,38 @@
       $
         E[□] & := □ | □ space t | (□).l | (v).□ \
              & | #b[if ] □ #b[ then ] t #b[ else ] t | #b[with ] □; t | #b[with ] v; □ \
-             & | #b[inherit ] (ρ) space □; | □ • t | v • t \
+             & | #b[inherit ] (ρ) space □; | □ ast.op.o t | v ast.op.o t \
       $,
     ),
     subbox(
       caption: "Reduction rules",
-      $
-        #rule_name("R-Lookup")&& {oi(l_i = t_i\;)}.l & arrow.long t_i #h(0.5cm) &&&"if" ∃i. l_i = l \
-        #rule_name("R-Lookup-Null")&& {oi(l_i = t_i\;)}.l & arrow.long #b[err] &&&"if" ∄i. l_i = l \
-        #rule_name("R-Lookup-Default-Pos")&& {oi(l_i = t_i\;)}.l" or "t & arrow.long
-        t_i &&&"if" ∃i. l_i = l \
-        #rule_name("R-Lookup-Default-Neg")&& {oi(l_i = t_i\;)}.l" or "t & arrow.long
-        t &&&"if" ∄i. l_i = l \
-        #rule_name("R-Has-Pos")&& {oi(l_i = t_i\;)}.l" ? "t & arrow.long "true" &&&"if" ∃i. l_i = l \
-        #rule_name("R-Has-Neg")&& {oi(l_i = t_i\;)}.l" ? "t & arrow.long "false" &&&"if" ∄i. l_i = l \
-        #rule_name("R-Let")&& #b[let] oi(l_i \= t_i\;) "in" t_2 & arrow.long t_2 [oi(l_i = t_i)] \
-        #rule_name("R-With")&& #b[with] {oi(l_i \= t_i\;)}; t_2 & arrow.long
-        t_2[oi(l_i = t_i) ] &&& i ∈ {i : i in.not Γ} \
-        #rule_name("R-Cond-True")&& #b[if ] "true" #b[ then ] t_1 #b[ else ]t_2 & arrow.long t_1 \
-        #rule_name("R-Cond-False")&& #b[if] "false" #b[then ] t_1 #b[ else ]t_2 & arrow.long t_2 \
-        #rule_name("R-Array-Concat")&& [ oi(t_(1i))] ⧺ [oj(t_(2j))] & arrow.long
-        [ oi(t_(1i)) oj(t_(2j)) ] \
-        #rule_name("R-Record-Concat")&& {oi(l_i = t_i\;)} "//" {oj(l_j \= t_j\;)} & arrow.long
-        {oi(l_i = t_i\;) space overline(l_b = t_b\;)^b} &&& b ∈ { j: exists.not i. l_i = l_j } \
-        && t arrow.long t' &==> E[t] → E[t']
-      $,
+      [$
+          #rule_name("R-Context") && t arrow.long t' &==> E[t] arrow.long E[t'] \
+          #rule_name("R-Lookup")&& {oi(l_i = t_i\;)}.l & arrow.long t_i #h(0.5cm) &&&"if" ∃i. l_i = l \
+          #rule_name("R-Lookup-Null")&& {oi(l_i = t_i\;)}.l & arrow.long #b[err] &&&"if" ∄i. l_i = l \
+          #rule_name("R-Lookup-Default-Pos")&& {oi(l_i = t_i\;)}.l" or "t & arrow.long
+          t_i &&&"if" ∃i. l_i = l \
+          #rule_name("R-Lookup-Default-Neg")&& {oi(l_i = t_i\;)}.l" or "t & arrow.long
+          t &&&"if" ∄i. l_i = l \
+          #rule_name("R-Has-Pos")&& {oi(l_i = t_i\;)}.l" ? "t & arrow.long "true" &&&"if" ∃i. l_i = l \
+          #rule_name("R-Has-Neg")&& {oi(l_i = t_i\;)}.l" ? "t & arrow.long "false" &&&"if" ∄i. l_i = l \
+          #rule_name("R-Let")&& #b[let] oi(l_i \= t_i\;) "in" t_2 & arrow.long t_2 [oi(l_i = t_i)] \
+          #rule_name("R-With")&& #b[with] {oi(l_i \= t_i\;)}; t_2 & arrow.long
+          t_2[oi(l_i = t_i) ] &&& i ∈ {i : i in.not Γ} \
+          #rule_name("R-Cond-True")&& #b[if ] "true" #b[ then ] t_1 #b[ else ]t_2 & arrow.long t_1 \
+          #rule_name("R-Cond-False")&& #b[if] "false" #b[then ] t_1 #b[ else ]t_2 & arrow.long t_2 \
+          #rule_name("R-Array-Concat")&& [ oi(t_(1i))] ⧺ [oj(t_(2j))] & arrow.long
+          [ oi(t_(1i)) oj(t_(2j)) ] \
+          #rule_name("R-Record-Concat")&& {oi(l_i = t_i\;)} "//" {oj(l_j \= t_j\;)} & arrow.long
+          {oi(l_i = t_i\;) space overline(l_b = t_b\;)^b} &&& b ∈ { j: exists.not i. l_i = l_j } \
+        $
+        #derive(
+          "T-Match",
+          ($m ~ overline(d) arrow.squiggly oα$,),
+          $(x: t) {oi(#b[nonrec] d)} arrow.long_a t["indirects" oα]$,
+        ),
+
+      ],
     ),
   )),
 )
@@ -165,27 +164,26 @@
 == Types
 #let types = figure(
   caption: "Types of nix.",
-  box(grid(
-    columns: 1,
+  box(width: 100%, grid(
+    columns: 1fr,
     align: left,
-    inset: 8pt,
     grid.cell(rowspan: 2, subbox(
       caption: "Types",
       $
-        #type_name("Type") tau ::= & "bool" | "string" | "path" | "num" \
-        & | τ -> τ | ⦃ oi(p) ⦄^(b,τ) -> τ| {l: τ} | [τ] | [overline(τ)] | alpha \
-        & | ⊥^diamond.small | τ ∨^diamond.small τ \
-        #type_name("Pattern Element") p & := τ | τ^? \
-        #type_name("Polymorphic type") σ & := ∀Xi. τ \
-        #type_name("Mode") diamond.small & := · | arrow.r.turn\
+        #type_name("Type")&& tau & ::= τ -> τ | ⦃ oi(p) ⦄^(b,τ) -> τ| {l: τ} | [τ] | [overline(τ)] | alpha \
+        #type_name("Groundtypes")&& & | "bool" | "string" | "path" | "num"\
+        #type_name("Connectives")&& & | ⊥ | top | τ ∨^diamond.small τ \
+        #type_name("Pattern Element")&& p & := τ | τ^? \
+        #type_name("Polymorphic type")&& σ & := ∀Xi. τ \
+        #type_name("Mode")&& diamond.small & := · | arrow.r.turn\
       $,
     )),
     subbox(
       caption: "Contexts",
       $
         #type_name("Typing Context") Γ & ::= ε | Γ · (l : τ) | Γ · (l : σ) \
-        #type_name("Subtyping Context") Σ & ::= Xi | Σ · (τ ≤ τ) | Σ · ⊳(τ ≤ τ) \
-        #type_name("Constraint Context") Xi & ::= ε | Xi · (τ ≤ τ) | Xi · (τ ≤ α) | Xi · #text(weight: "bold", "err") \
+        // #type_name("Subtyping Context") Σ & ::= Xi | Σ · (τ ≤ τ) | Σ · ⊳(τ ≤ τ) \
+        // #type_name("Constraint Context") Xi & ::= ε | Xi · (τ ≤ τ) | Xi · (τ ≤ α) | Xi · #text(weight: "bold", "err") \
       $,
     ),
   )),
@@ -197,9 +195,8 @@
 
 #let basic_typing_rules = figure(
   caption: "Nix typing rules",
-  box([
+  box(width: 100%, [
     #flexbox(
-      caption: "Standartrules",
       derive("T-Var1", ($Γ(x) = τ$,), $Ξ, Γ tack x: τ$),
       derive(
         "T-Var2",
@@ -221,12 +218,6 @@
         ($Ξ, Γ tack t: τ_1$, $Ξ, Γ tack τ_1 <= τ_2$),
         $Ξ, Γ tack t: τ_2$,
       ),
-      derive("T-Negate", ($Xi, Γ tack e: "bool"$,), $Xi, Γ tack !e: "bool"$),
-      // derive("T-Asc", ($Ξ,Γ ⊢ t : τ$,), $Ξ,Γ ⊢ (t: τ) : τ$),
-    )
-    // line(length: 100%),
-    #flexbox(
-      caption: "Language Constructs",
       derive(
         "T-If",
         ($Γ tack t_1: "bool"$, $Γ tack t_2: τ$, $Γ tack t_3: τ$),
@@ -238,44 +229,35 @@
         $Γ tack #b[assert] t_1; t_2: τ_2$,
       ),
       derive(
-        "T-Match",
-        ($m ~ overline(d) arrow.squiggly oα$,),
-        $(x: t) {oi(#b[nonrec] d)} arrow.long_a t["indirects" oα]$,
+        "T-Lst-Hom",
+        ($Ξ, Γ tack t_0: τ$, "...", $Ξ, Γ tack t_n: τ$),
+        $Ξ, Γ tack [ " " t_0 " " t_1 " " ... " " t_n " "]: [τ]$,
+      ),
+      derive(
+        "T-Lst-Agg",
+        (
+          $Ξ, Γ tack t_0: τ_0$,
+          "...",
+          $Ξ, Γ tack t_n: τ_n$,
+          $∃ i, j. τ_i != τ_j$,
+        ),
+        $Ξ, Γ tack [space t_0 space t_1 space ... " " t_n] : [ τ_0 space τ_1 space ... space τ_n]$,
+      ),
+      derive(
+        "T-List-Concat-Hom",
+        ($Ξ, Γ tack a: "[τ]"$, $Ξ, Γ tack b: "[τ]"$),
+        $Ξ, Γ tack a "⧺" b: "[τ]"$,
+      ),
+      derive(
+        "T-List-Concat-Multi",
+        ($Ξ, Γ tack a: [arrow(τ_1)]$, $Ξ, Γ tack b: [arrow(τ_2)]$),
+        $Ξ, Γ tack a "⧺" b: [arrow(τ_1)arrow(τ_2)]$,
       ),
     )
   ]),
 )
 #basic_typing_rules
 
-#let list_typing_rules = figure(caption: "List typing rules.", flexbox(
-  caption: "Lists",
-
-  derive(
-    "T-Lst-Hom",
-    ($Ξ, Γ tack t_0: τ$, "...", $Ξ, Γ tack t_n: τ$),
-    $Ξ, Γ tack [ " " t_0 " " t_1 " " ... " " t_n " "]: [τ]$,
-  ),
-  derive(
-    "T-Lst-Agg",
-    (
-      $Ξ, Γ tack t_0: τ_0$,
-      "...",
-      $Ξ, Γ tack t_n: τ_n$,
-      $∃ i, j. τ_i != τ_j$,
-    ),
-    $Ξ, Γ tack [space t_0 space t_1 space ... " " t_n] : [ τ_0 space τ_1 space ... space τ_n]$,
-  ),
-  derive(
-    "T-List-Concat-Hom",
-    ($Ξ, Γ tack a: "[τ]"$, $Ξ, Γ tack b: "[τ]"$),
-    $Ξ, Γ tack a "⧺" b: "[τ]"$,
-  ),
-  derive(
-    "T-List-Concat-Multi",
-    ($Ξ, Γ tack a: [arrow(τ_1)]$, $Ξ, Γ tack b: [arrow(τ_2)]$),
-    $Ξ, Γ tack a "⧺" b: [arrow(τ_1)arrow(τ_2)]$,
-  ),
-))
 
 #let record_typing_rules = figure(caption: "Record typing rules", flexbox(
   caption: "Records",
@@ -351,7 +333,7 @@
     $Γ tack t_1.l "or" t_2: τ_1 union.sq τ_2$,
   ),
 ))
-
+#operator_typing_rules
 
 
 == Matching
@@ -519,3 +501,10 @@
   ],
 )
 #constraining
+
+
+== Dunder
+$
+  #type_name("R-functor")&& {"__functor" = "self": x : t } &arrow.twohead x: t \
+  #type_name("R-overrides")&& {"__overrides" = record; oj(l_j = t_j) } &arrow.twohead todo({}) \
+$

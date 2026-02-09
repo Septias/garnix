@@ -226,12 +226,11 @@ The gradual type: $star.op$
 #derive("ForallL", ($Γ ⊢ τ$, $Γ, α ⊢ A[α -> τ] <= B$), $ ∀α. A <= B $)
 
 
-
-
-== Auxiliaries
+== Misc
 $ "unfold"_1 oα := &{ x := #b[nonrec] t | x := #b[nonrec] t ∈ oα} attach(union, tr: <) \
 &{ x := #b[nonrec] t["indirects" oα] | x := #b[rec] t ∈ oα} \
 "indirects" oα := &{x := #b[abs] {oα}.x | x ∈ oα } $,
+derive("T-Asc", ($Ξ,Γ ⊢ t : τ$,), $Ξ,Γ ⊢ (t: τ) : τ$),
 
 
 
