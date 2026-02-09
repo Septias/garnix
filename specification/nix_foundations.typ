@@ -1,6 +1,6 @@
 #import "functions.typ": *
 #import "typesystem.typ": *
-#import "./figures/comparison.typ": comparison
+#import "./figures/reduction-compare.typ": comparison
 #import "./figures/builtin-types.typ": builtin_types
 #import "./figures/module-types.typ": module_types
 #import "sections/occurrence.typ"
@@ -15,7 +15,7 @@
 #show link: set text(fill: rgb("#005596"))
 #show cite: set text(fill: black)
 #show figure: set block(breakable: true)
-#set figure(placement: auto)
+// #set figure(placement: auto)
 
 #set document(
   title: "Securing Nix' Foundations",
