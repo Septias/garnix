@@ -22,6 +22,7 @@
 // ------------- Shorthands
 #let oi(body) = $overline(body)^i$
 #let oj(body) = $overline(body)^j$
+#let oa = $overline(α)$
 #let b(body) = text(weight: "bold", body)
 #let rotate(..body) = $attach(tr: diamond.small, ..body)$
 #let todo(..body) = rect(stroke: orange_500, radius: 2pt, ..body)
@@ -36,6 +37,11 @@
 #let int = "int"
 #let float = "float"
 #let number = "(float ∨ int)"
+#let dyn = $\${t}$
+#let rec = b[rec]
+#let nonrec = b[nonrec]
+#let abs = b[abs]
+#let with = b[with]
 #let openPat = $⦃oi(l_i : τ_i)⦄^◌$
 #let recordType = ${oi(l_i : τ_i)}$
 #let record = ${oi(l_i \= t_i\;)}$

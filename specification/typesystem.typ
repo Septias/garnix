@@ -65,7 +65,7 @@
   $
     #type_name("Inherit") ι & ::= #b[inherit] overline(l); | #b[inherit] (ρ) space overline(l); \
     #type_name("Path") ρ & ::= l | ρ.l | ρ.i \
-    #type_name("Assignment") a & ::= l = t; | s = t; | ι \
+    #type_name("Assignment") a & ::= l = t; | s = t; | \${t} = t; ι \
   $
 ]
 
@@ -122,7 +122,7 @@
     subbox(
       caption: "Evaluation Context",
       $
-        E[□] & := □ | □ space t | (□).l | (v).□ \
+        E[□] & := □ | □ space t | (□).l | (□).dyn | (□)."s" | v.□ \
              & | #b[if ] □ #b[ then ] t #b[ else ] t | #b[with ] □; t | #b[with ] v; □ \
              & | #b[inherit ] (ρ) space □; | □ ast.op.o t | v ast.op.o t \
       $,

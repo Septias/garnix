@@ -20,7 +20,7 @@
 )
 
 = Securing Nix' Foundations
-The Nix programming language is used in over 40.000 files, showing its prominence, but was neglected in theoretical work until recently when work was picked up independently by S. Klähn and Breokhoff et. al. @verified @simplenix. Both works give a syntax definition and operational semantics to account for their uses, but did not cover the language in their full expressiveness. This work closes the gap by showing nix in its full expressiveness and giving an overview of possible type inference approaches.
+The Nix programming language is used in over 40.000 files, showing its prominence, but was neglected in theoretical work until recently when work was picked up independently by S. Klähn and Breokhoff et. al. @verified @simplenix. Both works give a syntax definition and operational semantics to account for their uses, but did not cover the language in their full expressiveness. This work gives a mixed operational semantic and an overview of possible type inference approaches.
 
 
 = Origin of the Nix Language <intro>
@@ -179,7 +179,9 @@ The last path-like construct is a sequence of record accesses ρ `r.l.l.l` that 
 
 #reduction <reduction>
 
-TODO: explain
+We largely follow the semantics of broekhoff and krebbers
+
+We assume prope operational semantics for the primitive Algebraic, Logic, Pipe and Comparison operators and give explicit transition rules for Records and Array operators. We use a call-by-name evaluation order which is operationally equivalent to lazy evaluation but less performant in interpreters. We also use the _deferred substitutions_ introduce by broekhoff and krebbers @verified to properly handle the weaker binding of the with-construct and rec/nonrec annotations to. Because of the problematic `{inherit x;} -> { x = x;}` we need to track for every field whether it is recursive or not which is done with the recursive kind.
 
 #matching
 
