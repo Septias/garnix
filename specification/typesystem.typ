@@ -161,6 +161,43 @@
 )
 #reduction
 
+== Matching
+
+#let matching = figure(
+  caption: "Matching",
+  box(flexbox(
+    // #derive("",(,), $${∅, …} ~ overline(d) arrow.squiggly ∅$$ )
+    align(horizon, ${∅, …} ~ overline(d) arrow.squiggly ∅$),
+    derive(
+      "",
+      (
+        ${oi(e?), …} ~ overline(d) arrow.squiggly oα$,
+        $x ∉ "dom "oi(e?)$,
+        $x ∉ "dom "overline(d)$,
+      ),
+      ${oi(e?)⟨x := e^?⟩, …} ~ overline(d)⟨x := d⟩ arrow.squiggly oα⟨x := #b[nonrec] d⟩$,
+    ),
+    derive(
+      "",
+      (
+        ${oi(e?), …} ~ overline(d) arrow.squiggly oα$,
+        $x ∉ "dom" oi(e?)$,
+        $x ∉ "dom" overline(d)$,
+      ),
+      ${oi(e?)⟨x := "Some" e⟩, …} ~ overline(d) arrow.squiggly oα⟨x := #b[rec] e⟩$,
+    ),
+    derive(
+      "",
+      (
+        ${oi(e?), …} ~ overline(d) arrow.squiggly oα$,
+        $"dom "overline(d) subset.eq "dom "oi(e?)$,
+      ),
+      ${oi(e?)} ~ overline(d) arrow.squiggly oα$,
+    ),
+  )),
+)
+#matching
+
 == Types
 #let types = figure(
   caption: "Types of nix.",
@@ -336,42 +373,6 @@
 #operator_typing_rules
 
 
-== Matching
-
-#let matching = figure(
-  caption: "Matching",
-  box(stack(
-    align(left, rect($m ~ overline(d) arrow.squiggly oα$)),
-    ${∅, …} ~ overline(d) arrow.squiggly ∅$,
-    derive(
-      "",
-      (
-        ${oi(e?), …} ~ overline(d) arrow.squiggly oα$,
-        $x ∉ "dom "oi(e?)$,
-        $x ∉ "dom "overline(d)$,
-      ),
-      ${oi(e?)⟨x := e^?⟩, …} ~ overline(d)⟨x := d⟩ arrow.squiggly oα⟨x := #b[nonrec] d⟩$,
-    ),
-    derive(
-      "",
-      (
-        ${oi(e?), …} ~ overline(d) arrow.squiggly oα$,
-        $x ∉ "dom" oi(e?)$,
-        $x ∉ "dom" overline(d)$,
-      ),
-      ${oi(e?)⟨x := "Some" e⟩, …} ~ overline(d) arrow.squiggly oα⟨x := #b[rec] e⟩$,
-    ),
-    derive(
-      "",
-      (
-        ${oi(e?), …} ~ overline(d) arrow.squiggly oα$,
-        $"dom "overline(d) subset.eq "dom "oi(e?)$,
-      ),
-      ${oi(e?)} ~ overline(d) arrow.squiggly oα$,
-    ),
-  )),
-)
-#matching
 
 == Subtyping Rules
 #let subtyping = figure(
