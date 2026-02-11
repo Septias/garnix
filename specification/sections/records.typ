@@ -14,7 +14,7 @@
 (Gaster & jones: A polymorphic type system for extensible records and variants)
 
 
-  Wand: [31] Mitchell Wand. Type inference for record concatenation and multipleinheritance. Information and Computation, 93(1), 1991.
+Wand: [31] Mitchell Wand. Type inference for record concatenation and multipleinheritance. Information and Computation, 93(1), 1991.
 
 #let export = [
   == Records
@@ -31,16 +31,38 @@
   The other idea is from Castagna et. al. @typing_records_etc who implements first-class labels for maps in a _semantic subtyping_ setting. The difference between the two approaches (see [simple essence of boolean algebraic subtyping] aswell) is, that one uses a row variables `{ a = b; | ξ}` while the other uses negation types and boolean reduction `{a: τ₁} ∧ {a: ¬T} ∧ {a: τ₂} -> {a : t₂}`. This allows them to address records. Otherwise, one could just build the conjunction and and give priority to later elements. It is not clear though, this affects the type inference algorithm.
 
 
-  == Comparison-draft
-  - Dolan: Lattice of types, Extensional,
-  - Castagna: Sets, Denotational, Universes, Occurrence, Functino-annotations,
-  - Parreaux: Boolean Algebraic, Syntactic, Verbose, Levels, Bounds, Skolems, Rigid Vars,
-
-  It is funny, how the approaches of Parreaux and Castagna are generally similar. They both want to have fully fledged boolean types and they use some strategy to grind down constraints. They also both use some strategy to bring them into a normal form and they use some non-standart¿ subtyping rules to complete the lattice. One difference are upper and lower bounds, that are only used in the Work of Parreaux. On the other hand, I think, Castagna uses constraint types? What are coercion type systems again?
-
-  The Workhorse in Parreaux: Carefully crafted inference rules, Normal-Forms
-  The Workhorse in Castagna: Boolean Formulas, Reduced to Normal-Forms
 
 ]
+
+== Comparison-draft
+- Dolan: Lattice of types, Extensional,
+- Castagna: Sets, Denotational, Universes, Occurrence, Functino-annotations,
+- Parreaux: Boolean Algebraic, Syntactic, Verbose, Levels, Bounds, Skolems, Rigid Vars,
+
+It is funny, how the approaches of Parreaux and Castagna are generally similar. They both want to have fully fledged boolean types and they use some strategy to grind down constraints. They also both use some strategy to bring them into a normal form and they use some non-standart¿ subtyping rules to complete the lattice. One difference are upper and lower bounds, that are only used in the Work of Parreaux. On the other hand, I think, Castagna uses constraint types? What are coercion type systems again?
+
+The Workhorse in Parreaux: Carefully crafted inference rules, Normal-Forms
+The Workhorse in Castagna: Boolean Formulas, Reduced to Normal-Forms
+
+== Regarding Perreaux
+- Since overloading is not possible in boolean algebra systems, we can not fully type nix in them. This is because due to the reflection checks, it is possible to overload functions.
+- μ-rule is not possible because recursion might aries during type checking and is not attached to any syntax
+- Tagged classes instead of anonymous record types
+
+Unchanged rest: { a: int; | r} -> { a: float; r}
+Extension: { .. }
+
+== Parreaux
+Singleton record type: { t : τ }
+
+
+
+== Things to say
+- Castgna combined row poly and subtyping @poly_records.
+
+
+== Questions
+- How does record extension work in parreaux?
+  - Unchanged rest: { a: int } ∧ { .. } -> { a: int } ∧ ¬{ a : int} ∧ { .. } ~> { .. }
 
 #bib

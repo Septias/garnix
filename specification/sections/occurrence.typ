@@ -13,7 +13,7 @@
   In an example match-statement `match x with bool(x) -> .. | rec(x) -> .. | _ -> x` one matches the single branches in order. The branches behave like conditionals, forcing a type on the variable, the interesting case is the default-case. This one can be typed under the assumption, that it is not of type bool or record and show why one would like to use negation types.
 
   Using negation types, it is possible to add record field removal to a language like `{a: τ} ∧ ¬{b : τ}`.
-  
+
   == Impurities <impurities>
   On the one hand nix is a pure and function language without sideffects but on the other hand it is one, that tightly integrates with the file-system to properly track built operations, their dependencies and outputs. The standart library thus boasts a few functions that make typing undecidable for systems that don't evaluate the language themselves. For example the expression `g.${builtins.currentSystem}` that takes an attribute from a record `g` based on the currentSystem variable, that is baked into nix, is used 207 times in public code\*.
 
@@ -22,6 +22,10 @@
   Since typing can not be solved completely (there will always be safe programs that can not be proven save with any typesystem), we need a _gradual type system_.
 
 ]
+
+
+
+
 
 == Graduality
 - We need a type system that can approximate (check builtins, untypable)

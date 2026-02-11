@@ -3,7 +3,7 @@
 
 #table(
   columns: (auto, auto),
-  table.header([*Symbol*], [*Meaning*]),
+  table.header([*Term*], [*Meaning*]),
   $ ~ $, [Consistency],
   $ lt.double $, [Constraining],
   $ ≤ $, [Subtyping],
@@ -22,6 +22,7 @@
   $t ⊲ s$, [Type cast],
   $t arrow.double^p s$, [blame],
   $t[x arrow.bar v]$, [x substituted *by* v],
+  $t[x \/ v]$, [x for v],
 )
 
 
@@ -86,7 +87,7 @@ $
 #derive(
   "Union-Elim",
   ($Γ ⊢ e' : τ_1 ∨ τ_2$, $Γ, x : τ_1: τ$, $Γ, x : τ_2: τ$),
-  $Γ ⊢ e{x / e'}: τ$,
+  $Γ ⊢ e{x \/ e'}: τ$,
 )
 
 
@@ -227,10 +228,13 @@ The gradual type: $star.op$
 
 
 == Misc
-$ "unfold"_1 oα := &{ x := #b[nonrec] t | x := #b[nonrec] t ∈ oα} attach(union, tr: <) \
-&{ x := #b[nonrec] t["indirects" oα] | x := #b[rec] t ∈ oα} \
-"indirects" oα := &{x := #b[abs] {oα}.x | x ∈ oα } $,
-derive("T-Asc", ($Ξ,Γ ⊢ t : τ$,), $Ξ,Γ ⊢ (t: τ) : τ$),
+$
+  "unfold"_1 oα := &{ x := #b[nonrec] t | x := #b[nonrec] t ∈ oα} attach(union, tr: <) \
+  &{ x := #b[nonrec] t["indirects" oα] | x := #b[rec] t ∈ oα} \
+  "indirects" oα := &{x := #b[abs] {oα}.x | x ∈ oα }
+$
+
+#derive("T-Asc", ($Ξ,Γ ⊢ t : τ$,), $Ξ,Γ ⊢ (t: τ) : τ$)
 
 
 

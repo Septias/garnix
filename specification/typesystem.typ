@@ -325,8 +325,9 @@
     $Xi, Γ tack e #b[#v(0.1pt)?#v(0.1pt)] l: "bool"$,
   ),
 ))
+#record_typing_rules
 
-#let operator_typing_rules = figure(caption: "operator typing rules", flexbox(
+#let operator_typing_rules = figure(caption: "Operator typing rules.", flexbox(
   derive(
     "T-Op-Arith",
     ($Γ tack t_1: "num"$, $Γ tack t_2: "num"$, $"op" ϵ space [-, +, \/, *]$),
@@ -370,7 +371,22 @@
     $Γ tack t_1.l "or" t_2: τ_1 union.sq τ_2$,
   ),
 ))
-#operator_typing_rules
+// #operator_typing_rules
+
+== Occurrence
+#let occurence_typing_rules = figure(
+  caption: "Occurence Typesystem for nix.",
+  [
+    $
+      #type_name[Types] τ =
+    $
+
+
+  ],
+)
+
+#occurence_typing_rules
+
 
 
 

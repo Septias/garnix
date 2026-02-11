@@ -1,4 +1,5 @@
 #import "../functions.typ": *
+./26-02-11.typ
 
 == Reduction Semantic
 - Laziness
@@ -41,15 +42,9 @@ For recursion: Check if the var is defined in the record and if yes, take it fro
 
 {x = {x = x;}.x;}.x = {x = x;}.x
 
-
 { x ? y; y ? x}:
-
-
 with { x = 2; }; with {y = 2 + x;}; y -> 4
 
-== Occurrence
-
-We add to our typesystem the usual
 
 
 == Records
@@ -58,10 +53,6 @@ We add to our typesystem the usual
 - { } ∧ { } ∧ { } <- Conjunctions (since we have them anyways)
 - lacks : { x without }
 
-
-Unchanged rest: { a: int; | r} -> { a: float; r}
-Unchanged rest: { a: int } ∧ { .. } -> { a: int } ∧ ¬{ a : int} ∧ { .. } ~> { .. }
-Extension: { .. }
 
 
 ```
@@ -123,7 +114,3 @@ S-PAT
 ```
 
 
-== Regarding Perreaux
-- Since overloading is not possible in boolean algebra systems, we can not fully type nix in them. This is because due to the reflection checks, it is possible to overload functions.
-- μ-rule is not possible because recursion might aries during type checking and is not attached to any syntax
-- Tagged classes as 

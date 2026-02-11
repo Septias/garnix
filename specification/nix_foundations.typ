@@ -209,6 +209,12 @@ Another important consideration is expressiveness. It is obviously easy to type 
 
 No matter the complexity of the typesystem, most general purpose typesystem want to have some form of polymorphism, to abstract over generic program behaviour. A whole suite of polymorphism sorts exist _parametric polymorphism_, _first-class polymorphism_, _subtyping polymorphism_, _Ad-hoc polymorphsim_, _Presence polymorphism_, _Explicit Polymorphism_, _Implicit Polymorphsim_ and its hard to judge which one is the right one for your type system. Parametric type inference a la System F is powerful, but needs explicit type application, a feature we can not add because we don't have type annotations. On the other hand, it is obvious that we need ad-hoc polymorphism is needed because nix features let-bindings.
 
+We need:
+- Intensional poly (reflection)
+- Ad-hoc poly (operators, reflection)
+
+
+
 Last but not least, _subtype polymorphism_ is a common technique that has proven useful especially in conjunction with _type-connectives_. Type connectives are borrowed from logic and add a way to connect othewise unrelated types with unions, intersection and negation. They are especially handy when used together with _flow-respective typing_, a technique used in flow to narrow types in conditionals.
 
 Now we also have to talk about properties/features needed becaus of the language itself. First of all, the language allows to reflect over its types using the builtin (isBool, isAttr, etc.) functions so we need a type system that is _reflective_. Nix also allows to compute record labels and such labels need to be _first class_ in the language. Last but not least, nix is a lazy and recursive language with hard-to-track shadowing semantics. The language definition thus needs to adapt to the lazy behaviour, _recursive types_ need to be baked into the language and one needs a substitution logic, that respect the different strengths of binding and the hard-to-calculate with-binding.

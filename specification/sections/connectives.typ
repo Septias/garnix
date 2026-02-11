@@ -9,18 +9,6 @@
 
   Together they form a boolean algbra of types that has shown useful @bool_alg_in_effect @mlstruct.
 
-  $
-    #b[add]: str -> str ∨ path -> str \
-    #b[add]: path -> str ∨ path -> path \
-    #b[add]: int -> int -> int \
-    #b[add]: float ∨ int -> float -> float \
-    #b[add]: float -> float ∨ int -> float \
-    // records
-    #b[?]: record -> label -> bool \
-    #b[or] null -> τ -> τ \
-    #b[or] τ₁ ∧ ¬null -> τ₂ -> τ₁ \
-  $
-
   This form of overloading is needed for nix' addition operator that can be used on strings and paths alike. It is possible to write expressions like `/home/ + "john" -> /home/john` that will return a _path_ and `"/home/" + "john"` which will return a _string_. The most general type is thus `(str -> (str ∨ path) -> string) ∧ (path -> (str ∨ path) -> path)`, needing an intersection type.
 
   We want to note that because of the overloading usage of intersection types, it is not possible to restrict unions to output positions and intersections to input positions as Dolan did @mlsub. It is thus not possible to easily destructure constraints without a normalization routine similar to the one of Parreaux.
