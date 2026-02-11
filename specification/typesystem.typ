@@ -72,9 +72,9 @@
 #let rewrites = subbox(
   caption: "Rewrites",
   $
-    #type_name("R-With")&& #b[with] record; t &arrow.twohead #b[let] _"with" record #b[in] t \
-    #type_name("R-Let-In")&& #b[let] oi(l_i \= t_i\;) #b[in] t &arrow.twohead#b[let] _"abs" record #b[in] t \
-    #type_name("R-Def-Inner")&& { l_1 . l_2 space … space .l_n = t; } &arrow.twohead {l_1 = { l_2 = {l_n = t;};};} \
+    #rule_name("R-Inherit")&& #b[inherit] overline(l); & arrow.twohead overline(x := nonrec x); \
+    #rule_name("R-Inherit")&& #b[inherit] (ρ) space overline(l); & arrow.twohead overline(x := ρ.x); \
+    #rule_name("R-Def-Inner")&& { l_1 . l_2 space … space .l_n = t; } &arrow.twohead {l_1 = { l_2 = {l_n = t;};};} \
   $,
 )
 
@@ -129,37 +129,60 @@
     ),
     subbox(
       caption: "Reduction rules",
-      [$
-          #rule_name("R-Context") && t arrow.long t' &==> E[t] arrow.long E[t'] \
-          #rule_name("R-Lookup")&& {oi(l_i = t_i\;)}.l & arrow.long t_i #h(0.5cm) &&&"if" ∃i. l_i = l \
-          #rule_name("R-Lookup-Null")&& {oi(l_i = t_i\;)}.l & arrow.long #b[err] &&&"if" ∄i. l_i = l \
-          #rule_name("R-Lookup-Default-Pos")&& {oi(l_i = t_i\;)}.l" or "t & arrow.long
-          t_i &&&"if" ∃i. l_i = l \
-          #rule_name("R-Lookup-Default-Neg")&& {oi(l_i = t_i\;)}.l" or "t & arrow.long
-          t &&&"if" ∄i. l_i = l \
-          #rule_name("R-Has-Pos")&& {oi(l_i = t_i\;)}.l" ? "t & arrow.long "true" &&&"if" ∃i. l_i = l \
-          #rule_name("R-Has-Neg")&& {oi(l_i = t_i\;)}.l" ? "t & arrow.long "false" &&&"if" ∄i. l_i = l \
-          #rule_name("R-Let")&& #b[let] oi(l_i \= t_i\;) "in" t_2 & arrow.long t_2 [oi(l_i = t_i)] \
-          #rule_name("R-With")&& #b[with] {oi(l_i \= t_i\;)}; t_2 & arrow.long
-          t_2[oi(l_i = t_i) ] &&& i ∈ {i : i in.not Γ} \
-          #rule_name("R-Cond-True")&& #b[if ] "true" #b[ then ] t_1 #b[ else ]t_2 & arrow.long t_1 \
-          #rule_name("R-Cond-False")&& #b[if] "false" #b[then ] t_1 #b[ else ]t_2 & arrow.long t_2 \
-          #rule_name("R-Array-Concat")&& [ oi(t_(1i))] ⧺ [oj(t_(2j))] & arrow.long
-          [ oi(t_(1i)) oj(t_(2j)) ] \
-          #rule_name("R-Record-Concat")&& {oi(l_i = t_i\;)} "//" {oj(l_j \= t_j\;)} & arrow.long
-          {oi(l_i = t_i\;) space overline(l_b = t_b\;)^b} &&& b ∈ { j: exists.not i. l_i = l_j } \
+      [
         $
-        #derive(
-          "T-Match",
-          ($m ~ overline(d) arrow.squiggly oα$,),
-          $(x: t) {oi(#b[nonrec] d)} arrow.long_a t["indirects" oα]$,
-        ),
-
+          #rule_name("Kind") k := with | abs #h(5cm) #rule_name("Recursiveness") k := rec | nonrec
+        $
+        $
+          #rule_name("R-Final")&& x_("Some" (k space e)) &arrow.long e \
+          #rule_name("R-Attr-Rec")&& {overline(a)} &arrow.long {"unfold" overline(a)} &&&"if" ∃x,d. x := rec d ∈ overline(a) \
+          #rule_name("R-Abs")&& (x: t_1) t_2 &arrow.long t_1[x := abs t_2] \
+          #rule_name("R-Match")&& (m: t) {overline(#b[nonrec] d)} &arrow.long t["indirects" oα] &&&"if" m ~ overline(d) arrow.squiggly oα \
+          #rule_name("R-With")&& #b[with] {oa}; t &arrow.long t["indirects" oa] \
+          #rule_name("R-Let")&& #b[let] {oa} #b[in] t &arrow.long t[{ l := abs d | l := d ∈ oa' }] &&& overline(α)' = "indirects" oa \
+          #rule_name("R-Let-In")&& #b[let] oi(l_i \= t_i\;) #b[in] t &arrow.long t[{ l_i := abs t_i | l_i = t_i }] \
+          #rule_name("R-Cond-True")&& #b[if] "true" #b[ then ] t_1 #b[ else ]t_2 & arrow.long t_1 \
+          #rule_name("R-Cond-False")&& #b[if] "false" #b[then ] t_1 #b[ else ]t_2 & arrow.long t_2 \
+          #rule_name("R-Lookup")&& {oa}.l & arrow.long t_i &&&"if" k space l ∈ oa\
+          #rule_name("R-Lookup-str")&& {oa}.s & arrow.long t_i &&&"if" k space s ∈ oa\
+          #rule_name("R-Lookup-dyn")&& {oa}.\${s} & arrow.long {oa}.s \
+          #rule_name("R-Lookup-dyn-step")&& {oa}.\${t} & arrow.long {oa}.\${t'} &&&"if" t arrow.long t' \
+          #rule_name("R-Lookup-Default-Pos")&& {oa}.l #b[or] t & arrow.long
+          t_i &&&"if" k space l ∈ oa \
+          #rule_name("R-Lookup-Default-Neg")&& {oa}.l #b[or] t & arrow.long
+          t &&&"if" k space l ∉ oa \
+          #rule_name("R-Has-Pos")&& {overline(α)}" ? "l & arrow.long "true" &&&"if" k space l ∈ oa \
+          #rule_name("R-Has-Neg")&& {overline(α)}" ? "l & arrow.long "false" &&&"if" k space l ∉ oa \
+          #rule_name("R-Has-Path-Pos")&& {overline(α)}" ? "l.p & arrow.long "true" \&\& space (t " ? " p) &&&"if" k space l ∈ oa \
+          #rule_name("R-Has-Path-Neg")&& {overline(α)}" ? "l.p & arrow.long "false" \&\& space (t " ? " p) &&&"if" k space l ∉ oa\
+          #rule_name("R-Array-Concat")&& [overline(t_1) ] ⧺ [overline(t_2)] & arrow.long [overline(t_1) space overline(t_2)] \
+          #rule_name("R-Record-Concat")&& {oa_1} "//" {oa_2} & arrow.long {oa_1} union.arrow {oa_2 } \
+          #rule_name("R-Context") && t arrow.long t' &==> E[t] arrow.long E[t'] \
+        $
       ],
+    ),
+    subbox(
+      caption: "Auxiliaries",
+      $
+        "unfold" oα := &{ x := #b[nonrec] t | x := #b[nonrec] t ∈ oα} union.arrow
+        &{ x := #b[nonrec] t["indirects" oα] | x := #b[rec] t ∈ oα} \
+        "indirects" oα := &{x := #b[abs] {oα}.x | x ∈ oα }
+      $,
     ),
   )),
 )
 #reduction
+
+#let subs = $overline(sigma.alt)$
+#let substitutions = $
+       x_(σ?)[subs] & := cases(
+                        x_("Some" ("abs" d)) & "if" x = "with" e ∈ subs "and" sigma^? = "Some"(abs d),
+                        x_("Some" (k space e)) & "if" x = k space e ∈ subs,
+                        x_(σ^?) & otherwise,
+                      ) \
+     (λ x. e)[subs] & := λ x. e[subs] \
+  (λ {p?}. e)[subs] & := λ {p[subs]}: e[subs] \
+$
 
 == Matching
 
