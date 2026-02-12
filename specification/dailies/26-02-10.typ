@@ -49,8 +49,8 @@ with { x = 2; }; with {y = 2 + x;}; y -> 4
 
 == Records
 
-- { l = t; | r } <- rows
-- { } ∧ { } ∧ { } <- Conjunctions (since we have them anyways)
+- { l = t; | r } ← rows
+- { } ∧ { } ∧ { } ← Conjunctions (since we have them anyways)
 - lacks : { x without }
 
 
@@ -83,7 +83,7 @@ T-OR-POS
 T-REC-CONC
 Ξ, Γ ⊢ a: { overline(l): overline(τ) } Ξ, Γ ⊢ b: { overline(b): overline(τ) }
 -----------------------------------------------------
-          Ξ, Γ ⊢ a "\/\/" b: 
+          Ξ, Γ ⊢ a "\/\/" b:
 
 T-REC-CHECK
 Ξ, Γ ⊢ e: {..}
@@ -92,13 +92,13 @@ T-REC-CHECK
 
 
 T-REC-DYN
-Γ ⊢ a: { l: τ }     t -> l 
+Γ ⊢ a: { l: τ }     t -> l
 -----------------------
 Γ ⊢ a.\${t} : τ
 
 
 T-SEL-STR
-Γ ⊢ a: { l: τ }
+Γ ⊢ a: { l: τ } t : Lab l
 ------------------
 Γ ⊢ a.\${t} : τ
 ```
@@ -106,7 +106,6 @@ T-SEL-STR
 
 ```
 S-PAT
-
 
 --------------
 { a: t } <= {| a: t |}
