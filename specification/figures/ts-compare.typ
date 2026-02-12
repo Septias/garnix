@@ -12,7 +12,7 @@
   [*Union*]                 , [●]           , [●]           , [●]      ,
   [*Intersection*]          , [●]           , [●]           , [●]      ,
 
-  table.cell(colspan: 4)[*Gradual*],
+  table.cell(colspan: 4)[*Advanced Features*],
   [*Occurrence*]            , [●]           , [ ]           , [ ]      ,
   [*Gradual*]               , [●]           , [ ]           , [ ]      ,
   [*First class labels*]    , [●]           , [ ]           , [ ]      ,
@@ -26,7 +26,7 @@
 
   table.cell(colspan: 4)[*Polymorphism*],
   [*Subtyping poly.*]       , [●]           , [●]           , [●]      ,
-  [*Parametric poly.*]      , [ ]           , [●]           , [ ]      ,
+  [*Parametric poly.*]      , [●]           , [●]           , [ ]      ,
 
   table.cell(colspan: 4)[*Misc*],
   [*Lazy*]                  , [ ]           , [ ]           , [ ]      ,

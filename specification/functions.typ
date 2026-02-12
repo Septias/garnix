@@ -125,6 +125,7 @@
     "./bib/nix.bib",
     "./bib/castagna.bib",
     "./bib/gradual.bib",
+    "./bib/records.bib",
   ),
   style: "association-for-computing-machinery",
 ))

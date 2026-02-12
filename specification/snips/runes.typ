@@ -227,6 +227,13 @@ The gradual type: $star.op$
 #derive("ForallL", ($Γ ⊢ τ$, $Γ, α ⊢ A[α -> τ] <= B$), $ ∀α. A <= B $)
 
 
+= Qualified types
+
+$
+  φ ::= τ | π => φ
+  σ ::= φ ϕ
+$
+
 == Misc
 $
   "unfold"_1 oα := &{ x := #b[nonrec] t | x := #b[nonrec] t ∈ oα} attach(union, tr: <) \

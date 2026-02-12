@@ -173,6 +173,7 @@
 )
 #reduction
 
+== Substitution
 #let subs = $overline(sigma.alt)$
 #let substitutions = $
        x_(σ?)[subs] & := cases(
@@ -323,32 +324,37 @@ $
   caption: "Records",
   derive(
     "T-Rcd",
-    ($Ξ, Γ tack t_0: τ_0$, "...", $Ξ, Γ tack t_n: τ_n$),
-    $Ξ, Γ tack {arrow(l): arrow(t)}: {arrow(l): arrow(τ)}$,
+    ($Ξ, Γ ⊢ t_0: τ_0$, "...", $Ξ, Γ ⊢ t_n: τ_n$),
+    $Ξ, Γ ⊢ {arrow(l): arrow(t)}: {arrow(l): arrow(τ)}$,
   ),
-  derive("T-Proj", ($ Ξ, Γ tack t: {l: τ} $,), $Ξ, Γ tack t.l: τ$),
+  derive("T-Proj", ($ Ξ, Γ ⊢ t: {l: τ} $,), $Ξ, Γ ⊢ t.l: τ$),
   derive(
     "T-Or-Neg",
-    ($Xi, Γ tack t_1: {l: τ_1}$, $Xi, Γ tack t_2: τ_2$),
-    $Xi, Γ tack (t_1).l #b[or] t_2: τ_1$,
+    ($Ξ, Γ ⊢ t_1: {l: τ_1}$, $l ∈ τ_1$, $Ξ, Γ ⊢ t_2: τ_2$),
+    $Ξ, Γ ⊢ (t_1).l #b[or] t_2: τ_1$,
   ),
   derive(
     "T-Or-Pos",
-    ($Xi, Γ tack t_1: τ_1$, $l ∉ τ_1$, $Xi, Γ tack t_2: τ_2$),
-    todo($Xi, Γ tack (t_1).l #b[or] t_2: τ_2$),
+    ($Ξ, Γ ⊢ t_1: τ_1$, $l ∉ τ_1$, $Ξ, Γ ⊢ t_2: τ_2$),
+    $Ξ, Γ ⊢ (t_1).l #b[or] t_2: τ_2$,
   ),
   derive(
     "T-Rec-Concat",
-    ($Ξ, Γ tack a: { oi(l\: τ) }$, $Ξ, Γ tack b: { l_j: τ_j }$),
-    todo[$Ξ, Γ tack a "//" b: {..b, ..a}$],
+    ($Ξ, Γ ⊢ a: { oa }$, $Ξ, Γ ⊢ b: { oa' }$),
+    $Ξ, Γ ⊢ a "//" b: {oa} union.arrow {oa}$,
   ),
   derive(
     "T-Check",
-    ($Xi, Γ tack e: {..}$,),
-    $Xi, Γ tack e #b[#v(0.1pt)?#v(0.1pt)] l: "bool"$,
+    ($Ξ, Γ ⊢ e: {..}$,),
+    $Ξ, Γ ⊢ e #b[?] l: "bool"$,
+  ),
+  derive(
+    "T-Acc-dyn",
+    ($Γ ⊢ a: { l: τ } t : "Lab" l$,),
+    $Γ ⊢ a.\${t} : τ$,
   ),
 ))
-#record_typing_rules
+
 
 #let operator_typing_rules = figure(caption: "Operator typing rules.", flexbox(
   derive(

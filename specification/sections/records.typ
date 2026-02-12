@@ -18,8 +18,9 @@ Wand: [31] Mitchell Wand. Type inference for record concatenation and multiplein
 
 #let export = [
   == Records
+  Records come as a natural extension of tuples to named tuples to make fields accessible by names. Records have been studied in variety of papers @symm_concat @concat4free @fc_labels @extensible_recs @extensible_tabular, each with their own quirk to it.
 
-  Records have been studied in a variety of papers [..] and can be partitioned in roughly 3 groups. The first model of records is a syntactic model where the syntax defines what a record is. This approach is conceptually simple but hard to extend because of its verbose nature and exploding rule-complexity. To overcome these shortcomings, \@wand studied _row polymorphism_. Row polymorphism extend record with a generic row r, effectively making them polymorphic in their "rest". By extending the row to lacks-predicates not only extension, but also restriction of record types can be achieved, giving a lot of flexibility in theory. While strong in theory, the theory gets complex and unwildy fast, making it hard to integrate into fully-fledged type systems. _Semantic subtyping_, developed over multiple years by Castagna et. al. @gentle_intro @poly_records @typing_records_etc to name a few, tries to remedie this by shortcoming by giving records a set-theoretic semantic model.
+  The first model of records is a syntactic model where the syntax defines what a record is. This approach is conceptually simple but hard to extend because of its verbose nature and exploding rule-complexity. To overcome these shortcomings, \@wand studied _row polymorphism_. Row polymorphism extend record with a generic row r, effectively making them polymorphic in their "rest". By extending the row to lacks-predicates not only extension, but also restriction of record types can be achieved, giving a lot of flexibility in theory. While strong in theory, the theory gets complex and unwildy fast, making it hard to integrate into fully-fledged type systems. _Semantic subtyping_, developed over multiple years by Castagna et. al. @gentle_intro @poly_records @typing_records_etc to name a few, tries to remedie this by shortcoming by giving records a set-theoretic semantic model.
 
   The principal idea of this approach is to relate types to their set of inhabited types, that is, the set of types that can be given a specific type, in this regard giving types a semantic meaning. In the set-theoretic model of types, type-union relates to set-unions $τ_1 ∨ t_2 arrow.double ⟦τ⟧ ∪ ⟦τ⟧$, type-intersection to set-intersections $t_1 ∧ t_2 arrow.double ⟦τ⟧∩⟦τ⟧$ and type negation to set-removal $¬τ arrow.long 𝟙 without ⟦τ⟧$.
 
@@ -29,9 +30,6 @@ Wand: [31] Mitchell Wand. Type inference for record concatenation and multiplein
   The first thing one needs to do is to form a _boolean algbebra_ of types that is well behaved. If given, constraints of the form τ₁ <= τ₂ can be "grained down" into sub-constraints, eventually leading to primitive  constraints like $"Bool" < top$ that can be added to type variables.
 
   The other idea is from Castagna et. al. @typing_records_etc who implements first-class labels for maps in a _semantic subtyping_ setting. The difference between the two approaches (see [simple essence of boolean algebraic subtyping] aswell) is, that one uses a row variables `{ a = b; | ξ}` while the other uses negation types and boolean reduction `{a: τ₁} ∧ {a: ¬T} ∧ {a: τ₂} -> {a : t₂}`. This allows them to address records. Otherwise, one could just build the conjunction and and give priority to later elements. It is not clear though, this affects the type inference algorithm.
-
-
-
 ]
 
 == Comparison-draft
