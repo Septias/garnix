@@ -46,6 +46,7 @@
     #type_name("Conditional") &| #b[if] t #b[then] t #b[else] t \
     #type_name("With-Statement") &| #b[with] t; t \
     #type_name("Assert-Statement") &| #b[assert] t; t \
+    #type_name("Import-Statement") &| #b[import] t; \
   $
 ]
 
@@ -157,6 +158,7 @@
           #rule_name("R-Has-Path-Neg")&& {overline(α)}" ? "l.p & arrow.long "false" \&\& space (t " ? " p) &&&"if" k space l ∉ oa\
           #rule_name("R-Array-Concat")&& [overline(t_1) ] ⧺ [overline(t_2)] & arrow.long [overline(t_1) space overline(t_2)] \
           #rule_name("R-Record-Concat")&& {oa_1} "//" {oa_2} & arrow.long {oa_1} union.arrow {oa_2 } \
+          #rule_name("R-Import")&& #b[import] p; & arrow.long t arrow.b.double &&&"if" p arrow.squiggly t \
           #rule_name("R-Context") && t arrow.long t' &==> E[t] arrow.long E[t'] \
         $
       ],
