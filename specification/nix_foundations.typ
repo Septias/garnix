@@ -91,7 +91,7 @@ This is a non-trivial feature, because it allows (arguably unidiomatic) recursio
 
 == String Interpolation <string_interpolation>
 
-String interpolation is a common feature in modern programming languages because of its convenience to build complex strings from pieces that are string-convertible. When used inside a string or path, the term t of the expression `${t}` will be evaluated to a string and inserted literally. It is thus possible to easily create complex strings `let name = "john"; in "Hello ${name}"` or programmatically access file locations:
+String interpolation is a common feature in modern programming languages because of its convenience to build complex strings from pieces that are string-convertible. When used inside a string or path, the term t of the expression `${t}` will has to evaluate to a string and will be inserted literally. It is thus possible to easily create complex strings `let name = "john"; in "Hello ${name}"` or programmatically access file locations:
 
 ```
 let conf_file_of = (name: readString /home/${name}/.config/nu); in conf_file_of "john" → /home/john/.config/nu
@@ -100,6 +100,7 @@ let conf_file_of = (name: readString /home/${name}/.config/nu); in conf_file_of 
 The same syntax can also be used in _dynamic bindings_, _field-accesses_ and _field-checks_. It is for example possible to define a record with a computed label `{ ${"foo"} = bar;} → {foo = bar;}`. Similarly, it is possible to _access_ records with a dynamically computed label `{ a = 1; b = 2; c = 3;}.${t}`, and check for record fields
 ```
 { players.gaben.health = 10; players.ruben.health = 7; } ? players.${"ruben"}.health → 7```
+
 Record labels are thus first class inhabitants of the language.
 
 
@@ -121,7 +122,7 @@ During our analysis we also found further occurences of `__structuredAttrs`, `__
 
 == Nix Builtins
 
-The nix builtins extends the languag' features beyond the simply syntactic ones. It comprehends functions that manipulate the languages datatypes, functions that inspect types, impure functions that bring the execution environment into scope and functions that infer with the usual program execution flow. We will now give a short overview over the builtin functions relevant to type inference. They will be further discussed in section @builtin_types_discussion but we want to make the reader aware of a few of the tricky builtins upfront.
+The nix builtins extends the languag' features beyond the simply syntactic ones. It comprehends functions that manipulate the languages datatypes, functions that inspect types, impure functions that bring the execution environment into scope and functions that infer with the usual program execution flow. We will now give a short overview over the builtin functions relevant to type inference. They will be further discussed in section \@builtin_types_discussion but we want to make the reader aware of a few of the tricky builtins upfront.
 
 #[
   #show figure: set block(breakable: true)
@@ -248,21 +249,28 @@ The final list of wanted properties is thus:
 
 
 = Types
-The following sections will further discuss the wanted properties in no particular order. We start with basic types and adopt them to the different systems.
+The following sections will further discuss the wanted properties in no particular order. We start with basic types based on the work of Lionell Parreaux @simplesub @mlstruct @invalml with type connectives, top and bottom types, atomic record types and also monomorphic and polymorphic type variables.
 
-#types <types>
-Garnix models all literal syntax categories with the respective atom types bool, string, path and num. Notice, that we do not distinguish between float and int as they are coerced during interpretation and thus used interspersely in practice. We also add the usual types for functions, records and arrays and note that record  types only define a _single_ label to type mapping instead of multiple. This is due to the use of subtyping constraints and their accumuation on type variables during type inferene. This mechanism is further discussed in \@section_todo. Also, we introduce two types for arrays, one for homogenous arrays of the same type and one accumulative for the case that an array has many distinct elements.
-To form a boolean algebra of types we add the expected type connectives $union.sq, inter.sq, ~$ as well as a top and bottom type which represent the least type which is subsumed by every other type and the greatest type which subsumes every other type respectively.
-Lastely, we add a single type for patterns. Even thought a pattern is similar in structere to a record, the pattern type is an accumulated type with multiple fields. This distinction is made due to the syntactical difference of the two. Patterns are introduced and eliminated atomically unlike a record where every fild acces `record.field` results in new independent constraints. The superscript b can be true or false, ascribing whether the pattern is _open_ or _closed_.
+#figure(
+  caption: "Types of nix.",
+  types,
+  placement: none,
+)<types>
+
+@types shows the initial types we use. We model all literal syntax categories with the respective atom types bool, string, path, float and int. We also add the usual types for functions, records and arrays and note that record types only define a _single_ label to type mapping instead of multiple. This is due to the use of subtyping constraints and their accumuation on type variables during type inferene. This mechanism is further discussed in \@section_todo. Also, we introduce two types for arrays, one for homogenous arrays of the same type and one accumulative for the case that an array has many distinct elements.
+To form a boolean algebra of types we add the expected type connectives $¬, ∨, ∧$ as well as a top and bottom type which represent the least type which is subsumed by every other type and the greatest type which subsumes every other type respectively.
+Lastely, we add a single type for patterns. Even thought a pattern is similar in structure to a record, the pattern type is an accumulated type with multiple fields. This distinction is made due to the syntactical difference of the two. Patterns are introduced and eliminated atomically unlike a record where every fild acces `record.field` results in new independent constraints. The superscript b can be true or false, ascribing whether the pattern is _open_ or _closed_.
+
 
 
 #basic_typing_rules
-TODO: explain
 
 @types shows the basic typing rules of a \_ derived type system.
 
+All operator typing rules can be found in @operator-typingrules
 
-// ------------- Section
+
+// ------------- Longer sections ---------------
 #occurrence.export
 #connectives.export
 #records.export
@@ -271,28 +279,6 @@ TODO: explain
 #modulesystem.export
 
 
-== Builtin types <builtin_types_discussion>
-
-== Recursiveness
-You can decide between equi-recursive and iso-recursive when modeling a typesystem.
-Equi-recursive has the benefit that you can just declare the infinite rollout of recursive type _euqal_ to their un-rolled out form whereas in iso-recursive type systems, you need explicit rollout operations. The main drawback of equi-recursiveness is is that it comes with high algorithmic complexity and heavy metatheory due to its co-recursive definition. Zhou et. al showed how to create an efficient algrothim for iso-recursive type systems in their develpment of Quicksub @quicksub. In addition, despite being less convenient, iso-recursive types are known to have the same expressive power as equi-recursive types @quicksub.
-
-
-== Related Work
-@verified has made three interesting decisions in their formalization:
-
-1. Rec/nonrec attribution
-2. Deep/shallow evaluation
-3. Operators as relations
-4. Matching
-
-The distinction between rec ond non-rec is due to this problematic example: `rec {inherit x;} -> rec {x = x;}`. If we were to add a simple rewrite rule for inherits, we would falsly add a new recursive binding in the example which is not how the interpreter handles it. The interpreter tries to lookup x in the context without the record-bindings. Meaning if x is defined, there will be a binding `x = x'` and if it is not defined, an error will be thrown. We decided to diverge from the formulation given in @verified by not adding inherit as syntactic sugar but as a inference rule with a premise that ensures x is defined. This is done by checking the context whether this variable exists.
-
-#derive("T-inherit", ($x ∈ Γ$,), $"inherit" x; -> x = x;$)
-#derive("T-inherit2", ($x ∈ Γ$,), $"inherit" (ρ) x; -> x = ρ.x;$)
-
-We also yeet the distinction between deep and shallow evaluation. For an interpreter that conforms to the spec it is important to diverge iff the previous implementation diverges. In our typesystem we do not want to derive termination properties (which would solve the halting problem) so we don't need to make this distinction.
-Due to this shift of focus, we finally also drop operators that are modeled with relations that accounts for the lazyness of the second operand.
 
 // -------------- Bibliography
 #pagebreak()
@@ -310,6 +296,9 @@ Due to this shift of focus, we finally also drop operators that are modeled with
 
 = Nix Builtins <all-builtins>
 #builtin_types
+
+= Nix module system types <operator-typingrules>
+#operator_typing_rules
 
 = Nix module system types <module-types>
 #module_types
