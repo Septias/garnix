@@ -1,3 +1,5 @@
+
+------------- OCCURRENCE ------------------
 @article{revisiting_occurrence,
    title={Revisiting occurrence typing},
    volume={217},
@@ -12,19 +14,38 @@
 }
 
 
-@article{elixir_design_principles,
-   title={The Design Principles of the Elixir Type System},
-   volume={8},
-   ISSN={2473-7321},
-   url={http://dx.doi.org/10.22152/programming-journal.org/2024/8/4},
-   DOI={10.22152/programming-journal.org/2024/8/4},
-   number={2},
-   journal={The Art, Science, and Engineering of Programming},
-   publisher={Aspect-Oriented Software Association (AOSA)},
-   author={Castagna, Giuseppe and Duboc, Guillaume and Valim, José},
-   year={2023},
-   month=oct }
+@article{on_occurence,
+  title={On type-cases, union elimination, and occurrence typing},
+  author={Castagna, Giuseppe and Laurent, Micka{\"e}l and Nguyễn, Kim and Lutze, Matthew},
+  journal={Proceedings of the ACM on Programming Languages},
+  volume={6},
+  number={POPL},
+  pages={1--31},
+  year={2022},
+  publisher={ACM New York, NY, USA}
+}
 
+---------------     GRADUAL    -------------------
+
+@article{gradual_perspective,
+  title={Gradual typing: a new perspective},
+  author={Castagna, Giuseppe and Lanvin, Victor and Petrucciani, Tommaso and Siek, Jeremy G},
+  journal={Proceedings of the ACM on Programming Languages},
+  volume={3},
+  number={POPL},
+  pages={1--32},
+  year={2019},
+  publisher={ACM New York, NY, USA}
+}
+
+@article{gradual_elixir,
+  title={Guard analysis and safe erasure gradual typing: a type system for Elixir},
+  author={Castagna, Giuseppe and Duboc, Guillaume},
+  journal={arXiv preprint arXiv:2408.14345},
+  year={2024}
+
+}
+--------------- SEMANTIC SUBTYPING ---------------
 @inproceedings{gentle_intro,
 author = {Castagna, Giuseppe and Frisch, Alain},
 title = {A gentle introduction to semantic subtyping},
@@ -43,6 +64,54 @@ location = {Lisbon, Portugal},
 series = {PPDP '05}
 }
 
+
+@inproceedings{frisch2002semantic,
+  title={Semantic subtyping},
+  author={Frisch, Alain and Castagna, Giuseppe and Benzaken, V{\'e}ronique},
+  booktitle={Proceedings 17th Annual IEEE Symposium on Logic in Computer Science},
+  pages={137--146},
+  year={2002},
+  organization={IEEE}
+}
+
+@article{frisch_semantic,
+  title={Semantic subtyping: Dealing set-theoretically with function, union, intersection, and negation types},
+  author={Frisch, Alain and Castagna, Giuseppe and Benzaken, V{\'e}ronique},
+  journal={Journal of the ACM (JACM)},
+  volume={55},
+  number={4},
+  pages={1--64},
+  year={2008},
+  publisher={ACM New York, NY, USA}
+}
+
+@inproceedings{castagna2014polymorphic,
+  title={Polymorphic functions with set-theoretic types: part 1: syntax, semantics, and evaluation},
+  author={Castagna, Giuseppe and Nguyen, Kim and Xu, Zhiwu and Im, Hyeonseung and Lenglet, Sergue{\"\i} and Padovani, Luca},
+  booktitle={Proceedings of the 41st ACM SIGPLAN-SIGACT Symposium on Principles of Programming Languages},
+  pages={5--17},
+  year={2014}
+}
+
+
+@inproceedings{castagna2015polymorphic,
+  title={Polymorphic functions with set-theoretic types: Part 2: Local type inference and type reconstruction},
+  author={Castagna, Giuseppe and Nguyen, Kim and Xu, Zhiwu and Abate, Pietro},
+  booktitle={Proceedings of the 42nd Annual ACM SIGPLAN-SIGACT Symposium on Principles of Programming Languages},
+  pages={289--302},
+  year={2015}
+}
+
+
+@incollection{castagna2023programming,
+  title={Programming with union, intersection, and negation types},
+  author={Castagna, Giuseppe},
+  booktitle={The French School of Programming},
+  pages={309--378},
+  year={2023},
+  publisher={Springer}
+}
+------------------ RECORDS ---------------------
 @article{typing_records_etc,
 author = {Castagna, Giuseppe},
 title = {Typing Records, Maps, and Structs},
@@ -86,4 +155,39 @@ month = apr,
 articleno = {132},
 numpages = {28},
 keywords = {intersection types, record types, row polymorphism, subtyping, union types}
+}
+
+
+--------------- ELIXIR ------------------
+@article{elixir_design_principles,
+   title={The Design Principles of the Elixir Type System},
+   volume={8},
+   ISSN={2473-7321},
+   url={http://dx.doi.org/10.22152/programming-journal.org/2024/8/4},
+   DOI={10.22152/programming-journal.org/2024/8/4},
+   number={2},
+   journal={The Art, Science, and Engineering of Programming},
+   publisher={Aspect-Oriented Software Association (AOSA)},
+   author={Castagna, Giuseppe and Duboc, Guillaume and Valim, José},
+   year={2023},
+   month=oct }
+
+
+@article{castagna2023elixir,
+  title={The design principles of the Elixir type system},
+  author={Castagna, Giuseppe and Duboc, Guillaume and Valim, Jos{\'e}},
+  journal={arXiv preprint arXiv:2306.06391},
+  year={2023}
+}
+------------- MISC -----------------
+
+@article{CDUCE,
+  title={CDuce: an XML-centric general-purpose language},
+  author={Benzaken, V{\'e}ronique and Castagna, Giuseppe and Frisch, Alain},
+  journal={ACM SIGPLAN Notices},
+  volume={38},
+  number={9},
+  pages={51--63},
+  year={2003},
+  publisher={ACM New York, NY, USA}
 }
