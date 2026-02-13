@@ -225,32 +225,30 @@ $
 #matching
 
 == Types
-#let types = figure(
-  caption: "Types of nix.",
-  box(width: 100%, grid(
-    columns: 1fr,
-    align: left,
-    grid.cell(rowspan: 2, subbox(
-      caption: "Types",
-      $
-        #type_name("Type")&& tau & ::= τ -> τ | ⦃ oi(p) ⦄^(b,τ) -> τ| {l: τ} | [τ] | [overline(τ)] | alpha \
-        #type_name("Groundtypes")&& & | "bool" | "string" | "path" | "num"\
-        #type_name("Connectives")&& & | ⊥ | top | τ ∨^diamond.small τ \
-        #type_name("Pattern Element")&& p & := τ | τ^? \
-        #type_name("Polymorphic type")&& σ & := ∀Xi. τ \
-        #type_name("Mode")&& diamond.small & := · | arrow.r.turn\
-      $,
-    )),
-    subbox(
-      caption: "Contexts",
-      $
-        #type_name("Typing Context") Γ & ::= ε | Γ · (l : τ) | Γ · (l : σ) \
-        // #type_name("Subtyping Context") Σ & ::= Xi | Σ · (τ ≤ τ) | Σ · ⊳(τ ≤ τ) \
-        // #type_name("Constraint Context") Xi & ::= ε | Xi · (τ ≤ τ) | Xi · (τ ≤ α) | Xi · #text(weight: "bold", "err") \
-      $,
-    ),
+#let types = box(width: 100%, grid(
+  columns: 1fr,
+  align: left,
+  grid.cell(rowspan: 2, subbox(
+    caption: "Types",
+    $
+      #type_name("Type")&& tau & ::= τ -> τ | ⦃ oi(p) ⦄^b -> τ| {l: τ} | [τ] | [overline(τ)] | alpha \
+      #type_name("Groundtypes")&& & | "bool" | "string" | "path" | "float" | "int"\
+      #type_name("Connectives")&& & | ⊥ | top | τ ∨ τ | τ ∧ τ | ¬τ \
+      #type_name("Pattern Element")&& p & := τ | τ^? \
+      #type_name("Polymorphic type")&& σ & := ∀Xi. τ \
+      // #type_name("Mode")&& diamond.small & := + | -\
+    $,
   )),
-)
+  subbox(
+    caption: "Contexts",
+    $
+      #type_name("Typing Context") Γ & ::= ε | Γ · (l : τ) | Γ · (l : σ) \
+      // #type_name("Subtyping Context") Σ & ::= Xi | Σ · (τ ≤ τ) | Σ · ⊳(τ ≤ τ) \
+      // #type_name("Constraint Context") Xi & ::= ε | Xi · (τ ≤ τ) | Xi · (τ ≤ α) | Xi · #text(weight: "bold", "err") \
+    $,
+  ),
+))
+
 #types
 
 
@@ -352,7 +350,7 @@ $
   ),
   derive(
     "T-Acc-dyn",
-    ($Γ ⊢ a: { l: τ } t : "Lab" l$,),
+    ($Γ ⊢ a: { l: τ }$, $t : "Lab" l$),
     $Γ ⊢ a.\${t} : τ$,
   ),
 ))
@@ -361,28 +359,28 @@ $
 #let operator_typing_rules = figure(caption: "Operator typing rules.", flexbox(
   derive(
     "T-Op-Arith",
-    ($Γ tack t_1: "num"$, $Γ tack t_2: "num"$, $"op" ϵ space [-, +, \/, *]$),
-    $Γ tack t_1 "op" t_2: "num"$,
+    ($Γ tack t_1: num$, $Γ tack t_2: num$, $"op" ϵ space [-, +, \/, *]$),
+    $Γ tack t_1 "op" t_2: num$,
   ),
   derive(
     "T-Op-Logic",
-    ($Γ tack t_1: "bool"$, $Γ tack t_2: "bool"$, $"op" ϵ space [->, ∨, ∧]$),
-    $Γ tack t_1 "op" t_2: "bool"$,
+    ($Γ tack t_1: bool$, $Γ tack t_2: bool$, $"op" ϵ space [->, ∨, ∧]$),
+    $Γ tack t_1 "op" t_2: bool$,
   ),
   derive(
     "T-Add-Num",
-    ($Γ tack t_1: "num"$, $Γ tack t_2: "num"$),
-    $Γ tack t_1 + t_2: "num"$,
+    ($Γ tack t_1: num$, $Γ tack t_2: num$),
+    $Γ tack t_1 + t_2: num$,
   ),
   derive(
     "T-Add-Str",
-    ($Γ tack t_1: "str"$, $Γ tack t_2: "str" union.sq "path"$),
-    $Γ tack t_1 + t_2: "str"$,
+    ($Γ tack t_1: str$, $Γ tack t_2: str union.sq path$),
+    $Γ tack t_1 + t_2: str$,
   ),
   derive(
     "T-Add-Path",
-    ($Γ tack t_1: "path"$, $Γ tack t_2: "path" union.sq "str"$),
-    $Γ tack t_1 + t_2: "path"$,
+    ($Γ tack t_1: path$, $Γ tack t_2: path union.sq str$),
+    $Γ tack t_1 + t_2: path$,
   ),
   derive(
     "T-Compare",
@@ -392,10 +390,10 @@ $
       $τ_1 eq.triple τ_2$,
       $"op" in [<, <=, >=, >, ==, !=]$,
     ),
-    $Γ tack t_1 "op" t_2: "bool"$,
+    $Γ tack t_1 "op" t_2: bool$,
   ),
-  derive("T-Negate", ($Γ tack e: "bool"$,), $Γ tack !e: "bool"$),
-  derive("T-Check", ($Γ tack e: {l: τ}$,), $Γ tack e ? l: "bool"$),
+  derive("T-Negate", ($Γ tack e: bool$,), $Γ tack !e: bool$),
+  derive("T-Check", ($Γ tack e: {l: τ}$,), $Γ tack e ? l: bool$),
   derive(
     "T-Or",
     ($Γ tack t_1: {l: τ_1}$, $Γ tack t_2: τ_2$),

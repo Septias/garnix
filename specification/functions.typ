@@ -36,7 +36,7 @@
 #let bool = "bool"
 #let int = "int"
 #let float = "float"
-#let number = "(float ∨ int)"
+#let num = "(float ∨ int)"
 #let dyn = $\${t}$
 #let rec = b[rec]
 #let nonrec = b[nonrec]
