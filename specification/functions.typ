@@ -6,6 +6,9 @@
   #show ref: set text(fill: rgb("#781C7D"))
   #show link: set text(fill: rgb("#005596"))
   #show cite: set text(fill: black)
+  #set par(justify: true)
+  #set text(12pt)
+  #set page(margin: (x: 2cm, y: 2cm))
   // #show figure: set block(breakable: true)
   #doc
 ]
