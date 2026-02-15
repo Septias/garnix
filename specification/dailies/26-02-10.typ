@@ -46,13 +46,10 @@ For recursion: Check if the var is defined in the record and if yes, take it fro
 with { x = 2; }; with {y = 2 + x;}; y -> 4
 
 
-
 == Records
-
 - { l = t; | r } ← rows
 - { } ∧ { } ∧ { } ← Conjunctions (since we have them anyways)
 - lacks : { x without }
-
 
 
 ```

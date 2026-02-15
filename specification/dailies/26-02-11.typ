@@ -45,14 +45,12 @@ All (Flow, Gradual, Occurrence) work by refining types.
 - Some of them can be implemented in the language?
 
 
-
 == Records
 Record presentations:
 - { a = t₁ } ∧ { b = t₂ } ← Normal subtyping already covers this
 - { a = t₁, b = t₂; }
 - { a = t₁, b = t₂; | r } ← Row subtyping
 - { a = 1; b = false;}    ← Double labels
-
 
 
 == Out of scope

@@ -38,7 +38,7 @@ x ∉ Γ    Ξ(x) = τ
 
 - `__toString` is only
 
-== Occurrcen
+== Occurrence
 
 First iteration:
 
