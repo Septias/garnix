@@ -1,0 +1,4 @@
+[[language]]
+auto-format = true
+language-servers = ["tinymist", "typos-lsp"]
+name = "typst"
