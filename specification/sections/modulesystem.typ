@@ -1,6 +1,7 @@
 #import "../functions.typ": *
 
 #let export = [
+  == Nix' Module System
   The nix module system is a framework and part of the nix standart library.
   It is a DSL inside the module system, that does type-checking during evaluation. This helps writing module system configuration, because it verifies on build (of packages) that configured values have the proper shape at least. The typesystem is not standardized and can be extended by every user. All type definitions consist of a description, a name, a merge function and a check function. The check function is used to check whether a provided value is of the type, mostly using the builtin reflection capabilities of nix. The merge function is used to merge option values that were defined in different places of the configiguration. Due to nix' hirarchical structure and the interdependency of packages, configuration changes can happen anywhere in the configuration hirarchy. For example, the networkmanager configuration will be edited be enabled and configured by a wireguard system. This very wireguard system will also probably.
 

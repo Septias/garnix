@@ -2,7 +2,7 @@
 
 #let export = [
   == From Static vs. Dynamic to Gradual to Occurrence
-  Static type systems operate on the meta-level to deduce program properties without running the program. This can help to enforce safety properties like _null-safety_ @pearce_flowtyping, _panic-freeness_, and _no use-after-free_ @rust, assisting programmers to write well-behaved programs. Especially type inference helps programmers to argue about complicated function calls, destructure nested datatypes and interact with unknown libraries. But  static type checking is a compile-time abstraction over a programs runtime behaviour and thus necessarily an incomplete approximation thereof @coldwar. This leads to valid programs being rejected or lots of work to "make the compiler happy".
+  Static type systems operate on the meta-level to deduce program properties without running the program. This can help to enforce safety properties like _null-safety_ @pearce_flowtyping, _panic-freeness_, and _no use-after-free_ @rust, assisting programmers to write well-behaved programs. Especially infererred type annotations help programmers to argue about complicated function calls, destructure nested datatypes and interact with unknown libraries. But  static type checking is a compile-time abstraction over a programs runtime behaviour and thus necessarily an incomplete approximation thereof @coldwar. This leads to valid programs being rejected or lots of work to "make the compiler happy".
 
   For scripting, many languages have thus turned towards dynamic typing. Dynamic languages form the other side of the spectrum by not imposing any static properties on the program, giving ultimate expressiveness to the programmer at the cost of possibly unexpected runtime errors. This reduces the overhead of creating types and helps in rapid prototyping of applications and features like reflection are handy techniques. Only when programs get bigger and interactions between modules, functions, classes and services more complex, static type systems and their strong guarantees show their strength. The growing popularity of flow and typescript @flow @typescript shows the general trend towards type safe programming for inherently dynamic languages like javascript and the need to mix the two approaches.
 
@@ -10,11 +10,11 @@
 
   A more promising approach is thus _flow typing_ or the more rigid _occurrence typing_ @revisiting_occurrence  @on_occurrence that narrow types based on their usage. For example, the function `if isBool(x) then !x else x + 1` checks the runtime value of x to be of type bool. After this conditional check, one can obviously type the positive branch under the assumption, that x is of type bool. Also, a negative type is needed to type the else-branch under the assumption, that x is not a bool. A similar technique can be used to refine the consecutive branches of pattern matching statements.
 
-  In an example match-statement `match x with bool(x) -> .. | rec(x) -> .. | _ -> x` one matches the single branches in order. The branches behave like conditionals, forcing a type on the variable, the interesting case is the default-case. This one can be typed under the assumption, that it is not of type bool or record and in fact an exhaustiveness check can be added straight by comparing the default-branch type with ⊥, making a strong case for negation types.
+  In an example match-statement `match x with bool(x) -> .. | rec(x) -> .. | _ -> x` one matches the single branches in order. The branches behave like conditionals, forcing a type on the variable, the interesting case is the default-case. This one can be typed under the assumption, that it is not of type bool or record and in fact an exhaustiveness check can be added by comparing the default-branch type with ⊥, making a strong case for negation types.
 
 
   == Impurities <impurities>
-  On the one hand nix is a pure and function language without sideffects but on the other hand it is one, that tightly integrates with the file-system to properly track built operations, their dependencies and outputs. The standard library thus boasts a few functions that make typing undecidable for systems that don't evaluate the language themselves. For example the expression `g.${builtins.currentSystem}` that takes an attribute from a record `g` based on the currentSystem variable, that is baked into nix, is used 207 times in public code. #footnote(link("https://sourcegraph.com/search?q=context:global+%24%7Bbuiltins.currentSystem%7D&patternType=keyword&sm=0"))
+  On the one hand nix is a purely function language without sideffects but on the other hand it is one, that tightly integrates with the file-system to properly track built operations, their dependencies and outputs. The standard library thus boasts a few functions that make typing undecidable for systems that don't evaluate the language themselves. For example the expression `g.${builtins.currentSystem}` that takes an attribute from a record `g` based on the currentSystem variable, that is baked into nix, is used 207 times in public code. #footnote(link("https://sourcegraph.com/search?q=context:global+%24%7Bbuiltins.currentSystem%7D&patternType=keyword&sm=0"))
 
   While currentSystem could be computed by a typesystem in theory, predicting the variable `builtins.currentTime` is virtually impossible, as it would allow you to predict the future. A list of other impure functions are `currentSystem, currentTime, fetch\*, findFile, langVersion, nixVersion`. These functions can return arbitrary values.
 
@@ -23,8 +23,6 @@
   Todo: add @gradual_elixir @gradual_perspective
 
 ]
-
-
 
 == Graduality
 - We need a type system that can approximate (check builtins, untypable)

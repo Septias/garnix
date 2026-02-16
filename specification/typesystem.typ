@@ -255,7 +255,7 @@ $
 == Typing Rules
 
 #let basic_typing_rules = figure(
-  caption: "Nix typing rules",
+  caption: "Basic nix typing rules.",
   box(width: 100%, [
     #flexbox(
       derive("T-Var1", ($Γ(x) = τ$,), $Ξ, Γ tack x: τ$),

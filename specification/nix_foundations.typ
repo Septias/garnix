@@ -211,7 +211,7 @@ We largely follow the semantics of broekhoff and krebbers @verified. We assume p
 
 
 = Finding a Type System <ts-dicsussion>
-Nix is a dynamically typed, lazy and pure language. It features extensible records, functions with expressive patterns, first-class-labels, overloaded operators, tricky shadowing behaviour (with-construct) and also boasts 78 builtin function, that manipulate records and arrays, access the execution environment and reflect on the languages types. There exists no type systems powerful enough to handle the full suite of properties needed to statically type such a language yet, leaving us with the only option to pick a subset of nix' features to form a well-behaved type system.
+Nix is a dynamically typed, lazy and purely functional language. It features extensible records, functions with expressive patterns, first-class-labels, overloaded operators, tricky shadowing behaviour (with-construct) and also boasts 78 builtin function, that manipulate records and arrays, access the execution environment and reflect on the languages types. There exists no type systems powerful enough to handle the full suite of properties needed to statically type such a language yet, leaving us with the only option to pick a subset of nix' features to form a well-behaved type system.
 
 A type system is nothing without a usecase. Research languages might seek theoretical properties to reject less valid programs and giving more static properties in the process but for typestems that have an existing language as foundation, _usability_ is the most important metric. In the following section we want to give a broader overview over type system features and their applicability to nix.
 
@@ -219,19 +219,19 @@ The everyday user of nix utilizes the module systems of nixos and home-manager t
 
 The module system is a part of the nix standard library and utilizes most of the languages core features, such that full option inference is a feature that builds upon nix-language type inference. With nix-type inference it could in theory be possible to infer the exact type for option values and help programmes complete these but "example" sections would probably still be missing. It is thus an interesting topic for further research to estimate the gains of type inference in nix in regard to option-autocompletion or whether a system that autocompletes the existing information from the web-portals is preferable.
 
-The second user-class uses nix as a programming language. The use of nix as a language is mostly in the standard library and software packages around the nix ecosystem. Even though this might only represent a fraction of the usage, the benefit of good type inference is still huge and "needed to make the language complete" @nix-ts-issue. A good typesystem would also reduce the hurdle to get into nix programming which normal users mostly avoid.
+The second user-class uses nix as a programming language, mostly in the standard library and software packages around the nix ecosystem. Even though this might only represent a fraction of the usage, the benefit of good type inference is still huge and "needed to make the language complete" @nix-ts-issue. A good typesystem would also reduce the hurdle to get into nix programming which normal users mostly avoid.
 
 We want to derive a typestem that helps in writing the language itself instead of a DSL that can only handle the module system. To grasp nix in its entirety, a few properties need to be satisfied...
 
 
 == Wanted Properties
-Th nixpkgs repository is with its 40.000 files the biggest and most up to date package repository in existence receiving approx. 80 PRs#footnote("Pull Requests")  a day. Adding mandatory type annotations to an ecosystem of such a size would be an undertaking too big to succeed. Such a situation immediately calls for a gradual type system @gradual_siek @gradual_tobin that allow typed and untyped code to coexist. Type annotations could then be gracefually added (i) as comment or (ii) directly to the language. The first approach has shown fruitful in javascript and typescript, but comments have their own usage and should not be polluted with type annotations. (ii) could be possible, but updating all files would still be a massive undertaking. The way harder but most useful approach is thus  _full type inference_ à la. ML (cite ml?) where no annotations have to be given to begin with. At best it would be _principaled_ type inference with one most general type that can always be inferred without _backtracking_, because that would, again, be unusabl regarding the size of the ecosystem. #footnote([All of nix' features root in a single file at #link("https://github.com/NixOS/nixpkgs/blob/master/flake.nix") or #link("https://github.com/NixOS/nixpkgs/blob/master/default.nix"), depending on whether you use a flake based system or not.]) Since the whole codebase roots in one file, this also calls for a _lazy_ type system.
+Th nixpkgs repository is with its 40.000 files the biggest and most up to date package repository in existence receiving approx. 80 PRs#footnote("Pull Requests")  a day. Adding mandatory type annotations to an ecosystem of such a size would be an undertaking too big to succeed. Such a situation immediately calls for a gradual type system @gradual_siek @gradual_tobin that allows typed and untyped code to coexist. Type annotations could then be gracefually added (i) as comment or (ii) directly to the language. The first approach has shown fruitful in javascript and typescript, but comments have their own usage and should not be polluted with type annotations. (ii) could be possible, but updating all files would still be a massive undertaking. The way harder but most useful approach is thus  _full type inference_ à la. ML (cite ml?) where no annotations have to be given to begin with. At best it would be _principaled_ type inference with one most general type that can always be inferred without _backtracking_, because that would, again, be unusable slow regarding the size of the ecosystem. #footnote([All of nix' features root in a single file at #link("https://github.com/NixOS/nixpkgs/blob/master/flake.nix") or #link("https://github.com/NixOS/nixpkgs/blob/master/default.nix"), depending on whether you use a flake based system or not.]) Since the whole codebase roots in one file, this also calls for a _lazy_ type system.
 
 Another important consideration for a typesystem is expressiveness. It is obviously possible to type every variable at an _unknown type_ $star.op$ but that would not give meaningful insight for the user. On the other hand, making a typesystem to complex might lead to unwanted properties like undecidability or non-termination @undecidable. Again, the proper path strikes the balance between expressiveness and simplicity.
 
-Most general purpose typesystem come equipped with some form of polymorphism, to abstract over generic program behaviour. Due to its usefulness, polymorphsim is one if not the most researched topic with a myrriad of different kinds:  _parametric polymorphism_, _first-class polymorphism_, _subtyping polymorphism_, _Ad-hoc polymorphsim_, _Presence polymorphism_, _Explicit Polymorphism_, _Implicit Polymorphsim_ just to name a few. It is not immediately obvious which types of polymorphism is the right for your type system but we can conclude from the language. Parametric type inference a la System F is powerful, but needs explicit type application, a feature we can not add because we don't have type annotations.
+Most general purpose typesystem come equipped with some form of polymorphism, to abstract over generic program behaviour. Due to its usefulness, polymorphsim is one if not the most researched topic with a myrriad of different kinds:  _parametric polymorphism_, _first-class polymorphism_, _subtyping polymorphism_, _Ad-hoc polymorphsim_, _Presence polymorphism_, _Explicit Polymorphism_, _Implicit Polymorphsim_ just to name a few. It is not immediately obvious which types of polymorphism is the right for your type system but we can conclude from the language.
 
-On the other hand, it is obvious that we need ad-hoc polymorphism because nix features let-bindings. Last but not least, _subtype polymorphism_ is a common technique that has proven useful especially in conjunction with _type-connectives_. Type connectives are borrowed from logic connect otherwise unrelated types using unions, intersection and negation. They are especially useful in conjunction with _flow-respective typing_, a technique used in flow to narrow types in conditionals.
+It is obvious that  parametric polymorphism is needed because nix features let-bindings.   Last but not least, _subtype polymorphism_ is a common technique that has proven useful especially in conjunction with _type-connectives_. Type connectives are borrowed from logic connect otherwise unrelated types using unions, intersection and negation. They are especially useful in conjunction with _flow-respective typing_, a technique used in flow to narrow types in conditionals.
 
 The nix language furthermore allows to reflect over its types using the builtin (isBool, isAttr, etc.) functions so a reflexive type system is needed. Nix also allows to compute record labels and such labels need to be _first class_ in the language. Last but not least, nix is a lazy and recursive language with hard-to-track shadowing semantics. Due to recursiveness in records, let-bindings, and patterns, recursive types are a must in the language.
 
@@ -262,7 +262,7 @@ Lastely, we add a single type for patterns. Even thought a pattern is similar in
 
 #basic_typing_rules
 
-@types shows the basic typing rules of a \_ derived type system.
+@types shows the basic typing rules of a mlsub-derived type system.
 
 All operator typing rules can be found in @operator-typingrules
 
@@ -275,6 +275,9 @@ All operator typing rules can be found in @operator-typingrules
 An overview comparison table can be found in @ts-comp.
 #first-class-labels.export
 #modulesystem.export
+
+== Conclusion & Outlook
+To be continued…
 
 // -------------- Bibliography ----------------
 #pagebreak()
