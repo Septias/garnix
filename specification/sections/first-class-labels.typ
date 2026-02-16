@@ -17,7 +17,7 @@ Types: ⦅ℓ ⦆|
 
   In research there exist different approaches to the problem of first-class labels @verified @typing_records_etc @extensible_rec_funcs @extensible_data_adhoc
 
-  In the world of _semantic subtyping_,
+  Todo: this part is not really applicable to a discussion (there are only so many papers) so I think an explicit view of semantic subtyping approach vs. Daan Leijen is good... :thinking:
 
 ]
 

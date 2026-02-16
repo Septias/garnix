@@ -118,7 +118,7 @@
   box(width: 100%, stack(
     spacing: 20pt,
     subbox(caption: "Values")[$
-      v ::= p: t | l | {overline(a\;)} | #b[rec] {overline(a\;)}
+      v ::= p: t | l | {overline(α)} | #b[rec] {overline(α)}
     $],
     subbox(
       caption: "Evaluation Context",
@@ -403,8 +403,8 @@ $
 // #operator_typing_rules
 
 == Occurrence
-#let occurence_typing_rules = figure(
-  caption: "Occurence Typesystem for nix.",
+#let occurrence_typing_rules = figure(
+  caption: "Occurrence Typesystem for nix.",
   [
     $
       #type_name[Types] τ =
@@ -414,7 +414,7 @@ $
   ],
 )
 
-#occurence_typing_rules
+#occurrence_typing_rules
 
 
 

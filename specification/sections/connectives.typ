@@ -7,7 +7,7 @@
 
   *overloading*: Using intersection types, one can define functions that have many types. For example, the function `if isBool(x) then !x else x + 1` is a function that either inverts a bool or increments an integer. We would like to describe the argument x with an unbound type-variable α, but from the function body it is clear, that this function is only well-behaved on integers and bools. This function can be given two types. The first one $(bool ∨ int) -> (bool ∨ int)$ states that the function accepts argument of either bool or int and will return either an int or bool. But using intersection types, the functiontype can be refined to the more specific type $(int -> int) ∧ (bool -> bool)$, stating that if the function is called with an integer, it will also return one (instead of the union $int ∨ bool$).
 
-  We have already seen their usage in occurence typing systems.
+  We have already seen their usage in occurrence typing systems.
 
   This form of overloading is needed for nix' addition operator that can be used on strings and paths alike. It is possible to write expressions like `/home/ + "john" -> /home/john` that will return a _path_ and `"/home/" + "john"` which will return a _string_. The most general type is thus $(str -> (str ∨ path) -> str) ∧ (path -> (str ∨ path) -> path)$, needing an intersection type.
 
