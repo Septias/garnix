@@ -1,10 +1,7 @@
 #import "../functions.typ": *
 
-
-
 == From interpreter to theory
 When trying to retrofit a typesystem onto a language that is effectively defined by an interpreter, the natural question arises, how close one should model the interpreters behaviour. In many cases the interpreter needs to be followed closely, but in cases of "higher theoretical properties" like infinite-recursion it might be benefical to extrapolate or simplify the intepreter quirks, effectively deviating from the instantiated operational semantic.
-
 
 
 = Archive
@@ -24,6 +21,16 @@ Records come as a natural extension of tuples to named tuples to make fields acc
 The first model of records is a syntactic model where the syntax defines what a record is. This approach is conceptually simple but hard to extend because of its verbose nature and exploding rule-complexity. To overcome these shortcomings, \@wand studied _row polymorphism_. Row polymorphism extend record with a generic row r, effectively making them polymorphic in their "rest". By extending the row to lacks-predicates not only extension, but also restriction of record types can be achieved, giving a lot of flexibility in theory. While strong in theory, the theory gets complex and unwildy fast, making it hard to integrate into fully-fledged type systems. _Semantic subtyping_, developed over multiple years by Castagna et. al. @gentle_intro @poly_records @typing_records_etc to name a few, tries to remedie this by shortcoming by giving records a set-theoretic semantic model.
 
 Stephen Dolan proposed a new family of type systems, named _algebraic type systems_. These systems tackle language construction from a new point of view. Instead of adding types first and then trying to find a semantic model for them, Dolan argues one should pay more attention to finding a semantic model for the types _first_.
+
+
+== Old property talk
+Another important consideration for a typesystem is _expressiveness_. It is obviously possible to type every variable at an _unknown type_ $star.op$ but that would not give meaningful insight for the user. On the other hand, making a typesystem to complex might lead to unwanted properties like undecidability or non-termination @undecidable. Again, the proper path strikes the balance between expressiveness and simplicity.
+
+Most general purpose typesystem come equipped with some form of polymorphism, to abstract over generic program behaviour. Due to its usefulness, polymorphsim is one if not the most researched topic with a myrriad of different kinds:  _parametric polymorphism_, _first-class polymorphism_, _subtyping polymorphism_, _Ad-hoc polymorphsim_, _Presence polymorphism_, _Explicit Polymorphism_, _Implicit Polymorphsim_ just to name a few. It is not immediately obvious which types of polymorphism is the right for your type system but we can conclude from the language.
+
+It is obvious that parametric polymorphism is needed because nix features let-bindings. Last but not least, _subtype polymorphism_ is a common technique that has proven useful especially in conjunction with _type-connectives_. Type connectives are borrowed from logic connect otherwise unrelated types using unions, intersection and negation. They are especially useful in conjunction with _flow-respective typing_, a technique used in flow to narrow types in conditionals.
+
+The nix language furthermore allows to reflect over its types using the builtin (isBool, isAttr, etc.) functions so a reflexive type system is needed. Nix also allows to compute record labels and such labels need to be _first class_ in the language. Last but not least, nix is a lazy and recursive language with hard-to-track shadowing semantics. Due to recursiveness in records, let-bindings, and patterns, recursive types are a must in the language.
 
 == Bad function reduction
 

@@ -26,6 +26,55 @@
 )
 
 
+== Amber Rules @quicksub
+#derive(
+  "Amber-Var",
+  ($α ≤ β ∈ Δ$,),
+  $Δ ⊢ α ≤ β$,
+)
+
+#derive(
+  "Amber-Rec",
+  ($Δ, α ≤ β ⊢ A ≤ B$,),
+  $Δ ⊢ μ α. A ≤ μ β. B$,
+)
+
+#derive(
+  "Amber-Self",
+  ($$,),
+  $Δ ⊢ μ α. A ≤ μ α. A$,
+)
+
+
+== Quicksub
+
+#flexbox(
+  derive("QS-Nat", ($$,), $Ψ ⊢ "nat" attach(≈, br: ∅) "nat"$),
+  derive("QS-TopEq", ($$,), $Ψ ⊢ T attach(≈, br: ∅) T$),
+  derive("QS-TopLT", ($A ≠ T$,), $Ψ ⊢ A < t$),
+  derive("QS-VarPos", ($α^⊕ ∈ Ψ$,), $Ψ ⊢ A attach(≈, br: ∅) α$),
+  derive("QS-VarNeg", ($α^(overline(⊕)) ∈ Ψ$,), $Ψ ⊢ α attach(≈, br: α) α$),
+  derive("QS-RecT", ($Ψ, α^⊕ ⊢ A_1 < A_2 ⊢$,), $Ψ ⊢ μ α. A_1 < μ α A_2$),
+  derive(
+    "QS-RecEq",
+    ($Ψ, α^⊕ ⊢ A_1 attach(≈, br: S) A_2 ⊢$, $α ∉ S$),
+    $Ψ ⊢ μ α. A_1 attach(≈, br: S) μ α A_2$,
+  ),
+  derive(
+    "QS-RecEqIn",
+    ($Ψ, α^⊕ ⊢ A_1 attach(≈, br: S)A_2$, $a ∈ S$),
+    $Ψ ⊢ μ α. A_1 ≈_(((S union"FV"(A_1)) without {α})) μ. α A_2$,
+  ),
+  derive(
+    "QS-Arrow",
+    (
+      $Ψ, α^overline(⊕) ⊢ A_2 attach(lt.approx, br: 1) A_1$,
+      $Ψ ⊢ B_1 attach(lt.approx, br: 2) B_2$,
+    ),
+    $Ψ ⊢ A_1 → A_2 (attach(lt.approx, br: 1) • attach(lt.approx, br: 2)) B_1 → B_2$,
+  ),
+)
+
 == Occurrence Typing
 *Domain-merging* @revisiting_occurrence
 
