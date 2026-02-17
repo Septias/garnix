@@ -108,6 +108,7 @@
     grid.cell(colspan: 2, rewrites),
   )),
 )
+
 #syntax
 
 
@@ -123,7 +124,7 @@
     subbox(
       caption: "Evaluation Context",
       $
-        E[□] & := □ | □ space t | (□).l | (□).dyn | (□)."s" | v.□ \
+        E[□] & := □ space t | (□).l | (□).dyn | (□)."s" | v.□ \
              & | #b[if ] □ #b[ then ] t #b[ else ] t | #b[with ] □; t | #b[with ] v; □ \
              & | #b[inherit ] (ρ) space □; | □ ast.op.o t | v ast.op.o t \
       $,
@@ -311,8 +312,8 @@ $
       ),
       derive(
         "T-List-Concat-Multi",
-        ($Ξ, Γ tack a: [arrow(τ_1)]$, $Ξ, Γ tack b: [arrow(τ_2)]$),
-        $Ξ, Γ tack a "⧺" b: [arrow(τ_1)arrow(τ_2)]$,
+        ($Ξ, Γ tack a: [overline(τ_1)]$, $Ξ, Γ tack b: [overline(τ_2)]$),
+        $Ξ, Γ tack a "⧺" b: [overline(τ_1) space overline(τ_2)]$,
       ),
     )
   ]),
@@ -354,7 +355,7 @@ $
     $Γ ⊢ a.\${t} : τ$,
   ),
 ))
-
+#record_typing_rules
 
 #let operator_typing_rules = figure(caption: "Operator typing rules.", flexbox(
   derive(
@@ -400,7 +401,7 @@ $
     $Γ tack t_1.l "or" t_2: τ_1 union.sq τ_2$,
   ),
 ))
-// #operator_typing_rules
+#operator_typing_rules
 
 == Occurrence
 #let occurrence_typing_rules = figure(

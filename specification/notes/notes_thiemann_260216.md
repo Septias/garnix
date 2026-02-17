@@ -10,7 +10,7 @@ Kommentare zum Dokument:
 * [ ] (Listing 1) terminale und nichtterminale kann man nicht gut auseinander halten
 * [x] (die Semantik würde ich nicht call-by-need machen, weil das technisch aufwändig ist. Stattdessen call-by-name)
 * [ ] Figure 1 gibt es mehrmals (S.10); die wird auch nicht im Text erwähnt
-* [ ] Beim Evaluation Context musst du dich entscheiden, ob er rekursiv sein soll oder nicht. Wenn nicht, muss die erste Alternative \Box weg. Ansonsten musst du alle anderen Boxen durch E ersetzen.
+* [x] Beim Evaluation Context musst du dich entscheiden, ob er rekursiv sein soll oder nicht. Wenn nicht, muss die erste Alternative \Box weg. Ansonsten musst du alle anderen Boxen durch E ersetzen.
 * [ ] R-Final verstehe ich nicht. Woher kommt das Some (k e)?
 * [ ] was machen unfold und indirects? —> Hab's gefunden! Beispiele wären hilfreich.
 * [ ] wieso explizite Indizes in R-Let-In und sonst nicht?

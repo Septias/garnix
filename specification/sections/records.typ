@@ -2,6 +2,7 @@
 
 == TODO
 - Are row-variables actually better in gradual systems?
+- Polymorphic records for dynamic languages: no open record extension
 
 == Records: History
 

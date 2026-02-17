@@ -27,6 +27,7 @@
 #let oj(body) = $overline(body)^j$
 #let oa = $overline(α)$
 #let b(body) = text(weight: "bold", body)
+#let subsec(body) = text(weight: "bold", size: 14pt, body)
 #let rotate(..body) = $attach(tr: diamond.small, ..body)$
 #let todo(..body) = rect(stroke: orange_500, radius: 2pt, ..body)
 
@@ -80,7 +81,6 @@
 
 // Logical unit in a bigger figure
 #let subbox(caption: "", ..body) = stack(
-  spacing: 10pt,
   align(left, text(weight: "bold", smallcaps(caption))),
   ..body,
 )
@@ -102,17 +102,24 @@
 )
 
 
-#let derive(name, prem, conclusion) = [
-  #table(
-    stroke: none,
-    inset: (x: 0pt, y: 5pt),
-    align: center,
-    table.cell(align: start, rule_name(name)),
-    table.cell(inset: (y: 5pt), prem.join("     ")),
-    table.hline(),
-    table.cell(inset: (y: 10pt), conclusion),
-  )
-]
+#let _to_seq(x) = if type(x) == array { x } else { (x,) }
+#let derive(name, prem, conclusion) = {
+  let prems = _to_seq(prem)
+  let concl = _to_seq(conclusion)
+
+  [
+    #table(
+      stroke: none,
+      inset: (x: 0pt, y: 5pt),
+      align: center,
+
+      table.cell(align: start, rule_name(name)),
+      table.cell(inset: (y: 5pt), prems.join("     ")),
+      table.hline(),
+      table.cell(inset: (y: 10pt), concl.join(" ")),
+    )
+  ]
+}
 
 #let appendix(body) = {
   set heading(numbering: "A", supplement: [Appendix])

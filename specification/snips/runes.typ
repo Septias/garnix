@@ -29,32 +29,32 @@
 == Amber Rules @quicksub
 #derive(
   "Amber-Var",
-  ($α ≤ β ∈ Δ$,),
+  $α ≤ β ∈ Δ$,
   $Δ ⊢ α ≤ β$,
 )
 
 #derive(
   "Amber-Rec",
-  ($Δ, α ≤ β ⊢ A ≤ B$,),
+  $Δ, α ≤ β ⊢ A ≤ B$,
   $Δ ⊢ μ α. A ≤ μ β. B$,
 )
 
 #derive(
   "Amber-Self",
-  ($$,),
+  $$,
   $Δ ⊢ μ α. A ≤ μ α. A$,
 )
 
 
-== Quicksub
+== QuickSub
 
 #flexbox(
-  derive("QS-Nat", ($$,), $Ψ ⊢ "nat" attach(≈, br: ∅) "nat"$),
-  derive("QS-TopEq", ($$,), $Ψ ⊢ T attach(≈, br: ∅) T$),
-  derive("QS-TopLT", ($A ≠ T$,), $Ψ ⊢ A < t$),
-  derive("QS-VarPos", ($α^⊕ ∈ Ψ$,), $Ψ ⊢ A attach(≈, br: ∅) α$),
-  derive("QS-VarNeg", ($α^(overline(⊕)) ∈ Ψ$,), $Ψ ⊢ α attach(≈, br: α) α$),
-  derive("QS-RecT", ($Ψ, α^⊕ ⊢ A_1 < A_2 ⊢$,), $Ψ ⊢ μ α. A_1 < μ α A_2$),
+  derive("QS-Nat", $$, $Ψ ⊢ "nat" attach(≈, br: ∅) "nat"$),
+  derive("QS-TopEq", $$, $Ψ ⊢ T attach(≈, br: ∅) T$),
+  derive("QS-TopLT", $A ≠ T$, $Ψ ⊢ A < t$),
+  derive("QS-VarPos", $α^⊕ ∈ Ψ$, $Ψ ⊢ A attach(≈, br: ∅) α$),
+  derive("QS-VarNeg", $α^(overline(⊕)) ∈ Ψ$, $Ψ ⊢ α attach(≈, br: α) α$),
+  derive("QS-RecT", $Ψ, α^⊕ ⊢ A_1 < A_2 ⊢$, $Ψ ⊢ μ α. A_1 < μ α A_2$),
   derive(
     "QS-RecEq",
     ($Ψ, α^⊕ ⊢ A_1 attach(≈, br: S) A_2 ⊢$, $α ∉ S$),
@@ -75,7 +75,7 @@
   ),
 )
 
-== Advanced Fc labels @extensible_rec_funcs
+== Advanced Fc Labels @extensible_rec_funcs
 #box(width: 100%)[
   #grid(
     columns: (1fr, 1fr),
@@ -95,7 +95,7 @@
       $
         #type_name("Kinds") && κ & ::= ∗ | L | R^κ | κ → κ \
         #type_name("Predicates") && π, ψ & ::= ρ lt.approx ρ | ρ ⊙ ρ ~ ρ \
-        #type_name("Types") && cal(T) in.rev τ & ::= α | T | π ⇒ τ | ∀α: κ.τ | τ τ | {xi_i ⊳ -_i}_(i ∈ 0..m) | l | \#τ | ϕ^∗ | ρ without ρ \
+        #type_name("Types") && cal(T) in.rev τ & ::= α | T | π ⇒ τ | ∀α: κ.τ | τ τ | {xi_i ⊳ τ_i}_(i ∈ 0..m) | l | \#τ | ϕ^∗ | ρ without ρ \
         #type_name("Type Constants") && T &::= (→) | Pi^((κ)) | μ \
         #type_name("Terms") && cal(E) in.rev M, N &::= x | k | λ x : - .M | M N | Lambda α: κ.M | M [τ] | Lambda υ : π.M | M[Q] \
         && &| \#τ | M ⊳^Ξ N | M \/^Ξ N #h(2cm) Ξ ∈ {Pi, Sigma}\
@@ -103,6 +103,34 @@
     ],
   )
 ]
+
+== Advanced Fc Labels @extensible_tabular
+#grid(
+  columns: 1fr,
+  rows: 2,
+  $
+         #type_name("Kinds") && κ & ::= ∗ | L | κ → κ \
+    #type_name("Poly types") && σ & ::= ∀a: κ. σ | τ \
+          #type_name("Type") && τ & ::= a | "Int" | → | τ_1 τ_2 | {ρ} | ⟨ρ⟩ | ⦅l⦆ \
+           #type_name("Row") && τ & ::= a | "Empty" | l: τ | (ρ_1 | ρ_2) \
+         #type_name("Label") && l & ::= a | l_c \
+       #type_name("Context") && Γ & ::= • | Γ, a: κ | Γ, x: τ \
+  $,
+  subbox(caption: "kinding", flexbox(
+    derive("", $a: κ ∈ Γ$, $Γ ⊢ a : κ$),
+    derive("", $$, $Γ ⊢ "Int": ∗$),
+    derive("", $$, $Γ ⊢ →: ∗ → ∗ → ∗$),
+    derive("", ($τ_1: κ_1 → κ_2$, $Γ ⊢ τ_2: κ_1$), $Γ ⊢ τ_1τ_2 : κ_2$),
+    derive("", $ρ : "Row"$, $Γ ⊢ {ρ} : ∗$),
+    derive("", $ρ: "Row"$, $Γ ⊢ ⟨ρ⟩: ∗$),
+    derive("", $l: "Label"$, $Γ ⊢ ⦅l⦆: ∗$),
+    derive("", $$, $Γ ⊢ l_c : "Label"$),
+    derive("", $$, $Γ ⊢ "Empty": "Row"$),
+    derive("", ($Γ ⊢ ρ_1: "Row"$, $Γ ⊢ (ρ_1 | ρ_2): "Row"$), $Γ ⊢ ⦅l⦆: ∗$),
+    derive("", ($l: "Label"$, $Γ ⊢ τ: ∗$), $Γ ⊢ (l: τ): "Row"$),
+  )),
+)
+
 
 == Occurrence Typing
 *Domain-merging* @revisiting_occurrence
@@ -193,7 +221,7 @@ $
 = Typing
 #flexbox(
   derive("T-sub", ($t: τ_1$, $τ_2 ≤ τ_1$), $t: τ_2$),
-  derive("T-Abs", ($Γ, x: τ_1 ⊢ t: τ_2$,), $Γ ⊢ λ x. t: (τ_1 → τ_2)$),
+  derive("T-Abs", $Γ, x: τ_1 ⊢ t: τ_2$, $Γ ⊢ λ x. t: (τ_1 → τ_2)$),
   derive("T-App", ($Γ ⊢ x: τ_1$, $Γ ⊢ t: (τ_1 → τ_2)$), $Γ ⊢ (λ x. t) x : τ_2$),
   derive(
     "T-Rec",
