@@ -75,6 +75,35 @@
   ),
 )
 
+== Advanced Fc labels @extensible_rec_funcs
+#box(width: 100%)[
+  #grid(
+    columns: (1fr, 1fr),
+    rows: 2,
+    gutter: 5pt,
+    $
+      #type_name("Term variables") x ∈ cal(X) \
+      #type_name("Type variables") x ∈ cal(A) \
+      #type_name("Labels") l ∈ cal(L)
+    $,
+    $
+      #type_name("Type environments") Γ ::= ε | Γ,x: τ \
+      #type_name("Predicate envorionments") Φ ::= ε | Φ,v: π \
+      #type_name("Kind environments") Δ ::= ε | Δ, α: κ \
+    $,
+    grid.cell(colspan: 2)[
+      $
+        #type_name("Kinds") && κ & ::= ∗ | L | R^κ | κ → κ \
+        #type_name("Predicates") && π, ψ & ::= ρ lt.approx ρ | ρ ⊙ ρ ~ ρ \
+        #type_name("Types") && cal(T) in.rev τ & ::= α | T | π ⇒ τ | ∀α: κ.τ | τ τ | {xi_i ⊳ -_i}_(i ∈ 0..m) | l | \#τ | ϕ^∗ | ρ without ρ \
+        #type_name("Type Constants") && T &::= (→) | Pi^((κ)) | μ \
+        #type_name("Terms") && cal(E) in.rev M, N &::= x | k | λ x : - .M | M N | Lambda α: κ.M | M [τ] | Lambda υ : π.M | M[Q] \
+        && &| \#τ | M ⊳^Ξ N | M \/^Ξ N #h(2cm) Ξ ∈ {Pi, Sigma}\
+      $
+    ],
+  )
+]
+
 == Occurrence Typing
 *Domain-merging* @revisiting_occurrence
 
