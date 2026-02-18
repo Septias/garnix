@@ -46,6 +46,7 @@
 #let nonrec = b[nonrec]
 #let abs = b[abs]
 #let with = b[with]
+#let inherit = b[inherit]
 #let openPat = $⦃oi(l_i : τ_i)⦄^◌$
 #let recordType = ${oi(l_i : τ_i)}$
 #let record = ${oi(l_i \= t_i\;)}$
@@ -81,6 +82,7 @@
 
 // Logical unit in a bigger figure
 #let subbox(caption: "", ..body) = stack(
+  spacing: 10pt,
   align(left, text(weight: "bold", smallcaps(caption))),
   ..body,
 )
@@ -92,12 +94,8 @@
   ..body,
 ))
 
-#let flexbox(caption: "", ..body) = stack(
+#let flexbox(..body) = stack(
   spacing: 10pt,
-  align(left, text(
-    weight: "bold",
-    smallcaps(caption),
-  )),
   flexwrap(main-spacing: 20pt, cross-spacing: 10pt, ..body),
 )
 

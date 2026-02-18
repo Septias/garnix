@@ -321,12 +321,12 @@ $
 #basic_typing_rules
 
 
-#let record_typing_rules = figure(caption: "Record typing rules", flexbox(
+#let record_typing_rules = flexbox(
   caption: "Records",
   derive(
     "T-Rcd",
     ($Ξ, Γ ⊢ t_0: τ_0$, "...", $Ξ, Γ ⊢ t_n: τ_n$),
-    $Ξ, Γ ⊢ {arrow(l): arrow(t)}: {arrow(l): arrow(τ)}$,
+    $Ξ, Γ ⊢ {oa}: {oa}$,
   ),
   derive("T-Proj", ($ Ξ, Γ ⊢ t: {l: τ} $,), $Ξ, Γ ⊢ t.l: τ$),
   derive(
@@ -354,8 +354,46 @@ $
     ($Γ ⊢ a: { l: τ }$, $t : "Lab" l$),
     $Γ ⊢ a.\${t} : τ$,
   ),
-))
-#record_typing_rules
+)
+#figure(caption: "Record typing rules", record_typing_rules)
+
+#let function_typing_rules = flexbox(
+  derive("T-Abs1", $Γ, x: τ_1 ⊢ e : τ_2$, $Γ ⊢ (x: e) : τ_1 → τ_2$),
+  derive(
+    "T-Abs2",
+    $Γ, overline(e_i : τ_i) ⊢ e: τ_2$,
+    $Γ ⊢ ({oa}: e) : {α}^- → τ_2$,
+  ),
+
+
+  derive(
+    "T-Abs3",
+    $Γ, overline(e_i : τ_i) ⊢ e: τ_2$,
+    $Γ ⊢ ({oa,...}: e) : {α}^+ → τ_2$,
+  ),
+
+
+  derive(
+    "T-App1",
+    ($Γ ⊢ e_1: τ_1 → τ_2$, $Γ ⊢ e_22: τ_3 ≤ τ_1$),
+    $Γ ⊢ (x: e_1) e_2: τ_2$,
+  ),
+
+
+  derive(
+    "T-App2",
+    ($Γ ⊢ e_1: {overline(α)^-} → τ_2$, $Γ ⊢ e_2: τ_3 ≤ τ_1$),
+    $Γ ⊢ (x: e_1) e_2: τ_2$,
+  ),
+
+
+  derive(
+    "T-App3",
+    ($Γ ⊢ e_1: {overline(α)^+} → τ_2$, $Γ ⊢ e_2: τ_1$),
+    $Γ ⊢ (x: e_1) e_2: τ_2$,
+  ),
+)
+
 
 #let operator_typing_rules = figure(caption: "Operator typing rules.", flexbox(
   derive(
