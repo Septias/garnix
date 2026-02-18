@@ -25,60 +25,44 @@
   $t[x \/ v]$, [x for v],
 )
 
-
-== Amber Rules @quicksub
-#derive(
-  "Amber-Var",
-  $α ≤ β ∈ Δ$,
-  $Δ ⊢ α ≤ β$,
-        #type_name("Type Constants") && T &::= (→) | Pi^((κ)) | μ \
-
-)
-
-#derive(
-  "Amber-Rec",
-  $Δ, α ≤ β ⊢ A ≤ B$,
-  $Δ ⊢ μ α. A ≤ μ β. B$,
-)
-
-#derive(
-  "Amber-Self",
-  $$,
-  $Δ ⊢ μ α. A ≤ μ α. A$,
-)
-
-
-== QuickSub
-
+= General Typing Rules
 #flexbox(
-  derive("QS-Nat", $$, $Ψ ⊢ "nat" attach(≈, br: ∅) "nat"$),
-  derive("QS-TopEq", $$, $Ψ ⊢ T attach(≈, br: ∅) T$),
-  derive("QS-TopLT", $A ≠ T$, $Ψ ⊢ A < t$),
-  derive("QS-VarPos", $α^⊕ ∈ Ψ$, $Ψ ⊢ A attach(≈, br: ∅) α$),
-  derive("QS-VarNeg", $α^(overline(⊕)) ∈ Ψ$, $Ψ ⊢ α attach(≈, br: α) α$),
-  derive("QS-RecT", $Ψ, α^⊕ ⊢ A_1 < A_2 ⊢$, $Ψ ⊢ μ α. A_1 < μ α A_2$),
+  derive("T-sub", ($t: τ_1$, $τ_2 ≤ τ_1$), $t: τ_2$),
+  derive("T-Abs", $Γ, x: τ_1 ⊢ t: τ_2$, $Γ ⊢ λ x. t: (τ_1 → τ_2)$),
+  derive("T-App", ($Γ ⊢ x: τ_1$, $Γ ⊢ t: (τ_1 → τ_2)$), $Γ ⊢ (λ x. t) x : τ_2$),
   derive(
-    "QS-RecEq",
-    ($Ψ, α^⊕ ⊢ A_1 attach(≈, br: S) A_2 ⊢$, $α ∉ S$),
-    $Ψ ⊢ μ α. A_1 attach(≈, br: S) μ α A_2$,
+    "T-Rec",
+    ($Γ ⊢ t_1 : τ_1$, $…$, $Γ ⊢ t_n : τ_n$),
+    $record: recordType$,
   ),
-  derive(
-    "QS-RecEqIn",
-    ($Ψ, α^⊕ ⊢ A_1 attach(≈, br: S)A_2$, $a ∈ S$),
-    $Ψ ⊢ μ α. A_1 ≈_(((S union"FV"(A_1)) without {α})) μ. α A_2$,
-  ),
-  derive(
-    "QS-Arrow",
-    (
-      $Ψ, α^overline(⊕) ⊢ A_2 attach(lt.approx, br: 1) A_1$,
-      $Ψ ⊢ B_1 attach(lt.approx, br: 2) B_2$,
-    ),
-    $Ψ ⊢ A_1 → A_2 (attach(lt.approx, br: 1) • attach(lt.approx, br: 2)) B_1 → B_2$,
-  ),
+  derive("T-Sel", ($Γ ⊢ t: {l: τ}$,), $Γ ⊢ t.l: τ$),
+  derive("T-Asc", ($Ξ,Γ ⊢ t : τ$,), $Ξ,Γ ⊢ (t: τ) : τ$),
 )
+
+
+
+= Records
+
+
+#let cast_fn = $λ^{ and_(i∈I) τ_i → τ_i}$
+#rect(width: 100%, inset: 10pt, flexbox(
+  derive("Sel", ($Γ ⊢ e: τ ≤ { l = 𝟙}$,), $Γ ⊢ e.l : τ.l$),
+  derive("Del", ($Γ ⊢ e: τ ≤ {}$,), $Γ ⊢ e without l : τ without l$),
+  derive(
+    "Conc",
+    ($Γ ⊢ e_1: τ_1 ≤ {}$, $Γ ⊢ e_2: τ_2 ≤ {}$),
+    $e_1 + e_2 : τ_1 + t_2$,
+  ),
+  [
+    *Record Type merging*
+
+    $(r_1 +_t r_2)(l) = cases(r_2(l) &r_2(l) ∧ t ≤ 𝟘, (r_2(l) without t) ∨ r_1(l) &otherwise)$,
+  ],
+))
+
 
 == Advanced Fc Labels @extensible_rec_funcs
-#box(width: 100%)[
+#rect(width: 100%, inset: 10pt)[
   #grid(
     columns: (1fr, 1fr),
     rows: 2,
@@ -106,7 +90,7 @@
 ]
 
 == Advanced Fc Labels @extensible_tabular
-#grid(
+#rect(width: 100%, inset: 10pt, grid(
   columns: 1fr,
   rows: 2,
   $
@@ -130,109 +114,154 @@
     derive("", ($Γ ⊢ ρ_1: "Row"$, $Γ ⊢ (ρ_1 | ρ_2): "Row"$), $Γ ⊢ ⦅l⦆: ∗$),
     derive("", ($l: "Label"$, $Γ ⊢ τ: ∗$), $Γ ⊢ (l: τ): "Row"$),
   )),
-)
+))
 
 
-== Occurrence Typing
-*Domain-merging* @revisiting_occurrence
+= Recursion
+== Amber Rules @quicksub
 
-$
-  t space square.filled.tiny space s = "dom"(t) ∧ or.big_(i ∈ I)(and.big_({P subset.eq P_i | s ≤ or.big_(p∈P) ¬t_p }) (or.big_(p ∈ P) ¬s_p))
-$
-
-*Occurence Typing Case-Rule* @revisiting_occurrence
-#derive(
-  "Case",
-  (
-    $Γ ⊢ e: t_0$,
-    $Γ ⊢^"Env"_(e, t) Γ_1$,
-    $Γ_1 ⊢ e_1: t'$,
-    $Γ ⊢^"Env"_(e,¬t) Γ_2$,
-    $Γ_2 ⊢ e_2: t'$,
-  ),
-  $Γ ⊢ (e ∈ t)? e_1 : e_2: t'$,
-)
-
-*Path-resolution* @revisiting_occurrence
 #flexbox(
-  "",
-  $e arrow.b ε = e$,
-  $e_0e_1 arrow.b i.pi.alt = e_i$,
-  $(e_1, e_2) arrow.b l.pi.alt = e_1 arrow.b pi.alt$,
-  $(e_1, e_2) arrow.b r.pi.alt = e_2 arrow.b pi.alt$,
-  $pi_1 e arrow.b f.pi.alt = e arrow.b pi.alt$,
-  $pi_2 e arrow.b s.pi.alt = e arrow.b pi.alt$,
-)
-
-*Record Merging* @revisiting_occurrence
-$
-  t_1 + t_2 = min(
-    {
-      u | ∀l ∈ "Labels"
-      cases(
-        u.l ≥ t_2.l & "if" t_2.l ≤ ¬"Udef",
-        u.l ≥ t_1.l ∨ (t_2.l without "Udef") & otherwise
-      )
-    }
-  )
-$
-
-= On Type-Cases, Union Elimination, and Occurrence Typing
-
-#derive(
-  "T-case1",
-  ($Γ ⊢ e : τ$, $Γ ⊢ e_1: τ_1$),
-  $Γ ⊢ ((e ∈ τ)? e_1 : e_2): τ_1$,
-)
-
-#derive(
-  "T-case2",
-  ($Γ ⊢ e : ¬τ$, $Γ ⊢ e_2: τ_2$),
-  $Γ ⊢ ((e ∈ τ)? e_1 : e_2): τ_2$,
-)
-
-#derive(
-  "Union-Elim",
-  ($Γ ⊢ e' : τ_1 ∨ τ_2$, $Γ, x : τ_1: τ$, $Γ, x : τ_2: τ$),
-  $Γ ⊢ e{x \/ e'}: τ$,
-)
-
-
-= Flow Typing @pearce_flowtyping
-
-- No recursion
-#derive(
-  "T-app",
-  ($Γ ⊢ t_1: τ_1$, $Γ ⊢ f: τ_2 → T_3$, $Γ ⊢ τ_1 ≤ τ_2$),
-  $Γ ⊢ f t_1: τ_3$,
-)
-
-#derive(
-  "T-dec",
-  ($Γ [x arrow.bar τ_1] ⊢ t_2 : τ_2$, $Γ [f arrow.bar τ_1 → τ_2 ] ⊢ t_3 : τ_3$),
-  $Γ ⊢ f (τ_1 x) = t_2 in t_3: τ_3$,
-)
-
-#derive(
-  "T-if",
-  ($Γ[x arrow.bar Γ(x) ∧ τ_1] ⊢ τ_3$, $Γ[x arrow.bar Γ(x) ∧ ¬τ_1] ⊢ τ_3$),
-  $"if" (x "is" τ_1) t_2 "else" t_3: τ_2 ∨ τ_3$,
-)
-
-= Typing
-#flexbox(
-  derive("T-sub", ($t: τ_1$, $τ_2 ≤ τ_1$), $t: τ_2$),
-  derive("T-Abs", $Γ, x: τ_1 ⊢ t: τ_2$, $Γ ⊢ λ x. t: (τ_1 → τ_2)$),
-  derive("T-App", ($Γ ⊢ x: τ_1$, $Γ ⊢ t: (τ_1 → τ_2)$), $Γ ⊢ (λ x. t) x : τ_2$),
   derive(
-    "T-Rec",
-    ($Γ ⊢ t_1 : τ_1$, $…$, $Γ ⊢ t_n : τ_n$),
-    $record: recordType$,
+    "Amber-Var",
+    $α ≤ β ∈ Δ$,
+    $Δ ⊢ α ≤ β$,
   ),
-  derive("T-Sel", ($Γ ⊢ t: {l: τ}$,), $Γ ⊢ t.l: τ$),
+
+  derive(
+    "Amber-Rec",
+    $Δ, α ≤ β ⊢ A ≤ B$,
+    $Δ ⊢ μ α. A ≤ μ β. B$,
+  ),
+
+  derive(
+    "Amber-Self",
+    $$,
+    $Δ ⊢ μ α. A ≤ μ α. A$,
+  ),
 )
 
-#derive("T-Asc", ($Ξ,Γ ⊢ t : τ$,), $Ξ,Γ ⊢ (t: τ) : τ$)
+== QuickSub
+#flexbox(
+  derive("QS-Nat", $$, $Ψ ⊢ "nat" attach(≈, br: ∅) "nat"$),
+  derive("QS-TopEq", $$, $Ψ ⊢ T attach(≈, br: ∅) T$),
+  derive("QS-TopLT", $A ≠ T$, $Ψ ⊢ A < t$),
+  derive("QS-VarPos", $α^⊕ ∈ Ψ$, $Ψ ⊢ A attach(≈, br: ∅) α$),
+  derive("QS-VarNeg", $α^(overline(⊕)) ∈ Ψ$, $Ψ ⊢ α attach(≈, br: α) α$),
+  derive("QS-RecT", $Ψ, α^⊕ ⊢ A_1 < A_2 ⊢$, $Ψ ⊢ μ α. A_1 < μ α A_2$),
+  derive(
+    "QS-RecEq",
+    ($Ψ, α^⊕ ⊢ A_1 attach(≈, br: S) A_2 ⊢$, $α ∉ S$),
+    $Ψ ⊢ μ α. A_1 attach(≈, br: S) μ α A_2$,
+  ),
+  derive(
+    "QS-RecEqIn",
+    ($Ψ, α^⊕ ⊢ A_1 attach(≈, br: S)A_2$, $a ∈ S$),
+    $Ψ ⊢ μ α. A_1 ≈_(((S union"FV"(A_1)) without {α})) μ. α A_2$,
+  ),
+  derive(
+    "QS-Arrow",
+    (
+      $Ψ, α^overline(⊕) ⊢ A_2 attach(lt.approx, br: 1) A_1$,
+      $Ψ ⊢ B_1 attach(lt.approx, br: 2) B_2$,
+    ),
+    $Ψ ⊢ A_1 → A_2 (attach(lt.approx, br: 1) • attach(lt.approx, br: 2)) B_1 → B_2$,
+  ),
+)
+
+
+
+
+= Occurrence Typing
+
+#rect(inset: 10pt)[
+  *Domain-merging* @revisiting_occurrence
+
+  $
+    t space square.filled.tiny space s = "dom"(t) ∧ or.big_(i ∈ I)(and.big_({P subset.eq P_i | s ≤ or.big_(p∈P) ¬t_p }) (or.big_(p ∈ P) ¬s_p))
+  $
+
+  *Occurence Typing Case-Rule* @revisiting_occurrence
+  #derive(
+    "Case",
+    (
+      $Γ ⊢ e: t_0$,
+      $Γ ⊢^"Env"_(e, t) Γ_1$,
+      $Γ_1 ⊢ e_1: t'$,
+      $Γ ⊢^"Env"_(e,¬t) Γ_2$,
+      $Γ_2 ⊢ e_2: t'$,
+    ),
+    $Γ ⊢ (e ∈ t)? e_1 : e_2: t'$,
+  )
+
+  *Path-resolution* @revisiting_occurrence
+  #flexbox(
+    "",
+    $e arrow.b ε = e$,
+    $e_0e_1 arrow.b i.pi.alt = e_i$,
+    $(e_1, e_2) arrow.b l.pi.alt = e_1 arrow.b pi.alt$,
+    $(e_1, e_2) arrow.b r.pi.alt = e_2 arrow.b pi.alt$,
+    $pi_1 e arrow.b f.pi.alt = e arrow.b pi.alt$,
+    $pi_2 e arrow.b s.pi.alt = e arrow.b pi.alt$,
+  )
+
+  *Record Merging* @revisiting_occurrence
+  $
+    t_1 + t_2 = min(
+      {
+        u | ∀l ∈ "Labels"
+        cases(
+          u.l ≥ t_2.l & "if" t_2.l ≤ ¬"Udef",
+          u.l ≥ t_1.l ∨ (t_2.l without "Udef") & otherwise
+        )
+      }
+    )
+  $
+]
+== On.. @on_occurrence
+#flexbox(
+  derive(
+    "T-case1",
+    ($Γ ⊢ e : τ$, $Γ ⊢ e_1: τ_1$),
+    $Γ ⊢ ((e ∈ τ)? e_1 : e_2): τ_1$,
+  ),
+
+  derive(
+    "T-case2",
+    ($Γ ⊢ e : ¬τ$, $Γ ⊢ e_2: τ_2$),
+    $Γ ⊢ ((e ∈ τ)? e_1 : e_2): τ_2$,
+  ),
+
+  derive(
+    "Union-Elim",
+    ($Γ ⊢ e' : τ_1 ∨ τ_2$, $Γ, x : τ_1: τ$, $Γ, x : τ_2: τ$),
+    $Γ ⊢ e{x \/ e'}: τ$,
+  ),
+)
+
+== Flow Typing @pearce_flowtyping
+
+#flexbox(
+  derive(
+    "T-app",
+    ($Γ ⊢ t_1: τ_1$, $Γ ⊢ f: τ_2 → T_3$, $Γ ⊢ τ_1 ≤ τ_2$),
+    $Γ ⊢ f t_1: τ_3$,
+  ),
+
+  derive(
+    "T-dec",
+    (
+      $Γ [x arrow.bar τ_1] ⊢ t_2 : τ_2$,
+      $Γ [f arrow.bar τ_1 → τ_2 ] ⊢ t_3 : τ_3$,
+    ),
+    $Γ ⊢ f (τ_1 x) = t_2 in t_3: τ_3$,
+  ),
+
+  derive(
+    "T-if",
+    ($Γ[x arrow.bar Γ(x) ∧ τ_1] ⊢ τ_3$, $Γ[x arrow.bar Γ(x) ∧ ¬τ_1] ⊢ τ_3$),
+    $"if" (x "is" τ_1) t_2 "else" t_3: τ_2 ∨ τ_3$,
+  ),
+)
 
 = Matching
 Given any pattern p, we can define a type $bag.l p bag.r$ that characterizes exactly the set of values that match the pattern:
@@ -264,21 +293,6 @@ Given a type τ and a pattern p with $bag.l p bag.r ≤ τ$, the operator τ/p p
 and satisfies the property that for every τ, p and v, if $∅ ⊢ v: τ$ and $v \/ p = σ$, then, for every variable x in p, the judgment $∅ ⊢ x σ : (τ\/p)(x)$ holds.
 
 
-= Subtyping
-#flexbox(
-  derive(
-    "S-depth",
-    (
-      $Γ ⊢ record: recordType$,
-      $Γ ⊢ {oj(t_j \= τ_j\;)}: {oj(t_j\: τ_j)}$,
-      $∀i τ_i < τ_j$,
-    ),
-    $$,
-  ),
-  derive("S-width", ($$,), $$),
-)
-
-
 = Deferred Substitutions
 #derive(
   "T-str",
@@ -298,51 +312,40 @@ $
   (λ {p?}. e)[subs] & := λ {p[subs]}: e[subs] \
 $
 
-= Records
-
-#let cast_fn = $λ^{ and_(i∈I) τ_i → τ_i}$
-
-#derive("Sel", ($Γ ⊢ e: τ ≤ { l = 𝟙}$,), $Γ ⊢ e.l : τ.l$)
-#derive("Del", ($Γ ⊢ e: τ ≤ {}$,), $Γ ⊢ e without l : τ without l$)
-#derive(
-  "Conc",
-  ($Γ ⊢ e_1: τ_1 ≤ {}$, $Γ ⊢ e_2: τ_2 ≤ {}$),
-  $e_1 + e_2 : τ_1 + t_2$,
-)
-
-$(r_1 +_t r_2)(l) = cases(r_2(l) &r_2(l) ∧ t ≤ 𝟘, (r_2(l) without t) ∨ r_1(l) &otherwise)$
 
 
 
 
 = Gradual Typing
 
-#let uk = $star.op$
-#flexbox(
-  "Consistency",
-  $A ~ A$,
-  $A ~ uk$,
-  $uk ~ A$,
-  derive(
-    "",
-    ($A_1 ~ B_1$, $A_1 ~ B_1$),
-    $A_1 → A_2 ~ B_1 → B_2$,
-  ),
-  derive("", ($A ~ B$,), $∀a. A ~ ∀α. B$),
-)
+#rect(inset: 10pt, width: 100%)[
+  *Consistency*
 
-#derive("ForallL", ($Γ, α ⊢ A <= B$,), $ A <= ∀α. B $)
-#derive("ForallL", ($Γ ⊢ τ$, $Γ, α ⊢ A[α -> τ] <= B$), $ ∀α. A <= B $)
+  #let uk = $star.op$
+  $A ~ A #h(1cm) A ~ uk #h(1cm) uk ~ A$
+
+  *Typingrules*
+  #flexbox(
+    derive(
+      "",
+      ($A_1 ~ B_1$, $A_1 ~ B_1$),
+      $A_1 → A_2 ~ B_1 → B_2$,
+    ),
+    derive("", ($A ~ B$,), $∀a. A ~ ∀α. B$),
+    derive("ForallL", ($Γ, α ⊢ A <= B$,), $ A <= ∀α. B $),
+    derive("ForallL", ($Γ ⊢ τ$, $Γ, α ⊢ A[α -> τ] <= B$), $ ∀α. A <= B $),
+  )
+]
 
 
 = Qualified Types
 
 $
-  φ &::= τ | π => φ \
-  σ &::= φ ϕ
+  φ & ::= τ | π => φ \
+  σ & ::= φ ϕ
 $
 
-== Misc
+= Misc
 $
   "unfold"_1 oα := &{ x := #b[nonrec] t | x := #b[nonrec] t ∈ oα} attach(union, tr: <) \
   &{ x := #b[nonrec] t["indirects" oα] | x := #b[rec] t ∈ oα} \

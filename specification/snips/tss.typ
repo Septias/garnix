@@ -16,7 +16,7 @@
     ),
     $
       #type_name("Kinds") &&               κ & ::= ∗ | L | κ → κ \
-      #type_name("Types") && cal(T) in.rev τ & ::= α | {overline(α)} | l | \
+      #type_name("Types") && cal(T) in.rev τ & ::= α | {overline(α)} | ⦅l⦆ | \
         #type_name("Row") && cal(E) in.rev t & ::= { overline(a) } \
       #type_name("Terms") && cal(E) in.rev t & ::= { overline(a) } \
                           &&               a & ::= l = t \
@@ -24,6 +24,7 @@
     $,
     align(left, text(weight: "bold", smallcaps("Typing Rules"))),
     record_typing_rules,
+    align(left, text(weight: "bold", smallcaps("Kinding Rules"))),
   ),
 ))
 
