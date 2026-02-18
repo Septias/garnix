@@ -31,6 +31,8 @@
   "Amber-Var",
   $α ≤ β ∈ Δ$,
   $Δ ⊢ α ≤ β$,
+        #type_name("Type Constants") && T &::= (→) | Pi^((κ)) | μ \
+
 )
 
 #derive(
@@ -96,7 +98,6 @@
         #type_name("Kinds") && κ & ::= ∗ | L | R^κ | κ → κ \
         #type_name("Predicates") && π, ψ & ::= ρ lt.approx ρ | ρ ⊙ ρ ~ ρ \
         #type_name("Types") && cal(T) in.rev τ & ::= α | T | π ⇒ τ | ∀α: κ.τ | τ τ | {xi_i ⊳ τ_i}_(i ∈ 0..m) | l | \#τ | ϕ^∗ | ρ without ρ \
-        #type_name("Type Constants") && T &::= (→) | Pi^((κ)) | μ \
         #type_name("Terms") && cal(E) in.rev M, N &::= x | k | λ x : - .M | M N | Lambda α: κ.M | M [τ] | Lambda υ : π.M | M[Q] \
         && &| \#τ | M ⊳^Ξ N | M \/^Ξ N #h(2cm) Ξ ∈ {Pi, Sigma}\
       $
@@ -231,6 +232,8 @@ $
   derive("T-Sel", ($Γ ⊢ t: {l: τ}$,), $Γ ⊢ t.l: τ$),
 )
 
+#derive("T-Asc", ($Ξ,Γ ⊢ t : τ$,), $Ξ,Γ ⊢ (t: τ) : τ$)
+
 = Matching
 Given any pattern p, we can define a type $bag.l p bag.r$ that characterizes exactly the set of values that match the pattern:
 
@@ -310,12 +313,11 @@ $
 $(r_1 +_t r_2)(l) = cases(r_2(l) &r_2(l) ∧ t ≤ 𝟘, (r_2(l) without t) ∨ r_1(l) &otherwise)$
 
 
-= Gradual typing
 
-The gradual type: $star.op$
+
+= Gradual Typing
 
 #let uk = $star.op$
-
 #flexbox(
   "Consistency",
   $A ~ A$,
@@ -333,11 +335,11 @@ The gradual type: $star.op$
 #derive("ForallL", ($Γ ⊢ τ$, $Γ, α ⊢ A[α -> τ] <= B$), $ ∀α. A <= B $)
 
 
-= Qualified types
+= Qualified Types
 
 $
-  φ ::= τ | π => φ
-  σ ::= φ ϕ
+  φ &::= τ | π => φ \
+  σ &::= φ ϕ
 $
 
 == Misc
@@ -347,7 +349,6 @@ $
   "indirects" oα := &{x := #b[abs] {oα}.x | x ∈ oα }
 $
 
-#derive("T-Asc", ($Ξ,Γ ⊢ t : τ$,), $Ξ,Γ ⊢ (t: τ) : τ$)
 
 
 
