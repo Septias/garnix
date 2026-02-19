@@ -145,21 +145,20 @@
           #rule_name("R-Let-In")&& #b[let] oi(l_i \= t_i\;) #b[in] t &arrow.long t[{ l_i := abs t_i | l_i = t_i }] \
           #rule_name("R-Cond-True")&& #b[if] "true" #b[ then ] t_1 #b[ else ]t_2 & arrow.long t_1 \
           #rule_name("R-Cond-False")&& #b[if] "false" #b[then ] t_1 #b[ else ]t_2 & arrow.long t_2 \
-          #rule_name("R-Lookup")&& {oa}.l & arrow.long t_i &&&"if" k space l ∈ oa\
-          #rule_name("R-Lookup-str")&& {oa}.s & arrow.long t_i &&&"if" k space s ∈ oa\
+          #rule_name("R-Lookup")&& {oa}.l & arrow.long t &&&"if" k space l = t ∈ oa\
+          #rule_name("R-Lookup-str")&& {oa}.s & arrow.long t &&&"if" k space s = t ∈ oa\
           #rule_name("R-Lookup-dyn")&& {oa}.\${s} & arrow.long {oa}.s \
-          #rule_name("R-Lookup-dyn-step")&& {oa}.\${t} & arrow.long {oa}.\${t'} &&&"if" t arrow.long t' \
           #rule_name("R-Lookup-Default-Pos")&& {oa}.l #b[or] t & arrow.long
           t_i &&&"if" k space l ∈ oa \
           #rule_name("R-Lookup-Default-Neg")&& {oa}.l #b[or] t & arrow.long
           t &&&"if" k space l ∉ oa \
           #rule_name("R-Has-Pos")&& {overline(α)}" ? "l & arrow.long "true" &&&"if" k space l ∈ oa \
           #rule_name("R-Has-Neg")&& {overline(α)}" ? "l & arrow.long "false" &&&"if" k space l ∉ oa \
-          #rule_name("R-Has-Path-Pos")&& {overline(α)}" ? "l.p & arrow.long "true" \&\& space (t " ? " p) &&&"if" k space l ∈ oa \
-          #rule_name("R-Has-Path-Neg")&& {overline(α)}" ? "l.p & arrow.long "false" \&\& space (t " ? " p) &&&"if" k space l ∉ oa\
+          #rule_name("R-Has-Path-Pos")&& {overline(α)}" ? "l.ρ & arrow.long "true" \&\& space (t " ? " ρ) &&&"if" k space l = t ∈ oa \
+          #rule_name("R-Has-Path-Neg")&& {overline(α)}" ? "l.ρ & arrow.long "false" \&\& space (t " ? " ρ) &&&"if" k space l = t ∉ oa\
           #rule_name("R-Array-Concat")&& [overline(t_1) ] ⧺ [overline(t_2)] & arrow.long [overline(t_1) space overline(t_2)] \
           #rule_name("R-Record-Concat")&& {oa_1} "//" {oa_2} & arrow.long {oa_1} union.arrow {oa_2 } \
-          #rule_name("R-Import")&& #b[import] p; & arrow.long t arrow.b.double &&&"if" p arrow.squiggly t \
+          #rule_name("R-Import")&& #b[import] 𝜚; & arrow.long t arrow.b.double &&&"if" p arrow.squiggly t \
           #rule_name("R-Context") && t arrow.long t' &==> E[t] arrow.long E[t'] \
         $
       ],
