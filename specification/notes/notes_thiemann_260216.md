@@ -1,5 +1,5 @@
 Kommentare zum Dokument:
-* [ ] (insgesamt klingt es etwas pathetisch für ein wissenschaftliches Paper; ein paar Grammatikfehler fallen auf)
+* [x] (insgesamt klingt es etwas pathetisch für ein wissenschaftliches Paper; ein paar Grammatikfehler fallen auf)
 * [x] mixed operation semantics - was ist das?
 * [x] without inferring -> without interfering ?
 * [x] Overview ist keine eigene Section
