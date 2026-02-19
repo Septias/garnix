@@ -4,7 +4,7 @@
   columns: (auto, 1fr, 1fr, 1fr),
   align: (left, center, center, center),
   table.header([*Property*] , [*Castagna*]  , [*Parreaux*]  , [*Dolan*],),
-  [*Extensible*]            , [ ]           , [ ]           , [●]      ,
+  [*Extensible*]            , [●]           , [ ]           , [●]      ,
   [*Principal*]             , [ ]           , [●]           , [●]      ,
   [*Effective*]             , [ ]           , [●]           , [●]      ,
 
@@ -15,10 +15,10 @@
   [*Polar Restriction*]     , [ ]           , [ ]           , [●]      ,
 
   table.cell(colspan: 4)[*Advanced Features*],
-  [*Occurrence*]            , [●]           , [ ]           , [ ]      ,
+  [*Occurrence*]            , [●]           , [●]           , [ ]      ,
   [*Gradual*]               , [●]           , [ ]           , [ ]      ,
   [*First class labels*]    , [●]           , [ ]           , [ ]      ,
-  [*Reflection*]            , [ ]           , [ ]           , [ ]      , 
+  [*Reflection*]            , [●]           , [ ]           , [ ]      , 
   [*Null-safety*]           , [ ]           , [ ]           , [ ]      ,
 
   table.cell(colspan: 4)[*Records*],
