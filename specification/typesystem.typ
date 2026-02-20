@@ -374,21 +374,21 @@ $
 
   derive(
     "T-App1",
-    ($Γ ⊢ e_1: τ_1 → τ_2$, $Γ ⊢ e_22: τ_3 ≤ τ_1$),
+    ($Γ ⊢ e_1: τ_1 → τ_2$, $Γ ⊢ e_2: τ_3 ≤ τ_1$),
     $Γ ⊢ (x: e_1) e_2: τ_2$,
   ),
 
 
   derive(
     "T-App2",
-    ($Γ ⊢ e_1: {overline(α)^-} → τ_2$, $Γ ⊢ e_2: τ_3 ≤ τ_1$),
+    ($Γ ⊢ e_1: {overline(α)}^- → τ_2$, $Γ ⊢ e_2: τ_3 ≤ τ_1$),
     $Γ ⊢ (x: e_1) e_2: τ_2$,
   ),
 
 
   derive(
     "T-App3",
-    ($Γ ⊢ e_1: {overline(α)^+} → τ_2$, $Γ ⊢ e_2: τ_1$),
+    ($Γ ⊢ e_1: {overline(α)}^+ → τ_2$, $Γ ⊢ e_2: τ_1$),
     $Γ ⊢ (x: e_1) e_2: τ_2$,
   ),
 )
@@ -439,21 +439,6 @@ $
   ),
 ))
 #operator_typing_rules
-
-== Occurrence
-#let occurrence_typing_rules = figure(
-  caption: "Occurrence Typesystem for nix.",
-  [
-    $
-      #type_name[Types] τ =
-    $
-
-
-  ],
-)
-
-#occurrence_typing_rules
-
 
 
 

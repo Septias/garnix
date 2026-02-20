@@ -42,8 +42,6 @@
 
 
 = Records
-
-
 #let cast_fn = $λ^{ and_(i∈I) τ_i → τ_i}$
 #rect(width: 100%, inset: 10pt, flexbox(
   derive("Sel", ($Γ ⊢ e: τ ≤ { l = 𝟙}$,), $Γ ⊢ e.l : τ.l$),
@@ -59,6 +57,11 @@
     $(r_1 +_t r_2)(l) = cases(r_2(l) &r_2(l) ∧ t ≤ 𝟘, (r_2(l) without t) ∨ r_1(l) &otherwise)$,
   ],
 ))
+
+
+== Castagna
+$λ^((τ_1 → τ_2)_(1..n ∈ S))x. t$
+$t_1 <t_2 <- t_3> | "case" (t_1 ? τ) t_2 : t_3$
 
 
 == Advanced Fc Labels @extensible_rec_funcs

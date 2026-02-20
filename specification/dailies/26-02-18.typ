@@ -1,10 +1,9 @@
 
 == Topics
-- Full record calculus with type connectives?
-- Record extension + fc labels?
+- Combined Castagna?
+- Parreaux + fc labels?
 - With construct typing alg?
 - Occurrence typing for ifs?
-- Polymorphic records with fc labels?
 
 
 == With & Inherit
