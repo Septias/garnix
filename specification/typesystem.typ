@@ -22,7 +22,7 @@
 
 
   $
-           #type_name("Interpol") i & ::= interpol \
+      #type_name("Interpolation") i & ::= interpol \
              #type_name("String") s & ::= string \
                                     & "where" c ::= strChar \
          #type_name("Ident String") & | identstring \
@@ -41,8 +41,8 @@
     t ::= b &| s | rho.alt | Rho | n | l | #b[null] \
     #type_name("Record") &| {overline(a\;)} | #b[rec] {overline(a\;)} \
     #type_name("Array") &| [ space t_0 space t_1 space ... space t_n space] \
-    #type_name("Function") &| p "@ "h : t \
-    #type_name("Let-statement") &| #b[let] {overline(a\;)} #b[in] t\
+    #type_name("Function") &| p "@ "h : t #v(2em) #type_name("where") h ::= l | ε \
+    #type_name("Let-Statement") &| #b[let] {overline(a\;)} #b[in] t\
     #type_name("Conditional") &| #b[if] t #b[then] t #b[else] t \
     #type_name("With-Statement") &| #b[with] t; t \
     #type_name("Assert-Statement") &| #b[assert] t; t \
@@ -82,9 +82,9 @@
 #let patterns = box([
   #text(weight: "bold", smallcaps("Patterns"))
   $
-    d, h & ::= t | ε \
-       e & ::= l | l space ¿ space d \
-       p & ::= { overline(e\,) } | { overline(e\,) … } | l \
+    d & ::= t | ε \
+    e & ::= l | l space ¿ space d \
+    p & ::= { overline(e\,) } | { overline(e\,) … } | l \
   $])
 
 #let syntax = figure(
@@ -101,7 +101,7 @@
       // #set math.equation(numbering: "(1)")
       $
         p : t space @ space ε & eq.def p : t \
-                   l" @ "p: t & eq.def p" @ "l: t \
+                   h" @ "p: t & eq.def p" @ "h: t \
             l space ¿ space ε & eq.def l \
       $
     ],
@@ -190,7 +190,7 @@ $
 == Matching
 
 #let matching = figure(
-  caption: "Matching",
+  caption: "Matching.",
   box(flexbox(
     // #derive("",(,), $${∅, …} ~ overline(d) arrow.squiggly ∅$$ )
     align(horizon, ${∅, …} ~ overline(d) arrow.squiggly ∅$),
