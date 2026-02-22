@@ -22,6 +22,7 @@
   [*Null-safety*]           , [ ]           , [ ]           , [ ]      ,
 
   table.cell(colspan: 4)[*Records*],
+  [*Untagged records*]      , [●]           , [ ]           , [●]      ,
   [*Record delete*]         , [●]           , [●]           , [ ]      ,
   [*Record add*]            , [●]           , [●]           , [ ]      ,
   [*Record concat*]         , [●]           , [●]           , [ ]      ,
