@@ -44,3 +44,6 @@
 Γ ⊢ e_1: {overline(α)^+} → τ_2 Γ ⊢ e_2: τ_1
 -------------------------------------------------- T-App3
 Γ ⊢ (x: e_1) e_2: τ_2
+
+
+...... we need even more for the global pattern lule
