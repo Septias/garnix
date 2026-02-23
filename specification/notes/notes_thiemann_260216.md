@@ -13,9 +13,9 @@ Kommentare zum Dokument:
 * [x] Beim Evaluation Context musst du dich entscheiden, ob er rekursiv sein soll oder nicht. Wenn nicht, muss die erste Alternative \Box weg. Ansonsten musst du alle anderen Boxen durch E ersetzen.
 * [ ] R-Final verstehe ich nicht. Woher kommt das Some (k e)?
 * [ ] was machen unfold und indirects? —> Hab's gefunden! Beispiele wären hilfreich.
-* [ ] wieso explizite Indizes in R-Let-In und sonst nicht?
+* [x] wieso explizite Indizes in R-Let-In und sonst nicht?
 * [x] woher das t und das i in R-Lookup?
-* [ ] die Beschreibung der Auswertung von ${t} ist komisch. Laut Syntax in Listing 1 ist zulässig
+* [x] die Beschreibung der Auswertung von ${t} ist komisch. Laut Syntax in Listing 1 ist zulässig
   t.l, t.i, und t.s  (also Label, Interpolation, Stringkonstante)
   Dann hätte ich gedacht, dass E ::= ... | {\alpha}.${ E } ein evaluation context ist, der verlangt, dass
   erst links vom Punkt das Record ausgewertet sein muss. Dadurch wird Lookup-DYn-Step überflüssig.
