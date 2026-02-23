@@ -113,7 +113,6 @@
 #syntax
 
 
-
 == Reduction Rules
 #let reduction = figure(
   caption: "Nix reduction rules, evaluation context and values.",
@@ -158,7 +157,7 @@
           #rule_name("R-Has-Path-Neg")&& {overline(α)}" ? "l.ρ & arrow.long "false" \&\& space (t " ? " ρ) &&&"if" k space l = t ∉ oa\
           #rule_name("R-Array-Concat")&& [overline(t_1) ] ⧺ [overline(t_2)] & arrow.long [overline(t_1) space overline(t_2)] \
           #rule_name("R-Record-Concat")&& {oa_1} "//" {oa_2} & arrow.long {oa_1} union.arrow {oa_2 } \
-          #rule_name("R-Import")&& #b[import] 𝜚; & arrow.long t arrow.b.double &&&"if" p arrow.squiggly t \
+          #rule_name("R-Import")&& #b[import] 𝜚; & arrow.long t &&&"if" 𝜚 arrow.squiggly t \
           #rule_name("R-Context") && t arrow.long t' &==> E[t] arrow.long E[t'] \
         $
       ],
@@ -223,6 +222,8 @@ $
   )),
 )
 #matching
+
+
 
 == Types
 #let types = box(width: 100%, grid(

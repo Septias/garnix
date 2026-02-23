@@ -35,6 +35,7 @@
   [Dynamic Binding], `{${"a"} = 1;}`,             `●`, ` `,
   [String-Interpolation], `The name is: ${name}`, `●`, ` `,
   [Assert], `assert false;`,                      `●`, ` `,
+  [Import], `import ./modules.nix;`,              `●`, ` `,
   table.cell(colspan: 4)[*Operators*],
   [Arithmetic], `1 + 2 / 3 * 4`,                  `●`, ` `,
   [Logic], `true | false & true → false`,         `●`, ` `,

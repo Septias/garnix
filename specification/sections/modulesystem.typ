@@ -1,7 +1,7 @@
 #import "../functions.typ": *
 
 #let export = [
-  == Nix' Module System
+  == Nix' Module System <modulesystem>
   The Nix module system is a framework in the Nixpkgs standard library that offers a domain‑specific language for declarative configuration. Types in this DSL are enforced at evaluation time: option values are checked as configurations are instantiated, providing early feedback about shape and well‑formedness. The catalogue of types is open and user‑extensible.
 
   Each type definition comprises a human‑readable description and name, together with two operational components: a check function and a merge function. The check function validates candidate values—primarily via Nix’s reflective predicates—while the merge function reconciles option values contributed by multiple modules. Because configurations are hierarchical and cross‑cutting, values for a given option may be introduced or refined at many points in the module graph (e.g., a WireGuard module may enable and specialize NetworkManager). Robust merging is therefore a first‑class design requirement.

@@ -16,7 +16,6 @@
   - Needed: Full Record-calculus
   - Wanted: Occurrence, Type conns, Full type inference
 - Occurrence: Case for Gradual, Simplified to Occ (because of applicability)
--
 
 Actually: Do we want to add typeannos?
 - We might actually have to put them in (not clear at the moment!)
@@ -49,6 +48,14 @@ Actually: Do we want to add typeannos?
 == TS brainstorming
 - Functions with recursive patterns:
   - Just refer to type variables
-  - A shared rust variable will keep them alive
+  - A Rc will keep them alive
   - Do you need to copy the variables? (similar technique as in superF)
     - Depends on the
+  - Do I need to unroll during type inference?
+    - Basically, what is the type there?
+
+
+`let f = ({x ? 2, y ? x}: t)`
+Application: `({x ? 2, y ? x}: t) {}`
+1. New typevariable for application
+2.
