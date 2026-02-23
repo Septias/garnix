@@ -76,6 +76,7 @@
     #rule_name("R-Inherit")&& #b[inherit] overline(l); & arrow.twohead overline(x := nonrec x); \
     #rule_name("R-Inherit")&& #b[inherit] (ρ) space overline(l); & arrow.twohead overline(x := ρ.x); \
     #rule_name("R-Def-Inner")&& { l_1 . l_2 space … space .l_n = t; } &arrow.twohead {l_1 = { l_2 = {l_n = t;};};} \
+    #rule_name("R-Let-In")&& #b[let] oi(l_i \= t_i\;) #b[in] t &arrow.twohead #b[let] {overline(α)^i} #b[in] t \
   $,
 )
 
@@ -142,7 +143,6 @@
           #rule_name("R-Match")&& (m: t) {overline(#b[nonrec] d)} &arrow.long t["indirects" oα] &&&"if" m ~ overline(d) arrow.squiggly oα \
           #rule_name("R-With")&& #b[with] {oa}; t &arrow.long t["indirects" oa] \
           #rule_name("R-Let")&& #b[let] {oa} #b[in] t &arrow.long t[{ l := abs d | l := d ∈ oa' }] &&& overline(α)' = "indirects" oa \
-          #rule_name("R-Let-In")&& #b[let] oi(l_i \= t_i\;) #b[in] t &arrow.long t[{ l_i := abs t_i | l_i = t_i }] \
           #rule_name("R-Cond-True")&& #b[if] "true" #b[ then ] t_1 #b[ else ]t_2 & arrow.long t_1 \
           #rule_name("R-Cond-False")&& #b[if] "false" #b[then ] t_1 #b[ else ]t_2 & arrow.long t_2 \
           #rule_name("R-Lookup")&& {oa}.l & arrow.long t &&&"if" k space l = t ∈ oa\
@@ -321,7 +321,6 @@ $
 
 
 #let record_typing_rules = flexbox(
-  caption: "Records",
   derive(
     "T-Rcd",
     ($Ξ, Γ ⊢ t_0: τ_0$, "...", $Ξ, Γ ⊢ t_n: τ_n$),

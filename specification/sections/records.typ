@@ -16,20 +16,18 @@
 - Extensible records with scoped labels (LE 2005)
 - Infix extensible records for Tubalar data (PA & Xie 2023)
 
-add: @concat4free
-add: Abstracting Extensible Recursive Functions?
 
 
 #let export = [
   == Records <records>
 
-  Records are the primary structuring mechanism in Nix. Key–value attribute sets provide a natural substrate for declarative configuration, and the language has consequently developed a rich record calculus. The resulting feature combination—recursive attribute sets, dynamic attribute selection, and record concatenation, in interaction with pattern functions—has not yet been comprehensively addressed by existing type systems. This section outlines the requirements for typing Nix records and surveys candidate systems, highlighting their strengths and limitations in this setting.
+  Records form natural data structure for declarative configurations, and the nix language has consequently developed a rich record calculus. The resulting feature combination of recursive attribute sets, dynamic attribute selection, and record concatenation, in interaction with pattern functions, has not yet been comprehensively addressed by existing type systems.In this section we want to give an overview of the requirements needed to type nix records and discuss existing typesystems and their advantages and shortcomings in regards to nix.
 
 
   Nix records are immutable: updates are realized by construction rather than by in-place mutation, and there are no primitive add or delete operations. To regain expressiveness, the language provides _free record extension_ via the right-biased concatenation operator (`a // b`). Typing this operator is subtle: safe use requires the ability to express both field extension and field absence (restriction) in the type system. Nix further admits first-class labels—attribute names computed by expressions—which complicates static tracking of present and accessed fields, especially under polymorphism; the topic has seen comparatively little attention in prior work @fc_labels @extensible_tabular. Finally, attribute sets are recursive, so an inference procedure must detect and account for reference cycles during typing.
 
 
-  Record concatenationwas first discussed by Harper and Pierce @symm_concat but limmited to _symmetric concatenation_ of  records that do not overlap in their defined fields. _Asymmetric concatenation_ @concat4multiinher lifts this restriction so the same fields can appear in both records. In systems, where doubled labels are not allowed _lacks predicates_ @poly_records regain the needed expressiveness to not only track field presence (due to record fields) but also the absence of fields in generic rows. This allows for _asymmetric concatenation_ to be typed safely without the danger of doubled record labels. Further advancements were made nearly a decade later by Daan Leijen who showed a typesystem with duplicate labels @extensible_recs and a lookup semantic that is right-biased. He also showed how to make labels first class inhabitants of the language in @fc_labels. This work together constitutes most of the features needed to type records in nix and were already combined by Adam Patzke and Ningning Xi in application to tabular data @extensible_tabular. Other systems that combine these features are @extensible_rec_funcs @extensible_data_adhoc. All of these typesystems use unification, sometimes in combination with qualified types as their workhorse of inference. These systems have shown syntactically heavy and also don't benefit from the advantages that strong subtyping systems provide. We will thus look at typesystems that rely on subtyping.
+  Record concatenation was first discussed by Harper and Pierce @symm_concat but limmited to _symmetric concatenation_ of  records that do not overlap in their defined fields. _Asymmetric concatenation_ @concat4multiinher lifts this restriction so the same fields can appear in both records. In systems, where doubled labels are not allowed _lacks predicates_ @poly_records regain the needed expressiveness to not only track field presence (due to record fields) but also the absence of fields in generic rows. This allows for _asymmetric concatenation_ to be typed safely without the danger of doubled record labels. Further advancements were made nearly a decade later by Daan Leijen who showed a typesystem with duplicate labels @extensible_recs and a lookup semantic that is right-biased. He also showed how to make labels first class inhabitants of the language in @fc_labels. This work together constitutes most of the features needed to type records in nix and were already combined by Adam Patzke and Ningning Xi in application to tabular data @extensible_tabular. Other systems that combine these features are @extensible_rec_funcs @extensible_data_adhoc. All of these typesystems use unification, sometimes in combination with qualified types as their workhorse of inference. These systems have shown syntactically heavy and also don't benefit from the advantages that strong subtyping systems provide. We will thus look at typesystems that rely on subtyping.
 
   Subtyping is a pervasive form of polymorphism that organizes types into a refinement hierarchy: any value of a subtype may be used wherever a supertype is expected. While the substitutability intuition is straightforward for ground types, its interaction with higher‑order functions, variance, and parametric structure is subtle. Designing subtyping relations that are both expressive and tractable has therefore been a central challenge in type theory and programming‑language design.
 
@@ -45,6 +43,9 @@ add: Abstracting Extensible Recursive Functions?
   The difference between the two approaches boiles down to expressiveness vs. computability where Castagna leans more towards expressive typesystems that need backtracking, Parreaux systems are slightly weaker but keep efficient and principled type inference. Other than that they are quite similar even under the hood. Both systems heavily rely on type connectives and battle the emerging complexity of type inference by transforming types to normal forms and solving these with either the explicit subtying rules of Parreaux and Chau or boolean formulas that can be derived for the set-represantion of Castagna.
 
   In regards to nix type inference both have major drawbacks. For the systems of Parreaux, the unusability of intersections to create overloaded functions is a major drawback because the addition operator needs overloading and using reflection, it is generally possible to write functions that can act on different types. For Castagnas work, the bad computability in face of nix' huge syntax trees is the biggest drawback. It has to be noted though, positively, that Castagna already carved out approaches for gradual and occurrence typing, even though that is regarded to his continuous endeavor to type another language, elixir @castagna2023elixir.
+
+  An overview comparison table can be found in @ts-comp.
+
 ]
 
 == Comparison-draft
@@ -65,10 +66,6 @@ Extension: { .. }
 
 == Parreaux
 Singleton record type: { t : τ }
-
-== Things to say
-- Castgna combined row poly and subtyping @poly_records.
-
 
 == Questions
 - How does record extension work in parreaux?
