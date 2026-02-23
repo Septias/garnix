@@ -119,7 +119,7 @@ Nix additionally provides three impure dunder variables—`__currentSystem`, `__
 During our analysis we found further occurrences of `__structuredAttrs`, `__splicedPackages`, `__allowFileset`, `__impure`, ... that could have effects on the evaluator, but their usage seems to be mixed with standard variable naming schemes for "hidden" variables such that a clear distinction remains an open question.
 
 
-== Nix Builtins
+== Nix Builtins <builtins>
 
 The Nix language builtins extends the language' features beyond the simply syntactic ones. They comprehend functions that manipulate the languages datatypes, inspect types, bring the execution environment into scope and infer with the usual program execution flow. We will now give a short overview over the builtin functions relevant to type inference. They will be further discussed in section \@builtin_types_discussion but we want to introduce a few builtins that add hard-to-type features to the laungage upfront.
 
@@ -142,7 +142,7 @@ The Nix language builtins extends the language' features beyond the simply synta
 
       [concatLists `lists`         ], $ [[α]] -> [α] $,
       [elem `x xs`                 ], $ [α] -> α -> bool $,
-      [elemAt `xs n`               ], $ [α] -> n -> α $,
+      [elemAt `xs n`               ], $ [α] -> int -> α $,
       [concatMap `f list`          ], $ (α -> β) -> [[α]] -> [β] $,
       [concatStringsSep `sep list` ], $ str -> [str] -> str $,
 
@@ -238,9 +238,9 @@ In the following sections, we survey relevant type-system features and assess th
 
 The nixpkgs repository is, with its 40.000 files and 120.000 packages, the biggest and most up-to-date package repository in existence, receiving approx. 80 PRs#footnote("Pull Requests") a day and having close to 100.000 commits and multiple thousand open issues and PRs. This scale has two immediate implications for type‑inference. First, the evaluation root is effectively a single entry point #footnote([Most features of Nixpkgs are reachable from #link("https://github.com/NixOS/nixpkgs/blob/master/flake.nix") or #link("https://github.com/NixOS/nixpkgs/blob/master/default.nix"), depending on whether a flake‑based workflow is used.]), so an inference algorithm that tries to fully evaluate the whole tree would need to evaluate all 120.000 packages. Since no typeinference algorithm exists yet, we can only guess, but a _lazy_ type inference algorithm @lazy_inf might be needed to handle a syntax tree of this size.
 
-Second, changes in an ecosystem of this magnitude are expensive and slow. A typesystem must thus force as little as possible changes to the language to retain backwards compatibility. Should changes still be needed, it is not possible to switch the whole ecosystem in one go. A _gradual typing_ discipline @gradual_siek @gradual_tobin, which interposes an unknown type $star.op$ at the boundary between dynamically and statically typed fragments, enables incremental adoption while preserving existing workflows. The same unkown type can be used to type impure builtins like the `fromJSON` and `fromTOML` which can not be given a precise type.
+Second, evolution at the scale of Nixpkgs is costly and slow. A type inference approach should therefore minimize required changes to the existing language in order to preserve backward compatibility. When changes are unavoidable, ecosystem‑wide migration cannot occur atomically and a gradual typing discipline @gradual_siek @gradual_tobin is needed for incremental adoption. Gradual type systems have a checked and dynamic portion whichs boundary is mediated by an unkown type $star.op$ and casts between the two systems. The same unknown type can act as a conservative static approximation for impure features exposed by the builtins and dunder-variables @dunder @builtins.
 
-Many typesystems rely on type annotations to reduce the type inference complexity but Nix does not provide the syntax for type annotations. An approach where types hints are added to comments is possible and also gradually changing the syntax to acoomodate type annotions is, but full type inference in the Hindley–Milner tradition, which requires no annotations while recovering principal types is the solution with the least friction on existing code. Regardless of surface design, the inference procedure must be efficient at Nixpkgs scale; in particular, global backtracking is unacceptable, as it would render analysis prohibitively slow.
+Many type systems reduce inference complexity by relying on explicit annotations, but Nix offers no surface syntax for types. It is possible to embed hints in comments or extend the language incrementally to admit annotations but full Hindley–Milner–style inference—requiring no annotations while recovering principal types—would impose the least friction on existing code. Regardless of surface design, the inference procedure must remain efficient at Nixpkgs scale; in particular, global backtracking is unacceptable, as it would render analysis prohibitively slow.
 
 Besides the properties that are required due to the language' environment, a few properties are directly founded by the features of the language. First and foremost _recursive types_, _first class labels_ and _record concatenation_ immediately follow from the expressive record calculus. As surveyed in @records, these capabilities have been treated in the literature but were only recently combined @extensible_tabular @extensible_rec_funcs @extensible_data_adhoc and have not yet been consolidated in mainstream languages. In addition, Nix requires _parametric polymorphism_ to capture generalization across let‑bindings, and _ad‑hoc polymorphism_ to model overloaded operators and user‑defined dispatch via type inspection.
 
@@ -260,7 +260,16 @@ The final list of wanted properties is thus:
 - Type connectives
 
 
-= Types
+// ------------- Longer sections ---------------
+#occurrence.export
+#connectives.export
+#records.export
+#first-class-labels.export
+#modulesystem.export
+
+
+
+== Typing approach
 #figure(
   caption: "Types of nix.",
   types,
@@ -275,19 +284,10 @@ The following sections will discuss the list of properties in detail in no parti
 Finally, we introduce a dedicated type of patterns. Although patterns mirror records syntactically, their type is cumulative across fields because introduction and elimination occur atomically at the level of the whole pattern; in contrast, each field selection `record.field` in a record yields independent constraints. We annotate openness with a superscript $b$, indicating whether a pattern is open or closed.
 
 #basic_typing_rules <typingrules>
+#figure(caption: "Record typing rules", record_typing_rules)
 
 @typingrules shows the basic typing rules of a mlsub-derived type system. The operator typing rules are relegated to @operator-typingrules. TODO: explain.
 
-
-// ------------- Longer sections ---------------
-#occurrence.export
-#connectives.export
-
-// #figure(caption: "Record typing rules. TODO:explain", record_typing_rules)
-
-#records.export
-// #first-class-labels.export
-#modulesystem.export
 
 == Conclusion & Outlook
 To be continued…

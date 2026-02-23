@@ -35,7 +35,7 @@
   [dirOf `s`                   ], $ str ∨ path -> str $,
   [div `e1 e2`                 ], $ num -> num -> num $,
   [elem `x xs`                 ], $ [α] -> α -> bool $,
-  [elemAt `xs n`               ], $ [α] -> n -> α $,
+  [elemAt `xs n`               ], $ [α] -> int -> α $,
   [false                       ], $ bool $,
   [fetchClosure `args`         ], $ { omitted } -> path $,
   [fetchGit `args`             ], $ { omitted } -> path $,
