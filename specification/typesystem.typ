@@ -39,10 +39,10 @@
 #let general = subbox(caption: "Terms")[
   $
     t ::= b &| s | rho.alt | Rho | n | l | #b[null] \
-    #type_name("Record") &| {overline(a\;)} | #b[rec] {overline(a\;)} \
+    #type_name("Record") &| {oa} | #b[rec] {oa} \
     #type_name("Array") &| [ space t_0 space t_1 space ... space t_n space] \
     #type_name("Function") &| p "@ "h : t #v(2em) #type_name("where") h ::= l | ε \
-    #type_name("Let-Statement") &| #b[let] {overline(a\;)} #b[in] t\
+    #type_name("Let-Statement") &| #b[let] oa #b[in] t\
     #type_name("Conditional") &| #b[if] t #b[then] t #b[else] t \
     #type_name("With-Statement") &| #b[with] t; t \
     #type_name("Assert-Statement") &| #b[assert] t; t \
@@ -64,19 +64,21 @@
 
 #let assignment = subbox(caption: "Assignment")[
   $
+    #type_name("Label") l & := ℓ | s | \${t} "TODO" \
+    #type_name("Assignment") α & ::= l = t; | s = t; | \${t} = t; ι \
     #type_name("Inherit") ι & ::= #b[inherit] overline(l); | #b[inherit] (ρ) space overline(l); \
     #type_name("Path") ρ & ::= l | ρ.l | ρ.i \
-    #type_name("Assignment") a & ::= l = t; | s = t; | \${t} = t; ι \
   $
 ]
 
 #let rewrites = subbox(
   caption: "Rewrites",
   $
-    #rule_name("R-Inherit")&& #b[inherit] overline(l); & arrow.twohead overline(x := nonrec x); \
-    #rule_name("R-Inherit")&& #b[inherit] (ρ) space overline(l); & arrow.twohead overline(x := ρ.x); \
-    #rule_name("R-Def-Inner")&& { l_1 . l_2 space … space .l_n = t; } &arrow.twohead {l_1 = { l_2 = {l_n = t;};};} \
-    #rule_name("R-Let-In")&& #b[let] oi(l_i \= t_i\;) #b[in] t &arrow.twohead #b[let] {overline(α)^i} #b[in] t \
+    #rule_name("RR-Inherit")&& #b[inherit] overline(l); & arrow.twohead overline(x := nonrec x); \
+    #rule_name("RR-Inherit")&& #b[inherit] (ρ) space overline(l); & arrow.twohead overline(x := ρ.x); \
+    #rule_name("RR-Def-Inner")&& { l_1 . l_2 space … space .l_n = t; } &arrow.twohead {l_1 = { l_2 = {l_n = t;};};} \
+    #rule_name("RR-Rec")&& #b[rec] {oa} &arrow.twohead { l = #b[rec] t | l = t; ∈ α } \
+    #rule_name("RR-Non-Rec")&& {oa} &arrow.twohead { l = #b[nonrec] t | l = t; ∈ α } \
   $,
 )
 
@@ -85,7 +87,7 @@
   $
     d & ::= t | ε \
     e & ::= l | l space ¿ space d \
-    p & ::= { overline(e\,) } | { overline(e\,) … } | l \
+    p & ::= { overline(e) } | { overline(e), … } | x \
   $])
 
 #let syntax = figure(
@@ -133,22 +135,23 @@
       caption: "Reduction rules",
       [
         $
-          #rule_name("Kind") k := with | abs #h(5cm) #rule_name("Recursiveness") k := rec | nonrec
+          #rule_name("Kind") k := #b[with] | #b[abs] #h(5cm) #rule_name("Recursiveness") ω := #b[rec] | #b[nonrec]
         $
         $
           #rule_name("R-Final")&& x_("Some" (k space e)) &arrow.long e \
-          #rule_name("R-Attr-Rec")&& {overline(a)} &arrow.long {"unfold" overline(a)} &&&"if" ∃x,d. x := rec d ∈ overline(a) \
+          #rule_name("R-Attr-Rec")&& {overline(a)} &arrow.long {"unfold" overline(a)} &&&"if" ∃x,d. space x := rec d ∈ overline(a) \
           #rule_name("R-Abs")&& (x: t_1) t_2 &arrow.long t_1[x := abs t_2] \
           #rule_name("R-Match")&& (m: t) {overline(#b[nonrec] d)} &arrow.long t["indirects" oα] &&&"if" m ~ overline(d) arrow.squiggly oα \
-          #rule_name("R-With")&& #b[with] {oa}; t &arrow.long t["indirects" oa] \
-          #rule_name("R-Let")&& #b[let] {oa} #b[in] t &arrow.long t[{ l := abs d | l := d ∈ oa' }] &&& overline(α)' = "indirects" oa \
+          #rule_name("R-With")&& #b[with] {oa}; t &arrow.long t[{ x := abs t | l = t ∈ oa }] \
+          #rule_name("R-Let")&& #b[let] oi(l_i = t_i\;) #b[in] t &arrow.long t[{ l_i := abs t_i }]\
+          #rule_name("R-Let-Rec")&& #b[let] {oi(l_i = t_i\;) "body" = t} &arrow.long t[{ l_i := abs t_i }] \
           #rule_name("R-Cond-True")&& #b[if] "true" #b[ then ] t_1 #b[ else ]t_2 & arrow.long t_1 \
           #rule_name("R-Cond-False")&& #b[if] "false" #b[then ] t_1 #b[ else ]t_2 & arrow.long t_2 \
           #rule_name("R-Lookup")&& {oa}.l & arrow.long t &&&"if" k space l = t ∈ oa\
           #rule_name("R-Lookup-str")&& {oa}.s & arrow.long t &&&"if" k space s = t ∈ oa\
           #rule_name("R-Lookup-dyn")&& {oa}.\${s} & arrow.long {oa}.s \
           #rule_name("R-Lookup-Default-Pos")&& {oa}.l #b[or] t & arrow.long
-          t_i &&&"if" k space l ∈ oa \
+          t &&&"if" k space l ∈ oa \
           #rule_name("R-Lookup-Default-Neg")&& {oa}.l #b[or] t & arrow.long
           t &&&"if" k space l ∉ oa \
           #rule_name("R-Has-Pos")&& {overline(α)}" ? "l & arrow.long "true" &&&"if" k space l ∈ oa \
@@ -165,7 +168,7 @@
     subbox(
       caption: "Auxiliaries",
       $
-        "unfold" oα := &{ x := #b[nonrec] t | x := #b[nonrec] t ∈ oα} union.arrow
+        "unfold" oα := &{ x := #b[nonrec] t | x := #b[nonrec] t ∈ oα} union
         &{ x := #b[nonrec] t["indirects" oα] | x := #b[rec] t ∈ oα} \
         "indirects" oα := &{x := #b[abs] {oα}.x | x ∈ oα }
       $,
