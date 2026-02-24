@@ -19,7 +19,7 @@
   [*Gradual*]               , [●]           , [ ]           , [ ]      ,
   [*First class labels*]    , [●]           , [ ]           , [ ]      ,
   [*Reflection*]            , [●]           , [ ]           , [ ]      , 
-  [*Null-safety*]           , [ ]           , [ ]           , [ ]      ,
+  [*Singleton types*]       , [●]           , [ ]           , [ ]      ,
 
   table.cell(colspan: 4)[*Records*],
   [*Untagged records*]      , [●]           , [ ]           , [●]      ,
