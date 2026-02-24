@@ -203,23 +203,14 @@ The last path-like construct is a sequence of record accesses ρ `r.l.l.l` that 
 == Reduction Rules
 #reduction <reduction>
 #figure(caption: [Deferred Substitutions.], substitutions) <substitution>
-
-- Same semantic
-- abs/with -> with
-- rec/nonrec -> inherit
-- Deferred substitution (with example)
-- unfold/indirects
-- elaboration of with/inherit features
-- function matching
-
-We follow the semantics of broekhoff and krebbers @verified. We assume prope operational semantics for the primitive Algebraic, Logic, Pipe and Comparison operators and give explicit transition rules for Records and Array operators. We use a call-by-name evaluation order which is operationally equivalent to lazy evaluation but less performant in interpreters. We also use the _deferred substitutions_ introduce by broekhoff and krebbers @verified to properly handle the weaker binding of the with-construct and rec/nonrec annotations to. Because of the problematic `{inherit x;} -> { x = x;}` we need to track for every field, whether it is recursive or not which is done with the recursive kind. $p arrow.squiggly t$ means the file pointed to with p is evaluated and reduces to t.
-
-@substitution shows deferred substitutions. Variables are annotated by the type they should be substituted with. The first two cases handle bindings of different strength with `abs`-bindings taking precedence.
-
 #matching <matching>
 
-@matching is a recursive procedure and ` m ~ p ~ α` read as "Pattern am is matched with record p giving a substitution α". The rules account for open and closed patterns as well as recursiveness because they reduce to recursive records that are re-interpreted as
-a
+We follow the semantics of broekhoff and krebbers @verified. We assume proper operational semantics for the primitive Algebraic, Logic, Pipe and Comparison operators and give explicit transition rules for Records and Array operators. The evaluation order is call-by-name which is operationally equivalent to lazy evaluation but less performant in interpreters. The binding-power kind $k$ is used to annotate the variable binding power for with, let and lambda bound variables to properly handle the weak let binding power. $b[rec]$ and $b[nonrec]$ is used to tag the recursiveness of of record-fields. A recursive record will thus be rewritten from `rec {a = 2; b = 3;}` to `{ rec a = 2; rec b = 2}`. Recursive and non-recursive fields are needed to faithfully desugar inherit statements. A statement `rec {inherit x;}` would otherwise be rewritten to `{x = x;}`, forming a new cyclic definition which is not faithful to the evaluator that raises an error because x is undefined as it tries to take x from the surrounding environment. Furthermore R-Attr-Rec will use the rec tags to unfold a record with recursive fields to a non-recursive record using the auxiliary unfold function.
+
+The rule R-Final is used in conjuction with _deffered substitutions_. Deffered substitutions reify substitutions on variables until variables are needed. This mechanism is motivatedt by the following example. The expression `with g {}; a + b` is only closed if the function function application returns a record that has the a an b variables as fields. An _outer_ or previous with-binding can thus not overwrite the a and b bindings but needs to delay the substitutions until `with g {}` is evaluated. The rule R-Final takes the resulting annotated variable and returns its prevalent definition. The definition of _deffered substitutions_ is given in @substitution. The first case of the variable case gives precedence to bindings with "abs" strength, the second handles the first binding and overwriting with-bindings. The last case skips variables that are not in the parallel substitution.
+
+The rule `R-match` to match a record argument against a pattern uses the auxiliary `m ~ p ~ α` judgement thatis  read as "Pattern m is matched with record p, giving a substitution α". The rules defined in @matching  account for open and closed patterns as well as recursiveness in function patterns by absusing the same rec/nonrec tagging mechansim and deferred substitutions on the function body.
+
 
 = Finding a Type System <ts-dicsussion>
 Nix is a dynamically typed, lazy, and purely functional language. Its core features include extensible records, pattern-based functions with parameter destructuring, first-class labels, overloaded operators, and a reduction semantic with two levels of binding power. In addition, the language provides 78 built-in functions that operate on attribute sets and lists, access the execution environment, and support limited forms of type reflection.
