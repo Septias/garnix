@@ -191,33 +191,43 @@ $
 #let matching = figure(
   caption: "Matching.",
   box(flexbox(
-    // #derive("",(,), $${∅, …} ~ overline(d) arrow.squiggly ∅$$ )
-    align(horizon, ${∅, …} ~ overline(d) arrow.squiggly ∅$),
     derive(
-      "",
+      "M-Id",
+      (),
+      ${∅, …} ~ overline(d) arrow.squiggly ∅$,
+    ),
+    derive(
+      "M-Var",
       (
-        ${oi(e?), …} ~ overline(d) arrow.squiggly oα$,
-        $x ∉ "dom "oi(e?)$,
+        ${overline(e), …} ~ overline(d) arrow.squiggly oα$,
+        $x ∉ "dom "overline(e)$,
         $x ∉ "dom "overline(d)$,
       ),
-      ${oi(e?)⟨x := e^?⟩, …} ~ overline(d)⟨x := d⟩ arrow.squiggly oα⟨x := #b[nonrec] d⟩$,
+      ${overline(e)⟨x ¿ ε⟩, …} ~ overline(d)⟨x := d⟩ arrow.squiggly oα⟨x := #b[nonrec] d⟩$,
     ),
     derive(
-      "",
+      "M-Default",
       (
-        ${oi(e?), …} ~ overline(d) arrow.squiggly oα$,
-        $x ∉ "dom" oi(e?)$,
+        ${overline(e), …} ~ overline(d) arrow.squiggly oα$,
+        $x ∉ "dom" overline(e)$,
         $x ∉ "dom" overline(d)$,
       ),
-      ${oi(e?)⟨x := "Some" e⟩, …} ~ overline(d) arrow.squiggly oα⟨x := #b[rec] e⟩$,
+      ${overline(e)⟨x ¿ e⟩, …} ~ overline(d) arrow.squiggly oα⟨x := #b[rec] e⟩$,
     ),
     derive(
-      "",
+      "M-Pat-Open",
       (
-        ${oi(e?), …} ~ overline(d) arrow.squiggly oα$,
-        $"dom "overline(d) subset.eq "dom "oi(e?)$,
+        ${overline(e), …} ~ overline(d) arrow.squiggly oα$,
+        $"dom "overline(d) subset.eq "dom "overline(e)$,
       ),
-      ${oi(e?)} ~ overline(d) arrow.squiggly oα$,
+      ${overline(e)} ~ overline(d) arrow.squiggly oα$,
+    ),
+    derive(
+      "M-Binding",
+      (
+        $p ~ overline(d) arrow.squiggly oα$,
+      ),
+      $x space @ space p ~ overline(d) arrow.squiggly oα⟨x := overline(d)⟩$,
     ),
   )),
 )
