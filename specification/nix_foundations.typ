@@ -205,11 +205,13 @@ The last path-like construct is a sequence of record accesses ρ `r.l.l.l` that 
 #figure(caption: [Deferred Substitutions.], substitutions) <substitution>
 #matching <matching>
 
-We follow the semantics of broekhoff and krebbers @verified. We assume proper operational semantics for the primitive Algebraic, Logic, Pipe and Comparison operators and give explicit transition rules for Records and Array operators. The evaluation order is call-by-name which is operationally equivalent to lazy evaluation but less performant in interpreters. The binding-power kind $k$ is used to annotate the variable binding power for with, let and lambda bound variables to properly handle the weak let binding power. $b[rec]$ and $b[nonrec]$ is used to tag the recursiveness of of record-fields. A recursive record will thus be rewritten from `rec {a = 2; b = 3;}` to `{ rec a = 2; rec b = 2}`. Recursive and non-recursive fields are needed to faithfully desugar inherit statements. A statement `rec {inherit x;}` would otherwise be rewritten to `{x = x;}`, forming a new cyclic definition which is not faithful to the evaluator that raises an error because x is undefined as it tries to take x from the surrounding environment. Furthermore R-Attr-Rec will use the rec tags to unfold a record with recursive fields to a non-recursive record using the auxiliary unfold function.
+We follow the semantics of broekhoff and krebbers @verified. We assume proper operational semantics for the primitive Algebraic, Logic, Pipe and Comparison operators and give explicit transition rules for Records and Array operators. The evaluation order is call-by-name which is operationally equivalent to lazy evaluation but less performant in interpreters. The binding-power kind $k$ is used to annotate the variable binding power in substitutions to properly handle the weak let binding power. $b[rec]$ and $b[nonrec]$ is used to tag the recursiveness of of record-fields. A recursive record will thus be rewritten from `rec {a = 2; b = 3;}` to `{ rec a = 2; rec b = 2}`. Recursive and non-recursive fields are needed to faithfully desugar inherit statements. A statement `rec {inherit x;}` would otherwise be rewritten to `{x = x;}`, forming a new cyclic definition which is not faithful to the evaluator that raises an error because x is undefined when not provided by the surrounding expression. Furthermore R-Attr-Rec will use the rec tags to unfold a record with recursive fields to a non-recursive record using the auxiliary unfold function. This function unrolls the recursive bindings of a record and internally uses the indirects function. This function is used to create a substition of abs-strength from record bindings.
 
 The rule R-Final is used in conjuction with _deffered substitutions_. Deffered substitutions reify substitutions on variables until variables are needed. This mechanism is motivatedt by the following example. The expression `with g {}; a + b` is only closed if the function function application returns a record that has the a an b variables as fields. An _outer_ or previous with-binding can thus not overwrite the a and b bindings but needs to delay the substitutions until `with g {}` is evaluated. The rule R-Final takes the resulting annotated variable and returns its prevalent definition. The definition of _deffered substitutions_ is given in @substitution. The first case of the variable case gives precedence to bindings with "abs" strength, the second handles the first binding and overwriting with-bindings. The last case skips variables that are not in the parallel substitution.
 
 The rule `R-match` to match a record argument against a pattern uses the auxiliary `m ~ p ~ α` judgement thatis  read as "Pattern m is matched with record p, giving a substitution α". The rules defined in @matching  account for open and closed patterns as well as recursiveness in function patterns by absusing the same rec/nonrec tagging mechansim and deferred substitutions on the function body.
+
+The conditional and record reduction rules are trivial. R-Record-Concat uses the right-biased union operator $union.arrow$ to denote that all bindings of the second argument take precedence over the first argument. The import rule takes a file-path and evaluates its content. The final expression is substituted as-is into the surrounding expression.
 
 
 = Finding a Type System <ts-dicsussion>
@@ -259,7 +261,6 @@ The final list of wanted properties is thus:
 #modulesystem.export
 
 
-
 == Typing approach
 #figure(
   caption: "Types of nix.",
@@ -267,21 +268,28 @@ The final list of wanted properties is thus:
   placement: none,
 )<types>
 
-Todo: Types are just shown but never actually referenced
 
-
-The following sections will discuss the list of properties in detail in no particular order. The types build on the calculi of Lionel Parreaux @simplesub @mlstruct @invalml and are summarized in @types. Literal terms inhabit their canonical atomic types (bool, string, path, float, int). We adopt the standard constructors for functions, records, and arrays, with the following refinement for records: a record type denotes a single mapping from a label to a type rather than an explicit enumeration of all fields. This aligns with conjunction-based accumulation of constraints on type variables during inference; see @records for details. For arrays, we provide two descriptions: a homogeneous array type and an accumulated variant that accommodates heterogeneously typed elements. To obtain a Boolean algebra of types, we admit the connectives $¬, ∨, ∧$ together with the top and bottom elements $⊤$ and $⊥$, which are, respectively, the greatest and least elements of the subtyping lattice.
+The types build on the calculi of Lionel Parreaux @simplesub @mlstruct @invalml and are summarized in @types. Literal terms inhabit their canonical atomic types (bool, string, path, float, int). We adopt the standard constructors for functions, records, and arrays, with the following refinement for records: a record type denotes a single mapping from a label to a type rather than an explicit enumeration of all fields. This aligns with conjunction-based accumulation of constraints on type variables during inference; see @records for details. For arrays, we provide two descriptions: a homogeneous array type and an accumulated variant that accommodates heterogeneously typed elements. To obtain a Boolean algebra of types, we admit the connectives $¬, ∨, ∧$ together with the top and bottom elements $⊤$ and $⊥$, which are, respectively, the greatest and least elements of the subtyping lattice.
 
 Finally, we introduce a dedicated type of patterns. Although patterns mirror records syntactically, their type is cumulative across fields because introduction and elimination occur atomically at the level of the whole pattern; in contrast, each field selection `record.field` in a record yields independent constraints. We annotate openness with a superscript $b$, indicating whether a pattern is open or closed.
 
 #basic_typing_rules <typingrules>
-#figure(caption: "Record typing rules", record_typing_rules)
+@typingrules shows the basic typing rules for nix. They are mostly standart but two var rules are needed to account for monomorphic and polymorphic types. Four list typing rules  account for \_ and \_ array types and their respective concatenation. The operator typing rules are relegated to @operator-typingrules.
 
-@typingrules shows the basic typing rules of a mlsub-derived type system. The operator typing rules are relegated to @operator-typingrules. TODO: explain.
+#figure(caption: "Record typing rules", record_typing_rules) <recordrules>
+
+The record typing rules are given in @recordrules. T-Rcd and T-Proj are entirely standart and the T-Or-Neg and T-or-Pos handle the or-operator if the lookup succeedes or not. This operator works on explicit records but already fails on typevariables because of the generic subsumption rule. It is then possible to "add"? fields using subsumption and false trigger the wrong branch?. THe concat operation usese the same right-biased union as in the reduction semantic on types. A lacks check should be added? T-check trivially returns a bool but if we have singleton types for true and false, this could even be used in branches. The final T-Acc-dyn rule lookups a label value dynamicall and uses first-class-labels.
+
+#figure(caption: "Function typing rules", function_typing_rules) <functionrules>
+
+@functionrules shows the typing rules for functions. T-Abs1 is the standartfunction typing rule. The following two typing rules handle ope and closed patterns respectively. The three application rules are straigt forward, but we want to note that T-App3 does not allow subsumption because open patterns... Actually this need to be domain checks.
+
 
 
 == Conclusion & Outlook
 To be continued…
+
+- @verified is wrong abit: its possible to eval in nix. Dynamic binding supported.
 
 - Combined Castagna?
 - Parreaux + fc labels?
@@ -305,10 +313,10 @@ To be continued…
 = Nix Builtins <all-builtins>
 #builtin_types
 
-= Nix module system types <operator-typingrules>
+= Operator Types <operator-typingrules>
 #operator_typing_rules
 
-= Nix module system types <module-types>
+= Nix Module System Types <module-types>
 #module_types
 
 = Typesystem comparison <ts-comp>
