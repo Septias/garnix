@@ -75,7 +75,7 @@
   caption: "Rewrites",
   $
     #rule_name("RR-Inherit")&& #b[inherit] overline(l); & arrow.twohead overline(x := nonrec x); \
-    #rule_name("RR-Inherit")&& #b[inherit] (ρ) space overline(l); & arrow.twohead overline(x := ρ.x); \
+    #rule_name("RR-Inherit")&& #b[inherit] (ρ) space overline(l); & arrow.twohead overline(x := ρ.x); "TODO" \
     #rule_name("RR-Def-Inner")&& { l_1 . l_2 space … space .l_n = t; } &arrow.twohead {l_1 = { l_2 = {l_n = t;};};} \
     #rule_name("RR-Rec")&& #b[rec] {oa} &arrow.twohead { l = #b[rec] t | l = t; ∈ α } \
     #rule_name("RR-Non-Rec")&& {oa} &arrow.twohead { l = #b[nonrec] t | l = t; ∈ α } \
@@ -101,7 +101,6 @@
     patterns,
 
     subbox(caption: "Shorthands")[
-      // #set math.equation(numbering: "(1)")
       $
         p : t space @ space ε & eq.def p : t \
                    h" @ "p: t & eq.def p" @ "h: t \
@@ -142,22 +141,22 @@
           #rule_name("R-Attr-Rec")&& {overline(a)} &arrow.long {"unfold" overline(a)} &&&"if" ∃x,d. space x := rec d ∈ overline(a) \
           #rule_name("R-Abs")&& (x: t_1) t_2 &arrow.long t_1[x := abs t_2] \
           #rule_name("R-Match")&& (m: t) {overline(#b[nonrec] d)} &arrow.long t["indirects" oα] &&&"if" m ~ overline(d) arrow.squiggly oα \
-          #rule_name("R-With")&& #b[with] {oa}; t &arrow.long t[{ x := abs t | l = t ∈ oa }] \
+          #rule_name("R-With")&& #b[with] {oa}; t &arrow.long t[{ x := with t | l = t ∈ oa }] \
           #rule_name("R-Let")&& #b[let] oi(l_i = t_i\;) #b[in] t &arrow.long t[{ l_i := abs t_i }]\
           #rule_name("R-Let-Rec")&& #b[let] {oi(l_i = t_i\;) "body" = t} &arrow.long t[{ l_i := abs t_i }] \
           #rule_name("R-Cond-True")&& #b[if] "true" #b[ then ] t_1 #b[ else ]t_2 & arrow.long t_1 \
           #rule_name("R-Cond-False")&& #b[if] "false" #b[then ] t_1 #b[ else ]t_2 & arrow.long t_2 \
-          #rule_name("R-Lookup")&& {oa}.l & arrow.long t &&&"if" k space l = t ∈ oa\
-          #rule_name("R-Lookup-str")&& {oa}.s & arrow.long t &&&"if" k space s = t ∈ oa\
-          #rule_name("R-Lookup-dyn")&& {oa}.\${s} & arrow.long {oa}.s \
+          #rule_name("R-Lookup")&& {oa}.l & arrow.long t &&&"if" ω space l = t ∈ oa\
+          #rule_name("R-Lookup-str")&& {oa}.s & arrow.long t &&&"if" ω space s = t ∈ oa\
+          #rule_name("R-Dyn")&& \${s} & arrow.long s \
           #rule_name("R-Lookup-Default-Pos")&& {oa}.l #b[or] t & arrow.long
-          t &&&"if" k space l ∈ oa \
+          t' &&&"if" ω space l = t' ∈ oa \
           #rule_name("R-Lookup-Default-Neg")&& {oa}.l #b[or] t & arrow.long
-          t &&&"if" k space l ∉ oa \
-          #rule_name("R-Has-Pos")&& {overline(α)}" ? "l & arrow.long "true" &&&"if" k space l ∈ oa \
-          #rule_name("R-Has-Neg")&& {overline(α)}" ? "l & arrow.long "false" &&&"if" k space l ∉ oa \
-          #rule_name("R-Has-Path-Pos")&& {overline(α)}" ? "l.ρ & arrow.long "true" \&\& space (t " ? " ρ) &&&"if" k space l = t ∈ oa \
-          #rule_name("R-Has-Path-Neg")&& {overline(α)}" ? "l.ρ & arrow.long "false" \&\& space (t " ? " ρ) &&&"if" k space l = t ∉ oa\
+          t &&&"if" ω space l ∉ oa \
+          #rule_name("R-Has-Pos")&& {overline(α)}" ? "l & arrow.long "true" &&&"if" ω space l ∈ oa \
+          #rule_name("R-Has-Neg")&& {overline(α)}" ? "l & arrow.long "false" &&&"if" ω space l ∉ oa \
+          #rule_name("R-Has-Path-Pos")&& {overline(α)}" ? "l.ρ & arrow.long "true" \&\& space (t " ? " ρ) &&&"if" ω space l ∈ oa \
+          #rule_name("R-Has-Path-Neg")&& {overline(α)}" ? "l.ρ & arrow.long "false" \&\& space (t " ? " ρ) &&&"if" ω space l ∉ oa\
           #rule_name("R-Array-Concat")&& [overline(t_1) ] ⧺ [overline(t_2)] & arrow.long [overline(t_1) space overline(t_2)] \
           #rule_name("R-Record-Concat")&& {oa_1} "//" {oa_2} & arrow.long {oa_1} union.arrow {oa_2 } \
           #rule_name("R-Import")&& #b[import] 𝜚; & arrow.long t &&&"if" 𝜚 arrow.squiggly t \
@@ -272,6 +271,7 @@ $
   caption: "Basic nix typing rules.",
   box(width: 100%, [
     #flexbox(
+      derive("T-Base", (), $Ξ, Γ tack c: b_c$),
       derive("T-Var1", ($Γ(x) = τ$,), $Ξ, Γ tack x: τ$),
       derive(
         "T-Var2",
