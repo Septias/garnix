@@ -121,7 +121,7 @@ During our analysis we found further occurrences of `__structuredAttrs`, `__spli
 
 == Nix Builtins <builtins>
 
-The Nix language builtins extends the language' features beyond the simply syntactic ones. They comprehend functions that manipulate the languages datatypes, inspect types, bring the execution environment into scope and infer with the usual program execution flow. We will now give a short overview over the builtin functions relevant to type inference. They will be further discussed in section \@builtin_types_discussion but we want to introduce a few builtins that add hard-to-type features to the laungage upfront.
+The Nix language builtins extends the language' features beyond the simply syntactic ones. They comprehend functions that manipulate the languages datatypes, inspect types, bring the execution environment into scope and infer with the usual program execution flow. We will now give a short overview over the builtin functions relevant to type inference.
 
 #[
   #show figure: set block(breakable: true)
@@ -286,15 +286,19 @@ The record typing rules are given in @recordrules. T-Rcd and T-Proj are entirely
 
 
 
-== Conclusion & Outlook
-To be continued…
+== Conclusion, Comparison and Outlook
+We have shown the nix language and its quirks by example and formalization. Especially the impure language constructs, the expressive record calculus and the requirements of the environment make type inference a hard task that can not be solved by contemporary type systems. We discussed possible type inference approaches like occurrence typing, gradual typing, semantic subtyping, algebraic subtyping, and a coup of record calculi in regards to the nix programming language. While many techniques exist to type subsets of the nix language, no system is currently able to type nix in its entirety.
 
-- @verified is wrong abit: its possible to eval in nix. Dynamic binding supported.
+Further work can go in many directions, choosing a subset of Nix' features to form a sound typesystem. Records are an important feature of the language and first class labels as well as record concatenation is commonly used in the nix ecosystem. Typesystems that provides these features in combination with type connectives, polymorphism or occurrence typing are interesting open research questions. Especially a formulation using row variables seems to be applicable to the record calculus and nix language constructs.
 
-- Combined Castagna?
-- Parreaux + fc labels?
-- With construct typing alg?
-- Occurrence typing for ifs?
+The development of function patterns, with-typing and occurence typing seems to be perpendicular to the aforementioned typesystem research line and can be developed in seperation. Since an unknown type is essential in face of language impurities and absence of type annotations, research along _soft typing systems_ seems interesting and could offer techniques to handle impurities correctly.
+
+The reduction semantic is based upon the works of Broekhoff and Krebbers @verified but extends their work with more syntax features, namely dynamic binding, dynamic lookups and string interpolation besides some smaller changes. We disregard their closer model of terminating and non-terminating computation to give a simpler presentation of reduction rules. Their work also examines the dynamic eval construct of javascript and other dynamic languages but does not apply these developments because Nix does not provide a dynamic eval primitive. We have seen @builtins that is is possible to mimic the eval construct behaviour using the Nix builtins so adapting their semantic for this constructed version of eval remains an open task.
+
+
+== Acknowledgements
+Finally, I would like to thank Peter Thiemann and Taro Sekiyama for their continuous supervision of these efforts.
+
 
 // -------------- Bibliography ----------------
 #pagebreak()
@@ -320,5 +324,8 @@ To be continued…
 #module_types
 
 = Typesystem comparison <ts-comp>
-#ts-compare
+#figure(
+  caption: "This table shows the research lines of Castagna, Parreax and Dolan together with the typesystem features their work (across multiple papers) covers",
+  ts-compare,
+)
 
