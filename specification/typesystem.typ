@@ -268,7 +268,7 @@ $
 == Typing Rules
 
 #let basic_typing_rules = figure(
-  caption: "Basic nix typing rules.",
+  caption: "Basic Nix typing rules.",
   box(width: 100%, [
     #flexbox(
       derive("T-Base", (), $Ξ, Γ tack c: b_c$),
@@ -376,29 +376,21 @@ $
     $Γ, overline(e_i : τ_i) ⊢ e: τ_2$,
     $Γ ⊢ ({oa}: e) : {α}^- → τ_2$,
   ),
-
-
   derive(
     "T-Abs3",
     $Γ, overline(e_i : τ_i) ⊢ e: τ_2$,
     $Γ ⊢ ({oa,...}: e) : {α}^+ → τ_2$,
   ),
-
-
   derive(
     "T-App1",
     ($Γ ⊢ e_1: τ_1 → τ_2$, $Γ ⊢ e_2: τ_3 ≤ τ_1$),
     $Γ ⊢ (x: e_1) e_2: τ_2$,
   ),
-
-
   derive(
     "T-App2",
     ($Γ ⊢ e_1: {overline(α)}^- → τ_2$, $Γ ⊢ e_2: τ_3 ≤ τ_1$),
     $Γ ⊢ (x: e_1) e_2: τ_2$,
   ),
-
-
   derive(
     "T-App3",
     ($Γ ⊢ e_1: {overline(α)}^+ → τ_2$, $Γ ⊢ e_2: τ_1$),
@@ -406,6 +398,23 @@ $
   ),
 )
 
+#let with_inherit = figure(caption: "Extra construct typing rules", flexbox(
+  derive("", $Γ ⊢ t₂ ≤ {} Γ, Ξ · t₂ ⊢ t₂ : τ$, $Γ ⊢ with t₁; t₂ : τ$),
+  derive("", $x ∈ Γ$, $Γ ⊢ { inherit x; } -> { x = Γ(x);}$),
+  derive("", $x ∈ Γ$, $Γ ⊢ { inherit (ρ) x; } -> { x = "lookup"(ρ, x)}$),
+))
+
+#let occurrence_typing = figure(caption: "Occurrence Typing", flexbox(
+  derive(
+    "",
+    $Γ ⊢ t: "true" => Ξ Γ, Ξ ⊢ t_1 : τ$,
+    $Γ ⊢ #b[if] t_1 #b[then] t_2 #b[else] t_3: τ$,
+  ),
+  derive("", $$, $Γ, Ξ ⊢ "isBool"(τ) => Ξ · (τ: bool)$),
+  derive("", $$, $Γ, Ξ ⊢ "isNum"(t) => Ξ · (t: num)$),
+  derive("", $$, $Γ, Ξ ⊢ t_1 && t_2 => Ξ · (t: num)$),
+  derive("", $$, $Γ, Ξ ⊢ !t_2 => Ξ · (t: ¬Ξ(τ))$),
+))
 
 #let operator_typing_rules = figure(caption: "Operator typing rules.", flexbox(
   derive(
@@ -528,10 +537,12 @@ $
 )
 #subtyping
 
+
 == Constraining
 #let constraining = figure(
   caption: "New Constraining Rules using normal forms",
   [
+    - Occurrence typing in typed scheme paper (2008)?
     #subrules(caption: $Σ ⊢ τ ≪ τ => Ξ$, flexwrap(
       main-spacing: 20pt,
       cross-spacing: 10pt,
