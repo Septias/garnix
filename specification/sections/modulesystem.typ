@@ -15,7 +15,7 @@
   Consequently, it is difficult to distill from this ad‑hoc collection a sound, conventional static type system. One could imagine augmenting it with qualified or refinement types to state richer invariants, but that trajectory approaches verification rather than lightweight validation. A more immediately useful direction is to ascribe precise types to the check functions themselves and, where possible, stage their application statically so configuration errors surface earlier. Whether a type system for the Nix source language can predict such applications with sufficient precision to be broadly valuable remains an open question.
 
 
-  #figure(caption: "Nix module system example", ```nix
+  #figure(caption: "Nix module system example", rect(inset: 10pt, ```nix
   let
     systemModule = { lib, config, ... }: {
       options.toplevel = lib.mkOption {
@@ -39,7 +39,7 @@
   in (import <nixpkgs/lib>).evalModules {
     modules = [ systemModule userModule ];
   }
-  ```) <module-exapmle>
+  ```)) <module-exapmle>
 ]
 
 https://github.com/NixOS/nixpkgs/blob/master/lib/types.nix
