@@ -13,7 +13,7 @@
   #let interpol = $\${ t }$
   #let string = `"(c* i)* c*"`
   #let identstring = `''(c* i)* c*''`
-  #let boolean = `true | false`
+  #let boolean = $"true "| "false"$
   #let filepath = `(./|~/|/)([a-zA-Z.]+/?)+`
   #let number = `([0-9]*.)?[0-9]+`
   #let label = `[A-Za-z_][A-Za-z0-9_'-]*`
@@ -23,30 +23,30 @@
 
   $
       #type_name("Interpolation") i & ::= interpol \
-             #type_name("String") s & ::= string \
-                                    & "where" c ::= strChar \
+             #type_name("String") s & ∈ string \
+                                    & "where" c ∈ strChar \
          #type_name("Ident String") & | identstring \
-                                    & "where" c ::= omitted) \
+                                    & "where" c ∈ omitted \
             #type_name("Boolean") b & ::= boolean \
-    #type_name("File-Path") rho.alt & ::= filepath \
-             #type_name("Number") n & ::= number \
-              #type_name("Label") l & ::= label \
-      #type_name("Search Path") Rho & ::= searchpath \
-                #type_name("Uri") u & ::= uri \
+    #type_name("File-Path") rho.alt & ∈ filepath \
+             #type_name("Number") n & ∈ number \
+              #type_name("Label") ℓ & ∈ label \
+      #type_name("Search Path") Rho & ∈ searchpath \
+                #type_name("Uri") u & ∈ uri \
   $
 ]
 
 #let general = subbox(caption: "Terms")[
   $
-    t ::= b &| s | rho.alt | Rho | n | l | #b[null] \
+    t ::= x &| s | b | rho.alt | n | Rho | n | #b[null] \
     #type_name("Record") &| {oa} | #b[rec] {oa} \
     #type_name("Array") &| [ space t_0 space t_1 space ... space t_n space] \
-    #type_name("Function") &| p "@ "h : t #v(2em) #type_name("where") h ::= l | ε \
+    #type_name("Function") &| p "@ "h : t #v(2em) #type_name("where") h ::= ℓ | ε \
     #type_name("Let-Statement") &| #b[let] oa #b[in] t\
     #type_name("Conditional") &| #b[if] t #b[then] t #b[else] t \
     #type_name("With-Statement") &| #b[with] t; t \
     #type_name("Assert-Statement") &| #b[assert] t; t \
-    #type_name("Import-Statement") &| #b[import] t; \
+    #type_name("Import-Statement") &| #b[import] t; t\
   $
 ]
 
@@ -64,8 +64,8 @@
 
 #let assignment = subbox(caption: "Assignment")[
   $
-    #type_name("Label") l & := ℓ | s | \${t} "TODO" \
-    #type_name("Assignment") α & ::= l = t; | s = t; | \${t} = t; ι \
+    #type_name("Label") l & := ℓ | s | \${t} \
+    #type_name("Assignment") α & ::= l = t; ι \
     #type_name("Inherit") ι & ::= #b[inherit] overline(l); | #b[inherit] (ρ) space overline(l); \
     #type_name("Path") ρ & ::= l | ρ.l | ρ.i \
   $
@@ -86,7 +86,7 @@
   #text(weight: "bold", smallcaps("Patterns"))
   $
     d & ::= t | ε \
-    e & ::= l | l space ¿ space d \
+    e & ::= ℓ | ℓ space ¿ space d \
     p & ::= { overline(e) } | { overline(e), … } | x \
   $])
 
@@ -96,6 +96,9 @@
     columns: 2,
     align: left,
     inset: 8pt,
+    // grid.cell(colspan: 2, flexbox(
+    //   $#type_name("Variables") x ∈ cal(X)$,
+    // )),
     general, literals,
     operators, assignment,
     patterns,
@@ -104,7 +107,7 @@
       $
         p : t space @ space ε & eq.def p : t \
                    h" @ "p: t & eq.def p" @ "h: t \
-            l space ¿ space ε & eq.def l \
+            ℓ space ¿ space ε & eq.def ℓ \
       $
     ],
     grid.cell(colspan: 2, rewrites),
@@ -120,14 +123,13 @@
   box(width: 100%, stack(
     spacing: 20pt,
     subbox(caption: "Values")[$
-      v ::= p: t | l | {overline(α)} | #b[rec] {overline(α)}
+      v ::= x &| s | b | rho.alt | n | Rho | n | #b[null] | [t_0 t_1 … t_n] | {overline(α)} | #b[rec] {overline(α)} | (p: t)
     $],
     subbox(
       caption: "Evaluation Context",
       $
-        E[□] & := □ space t | (□).l | (□).dyn | (□)."s" | v.□ \
-             & | #b[if ] □ #b[ then ] t #b[ else ] t | #b[with ] □; t | #b[with ] v; □ \
-             & | #b[inherit ] (ρ) space □; | □ ast.op.o t | v ast.op.o t \
+        E[□] & := □ space t | (□).l | v.□ | #b[if] □ #b[ then ] t #b[ else ] t | #b[with ] □; t | #b[assert] □; t \
+        & #b[import] □; t | \${□} | □ ast.op.o t | v ast.op.o t \
       $,
     ),
     subbox(
@@ -155,8 +157,8 @@
           t &&&"if" ω space l ∉ oa \
           #rule_name("R-Has-Pos")&& {overline(α)}" ? "l & arrow.long "true" &&&"if" ω space l ∈ oa \
           #rule_name("R-Has-Neg")&& {overline(α)}" ? "l & arrow.long "false" &&&"if" ω space l ∉ oa \
-          #rule_name("R-Has-Path-Pos")&& {overline(α)}" ? "l.ρ & arrow.long "true" \&\& space (t " ? " ρ) &&&"if" ω space l ∈ oa \
-          #rule_name("R-Has-Path-Neg")&& {overline(α)}" ? "l.ρ & arrow.long "false" \&\& space (t " ? " ρ) &&&"if" ω space l ∉ oa\
+          #rule_name("R-Has-Path-Pos")&& {overline(α)}" ? "l.ρ & arrow.long "true" \&\& space (t " ? " ρ) &&&"if" ω space l = t ∈ oa \
+          #rule_name("R-Has-Path-Neg")&& {overline(α)}" ? "l.ρ & arrow.long "false" \&\& space (t " ? " ρ) &&&"if" ω space l = t ∉ oa\
           #rule_name("R-Array-Concat")&& [overline(t_1) ] ⧺ [overline(t_2)] & arrow.long [overline(t_1) space overline(t_2)] \
           #rule_name("R-Record-Concat")&& {oa_1} "//" {oa_2} & arrow.long {oa_1} union.arrow {oa_2 } \
           #rule_name("R-Import")&& #b[import] 𝜚; & arrow.long t &&&"if" 𝜚 arrow.squiggly t \
@@ -241,11 +243,11 @@ $
 #let types = box(
   width: 100%,
   [
-    #flexbox(
+    #align(center, flexbox(
       $#type_name("Type Variables") α ∈ cal(V)_t$,
       $#type_name("Labels") l ∈ cal(L)$,
       $#type_name("Basetypes") b ∈ cal(B)$,
-    )
+    ))
     $
       #type_name("Type")&& tau & ::= b | α | τ -> τ | ⦃ overline(p) ⦄^+ -> τ | ⦃ overline(p) ⦄^- -> τ \
       #type_name("Datatypes")&& &| {overline(l\: τ)} | [τ] | [overline(τ)] \
