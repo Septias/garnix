@@ -8,6 +8,7 @@
 #import "sections/connectives.typ"
 #import "sections/records.typ"
 #import "sections/modulesystem.typ"
+#import "sections/ts-discussion.typ"
 
 #show: template
 #set figure(placement: auto)
@@ -184,7 +185,7 @@ Finally, `abort` interacts with control flow by terminating evaluation unconditi
 = Syntax <syntax>
 #syntax <syntax-table>
 
-@syntax-table shows the syntax of nix with. The syntax of the literals follows the official regex formulas of the informal nix specification @nix-language-2-28. Records follow a standard notation with multiple `key = value;` assignments. In addition, records can be marked _recursive_ with the `rec` keyword and are non-recursive otherwise. Arrays behave similarly and can be  concatenated with the only unintuitive nix-specific distinction that a space is used as separator. Both datatypes are generally _immutable_, but there are concat operations that can be used to create new, bigger datatypes. Furthermore, records can be accessed using labels, strings and a dynamically computed expression. Label access is standard and access by string a common technique in real world programming languages to allow more characters in record keys. Records come equipped with a check operation $t space ? ρ$ that returns a boolean as a result and the or-operator to specify a default value in case the previous check turned out to be negative.
+@syntax-table shows the syntax of nix. The syntax of the literals follows the official regex formulas of the informal nix specification @nix-language-2-28. Records follow a standard notation with multiple `key = value;` assignments. In addition, records can be marked _recursive_ with the `rec` keyword and are non-recursive otherwise. Arrays behave similarly and can be  concatenated with the only unintuitive nix-specific distinction that a space is used as separator. Both datatypes are generally _immutable_, but there are concat operations that can be used to create new, bigger datatypes. Furthermore, records can be accessed using labels, strings and a dynamically computed expression. Label access is standard and access by string a common technique in real world programming languages to allow more characters in record keys. Records come equipped with a check operation $t space ? ρ$ that returns a boolean as a result and the or-operator to specify a default value in case the previous check turned out to be negative.
 
 Functions take one argument, a _pattern_. This pattern can be a single label or adhere to a record-structure, allowing multiple fields to be present, possibly with _default arguments_. This way, a function taking multiple arguments can be created without resorting to currying. These functions can be called with a record from which the "single arguments" are taken and form a neat syntax ambiguity where function definitions and their supplied arguments can be read as functions taking records or as elaborate functions with multiple arguments and possibly default arguments.
 
@@ -257,34 +258,11 @@ The final list of wanted properties is thus:
 #connectives.export
 #records.export
 #modulesystem.export
-
-
-== Typing approach
-#figure(
-  caption: "Types of nix.",
-  types,
-  placement: none,
-)<types>
-
-
-The types build on the calculi of Lionel Parreaux @simplesub @mlstruct @invalml and are summarized in @types. Literal terms inhabit their canonical atomic types (bool, string, path, float, int). We adopt the standard constructors for functions, records, and arrays, with the following refinement for records: a record type denotes a single mapping from a label to a type rather than an explicit enumeration of all fields. This aligns with conjunction-based accumulation of constraints on type variables during inference; see @records for details. For arrays, we provide two descriptions: a homogeneous array type and an accumulated variant that accommodates heterogeneously typed elements. To obtain a Boolean algebra of types, we admit the connectives $¬, ∨, ∧$ together with the top and bottom elements $⊤$ and $⊥$, which are, respectively, the greatest and least elements of the subtyping lattice.
-
-Finally, we introduce a dedicated type of patterns. Although patterns mirror records syntactically, their type is cumulative across fields because introduction and elimination occur atomically at the level of the whole pattern; in contrast, each field selection `record.field` in a record yields independent constraints. We annotate openness with a superscript $b$, indicating whether a pattern is open or closed.
-
-#basic_typing_rules <typingrules>
-@typingrules shows the basic typing rules for nix. They are mostly standart but two var rules are needed to account for monomorphic and polymorphic types. Four list typing rules  account for \_ and \_ array types and their respective concatenation. The operator typing rules are relegated to @operator-typingrules.
-
-#figure(caption: "Record typing rules", record_typing_rules) <recordrules>
-
-The record typing rules are given in @recordrules. T-Rcd and T-Proj are entirely standart and the T-Or-Neg and T-or-Pos handle the or-operator if the lookup succeedes or not. This operator works on explicit records but already fails on typevariables because of the generic subsumption rule. It is then possible to "add"? fields using subsumption and false trigger the wrong branch?. THe concat operation usese the same right-biased union as in the reduction semantic on types. A lacks check should be added? T-check trivially returns a bool but if we have singleton types for true and false, this could even be used in branches. The final T-Acc-dyn rule lookups a label value dynamicall and uses first-class-labels.
-
-#figure(caption: "Function typing rules", function_typing_rules) <functionrules>
-
-@functionrules shows the typing rules for functions. T-Abs1 is the standartfunction typing rule. The following two typing rules handle ope and closed patterns respectively. The three application rules are straigt forward, but we want to note that T-App3 does not allow subsumption because open patterns... Actually this need to be domain checks.
+#ts-discussion.export
 
 
 
-== Conclusion, Comparison and Outlook
+= Conclusion, Comparison and Outlook
 We have shown the nix language and its quirks by example and formalization. Especially the impure language constructs, the expressive record calculus and the requirements of the environment make type inference a hard task that can not be solved by contemporary type systems. We discussed possible type inference approaches like occurrence typing, gradual typing, semantic subtyping, algebraic subtyping, and a coup of record calculi in regards to the nix programming language. While many techniques exist to type subsets of the nix language, no system is currently able to type nix in its entirety.
 
 Further work can go in many directions, choosing a subset of Nix' features to form a sound typesystem. Records are an important feature of the language and first class labels as well as record concatenation is commonly used in the nix ecosystem. Typesystems that provides these features in combination with type connectives, polymorphism or occurrence typing are interesting open research questions. Especially a formulation using row variables seems to be applicable to the record calculus and nix language constructs.
@@ -294,7 +272,7 @@ The development of function patterns, with-typing and occurence typing seems to 
 The reduction semantic is based upon the works of Broekhoff and Krebbers @verified but extends their work with more syntax features, namely dynamic binding, dynamic lookups and string interpolation besides some smaller changes. We disregard their closer model of terminating and non-terminating computation to give a simpler presentation of reduction rules. Their work also examines the dynamic eval construct of javascript and other dynamic languages but does not apply these developments because Nix does not provide a dynamic eval primitive. We have seen @builtins that is is possible to mimic the eval construct behaviour using the Nix builtins so adapting their semantic for this constructed version of eval remains an open task.
 
 
-== Acknowledgements
+= Acknowledgements
 Finally, I would like to thank Peter Thiemann and Taro Sekiyama for their continuous supervision of these efforts.
 
 
@@ -321,7 +299,7 @@ Finally, I would like to thank Peter Thiemann and Taro Sekiyama for their contin
 = Nix Module System Types <module-types>
 #module_types
 
-= Typesystem comparison <ts-comp>
+= Typesystem Comparison <ts-comp>
 #figure(
   caption: "This table shows the research lines of Castagna, Parreax and Dolan together with the typesystem features their work (across multiple papers) covers",
   ts-compare,
