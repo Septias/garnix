@@ -7,7 +7,6 @@
 #import "sections/occurrence.typ"
 #import "sections/connectives.typ"
 #import "sections/records.typ"
-#import "sections/first-class-labels.typ"
 #import "sections/modulesystem.typ"
 
 #show: template
@@ -257,7 +256,6 @@ The final list of wanted properties is thus:
 #occurrence.export
 #connectives.export
 #records.export
-#first-class-labels.export
 #modulesystem.export
 
 
