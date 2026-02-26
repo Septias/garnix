@@ -99,9 +99,6 @@ $t_1 <t_2 <- t_3> | "case" (t_1 ? τ) t_2 : t_3$
   flexbox(
     $#type_name("Type Variables") α ∈ cal(V)_t$,
     $#type_name("Labels") l_c ∈ cal(L)$,
-    $#type_name("Rows") r ∈ cal(R)$,
-    $#type_name("Basetypes") b ∈ cal(B)$, //#h(1cm) c : b_c #h(1cm) b_c (c) -> cal(T)$,
-    $L ∈ cal(P)_"fin" (cal(L))$,
   ),
   $
          #type_name("Kinds") && κ & ::= ∗ | κ_1 → κ_2 | "Row" | "Label" \

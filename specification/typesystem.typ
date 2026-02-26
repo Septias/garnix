@@ -397,7 +397,7 @@ $
 #let occurrence_typing = figure(caption: "Occurrence Typing", flexbox(
   derive(
     "",
-    $Γ ⊢ t: "true" => Ξ Γ, Ξ ⊢ t_1 : τ$,
+    ($Γ ⊢ t: "true" => Ξ$, $Γ, Ξ ⊢ t_1 : τ$),
     $Γ ⊢ #b[if] t_1 #b[then] t_2 #b[else] t_3: τ$,
   ),
   derive("", $$, $Γ, Ξ ⊢ "isBool"(τ) => Ξ · (τ: bool)$),
