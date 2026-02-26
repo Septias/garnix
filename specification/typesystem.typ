@@ -238,27 +238,25 @@ $
 
 
 == Types
-#let types = box(width: 100%, grid(
-  columns: 1fr,
-  align: left,
-  grid.cell(rowspan: 2, subbox(
-    caption: "Types",
+#let types = box(
+  width: 100%,
+  [
+    #flexbox(
+      $#type_name("Type Variables") α ∈ cal(V)_t$,
+      $#type_name("Labels") l ∈ cal(L)$,
+      $#type_name("Basetypes") b ∈ cal(B)$,
+    )
     $
-      #type_name("Type")&& tau & ::= τ -> τ | ⦃ oi(p) ⦄^b -> τ| {l: τ} | [τ] | [overline(τ)] | alpha \
-      #type_name("Groundtypes")&& & | "bool" | "string" | "path" | "float" | "int"\
+      #type_name("Type")&& tau & ::= b | α | τ -> τ | ⦃ overline(p) ⦄^+ -> τ | ⦃ overline(p) ⦄^- -> τ \
+      #type_name("Datatypes")&& &| {overline(l\: τ)} | [τ] | [overline(τ)] \
       #type_name("Connectives")&& & | ⊥ | top | τ ∨ τ | τ ∧ τ | ¬τ \
-      #type_name("Pattern Element")&& p & := τ | τ^? \
-      #type_name("Polymorphic type")&& σ & := ∀Xi. τ \
+      #type_name("Pattern Element")&& p & := τ | τ^τ \
+      // #type_name("Polymorphic type")&& σ & := ∀Xi. τ \
       // #type_name("Mode")&& diamond.small & := + | -\
-    $,
-  )),
-  subbox(
-    caption: "Contexts",
+      #type_name("Typing Context")&& Γ & ::= ε | Γ · (x : τ) \
     $
-      #type_name("Typing Context") Γ & ::= ε | Γ · (l : τ) | Γ · (l : σ) \
-    $,
-  ),
-))
+  ],
+)
 
 #types
 
@@ -269,62 +267,56 @@ $
   caption: "Basic Nix typing rules.",
   box(width: 100%, [
     #flexbox(
-      derive("T-Base", (), $Ξ, Γ tack c: b_c$),
-      derive("T-Var1", ($Γ(x) = τ$,), $Ξ, Γ tack x: τ$),
-      derive(
-        "T-Var2",
-        ($Γ(x) = σ$, $Ξ tack σ ≤^∀ ∀ε.τ$),
-        $Ξ, Γ tack x: τ[arrow(α) \\ arrow(τ)]$,
-      ),
+      derive("T-Base", (), $Γ ⊢ c: b_c$),
+      derive("T-Var", ($Γ(x) = τ$,), $Γ ⊢ x: τ$),
       derive(
         "T-Abs",
-        ($Ξ, Γ · (x: τ_1) tack t: τ_2$,),
-        $Ξ, Γ tack (x: t): τ_1 → τ_2$,
+        ($Γ · (x: τ_1) ⊢ t: τ_2$,),
+        $Γ ⊢ (x: t): τ_1 → τ_2$,
       ),
       derive(
         "T-App",
-        ($Ξ, Γ tack t_1: τ_1 → τ_2$, $Ξ, Γ tack t_2: τ_1$),
-        $Ξ,Γ tack t_1 t_2: τ_2$,
+        ($Γ ⊢ t_1: τ_1 → τ_2$, $Γ ⊢ t_2: τ_1$),
+        $⊢ t_1 t_2: τ_2$,
       ),
       derive(
         "T-Sub",
-        ($Ξ, Γ tack t: τ_1$, $Ξ, Γ tack τ_1 <= τ_2$),
-        $Ξ, Γ tack t: τ_2$,
+        ($Γ ⊢ t: τ_1$, $Γ ⊢ τ_1 <= τ_2$),
+        $Γ ⊢ t: τ_2$,
       ),
       derive(
         "T-If",
-        ($Γ tack t_1: "bool"$, $Γ tack t_2: τ$, $Γ tack t_3: τ$),
+        ($Γ ⊢ t_1: "bool"$, $Γ ⊢ t_2: τ$, $Γ ⊢ t_3: τ$),
         $ #b[if] t_1 #b[then] t_2 #b[else] t_3: τ $,
       ),
       derive(
         "T-Assert",
-        ($Γ tack t_1: "bool"$, $Γ tack t_2: τ_2$),
-        $Γ tack #b[assert] t_1; t_2: τ_2$,
+        ($Γ ⊢ t_1: "bool"$, $Γ ⊢ t_2: τ_2$),
+        $Γ ⊢ #b[assert] t_1; t_2: τ_2$,
       ),
       derive(
         "T-Lst-Hom",
-        ($Ξ, Γ tack t_0: τ$, "...", $Ξ, Γ tack t_n: τ$),
-        $Ξ, Γ tack [ " " t_0 " " t_1 " " ... " " t_n " "]: [τ]$,
+        ($Γ ⊢ t_0: τ$, "...", $Γ ⊢ t_n: τ$),
+        $Γ ⊢ [ " " t_0 " " t_1 " " ... " " t_n " "]: [τ]$,
       ),
       derive(
         "T-Lst-Agg",
         (
-          $Ξ, Γ tack t_0: τ_0$,
+          $Γ ⊢ t_0: τ_0$,
           "...",
-          $Ξ, Γ tack t_n: τ_n$,
-          $∃ i, j. τ_i != τ_j$,
+          $Γ ⊢ t_n: τ_n$,
         ),
-        $Ξ, Γ tack [space t_0 space t_1 space ... " " t_n] : [ τ_0 space τ_1 space ... space τ_n]$,
+        $Γ ⊢ [space t_0 space t_1 space ... " " t_n] : [ τ_0 space τ_1 space ... space τ_n]$,
       ),
       derive(
         "T-List-Concat-Hom",
-        ($Ξ, Γ tack a: "[τ]"$, $Ξ, Γ tack b: "[τ]"$),
-        $Ξ, Γ tack a "⧺" b: "[τ]"$,
+        ($Γ ⊢ a: "[τ]"$, $Γ ⊢ b: "[τ]"$),
+        $Γ ⊢ a "⧺" b: "[τ]"$,
       ),
       derive(
         "T-List-Concat-Multi",
-        ($Ξ, Γ tack a: [overline(τ_1)]$, $Ξ, Γ tack b: [overline(τ_2)]$),
-        $Ξ, Γ tack a "⧺" b: [overline(τ_1) space overline(τ_2)]$,
+        ($Γ ⊢ a: [overline(τ_1)]$, $Γ ⊢ b: [overline(τ_2)]$),
+        $Γ ⊢ a "⧺" b: [overline(τ_1) space overline(τ_2)]$,
       ),
     )
   ]),
@@ -340,12 +332,12 @@ $
   ),
   derive("T-Proj", ($ Ξ, Γ ⊢ t: {l: τ} $,), $Ξ, Γ ⊢ t.l: τ$),
   derive(
-    "T-Or-Neg",
+    "T-Or-Pos",
     ($Ξ, Γ ⊢ t_1: {l: τ_1}$, $l ∈ τ_1$, $Ξ, Γ ⊢ t_2: τ_2$),
     $Ξ, Γ ⊢ (t_1).l #b[or] t_2: τ_1$,
   ),
   derive(
-    "T-Or-Pos",
+    "T-Or-Neg",
     ($Ξ, Γ ⊢ t_1: τ_1$, $l ∉ τ_1$, $Ξ, Γ ⊢ t_2: τ_2$),
     $Ξ, Γ ⊢ (t_1).l #b[or] t_2: τ_2$,
   ),
@@ -356,7 +348,7 @@ $
   ),
   derive(
     "T-Check",
-    ($Ξ, Γ ⊢ e: {..}$,),
+    ($Ξ, Γ ⊢ e ≤ {}$,),
     $Ξ, Γ ⊢ e #b[?] l: "bool"$,
   ),
   derive(
@@ -396,8 +388,8 @@ $
   ),
 )
 
-#let with_inherit = figure(caption: "Extra construct typing rules", flexbox(
-  derive("", $Γ ⊢ t₂ ≤ {} Γ, Ξ · t₂ ⊢ t₂ : τ$, $Γ ⊢ with t₁; t₂ : τ$),
+#let with_inherit = figure(caption: "Extra construct typing rules.", flexbox(
+  derive("", ($Γ ⊢ t₂ ≤ {}$, $Γ,Ξ · t₂ ⊢ t₂ : τ$), $Γ ⊢ with t₁; t₂ : τ$),
   derive("", $x ∈ Γ$, $Γ ⊢ { inherit x; } -> { x = Γ(x);}$),
   derive("", $x ∈ Γ$, $Γ ⊢ { inherit (ρ) x; } -> { x = "lookup"(ρ, x)}$),
 ))
@@ -414,50 +406,35 @@ $
   derive("", $$, $Γ, Ξ ⊢ !t_2 => Ξ · (t: ¬Ξ(τ))$),
 ))
 
-#let operator_typing_rules = figure(caption: "Operator typing rules.", flexbox(
-  derive(
-    "T-Op-Arith",
-    ($Γ tack t_1: num$, $Γ tack t_2: num$, $"op" ϵ space [-, +, \/, *]$),
-    $Γ tack t_1 "op" t_2: num$,
-  ),
-  derive(
-    "T-Op-Logic",
-    ($Γ tack t_1: bool$, $Γ tack t_2: bool$, $"op" ϵ space [->, ∨, ∧]$),
-    $Γ tack t_1 "op" t_2: bool$,
-  ),
-  derive(
-    "T-Add-Num",
-    ($Γ tack t_1: num$, $Γ tack t_2: num$),
-    $Γ tack t_1 + t_2: num$,
-  ),
-  derive(
-    "T-Add-Str",
-    ($Γ tack t_1: str$, $Γ tack t_2: str union.sq path$),
-    $Γ tack t_1 + t_2: str$,
-  ),
-  derive(
-    "T-Add-Path",
-    ($Γ tack t_1: path$, $Γ tack t_2: path union.sq str$),
-    $Γ tack t_1 + t_2: path$,
-  ),
-  derive(
-    "T-Compare",
-    (
-      $Γ tack t_1: τ_1$,
-      $Γ tack t_2: τ_2$,
-      $τ_1 eq.triple τ_2$,
-      $"op" in [<, <=, >=, >, ==, !=]$,
-    ),
-    $Γ tack t_1 "op" t_2: bool$,
-  ),
-  derive("T-Negate", ($Γ tack e: bool$,), $Γ tack !e: bool$),
-  derive("T-Check", ($Γ tack e: {l: τ}$,), $Γ tack e ? l: bool$),
-  derive(
-    "T-Or",
-    ($Γ tack t_1: {l: τ_1}$, $Γ tack t_2: τ_2$),
-    $Γ tack t_1.l "or" t_2: τ_1 union.sq τ_2$,
-  ),
-))
+#let operator_typing_rules = figure(
+  caption: "Operator typing rules. Not including Record operator typing rules.",
+  [
+    $
+      "add": & (str → (str ∨ path) → str) \
+             & ∧ (path → (str ∨ path) → path) \
+             & ∧ (int → int → int) \
+             & ∧ (num → num → float)
+    $
+    #flexbox(
+      derive(
+        "T-Op-Logic",
+        ($Γ tack t_1: bool$, $Γ tack t_2: bool$, $"op" ϵ space [->, ∨, ∧]$),
+        $Γ tack t_1 "op" t_2: bool$,
+      ),
+      derive(
+        "T-Compare",
+        (
+          $Γ tack t_1: τ_1$,
+          $Γ tack t_2: τ_2$,
+          $τ_1 eq.triple τ_2$,
+          $"op" in [<, <=, >=, >, ==, !=]$,
+        ),
+        $Γ tack t_1 "op" t_2: bool$,
+      ),
+      derive("T-Negate", $Γ tack e: bool$, $Γ tack !e: bool$),
+    )
+  ],
+)
 #operator_typing_rules
 
 
