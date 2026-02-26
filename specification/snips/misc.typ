@@ -57,4 +57,17 @@ Since ${oi(e_i)}$ strictly subsumes ${oi(l_i)}$ due to its inner structure, rule
 We diverge from this representation quite a bit. First and foremost, NixLang @verified follows the first semantic of Dolan @memory_to_software @dolstra_phd and annotates every record field as recursive or not. The reason being a subtlety of the inherit statement. Both systems handle inherit by adding rewriting rules, that turn expressions of the form `inherit (a) x;` into something like `x = a.x;` in records or let-bindings. When used in conjunction with recursive records, this leads to unwanted recursion. The statement `inherit x;` will be desugared into `x = x;`
 
 
+== Can we check whether a variable is shadowed?
+- For with statements no
+- For let-staments yes?
+- Ways to shadow a variable:
+
+
+Broekhoff et al. @verified put substitutions into the syntactic domain in a technique called _deferred substitutions_. Their prime example is `with g {}; a + b` for why we don't even know whether a term is closed or not. In this case, variables can be added to the scope dynamically, meaning for `with {x = 2;}; with g; x` we don't know whether x's value is 2 or overwritten with any other value from g. An interpreter will thus store the binding x := 2; on the variable x, until it actually has to reduce x. For the example program, this means x will stay variable until g is fully resolved giving it the chance to overwrite the value of x. It is also possible to extend their approach to dynamic variables `${e}`. Where the lookup-name is not known until e is fully resolved. By adding the possible bindings to such expressions as in ${e}_(overline(d))$ will first resolve the variable and then look it up in the deferred substitution. For the nix language, this same substitution mechanism is handy because it can be used to implement the weak binding of width-constructs.
+
+Since nix is lexically scoped, it would also be possible to track the opened record with in a separate context, lookup variables normally (as they are stronger binding anyways) and only if a variable is undefined, we check the contexts.
+
+
+
+
 #bib

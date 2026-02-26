@@ -8,3 +8,7 @@
 - Ad-hoc poly: operators, reflection
 - ml-typinference: Big structure
 
+
+== Binding types
+Dynamic bindig: `${e} = x` \<- this one is more tricky, because it changes the context
+Dynamic vars: `t = ${e}` \<- this one is easier because its just a lookup
