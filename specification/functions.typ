@@ -81,11 +81,11 @@
 )
 
 // Logical unit in a bigger figure
-#let subbox(caption: "", ..body) = stack(
+#let subbox(caption: "", ..body) = box(width: 100%, stack(
   spacing: 10pt,
   align(left, text(weight: "bold", smallcaps(caption))),
   ..body,
-)
+))
 
 // Rules underlying one syntax
 #let subrules(caption: math, ..body) = block(breakable: true, stack(
