@@ -11,7 +11,7 @@ Kommentare zum Dokument:
 * [x] (die Semantik würde ich nicht call-by-need machen, weil das technisch aufwändig ist. Stattdessen call-by-name)
 * [x] Figure 1 gibt es mehrmals (S.10); die wird auch nicht im Text erwähnt
 * [x] Beim Evaluation Context musst du dich entscheiden, ob er rekursiv sein soll oder nicht. Wenn nicht, muss die erste Alternative \Box weg. Ansonsten musst du alle anderen Boxen durch E ersetzen.
-* [ ] R-Final verstehe ich nicht. Woher kommt das Some (k e)?
+* [x] R-Final verstehe ich nicht. Woher kommt das Some (k e)?
 * [ ] was machen unfold und indirects? —> Hab's gefunden! Beispiele wären hilfreich.
 * [x] wieso explizite Indizes in R-Let-In und sonst nicht?
 * [x] woher das t und das i in R-Lookup?

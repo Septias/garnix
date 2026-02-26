@@ -21,7 +21,7 @@ Actually: Do we want to add typeannos?
 - We might actually have to put them in (not clear at the moment!)
 
 
-== Writing Style improvements:
+== Writing style improvements:
 - Sentences don't follow the flow you use when speaking
 - No exaggeration, no personal feelings
 - "We want this becauso of that"

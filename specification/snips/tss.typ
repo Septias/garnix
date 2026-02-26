@@ -13,7 +13,7 @@
     $
     #align(left, text(weight: "bold", smallcaps("Syntax & Types")))
     #flexbox(
-      $#type_name("Type variables") α ∈ cal(V)_t$,
+      $#type_name("Type Variables") α ∈ cal(V)_t$,
       $#type_name("Field Type variables") θ ∈ cal(V)_f$,
       $#type_name("Row Type variables") ρ ∈ cal(V)_r$,
       $#type_name("Labels") l ∈ cal(L)$,
