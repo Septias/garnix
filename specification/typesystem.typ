@@ -1,5 +1,6 @@
 #import "functions.typ": *
 #set page(height: auto)
+#show: template
 
 
 == Syntax
@@ -244,7 +245,7 @@ $
   width: 100%,
   [
     #align(center, flexbox(
-      $#type_name("Type Variables") α ∈ cal(V)_t$,
+      $#type_name("Type Variables") α ∈ cal(A)$,
       $#type_name("Labels") l ∈ cal(L)$,
       $#type_name("Basetypes") b ∈ cal(B)$,
     ))
@@ -253,7 +254,7 @@ $
       #type_name("Datatypes")&& &| {overline(l\: τ)} | [τ] | [overline(τ)] \
       #type_name("Connectives")&& & | ⊥ | top | τ ∨ τ | τ ∧ τ | ¬τ \
       #type_name("Pattern Element")&& p & := τ | τ^τ \
-      // #type_name("Polymorphic type")&& σ & := ∀Xi. τ \
+      #type_name("Polymorphic type")&& σ & := ∀Xi. τ \
       // #type_name("Mode")&& diamond.small & := + | -\
       #type_name("Typing Context")&& Γ & ::= ε | Γ · (x : τ) \
     $
@@ -329,83 +330,109 @@ $
 #let record_typing_rules = flexbox(
   derive(
     "T-Rcd",
-    ($Ξ, Γ ⊢ t_0: τ_0$, "...", $Ξ, Γ ⊢ t_n: τ_n$),
-    $Ξ, Γ ⊢ {oa}: {oa}$,
+    ($Γ ⊢ t_1: ⦅l⦆$, $t_2 : τ$),
+    $Γ ⊢ {t_1 = t_2;}: {l: τ}$,
   ),
-  derive("T-Proj", ($ Ξ, Γ ⊢ t: {l: τ} $,), $Ξ, Γ ⊢ t.l: τ$),
+  derive("T-Proj", ($ Γ ⊢ t: {l: τ} $,), $Γ ⊢ t.l: τ$),
   derive(
     "T-Or-Pos",
-    ($Ξ, Γ ⊢ t_1: {l: τ_1}$, $l ∈ τ_1$, $Ξ, Γ ⊢ t_2: τ_2$),
-    $Ξ, Γ ⊢ (t_1).l #b[or] t_2: τ_1$,
+    ($Γ ⊢ t_1: {l: τ_1}$, $l ∈ τ_1$, $Γ ⊢ t_2: τ_2$),
+    $Γ ⊢ (t_1).l #b[or] t_2: τ_1$,
   ),
   derive(
     "T-Or-Neg",
-    ($Ξ, Γ ⊢ t_1: τ_1$, $l ∉ τ_1$, $Ξ, Γ ⊢ t_2: τ_2$),
-    $Ξ, Γ ⊢ (t_1).l #b[or] t_2: τ_2$,
+    ($Γ ⊢ t_1: τ_1$, $l ∉ τ_1$, $Γ ⊢ t_2: τ_2$),
+    $Γ ⊢ (t_1).l #b[or] t_2: τ_2$,
   ),
   derive(
     "T-Rec-Concat",
-    ($Ξ, Γ ⊢ a: { oa }$, $Ξ, Γ ⊢ b: { oa' }$),
-    $Ξ, Γ ⊢ a "//" b: {oa} union.arrow {oa}$,
+    ($Γ ⊢ a: { ρ }$, $Γ ⊢ b: { ρ'}$),
+    $Γ ⊢ a "//" b: {ρ | ρ'}$,
   ),
   derive(
     "T-Check",
-    ($Ξ, Γ ⊢ e ≤ {}$,),
-    $Ξ, Γ ⊢ e #b[?] l: "bool"$,
+    ($Γ ⊢ e ≤ {}$, $t : ⦅l⦆$),
+    $Γ ⊢ e #b[?] t: "bool"$,
   ),
   derive(
     "T-Acc-dyn",
-    ($Γ ⊢ a: { l: τ }$, $t : "Lab" l$),
+    ($Γ ⊢ a: { l: τ }$, $Γ ⊢ t : ⦅l⦆$),
     $Γ ⊢ a.\${t} : τ$,
   ),
 )
 #figure(caption: "Record typing rules", record_typing_rules)
 
 #let function_typing_rules = flexbox(
-  derive("T-Abs1", $Γ, x: τ_1 ⊢ e : τ_2$, $Γ ⊢ (x: e) : τ_1 → τ_2$),
+  derive("T-Abs1", $Γ, x: τ_1 ⊢ t : τ_2$, $Γ ⊢ (x: t) : τ_1 → τ_2$),
   derive(
     "T-Abs2",
-    $Γ, overline(e_i : τ_i) ⊢ e: τ_2$,
-    $Γ ⊢ ({oa}: e) : {α}^- → τ_2$,
+    $Γ, overline(e_i : τ_i) ⊢ t: τ_2$,
+    $Γ ⊢ ({overline(e)}: t) : ⦃α⦄^- → τ_2$,
   ),
   derive(
     "T-Abs3",
-    $Γ, overline(e_i : τ_i) ⊢ e: τ_2$,
-    $Γ ⊢ ({oa,...}: e) : {α}^+ → τ_2$,
+    $Γ, overline(e_i : τ_i) ⊢ t: τ_2$,
+    $Γ ⊢ ({overline(e),...}: t) : ⦃α⦄^+ → τ_2$,
   ),
   derive(
     "T-App1",
-    ($Γ ⊢ e_1: τ_1 → τ_2$, $Γ ⊢ e_2: τ_3 ≤ τ_1$),
-    $Γ ⊢ (x: e_1) e_2: τ_2$,
+    ($Γ ⊢ t_1: τ_1 → τ_2$, $Γ ⊢ t_2: τ_3 ≤ τ_1$),
+    $Γ ⊢ (x: t_1) t_2: τ_2$,
   ),
   derive(
     "T-App2",
-    ($Γ ⊢ e_1: {overline(α)}^- → τ_2$, $Γ ⊢ e_2: τ_3 ≤ τ_1$),
-    $Γ ⊢ (x: e_1) e_2: τ_2$,
+    ($Γ ⊢ t_1: {overline(α)}^- → τ_2$, $Γ ⊢ t_2: τ_3 ≤ τ_1$),
+    $Γ ⊢ (x: t_1) t_2: τ_2$,
   ),
   derive(
     "T-App3",
-    ($Γ ⊢ e_1: {overline(α)}^+ → τ_2$, $Γ ⊢ e_2: τ_1$),
-    $Γ ⊢ (x: e_1) e_2: τ_2$,
+    ($Γ ⊢ t_1: {overline(α)}^+ → τ_2$, $Γ ⊢ t_2: τ_1$),
+    $Γ ⊢ (x: t_1) t_2: τ_2$,
   ),
 )
 
-#let with_inherit = figure(caption: "Extra construct typing rules.", flexbox(
-  derive("", ($Γ ⊢ t₂ ≤ {}$, $Γ,Ξ · t₂ ⊢ t₂ : τ$), $Γ ⊢ with t₁; t₂ : τ$),
-  derive("", $x ∈ Γ$, $Γ ⊢ { inherit x; } -> { x = Γ(x);}$),
-  derive("", $x ∈ Γ$, $Γ ⊢ { inherit (ρ) x; } -> { x = "lookup"(ρ, x)}$),
-))
+#let other_constructs = figure(
+  caption: "Extra constructs typing rules.",
+  flexbox(
+    derive(
+      "T-with",
+      ($Γ ⊢ t₂ ≤ {}$, $Γ,Ξ · t₂ ⊢ t₂ : τ$),
+      $Γ ⊢ with t₁; t₂ : τ$,
+    ),
+    derive("R-inherit", $x ∈ Γ$, $Γ ⊢ { inherit x; } -> { x = Γ(x);}$),
+    derive(
+      "R-inherit-path",
+      $x ∈ Γ$,
+      $Γ ⊢ { inherit (ρ) x; } -> { x = "lookup"(ρ, x)}$,
+    ),
+    derive("T-imort", ($𝜚 arrow.squiggly t$, $Γ ⊢ t: τ$), $Γ ⊢ #b[import]: τ$),
+  ),
+)
 
-#let occurrence_typing = figure(caption: "Occurrence Typing", flexbox(
+#let occurrence_typing = figure(caption: "Occurrence Typing.", flexbox(
   derive(
-    "",
+    "T-Cond-pos",
     ($Γ ⊢ t: "true" => Ξ$, $Γ, Ξ ⊢ t_1 : τ$),
     $Γ ⊢ #b[if] t_1 #b[then] t_2 #b[else] t_3: τ$,
   ),
-  derive("", $$, $Γ, Ξ ⊢ "isBool"(τ) => Ξ · (τ: bool)$),
-  derive("", $$, $Γ, Ξ ⊢ "isNum"(t) => Ξ · (t: num)$),
-  derive("", $$, $Γ, Ξ ⊢ t_1 && t_2 => Ξ · (t: num)$),
-  derive("", $$, $Γ, Ξ ⊢ !t_2 => Ξ · (t: ¬Ξ(τ))$),
+  derive(
+    "T-Cond-neg",
+    ($Γ ⊢ t: "false" => Ξ$, $Γ, ¬Ξ ⊢ t_1 : τ$),
+    $Γ ⊢ #b[if] t_1 #b[then] t_2 #b[else] t_3: τ$,
+  ),
+  derive("T-Ground", $$, $Γ, Ξ ⊢ "is"_b (t) => Ξ · (t: b)$),
+  derive("T-Check", $$, $Γ, Ξ ⊢ t #b[?] l => Ξ · (t: {l: ?})$),
+  derive(
+    "T-Or",
+    ($Γ, Ξ ⊢ t_1 => Ξ'$, $Γ, Ξ ⊢ t_2 => Ξ''$),
+    $Γ, Ξ ⊢ t_1 space || space t_2 => Ξ$,
+  ),
+  derive(
+    "T-And",
+    ($Γ, Ξ ⊢ t_1 => Ξ'$, $Γ, Ξ ⊢ t_2 => Ξ''$),
+    $Γ, Ξ ⊢ t_1 space \&\& space t_2 => Ξ · Ξ' · Ξ''$,
+  ),
+  derive("T-Neg", $Γ, Ξ ⊢ t_2 => Ξ$, $Γ, Ξ ⊢ !t_2 => Ξ · ¬Ξ$),
 ))
 
 #let operator_typing_rules = figure(
