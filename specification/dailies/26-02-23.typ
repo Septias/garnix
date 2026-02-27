@@ -1,4 +1,6 @@
 
+./26-02-26.typ
+
 == To: Description
 - My problem is, it now sounds to unrelated to nix due to the "academic" tone.
 - Previous texts sound to casual
