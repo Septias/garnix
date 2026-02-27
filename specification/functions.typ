@@ -42,6 +42,7 @@
 #let float = "float"
 #let num = "(float ∨ int)"
 #let dyn = $\${t}$
+#let dom = "dom"
 #let rec = b[rec]
 #let nonrec = b[nonrec]
 #let abs = b[abs]
