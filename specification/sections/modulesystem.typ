@@ -2,7 +2,9 @@
 
 #let export = [
   == Nix' Module System <modulesystem>
-  The Nix module system is a framework in the Nixpkgs standard library that offers a domain‑specific language for declarative configuration. Types in this DSL are enforced at evaluation time: option values are checked as configurations are instantiated, providing early feedback about shape and well‑formedness. The catalogue of types is open and user‑extensible.
+  The Nix module system is a framework in the Nixpkgs standard library that offers a domain‑specific language for declarative configuration. Types in this DSL are enforced at evaluation time: option values are checked as configurations are instantiated, providing early feedback about shape and well‑formedness. The catalogue of types is open and extensible by simply creating a PR on the nixpkgs repository.
+
+  @module-example shows a simple module example with two modules. The option-fields form the "backend" and describe what things can be configured. The config-fields are use to realize the system state from the user-given configuration. We want to defer the reader to https://nixos.wiki/wiki/NixOS_modules for a full explanation.
 
   Each type definition comprises a human‑readable description and name, together with two operational components: a check function and a merge function. The check function validates candidate values—primarily via Nix’s reflective predicates—while the merge function reconciles option values contributed by multiple modules. Because configurations are hierarchical and cross‑cutting, values for a given option may be introduced or refined at many points in the module graph (e.g., a WireGuard module may enable and specialize NetworkManager). Robust merging is therefore a first‑class design requirement.
 
@@ -12,34 +14,37 @@
 
   Higher‑order constructors exist for enumerations, options, sum types, lists, and attribute sets (records). Their expressiveness is constrained by reliance on runtime reflection; there is no global type inference, and annotations primarily enforce local properties on declared fields.
 
-  Consequently, it is difficult to distill from this ad‑hoc collection a sound, conventional static type system. One could imagine augmenting it with qualified or refinement types to state richer invariants, but that trajectory approaches verification rather than lightweight validation. A more immediately useful direction is to ascribe precise types to the check functions themselves and, where possible, stage their application statically so configuration errors surface earlier. Whether a type system for the Nix source language can predict such applications with sufficient precision to be broadly valuable remains an open question.
+  Consequently, it is difficult to distill from this ad‑hoc collection a sound, conventional static type system. One could imagine augmenting it with qualified or refinement types to state richer invariants, but that trajectory approaches _verification_ rather than lightweight _validation_. A more immediately useful direction is to ascribe precise types to the check functions themselves and, where possible, stage their application statically so configuration errors surface earlier. Whether a type system for the Nix source language can predict such applications with sufficient precision to be broadly valuable remains an open question.
 
 
-  #figure(caption: "Nix module system example", rect(inset: 10pt, ```nix
-  let
-    systemModule = { lib, config, ... }: {
-      options.toplevel = lib.mkOption {
-        type = lib.types.str;
+  #figure(
+    caption: [Nix module system example. #link("https://nixos.wiki/wiki/NixOS_modules")],
+    rect(inset: 10pt, ```nix
+    let
+      systemModule = { lib, config, ... }: {
+        options.toplevel = lib.mkOption {
+          type = lib.types.str;
+        };
+
+        options.enableFoo = lib.mkOption {
+          type = lib.types.bool;
+          default = false;
+        };
+
+        config.toplevel = ''
+          Is foo enabled? ${lib.boolToString config.enableFoo}
+        '';
       };
 
-      options.enableFoo = lib.mkOption {
-        type = lib.types.bool;
-        default = false;
+      userModule = {
+        enableFoo = true;
       };
 
-      config.toplevel = ''
-        Is foo enabled? ${lib.boolToString config.enableFoo}
-      '';
-    };
-
-    userModule = {
-      enableFoo = true;
-    };
-
-  in (import <nixpkgs/lib>).evalModules {
-    modules = [ systemModule userModule ];
-  }
-  ```)) <module-exapmle>
+    in (import <nixpkgs/lib>).evalModules {
+      modules = [ systemModule userModule ];
+    }
+    ```),
+  ) <module-example>
 ]
 
 https://github.com/NixOS/nixpkgs/blob/master/lib/types.nix

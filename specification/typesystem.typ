@@ -39,7 +39,7 @@
 
 #let general = subbox(caption: "Terms")[
   $
-    t ::= x &| s | b | rho.alt | n | Rho | n | #b[null] \
+    t ::= x &| s | b | rho.alt | n | Rho | u | #b[null] \
     #type_name("Record") &| {oa} | #b[rec] {oa} \
     #type_name("Array") &| [ space t_0 space t_1 space ... space t_n space] \
     #type_name("Function") &| p "@ "h : t #v(2em) #type_name("where") h ::= ℓ | ε \
@@ -57,7 +57,7 @@
     #type_name("Logic") & && | t -> t | ! t | t "&&" t \
     #type_name("Comparison") & && | t < t | t <= t | t == t \
     & && | t "!=" t | t > t | t >= t \
-    #type_name("Pipe") & && | #b[<|] | #b[|>] \
+    #type_name("Pipe") & && | t #b[<|] t| t #b[|>] t \
     #type_name("Record") & && | t space ? ρ | t.ρ #b[or] t | t \/\/ t | t.l | t.i | t.s \
     #type_name("Array") & && | t ⧺ t \
   $
@@ -144,7 +144,7 @@
           #rule_name("R-Attr-Rec")&& {overline(a)} &arrow.long {"unfold" overline(a)} &&&"if" ∃x,d. space x := rec d ∈ overline(a) \
           #rule_name("R-Abs")&& (x: t_1) t_2 &arrow.long t_1[x := abs t_2] \
           #rule_name("R-Match")&& (m: t) {overline(#b[nonrec] d)} &arrow.long t["indirects" oα] &&&"if" m ~ overline(d) arrow.squiggly oα \
-          #rule_name("R-With")&& #b[with] {oa}; t &arrow.long t[{ x := with t | l = t ∈ oa }] \
+          #rule_name("R-With")&& #b[with] {oa}; t &arrow.long t[{ l := with t | l = t ∈ oa }] \
           #rule_name("R-Let")&& #b[let] oi(l_i = t_i\;) #b[in] t &arrow.long t[{ l_i := abs t_i }]\
           #rule_name("R-Let-Rec")&& #b[let] {oi(l_i = t_i\;) "body" = t} &arrow.long t[{ l_i := abs t_i }] \
           #rule_name("R-Cond-True")&& #b[if] "true" #b[ then ] t_1 #b[ else ]t_2 & arrow.long t_1 \
@@ -331,18 +331,18 @@ $
   derive(
     "T-Rcd",
     ($Γ ⊢ t_1: ⦅l⦆$, $t_2 : τ$),
-    $Γ ⊢ {t_1 = t_2;}: {l: τ}$,
+    $Γ ⊢ {t_1 = t_2}: {l: τ}$,
   ),
   derive("T-Proj", ($Γ ⊢ t_1: {l: τ | ρ}$, $Γ ⊢ t_2: ⦅l⦆$), $Γ ⊢ t_1.t_2: τ$),
   derive(
     "T-Or-Pos",
-    ($Γ ⊢ t_1: {l: τ | ρ}$),
-    $Γ ⊢ (t_1).l #b[or] t_2: τ$,
+    ($Γ ⊢ t_1: {l: τ | ρ}$, $Γ ⊢ t_2: ⦅l⦆$),
+    $Γ ⊢ (t_1).t_2 #b[or] t_3: τ$,
   ),
   derive(
     "T-Or-Neg",
-    ($Γ ⊢ t_1: {ρ}$, $l ∉ ρ$, $Γ ⊢ t_2: τ$),
-    $Γ ⊢ (t_1).l #b[or] t_2: τ$,
+    ($Γ ⊢ t_1: {ρ}$, $l ∉ ρ$, $Γ ⊢ t_2: ⦅l⦆$, $Γ ⊢ t_3: τ$),
+    $Γ ⊢ (t_1).t_2 #b[or] t_3: τ$,
   ),
   derive(
     "T-Rec-Concat",
@@ -378,8 +378,8 @@ $
       (
         $Γ ⊢ t_1: ⦃overline(α)⦄^- → τ_2$,
         $Γ ⊢ t_2: τ_1$,
-        $needed(overline(α)) ≤ τ_1$,
-        $τ_1 ≤ ceiling(overline(α))$,
+        $τ_1 ≤ needed(overline(α))$,
+        $ceiling(overline(α)) ≤ τ_1$,
       ),
       $Γ ⊢ (x: t_1) t_2: τ_2$,
     ),
@@ -388,7 +388,7 @@ $
       (
         $Γ ⊢ t_1: ⦃overline(α)⦄^+ → τ_2$,
         $Γ ⊢ t_2: τ_1$,
-        $needed(overline(α)) ≤ τ_1$,
+        $τ_1 ≤ needed(overline(α))$,
       ),
       $Γ ⊢ (x: t_1) t_2: τ_2$,
     ),
@@ -403,17 +403,21 @@ $
   caption: "Extra constructs typing rules.",
   flexbox(
     derive(
-      "T-with",
-      ($Γ ⊢ t₂ : {ρ}$, $Γ,Ξ · t₂ ⊢ t₂ : τ$),
+      "T-With",
+      ($Γ ⊢ t₁ : {ρ}$, $Γ,Ξ · {ρ} ⊢ t₂ : τ$),
       $Γ ⊢ with t₁; t₂ : τ$,
     ),
-    derive("R-inherit", $x ∈ Γ$, $Γ ⊢ { inherit x; } -> { x = Γ(x);}$),
+    derive("R-Inherit", $x ∈ Γ$, $Γ ⊢ { inherit x; } -> { x = Γ(x);}$),
     derive(
-      "R-inherit-path",
+      "R-Inherit-path",
       $x ∈ Γ$,
-      $Γ ⊢ { inherit (ρ) x; } -> { x = "lookup"(ρ, x)}$,
+      $Γ ⊢ { inherit (ρ) space x; } -> { x = "lookup"(ρ, x)}$,
     ),
-    derive("T-imort", ($𝜚 arrow.squiggly t$, $Γ ⊢ t: τ$), $Γ ⊢ #b[import]: τ$),
+    derive(
+      "T-Import",
+      ($𝜚 arrow.squiggly t$, $Γ ⊢ t: τ$),
+      $Γ ⊢ #b[import] 𝜚: τ$,
+    ),
   ),
 )
 
@@ -429,7 +433,7 @@ $
     $Γ ⊢ #b[if] t_1 #b[then] t_2 #b[else] t_3: τ$,
   ),
   derive("T-Ground", $$, $Γ, Ξ ⊢ "is"_b (t) => Ξ · (t: b)$),
-  derive("T-Has", $$, $Γ, Ξ ⊢ t #b[?] l => Ξ · (t: {l: ?})$),
+  derive("T-Has", $Γ ⊢ t: {l : τ}$, $Γ, Ξ ⊢ t #b[?] l => Ξ · (t: {l: τ})$),
   derive(
     "T-Or",
     ($Γ, Ξ ⊢ t_1 => Ξ'$, $Γ, Ξ ⊢ t_2 => Ξ''$),
