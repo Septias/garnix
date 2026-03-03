@@ -240,10 +240,11 @@ Besides the properties that are required due to the language' environment, a few
 Last but not least, the combination of _subtype polymorphism_ and _type connectives_ has been shown to be applicable to a lot of programming paradigms @castagna2023programming @mlstruct and their combination leads to very expressive typesystems that can track the flow of programs and naturally implement _occurrence typing_. It has been shown that a full boolean algbra of types can encode _overloading_, _variant types_, _bounded polymorphism_, _pattern type conditionals_ and _pattern matching_ @castagna2023programming. Given that such systems already address many of our desiderata, adopting them as a foundation is a natural starting point.
 
 This concludes the list of wanted properties:
+- Absence of type annotations
+- Efficient computation
 - Open record concatenation
 - First class labels
 - Recursive types
-- Efficient computation
 - Subtype polymorphism
 - Parametric polymorphism
 - Adhoc polymorphism
@@ -251,7 +252,6 @@ This concludes the list of wanted properties:
 - Gradual typing (weak)
 - Occurrence typing
 - Type connectives
-- Absence of type annotations
 
 
 // ------------- Longer sections ---------------
