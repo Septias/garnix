@@ -140,7 +140,7 @@
           #rule_name("Kind") k := #b[with] | #b[abs] #h(5cm) #rule_name("Recursiveness") ω := #b[rec] | #b[nonrec]
         $
         $
-          #rule_name("R-Final")&& x_("Some" (k space e)) &arrow.long e \
+          #rule_name("R-Final")&& x_("Some" (k space t)) &arrow.long t \
           #rule_name("R-Attr-Rec")&& {overline(a)} &arrow.long {"unfold" overline(a)} &&&"if" ∃x,d. space x := rec d ∈ overline(a) \
           #rule_name("R-Abs")&& (x: t_1) t_2 &arrow.long t_1[x := abs t_2] \
           #rule_name("R-Match")&& (m: t) {overline(#b[nonrec] d)} &arrow.long t["indirects" oα] &&&"if" m ~ overline(d) arrow.squiggly oα \
@@ -183,12 +183,12 @@
 #let subs = $overline(sigma.alt)$
 #let substitutions = $
        x_(σ?)[subs] & := cases(
-                        x_("Some" ("abs" d)) & "if" x = "with" e ∈ subs "and" sigma^? = "Some"(abs d),
-                        x_("Some" (k space e)) & "if" x = k space e ∈ subs,
+                        x_("Some" ("abs" d)) & "if" x = "with" t ∈ subs "and" sigma^? = "Some"(abs d),
+                        x_("Some" (k space t)) & "if" x = k space t ∈ subs,
                         x_(σ^?) & otherwise,
                       ) \
-     (λ x. e)[subs] & := λ x. e[subs] \
-  (λ {p?}. e)[subs] & := λ {p[subs]}: e[subs] \
+     (λ x. t)[subs] & := λ x. t[subs] \
+  (λ {p?}. t)[subs] & := λ {p[subs]}: t[subs] \
 $
 
 == Matching
