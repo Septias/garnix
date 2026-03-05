@@ -48,7 +48,7 @@
 
   ]) <recordrules>
 
-  A set of record typing rules are given in @recordrules. We adopt the formalization of Adam Paszke and Ningning Xie with first-class labels, row polymorphism, open record extension @extensible_tabular. We use a kinding system to distinguish between ordinary types, Rows and Labels and type constructors ${ρ}$, $⟨ρ⟩$, and $⦅l⦆$ to create record-, row- and label-types. Notice that types, rows and labels admit type variables and that $⟨ρ_1 | ρ_2⟩$ is the concatenation operation on two rows.
+  A set of record typing rules are given in @recordrules. We adopt the formalization of Adam Paszke and Ningning Xie with first-class labels, row polymorphism, asymetric record extension @extensible_tabular. We use a kinding system to distinguish between ordinary types, Rows and Labels and type constructors ${ρ}$, $⟨ρ⟩$, and $⦅l⦆$ to create record-, row- and label-types. Notice that types, rows and labels admit type variables and that $⟨ρ_1 | ρ_2⟩$ is the concatenation operation on two rows.
 
   T-Rcd and T-Proj are the natural extension to first class labels. The T-Or-Neg and T-or-Pos handle the or-operator if the lookup succeeds or not. The check ∈ operation is new. This operator works on explicit records but fails in presence of the generic subsumption rule and with-subtypng. Using both rules it is possible to "forget" record fields such that the or-rule dedudces the wrong type.
   The concat operation usese simple row concatenation since the semantics using multiple labels already handes the case for duplicate labels @extensible_tabular. T-check trivially returns a bool but if we have singleton types for true and false, this could be refined.
