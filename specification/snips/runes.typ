@@ -26,7 +26,7 @@
 )
 
 = General Typing Rules
-#flexbox(
+#rect(width: 100%, inset: 10pt, flexbox(
   derive("T-sub", ($t: τ_1$, $τ_2 ≤ τ_1$), $t: τ_2$),
   derive("T-Abs", $Γ, x: τ_1 ⊢ t: τ_2$, $Γ ⊢ λ x. t: (τ_1 → τ_2)$),
   derive("T-App", ($Γ ⊢ x: τ_1$, $Γ ⊢ t: (τ_1 → τ_2)$), $Γ ⊢ (λ x. t) x : τ_2$),
@@ -37,7 +37,7 @@
   ),
   derive("T-Sel", ($Γ ⊢ t: {l: τ}$,), $Γ ⊢ t.l: τ$),
   derive("T-Asc", ($Ξ,Γ ⊢ t : τ$,), $Ξ,Γ ⊢ (t: τ) : τ$),
-)
+))
 
 
 
@@ -49,7 +49,7 @@
   derive(
     "Conc",
     ($Γ ⊢ e_1: τ_1 ≤ {}$, $Γ ⊢ e_2: τ_2 ≤ {}$),
-    $e_1 + e_2 : τ_1 + t_2$,
+    $e_1 + e_2 : τ_1 + τ_2$,
   ),
   [
     *Record Type merging*
@@ -64,7 +64,7 @@ $λ^((τ_1 → τ_2)_(1..n ∈ S))x. t$
 $t_1 <t_2 <- t_3> | "case" (t_1 ? τ) t_2 : t_3$
 
 
-== Advanced Fc Labels @extensible_rec_funcs
+== Extensible Recursive Functions @extensible_rec_funcs
 #rect(width: 100%, inset: 10pt)[
   #grid(
     columns: (1fr, 1fr),
@@ -92,7 +92,7 @@ $t_1 <t_2 <- t_3> | "case" (t_1 ? τ) t_2 : t_3$
   )
 ]
 
-== Advanced Fc Labels @extensible_tabular
+== Infix Extensible Record Types @extensible_tabular
 #rect(width: 100%, inset: 10pt, grid(
   columns: 1fr,
   rows: 2,
@@ -224,7 +224,7 @@ $t_1 <t_2 <- t_3> | "case" (t_1 ? τ) t_2 : t_3$
     )
   $
 ]
-== On.. @on_occurrence
+== On type-cases, union elimination and Occurrence Typing @on_occurrence
 #flexbox(
   derive(
     "T-case1",

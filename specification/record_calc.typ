@@ -5,11 +5,60 @@
 
 
 = Brainstorming
-
-- Features: Pattern destructuring + FC Labels + Record concat + inference
+- Features:
+  - Pattern destructuring
+  - FC-Labels
+  - Record-concat
+  - With-construct
+  - Inference
 - ROSE system ist cool
-  - Aber basiert auf System F? ==> Ineffektiv?
-  - Keine FC labels
+  - Aber basiert auf System F? ==> Ineffektiv / undecidable?
+- What inference engine?
+  - subtyping?
+  - constraints?
+  - unification?
+  - bi-unification?
+- Relations
+  - subtyping: ≤
+  - containment: ≤
+  - destructuring: ⊙
+
+== Beispiele
+```nix
+let
+ e1 = a: b: (a // b).c;
+ e2 = a: b: c: (a // b).${c};
+in ()
+```
+
+
+== Fragen
+- Kann man destructuring und subtyping vereinen?
+
+= Typen
+#let types = box(
+  width: 100%,
+  [
+    #align(center, flexbox(
+      $#type_name("Basetypes") b ∈ cal(B)$,
+      $#type_name("Type Variables") α ∈ cal(A)$,
+      $#type_name("Labels") l ∈ cal(L)$,
+    ))
+    $
+      #type_name("Type")&& tau & ::= b | α | τ -> τ | ⦃ overline(p) ⦄^+ -> τ | ⦃ overline(p) ⦄^- -> τ \
+      #type_name("Datatypes")&& &| {overline(l\: τ)} | [τ] | [overline(τ)] \
+      #type_name("Connectives")&& & | ⊥ | top | τ ∨ τ | τ ∧ τ | ¬τ \
+      #type_name("Pattern Field")&& p & := τ | τ^τ \
+      #type_name("Polymorphic type")&& σ & := ∀Xi. τ \
+      // #type_name("Mode")&& diamond.small & := + | -\
+      #type_name("Typing Context")&& Γ & ::= ε | Γ · (x : τ) \
+    $
+  ],
+)
+
+#types
+
+
 
 = Typregeln
 #let record_typing_rules = flexbox(
