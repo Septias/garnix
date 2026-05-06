@@ -23,6 +23,7 @@
   - containment: ≤
   - destructuring: ⊙
 
+
 == Beispiele
 ```nix
 let
@@ -31,9 +32,68 @@ let
 in ()
 ```
 
+```nix
+let
+  arg = {a = 2; c = 3;};
+  fun =  {a, ..}: a;
+in (fun arg)
+```
+
+== Vorgehen: Typ-Algorithmus
+1. Wir lesen den Code und erstellen ein Parsetree
+  - Debjrujin?
+2. Jede Funktion bekommt für ihre Argumente _Typvariablen_
+3. Die Nutzung dieser Typvariablen wird im Funktionskörper analysiert
+4. Anhand der Nutzung stellen wir dann fest:
+  - Welche Felder hat diese Variable
+  - Andere Typinformationen
+5. Diese Constraints werden gesammelt
+  - Auf den Variablen?
+  - In einem Context?
+6. Und dann gelöst durch
+  - Unification?
+  - Bi-unification?
+
+
+== Abstriche
+- Impurities werden ausgelassen (später kann man auf gradual erweitern?)
 
 == Fragen
+- Was für Constraints und wie kann ich die lösen und inferieren?
 - Kann man destructuring und subtyping vereinen?
+
+
+== Schwierigkeiten
+- Dadurch, dass es Typvariablen gibt, können in Rows Unklarheiten entstehen
+
+
+== Record Model
+- Rows?
+- Type connectives?
+  - Restricted?
+
+
+== Vorgehen
+1. Mehr Beispiele finden, die ich typen möchte
+2. Algorithmisch ausprobieren, wie die getypt werden können
+3. Daran ausgehend Entscheidungen über die Struktur des Typsystems herleiten
+
+- Feststellen, wie Typsysteme mit qualified types funktionieren
+- Im Endefekt sind die Typregeln wie ein großes Case-statement
+
+== Todo
+- Why does [[Abstracting Extensible Data Types.pdf]] not mimic subsumption?
+- Understand the constraint mechanism of ROSE
+- Partial type constructor?
+- Warum polymorphische Typen extra? (neben normalen Type (σ))
+
+== Read
+- Read: A record calculus based on symmetric concatenation
+- A theory of qualified types
+- Higher order abstract syntax
+- Local type inference
+- Subtyping recursive types
+
 
 = Typen
 #let types = box(
