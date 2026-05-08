@@ -43,7 +43,6 @@ in ()
 - Oder man modelliert die Auswertung? Stinkt aber auch nach runberechenbarkeit.
 - Oder man darf gar nicht zwei unbekannte zusammenführen?
 
-
 == Records
 - Mehrere row variablen?
 - Einfach alle sammeln mit links präzedenz?
@@ -125,6 +124,12 @@ in (fun arg)
 - Higher order abstract syntax
 - Local type inference
 - Subtyping recursive types
+
+== Misc
+- Vielleicht einfach verschiedene Iterationen?
+- Local type inference mit Abstrichen?
+  - Overapproximation of types?
+  - Thats a possible way to calculate best types w/o backtracking
 
 
 = Typen
