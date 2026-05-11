@@ -37,15 +37,15 @@ in ()
 - Nun wissen wir nur leider nicht, aus welchem es stammt (beide sind ja abstrakt)
 - Wir können uns aber für die beiden Argumente merken, dass es in der Verbindung stecken _muss_
 - Wir geben also die _proof-obligation_ an den Caller weiter. Dieser muss beweisen können, dass das Feld c tatsächlich existiert
-- Um diese Art von Model zu haben bringen uns polynomische Rows nicht so viel, weil die Unwissenheit zu groß ist
-- Nun könnte man versuchen diese Beweise zu generieren, das stinkt aber nach runberechenbarkeit.
+- Um diese Art von Model zu haben, bringen uns polynomische Rows nicht so viel, weil die Unwissenheit zu groß ist
+- Nun könnte man versuchen, diese Beweise zu generieren, das stinkt aber nach Runberechenbarkeit.
 - Auf der anderen Seite kann man das Typsystem schwächen: Nur Inferenz, wenn keine zwei Unbekannten
-- Oder man modelliert die Auswertung? Stinkt aber auch nach runberechenbarkeit.
-- Oder man darf gar nicht zwei unbekannte zusammenführen?
+- Oder man modelliert die Auswertung? Stinkt aber auch nach Runberechenbarkeit.
+- Oder man darf gar nicht zwei Unbekannte zusammenführen?
 
 == Records
-- Mehrere row variablen?
-- Einfach alle sammeln mit links präzedenz?
+- Mehrere row-variablen?
+- Einfach alle sammeln mit rechts-Präzedenz?
 - Was ist mit with-statements?
 - Dafür eigener Kontext?
 
@@ -112,12 +112,15 @@ in (fun arg)
 
 - Feststellen, wie Typsysteme mit qualified types funktionieren
 - Im Endefekt sind die Typregeln wie ein großes Case-statement
+- Vielleicht kann ich ja einen Algorithmus finden, der Funktionen und Record concat kann?
+
 
 == Todo
 - Why does [[Abstracting Extensible Data Types.pdf]] not mimic subsumption?
 - Understand the constraint mechanism of ROSE
-- Partial type constructor?
 - Warum polymorphische Typen extra? (neben normalen Type (σ))
+- Wie / ob wir let-polymorphism machen
+
 
 == Read
 - A record calculus based on symmetric concatenation
@@ -125,11 +128,13 @@ in (fun arg)
 - Local type inference
 - Subtyping recursive types
 
+
 == Misc
-- Vielleicht einfach verschiedene Iterationen?
+- Vielleicht einfach verschiedene Iterationen / Erweiterungen?
 - Local type inference mit Abstrichen?
   - Overapproximation of types?
   - Thats a possible way to calculate best types w/o backtracking
+  - Bot-type ist schwierig (generell)
 
 
 = Typen
@@ -154,7 +159,6 @@ in (fun arg)
 )
 
 #types
-
 
 
 = Typregeln
