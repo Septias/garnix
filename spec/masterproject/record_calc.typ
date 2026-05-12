@@ -30,7 +30,7 @@ let
 in ()
 ```
 
-1. Die beiden Argumente werden als variablen in den Context aufgenommen
+1. Die beiden Argumente werden als Variablen in den Context aufgenommen
 2. Danach müssen beide durch das concat zumindest mal ein Record sein
 3. Und in diesem gemeinsamen Record muss das Feld `c` enthalten sein
 
@@ -55,8 +55,12 @@ in ()
 - Inference
 - Recursiveness
 
+l ∈ 𝓛
+
+
+
 #flexbox(
-  derive("", $$, $$),
+  derive("", $$, $(t ++ s).l$),
   derive("", $$, $$),
   derive("", $$, $$),
   derive("", $$, $$),
@@ -115,22 +119,16 @@ in (fun arg)
 - Vielleicht kann ich ja einen Algorithmus finden, der Funktionen und Record concat kann?
 
 
-== Todo
-- Why does [[Abstracting Extensible Data Types.pdf]] not mimic subsumption?
-- Understand the constraint mechanism of ROSE
-- Warum polymorphische Typen extra? (neben normalen Type (σ))
-- Wie / ob wir let-polymorphism machen
-
-
 == Read
 - A record calculus based on symmetric concatenation
-- Higher order abstract syntax
-- Local type inference
+  - Hilfreich weil: Übersicht records, quantified
+- Local Type inference
+  - Hilfreich weil: Locality, Abstraction, Records, Further Reading
 - Subtyping recursive types
+  - Hilfreich weil: Wir auch rekursive Typen haben
 
 
 == Misc
-- Vielleicht einfach verschiedene Iterationen / Erweiterungen?
 - Local type inference mit Abstrichen?
   - Overapproximation of types?
   - Thats a possible way to calculate best types w/o backtracking
@@ -158,10 +156,8 @@ in (fun arg)
   ],
 )
 
-#types
+#figure(caption: "Types.", types)
 
-
-= Typregeln
 #let record_typing_rules = flexbox(
   derive(
     "T-Rcd",
@@ -190,22 +186,23 @@ in (fun arg)
     $Γ ⊢ e #b[?] t: "bool"$,
   ),
 )
-#figure(caption: "Record typing rules", record_typing_rules)
+
+#figure(caption: "Record typing rules.", record_typing_rules)
 #let function_typing_rules = stack(
   spacing: 15pt,
   flexbox(
     derive(
-      "T-Abs2",
+      "T-Abs1",
       $Γ, overline(e_i : τ_i) ⊢ t: τ_2$,
       $Γ ⊢ ({overline(e)}: t) : ⦃α⦄^- → τ_2$,
     ),
     derive(
-      "T-Abs3",
+      "T-Abs2",
       $Γ, overline(e_i : τ_i) ⊢ t: τ_2$,
       $Γ ⊢ ({overline(e),...}: t) : ⦃α⦄^+ → τ_2$,
     ),
     derive(
-      "T-App2",
+      "T-App1",
       (
         $Γ ⊢ t_1: ⦃overline(α)⦄^- → τ_2$,
         $Γ ⊢ t_2: τ_1$,
@@ -215,7 +212,7 @@ in (fun arg)
       $Γ ⊢ (x: t_1) t_2: τ_2$,
     ),
     derive(
-      "T-App3",
+      "T-App2",
       (
         $Γ ⊢ t_1: ⦃overline(α)⦄^+ → τ_2$,
         $Γ ⊢ t_2: τ_1$,
@@ -229,7 +226,7 @@ in (fun arg)
     $floor(oa) = { τ | τ ∈ oa }$,
   ),
 )
-#figure(caption: "Function typing rules", function_typing_rules)
+#figure(caption: "Function typing rules.", function_typing_rules)
 
 #let other_constructs = figure(
   caption: "Extra constructs typing rules.",
@@ -253,3 +250,4 @@ in (fun arg)
   ),
 )
 
+#other_constructs

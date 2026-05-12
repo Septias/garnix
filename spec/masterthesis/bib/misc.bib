@@ -1,0 +1,254 @@
+@article{algebraic_subtyping,
+  title={Algebraic Subtyping},
+  author={Dolan, S.},
+  isbn={9781780174150},
+  series={BCS/CPHC distinguished dissertation award series},
+  url={https://books.google.co.jp/books?id=cBJdswEACAAJ},
+  year={2017},
+  publisher={BCS Learning \& Development Limited}
+}
+
+@article{lazy_inf,
+  title={Lazy type inference and program analysis},
+  author={Hankin, Chris and Le M{\'e}tayer, Daniel},
+  journal={Science of Computer Programming},
+  volume={25},
+  number={2-3},
+  pages={219--249},
+  year={1995},
+  publisher={Elsevier}
+}
+
+@inproceedings{schimpf2022set,
+  title={Set-theoretic types for erlang},
+  author={Schimpf, Albert and Wehr, Stefan and Bieniusa, Annette},
+  booktitle={Proceedings of the 34th Symposium on Implementation and Application of Functional Languages},
+  pages={1--14},
+  year={2022}
+}
+
+@inproceedings{xie2020row,
+  title={Row and bounded polymorphism via disjoint polymorphism},
+  author={Xie, Ningning and Oliveira, Bruno C d S and Bi, Xuan and Schrijvers, Tom},
+  booktitle={34th European Conference on Object-Oriented Programming (ECOOP 2020)},
+  pages={27--1},
+  year={2020},
+  organization={Schloss Dagstuhl--Leibniz-Zentrum f{\"u}r Informatik}
+}
+/*
+
+- Subtyping lattice
+- [[Subtyping]] is acting on this lattice and inherits better properties
+- [[Biunification]] as parallel to unification in ML
+- [[Open world]] system to be extensible
+- [[Type scheme]]s and [[Typing scheme]]s
+- Uses [[Polar types]] to distinguish flow in a program
+	- Unions can only be used in output positions and intersections in input
+- Type [[automatons]] to simplify types
+
+> Find the simplest algebra of types, and some syntax for them 
+
+So, we conclude that the extensible way to define a subtyping system is to define types as a coproduct of distributive lattices. 
+
+*/
+
+@article{mlsub,
+author = {Dolan, Stephen and Mycroft, Alan},
+title = {Polymorphism, subtyping, and type inference in MLsub},
+year = {2017},
+issue_date = {January 2017},
+publisher = {Association for Computing Machinery},
+address = {New York, NY, USA},
+volume = {52},
+number = {1},
+issn = {0362-1340},
+url = {https://doi.org/10.1145/3093333.3009882},
+doi = {10.1145/3093333.3009882},
+abstract = {We present a type system combining subtyping and ML-style parametric polymorphism. Unlike previous work, our system supports type inference and has compact principal types. We demonstrate this system in the minimal language MLsub, which types a strict superset of core ML programs. This is made possible by keeping a strict separation between the types used to describe inputs and those used to describe outputs, and extending the classical unification algorithm to handle subtyping constraints between these input and output types. Principal types are kept compact by type simplification, which exploits deep connections between subtyping and the algebra of regular languages. An implementation is available online.},
+journal = {SIGPLAN Not.},
+month = {jan},
+pages = {60–72},
+numpages = {13},
+keywords = {Type Inference, Subtyping, Polymorphism, Algebra}
+}
+
+
+/*
+This example thus shows that the basic property of closedness—which arguably every program should satisfy—is not statically checkable in dynamic languages
+
+Similarly, one cannot statically check if a variable is shadowed: 
+
+*/
+
+
+@inproceedings{typed_racket,
+author = {Tobin-Hochstadt, Sam and Felleisen, Matthias},
+title = {The design and implementation of typed scheme},
+year = {2008},
+isbn = {9781595936899},
+publisher = {Association for Computing Machinery},
+address = {New York, NY, USA},
+url = {https://doi.org/10.1145/1328438.1328486},
+doi = {10.1145/1328438.1328486},
+abstract = {When scripts in untyped languages grow into large programs, maintaining them becomes difficult. A lack of types in typical scripting languages means that programmers must (re)discover critical pieces of design information every time they wish to change a program. This analysis step both slows down the maintenance process and may even introduce mistakes due to the violation of undiscovered invariants.This paper presents Typed Scheme, an explicitly typed extension of an untyped scripting language. Its type system is based on the novel notion of occurrence typing, which we formalize and mechanically prove sound. The implementation of Typed Scheme additionally borrows elements from a range of approaches, including recursive types, true unions and subtyping, plus polymorphism combined with a modicum of local inference. Initial experiments with the implementation suggest that Typed Scheme naturally accommodates the programming style of the underlying scripting language, at least for the first few thousand lines of ported code.},
+booktitle = {Proceedings of the 35th Annual ACM SIGPLAN-SIGACT Symposium on Principles of Programming Languages},
+pages = {395–406},
+numpages = {12},
+keywords = {type systems, scheme},
+location = {San Francisco, California, USA},
+series = {POPL '08}
+}
+
+@article{quicksub,
+author = {Zhou, Litao and Oliveira, Bruno C. d. S.},
+title = {QuickSub: Efficient Iso-Recursive Subtyping},
+year = {2025},
+issue_date = {January 2025},
+publisher = {Association for Computing Machinery},
+address = {New York, NY, USA},
+volume = {9},
+number = {POPL},
+url = {https://doi.org/10.1145/3704869},
+doi = {10.1145/3704869},
+abstract = {Many programming languages need to check whether two recursive types are in a subtyping relation. Traditionally recursive types are modelled in two different ways: equi- or iso- recursive types. While efficient algorithms for subtyping equi-recursive types are well studied for simple type systems, efficient algorithms for iso-recursive subtyping remain understudied.   In this paper we present QuickSub: an efficient and simple to implement algorithm for iso-recursive subtyping. QuickSub has the same expressive power as the well-known iso-recursive Amber rules. The worst case complexity of QuickSub is O(nm), where m is the size of the type and n is the number of recursive binders. However, in practice, the algorithm is nearly linear with the worst case being hard to reach. Consequently, in many common cases, QuickSub can be several times faster than alternative algorithms. We validate the efficiency of QuickSub with an empirical evaluation comparing it to existing equi-recursive and iso-recursive subtyping algorithms. We prove the correctness of the algorithm and formalize a simple calculus with recursive subtyping and records. For this calculus we also show how type soundness can be proved using QuickSub. All the results have been formalized and proved in the Coq proof assistant.},
+journal = {Proc. ACM Program. Lang.},
+month = jan,
+articleno = {33},
+numpages = {32},
+keywords = {Algorithm, Recursive types, Subtyping}
+}
+
+@inproceedings{coldwar,
+  title={Static typing where possible, dynamic typing when needed: The end of the cold war between programming languages},
+  author={Meijer, Erik and Drayton, Peter},
+  year={2004},
+  organization={OOPSLA}
+}
+
+
+@inproceedings{rust,
+author = {Matsakis, Nicholas D. and Klock, Felix S.},
+title = {The rust language},
+year = {2014},
+isbn = {9781450332170},
+publisher = {Association for Computing Machinery},
+address = {New York, NY, USA},
+url = {https://doi.org/10.1145/2663171.2663188},
+doi = {10.1145/2663171.2663188},
+abstract = {Rust is a new programming language for developing reliable and efficient systems. It is designed to support concurrency and parallelism in building applications and libraries that take full advantage of modern hardware. Rust's static type system is safe1 and expressive and provides strong guarantees about isolation, concurrency, and memory safety.Rust also offers a clear performance model, making it easier to predict and reason about program efficiency. One important way it accomplishes this is by allowing fine-grained control over memory representations, with direct support for stack allocation and contiguous record storage. The language balances such controls with the absolute requirement for safety: Rust's type system and runtime guarantee the absence of data races, buffer overflows, stack overflows, and accesses to uninitialized or deallocated memory.},
+booktitle = {Proceedings of the 2014 ACM SIGAda Annual Conference on High Integrity Language Technology},
+pages = {103–104},
+numpages = {2},
+keywords = {affine type systems, memory management, rust, systems programming},
+location = {Portland, Oregon, USA},
+series = {HILT '14}
+}
+
+
+@article{bool_alg_in_effect,
+author = {Lee, Edward and Starup, Jonathan Lindegaard and Lhot\'{a}k, Ond\v{r}ej and Madsen, Magnus},
+title = {Qualified Types with Boolean Algebras},
+year = {2025},
+issue_date = {October 2025},
+publisher = {Association for Computing Machinery},
+address = {New York, NY, USA},
+volume = {9},
+number = {OOPSLA2},
+url = {https://doi.org/10.1145/3763096},
+doi = {10.1145/3763096},
+abstract = {We propose type qualifiers based on Boolean algebras. Traditional type systems with type qualifiers have been based on lattices, but lattices lack the ability to express exclusion. We argue that Boolean algebras, which permit exclusion, are a practical and useful choice of domain for qualifiers.    In this paper, we present a calculus System F<:B that extends System F<: with type qualifiers over Boolean algebras and has support for negation, qualifier polymorphism, and subqualification. We illustrate how System F<:B can be used as a design recipe for a type and effect system, System F<:BE, with effect polymorphism, subeffecting, and polymorphic effect exclusion. We use System F<:BE to establish formal foundations of the type and effect system of the Flix programming language. We also pinpoint and implement a practical form of subeffecting: abstraction-site subeffecting. Experimental results show that abstraction-site subeffecting allows us to eliminate all effect upcasts present in the current Flix Standard Library.},
+journal = {Proc. ACM Program. Lang.},
+month = oct,
+articleno = {318},
+numpages = {27},
+keywords = {Boolean Algebras, Flix, System F<:, Type Qualifiers, Type Systems}
+}
+
+@InProceedings{pearce_flowtyping,
+author="Pearce, David J.",
+editor="Giacobazzi, Roberto
+and Berdine, Josh
+and Mastroeni, Isabella",
+title="Sound and Complete Flow Typing with Unions, Intersections and Negations",
+booktitle="Verification, Model Checking, and Abstract Interpretation",
+year="2013",
+publisher="Springer Berlin Heidelberg",
+address="Berlin, Heidelberg",
+pages="335--354",
+abstract="Flow typing is becoming a popular mechanism for typing existing programs written in untyped languages (e.g. JavaScript, Racket, Groovy). Such systems require intersections for the true-branch of a type test, negations for the false-branch, and unions to capture the flow of information at meet points. Type systems involving unions, intersections and negations require a subtype operator which is non-trivial to implement. Frisch et al. demonstrated that this problem was decidable. However, their proof was not constructive and does not lend itself naturally to an implementation. In this paper, we present a sound and complete algorithm for subtype testing in the presence of unions, intersections and negations.",
+isbn="978-3-642-35873-9"
+}
+
+Non-null
+flowtyping
+
+@misc{nixos_tests,
+  title = {functional tests – NixOS/nix},
+  author= {{ NixOS }},
+  year  = {2026},
+  url   = {https://github.com/NixOS/nix/tree/master/tests/functional},
+  note  = {Accessed: 2026-02-06},
+}
+
+@misc{special_args,
+  title  = {lib/generators – Nixpkgs},
+  author = {{ Nixpkgs }},
+  year   = {2026},
+  url    = {https://github.com/NixOS/nixpkgs/blob/ecfe7c0e570a067b3b14906f0139d38e60f5c55a/lib/generators.nix#L469-L474},
+  note   = {Accessed: 2026-02-06},
+}
+
+@misc{nix-ts-issue,
+  title  = {Static type system #14},
+  author = {{ Eelco Dolstra }},
+  year   = {2012},
+  url    = {https://github.com/NixOS/nix/issues/14},
+  note   = {Accessed: 2026-02-06},
+}
+
+@manual{nix-language-2-28,
+  title        = {Nix Language — Nix 2.28 Reference Manual},
+  organization = {Nix.dev},
+  year         = {2025},
+  url          = {https://nix.dev/manual/nix/2.28/language/index.html},
+  note         = {Accessed: 2026-01-11},
+}
+
+@BachelorThesis{simplenix,
+  author  = {Sebastian Klähn},
+  title   = {SimpleNix: Type Inference for Nix},
+  school  = {Universität Freiburg},
+  year    = {2023},
+  type    = {Bachelor's Thesis},
+  url     = {https://github.com/Septias/bachelor-thesis/blob/main/main.pdf}
+}
+
+
+@misc{typescript,
+  title        = {TypeScript},
+  author       = {{Microsoft}},
+  year         = {2012},
+  howpublished = {\url{https://www.typescriptlang.org/}},
+  note         = {Accessed: 2026-01-14}
+}
+
+
+@misc{flow,
+  title        = {Flow: A Static Type Checker for JavaScript},
+  author       = {{Meta Platforms, Inc.}},
+  year         = {2014},
+  howpublished = {\url{https://flow.org/}},
+  note         = {Accessed: 2026-01-14}
+}
+
+
+@techreport{undecidable,
+author = {Wells, J. B.},
+title = {Typability and Type Checking in the Second-Order Lambda-Calculus Are Equivalent and Undecidable},
+year = {1993},
+publisher = {Boston University},
+address = {USA},
+abstract = {Abstract We consider the problems of typability and type checking in the Girard/Reynolds second-order polymorphic typed lambda calculus, for which we use the short name ``System F'''' and which we use in the ``Curry style'''' where types are assigned to pure lambda terms. These problems have been considered and proven to be decidable or undecidable for various restrictions and extensions of System F and other related systems, and lower-bound complexity results for System F have been achieved, but they have remained ``embarrassing open problems'''' for System F itself. We first prove that type checking in System F is undecidable by a reduction from semi-unification. We then prove typability in System F is undecidable by a reduction from type checking. Since the reverse reduction is already known, this implies the two problems are equivalent. The second reduction uses a novel method of constructing lambda terms such that in all type derivations, specific bound variables must always be assigned a specific type. Using this technique, we can require that specific subterms must be typable using a specific, fixed type assignment in order for the entire term to be typable at all. Any desired type assignment may be simulated. We develop this method, which we call ``constants for free'''', for both the lambda-K and lambda-I calculi.}
+}
+
+type inference for impredicative polymorphism alone is already known to be undecidable
