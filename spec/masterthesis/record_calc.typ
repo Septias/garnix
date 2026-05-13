@@ -14,7 +14,7 @@
       $#type_name("Labels") l ∈ cal(L)$,
     ))
     $
-      #type_name("Type")&& tau & ::= b | α | τ -> τ | ⦃ overline(p) ⦄^+ -> τ | ⦃ overline(p) ⦄^- -> τ \
+      #type_name("Type")&& tau & ::= b | α | τ -> τ | ⦃ overline(p) ⦄^+ -> τ | ⦃ overline(p) ⦄^- -> τ | ⦅l⦆ \
       #type_name("Datatypes")&& &| {overline(l\: τ)} | [τ] | [overline(τ)] \
       #type_name("Connectives")&& & | ⊥ | top | τ ∨ τ | τ ∧ τ | ¬τ \
       #type_name("Pattern Field")&& p & := τ | τ^τ \
@@ -54,6 +54,11 @@
     ($Γ ⊢ e: {ρ}$, $t : ⦅l⦆$),
     $Γ ⊢ e #b[?] t: "bool"$,
   ),
+  derive(
+    "T-With",
+    ($Γ ⊢ t₁ : {ρ}$, $Γ,Ξ · {ρ} ⊢ t₂ : τ$),
+    $Γ ⊢ with t₁; t₂ : τ$,
+  ),
 )
 
 #figure(caption: "Record typing rules.", record_typing_rules)
@@ -91,32 +96,8 @@
     ),
   ),
   flexbox(
-    $ceiling(oa) = { τ | τ ∈ oa ∨ τ^τ' ∈ oa}$,
+    $ceiling(oa) = { τ | (τ ∈ oa) ∨ (τ^τ' ∈ oa)}$,
     $floor(oa) = { τ | τ ∈ oa }$,
   ),
 )
 #figure(caption: "Function typing rules.", function_typing_rules)
-
-#let other_constructs = figure(
-  caption: "Extra constructs typing rules.",
-  flexbox(
-    derive(
-      "T-With",
-      ($Γ ⊢ t₁ : {ρ}$, $Γ,Ξ · {ρ} ⊢ t₂ : τ$),
-      $Γ ⊢ with t₁; t₂ : τ$,
-    ),
-    derive("R-Inherit", $x ∈ Γ$, $Γ ⊢ { inherit x; } -> { x = Γ(x);}$),
-    derive(
-      "R-Inherit-path",
-      $x ∈ Γ$,
-      $Γ ⊢ { inherit (ρ) space x; } -> { x = "lookup"(ρ, x)}$,
-    ),
-    derive(
-      "T-Import",
-      ($𝜚 arrow.squiggly t$, $Γ ⊢ t: τ$),
-      $Γ ⊢ #b[import] 𝜚: τ$,
-    ),
-  ),
-)
-
-#other_constructs

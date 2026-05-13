@@ -1,4 +1,13 @@
 
+== Beispiel: Nominale Tags funktionieren nicht
+
+```nix
+let
+ a = { b = 2; };
+ c = { b = 2; };
+in ()
+```
+- Das man records in Nix schreiben kann reicht schon?
 
 
 == Beispiel: Asymmetric Concat
@@ -21,4 +30,32 @@ in ()
 - Auf der anderen Seite kann man das Typsystem schwächen: Nur Inferenz, wenn keine zwei Unbekannten
 - Oder man modelliert die Auswertung? Stinkt aber auch nach Runberechenbarkeit.
 - Oder man darf gar nicht zwei Unbekannte zusammenführen?
+
+== Scoped Rows
+Rows mit typvariablen:
+⟨ρ₁⟩ | ⟨ρ₂⟩ -> ⟨ρ₁ ρ₂⟩
+⟨ρ₁⟩ | ⟨α⟩  -> ⟨ρ₁ α⟩
+⟨α⟩  | ⟨ρ₁⟩ -> ⟨α ρ₁⟩
+⟨α⟩  | ⟨β⟩  -> ⟨α β⟩
+
+Indexing mit typvariablen:
+
+⟨ρ₁ ρ₂⟩.x ->
+- ρ₁.x if x ∈ ρ₁
+- ρ₂.x if x ∈ ρ₂
+- e else
+
+⟨ρ₁ α⟩.x  ->
+- ρ₁.x if x ∈ ρ₁
+- ?    if x ∈ ρ₂
+
+⟨α ρ₁⟩.x  ->
+- ρ₁.x if x ∈ ρ₁
+- ?    if x ∈ ρ₂
+
+⟨α β⟩.x   ->
+- ?    if x ∈ ρ₁
+- ?    if x ∈ ρ₂
+
+Das Problem ist, dass ich nicht weiß, was in den Typvariablen drin steckt. Die einzige Lösung ist dann, die Auflösung zu _verzögern_ oder eine _proof-obligation_ zu erstellen. D.h entweder man versucht im Nachhinein (z.B) beim Function Call zu klären, ob alles funktioniert. Oder man erweitert die Sprache so, dass schon beim Call "bewiesen" werden muss, dass die gefragten Felder in dem Record existieren.
 

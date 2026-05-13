@@ -40,7 +40,6 @@
 ))
 
 
-
 = Records
 #let cast_fn = $λ^{ and_(i∈I) τ_i → τ_i}$
 #rect(width: 100%, inset: 10pt, flexbox(
@@ -122,6 +121,20 @@ $t_1 <t_2 <- t_3> | "case" (t_1 ? τ) t_2 : t_3$
     derive("", ($l: "Label"$, $Γ ⊢ τ: ∗$), $Γ ⊢ (l: τ): "Row"$),
   )),
 ))
+
+== Abstracting Extensible Data Types
+Operations:
+- Proj: λr prj r: ∀z₁z₂. z₂ ⧀ z₁ => Πz₁ -> Πz₂
+  - Record elimination
+- Concat: M₁ ∗ M₂: ∀z₁z₂z₃. z₁ ⊙ z₂ ~ z₃ => Πz₁ -> Πz₂ -> Πz₃
+  - Record ?
+- Inj: λxy. inj (And ⊳ (x, y)): ∀t₁t₂ z.(And ⊳ t₁ × t₂) ⧀ z => t₁ -> t₂ -> Σz
+  - Variant introduction
+- Case: ∇
+  - Variant elimination
+
+Types: $A, B ::= a | A → B | ∀α. A | ⊕ {A_i} | ⊗ {A_i}$
+Terms: $E, F ::= x | λ x: A. E | F E | Λ a. E | E[A] | (E₁, …, E\ₙ) | π\ᵢE | ι\ᵢE | "case" E {F₁, …, F\ₙ}$
 
 
 = Recursion

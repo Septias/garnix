@@ -1,0 +1,11 @@
+
+- Daan Leijen
+  - Extensible records with scoped labels
+  - First class labels for extensible rows
+- [[Infix-Extensible Record Types for Tabular Data.pdf]]
+  - Based On: Daan Leijen
+- [[Extensible Data Types with Ad-Hoc Polymorphism.pdf]]
+  - Based On: [[Abstracting Extensible Data Types.pdf]]
+- [[Abstracting Extensible Recursive Functions.pdf]]
+  - Based on: [[Generic Programming with Extensible Data Types.pdf]]
+    - Based on: [[Abstracting Extensible Data Types.pdf]]

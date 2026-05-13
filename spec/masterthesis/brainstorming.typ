@@ -1,56 +1,30 @@
+> Schaffen wir es ein Typsystem zwischen "Tabular Data" und "Rose" zu finden?
+
 = Brainstorming
 - Features:
-  - Pattern destructuring
+  - Pattern Destructuring
   - FC-Labels
-  - Asymmetric concat
+  - Asymmetric Concat
   - With-construct
   - Recursive types
   - Inference
-- Relations
-  - subtyping: ≤
-  - containment: ≤
-  - destructuring: ⊙
 
 
 == Records
-- Mehrere row-variablen?
-- Einfach alle sammeln mit rechts-Präzedenz?
-- Was ist mit with-statements?
-- Dafür eigener Kontext?
+- Mehrere row-variablen? Normalisieren?
+  - Einfach alle sammeln mit rechts-Präzedenz?
+  - Brauchen wir evtl. doch nicht, weil wir ja kein remove haben?
+- Können wir nominale identities für Nix besorgen? (classes)
 
-
-=== Minimal
+== Minimal
 - Record Concat
 - Function destructuring
 - Inference
-- Recursiveness
-
-
-```nix
-let
-  arg = {a = 2; c = 3;};
-  fun =  {a, ..}: a;
-in (fun arg)
-```
-
-== Vorgehen: Typ-Algorithmus
-1. Wir lesen den Code und erstellen ein Parsetree
-  - Debjrujin?
-2. Jede Funktion bekommt für ihre Argumente _Typvariablen_
-3. Die Nutzung dieser Typvariablen wird im Funktionskörper analysiert
-4. Anhand der Nutzung stellen wir dann fest:
-  - Welche Felder hat diese Variable
-  - Andere Typinformationen
-5. Diese Constraints werden gesammelt
-  - Auf den Variablen?
-  - In einem Context?
-6. Und dann gelöst durch
-  - Unification?
-  - Bi-unification?
 
 
 == Abstriche
-- Impurities werden ausgelassen (später kann man auf gradual erweitern?)
+- Impurities werden ausgelassen (später kann man auf Gradual erweitern?)
+
 
 == Fragen
 - Was für Constraints und wie kann ich die lösen und inferieren?
@@ -59,12 +33,6 @@ in (fun arg)
 
 == Schwierigkeiten
 - Dadurch, dass es Typvariablen gibt, können in Rows Unklarheiten entstehen
-
-
-== Record Model
-- Rows?
-- Type connectives?
-  - Restricted?
 
 
 == Vorgehen
@@ -84,6 +52,8 @@ in (fun arg)
   - Hilfreich weil: Locality, Abstraction, Records, Further Reading
 - Subtyping recursive types
   - Hilfreich weil: Wir auch rekursive Typen haben
+- Tabular Data
+  - Hilfreich weil: Ist fast das, was ich möchte
 
 
 == Misc
