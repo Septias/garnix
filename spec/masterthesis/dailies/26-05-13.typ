@@ -1,18 +1,11 @@
-== Tabular Data
-⊕ Unification
-⊕ First class labels
-⊕ Polymorphic Rows
-⊖ Kein Subtyping
-- Extension is always to the left
+== Todo
+- Add terms in the `record_calc`
+- Wie würde subtyping und type connectives funktionieren?
+  - Wo genau bricht das?
+- Rows fehlen (ρ)
 
+== Fragen
+- Was für constraints und wie kann ich die lösen und inferieren?
+- Kann man destructuring und subtyping vereinen?
+- How does unification work?
 
-== Abstracting Extensible Data Types
-⊕ Variants & Records
-⊕ Asymmetric Concat 
-⊕ Expressive constraints: $_ ⊙ _ ~ \_$(containment) and $ζ ⧀ ζ$(subtype)
-⊖ System F (Explizite type-application)
-  ⊖ Keine Inferenz für Funktionen
-
-
-== Lackes
-⊖ probably needs explicit types?
