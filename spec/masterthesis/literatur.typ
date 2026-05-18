@@ -1,5 +1,5 @@
 == Read
-- A record calculus based on symmetric concatenation
+- [x] A record calculus based on symmetric concatenation
   - Hilfreich weil: Übersicht records, quantified
 - [x] Local Type inference
   - Hilfreich weil: Locality, Abstraction, Records, Further Reading
@@ -24,7 +24,7 @@
 
 == Tabular Data
 ⊕ Unification
-⊕ First class labels
+⊕ FC-labels
 ⊕ Polymorphic Rows
 ⊖ Kein Subtyping
 ⊖ Can not model "extend or overwrite"
@@ -43,3 +43,9 @@
 
 == Lacks Predicates
 ⊖ probably needs explicit types?
+
+
+== Local Type Inference
+- Overapproximation of types?
+- Thats a possible way to calculate best types w/o backtracking
+- Bot-type ist schwierig (generell)

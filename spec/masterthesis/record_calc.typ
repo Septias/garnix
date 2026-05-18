@@ -3,21 +3,35 @@
 #set page(height: auto)
 
 #let op = $overline(α)$
+= Die Systeme
+- Minimal : Record Concat, Pattern-Functions
+- Mit #b[let]: Bring Poly rein
+- Mit #b[with]:
+- Mit #b[rec]: Dadurch brauch man spätestens einen rekursiven Typ
+  - Ich sag das ist eine spätere Erweiterung
 
+Für alle systeme ist die Frage:
+- Subtyping?
+- Andere constraints?
+
+
+== Minimal
+- Sollten die Funktionen schon polymorph sein?
+- Inferenz bereits für die Pattern notwendig
+  - Mehrere Typvariablen?
+  - Wie trackt man record accesses?
+
+= Formalisierung
 #rect(width: 100%)[
   == Minimal
   - Record Concat
   - Function Destructuring
 
-  == Todo
-  - Sollten die Funktionen polymorph sein?
-
-
   #figure(caption: "Terms", box(
     width: 100%,
     [
       #align(center, flexbox(
-        $#type_name("Terms") e := { e = e } | {overline(p)} → e | { overline(p), ... } → e$,
+        $#type_name("Terms") e := { e₁ = e₂ } | {overline(p)} → e | { overline(p), ... } → e | e₁:e₂$,
       ))
     ],
   ))
@@ -105,7 +119,6 @@
   - Record Concat
   - Function Destructuring
   - Let-statements
-
 
   == Todo
   - Kann die speziale Syntax helfen?
@@ -291,15 +304,4 @@
 
   Like this:?
   #derive("C-with", $ "routine"(r) $, $ Γ ⊢ r.l => (l ∈ overline(A)) $)
-
-  We need a routine that traverses the record and for every field does:
-  - Normal field:
-    - Is l? => If A is empty then we can just return the type. Otherwise we skip
-    - Not l? => Skip
-  - Row-var:
-    - Add to constraint set
-  - Explicit row:
-    - Recurse
-  - This routine returns overline(A)
-
 ]

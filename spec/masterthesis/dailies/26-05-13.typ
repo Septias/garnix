@@ -1,3 +1,6 @@
+
+next: ./26-05-16.typ
+
 == Todo
 - Add terms in the `record_calc`
 - Wie würde subtyping und type connectives funktionieren?

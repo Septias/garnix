@@ -1,41 +1,73 @@
 > Schaffen wir es ein Typsystem zwischen "Tabular Data" und "Rose" zu finden?
 
-= Brainstorming
-- Features:
-  - Pattern Destructuring
-  - FC-Labels
-  - Asymmetric Concat
-  - With-construct
-  - Recursive types
-  - Inference
+= ZIEL
+Mein Ziel ist es, ein Record calculus zu erstellen, der Nix so gut wie möglich abdeckt. Dabei können auch Abstriche gemacht werden, aber er sollte zumindest irgendwie sound sein. Darauf kann dann einen Implementation oder auch ein Beweis folgen. Wenn ich einen Beweis machen muss, dann muss ich dafür sicher zumindest mal 3W einplenen. Im Moment ist es noch nicht wirklich drinne, aber ich glaube ich muss das hinzufügen.
 
 
-== Records
-- Mehrere row-variablen? Normalisieren?
-  - Einfach alle sammeln mit rechts-Präzedenz?
-  - Brauchen wir evtl. doch nicht, weil wir ja kein remove haben?
-- Können wir nominale identities für Nix besorgen? (classes)
-  - Ich glaube nein!
-
-
-== Schwierigkeiten
-- Dadurch, dass es Typvariablen gibt, können in Rows Unklarheiten entstehen
-
-
-== Vorgehen
+= Vorgehen
 1. Mehr Beispiele finden, die ich typen möchte
 2. Algorithmisch ausprobieren, wie die getypt werden können
-3. Davon ausgehend Entscheidungen über die Struktur des Typsystems herleiten
+3. Algorithmen dafür erfinden/schreiben/brainstormen
+4. Davon ausgehend Entscheidungen über die Struktur des Typsystems herleiten
 
 - Feststellen, wie Typsysteme mit _qualified types_ funktionieren
 - Im Endefekt sind die Typregeln wie ein großes Case-statement
 - Vielleicht kann ich ja einen Algorithmus finden, der Funktionen und Record concat kann?
 
 
-== Misc
-- Local type inference mit Abstrichen?
-  - Overapproximation of types?
-  - Thats a possible way to calculate best types w/o backtracking
-  - Bot-type ist schwierig (generell)
+= Features
+- Pattern Destructuring
+- FC-Labels
+- Asymmetric Concat
+- With-construct
+- Recursive types
+- Inference
 
 
+== Fragen
+- Kann man Destructuring und Subtyping vereinen?
+  - Sind halt unterschiedliche Arten von Constraints..
+  - Mehrere Constraints zu mischen klingt mmn. sehr kompliziert
+- An welchen Stellen kommen Typvariablen vor?
+  - Let-poly
+  - Funktionen (in ML)
+- Wofür die Equivalence Relation?
+  - Damit wir Typvariablen haben können? NEEEEE
+
+
+== Dem Big ones
+- Row Poly _or_ Subtyping Poly?
+  - Row poly wird bei den advanced record calculi (RC) verwendet
+  - Subtyping ist genereller, und harmoniert gut mit _type connectives_
+    - Dafür ist es aber hart mit den generischen Records
+      - Castagna hat gezeigt, wie man _subtyping_ und _row poly_ vereinen kann
+        - _asymmetric concat_ still an open question!
+- _Row variables_?
+  - The case for row variables: We need them to make rows generic
+    - Do we really need that?
+      - I don't think I need fc-rows tbh
+- Vielleicht doch direkt den unknown type rein?
+  - Hilft bei Abstraktion
+    - Tun Top und Bot aber auch
+
+
+== Records
+- Mehrere Row-variablen? Normalisieren?
+  - Einfach alle sammeln mit rechts-Präzedenz?
+    - Eigentlich eine gute Heuristik 🤔
+- Können wir nominale identities für Nix besorgen? (classes)
+  - Ich glaube nein!
+  - Gegenbeispiel warum dann Parreaux nicht klappt?
+
+
+== Schwierigkeiten
+- Dadurch, dass es Typvariablen gibt, können in Rows Unklarheiten entstehen
+
+
+= Archiv
+- Was für constraints und wie kann ich die lösen und inferieren?
+  - Einfach was Bestehendes verwenden?
+- Qualified Types oder Unification oder Bi-unification?
+  - Qualified Types: Maximal flexibel, aber hart
+  - Unification: Auch constraints, aber easier
+  - Bi-unification: Eigentlich nicht viel härter als unification?
