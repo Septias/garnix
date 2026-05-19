@@ -1,7 +1,6 @@
-> Schaffen wir es ein Typsystem zwischen "Tabular Data" und "Rose" zu finden?
 
 = ZIEL
-Mein Ziel ist es, ein Record calculus zu erstellen, der Nix so gut wie möglich abdeckt. Dabei können auch Abstriche gemacht werden, aber er sollte zumindest irgendwie sound sein. Darauf kann dann einen Implementation oder auch ein Beweis folgen. Wenn ich einen Beweis machen muss, dann muss ich dafür sicher zumindest mal 3W einplenen. Im Moment ist es noch nicht wirklich drinne, aber ich glaube ich muss das hinzufügen.
+Mein Ziel ist es, ein Record calculus zu erstellen, der Nix so gut wie möglich abdeckt. Dabei können auch Abstriche gemacht werden, aber er sollte zumindest irgendwie sound sein. Darauf kann dann einen Implementation oder auch ein Beweis folgen. Wenn ich einen Beweis machen muss, dann muss ich dafür sicher zumindest mal 3W einplenen. Im Moment ist es noch nicht wirklich drinne, aber ich glaube ich muss das hinzufügen, damit Daddy T happy ist.
 
 
 = Vorgehen
@@ -9,10 +8,6 @@ Mein Ziel ist es, ein Record calculus zu erstellen, der Nix so gut wie möglich 
 2. Algorithmisch ausprobieren, wie die getypt werden können
 3. Algorithmen dafür erfinden/schreiben/brainstormen
 4. Davon ausgehend Entscheidungen über die Struktur des Typsystems herleiten
-
-- Feststellen, wie Typsysteme mit _qualified types_ funktionieren
-- Im Endefekt sind die Typregeln wie ein großes Case-statement
-- Vielleicht kann ich ja einen Algorithmus finden, der Funktionen und Record concat kann?
 
 
 = Features
@@ -24,17 +19,6 @@ Mein Ziel ist es, ein Record calculus zu erstellen, der Nix so gut wie möglich 
 - Inference
 
 
-== Fragen
-- Kann man Destructuring und Subtyping vereinen?
-  - Sind halt unterschiedliche Arten von Constraints..
-  - Mehrere Constraints zu mischen klingt mmn. sehr kompliziert
-- An welchen Stellen kommen Typvariablen vor?
-  - Let-poly
-  - Funktionen (in ML)
-- Wofür die Equivalence Relation?
-  - Damit wir Typvariablen haben können? NEEEEE
-
-
 == Dem Big ones
 - Row Poly _or_ Subtyping Poly?
   - Row poly wird bei den advanced record calculi (RC) verwendet
@@ -42,7 +26,7 @@ Mein Ziel ist es, ein Record calculus zu erstellen, der Nix so gut wie möglich 
     - Dafür ist es aber hart mit den generischen Records
       - Castagna hat gezeigt, wie man _subtyping_ und _row poly_ vereinen kann
         - _asymmetric concat_ still an open question!
-- _Row variables_?
+- _Row variables_
   - The case for row variables: We need them to make rows generic
     - Do we really need that?
       - I don't think I need fc-rows tbh
@@ -57,7 +41,7 @@ Mein Ziel ist es, ein Record calculus zu erstellen, der Nix so gut wie möglich 
     - Eigentlich eine gute Heuristik 🤔
 - Können wir nominale identities für Nix besorgen? (classes)
   - Ich glaube nein!
-  - Gegenbeispiel warum dann Parreaux nicht klappt?
+  - Gegenbeispiel, warum dann Parreaux nicht klappt?
 
 
 == Schwierigkeiten

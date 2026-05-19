@@ -59,3 +59,19 @@ Indexing mit typvariablen:
 
 Das Problem ist, dass ich nicht weiß, was in den Typvariablen drin steckt. Die einzige Lösung ist dann, die Auflösung zu _verzögern_ oder eine _proof-obligation_ zu erstellen. D.h entweder man versucht im Nachhinein (z.B) beim Function Call zu klären, ob alles funktioniert. Oder man erweitert die Sprache so, dass schon beim Call "bewiesen" werden muss, dass die gefragten Felder in dem Record existieren.
 
+== Algorithmus für Funktionen
+- Funktionen: Monomorph
+- Wie modellieren wir record-referenzen (enstehen durch Destructuring)?
+  - Theorie: Matching?
+    - { α, l: τ } fügt dann Typvariablen und Bindings (wieder?) in den Kontext
+- Können wir _inferieren_, wann etwas ein Label sein muss? Ja?
+
+
+== Subtyping für Rows mit FC-Labels
+- Wir haben die Row x: { a: int, b: {c : str}} und y: { α: int, β@{γ} }
+- Jetzt müssen wir entscheiden, ob die subtypen sind
+- Damit wir sagen können y ≤ x, muss α = a
+- Wie kann man das als Constraint machen?
+- Wir haben halt noch kein _generelles_ Model an constraints, die wir zulassen wollen
+- Hier liegt ein stückweit auch der _Knackpunkt_
+
