@@ -67,7 +67,4 @@ Broekhoff et al. @verified put substitutions into the syntactic domain in a tech
 
 Since nix is lexically scoped, it would also be possible to track the opened record with in a separate context, lookup variables normally (as they are stronger binding anyways) and only if a variable is undefined, we check the contexts.
 
-
-
-
 #bib

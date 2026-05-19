@@ -15,7 +15,7 @@
   $ {} $, [ Record ],
   $ ⟨⟩ $, [ Variants ],
   $ ⟦⟧ $, [ Denotation ],
-  $ l_i $, $ l_1 ... l_n $,
+  $ l_i $, $l_1 ... l_n$,
   $ x, y, z $, [ Object-lang: Unkown but fixed variable ],
   $ t, e $, [ Meta-lang: Expression or terms ],
   $ α, β, γ $, [ Typevariable ],
@@ -71,7 +71,7 @@ $t_1 <t_2 <- t_3> | "case" (t_1 ? τ) t_2 : t_3$
     gutter: 5pt,
     $
       #type_name("Term variables") x ∈ cal(X) \
-      #type_name("Type variables") x ∈ cal(A) \
+      #type_name("Type variables") α ∈ cal(A) \
       #type_name("Labels") l ∈ cal(L)
     $,
     $
@@ -94,6 +94,7 @@ $t_1 <t_2 <- t_3> | "case" (t_1 ? τ) t_2 : t_3$
 == Infix Extensible Record Types @extensible_tabular
 #rect(width: 100%, inset: 10pt, grid(
   columns: 1fr,
+  gutter: 2pt,
   rows: 2,
   flexbox(
     $#type_name("Type Variables") α ∈ cal(V)_t$,
@@ -193,7 +194,7 @@ Terms: $E, F ::= x | λ x: A. E | F E | Λ a. E | E[A] | (E₁, …, E\ₙ) | π
 
 = Occurrence Typing
 
-#rect(inset: 10pt)[
+#rect(inset: 10pt, width: 100%)[
   *Domain-merging* @revisiting_occurrence
 
   $
@@ -237,51 +238,58 @@ Terms: $E, F ::= x | λ x: A. E | F E | Λ a. E | E[A] | (E₁, …, E\ₙ) | π
     )
   $
 ]
-== On type-cases, union elimination and Occurrence Typing @on_occurrence
-#flexbox(
-  derive(
-    "T-case1",
-    ($Γ ⊢ e : τ$, $Γ ⊢ e_1: τ_1$),
-    $Γ ⊢ ((e ∈ τ)? e_1 : e_2): τ_1$,
-  ),
 
-  derive(
-    "T-case2",
-    ($Γ ⊢ e : ¬τ$, $Γ ⊢ e_2: τ_2$),
-    $Γ ⊢ ((e ∈ τ)? e_1 : e_2): τ_2$,
-  ),
+#rect(inset: 10pt, width: 100%)[
 
-  derive(
-    "Union-Elim",
-    ($Γ ⊢ e' : τ_1 ∨ τ_2$, $Γ, x : τ_1: τ$, $Γ, x : τ_2: τ$),
-    $Γ ⊢ e{x \/ e'}: τ$,
-  ),
-)
-
-== Flow Typing @pearce_flowtyping
-
-#flexbox(
-  derive(
-    "T-app",
-    ($Γ ⊢ t_1: τ_1$, $Γ ⊢ f: τ_2 → T_3$, $Γ ⊢ τ_1 ≤ τ_2$),
-    $Γ ⊢ f t_1: τ_3$,
-  ),
-
-  derive(
-    "T-dec",
-    (
-      $Γ [x arrow.bar τ_1] ⊢ t_2 : τ_2$,
-      $Γ [f arrow.bar τ_1 → τ_2 ] ⊢ t_3 : τ_3$,
+  == On type-cases, union elimination and Occurrence Typing @on_occurrence
+  #flexbox(
+    derive(
+      "T-case1",
+      ($Γ ⊢ e : τ$, $Γ ⊢ e_1: τ_1$),
+      $Γ ⊢ ((e ∈ τ)? e_1 : e_2): τ_1$,
     ),
-    $Γ ⊢ f (τ_1 x) = t_2 in t_3: τ_3$,
-  ),
 
-  derive(
-    "T-if",
-    ($Γ[x arrow.bar Γ(x) ∧ τ_1] ⊢ τ_3$, $Γ[x arrow.bar Γ(x) ∧ ¬τ_1] ⊢ τ_3$),
-    $"if" (x "is" τ_1) t_2 "else" t_3: τ_2 ∨ τ_3$,
-  ),
-)
+    derive(
+      "T-case2",
+      ($Γ ⊢ e : ¬τ$, $Γ ⊢ e_2: τ_2$),
+      $Γ ⊢ ((e ∈ τ)? e_1 : e_2): τ_2$,
+    ),
+
+    derive(
+      "Union-Elim",
+      ($Γ ⊢ e' : τ_1 ∨ τ_2$, $Γ, x : τ_1: τ$, $Γ, x : τ_2: τ$),
+      $Γ ⊢ e{x \/ e'}: τ$,
+    ),
+  )
+]
+
+#rect(inset: 10pt, width: 100%)[
+
+  == Flow Typing @pearce_flowtyping
+
+  #flexbox(
+    derive(
+      "T-app",
+      ($Γ ⊢ t_1: τ_1$, $Γ ⊢ f: τ_2 → τ_3$, $Γ ⊢ τ_1 ≤ τ_2$),
+      $Γ ⊢ f t_1: τ_3$,
+    ),
+
+    derive(
+      "T-dec",
+      (
+        $Γ [x arrow.bar τ_1] ⊢ t_2 : τ_2$,
+        $Γ [f arrow.bar τ_1 → τ_2 ] ⊢ t_3 : τ_3$,
+      ),
+      $Γ ⊢ f (τ_1 x) = t_2 in t_3: τ_3$,
+    ),
+
+    derive(
+      "T-if",
+      ($Γ[x arrow.bar Γ(x) ∧ τ_1] ⊢ τ_3$, $Γ[x arrow.bar Γ(x) ∧ ¬τ_1] ⊢ τ_3$),
+      $"if" (x "is" τ_1) t_2 "else" t_3: τ_2 ∨ τ_3$,
+    ),
+  )
+]
 
 = Matching
 Given any pattern p, we can define a type $bag.l p bag.r$ that characterizes exactly the set of values that match the pattern:
@@ -312,33 +320,33 @@ Given a type τ and a pattern p with $bag.l p bag.r ≤ τ$, the operator τ/p p
 
 and satisfies the property that for every τ, p and v, if $∅ ⊢ v: τ$ and $v \/ p = σ$, then, for every variable x in p, the judgment $∅ ⊢ x σ : (τ\/p)(x)$ holds.
 
+#rect(inset: 10pt, width: 100%)[
 
-= Deferred Substitutions
-#derive(
-  "T-str",
-  ($$,),
-  $x_("Some" k space e) -> e$,
-)
+  = Deferred Substitutions
+  #derive(
+    "T-str",
+    ($$,),
+    $x_("Some" k space e) -> e$,
+  )
 
-#let subs = $overline(sigma.alt)$
+  #let subs = $overline(sigma.alt)$
 
-$
-       x_(σ?)[subs] & := cases(
-                        x_("Some" ("abs" d)) & "if" x = "with" e ∈ subs "and" sigma^? = "Some"(abs d),
-                        x_("Some" (k space e)) & "if" x = k space e ∈ subs,
-                        x_(σ^?) & otherwise,
-                      ) \
-     (λ x. e)[subs] & := λ x. e[subs] \
-  (λ {p?}. e)[subs] & := λ {p[subs]}: e[subs] \
-$
+  $
+         x_(σ?)[subs] & := cases(
+                          x_("Some" ("abs" d)) & "if" x = "with" e ∈ subs "and" sigma^? = "Some"(abs d),
+                          x_("Some" (k space e)) & "if" x = k space e ∈ subs,
+                          x_(σ^?) & otherwise,
+                        ) \
+       (λ x. e)[subs] & := λ x. e[subs] \
+    (λ {p?}. e)[subs] & := λ {p[subs]}: e[subs] \
+  $
+]
 
-
-
-
-
-= Gradual Typing
 
 #rect(inset: 10pt, width: 100%)[
+
+  = Gradual Typing
+
   *Consistency*
 
   #let uk = $star.op$
@@ -356,23 +364,6 @@ $
     derive("ForallL", ($Γ ⊢ τ$, $Γ, α ⊢ A[α -> τ] <= B$), $ ∀α. A <= B $),
   )
 ]
-
-
-= Qualified Types
-
-$
-  φ & ::= τ | π => φ \
-  σ & ::= φ ϕ
-$
-
-= Misc
-$
-  "unfold"_1 oα := &{ x := #b[nonrec] t | x := #b[nonrec] t ∈ oα} attach(union, tr: <) \
-  &{ x := #b[nonrec] t["indirects" oα] | x := #b[rec] t ∈ oα} \
-  "indirects" oα := &{x := #b[abs] {oα}.x | x ∈ oα }
-$
-
-
 
 
 #bib

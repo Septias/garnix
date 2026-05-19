@@ -1,6 +1,9 @@
 #import "../functions.typ": *
-#import "../typesystem.typ": *
+#import "./typesystem.typ": *
 #set page(height: auto)
+
+== TODO
+- Die Typvariablen und records sind beide α
 
 == Castagna
 #figure(caption: "Castagna Record Typesystem.", rect(
@@ -249,12 +252,12 @@
     align(left, text(weight: "bold", smallcaps("Syntax & Types"))),
     flexbox(
       $#type_name("Term variables") x ∈ cal(X)$,
-      $#type_name("Type variables") x ∈ cal(A)$,
+      $#type_name("Type variables") α ∈ cal(A)$,
       $#type_name("Labels") l ∈ cal(L)$,
     ),
     $
       #type_name("Kinds") &&               κ & ::= ∗ | L | κ → κ \
-      #type_name("Types") && cal(T) in.rev τ & ::= α | {overline(α)} | ⦅l⦆ | \
+      #type_name("Types") && cal(T) in.rev τ & ::= α | {overline(α)} | ⦅l⦆ \
         #type_name("Row") && cal(E) in.rev t & ::= { overline(a) } \
       #type_name("Terms") && cal(E) in.rev t & ::= { overline(a) } \
                           &&               a & ::= l = t \
@@ -274,7 +277,7 @@
     spacing: 9pt,
     flexbox(
       $#type_name("Term variables") x ∈ cal(X)$,
-      $#type_name("Type variables") x ∈ cal(A)$,
+      $#type_name("Type variables") α ∈ cal(A)$,
     ),
     $
       #type_name("Types") && cal(T) in.rev τ & ::= {} → τ ∣ τ → τ | ?t \
@@ -302,15 +305,12 @@
     $
       #type_name("Types")&& cal(T) in.rev τ &::= "true" | "false" \
       #type_name("Terms")&& cal(E) in.rev t &::= #b[if] t_1 #b[then] t_2 #b[else] t_3 \
-      &&a &::= l | l ? t \
-      &&α &::= l : τ \
     $,
     align(left, text(weight: "bold", smallcaps("Reduction Rules"))),
     $
       #rule_name("R-Cond-True")&& #b[if] "true" #b[ then ] t_1 #b[ else ]t_2 & arrow.long t_1 \
       #rule_name("R-Cond-False")&& #b[if] "false" #b[then ] t_1 #b[ else ]t_2 & arrow.long t_2 \
     $,
-    align(left, text(weight: "bold", smallcaps("Typing Rules"))),
   ),
 ))
 

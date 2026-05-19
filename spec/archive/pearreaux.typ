@@ -2,10 +2,10 @@ Things to do for algebraic subtyping:
 
 == Form the distributive lattice of types (part of subtyping rules basically)
 
-- Every type needs to be in lattice
-- There needs to a top and bottom type (such that every element has glb an lup)
+- Every type needs to be in the _lattice_
+- There needs to be a top and bottom type (such that every element has glb an lup)
 - Distributivity rules τ₁ ∧ (τ₂ ∨ τ₃) == τ₁ ∧ τ₂ ∧ τ₁ ∧ τ₃
-- Meet and Join for every two elements τ₁, τ₂
+- Meet and Join for every two types τ₁, τ₂
 - Every τ has a complement ¬τ where τ ∧ ¬τ === T and τ ∨ ¬τ === ⊥
 
 == Define Contexts
@@ -26,9 +26,9 @@ Things to do for algebraic subtyping:
 - Hypotheses must be guarded against immediate use, otherwise unsound
 
 === Levels
-- Levels are used such that more more general tvs can not escape functions
-- Skolem: A skolem is used to fix a more polymorphic type (let-var inside a function)
-- Rigid Variable: A rigid variable is used fix a less polymorhpic type (function parameter)
+- _Levels_ are used such that more general tvs can not escape functions
+- _Skolem_: A skolem is used to fix a more polymorphic type (let-var inside a function)
+- _Rigid Variable_: A rigid variable is used fix a less polymorhpic type (function parameter)
 
 ==== Skolem
 > used to fix a more polymorphic type
@@ -45,24 +45,16 @@ It would be problematic if we constrain α (typvar from x) with types from β (t
 ==== Rigid Variable
 > used to fix a less polymorphic type
 
-```
-
-```
-
-
 === Recursion
 - Manual unfolding
 - Building types
 - Noticing cycles
 
-
 === Consistency
 - New ∀-quantified variable bounds have to be propagated
 
-
 === Normal Forms
 - Needed to get efficient inference in face of boolean algebra
-
 
 === Constraining
 - Subroutine to create new bounds

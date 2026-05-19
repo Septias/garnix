@@ -120,14 +120,11 @@ Für alle systeme ist die Frage:
   - Function Destructuring
   - Let-statements
 
-  == Todo
-  - Kann die speziale Syntax helfen?
-
   #figure(caption: "Terms", box(
     width: 100%,
     [
       #align(center, flexbox(
-        $#type_name("Terms") e := { e = e } | {overline(p)} → e | { overline(p), ... } → e | #b[let] e = e #b[in] e$,
+        $#type_name("Terms") e := { e₁ = e₂ } | {overline(p)} → e | { overline(p), ... } → e | #b[let] e₁ = e₂ #b[in] e₃$,
       ))
     ],
   ))
