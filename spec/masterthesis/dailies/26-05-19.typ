@@ -1,9 +1,10 @@
 
+./26-05-20.typ
 == Fragen
 - Sind Argumente bei den Funktionsaufrufen schon maximal präzise?
   - Nein: `a: let b = b: a + b; c = a + 1; ...`
-  - A captured und wird danach noch verfeinert
-  - Durch order nicht mehr confluent?
+  - a ist captured und wird danach noch verfeinert
+  - Durch order nicht mehr confluent??
   - Wie würde man überhaupt `a: b: a + b` typen?
 - Wie funktioniert subtyping mit rows?
   - Das ist halt schon einfach wieder nicht machbar
@@ -17,9 +18,6 @@
 - An welchen Stellen kommen Typvariablen vor?
   - Let-poly
   - Funktionen (in ML)
-- Wofür die Equivalence Relation?
-  - Damit wir Typvariablen haben können? NEEEEE
-
 
 == TODO
 - Die Systeme von Castagna nochmal wirklich anschauen… ?

@@ -5,21 +5,22 @@
 #let op = $overline(α)$
 = Die Systeme
 - Minimal : Record Concat, Pattern-Functions
-- Mit #b[let]: Bring Poly rein
-- Mit #b[with]:
+- Mit #b[let]: Bringt let-poly rein
 - Mit #b[rec]: Dadurch brauch man spätestens einen rekursiven Typ
   - Ich sag das ist eine spätere Erweiterung
+- Mit #b[with]: Anderes shadowing (perp)
+- Mit #b[inherit]: Wie werden die poly. vars. erweitert?
 
 Für alle systeme ist die Frage:
 - Subtyping?
 - Andere constraints?
-
 
 == Minimal
 - Sollten die Funktionen schon polymorph sein?
 - Inferenz bereits für die Pattern notwendig
   - Mehrere Typvariablen?
   - Wie trackt man record accesses?
+
 
 = Formalisierung
 #rect(width: 100%)[
