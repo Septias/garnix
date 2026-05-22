@@ -1,3 +1,5 @@
+
+./26-05-21.typ
 == Fragen
 - Wie genau funktionieren Qualified Type Systems?
 - Die Systeme von Castagna nochmal wirklich anschauen?
