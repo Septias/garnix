@@ -1,3 +1,5 @@
+
+./26-05-23.typ
 == Todo
 - Rows weiter behandeln und checken, wie das mit removal interagiert
 - Einfach record removal nicht durch negative typen?
