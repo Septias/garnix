@@ -1,8 +1,8 @@
 ./26-05-13.typ
 
 == Vorgehen: Typ-Algorithmus
-1. Wir lesen den Code und erstellen ein Parsetree
-  - Debjrujin?
+1. Wir lesen den Code und erstellen einen Parsetree
+  - Debrujin?
 2. Jede Funktion bekommt für ihre Argumente _Typvariablen_
 3. Die Nutzung dieser Typvariablen wird im Funktionskörper analysiert
 4. Anhand der Nutzung stellen wir dann fest:
@@ -25,13 +25,13 @@
 
 
 == Records mit vielen Rows
-Rows mit typvariablen:
+Rows mit Typvariablen:
 ⟨ρ₁⟩ | ⟨ρ₂⟩ -> ⟨ρ₁ ρ₂⟩
 ⟨ρ₁⟩ | ⟨α⟩  -> ⟨ρ₁ α⟩
 ⟨α⟩  | ⟨ρ₁⟩ -> ⟨α ρ₁⟩
 ⟨α⟩  | ⟨β⟩  -> ⟨α β⟩
 
-Indexing mit typvariablen:
+Indexing mit Typvariablen:
 
 ⟨ρ₁ ρ₂⟩.x ->
 - ρ₁.x if x ∈ ρ₁
@@ -53,7 +53,7 @@ Indexing mit typvariablen:
 Das Problem ist, dass ich nicht weiß, was in den Typvariablen drin steckt. Die einzige Lösung ist dann, die Auflösung zu _verzögern_ oder eine _proof-obligation_ zu erstellen. D.h entweder man versucht im Nachhinein (z.B) beim Function Call zu klären, ob alles funktioniert. Oder man erweitert die Sprache so, dass schon beim Call "bewiesen" werden muss, dass die gefragten Felder in dem Record existieren.
 
 == Wie genau macht ROSE das?
-{ l: τ} <= ζ₃ , ζ₁ ⊙ ζ₂ ~ ζ₃ => l -> τ
+{ l: τ } <= ζ₃ , ζ₁ ⊙ ζ₂ ~ ζ₃ => l -> τ
 
 
 == Beispiel: Funktion

@@ -9,6 +9,23 @@ Mein Ziel ist es, ein Record calculus zu erstellen, der Nix so gut wie möglich 
 3. Algorithmen dafür erfinden/schreiben/brainstormen
 4. Davon ausgehend Entscheidungen über die Struktur des Typsystems herleiten
 
+== Von unten nach Oben
+1. Records und Function Patterns
+  - Inferenz basierend auf Unification?
+  - [x] Probleme: Ich brauche schon subtyping?
+    - Wäre wahrscheinlich nice - I guess
+  - [x] Probleme: Wie genau werden die neuen Variablen assoziiert
+2. FC-Labels hinzufügen
+  - Neuer Type, Inferenz?
+3. Let-Erweiterung
+  - Vielleicht reicht dafür auch einfach schon eine Typregel?
+4. Recursive-Erweiterung
+  - Problem: Was genau sind die Implications?
+  - Warum konnte Parreaux nicht die μ-Regel hinzufügen?
+5. With-Statement
+  - Wie interagieren die mit den Row-variablen?
+6. Inherit
+
 
 = Features
 - Pattern Destructuring

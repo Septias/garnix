@@ -1,3 +1,6 @@
+== Subtyping für Rows mit Vars
+- Wir haben die Row x: { a: int, b: {c : str}} und y: { a: α, β@{γ} }
+- Hier muss jetzt einfach α ≤ int oder α ≡ int
 
 == Beispiel: Nominale Tags funktionieren nicht
 

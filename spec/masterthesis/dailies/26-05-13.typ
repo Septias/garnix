@@ -1,5 +1,4 @@
-
-next: ./26-05-16.typ
+./26-05-16.typ
 
 == Todo
 - Add terms in the `record_calc`
