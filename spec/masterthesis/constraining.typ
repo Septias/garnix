@@ -24,7 +24,7 @@ We need a routine that traverses the record and for every field does:
       - Können wir alle Constraints soweit aufschieben, bis sie lösbar werden?
         - Wenn pureness: Dann ja?
           - Wie siehts mit Completeness aus?
-  - Heuristik: Gute Accesse solange explizit, ansonsten ∗
+  - Heuristik: Gute Accesse solange explizit, ansonsten ★
     - Wieder von hinten lesen und expliziten Typ zurück wenn möglich
     - Ist halt direkt _gradual_ (A system based on refinements)
 

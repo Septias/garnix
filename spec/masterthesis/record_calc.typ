@@ -1,8 +1,8 @@
 #import "./functions.typ": *
 #import "./snips/typesystem.typ": *
 #set page(height: auto)
-
 #let op = $overline(α)$
+
 = Die Systeme
 - Minimal : Record Concat, Pattern-Functions
 - Mit #b[let]: Bringt let-poly rein
