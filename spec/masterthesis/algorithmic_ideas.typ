@@ -2,8 +2,20 @@
 - Wir haben die Row x: { a: int, b: {c : str}} und y: { a: α, β@{γ} }
 - Hier muss jetzt einfach α ≤ int oder α ≡ int
 
-== Beispiel: Nominale Tags funktionieren nicht
+== Beispiel: Row introduction
+```nix
+let
+  f = a: a.b;
+in ()
+```
 
+1. Hier wird eine typvariable für a eingeführt
+2. Durch den Zugriff wissen wir, dass es ein record sein muss
+3. Theoretisch würden wir dann { b: τ } als  _lower bound_ hinzufügen
+4. Was wir aber in row system machen ist: α bekommt einen constraint ⟨b | ρ⟩?
+
+
+== Beispiel: Nominale Tags funktionieren nicht
 ```nix
 let
  a = { b = 2; };
@@ -22,7 +34,7 @@ in ()
 ```
 
 1. Die beiden Argumente werden als Variablen in den Context aufgenommen
-2. Danach müssen beide durch das concat zumindest mal ein Record sein
+2. Danach müssen beide durch das Concat zumindest mal ein Record sein
 3. Und in diesem gemeinsamen Record muss das Feld `c` enthalten sein
 
 - Nun wissen wir nur leider nicht, aus welchem es stammt (beide sind ja abstrakt)
@@ -34,16 +46,16 @@ in ()
 - Oder man modelliert die Auswertung? Stinkt aber auch nach untractability
 - Oder man darf gar nicht zwei Unbekannte zusammenführen?
 
-== Beispiel: Unions
+== Beispiel: Intersection
 ```nix
 let
   f = a: b: c: if a then b else c;
 in f
 ```
-- Hier laufen b und c zusammen. Dh. sie müssen durch die union `b ∧ c` dargestellt werden
+- Hier laufen b und c zusammen. Dh. f hat Typ `bool -> b -> c -> b ∧ c`
 
 
-== Beispiel: Intersection
+== Beispiel: Union
 ```nix
 let
   f = a: a;
@@ -51,12 +63,12 @@ let
   y = f "str";
 in f
 ```
-- Hier muss die Funktion für int und str funktionieren. => f: int ∧ str -> ?
+- Hier muss die Funktion für int und str funktionieren. => f: int ∨ str -> ?
 
 
 == Beispiel: Intersection an positiver Stelle
 ```
-builtins.Removeattrs :: r ≤ {} -> [overline(str_i)] -> {} \ overline(str_i)
+builtins.Removeattrs :: r ≤ {} => r -> [overline(str_i)] -> r ∧ ¬{overline(str_i)}
 ```
 
 ```nix
@@ -70,13 +82,13 @@ in x
   - Maybe just prefill this function?
 
 == Scoped Rows
-Rows mit typvariablen:
+Rows mit Typvariablen:
 ⟨ρ₁⟩ | ⟨ρ₂⟩ -> ⟨ρ₁ ρ₂⟩
 ⟨ρ₁⟩ | ⟨α⟩  -> ⟨ρ₁ α⟩
 ⟨α⟩  | ⟨ρ₁⟩ -> ⟨α ρ₁⟩
 ⟨α⟩  | ⟨β⟩  -> ⟨α β⟩
 
-Indexing mit typvariablen:
+Indexing mit Typvariablen:
 
 ⟨ρ₁ ρ₂⟩.x ->
 - ρ₁.x if x ∈ ρ₁
@@ -106,7 +118,7 @@ Das Problem ist, dass ich nicht weiß, was in den Typvariablen drin steckt. Die 
 
 
 == Subtyping für Rows mit FC-Labels
-- Wir haben die Row x: { a: int, b: {c : str}} und y: { α: int, β@{γ} }
+- Wir haben die Row x: { a: int, b: {c : str}} und y: { α: int, β\@{γ} }
 - Jetzt müssen wir entscheiden, ob die subtypen sind
 - Damit wir sagen können y ≤ x, muss α = a
 - Wie kann man das als Constraint machen?

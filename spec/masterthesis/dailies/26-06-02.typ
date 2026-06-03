@@ -1,4 +1,5 @@
 
+./26-06-03.typ
 == Fäden
 - Wie würde Subtyping und type connectives funktionieren?
   - Subtyping schon eher plan B gerade würde ich sagen…
@@ -7,11 +8,6 @@
 
 == TODO: Formalization
 - Wie FC labels darstellen?
-- Minimal calc braucht
-  - Rewriting Rules für Records
-  - Kinding
-  - Muss man den Kontext noch mit Tyvars erweitern können?
-  - ± verwenden für syntax der Funktionen?
 
 
 == Ansätze
