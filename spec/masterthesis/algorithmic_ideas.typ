@@ -52,7 +52,7 @@ let
   f = a: b: c: if a then b else c;
 in f
 ```
-- Hier laufen b und c zusammen. Dh. f hat Typ `bool -> b -> c -> b ∧ c`
+- Hier laufen b und c zusammen. Dh. f hat Typ `bool -> b -> c -> b ∨ c`
 
 
 == Beispiel: Union

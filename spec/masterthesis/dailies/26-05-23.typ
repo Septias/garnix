@@ -1,5 +1,7 @@
 
-- Die Schwierigkeiten bei Type connectives sind Funktionen
 ./26-06-01.typ
-== Weiter Schwierigkeiten
+
+
+== Schwierigkeiten
+- Die Schwierigkeiten bei Type-connectives sind Funktionen
 - Recursiveness
