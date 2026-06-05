@@ -3,7 +3,7 @@
   - Hilfreich weil: Übersicht records, quantified
 - [x] Local Type inference
   - Hilfreich weil: Locality, Abstraction, Records, Further Reading
-- Subtyping recursive types
+- [ ] Subtyping recursive types
   - Hilfreich weil: Wir auch rekursive Typen haben
 - [x] Tabular Data
   - Hilfreich weil: Ist fast das, was ich möchte
@@ -16,10 +16,10 @@
 - [[Infix-Extensible Record Types for Tabular Data.pdf]]
   - Based On: Daan Leijen
 - [[Extensible Data Types with Ad-Hoc Polymorphism.pdf]]
-  - Based On: [[Abstracting Extensible Data Types.pdf]]
-- [[Abstracting Extensible Recursive Functions.pdf]]
-  - Based on: [[Generic Programming with Extensible Data Types.pdf]]
-    - Based on: [[Abstracting Extensible Data Types.pdf]]
+  - Based On: *[[Abstracting Extensible Data Types.pdf]]* - Morris
+- [[Abstracting Extensible Recursive Functions.pdf]] - Alex & Morris
+  - Based on: [[Generic Programming with Extensible Data Types.pdf]] - Alex & Morris
+    - Based on: *[[Abstracting Extensible Data Types.pdf]]* - Morris
 
 
 == Tabular Data

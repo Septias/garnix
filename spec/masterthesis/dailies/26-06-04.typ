@@ -1,15 +1,13 @@
 
+./26-06-05.typ
 == Todo
 - Wie werden rows in Nix eingeführt?
   - Durch getAttr functions? - Nicht unbedingt
   - Durch with? - Nope
   - Generell durch Inference? - Brauhct dann trotzdem keine syntaktischen Rows
 
-
-== Fäden
-- Fc-Label Regeln aufschreiben
-- Generic access function types aufschreiben?
-
+== Fakten
+- Ich brauche keine syntaktischen Rows
 
 == Ansätze
 - Alles in einer Row sammeln und dann von hinten vorgehen.
@@ -34,8 +32,8 @@
 
 == Set-based Elements
 
-- Wir sagen ein Element muss über zwei Rows existieren. Ein Beispiel ist
-- Hier sind a und b rows? Ne eigentlich sind das nur Records. Aber abstrakte Records _müssen_ rows haben?
+- Wir sagen ein Element muss über zwei Rows existieren.
+- Hier sind a und b rows? Ne eigentlich sind das nur Records.
 
 ```nix
 a: b: (a // b).c
