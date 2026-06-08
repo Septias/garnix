@@ -26,7 +26,7 @@ Mein Ziel ist es, ein _Record Calculus_ zu erstellen, der Nix so gut wie möglic
   - Warum konnte Parreaux nicht die μ-Regel hinzufügen?
 5. With-Statement
   - Wie interagieren die mit den Row-variablen?
-  - Eigentlich ist da auch direkt ★ glaube ich
+  - Eigentlich ist da auch direkt ⊛ glaube ich
 6. Inherit
   - Bidirectional?
 
@@ -60,19 +60,7 @@ Mein Ziel ist es, ein _Record Calculus_ zu erstellen, der Nix so gut wie möglic
 - Mehrere Row-variablen? Normalisieren?
   - Einfach alle sammeln mit Rechts-Präzedenz?
     - Eigentlich eine gute Heuristik 🤔
-- Können wir nominale Identities für Nix besorgen? (classes)
-  - Ich glaube nein!
-  - Gegenbeispiel, warum dann Parreaux nicht klappt?
 
 
 == Schwierigkeiten
 - Dadurch, dass es Typvariablen gibt, können in Rows Unklarheiten entstehen
-
-
-= Archiv
-- Was für constraints und wie kann ich die lösen und inferieren?
-  - Einfach was Bestehendes verwenden?
-- Qualified Types oder Unification oder Bi-unification?
-  - Qualified Types: Maximal flexibel, aber hart
-  - Unification: Auch constraints, aber easier
-  - Bi-unification: Eigentlich nicht viel härter als unification?

@@ -1,29 +1,17 @@
-== Subtyping für Rows mit Vars
-- Wir haben die Row x: { a: int, b: {c : str}} und y: { a: α, β@{γ} }
-- Hier muss jetzt einfach α ≤ int oder α ≡ int
-
-== Beispiel: Row introduction
-```nix
-let
-  f = a: a.b;
-in ()
-```
-
-1. Hier wird eine typvariable für a eingeführt
-2. Durch den Zugriff wissen wir, dass es ein record sein muss
-3. Theoretisch würden wir dann { b: τ } als  _lower bound_ hinzufügen
-4. Was wir aber in row system machen ist: α bekommt einen constraint ⟨b | ρ⟩?
+= ∈-Algorithmus
 
 
-== Beispiel: Nominale Tags funktionieren nicht
-```nix
-let
- a = { b = 2; };
- c = { b = 2; };
-in ()
-```
-- Das man records in Nix schreiben kann reicht schon?
+== Beispiel: Vereinfachung
+```  let y = {}; b = x: y: (x ++ y).a ```
 
+- In diesem Beispiel kann ich zum Beispiel sagen, dass a ∈ x sein _muss_
+- Sind x und y variable, kann man es nur weiter "Aufschieben"
+  - Was genau ist Aufschieben?
+    - sowohl x als auch y bekommen constraint `a ∈ x ∪ y`?
+    - Vielleicht auch nur einen Constraint dafür im Context speichern
+    - Was wenn es sich nicht auflösen lässt?
+      - Dann einfach Mehrheitsentscheid? Eigentlich blöd, weil nicht sound
+      - Einfach den unknown Type ⊛ zurück geben
 
 == Beispiel: Asymmetric Concat
 ```nix
@@ -45,6 +33,35 @@ in ()
 - Auf der anderen Seite kann man das Typsystem schwächen: Nur Inferenz, wenn keine zwei Unbekannten
 - Oder man modelliert die Auswertung? Stinkt aber auch nach untractability
 - Oder man darf gar nicht zwei Unbekannte zusammenführen?
+
+
+= Misc
+== Subtyping für Rows mit Typevars
+- Wir haben die Row x: { a: int, b: {c : str}} und y: { a: α, β@{γ} }
+- Hier muss jetzt einfach α ≤ int oder α ≡ int
+
+
+== Beispiel: Row introduction
+```nix
+let
+  f = a: a.b;
+in ()
+```
+
+1. Hier wird eine Typvariable für a eingeführt
+2. Durch den Zugriff wissen wir, dass es ein record sein muss
+3. Theoretisch würden wir dann { b: τ } als  _lower bound_ hinzufügen
+4. Was wir aber in row system machen ist: α bekommt einen constraint ⟨b | ρ⟩?
+
+
+== Beispiel: Nominale Tags funktionieren nicht
+```nix
+let
+ a = { b = 2; };
+ c = { b = 2; };
+in ()
+```
+- Dass man records in Nix schreiben kann reicht schon?
 
 == Beispiel: Intersection
 ```nix
@@ -83,10 +100,10 @@ in x
 
 == Scoped Rows
 Rows mit Typvariablen:
-⟨ρ₁⟩ | ⟨ρ₂⟩ -> ⟨ρ₁ ρ₂⟩
-⟨ρ₁⟩ | ⟨α⟩  -> ⟨ρ₁ α⟩
-⟨α⟩  | ⟨ρ₁⟩ -> ⟨α ρ₁⟩
-⟨α⟩  | ⟨β⟩  -> ⟨α β⟩
+⟨ρ₁⟩ | ⟨ρ₂⟩ -> ⟨ρ₁ | ρ₂⟩
+⟨ρ₁⟩ | ⟨α⟩  -> ⟨ρ₁ | α⟩
+⟨α⟩  | ⟨ρ₁⟩ -> ⟨α  | ρ₁⟩
+⟨α⟩  | ⟨β⟩  -> ⟨α  | β⟩
 
 Indexing mit Typvariablen:
 

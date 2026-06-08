@@ -1,10 +1,17 @@
 #import "../functions.typ": *
 
+
 == From interpreter to theory
 When trying to retrofit a typesystem onto a language that is effectively defined by an interpreter, the natural question arises, how close one should model the interpreters behaviour. In many cases the interpreter needs to be followed closely, but in cases of "higher theoretical properties" like infinite-recursion it might be benefical to extrapolate or simplify the intepreter quirks, effectively deviating from the instantiated operational semantic.
 
 
 = Archive
+- Was für constraints und wie kann ich die lösen und inferieren?
+  - Einfach was Bestehendes verwenden?
+- Qualified Types oder Unification oder Bi-unification?
+  - Qualified Types: Maximal flexibel, aber hart
+  - Unification: Auch constraints, aber easier
+  - Bi-unification: Eigentlich nicht viel härter als unification?
 
 $overline(E)^{i ∈ 𝓘}$ denotes a repetition of a syntax construct indexed by $i ∈ 𝓘$. The index $i ∈ 𝓘$ is omitted if obvious.
 
