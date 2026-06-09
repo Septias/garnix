@@ -1,6 +1,8 @@
 
 ⟨ a:b | ρ₁ | c:d | l₁: e ⟩
 
+./26-06-04.typ
+./26-06-09.typ
 
 == Fragen
 - Wie führe ich records mit rows ein?
@@ -17,11 +19,6 @@
     - Ich habe keinen getypten Code
 
 
-== Fäden
-- Fc-Label Regeln aufschreiben
-- Generic Access function types aufschreiben?
-
-
 == Lesen
 - [x] Algorithm M
 
@@ -31,37 +28,3 @@
   - Ja
 - Wie trackt man record accesses?
   - (bi-)unification
-
-
-
-== FC Labels
-e := e₁.\${e₂} | { \${e₁} = e₂ }
-
-t := ⦅l⦆
-
-kinding:
-
-
--------------
-l: Lab
-
-
-Γ ⊢ l: Lab
-----------
-Γ ⊢ ⦅l⦆: ★
-
-Wie genau funktioniert das?
-```nix
-let
- e2 = a: b: c: (a // b).${c};
-in ()
-```
-- Hier wissen wir überhaupt nichts über c
-- D.h. der Access ist auch maximal unbestimmt
-- Kann man hier mit ∈-Constraints was erreichen?
-- Man könnte _bi-directional_ auf c schließen, wenn a und b feststehen
-  - Oder halt nur ein `c` in { a: τ, b: τ }
-
-
-== Unkown Types
-ty := ⊛

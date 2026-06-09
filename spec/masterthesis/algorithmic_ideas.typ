@@ -17,7 +17,6 @@
 ```nix
 let
  e1 = a: b: (a // b).c;
- e2 = a: b: c: (a // b).${c};
 in ()
 ```
 
@@ -33,6 +32,17 @@ in ()
 - Auf der anderen Seite kann man das Typsystem schwächen: Nur Inferenz, wenn keine zwei Unbekannten
 - Oder man modelliert die Auswertung? Stinkt aber auch nach untractability
 - Oder man darf gar nicht zwei Unbekannte zusammenführen?
+
+```nix
+let
+ e2 = a: b: c: (a // b).${c};
+in ()
+```
+- Hier wissen wir überhaupt nichts über c
+- D.h. der Access ist auch maximal unbestimmt
+- Kann man hier mit ∈-Constraints was erreichen?
+- Man könnte _bi-directional_ auf c schließen, wenn a und b feststehen
+  - Oder halt nur ein `c` in { a: τ, b: τ }
 
 
 = Misc

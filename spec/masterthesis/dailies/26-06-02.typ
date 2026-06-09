@@ -4,6 +4,7 @@
 - Wie würde Subtyping und type connectives funktionieren?
   - Subtyping schon eher plan B gerade würde ich sagen…
 - Beispiel für negative Typen finden
+  - Got it
 
 
 == TODO: Formalization
