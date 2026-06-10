@@ -7,7 +7,12 @@
   - Hilfreich weil: Wir auch rekursive Typen haben
 - [x] Tabular Data
   - Hilfreich weil: Ist fast das, was ich möchte
-
+- [~] Algorithm M
+- [ ] A polymorphic typesystem for... (section: Inference)
+  - Weil inference
+- [ ] Designing Record Systems
+  - Weil inference und FC-Labels
+- [ ] The essence of ML Type Inference
 
 == Records
 - Daan Leijen
@@ -38,7 +43,13 @@
 ⊕ Asymmetric Concat
 ⊕ Expressive constraints: $\_ ⊙_~ \_$(containment) and $ζ ⧀ ζ$(subtype)
 ⊖ System F (Explizite type-application)
-⊖ Keine Inferenz für Funktionen
+⊖ Keine Inferenz für Lets
+
+
+== Generic Programming with Extensible Rows
+> Map rows to things and back?
+⊕ FC-Labels
+⊖ Zeigt keine Inferenz
 
 
 == Lacks Predicates

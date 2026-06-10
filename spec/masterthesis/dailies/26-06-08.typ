@@ -2,7 +2,7 @@
 ⟨ a:b | ρ₁ | c:d | l₁: e ⟩
 
 ./26-06-04.typ
-./26-06-09.typ
+./26-06-10.typ
 
 == Fragen
 - Wie führe ich records mit rows ein?

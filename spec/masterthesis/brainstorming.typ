@@ -1,6 +1,6 @@
 
 = ZIEL
-Mein Ziel ist es, ein _Record Calculus_ zu erstellen, der Nix so gut wie möglich abdeckt. Dabei können auch Abstriche gemacht werden, aber er sollte zumindest irgendwie _sound_ sein. Darauf kann dann einen Implementation oder auch ein Beweis folgen. Wenn ich einen Beweis machen muss, dann muss ich dafür sicher zumindest mal 3W einplenen. Im Moment ist es noch nicht wirklich drinne, aber ich glaube ich muss das hinzufügen, damit Daddy T happy ist.
+Mein Ziel ist es, ein _Record Calculus_ zu erstellen, der Nix so gut wie möglich abdeckt. Dabei können auch Abstriche gemacht werden, aber er sollte zumindest irgendwie _sound_ sein. Darauf kann dann einen Implementation oder auch ein Beweis folgen. Wenn ich einen Beweis machen muss, dann muss ich dafür sicher zumindest 1½ Monate einplanen. Im Moment ist es noch nicht wirklich drinne, aber ich glaube ich muss das hinzufügen, damit Daddy T happy ist.
 
 
 = Vorgehen
