@@ -1,30 +1,30 @@
 == Read
-- [x] A record calculus based on symmetric concatenation
+- [x] _A record calculus based on symmetric concatenation_
   - Hilfreich weil: Übersicht records, quantified
-- [x] Local Type inference
+- [x] _Local Type inference_
   - Hilfreich weil: Locality, Abstraction, Records, Further Reading
-- [ ] Subtyping recursive types
+- [ ] _Subtyping recursive types_
   - Hilfreich weil: Wir auch rekursive Typen haben
-- [x] Tabular Data
+- [x] _Tabular Data_
   - Hilfreich weil: Ist fast das, was ich möchte
-- [~] Algorithm M
-- [ ] A polymorphic typesystem for... (section: Inference)
-  - Weil inference
-- [ ] Designing Record Systems
+- [~] _Algorithm M_
+- [x] _A polymorphic typesystem for_... (section: Inference)
+  - Weil Inference
+- [ ] _Designing Record Systems_
   - Weil inference und FC-Labels
 - [ ] The essence of ML Type Inference
 
 == Records
 - Daan Leijen
-  - Extensible records with scoped labels
-  - First class labels for extensible rows
+  - _Extensible records with scoped labels_
+  - _First class labels for extensible rows_
 - [[Infix-Extensible Record Types for Tabular Data.pdf]]
   - Based On: Daan Leijen
 - [[Extensible Data Types with Ad-Hoc Polymorphism.pdf]]
-  - Based On: *[[Abstracting Extensible Data Types.pdf]]* - Morris
+  - Based On: _[[Abstracting Extensible Data Types.pdf]]_ - Morris
 - [[Abstracting Extensible Recursive Functions.pdf]] - Alex & Morris
   - Based on: [[Generic Programming with Extensible Data Types.pdf]] - Alex & Morris
-    - Based on: *[[Abstracting Extensible Data Types.pdf]]* - Morris
+    - Based on: _[[Abstracting Extensible Data Types.pdf]]_ - Morris
 
 
 == Tabular Data
@@ -32,7 +32,7 @@
 ⊕ FC-labels
 ⊕ Polymorphic Rows
 ⊖ Kein Subtyping
-⊖ Can not model "extend or overwrite"
+⊖ _Can not model "extend or overwrite"_
 - Extension is always to the left
 - Uses an _instantation_
 - Uses _conditional tail check_
@@ -43,7 +43,7 @@
 ⊕ Asymmetric Concat
 ⊕ Expressive constraints: $\_ ⊙_~ \_$(containment) and $ζ ⧀ ζ$(subtype)
 ⊖ System F (Explizite type-application)
-⊖ Keine Inferenz für Lets
+⊖ _Keine Inferenz für Lets_
 
 
 == Generic Programming with Extensible Rows
@@ -52,11 +52,15 @@
 ⊖ Zeigt keine Inferenz
 
 
-== Lacks Predicates
-⊖ probably needs explicit types?
-
-
 == Local Type Inference
 - Overapproximation of types?
 - Thats a possible way to calculate best types w/o backtracking
 - Bot-type ist schwierig (generell)
+
+
+== A polymorphic typesystem for
+⊖ No double labels?
+
+
+== Designing Record systems
+⊖ No overloading of field variables

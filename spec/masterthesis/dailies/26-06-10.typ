@@ -1,6 +1,8 @@
 
 - ROSE has explicit (and not inferred) let types
 
+./26-06-12.typ
+
 == Fragen
 - Brauche ich eine Row-equivalence relation?
   - In tabular data wirds für SIM verwendet
@@ -11,9 +13,3 @@
   - Nicht wirklich inferrable? Incomplete zumindest und halt SystemF nh.
 - Was macht das label-statement in tabular data?
   - Lookup rule lule
-
-
-== Fäden
-- Fc-Label Regeln aufschreiben
-- Generic Access function types aufschreiben?
-- Wie kann man _overwrite or extend_ in tabular data hinzufügen?
