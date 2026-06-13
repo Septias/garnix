@@ -10,9 +10,9 @@
 - [~] _Algorithm M_
 - [x] _A polymorphic typesystem for_... (section: Inference)
   - Weil Inference
-- [ ] _Designing Record Systems_
+- [x] _Designing Record Systems_
   - Weil inference und FC-Labels
-- [ ] The essence of ML Type Inference
+  - Mit HM(x) ein bisschen strange, inference nicht genau klar und nur theoretisch
 
 == Records
 - Daan Leijen
