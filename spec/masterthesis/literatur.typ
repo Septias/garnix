@@ -64,3 +64,9 @@
 
 == Designing Record systems
 ⊖ No overloading of field variables
+⊖ HM(X) does not tell you how to implement X.
+
+
+== Type systems with constrained types (no marks possible)
+- ∃ᾱ binds some subset of variables ᾱ in the constraint
+- Constraints are boolean algebras
