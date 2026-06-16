@@ -9,26 +9,28 @@ Typevars  : α, β, γ, …
 *Terms*
 e := x | e₁e₂  | 𝓹: e₂ | { ? }
 𝓹 := e | { p } | { p, … }
-p := ε | (v | p)
-v := x | ( l ? e )
+p := ε | (x | p) | (x ? e | p)
 l := α | ℓ
 
 *Types*
 κ := ∗ | κ₁ -> κ₂ | Row | Lab
-τ := 𝓫 | ★ | -> | ⦅l⦆ | ⦃p⦄∓ -> τ | { ρ }
-ρ := ε | (l:τ | ρ)
+τ := 𝓫 | ★ | -> | ⦅l⦆ | {p}∓ -> τ | { ρ }
+ρ := ε | α | (l:τ | ρ)
 σ := ∀α: κ. σ | τ
 p := ε | (l:τ | p) | (l: τ?τ | p)
 
 *Kontext*
-Γ := α | Γ · (x: τ)
+Γ := α | Γ · (x: τ) | Γ · (α : κ)
 
 
 ## Kinding
 
+Γ ⊢ ρ: Row
+----------- κ-row
+Γ ⊢ {ρ}: ∗
 
 Γ ⊢ l: Lab
------------ -
+----------- κ-lab
 Γ ⊢ ⦅l⦆: ∗
 
 
@@ -41,41 +43,44 @@ p := ε | (l:τ | p) | (l: τ?τ | p)
 
 *Basics*
 x: σ ∈ Γ   Γ ⊢ σ ⊑ τ
----------------- Var
+--------------------- Var
 Γ ⊢ x: τ
 
+--------
+Γ ⊢ ℓ: ⦅ℓ⦆
 
 *Equivalances*
 Γ ⊢ e₁: τ₁  τ₂ ≤ τ₁ 
------------------- Sub
+--------------------- Sub
 Γ ⊢ e₁: τ₂
 
 
 Γ ⊢ e₁: τ₁  τ₂ ≡ τ₁ 
------------------- Eq
+-------------------- Eq
 Γ ⊢ e₁: τ₂
 
 
 *Records*
-Γ ⊢ a: A  l: ⦅l⦆
------------------ Prod-I 
-Γ ⊢ {l = a}: ⟨l: a⟩ 
+Γ ⊢ a: ⦅l⦆ b: τ  
+----------------- Rec-I
+Γ ⊢ {a = b}: ⟨l: τ⟩ 
 
 
-Γ ⊢ a: A  l: ⦅l⦆
------------------ Row-I
-Γ ⊢ {l = a}: ⟨l: a⟩
+Γ ⊢ a: τ₁   Γ ⊢ b: τ₂
+--------------------- Rec-Concat
+Γ ⊢ a ‖ b: ⟨τ₁ | τ₂⟩
 
 
 *Functions* (TODO: use actual patterns lule)
-Γ x: τ₁ ⊢ e: τ₂
----------------   λ-I
-Γ ⊢ (x: e): τ₁ -> τ₂
+
+Γ ⊢ e₁: { p }⁻ -> τ₂    e₂ ⧀ ⌊p⌋   ⌊p⌋ ⧀ e₂
+------------------------------------------- λ-E-1
+Γ ⊢ e₁e₂
 
 
-Γ ⊢ e₁: τ₁  Γ ⊢ e₂: τ₁ -> τ₂
----------------------------  λ-E
-Γ ⊢ e₁e₂: τ₂
+Γ ⊢ e₁: { p }⁺ -> τ₂    e₂ ⧀  ⌊p⌋
+------------------------------------------- λ-E-2
+Γ ⊢ e₁e₂
 
 
 *Let-Poly*
@@ -84,11 +89,27 @@ x: σ ∈ Γ   Γ ⊢ σ ⊑ τ
 Γ ⊢ let x = e₁ in e₂: τ₂
 
 
-## Unification
+## ∈-Solving
+> Tries to solve element constraints for rows that can have (multiple) row and label variables
 
-(Γ, α, τ) => (Γ', )
-(Γ, τ, τ) => ⊤
+A => B
+where A is a tuple of (row, query-label)
+and   B can be one of:
+- (ρ, b) : To recurse
+- τ      : The type of of query-label
+- ★      : An unkown type due to missing information
+- α ! b  : A new constraint "Label variable α has to be b"
+- a !! b : A new constraint "Row variable α has to contain b"
 
-(Tapp)   τ₁τ₂, τ₃τ₄         => τ₁ ~ τ₃ ∧ τ₂ ~ τ₄
-(Tsolve) (Γ, α, τ)          => Γ · α: κ = [Γ]τ ⊢ ⊤    | if (α : κ ∈ Γ) ∧ (Γ ⊢ τ: κ)         ∧ (α ∉ ftv([Γ]τ))
-(Rfield) Γ₁ ⊢ ℓ: τ, ρ₁ ~ ρ₂ => Γ₂ ⊢ τ ~ τ' ∧ ρ₁ ~ ρ'₂ | if (Γ₁ ⊢ [Γ₁]ρ₂ ℓ↪ ℓ: τ., ρ'₂ ⊣ Γ₂) ∧ ([Γ₂]ρ₁ = [Γ₁]ρ₁)
+ρ̃: A row that has _label_ or _row variables_
+
+- ------------------------------------------------ -
+(recurse) – (⟨ρ | l: τ⟩, q) => (ρ, q)   if  q ≠ l
+(solved ) – (⟨ρ | l: τ⟩, q) => τ        if  q = l
+
+(var-lab) – (⟨ε | α: τ⟩, q) => Γ · q ∈ α ⊨ τ
+(–––––––) – (⟨ρ̃ | α: τ⟩, q) => ★
+
+(var-row) – (⟨ε | α⟩,    q) => q !! α
+(–––––––) – (⟨ρ̃ | α⟩,    q) => ★
+- ------------------------------------------------ -
