@@ -1,4 +1,5 @@
 
+./26-05-13.typ
 ./26-06-15.typ
 
 == Fäden
@@ -36,54 +37,6 @@ $.l: ∀α. α :: ⟨l: τ⟩ => α -> τ$
 2. Tabular: Unification vars
 3. ROSE: Prädikate (only)
 4. Castagna: Semantische Typen
-
-
-== Subtype Hirarchy
-l₁ = l₂    τ₁ ≤ τ₂   l ∉ ρ₁   l ∉ ρ₂
------------------------------------
-{ρ₁ | l₁: τ₁} ≤ { ρ₂ | l₂: τ₂ }
-
-
-== Function Destructuring Rules
-Γ ⊢ e₁: ⦃ p ⦄ -> τ₂    e₂ ⧀ ⌊p⌋   ⌊p⌋ ⧀ e₂
---------------------------------------
-Γ ⊢ e₁e₂
-
-- For a closed pattern, fields have to fit _exactly_
-
-
-Γ ⊢ e₁: ⦃ p, ... ⦄ -> τ₂     e₁ ⧀  ⌊p⌋
----------------------------------------
-Γ ⊢ e₁e₂
-
-- For an open pattern, fields only have to be subtype of the _required fields_
-
-== Matching Rules
-
-ρ₁ ⧀  ρ₂
----------------------------------
-{ρ₁} ⧀  {ρ₂}
-
-
-l₁ = l₂    τ₁ < τ₂    ρ₁ ⧀ ρ₂
----------------------------------
-⟨l₁: τ₁ | ρ₁⟩ ⧀ ⟨ l₂: τ₂ | ρ₂⟩
-
-
-[α = l]¡   τ₁ < τ₂    ρ₁ ⧀ ρ₂
----------------------------------
-⟨α: τ₁ | ρ₁⟩ ⧀ ⟨ l: τ₂ | ρ₂⟩
-
-
-??
---------------------
-⟨ l₁: τ₁ | ρ₁⟩ ⧀ α
-
-
-??
---------------------
-α ⧀ ⟨ l₁: τ₁ | ρ₁⟩
-
 
 
 == ∈-constraints

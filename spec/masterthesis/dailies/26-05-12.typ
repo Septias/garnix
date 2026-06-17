@@ -1,3 +1,4 @@
+./26-05-10.typ
 ./26-05-13.typ
 
 == Vorgehen: Typ-Algorithmus

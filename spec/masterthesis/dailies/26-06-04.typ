@@ -17,20 +17,6 @@
 - Alles nur _opportunistisch_
 
 
-Γ ⊢ a: A  l: ⦅l⦆
------------------ Prod-I
-Γ ⊢ {l = a}: ⟨l: a⟩
-
-
-Γ ⊢ a: A  l: ⦅l⦆
------------------ Row-I
-Γ ⊢ {l = a}: ⟨l: a⟩
-
-
--- Rewriting
-{l₁ = a; {l₂ = b;}} ≡ {l₁ = a; l₂ = b;}
-
-
 == Set-based Elements
 
 - Wir sagen ein Element muss über zwei Rows existieren.

@@ -12,16 +12,11 @@
   - Vorerst nein
 - Brauchen wir row variablen?
   - Ja, eigentlich schon gut für Expressiveness
-- Wenn ich _unknown ⊛_ hinzufüge, was passiert dann?
-  - Brauche ich direkt eine ähnlichkeits-relation?
+- Wenn ich _unknown ★_ hinzufüge, was passiert dann?
+  - Brauche ich direkt eine Ähnlichkeits-relation?
     - Eigentlich Ja
   - Soll ich graduality-guarantee beweisen?
     - Ich habe keinen getypten Code
-
-
-== Lesen
-- [x] Algorithm M
-
 
 == Misc
 - Sollten die Funktionen schon polymorph sein?
