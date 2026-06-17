@@ -82,6 +82,18 @@ x: σ ∈ Γ   Γ ⊢ σ ⊑ τ
 ------------------------------------------- λ-E-2
 Γ ⊢ e₁e₂
 
+- Only retain non-optional fields
+⌊p⌋ :: Row -> ∗
+ε              = ε
+(l: τ | p)     = { l = p | ⌊p⌋ }
+(l: τ ? τ | p) = ⌊p⌋
+
+- Retain all fields
+⌈p⌉ :: Row -> ∗
+ε              = ε
+(l: τ | p)     = { l = p | ⌈p⌉ }
+(l: τ ? τ | p) = { l = p | ⌈p⌉ }
+
 
 *Let-Poly*
 Γ x: ∀ᾱ. τ₁ ⊢ e₂ : τ₂     Γ ⊢ e₁: τ₁    ᾱ ∉ ftv(Γ)
