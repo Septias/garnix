@@ -1,10 +1,6 @@
 
 ./26-06-20.typ
 
-== Meeting
-- Unfication, Instantation und Subtyping rules schon fertig dann?
-  - Vielleicht nicht 100% notwendig aber auf jeden Fall schonmal gut
-
 
 == Fragen
 - Wofür _Instantation rules_?
@@ -27,8 +23,3 @@
   - Also unknow = false einfach?
   - Kann ich neue Bounds schaffen?
     - Ich glaube nicht
-
-
-== No-Brainer
-- Kinding für double ε
-- Label transformation rule ℓ -> l
