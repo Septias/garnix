@@ -32,9 +32,6 @@ Zuweisung:
 
 
 == Inferenz
-Γ · (b ∈ a) ⊨ τ
----------------
-Γ ⊢ a.b: τ
 
 == Subtype Hirarchy
 l₁ = l₂    τ₁ ≤ τ₂   l ∉ ρ₁   l ∉ ρ₂
