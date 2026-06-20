@@ -4,10 +4,13 @@
 - Only "hard" rules are given with "easy" rules being skipped
 
 ## Legend
-¿: Meta-symbol to mark something that is not undoubtetly correct
+¿: Meta-symbol to mark something that is not undoubtetly correct or missing
 ¡: Meta-symbol to mark something that is wrong and needs fixing
 - Can be bracketet with []
 
+## Remarks
+- ε verwende ich mehrmals für verschieden syntaktische Objekte
+- {} wird auch für syntax und typen verwendet
 
 ## Terms & Types
 Basetypes : 𝓫 ∈ 𝓑
@@ -17,8 +20,8 @@ Typevars  : α, β, γ ∈ 𝓿
 
 *Terms*
 e := x | e₁e₂  | ς: e₂ | { e = e; } | e₁ ‖ e₂ | let e₁ = e₂ in e₃
-ς := e | { ξ } | { ξ, … }
-ξ := ε | (x | p) | (x ? e | p)
+ς := { ξ } | { ξ, … }
+ξ := ε | (x | ξ) | (x ? e | ξ)
 l := α | ℓ
 
 *Types*
@@ -30,7 +33,7 @@ p := ε | (l:τ | p) | (l: τ?τ | p)
 ± ∈ {+, -}
 
 *Context*
-Γ := ε | Γ · (x: τ) | Γ · (α : κ)
+Γ := • | Γ · (x: τ) | Γ · (α : κ)
 
 
 ## Kinding
@@ -38,15 +41,12 @@ p := ε | (l:τ | p) | (l: τ?τ | p)
 ----------- κ-base
 Γ ⊢ b ∈ 𝓫: ∗
 
-
 α: σ ∈ Γ  σ ⊑ τ
 ----------- κ-var
 Γ ⊢ α: τ
 
-
 ----------- κ-base-lab
 Γ ⊢ ℓ: Lab
-
 
 Γ ⊢ l: Lab
 ----------- κ-lab
@@ -89,7 +89,8 @@ p := ε | (l:τ | p) | (l: τ?τ | p)
 
 ## Rewriting
 {l₁ = a; {l₂ = b;}} ≙ {l₁ = a; l₂ = b;}
-
+{ε} = {}       (syntax-recors & type-records)
+{ε}: e = {}: e
 
 ## Inference
 *Basics*
@@ -124,12 +125,21 @@ x: σ ∈ Γ   Γ ⊢ σ ⊑ τ
 Γ ⊢ a ‖ b: {ρ₁ | ρ₂}
 
 
-Γ · [(b ∈ a) ⊨ a: τ]¿
+Γ · [(b ∈ a) ⊨ˡ a: τ]¿
 --------------------- Rec-Acc
 Γ ⊢ a.b: τ
 
 
 *Functions*
+Γ,Δ ⊢ e: τ   ξ ↦ Δ
+--------------------------- λ-I-open
+Γ ⊢ ({ ξ }: e): {p}⁺ -> τ
+
+
+Γ,Δ ⊢ e: τ   ξ ↦ Δ
+--------------------------- λ-I-close
+Γ ⊢ ({ξ,…}: e): {p}⁻ -> τ
+
 e ⧀ τ ≙ (Γ ⊢ e: τ' and τ' ⧀ τ)
 τ ⧀ e ≙ (Γ ⊢ e: τ' and τ ⧀ τ')
 
@@ -143,7 +153,7 @@ e ⧀ τ ≙ (Γ ⊢ e: τ' and τ' ⧀ τ)
 ------------------------------------------- λ-E-2
 Γ ⊢ e₁e₂: τ₂
 
-
+*Auxiliary pattern approximation*
 - Only retain non-optional fields
 ⌊p⌋ :: Pat -> ∗
 ε              = {}
@@ -161,6 +171,78 @@ e ⧀ τ ≙ (Γ ⊢ e: τ' and τ' ⧀ τ)
 Γ x: ∀ᾱ: overline(κ). τ₁ ⊢ e₂ : τ₂     Γ ⊢ e₁: τ₁    ᾱ ∉ ftv(Γ)
 -------------------------------------------------- Let
 Γ ⊢ let x = e₁ in e₂: τ₂
+
+
+## Matching
+> An auxiliary judjement that creates a new context Δ with all pattern variables
+
+------ m-empty
+ε ↦ •
+
+Γ ⊢ x: τ   ξ ↦ Δ'
+-------------------------- m-pat
+(x | ξ) ↦ Δ, x: τ, Δ'
+
+- Using the default expressions type here is a deliberate decision
+Γ ⊢ d: τ  ξ ↦ Δ'
+-------------------------- m-default
+(x ? d | ξ)  ↦ Δ, x: τ, Δ'
+
+## Instantation
+> Instantiate type schemes `∀ᾱ: overline(κ). σ` when taking them out of the context
+
+------ Inst-Refl
+τ ⊑ τ
+
+
+Γ ⊢ τ: ∗   Γ ⊢ σ[τ/α] ⊑  σ'
+--------------------------- Inst-∗
+Γ ⊢ ∀α: ∗. σ ⊑ σ'
+
+
+(α ∉ ftv(Γ) or  α ⊳ˡ σ)  Γ ⊢ σ[τ/α] ⊑ σ'
+-------------------------------------- Inst-Lab
+Γ ⊢  ∀α: Lab. σ ⊑ σ'
+
+
+
+(α ∉ ftv(Γ) or  α ⊳ʳ σ)  Γ ⊢ σ[τ/α] ⊑ σ'
+-------------------------------------- Inst-Row
+Γ ⊢  ∀α: Row. σ ⊑ σ'
+
+
+## Tailcheck
+> Make sure not to instantiate row and label variables when they could shadow existing fields
+- TODO: we should use the subtype relation here
+
+α ⊳ τ₁
+--------- go-l
+α ⊳ τ₁ τ₂
+
+
+α ⊳ τ₂
+--------- go-r
+α ⊳ τ₁ τ₂
+
+
+α ⊳ σ
+------------ go-in
+α ⊳ ∀β: κ. σ
+
+
+------------ ⊳-Lab
+α ⊳ˡ ⦅α⦆
+
+
+ρ ≡ {ρ | α: τ}
+--------------- ⊳-Lab-Rec
+α ⊳ˡ {ρ}
+
+
+ρ ≡ {ρ' | α}
+------------- ⊳-Row
+α ⊳ʳ {ρ}
+
 
 
 ## Subtyping
@@ -192,9 +274,10 @@ l₁ = l₂    τ₁ ≤ τ₂    ρ₁ ⧀ ρ₂
 ## ∈-Solving
 > Tries to solve element constraints for rows that can have (multiple) row and label variables
 
+Discharged by (b ∈ a) ⊨ˡ a: τ
+
 A => B
-where A is a tuple of (row, query-label)
-and   B can be one of:
+where A is a tuple of (row, query-label) and B can be one of:
 - (ρ, b) : To recurse
 - τ      : The type of of query-label
 - ★      : An unkown type due to missing information
