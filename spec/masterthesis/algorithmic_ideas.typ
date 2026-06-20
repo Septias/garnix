@@ -11,7 +11,7 @@
     - Vielleicht auch nur einen Constraint dafür im Context speichern
     - Was wenn es sich nicht auflösen lässt?
       - Dann einfach Mehrheitsentscheid? Eigentlich blöd, weil nicht sound
-      - Einfach den unknown Type ⊛ zurück geben
+      - Einfach den unknown Type ★ zurück geben
 
 == Beispiel: Asymmetric Concat
 ```nix
@@ -46,7 +46,7 @@ in ()
 
 
 = Misc
-== Subtyping für Rows mit Typevars
+== Subtyping für Rows mit Type-vars
 - Wir haben die Row x: { a: int, b: {c : str}} und y: { a: α, β@{γ} }
 - Hier muss jetzt einfach α ≤ int oder α ≡ int
 
