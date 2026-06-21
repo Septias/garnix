@@ -122,7 +122,7 @@ x: σ ∈ Γ   Γ ⊢ σ ⊑ τ
 
 Γ ⊢ a: {ρ₁}   Γ ⊢ b: {ρ₂}
 --------------------- Rec-Concat
-Γ ⊢ a ‖ b: {ρ₁ | ρ₂}
+Γ ⊢ a ‖ b: { ρ₂ | ρ₁ }
 
 
 Γ · [(b ∈ a) ⊨ˡ a: τ]¿
@@ -174,7 +174,7 @@ e ⧀ τ ≙ (Γ ⊢ e: τ' and τ' ⧀ τ)
 
 
 ## Matching
-> An auxiliary judjement that creates a new context Δ with all pattern variables
+> An auxiliary judgement that creates a new context Δ with all pattern variables
 
 ------ m-empty
 ε ↦ •
