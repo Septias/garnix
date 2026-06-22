@@ -14,12 +14,13 @@
 
 ## Terms & Types
 Basetypes : 𝓫 ∈ 𝓑
+Constants : c ∈ 𝓒
 Labels    : ℓ ∈ 𝓛
 Variables : x, y ∈ 𝓧
 Typevars  : α, β, γ ∈ 𝓿
 
 *Terms*
-e := x | e₁e₂  | ς: e₂ | { e = e; } | e₁ ‖ e₂ | let e₁ = e₂ in e₃
+e := x | c | e₁e₂  | ς: e₂ | { e = e; } | e₁ ‖ e₂ | let e₁ = e₂ in e₃
 ς := { ξ } | { ξ, … }
 ξ := ε | (x | ξ) | (x ? e | ξ)
 l := α | ℓ
@@ -101,6 +102,9 @@ x: σ ∈ Γ   Γ ⊢ σ ⊑ τ
 --------
 Γ ⊢ ℓ: ⦅ℓ⦆
 
+-----------
+Γ ⊢ c: 𝓫_c
+
 *Equivalences*
 - TODO: choose one
 
@@ -125,7 +129,7 @@ x: σ ∈ Γ   Γ ⊢ σ ⊑ τ
 Γ ⊢ a ‖ b: { ρ₂ | ρ₁ }
 
 
-Γ · [(b ∈ a) ⊨ˡ a: τ]¿
+Γ ⊢ˡ a: τ ↝ Γ'
 --------------------- Rec-Acc
 Γ ⊢ a.b: τ
 
@@ -274,25 +278,23 @@ l₁ = l₂    τ₁ ≤ τ₂    ρ₁ ⧀ ρ₂
 ## ∈-Solving
 > Tries to solve element constraints for rows that can have (multiple) row and label variables
 
-Discharged by (b ∈ a) ⊨ˡ a: τ
+Discharged by Γ ⊨ˡ a: τ ⊣ Γ'
 
 A => B
-where A is a tuple of (row, query-label) and B can be one of:
-- (ρ, b) : To recurse
-- τ      : The type of of query-label
-- ★      : An unkown type due to missing information
-- α ! b  : A new constraint "Label variable α has to be b"
-- a !! b : A new constraint "Row variable α has to contain b"
-
-ρ̃: A row that has _label_ or _row variables_
+where A is a tuple of (row, query-label (l)) and B can be one of:
+- (Γ, ρ, b) : To recurse
+- τ         : The type of of query-label
+- ★         : An unkown type due to missing information
 
 - ------------------------------------------------ -
-(recurse) – (⟨ρ | l: τ⟩, q) => (ρ, q)   if  q ≠ l
-(solved ) – (⟨ρ | l: τ⟩, q) => τ        if  q = l
+(recurse) – (Γ, { l: τ | ρ}, q) => (Γ, ρ, q)          if  q ≠ l
+(solved ) – (Γ, { l: τ | ρ}, q) => τ                  if  q = l
 
-(var-lab) – (⟨ε | α: τ⟩, q) => Γ · q ∈ α ⊨ τ
-(–––––––) – (⟨ρ̃ | α: τ⟩, q) => ★
+(var-lab) – (Γ, { α: τ | ε }, q) => (Γ · (α = q), ε, q)
+(–––––––) – (Γ, { α: τ | ρ }, q) => ¿ Hier constraint, dass es in allen restlichen variablen drin ist?
 
-(var-row) – (⟨ε | α⟩,    q) => q !! α
-(–––––––) – (⟨ρ̃ | α⟩,    q) => ★
+(var-row) – (Γ, { α | ε },    q) => (Γ · (q ∈ α), ε, q)
+(–––––––) – (Γ, { α | ρ },    q) => ¿ Hier constraint, dass es in allen restlichen variablen drin ist?
+
+(default) –  (_, _, _)           => ★
 - ------------------------------------------------ -
