@@ -12,6 +12,7 @@
 
 = Want
 - Subtyping
+- Occurrence Typing
 - Recursive types
 - Recursive
 - With
