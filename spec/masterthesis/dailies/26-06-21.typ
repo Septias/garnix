@@ -1,18 +1,10 @@
 
-
+./26-06-22.typ
+./26-06-20.typ
 == Misc
 - Ich habe halt Angst, dass das alles zu wild wird (viele Konzepte und nichts richig anstatt kleinen, aber harten calculus)
 - Junge, ich werde von Thiemann so aufs Maul bekommen lol
 - Ist für ihn okay, dass wir einfach was soundes mit Abstrichen erstellen und das dann irgendwie beweisen?
-
-== Fäden
-- Subtyping Rules
-- Unification Rules
-- Occurrence-Typing für Records?
-  - Einfach schauen, ob wirs finden und dann vorne einfügen?
-  - Oder ist das unsound?
-- Spezialisierung von ∈-constraints bei Funktionsaufrufen
-- Wir müssen schauen, wie die verschiedenen Konzepte den Code durchdringen
 
 
 == Fragen
@@ -38,7 +30,6 @@
   - Eigentlich sollten wir das glaube ich nur machen, wenn wir typvariablen haben
   - Die werden dann bei record-access zu einer record-typevar
   - Oder ist das Record-sein dann nur ein Constraint? (a.k.a Parreaux)
-- Wie funktionieren Reorderings?
 
 
 == Subtyping
