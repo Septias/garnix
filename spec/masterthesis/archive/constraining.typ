@@ -1,4 +1,4 @@
-#import "./functions.typ": *
+#import "../functions.typ": *
 
 == Constraining
 This one should be for generic accesses:
@@ -19,7 +19,7 @@ We need a routine that traverses the record and for every field does:
 
 == Fragen
 - Wie kann man die Constraints wieder auflösen?
-  - Heuristik: sobald(von hinten) $∃a ∈ A. a.l↓$ dann $(a).l : τ$
+  - Heuristik: Sobald(von hinten) $∃a ∈ A. a.l↓$ dann $(a).l : τ$
     - *Unsound*: Die späteren nehmen natürlich Präzedenz
       - Können wir alle Constraints soweit aufschieben, bis sie lösbar werden?
         - Wenn pureness: Dann ja?
