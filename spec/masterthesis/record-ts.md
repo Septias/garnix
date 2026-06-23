@@ -6,11 +6,11 @@
 ## Legend
 ¿: Meta-symbol to mark something that is not undoubtetly correct or missing
 ¡: Meta-symbol to mark something that is wrong and needs fixing
-- Can be bracketet with []
+
 
 ## Remarks
 - ε verwende ich mehrmals für verschieden syntaktische Objekte
-- {} wird auch für syntax und typen verwendet
+- {} wird auch für Syntax und Typen verwendet
 
 ## Terms & Types
 Basetypes : 𝓫 ∈ 𝓑
@@ -24,9 +24,6 @@ e := x | c | e₁e₂ | ς: e₂ | { e = e; } | e₁ ‖ e₂ | let e₁ = e₂ 
 ς := { ξ } | { ξ, … }
 ξ := ε | (x | ξ) | (x ? e | ξ)
 
-|| ς -- pattern lambda?
-||| ja
-|| l (labels) does not occur in expressions
 ||| ¿Sind nur auf Typebene wichtig
 
 *Types*
