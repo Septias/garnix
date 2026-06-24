@@ -1,5 +1,5 @@
 # Formalisierung
-> A typesystem with records and function patterns. We use scoped rows with row and label variables which can create ambiguous scenarious. An unkown type ★ is used when the typesystem can not derive sound types. ∈-Solving is a novel algorithm that tries to solve ∈-constraints of the form `a ∈ (A ∪ B)`` where a is a field and A,B are records. A motivating example is: `x: y: (x ‖ y).a` where x and y are variables and ‖ is the concat operator that concatenates two records with right-preference towards fields in y. 
+> A typesystem with records and function patterns. We use scoped rows with row- and label-variables which can create ambiguous scenarious. An unkown type ★ is used when the typesystem can not derive sound types. ∈-solving is a novel algorithm that tries to solve ∈-constraints of the form `a ∈ (A ∪ B)`` where a is a field and A,B are records. A motivating example is: `x: y: (x ‖ y).a` where x and y are variables and ‖ is the concatenation operatort that concatenates two records with right-preference towards fields in y. 
 
 - Only "hard" rules are given with "easy" rules being skipped
 
@@ -10,7 +10,7 @@
 
 ## Remarks
 - ε verwende ich mehrmals für verschieden syntaktische Objekte
-- {} wird auch für syntax und typen verwendet
+- {} wird auch für Syntax und Typen verwendet
 
 ## Terms & Types
 Basetypes : 𝓫 ∈ 𝓑
@@ -20,21 +20,20 @@ Variables : x, y ∈ 𝓧
 Typevars  : α, β, γ ∈ 𝓿
 
 *Terms*
-e := x | c | e₁e₂  | ς: e₂ | { e = e; } | e₁ ‖ e₂ | let e₁ = e₂ in e₃
+e := x | c | e₁e₂ | ς: e₂ | { e = e; } | ℓ | e₁ ‖ e₂ | let e₁ = e₂ in e₃
 ς := { ξ } | { ξ, … }
 ξ := ε | (x | ξ) | (x ? e | ξ)
-l := α | ℓ
 
 *Types*
 κ := ∗ | κ₁ -> κ₂ | Row | Lab | Pat | Unknown
 σ := ∀α: κ. σ | τ
 τ := 𝓫 | ★ | { p }± -> τ | ⦅l⦆ | { ρ }
 ρ := ε | α | (l:τ | ρ)
-p := ε | (l:τ | p) | (l: τ?τ | p)
+p := ε | (l:τ | p) | (l: τ? | p)
 ± ∈ {+, -}
 
 *Context*
-Γ := • | Γ · (x: τ) | Γ · (α : κ)
+Γ := • | Γ · (x: σ) | Γ · (α : κ)
 
 
 ## Kinding
@@ -42,9 +41,9 @@ p := ε | (l:τ | p) | (l: τ?τ | p)
 ----------- κ-base
 Γ ⊢ b ∈ 𝓫: ∗
 
-α: σ ∈ Γ  σ ⊑ τ
------------ κ-var
-Γ ⊢ α: τ
+α: κ ∈ Γ
+---------------- κ-var
+Γ ⊢ α: κ
 
 ----------- κ-base-lab
 Γ ⊢ ℓ: Lab
@@ -67,16 +66,16 @@ p := ε | (l:τ | p) | (l: τ?τ | p)
 
 *patterns*
 
------------- κ-pat-empty¡
+------------ κ-pat-empty
 ε: Pat
 
-Γ ⊢ τ: ∗  Γ ⊢ l: Lab Γ ⊢ p: Pat 
--------------------------------- κ-pat
+Γ ⊢ τ: ∗   Γ ⊢ l: Lab   Γ ⊢ p: Pat 
+---------------------------------- κ-pat
 Γ ⊢ (l: τ | p): Pat
 
-Γ ⊢ τ: ∗  Γ ⊢ l: Lab Γ ⊢ p: Pat
--------------------------------- κ-pat-default
-Γ ⊢ (l: τ ? τ | p): Pat
+Γ ⊢ τ: ∗   Γ ⊢ l: Lab   Γ ⊢ p: Pat
+---------------------------------- κ-pat-default
+Γ ⊢ (l: τ? | p): Pat
 
 Γ ⊢ p: Pat
 --------------------- κ-λ
@@ -90,7 +89,7 @@ p := ε | (l:τ | p) | (l: τ?τ | p)
 
 ## Rewriting
 {l₁ = a; {l₂ = b;}} ≙ {l₁ = a; l₂ = b;}
-{ε} = {}       (syntax-recors & type-records)
+{ε} = {}       (syntax-records & type-records)
 {ε}: e = {}: e
 
 ## Inference
@@ -99,7 +98,7 @@ x: σ ∈ Γ   Γ ⊢ σ ⊑ τ
 --------------------- Var
 Γ ⊢ x: τ
 
---------
+---------
 Γ ⊢ ℓ: ⦅ℓ⦆
 
 -----------
@@ -114,39 +113,38 @@ x: σ ∈ Γ   Γ ⊢ σ ⊑ τ
 
 
 Γ ⊢ e₁: τ₁  τ₂ ≡ τ₁ 
--------------------- Eq
+--------------------- Eq
 Γ ⊢ e₁: τ₂
 
 
 *Records*
-Γ ⊢ a: ⦅l⦆ b: τ  
------------------ Rec-I
-Γ ⊢ {a = b}: {l: τ}
+Γ ⊢ e₁: ⦅l⦆  e₂: τ  
+-------------------- Rec-I
+Γ ⊢ {e₁ = e₂}: {l: τ}
 
 
-Γ ⊢ a: {ρ₁}   Γ ⊢ b: {ρ₂}
---------------------- Rec-Concat
-Γ ⊢ a ‖ b: { ρ₂ | ρ₁ }
+Γ ⊢ e₁: {ρ₁}   Γ ⊢ e₂: {ρ₂}
+------------------------- Rec-Concat
+Γ ⊢ e₁ ‖ e₂: { ρ₂ | ρ₁ }
 
 
-Γ ⊢ˡ a: τ ↝ Γ'
+Γ ⊢e₂– e₁: τ ↝ Γ'
 --------------------- Rec-Acc
-Γ ⊢ a.b: τ
+Γ ⊢ e₁.e₂: τ
 
 
 *Functions*
 Γ,Δ ⊢ e: τ   ξ ↦ Δ
 --------------------------- λ-I-open
-Γ ⊢ ({ ξ }: e): {p}⁺ -> τ
+Γ ⊢ ({ ξ, … }: e): {p}⁺ -> τ
 
 
 Γ,Δ ⊢ e: τ   ξ ↦ Δ
 --------------------------- λ-I-close
-Γ ⊢ ({ξ,…}: e): {p}⁻ -> τ
+Γ ⊢ ({ ξ }: e): {p}⁻ -> τ
 
 e ⧀ τ ≙ (Γ ⊢ e: τ' and τ' ⧀ τ)
 τ ⧀ e ≙ (Γ ⊢ e: τ' and τ ⧀ τ')
-
 
 Γ ⊢ e₁: { p }⁻ -> τ₂    e₂ ⧀ ⌊p⌋   ⌈p⌉ ⧀ e₂
 ------------------------------------------- λ-E-1
@@ -162,19 +160,19 @@ e ⧀ τ ≙ (Γ ⊢ e: τ' and τ' ⧀ τ)
 ⌊p⌋ :: Pat -> ∗
 ε              = {}
 (l: τ | p)     = { l: τ | ⌊p⌋ }
-(l: τ ? τ | p) = ⌊p⌋
+(l: τ? | p)    = ⌊p⌋
 
 - Retain all fields
 ⌈p⌉ :: Pat -> ∗
 ε              = {}
 (l: τ | p)     = { l: τ | ⌈p⌉ }
-(l: τ ? τ | p) = { l: τ | ⌈p⌉ }
+(l: τ? | p)    = { l: τ | ⌈p⌉ }
 
 
 *Let-Poly*
-Γ x: ∀ᾱ: overline(κ). τ₁ ⊢ e₂ : τ₂     Γ ⊢ e₁: τ₁    ᾱ ∉ ftv(Γ)
--------------------------------------------------- Let
-Γ ⊢ let x = e₁ in e₂: τ₂
+Γ e₂: ∀ᾱ: overline(κ). τ₁ ⊢ e₃ : τ₃     Γ ⊢ e₁: τ₁    ᾱ ∈ ftv(τ₁) \ ftv(Γ)
+------------------------------------------------------------------------- Let
+Γ ⊢ let e₁ = e₂ in e₃: τ₃
 
 
 ## Matching
@@ -183,14 +181,14 @@ e ⧀ τ ≙ (Γ ⊢ e: τ' and τ' ⧀ τ)
 ------ m-empty
 ε ↦ •
 
-Γ ⊢ x: τ   ξ ↦ Δ'
+ξ ↦ Δ'
 -------------------------- m-pat
-(x | ξ) ↦ Δ, x: τ, Δ'
+(x | ξ) ↦ Δ, [α: κ]¿, Δ'
 
 - Using the default expressions type here is a deliberate decision
-Γ ⊢ d: τ  ξ ↦ Δ'
+Γ ⊢ e: τ  ξ ↦ Δ'
 -------------------------- m-default
-(x ? d | ξ)  ↦ Δ, x: τ, Δ'
+(x ? e | ξ) ↦ Δ, x: τ, Δ'
 
 ## Instantation
 > Instantiate type schemes `∀ᾱ: overline(κ). σ` when taking them out of the context
@@ -204,14 +202,14 @@ e ⧀ τ ≙ (Γ ⊢ e: τ' and τ' ⧀ τ)
 Γ ⊢ ∀α: ∗. σ ⊑ σ'
 
 
-(α ∉ ftv(Γ) or  α ⊳ˡ σ)  Γ ⊢ σ[τ/α] ⊑ σ'
--------------------------------------- Inst-Lab
+(α ∉ ftv(Γ) or α ⊳ˡ σ)  Γ ⊢ σ[τ/α] ⊑ σ'
+--------------------------------------- Inst-Lab
 Γ ⊢  ∀α: Lab. σ ⊑ σ'
 
 
 
-(α ∉ ftv(Γ) or  α ⊳ʳ σ)  Γ ⊢ σ[τ/α] ⊑ σ'
--------------------------------------- Inst-Row
+(α ∉ ftv(Γ) or α ⊳ʳ σ)  Γ ⊢ σ[τ/α] ⊑ σ'
+--------------------------------------- Inst-Row
 Γ ⊢  ∀α: Row. σ ⊑ σ'
 
 
@@ -276,9 +274,9 @@ l₁ = l₂    τ₁ ≤ τ₂    ρ₁ ⧀ ρ₂
 
 
 ## ∈-Solving
-> Tries to solve element constraints for rows that can have (multiple) row and label variables
+> Tries to solve ∈-constraints for rows that can have (multiple) row and label variables
 
-Discharged by Γ ⊨ˡ a: τ ⊣ Γ'
+Discharged by Γ ⊢ˡ a: τ ↝ Γ'
 
 A => B
 where A is a tuple of (row, query-label (l)) and B can be one of:
