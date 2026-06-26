@@ -2,7 +2,7 @@
 
 
 == Beispiel: Vereinfachung
-```  let y = {}; b = x: y: (x ++ y).a ```
+```x: let y = {}; f = x: y: (x ++ y).a in (f x y)```
 
 - In diesem Beispiel kann ich zum Beispiel sagen, dass a ∈ x sein _muss_
 - Sind x und y variable, kann man es nur weiter "Aufschieben"
