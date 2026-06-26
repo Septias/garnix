@@ -1,8 +1,5 @@
 
-== Fäden
-- ∈-Algorithmus
-- ∈-Reduction
-- Rolle von ★ klären
+./26-06-26.typ
 
 
 == Fragen
@@ -10,7 +7,6 @@
 - Zwei Teile von ∈-constraints:
   - ||     fügt neue hinzu
   - (e: x) löst die auf?
-- Wie mache ich
 
 
 == ∈-constraints
@@ -25,7 +21,7 @@
   - Solange bleibt der Type dann halt `_ -> ★`
 
 
-== ∈-Eleminination einfach erklärt
+== ∈-Solving einfach erklärt
 - Die Idee kommt von dem Beispiel `x: y: (x ⧺ y).l`
 - Hier können wir nicht festlegen, ob l aus x oder y kommt
 - Wir können nur sagen: In einem der beiden muss es sein
@@ -36,12 +32,6 @@
   - Constraintslover: ?
 
 
-== Todo
-- Predicates not given as term syntax
-- Wie genau sind labels in der Term-syntax?
-- Matchingregeln auf Types, nicht auf Rows
-
-
 == Adding Constraints
 
 - TODO: hier müsste man wohl einen constraint-context machen?
@@ -50,7 +40,7 @@
 
 Γ ⊢ a: { ρ }  ∇ += (l ∈ ρ)↓
 -----------------------------------------
-Γ ⊢ a.l: (l ∈ ρ)
+Γ ⊢ a.l: l ↓ ρ
 
 // Collect all the row-variables for the ∈-constrain
 (l ∈ ε)↓           = ε
@@ -59,9 +49,9 @@
 
 
 // See if there is a type
-l ∈ {}            = ★
-l ∈ { α | ξ}      = ★
-l ∈ { l': τ | ξ } = τ         if l = l'
+l ↓ {}            = ★
+l ↓ { α | ξ }     = ★
+l ↓ { l': τ | ξ } = τ   if l = l'
 
 
 == Solving Constraints
