@@ -57,7 +57,8 @@
 - Overapproximation of types?
 - Thats a possible way to calculate best types w/o backtracking
 - Bot-type ist schwierig (generell)
-
+⊖ keine let-generalization
+⊖ Toplevel annos sind notwendig
 
 == A polymorphic typesystem for
 ⊖ No double labels?

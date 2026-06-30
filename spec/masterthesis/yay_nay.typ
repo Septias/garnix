@@ -9,7 +9,6 @@
 - Patterns
 - Unknown Type Abstraction
 
-
 = Want
 - Subtyping
 - Occurrence Typing
