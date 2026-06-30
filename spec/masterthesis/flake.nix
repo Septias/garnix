@@ -16,6 +16,7 @@
               typst
               typstyle
               tinymist
+              elan
             ];
           };
         }
