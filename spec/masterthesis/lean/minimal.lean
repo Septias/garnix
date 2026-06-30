@@ -162,6 +162,43 @@ inductive Typed {B C : Type} (constTy : C → B) :
       Typed constTy Γ e (.rcd (.ext l τ ρ)) →
       Typed constTy Γ (.sel e l) τ
 
+-- ## Substitution  e[x := v]
+
+mutual
+  def subst {C : Type} (x : Var) (v : Expr C) : Expr C → Expr C
+    | .con c      => .con c
+    | .lam y e    => if x == y then .lam y e else .lam y (subst x v e)
+    | .app e₁ e₂  => .app (subst x v e₁) (subst x v e₂)
+    | .cat e₁ e₂  => .cat (subst x v e₁) (subst x v e₂)
+    | .sel e l    => .sel (subst x v e) l
+    | .rcd b      => .rcd (substBody x v b)
+
+  def substBody {C : Type} (x : Var) (v : Expr C) : RecBody (Expr C) → RecBody (Expr C)
+    | .empty      => .empty
+    | .single l e => .single l (subst x v e)
+    | .ext l e b  => .ext l (subst x v e) (substBody x v b)
+end
+
+-- ## Values
+
+inductive Value {C : Type} : Expr C → Prop where
+  | con {c : C}                  : Value (.con c)
+  | lam {x : Var} {e : Expr C}  : Value (.lam x e)
+
+-- ## Small-step reduction  e ↦ e'
+
+inductive Step {C : Type} : Expr C → Expr C → Prop where
+  | beta {x : Var} {e v : Expr C} :
+      Value v →
+      Step (.app (.lam x e) v) (subst x v e)
+  | appFun {e₁ e₁' e₂ : Expr C} :
+      Step e₁ e₁' →
+      Step (.app e₁ e₂) (.app e₁' e₂)
+  | appArg {e₁ e₂ e₂' : Expr C} :
+      Value e₁ →
+      Step e₂ e₂' →
+      Step (.app e₁ e₂) (.app e₁ e₂')
+
 -- ## Specialization  x ⩪ Γ
 --
 --   Simplifies constraints when variable x resolves to a known label.
