@@ -1,8 +1,7 @@
 
-./26-06-24.typ
 
-== Todo
-- Algorithmische Fragen klären?
+./26-06-24.typ
+./26-06-28.typ
 
 == Fragen
 - Sollte ich einen access-operator auf rows einfügen?
