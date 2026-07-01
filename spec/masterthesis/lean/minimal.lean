@@ -233,9 +233,19 @@ end
 
 -- ## Values
 
-inductive Value {C : Type} : Expr C → Prop where
-  | con {c : C}                  : Value (.con c)
-  | lam {x : Var} {e : Expr C}  : Value (.lam x e)
+mutual
+  inductive Value {C : Type} : Expr C → Prop where
+    | con {c : C}                : Value (.con c)
+    | lam {x : Var} {e : Expr C} : Value (.lam x e)
+    | rcd {b : RecBody (Expr C)} : ValueBody b → Value (.rcd b)
+
+  inductive ValueBody {C : Type} : RecBody (Expr C) → Prop where
+    | empty  : ValueBody .empty
+    | single {l : Label} {e : Expr C}
+             : Value e → ValueBody (.single l e)
+    | ext    {l : Label} {e : Expr C} {b : RecBody (Expr C)}
+             : Value e → ValueBody b → ValueBody (.ext l e b)
+end
 
 -- ## Small-step reduction  e ↦ e'
 
