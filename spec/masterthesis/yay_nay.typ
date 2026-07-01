@@ -1,5 +1,6 @@
 = Have
 - FC-Labels
+- Scoped Records
 - Asymmetric Concat
 - Let-Statements
 - Row equivalence
