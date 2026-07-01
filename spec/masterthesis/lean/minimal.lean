@@ -249,17 +249,52 @@ end
 
 -- ## Small-step reduction  e ↦ e'
 
-inductive Step {C : Type} : Expr C → Expr C → Prop where
-  | beta {x : Var} {e v : Expr C} :
-      Value v →
-      Step (.app (.lam x e) v) (subst x v e)
-  | appFun {e₁ e₁' e₂ : Expr C} :
-      Step e₁ e₁' →
-      Step (.app e₁ e₂) (.app e₁' e₂)
-  | appArg {e₁ e₂ e₂' : Expr C} :
-      Value e₁ →
-      Step e₂ e₂' →
-      Step (.app e₁ e₂) (.app e₁ e₂')
+mutual
+  inductive Step {C : Type} : Expr C → Expr C → Prop where
+    | beta {x : Var} {e v : Expr C} :
+        Value v →
+        Step (.app (.lam x e) v) (subst x v e)
+    | appFun {e₁ e₁' e₂ : Expr C} :
+        Step e₁ e₁' →
+        Step (.app e₁ e₂) (.app e₁' e₂)
+    | appArg {e₁ e₂ e₂' : Expr C} :
+        Value e₁ →
+        Step e₂ e₂' →
+        Step (.app e₁ e₂) (.app e₁ e₂')
+    | selStep {e e' : Expr C} {l : Label} :
+        Step e e' →
+        Step (.sel e l) (.sel e' l)
+    | selVal {b : RecBody (Expr C)} {l : Label} {v : Expr C} :
+        ValueBody b →
+        RecBody.lookup l b = some v →
+        Step (.sel (.rcd b) l) v
+    | rcdStep {b b' : RecBody (Expr C)} :
+        StepBody b b' →
+        Step (.rcd b) (.rcd b')
+    | catLeft {a a' b : Expr C} :
+        Step a a' →
+        Step (.cat a b) (.cat a' b)
+    | catRight {a b b' : Expr C} :
+        Value a →
+        Step b b' →
+        Step (.cat a b) (.cat a b')
+    | catVal {b₁ b₂ : RecBody (Expr C)} :
+        ValueBody b₁ →
+        ValueBody b₂ →
+        Step (.cat (.rcd b₁) (.rcd b₂)) (.rcd (b₁.concat b₂))
+
+  inductive StepBody {C : Type} : RecBody (Expr C) → RecBody (Expr C) → Prop where
+    | single  {l : Label} {e e' : Expr C} :
+        Step e e' →
+        StepBody (.single l e) (.single l e')
+    | extHead {l : Label} {e e' : Expr C} {b : RecBody (Expr C)} :
+        Step e e' →
+        StepBody (.ext l e b) (.ext l e' b)
+    | extTail {l : Label} {v : Expr C} {b b' : RecBody (Expr C)} :
+        Value v →
+        StepBody b b' →
+        StepBody (.ext l v b) (.ext l v b')
+end
 
 -- ## Specialization  x ⩪ Γ
 --
