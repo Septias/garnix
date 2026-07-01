@@ -296,6 +296,45 @@ mutual
         StepBody (.ext l v b) (.ext l v b')
 end
 
+-- ## Substitution lemma  (key auxiliary for Preservation)
+--
+--   If Γ, x:τ₁ ⊢ e : τ₂  and  Γ ⊢ v : τ₁  then  Γ ⊢ e[x:=v] : τ₂
+
+theorem subst_preserves_typing
+    {B C : Type} (constTy : C → B)
+    (Γ : Ctx B) (x : Var) (v : Expr C) (τ₁ τ₂ : Ty B) (e : Expr C)
+    (hv : Typed constTy Γ v τ₁)
+    (he : Typed constTy (Γ.bindTy x τ₁) e τ₂) :
+    Typed constTy Γ (subst x v e) τ₂ := by
+  sorry
+
+-- ## Progress
+--
+--   If ⊢ e : τ  then  e ∈ Value  ∨  ∃ e', e → e'
+--
+--   Proof: induction on the typing derivation.
+
+theorem progress
+    {B C : Type} (constTy : C → B) (e : Expr C) (τ : Ty B)
+    (h : Typed constTy Ctx.empty e τ) :
+    Value e ∨ ∃ e', Step e e' := by
+  sorry
+
+-- ## Preservation
+--
+--   If Γ ⊢ e : τ  and  e → e'  then  Γ ⊢ e' : τ
+--
+--   Proof: induction on the typing derivation, case analysis on the step.
+--   Key auxiliary: subst_preserves_typing (for the β case).
+
+theorem preservation
+    {B C : Type} (constTy : C → B)
+    (Γ : Ctx B) (e e' : Expr C) (τ : Ty B)
+    (ht : Typed constTy Γ e τ)
+    (hs : Step e e') :
+    Typed constTy Γ e' τ := by
+  sorry
+
 -- ## Specialization  x ⩪ Γ
 --
 --   Simplifies constraints when variable x resolves to a known label.
