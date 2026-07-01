@@ -24,6 +24,16 @@ inductive RecBody (Term : Type) : Type where
   | single : Label → Term → RecBody Term
   | ext    : Label → Term → RecBody Term → RecBody Term
 
+def RecBody.lookup {α : Type} (l : Label) : RecBody α → Option α
+  | .empty      => none
+  | .single l' e => if l == l' then some e else none
+  | .ext l' e b  => if l == l' then some e else RecBody.lookup l b
+
+def RecBody.concat {α : Type} : RecBody α → RecBody α → RecBody α
+  | .empty,      b => b
+  | .single l e, b => .ext l e b
+  | .ext l e a,  b => .ext l e (RecBody.concat a b)
+
 inductive Expr (Const : Type) : Type where
   | con  : Const → Expr Const                            -- c
   | lam  : Var → Expr Const → Expr Const                 -- (x: e)
