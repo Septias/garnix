@@ -103,74 +103,116 @@ end Ctx
 --
 --   `constTy : C → B` assigns each constant its base type.
 
-inductive Typed {B C : Type} (constTy : C → B) :
-    Ctx B → Expr C → Ty B → Prop where
+mutual
+  inductive Typed {B C : Type} (constTy : C → B) :
+      Ctx B → Expr C → Ty B → Prop where
 
-  -- ----------- T-cons
-  -- Γ ⊢ c : 𝓫_c
-  | tCon (Γ : Ctx B) (c : C) :
-      Typed constTy Γ (.con c) (.base (constTy c))
+    -- ----------- T-cons
+    -- Γ ⊢ c : 𝓫_c
+    | tCon (Γ : Ctx B) (c : C):
+        Typed constTy Γ (.con c) (.base (constTy c))
 
-  -- Γ x:τ₁ ⊢ e : τ₂
-  -- --------------------- T-λ-I
-  -- Γ ⊢ (x: e) : τ₁ → τ₂
-  | tLam (Γ : Ctx B) (x : Var) (e : Expr C) (τ₁ τ₂ : Ty B) :
-      Typed constTy (Γ.bindTy x τ₁) e τ₂ →
-      Typed constTy Γ (.lam x e) (.fn τ₁ τ₂)
+    -- Γ x:τ₁ ⊢ e : τ₂
+    -- --------------------- T-λ-I
+    -- Γ ⊢ (x: e) : τ₁ → τ₂
+    | tLam (Γ : Ctx B) (x : Var) (e : Expr C) (τ₁ τ₂ : Ty B):
+        Typed constTy (Γ.bindTy x τ₁) e τ₂ →
+        Typed constTy Γ (.lam x e) (.fn τ₁ τ₂)
 
-  -- Γ ⊢ e₁ : τ₁→τ₂   Γ ⊢ e₂ : τ₁
-  -- -------------------------------- T-λ-E
-  -- Γ ⊢ e₁ e₂ : τ₂
-  | tApp (Γ : Ctx B) (e₁ e₂ : Expr C) (τ₁ τ₂ : Ty B) :
-      Typed constTy Γ e₁ (.fn τ₁ τ₂) →
-      Typed constTy Γ e₂ τ₁ →
-      Typed constTy Γ (.app e₁ e₂) τ₂
+    -- Γ ⊢ e₁ : τ₁→τ₂   Γ ⊢ e₂ : τ₁
+    -- -------------------------------- T-λ-E
+    -- Γ ⊢ e₁ e₂ : τ₂
+    | tApp (Γ : Ctx B) (e₁ e₂ : Expr C) (τ₁ τ₂ : Ty B):
+        Typed constTy Γ e₁ (.fn τ₁ τ₂) →
+        Typed constTy Γ e₂ τ₁ →
+        Typed constTy Γ (.app e₁ e₂) τ₂
 
-  -- x ∈ e₂    Γ ⊢ (x: e₁) e₂ : τ
-  -- ---------------------------------- T-λ∈-ok
-  -- Γ · (x ∈ S) ⊢ (x: e₁) e₂ : τ
+    -- x ∈ e₂    Γ ⊢ (x: e₁) e₂ : τ
+    -- ---------------------------------- T-λ∈-ok
+    -- Γ · (x ∈ S) ⊢ (x: e₁) e₂ : τ
+    --
+    -- The constraint is already satisfied — x is used, so it is "in scope".
+    | tInOk (Γ : Ctx B) (x : Var) (e₁ e₂ : Expr C) (τ : Ty B) (S : LabelSet) :
+        -- freeIn x e₂ = true →
+        Typed constTy Γ (.app (.lam x e₁) e₂) τ →
+        Typed constTy (Γ.bindConstr ⟨x, S⟩) (.app (.lam x e₁) e₂) τ
+
+    -- x ∉ e₂    S' = S \ {x}    Γ · (x ∈ S') ⊢ (x: e₁) e₂ : τ
+    -- ------------------------------------------------------------- T-λ∈-not-in
+    -- Γ · (x ∈ S) ⊢ (x: e₁) e₂ : τ
+    --
+    -- x is absent from e₂, so we remove x from the allowed set and recurse.
+    -- (Label = Var = String, so LabelSet.sub S x is well-typed.)
+    | tInNot (Γ : Ctx B) (x : Var) (e₁ e₂ : Expr C) (τ : Ty B) (S : LabelSet) :
+        -- freeIn x e₂ = false →
+        Typed constTy (Γ.bindConstr ⟨x, S.sub x⟩) (.app (.lam x e₁) e₂) τ →
+        Typed constTy (Γ.bindConstr ⟨x, S⟩) (.app (.lam x e₁) e₂) τ
+
+    -- x ∉ e₂
+    -- --------------------------------- T-λ∈-err
+    -- Γ · (x ∈ {x}) ⊢ (x: e₁) e₂ : ★
+    --
+    -- S was exactly {x} and x is not used — [the only allowed label]¿ is exhausted.
+    | tInErr (Γ : Ctx B) (x : Var) (e₁ e₂ : Expr C) :
+        -- freeIn x e₂ = false →
+        Typed constTy (Γ.bindConstr ⟨x, LabelSet.sing x⟩)
+                      (.app (.lam x e₁) e₂) .err
+
+    -- Γ ⊢ a : {ρ₁}   Γ ⊢ b : {ρ₂}
+    -- ------------------------------- T-conc
+    -- Γ ⊢ a ‖ b : {ρ₁ | ρ₂}
+    | tCat (Γ : Ctx B) (a b : Expr C) (ρ₁ ρ₂ : Row B) :
+        Typed constTy Γ a (.rcd ρ₁) →
+        Typed constTy Γ b (.rcd ρ₂) →
+        Typed constTy Γ (.cat a b) (.rcd (.cat ρ₁ ρ₂))
+
+    -- Γ ⊢ e : {l: τ | ρ}
+    -- -------------------- T-sel
+    -- Γ ⊢ e.l : τ
+    | tSel (Γ : Ctx B) (e : Expr C) (l : Label) (τ : Ty B) (ρ : Row B) :
+        Typed constTy Γ e (.rcd (.ext l τ ρ)) →
+        Typed constTy Γ (.sel e l) τ
+
+    -- Γ ⊢ e : {l: τ}
+    -- -------------------- T-sel-field
+    -- Γ ⊢ e.l : τ
+    | tSelField (Γ : Ctx B) (e : Expr C) (l : Label) (τ : Ty B) :
+        Typed constTy Γ e (.rcd (.field l τ)) →
+        Typed constTy Γ (.sel e l) τ
+
+    -- TypedBody Γ ξ ρ
+    -- -------------------- T-rcd
+    -- Γ ⊢ { ξ } : { ρ }
+    | tRcd (Γ : Ctx B) (b : RecBody (Expr C)) (ρ : Row B) :
+        TypedBody constTy Γ b ρ →
+        Typed constTy Γ (.rcd b) (.rcd ρ)
+
+  -- ## Typing relation for record bodies
   --
-  -- The constraint is already satisfied — x is used, so it is "in scope".
-  | tInOk (Γ : Ctx B) (x : Var) (e₁ e₂ : Expr C) (τ : Ty B) (S : LabelSet) :
-      -- freeIn x e₂ = true →
-      Typed constTy Γ (.app (.lam x e₁) e₂) τ →
-      Typed constTy (Γ.bindConstr ⟨x, S⟩) (.app (.lam x e₁) e₂) τ
+  --   TypedBody Γ ξ ρ
+  inductive TypedBody {B C : Type} (constTy : C → B) :
+      Ctx B → RecBody (Expr C) → Row B → Prop where
 
-  -- x ∉ e₂    S' = S \ {x}    Γ · (x ∈ S') ⊢ (x: e₁) e₂ : τ
-  -- ------------------------------------------------------------- T-λ∈-not-in
-  -- Γ · (x ∈ S) ⊢ (x: e₁) e₂ : τ
-  --
-  -- x is absent from e₂, so we remove x from the allowed set and recurse.
-  -- (Label = Var = String, so LabelSet.sub S x is well-typed.)
-  | tInNot (Γ : Ctx B) (x : Var) (e₁ e₂ : Expr C) (τ : Ty B) (S : LabelSet) :
-      -- freeIn x e₂ = false →
-      Typed constTy (Γ.bindConstr ⟨x, S.sub x⟩) (.app (.lam x e₁) e₂) τ →
-      Typed constTy (Γ.bindConstr ⟨x, S⟩) (.app (.lam x e₁) e₂) τ
+    -- -------------------- T-rcd-empty
+    -- TypedBody Γ ε ε
+    | empty (Γ : Ctx B) :
+        TypedBody constTy Γ .empty .empty
 
-  -- x ∉ e₂
-  -- --------------------------------- T-λ∈-err
-  -- Γ · (x ∈ {x}) ⊢ (x: e₁) e₂ : ★
-  --
-  -- S was exactly {x} and x is not used — the only allowed label is exhausted.
-  | tInErr (Γ : Ctx B) (x : Var) (e₁ e₂ : Expr C) :
-      -- freeIn x e₂ = false →
-      Typed constTy (Γ.bindConstr ⟨x, LabelSet.sing x⟩)
-                    (.app (.lam x e₁) e₂) .err
+    -- Γ ⊢ e : τ
+    -- -------------------------- T-rcd-single
+    -- TypedBody Γ (l = e) (l: τ)
+    | single (Γ : Ctx B) (l : Label) (e : Expr C) (τ : Ty B) :
+        Typed constTy Γ e τ →
+        TypedBody constTy Γ (.single l e) (.field l τ)
 
-  -- Γ ⊢ a : {ρ₁}   Γ ⊢ b : {ρ₂}
-  -- ------------------------------- T-conc
-  -- Γ ⊢ a ‖ b : {ρ₁ | ρ₂}
-  | tCat (Γ : Ctx B) (a b : Expr C) (ρ₁ ρ₂ : Row B) :
-      Typed constTy Γ a (.rcd ρ₁) →
-      Typed constTy Γ b (.rcd ρ₂) →
-      Typed constTy Γ (.cat a b) (.rcd (.cat ρ₁ ρ₂))
-
-  -- Γ ⊢ e : {l: τ | ρ}
-  -- -------------------- T-sel
-  -- Γ ⊢ e.l : τ
-  | tSel (Γ : Ctx B) (e : Expr C) (l : Label) (τ : Ty B) (ρ : Row B) :
-      Typed constTy Γ e (.rcd (.ext l τ ρ)) →
-      Typed constTy Γ (.sel e l) τ
+    -- Γ ⊢ e : τ    TypedBody Γ ξ ρ
+    -- ------------------------------------ T-rcd-ext
+    -- TypedBody Γ (l = e | ξ) (l: τ | ρ)
+    | ext (Γ : Ctx B) (l : Label) (e : Expr C) (b : RecBody (Expr C)) (τ : Ty B) (ρ : Row B) :
+        Typed constTy Γ e τ →
+        TypedBody constTy Γ b ρ →
+        TypedBody constTy Γ (.ext l e b) (.ext l τ ρ)
+end
 
 -- ## Substitution  e[x := v]
 
