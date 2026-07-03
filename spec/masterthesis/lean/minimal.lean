@@ -58,7 +58,7 @@ mutual
   inductive Row (B : Type) : Type where
     | empty  : Row B                              -- ε
     | var    : TyVar → Row B                      -- α
-    | ext    : Label → Ty B → Row B → Row B       -- l: τ | ρ
+    | ext    : Label → Ty B → Row B               -- l: τ
     | cat    : Row B → Row B → Row B              -- ρ₁ | ρ₂  (for T-conc result)
 end
 
@@ -171,8 +171,8 @@ mutual
     -- Γ ⊢ e : {l: τ | ρ}
     -- -------------------- T-sel
     -- Γ ⊢ e.l : τ
-    | tSel (Γ : Ctx B) (e : Expr C) (l : Label) (τ : Ty B) (ρ : Row B) :
-        Typed constTy Γ e (.rcd (.ext l τ ρ)) →
+    | tSel (Γ : Ctx B) (e : Expr C) (l : Label) (τ : Ty B) :
+        Typed constTy Γ e (.rcd (.ext l τ)) →
         Typed constTy Γ (.sel e l) τ
 
     -- TypedBody Γ ξ ρ
@@ -199,7 +199,7 @@ mutual
     | ext (Γ : Ctx B) (l : Label) (e : Expr C) (b : RecBody (Expr C)) (τ : Ty B) (ρ : Row B) :
         Typed constTy Γ e τ →
         TypedBody constTy Γ b ρ →
-        TypedBody constTy Γ (.ext l e b) (.ext l τ ρ)
+        TypedBody constTy Γ (.ext l e b) (.cat (.ext l τ) ρ)
 end
 
 -- ## Substitution  e[x := v]
