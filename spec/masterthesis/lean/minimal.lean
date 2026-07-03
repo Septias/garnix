@@ -241,20 +241,21 @@ mutual
 end
 
 -- ## Values
+-- Lazy semantics: a record is a value at the constructor level (WHNF).
+-- Fields are unevaluated thunks and are forced only on projection.
 
-mutual
-  inductive Value {C : Type} : Expr C → Prop where
-    | con {c : C}                : Value (.con c)
-    | lam {x : Var} {e : Expr C} : Value (.lam x e)
-    | rcd {b : RecBody (Expr C)} : ValueBody b → Value (.rcd b)
+inductive Value {C : Type} : Expr C → Prop where
+  | con {c : C}                : Value (.con c)
+  | lam {x : Var} {e : Expr C} : Value (.lam x e)
+  | rcd {b : RecBody (Expr C)} : Value (.rcd b)
 
-  inductive ValueBody {C : Type} : RecBody (Expr C) → Prop where
-    | empty  : ValueBody .empty
-    | single {l : Label} {e : Expr C}
-             : Value e → ValueBody (.single l e)
-    | ext    {l : Label} {e : Expr C} {b : RecBody (Expr C)}
-             : Value e → ValueBody b → ValueBody (.ext l e b)
-end
+-- ValueBody (eager variant, kept for reference): all fields are fully forced.
+inductive ValueBody {C : Type} : RecBody (Expr C) → Prop where
+  | empty  : ValueBody .empty
+  | single {l : Label} {e : Expr C}
+           : Value e → ValueBody (.single l e)
+  | ext    {l : Label} {e : Expr C} {b : RecBody (Expr C)}
+           : Value e → ValueBody b → ValueBody (.ext l e b)
 
 -- ## Small-step reduction  e ↦ e'
 
@@ -320,11 +321,15 @@ theorem subst_preserves_typing
 -- ## Progress
 --
 --   If ⊢ e : τ  then  e ∈ Value  ∨  ∃ e', e → e'
+--   If ⊢ e : τ  and  τ ≠ ★  then  e ∈ Value  ∨  ∃ e', e → e'
 --
+--   Restricted to non-★ types: tInErr gives ★ to terms that may produce stuck
+--   redexes after β-reduction, so no progress guarantee for ★-typed terms.
 --   Proof: induction on the typing derivation.
 
 theorem progress
     {B C : Type} (constTy : C → B) (e : Expr C) (τ : Ty B)
+    (hτ : τ ≠ .err)
     (h : Typed constTy Ctx.empty e τ) :
     Value e ∨ ∃ e', Step e e' := by
   sorry
@@ -333,8 +338,10 @@ theorem progress
 --
 --   If Γ ⊢ e : τ  and  e → e'  then  Γ ⊢ e' : τ
 --
+--   Holds for concrete types via the substitution lemma (β case).
+--   The tInErr / ★ case requires constr_weakening below: after β-reduction
+--   the binder x is gone but the constraint context still mentions x.
 --   Proof: induction on the typing derivation, case analysis on the step.
---   Key auxiliary: subst_preserves_typing (for the β case).
 
 theorem preservation
     {B C : Type} (constTy : C → B)
@@ -342,6 +349,20 @@ theorem preservation
     (ht : Typed constTy Γ e τ)
     (hs : Step e e') :
     Typed constTy Γ e' τ := by
+  sorry
+
+-- ## Context weakening for constraints
+--
+--   Adding an irrelevant constraint does not affect typing.
+--   Needed in the tInErr case of preservation: after β-reducing
+--   (lam x e₁) e₂, x no longer appears free, but the context still
+--   carries (x ∈ {x}). Weakening lets us discard it.
+
+theorem constr_weakening
+    {B C : Type} (constTy : C → B)
+    (Γ : Ctx B) (e : Expr C) (τ : Ty B) (c : Constr)
+    (h : Typed constTy Γ e τ) :
+    Typed constTy (Γ.bindConstr c) e τ := by
   sorry
 
 -- ## Specialization  x ⩪ Γ
