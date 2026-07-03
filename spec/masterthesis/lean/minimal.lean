@@ -62,7 +62,7 @@ mutual
     | cat    : Row B → Row B → Row B              -- ρ₁ | ρ₂  (for T-conc result)
 end
 
------------------------------------ Context ----------------------------------------
+----------------------------------- CONTEXT ----------------------------------------
 --   π := x ∈ (S₁ ∪ … ∪ Sₙ)
 
 structure Constr where
@@ -91,11 +91,8 @@ def bindConstr (Γ : Ctx B) (c : Constr) : Ctx B :=
 end Ctx
 
 
---------------------------------- Typing Relation ------------------------------
--- ## Typing relation
---
+--------------------------------- TYPING RELATION ------------------------------
 --   Γ ⊢ e : τ
---
 --   `constTy : C → B` assigns each constant its base type.
 
 mutual
@@ -219,7 +216,7 @@ mutual
     | .ext l e b => .ext l (subst x v e) (substBody x v b)
 end
 
--- ## Values
+--------------------------------- VALUES --------------------------------------
 -- Lazy semantics: a record is a value at the constructor level (WHNF).
 -- Fields are unevaluated thunks and are forced only on projection.
 
@@ -234,7 +231,9 @@ inductive ValueBody {C : Type} : RecBody (Expr C) → Prop where
   | ext    {l : Label} {e : Expr C} {b : RecBody (Expr C)}
            : Value e → ValueBody b → ValueBody (.ext l e b)
 
--- ## Small-step reduction  e ↦ e'
+
+--------------------------------- REDUCTION ------------------------------------
+-- e ↦ e'
 
 mutual
   inductive Step {C : Type} : Expr C → Expr C → Prop where
@@ -280,6 +279,24 @@ mutual
         StepBody (.ext l v b) (.ext l v b')
 end
 
+---------------------------------- PROGRESS ---------------------------------
+--   If ⊢ e : τ  then  e ∈ Value  ∨  ∃ e', e → e'
+--   If ⊢ e : τ  and  τ ≠ ★  then  e ∈ Value  ∨  ∃ e', e → e'
+--
+--   Restricted to non-★ types: tInErr gives ★ to terms that may produce stuck
+--   redexes after β-reduction, so no progress guarantee for ★-typed terms.
+--   Proof: induction on the typing derivation.
+
+
+theorem progress
+    {B C : Type} (constTy : C → B) (e : Expr C) (τ : Ty B)
+    (hτ : τ ≠ .err)
+    (h : Typed constTy Ctx.empty e τ) :
+    Value e ∨ ∃ e', Step e e' := by
+  sorry
+
+
+---------------------------------- PRESERVATION ---------------------------------
 -- ## Substitution lemma  (key auxiliary for Preservation)
 --
 --   If Γ, x:τ₁ ⊢ e : τ₂  and  Γ ⊢ v : τ₁  then  Γ ⊢ e[x:=v] : τ₂
@@ -292,24 +309,6 @@ theorem subst_preserves_typing
     Typed constTy Γ (subst x v e) τ₂ := by
   sorry
 
--- ## Progress
---
---   If ⊢ e : τ  then  e ∈ Value  ∨  ∃ e', e → e'
---   If ⊢ e : τ  and  τ ≠ ★  then  e ∈ Value  ∨  ∃ e', e → e'
---
---   Restricted to non-★ types: tInErr gives ★ to terms that may produce stuck
---   redexes after β-reduction, so no progress guarantee for ★-typed terms.
---   Proof: induction on the typing derivation.
-
-theorem progress
-    {B C : Type} (constTy : C → B) (e : Expr C) (τ : Ty B)
-    (hτ : τ ≠ .err)
-    (h : Typed constTy Ctx.empty e τ) :
-    Value e ∨ ∃ e', Step e e' := by
-  sorry
-
--- ## Preservation
---
 --   If Γ ⊢ e : τ  and  e → e'  then  Γ ⊢ e' : τ
 --
 --   Holds for concrete types via the substitution lemma (β case).
@@ -338,18 +337,5 @@ theorem constr_weakening
     (h : Typed constTy Γ e τ) :
     Typed constTy (Γ.bindConstr c) e τ := by
   sorry
-
--- ## Specialization  x ⩪ Γ
---
---   Simplifies constraints when variable x resolves to a known label.
---
---   (x, l ∈ (X ∪ Y))  →  l ∈ Y         when l ∉ X
---   (x, l ∈ (X ∪ Y))  →  ε             when l ∈ X
---   (x, l ∈ (X ∪ Y))  →  l ∈ (X ∪ Y)  otherwise
---
---   Full specialization requires knowing the X / Y decomposition of `allowed`.
---   That structure is not tracked in our `Constr` type as stated — a richer
---   representation (e.g. a list of sets whose union is `allowed`) is needed.
---   We leave this as a placeholder.
 
 end MinimalCalculus
