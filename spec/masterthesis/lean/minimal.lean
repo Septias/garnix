@@ -3,7 +3,7 @@
 
 namespace MinimalCalculus
 
-
+---------------------------------- SYNTAX-----------------------------------
 --  l ∈ 𝓛   x ∈ 𝓧   𝓫 ∈ 𝓑   c ∈ 𝓒
 abbrev Label  := String
 abbrev Var    := String
@@ -21,18 +21,15 @@ def LabelSet.sing (l : Label)                 : LabelSet := [l]
 
 inductive RecBody (Term : Type) : Type where
   | empty  : RecBody Term
-  | single : Label → Term → RecBody Term
   | ext    : Label → Term → RecBody Term → RecBody Term
 
 def RecBody.lookup {α : Type} (l : Label) : RecBody α → Option α
   | .empty      => none
-  | .single l' e => if l == l' then some e else none
   | .ext l' e b  => if l == l' then some e else RecBody.lookup l b
 
 def RecBody.concat {α : Type} : RecBody α → RecBody α → RecBody α
-  | .empty,      b => b
-  | .single l e, b => .ext l e b
-  | .ext l e a,  b => .ext l e (RecBody.concat a b)
+  | .empty,     b => b
+  | .ext l e a, b => .ext l e (RecBody.concat a b)
 
 inductive Expr (Const : Type) : Type where
   | con  : Const → Expr Const                            -- c
@@ -42,6 +39,10 @@ inductive Expr (Const : Type) : Type where
   | cat  : Expr Const → Expr Const → Expr Const          -- a ‖ b
   | sel  : Expr Const → Label → Expr Const               -- e.l
   | rcd  : RecBody (Expr Const) → Expr Const             -- { ξ }
+
+
+
+---------------------------------- TYPES-----------------------------------
 
 -- τ := α | 𝓫 | ★ | τ → τ | { ρ }
 -- ρ := ε | α | l: τ | (l: τ | ρ)
@@ -198,13 +199,6 @@ mutual
     | empty (Γ : Ctx B) :
         TypedBody constTy Γ .empty .empty
 
-    -- Γ ⊢ e : τ
-    -- -------------------------- T-rcd-single
-    -- TypedBody Γ (l = e) (l: τ)
-    | single (Γ : Ctx B) (l : Label) (e : Expr C) (τ : Ty B) :
-        Typed constTy Γ e τ →
-        TypedBody constTy Γ (.single l e) (.ext l τ .empty)
-
     -- Γ ⊢ e : τ    TypedBody Γ ξ ρ
     -- ------------------------------------ T-rcd-ext
     -- TypedBody Γ (l = e | ξ) (l: τ | ρ)
@@ -227,9 +221,8 @@ mutual
     | .rcd b      => .rcd (substBody x v b)
 
   def substBody {C : Type} (x : Var) (v : Expr C) : RecBody (Expr C) → RecBody (Expr C)
-    | .empty      => .empty
-    | .single l e => .single l (subst x v e)
-    | .ext l e b  => .ext l (subst x v e) (substBody x v b)
+    | .empty     => .empty
+    | .ext l e b => .ext l (subst x v e) (substBody x v b)
 end
 
 -- ## Values
@@ -244,8 +237,6 @@ inductive Value {C : Type} : Expr C → Prop where
 -- ValueBody (eager variant, kept for reference): all fields are fully forced.
 inductive ValueBody {C : Type} : RecBody (Expr C) → Prop where
   | empty  : ValueBody .empty
-  | single {l : Label} {e : Expr C}
-           : Value e → ValueBody (.single l e)
   | ext    {l : Label} {e : Expr C} {b : RecBody (Expr C)}
            : Value e → ValueBody b → ValueBody (.ext l e b)
 
@@ -286,9 +277,6 @@ mutual
         Step (.cat (.rcd b₁) (.rcd b₂)) (.rcd (b₁.concat b₂))
 
   inductive StepBody {C : Type} : RecBody (Expr C) → RecBody (Expr C) → Prop where
-    | single  {l : Label} {e e' : Expr C} :
-        Step e e' →
-        StepBody (.single l e) (.single l e')
     | extHead {l : Label} {e e' : Expr C} {b : RecBody (Expr C)} :
         Step e e' →
         StepBody (.ext l e b) (.ext l e' b)
