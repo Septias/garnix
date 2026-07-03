@@ -62,10 +62,9 @@ mutual
     | cat    : Row B → Row B → Row B              -- ρ₁ | ρ₂  (for T-conc result)
 end
 
--- ## Context
+----------------------------------- Context ----------------------------------------
 --
 --   π := x ∈ (S₁ ∪ … ∪ Sₙ)
---
 
 structure Constr where
   x       : Var
