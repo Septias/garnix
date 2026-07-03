@@ -121,7 +121,7 @@ mutual
         Typed constTy (Γ.bindTy x τ₁) e τ₂ →
         Typed constTy Γ (.lam x e) (.fn τ₁ τ₂)
 
-    -- Γ ⊢ e₁ : τ₁→τ₂   Γ ⊢ e₂ : τ₁
+    -- Γ ⊢ e₁ : τ₁ → τ₂   Γ ⊢ e₂ : τ₁
     -- -------------------------------- T-λ-E
     -- Γ ⊢ e₁ e₂ : τ₂
     | tApp (Γ : Ctx B) (e₁ e₂ : Expr C) (τ₁ τ₂ : Ty B):
@@ -154,7 +154,7 @@ mutual
     -- --------------------------------- T-λ∈-err
     -- Γ · (x ∈ {x}) ⊢ (x: e₁) e₂ : ★
     --
-    -- S was exactly {x} and x is not used — [the only allowed label]¿ is exhausted.
+    -- S was exactly {x} and x is not used — the only allowed label is exhausted.
     | tInErr (Γ : Ctx B) (x : Var) (e₁ e₂ : Expr C) :
         -- freeIn x e₂ = false →
         Typed constTy (Γ.bindConstr ⟨x, LabelSet.sing x⟩)
