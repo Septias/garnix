@@ -17,7 +17,7 @@ def LabelSet.sub  (S : LabelSet) (l : Label)  : LabelSet := S.erase l
 def LabelSet.sing (l : Label)                 : LabelSet := [l]
 
 --   a, b, e := c | x | (x: e) | a ‖ b | e.l | { ξ }
---       ξ   := ε | l = b | (l = b | ξ)
+--       ξ   := ε | (l = b | ξ)
 
 inductive RecBody (Term : Type) : Type where
   | empty  : RecBody Term
@@ -57,7 +57,6 @@ mutual
   inductive Row (B : Type) : Type where
     | empty  : Row B                              -- ε
     | var    : TyVar → Row B                      -- α
-    | field  : Label → Ty B → Row B               -- l: τ
     | ext    : Label → Ty B → Row B → Row B       -- l: τ | ρ
     | cat    : Row B → Row B → Row B              -- ρ₁ | ρ₂  (for T-conc result)
 end
@@ -181,13 +180,6 @@ mutual
         Typed constTy Γ e (.rcd (.ext l τ ρ)) →
         Typed constTy Γ (.sel e l) τ
 
-    -- Γ ⊢ e : {l: τ}
-    -- -------------------- T-sel-field
-    -- Γ ⊢ e.l : τ
-    | tSelField (Γ : Ctx B) (e : Expr C) (l : Label) (τ : Ty B) :
-        Typed constTy Γ e (.rcd (.field l τ)) →
-        Typed constTy Γ (.sel e l) τ
-
     -- TypedBody Γ ξ ρ
     -- -------------------- T-rcd
     -- Γ ⊢ { ξ } : { ρ }
@@ -211,7 +203,7 @@ mutual
     -- TypedBody Γ (l = e) (l: τ)
     | single (Γ : Ctx B) (l : Label) (e : Expr C) (τ : Ty B) :
         Typed constTy Γ e τ →
-        TypedBody constTy Γ (.single l e) (.field l τ)
+        TypedBody constTy Γ (.single l e) (.ext l τ .empty)
 
     -- Γ ⊢ e : τ    TypedBody Γ ξ ρ
     -- ------------------------------------ T-rcd-ext
