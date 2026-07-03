@@ -63,7 +63,6 @@ mutual
 end
 
 ----------------------------------- Context ----------------------------------------
---
 --   π := x ∈ (S₁ ∪ … ∪ Sₙ)
 
 structure Constr where
@@ -91,9 +90,8 @@ def bindConstr (Γ : Ctx B) (c : Constr) : Ctx B :=
 
 end Ctx
 
--- ## Free-variable membership  (x ∈ e)
--- TODO
 
+--------------------------------- Typing Relation ------------------------------
 -- ## Typing relation
 --
 --   Γ ⊢ e : τ
