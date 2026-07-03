@@ -16,7 +16,7 @@ def LabelSet.mem  (l : Label) (S : LabelSet)  : Bool     := S.contains l
 def LabelSet.sub  (S : LabelSet) (l : Label)  : LabelSet := S.erase l
 def LabelSet.sing (l : Label)                 : LabelSet := [l]
 
---   a, b, e := c | (x: e) | a ‖ b | e.l | { ξ }
+--   a, b, e := c | x | (x: e) | a ‖ b | e.l | { ξ }
 --       ξ   := ε | l = b | (l = b | ξ)
 
 inductive RecBody (Term : Type) : Type where
@@ -36,6 +36,7 @@ def RecBody.concat {α : Type} : RecBody α → RecBody α → RecBody α
 
 inductive Expr (Const : Type) : Type where
   | con  : Const → Expr Const                            -- c
+  | var  : Var → Expr Const                              -- x
   | lam  : Var → Expr Const → Expr Const                 -- (x: e)
   | app  : Expr Const → Expr Const → Expr Const          -- e₁ e₂
   | cat  : Expr Const → Expr Const → Expr Const          -- a ‖ b
@@ -111,6 +112,13 @@ mutual
     -- Γ ⊢ c : 𝓫_c
     | tCon (Γ : Ctx B) (c : C):
         Typed constTy Γ (.con c) (.base (constTy c))
+
+    -- x : τ ∈ Γ
+    -- ----------- T-var
+    -- Γ ⊢ x : τ
+    | tVar (Γ : Ctx B) (x : Var) (τ : Ty B) :
+        Γ.lookup x = some τ →
+        Typed constTy Γ (.var x) τ
 
     -- Γ x:τ₁ ⊢ e : τ₂
     -- --------------------- T-λ-I
@@ -219,6 +227,7 @@ end
 mutual
   def subst {C : Type} (x : Var) (v : Expr C) : Expr C → Expr C
     | .con c      => .con c
+    | .var y      => if x == y then v else .var y
     | .lam y e    => if x == y then .lam y e else .lam y (subst x v e)
     | .app e₁ e₂  => .app (subst x v e₁) (subst x v e₂)
     | .cat e₁ e₂  => .cat (subst x v e₁) (subst x v e₂)
