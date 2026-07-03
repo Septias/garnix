@@ -51,7 +51,7 @@ mutual
   inductive Ty (B : Type) : Type where
     | var  : TyVar → Ty B                         -- α
     | base : B → Ty B                             -- 𝓫
-    | err  : Ty B                                 -- ★
+    | unk  : Ty B                                 -- ★
     | fn   : Ty B → Ty B → Ty B                   -- τ → τ
     | rcd  : Row B → Ty B                         -- { ρ }
 
@@ -63,8 +63,6 @@ mutual
 end
 
 ----------------------------------- CONTEXT ----------------------------------------
---   π := x ∈ (S₁ ∪ … ∪ Sₙ)
-
 structure Constr where
   x       : Var
   allowed : LabelSet   -- treated as a set of allowed labels
@@ -146,16 +144,6 @@ mutual
         -- freeIn x e₂ = false →
         Typed constTy (Γ.bindConstr ⟨x, S.sub x⟩) (.app (.lam x e₁) e₂) τ →
         Typed constTy (Γ.bindConstr ⟨x, S⟩) (.app (.lam x e₁) e₂) τ
-
-    -- x ∉ e₂
-    -- --------------------------------- T-λ∈-err
-    -- Γ · (x ∈ {x}) ⊢ (x: e₁) e₂ : ★
-    --
-    -- S was exactly {x} and x is not used — the only allowed label is exhausted.
-    | tInErr (Γ : Ctx B) (x : Var) (e₁ e₂ : Expr C) :
-        -- freeIn x e₂ = false →
-        Typed constTy (Γ.bindConstr ⟨x, LabelSet.sing x⟩)
-                      (.app (.lam x e₁) e₂) .err
 
     -- Γ ⊢ a : {ρ₁}   Γ ⊢ b : {ρ₂}
     -- ------------------------------- T-conc
@@ -281,16 +269,11 @@ end
 
 ---------------------------------- PROGRESS ---------------------------------
 --   If ⊢ e : τ  then  e ∈ Value  ∨  ∃ e', e → e'
---   If ⊢ e : τ  and  τ ≠ ★  then  e ∈ Value  ∨  ∃ e', e → e'
---
---   Restricted to non-★ types: tInErr gives ★ to terms that may produce stuck
---   redexes after β-reduction, so no progress guarantee for ★-typed terms.
 --   Proof: induction on the typing derivation.
 
 
 theorem progress
     {B C : Type} (constTy : C → B) (e : Expr C) (τ : Ty B)
-    (hτ : τ ≠ .err)
     (h : Typed constTy Ctx.empty e τ) :
     Value e ∨ ∃ e', Step e e' := by
   sorry
@@ -310,10 +293,6 @@ theorem subst_preserves_typing
   sorry
 
 --   If Γ ⊢ e : τ  and  e → e'  then  Γ ⊢ e' : τ
---
---   Holds for concrete types via the substitution lemma (β case).
---   The tInErr / ★ case requires constr_weakening below: after β-reduction
---   the binder x is gone but the constraint context still mentions x.
 --   Proof: induction on the typing derivation, case analysis on the step.
 
 theorem preservation
@@ -327,9 +306,6 @@ theorem preservation
 -- ## Context weakening for constraints
 --
 --   Adding an irrelevant constraint does not affect typing.
---   Needed in the tInErr case of preservation: after β-reducing
---   (lam x e₁) e₂, x no longer appears free, but the context still
---   carries (x ∈ {x}). Weakening lets us discard it.
 
 theorem constr_weakening
     {B C : Type} (constTy : C → B)
