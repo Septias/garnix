@@ -66,9 +66,6 @@ end
 --
 --   π := x ∈ (S₁ ∪ … ∪ Sₙ)
 --
---   Simplified: each constraint binds one variable to one allowed label set.
---   The full union-of-sets form from the paper is captured by having multiple
---   constraints per variable; simplification merges / drops them (see §Spec).
 
 structure Constr where
   x       : Var
