@@ -1,5 +1,6 @@
 
 ./26-07-02.typ
+../paper-proofs.typ
 
 == Proofs
 Given a set of values and smallstep reduction semantic (→):
