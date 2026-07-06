@@ -1,6 +1,6 @@
 
 == Fragen
-- Wie sieht's mit ner Phd. Stelle aus?
-- Structural Hashing für Dicts okay?
-- Was für Features? Set/Get/Delete/Create?
-
+- Soll ich für DeBrujin Indices gehen?
+- Restriction auf nur closed terms okay?
+- Intrinsic oder Extrinsic?
+- Soll ich
