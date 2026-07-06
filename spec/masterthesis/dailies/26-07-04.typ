@@ -1,6 +1,6 @@
-
-
 ./26-07-06.typ
+
+
 == Fragen
 - Wie transportiere ich die Constraints nach oben?
   - Durch extended context in constraints
