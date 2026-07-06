@@ -62,7 +62,7 @@ mutual
     | cat    : Row B → Row B → Row B              -- ρ₁ | ρ₂  (for T-conc result)
 end
 
------------------------------------ CONTEXT ----------------------------------------
+------------------------------------ CONTEXT -----------------------------------
 structure Constr where
   x       : Var
   allowed : LabelSet   -- treated as a set of allowed labels
@@ -89,7 +89,7 @@ def bindConstr (Γ : Ctx B) (c : Constr) : Ctx B :=
 end Ctx
 
 
---------------------------------- TYPING RELATION --------------------------------
+------------------------------- TYPING RELATION --------------------------------
 --   Γ ⊢ e : τ
 --   `constTy : C → B` assigns each constant its base type.
 
@@ -276,7 +276,7 @@ theorem progress
     {B C : Type} (constTy : C → B) (e : Expr C) (τ : Ty B)
     (h : Typed constTy Ctx.empty e τ) :
     Value e ∨ ∃ e', Step e e' := by
-  sorry
+    sorry
 
 
 ---------------------------------- PRESERVATION ---------------------------------
