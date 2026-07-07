@@ -44,7 +44,6 @@ x ∉ e₂    S' = S∖x    Γ · (x ∈ S') ⊢ (x: e₁)e₂: τ
 Γ · (x ∈ S) ⊢ (x: e₁)e₂: τ
 
 
-
 Γ ⊢ a: { ρ₁ }  Γ ⊢ b: { ρ₂ }
 ----------------------------- T-conc
 Γ ⊢ a ‖ b: (ρ₁ | ρ₂)
@@ -55,9 +54,3 @@ x ∉ e₂    S' = S∖x    Γ · (x ∈ S') ⊢ (x: e₁)e₂: τ
 Γ ⊢ e.l: τ
 
 
-== Spezialisierung
-
-Die neue Relation x ⩪ Γ vereinfacht wenn möglich constraints.
-- (x, l ∈ (X ∪ Y)) -> l ∈ Y       :  wenn l ∉ X
-- (x, l ∈ (X ∪ Y)) -> ε           :  wenn l ∈ X
-- (x, l ∈ (X ∪ Y)) -> l ∈ (X ∪ Y) :  otherwise
