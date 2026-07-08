@@ -272,11 +272,29 @@ end
 --   Proof: induction on the typing derivation.
 
 
-theorem progress
-    {B C : Type} (constTy : C → B) (e : Expr C) (τ : Ty B)
-    (h : Typed constTy Ctx.empty e τ) :
-    Value e ∨ ∃ e', Step e e' := by
-    sorry
+inductive Progress {C: Type} (e: Expr C) : Prop where
+| step: Step e e' → Progress e
+| done: Value e → Progress e
+
+def progress (hΓ : Γ = Ctx.empty) (ht : Typed constTy Γ e τ) : Progress e :=
+  match ht with
+  | .tCon _ _            => .done .con
+  | .tVar _ _ _ h        => by subst hΓ; simp [Ctx.lookup, Ctx.empty] at h
+  | .tLam _ _ _ _ _ _    => .done .lam
+  | .tRcd _ _ _ _        => .done .rcd
+  | .tSel _ e _ _ h      =>
+      match progress hΓ h with
+      | .step hstep => .step (.selStep hstep)
+      | .done hval  =>
+          match hval with
+          | .con => by cases h
+          | .lam => by cases h
+          | .rcd => sorry       -- e = .rcd b; need to step via selVal or rcdStep
+  | .tApp _ _ _ _ _ _ _   => sorry
+  | .tCat _ _ _ _ _ _ _   => sorry
+  | .tInOk _ _ _ _ _ _ _  => sorry
+  | .tInNot _ _ _ _ _ _ _ => sorry
+
 
 
 ---------------------------------- PRESERVATION ---------------------------------
