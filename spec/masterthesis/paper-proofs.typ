@@ -47,6 +47,7 @@ Given a set of values and smallstep reduction semantic (→):
   - selStep: e' → e'' → by IH, Γ ⊢ e'': { l: τ | ρ }, so Γ ⊢ e''.l: τ by T-sel. ✓
 - *T-λ∈-ok / T-λ∈-not-in*: Reduces to the underlying T-λ-E case. □
 
+- Problem: T-λ∈-ok: The inner type can change after an application.
 
 *Key lemma — Substitution*: If Γ, x:τ₁ ⊢ e: τ₂ and Γ ⊢ v: τ₁ then Γ ⊢ e[x ↦ v]: τ₂.
 - sorry
