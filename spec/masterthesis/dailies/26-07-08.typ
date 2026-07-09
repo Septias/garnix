@@ -1,5 +1,5 @@
 
-
+./26-07-07.typ
 == Fragen
 - Fm: Wie genau speicher ich die Constraints?
   - opt1: Im selben context
@@ -62,7 +62,6 @@ We add a lookup relation on record-types that simultaneously looks up a type and
 --------------------------- T-look-★
 Γ, (l ∈ S) ⊢ e.l: ★
 - If type unknown, add ∈-constraint
-
 
 
 l₁ = l₂
