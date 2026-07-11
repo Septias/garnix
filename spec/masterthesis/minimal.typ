@@ -63,14 +63,11 @@ l₁ ≠ l₂
 Γ ⊢ α: {ρ}  Γ ⊢ ρ.l: τ
 ------------------------------ T-look-Γ-rec
 Γ ⊢ (α | ρ).l: τ
-- If α in bound in Γ, try to look up the label there
-- This also handles the case when we get ★ in (ρ.l)
 
 
 Γ ⊢ α: {ρ}   Γ ⊢̷ ρ.l: τ₁   ρ.l: τ₂
 ----------------------------------- T-look-Γ-cont
 Γ ⊢ (α | ρ).l: τ₂
-- If we can not find the label in α, recurse into the row
 
 
 α ∉ Γ
