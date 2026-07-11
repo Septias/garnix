@@ -2,27 +2,6 @@
 ./26-07-08.typ
 ./26-07-10.typ
 
-== Fragen
-- Instantation muss noch geklärt werden (mit let-poly dann)
-
-
-== Fäden
-- Brainstorm Constraintsolving
-  - Do I even want to do constraint solving outside of function instantiation?
-- Extrakontext hinzufügen
-- Subtyping mit lookup-relation
-- Fix lookup relation (fixed labels should occur?)
-  - Soll ich einfach die ganzen Records rein geben?
-    - I mean why not, muss man halt bissel trash raus schmeißen
-
-
-== Advanced Topics
-- Aufschieben von Constraints
-- Type Refinements based on T-App
-- Constraints during Subtyping
-- Subtyping und ★
-- Unification
-
 
 == Misc
 - Claude hat gechoked und ein einziger default-type funktioniert nicht
@@ -66,7 +45,7 @@ l ∉ dom(ρ₂)
 Γ ⊢ e.l: τ
 
 
-Γ ⊢ ρ.l: ★  Γ ⊢ e: {ρ}  rows(ρ) = S
+Γ ⊢ ρ.l: ★   Γ ⊢ e: {ρ}  rows(ρ) = S
 ------------------------------------ T-sel-★
 Γ, (l ∈ S) ⊢ e.l: ★
 - If type unknown, add ∈-constraint

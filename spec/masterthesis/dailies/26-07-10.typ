@@ -1,4 +1,5 @@
 ./26-07-09.typ
+./26-07-11.typ
 
 == Fäden
 - Brainstorm Constraintsolving
@@ -32,9 +33,9 @@
 - Für unification habe ich dann ja eh constraints
 - Aber das sind halt ≡-constraints
 - Ich mag halt die Syntax z.B. `r <= {l: int} => r -> int`
-- Fürs erste kann ich mich aber eigentlich echt einfach auf ∈-constraints und
+- Fürs erste kann ich mich aber eigentlich echt einfach auf ≡-constraints verlassen
 - Ich glaube, das war initial über die application function motiviert
-- Weil bei Records ist halt depth- und width-einfach mega convenient
+- Weil bei Records ist halt depth- und width-subtyping mega convenient
 
 
 == Refinement
@@ -44,7 +45,7 @@
     - Wir merken uns welche Record-lookups zu ★ geführt haben
     - Wenn wir records supplien, überarbeiten wir rows und spezialisieren Typen
       - Das ist halt grundsätzlich deep
-      - Es ist dann nicht klar, wie welche Auswirkung ein neues β hat
+      - Es ist dann nicht klar, welche Auswirkung ein neues β hat
         - Das ich bei einem lookup (`r.l`) für den Returnwert nutzen kann
       - Wenn ich jetzt β einfach neu instantiiere, weil aus dem Paar (r,l) klar wird, was für ein Typ das hat, dann substitute ich einfach überall β
       - Aber wer führt das weiter? Also wenn ich dann (β + α) hab?
@@ -52,7 +53,6 @@
 
 
 == ∈₂-constraints
-
 - Effektiv kann ich hier β instantiieren, wenn ρ in r ist und dadurch l freigeschaltet wird.
 - Wie mache ich equality?
 - ρ₁↓lρ₂ macht mehreres:
@@ -64,17 +64,17 @@
   2. Danach wird ein neuer lookup versucht (ρ'.l)
     - Ergebniss τ: β -> τ
     - Ergebniss ★:
-      - Weil nicht eingesetz: Nichts passiert
+      - Weil nicht eingesetzt: Nichts passiert
       - Trotz expliziter Einsetzung: Nichts passiert
       - Wenn T-var eingesetzt: Constraint muss umgeschrieben werden?
         - Vorher: (α | ρ), aber dann wird α durch β ersetzt, also (β | ρ)
-- Ist das nicht ne ganz normale instantiierung (τ ⊑ σ)?
+- Ist das nicht ne ganz normale Instantiierung (τ ⊑ σ)?
   - Nee, das ist für let-poly
   - Wobei ich natürlich fast alle Funktionen so verwende
   - Wie mache ich das denn mit anonymen Funktionen?
   - Soll ich die auch einfach type-schemen ?
   - Muss ich ja eigentlich, weil man die in Nix auch so verwenden kann
-- Muss ich ein netz an Row-variablen maintainen?
+- Muss ich ein Netz an Row-variablen maintainen?
 
 
 Γe₁ ~ ((ρ₁, l) ↦ β)   Γ ⊢ e₂: { ρ₂ }    ρ₁↓ₗρ₂
