@@ -11,14 +11,8 @@ a, b, e := c | x | (x: e) | e₁e₂ | a ‖ b | e.l | { ξ }
 τ := α | 𝓫 | ★ | τ -> τ | { ρ }
 ρ := ε | α | (l: τ | ρ)
 
-=== Reduction
-(x: e₁)e₂       -> e₁[x ↦ e₂]
-{ ξ }.l         -> e            if (e = t) ∈ ξ
-{ ξ₁ } ‖ { ξ₂ } -> { ξ₁ | ξ₂ }
 
-
-
-=== Inference
+== Inference
 
 ----------- T-cons
 Γ ⊢ c: 𝓫_c
@@ -34,23 +28,53 @@ a, b, e := c | x | (x: e) | e₁e₂ | a ‖ b | e.l | { ξ }
 Γ ⊢ e₁e₂: τ₂
 
 
-[x ∈ e₂]¡    Γ ⊢ (x: e₁)e₂: τ
---------------------------- T-λ∈-ok
-Γ · (x ∈ S) ⊢ (x: e₁)e₂: τ
-
-
-[x ∉ e₂]¡    S' = S∖x    Γ · (x ∈ S') ⊢ (x: e₁)e₂: τ
---------------------------------------------------- T-λ∈-not-in
-Γ · (x ∈ S) ⊢ (x: e₁)e₂: τ
-
-
 Γ ⊢ a: { ρ₁ }  Γ ⊢ b: { ρ₂ }
 ----------------------------- T-conc
 Γ ⊢ a ‖ b: (ρ₁ | ρ₂)
 
 
-Γ ⊢ e: { l: τ | ρ }
--------------------- T-sel
+Γ ⊢ ρ.l: τ   Γ ⊢ e: {ρ}
+------------------------ T-sel
 Γ ⊢ e.l: τ
+
+
+== Row-Lookup
+- Γ ⊢ ρ.l
+- This statement recursively searches rows for a label l
+- If no derivation can be found, the label does not exist in ρ
+- If a row- or label-var is found, return the unknown type ★
+
+
+l₁ = l₂
+----------------------------- T-look-hit
+Γ ⊢ (l₁: τ | ρ).l₂ : τ
+
+
+l₁ ≠ l₂      Γ ⊢ ρ.l₂: τ₂
+----------------------------- T-look-rec
+Γ ⊢ (l₁: τ₁ | ρ).l₂: τ₂
+
+
+l₁ ≠ l₂
+----------------------------- ↯
+Γ ⊢ ( l₁: τ | ε ).l₂: τ
+
+
+Γ ⊢ α: {ρ}  Γ ⊢ ρ.l: τ
+------------------------------ T-look-Γ-rec
+Γ ⊢ (α | ρ).l: τ
+- If α in bound in Γ, try to look up the label there
+- This also handles the case when we get ★ in (ρ.l)
+
+
+Γ ⊢ α: {ρ}   Γ ⊢̷ ρ.l: τ₁   ρ.l: τ₂
+----------------------------------- T-look-Γ-cont
+Γ ⊢ (α | ρ).l: τ₂
+- If we can not find the label in α, recurse into the row
+
+
+α ∉ Γ
+----------------------------- T-look-Γ-neg
+Γ ⊢ (α | ρ).l: ★
 
 
