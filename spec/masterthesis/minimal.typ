@@ -11,7 +11,7 @@ e := c | x | (x: e) | e₁e₂ | e₁ ‖ e₂ | e.l | { ξ }
 ρ := ε | α | l: τ | (ρ₁ | ρ₂)
 
 
-== Inference
+== Declarative
 
 ----------- T-cons
 Γ ⊢ c: 𝓫_c
