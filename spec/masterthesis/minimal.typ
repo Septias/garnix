@@ -23,6 +23,11 @@ x: σ ∈ Γ   σ ⊑ τ
 Γ ⊢ x: τ
 
 
+Γ ⊢ e: τ₁   τ₁ ≈ τ₂
+--------------------- T-eq
+Γ ⊢ e: τ₂
+
+
 Γ·(x: τ₁) ⊢ e: τ₂
 --------------------- T-λ-I
 Γ ⊢ (x: e): τ₁ -> τ₂
@@ -140,3 +145,49 @@ l₁ ≠ l₂
 Γ ⊢ (ρ₁ | ρ₂).l ↓ ?
 
 
+== Row-Equivalence
+- ρ₁ ≈ ρ₂, lifted to types congruently (τ₁ ≈ τ₂)
+- Rows are equal up to reassociation, ε-units and swapping distinct labels
+- Deliberately not derivable: swapping equal labels (changes shadowing),
+  moving a field past a row-var (its instantiation could shadow it)
+
+
+----------- ≈-refl
+ρ ≈ ρ
+
+
+ρ₂ ≈ ρ₁
+----------- ≈-symm
+ρ₁ ≈ ρ₂
+
+
+ρ₁ ≈ ρ₂   ρ₂ ≈ ρ₃
+------------------ ≈-trans
+ρ₁ ≈ ρ₃
+
+
+τ₁ ≈ τ₂
+------------------- ≈-ext
+(l: τ₁) ≈ (l: τ₂)
+
+
+ρ₁ ≈ ρ₁′   ρ₂ ≈ ρ₂′
+------------------------ ≈-conc
+(ρ₁ | ρ₂) ≈ (ρ₁′ | ρ₂′)
+
+
+------------------------------------- ≈-assoc
+((ρ₁ | ρ₂) | ρ₃) ≈ (ρ₁ | (ρ₂ | ρ₃))
+
+
+----------- ≈-unit-l
+(ε | ρ) ≈ ρ
+
+
+----------- ≈-unit-r
+(ρ | ε) ≈ ρ
+
+
+l₁ ≠ l₂
+----------------------------------------- ≈-comm
+(l₁: τ₁ | l₂: τ₂) ≈ (l₂: τ₂ | l₁: τ₁)
