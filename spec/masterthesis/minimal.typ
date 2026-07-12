@@ -37,9 +37,14 @@ x: τ ∈ Γ
 Γ ⊢ e₁ ‖ e₂: { ρ₂ | ρ₁ }
 
 
-Γ ⊢ ρ.l: τ   Γ ⊢ e: {ρ}
------------------------- T-sel
+Γ ⊢ e: {ρ}   Γ ⊢ ρ.l ↓ τ
+------------------------------- T-sel
 Γ ⊢ e.l: τ
+
+
+Γ ⊢ e: {ρ}   Γ ⊢ ρ.l ↓ ?
+------------------------------- T-sel-★
+Γ ⊢ e.l: ★
 
 
 Γ ⊢ ξ: ρ
@@ -62,34 +67,49 @@ x: τ ∈ Γ
 
 
 == Row-Lookup
-- Γ ⊢ ρ.l
+- Γ ⊢ ρ.l ↓ r with r := τ | ⊥ | ?
+
 - This statement recursively searches rows for a label l
-- If no derivation can be found, the label does not exist in ρ
-- If a row-var is found, return the unknown type ★
+- absent means the label provably does not exist in ρ (T-sel has no rule for it)
+- unknown means an unconstrained row-var could contain l, so no sound type can be derived
+
+
+----------------- L-ε
+Γ ⊢ ε.l ↓ ⊥
 
 
 l₁ = l₂
------------------------------ T-look-hit
-Γ ⊢ (l₁: τ | ρ).l₂ : τ
+----------------------------- L-hit
+Γ ⊢ (l₁: τ).l₂ ↓ τ
 
 
-l₁ ≠ l₂      Γ ⊢ ρ.l₂: τ₂
------------------------------ T-look-rec
-Γ ⊢ (l₁: τ₁ | ρ).l₂: τ₂
+l₁ ≠ l₂
+----------------------------- L-miss
+Γ ⊢ (l₁: τ).l₂ ↓ ⊥
 
 
-Γ ⊢ α: {ρ′}  Γ ⊢ ρ′.l: τ
------------------------------- T-look-Γ-rec
-Γ ⊢ (α | ρ).l: τ
-
-
-Γ ⊢ α: {ρ′}  Γ ⊢ ρ.l: τ
------------------------------------ T-look-Γ-cont
-Γ ⊢ (α | ρ).l: τ
+Γ ⊢ α: {ρ}   Γ ⊢ ρ.l ↓ r
+----------------------------- L-α
+Γ ⊢ α.l ↓ r
 
 
 α ∉ Γ
------------------------------ T-look-Γ-neg
-Γ ⊢ (α | ρ).l: ★
+----------------------------- L-α-free
+Γ ⊢ α.l ↓ ?
+
+
+Γ ⊢ ρ₁.l ↓ τ
+----------------------------- L-conc-hit
+Γ ⊢ (ρ₁ | ρ₂).l ↓ τ
+
+
+Γ ⊢ ρ₁.l ↓ ⊥   Γ ⊢ ρ₂.l ↓ r
+--------------------------------- L-conc-skip
+Γ ⊢ (ρ₁ | ρ₂).l ↓ r
+
+
+Γ ⊢ ρ₁.l ↓ ?
+----------------------------- L-conc-★
+Γ ⊢ (ρ₁ | ρ₂).l ↓ ?
 
 
