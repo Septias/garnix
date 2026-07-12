@@ -1,0 +1,1045 @@
+          Infix-Extensible Record Types for Tabular Data
+                               Adam Paszke                                                                 Ningning Xie
+                           apaszke@google.com                                                         ningningxie@google.com
+                            Google DeepMind                                                              Google DeepMind
+                             Berlin, Germany                                                              Toronto, Canada
+
+Abstract                                                                                  With greater power comes greater responsibility. Mis-
+We present a novel row-polymorphic record calculus, sup-                               takes in data analysis can be costly, and the flexibility of
+porting a unique combination of features: scoped labels, first-                        programmable tools also makes it easier to make mistakes,
+class labels and rows, and record concatenation. Our work                              especially for non-expert programmers. The risks are only in-
+is motivated by the similarity of record types and data table                          flated by many libraries inheriting arguably unintuitive prac-
+(or data frame) schemas, commonly used in data processing                              tices, such as the implicit use of ternary logic to model miss-
+tasks. After presenting our record calculus, we demonstrate                            ing data that is so prevalent, e.g., in SQL. To increase their
+its applicability to data frame manipulation by showing that                           trustworthiness, data science workloads can be extended
+it can be used to successfully assign types to the functions                           with forms of formal verification such as type systems. Still,
+listed in the Brown Benchmark for Tabular Types. Our typ-                              we believe that practical verification tools should remain
+ing discipline is remarkably lightweight, compared to calculi                          lightweight, to make sure that the added safety and clarity
+that require reasoning about type-level constraints when                               are not outweighed by lesser accessibility caused by the need
+manipulating record types, making it a viable candidate for                            to appease a picky verifier or compiler.
+practical use.                                                                            In this work we present one potential component of such
+                                                                                       lightweight verification. We build on the well-studied type
+CCS Concepts: • Software and its engineering → Data                                    theory of row-polymorphic record types. Record types are
+types and structures; Formal language definitions; Domain                              a natural way to model the schema of a heterogeneous data
+specific languages.                                                                    table, that is, the set of (named) columns annotated with a
+Keywords: data frame, table, schema, row polymorphism                                  homogeneous type for every column. Row polymorphism
+                                                                                       keeps typed programs from being overly sensitive to table
+ACM Reference Format:                                                                  schema changes, such that the verification is robust against,
+Adam Paszke and Ningning Xie. 2023. Infix-Extensible Record Types
+                                                                                       e.g., the addition of new data sources as new columns.
+for Tabular Data. In Proceedings of the 8th ACM SIGPLAN Interna-
+                                                                                          While seemingly a good fit, most work focusing on row-
+tional Workshop on Type-Driven Development (TyDe ’23), September
+4, 2023, Seattle, WA, USA. ACM, New York, NY, USA, 15 pages.                           polymorphic records assumes a fairly advanced type system,
+https://doi.org/10.1145/3609027.3609406                                                such as one supporting qualified type theories. In turn, most
+                                                                                       functions dealing with records require a fairly ceremoni-
+1     Introduction                                                                     ous typing discipline. And, even if the constraints can be
+                                                                                       inferred by the compiler, we argue that something of value is
+Quantitative research has taken over most scientific fields
+                                                                                       lost: Types increase correctness, yes, but perhaps even more
+and business analytics, making computerized analysis of tab-
+                                                                                       important, they provide a high-level view of the data trans-
+ular data a commonplace task. Most of the programs used
+                                                                                       formations performed by a function. The long rows of quali-
+to perform data analysis present a graphical user interface,
+                                                                                       fications necessary for a function type to be well-defined in
+making them very accessible to a wide audience. Yet, the
+                                                                                       a conventional row-polymorphic type system create unnec-
+convenience they offer often comes with constraints. And,
+                                                                                       essary syntactic noise and hamper understanding.
+with the growing accessibility of programming education,
+                                                                                          As a solution to this problem, we propose a novel row-
+advanced users often turn to popular (and usually dynam-
+                                                                                       polymorphic record calculus with a unique combination of
+ically typed) programming languages (R, Python, Julia) to
+                                                                                       features: (1) scoped labels [10], where unlike in many row
+perform their more advanced data processing.
+                                                                                       type systems, duplicate labels are allowed and retained in our
+Permission to make digital or hard copies of part or all of this work for              system; (2) first-class labels [9], where labels are first-class
+personal or classroom use is granted without fee provided that copies are              values that can be passed in and returned by functions; (3) an
+not made or distributed for profit or commercial advantage and that copies             extension to first-class rows, where a row can be considered
+bear this notice and the full citation on the first page. Copyrights for third-
+party components of this work must be honored. For all other uses, contact
+                                                                                       a group of labels; and (4) record concatenation [5], where two
+the owner/author(s).                                                                   records can be merged into a single record. Except for first-
+TyDe ’23, September 4, 2023, Seattle, WA, USA                                          class rows, some of the individual features have been studied
+© 2023 Copyright held by the owner/author(s).                                          in existing literature, but not in ways compatible with each
+ACM ISBN 979-8-4007-0299-0/23/09.                                                      other. For example, Harper and Pierce [5] can concatenate
+https://doi.org/10.1145/3609027.3609406
+
+
+
+
+                                                                                  29
+TyDe ’23, September 4, 2023, Seattle, WA, USA                                                                      Adam Paszke and Ningning Xie
+
+
+two records only if they do not share common fields, as labels                 In many record calculi, it is common to assume that fields
+cannot be duplicated; while Leijen [10] alone cannot express                are unordered, and we make that assumption as well. That
+polymorphic record concatenation. We discuss related work                   means, that we treat the rows (and record types constructed
+in more detail in §5. As we will see (§4), with this set of                 from them) ⟨𝑙 1 : Int, 𝑙 2 : String⟩ and ⟨𝑙 2 : String, 𝑙 1 : Int⟩ as
+features we can express table types fairly well.                            equivalent.
+   The rest of the paper is structured as follows:
+                                                                            2.1    Tail-Extensible Records
+ • We begin our presentation in §2, by informally demon-
+   strating a sequence of record calculus extensions that                   A very common extension to the row calculus that our work
+   leads to our proposed system.                                            builds upon, is to allow arbitrary row extensions in tail posi-
+ • In §3 we present 𝜆 ⟨⟩ , a novel row-polymorphic record                   tions [4]. It extends the row language to allow type variables
+   calculus. We present the static and the operational seman-               with kind Row, including in the tail position of the row
+   tics, and prove that 𝜆 ⟨⟩ is type-safe. Moreover, we discuss             constructor ⟨· | ·⟩, as in ⟨𝑙 : 𝜏 | 𝜌⟩. Extensible rows are inter-
+   type inference and present a sound unification algorithm.                esting, because they make it possible to simulate structural
+ • In §4 we evaluate our proposal on the Brown Benchmark                    subtyping of rows. For example, one could write a function
+   for Tabular Types (B2T2) [11] to better display the low-                 computing the area of a rectangular object and have it apply
+   noise characteristics and satisfactory expressiveness of                 to records with arbitrary additional fields.
+   our type system.                                                             area :: ∀(𝜌 :: Row). {height : Int, width : Int | 𝜌 } → Int
+ • We discuss related work in §5 and conclude in §6.                            area 𝑥 = 𝑥 .height ∗ 𝑥 .width
+                                                                                  area ⟨height = 10, width = 20, color = Red⟩ :: Int
+2    Multi-Tailed Records, Informally                                             area ⟨height = 10, width = 20, texture = Smooth⟩ :: Int
+Product types are a standard tool in modern programming
+languages, allowing convenient grouping of related values                   2.2    Scoped Labels
+in a single entity. Perhaps the simplest and most common                    Since we said records are unordered, what happens if the
+version is the tuple type, where product fields (and their                  same label appears in a record more than once? Most pub-
+respective projections) are indexed by integers. But, when                  lished and used record type systems (such as in [4, 5]) forbid
+tuples grow large or long-lived, it becomes difficult to keep               this. Unfortunately, they must then turn to heavy-weight
+track of the positional indices. To resolve that problem many               machinery like qualified types [7] to enforce label uniqueness
+languages allow product types with named fields (structs in                 in the face of polymorphism.
+C(++), namedtuple in Python, . . . ), allowing for much cleaner                We address this by adopting scoped labels [10]. Instead of
+and less error-prone access to fields. Products with named                  forbidding duplicate labels, we give them a semantics: When
+fields are exactly what we refer to as records.                             a label is repeated, the first field shadows all the other fields
+   For example, imagine a program for video manipulation.                   with the same label. For example:
+It is important to be able to store video metadata such as
+the frame resolution and the number of frames. It could be                                     {𝑙 = 2, 𝑙 = “asdf”}.𝑙 :: Int
+stored in a tuple of type (Int, Int, Int), but its usage would              To retain access to the second field, we also adopt a record
+be error-prone, due to “integer blindness” (does height come                restriction operation, which removes a specified field from a
+before width or after?). We can model the data as a record                  record:
+type instead, with clear semantics:                                                         {𝑙 1 = 1, 𝑙 2 = 2}\𝑙 1 == {𝑙 2 = 2}.
+            {length : Int, height : Int, width : Int}.                      Restriction respects shadowing, so we can access the second
+                                                                            field with a shared name by first restricting away the first:
+To construct a record value, one replaces field types for con-
+crete expressions. Projections can then be performed by sup-                                ({𝑙 = 2, 𝑙 = “asdf”}\𝑙).𝑙 :: String
+plying a field name to the (.) operator:                                       It is important to note that while we still treat rows that
+ {length = 240, height = 480, width = 640}.height == 480                    permute fields with distinct labels as equivalent, permuta-
+                                                                            tions of fields with the same label is not allowed, because we
+    A record type can be constructed from a sequence of la-
+                                                                            are now relying on their order to disambiguate them.
+beled types called a row. Rows, in turn, are constructed in-
+ductively, starting from an empty row ⟨⟩, that can be left-                 2.3    First-Class Labels
+extended by labeled fields ⟨𝑙 : 𝜏 | ⟨. . .⟩⟩, where we write
+𝜏 for types. For clarity of presentation, we flatten the re-                We also add first-class labels [9] to our calculus. To do so, we
+peated extensions and abbreviate ⟨𝑙 1 : 𝜏1 | ⟨𝑙 2 : 𝜏2 | ⟨⟩⟩⟩ as            add another kind Label and a type constructor L·M :: Label →
+⟨𝑙 1 : 𝜏1, 𝑙 2 : 𝜏2 ⟩ (and similarly for record types). We use angle        ★ to our system. The only way to construct a value of type
+brackets ⟨·⟩ to notate row types (which have kind Row) and                  LheightM is through the label literal expression:
+curly braces {·} to notate record types (which have kind ★).                                       height :: LheightM.
+
+
+
+                                                                       30
+Infix-Extensible Record Types for Tabular Data                                                                TyDe ’23, September 4, 2023, Seattle, WA, USA
+
+
+  Thanks to first-class labels, the (.) operator (as well as                      a valid record type, with row variables 𝑟 1 and 𝑟 2 , a label
+record restriction and extension) can be assigned a type:                         variable 𝑙, and a label literal foo.
+ (.) :: ∀(𝑙 : Label) (𝛼 : ★) (𝜌 : Row). {𝑙 : 𝛼 | 𝜌 } → L𝑙M → 𝛼 .                    As before, types that differ by an exchange of a row vari-
+                                                                                  able with a neighboring field or row are also considered
+  First-class labels interact with scoped labels in an interest-                  non-equivalent, since shadowing of fields can depend on
+ing and, to the best of our knowledge, previously undescribed                     variable instantiation.
+way. Consider the following expression:                                             To complement field-level operations, we extend our lan-
+       𝑓 :: ∀(𝑙 : Label). L𝑙M → {𝑙 : String, foo : Int} → ?                       guage with a row projection ( • ) operator:
+       𝑓 𝑙 𝑥 = 𝑥 .foo      // rejected                                                  ( • ) :: ∀(𝑟 1 : Row) (𝑟 2 : Row). {𝑟 1 | 𝑟 2 } → ⟨𝑟 1 ⟩ → {𝑟 1 }
+Since labels are no longer guaranteed to be unique, nothing
+                                                                                  Similarly, we can provide a row restriction operator, which
+prevents the label variable 𝑙 from being instantiated as foo
+                                                                                  subsumes the previously described field restriction.
+later in the program. As such, there is no way to statically
+                                                                                     As we demonstrate in §4, the flexibility to extend and
+decide upon the return type of function 𝑓 and our calculus
+                                                                                  break up record rows in multiple places is crucial to ensure
+rejects the program. Access to the integer field is still possible,
+                                                                                  our calculus can type important table manipulation func-
+but it requires explicitly removing the field 𝑙:
+                                                                                  tions such as joins and aggregations. Since variable rows
+      𝑓 :: ∀(𝑙 : Label). L𝑙M → {𝑙 : String, foo : Int} → Int                      and labels cannot be exchanged, in polymorphic contexts
+      𝑓 𝑙 𝑥 = (𝑥\𝑙).foo                                                           the record types behave more akin to tuples of records, with
+                                                                                  points of concatenation delineating the tuple components.
+   Note that the above issue would not arise if the record
+                                                                                  However, once the record types are fully instantiated (e.g.
+had type {foo : Int, 𝑙 : String}, as no instantiation of 𝑙 could
+                                                                                  at the top level of the program), field reordering becomes
+shadow the literal field foo. For this reason, we restrict the
+                                                                                  possible again (up to shadowing preservation). This places
+row-equivalence relation such that a field labeled by a vari-
+                                                                                  additional burden on the implementers of polymorphic ta-
+able can never be swapped with another label (either con-
+                                                                                  ble manipulation functions, but the users of those functions,
+stant or variable). This means that two initially unequal types
+                                                                                  which we expect are a much larger group, can usually remain
+can become equal after instantiation of label variables.1 In
+                                                                                  unaware of the restrictions.
+contrast, [9] does not support scoped labels, and the type of
+𝑓 must be rewritten with a lacks predicate ensuring that 𝑙
+cannot be instantiated with foo.
+                                                                                  3      A Calculus with Infix-extensible Records
+   In our system, we take the idea of first-class labels further                  In this section we formally describe our proposed row poly-
+and support first-class rows, written as ⟨𝑟 ⟩, where 𝑟 : Row.                     morphic calculus 𝜆 ⟨⟩ .
+Essentially, rows can be considered as a group of labels. First-
+class rows can be passed in or returned by functions. As a                        3.1     Types and Contexts
+contrived example, we can define a specialization 𝑔 of the                        The syntax of kinds, types, and contexts is defined in Fig. 1.
+field access operator                                                                Kinds distinguish types. A kind 𝜅 is either a type kind ★,
+                                                                                  a function 𝜅 1 → 𝜅 2 , a label kind Label, or a row kind Row.
+                𝑔 ::∀(𝑙 : Label) (𝛼 : ★) (𝜌 : Row).
+                                                                                     A polymorphic type 𝜎 is a list of universal quantifiers fol-
+                    ⟨𝜌⟩ → {𝑙 : 𝛼 | 𝜌 } → L𝑙M → 𝛼                                  lowed by a monotype 𝜏, where each quantified type variable
+Then 𝑔 applied to a row 𝜌 can be used to project out the 𝑙                        𝑎 is annotated with its kind 𝜅. Monotypes 𝜏 include type vari-
+label only for records with the given common postfix 𝜌.                           ables 𝑎, base types2 , functions →, applications 𝜏1 𝜏2 , records
+   First-class rows are more interesting when the system is                       {𝜌 }, rows ⟨𝜌⟩, and labels LℓM.
+extended with record concatenation, which we explain next.                           Row types 𝜌 include type variables 𝑎, empty rows (Empty),
+                                                                                  singleton rows (ℓ : 𝜏) and record concatenation (𝜌 1 | 𝜌 2 ).
+2.4    Infix-Extensible Records                                                   Label types ℓ include type variables 𝑎 and label literals 𝑙𝑐 .
+A final piece of our record calculus is record concatenation [5,                     A context Γ maps each term variable to its type, and each
+16, 20], in the form of a row concatenation operator:                             type variable to its kind. Lastly, to avoid presentation clutter,
+                                                                                  we use syntactic sugar outlined in Fig. 1. That is, we never
+   ⟨· | ·⟩ :: ∀(𝑟 1 : Row) (𝑟 2 : Row). ⟨𝑟 1 ⟩ → ⟨𝑟 2 ⟩ → ⟨𝑟 1 | 𝑟 2 ⟩            explicitly write Empty, and we often write commas (,) for a
+In this calculus, rows can be extended anywhere, i.e. they                        series of row concatenations.
+are now infix-extensible and not just tail-extensible, making                        The kinding rules are presented in Fig. 2. We omit a de-
+                  {𝑟 1 | 𝑙 : Int | 𝑟 2 | foo : String}                            tailed exposition, as most rules are entirely standard.
+1 This should not be surprising for any polymorphic types. For example,           2 We present the formal syntax with Int being the only base type, but we
+
+while in ∀𝑎 𝑏. 𝑎 → 𝑏 → 𝑎, 𝑎 and 𝑏 are considered different, it is possible        use other common types such as Bool or String in examples throughout the
+that 𝑎 and 𝑏 are later instantiated with the same type and are then equal.        section.
+
+
+
+
+                                                                             31
+TyDe ’23, September 4, 2023, Seattle, WA, USA                                                                                          Adam Paszke and Ningning Xie
+
+
+         kind 𝜅 ::= ★ | 𝜅 1 → 𝜅 2 | Label | Row                                              expr 𝑒            ::= 𝑥 | 𝜆𝑥 . 𝑒 | 𝑒 1 𝑒 2 | let 𝑥 = 𝑒 1 in 𝑒 2
+    poly type 𝜎 ::= ∀𝑎 : 𝜅. 𝜎 | 𝜏                                                                                | {} | {𝑒 1 = 𝑒 2 } | {𝑒 1 | 𝑒 2 } | 𝑙𝑐 | 𝑒 1 .𝑒 2
+         type 𝜏 ::= 𝑎 | Int |→| 𝜏1 𝜏2 | {𝜌 } | ⟨𝜌⟩ | LℓM                                                         | ⟨⟩ | ⟨𝑒⟩ | ⟨𝑒 1 | 𝑒 2 ⟩ | 𝑒 1•𝑒 2 | 𝑒 1 \𝑒 2
+          row 𝜌 ::= 𝑎 | Empty | ℓ : 𝜏 | (𝜌 1 | 𝜌 2 )                                     syntactic sugar
+        label ℓ ::= 𝑎 | 𝑙𝑐                                                                                          𝑒\𝑙𝑐 ≜ 𝑒\⟨𝑙𝑐 ⟩
+      context Γ ::= • | Γ, 𝑎 : 𝜅 | Γ, 𝑥 : 𝜏                                                                      ⟨𝑙𝑐 , 𝑒⟩ ≜ ⟨⟨𝑙𝑐 ⟩ | 𝑒⟩
+       syntactic sugar                                                                                 ⟨𝑙𝑐 1 . . . , 𝑙𝑐𝑛 ⟩ ≜ ⟨⟨𝑙𝑐 1 ⟩ | ⟨. . . | ⟨𝑙𝑐𝑛 ⟩⟩⟩
+                             {} ≜ {Empty}                                                {𝑒 1 = 𝑒 1′ . . . , 𝑒𝑛 = 𝑒𝑛′ } ≜ {{𝑒 1 = 𝑒 1′ } | {. . . | {𝑒𝑛 = 𝑒𝑛′ }}}
+                             ⟨⟩ ≜ ⟨Empty⟩
+                    ℓ1 : 𝜏1, 𝜌 ≜ ℓ1 : 𝜏1 | 𝜌                                                               Figure 4. Syntax of expressions
+       ℓ1 : 𝜏1, . . . , ℓ𝑛 : 𝜏𝑛 ≜ ℓ1 : 𝜏1 | (. . . | (ℓ𝑛 : 𝜏𝑛 ))
+                                                                                          𝑥 :𝜎 ∈Γ             Γ⊢𝜎 ⊑𝜏                 Γ ⊢ 𝑒 : 𝜏1           𝜏1 ≡ 𝜏2
+                                                                                                                             Var                                      Eq
+             Figure 1. Syntax of types and contexts                                                 Γ ⊢𝑥 :𝜏                                   Γ ⊢ 𝑒 : 𝜏2
+
+      𝑎 :𝜅 ∈ Γ                                                                                       Γ ⊢ 𝜏1 : ★                       Γ ⊢ 𝑒 1 : 𝜏1 → 𝜏2
+      Γ ⊢𝑎 :𝜅              Γ ⊢ Int : ★           Γ ⊢→: ★ → ★ → ★                                 Γ, 𝑥 : 𝜏1 ⊢ 𝑒 : 𝜏2                      Γ ⊢ 𝑒 2 : 𝜏1
+                                                                                                                           Lam                                App
+                                                                                               Γ ⊢ 𝜆𝑥 . 𝑒 : 𝜏1 → 𝜏2                     Γ ⊢ 𝑒 1 𝑒 2 : 𝜏2
+      Γ ⊢ 𝜏1 : 𝜅 1 → 𝜅 2             Γ ⊢ 𝜏2 : 𝜅 1           Γ ⊢ 𝜌 : Row
+                                                                                                                       Γ ⊢ 𝑒 1 : 𝜏1
+                   Γ ⊢ 𝜏1 𝜏2 : 𝜅 2                           Γ ⊢ {𝜌 } : ★
+                                                                                                𝛼𝑖 ∉ ftv(Γ)            Γ, 𝑥 : ∀𝛼𝑖 : 𝜅𝑖 . 𝜏1 ⊢ 𝑒 2 : 𝜏2
+                                                                                                                                                             Let
+       Γ ⊢ 𝜌 : Row             Γ ⊢ ℓ : Label                                                                  Γ ⊢ let 𝑥 = 𝑒 1 in 𝑒 2 : 𝜏2
+       Γ ⊢ ⟨𝜌⟩ : ★              Γ ⊢ LℓM : ★               Γ ⊢ 𝑙𝑐 : Label
+                                                                                                                           Γ ⊢ 𝑒 1 : LℓM         Γ ⊢ 𝑒2 : 𝜏
+                                                                                                             Empty                                              Rcd
+                                   Γ ⊢ 𝜌 1 : Row                 Γ ⊢ 𝜌 2 : Row               Γ ⊢ {} : {}                      Γ ⊢ {𝑒 1 = 𝑒 2 } : {ℓ : 𝜏 }
+   Γ ⊢ Empty : Row                           Γ ⊢ (𝜌 1 | 𝜌 2 ) : Row
+                                                                                                     Γ ⊢ 𝑒 1 : {𝜌 1 }         Γ ⊢ 𝑒 2 : {𝜌 2 }
+                                                                                                                                                 Concat
+                        Γ ⊢ ℓ : Label           Γ ⊢𝜏 :★                                                    Γ ⊢ {𝑒 1 | 𝑒 2 } : {𝜌 1 | 𝜌 2 }
+                             Γ ⊢ (ℓ : 𝜏) : Row
+                                                                                                                   Γ ⊢ 𝑒 1 : {ℓ : 𝜏 | 𝜌 }             Γ ⊢ 𝑒 2 : LℓM
+                                                                                                           Lab                                                        Prj
+                                                                                          Γ ⊢ 𝑙𝑐 : L𝑙𝑐 M                           Γ ⊢ 𝑒 1 .𝑒 2 : 𝜏
+                             Figure 2. Kinding
+                                                                                                                            Γ ⊢ 𝑒 : LℓM          Γ ⊢𝜏 :★
+                                                                                                             EmptyR                                            Row
+                    𝜌1 ≈ 𝜌2                  𝜌1 ≈ 𝜌2             𝜌2 ≈ 𝜌3                     Γ ⊢ ⟨⟩ : ⟨⟩                           Γ ⊢ ⟨𝑒⟩ : ⟨ℓ : 𝜏⟩
+          refl                   symm                                      trans
+ 𝜌≈𝜌                𝜌2 ≈ 𝜌1                           𝜌1 ≈ 𝜌3                                       Γ ⊢ 𝑒 1 : ⟨𝜌 1 ⟩          Γ ⊢ 𝑒 2 : ⟨𝜌 2 ⟩
+                                                                                                                                                 ConcatR
+      𝜏1 ≈ 𝜏2                            𝜌1 ≈ 𝜌2         𝜌 1′ ≈ 𝜌 2′                                       Γ ⊢ ⟨𝑒 1 | 𝑒 2 ⟩ : ⟨𝜌 1 | 𝜌 2 ⟩
+                         singleton                                   concat
+  𝑙𝑐 : 𝜏 1 ≈ 𝑙𝑐 : 𝜏 2                      𝜌 1 | 𝜌 1′ ≈ 𝜌 2 | 𝜌 2′                             Γ ⊢ 𝑒 1 : {𝜌 1 | 𝜌 2 }               Γ ⊢ 𝑒 1 : {𝜌 1 | 𝜌 2 }
+                                                                                                 Γ ⊢ 𝑒 2 : ⟨𝜌 1 ⟩                     Γ ⊢ 𝑒 2 : ⟨𝜌 1 ⟩
+                               𝑙𝑐 1 ≠ 𝑙𝑐 2                                                                               PrjR                                 Del
+                                                                 comm                           Γ ⊢ 𝑒 1•𝑒 2 : {𝜌 1 }                 Γ ⊢ 𝑒 1 \𝑒 2 : {𝜌 2 }
+             𝑙𝑐 1 : 𝜏 1 | 𝑙𝑐 2 : 𝜏 2 ≈ 𝑙𝑐 2 : 𝜏 2 | 𝑙𝑐 1 : 𝜏 1
+
+                                                                                                                 Figure 5. Typing rules
+                                                             assoc
+                (𝜌 1 | 𝜌 2 ) | 𝜌 3 ≈ 𝜌 1 | (𝜌 2 | 𝜌 3 )
+                                                                                           Row Equivalence. We formalize the row equivalence re-
+                                                        empR                            lation 𝜌 1 ≡ 𝜌 2 in Fig. 3. We overload the ≡ operator such that
+                        (ℓ : 𝜏 | Empty) ≈ ℓ : 𝜏                                         𝜏1 ≡ 𝜏2 for types that are equivalent up to row equivalence
+                                                                                        and otherwise syntactically equal.
+                                                        empL                               As an equivalence relation, row equivalence is reflexive
+                        (Empty | ℓ : 𝜏) ≈ ℓ : 𝜏                                         (refl), symmetric (symm), transitive (trans), and congruent
+                                                                                        with respect to type constructors (singleton and concat).
+                        Figure 3. Row equivalence                                       Moreover, the concatenation operation is commutative over
+                                                                                        distinct labels (comm), associative (assoc), and has Empty as
+                                                                                        its unit (empR,empL). Notably, (comm) compares only label
+
+
+
+                                                                                   32
+Infix-Extensible Record Types for Tabular Data                                                             TyDe ’23, September 4, 2023, Seattle, WA, USA
+
+
+                       Γ ⊢𝜏 :★         Γ ⊢ 𝜎 [𝑎 ↦→ 𝜏] ⊑ 𝜎 ′                   (rule (Rcd)), since the system supports first-class labels, we
+              Eq                                                 InstK
+  Γ ⊢𝜏 ⊑𝜏                       Γ ⊢ ∀𝑎 : ★. 𝜎 ⊑ 𝜎     ′                       first get the label type LℓM from 𝑒 1 , and then get the field
+                                                                              type 𝜏 from 𝑒 2 , and return the record type {ℓ : 𝜏 }. For record
+                      Γ ⊢ ℓ : Label                                           concatenation (rule (Concat)), the result type is simply a
+      𝑎 ▶𝑙 𝜎 ∨ 𝑎 ∉ ftv(𝜎)       Γ ⊢ 𝜎 [𝑎 ↦→ ℓ] ⊑ 𝜎 ′                          record of row concatenation.
+                                                               InstL
+                   Γ ⊢ ∀𝑎 : Label. 𝜎 ⊑ 𝜎 ′                                         In rule (Lab), a label literal has itself in the type; namely,
+                                                                              L𝑙𝑐 M is a singleton type. Labels can be used to project a field
+                      Γ ⊢ 𝜌 : Row                                             from a record (rule (Prj)). Here we first get the record type
+      𝑎 ▶𝑟 𝜎 ∨ 𝑎 ∉ ftv(𝜎)      Γ ⊢ 𝜎 [𝑎 ↦→ 𝜌] ⊑ 𝜎 ′                           {ℓ : 𝜏 | 𝜌 } from 𝑒 1 , and then get the record type LℓM from
+                                                               InstR
+                    Γ ⊢ ∀𝑎 : Row. 𝜎 ⊑ 𝜎 ′                                     𝑒 2 , and return the field type 𝜏. Notably, ℓ may not be the
+                                                                              first label in a record type, but by using row equivalence
+                                                                              (rule (Eq)) we may be able to move ℓ to be the head. Take
+                      Figure 6. Instantiation                                 𝑒 : {𝑙 1 : Int, 𝑙 2 : Bool} with 𝑙 1 and 𝑙 2 being constants as
+                                                                              an example. By rule (Eq) and rule (assoc) we can deduce
+             𝑎 ▶∗ 𝜎                𝑎 ▶∗ 𝜏1           𝑎 ▶∗ 𝜏2                  𝑒 : {𝑙 2 : Bool, 𝑙 1 : Int}, allowing us to conclude 𝑒.𝑙 2 : Bool.
+         𝑎 ▶∗ ∀𝛽 : 𝜅.𝜎          𝑎 ▶∗ 𝜏1 𝜏2         𝑎 ▶∗ 𝜏1 𝜏2                 However, since rule (assoc) only works on distinct label
+                                                                              literals, if 𝑒 ′ : {𝑎 : Int, 𝑙 2 : Bool} for some label variable 𝑎 (or
+                   𝜌 ≡ (𝜌 ′ | 𝑎)       𝜌 ≡ ⟨𝜌 ′ | 𝑎⟩                          𝑒 ′ : {𝑎 | 𝑙 2 : Bool} for some row variable 𝑎), then 𝑒 ′ .𝑙 2 is not
+                    𝑎 ▶𝑟 {𝜌 }             𝑎 ▶𝑟 ⟨𝜌⟩                            considered well-typed (as usual, shadowing is yet unclear).
+                                                                                   The rest of the rules concern rows. An empty row always
+                      𝜌 ≡ (𝜌 ′ | 𝑎 : 𝜏)          𝜌 ≡ ⟨𝜌 ′ | 𝑎 : 𝜏⟩
+                                                                              has an empty row type (rule (EmptyR)). For a singleton row
+      𝑎 ▶𝑙 L𝑎M            𝑎 ▶𝑙 {𝜌 }                 𝑎 ▶𝑙 ⟨𝜌⟩                  (rule (Row)), we get the label type LℓM from 𝑒, and we guess a
+                                                                              field type 𝜏, returning the row type ⟨ℓ : 𝜏⟩. We could also have
+                                                                              the programmers provide an explicit type annotation for the
+Figure 7. Tail check rules. We use ▶∗ to indicate that a rule
+                                                                              field. Such annotations are not necessary, however.3 This is
+applies to both ▶𝑙 and ▶𝑟 .                                                   because rows are mainly used for projection (and deletion),
+                                                                              and just like label projection, a label in a row always projects
+literals, but not label variables, as we cannot predict if a label            out the first corresponding field in a record.4 In the row
+variable will introduce shadowing after instantiation.                        concatenation (rule (ConcatR)), the result type is simply the
+                                                                              concatenated row type. Finally, projection with a row (rule
+3.2   Expressions and Typing                                                  (PrjR)) gets a subset of the original record, and deletion of a
+We outline expression syntax in Fig. 4. Expressions 𝑒 are                     row (rule (del)) removes a subset of the record.
+variables 𝑥, function literals 𝜆𝑥 . 𝑒, applications 𝑒 1 𝑒 2 , let-
+bindings let 𝑥 = 𝑒 1 in 𝑒 2 , the empty record {}, a singleton                   Instantiation and tail check. Recall that rule (Var) uses
+record {𝑒 1 = 𝑒 2 }, record concatenation {𝑒 1 | 𝑒 2 }, a label               instantiation (𝜎 ⊑ 𝜏) to turn a polymorphic type into a
+literal 𝑙𝑐 , label projects 𝑒 1 .𝑒 2 , the empty row ⟨⟩, a singleton          monotype. Fig. 6 presents the instantiation rules.
+row ⟨𝑒⟩, row concatenation ⟨𝑒 1 | 𝑒 2 ⟩, row projections 𝑒 1•𝑒 2 ,               Rule (Eq) says that a monotype is an instantiation of itself.
+and row deletion 𝑒 1 \𝑒 2 . As syntactic sugar, we define label               Rule (InstK) instantiates a type variable 𝛼 : ★ by a monotype
+deletion 𝑒\𝑙𝑐 as deletion of a singleton row. And we often                    𝜏. The rules for record and label variables are similar, except
+write commas for record and row concatenation.                                for the extra condition 𝛼 ▶∗ 𝜎 ∨ 𝛼 ∉ ftv(𝜎); that is, either 𝛼
+   Fig. 5 gives the typing rules, which are essentially the                   is not used in the body, or it satisfies 𝛼 ▶∗ 𝜎.
+Hindley-Milner type system extended with records and rows.                       We call the 𝛼 ▶∗ 𝜎 condition tail check, whose rules are
+Rule (Var) type-checks a variable by first looking up its type                given in Fig. 7. At a high-level, tail check only allows in-
+𝜎 in the context. Since 𝜎 is potentially polymorphic, the rule                stantiating a label (with ▶𝑙 ) or a row (with ▶𝑟 ) variable if it
+instantiates 𝜎 to 𝜏; the instantiation rules are given in Fig. 6,             appears in a tail position. While this seems artificial at first,
+which we will explain shortly.                                                take 𝑒 : ∀ 𝑎. {𝑎 : Int, 𝑙 2 : Bool} as an example and consider
+   Rule (Eq) converts between equivalent types. This rule                     what the type is for 𝑒.𝑙 2 . Without the tail check, our type
+makes the typing rules non-syntax-directed; however, it is                    system would allow a derivation leading to 𝑒.𝑙 2 : Int (by
+easy to integrate the rule into each rule that requires type
+                                                                              3 Nor are they useful: even if labels are type annotated, a projection like
+equivalence (e.g., in rule (App)) and thus make a syntax-
+directed version of the type system.                                          𝑒 • ⟨𝑙 : Bool⟩ where 𝑒 : {𝑙 : Int, 𝑙 : Bool} is rejected, since again we can only
+                                                                              access the first 𝑙 label from a record, and here the types mismatch. However,
+   Rules (Lam), (App), and (Let) are standard. The next three                 we do not lose any expressive power, as we could rewrite the program as
+rules type-check records. An empty record always has an                       (𝑒\𝑙) • ⟨𝑙 : Bool⟩.
+empty record type (rule (Empty)). For a singleton record                      4 A repeated label in a row will get the next corresponding field.
+
+
+
+
+                                                                         33
+TyDe ’23, September 4, 2023, Seattle, WA, USA                                                                                                  Adam Paszke and Ningning Xie
+
+
+                                    value 𝑣               ::= 𝜆𝑥 . 𝑒 | 𝑙𝑐 | {𝑙𝑐 1 = 𝑣 1, . . . , 𝑙𝑐𝑛 = 𝑣𝑛 } | ⟨𝑙𝑐 1 , . . . , 𝑙𝑐𝑛 ⟩            (𝑛 ≥ 0)
+                       evaluation context 𝐸               ::= □ | 𝐸 𝑒 | 𝑣 𝐸 | let 𝑥 = 𝐸 in 𝑒
+                                                            | {𝐸 = 𝑒} | {𝑣 = 𝐸} | {𝐸 | 𝑒} | {𝑣 | 𝐸} | 𝐸.𝑒 | 𝑣 .𝐸
+                                                            | ⟨𝐸⟩ | ⟨𝐸 | 𝑒⟩ | ⟨𝑣 | 𝐸⟩ | 𝐸 •𝑒 | 𝑣 • 𝐸 | 𝐸\𝑒 | 𝑣\𝐸
+
+       (app)         (𝜆𝑥 . 𝑒) 𝑣                                                              −→      𝑒 [𝑥 ↦→ 𝑣]
+       (let)         let 𝑥 = 𝑣 in 𝑒                                                          −→      𝑒 [𝑥 ↦→ 𝑣]
+       (prj)         {𝑙𝑐 1 = 𝑣 1, . . . , 𝑙𝑐𝑛 = 𝑣𝑛 }.𝑙𝑐𝑖                                     −→      𝑣𝑖                                         where 𝑙𝑐 1 , . . . , 𝑙𝑐𝑖−1 ≠ 𝑙𝑐𝑖
+       (prjr1 )      𝑣 • ⟨⟩                                                                  −→      {}
+       (prjr2 )      𝑣 • ⟨𝑙𝑐 , 𝑣 ′⟩                                                          −→      {𝑙𝑐 = 𝑣 .𝑙𝑐 | (𝑣\𝑙𝑐 ) •𝑣 ′ }
+       (concat)      {{𝑙𝑐 1 = 𝑣 1, . . . , 𝑙𝑐𝑖 = 𝑣𝑖 } | {𝑙𝑐 𝑗 = 𝑣 𝑗 , . . . , 𝑙𝑐𝑛 = 𝑣𝑛 }}    −→      {𝑙𝑐 1 = 𝑣 1, . . . , 𝑙𝑐𝑖 = 𝑣𝑖 , 𝑙𝑐 𝑗 = 𝑣 𝑗 , . . . , 𝑙𝑐𝑛 = 𝑣𝑛 }
+       (concatr )    ⟨⟨𝑙𝑐 1 , . . . , 𝑙𝑐𝑖 ⟩ | ⟨𝑙𝑐 𝑗 , . . . , 𝑙𝑐𝑛 ⟩⟩                         −→      ⟨𝑙𝑐 1 , . . . , 𝑙𝑐𝑖 , 𝑙𝑐 𝑗 , . . . , 𝑙𝑐𝑛 ⟩
+       (del1 )       𝑣\⟨⟩                                                                    −→      𝑣
+       (del2 )       {𝑙𝑐 1 = 𝑣 1, . . . , 𝑙𝑐𝑛 = 𝑣𝑛 }\⟨𝑙𝑐𝑖 , 𝑣⟩                               −→      {𝑙𝑐 1 = 𝑣 1, . . . 𝑙𝑐𝑖−1 = 𝑣𝑖−1, 𝑙𝑐𝑖+1 = 𝑣𝑖+1, 𝑙𝑐𝑛 = 𝑣𝑛 }\𝑣
+                                                                                                                                                where 𝑙𝑐 1 , . . . , 𝑙𝑐𝑖−1 ≠ 𝑙𝑐𝑖
+       (step)         𝐸 [𝑒 1 ]                                                               ↦−→ 𝐸 [𝑒 2 ]                                  if 𝑒 1 −→ 𝑒 2
+
+                                                              Figure 8. Operational semantics
+
+instantiating 𝛼 = 𝑙 2 ), as well as one leading to 𝑒.𝑙 2 : Bool (for                           Rules (app) and (let) are standard. Rule (prj) projects
+𝛼 = 𝑙 1 ≠ 𝑙 2 ). Hence, ▶∗ will help rule out this example.                                 a field 𝑙𝑐𝑖 out of a record. The semantics searches for the
+   The first three rules in Fig. 7 traverse the structure of the                            first field corresponding to the label, expressed using the
+type. Note that we only require the variable to appear in a                                 side condition 𝑙𝑐 1 , . . . , 𝑙𝑐𝑖−1 ≠ 𝑙𝑐𝑖 . Projecting a row is defined
+tail position once5 , hence the two type application rules. For                             inductively. In the base case (prjr1 ), projecting an empty row
+row variable (▶𝑟 ), we check that the variable appears at the                               returns the empty record. If the row is not empty (prjr2 ),
+tail of a record or a row type. For label variables (▶𝑙 ), the                              then it must be ⟨𝑙𝑐 , 𝑣 ′⟩, in which case we first project 𝑙𝑐 , and
+variable can appear in a singleton type, or at the tail of a                                then build the result by recursively projecting 𝑣 ′. Notably,
+record of a row type.                                                                       𝑣\𝑙𝑐 only removes the first appearance of 𝑙𝑐 in 𝑣, making sure
+   Going back to the instantiation rules in Fig. 6, we can                                  that shadowed labels can be projected too, if requested in 𝑣.
+consider the condition 𝛼 ∉ ftv(𝜎) as a relaxation of the tail                                  Rule (concat) canonicalizes a record by flattening it. Simi-
+check: we do not want to reject a polymorphic type where                                    larly, (concatr ) canonicalizes a row. Row deletion is defined
+the quantified variable 𝑎 is not used and thus does not appear                              in an inductive way similar to row projection. In the base case
+in any tail position.6                                                                      (del1 ), deleting an empty row returns the original record. If
+                                                                                            the row is not empty (del2 ), then it must be ⟨𝑙𝑐𝑖 , 𝑣⟩, in which
+3.3    Operational Semantics                                                                case we first delete 𝑙𝑐𝑖 by searching for the first field for 𝑙𝑐𝑖
+Fig. 8 defines values, evaluation contexts, and the operational                             using the side condition 𝑙𝑐 1 , . . . , 𝑙𝑐𝑖−1 ≠ 𝑙𝑐𝑖 , and recursively
+semantics for 𝜆 ⟨⟩ .                                                                        delete 𝑣.
+   Values 𝑣 include lambdas 𝜆𝑥 . 𝑒, label literals 𝑙𝑐 , and canon-                             Finally, (step) evaluates inside an evaluation context. Note
+icalized records and rows; recall that commas are syntactic                                 that we write ↦−→ here, instead of −→ used in previous rules.
+sugar for a series of row concatenations (Fig. 4).
+   An evaluation context 𝐸 is essentially an expression with                                   Type safety. With the operational semantics, we can now
+a hole, in which we can plug in another expression. The def-                                formally show that 𝜆 ⟨⟩ is type safe. All proofs can be found
+inition here is standard. We only remark that the evaluation                                in the appendix.
+context decides the evaluation order. For example, the form                                 Theorem 3.1 (Preservation). If Γ ⊢ 𝑒 : 𝜎, and 𝑒 ↦−→ 𝑒 ′, then
+𝑣 𝐸 means that for applications we evaluate the argument                                    Γ ⊢ 𝑒 ′ : 𝜎.
+only when the function is already a value.
+5 A more restricted version of the rules could require all occurrences of a                 Theorem 3.2 (Progress). If • ⊢ 𝑒 : 𝜎, then either 𝑒 is a value,
+variable to be in tail positions, but such a system would also rule out some                or there exists 𝑒 ′ such that 𝑒 ↦−→ 𝑒 ′.
+useful programs.
+6 One may also relax the system and delay tail-checks. For example, take
+                                                                                            3.4   Type Inference
+𝑓 :: ∀ 𝑎 𝑏.Int → ⟨𝑎 : Int, 𝑏 ⟩ → Int. We could consider 𝑓 1 to be well-typed,
+even though 𝑎 does not pass the tail check, because 𝑓 ’s type is equivalent                 A type inference algorithm is often implemented as a two-
+to 𝑓 :: Int → ∀ 𝑎 𝑏. ⟨𝑎 : Int, 𝑏 ⟩ → Int. Such a design can be considered as                stage process. In the first stage, the algorithm traverses the
+the reverse of deep skolemisation [8].                                                      input program and generates type constraints according to a
+
+
+
+                                                                                    34
+Infix-Extensible Record Types for Tabular Data                                                                        TyDe ’23, September 4, 2023, Seattle, WA, USA
+
+
+                         unification variables 𝛼, 𝛽, 𝛾
+                         constraint            𝐶                    := ⊤ | 𝜏1 ∼ 𝜏2 | 𝜌 1 ∼ 𝜌 2 | ℓ1 ∼ ℓ2 | 𝐶 1 ∧ 𝐶 2
+                         unification type      𝜏                   ::= 𝛼 | Int |→| 𝜏1 𝜏2 | {𝜌 } | ⟨𝜌⟩ | LℓM
+                         substitution context Δ                     := • | Δ, 𝛼 : 𝜅 | Δ, 𝛼 : 𝜅 = 𝜏 | Δ, 𝛼 : 𝜅 = 𝜌 | Δ, 𝛼 : 𝜅 = ℓ
+
+                                                                Figure 9. Unification types
+
+   Δ1 ⊢ 𝐶 1 =⇒ Δ2 ⊢ 𝐶 2           (Δ ⊢ 𝐶 1 =⇒ 𝐶 2 ≜ Δ ⊢ 𝐶 1 =⇒ Δ ⊢ 𝐶 2 )               (𝐶 1 =⇒ 𝐶 2 ≜ Δ ⊢ 𝐶 1 =⇒ Δ ⊢ 𝐶 2 )
+
+  (conj)             Δ1 ⊢ 𝐶 1 ∧ 𝐶 2             =⇒ Δ2 ⊢ 𝐶 1′ ∧ 𝐶 2                      if Δ1 ⊢ 𝐶 1 =⇒ Δ2 ⊢ 𝐶 1′
+  (top1 )            ⊤ ∧𝐶                       =⇒ 𝐶
+  (top2 )            𝐶 ∧⊤                       =⇒ 𝐶
+
+  (Trefl)            𝜏 ∼𝜏                       =⇒      ⊤
+  (Tapp)             𝜏1 𝜏2 ∼ 𝜏3 𝜏4              =⇒      𝜏1 ∼ 𝜏3 ∧ 𝜏2 ∼ 𝜏4
+  (Trcd)             {𝜌 1 } ∼ {𝜌 2 }            =⇒      𝜌1 ∼ 𝜌2
+  (Trow)             ⟨𝜌 1 ⟩ ∼ ⟨𝜌 2 ⟩            =⇒      𝜌1 ∼ 𝜌2
+  (Tlab)             Lℓ1 M ∼ Lℓ2 M              =⇒      ℓ1 ∼ ℓ2
+  (Tswap)            𝜏 ∼𝛼                       =⇒      𝛼 ∼𝜏                            if 𝜏 ≠ 𝛽 for any 𝛽
+  (Tsolved)          Δ⊢𝛼 ∼𝜏                     =⇒      𝜏′ ∼ 𝜏                          if 𝛼 : 𝜅 = 𝜏 ′ ∈ Δ
+  (Tsolve)           Δ⊢𝛼 ∼𝜏                     =⇒      Δ ◦ 𝛼 : 𝜅 = [Δ]𝜏 ⊢ ⊤            if 𝛼 : 𝜅 ∈ Δ ∧ Δ ⊢ 𝜏 : 𝜅 ∧ 𝛼 ∉ ftv( [Δ]𝜏)
+
+  (Rrefl)            𝜌∼𝜌                        =⇒ ⊤
+  (Rsingleton)       ℓ1 : 𝜏1 ∼ ℓ2 : 𝜏2          =⇒ ℓ1 ∼ ℓ2 ∧ 𝜏1 ∼ 𝜏2
+                                                                                                            𝑙𝑐
+  (Rfield)           Δ1 ⊢ 𝑙𝑐 : 𝜏, 𝜌 1 ∼ 𝜌 2     =⇒ Δ2 ⊢ 𝜏 ∼ 𝜏 ′ ∧ 𝜌 1 ∼ 𝜌 2′            if Δ1 ⊢ [Δ1 ]𝜌 2 ↩→ 𝑙𝑐 : 𝜏 ′, 𝜌 2′ ⊣ Δ2 ∧ [Δ2 ]𝜌 1 = [Δ1 ]𝜌 1
+  (Rswap)            𝜌 ∼𝛼                       =⇒ 𝛼 ∼ 𝜌                                if 𝜌 ≠ 𝛽 for any 𝛽
+  (Rsolved)          Δ⊢𝛼 ∼𝜌                     =⇒ 𝜌 ′ ∼ 𝜌                              if 𝛼 : 𝜅 = 𝜌 ′ ∈ Δ
+  (Rsolve)           Δ⊢𝛼 ∼𝜌                     =⇒ Δ ◦ 𝛼 : 𝜅 = [Δ]𝜌 ⊢ ⊤                 if 𝛼 : 𝜅 ∈ Δ ∧ Δ ⊢ 𝜌 : 𝜅 ∧ 𝛼 ∉ ftv( [Δ]𝜌)
+
+  (Lrefl)            ℓ ∼ℓ                       =⇒ ⊤
+  (Lswap)            ℓ ∼𝛼                       =⇒ 𝛼 ∼ ℓ                                if ℓ ≠ 𝛽 for any 𝛽
+  (Lsolved)          Δ⊢𝛼 ∼ℓ                     =⇒ ℓ ′ ∼ ℓ                              if 𝛼 : 𝜅 = ℓ ′ ∈ Δ
+  (Lsolve)           Δ⊢𝛼 ∼ℓ                     =⇒ Δ ◦ 𝛼 : 𝜅 = [Δ]ℓ ⊢ ⊤                 if 𝛼 : 𝜅 ∈ Δ ∧ Δ ⊢ ℓ : 𝜅 ∧ 𝛼 ∉ ftv( [Δ]ℓ)
+
+                                                 𝑙𝑐
+  (LUhead)           Δ ⊢ 𝑙𝑐 : 𝜏, 𝜌              ↩→      𝑙𝑐 : 𝜏, 𝜌 ⊣ Δ
+                                                 𝑙𝑐                                                              𝑙𝑐
+  (LUrec)            Δ1 ⊢ 𝑙𝑐 ′ : 𝜏, 𝜌           ↩→      𝑙𝑐 : 𝜏, 𝑙𝑐 ′ : 𝜏 ′, 𝜌 ′ ⊣ Δ2    if 𝑙𝑐 ′ ≠ 𝑙𝑐 ∧ Δ1 ⊢ 𝜌 ↩→ 𝑙𝑐 : 𝜏, 𝜌 ′ ⊣ Δ2
+                                                 𝑙𝑐
+  (LUtail)           Δ⊢𝛼                        ↩→      𝑙𝑐 : 𝛽, 𝛾 ⊣ Δ ◦ 𝛼 : Row = (𝑙𝑐 : 𝛽, 𝛾), 𝛽 : ★, 𝛾 : Row if 𝛼 : Row ∈ Δ where 𝛽, 𝛾 fresh
+
+                                                                   Figure 10. Unification
+
+set of syntax-directed typing rules.7 In the second stage, the                            Fig. 9 defines the constraints and types used during unfi-
+algorithm uses a specific set of constraint solving rules to                           ication. First, we use 𝛼, 𝛽, and 𝛾 for unification variables. We
+resolve the generated constraints. As our system essentially                           focus on equality constraints 𝐶, which include the truth ⊤,
+extends the Hindley-Milner system with records and rows,                               equality constraints over types, rows, and labels, and con-
+most of the constraint generation and solving is standard.                             straint conjunction 𝐶 1 ∧ 𝐶 2 . Finally, a unification type 𝜏 8
+Therefore, in this section, we focus on the unique part of our                         includes unification variables 𝛼 instead of type variables 𝑎.
+system, which is the unification algorithm involving record                            To make the presentation clearer, we assume all types are
+and row types, and we refer the interested reader to [15] for                          canonicalized (e.g. all record concatenations are commuted
+general constraint-based type inference in ML-style calculi.                           to be left-associative and labels and variables are ordered lex-
+                                                                                       icographically). Since the type system features a kind system,
+7 For our system, the type equivalence relation in (Eq) will be integrated into        8 We always make it clear from the context whether a type 𝜏 refers to a
+
+type equity constraints, and the rest of the type system is syntax-directed.           declarative type or a unification type.
+
+
+
+
+                                                                                  35
+TyDe ’23, September 4, 2023, Seattle, WA, USA                                                                                    Adam Paszke and Ningning Xie
+
+
+we use substitution contexts Δ to keep track of unification                           Now we are back to where we started, modulo renaming of
+variables’ kinds and their solutions. We write [Δ]𝜏 for sub-                          unification variables, and thus unification will loop forever.
+stituting unification variables in 𝜏 by their solutions in Δ, if                      The side condition ensures that this kind of situation will
+any solutions exist. The substitution context is idempotent,                          never happen, by checking that the newly solved unification
+meaning [Δ] ( [Δ]𝜏) = [Δ]𝜏. For an unsolved 𝛼 : 𝜅 ∈ Δ, we                             variable in Δ2 does not occur in [Δ1 ]𝜌 1 .
+write Δ ◦ 𝛼 : 𝜅 = 𝜏 for solving 𝛼 with 𝜏, which will also
+                                                                                         Unification Soundness. We prove that our unification
+substitute 𝛼 with its solution in all other items in Δ (and
+                                                                                      is sound. First, we define the notion of a solution context.
+canonicalize after substitution), ensuring that the resulting
+context remains idempotent.                                                           Definition 3.3 (Solution Context). A solution context solves
+   The unification rules are listed in Fig. 10. The judgment                          a constraint, written as Δ |= 𝐶, if for any 𝜏1 ∼ 𝜏2 ∈ 𝐶, we
+Δ1 ⊢ 𝐶 1 =⇒ Δ2 ⊢ 𝐶 2 reads: under the solution context Δ1 , the                       have [Δ]𝜏1 ≡ [Δ]𝜏2 . Similarly for 𝜌 1 ∼ 𝜌 2 , and ℓ1 ∼ ℓ2 ∈ 𝐶.
+constraint 𝐶 1 reduces to constraint 𝐶 2 , updating the solution
+                                                                                         We prove that unification finds a solution context.
+context to Δ2 . Most rules are self-explanatory. Rule (conj) is
+defined modulo constraint associativity, commutativity and                            Theorem 3.4 (Unification Soundness). If Δ1 ⊢ 𝐶 =⇒∗ Δ2 ⊢
+truth being a neutral element ((top1 ) and (top2 )).                                  ⊤, then Δ2 |= 𝐶.
+   T-rules unify types. A reflexive constraint reduces to truth
+                                                                                         Most General Unifier. Since our system supports first-
+(Trefl). The next four rules decompose constraints over type
+                                                                                      class labels and rows, unification may get stuck (thus is
+structures into constraints over subcomponents. The last
+                                                                                      incomplete) when there is no unique most general unifier for
+three T-rules concern unification variables. Rule (Tswap)
+                                                                                      the constraint. This has already been discussed in Leijen [9],
+puts the unification variables on the left, so that it can be
+                                                                                      so we only present a short example. For
+solved by the next two rules. A solved unification variable
+is replaced by its solution (Tsolved). Rule (Tsolve) solves a                                           (𝛼 : Int, 𝛽) ∼ (𝑙 1 : Int, 𝑙 2 : Int),
+unification variable by [Δ]𝜏, after checking that the solution                        there are two unifiers that are incompatible with each other:
+is of the right kind, and that 𝛼 does not occur in [Δ]𝜏.
+                                                                                            𝛼 = 𝑙 1, 𝛽 = 𝑙 2 : Int       or        𝛼 = 𝑙 2, 𝛽 = 𝑙 1 : Int.
+   Similarly, the R-rules and the L-rules unify rows and labels
+respectively. The most notable rule is (Rfield). In this rule,                        Fortunately, we can prove that when our unification suc-
+we are unifying a row 𝑙𝑐 : 𝜏, 𝜌 1 with another row 𝜌 2 . We first                     ceeds, it always returns the most general unifier (in which
+find the corresponding 𝑙𝑐 field in 𝜌 2 , by using the lookup                          case the type inference returns the principal type). To prove
+        𝑙𝑐                                                                            this, we first define the notion of context extension.
+rules ↩→, which decomposes 𝜌 2 into 𝑙𝑐 : 𝜏 ′, 𝜌 2′ . We can then
+continue by unifying the subcomponents.                                               Definition 3.5 (Context Extension). A solution context ex-
+  The lookup rules are defined at the end of the figure. The                          tends to another solution context, written as Δ1 ⇝ Δ2 , if for
+                          𝑙𝑐
+judgment Δ1 ⊢ 𝜌 1 ↩→ 𝑙𝑐 : 𝜏, 𝜌 2 ⊣ Δ2 reads: under the sub-                           any 𝜏, we have [Δ2 ]𝜏 ≡ [Δ2 ] ( [Δ1 ]𝜏).
+stitution context Δ1 , we look for field 𝑙𝑐 in 𝜌 1 , and find that                    The definition effectively captures the semantics of the con-
+𝜌 1 can be represented as 𝑙𝑐 : 𝜏, 𝜌 2 , updating the substitution                     text extension notion defined in [3]. Intuitively, context ex-
+context to Δ2 . Rule (LUhead) finds the label successfully and                        tension expresses a form of information increase: if Δ1 ⇝ Δ2 ,
+returns the context unchanged. Rule (LUrec) discovers that                            then Δ2 preserves all equivalence relations derivable from
+the head of the row is not 𝑙𝑐 , and thus recursively looks up                         Δ1 10 , and may additionally include more variable solutions.
+in the tail of the row. Rule (LUtail) is when we encounter a                          We can prove that unification extends the context.
+polymorphic row tail. In this case, we know that 𝛼 must be
+of shape 𝑙𝑐 : 𝛽, 𝛾 with fresh 𝛽 and 𝛾.                                                Lemma 3.6 (Unification extends context). If Δ1 ⊢ 𝐶 1 =⇒
+    Returning to (Rfield), note that when the lookup rule re-                         Δ2 ⊢ 𝐶 2 , then Δ1 ⇝ Δ2 .
+turns, we have an extra side condition [Δ2 ]𝜌 = [Δ1 ]𝜌.9 The                             Now we define the notion of a most general unifier:
+condition prevents us from unifying two rows with a shared
+                                                                                      Theorem 3.7 (Unification Produces the Most General Uni-
+tail but different prefixes. For example, consider unifying
+                                                                                      fier). If Δ1 ⊢ 𝐶 =⇒∗ Δ2 ⊢ ⊤, then for any Δ such that Δ1 ⇝ Δ
+(𝑙 1 : Int, 𝛼) ∼ (𝑙 2 : Int, 𝛼) (with 𝑙 1 ≠ 𝑙 2 ). By (LUtail), we
+                                                                                      and Δ |= 𝐶, there exists Δ ′ such that Δ2 ⇝ Δ ′ and Δ ⇝ Δ ′.
+will generate 𝛼 = 𝑙 1 : 𝛽, 𝛾 (with fresh 𝛽, 𝛾) and rewrite the
+right-hand-side to (𝑙 1 : 𝛽, 𝑙 2 : Int, 𝛾). Without the side con-                     The lemma states that, for a unification problem 𝐶 starting
+dition, by (Rfield) the original constraint is decomposed to                          with the substitution context Δ1 , the unification result Δ2 is
+Int ∼ 𝛽 (with solution 𝛽 = Int) and 𝛼 ∼ 𝑙 2 : Int, 𝛾. The latter                      the most general solution, as for any other possible solution
+constraint turns into (𝑙 1 : Int, 𝛾) ∼ (𝑙 2 : Int, 𝛾) by (Tsolved).                   Δ, we can establish some relation between Δ2 and Δ. The
+9 A more efficient way of implementing this condition is to calculate the
+                                                                                      reader might expect that Δ2 ⇝ Δ which, however, is not
+tails of 𝜌 1 and pass them into the lookup rules, so (LUtail) checks that 𝛼 is        10 That is, if [Δ ]𝜏       ≡ [Δ1 ]𝜏2 , then [Δ2 ]𝜏1 ≡ [Δ2 ]𝜏2 , as [Δ2 ]𝜏1 =
+                                                                                                       1 1
+not in the tails.                                                                     [Δ2 ] ( [Δ1 ]𝜏1 ) = [Δ2 ] ( [Δ1 ]𝜏2 ) = [Δ2 ]𝜏2 .
+
+
+
+
+                                                                                 36
+Infix-Extensible Record Types for Tabular Data                                                                     TyDe ’23, September 4, 2023, Seattle, WA, USA
+
+
+true in general: during unification, we may allocate extra                             4     Evaluation
+fresh unification variables (such as in (LUtail)) to help solve                        To motivate the development of this new flavor of row types,
+the constraint, which the solution context Δ may not contain.                          we evaluate their capability, both in terms of the functions
+Therefore, instead of Δ2 ⇝ Δ, we can find another solution                             that can be typed, and in terms of errors that can be caught
+context Δ ′ that both Δ2 and Δ extend to. This effectively                             statically, over the Brown Benchmark for Tabular Types
+ensures that Δ2 is the most general unifier: suppose Δ2 is                             (B2T2) [11]. Furthermore, an important part of the evaluation,
+not the most general unifier, then there exists at least one                           that we will stress for the last time now, is that the type
+unification variable that does not have to be solved or could                          theory is arguably simple, as it is based purely on unification
+be solved differently, say 𝛼 = Int ∈ Δ2 . Then we can make the                         and does not require the use of qualified or dependent types.
+solution context Δ contain a different solution 𝛼 = String,                               Throughout this section, we will use the usual facilities
+and now it is impossible to find a Δ ′ that both Δ2 and Δ                              found in most functional programming languages, such as
+extend to. Thus Δ2 must be the most general unifier.                                   sum and product types. We adopt Haskell’s naming conven-
+                                                                                       tion and write Maybe for an optional type.
+   Design Variants. While not having most general unifier                                 Since our presentation here focuses on the type system
+in certain cases is unsatisfactory, we do not find it a sig-                           features and not a concrete implementation, we do not report
+nificant limitation in practice11 , largely because of the tail                        on implementation details such as error messages, but focus
+check (Fig. 7) imposed in the system. Back to the problematic                          on the typeability. Similarly, we do not present example
+example above:                                                                         implementations of most functions, as they are either fairly
+                                                                                       trivial (see hcat) or would not resemble a real implementation
+                    (𝛼 : Int, 𝛽) ∼ (𝑙 1 : Int, 𝑙 2 : Int)                              (joins might require hash tables for efficiency).
+
+One may find it a bit strange to have 𝛼 in the unification                             4.1    What is a Table?
+constraint, since 𝛼 does not appear in a tail position. Indeed,                        First, we represent a table as a homogeneous array of records,
+consider the type of the following function:                                           whose type we denote as [{𝑟 }], with 𝑟 being the row rep-
+  𝑓 :: ∀(𝑎 : Label) (𝑏 : Row).{𝑎 : Int, 𝑏} → L𝑎M → Int                                 resenting the table schema. This satisfies the benchmark
+  𝑓 𝑟 𝑙 = 𝑟 .𝑙                                                                         requirements of tables being a typed, rectangular collection
+In this case, both 𝑎 and 𝑏 can be instantiated (to 𝛼 and 𝛽                             of cells. Moreover, since labels are first-class, column names
+respectively) as they both satisfy the tail check. Applying                            are, as requested, string-like first-class values.
+𝑓 to a record of type {𝑙 1 : Int, 𝑙 2 : Int} will give us the                             While we consider a table as a homogeneous array (of
+above equality constraint. However, note that the reason 𝑎                             records), the array type constructor is not our focus here. In
+passes the tail check is because there is a singleton label L𝑎M                        particular, we assume that the array type does not put any
+which is the second argument to the function. Therefore,                               limitations on the element type, and any valid record type can
+once the function is applied to a second argument, we will                             be supplied (as is the case in many array languages such as
+know exactly how to solve 𝛼, and thus 𝛽. This is often the                             [6, 14]). Thus, we only use parts of the B2T2 benchmark that
+case in practice — unification could get resolved once more                            deal with column manipulation for evaluation. Functions
+information is available.12 Indeed, this is true for all examples                      that focus purely on modifying the rows of a data table
+in the evaluation (§4).                                                                (subsampling, etc.) are mostly capabilities of the array type
+   As a design variant, we could follow Leijen [9] to have                             and are unaffected by the row type13 .
+the unification derive a set of most general unifiers, mak-                               Our main deviation from the benchmark is in the relaxed
+ing unification complete. That is, a unifier is not the most                           structure of the schema. Firstly, columns are unordered. We
+general one in the usual sense, but a most general one up                              consider this to be a fairly unimportant property of tables,
+to permutation of row fields. For example for the problem-                             since most data processing does not actually rely on the or-
+atic example, both of the two incompatible unifiers will be                            dering of columns. Secondly, column names are not unique.
+returned. However, as discussed in [9], such an algorithm is                           This could lead to potential errors by accidentally introducing
+exponential in the number of polymorphic labels.                                       shadowing between columns. But, we consider the usability
+                                                                                       upside of not having to enforce distinctness at the type level
+                                                                                       to balance the potential risks. After all, programmers already
+11 We also remark this is not uncommon in practical systems, including e.g.,
+                                                                                       have to deal with the risk of accidental shadowing in pretty
+the type inference [18] and the kind inference algorithms [23] in GHC.                 much all common programming languages. And, similar to
+12 The tail check is not always helpful. For example, consider 𝑓 :: ∀𝑎 𝑏. {𝑎 :
+
+Int, 𝑏 } → (L𝑎M → L𝑎M) → Int. In this case, 𝑎 and 𝑏 still pass the tail check,         13 The list of omitted functions includes: emptyTable, addRows, vcat, val-
+
+but the second argument to 𝑓 could be a polymorphic identity function that             ues, nrows, getRow, selectRows, head, distinct, find, tfilter, update, select,
+contains no useful information about 𝑎. Still, this is a contrived scenario            selectMany. We additionally omit tsort, sortByColumns, orderBy, count
+that we expect to be rare in practice. It is also possible to design a stricter        and bin, as all of them can be implemented by composing column projec-
+tail check to make sure each tail position is useful.                                  tions/insertions (that we discuss) with row rearrangements.
+
+
+
+
+                                                                                  37
+TyDe ’23, September 4, 2023, Seattle, WA, USA                                                                  Adam Paszke and Ningning Xie
+
+
+variable shadowing in typed languages, it only goes unno-            the back. Of course, both are equivalent if the column name
+ticed when the shadowing does not change the type of the             does not appear in the table, but they do differ in shadowing
+variable (or changes it in a compatible way, e.g. in systems         semantics when it does.
+with subtyping).
+                                                                             addColumnfront
+4.2   Example Tables
+                                                                               :: ∀𝑟 𝑙 𝑎. [{𝑟 }] → L𝑙M → [𝑎] → [{𝑙 : 𝑎 | 𝑟 }]
+B2T2 provides a collection of example tables. Since neither                  addColumnback
+the array type nor the record type constrain the column                        :: ∀𝑟 𝑙 𝑎. [{𝑟 }] → L𝑙M → [𝑎] → [{𝑟 | 𝑙 : 𝑎}]
+types, all example tables can be successfully represented
+and typed. We omit their definitions, but provide full type
+signatures.                                                              Another interesting case is the renameColumns func-
+                                                                     tion. In the benchmark specification, it renames a set of
+ students :: [{name : String, age : Int, favColor : String}]         columns, but in our type system it can only rename one col-
+ studentsMissing :: [                                                umn at a time (or any fixed statically known number). We
+    {name : String, age : Int, favColor : Maybe String}]             add a column subscript to denote functions that work on a
+ gradebookSeq :: [                                                   single column only. Luckily, the general variant can be re-
+    {name : String, age : Int, quizzes : [Int], final : Int}]        covered by composing multiple single-column applications.
+ gradebookTable :: [                                                 For renameColumns, the single-column version has clearer
+    {name : String, age : Int, final : Int,                          semantics too, since otherwise applying the name substitu-
+     quizzes : [{quiz : Int, grade : Int}]}                          tion in parallel or in sequence could lead to different results
+ ]                                                                   if the domain and range of the substitution overlap.
+4.3   Expressible Table Manipulation Functions
+In this section, we list the data manipulation functions pro-         renameColumnscolumn
+posed in the benchmark that our system can successfully                 :: ∀𝑟 𝑙 1 𝑙 2 𝑎. [{𝑙 1 : 𝑎 | 𝑟 }] → L𝑙 1 M → L𝑙 2 M → [{𝑙 2 : 𝑎 | 𝑟 }]
+assign types to. We group them into subcategories that have
+similar behaviors and share similar challenges.                  4.3.2 Undefined Values. We handle undefined values us-
+   Most functions are presented with the same signatures as      ing explicit Maybe types, thus giving correct types to all
+in the benchmark. When we modify the signature, we attach        functions that manipulate optional values. Since the bench-
+a subscript to the function name, e.g., almostOkmodified . We    mark specification assumes that every single column of a
+discuss all the functions in the benchmark, here or in §4.5.     table can contain missing values, the dropna function re-
+                                                                 moves all rows in which any column does not have a value
+4.3.1 Column Manipulation Functions. We start with               specified. Since in our system columns are non-optional by
+functions that manipulate the columns of a data table inde-      default, we present dropnacolumn , which operates on and
+pendently over its rows. These are implementable as fmap/zipWith eliminates the optional from a single column.
+of a record-manipulating function.
+   Our type system can successfully assign type signatures
+to almost all the functions in this category. However, due        completeCases
+to columns being unordered, the overloads of getColumn                :: ∀𝑟 𝑙 𝑎. [{𝑙 : Maybe 𝑎 | 𝑟 }] → L𝑙M → [Bool]
+and selectColumns that use integers or boolean masks as           dropna    column
+selectors are inexpressible.                                          :: ∀𝑟 𝑙 𝑎. [{𝑙 : Maybe 𝑎 | 𝑟 }] → L𝑙M → [{𝑙 : 𝑎 | 𝑟 }]
+                                                                  fillna
+  hcat :: ∀𝑟 1 𝑟 2 . [{𝑟 1 }] → [{𝑟 2 }] → [{𝑟 1 | 𝑟 2 }]             :: ∀𝑟 𝑙 𝑎. [{𝑙 : Maybe 𝑎 | 𝑟 }] → L𝑙M → 𝑎 → [{𝑙 : 𝑎 | 𝑟 }]
+  getValue :: ∀𝑟 𝑙 𝑎. {𝑙 : 𝑎 | 𝑟 } → L𝑙M → 𝑎
+  getColumn :: ∀𝑟 𝑙 𝑎. [{𝑙 : 𝑎 | 𝑟 }] → L𝑙M → [𝑎]
+                                                                 4.3.3 Aggregations. Aggregations are some of the most
+  selectColumns :: ∀𝑟 1 𝑟 2 . [{𝑟 1 | 𝑟 2 }] → ⟨𝑟 1 ⟩ → [{𝑟 1}]
+                                                                 important functions in data analysis, since they allow the
+  dropColumn :: ∀𝑟 𝑙 𝑎. [{𝑙 : 𝑎 | 𝑟 }] → L𝑙M → [{𝑟 }]
+                                                                 modeller to synthesize a fixed size answer from a large body
+  dropColumns :: ∀𝑟 1 𝑟 2 . [{𝑟 1 | 𝑟 2 }] → ⟨𝑟 1 ⟩ → [{𝑟 2 }]
+                                                                 of data. Here, we analyze the aggregations listed in the B2T2
+  buildColumn
+                                                                 benchmark.
+     :: ∀𝑟 𝑙 𝑎. [{𝑟 }] → L𝑙M → ({𝑟 } → 𝑎) → [{𝑙 : 𝑎 | 𝑟 }]
+                                                                    The pivotTable function partitions rows into groups and
+  transformColumn
+                                                                 summarizes each group with an aggregation function. We
+     :: ∀𝑟 𝑙 𝑎. [{𝑙 : 𝑎 | 𝑟 }] → L𝑙M → (𝑎 → 𝑏) → [{𝑙 : 𝑏 | 𝑟 }]
+                                                                 present its one-column version, as well as another one that
+   One interesting case is the addColumn function. Because       replaces a sequence of per-column reducers with a reduction
+columns are not distinct, it can be implemented in two ways:     function from an array of records to a single record. This
+one that adds the column at the front, and one that adds it in   should be as capable as the original pivotTable.
+
+
+
+                                                                38
+Infix-Extensible Record Types for Tabular Data                                                        TyDe ’23, September 4, 2023, Seattle, WA, USA
+
+
+                                                                          columns are accessed correctly (missing names are rejected)
+   groupBy                                                                and used according to the types listed in their schema. Both
+     :: ∀𝑟 𝑟 2 𝑘 𝑣 . [{𝑟 }] → ({𝑟 } → 𝑘) → ({𝑟 } → 𝑣) →                   of those are sufficient to catch pretty much all of the example
+                      (𝑘 → [𝑣] → {𝑟 2 }) → [{𝑟 2}]                        errors listed in the benchmark14 .
+   groupByRetentive                                                          Most of the invariants used to annotate benchmark func-
+     :: ∀𝑟 𝑙 𝑎. [{𝑙 : 𝑎 | 𝑟 }] → L𝑙M →                                    tions are proven statically, except for the array length equal-
+                  [{key : 𝑎, groups : [{𝑙 : 𝑎 | 𝑟 }]}]                    ity checks, which we leave out of scope. Verification of those
+   groupBySubtractive                                                     depends on the ability to model array length at the type level
+     :: ∀𝑟 𝑙 𝑎. [{𝑙 : 𝑎 | 𝑟 }] → L𝑙M →                                    rather than on the record calculus, and is possible in many
+                  [{key : 𝑎, groups : [{𝑟 }]}]                            array languages (for example in [6, 14]).
+   pivotTablecolumn                                                          We stress the value of types for illuminating the interme-
+     :: ∀𝑟 𝑙 1 𝑙 2 𝑘 𝑎 𝑏. [{𝑘 | 𝑙 1 : 𝑎 | 𝑟 }] → ⟨𝑘⟩ → L𝑙 1 M →           diate steps in the data transformations, for example, when
+                          L𝑙 2 M → ( [𝑎] → 𝑏) → [{𝑘 | 𝑙 2 : 𝑏}]           columns are added, how column types change, etc. Often
+   pivotTablerecord                                                       just by looking at the type signatures of the table interface,
+     :: ∀𝑟 1 𝑟 2 𝑘. [{𝑘 | 𝑟 1 }] → ⟨𝑘⟩ → ( [{𝑟 1 }] → {𝑟 2 }) →           one can easily deduce the semantics of each function (i.e.,
+                     [{𝑘 | 𝑟 2 }]                                         theorems for free [19]). This is especially powerful when used
+                                                                          in conjunction with proper development environments that,
+4.3.4 Joins. Another important class of table manipulation                e.g., allow the programmer to query types on hover over
+functions are joins, which collate the related data points from           identifiers.
+multiple tables into a single one. As before, our system can
+successfully assign types to most join-related functions, with            4.5    Negative Results
+the most interesting case being leftJoin. As specified in the
+benchmark, it assumes that all columns are nullable. Since                Here, we present an analysis complementary to the previous
+this is not an assumption that is possible to express in our              sections, by listing all the benchmark functions that we have
+system, we suggest leftJoinmaybe that adds the whole record               found to be difficult to assign a type or implementation to.
+of columns of the second table as an optional value, instead of           We treat this list as a set of open problems for applying record
+concatenating both record types. Then, handling of missing                types to data science programming, and hope to resolve them
+cases in the resulting table can be handled explicitly, and               in the future, and for now only sketch potential solutions if
+once done the non-optional record type can be concatenated                known to us.
+into the left table columns.
+                                                                          4.5.1 Table Pivots. The two functions we have found to
+     crossJoin :: ∀𝑟 1 𝑟 2 . [{𝑟 1 }] → [{𝑟 2 }] → [{𝑟 1 | 𝑟 2 }]         be the most difficult to represent in our system are pivot-
+     leftJoinmaybe                                                        Longer and pivotWider. They are each other’s inverse, and
+        :: ∀𝑟 1 𝑟 2 𝑘. [{𝑘 | 𝑟 1 }] → [{𝑘 | 𝑟 2 }] → ⟨𝑘⟩ →                convert between the standard “wide” table format to a “long”
+                        [{𝑘 | 𝑟 1 | joined : Maybe {𝑟 2}}]                format, where a number of same-typed columns are replaced
+     groupJoin                                                            by two columns instead: one for the column name, the other
+        :: ∀𝑟 1 𝑟 2 𝑟 3 𝑘. [{𝑟 1 }] → [{𝑟 2 }] →                          for its value.
+                           ({𝑟 1 } → 𝑘) → ({𝑟 2 } → 𝑘) →                     There are a number of issues that make those two func-
+                           ({𝑟 1 } → [{𝑟 2 }] → {𝑟 3 }) → [{𝑟 3 }]        tions difficult to represent. pivotLonger (the “wide” to “long”
+     join                                                                 conversion) requires that all flattened columns are of the
+        :: ∀𝑟 1 𝑟 2 𝑟 3 𝑘. [{𝑟 1 }] → [{𝑟 2 }] →                          same type, which cannot be enforced on row variables in
+                           ({𝑟 1 } → 𝑘) → ({𝑟 2 } → 𝑘) →                  the current system. It additionally requires extra run-time
+                           ({𝑟 1 } → {𝑟 2 } → {𝑟 3 }) → [{𝑟 3 }]          reflection facilities to be able to extract column names (dis-
+4.3.5 Flattening. flattencolumn flattens a single column at               cussed further in §4.5.3). Finally, the order in which the new
+a time. As in the case of renameColumns flattening a number               rows are to be produced is unclear, since table columns are
+of columns simultaneously is equivalent to flattening them                unordered in our system. In the other direction, the main
+one by one, so little expressiveness is lost.                             two difficulties with pivotWider are that it needs to construct
+                                                                          records from unstructured column names and allow miss-
+ flattencolumn :: ∀𝑟 𝑙 𝑎. [{𝑙 : [𝑎] | 𝑟 }] → L𝑙M → [{𝑙 : 𝑎 | 𝑟 }]         ing values in any of the flattened columns, since nothing
+                                                                          guarantees that all their values are present in the long table.
+4.4   Static Checks and Errors Caught
+Our system requires the specification of the table schema
+statically and uses it to verify the construction of a table,             14 The list of errors caught is as follows: missingSchema, missingRow, miss-
+ruling out all of the malformed tables listed in the benchmark.           ingCell, swappedColumns, schemaTooShort, schemaTooLong, midFinal,
+Additionally, our type system is capable of verifying that                blackAndWhite, pieCount, brownGetAcne, favoriteColor, brownJellybeans
+
+
+
+
+                                                                     39
+TyDe ’23, September 4, 2023, Seattle, WA, USA                                                                       Adam Paszke and Ningning Xie
+
+
+4.5.2 Typeclasses for Records. Many of the benchmark                         with a lightweight type system compared to most existing cal-
+functions depend on records supporting a number of basic                     culi, since 𝜆 ⟨⟩ does not depend on qualified types or bounded
+operations, such as equality checking (unique, leftJoin, . . . )             polymorphism. However, it also means that certain programs
+or having a hash function.                                                   with qualified type constraints cannot be expressed in 𝜆 ⟨⟩ .
+   In many functional languages, such requirements are en-                   In particular, we can relatively easily express positive infor-
+coded as typeclass constraints. Try as we might, we have                     mation, but not forms of negative information. That is, we
+not been able to find a satisfactory way to integrate row-                   could write 𝑟 as {𝑙 : 𝑎 | 𝜌 } to express the constraint "a record
+polymorphic records with existing typeclass systems. The                     𝑟 has a label 𝑙". However, there is no direct way to say "a
+main difficulty we encountered is that while record types                    record 𝑟 lacks a label 𝑙". As such, 𝜆 ⟨⟩ alone cannot enforce
+are usually defined inductively, a single record type allows                 distinct labels, or the "extend or overwrite" operator [20]
+multiple equivalent inductive definitions. This means that                   that extends a record with a label, or overwrites its field if
+typeclass constraint resolution for records is actually a non-               the label already exists in the record.
+deterministic procedure. There are typeclasses for which the                    First-class labels in [9] are realized via singleton types,
+order of derivation wouldn’t change the eventual result. For                 while they can also be naturally supported in record calculi
+example, when checking record equality (Eq in Haskell), it                   based on dependent types such as in [2]. Following [9], 𝜆 ⟨⟩
+does not matter in which order we reduce the per-field equal-                supports first-class labels using singleton types, and further
+ity decisions, because the (∧, True) monoid is commutative.                  generalizes the system to include first-class rows.
+But, it is not straightforward for a compiler to prove this,
+and therefore be confident in typeclass coherence.                              Tabular types. Tables are a widely used format for stor-
+   One can extract insight from the previous paragraph: we                   ing data. Lu et al. [11] proposed the B2T2 benchmark, whose
+likely want to exploit the programmer’s knowledge about                      purpose is to serve as "a focal point for research on type
+certain algebraic structures being commutative monoids to                    systems for tabular programming". Using record types to
+ensure consistency over record type equivalence. But, we                     express tabular types is not new. Indeed, all record calculi
+have not (yet) found a satisfactory way to express that in a                 discussed above can express some form of tabular types. Our
+real language, and leave this as future work.                                evaluation (§4) shows that while relatively lightweight, 𝜆 ⟨⟩
+                                                                             can express a significant number of functions in the bench-
+4.5.3 Schema Reflection. Since our system lacks support
+                                                                             mark using its unique combination of features. Recently, the
+for run-time reflection over table (or record) schemata, it is
+                                                                             dependently typed language Idris has been used to evaluate
+difficult to implement functions such as header. Another
+                                                                             dependently-typed tables on B2T2 [21]. With full depen-
+similar example is ncols, though support for typeclasses for
+                                                                             dent types, their system is effectively more expressive, but
+records could help.
+                                                                             arguably also more complex.
+   While out of scope for the B2T2 benchmark, this also
+makes record I/O difficult. It is convenient to order columns
+for printing, but without a more extensive constraint system                 6    Conclusion
+there is no way to take a list of labels that are known to                   We have described a novel record calculus, that brings many
+correspond to fields of a record/table.                                      previously described calculi together in a coherent way. The
+                                                                             resulting type system is remarkably lightweight, as it re-
+5    Related Work                                                            quires no support for qualified types and only slightly ex-
+   Record calculi. Following Rémy [17], we categorize record                 tends well-established type checking and inference proce-
+calculi into two groups based on how how record concate-                     dures. Finally, we show that the new record calculus can
+nation is supported: the strict group does not allow dupli-                  be used to successfully analyze the transformations of table
+cate labels, while the free group does. In the strict group,                 schema in programs manipulating tabular data, as measured
+record concatenation is symmetric (i.e., {𝑟 1 | 𝑟 2 } ≡ {𝑟 2 | 𝑟 1 })        by the B2T2 benchmark.
+[2, 5] where the type system must check that 𝑟 1 and 𝑟 2 are                   While we do not provide a concrete implementation for
+disjoint, often in a form of bounded quantification or quali-                our system yet, we have explored integrating it into Dex [14].
+fied types. In the free group, record concatenation has been                 Beyond that, we hope that this document can also serve as
+given different semantics: it can be asymmetric [1, 20] where                an inspiration for other programming language designers
+concatenation overwrites a field if it is already present, or                wanting to improve data science applications.
+scoped (following [10]) where concatenation shadows exist-
+ing labels, or recursive [13, 22] where common fields will
+                                                                             References
+recursively concatenate their values. Morris and McKinna
+                                                                              [1] Luca Cardelli and John C. Mitchell. 1990. Operations on records.
+[12] give a general account of record concatenation abstract-                     In Mathematical Foundations of Programming Semantics, M. Main,
+ing the interpretation of records, realized via qualified types.                  A. Melton, M. Mislove, and D. Schmidt (Eds.). Springer New York,
+As we have seen, 𝜆 ⟨⟩ supports scoped record concatenation,                       New York, NY, 22–52. https://doi.org/10.1007/BFb0040253
+
+
+
+
+                                                                        40
+Infix-Extensible Record Types for Tabular Data                                                                      TyDe ’23, September 4, 2023, Seattle, WA, USA
+
+
+ [2] Adam Chlipala. 2010. Ur: Statically-Typed Metaprogramming with                          143165.143202
+     Type-Level Record Computation. In Proceedings of the 31st ACM SIG-                 [17] Didier Rémy. 1994. Type Inference for Records in Natural Extension of
+     PLAN Conference on Programming Language Design and Implementa-                          ML. MIT Press, Cambridge, MA, USA, 67–95.
+     tion (PLDI ’10). Association for Computing Machinery, New York, NY,                [18] Dimitrios Vytiniotis, Simon Peyton Jones, Tom Schrijvers, and Martin
+     USA, 122–133. https://doi.org/10.1145/1806596.1806612                                   Sulzmann. 2011. OutsideIn (X) Modular type inference with local
+ [3] Jana Dunfield and Neelakantan R. Krishnaswami. 2013. Complete                           assumptions. Journal of functional programming 21, 4-5 (2011), 333–
+     and Easy Bidirectional Typechecking for Higher-Rank Polymorphism.                       412. https://doi.org/10.1017/S0956796811000098
+     In Proceedings of the 18th ACM SIGPLAN International Conference                    [19] Philip Wadler. 1989. Theorems for Free!. In Proceedings of the Fourth
+     on Functional Programming (ICFP ’13). Association for Computing                         International Conference on Functional Programming Languages and
+     Machinery, New York, NY, USA, 429–442. https://doi.org/10.1145/                         Computer Architecture (FPCA ’89). Association for Computing Machin-
+     2500365.2500582                                                                         ery, New York, NY, USA, 347–359. https://doi.org/10.1145/99370.99404
+ [4] Benedict R. Gaster and Mark P. Jones. 1996. A Polymorphic Type System              [20] Mitchell Wand. 1991. Type inference for record concatenation and
+     for Extensible Records and Variants. Technical Report NOTTCS-TR-96-3.                   multiple inheritance. Information and Computation 93, 1 (1991), 1–15.
+     Department of Computer Science, University of Nottingham.                               https://doi.org/10.1016/0890-5401(91)90050-C Selections from 1989
+ [5] Robert Harper and Benjamin Pierce. 1991. A Record Calculus Based on                     IEEE Symposium on Logic in Computer Science.
+     Symmetric Concatenation. In Proceedings of the 18th ACM SIGPLAN-                   [21] Robert Wright, Michel Steuwer, and Ohad Kammar. 2022. Idris2-Table:
+     SIGACT Symposium on Principles of Programming Languages (POPL ’91).                     evaluating dependently-typed tables with the Brown Benchmark for
+     Association for Computing Machinery, New York, NY, USA, 131–142.                        Table Types (Extended Abstract). TyDe 2022.
+     https://doi.org/10.1145/99583.99603                                                [22] Ningning Xie, Bruno C. d. S. Oliveira, Xuan Bi, and Tom Schrijvers.
+ [6] Troels Henriksen, Niels G. W. Serup, Martin Elsman, Fritz Henglein,                     2020. Row and Bounded Polymorphism via Disjoint Polymorphism.
+     and Cosmin E. Oancea. 2017. Futhark: Purely Functional GPU-                             In 34th European Conference on Object-Oriented Programming (ECOOP
+     Programming with Nested Parallelism and in-Place Array Updates.                         2020) (Leibniz International Proceedings in Informatics (LIPIcs)), Robert
+     SIGPLAN Not. 52, 6 (jun 2017), 556–571. https://doi.org/10.1145/                        Hirschfeld and Tobias Pape (Eds.), Vol. 166. Schloss Dagstuhl–Leibniz-
+     3140587.3062354                                                                         Zentrum für Informatik, Dagstuhl, Germany, 27:1–27:30. https://doi.
+ [7] Mark P Jones. 2003. Qualified types: theory and practice. Cambridge                     org/10.4230/LIPIcs.ECOOP.2020.27
+     University Press.                                                                  [23] Ningning Xie, Richard A. Eisenberg, and Bruno C. d. S. Oliveira. 2019.
+ [8] Simon Peyton Jones, Dimitrios Vytiniotis, Stephanie Weirich, and Mark                   Kind Inference for Datatypes. Proc. ACM Program. Lang. 4, POPL,
+     Shields. 2007. Practical type inference for arbitrary-rank types. Journal               Article 53 (dec 2019), 28 pages. https://doi.org/10.1145/3371121
+     of functional programming 17, 1 (2007), 1–82. https://doi.org/10.1017/
+     S0956796806006034
+ [9] Daan Leijen. 2004. First-class labels for extensible rows. Technical Report        A     Type Safety
+     UU-CS-2004-051. Institute of Information and Computing Sciences,                   Theorem 3.1 (Preservation). If Γ ⊢ 𝑒 : 𝜎, and 𝑒 ↦−→ 𝑒 ′, then
+     Utrecht University.
+                                                                                        Γ ⊢ 𝑒 ′ : 𝜎.
+[10] Daan Leijen. 2005. Extensible records with scoped labels. In
+     Proceedings of the 2005 Symposium on Trends in Functional Pro-
+                                                                                        Proof. By induction on the evaluation rule. Most rules are
+     gramming (TFP’05), Tallin, Estonia (proceedings of the 2005 sym-
+     posium on trends in functional programming (tfp’05), tallin, esto-                 straightforward. We discuss below the rules specific to rows.
+     nia ed.). https://www.microsoft.com/en-us/research/publication/                     • rule (prj). Since the rule checks that we get the first field
+     extensible-records-with-scoped-labels/
+                                                                                           for 𝑙𝑐𝑖 , it’s guaranteed that we will get 𝜏𝑖 when the type
+[11] Kuang-Chen Lu, Ben Greenman, and Shriram Krishnamurthi. 2022.
+     Types for Tables: A Language Design Benchmark. Art Sci. Eng. Program.                 of {𝑙𝑐 1 = 𝑣 1, . . . , 𝑙𝑐𝑛 = 𝑣𝑛 } is {𝑙𝑐𝑖 : 𝜏𝑖 | 𝜌 }.
+     6, 2 (2022), 8. https://doi.org/10.22152/programming-journal.org/2022/              • rule (concat). We can derive that the type {𝑙𝑐 1 : 𝜏1, . . . , 𝑙𝑐𝑖 :
+     6/8                                                                                   𝜏𝑖 | 𝑙𝑐 𝑗 : 𝜏 𝑗 , . . . , 𝑙𝑐𝑛 : 𝜏𝑛 } ≡ {𝑙𝑐 1 : 𝜏1, . . . , 𝑙𝑐𝑖 : 𝜏𝑖 , 𝑙𝑐 𝑗 :
+[12] J. Garrett Morris and James McKinna. 2019. Abstracting Extensible                     𝜏 𝑗 , . . . , 𝑙𝑐𝑛 : 𝜏𝑛 } following Assoc.
+     Data Types: Or, Rows by Any Other Name. Proc. ACM Program. Lang. 3,
+                                                                                         • rule (concatr ). We can derive that the type ⟨𝑙𝑐 1 : 𝜏1, . . . , 𝑙𝑐𝑖 :
+     POPL, Article 12 (jan 2019), 28 pages. https://doi.org/10.1145/3290325
+[13] Atsushi Ohori and Peter Buneman. 1988. Type Inference in a Database                   𝜏𝑖 | 𝑙𝑐 𝑗 : 𝜏 𝑗 , . . . , 𝑙𝑐𝑛 : 𝜏𝑛 ⟩ ≡ ⟨𝑙𝑐 1 : 𝜏1, . . . , 𝑙𝑐𝑖 : 𝜏𝑖 , 𝑙𝑐 𝑗 :
+     Programming Language. In Proceedings of the 1988 ACM Conference on                    𝜏 𝑗 , . . . , 𝑙𝑐𝑛 : 𝜏𝑛 ⟩ following Assoc.
+     LISP and Functional Programming (LFP ’88). Association for Computing                • rule (del1 ). We know that {𝜌 } = {Empty | 𝜌 } by empL.
+     Machinery, New York, NY, USA, 174–183. https://doi.org/10.1145/                       So the goal follows.
+     62678.62700
+                                                                                         • rule (del2 ). In this case we know that {𝑙𝑐 1 = 𝑣 1, . . . , 𝑙𝑐𝑛 =
+[14] Adam Paszke, Daniel D. Johnson, David Duvenaud, Dimitrios Vy-
+     tiniotis, Alexey Radul, Matthew J. Johnson, Jonathan Ragan-Kelley,                    𝑣𝑛 } has type {𝑙𝑐 1 : 𝜏1, . . . , 𝑙𝑐𝑛 : 𝜏𝑛 } ≡ {𝑙𝑐𝑖 : 𝜏 | 𝜌 | 𝜌 ′ },
+     and Dougal Maclaurin. 2021. Getting to the Point: Index Sets and                      and ⟨𝑙𝑐𝑖 : 𝜏 | 𝑣⟩ has type ⟨𝑙𝑐𝑖 : 𝜏 | 𝜌⟩ where 𝑣 : ⟨𝜌⟩. Thus
+     Parallelism-Preserving Autodiff for Pointful Array Programming.                       {𝑙𝑐 1 = 𝑣 1, . . . , 𝑙𝑐𝑛 = 𝑣𝑛 }\⟨𝑙𝑐𝑖 : 𝜏𝑖 | 𝑣⟩ has type {𝜌 ′ }.
+     Proc. ACM Program. Lang. 5, ICFP, Article 88 (aug 2021), 29 pages.                    Since the rule checks that we remove the first field for 𝑙𝑐𝑖 ,
+     https://doi.org/10.1145/3473593
+                                                                                           we know that {𝑙𝑐 1 = 𝑣 1, . . . , 𝑙𝑐𝑖−1 = 𝑣𝑖−1, 𝑙𝑐𝑖+1 = 𝑣𝑖+1, . . . , 𝑙𝑐𝑛 =
+[15] François Pottier and Didier Rémy. 2005. The essence of ML type
+     inference. In Advanced Topics in Types and Programming Languages.                     𝑣𝑛 } is of type {𝑙𝑐 1 : 𝜏1, . . . , 𝑙𝑐𝑖−1 : 𝜏𝑖−1, 𝑙𝑐𝑖+1 : 𝜏𝑖+1, . . . 𝑙𝑐𝑛 :
+     The MIT Press.                                                                        𝜏𝑛 }, namely {𝜌 | 𝜌 ′ }.
+[16] Didier Rémy. 1992. Typing Record Concatenation for Free. In Pro-                      By the typing rule, we know that {𝑙𝑐 1 : 𝜏1, . . . , 𝑙𝑐𝑖−1 :
+     ceedings of the 19th ACM SIGPLAN-SIGACT Symposium on Principles                       𝜏𝑖−1, 𝑙𝑐𝑖+1 : 𝜏𝑖+1, . . . 𝑙𝑐𝑛 : 𝜏𝑛 }\𝑣 has type {𝜌 ′ }.
+     of Programming Languages (POPL ’92). Association for Computing
+     Machinery, New York, NY, USA, 166–176. https://doi.org/10.1145/                                                                                               □
+
+
+
+
+                                                                                   41
+TyDe ’23, September 4, 2023, Seattle, WA, USA                                                                                      Adam Paszke and Ningning Xie
+
+
+Theorem 3.2 (Progress). If • ⊢ 𝑒 : 𝜎, then either 𝑒 is a value,                             Proof. We have:
+or there exists 𝑒 ′ such that 𝑒 ↦−→ 𝑒 ′.                                                           [Δ3 ]𝜏 ≡ [Δ3 ] ( [Δ2 ]𝜏)                  (Δ2 ⇝ Δ3 )
+                                                                                                          ≡ [Δ3 ] ( [Δ2 ] ( [Δ1 ]𝜏))         (Δ1 ⇝ Δ2 )
+Proof. We first generalize the theorem statement, letting the                                             ≡ [Δ3 ] ( [Δ1 ]𝜏))                 (Δ2 ⇝ Δ3 )
+context be non-empty as long as it only consists of type
+variables: if Γ ⊢ 𝑒 : 𝜎, where Γ has only type variables, then
+                                                                                                                                                             □
+either 𝑒 is a value, or there exists 𝑒 ′ such that 𝑒 ↦−→ 𝑒 ′.
+   Now we proceed by induction on the typing rule. Most                                     Lemma 3.6 (Unification extends context). If Δ1 ⊢ 𝐶 1 =⇒
+cases are straightforward. The purpose of the above general-                                Δ2 ⊢ 𝐶 2 , then Δ1 ⇝ Δ2 .
+ization step to make the case Gen go through, and it won’t                                  Proof. By induction on =⇒. Most cases follow directly from
+affect any other cases.                                                                     I.H.. The two interesting cases are:
+   Below we discuss the rules specific to rows.
+                                                                                             • (Tsolve). In this case we have Δ2 being Δ1 ◦ 𝛼 : 𝜅 = [Δ1 ]𝜏,
+                                                                                               and our goal is to prove [Δ2 ]𝜏 ′ ≡ [Δ2 ] ( [Δ1 ]𝜏 ′).
+ • Empty. {} is a value.                                                                       We can do a case-analysis on 𝜏 ′, and the only interesting
+ • Rcd. {𝑒 1 = 𝑒 2 }. If 𝑒 1 is not a value, then by I.H., 𝑒 1 ↦−→ 𝑒 3 ,                       case is when 𝜏 ′ = 𝛼. Since we know 𝛼 : 𝜅 ∈ Δ1 , we know
+   namely 𝑒 1 = 𝐸 [𝑒 1′ ], and 𝑒 1′ =⇒ 𝑒 3′ and 𝐸 [𝑒 1′ ] ↦−→ 𝐸 [𝑒 3′ ].                       that [Δ1 ]𝛼 = 𝛼. Therefore [Δ2 ] ( [Δ1 ]𝛼) = [Δ2 ]𝛼 .
+   Therefore ({𝐸 = 𝑒 2 }) [𝑒 1′ ] ↦−→ ({𝐸 = 𝑒 2 }) [𝑒 3′ ].                                  • (Rfield). For this one we can prove a similar lemma for
+   If 𝑒 1 is a value, then by typing it must be 𝑒 1 = 𝑙𝑐 .                                                                             𝑙𝑐
+                                                                                               lookup rules; namely, if Δ1 ⊢ 𝜌 ↩→ 𝜌 2 ⊣ Δ2 , then Δ1 ⇝
+   If 𝑒 2 is not a value, then 𝑒 2 reduces.                                                    Δ2 .
+   If 𝑒 2 is also a value 𝑣, then {𝑙 = 𝑣 } is also a value.                                                              𝑙𝑐
+ • Concat for {𝑒 1 | 𝑒 2 }. The case is similar to the above,                                  We do induction on ↩→, and the only interesting case is
+   except that when 𝑒 1 and 𝑒 2 are values, because of their                                   (LUtail), which is similar to (Tsolve) above.        □
+   types we know that 𝑒 1 = {𝑙𝑐 1 = 𝑣 1, . . . , 𝑙𝑐𝑖 = 𝑣𝑖 }, and
+                                                                                            B.2   Solution Context
+   𝑒 2 = {𝑙𝑐 𝑗 = 𝑣 𝑗 , . . . , 𝑙𝑐𝑛 = 𝑣𝑛 }, so by (concat) we have
+   {𝑒 1 | 𝑒 2 } ↦−→ {𝑙𝑐 1 = 𝑣 1, . . . , 𝑙𝑐𝑖 = 𝑣𝑖 , 𝑙𝑐 𝑗 = 𝑣 𝑗 , . . . , 𝑙𝑐𝑛 = 𝑣𝑛 }.        Lemma B.2 (Context Extension Preserves Solution Context).
+ • Lab. 𝑙𝑐 is a value.                                                                      If Δ1 |= 𝐶, and Δ1 ⇝ Δ2 , then Δ2 |= 𝐶.
+ • Prj for 𝑒 1 .𝑒 2 . The reasoning is similar to the case for Rcd.                         Proof. For any 𝜏1 ∼ 𝜏2 ∈ 𝐶, we have:
+   When both 𝑒 1 and 𝑒 2 are values, then it must be 𝑒 1 =                                           [Δ2 ]𝜏1 ≡ [Δ2 ] ( [Δ1 ]𝜏1 )            (Δ1 ⇝ Δ2 )
+   {𝑙𝑐 1 = 𝑣 1, . . . , 𝑙𝑐𝑛 = 𝑣𝑛 } and 𝑒 2 = 𝑙𝑐𝑖 for some 1 ≤ 𝑖 ≤ 𝑛. So
+   we reduce following (prj).                                                                                ≡ [Δ2 ] ( [Δ1 ]𝜏2 )             (Δ1 |= 𝐶)
+ • EmptyR. ⟨⟩ is a value.                                                                                    ≡ [Δ2 ]𝜏2                      (Δ1 ⇝ Δ2 )
+ • Row for ⟨𝑒 : 𝜏⟩. If 𝑒 reduces, then we can reason similarly
+   to the case for Rcd. If 𝑒 is a value, then it must be 𝑙𝑐 , and
+                                                                                            Similarly for rows and labels in 𝐶.                              □
+   ⟨𝑙𝑐 : 𝜏⟩ is a value.
+ • ConcatR. Similar to the case for Concat, except for the                                  Lemma B.3 (Constraint Solving Preserves Solution Context).
+   evaluation step we use rule (concatr ).                                                  If Δ1 ⊢ 𝐶 1 =⇒ Δ2 ⊢ 𝐶 2 and Δ2 ⇝ Δ, then:
+ • PrjR. Simlar to the case for Prj except for the evaluation                                 1. if Δ |= 𝐶 2 then Δ |= 𝐶 1 ; and
+   step we use the rule (prjr1 ) or (prjr2 ) according to whether                             2. if Δ |= 𝐶 1 then Δ |= 𝐶 2 .
+   the row is empty.
+                                                                                            Proof. By Lemma 3.6, we can infer that Δ1 ⇝ Δ2 . So by
+ • Del for 𝑒 1 \𝑒 2 . Again the reasoning is similar to case Con-
+                                                                                            Lemma B.1, we also have Δ1 ⇝ Δ.
+   cat. When both 𝑒 1 and 𝑒 2 are values, it must be that
+                                                                                              (1) Since Δ |= 𝐶 2 , we know that for all 𝜏1 ∼ 𝜏2 ∈ 𝐶 2 , we
+   𝑒 1 = {𝑙𝑐 1 = 𝑣 1, . . . 𝑙𝑐𝑛 = 𝑣𝑛 }, and 𝑒 2 is a row value.
+                                                                                            have [Δ]𝜏1 ≡ [Δ]𝜏2 .
+   If 𝑒 2 = ⟨⟩, then following (del1 ) we have 𝑒 1 \𝑒 2 ↦−→ 𝑒 1 .
+                                                                                              By induction on =⇒. Most cases follow directly. We dis-
+   If 𝑒 2 = ⟨⟨𝑙𝑐𝑖 : 𝜏𝑖 ⟩ | 𝑣⟩, then 𝑒 1 \𝑒 2 reduces following (del2 ).
+                                                                                            cuss the only interesting cases below.
+ • Inst. The goal follows from I.H..
+ • Gen. The goal follows from I.H..                                                □         • (conj). We have Δ |= 𝐶 1′ ∧ 𝐶 2 . By I.H., we have Δ |= 𝐶 1 .
+                                                                                               Threfore Δ |= 𝐶 1 ∧ 𝐶 2 .
+                                                                                             • (Tapp). We have Δ |= 𝜏1 ∼ 𝜏3 ∧𝜏2 ∼ 𝜏4 . Therefore [Δ]𝜏1 ≡
+                                                                                               [Δ]𝜏3 , and [Δ]𝜏2 ≡ [Δ]𝜏4 . Thus [Δ] (𝜏1 𝜏2 ) ≡ [Δ] (𝜏3 𝜏4 ).
+B     Unification Soundness
+                                                                                               All other congruent rules are similar.
+B.1     Context Extension                                                                    • (Tsolved). We have [Δ]𝜏 ′ ≡ [Δ]𝜏. Therefore [Δ]𝛼 ≡
+Lemma B.1 (Context Extension Transitivity). If Δ1 ⇝ Δ2 ,                                       [Δ] ( [Δ1 ]𝛼) = [Δ]𝜏 ′ ≡ [Δ]𝜏. All other solved rules are
+and Δ2 ⇝ Δ3 , then Δ1 ⇝ Δ3 .                                                                   similar.
+
+
+
+                                                                                       42
+Infix-Extensible Record Types for Tabular Data                                                   TyDe ’23, September 4, 2023, Seattle, WA, USA
+
+
+ • (Tsolve). We have [Δ]𝛼 ≡ [Δ] ( [Δ2 ]𝛼) = [Δ] ( [Δ1 ]𝜏) ≡                  Let Δ ′ be Δ. Now we need to prove [Δ]𝜏 ′ ≡ [Δ] ( [Δ2 ]𝜏 ′)
+   [Δ]𝜏. All other solve rules are similar.                                  for all 𝜏 ′ (similarly for 𝜌 and ℓ).
+ • (Rfield). For this case we need to first prove that: if Δ1 ⊢              We do induction on 𝜏 ′. Most cases follow by I.H.. The
+         𝑙𝑐
+    𝜌 1 ↩→ 𝜌 2 ⊣ Δ2 , then [Δ2 ]𝜌 2 = [Δ2 ]𝜌 1 . This follows di-            only interesting case is when 𝜏 ′ = 𝛼.
+                                   𝑙𝑐                                               [Δ]𝛼
+    rectly by induction on ↩→.                                                ≡ [Δ]𝜏                 (Δ |= 𝛼 ∼ 𝜏)
+    Thus,                                                                     ≡ [Δ] ( [Δ1 ]𝜏) (Δ1 ⇝ Δ)
+     [Δ] (𝑙𝑐 : 𝜏, 𝜌 1 ) = 𝑙𝑐 : [Δ]𝜏, [Δ]𝜌 1                                   = [Δ] ( [Δ2 ]𝛼) (Δ2 = (Δ1 ◦ 𝛼 : 𝜅 = [Δ1 ]𝜏))
+     ≡ 𝑙𝑐 : [Δ]𝜏 ′, [Δ]𝜌 2′ = [Δ] (𝑙𝑐 : 𝜏 ′, 𝜌 2′ )                          Therefore, Δ2 ⇝ Δ.
+     = [Δ] ( [Δ2 ] (𝑙𝑐 : 𝜏 ′, 𝜌 2′ )) = [Δ] ( [Δ2 ]𝜌 2 )                   • (Rfield). If Δ1 = Δ2 , then the goal follows directly.
+     ≡ [Δ]𝜌 2                                                                However, if Δ1 ≠ Δ2 , then it must be Δ2 = Δ1 ◦ 𝛼 : Row =
+  (2) Since Δ |= 𝐶 1 , we know that for all 𝜏1 ∼ 𝜏2 ∈ 𝐶 1 , we               (𝑙𝑐 : 𝛽, 𝛾), 𝛽 : ★, 𝛾 : Row.
+have [Δ]𝜏1 ≡ [Δ]𝜏2 .                                                         We first prove that (*): if Δ1 ⇝ Δ, and Δ |= 𝜌 1 ∼ 𝜌 2 and
+  By induction on =⇒. Most cases follow directly. We dis-                             𝑙𝑐
+                                                                             Δ1 ⊢ 𝜌 1 ↩→ 𝜌 2 ⊣ Δ2 , then Δ2 ⇝ Δ.
+cuss the only interesting cases below.                                                               𝑙𝑐
+                                                                             We do induction on ↩→ and most cases follow directly.
+ • (conj). We have Δ |= 𝐶 1 ∧ 𝐶 2 . By I.H., we have Δ |= 𝐶 1′ .             The case for (LUtail) is simiar to (Tsolve) above.
+   Therefore Δ |= 𝐶 1′ ∧ 𝐶 2 .                                               Let Δ ′ be Δ, 𝛽 : ★ = [Δ]𝜏, 𝛾 : Row = [Δ]𝜌 1 . Therefore
+ • (Tapp). We have Δ |= 𝜏1 𝜏2 ∼ 𝜏3 𝜏4 Therefore [Δ] (𝜏1 𝜏2 ) ≡               Δ ⇝ Δ ′. Therefore by Lemma B.1, Δ1 ⇝ Δ ′.
+   [Δ] (𝜏3 𝜏4 ). Thus [Δ]𝜏1 ≡ [Δ]𝜏2 . and [Δ]𝜏2 ≡ [Δ]𝜏4 . All                Now we show that
+   other congruent rules are similar.                                             [Δ ′] ( [Δ1 ]𝜌 2 )
+ • (Tsolved). We have [Δ]𝛼 ≡ [Δ]𝜏. Therefore [Δ]𝜏 ′ ≡                         ≡ [Δ ′] ( [Δ] ( [Δ1 ]𝜌 2 )) (Δ ⇝ Δ ′)
+   [Δ] ( [Δ1 ]𝜏 ′) = [Δ] ( [Δ1 ]𝛼) = [Δ] (𝛼) ≡ [Δ]𝜏. All other                ≡ [Δ ′] ( [Δ]𝜌 2 )            (Δ1 ⇝ Δ)
+   solved rules are similar.                                                  ≡ [Δ ′] ( [Δ] (𝑙𝑐 : 𝜏, 𝜌 1 )) (Δ |= 𝑙𝑐 : 𝜏, 𝜌 1 ∼ 𝜌 2 )
+ • (Tsolve). Δ |= ⊤ trivially. All other solve rules are similar.             ≡ [Δ ′] (𝑙𝑐 : 𝜏, 𝜌 1 )        (Δ ⇝ Δ ′)
+ • (Rfield). We have proven in the previous (Rfield) case                                  ′
+                                                                              = 𝑙𝑐 : [Δ ]𝜏, [Δ ]𝜌 1′
+                         𝑙𝑐
+    that: if Δ1 ⊢ 𝜌 1 ↩→ 𝜌 2 ⊣ Δ2 , then [Δ2 ]𝜌 2 ≡ [Δ2 ]𝜌 1 .                = 𝑙𝑐 : [Δ]𝜏, [Δ]𝜌 1           (𝛽, 𝛾 are fresh)
+    Thus,                                                                     = 𝑙𝑐 : [Δ ′]𝛽, [Δ ′]𝛾         (definition of Δ ′)
+                                                                                      ′
+                                                                              = [Δ ] (𝑙𝑐 : 𝛽, 𝛾)
+          𝑙𝑐 : [Δ]𝜏, [Δ]𝜌 1
+     = [Δ] (𝑙𝑐 : 𝜏, 𝜌 1 ) ≡ [Δ]𝜌 2                                           Therefore Δ ′ |= [Δ1 ]𝜌 2 ∼ (𝑙𝑐 : 𝛽, 𝛾).
+     ≡ [Δ] ( [Δ2 ]𝜌 2 )                                                      Therefore by the lemma (*) we proved above we have
+     ≡ [Δ] ( [Δ2 ] (𝑙𝑐 : 𝜏 ′, 𝜌 2′ ))                                        Δ2 ⇝ Δ ′ .                                               □
+     = 𝑙𝑐 : [Δ] ( [Δ2 ]𝜏 ′), [Δ] ( [Δ2 ]𝜌 2′ )                            Theorem 3.7 (Unification Produces the Most General Uni-
+     = 𝑙𝑐 : [Δ]𝜏 ′, [Δ]𝜌 2′                                               fier). If Δ1 ⊢ 𝐶 =⇒∗ Δ2 ⊢ ⊤, then for any Δ such that Δ1 ⇝ Δ
+    Thus [Δ]𝜏 ≡ [Δ]𝜏 ′ and [Δ]𝜌 1 ≡ [Δ]𝜌 2′ .                    □        and Δ |= 𝐶, there exists Δ ′ such that Δ2 ⇝ Δ ′ and Δ ⇝ Δ ′.
+
+B.3    Unification Soundness                                              Proof. We do induction on =⇒∗ .
+Theorem 3.4 (Unification Soundness). If Δ1 ⊢ 𝐶 =⇒∗ Δ2 ⊢                    • The base case is Δ1 ⊢ 𝐶 =⇒ Δ1 ⊢ 𝐶. Let Δ ′ be Δ and we
+⊤, then Δ2 |= 𝐶.                                                             are done.
+                                                                           • The inductive case is Δ1 ⊢ 𝐶 =⇒ 𝐶 ′ ⊣ Δ1′ and Δ1′ ⊢
+Proof. We know Δ2 |= ⊤ trivially. By Lemma B.3, we deduce                    𝐶 ′ =⇒∗ Δ2 ⊢ ⊤.
+that Δ2 |= 𝐶.                                           □                    We are given Δ1 ⇝ Δ, and Δ |= 𝐶. By Lemma C.1, we
+                                                                             know that there exists Δ ′ such that Δ1′ ⇝ Δ ′, and Δ ⇝
+C     Most General Unifier                                                   Δ ′.
+Lemma C.1 (Constraint Solving Preserves the Most General                     By Lemma B.3, we have Δ |= 𝐶 ′. By Lemma B.2, we have
+Unifier). If Δ1 ⇝ Δ such that Δ |= 𝐶 1 , and Δ1 ⊢ 𝐶 1 =⇒ Δ2 ⊢                Δ ′ |= 𝐶.
+𝐶 2 , then there exists Δ ′ such that Δ2 ⇝ Δ ′ and Δ ⇝ Δ ′.                  By I.H., there exists Δ ′′ such that Δ ′ ⇝ Δ ′′ and Δ2 ⇝ Δ ′′.
+                                                                             By Lemma B.1, we have Δ ⇝ Δ ′′.
+Proof. By induction on the derivation of Δ1 ⊢ 𝐶 1 =⇒ Δ2 ⊢ 𝐶 2 .              Therefore Δ ′′ is what we need.                           □
+Most cases follow directly. Below we discuss a few interesting
+cases.                                                                    Received 2023-06-01; accepted 2023-06-29
+
+ • (Tsolve). We are given Δ1 ⇝ Δ and Δ |= 𝛼 ∼ 𝜏.
+   We know Δ2 = (Δ1 ◦𝛼 : 𝜅 = [Δ1 ]𝜏), and we want to prove
+   that there exists Δ ′ such that Δ ⇝ Δ ′ and Δ2 ⇝ Δ ′.
+
+
+
+                                                                     43
+
