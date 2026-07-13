@@ -2,3 +2,4 @@
 .direnv
 specification/_build
 .aider*
+/spec/masterthesis/lean/plfa/
