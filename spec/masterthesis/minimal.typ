@@ -18,7 +18,7 @@ e := c | x | (x: e) | e₁e₂ | e₁ ‖ e₂ | e.l | { ξ } | let x = e₁ in 
 Γ ⊢ c: 𝓫_c
 
 
-x: σ ∈ Γ   σ ⊑ τ
+x: σ ∈ Γ   σ ≥ τ
 ------------------ T-var
 Γ ⊢ x: τ
 
@@ -42,6 +42,13 @@ x: σ ∈ Γ   σ ⊑ τ
 ------------------------------------------------------------ T-let
 Γ ⊢ let x = e₁ in e₂: τ₂
 
+// The mechanization (minimal.lean) uses the equivalent *instance-closed* form
+//   ∀ τ₁ ≤ σ. Γ ⊢ e₁: τ₁    Γ·(x: σ) ⊢ e₂: τ₂  ⟹  Γ ⊢ let x = e₁ in e₂: τ₂
+// which is sound by construction (no ᾱ ∩ ftv(Γ) side condition, hence no
+// variable-capture/renaming machinery) and feeds the polymorphic substitution
+// lemma its exact hypothesis at let-β. The syntactic rule above is admissible
+// via a type-substitution lemma (future work).
+
 
 Γ ⊢ e₁: {ρ₁}  Γ ⊢ e₂: {ρ₂}
 ----------------------------- T-conc
@@ -56,6 +63,16 @@ x: σ ∈ Γ   σ ⊑ τ
 Γ ⊢ e: {ρ}   Γ ⊢ ρ.l ↓ ?
 ------------------------------- T-sel-★
 Γ ⊢ e.l: ★
+
+
+Γ ⊢ e: {ρ}   Γ ⊢ ρ.l ↓ ⊥
+------------------------------- T-sel-⊥
+Γ ⊢ e.l: ★
+
+
+Γ ⊢ e: τ
+----------- T-★-intro
+Γ ⊢ e: ★
 
 
 Γ ⊢ ξ: ρ
@@ -78,32 +95,50 @@ x: σ ∈ Γ   σ ⊑ τ
 
 
 == Instantiation
-- σ ⊑ τ strips quantifiers; α in type position takes a type, in row position a row
+- σ ≥ τ strips quantifiers; α in type position takes a type, in row position a row
+  (written ≥, not ⊑ — ⊑ is reserved for the precision relation of type refinement)
 - No tail check needed (unlike λ⟨⟩): by monotonicity of ↓, instantiating a
   row-var can never invalidate a definite lookup result — every position it
   could shadow was already ?-poisoned
+- But instantiation CAN demote indefinite results: a ? lookup may become ⊥ or τ
+  after the row-var is filled in. T-sel-⊥ and T-★-intro exist precisely to absorb
+  this — without them preservation fails with untypeable reducts:
+  - `let f = (x: x.l) in f {}`: f: ∀β. {β} → ★ instantiated at β ≔ ε; the reduct
+    (x: x.l) {} needs x: {ε} ⊢ x.l, but ε.l ↓ ⊥ had no rule (fixed by T-sel-⊥)
+  - `let w = (f: (y: f (y.l))) in w (z: c) {l = c′}`: after β ≔ (l: 𝓫′), y.l
+    refines from ★ to 𝓫′, but the λ-bound f: ★ → 𝓫 has a frozen domain ★
+    (fixed by T-★-intro: re-blur 𝓫′ to ★)
+- T-★-intro is the "second relation" from the design notes (equate ★ with
+  ordinary types): kept out of ≈ so head rigidity survives, non-transitive by
+  construction since nothing sits above ★ and ★ has no elimination rules yet
+- With both rules, type safety stays on the nose: refined types can always be
+  re-blurred to ★, so the precision relation ⊑ is only needed for the
+  refinement theorem, not for progress/preservation
 
 
 ----------- I-refl
-τ ⊑ τ
+τ ≥ τ
 
 
-σ[τ′/α] ⊑ τ
+σ[τ′/α] ≥ τ
 ------------- I-ty
-(∀α. σ) ⊑ τ
+(∀α. σ) ≥ τ
 
 
-σ[ρ/α] ⊑ τ
+σ[ρ/α] ≥ τ
 ------------- I-row
-(∀α. σ) ⊑ τ
+(∀α. σ) ≥ τ
 
 
 == Row-Lookup
 - Γ ⊢ ρ.l ↓ r with r := τ | ⊥ | ?
 
 - This statement recursively searches rows for a label l
-- absent means the label provably does not exist in ρ (T-sel has no rule for it)
-- unknown means an unconstrained row-var could contain l, so no sound type can be derived
+- absent means the label provably does not exist in ρ; T-sel-⊥ still types the
+  selection at ★ (soft typing: the checker flags it, the ↯-disjunct of progress
+  catches it at runtime)
+- unknown means an unconstrained row-var could contain l, so no definite type
+  can be derived
 
 
 ----------------- L-ε

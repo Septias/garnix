@@ -1,6 +1,7 @@
 -- Lean 4 formalization of masterthesis/minimal.typ
 -- Minimal Calculus: functions, scoped records, record concat, row-vars,
--- row equivalence, three-way row lookup (τ | ⊥ | ?)
+-- row equivalence, three-way row lookup (τ | ⊥ | ?), let-polymorphism
+-- (instance-closed T-let, T-sel-⊥, T-★-intro)
 
 namespace MinimalCalculus
 
@@ -10,7 +11,7 @@ abbrev Label  := String
 abbrev Var    := String
 abbrev TyVar  := String
 
---   e := c | x | (x: e) | e₁e₂ | e₁ ‖ e₂ | e.l | { ξ }
+--   e := c | x | (x: e) | e₁e₂ | e₁ ‖ e₂ | e.l | { ξ } | let x = e₁ in e₂
 --   ξ := ε | l = e | (ξ₁ | ξ₂)
 
 inductive RecBody (Term : Type) : Type where
@@ -35,6 +36,7 @@ inductive Expr (Const : Type) : Type where
   | cat  : Expr Const → Expr Const → Expr Const          -- e₁ ‖ e₂
   | sel  : Expr Const → Label → Expr Const               -- e.l
   | rcd  : RecBody (Expr Const) → Expr Const             -- { ξ }
+  | letE : Var → Expr Const → Expr Const → Expr Const    -- let x = e₁ in e₂
 
 
 ---------------------------------- TYPES ------------------------------------------
@@ -56,6 +58,17 @@ mutual
     | sing  : Label → Ty B → Row B                -- l: τ
     | cat   : Row B → Row B → Row B               -- ρ₁ | ρ₂
 end
+
+
+-- ## Type schemes  σ := ∀ᾱ. τ
+-- ᾱ quantifies over both sorts at once: at instantiation each α ∈ ᾱ may be
+-- replaced by a type at Ty-positions (I-ty) and by a row at Row-positions
+-- (I-row). Monotypes embed as ⟨[], τ⟩. (Instantiation itself — Scheme.Inst —
+-- lives further down, after type substitution is defined.)
+
+structure Scheme (B : Type) where
+  vars : List TyVar
+  body : Ty B
 
 
 ------------------------------ ROW EQUIVALENCE ---------------------------------
@@ -191,6 +204,24 @@ theorem TyEquiv.base_inv_both {B : Type} :
   | _, _, .fn _ _  => ⟨(fun hτ => nomatch hτ), (fun hσ => nomatch hσ)⟩
   | _, _, .rcd _   => ⟨(fun hτ => nomatch hτ), (fun hσ => nomatch hσ)⟩
 
+--   If  τ ≈ₜ σ,  then ★ is rigid in both directions (★ has no congruence
+--   rule in ≈, deliberately — T-★-intro lives in the typing relation instead):
+--
+--     τ = ★   ⟹   σ = ★          σ = ★   ⟹   τ = ★
+theorem TyEquiv.unk_inv_both {B : Type} :
+    {τ σ : Ty B} → TyEquiv τ σ →
+    (τ = .unk → σ = .unk) ∧ (σ = .unk → τ = .unk)
+  | _, _, .refl _  => ⟨fun h => h, fun h => h⟩
+  | _, _, .symm h  =>
+      have ih := TyEquiv.unk_inv_both h
+      ⟨fun hτ => ih.2 hτ, fun hσ => ih.1 hσ⟩
+  | _, _, .trans h₁ h₂ =>
+      have ih₁ := TyEquiv.unk_inv_both h₁
+      have ih₂ := TyEquiv.unk_inv_both h₂
+      ⟨fun hτ => ih₂.1 (ih₁.1 hτ), fun hσ => ih₁.2 (ih₂.2 hσ)⟩
+  | _, _, .fn _ _  => ⟨(fun hτ => nomatch hτ), (fun hσ => nomatch hσ)⟩
+  | _, _, .rcd _   => ⟨(fun hτ => nomatch hτ), (fun hσ => nomatch hσ)⟩
+
 -- The usable corollaries:
 theorem TyEquiv.fn_inv {B : Type} {τ₁ τ₂ : Ty B} {σ : Ty B}
     (h : TyEquiv (.fn τ₁ τ₂) σ) :
@@ -205,26 +236,34 @@ theorem TyEquiv.base_inv {B : Type} {b : B} {σ : Ty B}
     (h : TyEquiv (.base b) σ) : σ = .base b :=
   (TyEquiv.base_inv_both h).1 rfl
 
+theorem TyEquiv.unk_inv {B : Type} {σ : Ty B}
+    (h : TyEquiv (.unk : Ty B) σ) : σ = .unk :=
+  (TyEquiv.unk_inv_both h).1 rfl
+
 
 ------------------------------------ CONTEXT -----------------------------------
 
 structure Ctx (B : Type) where
-  tyEnv  : List (Var × Ty B)     -- x: τ
+  tyEnv  : List (Var × Scheme B) -- x: σ  (λ binds monotypes, let binds schemes)
   rowEnv : List (TyVar × Row B)  -- α = ρ  (solved row-vars, consulted by L-α)
 
 namespace Ctx
 
 def empty : Ctx B := ⟨[], []⟩
 
-def lookup (Γ : Ctx B) (x : Var) : Option (Ty B) :=
+def lookup (Γ : Ctx B) (x : Var) : Option (Scheme B) :=
   (Γ.tyEnv.find? (·.1 == x)).map (·.2)
 
 def lookupRow (Γ : Ctx B) (α : TyVar) : Option (Row B) :=
   (Γ.rowEnv.find? (·.1 == α)).map (·.2)
 
--- Γ · (x: τ)
+-- Γ · (x: σ)
+def bindScheme (Γ : Ctx B) (x : Var) (σ : Scheme B) : Ctx B :=
+  { Γ with tyEnv := (x, σ) :: Γ.tyEnv }
+
+-- Γ · (x: τ)   (monotype binding, used by T-λ-I)
 def bindTy (Γ : Ctx B) (x : Var) (τ : Ty B) : Ctx B :=
-  { Γ with tyEnv := (x, τ) :: Γ.tyEnv }
+  Γ.bindScheme x ⟨[], τ⟩
 
 -- Γ · (α = ρ)
 def bindRow (Γ : Ctx B) (α : TyVar) (ρ : Row B) : Ctx B :=
@@ -599,6 +638,188 @@ theorem Lookup.not_unknown_of_spineVarFree {B : Type} {Γ : Ctx B} {ρ : Row B}
       | catUnk h₁    => exact ih₁ h₁
 
 
+------------------------------ TYPE SUBSTITUTION -------------------------------
+-- θ = (θt, θr): a pair of *total* maps (identity outside the finite domain of
+-- interest). Ty-positions consult θt, Row-positions θr — no kind system
+-- needed; a variable used at both sorts just gets each map at each position.
+-- This is the engine of instantiation: σ ≥ τ picks a θ over the quantified
+-- variables.
+
+structure TySubst (B : Type) where
+  ty  : TyVar → Ty B
+  row : TyVar → Row B
+
+mutual
+  def Ty.applySubst {B : Type} (θ : TySubst B) : Ty B → Ty B
+    | .var α    => θ.ty α
+    | .base b   => .base b
+    | .unk      => .unk
+    | .fn τ₁ τ₂ => .fn (τ₁.applySubst θ) (τ₂.applySubst θ)
+    | .rcd ρ    => .rcd (ρ.applySubst θ)
+
+  def Row.applySubst {B : Type} (θ : TySubst B) : Row B → Row B
+    | .empty     => .empty
+    | .var α     => θ.row α
+    | .sing l τ  => .sing l (τ.applySubst θ)
+    | .cat ρ₁ ρ₂ => .cat (ρ₁.applySubst θ) (ρ₂.applySubst θ)
+end
+
+def TySubst.id (B : Type) : TySubst B := ⟨(.var ·), (.var ·)⟩
+
+mutual
+  theorem Ty.applySubst_id {B : Type} :
+      (τ : Ty B) → τ.applySubst (TySubst.id B) = τ
+    | .var _    => rfl
+    | .base _   => rfl
+    | .unk      => rfl
+    | .fn τ₁ τ₂ => by
+        simp only [Ty.applySubst, Ty.applySubst_id τ₁, Ty.applySubst_id τ₂]
+    | .rcd ρ    => by simp only [Ty.applySubst, Row.applySubst_id ρ]
+
+  theorem Row.applySubst_id {B : Type} :
+      (ρ : Row B) → ρ.applySubst (TySubst.id B) = ρ
+    | .empty     => rfl
+    | .var _     => rfl
+    | .sing _ τ  => by simp only [Row.applySubst, Ty.applySubst_id τ]
+    | .cat ρ₁ ρ₂ => by
+        simp only [Row.applySubst, Row.applySubst_id ρ₁, Row.applySubst_id ρ₂]
+end
+
+-- Free type/row variables, spine and field positions alike.
+mutual
+  def Ty.ftv {B : Type} : Ty B → List TyVar
+    | .var α    => [α]
+    | .base _   => []
+    | .unk      => []
+    | .fn τ₁ τ₂ => τ₁.ftv ++ τ₂.ftv
+    | .rcd ρ    => ρ.ftv
+
+  def Row.ftv {B : Type} : Row B → List TyVar
+    | .empty     => []
+    | .var α     => [α]
+    | .sing _ τ  => τ.ftv
+    | .cat ρ₁ ρ₂ => ρ₁.ftv ++ ρ₂.ftv
+end
+
+-- ≈ is a congruence for substitution: every axiom is label-driven and
+-- substitution never touches labels (comm's l₁ ≠ l₂ survives untouched).
+mutual
+  theorem TyEquiv.applySubst {B : Type} (θ : TySubst B) :
+      {τ₁ τ₂ : Ty B} → TyEquiv τ₁ τ₂ →
+      TyEquiv (τ₁.applySubst θ) (τ₂.applySubst θ)
+    | _, _, .refl _      => .refl _
+    | _, _, .symm h      => (TyEquiv.applySubst θ h).symm
+    | _, _, .trans h₁ h₂ =>
+        (TyEquiv.applySubst θ h₁).trans (TyEquiv.applySubst θ h₂)
+    | _, _, .fn h₁ h₂    => by
+        simp only [Ty.applySubst]
+        exact .fn (TyEquiv.applySubst θ h₁) (TyEquiv.applySubst θ h₂)
+    | _, _, .rcd h       => by
+        simp only [Ty.applySubst]
+        exact .rcd (RowEquiv.applySubst θ h)
+
+  theorem RowEquiv.applySubst {B : Type} (θ : TySubst B) :
+      {ρ₁ ρ₂ : Row B} → RowEquiv ρ₁ ρ₂ →
+      RowEquiv (ρ₁.applySubst θ) (ρ₂.applySubst θ)
+    | _, _, .refl _      => .refl _
+    | _, _, .symm h      => (RowEquiv.applySubst θ h).symm
+    | _, _, .trans h₁ h₂ =>
+        (RowEquiv.applySubst θ h₁).trans (RowEquiv.applySubst θ h₂)
+    | _, _, .sing hty    => by
+        simp only [Row.applySubst]
+        exact .sing (TyEquiv.applySubst θ hty)
+    | _, _, .cat h₁ h₂   => by
+        simp only [Row.applySubst]
+        exact .cat (RowEquiv.applySubst θ h₁) (RowEquiv.applySubst θ h₂)
+    | _, _, .assoc       => by simp only [Row.applySubst]; exact .assoc
+    | _, _, .unitL       => by simp only [Row.applySubst]; exact .unitL
+    | _, _, .unitR       => by simp only [Row.applySubst]; exact .unitR
+    | _, _, .comm hne    => by simp only [Row.applySubst]; exact .comm hne
+end
+
+-- Substitution acts on lookup results pointwise (definite ones, see below).
+def LookupRes.applySubst {B : Type} (θ : TySubst B) : LookupRes B → LookupRes B
+  | .found τ => .found (τ.applySubst θ)
+  | .absent  => .absent
+  | .unknown => .unknown
+
+-- Definite lookups are stable under substitution — the *syntactic* analog of
+-- lookup_mono: at an empty rowEnv a definite derivation never consults the
+-- context (L-α needs a solution, L-α-free yields ?), so it transports into
+-- any context after substituting the row. Only ? can change category — that
+-- demotion is exactly what T-sel-⊥ / T-★-intro absorb.
+theorem lookup_applySubst {B : Type} {Γ Γ' : Ctx B} {ρ : Row B} {l : Label}
+    {r : LookupRes B} (hrow : Γ.rowEnv = []) (θ : TySubst B)
+    (h : Lookup Γ ρ l r) (hr : r ≠ .unknown) :
+    Lookup Γ' (ρ.applySubst θ) l (r.applySubst θ) := by
+  induction h with
+  | emp        => exact .emp
+  | hit        => exact .hit
+  | miss hne   => exact .miss hne
+  | var hΓ _ _ =>
+      rw [show Γ.lookupRow _ = none by simp [Ctx.lookupRow, hrow]] at hΓ
+      cases hΓ
+  | varFree _  => exact absurd rfl hr
+  | catHit _ ih =>
+      simp only [Row.applySubst]
+      exact .catHit (ih (by intro h; cases h))
+  | catSkip _ _ ih₁ ih₂ =>
+      simp only [Row.applySubst]
+      exact .catSkip (ih₁ (by intro h; cases h)) (ih₂ hr)
+  | catUnk _ _ => exact absurd rfl hr
+
+-- ## Instantiation  σ ≥ τ
+-- θ acts only on the quantified variables; everything else stays put.
+
+def TySubst.FixedOutside {B : Type} (θ : TySubst B) (ᾱ : List TyVar) : Prop :=
+  (∀ α, α ∉ ᾱ → θ.ty α = .var α) ∧ (∀ α, α ∉ ᾱ → θ.row α = .var α)
+
+def Scheme.Inst {B : Type} (σ : Scheme B) (τ : Ty B) : Prop :=
+  ∃ θ : TySubst B, θ.FixedOutside σ.vars ∧ σ.body.applySubst θ = τ
+
+-- A pointwise-identity substitution acts as the identity.
+mutual
+  theorem Ty.applySubst_fixed {B : Type} {θ : TySubst B}
+      (ht : ∀ α, θ.ty α = .var α) (hr : ∀ α, θ.row α = .var α) :
+      (τ : Ty B) → τ.applySubst θ = τ
+    | .var α    => ht α
+    | .base _   => rfl
+    | .unk      => rfl
+    | .fn τ₁ τ₂ => by
+        simp only [Ty.applySubst, Ty.applySubst_fixed ht hr τ₁,
+                   Ty.applySubst_fixed ht hr τ₂]
+    | .rcd ρ    => by simp only [Ty.applySubst, Row.applySubst_fixed ht hr ρ]
+
+  theorem Row.applySubst_fixed {B : Type} {θ : TySubst B}
+      (ht : ∀ α, θ.ty α = .var α) (hr : ∀ α, θ.row α = .var α) :
+      (ρ : Row B) → ρ.applySubst θ = ρ
+    | .empty     => rfl
+    | .var α     => hr α
+    | .sing _ τ  => by simp only [Row.applySubst, Ty.applySubst_fixed ht hr τ]
+    | .cat ρ₁ ρ₂ => by
+        simp only [Row.applySubst, Row.applySubst_fixed ht hr ρ₁,
+                   Row.applySubst_fixed ht hr ρ₂]
+end
+
+-- Monotype schemes instantiate only to themselves (I-refl is the whole story).
+theorem Scheme.Inst.mono {B : Type} {τ₁ τ : Ty B}
+    (h : Scheme.Inst ⟨[], τ₁⟩ τ) : τ = τ₁ := by
+  obtain ⟨θ, ⟨ht, hr⟩, hτ⟩ := h
+  rw [← hτ]
+  exact Ty.applySubst_fixed
+    (fun α => ht α (List.not_mem_nil))
+    (fun α => hr α (List.not_mem_nil)) τ₁
+
+theorem Scheme.Inst.refl {B : Type} (τ : Ty B) : Scheme.Inst ⟨[], τ⟩ τ :=
+  ⟨TySubst.id B, ⟨fun _ _ => rfl, fun _ _ => rfl⟩, Ty.applySubst_id τ⟩
+
+-- Every scheme has at least its own body as an instance (θ = id): schemes are
+-- never vacuous, which is what lets progress extract *some* typing for a
+-- let-bound expression.
+theorem Scheme.Inst.self {B : Type} (σ : Scheme B) : σ.Inst σ.body :=
+  ⟨TySubst.id B, ⟨fun _ _ => rfl, fun _ _ => rfl⟩, Ty.applySubst_id σ.body⟩
+
+
 ------------------------------- TYPING RELATION --------------------------------
 --   Γ ⊢ e : τ
 --   `constTy : C → B` assigns each constant its base type.
@@ -611,10 +832,10 @@ mutual
     -- Γ ⊢ c : 𝓫_c
     | tCon : Typed constTy Γ (.con c) (.base (constTy c))
 
-    -- x : τ ∈ Γ
-    -- ----------- T-var
+    -- x : σ ∈ Γ   σ ≥ τ
+    -- ------------------- T-var
     -- Γ ⊢ x : τ
-    | tVar : Γ.lookup x = some τ → Typed constTy Γ (.var x) τ
+    | tVar : Γ.lookup x = some σ → σ.Inst τ → Typed constTy Γ (.var x) τ
 
     -- Γ ⊢ e : τ₁   τ₁ ≈ τ₂
     -- ---------------------- T-eq
@@ -633,6 +854,21 @@ mutual
     | tApp : Typed constTy Γ e₁ (.fn τ₁ τ₂) → Typed constTy Γ e₂ τ₁ →
              Typed constTy Γ (.app e₁ e₂) τ₂
 
+    -- ∀ τ₁ ≤ σ.  Γ ⊢ e₁ : τ₁     Γ · (x: σ) ⊢ e₂ : τ₂
+    -- -------------------------------------------------- T-let
+    -- Γ ⊢ let x = e₁ in e₂ : τ₂
+    -- *Instance-closed* formulation: e₁ must type at every instance of the
+    -- scheme, so generalization is sound by construction — no ᾱ ∩ ftv(Γ) = ∅
+    -- side condition, hence no variable-capture/renaming machinery anywhere.
+    -- The premise is exactly what the polymorphic substitution lemma consumes
+    -- at let-β. The standard syntactic rule (generalize ᾱ = ftv(τ₁) ∖ ftv(Γ))
+    -- is admissible via a type-substitution lemma — future work; T-sel-⊥ and
+    -- T-★-intro are what make this premise satisfiable when instantiation
+    -- demotes/refines a ?-lookup.
+    | tLet : (∀ τ₁, σ.Inst τ₁ → Typed constTy Γ e₁ τ₁) →
+             Typed constTy (Γ.bindScheme x σ) e₂ τ₂ →
+             Typed constTy Γ (.letE x e₁ e₂) τ₂
+
     -- Γ ⊢ e₁ : {ρ₁}   Γ ⊢ e₂ : {ρ₂}
     -- ------------------------------- T-conc
     -- Γ ⊢ e₁ ‖ e₂ : {ρ₂ | ρ₁}          (right-preference: e₂'s row in front)
@@ -650,6 +886,24 @@ mutual
     -- Γ ⊢ e.l : ★
     | tSelUnk : Typed constTy Γ e (.rcd ρ) → Lookup Γ ρ l .unknown →
                 Typed constTy Γ (.sel e l) .unk
+
+    -- Γ ⊢ e : {ρ}   Γ ⊢ ρ.l ↓ ⊥
+    -- --------------------------- T-sel-⊥
+    -- Γ ⊢ e.l : ★
+    -- Definitely errs at runtime (soft typing: flagged statically, caught by
+    -- the ↯-disjunct of progress). Needed for preservation under let-poly:
+    -- instantiation can demote a ?-lookup to ⊥, cf. let f = (x: x.l) in f {}.
+    | tSelAbs : Typed constTy Γ e (.rcd ρ) → Lookup Γ ρ l .absent →
+                Typed constTy Γ (.sel e l) .unk
+
+    -- Γ ⊢ e : τ
+    -- ----------- T-★-intro
+    -- Γ ⊢ e : ★
+    -- One-step upcast to ★, kept out of ≈ so head rigidity survives.
+    -- Non-transitive by construction: nothing sits above ★ and ★ has no
+    -- elimination rules. Needed for preservation under let-poly: instantiation
+    -- can refine a ?-lookup to a definite τ that a frozen ★-domain expects.
+    | tUnk : Typed constTy Γ e τ → Typed constTy Γ e .unk
 
     -- Γ ⊢ ξ : ρ
     -- ------------------ T-rec
@@ -682,32 +936,50 @@ end
 
 --------------------------- TYPING INVERSION (mod ≈) ---------------------------
 -- T-eq can wrap any derivation, so syntax-directed inversion only holds up to
--- ≈ₜ: peel the tEq layers, collecting them with transitivity.
+-- ≈ₜ: peel the tEq layers, collecting them with transitivity. T-★-intro can
+-- also wrap any derivation, blurring the type to ★, so each conclusion gains
+-- a `∨ τ = ★` escape hatch — kept *inside* the existentials so the underlying
+-- typing information survives the upcast. A trailing tEq after tUnk stays at ★
+-- by unk-rigidity (unk_inv).
 
--- Combined so the recursion (peeling tEq) runs over variable indices only,
--- which is what Lean's structural recursion over inductive families needs.
+-- Combined so the recursion (peeling tEq/tUnk) runs over variable indices
+-- only, which is what Lean's structural recursion over inductive families
+-- needs.
 private theorem typed_inv_aux {B C : Type} {constTy : C → B} :
     {Γ : Ctx B} → {e : Expr C} → {τ : Ty B} → Typed constTy Γ e τ →
-    (∀ {c : C}, e = .con c → TyEquiv (.base (constTy c)) τ) ∧
+    (∀ {c : C}, e = .con c →
+      TyEquiv (.base (constTy c)) τ ∨ τ = .unk) ∧
     (∀ {x : Var} {e' : Expr C}, e = .lam x e' →
-      ∃ τ₁ τ₂, TyEquiv (.fn τ₁ τ₂) τ ∧ Typed constTy (Γ.bindTy x τ₁) e' τ₂) ∧
+      ∃ τ₁ τ₂, (TyEquiv (.fn τ₁ τ₂) τ ∨ τ = .unk) ∧
+        Typed constTy (Γ.bindTy x τ₁) e' τ₂) ∧
     (∀ {b : RecBody (Expr C)}, e = .rcd b →
-      ∃ ρ, TyEquiv (.rcd ρ) τ ∧ TypedBody constTy Γ b ρ)
+      ∃ ρ, (TyEquiv (.rcd ρ) τ ∨ τ = .unk) ∧ TypedBody constTy Γ b ρ)
   | _, _, _, .tCon =>
-      ⟨(fun h => by cases h; exact .refl _),
+      ⟨(fun h => by cases h; exact .inl (.refl _)),
        (fun h => nomatch h), (fun h => nomatch h)⟩
-  | _, _, _, .tVar _ =>
+  | _, _, _, .tVar _ _ =>
       ⟨(fun h => nomatch h), (fun h => nomatch h), (fun h => nomatch h)⟩
   | _, _, _, .tEq h heq =>
       have ih := typed_inv_aux h
-      ⟨(fun hc => (ih.1 hc).trans heq),
+      ⟨(fun hc => match ih.1 hc with
+         | .inl he => .inl (he.trans heq)
+         | .inr hu => .inr (hu ▸ heq).unk_inv),
        (fun hl => match ih.2.1 hl with
-         | ⟨_, _, he, hb⟩ => ⟨_, _, he.trans heq, hb⟩),
+         | ⟨_, _, .inl he, hb⟩ => ⟨_, _, .inl (he.trans heq), hb⟩
+         | ⟨_, _, .inr hu, hb⟩ => ⟨_, _, .inr (hu ▸ heq).unk_inv, hb⟩),
        (fun hr => match ih.2.2 hr with
-         | ⟨_, he, hb⟩ => ⟨_, he.trans heq, hb⟩)⟩
+         | ⟨_, .inl he, hb⟩ => ⟨_, .inl (he.trans heq), hb⟩
+         | ⟨_, .inr hu, hb⟩ => ⟨_, .inr (hu ▸ heq).unk_inv, hb⟩)⟩
+  | _, _, _, .tUnk h =>
+      have ih := typed_inv_aux h
+      ⟨(fun _ => .inr rfl),
+       (fun hl => match ih.2.1 hl with
+         | ⟨_, _, _, hb⟩ => ⟨_, _, .inr rfl, hb⟩),
+       (fun hr => match ih.2.2 hr with
+         | ⟨_, _, hb⟩ => ⟨_, .inr rfl, hb⟩)⟩
   | _, _, _, .tLam h =>
       ⟨(fun hc => nomatch hc),
-       (fun hl => by cases hl; exact ⟨_, _, .refl _, h⟩),
+       (fun hl => by cases hl; exact ⟨_, _, .inl (.refl _), h⟩),
        (fun hr => nomatch hr)⟩
   | _, _, _, .tApp _ _ =>
       ⟨(fun h => nomatch h), (fun h => nomatch h), (fun h => nomatch h)⟩
@@ -717,25 +989,31 @@ private theorem typed_inv_aux {B C : Type} {constTy : C → B} :
       ⟨(fun h => nomatch h), (fun h => nomatch h), (fun h => nomatch h)⟩
   | _, _, _, .tSelUnk _ _ =>
       ⟨(fun h => nomatch h), (fun h => nomatch h), (fun h => nomatch h)⟩
+  | _, _, _, .tSelAbs _ _ =>
+      ⟨(fun h => nomatch h), (fun h => nomatch h), (fun h => nomatch h)⟩
+  | _, _, _, .tLet _ _ =>
+      ⟨(fun h => nomatch h), (fun h => nomatch h), (fun h => nomatch h)⟩
   | _, _, _, .tRcd h =>
       ⟨(fun hc => nomatch hc), (fun hl => nomatch hl),
-       (fun hr => by cases hr; exact ⟨_, .refl _, h⟩)⟩
+       (fun hr => by cases hr; exact ⟨_, .inl (.refl _), h⟩)⟩
 
 theorem typed_con_inv {B C : Type} {constTy : C → B} {Γ : Ctx B} {c : C}
     {τ : Ty B}
-    (h : Typed constTy Γ (.con c) τ) : TyEquiv (.base (constTy c)) τ :=
+    (h : Typed constTy Γ (.con c) τ) :
+    TyEquiv (.base (constTy c)) τ ∨ τ = .unk :=
   (typed_inv_aux h).1 rfl
 
 theorem typed_lam_inv {B C : Type} {constTy : C → B} {Γ : Ctx B} {x : Var}
     {e : Expr C} {τ : Ty B}
     (h : Typed constTy Γ (.lam x e) τ) :
-    ∃ τ₁ τ₂, TyEquiv (.fn τ₁ τ₂) τ ∧ Typed constTy (Γ.bindTy x τ₁) e τ₂ :=
+    ∃ τ₁ τ₂, (TyEquiv (.fn τ₁ τ₂) τ ∨ τ = .unk) ∧
+      Typed constTy (Γ.bindTy x τ₁) e τ₂ :=
   (typed_inv_aux h).2.1 rfl
 
 theorem typed_rcd_inv {B C : Type} {constTy : C → B} {Γ : Ctx B}
     {b : RecBody (Expr C)} {τ : Ty B}
     (h : Typed constTy Γ (.rcd b) τ) :
-    ∃ ρ, TyEquiv (.rcd ρ) τ ∧ TypedBody constTy Γ b ρ :=
+    ∃ ρ, (TyEquiv (.rcd ρ) τ ∨ τ = .unk) ∧ TypedBody constTy Γ b ρ :=
   (typed_inv_aux h).2.2 rfl
 
 
@@ -791,13 +1069,18 @@ theorem TypedBody.lookup_found {B C : Type} {constTy : C → B} {Γ : Ctx B} :
 -- the named-binder plumbing the substitution lemma needs.
 
 def Ctx.Sub {B : Type} (Γ₁ Γ₂ : Ctx B) : Prop :=
-  (∀ x τ, Γ₁.lookup x = some τ → Γ₂.lookup x = some τ) ∧
+  (∀ x σ, Γ₁.lookup x = some σ → Γ₂.lookup x = some σ) ∧
   (∀ α, Γ₁.lookupRow α = Γ₂.lookupRow α)
 
-theorem Ctx.lookup_bindTy {B : Type} (Γ : Ctx B) (x y : Var) (τ : Ty B) :
-    (Γ.bindTy x τ).lookup y = if x == y then some τ else Γ.lookup y := by
-  simp only [Ctx.lookup, Ctx.bindTy, List.find?_cons]
+theorem Ctx.lookup_bindScheme {B : Type} (Γ : Ctx B) (x y : Var)
+    (σ : Scheme B) :
+    (Γ.bindScheme x σ).lookup y = if x == y then some σ else Γ.lookup y := by
+  simp only [Ctx.lookup, Ctx.bindScheme, List.find?_cons]
   cases hxy : (x == y) <;> simp_all
+
+theorem Ctx.lookup_bindTy {B : Type} (Γ : Ctx B) (x y : Var) (τ : Ty B) :
+    (Γ.bindTy x τ).lookup y = if x == y then some ⟨[], τ⟩ else Γ.lookup y :=
+  Ctx.lookup_bindScheme Γ x y ⟨[], τ⟩
 
 theorem Ctx.Sub.refl {B : Type} (Γ : Ctx B) : Ctx.Sub Γ Γ :=
   ⟨fun _ _ h => h, fun _ => rfl⟩
@@ -807,36 +1090,42 @@ theorem Ctx.Sub.trans {B : Type} {Γ₁ Γ₂ Γ₃ : Ctx B}
   ⟨fun x τ h => h₂.1 x τ (h₁.1 x τ h), fun α => (h₁.2 α).trans (h₂.2 α)⟩
 
 -- Binding respects the preorder.
-theorem Ctx.Sub.bindTy {B : Type} {Γ₁ Γ₂ : Ctx B} (h : Ctx.Sub Γ₁ Γ₂)
-    (x : Var) (τ : Ty B) : Ctx.Sub (Γ₁.bindTy x τ) (Γ₂.bindTy x τ) := by
-  refine ⟨fun y σ hy => ?_, h.2⟩
-  rw [Ctx.lookup_bindTy] at hy ⊢
+theorem Ctx.Sub.bindScheme {B : Type} {Γ₁ Γ₂ : Ctx B} (h : Ctx.Sub Γ₁ Γ₂)
+    (x : Var) (σ : Scheme B) :
+    Ctx.Sub (Γ₁.bindScheme x σ) (Γ₂.bindScheme x σ) := by
+  refine ⟨fun y σ' hy => ?_, h.2⟩
+  rw [Ctx.lookup_bindScheme] at hy ⊢
   cases hxy : (x == y)
   · simp only [hxy, Bool.false_eq_true, if_false] at hy ⊢
-    exact h.1 y σ hy
+    exact h.1 y σ' hy
   · simpa [hxy] using hy
+
+theorem Ctx.Sub.bindTy {B : Type} {Γ₁ Γ₂ : Ctx B} (h : Ctx.Sub Γ₁ Γ₂)
+    (x : Var) (τ : Ty B) : Ctx.Sub (Γ₁.bindTy x τ) (Γ₂.bindTy x τ) :=
+  h.bindScheme x ⟨[], τ⟩
 
 -- Exchange: distinct bindings commute.
 theorem Ctx.Sub.exchange {B : Type} (Γ : Ctx B) {x y : Var} (hne : x ≠ y)
-    (τ σ : Ty B) :
-    Ctx.Sub ((Γ.bindTy x τ).bindTy y σ) ((Γ.bindTy y σ).bindTy x τ) := by
+    (σ₁ σ₂ : Scheme B) :
+    Ctx.Sub ((Γ.bindScheme x σ₁).bindScheme y σ₂)
+            ((Γ.bindScheme y σ₂).bindScheme x σ₁) := by
   refine ⟨fun z μ hz => ?_, fun _ => rfl⟩
-  simp only [Ctx.lookup_bindTy] at hz ⊢
+  simp only [Ctx.lookup_bindScheme] at hz ⊢
   cases hyz : (y == z) <;> cases hxz : (x == z) <;>
     simp only [hyz, hxz, Bool.false_eq_true, if_false, if_true] at hz ⊢ <;>
     try exact hz
   exact absurd ((eq_of_beq hxz).trans (eq_of_beq hyz).symm) hne
 
--- Shadowing: rebinding x hides whatever τ₁ the lower context knew about x.
-theorem Ctx.Sub.shadowed {B : Type} {Δ Γ : Ctx B} {x : Var} {τ₁ : Ty B}
-    (h : Ctx.Sub Δ (Γ.bindTy x τ₁)) (σ : Ty B) :
-    Ctx.Sub (Δ.bindTy x σ) (Γ.bindTy x σ) := by
+-- Shadowing: rebinding x hides whatever σ₁ the lower context knew about x.
+theorem Ctx.Sub.shadowed {B : Type} {Δ Γ : Ctx B} {x : Var} {σ₁ : Scheme B}
+    (h : Ctx.Sub Δ (Γ.bindScheme x σ₁)) (σ : Scheme B) :
+    Ctx.Sub (Δ.bindScheme x σ) (Γ.bindScheme x σ) := by
   refine ⟨fun z μ hz => ?_, fun α => h.2 α⟩
-  rw [Ctx.lookup_bindTy] at hz ⊢
+  rw [Ctx.lookup_bindScheme] at hz ⊢
   cases hxz : (x == z)
   · simp only [hxz, Bool.false_eq_true, if_false] at hz ⊢
     have := h.1 z μ hz
-    rwa [Ctx.lookup_bindTy, hxz, if_neg (by simp)] at this
+    rwa [Ctx.lookup_bindScheme, hxz, if_neg (by simp)] at this
   · simpa [hxz] using hz
 
 -- A closed term types in any context over the same row-solutions.
@@ -864,7 +1153,7 @@ theorem typed_sub {B C : Type} {constTy : C → B} :
     {Γ₁ Γ₂ : Ctx B} → {e : Expr C} → {τ : Ty B} → Ctx.Sub Γ₁ Γ₂ →
     Typed constTy Γ₁ e τ → Typed constTy Γ₂ e τ
   | _, _, _, _, _,  .tCon        => .tCon
-  | _, _, _, _, hs, .tVar h      => .tVar (hs.1 _ _ h)
+  | _, _, _, _, hs, .tVar h hi   => .tVar (hs.1 _ _ h) hi
   | _, _, _, _, hs, .tEq h heq   => .tEq (typed_sub hs h) heq
   | _, _, _, _, hs, .tLam h      => .tLam (typed_sub (hs.bindTy _ _) h)
   | _, _, _, _, hs, .tApp h₁ h₂  => .tApp (typed_sub hs h₁) (typed_sub hs h₂)
@@ -873,6 +1162,12 @@ theorem typed_sub {B C : Type} {constTy : C → B} :
       .tSel (typed_sub hs h) (Lookup.congr_rowEnv hs.2 hl)
   | _, _, _, _, hs, .tSelUnk h hl =>
       .tSelUnk (typed_sub hs h) (Lookup.congr_rowEnv hs.2 hl)
+  | _, _, _, _, hs, .tSelAbs h hl =>
+      .tSelAbs (typed_sub hs h) (Lookup.congr_rowEnv hs.2 hl)
+  | _, _, _, _, hs, .tUnk h      => .tUnk (typed_sub hs h)
+  | _, _, _, _, hs, .tLet h₁ h₂  =>
+      .tLet (fun τ' hi => typed_sub hs (h₁ τ' hi))
+            (typed_sub (hs.bindScheme _ _) h₂)
   | _, _, _, _, hs, .tRcd h      => .tRcd (typedBody_sub hs h)
 
 theorem typedBody_sub {B C : Type} {constTy : C → B} :
@@ -896,6 +1191,8 @@ mutual
     | .cat e₁ e₂  => .cat (subst x v e₁) (subst x v e₂)
     | .sel e l    => .sel (subst x v e) l
     | .rcd b      => .rcd (substBody x v b)
+    | .letE y e₁ e₂ =>
+        .letE y (subst x v e₁) (if x == y then e₂ else subst x v e₂)
 
   def substBody {C : Type} (x : Var) (v : Expr C) : RecBody (Expr C) → RecBody (Expr C)
     | .empty      => .empty
@@ -923,28 +1220,37 @@ theorem canonical_fn {B C : Type} {constTy : C → B} {Γ : Ctx B} {v : Expr C}
     (hv : Value v) (ht : Typed constTy Γ v (.fn τ₁ τ₂)) :
     ∃ x e, v = .lam x e := by
   cases hv with
-  | con => cases (typed_con_inv ht).base_inv.symm.trans rfl
+  | con =>
+      rcases typed_con_inv ht with he | hu
+      · cases he.base_inv
+      · cases hu
   | lam => exact ⟨_, _, rfl⟩
   | rcd =>
-      obtain ⟨ρ, he, -⟩ := typed_rcd_inv ht
-      obtain ⟨ρ', hσ, -⟩ := he.rcd_inv
-      cases hσ
+      obtain ⟨ρ, he | hu, -⟩ := typed_rcd_inv ht
+      · obtain ⟨ρ', hσ, -⟩ := he.rcd_inv
+        cases hσ
+      · cases hu
 
 theorem canonical_rcd {B C : Type} {constTy : C → B} {Γ : Ctx B} {v : Expr C}
     {ρ : Row B}
     (hv : Value v) (ht : Typed constTy Γ v (.rcd ρ)) :
     ∃ b ρ', v = .rcd b ∧ RowEquiv ρ' ρ ∧ TypedBody constTy Γ b ρ' := by
   cases hv with
-  | con => cases typed_con_inv ht |>.base_inv
+  | con =>
+      rcases typed_con_inv ht with he | hu
+      · cases he.base_inv
+      · cases hu
   | lam =>
-      obtain ⟨τ₁, τ₂, he, -⟩ := typed_lam_inv ht
-      obtain ⟨σ₁, σ₂, hσ, -⟩ := he.fn_inv
-      cases hσ
+      obtain ⟨τ₁, τ₂, he | hu, -⟩ := typed_lam_inv ht
+      · obtain ⟨σ₁, σ₂, hσ, -⟩ := he.fn_inv
+        cases hσ
+      · cases hu
   | rcd =>
-      obtain ⟨ρ', he, hb⟩ := typed_rcd_inv ht
-      obtain ⟨ρ'', hσ, heq⟩ := he.rcd_inv
-      cases hσ
-      exact ⟨_, _, rfl, heq, hb⟩
+      obtain ⟨ρ', he | hu, hb⟩ := typed_rcd_inv ht
+      · obtain ⟨ρ'', hσ, heq⟩ := he.rcd_inv
+        cases hσ
+        exact ⟨_, _, rfl, heq, hb⟩
+      · cases hu
 
 
 --------------------------------- REDUCTION ------------------------------------
@@ -978,6 +1284,13 @@ inductive Step {C : Type} : Expr C → Expr C → Prop where
   -- Right-preference: e₂'s fields go to the front (mirrors T-conc's {ρ₂ | ρ₁}).
   | catVal {b₁ b₂ : RecBody (Expr C)} :
       Step (.cat (.rcd b₁) (.rcd b₂)) (.rcd (.cat b₂ b₁))
+  -- CBV let, mirroring beta: evaluate the binding, then substitute.
+  | letCong {x : Var} {e₁ e₁' e₂ : Expr C} :
+      Step e₁ e₁' →
+      Step (.letE x e₁ e₂) (.letE x e₁' e₂)
+  | letBeta {x : Var} {v e : Expr C} :
+      Value v →
+      Step (.letE x v e) (subst x v e)
 
 
 ---------------------------------- PROGRESS ---------------------------------
@@ -997,6 +1310,7 @@ inductive Err {C : Type} : Expr C → Prop where
   | sel      : Err e → Err (.sel e l)
   | catLeft  : Err e₁ → Err (.cat e₁ e₂)
   | catRight : Value e₁ → Err e₂ → Err (.cat e₁ e₂)
+  | letBind  : Err e₁ → Err (.letE x e₁ e₂)
 
 inductive Progress {C : Type} (e : Expr C) : Prop where
   | step : Step e e' → Progress e
@@ -1014,7 +1328,7 @@ def progress {B C : Type} {constTy : C → B} {Γ : Ctx B} {e : Expr C} {τ : Ty
     (hΓ : Γ = Ctx.empty) (ht : Typed constTy Γ e τ) : Progress e :=
   match ht with
   | .tCon        => .done .con
-  | .tVar h      => by subst hΓ; simp [Ctx.lookup, Ctx.empty] at h
+  | .tVar h _    => by subst hΓ; simp [Ctx.lookup, Ctx.empty] at h
   | .tEq h _     => progress hΓ h
   | .tLam _      => .done .lam
   | .tRcd _      => .done .rcd
@@ -1060,40 +1374,63 @@ def progress {B C : Type} {constTy : C → B} {Γ : Ctx B} {e : Expr C} {τ : Ty
       | .done v => by
           obtain ⟨b, ρ', rfl, -, -⟩ := canonical_rcd v he
           exact sel_rcd_progress b _
+  -- T-sel-⊥: the ↯-disjunct at work — the selection is typed (at ★) and errs.
+  | .tSelAbs he _ =>
+      match progress hΓ he with
+      | .step s => .step (.selStep s)
+      | .err er => .err (.sel er)
+      | .done v => by
+          obtain ⟨b, ρ', rfl, -, -⟩ := canonical_rcd v he
+          exact sel_rcd_progress b _
+  | .tUnk h => progress hΓ h
+  -- The binding is typeable at (at least) the scheme's own body — enough to
+  -- drive it to a value, an error, or a step.
+  | .tLet h₁ _ =>
+      match progress hΓ (h₁ _ (Scheme.Inst.self _)) with
+      | .step s  => .step (.letCong s)
+      | .err er  => .err (.letBind er)
+      | .done v₁ => .step (.letBeta v₁)
 
 
 ---------------------------------- PRESERVATION ---------------------------------
--- ## Substitution lemma  (key auxiliary for Preservation)
+-- ## Polymorphic substitution lemma  (key auxiliary for Preservation)
 --
---   If Γ, x:τ₁ ⊢ e : τ₂  and  ⊢ v : τ₁ (v closed over Γ's row-solutions)
---   then  Γ ⊢ e[x:=v] : τ₂
+--   If Γ, x:σ ⊢ e : τ₂  and  ⊢ v : τ' for *every* instance τ' of σ
+--   (v closed over Γ's row-solutions), then  Γ ⊢ e[x:=v] : τ₂
 --
 -- v must be *closed*: with named binders, pushing an open v under a λ could
 -- capture its free variables. Closed v suffices for preservation of closed
--- programs (β only fires at ∅), and dodges all renaming machinery.
+-- programs (β and let-β only fire at ∅), and dodges all renaming machinery.
+--
+-- The all-instances hypothesis is exactly what T-let's instance-closed
+-- premise provides at let-β; each use site of x picks its instance and grabs
+-- the matching typing of v. Monotype bindings (β) are the singleton case.
 --
 -- The recursion is over the derivation of e, but its context changes shape
--- under λ (exchange/shadowing), so the statement is generalized to any Δ
--- Sub-below Γ,x:τ₁ — keeping the derivation indices variable, which is what
+-- under λ/let (exchange/shadowing), so the statement is generalized to any Δ
+-- Sub-below Γ,x:σ — keeping the derivation indices variable, which is what
 -- structural recursion over an inductive family needs.
 
 mutual
 private theorem subst_aux {B C : Type} {constTy : C → B} :
     {Δ : Ctx B} → {e : Expr C} → {τ : Ty B} → Typed constTy Δ e τ →
-    ∀ {Γ : Ctx B} {x : Var} {v : Expr C} {τ₁ : Ty B},
-      Ctx.Sub Δ (Γ.bindTy x τ₁) →
-      Typed constTy ⟨[], Γ.rowEnv⟩ v τ₁ →
+    ∀ {Γ : Ctx B} {x : Var} {v : Expr C} {σ : Scheme B},
+      Ctx.Sub Δ (Γ.bindScheme x σ) →
+      (∀ τ', σ.Inst τ' → Typed constTy ⟨[], Γ.rowEnv⟩ v τ') →
       Typed constTy Γ (subst x v e) τ
   | _, _, _, .tCon, _, _, _, _, _, _ => .tCon
-  | _, .var y, _, .tVar h, _, x, _, _, hsub, hv => by
+  | _, .var y, _, .tVar h hi, _, x, _, _, hsub, hv => by
       have hy := hsub.1 _ _ h
-      rw [Ctx.lookup_bindTy] at hy
+      rw [Ctx.lookup_bindScheme] at hy
       simp only [subst]
       cases hxy : (x == y)
       · simp only [hxy, Bool.false_eq_true, if_false] at hy ⊢
-        exact .tVar hy
+        exact .tVar hy hi
       · simp only [hxy, if_true] at hy ⊢
-        exact Option.some.inj hy ▸ typed_sub (Ctx.Sub.ofEmptyTyEnv _) hv
+        -- x = y: the hit binding is the scheme itself; this use site's
+        -- instance selects the matching typing of v
+        cases Option.some.inj hy
+        exact typed_sub (Ctx.Sub.ofEmptyTyEnv _) (hv _ hi)
   | _, _, _, .tEq h heq, _, _, _, _, hsub, hv =>
       .tEq (subst_aux h hsub hv) heq
   | _, .lam y e₀, _, .tLam h, _, x, _, _, hsub, hv => by
@@ -1117,15 +1454,33 @@ private theorem subst_aux {B C : Type} {constTy : C → B} :
   | _, _, _, .tSelUnk h hl, Γ, _, _, _, hsub, hv =>
       .tSelUnk (subst_aux h hsub hv)
                (Lookup.congr_rowEnv (Γ₂ := Γ) (fun α => hsub.2 α) hl)
+  | _, _, _, .tSelAbs h hl, Γ, _, _, _, hsub, hv =>
+      .tSelAbs (subst_aux h hsub hv)
+               (Lookup.congr_rowEnv (Γ₂ := Γ) (fun α => hsub.2 α) hl)
+  | _, _, _, .tUnk h, _, _, _, _, hsub, hv =>
+      .tUnk (subst_aux h hsub hv)
+  | _, .letE y e₁ e₂, _, .tLet h₁ h₂, _, x, _, _, hsub, hv => by
+      simp only [subst]
+      cases hxy : (x == y)
+      · -- x ≠ y: substitute binding and body, exchanging the two binders
+        simp only [Bool.false_eq_true, if_false]
+        exact .tLet (fun τ' hi => subst_aux (h₁ τ' hi) hsub hv)
+          (subst_aux h₂
+            ((hsub.bindScheme _ _).trans
+              (Ctx.Sub.exchange _ (by simpa using hxy) _ _)) hv)
+      · -- x = y: the let-binder shadows x, the body is untouched
+        simp only [if_true]
+        exact .tLet (fun τ' hi => subst_aux (h₁ τ' hi) hsub hv)
+          (typed_sub ((eq_of_beq hxy) ▸ hsub.shadowed _) h₂)
   | _, _, _, .tRcd h, _, _, _, _, hsub, hv =>
       .tRcd (substBody_aux h hsub hv)
 
 private theorem substBody_aux {B C : Type} {constTy : C → B} :
     {Δ : Ctx B} → {b : RecBody (Expr C)} → {ρ : Row B} →
     TypedBody constTy Δ b ρ →
-    ∀ {Γ : Ctx B} {x : Var} {v : Expr C} {τ₁ : Ty B},
-      Ctx.Sub Δ (Γ.bindTy x τ₁) →
-      Typed constTy ⟨[], Γ.rowEnv⟩ v τ₁ →
+    ∀ {Γ : Ctx B} {x : Var} {v : Expr C} {σ : Scheme B},
+      Ctx.Sub Δ (Γ.bindScheme x σ) →
+      (∀ τ', σ.Inst τ' → Typed constTy ⟨[], Γ.rowEnv⟩ v τ') →
       TypedBody constTy Γ (substBody x v b) ρ
   | _, _, _, .empty, _, _, _, _, _, _ => .empty
   | _, _, _, .field h, _, _, _, _, hsub, hv => .field (subst_aux h hsub hv)
@@ -1133,13 +1488,25 @@ private theorem substBody_aux {B C : Type} {constTy : C → B} :
       .cat (substBody_aux h₁ hsub hv) (substBody_aux h₂ hsub hv)
 end
 
+-- Scheme-bound variables: v must be typeable at every instance (provided by
+-- T-let's premise at let-β).
+theorem subst_scheme_preserves_typing
+    {B C : Type} (constTy : C → B)
+    (Γ : Ctx B) (x : Var) (v : Expr C) (σ : Scheme B) (τ₂ : Ty B) (e : Expr C)
+    (hv : ∀ τ', σ.Inst τ' → Typed constTy { Γ with tyEnv := [] } v τ')
+    (he : Typed constTy (Γ.bindScheme x σ) e τ₂) :
+    Typed constTy Γ (subst x v e) τ₂ :=
+  subst_aux he (Ctx.Sub.refl _) hv
+
+-- Monotype-bound variables (β): the singleton case.
 theorem subst_preserves_typing
     {B C : Type} (constTy : C → B)
     (Γ : Ctx B) (x : Var) (v : Expr C) (τ₁ τ₂ : Ty B) (e : Expr C)
     (hv : Typed constTy { Γ with tyEnv := [] } v τ₁)
     (he : Typed constTy (Γ.bindTy x τ₁) e τ₂) :
     Typed constTy Γ (subst x v e) τ₂ :=
-  subst_aux he (Ctx.Sub.refl _) hv
+  subst_scheme_preserves_typing constTy Γ x v ⟨[], τ₁⟩ τ₂ e
+    (fun _ hi => hi.mono.symm ▸ hv) he
 
 --   If ∅ ⊢ e : τ  and  e → e'  then  ∅ ⊢ e' : τ
 --   Stated for closed programs (β needs a closed argument, see above).
@@ -1151,7 +1518,7 @@ private theorem preservation_aux {B C : Type} {constTy : C → B} :
     {Γ : Ctx B} → {e : Expr C} → {τ : Ty B} → Typed constTy Γ e τ →
     Γ = Ctx.empty → ∀ {e' : Expr C}, Step e e' → Typed constTy Γ e' τ
   | _, _, _, .tCon,   _, _ => (nomatch ·)
-  | _, _, _, .tVar _, _, _ => (nomatch ·)
+  | _, _, _, .tVar _ _, _, _ => (nomatch ·)
   | _, _, _, .tLam _, _, _ => (nomatch ·)
   | _, _, _, .tRcd _, _, _ => (nomatch ·)
   | _, _, _, .tEq h heq, hΓ, _ => fun hs =>
@@ -1162,49 +1529,80 @@ private theorem preservation_aux {B C : Type} {constTy : C → B} :
       | appArg v s   => exact .tApp h₁ (preservation_aux h₂ hΓ s)
       | beta hval =>
           subst hΓ
-          obtain ⟨σ₁, σ₂, heq, hbody⟩ := typed_lam_inv h₁
-          obtain ⟨τ₁', τ₂', hfn, he₁, he₂⟩ := heq.fn_inv
-          cases hfn
-          -- retype the argument at the λ's domain, then substitute
-          exact .tEq
-            (subst_preserves_typing _ _ _ _ _ _ _
-              (.tEq h₂ he₁.symm) hbody)
-            he₂
+          obtain ⟨σ₁, σ₂, heq | hu, hbody⟩ := typed_lam_inv h₁
+          · obtain ⟨τ₁', τ₂', hfn, he₁, he₂⟩ := heq.fn_inv
+            cases hfn
+            -- retype the argument at the λ's domain, then substitute
+            exact .tEq
+              (subst_preserves_typing _ _ _ _ _ _ _
+                (.tEq h₂ he₁.symm) hbody)
+              he₂
+          · cases hu
   | _, _, _, .tCat h₁ h₂, hΓ, _ => fun hs => by
       cases hs with
       | catLeft s    => exact .tCat (preservation_aux h₁ hΓ s) h₂
       | catRight v s => exact .tCat h₁ (preservation_aux h₂ hΓ s)
       | catVal =>
-          obtain ⟨ρ₁', he₁, hb₁⟩ := typed_rcd_inv h₁
-          obtain ⟨ρ₂', he₂, hb₂⟩ := typed_rcd_inv h₂
-          obtain ⟨_, hσ₁, hr₁⟩ := he₁.rcd_inv
-          obtain ⟨_, hσ₂, hr₂⟩ := he₂.rcd_inv
-          cases hσ₁; cases hσ₂
-          exact .tEq (.tRcd (.cat hb₂ hb₁)) (.rcd (.cat hr₂ hr₁))
+          obtain ⟨ρ₁', he₁ | hu₁, hb₁⟩ := typed_rcd_inv h₁
+          · obtain ⟨ρ₂', he₂ | hu₂, hb₂⟩ := typed_rcd_inv h₂
+            · obtain ⟨_, hσ₁, hr₁⟩ := he₁.rcd_inv
+              obtain ⟨_, hσ₂, hr₂⟩ := he₂.rcd_inv
+              cases hσ₁; cases hσ₂
+              exact .tEq (.tRcd (.cat hb₂ hb₁)) (.rcd (.cat hr₂ hr₁))
+            · cases hu₂
+          · cases hu₁
   | _, _, _, .tSel h hl, hΓ, _ => fun hs => by
       cases hs with
       | selStep s => exact .tSel (preservation_aux h hΓ s) hl
       | selVal hbl =>
-          obtain ⟨ρ', he, hb⟩ := typed_rcd_inv h
-          obtain ⟨_, hσ, hr⟩ := he.rcd_inv
-          cases hσ
-          obtain ⟨r', hl', hre⟩ := lookup_equiv (RowEquiv.symm hr) hl
-          cases hre with
-          | found hty =>
-              obtain ⟨e'', hbl', hte⟩ := TypedBody.lookup_found hb hl'
-              rw [hbl] at hbl'
-              exact Option.some.inj hbl' ▸ .tEq hte hty.symm
+          obtain ⟨ρ', he | hu, hb⟩ := typed_rcd_inv h
+          · obtain ⟨_, hσ, hr⟩ := he.rcd_inv
+            cases hσ
+            obtain ⟨r', hl', hre⟩ := lookup_equiv (RowEquiv.symm hr) hl
+            cases hre with
+            | found hty =>
+                obtain ⟨e'', hbl', hte⟩ := TypedBody.lookup_found hb hl'
+                rw [hbl] at hbl'
+                exact Option.some.inj hbl' ▸ .tEq hte hty.symm
+          · cases hu
   | _, _, _, .tSelUnk h hl, hΓ, _ => fun hs => by
       cases hs with
       | selStep s => exact .tSelUnk (preservation_aux h hΓ s) hl
       | selVal hbl =>
           -- vacuous: the literal's row is spine-var-free, its lookup can't be ?
-          obtain ⟨ρ', he, hb⟩ := typed_rcd_inv h
-          obtain ⟨_, hσ, hr⟩ := he.rcd_inv
-          cases hσ
-          obtain ⟨r', hl', hre⟩ := lookup_equiv (RowEquiv.symm hr) hl
-          cases hre
-          exact (Lookup.not_unknown_of_spineVarFree hb.spineVarFree hl').elim
+          obtain ⟨ρ', he | hu, hb⟩ := typed_rcd_inv h
+          · obtain ⟨_, hσ, hr⟩ := he.rcd_inv
+            cases hσ
+            obtain ⟨r', hl', hre⟩ := lookup_equiv (RowEquiv.symm hr) hl
+            cases hre
+            exact (Lookup.not_unknown_of_spineVarFree hb.spineVarFree hl').elim
+          · cases hu
+  | _, _, _, .tSelAbs h hl, hΓ, _ => fun hs => by
+      cases hs with
+      | selStep s => exact .tSelAbs (preservation_aux h hΓ s) hl
+      | selVal hbl =>
+          -- vacuous: an absent lookup on the literal's row means the body has
+          -- no such field, contradicting the successful syntactic lookup
+          obtain ⟨ρ', he | hu, hb⟩ := typed_rcd_inv h
+          · obtain ⟨_, hσ, hr⟩ := he.rcd_inv
+            cases hσ
+            obtain ⟨r', hl', hre⟩ := lookup_equiv (RowEquiv.symm hr) hl
+            cases hre
+            rw [TypedBody.lookup_absent hb hl'] at hbl
+            cases hbl
+          · cases hu
+  | _, _, _, .tUnk h, hΓ, _ => fun hs =>
+      .tUnk (preservation_aux h hΓ hs)
+  | _, _, _, .tLet h₁ h₂, hΓ, _ => fun hs => by
+      cases hs with
+      | letCong s =>
+          exact .tLet (fun τ' hi => preservation_aux (h₁ τ' hi) hΓ s) h₂
+      | letBeta hval =>
+          -- let-β: the instance-closed premise is exactly the all-instances
+          -- hypothesis of the polymorphic substitution lemma
+          subst hΓ
+          exact subst_scheme_preserves_typing _ _ _ _ _ _ _
+            (fun τ' hi => h₁ τ' hi) h₂
 
 theorem preservation
     {B C : Type} (constTy : C → B)
@@ -1213,5 +1611,46 @@ theorem preservation
     (hs : Step e e') :
     Typed constTy Ctx.empty e' τ :=
   preservation_aux ht rfl hs
+
+
+---------------------------------- REGRESSION ----------------------------------
+-- The program that breaks preservation without T-sel-⊥/T-★-intro:
+--   let f = (x: x.l) in f {}   :   ★
+-- f's scheme ∀β. {β} → ★ demands the lambda typed at *every* instance
+-- {ρ} → ★; the three-way case split on the (total) lookup of ρ.l hits all
+-- three selection rules — with T-sel-⊥ covering exactly the instance ρ = ε
+-- that used to make the reduct untypeable.
+
+example {B C : Type} (constTy : C → B) :
+    Typed constTy Ctx.empty
+      (.letE "f" (.lam "x" (.sel (.var "x") "l"))
+        (.app (.var "f") (.rcd .empty)))
+      .unk := by
+  apply Typed.tLet (σ := ⟨["β"], .fn (.rcd (.var "β")) .unk⟩)
+  · -- the binding types at every instance {ρ} → ★
+    intro τ' hi
+    obtain ⟨θ, -, rfl⟩ := hi
+    simp only [Ty.applySubst, Row.applySubst]
+    apply Typed.tLam
+    have hx : (Ctx.empty.bindTy "x" (.rcd (θ.row "β"))).lookup "x"
+        = some ⟨[], .rcd (θ.row "β")⟩ := by
+      simp [Ctx.lookup_bindTy]
+    have hwf : (Ctx.empty.bindTy "x" (.rcd (θ.row "β")) : Ctx B).RowWF :=
+      ⟨fun _ => 0, fun α ρ h => by
+        simp [Ctx.lookupRow, Ctx.bindTy, Ctx.bindScheme, Ctx.empty] at h⟩
+    obtain ⟨r, hr⟩ := lookup_total hwf (θ.row "β") "l"
+    cases r with
+    | found τf => exact .tUnk (.tSel (.tVar hx (Scheme.Inst.refl _)) hr)
+    | absent   => exact .tSelAbs (.tVar hx (Scheme.Inst.refl _)) hr
+    | unknown  => exact .tSelUnk (.tVar hx (Scheme.Inst.refl _)) hr
+  · -- the body instantiates f at β ≔ ε and applies it to {}
+    have hif : Scheme.Inst (⟨["β"], .fn (.rcd (.var "β")) .unk⟩ : Scheme B)
+        (.fn (.rcd .empty) .unk) := by
+      refine ⟨⟨fun α => .var α, fun α => if α == "β" then .empty else .var α⟩,
+        ⟨fun _ _ => rfl, fun α hα => ?_⟩, ?_⟩
+      · simp only [List.mem_singleton] at hα
+        simp [hα]
+      · simp [Ty.applySubst, Row.applySubst]
+    exact .tApp (.tVar (by simp [Ctx.lookup_bindScheme]) hif) (.tRcd .empty)
 
 end MinimalCalculus
