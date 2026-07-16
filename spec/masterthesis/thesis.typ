@@ -1,7 +1,7 @@
 #import "./functions.typ": bib, template
 
 #show: template
-#set figure(placement: auto)
+// #set figure(placement: auto)
 #set raw(lang: "nix")
 
 #set document(

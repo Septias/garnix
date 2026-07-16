@@ -1,6 +1,4 @@
 #import "../functions.typ": *
-#set page(height: auto)
-#show: template
 
 == Minimal Calculus
 _Functions, scoped records, record concat, row-vars, let-poly_
