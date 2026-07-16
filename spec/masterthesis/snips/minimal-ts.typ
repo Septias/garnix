@@ -1,4 +1,4 @@
-#import "functions.typ": *
+#import "../functions.typ": *
 #set page(height: auto)
 #show: template
 
@@ -23,8 +23,8 @@ _Functions, scoped records, record concat, row-vars, let-poly_
     ],
     subbox(caption: "Types")[
       $
-        #type_name("Type") τ & ::= α | 𝓫 | ★ | τ -> τ | { ρ } \
-        #type_name("Row") ρ & ::= ε | α | l: τ | (ρ₁ | ρ₂) \
+               #type_name("Type") τ & ::= α | 𝓫 | ★ | τ -> τ | { ρ } \
+                #type_name("Row") ρ & ::= ε | α | l: τ | (ρ₁ | ρ₂) \
         #type_name("Type Scheme") σ & ::= ∀macron(α). τ | τ \
       $
     ],
@@ -53,10 +53,18 @@ _Functions, scoped records, record concat, row-vars, let-poly_
     derive("T-λ-E", ($Γ ⊢ e₁: τ₁ -> τ₂$, $Γ ⊢ e₂: τ₁$), $Γ ⊢ e₁e₂: τ₂$),
     derive(
       "T-let",
-      ($Γ ⊢ e₁: τ₁$, $macron(α) = "ftv"(τ₁) ∖ "ftv"(Γ)$, $Γ · (x: ∀macron(α). τ₁) ⊢ e₂: τ₂$),
+      (
+        $Γ ⊢ e₁: τ₁$,
+        $macron(α) = "ftv"(τ₁) ∖ "ftv"(Γ)$,
+        $Γ · (x: ∀macron(α). τ₁) ⊢ e₂: τ₂$,
+      ),
       $Γ ⊢ #b[let] x = e₁ #b[in] e₂: τ₂$,
     ),
-    derive("T-conc", ($Γ ⊢ e₁: {ρ₁}$, $Γ ⊢ e₂: {ρ₂}$), $Γ ⊢ e₁ ‖ e₂: { ρ₂ | ρ₁ }$),
+    derive(
+      "T-conc",
+      ($Γ ⊢ e₁: {ρ₁}$, $Γ ⊢ e₂: {ρ₂}$),
+      $Γ ⊢ e₁ ‖ e₂: { ρ₂ | ρ₁ }$,
+    ),
     derive("T-sel", ($Γ ⊢ e: {ρ}$, $Γ ⊢ ρ.l ↓ τ$), $Γ ⊢ e.l: τ$),
     derive("T-sel-★", ($Γ ⊢ e: {ρ}$, $Γ ⊢ ρ.l ↓ ?$), $Γ ⊢ e.l: ★$),
     derive("T-sel-⊥", ($Γ ⊢ e: {ρ}$, $Γ ⊢ ρ.l ↓ ⊥$), $Γ ⊢ e.l: ★$),
@@ -64,7 +72,11 @@ _Functions, scoped records, record concat, row-vars, let-poly_
     derive("T-rec", ($Γ ⊢ ξ: ρ$,), $Γ ⊢ { ξ }: { ρ }$),
     derive("T-ξ-empty", (), $Γ ⊢ ε: ε$),
     derive("T-ξ-field", ($Γ ⊢ e: τ$,), $Γ ⊢ (l = e): (l: τ)$),
-    derive("T-ξ-conc", ($Γ ⊢ ξ₁: ρ₁$, $Γ ⊢ ξ₂: ρ₂$), $Γ ⊢ (ξ₁ | ξ₂): (ρ₁ | ρ₂)$),
+    derive(
+      "T-ξ-conc",
+      ($Γ ⊢ ξ₁: ρ₁$, $Γ ⊢ ξ₂: ρ₂$),
+      $Γ ⊢ (ξ₁ | ξ₂): (ρ₁ | ρ₂)$,
+    ),
   ),
 )
 #declarative
@@ -123,7 +135,11 @@ _Functions, scoped records, record concat, row-vars, let-poly_
       derive("L-α", ($Γ ⊢ α: {ρ}$, $Γ ⊢ ρ.l ↓ r$), $Γ ⊢ α.l ↓ r$),
       derive("L-α-free", ($α ∉ Γ$,), $Γ ⊢ α.l ↓ ?$),
       derive("L-conc-hit", ($Γ ⊢ ρ₁.l ↓ τ$,), $Γ ⊢ (ρ₁ | ρ₂).l ↓ τ$),
-      derive("L-conc-skip", ($Γ ⊢ ρ₁.l ↓ ⊥$, $Γ ⊢ ρ₂.l ↓ r$), $Γ ⊢ (ρ₁ | ρ₂).l ↓ r$),
+      derive(
+        "L-conc-skip",
+        ($Γ ⊢ ρ₁.l ↓ ⊥$, $Γ ⊢ ρ₂.l ↓ r$),
+        $Γ ⊢ (ρ₁ | ρ₂).l ↓ r$,
+      ),
       derive("L-conc-★", ($Γ ⊢ ρ₁.l ↓ ?$,), $Γ ⊢ (ρ₁ | ρ₂).l ↓ ?$),
     ),
   ),
