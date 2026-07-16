@@ -49,7 +49,7 @@ The concatenation inside the example `a: ({l: τ} ‖ a).l` will produce a row `
 
 
 == The Typesystem
-TODO: add all them rules.
+#include "./snips/minimal-ts.typ"
 
 
 == Formal: The Typesystem
