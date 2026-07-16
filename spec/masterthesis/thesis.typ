@@ -1,3 +1,15 @@
+#import "./functions.typ": bib, template
+
+#show: template
+#set figure(placement: auto)
+#set raw(lang: "nix")
+
+#set document(
+  title: "A Soft-Typing Records Calculus with Asymmetric Concatenation for Nix",
+  description: "Masterthesis about a Soft-Typing Records Calculus with Asymmetric Concatenation for Nix",
+  author: "Sebastian Klähn",
+  keywords: ("Nix", "Type inference", "Laziness", "Records"),
+)
 
 = A Soft-Typing Records Calculus with Asymmetric Concatenation for Nix
 == Goal
@@ -63,4 +75,4 @@ The concatenation inside the example `a: ({l: τ} ‖ a).l` will produce a row `
 == Towards Nix
 > Section about extended features, limitations etc.
 
-
+#bib
