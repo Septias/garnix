@@ -72,3 +72,9 @@
 == Type systems with constrained types (no marks possible)
 - ∃ᾱ binds some subset of variables ᾱ in the constraint
 - Constraints are boolean algebras
+
+
+
+= Fixed to some properties
+> For the comparison section, I want to pick out some? record calculi that are relevant and why they can to be used by us. Basically a few newer record calculi should be there. Record calculi by Castaga and Parreaux.
+
