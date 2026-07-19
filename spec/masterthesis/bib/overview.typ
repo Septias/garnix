@@ -1,3 +1,5 @@
+#import "../functions.typ": *
+
 == Read
 - [x] _A record calculus based on symmetric concatenation_
   - Hilfreich weil: Übersicht records, quantified
@@ -28,7 +30,7 @@
     - Based on: _[[Abstracting Extensible Data Types.pdf]]_ - Morris
 
 
-== Tabular Data
+== Tabular Data @extensible_tabular
 ⊕ Unification
 ⊕ FC-labels
 ⊕ Polymorphic Rows
@@ -39,7 +41,7 @@
 - Uses _conditional tail check_
 
 
-== Abstracting Extensible Data Types
+== Abstracting Extensible Data Types @abstracting_extensible_data
 ⊕ Variants & Records
 ⊕ Asymmetric Concat
 ⊕ Expressive constraints: $\_ ⊙_~ \_$(containment) and $ζ ⧀ ζ$(subtype)
@@ -47,24 +49,21 @@
 ⊖ _Keine Inferenz für Lets_
 
 
-== Generic Programming with Extensible Rows
+== Generic Programming with Extensible Rows @generic_with_extensible
 > Map rows to things and back?
 ⊕ FC-Labels
 ⊖ Zeigt keine Inferenz
 
 
-== Local Type Inference
+== Local Type Inference @local_type_inference
 - Overapproximation of types?
 - Thats a possible way to calculate best types w/o backtracking
 - Bot-type ist schwierig (generell)
 ⊖ keine let-generalization
 ⊖ Toplevel annos sind notwendig
 
-== A polymorphic typesystem for
-⊖ No double labels?
 
-
-== Designing Record systems
+== Designing Record systems @designing_record_systems
 ⊖ No overloading of field variables
 ⊖ HM(X) does not tell you how to implement X.
 
@@ -74,7 +73,4 @@
 - Constraints are boolean algebras
 
 
-
-= Fixed to some properties
-> For the comparison section, I want to pick out some? record calculi that are relevant and why they can to be used by us. Basically a few newer record calculi should be there. Record calculi by Castaga and Parreaux.
-
+#bib
