@@ -226,3 +226,85 @@ l₁ ≠ l₂
 l₁ ≠ l₂
 ----------------------------------------- ≈-comm
 (l₁: τ₁ | l₂: τ₂) ≈ (l₂: τ₂ | l₁: τ₁)
+
+
+== Precision
+- τ′ ⊑ τ reads "τ′ is at least as precise as τ": ★ is the top, everything else
+  is structural congruence. Not used by progress/preservation (safety is on the
+  nose) — only by the refinement theorem below and, later, by algorithmic
+  soundness ("the inferred type is below every declarative type")
+- This is *precision* in the gradual-typing sense¿, not subtyping: it measures
+  information content, so it is covariant in ALL positions — including function
+  domains. τ₁ → τ₂ ⊑ ★ → τ₂ says the left type knows more about the domain,
+  not that one accepts more arguments
+- No row-level ★ exists, so row precision is pure congruence: all imprecision
+  bottlenecks through the type ★. In particular α ⊑ α only — refinement never
+  rewrites a type syntactically, it extends the rowEnv so lookup sees more
+  through L-α; only the ★ introduced by T-sel-★ improves
+- Partial order up to ≈: reflexive by ⊑-refl, transitivity and antisymmetry-
+  mod-≈ admissible (not rules — keeps inversions small in the mechanization)
+- ⊑-rigidity: τ′ ⊑ τ and τ ≠ ★ implies τ′ and τ share their head constructor —
+  the precision analog of head rigidity, feeds canonical forms
+- ⊑-subsumption is NOT a rule and NOT admissible: T-★-intro blurs only at the
+  top level; Γ ⊢ e: τ₁ → τ₂ does not give Γ ⊢ e: ★ → τ₂ (blurring under
+  constructors would need new typing rules, deliberately absent)
+- Commutation with ≈ (lemma, needed in the T-eq case of the refinement proof):
+  if τ′ ⊑ τ and τ ≈ σ then there is σ′ with τ′ ≈ σ′ and σ′ ⊑ σ
+
+
+----------- ⊑-refl
+τ ⊑ τ
+
+
+----------- ⊑-★
+τ ⊑ ★
+
+
+τ₁ ⊑ τ₁′   τ₂ ⊑ τ₂′
+--------------------- ⊑-fn
+τ₁ → τ₂ ⊑ τ₁′ → τ₂′
+
+
+ρ ⊑ ρ′
+------------- ⊑-rec
+{ρ} ⊑ {ρ′}
+
+
+----------- ⊑-ρ-refl
+ρ ⊑ ρ
+
+
+τ ⊑ τ′
+------------------- ⊑-field
+(l: τ) ⊑ (l: τ′)
+
+
+ρ₁ ⊑ ρ₁′   ρ₂ ⊑ ρ₂′
+------------------------ ⊑-ρ-conc
+(ρ₁ | ρ₂) ⊑ (ρ₁′ | ρ₂′)
+
+
+- Lookup-result precision r′ ⊑ r: only ? can be improved, definite results are
+  final — the relational form of lookup monotonicity
+
+
+----------- ⊑-r-refl
+r ⊑ r
+
+
+----------- ⊑-r-?
+r ⊑ ?
+
+
+== Refinement
+- Γ ⊑ Γ′ (context extension): same term bindings, rowEnv(Γ′) ⊇ rowEnv(Γ) —
+  the algorithmic system only ever adds row-solutions (unification), never
+  removes or changes one
+- Lookup monotonicity (proven, lookup_mono): if Γ ⊢ ρ.l ↓ r and Γ ⊑ Γ′
+  then Γ′ ⊢ ρ.l ↓ r′ with r′ ⊑ r
+- Typing monotonicity (the refinement theorem, open): if Γ ⊢ e: τ and Γ ⊑ Γ′
+  then Γ′ ⊢ e: τ′ with τ′ ⊑ τ — lookup monotonicity is the T-sel-★ base case,
+  lifted through the typing rules
+- This is where "applying x = {} promotes ★ to τ" becomes a theorem: the
+  application instantiates a row-var, extending the rowEnv, and the body's
+  type can only get more precise
