@@ -221,6 +221,21 @@ In the following section we lay out the metatheory of our calculus. We prove pro
 == Related Work
 - Discuss the work of Parreaux, Castagna, Leijen, Belgier, old record calculi, Ohori etc.
 
+Main: @verified
+
+We base our work upon @extensible_tabular but extend it with a soft typing system and
+
+Symmetric concatenation has been dicsussed in @symm_concat @concat4multiinher @concat4free
+
+First class labels in @fc_labels
+
+The typesystems in @extensible_data_adhoc @extensible_rec_funcs but they are not inferrable. (at least not shown)
+
+- Subtyping based systems: It has been shown by ? that width-subtyping and the concat operation don't mix well because we can forget fields that will still affect the operational semantics.
+
+== TMP: Comparison
+
+
 
 == Conclusion
 We have shown that we have such a nice typesystem with so many (much wow) nice properties and we are very happy and thank all the people that helped us accomplish such an outstanding result wow nice.

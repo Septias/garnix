@@ -30,8 +30,6 @@ The road to _type refinement_. Nothing fundamental blocks it — the design alre
 3. *★-elimination rules*: currently ★ is inert — nothing applies, selects on, or concatenates a ★-typed value. With T-app-★ etc. more programs become typeable. Partially delivered by T-sel-⊥: ★-typed selections on records lacking the label are already typeable, so the ↯-disjunct of progress is no longer decorative.
 4. *Typing monotonicity*: the actual refinement lemma — if `Γ ⊢ e: τ` and Γ' extends Γ's row-solutions, then `Γ' ⊢ e: τ'` with `τ' ⊑ τ`. *Monotonicity* of lookup is exactly its base case; it just has to be lifted through the typing rules. Needs ⊑ (2) to even be stated.
 
-Note: refinement is purely a typing-side phenomenon — small steps never touch types. β replaces x by a concrete record and the reduct _admits_ a more precise type; preservation-modulo-⊑ is what "types become more precise during small steps" means formally.
-
 ## Related Files
 - minimal.typ: provides a semi-formal method of the typesystem
 - minimal.lean: provides a fully formal type-system
