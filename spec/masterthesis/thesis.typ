@@ -18,7 +18,7 @@
 
 == Abstract
 Asymmetric record concatenation with left-precedence is a _set-or-replace operation_ that, given two records, extends the fields of the first record with every unique field of the second and overwrites fields that collide. This operation is a trivial operation in the Nix programming language and admits a canonical example that can not be statically typed: The expression `a: b: (a ‖ b).l` concatenates two type variables but can not be given a type without instantiating at least b, because of field-precedence and shadowing behaviour.
-We propose a novel _soft type system_ based upon the work of Paszke&Xie with scoped-records, row-variables, asymmetric record concatenation, let-polymorphism, row-equivalence and an unknown type that solves¿ the motivating example using a new lookup derivation _Γ ⊢ ρ.l ↓ r_ to delay record lookups and a _refinement technique_ upon type variable instantiation to narrow types at term application.
+We propose a novel _soft type system_ based upon the work of Paszke&Xie with scoped-records, row-variables, asymmetric record concatenation, let-polymorphism, row-equivalence and an unknown type that solves the motivating example using a new lookup derivation $Γ ⊢ ρ.l ↓ r$ to delay record lookups and a _refinement technique_ upon type variable instantiation to narrow types at term application.
 We mechanically prove _type safety_ of the declarative system in Lean and give an efficient unification algorithm for a minimal calculus.
 
 
@@ -47,17 +47,14 @@ In our record calculus, uncertainty is recorded during field-lookup and remedied
 
 The concatenation inside the example `a: ({l: τ} ‖ a).l` will produce a row `(α | l: τ)` with a type variable for the function argument. Upon instantiation at the application site, the row-variable can be eliminated such that the lookup relation that was previously stuck before finding a field can advance further into the row, find the l: τ binding, and return a proper type τ.
 
-== Contributions
 
-- *A declarative soft type system for records.* We extend the row theory of Paszke&Xie with _scoped rows_, _asymmetric concatenation_ with left-precedence, _row-equivalence_, _let-polymorphism_ and an _unknown type_ ★ that marks statically unresolvable operations instead of rejecting the program.
+_Contributions_ We contribute the following items:
 
-- *A best-effort lookup relation.* Our lookup relation `Γ ⊢ ρ.l ↓ r` extends the usual positive and negative results of lookup to a three-way result (τ | ⊥ | ★). The relation can consult row-solutions in the context, and its _monotonicity_ — definite results survive extending the solutions, only ★ can improve — is what makes deferring lookups sound.
+1. *A best-effort lookup relation.* Our lookup relation `Γ ⊢ ρ.l ↓ r` extends the usual positive and negative results of lookup to a three-way result (τ | ⊥ | ★).
+2. *Type refinement at instantiation.* Uncertainty introduced by lookup is remedied at application sites: instantiating a type variable lets a previously stuck lookup advance further into the row and promote ★ to a definite type.
+3. *Mechanized type safety.* We prove _progress_ under erroring terms ↯ and _preservation_ in Lean.
+4. *An algorithmic system.* We give an efficient unification algorithm for the minimal calculus, extending the algorithm of Paszke&Xie to rows containing the unknown type.
 
-- *Type refinement at instantiation.* Uncertainty introduced by lookup is remedied at application sites: instantiating a type variable lets a previously stuck lookup advance further into the row and promote ★ to a definite type.
-
-- *Mechanized type safety.* We prove a form of _progress_ that admits some runtime errors and _preservation_ for the minimal calculus in Lean.
-
-- *An algorithmic system.* We give an efficient unification algorithm for the minimal calculus, extending the algorithm of Paszke&Xie to rows containing the unknown type.
 
 == Informal Description of the TS and it's tricks
 - Row-equality up to type-vars
@@ -94,7 +91,7 @@ _Functions, scoped records, record concat, row-vars, let-poly_
 )
 #syntax <syntax>
 
-@syntax shows the term- and type-syntax of a standard lambda-calculus extended with records, record-concatenation (‖) and let-polymorphism. Functions use the unusual syntax (x: e) where x is the variable to be replaced in the function body e. This distinction is chosen because it's Nix' syntax for functions. We admit a finite set 𝓒 of constants $c ∈ 𝓒$ that can be typed by basetypes 𝓫 from the finite set of basetypes 𝓑 and state that 𝓑 has at least the types needed to type every constant such that `c: 𝓫_c` is a complete mapping. We admit an "unknown" ★ type for our soft-typing system that can be used to type expressions the typesystem can not reason about. Term-rows ${ξ}$ and row-types ${ρ}$ are both [what form of trees]¿ that shows their similarity. As per the usual, we stratify our typesystem with a polymorphic σ-type that subsumes the monomorphic types τ.
+@syntax shows the term- and type-syntax of a standard lambda-calculus extended with records, record-concatenation and let-polymorphism. Functions use the unusual syntax (x: e) where x is the variable to be replaced in the function body e. This distinction is chosen because it's Nix' syntax for functions. We admit a finite set 𝓒 of constants $c ∈ 𝓒$ that can be typed by basetypes 𝓫 from the finite set of basetypes 𝓑 and state that 𝓑 has at least the types needed to type every constant such that `c: 𝓫_c` is a complete mapping. We admit an "unknown" ★ type for our soft-typing system that can be used to type expressions the typesystem can not reason about. Term-rows ${ξ}$ and row-types ${ρ}$ are both [what form of trees]¿ that shows their similarity. As per the usual, we stratify our typesystem with a polymorphic σ-type that subsumes the monomorphic types τ to sidestep [the risk of undecadbility]¿.
 
 
 == Declarative
@@ -136,7 +133,7 @@ _Functions, scoped records, record concat, row-vars, let-poly_
 )
 #declarative <declarative>
 
-The declarative system's typing rules follow the standard λ-calculus rules. T-cons is used to type the set of constants of the language with their respective type $𝓫_c$. T-var not only looks up variables in the context Γ, but also instantiates polymorphic types using the instantiation rules from @instantiation discussed in the following section. T-eq equates types equal up to the row-equivalence relation from @row-equivalence. T-conc concatenates two row types by concatenating their type representation and T-sel types record lookups by giving the hard work to the row-lookup relation, defined in @row-lookup. T-sel-★ is needed (as discussed in TODO-section) to type otherwise stuck terms and T-★-intro to blur a type into nothingness. The rules T-rec, T-ξ-empty, T-ξ-field and T-ξ-conc are needed to type record literals.
+The declarative system's typing rules follow the standard λ-calculus rules. T-cons is used to type the set of constants of the language with their respective type $𝓫_c$. T-var not only looks up variables in the context Γ, but also instantiates polymorphic types using the instantiation rules from @instantiation discussed in the following section. T-eq equates types equal up to the row-equivalence relation from @row-equivalence. T-conc concatenates two row types by concatenating their type representation and T-sel types record lookups by lifting the hard work to the row-lookup relation, defined in @row-lookup. T-sel-★ is needed (as discussed in TODO-section) to type otherwise stuck terms and T-★-intro to blur a type into the unknown. The rules T-rec, T-ξ-empty, T-ξ-field and T-ξ-conc type record literals.
 
 
 == Instantiation
@@ -175,7 +172,7 @@ The declarative system's typing rules follow the standard λ-calculus rules. T-c
 )
 #row_lookup <row-lookup>
 
-@row-lookup gives the derivation rules for record-type lookups. The judgement $Γ ⊢ ρ.l ↓ r$ is read as »In Context Γ, the lookup of label l in row ρ has result r« with $r := τ | ⊥ | ?$. The lookup succeeds either with a definite type τ due to a successful lookup, ⊥ when no definite type can be found and ? if the lookup relation encounters a type-variable. Accordingly, L-ε and L-miss return with a negative lookup result, L-hit with a positive result and the rules L-conc-hit and L-conc-skip recurse into the left and right subtrees a row can form. The rule L-α consults the context to find out about instantiated type variables α and recurses into their definite value. This is the essential ingredient that enables refinement of ★ types at function application where type variables are instantiated. If α is not yet bound in Γ, L-α-free terminates the search with the unknown result ? and finally L-conc-★ is used to bubble up such a result.
+@row-lookup gives the derivation rules for record-type lookups. The judgement $Γ ⊢ ρ.l ↓ r$ is read as »In Context $Γ$, the lookup of label $l$ in row $ρ$ has result $r$« with $r := τ | ⊥ | #v(1em) ?$. The lookup succeeds either with a definite type τ due to a successful lookup, ⊥ when no definite type can be found or ? if the lookup relation encounters a row- or label variable. Accordingly, L-ε and L-miss return with a negative lookup result, L-hit with a positive result and the rules L-conc-hit and L-conc-skip recurse into the left and right subtrees a row can form. The rule L-α consults the context to find out about instantiated type variables α and recurses into their definite value – if present. This is the essential ingredient that enables refinement of ★ types at function application where type variables are instantiated. If α is not yet bound in Γ, L-α-free terminates the search with the unknown result ? and finally L-conc-★ is used to bubble up such a result.
 
 
 == Row-Equivalence
@@ -195,10 +192,7 @@ The declarative system's typing rules follow the standard λ-calculus rules. T-c
 )
 #row_equivalence <row-equivalence>
 
-@row-equivalence gives the row-equivalence rules of our calculus (and the one of Paszke&Xie?). The equivalence of rows can be lifted to an equivalence on types `τ₁ ≈ τ₂`. The relation is symmetric, transitive, associative, commutative and admits left- and right units. We note that l₁ ≠ l₂ is only decidable for concrete labels and as such, row-equivalence does not go beyond label and row-variables as that would break the shadowing behaviour.
-
-
-== Formal: The Typesystem
+@row-equivalence gives the row-equivalence rules of our calculus. The equivalence of rows can be lifted to an equivalence on types `τ₁ ≈ τ₂`. The relation is symmetric, transitive, associative, commutative and admits left- and right units. We note that l₁ ≠ l₂ is only decidable for concrete labels and as such, row-equivalence does not go beyond label and row-variables as that would break the shadowing behaviour.
 
 
 == Formal: Metatheory
