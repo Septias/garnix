@@ -53,8 +53,9 @@ The road to _type refinement_. Nothing fundamental blocks it — the design alre
 ## Proof Overview
 Proofs are for _closed_ programs (Γ = ∅). e ↯ marks _lookup-errors_: a selection reached a record literal without the label. ★ makes such programs typeable (now also via T-sel-⊥), so progress only holds up to ↯ — and since T-sel-⊥, the ↯-disjunct is no longer decorative even without ★-elimination rules. Preservation keeps the type on the nose even under instantiation: T-★-intro re-blurs refined types to ★, so refinement is visible only as "the reduct *also* admits a more precise type" (the future monotonicity theorem), never as a weaker preservation statement.
 
-*Progress*: If ∅ ⊢ e: τ then e ∈ Values, or ∃e' such that e → e', or e ↯
-*Preservation*: If ∅ ⊢ e: τ and e → e' then ∅ ⊢ e': τ
+
+*Progress* (`progress`): If Γ = ∅ and Γ ⊢ e: τ, then `Progress e` — i.e. ∃e' with e → e' (`step`), or e ∈ Values (`done`), or e ↯ (`err`).
+*Preservation* (`preservation`): If ∅ ⊢ e: τ and e → e' then ∅ ⊢ e': τ — the type is preserved on the nose.
 *Soundness*: If ⊨ e: τ then ⊢ e: τ
 *Completeness*: If ⊢ e: τ then ⊨ e: τ
 
