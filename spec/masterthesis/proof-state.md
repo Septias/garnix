@@ -5,13 +5,13 @@
 ## Motivation
 We are creating a calculus that can be used to type real Nixlang code and base it on a row theory inspired by Paszke&Xie extending it with an unknown type ★ and a _delayed lookup relation_ (`Γ ⊢ ρ.l ↓ r`) to form a soft typing system with _type refinement_. We use _scoped rows_ since they give a natural semantic to _asymmetric concat_ where all concatenations are stored in a "bag" and looked up with left-precedence. The row theory of Paszke&Xie shows how to form a _sound typesystem_ with row- and label-variables that can be efficiently solved by _unification_. We want to provide a declarative typesystem and extend it to an algorithmic one in a similar fashion.
 
-Our contribution is a _lookup relation_ that tries to solve one motivating example: `a: b: (a || b).l` which is a lookup on a concatenation of two type-variables that can not be typed easily. The novelty of our approach is to lookup a type on a _best-effort_ basis. Our lookup relation thus returns a result out of (τ | ⊥ | ★) where ⊥ symbolises definite absence of a field and ★ means "we don't know" (yet). Our lookup relation `Γ ⊢ ρ.l ↓ r` is able to lookup row-variables in the context.
+Our contribution is a _lookup relation_ that tries to solve one motivating example: `a: b: (a || b).l` which is a lookup on a concatenation of two type-variables that can not be typed easily. The novelty of our approach is to lookup a type on a _best-effort_ basis. Our lookup relation thus returns a result out of (τ | ⊥ | ★) where ⊥ symbolises definite absence of a field and ★ means "we don't know" (yet). Our lookup relation `Γ ⊢ ρ.l ↓ r` is able to lookup row-variables in the context that were instantiated on application.
 
 This mechanism allows to _refine_ types on function application. See the example `x: ({l: τ} || x).l` of type `? →★` since the lookup-relation can not look past the type-variable introduced by x. Only after instantiation it becomes clear whether the label is _shadowed_ or not. Applying the argument `x = {}` promotes the unknown type ★ to τ because it becomes clear that x does not shadow the label defined in the literal record.
 
 The type-safety proofs have to account for this new lookup-mechanism in two ways: Progress can only be proven for definite types, but ★ forms a boundary where programs can get stuck. The preservation proof has to account for type refinement by allowing types to become more precise during small steps.
 
-TODO: the two relations.
+We have two relations: A row equivalence (≈) relation that allows us to swap labels on the head of a row (up until the first type-variable) and a precision relation (≤) that allows us to type things as ★.
 
 
 ## Current State
@@ -23,12 +23,19 @@ Design finding 2 (26-07-14): the standard side condition `ᾱ = ftv(τ₁) ∖ f
 
 
 ## Future
-The road to _type refinement_. Nothing fundamental blocks it — the design already anticipates it (rowEnv, *monotonicity*, the ↯-disjunct) — but four pieces are missing, in dependency order:
+The road to _type refinement_. Nothing fundamental blocks it — the design already anticipates it (rowEnv, *monotonicity*, the ↯-disjunct) — in dependency order:
 
-1. *Instantiation*: DONE (26-07-14) declaratively — let-polymorphism generalizes at binders and instantiates by substitution at use sites (T-var with σ ≥ τ). rowEnv is still only read, never written: writing solutions is the *algorithmic* system's job (unification), and lookup *monotonicity* is the lemma that will make that sound.
-2. *Precision relation ⊑*: refinement means the ★ from T-sel-★ later becomes τ. REVISED (26-07-14): with T-sel-⊥ and T-★-intro, preservation stays on the nose (refined types re-blur to ★), so ⊑ is *not* needed for safety — only for stating the refinement theorem (4). The inversion-mod-≈ machinery gains one `∨ τ = ★` disjunct (from T-★-intro) instead of being redone mod ⊑; canonical forms survive since fn/rcd heads are ≠ ★ and ★ stays out of ≈.
-3. *★-elimination rules*: currently ★ is inert — nothing applies, selects on, or concatenates a ★-typed value. With T-app-★ etc. more programs become typeable. Partially delivered by T-sel-⊥: ★-typed selections on records lacking the label are already typeable, so the ↯-disjunct of progress is no longer decorative.
-4. *Typing monotonicity*: the actual refinement lemma — if `Γ ⊢ e: τ` and Γ' extends Γ's row-solutions, then `Γ' ⊢ e: τ'` with `τ' ⊑ τ`. *Monotonicity* of lookup is exactly its base case; it just has to be lifted through the typing rules. Needs ⊑ (2) to even be stated.
+1. *Typing monotonicity* (the refinement theorem, **next Lean session**): if `Γ ⊢ e: τ` and `Γ ⊑ Γ'` (rowEnv only grows), then `Γ' ⊢ e: τ'` with `τ' ⊑ τ`. ⊑ SPECCED (26-07-19) in minimal.typ (Precision + Refinement sections): Siek-style precision — covariant in ALL positions incl. function domains, ★ top, rows pure congruence (no row-level ★, all imprecision bottlenecks through the type ★). Port as `TyPrec`/`RowPrec`/`ResPrec` inductives, restate lookup_mono's conclusion as `r' ⊑ r`, then induct on typing with lookup_mono as the T-sel-★ base case. Pre-declared helper lemmas: *⊑/≈ commutation* (the T-eq case) and *⊑-rigidity* (τ' ⊑ τ ∧ τ ≠ ★ ⟹ same head). Transitivity/antisymmetry-mod-≈ kept admissible, not rules — small inversions. This turns contribution 2 (refinement at instantiation) from example into theorem.
+
+2. *Algorithmic system* (unification, paper-first): constraint generation + unification over scoped rows; unresolved lookups become deferred constraints, unification *writes* rowEnv — (1) is exactly why deferring is sound. Soundness statement needs ⊑: the inferred type sits below every declarative type. This is also where the ★-taming story lives: since T-★-intro makes "∃ derivation" nearly vacuous, "the checker flags e" must be defined against the *most precise* derivation the algorithm computes, not against existence. Mechanization of unification: out of scope unless time abounds.
+
+3. *★-elimination rules*: DEFERRED behind (1) and (2) — deliberately. Two reasons (26-07-19): (a) every rule added before the monotonicity induction exists adds cases to it; (b) T-★-intro + T-app-★ makes the declarative system a universal sink (blur `3`, apply it: `3 4` types at ★), so elimination is only defensible once (2) defines flagging via principality. minimal.typ records the guard: ⊑-subsumption is NOT admissible, T-★-intro blurs only at top level — that line keeps the sink latent. Related honest-writing note: T-sel-⊥ and T-sel-★ both conclude ★, so "flagged statically" is checker instrumentation (which rule fired), not readable off the type. Partially delivered already by T-sel-⊥ (↯-disjunct non-decorative).
+
+4. *Syntactic T-let admissibility*: staged and waiting — the *substitution stability* lemmas are proven and currently unused precisely for this. Medium effort; alternative is presenting the instance-closed rule in the thesis (the declarative figure currently shows the ftv-rule the mechanization does NOT prove — either fix the figure's claim or prove admissibility, don't leave the gap silent).
+
+5. *Stretch, in order*: patterns (meeting-notes candidate, tractable), FC-labels (drags in label variables + kinds, likely paper-only in "Towards Nix").
+
+Writing debt (parallel, no dependencies): thesis.typ Metatheory section still claims "a weak form of preservation" — backwards, preservation is on the nose and *progress* carries the ↯-weakening; the "Informal Description" stub = the design-finding-1 story; a discussion paragraph on the re-blurring trade-offs (preservation-at-★ is nearly vacuous, the `∨ τ = ★` inversion tax, the sink risk) before a reviewer writes it first.
 
 ## Related Files
 - minimal.typ: provides a semi-formal method of the typesystem
