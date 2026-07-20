@@ -13,7 +13,7 @@
 - What is _head rigidy_?
   - The row type can change slightly (in an equivalence class)
 - What is _nose_?
-  - Mathematic slang
+  - Mathematic slang for "directly"
 
 == Todo
 - [x] Pen & Paper proof-structur aufschreiben (was wir haben)
