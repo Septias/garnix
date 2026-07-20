@@ -121,12 +121,12 @@ x: σ ∈ Γ   σ ≥ τ
 
 
 σ[τ′/α] ≥ τ
-------------- I-ty
+-------------- I-ty
 (∀α. σ) ≥ τ
 
 
 σ[ρ/α] ≥ τ
-------------- I-row
+-------------- I-row
 (∀α. σ) ≥ τ
 
 
@@ -248,8 +248,10 @@ l₁ ≠ l₂
 - ⊑-subsumption is NOT a rule and NOT admissible: T-★-intro blurs only at the
   top level; Γ ⊢ e: τ₁ → τ₂ does not give Γ ⊢ e: ★ → τ₂ (blurring under
   constructors would need new typing rules, deliberately absent)
-- Commutation with ≈ (lemma, needed in the T-eq case of the refinement proof):
-  if τ′ ⊑ τ and τ ≈ σ then there is σ′ with τ′ ≈ σ′ and σ′ ⊑ σ
+- Commutation with ≈ (lemma): if τ′ ⊑ τ and τ ≈ σ then there is σ′ with
+  τ′ ≈ σ′ and σ′ ⊑ σ. NOT needed after all (26-07-19): the refinement theorem
+  holds on the nose (see Refinement), so no ⊑-induction through T-eq ever runs.
+  Retained as a note for algorithmic soundness, where ⊑ meets ≈ again
 
 
 ----------- ⊑-refl
@@ -285,11 +287,18 @@ l₁ ≠ l₂
 
 
 - Lookup-result precision r′ ⊑ r: only ? can be improved, definite results are
-  final — the relational form of lookup monotonicity
+  final — the relational form of lookup monotonicity. Found-results are
+  congruent in ⊑ (their types may sharpen once row precision is in play; on a
+  fixed row they stay on the nose), so ⊑-r-refl is derivable
 
 
------------ ⊑-r-refl
-r ⊑ r
+τ′ ⊑ τ
+------------- ⊑-r-found
+τ′ ⊑ᵣ τ
+
+
+----------- ⊑-r-⊥
+⊥ ⊑ ⊥
 
 
 ----------- ⊑-r-?
@@ -297,14 +306,26 @@ r ⊑ ?
 
 
 == Refinement
-- Γ ⊑ Γ′ (context extension): same term bindings, rowEnv(Γ′) ⊇ rowEnv(Γ) —
-  the algorithmic system only ever adds row-solutions (unification), never
-  removes or changes one
-- Lookup monotonicity (proven, lookup_mono): if Γ ⊢ ρ.l ↓ r and Γ ⊑ Γ′
-  then Γ′ ⊢ ρ.l ↓ r′ with r′ ⊑ r
-- Typing monotonicity (the refinement theorem, open): if Γ ⊢ e: τ and Γ ⊑ Γ′
-  then Γ′ ⊢ e: τ′ with τ′ ⊑ τ — lookup monotonicity is the T-sel-★ base case,
-  lifted through the typing rules
-- This is where "applying x = {} promotes ★ to τ" becomes a theorem: the
-  application instantiates a row-var, extending the rowEnv, and the body's
-  type can only get more precise
+- Γ ⊑ Γ′ (context extension, Ctx.Ext): same term bindings, rowEnv(Γ′) ⊇
+  rowEnv(Γ) — the algorithmic system only ever adds row-solutions
+  (unification), never removes or changes one
+- Γ′ must have acyclic row-solutions (RowWF, maintained by unification's
+  occurs-check): a ?-lookup has to re-resolve to *something* in Γ′, which is
+  lookup totality
+- Lookup monotonicity (proven, lookup_mono / lookup_mono_prec): if
+  Γ ⊢ ρ.l ↓ r and Γ ⊑ Γ′ then Γ′ ⊢ ρ.l ↓ r′ with r′ ⊑ r; definite results
+  survive on the nose
+- Typing monotonicity: PROVEN (26-07-19, typed_ext / typed_mono) — and it
+  holds ON THE NOSE: if Γ ⊢ e: τ and Γ ⊑ Γ′ (Γ′ RowWF) then Γ′ ⊢ e: τ itself.
+  The ⊑-form (∃ τ′ ⊑ τ) is a trivial corollary (τ′ ≔ τ). Same mechanism as
+  preservation: T-★-intro re-blurs a lookup that became definite, so T-sel-★
+  survives as T-sel + T-★-intro (found) or T-sel-⊥ (absent). The up-to-⊑ form
+  alone would in fact be UNPROVABLE at T-λ-E: function domain and argument may
+  refine differently, and no rule lifts one refined type to another
+- Refinement is therefore *additive*: extending the rowEnv never invalidates a
+  typing, it only lets the same term admit new, more precise ones. "applying
+  x = {} promotes ★ to τ" formally: the motivating term x: ({l = c} ‖ x).l
+  types at {β} → ★ with β free, and additionally at {β} → 𝓫_c once β ≔ ε —
+  the two related by ⊑ (mechanized as the refinement example in minimal.lean)
+- The statement "the ★ actually improves" (not just "may") is about principal
+  types and belongs to the algorithmic system

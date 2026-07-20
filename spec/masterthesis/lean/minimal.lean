@@ -2205,4 +2205,247 @@ example {B C : Type} (constTy : C → B) :
       · simp [Ty.applySubst, Row.applySubst]
     exact .tApp (.tVar (by simp [Ctx.lookup_bindScheme]) hif) (.tRcd .empty)
 
+
+------------------------------- PRECISION (⊑) ----------------------------------
+-- τ' ⊑ τ: "τ' is at least as precise as τ". ★ is the top, everything else is
+-- structural congruence — covariant in ALL positions including function
+-- domains: precision measures information content, it is NOT subtyping.
+-- No row-level ★ exists, so row precision is pure congruence — all imprecision
+-- bottlenecks through the type ★. Transitivity and antisymmetry-mod-≈ are
+-- admissible, deliberately not constructors (small inversions).
+-- [minimal.typ, Precision]
+
+mutual
+  inductive TyPrec {B : Type} : Ty B → Ty B → Prop where
+    | refl (τ : Ty B) : TyPrec τ τ
+    | unk  (τ : Ty B) : TyPrec τ .unk
+    | fn   : TyPrec τ₁ τ₁' → TyPrec τ₂ τ₂' →
+             TyPrec (.fn τ₁ τ₂) (.fn τ₁' τ₂')
+    | rcd  : RowPrec ρ ρ' → TyPrec (.rcd ρ) (.rcd ρ')
+
+  inductive RowPrec {B : Type} : Row B → Row B → Prop where
+    | refl (ρ : Row B) : RowPrec ρ ρ
+    | sing : TyPrec τ τ' → RowPrec (.sing l τ) (.sing l τ')
+    | cat  : RowPrec ρ₁ ρ₁' → RowPrec ρ₂ ρ₂' →
+             RowPrec (.cat ρ₁ ρ₂) (.cat ρ₁' ρ₂')
+end
+
+infix:50 " ⊑ₜ " => TyPrec
+infix:50 " ⊑ᵣ " => RowPrec
+
+-- ⊑-rigidity: below anything but ★ sits only the same head constructor —
+-- the precision analog of head rigidity, feeds canonical forms.
+theorem TyPrec.fn_inv {B : Type} {τ' τ₁ τ₂ : Ty B}
+    (h : TyPrec τ' (.fn τ₁ τ₂)) :
+    ∃ τ₁' τ₂', τ' = .fn τ₁' τ₂' ∧ TyPrec τ₁' τ₁ ∧ TyPrec τ₂' τ₂ := by
+  cases h with
+  | refl _    => exact ⟨τ₁, τ₂, rfl, .refl τ₁, .refl τ₂⟩
+  | fn h₁ h₂  => exact ⟨_, _, rfl, h₁, h₂⟩
+
+theorem TyPrec.rcd_inv {B : Type} {τ' : Ty B} {ρ : Row B}
+    (h : TyPrec τ' (.rcd ρ)) :
+    ∃ ρ', τ' = .rcd ρ' ∧ RowPrec ρ' ρ := by
+  cases h with
+  | refl _ => exact ⟨ρ, rfl, .refl ρ⟩
+  | rcd hr => exact ⟨_, rfl, hr⟩
+
+-- ★ cannot masquerade as precise: nothing but ★ itself sits above it.
+theorem TyPrec.unk_below {B : Type} {τ : Ty B}
+    (h : TyPrec .unk τ) : τ = .unk := by
+  cases h <;> rfl
+
+-- r' ⊑ r on lookup results: the lifting of ⊑ with ? as top. Only ? can
+-- improve; definite results are final (their found-types may sharpen once
+-- row precision is in play — on a fixed row they stay on the nose).
+inductive ResPrec {B : Type} : LookupRes B → LookupRes B → Prop where
+  | found  : TyPrec τ' τ → ResPrec (.found τ') (.found τ)
+  | absent : ResPrec .absent .absent
+  | unk (r : LookupRes B) : ResPrec r .unknown
+
+theorem ResPrec.refl {B : Type} : (r : LookupRes B) → ResPrec r r
+  | .found τ  => .found (.refl τ)
+  | .absent   => .absent
+  | .unknown  => .unk _
+
+-- Lookup monotonicity in ⊑ vocabulary: extending the row-solutions can only
+-- sharpen a lookup. Definite results survive on the nose (lookup_mono); a ?
+-- re-resolves to whatever the richer context finds — which needs totality,
+-- hence Γ'.RowWF (maintained by unification's occurs-check).
+theorem lookup_mono_prec {B : Type} {Γ Γ' : Ctx B} {ρ : Row B} {l : Label}
+    {r : LookupRes B}
+    (hext : Ctx.RowExt Γ Γ') (hwf : Γ'.RowWF) (h : Lookup Γ ρ l r) :
+    ∃ r', Lookup Γ' ρ l r' ∧ ResPrec r' r := by
+  cases r with
+  | found τ =>
+      exact ⟨_, lookup_mono hext h (by intro hc; cases hc), .found (.refl τ)⟩
+  | absent  =>
+      exact ⟨_, lookup_mono hext h (by intro hc; cases hc), .absent⟩
+  | unknown =>
+      obtain ⟨r', hr'⟩ := lookup_total hwf ρ l
+      exact ⟨r', hr', .unk r'⟩
+
+
+-------------------------- CONTEXT EXTENSION (Γ ⊑ Γ') --------------------------
+-- The algorithmic system only ever *adds* row-solutions (unification writes,
+-- never rewrites): term bindings are preserved, rowEnv only grows. Unlike
+-- Ctx.Sub this does NOT preserve `lookupRow α = none` — L-α-free results may
+-- change category, which is the whole point of refinement.
+
+def Ctx.Ext {B : Type} (Γ Γ' : Ctx B) : Prop :=
+  (∀ x σ, Γ.lookup x = some σ → Γ'.lookup x = some σ) ∧ Ctx.RowExt Γ Γ'
+
+theorem Ctx.Ext.refl {B : Type} (Γ : Ctx B) : Ctx.Ext Γ Γ :=
+  ⟨fun _ _ h => h, fun _ _ h => h⟩
+
+-- Binding respects the extension (term-binding leaves rowEnv untouched).
+theorem Ctx.Ext.bindScheme {B : Type} {Γ Γ' : Ctx B} (h : Ctx.Ext Γ Γ')
+    (x : Var) (σ : Scheme B) :
+    Ctx.Ext (Γ.bindScheme x σ) (Γ'.bindScheme x σ) := by
+  refine ⟨fun y σ' hy => ?_, h.2⟩
+  rw [Ctx.lookup_bindScheme] at hy ⊢
+  cases hxy : (x == y)
+  · simp only [hxy, Bool.false_eq_true, if_false] at hy ⊢
+    exact h.1 y σ' hy
+  · simpa [hxy] using hy
+
+theorem Ctx.Ext.bindTy {B : Type} {Γ Γ' : Ctx B} (h : Ctx.Ext Γ Γ')
+    (x : Var) (τ : Ty B) : Ctx.Ext (Γ.bindTy x τ) (Γ'.bindTy x τ) :=
+  h.bindScheme x ⟨[], τ⟩
+
+theorem Ctx.RowWF.bindScheme {B : Type} {Γ : Ctx B} (h : Γ.RowWF)
+    (x : Var) (σ : Scheme B) : (Γ.bindScheme x σ).RowWF := h
+
+theorem Ctx.RowWF.bindTy {B : Type} {Γ : Ctx B} (h : Γ.RowWF)
+    (x : Var) (τ : Ty B) : (Γ.bindTy x τ).RowWF := h
+
+-- A selection on a record-typed term is always typeable at ★ — whatever the
+-- lookup result is, one of the three selection rules fires (the typing analog
+-- of sel_rcd_progress; totality supplies the result).
+private theorem sel_unk_of_total {B C : Type} {constTy : C → B} {Γ : Ctx B}
+    {e : Expr C} {ρ : Row B} {l : Label}
+    (hwf : Γ.RowWF) (h : Typed constTy Γ e (.rcd ρ)) :
+    Typed constTy Γ (.sel e l) .unk := by
+  obtain ⟨r, hr⟩ := lookup_total hwf ρ l
+  cases r with
+  | found τ => exact .tUnk (.tSel h hr)
+  | absent  => exact .tSelAbs h hr
+  | unknown => exact .tSelUnk h hr
+
+
+--------------------- TYPING MONOTONICITY (refinement) -------------------------
+-- Extending the row-solutions preserves typing ON THE NOSE — not just up to ⊑.
+-- Design finding (26-07-19): the ∃ τ' ⊑ τ form of the refinement theorem
+-- (typed_mono below) is a trivial corollary (τ' := τ), because T-★-intro
+-- re-blurs any lookup that became definite: tSelUnk survives as tSel + tUnk
+-- (found) or tSelAbs (absent). Without re-blurring, the tApp case would be
+-- unprovable up to ⊑ alone: function domain and argument may refine
+-- *differently*, and no rule lifts one refined type to another. The genuinely
+-- ⊑-flavored content of refinement therefore lives in the algorithmic system
+-- (the principal type improves); declaratively, refinement is visible as "the
+-- term also admits a more precise type" (see the example below).
+-- Γ'.RowWF is needed exactly once: a ?-lookup must re-resolve to *something*.
+
+mutual
+theorem typed_ext {B C : Type} {constTy : C → B} :
+    {Γ Γ' : Ctx B} → {e : Expr C} → {τ : Ty B} →
+    Ctx.Ext Γ Γ' → Γ'.RowWF →
+    Typed constTy Γ e τ → Typed constTy Γ' e τ
+  | _, _, _, _, _,    _,   .tCon         => .tCon
+  | _, _, _, _, hext, _,   .tVar h hi    => .tVar (hext.1 _ _ h) hi
+  | _, _, _, _, hext, hwf, .tEq h heq    => .tEq (typed_ext hext hwf h) heq
+  | _, _, _, _, hext, hwf, .tLam h       =>
+      .tLam (typed_ext (hext.bindTy _ _) (hwf.bindTy _ _) h)
+  | _, _, _, _, hext, hwf, .tApp h₁ h₂   =>
+      .tApp (typed_ext hext hwf h₁) (typed_ext hext hwf h₂)
+  | _, _, _, _, hext, hwf, .tCat h₁ h₂   =>
+      .tCat (typed_ext hext hwf h₁) (typed_ext hext hwf h₂)
+  | _, _, _, _, hext, hwf, .tSel h hl    =>
+      .tSel (typed_ext hext hwf h)
+            (lookup_mono hext.2 hl (by intro hc; cases hc))
+  | _, _, _, _, hext, hwf, .tSelUnk h _  =>
+      sel_unk_of_total hwf (typed_ext hext hwf h)
+  | _, _, _, _, hext, hwf, .tSelAbs h hl =>
+      .tSelAbs (typed_ext hext hwf h)
+               (lookup_mono hext.2 hl (by intro hc; cases hc))
+  | _, _, _, _, hext, hwf, .tUnk h       => .tUnk (typed_ext hext hwf h)
+  | _, _, _, _, hext, hwf, .tLet h₁ h₂   =>
+      .tLet (fun τ' hi => typed_ext hext hwf (h₁ τ' hi))
+            (typed_ext (hext.bindScheme _ _) (hwf.bindScheme _ _) h₂)
+  | _, _, _, _, hext, hwf, .tRcd h       => .tRcd (typedBody_ext hext hwf h)
+
+theorem typedBody_ext {B C : Type} {constTy : C → B} :
+    {Γ Γ' : Ctx B} → {b : RecBody (Expr C)} → {ρ : Row B} →
+    Ctx.Ext Γ Γ' → Γ'.RowWF →
+    TypedBody constTy Γ b ρ → TypedBody constTy Γ' b ρ
+  | _, _, _, _, _,    _,   .empty     => .empty
+  | _, _, _, _, hext, hwf, .field h   => .field (typed_ext hext hwf h)
+  | _, _, _, _, hext, hwf, .cat h₁ h₂ =>
+      .cat (typedBody_ext hext hwf h₁) (typedBody_ext hext hwf h₂)
+end
+
+-- The ⊑-form stated by the spec [minimal.typ, Refinement] — the shape the
+-- algorithmic soundness proof will consume.
+theorem typed_mono {B C : Type} {constTy : C → B} {Γ Γ' : Ctx B}
+    {e : Expr C} {τ : Ty B}
+    (hext : Ctx.Ext Γ Γ') (hwf : Γ'.RowWF) (h : Typed constTy Γ e τ) :
+    ∃ τ', Typed constTy Γ' e τ' ∧ TyPrec τ' τ :=
+  ⟨τ, typed_ext hext hwf h, .refl τ⟩
+
+
+------------------------------ REFINEMENT EXAMPLE ------------------------------
+-- The Motivation example  x: ({l = c} ‖ x).l  — refinement made visible.
+-- With x: {β} the concatenation has row (β | l: 𝓫_c) and the lookup of l is ?
+-- (β could shadow it), so the λ types at {β} → ★. Solving β ≔ ε lets the
+-- lookup advance past β and hit l: the same term now ALSO types at the
+-- strictly more precise {β} → 𝓫_c — while typed_ext keeps the old {β} → ★
+-- derivable (the found-lookup is re-blurred through T-★-intro). Refinement
+-- only ever adds typings, it never invalidates one.
+
+private def refEx {C : Type} (c : C) : Expr C :=
+  .lam "x" (.sel (.cat (.rcd (.field "l" (.con c))) (.var "x")) "l")
+
+private theorem refEx_unk {B C : Type} (constTy : C → B) (c : C) :
+    Typed constTy Ctx.empty (refEx c) (.fn (.rcd (.var "β")) .unk) := by
+  apply Typed.tLam
+  refine .tSelUnk (ρ := .cat (.var "β") (.sing "l" (.base (constTy c))))
+    (.tCat (.tRcd (.field .tCon)) (.tVar ?_ (Scheme.Inst.refl _))) ?_
+  · simp [Ctx.lookup_bindTy]
+  · exact .catUnk (.varFree
+      (by simp [Ctx.lookupRow, Ctx.bindTy, Ctx.bindScheme, Ctx.empty]))
+
+private theorem refEx_refined {B C : Type} (constTy : C → B) (c : C) :
+    Typed constTy (Ctx.empty.bindRow "β" .empty) (refEx c)
+      (.fn (.rcd (.var "β")) (.base (constTy c))) := by
+  apply Typed.tLam
+  refine .tSel (ρ := .cat (.var "β") (.sing "l" (.base (constTy c))))
+    (.tCat (.tRcd (.field .tCon)) (.tVar ?_ (Scheme.Inst.refl _))) ?_
+  · simp [Ctx.lookup_bindTy]
+  · exact .catSkip (.var rfl .emp) .hit
+
+-- The two typings are related by precision:
+example {B C : Type} (constTy : C → B) (c : C) :
+    TyPrec (.fn (.rcd (.var "β")) (.base (constTy c)))
+           (.fn (.rcd (.var "β")) .unk) :=
+  .fn (.refl _) (.unk _)
+
+private theorem betaCtx_wf {B : Type} :
+    (Ctx.empty.bindRow "β" (.empty : Row B)).RowWF :=
+  ⟨fun _ => 1, fun α ρ h => by
+    simp only [Ctx.lookupRow, Ctx.bindRow, Ctx.empty, List.find?] at h
+    split at h
+    · simp only [Option.map_some] at h
+      cases h
+      simp [Row.rankUnder]
+    · simp at h⟩
+
+-- …and the ★-typing transports into the richer context on the nose:
+example {B C : Type} (constTy : C → B) (c : C) :
+    Typed constTy (Ctx.empty.bindRow "β" .empty) (refEx c)
+      (.fn (.rcd (.var "β")) .unk) :=
+  typed_ext
+    ⟨fun x σ h => by simp [Ctx.lookup, Ctx.empty] at h,
+     fun α ρ h => by simp [Ctx.lookupRow, Ctx.empty] at h⟩
+    betaCtx_wf
+    (refEx_unk constTy c)
+
 end MinimalCalculus

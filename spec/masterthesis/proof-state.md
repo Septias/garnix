@@ -15,7 +15,7 @@ We have two relations: A row equivalence (≈) relation that allows us to swap l
 
 
 ## Current State
-We have proven _type-safety_ for a minimal calculus with _scoped-rows_, _asymmetric concat_, _row-equivalence_, an _unknown type_ and _let-polymorphism_ (schemes over both type- and row-variables, instantiation by substitution at T-var). Preservation holds **on the nose** — see the two design findings below for why that required two new rules and a non-standard T-let.
+We have proven _type-safety_ for a minimal calculus with _scoped-rows_, _asymmetric concat_, _row-equivalence_, an _unknown type_ and _let-polymorphism_ (schemes over both type- and row-variables, instantiation by substitution at T-var). Preservation holds **on the nose** — see the two design findings below for why that required two new rules and a non-standard T-let. Since 26-07-19 the _refinement theorem_ is mechanized too (`typed_ext`/`typed_mono`): typing survives rowEnv-extension on the nose, and refinement is additive — see Future 1 / design finding 3.
 
 Design finding 1 (26-07-14): adding T-let as specced breaks preservation *fatally* — instantiation can demote a `?` lookup to `⊥` (or to a definite `τ`), leaving reducts untypeable, e.g. `let f = (x: x.l) in f {}` steps to `(x: x.l) {}` whose body needs a rule for `ε.l ↓ ⊥`. Fix (adopted, see minimal.typ): two new rules, *T-sel-⊥* (`ρ.l ↓ ⊥ ⟹ e.l: ★`, soft typing — flagged statically, ↯ at runtime) and *T-★-intro* (`e: τ ⟹ e: ★`, the non-transitive "second relation" from the Motivation, kept out of ≈ so head rigidity survives). With both, safety stays on the nose: refined types re-blur to ★, pushing ⊑ out of the safety proof entirely.
 
@@ -25,13 +25,13 @@ Design finding 2 (26-07-14): the standard side condition `ᾱ = ftv(τ₁) ∖ f
 ## Future
 The road to _type refinement_. Nothing fundamental blocks it — the design already anticipates it (rowEnv, *monotonicity*, the ↯-disjunct) — in dependency order:
 
-1. *Typing monotonicity* (the refinement theorem, **next Lean session**): if `Γ ⊢ e: τ` and `Γ ⊑ Γ'` (rowEnv only grows), then `Γ' ⊢ e: τ'` with `τ' ⊑ τ`. ⊑ SPECCED (26-07-19) in minimal.typ (Precision + Refinement sections): Siek-style precision — covariant in ALL positions incl. function domains, ★ top, rows pure congruence (no row-level ★, all imprecision bottlenecks through the type ★). Port as `TyPrec`/`RowPrec`/`ResPrec` inductives, restate lookup_mono's conclusion as `r' ⊑ r`, then induct on typing with lookup_mono as the T-sel-★ base case. Pre-declared helper lemmas: *⊑/≈ commutation* (the T-eq case) and *⊑-rigidity* (τ' ⊑ τ ∧ τ ≠ ★ ⟹ same head). Transitivity/antisymmetry-mod-≈ kept admissible, not rules — small inversions. This turns contribution 2 (refinement at instantiation) from example into theorem.
+1. *Typing monotonicity* (the refinement theorem): DONE (26-07-19, `typed_ext`/`typed_mono` in minimal.lean; ⊑ as `TyPrec`/`RowPrec`/`ResPrec`, Siek-style precision — covariant everywhere incl. function domains, ★ top, rows pure congruence). Design finding 3 (26-07-19): it holds **on the nose** — `Γ ⊑ Γ'` (Ctx.Ext, rowEnv only grows) plus `Γ'.RowWF` gives `Γ' ⊢ e: τ` itself; the specced ∃ τ' ⊑ τ form is the trivial corollary τ' ≔ τ. Same mechanism as preservation: T-★-intro re-blurs lookups that became definite (T-sel-★ survives as T-sel + T-★-intro or T-sel-⊥). The up-to-⊑ form *alone* would be unprovable at T-λ-E (domain and argument may refine differently; no rule lifts one refined type to another) — re-blurring is what makes refinement *additive*: new typings appear, none disappear. Γ'.RowWF is where unification's occurs-check enters the metatheory (a ?-lookup must re-resolve, i.e. totality). The pre-declared ⊑/≈ commutation lemma was NOT needed (no ⊑-induction runs); ⊑-rigidity is proven as inversions. Refinement example mechanized: `x: ({l = c} ‖ x).l` at {β} → ★ with β free, additionally at {β} → 𝓫_c once β ≔ ε, related by ⊑. The "★ actually improves" statement is about principal types → item 2.
 
-2. *Algorithmic system* (unification, paper-first): constraint generation + unification over scoped rows; unresolved lookups become deferred constraints, unification *writes* rowEnv — (1) is exactly why deferring is sound. Soundness statement needs ⊑: the inferred type sits below every declarative type. This is also where the ★-taming story lives: since T-★-intro makes "∃ derivation" nearly vacuous, "the checker flags e" must be defined against the *most precise* derivation the algorithm computes, not against existence. Mechanization of unification: out of scope unless time abounds.
+2. *Algorithmic system* (unification, paper-first): BRAINSTORMED (26-07-19) in algorithmic.typ — W-with-state, θ's row-restriction IS rowEnv, stumps (parked lookups ⟨blocker α, ρ.l ↓ δ⟩ with wake-up on α ≔ ρ′) instead of P&X's rejecting tail check; determinism/monotonicity/totality are the stump lemmas, typed_ext is soundness-across-solver-time, occurs-check maintains RowWF. Open forks recorded there: L1 vs L2 stump/scheme interaction (leaning L1 for theorems, L2 for garnix), failure policy (coupled to ★-elim, item 3), ≐ᵣ vs ≈ completeness, cost model. Principality (⊑ enters here, "the ★ actually improves") and soundness statements drafted. Next: settle L1/L2 by attempting the L1 principality proof; then write the thesis section from it.
 
 3. *★-elimination rules*: DEFERRED behind (1) and (2) — deliberately. Two reasons (26-07-19): (a) every rule added before the monotonicity induction exists adds cases to it; (b) T-★-intro + T-app-★ makes the declarative system a universal sink (blur `3`, apply it: `3 4` types at ★), so elimination is only defensible once (2) defines flagging via principality. minimal.typ records the guard: ⊑-subsumption is NOT admissible, T-★-intro blurs only at top level — that line keeps the sink latent. Related honest-writing note: T-sel-⊥ and T-sel-★ both conclude ★, so "flagged statically" is checker instrumentation (which rule fired), not readable off the type. Partially delivered already by T-sel-⊥ (↯-disjunct non-decorative).
 
-4. *Syntactic T-let admissibility*: staged and waiting — the *substitution stability* lemmas are proven and currently unused precisely for this. Medium effort; alternative is presenting the instance-closed rule in the thesis (the declarative figure currently shows the ftv-rule the mechanization does NOT prove — either fix the figure's claim or prove admissibility, don't leave the gap silent).
+4. *Syntactic T-let admissibility / type-substitution lemma*: PRIORITY RAISED (26-07-19, see algorithmic.typ): the type-substitution lemma is also the *completeness workhorse* of the algorithmic system — it stretches the algorithm's one generic-instance check of a let-binding to the ∀-instances premise of instance-closed T-let. No longer just figure-hygiene. The *substitution stability* lemmas are proven and staged for it. (Thesis figure currently shows the ftv-rule the mechanization does NOT prove — fix the figure's claim or prove admissibility, don't leave the gap silent.)
 
 5. *Stretch, in order*: patterns (meeting-notes candidate, tractable), FC-labels (drags in label variables + kinds, likely paper-only in "Towards Nix").
 
@@ -40,6 +40,7 @@ Writing debt (parallel, no dependencies): thesis.typ Metatheory section still cl
 ## Related Files
 - minimal.typ: provides a semi-formal method of the typesystem
 - minimal.lean: provides a fully formal type-system
+- algorithmic.typ: design brainstorm for the algorithmic system (stumps, unification, L1/L2 fork, failure policy)
 - In the bib/plaintext folder there is the plaintext version of the Paszke&Xie paper
 
 # Progress
@@ -63,6 +64,7 @@ Proofs are for _closed_ programs (Γ = ∅). e ↯ marks _lookup-errors_: a sele
 
 *Progress* (`progress`): If Γ = ∅ and Γ ⊢ e: τ, then `Progress e` — i.e. ∃e' with e → e' (`step`), or e ∈ Values (`done`), or e ↯ (`err`).
 *Preservation* (`preservation`): If ∅ ⊢ e: τ and e → e' then ∅ ⊢ e': τ — the type is preserved on the nose.
+*Refinement* (`typed_ext`/`typed_mono`): If Γ ⊢ e: τ and Γ ⊑ Γ' (Ctx.Ext: term bindings preserved, rowEnv only grows) and Γ'.RowWF, then Γ' ⊢ e: τ on the nose (typed_ext); hence ∃ τ' ⊑ τ with Γ' ⊢ e: τ' (typed_mono, trivially). Stated for open terms — unlike safety, refinement happens under binders.
 *Soundness*: If ⊨ e: τ then ⊢ e: τ
 *Completeness*: If ⊢ e: τ then ⊨ e: τ
 
@@ -81,10 +83,14 @@ Proofs are for _closed_ programs (Γ = ∅). e ↯ marks _lookup-errors_: a sele
     - *context conversion*: typing only sees the context through lookups, so contexts that agree on lookups type the same terms. Subsumes weakening, exchange and shadowing (now at scheme granularity).
     - *rowEnv congruence*: lookup only depends on row-solutions, so substitution leaves lookups untouched
   - *spine-var-freeness*: literal rows carry no row-var in their spine, so no ★
+- Refinement:
+  - *lookup monotonicity in ⊑ vocabulary* (`lookup_mono_prec`): Γ ⊑ Γ' sharpens a lookup — definite results survive on the nose (monotonicity), ? re-resolves via totality (needs Γ'.RowWF).
+  - *⊑-rigidity* (`TyPrec.fn_inv`/`rcd_inv`/`unk_below`): below anything but ★ sits only the same head constructor; ★ sits only below itself. Precision analog of head rigidity.
+  - *★-typeability of selections* (`sel_unk_of_total`): a selection on a record-typed term always types at ★ — whatever the lookup result, one of the three selection rules fires. The re-blurring workhorse of typed_ext (and implicitly of the regression example's instance split).
 - Standalone Metatheory:
   - *determinism*: lookup is deterministic
   - *monotonicity*: definite results (τ/⊥) survive extending the row-solutions, only ★ can improve: the lemma that makes deferring lookups sound
   - *totality*: under acyclic row-solutions (RowWF) every lookup has a result
-  - *substitution stability*: definite lookups survive type substitution (syntactic analog of monotonicity); ≈ is a congruence for type substitution. Currently unused by safety — will serve the syntactic-T-let admissibility and refinement theorems.
+  - *substitution stability*: definite lookups survive type substitution (syntactic analog of monotonicity); ≈ is a congruence for type substitution. Currently unused by safety — will serve the syntactic-T-let admissibility.
 
 
