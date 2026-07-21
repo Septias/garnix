@@ -58,8 +58,8 @@ _Contributions_ We contribute the following items:
 
 == Informal Description of the TS and it's tricks
 - Row-equality up to type-vars
-- T-sel-⊥ and T-★-intro
-
+- We don't need the tail check :)
+- Explain why ★ is Covariant in all positions for functions
 
 == Minimal Calculus
 _Functions, scoped records, record concat, row-vars, let-poly_
