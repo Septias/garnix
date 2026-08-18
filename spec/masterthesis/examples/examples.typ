@@ -1,6 +1,17 @@
 = ∈-Algorithmus
 
 
+== TODO
+- But instantiation CAN demote indefinite results: a ? lookup may become ⊥ or τ
+  after the row-var is filled in. T-sel-⊥ and T-★-intro exist precisely to absorb
+  this — without them preservation fails with untypeable reducts:
+  - `let f = (x: x.l) in f {}`: f: ∀β. {β} → ★ instantiated at β ≔ ε; the reduct
+    (x: x.l) {} needs x: {ε} ⊢ x.l, but ε.l ↓ ⊥ had no rule (fixed by T-sel-⊥)
+  - `let w = (f: (y: f (y.l))) in w (z: c) {l = c′}`: after β ≔ (l: 𝓫′), y.l
+    refines from ★ to 𝓫′, but the λ-bound f: ★ → 𝓫 has a frozen domain ★
+    (fixed by T-★-intro: re-blur 𝓫′ to ★)
+
+
 == Beispiel: Vereinfachung
 ```x: let y = {}; f = x: y: (x ++ y).a in (f x y)```
 

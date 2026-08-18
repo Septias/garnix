@@ -18,7 +18,7 @@
 
 == Abstract
 Asymmetric record concatenation with left-precedence is a _set-or-replace operation_ that, given two records, extends the fields of the first record with every unique field of the second and overwrites fields that collide. This operation is a trivial operation in the Nix programming language and admits a canonical example that can not be statically typed: The expression `a: b: (a ‖ b).l` concatenates two type variables but can not be given a type without instantiating at least b, because of field-precedence and shadowing behaviour.
-We propose a novel _soft type system_ based upon the work of Paszke&Xie with scoped-records, row-variables, asymmetric record concatenation, let-polymorphism, row-equivalence and an unknown type that solves the motivating example using a new lookup derivation $Γ ⊢ ρ.l ↓ r$ to delay record lookups and a _refinement technique_ upon type variable instantiation to narrow types at term application.
+We propose a novel _soft type system_ based upon the work of Paszke&Xie with scoped-records, row-variables, asymmetric record concatenation, let-polymorphism, row-equivalence and an unknown type that solves the motivating example using a novel lookup derivation $Γ ⊢ ρ.l ↓ r$ to delay record lookups and a _refinement technique_ upon type variable instantiation to narrow types at term application.
 We mechanically prove _type safety_ of the declarative system in Lean and give an efficient unification algorithm for a minimal calculus.
 
 
