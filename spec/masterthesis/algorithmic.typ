@@ -180,9 +180,73 @@ slope we criticized — how far before we lose "efficiently computable"?
 ⊖ declarative counterpart of an L2-refined use is a DIFFERENT σ at T-let
 per program — completeness statement gets subtle (see below)
 
-LEANING¿: present L1 as the baseline theorem-bearing system, L2 as the
-implementation's refinement with its own (weaker/sketched) claims. Decide
-after attempting the L1 principality proof.
+DECIDED (26-08-18): L1 principality is REFUTED without attempting the proof
+— mechanized in minimal.lean ("Plain schemes are not principal"):
+- finalized_no_blur: λx. x.l types declaratively at {(l: τ₀)} → τ₀ for EVERY
+  τ₀ (T-sel/hit), but no substitution instance of the L1-finalized {β} → ★
+  sits ⊑-below any of them with τ₀ ≠ ★ — the frozen ★ result cannot blur
+  into a definite type (⊑-rigidity). The stated principality factoring fails.
+- no_plain_principal_scheme: worse, no plain ∀ᾱ.τ scheme AT ALL is
+  instance-closed while covering both the found-typing {(l: {ε})} → {ε} and
+  the ⊥-typing {ε} → ★: its result position must be a quantified variable,
+  and re-pointing that variable at {ε} in the ⊥-instance's substitution
+  manufactures the instance {ε} → {ε}, which is NOT a typing (on x: {ε} the
+  lookup is ⊥, the body types only at ★).
+Consequence: L1 is the soundness-bearing baseline ONLY. Principality must be
+stated over L2's qualified schemes — ∀β. ⟨β.l ↓ δ⟩ ⇒ {β} → δ is exactly the
+principal type of λx. x.l that plain schemes cannot express (δ stays
+writable per instance). L2 is not an optional refinement; it is where the
+refinement claim lives.
+
+
+== L2: qualified schemes (DRAFT¿ — consequence of the decided fork)
+Schemes carry their unresolved lookups as constraints:
+
+σ := ∀ᾱ. Q ⇒ τ        Q := { ⟨ρ.l ↓ δ⟩, … }     (δ ∈ ᾱ; plain HM: Q = ∅)
+
+Declarative instantiation-with-discharge (replaces σ ≥ τ at T-var):
+
+σ ≥_Γ τ′   iff   ∃θ fixed outside ᾱ:  θτ = τ′  and every ⟨ρ.l ↓ δ⟩ ∈ Q
+discharges:  Γ ⊢ (θρ).l ↓ r  with
+r = τ_r  ⟹  θδ = τ_r          (the T-sel moment)
+r = ⊥    ⟹  θδ = ★            (T-sel-⊥; W-flag)
+r = ?    ⟹  θδ = ★            (T-sel-★: still-unknown stays blurred)
+
+- The three-way discharge IS the per-instance case split of the Lean
+  regression proof — instantiation replays T-sel / T-sel-⊥ / T-sel-★ for
+  its chosen ρ. Completeness against instance-closed T-let should fall out
+  of this correspondence¿ (the CORRESPONDENCE bullet above, now load-bearing).
+- Instantiation becomes Γ-relative (lookup reads row-solutions): the price
+  of cross-instantiation refinement. Determinism/monotonicity/totality of ↓
+  keep discharge well-behaved — the same three mechanized lemmas that govern
+  stump wake-up.
+
+Worked example (the regression program): f : ∀β δ. ⟨β.l ↓ δ⟩ ⇒ {β} → δ
+f {}         β ≔ ε          lookup ⊥    δ ≔ ★      : ★    (+ W-flag)
+f {l = c}    β ≔ (l: 𝓫_c)   lookup hit  δ ≔ 𝓫_c    : 𝓫_c  (what L1 loses)
+f y          β ≔ β′ free    lookup ?    δ ≔ ★ decl. / stump re-parks algo.
+
+Principality, restated over L2 (replaces the refuted L1 statement):
+If  θ′(Γ) ⊢ e : τ′  then  Γ; S₀ ⊢ e ⇒ τ; S′  and some θ″ discharging S′'s
+pending stumps has  τ′ ⊒ θ″τ.  The ⊒-blur now absorbs ONLY T-★-intro;
+finalization never occurs inside the statement — δ's are discharged, not
+frozen. (finalized_no_blur exhibits exactly the θ″ that L1 cannot provide:
+the one discharging δ to a found τ₀.)
+
+Improvement corollary (the "reduction only improves typing" claim):
+∅ ⊢ e : τ  ∧  e → e′  ⟹  Types(e) ⊆ Types(e′)   (preservation, MECHANIZED)
+so with L2 principality the principal qualified type of e′ covers that of
+e — improvement under reduction is a two-line corollary. ALL remaining risk
+sits in principality itself, none in the improvement statement.
+
+Open (L2-specific):
+- The covering order on qualified schemes needed to even STATE "the
+  principal type improves": candidate — σ₁ ⊴ σ₂ iff every ≥_Γ-instance of
+  σ₂ is a ⊒-blur of a ≥_Γ-instance of σ₁, uniformly in Γ¿
+- A-var stump copying: fresh δ AND fresh blocker per use; cost of schemes
+  with large Q (dedup identical ⟨ρ.l ↓ δ⟩ across uses¿)
+- Does discharge need full Γ or only θ's row-image? (top-level rowEnv is
+  empty; lookup_applySubst suggests the θ-image suffices¿)
 
 
 == Failure policy (soft typing's hard question)
@@ -234,13 +298,20 @@ substitution-then-blur." ⊑ enters ONLY here — as forecast, safety never
 needed it. Expected hard cases: T-eq (need ≐ᵣ complete for ≈ — the
 lookup_equiv / ResEquiv toolkit should carry it¿) and T-★-intro (absorbed
 by the ⊒-blur in the statement).
+NOTE (26-08-18): as stated this FAILS for L1 — mechanized refutation, see
+Generalization/DECIDED. The statement survives only over L2's qualified
+schemes, where the stump-var δ stays writable and θ″ may instantiate it;
+the ⊒-blur then only absorbs T-★-intro, never finalization. Restate
+against L2 instantiation before proving.
 
 Completeness w.r.t. T-let: against the INSTANCE-CLOSED rule. The algorithm
 checks e₁ once at the generic instance; the type-substitution lemma (plan
 item 4 — the same lemma that makes the syntactic ftv-rule admissible) is
 what stretches one generic check to the ∀-instances premise. Item 4 is
 therefore not optional bookkeeping: it is the completeness workhorse.
-Priority of item 4 RISES.
+STATUS (26-08-18): item 4 is DONE and mechanized (typed_applySubst_aux +
+renameScheme + tLet_syntactic, minimal.lean) — the completeness workhorse
+is already in place.
 
 
 Termination: unification by the usual size/rank measures; stump wake-ups by
@@ -251,7 +322,9 @@ small confluence argument — candidate for mechanization later).
 
 
 == Open questions
-1. L1 vs L2 at generalization (leaning: L1 for theorems, L2 for garnix)
+1. L1 vs L2: DECIDED (see Generalization) — L1 sound-only, L2 carries
+  principality. Remaining: how much of the L2 metatheory gets proven (paper)
+  vs sketched, and the qualified-scheme precision order it needs
 2. Failure policy beyond baseline — coupled to ★-elimination (plan item 3);
   design the ⟨★-elim rule, degradation rule, warning⟩ triples in lockstep
 3. Does ≐ᵣ need full ≈-completeness (distinct-label transpositions across
@@ -271,7 +344,9 @@ small confluence argument — candidate for mechanization later).
 == Relation to plan (proof-state.md)
 - Realizes item 2 (paper-first design); soundness leans on typed_ext,
   Ctx.Ext, RowWF, lookup_det/mono/total — all mechanized
-- RAISES priority of item 4 (type-substitution lemma = completeness
-  workhorse, not just figure-hygiene)
+- Item 4 DONE (typed_applySubst, renameScheme, tLet_syntactic in
+  minimal.lean) — the completeness workhorse is already mechanized
+- L1/L2 fork DECIDED by mechanized refutation (finalized_no_blur,
+  no_plain_principal_scheme): plain schemes cannot be principal
 - CONFIRMS deferral of item 3, and sharpens it: ★-elimination must ship as
   declarative-rule + failure-policy + warning, jointly
