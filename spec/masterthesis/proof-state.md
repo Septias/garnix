@@ -26,7 +26,7 @@ We have two relations: A row equivalence (≈) relation that allows us to swap l
 - [~] Row equivalence ≈
 - [~] Refinement ⊑
 - [x] Unknown Type Abstraction
-- [x] Let-Statements (instance-closed T-let; syntactic-rule admissibility open)
+- [x] Let-Statements (instance-closed T-let; syntactic rule proven admissible — tLet_syntactic via the type-substitution lemma)
 - [ ] FC-Labels
 - [ ] Unification
 - [ ] Patterns
@@ -76,5 +76,12 @@ Proofs are for _closed_ programs (Γ = ∅). e ↯ marks _lookup-errors_: a sele
   - *monotonicity*: definite results (τ/⊥) survive extending the row-solutions, only ★ can improve
   - *totality*: under acyclic row-solutions (RowWF) every lookup has a result
   - *substitution stability*: definite lookups survive type substitution
+- Type substitution & generalization (the algorithmic completeness workhorse):
+  - *type-substitution lemma*: typing transports along θ into a context whose schemes θ-cover the originals (typed_applySubst_aux); the ?-selection case re-derives through T-sel + T-★-intro / T-sel-⊥ / T-sel-★ per the substituted lookup
+  - *scheme renaming*: capture-avoiding renaming of scheme binders against a finite avoid-set (renameScheme) — the only place fresh names are needed
+  - *syntactic let*: the standard HM generalization rule (one derivation + ᾱ ∩ ftv(Γ) = ∅) is admissible for instance-closed T-let (tLet_syntactic)
+- Principality refutation (decides the L1/L2 fork of algorithmic.typ):
+  - *no blur factoring*: no substitution instance of the L1-finalized {β} → ★ sits ⊑-below a found-typing {(l: τ₀)} → τ₀ with τ₀ ≠ ★ (finalized_no_blur)
+  - *no plain principal scheme*: no ∀ᾱ.τ scheme is instance-closed while having both the found-typing and the ⊥-typing of λx. x.l as instances (no_plain_principal_scheme) — plain schemes cannot be principal; qualified/stump-carrying schemes (L2) are forced
 
 

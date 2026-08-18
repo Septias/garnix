@@ -862,9 +862,9 @@ mutual
     -- side condition, hence no variable-capture/renaming machinery anywhere.
     -- The premise is exactly what the polymorphic substitution lemma consumes
     -- at let-β. The standard syntactic rule (generalize ᾱ = ftv(τ₁) ∖ ftv(Γ))
-    -- is admissible via a type-substitution lemma — future work; T-sel-⊥ and
-    -- T-★-intro are what make this premise satisfiable when instantiation
-    -- demotes/refines a ?-lookup.
+    -- is admissible via the type-substitution lemma — proven below
+    -- (tLet_syntactic); T-sel-⊥ and T-★-intro are what make this premise
+    -- satisfiable when instantiation demotes/refines a ?-lookup.
     | tLet : (∀ τ₁, σ.Inst τ₁ → Typed constTy Γ e₁ τ₁) →
              Typed constTy (Γ.bindScheme x σ) e₂ τ₂ →
              Typed constTy Γ (.letE x e₁ e₂) τ₂
@@ -2447,5 +2447,205 @@ example {B C : Type} (constTy : C → B) (c : C) :
      fun α ρ h => by simp [Ctx.lookupRow, Ctx.empty] at h⟩
     betaCtx_wf
     (refEx_unk constTy c)
+
+------------------- PLAIN SCHEMES ARE NOT PRINCIPAL (L1 refutation) ------------
+-- The algorithmic design (algorithmic.typ, Generalization) forks on whether
+-- schemes may carry stumps (L2) or stay plain ∀ᾱ.τ, finalizing pending stumps
+-- to ★ at the generalization boundary (L1). The L1 principality claim is
+-- refuted here, deciding the fork without attempting the proof:
+--
+--   λx. x.l  types at  {(l: τ₀)} → τ₀  for EVERY τ₀   (lookup hits)
+--            and at    {ε} → ★                        (lookup is ⊥)
+--
+-- (1) finalized_no_blur: L1 infers {β} → δ and finalizes δ ≐ ★; no
+--     substitution instance of {β} → ★ sits ⊑-below a found-typing with
+--     non-★ result — the principality factoring ("every declarative typing
+--     is substitution-then-blur of the inferred type") fails.
+-- (2) no_plain_principal_scheme: no plain scheme AT ALL is instance-closed
+--     (T-let's premise / what algorithmic soundness guarantees) while having
+--     both typings above as instances: its result position must be a
+--     quantified variable α, and re-pointing α at {ε} inside the ⊥-instance's
+--     substitution manufactures the instance {ε} → {ε} — not a typing, since
+--     on x: {ε} the lookup is ⊥ and the body types only at ★.
+-- The principal type needs a result position that stays WRITABLE per
+-- instance: the qualified (stump-carrying) scheme ∀β. ⟨β.l ↓ δ⟩ ⇒ {β} → δ.
+-- Hence L1 is soundness-bearing only; principality lives in L2.
+
+private def selEx (C : Type) : Expr C := .lam "x" (.sel (.var "x") "l")
+
+-- The found-typing family: λx. x.l : {(l: τ₀)} → τ₀ for every τ₀.
+theorem selEx_found {B C : Type} (constTy : C → B) (τ₀ : Ty B) :
+    Typed constTy Ctx.empty (selEx C) (.fn (.rcd (.sing "l" τ₀)) τ₀) :=
+  .tLam (.tSel (.tVar (by simp [Ctx.lookup_bindTy]) (Scheme.Inst.refl _)) .hit)
+
+-- The ⊥-typing: λx. x.l : {ε} → ★.
+theorem selEx_absent {B C : Type} (constTy : C → B) :
+    Typed constTy Ctx.empty (selEx C) (.fn (.rcd .empty) .unk) :=
+  .tLam (.tSelAbs (.tVar (by simp [Ctx.lookup_bindTy]) (Scheme.Inst.refl _)) .emp)
+
+-- (1) The L1 factoring fails: for τ₀ ≠ ★ there is no θ with
+-- θ({β} → ★) ⊑ {(l: τ₀)} → τ₀ — the frozen ★ result sits ⊑-below nothing
+-- but ★ (⊑-rigidity, TyPrec.unk_below).
+theorem finalized_no_blur {B : Type} (θ : TySubst B) {τ₀ : Ty B}
+    (h₀ : τ₀ ≠ .unk) :
+    ¬ TyPrec ((Ty.fn (.rcd (.var "β")) .unk).applySubst θ)
+             (.fn (.rcd (.sing "l" τ₀)) τ₀) := by
+  intro h
+  simp only [Ty.applySubst, Row.applySubst] at h
+  obtain ⟨τ₁', τ₂', hfn, -, hres⟩ := TyPrec.fn_inv h
+  cases hfn
+  exact h₀ hres.unk_below
+
+-- Variable typings mod tEq/tUnk: a monotype-bound variable types at ★ or at
+-- something ≈ its binding.
+private theorem var_inst_inv {B C : Type} {constTy : C → B} :
+    {Γ : Ctx B} → {e : Expr C} → {τ : Ty B} → Typed constTy Γ e τ →
+    ∀ {x : Var} {τx : Ty B}, e = .var x → Γ.lookup x = some ⟨[], τx⟩ →
+    τ = .unk ∨ TyEquiv τx τ
+  | _, _, _, .tVar h hi => fun he hx => by
+      cases he
+      rw [h] at hx
+      cases Option.some.inj hx
+      rw [hi.mono]
+      exact .inr (.refl _)
+  | _, _, _, .tEq h heq => fun he hx =>
+      match var_inst_inv h he hx with
+      | .inl hu => .inl (hu ▸ heq).unk_inv
+      | .inr ht => .inr (ht.trans heq)
+  | _, _, _, .tUnk _ => fun _ _ => .inl rfl
+  | _, _, _, .tCon => fun he _ => nomatch he
+  | _, _, _, .tLam _ => fun he _ => nomatch he
+  | _, _, _, .tApp _ _ => fun he _ => nomatch he
+  | _, _, _, .tCat _ _ => fun he _ => nomatch he
+  | _, _, _, .tSel _ _ => fun he _ => nomatch he
+  | _, _, _, .tSelUnk _ _ => fun he _ => nomatch he
+  | _, _, _, .tSelAbs _ _ => fun he _ => nomatch he
+  | _, _, _, .tLet _ _ => fun he _ => nomatch he
+  | _, _, _, .tRcd _ => fun he _ => nomatch he
+
+-- On x: τx with τx ≈ {ε}, the selection x.l types ONLY at ★: the lookup on ε
+-- is ⊥ (mod ≈), so T-sel can never fire.
+private theorem sel_var_unk {B C : Type} {constTy : C → B} :
+    {Γ : Ctx B} → {e : Expr C} → {τ : Ty B} → Typed constTy Γ e τ →
+    ∀ {x : Var} {l : Label} {τx : Ty B}, e = .sel (.var x) l →
+    Γ.lookup x = some ⟨[], τx⟩ → TyEquiv τx (.rcd .empty) → τ = .unk
+  | _, _, _, .tSel h hl => fun he hx hτx => by
+      cases he
+      rcases var_inst_inv h rfl hx with hu | ht
+      · cases hu
+      · obtain ⟨ρ', hρ', hre⟩ := (ht.symm.trans hτx).rcd_inv
+        cases hρ'
+        obtain ⟨r₂, hl₂, hre₂⟩ := lookup_equiv hre hl
+        cases hl₂
+        cases hre₂
+  | _, _, _, .tEq h heq => fun he hx hτx =>
+      ((sel_var_unk h he hx hτx) ▸ heq).unk_inv
+  | _, _, _, .tUnk _ => fun _ _ _ => rfl
+  | _, _, _, .tSelUnk _ _ => fun _ _ _ => rfl
+  | _, _, _, .tSelAbs _ _ => fun _ _ _ => rfl
+  | _, _, _, .tCon => fun he _ _ => nomatch he
+  | _, _, _, .tVar _ _ => fun he _ _ => nomatch he
+  | _, _, _, .tLam _ => fun he _ _ => nomatch he
+  | _, _, _, .tApp _ _ => fun he _ _ => nomatch he
+  | _, _, _, .tCat _ _ => fun he _ _ => nomatch he
+  | _, _, _, .tLet _ _ => fun he _ _ => nomatch he
+  | _, _, _, .tRcd _ => fun he _ _ => nomatch he
+
+-- The mixed instance {ε} → {ε} is not a typing of λx. x.l.
+private theorem selEx_no_mixed {B C : Type} (constTy : C → B) :
+    ¬ Typed constTy Ctx.empty (selEx C) (.fn (.rcd .empty) (.rcd .empty)) := by
+  intro h
+  obtain ⟨τ₁, τ₂, heq | hu, hbody⟩ := typed_lam_inv h
+  · obtain ⟨σ₁, σ₂, hσ, he₁, he₂⟩ := heq.fn_inv
+    cases hσ
+    have hτ₂ : τ₂ = .unk :=
+      sel_var_unk hbody rfl (by simp [Ctx.lookup_bindTy]) he₁
+    cases (hτ₂ ▸ he₂).unk_inv
+  · cases hu
+
+-- (2) No plain scheme is instance-closed while covering both the found- and
+-- the ⊥-typing of λx. x.l. Proof: the scheme's result position must be a
+-- quantified variable (it instantiates to both {ε} and ★, which are rigid);
+-- re-pointing that variable at {ε} inside the ⊥-instance's substitution
+-- leaves the domain image at {ε} (the domain never consults the result
+-- variable's ty-image) and yields the underivable instance {ε} → {ε}.
+theorem no_plain_principal_scheme {B C : Type} (constTy : C → B) :
+    ¬ ∃ σ : Scheme B,
+        (∀ τ, σ.Inst τ → Typed constTy Ctx.empty (selEx C) τ) ∧
+        σ.Inst (.fn (.rcd (.sing "l" (.rcd .empty))) (.rcd .empty)) ∧
+        σ.Inst (.fn (.rcd .empty) .unk) := by
+  rintro ⟨σ, hclosed, ⟨θa, -, hba⟩, ⟨θb, hfb, hbb⟩⟩
+  cases hbody : σ.body with
+  | base b => rw [hbody] at hba; simp only [Ty.applySubst] at hba; cases hba
+  | unk => rw [hbody] at hba; simp only [Ty.applySubst] at hba; cases hba
+  | rcd ρ => rw [hbody] at hba; simp only [Ty.applySubst] at hba; cases hba
+  | var α =>
+      rw [hbody] at hbb
+      simp only [Ty.applySubst] at hbb
+      by_cases hα : α ∈ σ.vars
+      · -- α quantified: every type is an instance, e.g. {ε} — not a typing
+        have hinst : σ.Inst (.rcd .empty : Ty B) := by
+          refine ⟨⟨fun δ => if δ = α then .rcd .empty else .var δ,
+            fun δ => .var δ⟩, ⟨fun δ hδ => ?_, fun _ _ => rfl⟩, ?_⟩
+          · have hne : ¬δ = α := by rintro rfl; exact hδ hα
+            simp [hne]
+          · rw [hbody]; simp [Ty.applySubst]
+        obtain ⟨τ₁, τ₂, heq | hu, -⟩ := typed_lam_inv (hclosed _ hinst)
+        · obtain ⟨σ₁, σ₂, hσ, -, -⟩ := heq.fn_inv
+          cases hσ
+        · cases hu
+      · -- α free: the instance is .var α, not a function type
+        rw [hfb.1 α hα] at hbb
+        cases hbb
+  | fn dom res =>
+      rw [hbody] at hba hbb
+      simp only [Ty.applySubst] at hba hbb
+      injection hba with hda hra
+      injection hbb with hdb hrb
+      cases res with
+      | base b => simp only [Ty.applySubst] at hrb; cases hrb
+      | unk => simp only [Ty.applySubst] at hra; cases hra
+      | fn τa τb => simp only [Ty.applySubst] at hrb; cases hrb
+      | rcd ρr => simp only [Ty.applySubst] at hrb; cases hrb
+      | var α =>
+          simp only [Ty.applySubst] at hra hrb
+          have hα : α ∈ σ.vars := by
+            by_cases hα : α ∈ σ.vars
+            · exact hα
+            · rw [hfb.1 α hα] at hrb
+              cases hrb
+          -- the mixed substitution: θb with α re-pointed at {ε}
+          have hd' : dom.applySubst
+              (⟨fun δ => if δ = α then .rcd .empty else θb.ty δ, θb.row⟩ :
+                TySubst B) = .rcd .empty := by
+            cases dom with
+            | var γ =>
+                simp only [Ty.applySubst] at hdb
+                have hne : ¬γ = α := by
+                  rintro rfl
+                  rw [hdb] at hrb
+                  cases hrb
+                simpa [Ty.applySubst, hne] using hdb
+            | rcd ρd =>
+                simp only [Ty.applySubst] at hdb
+                injection hdb with hρ
+                cases ρd with
+                | empty => simp [Ty.applySubst, Row.applySubst]
+                | var β =>
+                    simp only [Row.applySubst] at hρ
+                    simp [Ty.applySubst, Row.applySubst, hρ]
+                | sing l' t => simp only [Row.applySubst] at hρ; cases hρ
+                | cat ρ₁ ρ₂ => simp only [Row.applySubst] at hρ; cases hρ
+            | base b => simp only [Ty.applySubst] at hdb; cases hdb
+            | unk => simp only [Ty.applySubst] at hdb; cases hdb
+            | fn τa τb => simp only [Ty.applySubst] at hdb; cases hdb
+          have hinst : σ.Inst (.fn (.rcd .empty) (.rcd .empty)) := by
+            refine ⟨⟨fun δ => if δ = α then .rcd .empty else θb.ty δ, θb.row⟩,
+              ⟨fun δ hδ => ?_, fun δ hδ => hfb.2 δ hδ⟩, ?_⟩
+            · have hne : ¬δ = α := by rintro rfl; exact hδ hα
+              simp [hne, hfb.1 δ hδ]
+            · rw [hbody]
+              simp [Ty.applySubst, hd']
+          exact selEx_no_mixed constTy (hclosed _ hinst)
 
 end MinimalCalculus
