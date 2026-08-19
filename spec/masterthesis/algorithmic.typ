@@ -10,7 +10,7 @@
   with row-/label-variables. We drop their *conditional tail check* (they
   reject when shadowing is unresolved) and replace it with stumps: park the
   lookup, emit ★ only when forced
-- Working name¿: Algorithm R (rows / refinement)
+- Working name: Algorithm R (rows / refinement)
 
 
 == Architecture: W-with-state vs constraint generation
@@ -37,8 +37,8 @@ W : warnings (definite-absence flags, ★-degradations)
   θ. The declarative system "reads" solutions via L-α; the algorithm "writes"
   them via unification. Ctx.Ext (rowEnv only grows) is precisely "θ only gets
   refined during solving" — the mechanized typed_ext says every typing
-  established at an earlier solver state survives to every later one. That is
-  the entire soundness-across-time argument, already proven.
+  established at an earlier solver state survives to every later one. *That is
+  the entire soundness-across-time argument, already proven.*
 - The occurs-check is not an optimization: it maintains Ctx.RowWF (acyclic,
   rank-decreasing solutions), which is the hypothesis typed_ext and lookup
   totality consume. Occurs-check failure on a row-var = would-be recursive
@@ -50,8 +50,7 @@ W : warnings (definite-absence flags, ★-degradations)
 Γ; S ⊢ e ⇒ τ; S′        (infer)
 S ⊢ τ₁ ≐ τ₂ ⇝ S′        (unify types)
 S ⊢ ρ₁ ≐ᵣ ρ₂ ⇝ S′       (unify rows)
-θ ⊢ ρ.l ↓ r              (the SAME lookup relation as minimal.typ, reading
-θ's row-solutions — nothing new to define)
+θ ⊢ ρ.l ↓ r             (the SAME lookup relation as minimal.typ, reading θ's row-solutions — nothing new to define)
 
 Fresh-variable discipline as usual; ⇒-rules are syntax-directed, one per
 term former, no T-eq/T-★-intro counterparts (those are what inversion-mod-≈
@@ -66,17 +65,17 @@ A-var:   x: ∀ᾱ.τ ∈ Γ   fresh β̄
 (plus stump copying if schemes carry stumps — see Generalization)
 
 A-lam:   fresh α   Γ·(x: α); S ⊢ e ⇒ τ; S′
-------------------------------------
+------------------------------------------
 Γ; S ⊢ (x: e) ⇒ α → τ; S′
 
 A-app:   Γ; S ⊢ e₁ ⇒ τ₁; S₁   Γ; S₁ ⊢ e₂ ⇒ τ₂; S₂   fresh β
 S₂ ⊢ τ₁ ≐ τ₂ → β ⇝ S₃
-----------------------------------------------------
+------------------------------------------------------------
 Γ; S ⊢ e₁e₂ ⇒ β; S₃
 
 A-conc:  Γ; S ⊢ e₁ ⇒ τ₁; S₁   Γ; S₁ ⊢ e₂ ⇒ τ₂; S₂   fresh ρ₁ ρ₂
 S₂ ⊢ τ₁ ≐ {ρ₁} ⇝ S₃   S₃ ⊢ τ₂ ≐ {ρ₂} ⇝ S₄
---------------------------------------------------------
+---------------------------------------------------------------
 Γ; S ⊢ e₁ ‖ e₂ ⇒ { ρ₂ | ρ₁ }; S₄
 
 A-sel:   Γ; S ⊢ e ⇒ τ; S₁   fresh ρ   S₁ ⊢ τ ≐ {ρ} ⇝ S₂
@@ -124,32 +123,153 @@ will turn out to be".
   whole solver should stay near-linear¿ (formal cost analysis open)
 
 
-== Row unification sketch
-Adapting Paszke&Xie to scoped rows + asymmetric concat. Rows normalize
-(mod ≈: assoc, ε-units) to spines  a₁ | a₂ | … | aₙ  with atoms
-a := l: τ | α.
+== Row unification ≐ᵣ (DRAFT 26-08-19)
+> Replaces the earlier sketch. Adapts P&X's Fig. 10 to scoped rows +
+> asymmetric concat. Headline deviation: we DROP their field-guessing rule
+> (LUtail) — in our architecture selections never emit row constraints
+> (they become stumps), so ≐ᵣ never has to guess a field into a var. What
+> remains is a unification whose every step is FORCED (solution-set
+> preserving), which is what makes mgu-on-success nearly free.
 
-- ≈-comm (swap DISTINCT labels) gives limited reordering: a field may move
-  left/right past distinctly-labeled fields but never past a row-var and
-  never past an equal label. Unification must respect this: match fields
-  greedily left-to-right, allowing distinct-label transpositions within the
-  var-free prefix¿ (this is where P&X's machinery mostly carries over)
-- (l: τ₁ | ρ₁) ≐ᵣ (l: τ₂ | ρ₂) with l leftmost on both sides ⟹
-  τ₁ ≐ τ₂, ρ₁ ≐ᵣ ρ₂
-- var-var: α ≐ᵣ β ⟹ union-find merge
-- var-row: α ≐ᵣ ρ ⟹ occurs-check (rank discipline! solution may only
-  mention strictly-later vars — the telescope form of RowWF), then write
-  α ≔ ρ and WAKE stumps blocked on α
-- Duplicate labels are legal (scoped!): (l:τ₁ | l:τ₂) is a valid spine and
-  NOT equal to (l:τ₁); shadowed fields still participate in ≐ᵣ ¿ — or should
-  unification quotient them away? Careful: shadowed fields are unobservable
-  by lookup but ≈ does not erase them; quotienting would make ≐ᵣ coarser
-  than ≈ and break soundness-against-T-eq. LEANING: keep shadowed fields,
-  they cost nothing
-- ★ in unification: ★ ≐ ★ succeeds; ★ ≐ τ (τ ≠ ★, not a var) FAILS as an
-  equation — ★ is a rigid constructor for ≐, matching "★ stays out of ≈" and
-  ★-rigidity (TyPrec.unk_below). Whether that failure rejects or degrades is
-  the Failure-policy question, not unification's
+*Normal form.* Rows normalize mod ≈-assoc and ≈-units to spines
+a₁ | a₂ | … | aₙ with atoms a := l: τ | α, and a spine factors into an
+alternation of *segments* and vars:
+
+seg₀ | α₁ | seg₁ | α₂ | … | αₖ | segₖ
+
+where a segment is a var-free run, read as a map label ↦ (ordered list of
+types): ≈-comm swaps adjacent DISTINCT labels only, so within a segment
+distinct labels commute freely while equal labels keep their relative
+order (scopedness: (l:τ₁ | l:τ₂) ≠ (l:τ₁), shadowed fields participate).
+Nothing crosses a var and vars never swap. Hence the ≈-CHARACTERIZATION:
+
+ρ₁ ≈ ρ₂  iff  same var sequence α₁…αₖ, and corresponding segments
+have equal label sets with per-label type lists pointwise ≈
+
+This is a partially-commutative (trace) monoid¿; the load-bearing algebraic
+fact is that trace monoids are *LEFT- AND RIGHT-CANCELLATIVE* — cancelling a
+shared var off either end is sound AND complete, which is exactly what
+replaces P&X's shared-tail side condition ([Δ₂]ρ₁ = [Δ₁]ρ₁).
+
+*Judgment.*  S ⊢ ρ₁ ≐ᵣ ρ₂ ⇝ S′  with both sides kept θ-normalized
+(solved vars expanded, segments re-merged, then re-factored). Rules apply
+from BOTH ends of the spines; every rule is forced; symmetric mirrors
+(and right-end duals) omitted:
+
+U-ε          ε ≐ᵣ ε                        ⟹ ✓
+U-field      leftmost LHS field l:τ, and the RHS *window* (= leading
+             segment, i.e. everything before the first var) contains l
+             ⟹ match against the FIRST l-occurrence in the window
+             (distinct-label transpositions = ≈-comm; first occurrence
+             per label = scoped order), emit τ ≐ τ', delete both, recurse
+U-clash      projection-clash, checked GLOBALLY (any position, not just
+             the window): some label l has more concrete l-fields on one
+             side than on the other AND the side with fewer has NO vars
+             left to absorb the difference
+             ⟹ FAIL (clash: the l-projection already has no unifier —
+             hard error). Subsumes "leftmost field missing in a var-free
+             RHS"; per-label counting is O(atoms) bookkeeping¿
+U-var-refl   both spines start (or end) with the SAME var α
+             ⟹ strip it (*cancellativity*), recurse
+U-var-solve  one side's remainder is exactly α
+             ⟹ occurs-check + rank discipline (solution mentions only
+             strictly-later vars — the telescope form of RowWF), write
+             α ≔ remainder, WAKE stumps blocked on α
+U-ε-var      one side exhausted, other side remainder r
+             ⟹ every var in r ≔ ε (forced: θ-images must concatenate to
+             the empty trace); any remaining field ⟹ FAIL (clash)
+U-stuck      NO projection-clash (else U-clash), and: leftmost LHS field
+             l:τ, RHS window lacks l, window ends at var β (l could come
+             from β — or be shadowed by it); or both spines lead (and
+             trail) with DISTINCT vars, neither side a whole-var remainder
+             ⟹ *FAIL (ambiguous: solutions exist but no unique mgu, see
+             Trichotomy). The projection-clash precondition is what keeps
+             this class honest — solvable-but-ambiguous ONLY*
+
+- var-var α ≐ᵣ β is U-var-solve (union-find merge in the implementation)
+- ★ in field types: ★ ≐ ★ succeeds; ★ ≐ τ (τ ≠ ★, not a var) FAILS as an
+  equation — ★ is a rigid constructor for ≐, matching "★ stays out of ≈"
+  and ★-rigidity (TyPrec.unk_below). Whether that failure rejects or
+  degrades is the Failure-policy question, not unification's
+- shadowed fields are NOT quotiented away: ≈ does not erase them, and a
+  coarser ≐ᵣ would break soundness-against-T-eq. They cost nothing
+
+*Why no LUtail (deviation from P&X).* P&X's (Rfield) search may hit a row
+var and then COMMITS it to contain the sought field: α ≔ (l: β | γ),
+fresh β γ. Two reasons we drop this:
+- It is not forced, and demonstrably loses solutions: (l: Int) ≐ᵣ (α | l: Int)
+  has the unique mgu α ≔ ε, but LUtail commits α to contain l and fails.
+  Our two-sided processing finds it: right-cancel the field (match l:Int
+  against l:Int — both are the rightmost atoms and their windows are the
+  trailing segments), leaving ε ≐ᵣ α, then U-ε-var. Forced throughout.
+- P&X NEED LUtail because their selection/extension elaborate to row
+  constraints — a field demand must flow into the row through unification.
+  Ours flow through the lookup relation and park as stumps; ≐ᵣ only ever
+  states structural EQUALITY of two rows. Field demands and row equality
+  are different judgments in this system, and the stump machinery absorbs
+  exactly the non-forced rule. (This is the algorithmic payoff of the
+  T-sel/★ design, and worth saying loudly in the thesis)
+
+*Worked examples.*
+- P&X's shared-tail pitfall (l₁: Int | α) ≐ᵣ (l₂: Int | α), l₁ ≠ l₂:
+  U-var-refl right-cancels α, then U-clash — correct rejection with no
+  side condition and no loop risk (their example motivating [Δ₂]ρ₁ = [Δ₁]ρ₁)
+- (α | l: Int | β) ≐ᵣ (l: Int): var count must collapse; right-match the
+  field, U-ε-var forces α ≔ ε, β ≔ ε. Unique mgu, found
+- (β | α) ≐ᵣ (l: Int): θβ ++ θα = [l: Int] splits two incomparable ways
+  ⟹ U-stuck. CORRECT to fail: this is Wand's non-principality example in
+  unification clothing — g: {l: Int} → τ applied to x ‖ y with both
+  arguments abstract genuinely has no principal typing without lacks-
+  constraints or unions of typings. Systems either backtrack (Wand),
+  constrain (lacks/disjointness), or fail (P&X, us). We fail ONLY when two
+  abstract concatenations must be aligned against each other; selection —
+  the common case — never asks for alignment thanks to stumps¿ (claim:
+  check against a corpus later, Towards Nix)
+- (β | l: Int | α) ≐ᵣ (l′: Bool), l ≠ l′: U-clash, NOT stuck — the RHS is
+  var-free with no l-field, so the l-projection is unsolvable no matter
+  what the vars do. A window-only clash rule would misfile this under
+  stuck (leading atoms are var vs. field); this example is why U-clash
+  must be projection-based
+
+*Metatheory obligations.*
+- Soundness: S ⊢ ρ₁ ≐ᵣ ρ₂ ⇝ S′ and S″ ⊒ S′ final ⟹ ⟦S″⟧ρ₁ ≈ ⟦S″⟧ρ₂
+  (mirrors P&X Thm 3.4; the ⇝-extension is Ctx.Ext, typed_ext transports)
+- Forced-step invariance: every rule preserves the solution set
+  {θ | θρ₁ ≈ θρ₂}. Corollary: mgu-on-success (P&X Thm 3.7, but without
+  their "if it succeeds" asymmetry hiding lost solutions — our failures
+  are classified instead)
+- Trichotomy¿ (the clean statement to aim for): ≐ᵣ terminates with either
+  (a) success + mgu, (b) clash-fail and NO unifier exists, or
+  (c) stuck-fail and solutions EXIST but no mgu does.
+  (c) is the trace-factorization argument: a unifier = a Levi-style
+  factorization of one side's blocks against the other's (Levi's lemma
+  for trace monoids; vars commute with nothing, so they never split
+  across an alignment boundary); a stuck configuration admits ≥2
+  factorizations pairing some concrete atom differently; concrete-atom
+  pairings are substitution-STABLE (θ can instantiate vars but never
+  re-pair existing concrete fields — per-label order is preserved), so
+  no single unifier generalizes both ⟹ no mgu.
+  SHARPNESS of (c) hangs on U-clash being projection-based (26-08-19):
+  with a window-only clash rule, (β | l: Int | α) ≐ᵣ (l′: Bool) would
+  land in stuck although no unifier exists at all — (c) would degrade to
+  "no unique mgu OR unsolvable". (a),(b) should be routine given the
+  ≈-characterization. Mechanization candidate: the ≈-characterization
+  itself (segments + var sequence) — it is also what the T-eq
+  completeness case consumes (lookup_equiv / ResEquiv toolkit)
+- Ground completeness (T-eq workhorse): on var-free rows ≐ᵣ decides ≈
+  — direct from the characterization; no window bound needed, the window
+  IS the whole row
+- Termination: lexicographic (unsolved vars, total atom count); every
+  rule solves a var or deletes atoms; rank discipline keeps RowWF
+
+*Failure policy note.* U-stuck is a THIRD failure class besides clash and
+occurs-check: the program may well be declaratively typable (pick either
+Wand split), so stuck-fail genuinely breaks "inference never rejects what
+the declarative system types" — the promise needs this caveat, stated
+honestly: completeness/principality hold up to var-alignment ambiguity,
+which is exactly the classical non-principality of asymmetric concat.
+W should carry a dedicated diagnostic (which two vars, which label,
+suggest annotating one side)¿
 
 
 == Generalization (A-let) and the stump/scheme interaction
@@ -182,11 +302,11 @@ per program — completeness statement gets subtle (see below)
 
 DECIDED (26-08-18): L1 principality is REFUTED without attempting the proof
 — mechanized in minimal.lean ("Plain schemes are not principal"):
-- finalized_no_blur: λx. x.l types declaratively at {(l: τ₀)} → τ₀ for EVERY
+- *finalized_no_blur*: λx. x.l types declaratively at {(l: τ₀)} → τ₀ for EVERY
   τ₀ (T-sel/hit), but no substitution instance of the L1-finalized {β} → ★
   sits ⊑-below any of them with τ₀ ≠ ★ — the frozen ★ result cannot blur
   into a definite type (⊑-rigidity). The stated principality factoring fails.
-- no_plain_principal_scheme: worse, no plain ∀ᾱ.τ scheme AT ALL is
+- *no_plain_principal_scheme*: worse, no plain ∀ᾱ.τ scheme AT ALL is
   instance-closed while covering both the found-typing {(l: {ε})} → {ε} and
   the ⊥-typing {ε} → ★: its result position must be a quantified variable,
   and re-pointing that variable at {ε} in the ⊥-instance's substitution
@@ -206,7 +326,7 @@ Schemes carry their unresolved lookups as constraints:
 
 Declarative instantiation-with-discharge (replaces σ ≥ τ at T-var):
 
-σ ≥_Γ τ′   iff   ∃θ fixed outside ᾱ:  θτ = τ′  and every ⟨ρ.l ↓ δ⟩ ∈ Q
+σ ≥\_Γ τ′   iff   ∃θ fixed outside ᾱ:  θτ = τ′  and every ⟨ρ.l ↓ δ⟩ ∈ Q
 discharges:  Γ ⊢ (θρ).l ↓ r  with
 r = τ_r  ⟹  θδ = τ_r          (the T-sel moment)
 r = ⊥    ⟹  θδ = ★            (T-sel-⊥; W-flag)
@@ -241,8 +361,8 @@ sits in principality itself, none in the improvement statement.
 
 Open (L2-specific):
 - The covering order on qualified schemes needed to even STATE "the
-  principal type improves": candidate — σ₁ ⊴ σ₂ iff every ≥_Γ-instance of
-  σ₂ is a ⊒-blur of a ≥_Γ-instance of σ₁, uniformly in Γ¿
+  principal type improves": candidate — σ₁ ⊴ σ₂ iff every ≥\_Γ-instance of
+  σ₂ is a ⊒-blur of a ≥\_Γ-instance of σ₁, uniformly in Γ¿
 - A-var stump copying: fresh δ AND fresh blocker per use; cost of schemes
   with large Q (dedup identical ⟨ρ.l ↓ δ⟩ across uses¿)
 - Does discharge need full Γ or only θ's row-image? (top-level rowEnv is
@@ -327,10 +447,12 @@ small confluence argument — candidate for mechanization later).
   vs sketched, and the qualified-scheme precision order it needs
 2. Failure policy beyond baseline — coupled to ★-elimination (plan item 3);
   design the ⟨★-elim rule, degradation rule, warning⟩ triples in lockstep
-3. Does ≐ᵣ need full ≈-completeness (distinct-label transpositions across
-  the whole var-free prefix) or does left-to-right greedy with a bounded
-  window suffice? P&X's proof should transfer; verify against ≈-comm's
-  var-blocking restriction
+3. ≐ᵣ: DRAFTED (see Row unification) — window question dissolved: the
+  window is the leading segment, full ≈-completeness within it comes for
+  free from the segment characterization. Remaining obligations: the
+  trace-monoid ≈-characterization (mechanization candidate), cancellativity
+  for our ≈, and the trichotomy claim (esp. the stuck ⟹ no-unique-mgu
+  direction)
 4. Recursive rows: occurs-check rejects `rec`-style attrsets; equi-recursive
   rows vs ★-degradation as the Nix answer (Towards Nix section)
 5. Cost model: is near-linear provable (union-find + wake-lists), or only
@@ -348,5 +470,9 @@ small confluence argument — candidate for mechanization later).
   minimal.lean) — the completeness workhorse is already mechanized
 - L1/L2 fork DECIDED by mechanized refutation (finalized_no_blur,
   no_plain_principal_scheme): plain schemes cannot be principal
+- ≐ᵣ DRAFTED (26-08-19): forced-step unification over the trace-monoid
+  normal form, no LUtail (stumps absorb it), two-sided cancellation
+  replaces P&X's shared-tail condition; failure trichotomy
+  clash / occurs / stuck(no-unique-mgu = Wand ambiguity)
 - CONFIRMS deferral of item 3, and sharpens it: ★-elimination must ship as
   declarative-rule + failure-policy + warning, jointly
