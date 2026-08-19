@@ -1,17 +1,20 @@
 
+./26-08-18.typ
 == Todo
 - Let Claude compare Taros paper to my work
 - Kann ich ★ wieder reduzieren?
 - Look at dem new examples ../examples/examples.typ
 - *T-sel-⊥* ist kompletter Quatsch
+  - Actually nein
 
 - Weirdness von Proofs checken
   - Instance-closed Let
+    - Wird gebraucht um renaming-machinery zu dodgen
   - T-sel-★ and T-sel-⊥
     - Currently needs principled types
-    - Added for easy proofs
   - Relation von ≈ and ⊑
   - Variablen immernoch strings
+    - Laut AI erstmal noch lassen
   - Const types C → B
   - Progress can fail even if type ≠ ★
 
@@ -19,6 +22,7 @@
 == Fragen
 - Was ist das Problem mit ★ elimination und warum löst Principality das?
 - Ist let-poly generally broken mit meinen Relations und AI sagts mir nur nicht?
+  - wahrscheinlich nicht
 - Why does ★ have to be outside of ≈ and can I "fix" that?
   - Hard to fix, it apparently collapses the typesystem
   - *Do ⊑ and ≈ fit together conceptually?*
