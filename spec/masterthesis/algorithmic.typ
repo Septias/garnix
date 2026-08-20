@@ -4,8 +4,7 @@
 > minimal.lean (mechanized safety + refinement).
 
 - Goal restated (thesis.typ, Goal): efficiently computable, *no breaking
-  points* — inference never rejects a program the declarative system types;
-  failures inside the ★-fragment degrade to ★ + warning instead of erroring
+  points*
 - Design inheritance: Paszke&Xie give unification for infix-extensible rows
   with row-/label-variables. We drop their *conditional tail check* (they
   reject when shadowing is unresolved) and replace it with stumps: park the
@@ -24,7 +23,7 @@ Two candidate shapes:
   to implement X — and X here (stumps) is stateful and order-sensitive
   in its *wake-up* behaviour, even if confluent in its results.
 
-LEANING¿: W-with-state as the primary presentation (it is what garnix will
+LEANING: W-with-state as the primary presentation (it is what garnix will
 implement, and efficiency is a headline constraint), with the constraint
 reading given informally for proofs. The state:
 
@@ -109,21 +108,21 @@ will turn out to be".
   ⊥         ⟹  δ ≐ ★, flag in W       (definite absence, T-sel-⊥)
   ? on α′   ⟹  re-park, blocker α′    (progressed to the next var)
 - *Finalization* (end of inference, or generalization boundary — see below):
-  surviving stumps resolve δ ≐ ★. This is the algorithmic moment of T-sel-★.
+  surviving stumps resolve δ ≐ ★. *This is the algorithmic moment of T-sel-★.*
 - Why this is sound and deterministic — the three standalone lemmas were
   built for exactly this (proof-state, Standalone Metatheory):
-  determinism  — a woken stump re-resolves to a unique result
-  monotonicity — a resolved stump NEVER needs re-checking: found/⊥ are
+  *determinism* — a woken stump re-resolves to a unique result
+  *monotonicity* — a resolved stump NEVER needs re-checking: found/⊥ are
   final under every future extension of θ. Wake-up lists
   never contain resolved stumps; no fixpoint iteration
-  totality     — under the occurs-check invariant (RowWF) every wake-up
+  *totality*     — under the occurs-check invariant (RowWF) every wake-up
   terminates with a result
 - Each stump wakes at most (spine-depth of the eventual solution chain)
   times, and monotonicity de-duplicates work ⟹ with union-find on vars the
   whole solver should stay near-linear¿ (formal cost analysis open)
 
 
-== Row unification ≐ᵣ (DRAFT 26-08-19)
+== Row unification ≐ᵣ
 > Replaces the earlier sketch. Adapts P&X's Fig. 10 to scoped rows +
 > asymmetric concat. Headline deviation: we DROP their field-guessing rule
 > (LUtail) — in our architecture selections never emit row constraints
@@ -141,7 +140,7 @@ where a segment is a var-free run, read as a map label ↦ (ordered list of
 types): ≈-comm swaps adjacent DISTINCT labels only, so within a segment
 distinct labels commute freely while equal labels keep their relative
 order (scopedness: (l:τ₁ | l:τ₂) ≠ (l:τ₁), shadowed fields participate).
-Nothing crosses a var and vars never swap. Hence the ≈-CHARACTERIZATION:
+Nothing crosses a var and vars never swap. Hence the *≈-CHARACTERIZATION*:
 
 ρ₁ ≈ ρ₂  iff  same var sequence α₁…αₖ, and corresponding segments
 have equal label sets with per-label type lists pointwise ≈
@@ -158,33 +157,33 @@ from BOTH ends of the spines; every rule is forced; symmetric mirrors
 
 U-ε          ε ≐ᵣ ε                        ⟹ ✓
 U-field      leftmost LHS field l:τ, and the RHS *window* (= leading
-             segment, i.e. everything before the first var) contains l
-             ⟹ match against the FIRST l-occurrence in the window
-             (distinct-label transpositions = ≈-comm; first occurrence
-             per label = scoped order), emit τ ≐ τ', delete both, recurse
+segment, i.e. everything before the first var) contains l
+⟹ match against the FIRST l-occurrence in the window
+(distinct-label transpositions = ≈-comm; first occurrence
+per label = scoped order), emit τ ≐ τ', delete both, recurse
 U-clash      projection-clash, checked GLOBALLY (any position, not just
-             the window): some label l has more concrete l-fields on one
-             side than on the other AND the side with fewer has NO vars
-             left to absorb the difference
-             ⟹ FAIL (clash: the l-projection already has no unifier —
-             hard error). Subsumes "leftmost field missing in a var-free
-             RHS"; per-label counting is O(atoms) bookkeeping¿
+the window): some label l has more concrete l-fields on one
+side than on the other AND the side with fewer has NO vars
+left to absorb the difference
+⟹ FAIL (clash: the l-projection already has no unifier —
+hard error). Subsumes "leftmost field missing in a var-free
+RHS"; per-label counting is O(atoms) bookkeeping¿
 U-var-refl   both spines start (or end) with the SAME var α
-             ⟹ strip it (*cancellativity*), recurse
+⟹ strip it (*cancellativity*), recurse
 U-var-solve  one side's remainder is exactly α
-             ⟹ occurs-check + rank discipline (solution mentions only
-             strictly-later vars — the telescope form of RowWF), write
-             α ≔ remainder, WAKE stumps blocked on α
+⟹ occurs-check + rank discipline (solution mentions only
+strictly-later vars — the telescope form of RowWF), write
+α ≔ remainder, WAKE stumps blocked on α
 U-ε-var      one side exhausted, other side remainder r
-             ⟹ every var in r ≔ ε (forced: θ-images must concatenate to
-             the empty trace); any remaining field ⟹ FAIL (clash)
+⟹ every var in r ≔ ε (forced: θ-images must concatenate to
+the empty trace); any remaining field ⟹ FAIL (clash)
 U-stuck      NO projection-clash (else U-clash), and: leftmost LHS field
-             l:τ, RHS window lacks l, window ends at var β (l could come
-             from β — or be shadowed by it); or both spines lead (and
-             trail) with DISTINCT vars, neither side a whole-var remainder
-             ⟹ *FAIL (ambiguous: solutions exist but no unique mgu, see
-             Trichotomy). The projection-clash precondition is what keeps
-             this class honest — solvable-but-ambiguous ONLY*
+l:τ, RHS window lacks l, window ends at var β (l could come
+from β — or be shadowed by it); or both spines lead (and
+trail) with DISTINCT vars, neither side a whole-var remainder
+⟹ *FAIL (ambiguous: solutions exist but no unique mgu, see
+Trichotomy). The projection-clash precondition is what keeps
+this class honest — solvable-but-ambiguous ONLY*
 
 - var-var α ≐ᵣ β is U-var-solve (union-find merge in the implementation)
 - ★ in field types: ★ ≐ ★ succeeds; ★ ≐ τ (τ ≠ ★, not a var) FAILS as an
