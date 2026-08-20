@@ -58,10 +58,12 @@ x: σ ∈ Γ   σ ≥ τ
 -------------------------- T-sel-★
 Γ ⊢ e.l: ★
 
-// This blur just keeps progress artifically alive
+
+// Allows to not error on lazy errors
 Γ ⊢ e: {ρ}   Γ ⊢ ρ.l ↓ ⊥
 -------------------------- T-sel-⊥
 Γ ⊢ e.l: ★
+
 
 Γ ⊢ e: τ
 --------- T-★-intro
