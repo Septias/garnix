@@ -36,9 +36,11 @@ We have two relations: A row equivalence (≈) relation that allows us to swap l
 - [¿] Inherit
 
 ## Properties
-- ↓: monoton, total
-- ⊑: non-transitive
-- ≈: symm, assoc, refl, comm 
+- ↓: deterministic, monotone, total (under RowWF)
+- ⊑: reflexive, transitive (limmited)
+- ≈: refl, symm, trans, congruence under |; adjacent distinct labels commute, ε is a unit
+- ρ: rows mod ≈ form a trace monoid (partially-commutative, cancellative)
+
 
 ## Proof Overview
 Proofs are for _closed_ programs (Γ = ∅). e ↯ marks _lookup-errors_: a selection reached a record literal without the label. ★ makes such programs typeable (now also via T-sel-⊥), so progress only holds up to ↯. 
