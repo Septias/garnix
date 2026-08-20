@@ -1,7 +1,11 @@
 
-- *Frozen domain*: A domain that is "poisoned" by ★
+- *Frozen*: A position finalized to ★ that no substitution can refine again
+- *Blurring*: Weakening a definite type to ★ (T-★-intro)
 - *Context Conversion*: Typing sees the context only through lookups
-- *⊑-rigidity*: τ′ ⊑ τ and τ ≠ ★ implies τ′ and τ share their head constructor
-- *On the nose*: Math slang for "trivially holds"
+- *⊑-rigidity*: τ′ ⊑ τ and τ ≠ ★ implies τ′ and τ share their head constructor; ★ sits only below itself
+- *On the nose*: Math slang for "exactly" — holds strictly, not just up to ≈ or ⊑
 - *Inversion*: Invert a typing judgement to learn more about the premise type
-- *Head Rigity*: The head-constructor does not change (functions stay functions)
+- *Head Rigidity*: The head-constructor does not change (functions stay functions)
+- *Instance-closed*: Our version of let, where e₁ must type at every instance of the scheme
+- *Factorization*: An alignment of one row's atoms against the other's (Levi-style); a unifier is one, two distinct ones mean no mgu
+- *Cancellative*: a | ρ₁ ≈ a | ρ₂ implies ρ₁ ≈ ρ₂ (and from the right) — shared atoms strip off either end
