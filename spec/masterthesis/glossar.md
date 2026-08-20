@@ -9,3 +9,21 @@
 - *Instance-closed*: Our version of let, where e₁ must type at every instance of the scheme
 - *Factorization*: An alignment of one row's atoms against the other's (Levi-style); a unifier is one, two distinct ones mean no mgu
 - *Cancellative*: a | ρ₁ ≈ a | ρ₂ implies ρ₁ ≈ ρ₂ (and from the right) — shared atoms strip off either end
+- *mgu*: Most general unifier
+- *Stump*: A parked selection ⟨blocker α, ρ.l ↓ δ⟩ — the lookup waits until α gets solved
+- *Blocker*: The row-variable a stuck lookup is waiting on
+- *Wake-up*: Re-running a stump's lookup when unification solves its blocker
+- *Finalization*: End of inference; surviving stumps resolve δ ≔ ★ (the algorithmic moment of T-sel-★)
+- *Discharge*: Replaying the three-way lookup at instantiation to resolve a qualified scheme's constraints (D-hit/D-⊥/D-defer)
+- *Qualified scheme*: ∀ᾱ. Q ⇒ τ — a scheme carrying its pending lookups as constraints (L2)
+- *Refinement*: A lookup result improving (? → τ or ⊥) once instantiation unblocks it; only ? can improve, definite results are final
+- *Scoped rows*: Duplicate labels stay in the row; lookup resolves them with left-precedence
+- *Spine*: A row normalized mod assoc/units to a flat atom sequence
+- *Segment*: A var-free run of a spine; distinct labels commute inside it, nothing crosses a var
+- *Window*: The leading (or trailing) segment — where unification may match fields
+- *Stuck*: Unification failure where solutions exist but no mgu does (Wand ambiguity: two abstract concatenations must align)
+- *Trichotomy*: ≐ᵣ ends in exactly one of success + mgu, clash (no unifier), or stuck (no unique mgu)
+- *RowWF*: Acyclic, rank-decreasing row-solutions — the occurs-check invariant; feeds lookup totality
+- *↯*: Lookup error — a selection reached a record literal without the label; the residual-risk disjunct of progress
+- *Soft typing*: Programs keep their untyped semantics; ★ marks where the analysis gave up, warnings say why
+- *Instance-Closed T-let*: ∀ τ₁ ≤ σ. Γ ⊢ e₁: τ₁
