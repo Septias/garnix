@@ -35,6 +35,17 @@ We have two relations: A row equivalence (≈) relation that allows us to swap l
 - [¿] With
 - [¿] Inherit
 
+## Symbols
+- ↓: Row-lookup relation, three-way result r := (τ | ⊥ | ?)
+- ★: Definite uncertainty, no elimination
+- ⊑: Precision relation for ★
+  - Every other type is below ★
+- ≈: Row-equivalence relation
+- ≤: Instantiation relation for type-schemes
+- ≐: Type unification
+- ≐ᵣ: Row unification
+- ⊴: "At least as general" (covering order on schemes)
+
 ## Properties
 - ↓: deterministic, monotone, total (under RowWF)
 - ⊑: reflexive, transitive (limmited)
