@@ -357,16 +357,11 @@ reject it — soundness even demands it.
   produces hard errors by itself: lookup results found/⊥/? all continue.
 - The tension case: a stump's δ was already unified (e.g. body forced
   δ ≐ Int) and wake-up finds τ′ = String. Under the baseline: hard error —
-  and this is CORRECT against the current declarative system (there is no
-  typing; the program really is a shadowing-dependent type clash).
-  It still feels anti-soft¿: the program has a perfectly fine ↯-free run
-  whenever the actual argument doesn't shadow l. Making it typeable needs
-  ★-elimination rules (T-app-★ …) so that ★ can absorb the clash — this is
-  the algorithmic face of plan item 3, and the flagging discipline it needs
-  is exactly W: a clash inside a δ-rooted constraint degrades δ ≐ ★ + warn,
-  a clash outside stays fatal. TABLED with item 3; the two must land
-  together, with the declarative and algorithmic side of each ★-elim rule
-  added in lockstep
+  and this is CORRECT: the clash is genuine at this call site regardless of
+  other call sites. ★ has no elimination rules by design: T-★-intro +
+  T-app-★ would make the declarative system a universal sink (blur `3`,
+  apply it: `3 4` types at ★ — soundness demands rejection). δ-clashes stay
+  hard errors.
 - Diagnostics are part of the design, not an afterthought: W records WHY each
   ★ exists (stump lifecycle: born at e.l, blocked on α, forced at
   generalization / resolved ⊥). This is the answer to the "T-sel-⊥ and
@@ -421,20 +416,18 @@ small confluence argument — candidate for mechanization later).
 1. L1 vs L2: DECIDED (see Generalization) — L1 sound-only, L2 carries
   principality. Remaining: how much of the L2 metatheory gets proven (paper)
   vs sketched, and the qualified-scheme precision order it needs
-2. Failure policy beyond baseline — coupled to ★-elimination (plan item 3);
-  design the ⟨★-elim rule, degradation rule, warning⟩ triples in lockstep
-3. ≐ᵣ: DRAFTED (see Row unification) — window question dissolved: the
+2. ≐ᵣ: DRAFTED (see Row unification) — window question dissolved: the
   window is the leading segment, full ≈-completeness within it comes for
   free from the segment characterization. Remaining obligations: the
   trace-monoid ≈-characterization (mechanization candidate), cancellativity
   for our ≈, and the trichotomy claim (esp. the stuck ⟹ no-unique-mgu
   direction)
-4. Recursive rows: occurs-check rejects `rec`-style attrsets; equi-recursive
+3. Recursive rows: occurs-check rejects `rec`-style attrsets; equi-recursive
   rows vs ★-degradation as the Nix answer (Towards Nix section)
-5. Cost model: is near-linear provable (union-find + wake-lists), or only
+4. Cost model: is near-linear provable (union-find + wake-lists), or only
   empirical? What does "efficiently computable" concretely claim in the
   thesis?
-6. FC-labels add label-vars as a second stump *blocker kind* (selection
+5. FC-labels add label-vars as a second stump *blocker kind* (selection
   stuck on an unknown label, cf. record-ts.md's T-look-FC rules) — check
   the stump abstraction survives a second sort before committing to it
 
@@ -450,5 +443,3 @@ small confluence argument — candidate for mechanization later).
   normal form, no LUtail (stumps absorb it), two-sided cancellation
   replaces P&X's shared-tail condition; failure trichotomy
   clash / occurs / stuck(no-unique-mgu = Wand ambiguity)
-- CONFIRMS deferral of item 3, and sharpens it: ★-elimination must ship as
-  declarative-rule + failure-policy + warning, jointly
