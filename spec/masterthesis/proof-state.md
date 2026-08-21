@@ -16,19 +16,21 @@ We have two relations: A row equivalence (≈) relation that allows us to swap l
 
 ## Related Files
 - minimal.typ: provides a semi-formal method of the typesystem
-- minimal.lean: provides a fully formal type-system
+- minimal.lean: provides a fully formal type-system (frozen — L2 lives in its own file)
 - algorithmic.typ: Algorithmic ideas
+- algorithmic.lean: the L2 layer — qualified schemes, discharge, principality bookend. Imports minimal.olean (`lean minimal.lean -o minimal.olean`, then `LEAN_PATH=. lean algorithmic.lean`)
 - In the bib/plaintext folder there is the plaintext version of the Paszke&Xie paper
 
 # Progress
 - [x] Scoped Records
 - [x] Asymmetric Concat
-- [~] Row equivalence ≈
+- [x] Row equivalence ≈ (trace-monoid characterization + full cancellativity mechanized)
 - [~] Refinement ⊑
 - [x] Unknown Type Abstraction
 - [x] Let-Statements (instance-closed T-let; syntactic rule proven admissible — tLet_syntactic via the type-substitution lemma)
+- [~] L2 qualified schemes (declarative QTyped + discharge + embedding mechanized; safety and strictness open)
 - [ ] FC-Labels
-- [ ] Unification
+- [ ] Unification (algebraic foundation + all three worked examples mechanized; algorithm ≐ᵣ + trichotomy open)
 - [ ] Patterns
 - [¿] Occurrence Typing
 - [¿] Recursive types
@@ -50,7 +52,7 @@ We have two relations: A row equivalence (≈) relation that allows us to swap l
 - ↓: deterministic, monotone, total (under RowWF)
 - ⊑: reflexive, transitive (limmited)
 - ≈: refl, symm, trans, congruence under |; adjacent distinct labels commute, ε is a unit
-- ρ: rows mod ≈ form a trace monoid (partially-commutative, cancellative)
+- ρ: rows mod ≈ form a trace monoid (partially-commutative, cancellative) — MECHANIZED (rowEquiv_iff_char + cancel_var_left/right, algorithmic.lean)
 
 
 ## Proof Overview
@@ -96,5 +98,31 @@ Proofs are for _closed_ programs (Γ = ∅). e ↯ marks _lookup-errors_: a sele
 - Principality refutation (decides the L1/L2 fork of algorithmic.typ):
   - *no blur factoring*: no substitution instance of the L1-finalized {β} → ★ sits ⊑-below a found-typing {(l: τ₀)} → τ₀ with τ₀ ≠ ★ (finalized_no_blur)
   - *no plain principal scheme*: no ∀ᾱ.τ scheme is instance-closed while having both the found-typing and the ⊥-typing of λx. x.l as instances (no_plain_principal_scheme) — plain schemes cannot be principal; qualified/stump-carrying schemes (L2) are forced
+- L2 qualified schemes (algorithmic.lean — QScheme σ := ∀ᾱ. Q ⇒ τ, discharge replays D-hit/D-⊥/D-?):
+  - *plain embedding*: Q = ∅ degenerates ≥\_Γ to the Γ-independent Scheme.Inst (inst_toQ) — the seam between the two files
+  - *discharge determinism*: two discharges substituting the row the same way pin δ to the same type (Discharge.det, via lookup_det)
+  - *definite-stability*: found/⊥ discharges survive row-extension of Γ — "a resolved stump never re-checks", wake-up lists carry no resolved stumps (Discharge.mono_of_definite, via lookup_mono); the ?-case is deliberately unstable, wake-up exists to improve it
+  - *worked-example table*: any lookup verdict Γ ⊢ ρ.l ↓ r yields the instance {ρ} → collapse(r) of selQ = ∀βδ. ⟨β.l ↓ δ⟩ ⇒ {β} → δ (selQ_inst_of_lookup)
+  - *instance-closedness restored*: every ≥\_Γ-instance of selQ is a declarative typing of λx. x.l (selQ_instance_closed), and the mixed instance {ε} → {ε} that broke every plain scheme is blocked by discharge (selQ_no_mixed). Bookend: qualified_principal_scheme states the exact shape whose plain-scheme version no_plain_principal_scheme refutes
+- ≈-characterization (algorithmic.lean — the trace-monoid presentation behind ≐ᵣ):
+  - *normal form*: rows flatten to spines (toSpine/ofSpine); refold ρ ≈ ofSpine ρ.toSpine consumes exactly assoc + units (toSpine_equiv)
+  - *invariants*: var sequence (sVarSeq) and per-label projection (sProj — (segment index, type) per l-field in row order); both compositional under ++ (sVarSeq_append, sProj_append)
+  - *the characterization*: ρ₁ ≈ ρ₂ iff same var sequence ∧ all l-projections pointwise-≈ at equal segment indices (rowEquiv_iff_char; soundness RowEquiv.char by rule induction, completeness char_complete by spine walk + extraction spine_extract — first l-field at index 0 bubbles to the front through distinct-label comm-swaps only)
+  - *end-var cancellativity*: shared leading/trailing vars cancel — complete, not just sound (cancel_var_left / cancel_var_right); this is the load-bearing fact for U-var-refl, replacing P&X's shared-tail side condition
+  - *full cancellativity*: ANY shared prefix/suffix row cancels (cancel_cat_left / cancel_cat_right) — the trace-monoid theorem proper, the Levi-lemma ingredient for the trichotomy's stuck ⟹ no-unique-mgu direction
+  - *ground rows*: SpineVarFree ↔ empty var sequence (spineVarFree_iff_varSeq_nil); on ground rows ≈ is decided by the projections alone (ground_char — ≐ᵣ's ground-completeness workhorse)
+  - *≐ᵣ regressions mechanized*: the shared-tail pitfall (l₁:𝓫 | α) ≐ᵣ (l₂:𝓫 | α) has NO unifier (shared_tail_no_unifier), and the LUtail example (l:𝓫) ≐ᵣ (α | l:𝓫) has unifiers exactly θα ≈ ε (lutail_unifier_iff) — the mgu P&X's LUtail misses
+  - *Wand's ambiguity / trichotomy (c)*: (β | α) ≐ᵣ (l:𝓫) is solvable (wand_unifiable) but has NO mgu (wand_no_mgu, over the instance order InstanceOf) — the l-field can come from either side and a ground singleton can never substitute into ε, so the two witnesses are incomparable. U-stuck's failure class is genuine
+- L2 typing relation (algorithmic.lean — QTyped over qualified contexts QCtx):
+  - *the system*: qVar instantiates via ≥\_Γ (instantiation-with-discharge, reading QCtx's row-solutions), qLet's instance-closed premise quantifies over DISCHARGED instances only; all other rules mirror Typed verbatim
+  - *embedding*: every declarative typing is an L2 typing (Typed.toQ / TypedBody.toQ — plain schemes embed with Q = ∅, discharge vacuous, lookups transport on the nose). L2 EXTENDS the declarative system
+  - *the two-use program*: `let f = (x: x.l) in { a = f {l = c} | b = f {} } : {a: 𝓫_c | b: ★}` is QTyped (qtyped_two_use) — one binding used at the found- AND the ⊥-instance simultaneously, the combination no_plain_principal_scheme proves impossible for any plain scheme. The instance-closed premise is discharged by selQ_instance_closed lifted through the embedding
+  - IMPORTANT consequence (not yet mechanized): the extension is STRICT — the declarative system cannot type the two-use program at this precise type, so "algorithm sound against minimal.typ's declarative system" must be stated with L1-finalization (⟦S″⟧ maps δ to ★), while the refined typings live only in the L2 system. The thesis should present L2 as the primary declarative system
+- ≐ᵣ, the algorithm (algorithmic.lean — unifyRow/unifySpine, executable):
+  - *forced steps only*: end-var stripping (U-var-refl, both ends), occurs-checked whole-var solving (U-var-solve), two-ended window field-matching (U-field), U-ε-var, U-ground counting, global projection clash (U-clash), stuck otherwise. No LUtail — field demands park as stumps, never flow through ≐ᵣ. Type equations are EMITTED (τ ≐ τ' pairs), not solved
+  - *four-way result*: success (row-var solutions + residual type equations) / clash (no unifier) / occurs (recursive row) / stuck (no unique mgu)
+  - *kernel-checked regressions* (rfl runs the algorithm): shared-tail → clash, LUtail → success α ≔ ε, Wand → stuck, ground-collapse → α,β ≔ ε, global-clash example → clash, interior occurs → occurs, two-sided ambiguity → stuck
+  - *mechanization findings*: (1) U-ground must be an EXPLICIT rule — the window rules alone do not cover worked example 2's "var count must collapse"; the counting argument (ground side ⟹ vars label-free ⟹ positional pairing) is a separate forced move. (2) End-var cancellation SUBSUMES end-aligned occurs-failures into definite clashes (α ≐ᵣ (l:𝓫 | α) cancels to ε ≐ᵣ (l:𝓫) → clash, strictly stronger than occurs)
+  - *open*: soundness, mgu-on-success, the trichotomy directions, fuel-sufficiency; the type-level driver ≐
 
 

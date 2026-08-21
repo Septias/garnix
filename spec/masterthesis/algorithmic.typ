@@ -149,6 +149,10 @@ This is a partially-commutative (trace) monoid; the load-bearing algebraic
 fact is that trace monoids are *LEFT- AND RIGHT-CANCELLATIVE* — cancelling a
 shared var off either end is sound AND complete, which is exactly what
 replaces P&X's shared-tail side condition ([Δ₂]ρ₁ = [Δ₁]ρ₁).
+MECHANIZED (algorithmic.lean, 26-08-21): the characterization
+(rowEquiv_iff_char) and cancellativity in full generality — not just
+end-vars (cancel_var_left/right) but any shared prefix/suffix row
+(cancel_cat_left/right).
 
 *Judgment.*  S ⊢ ρ₁ ≐ᵣ ρ₂ ⇝ S′  with both sides kept θ-normalized
 (solved vars expanded, segments re-merged, then re-factored). Rules apply
@@ -176,6 +180,8 @@ from BOTH ends of the spines; every rule is forced; symmetric mirrors
   Our two-sided processing finds it: right-cancel the field (match l:Int
   against l:Int — both are the rightmost atoms and their windows are the
   trailing segments), leaving ε ≐ᵣ α, then U-ε-var. Forced throughout.
+  MECHANIZED: the unifiers of this equation are exactly θα ≈ ε
+  (lutail_unifier_iff, algorithmic.lean)
 - P&X NEED LUtail because their selection/extension elaborate to row
   constraints — *a field demand must flow into the row through unification*.
   Ours flow through the lookup relation and park as stumps; ≐ᵣ only ever
@@ -187,7 +193,8 @@ from BOTH ends of the spines; every rule is forced; symmetric mirrors
 *Worked examples.*
 - P&X's shared-tail pitfall (l₁: Int | α) ≐ᵣ (l₂: Int | α), l₁ ≠ l₂:
   U-var-refl right-cancels α, then U-clash — correct rejection with no
-  side condition and no loop risk (their example motivating [Δ₂]ρ₁ = [Δ₁]ρ₁)
+  side condition and no loop risk (their example motivating [Δ₂]ρ₁ = [Δ₁]ρ₁).
+  MECHANIZED: no unifier exists (shared_tail_no_unifier, algorithmic.lean)
 - (α | l: Int | β) ≐ᵣ (l: Int): var count must collapse; right-match the
   field, U-ε-var forces α ≔ ε, β ≔ ε. Unique mgu, found
 - (β | α) ≐ᵣ (l: Int): θβ ++ θα = [l: Int] splits two incomparable ways
@@ -198,7 +205,10 @@ from BOTH ends of the spines; every rule is forced; symmetric mirrors
   constrain (lacks/disjointness), or fail (P&X, us). We fail ONLY when two
   abstract concatenations must be aligned against each other; selection —
   the common case — never asks for alignment thanks to stumps¿ (claim:
-  check against a corpus later, Towards Nix)
+  check against a corpus later, Towards Nix).
+  MECHANIZED: solvable (wand_unifiable) but no mgu over the instance
+  order (wand_no_mgu, algorithmic.lean) — the stuck ⟹ solvable-but-no-mgu
+  direction of the trichotomy holds on this configuration
 - (β | l: Int | α) ≐ᵣ (l′: Bool), l ≠ l′: U-clash, NOT stuck — the RHS is
   var-free with no l-field, so the l-projection is unsolvable no matter
   what the vars do. A window-only clash rule would misfile this under
@@ -228,12 +238,17 @@ from BOTH ends of the spines; every rule is forced; symmetric mirrors
   with a window-only clash rule, (β | l: Int | α) ≐ᵣ (l′: Bool) would
   land in stuck although no unifier exists at all — (c) would degrade to
   "no unique mgu OR unsolvable". (a),(b) should be routine given the
-  ≈-characterization. Mechanization candidate: the ≈-characterization
-  itself (segments + var sequence) — it is also what the T-eq
-  completeness case consumes (lookup_equiv / ResEquiv toolkit)
+  ≈-characterization. MECHANIZED (26-08-21, algorithmic.lean): the
+  ≈-characterization itself — ρ₁ ≈ ρ₂ iff same var sequence ∧ all
+  l-projections pointwise-≈ at equal segment indices (rowEquiv_iff_char),
+  plus end-var cancellativity both sides (cancel_var_left/right) — it is
+  also what the T-eq completeness case consumes (lookup_equiv / ResEquiv
+  toolkit)
 - Ground completeness (T-eq workhorse): on var-free rows ≐ᵣ decides ≈
   — direct from the characterization; no window bound needed, the window
-  IS the whole row
+  IS the whole row. The characterization side is MECHANIZED: on ground
+  rows ≈ is decided by the projections alone (ground_char,
+  algorithmic.lean)
 - Termination: lexicographic (unsolved vars, total atom count); every
   rule solves a var or deletes atoms; rank discipline keeps RowWF
 
@@ -418,10 +433,10 @@ small confluence argument — candidate for mechanization later).
   vs sketched, and the qualified-scheme precision order it needs
 2. ≐ᵣ: DRAFTED (see Row unification) — window question dissolved: the
   window is the leading segment, full ≈-completeness within it comes for
-  free from the segment characterization. Remaining obligations: the
-  trace-monoid ≈-characterization (mechanization candidate), cancellativity
-  for our ≈, and the trichotomy claim (esp. the stuck ⟹ no-unique-mgu
-  direction)
+  free from the segment characterization. The trace-monoid
+  ≈-characterization and end-var cancellativity are MECHANIZED
+  (algorithmic.lean, 26-08-21). Remaining obligation: the trichotomy claim
+  (esp. the stuck ⟹ no-unique-mgu direction)
 3. Recursive rows: occurs-check rejects `rec`-style attrsets; equi-recursive
   rows vs ★-degradation as the Nix answer (Towards Nix section)
 4. Cost model: is near-linear provable (union-find + wake-lists), or only
