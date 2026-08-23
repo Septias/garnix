@@ -1,9 +1,8 @@
--- Lean 4 formalization of masterthesis/algorithmic.typ — the L2 layer:
+-- Lean 4 formalization of masterthesis/algorithmic.typ:
 -- qualified (stump-carrying) schemes and instantiation-with-discharge.
 --
 -- Builds on minimal.lean: the declarative system, the lookup
--- metatheory and the L1 refutation (no_plain_principal_scheme) are imported,
--- never touched. QScheme is defined afresh instead of retrofitting a
+-- QScheme is defined afresh instead of retrofitting a
 -- constraint field into Scheme — the declarative system never carries
 -- constraints; only the algorithmic layer does. The seam between the files
 -- is Scheme.toQ (a plain scheme is a qualified scheme with Q = ∅).
@@ -1311,6 +1310,122 @@ theorem unify_two_sided_stuck :
     unifyRow (B := Unit) (.cat (.var "a") (.sing "l" uB))
                          (.cat (.sing "l" uB) (.var "b")) = .stuck := rfl
 
+
+--------------------- ≐ᵣ METATHEORY: FIELD-COUNT INVARIANT -------------------
+-- The l-field count is a ≈-invariant: ≈ preserves projection-list lengths.
+-- Substitution can only ADD l-fields (vars expand to ≥ 0 new fields); for
+-- var-free rows the count is fixed. These three facts together prove the
+-- U-clash direction of the trichotomy (projClash_no_unifier).
+
+-- Spine roundtrip: toSpine . ofSpine = id.
+private theorem ofSpine_toSpine {B : Type} : (s : List (Atom B)) → (ofSpine s).toSpine = s
+  | [] => rfl
+  | .field l τ :: s => by
+      simp only [ofSpine, Row.toSpine, List.singleton_append]
+      exact congrArg (.field l τ :: ·) (ofSpine_toSpine s)
+  | .var α :: s => by
+      simp only [ofSpine, Row.toSpine, List.singleton_append]
+      exact congrArg (.var α :: ·) (ofSpine_toSpine s)
+
+-- l-field count distributes over spine append.
+private theorem sFieldCount_append {B : Type} (l : Label) : (s₁ s₂ : List (Atom B)) →
+    sFieldCount l (s₁ ++ s₂) = sFieldCount l s₁ + sFieldCount l s₂
+  | [], _ => by simp [sFieldCount]
+  | .field l' _ :: s₁, s₂ => by
+      simp only [List.cons_append, sFieldCount]
+      rw [sFieldCount_append l s₁ s₂]; omega
+  | .var _ :: s₁, s₂ => by
+      simp only [List.cons_append, sFieldCount]
+      rw [sFieldCount_append l s₁ s₂]
+
+-- (sProj l s).length = sFieldCount l s (projection list length = concrete count).
+private theorem sProj_length_eq_sFieldCount {B : Type} (l : Label) : (s : List (Atom B)) →
+    (sProj l s).length = sFieldCount l s
+  | [] => rfl
+  | .field l' _ :: s => by
+      simp only [sProj, sFieldCount]
+      by_cases h : l' = l <;> simp [h, sProj_length_eq_sFieldCount l s] <;> omega
+  | .var _ :: s => by
+      simp only [sProj, sFieldCount, List.length_map, sProj_length_eq_sFieldCount l s]
+
+-- ProjEquiv preserves list length.
+private theorem ProjEquiv.length_eq {B : Type} : {ps qs : List (Nat × Ty B)} →
+    ProjEquiv ps qs → ps.length = qs.length
+  | _, _, .nil => rfl
+  | _, _, .cons _ _ h => congrArg Nat.succ h.length_eq
+
+-- ≈ preserves the l-field count (rowEquiv_iff_char + projection-length).
+theorem rowEquiv_fieldCount_eq {B : Type} {ρ₁ ρ₂ : Row B} (l : Label) (h : ρ₁ ≈ᵣ ρ₂) :
+    sFieldCount l ρ₁.toSpine = sFieldCount l ρ₂.toSpine := by
+  rw [← sProj_length_eq_sFieldCount, ← sProj_length_eq_sFieldCount]
+  exact (h.char.2 l).length_eq
+
+-- sHasVar s = false ↔ sVarSeq s = [] (bridge from Bool to Prop).
+private theorem sHasVar_false_iff {B : Type} : (s : List (Atom B)) →
+    (sHasVar s = false ↔ sVarSeq s = [])
+  | [] => ⟨fun _ => rfl, fun _ => rfl⟩
+  | .var _ :: _ => by simp [sHasVar, sVarSeq]
+  | .field _ _ :: s => by simp [sHasVar, sVarSeq, sHasVar_false_iff s]
+
+-- !sHasVar s → SpineVarFree (ofSpine s) — used in projClash_no_unifier.
+private theorem spineVarFree_ofSpine {B : Type} {s : List (Atom B)}
+    (h : sHasVar s = false) : (ofSpine s).SpineVarFree :=
+  (spineVarFree_iff_varSeq_nil (ofSpine s)).mpr
+    (by rw [ofSpine_toSpine]; exact (sHasVar_false_iff s).mp h)
+
+-- Substitution can only add l-fields: the count weakly increases.
+theorem sFieldCount_applySubst_le {B : Type} (θ : TySubst B) (l : Label) :
+    (ρ : Row B) → sFieldCount l ρ.toSpine ≤ sFieldCount l (ρ.applySubst θ).toSpine
+  | .empty => Nat.le_refl _
+  | .var _ => Nat.zero_le _
+  | .sing l' _ => by simp [Row.applySubst, Row.toSpine, sFieldCount]
+  | .cat ρ₁ ρ₂ => by
+      simp only [Row.applySubst, Row.toSpine, sFieldCount_append]
+      exact Nat.add_le_add
+        (sFieldCount_applySubst_le θ l ρ₁) (sFieldCount_applySubst_le θ l ρ₂)
+
+-- For var-free rows substitution fixes the l-field count exactly.
+theorem sFieldCount_applySubst_varFree {B : Type} (θ : TySubst B) (l : Label) :
+    {ρ : Row B} → ρ.SpineVarFree →
+    sFieldCount l (ρ.applySubst θ).toSpine = sFieldCount l ρ.toSpine
+  | .empty, _ => rfl
+  | .var _, h => nomatch h
+  | .sing l' _, _ => by simp [Row.applySubst, Row.toSpine, sFieldCount]
+  | .cat ρ₁ ρ₂, .cat hv₁ hv₂ => by
+      simp only [Row.applySubst, Row.toSpine, sFieldCount_append]
+      rw [sFieldCount_applySubst_varFree θ l hv₁, sFieldCount_applySubst_varFree θ l hv₂]
+
+-- ## projClash soundness: the projection-clash direction of the trichotomy.
+-- If projClash s₁ s₂, no θ can unify (ofSpine s₁) with (ofSpine s₂).
+-- The ground side's l-count is fixed under substitution; the other side can
+-- only grow; ≈ forces equality; omega closes the Nat arithmetic.
+theorem projClash_no_unifier {B : Type} {s₁ s₂ : List (Atom B)}
+    (hclash : projClash s₁ s₂ = true) :
+    ¬ ∃ θ : TySubst B, Unifies θ (ofSpine s₁) (ofSpine s₂) := by
+  unfold projClash at hclash
+  rw [List.any_eq_true] at hclash
+  obtain ⟨l, -, hl⟩ := hclash
+  simp only [Bool.or_eq_true, Bool.and_eq_true, decide_eq_true_eq] at hl
+  rintro ⟨θ, hunify⟩
+  unfold Unifies at hunify
+  have hfc := rowEquiv_fieldCount_eq l hunify
+  have hle₁ : sFieldCount l s₁ ≤ sFieldCount l ((ofSpine s₁).applySubst θ).toSpine := by
+    have h := sFieldCount_applySubst_le θ l (ofSpine s₁); rwa [ofSpine_toSpine] at h
+  have hle₂ : sFieldCount l s₂ ≤ sFieldCount l ((ofSpine s₂).applySubst θ).toSpine := by
+    have h := sFieldCount_applySubst_le θ l (ofSpine s₂); rwa [ofSpine_toSpine] at h
+  rcases hl with ⟨hlt, hvf⟩ | ⟨hlt, hvf⟩
+  · -- s₂ var-free: count fixed at sFieldCount l s₂ < sFieldCount l s₁
+    have h₂ : sHasVar s₂ = false := by
+      cases h : sHasVar s₂ with | false => rfl | true => simp [h] at hvf
+    have heq₂ : sFieldCount l ((ofSpine s₂).applySubst θ).toSpine = sFieldCount l s₂ := by
+      rw [sFieldCount_applySubst_varFree θ l (spineVarFree_ofSpine h₂), ofSpine_toSpine]
+    omega
+  · -- s₁ var-free: count fixed at sFieldCount l s₁ < sFieldCount l s₂
+    have h₁ : sHasVar s₁ = false := by
+      cases h : sHasVar s₁ with | false => rfl | true => simp [h] at hvf
+    have heq₁ : sFieldCount l ((ofSpine s₁).applySubst θ).toSpine = sFieldCount l s₁ := by
+      rw [sFieldCount_applySubst_varFree θ l (spineVarFree_ofSpine h₁), ofSpine_toSpine]
+    omega
 
 ------------------------------------ NEXT ------------------------------------
 -- Milestones that build on this file (algorithmic.typ, Open questions):
