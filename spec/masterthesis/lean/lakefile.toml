@@ -1,0 +1,10 @@
+name = "spec"
+defaultTargets = ["Spec"]
+
+[leanOptions]
+relaxedAutoImplicit = false
+
+[[lean_lib]]
+name = "Spec"
+srcDir = "."
+globs = ["minimal", "algorithmic"]
