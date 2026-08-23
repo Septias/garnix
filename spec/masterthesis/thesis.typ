@@ -202,6 +202,53 @@ In the following section we lay out the metatheory of our calculus. We prove pro
 *Progress*: If $∅ ⊢ e: τ$ then $e ∈ "Values"$, or $∃e'$ such that $e → e'$, or $e ↯$
 
 
+== Generalization and Principality
+
+HM-style generalization works at `let`-binding sites: to type `let x = e₁ in e₂`, the algorithm infers a monotype τ₁ for e₁, abstracts over the free type variables $macron(α)$ not appearing in the context, and binds x to the scheme $∀ macron(α). τ₁$ for typing e₂. This proceeds smoothly in standard HM. In our system, however, the inference of e₁ may produce _stumps_ — pending lookups of the form $⟨ρ.l ↓ δ⟩$ that arise when a field selection blocks on an unresolved row-variable. When the stump's result variable δ belongs to the generalized set $macron(α)$, a choice arises: resolve the stump at the `let`-boundary before abstracting, or carry it along in the scheme. These two strategies are L1 and L2.
+
+*L1 — finalize at the boundary.* Before generalizing over $macron(α)$, resolve every pending stump by setting δ ≔ ★. Schemes remain plain $∀ macron(α). τ$, as in standard HM. This is sound and simple: if e₁ produces a stump, T-sel-★ already types the selection at ★, so the inferred scheme faithfully records that uncertainty. For `let f = (x: x.l) in f {}`, L1 correctly gives `f : ∀β. {β} → ★`. The cost appears only at polymorphic call sites: `let f = (x: x.l) in f {l = c}` should deliver type `𝓫_c` — the lookup of l in `{l = c}` succeeds definitively — but L1 has frozen δ at ★ before the argument is known, and no refinement can recover it.
+
+*L2 — stumps in schemes.* Carry each pending stump as a _constraint_ on the scheme, extending the scheme syntax:
+
+$
+  σ := ∀ macron(α). Q ⇒ τ #h(3em)
+  Q := { ⟨ρ.l ↓ δ⟩, … } #h(2em)
+  δ ∈ macron(α)
+$
+
+A plain scheme $∀ macron(α). τ$ is the special case Q = ∅. At each use of a variable x : σ, the scheme is instantiated with fresh copies of $macron(α)$ and each constraint is _discharged_ against the current typing environment under the instantiation substitution θ. Discharge (@discharge) replays the three-way lookup case split:
+
+#let discharge = figure(
+  caption: "Constraint discharge at instantiation (L2). θ is the instantiation substitution; δ is the stump's result variable. A still-blocked lookup is re-stated over the substituted row instead of resolving δ.",
+  flexbox(
+    derive("D-hit", ($Γ ⊢ (θ ρ).l ↓ τ_r$,), $θ δ = τ_r$),
+    derive("D-⊥", ($Γ ⊢ (θ ρ).l ↓ ⊥$,), $θ δ = ★$),
+    derive("D-defer", ($Γ ⊢ (θ ρ).l ↓ #v(1em) ?$,), $⟨(θ ρ).l ↓ δ⟩ "residual"$),
+  ),
+)
+#discharge <discharge>
+
+D-hit corresponds to T-sel and D-⊥ to T-sel-⊥. D-defer covers the case where the substituted row still blocks the lookup — θ replaced the old blocker but the walk now stops at a new variable β inside θρ. Instead of freezing δ at ★, the constraint is re-stated over the substituted row and stays pending with β as its new blocker: it joins the constraint set of the enclosing generalization (or, algorithmically, re-parks as a stump). δ is resolved to ★ only at _finalization_ — the top level of the program, where no further instantiation can arrive — and that is the moment corresponding to T-sel-★. The correspondence runs deep: the instance-closed reading of T-let quantifies over all instances of σ and requires e₁ to be typeable at each — discharge is exactly its algorithmic image, re-evaluating the lookup for each call's concrete substitution θ independently. With L2, `let f = (x: x.l) in f {l = c}` correctly delivers `𝓫_c`: the instantiation θ maps β ≔ (l: 𝓫_c), discharge applies L-hit to (l: 𝓫_c).l, and sets δ ≔ 𝓫_c.
+
+=== L1 is not sufficient: a mechanized refutation
+
+The choice between L1 and L2 is not a trade-off in precision — it is forced. We prove in Lean that L1 _cannot be principal_: no plain ∀ᾱ.τ scheme captures all declarative typings of a term that generates a stump.
+
+The witness is λx. x.l. The declarative system types it at `{l: τ₀} → τ₀` for every type τ₀, via T-sel with ρ = (l: τ₀) (the lookup hits immediately), and also at `{β} → ★` for any fresh row-variable β, via T-sel-★ with ρ = β (the lookup of l in β returns ?). An L1 algorithm infers the scheme `∀β. {β} → ★` — the stump is finalized immediately and its result frozen.
+
+Two mechanized Lean lemmas close the case.
+
+_finalized_no_blur_: No substitution instance of `{β} → ★` lies ⊑-below a found-typing `{l: τ₀} → τ₀` with τ₀ ≠ ★. The precision relation ⊑ is _rigid_: if τ′ ⊑ τ and τ ≠ ★, then τ′ and τ share the same head constructor. The frozen ★ in the result position of `{β} → ★` can therefore never be blurred into a definite type. The principality factoring — "every declarative typing is ⊑-below some instance of the principal scheme" — fails for all found-typings.
+
+_no_plain_principal_scheme_: No plain ∀ᾱ.τ scheme is simultaneously instance-closed while having both the found-typing `{(l: {ε})} → {ε}` and the ⊥-typing `{ε} → ★` as instances. Such a scheme must place a quantified variable α in the result position to cover both. Setting α ≔ {ε} for the found-typing and α ≔ ★ for the ⊥-typing together produce a third candidate instance `{ε} → {ε}`. But this is not a valid typing: when the argument has type {ε}, the lookup of l in ε returns ⊥, so the body can only receive type ★, not {ε}. The scheme is not instance-closed. Since a quantified variable in the result position is the only candidate structure, no plain scheme works.
+
+The consequence is that L1 is a sound baseline — it never assigns a contradictory type — but principality must be stated over L2's qualified schemes. The L2-principal type of λx. x.l is:
+
+$∀β δ. ⟨β.l ↓ δ⟩ ⇒ {β} → δ$
+
+Here δ remains writable: D-hit binds it to the found type at each call site, D-⊥ binds it to ★, and a still-blocked lookup stays pending via D-defer until finalization forces ★. A plain scheme has no mechanism to express this per-instantiation resolution. L2 is therefore not an optional refinement; it is the necessary form of let-generalization for a calculus with lookup-stumps.
+
+
 == Extensions to the minimal Calculus
 - Occurrence typing using if's?
 - Inherit statements?
