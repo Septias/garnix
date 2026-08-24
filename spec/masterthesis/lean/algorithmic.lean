@@ -1605,6 +1605,106 @@ theorem wand_no_mgu_count {B : Type} (b : B) (l : Label) :
     · unfold Unifies; simp [Row.applySubst, Ty.applySubst]; exact RowEquiv.unitR
     · show 0 < sFieldCount l (θ.row "α").toSpine; omega
 
+-- The dual of the count bound: a VAR-FREE component of θ is RIGID — every
+-- instance has the exact same l-count there, because with no variables to
+-- expand, substitution can neither add nor delete fields
+-- (sFieldCount_applySubst_varFree turns the ≤ into an =).
+-- ⊢  θ' ⊑ θ,  (θ x) var-free   ⟹   count_l(θ' x) = count_l(θ x)
+theorem instanceOf_fieldCount_eq_of_varFree {B : Type} {θ' θ : TySubst B}
+    (h : InstanceOf θ' θ) {x : TyVar} (hvf : (θ.row x).SpineVarFree) (l : Label) :
+    sFieldCount l (θ'.row x).toSpine = sFieldCount l (θ.row x).toSpine := by
+  obtain ⟨σ, hrow, -⟩ := h
+  rw [rowEquiv_fieldCount_eq l (hrow x), sFieldCount_applySubst_varFree σ l hvf]
+
+-- The OTHER canonical stuck shape: (α | l:𝓫) ≐ᵣ (l:𝓫 | β), α ≠ β. Counting alone
+-- CANNOT fire here — the ε,ε unifier has count 0 at every variable, so nothing
+-- can be undercut. The kill is RIGIDITY. The empty witness (α,β ↦ ε) pins
+-- count_l(θα) = count_l(θβ) = 0; the unifier equation then forces θα var-free
+-- (its lone l-projection would sit at segment |vars θα|, which must match
+-- segment 0 on the right — so |vars θα| = 0); and a var-free θα is rigid, so the
+-- doubling witness (α,β ↦ l:𝓫), which needs count 1 at α, cannot factor through
+-- any such θ. Complements wand_no_mgu_count: together the two canonical stuck
+-- shapes (field-vs-vars and two-sided) are both proven ambiguous.
+-- ⊢  ¬ ∃ mgu for (α | l:𝓫) ≐ᵣ (l:𝓫 | β)
+theorem two_sided_no_mgu {B : Type} (b : B) (l : Label) :
+    ¬ ∃ θ : TySubst B,
+        Unifies θ (.cat (.var "α") (.sing l (.base b)))
+                  (.cat (.sing l (.base b)) (.var "β")) ∧
+        ∀ θ' : TySubst B,
+          Unifies θ' (.cat (.var "α") (.sing l (.base b)))
+                     (.cat (.sing l (.base b)) (.var "β")) →
+          InstanceOf θ' θ := by
+  rintro ⟨θ, hu, hmgu⟩
+  have hu' : RowEquiv (Row.cat (θ.row "α") (Row.sing l (.base b)))
+                      (Row.cat (Row.sing l (.base b)) (θ.row "β")) := by
+    have h := hu; unfold Unifies at h
+    simpa only [Row.applySubst, Ty.applySubst] using h
+  -- witness u₁ = (α,β ↦ ε): a unifier
+  have hu1 : Unifies
+      (⟨fun x => .var x, fun x => if x = "α" then .empty
+        else if x = "β" then .empty else .var x⟩ : TySubst B)
+      (.cat (.var "α") (.sing l (.base b))) (.cat (.sing l (.base b)) (.var "β")) := by
+    unfold Unifies
+    show RowEquiv (Row.cat Row.empty (Row.sing l (.base b)))
+                  (Row.cat (Row.sing l (.base b)) Row.empty)
+    exact RowEquiv.unitL.trans RowEquiv.unitR.symm
+  have hI1 := hmgu _ hu1
+  have hcα : sFieldCount l (θ.row "α").toSpine = 0 := by
+    have h : sFieldCount l (θ.row "α").toSpine ≤ 0 := instanceOf_fieldCount_mono hI1 "α" l
+    omega
+  have hcβ : sFieldCount l (θ.row "β").toSpine = 0 := by
+    have h : sFieldCount l (θ.row "β").toSpine ≤ 0 := instanceOf_fieldCount_mono hI1 "β" l
+    omega
+  -- the l-projections are empty (length = count = 0)
+  have hπα : sProj l (θ.row "α").toSpine = [] := by
+    rcases hh : sProj l (θ.row "α").toSpine with _ | ⟨p, ps⟩
+    · rfl
+    · exfalso
+      have hlen : (sProj l (θ.row "α").toSpine).length = 0 := by
+        rw [sProj_length_eq_sFieldCount]; exact hcα
+      rw [hh] at hlen; simp at hlen
+  have hπβ : sProj l (θ.row "β").toSpine = [] := by
+    rcases hh : sProj l (θ.row "β").toSpine with _ | ⟨p, ps⟩
+    · rfl
+    · exfalso
+      have hlen : (sProj l (θ.row "β").toSpine).length = 0 := by
+        rw [sProj_length_eq_sFieldCount]; exact hcβ
+      rw [hh] at hlen; simp at hlen
+  -- θα is var-free: its single l-field would sit at segment |vars θα|, forced 0
+  obtain ⟨-, hp⟩ := hu'.char
+  have hpl := hp l
+  have hsing : sProj l [Atom.field l (.base b)] = [(0, (.base b : Ty B))] := by
+    simp [sProj]
+  rw [show (Row.cat (θ.row "α") (Row.sing l (.base b))).toSpine
+        = (θ.row "α").toSpine ++ [Atom.field l (.base b)] from rfl,
+      show (Row.cat (Row.sing l (.base b)) (θ.row "β")).toSpine
+        = [Atom.field l (.base b)] ++ (θ.row "β").toSpine from rfl,
+      sProj_append, sProj_append, hπα, hπβ, hsing] at hpl
+  simp only [List.nil_append, List.append_nil, List.map_cons, List.map_nil] at hpl
+  have hvnil : sVarSeq (θ.row "α").toSpine = [] := by
+    have hv0 : (sVarSeq (θ.row "α").toSpine).length = 0 := by
+      obtain ⟨τ', rest, heq, -, -⟩ := hpl.cons_inv
+      rw [List.cons.injEq, Prod.mk.injEq] at heq
+      omega
+    rcases hh : sVarSeq (θ.row "α").toSpine with _ | ⟨x, xs⟩
+    · rfl
+    · rw [hh] at hv0; simp at hv0
+  have hvfα : (θ.row "α").SpineVarFree :=
+    (spineVarFree_iff_varSeq_nil (θ.row "α")).mpr hvnil
+  -- witness u₂ = (α,β ↦ l:𝓫): needs count 1 at α, which rigidity forbids
+  have hu2 : Unifies
+      (⟨fun x => .var x, fun x => if x = "α" then .sing l (.base b)
+        else if x = "β" then .sing l (.base b) else .var x⟩ : TySubst B)
+      (.cat (.var "α") (.sing l (.base b))) (.cat (.sing l (.base b)) (.var "β")) := by
+    unfold Unifies
+    show RowEquiv (Row.cat (Row.sing l (.base b)) (Row.sing l (.base b)))
+                  (Row.cat (Row.sing l (.base b)) (Row.sing l (.base b)))
+    exact RowEquiv.refl _
+  have hI2 := hmgu _ hu2
+  have hrig := instanceOf_fieldCount_eq_of_varFree hI2 hvfα l
+  rw [hcα] at hrig
+  simp [Row.toSpine, sFieldCount] at hrig
+
 -- ## projClash soundness: the projection-clash direction of the trichotomy.
 -- If projClash s₁ s₂, no θ can unify (ofSpine s₁) with (ofSpine s₂).
 -- The ground side's l-count is fixed under substitution; the other side can
@@ -3200,13 +3300,15 @@ theorem unifySpineF_fuel_stable {B : Type} (s₁ s₂ : List (Atom B)) {fuel : N
 --    EXACTLY {θ : SolSat θ σ ∧ EqsSat θ eqs}: ≐ᵣ computes a most general unifier.
 --    Via unifySpineF_success_complete (fuel induction, forward) + solveVar_complete
 --    + allVarsEmpty_complete (RowEquiv.cat_empty_split) + EqsSat.cons.
---    STUCK ⟹ NO-MGU — reusable principle DONE: instanceOf_fieldCount_mono (an mgu
---    is pointwise count-minimal, as subst never deletes a field) + the general
---    no_mgu_of_witness_shrinks; wand_no_mgu_count re-proves Wand through counting.
---    Covers the field-vs-vars stuck subclass; the equal-count two-sided case
---    (α|l:𝓫)≐ᵣ(l:𝓫|β) needs depth/non-commutativity (counting can't shrink the
---    ε,ε unifier), and the algorithm-level lift unifySpineF=stuck⟹no-mgu (stuck
---    propagates up through match/ground via addEq) needs mgu-transfer across moves.
+--    STUCK ⟹ NO-MGU — both canonical base shapes DONE: (1) instanceOf_fieldCount_mono
+--    (an mgu is pointwise count-minimal, as subst never deletes a field) + the general
+--    no_mgu_of_witness_shrinks; wand_no_mgu_count re-proves Wand (field-vs-vars) via
+--    counting. (2) instanceOf_fieldCount_eq_of_varFree (a var-free component of an mgu is
+--    RIGID) + two_sided_no_mgu for (α|l:𝓫)≐ᵣ(l:𝓫|β) — counting can't shrink the ε,ε
+--    unifier there, so rigidity does the kill. Remaining: the algorithm-level lift
+--    unifySpineF=stuck⟹no-mgu (stuck propagates up through match/ground via addEq) needs
+--    witness-transfer across moves — push the two witnesses back through each _reflect,
+--    then apply the count-shrink or rigidity kill at the base stuck config.
 --    NOTE occurs does NOT lift to a no-unifier theorem — it is conservative
 --    (occurs_allVar_unifiable); only occurs_field_no_unifier genuine.
 --  * The type-level driver ≐: solve the emitted (τ, τ') equations, mutually
