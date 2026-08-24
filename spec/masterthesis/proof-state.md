@@ -28,7 +28,7 @@ Principality forces qualified schemes that use parked stumps to during unificati
 - [x] Unknown Type Abstraction
 - [x] Let-Statements (instance-closed T-let; syntactic rule proven admissible)
 - [~] L2 qualified schemes (declarative QTyped + discharge + embedding mechanized; safety and strictness open)
-- [~] Unification (algebraic foundation + all worked examples mechanized; ≐ᵣ executable; clash-soundness (projClash) done; SUCCESS-SOUNDNESS fully done + axiom-clean — unifyRow_success_sound, incl. the hard groundMatch counting and full fuel-induction assembly; FUEL-SUFFICIENCY done — unifySpineF_fuel_irrel/_stable, each move eats 2 atoms so |s₁|+|s₂| fuel never runs out, a .stuck is genuine; mgu-on-success + occurs/stuck ⟹ no-unifier + type-level ≐ still open)
+- [~] Unification (algebraic foundation + all worked examples mechanized; ≐ᵣ executable; clash-soundness (projClash) done; SUCCESS-SOUNDNESS fully done + axiom-clean — unifyRow_success_sound, incl. the hard groundMatch counting and full fuel-induction assembly; FUEL-SUFFICIENCY done — unifySpineF_fuel_irrel/_stable, each move eats 2 atoms so |s₁|+|s₂| fuel never runs out, a .stuck is genuine; OCCURS CHARACTERIZED — occurs is CONSERVATIVE: occurs_allVar_unifiable shows unifyRow α (β|α|γ)=occurs but β,γ↦ε unifies (algorithm incomplete on all-var occurrences), genuine occurs needs a field — occurs_field_no_unifier proven; mgu-on-success + stuck⟹no-mgu + type-level ≐ still open)
 - [ ] FC-Labels
 - [ ] Patterns
 - [?] Occurrence Typing

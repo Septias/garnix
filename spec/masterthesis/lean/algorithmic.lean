@@ -1511,6 +1511,66 @@ theorem projClash_no_unifier {B : Type} {s₁ s₂ : List (Atom B)}
       rw [sFieldCount_applySubst_varFree θ l (spineVarFree_ofSpine h₁), ofSpine_toSpine]
     omega
 
+-- ## occurs: what the recursive-row check really guarantees
+-- The occurs verdict (solveVar hitting `(sVarSeq s₂).contains α`) is CONSERVATIVE.
+-- It is genuinely no-unifier only when the recursive variable is pinned by a
+-- FIELD; an all-variable interior occurrence is unifiable by collapsing the
+-- surrounding variables to ε.
+
+-- A recursive variable α of ρ contributes its whole l-field count to (θρ) on top
+-- of ρ's own explicit l-fields — because α occurs inside ρ, so θα is spliced in.
+-- ⊢  α ∈ vars(spine ρ)   ⟹   count_l(spine ρ) + count_l(spine (θα)) ≤ count_l(spine (θρ))
+theorem fieldCount_var_lower {B : Type} (θ : TySubst B) (l : Label) (α : TyVar) :
+    (ρ : Row B) → α ∈ sVarSeq ρ.toSpine →
+    sFieldCount l ρ.toSpine + sFieldCount l (θ.row α).toSpine
+      ≤ sFieldCount l (ρ.applySubst θ).toSpine
+  | .empty, h => by simp [Row.toSpine, sVarSeq] at h
+  | .sing _ _, h => by simp [Row.toSpine, sVarSeq] at h
+  | .var β, h => by
+      simp only [Row.toSpine, sVarSeq, List.mem_singleton] at h
+      subst h; simp [Row.applySubst, Row.toSpine, sFieldCount]
+  | .cat ρ₁ ρ₂, h => by
+      simp only [Row.applySubst, Row.toSpine, sFieldCount_append, sVarSeq_append,
+        List.mem_append] at h ⊢
+      rcases h with h | h
+      · have ih := fieldCount_var_lower θ l α ρ₁ h
+        have hle := sFieldCount_applySubst_le θ l ρ₂
+        omega
+      · have ih := fieldCount_var_lower θ l α ρ₂ h
+        have hle := sFieldCount_applySubst_le θ l ρ₁
+        omega
+
+-- The GENUINE occurs case: α occurs recursively in s₂ AND some label l has a
+-- field there. ≈ pins l's count, but θα would have to hold that field's l-count
+-- both on its own (as the lhs) and again inside the rhs — an impossible strict
+-- growth. Mirrors projClash_no_unifier (the clash direction).
+-- ⊢  α ∈ vars s₂,  0 < count_l s₂   ⟹   ¬ ∃ θ. θ ⊨ α ≐ᵣ ofSpine s₂
+theorem occurs_field_no_unifier {B : Type} {α : TyVar} {s₂ : List (Atom B)}
+    {l : Label} (hmem : α ∈ sVarSeq s₂) (hfield : 0 < sFieldCount l s₂) :
+    ¬ ∃ θ : TySubst B, Unifies θ (.var α) (ofSpine s₂) := by
+  rintro ⟨θ, hu⟩
+  unfold Unifies at hu
+  have hfc := rowEquiv_fieldCount_eq l hu
+  simp only [Row.applySubst] at hfc
+  have hlb := fieldCount_var_lower θ l α (ofSpine s₂) (by rw [ofSpine_toSpine]; exact hmem)
+  rw [ofSpine_toSpine] at hlb
+  omega
+
+-- occurs is CONSERVATIVE, not sound-for-no-unifier: the all-variable interior
+-- occurrence α ≐ᵣ (β | α | γ) is REPORTED occurs yet IS unifiable — take β,γ ↦ ε.
+-- Only the field-pinned case (occurs_field_no_unifier) is a real non-unifier.
+-- ⊢  unifyRow α (β|α|γ) = occurs   ∧   ∃ θ. θ ⊨ α ≐ᵣ (β|α|γ)
+theorem occurs_allVar_unifiable {B : Type} :
+    unifyRow (B := B) (.var "a") (.cat (.var "b") (.cat (.var "a") (.var "c")))
+        = .occurs
+    ∧ ∃ θ : TySubst B,
+        Unifies θ (.var "a") (.cat (.var "b") (.cat (.var "a") (.var "c"))) :=
+  ⟨rfl,
+   ⟨⟨(.var ·), fun x => if x = "b" then .empty else if x = "c" then .empty else .var x⟩,
+    by unfold Unifies
+       simp only [Row.applySubst]
+       exact (RowEquiv.unitL.trans RowEquiv.unitR).symm⟩⟩
+
 ------------------------- ≐ᵣ SUCCESS SOUNDNESS (SETUP) -----------------------
 -- The success case emits a row-var solution list σ and residual type
 -- equations eqs. A substitution θ "extends σ" when it agrees with every
@@ -2483,11 +2543,16 @@ theorem unifySpineF_fuel_stable {B : Type} (s₁ s₂ : List (Atom B)) {fuel : N
 --    unifySpineF_fuel_irrel / unifySpineF_fuel_stable — each move eats exactly 2
 --    atoms (the *_len lemmas), so |s₁|+|s₂| fuel never runs out and a .stuck
 --    result is genuine, not out-of-fuel.
---    Remaining ≐ᵣ metatheory: mgu-on-success; clash/occurs ⟹ no unifier
---    (projClash_no_unifier is the field-count half of clash); stuck ⟹ no unique
---    mgu (wand_no_mgu is the worked instance). NOTE occurs/stuck are NOT local to
---    solveVar — they are only correct after end-stripping has run, so their
---    soundness needs this same control-flow inversion.
+--    OCCURS — CHARACTERIZED: occurs is CONSERVATIVE. occurs_allVar_unifiable
+--    shows unifyRow α (β|α|γ) = occurs is UNIFIABLE (β,γ ↦ ε), so the check is
+--    incomplete; the genuine no-unifier case needs a field —
+--    occurs_field_no_unifier (α ∈ vars s₂ ∧ 0 < count_l s₂ ⟹ no unifier), the
+--    occurs analogue of projClash_no_unifier. Both after projClash_no_unifier.
+--    Remaining ≐ᵣ metatheory: mgu-on-success; stuck ⟹ no unique mgu (wand_no_mgu
+--    is the worked instance). NOTE stuck is NOT local to solveVar — only correct
+--    after end-stripping has run, so its soundness needs the control-flow
+--    inversion; likewise lifting occurs_field_no_unifier to the algorithm level
+--    needs the forward reflection (the hard completeness direction).
 --  * The type-level driver ≐: solve the emitted (τ, τ') equations, mutually
 --    recursing into rows; occurs/rank discipline across both sorts.
 --  * Non-vacuity of qualified schemes: needs lookup_total (RowWF) plus a
@@ -2499,3 +2564,4 @@ theorem unifySpineF_fuel_stable {B : Type} (s₁ s₂ : List (Atom B)) {fuel : N
 --    (lookup_det + Discharge.mono_of_definite are the two pillars).
 
 end MinimalCalculus
+
