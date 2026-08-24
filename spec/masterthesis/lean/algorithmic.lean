@@ -1705,6 +1705,34 @@ theorem two_sided_no_mgu {B : Type} (b : B) (l : Label) :
   rw [hcα] at hrig
   simp [Row.toSpine, sFieldCount] at hrig
 
+-- ## No-mgu depends only on the unifier SET
+-- `HasMgu` packages "a most general unifier exists". Crucially InstanceOf never
+-- mentions the rows — only θ's action on variables — so two unification problems
+-- with the SAME unifiers (as substitutions) have the SAME mgu-status. This is the
+-- vehicle for lifting stuck⟹no-mgu through the unifier-set-PRESERVING moves.
+def HasMgu {B : Type} (ρ₁ ρ₂ : Row B) : Prop :=
+  ∃ θ : TySubst B, Unifies θ ρ₁ ρ₂ ∧
+    ∀ θ' : TySubst B, Unifies θ' ρ₁ ρ₂ → InstanceOf θ' θ
+
+-- ⊢  (∀θ. θ ⊨ ρ₁≐ᵣρ₂  ↔  θ ⊨ ρ₁'≐ᵣρ₂')   ⟹   (HasMgu ρ₁ ρ₂ ↔ HasMgu ρ₁' ρ₂')
+theorem hasMgu_congr {B : Type} {ρ₁ ρ₂ ρ₁' ρ₂' : Row B}
+    (h : ∀ θ : TySubst B, Unifies θ ρ₁ ρ₂ ↔ Unifies θ ρ₁' ρ₂') :
+    HasMgu ρ₁ ρ₂ ↔ HasMgu ρ₁' ρ₂' :=
+  ⟨fun ⟨θ, hu, hmax⟩ => ⟨θ, (h θ).mp hu, fun θ' hu' => hmax θ' ((h θ').mpr hu')⟩,
+   fun ⟨θ, hu, hmax⟩ => ⟨θ, (h θ).mpr hu, fun θ' hu' => hmax θ' ((h θ').mp hu')⟩⟩
+
+-- No-mgu is a ≈-INVARIANT: replacing either side by a ≈-equal row preserves the
+-- unifier set (applySubst is a ≈-congruence), hence mgu-status. Lets the base
+-- no-mgu theorems (stated on plain rows) transfer to the ofSpine forms the
+-- algorithm produces.
+-- ⊢  ρ₁ ≈ᵣ ρ₁',  ρ₂ ≈ᵣ ρ₂'   ⟹   (HasMgu ρ₁ ρ₂ ↔ HasMgu ρ₁' ρ₂')
+theorem hasMgu_rowEquiv {B : Type} {ρ₁ ρ₂ ρ₁' ρ₂' : Row B}
+    (h₁ : RowEquiv ρ₁ ρ₁') (h₂ : RowEquiv ρ₂ ρ₂') :
+    HasMgu ρ₁ ρ₂ ↔ HasMgu ρ₁' ρ₂' :=
+  hasMgu_congr (fun θ =>
+    ⟨fun hu => ((RowEquiv.applySubst θ h₁).symm.trans hu).trans (RowEquiv.applySubst θ h₂),
+     fun hu => ((RowEquiv.applySubst θ h₁).trans hu).trans (RowEquiv.applySubst θ h₂).symm⟩)
+
 -- ## projClash soundness: the projection-clash direction of the trichotomy.
 -- If projClash s₁ s₂, no θ can unify (ofSpine s₁) with (ofSpine s₂).
 -- The ground side's l-count is fixed under substitution; the other side can
@@ -2258,6 +2286,46 @@ theorem stripR_reflect_fwd {B : Type} {θ : TySubst B} {s₁ s₂ t₁ t₂ : Li
   have e₂ := RowEquiv.applySubst θ (ofSpine_append t₂ [Atom.var α])
   simp only [ofSpine, Row.applySubst] at e₁ e₂
   exact (e₁.symm.trans (hu.trans e₂)).cancel_cat_right
+
+-- ## Strip moves reflect no-mgu (the unifier-set-preserving case of the lift)
+-- stripL/stripR cancel a shared end-var, and reflect + reflect_fwd together show
+-- they preserve the unifier set EXACTLY. So mgu-status transfers both ways: a
+-- config that gets stuck purely by end-stripping inherits the no-mgu verdict of
+-- its stripped core. (matchL/matchR/groundMatch emit a type equation, so they do
+-- NOT preserve the unifier set — those need the harder augmented-witness lift.)
+-- ⊢  stripL s₁ s₂ = some (t₁,t₂)   ⟹   (HasMgu (ofSpine s₁)(ofSpine s₂) ↔
+--                                       HasMgu (ofSpine t₁)(ofSpine t₂))
+theorem stripL_hasMgu_iff {B : Type} {s₁ s₂ t₁ t₂ : List (Atom B)}
+    (hstrip : stripL s₁ s₂ = some (t₁, t₂)) :
+    HasMgu (ofSpine s₁) (ofSpine s₂) ↔ HasMgu (ofSpine t₁) (ofSpine t₂) :=
+  hasMgu_congr (fun _ => ⟨fun hu => stripL_reflect_fwd hstrip hu,
+                          fun hu => stripL_reflect hstrip hu⟩)
+
+-- ⊢  stripR s₁ s₂ = some (t₁,t₂)   ⟹   (HasMgu (ofSpine s₁)(ofSpine s₂) ↔
+--                                       HasMgu (ofSpine t₁)(ofSpine t₂))
+theorem stripR_hasMgu_iff {B : Type} {s₁ s₂ t₁ t₂ : List (Atom B)}
+    (hstrip : stripR s₁ s₂ = some (t₁, t₂)) :
+    HasMgu (ofSpine s₁) (ofSpine s₂) ↔ HasMgu (ofSpine t₁) (ofSpine t₂) :=
+  hasMgu_congr (fun _ => ⟨fun hu => stripR_reflect_fwd hstrip hu,
+                          fun hu => stripR_reflect hstrip hu⟩)
+
+-- End-to-end demonstration that the pieces compose: the Wand core wrapped in a
+-- shared leading var. stripL peels γ, the stripped core is Wand's no-mgu config,
+-- so the whole thing has no mgu — obtained mechanically from stripL_hasMgu_iff +
+-- hasMgu_rowEquiv + wand_no_mgu_count. (This is exactly how the eventual lift
+-- discharges its strip arms.)
+-- ⊢  ¬ HasMgu (γ | β | α) (γ | l:𝓫)
+theorem wand_under_strip_no_mgu {B : Type} (b : B) (l : Label) :
+    ¬ HasMgu (ofSpine [Atom.var "γ", .var "β", .var "α"])
+             (ofSpine [Atom.var "γ", .field l (.base b)]) := by
+  have hs : stripL ([Atom.var "γ", .var "β", .var "α"] : List (Atom B))
+                   [Atom.var "γ", .field l (.base b)]
+          = some ([.var "β", .var "α"], [.field l (.base b)]) := rfl
+  rw [stripL_hasMgu_iff hs]
+  simp only [ofSpine]
+  rw [hasMgu_rowEquiv (ρ₁' := .cat (.var "β") (.var "α")) (ρ₂' := .sing l (.base b))
+        (RowEquiv.cat (RowEquiv.refl _) RowEquiv.unitR) RowEquiv.unitR]
+  exact wand_no_mgu_count b l
 
 -- ⊢  matchL s₁ s₂ = some (τ,τ',t₁,t₂),  θ ⊨ ofSpine s₁ ≐ᵣ ofSpine s₂
 --        ⟹   θτ ≈ₜ θτ'  ∧  θ ⊨ ofSpine t₁ ≐ᵣ ofSpine t₂
@@ -3305,10 +3373,15 @@ theorem unifySpineF_fuel_stable {B : Type} (s₁ s₂ : List (Atom B)) {fuel : N
 --    no_mgu_of_witness_shrinks; wand_no_mgu_count re-proves Wand (field-vs-vars) via
 --    counting. (2) instanceOf_fieldCount_eq_of_varFree (a var-free component of an mgu is
 --    RIGID) + two_sided_no_mgu for (α|l:𝓫)≐ᵣ(l:𝓫|β) — counting can't shrink the ε,ε
---    unifier there, so rigidity does the kill. Remaining: the algorithm-level lift
---    unifySpineF=stuck⟹no-mgu (stuck propagates up through match/ground via addEq) needs
---    witness-transfer across moves — push the two witnesses back through each _reflect,
---    then apply the count-shrink or rigidity kill at the base stuck config.
+--    unifier there, so rigidity does the kill. LIFT INFRA: HasMgu + hasMgu_congr/
+--    hasMgu_rowEquiv (no-mgu depends only on the unifier SET, is a ≈-invariant) +
+--    stripL/stripR_hasMgu_iff (strip moves preserve the unifier set) discharge the STRIP
+--    arms of the fuel induction (demo: wand_under_strip_no_mgu). Remaining for the full
+--    unifySpineF=stuck⟹no-mgu: (a) the general BASE arm (any immediately-stuck config ⟹
+--    no-mgu — only wand/two_sided shapes so far; may be conservative, unchecked); (b) the
+--    MATCH/GROUND arms (emit a type eq ⟹ unifier sets differ ⟹ hasMgu_congr doesn't apply;
+--    need the augmented-witness argument: satisfy the emitted eq via the witnesses' type
+--    parts, then re-run count-shrink/rigidity at the original level).
 --    NOTE occurs does NOT lift to a no-unifier theorem — it is conservative
 --    (occurs_allVar_unifiable); only occurs_field_no_unifier genuine.
 --  * The type-level driver ≐: solve the emitted (τ, τ') equations, mutually
