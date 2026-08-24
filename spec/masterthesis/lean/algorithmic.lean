@@ -2987,6 +2987,33 @@ theorem groundMatch_hasMgu_iff {B : Type} {s₁ s₂ t₁ t₂ : List (Atom B)} 
     ⟨fun hu => groundMatch_reflect_fwd hg hu,
      fun ⟨heq, hrec⟩ => groundMatch_reflect hg heq hrec⟩)
 
+-- End-to-end demo that the eq-emitting arm composes (the match analogue of
+-- wand_under_strip_no_mgu): prepend a shared ground field l:𝓪 to both sides of
+-- the Wand core (β|α)≐ᵣ(l:𝓫). matchL fires on the leading l-fields, emitting the
+-- (trivially satisfiable) eq 𝓪≐𝓪, and the residual is exactly Wand. matchL_hasMgu_iff
+-- transports mgu-status to HasMguP of that eq-constrained residual; the eq being
+-- 𝓪≐𝓪 the constraint is vacuous, so it collapses to HasMgu Wand — with no mgu.
+-- (Here the accumulated eq is trivial; the genuine augmented-witness case is when
+-- it constrains a shared field variable — same skeleton, witnesses extended to it.)
+-- ⊢  ¬ HasMgu (l:𝓪 | β | α) (l:𝓪 | l:𝓫)
+theorem wand_under_match_no_mgu {B : Type} (a b : B) :
+    ¬ HasMgu (ofSpine [Atom.field "l" (.base a), .var "β", .var "α"])
+             (ofSpine [Atom.field "l" (.base a), .field "l" (.base b)]) := by
+  intro hmgu
+  have hmatch : matchL ([Atom.field "l" (.base a), .var "β", .var "α"] : List (Atom B))
+                       [Atom.field "l" (.base a), .field "l" (.base b)]
+      = some (.base a, .base a, [.var "β", .var "α"], [.field "l" (.base b)]) := rfl
+  rw [matchL_hasMgu_iff hmatch] at hmgu
+  -- drop the vacuous eq conjunct: HasMguP (𝓪≐𝓪 ∧ ·) ⟹ HasMgu of the residual
+  have hw : HasMgu (ofSpine [Atom.var "β", .var "α"]) (ofSpine [Atom.field "l" (.base b)]) := by
+    obtain ⟨θ, ⟨_, hu⟩, hmax⟩ := hmgu
+    exact ⟨θ, hu, fun θ' hu' => hmax θ' ⟨TyEquiv.refl _, hu'⟩⟩
+  refine absurd hw ?_
+  simp only [ofSpine]
+  rw [hasMgu_rowEquiv (ρ₁' := .cat (.var "β") (.var "α")) (ρ₂' := .sing "l" (.base b))
+        (RowEquiv.cat (RowEquiv.refl _) RowEquiv.unitR) RowEquiv.unitR]
+  exact wand_no_mgu_count b "l"
+
 -- ## Assembly: success ⟹ unifies (induction on unifySpineF's fuel)
 -- Base cases: one side empty ⟹ allVarsEmpty forces the other's vars to ε.
 -- ⊢  unifySpineF fuel [] s₂ = success σ eqs,  θ ⊨ σ
@@ -3686,7 +3713,9 @@ theorem unifySpineF_fuel_stable {B : Type} (s₁ s₂ : List (Atom B)) {fuel : N
 --    InstanceOf never mentions the rows) + hasMguP_congr, with matchL/matchR/
 --    groundMatch_hasMgu_iff transporting HasMgu (ofSpine s₁)(ofSpine s₂) to
 --    HasMguP (λθ. θτ≈ₜθτ' ∧ θ ⊨ ofSpine t₁≐ᵣofSpine t₂) — the eq-constrained residual.
---    (All axiom-clean: propext/Quot.sound; hasMguP_congr axiom-free.) CAVEAT: unlike
+--    (All axiom-clean: propext/Quot.sound; hasMguP_congr axiom-free.) Composed
+--    end-to-end in wand_under_match_no_mgu (¬HasMgu (l:𝓪|β|α)(l:𝓪|l:𝓫): matchL peels the
+--    shared leading field emitting the vacuous eq 𝓪≐𝓪, residual = Wand). CAVEAT: unlike
 --    the strip arms these SHRINK the unifier set (intersect with the eq-satisfiers), so
 --    they transport mgu-STATUS but do not by themselves let a stuck residual kill the
 --    original — that needs the base-technique WITNESSES to also satisfy the accumulated
