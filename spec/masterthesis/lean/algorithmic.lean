@@ -1832,6 +1832,143 @@ theorem vars_vs_field_no_mgu {B : Type} {vs : List TyVar} (hnd : vs.Nodup)
     simp only [Row.toSpine, sFieldCount]
     omega
 
+-- ## The all-variable stuck class: (α | β) ≐ᵣ (β | α) has no mgu
+-- The THIRD base technique: variable non-commutativity. Counting/rigidity cannot
+-- fire (no fields), so the kill is combinatorial. Witnesses pin θα, θβ field-free;
+-- the unifier equation gives their var-sequences A, B with A ++ B = B ++ A; the
+-- position argument forces vars(A) ⊆ vars(B); then the (α↦l, β↦ε) witness — which
+-- empties every var of B, hence of A — collapses θα to ε, contradicting the
+-- l-field it must carry.
+
+-- Reusable: proj is empty exactly when the l-count is 0 (length = count).
+private theorem sProj_nil_of_fieldCount_zero {B : Type} {l : Label} {s : List (Atom B)}
+    (h : sFieldCount l s = 0) : sProj l s = [] := by
+  rcases hh : sProj l s with _ | ⟨p, ps⟩
+  · rfl
+  · exact absurd (by rw [← sProj_length_eq_sFieldCount, hh] at h; exact h)
+      (by simp)
+
+-- The combinatorial heart (Lyndon–Schützenberger, the membership fragment):
+-- if A ++ B = B ++ A and B ≠ [], every element of A occurs in B. Proof by
+-- first-occurrence index: x∈A sits at idxOf x A in A++B; if x∉B it sits at
+-- idxOf x A + |B| in B++A; equal lists ⟹ |B| = 0.
+theorem append_comm_subset {A Bl : List TyVar} (h : A ++ Bl = Bl ++ A) (hB : Bl ≠ [])
+    {x : TyVar} (hxA : x ∈ A) : x ∈ Bl := by
+  by_cases hxB : x ∈ Bl
+  · exact hxB
+  · exfalso
+    have h1 : List.idxOf x (A ++ Bl) = List.idxOf x A := by
+      rw [List.idxOf_append, if_pos hxA]
+    have h2 : List.idxOf x (Bl ++ A) = List.idxOf x A + Bl.length := by
+      rw [List.idxOf_append, if_neg hxB]
+    rw [h, h2] at h1
+    have hlen : Bl.length = 0 := by omega
+    cases Bl with
+    | nil => exact hB rfl
+    | cons b bs => simp at hlen
+
+-- A row vanishes under σ ⟹ every variable in its spine vanishes under σ.
+theorem applySubst_empty_forces_vars {B : Type} (σ : TySubst B) :
+    (R : Row B) → RowEquiv (R.applySubst σ) Row.empty →
+    ∀ v ∈ sVarSeq R.toSpine, RowEquiv (σ.row v) Row.empty
+  | .empty, _ => by intro v hv; simp [Row.toSpine, sVarSeq] at hv
+  | .var α, h => by
+      intro v hv
+      simp only [Row.toSpine, sVarSeq, List.mem_singleton] at hv
+      subst hv; simpa only [Row.applySubst] using h
+  | .sing _ _, _ => by intro v hv; simp [Row.toSpine, sVarSeq] at hv
+  | .cat R₁ R₂, h => by
+      intro v hv
+      simp only [Row.applySubst] at h
+      obtain ⟨h₁, h₂⟩ := h.cat_empty_split
+      simp only [Row.toSpine, sVarSeq_append, List.mem_append] at hv
+      rcases hv with hv | hv
+      · exact applySubst_empty_forces_vars σ R₁ h₁ v hv
+      · exact applySubst_empty_forces_vars σ R₂ h₂ v hv
+
+-- The converse for a FIELD-FREE row: if every variable of its spine vanishes
+-- under σ, the whole row does.
+theorem varsEmpty_forces_applySubst_empty {B : Type} (σ : TySubst B) :
+    (R : Row B) → (∀ v ∈ sVarSeq R.toSpine, RowEquiv (σ.row v) Row.empty) →
+    (∀ l, sFieldCount l R.toSpine = 0) → RowEquiv (R.applySubst σ) Row.empty
+  | .empty, _, _ => RowEquiv.refl _
+  | .var α, hv, _ => by
+      simp only [Row.applySubst]
+      exact hv α (by simp [Row.toSpine, sVarSeq])
+  | .sing l _, _, hf => by
+      exfalso; have := hf l; simp [Row.toSpine, sFieldCount] at this
+  | .cat R₁ R₂, hv, hf => by
+      simp only [Row.applySubst]
+      have hv1 : ∀ v ∈ sVarSeq R₁.toSpine, RowEquiv (σ.row v) Row.empty := fun v hm =>
+        hv v (by simp only [Row.toSpine, sVarSeq_append, List.mem_append]; exact Or.inl hm)
+      have hv2 : ∀ v ∈ sVarSeq R₂.toSpine, RowEquiv (σ.row v) Row.empty := fun v hm =>
+        hv v (by simp only [Row.toSpine, sVarSeq_append, List.mem_append]; exact Or.inr hm)
+      have hf1 : ∀ l, sFieldCount l R₁.toSpine = 0 := fun l => by
+        have := hf l; simp only [Row.toSpine, sFieldCount_append] at this; omega
+      have hf2 : ∀ l, sFieldCount l R₂.toSpine = 0 := fun l => by
+        have := hf l; simp only [Row.toSpine, sFieldCount_append] at this; omega
+      exact (RowEquiv.cat (varsEmpty_forces_applySubst_empty σ R₁ hv1 hf1)
+              (varsEmpty_forces_applySubst_empty σ R₂ hv2 hf2)).trans RowEquiv.unitL
+
+-- ⊢  ¬ HasMgu (α | β) (β | α)      (the all-variable stuck class)
+theorem allvar_swap_no_mgu {B : Type} :
+    ¬ HasMgu (.cat (.var "α") (.var "β") : Row B) (.cat (.var "β") (.var "α")) := by
+  rintro ⟨θ, hu, hmax⟩
+  unfold Unifies at hu
+  simp only [Row.applySubst] at hu
+  -- the two witnesses (α↦l, β↦ε) and (α↦ε, β↦l), for any label l
+  have hUu : ∀ l : Label, Unifies
+      (⟨fun x => .var x, fun x => if x = "α" then .sing l .unk else .empty⟩ : TySubst B)
+      (.cat (.var "α") (.var "β")) (.cat (.var "β") (.var "α")) := fun l => by
+    unfold Unifies
+    show RowEquiv (Row.cat (Row.sing l .unk) Row.empty) (Row.cat Row.empty (Row.sing l .unk))
+    exact RowEquiv.unitR.trans RowEquiv.unitL.symm
+  have hUu' : ∀ l : Label, Unifies
+      (⟨fun x => .var x, fun x => if x = "α" then .empty else .sing l .unk⟩ : TySubst B)
+      (.cat (.var "α") (.var "β")) (.cat (.var "β") (.var "α")) := fun l => by
+    unfold Unifies
+    show RowEquiv (Row.cat Row.empty (Row.sing l .unk)) (Row.cat (Row.sing l .unk) Row.empty)
+    exact RowEquiv.unitL.trans RowEquiv.unitR.symm
+  -- both images are field-free (an mgu is pointwise count-minimal, witnesses give 0)
+  have hβfree : ∀ l, sFieldCount l (θ.row "β").toSpine = 0 := fun l => by
+    have hle : sFieldCount l (θ.row "β").toSpine ≤ 0 :=
+      instanceOf_fieldCount_mono (hmax _ (hUu l)) "β" l
+    omega
+  have hαfree : ∀ l, sFieldCount l (θ.row "α").toSpine = 0 := fun l => by
+    have hle : sFieldCount l (θ.row "α").toSpine ≤ 0 :=
+      instanceOf_fieldCount_mono (hmax _ (hUu' l)) "α" l
+    omega
+  -- the var-sequences commute: A ++ B = B ++ A
+  obtain ⟨hvarseq, -⟩ := hu.char
+  simp only [Row.toSpine, sVarSeq_append] at hvarseq
+  -- B ≠ [] : else θβ (field-free + var-free) ≈ ε, refuting the (α↦ε,β↦l) witness
+  have hBne : sVarSeq (θ.row "β").toSpine ≠ [] := by
+    intro hBnil
+    have hθβε : RowEquiv (θ.row "β") (Row.empty : Row B) :=
+      RowEquiv.ofChar ⟨by rw [hBnil]; rfl,
+        fun l => by rw [sProj_nil_of_fieldCount_zero (hβfree l)]; exact .nil⟩
+    obtain ⟨σ', hrowσ', -⟩ := hmax _ (hUu' "x")
+    have hfield : RowEquiv (Row.sing "x" (.unk : Ty B)) ((θ.row "β").applySubst σ') := by
+      have := hrowσ' "β"; simpa using this
+    have hemp : RowEquiv ((θ.row "β").applySubst σ') Row.empty := RowEquiv.applySubst σ' hθβε
+    have hc := rowEquiv_fieldCount_eq "x" (hfield.trans hemp)
+    simp [Row.toSpine, sFieldCount] at hc
+  -- the (α↦l, β↦ε) witness factors: θβ vanishes, θα becomes (l:unk)
+  obtain ⟨σ, hrowσ, -⟩ := hmax _ (hUu "x")
+  have hσα : RowEquiv (Row.sing "x" (.unk : Ty B)) ((θ.row "α").applySubst σ) := by
+    have := hrowσ "α"; simpa using this
+  have hσβ : RowEquiv (Row.empty : Row B) ((θ.row "β").applySubst σ) := by
+    have := hrowσ "β"; simpa using this
+  -- every var of B vanishes under σ; by A ⊆ B so does every var of A
+  have hBvars := applySubst_empty_forces_vars σ (θ.row "β") hσβ.symm
+  have hAvars : ∀ v ∈ sVarSeq (θ.row "α").toSpine, RowEquiv (σ.row v) Row.empty := fun v hv =>
+    hBvars v (append_comm_subset hvarseq hBne hv)
+  -- so θα collapses to ε — contradicting the l-field it carries
+  have hαε : RowEquiv ((θ.row "α").applySubst σ) Row.empty :=
+    varsEmpty_forces_applySubst_empty σ (θ.row "α") hAvars hαfree
+  have hc := rowEquiv_fieldCount_eq "x" (hσα.trans hαε)
+  simp [Row.toSpine, sFieldCount] at hc
+
 -- ## projClash soundness: the projection-clash direction of the trichotomy.
 -- If projClash s₁ s₂, no θ can unify (ofSpine s₁) with (ofSpine s₂).
 -- The ground side's l-count is fixed under substitution; the other side can
@@ -3473,15 +3610,16 @@ theorem unifySpineF_fuel_stable {B : Type} (s₁ s₂ : List (Atom B)) {fuel : N
 --    counting, GENERALIZED to n vars by vars_vs_field_no_mgu ((v₁|…|vₙ)≐ᵣ(l:𝓫), nodup,
 --    ≥2). (2) instanceOf_fieldCount_eq_of_varFree (a var-free component of an mgu is
 --    RIGID) + two_sided_no_mgu for (α|l:𝓫)≐ᵣ(l:𝓫|β) — counting can't shrink the ε,ε
---    unifier there, so rigidity does the kill. LIFT INFRA: HasMgu + hasMgu_congr/
---    hasMgu_rowEquiv (no-mgu depends only on the unifier SET, is a ≈-invariant) +
---    stripL/stripR_hasMgu_iff (strip moves preserve the unifier set) discharge the STRIP
---    arms of the fuel induction (demo: wand_under_strip_no_mgu). Remaining for the full
---    unifySpineF=stuck⟹no-mgu: (a) the general BASE arm (any immediately-stuck config ⟹
---    no-mgu — only wand/two_sided shapes so far; may be conservative, unchecked); (b) the
---    MATCH/GROUND arms (emit a type eq ⟹ unifier sets differ ⟹ hasMgu_congr doesn't apply;
---    need the augmented-witness argument: satisfy the emitted eq via the witnesses' type
---    parts, then re-run count-shrink/rigidity at the original level).
+--    unifier there, so rigidity does the kill. (3) allvar_swap_no_mgu for (α|β)≐ᵣ(β|α) —
+--    NON-COMMUTATIVITY: witnesses force θα,θβ field-free, hu.char gives A++B=B++A, the
+--    combinatorial append_comm_subset (first-occurrence idxOf) forces vars(A)⊆vars(B), so
+--    emptying B's vars collapses θα. All three base techniques now proven. LIFT INFRA:
+--    HasMgu + hasMgu_congr/hasMgu_rowEquiv (no-mgu depends only on the unifier SET, is a
+--    ≈-invariant) + stripL/stripR_hasMgu_iff (strip moves preserve the unifier set)
+--    discharge the STRIP arms (demo: wand_under_strip_no_mgu). Remaining for the full
+--    unifySpineF=stuck⟹no-mgu: (a) assemble the general BASE arm from the 3 techniques
+--    (+ all-var beyond the swap); (b) the MATCH/GROUND arms (emit a type eq ⟹ unifier sets
+--    differ ⟹ hasMgu_congr doesn't apply; need the augmented-witness argument).
 --    NOTE occurs does NOT lift to a no-unifier theorem — it is conservative
 --    (occurs_allVar_unifiable); only occurs_field_no_unifier genuine.
 --  * The type-level driver ≐: solve the emitted (τ, τ') equations, mutually
