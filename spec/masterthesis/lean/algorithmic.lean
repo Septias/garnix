@@ -1538,6 +1538,73 @@ theorem sFieldCount_applySubst_varFree {B : Type} (θ : TySubst B) (l : Label) :
       simp only [Row.applySubst, Row.toSpine, sFieldCount_append]
       rw [sFieldCount_applySubst_varFree θ l hv₁, sFieldCount_applySubst_varFree θ l hv₂]
 
+-- ## The stuck ⟹ no-unique-mgu direction, via field-count monotonicity
+-- Substitution never DELETES an l-field (sFieldCount_applySubst_le) and ≈
+-- preserves counts (rowEquiv_fieldCount_eq). So if θ' factors through θ
+-- (θ' ⊑ θ), then θ carries no more l-fields at any single variable than θ'
+-- does: an mgu is pointwise-MINIMAL in every label count. A unifier that
+-- strictly undercuts a candidate somewhere therefore refutes its maximality —
+-- this single fact is the engine behind Wand's ambiguity (U-stuck).
+
+-- ⊢  θ' ⊑ θ   ⟹   count_l(θ x) ≤ count_l(θ' x)
+theorem instanceOf_fieldCount_mono {B : Type} {θ' θ : TySubst B}
+    (h : InstanceOf θ' θ) (x : TyVar) (l : Label) :
+    sFieldCount l (θ.row x).toSpine ≤ sFieldCount l (θ'.row x).toSpine := by
+  obtain ⟨σ, hrow, -⟩ := h
+  rw [rowEquiv_fieldCount_eq l (hrow x)]
+  exact sFieldCount_applySubst_le σ l (θ.row x)
+
+-- The reusable no-mgu principle: if every unifier is strictly undercut at some
+-- variable/label by another unifier, then no unifier is most general.
+-- ⊢  (∀ unifier θ. ∃ unifier u, x, l.  count_l(u x) < count_l(θ x))
+--        ⟹   ¬ ∃ mgu
+theorem no_mgu_of_witness_shrinks {B : Type} {ρ₁ ρ₂ : Row B}
+    (H : ∀ θ : TySubst B, Unifies θ ρ₁ ρ₂ →
+         ∃ (u : TySubst B) (x : TyVar) (l : Label),
+           Unifies u ρ₁ ρ₂ ∧
+           sFieldCount l (u.row x).toSpine < sFieldCount l (θ.row x).toSpine) :
+    ¬ ∃ θ : TySubst B, Unifies θ ρ₁ ρ₂ ∧
+        ∀ θ' : TySubst B, Unifies θ' ρ₁ ρ₂ → InstanceOf θ' θ := by
+  rintro ⟨θ, hu, hmgu⟩
+  obtain ⟨u, x, l, huni, hlt⟩ := H θ hu
+  exact absurd (instanceOf_fieldCount_mono (hmgu u huni) x l) (by omega)
+
+-- Wand's example, re-proved through the counting principle: in (β | α) ≐ᵣ (l:𝓫)
+-- the single l-field must be hosted by θβ or θα (their counts sum to 1); the
+-- witness that hosts it in the OTHER variable undercuts the chosen one's count
+-- from 1 to 0, so no mgu exists. Cleaner and more uniform than the direct
+-- projection argument (and the template for every field-vs-vars stuck case).
+-- ⊢  ¬ ∃ mgu for (β | α) ≐ᵣ (l:𝓫)
+theorem wand_no_mgu_count {B : Type} (b : B) (l : Label) :
+    ¬ ∃ θ : TySubst B,
+        Unifies θ (.cat (.var "β") (.var "α")) (.sing l (.base b)) ∧
+        ∀ θ' : TySubst B,
+          Unifies θ' (.cat (.var "β") (.var "α")) (.sing l (.base b)) →
+          InstanceOf θ' θ := by
+  apply no_mgu_of_witness_shrinks
+  intro θ hu
+  have hu' : RowEquiv (Row.cat (θ.row "β") (θ.row "α")) (Row.sing l (.base b)) := by
+    have h := hu; unfold Unifies at h
+    simpa only [Row.applySubst, Ty.applySubst] using h
+  have hcount : sFieldCount l (θ.row "β").toSpine
+              + sFieldCount l (θ.row "α").toSpine = 1 := by
+    have h := rowEquiv_fieldCount_eq l hu'
+    rw [show (Row.cat (θ.row "β") (θ.row "α")).toSpine
+          = (θ.row "β").toSpine ++ (θ.row "α").toSpine from rfl,
+        sFieldCount_append] at h
+    simpa [Row.toSpine, sFieldCount] using h
+  by_cases hα : sFieldCount l (θ.row "α").toSpine = 0
+  · -- the field is in β (count β = 1); empty-β witness undercuts at "β"
+    refine ⟨⟨fun x => .var x, fun x => if x = "β" then .empty
+              else if x = "α" then .sing l (.base b) else .var x⟩, "β", l, ?_, ?_⟩
+    · unfold Unifies; simp [Row.applySubst, Ty.applySubst]; exact RowEquiv.unitL
+    · show 0 < sFieldCount l (θ.row "β").toSpine; omega
+  · -- the field is in α (count α = 1); empty-α witness undercuts at "α"
+    refine ⟨⟨fun x => .var x, fun x => if x = "β" then .sing l (.base b)
+              else if x = "α" then .empty else .var x⟩, "α", l, ?_, ?_⟩
+    · unfold Unifies; simp [Row.applySubst, Ty.applySubst]; exact RowEquiv.unitR
+    · show 0 < sFieldCount l (θ.row "α").toSpine; omega
+
 -- ## projClash soundness: the projection-clash direction of the trichotomy.
 -- If projClash s₁ s₂, no θ can unify (ofSpine s₁) with (ofSpine s₂).
 -- The ground side's l-count is fixed under substitution; the other side can
@@ -3133,9 +3200,15 @@ theorem unifySpineF_fuel_stable {B : Type} (s₁ s₂ : List (Atom B)) {fuel : N
 --    EXACTLY {θ : SolSat θ σ ∧ EqsSat θ eqs}: ≐ᵣ computes a most general unifier.
 --    Via unifySpineF_success_complete (fuel induction, forward) + solveVar_complete
 --    + allVarsEmpty_complete (RowEquiv.cat_empty_split) + EqsSat.cons.
---    Remaining ≐ᵣ metatheory: stuck ⟹ no unique mgu (wand_no_mgu is the worked
---    instance). NOTE occurs does NOT lift to a no-unifier theorem — it is
---    conservative (occurs_allVar_unifiable); only occurs_field_no_unifier genuine.
+--    STUCK ⟹ NO-MGU — reusable principle DONE: instanceOf_fieldCount_mono (an mgu
+--    is pointwise count-minimal, as subst never deletes a field) + the general
+--    no_mgu_of_witness_shrinks; wand_no_mgu_count re-proves Wand through counting.
+--    Covers the field-vs-vars stuck subclass; the equal-count two-sided case
+--    (α|l:𝓫)≐ᵣ(l:𝓫|β) needs depth/non-commutativity (counting can't shrink the
+--    ε,ε unifier), and the algorithm-level lift unifySpineF=stuck⟹no-mgu (stuck
+--    propagates up through match/ground via addEq) needs mgu-transfer across moves.
+--    NOTE occurs does NOT lift to a no-unifier theorem — it is conservative
+--    (occurs_allVar_unifiable); only occurs_field_no_unifier genuine.
 --  * The type-level driver ≐: solve the emitted (τ, τ') equations, mutually
 --    recursing into rows; occurs/rank discipline across both sorts.
 --  * Non-vacuity of qualified schemes: needs lookup_total (RowWF) plus a
