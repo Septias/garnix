@@ -17,7 +17,11 @@ Principality forces qualified schemes that use parked stumps to during unificati
 - minimal.typ: provides a semi-formal method of the typesystem
 - minimal.lean: provides a fully formal type-system (frozen — L2 lives in its own file)
 - algorithmic.typ: Algorithmic ideas
-- algorithmic.lean: qualified schemes, discharge, principality
+- algorithmic.lean: umbrella re-export of the split below (2026-08-25 split into 3 files along the two independent halves + the row-algebra foundation):
+  - Qualified.lean: L2 qualified schemes, discharge, principality, QTyped (imports minimal)
+  - RowEquiv.lean: the ≈-characterization / trace-monoid normal form (imports minimal)
+  - RowUnify.lean: the ≐ᵣ algorithm + trichotomy legs (imports RowEquiv)
+  - Axioms.lean: axiom guard (#guard_msgs pins headline theorems' axiom lists; build fails if a sorry/unexpected axiom creeps in)
 - In the bib/plaintext folder there is the plaintext version of the Paszke&Xie paper
 
 # Progress
