@@ -2363,6 +2363,39 @@ theorem groundMatch_reflect {B : Type} {θ : TySubst B} {s₁ s₂ t₁ t₂ : L
                     hlfree β (by rw [hvars₁]; exact hβ)⟩)
   exact hs₁equiv.trans ((RowEquiv.cat (.sing heq) hrec).trans hs₂equiv.symm)
 
+-- U-ground FORWARD: a unifier of the original ground-match pins the field types
+-- and unifies the residual. The var-free + l-free side conditions on s₁ (which
+-- the backward lemma reads off the residual) are here DERIVED from hu itself:
+-- the ground side s₂ fixes count_l and the var sequence under θ, hu transports
+-- both to s₁, and hcount forces θ to add no l-fields across s₁'s vars.
+-- ⊢  groundMatch s₁ s₂ = some (τ,τ',t₁,t₂),  θ ⊨ ofSpine s₁ ≐ᵣ ofSpine s₂
+--        ⟹   θτ ≈ₜ θτ'  ∧  θ ⊨ ofSpine t₁ ≐ᵣ ofSpine t₂
+theorem groundMatch_reflect_fwd {B : Type} {θ : TySubst B}
+    {s₁ s₂ t₁ t₂ : List (Atom B)} {τ τ' : Ty B}
+    (hg : groundMatch s₁ s₂ = some (τ, τ', t₁, t₂))
+    (hu : RowEquiv ((ofSpine s₁).applySubst θ) ((ofSpine s₂).applySubst θ)) :
+    TyEquiv (τ.applySubst θ) (τ'.applySubst θ) ∧
+    RowEquiv ((ofSpine t₁).applySubst θ) ((ofSpine t₂).applySubst θ) := by
+  obtain ⟨hs₂vars, l, hcount, _, hr₁, hr₂⟩ := groundMatch_inv hg
+  have hs₂equiv : RowEquiv ((ofSpine s₂).applySubst θ)
+      (.cat (.sing l (τ'.applySubst θ)) ((ofSpine t₂).applySubst θ)) :=
+    removeField_equiv_of l s₂ hr₂ (fun β hβ => by simp [hs₂vars] at hβ)
+  have hs₂vf : (ofSpine s₂).SpineVarFree :=
+    (spineVarFree_iff_varSeq_nil _).mpr (by rw [ofSpine_toSpine]; exact hs₂vars)
+  have hv₁nil : sVarSeq ((ofSpine s₁).applySubst θ).toSpine = [] := by
+    rw [hu.char.1]; exact varSeq_applySubst_nil θ s₂ hs₂vars
+  have hfc : sFieldCount l ((ofSpine s₁).applySubst θ).toSpine = sFieldCount l s₁ := by
+    have e1 := rowEquiv_fieldCount_eq l hu
+    have e2 : sFieldCount l ((ofSpine s₂).applySubst θ).toSpine = sFieldCount l s₂ := by
+      rw [sFieldCount_applySubst_varFree θ l hs₂vf, ofSpine_toSpine]
+    omega
+  have hvarfree := allVars_varFree_of s₁ hv₁nil
+  have hlfree := allVars_lfree_of l s₁ hfc
+  have hs₁equiv : RowEquiv ((ofSpine s₁).applySubst θ)
+      (.cat (.sing l (τ.applySubst θ)) ((ofSpine t₁).applySubst θ)) :=
+    removeField_equiv_of l s₁ hr₁ (fun β hβ => ⟨hvarfree β hβ, hlfree β hβ⟩)
+  exact (hs₁equiv.symm.trans (hu.trans hs₂equiv)).field_cancel_left
+
 -- ## Assembly: success ⟹ unifies (induction on unifySpineF's fuel)
 -- Base cases: one side empty ⟹ allVarsEmpty forces the other's vars to ε.
 -- ⊢  unifySpineF fuel [] s₂ = success σ eqs,  θ ⊨ σ
@@ -2501,6 +2534,142 @@ theorem unifyRow_success_sound {B : Type} {θ : TySubst B} {ρ₁ ρ₂ : Row B}
   have e₁ := RowEquiv.applySubst θ (Row.toSpine_equiv ρ₁)
   have e₂ := RowEquiv.applySubst θ (Row.toSpine_equiv ρ₂)
   exact e₁.trans (key.trans e₂.symm)
+
+------------------------- ≐ᵣ CLASH SOUNDNESS (algorithm level) --------------
+-- Lifting the two local clash cores through the whole control flow, using the
+-- FORWARD reflection: at every move a unifier of the original also unifies the
+-- residual, so no-unifier propagates backwards. solveVar never yields clash, and
+-- addEq preserves clash, so a clash comes only from a base case (allVarsEmpty) or
+-- the final projClash — both already refuted locally. This is the ≐ᵣ CLASH leg of
+-- the trichotomy, now at the algorithm level (not just the local conditions).
+
+-- solveVar answers success or occurs, never clash.
+theorem solveVar_ne_clash {B : Type} {s₁ s₂ : List (Atom B)} :
+    solveVar s₁ s₂ ≠ some .clash := by
+  intro h
+  cases s₁ with
+  | nil => simp [solveVar] at h
+  | cons a r =>
+    cases a with
+    | field _ _ => simp [solveVar] at h
+    | var α =>
+      cases r with
+      | cons _ _ => simp [solveVar] at h
+      | nil => simp only [solveVar] at h; split at h <;> simp at h
+
+-- addEq only rewrites a success; a clash result must come from a clash residual.
+theorem addEq_clash_inv {B : Type} {τ τ' : Ty B} {u : URes B} :
+    u.addEq τ τ' = .clash → u = .clash := by
+  cases u <;> simp [URes.addEq]
+
+-- ⊢  unifySpineF fuel s₁ s₂ = clash   ⟹   ¬ ∃ θ. θ ⊨ ofSpine s₁ ≐ᵣ ofSpine s₂
+theorem unifySpineF_clash_no_unifier {B : Type} :
+    ∀ (fuel : Nat) (s₁ s₂ : List (Atom B)),
+      unifySpineF fuel s₁ s₂ = .clash →
+      ¬ ∃ θ : TySubst B, Unifies θ (ofSpine s₁) (ofSpine s₂) := by
+  intro fuel
+  induction fuel with
+  | zero =>
+      intro s₁ s₂ h
+      cases s₁ with
+      | nil =>
+          simp only [unifySpineF] at h
+          cases hae : allVarsEmpty s₂ with
+          | none => rintro ⟨θ, hu⟩; exact allVarsEmpty_none_no_unifier hae ⟨θ, hu⟩
+          | some => simp [hae] at h
+      | cons a s₁ =>
+          cases s₂ with
+          | nil =>
+              simp only [unifySpineF] at h
+              cases hae : allVarsEmpty (a :: s₁) with
+              | none => rintro ⟨θ, hu⟩; exact allVarsEmpty_none_no_unifier' hae ⟨θ, hu⟩
+              | some => simp [hae] at h
+          | cons b s₂ => simp [unifySpineF] at h
+  | succ fuel ih =>
+      intro s₁ s₂ h
+      cases s₁ with
+      | nil =>
+          simp only [unifySpineF] at h
+          cases hae : allVarsEmpty s₂ with
+          | none => rintro ⟨θ, hu⟩; exact allVarsEmpty_none_no_unifier hae ⟨θ, hu⟩
+          | some => simp [hae] at h
+      | cons a s₁ =>
+          cases s₂ with
+          | nil =>
+              simp only [unifySpineF] at h
+              cases hae : allVarsEmpty (a :: s₁) with
+              | none => rintro ⟨θ, hu⟩; exact allVarsEmpty_none_no_unifier' hae ⟨θ, hu⟩
+              | some => simp [hae] at h
+          | cons b s₂ =>
+              rintro ⟨θ, hu⟩
+              unfold unifySpineF at h
+              cases hsl : stripL (a :: s₁) (b :: s₂) with
+              | some p =>
+                obtain ⟨t₁, t₂⟩ := p; simp only [hsl] at h
+                exact ih t₁ t₂ h ⟨θ, stripL_reflect_fwd hsl hu⟩
+              | none =>
+              cases hsr : stripR (a :: s₁) (b :: s₂) with
+              | some p =>
+                obtain ⟨t₁, t₂⟩ := p; simp only [hsl, hsr] at h
+                exact ih t₁ t₂ h ⟨θ, stripR_reflect_fwd hsr hu⟩
+              | none =>
+              cases hv1 : solveVar (a :: s₁) (b :: s₂) with
+              | some r =>
+                simp only [hsl, hsr, hv1] at h; exact solveVar_ne_clash (hv1.trans (congrArg some h))
+              | none =>
+              cases hv2 : solveVar (b :: s₂) (a :: s₁) with
+              | some r =>
+                simp only [hsl, hsr, hv1, hv2] at h
+                exact solveVar_ne_clash (hv2.trans (congrArg some h))
+              | none =>
+              cases hml : matchL (a :: s₁) (b :: s₂) with
+              | some p =>
+                obtain ⟨τ0, τ0', t₁, t₂⟩ := p; simp only [hsl, hsr, hv1, hv2, hml] at h
+                exact ih t₁ t₂ (addEq_clash_inv h) ⟨θ, (matchL_reflect_fwd hml hu).2⟩
+              | none =>
+              cases hml2 : matchL (b :: s₂) (a :: s₁) with
+              | some p =>
+                obtain ⟨τ0', τ0, t₂, t₁⟩ := p; simp only [hsl, hsr, hv1, hv2, hml, hml2] at h
+                exact ih t₁ t₂ (addEq_clash_inv h) ⟨θ, (matchL_reflect_fwd hml2 hu.symm).2.symm⟩
+              | none =>
+              cases hmr : matchR (a :: s₁) (b :: s₂) with
+              | some p =>
+                obtain ⟨τ0, τ0', t₁, t₂⟩ := p; simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr] at h
+                exact ih t₁ t₂ (addEq_clash_inv h) ⟨θ, (matchR_reflect_fwd hmr hu).2⟩
+              | none =>
+              cases hmr2 : matchR (b :: s₂) (a :: s₁) with
+              | some p =>
+                obtain ⟨τ0', τ0, t₂, t₁⟩ := p
+                simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2] at h
+                exact ih t₁ t₂ (addEq_clash_inv h) ⟨θ, (matchR_reflect_fwd hmr2 hu.symm).2.symm⟩
+              | none =>
+              cases hg : groundMatch (a :: s₁) (b :: s₂) with
+              | some p =>
+                obtain ⟨τ0, τ0', t₁, t₂⟩ := p
+                simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg] at h
+                exact ih t₁ t₂ (addEq_clash_inv h) ⟨θ, (groundMatch_reflect_fwd hg hu).2⟩
+              | none =>
+              cases hg2 : groundMatch (b :: s₂) (a :: s₁) with
+              | some p =>
+                obtain ⟨τ0', τ0, t₂, t₁⟩ := p
+                simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2] at h
+                exact ih t₁ t₂ (addEq_clash_inv h) ⟨θ, (groundMatch_reflect_fwd hg2 hu.symm).2.symm⟩
+              | none =>
+                simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2] at h
+                split at h
+                · rename_i hpc; exact projClash_no_unifier hpc ⟨θ, hu⟩
+                · simp at h
+
+-- ≐ᵣ CLASH is SOUND: a clash verdict means the two rows have no unifier.
+-- ⊢  unifyRow ρ₁ ρ₂ = clash   ⟹   ¬ ∃ θ. θ ⊨ ρ₁ ≐ᵣ ρ₂
+theorem unifyRow_clash_no_unifier {B : Type} {ρ₁ ρ₂ : Row B}
+    (h : unifyRow ρ₁ ρ₂ = .clash) : ¬ ∃ θ : TySubst B, Unifies θ ρ₁ ρ₂ := by
+  rintro ⟨θ, hu⟩
+  unfold unifyRow unifySpine at h
+  refine unifySpineF_clash_no_unifier _ ρ₁.toSpine ρ₂.toSpine h ⟨θ, ?_⟩
+  have e₁ := RowEquiv.applySubst θ (Row.toSpine_equiv ρ₁)
+  have e₂ := RowEquiv.applySubst θ (Row.toSpine_equiv ρ₂)
+  exact e₁.symm.trans (hu.trans e₂)
 
 ------------------------- ≐ᵣ FUEL SUFFICIENCY -------------------------------
 -- Every recursive move of unifySpineF removes exactly ONE atom from each side
@@ -2720,14 +2889,17 @@ theorem unifySpineF_fuel_stable {B : Type} (s₁ s₂ : List (Atom B)) {fuel : N
 --    incomplete; the genuine no-unifier case needs a field —
 --    occurs_field_no_unifier (α ∈ vars s₂ ∧ 0 < count_l s₂ ⟹ no unifier), the
 --    occurs analogue of projClash_no_unifier. Both after projClash_no_unifier.
---    CLASH — both local halves now done: projClash_no_unifier (interior
---    projection clash) AND allVarsEmpty_none_no_unifier(') (the base case — a
---    field left on an exhausted side can't unify ε), via empty_no_unifier.
---    Remaining ≐ᵣ metatheory: mgu-on-success; stuck ⟹ no unique mgu (wand_no_mgu
---    is the worked instance). NOTE stuck is NOT local to solveVar — only correct
---    after end-stripping has run, so its soundness needs the control-flow
---    inversion; likewise lifting occurs_field_no_unifier to the algorithm level
---    needs the forward reflection (the hard completeness direction).
+--    CLASH — ALGORITHM-LEVEL, DONE: unifyRow_clash_no_unifier (clash ⟹ no
+--    unifier), via unifySpineF_clash_no_unifier (fuel induction) using the two
+--    local halves (projClash_no_unifier interior + allVarsEmpty_none_no_unifier
+--    base) plus the FORWARD-REFLECTION layer + solveVar_ne_clash/addEq_clash_inv.
+--    FORWARD REFLECTION — DONE (completeness direction of every move):
+--    strip/match/groundMatch_reflect_fwd via field_cancel_left/right — a unifier
+--    of the original unifies the residual (+ emitted type eq). Reusable for mgu.
+--    Remaining ≐ᵣ metatheory: mgu-on-success (forward reflection is the key
+--    ingredient); stuck ⟹ no unique mgu (wand_no_mgu is the worked instance).
+--    NOTE occurs does NOT lift to a no-unifier theorem — it is conservative
+--    (occurs_allVar_unifiable); only occurs_field_no_unifier is genuine.
 --  * The type-level driver ≐: solve the emitted (τ, τ') equations, mutually
 --    recursing into rows; occurs/rank discipline across both sorts.
 --  * Non-vacuity of qualified schemes: needs lookup_total (RowWF) plus a
@@ -2739,6 +2911,7 @@ theorem unifySpineF_fuel_stable {B : Type} (s₁ s₂ : List (Atom B)) {fuel : N
 --    (lookup_det + Discharge.mono_of_definite are the two pillars).
 
 end MinimalCalculus
+
 
 
 
