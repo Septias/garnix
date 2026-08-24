@@ -21,6 +21,7 @@ Principality forces qualified schemes that use parked stumps to during unificati
   - Qualified.lean: L2 qualified schemes, discharge, principality, QTyped (imports minimal)
   - RowEquiv.lean: the ≈-characterization / trace-monoid normal form (imports minimal)
   - RowUnify.lean: the ≐ᵣ algorithm + trichotomy legs (imports RowEquiv)
+  - Regressions.lean: kernel-checked (`rfl`) worked examples of ≐ᵣ (unify_wand, unify_eq_rescued_stuck, …); each rfl RUNS the algorithm in the kernel, so a behaviour change breaks the build
   - Axioms.lean: axiom guard (#guard_msgs pins headline theorems' axiom lists; build fails if a sorry/unexpected axiom creeps in)
 - In the bib/plaintext folder there is the plaintext version of the Paszke&Xie paper
 
