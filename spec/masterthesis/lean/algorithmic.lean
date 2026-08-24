@@ -2270,6 +2270,194 @@ theorem unifyRow_success_sound {B : Type} {θ : TySubst B} {ρ₁ ρ₂ : Row B}
   have e₂ := RowEquiv.applySubst θ (Row.toSpine_equiv ρ₂)
   exact e₁.trans (key.trans e₂.symm)
 
+------------------------- ≐ᵣ FUEL SUFFICIENCY -------------------------------
+-- Every recursive move of unifySpineF removes exactly ONE atom from each side
+-- (a shared end-var for strip; a matched field + its window/counterpart for
+-- match/ground), so the total spine length drops by 2 per step. Hence the
+-- starting fuel |s₁| + |s₂| never runs out: unifySpineF is INVARIANT to fuel
+-- above that threshold, and the fuel-0 `.stuck` branch is unreachable for
+-- unifySpine. A `.stuck` result is therefore a genuine ambiguity (Wand class),
+-- not an out-of-fuel artifact — the precondition that makes the trichotomy's
+-- stuck/occurs legs well-posed.
+
+-- Each move's length bookkeeping: |t| + 1 = |s| for the field extractors, and
+-- |t₁| + |t₂| + 2 = |s₁| + |s₂| for every two-sided move.
+theorem windowExtract_len {B : Type} (l : Label) :
+    (s : List (Atom B)) → {τ : Ty B} → {s' : List (Atom B)} →
+    windowExtract l s = some (τ, s') → s'.length + 1 = s.length
+  | [], _, _, h => by simp [windowExtract] at h
+  | .var _ :: _, _, _, h => by simp [windowExtract] at h
+  | .field l' _ :: s, _, _, h => by
+      simp only [windowExtract] at h
+      split at h
+      · simp only [Option.some.injEq, Prod.mk.injEq] at h
+        obtain ⟨rfl, rfl⟩ := h; rfl
+      · split at h
+        · rename_i τ'' s'' hwe
+          simp only [Option.some.injEq, Prod.mk.injEq] at h
+          obtain ⟨rfl, rfl⟩ := h
+          have ih := windowExtract_len l s hwe
+          simp only [List.length_cons]; omega
+        · simp at h
+
+theorem removeField_len {B : Type} (l : Label) :
+    (s : List (Atom B)) → {τ : Ty B} → {s' : List (Atom B)} →
+    removeField l s = some (τ, s') → s'.length + 1 = s.length
+  | [], _, _, h => by simp [removeField] at h
+  | .var _ :: s, _, _, h => by
+      simp only [removeField] at h
+      split at h
+      · rename_i τ'' s'' hwe
+        simp only [Option.some.injEq, Prod.mk.injEq] at h
+        obtain ⟨rfl, rfl⟩ := h
+        have ih := removeField_len l s hwe
+        simp only [List.length_cons]; omega
+      · simp at h
+  | .field l' _ :: s, _, _, h => by
+      simp only [removeField] at h
+      split at h
+      · simp only [Option.some.injEq, Prod.mk.injEq] at h
+        obtain ⟨rfl, rfl⟩ := h; rfl
+      · split at h
+        · rename_i τ'' s'' hwe
+          simp only [Option.some.injEq, Prod.mk.injEq] at h
+          obtain ⟨rfl, rfl⟩ := h
+          have ih := removeField_len l s hwe
+          simp only [List.length_cons]; omega
+        · simp at h
+
+theorem stripL_len {B : Type} {s₁ s₂ t₁ t₂ : List (Atom B)}
+    (h : stripL s₁ s₂ = some (t₁, t₂)) :
+    t₁.length + t₂.length + 2 = s₁.length + s₂.length := by
+  obtain ⟨α, rfl, rfl⟩ := stripL_inv h; simp only [List.length_cons]; omega
+
+theorem stripR_len {B : Type} {s₁ s₂ t₁ t₂ : List (Atom B)}
+    (h : stripR s₁ s₂ = some (t₁, t₂)) :
+    t₁.length + t₂.length + 2 = s₁.length + s₂.length := by
+  obtain ⟨α, rfl, rfl⟩ := stripR_inv h
+  simp only [List.length_append, List.length_cons, List.length_nil]; omega
+
+theorem matchL_len {B : Type} {s₁ s₂ t₁ t₂ : List (Atom B)} {τ τ' : Ty B}
+    (h : matchL s₁ s₂ = some (τ, τ', t₁, t₂)) :
+    t₁.length + t₂.length + 2 = s₁.length + s₂.length := by
+  obtain ⟨l, rfl, hwe⟩ := matchL_inv h
+  have := windowExtract_len l s₂ hwe
+  simp only [List.length_cons]; omega
+
+theorem matchR_len {B : Type} {s₁ s₂ t₁ t₂ : List (Atom B)} {τ τ' : Ty B}
+    (h : matchR s₁ s₂ = some (τ, τ', t₁, t₂)) :
+    t₁.length + t₂.length + 2 = s₁.length + s₂.length := by
+  unfold matchR at h
+  cases hml : matchL s₁.reverse s₂.reverse with
+  | none => rw [hml] at h; simp at h
+  | some p =>
+    obtain ⟨τa, τb, u₁, u₂⟩ := p
+    rw [hml] at h
+    simp only [Option.some.injEq, Prod.mk.injEq] at h
+    obtain ⟨rfl, rfl, rfl, rfl⟩ := h
+    have := matchL_len hml
+    simp only [List.length_reverse] at this ⊢
+    omega
+
+theorem groundMatch_len {B : Type} {s₁ s₂ t₁ t₂ : List (Atom B)} {τ τ' : Ty B}
+    (h : groundMatch s₁ s₂ = some (τ, τ', t₁, t₂)) :
+    t₁.length + t₂.length + 2 = s₁.length + s₂.length := by
+  obtain ⟨_, l, _, _, hr₁, hr₂⟩ := groundMatch_inv h
+  have := removeField_len l s₁ hr₁
+  have := removeField_len l s₂ hr₂
+  omega
+
+-- Fuel invariance: any two fuels ≥ |s₁|+|s₂| give the same result. Induction on
+-- a length bound N; each recursive arm drops the bound by 2 (the *_len lemmas)
+-- and applies the IH. The control-flow cascade mirrors unifySpineF_success_sound.
+theorem unifySpineF_fuel_irrel {B : Type} (N : Nat) :
+    ∀ (s₁ s₂ : List (Atom B)) (fuel fuel' : Nat),
+      s₁.length + s₂.length ≤ N →
+      s₁.length + s₂.length ≤ fuel → s₁.length + s₂.length ≤ fuel' →
+      unifySpineF fuel s₁ s₂ = unifySpineF fuel' s₁ s₂ := by
+  induction N with
+  | zero =>
+      intro s₁ s₂ fuel fuel' hN _ _
+      cases s₁ with
+      | nil => simp only [unifySpineF]
+      | cons a s₁ =>
+        cases s₂ with
+        | nil => simp only [unifySpineF]
+        | cons b s₂ => simp only [List.length_cons] at hN; omega
+  | succ N IH =>
+      intro s₁ s₂ fuel fuel' hN hf hf'
+      cases s₁ with
+      | nil => simp only [unifySpineF]
+      | cons a s₁ =>
+        cases s₂ with
+        | nil => simp only [unifySpineF]
+        | cons b s₂ =>
+          have hpos : 2 ≤ (a :: s₁).length + (b :: s₂).length := by
+            simp only [List.length_cons]; omega
+          obtain ⟨f, rfl⟩ := Nat.exists_eq_succ_of_ne_zero (show fuel ≠ 0 by omega)
+          obtain ⟨f', rfl⟩ := Nat.exists_eq_succ_of_ne_zero (show fuel' ≠ 0 by omega)
+          simp only [unifySpineF]
+          cases hsl : stripL (a :: s₁) (b :: s₂) with
+          | some p =>
+            obtain ⟨t₁, t₂⟩ := p
+            have hlen := stripL_len hsl
+            exact IH t₁ t₂ f f' (by omega) (by omega) (by omega)
+          | none =>
+          cases hsr : stripR (a :: s₁) (b :: s₂) with
+          | some p =>
+            obtain ⟨t₁, t₂⟩ := p
+            have hlen := stripR_len hsr
+            exact IH t₁ t₂ f f' (by omega) (by omega) (by omega)
+          | none =>
+          cases hv1 : solveVar (a :: s₁) (b :: s₂) with
+          | some r => rfl
+          | none =>
+          cases hv2 : solveVar (b :: s₂) (a :: s₁) with
+          | some r => rfl
+          | none =>
+          cases hml : matchL (a :: s₁) (b :: s₂) with
+          | some p =>
+            obtain ⟨τ0, τ0', t₁, t₂⟩ := p; dsimp only
+            have hlen := matchL_len hml
+            rw [IH t₁ t₂ f f' (by omega) (by omega) (by omega)]
+          | none =>
+          cases hml2 : matchL (b :: s₂) (a :: s₁) with
+          | some p =>
+            obtain ⟨τ0', τ0, t₂, t₁⟩ := p; dsimp only
+            have hlen := matchL_len hml2
+            rw [IH t₁ t₂ f f' (by omega) (by omega) (by omega)]
+          | none =>
+          cases hmr : matchR (a :: s₁) (b :: s₂) with
+          | some p =>
+            obtain ⟨τ0, τ0', t₁, t₂⟩ := p; dsimp only
+            have hlen := matchR_len hmr
+            rw [IH t₁ t₂ f f' (by omega) (by omega) (by omega)]
+          | none =>
+          cases hmr2 : matchR (b :: s₂) (a :: s₁) with
+          | some p =>
+            obtain ⟨τ0', τ0, t₂, t₁⟩ := p; dsimp only
+            have hlen := matchR_len hmr2
+            rw [IH t₁ t₂ f f' (by omega) (by omega) (by omega)]
+          | none =>
+          cases hg : groundMatch (a :: s₁) (b :: s₂) with
+          | some p =>
+            obtain ⟨τ0, τ0', t₁, t₂⟩ := p; dsimp only
+            have hlen := groundMatch_len hg
+            rw [IH t₁ t₂ f f' (by omega) (by omega) (by omega)]
+          | none =>
+          cases hg2 : groundMatch (b :: s₂) (a :: s₁) with
+          | some p =>
+            obtain ⟨τ0', τ0, t₂, t₁⟩ := p; dsimp only
+            have hlen := groundMatch_len hg2
+            rw [IH t₁ t₂ f f' (by omega) (by omega) (by omega)]
+          | none => rfl
+
+-- unifySpine's own fuel (|s₁|+|s₂|) is enough: any larger fuel agrees with it.
+theorem unifySpineF_fuel_stable {B : Type} (s₁ s₂ : List (Atom B)) {fuel : Nat}
+    (h : s₁.length + s₂.length ≤ fuel) :
+    unifySpineF fuel s₁ s₂ = unifySpine s₁ s₂ :=
+  unifySpineF_fuel_irrel (s₁.length + s₂.length) s₁ s₂ fuel _ (Nat.le_refl _) h (Nat.le_refl _)
+
 ------------------------------------ NEXT ------------------------------------
 -- Milestones that build on this file (algorithmic.typ, Open questions):
 --  * STRICTNESS of the QTyped extension: prove ¬Typed for the two-use
@@ -2291,12 +2479,15 @@ theorem unifyRow_success_sound {B : Type} {θ : TySubst B} {ρ₁ ρ₂ : Row B}
 --        are l-free under θ" side condition from hrec + the ground side being
 --        var-free — the one genuinely non-local step, now closed;
 --      - fuel induction (unifySpineF_success_sound) discharging each match arm.
+--    FUEL SUFFICIENCY — DONE (section "≐ᵣ FUEL SUFFICIENCY"):
+--    unifySpineF_fuel_irrel / unifySpineF_fuel_stable — each move eats exactly 2
+--    atoms (the *_len lemmas), so |s₁|+|s₂| fuel never runs out and a .stuck
+--    result is genuine, not out-of-fuel.
 --    Remaining ≐ᵣ metatheory: mgu-on-success; clash/occurs ⟹ no unifier
 --    (projClash_no_unifier is the field-count half of clash); stuck ⟹ no unique
---    mgu (wand_no_mgu is the worked instance); fuel-sufficiency (each move eats
---    ≥ 2 atoms). NOTE occurs/stuck are NOT local to solveVar — they are only
---    correct after end-stripping has run, so their soundness needs this same
---    control-flow inversion.
+--    mgu (wand_no_mgu is the worked instance). NOTE occurs/stuck are NOT local to
+--    solveVar — they are only correct after end-stripping has run, so their
+--    soundness needs this same control-flow inversion.
 --  * The type-level driver ≐: solve the emitted (τ, τ') equations, mutually
 --    recursing into rows; occurs/rank discipline across both sorts.
 --  * Non-vacuity of qualified schemes: needs lookup_total (RowWF) plus a
