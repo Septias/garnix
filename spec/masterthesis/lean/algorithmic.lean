@@ -1401,6 +1401,22 @@ theorem unify_wand :
     unifyRow (B := Unit) (.cat (.var "b") (.var "a")) (.sing "l" uB) =
       .stuck := rfl
 
+-- EQ-RESCUED STUCK (the sharp finding behind the stuck leg). Feeding a field
+-- whose TYPE embeds the stuck row-var — (k:{β} | β | α) ≐ᵣ (k:{l:𝓫} | l:𝓫) —
+-- matchL peels k, emitting the type equation {β} ≐ {l:𝓫}; the residual
+-- (β | α) ≐ᵣ (l:𝓫) is Wand, hence STUCK. But the emitted equation forces
+-- β ≈ (l:𝓫), which then forces α ≈ ε: the WHOLE problem has a UNIQUE mgu.
+-- So `unifyRow = stuck` does NOT imply "no mgu" — the single row pass does not
+-- solve the emitted equations, so its stuck verdict is incomplete whenever an
+-- emitted equation constrains a stuck row-var. The honest trichotomy (c) must be
+-- stated relative to the emitted equations (see unifySpineF_stuck_no_mgu).
+-- ⊢  unifyRow (k:{β} | β | α) (k:{l:𝓫} | l:𝓫)  =  stuck   (yet an mgu exists)
+theorem unify_eq_rescued_stuck :
+    unifyRow (B := Unit)
+      (.cat (.sing "k" (.rcd (.var "b"))) (.cat (.var "b") (.var "a")))
+      (.cat (.sing "k" (.rcd (.sing "l" uB))) (.sing "l" uB))
+      = .stuck := rfl
+
 -- Worked example 2, (α | l: 𝓫 | β) ≐ᵣ (l: 𝓫): U-ground pairs the l-fields
 -- (counting rules the vars out), then U-ε-var forces α ≔ ε, β ≔ ε.
 -- ⊢  unifyRow (a | l:𝓫 | b) (l:𝓫)  =  success [a ≔ ε, b ≔ ε] [(𝓫, 𝓫)]
@@ -3180,6 +3196,26 @@ theorem addEq_clash_inv {B : Type} {τ τ' : Ty B} {u : URes B} :
     u.addEq τ τ' = .clash → u = .clash := by
   cases u <;> simp [URes.addEq]
 
+-- solveVar answers success or occurs, never stuck (the stuck-leg analogue of
+-- solveVar_ne_clash).
+theorem solveVar_ne_stuck {B : Type} {s₁ s₂ : List (Atom B)} :
+    solveVar s₁ s₂ ≠ some .stuck := by
+  intro h
+  cases s₁ with
+  | nil => simp [solveVar] at h
+  | cons a r =>
+    cases a with
+    | field _ _ => simp [solveVar] at h
+    | var α =>
+      cases r with
+      | cons _ _ => simp [solveVar] at h
+      | nil => simp only [solveVar] at h; split at h <;> simp at h
+
+-- addEq only rewrites a success; a stuck result must come from a stuck residual.
+theorem addEq_stuck_inv {B : Type} {τ τ' : Ty B} {u : URes B} :
+    u.addEq τ τ' = .stuck → u = .stuck := by
+  cases u <;> simp [URes.addEq]
+
 -- ⊢  unifySpineF fuel s₁ s₂ = clash   ⟹   ¬ ∃ θ. θ ⊨ ofSpine s₁ ≐ᵣ ofSpine s₂
 theorem unifySpineF_clash_no_unifier {B : Type} :
     ∀ (fuel : Nat) (s₁ s₂ : List (Atom B)),
@@ -3653,6 +3689,304 @@ theorem unifySpineF_fuel_stable {B : Type} (s₁ s₂ : List (Atom B)) {fuel : N
     (h : s₁.length + s₂.length ≤ fuel) :
     unifySpineF fuel s₁ s₂ = unifySpine s₁ s₂ :=
   unifySpineF_fuel_irrel (s₁.length + s₂.length) s₁ s₂ fuel _ (Nat.le_refl _) h (Nat.le_refl _)
+
+------------------- ≐ᵣ TERMINAL STUCK-SHAPE STRUCTURE -----------------------
+-- Structural facts about the terminal stuck config (every move dead, no
+-- projClash). These pin down which shapes the base arm must handle: chiefly,
+-- BOTH sides cannot be var-free — a genuinely stuck config always has a live
+-- row-var somewhere, so it sits in the setting of the three base-witness
+-- techniques (count-shrink / rigidity / non-commutativity). This is the
+-- de-risking characterization the base arm dispatches on.
+
+-- removeField finds an l-field whenever the l-count is positive.
+theorem removeField_isSome_of_pos {B : Type} (l : Label) :
+    (s : List (Atom B)) → 0 < sFieldCount l s → (removeField l s).isSome = true
+  | [], h => by simp [sFieldCount] at h
+  | .var β :: s, h => by
+      simp only [sFieldCount] at h
+      simp only [removeField]
+      have ih := removeField_isSome_of_pos l s h
+      cases hr : removeField l s with
+      | none => rw [hr] at ih; simp at ih
+      | some p => simp
+  | .field l' τ :: s, h => by
+      simp only [removeField]
+      by_cases hl : l' = l
+      · subst hl; simp
+      · rw [if_neg hl]
+        simp only [sFieldCount, if_neg hl, Nat.zero_add] at h
+        have ih := removeField_isSome_of_pos l s h
+        cases hr : removeField l s with
+        | none => rw [hr] at ih; simp at ih
+        | some p => simp
+
+-- groundMatchAux none ⟹ no scanned label has equal positive counts on both sides
+-- (equal positive counts would let removeField fire on both, yielding `some`).
+theorem groundMatchAux_none_of_mem {B : Type} {s₁ s₂ : List (Atom B)} :
+    (ls : List Label) → groundMatchAux s₁ s₂ ls = none →
+    ∀ l ∈ ls, ¬ (sFieldCount l s₁ = sFieldCount l s₂ ∧ 0 < sFieldCount l s₁)
+  | [], _, l, hmem, _ => by simp at hmem
+  | c :: ls, hnone, l, hmem, hcond' => by
+      simp only [groundMatchAux] at hnone
+      by_cases hcond : sFieldCount c s₁ = sFieldCount c s₂ ∧ 0 < sFieldCount c s₁
+      · rw [if_pos hcond] at hnone
+        have h1 := removeField_isSome_of_pos c s₁ hcond.2
+        have h2 := removeField_isSome_of_pos c s₂ (hcond.1 ▸ hcond.2)
+        cases hr1 : removeField c s₁ with
+        | none => rw [hr1] at h1; simp at h1
+        | some p1 =>
+          cases hr2 : removeField c s₂ with
+          | none => rw [hr2] at h2; simp at h2
+          | some p2 =>
+            obtain ⟨t1, r1⟩ := p1; obtain ⟨t2, r2⟩ := p2
+            rw [hr1, hr2] at hnone; simp at hnone
+      · rw [if_neg hcond] at hnone
+        rcases List.mem_cons.mp hmem with rfl | htail
+        · exact hcond hcond'
+        · exact groundMatchAux_none_of_mem ls hnone l htail hcond'
+
+-- projClash false, both sides var-free ⟹ every scanned label has EQUAL counts.
+theorem projClash_false_count_eq {B : Type} {s₁ s₂ : List (Atom B)}
+    (hpc : projClash s₁ s₂ = false) (hv₁ : sHasVar s₁ = false) (hv₂ : sHasVar s₂ = false)
+    (l : Label) (hmem : l ∈ sLabels s₁ ++ sLabels s₂) :
+    sFieldCount l s₁ = sFieldCount l s₂ := by
+  have hpc' : (sLabels s₁ ++ sLabels s₂).any (fun l =>
+      (decide (sFieldCount l s₂ < sFieldCount l s₁) && !sHasVar s₂) ||
+      (decide (sFieldCount l s₁ < sFieldCount l s₂) && !sHasVar s₁)) = false := hpc
+  have hkey := List.any_eq_false.mp hpc' l hmem
+  rw [hv₁, hv₂] at hkey
+  simp only [Bool.not_false, Bool.and_true, Bool.or_eq_true, decide_eq_true_eq, not_or] at hkey
+  omega
+
+-- The de-risking fact: a terminal stuck config is NEVER ground on both sides.
+-- (If it were, projClash-false pins all counts equal, and the leading field's
+-- label then satisfies groundMatch's fire condition — contradicting groundMatch
+-- = none.) So the base arm always has a live var to run a witness technique on.
+-- ⊢  groundMatch (a::s₁) s₂ = none,  projClash (a::s₁) s₂ = false,
+--      sHasVar (a::s₁) = false,  sHasVar s₂ = false   ⟹   False
+theorem stuck_not_both_ground {B : Type} {a : Atom B} {s₁ s₂ : List (Atom B)}
+    (hg : groundMatch (a :: s₁) s₂ = none)
+    (hpc : projClash (a :: s₁) s₂ = false)
+    (hv₁ : sHasVar (a :: s₁) = false) (hv₂ : sHasVar s₂ = false) : False := by
+  cases a with
+  | var α => simp [sHasVar] at hv₁
+  | field l₀ τ =>
+    have hpos : 0 < sFieldCount l₀ (Atom.field l₀ τ :: s₁) := by simp [sFieldCount]; omega
+    have hmem₁ : l₀ ∈ sLabels (Atom.field l₀ τ :: s₁) := by simp [sLabels]
+    have hcount : sFieldCount l₀ (Atom.field l₀ τ :: s₁) = sFieldCount l₀ s₂ :=
+      projClash_false_count_eq hpc hv₁ hv₂ l₀ (List.mem_append_left _ hmem₁)
+    have hgaux : groundMatchAux (Atom.field l₀ τ :: s₁) s₂ (sLabels (Atom.field l₀ τ :: s₁)) = none := by
+      rw [groundMatch, hv₂] at hg; simpa using hg
+    exact groundMatchAux_none_of_mem (sLabels (Atom.field l₀ τ :: s₁)) hgaux l₀ hmem₁ ⟨hcount, hpos⟩
+
+--------------------------- ≐ᵣ STUCK ⟹ NO-MGU ------------------------------
+-- The third leg of the trichotomy at the algorithm level — but stated HONESTLY
+-- as a REDUCTION, because the naive form is FALSE (unify_eq_rescued_stuck):
+-- `unifyRow = stuck` does NOT imply "no mgu", since an emitted type-equation can
+-- constrain a stuck row-var and collapse the ambiguity that the single row pass
+-- calls stuck. So the mgu-status of the whole problem is decided ENTIRELY at the
+-- terminal stuck config TOGETHER WITH the accumulated type-equations Q.
+--
+-- unifySpineF_stuck_no_mgu is exactly that reduction: it threads no-mgu status
+-- BACKWARD from the terminal config to the original, carrying Q (the accumulated
+-- eqs) as an arbitrary unifier predicate. Structure mirrors
+-- unifySpineF_clash_no_unifier, but where clash pushes an EXISTING unifier
+-- forward to a local no-unifier fact, stuck pulls NO-MGU status backward through
+-- each move via the *_hasMgu transport (hasMguP_congr on the per-θ
+-- reflect/reflect_fwd iffs). The strip arms keep Q; the eq-emitting arms
+-- (matchL/R, groundMatch) augment Q with the move's type equation.
+--
+-- The base hypothesis `hbase` (terminal config + Q has no mgu) is therefore NOT
+-- universally true: unify_eq_rescued_stuck exhibits a terminal Wand config whose
+-- Q = ⟨{β}≐{l:𝓫}⟩ makes it have a unique mgu. hbase HOLDS exactly when Q does not
+-- re-constrain the stuck row-vars (e.g. Q between var-free field types) — that
+-- side condition, plus the three base-witness techniques, is the remaining
+-- (paper-level) content. The threading below is the reusable, ORDER-agnostic core.
+
+-- No-mgu of a redescribed unifier predicate transfers along a pointwise iff.
+private theorem hasMguP_not_of_iff {B : Type} {P P' : TySubst B → Prop}
+    (hiff : ∀ θ, P θ ↔ P' θ) (h : ¬ HasMguP P') : ¬ HasMguP P :=
+  fun hmgu => h ((hasMguP_congr hiff).mp hmgu)
+
+theorem unifySpineF_stuck_no_mgu {B : Type}
+    (hbase : ∀ (a : Atom B) (s₁ : List (Atom B)) (b : Atom B) (s₂ : List (Atom B))
+              (Q : TySubst B → Prop),
+      stripL (a :: s₁) (b :: s₂) = none → stripR (a :: s₁) (b :: s₂) = none →
+      solveVar (a :: s₁) (b :: s₂) = none → solveVar (b :: s₂) (a :: s₁) = none →
+      matchL (a :: s₁) (b :: s₂) = none → matchL (b :: s₂) (a :: s₁) = none →
+      matchR (a :: s₁) (b :: s₂) = none → matchR (b :: s₂) (a :: s₁) = none →
+      groundMatch (a :: s₁) (b :: s₂) = none → groundMatch (b :: s₂) (a :: s₁) = none →
+      projClash (a :: s₁) (b :: s₂) = false →
+      ¬ HasMguP (fun θ => Unifies θ (ofSpine (a :: s₁)) (ofSpine (b :: s₂)) ∧ Q θ)) :
+    ∀ (fuel : Nat) (s₁ s₂ : List (Atom B)) (Q : TySubst B → Prop),
+      s₁.length + s₂.length ≤ fuel →
+      unifySpineF fuel s₁ s₂ = .stuck →
+      ¬ HasMguP (fun θ => Unifies θ (ofSpine s₁) (ofSpine s₂) ∧ Q θ) := by
+  intro fuel
+  induction fuel with
+  | zero =>
+      intro s₁ s₂ Q hguard h
+      cases s₁ with
+      | nil =>
+          simp only [unifySpineF] at h
+          cases hae : allVarsEmpty s₂ with
+          | none => rw [hae] at h; simp at h
+          | some σ => rw [hae] at h; simp at h
+      | cons a s₁ =>
+          cases s₂ with
+          | nil =>
+              simp only [unifySpineF] at h
+              cases hae : allVarsEmpty (a :: s₁) with
+              | none => rw [hae] at h; simp at h
+              | some σ => rw [hae] at h; simp at h
+          | cons b s₂ => simp only [List.length_cons] at hguard; omega
+  | succ fuel ih =>
+      intro s₁ s₂ Q hguard h
+      cases s₁ with
+      | nil =>
+          -- [] side: allVarsEmpty answers success or clash, never stuck.
+          simp only [unifySpineF] at h
+          cases hae : allVarsEmpty s₂ with
+          | none => rw [hae] at h; simp at h
+          | some σ => rw [hae] at h; simp at h
+      | cons a s₁ =>
+          cases s₂ with
+          | nil =>
+              simp only [unifySpineF] at h
+              cases hae : allVarsEmpty (a :: s₁) with
+              | none => rw [hae] at h; simp at h
+              | some σ => rw [hae] at h; simp at h
+          | cons b s₂ =>
+              unfold unifySpineF at h
+              cases hsl : stripL (a :: s₁) (b :: s₂) with
+              | some p =>
+                obtain ⟨t₁, t₂⟩ := p; simp only [hsl] at h
+                have hlen := stripL_len hsl
+                refine hasMguP_not_of_iff (P' := fun θ =>
+                    Unifies θ (ofSpine t₁) (ofSpine t₂) ∧ Q θ) ?_ (ih t₁ t₂ Q (by omega) h)
+                exact fun θ => ⟨fun ⟨hu, hq⟩ => ⟨stripL_reflect_fwd hsl hu, hq⟩,
+                                fun ⟨hu, hq⟩ => ⟨stripL_reflect hsl hu, hq⟩⟩
+              | none =>
+              cases hsr : stripR (a :: s₁) (b :: s₂) with
+              | some p =>
+                obtain ⟨t₁, t₂⟩ := p; simp only [hsl, hsr] at h
+                have hlen := stripR_len hsr
+                refine hasMguP_not_of_iff (P' := fun θ =>
+                    Unifies θ (ofSpine t₁) (ofSpine t₂) ∧ Q θ) ?_ (ih t₁ t₂ Q (by omega) h)
+                exact fun θ => ⟨fun ⟨hu, hq⟩ => ⟨stripR_reflect_fwd hsr hu, hq⟩,
+                                fun ⟨hu, hq⟩ => ⟨stripR_reflect hsr hu, hq⟩⟩
+              | none =>
+              cases hv1 : solveVar (a :: s₁) (b :: s₂) with
+              | some r => simp only [hsl, hsr, hv1] at h; exact absurd (h ▸ hv1) solveVar_ne_stuck
+              | none =>
+              cases hv2 : solveVar (b :: s₂) (a :: s₁) with
+              | some r => simp only [hsl, hsr, hv1, hv2] at h; exact absurd (h ▸ hv2) solveVar_ne_stuck
+              | none =>
+              cases hml : matchL (a :: s₁) (b :: s₂) with
+              | some p =>
+                obtain ⟨τ0, τ0', t₁, t₂⟩ := p; simp only [hsl, hsr, hv1, hv2, hml] at h
+                have hlen := matchL_len hml
+                have h' := addEq_stuck_inv h
+                refine hasMguP_not_of_iff (P' := fun θ =>
+                    Unifies θ (ofSpine t₁) (ofSpine t₂) ∧
+                      (TyEquiv (τ0.applySubst θ) (τ0'.applySubst θ) ∧ Q θ)) ?_
+                    (ih t₁ t₂ _ (by omega) h')
+                exact fun θ => ⟨fun ⟨hu, hq⟩ => let ⟨he, hr⟩ := matchL_reflect_fwd hml hu; ⟨hr, he, hq⟩,
+                                fun ⟨hr, he, hq⟩ => ⟨matchL_reflect hml he hr, hq⟩⟩
+              | none =>
+              cases hml2 : matchL (b :: s₂) (a :: s₁) with
+              | some p =>
+                obtain ⟨τ0', τ0, t₂, t₁⟩ := p; simp only [hsl, hsr, hv1, hv2, hml, hml2] at h
+                have hlen := matchL_len hml2
+                have h' := addEq_stuck_inv h
+                refine hasMguP_not_of_iff (P' := fun θ =>
+                    Unifies θ (ofSpine t₁) (ofSpine t₂) ∧
+                      (TyEquiv (τ0.applySubst θ) (τ0'.applySubst θ) ∧ Q θ)) ?_
+                    (ih t₁ t₂ _ (by omega) h')
+                exact fun θ => ⟨fun ⟨hu, hq⟩ => let ⟨he, hr⟩ := matchL_reflect_fwd hml2 hu.symm; ⟨hr.symm, he.symm, hq⟩,
+                                fun ⟨hr, he, hq⟩ => ⟨(matchL_reflect hml2 he.symm hr.symm).symm, hq⟩⟩
+              | none =>
+              cases hmr : matchR (a :: s₁) (b :: s₂) with
+              | some p =>
+                obtain ⟨τ0, τ0', t₁, t₂⟩ := p; simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr] at h
+                have hlen := matchR_len hmr
+                have h' := addEq_stuck_inv h
+                refine hasMguP_not_of_iff (P' := fun θ =>
+                    Unifies θ (ofSpine t₁) (ofSpine t₂) ∧
+                      (TyEquiv (τ0.applySubst θ) (τ0'.applySubst θ) ∧ Q θ)) ?_
+                    (ih t₁ t₂ _ (by omega) h')
+                exact fun θ => ⟨fun ⟨hu, hq⟩ => let ⟨he, hr⟩ := matchR_reflect_fwd hmr hu; ⟨hr, he, hq⟩,
+                                fun ⟨hr, he, hq⟩ => ⟨matchR_reflect hmr he hr, hq⟩⟩
+              | none =>
+              cases hmr2 : matchR (b :: s₂) (a :: s₁) with
+              | some p =>
+                obtain ⟨τ0', τ0, t₂, t₁⟩ := p; simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2] at h
+                have hlen := matchR_len hmr2
+                have h' := addEq_stuck_inv h
+                refine hasMguP_not_of_iff (P' := fun θ =>
+                    Unifies θ (ofSpine t₁) (ofSpine t₂) ∧
+                      (TyEquiv (τ0.applySubst θ) (τ0'.applySubst θ) ∧ Q θ)) ?_
+                    (ih t₁ t₂ _ (by omega) h')
+                exact fun θ => ⟨fun ⟨hu, hq⟩ => let ⟨he, hr⟩ := matchR_reflect_fwd hmr2 hu.symm; ⟨hr.symm, he.symm, hq⟩,
+                                fun ⟨hr, he, hq⟩ => ⟨(matchR_reflect hmr2 he.symm hr.symm).symm, hq⟩⟩
+              | none =>
+              cases hg : groundMatch (a :: s₁) (b :: s₂) with
+              | some p =>
+                obtain ⟨τ0, τ0', t₁, t₂⟩ := p; simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg] at h
+                have hlen := groundMatch_len hg
+                have h' := addEq_stuck_inv h
+                refine hasMguP_not_of_iff (P' := fun θ =>
+                    Unifies θ (ofSpine t₁) (ofSpine t₂) ∧
+                      (TyEquiv (τ0.applySubst θ) (τ0'.applySubst θ) ∧ Q θ)) ?_
+                    (ih t₁ t₂ _ (by omega) h')
+                exact fun θ => ⟨fun ⟨hu, hq⟩ => let ⟨he, hr⟩ := groundMatch_reflect_fwd hg hu; ⟨hr, he, hq⟩,
+                                fun ⟨hr, he, hq⟩ => ⟨groundMatch_reflect hg he hr, hq⟩⟩
+              | none =>
+              cases hg2 : groundMatch (b :: s₂) (a :: s₁) with
+              | some p =>
+                obtain ⟨τ0', τ0, t₂, t₁⟩ := p
+                simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2] at h
+                have hlen := groundMatch_len hg2
+                have h' := addEq_stuck_inv h
+                refine hasMguP_not_of_iff (P' := fun θ =>
+                    Unifies θ (ofSpine t₁) (ofSpine t₂) ∧
+                      (TyEquiv (τ0.applySubst θ) (τ0'.applySubst θ) ∧ Q θ)) ?_
+                    (ih t₁ t₂ _ (by omega) h')
+                exact fun θ => ⟨fun ⟨hu, hq⟩ => let ⟨he, hr⟩ := groundMatch_reflect_fwd hg2 hu.symm; ⟨hr.symm, he.symm, hq⟩,
+                                fun ⟨hr, he, hq⟩ => ⟨(groundMatch_reflect hg2 he.symm hr.symm).symm, hq⟩⟩
+              | none =>
+                simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2] at h
+                split at h
+                · simp at h
+                · rename_i hpc
+                  exact hbase a s₁ b s₂ Q hsl hsr hv1 hv2 hml hml2 hmr hmr2 hg hg2
+                    (by simpa using hpc)
+
+-- Row-level reduction: given the base arm, a stuck verdict rules out an mgu.
+-- (`Row.toSpine_equiv` transports HasMgu across the normalization, exactly as in
+-- unifyRow_clash_no_unifier; the accumulated predicate starts trivial.)
+-- ⊢  (hbase)  →  unifyRow ρ₁ ρ₂ = stuck  →  ¬ HasMgu ρ₁ ρ₂
+theorem unifyRow_stuck_no_mgu {B : Type} {ρ₁ ρ₂ : Row B}
+    (hbase : ∀ (a : Atom B) (s₁ : List (Atom B)) (b : Atom B) (s₂ : List (Atom B))
+              (Q : TySubst B → Prop),
+      stripL (a :: s₁) (b :: s₂) = none → stripR (a :: s₁) (b :: s₂) = none →
+      solveVar (a :: s₁) (b :: s₂) = none → solveVar (b :: s₂) (a :: s₁) = none →
+      matchL (a :: s₁) (b :: s₂) = none → matchL (b :: s₂) (a :: s₁) = none →
+      matchR (a :: s₁) (b :: s₂) = none → matchR (b :: s₂) (a :: s₁) = none →
+      groundMatch (a :: s₁) (b :: s₂) = none → groundMatch (b :: s₂) (a :: s₁) = none →
+      projClash (a :: s₁) (b :: s₂) = false →
+      ¬ HasMguP (fun θ => Unifies θ (ofSpine (a :: s₁)) (ofSpine (b :: s₂)) ∧ Q θ))
+    (h : unifyRow ρ₁ ρ₂ = .stuck) : ¬ HasMgu ρ₁ ρ₂ := by
+  intro hmgu
+  unfold unifyRow unifySpine at h
+  refine unifySpineF_stuck_no_mgu hbase _ ρ₁.toSpine ρ₂.toSpine (fun _ => True)
+    (Nat.le_refl _) h ?_
+  rw [hasMgu_eq_hasMguP] at hmgu
+  refine (hasMguP_congr (fun θ => ?_)).mp hmgu
+  have e₁ := RowEquiv.applySubst θ (Row.toSpine_equiv ρ₁)
+  have e₂ := RowEquiv.applySubst θ (Row.toSpine_equiv ρ₂)
+  exact ⟨fun hu => ⟨e₁.symm.trans (hu.trans e₂), trivial⟩,
+         fun ⟨hu, _⟩ => e₁.trans (hu.trans e₂.symm)⟩
 
 ------------------------------------ NEXT ------------------------------------
 -- Milestones that build on this file (algorithmic.typ, Open questions):
