@@ -1733,6 +1733,30 @@ theorem hasMgu_rowEquiv {B : Type} {ρ₁ ρ₂ ρ₁' ρ₂' : Row B}
     ⟨fun hu => ((RowEquiv.applySubst θ h₁).symm.trans hu).trans (RowEquiv.applySubst θ h₂),
      fun hu => ((RowEquiv.applySubst θ h₁).trans hu).trans (RowEquiv.applySubst θ h₂).symm⟩)
 
+-- ## Predicate-based mgu: lifting no-mgu through the eq-EMITTING moves
+-- The strip moves preserve the unifier set exactly, so `hasMgu_congr` (stated on
+-- two ROW problems) discharges them. matchL/matchR/groundMatch instead emit a
+-- type equation: a unifier of the original is EXACTLY a unifier of the residual
+-- row problem that ALSO satisfies `τ ≐ τ'`. That is still a set of substitutions,
+-- just not the unifier set of a bare row equation. Since `InstanceOf` mentions
+-- only the substitutions (never the rows), mgu-status is a property of that SET,
+-- whatever cuts it out. So we generalize `HasMgu` to an arbitrary unifier
+-- PREDICATE and get a congruence that covers the eq-emitting moves for free.
+def HasMguP {B : Type} (P : TySubst B → Prop) : Prop :=
+  ∃ θ : TySubst B, P θ ∧ ∀ θ' : TySubst B, P θ' → InstanceOf θ' θ
+
+-- `HasMgu` is the predicate version instantiated at the row-unifier predicate.
+theorem hasMgu_eq_hasMguP {B : Type} (ρ₁ ρ₂ : Row B) :
+    HasMgu ρ₁ ρ₂ ↔ HasMguP (fun θ => Unifies θ ρ₁ ρ₂) := Iff.rfl
+
+-- ⊢  (∀θ. P θ ↔ Q θ)   ⟹   (HasMguP P ↔ HasMguP Q)
+-- Pointwise-equal unifier predicates have the same mgu-status. This is the whole
+-- reason no-mgu lifts through moves: they only ever REDESCRIBE the unifier set.
+theorem hasMguP_congr {B : Type} {P Q : TySubst B → Prop}
+    (h : ∀ θ : TySubst B, P θ ↔ Q θ) : HasMguP P ↔ HasMguP Q :=
+  ⟨fun ⟨θ, hp, hmax⟩ => ⟨θ, (h θ).mp hp, fun θ' hp' => hmax θ' ((h θ').mpr hp')⟩,
+   fun ⟨θ, hp, hmax⟩ => ⟨θ, (h θ).mpr hp, fun θ' hp' => hmax θ' ((h θ').mp hp')⟩⟩
+
 -- ## Generalizing Wand: n distinct variables vs a single field has no mgu
 -- The whole family (α₁ | … | αₙ) ≐ᵣ (l:𝓫), n ≥ 2 distinct vars — the general
 -- "field with many variable hosts" stuck class. Same counting kill as
@@ -2922,6 +2946,47 @@ theorem groundMatch_reflect_fwd {B : Type} {θ : TySubst B}
     removeField_equiv_of l s₁ hr₁ (fun β hβ => ⟨hvarfree β hβ, hlfree β hβ⟩)
   exact (hs₁equiv.symm.trans (hu.trans hs₂equiv)).field_cancel_left
 
+-- ## Eq-emitting moves reflect no-mgu (the augmented-witness case of the lift)
+-- Each of matchL/matchR/groundMatch replaces the row problem by "residual row
+-- problem PLUS the emitted type equation τ ≐ τ'". reflect_fwd (forward) and
+-- reflect (backward) together say a θ unifies the original IFF it unifies the
+-- residual AND satisfies τ ≐ τ'. That is a pointwise predicate equivalence, so
+-- `hasMguP_congr` transports mgu-status across the move. Thus a stuck residual
+-- (whose eq-constrained problem has no mgu) forces the original to have no mgu —
+-- the eq-emitting analogue of stripL/stripR_hasMgu_iff.
+-- ⊢  matchL s₁ s₂ = some (τ,τ',t₁,t₂)   ⟹   (HasMgu (ofSpine s₁)(ofSpine s₂) ↔
+--        HasMguP (λθ. θτ ≈ₜ θτ'  ∧  θ ⊨ ofSpine t₁ ≐ᵣ ofSpine t₂))
+theorem matchL_hasMgu_iff {B : Type} {s₁ s₂ t₁ t₂ : List (Atom B)} {τ τ' : Ty B}
+    (hmatch : matchL s₁ s₂ = some (τ, τ', t₁, t₂)) :
+    HasMgu (ofSpine s₁) (ofSpine s₂) ↔
+    HasMguP (fun θ => TyEquiv (τ.applySubst θ) (τ'.applySubst θ) ∧
+                      Unifies θ (ofSpine t₁) (ofSpine t₂)) :=
+  hasMguP_congr (fun _ =>
+    ⟨fun hu => matchL_reflect_fwd hmatch hu,
+     fun ⟨heq, hrec⟩ => matchL_reflect hmatch heq hrec⟩)
+
+-- ⊢  matchR s₁ s₂ = some (τ,τ',t₁,t₂)   ⟹   (HasMgu (ofSpine s₁)(ofSpine s₂) ↔
+--        HasMguP (λθ. θτ ≈ₜ θτ'  ∧  θ ⊨ ofSpine t₁ ≐ᵣ ofSpine t₂))
+theorem matchR_hasMgu_iff {B : Type} {s₁ s₂ t₁ t₂ : List (Atom B)} {τ τ' : Ty B}
+    (hmatch : matchR s₁ s₂ = some (τ, τ', t₁, t₂)) :
+    HasMgu (ofSpine s₁) (ofSpine s₂) ↔
+    HasMguP (fun θ => TyEquiv (τ.applySubst θ) (τ'.applySubst θ) ∧
+                      Unifies θ (ofSpine t₁) (ofSpine t₂)) :=
+  hasMguP_congr (fun _ =>
+    ⟨fun hu => matchR_reflect_fwd hmatch hu,
+     fun ⟨heq, hrec⟩ => matchR_reflect hmatch heq hrec⟩)
+
+-- ⊢  groundMatch s₁ s₂ = some (τ,τ',t₁,t₂)   ⟹   (HasMgu (ofSpine s₁)(ofSpine s₂) ↔
+--        HasMguP (λθ. θτ ≈ₜ θτ'  ∧  θ ⊨ ofSpine t₁ ≐ᵣ ofSpine t₂))
+theorem groundMatch_hasMgu_iff {B : Type} {s₁ s₂ t₁ t₂ : List (Atom B)} {τ τ' : Ty B}
+    (hg : groundMatch s₁ s₂ = some (τ, τ', t₁, t₂)) :
+    HasMgu (ofSpine s₁) (ofSpine s₂) ↔
+    HasMguP (fun θ => TyEquiv (τ.applySubst θ) (τ'.applySubst θ) ∧
+                      Unifies θ (ofSpine t₁) (ofSpine t₂)) :=
+  hasMguP_congr (fun _ =>
+    ⟨fun hu => groundMatch_reflect_fwd hg hu,
+     fun ⟨heq, hrec⟩ => groundMatch_reflect hg heq hrec⟩)
+
 -- ## Assembly: success ⟹ unifies (induction on unifySpineF's fuel)
 -- Base cases: one side empty ⟹ allVarsEmpty forces the other's vars to ε.
 -- ⊢  unifySpineF fuel [] s₂ = success σ eqs,  θ ⊨ σ
@@ -3616,10 +3681,20 @@ theorem unifySpineF_fuel_stable {B : Type} (s₁ s₂ : List (Atom B)) {fuel : N
 --    emptying B's vars collapses θα. All three base techniques now proven. LIFT INFRA:
 --    HasMgu + hasMgu_congr/hasMgu_rowEquiv (no-mgu depends only on the unifier SET, is a
 --    ≈-invariant) + stripL/stripR_hasMgu_iff (strip moves preserve the unifier set)
---    discharge the STRIP arms (demo: wand_under_strip_no_mgu). Remaining for the full
---    unifySpineF=stuck⟹no-mgu: (a) assemble the general BASE arm from the 3 techniques
---    (+ all-var beyond the swap); (b) the MATCH/GROUND arms (emit a type eq ⟹ unifier sets
---    differ ⟹ hasMgu_congr doesn't apply; need the augmented-witness argument).
+--    discharge the STRIP arms (demo: wand_under_strip_no_mgu). MATCH/GROUND ARMS —
+--    congruence DONE: HasMguP (mgu-status of an arbitrary unifier PREDICATE, since
+--    InstanceOf never mentions the rows) + hasMguP_congr, with matchL/matchR/
+--    groundMatch_hasMgu_iff transporting HasMgu (ofSpine s₁)(ofSpine s₂) to
+--    HasMguP (λθ. θτ≈ₜθτ' ∧ θ ⊨ ofSpine t₁≐ᵣofSpine t₂) — the eq-constrained residual.
+--    (All axiom-clean: propext/Quot.sound; hasMguP_congr axiom-free.) CAVEAT: unlike
+--    the strip arms these SHRINK the unifier set (intersect with the eq-satisfiers), so
+--    they transport mgu-STATUS but do not by themselves let a stuck residual kill the
+--    original — that needs the base-technique WITNESSES to also satisfy the accumulated
+--    eq (the genuine augmented-witness content, now cleanly expressible via HasMguP).
+--    Remaining for the full unifySpineF=stuck⟹no-mgu: (a) assemble the general BASE arm
+--    from the 3 techniques (+ all-var beyond the swap); (b) re-run those base witnesses
+--    under the accumulated equations (carry them as the HasMguP predicate through the
+--    fuel induction).
 --    NOTE occurs does NOT lift to a no-unifier theorem — it is conservative
 --    (occurs_allVar_unifiable); only occurs_field_no_unifier genuine.
 --  * The type-level driver ≐: solve the emitted (τ, τ') equations, mutually
