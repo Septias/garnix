@@ -763,6 +763,46 @@ theorem RowEquiv.cancel_cat_right {B : Type} {ρ ρ₁ ρ₂ : Row B}
     exact Nat.add_right_cancel this
   exact (ProjEquiv.split h' hplen).1
 
+-- ## Leading-field cancellation (the completeness ingredient for U-field)
+-- Unlike cancel_cat_left (identical shared prefix), the two leading fields carry
+-- DIFFERENT types; cancelling them EXTRACTS the type equivalence. Both fields sit
+-- at segment 0 (nothing precedes them), so ≈'s l-projection pins their types
+-- pairwise and leaves the tails ≈. This is the forward direction the matchL move
+-- needs: a unifier of the original must equate the matched field types.
+-- ⊢  (l:τ₁ | R₁) ≈ᵣ (l:τ₂ | R₂)   ⟹   τ₁ ≈ₜ τ₂  ∧  R₁ ≈ᵣ R₂
+theorem RowEquiv.field_cancel_left {B : Type} {l : Label} {τ₁ τ₂ : Ty B}
+    {R₁ R₂ : Row B}
+    (h : RowEquiv (.cat (.sing l τ₁) R₁) (.cat (.sing l τ₂) R₂)) :
+    TyEquiv τ₁ τ₂ ∧ RowEquiv R₁ R₂ := by
+  obtain ⟨hv, hp⟩ := h.char
+  simp only [Row.toSpine, sVarSeq_append, sVarSeq, List.nil_append] at hv
+  have hred : ∀ (τ : Ty B) (R : Row B),
+      sProj l (Row.toSpine (.cat (.sing l τ) R)) = (0, τ) :: sProj l R.toSpine := by
+    intro τ R
+    simp only [Row.toSpine, List.cons_append, List.nil_append, sProj]
+    split
+    · rfl
+    · rename_i hne; exact absurd trivial hne
+  have hpl := hp l
+  rw [hred, hred] at hpl
+  obtain ⟨τ', rest, heq, hty, hrest⟩ := hpl.cons_inv
+  injection heq with hhd htl
+  injection hhd with _ hτ'
+  subst hτ'; subst htl
+  refine ⟨hty, RowEquiv.ofChar ⟨hv, fun l' => ?_⟩⟩
+  by_cases hll' : l = l'
+  · subst hll'; exact hrest
+  · have h' := hp l'
+    have hred' : ∀ (τ : Ty B) (R : Row B),
+        sProj l' (Row.toSpine (.cat (.sing l τ) R)) = sProj l' R.toSpine := by
+      intro τ R
+      simp only [Row.toSpine, List.cons_append, List.nil_append, sProj]
+      split
+      · rename_i heq; exact absurd heq hll'
+      · rfl
+    rw [hred', hred'] at h'
+    exact h'
+
 -- ## Ground rows: the characterization degenerates to the projections
 -- (the T-eq workhorse for ≐ᵣ's ground completeness).
 -- ⊢  ρ.SpineVarFree   ↔   vars(spine ρ) = []
@@ -1959,6 +1999,86 @@ theorem matchR_reflect {B : Type} {θ : TySubst B} {s₁ s₂ t₁ t₂ : List (
     refine e₁.trans (RowEquiv.trans ?_ e₂.symm)
     exact RowEquiv.cat hrec (.sing heq)
 
+-- ## FORWARD reflection: a unifier of the ORIGINAL unifies the RESIDUAL (+ eqs)
+-- The converse of the *_reflect lemmas — the COMPLETENESS direction each move
+-- needs. For strip this is just cancellativity (shared θα prefix/suffix). For
+-- match it is leading/trailing-field cancellation (field_cancel_left/right),
+-- which additionally EXTRACTS the emitted type equation θτ ≈ θτ'. Together these
+-- say every move preserves the unifier set, so no-unifier propagates backwards.
+
+theorem RowEquiv.field_cancel_right {B : Type} {l : Label} {τ₁ τ₂ : Ty B}
+    {R₁ R₂ : Row B}
+    (h : RowEquiv (.cat R₁ (.sing l τ₁)) (.cat R₂ (.sing l τ₂))) :
+    TyEquiv τ₁ τ₂ ∧ RowEquiv R₁ R₂ := by
+  obtain ⟨hty, hR⟩ := (h.revRow).field_cancel_left
+  refine ⟨hty, ?_⟩
+  have hRR := hR.revRow
+  rwa [revRow_involutive, revRow_involutive] at hRR
+
+-- ⊢  stripL s₁ s₂ = some (t₁,t₂),  θ ⊨ ofSpine s₁ ≐ᵣ ofSpine s₂
+--        ⟹   θ ⊨ ofSpine t₁ ≐ᵣ ofSpine t₂
+theorem stripL_reflect_fwd {B : Type} {θ : TySubst B} {s₁ s₂ t₁ t₂ : List (Atom B)}
+    (hstrip : stripL s₁ s₂ = some (t₁, t₂))
+    (hu : RowEquiv ((ofSpine s₁).applySubst θ) ((ofSpine s₂).applySubst θ)) :
+    RowEquiv ((ofSpine t₁).applySubst θ) ((ofSpine t₂).applySubst θ) := by
+  obtain ⟨α, rfl, rfl⟩ := stripL_inv hstrip
+  simp only [ofSpine, Row.applySubst] at hu
+  exact hu.cancel_cat_left
+
+-- ⊢  stripR s₁ s₂ = some (t₁,t₂),  θ ⊨ ofSpine s₁ ≐ᵣ ofSpine s₂
+--        ⟹   θ ⊨ ofSpine t₁ ≐ᵣ ofSpine t₂
+theorem stripR_reflect_fwd {B : Type} {θ : TySubst B} {s₁ s₂ t₁ t₂ : List (Atom B)}
+    (hstrip : stripR s₁ s₂ = some (t₁, t₂))
+    (hu : RowEquiv ((ofSpine s₁).applySubst θ) ((ofSpine s₂).applySubst θ)) :
+    RowEquiv ((ofSpine t₁).applySubst θ) ((ofSpine t₂).applySubst θ) := by
+  obtain ⟨α, rfl, rfl⟩ := stripR_inv hstrip
+  have e₁ := RowEquiv.applySubst θ (ofSpine_append t₁ [Atom.var α])
+  have e₂ := RowEquiv.applySubst θ (ofSpine_append t₂ [Atom.var α])
+  simp only [ofSpine, Row.applySubst] at e₁ e₂
+  exact (e₁.symm.trans (hu.trans e₂)).cancel_cat_right
+
+-- ⊢  matchL s₁ s₂ = some (τ,τ',t₁,t₂),  θ ⊨ ofSpine s₁ ≐ᵣ ofSpine s₂
+--        ⟹   θτ ≈ₜ θτ'  ∧  θ ⊨ ofSpine t₁ ≐ᵣ ofSpine t₂
+theorem matchL_reflect_fwd {B : Type} {θ : TySubst B} {s₁ s₂ t₁ t₂ : List (Atom B)}
+    {τ τ' : Ty B}
+    (hmatch : matchL s₁ s₂ = some (τ, τ', t₁, t₂))
+    (hu : RowEquiv ((ofSpine s₁).applySubst θ) ((ofSpine s₂).applySubst θ)) :
+    TyEquiv (τ.applySubst θ) (τ'.applySubst θ) ∧
+    RowEquiv ((ofSpine t₁).applySubst θ) ((ofSpine t₂).applySubst θ) := by
+  obtain ⟨l, rfl, hwe⟩ := matchL_inv hmatch
+  have hs₂ := RowEquiv.applySubst θ (windowExtract_equiv l s₂ hwe)
+  simp only [ofSpine, Row.applySubst] at hu hs₂
+  exact (hu.trans hs₂).field_cancel_left
+
+-- ⊢  matchR s₁ s₂ = some (τ,τ',t₁,t₂),  θ ⊨ ofSpine s₁ ≐ᵣ ofSpine s₂
+--        ⟹   θτ ≈ₜ θτ'  ∧  θ ⊨ ofSpine t₁ ≐ᵣ ofSpine t₂
+theorem matchR_reflect_fwd {B : Type} {θ : TySubst B} {s₁ s₂ t₁ t₂ : List (Atom B)}
+    {τ τ' : Ty B}
+    (hmatch : matchR s₁ s₂ = some (τ, τ', t₁, t₂))
+    (hu : RowEquiv ((ofSpine s₁).applySubst θ) ((ofSpine s₂).applySubst θ)) :
+    TyEquiv (τ.applySubst θ) (τ'.applySubst θ) ∧
+    RowEquiv ((ofSpine t₁).applySubst θ) ((ofSpine t₂).applySubst θ) := by
+  unfold matchR at hmatch
+  cases hml : matchL s₁.reverse s₂.reverse with
+  | none => rw [hml] at hmatch; simp at hmatch
+  | some p =>
+    rw [hml] at hmatch
+    obtain ⟨τa, τb, u₁, u₂⟩ := p
+    simp only [Option.some.injEq, Prod.mk.injEq] at hmatch
+    obtain ⟨rfl, rfl, rfl, rfl⟩ := hmatch
+    obtain ⟨l, hrev, hwe⟩ := matchL_inv hml
+    have hs₁ : s₁ = u₁.reverse ++ [Atom.field l τa] := by
+      rw [← List.reverse_reverse s₁, hrev]; simp
+    have hs₂equiv := windowExtract_reverse_equiv l s₂ hwe
+    have hs₁equiv : RowEquiv (ofSpine s₁) (.cat (ofSpine u₁.reverse) (.sing l τa)) := by
+      rw [hs₁]
+      exact (ofSpine_append u₁.reverse [Atom.field l τa]).trans
+        (RowEquiv.cat (.refl _) RowEquiv.unitR)
+    have e₁ := RowEquiv.applySubst θ hs₁equiv
+    have e₂ := RowEquiv.applySubst θ hs₂equiv
+    simp only [Row.applySubst] at e₁ e₂
+    exact (e₁.symm.trans (hu.trans e₂)).field_cancel_right
+
 -- ## U-ground: the reusable algebraic core
 -- A field ≈-commutes past a row that is BOTH var-free and l-free. (Past a var
 -- it would NOT commute — shadowing — so both hypotheses are essential; this is
@@ -2619,5 +2739,6 @@ theorem unifySpineF_fuel_stable {B : Type} (s₁ s₂ : List (Atom B)) {fuel : N
 --    (lookup_det + Discharge.mono_of_definite are the two pillars).
 
 end MinimalCalculus
+
 
 
