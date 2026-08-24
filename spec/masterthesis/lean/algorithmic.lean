@@ -118,6 +118,7 @@ def QScheme.Inst {B : Type} (Γ : Ctx B) (σ : QScheme B) (τ : Ty B) : Prop :=
 -- ≥_Γ degenerates to the Γ-independent Scheme.Inst. This is the seam between
 -- the two files — everything minimal.lean knows about plain schemes lifts
 -- across this equivalence.
+-- ⊢  σ.toQ ≥_Γ τ   ↔   σ ≥ τ
 theorem QScheme.inst_toQ {B : Type} {Γ : Ctx B} {σ : Scheme B} {τ : Ty B} :
     QScheme.Inst Γ σ.toQ τ ↔ σ.Inst τ := by
   constructor
@@ -127,6 +128,7 @@ theorem QScheme.inst_toQ {B : Type} {Γ : Ctx B} {σ : Scheme B} {τ : Ty B} :
     exact ⟨θ, hfix, fun s hs => absurd hs List.not_mem_nil, hbody⟩
 
 -- Monotype qualified schemes instantiate only to themselves.
+-- ⊢  ⟨[], [], τ₁⟩ ≥_Γ τ   ⟹   τ = τ₁
 theorem QScheme.Inst.mono {B : Type} {Γ : Ctx B} {τ₁ τ : Ty B}
     (h : QScheme.Inst Γ ⟨[], [], τ₁⟩ τ) : τ = τ₁ :=
   Scheme.Inst.mono ((QScheme.inst_toQ (σ := ⟨[], τ₁⟩)).mp h)
@@ -137,6 +139,8 @@ theorem QScheme.Inst.mono {B : Type} {Γ : Ctx B} {τ₁ τ : Ty B}
 -- Determinism: two discharges of the same stump that substitute the row the
 -- same way pin the result variable to the same type (lookup_det lifted).
 -- This is what makes ≥_Γ a well-defined relation per θ rather than a choice.
+-- ⊢  discharge s @θ₁,  discharge s @θ₂,  θ₁·s.row = θ₂·s.row
+--        ⟹   θ₁·s.res = θ₂·s.res
 theorem Stump.Discharge.det {B : Type} {Γ : Ctx B} {θ₁ θ₂ : TySubst B}
     {s : Stump B} (h₁ : s.Discharge Γ θ₁) (h₂ : s.Discharge Γ θ₂)
     (hrow : s.row.applySubst θ₁ = s.row.applySubst θ₂) :
@@ -166,6 +170,8 @@ theorem Stump.Discharge.det {B : Type} {Γ : Ctx B} {θ₁ θ₂ : TySubst B}
 -- algorithmic "a resolved stump NEVER needs re-checking" — wake-up lists
 -- never contain resolved stumps, no fixpoint iteration. The ?-case is
 -- deliberately NOT stable: wake-up exists precisely to improve it.
+-- ⊢  Γ ⊑ᵣ Γ',  discharge s @θ in Γ,  ¬(Γ ⊢ (θ·s.row).l ↓ ?)
+--        ⟹   discharge s @θ in Γ'
 theorem Stump.Discharge.mono_of_definite {B : Type} {Γ Γ' : Ctx B}
     {θ : TySubst B} {s : Stump B} (hext : Ctx.RowExt Γ Γ')
     (h : s.Discharge Γ θ)
@@ -208,6 +214,7 @@ def selQ (B : Type) : QScheme B :=
 --   Γ ⊢ ρ.l ↓ found τ_r  ⟹  {ρ} → τ_r      (what L1 loses)
 --   Γ ⊢ ρ.l ↓ ⊥          ⟹  {ρ} → ★
 --   Γ ⊢ ρ.l ↓ ?          ⟹  {ρ} → ★
+-- ⊢  Γ ⊢ ρ.l ↓ r   ⟹   selQ ≥_Γ ({ρ} → collapse r)
 theorem selQ_inst_of_lookup {B : Type} {Γ : Ctx B} {ρ : Row B}
     {r : LookupRes B} (h : Lookup Γ ρ "l" r) :
     QScheme.Inst Γ (selQ B) (.fn (.rcd ρ) r.collapse) := by
@@ -231,11 +238,13 @@ theorem selQ_inst_of_lookup {B : Type} {Γ : Ctx B} {ρ : Row B}
 
 -- The found-typing family is covered (τ₀ arbitrary — the typings L1's frozen
 -- ★ could never reach, cf. finalized_no_blur):
+-- ⊢  selQ ≥_Γ ({l: τ₀} → τ₀)      (every τ₀)
 theorem selQ_inst_found {B : Type} (Γ : Ctx B) (τ₀ : Ty B) :
     QScheme.Inst Γ (selQ B) (.fn (.rcd (.sing "l" τ₀)) τ₀) :=
   selQ_inst_of_lookup (r := .found τ₀) .hit
 
 -- ... and so is the ⊥-typing:
+-- ⊢  selQ ≥_Γ ({} → ★)
 theorem selQ_inst_absent {B : Type} (Γ : Ctx B) :
     QScheme.Inst Γ (selQ B) (.fn (.rcd .empty) .unk) :=
   selQ_inst_of_lookup (r := .absent) .emp
@@ -245,6 +254,7 @@ theorem selQ_inst_absent {B : Type} (Γ : Ctx B) :
 -- θ must send β to ε, the lookup on ε is definitely ⊥, and discharge then
 -- pins δ at ★, never at {ε}. Discharge is exactly the mechanism that plugs
 -- the instance-closedness leak.
+-- ⊢  ¬ ( selQ ≥_∅ ({} → {}) )
 theorem selQ_no_mixed {B : Type} :
     ¬ QScheme.Inst Ctx.empty (selQ B)
         (.fn (.rcd .empty) (.rcd (.empty : Row B))) := by
@@ -265,6 +275,7 @@ theorem selQ_no_mixed {B : Type} :
 -- λx. x.l — in any context Γ. The three discharge cases replay exactly
 -- T-sel / T-sel-⊥ / T-sel-★; the Lean regression proof of minimal.lean was
 -- already this case split, per instance.
+-- ⊢  ∀ τ. selQ ≥_Γ τ   ⟹   Γ ⊢ (λx. x.l) : τ
 theorem selQ_instance_closed {B C : Type} (constTy : C → B) (Γ : Ctx B) :
     ∀ τ, QScheme.Inst Γ (selQ B) τ → Typed constTy Γ (selEx C) τ := by
   rintro τ ⟨θ, -, hQ, hbody⟩
@@ -299,6 +310,8 @@ theorem selQ_instance_closed {B C : Type} (constTy : C → B) (Γ : Ctx B) :
 -- cannot (minimal.lean); qualified schemes are therefore not an optional
 -- refinement but the necessary form of let-generalization for a calculus
 -- with lookup-stumps.
+-- ⊢  ∃ σ.  (∀ τ. σ ≥_∅ τ ⟹ ∅ ⊢ λx.x.l : τ)
+--            ∧  σ ≥_∅ ({l: {}} → {})   ∧  σ ≥_∅ ({} → ★)
 theorem qualified_principal_scheme {B C : Type} (constTy : C → B) :
     ∃ σ : QScheme B,
       (∀ τ, QScheme.Inst Ctx.empty σ τ →
@@ -353,12 +366,14 @@ def sProj {B : Type} (l : Label) : List (Atom B) → List (Nat × Ty B)
   | .field l' τ :: s => if l' = l then (0, τ) :: sProj l s else sProj l s
   | .var _ :: s      => (sProj l s).map (fun p => (p.1 + 1, p.2))
 
+-- ⊢  vars(s₁ ++ s₂) = vars(s₁) ++ vars(s₂)
 theorem sVarSeq_append {B : Type} : (s₁ s₂ : List (Atom B)) →
     sVarSeq (s₁ ++ s₂) = sVarSeq s₁ ++ sVarSeq s₂
   | [], _ => rfl
   | .field _ _ :: s₁, s₂ => sVarSeq_append s₁ s₂
   | .var _ :: s₁, s₂ => congrArg (_ :: ·) (sVarSeq_append s₁ s₂)
 
+-- ⊢  proj_l(s₁ ++ s₂) = proj_l(s₁) ++ map(·+|vars s₁|) proj_l(s₂)
 theorem sProj_append {B : Type} (l : Label) : (s₁ s₂ : List (Atom B)) →
     sProj l (s₁ ++ s₂) =
       sProj l s₁ ++ (sProj l s₂).map (fun p => (p.1 + (sVarSeq s₁).length, p.2))
@@ -376,38 +391,47 @@ inductive ProjEquiv {B : Type} : List (Nat × Ty B) → List (Nat × Ty B) → P
   | cons : n₁ = n₂ → TyEquiv τ₁ τ₂ → ProjEquiv ps qs →
            ProjEquiv ((n₁, τ₁) :: ps) ((n₂, τ₂) :: qs)
 
+-- ⊢  ps ≈ₚ ps
 theorem ProjEquiv.refl {B : Type} : (ps : List (Nat × Ty B)) → ProjEquiv ps ps
   | [] => .nil
   | (_, τ) :: ps => .cons rfl (.refl τ) (ProjEquiv.refl ps)
 
+-- ⊢  ps = qs   ⟹   ps ≈ₚ qs
 theorem ProjEquiv.of_eq {B : Type} {ps qs : List (Nat × Ty B)} (h : ps = qs) :
     ProjEquiv ps qs := h ▸ ProjEquiv.refl ps
 
+-- ⊢  ps ≈ₚ qs   ⟹   qs ≈ₚ ps
 theorem ProjEquiv.symm {B : Type} {ps qs : List (Nat × Ty B)} :
     ProjEquiv ps qs → ProjEquiv qs ps
   | .nil => .nil
   | .cons hn hty h => .cons hn.symm hty.symm h.symm
 
+-- ⊢  ps ≈ₚ qs,  qs ≈ₚ rs   ⟹   ps ≈ₚ rs
 theorem ProjEquiv.trans {B : Type} {ps qs rs : List (Nat × Ty B)} :
     ProjEquiv ps qs → ProjEquiv qs rs → ProjEquiv ps rs
   | .nil, h => h
   | .cons hn hty h, .cons hn' hty' h' =>
       .cons (hn.trans hn') (hty.trans hty') (h.trans h')
 
+-- ⊢  ps ≈ₚ qs,  ps' ≈ₚ qs'   ⟹   (ps ++ ps') ≈ₚ (qs ++ qs')
 theorem ProjEquiv.append {B : Type} {ps qs ps' qs' : List (Nat × Ty B)} :
     ProjEquiv ps qs → ProjEquiv ps' qs' → ProjEquiv (ps ++ ps') (qs ++ qs')
   | .nil, h => h
   | .cons hn hty h, h' => .cons hn hty (h.append h')
 
+-- ⊢  ps ≈ₚ qs   ⟹   map(·+k) ps ≈ₚ map(·+k) qs
 theorem ProjEquiv.mapShift {B : Type} (k : Nat) {ps qs : List (Nat × Ty B)} :
     ProjEquiv ps qs →
     ProjEquiv (ps.map (fun p => (p.1 + k, p.2))) (qs.map (fun p => (p.1 + k, p.2)))
   | .nil => .nil
   | .cons hn hty h => .cons (by rw [hn]) hty (ProjEquiv.mapShift k h)
 
+-- ⊢  [] ≈ₚ qs   ⟹   qs = []
 theorem ProjEquiv.nil_inv {B : Type} {qs : List (Nat × Ty B)}
     (h : ProjEquiv [] qs) : qs = [] := by cases h; rfl
 
+-- ⊢  (n,τ)::ps ≈ₚ qs
+--        ⟹  ∃ τ' rest. qs = (n,τ')::rest ∧ τ ≈ τ' ∧ ps ≈ₚ rest
 theorem ProjEquiv.cons_inv {B : Type} {n : Nat} {τ : Ty B}
     {ps qs : List (Nat × Ty B)} (h : ProjEquiv ((n, τ) :: ps) qs) :
     ∃ τ' rest, qs = (n, τ') :: rest ∧ TyEquiv τ τ' ∧ ProjEquiv ps rest := by
@@ -416,6 +440,7 @@ theorem ProjEquiv.cons_inv {B : Type} {n : Nat} {τ : Ty B}
 
 -- Un-shifting: the segment indices are injective in +1 (used to strip a
 -- leading var off both sides).
+-- ⊢  map(·+1) ps ≈ₚ map(·+1) qs   ⟹   ps ≈ₚ qs
 theorem ProjEquiv.unshift {B : Type} :
     {ps qs : List (Nat × Ty B)} →
     ProjEquiv (ps.map (fun p => (p.1 + 1, p.2))) (qs.map (fun p => (p.1 + 1, p.2))) →
@@ -430,6 +455,7 @@ theorem ProjEquiv.unshift {B : Type} :
 
 -- A shifted projection never starts at segment index 0 (a spine that leads
 -- with a var has an empty first segment).
+-- ⊢  ¬ ( map(·+1) ps ≈ₚ (0,τ)::qs )
 theorem ProjEquiv.no_zero_head {B : Type} {qs : List (Nat × Ty B)} {τ : Ty B} :
     (ps : List (Nat × Ty B)) →
     ¬ ProjEquiv (ps.map (fun p => (p.1 + 1, p.2))) ((0, τ) :: qs)
@@ -438,6 +464,7 @@ theorem ProjEquiv.no_zero_head {B : Type} {qs : List (Nat × Ty B)} {τ : Ty B} 
       cases h with
       | cons hn _ _ => exact Nat.succ_ne_zero _ hn
 
+-- ⊢  map(·+1) ps = (0,τ)::qs   ⟹   False
 theorem map_shift_ne_zero_head {B : Type} {ps qs : List (Nat × Ty B)} {τ : Ty B}
     (h : ps.map (fun p => (p.1 + 1, p.2)) = (0, τ) :: qs) : False := by
   cases ps with
@@ -452,6 +479,7 @@ def Row.Char {B : Type} (ρ₁ ρ₂ : Row B) : Prop :=
   sVarSeq ρ₁.toSpine = sVarSeq ρ₂.toSpine ∧
   ∀ l, ProjEquiv (sProj l ρ₁.toSpine) (sProj l ρ₂.toSpine)
 
+-- ⊢  spine ρ₁ = spine ρ₂   ⟹   Char(ρ₁, ρ₂)
 theorem Row.Char.of_eq {B : Type} {ρ₁ ρ₂ : Row B}
     (h : ρ₁.toSpine = ρ₂.toSpine) : Row.Char ρ₁ ρ₂ :=
   ⟨by rw [h], fun _ => .of_eq (by rw [h])⟩
@@ -460,6 +488,7 @@ theorem Row.Char.of_eq {B : Type} {ρ₁ ρ₂ : Row B}
 -- Every ≈-axiom is invariant-preserving: assoc/units don't move atoms
 -- (spines are EQUAL), comm swaps distinct labels (all projections are equal
 -- lists), congruence is pointwise, and no rule crosses a var.
+-- ⊢  ρ₁ ≈ᵣ ρ₂   ⟹   Char(ρ₁, ρ₂)      (≈ soundness)
 theorem RowEquiv.char {B : Type} : {ρ₁ ρ₂ : Row B} → ρ₁ ≈ᵣ ρ₂ → Row.Char ρ₁ ρ₂
   | _, _, .refl _ => ⟨rfl, fun _ => .refl _⟩
   | _, _, .symm h =>
@@ -500,6 +529,7 @@ theorem RowEquiv.char {B : Type} : {ρ₁ ρ₂ : Row B} → ρ₁ ≈ᵣ ρ₂ 
 
 -- ## Refold: every row is ≈ to its right-nested spine form
 -- (assoc + units are exactly the axioms this consumes).
+-- ⊢  ofSpine(s₁ ++ s₂) ≈ᵣ (ofSpine s₁ | ofSpine s₂)
 theorem ofSpine_append {B : Type} : (s₁ s₂ : List (Atom B)) →
     RowEquiv (ofSpine (s₁ ++ s₂)) (.cat (ofSpine s₁) (ofSpine s₂))
   | [], _ => RowEquiv.unitL.symm
@@ -508,6 +538,7 @@ theorem ofSpine_append {B : Type} : (s₁ s₂ : List (Atom B)) →
   | .var _ :: s₁, s₂ =>
       (RowEquiv.cat (.refl _) (ofSpine_append s₁ s₂)).trans RowEquiv.assoc.symm
 
+-- ⊢  ρ ≈ᵣ ofSpine(spine ρ)      (every row ≈ its refolded spine)
 theorem Row.toSpine_equiv {B : Type} : (ρ : Row B) → RowEquiv ρ (ofSpine ρ.toSpine)
   | .empty     => .refl _
   | .var _     => RowEquiv.unitR.symm
@@ -522,6 +553,9 @@ theorem Row.toSpine_equiv {B : Type} : (ρ : Row B) → RowEquiv ρ (ofSpine ρ.
 -- DIFFERENT label (index 0 ⟹ no preceding var; first l-occurrence ⟹ no
 -- preceding l-field), so ≈-comm bubbles it to the front. All other
 -- invariants are untouched — removing a field crosses no var.
+-- ⊢  proj_l(s) = (0,τ)::rest   ⟹
+--       ∃ t.  ofSpine s ≈ᵣ (l:τ | ofSpine t)  ∧  proj_l(t) = rest
+--             ∧  (∀ l'≠l. proj_l'(t) = proj_l'(s))  ∧  vars(t) = vars(s)
 theorem spine_extract {B : Type} {τ : Ty B} {rest : List (Nat × Ty B)} :
     (s : List (Atom B)) → (l : Label) →
     sProj l s = (0, τ) :: rest →
@@ -560,6 +594,7 @@ theorem spine_extract {B : Type} {τ : Ty B} {rest : List (Nat × Ty B)} :
         · simp [sVarSeq, hvars]
 
 -- A spine with no vars and no fields is empty.
+-- ⊢  vars(s) = []  ∧  (∀ l. proj_l(s) = [])   ⟹   s = []
 theorem spine_nil_of {B : Type} : (s : List (Atom B)) →
     sVarSeq s = [] → (∀ l, sProj l s = []) → s = []
   | [], _, _ => rfl
@@ -572,6 +607,8 @@ theorem spine_nil_of {B : Type} : (s : List (Atom B)) →
 -- strip both (unshift). A leading field l:τ is s₁'s first l-occurrence at
 -- index 0, so s₂'s l-projection also starts (0, τ') with τ ≈ τ' — extract it,
 -- recurse on the remainders.
+-- ⊢  vars(s₁) = vars(s₂)  ∧  (∀ l. proj_l(s₁) ≈ₚ proj_l(s₂))
+--        ⟹   ofSpine s₁ ≈ᵣ ofSpine s₂      (≈ completeness)
 theorem char_complete {B : Type} :
     (s₁ s₂ : List (Atom B)) →
     sVarSeq s₁ = sVarSeq s₂ →
@@ -618,12 +655,14 @@ theorem char_complete {B : Type} :
         hequiv.symm
 
 -- ## The characterization
+-- ⊢  Char(ρ₁, ρ₂)   ⟹   ρ₁ ≈ᵣ ρ₂
 theorem RowEquiv.ofChar {B : Type} {ρ₁ ρ₂ : Row B} (h : Row.Char ρ₁ ρ₂) :
     ρ₁ ≈ᵣ ρ₂ :=
   ρ₁.toSpine_equiv.trans
     ((char_complete _ _ h.1 h.2).trans ρ₂.toSpine_equiv.symm)
 
 --   ρ₁ ≈ ρ₂   iff   same var sequence ∧ pointwise-≈ l-projections
+-- ⊢  ρ₁ ≈ᵣ ρ₂   ↔   Char(ρ₁, ρ₂)
 theorem rowEquiv_iff_char {B : Type} {ρ₁ ρ₂ : Row B} :
     ρ₁ ≈ᵣ ρ₂ ↔ Row.Char ρ₁ ρ₂ :=
   ⟨RowEquiv.char, RowEquiv.ofChar⟩
@@ -632,6 +671,7 @@ theorem rowEquiv_iff_char {B : Type} {ρ₁ ρ₂ : Row B} :
 -- The trace-monoid fact ≐ᵣ's U-var-refl rests on: stripping a shared var off
 -- either end is sound (trivially, by ≈-congruence) AND complete (below) —
 -- this is what replaces P&X's shared-tail side condition [Δ₂]ρ₁ = [Δ₁]ρ₁.
+-- ⊢  (α | ρ₁) ≈ᵣ (α | ρ₂)   ⟹   ρ₁ ≈ᵣ ρ₂
 theorem RowEquiv.cancel_var_left {B : Type} {α : TyVar} {ρ₁ ρ₂ : Row B}
     (h : RowEquiv (.cat (.var α) ρ₁) (.cat (.var α) ρ₂)) : ρ₁ ≈ᵣ ρ₂ := by
   obtain ⟨hv, hp⟩ := h.char
@@ -642,6 +682,7 @@ theorem RowEquiv.cancel_var_left {B : Type} {α : TyVar} {ρ₁ ρ₂ : Row B}
     simp only [Row.toSpine, List.cons_append, List.nil_append, sProj] at h'
     exact h'.unshift
 
+-- ⊢  (ρ₁ | α) ≈ᵣ (ρ₂ | α)   ⟹   ρ₁ ≈ᵣ ρ₂
 theorem RowEquiv.cancel_var_right {B : Type} {α : TyVar} {ρ₁ ρ₂ : Row B}
     (h : RowEquiv (.cat ρ₁ (.var α)) (.cat ρ₂ (.var α))) : ρ₁ ≈ᵣ ρ₂ := by
   obtain ⟨hv, hp⟩ := h.char
@@ -660,11 +701,13 @@ theorem RowEquiv.cancel_var_right {B : Type} {α : TyVar} {ρ₁ ρ₂ : Row B}
 -- a shared block are unique — and the ingredient the trichotomy's
 -- stuck ⟹ no-unique-mgu direction builds on.
 
+-- ⊢  ps ≈ₚ qs   ⟹   |ps| = |qs|
 theorem ProjEquiv.length {B : Type} :
     {ps qs : List (Nat × Ty B)} → ProjEquiv ps qs → ps.length = qs.length
   | _, _, .nil => rfl
   | _, _, .cons _ _ h => congrArg (· + 1) h.length
 
+-- ⊢  (a ++ c) ≈ₚ (b ++ d),  |a| = |b|   ⟹   a ≈ₚ b  ∧  c ≈ₚ d
 theorem ProjEquiv.split {B : Type} :
     {a b c d : List (Nat × Ty B)} → ProjEquiv (a ++ c) (b ++ d) →
     a.length = b.length → ProjEquiv a b ∧ ProjEquiv c d
@@ -677,6 +720,7 @@ theorem ProjEquiv.split {B : Type} :
           have hsplit := ProjEquiv.split h' (Nat.succ.inj hl)
           exact ⟨.cons hn hty hsplit.1, hsplit.2⟩
 
+-- ⊢  map(·+k) ps ≈ₚ map(·+k) qs   ⟹   ps ≈ₚ qs
 theorem ProjEquiv.unshiftK {B : Type} (k : Nat) :
     {ps qs : List (Nat × Ty B)} →
     ProjEquiv (ps.map (fun p => (p.1 + k, p.2))) (qs.map (fun p => (p.1 + k, p.2))) →
@@ -689,6 +733,7 @@ theorem ProjEquiv.unshiftK {B : Type} (k : Nat) :
       | cons hn hty h' =>
           exact .cons (Nat.add_right_cancel hn) hty (ProjEquiv.unshiftK k h')
 
+-- ⊢  (ρ | ρ₁) ≈ᵣ (ρ | ρ₂)   ⟹   ρ₁ ≈ᵣ ρ₂      (shared prefix cancels)
 theorem RowEquiv.cancel_cat_left {B : Type} {ρ ρ₁ ρ₂ : Row B}
     (h : RowEquiv (.cat ρ ρ₁) (.cat ρ ρ₂)) : ρ₁ ≈ᵣ ρ₂ := by
   obtain ⟨hv, hp⟩ := h.char
@@ -698,6 +743,7 @@ theorem RowEquiv.cancel_cat_left {B : Type} {ρ ρ₁ ρ₂ : Row B}
   simp only [Row.toSpine, sProj_append] at h'
   exact ((ProjEquiv.split h' rfl).2).unshiftK _
 
+-- ⊢  (ρ₁ | ρ) ≈ᵣ (ρ₂ | ρ)   ⟹   ρ₁ ≈ᵣ ρ₂      (shared suffix cancels)
 theorem RowEquiv.cancel_cat_right {B : Type} {ρ ρ₁ ρ₂ : Row B}
     (h : RowEquiv (.cat ρ₁ ρ) (.cat ρ₂ ρ)) : ρ₁ ≈ᵣ ρ₂ := by
   obtain ⟨hv, hp⟩ := h.char
@@ -719,6 +765,7 @@ theorem RowEquiv.cancel_cat_right {B : Type} {ρ ρ₁ ρ₂ : Row B}
 
 -- ## Ground rows: the characterization degenerates to the projections
 -- (the T-eq workhorse for ≐ᵣ's ground completeness).
+-- ⊢  ρ.SpineVarFree   ↔   vars(spine ρ) = []
 theorem spineVarFree_iff_varSeq_nil {B : Type} :
     (ρ : Row B) → (ρ.SpineVarFree ↔ sVarSeq ρ.toSpine = [])
   | .empty => ⟨fun _ => rfl, fun _ => .empty⟩
@@ -737,6 +784,8 @@ theorem spineVarFree_iff_varSeq_nil {B : Type} :
         exact .cat ((spineVarFree_iff_varSeq_nil ρ₁).2 h₁)
                    ((spineVarFree_iff_varSeq_nil ρ₂).2 h₂)
 
+-- ⊢  ρ₁, ρ₂ var-free   ⟹
+--       ( ρ₁ ≈ᵣ ρ₂   ↔   ∀ l. proj_l(ρ₁) ≈ₚ proj_l(ρ₂) )
 theorem ground_char {B : Type} {ρ₁ ρ₂ : Row B}
     (h₁ : ρ₁.SpineVarFree) (h₂ : ρ₂.SpineVarFree) :
     ρ₁ ≈ᵣ ρ₂ ↔ ∀ l, ProjEquiv (sProj l ρ₁.toSpine) (sProj l ρ₂.toSpine) :=
@@ -753,6 +802,7 @@ def Unifies {B : Type} (θ : TySubst B) (ρ₁ ρ₂ : Row B) : Prop :=
 -- P&X's shared-tail pitfall (l₁: 𝓫 | α) ≐ᵣ (l₂: 𝓫 | α), l₁ ≠ l₂: NO unifier
 -- exists — cancel the shared α, then the l₁-projections clash. U-var-refl's
 -- right-cancellation rejects this correctly with no side condition.
+-- ⊢  l₁ ≠ l₂   ⟹   ¬ θ ⊨ (l₁:𝓫 | α) ≐ᵣ (l₂:𝓫 | α)
 theorem shared_tail_no_unifier {B : Type} {b : B} {l₁ l₂ : Label} {α : TyVar}
     (hne : l₁ ≠ l₂) (θ : TySubst B) :
     ¬ Unifies θ (.cat (.sing l₁ (.base b)) (.var α))
@@ -769,6 +819,7 @@ theorem shared_tail_no_unifier {B : Type} {b : B} {l₁ l₂ : Label} {α : TyVa
 -- The LUtail-loses-solutions example (l: 𝓫) ≐ᵣ (α | l: 𝓫): θ is a unifier
 -- IFF θ maps α to (something ≈) ε — the unique mgu that P&X's LUtail misses
 -- by committing α to contain l. Forced two-sided processing finds it.
+-- ⊢  θ ⊨ (l:𝓫) ≐ᵣ (α | l:𝓫)   ↔   θα ≈ᵣ ε
 theorem lutail_unifier_iff {B : Type} {b : B} {l : Label} {α : TyVar}
     (θ : TySubst B) :
     Unifies θ (.sing l (.base b)) (.cat (.var α) (.sing l (.base b))) ↔
@@ -801,6 +852,8 @@ def InstanceOf {B : Type} (θ' θ : TySubst B) : Prop :=
 
 -- A ProjEquiv into a singleton splits: the entry comes from exactly one of
 -- the two appended sides (per-label counting across a concatenation).
+-- ⊢  (p₁ ++ p₂) ≈ₚ [(n,τ)]
+--        ⟹  (p₁ = [] ∧ p₂ ≈ₚ [(n,τ)])  ∨  (p₁ ≈ₚ [(n,τ)] ∧ p₂ = [])
 theorem ProjEquiv.append_singleton {B : Type} {p₁ p₂ : List (Nat × Ty B)}
     {n : Nat} {τ : Ty B} (h : ProjEquiv (p₁ ++ p₂) [(n, τ)]) :
     (p₁ = [] ∧ ProjEquiv p₂ [(n, τ)]) ∨ (ProjEquiv p₁ [(n, τ)] ∧ p₂ = []) := by
@@ -815,6 +868,8 @@ theorem ProjEquiv.append_singleton {B : Type} {p₁ p₂ : List (Nat × Ty B)}
 
 -- A ground row whose only projection entry is (0, 𝓫) at label l IS the
 -- singleton (l: 𝓫), mod ≈ (assembled from the characterization).
+-- ⊢  vars(spine ρ) = [],  proj_l(ρ) ≈ₚ [(0,𝓫)],  (∀ l'≠l. proj_l'(ρ) = [])
+--        ⟹   ρ ≈ᵣ (l:𝓫)
 theorem row_equiv_sing_of_char {B : Type} {ρ : Row B} {l : Label} {b : B}
     (hv : sVarSeq ρ.toSpine = [])
     (hl : ProjEquiv (sProj l ρ.toSpine) [(0, .base b)])
@@ -832,6 +887,7 @@ theorem row_equiv_sing_of_char {B : Type} {ρ : Row B} {l : Label} {b : B}
       exact .nil
 
 -- Solutions exist …
+-- ⊢  ∃ θ.  θ ⊨ (β | α) ≐ᵣ (l:𝓫)
 theorem wand_unifiable {B : Type} (b : B) (l : Label) :
     ∃ θ : TySubst B,
       Unifies θ (.cat (.var "β") (.var "α")) (.sing l (.base b)) :=
@@ -846,6 +902,8 @@ theorem wand_unifiable {B : Type} (b : B) (l : Label) :
 -- either way, one of the two witness unifiers (field-from-β / field-from-α)
 -- cannot factor through θ, because a ground singleton can never be
 -- substituted into ε (⟦concrete-atom pairings are substitution-stable⟧).
+-- ⊢  ¬ ∃ θ.  θ ⊨ (β | α) ≐ᵣ (l:𝓫)
+--             ∧  (∀ θ'. θ' ⊨ (β | α) ≐ᵣ (l:𝓫) ⟹ θ' ⊑ θ)      (no mgu)
 theorem wand_no_mgu {B : Type} (b : B) (l : Label) :
     ¬ ∃ θ : TySubst B,
         Unifies θ (.cat (.var "β") (.var "α")) (.sing l (.base b)) ∧
@@ -937,6 +995,7 @@ def bindTy (Γ : QCtx B) (x : Var) (τ : Ty B) : QCtx B :=
 -- The row-solutions view consumed by Lookup and by discharge.
 def ctx (Γ : QCtx B) : Ctx B := ⟨[], Γ.rowEnv⟩
 
+-- ⊢  (Γ, x:σ).lookup y  =  if x = y then some σ else Γ.lookup y
 theorem lookup_bindScheme (Γ : QCtx B) (x y : Var) (σ : QScheme B) :
     (Γ.bindScheme x σ).lookup y = if x == y then some σ else Γ.lookup y := by
   simp only [QCtx.lookup, QCtx.bindScheme, List.find?_cons]
@@ -987,11 +1046,13 @@ end
 def Ctx.toQ {B : Type} (Γ : Ctx B) : QCtx B :=
   ⟨Γ.tyEnv.map (fun p => (p.1, p.2.toQ)), Γ.rowEnv⟩
 
+-- ⊢  Γ.toQ.lookup x  =  (Γ.lookup x).map (·.toQ)
 theorem Ctx.toQ_lookup {B : Type} (Γ : Ctx B) (x : Var) :
     Γ.toQ.lookup x = (Γ.lookup x).map Scheme.toQ := by
   simp only [Ctx.toQ, QCtx.lookup, Ctx.lookup, List.find?_map, Option.map_map]
   rfl
 
+-- ⊢  Γ ⊢ e : τ   ⟹   Γ.toQ ⊢_Q e : τ      (declarative embeds into L2)
 mutual
 theorem Typed.toQ {B C : Type} {constTy : C → B} :
     {Γ : Ctx B} → {e : Expr C} → {τ : Ty B} →
@@ -1018,6 +1079,7 @@ theorem Typed.toQ {B C : Type} {constTy : C → B} :
   | _, _, _, .tUnk h => .qUnk (Typed.toQ h)
   | _, _, _, .tRcd h => .qRcd (TypedBody.toQ h)
 
+-- ⊢  Γ ⊢ b : ρ   ⟹   Γ.toQ ⊢_Q b : ρ      (record-body version)
 theorem TypedBody.toQ {B C : Type} {constTy : C → B} :
     {Γ : Ctx B} → {b : RecBody (Expr C)} → {ρ : Row B} →
     TypedBody constTy Γ b ρ → QTypedBody constTy Γ.toQ b ρ
@@ -1034,6 +1096,8 @@ end
 -- Typed.toQ) discharges the instance-closed premise; each use discharges its
 -- own copy of the stump. By no_plain_principal_scheme, no single plain
 -- scheme could serve both uses at these types.
+-- ⊢  ∅ ⊢_Q  let f = (λx. x.l) in { a = f {l = c} | b = f {} }
+--            :  { a: 𝓫_c | b: ★ }
 theorem qtyped_two_use {B C : Type} (constTy : C → B) (c : C) :
     QTyped constTy ⟨[], []⟩
       (.letE "f" (selEx C)
@@ -1253,28 +1317,33 @@ def unifyRow {B : Type} (ρ₁ ρ₂ : Row B) : URes B :=
 private def uB : Ty Unit := .base ()
 
 -- U-ε.
+-- ⊢  unifyRow ε ε  =  success [] []
 theorem unify_empty : unifyRow (B := Unit) .empty .empty = .success [] [] := rfl
 
 -- P&X's shared-tail pitfall (l₁: 𝓫 | α) ≐ᵣ (l₂: 𝓫 | α): U-var-refl
 -- right-cancels α, then U-clash — matches shared_tail_no_unifier.
+-- ⊢  unifyRow (l:𝓫 | a) (m:𝓫 | a)  =  clash
 theorem unify_shared_tail :
     unifyRow (B := Unit) (.cat (.sing "l" uB) (.var "a"))
                          (.cat (.sing "m" uB) (.var "a")) = .clash := rfl
 
 -- The LUtail example (l: 𝓫) ≐ᵣ (α | l: 𝓫): right-match the field, then
 -- U-ε-var — finds the mgu α ≔ ε that LUtail misses (lutail_unifier_iff).
+-- ⊢  unifyRow (l:𝓫) (a | l:𝓫)  =  success [a ≔ ε] [(𝓫, 𝓫)]
 theorem unify_lutail :
     unifyRow (B := Unit) (.sing "l" uB) (.cat (.var "a") (.sing "l" uB)) =
       .success [("a", .empty)] [(uB, uB)] := rfl
 
 -- Wand's ambiguity (β | α) ≐ᵣ (l: 𝓫): STUCK — solvable but no mgu
 -- (wand_unifiable, wand_no_mgu).
+-- ⊢  unifyRow (b | a) (l:𝓫)  =  stuck
 theorem unify_wand :
     unifyRow (B := Unit) (.cat (.var "b") (.var "a")) (.sing "l" uB) =
       .stuck := rfl
 
 -- Worked example 2, (α | l: 𝓫 | β) ≐ᵣ (l: 𝓫): U-ground pairs the l-fields
 -- (counting rules the vars out), then U-ε-var forces α ≔ ε, β ≔ ε.
+-- ⊢  unifyRow (a | l:𝓫 | b) (l:𝓫)  =  success [a ≔ ε, b ≔ ε] [(𝓫, 𝓫)]
 theorem unify_ground_collapse :
     unifyRow (B := Unit) (.cat (.var "a") (.cat (.sing "l" uB) (.var "b")))
                          (.sing "l" uB) =
@@ -1282,6 +1351,7 @@ theorem unify_ground_collapse :
 
 -- (β | l: 𝓫 | α) ≐ᵣ (l′: 𝓫), l ≠ l′: U-clash, NOT stuck — the projection
 -- check is global, a window-only rule would misfile this.
+-- ⊢  unifyRow (b | l:𝓫 | a) (m:𝓫)  =  clash
 theorem unify_global_clash :
     unifyRow (B := Unit) (.cat (.var "b") (.cat (.sing "l" uB) (.var "a")))
                          (.sing "m" uB) = .clash := rfl
@@ -1289,23 +1359,27 @@ theorem unify_global_clash :
 -- α ≐ᵣ (l: 𝓫 | α): the shared END-var cancels first (solution-preserving!),
 -- leaving ε ≐ᵣ (l: 𝓫) — a definite CLASH, strictly stronger than an
 -- occurs-failure. Cancellativity subsumes end-aligned occurs cases.
+-- ⊢  unifyRow a (l:𝓫 | a)  =  clash
 theorem unify_occurs_cancelled :
     unifyRow (B := Unit) (.var "a") (.cat (.sing "l" uB) (.var "a")) =
       .clash := rfl
 
 -- U-var-solve with occurs check: α ≐ᵣ (l: 𝓫 | α | m: 𝓫) — the recursive
 -- var is interior, no cancellation applies, genuinely a recursive row.
+-- ⊢  unifyRow a (l:𝓫 | a | m:𝓫)  =  occurs
 theorem unify_occurs :
     unifyRow (B := Unit) (.var "a")
       (.cat (.sing "l" uB) (.cat (.var "a") (.sing "m" uB))) = .occurs := rfl
 
 -- Var-var: solved union-find style.
+-- ⊢  unifyRow a b  =  success [a ≔ (b | ε)] []
 theorem unify_var_var :
     unifyRow (B := Unit) (.var "a") (.var "b") =
       .success [("a", .cat (.var "b") .empty)] [] := rfl
 
 -- The ambiguous mirror (α | l: 𝓫) ≐ᵣ (l: 𝓫 | β): both windows closed by a
 -- var, both sides have vars — correctly stuck (Levi splits two ways).
+-- ⊢  unifyRow (a | l:𝓫) (l:𝓫 | b)  =  stuck
 theorem unify_two_sided_stuck :
     unifyRow (B := Unit) (.cat (.var "a") (.sing "l" uB))
                          (.cat (.sing "l" uB) (.var "b")) = .stuck := rfl
@@ -1318,6 +1392,7 @@ theorem unify_two_sided_stuck :
 -- U-clash direction of the trichotomy (projClash_no_unifier).
 
 -- Spine roundtrip: toSpine . ofSpine = id.
+-- ⊢  spine(ofSpine s) = s
 private theorem ofSpine_toSpine {B : Type} : (s : List (Atom B)) → (ofSpine s).toSpine = s
   | [] => rfl
   | .field l τ :: s => by
@@ -1328,6 +1403,7 @@ private theorem ofSpine_toSpine {B : Type} : (s : List (Atom B)) → (ofSpine s)
       exact congrArg (.var α :: ·) (ofSpine_toSpine s)
 
 -- l-field count distributes over spine append.
+-- ⊢  count_l(s₁ ++ s₂) = count_l(s₁) + count_l(s₂)
 private theorem sFieldCount_append {B : Type} (l : Label) : (s₁ s₂ : List (Atom B)) →
     sFieldCount l (s₁ ++ s₂) = sFieldCount l s₁ + sFieldCount l s₂
   | [], _ => by simp [sFieldCount]
@@ -1339,6 +1415,7 @@ private theorem sFieldCount_append {B : Type} (l : Label) : (s₁ s₂ : List (A
       rw [sFieldCount_append l s₁ s₂]
 
 -- (sProj l s).length = sFieldCount l s (projection list length = concrete count).
+-- ⊢  |proj_l(s)| = count_l(s)
 private theorem sProj_length_eq_sFieldCount {B : Type} (l : Label) : (s : List (Atom B)) →
     (sProj l s).length = sFieldCount l s
   | [] => rfl
@@ -1349,18 +1426,21 @@ private theorem sProj_length_eq_sFieldCount {B : Type} (l : Label) : (s : List (
       simp only [sProj, sFieldCount, List.length_map, sProj_length_eq_sFieldCount l s]
 
 -- ProjEquiv preserves list length.
+-- ⊢  ps ≈ₚ qs   ⟹   |ps| = |qs|
 private theorem ProjEquiv.length_eq {B : Type} : {ps qs : List (Nat × Ty B)} →
     ProjEquiv ps qs → ps.length = qs.length
   | _, _, .nil => rfl
   | _, _, .cons _ _ h => congrArg Nat.succ h.length_eq
 
 -- ≈ preserves the l-field count (rowEquiv_iff_char + projection-length).
+-- ⊢  ρ₁ ≈ᵣ ρ₂   ⟹   count_l(spine ρ₁) = count_l(spine ρ₂)
 theorem rowEquiv_fieldCount_eq {B : Type} {ρ₁ ρ₂ : Row B} (l : Label) (h : ρ₁ ≈ᵣ ρ₂) :
     sFieldCount l ρ₁.toSpine = sFieldCount l ρ₂.toSpine := by
   rw [← sProj_length_eq_sFieldCount, ← sProj_length_eq_sFieldCount]
   exact (h.char.2 l).length_eq
 
 -- sHasVar s = false ↔ sVarSeq s = [] (bridge from Bool to Prop).
+-- ⊢  hasVar(s) = false   ↔   vars(s) = []
 private theorem sHasVar_false_iff {B : Type} : (s : List (Atom B)) →
     (sHasVar s = false ↔ sVarSeq s = [])
   | [] => ⟨fun _ => rfl, fun _ => rfl⟩
@@ -1368,12 +1448,14 @@ private theorem sHasVar_false_iff {B : Type} : (s : List (Atom B)) →
   | .field _ _ :: s => by simp [sHasVar, sVarSeq, sHasVar_false_iff s]
 
 -- !sHasVar s → SpineVarFree (ofSpine s) — used in projClash_no_unifier.
+-- ⊢  hasVar(s) = false   ⟹   (ofSpine s).SpineVarFree
 private theorem spineVarFree_ofSpine {B : Type} {s : List (Atom B)}
     (h : sHasVar s = false) : (ofSpine s).SpineVarFree :=
   (spineVarFree_iff_varSeq_nil (ofSpine s)).mpr
     (by rw [ofSpine_toSpine]; exact (sHasVar_false_iff s).mp h)
 
 -- Substitution can only add l-fields: the count weakly increases.
+-- ⊢  count_l(spine ρ) ≤ count_l(spine (θρ))
 theorem sFieldCount_applySubst_le {B : Type} (θ : TySubst B) (l : Label) :
     (ρ : Row B) → sFieldCount l ρ.toSpine ≤ sFieldCount l (ρ.applySubst θ).toSpine
   | .empty => Nat.le_refl _
@@ -1385,6 +1467,7 @@ theorem sFieldCount_applySubst_le {B : Type} (θ : TySubst B) (l : Label) :
         (sFieldCount_applySubst_le θ l ρ₁) (sFieldCount_applySubst_le θ l ρ₂)
 
 -- For var-free rows substitution fixes the l-field count exactly.
+-- ⊢  ρ var-free   ⟹   count_l(spine (θρ)) = count_l(spine ρ)
 theorem sFieldCount_applySubst_varFree {B : Type} (θ : TySubst B) (l : Label) :
     {ρ : Row B} → ρ.SpineVarFree →
     sFieldCount l (ρ.applySubst θ).toSpine = sFieldCount l ρ.toSpine
@@ -1399,6 +1482,7 @@ theorem sFieldCount_applySubst_varFree {B : Type} (θ : TySubst B) (l : Label) :
 -- If projClash s₁ s₂, no θ can unify (ofSpine s₁) with (ofSpine s₂).
 -- The ground side's l-count is fixed under substitution; the other side can
 -- only grow; ≈ forces equality; omega closes the Nat arithmetic.
+-- ⊢  projClash s₁ s₂   ⟹   ¬ ∃ θ. θ ⊨ ofSpine s₁ ≐ᵣ ofSpine s₂
 theorem projClash_no_unifier {B : Type} {s₁ s₂ : List (Atom B)}
     (hclash : projClash s₁ s₂ = true) :
     ¬ ∃ θ : TySubst B, Unifies θ (ofSpine s₁) (ofSpine s₂) := by
@@ -1442,6 +1526,8 @@ def EqsSat {B : Type} (θ : TySubst B) (eqs : List (Ty B × Ty B)) : Prop :=
   ∀ p ∈ eqs, TyEquiv (p.1.applySubst θ) (p.2.applySubst θ)
 
 -- addEq only prepends to the eqs of a success; it inverts cleanly.
+-- ⊢  r.addEq τ τ' = success σ eqs
+--        ⟹  ∃ eqs'. r = success σ eqs' ∧ eqs = (τ,τ')::eqs'
 theorem URes.addEq_success {B : Type} {τ τ' : Ty B} {r : URes B}
     {σ : List (TyVar × Row B)} {eqs : List (Ty B × Ty B)} :
     r.addEq τ τ' = .success σ eqs →
@@ -1456,9 +1542,11 @@ theorem URes.addEq_success {B : Type} {τ τ' : Ty B} {r : URes B}
   | stuck  => intro h; cases (h : URes.stuck = .success σ eqs)
 
 -- ## ofSpine cons is definitionally a cat (kept as named rewrites).
+-- ⊢  ofSpine (α :: s) = (α | ofSpine s)
 theorem ofSpine_var_cons {B : Type} (α : TyVar) (s : List (Atom B)) :
     ofSpine (.var α :: s) = .cat (.var α) (ofSpine s) := rfl
 
+-- ⊢  ofSpine ((l:τ) :: s) = (l:τ | ofSpine s)
 theorem ofSpine_field_cons {B : Type} (l : Label) (τ : Ty B) (s : List (Atom B)) :
     ofSpine (.field l τ :: s) = .cat (.sing l τ) (ofSpine s) := rfl
 
@@ -1469,6 +1557,7 @@ theorem ofSpine_field_cons {B : Type} (l : Label) (τ : Ty B) (s : List (Atom B)
 -- U-var-refl (left): a shared leading var contributes θα to both sides, so it
 -- drops out of the equivalence — no constraint on θ.
 -- Inversion: stripL succeeds only on a shared leading var.
+-- ⊢  stripL s₁ s₂ = some (t₁,t₂)   ⟹   ∃ α. s₁ = α::t₁ ∧ s₂ = α::t₂
 theorem stripL_inv {B : Type} {s₁ s₂ t₁ t₂ : List (Atom B)} :
     stripL s₁ s₂ = some (t₁, t₂) → ∃ α, s₁ = .var α :: t₁ ∧ s₂ = .var α :: t₂ := by
   cases s₁ with
@@ -1493,6 +1582,7 @@ theorem stripL_inv {B : Type} {s₁ s₂ t₁ t₂ : List (Atom B)} :
           · simp at h
 
 -- Inversion: stripR succeeds only on a shared trailing var.
+-- ⊢  stripR s₁ s₂ = some (t₁,t₂)   ⟹   ∃ α. s₁ = t₁++[α] ∧ s₂ = t₂++[α]
 theorem stripR_inv {B : Type} {s₁ s₂ t₁ t₂ : List (Atom B)} :
     stripR s₁ s₂ = some (t₁, t₂) → ∃ α, s₁ = t₁ ++ [.var α] ∧ s₂ = t₂ ++ [.var α] := by
   intro h
@@ -1511,6 +1601,8 @@ theorem stripR_inv {B : Type} {s₁ s₂ t₁ t₂ : List (Atom B)} :
 
 -- U-var-refl (left): a shared leading var contributes θα to both sides, so it
 -- drops out of the equivalence — no constraint on θ.
+-- ⊢  stripL s₁ s₂ = some (t₁,t₂),  θ(ofSpine t₁) ≈ᵣ θ(ofSpine t₂)
+--        ⟹   θ(ofSpine s₁) ≈ᵣ θ(ofSpine s₂)
 theorem stripL_reflect {B : Type} {θ : TySubst B} {s₁ s₂ t₁ t₂ : List (Atom B)}
     (hstrip : stripL s₁ s₂ = some (t₁, t₂))
     (hrec : RowEquiv ((ofSpine t₁).applySubst θ) ((ofSpine t₂).applySubst θ)) :
@@ -1520,6 +1612,8 @@ theorem stripL_reflect {B : Type} {θ : TySubst B} {s₁ s₂ t₁ t₂ : List (
   exact RowEquiv.cat (.refl _) hrec
 
 -- U-var-refl (right): the same at the trailing end, via ofSpine over append.
+-- ⊢  stripR s₁ s₂ = some (t₁,t₂),  θ(ofSpine t₁) ≈ᵣ θ(ofSpine t₂)
+--        ⟹   θ(ofSpine s₁) ≈ᵣ θ(ofSpine s₂)
 theorem stripR_reflect {B : Type} {θ : TySubst B} {s₁ s₂ t₁ t₂ : List (Atom B)}
     (hstrip : stripR s₁ s₂ = some (t₁, t₂))
     (hrec : RowEquiv ((ofSpine t₁).applySubst θ) ((ofSpine t₂).applySubst θ)) :
@@ -1531,6 +1625,8 @@ theorem stripR_reflect {B : Type} {θ : TySubst B} {s₁ s₂ t₁ t₂ : List (
   exact e₁.trans ((RowEquiv.cat hrec (.refl _)).trans e₂.symm)
 
 -- U-var-solve: s₁ = [var α], θ satisfies α ≔ ofSpine s₂ ⟹ θ unifies.
+-- ⊢  solveVar s₁ s₂ = some (success σ eqs),  θ ⊨ σ
+--        ⟹   θ(ofSpine s₁) ≈ᵣ θ(ofSpine s₂)
 theorem solveVar_reflect {B : Type} {θ : TySubst B} {s₁ s₂ : List (Atom B)}
     {σ : List (TyVar × Row B)} {eqs : List (Ty B × Ty B)}
     (hsolve : solveVar s₁ s₂ = some (.success σ eqs))
@@ -1556,6 +1652,7 @@ theorem solveVar_reflect {B : Type} {θ : TySubst B} {s₁ s₂ : List (Atom B)}
 
 -- U-field (left): a leading field matched against the other side's window.
 -- windowExtract bubbles the matched field to the front (distinct-label comm).
+-- ⊢  windowExtract l s = some (τ,s')   ⟹   ofSpine s ≈ᵣ (l:τ | ofSpine s')
 theorem windowExtract_equiv {B : Type} (l : Label) :
     (s : List (Atom B)) → {τ : Ty B} → {s' : List (Atom B)} →
     windowExtract l s = some (τ, s') →
@@ -1582,6 +1679,8 @@ theorem windowExtract_equiv {B : Type} (l : Label) :
               ((RowEquiv.cat (.comm hl) (.refl _)).trans RowEquiv.assoc))
         · simp at h
 
+-- ⊢  matchL s₁ s₂ = some (τ,τ',t₁,t₂),  θτ ≈ θτ',  θ(ofSpine t₁) ≈ᵣ θ(ofSpine t₂)
+--        ⟹   θ(ofSpine s₁) ≈ᵣ θ(ofSpine s₂)
 theorem matchL_reflect {B : Type} {θ : TySubst B} {s₁ s₂ t₁ t₂ : List (Atom B)}
     {τ τ' : Ty B}
     (hmatch : matchL s₁ s₂ = some (τ, τ', t₁, t₂))
@@ -1608,6 +1707,7 @@ theorem matchL_reflect {B : Type} {θ : TySubst B} {s₁ s₂ t₁ t₂ : List (
 
 -- Base case: an all-vars remainder, each solved to ε, unifies with the empty
 -- side (allVarsEmpty forces every var to ε).
+-- ⊢  allVarsEmpty s = some σ,  θ ⊨ σ   ⟹   θ(ofSpine s) ≈ᵣ ε
 theorem allVarsEmpty_sound {B : Type} {θ : TySubst B} :
     (s : List (Atom B)) → {σ : List (TyVar × Row B)} →
     allVarsEmpty s = some σ → SolSat θ σ →
@@ -1638,12 +1738,14 @@ def revRow {B : Type} : Row B → Row B
   | .sing l τ  => .sing l τ
   | .cat ρ₁ ρ₂ => .cat (revRow ρ₂) (revRow ρ₁)
 
+-- ⊢  revRow (revRow ρ) = ρ
 theorem revRow_involutive {B : Type} : (ρ : Row B) → revRow (revRow ρ) = ρ
   | .empty     => rfl
   | .var _     => rfl
   | .sing _ _  => rfl
   | .cat a b   => by simp only [revRow, revRow_involutive a, revRow_involutive b]
 
+-- ⊢  a ≈ᵣ b   ⟹   revRow a ≈ᵣ revRow b
 theorem RowEquiv.revRow {B : Type} :
     {a b : Row B} → RowEquiv a b → RowEquiv (revRow a) (revRow b)
   | _, _, .refl _      => .refl _
@@ -1657,6 +1759,7 @@ theorem RowEquiv.revRow {B : Type} :
   | _, _, .comm hne    => RowEquiv.comm (fun h => hne h.symm)
 
 -- ofSpine of a reversed spine is the row-reversal of ofSpine (mod ≈).
+-- ⊢  ofSpine (reverse as) ≈ᵣ revRow (ofSpine as)
 theorem ofSpine_reverse_equiv {B : Type} : (as : List (Atom B)) →
     RowEquiv (ofSpine as.reverse) (revRow (ofSpine as))
   | [] => .refl _
@@ -1675,6 +1778,8 @@ theorem ofSpine_reverse_equiv {B : Type} : (as : List (Atom B)) →
 -- on the REVERSED spines, so the matched field sits in the trailing var-free
 -- window and bubbles to the RIGHT end past distinct-label fields only. We get
 -- this by transporting windowExtract_equiv through revRow.
+-- ⊢  windowExtract l (reverse s) = some (τ,q)
+--        ⟹   ofSpine s ≈ᵣ (ofSpine (reverse q) | l:τ)
 theorem windowExtract_reverse_equiv {B : Type} (l : Label) (s : List (Atom B))
     {τ : Ty B} {q : List (Atom B)}
     (h : windowExtract l s.reverse = some (τ, q)) :
@@ -1688,6 +1793,8 @@ theorem windowExtract_reverse_equiv {B : Type} (l : Label) (s : List (Atom B))
   exact h2.trans (RowEquiv.cat (ofSpine_reverse_equiv q).symm (.refl _))
 
 -- Inversion of a leading field-match.
+-- ⊢  matchL s₁ s₂ = some (τ,τ',t₁,t₂)
+--        ⟹  ∃ l. s₁ = (l:τ)::t₁ ∧ windowExtract l s₂ = some (τ',t₂)
 theorem matchL_inv {B : Type} {s₁ s₂ t₁ t₂ : List (Atom B)} {τ τ' : Ty B} :
     matchL s₁ s₂ = some (τ, τ', t₁, t₂) →
     ∃ l, s₁ = .field l τ :: t₁ ∧ windowExtract l s₂ = some (τ', t₂) := by
@@ -1706,6 +1813,8 @@ theorem matchL_inv {B : Type} {s₁ s₂ t₁ t₂ : List (Atom B)} {τ τ' : Ty
         exact ⟨l, rfl, hwe⟩
       · simp at h
 
+-- ⊢  matchR s₁ s₂ = some (τ,τ',t₁,t₂),  θτ ≈ θτ',  θ(ofSpine t₁) ≈ᵣ θ(ofSpine t₂)
+--        ⟹   θ(ofSpine s₁) ≈ᵣ θ(ofSpine s₂)      (trailing-field mirror)
 theorem matchR_reflect {B : Type} {θ : TySubst B} {s₁ s₂ t₁ t₂ : List (Atom B)}
     {τ τ' : Ty B}
     (hmatch : matchR s₁ s₂ = some (τ, τ', t₁, t₂))
@@ -1743,6 +1852,7 @@ theorem matchR_reflect {B : Type} {θ : TySubst B} {s₁ s₂ t₁ t₂ : List (
 -- it would NOT commute — shadowing — so both hypotheses are essential; this is
 -- exactly why groundMatch's soundness is conditional on the skipped vars being
 -- l-free under θ, which the counting forces.)
+-- ⊢  R var-free,  count_l(spine R) = 0   ⟹   (l:τ | R) ≈ᵣ (R | l:τ)
 theorem field_comm_lfree {B : Type} (l : Label) (τ : Ty B) :
     (R : Row B) → R.SpineVarFree → sFieldCount l R.toSpine = 0 →
     RowEquiv (.cat (.sing l τ) R) (.cat R (.sing l τ))
@@ -1767,6 +1877,9 @@ theorem field_comm_lfree {B : Type} (l : Label) (τ : Ty B) :
 -- variable of the spine is var-free and l-free under θ (vacuous when the spine
 -- is var-free, e.g. the ground side). The var case is the only one that needs
 -- field_comm_lfree; the field case only crosses distinct labels (comm).
+-- ⊢  removeField l s = some (τ,t),
+--       (∀ β ∈ vars(s). θβ var-free ∧ count_l(spine θβ) = 0)
+--        ⟹   θ(ofSpine s) ≈ᵣ (l:θτ | θ(ofSpine t))
 theorem removeField_equiv_of {B : Type} {θ : TySubst B} (l : Label) :
     (s : List (Atom B)) → {τ : Ty B} → {t : List (Atom B)} →
     removeField l s = some (τ, t) →
@@ -1819,6 +1932,7 @@ theorem removeField_equiv_of {B : Type} {θ : TySubst B} (l : Label) :
 
 -- ## U-ground: the counting (measurement lemmas)
 -- removeField keeps the variable sequence (it only deletes a concrete field).
+-- ⊢  removeField l s = some (τ,t)   ⟹   vars(t) = vars(s)
 theorem removeField_sVarSeq {B : Type} (l : Label) :
     (s : List (Atom B)) → {τ : Ty B} → {t : List (Atom B)} →
     removeField l s = some (τ, t) → sVarSeq t = sVarSeq s
@@ -1845,6 +1959,7 @@ theorem removeField_sVarSeq {B : Type} (l : Label) :
       · simp at h
 
 -- removeField deletes exactly one l-field.
+-- ⊢  removeField l s = some (τ,t)   ⟹   count_l(s) = count_l(t) + 1
 theorem removeField_sFieldCount {B : Type} (l : Label) :
     (s : List (Atom B)) → {τ : Ty B} → {t : List (Atom B)} →
     removeField l s = some (τ, t) → sFieldCount l s = sFieldCount l t + 1
@@ -1876,6 +1991,7 @@ theorem removeField_sFieldCount {B : Type} (l : Label) :
       · simp at h
 
 -- A var-free spine stays var-free under θ (θ introduces vars only via row-vars).
+-- ⊢  vars(s) = []   ⟹   vars(spine (θ(ofSpine s))) = []
 theorem varSeq_applySubst_nil {B : Type} (θ : TySubst B) :
     (s : List (Atom B)) → sVarSeq s = [] →
     sVarSeq ((ofSpine s).applySubst θ).toSpine = []
@@ -1888,6 +2004,7 @@ theorem varSeq_applySubst_nil {B : Type} (θ : TySubst B) :
 
 -- If the θ-image of ofSpine s carries NO spine variable, every variable of s is
 -- var-free under θ.
+-- ⊢  vars(spine (θ(ofSpine s))) = []   ⟹   ∀ β ∈ vars(s). θβ var-free
 theorem allVars_varFree_of {B : Type} {θ : TySubst B} :
     (s : List (Atom B)) →
     sVarSeq ((ofSpine s).applySubst θ).toSpine = [] →
@@ -1907,6 +2024,8 @@ theorem allVars_varFree_of {B : Type} {θ : TySubst B} :
 
 -- If θ does not INCREASE the l-count of ofSpine s (it never decreases it), then
 -- every variable of s is l-free under θ — the U-ground counting fact.
+-- ⊢  count_l(spine (θ(ofSpine s))) = count_l(s)
+--        ⟹   ∀ β ∈ vars(s). count_l(spine θβ) = 0
 theorem allVars_lfree_of {B : Type} {θ : TySubst B} (l : Label) :
     (s : List (Atom B)) →
     sFieldCount l ((ofSpine s).applySubst θ).toSpine = sFieldCount l s →
@@ -1929,6 +2048,9 @@ theorem allVars_lfree_of {B : Type} {θ : TySubst B} (l : Label) :
       · exact allVars_lfree_of l s hs β hβ'
 
 -- ## U-ground: inversion + the reflection lemma
+-- ⊢  groundMatchAux s₁ s₂ ls = some (τ,τ',t₁,t₂)   ⟹   ∃ l.
+--       count_l(s₁) = count_l(s₂) ∧ 0 < count_l(s₁)
+--       ∧ removeField l s₁ = some (τ,t₁) ∧ removeField l s₂ = some (τ',t₂)
 theorem groundMatchAux_inv {B : Type} {s₁ s₂ : List (Atom B)} {τ τ' : Ty B}
     {t₁ t₂ : List (Atom B)} :
     (ls : List Label) → groundMatchAux s₁ s₂ ls = some (τ, τ', t₁, t₂) →
@@ -1952,6 +2074,9 @@ theorem groundMatchAux_inv {B : Type} {s₁ s₂ : List (Atom B)} {τ τ' : Ty B
             exact ⟨l, hcond.1, hcond.2, hr₁, hr₂⟩
       · exact groundMatchAux_inv ls h
 
+-- ⊢  groundMatch s₁ s₂ = some (τ,τ',t₁,t₂)   ⟹   vars(s₂) = [] ∧ ∃ l.
+--       count_l(s₁) = count_l(s₂) ∧ 0 < count_l(s₁)
+--       ∧ removeField l s₁ = some (τ,t₁) ∧ removeField l s₂ = some (τ',t₂)
 theorem groundMatch_inv {B : Type} {s₁ s₂ : List (Atom B)} {τ τ' : Ty B}
     {t₁ t₂ : List (Atom B)} :
     groundMatch s₁ s₂ = some (τ, τ', t₁, t₂) →
@@ -1972,6 +2097,8 @@ theorem groundMatch_inv {B : Type} {s₁ s₂ : List (Atom B)} {τ τ' : Ty B}
 -- across s₁'s variables (allVars_lfree_of); likewise they stay var-free
 -- (allVars_varFree_of). This is the one move whose soundness is genuinely
 -- non-local — it reads the residual solution back through the counting.
+-- ⊢  groundMatch s₁ s₂ = some (τ,τ',t₁,t₂),  θτ ≈ θτ',  θ(ofSpine t₁) ≈ᵣ θ(ofSpine t₂)
+--        ⟹   θ(ofSpine s₁) ≈ᵣ θ(ofSpine s₂)
 theorem groundMatch_reflect {B : Type} {θ : TySubst B} {s₁ s₂ t₁ t₂ : List (Atom B)}
     {τ τ' : Ty B}
     (hg : groundMatch s₁ s₂ = some (τ, τ', t₁, t₂))
@@ -2006,6 +2133,8 @@ theorem groundMatch_reflect {B : Type} {θ : TySubst B} {s₁ s₂ t₁ t₂ : L
 
 -- ## Assembly: success ⟹ unifies (induction on unifySpineF's fuel)
 -- Base cases: one side empty ⟹ allVarsEmpty forces the other's vars to ε.
+-- ⊢  unifySpineF fuel [] s₂ = success σ eqs,  θ ⊨ σ
+--        ⟹   θ(ofSpine []) ≈ᵣ θ(ofSpine s₂)
 theorem unifySpineF_nil_left {B : Type} {θ : TySubst B} (fuel : Nat) (s₂ : List (Atom B))
     {σ : List (TyVar × Row B)} {eqs : List (Ty B × Ty B)}
     (h : unifySpineF fuel [] s₂ = .success σ eqs) (hσ : SolSat θ σ) :
@@ -2019,6 +2148,8 @@ theorem unifySpineF_nil_left {B : Type} {θ : TySubst B} (fuel : Nat) (s₂ : Li
       simp only [ofSpine, Row.applySubst]
       exact (allVarsEmpty_sound s₂ hae hσ).symm
 
+-- ⊢  unifySpineF fuel (a::s₁) [] = success σ eqs,  θ ⊨ σ
+--        ⟹   θ(ofSpine (a::s₁)) ≈ᵣ θ(ofSpine [])
 theorem unifySpineF_cons_nil {B : Type} {θ : TySubst B} (fuel : Nat)
     (a : Atom B) (s₁ : List (Atom B))
     {σ : List (TyVar × Row B)} {eqs : List (Ty B × Ty B)}
@@ -2033,6 +2164,8 @@ theorem unifySpineF_cons_nil {B : Type} {θ : TySubst B} (fuel : Nat)
       simp only [ofSpine, Row.applySubst]
       exact allVarsEmpty_sound (a :: s₁) hae hσ
 
+-- ⊢  unifySpineF fuel s₁ s₂ = success σ eqs,  θ ⊨ σ,  θ ⊨ eqs
+--        ⟹   θ(ofSpine s₁) ≈ᵣ θ(ofSpine s₂)
 theorem unifySpineF_success_sound {B : Type} {θ : TySubst B} (fuel : Nat) :
     ∀ (s₁ s₂ : List (Atom B)) {σ : List (TyVar × Row B)} {eqs : List (Ty B × Ty B)},
       unifySpineF fuel s₁ s₂ = .success σ eqs → SolSat θ σ → EqsSat θ eqs →
@@ -2126,6 +2259,7 @@ theorem unifySpineF_success_sound {B : Type} {θ : TySubst B} (fuel : Nat) :
 
 -- The ≐ᵣ success case is SOUND: any θ that meets the emitted row-var solution σ
 -- and residual type equations eqs unifies the two rows.
+-- ⊢  unifyRow ρ₁ ρ₂ = success σ eqs,  θ ⊨ σ,  θ ⊨ eqs   ⟹   θ ⊨ ρ₁ ≐ᵣ ρ₂
 theorem unifyRow_success_sound {B : Type} {θ : TySubst B} {ρ₁ ρ₂ : Row B}
     {σ : List (TyVar × Row B)} {eqs : List (Ty B × Ty B)}
     (h : unifyRow ρ₁ ρ₂ = .success σ eqs) (hσ : SolSat θ σ) (heqs : EqsSat θ eqs) :
