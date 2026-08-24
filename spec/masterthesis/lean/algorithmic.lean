@@ -1733,6 +1733,105 @@ theorem hasMgu_rowEquiv {B : Type} {ρ₁ ρ₂ ρ₁' ρ₂' : Row B}
     ⟨fun hu => ((RowEquiv.applySubst θ h₁).symm.trans hu).trans (RowEquiv.applySubst θ h₂),
      fun hu => ((RowEquiv.applySubst θ h₁).trans hu).trans (RowEquiv.applySubst θ h₂).symm⟩)
 
+-- ## Generalizing Wand: n distinct variables vs a single field has no mgu
+-- The whole family (α₁ | … | αₙ) ≐ᵣ (l:𝓫), n ≥ 2 distinct vars — the general
+-- "field with many variable hosts" stuck class. Same counting kill as
+-- wand_no_mgu_count (which is the n=2 instance): the field's counts across the
+-- vars sum to 1, so exactly one var hosts it; the witness that hosts it in ANY
+-- other (distinct) var undercuts that one's count 1→0.
+
+-- A substitution that fields w' and empties everything else sends a pure-var
+-- spine NOT mentioning w' to ε (every factor is empty).
+private theorem subst_empty_of_notMem {B : Type} (b : B) (l : Label) (w' : TyVar) :
+    (ws : List TyVar) → w' ∉ ws →
+    RowEquiv ((ofSpine (ws.map Atom.var)).applySubst
+        ⟨fun x => .var x, fun x => if x = w' then .sing l (.base b) else .empty⟩)
+      Row.empty
+  | [], _ => by simp only [List.map_nil, ofSpine, Row.applySubst]; exact RowEquiv.refl _
+  | c :: rest, hmem => by
+      have hc : c ≠ w' := fun h => hmem (h ▸ List.mem_cons_self)
+      have hrest : w' ∉ rest := fun h => hmem (List.mem_cons_of_mem _ h)
+      simp only [List.map_cons, ofSpine, Row.applySubst]
+      rw [if_neg hc]
+      exact RowEquiv.unitL.trans (subst_empty_of_notMem b l w' rest hrest)
+
+-- … and sends a pure-var spine that DOES mention w' (once, by nodup) to (l:𝓫).
+private theorem witness_unifies {B : Type} (b : B) (l : Label) (w' : TyVar) :
+    (ws : List TyVar) → ws.Nodup → w' ∈ ws →
+    RowEquiv ((ofSpine (ws.map Atom.var)).applySubst
+        ⟨fun x => .var x, fun x => if x = w' then .sing l (.base b) else .empty⟩)
+      (.sing l (.base b))
+  | [], _, hmem => by simp at hmem
+  | c :: rest, hnd, hmem => by
+      have hnd' := List.nodup_cons.mp hnd
+      simp only [List.map_cons, ofSpine, Row.applySubst]
+      by_cases hc : c = w'
+      · subst hc
+        rw [if_pos rfl]
+        exact (RowEquiv.cat (RowEquiv.refl _)
+                 (subst_empty_of_notMem b l c rest hnd'.1)).trans RowEquiv.unitR
+      · rw [if_neg hc]
+        have hmem' : w' ∈ rest := (List.mem_cons.mp hmem).resolve_left (fun h => hc h.symm)
+        exact RowEquiv.unitL.trans (witness_unifies b l w' rest hnd'.2 hmem')
+
+-- The l-count of a substituted pure-var spine is the sum of the vars' l-counts.
+private theorem sFieldCount_ofSpine_map_var {B : Type} (θ : TySubst B) (l : Label) :
+    (vs : List TyVar) →
+    sFieldCount l ((ofSpine (vs.map Atom.var)).applySubst θ).toSpine
+      = (vs.map (fun v => sFieldCount l (θ.row v).toSpine)).sum
+  | [] => rfl
+  | v :: vs => by
+      simp only [List.map_cons, ofSpine, Row.applySubst, Row.toSpine,
+                 sFieldCount_append, List.sum_cons]
+      rw [sFieldCount_ofSpine_map_var θ l vs]
+
+-- ⊢  vs nodup,  |vs| ≥ 2   ⟹   ¬ HasMgu (v₁ | … | vₙ) (l:𝓫)
+theorem vars_vs_field_no_mgu {B : Type} {vs : List TyVar} (hnd : vs.Nodup)
+    (hlen : 2 ≤ vs.length) (b : B) (l : Label) :
+    ¬ HasMgu (ofSpine (vs.map Atom.var)) (.sing l (.base b)) := by
+  apply no_mgu_of_witness_shrinks
+  intro θ hu
+  -- a pure-var spine whose l-counts sum to ≥1 has a variable carrying ≥1 l-field
+  have hpos : ∀ (ns : List TyVar),
+      1 ≤ (ns.map (fun v => sFieldCount l (θ.row v).toSpine)).sum →
+      ∃ w ∈ ns, 1 ≤ sFieldCount l (θ.row w).toSpine := by
+    intro ns
+    induction ns with
+    | nil => intro h; simp at h
+    | cons a t ih =>
+        intro h
+        simp only [List.map_cons, List.sum_cons] at h
+        by_cases ha : 1 ≤ sFieldCount l (θ.row a).toSpine
+        · exact ⟨a, List.mem_cons_self, ha⟩
+        · obtain ⟨w, hw, hwc⟩ := ih (by omega)
+          exact ⟨w, List.mem_cons_of_mem a hw, hwc⟩
+  have hsum : (vs.map (fun v => sFieldCount l (θ.row v).toSpine)).sum = 1 := by
+    have h := rowEquiv_fieldCount_eq l hu
+    rw [sFieldCount_ofSpine_map_var] at h
+    simpa [Row.applySubst, Ty.applySubst, Row.toSpine, sFieldCount] using h
+  obtain ⟨w, hwmem, hwc⟩ := hpos vs (by omega)
+  obtain ⟨a, b', rest, rfl⟩ : ∃ a b' rest, vs = a :: b' :: rest := by
+    match vs, hlen with
+    | a :: b' :: rest, _ => exact ⟨a, b', rest, rfl⟩
+  have hab : a ≠ b' := by
+    intro h
+    exact (List.nodup_cons.mp hnd).1 (by rw [h]; exact List.mem_cons_self)
+  refine ⟨⟨fun x => .var x, fun x => if x = (if w = a then b' else a)
+            then .sing l (.base b) else .empty⟩, w, l, ?_, ?_⟩
+  · exact witness_unifies b l _ (a :: b' :: rest) hnd (by
+      split
+      · exact List.mem_cons_of_mem _ List.mem_cons_self
+      · exact List.mem_cons_self)
+  · have hne : (if w = a then b' else a) ≠ w := by
+      split
+      · rename_i h; subst h; exact fun hh => hab hh.symm
+      · rename_i h; exact fun hh => h hh.symm
+    show sFieldCount l (if w = (if w = a then b' else a) then Row.sing l (.base b)
+                        else Row.empty).toSpine < sFieldCount l (θ.row w).toSpine
+    rw [if_neg (fun hh => hne hh.symm)]
+    simp only [Row.toSpine, sFieldCount]
+    omega
+
 -- ## projClash soundness: the projection-clash direction of the trichotomy.
 -- If projClash s₁ s₂, no θ can unify (ofSpine s₁) with (ofSpine s₂).
 -- The ground side's l-count is fixed under substitution; the other side can
@@ -3371,7 +3470,8 @@ theorem unifySpineF_fuel_stable {B : Type} (s₁ s₂ : List (Atom B)) {fuel : N
 --    STUCK ⟹ NO-MGU — both canonical base shapes DONE: (1) instanceOf_fieldCount_mono
 --    (an mgu is pointwise count-minimal, as subst never deletes a field) + the general
 --    no_mgu_of_witness_shrinks; wand_no_mgu_count re-proves Wand (field-vs-vars) via
---    counting. (2) instanceOf_fieldCount_eq_of_varFree (a var-free component of an mgu is
+--    counting, GENERALIZED to n vars by vars_vs_field_no_mgu ((v₁|…|vₙ)≐ᵣ(l:𝓫), nodup,
+--    ≥2). (2) instanceOf_fieldCount_eq_of_varFree (a var-free component of an mgu is
 --    RIGID) + two_sided_no_mgu for (α|l:𝓫)≐ᵣ(l:𝓫|β) — counting can't shrink the ε,ε
 --    unifier there, so rigidity does the kill. LIFT INFRA: HasMgu + hasMgu_congr/
 --    hasMgu_rowEquiv (no-mgu depends only on the unifier SET, is a ≈-invariant) +
