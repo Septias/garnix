@@ -803,6 +803,26 @@ theorem RowEquiv.field_cancel_left {B : Type} {l : Label} {τ₁ τ₂ : Ty B}
     rw [hred', hred'] at h'
     exact h'
 
+-- A product ≈ ε forces each factor ≈ ε (a cancellative monoid with no inverses:
+-- ε has empty var sequence and empty projections, and both split over ++). The
+-- base case of ≐ᵣ completeness — an exhausted side pins every leftover var to ε.
+-- ⊢  (ρ₁ | ρ₂) ≈ᵣ ε   ⟹   ρ₁ ≈ᵣ ε  ∧  ρ₂ ≈ᵣ ε
+theorem RowEquiv.cat_empty_split {B : Type} {ρ₁ ρ₂ : Row B}
+    (h : RowEquiv (.cat ρ₁ ρ₂) .empty) :
+    RowEquiv ρ₁ .empty ∧ RowEquiv ρ₂ .empty := by
+  obtain ⟨hv, hp⟩ := h.char
+  simp only [Row.toSpine, sVarSeq_append, sVarSeq] at hv
+  obtain ⟨hv₁, hv₂⟩ := List.append_eq_nil_iff.mp hv
+  have hpe : ∀ l, sProj l ρ₁.toSpine = [] ∧ sProj l ρ₂.toSpine = [] := by
+    intro l
+    have h' := hp l
+    simp only [Row.toSpine, sProj_append, sProj] at h'
+    have heq := ProjEquiv.nil_inv h'.symm
+    obtain ⟨hx, hym⟩ := List.append_eq_nil_iff.mp heq
+    exact ⟨hx, List.map_eq_nil_iff.mp hym⟩
+  exact ⟨RowEquiv.ofChar ⟨by rw [hv₁]; rfl, fun l => ProjEquiv.of_eq (by rw [(hpe l).1]; rfl)⟩,
+         RowEquiv.ofChar ⟨by rw [hv₂]; rfl, fun l => ProjEquiv.of_eq (by rw [(hpe l).2]; rfl)⟩⟩
+
 -- ## Ground rows: the characterization degenerates to the projections
 -- (the T-eq workhorse for ≐ᵣ's ground completeness).
 -- ⊢  ρ.SpineVarFree   ↔   vars(spine ρ) = []
@@ -1677,6 +1697,14 @@ def SolSat {B : Type} (θ : TySubst B) (σ : List (TyVar × Row B)) : Prop :=
 def EqsSat {B : Type} (θ : TySubst B) (eqs : List (Ty B × Ty B)) : Prop :=
   ∀ p ∈ eqs, TyEquiv (p.1.applySubst θ) (p.2.applySubst θ)
 
+theorem EqsSat.cons {B : Type} {θ : TySubst B} {τ τ' : Ty B} {eqs : List (Ty B × Ty B)}
+    (hty : TyEquiv (τ.applySubst θ) (τ'.applySubst θ)) (h : EqsSat θ eqs) :
+    EqsSat θ ((τ, τ') :: eqs) := by
+  intro p hp
+  rcases List.mem_cons.mp hp with rfl | hp'
+  · exact hty
+  · exact h p hp'
+
 -- addEq only prepends to the eqs of a success; it inverts cleanly.
 -- ⊢  r.addEq τ τ' = success σ eqs
 --        ⟹  ∃ eqs'. r = success σ eqs' ∧ eqs = (τ,τ')::eqs'
@@ -1880,6 +1908,33 @@ theorem allVarsEmpty_sound {B : Type} {θ : TySubst B} :
         have ih := allVarsEmpty_sound s hs htail
         simp only [ofSpine_var_cons, Row.applySubst]
         exact (RowEquiv.cat hhead ih).trans RowEquiv.unitL
+
+-- Completeness counterpart: if θ makes ofSpine s collapse to ε (the exhausted-
+-- side unifier), then θ satisfies every ε-binding allVarsEmpty emitted.
+-- ⊢  allVarsEmpty s = some σ,  θ(ofSpine s) ≈ᵣ ε   ⟹   SolSat θ σ
+theorem allVarsEmpty_complete {B : Type} {θ : TySubst B} :
+    (s : List (Atom B)) → {σ : List (TyVar × Row B)} →
+    allVarsEmpty s = some σ → RowEquiv ((ofSpine s).applySubst θ) .empty →
+    SolSat θ σ
+  | [], _, hσ, _ => by
+      simp only [allVarsEmpty, Option.some.injEq] at hσ; subst hσ
+      intro p hp; simp at hp
+  | .field _ _ :: _, _, hσ, _ => by simp [allVarsEmpty] at hσ
+  | .var α :: s, σ, hσ, hu => by
+      simp only [allVarsEmpty] at hσ
+      cases hs : allVarsEmpty s with
+      | none => rw [hs] at hσ; simp at hσ
+      | some σ' =>
+        rw [hs] at hσ
+        have hσ' : σ = (α, Row.empty) :: σ' := (Option.some.inj hσ).symm
+        subst hσ'
+        simp only [ofSpine_var_cons, Row.applySubst] at hu
+        obtain ⟨hα, hrest⟩ := hu.cat_empty_split
+        have ih := allVarsEmpty_complete s hs hrest
+        intro p hp
+        rcases List.mem_cons.mp hp with rfl | hp'
+        · simp only [Row.applySubst]; exact hα
+        · exact ih p hp'
 
 -- Row reversal (reverses cat order): the algebraic image of List.reverse on
 -- spines. Used only to transport windowExtract_equiv from s.reverse to s — no
@@ -2671,6 +2726,183 @@ theorem unifyRow_clash_no_unifier {B : Type} {ρ₁ ρ₂ : Row B}
   have e₂ := RowEquiv.applySubst θ (Row.toSpine_equiv ρ₂)
   exact e₁.symm.trans (hu.trans e₂)
 
+------------------------- ≐ᵣ SUCCESS COMPLETENESS (mgu) ---------------------
+-- The emitted σ (row-var bindings) and eqs (deferred type equations) are
+-- NECESSARY: EVERY unifier satisfies them. With unifyRow_success_sound (they are
+-- SUFFICIENT) this makes unifyRow's output characterize the unifier set exactly —
+-- i.e. ≐ᵣ computes a most general unifier, presented as row bindings + residual
+-- type equations. The FORWARD reflection layer is the engine: it pushes any
+-- unifier through each move to the residual and reads off the emitted type eq.
+
+-- solveVar's success binds α ≔ ofSpine s₂; a unifier of the two rows is exactly
+-- a θ meeting that binding (θα ≈ (ofSpine s₂)θ).
+theorem solveVar_complete {B : Type} {θ : TySubst B} {s₁ s₂ : List (Atom B)}
+    {σ : List (TyVar × Row B)} {eqs : List (Ty B × Ty B)}
+    (hsolve : solveVar s₁ s₂ = some (.success σ eqs))
+    (hu : RowEquiv ((ofSpine s₁).applySubst θ) ((ofSpine s₂).applySubst θ)) :
+    SolSat θ σ ∧ EqsSat θ eqs := by
+  cases s₁ with
+  | nil => simp [solveVar] at hsolve
+  | cons a₁ r₁ =>
+    cases a₁ with
+    | field _ _ => simp [solveVar] at hsolve
+    | var α =>
+      cases r₁ with
+      | cons _ _ => simp [solveVar] at hsolve
+      | nil =>
+        simp only [solveVar] at hsolve
+        split at hsolve
+        · simp at hsolve
+        · simp only [Option.some.injEq, URes.success.injEq] at hsolve
+          obtain ⟨rfl, rfl⟩ := hsolve
+          refine ⟨fun p hp => ?_, fun p hp => by simp at hp⟩
+          simp only [List.mem_singleton] at hp
+          subst hp
+          simp only [ofSpine, Row.applySubst] at hu
+          exact RowEquiv.unitR.symm.trans hu
+
+theorem unifySpineF_nil_left_complete {B : Type} {θ : TySubst B} (fuel : Nat)
+    (s₂ : List (Atom B)) {σ : List (TyVar × Row B)} {eqs : List (Ty B × Ty B)}
+    (h : unifySpineF fuel [] s₂ = .success σ eqs)
+    (hu : RowEquiv ((ofSpine ([] : List (Atom B))).applySubst θ) ((ofSpine s₂).applySubst θ)) :
+    SolSat θ σ ∧ EqsSat θ eqs := by
+  simp only [unifySpineF] at h
+  cases hae : allVarsEmpty s₂ with
+  | none => simp [hae] at h
+  | some σ' =>
+      simp only [hae, URes.success.injEq] at h
+      obtain ⟨rfl, rfl⟩ := h
+      simp only [ofSpine, Row.applySubst] at hu
+      exact ⟨allVarsEmpty_complete s₂ hae hu.symm, fun p hp => by simp at hp⟩
+
+theorem unifySpineF_cons_nil_complete {B : Type} {θ : TySubst B} (fuel : Nat)
+    (a : Atom B) (s₁ : List (Atom B)) {σ : List (TyVar × Row B)} {eqs : List (Ty B × Ty B)}
+    (h : unifySpineF fuel (a :: s₁) [] = .success σ eqs)
+    (hu : RowEquiv ((ofSpine (a :: s₁)).applySubst θ)
+                   ((ofSpine ([] : List (Atom B))).applySubst θ)) :
+    SolSat θ σ ∧ EqsSat θ eqs := by
+  simp only [unifySpineF] at h
+  cases hae : allVarsEmpty (a :: s₁) with
+  | none => simp [hae] at h
+  | some σ' =>
+      simp only [hae, URes.success.injEq] at h
+      obtain ⟨rfl, rfl⟩ := h
+      simp only [ofSpine, Row.applySubst] at hu
+      exact ⟨allVarsEmpty_complete (a :: s₁) hae hu, fun p hp => by simp at hp⟩
+
+-- ⊢  unifySpineF fuel s₁ s₂ = success σ eqs,  θ ⊨ ofSpine s₁ ≐ᵣ ofSpine s₂
+--        ⟹   SolSat θ σ  ∧  EqsSat θ eqs
+theorem unifySpineF_success_complete {B : Type} {θ : TySubst B} (fuel : Nat) :
+    ∀ (s₁ s₂ : List (Atom B)) {σ : List (TyVar × Row B)} {eqs : List (Ty B × Ty B)},
+      unifySpineF fuel s₁ s₂ = .success σ eqs →
+      RowEquiv ((ofSpine s₁).applySubst θ) ((ofSpine s₂).applySubst θ) →
+      SolSat θ σ ∧ EqsSat θ eqs := by
+  induction fuel with
+  | zero =>
+      intro s₁ s₂ σ eqs h hu
+      cases s₁ with
+      | nil => exact unifySpineF_nil_left_complete 0 s₂ h hu
+      | cons a s₁ =>
+        cases s₂ with
+        | nil => exact unifySpineF_cons_nil_complete 0 a s₁ h hu
+        | cons b s₂ => simp [unifySpineF] at h
+  | succ fuel ih =>
+      intro s₁ s₂ σ eqs h hu
+      cases s₁ with
+      | nil => exact unifySpineF_nil_left_complete (fuel + 1) s₂ h hu
+      | cons a s₁ =>
+        cases s₂ with
+        | nil => exact unifySpineF_cons_nil_complete (fuel + 1) a s₁ h hu
+        | cons b s₂ =>
+          unfold unifySpineF at h
+          cases hsl : stripL (a :: s₁) (b :: s₂) with
+          | some p =>
+            obtain ⟨t₁, t₂⟩ := p; simp only [hsl] at h
+            exact ih t₁ t₂ h (stripL_reflect_fwd hsl hu)
+          | none =>
+          cases hsr : stripR (a :: s₁) (b :: s₂) with
+          | some p =>
+            obtain ⟨t₁, t₂⟩ := p; simp only [hsl, hsr] at h
+            exact ih t₁ t₂ h (stripR_reflect_fwd hsr hu)
+          | none =>
+          cases hv1 : solveVar (a :: s₁) (b :: s₂) with
+          | some r =>
+            simp only [hsl, hsr, hv1] at h
+            exact solveVar_complete (hv1.trans (congrArg some h)) hu
+          | none =>
+          cases hv2 : solveVar (b :: s₂) (a :: s₁) with
+          | some r =>
+            simp only [hsl, hsr, hv1, hv2] at h
+            exact solveVar_complete (hv2.trans (congrArg some h)) hu.symm
+          | none =>
+          cases hml : matchL (a :: s₁) (b :: s₂) with
+          | some p =>
+            obtain ⟨τ0, τ0', t₁, t₂⟩ := p; simp only [hsl, hsr, hv1, hv2, hml] at h
+            obtain ⟨eqs', hre, rfl⟩ := URes.addEq_success h
+            obtain ⟨hty, hru⟩ := matchL_reflect_fwd hml hu
+            obtain ⟨hsol, heqs⟩ := ih t₁ t₂ hre hru
+            exact ⟨hsol, EqsSat.cons hty heqs⟩
+          | none =>
+          cases hml2 : matchL (b :: s₂) (a :: s₁) with
+          | some p =>
+            obtain ⟨τ0', τ0, t₂, t₁⟩ := p; simp only [hsl, hsr, hv1, hv2, hml, hml2] at h
+            obtain ⟨eqs', hre, rfl⟩ := URes.addEq_success h
+            obtain ⟨hty, hru⟩ := matchL_reflect_fwd hml2 hu.symm
+            obtain ⟨hsol, heqs⟩ := ih t₁ t₂ hre hru.symm
+            exact ⟨hsol, EqsSat.cons hty.symm heqs⟩
+          | none =>
+          cases hmr : matchR (a :: s₁) (b :: s₂) with
+          | some p =>
+            obtain ⟨τ0, τ0', t₁, t₂⟩ := p; simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr] at h
+            obtain ⟨eqs', hre, rfl⟩ := URes.addEq_success h
+            obtain ⟨hty, hru⟩ := matchR_reflect_fwd hmr hu
+            obtain ⟨hsol, heqs⟩ := ih t₁ t₂ hre hru
+            exact ⟨hsol, EqsSat.cons hty heqs⟩
+          | none =>
+          cases hmr2 : matchR (b :: s₂) (a :: s₁) with
+          | some p =>
+            obtain ⟨τ0', τ0, t₂, t₁⟩ := p
+            simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2] at h
+            obtain ⟨eqs', hre, rfl⟩ := URes.addEq_success h
+            obtain ⟨hty, hru⟩ := matchR_reflect_fwd hmr2 hu.symm
+            obtain ⟨hsol, heqs⟩ := ih t₁ t₂ hre hru.symm
+            exact ⟨hsol, EqsSat.cons hty.symm heqs⟩
+          | none =>
+          cases hg : groundMatch (a :: s₁) (b :: s₂) with
+          | some p =>
+            obtain ⟨τ0, τ0', t₁, t₂⟩ := p
+            simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg] at h
+            obtain ⟨eqs', hre, rfl⟩ := URes.addEq_success h
+            obtain ⟨hty, hru⟩ := groundMatch_reflect_fwd hg hu
+            obtain ⟨hsol, heqs⟩ := ih t₁ t₂ hre hru
+            exact ⟨hsol, EqsSat.cons hty heqs⟩
+          | none =>
+          cases hg2 : groundMatch (b :: s₂) (a :: s₁) with
+          | some p =>
+            obtain ⟨τ0', τ0, t₂, t₁⟩ := p
+            simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2] at h
+            obtain ⟨eqs', hre, rfl⟩ := URes.addEq_success h
+            obtain ⟨hty, hru⟩ := groundMatch_reflect_fwd hg2 hu.symm
+            obtain ⟨hsol, heqs⟩ := ih t₁ t₂ hre hru.symm
+            exact ⟨hsol, EqsSat.cons hty.symm heqs⟩
+          | none =>
+            simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2] at h
+            split at h <;> simp at h
+
+-- ≐ᵣ SUCCESS COMPLETENESS: any unifier of ρ₁,ρ₂ satisfies the emitted σ and eqs.
+-- Together with unifyRow_success_sound: {unifiers of ρ₁ ≐ᵣ ρ₂} = {θ : SolSat θ σ ∧
+-- EqsSat θ eqs} — the algorithm's output is a most general unifier.
+-- ⊢  unifyRow ρ₁ ρ₂ = success σ eqs,  θ ⊨ ρ₁ ≐ᵣ ρ₂   ⟹   SolSat θ σ ∧ EqsSat θ eqs
+theorem unifyRow_success_complete {B : Type} {θ : TySubst B} {ρ₁ ρ₂ : Row B}
+    {σ : List (TyVar × Row B)} {eqs : List (Ty B × Ty B)}
+    (h : unifyRow ρ₁ ρ₂ = .success σ eqs) (hu : Unifies θ ρ₁ ρ₂) :
+    SolSat θ σ ∧ EqsSat θ eqs := by
+  unfold unifyRow unifySpine at h
+  unfold Unifies at hu
+  have e₁ := RowEquiv.applySubst θ (Row.toSpine_equiv ρ₁)
+  have e₂ := RowEquiv.applySubst θ (Row.toSpine_equiv ρ₂)
+  exact unifySpineF_success_complete _ ρ₁.toSpine ρ₂.toSpine h (e₁.symm.trans (hu.trans e₂))
+
 ------------------------- ≐ᵣ FUEL SUFFICIENCY -------------------------------
 -- Every recursive move of unifySpineF removes exactly ONE atom from each side
 -- (a shared end-var for strip; a matched field + its window/counterpart for
@@ -2895,11 +3127,15 @@ theorem unifySpineF_fuel_stable {B : Type} (s₁ s₂ : List (Atom B)) {fuel : N
 --    base) plus the FORWARD-REFLECTION layer + solveVar_ne_clash/addEq_clash_inv.
 --    FORWARD REFLECTION — DONE (completeness direction of every move):
 --    strip/match/groundMatch_reflect_fwd via field_cancel_left/right — a unifier
---    of the original unifies the residual (+ emitted type eq). Reusable for mgu.
---    Remaining ≐ᵣ metatheory: mgu-on-success (forward reflection is the key
---    ingredient); stuck ⟹ no unique mgu (wand_no_mgu is the worked instance).
---    NOTE occurs does NOT lift to a no-unifier theorem — it is conservative
---    (occurs_allVar_unifiable); only occurs_field_no_unifier is genuine.
+--    of the original unifies the residual (+ emitted type eq).
+--    MGU-ON-SUCCESS — DONE: unifyRow_success_complete — every unifier satisfies
+--    the emitted σ and eqs, so with unifyRow_success_sound the unifier set is
+--    EXACTLY {θ : SolSat θ σ ∧ EqsSat θ eqs}: ≐ᵣ computes a most general unifier.
+--    Via unifySpineF_success_complete (fuel induction, forward) + solveVar_complete
+--    + allVarsEmpty_complete (RowEquiv.cat_empty_split) + EqsSat.cons.
+--    Remaining ≐ᵣ metatheory: stuck ⟹ no unique mgu (wand_no_mgu is the worked
+--    instance). NOTE occurs does NOT lift to a no-unifier theorem — it is
+--    conservative (occurs_allVar_unifiable); only occurs_field_no_unifier genuine.
 --  * The type-level driver ≐: solve the emitted (τ, τ') equations, mutually
 --    recursing into rows; occurs/rank discipline across both sorts.
 --  * Non-vacuity of qualified schemes: needs lookup_total (RowWF) plus a
@@ -2911,6 +3147,7 @@ theorem unifySpineF_fuel_stable {B : Type} (s₁ s₂ : List (Atom B)) {fuel : N
 --    (lookup_det + Discharge.mono_of_definite are the two pillars).
 
 end MinimalCalculus
+
 
 
 
