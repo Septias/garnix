@@ -16,13 +16,12 @@
 - Was genau macht das replay (D-hit/D-⊥/D-?)
   - Unification lule
 - Lake projekt für richtige LSP-Features?
+  - Ja, done
 - Ist mir Claude too verbose? Muss ich da ein bisschen strippen?
   - Die Sauce wird verliert halt an Würze
-- Sollte ich alle Beispiele nochmal zusammenfassen?
 - Wie bekomme ich die Proofs clean?
   - Oder sollte ich einfach weiter machen?
-- Do we collapse to delibaretely in LookupRes.collapse?
 
 == Misc
 - Schon auch gefährlich, dass Claude manche Regeln für Beweise "zu sehr ausnutzt"
-- Claude arbeitet sehr Beispiel-basiert
+- Claude arbeitet sehr Beispiel-orientiert
