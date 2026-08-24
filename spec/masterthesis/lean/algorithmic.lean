@@ -1571,6 +1571,58 @@ theorem occurs_allVar_unifiable {B : Type} :
        simp only [Row.applySubst]
        exact (RowEquiv.unitL.trans RowEquiv.unitR).symm⟩⟩
 
+-- ## Base-case clash: the OTHER place the algorithm answers clash
+-- unifySpineF returns clash when one side is exhausted but the other still
+-- carries a field (`allVarsEmpty = none`). This is the second half of clash
+-- soundness (projClash_no_unifier is the interior/projection half): a field on
+-- the leftover side has nowhere to go against the empty row.
+
+-- allVarsEmpty fails exactly when a field remains: it walks vars, stops at a field.
+-- ⊢  allVarsEmpty s = none   ⟹   ∃ l. 0 < count_l s
+theorem allVarsEmpty_none_field {B : Type} :
+    (s : List (Atom B)) → allVarsEmpty s = none → ∃ l, 0 < sFieldCount l s
+  | [], h => by simp [allVarsEmpty] at h
+  | .field l _ :: s, _ => ⟨l, by
+      show 0 < (if l = l then 1 else 0) + sFieldCount l s
+      rw [if_pos rfl]; omega⟩
+  | .var _ :: s, h => by
+      cases hs : allVarsEmpty s with
+      | some σ => simp [allVarsEmpty, hs] at h
+      | none =>
+        obtain ⟨l, hl⟩ := allVarsEmpty_none_field s hs
+        exact ⟨l, by simpa [sFieldCount] using hl⟩
+
+-- ε cannot unify a row that still holds a field: ≈ pins the l-count at 0 on the
+-- left, but substitution can only keep the leftover field's count positive.
+-- ⊢  0 < count_l s   ⟹   ¬ ∃ θ. θ ⊨ ε ≐ᵣ ofSpine s
+theorem empty_no_unifier {B : Type} {s : List (Atom B)} {l : Label}
+    (hfield : 0 < sFieldCount l s) :
+    ¬ ∃ θ : TySubst B, Unifies θ Row.empty (ofSpine s) := by
+  rintro ⟨θ, hu⟩
+  unfold Unifies at hu
+  have hfc := rowEquiv_fieldCount_eq l hu
+  simp only [Row.applySubst, Row.toSpine, sFieldCount] at hfc
+  have hle := sFieldCount_applySubst_le θ l (ofSpine s)
+  rw [ofSpine_toSpine] at hle
+  omega
+
+-- The base-case clash is sound (both orientations, by ≈-symmetry).
+-- ⊢  allVarsEmpty s = none   ⟹   ¬ ∃ θ. θ ⊨ ε ≐ᵣ ofSpine s
+theorem allVarsEmpty_none_no_unifier {B : Type} {s : List (Atom B)}
+    (h : allVarsEmpty s = none) :
+    ¬ ∃ θ : TySubst B, Unifies θ Row.empty (ofSpine s) :=
+  let ⟨_, hl⟩ := allVarsEmpty_none_field s h
+  empty_no_unifier hl
+
+-- ⊢  allVarsEmpty s = none   ⟹   ¬ ∃ θ. θ ⊨ ofSpine s ≐ᵣ ε
+theorem allVarsEmpty_none_no_unifier' {B : Type} {s : List (Atom B)}
+    (h : allVarsEmpty s = none) :
+    ¬ ∃ θ : TySubst B, Unifies θ (ofSpine s) Row.empty := by
+  rintro ⟨θ, hu⟩
+  refine allVarsEmpty_none_no_unifier h ⟨θ, ?_⟩
+  unfold Unifies at hu ⊢
+  exact hu.symm
+
 ------------------------- ≐ᵣ SUCCESS SOUNDNESS (SETUP) -----------------------
 -- The success case emits a row-var solution list σ and residual type
 -- equations eqs. A substitution θ "extends σ" when it agrees with every
@@ -2548,6 +2600,9 @@ theorem unifySpineF_fuel_stable {B : Type} (s₁ s₂ : List (Atom B)) {fuel : N
 --    incomplete; the genuine no-unifier case needs a field —
 --    occurs_field_no_unifier (α ∈ vars s₂ ∧ 0 < count_l s₂ ⟹ no unifier), the
 --    occurs analogue of projClash_no_unifier. Both after projClash_no_unifier.
+--    CLASH — both local halves now done: projClash_no_unifier (interior
+--    projection clash) AND allVarsEmpty_none_no_unifier(') (the base case — a
+--    field left on an exhausted side can't unify ε), via empty_no_unifier.
 --    Remaining ≐ᵣ metatheory: mgu-on-success; stuck ⟹ no unique mgu (wand_no_mgu
 --    is the worked instance). NOTE stuck is NOT local to solveVar — only correct
 --    after end-stripping has run, so its soundness needs the control-flow
@@ -2564,4 +2619,5 @@ theorem unifySpineF_fuel_stable {B : Type} (s₁ s₂ : List (Atom B)) {fuel : N
 --    (lookup_det + Discharge.mono_of_definite are the two pillars).
 
 end MinimalCalculus
+
 
