@@ -4,4 +4,4 @@ defaultTargets = ["Spec"]
 [[lean_lib]]
 name = "Spec"
 srcDir = "."
-globs = ["minimal", "Qualified", "RowEquiv", "RowUnify", "algorithmic", "Axioms"]
+globs = ["minimal", "Qualified", "RowEquiv", "RowUnify", "Regressions", "algorithmic", "Axioms"]
