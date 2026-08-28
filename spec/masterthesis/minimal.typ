@@ -4,7 +4,7 @@
 
 l ∈ 𝓛  x ∈ 𝓧  𝓫 ∈ 𝓑  c ∈ 𝓒
 
-e := c | x | (x: e) | e₁e₂ | e₁ ‖ e₂ | e.l | { ξ } | let x = e₁ in e₂
+e := c | x | (x: e) | e₁e₂ | (e₁ ‖ e₂) | e.l | { ξ } | let x = e₁ in e₂
 ξ := ε | l = e | (ξ₁ | ξ₂)
 
 τ := α | 𝓫 | ★ | τ -> τ | { ρ }
@@ -38,13 +38,17 @@ x: σ ∈ Γ   σ ≥ τ
 Γ ⊢ e₁e₂: τ₂
 
 
-Γ ⊢ e₁: τ₁   ᾱ = ftv(τ₁) ∖ ftv(Γ)   Γ·(x: ∀ᾱ. τ₁) ⊢ e₂: τ₂
------------------------------------------------------------- T-let
+(∀ τ₁. σ ≥ τ₁ ⟹ Γ ⊢ e₁: τ₁)   Γ·(x: σ) ⊢ e₂: τ₂
+------------------------------------------------- T-let
 Γ ⊢ let x = e₁ in e₂: τ₂
+// Instance-closed: e₁ must type at *every* instance of σ, so generalization is
+// sound by construction — no ᾱ ∩ ftv(Γ) = ∅ side condition. The standard
+// syntactic rule (generalize ᾱ = ftv(τ₁) ∖ ftv(Γ) from one derivation) is
+// admissible via the type-substitution lemma.
 
 
-Γ ⊢ e₁: {ρ₁}  Γ ⊢ e₂: {ρ₂}
---------------------------- T-conc
+Γ ⊢ e₁: { ρ₁ }  Γ ⊢ e₂: { ρ₂ }
+-------------------------------- T-conc
 Γ ⊢ e₁ ‖ e₂: { ρ₂ | ρ₁ }
 
 
@@ -85,33 +89,30 @@ x: σ ∈ Γ   σ ≥ τ
 
 
 Γ ⊢ ξ₁: ρ₁   Γ ⊢ ξ₂: ρ₂
-------------------------- T-ξ-conc
+-------------------------- T-ξ-conc
 Γ ⊢ (ξ₁ | ξ₂): (ρ₁ | ρ₂)
 
 
 == Instantiation
-- σ ≥ τ strips quantifiers; α in type position takes a type, in row position a row
-- No tail check needed (unlike λ⟨⟩): by monotonicity of ↓, instantiating a
+- (σ ≥ τ) instantiates all quantifiers at once via a substitution θ over ᾱ;
+  each α ∈ ᾱ takes a type at type positions and a row at row positions (θ acts
+  as identity outside ᾱ). I-refl is the ᾱ = ∅ case.
+- *No tail check needed* (unlike λ⟨⟩): By monotonicity of ↓, instantiating a
   row-var can never invalidate a definite lookup result — every position it
   could shadow was already ?-poisoned
 
------------ I-refl
-τ ≥ τ
-
-
-σ[τ′/α] ≥ τ
--------------- I-ty
-(∀α. σ) ≥ τ
-
-
-σ[ρ/α] ≥ τ
--------------- I-row
-(∀α. σ) ≥ τ
+θ = [ᾱ ↦ τ̄ | ρ̄]
+---------------- I-inst
+(∀ᾱ. τ) ≥ θτ
 
 
 == Row-Lookup
-- Γ ⊢ ρ.l ↓ r with r := τ | ⊥ | ?
+- (Γ ⊢ ρ.l ↓ r) with (r := τ | ⊥ | ?)
 - This statement recursively searches rows for a label l
+- Γ additionally carries *row-solutions* (α = ρ): a partial map from row-vars to
+  the rows they stand for (written α = ρ ∈ Γ). L-α consults it; L-α-free fires
+  when α is unsolved. (α = ρ is a row binding, NOT a record type — a row-var
+  ranges over rows ρ, not over record types {ρ}.)
 - Absent means the label provably does not exist in ρ; T-sel-⊥ still types the
   selection at ★ (soft typing: the checker flags it, the ↯-disjunct of progress
   catches it at runtime)
@@ -133,13 +134,13 @@ l₁ ≠ l₂
 Γ ⊢ (l₁: τ).l₂ ↓ ⊥
 
 
-Γ ⊢ α: {ρ}   Γ ⊢ ρ.l ↓ r
--------------------------- L-α
+α = ρ ∈ Γ   Γ ⊢ ρ.l ↓ r
+------------------------ L-α
 Γ ⊢ α.l ↓ r
 
 
-α ∉ Γ
------------- L-α-free
+α unsolved in Γ
+--------------- L-α-free
 Γ ⊢ α.l ↓ ?
 
 
@@ -240,21 +241,20 @@ l₁ ≠ l₂
 (ρ₁ | ρ₂) ⊑ (ρ₁′ | ρ₂′)
 
 
-- Lookup-result precision r′ ⊑ r: only ? can be improved, definite results are
+- Lookup-result precision r′ ⊑ᵣ r: only ? can be improved, definite results are
   final — the relational form of lookup monotonicity. Found-results are
   congruent in ⊑ (their types may sharpen once row precision is in play; on a
   fixed row they stay on the nose), so ⊑-r-refl is derivable
 
-// Wtf is this?
 τ′ ⊑ τ
 --------- ⊑-r-found
 τ′ ⊑ᵣ τ
 
 
 ----------- ⊑-r-⊥
-⊥ ⊑ ⊥
+⊥ ⊑ᵣ ⊥
 
 
 ----------- ⊑-r-?
-r ⊑ ?
+r ⊑ᵣ ?
 
