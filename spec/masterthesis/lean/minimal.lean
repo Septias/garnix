@@ -1,22 +1,23 @@
 -- Lean 4 formalization of masterthesis/minimal.typ
 -- Minimal Calculus: functions, scoped records, record concat, row-vars,
 -- row equivalence, three-way row lookup (τ | ⊥ | ?), let-polymorphism
--- (instance-closed T-let, T-sel-⊥, T-★-intro)
+-- Specialities: (instance-closed T-let, T-sel-⊥, T-★-intro)
 
 namespace MinimalCalculus
 
 ---------------------------------- TERMS -----------------------------------
+
 --  l ∈ 𝓛   x ∈ 𝓧   𝓫 ∈ 𝓑   c ∈ 𝓒
 abbrev Label  := String
 abbrev Var    := String
 abbrev TyVar  := String
 
---   e := c | x | (x: e) | e₁e₂ | e₁ ‖ e₂ | e.l | { ξ } | let x = e₁ in e₂
+--   e := c | x | (x: e) | e₁e₂ | (e₁ ‖ e₂) | e.l | { ξ } | let x = e₁ in e₂
 --   ξ := ε | l = e | (ξ₁ | ξ₂)
 
 inductive RecBody (Term : Type) : Type where
-  | empty : RecBody Term                             -- ε
-  | field : Label → Term → RecBody Term              -- l = e
+  | empty : RecBody Term                                -- ε
+  | field : Label → Term → RecBody Term                 -- l = e
   | cat   : RecBody Term → RecBody Term → RecBody Term  -- ξ₁ | ξ₂
 
 -- Leftmost occurrence wins (scoped labels)
@@ -61,7 +62,7 @@ end
 
 
 -- ## Type schemes  σ := ∀ᾱ. τ
--- ᾱ quantifies over both sorts at once: at instantiation each α ∈ ᾱ may be
+-- ᾱ quantifies over both *sorts* at once: at instantiation each α ∈ ᾱ may be
 -- replaced by a type at Ty-positions (I-ty) and by a row at Row-positions
 -- (I-row). Monotypes embed as ⟨[], τ⟩. (Instantiation itself — Scheme.Inst —
 -- lives further down, after type substitution is defined.)
@@ -79,9 +80,8 @@ structure Scheme (B : Type) where
 --   unitL/unitR  ε is a unit of concatenation
 --   comm         swapping two adjacent singletons with *distinct* labels
 -- Deliberately NOT derivable:
---   swapping equal labels        (would change shadowing)
+--   swapping equal labels         (would change shadowing)
 --   moving a field past a row-var (its instantiation could shadow it)
--- [Paszke & Xie '23, Fig. 3]
 
 mutual
   inductive TyEquiv {B : Type} : Ty B → Ty B → Prop where
@@ -244,7 +244,7 @@ theorem TyEquiv.unk_inv {B : Type} {σ : Ty B}
 ------------------------------------ CONTEXT -----------------------------------
 
 structure Ctx (B : Type) where
-  tyEnv  : List (Var × Scheme B) -- x: σ  (λ binds monotypes, let binds schemes)
+  tyEnv  : List (Var × Scheme B) -- x: σ   (λ binds monotypes, let binds schemes)
   rowEnv : List (TyVar × Row B)  -- α = ρ  (solved row-vars, consulted by L-α)
 
 namespace Ctx
@@ -945,6 +945,11 @@ end
 -- Combined so the recursion (peeling tEq/tUnk) runs over variable indices
 -- only, which is what Lean's structural recursion over inductive families
 -- needs.
+--
+-- If Γ ⊢ e : τ then, up to ≈:
+--   e = c        ⟹  𝓫_c ≈ τ  ∨  τ = ★
+--   e = (x: e′)  ⟹  ∃τ₁τ₂. (τ₁ → τ₂ ≈ τ ∨ τ = ★) ∧ Γ·(x: τ₁) ⊢ e′: τ₂
+--   e = {ξ}      ⟹  ∃ρ. ({ρ} ≈ τ ∨ τ = ★) ∧ Γ ⊢ ξ: ρ
 private theorem typed_inv_aux {B C : Type} {constTy : C → B} :
     {Γ : Ctx B} → {e : Expr C} → {τ : Ty B} → Typed constTy Γ e τ →
     (∀ {c : C}, e = .con c →
@@ -1298,7 +1303,8 @@ inductive Step {C : Type} : Expr C → Expr C → Prop where
 --   Plain progress fails once ★-typed selections can reach records lacking
 --   the label (in the full system, via instantiation). Err marks exactly
 --   these lookup-errors and their propagation through evaluation contexts,
---   so the honest statement is "progress up to lookup-error" (see plan.typ).
+--   so the honest statement is "progress up to lookup-error"
+--   (see thesis.typ, Formal: Metatheory).
 
 -- e ↯ : a selection reached a record without the label, possibly under an
 -- evaluation context (mirrors the congruence rules of Step).
@@ -1615,7 +1621,7 @@ theorem preservation
 
 ---------------------------------- REGRESSION ----------------------------------
 -- The program that breaks preservation without T-sel-⊥/T-★-intro:
---   let f = (x: x.l) in f {}   :   ★
+--   let f = (x: x.l) in f {}:   ★
 -- f's scheme ∀β. {β} → ★ demands the lambda typed at *every* instance
 -- {ρ} → ★; the three-way case split on the (total) lookup of ρ.l hits all
 -- three selection rules — with T-sel-⊥ covering exactly the instance ρ = ε
@@ -1842,12 +1848,12 @@ def Covers {B : Type} (θ : TySubst B) (σ σ' : Scheme B) : Prop :=
   ∀ χ, SchemeAgree θ χ σ → ∀ τ, σ.Inst τ → σ'.Inst (τ.applySubst χ)
 
 -- The four substitutions of the renaming construction:
--- renSub: bound variables to their fresh partners (identity elsewhere)
+-- bound variables to their fresh partners (identity elsewhere)
 private def renSub {B : Type} (prs : List (TyVar × TyVar)) : TySubst B :=
   ⟨fun α => .var (match prs.find? (·.1 == α) with | some p => p.2 | none => α),
    fun α => .var (match prs.find? (·.1 == α) with | some p => p.2 | none => α)⟩
 
--- outSub: θ acting through the renamed binder (identity on the fresh names)
+-- θ acting through the renamed binder (identity on the fresh names)
 private def outSub {B : Type} (θ : TySubst B) (prs : List (TyVar × TyVar)) :
     TySubst B :=
   ⟨fun β => if (prs.find? (·.2 == β)).isSome then .var β else θ.ty β,
@@ -2383,7 +2389,7 @@ theorem typedBody_ext {B C : Type} {constTy : C → B} :
       .cat (typedBody_ext hext hwf h₁) (typedBody_ext hext hwf h₂)
 end
 
--- The ⊑-form stated by the spec [minimal.typ, Refinement] — the shape the
+-- The ⊑-form of refinement (thesis.typ, Motivation) — the shape the
 -- algorithmic soundness proof will consume.
 theorem typed_mono {B C : Type} {constTy : C → B} {Γ Γ' : Ctx B}
     {e : Expr C} {τ : Ty B}
@@ -2393,7 +2399,8 @@ theorem typed_mono {B C : Type} {constTy : C → B} {Γ Γ' : Ctx B}
 
 
 ------------------------------ REFINEMENT EXAMPLE ------------------------------
--- The Motivation example  x: ({l = c} ‖ x).l  — refinement made visible.
+-- The Motivation example (thesis.typ)  x: ({l = c} ‖ x).l  — refinement made
+-- visible.
 -- With x: {β} the concatenation has row (β | l: 𝓫_c) and the lookup of l is ?
 -- (β could shadow it), so the λ types at {β} → ★. Solving β ≔ ε lets the
 -- lookup advance past β and hit l: the same term now ALSO types at the
@@ -2452,7 +2459,7 @@ example {B C : Type} (constTy : C → B) (c : C) :
 -- The algorithmic design (algorithmic.typ, Generalization) forks on whether
 -- schemes may carry stumps (L2) or stay plain ∀ᾱ.τ, finalizing pending stumps
 -- to ★ at the generalization boundary (L1). The L1 principality claim is
--- refuted here, deciding the fork without attempting the proof:
+-- refuted here, deciding the fork with counter examples:
 --
 --   λx. x.l  types at  {(l: τ₀)} → τ₀  for EVERY τ₀   (lookup hits)
 --            and at    {ε} → ★                        (lookup is ⊥)
@@ -2469,7 +2476,7 @@ example {B C : Type} (constTy : C → B) (c : C) :
 --     on x: {ε} the lookup is ⊥ and the body types only at ★.
 -- The principal type needs a result position that stays WRITABLE per
 -- instance: the qualified (stump-carrying) scheme ∀β. ⟨β.l ↓ δ⟩ ⇒ {β} → δ.
--- Hence L1 is soundness-bearing only; principality lives in L2.
+-- Hence L1 is soundness-bearing only; principality lives in L2 (algorithmic).
 
 private def selEx (C : Type) : Expr C := .lam "x" (.sel (.var "x") "l")
 
