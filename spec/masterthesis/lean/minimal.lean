@@ -2,6 +2,7 @@
 -- Minimal Calculus: functions, scoped records, record concat, row-vars,
 -- row equivalence, three-way row lookup (τ | ⊥ | ?), let-polymorphism
 -- Specialities: (instance-closed T-let, T-sel-⊥, T-★-intro)
+-- Algorithmic version (L2) in ./algorithmic.lean
 
 namespace MinimalCalculus
 

@@ -2,7 +2,6 @@
 -- field-count invariant, and the trichotomy legs — success soundness &
 -- completeness (mgu), clash soundness, fuel sufficiency, terminal-stuck
 -- structure, and stuck ⟹ no-mgu (as a reduction). Builds on RowEquiv.
--- Split out of the former algorithmic.lean (see proof-state.md).
 
 import minimal
 import RowEquiv
@@ -10,7 +9,7 @@ import RowEquiv
 namespace MinimalCalculus
 
 ------------------------ THE ROW UNIFICATION ALGORITHM ------------------------
--- ≐ᵣ [algorithmic.typ, Row unification], executable. Works on spines; every
+-- ≐ᵣ Works on spines; every
 -- step is FORCED (solution-set preserving):
 --   * strip a shared var off either end            (U-var-refl; cancel_cat_*)
 --   * solve a whole-var remainder, occurs-checked  (U-var-solve)
@@ -493,6 +492,16 @@ theorem hasMgu_rowEquiv {B : Type} {ρ₁ ρ₂ ρ₁' ρ₂' : Row B}
     ⟨fun hu => ((RowEquiv.applySubst θ h₁).symm.trans hu).trans (RowEquiv.applySubst θ h₂),
      fun hu => ((RowEquiv.applySubst θ h₁).trans hu).trans (RowEquiv.applySubst θ h₂).symm⟩)
 
+-- No-mgu is SYMMETRIC in the two rows: `Unifies` is `RowEquiv` of the two
+-- substituted rows, which is symmetric, so the unifier sets of ρ₁≐ᵣρ₂ and
+-- ρ₂≐ᵣρ₁ coincide. Lets a base no-mgu theorem stated with the field on the LEFT
+-- discharge the mirror config with the field on the RIGHT (and vice versa) — the
+-- var-vs-field leading shape and its field-vs-var mirror are the same kill.
+-- ⊢  HasMgu ρ₁ ρ₂  ↔  HasMgu ρ₂ ρ₁
+theorem hasMgu_symm {B : Type} {ρ₁ ρ₂ : Row B} : HasMgu ρ₁ ρ₂ ↔ HasMgu ρ₂ ρ₁ := by
+  apply hasMgu_congr; intro θ; unfold Unifies
+  exact ⟨RowEquiv.symm, RowEquiv.symm⟩
+
 -- ## Predicate-based mgu: lifting no-mgu through the eq-EMITTING moves
 -- The strip moves preserve the unifier set exactly, so `hasMgu_congr` (stated on
 -- two ROW problems) discharges them. matchL/matchR/groundMatch instead emit a
@@ -615,6 +624,19 @@ theorem vars_vs_field_no_mgu {B : Type} {vs : List TyVar} (hnd : vs.Nodup)
     rw [if_neg (fun hh => hne hh.symm)]
     simp only [Row.toSpine, sFieldCount]
     omega
+
+-- Mirror of vars_vs_field_no_mgu (via hasMgu_symm): a single field facing ≥2
+-- distinct variable hosts on the RIGHT. For a lone field to have any unifier the
+-- other side must be var-free of foreign labels — any concrete k≠l field there is
+-- an outright clash — so unifier-existence already forces the var-side spine
+-- all-vars; this is exactly that canonical shape, flipped. Discharges the
+-- var-vs-field leading shape of stuck_leading_shape (side-2 lone field, side-1
+-- all-vars).
+-- ⊢  vs nodup,  |vs| ≥ 2   ⟹   ¬ HasMgu (l:𝓫) (v₁ | … | vₙ)
+theorem field_vs_vars_no_mgu {B : Type} {vs : List TyVar} (hnd : vs.Nodup)
+    (hlen : 2 ≤ vs.length) (b : B) (l : Label) :
+    ¬ HasMgu (.sing l (.base b)) (ofSpine (vs.map Atom.var)) :=
+  fun h => vars_vs_field_no_mgu hnd hlen b l (hasMgu_symm.mp h)
 
 -- ## The all-variable stuck class: (α | β) ≐ᵣ (β | α) has no mgu
 -- The THIRD base technique: variable non-commutativity. Counting/rigidity cannot
@@ -2522,6 +2544,52 @@ theorem stuck_not_both_ground {B : Type} {a : Atom B} {s₁ s₂ : List (Atom B)
     have hgaux : groundMatchAux (Atom.field l₀ τ :: s₁) s₂ (sLabels (Atom.field l₀ τ :: s₁)) = none := by
       rw [groundMatch, hv₂] at hg; simpa using hg
     exact groundMatchAux_none_of_mem (sLabels (Atom.field l₀ τ :: s₁)) hgaux l₀ hmem₁ ⟨hcount, hpos⟩
+
+-- Leading-atom characterization of a terminal stuck config. With stripL and
+-- both matchL directions dead, the two leading atoms can only take one of four
+-- shapes — none of which a forced move can act on. This is step 1 of the
+-- base-arm DISPATCH the trichotomy still owes: each shape routes to a
+-- base-witness technique (distinct leading vars → non-commutativity /
+-- allvar_swap; a leading field facing a var, either way → count-shrink /
+-- rigidity; two distinct leading fields each absent from the other's window →
+-- count-shrink on the mismatched label). The last shape carries the two
+-- windowExtract-failures the dispatch needs to locate the offending field.
+-- ⊢  stripL/matchL(both) dead   ⟹   the leading atoms are one of the four shapes
+theorem stuck_leading_shape {B : Type} {a b : Atom B} {s₁ s₂ : List (Atom B)}
+    (hsl : stripL (a :: s₁) (b :: s₂) = none)
+    (hml : matchL (a :: s₁) (b :: s₂) = none)
+    (hml2 : matchL (b :: s₂) (a :: s₁) = none) :
+    (∃ α β, a = .var α ∧ b = .var β ∧ α ≠ β) ∨
+    (∃ α l' τ', a = .var α ∧ b = .field l' τ') ∨
+    (∃ l τ β, a = .field l τ ∧ b = .var β) ∨
+    (∃ l τ l' τ', a = .field l τ ∧ b = .field l' τ' ∧ l ≠ l' ∧
+      windowExtract l (b :: s₂) = none ∧ windowExtract l' (a :: s₁) = none) := by
+  cases a with
+  | var α =>
+    cases b with
+    | var β =>
+      -- stripL would fire on equal leading vars, so α ≠ β.
+      refine Or.inl ⟨α, β, rfl, rfl, ?_⟩
+      intro h; subst h; simp [stripL] at hsl
+    | field l' τ' => exact Or.inr (Or.inl ⟨α, l', τ', rfl, rfl⟩)
+  | field l τ =>
+    cases b with
+    | var β => exact Or.inr (Or.inr (Or.inl ⟨l, τ, β, rfl, rfl⟩))
+    | field l' τ' =>
+      refine Or.inr (Or.inr (Or.inr ⟨l, τ, l', τ', rfl, rfl, ?_, ?_, ?_⟩))
+      -- matchL of a leading field fires exactly when the label is in the
+      -- other side's window, so both windowExtracts must be none.
+      · -- l ≠ l' : equal labels would let windowExtract fire at the head.
+        intro h; subst h
+        simp [matchL, windowExtract] at hml
+      · simp only [matchL] at hml
+        cases hwe : windowExtract l (Atom.field l' τ' :: s₂) with
+        | none => rfl
+        | some p => obtain ⟨t, r⟩ := p; rw [hwe] at hml; simp at hml
+      · simp only [matchL] at hml2
+        cases hwe : windowExtract l' (Atom.field l τ :: s₁) with
+        | none => rfl
+        | some p => obtain ⟨t, r⟩ := p; rw [hwe] at hml2; simp at hml2
 
 --------------------------- ≐ᵣ STUCK ⟹ NO-MGU ------------------------------
 -- The third leg of the trichotomy at the algorithm level — but stated HONESTLY

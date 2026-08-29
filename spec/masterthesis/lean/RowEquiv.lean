@@ -2,20 +2,19 @@
 -- the trace-monoid normal form (toSpine/ofSpine, sVarSeq, sProj), the
 -- characterization rowEquiv_iff_char, and full cancellativity. The algebraic
 -- foundation the row-unification algorithm (RowUnify) consumes.
--- Imports only `minimal`. Split out of the former algorithmic.lean.
 
 import minimal
 
 namespace MinimalCalculus
 
 ------------------------- THE ≈-CHARACTERIZATION ------------------------------
--- [algorithmic.typ, Row unification] Rows mod ≈-assoc/units are SPINES (lists
--- of atoms a := l: τ | α); a spine factors into segments (var-free runs)
+-- Rows mod ≈-assoc/units are SPINES (lists of atoms a := l: τ | α);
+-- a spine factors into segments (var-free runs)
 -- separated by vars. ≈-comm swaps adjacent DISTINCT labels only, so within a
 -- segment distinct labels commute freely while equal labels keep their
 -- relative order, and nothing crosses a var. Characterization:
 --
---   ρ₁ ≈ ρ₂   iff   same var sequence   ∧   ∀ l, the l-projections agree
+--   ρ₁ ≈ ρ₂   iff   same var sequence and ∀ l, the l-projections agree
 --                   pointwise (equal segment index, ≈-equivalent types)
 --
 -- The l-projection records, for every l-field in row order, its segment index

@@ -1,7 +1,6 @@
--- Qualified schemes (L2): stumps, discharge, discharge metatheory, the
+-- Qualified schemes: stumps, discharge, discharge metatheory, the
 -- principal qualified scheme of λx.x.l, and the L2 QTyped relation over QCtx.
 -- Independent of the row-unification algorithm (imports only `minimal`).
--- Split out of the former monolithic algorithmic.lean (see proof-state.md).
 
 import minimal
 
@@ -34,13 +33,13 @@ def Scheme.toQ {B : Type} (σ : Scheme B) : QScheme B :=
 
 
 ---------------------------------- DISCHARGE ----------------------------------
--- Γ ⊢ (θρ).l ↓ r  replayed per instantiation θ [algorithmic.typ, D-rules]:
+-- Γ ⊢ (θρ).l ↓ r  replayed per instantiation θ:
 --
---   D-hit    r = τ_r  ⟹  θδ = τ_r     (the T-sel moment)
+--   D-hit    r = τ_r  ⟹  θδ = τ_r    (the T-sel moment)
 --   D-⊥      r = ⊥    ⟹  θδ = ★      (T-sel-⊥; W-flag on the algo side)
 --   D-?      r = ?    ⟹  θδ = ★      (T-sel-★: still-unknown stays blurred;
---                                       algorithmically this case re-parks
---                                       instead — only finalization commits ★)
+--                                     algorithmically this case re-parks
+--                                     instead — only finalization commits ★)
 
 inductive Stump.Discharge {B : Type} (Γ : Ctx B) (θ : TySubst B) (s : Stump B) :
     Prop where
@@ -54,7 +53,7 @@ inductive Stump.Discharge {B : Type} (Γ : Ctx B) (θ : TySubst B) (s : Stump B)
       Lookup Γ (s.row.applySubst θ) s.label .unknown →
       θ.ty s.res = .unk → Discharge Γ θ s
 
--- ## Instantiation-with-discharge  σ ≥_Γ τ
+-- Instantiation-with-discharge  σ ≥_Γ τ
 -- Replaces Scheme.Inst at (a future qualified) T-var. Γ-relative — the price
 -- of cross-instantiation refinement: discharge reads Γ's row-solutions.
 
@@ -65,8 +64,8 @@ def QScheme.Inst {B : Type} (Γ : Ctx B) (σ : QScheme B) (τ : Ty B) : Prop :=
 
 -- Plain schemes embed: with Q = ∅ the discharge condition is vacuous and
 -- ≥_Γ degenerates to the Γ-independent Scheme.Inst. This is the seam between
--- the two files — everything minimal.lean knows about plain schemes lifts
--- across this equivalence.
+-- the two sysstems (decl. & alg.) — everything minimal.lean knows about plain
+-- schemes lifts across this equivalence.
 -- ⊢  σ.toQ ≥_Γ τ   ↔   σ ≥ τ
 theorem QScheme.inst_toQ {B : Type} {Γ : Ctx B} {σ : Scheme B} {τ : Ty B} :
     QScheme.Inst Γ σ.toQ τ ↔ σ.Inst τ := by
@@ -163,7 +162,7 @@ def selQ (B : Type) : QScheme B :=
 --   Γ ⊢ ρ.l ↓ found τ_r  ⟹  {ρ} → τ_r      (what L1 loses)
 --   Γ ⊢ ρ.l ↓ ⊥          ⟹  {ρ} → ★
 --   Γ ⊢ ρ.l ↓ ?          ⟹  {ρ} → ★
--- ⊢  Γ ⊢ ρ.l ↓ r   ⟹   selQ ≥_Γ ({ρ} → collapse r)
+-- ⊢ Γ ⊢ ρ.l ↓ r          ⟹  selQ ≥_Γ ({ρ} → collapse r)
 theorem selQ_inst_of_lookup {B : Type} {Γ : Ctx B} {ρ : Row B}
     {r : LookupRes B} (h : Lookup Γ ρ "l" r) :
     QScheme.Inst Γ (selQ B) (.fn (.rcd ρ) r.collapse) := by
@@ -201,8 +200,7 @@ theorem selQ_inst_absent {B : Type} (Γ : Ctx B) :
 -- The mixed instance {ε} → {ε} — the one every plain scheme was forced to
 -- admit (no_plain_principal_scheme's contradiction) — is NOT an instance:
 -- θ must send β to ε, the lookup on ε is definitely ⊥, and discharge then
--- pins δ at ★, never at {ε}. Discharge is exactly the mechanism that plugs
--- the instance-closedness leak.
+-- pins δ at ★, never at {ε}. *Discharge is exactly the mechanism that plugs the instance-closedness leak.*
 -- ⊢  ¬ ( selQ ≥_∅ ({} → {}) )
 theorem selQ_no_mixed {B : Type} :
     ¬ QScheme.Inst Ctx.empty (selQ B)
@@ -260,7 +258,7 @@ theorem selQ_instance_closed {B C : Type} (constTy : C → B) (Γ : Ctx B) :
 -- refinement but the necessary form of let-generalization for a calculus
 -- with lookup-stumps.
 -- ⊢  ∃ σ.  (∀ τ. σ ≥_∅ τ ⟹ ∅ ⊢ λx.x.l : τ)
---            ∧  σ ≥_∅ ({l: {}} → {})   ∧  σ ≥_∅ ({} → ★)
+--              ∧ σ ≥_∅ ({l: {}} → {}) ∧ σ ≥_∅ ({} → ★)
 theorem qualified_principal_scheme {B C : Type} (constTy : C → B) :
     ∃ σ : QScheme B,
       (∀ τ, QScheme.Inst Ctx.empty σ τ →
@@ -270,7 +268,6 @@ theorem qualified_principal_scheme {B C : Type} (constTy : C → B) :
       QScheme.Inst Ctx.empty σ (.fn (.rcd .empty) .unk) :=
   ⟨selQ B, selQ_instance_closed constTy Ctx.empty,
    selQ_inst_found Ctx.empty (.rcd .empty), selQ_inst_absent Ctx.empty⟩
-
 
 
 --------------------------- THE L2 TYPING RELATION ----------------------------
@@ -310,12 +307,6 @@ theorem lookup_bindScheme (Γ : QCtx B) (x y : Var) (σ : QScheme B) :
   simp only [QCtx.lookup, QCtx.bindScheme, List.find?_cons]
   cases hxy : (x == y) <;> simp_all
 
--- ## The rowEnv view is untouched by term-binding (Phase 0)
--- QScheme.Inst and Discharge see Γ ONLY through `Lookup Γ.ctx …`, and `ctx`
--- reads `rowEnv` alone. Binding a scheme or a monotype changes `tyEnv` only, so
--- the instantiation-with-discharge relation transports across binders on the
--- nose — this is what lets the qLet/qLam substitution cases go through without
--- any discharge bookkeeping. Both hold definitionally.
 -- ⊢  (Γ, x:σ).ctx = Γ.ctx    and    (Γ, x:τ).ctx = Γ.ctx
 theorem ctx_bindScheme (Γ : QCtx B) (x : Var) (σ : QScheme B) :
     (Γ.bindScheme x σ).ctx = Γ.ctx := rfl
@@ -481,7 +472,7 @@ theorem qcanonical_rcd {B C : Type} {constTy : C → B} {Γ : QCtx B} {v : Expr 
         exact ⟨_, _, rfl, heq, hb⟩
       · cases hu
 
--- ## Embedding: every declarative typing is an L2 typing
+-- Embedding: every declarative typing is an L2 typing
 -- Plain contexts embed by Q = ∅ everywhere; discharge is vacuous, lookups
 -- transport because toQ preserves the row-solutions on the nose.
 
