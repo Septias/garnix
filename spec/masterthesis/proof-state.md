@@ -5,9 +5,9 @@
 ## Motivation
 We are creating a calculus that can be used to type real Nixlang code and base it on a row theory inspired by Paszke&Xie extending it with an unknown type ★ and a _delayed lookup relation_ (`Γ ⊢ ρ.l ↓ r`) to form a soft typing system with _type refinement_. We use _scoped rows_ since they give a natural semantic to _asymmetric concat_ where all concatenations are stored in a "bag" and looked up with left-precedence. The row theory of Paszke&Xie shows how to form a _sound typesystem_ with row- and label-variables that can be efficiently solved by _unification_. We want to provide a declarative typesystem and extend it to an algorithmic one in a similar fashion.
 
-Our contribution is a _lookup relation_ that tries to solve one motivating example: `a: b: (a || b).l` which is a lookup on a concatenation of two row-variables that can not be typed easily. The novelty of our approach is to lookup a type on a _best-effort_ basis. Our lookup relation thus returns a result out of (τ | ⊥ | ★) where ⊥ symbolises definite absence of a field and ★ means "we don't know" (yet). Our lookup relation `Γ ⊢ ρ.l ↓ r` is able to lookup row-variables in the context that were instantiated on application.
+Our contribution is a _lookup relation_ that tries to solve one motivating example: `a: b: (a || b).l` which is a lookup on a concatenation of two row-variables that can not be typed easily. This wand-example is actually unsolvable, even with our effort. The novelty of our approach is to lookup a type on a _best-effort_ basis and give back an unkown result ★ in the wand-example. Our lookup relation thus returns a result out of (τ | ⊥ | ?) where ⊥ symbolises definite absence of a field and ? means "we don't know" (yet). Our lookup relation `Γ ⊢ ρ.l ↓ r` is able to lookup row-variables in the context that were instantiated on application. This can also be done with normal substitution of type-variables, but already shows the algorithmic implementation.
 
-This mechanism allows to _refine_ types on function application. See the example `x: ({l: τ} || x).l` of type `? → ★` since the lookup-relation can not look past the type-variable introduced by x. Only after instantiation it becomes clear whether the label is _shadowed_ or not. Applying the argument `x = {}` promotes the unknown type ★ to τ because it becomes clear that x does not shadow the label defined in the literal record.
+This mechanism allows to _refine_ types on function application. See the example `x: ({l: τ} || x).l` of type `{β} → ★` since the lookup-relation can not look past the type-variable introduced by x. Only after instantiation, it becomes clear whether the label is _shadowed_ or not. Applying the argument `x = {}` promotes the unknown type ★ to τ because it becomes clear that x does not shadow the label defined in the literal record.
 
 The type-safety proofs have to account for this new lookup-mechanism in two ways: Progress can only be proven for definite types, but ★ forms a boundary where programs can get stuck. The preservation proof has to account for type refinement by allowing types to become more precise during small steps.
 
@@ -15,25 +15,25 @@ Principality forces qualified schemes that use parked stumps to during unificati
 
 ## Related Files
 - minimal.typ: provides a semi-formal method of the typesystem
-- minimal.lean: provides a fully formal type-system (frozen — L2 lives in its own file)
+- minimal.lean: provides a fully formal type-system
 - algorithmic.typ: Algorithmic ideas
-- algorithmic.lean: umbrella re-export of the split below (2026-08-25 split into 3 files along the two independent halves + the row-algebra foundation):
+- algorithmic.lean: Reexport:
   - Qualified.lean: L2 qualified schemes, discharge, principality, QTyped (imports minimal)
   - RowEquiv.lean: the ≈-characterization / trace-monoid normal form (imports minimal)
   - RowUnify.lean: the ≐ᵣ algorithm + trichotomy legs (imports RowEquiv)
   - Regressions.lean: kernel-checked (`rfl`) worked examples of ≐ᵣ (unify_wand, unify_eq_rescued_stuck, …); each rfl RUNS the algorithm in the kernel, so a behaviour change breaks the build
-  - Axioms.lean: axiom guard (#guard_msgs pins headline theorems' axiom lists; build fails if a sorry/unexpected axiom creeps in)
+  - Axioms.lean: axiom guard
 - In the bib/plaintext folder there is the plaintext version of the Paszke&Xie paper
 
 # Progress
 - [x] Scoped Records
 - [x] Asymmetric Concat
 - [x] Row equivalence ≈ (trace-monoid characterization + full cancellativity mechanized)
-- [~] Refinement ⊑
+- [x] Refinement ⊑
 - [x] Unknown Type Abstraction
 - [x] Let-Statements (instance-closed T-let; syntactic rule proven admissible)
 - [~] L2 qualified schemes (declarative QTyped + discharge + embedding mechanized; safety and strictness open)
-- [~] Unification (algebraic foundation + all worked examples mechanized; ≐ᵣ executable; clash-soundness (projClash) done; SUCCESS-SOUNDNESS fully done + axiom-clean — unifyRow_success_sound, incl. the hard groundMatch counting and full fuel-induction assembly; FUEL-SUFFICIENCY done — unifySpineF_fuel_irrel/_stable, each move eats 2 atoms so |s₁|+|s₂| fuel never runs out, a .stuck is genuine; OCCURS CHARACTERIZED — occurs is CONSERVATIVE: occurs_allVar_unifiable shows unifyRow α (β|α|γ)=occurs but β,γ↦ε unifies (algorithm incomplete on all-var occurrences), genuine occurs needs a field — occurs_field_no_unifier proven; CLASH ALGORITHM-LEVEL done — unifyRow_clash_no_unifier; MGU-ON-SUCCESS done — unifyRow_success_complete (any unifier satisfies the emitted σ,eqs; with soundness the algorithm computes a most general unifier), via the full FORWARD-REFLECTION layer (strip/match/ground_reflect_fwd + field_cancel_left/right) + allVarsEmpty_complete/cat_empty_split/solveVar_complete; STUCK⟹NO-MGU — reusable principle done: instanceOf_fieldCount_mono (θ'⊑θ ⟹ count_l(θ x)≤count_l(θ' x), since subst never deletes a field and ≈ preserves counts — an mgu is pointwise count-minimal) + no_mgu_of_witness_shrinks (every unifier strictly undercut somewhere ⟹ no mgu); wand_no_mgu_count re-proves Wand's (β|α)≐ᵣ(l:𝓫) through it by counting (the l-field's host is beaten 1→0 by the opposite-placement witness). Generalized to n vars: vars_vs_field_no_mgu — (v₁|…|vₙ)≐ᵣ(l:𝓫) for any nodup vs, |vs|≥2, has no mgu (wand = n=2). BOTH canonical stuck shapes done: two_sided_no_mgu — (α|l:𝓫)≐ᵣ(l:𝓫|β) has no mgu, via RIGIDITY (instanceOf_fieldCount_eq_of_varFree: a var-free component of θ is rigid under any instance); the ε,ε witness pins θα to count 0, the unifier eq forces θα var-free, so the doubling witness that needs count 1 there can't factor. Lift infrastructure: HasMgu abstraction + hasMgu_congr/hasMgu_rowEquiv (no-mgu depends only on the unifier set, is a ≈-invariant) + stripL/stripR_hasMgu_iff (strip moves preserve the unifier set, so the STRIP arms of the fuel induction are discharge-ready; demo wand_under_strip_no_mgu). ALL THREE base techniques now done: count-shrink (vars_vs_field_no_mgu), rigidity (two_sided_no_mgu), and non-commutativity (allvar_swap_no_mgu — (α|β)≐ᵣ(β|α), via witnesses forcing θα,θβ field-free + the combinatorial append_comm_subset: A++B=B++A ∧ B≠[] ⟹ vars(A)⊆vars(B) by first-occurrence index). MATCH/GROUND congruence now done: HasMguP (mgu-status of an arbitrary unifier PREDICATE — InstanceOf never mentions the rows) + hasMguP_congr (axiom-free), with matchL/matchR/groundMatch_hasMgu_iff transporting HasMgu (ofSpine s₁)(ofSpine s₂) to HasMguP (λθ. θτ≈ₜθτ' ∧ θ⊨ofSpine t₁≐ᵣofSpine t₂), the eq-constrained residual (all propext/Quot.sound-clean). CAVEAT: unlike strip these SHRINK the unifier set (intersect with eq-satisfiers), so they transport mgu-status but a stuck residual does not by itself kill the original — that additionally needs the base-technique witnesses to satisfy the accumulated eq (the genuine augmented-witness content, now expressible via HasMguP). Remaining for the full lift: assembling the general base arm from the three techniques (+ the all-var argument generalized beyond the swap) and re-running those base witnesses under the accumulated equations (carry them as the HasMguP predicate through the fuel induction); type-level ≐ still open)
+- [~] Unification 
 - [ ] FC-Labels
 - [ ] Patterns
 - [?] Occurrence Typing
@@ -41,13 +41,37 @@ Principality forces qualified schemes that use parked stumps to during unificati
 - [?] With
 - [?] Inherit
 
+## Unification
+- [x] all worked examples mechanized;
+- [x] ≐ᵣ executable; clash-soundness (projClash) done;
+- Soundness
+  - [x] Success
+   - a .stuck is genuine;
+- [x] OCCURS CHARACTERIZED
+  occurs is CONSERVATIVE:
+- [x] CLASH ALGORITHM-LEVEL done — unifyRow_clash_no_unifier;
+- [x] MGU-ON-SUCCESS done
+- [x] STUCK⟹NO-MGU
+  - reusable principle done
+- [x] ALL THREE base techniques now done:
+  - count-shrink (vars_vs_field_no_mgu)
+  - rigidity (two_sided_no_mgu)
+  - non-commutativity
+- [x] MATCH/GROUND congruence now done:
+- CAVEAT: unlike strip these SHRINK the unifier set (intersect with eq-satisfiers), so they transport mgu-status but a stuck residual does not by itself kill the original — that additionally needs the base-technique witnesses to satisfy the accumulated eq (the genuine augmented-witness content, now expressible via HasMguP).
+- [ ] Remaining for the full lift: assembling the general base arm from the three techniques (+ the all-var argument generalized beyond the swap) and re-running those base witnesses under the accumulated equations (carry them as the HasMguP predicate through the fuel induction);
+- [ ] type-level ≐
+
+
 ## Symbols
 - ↓: Row-lookup relation, three-way result r := (τ | ⊥ | ?)
 - ★: Definite uncertainty, no elimination
 - ⊑: Precision relation for ★
   - Every other type is below ★
 - ≈: Row-equivalence relation
-- ≤: Instantiation relation for type-schemes
+- ≤|≥: Instantiation relation for type-schemes
+  - τ ≤ σ: τ is an instance of σ
+  - σ ≥ τ: σ instantiates as τ
 - ≐: Type unification
 - ≐ᵣ: Row unification
 - ⊴: "At least as general" (covering order on schemes)
@@ -56,8 +80,7 @@ Principality forces qualified schemes that use parked stumps to during unificati
 - ↓: deterministic, monotone, total (under RowWF)
 - ⊑: reflexive, transitive (limmited)
 - ≈: refl, symm, trans, congruence under |; adjacent distinct labels commute, ε is a unit
-- ρ: rows mod ≈ form a trace monoid (partially-commutative, cancellative) — MECHANIZED (rowEquiv_iff_char + cancel_var_left/right, algorithmic.lean)
-
+- ρ: rows mod ≈ form a trace monoid (partially-commutative, cancellative)
 
 ## Proof Overview
 Proofs are for _closed_ programs (Γ = ∅). e ↯ marks _lookup-errors_: a selection reached a record literal without the label. ★ makes such programs typeable (now also via T-sel-⊥), so progress only holds up to ↯. 
@@ -70,7 +93,6 @@ Proofs are for _closed_ programs (Γ = ∅). e ↯ marks _lookup-errors_: a sele
 *Preservation*: If ∅ ⊢ e: τ and e → e' then ∅ ⊢ e'
 *Soundness*: If ⊨ e: τ then ⊢ e: τ
 *Completeness*: If ⊢ e: τ then ⊨ e: τ
-
 
 ## Lemma Overview
 - Progress & Preservation:
@@ -140,7 +162,7 @@ Proofs are for _closed_ programs (Γ = ∅). e ↯ marks _lookup-errors_: a sele
     - `unifySpineF_success_sound`: induction on the fuel, discharging every match arm (stripL/R, solveVar×2, matchL×2, matchR×2, groundMatch×2, base allVarsEmpty) by the reflection lemma; lifted to `unifyRow` via `toSpine_equiv` congruence.
   - *STUCK ⟹ NO-MGU threading — DONE as a REDUCTION, axiom-clean* (algorithmic.lean, "STUCK ⟹ NO-MGU" section): `unifySpineF_stuck_no_mgu` / `unifyRow_stuck_no_mgu` — given the terminal base arm (`hbase`: a genuinely-stuck config, every move dead + no projClash, together with its accumulated eq-predicate Q has no mgu), a `.stuck` verdict rules out an mgu of the whole problem. Fuel induction mirroring `unifySpineF_clash_no_unifier` but pulling NO-MGU status BACKWARD through each move via `hasMguP_congr` on the per-θ reflect/reflect_fwd iffs (`hasMguP_not_of_iff`); strip arms keep Q, the eq-emitting arms (matchL/R, groundMatch, ×2 each) augment Q with the move's type equation; base/nil arms discharged by `solveVar_ne_stuck` + `addEq_stuck_inv`. propext/Quot.sound only, no sorry.
   - *KEY FINDING — the naive stuck ⟹ no-mgu is FALSE at the row level* (kernel-checked, `unify_eq_rescued_stuck`): `unifyRow (k:{β}|β|α) (k:{l:𝓫}|l:𝓫) = stuck`, yet a UNIQUE mgu exists (β↦(l:𝓫), α↦ε). matchL peels k emitting the type eq {β}≐{l:𝓫}; the residual (β|α)≐(l:𝓫) is Wand (stuck), but the emitted eq forces β≈(l:𝓫) hence α≈ε. The single row pass does NOT solve the emitted equations, so its stuck verdict is incomplete whenever an emitted eq re-constrains a stuck row-var. Consequence: the threading above is the HONEST form — mgu-status is decided at the base config TOGETHER WITH Q; `hbase` is NOT universally true (it fails on exactly this Q). It holds when Q does not re-constrain the stuck row-vars (e.g. Q between var-free field types) — that side condition + the three base-witness techniques (count-shrink / rigidity / non-commutativity, all already proven) is the remaining paper-level content. algorithmic.typ's trichotomy (c) must be restated relative to the emitted equations (or to the type-level driver ≐ that solves+re-runs them).
-  - *TERMINAL-SHAPE STRUCTURE — de-risking started, axiom-clean* (algorithmic.lean, "TERMINAL STUCK-SHAPE STRUCTURE"): `stuck_not_both_ground` — a genuinely-stuck terminal config (groundMatch=none, projClash=false) can NOT have both sides var-free, so it always has a live row-var and thus sits in the setting of the three base-witness techniques. Built from `removeField_isSome_of_pos` (positive l-count ⟹ removeField fires), `groundMatchAux_none_of_mem` (groundMatch=none ⟹ no scanned label has equal positive counts both sides), `projClash_false_count_eq` (projClash=false + both var-free ⟹ all counts equal — the two together are contradictory at the leading field's label). propext/Quot.sound only.
-  - *open (rest of trichotomy)*: finish the terminal-shape characterization (leading-atom cases: distinct leading vars vs field-not-in-window-ending-at-var) and dispatch each to a base-witness technique, generalized from the closed demo shapes to arbitrary context (the all-var-beyond-swap generalization is the one genuinely open bit) — all under the "Q doesn't re-constrain stuck vars" side condition; the type-level driver ≐ (solves emitted eqs, mutually recursing into rows — this is also what makes the stuck verdict complete)
+  - *TERMINAL-SHAPE STRUCTURE — de-risking in progress, axiom-clean* (algorithmic.lean, "TERMINAL STUCK-SHAPE STRUCTURE"): TWO characterization lemmas now pin down the base-arm's obligations. (1) `stuck_not_both_ground` — a genuinely-stuck terminal config (groundMatch=none, projClash=false) can NOT have both sides var-free, so it always has a live row-var and thus sits in the setting of the three base-witness techniques. Built from `removeField_isSome_of_pos` (positive l-count ⟹ removeField fires), `groundMatchAux_none_of_mem` (groundMatch=none ⟹ no scanned label has equal positive counts both sides), `projClash_false_count_eq` (projClash=false + both var-free ⟹ all counts equal — the two together are contradictory at the leading field's label). (2) `stuck_leading_shape` (NEW) — with stripL + both matchL directions dead, the LEADING atoms of a terminal config are one of exactly FOUR shapes: distinct leading vars / var-vs-field / field-vs-var / two distinct leading fields each absent from the other's window (carrying the two windowExtract=none facts the dispatch needs to locate the offending label). This enumerates the base-arm's case split: each shape routes to a base-witness technique (distinct vars → non-commutativity/allvar_swap; a field facing a var → count-shrink/rigidity; disjoint-window fields → count-shrink on the mismatched label). propext only (structural, no Quot.sound).
+  - *open (rest of trichotomy)*: DISPATCH each `stuck_leading_shape` case to its base-witness technique, generalized from the closed demo shapes (wand/two_sided/allvar_swap + vars_vs_field_no_mgu) to arbitrary spine context — the all-var-beyond-swap generalization is the one genuinely open bit — then discharge `hbase` to drop it as a hypothesis of `unifyRow_stuck_no_mgu`; all under the "Q doesn't re-constrain stuck vars" side condition; plus the type-level driver ≐ (solves emitted eqs, mutually recursing into rows — this is also what makes the stuck verdict complete)
 
 
