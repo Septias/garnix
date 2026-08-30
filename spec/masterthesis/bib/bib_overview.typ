@@ -46,7 +46,7 @@
 ⊕ Asymmetric Concat
 ⊕ Expressive constraints: $\_ ⊙_~ \_$(containment) and $ζ ⧀ ζ$(subtype)
 ⊖ System F (Explizite type-application)
-⊖ _Keine Inferenz für Lets_
+⊖ [_Keine Inferenz für Lets_]¿
 
 
 == Generic Programming with Extensible Rows @generic_with_extensible
