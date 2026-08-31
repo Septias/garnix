@@ -15,7 +15,6 @@
 - [x] _Designing Record Systems_
   - Weil inference und FC-Labels
   - Mit HM(x) ein bisschen strange, inference nicht genau klar und nur theoretisch
-- [x] Algorithm M
 
 == Records
 - Daan Leijen
@@ -47,7 +46,7 @@
 ⊕ Expressive constraints: $\_ ⊙_~ \_$(containment) and $ζ ⧀ ζ$(subtype)
 ⊖ System F (Explizite type-application)
 ⊖ [_Keine Inferenz für Lets_]¿
-
+⊖ "We leave questions of efficiency to future work"
 
 == Generic Programming with Extensible Rows @generic_with_extensible
 > Map rows to things and back?
