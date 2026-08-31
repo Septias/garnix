@@ -11,17 +11,18 @@ This mechanism allows to _refine_ types on function application. See the example
 
 The type-safety proofs have to account for this new lookup-mechanism in two ways: Progress can only be proven for definite types, but ★ forms a boundary where programs can get stuck. The preservation proof has to account for type refinement by allowing types to become more precise during small steps.
 
-Principality forces qualified schemes that use parked stumps to during unification to get mgus in many cases. The wand-example is re-stated in a similar form to the motivating example and forces a trichotomy: success + mgu, hard error or no mgu possible. In comparison we can drop the LU-tail rule which forces fields into rows since our parking-mechanism allows us to postpone the decision on what to do in this case. This allows us to type [strictly more]¿ examples.
+Principality forces qualified schemes that use parked stumps during unification to get mgus in many cases. A tetrachotomy for the unification algorithms outcome is wanted.
+
 
 ## Related Files
 - minimal.typ: provides a semi-formal method of the typesystem
 - minimal.lean: provides a fully formal type-system
 - algorithmic.typ: Algorithmic ideas
 - algorithmic.lean: Reexport:
-  - Qualified.lean: L2 qualified schemes, discharge, principality, QTyped (imports minimal)
-  - RowEquiv.lean: the ≈-characterization / trace-monoid normal form (imports minimal)
-  - RowUnify.lean: the ≐ᵣ algorithm + trichotomy legs (imports RowEquiv)
-  - Regressions.lean: kernel-checked (`rfl`) worked examples of ≐ᵣ (unify_wand, unify_eq_rescued_stuck, …); each rfl RUNS the algorithm in the kernel, so a behaviour change breaks the build
+  - Qualified.lean: L2 qualified schemes, discharge, principality, QTyped
+  - RowEquiv.lean: the ≈-characterization / trace-monoid normal form 
+  - RowUnify.lean: the ≐ᵣ algorithm + trichotomy legs
+  - Regressions.lean: Some kernel-checked examples
   - Axioms.lean: axiom guard
 - In the bib/plaintext folder there is the plaintext version of the Paszke&Xie paper
 
@@ -31,8 +32,8 @@ Principality forces qualified schemes that use parked stumps to during unificati
 - [x] Row equivalence ≈ (trace-monoid characterization + full cancellativity mechanized)
 - [x] Refinement ⊑
 - [x] Unknown Type Abstraction
-- [x] Let-Statements (instance-closed T-let; syntactic rule proven admissible)
-- [~] L2 qualified schemes (declarative QTyped + discharge + embedding mechanized; safety and strictness open)
+- [x] Let-Statements
+- [~] Qualified schemes (*progress* open)
 - [~] Unification 
 - [ ] FC-Labels
 - [ ] Patterns
@@ -40,6 +41,11 @@ Principality forces qualified schemes that use parked stumps to during unificati
 - [?] Recursive types
 - [?] With
 - [?] Inherit
+
+## Tisch
+- Subtyping for pattern functions
+- Occurence Typing with ifs
+
 
 ## Unification
 - [x] all worked examples mechanized;
@@ -51,8 +57,8 @@ Principality forces qualified schemes that use parked stumps to during unificati
   occurs is CONSERVATIVE:
 - [x] CLASH ALGORITHM-LEVEL done — unifyRow_clash_no_unifier;
 - [x] MGU-ON-SUCCESS done
-- [x] STUCK⟹NO-MGU
-  - reusable principle done
+- [x] STUCK⟹NO-MGU — but only as a REDUCTION, the naive statement is FALSE.
+  - reusable order-agnostic threading principle done
 - [x] ALL THREE base techniques now done:
   - count-shrink (vars_vs_field_no_mgu)
   - rigidity (two_sided_no_mgu)
@@ -131,6 +137,9 @@ Proofs are for _closed_ programs (Γ = ∅). e ↯ marks _lookup-errors_: a sele
   - *plain embedding*: Q = ∅ degenerates ≥\_Γ to the Γ-independent Scheme.Inst
   - *discharge determinism*: Row discharge is deterministic
   - *definite-stability*: a resolved stump never re-checks, wake-up only improves
+  - *instance-closedness*: EVERY ≥\_Γ-instance of selQ = ∀β δ. ⟨β.l ↓ δ⟩ ⇒ {β} → δ
+    is a declarative typing of λx. x.l, in ANY Γ (selQ_instance_closed) — the three
+    discharge cases replay T-sel / T-sel-⊥ / T-sel-★ per instance
   
 - ≈-characterization:
   - *normal form*: rows flatten to spines
@@ -147,6 +156,4 @@ Proofs are for _closed_ programs (Γ = ∅). e ↯ marks _lookup-errors_: a sele
   - *SUCCESS SOUNDNESS*:
     - *MOVE-REFLECTION lemmas*: θ unifies the residual ofSpine tᵢ ⟹ θ unified the original ofSpine sᵢ"
     - *U-GROUND*: a field does NOT commute past a var, shadowing
-  - *STUCK ⟹ NO-MGU threading*: ye 
-
 
