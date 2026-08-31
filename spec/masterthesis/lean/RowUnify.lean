@@ -28,7 +28,7 @@ namespace MinimalCalculus
 --
 -- No LUtail: field demands never flow through ≐ᵣ (they park as stumps), so
 -- the algorithm never guesses a field into a var. Type equations are EMITTED
--- (τ ≐ τ' pairs), not solved — the type-level driver is future work.
+-- (τ ≐ τ' pairs), not solved — *the type-level driver is future work*.
 --
 -- Presentation uses fuel (structural recursion ⟹ the algorithm computes by
 -- rfl; the regressions below are kernel-checked executions). Every recursive
