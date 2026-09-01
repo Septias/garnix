@@ -17,7 +17,7 @@
     - [ ] Unification
   - [ ] Metatheory
   - [ ] Towards Nix
-  - [ ] Related Work
+  - [ ] Related Work (Broekhoff?)
 
 
 ## Kalenderwochen
