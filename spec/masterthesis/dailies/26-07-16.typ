@@ -9,6 +9,7 @@
 == Fragen
 - Do we "solve" the motivating example?
   - Well, we give more information
+    - Nope
 - What kind of operational semantics?
   - Wahrscheinlich sollte ich die schon kurz zeigen?
 

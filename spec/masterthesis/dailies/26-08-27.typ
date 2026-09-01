@@ -10,27 +10,6 @@
 - [ ] Isn't the Discharge rule too permissive because it turns a bottom-lookup into ★?
 
 
-================================================
-Ausschnitt aus `./minimal.typ`
-------------------------------------------------
-// I think this blur is fine?
-Γ ⊢ e: {ρ}   Γ ⊢ ρ.l ↓ ?
--------------------------- T-sel-★
-Γ ⊢ e.l: ★
-
-
-// Allows to not error on lazy errors
-Γ ⊢ e: {ρ}   Γ ⊢ ρ.l ↓ ⊥
--------------------------- T-sel-⊥
-Γ ⊢ e.l: ★
-
-
-Γ ⊢ e: τ
---------- T-★-intro
-Γ ⊢ e: ★
-===============================================
-
-
 == Misc
 - Patterns sind (noch) nich drin
-- Two-directional inversion: Showing equality by profing both directions
+- Two-directional inversion: Showing equality by proving both directions

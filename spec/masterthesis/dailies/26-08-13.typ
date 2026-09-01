@@ -6,12 +6,11 @@
 - Look at dem new examples ../examples/examples.typ
 - *T-sel-⊥* ist kompletter Quatsch
   - Actually nein
-
 - Weirdness von Proofs checken
   - Instance-closed Let
     - Wird gebraucht um renaming-machinery zu dodgen
   - T-sel-★ and T-sel-⊥
-    - Currently needs principled types
+    - Currently needs principled types¿
   - Relation von ≈ and ⊑
   - Variablen immernoch strings
     - Laut AI erstmal noch lassen

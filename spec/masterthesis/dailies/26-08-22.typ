@@ -14,7 +14,7 @@
 - Wie akkurat ist die Einführung in ../proof-state.md:10?
   - Angepasst
 - Was genau macht das replay (D-hit/D-⊥/D-?)
-  - Unification lule
+  - Constraint auf substitution
 - Lake projekt für richtige LSP-Features?
   - Ja, done
 - Ist mir Claude too verbose? Muss ich da ein bisschen strippen?

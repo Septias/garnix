@@ -3,7 +3,7 @@
 ./26-06-21.typ
 
 == Meeting
-- Unfication, Instantation und Subtyping rules schon fertig dann?
+- Unification, Instantation und Subtyping rules schon fertig dann?
   - Vielleicht nicht 100% notwendig aber auf jeden Fall schonmal gut
 
 == Contribution

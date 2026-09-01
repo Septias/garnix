@@ -8,7 +8,7 @@
 - Subtstitution für Row-Vars über unification, nh?
 - Instantation muss noch geklärt werden
 - (davor aber deklarative Beweise fertig imo.)
-- Irgendwann könnte man sich noch überlegen, lacks-predikate hinzuzufügen
+- Irgendwann könnte man sich noch überlegen, Lacks-Predikate hinzuzufügen
 
 
 == Subtyping

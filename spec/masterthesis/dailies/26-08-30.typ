@@ -2,7 +2,7 @@
 
 == Fäden
 - Was genau ist die Relation davon zu ROSE?
-  - Rose hat halt zwei relations: containment und equality
+  - Rose hat halt zwei Relations: Containment und Equality
   - Ich habe nur eine: lookup in rows
   - Kann ich generische lookup function typen?
     - `f: ⟨ρ.l ↓ δ⟩ => ρ -> δ`
