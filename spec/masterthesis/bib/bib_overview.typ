@@ -15,6 +15,8 @@
 - [x] _Designing Record Systems_
   - Weil inference und FC-Labels
   - Mit HM(x) ein bisschen strange, inference nicht genau klar und nur theoretisch
+- [ ] Read ATIA
+  - Weil Inferenz, neu, und Morris
 
 == Records
 - Daan Leijen
