@@ -1,0 +1,18 @@
+
+- Ich hab mir die ganzen Proofs mal genauer angeschaut
+- Bisschen Brainstorming über die kommende Zeit
+  - Plan ist im kommenden Monat beweise fertig und dann schreiben.
+  - ⊖ Broekhoff-Semantik
+    - Ziel ist eher Typinferenz und die genaue Semantik da eher ein Hinderniss (Rekursive, Randfälle)
+  - Ich brauche noch so 2 Wochen für Nix-Erweiterungen
+    - Occurrence, With, Inherit, Patterns
+- Kann man System F⊕⊗ mit Rank 1 Poly verwenden?
+  - Nope geht nicht, weil tuples ∀ sein können, also sind die tuples nicht Rank-1
+  - Außerdem sind die lets gerade auch mit expliziten Schemes (geht nicht für Nix)
+- Ich habe mir Qualified Types mit ⟨ρ.l ↓ δ⟩ angeschaut
+  - Explain why this keeps principality
+    - Return type ist jetzt einfach δ
+    - Die schemes constrainen das δ, dass kein ill-typing möglich ist
+- Daraus resultiert die Trychotomy oder Tetratochomy
+- ↯ ist das Fragment von Fehlern in Progress, dass durch fehlerhafte lookups im ★-Fragment auftritt
+- Ich möchte bis Ende des Monats den theoretischen Teil beenden.- Die Regeln T-sel-⊥ und T-sel-★ und deren Begründung
