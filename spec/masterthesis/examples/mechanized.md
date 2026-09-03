@@ -1,5 +1,4 @@
-# Mechanized Examples
-
+# Typings
 
 a: b: (a ‖ b).l
 ----------------
@@ -80,7 +79,7 @@ ONE binding, TWO uses at incompatible refined instances: the found-typing and
 the ⊥-typing of the same scheme, each discharging its own copy of the stump.
 
 
-
+# Unification
 (l₁: 𝓫 | α) ≐ᵣ (l₂: 𝓫 | α),  l₁ ≠ l₂     ⟹  no unifier
 ---------------------------------------------------------
 P&X's shared-tail pitfall, the example motivating their side condition
@@ -101,6 +100,7 @@ P&X need field demands to flow into rows through unification, ours flow
 through the lookup relation and park as stumps, so ≐ᵣ only ever states
 structural EQUALITY of two rows and never has to guess a field into a var.
 **This is the algorithmic payoff of the T-sel/★ design.**
+
 
 (β | α) ≐ᵣ (l: 𝓫)     solutions EXIST, but no mgu
 --------------------------------------------------
@@ -132,34 +132,31 @@ trailing atom is a var), yet the answer is forced: the right side is var-free
 and both sides have exactly one l-field, so by COUNTING the vars cannot
 contribute any l-field and the pairing is positional. **This example is what
 forced the U-ground rule into existence — the mechanization surfaced that the
-window rules alone do not cover it.** Its soundness is the one genuinely
-non-local step in the whole file (groundMatch_reflect reads the counting back
-out of the residual solution).
+window rules alone do not cover it.**
+
 
 (α | l: 𝓫) ≐ᵣ (l: 𝓫 | β),  α ≠ β     ⟹  STUCK
 -------------------------------------------------
-✓ (RowUnify.lean: two_sided_no_mgu) ✓rfl (unify_two_sided_stuck) — the OTHER
-canonical stuck shape: both windows closed by a var, both sides have vars,
-Levi splits two ways. Worth stating separately because the counting argument
-CANNOT kill it — the (α,β ↦ ε) unifier has l-count 0 at every variable, so
-there is nothing to undercut. The kill is RIGIDITY instead: the empty witness
-pins the counts at 0, the unifier equation forces θα var-free, and a var-free
-component of a substitution has a FIXED count under every instance, which the
-doubling witness (α,β ↦ l:𝓫) then contradicts.
+the OTHER canonical stuck shape: both windows closed by a var,
+both sides have vars, Levi splits two ways. Worth stating separately because
+the counting argument CANNOT kill it — the (α,β ↦ ε) unifier has l-count 0 at
+every variable, so there is nothing to undercut. The kill is RIGIDITY instead:
+the empty witness pins the counts at 0, the unifier equation forces θα var-free,
+and a var-free component of a substitution has a FIXED count under every
+instance, which the doubling witness (α,β ↦ l:𝓫) then contradicts.
 
 (α | β) ≐ᵣ (β | α)     ⟹  no mgu
 -----------------------------------
-✓ (RowUnify.lean: allvar_swap_no_mgu) — the third and last base technique,
-needed because the all-variable case has NO fields for counting or rigidity to
-bite on. The kill is combinatorial: witnesses force θα, θβ field-free, the
-unifier equation gives var-sequences with A ++ B = B ++ A, a first-occurrence
-index argument (append_comm_subset, the membership fragment of
-Lyndon–Schützenberger) forces vars(A) ⊆ vars(B), and emptying B's vars then
-collapses θα — contradicting the field it must carry. **Variables do not
-commute; that non-commutativity is itself a proof technique.**
+the third and last base technique, needed because the all-variable case has
+NO fields for counting or rigidity to bite on. The kill is combinatorial:
+witnesses force θα, θβ field-free, the unifier equation gives var-sequences
+with A ++ B = B ++ A, a first-occurrence index argument (append_comm_subset,
+the membership fragment of Lyndon–Schützenberger) forces vars(A) ⊆ vars(B),
+and emptying B's vars then collapses θα — contradicting the field it must carry.
+**Variables do not commute; that non-commutativity is itself a proof technique.**
 
 
-## 5. What the occurs check really means
+# Occurrence Check
 
 α ≐ᵣ (l: 𝓫 | α)     ⟹  CLASH  (not occurs)
 ---------------------------------------------
@@ -179,14 +176,22 @@ inside the right side — an impossible strict growth.
 
 α ≐ᵣ (β | α | γ)     reported OCCURS, yet UNIFIABLE (β, γ ↦ ε)
 ----------------------------------------------------------------
-⚠ (RowUnify.lean: occurs_allVar_unifiable) — the occurs check is
-CONSERVATIVE, and this example proves it. An all-variable interior occurrence
-is perfectly unifiable by collapsing the surrounding variables to ε, but the
-algorithm rejects it. So `.occurs` does NOT carry a no-unifier guarantee —
-only the field-pinned case does. **This is worth saying out loud in the thesis,
+⚠ (RowUnify.lean: occurs_allVar_unifiable, occurs_allVar_hasMgu) — the occurs
+check is CONSERVATIVE, and this example proves it. An all-variable interior
+occurrence is perfectly unifiable by collapsing the surrounding variables to ε,
+but the algorithm rejects it. So `.occurs` does NOT carry a no-unifier guarantee
+— only the field-pinned case does. **This is worth saying out loud in the thesis,
 since "occurs check" ordinarily connotes definite non-unifiability.** It is a
 soundness-preserving incompleteness (we reject some solvable problems), not a
 soundness bug.
+
+Sharper still: the rejected problem has an MGU, not merely a unifier
+(occurs_allVar_hasMgu). Counting kills every field in θβ, θγ, and the
+var-sequence equation A = B ++ A ++ C forces |B| = |C| = 0 by length; field-free
+plus var-free is ε, so every unifier already AGREES with (β, γ ↦ ε) there and
+factors through it via σ ≔ θ itself. The guard therefore does not just lose
+completeness for unifiability — **it discards a principal solution**, i.e. it
+rejects a problem the trichotomy files under case (a).
 
 
 ## 6. The stuck leg: what the trichotomy can and cannot claim
@@ -209,6 +214,71 @@ equations Q — which is exactly how unifySpineF_stuck_no_mgu is stated (as a
 reduction carrying Q as an arbitrary unifier predicate), and why its base
 hypothesis is not universally true.
 
+(l: 𝓫 | α) ≐ᵣ (m: 𝓫 | β),  l ≠ m     STUCK — yet an mgu EXISTS
+------------------------------------------------------------------
+⚠⚠ (RowUnify.lean: crossfield_stuck_unifiable) — a SECOND, independent way the
+stuck verdict is wrong, and the more damaging one: unlike unify_eq_rescued_stuck
+this config emits NO equations at all. Every move is dead at the very first step
+(each side's window is closed by the other's leading field, so both matchL
+directions fail; both sides carry a var, so groundMatch and projClash cannot
+fire), hence Q is EMPTY and the Q side condition is vacuously satisfied. There is
+nothing here for a mutually-recursive type solver to solve either. The verdict is
+simply INCOMPLETE.
+
+The unifier is forced. Reading the ≈-characterization on a unifier θ, writing
+A = θα and B = θβ:
+
+    proj_m A = (0, 𝓫) :: proj_m B          proj_l B = (0, 𝓫) :: proj_l A
+    proj_k A = proj_k B   (k ∉ {l, m})     vars A = vars B
+
+Segment index 0 means "before the first var", so A ≈ (m: 𝓫 | R); feeding that
+back gives B ≈ (l: 𝓫 | R) for the SAME R. Hence
+
+    α ↦ (m: 𝓫 | X),   β ↦ (l: 𝓫 | X)      (X fresh)
+
+is an mgu. MECHANIZED so far: the stuck verdict, and that this substitution
+unifies. The maximality half is derived by hand off rowEquiv_iff_char and is NOT
+yet machine-checked.
+
+The missing rule is Rémy-style variable EXPANSION. ≐ᵣ refuses to guess which
+variable hosts a demanded field — which is exactly what keeps Wand honest, since
+there TWO variables could host it — but when the host is UNIQUE, refusing costs
+completeness for nothing. The precondition that separates the two cases:
+
+    s₁ = (l: τ | t₁),   windowExtract l s₂ = none,
+    sFieldCount l s₂ = 0        (no l ANYWHERE in s₂, not just its window),
+    s₂ has exactly ONE variable β,     β ∉ vars s₁
+  ⟹  β ≔ (l: τ | β′),  recurse on  (t₁,  s₂[β := β′])
+
+All three clauses are load-bearing, and each is refuted by one of the examples
+already in this file:
+
+  · Wand (β | α) ≐ᵣ (l: 𝓫): receiving side has TWO vars, so the field's host is
+    genuinely ambiguous — the move must not fire, and does not.
+  · two-sided (α | l: 𝓫) ≐ᵣ (l: 𝓫 | β): the receiving side already HAS an l,
+    after its var. Its own field can slide to segment 0 when θα turns out
+    var-free (that is precisely the ε witness of two_sided_no_mgu), so the host
+    is again not forced. Hence the count must be checked over the whole spine,
+    not just the window — windowExtract alone would misfire here.
+  · β ∈ vars s₁ would make the expansion grow the LEFT spine too; those configs
+    are cancelled by stripR first anyway (cf. unify_occurs_cancelled).
+
+On the example the move closes the problem outright:
+
+    [l:𝓫, α] ≐ᵣ [m:𝓫, β]   --expand-->   β ≔ (l:𝓫 | β′),  [α] ≐ᵣ [m:𝓫, β′]
+                           --solveVar->  α ≔ (m:𝓫 | β′)
+    σ = [β ≔ (l:𝓫 | β′),  α ≔ (m:𝓫 | β′)]        = the mgu above, X = β′
+
+and it costs nothing in the termination argument: |s₁| loses one atom and |s₂| is
+unchanged (β occurs once in s₂ and not at all in s₁), so the measure |s₁| + |s₂|
+still strictly decreases and the existing fuel structure survives.
+
+**The two failures are exactly complementary: every base-arm witness technique
+needs ≥2 candidate hosts, and exactly-one-host is precisely where none of them
+can fire.** That is why the stuck-leg dispatch could not be closed as stated —
+the unique-host configs do not belong in the base arm at all, they belong in the
+algorithm.
+
 ¬ HasMgu (γ | β | α) (γ | l: 𝓫)
 ---------------------------------
 ✓ (RowUnify.lean: wand_under_strip_no_mgu) — the Wand core wrapped in a shared
@@ -225,9 +295,7 @@ EQ-EMITTING arm. matchL peels the shared leading field, emitting the eq
 (they intersect it with the eq-satisfiers) rather than preserving it, they
 transport mgu-status only through the predicate-level congruence (HasMguP).
 Here the emitted eq happens to be vacuous so it collapses back to plain
-HasMgu; **the genuine content — re-running the base witnesses under a
-NON-vacuous accumulated equation — is exactly what unify_eq_rescued_stuck
-shows is necessary, and is the remaining open work.**
+HasMgu;
 
 (v₁ | … | vₙ) ≐ᵣ (l: 𝓫),  n ≥ 2 distinct     ⟹  no mgu
 ---------------------------------------------------------
@@ -265,5 +333,11 @@ would catch a silent change in the normal form.
 - U-ground exists because window rules alone are incomplete — §4
 - occurs is conservative, not a no-unifier oracle — §5
 - **the stuck verdict is only meaningful relative to the accumulated type
-  equations** — §6, the finding that currently blocks a clean trichotomy
-  statement and is the main open design question
+  equations** — §6, the finding that blocks a clean trichotomy statement; the
+  side condition that repairs it (`Indep Q V`) is now mechanized and carried by
+  all three base techniques
+- **≐ᵣ is INCOMPLETE, independently of that** — §6, crossfield: it reports stuck
+  on a config with an mgu and no equations at all. The missing rule is
+  unique-host variable expansion, and the uniqueness guard is what keeps it from
+  breaking Wand. This is a defect in the algorithm, not in the statement of the
+  trichotomy, and it should be fixed before the base arm is dispatched
