@@ -11,7 +11,7 @@ This mechanism allows to _refine_ types on function application. See the example
 
 The type-safety proofs have to account for this new lookup-mechanism in two ways: Progress can only be proven for definite types, but ★ forms a boundary where programs can get stuck. The preservation proof has to account for type refinement by allowing types to become more precise during small steps.
 
-Principality forces qualified schemes that use parked stumps during unification to get mgus in many cases. A tetrachotomy for the unification algorithms outcome is wanted.
+Principality forces qualified schemes that use parked stumps during unification to get mgus in many cases. The algorithm outputs three solution: A sucees with MGU, a failure without MGU, a _ for the wand example and finally an outcome »occurs«, that cuts across the other output paths. The occurs class of outputs is a syntactic check for recursive row-variables that naturally occur in nix.
 
 
 ## Related Files
@@ -29,11 +29,11 @@ Principality forces qualified schemes that use parked stumps during unification 
 # Progress
 - [x] Scoped Records
 - [x] Asymmetric Concat
-- [x] Row equivalence ≈ (trace-monoid characterization + full cancellativity mechanized)
+- [x] Row equivalence ≈
 - [x] Refinement ⊑
 - [x] Unknown Type Abstraction
 - [x] Let-Statements
-- [~] Qualified schemes (*progress* open)
+- [x] Qualified schemes
 - [~] Unification 
 - [ ] FC-Labels
 - [ ] Patterns
@@ -53,8 +53,28 @@ Principality forces qualified schemes that use parked stumps during unification 
 - Soundness
   - [x] Success
    - a .stuck is genuine;
-- [x] OCCURS CHARACTERIZED
-  occurs is CONSERVATIVE:
+- [x] OCCURS CHARACTERIZED — `.occurs` is a CONSERVATIVE syntactic guard, not a
+  unifier-set category. solveVar fires it on a whole-var remainder α with
+  α ∈ sVarSeq of the other side; that condition CUTS ACROSS the trichotomy:
+  - end-aligned recursive rows never even reach it: α ≐ᵣ (l:𝓫 | α) cancels the
+    shared end-var first and reports **clash** (unify_occurs_cancelled) —
+    cancellativity subsumes the end-aligned occurs cases;
+  - field-pinned interior occurrence is a genuine leg (b): occurs_field_no_unifier
+    (α ∈ vars s₂ ∧ 0 < count_l s₂ ⟹ NO unifier), proven by field-counting
+    (fieldCount_var_lower) — same family as projClash_no_unifier, NOT a finiteness
+    artifact;
+  - all-var interior occurrence is leg (a): α ≐ᵣ (β | α | γ) is reported occurs yet
+    IS unifiable (occurs_allVar_unifiable, β,γ ↦ ε). By rowEquiv_iff_char that
+    unifier even looks FORCED — counting kills any field in θβ/θγ, and matching
+    var-sequence lengths force both to ε — i.e. an MGU the guard rejects.
+    [x] MECHANIZED (occurs_allVar_hasMgu, 26-09-02): the guard does not merely
+    lose completeness for unifiability, it DISCARDS A PRINCIPAL SOLUTION — a
+    config the trichotomy files under (a). Every unifier already agrees with the
+    candidate on β,γ and factors through it via σ ≔ θ itself.
+  ⟹ occurs does NOT lift to a no-unifier theorem. Its job is preserving Ctx.RowWF
+  (acyclic, rank-decreasing solutions) — the hypothesis lookup TOTALITY consumes,
+  hence what stump wake-up termination and discharge rest on. It guards the
+  solver's invariant and over-approximates to do so cheaply.
 - [x] CLASH ALGORITHM-LEVEL done — unifyRow_clash_no_unifier;
 - [x] MGU-ON-SUCCESS done
 - [x] STUCK⟹NO-MGU — but only as a REDUCTION, the naive statement is FALSE.
@@ -65,8 +85,41 @@ Principality forces qualified schemes that use parked stumps during unification 
   - non-commutativity
 - [x] MATCH/GROUND congruence now done:
 - CAVEAT: unlike strip these SHRINK the unifier set (intersect with eq-satisfiers), so they transport mgu-status but a stuck residual does not by itself kill the original — that additionally needs the base-technique witnesses to satisfy the accumulated eq (the genuine augmented-witness content, now expressible via HasMguP).
+- [!] ≐ᵣ IS INCOMPLETE — a stuck verdict that is WRONG (26-09-02):
+  (l:𝓫 | α) ≐ᵣ (m:𝓫 | β), l ≠ m, is reported stuck yet HAS an mgu
+  (α ↦ (m:𝓫 | X), β ↦ (l:𝓫 | X)). crossfield_stuck_unifiable mechanizes the
+  stuck verdict + the unifier; maximality is derived by hand off
+  rowEquiv_iff_char (proj_m A = (0,𝓫)::proj_m B, proj_l B = (0,𝓫)::proj_l A,
+  proj_k equal otherwise, vars equal ⟹ A ≈ (m:𝓫|R), B ≈ (l:𝓫|R), same R) and is
+  NOT yet mechanized. The missing rule is Rémy-style variable EXPANSION: when the
+  leading field's label is absent from the other side's window and exactly ONE
+  variable there can host it, that variable is FORCED to β ≔ (l:δ | β′). ≐ᵣ
+  refuses to guess a host — right for Wand, where TWO vars could host it — but
+  refusing when the host is UNIQUE costs completeness for free. This is the exact
+  COMPLEMENT of the base-arm dispatch, whose witness techniques all need ≥2
+  candidate hosts. Adding the move shrinks the stuck class to precisely what the
+  techniques can kill; it also GROWS the spine, so it forces the same
+  fuel→well-founded rebuild the mutual ≐/≐ᵣ design needs. Do them together.
+- [x] Base techniques now Q-CARRYING and off the literal names:
+  vars_vs_field_no_mguP / field_vs_vars_no_mguP (count-shrink),
+  two_sided_no_mguP (rigidity), allvar_swap_no_mguP (non-commutativity) — each
+  takes `Indep Q V` and builds its witnesses as PATCHES of the candidate θ
+  (patchRow / patch2), so the accumulated equations ride along. `Indep` +
+  eqsSat_indep give the syntactic, checkable form of the side condition.
 - [ ] Remaining for the full lift: assembling the general base arm from the three techniques (+ the all-var argument generalized beyond the swap) and re-running those base witnesses under the accumulated equations (carry them as the HasMguP predicate through the fuel induction);
 - [ ] type-level ≐
+- MUTUAL ≐/≐ᵣ (26-09-02, verified by running the algorithm): making type- and
+  row-unification mutually recursive, so an emitted equation is SOLVED AND
+  APPLIED before the row pass continues, fixes the rescued-stuck example —
+  (l:𝓫 | α) ≐ᵣ (l:𝓫) = success [α ↦ ε]. Structurally it turns the Q side
+  condition from a HYPOTHESIS into an INVARIANT: no leftover equation can
+  mention a stuck row-var if each was discharged into θ first. Caveats: genuine
+  Wand is untouched (no equation to solve, provably no mgu); the fuel measure
+  |s₁|+|s₂| dies because applying a solution GROWS the spine, so it must become
+  the lexicographic (#unsolved vars, #atoms) — which makes the occurs guard
+  LOAD-BEARING for termination, retroactively justifying its conservatism; and a
+  parked STUCK equation can still mention stuck row-vars, so the Q side
+  condition survives for those. See proof-plan.md.
 
 
 ## Symbols
@@ -134,6 +187,8 @@ Proofs are for _closed_ programs (Γ = ∅). e ↯ marks _lookup-errors_: a sele
 
 ### Algorithmic (L2) 
 - Qualified schemes:
+  - *L2 TYPE SAFETY*: qProgress + qPreservation — the qualified system is safe in
+    its own right, not via L1. 
   - *plain embedding*: Q = ∅ degenerates ≥\_Γ to the Γ-independent Scheme.Inst
   - *discharge determinism*: Row discharge is deterministic
   - *definite-stability*: a resolved stump never re-checks, wake-up only improves
