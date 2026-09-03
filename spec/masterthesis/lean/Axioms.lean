@@ -36,6 +36,13 @@ namespace MinimalCalculus
 /-- info: 'MinimalCalculus.stuck_not_both_ground' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in #print axioms stuck_not_both_ground
 
+-- The occurs guard's incompleteness, sharply: a reported-occurs problem with an
+-- MGU. Classical.choice matches its sibling no-mgu/mgu theorems (allvar_swap).
+/--
+info: 'MinimalCalculus.occurs_allVar_hasMgu' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms occurs_allVar_hasMgu
+
 -- ## L2 qualified schemes (Qualified) — Classical.choice is expected here
 /--
 info: 'MinimalCalculus.qtyped_two_use' depends on axioms: [propext, Classical.choice, Quot.sound]
@@ -46,5 +53,17 @@ info: 'MinimalCalculus.qtyped_two_use' depends on axioms: [propext, Classical.ch
 info: 'MinimalCalculus.selQ_instance_closed' depends on axioms: [propext, Classical.choice, Quot.sound]
 -/
 #guard_msgs in #print axioms selQ_instance_closed
+
+-- Type safety for the QUALIFIED system — the real declarative system of the
+-- thesis. minimal.lean's progress/preservation are the L1 template.
+/--
+info: 'MinimalCalculus.qProgress' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms qProgress
+
+/--
+info: 'MinimalCalculus.qPreservation' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms qPreservation
 
 end MinimalCalculus

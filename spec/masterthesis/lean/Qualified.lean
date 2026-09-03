@@ -329,7 +329,14 @@ mutual
     | qApp : QTyped constTy Γ e₁ (.fn τ₁ τ₂) → QTyped constTy Γ e₂ τ₁ →
              QTyped constTy Γ (.app e₁ e₂) τ₂
     -- ∀ τ₁ ≥_Γ σ.  Γ ⊢ e₁ : τ₁     (instance-closed over DISCHARGED instances)
+    -- The INHABITATION premise is not bureaucracy: with Q ≠ ∅ a scheme can have
+    -- NO Γ-instance, and then the instance-closed premise says nothing at all
+    -- about e₁ — `let x = (3 4) in 5` would type while being stuck, and progress
+    -- would be false. Plain schemes satisfy it by Scheme.Inst.self; the solver
+    -- satisfies it by construction (a parked stump discharges at ★ if nothing
+    -- better), so this is the declarative shadow of "stumps always finalize".
     | qLet : (∀ τ₁, QScheme.Inst Γ.ctx σ τ₁ → QTyped constTy Γ e₁ τ₁) →
+             (∃ τ₁, QScheme.Inst Γ.ctx σ τ₁) →
              QTyped constTy (Γ.bindScheme x σ) e₂ τ₂ →
              QTyped constTy Γ (.letE x e₁ e₂) τ₂
     | qCat : QTyped constTy Γ e₁ (.rcd ρ₁) → QTyped constTy Γ e₂ (.rcd ρ₂) →
@@ -405,7 +412,7 @@ private theorem qtyped_inv_aux {B C : Type} {constTy : C → B} :
       ⟨(fun h => nomatch h), (fun h => nomatch h), (fun h => nomatch h)⟩
   | _, _, _, .qSelAbs _ _ =>
       ⟨(fun h => nomatch h), (fun h => nomatch h), (fun h => nomatch h)⟩
-  | _, _, _, .qLet _ _ =>
+  | _, _, _, .qLet _ _ _ =>
       ⟨(fun h => nomatch h), (fun h => nomatch h), (fun h => nomatch h)⟩
   | _, _, _, .qRcd h =>
       ⟨(fun hc => nomatch hc), (fun hl => nomatch hl),
@@ -498,6 +505,7 @@ theorem Typed.toQ {B C : Type} {constTy : C → B} :
   | _, _, _, .tApp h₁ h₂ => .qApp (Typed.toQ h₁) (Typed.toQ h₂)
   | _, _, _, .tLet hprem hbody =>
       .qLet (fun τ₁ hq => Typed.toQ (hprem τ₁ (QScheme.inst_toQ.mp hq)))
+            ⟨_, QScheme.inst_toQ.mpr (Scheme.Inst.self _)⟩
             (Typed.toQ hbody)
   | _, _, _, .tCat h₁ h₂ => .qCat (Typed.toQ h₁) (Typed.toQ h₂)
   | Γ, _, _, .tSel h hl =>
@@ -538,7 +546,7 @@ theorem qtyped_two_use {B C : Type} (constTy : C → B) (c : C) :
           (.field "a" (.app (.var "f") (.rcd (.field "l" (.con c)))))
           (.field "b" (.app (.var "f") (.rcd .empty))))))
       (.rcd (.cat (.sing "a" (.base (constTy c))) (.sing "b" .unk))) := by
-  refine .qLet (σ := selQ B) (fun τ₁ hq => ?_) ?_
+  refine .qLet (σ := selQ B) (fun τ₁ hq => ?_) ⟨_, selQ_inst_absent _⟩ ?_
   · exact (selQ_instance_closed constTy _ τ₁ hq).toQ
   · refine .qRcd (.cat (.field ?_) (.field ?_))
     · exact .qApp
@@ -650,9 +658,10 @@ theorem qtyped_sub {B C : Type} {constTy : C → B} :
   | _, _, _, _, hs, .qSelAbs h hl =>
       .qSelAbs (qtyped_sub hs h) (Lookup.congr_rowEnv hs.2 hl)
   | _, _, _, _, hs, .qUnk h       => .qUnk (qtyped_sub hs h)
-  | _, _, _, _, hs, .qLet h₁ h₂   =>
+  | _, _, _, _, hs, .qLet h₁ hne h₂   =>
       .qLet (fun τ' hi =>
               qtyped_sub hs (h₁ τ' (hi.congr_rowEnv (fun α => (hs.2 α).symm))))
+            (let ⟨τ', hi⟩ := hne; ⟨τ', hi.congr_rowEnv hs.2⟩)
             (qtyped_sub (hs.bindScheme _ _) h₂)
   | _, _, _, _, hs, .qRcd h       => .qRcd (qtypedBody_sub hs h)
 
@@ -711,13 +720,14 @@ private theorem qsubst_aux {B C : Type} {constTy : C → B} :
       .qSelAbs (qsubst_aux h hsub hv) (Lookup.congr_rowEnv (fun α => hsub.2 α) hl)
   | _, _, _, .qUnk h, _, _, _, _, hsub, hv =>
       .qUnk (qsubst_aux h hsub hv)
-  | _, .letE y e₁ e₂, _, .qLet h₁ h₂, _, x, _, _, hsub, hv => by
+  | _, .letE y e₁ e₂, _, .qLet h₁ hne h₂, _, x, _, _, hsub, hv => by
       simp only [subst]
       cases hxy : (x == y)
       · simp only [Bool.false_eq_true, if_false]
         exact .qLet
           (fun τ' hi =>
             qsubst_aux (h₁ τ' (hi.congr_rowEnv (fun α => (hsub.2 α).symm))) hsub hv)
+          (let ⟨τ', hi⟩ := hne; ⟨τ', hi.congr_rowEnv (fun α => hsub.2 α)⟩)
           (qsubst_aux h₂
             ((hsub.bindScheme _ _).trans
               (QCtx.Sub.exchange _ (by simpa using hxy) _ _)) hv)
@@ -725,6 +735,7 @@ private theorem qsubst_aux {B C : Type} {constTy : C → B} :
         exact .qLet
           (fun τ' hi =>
             qsubst_aux (h₁ τ' (hi.congr_rowEnv (fun α => (hsub.2 α).symm))) hsub hv)
+          (let ⟨τ', hi⟩ := hne; ⟨τ', hi.congr_rowEnv (fun α => hsub.2 α)⟩)
           (qtyped_sub ((eq_of_beq hxy) ▸ hsub.shadowed _) h₂)
   | _, _, _, .qRcd h, _, _, _, _, hsub, hv =>
       .qRcd (qsubstBody_aux h hsub hv)
@@ -885,14 +896,108 @@ private theorem qpreservation_aux {B C : Type} {constTy : C → B} :
           · cases hu
   | _, _, _, .qUnk h, hΓ, _ => fun hs =>
       .qUnk (qpreservation_aux h hΓ hs)
-  | _, _, _, .qLet h₁ h₂, hΓ, _ => fun hs => by
+  | _, _, _, .qLet h₁ hne h₂, hΓ, _ => fun hs => by
       cases hs with
       | letCong s =>
-          exact .qLet (fun τ' hi => qpreservation_aux (h₁ τ' hi) hΓ s) h₂
+          exact .qLet (fun τ' hi => qpreservation_aux (h₁ τ' hi) hΓ s) hne h₂
       | letBeta hval =>
           subst hΓ
           exact qsubst_scheme_preserves_typing _ _ _ _ _ _ _
             (fun τ' hi => h₁ τ' hi) h₂
+
+--========================= L2 METATHEORY: PROGRESS ==========================--
+--   If ⊢_Q e : τ  then  e ∈ Value  ∨  (∃ e', e → e')  ∨  e ↯
+-- Step/Value/Err/Progress are reused verbatim from minimal — only the typing
+-- relation changed — so this tracks `progress` rule-for-rule. Two differences,
+-- both real:
+--   * only tyEnv must be empty. Γ's ROW-solutions stay available, because L2
+--     lookups (qSel*) read them; L1 could demand the whole context empty since
+--     nothing consulted rowEnv at ∅.
+--   * the qLet case consumes the INHABITATION premise instead of
+--     Scheme.Inst.self. With Q ≠ ∅ a scheme need not instantiate at all, and a
+--     vacuous one would let `let x = e₁ in e₂` type without saying anything
+--     about e₁ — which is exactly where progress would break.
+
+-- Selecting on a record literal always progresses: hit steps, miss errors.
+-- (minimal's twin is private; the L2 development needs its own copy.)
+private theorem qsel_rcd_progress {C : Type} (b : RecBody (Expr C)) (l : Label) :
+    Progress (.sel (.rcd b) l) := by
+  cases hbl : RecBody.lookup l b with
+  | some e' => exact .step (.selVal hbl)
+  | none    => exact .err (.selAbsent hbl)
+
+def qprogress {B C : Type} {constTy : C → B} {Γ : QCtx B} {e : Expr C} {τ : Ty B}
+    (hΓ : Γ.tyEnv = []) (ht : QTyped constTy Γ e τ) : Progress e :=
+  match ht with
+  | .qCon         => .done .con
+  | .qVar h _     => by simp [QCtx.lookup, hΓ] at h
+  | .qEq h _      => qprogress hΓ h
+  | .qLam _       => .done .lam
+  | .qRcd _       => .done .rcd
+  | .qUnk h       => qprogress hΓ h
+  | .qApp h₁ h₂   =>
+      match qprogress hΓ h₁ with
+      | .step s  => .step (.appFun s)
+      | .err er  => .err (.appFun er)
+      | .done v₁ =>
+          match qprogress hΓ h₂ with
+          | .step s  => .step (.appArg v₁ s)
+          | .err er  => .err (.appArg v₁ er)
+          | .done v₂ => by
+              obtain ⟨x, e₀, rfl⟩ := qcanonical_fn v₁ h₁
+              exact .step (.beta v₂)
+  | .qCat h₁ h₂   =>
+      match qprogress hΓ h₁ with
+      | .step s  => .step (.catLeft s)
+      | .err er  => .err (.catLeft er)
+      | .done v₁ =>
+          match qprogress hΓ h₂ with
+          | .step s  => .step (.catRight v₁ s)
+          | .err er  => .err (.catRight v₁ er)
+          | .done v₂ => by
+              obtain ⟨b₁, ρ₁', rfl, -, -⟩ := qcanonical_rcd v₁ h₁
+              obtain ⟨b₂, ρ₂', rfl, -, -⟩ := qcanonical_rcd v₂ h₂
+              exact .step .catVal
+  | .qSel he hl   =>
+      match qprogress hΓ he with
+      | .step s => .step (.selStep s)
+      | .err er => .err (.sel er)
+      | .done v => by
+          -- carry the found-lookup across ≈ᵣ onto the literal's row, then read
+          -- the field off the body (Γ.ctx keeps the row-solutions)
+          obtain ⟨b, ρ', rfl, heq, hb⟩ := qcanonical_rcd v he
+          obtain ⟨r', hl', hre⟩ := lookup_equiv (RowEquiv.symm heq) hl
+          cases hre
+          obtain ⟨e', hbl, -⟩ := QTypedBody.lookup_found hb hl'
+          exact .step (.selVal hbl)
+  | .qSelUnk he _ =>
+      match qprogress hΓ he with
+      | .step s => .step (.selStep s)
+      | .err er => .err (.sel er)
+      | .done v => by
+          obtain ⟨b, ρ', rfl, -, -⟩ := qcanonical_rcd v he
+          exact qsel_rcd_progress b _
+  -- T-sel-⊥ one level up: the ↯-disjunct at work — typed (at ★) and errs.
+  | .qSelAbs he _ =>
+      match qprogress hΓ he with
+      | .step s => .step (.selStep s)
+      | .err er => .err (.sel er)
+      | .done v => by
+          obtain ⟨b, ρ', rfl, -, -⟩ := qcanonical_rcd v he
+          exact qsel_rcd_progress b _
+  -- the inhabitation premise picks ONE discharged instance; the binding types
+  -- there, which is all progress needs to drive it to a value, error or step
+  | .qLet h₁ hne h₂ =>
+      match qprogress hΓ (h₁ _ hne.choose_spec) with
+      | .step s  => .step (.letCong s)
+      | .err er  => .err (.letBind er)
+      | .done v₁ => .step (.letBeta v₁)
+
+-- ⊢  ⊢_Q e : τ   ⟹   e is a value, steps, or is a lookup-error
+theorem qProgress {B C : Type} (constTy : C → B) (e : Expr C) (τ : Ty B)
+    (ht : QTyped constTy ⟨[], []⟩ e τ) : Progress e :=
+  qprogress rfl ht
+
 
 theorem qPreservation
     {B C : Type} (constTy : C → B)
