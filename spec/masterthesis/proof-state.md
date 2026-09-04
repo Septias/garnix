@@ -79,12 +79,6 @@ Principality forces qualified schemes that use parked stumps during unification 
   candidate hosts. Adding the move shrinks the stuck class to precisely what the
   techniques can kill; it also GROWS the spine, so it forces the same
   fuel→well-founded rebuild the mutual ≐/≐ᵣ design needs. Do them together.
-- [x] Base techniques now Q-CARRYING and off the literal names:
-  vars_vs_field_no_mguP / field_vs_vars_no_mguP (count-shrink),
-  two_sided_no_mguP (rigidity), allvar_swap_no_mguP (non-commutativity) — each
-  takes `Indep Q V` and builds its witnesses as PATCHES of the candidate θ
-  (patchRow / patch2), so the accumulated equations ride along. `Indep` +
-  eqsSat_indep give the syntactic, checkable form of the side condition.
 - [ ] Remaining for the full lift: assembling the general base arm from the three techniques (+ the all-var argument generalized beyond the swap) and re-running those base witnesses under the accumulated equations (carry them as the HasMguP predicate through the fuel induction);
 - [ ] type-level ≐
 - MUTUAL ≐/≐ᵣ (26-09-02, verified by running the algorithm): making type- and
