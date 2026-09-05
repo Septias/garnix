@@ -14,22 +14,10 @@ namespace MinimalCalculus
 /-- info: 'MinimalCalculus.rowEquiv_iff_char' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in #print axioms rowEquiv_iff_char
 
--- ## ≐ᵣ trichotomy (RowUnify)
-/-- info: 'MinimalCalculus.unifyRow_success_sound' depends on axioms: [propext, Quot.sound] -/
-#guard_msgs in #print axioms unifyRow_success_sound
-
-/-- info: 'MinimalCalculus.unifyRow_success_complete' depends on axioms: [propext, Quot.sound] -/
-#guard_msgs in #print axioms unifyRow_success_complete
-
-/-- info: 'MinimalCalculus.unifyRow_clash_no_unifier' depends on axioms: [propext, Quot.sound] -/
-#guard_msgs in #print axioms unifyRow_clash_no_unifier
-
-/-- info: 'MinimalCalculus.unifyRow_stuck_no_mgu' depends on axioms: [propext, Quot.sound] -/
-#guard_msgs in #print axioms unifyRow_stuck_no_mgu
-
-/-- info: 'MinimalCalculus.unifySpineF_stuck_no_mgu' depends on axioms: [propext, Quot.sound] -/
-#guard_msgs in #print axioms unifySpineF_stuck_no_mgu
-
+-- ## ≐ᵣ / ≐ trichotomy (RowUnify)
+-- The single-pass driver was retired in P5/P6 consolidation; the four legs now
+-- live on the MUTUAL driver and are guarded in the P5/P6 blocks below. What
+-- stays here are the two local no-unifier cores the clash leg rests on.
 /-- info: 'MinimalCalculus.projClash_no_unifier' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in #print axioms projClash_no_unifier
 
@@ -37,7 +25,8 @@ namespace MinimalCalculus
 #guard_msgs in #print axioms stuck_not_both_ground
 
 -- The occurs guard's incompleteness, sharply: a reported-occurs problem with an
--- MGU. Classical.choice matches its sibling no-mgu/mgu theorems (allvar_swap).
+-- MGU (the algorithm's verdict on it is occurs_allVar_reported).
+-- Classical.choice matches its sibling no-mgu/mgu theorems (allvar_swap).
 /--
 info: 'MinimalCalculus.occurs_allVar_hasMgu' depends on axioms: [propext, Classical.choice, Quot.sound]
 -/
@@ -94,6 +83,94 @@ info: 'MinimalCalculus.Supply.unifies_setRow_fresh' depends on axioms: [propext,
 
 /-- info: 'MinimalCalculus.expand_reflect_fwd' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in #print axioms expand_reflect_fwd
+
+-- ## P4: the mutual ≐ / ≐ᵣ driver (RowUnify, proof-plan.md §1.2)
+-- The fuel lemma replaces §1.3's termination measure: `outOfFuel` is its own
+-- verdict, so "more budget never changes a verdict that was reached" is a plain
+-- structural induction and stays propext/Quot.sound. unifyRowM_fuel_mono picks
+-- up Classical.choice only through localSupply's lenBound, like its ≐ᵣ siblings.
+/-- info: 'MinimalCalculus.UResM.Mono.seq' depends on axioms: [propext] -/
+#guard_msgs in #print axioms UResM.Mono.seq
+
+/-- info: 'MinimalCalculus.unifyM_fuel_mono' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in #print axioms unifyM_fuel_mono
+
+/-- info: 'MinimalCalculus.unifySpineMF_fuel_mono' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in #print axioms unifySpineMF_fuel_mono
+
+/-- info: 'MinimalCalculus.unifyTyF_fuel_mono' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in #print axioms unifyTyF_fuel_mono
+
+/--
+info: 'MinimalCalculus.unifyRowM_fuel_mono' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms unifyRowM_fuel_mono
+
+-- ## P5: the three forward legs, on the MUTUAL driver (proof-plan.md §4-P5)
+-- Soundness needs no freshness, so it stays propext/Quot.sound; the other two
+-- reach Classical.choice through the Supply's lenBound, as the ≐ᵣ originals do.
+/-- info: 'MinimalCalculus.unifyM_success_sound' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in #print axioms unifyM_success_sound
+
+/--
+info: 'MinimalCalculus.unifyRowM_success_sound' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms unifyRowM_success_sound
+
+/--
+info: 'MinimalCalculus.unifyTyM_success_sound' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms unifyTyM_success_sound
+
+-- The freshness invariant solve-and-apply forced (§4-P5): a run only mentions
+-- names below the supply it returns.
+/--
+info: 'MinimalCalculus.unifyM_bounded' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms unifyM_bounded
+
+/-- info: 'MinimalCalculus.Ty.ftv_applySubst' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in #print axioms Ty.ftv_applySubst
+
+/-- info: 'MinimalCalculus.Sol.Sat.comp' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in #print axioms Sol.Sat.comp
+
+/--
+info: 'MinimalCalculus.unifyRowM_success_complete' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms unifyRowM_success_complete
+
+/--
+info: 'MinimalCalculus.unifyRowM_clash_no_unifier' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms unifyRowM_clash_no_unifier
+
+-- ## P6: step 2 of the base-arm dispatch (proof-plan.md §4-P6)
+-- What U-expand's REFUSAL contributes to the terminal stuck configuration: ≥ 2
+-- candidate hosts, or the label already present behind a variable. Pure
+-- structure, so no Classical.choice.
+/-- info: 'MinimalCalculus.uniqueHost_none' depends on axioms: [propext] -/
+#guard_msgs in #print axioms uniqueHost_none
+
+/-- info: 'MinimalCalculus.stuck_leading_shape_expand' depends on axioms: [propext] -/
+#guard_msgs in #print axioms stuck_leading_shape_expand
+
+/-- info: 'MinimalCalculus.stuck_field_vs_var' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in #print axioms stuck_field_vs_var
+
+/--
+info: 'MinimalCalculus.unifyRowM_success_iff' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms unifyRowM_success_iff
+
+-- The fourth leg, still a REDUCTION (to hbase / hexp / hsolve / hsolveTy).
+/-- info: 'MinimalCalculus.unifyM_stuck_no_mgu' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in #print axioms unifyM_stuck_no_mgu
+
+/--
+info: 'MinimalCalculus.unifyRowM_stuck_no_mgu' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms unifyRowM_stuck_no_mgu
 
 -- ## L2 qualified schemes (Qualified) — Classical.choice is expected here
 /--
