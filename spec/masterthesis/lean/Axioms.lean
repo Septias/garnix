@@ -43,6 +43,58 @@ info: 'MinimalCalculus.occurs_allVar_hasMgu' depends on axioms: [propext, Classi
 -/
 #guard_msgs in #print axioms occurs_allVar_hasMgu
 
+-- ## P1: mutual ≐/≐ᵣ scaffolding (RowUnify, proof-plan.md §1.1/§2)
+-- The ≗-congruence is the new load-bearing theory; it is axiom-FREE, and the
+-- bridge lemmas built on it stay propext-only.
+/-- info: 'MinimalCalculus.Row.applySubst_substEquiv' does not depend on any axioms -/
+#guard_msgs in #print axioms Row.applySubst_substEquiv
+
+/-- info: 'MinimalCalculus.unifies_applySubst_iff' depends on axioms: [propext] -/
+#guard_msgs in #print axioms unifies_applySubst_iff
+
+/-- info: 'MinimalCalculus.unifies_applySubst_of_sat' depends on axioms: [propext] -/
+#guard_msgs in #print axioms unifies_applySubst_of_sat
+
+/-- info: 'MinimalCalculus.unifies_sApplySubst_of_sat' depends on axioms: [propext] -/
+#guard_msgs in #print axioms unifies_sApplySubst_of_sat
+
+/-- info: 'MinimalCalculus.Sol.Sat.comp_inv' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in #print axioms Sol.Sat.comp_inv
+
+-- ## P2: the fresh-variable supply (RowUnify, proof-plan.md §1.4)
+-- Classical.choice reaches these through minimal.lean's natName/lenBound
+-- toolkit; the freshness content itself adds nothing.
+/--
+info: 'MinimalCalculus.Supply.fresh_not_mem' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms Supply.fresh_not_mem
+
+/--
+info: 'MinimalCalculus.Supply.unifies_setRow_fresh' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms Supply.unifies_setRow_fresh
+
+/-- info: 'MinimalCalculus.unifies_setRow_of_not_mem' depends on axioms: [propext] -/
+#guard_msgs in #print axioms unifies_setRow_of_not_mem
+
+/-- info: 'MinimalCalculus.groundMatch_ftv' depends on axioms: [propext] -/
+#guard_msgs in #print axioms groundMatch_ftv
+
+-- ## P3: unique-host expansion (RowUnify, proof-plan.md §1.4)
+-- host_forced mechanizes the maximality argument proof-state.md carries by hand
+-- for crossfield; expand_reflect_fwd is the completeness direction of the move.
+/-- info: 'MinimalCalculus.host_forced' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in #print axioms host_forced
+
+/-- info: 'MinimalCalculus.crossfield_host_forced' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in #print axioms crossfield_host_forced
+
+/-- info: 'MinimalCalculus.expand_reflect' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in #print axioms expand_reflect
+
+/-- info: 'MinimalCalculus.expand_reflect_fwd' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in #print axioms expand_reflect_fwd
+
 -- ## L2 qualified schemes (Qualified) — Classical.choice is expected here
 /--
 info: 'MinimalCalculus.qtyped_two_use' depends on axioms: [propext, Classical.choice, Quot.sound]

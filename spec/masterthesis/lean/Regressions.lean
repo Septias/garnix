@@ -95,4 +95,64 @@ theorem unify_two_sided_stuck :
     unifyRow (B := Unit) (.cat (.var "a") (.sing "l" uB))
                          (.cat (.sing "l" uB) (.var "b")) = .stuck := rfl
 
+-- ## P1 scaffolding, kernel-checked (proof-plan.md §1.1)
+-- The mutual driver applies a solution to the residual spine at every
+-- eq-emitting arm, so sApplySubst must REDUCE, not just be provably correct —
+-- that is what keeps the regressions above `rfl` once P4 lands.
+private def uS : Sol Unit := ⟨[("t", uB)], [("a", .sing "l" uB)]⟩
+
+-- ⊢  (l: t | a | m: 𝓫)[uS]  =  l: 𝓫 | l: 𝓫 | m: 𝓫      (var expands to a spine)
+theorem sApplySubst_computes :
+    sApplySubst uS.toSubst
+      [.field "l" (.var "t"), .var "a", .field "m" uB] =
+      [.field "l" uB, .field "l" uB, .field "m" uB] := rfl
+
+-- ⊢  an unbound variable is left alone by a solution's substitution
+theorem toSubst_free : uS.toSubst.row "z" = .var "z" := rfl
+
+-- seq composes two successes; the earlier solution is pushed through the later.
+-- ⊢  success ⟨[t ≔ 𝓫], []⟩ >>= (fun _ => success ⟨[], [a ≔ ε]⟩)
+--      =  success ⟨[t ≔ 𝓫], [a ≔ ε]⟩
+theorem seq_composes :
+    (UResM.success (B := Unit) ⟨[("t", uB)], []⟩).seq
+        (fun _ => .success ⟨[], [("a", .empty)]⟩) =
+      .success ⟨[("t", uB)], [("a", .empty)]⟩ := rfl
+
+-- ⊢  a stuck second stage is the verdict of the whole
+theorem seq_propagates :
+    (UResM.success (B := Unit) ⟨[("t", uB)], []⟩).seq (fun _ => .stuck) = .stuck := rfl
+
+-- ## P2 freshness, kernel-checked (proof-plan.md §1.4)
+-- The supply is a Nat and the avoid-set is proof-only, so drawing a name
+-- reduces — expandVar's arm will stay a `rfl` regression.
+-- ⊢  two draws from a supply are two DIFFERENT names
+theorem fresh_draws :
+    ((Supply.mk 2).fresh.1, (Supply.mk 2).fresh.2.fresh.1) = ("aa", "aaa") := rfl
+
+-- ⊢  the initial supply starts strictly above the problem's longest name
+theorem initSupply_computes :
+    (initSupply (B := Unit) (.var "ab") (.cat (.var "c") (.sing "l" uB))).next = 3 := rfl
+
+-- ⊢  sFtv sees BOTH sorts: the field type's variable counts as used
+theorem sFtv_computes :
+    sFtv (B := Unit) [.var "a", .field "l" (.var "t")] = ["a", "t"] := rfl
+
+-- ## P3 unique-host expansion, kernel-checked (proof-plan.md §1.4)
+-- ⊢  crossfield FIRES, and picks β as the forced host: β ≔ (l:δ | β′), with the
+--    host side keeping its length (β renamed to the fresh β′)
+theorem expandL_crossfield :
+    expandL (B := Unit) ⟨5⟩ [.field "l" uB, .var "a"] [.field "m" uB, .var "b"]
+      = some ("b", "l", uB, [.var "a"], [.field "m" uB, .var (natName 6)]) := rfl
+
+-- ⊢  Wand REFUSES: two candidate hosts, and vars_vs_field_no_mgu proves the rule
+--    is right to refuse — there is genuinely no mgu
+theorem expandL_wand_refuses :
+    expandL (B := Unit) ⟨5⟩ [.field "l" uB] [.var "a", .var "b"] = none := rfl
+
+-- ⊢  an l-field on the other side could host the pairing instead, so REFUSE
+--    ((l:𝓪 | α) ≐ᵣ (β | l:𝓫) is unifiable with β ≔ ε)
+theorem expandL_lfield_refuses :
+    expandL (B := Unit) ⟨5⟩ [.field "l" uB, .var "a"] [.var "b", .field "l" uB]
+      = none := rfl
+
 end MinimalCalculus

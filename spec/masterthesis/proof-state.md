@@ -58,6 +58,13 @@ Principality forces qualified schemes that use parked stumps during unification 
 - [x] MGU-ON-SUCCESS done
 - [x] STUCK⟹NO-MGU — but only as a REDUCTION, the naive statement is FALSE.
   - reusable order-agnostic threading principle done
+- [~] MUTUAL ≐/≐ᵣ (proof-plan.md) — the rebuild that turns the stuck leg
+  unconditional. P1 done: ≗-congruence (axiom-free), Sol/UResM/Sol.Sat at both
+  sorts, the apply-then-unify bridge, sApplySubst. P2 done: Supply/Avoids over
+  minimal.lean's natName, sFtv, the set*-invisibility lemmas, residual
+  freshness for every detector. P3a done: host_forced MECHANIZES crossfield's
+  maximality (the by-hand argument below), expand_shift/expand_reflect(_fwd),
+  detectors. Next: P3b, wiring the arm into the dispatch cascade.
 - [x] ALL THREE base techniques now done:
   - count-shrink (vars_vs_field_no_mgu)
   - rigidity (two_sided_no_mgu)

@@ -212,16 +212,94 @@ lean/RowUnify.lean` has it in full.
 - **P0 — done (26-09-03).** Revert the `Indep`/`patchRow`/Q-carrying-technique
   block; keep `occurs_allVar_hasMgu` and `crossfield_stuck_unifiable`. Builds
   clean, `Axioms.lean` guards pass.
-- **P1 — the bridge.** `applySubst`/`Unifies` compose lemma (§2, "New, small"),
-  plus `Sol`/`UResM` and `SolSat` at both sorts. Nothing else changes yet;
-  the existing `unifySpineF` is retargeted onto the new result type so the
-  regressions keep passing.
-- **P2 — freshness.** A fresh-variable supply threaded through the algorithm
-  and the "fresh ∉ problem" lemmas. Needed by P3 and independently by the
-  qualified-scheme non-vacuity milestone, so it is not sunk cost.
-- **P3 — `expandVar`.** Add the move, re-run the regressions,
-  turn `crossfield_stuck_unifiable` into `crossfield_success` (and mechanize the
-  maximality argument that is currently by hand in `proof-state.md`).
+- **P1 — done (26-09-05).** Section "P1: SCAFFOLDING FOR THE MUTUAL ≐ / ≐ᵣ
+  DRIVER" in `RowUnify.lean`, entirely additive; build and all `rfl`
+  regressions green, axiom guards extended in `Axioms.lean`.
+  - `SubstEquiv` (`≗`, pointwise ≈-equality of substitutions) and its
+    congruence `Ty/Row.applySubst_substEquiv` — the one genuinely new piece of
+    theory, and AXIOM-FREE. `minimal.lean`'s `applySubst_congr` (`:1697/:1714`)
+    is equality-based and too rigid: a solution is only ever met up to `≈`.
+  - `Sol` (ty + row), `Sol.nil/ofRow/toSubst/Sat/comp`, `UResM`, `UResM.seq`
+    (+ `seq_success` inversion). `Sol.Sat_ofRow` makes the old `SolSat` the
+    row-only case. `tyLookup/rowLookup` with `if β = α` instead of
+    `List.lookup`, so `*_spec` is a two-line induction.
+  - `Sol.Sat.substEquiv` (`Sat θ s → θ ≗ θ ∘ s.toSubst`) — the reason `Sat` is
+    the right notion — and `Sol.Sat.comp_inv`, the compose lemma the §2 table
+    demands for P5.
+  - The bridge in three shapes: `unifies_applySubst_iff` /
+    `tyUnifies_applySubst_iff` / `unifies_sApplySubst_iff` (composition), and
+    `*_of_sat` (the form the arms use: under a MET solution, substituting the
+    residual does not change the unifier set).
+  - `sApplySubst` (spine-level substitution; a var atom expands to a spine, so
+    it is not a map) + `sApplySubst_equiv`, written by structural recursion so
+    it REDUCES — `Regressions.lean` now kernel-checks that.
+
+  DEVIATION: `unifySpineF` was NOT retargeted onto `UResM` here. Doing so
+  breaks every downstream `.success σ eqs` proof, which contradicts "P1 keeps
+  the build green"; the retarget belongs to P4, where those proofs are re-done
+  anyway. Nothing else in the plan changes.
+- **P2 — done (26-09-05).** Section "P2: A FRESH-VARIABLE SUPPLY FOR ≐ / ≐ᵣ"
+  in `RowUnify.lean`, again additive; build, regressions and guards green.
+  The generator did NOT have to be built: `minimal.lean:1752` already has
+  `natName`/`natName_length`/`natName_inj`/`lenBound`/`length_le_lenBound`
+  (fresh names by LENGTH, for capture-avoiding scheme renaming). P2 is a
+  supply and an invariant on top of it.
+  - `Supply` (a Nat), `Supply.fresh`, and `S.Avoids avoid := lenBound avoid <
+    S.next`. The avoid-set is PROOF-ONLY — the algorithm never computes it, so
+    the arms stay reducible (`Regressions.lean` checks a draw by `rfl`).
+  - The spec: `fresh_not_mem`, `Avoids.advance`, `Avoids.cons_fresh` (how the
+    invariant survives a move that GROWS the problem — i.e. expandVar),
+    `Avoids.mono` (how it survives every move that shrinks it), `fresh_ne`
+    (δ ≠ β′), `initSupply`/`initSupply_avoids`.
+  - `sFtv` — the avoid-set of a spine, counting field-type variables too since
+    the namespace is shared — with `sFtv_ofSpine`, `sFtv_append`, `sFtv_cons`,
+    `mem_sFtv_reverse` (the right-end moves work on reversed spines).
+  - `TySubst.setTy/setRow` + the four INVISIBILITY lemmas (a value chosen at a
+    variable the subject does not mention is unobservable), lifted to
+    `unifies_setRow_of_not_mem` / `tyUnifies_setTy_of_not_mem` and to the
+    headline `Supply.unifies_setRow_fresh`. Note these use the EQUALITY
+    congruence `applySubst_congr`, not P1's `≗` — `set*` perturbs θ pointwise,
+    so no `≈` is involved.
+  - Residual-freshness for the surviving detectors: `windowExtract_ftv`,
+    `removeField_ftv`, `stripL_ftv`, `matchL_ftv`, `groundMatchAux/Match_ftv` —
+    every residual and every emitted type lives inside the original problem, so
+    `Avoids` transports to the recursive call by `Avoids.mono`.
+- **P3a — done (26-09-05): the move's metatheory.** Section "P3: UNIQUE-HOST
+  VARIABLE EXPANSION" in `RowUnify.lean`; still additive, build/regressions/
+  guards green.
+  - `host_forced` — THE theorem: if the other side has exactly one variable and
+    NO l-field anywhere, every unifier puts an l-field at the FRONT of that
+    variable. Via `host_proj` (all of the l-projection comes from the host, the
+    surrounding fields carrying other labels) + `spine_extract`
+    (`RowEquiv.lean:243`), which already had the "index 0 ⟹ comm bubbles it
+    out" argument. `crossfield_host_forced` instantiates it: this MECHANIZES
+    the maximality half that `proof-state.md` carries by hand.
+  - `expand_shift` — the algebraic content of the move: under a host expansion
+    the side factors as "invented field, then the side with the host renamed".
+    A plain induction; `field_comm_lfree` is not even needed.
+  - `expand_reflect` (backward) and `expand_reflect_fwd` (forward). The forward
+    one EXTENDS the unifier at δ and β′ instead of constraining it — this is
+    where P2 is consumed, and why the move does NOT shrink the unifier set, in
+    contrast to matchL/groundMatch (§2 CAVEAT).
+  - Detectors `uniqueHost`/`expandL`/`expandR` (+ `_spec`), with the side
+    condition sharpened: `count_l(s₂) = 0` EVERYWHERE, not just in the window.
+    Just "absent from the window" is unsound — `(l:𝓪 | α) ≐ᵣ (β | l:𝓫)` has the
+    unifier `β ≔ ε` and must not be expanded. `Regressions.lean` pins all three
+    behaviours (fires on crossfield, refuses Wand, refuses an l-field).
+
+  CORRECTION to §1.3: the fuel bound does NOT die here. Fusing the expansion
+  with the pairing it enables costs exactly ONE atom (`expandL_len`: the host
+  side keeps its length, β ↦ β′, and the invented field is consumed at once),
+  so `|s₁| + |s₂|` still bounds the recursion. Only P4's solve-and-apply grows
+  a spine, so the lexicographic measure is a P4 requirement, not a P3 one.
+- **P3b — next: wire it in.** Add the arm between `groundMatch` and
+  `projClash`, re-run the regressions, and turn `crossfield_stuck_unifiable`
+  into `crossfield_success`. The dispatch cascade needs a fresh-name source;
+  deriving it locally as `⟨lenBound (sFtv s₁ ++ sFtv s₂) + 1⟩` avoids adding a
+  `Supply` parameter to `unifySpineF` (which would break every existing
+  statement), and stays sound across the recursion because β′ is IN the
+  residual, so the next call's bound exceeds it. Each of the four fuel
+  inductions then gains one arm, discharged by the P3a reflection lemmas.
 - **P4 — mutualize.** Write `unifyTyF`, make the eq-emitting arms solve and
   apply, drop `URes.addEq`. New bound + `fuel_irrel`/`fuel_stable`.
 - **P5 — re-prove the legs.** Success sound, success complete, clash — in that
