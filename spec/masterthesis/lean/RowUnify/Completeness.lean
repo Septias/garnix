@@ -6,16 +6,10 @@ import RowUnify.Soundness
 
 namespace MinimalCalculus
 
--- ## What a solution mentions
--- Keys and ranges, at both sorts. Kept as a PREDICATE rather than a list: it is
--- only ever used inside a `⊆ W`, and a predicate needs no membership algebra.
-def SolMentions {B : Type} (s : Sol B) (γ : TyVar) : Prop :=
-  (∃ p ∈ s.ty, γ = p.1 ∨ γ ∈ p.2.ftv) ∨ (∃ p ∈ s.row, γ = p.1 ∨ γ ∈ p.2.ftv)
 
-/-- `SolBelow s W`: every name the solution mentions is already in `W`. -/
-def SolBelow {B : Type} (s : Sol B) (W : List TyVar) : Prop :=
-  ∀ γ, SolMentions s γ → γ ∈ W
-
+-- ## What a solution mentions  (`SolMentions`, `SolBelow`, Defs.lean)
+-- The freshness bookkeeping solve-and-apply forced: a run only ever mentions
+-- names below the supply it returns.
 theorem SolBelow.mono {B : Type} {s : Sol B} {W W' : List TyVar}
     (h : SolBelow s W) (hW : W ⊆ W') : SolBelow s W' := fun γ hγ => hW (h γ hγ)
 
@@ -81,7 +75,6 @@ theorem SolBelow.comp {B : Type} {s₁ s₂ : Sol B} {W : List TyVar}
       · exact Row_ftv_applySubst_sub
           (fun _ hx => h₁ _ (.inr ⟨q, hq, .inr hx⟩)) h₂ hγ
     · exact h₂ _ (.inr ⟨p, hp, hγ⟩)
-
 
 
 ------------------ P5: THE FRESHNESS INVARIANT, TRANSPORTED -----------------
@@ -529,7 +522,6 @@ theorem unifyM_bounded {B : Type} [DecidableEq B] (fuel : Nat) :
             | none =>
               simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, he1, he2] at h
               split at h <;> cases h
-
 
 
 ------------------ P5: SUCCESS COMPLETENESS (mgu), MUTUALLY -----------------
@@ -1057,8 +1049,6 @@ theorem unifyRowM_success_complete {B : Type} [DecidableEq B] {θ : TySubst B}
   have e₂ := RowEquiv.applySubst θ (Row.toSpine_equiv ρ₂)
   exact (unifyM_success_complete fuel).2 _ ρ₁.toSpine ρ₂.toSpine _
     (localSupply_avoids _ _) (fun _ hx => hx) h (e₁.symm.trans (hu.trans e₂))
-
-
 
 
 end MinimalCalculus

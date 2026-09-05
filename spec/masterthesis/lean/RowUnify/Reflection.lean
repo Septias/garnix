@@ -823,14 +823,6 @@ theorem wand_under_match_no_mgu {B : Type} (a b : B) :
 -- (proof-plan.md §4-P3b(2)); consumed by P5's completeness and clash legs and by
 -- the boundedness invariant they rest on.
 
--- ## Agreement: the completeness statement must allow EXTENSION
--- U-expand invents δ and β′, so a unifier of the problem cannot literally meet
--- the emitted solution — it says nothing about names the problem never had. The
--- honest mgu statement is "every unifier EXTENDS to one that meets σ and eqs,
--- without moving on the problem's own variables". `V` is any variable set the
--- problem lives inside; it is what the extension promises to leave alone.
-def AgreeOn {B : Type} (θ θ' : TySubst B) (V : List TyVar) : Prop :=
-  ∀ α ∈ V, θ.ty α = θ'.ty α ∧ θ.row α = θ'.row α
 
 theorem AgreeOn.refl {B : Type} (θ : TySubst B) (V : List TyVar) : AgreeOn θ θ V :=
   fun _ _ => ⟨rfl, rfl⟩

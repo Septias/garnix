@@ -14,11 +14,6 @@ namespace MinimalCalculus
 -- original rows. The individual MOVE-REFLECTION lemmas here are the reusable
 -- content — each says "if θ unifies the residual, it unified the original".
 
-def SolSat {B : Type} (θ : TySubst B) (σ : List (TyVar × Row B)) : Prop :=
-  ∀ p ∈ σ, RowEquiv (θ.row p.1) (p.2.applySubst θ)
-
-def EqsSat {B : Type} (θ : TySubst B) (eqs : List (Ty B × Ty B)) : Prop :=
-  ∀ p ∈ eqs, TyEquiv (p.1.applySubst θ) (p.2.applySubst θ)
 
 theorem EqsSat.cons {B : Type} {θ : TySubst B} {τ τ' : Ty B} {eqs : List (Ty B × Ty B)}
     (hty : TyEquiv (τ.applySubst θ) (τ'.applySubst θ)) (h : EqsSat θ eqs) :
@@ -58,11 +53,6 @@ theorem SolSat.tail {B : Type} {θ : TySubst B} {α : TyVar} {ρ : Row B}
 -- θ ∘ s.toSubst" can only ever be a ≈-statement. Everything else in this
 -- section is bookkeeping on top of it.
 
--- ## ≗ : pointwise ≈-equality of substitutions
-def SubstEquiv {B : Type} (θ₁ θ₂ : TySubst B) : Prop :=
-  (∀ α, TyEquiv (θ₁.ty α) (θ₂.ty α)) ∧ (∀ α, RowEquiv (θ₁.row α) (θ₂.row α))
-
-infix:50 " ≗ " => SubstEquiv
 
 theorem SubstEquiv.refl {B : Type} (θ : TySubst B) : θ ≗ θ :=
   ⟨fun _ => .refl _, fun _ => .refl _⟩
@@ -96,29 +86,6 @@ mutual
         .cat (Row.applySubst_substEquiv h ρ₁) (Row.applySubst_substEquiv h ρ₂)
 end
 
--- ## Solutions at both sorts
--- Sol replaces the pair (σ : List (TyVar × Row B), eqs) of URes.success: the
--- type equations are no longer parked but SOLVED, and their solutions land in
--- the .ty component. One shared TyVar namespace (minimal.lean:649), so a
--- variable bound by the type pass is readable by the row pass.
-structure Sol (B : Type) where
-  ty  : List (TyVar × Ty B)
-  row : List (TyVar × Row B)
-
-def Sol.nil {B : Type} : Sol B := ⟨[], []⟩
-
--- The old row-only solution, embedded.
-def Sol.ofRow {B : Type} (σ : List (TyVar × Row B)) : Sol B := ⟨[], σ⟩
-
--- Association lists, resolved with `if β = α` rather than List.lookup so the
--- membership spec below is a two-line structural induction.
-def tyLookup {B : Type} (α : TyVar) : List (TyVar × Ty B) → Ty B
-  | [] => .var α
-  | (β, τ) :: t => if β = α then τ else tyLookup α t
-
-def rowLookup {B : Type} (α : TyVar) : List (TyVar × Row B) → Row B
-  | [] => .var α
-  | (β, ρ) :: t => if β = α then ρ else rowLookup α t
 
 -- ⊢  a lookup either leaves the variable free, or is one of the bindings
 theorem tyLookup_spec {B : Type} (α : TyVar) :
@@ -139,15 +106,6 @@ theorem rowLookup_spec {B : Type} (α : TyVar) :
       · simp only [rowLookup, if_neg h]
         exact (rowLookup_spec α t).imp id (List.mem_cons_of_mem _)
 
--- The substitution a solution denotes: bound variables go to their binding,
--- every other variable stays free.
-def Sol.toSubst {B : Type} (s : Sol B) : TySubst B :=
-  ⟨fun α => tyLookup α s.ty, fun α => rowLookup α s.row⟩
-
--- SolSat (:1030) at both sorts.
-def Sol.Sat {B : Type} (θ : TySubst B) (s : Sol B) : Prop :=
-  (∀ p ∈ s.ty, TyEquiv (θ.ty p.1) (p.2.applySubst θ)) ∧
-  (∀ p ∈ s.row, RowEquiv (θ.row p.1) (p.2.applySubst θ))
 
 -- ⊢  Sol.Sat θ (Sol.ofRow σ)  ↔  SolSat θ σ      (the embedding is faithful)
 theorem Sol.Sat_ofRow {B : Type} {θ : TySubst B} {σ : List (TyVar × Row B)} :
@@ -171,12 +129,6 @@ theorem Sol.Sat.substEquiv {B : Type} {θ : TySubst B} {s : Sol B}
     · rw [he]; exact .refl _
     · exact h.2 _ hm
 
--- ## Composing solutions
--- s₂.comp s₁ — first s₁, then s₂ — the Sol-level image of TySubst.comp
--- (minimal.lean:1669): push s₂ through s₁'s bindings, then keep s₂'s own.
-def Sol.comp {B : Type} (s₂ s₁ : Sol B) : Sol B :=
-  ⟨s₁.ty.map  (fun p => (p.1, p.2.applySubst s₂.toSubst)) ++ s₂.ty,
-   s₁.row.map (fun p => (p.1, p.2.applySubst s₂.toSubst)) ++ s₂.row⟩
 
 -- THE COMPOSE LEMMA the P5 arms need (proof-plan.md §2, table row 1): meeting a
 -- composite means meeting both halves. The s₂ half is immediate (it sits in the
@@ -202,31 +154,6 @@ theorem Sol.Sat.comp_inv {B : Type} {θ : TySubst B} {s₁ s₂ : Sol B}
     rw [Row.applySubst_applySubst]
     exact (Row.applySubst_substEquiv h₂.substEquiv p.2).symm
 
--- ## The result type of the mutual driver
--- Two changes from URes (proof-plan.md §1.1, and the P4 deviation recorded in
--- §4): no `eqs` component — everything a success discovers is SOLVED — and a
--- success carries the SUPPLY it stopped at, so the fresh names invented by one
--- sub-call are not handed out again by the next (a type equation solved inside
--- a field may expand a row variable, and the invented tail then travels into
--- the residual). `outOfFuel` is the fifth verdict: it separates "the algorithm
--- ran out of budget" from "every move is dead", which is what makes the fuel
--- lemma a structural induction rather than a termination measure.
-inductive UResM (B : Type) : Type where
-  | success   : Sol B → Supply → UResM B
-  | clash     : UResM B
-  | occurs    : UResM B
-  | stuck     : UResM B
-  | outOfFuel : UResM B
-
--- Sequencing, as used by every eq-emitting arm in §1.2: run the second stage
--- under the first stage's solution AND its supply, then compose. A non-success
--- in either stage is the verdict of the whole.
-def UResM.seq {B : Type} : UResM B → (TySubst B → Supply → UResM B) → UResM B
-  | .success s S, k =>
-      match k s.toSubst S with
-      | .success s' S' => .success (s'.comp s) S'
-      | r => r
-  | r, _ => r
 
 -- ⊢  seq inverts: a success came from two successes whose composite it is
 theorem UResM.seq_success {B : Type} {r : UResM B} {k : TySubst B → Supply → UResM B}
@@ -246,24 +173,10 @@ theorem UResM.seq_success {B : Type} {r : UResM B} {k : TySubst B → Supply →
   | stuck  => cases h
   | outOfFuel => cases h
 
--- ## Unification at the type sort
--- The ≐ counterpart of Unifies (RowEquiv.lean:543); EqsSat is exactly a list of
--- these, so the parked-equation vocabulary survives as the proof-internal
--- device proof-plan.md §1.1 predicts.
-def TyUnifies {B : Type} (θ : TySubst B) (τ τ' : Ty B) : Prop :=
-  TyEquiv (τ.applySubst θ) (τ'.applySubst θ)
 
 theorem eqsSat_iff_tyUnifies {B : Type} {θ : TySubst B} {eqs : List (Ty B × Ty B)} :
     EqsSat θ eqs ↔ ∀ p ∈ eqs, TyUnifies θ p.1 p.2 := Iff.rfl
 
--- ## Substitution on spines
--- A var atom expands to a whole spine, so this is not a map: it is the spine
--- image of Row.applySubst. Written by structural recursion (not via
--- ofSpine/toSpine) so the regressions keep reducing by rfl.
-def sApplySubst {B : Type} (θ : TySubst B) : List (Atom B) → List (Atom B)
-  | [] => []
-  | .field l τ :: s => .field l (τ.applySubst θ) :: sApplySubst θ s
-  | .var α :: s     => (θ.row α).toSpine ++ sApplySubst θ s
 
 -- ⊢  ofSpine (sApplySubst θ s)  ≈ᵣ  (ofSpine s).applySubst θ
 theorem sApplySubst_equiv {B : Type} (θ : TySubst B) :
@@ -351,11 +264,8 @@ theorem unifies_sApplySubst_of_sat {B : Type} {θ : TySubst B} {s : Sol B}
 -- the supply is a Nat, and the avoid-set is PROOF-ONLY: the algorithm never
 -- computes it, so the arms stay reducible.
 
--- ## The supply
-/-- The invariant: every name `S` can still produce is longer than everything
-in `avoid`, hence fresh for it. -/
-def Supply.Avoids (S : Supply) (avoid : List TyVar) : Prop := lenBound avoid < S.next
 
+-- ## The supply  (`Supply`, `Supply.Avoids`, `localSupply`, Defs.lean)
 -- lenBound is a foldr of max, so consing is definitional.
 theorem lenBound_cons (a : TyVar) (l : List TyVar) :
     lenBound (a :: l) = max a.length (lenBound l) := rfl
@@ -625,8 +535,6 @@ theorem groundMatch_ftv {B : Type} {s₁ s₂ : List (Atom B)} {τ τ' : Ty B}
   · rw [if_pos hv] at h; cases h
   · rw [if_neg hv] at h; exact groundMatchAux_ftv _ h
 
--- The initial supply of a row problem, and the invariant it establishes.
-def initSupply {B : Type} (ρ₁ ρ₂ : Row B) : Supply := ⟨lenBound (ρ₁.ftv ++ ρ₂.ftv) + 1⟩
 
 -- The supply unifySpineM actually starts from does avoid its problem.
 theorem localSupply_avoids {B : Type} (s₁ s₂ : List (Atom B)) :

@@ -2,7 +2,7 @@
 --
 -- Part of RowUnify; see RowUnify.lean for the overview.
 
-import RowUnify.Detectors
+import RowUnify.Defs
 
 namespace MinimalCalculus
 
@@ -266,15 +266,8 @@ theorem two_sided_no_mgu {B : Type} (b : B) (l : Label) :
   rw [hcα] at hrig
   simp [Row.toSpine, sFieldCount] at hrig
 
--- ## No-mgu depends only on the unifier SET
--- `HasMgu` packages "a most general unifier exists". Crucially InstanceOf never
--- mentions the rows — only θ's action on variables — so two unification problems
--- with the SAME unifiers (as substitutions) have the SAME mgu-status. This is the
--- vehicle for lifting stuck⟹no-mgu through the unifier-set-PRESERVING moves.
-def HasMgu {B : Type} (ρ₁ ρ₂ : Row B) : Prop :=
-  ∃ θ : TySubst B, Unifies θ ρ₁ ρ₂ ∧
-    ∀ θ' : TySubst B, Unifies θ' ρ₁ ρ₂ → InstanceOf θ' θ
 
+-- ## No-mgu depends only on the unifier SET  (`HasMgu`, Defs.lean)
 -- ⊢  (∀θ. θ ⊨ ρ₁≐ᵣρ₂  ↔  θ ⊨ ρ₁'≐ᵣρ₂')   ⟹   (HasMgu ρ₁ ρ₂ ↔ HasMgu ρ₁' ρ₂')
 theorem hasMgu_congr {B : Type} {ρ₁ ρ₂ ρ₁' ρ₂' : Row B}
     (h : ∀ θ : TySubst B, Unifies θ ρ₁ ρ₂ ↔ Unifies θ ρ₁' ρ₂') :
@@ -304,22 +297,13 @@ theorem hasMgu_symm {B : Type} {ρ₁ ρ₂ : Row B} : HasMgu ρ₁ ρ₂ ↔ Ha
   apply hasMgu_congr; intro θ; unfold Unifies
   exact ⟨RowEquiv.symm, RowEquiv.symm⟩
 
--- ## Predicate-based mgu: lifting no-mgu through the eq-EMITTING moves
--- The strip moves preserve the unifier set exactly, so `hasMgu_congr` (stated on
--- two ROW problems) discharges them. matchL/matchR/groundMatch instead emit a
--- type equation: a unifier of the original is EXACTLY a unifier of the residual
--- row problem that ALSO satisfies `τ ≐ τ'`. That is still a set of substitutions,
--- just not the unifier set of a bare row equation. Since `InstanceOf` mentions
--- only the substitutions (never the rows), mgu-status is a property of that SET,
--- whatever cuts it out. So we generalize `HasMgu` to an arbitrary unifier
--- PREDICATE and get a congruence that covers the eq-emitting moves for free.
-def HasMguP {B : Type} (P : TySubst B → Prop) : Prop :=
-  ∃ θ : TySubst B, P θ ∧ ∀ θ' : TySubst B, P θ' → InstanceOf θ' θ
 
 -- `HasMgu` is the predicate version instantiated at the row-unifier predicate.
 theorem hasMgu_eq_hasMguP {B : Type} (ρ₁ ρ₂ : Row B) :
     HasMgu ρ₁ ρ₂ ↔ HasMguP (fun θ => Unifies θ ρ₁ ρ₂) := Iff.rfl
 
+-- ## Predicate-based mgu: lifting no-mgu through the eq-EMITTING moves
+-- (`HasMguP`, Defs.lean)
 -- ⊢  (∀θ. P θ ↔ Q θ)   ⟹   (HasMguP P ↔ HasMguP Q)
 -- Pointwise-equal unifier predicates have the same mgu-status. This is the whole
 -- reason no-mgu lifts through moves: they only ever REDESCRIBE the unifier set.

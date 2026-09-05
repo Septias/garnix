@@ -25,15 +25,6 @@ namespace MinimalCalculus
 -- This is now THE algorithm: the single-pass URes driver and its four legs were
 -- deleted once P5/P6 had ported them (proof-plan.md §4-P5/P6).
 
--- ## Binding a type variable, occurs-checked
--- α ≐ α is vacuous; otherwise α ≔ τ, guarded. ftv spans BOTH sorts
--- (minimal.lean:691), so `α ≐ {… α …}` is rejected even when the inner α is a
--- row variable and the problem is in fact solvable — the same conservatism the
--- row occurs guard has (occurs_allVar_hasMgu), and §1.3 keeps it deliberately:
--- the guard is what makes a binding eliminate its variable.
-def tyIsVar {B : Type} : Ty B → Option TyVar
-  | .var β => some β
-  | _      => none
 
 theorem tyIsVar_eq {B : Type} : {τ : Ty B} → {α : TyVar} → tyIsVar τ = some α → τ = .var α
   | .var _, _, h => by simp only [tyIsVar, Option.some.injEq] at h; rw [h]
@@ -41,145 +32,6 @@ theorem tyIsVar_eq {B : Type} : {τ : Ty B} → {α : TyVar} → tyIsVar τ = so
   | .unk, _, h => by simp [tyIsVar] at h
   | .fn _ _, _, h => by simp [tyIsVar] at h
   | .rcd _, _, h => by simp [tyIsVar] at h
-
--- Written as a chain of `if`s rather than a match on τ, so it has ONE
--- unconditional equation and its soundness/completeness proofs never case-split
--- on the shape of τ.
-def bindTy {B : Type} (S : Supply) (α : TyVar) (τ : Ty B) : UResM B :=
-  if tyIsVar τ = some α then .success .nil S
-  else if τ.ftv.contains α then .occurs
-  else .success ⟨[(α, τ)], []⟩ S
-
--- ## U-var-solve, at the mutual driver's result type
--- Same detector as solveVar (:97); solveVar's successes always carry eqs = [],
--- so nothing is lost by dropping that component here.
-def solveVarM {B : Type} (S : Supply) : List (Atom B) → List (Atom B) → Option (UResM B)
-  | [.var α], s₂ =>
-      some (if (sVarSeq s₂).contains α then .occurs
-            else .success (Sol.ofRow [(α, ofSpine s₂)]) S)
-  | _, _ => none
-
--- ## U-expand, at the mutual driver's result type
--- expandRes (:217) parked the equation τ ≐ δ. Here δ is FRESH, so that
--- equation has the one solution δ ≔ τ — solving it eagerly is exactly what the
--- driver does everywhere else, and it keeps P3's metatheory (which invents δ)
--- applicable verbatim. The recursive solution is composed ON TOP, so the
--- expansion's own binding sees whatever the residual did to β′.
-def expandResM {B : Type} (S : Supply) (β : TyVar) (l : Label) (τ : Ty B) :
-    UResM B → UResM B
-  | .success s S' =>
-      .success (s.comp ⟨[(S.fresh.1, τ)],
-                        [(β, .cat (.sing l (.var S.fresh.1)) (.var S.fresh.2.fresh.1))]⟩) S'
-  | r => r
-
--- ## The driver
--- unifyTyF is ≐; unifySpineMF is ≐ᵣ. Both consume one unit of fuel per
--- cross-call, so the block is STRUCTURALLY recursive on fuel — which is what
--- keeps the regressions kernel-checked `rfl` executions (§1.3).
-mutual
-
-def unifyTyF {B : Type} [DecidableEq B] (S : Supply) (fuel : Nat) : Ty B → Ty B → UResM B
-  -- The fuel is consumed in the two RECURSIVE arms only, so the match on it
-  -- sits inside: every other verdict is reached at any fuel, and the fuel
-  -- lemma below then has exactly two interesting cases.
-  | .var α, τ₂ => bindTy S α τ₂
-  | τ₁, .var α => bindTy S α τ₁
-  -- ★ is RIGID (§5): it unifies with itself and clashes with everything else
-  | .unk, .unk => .success .nil S
-  | .base b, .base b' => if b = b' then .success .nil S else .clash
-  | .fn a₁ b₁, .fn a₂ b₂ =>
-      match fuel with
-      | 0 => .outOfFuel
-      | f+1 =>
-          (unifyTyF S f a₁ a₂).seq fun θ S' =>
-            unifyTyF S' f (b₁.applySubst θ) (b₂.applySubst θ)
-  | .rcd ρ₁, .rcd ρ₂ =>
-      match fuel with
-      | 0 => .outOfFuel
-      | f+1 => unifySpineMF S f ρ₁.toSpine ρ₂.toSpine
-  | _, _ => .clash
-
-def unifySpineMF {B : Type} [DecidableEq B] :
-    Supply → Nat → List (Atom B) → List (Atom B) → UResM B
-  | S, _, [], s₂ =>
-      match allVarsEmpty s₂ with
-      | some σ => .success (Sol.ofRow σ) S
-      | none   => .clash
-  | S, _, s₁, [] =>
-      match allVarsEmpty s₁ with
-      | some σ => .success (Sol.ofRow σ) S
-      | none   => .clash
-  | _, 0, _, _ => .outOfFuel
-  | S, fuel+1, s₁, s₂ =>
-      match stripL s₁ s₂ with
-      | some (t₁, t₂) => unifySpineMF S fuel t₁ t₂
-      | none =>
-      match stripR s₁ s₂ with
-      | some (t₁, t₂) => unifySpineMF S fuel t₁ t₂
-      | none =>
-      match solveVarM S s₁ s₂ with
-      | some r => r
-      | none =>
-      match solveVarM S s₂ s₁ with
-      | some r => r
-      | none =>
-      match matchL s₁ s₂ with
-      | some (τ, τ', t₁, t₂) =>
-          (unifyTyF S fuel τ τ').seq fun θ S' =>
-            unifySpineMF S' fuel (sApplySubst θ t₁) (sApplySubst θ t₂)
-      | none =>
-      match matchL s₂ s₁ with
-      | some (τ', τ, t₂, t₁) =>
-          (unifyTyF S fuel τ τ').seq fun θ S' =>
-            unifySpineMF S' fuel (sApplySubst θ t₁) (sApplySubst θ t₂)
-      | none =>
-      match matchR s₁ s₂ with
-      | some (τ, τ', t₁, t₂) =>
-          (unifyTyF S fuel τ τ').seq fun θ S' =>
-            unifySpineMF S' fuel (sApplySubst θ t₁) (sApplySubst θ t₂)
-      | none =>
-      match matchR s₂ s₁ with
-      | some (τ', τ, t₂, t₁) =>
-          (unifyTyF S fuel τ τ').seq fun θ S' =>
-            unifySpineMF S' fuel (sApplySubst θ t₁) (sApplySubst θ t₂)
-      | none =>
-      match groundMatch s₁ s₂ with
-      | some (τ, τ', t₁, t₂) =>
-          (unifyTyF S fuel τ τ').seq fun θ S' =>
-            unifySpineMF S' fuel (sApplySubst θ t₁) (sApplySubst θ t₂)
-      | none =>
-      match groundMatch s₂ s₁ with
-      | some (τ', τ, t₂, t₁) =>
-          (unifyTyF S fuel τ τ').seq fun θ S' =>
-            unifySpineMF S' fuel (sApplySubst θ t₁) (sApplySubst θ t₂)
-      | none =>
-      match expandL S s₁ s₂ with
-      | some (β, l, τ, t₁, t₂) =>
-          expandResM S β l τ (unifySpineMF S.fresh.2.fresh.2 fuel t₁ t₂)
-      | none =>
-      match expandL S s₂ s₁ with
-      | some (β, l, τ, t₁, t₂) =>
-          expandResM S β l τ (unifySpineMF S.fresh.2.fresh.2 fuel t₁ t₂)
-      | none =>
-      if projClash s₁ s₂ then .clash else .stuck
-
-end
-
--- ## Entry points
--- Fuel stays EXPLICIT at the top level. §1.3 wanted a closed-form bound
--- realizing a lexicographic measure; solve-and-apply defeats that (see the
--- note below unifyM_fuel_mono), and it is not needed: `outOfFuel` makes every
--- reached verdict fuel-independent, and only the stuck leg (P6) has to know
--- that enough fuel exists.
-def unifySpineM {B : Type} [DecidableEq B] (fuel : Nat) (s₁ s₂ : List (Atom B)) : UResM B :=
-  unifySpineMF (localSupply s₁ s₂) fuel s₁ s₂
-
-def unifyRowM {B : Type} [DecidableEq B] (fuel : Nat) (ρ₁ ρ₂ : Row B) : UResM B :=
-  unifySpineM fuel ρ₁.toSpine ρ₂.toSpine
-
-def unifyTyM {B : Type} [DecidableEq B] (fuel : Nat) (τ τ' : Ty B) : UResM B :=
-  unifyTyF ⟨lenBound (τ.ftv ++ τ'.ftv) + 1⟩ fuel τ τ'
-
 
 
 -- ## Two worked verdicts, kernel-checked
@@ -223,10 +75,8 @@ theorem crossfield_success {B : Type} [DecidableEq B] (b : B) :
 -- except the stuck one needs; only P6 has to know that a sufficient budget
 -- exists at all.
 
-/-- `Mono r r'`: `r` is what the algorithm answered on some budget and `r'` on a
-larger one — either the smaller run ran out, or the two agree. -/
-def UResM.Mono {B : Type} (r r' : UResM B) : Prop := r = .outOfFuel ∨ r' = r
 
+-- ## Fuel monotonicity  (`UResM.Mono`, Defs.lean)
 theorem UResM.Mono.rfl' {B : Type} (r : UResM B) : UResM.Mono r r := .inr rfl
 
 -- ⊢  Mono is compatible with sequencing, ARM-WISE: no side condition survives
@@ -384,8 +234,6 @@ theorem unifyRowM_fuel_mono {B : Type} [DecidableEq B] {fuel fuel' : Nat}
     {ρ₁ ρ₂ : Row B} (h : fuel ≤ fuel') (hne : unifyRowM fuel ρ₁ ρ₂ ≠ .outOfFuel) :
     unifyRowM fuel' ρ₁ ρ₂ = unifyRowM fuel ρ₁ ρ₂ :=
   unifySpineMF_fuel_mono h hne
-
-
 
 
 end MinimalCalculus
