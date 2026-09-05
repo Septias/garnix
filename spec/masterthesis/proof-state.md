@@ -48,26 +48,6 @@ Principality forces qualified schemes that use parked stumps during unification 
 
 
 ## Unification
-- [x] all worked examples mechanized;
-- [x] ≐ᵣ executable; clash-soundness (projClash) done;
-- Soundness
-  - [x] Success
-   - a .stuck is genuine;
-- [x] OCCURS CHARACTERIZED — `.
-- [x] CLASH ALGORITHM-LEVEL done — unifyRow_clash_no_unifier;
-- [x] MGU-ON-SUCCESS done
-- [x] STUCK⟹NO-MGU — but only as a REDUCTION, the naive statement is FALSE.
-  - reusable order-agnostic threading principle done
-- [~] MUTUAL ≐/≐ᵣ (proof-plan.md)
-- [x] ALL THREE base techniques now done:
-  - count-shrink (vars_vs_field_no_mgu)
-  - rigidity (two_sided_no_mgu)
-  - non-commutativity
-- [x] MATCH/GROUND congruence now done:
-- [ ] Remaining for the full lift: assembling the general base arm from the three techniques (+ the all-var argument generalized beyond the swap) and re-running those base witnesses under the accumulated equations (carry them as the HasMguP predicate through the fuel induction);
-- [x] type-level ≐ — unifyTyF (P4): var-binding with a cross-sort occurs
-  guard, ★ rigid, fn solve-and-apply, rcd descending into ≐ᵣ. Its metatheory
-  (the P5 legs at the type sort) is not yet written.
 
 
 ## Symbols

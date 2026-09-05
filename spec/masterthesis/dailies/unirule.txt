@@ -1,0 +1,49 @@
+≐ᵣ dispatch cascade
+`w` = fields only (window stops at first var),
+
+| =  | LHS spine `s₁`           | RHS spine `s₂`       | side condition                                                                   | rule                    | result                                                                                |
+|----|--------------------------|----------------------|----------------------------------------------------------------------------------|-------------------------|---------------------------------------------------------------------------------------|
+| 1  | `[]`                     | `β₁ ⋯ βₙ`            | —                                                                                | U-ε-var                 | `success [βᵢ ≔ ε]`                                                                    |
+| 2  | `[]`                     | contains a field     | —                                                                                | U-ε-clash               | `clash`                                                                               |
+| 3  | `α₁ ⋯ αₙ` (all vars)     | `[]`                 | —                                                                                | U-ε-var                 | `success [αᵢ ≔ ε]`                                                                    |
+| 4  | contains a field         | `[]`                 | —                                                                                | U-ε-clash               | `clash`                                                                               |
+| 5  | `α · t₁`                 | `α · t₂`             | same var                                                                         | U-var-refl (`stripL`)   | recurse `t₁ ≐ᵣ t₂`                                                                    |
+| 6  | `t₁ · α`                 | `t₂ · α`             | same var                                                                         | U-var-refl (`stripR`)   | recurse `t₁ ≐ᵣ t₂`                                                                    |
+| 7  | `[α]`                    | anything             | `α ∉ vars(s₂)`                                                                   | U-var-solve             | `success [α ≔ ofSpine s₂]`                                                            |
+| 7′ | `[α]`                    | anything             | `α ∈ vars(s₂)`                                                                   | U-var-solve / occurs    | `occurs`                                                                              |
+| 8  | anything                 | `[β]`                | mirror of 7 / 7′                                                                 | U-var-solve             | `success [β ≔ ofSpine s₁]` / `occurs`                                                 |
+| 9  | `l: τ · t₁`              | `w · l: τ′ · t₂`     |  `l ∉ labels(w)`                                                                 | U-field left (`matchL`) | recurse `t₁ ≐ᵣ (w · t₂)`, emit `τ ≐ τ′`                                               |
+| 10 | `w · l: τ · t₁`          | `l: τ′ · t₂`         | mirror of 9                                                                      | U-field left (swapped)  | same, emitting `τ ≐ τ′`                                                               |
+| 11 | `t₁ · l: τ`              | `t₂ · l: τ′ · w`     | mirror of 9 at the *right* end (`matchR`)                                        | U-field right           | recurse, emit `τ ≐ τ′`                                                                |
+| 12 | `t₁ · l: τ · w`          | `t₂ · l: τ′`         | mirror of 11                                                                     | U-field right (swapped) | recurse, emit `τ ≐ τ′`                                                                |
+| 13 | anything                 | *var-free*           | ∃ `l ∈ labels(s₁)` with `#l(s₁) = #l(s₂) > 0`                                    | U-ground                | remove *first* `l`-field anywhere on each side (vars skipped), recurse, emit `τ ≐ τ′` |
+| 14 | *var-free*               | anything             | mirror of 13                                                                     | U-ground (swapped)      | same                                                                                  |
+| 15 | any                      | any                  | `projClash s₁ s₂`: ∃ `l` with `#l(s₂) < #l(s₁)` and `s₂` var-free (or symmetric) | U-clash                 | `clash`                                                                               |
+| 16 | any                      | any                  | everything above dead                                                            | U-stuck                 | `stuck` (Wand ambiguity)                                                              |
+
+
+== Worked inputs, mapped onto the table
+
+(`B := Unit`, `𝓫` = `Ty.base ()`).
+
+| input                                   | rules that fire | verdict                                                     |
+|---                                      |---              |---                                                          |
+| `ε ≐ᵣ ε                               ` | 1               |`success [] []                 `                             |
+| `(l: 𝓫 | α) ≐ᵣ (m: 𝓫 | α)             ` | 6 → 4           |`clash                         `                             |
+| `(l: 𝓫) ≐ᵣ (α | l: 𝓫)                 ` | 11 → 3          |`success [α ≔ ε] [(𝓫,𝓫)]       `                             |
+| `(β | α) ≐ᵣ (l: 𝓫)                    ` | none            |`stuck                         ` (Wand)                      |
+| `(α | l: 𝓫 | β) ≐ᵣ (l: 𝓫)             ` | 13 → 3          |`success [α ≔ ε, β ≔ ε] [(𝓫,𝓫)]`                             |
+| `(β | l: 𝓫 | α) ≐ᵣ (l′: 𝓫)            ` | 15              |`clash                         ` (global, not per-window)    |
+| `α ≐ᵣ (l: 𝓫 | α)                      ` | 6 → 2           |`clash                         ` (cancellation beats occurs) |
+| `α ≐ᵣ (l: 𝓫 | α | m: 𝓫)               ` | 7′              |`occurs                        `                             |
+| `α ≐ᵣ β                               ` | 7               |`success [α ≔ (β | ε)] []     `                              |
+| `(α | l: 𝓫) ≐ᵣ (l: 𝓫 | β)             ` | none            |`stuck                         ` (Levi splits two ways)      |
+| `(k:{β} | β | α) ≐ᵣ (k:{l:𝓫} | l:𝓫)   ` | 9 → stuck       |`stuck                         ` — *but an mgu exists*       |
+
+The last row (`unify_eq_rescued_stuck`) is why the stuck leg is stated as a
+reduction relative to the emitted equations `Q` (`unifySpineF_stuck_no_mgu`,
+`lean/RowUnify.lean:2721`) rather than as "`stuck` ⟹ no mgu": rule 9 peels the
+`k`-field and emits `{β} ≐ {l: 𝓫}`, leaving the Wand residual `(β | α) ≐ᵣ (l: 𝓫)`,
+but the emitted equation forces `β ≈ (l: 𝓫)` and hence `α ≈ ε`.
+
+

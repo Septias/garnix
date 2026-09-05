@@ -16,11 +16,6 @@ W : warnings (definite-absence flags, ★-degradations)
 
 - The declarative system *reads* solutions via L-α; the algorithm *writes*
   them via unification. "θ only gets refined during solving".
-- The *occurs-check* is not an optimization: it maintains Ctx.RowWF (acyclic,
-  rank-decreasing solutions), which is the hypothesis typed_ext and lookup
-  totality consume. Occurs-check failure on a row-var = would-be recursive
-  row = reject¿ (or ★-degrade? see Failure policy; Nix recursive attrsets
-  suggest we eventually want equi-recursive rows, out of scope here)
 
 
 == Judgments
