@@ -7,7 +7,7 @@ import RowUnify.Driver
 namespace MinimalCalculus
 
 --------------------- P5: SUCCESS SOUNDNESS, MUTUALLY -----------------------
--- proof-plan.md §2 (table row 1) / §4-P5. Success soundness at both sorts: a θ
+-- Success soundness at both sorts: a θ
 -- that meets the solution unifies the problem.
 --
 -- An eq-emitting arm's success is a COMPOSITE, and Sol.Sat.comp_inv splits it

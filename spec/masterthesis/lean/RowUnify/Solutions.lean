@@ -42,16 +42,13 @@ theorem SolSat.tail {B : Type} {θ : TySubst B} {α : TyVar} {ρ : Row B}
   fun p hp => h p (List.mem_cons_of_mem _ hp)
 
 ---------------- P1: SCAFFOLDING FOR THE MUTUAL ≐ / ≐ᵣ DRIVER -----------------
--- proof-plan.md §1.1 + §2 ("New, small"). The vocabulary the mutual driver is
--- stated in: solutions at both sorts, its result type, and the apply-then-unify
--- bridge every eq-emitting arm consumes.
+-- The vocabulary the mutual driver is stated in: solutions at both sorts, its
+-- result type, and the apply-then-unify bridge every eq-emitting arm consumes.
 --
--- The one genuinely new piece of theory is ≗ and its congruence: applySubst
--- respects POINTWISE ≈-EQUALITY of substitutions. minimal.lean only has the
--- equality version (Ty/Row.applySubst_congr), which is too rigid here — a
--- solution is only ever met UP TO ≈ (SolSat), so "θ agrees with
--- θ ∘ s.toSubst" can only ever be a ≈-statement. Everything else in this
--- section is bookkeeping on top of it.
+-- The one new piece of theory is ≗ and its congruence: applySubst respects
+-- POINTWISE ≈-EQUALITY of substitutions. minimal.lean has only the equality
+-- version (Ty/Row.applySubst_congr), too rigid here — a solution is only ever
+-- met UP TO ≈ (SolSat). The rest is bookkeeping on top of it.
 
 
 theorem SubstEquiv.refl {B : Type} (θ : TySubst B) : θ ≗ θ :=
@@ -130,7 +127,7 @@ theorem Sol.Sat.substEquiv {B : Type} {θ : TySubst B} {s : Sol B}
     · exact h.2 _ hm
 
 
--- THE COMPOSE LEMMA the P5 arms need (proof-plan.md §2, table row 1): meeting a
+-- THE COMPOSE LEMMA the P5 arms need: meeting a
 -- composite means meeting both halves. The s₂ half is immediate (it sits in the
 -- append verbatim); the s₁ half then follows from ≗-congruence, since θ is
 -- ≈-unchanged by s₂.
@@ -188,7 +185,7 @@ theorem sApplySubst_equiv {B : Type} (θ : TySubst B) :
       (ofSpine_append _ _).trans
         (.cat (Row.toSpine_equiv (θ.row α)).symm (sApplySubst_equiv θ s))
 
--- ## THE BRIDGE (proof-plan.md §2, "New, small")
+-- ## THE BRIDGE
 -- Unifying the σ-substituted problem = unifying the original under θ ∘ σ.
 -- ⊢  θ ⊨ ρ₁σ ≐ᵣ ρ₂σ   ↔   (θ ∘ σ) ⊨ ρ₁ ≐ᵣ ρ₂
 theorem unifies_applySubst_iff {B : Type} (θ σ : TySubst B) (ρ₁ ρ₂ : Row B) :
@@ -252,17 +249,15 @@ theorem unifies_sApplySubst_of_sat {B : Type} {θ : TySubst B} {s : Sol B}
 
 
 ------------------- P2: A FRESH-VARIABLE SUPPLY FOR ≐ / ≐ᵣ -------------------
--- proof-plan.md §1.4 / §4-P2. expandVar (P3) invents a field type δ and a tail
--- β′ out of thin air; every soundness proof about it then needs "θ may be
--- perturbed on δ and β′ without changing what it does to the problem". That is
--- the whole content of this section. It is also, independently, the missing
--- input for the qualified-scheme non-vacuity milestone.
+-- U-expand invents a field type δ and a tail β′ out of thin air, so every
+-- soundness proof about it needs "θ may be perturbed on δ and β′ without
+-- changing what it does to the problem". That is this section. (It is also the
+-- missing input for the qualified-scheme non-vacuity milestone.)
 --
--- The generator is minimal.lean's `natName`, reused verbatim: natName n has
--- LENGTH n, so a name longer than everything in an avoid-set is fresh and two
--- names of different lengths never collide. Nothing here inspects strings —
--- the supply is a Nat, and the avoid-set is PROOF-ONLY: the algorithm never
--- computes it, so the arms stay reducible.
+-- The generator is minimal.lean's `natName`: natName n has LENGTH n, so a name
+-- longer than everything in an avoid-set is fresh and two names of different
+-- lengths never collide. The supply is a Nat and the avoid-set is PROOF-ONLY,
+-- so the arms stay reducible.
 
 
 -- ## The supply  (`Supply`, `Supply.Avoids`, `localSupply`, Defs.lean)
@@ -419,8 +414,7 @@ theorem Supply.unifies_setRow_fresh {B : Type} {S : Supply} {θ : TySubst B}
 
 -- ## The invariant survives every existing move
 -- Each detector's residual mentions no new variable, so `S.Avoids` transports
--- to the recursive call by Avoids.mono. (The detectors themselves are
--- untouched by the rebuild — proof-plan.md §2, "survives untouched".)
+-- to the recursive call by Avoids.mono.
 theorem windowExtract_ftv {B : Type} {l : Label} :
     (s : List (Atom B)) → {τ : Ty B} → {s' : List (Atom B)} →
     windowExtract l s = some (τ, s') → τ.ftv ⊆ sFtv s ∧ sFtv s' ⊆ sFtv s
@@ -544,14 +538,13 @@ theorem initSupply_avoids {B : Type} (ρ₁ ρ₂ : Row B) :
     (initSupply ρ₁ ρ₂).Avoids (ρ₁.ftv ++ ρ₂.ftv) := Nat.lt_succ_self _
 
 
------------------- P3: UNIQUE-HOST VARIABLE EXPANSION (§1.4) ------------------
--- The missing rule (proof-state.md 26-09-02, proof-plan.md §1.4): when a
--- leading field's label is absent from the OTHER side ENTIRELY and that side
--- has EXACTLY ONE variable, that variable is FORCED to host the field —
+------------------ P3: UNIQUE-HOST VARIABLE EXPANSION ------------------
+-- When a leading field's label is absent from the OTHER side ENTIRELY and that
+-- side has EXACTLY ONE variable, that variable is FORCED to host the field —
 -- β ≔ (l:δ | β′), δ and β′ fresh. With two candidate hosts the rule must NOT
 -- fire (that is Wand, where vars_vs_field_no_mgu proves there is genuinely no
--- mgu); refusing when the host is UNIQUE costs completeness for free, which is
--- exactly crossfield_unifiable (NoMgu.lean).
+-- mgu); refusing when the host is UNIQUE costs completeness, which is exactly
+-- crossfield_unifiable (NoMgu.lean).
 --
 -- This section is the METATHEORY of the move: the host is forced (host_forced),
 -- the algebraic shift the move performs (expand_shift), and the two reflection
@@ -750,9 +743,8 @@ theorem mem_sFtv_of_mem_sVarSeq {B : Type} {α : TyVar} :
 
 -- FORWARD (completeness): a unifier of the original EXTENDS to one that meets
 -- the binding and the emitted equation and unifies the residual. The extension
--- only touches δ and β′, which are FRESH — that is where P2 is consumed, and it
--- is why the move does not shrink the unifier set (unlike matchL/groundMatch,
--- proof-plan.md §2 CAVEAT).
+-- only touches δ and β′, which are FRESH — which is why the move does not
+-- shrink the unifier set (unlike matchL/groundMatch).
 theorem expand_reflect_fwd {B : Type} {θ : TySubst B} {l : Label} {τ : Ty B}
     {β dv β' : TyVar} {t₁ s₂ : List (Atom B)}
     (hv : sVarSeq s₂ = [β]) (hc : sFieldCount l s₂ = 0)
@@ -849,10 +841,9 @@ theorem crossfield_host_forced {B : Type} (b : B) {l m : Label} (hne : l ≠ m)
   obtain ⟨σ, ρ', hty, hβ⟩ := host_forced (t₁ := [Atom.var α]) rfl hc hu'
   exact ⟨ρ', hβ.trans (RowEquiv.cat (RowEquiv.sing hty.symm) (.refl _))⟩
 
--- THE FUEL OBSERVATION (contra proof-plan.md §1.3, which expects the bound to
--- die): fusing the expansion with the pairing it enables costs ONE atom, so the
--- existing bound |s₁| + |s₂| still works. Only P4's solve-and-apply grows a
--- spine, so the lexicographic measure is needed there, not here.
+-- THE FUEL OBSERVATION: fusing the expansion with the pairing it enables costs
+-- ONE atom, so the bound |s₁| + |s₂| still works. Only solve-and-apply grows a
+-- spine.
 -- ⊢  expandL S s₁ s₂ = some (β,l,τ,t₁,t₂)  ⟹  |t₁|+|t₂| + 1 = |s₁|+|s₂|
 theorem expandL_len {B : Type} {S : Supply} {s₁ s₂ : List (Atom B)}
     {β : TyVar} {l : Label} {τ : Ty B} {t₁ t₂ : List (Atom B)}

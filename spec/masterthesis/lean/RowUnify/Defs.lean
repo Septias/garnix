@@ -36,12 +36,10 @@ namespace MinimalCalculus
 -- No LUtail: field demands never flow through ≐ᵣ (they park as stumps), so
 -- the algorithm never guesses a field into a var. Type equations are SOLVED on
 -- the spot by the type pass and applied to the residual — that mutual recursion
--- is what makes a `.stuck` verdict mean something (proof-plan.md §0).
+-- is what makes a `.stuck` verdict mean something.
 --
--- Presentation uses fuel (structural recursion ⟹ the algorithm computes by
--- rfl; the regressions are kernel-checked executions). Fuel is EXPLICIT at the
--- entry points and exhaustion is its own verdict, `outOfFuel`; unifyM_fuel_mono
--- says a verdict that was reached never changes when the budget grows.
+-- Fuel is EXPLICIT at the entry points (structural recursion ⟹ the algorithm
+-- computes by rfl) and exhaustion is its own verdict, `outOfFuel`.
 
 -- ## Spine measurements
 def sHasVar {B : Type} : List (Atom B) → Bool
@@ -145,7 +143,7 @@ def groundMatch {B : Type} (s₁ s₂ : List (Atom B)) :
     Option (Ty B × Ty B × List (Atom B) × List (Atom B)) :=
   if sHasVar s₂ then none else groundMatchAux s₁ s₂ (sLabels s₁)
 
--- ## U-expand: unique-host variable expansion (proof-plan.md §1.4)
+-- ## U-expand: unique-host variable expansion
 -- The DETECTORS only; the metatheory (host_forced, expand_shift, the two
 -- reflection lemmas) is in Solutions.lean.
 --
@@ -153,7 +151,7 @@ def groundMatch {B : Type} (s₁ s₂ : List (Atom B)) :
 -- (localSupply) and THREADED through the driver: deriving it per call from the
 -- current problem is non-monotone, since a move that drops a field drops its
 -- type's variables and the bound can fall below a name still in scope
--- (proof-plan.md §4-P3b(1)).
+--.
 
 
 structure Supply where
@@ -293,7 +291,7 @@ inductive UResM (B : Type) : Type where
   | stuck     : UResM B
   | outOfFuel : UResM B
 
--- Sequencing, as used by every eq-emitting arm in §1.2: run the second stage
+-- Sequencing, as used by every eq-emitting arm: run the second stage
 -- under the first stage's solution AND its supply, then compose. A non-success
 -- in either stage is the verdict of the whole.
 def UResM.seq {B : Type} : UResM B → (TySubst B → Supply → UResM B) → UResM B
@@ -345,8 +343,8 @@ def AgreeOn {B : Type} (θ θ' : TySubst B) (V : List TyVar) : Prop :=
 -- α ≐ α is vacuous; otherwise α ≔ τ, guarded. ftv spans BOTH sorts
 -- (minimal.lean:691), so `α ≐ {… α …}` is rejected even when the inner α is a
 -- row variable and the problem is in fact solvable — the same conservatism the
--- row occurs guard has (occurs_allVar_hasMgu), and §1.3 keeps it deliberately:
--- the guard is what makes a binding eliminate its variable.
+-- row occurs guard has (occurs_allVar_hasMgu). Deliberate: the guard is what
+-- makes a binding eliminate its variable.
 def tyIsVar {B : Type} : Ty B → Option TyVar
   | .var β => some β
   | _      => none
@@ -381,7 +379,7 @@ def expandResM {B : Type} (S : Supply) (β : TyVar) (l : Label) (τ : Ty B) :
 -- ## The driver
 -- unifyTyF is ≐; unifySpineMF is ≐ᵣ. Both consume one unit of fuel per
 -- cross-call, so the block is STRUCTURALLY recursive on fuel — which is what
--- keeps the regressions kernel-checked `rfl` executions (§1.3).
+-- keeps the regressions kernel-checked `rfl` executions.
 mutual
 
 def unifyTyF {B : Type} [DecidableEq B] (S : Supply) (fuel : Nat) : Ty B → Ty B → UResM B
@@ -390,7 +388,7 @@ def unifyTyF {B : Type} [DecidableEq B] (S : Supply) (fuel : Nat) : Ty B → Ty 
   -- lemma below then has exactly two interesting cases.
   | .var α, τ₂ => bindTy S α τ₂
   | τ₁, .var α => bindTy S α τ₁
-  -- ★ is RIGID (§5): it unifies with itself and clashes with everything else
+  -- ★ is RIGID: it unifies with itself and clashes with everything else
   | .unk, .unk => .success .nil S
   | .base b, .base b' => if b = b' then .success .nil S else .clash
   | .fn a₁ b₁, .fn a₂ b₂ =>
@@ -472,11 +470,9 @@ def unifySpineMF {B : Type} [DecidableEq B] :
 end
 
 -- ## Entry points
--- Fuel stays EXPLICIT at the top level. §1.3 wanted a closed-form bound
--- realizing a lexicographic measure; solve-and-apply defeats that (see the
--- note below unifyM_fuel_mono), and it is not needed: `outOfFuel` makes every
--- reached verdict fuel-independent, and only the stuck leg (P6) has to know
--- that enough fuel exists.
+-- Fuel stays EXPLICIT at the top level. No closed-form bound: solve-and-apply
+-- defeats it (see the note below unifyM_fuel_mono), and it is not needed —
+-- `outOfFuel` makes every reached verdict fuel-independent.
 def unifySpineM {B : Type} [DecidableEq B] (fuel : Nat) (s₁ s₂ : List (Atom B)) : UResM B :=
   unifySpineMF (localSupply s₁ s₂) fuel s₁ s₂
 

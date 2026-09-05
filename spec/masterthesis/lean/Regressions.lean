@@ -2,13 +2,10 @@
 -- makes the Lean kernel RUN the algorithm on a concrete input (B := Unit) and
 -- check the result — a regression test baked into the build. If ≐ᵣ's behaviour
 -- ever changes, the corresponding rfl stops type-checking and the build breaks.
--- (The `wand_under_*_no_mgu` worked proofs stay in RowUnify: they are proof
--- demos woven into the stuck-leg development, not rfl regressions; so are
--- crossfield_success and occurs_allVar_reported.)
 --
--- Fuel is explicit (proof-plan.md §4-P4): `outOfFuel` is its own verdict, so a
--- `.stuck` below always means every move is dead, never "the budget ran out",
--- and 20 is comfortably enough for every example here.
+-- Fuel is explicit: `outOfFuel` is its own verdict, so a `.stuck` below always
+-- means every move is dead, never "the budget ran out", and 20 is comfortably
+-- enough for every example here.
 
 import RowUnify
 
@@ -44,10 +41,8 @@ theorem unify_lutail :
 theorem unify_wand :
     unifyRowM (B := Unit) 20 (.cat (.var "b") (.var "a")) (.sing "l" uB) = .stuck := rfl
 
--- THE PAYOFF OF MUTUALIZATION (proof-plan.md §0(1), §4-P4). Under the single
--- row pass this was the sharp counterexample: (k:{β} | β | α) ≐ᵣ (k:{l:𝓫} | l:𝓫)
--- answered `.stuck`, because matchL peeled k and PARKED the equation
--- {β} ≐ {l:𝓫}, leaving the Wand residual (β | α) ≐ᵣ (l:𝓫) — yet the parked
+-- THE PAYOFF OF MUTUALIZATION. matchL peels k and emits {β} ≐ {l:𝓫}, leaving
+-- the Wand residual (β | α) ≐ᵣ (l:𝓫) — which alone is ambiguous, but the
 -- equation forces β ≈ (l:𝓫), hence α ≈ ε, so the problem has a UNIQUE mgu.
 -- The mutual driver solves that equation, applies it, and finds exactly it.
 -- ⊢  unifyRowM (k:{β} | β | α) (k:{l:𝓫} | l:𝓫)
@@ -100,7 +95,7 @@ theorem unify_two_sided_stuck :
     unifyRowM (B := Unit) 20 (.cat (.var "a") (.sing "l" uB))
                              (.cat (.sing "l" uB) (.var "b")) = .stuck := rfl
 
--- ## P1 scaffolding, kernel-checked (proof-plan.md §1.1)
+-- ## P1 scaffolding, kernel-checked
 -- The mutual driver applies a solution to the residual spine at every
 -- eq-emitting arm, so sApplySubst must REDUCE, not just be provably correct —
 -- that is what keeps the regressions above `rfl` once P4 lands.
@@ -127,7 +122,7 @@ theorem seq_composes :
 theorem seq_propagates :
     (UResM.success (B := Unit) ⟨[("t", uB)], []⟩ ⟨7⟩).seq (fun _ _ => .stuck) = .stuck := rfl
 
--- ## P2 freshness, kernel-checked (proof-plan.md §1.4)
+-- ## P2 freshness, kernel-checked
 -- The supply is a Nat and the avoid-set is proof-only, so drawing a name
 -- reduces — expandVar's arm will stay a `rfl` regression.
 -- ⊢  two draws from a supply are two DIFFERENT names
@@ -142,7 +137,7 @@ theorem initSupply_computes :
 theorem sFtv_computes :
     sFtv (B := Unit) [.var "a", .field "l" (.var "t")] = ["a", "t"] := rfl
 
--- ## P3 unique-host expansion, kernel-checked (proof-plan.md §1.4)
+-- ## P3 unique-host expansion, kernel-checked
 -- ⊢  crossfield FIRES, and picks β as the forced host: β ≔ (l:δ | β′), with the
 --    host side keeping its length (β renamed to the fresh β′)
 theorem expandL_crossfield :
@@ -171,14 +166,14 @@ theorem tyM_fn_solve_and_apply :
     unifyTyM (B := Unit) 5 (.fn (.var "x") (.var "x")) (.fn uB (.var "y")) =
       .success ⟨[("x", uB), ("y", uB)], []⟩ ⟨2⟩ := rfl
 
--- ★ is RIGID (proof-plan.md §5): it unifies with itself and nothing else.
+-- ★ is RIGID: it unifies with itself and nothing else.
 -- ⊢  ★ ≐ ★  =  success ∅      ⊢  ★ ≐ 𝓫  =  clash
 theorem tyM_unk_refl : unifyTyM (B := Unit) 5 .unk .unk = .success ⟨[], []⟩ ⟨1⟩ := rfl
 theorem tyM_unk_rigid : unifyTyM (B := Unit) 5 .unk uB = .clash := rfl
 
 -- The occurs guard spans BOTH sorts: x ≐ {x} is rejected even though the inner
 -- x is a ROW variable and θ.ty x = {ε}, θ.row x = ε solves it. Deliberate
--- conservatism (§1.3), the same price occurs_allVar_hasMgu records for rows.
+-- conservatism, the same price occurs_allVar_hasMgu records for rows.
 -- ⊢  x ≐ {x}  =  occurs
 theorem tyM_occurs_cross_sort :
     unifyTyM (B := Unit) 5 (.var "x") (.rcd (.var "x")) = .occurs := rfl

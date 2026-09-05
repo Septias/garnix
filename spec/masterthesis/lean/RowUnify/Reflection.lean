@@ -820,7 +820,7 @@ theorem wand_under_match_no_mgu {B : Type} (a b : B) :
 
 ------------------------- AGREEMENT: mgu MODULO FRESH NAMES -----------------
 -- The vocabulary ≐ᵣ completeness needs once the algorithm can INVENT variables
--- (proof-plan.md §4-P3b(2)); consumed by P5's completeness and clash legs and by
+--; consumed by P5's completeness and clash legs and by
 -- the boundedness invariant they rest on.
 
 

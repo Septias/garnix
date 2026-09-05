@@ -1,15 +1,9 @@
 -- Unification ≐ / ≐ᵣ: the executable MUTUAL algorithm (unifyTyF /
--- unifySpineMF, entry points unifyTyM / unifyRowM), the field-count invariant,
--- and the trichotomy legs — success soundness & completeness (mgu), clash
--- soundness, fuel monotonicity, terminal-stuck structure, and stuck ⟹ no-mgu
--- (still a reduction; see NEXT at the end of Trichotomy). Builds on RowEquiv.
+-- unifySpineMF, entry points unifyTyM / unifyRowM) and the trichotomy legs.
+-- Stuck ⟹ no-mgu is still a reduction; see NEXT at the end of Trichotomy.
 --
--- Defs.lean holds the algorithm and the vocabulary the theorems are stated in,
--- with no proofs — read it first. Then the base no-mgu techniques, the
--- scaffolding the driver is stated in (P1–P3), the driver's metatheory, and
--- the legs (P4–P6). proof-plan.md is the live plan.
---
--- This file is the root: the imports below are the table of contents, listed
+-- Read Defs.lean first — it is the algorithm and the vocabulary the theorems
+-- are stated in, with no proofs. The imports below are the table of contents,
 -- in dependency order (each module imports its predecessor).
 
 import RowUnify.Defs          -- the algorithm + statement vocabulary, proof-free

@@ -21,27 +21,16 @@ theorem unifyRowM_success_iff {B : Type} [DecidableEq B] {fuel : Nat} {ρ₁ ρ�
 
 
 ------------------ P6: THE BASE-ARM DISPATCH, STEP 2 ------------------------
--- proof-plan.md §3 / §4-P6. `hbase` — "a terminal stuck configuration has no
--- mgu" — is the one hypothesis the trichotomy still reduces to. Step 1 of its
--- dispatch is stuck_leading_shape: with stripL and both matchL
--- directions dead, the two leading atoms take one of four shapes. Step 2 is
--- here, and it is the payoff of P3b: a terminal configuration ALSO has both
--- U-expand directions dead, and that refusal is informative.
---
--- U-expand refuses for exactly two reasons (uniqueHost): the host side has
--- no UNIQUE variable, or the label is already present there. So whenever a
--- leading field faces the other side, the terminal configuration is
---
---   * ≥ 2 candidate hosts — Wand's shape, killed by count-shrink
---     (vars_vs_field_no_mgu), or
---   * the label already occurs on the other side, necessarily BEHIND a variable
---     (matchL is dead, so it is not in the window) — the two-sided shape, killed
---     by rigidity (two_sided_no_mgu).
---
--- That is exactly proof-plan.md §1.4's claim ("this shrinks the stuck class to
--- precisely what the three base techniques can kill"), now mechanized. What
--- remains for hbase is step 3: running those two witnesses at the general shape
--- rather than at the canonical examples.
+-- `hbase` — "a terminal stuck configuration has no mgu" — is the one hypothesis
+-- the trichotomy still reduces to. Step 1 is stuck_leading_shape: with stripL
+-- and both matchL directions dead, the two leading atoms take one of four
+-- shapes. Step 2 is here — a terminal configuration also has both U-expand
+-- directions dead, and uniqueHost refuses for exactly two reasons, so a leading
+-- field facing the other side means either
+--   * ≥ 2 candidate hosts — Wand's shape, killed by vars_vs_field_no_mgu, or
+--   * the label already occurs there, necessarily BEHIND a variable (matchL is
+--     dead) — the two-sided shape, killed by two_sided_no_mgu.
+-- Step 3 remains: run those witnesses at the general shape.
 
 -- ⊢  uniqueHost refuses for exactly two reasons
 theorem uniqueHost_none {B : Type} {l : Label} {s : List (Atom B)}
@@ -131,26 +120,19 @@ theorem stuck_field_vs_var {B : Type} {S : Supply} {l : Label} {τ : Ty B}
 
 
 ------------------ P6: STUCK ⟹ NO-MGU, MUTUALLY ----------------------------
--- The fourth leg on the mutual driver, still stated HONESTLY as a REDUCTION.
--- One thing gets strictly better and one thing gets harder.
+-- The fourth leg, still stated HONESTLY as a REDUCTION.
 --
--- BETTER: no fuel guard. `outOfFuel` is its own verdict now, so `.stuck` can
--- never be a budget artefact and the induction needs no `|s₁|+|s₂| ≤ fuel`
--- premise.
+-- No fuel guard: `outOfFuel` is its own verdict, so `.stuck` is never a budget
+-- artefact and the induction needs no `|s₁|+|s₂| ≤ fuel` premise.
 --
--- HARDER: an eq-emitting arm has TWO ways to be stuck, and the second is new.
--- Either the type sub-call is stuck — handled here, by the ≐ half of the same
--- induction — or it SUCCEEDED and the substituted residual is stuck. The second
--- is not a pointwise iff: relating the substituted residual's unifiers to the
--- original's needs `Sol.Sat θ s₁`, which only an EXTENSION of θ satisfies. So it
--- is parked as `hsolve` / `hsolveTy`, alongside `hbase` and `hexp`.
---
--- The root obstruction behind all three parked hypotheses is now identified and
--- recorded in proof-plan.md §4-P6: `HasMgu`, defined with strict `InstanceOf`
--- over ALL variables, is the wrong notion for an algorithm that invents
--- variables — the same mismatch `AgreeOn` fixed for completeness in §4-P3b(2),
--- one level up. Relativizing it is P6's first task; these four hypotheses are
--- what it has to discharge.
+-- An eq-emitting arm has TWO ways to be stuck: the type sub-call is stuck
+-- (handled here by the ≐ half of the same induction), or it SUCCEEDED and the
+-- substituted residual is stuck. The second is not a pointwise iff — relating
+-- the substituted residual's unifiers to the original's needs `Sol.Sat θ s₁`,
+-- which only an EXTENSION of θ satisfies — so it parks as `hsolve`/`hsolveTy`,
+-- alongside `hbase` and `hexp`. The root obstruction behind all of them:
+-- `HasMgu` uses strict `InstanceOf` over ALL variables, the wrong notion for an
+-- algorithm that invents them. Relativizing it is P6's first task.
 
 -- ## ≐'s congruence arms are pointwise iffs (so they need no hypothesis)
 theorem tyUnifies_fn_iff {B : Type} (θ : TySubst B) (a₁ b₁ a₂ b₂ : Ty B) :
@@ -549,31 +531,19 @@ theorem unifyRowM_stuck_no_mgu {B : Type} [DecidableEq B] {fuel : Nat} {ρ₁ ρ
 
 
 ------------------------------------ NEXT ------------------------------------
--- WHERE ≐ / ≐ᵣ STANDS (proof-plan.md is the live plan; §4 records each phase).
+-- WHERE ≐ / ≐ᵣ STANDS (proof-plan.md is the live plan).
 --
 -- The algorithm is `unifyTyF` / `unifySpineMF` — one mutual block, structurally
 -- recursive on fuel, so every worked example is a kernel-checked `rfl`
 -- (Regressions.lean). Five verdicts: success / clash / occurs / stuck /
--- outOfFuel. Three of the four legs are THEOREMS, one is a reduction:
+-- outOfFuel.
 --
---  * SUCCESS SOUNDNESS — unifyM_success_sound / unifyRowM_/unifyTyM_. A θ that
---    meets the solution unifies the problem. No residual equations: the driver
---    solves them. Any fuel.
---  * SUCCESS COMPLETENESS — unifyM_success_complete, in the ∃θ′/AgreeOn form
---    (a unifier cannot constrain names the run invented). With soundness:
---    unifyRowM_success_iff — the solution DESCRIBES the unifier set, i.e. ≐ᵣ
---    computes an mgu. Any fuel.
---  * CLASH — unifyM_clash_no_unifier, including a clash found inside a field
---    type; tyClash_dispatch refutes all twelve head mismatches at once. Any fuel.
---  * STUCK ⟹ NO-MGU — unifyM_stuck_no_mgu, a REDUCTION to four named
---    hypotheses: hbase (a terminal row configuration has no mgu), hexp (the
---    U-expand arm), hsolve/hsolveTy (the solve-and-apply arms). No fuel premise:
---    `outOfFuel` is a separate verdict, so `.stuck` is never a budget artefact.
---
--- Supporting invariants: unifyM_fuel_mono (a verdict that was REACHED never
--- changes when the budget grows — this replaces a termination measure, see §1.3)
--- and unifyM_bounded (a run only mentions names below the supply it returns —
--- the freshness invariant solve-and-apply forced).
+-- Three of the four legs are THEOREMS, at any fuel: unifyM_success_sound,
+-- unifyM_success_complete (∃θ′/AgreeOn form; with soundness, the solution
+-- DESCRIBES the unifier set — unifyRowM_success_iff), and
+-- unifyM_clash_no_unifier. The fourth, unifyM_stuck_no_mgu, is a REDUCTION to
+-- hbase, hexp and hsolve/hsolveTy. Supporting invariants: unifyM_fuel_mono and
+-- unifyM_bounded.
 --
 -- OPEN, in the order the plan wants them:
 --  * `HasMguOn V` / `InstanceOfOn V` — mgu RELATIVIZED to a variable set. The

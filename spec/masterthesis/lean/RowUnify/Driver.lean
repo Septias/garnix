@@ -7,20 +7,19 @@ import RowUnify.Reflection
 namespace MinimalCalculus
 
 --------------------- P4: THE MUTUAL ≐ / ≐ᵣ DRIVER ---------------------------
--- proof-plan.md §1.2 / §4-P4. The row pass solves the type equations it
+-- The row pass solves the type equations it
 -- discovers on the spot, by calling the type pass, and applies the solution to
 -- the residual before recursing. That is what makes the stuck verdict mean
--- something (§3): an equation is discharged, or fatal, or itself stuck — never
+-- something: an equation is discharged, or fatal, or itself stuck — never
 -- merely deferred.
 --
--- Three deviations from §1.2, all recorded in §4-P4:
+-- Three things the row pass alone did not need:
 --  * a success carries its SUPPLY, because a type equation solved inside a
 --    field may expand a row variable, and the invented tail travels into the
 --    residual; without threading, the residual call would re-draw that name;
 --  * `outOfFuel` is a separate verdict, so the fuel lemma is a structural
---    induction ("more fuel never changes a verdict that was reached") rather
---    than the termination measure §1.3 asked for — see the note on unifyBound;
---  * `[DecidableEq B]`: ≐ must decide 𝓫 = 𝓫′. The row pass never needed it.
+--    induction rather than a termination measure;
+--  * `[DecidableEq B]`: ≐ must decide 𝓫 = 𝓫′.
 
 
 theorem tyIsVar_eq {B : Type} : {τ : Ty B} → {α : TyVar} → tyIsVar τ = some α → τ = .var α
@@ -38,7 +37,7 @@ theorem tyIsVar_eq {B : Type} : {τ : Ty B} → {α : TyVar} → tyIsVar τ = so
 
 -- The occurs guard is CONSERVATIVE: it rejects α ≐ᵣ (β | α | γ), which
 -- occurs_allVar_unifiable shows is unifiable and occurs_allVar_hasMgu shows
--- has an MGU. Deliberate, and the price §1.3 accepts.
+-- has an MGU. Deliberate.
 -- ⊢  unifyRowM α (β | α | γ)  =  occurs
 theorem occurs_allVar_reported {B : Type} [DecidableEq B] :
     unifyRowM (B := B) 20 (.var "a") (.cat (.var "b") (.cat (.var "a") (.var "c")))
@@ -58,19 +57,15 @@ theorem crossfield_success {B : Type} [DecidableEq B] (b : B) :
                ⟨4⟩ := rfl
 
 -- ## Fuel monotonicity
--- §1.3 asked for a closed-form BOUND realizing a lexicographic measure. That
--- is not what P4 delivers, and the reason is structural: solve-and-apply grows
--- the spine (a variable expands to a whole row), while the number of variables
--- can grow too, since a type equation solved inside a field may itself expand a
--- row variable and hand the invented tail to the residual. Neither component of
--- the §1.3 measure decreases, so no such bound is available yet — the missing
--- ingredient is a Rémy-style argument on the finitely many labels of the
--- problem. See §4-P4.
+-- No closed-form bound yet: solve-and-apply grows the spine, and the variable
+-- count can grow too (a type equation solved inside a field may expand a row
+-- variable and hand the invented tail to the residual), so no lexicographic
+-- measure decreases. The missing ingredient is a Rémy-style argument on the
+-- problem's finitely many labels.
 --
--- `outOfFuel` makes that a separable question. The lemma below says a verdict
--- that was REACHED never changes when the budget grows, which is all any leg
--- except the stuck one needs; only P6 has to know that a sufficient budget
--- exists at all.
+-- `outOfFuel` makes that separable: the lemma below says a verdict that was
+-- REACHED never changes when the budget grows, which is all any leg except the
+-- stuck one needs.
 
 
 -- ## Fuel monotonicity  (`UResM.Mono`, Defs.lean)

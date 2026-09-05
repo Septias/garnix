@@ -31,7 +31,7 @@ info: 'MinimalCalculus.occurs_allVar_hasMgu' depends on axioms: [propext, Classi
 -/
 #guard_msgs in #print axioms occurs_allVar_hasMgu
 
--- ## P1: mutual ≐/≐ᵣ scaffolding (RowUnify, proof-plan.md §1.1/§2)
+-- ## P1: mutual ≐/≐ᵣ scaffolding
 -- The ≗-congruence is the new load-bearing theory; it is axiom-FREE, and the
 -- bridge lemmas built on it stay propext-only.
 /-- info: 'MinimalCalculus.Row.applySubst_substEquiv' does not depend on any axioms -/
@@ -49,7 +49,7 @@ info: 'MinimalCalculus.occurs_allVar_hasMgu' depends on axioms: [propext, Classi
 /-- info: 'MinimalCalculus.Sol.Sat.comp_inv' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in #print axioms Sol.Sat.comp_inv
 
--- ## P2: the fresh-variable supply (RowUnify, proof-plan.md §1.4)
+-- ## P2: the fresh-variable supply
 -- Classical.choice reaches these through minimal.lean's natName/lenBound
 -- toolkit; the freshness content itself adds nothing.
 /--
@@ -68,7 +68,7 @@ info: 'MinimalCalculus.Supply.unifies_setRow_fresh' depends on axioms: [propext,
 /-- info: 'MinimalCalculus.groundMatch_ftv' depends on axioms: [propext] -/
 #guard_msgs in #print axioms groundMatch_ftv
 
--- ## P3: unique-host expansion (RowUnify, proof-plan.md §1.4)
+-- ## P3: unique-host expansion
 -- host_forced mechanizes the maximality argument proof-state.md carries by hand
 -- for crossfield; expand_reflect_fwd is the completeness direction of the move.
 /-- info: 'MinimalCalculus.host_forced' depends on axioms: [propext, Quot.sound] -/
@@ -83,8 +83,8 @@ info: 'MinimalCalculus.Supply.unifies_setRow_fresh' depends on axioms: [propext,
 /-- info: 'MinimalCalculus.expand_reflect_fwd' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in #print axioms expand_reflect_fwd
 
--- ## P4: the mutual ≐ / ≐ᵣ driver (RowUnify, proof-plan.md §1.2)
--- The fuel lemma replaces §1.3's termination measure: `outOfFuel` is its own
+-- ## P4: the mutual ≐ / ≐ᵣ driver
+-- The fuel lemma replaces a termination measure: `outOfFuel` is its own
 -- verdict, so "more budget never changes a verdict that was reached" is a plain
 -- structural induction and stays propext/Quot.sound. unifyRowM_fuel_mono picks
 -- up Classical.choice only through localSupply's lenBound, like its ≐ᵣ siblings.
@@ -105,7 +105,7 @@ info: 'MinimalCalculus.unifyRowM_fuel_mono' depends on axioms: [propext, Classic
 -/
 #guard_msgs in #print axioms unifyRowM_fuel_mono
 
--- ## P5: the three forward legs, on the MUTUAL driver (proof-plan.md §4-P5)
+-- ## P5: the three forward legs, on the MUTUAL driver
 -- Soundness needs no freshness, so it stays propext/Quot.sound; the other two
 -- reach Classical.choice through the Supply's lenBound, as the ≐ᵣ originals do.
 /-- info: 'MinimalCalculus.unifyM_success_sound' depends on axioms: [propext, Quot.sound] -/
@@ -121,7 +121,7 @@ info: 'MinimalCalculus.unifyTyM_success_sound' depends on axioms: [propext, Clas
 -/
 #guard_msgs in #print axioms unifyTyM_success_sound
 
--- The freshness invariant solve-and-apply forced (§4-P5): a run only mentions
+-- The freshness invariant solve-and-apply forced: a run only mentions
 -- names below the supply it returns.
 /--
 info: 'MinimalCalculus.unifyM_bounded' depends on axioms: [propext, Classical.choice, Quot.sound]
@@ -144,7 +144,7 @@ info: 'MinimalCalculus.unifyRowM_clash_no_unifier' depends on axioms: [propext, 
 -/
 #guard_msgs in #print axioms unifyRowM_clash_no_unifier
 
--- ## P6: step 2 of the base-arm dispatch (proof-plan.md §4-P6)
+-- ## P6: step 2 of the base-arm dispatch
 -- What U-expand's REFUSAL contributes to the terminal stuck configuration: ≥ 2
 -- candidate hosts, or the label already present behind a variable. Pure
 -- structure, so no Classical.choice.

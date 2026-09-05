@@ -251,12 +251,10 @@ theorem selQ_instance_closed {B C : Type} (constTy : C → B) (Γ : Ctx B) :
       rw [hδ]
       exact .tLam (.tSelUnk hvar (Lookup.congr_rowEnv hrow hl))
 
--- The bookend, stated in the exact shape whose plain-scheme version
--- no_plain_principal_scheme refutes: a QUALIFIED scheme CAN be
--- simultaneously instance-closed and cover both typings. Plain schemes
--- cannot (minimal.lean); qualified schemes are therefore not an optional
--- refinement but the necessary form of let-generalization for a calculus
--- with lookup-stumps.
+-- The bookend to no_plain_principal_scheme: a QUALIFIED scheme CAN be
+-- simultaneously instance-closed and cover both typings, so qualified schemes
+-- are the necessary form of let-generalization for a calculus with
+-- lookup-stumps.
 -- ⊢  ∃ σ.  (∀ τ. σ ≥_∅ τ ⟹ ∅ ⊢ λx.x.l : τ)
 --              ∧ σ ≥_∅ ({l: {}} → {}) ∧ σ ≥_∅ ({} → ★)
 theorem qualified_principal_scheme {B C : Type} (constTy : C → B) :
@@ -276,12 +274,9 @@ theorem qualified_principal_scheme {B C : Type} (constTy : C → B) :
 -- T-let's instance-closed premise quantifies over DISCHARGED instances only.
 -- Everything else mirrors minimal.lean's Typed verbatim.
 --
--- Relationship to the plain system: QTyped EXTENDS Typed (Typed.toQ below —
--- plain schemes embed with Q = ∅ and discharge vacuous), and the extension
--- is strict in precision: the two-use program at the bottom types one
--- let-binding at BOTH the found- and the ⊥-instance simultaneously — the
--- exact combination no_plain_principal_scheme proves impossible for any
--- single plain scheme.
+-- QTyped EXTENDS Typed (Typed.toQ below), strictly: the two-use program at the
+-- bottom types one let-binding at BOTH the found- and the ⊥-instance — the
+-- combination no_plain_principal_scheme proves impossible for a plain scheme.
 
 structure QCtx (B : Type) where
   tyEnv  : List (Var × QScheme B)

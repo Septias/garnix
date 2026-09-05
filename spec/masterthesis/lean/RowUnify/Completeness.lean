@@ -529,7 +529,7 @@ theorem unifyM_bounded {B : Type} [DecidableEq B] (fuel : Nat) :
 -- SOLUTION and nothing else — the sharp form of "≐ᵣ computes an mgu".
 -- Together with unifyM_success_sound the unifier set
 -- of the problem is EXACTLY {θ : Sol.Sat θ s}, up to the fresh names U-expand
--- invents (the ∃θ'/AgreeOn form, cf. §4-P3b(2)).
+-- invents (the ∃θ'/AgreeOn form)).
 --
 -- The new work is in the eq-emitting arms: the recursive call is on the
 -- SUBSTITUTED residual, so a unifier has to be pushed through the solution
