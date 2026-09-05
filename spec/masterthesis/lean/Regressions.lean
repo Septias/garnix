@@ -30,8 +30,8 @@ theorem unify_shared_tail :
 
 -- The LUtail example (l: 𝓫) ≐ᵣ (α | l: 𝓫): right-match the field, then
 -- U-ε-var — finds the mgu α ≔ ε that LUtail misses (lutail_unifier_iff). The
--- type equation 𝓫 ≐ 𝓫 the single pass used to emit is now SOLVED (vacuously),
--- so the solution is the whole answer.
+-- type equation 𝓫 ≐ 𝓫 is SOLVED (vacuously), so the solution is the whole
+-- answer.
 -- ⊢  unifyRowM (l:𝓫) (a | l:𝓫)  =  success [a ≔ ε]
 theorem unify_lutail :
     unifyRowM (B := Unit) 20 (.sing "l" uB) (.cat (.var "a") (.sing "l" uB)) =

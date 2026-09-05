@@ -48,8 +48,8 @@ theorem SolSat.tail {B : Type} {θ : TySubst B} {α : TyVar} {ρ : Row B}
 --
 -- The one genuinely new piece of theory is ≗ and its congruence: applySubst
 -- respects POINTWISE ≈-EQUALITY of substitutions. minimal.lean only has the
--- equality version (Ty/Row.applySubst_congr, :1697/:1714), which is too rigid
--- here — a solution is only ever met UP TO ≈ (SolSat, :1030), so "θ agrees with
+-- equality version (Ty/Row.applySubst_congr), which is too rigid here — a
+-- solution is only ever met UP TO ≈ (SolSat), so "θ agrees with
 -- θ ∘ s.toSubst" can only ever be a ≈-statement. Everything else in this
 -- section is bookkeeping on top of it.
 
@@ -258,7 +258,7 @@ theorem unifies_sApplySubst_of_sat {B : Type} {θ : TySubst B} {s : Sol B}
 -- the whole content of this section. It is also, independently, the missing
 -- input for the qualified-scheme non-vacuity milestone.
 --
--- The generator is minimal.lean's (:1752), reused verbatim: natName n has
+-- The generator is minimal.lean's `natName`, reused verbatim: natName n has
 -- LENGTH n, so a name longer than everything in an avoid-set is fresh and two
 -- names of different lengths never collide. Nothing here inspects strings —
 -- the supply is a Nat, and the avoid-set is PROOF-ONLY: the algorithm never
@@ -354,7 +354,7 @@ def TySubst.setRow {B : Type} (θ : TySubst B) (α : TyVar) (ρ : Row B) : TySub
 
 -- THE INVISIBILITY LEMMAS: a value chosen at a variable the subject does not
 -- mention is not observable. Straight off Ty/Row.applySubst_congr
--- (minimal.lean:1697/:1714) — the EQUALITY congruence is exactly right here,
+-- (minimal.lean) — the EQUALITY congruence is exactly right here,
 -- since setTy/setRow change θ pointwise, not up to ≈.
 theorem Row.applySubst_setRow_of_not_mem {B : Type} {θ : TySubst B} {α : TyVar}
     {ρ : Row B} (ρ' : Row B) (h : α ∉ ρ'.ftv) :
@@ -551,11 +551,11 @@ theorem initSupply_avoids {B : Type} (ρ₁ ρ₂ : Row B) :
 -- β ≔ (l:δ | β′), δ and β′ fresh. With two candidate hosts the rule must NOT
 -- fire (that is Wand, where vars_vs_field_no_mgu proves there is genuinely no
 -- mgu); refusing when the host is UNIQUE costs completeness for free, which is
--- exactly crossfield_stuck_unifiable (:952).
+-- exactly crossfield_unifiable (NoMgu.lean).
 --
 -- This section is the METATHEORY of the move: the host is forced (host_forced),
 -- the algebraic shift the move performs (expand_shift), and the two reflection
--- lemmas. The dispatch cascade above is still the old one — wiring is next.
+-- lemmas.
 
 -- ## Projections of a var-free, l-free side vanish
 -- ⊢  count_l(s) = 0   ⟹   proj_l(s) = []

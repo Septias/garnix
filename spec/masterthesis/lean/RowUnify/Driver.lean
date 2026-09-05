@@ -7,11 +7,11 @@ import RowUnify.Reflection
 namespace MinimalCalculus
 
 --------------------- P4: THE MUTUAL ≐ / ≐ᵣ DRIVER ---------------------------
--- proof-plan.md §1.2 / §4-P4. The row pass no longer PARKS the type equations
--- it discovers: it solves them, on the spot, by calling the type pass, and
--- applies the solution to the residual before recursing. That is the whole of
--- P4, and it is what makes the stuck verdict mean something (§3): an equation
--- is discharged, or fatal, or itself stuck — never merely deferred.
+-- proof-plan.md §1.2 / §4-P4. The row pass solves the type equations it
+-- discovers on the spot, by calling the type pass, and applies the solution to
+-- the residual before recursing. That is what makes the stuck verdict mean
+-- something (§3): an equation is discharged, or fatal, or itself stuck — never
+-- merely deferred.
 --
 -- Three deviations from §1.2, all recorded in §4-P4:
 --  * a success carries its SUPPLY, because a type equation solved inside a
@@ -21,9 +21,6 @@ namespace MinimalCalculus
 --    induction ("more fuel never changes a verdict that was reached") rather
 --    than the termination measure §1.3 asked for — see the note on unifyBound;
 --  * `[DecidableEq B]`: ≐ must decide 𝓫 = 𝓫′. The row pass never needed it.
---
--- This is now THE algorithm: the single-pass URes driver and its four legs were
--- deleted once P5/P6 had ported them (proof-plan.md §4-P5/P6).
 
 
 theorem tyIsVar_eq {B : Type} : {τ : Ty B} → {α : TyVar} → tyIsVar τ = some α → τ = .var α
@@ -40,8 +37,8 @@ theorem tyIsVar_eq {B : Type} : {τ : Ty B} → {α : TyVar} → tyIsVar τ = so
 -- is here.
 
 -- The occurs guard is CONSERVATIVE: it rejects α ≐ᵣ (β | α | γ), which
--- occurs_allVar_unifiable (:935) shows is unifiable and occurs_allVar_hasMgu
--- (:956) shows has an MGU. Deliberate, and the price §1.3 accepts.
+-- occurs_allVar_unifiable shows is unifiable and occurs_allVar_hasMgu shows
+-- has an MGU. Deliberate, and the price §1.3 accepts.
 -- ⊢  unifyRowM α (β | α | γ)  =  occurs
 theorem occurs_allVar_reported {B : Type} [DecidableEq B] :
     unifyRowM (B := B) 20 (.var "a") (.cat (.var "b") (.cat (.var "a") (.var "c")))
@@ -106,8 +103,8 @@ theorem UResM.Mono.expandRes {B : Type} (S : Supply) (β : TyVar) (l : Label) (�
   · subst h; exact .inr rfl
 
 -- THE FUEL LEMMA, for both sorts at once (the mutual induction is on the
--- budget, exactly as unifySpineF_fuel_irrel's is — but with no measure
--- hypothesis, because `outOfFuel` absorbs the shortfall).
+-- budget, with no measure hypothesis, because `outOfFuel` absorbs the
+-- shortfall).
 -- The fuel-0 base, for both sorts: at zero budget everything except the arms
 -- that need no recursion at all (a variable binding, ★, a base clash, an
 -- exhausted side) is `outOfFuel`, and those arms do not look at the budget.

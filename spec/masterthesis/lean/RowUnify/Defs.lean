@@ -147,8 +147,7 @@ def groundMatch {B : Type} (s₁ s₂ : List (Atom B)) :
 
 -- ## U-expand: unique-host variable expansion (proof-plan.md §1.4)
 -- The DETECTORS only; the metatheory (host_forced, expand_shift, the two
--- reflection lemmas) is in the P3 section at the end of the file. They sit here
--- because the dispatch cascade below needs them.
+-- reflection lemmas) is in Solutions.lean.
 --
 -- The fresh names are drawn from a supply derived LOCALLY from the problem
 -- (localSupply) and THREADED through the driver: deriving it per call from the
@@ -241,10 +240,9 @@ def SubstEquiv {B : Type} (θ₁ θ₂ : TySubst B) : Prop :=
 infix:50 " ≗ " => SubstEquiv
 
 -- ## Solutions at both sorts
--- Sol replaces the pair (σ : List (TyVar × Row B), eqs) of URes.success: the
--- type equations are no longer parked but SOLVED, and their solutions land in
--- the .ty component. One shared TyVar namespace (minimal.lean:649), so a
--- variable bound by the type pass is readable by the row pass.
+-- Row bindings, plus the type bindings the driver solves on the spot. One
+-- shared TyVar namespace (minimal.lean:649), so a variable bound by the type
+-- pass is readable by the row pass.
 structure Sol (B : Type) where
   ty  : List (TyVar × Ty B)
   row : List (TyVar × Row B)
@@ -269,7 +267,7 @@ def rowLookup {B : Type} (α : TyVar) : List (TyVar × Row B) → Row B
 def Sol.toSubst {B : Type} (s : Sol B) : TySubst B :=
   ⟨fun α => tyLookup α s.ty, fun α => rowLookup α s.row⟩
 
--- SolSat (:1030) at both sorts.
+-- SolSat at both sorts.
 def Sol.Sat {B : Type} (θ : TySubst B) (s : Sol B) : Prop :=
   (∀ p ∈ s.ty, TyEquiv (θ.ty p.1) (p.2.applySubst θ)) ∧
   (∀ p ∈ s.row, RowEquiv (θ.row p.1) (p.2.applySubst θ))
@@ -282,14 +280,12 @@ def Sol.comp {B : Type} (s₂ s₁ : Sol B) : Sol B :=
    s₁.row.map (fun p => (p.1, p.2.applySubst s₂.toSubst)) ++ s₂.row⟩
 
 -- ## The result type of the mutual driver
--- Two changes from URes (proof-plan.md §1.1, and the P4 deviation recorded in
--- §4): no `eqs` component — everything a success discovers is SOLVED — and a
--- success carries the SUPPLY it stopped at, so the fresh names invented by one
--- sub-call are not handed out again by the next (a type equation solved inside
--- a field may expand a row variable, and the invented tail then travels into
--- the residual). `outOfFuel` is the fifth verdict: it separates "the algorithm
--- ran out of budget" from "every move is dead", which is what makes the fuel
--- lemma a structural induction rather than a termination measure.
+-- A success carries the SUPPLY it stopped at, so the fresh names invented by
+-- one sub-call are not handed out again by the next (a type equation solved
+-- inside a field may expand a row variable, and the invented tail then travels
+-- into the residual). `outOfFuel` is the fifth verdict: it separates "the
+-- algorithm ran out of budget" from "every move is dead", which is what makes
+-- the fuel lemma a structural induction rather than a termination measure.
 inductive UResM (B : Type) : Type where
   | success   : Sol B → Supply → UResM B
   | clash     : UResM B
@@ -308,9 +304,8 @@ def UResM.seq {B : Type} : UResM B → (TySubst B → Supply → UResM B) → UR
   | r, _ => r
 
 -- ## Unification at the type sort
--- The ≐ counterpart of Unifies (RowEquiv.lean:543); EqsSat is exactly a list of
--- these, so the parked-equation vocabulary survives as the proof-internal
--- device proof-plan.md §1.1 predicts.
+-- The ≐ counterpart of Unifies (RowEquiv.lean:543); EqsSat is exactly a list
+-- of these.
 def TyUnifies {B : Type} (θ : TySubst B) (τ τ' : Ty B) : Prop :=
   TyEquiv (τ.applySubst θ) (τ'.applySubst θ)
 
@@ -365,8 +360,6 @@ def bindTy {B : Type} (S : Supply) (α : TyVar) (τ : Ty B) : UResM B :=
   else .success ⟨[(α, τ)], []⟩ S
 
 -- ## U-var-solve, at the mutual driver's result type
--- Same detector as solveVar (:97); solveVar's successes always carry eqs = [],
--- so nothing is lost by dropping that component here.
 def solveVarM {B : Type} (S : Supply) : List (Atom B) → List (Atom B) → Option (UResM B)
   | [.var α], s₂ =>
       some (if (sVarSeq s₂).contains α then .occurs
@@ -374,11 +367,10 @@ def solveVarM {B : Type} (S : Supply) : List (Atom B) → List (Atom B) → Opti
   | _, _ => none
 
 -- ## U-expand, at the mutual driver's result type
--- expandRes (:217) parked the equation τ ≐ δ. Here δ is FRESH, so that
--- equation has the one solution δ ≔ τ — solving it eagerly is exactly what the
--- driver does everywhere else, and it keeps P3's metatheory (which invents δ)
--- applicable verbatim. The recursive solution is composed ON TOP, so the
--- expansion's own binding sees whatever the residual did to β′.
+-- δ is FRESH, so the equation τ ≐ δ has the one solution δ ≔ τ; solving it
+-- eagerly is what the driver does everywhere else, and it keeps P3's metatheory
+-- (which invents δ) applicable verbatim. The recursive solution is composed ON
+-- TOP, so the expansion's own binding sees whatever the residual did to β′.
 def expandResM {B : Type} (S : Supply) (β : TyVar) (l : Label) (τ : Ty B) :
     UResM B → UResM B
   | .success s S' =>

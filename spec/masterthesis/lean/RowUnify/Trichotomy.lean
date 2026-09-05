@@ -23,20 +23,20 @@ theorem unifyRowM_success_iff {B : Type} [DecidableEq B] {fuel : Nat} {ρ₁ ρ�
 ------------------ P6: THE BASE-ARM DISPATCH, STEP 2 ------------------------
 -- proof-plan.md §3 / §4-P6. `hbase` — "a terminal stuck configuration has no
 -- mgu" — is the one hypothesis the trichotomy still reduces to. Step 1 of its
--- dispatch is stuck_leading_shape (:4078): with stripL and both matchL
+-- dispatch is stuck_leading_shape: with stripL and both matchL
 -- directions dead, the two leading atoms take one of four shapes. Step 2 is
 -- here, and it is the payoff of P3b: a terminal configuration ALSO has both
 -- U-expand directions dead, and that refusal is informative.
 --
--- U-expand refuses for exactly two reasons (uniqueHost, :194): the host side has
+-- U-expand refuses for exactly two reasons (uniqueHost): the host side has
 -- no UNIQUE variable, or the label is already present there. So whenever a
 -- leading field faces the other side, the terminal configuration is
 --
 --   * ≥ 2 candidate hosts — Wand's shape, killed by count-shrink
---     (vars_vs_field_no_mgu, :663), or
+--     (vars_vs_field_no_mgu), or
 --   * the label already occurs on the other side, necessarily BEHIND a variable
 --     (matchL is dead, so it is not in the window) — the two-sided shape, killed
---     by rigidity (two_sided_no_mgu, :469).
+--     by rigidity (two_sided_no_mgu).
 --
 -- That is exactly proof-plan.md §1.4's claim ("this shrinks the stuck class to
 -- precisely what the three base techniques can kill"), now mechanized. What
@@ -86,7 +86,7 @@ theorem sVarSeq_var_cons {B : Type} (β : TyVar) (s : List (Atom B)) :
 -- STEP 2 OF THE DISPATCH. Every shape stuck_leading_shape allows, refined by
 -- what U-expand's refusal adds. Shape (1) — two distinct leading variables — is
 -- the only one U-expand says nothing about; it is the non-commutativity
--- territory (allvar_swap_no_mgu, :801), where no leading field exists to host.
+-- territory (allvar_swap_no_mgu), where no leading field exists to host.
 theorem stuck_leading_shape_expand {B : Type} {S : Supply} {a b : Atom B}
     {s₁ s₂ : List (Atom B)}
     (hsl : stripL (a :: s₁) (b :: s₂) = none)
@@ -136,7 +136,7 @@ theorem stuck_field_vs_var {B : Type} {S : Supply} {l : Label} {τ : Ty B}
 --
 -- BETTER: no fuel guard. `outOfFuel` is its own verdict now, so `.stuck` can
 -- never be a budget artefact and the induction needs no `|s₁|+|s₂| ≤ fuel`
--- premise — the old statement's (:4143) most awkward hypothesis is gone.
+-- premise.
 --
 -- HARDER: an eq-emitting arm has TWO ways to be stuck, and the second is new.
 -- Either the type sub-call is stuck — handled here, by the ≐ half of the same
@@ -508,8 +508,7 @@ theorem unifyM_stuck_no_mgu {B : Type} [DecidableEq B]
 
 -- Row-level reduction on the mutual driver. Note there is NO fuel premise: with
 -- `outOfFuel` split out, a `.stuck` verdict is a genuine terminal ambiguity at
--- whatever budget it was reached — the old statement (`unifyRow_stuck_no_mgu`)
--- had to carry `|s₁|+|s₂| ≤ fuel` to say that.
+-- whatever budget it was reached.
 -- ⊢  (hbase, hexp, hsolve, hsolveTy)  →  unifyRowM fuel ρ₁ ρ₂ = stuck
 --        →  ¬ HasMgu ρ₁ ρ₂
 theorem unifyRowM_stuck_no_mgu {B : Type} [DecidableEq B] {fuel : Nat} {ρ₁ ρ₂ : Row B}

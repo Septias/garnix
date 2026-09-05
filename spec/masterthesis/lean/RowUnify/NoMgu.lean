@@ -600,7 +600,7 @@ theorem projClash_no_unifier {B : Type} {s₁ s₂ : List (Atom B)}
     omega
 
 -- ## occurs: what the recursive-row check really guarantees
--- The occurs verdict (solveVar hitting `(sVarSeq s₂).contains α`) is CONSERVATIVE.
+-- The occurs verdict (solveVarM hitting `(sVarSeq s₂).contains α`) is CONSERVATIVE.
 -- It is genuinely no-unifier only when the recursive variable is pinned by a
 -- FIELD; an all-variable interior occurrence is unifiable by collapsing the
 -- surrounding variables to ε.

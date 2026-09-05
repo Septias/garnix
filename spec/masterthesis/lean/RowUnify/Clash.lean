@@ -7,8 +7,7 @@ import RowUnify.Completeness
 namespace MinimalCalculus
 
 ------------------ P5: CLASH SOUNDNESS, MUTUALLY ----------------------------
--- The port of unifySpineF_clash_no_unifier onto the mutual driver, plus its ≐
--- counterpart. The genuinely new case is the one proof-plan.md §2 predicted:
+-- Clash soundness at both sorts. The interesting case is
 -- **a clash inside a field type is a clash of the whole**. It splits in two —
 -- the sub-unification clashed (the type IH kills it outright), or it SUCCEEDED
 -- and the substituted residual clashed. The second is why the plan orders

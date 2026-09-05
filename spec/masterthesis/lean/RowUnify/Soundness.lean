@@ -7,18 +7,14 @@ import RowUnify.Driver
 namespace MinimalCalculus
 
 --------------------- P5: SUCCESS SOUNDNESS, MUTUALLY -----------------------
--- proof-plan.md §2 (table row 1) / §4-P5. The port of unifySpineF_success_sound
--- (:3109) onto the mutual driver, plus its ≐ counterpart — which is new, since
--- there was no type pass to be sound about before.
+-- proof-plan.md §2 (table row 1) / §4-P5. Success soundness at both sorts: a θ
+-- that meets the solution unifies the problem.
 --
--- What changed in the argument: an eq-emitting arm no longer hands its equation
--- to the caller, so `EqsSat θ eqs` disappears from the statement. In its place
--- the arm's success is a COMPOSITE, and Sol.Sat.comp_inv splits it into the
--- type solution and the residual solution; the type IH turns the first into the
--- `heq` those reflection lemmas want, and unifies_sApplySubst_of_sat (P1's
--- apply-then-unify bridge) undoes the substitution the arm applied to the
--- residual. That is the whole delta — every move-reflection lemma is reused
--- verbatim.
+-- An eq-emitting arm's success is a COMPOSITE, and Sol.Sat.comp_inv splits it
+-- into the type solution and the residual solution; the type IH turns the first
+-- into the `heq` those reflection lemmas want, and unifies_sApplySubst_of_sat
+-- (P1's apply-then-unify bridge) undoes the substitution the arm applied to the
+-- residual.
 --
 -- Fuel is arbitrary: a success means the same thing whatever the budget was, so
 -- unifyM_fuel_mono is not needed here.
@@ -37,7 +33,7 @@ theorem bindTy_sound {B : Type} {θ : TySubst B} {S : Supply} {α : TyVar} {τ :
       obtain ⟨rfl, -⟩ := h
       exact hsat.1 (α, τ) List.mem_cons_self
 
--- ⊢  U-var-solve, at the mutual result type (solveVar_reflect, :2321)
+-- ⊢  U-var-solve, at the mutual result type
 theorem solveVarM_reflect {B : Type} {θ : TySubst B} {S : Supply}
     {s₁ s₂ : List (Atom B)} {s : Sol B} {S' : Supply}
     (hsolve : solveVarM S s₁ s₂ = some (.success s S')) (hsat : Sol.Sat θ s) :
@@ -340,11 +336,10 @@ theorem unifyTyM_success_sound {B : Type} [DecidableEq B] {θ : TySubst B}
 
 
 ------------------ P5: WHERE A SOLUTION'S VARIABLES LIVE --------------------
--- New machinery, not anticipated by the plan (§4-P5 records why). Under the
--- mutual driver an eq-emitting arm recurses on the SUBSTITUTED residual, so the
--- freshness invariant `S.Avoids …` no longer transports by "the residual is a
--- sub-problem": the substitution can put names into the residual that the
--- original problem never had — precisely the ones a nested U-expand invented.
+-- An eq-emitting arm recurses on the SUBSTITUTED residual, so the freshness
+-- invariant `S.Avoids …` does not transport by "the residual is a sub-problem":
+-- the substitution can put names into the residual that the original problem
+-- never had — precisely the ones a nested U-expand invented.
 -- To carry the invariant across such an arm one has to know that those names
 -- are bounded by the supply the sub-call RETURNED. That is what this section
 -- sets up: where the variables of a substituted term come from, and what a

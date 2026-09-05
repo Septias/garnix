@@ -525,10 +525,9 @@ theorem unifyM_bounded {B : Type} [DecidableEq B] (fuel : Nat) :
 
 
 ------------------ P5: SUCCESS COMPLETENESS (mgu), MUTUALLY -----------------
--- The port of unifySpineF_success_complete onto the mutual driver, plus its ≐
--- counterpart. `eqs` is gone: what a unifier must satisfy is the SOLUTION, and
--- nothing else — which is the sharp form of "≐ᵣ computes an mgu" the parked
--- equations always blurred. Together with unifyM_success_sound the unifier set
+-- Success completeness at both sorts. What a unifier must satisfy is the
+-- SOLUTION and nothing else — the sharp form of "≐ᵣ computes an mgu".
+-- Together with unifyM_success_sound the unifier set
 -- of the problem is EXACTLY {θ : Sol.Sat θ s}, up to the fresh names U-expand
 -- invents (the ∃θ'/AgreeOn form, cf. §4-P3b(2)).
 --
@@ -687,7 +686,7 @@ theorem unifySpineMF_cons_nil_complete {B : Type} [DecidableEq B] {θ : TySubst 
       simp only [ofSpine, Row.applySubst] at hu
       exact Sol.Sat_ofRow.mpr (allVarsEmpty_complete (a :: s₁) hae hu)
 
--- THE U-EXPAND ARM, at both orientations (cf. expand_complete, :3556).
+-- THE U-EXPAND ARM, at both orientations.
 theorem expand_completeM {B : Type} [DecidableEq B] {fuel : Nat}
     (ih : ∀ (S : Supply) (u₁ u₂ : List (Atom B)) (V : List TyVar) {s : Sol B}
       {S' : Supply} {θ : TySubst B},

@@ -15,9 +15,8 @@ namespace MinimalCalculus
 #guard_msgs in #print axioms rowEquiv_iff_char
 
 -- ## ≐ᵣ / ≐ trichotomy (RowUnify)
--- The single-pass driver was retired in P5/P6 consolidation; the four legs now
--- live on the MUTUAL driver and are guarded in the P5/P6 blocks below. What
--- stays here are the two local no-unifier cores the clash leg rests on.
+-- The four legs are guarded in the P5/P6 blocks below. What stays here are the
+-- two local no-unifier cores the clash leg rests on.
 /-- info: 'MinimalCalculus.projClash_no_unifier' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in #print axioms projClash_no_unifier
 
