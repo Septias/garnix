@@ -58,48 +58,16 @@ Principality forces qualified schemes that use parked stumps during unification 
 - [x] MGU-ON-SUCCESS done
 - [x] STUCK⟹NO-MGU — but only as a REDUCTION, the naive statement is FALSE.
   - reusable order-agnostic threading principle done
-- [~] MUTUAL ≐/≐ᵣ (proof-plan.md) — the rebuild that turns the stuck leg
-  unconditional. P1 done: ≗-congruence (axiom-free), Sol/UResM/Sol.Sat at both
-  sorts, the apply-then-unify bridge, sApplySubst. P2 done: Supply/Avoids over
-  minimal.lean's natName, sFtv, the set*-invisibility lemmas, residual
-  freshness for every detector. P3a done: host_forced MECHANIZES crossfield's
-  maximality (the by-hand argument below), expand_shift/expand_reflect(_fwd),
-  detectors. Next: P3b, wiring the arm into the dispatch cascade.
+- [~] MUTUAL ≐/≐ᵣ (proof-plan.md)
 - [x] ALL THREE base techniques now done:
   - count-shrink (vars_vs_field_no_mgu)
   - rigidity (two_sided_no_mgu)
   - non-commutativity
 - [x] MATCH/GROUND congruence now done:
-- CAVEAT: unlike strip these SHRINK the unifier set (intersect with eq-satisfiers), so they transport mgu-status but a stuck residual does not by itself kill the original — that additionally needs the base-technique witnesses to satisfy the accumulated eq (the genuine augmented-witness content, now expressible via HasMguP).
-- [!] ≐ᵣ IS INCOMPLETE — a stuck verdict that is WRONG (26-09-02):
-  (l:𝓫 | α) ≐ᵣ (m:𝓫 | β), l ≠ m, is reported stuck yet HAS an mgu
-  (α ↦ (m:𝓫 | X), β ↦ (l:𝓫 | X)). crossfield_stuck_unifiable mechanizes the
-  stuck verdict + the unifier; maximality is derived by hand off
-  rowEquiv_iff_char (proj_m A = (0,𝓫)::proj_m B, proj_l B = (0,𝓫)::proj_l A,
-  proj_k equal otherwise, vars equal ⟹ A ≈ (m:𝓫|R), B ≈ (l:𝓫|R), same R) and is
-  NOT yet mechanized. The missing rule is Rémy-style variable EXPANSION: when the
-  leading field's label is absent from the other side's window and exactly ONE
-  variable there can host it, that variable is FORCED to β ≔ (l:δ | β′). ≐ᵣ
-  refuses to guess a host — right for Wand, where TWO vars could host it — but
-  refusing when the host is UNIQUE costs completeness for free. This is the exact
-  COMPLEMENT of the base-arm dispatch, whose witness techniques all need ≥2
-  candidate hosts. Adding the move shrinks the stuck class to precisely what the
-  techniques can kill; it also GROWS the spine, so it forces the same
-  fuel→well-founded rebuild the mutual ≐/≐ᵣ design needs. Do them together.
 - [ ] Remaining for the full lift: assembling the general base arm from the three techniques (+ the all-var argument generalized beyond the swap) and re-running those base witnesses under the accumulated equations (carry them as the HasMguP predicate through the fuel induction);
-- [ ] type-level ≐
-- MUTUAL ≐/≐ᵣ (26-09-02, verified by running the algorithm): making type- and
-  row-unification mutually recursive, so an emitted equation is SOLVED AND
-  APPLIED before the row pass continues, fixes the rescued-stuck example —
-  (l:𝓫 | α) ≐ᵣ (l:𝓫) = success [α ↦ ε]. Structurally it turns the Q side
-  condition from a HYPOTHESIS into an INVARIANT: no leftover equation can
-  mention a stuck row-var if each was discharged into θ first. Caveats: genuine
-  Wand is untouched (no equation to solve, provably no mgu); the fuel measure
-  |s₁|+|s₂| dies because applying a solution GROWS the spine, so it must become
-  the lexicographic (#unsolved vars, #atoms) — which makes the occurs guard
-  LOAD-BEARING for termination, retroactively justifying its conservatism; and a
-  parked STUCK equation can still mention stuck row-vars, so the Q side
-  condition survives for those. See proof-plan.md.
+- [x] type-level ≐ — unifyTyF (P4): var-binding with a cross-sort occurs
+  guard, ★ rigid, fn solve-and-apply, rcd descending into ≐ᵣ. Its metatheory
+  (the P5 legs at the type sort) is not yet written.
 
 
 ## Symbols
