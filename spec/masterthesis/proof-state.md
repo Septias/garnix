@@ -29,16 +29,16 @@ Principality forces qualified schemes that use parked stumps during unification 
 # Progress
 - [x] Scoped Records
 - [x] Asymmetric Concat
-- [x] Row equivalence ≈
+- [x] Row Equivalence ≈
 - [x] Refinement ⊑
 - [x] Unknown Type Abstraction
 - [x] Let-Statements
-- [x] Qualified schemes
+- [x] Qualified Schemes
 - [~] Unification 
 - [ ] FC-Labels
 - [ ] Patterns
 - [?] Occurrence Typing
-- [?] Recursive types
+- [?] Recursive Types
 - [?] With
 - [?] Inherit
 
