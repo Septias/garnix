@@ -105,9 +105,19 @@ with the strip/match arms shrinking the second component at constant first, and
   carries over verbatim,
 - state every downstream theorem at `unifyBound … ≤ fuel`.
 
+**SUPERSEDED by P4 (see §4).** No such measure exists yet: the fresh names
+U-expand invents underneath a solved field equation defeat the first component
+just as solve-and-apply defeats the second. Fuel stays explicit at the entry
+points, `outOfFuel` becomes its own verdict, and `unifyM_fuel_mono` — "a
+verdict that was reached never changes when the budget grows" — does the work
+`fuel_irrel`/`fuel_stable` used to do, with no measure at all. The termination
+argument (Rémy-style, on the problem's finitely many labels) is now a P6
+obligation, needed only to know the stuck verdict is not a disguised timeout.
+
 **The occurs guard becomes load-bearing.** The first measure component only
 decreases if a binding genuinely eliminates its variable, which is exactly what
-`occurs` enforces. That retroactively justifies its conservatism — and it means
+`occurs` enforces. (This much survives P4 — it is the *fresh* variables, not
+the bound one, that break the measure.) That retroactively justifies its conservatism — and it means
 `occurs_allVar_hasMgu` (the guard rejects `α ≐ᵣ (β|α|γ)`, which HAS an mgu) must
 be accepted as a deliberate price, not repaired. Record it as such; do not
 attempt to weaken the guard during this rebuild.
@@ -292,21 +302,230 @@ lean/RowUnify.lean` has it in full.
   side keeps its length, β ↦ β′, and the invented field is consumed at once),
   so `|s₁| + |s₂|` still bounds the recursion. Only P4's solve-and-apply grows
   a spine, so the lexicographic measure is a P4 requirement, not a P3 one.
-- **P3b — next: wire it in.** Add the arm between `groundMatch` and
-  `projClash`, re-run the regressions, and turn `crossfield_stuck_unifiable`
-  into `crossfield_success`. The dispatch cascade needs a fresh-name source;
-  deriving it locally as `⟨lenBound (sFtv s₁ ++ sFtv s₂) + 1⟩` avoids adding a
-  `Supply` parameter to `unifySpineF` (which would break every existing
-  statement), and stays sound across the recursion because β′ is IN the
-  residual, so the next call's bound exceeds it. Each of the four fuel
-  inductions then gains one arm, discharged by the P3a reflection lemmas.
-- **P4 — mutualize.** Write `unifyTyF`, make the eq-emitting arms solve and
-  apply, drop `URes.addEq`. New bound + `fuel_irrel`/`fuel_stable`.
-- **P5 — re-prove the legs.** Success sound, success complete, clash — in that
-  order; each is a mechanical port plus the P1 bridge.
-- **P6 — the stuck leg.** (INV) and the unconditional
+- **P3b — done (26-09-05): wired in.** `unifySpineF` now takes the U-expand arm
+  at both orientations, between `groundMatch` and `projClash`. Build, every
+  `rfl` regression and the axiom guards are green; `crossfield_stuck_unifiable`
+  is now `crossfield_success`, and the computed mgu is EXACTLY the one derived
+  by hand: `β ≔ (l:δ | β′)`, `α ≔ (m:𝓫 | β′)`, equation `𝓫 ≐ δ`. Wand and the
+  two-sided shape are still `.stuck`, as they must be.
+
+  Three things the plan did not anticipate, all forced:
+
+  1. **The local supply is unsound; the Supply had to be THREADED.** Deriving
+     the supply per call from the current problem is non-monotone: a move that
+     drops a field drops its type's variables, so an inner call's bound can fall
+     BELOW an outer one and reuse a name the outer context still cares about.
+     (Concretely: `matchL` emits `⟨"aa", 𝓫⟩` and drops `"aa"` from the residual,
+     whose bound is then 2 — and `natName 2 = "aa"`.) So `unifySpineF` gained a
+     `Supply` argument after all, advanced by two at each expansion;
+     `unifySpine` seeds it with `localSupply`. This is what §4-P2 called for and
+     what P3b/1's commit message wrongly claimed to avoid.
+  2. **`unifySpineF_success_complete` was FALSE as stated and is restated.** A
+     unifier of the problem says nothing about δ and β′, so it cannot literally
+     satisfy the emitted σ and eqs. The honest mgu statement is up to
+     EXTENSION: `∃ θ'. AgreeOn θ θ' V ∧ SolSat θ' σ ∧ EqsSat θ' eqs`, with `V`
+     any variable set containing the problem — the set the extension promises
+     not to move on. `V` has to be a parameter rather than the current
+     problem's variables, because an arm's emitted equation may mention
+     variables the residual has already dropped. `unifyRow_success_complete`
+     inherits the ∃-form. This is standard mgu-modulo-fresh-variables, but it
+     is a change to a headline theorem, not a re-proof.
+  3. **The three FORWARD legs carry a freshness invariant.**
+     `S.Avoids (sFtv s₁ ++ sFtv s₂)` is threaded through clash, completeness and
+     stuck (soundness needs none of it — it only reads a binding off `SolSat`).
+     Maintaining it needed `stripR_ftv` / `matchR_ftv` (via `mem_sFtv_reverse`),
+     `sFtv_renameVar`, `Supply.Avoids.residual/swap` and `expandL_avoids`.
+
+  The stuck leg's expand arm is PARKED as a new hypothesis `hexp`, exactly as
+  the terminal arm is parked as `hbase`: "if the expansion's residual has no
+  mgu, neither does the original". Unlike the match arms this is not a pointwise
+  iff — the residual's unifiers are extensions — so it is genuine P6 content.
+  `hbase` correspondingly gains the two `expandL S … = none` premises, which
+  makes it easier to discharge.
+
+  Axiom guards moved to `[propext, Classical.choice, Quot.sound]` for the four
+  `unifyRow_*` results: the algorithm now mentions `lenBound`, whose lemmas in
+  `minimal.lean` are classical. The unification content itself still adds no
+  axioms (the ≗-congruence remains axiom-free).
+- **P4 — done (26-09-05): mutualized.** Section "P4: THE MUTUAL ≐ / ≐ᵣ
+  DRIVER" in `RowUnify.lean`. `unifyTyF` (≐) and `unifySpineMF` (≐ᵣ) are one
+  `mutual` block, structurally recursive on fuel, so the new regressions are
+  kernel-checked `rfl` executions like the old ones. Build, all regressions and
+  the axiom guards are green.
+
+  **THE PAYOFF, mechanized.** `eq_rescued_solved` (`Regressions.lean`): the
+  shape that proves the single pass's stuck verdict incomplete —
+  `(k:{β} | β | α) ≐ᵣ (k:{l:𝓫} | l:𝓫)` — now returns
+  `success [β ≔ (l:𝓫 | ε), α ≔ ε]`, exactly the unique mgu §0(1) derives by
+  hand. Wand and the two-sided shape are still `.stuck` (they must be), and
+  crossfield still succeeds, now with its equation `𝓫 ≐ δ` SOLVED (`δ ≔ 𝓫`
+  appears in the `.ty` component) rather than parked. ≐ itself has its first
+  regressions: solve-and-apply on `(x → x) ≐ (𝓫 → y)` yields `y ≔ 𝓫`, not
+  `y ≔ x`; ★ is rigid; `x ≐ {x}` is `occurs`.
+
+  Four deviations, all forced:
+
+  1. **A success carries its SUPPLY.** A type equation solved inside a field
+     may expand a row variable, and the invented tail travels into the residual
+     via the substitution; without threading, the residual call would re-draw
+     that name. So `UResM.success : Sol B → Supply → UResM B` and `seq` passes
+     the supply to its continuation. The alternative — giving the residual call
+     a supply pre-advanced by a static budget — needs a bound on how many names
+     a sub-call can invent, which is `3^fuel`: correct, but it makes every
+     freshness lemma carry that arithmetic, and it hands out names of absurd
+     length. Monotone state is the cheaper invariant.
+  2. **`outOfFuel` is a fifth verdict**, and it replaces §1.3's measure. See
+     the next item; the immediate effect is that `.stuck` now always means
+     "every move is dead", never "the budget ran out" — which is exactly what
+     the P6 statement needs to be about.
+  3. **§1.3's lexicographic bound does NOT exist yet, and P4 does not need
+     it.** Neither component decreases: solve-and-apply grows the spine (a
+     variable expands to a whole row), and the variable count grows too,
+     because an equation solved inside a field can expand a row variable and
+     hand the invented tail to the residual — so the substitution's range
+     introduces variables the problem did not have. §1.3 assumed the occurs
+     guard makes the variable count decrease; it does, for the binding, but not
+     against the fresh names U-expand invents underneath. The missing argument
+     is Rémy-style, on the finitely many LABELS of the problem (an expansion
+     consumes one label-slot at the host variable and every label ever
+     introduced comes from the original problem). That is real work and it
+     belongs where it is needed.
+
+     What replaces it: fuel stays EXPLICIT at the entry points, and
+     `unifyM_fuel_mono` — a plain mutual induction on the budget, no measure
+     hypothesis — gives `UResM.Mono r r' := r = outOfFuel ∨ r' = r` for the two
+     runs, hence `unifySpineMF_fuel_mono` / `unifyTyF_fuel_mono` /
+     `unifyRowM_fuel_mono`: **a verdict that was reached never changes when the
+     budget grows.** Sound/complete/clash need nothing more, since they are
+     about what a success or a clash MEANS. Only the stuck leg has to know that
+     a sufficient budget exists — so the termination argument moves into P6,
+     where it is one hypothesis rather than a precondition on the whole
+     development. `UResM.Mono.seq` and `.expandRes` make every arm of the
+     induction a one-liner, which is why this is ~60 lines against
+     `unifySpineF_fuel_irrel`'s ~90.
+  4. **`[DecidableEq B]`**, on the driver and everything downstream of it: ≐
+     must decide `𝓫 = 𝓫′`. The row pass never had to.
+
+  Two smaller notes. `unifyTyF` is written with the fuel match NESTED inside
+  the `(τ, τ')` match, so the budget is consumed only in the two recursive arms
+  and the fuel lemma has exactly two interesting cases. And U-expand's parked
+  equation `τ ≐ δ` is solved eagerly as `δ ≔ τ` rather than dropping δ
+  altogether: δ is fresh, so the two are equivalent, and keeping it lets P3's
+  metatheory (`expand_reflect_fwd`, which extends the unifier at δ and β′)
+  apply verbatim in P5.
+
+  NOT done, deliberately: `URes.addEq` and the single-pass `unifySpineF` are
+  still there. Retiring them means porting the four legs, which is P5; until
+  then the two drivers coexist and `Regressions.lean` pins both.
+- **P5 — done (26-09-05): all three forward legs re-proved.** Sections "P5:
+  SUCCESS SOUNDNESS", "P5: WHERE A SOLUTION'S VARIABLES LIVE", "P5: THE
+  FRESHNESS INVARIANT, TRANSPORTED", "P5: SUCCESS COMPLETENESS" and "P5: CLASH
+  SOUNDNESS" in `RowUnify.lean`. Build, all regressions and the axiom guards
+  green; every move-reflection lemma was reused verbatim, as §2 predicted.
+  All three quantify over an ARBITRARY fuel — a success or a clash means the
+  same thing whatever the budget was — so `unifyM_fuel_mono` is not needed here.
+
+  - **Soundness** (`unifyM_success_sound`, `unifyRowM_success_sound`,
+    `unifyTyM_success_sound`). `EqsSat` is gone from the statement: an arm's
+    success is a COMPOSITE, `Sol.Sat.comp_inv` splits it, the type IH supplies
+    the `heq` the reflection lemmas want, and `unifies_sApplySubst_of_sat` (P1's
+    bridge) undoes the substitution the arm applied. Needs no freshness at all —
+    it only reads bindings off `Sol.Sat` — and stays propext/Quot.sound.
+  - **Completeness** (`unifyM_success_complete`, `unifyRowM_success_complete`),
+    in the ∃θ′/`AgreeOn` form of §4-P3b(2). With `eqs` gone this is the sharp
+    statement the parked equations always blurred: the unifier set of the
+    problem is exactly {θ : `Sol.Sat` θ s}, up to the names the run invented.
+  - **Clash** (`unifyM_clash_no_unifier`, `unifyRowM_clash_no_unifier`),
+    including the case §2 predicted — a clash inside a field type is a clash of
+    the whole. `tyClash_dispatch` refutes all twelve head mismatches once (≈ₜ
+    never changes a head, `minimal.lean:163ff`), leaving only the two recursive
+    pairs.
+
+  THE ONE THING THE PLAN DID NOT ANTICIPATE — **the freshness invariant no
+  longer transports for free.** Before P4 a residual was a SUB-problem, so
+  `S.Avoids` descended by `Avoids.mono`. Under solve-and-apply the residual is
+  substituted, and the substitution can put names into it that the problem never
+  had — precisely the ones a nested U-expand invented. Carrying `S.Avoids` across
+  an eq-emitting arm therefore needs to know those names are bounded by the
+  supply the sub-call RETURNED. Two new sections supply that:
+
+  1. *Where a substituted term's variables come from* — `Ty/Row.ftv_applySubst`
+     and `sFtv_sApplySubst` (γ reaches τθ only through a free variable of τ),
+     `mem_sFtv_toSpine`, and `SolMentions`/`SolBelow`, kept as a PREDICATE
+     rather than a list so it needs no membership algebra. Plus
+     `Sol.Sat.congrAgree` (meeting a solution transports along agreement) and
+     `Sol.Sat.comp`, the converse of P1's `comp_inv` — the arms need to BUILD a
+     composite, not only invert one.
+  2. `unifyM_bounded`: a successful run returns a supply fresh for an enlarged
+     avoid-set `W ⊇ V` that contains everything the solution mentions. This is a
+     second full 13-arm induction over the driver, and completeness and clash
+     both consume it. It is also the honest statement of what the algorithm
+     promises about names, which nothing in the ≐ᵣ-only development had to say.
+
+  RETIREMENT — done in the P6 consolidation below: `URes`, `URes.addEq/addSol`,
+  `solveVar`, `expandRes`, `unifySpineF`/`unifySpine`/`unifyRow` and all four
+  old legs are gone. `RowUnify.lean` lost ~1,250 lines; `Regressions.lean` now
+  runs the mutual driver throughout.
+- **P6 — the stuck leg (started 26-09-05).** (INV) and the unconditional
   `unifyRow_stuck_no_mgu`. Then, and only then, the trichotomy is a theorem
-  rather than a reduction.
+  rather than a reduction. Landed so far, plus a sharpened statement of what is
+  left:
+
+  - **DONE: step 2 of the base-arm dispatch.** `stuck_leading_shape` (step 1)
+    said a terminal configuration's two leading atoms take one of four shapes.
+    A terminal configuration now ALSO has both U-expand directions dead, and
+    that refusal is informative: `uniqueHost` refuses for exactly two reasons,
+    so `stuck_leading_shape_expand` refines every shape with a leading FIELD to
+    "the other side has no unique variable" or "the other side already carries
+    the label". `stuck_field_vs_var` reads that off as: **≥ 2 candidate hosts
+    (Wand's shape — count-shrink, `vars_vs_field_no_mgu`) or the label already
+    present, necessarily behind a variable since matchL is dead (the two-sided
+    shape — rigidity, `two_sided_no_mgu`).** That is §1.4's claim — "U-expand
+    shrinks the stuck class to precisely what the three base techniques can
+    kill" — mechanized. Only shape (1), two distinct leading variables, is
+    untouched by U-expand; that is non-commutativity territory
+    (`allvar_swap_no_mgu`). What remains for `hbase` is step 3: running those
+    witnesses at the GENERAL shape rather than at the canonical examples.
+
+  - **DONE: the stuck leg is on the mutual driver** (`unifyM_stuck_no_mgu`,
+    `unifyRowM_stuck_no_mgu`), still as a REDUCTION. One thing got strictly
+    better: **no fuel premise.** `outOfFuel` is its own verdict, so `.stuck` can
+    never be a budget artefact and the old statement's `|s₁|+|s₂| ≤ fuel` is
+    gone. One thing got harder: an eq-emitting arm has TWO ways to be stuck.
+    (a) The TYPE sub-call is stuck — handled inside the same induction, by its ≐
+    half, since ≐'s congruence arms (`tyUnifies_fn_iff`, `tyUnifies_rcd_iff`)
+    are pointwise iffs and need no hypothesis. (b) It SUCCEEDED and the
+    substituted residual is stuck — **not a pointwise iff**: the step needs
+    `Sol.Sat θ s₁`, which only an EXTENSION of θ satisfies. So the reduction now
+    names FOUR hypotheses: `hbase`, `hexp`, `hsolve`, `hsolveTy`.
+
+  - **DONE: the single-pass driver is retired.** With all four legs on the
+    mutual driver, `URes` and everything built on it was deleted (see §4-P5).
+    One algorithm, one set of legs, ~1,250 lines lighter.
+
+  - **ROOT CAUSE, and P6's next task: `HasMgu` is the wrong notion.**
+    Defined with strict `InstanceOf` over ALL variables, it cannot survive an
+    algorithm that invents variables — the same mismatch that made
+    `unifySpineF_success_complete` false before §4-P3b(2), for the same reason.
+    Concretely: after a U-expand the invented δ and β′ do not occur in the
+    residual (δ) or in the original (both), so an mgu of one side leaves them
+    unconstrained, and an arbitrary unifier of the other side need not be an
+    instance of any candidate AT THOSE NAMES. The fix has the same shape as
+    `AgreeOn`: relativize to a variable set — `InstanceOfOn V` / `HasMguOn V`,
+    "most general when restricted to V" — and re-state the three base
+    techniques and the per-move `*_hasMgu_iff` transports against it. Do that
+    BEFORE either the port or `hbase`; both consume it.
+
+  - **Still open: TERMINATION** — a fuel that provably suffices, so `.stuck`
+    cannot be a disguised `.outOfFuel`. The expected argument is Rémy's, but
+    the naive form does not close, and it is worth recording why. Our
+    `uniqueHost` side condition is `count_l(s₂) = 0` EVERYWHERE, and after an
+    expansion the residual host side still has `count_l = 0` (renaming adds no
+    fields) — so nothing stops re-expanding the same variable at the same
+    label. The bound has to come from the l-fields on the OTHER side, and those
+    can be introduced by solve-and-apply. So the measure must account for
+    fields a substitution adds, not only for label slots consumed. Needed only
+    for the stuck leg: P5's three legs are stated at arbitrary fuel.
 
 P1–P3 are independently valuable and each keeps the build green; P4 is the only
 step that briefly breaks everything downstream.
