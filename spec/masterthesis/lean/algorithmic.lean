@@ -1,7 +1,7 @@
 -- * Qualified.lean — L2 qualified schemes, discharge, principality, QTyped
 -- * RowEquiv.lean  — the ≈-characterization (trace-monoid normal form)
--- * RowUnify.lean  — the ≐ᵣ algorithm + trichotomy legs (builds on RowEquiv)
--- * Regressions.lean — kernel-checked (`rfl`) worked examples of the algorithm
+-- * RowUnify.lean  — the unification algorithm and trichotomy legs
+-- * Regressions.lean — kernel-checked worked examples of the algorithm
 
 import Qualified
 import RowEquiv

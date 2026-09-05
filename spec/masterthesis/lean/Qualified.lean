@@ -1,5 +1,5 @@
 -- Qualified schemes: stumps, discharge, discharge metatheory, the
--- principal qualified scheme of λx.x.l, and the L2 QTyped relation over QCtx.
+-- principal qualified scheme of λx.x.l, and the QTyped relation over QCtx.
 -- Independent of the row-unification algorithm (imports only `minimal`).
 
 import minimal
