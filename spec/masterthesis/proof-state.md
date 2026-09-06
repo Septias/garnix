@@ -49,6 +49,36 @@ Principality forces qualified schemes that use parked stumps during unification 
 
 ## Unification
 
+- Outcomes
+  - success
+    - [x] sound & complete
+    - completeness is ∃θ'/AgreeOn — strict InstanceOf is wrong for a solver that invents vars
+  - clash
+    - [x] sound
+    - core: projClash_no_unifier — ≈ pins l-counts, substitution only grows them
+  - occurs
+    - incomplete!
+    - [x] the genuine case really has no unifier 
+    - [x] SHARP incopmleteness: α ≐ᵣ (β|α|γ) is reported occurs yet has an MGU (occurs_allVar_hasMgu)
+  - stuck
+    - [ ] stuck -> ¬mgu — still a REDUCTION to hbase/hexp/hsolve/hsolveTy
+    - [x] step 1: four leading shapes once stripL/matchL are dead
+    - [x] step 2: U-expand refuses for exactly 2 reasons
+    - [ ] step 3: run count-shrink / rigidity / non-commutativity at the GENERAL shape
+- Invariants
+  - [x] fuel monotone: more budget never changes a verdict already reached
+  - [x] bounded: a run only mentions names below the supply it returns
+  - [x] unique-host expansion is forced
+  - [x] ≗-congruence of substitution on rows — axiom-free
+- Open
+  - [ ] `HasMguOn V` / `InstanceOfOn V` — mgu relativized to a var set.
+  - [ ] termination. Naive Rémy measure does not close: renaming adds no fields,
+    so the host keeps count_l = 0 and the same var is re-expandable at the same
+    label; the bound must come from the other side's l-fields, which solve-and-apply adds.
+  - [ ] ⊴ covering order on qualified schemes — needed to even STATE "principal type improves under reduction"
+  - [ ] solver state S = (θ, Δ, W), stump wake-up, confluence of the final state
+- Not blocked by any of this: L2 type safety (qProgress/qPreservation) and
+  selQ_instance_closed stand on their own. The open work is purely algorithmic.
 
 ## Symbols
 - ↓: Row-lookup relation, three-way result r := (τ | ⊥ | ?)
