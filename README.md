@@ -5,11 +5,11 @@
 ### Structure
 This project is a mono repository and contains the parser, inference algorithm and language server in three respective folders:
 
-| Folder | Content |
-| ------ | ------- |
+| Folder | Content                                                                                                                                                                                                  |
+| ------ | -------                                                                                                                                                                                                  |
 | parser | The **parser** folder contains the parser for the nix language. It is capable of parsing all modern nix language features (no deprecated let-bindings) but needs extensive randomised testing to verify. |
-|infer | The **infer** folder contains the type inference algorithm capable of infering principal types for the nix language.
-|lsp| The **lsp** folder contains the language server which wraps the inference library to bring type hints and error reporting to the user.
+|infer   | The **infer** folder contains the type inference algorithm capable of infering principal types for the nix language.
+|lsp     | The **lsp** folder contains the language server which wraps the inference library to bring type hints and error reporting to the user.
 
 ### Theoretical foundation
 The repository is related to the Bachelor Thesis of Sebastian Klähn. It contains a discussion about the current state of developer toolings in the nix ecosystem, a thorough language definition and the theoretical background for the type inference algorithm and it's drawbacks.
