@@ -2,15 +2,16 @@
 
 ## Big Todos
 - [ ] Algorithmisch
-  - [ ] Soundness für Unification
-  - [ ] Principality für Unification
+  - [ ] Soundness
+  - [ ] Principality
+  - [ ] Termination
 - [ ] Schreiben
   - [ ] Einleitung
     - [~] Motivation
     - [ ] Vergleichsteil
   - [ ] Das Typsystem
     - Zeigen der lookup-relation
-    - Tücken, Extraregeln schon motivieren?
+    - Tücken und Extraregeln schon motivieren?
   - [ ] Formal
     - [~] Syntax
     - [~] Types
