@@ -11,19 +11,14 @@ This mechanism allows to _refine_ types on function application. See the example
 
 The type-safety proofs have to account for this new lookup-mechanism in two ways: Progress can only be proven for definite types, but ★ forms a boundary where programs can get stuck. The preservation proof has to account for type refinement by allowing types to become more precise during small steps.
 
-Principality forces qualified schemes that use parked stumps during unification to get mgus in many cases. The algorithm outputs three solution: A sucees with MGU, a failure without MGU, a _ for the wand example and finally an outcome »occurs«, that cuts across the other output paths. The occurs class of outputs is a syntactic check for recursive row-variables that naturally occur in nix.
+Principality forces qualified schemes that use parked stumps during unification to get mgus in many cases. The algorithm outputs three solution: A sucees with MGU, a failure without MGU, stuck for the wand example and finally an outcome »occurs«, that cuts across the other output paths. The occurs class of outputs is a syntactic check for recursive row-variables that naturally occur in nix.
 
 
 ## Related Files
-- minimal.typ: provides a semi-formal method of the typesystem
-- minimal.lean: provides a fully formal type-system
-- algorithmic.typ: Algorithmic ideas
-- algorithmic.lean: Reexport:
-  - Qualified.lean: L2 qualified schemes, discharge, principality, QTyped
-  - RowEquiv.lean: the ≈-characterization / trace-monoid normal form 
-  - RowUnify.lean: the ≐ᵣ algorithm + trichotomy legs
-  - Regressions.lean: Some kernel-checked examples
-  - Axioms.lean: axiom guard
+- minimal.typ: provides a semi-formal method of a simpliefed typesystem (L1)
+- minimal.lean: provides a fully formal version of minimal.typ
+- algorithmic.typ: Algorithmic typesystem with qualified schemes
+- algorithmic.lean: Root of the formal algorithmic system with unification
 - In the bib/plaintext folder there is the plaintext version of the Paszke&Xie paper
 
 # Progress
