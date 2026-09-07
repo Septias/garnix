@@ -7,6 +7,7 @@
 
 import Qualified
 import RowUnify
+import Refutations
 
 namespace MinimalCalculus
 
@@ -162,14 +163,113 @@ info: 'MinimalCalculus.unifyRowM_success_iff' depends on axioms: [propext, Class
 -/
 #guard_msgs in #print axioms unifyRowM_success_iff
 
--- The fourth leg, still a REDUCTION (to hbase / hexp / hsolve / hsolveTy).
-/-- info: 'MinimalCalculus.unifyM_stuck_no_mgu' depends on axioms: [propext, Quot.sound] -/
-#guard_msgs in #print axioms unifyM_stuck_no_mgu
+-- The fourth leg is NOT guarded here: there is nothing to guard yet. The old
+-- reduction `unifyM_stuck_no_mgu` was deleted (its hypotheses are false —
+-- see the Refutations block below), and its replacement `TerminalNoMgu` is a
+-- STATEMENT, not yet a theorem. What is guarded is the dispatch it will be
+-- proved through.
+/-- info: 'MinimalCalculus.terminal_leading_shape' depends on axioms: [propext] -/
+#guard_msgs in #print axioms terminal_leading_shape
+
+-- ## P6 / Phase A: mgu RELATIVIZED to a variable set
+-- `¬ HasMguOn V` is the stronger statement (factoring on V only is an easier
+-- demand than factoring everywhere), so it hands back the thesis-facing
+-- `¬ HasMgu` for free — and unlike the strict form it is insensitive to the
+-- variables the algorithm invents. The relativization itself is axiom-free.
+/-- info: 'MinimalCalculus.not_hasMgu_of_not_hasMguOn' does not depend on any axioms -/
+#guard_msgs in #print axioms not_hasMgu_of_not_hasMguOn
+
+/-- info: 'MinimalCalculus.hasMguOn_congr' does not depend on any axioms -/
+#guard_msgs in #print axioms hasMguOn_congr
+
+-- The two count bounds an mgu obeys, relativized: an mgu is pointwise minimal
+-- in every label count (mono) and rigid where its image is var-free.
+/-- info: 'MinimalCalculus.instanceOfOn_fieldCount_mono' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in #print axioms instanceOfOn_fieldCount_mono
 
 /--
-info: 'MinimalCalculus.unifyRowM_stuck_no_mgu' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: 'MinimalCalculus.instanceOfOn_fieldCount_eq_of_varFree' depends on axioms: [propext, Quot.sound]
 -/
-#guard_msgs in #print axioms unifyRowM_stuck_no_mgu
+#guard_msgs in #print axioms instanceOfOn_fieldCount_eq_of_varFree
+
+-- The three base no-mgu techniques at the `On` level: count-shrink
+-- (field vs ≥2 variable hosts), rigidity (two-sided), non-commutativity
+-- (all-variable). These are what Phase B has to run at the general shape.
+/--
+info: 'MinimalCalculus.vars_vs_field_no_mgu_on' depends on axioms: [propext, Quot.sound]
+-/
+#guard_msgs in #print axioms vars_vs_field_no_mgu_on
+
+/--
+info: 'MinimalCalculus.two_sided_no_mgu_on' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms two_sided_no_mgu_on
+
+/--
+info: 'MinimalCalculus.allvar_swap_no_mgu_on' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms allvar_swap_no_mgu_on
+
+-- ## P6: why that reduction cannot be discharged as stated (Refutations)
+-- The parked hypotheses quantify over an unconstrained `Q`, and conjoining a
+-- predicate can SHRINK a unifier set to one that has an mgu. Both refutations
+-- run on the Wand configuration, whose thirteen terminal-move premises hold by
+-- `rfl`. If either of these ever stops holding, the stuck leg has been
+-- restated — which is the point of Phase A in proof-plan.md.
+/--
+info: 'MinimalCalculus.hbase_shape_false' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms hbase_shape_false
+
+-- …and restricting `Q` to the substitution-stable shape an emitted type
+-- equation really has does not save it either.
+/--
+info: 'MinimalCalculus.hbase_stableQ_false' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms hbase_stableQ_false
+
+-- THE SHARP ONE. `.stuck` is a CONSERVATIVE verdict, like `.occurs`: the driver
+-- propagates an ambiguous sub-equation before it ever looks at the residual
+-- that would disambiguate the problem. So "stuck ⟹ no mgu" is false outright,
+-- not merely misstated, and the honest fourth leg is about TERMINAL
+-- configurations. The pair below is the counterexample: the algorithm RUNS to
+-- `.stuck` (a kernel-checked rfl), and the problem has an mgu.
+/--
+info: 'MinimalCalculus.stuck_masks_mgu_reported' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms stuck_masks_mgu_reported
+
+/--
+info: 'MinimalCalculus.stuck_masks_mgu' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms stuck_masks_mgu
+
+-- AND THE SHARPEST. Retreating from the `.stuck` VERDICT to TERMINAL
+-- CONFIGURATIONS does not rescue the leg either: (l:{w}) ≐ᵣ (w | v) is terminal
+-- (each of the twelve moves `none` by rfl) and has a UNIQUE unifier, because
+-- hosting the field in w would force θw ≈ (l:{θw}). Field counts are blind to
+-- that — the recursion passes under a record constructor — so the guards miss
+-- it; `rcdDepth` is the ≈-invariant that sees it.
+/-- info: 'MinimalCalculus.terminal_masks_mgu_terminal' depends on axioms: [propext] -/
+#guard_msgs in #print axioms terminal_masks_mgu_terminal
+
+/--
+info: 'MinimalCalculus.terminal_masks_mgu' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms terminal_masks_mgu
+
+/--
+info: 'MinimalCalculus.terminalNoMgu_false' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms terminalNoMgu_false
+
+-- The tool behind it: record NESTING is a ≈-invariant, so an occurs violation
+-- that hides inside a field payload is still visible. Axiom-light on purpose.
+/-- info: 'MinimalCalculus.RowEquiv.rcdDepth_eq' depends on axioms: [propext] -/
+#guard_msgs in #print axioms RowEquiv.rcdDepth_eq
+
+/-- info: 'MinimalCalculus.no_rcd_self_reference' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in #print axioms no_rcd_self_reference
 
 -- ## L2 qualified schemes (Qualified) — Classical.choice is expected here
 /--

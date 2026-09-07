@@ -115,6 +115,34 @@ theorem instanceOf_fieldCount_mono {B : Type} {θ' θ : TySubst B}
   rw [rowEquiv_fieldCount_eq l (hrow x)]
   exact sFieldCount_applySubst_le σ l (θ.row x)
 
+-- The same bound, relativized: factoring only has to hold on `V`, so the bound
+-- is only available at variables OF `V`. Every caller kills at a variable that
+-- literally occurs in the problem, so this costs a membership proof and nothing
+-- else.
+-- ⊢  θ' ⊑_V θ,  x ∈ V   ⟹   count_l(θ x) ≤ count_l(θ' x)
+theorem instanceOfOn_fieldCount_mono {B : Type} {V : List TyVar} {θ' θ : TySubst B}
+    (h : InstanceOfOn V θ' θ) {x : TyVar} (hx : x ∈ V) (l : Label) :
+    sFieldCount l (θ.row x).toSpine ≤ sFieldCount l (θ'.row x).toSpine := by
+  obtain ⟨σ, hrow, -⟩ := h
+  rw [rowEquiv_fieldCount_eq l (hrow x hx)]
+  exact sFieldCount_applySubst_le σ l (θ.row x)
+
+-- The shrink principle at the `On` level, and for an ARBITRARY unifier
+-- predicate: what Phase A's induction needs, since the residual problems it
+-- meets are cut out by more than a bare row equation.
+-- ⊢  (∀ θ ⊨ P. ∃ u ⊨ P, x ∈ V, l.  count_l(u x) < count_l(θ x))
+--        ⟹   ¬ HasMguOn V P
+theorem no_mgu_on_of_witness_shrinks {B : Type} {V : List TyVar}
+    {P : TySubst B → Prop}
+    (H : ∀ θ : TySubst B, P θ →
+         ∃ (u : TySubst B) (x : TyVar) (l : Label),
+           P u ∧ x ∈ V ∧
+           sFieldCount l (u.row x).toSpine < sFieldCount l (θ.row x).toSpine) :
+    ¬ HasMguOn V P := by
+  rintro ⟨θ, hp, hmgu⟩
+  obtain ⟨u, x, l, hPu, hxV, hlt⟩ := H θ hp
+  exact absurd (instanceOfOn_fieldCount_mono (hmgu u hPu) hxV l) (by omega)
+
 -- The reusable no-mgu principle: if every unifier is strictly undercut at some
 -- variable/label by another unifier, then no unifier is most general.
 -- ⊢  (∀ unifier θ. ∃ unifier u, x, l.  count_l(u x) < count_l(θ x))
@@ -136,13 +164,14 @@ theorem no_mgu_of_witness_shrinks {B : Type} {ρ₁ ρ₂ : Row B}
 -- from 1 to 0, so no mgu exists. Cleaner and more uniform than the direct
 -- projection argument (and the template for every field-vs-vars stuck case).
 -- ⊢  ¬ ∃ mgu for (β | α) ≐ᵣ (l:𝓫)
-theorem wand_no_mgu_count {B : Type} (b : B) (l : Label) :
-    ¬ ∃ θ : TySubst B,
-        Unifies θ (.cat (.var "β") (.var "α")) (.sing l (.base b)) ∧
-        ∀ θ' : TySubst B,
-          Unifies θ' (.cat (.var "β") (.var "α")) (.sing l (.base b)) →
-          InstanceOf θ' θ := by
-  apply no_mgu_of_witness_shrinks
+-- Proved at the `On` level (V = the problem's own two variables), which is the
+-- stronger statement; the strict form below is the corollary.
+-- ⊢  ¬ HasMguOn [β, α] for (β | α) ≐ᵣ (l:𝓫)
+theorem wand_no_mgu_count_on {B : Type} (b : B) (l : Label) :
+    ¬ HasMguOn ["β", "α"]
+        (fun θ : TySubst B => Unifies θ (.cat (.var "β") (.var "α"))
+                                        (.sing l (.base b))) := by
+  apply no_mgu_on_of_witness_shrinks
   intro θ hu
   have hu' : RowEquiv (Row.cat (θ.row "β") (θ.row "α")) (Row.sing l (.base b)) := by
     have h := hu; unfold Unifies at h
@@ -157,14 +186,25 @@ theorem wand_no_mgu_count {B : Type} (b : B) (l : Label) :
   by_cases hα : sFieldCount l (θ.row "α").toSpine = 0
   · -- the field is in β (count β = 1); empty-β witness undercuts at "β"
     refine ⟨⟨fun x => .var x, fun x => if x = "β" then .empty
-              else if x = "α" then .sing l (.base b) else .var x⟩, "β", l, ?_, ?_⟩
+              else if x = "α" then .sing l (.base b) else .var x⟩, "β", l, ?_,
+            by simp, ?_⟩
     · unfold Unifies; simp [Row.applySubst, Ty.applySubst]; exact RowEquiv.unitL
     · show 0 < sFieldCount l (θ.row "β").toSpine; omega
   · -- the field is in α (count α = 1); empty-α witness undercuts at "α"
     refine ⟨⟨fun x => .var x, fun x => if x = "β" then .sing l (.base b)
-              else if x = "α" then .empty else .var x⟩, "α", l, ?_, ?_⟩
+              else if x = "α" then .empty else .var x⟩, "α", l, ?_,
+            by simp, ?_⟩
     · unfold Unifies; simp [Row.applySubst, Ty.applySubst]; exact RowEquiv.unitR
     · show 0 < sFieldCount l (θ.row "α").toSpine; omega
+
+-- ⊢  ¬ ∃ mgu for (β | α) ≐ᵣ (l:𝓫)      (the thesis-facing form)
+theorem wand_no_mgu_count {B : Type} (b : B) (l : Label) :
+    ¬ ∃ θ : TySubst B,
+        Unifies θ (.cat (.var "β") (.var "α")) (.sing l (.base b)) ∧
+        ∀ θ' : TySubst B,
+          Unifies θ' (.cat (.var "β") (.var "α")) (.sing l (.base b)) →
+          InstanceOf θ' θ :=
+  not_hasMguP_of_not_hasMguOn (wand_no_mgu_count_on b l)
 
 -- The dual of the count bound: a VAR-FREE component of θ is RIGID — every
 -- instance has the exact same l-count there, because with no variables to
@@ -177,6 +217,15 @@ theorem instanceOf_fieldCount_eq_of_varFree {B : Type} {θ' θ : TySubst B}
   obtain ⟨σ, hrow, -⟩ := h
   rw [rowEquiv_fieldCount_eq l (hrow x), sFieldCount_applySubst_varFree σ l hvf]
 
+-- Rigidity, relativized the same way.
+-- ⊢  θ' ⊑_V θ,  x ∈ V,  (θ x) var-free   ⟹   count_l(θ' x) = count_l(θ x)
+theorem instanceOfOn_fieldCount_eq_of_varFree {B : Type} {V : List TyVar}
+    {θ' θ : TySubst B} (h : InstanceOfOn V θ' θ) {x : TyVar} (hx : x ∈ V)
+    (hvf : (θ.row x).SpineVarFree) (l : Label) :
+    sFieldCount l (θ'.row x).toSpine = sFieldCount l (θ.row x).toSpine := by
+  obtain ⟨σ, hrow, -⟩ := h
+  rw [rowEquiv_fieldCount_eq l (hrow x hx), sFieldCount_applySubst_varFree σ l hvf]
+
 -- The OTHER canonical stuck shape: (α | l:𝓫) ≐ᵣ (l:𝓫 | β), α ≠ β. Counting alone
 -- CANNOT fire here — the ε,ε unifier has count 0 at every variable, so nothing
 -- can be undercut. The kill is RIGIDITY. The empty witness (α,β ↦ ε) pins
@@ -187,14 +236,11 @@ theorem instanceOf_fieldCount_eq_of_varFree {B : Type} {θ' θ : TySubst B}
 -- any such θ. Complements wand_no_mgu_count: together the two canonical stuck
 -- shapes (field-vs-vars and two-sided) are both proven ambiguous.
 -- ⊢  ¬ ∃ mgu for (α | l:𝓫) ≐ᵣ (l:𝓫 | β)
-theorem two_sided_no_mgu {B : Type} (b : B) (l : Label) :
-    ¬ ∃ θ : TySubst B,
-        Unifies θ (.cat (.var "α") (.sing l (.base b)))
-                  (.cat (.sing l (.base b)) (.var "β")) ∧
-        ∀ θ' : TySubst B,
-          Unifies θ' (.cat (.var "α") (.sing l (.base b)))
-                     (.cat (.sing l (.base b)) (.var "β")) →
-          InstanceOf θ' θ := by
+-- ⊢  ¬ HasMguOn [α, β] for (α | l:𝓫) ≐ᵣ (l:𝓫 | β)
+theorem two_sided_no_mgu_on {B : Type} (b : B) (l : Label) :
+    ¬ HasMguOn ["α", "β"]
+        (fun θ : TySubst B => Unifies θ (.cat (.var "α") (.sing l (.base b)))
+                                        (.cat (.sing l (.base b)) (.var "β"))) := by
   rintro ⟨θ, hu, hmgu⟩
   have hu' : RowEquiv (Row.cat (θ.row "α") (Row.sing l (.base b)))
                       (Row.cat (Row.sing l (.base b)) (θ.row "β")) := by
@@ -211,10 +257,12 @@ theorem two_sided_no_mgu {B : Type} (b : B) (l : Label) :
     exact RowEquiv.unitL.trans RowEquiv.unitR.symm
   have hI1 := hmgu _ hu1
   have hcα : sFieldCount l (θ.row "α").toSpine = 0 := by
-    have h : sFieldCount l (θ.row "α").toSpine ≤ 0 := instanceOf_fieldCount_mono hI1 "α" l
+    have h : sFieldCount l (θ.row "α").toSpine ≤ 0 :=
+      instanceOfOn_fieldCount_mono (x := "α") hI1 (by simp) l
     omega
   have hcβ : sFieldCount l (θ.row "β").toSpine = 0 := by
-    have h : sFieldCount l (θ.row "β").toSpine ≤ 0 := instanceOf_fieldCount_mono hI1 "β" l
+    have h : sFieldCount l (θ.row "β").toSpine ≤ 0 :=
+      instanceOfOn_fieldCount_mono (x := "β") hI1 (by simp) l
     omega
   -- the l-projections are empty (length = count = 0)
   have hπα : sProj l (θ.row "α").toSpine = [] := by
@@ -262,9 +310,20 @@ theorem two_sided_no_mgu {B : Type} (b : B) (l : Label) :
                   (Row.cat (Row.sing l (.base b)) (Row.sing l (.base b)))
     exact RowEquiv.refl _
   have hI2 := hmgu _ hu2
-  have hrig := instanceOf_fieldCount_eq_of_varFree hI2 hvfα l
+  have hrig := instanceOfOn_fieldCount_eq_of_varFree (x := "α") hI2 (by simp) hvfα l
   rw [hcα] at hrig
   simp [Row.toSpine, sFieldCount] at hrig
+
+-- ⊢  ¬ ∃ mgu for (α | l:𝓫) ≐ᵣ (l:𝓫 | β)      (thesis-facing)
+theorem two_sided_no_mgu {B : Type} (b : B) (l : Label) :
+    ¬ ∃ θ : TySubst B,
+        Unifies θ (.cat (.var "α") (.sing l (.base b)))
+                  (.cat (.sing l (.base b)) (.var "β")) ∧
+        ∀ θ' : TySubst B,
+          Unifies θ' (.cat (.var "α") (.sing l (.base b)))
+                     (.cat (.sing l (.base b)) (.var "β")) →
+          InstanceOf θ' θ :=
+  not_hasMguP_of_not_hasMguOn (two_sided_no_mgu_on b l)
 
 
 -- ## No-mgu depends only on the unifier SET  (`HasMgu`, Defs.lean)
@@ -316,6 +375,33 @@ theorem hasMguP_congr {B : Type} {P Q : TySubst B → Prop}
 theorem hasMguP_not_of_iff {B : Type} {P P' : TySubst B → Prop}
     (hiff : ∀ θ, P θ ↔ P' θ) (h : ¬ HasMguP P') : ¬ HasMguP P :=
   fun hmgu => h ((hasMguP_congr hiff).mp hmgu)
+
+-- ## The same congruences at the `On` level
+-- `InstanceOfOn` still mentions only the substitutions, never the rows, so
+-- mgu-on-V status is likewise a property of the unifier SET alone.
+-- ⊢  (∀θ. P θ ↔ Q θ)   ⟹   (HasMguOn V P ↔ HasMguOn V Q)
+theorem hasMguOn_congr {B : Type} {V : List TyVar} {P Q : TySubst B → Prop}
+    (h : ∀ θ : TySubst B, P θ ↔ Q θ) : HasMguOn V P ↔ HasMguOn V Q :=
+  ⟨fun ⟨θ, hp, hmax⟩ => ⟨θ, (h θ).mp hp, fun θ' hp' => hmax θ' ((h θ').mpr hp')⟩,
+   fun ⟨θ, hp, hmax⟩ => ⟨θ, (h θ).mpr hp, fun θ' hp' => hmax θ' ((h θ').mp hp')⟩⟩
+
+theorem hasMguOn_not_of_iff {B : Type} {V : List TyVar} {P P' : TySubst B → Prop}
+    (hiff : ∀ θ, P θ ↔ P' θ) (h : ¬ HasMguOn V P') : ¬ HasMguOn V P :=
+  fun hmgu => h ((hasMguOn_congr hiff).mp hmgu)
+
+-- ⊢  ρ₁ ≈ᵣ ρ₁',  ρ₂ ≈ᵣ ρ₂'   ⟹   the two problems have the same mgu-on-V status
+theorem hasMguOn_rowEquiv {B : Type} {V : List TyVar} {ρ₁ ρ₂ ρ₁' ρ₂' : Row B}
+    (h₁ : RowEquiv ρ₁ ρ₁') (h₂ : RowEquiv ρ₂ ρ₂') :
+    HasMguOn V (fun θ => Unifies θ ρ₁ ρ₂) ↔ HasMguOn V (fun θ => Unifies θ ρ₁' ρ₂') :=
+  hasMguOn_congr (fun θ =>
+    ⟨fun hu => ((RowEquiv.applySubst θ h₁).symm.trans hu).trans (RowEquiv.applySubst θ h₂),
+     fun hu => ((RowEquiv.applySubst θ h₁).trans hu).trans (RowEquiv.applySubst θ h₂).symm⟩)
+
+-- ⊢  and it is symmetric in the two rows
+theorem hasMguOn_symm {B : Type} {V : List TyVar} {ρ₁ ρ₂ : Row B} :
+    HasMguOn V (fun θ => Unifies θ ρ₁ ρ₂) ↔ HasMguOn V (fun θ => Unifies θ ρ₂ ρ₁) :=
+  hasMguOn_congr (fun _ => ⟨RowEquiv.symm, RowEquiv.symm⟩)
+
 
 -- ## Generalizing Wand: n distinct variables vs a single field has no mgu
 -- The whole family (α₁ | … | αₙ) ≐ᵣ (l:𝓫), n ≥ 2 distinct vars — the general
@@ -369,11 +455,14 @@ private theorem sFieldCount_ofSpine_map_var {B : Type} (θ : TySubst B) (l : Lab
                  sFieldCount_append, List.sum_cons]
       rw [sFieldCount_ofSpine_map_var θ l vs]
 
--- ⊢  vs nodup,  |vs| ≥ 2   ⟹   ¬ HasMgu (v₁ | … | vₙ) (l:𝓫)
-theorem vars_vs_field_no_mgu {B : Type} {vs : List TyVar} (hnd : vs.Nodup)
+-- At the `On` level, with V = the variables of the problem itself. The kill
+-- always happens at `w ∈ vs`, so the membership side condition is free.
+-- ⊢  vs nodup,  |vs| ≥ 2   ⟹   ¬ HasMguOn vs for (v₁ | … | vₙ) ≐ᵣ (l:𝓫)
+theorem vars_vs_field_no_mgu_on {B : Type} {vs : List TyVar} (hnd : vs.Nodup)
     (hlen : 2 ≤ vs.length) (b : B) (l : Label) :
-    ¬ HasMgu (ofSpine (vs.map Atom.var)) (.sing l (.base b)) := by
-  apply no_mgu_of_witness_shrinks
+    ¬ HasMguOn vs (fun θ : TySubst B =>
+        Unifies θ (ofSpine (vs.map Atom.var)) (.sing l (.base b))) := by
+  apply no_mgu_on_of_witness_shrinks
   intro θ hu
   -- a pure-var spine whose l-counts sum to ≥1 has a variable carrying ≥1 l-field
   have hpos : ∀ (ns : List TyVar),
@@ -401,7 +490,7 @@ theorem vars_vs_field_no_mgu {B : Type} {vs : List TyVar} (hnd : vs.Nodup)
     intro h
     exact (List.nodup_cons.mp hnd).1 (by rw [h]; exact List.mem_cons_self)
   refine ⟨⟨fun x => .var x, fun x => if x = (if w = a then b' else a)
-            then .sing l (.base b) else .empty⟩, w, l, ?_, ?_⟩
+            then .sing l (.base b) else .empty⟩, w, l, ?_, hwmem, ?_⟩
   · exact witness_unifies b l _ (a :: b' :: rest) hnd (by
       split
       · exact List.mem_cons_of_mem _ List.mem_cons_self
@@ -416,6 +505,20 @@ theorem vars_vs_field_no_mgu {B : Type} {vs : List TyVar} (hnd : vs.Nodup)
     simp only [Row.toSpine, sFieldCount]
     omega
 
+-- ⊢  vs nodup,  |vs| ≥ 2   ⟹   ¬ HasMgu (v₁ | … | vₙ) (l:𝓫)   (thesis-facing)
+theorem vars_vs_field_no_mgu {B : Type} {vs : List TyVar} (hnd : vs.Nodup)
+    (hlen : 2 ≤ vs.length) (b : B) (l : Label) :
+    ¬ HasMgu (ofSpine (vs.map Atom.var)) (.sing l (.base b)) :=
+  not_hasMguP_of_not_hasMguOn (vars_vs_field_no_mgu_on hnd hlen b l)
+
+-- The mirror at the `On` level too, via hasMguOn_symm.
+-- ⊢  vs nodup,  |vs| ≥ 2   ⟹   ¬ HasMguOn vs for (l:𝓫) ≐ᵣ (v₁ | … | vₙ)
+theorem field_vs_vars_no_mgu_on {B : Type} {vs : List TyVar} (hnd : vs.Nodup)
+    (hlen : 2 ≤ vs.length) (b : B) (l : Label) :
+    ¬ HasMguOn vs (fun θ : TySubst B =>
+        Unifies θ (.sing l (.base b)) (ofSpine (vs.map Atom.var))) :=
+  fun h => vars_vs_field_no_mgu_on hnd hlen b l (hasMguOn_symm.mp h)
+
 -- Mirror of vars_vs_field_no_mgu (via hasMgu_symm): a single field facing ≥2
 -- distinct variable hosts on the RIGHT. For a lone field to have any unifier the
 -- other side must be var-free of foreign labels — any concrete k≠l field there is
@@ -428,6 +531,145 @@ theorem field_vs_vars_no_mgu {B : Type} {vs : List TyVar} (hnd : vs.Nodup)
     (hlen : 2 ≤ vs.length) (b : B) (l : Label) :
     ¬ HasMgu (.sing l (.base b)) (ofSpine (vs.map Atom.var)) :=
   fun h => vars_vs_field_no_mgu hnd hlen b l (hasMgu_symm.mp h)
+
+-- ## A ≈-INVARIANT DEPTH, and the occurs violation it can see
+-- `sFieldCount` cannot see inside a field's PAYLOAD, so it is blind to a
+-- self-reference that passes through a record type: `ρ ≈ᵣ (l : {ρ})` has
+-- l-count 1 on both sides. Record NESTING is the invariant that does see it.
+-- `max` on `cat` is what makes every RowEquiv constructor — assoc, unitL,
+-- unitR, comm — preserve it on the nose.
+mutual
+def Ty.rcdDepth {B : Type} : Ty B → Nat
+  | .var _   => 0
+  | .base _  => 0
+  | .unk     => 0
+  | .fn a b  => max (Ty.rcdDepth a) (Ty.rcdDepth b)
+  | .rcd ρ   => 1 + Row.rcdDepth ρ
+
+def Row.rcdDepth {B : Type} : Row B → Nat
+  | .empty      => 0
+  | .var _      => 0
+  | .sing _ τ   => Ty.rcdDepth τ
+  | .cat ρ₁ ρ₂  => max (Row.rcdDepth ρ₁) (Row.rcdDepth ρ₂)
+end
+
+mutual
+-- ⊢  τ₁ ≈ₜ τ₂   ⟹   depth τ₁ = depth τ₂
+theorem TyEquiv.rcdDepth_eq {B : Type} :
+    {τ₁ τ₂ : Ty B} → TyEquiv τ₁ τ₂ → Ty.rcdDepth τ₁ = Ty.rcdDepth τ₂
+  | _, _, .refl _      => rfl
+  | _, _, .symm h      => (TyEquiv.rcdDepth_eq h).symm
+  | _, _, .trans h₁ h₂ => (TyEquiv.rcdDepth_eq h₁).trans (TyEquiv.rcdDepth_eq h₂)
+  | _, _, .fn h₁ h₂    => by
+      simp only [Ty.rcdDepth, TyEquiv.rcdDepth_eq h₁, TyEquiv.rcdDepth_eq h₂]
+  | _, _, .rcd h       => by
+      simp only [Ty.rcdDepth, RowEquiv.rcdDepth_eq h]
+
+-- ⊢  ρ₁ ≈ᵣ ρ₂   ⟹   depth ρ₁ = depth ρ₂
+theorem RowEquiv.rcdDepth_eq {B : Type} :
+    {ρ₁ ρ₂ : Row B} → RowEquiv ρ₁ ρ₂ → Row.rcdDepth ρ₁ = Row.rcdDepth ρ₂
+  | _, _, .refl _      => rfl
+  | _, _, .symm h      => (RowEquiv.rcdDepth_eq h).symm
+  | _, _, .trans h₁ h₂ => (RowEquiv.rcdDepth_eq h₁).trans (RowEquiv.rcdDepth_eq h₂)
+  | _, _, .sing h      => by
+      simp only [Row.rcdDepth, TyEquiv.rcdDepth_eq h]
+  | _, _, .cat h₁ h₂   => by
+      simp only [Row.rcdDepth, RowEquiv.rcdDepth_eq h₁, RowEquiv.rcdDepth_eq h₂]
+  | _, _, .assoc       => by simp only [Row.rcdDepth, Nat.max_assoc]
+  | _, _, .unitL       => by simp only [Row.rcdDepth, Nat.max_eq_right (Nat.zero_le _)]
+  | _, _, .unitR       => by simp only [Row.rcdDepth, Nat.max_eq_left (Nat.zero_le _)]
+  | _, _, .comm _      => by simp only [Row.rcdDepth, Nat.max_comm]
+end
+
+-- ⊢  no vars and no fields at any label   ⟹   ρ ≈ᵣ ε
+theorem rowEquiv_empty_of_no_vars_no_fields {B : Type} {ρ : Row B}
+    (hv : sVarSeq ρ.toSpine = []) (hc : ∀ l, sFieldCount l ρ.toSpine = 0) :
+    RowEquiv ρ Row.empty := by
+  refine RowEquiv.ofChar ⟨hv, fun l => ?_⟩
+  have hlen : (sProj l ρ.toSpine).length = 0 := by
+    rw [sProj_length_eq_sFieldCount]; exact hc l
+  have hnil : sProj l ρ.toSpine = [] := by
+    rcases hh : sProj l ρ.toSpine with _ | ⟨p, ps⟩
+    · rfl
+    · rw [hh] at hlen; simp at hlen
+  rw [hnil]
+  exact .nil
+
+-- The occurs violation, seen through the payload.
+-- ⊢  ¬ (ρ ≈ᵣ (l : {ρ}))
+theorem no_rcd_self_reference {B : Type} {l : Label} {ρ : Row B} :
+    ¬ RowEquiv ρ (.sing l (.rcd ρ)) := by
+  intro h
+  have := RowEquiv.rcdDepth_eq h
+  simp only [Row.rcdDepth, Ty.rcdDepth] at this
+  omega
+
+
+-- ## PHASE B GROUNDWORK: what a LONE FIELD forces on the other side
+-- Shape (2)/(3) of the terminal dispatch is a leading field facing a leading
+-- variable. When the field side is the whole spine, counting alone pins the
+-- other side down almost completely, before any witness is constructed: ≈
+-- preserves label counts and substitution only ever adds them, so a side with
+-- exactly one l-field and nothing else cannot face a foreign label at all, and
+-- can face at most one l-field.
+
+-- ⊢  θ ⊨ (l:τ) ≐ᵣ ofSpine s,  m ≠ l   ⟹   count_m s = 0
+theorem lone_field_no_foreign {B : Type} {θ : TySubst B} {l m : Label} {τ : Ty B}
+    {s : List (Atom B)} (hne : m ≠ l)
+    (hu : Unifies θ (ofSpine [.field l τ]) (ofSpine s)) :
+    sFieldCount m s = 0 := by
+  have hc := rowEquiv_fieldCount_eq m hu
+  have hlhs : sFieldCount m ((ofSpine [Atom.field l τ]).applySubst θ).toSpine = 0 := by
+    show sFieldCount m ((Row.cat (.sing l (τ.applySubst θ)) Row.empty)).toSpine = 0
+    simp only [Row.toSpine, List.append_nil, sFieldCount,
+      if_neg (fun h : l = m => hne h.symm)]
+  rw [hlhs] at hc
+  have hle := sFieldCount_applySubst_le θ m (ofSpine s)
+  rw [ofSpine_toSpine] at hle
+  omega
+
+-- ⊢  θ ⊨ (l:τ) ≐ᵣ ofSpine s   ⟹   count_l s ≤ 1
+theorem lone_field_count_le {B : Type} {θ : TySubst B} {l : Label} {τ : Ty B}
+    {s : List (Atom B)} (hu : Unifies θ (ofSpine [.field l τ]) (ofSpine s)) :
+    sFieldCount l s ≤ 1 := by
+  have hc := rowEquiv_fieldCount_eq l hu
+  have hlhs : sFieldCount l ((ofSpine [Atom.field l τ]).applySubst θ).toSpine = 1 := by
+    show sFieldCount l ((Row.cat (.sing l (τ.applySubst θ)) Row.empty)).toSpine = 1
+    simp [Row.toSpine, sFieldCount]
+  rw [hlhs] at hc
+  have hle := sFieldCount_applySubst_le θ l (ofSpine s)
+  rw [ofSpine_toSpine] at hle
+  omega
+
+-- The bridge to the pure-variable form the base theorem is stated in: a spine
+-- with no fields at any label IS its own variable sequence.
+-- ⊢  (∀ l. count_l s = 0)   ⟹   s = map .var (vars s)
+theorem spine_eq_map_var_of_no_fields {B : Type} :
+    (s : List (Atom B)) → (∀ l, sFieldCount l s = 0) → s = (sVarSeq s).map Atom.var
+  | [], _ => rfl
+  | .field l τ :: t, h => by
+      have := h l
+      simp only [sFieldCount, if_true] at this
+      omega
+  | .var α :: t, h => by
+      have ih := spine_eq_map_var_of_no_fields t (fun l => by
+        have := h l; simpa only [sFieldCount] using this)
+      simp only [sVarSeq, List.map_cons]
+      exact congrArg (Atom.var α :: ·) ih
+
+-- Putting the three together: facing a lone field, a side that carries no
+-- l-field is a PURE VARIABLE SPINE — so `field_vs_vars_no_mgu_on` is already
+-- stated at full generality for that side, no tail handling needed.
+-- ⊢  θ ⊨ (l:τ) ≐ᵣ ofSpine s,  count_l s = 0   ⟹   s = map .var (vars s)
+theorem lone_field_other_pure_var {B : Type} {θ : TySubst B} {l : Label} {τ : Ty B}
+    {s : List (Atom B)} (hu : Unifies θ (ofSpine [.field l τ]) (ofSpine s))
+    (hl : sFieldCount l s = 0) :
+    s = (sVarSeq s).map Atom.var :=
+  spine_eq_map_var_of_no_fields s (fun m => by
+    by_cases hm : m = l
+    · exact hm ▸ hl
+    · exact lone_field_no_foreign hm hu)
+
 
 -- ## The all-variable stuck class: (α | β) ≐ᵣ (β | α) has no mgu
 -- The THIRD base technique: variable non-commutativity. Counting/rigidity cannot
@@ -508,8 +750,11 @@ theorem varsEmpty_forces_applySubst_empty {B : Type} (σ : TySubst B) :
               (varsEmpty_forces_applySubst_empty σ R₂ hv2 hf2)).trans RowEquiv.unitL
 
 -- ⊢  ¬ HasMgu (α | β) (β | α)      (the all-variable stuck class)
-theorem allvar_swap_no_mgu {B : Type} :
-    ¬ HasMgu (.cat (.var "α") (.var "β") : Row B) (.cat (.var "β") (.var "α")) := by
+-- ⊢  ¬ HasMguOn [α, β] for (α | β) ≐ᵣ (β | α)
+theorem allvar_swap_no_mgu_on {B : Type} :
+    ¬ HasMguOn ["α", "β"]
+        (fun θ : TySubst B => Unifies θ (.cat (.var "α") (.var "β"))
+                                        (.cat (.var "β") (.var "α"))) := by
   rintro ⟨θ, hu, hmax⟩
   unfold Unifies at hu
   simp only [Row.applySubst] at hu
@@ -529,11 +774,11 @@ theorem allvar_swap_no_mgu {B : Type} :
   -- both images are field-free (an mgu is pointwise count-minimal, witnesses give 0)
   have hβfree : ∀ l, sFieldCount l (θ.row "β").toSpine = 0 := fun l => by
     have hle : sFieldCount l (θ.row "β").toSpine ≤ 0 :=
-      instanceOf_fieldCount_mono (hmax _ (hUu l)) "β" l
+      instanceOfOn_fieldCount_mono (x := "β") (hmax _ (hUu l)) (by simp) l
     omega
   have hαfree : ∀ l, sFieldCount l (θ.row "α").toSpine = 0 := fun l => by
     have hle : sFieldCount l (θ.row "α").toSpine ≤ 0 :=
-      instanceOf_fieldCount_mono (hmax _ (hUu' l)) "α" l
+      instanceOfOn_fieldCount_mono (x := "α") (hmax _ (hUu' l)) (by simp) l
     omega
   -- the var-sequences commute: A ++ B = B ++ A
   obtain ⟨hvarseq, -⟩ := hu.char
@@ -546,16 +791,16 @@ theorem allvar_swap_no_mgu {B : Type} :
         fun l => by rw [sProj_nil_of_fieldCount_zero (hβfree l)]; exact .nil⟩
     obtain ⟨σ', hrowσ', -⟩ := hmax _ (hUu' "x")
     have hfield : RowEquiv (Row.sing "x" (.unk : Ty B)) ((θ.row "β").applySubst σ') := by
-      have := hrowσ' "β"; simpa using this
+      have := hrowσ' "β" (by simp); simpa using this
     have hemp : RowEquiv ((θ.row "β").applySubst σ') Row.empty := RowEquiv.applySubst σ' hθβε
     have hc := rowEquiv_fieldCount_eq "x" (hfield.trans hemp)
     simp [Row.toSpine, sFieldCount] at hc
   -- the (α↦l, β↦ε) witness factors: θβ vanishes, θα becomes (l:unk)
   obtain ⟨σ, hrowσ, -⟩ := hmax _ (hUu "x")
   have hσα : RowEquiv (Row.sing "x" (.unk : Ty B)) ((θ.row "α").applySubst σ) := by
-    have := hrowσ "α"; simpa using this
+    have := hrowσ "α" (by simp); simpa using this
   have hσβ : RowEquiv (Row.empty : Row B) ((θ.row "β").applySubst σ) := by
-    have := hrowσ "β"; simpa using this
+    have := hrowσ "β" (by simp); simpa using this
   -- every var of B vanishes under σ; by A ⊆ B so does every var of A
   have hBvars := applySubst_empty_forces_vars σ (θ.row "β") hσβ.symm
   have hAvars : ∀ v ∈ sVarSeq (θ.row "α").toSpine, RowEquiv (σ.row v) Row.empty := fun v hv =>
@@ -565,6 +810,11 @@ theorem allvar_swap_no_mgu {B : Type} :
     varsEmpty_forces_applySubst_empty σ (θ.row "α") hAvars hαfree
   have hc := rowEquiv_fieldCount_eq "x" (hσα.trans hαε)
   simp [Row.toSpine, sFieldCount] at hc
+
+-- ⊢  ¬ HasMgu (α | β) (β | α)      (thesis-facing)
+theorem allvar_swap_no_mgu {B : Type} :
+    ¬ HasMgu (.cat (.var "α") (.var "β") : Row B) (.cat (.var "β") (.var "α")) :=
+  not_hasMguP_of_not_hasMguOn allvar_swap_no_mgu_on
 
 -- ## projClash soundness: the projection-clash direction of the trichotomy.
 -- If projClash s₁ s₂, no θ can unify (ofSpine s₁) with (ofSpine s₂).

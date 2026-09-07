@@ -150,8 +150,7 @@ def groundMatch {B : Type} (s₁ s₂ : List (Atom B)) :
 -- The fresh names are drawn from a supply derived LOCALLY from the problem
 -- (localSupply) and THREADED through the driver: deriving it per call from the
 -- current problem is non-monotone, since a move that drops a field drops its
--- type's variables and the bound can fall below a name still in scope
---.
+-- type's variables and the bound can fall below a name still in scope.
 
 
 structure Supply where
@@ -221,6 +220,47 @@ def HasMgu {B : Type} (ρ₁ ρ₂ : Row B) : Prop :=
 -- PREDICATE and get a congruence that covers the eq-emitting moves for free.
 def HasMguP {B : Type} (P : TySubst B → Prop) : Prop :=
   ∃ θ : TySubst B, P θ ∧ ∀ θ' : TySubst B, P θ' → InstanceOf θ' θ
+
+-- ## mgu RELATIVIZED to a variable set
+-- `InstanceOf` asks θ' to factor through θ at EVERY variable. That is the wrong
+-- demand on an algorithm that invents variables: U-expand introduces δ and β′,
+-- about which a unifier of the original problem says nothing, so factoring can
+-- fail on names the problem never had. This is the same mismatch `AgreeOn`
+-- (below) already fixes one level up, for success completeness.
+--
+-- The repair is to relativize: ask for factoring only on `V`, the problem's own
+-- variables. Weakening the demand makes maximality EASIER, so `¬ HasMguOn V P`
+-- is the STRONGER statement — it is what the negative legs should prove, and it
+-- hands back the thesis-facing `¬ HasMgu` for free (`InstanceOf.on`).
+def InstanceOfOn {B : Type} (V : List TyVar) (θ' θ : TySubst B) : Prop :=
+  ∃ σ : TySubst B,
+    (∀ x ∈ V, RowEquiv (θ'.row x) ((θ.row x).applySubst σ)) ∧
+    (∀ x ∈ V, TyEquiv (θ'.ty x) ((θ.ty x).applySubst σ))
+
+def HasMguOn {B : Type} (V : List TyVar) (P : TySubst B → Prop) : Prop :=
+  ∃ θ : TySubst B, P θ ∧ ∀ θ' : TySubst B, P θ' → InstanceOfOn V θ' θ
+
+-- ⊢  factoring everywhere factors on V
+theorem InstanceOf.on {B : Type} {θ' θ : TySubst B} (V : List TyVar)
+    (h : InstanceOf θ' θ) : InstanceOfOn V θ' θ :=
+  let ⟨σ, hrow, hty⟩ := h
+  ⟨σ, fun x _ => hrow x, fun x _ => hty x⟩
+
+-- ⊢  a strict mgu is an mgu on V
+theorem hasMguOn_of_hasMguP {B : Type} {P : TySubst B → Prop} (V : List TyVar)
+    (h : HasMguP P) : HasMguOn V P :=
+  let ⟨θ, hp, hmax⟩ := h
+  ⟨θ, hp, fun θ' hp' => (hmax θ' hp').on V⟩
+
+-- ⊢  … so no-mgu-on-V is the stronger conclusion  (the direction the legs use)
+theorem not_hasMguP_of_not_hasMguOn {B : Type} {P : TySubst B → Prop}
+    {V : List TyVar} (h : ¬ HasMguOn V P) : ¬ HasMguP P :=
+  fun hmgu => h (hasMguOn_of_hasMguP V hmgu)
+
+-- ⊢  … stated at the row-unifier predicate, where it retires a `HasMgu` goal
+theorem not_hasMgu_of_not_hasMguOn {B : Type} {ρ₁ ρ₂ : Row B} {V : List TyVar}
+    (h : ¬ HasMguOn V (fun θ => Unifies θ ρ₁ ρ₂)) : ¬ HasMgu ρ₁ ρ₂ :=
+  not_hasMguP_of_not_hasMguOn h
 
 
 ------------------- SOLUTIONS, SUBSTITUTIONS, THE RESULT TYPE -----------------
@@ -498,5 +538,54 @@ def SolMentions {B : Type} (s : Sol B) (γ : TyVar) : Prop :=
 /-- `SolBelow s W`: every name the solution mentions is already in `W`. -/
 def SolBelow {B : Type} (s : Sol B) (W : List TyVar) : Prop :=
   ∀ γ, SolMentions s γ → γ ∈ W
+
+
+--------------------- TERMINAL CONFIGURATIONS --------------------------------
+
+-- ## What the fourth leg can honestly be about
+-- `unifySpineMF … = .stuck` is NOT the right hypothesis. `UResM.seq` propagates
+-- a sub-call's `.stuck` before the residual is ever examined, and that residual
+-- can disambiguate the whole problem — so the verdict is CONSERVATIVE, exactly
+-- as `.occurs` is (Refutations.stuck_masks_mgu, Refutations.occurs-side
+-- occurs_allVar_hasMgu). "stuck ⟹ no mgu" is false, at every formulation.
+--
+-- What IS available is the fall-through condition of the driver's last arm:
+-- both spines non-empty and every move dead, with no projection clash either.
+-- That is a property of a CONFIGURATION, independent of the driver's recursion
+-- — so it also survives any later change to the driver.
+structure Terminal {B : Type} (S : Supply) (s₁ s₂ : List (Atom B)) : Prop where
+  hstripL  : stripL s₁ s₂ = none
+  hstripR  : stripR s₁ s₂ = none
+  hsolveL  : solveVarM S s₁ s₂ = none
+  hsolveR  : solveVarM S s₂ s₁ = none
+  hmatchL₁ : matchL s₁ s₂ = none
+  hmatchL₂ : matchL s₂ s₁ = none
+  hmatchR₁ : matchR s₁ s₂ = none
+  hmatchR₂ : matchR s₂ s₁ = none
+  hgroundL : groundMatch s₁ s₂ = none
+  hgroundR : groundMatch s₂ s₁ = none
+  hexpandL : expandL S s₁ s₂ = none
+  hexpandR : expandL S s₂ s₁ = none
+  hnoClash : projClash s₁ s₂ = false
+
+/-- The candidate fourth leg — **and it is REFUTED**: `Refutations.terminalNoMgu_false`.
+
+Kept as a named `def` because the refutation has to be able to name it, and
+because it is the exact statement a side condition would have to repair.
+
+Why it fails: terminality says "no move fires", which is a fact about the MOVES,
+not about the problem. On (l:{w}) ≐ᵣ (w | v) U-expand sees two candidate hosts
+and refuses — the Wand shape — but hosting in `w` would force θw ≈ (l:{θw}), an
+occurs violation invisible to field counting (the recursion passes under a
+record constructor). One placement is therefore ruled out, the unifier is
+unique, and a unique unifier is most general.
+
+The natural repair to TRY is a side condition forbidding exactly that: no
+variable of either side occurring inside a field payload of the other. Whether
+that suffices is OPEN — do not assume it. -/
+def TerminalNoMgu (B : Type) : Prop :=
+  ∀ (S : Supply) (a b : Atom B) (s₁ s₂ : List (Atom B)),
+    Terminal S (a :: s₁) (b :: s₂) →
+    ¬ HasMgu (ofSpine (a :: s₁)) (ofSpine (b :: s₂))
 
 end MinimalCalculus

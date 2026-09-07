@@ -119,20 +119,38 @@ theorem stuck_field_vs_var {B : Type} {S : Supply} {l : Label} {τ : Ty B}
 
 
 
------------------- P6: STUCK ⟹ NO-MGU, MUTUALLY ----------------------------
--- The fourth leg, still stated HONESTLY as a REDUCTION.
+------------------ P6: THE FOURTH LEG ---------------------------------------
+-- WHAT THIS LEG IS NOT. There used to be a `unifyM_stuck_no_mgu` here: an
+-- induction on fuel reducing `.stuck ⟹ ¬HasMgu` to four hypotheses (hbase,
+-- hexp, hsolve, hsolveTy), each threading an accumulated predicate `Q`. It is
+-- deleted, because the theorem it was reducing is FALSE:
 --
--- No fuel guard: `outOfFuel` is its own verdict, so `.stuck` is never a budget
--- artefact and the induction needs no `|s₁|+|s₂| ≤ fuel` premise.
+--   * `Refutations.stuck_masks_mgu` — the driver answers `.stuck` on
+--     (k:{β|α} | β) ≐ᵣ (k:{l:𝓫} | l:𝓫), which has the unique mgu
+--     β ≔ (l:𝓫), α ≔ ε. `UResM.seq` propagates the ambiguous sub-equation
+--     {β|α} ≐ {l:𝓫} before the residual β ≐ᵣ (l:𝓫), which pins β, is looked
+--     at. So `.stuck` is a CONSERVATIVE verdict, exactly like `.occurs`.
+--   * `Refutations.hbase_shape_false` / `hbase_stableQ_false` — the four
+--     hypotheses were also false in their own right, an unconstrained `Q`
+--     conjunct being able to shrink a unifier set down to one with an mgu.
+--     That is the shadow of the first point: the `Q`-threading assumed a stuck
+--     conjunct makes the conjunction ambiguous.
 --
--- An eq-emitting arm has TWO ways to be stuck: the type sub-call is stuck
--- (handled here by the ≐ half of the same induction), or it SUCCEEDED and the
--- substituted residual is stuck. The second is not a pointwise iff — relating
--- the substituted residual's unifiers to the original's needs `Sol.Sat θ s₁`,
--- which only an EXTENSION of θ satisfies — so it parks as `hsolve`/`hsolveTy`,
--- alongside `hbase` and `hexp`. The root obstruction behind all of them:
--- `HasMgu` uses strict `InstanceOf` over ALL variables, the wrong notion for an
--- algorithm that invents them. Relativizing it is P6's first task.
+-- NOR IS IT the retreat to TERMINAL configurations. `TerminalNoMgu` (Defs.lean)
+-- is refuted too, by `Refutations.terminalNoMgu_false`: terminality says "no
+-- move fires", a fact about the MOVES, and on (l:{w}) ≐ᵣ (w | v) one of the two
+-- candidate placements is ruled out by an occurs violation the guards cannot
+-- see, leaving a unique — hence most general — unifier.
+--
+-- WHAT THE LEG ACTUALLY IS, then: the SPECIFIC no-mgu theorems (NoMgu.lean —
+-- vars_vs_field_no_mgu for Wand, two_sided_no_mgu, allvar_swap_no_mgu, each
+-- also at the `On` level), together with the conservativity examples. There is
+-- no general converse to prove. The dispatch below stays useful as the case
+-- analysis a side-condition-guarded version would still go through.
+--
+-- The lemmas kept below (which arms can answer `.stuck` at all, and ≐'s
+-- congruence iffs) are facts about the driver in their own right, and are what
+-- a future algorithm-level statement would still be built from.
 
 -- ## ≐'s congruence arms are pointwise iffs (so they need no hypothesis)
 theorem tyUnifies_fn_iff {B : Type} (θ : TySubst B) (a₁ b₁ a₂ b₂ : Ty B) :
@@ -211,322 +229,21 @@ theorem UResM.seq_stuck {B : Type} {r : UResM B} {k : TySubst B → Supply → U
   | stuck => exact .inl rfl
   | outOfFuel => cases h
 
--- THE STUCK LEG, both sorts at once, as a reduction to four named hypotheses.
-theorem unifyM_stuck_no_mgu {B : Type} [DecidableEq B]
-    (hbase : ∀ (S : Supply) (a : Atom B) (s₁ : List (Atom B)) (b : Atom B)
-              (s₂ : List (Atom B)) (Q : TySubst B → Prop),
-      stripL (a :: s₁) (b :: s₂) = none → stripR (a :: s₁) (b :: s₂) = none →
-      solveVarM S (a :: s₁) (b :: s₂) = none → solveVarM S (b :: s₂) (a :: s₁) = none →
-      matchL (a :: s₁) (b :: s₂) = none → matchL (b :: s₂) (a :: s₁) = none →
-      matchR (a :: s₁) (b :: s₂) = none → matchR (b :: s₂) (a :: s₁) = none →
-      groundMatch (a :: s₁) (b :: s₂) = none → groundMatch (b :: s₂) (a :: s₁) = none →
-      expandL S (a :: s₁) (b :: s₂) = none → expandL S (b :: s₂) (a :: s₁) = none →
-      projClash (a :: s₁) (b :: s₂) = false →
-      ¬ HasMguP (fun θ => Unifies θ (ofSpine (a :: s₁)) (ofSpine (b :: s₂)) ∧ Q θ))
-    (hexp : ∀ (S : Supply) (u₁ u₂ : List (Atom B)) (Q : TySubst B → Prop)
-              (β : TyVar) (l : Label) (τ : Ty B) (t₁ t₂ : List (Atom B)),
-      expandL S u₁ u₂ = some (β, l, τ, t₁, t₂) →
-      ¬ HasMguP (fun θ => Unifies θ (ofSpine t₁) (ofSpine t₂) ∧ Q θ) →
-      ¬ HasMguP (fun θ => Unifies θ (ofSpine u₁) (ofSpine u₂) ∧ Q θ))
-    (hsolve : ∀ (s : Sol B) (τ τ' : Ty B) (t₁ t₂ : List (Atom B)) (Q : TySubst B → Prop),
-      ¬ HasMguP (fun θ => Unifies θ (ofSpine (sApplySubst s.toSubst t₁))
-                                    (ofSpine (sApplySubst s.toSubst t₂)) ∧ Q θ) →
-      ¬ HasMguP (fun θ => Unifies θ (ofSpine t₁) (ofSpine t₂) ∧
-                          (TyUnifies θ τ τ' ∧ Q θ)))
-    (hsolveTy : ∀ (s : Sol B) (a₁ a₂ b₁ b₂ : Ty B) (Q : TySubst B → Prop),
-      ¬ HasMguP (fun θ => TyUnifies θ (b₁.applySubst s.toSubst)
-                                      (b₂.applySubst s.toSubst) ∧ Q θ) →
-      ¬ HasMguP (fun θ => TyUnifies θ b₁ b₂ ∧ (TyUnifies θ a₁ a₂ ∧ Q θ))) :
-    ∀ (fuel : Nat),
-      (∀ (S : Supply) (τ τ' : Ty B) (Q : TySubst B → Prop),
-        unifyTyF S fuel τ τ' = .stuck →
-        ¬ HasMguP (fun θ => TyUnifies θ τ τ' ∧ Q θ)) ∧
-      (∀ (S : Supply) (s₁ s₂ : List (Atom B)) (Q : TySubst B → Prop),
-        unifySpineMF S fuel s₁ s₂ = .stuck →
-        ¬ HasMguP (fun θ => Unifies θ (ofSpine s₁) (ofSpine s₂) ∧ Q θ)) := by
-  intro fuel
-  induction fuel with
-  | zero =>
-      refine ⟨fun S τ τ' Q h => ?_, fun S s₁ s₂ Q h => ?_⟩
-      · cases τ with
-        | var α => exact absurd h (bindTy_ne_stuck (S := S) (α := α) (τ := τ'))
-        | base b =>
-            cases τ' with
-            | var α => exact absurd h (bindTy_ne_stuck (S := S) (α := α) (τ := Ty.base b))
-            | base b' => by_cases hb : b = b' <;> simp [unifyTyF, hb] at h
-            | unk => cases h
-            | fn _ _ => cases h
-            | rcd _ => cases h
-        | unk =>
-            cases τ' with
-            | var α =>
-                exact absurd h (bindTy_ne_stuck (S := S) (α := α) (τ := (Ty.unk : Ty B)))
-            | base _ => cases h
-            | unk => cases h
-            | fn _ _ => cases h
-            | rcd _ => cases h
-        | fn c d =>
-            cases τ' with
-            | var α => exact absurd h (bindTy_ne_stuck (S := S) (α := α) (τ := Ty.fn c d))
-            | base _ => cases h
-            | unk => cases h
-            | fn _ _ => cases h
-            | rcd _ => cases h
-        | rcd ρ =>
-            cases τ' with
-            | var α => exact absurd h (bindTy_ne_stuck (S := S) (α := α) (τ := Ty.rcd ρ))
-            | base _ => cases h
-            | unk => cases h
-            | fn _ _ => cases h
-            | rcd _ => cases h
-      · cases s₁ with
-        | nil =>
-            simp only [unifySpineMF] at h
-            cases hae : allVarsEmpty s₂ with
-            | none => rw [hae] at h; simp at h
-            | some σ => rw [hae] at h; simp at h
-        | cons a s₁ =>
-          cases s₂ with
-          | nil =>
-              simp only [unifySpineMF] at h
-              cases hae : allVarsEmpty (a :: s₁) with
-              | none => rw [hae] at h; simp at h
-              | some σ => rw [hae] at h; simp at h
-          | cons b s₂ => cases h
-  | succ fuel ih =>
-      -- the shape every eq-emitting arm produces, at both stuck sources
-      have armStuck : ∀ (S : Supply) (τ0 τ0' : Ty B) (t₁ t₂ u₁ u₂ : List (Atom B))
-          (Q : TySubst B → Prop),
-          ((unifyTyF S fuel τ0 τ0').seq fun θ' S'' =>
-              unifySpineMF S'' fuel (sApplySubst θ' t₁) (sApplySubst θ' t₂)) = .stuck →
-          (∀ θ : TySubst B, Unifies θ (ofSpine u₁) (ofSpine u₂) →
-              TyUnifies θ τ0 τ0' ∧ Unifies θ (ofSpine t₁) (ofSpine t₂)) →
-          (∀ θ : TySubst B, TyUnifies θ τ0 τ0' →
-              Unifies θ (ofSpine t₁) (ofSpine t₂) → Unifies θ (ofSpine u₁) (ofSpine u₂)) →
-          ¬ HasMguP (fun θ => Unifies θ (ofSpine u₁) (ofSpine u₂) ∧ Q θ) := by
-        intro S τ0 τ0' t₁ t₂ u₁ u₂ Q h hfwd hbwd
-        rcases UResM.seq_stuck h with hc | ⟨s, S₁, hs, hk⟩
-        · refine hasMguP_not_of_iff (P' := fun θ =>
-              TyUnifies θ τ0 τ0' ∧ (Unifies θ (ofSpine t₁) (ofSpine t₂) ∧ Q θ)) ?_
-              (ih.1 S τ0 τ0' _ hc)
-          exact fun θ => ⟨fun ⟨hu, hq⟩ => ⟨(hfwd θ hu).1, (hfwd θ hu).2, hq⟩,
-                          fun ⟨he, hr, hq⟩ => ⟨hbwd θ he hr, hq⟩⟩
-        · refine hasMguP_not_of_iff (P' := fun θ =>
-              Unifies θ (ofSpine t₁) (ofSpine t₂) ∧ (TyUnifies θ τ0 τ0' ∧ Q θ)) ?_
-              (hsolve s τ0 τ0' t₁ t₂ Q (ih.2 S₁ _ _ _ hk))
-          exact fun θ => ⟨fun ⟨hu, hq⟩ => ⟨(hfwd θ hu).2, (hfwd θ hu).1, hq⟩,
-                          fun ⟨hr, he, hq⟩ => ⟨hbwd θ he hr, hq⟩⟩
-      refine ⟨fun S τ τ' Q h => ?_, fun S s₁ s₂ Q h => ?_⟩
-      · cases τ with
-        | var α => exact absurd h (bindTy_ne_stuck (S := S) (α := α) (τ := τ'))
-        | base b =>
-            cases τ' with
-            | var α => exact absurd h (bindTy_ne_stuck (S := S) (α := α) (τ := Ty.base b))
-            | base b' => by_cases hb : b = b' <;> simp [unifyTyF, hb] at h
-            | unk => cases h
-            | fn _ _ => cases h
-            | rcd _ => cases h
-        | unk =>
-            cases τ' with
-            | var α =>
-                exact absurd h (bindTy_ne_stuck (S := S) (α := α) (τ := (Ty.unk : Ty B)))
-            | base _ => cases h
-            | unk => cases h
-            | fn _ _ => cases h
-            | rcd _ => cases h
-        | fn a₁ b₁ =>
-            cases τ' with
-            | var α => exact absurd h (bindTy_ne_stuck (S := S) (α := α) (τ := Ty.fn a₁ b₁))
-            | base _ => cases h
-            | unk => cases h
-            | fn a₂ b₂ =>
-                replace h : ((unifyTyF S fuel a₁ a₂).seq fun θ' S'' =>
-                    unifyTyF S'' fuel (b₁.applySubst θ') (b₂.applySubst θ'))
-                  = .stuck := h
-                rcases UResM.seq_stuck h with hc | ⟨s, S₁, hs, hk⟩
-                · refine hasMguP_not_of_iff (P' := fun θ =>
-                      TyUnifies θ a₁ a₂ ∧ (TyUnifies θ b₁ b₂ ∧ Q θ)) ?_
-                      (ih.1 S a₁ a₂ _ hc)
-                  exact fun θ => ⟨fun ⟨hu, hq⟩ =>
-                      ⟨((tyUnifies_fn_iff θ a₁ b₁ a₂ b₂).mp hu).1,
-                       ((tyUnifies_fn_iff θ a₁ b₁ a₂ b₂).mp hu).2, hq⟩,
-                    fun ⟨hA, hB, hq⟩ => ⟨(tyUnifies_fn_iff θ a₁ b₁ a₂ b₂).mpr ⟨hA, hB⟩, hq⟩⟩
-                · refine hasMguP_not_of_iff (P' := fun θ =>
-                      TyUnifies θ b₁ b₂ ∧ (TyUnifies θ a₁ a₂ ∧ Q θ)) ?_
-                      (hsolveTy s a₁ a₂ b₁ b₂ Q (ih.1 S₁ _ _ _ hk))
-                  exact fun θ => ⟨fun ⟨hu, hq⟩ =>
-                      ⟨((tyUnifies_fn_iff θ a₁ b₁ a₂ b₂).mp hu).2,
-                       ((tyUnifies_fn_iff θ a₁ b₁ a₂ b₂).mp hu).1, hq⟩,
-                    fun ⟨hB, hA, hq⟩ => ⟨(tyUnifies_fn_iff θ a₁ b₁ a₂ b₂).mpr ⟨hA, hB⟩, hq⟩⟩
-            | rcd _ => cases h
-        | rcd ρ₁ =>
-            cases τ' with
-            | var α => exact absurd h (bindTy_ne_stuck (S := S) (α := α) (τ := Ty.rcd ρ₁))
-            | base _ => cases h
-            | unk => cases h
-            | fn _ _ => cases h
-            | rcd ρ₂ =>
-                replace h : unifySpineMF S fuel ρ₁.toSpine ρ₂.toSpine = .stuck := h
-                refine hasMguP_not_of_iff (P' := fun θ =>
-                    Unifies θ (ofSpine ρ₁.toSpine) (ofSpine ρ₂.toSpine) ∧ Q θ) ?_
-                    (ih.2 S _ _ Q h)
-                exact fun θ => ⟨fun ⟨hu, hq⟩ =>
-                    ⟨(unifies_toSpine_iff θ ρ₁ ρ₂).mpr ((tyUnifies_rcd_iff θ ρ₁ ρ₂).mp hu), hq⟩,
-                  fun ⟨hu, hq⟩ =>
-                    ⟨(tyUnifies_rcd_iff θ ρ₁ ρ₂).mpr ((unifies_toSpine_iff θ ρ₁ ρ₂).mp hu), hq⟩⟩
-      · cases s₁ with
-        | nil =>
-            simp only [unifySpineMF] at h
-            cases hae : allVarsEmpty s₂ with
-            | none => rw [hae] at h; simp at h
-            | some σ => rw [hae] at h; simp at h
-        | cons a s₁ =>
-          cases s₂ with
-          | nil =>
-              simp only [unifySpineMF] at h
-              cases hae : allVarsEmpty (a :: s₁) with
-              | none => rw [hae] at h; simp at h
-              | some σ => rw [hae] at h; simp at h
-          | cons b s₂ =>
-            unfold unifySpineMF at h
-            cases hsl : stripL (a :: s₁) (b :: s₂) with
-            | some p =>
-              obtain ⟨t₁, t₂⟩ := p; simp only [hsl] at h
-              refine hasMguP_not_of_iff (P' := fun θ =>
-                  Unifies θ (ofSpine t₁) (ofSpine t₂) ∧ Q θ) ?_ (ih.2 S t₁ t₂ Q h)
-              exact fun θ => ⟨fun ⟨hu, hq⟩ => ⟨stripL_reflect_fwd hsl hu, hq⟩,
-                              fun ⟨hu, hq⟩ => ⟨stripL_reflect hsl hu, hq⟩⟩
-            | none =>
-            cases hsr : stripR (a :: s₁) (b :: s₂) with
-            | some p =>
-              obtain ⟨t₁, t₂⟩ := p; simp only [hsl, hsr] at h
-              refine hasMguP_not_of_iff (P' := fun θ =>
-                  Unifies θ (ofSpine t₁) (ofSpine t₂) ∧ Q θ) ?_ (ih.2 S t₁ t₂ Q h)
-              exact fun θ => ⟨fun ⟨hu, hq⟩ => ⟨stripR_reflect_fwd hsr hu, hq⟩,
-                              fun ⟨hu, hq⟩ => ⟨stripR_reflect hsr hu, hq⟩⟩
-            | none =>
-            cases hv1 : solveVarM S (a :: s₁) (b :: s₂) with
-            | some r =>
-              simp only [hsl, hsr, hv1] at h
-              exact absurd (hv1.trans (congrArg some h)) solveVarM_ne_stuck
-            | none =>
-            cases hv2 : solveVarM S (b :: s₂) (a :: s₁) with
-            | some r =>
-              simp only [hsl, hsr, hv1, hv2] at h
-              exact absurd (hv2.trans (congrArg some h)) solveVarM_ne_stuck
-            | none =>
-            cases hml : matchL (a :: s₁) (b :: s₂) with
-            | some p =>
-              obtain ⟨τ0, τ0', t₁, t₂⟩ := p; simp only [hsl, hsr, hv1, hv2, hml] at h
-              exact armStuck S τ0 τ0' t₁ t₂ (a :: s₁) (b :: s₂) Q h
-                (fun _ hu => matchL_reflect_fwd hml hu)
-                (fun _ he hr => matchL_reflect hml he hr)
-            | none =>
-            cases hml2 : matchL (b :: s₂) (a :: s₁) with
-            | some p =>
-              obtain ⟨τ0', τ0, t₂, t₁⟩ := p; simp only [hsl, hsr, hv1, hv2, hml, hml2] at h
-              exact armStuck S τ0 τ0' t₁ t₂ (a :: s₁) (b :: s₂) Q h
-                (fun _ hu => let ⟨he, hr⟩ := matchL_reflect_fwd hml2 hu.symm; ⟨he.symm, hr.symm⟩)
-                (fun _ he hr => (matchL_reflect hml2 he.symm hr.symm).symm)
-            | none =>
-            cases hmr : matchR (a :: s₁) (b :: s₂) with
-            | some p =>
-              obtain ⟨τ0, τ0', t₁, t₂⟩ := p
-              simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr] at h
-              exact armStuck S τ0 τ0' t₁ t₂ (a :: s₁) (b :: s₂) Q h
-                (fun _ hu => matchR_reflect_fwd hmr hu)
-                (fun _ he hr => matchR_reflect hmr he hr)
-            | none =>
-            cases hmr2 : matchR (b :: s₂) (a :: s₁) with
-            | some p =>
-              obtain ⟨τ0', τ0, t₂, t₁⟩ := p
-              simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2] at h
-              exact armStuck S τ0 τ0' t₁ t₂ (a :: s₁) (b :: s₂) Q h
-                (fun _ hu => let ⟨he, hr⟩ := matchR_reflect_fwd hmr2 hu.symm; ⟨he.symm, hr.symm⟩)
-                (fun _ he hr => (matchR_reflect hmr2 he.symm hr.symm).symm)
-            | none =>
-            cases hg : groundMatch (a :: s₁) (b :: s₂) with
-            | some p =>
-              obtain ⟨τ0, τ0', t₁, t₂⟩ := p
-              simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg] at h
-              exact armStuck S τ0 τ0' t₁ t₂ (a :: s₁) (b :: s₂) Q h
-                (fun _ hu => groundMatch_reflect_fwd hg hu)
-                (fun _ he hr => groundMatch_reflect hg he hr)
-            | none =>
-            cases hg2 : groundMatch (b :: s₂) (a :: s₁) with
-            | some p =>
-              obtain ⟨τ0', τ0, t₂, t₁⟩ := p
-              simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2] at h
-              exact armStuck S τ0 τ0' t₁ t₂ (a :: s₁) (b :: s₂) Q h
-                (fun _ hu =>
-                  let ⟨he, hr⟩ := groundMatch_reflect_fwd hg2 hu.symm; ⟨he.symm, hr.symm⟩)
-                (fun _ he hr => (groundMatch_reflect hg2 he.symm hr.symm).symm)
-            | none =>
-            cases he1 : expandL S (a :: s₁) (b :: s₂) with
-            | some p =>
-              obtain ⟨β0, l0, τ0, t₁, t₂⟩ := p
-              simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, he1] at h
-              exact hexp S (a :: s₁) (b :: s₂) Q β0 l0 τ0 t₁ t₂ he1
-                (ih.2 S.fresh.2.fresh.2 t₁ t₂ Q (expandResM_stuck h))
-            | none =>
-            cases he2 : expandL S (b :: s₂) (a :: s₁) with
-            | some p =>
-              obtain ⟨β0, l0, τ0, t₁, t₂⟩ := p
-              simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, he1, he2] at h
-              refine hasMguP_not_of_iff (P' := fun θ =>
-                  Unifies θ (ofSpine (b :: s₂)) (ofSpine (a :: s₁)) ∧ Q θ) ?_
-                  (hexp S (b :: s₂) (a :: s₁) Q β0 l0 τ0 t₁ t₂ he2
-                    (ih.2 S.fresh.2.fresh.2 t₁ t₂ Q (expandResM_stuck h)))
-              exact fun θ => ⟨fun ⟨hu, hq⟩ => ⟨hu.symm, hq⟩,
-                              fun ⟨hu, hq⟩ => ⟨hu.symm, hq⟩⟩
-            | none =>
-              simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, he1, he2] at h
-              split at h
-              · cases h
-              · rename_i hpc
-                exact hbase S a s₁ b s₂ Q hsl hsr hv1 hv2 hml hml2 hmr hmr2 hg hg2
-                  he1 he2 (by simpa using hpc)
+-- ⊢  the dispatch, packaged from a `Terminal` record — the entry point Phase B
+-- proves `TerminalNoMgu` through.
+theorem terminal_leading_shape {B : Type} {S : Supply} {a b : Atom B}
+    {s₁ s₂ : List (Atom B)} (ht : Terminal S (a :: s₁) (b :: s₂)) :
+    (∃ α β, a = .var α ∧ b = .var β ∧ α ≠ β) ∨
+    (∃ α l' τ', a = .var α ∧ b = .field l' τ' ∧
+       ((∀ γ, sVarSeq (a :: s₁) ≠ [γ]) ∨ 0 < sFieldCount l' (a :: s₁))) ∨
+    (∃ l τ β, a = .field l τ ∧ b = .var β ∧
+       ((∀ γ, sVarSeq (b :: s₂) ≠ [γ]) ∨ 0 < sFieldCount l (b :: s₂))) ∨
+    (∃ l τ l' τ', a = .field l τ ∧ b = .field l' τ' ∧ l ≠ l' ∧
+      windowExtract l (b :: s₂) = none ∧ windowExtract l' (a :: s₁) = none ∧
+      ((∀ γ, sVarSeq (b :: s₂) ≠ [γ]) ∨ 0 < sFieldCount l (b :: s₂)) ∧
+      ((∀ γ, sVarSeq (a :: s₁) ≠ [γ]) ∨ 0 < sFieldCount l' (a :: s₁))) :=
+  stuck_leading_shape_expand ht.hstripL ht.hmatchL₁ ht.hmatchL₂ ht.hexpandL ht.hexpandR
 
-
--- Row-level reduction on the mutual driver. Note there is NO fuel premise: with
--- `outOfFuel` split out, a `.stuck` verdict is a genuine terminal ambiguity at
--- whatever budget it was reached.
--- ⊢  (hbase, hexp, hsolve, hsolveTy)  →  unifyRowM fuel ρ₁ ρ₂ = stuck
---        →  ¬ HasMgu ρ₁ ρ₂
-theorem unifyRowM_stuck_no_mgu {B : Type} [DecidableEq B] {fuel : Nat} {ρ₁ ρ₂ : Row B}
-    (hbase : ∀ (S : Supply) (a : Atom B) (s₁ : List (Atom B)) (b : Atom B)
-              (s₂ : List (Atom B)) (Q : TySubst B → Prop),
-      stripL (a :: s₁) (b :: s₂) = none → stripR (a :: s₁) (b :: s₂) = none →
-      solveVarM S (a :: s₁) (b :: s₂) = none → solveVarM S (b :: s₂) (a :: s₁) = none →
-      matchL (a :: s₁) (b :: s₂) = none → matchL (b :: s₂) (a :: s₁) = none →
-      matchR (a :: s₁) (b :: s₂) = none → matchR (b :: s₂) (a :: s₁) = none →
-      groundMatch (a :: s₁) (b :: s₂) = none → groundMatch (b :: s₂) (a :: s₁) = none →
-      expandL S (a :: s₁) (b :: s₂) = none → expandL S (b :: s₂) (a :: s₁) = none →
-      projClash (a :: s₁) (b :: s₂) = false →
-      ¬ HasMguP (fun θ => Unifies θ (ofSpine (a :: s₁)) (ofSpine (b :: s₂)) ∧ Q θ))
-    (hexp : ∀ (S : Supply) (u₁ u₂ : List (Atom B)) (Q : TySubst B → Prop)
-              (β : TyVar) (l : Label) (τ : Ty B) (t₁ t₂ : List (Atom B)),
-      expandL S u₁ u₂ = some (β, l, τ, t₁, t₂) →
-      ¬ HasMguP (fun θ => Unifies θ (ofSpine t₁) (ofSpine t₂) ∧ Q θ) →
-      ¬ HasMguP (fun θ => Unifies θ (ofSpine u₁) (ofSpine u₂) ∧ Q θ))
-    (hsolve : ∀ (s : Sol B) (τ τ' : Ty B) (t₁ t₂ : List (Atom B)) (Q : TySubst B → Prop),
-      ¬ HasMguP (fun θ => Unifies θ (ofSpine (sApplySubst s.toSubst t₁))
-                                    (ofSpine (sApplySubst s.toSubst t₂)) ∧ Q θ) →
-      ¬ HasMguP (fun θ => Unifies θ (ofSpine t₁) (ofSpine t₂) ∧
-                          (TyUnifies θ τ τ' ∧ Q θ)))
-    (hsolveTy : ∀ (s : Sol B) (a₁ a₂ b₁ b₂ : Ty B) (Q : TySubst B → Prop),
-      ¬ HasMguP (fun θ => TyUnifies θ (b₁.applySubst s.toSubst)
-                                      (b₂.applySubst s.toSubst) ∧ Q θ) →
-      ¬ HasMguP (fun θ => TyUnifies θ b₁ b₂ ∧ (TyUnifies θ a₁ a₂ ∧ Q θ)))
-    (h : unifyRowM fuel ρ₁ ρ₂ = .stuck) : ¬ HasMgu ρ₁ ρ₂ := by
-  intro hmgu
-  unfold unifyRowM unifySpineM at h
-  refine (unifyM_stuck_no_mgu hbase hexp hsolve hsolveTy fuel).2
-    _ ρ₁.toSpine ρ₂.toSpine (fun _ => True) h ?_
-  rw [hasMgu_eq_hasMguP] at hmgu
-  refine (hasMguP_congr (fun θ => ?_)).mp hmgu
-  exact ⟨fun hu => ⟨(unifies_toSpine_iff θ ρ₁ ρ₂).mpr hu, trivial⟩,
-         fun ⟨hu, _⟩ => (unifies_toSpine_iff θ ρ₁ ρ₂).mp hu⟩
 
 
 
