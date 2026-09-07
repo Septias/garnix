@@ -56,17 +56,80 @@ Principality forces qualified schemes that use parked stumps during unification 
     - [x] the genuine case really has no unifier 
     - [x] SHARP incopmleteness: α ≐ᵣ (β|α|γ) is reported occurs yet has an MGU (occurs_allVar_hasMgu)
   - stuck
-    - [ ] stuck -> ¬mgu — still a REDUCTION to hbase/hexp/hsolve/hsolveTy
+    - *incomplete!* — `.stuck` is a CONSERVATIVE verdict, exactly like `.occurs`
+    - [x] SHARP incompleteness: (k:{β|α} | β) ≐ᵣ (k:{l:𝓫} | l:𝓫) is reported
+      stuck yet has a UNIQUE mgu β≔(l:𝓫), α≔ε.  matchL emits {β|α} ≐ {l:𝓫},
+      which IS Wand and IS stuck, and UResM.seq propagates that before the
+      residual β ≐ᵣ (l:𝓫) — which pins β — is ever looked at.
+      Compare eq_rescued_solved, where the equation is SOLVABLE and
+      the driver does the right thing.
+    - [X] so "stuck -> ¬mgu" is FALSE at the algorithm level.
+    - [X] and the retreat to TERMINAL configurations is false TOO
+      (terminalNoMgu_false): (l:{w}) ≐ᵣ (w | v) is terminal — all twelve moves
+      none by rfl, U-expand refusing on TWO candidate hosts, the Wand shape —
+      yet hosting in w would force θw ≈ (l:{θw}), *an OCCURS violation that field
+      counting cannot see* (the recursion passes under a record constructor). One
+      placement is ruled out, the unifier is UNIQUE, hence most general.
+      LESSON: terminality is a fact about the MOVES, not about the problem. There
+      is no general converse at any formulation. New tool: Ty/Row.rcdDepth —
+      record nesting, ≈-invariant (every constructor, `cat` taking a max), the
+      first invariant here that sees THROUGH a field payload.
+    - [x] what the fourth leg actually IS: the three SPECIFIC no-mgu theorems
+      (vars_vs_field = Wand, two_sided, allvar_swap — each also at the On level)
+      plus the three conservativity examples (occurs_allVar_hasMgu,
+      stuck_masks_mgu, terminal_masks_mgu). Complete and honest; just not a
+      converse. Writing that up is the next task.
+    - [!] the four parked hypotheses are also false in their own right.
+      Each has the shape `∀ Q. … → ¬HasMguP (Unifies θ ρ₁ ρ₂ ∧ Q θ)`, and
+      conjoining an unconstrained Q can SHRINK a unifier set to one that has an
+      mgu. Refutations.lean, both axiom-clean, both on the Wand configuration
+      (all thirteen terminal-move premises hold by rfl):
+      - *hbase_shape_false*: Q := (· = wθ) — a singleton set is its own mgu
+      - *hbase_stableQ_false*: even a SUBSTITUTION-STABLE Q (the real shape of an
+        emitted eq) fails — under β ≈ (l:𝓫) the Wand set has the mgu
+        β ≔ (l:𝓫), α ≔ ε. This is eq_rescued_solved seen at the residual.
+      This is the shadow of the sharp result above: the Q-threading exists so
+      that an arm whose type sub-call is stuck can still use the IH, carrying
+      the residual as Q — which silently assumes a stuck conjunct makes the
+      conjunction ambiguous. It does not.
     - [x] step 1: four leading shapes once stripL/matchL are dead
     - [x] step 2: U-expand refuses for exactly 2 reasons
-    - [ ] step 3: run count-shrink / rigidity / non-commutativity at the GENERAL shape
+    - [ ] step 3 is now CONDITIONAL on a side condition that blocks
+      terminal_masks_mgu — the candidate being "no variable of either side occurs
+      inside a field payload of the other". Whether that suffices is OPEN; three
+      successive formulations of this leg have been refuted, so hunt for a
+      counterexample before proving. Groundwork that survives regardless:
+      lone_field_no_foreign / lone_field_count_le / spine_eq_map_var_of_no_fields
+      / lone_field_other_pure_var (facing a lone field, counting alone forces the
+      other side to be a pure var spine) and terminal_leading_shape.
 - Invariants
   - [x] fuel monotone: more budget never changes a verdict already reached
   - [x] bounded: a run only mentions names below the supply it returns
   - [x] unique-host expansion is forced
   - [x] ≗-congruence of substitution on rows — axiom-free
 - Open
-  - [ ] `HasMguOn V` / `InstanceOfOn V` — mgu relativized to a var set.
+  - [x] `HasMguOn V` / `InstanceOfOn V` — mgu relativized to a var set (Defs.lean).
+    `¬HasMguOn V` is the STRONGER statement (factoring on V only is an easier
+    demand), so it yields the thesis-facing `¬HasMgu` for free via
+    not_hasMgu_of_not_hasMguOn — and unlike strict InstanceOf it is insensitive
+    to the vars the algorithm invents. Ported: hasMguOn_congr (axiom-free),
+    hasMguOn_rowEquiv/_symm, instanceOfOn_fieldCount_mono and
+    _eq_of_varFree (both now need `x ∈ V`), no_mgu_on_of_witness_shrinks
+    (stated for an ARBITRARY unifier predicate, which is what A4 needs).
+    All four base techniques re-proved at the On level —
+    wand_no_mgu_count_on, vars_vs_field_no_mgu_on, field_vs_vars_no_mgu_on,
+    two_sided_no_mgu_on, allvar_swap_no_mgu_on — with the old names kept as
+    one-line corollaries, so nothing downstream moved.
+    CAVEAT: A4 was to be its main consumer and A4 is cancelled, so HasMguOn is
+    currently NOT load-bearing — the terminal-configuration statement involves
+    no invented vars and strict HasMgu would do. Kept because ¬HasMguOn V is
+    strictly stronger (the base theorems say more for free) and because a
+    DEFERRING driver would need it. Do not oversell it.
+  - [ ] the algorithm repair suggested by stuck_masks_mgu: on a stuck sub-call,
+    DEFER the equation, run the residual, retry against the solution — the
+    parked-stump idea inside unification. Open: termination, confluence, and
+    whether mgu-on-success survives. The only route to a non-conservative
+    `.stuck`.
   - [ ] termination. Naive Rémy measure does not close: renaming adds no fields,
     so the host keeps count_l = 0 and the same var is re-expandable at the same
     label; the bound must come from the other side's l-fields, which solve-and-apply adds.
@@ -74,6 +137,10 @@ Principality forces qualified schemes that use parked stumps during unification 
   - [ ] solver state S = (θ, Δ, W), stump wake-up, confluence of the final state
 - Not blocked by any of this: L2 type safety (qProgress/qPreservation) and
   selQ_instance_closed stand on their own. The open work is purely algorithmic.
+- [ ] Termination
+  - Fuzzing suggests, that the algorithm actually terminates
+- [ ] Principality
+  - [ ] covering order on schemes ⊴
 
 ## Symbols
 - ↓: Row-lookup relation, three-way result r := (τ | ⊥ | ?)

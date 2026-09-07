@@ -13,14 +13,22 @@
 
 #[
   = Materialsammlung
-  - Closedenss
+  - L1 without princpal Schemes
+    - Geht nicht und wurde *bewiesen*
+  - L2 mit qualified schemes
+    - Ähnlich zu HM(X), aber vielleicht bekommen wir einen Algorithmus?
+    - Zurzeit seht *principality* und *termination* auf dem Spiel
+    - ★ Kann keine Eliminatoren haben
+
+  - Closedness in Proofs
     - Lazyness von Nix erlaubt non-closedness
       - Closedness müsste man auf das ausgewertete Fragment reduzieren
     - With killt auch closedness
-  - Keine Recursiveness
+  - (Keine) Recursiveness
+
 
   == Goal
-  > I want to create a typesystem that handles Nix as best as possible. It should be efficiently computable and have no "breaking" points. Meaning, there is nothing in it that makes it immediately unfeasible for Nix. This is why we need a soft-typing type as well as row- and label variables. The result should be efficiently computable.
+  > I want to create a typesystem that handles Nix as best as possible. It should be efficiently computable and have no "breaking" points. Meaning, there is nothing in it that makes it immediately unfeasible for Nix. This is why we need a soft-typing type as well as row- and label-variables. The result should be efficiently computable.
 ]
 
 
