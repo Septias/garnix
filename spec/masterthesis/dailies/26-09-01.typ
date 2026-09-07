@@ -8,7 +8,6 @@
 
 
 == Todo
-- Taros work actually auch in Vergleich aufnehmen?
 - Entscheidung über Tetrochotomy treffen
   - Decide where to use ★ in unification/tetratochomy
 
