@@ -5,3 +5,9 @@ defaultTargets = ["Spec"]
 name = "Spec"
 srcDir = "."
 globs = ["minimal", "Qualified", "RowEquiv", "RowUnify", "RowUnify.+", "Regressions", "Refutations", "algorithmic", "Axioms"]
+
+# Not in defaultTargets: `lake build` is unaffected.
+#   lake build fuzz && lake exe fuzz
+[[lean_exe]]
+name = "fuzz"
+root = "Fuzz"

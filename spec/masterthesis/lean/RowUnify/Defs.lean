@@ -1,11 +1,9 @@
--- DEFINITIONS. The row-unification algorithm and the vocabulary its theorems
+-- Spec without any proofs
+-- The row-unification algorithm and the vocabulary its theorems
 -- are stated in — detectors, the fresh-name supply, solutions (`Sol`), the
 -- result type (`UResM`), the mutual driver `unifyTyF` / `unifySpineMF`, and the
 -- entry points. Proof-only gadgets stay with the proofs that need them
 -- (`revRow` in Reflection, `TySubst.setTy`/`setRow` in Solutions).
---
--- No proofs live here: everything is structural, so this file is the spec you
--- can read on its own. Part of RowUnify; see RowUnify.lean for the overview.
 
 import minimal
 import RowEquiv
