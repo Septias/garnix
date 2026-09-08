@@ -1,11 +1,6 @@
 == Algorithmic System
 - Goal: efficiently computable, *no breaking points*
-- Design inheritance: Paszke&Xie give unification for infix-extensible rows
-  with row-/label-variables. We drop their *conditional tail check* (they
-  reject when shadowing is unresolved) and replace it with stumps: park the
-  lookup, emit ★ only when forced. Their *field-guessing* rule (LUtail) we do
-  not drop outright but RESTRICT to the case where the host variable is
-  FORCED (U-expand below)
+- Design inheritance: Paszke&Xie give unification for infix-extensible rows with row-/label-variables.
 - Working name: *Algorithm R*
 
 
@@ -14,7 +9,6 @@ S := (θ, Δ, W)
 θ : substitution over type-vars AND row-vars
 Δ : set of pending stumps
 W : warnings (definite-absence flags, ★-degradations)
-
 
 - The declarative system *reads* solutions via L-α; the algorithm *writes*
   them via unification. "θ only gets refined during solving".
@@ -53,6 +47,7 @@ A-conc:  Γ; S ⊢ e₁ ⇒ τ₁; S₁   Γ; S₁ ⊢ e₂ ⇒ τ₂; S₂   fr
 A-sel:   Γ; S ⊢ e ⇒ τ; S₁   fresh ρ   S₁ ⊢ τ ≐ {ρ} ⇝ S₂
 --------------------------------------------------------
 then case θ ⊢ ρ.l ↓ r:
+
 r = τ′  ⟹  result τ′                       (T-sel)
 r = ⊥   ⟹  result ★, flag (e.l, ⊥) in W    (T-sel-⊥)
 r = ?   ⟹  fresh δ, park stump; result δ   (see Stumps)
@@ -72,7 +67,7 @@ on α) and δ is a fresh *result variable* standing for "whatever the lookup
 will turn out to be".
 
 - Declaratively, T-sel-★ types the selection ★ immediately and refinement
-  means the term ALSO admits a better type later (typed_mono). Algorithmically
+  means the term admits a better type later (typed_mono). Algorithmically
   we cannot return ★ immediately — *that would freeze the result and lose
   refinement* (the motivating λ-example would infer {β} → ★ and application
   could never recover τ). *The stump-var δ keeps the position writable.*
@@ -96,42 +91,60 @@ will turn out to be".
   whole solver should stay near-linear¿
 
 
-== Unification: the five verdicts
-≐ and ≐ᵣ return one of
+== Unification
+≐ and ≐ᵣ are the mutual halfes of the algorithm:
 
-- *success*
+≐ → ≐ᵣ   *T-rcd*: {ρ₁} ≐ {ρ₂} hands both spines to the row pass
+≐ᵣ → ≐   *U-field / U-ground*: pairing two fields emits a type equation
+|        τ ≐ τ′, which the row pass solves by calling ≐, then
+|        applies the solution to the residual before recursing
+
+
+/ *Shared fuel*: one counter for both sorts — ≐ spends a unit in its two
+  recursive arms (T-fn, T-rcd), ≐ᵣ one per step — so the block is STRUCTURALLY
+  recursive on it and needs no termination measure (there is none, see
+  Metatheory); the regressions stay kernel-checked `rfl` executions
+/ *Threaded supply*: a success carries the supply it stopped at, because a type
+  equation solved inside a field may expand a row variable and the invented
+  tail travels into the residual (see *Freshness* below)
+/ *One sequencing operator* `seq`: run the second stage under the first stage's
+  solution and supply, then compose; a non-success in either stage is the
+  verdict of the whole. T-fn and every eq-emitting row rule use it; it is what
+  carries a solution and a supply out of a sub-call and into the next one,
+  across the sort boundary included (T-rcd needs no `seq` — it is a tail call)
+
+*The five verdicts* are therefore shared — both judgments return one of
+
+- *success*: a substitution over both sorts, plus the supply it stopped at
 - *clash*
-- *occurs*
-- *stuck*   — no forced move remains. CONSERVATIVE: usually genuine ambiguity
-  (Wand), but not always — see below
-- *outOfFuel* — the budget ran out
+- *occurs*: conservative
+- *stuck*: conservative
+- *outOfFuel*
 
 
-*Two verdicts are conservative, not one.* `occurs` and `stuck` are both
-syntactic give-ups: each fires on some problems that do have an mgu.
-
-*occurs cuts ACROSS the other three* — it is a syntactic guard, not a
-classification of the problem, and it is deliberately CONSERVATIVE:
+*occurs cuts ACROSS the other three*: it is a syntactic guard, not a
+classification of the problem:
 
 - the row guard tests the other side's VAR SEQUENCE. α ≐ᵣ (β | α | γ) is
   reported `occurs` even though it has an mgu (occurs_allVar_hasMgu). Sharp
-  incompleteness, knowingly paid for
+  incompleteness.
 - the type guard tests the full ftv, which spans BOTH sorts, so x ≐ {x} is
   rejected even though θ.ty x = {ε}, θ.row x = ε solves it
 
 
 == Type unification ≐
-
 - *T-var* one side is a variable α ⟹ bind, occurs-checked:
   α ≐ α ⟹ success ∅ (no binding written);
   α ∈ ftv(τ) ⟹ *occurs*; else α ≔ τ.
 - *T-unk* ★ ≐ ★ ⟹ success ∅. *★ is RIGID*: it unifies with itself and
   clashes with everything else, matching "★ stays out of ≈" and TyPrec.unk_below
 - *T-base* 𝓫 ≐ 𝓫′ ⟹ success if equal, else *clash*
-- *T-fn* (a₁ → b₁) ≐ (a₂ → b₂) ⟹ solve a₁ ≐ a₂, APPLY the solution to b₁, b₂,
-  then solve those; compose.
-- *T-rcd* {ρ₁} ≐ {ρ₂} ⟹ hand both spines to ≐ᵣ
+- *T-fn* (a₁ → b₁) ≐ (a₂ → b₂) ⟹ spend fuel, solve a₁ ≐ a₂, APPLY the solution
+  to b₁, b₂, then solve those; compose — i.e. `seq`
+- *T-rcd* {ρ₁} ≐ {ρ₂} ⟹ spend fuel and *CROSS INTO ≐ᵣ*: hand both spines to the
+  row pass, which may call straight back into ≐ on the field types it pairs
 - otherwise *clash* (constructor mismatch)
+
 
 == Row unification ≐ᵣ
 > Replaces the earlier sketch. Adapts P&X's Fig. 10 to scoped rows +
@@ -161,8 +174,9 @@ fact is that trace monoids are *LEFT- AND RIGHT-CANCELLATIVE* — cancelling a
 shared var off either end is sound AND complete, which is exactly what
 replaces P&X's shared-tail side condition ([Δ₂]ρ₁ = [Δ₁]ρ₁).
 
-*Judgment.*  S ⊢ ρ₁ ≐ᵣ ρ₂ ⇝ S′, on spines s₁, s₂.
 
+*Judgment.*  S ⊢ ρ₁ ≐ᵣ ρ₂ ⇝ S′, on spines s₁, s₂. The rules are tried in the
+order listed; the three eq-emitting ones (U-field, U-ground) RECURSE INTO ≐.
 + *U-ε-var* one side is exhausted (ε) ⟹ every var of the other side ≔ ε
   (forced: θ-images must concatenate to the empty trace); any remaining field
   ⟹ *clash*. ε ≐ᵣ ε is the degenerate case, so there is no separate U-ε rule.
@@ -176,20 +190,26 @@ replaces P&X's shared-tail side condition ([Δ₂]ρ₁ = [Δ₁]ρ₁).
 + *U-field, left end* leftmost LHS field l:τ, and the RHS *window* (= leading
   segment, i.e. everything before the first var) contains l ⟹ match against
   the FIRST l-occurrence in the window (distinct-label transpositions =
-  ≈-comm; first occurrence per label = scoped order), emit τ ≐ τ′, delete
-  both, *solve the equation and apply it to both residuals*, recurse
+  ≈-comm; first occurrence per label = scoped order), delete both and emit
+  τ ≐ τ′, *solve it by CALLING ≐ and apply that solution to both residuals*,
+  recurse under it (this is the ≐ᵣ → ≐ leg of the mutual recursion, sequenced
+  with `seq`, so the equation's verdict is the whole call's verdict unless it
+  succeeds)
 + *U-field, right end* the mirror, on the trailing segments
 + *U-ground* one side is VAR-FREE and some label has EQUAL POSITIVE counts on
   both sides ⟹ that side's counting rules the other side's vars out at l
   (they must contribute zero l-fields), so the pairing is positional: match
   the first l-occurrence ANYWHERE on each side (vars skipped), emit the type
-  equation, recurse. This is worked example 2's "var count must collapse"
+  equation and solve it in ≐ as above, recurse. This is worked example 2's
+  "var count must collapse"
   made into a rule — the window rules alone do not cover it, which the
   mechanization surfaced
 + *U-expand* leftmost LHS field l:τ, and the RHS has EXACTLY ONE variable β
   and NO l-field at all ⟹ β is the only place l can come from, so the
   expansion is FORCED: fresh δ, β′; write δ ≔ τ and β ≔ (l: δ | β′), rename
-  β to β′ in the residual, recurse. This is P&X's LUtail with the guess
+  β to β′ in the residual, recurse. The emitted equation τ ≐ δ needs NO
+  cross-call — δ is fresh, so δ ≔ τ is its one solution — which is why this is
+  the only field rule that stays inside ≐ᵣ. This is P&X's LUtail with the guess
   removed. Currently wired at the LEFT end only (in both argument orders);
   `expandR` exists but the driver does not call it
 + *U-clash* projection clash, checked *globally* (any position, not just the
@@ -207,8 +227,8 @@ replaces P&X's shared-tail side condition ([Δ₂]ρ₁ = [Δ₁]ρ₁).
 *Note on the ORDER of U-clash.* It sits at the BOTTOM, not at the top: a
 clash is only diagnosed once every forced move is dead. The cheap clashes are
 caught earlier and more precisely anyway — U-ε-var reports a leftover field
-directly, and cancellativity turns α ≐ᵣ (l:𝓫 | α) into a *clash* rather than
-an occurs-failure (strictly stronger information).
+directly, *and cancellativity turns α ≐ᵣ (l:𝓫 | α) into a clash rather than
+an occurs-failure (strictly stronger information).*
 
 *Other invariants.*
 - ★ in field types: ★ ≐ ★ succeeds; ★ ≐ τ (τ ≠ ★, not a var) CLASHES — ★ is a
@@ -224,94 +244,6 @@ an occurs-failure (strictly stronger information).
 - There is *no rank/telescope discipline* on solutions; the occurs check is
   the whole guard
 
-
-== Examples
-
-*Why LUtail must be restricted, not just adopted (deviation from P&X).*
-P&X's (Rfield) search may hit a row var and then commits it to contain
-the sought field: α ≔ (l: β | γ), fresh β γ. Two reasons we do not take it
-unrestricted:
-
-- It is not forced, and demonstrably loses solutions: (l: Int) ≐ᵣ (α | l: Int)
-  has the unique mgu α ≔ ε, but LUtail commits α to contain l and fails.
-  Our two-sided processing finds it: right-cancel the field (match l:Int
-  against l:Int — both are the rightmost atoms and their windows are the
-  trailing segments), leaving ε ≐ᵣ α, then U-ε-var. Forced throughout
-  (`unify_lutail`)
-- P&X NEED LUtail because their selection/extension elaborate to row
-  constraints — *a field demand must flow into the row through unification*.
-  Ours flow through the lookup relation and park as stumps; ≐ᵣ only ever
-  states structural EQUALITY of two rows. Field demands and row equality
-  are different judgments in this system, and the stump machinery absorbs
-  the non-forced part of the rule. (*This is the algorithmic payoff of the
-  T-sel/★ design, and worth saying loudly in the thesis*)
-- What SURVIVES of LUtail is U-expand: when the other side has exactly one
-  variable and no l-field, there is nothing to guess. `expandL_wand_refuses`
-  and `expandL_lfield_refuses` are the two refusals that keep it honest
-
-(l₁: Int | α) ≐ᵣ (l₂: Int | α), l₁ ≠ l₂
-----------------------------------------
-P&X's shared-tail pitfall: U-var-refl right-cancels α, leaving the var-free
-(l₁: Int) ≐ᵣ (l₂: Int) that every forced move declines, so U-clash fires at the
-bottom — correct rejection with no side condition and no loop risk (their
-example motivating [Δ₂]ρ₁ = [Δ₁]ρ₁). `unify_shared_tail`
-
-(α | l: Int | β) ≐ᵣ (l: Int)
------------------------------
-var count must collapse. The RHS is var-free and both sides have exactly one
-l-field ⟹ *U-ground* pairs them positionally, then U-ε-var forces α ≔ ε,
-β ≔ ε. Unique mgu, found. `unify_ground_collapse`
-
-(β | α) ≐ᵣ (l: Int): θβ ++ θα = [l: Int]
------------------------------------------
-splits two incomparable ways ⟹ *U-stuck*. CORRECT to fail: this is Wand's
-non-principality example in unification clothing — g: {l: Int} → τ applied to
-x ‖ y with both arguments abstract genuinely has no principal typing without
-lacks-constraints or unions of typings. Systems either backtrack (Wand),
-constrain (lacks/disjointness), or fail (P&X, us). U-expand refuses here
-precisely because TWO variables could host l. We fail ONLY when two abstract
-concatenations must be aligned against each other; selection — the common
-case — never asks for alignment thanks to stumps¿ (claim: check against a
-corpus later, Towards Nix). `unify_wand`
-
-(β | l: Int | α) ≐ᵣ (l′: Bool), l ≠ l′
----------------------------------------
-*U-clash, NOT stuck* — the RHS is var-free with no l-field, so the
-l-projection is unsolvable no matter what the vars do. A window-only clash
-rule would misfile this under stuck (leading atoms are var vs. field); this
-example is why U-clash must be projection-based. `unify_global_clash`
-
-(α | l: Int) ≐ᵣ (l: Int | β)
------------------------------
-the ambiguous mirror: both windows are closed by a var and both sides have
-vars, so Levi splits two ways ⟹ *U-stuck*. `unify_two_sided_stuck`
-
-(l: 𝓫 | α) ≐ᵣ (m: 𝓫 | β), l ≠ m
---------------------------------
-*U-expand's payoff.* The RHS has exactly one variable and no l-field, so β is
-the FORCED host: β ≔ (l: δ | β′) with the emitted equation δ ≐ 𝓫 solved on the
-spot. The residual α ≐ᵣ (m: 𝓫 | β′) is then a plain U-var-solve.
-*Success with an mgu.* Without U-expand this was reported stuck, and that was
-WRONG. `crossfield_success`
-
-(k: {β} | β | α) ≐ᵣ (k: {l: Int} | l: Int)
--------------------------------------------
-*The payoff of mutualizing ≐ and ≐ᵣ.* U-field peels k and emits the type
-equation {β} ≐ {l: Int}, leaving the Wand residual (β | α) ≐ᵣ (l: Int) — which
-ALONE is ambiguous. But the equation forces β ≈ (l: Int), hence α ≈ ε, so the
-problem has a unique mgu. A two-pass architecture that collected the equation
-and solved it later would report stuck; the mutual driver solves it, applies
-it, and finds the mgu. `eq_rescued_solved`
-
-α ≐ᵣ (l: Int | α)   vs.   α ≐ᵣ (l: Int | α | m: Int)
------------------------------------------------------
-the first *cancels*: the shared END-var strips (solution-preserving!), leaving
-ε ≐ᵣ (l: Int) — a definite *clash*, strictly stronger than an occurs-failure.
-The second is genuinely recursive (the var is interior, nothing cancels) ⟹
-*occurs*. Cancellativity subsumes the end-aligned occurs cases.
-`unify_occurs_cancelled`, `unify_occurs`
-
-
 == Qualified Schemes
 Schemes carry their unresolved lookups as constraints:
 
@@ -323,14 +255,11 @@ Declarative instantiation-with-discharge (replaces σ ≥ τ at T-var):
 discharges: Γ ⊢ (θρ).l ↓ r  with
 r = τ_r  ⟹  θδ = τ_r          (D-hit; the T-sel moment)
 r = ⊥    ⟹  θδ = ★            (D-⊥; T-sel-⊥, W-flag)
-r = ?    ⟹  θδ = ★            (D-?; T-sel-★: still-unknown stays blurred —
-algorithmically this case RE-PARKS instead,
-only finalization commits ★)
+r = ?    ⟹  θδ = ★            (D-?; T-sel-★: still-unknown stays blurred; algorithmically this case RE-PARKS instead, only finalization commits ★)
 
 - The three-way discharge IS the per-instance case split of the Lean
   regression proof — instantiation replays T-sel / T-sel-⊥ / T-sel-★ for
-  its chosen ρ. *Completeness against instance-closed T-let should fall out
-  of this correspondence¿*
+  its chosen ρ.
 - Plain schemes embed: with Q = ∅ the discharge condition is vacuous and
   ≥\_Γ degenerates to the Γ-independent Scheme.Inst (`QScheme.inst_toQ`) —
   the seam between the declarative and the algorithmic system
@@ -395,8 +324,11 @@ decision procedure, and the algorithm does not currently consult them.
   reported `stuck`, and has the unique mgu β ≔ (l:𝓫), α ≔ ε
   (`stuck_masks_mgu`). The driver evaluates an emitted equation first and `seq`
   propagates its `stuck` before the residual — which would have disambiguated
-  it — is ever looked at. This is a DRIVER defect, in the evaluation order;
-  deferring the equation and retrying after the residual would fix it.
+  it — is ever looked at. Note WHERE the loss happens: the inner `stuck` is a
+  verdict of the ≐ᵣ call made from inside a ≐ call made from inside ≐ᵣ, and
+  `seq` hands it up through both levels unchanged. This is a DRIVER defect, in
+  the evaluation order; deferring the equation and retrying after the residual
+  would fix it.
 + *Terminality is not the problem either.* Retreating from the verdict to
   TERMINAL configurations — every move checked dead, one by one — does not
   rescue the leg. `(l:{w}) ≐ᵣ (w | v)` is terminal, U-expand refusing because
@@ -432,8 +364,8 @@ Two claims must be kept apart, and only the first is settled.
 / The algorithm FINDS them: open. `stuck` and `occurs` are both conservative
   give-ups, so inference can return ★ where the L2-principal type is definite.
   Soundness survives — ★ over-approximates — but the principality factoring
-  "every declarative typing is ⊒ θ″(⟦S′⟧τ)" does not, because the inferred τ
-  can be strictly blurrier than the principal one.
+  "every declarative typing is ⊒ θ″(⟦S′⟧τ)" does not, *because the inferred τ
+  can be strictly blurrier than the principal one.*
 
 The gap between them is exactly the two conservativity examples: a driver defect
 (fixable by deferral) and a move-set defect (not). Closing the first is a
@@ -459,7 +391,15 @@ so with L2 principality the principal qualified type of e′ covers that of
 e — improvement under reduction is a two-line corollary. ALL remaining risk
 sits in principality itself, none in the improvement statement.
 
-*Termination*: OPEN. There is no closed-form fuel bound yet. Solve-and-apply
+*Termination*: OPEN as a MEASURE, closed as a definition. The block is well
+defined because it recurses structurally on the shared fuel counter, and the
+fuel lemma — a verdict that was REACHED never changes on a larger budget — is
+proved for BOTH sorts at once, as ONE conjunction, by induction on that counter
+(`unifyM_fuel_mono`; the per-sort statements `unifyTyF_fuel_mono` and
+`unifySpineMF_fuel_mono` are projections of it). A separate induction per sort
+is not available: each sort's recursive arms mention the other.
+
+What is missing is a closed-form fuel bound. Solve-and-apply
 grows the spine, and the variable count can grow too (a type equation solved
 inside a field may expand a row variable and hand the invented tail to the
 residual), so no lexicographic measure decreases. The naive Rémy measure does

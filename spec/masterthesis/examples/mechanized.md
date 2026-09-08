@@ -1,3 +1,28 @@
+## Examples
+
+*Why LUtail must be restricted, not just adopted (deviation from P&X).*
+P&X's (Rfield) search may hit a row var and then commits it to contain
+the sought field: α ≔ (l: β | γ), fresh β γ. Two reasons we do not take it
+unrestricted:
+
+- It is not forced, and demonstrably loses solutions: (l: Int) ≐ᵣ (α | l: Int)
+  has the unique mgu α ≔ ε, but LUtail commits α to contain l and fails.
+  Our two-sided processing finds it: right-cancel the field (match l:Int
+  against l:Int — both are the rightmost atoms and their windows are the
+  trailing segments), leaving ε ≐ᵣ α, then U-ε-var. Forced throughout
+  (`unify_lutail`)
+- P&X NEED LUtail because their selection/extension elaborate to row
+  constraints — *a field demand must flow into the row through unification*.
+  Ours flow through the lookup relation and park as stumps; ≐ᵣ only ever
+  states structural EQUALITY of two rows. Field demands and row equality
+  are different judgments in this system, and the stump machinery absorbs
+  the non-forced part of the rule. (*This is the algorithmic payoff of the
+  T-sel/★ design, and worth saying loudly in the thesis*)
+- What SURVIVES of LUtail is U-expand: when the other side has exactly one
+  variable and no l-field, there is nothing to guess. `expandL_wand_refuses`
+  and `expandL_lfield_refuses` are the two refusals that keep it honest.
+
+
 # Typings
 
 a: b: (a ‖ b).l
