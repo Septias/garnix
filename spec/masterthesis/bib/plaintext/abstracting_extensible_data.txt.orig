@@ -1,0 +1,1420 @@
+Abstracting Extensible Data Types
+Or, Rows by Any Other Name
+
+J. GARRETT MORRIS, The University of Kansas, USA
+JAMES MCKINNA, The University of Edinburgh, UK
+We present a novel typed language for extensible data types, generalizing and abstracting existing systems
+of row types and row polymorphism. Extensible data types are a powerful addition to traditional functional
+programming languages, capturing ideas from OOP-like record extension and polymorphism to modular
+compositional interpreters. We introduce row theories, a monoidal generalization of row types, giving a
+general account of record concatenation and projection (dually, variant injection and branching). We realize
+them via qualified types, abstracting the interpretation of records and variants over different row theories. Our
+approach naturally types terms untypable in other systems of extensible data types, while maintaining strong
+metatheoretic properties, such as coherence and principal types. Evidence for type qualifiers has computational
+content, determining the implementation of record and variant operations; we demonstrate this in giving a
+modular translation from our calculus, instantiated with various row theories, to polymorphic λ-calculus.
+CCS Concepts: · Theory of computation → Type theory; · Software and its engineering → Data types
+and structures;
+Additional Key Words and Phrases: Extensible data types, row types, row polymorphism, qualified types
+ACM Reference Format:
+                                                                                                                               12
+J. Garrett Morris and James McKinna. 2019. Abstracting Extensible Data Types: Or, Rows by Any Other Name.
+Proc. ACM Program. Lang. 3, POPL, Article 12 (January 2019), 28 pages. https://doi.org/10.1145/3290325
+
+1 INTRODUCTION
+The goal of extensible data types is type-safe modular software development. We want to be able
+to define large software systems in terms of independent components. For example, in a compiler
+for a rich source language, we might want to define individual desugaring passes independently
+of the remainder of the syntax tree. However, the typing of these components should guarantee
+the typing of their composition: inconsistent assumptions about the underlying AST should be
+reflected as type errors, not run-time failures.
+   Row types provide one approach to typing extensible data types. Originally introduced to model
+inheritance [Wand 1987], row types combine structural typing for records and variants with
+parametric polymorphism. They achieve similar expressiveness to structural subtyping, while
+maintaining a purely parametric approach to typing (and correspondingly simplifying type infer-
+ence). Row types have been the subject of much theoretical effort, and have been used to provide
+polymorphic variants, and types for objects, in the programming language OCaml [Garrigue 1998].
+More recently, they have been applied to provide extensibility in effect type systems [Lindley and
+
+Authors’ addresses: J. Garrett Morris, Information and Telecommunication Technology Center, The University of Kansas,
+2335 Irving Hill Rd, Lawrence, KS, USA, garrett@ittc.ku.edu; James McKinna, Laboratory for Foundations of Computer
+Science, The University of Edinburgh, 10 Crichton Street, Edinburgh, UK, James.McKinna@ed.ac.uk.
+
+Permission to make digital or hard copies of part or all of this work for personal or classroom use is granted without fee
+provided that copies are not made or distributed for profit or commercial advantage and that copies bear this notice and
+the full citation on the first page. Copyrights for third-party components of this work must be honored. For all other uses,
+This work
+contact  theis licensed under a Creative Commons Attribution 4.0 International License.
+              owner/author(s).
+© 2019 Copyright held by the owner/author(s).
+2475-1421/2019/1-ART12
+https://doi.org/10.1145/3290325
+
+
+                                  Proc. ACM Program. Lang., Vol. 3, No. POPL, Article 12. Publication date: January 2019.
+12:2                                                                     J. Garrett Morris and James McKinna
+
+Cheney 2012], to capture algebraic effects and handlers [Hillerström and Lindley 2016; Leijen 2014,
+2017], and to express extensible choice and branching in session types [Lindley and Morris 2017].
+   Despite these successes, there are still several open problems in row types. First, there are several
+differing notions of rows, particularly in the conditions on row extension (i.e., adding individual new
+entries to rows). This impedes adoption of row types in other languages, as different applications
+apparently require different notions of rows. Second, while there are several competing approaches
+to extension, most existing systems do not support concatenation (i.e., combining multiple records)
+at all. There are several reasons to desire record concatenation. It naturally captures multiple
+inheritance-like patterns, in which the final behavior of a system arises from combining multiple
+independent components; the dual pattern arises in modular interpreters [Liang et al. 1995] (i.e. the
+expression problem [Wadler 1998]). Existing approaches to typing record concatenation depend
+on expressive type systems, such as intersection types [Wand 1991] or dependent types [Chlipala
+2010], and require programmer-specified annotations not required in other row typed systems.
+   We propose a new approach to row types for extensible data types, based on two key ideas.
+The first is a monoidal account of rows and row extension. This supports record concatenation
+(and, dually, branching on variants) naturally and directly in our type system. The second is
+using qualified types to connect record and variant types to rows and row operations. This avoids
+expressiveness limitations in purely syntactic accounts of row types, while abstracting the meaning
+of records and variants over different monoidal row theories. We instantiate our approach in a
+simple functional language with Hindley-Milner polymorphism, which we call Rose. As an example
+of Rose, and of our approach in general, consider the following term (originally proposed by Wand):
+                                                  λmn.(m ⋆ n).x
+This term defines a function on two records, which concatenates those records and projects the x
+field from the concatenation. The problem in typing this term is that we need to require that there
+be a x field in at least one of the input records (otherwise, the projection must fail), but requiring
+that it appear in either m or n individually overconstrains the use of the term (and overdetermines
+its meaning). The type for this term in Rose is
+                               ∀t z1 z2 .(x ◃ t) 4 (z1 ⊙ z2 ) ⇒ Πz1 → Πz2 → t.
+We interpret this type as follows: a function taking a record with fields given by z1 (i.e., Πz1 ) and a
+record with fields given by z2 to a value of type t, such that the concatenation of z1 and z2 (i.e.,
+z1 ⊙ z2 ) contains an entry for field x with type t. Rose maintains the strong metatheoretic properties
+of other Hindley-Milner languages, including principal types and decidable type inference.
+   One consequence of our use of qualified types is that, subject to some basic constraints, our
+type and row system can evolve independently. This means that we can use Rose with any of
+the different notions of rows in the literature (we demonstrate this for two systems, the simple
+rows of Wand [1987] and Rémy [1989] and the scoped rows of Berthomieu and le Moniès de
+Sagazan [1995] and Leijen [2005]), or even with multiple models of rows simultaneously (such as
+to support both extensible data types and algebraic effects). Alternatively, we could extend Rose to
+incorporate other language features, such as extensible effects or session-typed communication,
+without needing to alter our interpretation of rows.
+   In summary, this paper contributes:
+    • The design of the Rose language, highlighting the role of our predicate system in supporting
+       expressive record concatenation and variant branching (ğ2);
+    • The introduction of row theories, an abstract characterization of row systems based on partial
+       monoids, relating the syntax of rows to their interpretations and generalizing Rose across a
+       variety of systems of records and variants (ğ3); and,
+
+Proc. ACM Program. Lang., Vol. 3, No. POPL, Article 12. Publication date: January 2019.
+Abstracting Extensible Data Types                                                                             12:3
+
+   • A formalization of the Rose type system, and notions of translation both among row theories
+      in Rose and from Rose to the polymorphic λ-calculus, giving computational content to
+      proofs of Rose predicates in terms of the implementations of ground record and variant
+      operations (ğ4).
+We conclude by discussing related work (ğ5) and two areas of future work, focusing on the
+connections between our approach and those of prisms and lenses (ğ6) and extensible effects
+and effect handlers (ğ7).
+
+2 PROGRAMMING IN ROSE
+This section gives an intuitive overview of programming with extensible data types in Rose. Later
+in the paper, we will give a formal account of our type system and semantics (ğ4), and put our work
+in the context of other systems of row types and extensible data types (ğ5).
+
+2.1   Extensible Records
+We begin with a simple question: what do we mean by the field x? The answer, of course, depends
+upon context. If we are discussing points on a plane, then we use x to denote the first component
+of pairs of floating-point values. If we are instead considering points in space, x denotes the first
+component of triples of floating-point values. If we consider pixels on a screen, then x is likely to
+denote an integer value rather than a floating-point value, and the source object might contain color
+information as well as coordinates. In each of these cases, we have a well-defined (but differing)
+view of what it means to select the x field from a value. Now suppose that we abstract over selecting
+the x field (using a term such as λr. r.x). What type should we give this term? Clearly, we do not
+want to limit ourselves to only one kind of input value, or to only one kind of result type. Instead,
+we expect the type of this function to accept the variety of possible objects that have a field x, and
+to produce a result appropriate to the type of its input.
+   In Rose, we use row types to capture this kind of variance in types. (Row types, initially introduced
+by Wand [1987], have been the subject of significant research attention. We give a brief account
+of their history later in the paper.) We can think of a row ζ as a type-level association of field
+names ℓ to types τ Ðalthough we will generalize this idea shortly (ğ3)Ðand think of records (Πζ )
+and variants (Σζ ) as being types constructed from rows. For example, the type of two-dimensional
+points would be expressed Π(x ◃ Double, y ◃ Double); (x ◃ Double, y ◃ Double) is a row, while Π is
+a type constructor which, when applied to row, denotes records with those fields. Similarly, pixels
+would be described by the type Π(x ◃ Int, y ◃ Int, r ◃ Byte, g ◃ Byte, b ◃ Byte).
+   We identify two key relations on rows, containment and combination. Intuitively, the containment
+relation ζ 1 4 ζ 2 holds if the fields of row ζ 1 are a subset of the fields of row ζ 2 ; for example, we
+would expect that (x ◃ Double) 4 (x ◃ Double, y ◃ Double), but not that (x ◃ Double) 4 (x ◃ Int, y ◃
+Int, r ◃ Byte, g ◃ Byte, b ◃ Byte). We can use the containment relation to express the type of
+selection abstractly: the term λr. r.x has type
+                                      ∀t z.(x ◃ t) 4 z ⇒ Πz → t.
+The containment relation here qualifies the polymorphism in the type; we read this type as łfor
+all t and z such that the row (x ◃ t) is contained in z, a function from a z-record to a tž. Following
+the meaning of the containment relation, λr. r.x would project a floating-point value from a point,
+but would project an integer from a pixel. In Rose, we will both instantiate type variables and
+discharge the corresponding predicates automatically, using an extended version of Hindley-Milner
+type inference.
+   The combination relation is used to describe the construction of rows; intuitively, ζ 1 ⊙ ζ 2 denotes
+a row that contains all the fields in ζ 1 and ζ 2 . We use combination to generalize record construction.
+
+                            Proc. ACM Program. Lang., Vol. 3, No. POPL, Article 12. Publication date: January 2019.
+12:4                                                                            J. Garrett Morris and James McKinna
+
+
+       P | Γ ⊢ M : Πζ 1      P ⇒ ζ2 4 ζ1           P | Γ ⊢ M : Πζ 1         P | Γ ⊢ N : Πζ 2       P ⇒ ζ1 ⊙ ζ2 ∼ ζ3
+              P | Γ ⊢ prj M : Πζ 2                                        P | Γ ⊢ M ⋆ N : Πζ 3
+                                  {ℓ1 ◃ τ1, . . . , ℓm ◃ τm } ⊆ {ℓ1′ ◃ τ1′, . . . , ℓn′ ◃ τn′ }
+                               P ⇒ (ℓ1 ◃ τ2, . . . , ℓm ◃ τm ) 4 (ℓ1′ ◃ τ1′, . . . , ℓn′ ◃ τn′ )
+
+                {ℓ1 ◃ τ1, . . . , ℓk ◃ τk } ⊎ {ℓk+1 ◃ τk+1, . . . , ℓm ◃ τm } = {ℓ1′ ◃ τ1′, . . . , ℓm′ ◃ τm′ }
+              P ⇒ (ℓ1 ◃ τ1, . . . , ℓk ◃ τk ) ⊙ (ℓk+1 ◃ τk+1, . . . , ℓm ◃ τm ) ∼ (ℓ1′ ◃ τ1′, . . . , ℓm′ ◃ τm′ )
+
+Fig. 1. Excerpted typing and entailment rules for record and row operations in Rose; context Γ tracks typing
+assumptions for term variables while context P tracks predicate assumptions on type variables.
+
+
+For example, the term λvr.(x = v | r) extends record r by adding field x with value v; it has type
+                                           ∀t z.t → Πz → Π((x ◃ t) ⊙ z).
+That is to say, it consumes a record of type Πz, whatever row z happens to be, and produces a
+record containing all of z and an x-labeled field of type t. There is a significant additional source of
+complexity to record extension, however. Suppose that record r already contains an x-labeled field.
+In that case, should we treat extension with a new x field as a type error, as overwriting the existing
+field, or attempt to preserve both fields? Each of these solutions appears in existing systems of
+extensible records. Regardless of which approach we pick, how should it be reflected in the typing
+of λvr.(x = v | r)?
+   We capture these possibilities by treating combination as a three-place predicate rather than as a
+binary type constructor. The relation ζ 1 ⊙ ζ 2 ∼ ζ 3 holds if ζ 3 is a row capturing the combination of
+rows ζ 1 and ζ 2 . The type ∀t z.t → Πz → Π((x ◃ t) ⊙ z) is shorthand for the qualified type
+                                  ∀t z1 z2 .(x ◃ t) ⊙ z1 ∼ z2 ⇒ t → Πz1 → Πz2 ;
+that is, given a type t and two rows z1 and z2 such that the combination of (x ◃ t) and z1 is z2 , the
+term consumes a t value and a Πz1 record and produces a Πz2 record. (While for any given z1
+there may be multiple z2 such that this predicate is satisfiable, we insist that they be equivalent up
+to permutation of the fields, and so indistinguishable in the language. This assures that there is
+no ambiguity resulting from the choice of z2 .) Now consider our three distinct interpretations of
+record extension.
+    • If we interpret extension as overwriting existing fields, then the constraint (x ◃ t) ⊙ z1 ∼ z2 is
+       always satisfiable, but some of the fields in z1 (i.e., fields with label x) may not appear in z2 .
+    • If we interpret extension as only being valid for new field labels, then we would consider
+       predicates like (x ◃ Int) ⊙ (x ◃ Double, y ◃ Double) ∼ ζ unsatisfiable for any choice of ζ .
+    • Finally, if we interpret combination as preserving both the original and new fields, then
+       predicate (x ◃ t) ⊙ z1 ∼ z2 is again always satisfiable, but where z2 now maintains the contents
+       of both of its arguments (i.e., both old and new mappings for field x).
+For the remainder of this section, we will assume that attempting to replace existing fields is a type
+errorÐan approach we term łsimple rowsžÐand return to other possibilities in the next section.
+The primitives and predicates introduced so far are summarized in Figure 1.
+   Having both the combination and containment predicates may seem superfluous: surely ζ 1 4 ζ 3
+holds in exactly those cases where there is a ζ 2 such that ζ 1 ⊙ ζ 2 ∼ ζ 3 . While this characterizes the
+satisfiability of ζ 1 4 ζ 3 , having distinct predicates more closely parallels the term structure, and so,
+
+Proc. ACM Program. Lang., Vol. 3, No. POPL, Article 12. Publication date: January 2019.
+Abstracting Extensible Data Types                                                                             12:5
+
+as we will see when we discuss the semantics of Rose (ğ4), captures the translation of Rose into
+languages without row types.
+
+2.2   Records by Concatenation
+So far, we have only discussed record operations one field at a timeÐselecting individual fields
+from records, or extending records with individual fields. We can generalize these ideas to operate
+on (sub-)records instead of individual fields. First, we introduce a general projection operator, prj,
+which computes an arbitrary substructure of its (record) argument. For example, suppose that r is
+a pixelÐthat is, it has type Π(x ◃ Int, y ◃ Int, r ◃ Byte, g ◃ Byte, b ◃ Byte). Depending on context,
+prj r could denote either the coordinates of r, of type Π(x ◃ Int, y ◃ Int), or the color of r, of type
+Π(r ◃ Byte, b ◃ Byte, g ◃ Byte), or indeed any of the individual fields of r. The prj operation captures
+the full expressiveness of the containment relation: λr.prj r has type
+
+                                     ∀z1 z2 .z2 4 z1 ⇒ Πz1 → Πz2 .
+
+The behavior of this term (indeed of any use of prj) is determined by the evidence for z2 4 z1 . That
+evidence, in turn, is determined by the instantiations of type variables z1 and z2 . The behavior of
+prj is thus determined by the (types in) the context in which it is used; this is what allows us to use
+such an apparently general operator without introducing ambiguity in the meaning of programs.
+   Similarly, we generalize record extension to record concatenation: if M1 and M2 are two records,
+then M1 ⋆ M2 denotes the concatenation of those two records. This term captures the full expres-
+siveness of the concatenation relation: λmn.m ⋆ n has type
+
+                            ∀z1 z2 z3 .z1 ⊙ z2 ∼ z3 ⇒ Πz1 → Πz2 → Πz3 .
+
+As in the single-field case, we capture the limitations on the structure of rows by expressing
+combination as a relation: we can only instantiate z1 and z2 to rows that have a well-defined
+combination. (In the remainder of the paper, we will generally write combination as if it were an
+infix type constructor:
+                                   ∀z1 z2 .Πz1 → Πz2 → Π(z1 ⊙ z2 ).
+This should always be interpreted in terms of the _⊙_∼_ relation, and the partiality that it provides;
+it may not be the case that z1 ⊙ z2 is well-defined for arbitrary choices of z1 and z2 .
+   We introduce syntax for singleton records: for any label ℓ and term M of type τ , the term ℓ ◃ M
+has type Π(ℓ ◃ τ ); similarly, for any term N of type Π(ℓ ◃ τ ), the term N /ℓ has type τ . Now, we can
+define the field-at-a-time operations from the last section in terms of our more general operations.
+Abstraction over field selection, λr. r.x, is implemented by λr.prj r/x. For prj r/x to be well-typed,
+we must have that prj r has type Π(x ◃τ ) for some type τ ; in turn, from the type of prj, we must have
+that r has some record type Πζ such that the constraint (x ◃ τ ) 4 ζ is satisfiable. (This demonstrates
+how the behavior of prj is determined by context: the context −/x forces the result of prj to be the
+Π(x ◃ τ ) singleton record.) Generalizing, we get
+
+                                      ∀t z.(x ◃ t) 4 z ⇒ Πz → t,
+
+which is the type we expected for x-selection. The record extension term λvr.(x = v | r) is expressed
+as λvr.(x ◃ v) ⋆ r. Its typing is more straightforward: if v is of type τ , and r is of type Πζ , then
+(x ◃ v) ⋆ r is of type Π((x ◃ τ ) ⊙ ζ ); generalizing, we get
+
+                                    ∀t z.t → Πz → Π((x ◃ t) ⊙ z).
+
+                            Proc. ACM Program. Lang., Vol. 3, No. POPL, Article 12. Publication date: January 2019.
+12:6                                                                     J. Garrett Morris and James McKinna
+
+Update and extension. Requiring that ζ 1 ⊙ ζ 2 is defined only when ζ 1 and ζ 2 have disjoint label
+sets simplifies reasoning about the resulting type system. For example, it allows us to assume
+that ⊙ is commutative (and so that < corresponds to subset) without worrying about whether
+(x ◃ Int) ⊙ (x ◃ Double) should be (x ◃ Int) or (x ◃ Double). However, it can make defining record
+update (as opposed to extension) more complicated. Some existing systems [Gaster and Jones 1996;
+Leijen 2005] introduce a separate primitive, restriction, that remove fields from records. Update can
+then be defined as the composition of restriction and extension. Rémy [1989] introduces presence
+flags, denoting the presence or absence of fields, and types polymorphic in presence flags. This
+allows him to define a single operation that can serve as either extension or update. We can express
+the combined extension and update operation in our system using only the primitives already
+introduced, without needing to introduce presence flags or new forms of polymorphism. To do so,
+instead of our earlier interpretation, we implement the term λvr.(x = v | r) by
+                                                 λvr.(x ◃ v) ⋆ prj r
+(where the change is the application of projection to r). As before, if v has type τ and prj r has type
+Πζ 2 , then the result will be of type Π((x ◃ τ ) ⊙ ζ 2 ). Now, however, rather than Πζ 2 being the type of
+the input record, it only needs to be contained in the full type of input record Πζ 1 ; generalizing
+over τ , ζ 1 , and ζ 2 , we get
+                               ∀t z1 z2 .z2 4 z1 ⇒ t → Πz1 → Π((x ◃ t) ⊙ z2 ).
+This raises two questions. First, is the term general enough? That is, does it express both record
+extension and record update? Second, does the use of the projection operator (in a generic context)
+leave the behavior of the term too unconstrained?
+    To answer the first question, we consider both possibilities. Suppose that the input value is type
+τ , the input record is of type Πζ 1 , and x does not appear in ζ 1 . Then, we can pick z2 to also be ζ 1 ;
+the constraint ζ 1 4 ζ 1 is trivially satisfiable, and so we get the expected extension operator of type
+τ → Πζ 1 → Π((x ◃ t) ⊙ ζ 1 ) (where, by assumption, the result of ⊙ is defined). Alternatively, suppose
+that x does appear in ζ 1 ; then, there must exist a row ζ 2 and type τ2 such that (x ◃ τ2 ) ⊙ ζ 2 ∼ ζ 1 .
+In this case, we can pick z2 to be ζ 2 ; then, we get the expected record update operator, of type
+τ → Π((x ◃ τ2 ) ⊙ ζ 2 ) → Π((x ◃ τ ) ⊙ ζ 2 ). To answer the second question, observe that, even though
+the result of the projection is used inside the extension function, it is still determined by a type
+parameter z2 determined by the caller (or the calling context). So, there is no possibility for the
+projection operator to discard fields that might be required by the surrounding code.
+    Nevertheless, we can give a more precise type to the record update function, further constraining
+its possible behaviors:
+                        ∀tu z1 z2 .z2 4 (x ◃ u) ⇒ t → Π(z2 ⊙ z1 ) → Π((x ◃ t) ⊙ z1 )
+Again, we consider the two use cases, assuming in each that the input value is of type τ and input
+record is of type Πζ . If the input record, of type Π(z2 ⊙ z1 ), does not contain an x-labeled field, then
+z2 must be the empty row. (Otherwise, since z2 4 (x ◃ u), there would have to be an x-labeled field
+in the input record.) So, z1 must be ζ , and we get the expected extension function, with type
+                                           τ → Πζ → Π((x ◃ τ ) ⊙ ζ ).
+Type variable u can be freely instantiated: while it is not constrained by the remainder of the type, it
+also plays no role in the behavior of the term. Alternatively, suppose the input record does contain
+an x-labeled field x ◃υ. Then z2 must be instantiated to the row (x ◃υ), and so u must be instantiated
+to υ. (If not, then z1 must contain x ◃ υ, and so (x ◃ τ ) ⊙ z1 is not defined.) This gives the expected
+
+Proc. ACM Program. Lang., Vol. 3, No. POPL, Article 12. Publication date: January 2019.
+Abstracting Extensible Data Types                                                                               12:7
+
+update function, with type
+                                  τ → Π((x ◃ υ) ⊙ ζ ) → Π((x ◃ τ ) ⊙ ζ ).
+Note that all we have done is to constrain the use of the extension function; the two possibilities
+allowed by the more elaborate type were also included in the simpler type. Therefore, while the
+more precise type is a useful demonstration of the expressiveness of the Rose type system, we
+prefer the simpler (and more general) alternative.
+Default values. We can make a similar use of concatenation and projection to implement default
+values for fields. For example, suppose that we wanted pixels to be black by default, but not to
+have any default position information. We can define a function to add these default values to an
+existing record: λr.r ⋆ prj (r ◃ 0, g ◃ 0, b ◃ 0). Letting ζ C = (r ◃ Byte, g ◃ Byte, b ◃ Byte), this function
+has type
+                                   ∀z1 z2 .z2 4 ζ C ⇒ Πz1 → Π(z1 ⊙ z2 ).
+The projection ensures that, if r contains any color values, then those values are not replaced by
+the corresponding defaults. However, it does not guarantee that the result is a pixel. This could be
+either because the input record does not contain x and y fields, or because the projection operation
+removed colors from the defaults that are also not present in r. Either happening would be a
+consequence of the context (i.e., the instantiation of type variables z1 and z2 ), not of some capricious
+choice of the default value function. Nevertheless, we can give a more precise type that guarantees
+the result is a pixel. Letting ζ P = (x ◃ Int, y ◃ Int, r ◃ Byte, g ◃ Byte, b ◃ Byte), we can give the
+same term the following type:
+                        ∀z1 z2 z3 .(z2 4 ζ C , z1 ⊙ z2 ∼ z3, ζ P 4 z3 ) ⇒ Πz1 → Πz3
+Here we guarantee not only that the added fields are a subset of the color fields, but also that the
+resulting record includes at least all the pixel fields. (Of course, because our goal is extensibility, we
+do not want to overconstrain the result to contain only the pixel fields.) Thus, for example, if the
+input record does not contain an r field, the projection operator must preserve the r field in the
+default values. Observe the central role played by the predicates: in the result type, z3 is constrained
+both to be the combination of z1 and z2 and by the requirement that it contain the pixel fields ζ P .
+Wand’s problem. Record concatenation introduces typing challenges not present in systems that
+include only single-field record extension. Wand [1991] illustrates these difficulties with the term
+λmn.(m ⋆ n).x. This function concatenates two records m and n, and projects field x from the
+result. (Wand’s motivation for considering this term was multiple inheritance: records m and n
+represent the method implementations arising from two superclasses, while the result of the term
+is the implementation of method x for their subclass.) For this term to be well-typed, we should
+require that either m or n contain the x field, but we should not restrict x to necessarily appearing
+in either argument. This type in inexpressible in most existing type systems for extensible records.
+(The notable exceptions are Wand’s [1991] system with intersection types, and Chlipala’s [2010]
+dependently typed record calculus. We will contrast our approach with theirs later in the paper.)
+On the other hand, its principal type is quite naturally expressed in Rose:
+                             ∀t z1 z2 .(x ◃ t) 4 (z1 ⊙ z2 ) ⇒ Πz1 → Πz2 → t.
+That is: for any type t and rows z1 and z2 such that x ◃ t appears in the combination of z1 and z2 , a
+function from Πz1 and Πz2 records to a t value. The use of constraints is essential to expressing
+this type: the combination z1 ⊙ z2 does not appear in either the argument types or the result type
+of the function, but is central to understanding the typing of the function as a whole.
+
+                              Proc. ACM Program. Lang., Vol. 3, No. POPL, Article 12. Publication date: January 2019.
+12:8                                                                      J. Garrett Morris and James McKinna
+
+
+ P | Γ ⊢ M : Σζ 1      P ⇒ ζ1 4 ζ2         P | Γ ⊢ M : Σζ 1 → τ        P | Γ ⊢ N : Σζ 2 → τ        P ⇒ ζ1 ⊙ ζ2 ∼ ζ3
+         P | Γ ⊢ inj M : Σζ 2                                     P | Γ ⊢ M ▽ N : Σζ 3 → τ
+
+ Fig. 2. Excerpted typing rules for variant operations in Rose; entailment is given by the rules in Figure 1.
+
+
+2.3    Extensible Variants
+We turn to the dual of extensible records, extensible variants. Here, our motivating question might
+be what we mean by a data constructor And: if we are describing formulae in either classical
+or substructural logic, then we mean logical conjunction (albeit built out of different sorts of
+formulae); if we are describing ML definitions, then we may mean the combiner of mutually
+recursive definitions. In each case, we expect the And construct to operate on different argument
+types: formulae in classical or substructural logic, or (lists of) ML definitions, respectively. Now,
+suppose we want to abstract over data construction (using a term such as λxy.And x y). What type
+do we give this term?
+   Our approach here is exactly dual to our approach to describing extensible products. We introduce
+a type constructor Σ which, applied to a row, denotes a variant with those constructors. For example,
+following the initial algebra approach to defining recursive data types, we might describe Boolean
+formulae by taking the fixed point of the functor1
+                          F(t) = Σ(And ◃ t × t, Or ◃ t × t, Not ◃ t, Atom ◃ String).
+As in the case for records, the operations on variants correspond to the containment and combination
+predicates. The prj operation provided record elimination, projecting substructures from records.
+The dual operation, inj, provides variant introduction, injecting values from smaller variants into
+larger variants. The ⋆ operation provided record introduction, building larger records out of smaller
+records. Its dual, ▽, provides variant elimination, building eliminators for larger variants out of
+eliminators for smaller variants. The typing rules for these constructs are given in Figure 2.
+   The rule for ▽ is more complex than the corresponding rule for ⋆, as it operates on functions
+Σζ → τ instead of directly on values Σζ . By defining ▽ on functions, we avoid needing new terms
+and types for first-class case-branches. We also get an appealing similarity to the categorical account
+of variants, given by (colimiting cones defining) coproducts, with premises of the elimination rule
+describing a cone over ζ 1 ⊙ ζ 2 . To emphasize the connection to the category theoretic account, we
+define the corresponding operation for records: f △ g is defined to be λx.f x ⋆ g x.
+   We reuse the syntax for singleton records to describe singleton variants: for any label ℓ and term
+M of type τ , the term ℓ ◃ M has type Σ(ℓ ◃ τ ), while if N has type Σ(ℓ ◃ τ ) then N /ℓ has type τ . (That
+is, we identify singleton products and sums with the underlying type; we will return to this point
+in the next section.) Now, we can recover the expected primitive operations on variants in terms of
+our primitives. For example, the generic constructor term λxy.And x y would be implemented by
+λxy.inj (And ◃ (x, y)); its type,
+                                 ∀t1 t2 z.(And ◃ t1 × t2 ) 4 z ⇒ t1 → t2 → Σz,
+1 To avoid cluttering our presentation, we will not formalize the extension of Rose with recursive types. Any of the
+
+several approaches to encoding iso-recursive types, such as two-level types [Sheard and Pasalic 2004] or conjugate
+hylomorphisms [Hinze et al. 2015], could be combined with the Rose type system. Adding equi-recursive types could raise
+interesting usability challenges, particularly in reporting error messages. We will explore these issues further in future
+work, particularly the extent to which they can be addressed by a combination of programmer-specified type annotation
+and top-down/bi-directional type inference.
+
+
+Proc. ACM Program. Lang., Vol. 3, No. POPL, Article 12. Publication date: January 2019.
+Abstracting Extensible Data Types                                                                             12:9
+
+captures that its result can be a member of any variant type so long as that type contains at least the
+constructor And. Expressing elimination is more verbose, but no more complicated. For example,
+we could represent Haskell’s Maybe type as the type Σ(Just ◃ t, Nothing ◃ 1). Then, we would
+express a defaulting operation (i.e., Haskell’s fromMaybe) with the following term:
+                          λd.(λy.y/Just) ▽ (λy.let () = y/Nothing in d)
+The left-hand side of ▽ strips a Just label from its argument; it has type Σ(Just ◃ τ ) → τ . The
+right-hand side strips a Nothing label from its argument and then returns d; if d has type τ , then
+this term has type Σ(Nothing ◃ 1) → τ . Generalizing over τ , the function as a whole has type
+                               ∀t.t → Σ(Just ◃ t, Nothing ◃ 1) → t.
+We can generalize this term in several ways. For example, we could write a defaulting operation
+that works on any variant containing a Just label, regardless of the other labels in the variant:
+                                       λd.(λy.y/Just) ▽ (λy.d).
+This term has type
+                                   ∀t z.t → Σ((Just ◃ t) ⊙ z) → t;
+that is, it eliminates any variant type that contains at least the Just label, returning the default
+value for any input not of the form Just ◃ M.
+   The ▽ operator requires that its arguments eliminate disjoint sets of constructors. Following the
+pattern we used for default values in records, we can define an operator that selectively replaces
+the handling of individual branches. The term λfg.f ▽ (g ◦ inj) allows f to override the behavior of
+g. Its type is ∀t z1 z2 z3 .z2 4 z3 ⇒ (Σz1 → t) → (Σz3 → t) → (Σ(z1 ⊙ z2 ) → t), capturing that the
+resulting term handles all the cases handled by its first argument (z1 ), and a subset (z2 ) of those
+cases handled by its second argument (z3 ) such that the combination of z1 and z2 is well-defined. As
+in the similar examples for extensible records, the subset z2 of z3 is picked by the caller, not by the
+term itself, and so cannot capriciously eliminate behavior needed in the remainder of the program.
+
+3 GENERALIZING EXTENSIBILITY
+Our examples so far have all assumed one model of rows: that rows uniquely associate labels to
+types, and that the uniqueness of labels is required by the combination relation. However, this is not
+the only model of rows: others include models in which labels need not be unique [Berthomieu and
+le Moniès de Sagazan 1995; Leijen 2005], or in which row fields are unlabeled [Bahr 2014; Morris
+2015]. In this section, we show that Rose can capture such systems as well, by considering non-
+commutative interpretations of the combination relation _⊙_∼_, and corresponding refinements
+of the containment predicate, as well as the projection, and injection, operators, to reflect such
+extensions. We then generalize our approach to give both an abstract characterization of rows,
+called row theories, and a connection between the syntax of rows and their interpretations.
+
+3.1   Scoped Records
+We begin by considering scoped records [Berthomieu and le Moniès de Sagazan 1995; Leijen 2005],
+as used in the programming languages Koka and LCS. The key difference between scoped and
+simple records is in the handling of extension. With scoped records, record extension does not
+require that labels be unique, but also does not overwrite existing fields. Instead, new fields łshadowž
+existing fields; field selection returns the value most recently associated with a given label, but the
+earlier values can be recovered by dropping the newer fields from the record.
+  For an example, suppose that we were to extend the empty record with two different x-labeled
+values: (x = 4 | (x = True | ())). Following the approach discussed in the prior section, this
+
+                            Proc. ACM Program. Lang., Vol. 3, No. POPL, Article 12. Publication date: January 2019.
+12:10                                                                              J. Garrett Morris and James McKinna
+
+
+                   ζ1 ∼ ζ2     ζ2 ∼ ζ3                  ζ1 ∼ ζ2                                  ℓ , ℓ ′ ζ1 ∼ ζ2
+  ζ ∼ζ                   ζ1 ∼ ζ3              (ℓ ◃ τ , ζ 1 ) ∼ (ℓ ◃ τ , ζ 2 )      (ℓ ◃ τ , ℓ ′ ◃ τ ′, ζ 1 ) ∼ (ℓ ′ ◃ τ ′, ℓ ◃ τ , ζ 2 )
+                           ζ ∼ (ℓ1 ◃ τ1, . . . , ℓn ◃ τn )                           ζ1 ⊙ ζ2 ∼ ζ3           ζ1 ⊙ ζ2 ∼ ζ3
+           (ℓ1 ◃ τ1, . . . , ℓi ◃ τi ) ⊙ (ℓi+1 ◃ τi+1, . . . , ℓn ◃ τn ) ∼ ζ            ζ 1 4L ζ 3             ζ 2 4R ζ 3
+    P | Γ ⊢ M : Πζ 1      P ⇒ ζ 2 4d ζ 1                            P | Γ ⊢ M : Σζ 1           P ⇒ ζ 1 4d ζ 2
+                                             (d ∈ {L, R})                                                           (d ∈ {L, R})
+           P | Γ ⊢ prjd M : Πζ 2                                                P | Γ ⊢ prjd M : Σζ 2
+
+Fig. 3. Typing and entailment rules for scoped rows, with projection operators for potentially non-commutative
+combination.
+
+
+would either be a type error (interpreting extension strictly as ⋆) or would have type Π(x ◃ Int)
+(interpreting extension as incorporating update). With scoped records, this term is instead given
+the type Π(x ◃ Int, x ◃ Bool); viewing the row as a list, we have that x ◃ Int is the newest entry in
+the row, while the older entry, x ◃ Bool, is shadowed by it. Call our example record r. If we select
+the x field from r, r.x, we get 4, the most recently added x-labeled value. On the other hand, if we
+drop an x-labeled value before selecting x, (r − x).x, then we get True, the older x-labeled value.
+   To incorporate scoped records into our framework, we have to answer two central questions.
+First, how are the containment and combination relations defined for scoped rows? Second, how
+can we derive the primitives operations on scoped records from the Rose primitives? A particular
+challenge here arises from the distinction between selection r.x and restriction r − x. For simple
+rows, these can both be viewed uniformly as special cases of projection. Now, that seems less likely:
+there is a crucial distinction in their handling of the initial x-labeled field.
+   We begin by observing that we need some way to capture the ordering of fields. We do so by
+making row combination non-commutative: the constraints
+                                   (x ◃ Int) ⊙ (x ◃ Bool) ∼ (x ◃ Int, x ◃ Bool)
+                                   (x ◃ Bool) ⊙ (x ◃ Int) ∼ (x ◃ Bool, x ◃ Int)
+are both satisfiable, but neither of
+                                   (x ◃ Int) ⊙ (x ◃ Bool) ∼ (x ◃ Bool, x ◃ Int)
+                                   (x ◃ Bool) ⊙ (x ◃ Int) ∼ (x ◃ Int, x ◃ Bool)
+are satisfiable. We do not, however, impose a strict ordering on the result of combination: both of
+                                   (x ◃ Int) ⊙ (y ◃ Bool) ∼ (x ◃ Int, y ◃ Bool)
+                                   (x ◃ Int) ⊙ (y ◃ Bool) ∼ (y ◃ Bool, x ◃ Int)
+are satisfiable. We also now have two different forms of containment: given rows ζ 1 and ζ 3 , it can
+either be the case that ζ 1 ⊙ ζ 2 ∼ ζ 3 or the case that ζ 2 ⊙ ζ 1 ∼ ζ 3 ; unlike in the previous section, these
+are not equivalent. We write the first case as ζ 1 4L ζ 3 and the second as ζ 1 4R ζ 3 . Correspondingly,
+we will require distinct left and right projection and injection operators. These rules are summarized
+in Figure 3. This is a straightforward generalization of the operators for simple rows: since ⊙ is
+commutative for simple rows, we have prjL = prjR , injL = injR , and ζ 1 4L ζ 2 iff ζ 1 4R ζ 2 .
+   Next, we have to define the basic operations on scoped records (extension, selection, and re-
+striction) in terms of the Rose primitives (prjd and ⋆). As we would expect, extension is defined
+in terms of ⋆: the term (x = v | r) is implemented by (x ◃ v) ⋆ r. The typing of extension is also
+
+Proc. ACM Program. Lang., Vol. 3, No. POPL, Article 12. Publication date: January 2019.
+Abstracting Extensible Data Types                                                                             12:11
+
+unchanged from the previous section: λvr.(x ◃ v) ⋆ r still has type ∀t z.t → Πz → Π((x ◃ t) ⊙ z).
+However, unlike in the previous section, the combination constraint imposes no restriction on the
+fields already present in z; for any row ζ 1 , there is a row ζ 2 such that (x ◃ t) ⊙ ζ 1 ∼ ζ 2 . We define new
+operations for field selection and restriction in terms of prjd , constraining their types to guarantee
+the desired behavior:
+               takeℓ : ∀t z.(ℓ ◃ t) 4L z ⇒ Πz → t             dropℓ : ∀t z.Π((ℓ ◃ t) ⊙ z) → Πz
+             takeℓ r = prjL r/ℓ                              dropℓ r = prjR r
+Selection r.x is interpreted as takex r and restriction r − x is interpreted as dropx r. An update
+operation can be defined in terms of restriction and extension: λvr.(x = v | r − x). However, note
+that it is not meaningful to define a combined extension/update operation for scoped rows as it
+was for simple rows: extension is still defined even if there is already an x field in the record.
+  We might hope to generalize these operations to arbitrary rows, not just single fields. For record
+extension and selection, this is natural. The same is not true of restriction, however; there, because
+the eliminated label ℓ does not appear in the result of the term, the ℓ annotation is essential to
+determining its behavior. This also explains why the definition of dropℓ required a more complicated
+type signature than take.
+
+3.2 Rows Abstracted
+We have seen two different notions of rows (simple and scoped rows), how they give rise to two
+different notions of record and variants, and how both notions can be expressed in Rose by adjusting
+the interpretation of the containment and combination predicates. These are far from the only
+formulations of rows, or their only applications: other formulations of rows include unlabeled rows
+(both unique and overwriting) captured by various encodings of extensible data types [Bahr 2014;
+Kiselyov et al. 2004; Morris 2015; Oliveira et al. 2015], while other applications include the use of
+rows to describe choice in session types [Lindley and Morris 2017] and in effect types [Hillerström
+and Lindley 2016; Leijen 2014; Lindley and Cheney 2012]. This raises several questions:
+    • Could these other notions of rows also be expressed using containment and combination?
+    • Could Rose’s approach to record and variants be extended to incorporate other applications
+      of row types?
+    • Most importantly, is there a general methodology to expressing row types that avoids repeat-
+      edly redeveloping the interpretation of the containment and combination predicates?
+We address the final question by separating the syntactic presentation of rows and row types (which
+we will call a row theory) from the underlying model (or algebra) of rows. Simple and scoped rows
+can both be expressed as theories of rows, with intuitive algebras building on the idea of mappings
+from labels to types. In turn, the Rose type system is parametric over a row theory, guaranteeing
+its generality. Finally, in giving a semantics for Rose, we will show how mappings between row
+theories can be uniquely extended to mappings between terms of Rose.
+   We begin by defining the syntactic presentations of rows.
+
+  Definition 1. A row theory is a 3-tuple ⟨R, ∼, ⇒⟩, as follows.
+    • R is a set of syntactic rows (that is, of well-formed ground row type expressions). We impose
+      no further restriction on R at this level of abstraction: it may or may not require labels, may
+      or may not impose uniqueness restrictions on those labels, and so forth. We let ζ range over
+      elements of R.
+    • Relation ∼ is an equivalence relation on R; it accounts for the identification of syntactically
+      distinct rows in most row type systems.
+
+                              Proc. ACM Program. Lang., Vol. 3, No. POPL, Article 12. Publication date: January 2019.
+12:12                                                                      J. Garrett Morris and James McKinna
+
+    • Relation ⇒ is an entailment relation on row predicates (ζ 1 4d ζ 2 and ζ 1 ⊙ ζ 2 ∼ ζ 3 ), invariant
+      with respect to ∼, satisfying monotonicity (P ⇒ ψ if ψ ∈ P) and transitivity P, Q ⇒ ϕ if
+      P ⇒ ψ and Q,ψ ⇒ ϕ).
+   Of course, in a practical language based on Rose, the entailment relation may also be used to
+express other constraints, such as type classes. Our intention here is to give a minimal specification
+sufficient to capture row typing. Each of the notions of rows presented so far is a row theory. We
+define the simple row theory by ⟨R simp, ∼simp, ⇒simp ⟩, where R simp is the set of uniquely-labeled
+sequences of types, ∼simp identifies sequences up to permutation, and ⇒simp is as given in Figure 1.
+The theory of scoped rows is given by ⟨R scop, ∼scop, ⇒scop ⟩, where R scop is the set of arbitrarily-
+labeled sequences of types, and ∼scop and ⇒scop are as given in Figure 3. We will see other theories
+of rows in the remainder of the paper.
+   To capture the intuitive meaning of a row theory, we introduce algebraic structures corresponding
+to rows, and their modeling relationship to row theories.
+  Definition 2. A row algebra is any partial monoid ⟨M, ·, ϵ⟩; that is, · is a partial binary function
+M × M ⇀ M such that: m · ϵ = m = ϵ · m; and, if m1 · (m2 · m3 ) is defined, then it is equal to
+(m1 · m2 ) · m3 . Let f : R → M; we write f |= ζ 1 ⊙ ζ 2 ∼ ζ 3 if f (ζ 1 ) · f (ζ 2 ) = f (ζ 3 ), extended to
+f |= ζ 1 4d ζ 2 and f |= P in the obvious way. We say that such an f is a model of ⟨R, ∼, ⇒⟩ in
+⟨M, ·, ϵ⟩ iff:
+    • For ζ 1, ζ 2 ∈ R, if ζ 1 ∼ ζ 2 , then f (ζ 1 ) = f (ζ 2 );
+    • If P ⇒ ψ , then for each ground substitution θ on fv(P,ψ ), f |= θ P implies f |= θ ψ ; and,
+    • There is some ζ 0 ∈ R such that f (ζ 0 ) = ϵ.
+We say that ⟨M, ·, ϵ⟩ is an algebra for (or model of) ⟨R, ∼, ⇒⟩ if there is such a function f : R → M.
+  Obviously, any row theory gives rise to a term algebra in an unsurprising way. Other models of
+row theories are more informative.
+ Example 3 (Simple rows). Consider partial functions f , g from labels (drawn from L) to types.
+We define a partial union f ⊔ g by
+                                             (
+                                               f (ℓ) if ℓ ∈ dom(f )
+                                (f ⊔ g)(ℓ) =
+                                               g(ℓ) if ℓ ∈ dom(g)
+if dom(f ) and dom(g) are disjoint, and let f ⊔ g be undefined otherwise. Now, we have that
+⟨L ⇀ T , ⊔, ∅⟩ is an algebra for the simple row theory ⟨R simp, ∼simp, ⇒simp ⟩. This is also the
+algebra of rows implemented by a number of existing row type systems, including those of Rémy
+[1989], Harper and Pierce [1991], Gaster and Jones [1996], and Chlipala [2010].2
+   Example 4 (Scoped rows). We write T ⋆ for sequences of types and v aw for the concatenation of
+sequences v and w. We define a pointwise concatenation operator ⊕ on functions f , g ∈ L → T ⋆
+by (f ⊕ g)(ℓ) = f (ℓ)ag(ℓ), and write f0 for the function that maps all labels to the empty sequence.
+Now, we have that ⟨L → T ⋆, ⊕, f0 ⟩ is an algebra for ⟨R scop, ∼scop, ⇒scop ⟩. This algebra clarifies the
+intention of scoped rows: each scoped row should be viewed as a map from all labels to sequences
+of types; the syntax leaves out those labels mapped to empty sequences. We have ⇒scop ζ 1 ⊙ ζ 2 ∼ ζ 3
+exactly when ζ 1 contains (possibly empty) pointwise initial sequences of ζ 3 , and ζ 2 contains the
+corresponding pointwise final sequences.
+2 A formal, if lengthy, demonstration of this point would require building similar maps from the syntax of rows present in
+
+each language, and their representations of row operations, to this algebra.
+
+
+Proc. ACM Program. Lang., Vol. 3, No. POPL, Article 12. Publication date: January 2019.
+Abstracting Extensible Data Types                                                                           12:13
+
+  Example 5 (Unlabeled rows). Bahr [2014] and Morris [2015] give encodings of unlabeled row
+theories, focusing on their use in defining extensible variants. Each provides equivalents to our inj
+and ▽ operators, but require some amount of additional type annotation as a consequence of their
+respective encoding techniques. Each has ⟨P(T ), ⊎, ∅⟩ as an algebra, where the partial disjoint
+union operator ⊎ is defined by T ⊎ U = T ∪ U if T and U are disjoint, and is undefined otherwise.
+
+3.3   Row Homomorphisms
+Having an abstract characterization of row theories, we can now consider their relative expressive-
+ness. A natural idea is to consider structure-preserving maps between row theories. Such maps
+capture the expressiveness of row theories themselves: if one theory can be mapped into another,
+then programs in the first theory can be mapped to programs in the second in an entirely uniform
+manner, changing types but never terms. We formalize this intuition as follows.
+  Definition 6. A function h : R 1 → R 2 , extended to predicates in the obvious fashion, is a row
+theory homomorphism (or simply: homomorphism) from ⟨R, ∼, ⇒⟩ to ⟨R ′, ∼′, ⇒′⟩ if ζ 1 ∼ ζ 2 implies
+that h(ζ 1 ) ∼′ h(ζ 2 ) and P ⇒ ψ implies that h(P) ⇒′ h(ψ ).
+Row algebras are related by partial monoid homomorphisms. Homomorphisms of row theories and
+partial monoids are related in an intuitive way. Given that f is a model of ⟨R, ∼, ⇒⟩ in ⟨M, ·, ϵ⟩,
+and g is a model of ⟨R ′, ∼′, ⇒′⟩ in ⟨M ′, · ′, ϵ ′⟩, if there is a row theory homomorphism from R to
+R ′, then there is a corresponding partial monoid homomorphism from M to M ′. Under the same
+assumptions, if there is a partial monoid homomorphism j from M to M ′, and for every ζ ∈ R,
+there is a ζ ′ ∈ R ′ such that j(f (ζ )) = g(ζ ′), there is a row theory homomorphism from R to R ′.
+   We can use row homomorphisms to capture the relationships among the row theories we have
+discussed so far. Intuitively, the scoped row theory encompasses the simple row theory, and so
+we expect that there is a homomorphism from simple to scoped rows. The homomorphism from
+R simp to R scop is given by the inclusion map, and the preservation of ∼simp and ⇒simp is immediate.
+The corresponding homomorphism from ⟨L ⇀ T , ⊎, ∅⟩ to ⟨L → T ⋆, ⊔, f0 ⟩ is given by mapping
+defined cases to singleton sequences and undefined cases to the empty sequence (i.e., the standard
+mapping from Maybe to List). Similarly, we can see that there are row theory homomorphisms
+from the simple to unlabeled row theories and, assuming some suitable way to invent labels from
+types, a row theory homomorphism from unlabeled to simple rows. This captures our intuition
+that the labels in rows, while central to the pragmatics of records and variants, are not essential to
+their semantics.
+   The row theories that we have considered so far all provide some additional abstraction compared
+to simple products and coproducts. To describe the implementation of these theories in our formal
+development, it will be useful to capture products and coproducts themselves as a row theory.
+  Example 7 (Trivial rows). The trivial theory of rows is given by ⟨T ⋆, =, ⇒triv ⟩, where the atomic
+axioms of ⇒triv are of the form ⊢ ζ 1 ⊙ ζ 2 ∼ ζ 1aζ 2 .
+We will use its term algebra as our model of the trivial row theory. This theory identifies products
+and coproducts up to associativity, but not commutativity; each indexed projection is obtained by
+the composition prjL ◦ prjR (or vice versa), for a suitable choice of the intermediate result type, and
+similarly for injection.
+  It is easy to see that there is a row theory homomorphism from trivial to scoped rows: simply
+give the same label to each entry in the trivial row. It is more interesting, however, to consider
+homomorphisms between simple or scoped rows into trivial rows. Any such homomorphism would
+give uniform implementations of records and variants in terms of products and coproducts. Unfor-
+tunately, no such homomorphism can exist. We can see that there cannot be a row homomorphism
+
+                            Proc. ACM Program. Lang., Vol. 3, No. POPL, Article 12. Publication date: January 2019.
+12:14                                                                    J. Garrett Morris and James McKinna
+
+
+   Variables         x, v ∈ V                                       Directions            d ::= L | R
+   Rows              ζ,ξ ∈ R                                        Labels                ℓ ∈ L
+   Predicates       ψ , ϕ ::= ζ 4d ζ | ζ ⊙ ζ ∼ ζ                    Qualified types       ρ ::= τ | ψ ⇒ ρ
+   Types                τ ::= t | τ → τ | Πζ | Σζ | ℓ ◃ τ           Schemes               σ ::= ρ | ∀t.σ | ∀z.σ
+   Terms           M, N ::= x | λx.M | M N | let x :: σ = M in N
+                       | ℓ ◃ M | M/ℓ | prjd M | M ⋆ N | injd M | M ▽ N
+   Environments         Γ ::= ε | Γ, x : σ                          Contexts              P ::= ε | P, v : ψ
+
+                                          Fig. 4. Syntax of Rose(R, ∼, ⇒)
+
+
+from simple to trivial rows. Consider these results for simple rows:
+        ⇒simp (x ◃ Int) 4L (x ◃ Int, y ◃ Bool)                ⇒simp (y ◃ Bool) 4L (x ◃ Int, y ◃ Bool)
+It is easy to show that, if ⇒triv ζ 1 4L ζ 2 , ⇒triv ζ 1′ 4L ζ 2 , and ζ 1 and ζ 1′ are of the same length, then
+ζ 1 = ζ 1′. Consequently, we cannot hope to have a uniform mapping of simple to trivial rows that
+preserves ⇒simp ; since scoped rows are more expressive, we similarly cannot have a homomorphism
+from scoped to trivial rows. Neither can we find a homomorphism from trivial rows to simple rows.
+If we could, it would have to provide a mapping from each trivial row to a simple row, preserving
+combination of trivial rows. Consider the following entailments:
+             ⇒triv (Int) ⊙ (Bool) ∼ (Int, Bool)                    ⇒triv (Bool) ⊙ (Int) ∼ (Bool, Int)
+             ⇒triv (Int) 4L (Int, Bool)                            ̸⇒triv (Int) 4L (Bool, Int)
+ The crux of the problem is attempting to encode the non-commutative ⊙ of scoped rows in terms
+of the commutative ⊙ of simple rows. While we can imagine encodings of scoped rows that capture
+the order of labels, we cannot do so in a uniform way. In the examples, we must somehow be able
+to translate the row (x ◃ Bool) differently depending on the combinations in which it later occurs.
+   However, all is not lost. In the following section (ğ4.6), we will show how we can give (local)
+translations from terms of Rose with simple rows to terms of Rose with trivial rows. This shows
+that, even for row theories that are incomparable directly, Rose gives us a framework to compare
+their expressiveness and relate their implementations.
+
+4 THE ROSE TYPE SYSTEM
+This section gives a formal specification of the type system and semantics of Rose. The syntax
+and typing of Rose are parameterized by a row theory ⟨R, ∼, ⇒⟩, giving the interpretation of
+the predicates. We give Rose’s semantics by giving a (typing-directed) translation from Rose,
+instantiated with the trivial row theory, to a small extension of System F. We show some simple
+formal results on Rose, including the coherence of our interpretations. Finally, we show how other
+row theories can be translated to the trivial row theory; by composition, we thus obtain semantics
+for Rose instantiated with simple or scoped rows. Our goal in giving this translation is to make the
+abstract aspects of Rose concrete, particularly the roles played by the containment and combination
+predicates, and to show that Rose does not require any foundational extension to our understanding
+of computation in functional languages; we leave questions of efficiency to future work.
+
+4.1 Rose Syntax
+We write Rose(R, ∼, ⇒) to denote the core Rose system instantiated with the row theory ⟨R, ∼, ⇒⟩;
+we will omit the instantiating row theory when it is apparent from context. Figure 4 gives the syntax
+
+Proc. ACM Program. Lang., Vol. 3, No. POPL, Article 12. Publication date: January 2019.
+Abstracting Extensible Data Types                                                                           12:15
+
+
+                   Types     A, B ::= a | A → B | ∀a.A | ⊗ {Ai } | ⊕ {Ai }
+                   Terms     E, F ::= x | λx : A.E | F E | Λa.E | E[A]
+                                     | (E1, . . . , En ) | πi E | ι i E | case E {F1, . . . , Fn }
+
+                                     Fig. 5. F ⊗ ⊕ term and type syntax.
+
+
+of Rose(R, ∼, ⇒); it should mostly be familiar from our earlier examples. In addition to the standard
+terms for abstraction, application, and polymorphic definition, we have terms for record projection
+(prjd M) and concatenation (M ⋆ N ) and variant injection (injd M) and branching (M ▽ N ). We also
+include terms to label (ℓ ◃ M) and unlabel (M/ℓ) terms; these capture introduction and elimination
+of singleton records and variants. As is standard for Hindley-Milner style polymorphism, the type
+language is stratified into types (or monotypes) τ and type schemes (or polytypes) σ , with the latter
+extended by row polymorphic variables z. Types include type variables, functions, records, variants,
+and labeled types. Records and variants are built out of rows. The syntax of rows themselves we
+leave as a parameter of the system; in practice, syntactic formation rules for rows could be captured
+with kinds. The predicates are exactly the containment and combination predicates discussed so
+far. We do not assume any other uses of qualified types, such as to support type classes; however,
+nothing in Rose would prevent its combination with other uses of predicates. Finally, the formation
+of qualified types and type schemes is standard.
+
+4.2 Target Language
+The syntax for the target language of our semantics is given in Figure 5. It is a version of System F,
+extended with arbitrary width product and sum types. (While we could encode these types in
+unextended System F, doing so would only serve to complicate the presentation.) Types include
+functions, polymorphism, products (⊗{Ai }) and coproducts (⊕{Ai }). In addition to the usual
+terms, we include terms for product introduction (E1, . . . , En ) and elimination (πi E) and coproduct
+introduction (ι i E) and elimination (case E {F1, . . . , Fn }). In each of these forms, i and n refer to
+concrete natural numbers; we do not assume any form of quantification over or dynamic use of
+indices. The typing rules are for F ⊗ ⊕ are given in Figure 6. Environment ∆ tracks type variables in
+scope, and the judgment ∆ ⊢ A type assures that all free type variables mentioned in A are included
+in ∆. We do not assume terms or types specific to encoding extensible data types, such as generic
+extension or projection operations, or labels appearing in types or terms.
+
+4.3 Interpreting Terms and Types
+Figure 7 gives the type system for Rose(R, ∼, ⇒), and the translation from Rose to F ⊗ ⊕ . The figure
+has two parts. First we give the typing rules for Rose, and a generic translation from Rose typings
+into F ⊗ ⊕ terms. This translation is parametric over two aspects of the translation. We assume a
+translation (−)• from Rose types to F ⊗ ⊕ types; the mechanics of this translation will depend, of
+course, upon the particular structure of rows and their interpretation in F ⊗ ⊕ . We also rely on an
+augmented entailment judgment P ⇒ F : ψ , denoting that F is a F ⊗ ⊕ term giving evidence for the
+predicate ψ . Second, we extend the equivalence relation ζ 1 ∼ ζ 2 on rows to an equivalence ⊢ τ1 ≈ τ2
+on types. The remainder of this section discusses the translation in detail; the following sections
+discuss the translation of types and interpretation of entailment for different row theories.
+  Functional terms and types. Following Jones [1993; 1994], our typing derivations take the form
+P | Γ ⊢ M { E : σ , where P is the predicate environment, Γ is the type environment, M is the
+Rose term with type σ , and E is its F ⊗ ⊕ translation. The predicate environment P maps evidence
+
+                            Proc. ACM Program. Lang., Vol. 3, No. POPL, Article 12. Publication date: January 2019.
+12:16                                                                                   J. Garrett Morris and James McKinna
+
+
+      a∈∆                  ∆ ⊢ A type            ∆ ⊢ B type         ∆, a ⊢ A type            {∆ ⊢ Ai type}i
+                                                                                                                 (⊛ ∈ {⊕, ⊗})
+    ∆ ⊢ a type                    ∆ ⊢ A → B type                   ∆ ⊢ ∀a.A type             ∆ ⊢ ⊛{Ai } type
+
+               (x : A) ∈ Γ                        ∆, a; Γ ⊢ E : A                               ∆; Γ ⊢ E : ∀a.A       ∆ ⊢ B type
+     (var)                             (∀I)                        (a < ∆)               (∀E)
+               ∆; Γ ⊢ x : A                     ∆; Γ ⊢ Λa.E : ∀a.A                                  ∆; Γ ⊢ E[B] : A{B/a}
+                         ∆ ⊢ A type         ∆; Γ, x : A ⊢ E : B                     ∆; Γ ⊢ F : A → B ∆; Γ ⊢ E : A
+               (→I)                                                       (→E)
+                              ∆; Γ ⊢ λx : A.E : A → B                                         ∆; Γ ⊢ F E : B
+                                       {∆; Γ ⊢ Ei : Ai }i                           ∆; Γ ⊢ E : ⊗{Aj }
+                         (⊗ I)                                             (⊗ E)                          (i ∈ {j})
+                                 ∆; Γ ⊢ (E1, . . . , En ) : ⊗{Ai }                   ∆; Γ ⊢ πi E : Ai
+                      ∆; Γ ⊢ E : Ai                                       ∆; Γ ⊢ E : ⊕{Ai }         {∆; Γ ⊢ Fi : Ai → B}i
+           (⊕ I)                         (i ∈ {j})                (⊕ E)
+                   ∆; Γ ⊢ ι i E : ⊕{Aj }                                           ∆; Γ ⊢ case E {F1, . . . , Fn } : B
+
+                                                        Fig. 6. F ⊗ ⊕ typing rules.
+
+
+                                 (x : σ ) ∈ Γ                    P | Γ⊢M {E:σ               P | Γ, x : σ ⊢ N { F : τ
+                  (var)                                 (let)
+                           P | Γ⊢x {x :σ                        P | Γ ⊢ let x :: σ = M in N { (λx : (σ )• .F) E : τ
+
+                         P | Γ, x : τ ⊢ M { E : υ                           P | Γ ⊢ M { F :τ →υ             P | Γ ⊢N { E :τ
+        (→I)                                                         (→E)
+                P | Γ ⊢ λx.M { λx : (τ )• .E : τ → υ                                       P | Γ ⊢ MN { FE :υ
+
+                              P, v : ψ | Γ ⊢ M { E : ρ                         P | Γ ⊢ M { F :ψ ⇒ ρ            P ⇒ E :ψ
+               (⇒I)                                                    (⇒E)
+                      P | Γ ⊢ M { λv : (ψ )• .E : ψ ⇒ ρ                                    P |Γ⊢M {FE:ρ
+
+                              P | Γ⊢M {E:σ                                                  P | Γ ⊢ M { E : ∀t.σ
+                  (∀I)                                   (t < fv(P, Γ))       (∀E)
+                         P | Γ ⊢ M { Λt.E : ∀t.σ                                       P | Γ ⊢ M { E[(τ )• ] : σ {τ /t}
+
+                   P | Γ ⊢M { E :τ                         P | Γ ⊢ M { E : ℓ ◃τ                   P | Γ ⊢M { E :τ        ⊢τ ≈υ
+        (◃I)                                        (◃E)                                  (sim)
+               P | Γ ⊢ ℓ ◃M { E : ℓ ◃τ                     P | Γ ⊢ M/ℓ { E : τ                        P | Γ ⊢ M { E :υ
+
+                              P | Γ ⊢ M1 { E1 : Πζ 1          P | Γ ⊢ M2 { E2 : Πζ 2          P ⇒ F : ζ1 ⊙ ζ2 ∼ ζ3
+                      (Π I)
+                                                     P | Γ ⊢ M1 ⋆ M2 { F⋆ E1 E2 : Πζ 3
+
+                  P | Γ ⊢ M { E : Πζ 2            P ⇒ F : ζ 1 4d ζ 2               P | Γ ⊢ M { E : Σζ 1       P ⇒ F : ζ 1 4d ζ 2
+        (Π Ed )                                                           (ΣId )
+                         P | Γ ⊢ prjd M { Fprjd E : Πζ 1                                 P | Γ ⊢ injd M { Finjd E : Σζ 2
+
+                      P | Γ ⊢ M1 { E1 : Σζ 1 → τ              P | Γ ⊢ M2 { E2 : Σζ 2 → τ            P ⇒ F : ζ1 ⊙ ζ2 ∼ ζ3
+               (ΣE)
+                                                P | Γ ⊢ M1 ▽ M2 { F▽ [(τ )• ] E1 E2 : Σζ 3 → τ
+
+                                              ζ1 ∼ ζ2                                         ⊢ τ1 ≈ τ2     ⊢ τ1 ≈ τ2 ⊢ τ2 ≈ τ3
+                                                           (Ξ ∈ {Π, Σ})
+    ⊢ Π(τ ) ≈ τ          ⊢ Σ(τ ) ≈ τ     ⊢ Ξζ 1 ≈ Ξζ 2                       ⊢τ ≈τ            ⊢ τ2 ≈ τ1           ⊢ τ1 ≈ τ3
+
+                                        Fig. 7. Rose typing rules and translation to F ⊗ ⊕ .
+
+
+
+
+Proc. ACM Program. Lang., Vol. 3, No. POPL, Article 12. Publication date: January 2019.
+Abstracting Extensible Data Types                                                                             12:17
+
+variables v to predicates ψ ; it should be viewed as constraining all the type variables appearing in
+the remainder of the judgment. (Although we distinguish evidence variables v from term variables
+x for clarity, they do not constitute different syntactic classes in the translation.) The translation of
+variables (var), quantification (∀I), and instantiation (∀E) are all unsurprising. Rose distinguishes
+between polymorphic (let) and monomorphic (→I) binding; as a corresponding distinction does
+not exist in F ⊗ ⊕ , the images of their translations are identical. Qualified type introduction (⇒I)
+corresponds to abstraction over evidence, while their elimination (⇒E) requires the provision of
+that evidence. This is one of the points of interface between the type system and the predicate
+system. The entailment judgment P ⇒ E : ψ denotes that, if the predicates in P hold (with evidence
+assigned to the corresponding evidence variables), then E is evidence that ψ holds as well. The
+rules for this judgment determine the interpretation of the predicates, and so are left abstract.
+
+   Labels and equality. As the meaning of labels is captured solely by the predicates, labeled types
+and terms are translated identically to their unlabeled equivalents (◃ I, ◃ E). There are two sources
+of type equality in Rose. One arises from equivalence of rows; for example, we expect that the types
+Π(x ◃ Int, y ◃ Bool) and Π(y ◃ Bool, x ◃ Int) are equivalent. The other arises from our interpretation
+of singleton records and variants as equivalent to their underlying type. These are captured in the
+equivalence relationship ⊢ τ1 ≈ τ2 . Equivalence is defined only for types; it can be generalized to
+qualified types and type schemes using pairs of the corresponding introduction and elimination
+rules. We require that equivalence be preserved in the interpretation (sim): if E is the translation of
+a term of type τ1 , and ⊢ τ1 ≈ τ2 , then E must also be the translation of that term at type τ2 .
+
+   Predicates and evidence. The meaning of record and variant terms is determined by the interpre-
+tation of the predicates. We specify the form that we expect this interpretation to take. Each of our
+predicates appears in two contexts: once in the treatment of records, and once in the treatment
+of variants. Correspondingly, the evidence for each of these predicates must support two opera-
+tions: the evidence for containment supports record projection and variant injection, while the
+evidence for combination supports record concatenation and variant branching. We capture these
+requirements as follows:
+
+     If F : ζ 1 4d ζ 2 :                   If F : ζ 1 ⊙ ζ 2 ∼ ζ 3 :
+         Fprjd : (Πζ 2 )• → (Πζ 1 )•          F⋆ : (Πζ 1 )• → (Πζ 2 )• → (Πζ 3 )•
+         Finjd : (Σζ 1 )• → (Σζ 2 )•          F▽ : ∀a.((Σζ 1 )• → a) → ((Σζ 2 )• → a) → (Σζ 3 )• → a
+
+The interpretation of combination for variants is complicated by the need to refer to the result
+type, but otherwise these should be unsurprising. We place no other restrictions on the structure
+or implementation of evidence.
+
+  Records and variants. Finally, we have the rules for product introduction (Π I) and elimination
+(ΠE) and variant introduction (ΣI) and elimination (ΣE). These should be largely unsurprisingÐeach
+operation is interpreted in terms of the relevant evidence. The rule for variant elimination is slightly
+complicated by having to refer to the result type. Given that this type appears in the types of
+M and M ′, however, this introduces no potential for ambiguity in the typing or translation. One
+observation at this point is that we could have treated the record and variant operations purely as
+constants, rather than with distinct typing rules; following that approach, evidence would only
+have been computed in (⇒E), and the interpretation of that evidence would have been determined
+by the constants. In our view, while that approach would have required fewer typing rules, it would
+have camouflaged the central contribution of the type system.
+
+                              Proc. ACM Program. Lang., Vol. 3, No. POPL, Article 12. Publication date: January 2019.
+12:18                                                                                              J. Garrett Morris and James McKinna
+
+
+               (t)• = t         (τ → υ)• = (τ )• → (υ)•                  (ψ ⇒ ρ)• = (ψ )• → (ρ)•                          (∀t.σ )• = ∀t.(σ )•
+     (ℓ ◃ τ )• = (τ )•    (Π(τ1, . . . , τn ))• = ⊗{(τi )• : 1 ≤ i ≤ n}       (Σ(τ1, . . . , τn ))• = ⊕{(τi )• : 1 ≤ i ≤ n}
+                                                                 (Πζ 2 )• → (Πζ 1 )•
+                                                                                    
+                                             (ζ 1 4 ζ 1 )• = ⊗
+                                                                 (Σζ 1 )• → (Σζ 2 )•
+                             (Πζ 1 ) → (Πζ 2 ) → (Πζ 3 ) , ∀a.((Σζ 1 )• → a) → ((Σζ 2 )• → a) → (Σζ 3 )• → a
+                                    •              •           •
+                                                                                                                         
+                      •
+    (ζ 1 ⊙ ζ 2 ∼ ζ 3 ) = ⊗
+                             (ζ 1 4 ζ 3 )•, (ζ 2 4 ζ 3 )•
+                                       (                                                                    (
+                                           E      if j = 1                                                    E          if j = 1
+                            πi:j E =                                                            ι i:j E =
+                                           πi E   otherwise                                                   ιi E       otherwise
+        Let ζ 1 = (τ1, . . . , τj ), and ζ 2 = (τ1′, . . . , τk′ ).
+                  ζ ,ζ 2
+              prjL1        = λx : (Πζ 2 )• .π1:k x, if j = 1; λx : (Πζ 2 )• .(πi:k x)1≤i ≤j , otherwise.
+                  ζ ,ζ 2
+              prjR1        = λx : (Πζ 2 )• .π k:k x, if j = 1; λx : (Πζ 2 )• .(πi:k x)k−j ≤i ≤k , otherwise.
+                  ζ ,ζ 2
+              injL1        = λx : (Σζ 1 )• .ι 1:k x, if j = 1; λx : (Σζ 1 )• .case x {λy : (τi )• .ι i:k y}1≤i ≤j , otherwise.
+                  ζ ,ζ 2
+              injR1        = λx : (Σζ 1 )• .ι k:k x, if j = 1; λx : (Σζ 1 )• .case x {λy : (τi )• .ι i:k y}k−j ≤i ≤k , otherwise.
+        concatζ1 ,ζ2 = λx : (Πζ 1 )• .λy : (Πζ 2 )• .(π1:j x, . . . , πj:j x, π 1:k y, . . . , πk:k y)
+        branchζ1 ,ζ2 = Λa.λf : (Σζ 1 )• → a.λg : (Σζ 2 )• → a.λz : (Σ(ζ 1aζ 2 ))• .
+                                         λx : (τi )• .f (ι i:j x)
+                                                                                
+                                                                       if i ≤ j
+                             case z              ′ )• .g (ι
+                                         λy : (τi−j           i−j:k y) otherwise                           1≤i ≤j+k
+
+
+                                   v :ψ ∈ P           P ⇒ F : ζ1 ⊙ ζ2 ∼ ζ3                     P ⇒ F : ζ1 ⊙ ζ2 ∼ ζ3
+                                  P ⇒ v :ψ            P ⇒ π 3 F : ζ 1 4L ζ 2                   P ⇒ π 4 F : ζ 2 4R ζ 3
+
+                                                                       ζ 1aζ 2 = ζ 3
+                                                                      ζ ,ζ 3       ζ ,ζ 3         ζ ,ζ 3        ζ ,ζ 3
+                   P ⇒ (concatζ1 ,ζ2 , branchζ1 ,ζ2 , (prjL1                   , injL1      ), (prjR2      , injR2       )) : ζ 1 ⊙ ζ 2 ∼ ζ 3
+
+                                    F⋆ = π1 F           F▽ = π 2 F               Fprjd = π1 F           Finjd = π 2 F
+
+
+                                              Fig. 8. Interpretation of trivial rows in F ⊗ ⊕
+
+
+4.4 Entailment and Evidence for Trivial Rows
+Figure 8 shows the entailment relation and evidence for the trivial row theory. The top of the figure
+gives the translation on types; in the center we give metatheoretic definitions of the terms used to
+construct evidence in the entailment relation, and at the bottom we give the entailment relation
+and define the projections from evidence to implementations of the record and variant operations.
+   Types. The translation on types (−)• broadly interprets each Rose type as the parallel F ⊗ ⊕
+construct: functions are interpreted as functions, polymorphism as polymorphism, records and
+variants as products and coproducts respectively. There are, however, several subtleties. First,
+we interpret qualified types ψ ⇒ ρ as functions from the evidence for ψ to ρ. This means our
+translation on types depends on a interpretation of predicates. In our translation, we interpret
+predicates by the interpretations of the corresponding record and variant operations; with a more
+expressive target language, we could give more concise descriptions of evidence. Second, we have
+
+Proc. ACM Program. Lang., Vol. 3, No. POPL, Article 12. Publication date: January 2019.
+Abstracting Extensible Data Types                                                                               12:19
+
+no representation of labels in the target language, so labeled types ℓ ◃ τ are interpreted identically
+to their unlabeled versions. This emphasizes that the interpretation of the labels will be captured
+entirely through the interpretation of predicates.
+     Evidence. The trivial row theory is a close match for the n-ary products and coproducts in F ⊗ ⊕ .
+The only complexities in the construction of evidence arise from the identification of singleton
+products and variants with their underlying types. The projection and injection operators πi:j and
+                                                             ζ ,ζ    ζ ,ζ
+ι i:j abstract much of this handling. The constructions prjd1 2 , injd1 2 , concatζ1 ,ζ2 , and branchζ1 ,ζ2
+                                                                                                                  ζ ,ζ
+each denote families of F ⊗ ⊕ terms, one for each ground instantiation of ζ 1 and ζ 2 . The terms prjL1 2
+        ζ ,ζ                                                                                    ζ ,ζ
+and prjR1 2 extract initial and final subsequences of their argument. Dually, the terms injL1 2 and
+   ζ ,ζ
+injR1 2 inject values from sub-coproducts into larger coproducts. In each case, the only complexity
+arises from the possibility that the ζ i may be singleton rows. The term concatζ1 ,ζ2 concatenates
+two products. The term branchζ1 ,ζ2 combines eliminators for coproducts; other than the need to
+abstract over the result type, this term is straightforward.
+   Entailment. The entailment relation is pleasingly direct. The containment relations 4L and 4R
+are proved in terms of the corresponding combination predicate; while we could have given the
+containment relations directly, this approach limits the need to specify semantically unnecessary
+containment predicates in types. The evidence for the combination predicate contains both the
+implementations of the operations corresponding to combination (record concatenation and variant
+branching), but also contains the (tuples of) evidence arising from both corresponding containment
+relations. The evidence for the containment relations can then be projected directly from the
+evidence for the combination. Finally, we interpret the operations by projecting the implementations
+from the evidence.
+  Lemma 8. Suppose that P ⇒ F : ψ , and let ∆ = fv(P,ψ ). Let (P)• be the F ⊗ ⊕ typing environment
+{v : (ψ )• | (v : ψ ) ∈ P}. Then:
+  (1) ∆; (P)• ⊢ F : (ψ )• ;
+  (2) If ψ = ζ 1 4d ζ 2 , then ∆; (P)• ⊢ Fprjd : (Πζ 2 )• → (Πζ 1 )• and ∆; (P)• ⊢ Finjd : (Σζ 1 )• → (Σζ 2 )• ;
+       and,
+  (3) If ψ = ζ 1 ⊙ ζ 2 ∼ ζ 3 , then ∆; (P)• ⊢ F⋆ : (Πζ 1 )• → (Πζ 2 )• → (Π(ζ 1aζ 2 ))• and ∆; (P)• ⊢ F▽ :
+       ∀a.((Σζ 1 )• → a) → ((Σζ 1 )• → a) → (Σ(ζ 1aζ 2 ))• → a.
+Each is shown by a combination of induction on the structure of the entailment derivation and
+routine type checking for the evidence constructions.
+
+4.5 Properties of Typing and Translation
+We establish several formal properties validating our type system and semantics. We begin a
+preliminary definition. In a typing judgment P | Γ ⊢ M { E : σ , type variables in σ are constrained
+both by the predicates in P and by any predicates in σ . We reflect this using constrained type
+schemes.
+   Definition 9. A constrained type scheme (P | σ ) pairs a type scheme σ with a set of predicates P
+constraining its free type variables. We can interpret constrained type schemes in F ⊗ ⊕ : if P = v1 :
+ψ 1, . . . , vn : ψ n , then (P | σ )• = (ψ 1 )• → · · · → (ψ n )• → (σ )• .
+  We then introduce a generality relation C : σ1 ⊒ σ2 on type schemes, shown in Figure 9.3
+Intuitively, we have σ1 ⊒ σ2 if every ground instance of σ2 is also a ground instance of σ1 . If that
+3 Mitchell and Jones call this relation łcontainmentž; we have chosen different terminology to avoid confusion with the
+
+relation on rows.
+
+                                Proc. ACM Program. Lang., Vol. 3, No. POPL, Article 12. Publication date: January 2019.
+12:20                                                                        J. Garrett Morris and James McKinna
+
+
+               ⊢ τ1 ≈ τ2       C1 : σ 1 ⊒ σ 2   C2 : σ2 ⊒ σ3                    C : σ1 [τ /t] ⊒ σ2
+              id : σ ⊒ σ             C2 ◦ C1 : σ1 ⊒ σ3             λx : ∀a.(σ1 )• .C (x[(τ )• ]) : ∀t.σ1 ⊒ σ2
+
+         C : σ1 [b/a] ⊒ σ2   b < fv(σ1 )                                      C : σ1 ⊒ σ2
+                •
+   λx : ∀a.(σ1 ) .Λb.C (x[b]) : ∀a.σ1 ⊒ ∀b.σ2                          •
+                                                       λx : ∀a.∀b.(σ1 ) .Λb.Λa.C (x[a][b]) : ∀a.∀b.σ1 ⊒ ∀b.∀a.σ2
+
+                                    {⊢ v1 : ϕ 1, . . . , vm : ϕ m ⇒ Ei : ψ i }i C : ρ 1 ⊒ ρ 2
+     λx.λv1 : (ϕ 1 ) . . . . .λvm : (ϕ m )• .C (x E1 . . . En ) : (ψ 1 ⇒ · · · ⇒ ψ n ⇒ ρ 1 ) ⊒ (ϕ 1 ⇒ · · · ⇒ ϕ m ⇒ ρ 2 )
+                    •
+
+
+                                            Fig. 9. Ordering type schemes.
+
+is the case, it should also be the case that we can transform an F ⊗ ⊕ term in the interpretation of
+σ1 into one in the interpretation of σ2 . The term C provides this transformation. This judgment is
+extended to constrained type schemes C : (P1 | σ1 ) ⊒ (P2 | σ2 ) in the obvious manner, following the
+rule for qualified types. The following is lemma is proved by a simple induction on ⊒ derivations.
+   Lemma 10. If C : (P1 | σ1 ) ⊒ (P2 | σ2 ), then ⊢ C : (σ1 )• → (σ2 )• .
+   We now turn to the main results of this section.
+  Theorem 11 (Principality). If P | Γ ⊢ M { E : σ , then there is some (P0 | σ0 ) such that
+P0 | Γ ⊢ M { E : σ0 and for all (P | σ ) such that P | Γ ⊢ M { E : σ , (P0 | σ0 ) ⊒ (P | σ ).
+We are able to draw almost entirely on existing work on principality for qualified types sys-
+tems [Jones 1994]. We construct a syntax-directed variant of the type system, adapt Algorithm M [Lee
+and Yi 1998] to our type system, and then show soundness and completeness relationships between
+each. The only complexities arise from the use of (sim) to wrap and unwrap singleton products and
+sums; however, we can push these to the elimination rules in the syntax-directed type system, and
+incorporate them into unification for type inference.
+   Theorem 12 (Soundness). If P | Γ ⊢ M { E : σ , then ∆; (Γ)• ⊢ E : (σ )• , where ∆ = fv(P, Γ, σ ).
+The proof is by induction on typing derivations in Rose. Because Rose terms are implicitly quantified,
+we build the F ⊗ ⊕ type variable environment ∆ from the free type variables in the Rose typing
+derivation, in an entirely standard way. The only interesting cases of the induction are those
+that manipulate evidence. The soundness of those cases follows from the entailment judgment
+producing well-typed evidence (Lemma 8).
+   Rose terms may have multiple typing derivations, and so have translations to differing F ⊗ ⊕
+terms; this is typical for qualified type systems, and is known as the coherence problem. We show
+that, assuming a syntactically verifiable condition on source terms, the interpretations of these
+type derivations are all interconvertible, and so the meaning of terms is well-defined. Our approach
+follows that of Jones [1993; 1994], in turn built on the work of Mitchell [1988], adapted to the
+specifics of the Rose type system.
+   Unfortunately, it is simply not the case that all Rose terms, in all row theories, have coherent
+meanings. For example, consider the term prjL ◦ prjR in either the trivial or scoped row theory.
+Depending on the type assigned to the invocation of prjR , this term can select any subset of its
+input record. This ambiguity is reflected in the term’s principal type.
+                           ⊢ prjL ◦ prjR : ∀z1 z2 z3 .(z3 4L z2, z2 4R z1 ) ⇒ Πz1 → Πz3
+The type variable z2 appears in the qualifiers, but nowhere in the type of the term, so its instanti-
+ation can be chosen arbitrarily when constructing typings of this term; differing choices for its
+
+Proc. ACM Program. Lang., Vol. 3, No. POPL, Article 12. Publication date: January 2019.
+Abstracting Extensible Data Types                                                                             12:21
+
+instantiation give rise to different interpretations of the term. However, it is not the case that any
+term whose typing includes type variables that do not appear in the type gives rise to incoherence.
+Recall the (fully-desugared) type we gave to Wand’s example (ğ2.2):
+           λmn.(prj (m ⋆ n))/ℓ : ∀t z1 z2 z3 .(z1 ⊙ z2 ∼ z3, (ℓ ◃ t) 4 z3 ) ⇒ Πz1 → Πz2 → t
+Type variable z3 appears in the qualifiers, but not in the type itself. However, this does not introduce
+incoherence: z3 is determined (up to ∼) by z1 and z2 , which do appear in the type. To capture this
+notion, we introduce the idea of the closure of a set of type variables T over a set of predicates Ψ.
+  Definition 13. We define TΨ+ as the smallest set U such that
+   • T ⊆ U ; and,
+   • if ζ 1 ⊙ ζ 2 ∼ ζ 3 ∈ Ψ, and fv(ζ 1, ζ 2 ) ⊆ U , then fv(ζ 3 ) ⊆ U .
+This approach was originally introduced by Jones [2000] to account for functional dependencies in
+type class predicates. We can then define notions of coherent type schemes and coherent terms.
+  Definition 14. A type scheme ∀T .Ψ ⇒ τ is coherent if T ⊆ fv(τ )+Ψ . A term M is coherent if its
+principal type scheme is coherent.
+Finally, we can state our coherence result for the translation.
+  Theorem 15 (Coherence). If M is coherent, P1 | Γ ⊢ M { E1 : σ1 , P2 | Γ ⊢ M { E2 : σ2 and
+C : (P1 | σ1 ) ⊒ (P2 | σ2 ), then C E1 =βη E2 .
+The proof is routine, following standard approaches to showing coherence for qualified type
+systems [Jones 1993; Morris 2014].
+
+4.6   Translations Between Row Theories
+We have both a generic account of the interpretation of Rose(R, ∼, ⇒) and a specific account of
+the interpretation of the trivial theory ⟨R triv, ∼triv, ⇒triv ⟩ in F ⊗ ⊕ . Now, we extend our approach to
+give an account of the simple and scoped theories of rows, in a modular and reusable fashion.
+4.6.1 Translations, generally. We might hope that row theory homomorphisms, the intuitive
+structure-preserving maps for row theories, would be sufficient to extend our semantics from trivial
+to simple or scoped rows. Unfortunately, the trivial row theory is not expressive enough to capture
+the other row theories (ğ3.3); this means that a translation from simple or scoped rows to trivial
+rows must induce some transformation on terms, not only on types. The problem is that there are
+equivalent rows in the source theory (such as (x ◃ Int, y ◃ Bool)) that cannot be translated to a
+single row in the target theory (neither of the trivial rows (Int, Bool) nor (Bool, Int) satisfies all
+the predicates on the original simple row). However, there are families of rows in the target theory
+that do satisfy all of the predicates, and are all interconvertible! For example, if we are allowed to
+switch between the trivial rows (Int, Bool) and (Bool, Int) (in this case, how to do so is clear),
+then we can model all of the predicates on the original simple row.
+   Definition 16. Let ⟨R, ∼, ⇒⟩ and ⟨R ′, ∼′, ⇒′⟩ be two theories of rows. Let η : R → R ′, and
+extend η homomorphically from rows to predicates, types, and contexts. We say η is a row theory
+translation (or simply: translation) from ⟨R, ∼, ⇒⟩ to ⟨R ′, ∼′, ⇒′⟩ if:
+   (1) If ζ 1 ∼ ζ 2 , then there are Rose(R ′, ∼′, ⇒′) terms T1, T2 such that T1 : Πη(ζ 1 ) → Πη(ζ 2 ) and
+       T2 : Ση(ζ 1 ) → Ση(ζ 2 ).
+   (2) If P ⇒ ζ 1 ⊙ ζ 2 ∼ ζ 3 , then there is some ζ 3′ ∼ ζ 3 such that η(P) ⇒′ η(ζ 1 ) ⊙ η(ζ 2 ) ∼ η(ζ 3′).
+  Such a translation on row theories gives rise to a corresponding translation on terms of Rose
+instantiated by those theories.
+
+                              Proc. ACM Program. Lang., Vol. 3, No. POPL, Article 12. Publication date: January 2019.
+12:22                                                                              J. Garrett Morris and James McKinna
+
+
+                     ⟨f1, g1 ⟩ : ζ 1 ∼ ζ 2   ⟨f2, g2 ⟩ : ζ 2 ∼ ζ 3                         ⟨f , g⟩ : ζ 1 ∼ ζ 2
+ ⟨id, id⟩ : ζ ∼ ζ          ⟨f2 ◦ f1, g2 ◦ g1 ⟩ : ζ 1 ∼ ζ 3           ⟨prjL △ f ◦ prjR, injL ▽ injR ◦ g⟩ : ℓ ◃ τ , ζ 1 ∼ ℓ ◃ τ , ζ 2
+
+                                                    ⟨f , g⟩ : ζ 1 ∼ ζ 2   ℓ , ℓ′
+        ⟨(prjR △ prjL ) ◦ prjL △ f ◦ prjR, injL ◦ (injR ▽ injL ) ▽ injR ◦ g⟩ : ℓ ◃ τ , ℓ ′ ◃ τ ′ζ 1 ∼ ℓ ′ ◃ τ ′, ℓ ◃ τ , ζ 2
+
+Fig. 10. Equivalence of simple and scoped rows, with witnessing terms in the trivial row theory. The shaded
+condition holds trivially for simple rows.
+
+   Theorem 17. If η is a row theory translation from ⟨R, ∼, ⇒⟩ to ⟨R ′, ∼′, ⇒′⟩, then it extends to a
+translation η • from terms of Rose(R, ∼, ⇒) to terms of Rose(R ′, ∼′, ⇒′) such that if P | Γ ⊢ M : σ ,
+then η(P) | η(Γ) ⊢ η • (M) : η(σ ).
+The proof is by induction on the derivation of P | Γ ⊢ M : σ . The translation introduces mediat-
+ing terms, as are guaranteed by Definition 16 condition 1, at record and variant operations and
+applications of (sim), and is otherwise homomorphic.
+4.6.2 Translations, specifically. To use Theorem 17 to give semantics for simple or scoped rows, we
+need to exhibit row theory translations from these theories to the trivial theory. We can do so in an
+entirely regular fashion. We map rows in the source theory to syntactically identical rows in the
+target theory; since the trivial theory is less expressive than either simple or scoped rows, however,
+we have some work to do to show we can preserve the operations from the source theories.
+   Proposition 18. Let ⟨R, ∼, ⇒⟩ be the simple (resp. scoped) theory of rows. Then η I : R → R triv ; η I :
+(ℓi ◃ τi )i 7→ (ℓi ◃ τi )i is a translation from the simple (resp. scoped) row theory to the trivial row theory.
+The key step is showing that equivalences in the source theories can be witnessed in the trivial
+theory. Figure 10 reiterates the equivalence relation for both simple and scoped rows, extending it
+with witness information (recall that △ is the dual operator to ▽). The side condition that ℓ , ℓ ′
+holds trivially for simple rows, as simple rows prohibit repetitions of labels within a row.
+  Lemma 19. If ⟨f , g⟩ : ζ 1 ∼ ζ 2 (in either the simple or scoped row theory), then ⊢ f : Πη I (ζ 1 ) →
+Πη I (ζ 2 ) and ⊢ g : Ση I (ζ 1 ) → Ση I (ζ 2 ).
+Finally, we have to show that satisfiable predicates from the source theory can be mapped to
+satisfiable predicates in the trivial theory. This amounts to observing that, for any non-trivial
+derivation P ⇒ ζ 1 ⊙ ζ 2 ∼ ζ 3 , we have that ζ 3 ∼ ζ 1aζ 2 . This is a simple induction on the length of ζ 3 .
+4.6.3 Fusion and efficiency. The translations in the previous section demonstrate the utility of
+the row theory abstraction, while showing that, for the row theories we have considered, Rose
+programs can still be interpreted in System F. The resulting implementations may not be particularly
+efficient; in particular, the translations to the trivial row theory introduce regular, and apparently
+unnecessary, reshuffling of product and sum values. We observe that most of these reshuffling
+steps, however, could be combined by a simple analysis of the final F ⊗ ⊕ terms. There are still
+significant questions, both about how to best represent extensible records and variants, and how to
+take advantage of contextual information (perhaps captured in typing) to optimize representation
+choices. We hope to return to these questions in future work.
+
+5 RELATED WORK
+There is a significant literature on extensible data types in general, and on row type systems in
+particular. Here we highlight that work which is closest to ours.
+
+Proc. ACM Program. Lang., Vol. 3, No. POPL, Article 12. Publication date: January 2019.
+Abstracting Extensible Data Types                                                                           12:23
+
+   Establishing row types. Wand [1987] originally introduced row types, motivated by modeling
+inheritance in object-oriented languages. He initially proposed treating rows as arbitrary partial
+functions from labels to types; updates were always allowed, and overwrote fields if they were
+present. Wand also observed that the dual of his record calculus gave a system of extensible variants.
+Unfortunately, unification for this system proved problematic. Rémy [1989] introduced an alternate
+approach to row typing, in which rows mapped labels to fields, rather than types. Fields could
+either indicate that a label was present, at a given type, or that a field was absent. In this system,
+unlike Wand’s, record extension was limited to cases in which fields were not already present.
+Rémy introduced a restriction operator, which łforgetsž fields already present in a record, making it
+possible to define record update in terms of restriction followed by extension. However, he further
+proposed polymorphism in fields; by making record extension polymorphic in the new label’s field,
+it could serve as both extension and update.
+   Modern row types. Pottier and Rémy [2005] give an updated presention of Rémy’s original row
+system. Among the innovations of their presentation is that they lift arbitrary type operators
+to row operators; for example, if ζ 1 and ζ 2 are rows, then they also support the row ζ 1 → ζ 2 ,
+in which each label ℓ is mapped to ζ 1 (ℓ) → ζ 2 (ℓ). This allows them to express some programs
+inexpressible in our system, such as one that applies a record of functions to a record of arguments.
+Unlike the other systems we have discussed, they restrict record and variant types to complete
+rows, in which all labels are mapped to some type. They still, however, limit record extension to
+avoid overwriting fields, and so support incomplete rows in the building of complete rows. Blume
+et al. [2006] describe a calculus that supports extensible records and first-class cases. Unlike other
+approaches to extensible variants, they distinguish case-branch functions from arbitrary functions,
+and restrict their branching operator to combining case-branch function. This allows them to give
+a more efficient implementation of extensible variants, by translating case blocks into (extensible)
+records of functions.
+   Rows and qualified types. The systems of Rémy [1989] and Pottier and Rémy [2005] use kinds to
+track the labels present in (or absent from) a given record, to assure that record types themselves
+are well formed. Gaster and Jones [1996] proposed using qualified types instead. They introduce
+a predicate ζ \ ℓ, pronounced łζ lacks ℓž, which is only satisfied if row ζ does not include label
+ℓ. Otherwise, their operations are similar to other systems of extensible data types: they include
+record extension (limited to cases where the new field is not already present), restriction, and
+the dual operations for variants. The use of łlacksž constraints also guides the implementation of
+records: the presence of a constraint ζ \ ℓ indicates that at some point, ζ will be extended with label
+ℓ. The evidence for such a constraint is the offset into a Πζ record at which field ℓ should be stored.
+   Rows and concatenation. There are several existing accounts of rows and record concatenation.
+Wand [1991] first discussed the typing problems that arise with record concatenation. He described
+an approach to typing concatenation that used row types as in Rémy [1989], but concluded multiple
+typing derivations for each possible term. (These are essentially intersection types, although he
+did not express them as intersections.) While expressive, we believe that this approach introduces
+obstacles to understanding types and the corresponding terms. Harper and Pierce [1991] give an
+extension of System F with record concatenation, in which record concatenation does not replace
+fields. They assure this by introducing a form of constrained type abstraction ∀a#ζ®.A, which
+requires that instantiations of type variable a be with record types disjoint from any of those in ζ®.
+Otherwise, they support the standard record selection, restriction, and construction operations. (In
+particular, while their concatenation operation behaves identically to ours, their primitives project
+only single fields, not subrecords.) However, their system cannot express Wand’s problem: while it
+
+                            Proc. ACM Program. Lang., Vol. 3, No. POPL, Article 12. Publication date: January 2019.
+12:24                                                                    J. Garrett Morris and James McKinna
+
+can express the concatenation, it lacks a mechanism to require that a field is in the result of the
+concatenation without specifying in which record it originates.
+  Featherweight Ur [Chlipala 2010] incorporates record concatenation and row typing in a
+dependently-typed programming language; in addition to standard row types, Featherweight
+Ur includes types witnessing disjointness of rows and type-level maps on rows. Wand’s problem
+can be expressed in Featherweight Ur (in contrast to our approach, the programmer must provide
+an explicit witness of row disjointness, although they can do so in an entirely routine fashion). We
+do not claim that Rose provides more expressive row types than Featherweight Ur. Rather, we view
+our work as demonstrating that expressive record concatenation can be expressed in type systems
+with only a fraction of the overall expressiveness (and corresponding complexity) of systems like
+Ur.
+
+   Encoding extensible data types. There have been a number of systems encoding extensible data
+types using other type system features, notably type classes and type families in Haskell. Kiselyov
+et al. [2004] demonstrate how to encode extensible records in Haskell; their approach initially
+corresponds to one with unlabeled rows, in which projection is based solely on the types of record
+fields, but they also give an encoding of labeled fields. Predictably, they rely on a number of
+extensions to the Haskell class system, most prominently functional dependencies. Swierstra [2008]
+develops an encoding of extensible variants in Haskell, using two-level types to capture extensible
+recursive types. While his injection functions are similar to ours, he does not provide a general
+approach to branching, instead expressing each branching with its own type class. Bahr [2014] and
+Morris [2015] give independent encodings of extensible variants, with similar but subtly different
+expressions of branching. Both systems are essentially equivalent to unlabeled simple rows (Morris
+also presented a system like scoped rows, but, apparently unaware of the work on scoped rows,
+discarded it as undesirable). Oliveira et al. [2015] give an encoding of extensible data types using
+type-level lists of types, an approach quite close to rows. However, in doing so, they lose precision
+in their typing of case blocks.
+
+   Other applications of rows. We have considered rows solely in the context of extensible data
+types. Row types have been used to capture similar ideas of extensibility in several other contexts.
+Lindley and Cheney [2012] use row types to provide effect polymorphism, while Hillerström and
+Lindley [2016]; Leijen [2014]; Lindley et al. [2017] use row types to provide accounts of algebraic
+effects and handlers. Lindley and Cheney [2012] use a row type system based on that of Rémy;
+Hillerström and Lindley [2016] extend this approach to also encompass handlers for algebraic
+effects. Leijen uses scoped rows to account for algebraic effects and handlers; the use of scoping in
+the rows corresponds to the nesting of handlers in source code, where there may be, for example,
+multiple nested catch blocks all handling (different levels or types of) exceptions. Lindley and Morris
+[2017] use row types to account for extensible choice in session types, a type-based abstraction of
+communication protocols.
+   Makholm and Wells [2005] introduce a row-based approach to typing mixin modules and their
+composition, called Martini. In this approach, modules are typed by pairs of rows, one that captures
+the definitions they provide and another that captures their dependencies on their environment.
+Composition of modules is only allowed when the two modules have disjoint output sets, and
+the modules may (mutually) satisfy each other’s dependencies. Martini can be captured by Rose,
+by observing that its module types (that is, its pairs of rows) themselves form a partial monoid.
+Following this characterization, Martini’s various module projection and restriction operations,
+and their types, can be encoded using the record operations of Rose. This application also highlights
+Rose’s unique benefit of capturing multiple row systems within a single language: a practical
+
+Proc. ACM Program. Lang., Vol. 3, No. POPL, Article 12. Publication date: January 2019.
+Abstracting Extensible Data Types                                                                            12:25
+
+instantiation of Rose might use simple rows to capture extensible data types, while using Martini
+like rows to capture module structure.
+   Subsumption and intersection types. Records and variants, in general, have some similarities to
+intersection and union types, particularly in light of type systems that allow arbitrary or almost-
+arbitrary intersections [Dunfield 2012; Oliveira et al. 2016]. There are two important differences
+between our approach and those based on intersections. First, we consider a view parametric over
+the interpretation of rows, and thus the meaning of records and variants; in contrast, work on
+intersections and unions focuses on a particular interpretation of intersections and unions. Second,
+and more importantly, our approach to projection (and injection) is not equivalent to subtyping.
+This is demonstrated in our discussion of default values (ğ2.2), where the presence of projection
+only on the right of the concatenation is essential to the meaning of the term.
+
+6 FUTURE WORK: LENSES
+Not for nothing have we presented ⋆ and ▽ for Π-rows (records, ğ2.2) and Σ-rows (variants,
+ğ2.3) as offering an abstract presentation of product and coproduct types, subject to the ability to
+project/inject at will along a chosen coordinate axis given by a field label/constructor, or more
+generally along any (sub-)row type. Elsewhere, the rich literature on (asymmetric, state-based)
+lenses [Foster et al. 2007, for example], has similarly given a łcoordinate-freež account, at least
+for product types. An (asymmetric) lens (get, put) from source type S to view type V consists of
+(partial) functions get : S → V , constructing a view from a given source value, and put : V × S → S,
+responsible for updating a source value with changes made to the view. Without further belaboring
+the details, a very-well-behaved asymmetric lens from S to V exhibits an isomorphism between S
+and V × C, for some type C, called the łconstant complementž, which stores the information in S
+not visible in the view V [Hofmann et al. 2011]. In this light, we can see that the record operations
+in Rose exactly define a set of very-well-behaved lenses. For any rows ζ 1 ⊙ ζ 2 ∼ ζ 3 , we have that
+(λz.prj z, λ(x, z).x ⋆ prj z) is a lens from Πζ 3 to Πζ 1 , with constant complement Πζ 2 (or, by different
+instantiations of the type variables, from Πζ 3 to Πζ 2 with constant complement Πζ 1 ). This is true
+regardless of the theory of rows in which the predicates are interpreted.
+   Dual to lenses are prisms [Kmett 2018]: a prism from S to V consists of functions (match, build)
+where match : S → Maybe V performs a case match, returning Nothing if the S value does not
+match the pattern captured by the prism, and build : V → S constructs an S value matching the
+prism from V . As with lenses, we see that the variant operations in Rose define prisms. For any
+rows ζ 1 ⊙ ζ 2 ∼ ζ 3 , we have that ((λy.y/Just) ▽ (λy.Nothing), λy.inj y) is a prism from Σζ 3 to Σζ 1 .
+However, prisms discard a crucial piece of information captured in Rose: in the case that match
+returns Nothing, we have lost any knowledge of the remaining cases. That is to say, the idea of the
+constant complement, essential to characterizing the behavior of very-well-behaved lenses, which
+is captured implicitly by Rose constraints and used to check branching, is missing from prisms.
+   Just as McKinna [2016] draws attention to the logical meaning of lens complement, we exploit
+Curry-Howard to give computational content to logical constraints on rows. In future work, we hope
+to further explore the connections between lenses and prisms and our type-theoretic, monoidal
+view of extensible data types. In particular, we plan to compare our work to the profunctor-based
+generalization of lenses and prisms given by Pickering et al. [2017] and Boisseau and Gibbons
+[2018].
+
+7 FUTURE WORK: EFFECTS AND EFFECT HANDLERS
+We have considered applications of row types to extensible records and variants. Row types have
+also recently been applied to type systems for (algebraic) effects and effect handlers [Hillerström
+
+                             Proc. ACM Program. Lang., Vol. 3, No. POPL, Article 12. Publication date: January 2019.
+12:26                                                                       J. Garrett Morris and James McKinna
+
+and Lindley 2016; Leijen 2014; Lindley et al. 2017]. As future work, we plan to study how our view
+of rows and row theories can be applied to effect typing. Our goal is to leverage the expressiveness
+of higher-order functional programming to express effects and handlers in terms of the existing
+primitives (records and variants), rather than endlessly extending our language with new primitive
+types and new primitive operations. Different views of effects and handlers imply different accounts
+of recursive data types, and so take advantage of Rose’s ability to capture multiple row systems in
+the same language.
+   To do so, we expect to develop several features not present in Rose. Our approach exposes the
+duality between records and variants in the type system but does not reflect it directly in terms.
+A general account of effectful computations (essentially, variants over the possible operations)
+and effect handlers (essentially, records of implementations of operations) will require terms that
+witness the duality between record construction and variant branching. (A similar approach is
+used by Blume et al. [2006], but in their implementation of variants rather than being materialized
+in the language.) Many existing accounts of extensible effects also depend on transformations on
+the effect labels in a term, such as the row-level maps introduced by Pottier and Rémy [2005] and
+Chlipala [2010]. We intend a fuller study of first-class labels and of how label transformations
+and their properties can be characterized, consistent with our separation of labeling from the core
+record and variant operations
+
+ACKNOWLEDGEMENTS
+We are grateful to the reviewers for their help and encouragement in improving the presentation of
+this work. The second author gratefully acknowledges the support of LFCS, University of Edinburgh,
+and the U.S. Air Force Office of Scientific Research, Air Force Materiel Command, USAF, under grant
+number FA8655-13-1-3006 (PI: James Cheney). The U.S. Government, the University of Edinburgh,
+and the University of Kansas are authorised to reproduce and distribute reprints for their purposes
+notwithstanding any copyright notation thereon.
+
+REFERENCES
+P. Bahr. Composing and decomposing data types: a closed type families implementation of data types à la carte. In J. P.
+    Magalhães and T. Rompf, editors, Proceedings of the 10th ACM SIGPLAN workshop on Generic programming, WGP 2014,
+    Gothenburg, Sweden, August 31, 2014, pages 71ś82. ACM, 2014.
+B. Berthomieu and C. le Moniès de Sagazan. A calculus of tagged types, with applications to process languages. In Workshop
+    on types for program analysis, Aarhus, 1995.
+M. Blume, U. A. Acar, and W. Chae. Extensible programming with first-class cases. In J. H. Reppy and J. L. Lawall, editors,
+    Proceedings of the 11th ACM SIGPLAN International Conference on Functional Programming, ICFP 2006, Portland, Oregon,
+    USA, September 16-21, 2006, pages 239ś250. ACM, 2006.
+G. Boisseau and J. Gibbons. What you needa know about Yoneda: profunctor optics and the Yoneda Lemma (Functional
+    Pearl). PACMPL, 2(ICFP):84:1ś84:27, 2018.
+A. Chlipala. Ur: statically-typed metaprogramming with type-level record computation. In B. G. Zorn and A. Aiken, editors,
+    Proceedings of the 2010 ACM SIGPLAN Conference on Programming Language Design and Implementation, PLDI 2010,
+    Toronto, Ontario, Canada, June 5-10, 2010, pages 122ś133. ACM, 2010.
+J. Dunfield. Elaborating intersection and union types. In P. Thiemann and R. B. Findler, editors, ACM SIGPLAN International
+    Conference on Functional Programming, ICFP’12, Copenhagen, Denmark, September 9-15, 2012, pages 17ś28. ACM, 2012.
+J. N. Foster, M. B. Greenwald, J. T. Moore, B. C. Pierce, and A. Schmitt. Combinators for bidirectional tree transformations:
+    A linguistic approach to the view-update problem. ACM Trans. Program. Lang. Syst., 29(3):17, 2007.
+J. Garrigue. Programming with polymorphic variants. In ML Workshop. ACM, 1998.
+B. R. Gaster and M. P. Jones. A polymorphic type system for extensible records and variants. Technical Report NOTTCS-
+    TR-96-3, University of Nottingham, 1996.
+R. Harper and B. Pierce. A record calculus based on symmetric concatenation. In Proceedings of the 18th ACM SIGPLAN-
+    SIGACT Symposium on Principles of Programming Languages, POPL ’91, pages 131ś142. ACM, 1991.
+D. Hillerström and S. Lindley. Liberating effects with rows and handlers. In TyDe@ICFP, pages 15ś27. ACM, 2016.
+
+
+Proc. ACM Program. Lang., Vol. 3, No. POPL, Article 12. Publication date: January 2019.
+Abstracting Extensible Data Types                                                                                        12:27
+
+R. Hinze, N. Wu, and J. Gibbons. Conjugate hylomorphisms - or: The mother of all structured recursion schemes. In S. K.
+    Rajamani and D. Walker, editors, Proceedings of the 42nd Annual ACM SIGPLAN-SIGACT Symposium on Principles of
+    Programming Languages, POPL 2015, Mumbai, India, January 15-17, 2015, pages 527ś538. ACM, 2015.
+M. Hofmann, B. C. Pierce, and D. Wagner. Symmetric lenses. In T. Ball and M. Sagiv, editors, Proceedings of the 38th ACM
+    SIGPLAN-SIGACT Symposium on Principles of Programming Languages, POPL 2011, Austin, TX, USA, January 26-28, 2011,
+    pages 371ś384. ACM, 2011.
+M. P. Jones. Coherence for qualified types. Technical Report YALEU/DCS/RR-989, Yale University, 1993.
+M. P. Jones. Qualified Types: Theory and Practice. Cambridge University Press, 1994.
+M. P. Jones. Type classes with functional dependencies. In G. Smolka, editor, Programming Languages and Systems, 9th
+    European Symposium on Programming, ESOP 2000, Held as Part of the European Joint Conferences on the Theory and
+    Practice of Software, ETAPS 2000, Berlin, Germany, March 25 - April 2, 2000, Proceedings, volume 1782 of Lecture Notes in
+    Computer Science, pages 230ś244. Springer, 2000.
+O. Kiselyov, R. Lämmel, and K. Schupke. Strongly typed heterogeneous collections. In H. Nilsson, editor, Proceedings of the
+    ACM SIGPLAN Workshop on Haskell, Haskell 2004, Snowbird, UT, USA, September 22-22, 2004, pages 96ś107. ACM, 2004.
+E. Kmett. The lens package, version 4.16, 2018.
+O. Lee and K. Yi. Proofs about a folklore let-polymorphic type inference algorithm. ACM Trans. Program. Lang. Syst., 20(4):
+    707ś723, 1998.
+D. Leijen. Extensible records with scoped labels. In Revised Selected Papers from the Sixth Symposium on Trends in Functional
+    Programming, TFP 2005, Tallinn, Estonia, 23-24 September 2005., pages 179ś194, 2005.
+D. Leijen. Koka: Programming with row polymorphic effect types. In P. Levy and N. Krishnaswami, editors, Proceedings 5th
+    Workshop on Mathematically Structured Functional Programming, MSFP@ETAPS 2014, Grenoble, France, 12 April 2014.,
+    volume 153 of EPTCS, pages 100ś126, 2014.
+D. Leijen. Type directed compilation of row-typed algebraic effects. In G. Castagna and A. D. Gordon, editors, Proceedings
+    of the 44th ACM SIGPLAN Symposium on Principles of Programming Languages, POPL 2017, Paris, France, January 18-20,
+    2017, pages 486ś499. ACM, 2017.
+S. Liang, P. Hudak, and M. P. Jones. Monad transformers and modular interpreters. In R. K. Cytron and P. Lee, editors,
+    Conference Record of POPL’95: 22nd ACM SIGPLAN-SIGACT Symposium on Principles of Programming Languages, San
+    Francisco, California, USA, January 23-25, 1995, pages 333ś343. ACM Press, 1995.
+S. Lindley and J. Cheney. Row-based effect types for database integration. In B. C. Pierce, editor, Proceedings of TLDI 2012:
+    The Seventh ACM SIGPLAN Workshop on Types in Languages Design and Implementation, Philadelphia, PA, USA, Saturday,
+    January 28, 2012, pages 91ś102. ACM, 2012.
+S. Lindley and J. G. Morris. Lightweight functional session types. In S. Gay and A. Ravara, editors, Behavioural Types: from
+    Theory to Tools. River Publishers, 2017.
+S. Lindley, C. McBride, and C. McLaughlin. Do be do be do. In G. Castagna and A. D. Gordon, editors, Proceedings of the
+    44th ACM SIGPLAN Symposium on Principles of Programming Languages, POPL 2017, Paris, France, January 18-20, 2017,
+    pages 500ś514. ACM, 2017.
+H. Makholm and J. B. Wells. Type inference, principal typings, and let-polymorphism for first-class mixin modules.
+    In O. Danvy and B. C. Pierce, editors, Proceedings of the 10th ACM SIGPLAN International Conference on Functional
+    Programming, ICFP 2005, Tallinn, Estonia, September 26-28, 2005, pages 156ś167. ACM, 2005.
+J. McKinna. Complements witness consistency. In Bx@ETAPS, volume 1571 of CEUR Workshop Proceedings, pages 90ś94.
+    CEUR-WS.org, 2016.
+J. C. Mitchell. Polymorphic type inference and containment. Inf. Comput., 76(2-3):211ś249, Feb. 1988.
+J. G. Morris. A simple semantics for Haskell overloading. In W. Swierstra, editor, Proceedings of the 2014 ACM SIGPLAN
+    symposium on Haskell, Gothenburg, Sweden, September 4-5, 2014, pages 107ś118. ACM, 2014.
+J. G. Morris. Variations on variants. In B. Lippmeier, editor, Proceedings of the 8th ACM SIGPLAN Symposium on Haskell,
+    Haskell ’15, pages 71ś81, Vancouver, BC, 2015. ACM.
+B. Oliveira, S. Mu, and S. You. Modular reifiable matching: a list-of-functors approach to two-level types. In Haskell, pages
+    82ś93. ACM, 2015.
+B. Oliveira, Z. Shi, and J. Alpuim. Disjoint intersection types. In J. Garrigue, G. Keller, and E. Sumii, editors, Proceedings of
+    the 21st ACM SIGPLAN International Conference on Functional Programming, ICFP 2016, Nara, Japan, September 18-22,
+    2016, pages 364ś377. ACM, 2016.
+M. Pickering, J. Gibbons, and N. Wu. Profunctor Optics: Modular Data Accessors. The Art, Science, and Engineering of
+    Programming, 1(2), 2017. Article 7.
+F. Pottier and D. Rémy. The essence of ML type inference. In B. C. Pierce, editor, Advanced Topics in Types and Programming
+    Languages. The MIT Press, 2005.
+D. Rémy. Typechecking records and variants in a natural extension of ML. In Conference Record of the Sixteenth Annual
+    ACM Symposium on Principles of Programming Languages, Austin, Texas, USA, January 11-13, 1989, pages 77ś88. ACM
+
+
+                                   Proc. ACM Program. Lang., Vol. 3, No. POPL, Article 12. Publication date: January 2019.
+12:28                                                                    J. Garrett Morris and James McKinna
+
+    Press, 1989.
+T. Sheard and E. Pasalic. Two-level types and parameterized modules. J. Funct. Program., 14(5):547ś587, 2004.
+W. Swierstra. Data types à la carte. J. Funct. Program., 18(04):423ś436, 2008.
+P. Wadler. The expression problem. http://homepages.inf.ed.ac.uk/wadler/papers/expression/expression.txt, 1998.
+M. Wand. Complete type inference for simple objects. In Proceedings of the Symposium on Logic in Computer Science (LICS
+   ’87), Ithaca, New York, USA, June 22-25, 1987, pages 37ś44. IEEE Computer Society, 1987.
+M. Wand. Type inference for record concatenation and multiple inheritance. Inf. Comput., 93(1):1ś15, 1991.
+
+
+
+
+Proc. ACM Program. Lang., Vol. 3, No. POPL, Article 12. Publication date: January 2019.
+
