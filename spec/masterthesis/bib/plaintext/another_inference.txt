@@ -1,0 +1,1510 @@
+Another Type Inference Algorithm for First-Class Implicit
+Polymorphism
+J. GARRETT MORRIS, The University of Iowa, USA
+We propose yet another approach to type inference with first-class implicit polymorphism, based on the
+interleaving of an Algorithm M-style constraint-generating elaboration of terms and a solver for the generated
+constraints. The novelty of our approach is that types include explicit syntactic representations of unknown
+polymorphic types during type inference. Solving unification constraints with unknown polymorphic types
+also computes type arguments for the elaborated terms. The resulting system is uniform, simple, extends to
+support domain-specific constraints, and compares favorably with other approaches to first-class implicit
+polymorphism.
+CCS Concepts: • Software and its engineering → Polymorphism; Functional languages; • Theory of
+computation → Type theory.
+Additional Key Words and Phrases: type inference, impredicative polymorphism, qualified types
+ACM Reference Format:
+J. Garrett Morris. 2026. Another Type Inference Algorithm for First-Class Implicit Polymorphism. Proc. ACM
+Program. Lang. 10, ICFP, Article 304 (August 2026), 29 pages. https://doi.org/10.1145/3828702
+
+1   Introduction
+Implicit polymorphism has been a hallmark of typed functional programming since the introduction
+of Hindley-Milner type inference [17]. It has proved expressive, understandable to programmers,
+easy to implement, and amenable to a variety of extensions, from type classes [29] and type families
+[24], to variant subtyping [5], to generalized algebraic data types [22], to many many more.
+   At the heart of Hindley-Milner type inference is a compromise in the treatment of polymorphic
+types. Quantifiers can appear at the outside of types—∀a.a → a is the type of the identity function—
+but not inside types—the type of self-application, (∀a.a → a) → (∀a.a → a), is not allowed. This
+restriction makes it possible for type inference to be sound and complete, but comes at a significant
+cost in expressiveness. There have been many proposals to relax this restriction, making implicit
+polymorphism closer to first class, each with its own tradeoffs. Some are highly expressive, but at
+the cost of new programmer-visible features of the type system. Others are highly localized in their
+implementation, but introduce more restrictions on where and how polymorphism can be used.
+   Our interest in first-class implicit polymorphism arose from its interaction with qualified types.
+Qualified types add domain-specific constraints to typing and type inference, and can capture ideas
+from type classes [8] to row types [6, 20] to first-class polymorphism itself [16]. Many approaches
+to first-class polymorphism use the type information computed during type inference to guide the
+introduction of implicit type abstractions and implicit type applications. Domain-specific constraint
+solving may reveal polymorphic types (seemingly) too late to introduce implicit type applications.
+This causes a significant loss in the expressiveness of first-class polymorphism.
+Author’s Contact Information: J. Garrett Morris, Department of Computer Science, The University of Iowa, Iowa City, Iowa,
+USA, garrett-morris@uiowa.edu.
+
+
+
+
+This work is licensed under a Creative Commons Attribution 4.0 International License.
+© 2026 Copyright held by the owner/author(s).
+ACM 2475-1421/2026/8-ART304
+https://doi.org/10.1145/3828702
+
+
+                                Proc. ACM Program. Lang., Vol. 10, No. ICFP, Article 304. Publication date: August 2026.
+304:2                                                                                      J. Garrett Morris
+
+
+   We propose Another Type Inference Algorithm (ATIA) for first-class implicit polymorphism.
+While inspired by qualified types, our approach is independent of that application. ATIA consists
+of the interleaving of an Algorithm M-style constraint-generating traversal of terms and a simpli-
+fication algorithm for the generated constraints. Its traversal pushes expected type information
+towards the leaves of the term, rather than returning inferred type information towards the root.
+This is naturally suited to first-class implicit polymorphism, as we will use expected types to guide
+the introduction of implicit polymorphism. The novelty of our approach is that we extend the
+syntax of types with an explicit representation of (both explicit and implicit) type instantiation, but
+only during type inference. Type instantiations never appear in the final computed types. Solving
+unification constraints involving implicit instantiations also computes the type arguments that
+need to appear in the elaborated term. ATIA requires small and routine extensions to traversal,
+is modular in its constraint solving algorithm, and is competitive with the state of the art in type
+inference for first-class implicit polymorphism.
+   The paper proceeds as follows. We begin with an overview of first-class implicit polymorphism
+and our approach to type inference (§2). We introduce a small language with first-class implicit
+polymorphism (§3), and describe the traversal (§4) and constraint solving (§5) portions of ATIA.
+We give two examples of ATIA and its extension (§6). We sketch ATIA’s metatheory (§7), describe
+our (experimental) implementation (§8) and compare it to a collection of benchmarks of first-class
+implicit polymorphism (§9). We conclude by discussing related (§10) and future (§11) work.
+
+2     Overview
+2.1     The Problems of Implicit Polymorphism
+The problem of implicit polymorphism is to, given a term in a language with implicit polymorphism,
+produce a type-correct elaboration of that term in which all implicit polymorphism is made explicit.
+The elaboration may be in a subset of the original language, such as in a setting with dependent
+types, or may be in a different language, such as elaborating Haskell programs to programs in
+System FC. Following Kovács [11], we divide this into two problems, abstraction insertion and
+application insertion. Abstraction insertion is the problem of discovering which terms should be
+surrounded with implicit type abstractions, and application insertion is discovering which terms
+should be followed by implicit type application.
+   Consider the term auto (λx.x) true, where auto : (∀a.a → a) → (∀a.a → a) is self-appliction,
+and true : Bool is a Boolean constant. One elaboration of this term is to auto (Λt.λx:t.x) [Bool] true
+(where we write explicit type abstraction with Λ and explicit type application with [−]). In producing
+this elaboration, we have inserted a type abstraction surrounding λx.x, giving a valid argument to
+auto. We have inserted a type application following auto(λx.x), as its result (of type ∀a.a → a)
+must be instantiated to apply to a Boolean argument.
+   Hindley-Milner type inference gives a purely syntactic solution to these problems: type ab-
+stractions are introduced at let-bindings, and type applications are introduced at variables. MLF
+allows arbitrary insertion of type abstractions and type applications, but must extend quantification
+with an instantiation relation. Most other solutions use some combination of syntactic restriction
+and type information. QuickLook [25], for instance, can be summarized in part as allowing type
+applications anywhere in application spines, guided by the types of the terms at their heads.
+
+2.2     Implicit Polymorphism and Constraints
+Our interest in this problem arose from the intersection of first-class implicit polymorphism and
+qualified types. The former requires type inference to discover the need for implicit type arguments,
+typically by observing that a term has polymorphic type but appears in a context which does not
+
+Proc. ACM Program. Lang., Vol. 10, No. ICFP, Article 304. Publication date: August 2026.
+Another Type Inference Algorithm for First-Class Implicit Polymorphism                                           304:3
+
+
+supply type arguments. The latter introduces a distinct constraint solving step to type inference,
+which may refine metavariables introduced during type inference. In combination, then, constraint
+solving may lead to polymorphism appearing in terms after the initial type inference pass, and so
+not triggering implicit argument insertion.
+   To make this problem concrete, we describe a specific example we countered in implementing
+type inference for Rω [7]. Rω is an extension of Fω with qualified types and row types. A row type
+is an association of labels (type-level immmutable strings) to types or type constructors, written
+{ℓ1 ⊲ τ1 . . . ℓn ⊲ τn }. Rows are used to describe the fields of record types and the constructors of
+variant types. Rω has several constraints on rows, which appear in qualified types. For example,
+the constraint ρ 1 ≲ ρ 2 is satisfied if every association ℓ ⊲ τ appearing in ρ 1 also appears in ρ 2 .
+   In this setting, we encountered the term sel d k f x with expected type T υ, in which: sel :
+∀l t z.{l ⊲ t} ≲ z ⇒ Record z → Sing l → t is the polymorphic field selection function for records;
+d : Record ρ is some record; k : Sing ℓ is a singleton corresponding to field ℓ; f : τ → υ is a function;
+and, x : T τ is a value. Why we encountered this particular term is unimportant here. Inferring a
+type for this term requires finding suitable instantiations for the type variables l, t, and z in the
+type of sel. The natural solutions are ρ for z, ℓ for l, and (τ → υ) → T τ → T υ for t, and so type
+inference produces the elaborated term sel [ρ] [ℓ] [(τ → υ) → T τ → T υ] d k f x and emits the
+constraint {ℓ ⊲ (τ → υ) → T τ → T υ} ≲ ρ. (There is also an implicit argument to sel for the
+solution of this constraint; we have omitted it as it is not relevant to the current problem.)
+   Unfortunately, the emitted constraint is not satisfiable and so type inference for this term will fail.
+The corresponding entry of ρ is ℓ ⊲ ∀ab.(a → b) → T a → T b, and the types (τ → υ) → T τ → T υ
+and ∀ab.(a → b) → T a → T b do not unify. It is not the case, however, the that initial term
+was necessarily ill-typed, just that the natural introduction of implicit arguments was insufficient.
+The correct elaboration of this term is sel [ρ] [ℓ] [∀ab.(a → b) → T a → T b] d k [τ] [υ] f x, with
+emitted constraint {ℓ ⊲ ∀ab.(a → b) → T a → T b} ≲ ρ. This constraint is satisfiable, and so
+type inference succeeds. This example raises two questions: how was type inference to know
+that implicit arguments were needed after k, and how should the need to solve those implicits be
+conveyed to constraint solving? We emphasize that the row ρ is not necessarily known in advance:
+ρ itself might be a metavariable, capturing the type of some other complex expression. Interleaving
+type inference and constraint solving, hoping to surface polymorphism sooner, is not a scalable
+solution.
+
+2.3   Our Approach
+ATIA combines an Algorithm M-style traversal of terms, producing elaborated terms and a set of
+constraints (unification and otherwise), and a solver for the generated constraints. We extend the
+grammar of types, only as they appear during constraint generation and constraint solving, to capture
+potential implicit polymorphism, and extend unification to resolve potential implicit polymorphism.
+The resulting algorithm is expressive, modular, and relatively simple to implement.
+   Algorithm M, named and formalized by Lee and Yi [13], is Milner’s Algorithm W turned upside
+down. Like Algorithm W, it is a (single) traversal of the input term, computing (if possible) a typing
+of the input term and corresponding elaboration. In Algorithm W, the inferred type of a term is a
+result of the algorithm, and so unification is typically performed at interior nodes of the syntax
+tree. In Algorithm M, the expected type of a term is an input to the algorithm, and so unification
+is typically performed at leaves of the syntax tree.
+   There are multiple reasons to prefer Algorithm M. Lee and Yi show that Algorithm M stops
+earlier than Algorithm W does—that is to say, closer to the leaves of the syntax tree—and thus more
+tightly identifies type errors. In the context of first-class implicit polymorphism, Algorithm M
+can push polymorphic types from functions to their arguments, improving the typing of those
+
+                               Proc. ACM Program. Lang., Vol. 10, No. ICFP, Article 304. Publication date: August 2026.
+304:4                                                                                      J. Garrett Morris
+
+
+arguments. However, Algorithm M might seem to adapt poorly to polymorphic systems with
+explicit type arguments. Consider inference for a term M [A] with expected type B. We would like
+to compute an expected type for M, but cannot do so directly from A and B.
+   We address this problem by introducing an explicit representation of unknown polymorphism.
+The type [A]B denotes all polymorphic types ∀t.C such that C{A/t} is B. We generalize to arbitrary
+sequences of implicit arguments, and introduce metavariables that stand in for sequence of implicit
+arguments. Finally, we extend unification with rules that match known quantifiers against unknown
+polymorphism. Returning to our motivating example, we can initially elaborate sel d k f x with
+unknown instantiations following sel itself and each application. We then resolve these instantiation,
+when solving unification and row constraints, giving the desired elaboration.
+   Note that [−]− itself is a kind of “pseudotype” constructor, in that it has no introduction or
+elimination rules, does not (uniquely) classify any terms, and never appears in a final elaborated
+term or its typing. Instead, it exists only during type inference, to guide the generation and solving
+of unification constraints.
+   While our problem was motivated by the interaction between qualified types and first-class
+polymorphism, our solution is more general. By disconnecting the insertion of implicit arguments
+from their determination, we allow more flexible uses of first-class polymorphism while providing
+for a modular and (relatively) simple implementation. One essential challenge of type inference
+for first-class implicit polymorphism is that the same source term may have multiple valid but
+incompatible elaborations. As we will show (§6), ATIA makes it possible to defer the choice between
+elaborations until later in type inference, without losing the ability to apply sensible defaults in
+cases where there is genuinely an unforced choice.
+
+2.4     Comparison with Related Approaches
+There have been many proposals of type inference algorithms for first-class implicit polymorphism.
+Before plunging into the technical presentation of yet another such, we want to contrast our
+approach with two other proposals.
+   QuickLook [25] is the approach currently implemented in GHC. Haskell is an ornate language,
+with many mostly orthogonal type system features and much syntactic sugar. One of QuickLook’s
+design goals is to impact as little as possible of the rest of the type system, and so minimize the
+change to the compiler. QuickLook’s designers highlight that its implementation changed only
+1% of GHC’s type inference mechanism. ATIA, in contrast, involves a fundamental change to the
+structure of types used during type inference, and impacts the inference rules for all elimination
+forms. Nevertheless, our experience suggests that this change is not unmanageable (§8). Our
+treatment of elimination forms is uniform and so can itself be abstracted. Moreover, we did not
+need special handling of unknown polymorphism in simplifying constraints arising from row types
+or higher-order unification.
+   Haskell is the most widely used language to use qualified types, and QuickLook is a constraint-
+based algorithm. However, Haskell’s type class constraints and type families specifically exclude
+polymorphic types, a restriction that has not been lifted by any of GHC’s many extensions. Therefore,
+the specific motivation for our work, in which domain-specific constraint solving discovers that
+terms have polymorphic types, does not arise for QuickLook.
+   Kovács has developed several type inference algorithms for first-class implicit polymorphism,
+including FCIF [10] (first-class implicit functions) and DOE [11] (dynamic order of elaboration).
+Dependent types are an explicit goal of Kovács’s systems, whereas we have not considered whether
+or how ATIA would extend to dependent types. There are two significant differences between
+our approach and those of Kovács. First, we have a constraint-based system, whereas his systems
+perform unification and insertion as part of a single bi-directional traversal. Supporting separate
+
+Proc. ACM Program. Lang., Vol. 10, No. ICFP, Article 304. Publication date: August 2026.
+Another Type Inference Algorithm for First-Class Implicit Polymorphism                                           304:5
+
+
+                Term variables x                             Type environments            Γ ::= ε | Γ, x : A
+                Type variables t, u                    Pseudotype environments            Ψ ::= ε | Ψ, x : P
+                 Metavariables α                             Kind environments            Δ ::= ε | Δ, t
+        Sequence metavariables ι                                 Constraint sets          Θ ::= ε | Θ, C
+             Types               A, B ::= t | ∀t.A | A → B
+             Pseudotypes         P, Q ::= α Δ | t | ∀t.P | P → Q | [S]P
+             Pseudotype sequences S ::= ι Δ | • | P :: S
+             Terms              M, N ::= x | λx.M | λx:A.M | M N | Λt.M | M [S]
+             Constraints            C ::= P = Q
+
+                                                   Fig. 1. Syntax
+
+
+
+constraint solving, and in particular not constraining implicit instantiation to only the type in-
+formation available when first traversing applications, is a key goal of our approach. Second, we
+represent unknown polymorphism in terms of the result of instantiation, whereas FCIF introduces
+unknown telescopes in the types to be instantiated. Both approaches lead to effective and expressive
+type inference algorithms.
+
+3   Language
+We begin by introducing our surface and elaborated languages. Their syntax is given in Figure 1.
+The elaborated language is the subset of the surface language in which all type abstraction and
+application are explicit and all term abstractions have type annotations. This subset is enforced
+by a typing judgment, described later in this section. Note that the surface language allows both
+implicit and explicit type abstraction and type application.
+
+  Types. We distinguish types A from pseudotypes P. Types contain the usual constructs: type
+variables t, quantified types ∀t.A, and functions A → B (standing in for arbitrary type constructors).
+The extension of ATIA to higher-kinded types is routine and orthogonal to the goals of this paper.
+
+  Pseudotypes. Pseudotypes extend types with metavariables α and unknown polymorphism [S]P.
+Metavariables represent unknown types during type inference. Metavariables are annotated with
+kinding environments Δ, used to avoid variable escape. We will reject attempts to assign type
+A to metavariable α Δ unless the type variables of A are included in Δ. The pseudotype [S]P
+captures all polymorphic types that give P when instantiated with the sequence of types S. For
+example, [A :: B :: •] (A → B) corresponds to any of ∀tu.t → u, ∀tu.A → u, ∀tu.t → B, and
+∀tu.A → B. Sequences of types may be terminated by a sequence metavariable ι, representing
+potential instantiations, or with the empty sequence •. For example, [ι]A → A corresponds to both
+∀t.t → t, in which case we must have that ι ↦→ A :: •, or to A → A, in which case we must have
+that ι ↦→ •. We will write P :: S for the sequence beginning with the Ps and continuing with S.
+
+   Terms. Terms M are mostly standard, and include both pre- and post-elaboration terms. We
+allow function abstraction both with and without type annotation, but will not allow the latter
+post-elaboration. Type application M [S] uses sequences of types, not individual types, to support
+inferring unknown instantiations. Outside type inference, these can be viewed simply as iterated
+type application. We will assume that the input to type inference does not contain any metavariables,
+that is, that type annotations are proper types A and that type applications are of the form M [A :: •].
+
+                               Proc. ACM Program. Lang., Vol. 10, No. ICFP, Article 304. Publication date: August 2026.
+304:6                                                                                                      J. Garrett Morris
+
+
+
+                                       Δ⊢A                                                 Δ⊢Γ
+
+                                  Δ ⊢ A1 Δ ⊢ A2             Δ, t ⊢ A                        Δ⊢Γ Δ⊢A
+                  Δ1, t, Δ2 ⊢ t    Δ ⊢ A1 → A2              Δ ⊢ ∀t.A           Δ⊢ε           Δ ⊢ Γ, x:A
+
+                                                       Δ; Γ ⊢ M : A
+
+            (t-∀I)                        (t-∀E)                                      (t-•)
+                    Δ, t; Γ ⊢ M : A           Δ; Γ ⊢ M [B :: •] : ∀t.A     Δ ⊢ B′            Δ; Γ ⊢ M : A
+                  Δ; Γ ⊢ Λt.M : ∀t.A          Δ; Γ ⊢ M [B :: B′ :: •] : A{B′ /t}            Δ; Γ ⊢ M [•] : A
+
+    (t-var)                          (t-→I)                                (t-→E)
+            Δ ⊢ Γ1, x:A, Γ2             Δ ⊢ A Δ; Γ, x:A ⊢ M : B              Δ; Γ ⊢ M : A → B Δ; Γ ⊢ N : A
+         Δ; Γ1, x:A, Γ2 ⊢ x : A          Δ; Γ ⊢ λx:A.M : A → B                       Δ; Γ ⊢ M N : B
+
+                                       Fig. 2. Type system for elaborated terms
+
+
+                                           Θ⊢P⇒P                   Θ⊢S⇒S
+
+                 (s-var)           (s-solvedα )                                      (s-unsolvedα )
+                                     α =P ∈Θ          P ≠ [S]P ′ Θ ⊢ P ⇒ Q                 ∀Q, α = Q ∉ Θ
+                    Θ⊢t⇒t                             Θ⊢α ⇒Q                                Θ⊢α ⇒α
+         (s-→)                                      (s-∀)                     (s-cat-•)
+           Θ ⊢ P1 ⇒ P2 Θ ⊢ Q1 ⇒ Q2                          Θ⊢P⇒Q               Θ ⊢ S1 ⇒ • Θ ⊢ P1 ⇒ P2
+            Θ ⊢ P1 → Q1 ⇒ P2 → Q2                     Θ ⊢ ∀t.P ⇒ ∀t.Q                Θ ⊢ [S1 ]P1 ⇒ P2
+        (s-cat)                                              (s-inst)                              (s-•)
+          Θ ⊢ S1 ⇒ Q1 :: •        Θ ⊢ P1 ⇒ [Q2 ]P2             Θ ⊢ S1 ⇒ S2 Θ ⊢ P1 ⇒ P2
+                    Θ ⊢ [S1 ]P1 ⇒ [Q1 Q2 ]P2                      Θ ⊢ [S1 ]P1 ⇒ [S2 ]P2               Θ⊢•⇒•
+
+             (s-::)                                    (s-solvedι )                        (s-unsolvedι )
+                   Θ ⊢ P1 ⇒ P2 Θ ⊢ S1 ⇒ S2                  ι = S ∈ Θ Θ ⊢ S ⇒ S′             ∀S, ι = S ∉ Θ
+                      Θ ⊢ P1 :: S1 ⇒ P2 :: S2                     Θ ⊢ ι ⇒ S′                  Θ⊢ι ⇒ι
+
+                                                   Fig. 3. Normalization
+
+
+  Typing, post-elaboration. Figure 2 gives typing rules for the elaborated language. Function argu-
+ments must have type annotations. Type applications M [B :: •] are typed as repeated application:
+rule (t-∀E) removes the last (that is, outermost) type argument, and rule (t-•) handles empty type
+applications. Note that pseudotypes are not allowed by this judgment.
+   Constraints and constraint sets. Sets Θ of unification constraints P = Q are generated and solved
+during type inference, but do not appear directly in types or terms. We call a set of constraints
+reduced if every constraint is either of the form α Δ = P or ι Δ = S. The judgment Θ ⊢ P ⇒ P ′ , defined
+in Figure 3, holds if P ′ is the normal form of P, interpreting equations α = Q and ι = S in Θ as
+rewrites. Most of the rules are homomorphic extensions of the replacement of solved metavariables.
+
+Proc. ACM Program. Lang., Vol. 10, No. ICFP, Article 304. Publication date: August 2026.
+Another Type Inference Algorithm for First-Class Implicit Polymorphism                                            304:7
+
+
+
+                                            Δ; Ψ; Θ ⊢ M : P ↩→ N ⊣ Θ
+
+                                       Δ, t; Ψ; Θ1, P = ∀t.β Δ,t ⊢ M : β Δ,t ↩→ N ⊣ Θ2
+                           (i-tlam)
+                                            Δ; Ψ; Θ1 ⊢ Λt.M : P ↩→ Λt.N ⊣ Θ2
+                                      Θ1 ; Δ, t; Ψ ⊢ M : P ↩→ N ⊣ Θ2
+                        (i-forall)                                     (M ≠ Λt.M ′ )
+                                     Θ1 ; Δ; Ψ ⊢ M : ∀t.P ↩→ Λt.N ⊣ Θ2
+                                 In the following rules, we require that P ≠ ∀t.Q.
+
+                                Δ⊢A       Δ; Ψ, x:A; Θ1, P = A → β 2Δ ⊢ M : β 2Δ ↩→ N ⊣ Θ2
+                     (i-alam)
+                                          Δ; Ψ; Θ1 ⊢ λx:A.M : P ↩→ λx:A.N ⊣ Θ2
+
+                                   Δ; Ψ, x:β 1Δ ; Θ1, P = β 1Δ → β 2Δ ⊢ M : β 2Δ ↩→ N ⊣ Θ2
+                        (i-ulam)
+                                           Δ; Ψ; Θ1 ⊢ λx.M : P ↩→ λx:β 1 .N ⊣ Θ2
+                           (i-var)
+                                     Δ; Ψ1, x:P, Ψ2 ; Θ ⊢ x : Q ↩→ x [ι] ⊣ Θ, P = [ι]Q
+
+                     Δ; Ψ; Θ1 ⊢ M1 : β Δ → [ι Δ ]P ↩→ N1 ⊣ Θ2           Δ; Ψ; Θ2 ⊢ M2 : β Δ ↩→ N2 ⊣ Θ3
+           (i-app)
+                                       Δ; Ψ; Θ1 ⊢ M1 M2 : P ↩→ (N1 N2 ) [ι Δ ] ⊣ Θ3
+
+                                            Δ; Ψ; Θ1 ⊢ M : [ι Δ ] [S]P ↩→ N ⊣ Θ2
+                            (i-tapp)
+                                        Δ; Ψ; Θ1 ⊢ M [S] : P ↩→ (N [S]) [ι Δ ] ⊣ Θ2
+                                              ∗
+                                         Θ1 −
+                                            −→ Θ2 Δ; Ψ; Θ2 ⊢ M : P ↩→ N ⊣ Θ3
+                             (i-simpl)
+                                              Δ; Ψ; Θ1 ⊢ M : P ↩→ N ⊣ Θ3
+                              Θ ⊢ Ψ, M, P ⇒ Ψ′, M ′, P ′ Δ; Ψ′ ; Θ1 ⊢ M ′ : P ′ ↩→ N ⊣ Θ2
+                  (i-subst)
+                                           Δ; Ψ; Θ1 ⊢ M : P ↩→ N ⊣ Θ2
+
+                                          Fig. 4. Type inference: traversal
+
+
+Rules (s-cat) and (s-cat-•) collapse sequences of known instantiations. At this point, we do not
+enforce any well-formedness requirement on Θ, and so it may be the case that normalization of a
+given type is not defined. In type inference, we will guarantee that generated constraint sets are
+well-formed such that normalization is always defined.
+
+4   Traversal
+ATIA has two stages. In the first, described in this section, we traverse the syntax of a term,
+generating both an elaborated term and a set of unification constraints. In the second, described in
+the next section, we (hopefully) solve the generated constraints. Unlike many constraint-based type
+inference systems, however, the expressiveness of our system depends on intertwining traversal
+and constraint solving.
+   Traversal is described by the judgment Δ; Ψ; Θ1 ⊢ M : P ↩→ N ⊣ Θ2 , given in Figure 4. Intuitively,
+traversal has five inputs—a kind environment Δ, a pseudotype environment Ψ, a set of constraints
+Θ1 , a term M, and an expected pseudotype P—and generates two outputs—an elaborated term N ,
+
+                                Proc. ACM Program. Lang., Vol. 10, No. ICFP, Article 304. Publication date: August 2026.
+304:8                                                                                      J. Garrett Morris
+
+
+and an expanded set of constraints Θ2 . We will always have that Θ2 implies Θ1 (more formally
+described by Lemma 6). In the style of Algorithm M and of Pottier and Rémy [23], but in contrast
+to many other type inference systems, we treat the expected type always as an input to type
+inference, and never have inferred types as an output. However, as the expected type may contain
+metavariables, we do not enforce information flow as bidirectional approaches do.
+   At a high level, we divide our traversal rules into three categories. Introduction steps correspond
+to the introduction of some type former, directed either by the term itself or by its expected type.
+Introduction steps restrict the expected type; for example, typing an abstraction λx.M only makes
+sense if the expected type is a function type A → B. This restriction will appear as a new input
+constraint in subderivations. Elimination steps correspond to the elimination of some type former.
+Elimination steps build the expected types of their subterms from their expected type. Elimination
+steps also provide the opportunity for implicit instantiation. Simplification steps manipulate the
+constraint set, or use the input constraints to transform the type inference problem. We will describe
+the rules in each category in turn. As a running example, we will infer the type of auto (λx.x) true,
+where auto : (∀a.a → a) → (∀a.a → a) = λx.x x and true : ∀b.b → b → b = λx y.x.
+
+4.1     Introduction Steps
+Rule (i-tlam) checks explicit type abstractions, and establishes the form of introduction rules. We
+elaborate the body M to N in an environment that additionally binds type variable t. The expected
+type of the body is a new metavariable β, but with the additional constraint that the expected type
+P unifies with ∀t.β. (We will always use β for new metavariables.) As Θ2 entails Θ1 , this constraint
+propagates to the output of (i-tlam).
+   Our implementation attempts to solve the unification constraint P = ∀t.α eagerly. This has two
+benefits. First, should the expected type not have a quantifier at its head, we can immediately report
+a type error. Second, should the expected type have a quantifier at its head, we may also acquire
+additional type expectation for the body. To simplify this presentation, we have separated eager
+unification into rules (i-simpl,i-subst), which we describe later in this section (§4.3). Nevertheless,
+the role of eager unification is emphasized by constraints being added to the inputs above the line,
+not to the outputs below it.
+   Rule (i-forall) inserts implicit type abstractions, guided by the expected type. If the term M is
+not a type abstraction, but the expected type is a quantified type ∀t.P, we introduce type variable t
+in the context and correspondingly add a type abstraction Λt in the elaborated term. We assume
+that the quantified variable t is fresh; our implementation uses de Bruijn indices, and so freshness
+of variables is not a concern. We apply rule (i-forall) eagerly; the other rules should all be read
+as having the side condition that the expected type P is not quantified. Because (i-forall) only
+inserts type abstractions based on the expected type, the introduction of type abstractions is still
+limited by the order of traversal. Relaxing this restriction is an important area of future work.
+   Rule (i-alam) types annotated functions, and rule (i-ulam) types unannotated functions. In
+both cases, we extend the environment with the argument type (a new metavariable β 1 in the
+unannotated case), and the check the body with a new metavariable β 2 subject to the requirement
+that the expected type P unify with A → β 2 or β 1 → β 2 , respectively. Again, by eagerly solving
+this constraint, our implementation both reports errors sooner and refines the expected type of the
+body of the function.
+
+  Demonstration. As a demonstration, we infer the type of the subterm λx.x of auto (λx.x) true.
+We assume that we are working in the empty kinding environment, have some initial pseudotype
+environment Ψ—which should contain auto and true, but is actually irrelevant to this term—and
+an initial constraint set Θ. The argument to auto should be a polymorphic function, so we will
+
+Proc. ACM Program. Lang., Vol. 10, No. ICFP, Article 304. Publication date: August 2026.
+Another Type Inference Algorithm for First-Class Implicit Polymorphism                                           304:9
+
+
+provide the expected type ∀a.a → a. The mechanics of how this becomes the expected type will be
+discussed in the next section.
+ε; Ψ; Θ ⊢ λx.x : ∀a.a → a ↩→
+We must apply rule (i-forall): the expected type is quantified, and the term is not a type abstraction.
+We pick a new type variable, t, add it to the typing environment, and use it to instantiate the expected
+type ∀a.a → a.
+   t; Ψ; Θ ⊢ λx.x : t → t ↩→
+   Rule (i-ulam) applies. We invent fresh metavariables α 1 and α 2 for the domain and codomain
+   of the function, and constrain the expected type t → t to equal α 1 → α 2 . Finally, we add the
+   parameter x to the typing assumptions, and infer the type of the body.
+      t; Ψ, x:α 1t ; Θ, α 1t → α 2t = t → t ⊢ x : α 2t ↩→
+      The new metavariables are annotated with the current kind environment, allowing solutions
+      including the type variable t. Our implementation applies constraint simplification and sub-
+      stitution eagerly during type inference. In this case, we can simplify an equality on function
+      types to equalities on the domain and codomain.
+         Θ, α 1t → α 2t = t → t −→ Θ, α 1t = t, α 2t = t
+         Having solved the metavariables α 1 and α 2 , we can substitute into our environment and
+         expected type.
+         t; Ψ, x:t; Θ, α 1t = t, α 2t = t ⊢ x : t ↩→
+         By eagerly simplifying and substituting, we provide a precise expected type for the body of
+         the function. We maintain the equalities on α 1t and α 2t to maintain the metatheoretic property
+         that the output constraints entail the input constraints. The variable rule, discussed next,
+         applies. We defer further discussion of the variable rule to the next example.
+            ↩→ x [ι 1t ] ⊣ Θ, α 1t = t, α 2t = t, [ι 1t ]t = t
+            Variables provide an opportunity for implicit instantiation. In this case, no instantiation is
+            needed; the only solution to [ι 1t ]t = t is to set ι 1t to the empty sequence •.
+      ↩→ λx:α 1t .x [ι 1t ] ⊣ Θ, α 1t = t, α 2t = t, [ι 1t ]t = t
+      The elaborated function still contains metavariables awaiting a final substitution. Our imple-
+      mentation updates metavariables in place, avoiding any additional term traversals.
+   ↩→ Λt.λx:α 1t .x [ι 1t ] ⊣ Θ, α 1t = t, α 2t = t, [ι 1t ]t = t
+   The type abstraction induced by the quantifier in the expected type appears in the final elaborated
+   term. We could do a further substitution step to arrive at the term Λt.λx:t.x [ι 1t ], but doing so
+   would have no further effect on type inference, so we leave all such substitutions to the end.
+
+4.2   Elimination Steps
+Rule (i-var) checks variables, and establishes the form of elimination rules. While the variable
+rule is not an elimination rule in declarative type systems, in systems with implicits it frequently
+corresponds to elimination of implicit arguments, as it does for us. Correspondingly, we elaborate
+variable x to the implicit application x [ι]. Here ι is a new metavariable, to be instantiated with
+a (potentially empty) sequence of instantiations. We look up the actual type of x, P, and require
+that P instantiated with ι unify with the expected type Q. Note that, like Pottier and Rémy [23]
+but unlike most presentations of type inference, our variable rule does not do any instantiation
+directly. Instead, the potential for instantiation is all deferred to solving the generated constraint.
+   Rule (i-app) checks applications. At its heart, the rule here is the same as in Algorithm M: to
+check an application with expected type P, we check the function with expected type β → P and the
+
+                               Proc. ACM Program. Lang., Vol. 10, No. ICFP, Article 304. Publication date: August 2026.
+304:10                                                                                     J. Garrett Morris
+
+
+argument with expected type β. There are two sources of complication. First, as with all elimination
+forms, we follow explicit applications with potential implicit applications. This is reflected in our
+elaboration, N1 N2 [ι], where ι is (again) a new sequence metavariable. It is also reflected in the
+type of the function, in which the codomain [ι]P includes unknown polymorphism. Second, we
+want the function’s domain type—specifically, first-class polymorphism in the domain type—to
+influence type checking the argument. This is accomplished by threading the output constraints Θ2
+of the function into the input constraints of the argument. In particular, this can justify application
+of (i-forall), but only in the argument. Generalizing the introduction of implicit type abstractions
+would eliminate this order dependence.
+   Rule (i-tapp) checks type applications. Again, we allow for implicit arguments ι following the
+explicit arguments S, as reflected in both the elaboration and the expected type for M. There may
+seem to be an unforced choice here: why do the implicit arguments follow S? However, consider
+the possible forms of M. If M is an elimination form or variable, its elaboration will insert potential
+implicit arguments preceding S. If it is an explicit function, it is a type error. In the only remaining
+case, the input term is a β-redex (Λt.M) [A], and in such a case it seems clear we should not
+introduce new (implicit) type arguments between (Λt.M) and A.
+
+   Demonstration. We now infer the remainder of the term auto (λx.x) true. We assume a pseu-
+dotype environment Ψ that includes auto and true, but otherwise start with a blank slate: we
+have an empty kinding environment, no incoming constraints, and no knowledge of the term’s
+intended type. We will omit the kind environment annotations on metavariables created in the
+empty environment.
+ε; Ψ; ε ⊢ auto (λx.x) true : α 3 ↩→
+Rule (i-app) applies. In addition to inventing types for the function and argument, initially typed
+with a new metavariable α 4 , we also introduce a potential implicit instantiation ι 2 at the end of the
+term.
+   ε; Ψ; ε ⊢ auto (λx.x) : α 4 → [ι 2 ]α 3 ↩→
+   Again, (i-app) applies. We generate another new metavariable α 5 for the argument, and add
+   another potential implicit instantiation ι 3 .
+      ε; Ψ; ε ⊢ auto : α 5 → [ι 3 ] (α 4 → [ι 2 ]α 3 ) ↩→
+      We have reached a variable. Variables add one more potential implicit instantiation, ι 4 . We
+      assume that Ψ contains the binding auto : (∀a.a → a) → (∀a.a → a).
+         ↩→ auto [ι 4 ] ⊣ [ι 4 ] (α 5 → [ι 3 ] (α 4 → [ι 2 ]α 3 )) = (∀a.a → a) → (∀a.a → a)
+      ε; Ψ; [ι 4 ] (α 5 → [ι 3 ] (α 4 → [ι 2 ]α 3 )) = (∀a.a → a) → (∀a.a → a) ⊢ λx.x : α 5 ↩→
+      Our next step is to type the first argument to auto, λx.x. We would like to follow the derivation
+      from the end of the previous subsection. There, however, we knew that we were inferring
+      a term with polymorphic type. Here, all we (seem to) know is that the term has type α 5 . To
+      resolve the difference, we must simplify the generated constraints and substitute.
+         [ι 4 ] (α 5 → [ι 3 ] (α 4 → [ι 2 ]α 3 )) = (∀a.a → a) → (∀a.a → a)
+          ∗
+         −→ ι 4 = •, α 5 = ∀a.a → a, ι 3 = α 6 :: •, α 4 = α 6, α 6 = [ι 2 ]α 3
+         −
+         We will describe the mechanism of simplification, with reference to this example, in the next
+         section. For the time being, note that we have instantiated the quantifier in the result of auto
+         to a new metavariable α 6 , and that we have learned that α 5 , the expected type of λx.x, is
+         ∀a.a → a. We let Θ be the simplified constraint set and substitute.
+         ε; Ψ; Θ ⊢ λx.x : ∀a.a → a ↩→
+
+Proc. ACM Program. Lang., Vol. 10, No. ICFP, Article 304. Publication date: August 2026.
+Another Type Inference Algorithm for First-Class Implicit Polymorphism                                          304:11
+
+
+          Inference proceeds as before.
+          ↩→ Λt.λx:α 1t .x [ι 2t ] ⊣ Θ, α 1t = t, α 2t = t, [ι 1t ]t = t
+     ↩→ auto [ι 4 ] (Λt.λx:α 1t .x [ι 2t ]) [ι 3 ] ⊣ Θ, α 1t = t, α 2t = t, [ι 1t ]t = t
+  We have reached the argument of the outer application.
+  ε; Ψ; Θ, α 1t = t, α 2t = t, [ι 1t ]t = t ⊢ true : α 4 ↩→
+  We can substitute, using the information we learned from the type of auto.
+     ε; Ψ; Θ, α 1t = t, α 2t = t, [ι 1t ]t = t ⊢ true : [ι 2 ]α 3 ↩→
+     The variable rule applies, giving one final opportunity for instantiation.
+        ↩→ true [ι 5 ] ⊣ Θ, α 1t = t, α 2t = t, [ι 1t ]t = t, [ι 5 ] [ι 2 ]α 3 = ∀b.b → b → b
+  ↩→ auto [ι 4 ] (Λt.λx:α 1t .x [ι 1t ]) [ι 3 ] (true [ι 5 ]) [ι 2 ] ⊣
+         Θ, α 1t = t, α 2t = t, [ι 1t ]t = t, [ι 5 ] [ι 2 ]α 3 = ∀b.b → b → b
+  In the final elaborated term, we see the full handling of implicit polymorphism: the potential
+  instantiation after each application and the type abstraction inserted around the identity function.
+  Applying the equations discovered so far and removing the no longer needed equations from the
+  constraint set will make the result of type inference clearer.
+  ↩→ auto (Λt.λx:t.x) [[ι 2 ]α 3 :: •] (true [ι 5 ]) [ι 2 ] ⊣ [ι 5 ] [ι 2 ]α 3 = ∀b.b → b → b
+One constraint remains unsolved. In fact, this constraint has three solutions, and each corresponds
+to a different valid elaboration of the original term. Should we choose ι 2 = ι 5 = •, in essence
+choosing to do no further instantiation, we must have α 3 = ∀b.b → b → b. Our elaborated term
+becomes auto (Λt.λx:t.x) [∀b.b → b → b :: •] true. That is, we provide the identity function to
+auto, getting an identity function in return. We instantiate that identity function with the Church-
+encoding of Booleans, and so can apply it to true to produce a Boolean result. We will discuss
+constraints with multiple solutions, and our handling of them, with the other details of constraint
+solving, in the next section.
+
+4.3   Simplification Steps
+Rules (i-simpl) and (i-subst) implement constraint simplification and unification variable substitu-
+                                              ∗
+tion. Simplification of constraints sets Θ1 −−→ Θ2 is described in the next section (§5). We write
+Θ ⊢ Ψ, M, P ⇒ Ψ , M , P to compact the three corresponding substitution judgments. Neither of
+                   ′  ′  ′
+
+these rules is syntax directed, and so they may appear at any point in a traversal. However, they
+are not difficult to place, as they can be limited to those cases where the input constraints in a
+subproblem are different from the input constraints of the root problem. Concretely, these are when
+traversing the body of a type or term abstraction (i-tlam,i-alam,i-ulam), and when traversing the
+argument of an application (i-app).
+
+4.4   Generalization
+We do not include a treatment of generalization or the corresponding local binding form. This is
+because generalization is an essentially orthogonal problem (albeit one that is very much not or-
+thogonal to generalizing implicit type abstraction). Adding top-level generalization to our approach
+is entirely routine. Recall the final state of the auto example:
+
+             ↩→ auto (Λt.λx:t.x) [[ι 2 ]α 3 :: •] (true [ι 5 ]) [ι 2 ] ⊣ [ι 5 ] [ι 2 ]α 3 = ∀b.b → b → b
+
+Another potential solution would be to instantiate at true. (This corresponds to the common
+intuition that, when in doubt, instantiate near variables.) We would invent a new metavaraiable α 7 ,
+
+                               Proc. ACM Program. Lang., Vol. 10, No. ICFP, Article 304. Publication date: August 2026.
+304:12                                                                                                              J. Garrett Morris
+
+
+                                                     Θ −→ Θ            Θ ∼⇝ Θ
+            Θ, P1 → P2 = Q1 → Q2 −→ Θ ⊕ P1 = Q1 ⊕ P2 = Q2                                                                   (c-arr)
+                      Θ, ∀t.P1 = ∀t.P2 −→ Θ ⊕ P1 = P2                                                                        (c-all)
+                                Θ, t = t −→ Θ                                                                             (c-reflt )
+                           Θ, α Δ = α Δ −→ Θ                                                                              (c-reflα )
+                             Θ, ι Δ = ι Δ −→ Θ                                                                            (c-reflι )
+                                   Θ, C −→ Θ ⊕ C      ′
+                                                                                               if Θ ⊢ C ⇒ C     ′
+                                                                                                                          (c-subst)
+                          Θ, [•]P = Q −→ Θ ⊕ P = Q                                                                       (c-empty)
+                 Θ, [P :: S]Q1 = ∀t.Q2 −→ Θ ⊕ [S]Q1 = Q2 {P/t}                                                              (c-seq)
+                                                                                                                         ′
+                    Θ, [ι 1Δ ]Q1 = ∀t.Q2 −→ Θ ⊕ [ι 2Δ ]Q1 = Q2 {β Δ /t} ⊕ ι 1Δ = β Δ :: ι 2Δ   if Q1 ≠ [S]Q1′ , Q1 ≠ α Δ
+                                                                                                                           (c-impl)
+                            Δ                                     Δ                                                      ′
+                       Θ, [ι ]Q1 = Q2 −→ Θ ⊕ Q1 = Q2 ⊕ ι = •                                   if Q2 ≠ ∀t.Q2′ , Q2 ≠ α Δ
+                                                                                                                       (c-no-impl)
+            Δ                                                                                                            ′
+    Θ, [ι       ] [P :: •]Q1 = ∀t.∀u.Q2 −→ Θ ⊕ Q1 = Q2 {P/u}{β Δ /t} ⊕ ι Δ = β :: •            if Q1 ≠ [S]Q1′ , Q1 ≠ α Δ
+                                                                                                                      (c-impl-seq)
+                    Θ, [ι 1Δ ]Q1 = ∀t.Q2 ∼⇝ Θ ⊕ [ι 2Δ ]Q1 = Q2 {β Δ /t} ⊕ ι 1Δ = β Δ :: ι 2Δ                        (c-guess-impl)
+                       Θ, [ι Δ ]Q1 = Q2 ∼⇝ Θ ⊕ Q1 = Q2 ⊕ ι = •                                 if Q2 ≠ ∀t.Q2′        (c-guess-no)
+
+
+                                     Fig. 5. Type inference: Constraint set simplification
+
+
+solve ι 5 = α 7 :: •, and the remaining solutions ι 2 = • and α 3 = α 7 → α 7 → α 7 are forced, giving:
+                                  auto (Λt.λx:t.x) [α 7 → α 7 → α 7 :: •] (true [α 7 :: •])
+We have a term containing the metavariable α 7 , which itself has no constraints. Therefore, we are
+free to generalize over α 7 , say to type variable u:
+                                  Λu.auto (Λt.λx:t.x) [u → u → u :: •] (true [u :: •])
+and again, we have arrived at a term of Boolean type. Unconstrained sequence metavariables ι i
+correspond to possible but unneeded instantiations, and so can always be safely solved by the
+empty sequence.
+
+5   Constraint Solving
+This section describes constraint solving, the other half of ATIA. We describe constraint solving
+as the iteration of two single step relations, given in Figure 5. We identify constraint sets up to
+reordering. Simplification Θ1 −→ Θ2 captures necessary steps, and can be done eagerly during
+traversal. Guessing Θ1 ∼⇝ Θ2 captures unforced steps which may still lead to finding solutions.
+Our implementation delays guesses until after all necessary, minimizing the chances that a guess
+rules out a valid solution. We describe the individual rules later in this section (§§5.2 and 5.4).
+           ∪                                  ∗                                                     ∪∗
+   Define −
+          −→ as the union of −→ and ∼⇝, −   −→ as the recursive, transitive closure of −→, and −   −→
+                                         ∪
+                                       −→. We say that Θ is satisfiable if there is some reduced Θ′
+as the recursive, transitive closure of −
+                     ∪∗
+such that Θ −
+            −→ Θ′ and unsatisfiable otherwise. Type inference succeeds if and only if traversal
+generates a satisfiable constraint set.
+
+Proc. ACM Program. Lang., Vol. 10, No. ICFP, Article 304. Publication date: August 2026.
+Another Type Inference Algorithm for First-Class Implicit Polymorphism                                          304:13
+
+
+5.1   Consistent Extension
+We define constraint solving in terms of consistent extension Θ ⊕ C. If C is α Δ = P, and Θ includes
+α Δ = P1, . . . , α Δ = Pn , then Θ ⊕ C = Θ, C, P = P1, . . . , P = Pn if, and only if:
+    1. α Δ does not appear in P;
+    2. the free type variables of P all appear in Δ;
+    3. if there is any equation β Δ = Q or ι Δ = S in Θ, then neither β Δ nor ι Δ appears in P.
+                                       ′          ′                              ′      ′
+
+
+Condition 1 is the occurs check, which avoids inferring infinite types. Condition 2 ensures that
+type variables do not escape their binders. Condition 3 guarantee that the constraint set does not
+become circular. We require parallel conditions if C is ι Δ = S. Finally, if C is P = Q, where neither P
+nor Q is a metavariable, then Θ ⊕ C = Θ, C. When consistent extension appears on the right-hand
+side of a simplification or guessing rule, we treat the rule as having an implicit side condition that
+the consistent extension is defined.
+   For example, consider the constraint set ε, α → α = t → u. Rule (c-arr) says that this set
+should step to ε ⊕ α = t ⊕ α = u. The first extension gives the constraint set ε, α = t, and the
+second gives ε, α = t, α = u, t = u. But this constraint set is unsatisfiable, as t = u cannot be
+simplified. Or, consider the constraint set ε, α → (α → α) = t → (u → u). This constraint set
+can be simplified to ε, α = t, α → α = u → u. If we apply rule (c-arr) immediately, we arrive at
+ε, α = t, α = u, t = u, and the final constraint cannot be simplified. We can apply rule (c-subst),
+giving ε, α = t, t → t = u → u, and then (c-arr) giving ε, α = t, t = u, t = u, but neither of the latter
+two constraints can be further simplified, and this constraint set is also unsatisfiable.
+
+5.2   Simplification Rules
+We now describe the individual simplification rules. Rules (c-arr) and (c-all) decompose equalities
+on arrow types and quantified types. In (c-all), we assume that the two types have the same
+quantified variable; our implementation uses de Bruijn indices for type variables, and so this
+condition is trivially met. Rules (c-reflt ,c-reflα ,c-reflι ) discharge reflexive equalities. Rule (c-
+subst) applies results in Θ to the constraint C.
+   The constraint [•]P = Q requires that, after doing no instantiation of Q, P and Q unify. This is
+captured by rule (c-empty). The constraint [P :: S]Q1 = Q2 gives a concrete set of instantiations P
+for Q2 , captured by rule (c-seq). The remainder S will either be •, in which case (c-empty) applies,
+or a metavariable ι Δ .
+   The final three simplification rules actually solve for implicit polymorphism, and have similar
+structure. Consider a constraint [ι Δ ]Q1 = ∀t.Q2 . This corresponds to implicit polymorphism in the
+source program: some term has polymorphic type ∀t.Q2 , and we have opportunity ι Δ to instantiate
+its parameters. How should we do so?
+   In some cases, the answer is immediate. For example, suppose we have the constraint [ι Δ ] (t →
+t) = ∀u.u → u (where we assume that t is in Δ). That is: some term has type ∀u.u → u, and we
+must instantiate this term to match the type t → t. The only possible solution is to instantiate
+u to t, which we capture by instantiating ι to the sequence t :: •, leaving the trivial constraint
+t → t = t → t.
+   Other cases are not so simple. Suppose we have the constraint [ι 1Δ ] [ι 2Δ ]P = ∀t.Q. That is, we have
+a term with polymorphic type and two possible instantiations of it. We no longer have a unique
+solution. We can instantiate the ts either at ι 1 , at ι 2 , or even split between them, and nothing in this
+constraint forces our hand. Or, consider [ι Δ ]α Δ = ∀t.P. Now, depending on the eventual solution of
+α, we may need to instantiate more or fewer of the t at ι.
+   Rules (c-impl,c-no-impl,c-impl-seq) handle the cases in which the instantiation is forced. In
+rule (c-impl), we require that Q1 is neither a metavariable nor further polymorphic instantiation;
+
+                               Proc. ACM Program. Lang., Vol. 10, No. ICFP, Article 304. Publication date: August 2026.
+304:14                                                                                     J. Garrett Morris
+
+
+thus, it must be a type variable, arrow, or quantifier. In this case, we instantiate the first quantifier
+with a fresh metavariable β Δ and introduce a fresh sequence metavariable ι 2Δ to account for any
+more quantifiers in Q2 . In rule (c-impl-seq), we have one unknown instantiation followed by a
+series of known instantiations, but then can be sure that no more instantiations are possible. We
+divide the available quantifiers between the two sources of instantiation. In rule (c-no-impl) we
+have no quantifiers and so no implicit applications are possible.
+
+5.3      Example
+As an example, we simplify one of the constraint sets generated while inferring the type of
+auto (λx.x) true. After looking up the the type of auto itself, we generated the constraint set
+[ι 4 ] (α 5 → [ι 3 ] (α 4 → [ι 2 ]α 3 )) = (∀a.a → a) → (∀a.a → a)
+We have a potential instantiation ι 4 on the left-hand side, but no corresponding quantifiers on the
+right-hand side. Rule (c-no-impl) applies.
+−→ ι 4 = •, α 5 → [ι 3 ] (α 4 → [ι 2 ]α 3 ) = (∀a.a → a) → (∀a.a → a)
+The constraint ι 4 = • cannot simplify further. We can simplify the other constraint using rule
+(c-arr).
+−→ ι 4 = •, α 5 = ∀a.a → a, [ι 3 ] (α 4 → [ι 2 ]α 3 ) = ∀a.a → a
+Now we have a potential instantiation on the left-hand side, and actual quantifiers on the right
+hand side. Following rule (c-impl), we generate a new metavariable α 6 , which we use to solve ι 2
+and to instantiate ∀a.a → a.
+−→ ι 4 = •, α 5 = ∀a.a → a, ι 3 = α 6 :: •, α 4 → [ι 2 ]α 3 = α 6 → α 6
+We apply (c-arr) and (c-subst)
+ ∗
+−→ ι 4 = •, α 5 = ∀a.a → a, ι 3 = α 6 :: •, α 4 = α 6, [ι 2 ]α 3 = α 6
+−
+We cannot apply rule (c-no-impl)—α 6 may eventually be instantiated to a quantified type, in which
+case instantiation would indeed be possible—and so this constraint set does not simplify further.
+
+5.4      Guessing Implicit Polymorphism
+It may be that, even after performing all possible simplifications, we still have unresolved potential
+instantiations. In such cases, rules (c-guess-impl,c-guess-no) assign quantifiers to the outermost
+potential instantiation, if any quantifiers are present. This corresponds to instantiating closer to
+variables, which seems to be generally consistent with programmer expectation and is also the
+heuristic adopted by other approaches to first-class implicit polymorphism. Note that traversal rule
+(i-simpl) precludes guessing during traversal. We only guess after we have fully explored the tree,
+and exhausted all other simplifications.
+    At the end of traversing auto (λx.x) true, we had one non-trivial constraint:
+[ι 5 ] [ι 2 ]α 3 = ∀b.b → b → b
+Rule (c-guess-impl) applies here, solving ι 5 with a fresh metavariable α 7 .
+∼⇝ ι 5 = α 7 :: •, [ι 2 ]α 3 = α 7 → α 7 → α 7
+Rule (c-guess-no) finishes the solution
+−→ ι 5 = α 7 :: •, α 3 = α 7 → α 7 → α 7
+
+6     Examples
+In this section, we give two extended examples of ATIA. The first is a benchmark for first-class
+polymorphism, drawn from Serrano et al. [25], and shows how different possible elaborations of
+
+Proc. ACM Program. Lang., Vol. 10, No. ICFP, Article 304. Publication date: August 2026.
+Another Type Inference Algorithm for First-Class Implicit Polymorphism                                          304:15
+
+
+the same term are handled by ATIA. The second extends ATIA with a simple system of qualified
+types and returns to the example of record typing that originally motivated this work.
+
+6.1   First-Class Polymorphism
+We begin with some definitions:
+                  choose : ∀a.a → a → a             nil : ∀a.List a       ids : List (∀a.a → a)
+                  choose = λxy.x                    nil = λnc.n           ids = nil
+                                  where List a = ∀l.l → (a → l → l) → l
+We rely on a Church encoding of lists: a List a is implemented by the corresponding fold for any
+output type l. The terms nil and ids are both (empty) lists. Finally, choose is used to force the
+identification of the types of its arguments.
+   Our example is to infer the type of choose nil ids, where we have no specific expected type. The
+inferred type should be List (∀a.a → a). We identify three possible elaborations consistent with
+that inferred type.
+      choose [∀l.l → ((∀a.a → a) → l → l) → l :: •] (nil [∀a.a → a :: •]) ids
+      Λl.choose [∀l.l → ((∀a.a → a) → l → l :: •] (nil [∀a.a → a :: •]) ids [l :: •]
+      Λl.choose [l → ((∀a.a → a) → l → l) → l :: •] (nil [(∀a.a → a) :: l :: •]) (ids [l :: •])
+The first is perhaps the most intuitive elaboration, in which we instantiate choose with the type
+List (∀a.a → a) and nil with the element type ∀a.a → a. The second is the η-expansion of the first.
+The third follows from the second by pushing the type application to l into the two arguments of
+choose, and thus doing as much instantiation at the variables as possible. There are two challenges
+to inference for this term. The first is a general challenge. We need to infer that the type arguments
+nil and potentially to choose are quantified type. The second is specific to our algorithm. As we
+will see, our traversal and constraint simplification algorithms allow for any of the three possible
+elaborations. The final choice must be made by our guessing rules. Consistent with the intuition
+that instantiation should happen close to variables, our algorithm will generate option 3.
+   As this term has neither term nor type binders, we will omit the corresponding environments.
+We assume an empty input kinding environment, and a typing environment that contains choose,
+nil, and ids with their types as listed above. We also omit kind environment annotations on
+metavariables.
+   We begin by traversing the term.
+ε ⊢ choose nil ids : α 1 ↩→
+We start with no equations (ε) and with no expected type (α 1 ). Rule (i-app) applies. We get two
+subproblems—one for the function choose nil and one for the argument ids, and one opportunity
+for implicit arguments, ι 1 .
+   ε ⊢ choose nil : α 2 → [ι 1 ]α 1 ↩→
+   Again, (c-app) applies, generating another opportunity for implicit arguments.
+        ε ⊢ choose : α 3 → [ι 2 ] (α 2 → [ι 1 ]α 1 ) ↩→
+        We have arrived at the variable case. This adds one last opportunity for implicit arguments.
+                    ↩→ choose [ι 3 ] ⊣ [ι 3 ] (α 3 → [ι 2 ] (α 2 → [ι 1 ]α 1 )) = ∀a.a → a → a
+                    The elaboration of choose reflects the opportunity for implicit arguments. The output
+                    constraints require that the expected type, now with three potential instantiations,
+                    unifies with the type of choose.
+        [ι 3 ] (α 3 → [ι 2 ] (α 2 → [ι 1 ]α 1 )) = ∀a.a → a → a ⊢ nil : α 3 ↩→
+
+                               Proc. ACM Program. Lang., Vol. 10, No. ICFP, Article 304. Publication date: August 2026.
+304:16                                                                                        J. Garrett Morris
+
+
+       Next we traverse the argument. As the input constraints checking the argument are different
+       from the input constraints we had when checking the application itself, we begin with
+       constraint simplification.
+             [ι 3 ] (α 3 → [ι 2 ] (α 2 → [ι 1 ]α 1 )) = ∀a.a → a → a
+             −→ ι 3 = α 4 :: •, α 3 → [ι 2 ] (α 2 → [ι 1 ]α 1 ) = α 4 → α 4 → α 4
+             Rule (c-impl) instantiates ι 4 with a sequence containing one fresh metavariable, for
+             the one quantifier in the type of choose.
+             −→ ι 3 = α 4 :: •, α 4 = α 3, [ι 2 ] (α 2 → [ι 1 ]α 1 ) = α 3 → α 3
+             −→ ι 3 = α 4 :: •, α 4 = α 3, ι 2 = •, α 2 → [ι 1 ]α 1 = α 3 → α 3
+             −→ ι 3 = α 4 :: •, α 4 = α 3, ι 2 = •, α 3 = α 2, α 2 = [ι 1 ]α 1
+             We can apply rules (c-app) and (c-inst-no) to simplify the remainder. We do not learn
+             anything about ι 1 : Rule (c-inst) does not apply because ι 1 instantiates a metavariable
+             α 1 . Write Θ1 for the simplified constraint set. We can now substitute into our type
+             inference problem:
+             Θ1 ⊢ nil : [ι 1 ]α 1 ↩→
+                         ↩→ nil [ι 4 ] ⊣ Θ1, [ι 4 ] [ι 1 ]α 1 = ∀a l.l → (a → l → l) → l
+                         Rule (c-var) introduces another point of potential instantiation (ι 4 ). We could
+                         not make progress on these constraints without guessing: how are we to know
+                         whether a and l should be instantiated by ι 4 , ι 1 , or indeed not at all?
+       ↩→ choose [[ι 1 ]α 1 ] (nil [ι 4 ]) ⊣ Θ1, [ι 4 ] [ι 1 ]α 1 = ∀a l.l → (a → l → l) → l
+       The result of elaborating choose nil (after substitution). Let Θ2 be the output constraints.
+  Θ2 ⊢ ids : α 2 ↩→
+  We have arrived at the second argument ids. We begin by substituting its type.
+       Θ2 ⊢ ids : [ι 1 ]α 1 ↩→
+                 ↩→ ids [ι 5 ] ⊣ Θ2, [ι 5 ] [ι 1 ]α 1 = ∀l.l → ((∀a.a → a) → l → l) → l
+                 Rule (c-var) introduces one final opportunity for parameterization (ι 5 ).
+↩→ choose [[ι 1 ]α 1 :: •] (nil [ι 4 ]) (ids [ι 5 ]) ⊣ Θ2, [ι 5 ] [ι 1 ]α 1 = ∀l.l → ((∀a.a → a) → l → l) → l
+The final elaboration of choose nil ids.
+  After traversal, we have two non-trivial constraints:
+
+                              [ι 4 ] [ι 1 ]α 1 = ∀a l.l → (a → l → l) → l
+                              [ι 5 ] [ι 1 ]α 1 = ∀l.l → ((∀a.a → a) → l → l) → l
+
+All three possible elaborations above correspond to different solutions to these equations. The
+first elaboration corresponds to setting α 1 = ∀l.l → ((∀a.a → a) → l → l) → l. The remaining
+choices are then forced. The second constraint forces ι 1 = •, ι 5 = •, and the first constraint forces
+ι 4 = ∀a.a → a :: •. The second elaboration arises from solving ι 1 with a fresh metavariable α 5 . The
+remaining choices are forced, and the outer η-expansion arises from generalizing over α 5 . The third
+elaboration is that which our algorithm chooses, as follows.
+Θ1, [ι 4 ] [ι 1 ]α 1 = ∀a l.l → (a → l → l) → l, [ι 5 ] [ι 1 ]α 1 = ∀l.l → ((∀a.a → a) → l → l) → l
+    None of our simplification rules apply to either non-trivial constraint, as they are both headed
+    by pairs of unknown instantiations. The results are identical whichever we choose to guess. We
+    apply (c-guess) to the second constraint, introducing a new metavariable α 5 to instantiate l.
+∼⇝ Θ1, [ι 4 ] [ι 1 ]α 1 = ∀a l.l → (a → l → l) → l, ι 5 = α 5 :: •,
+      [ι 1 ]α 1 = α 5 → ((∀a.a → a) → α 5 → α 5 ) → α 5
+
+Proc. ACM Program. Lang., Vol. 10, No. ICFP, Article 304. Publication date: August 2026.
+Another Type Inference Algorithm for First-Class Implicit Polymorphism                                          304:17
+
+
+                    Types        A, B ::= · · · | C ⇒ A | □ | {ℓ1 ⊲ A1, . . . , ℓn ⊲ An }
+                    Labels          ℓ
+                    Terms       M, N ::= · · · | ΛC.M
+                    Constraints    C ::= Δ ⊢ P = Q | Δ ⊢ P ≲ Q
+
+                                  Fig. 6. Syntactic extensions for record types
+
+
+     We can simplify the latter constraint, as the right-hand side contains no quantifiers, and finally
+     arrive at a solution to α 1 . We substitute for α 1 and ι 1 and reorder the resulting constraints.
+ ∗
+−→ Θ1, ι 5 = α 5 :: •, α 1 = •, ι 1 = •, α 1 = α 5 → ((∀a.a → a) → α 5 → α 5 ) → α 5,
+−
+     [ι 4 ] (α 5 → ((∀a.a → a) → α 5 → α 5 ) → α 5 ) = ∀a l.l → (a → l → l) → l
+  We can simplify the latter constraint, as there is now only one possibility for instantiating a and
+  l. We invent fresh metavariables α 6 and α 7 for the purpose.
+−→ Θ1, ι 5 = α 5 :: •, α 1 = •, ι 1 = •, α 1 = α 5 → ((∀a.a → a) → α 5 → α 5 ) → α 5, ι 4 = α 6 :: α 7 :: •,
+     (α 5 → ((∀a.a → a) → α 5 → α 5 ) → α 5 ) = α 7 → (α 6 → α 7 → α 7 ) → α 7
+  The remaining simplifications are routine.
+ ∗
+−→ Θ1, ι 5 = α 5 :: •, α 1 = •, ι 1 = •, α 1 = α 5 → ((∀a.a → a) → α 5 → α 5 ) → α 5, ι 4 = α 6 :: α 7 :: •,
+−
+   α 7 = α 5, α 6 = ∀a.a → a
+Substituting into the elaborated term, we arrive at:
+      choose [α 5 → ((∀a.a → a) → α 5 → α 5 ) → α 5 :: •] (nil [∀a.a → a :: α 5 :: •]) (ids [α 5 :: •])
+Generalizing over α 5 gives the desired result.
+
+6.2     Record Types
+This section presents a greatly simplified version of the row type system that originally motivated
+the development of ATIA. The significant addition is qualified types, which extend the language of
+types with (domain-specific) constraints restricting the instantiation of type variables. Qualified
+types have two significant interactions with ATIA. First, constraints are introduced and eliminated
+implicitly, and so the extended system has to account for multiple kinds of implicit abstraction
+and instantiation. Second, these constraints may themselves introduce new type equalities during
+simplification, adding additional sources of implicit polymorphism.
+   Our original motivation, the Rω language [7], uses row types to capture the structure of extensible
+records and variants, and manipulates row types using several row-specific constraints. For this
+example, we will limit ourselves to considering just records and only one constraint over records.
+In Rω, satisfied constraints are witnessed by evidence, which in turn contributes to the semantics of
+operations on extensible records and variants. As the semantics of these operations are orthogonal
+to the challenges of first-class implicit polymorphism, we will omit evidence.
+Syntax. Figure 6 gives the syntax for record types, extending Figure 1.
+   The grammar of types is extended with the qualified type C ⇒ A, denoting type A under the
+assumption that C is satisfiable. As qualified types are introduced and eliminated implicitly, we
+will merge most of their treatment with that of type abstractions. In particular, we add □ to the
+grammar of types, standing in for evidence. The type {ℓ1 ⊲ A1, . . . , ℓn ⊲ An } denotes records with
+fields ℓ1 of type A1 through ℓn of type An , where labels ℓ are a distinct type-level construct.
+   The grammar of terms of extended with an introduction form ΛC.M for qualified types. As we
+do not include evidence, we have no need to name the assumption of constraint C. We do not have
+
+                               Proc. ACM Program. Lang., Vol. 10, No. ICFP, Article 304. Publication date: August 2026.
+304:18                                                                                                    J. Garrett Morris
+
+
+
+                                    Δ⊢C                                                    Δ; Γ ⊢ M : A
+  ( e-asmp)     ( e-refl)         ( e-trans)                         (t-⇒I)
+     C∈Δ                              Δ ⊢ A1 ≲ A2 Δ ⊢ A2 ≲ A3               Δ, C; Γ ⊢ M : A
+      Δ⊢C           Δ⊢A=A                     Δ ⊢ A1 ≲ A3               Δ; Γ ⊢ ΛC.M : C ⇒ A
+       ( e-leq)                                               (t-⇒E)
+                       ∃=m k, ℓi = ℓk′i ∧ Ai = Ak′ i             Δ; Γ ⊢ M [B :: •] : C ⇒ A Δ ⊢ C
+         Δ ⊢ {ℓ1 ⊲ A1, . . . , ℓm ⊲ Am } ≲ {ℓi′ ⊲ A1′ , . . . , ℓn′ ⊲ An′ }        Δ; Γ ⊢ M [B :: □ :: •] : A
+
+                                      Fig. 7. Typing extensions for record types
+
+
+
+an explicit elimination form for qualified types. This is because implicit eliminations must be able
+to eliminate both implicit polymorphism and qualified types, and so we combine the elimination of
+both into the existing elimination form M [S]. Because we have added the generic evidence □ to
+the grammar of types, sequences S may now include both “normal” types and evidence.
+   The grammar of constraints is changed more significantly. Because terms may now have local
+constraint assumptions (when checking the body of a term of type C ⇒ A, we assume C), we add a
+context Δ to all constraints. This context can be safely propagated in all the existing constraint
+simplification rules. For example, (c-arr) would simplify Δ ⊢ P1 → P2 = Q1 → Q2 to Δ ⊢ P1 =
+Q1, Δ ⊢ P2 = Q2 . We add a domain specific constraint Δ ⊢ P ≲ Q, which holds when P and Q are
+records such that all the fields of P also appear in Q.
+
+Typing. Figure 7 shows the typing rules for record types, extending Figure 2.
+   The judgment Δ ⊢ C is new, and denotes that under the constraint C holds under the assumptions
+in Δ. Rule (e-asmp) corresponds to the axiom. Rule (e-refl) is the only rule for equality constraints,
+capturing that syntactically identical types are equal. (We ignore issues of α-equivalence, as these
+can be handled using de Bruijn notation.) Rules (e-leq,e-trans) capture properties specific to
+records. Rules (e-leq) defines when one record is a subrecord of another; the counted quantifier
+∃=m k should be read as asserting the existing of m distinct values k1, . . . , km . Rule (e-etrans) is
+useful if any of the Ai are type variables; if they are all concrete records, then rule (e-leq) suffices.
+   We add two typing rules for introducing and eliminating qualified types. The introduction
+rule (t-⇒I) should be unsurprising. The elimination rule follows the same pattern as rule (t-∀E),
+eliminating the right-most argument. In this case, if the right-most argument is □, then M [B :: •]
+must have a qualified type C ⇒ A, and the current context must satisfy C.
+   We do not include any terms for creating or eliminating records. Instead, in our upcoming
+example, we will simply assume constants of suitable type. This is not as unrealistic as it seems, as
+extensible records and variants in Rω are described entirely through families of primitive constants.
+
+Traversal. Figure 8 gives the traversal rules for qualified types, extending Figure 4. The rules closely
+parallel those for implicit polymorphism: rule (i-pabs), like (i-tabs), handles explicit qualification
+and rule (i-qal), like (i-forall), handles qualification driven by the expected type. Rule (i-tapp)
+already accounts for explicit elimination of qualified types, as □ is included in the grammar of
+types. Those rules in Figure 4 that require that the expected type is not quantified must also now
+require that the expected type is not qualified.
+   Our implementation, consistent with existing uses of qualified types, does not actually allow
+programmers to explicitly introduce or eliminate qualified types. That is, our implementation only
+
+Proc. ACM Program. Lang., Vol. 10, No. ICFP, Article 304. Publication date: August 2026.
+Another Type Inference Algorithm for First-Class Implicit Polymorphism                                             304:19
+
+
+
+                                           Δ; Ψ; Θ ⊢ M : P ↩→ N ⊣ Θ
+
+                                    Δ, C; Ψ; Θ1, P = (C ⇒ β Δ ) ⊢ M : β Δ ↩→ N ⊣ Θ2
+                         (i-pabs)
+                                          Δ; Ψ; Θ1 ⊢ ΛC.M : P ↩→ ΛC.N ⊣ Θ2
+                                            Δ, C; Ψ; Θ1 ⊢ M : A ↩→ N ⊣ Θ2
+                               (i-qal)
+                                         Δ; Ψ; Θ1 ⊢ M : C ⇒ A ↩→ ΛC.N ⊣ Θ2
+
+                                  Fig. 8. Traversal extensions for record types
+
+                                            Θ −→ Θ            Θ ∼⇝ Θ
+                                 Θ, Δ ⊢ C −→ Θ                                             if C ∈ Δ          (c-asmp)
+           Θ, Δ ⊢ [□ :: S]P = (C ⇒ Q) −→ Θ, Δ ⊢ [S]P = Q, C                                                  (c-qseq)
+              Θ, Δ ⊢ [ι 1Δ ]P = (C ⇒ Q) −→ Θ, Δ ⊢ [ι 2Δ ]P = Q, ι 1Δ = □ :: ι 2Δ, C        if P ≠ [S]P ′ , P ≠ α Δ
+                                                                                                                     ′
+
+
+                                                                                                           (c-qimpl)
+    Θ, (Δ, P1 ≲ P2, P2 ≲ P3 ⊢ P1 ≲ P3 ) −→ Θ                                                               (c-trans)
+  Θ, Δ ⊢ {ℓ1 ⊲ A1, . . . , ℓm ⊲ Am } ≲
+                  {ℓ1′ ⊲ B1, . . . , ℓn′ ⊲ Bn } −→ Θ, Δ ⊢ Ai = Bki                         if ∃=m k, ℓi = ℓk′i
+                                                                                                                 (c-leq)
+              Θ, Δ ⊢ [ι Δ ]P = (C ⇒ Q) ∼⇝ Θ, Δ ⊢ P = Q, ι Δ = □ :: •, C                                   (c-qguess)
+
+                                  Fig. 9. Simplification rules for record types
+
+
+contains rule (i-qal), and all evidence must be synthesized during type inference. This is simply a
+design decision, not a fundamental requirement of qualified types or of ATIA.
+Simplification. Figure 9 gives the simplification rules for record types, extending Figure 5. Rule (c-
+asmp) uses assumptions in Δ to discharge a constraint Δ ⊢ C. In combination with the existing rules
+(modified to propagate contexts) this is sufficient for equality constraints. Rules (c-qseq,c-qimpl)
+handle explicit and implicit elimination of qualified types, paralling rules (c-seq,c-impl). Rules
+(c-trans,c-leq) provide the domain-specific handling of record type constraints. Rule (c-trans)
+shows a non-trivial use of the context Δ, using two assumed subrecord constraints to satisfy another
+subrecord constraint. In practice, more simplification rules are required to fully capture the uses of
+(e-trans). Rule (c-leq) handles constraints on concrete subrecords. Importantly, this constraint
+defers the comparison of the types within the records for additional simplification. This is the
+key to the interplay of the record constraints with the existing treatment of first-class implicit
+polymorphism, as we will demonstrate in the next subsection.
+Example. We are finally ready to present our motivating example. We begin with a few assumptions:
+
+                           selfmap : ∀az.{fmap ⊲ a} ≲ z ⇒ z → a
+                    Functor (r→) : ∀r.{fmap ⊲ ∀ab.(a → b) → (r → a) → (r → b)}
+  Our original example used first-class labels, but that is an orthogonal concern. Here, we restrict
+ourselves to a specific label fmap. The selfmap function selects the fmap-labeled field from a record.
+
+                               Proc. ACM Program. Lang., Vol. 10, No. ICFP, Article 304. Publication date: August 2026.
+304:20                                                                                                         J. Garrett Morris
+
+
+This is a generic selection function: even though we may have some suspicion of the form of the
+fmap-labeled field, selfmap will work for records that have fmap fields of any type. Functor (r→) is
+just such a record, containing a field that provides the mapping function for any reader monad.
+   Our goal is to infer a type for the following term.
+                                         λfx. (λr. selfmap r f x) Functor (r→)
+We have artificially separated the call of selfmap from its eventual argument Functor (r→) so as to
+delay the discovery of the polymorphic type of fmap in Functor (r→) . In practice, of course, the
+terms selfmap and Functor (r→) might be much further apart.
+   We traverse and elaborate the term with initial expected type α 1 . The traversal does not invoke
+any new rules—all we have are function abstractions and applications—so we elide the details. The
+final elaborated term, after simplification, is:
+
+                       λf : α 2 .λx : α 3 .
+                            (λr : α 6 .selfmap [ι 5 ] (r [ι 6 ]) [ι 4 ] (f [ι 7 ]) [ι 3 ] (x [ι 8 ]) [ι 2 ])
+                            (Functor (r→) [ι 9 ]) [ι 1 ]
+Importantly, it is still possible to insert type arguments at any point in the selfmap application spine.
+The constraints after traversal are:
+
+            α 1 = α 2 → α 3, α 3 = α 4 → α 5, α 9 = [ι 6 ]α 6, α 8 = [ι 7 ]α 2, α 7 = [ι 8 ]α 3,
+            [ι 5 ] (α 9 → [ι 4 ] (α 8 → [ι 3 ] (α 7 → [ι 2 ] [ι 1 ]α 5 ))) = ∀az.{fmap ⊲ a} ≲ z ⇒ z → a,
+            [ι 9 ]α 6 = ∀r.{fmap ⊲ ∀ab.(a → b) → (r → a) → (r → b)}
+The latter two are the constraints of interest. We can simplify the final constraint by (c-impl) and
+substitute, giving:
+
+            α 1 = α 2 → α 3, α 3 = α 4 → α 5, α 8 = [ι 7 ]α 2, α 7 = [ι 8 ]α 3, ι 9 = α 10 :: •, ι 6 = •,
+            α 6 = {fmap ⊲ ∀ab.(a → b) → (α 10 → a) → (α 10 → b)},
+            α 9 = {fmap ⊲ ∀ab.(a → b) → (α 10 → a) → (α 10 → b)},
+            [ι 5 ] (α 9 → [ι 4 ] (α 8 → [ι 3 ] (α 7 → [ι 2 ] [ι 1 ]α 5 ))) = ∀az.{fmap ⊲ a} ≲ z ⇒ z → a
+We leave α 9 unsubstituted in the final constraint for clarity. Focusing on the final constraint, we
+can perform two instantiations of ι 5 , leaving:
+
+         [ι 11 ] (α 9 → [ι 4 ] (α 8 → [ι 3 ] (α 7 → [ι 2 ] [ι 1 ]α 5 ))) = {fmap ⊲ α 11 } ≲ α 12 ⇒ α 12 → α 11
+We can now apply (c-qimpl) to finish instantiating ι 11 , giving the pair of constraints:
+
+                            {fmap ⊲ α 11 } ≲ α 12,
+                            α 9 → [ι 4 ] (α 8 → [ι 3 ] (α 7 → [ι 2 ] [ι 1 ]α 5 )) = α 12 → α 11
+We can solve the latter constraint and substitute, including finally substituting α 9 , giving:
+
+
+{fmap ⊲ [ι 4 ] (α 8 → [ι 3 ] (α 7 → [ι 2 ] [ι 1 ]α 5 ))} ≲ {fmap ⊲ ∀ab.(a → b) → (α 10 → a) → (α 10 → b)}
+Rule (c-leq) reduces this constraint to:
+
+            [ι 4 ] (α 8 → [ι 3 ] (α 7 → [ι 2 ] [ι 1 ]α 5 )) = ∀ab.(a → b) → (α 10 → a) → (α 10 → b)
+And now we have arrived at the crucial step. Here, we instantiate ι 4 with two new metavariables
+α 13 and α 14 . The remaining steps are routine. Substituting into the elaborated term gives:
+
+Proc. ACM Program. Lang., Vol. 10, No. ICFP, Article 304. Publication date: August 2026.
+Another Type Inference Algorithm for First-Class Implicit Polymorphism                                          304:21
+
+
+
+                  λf : (α 13 → α 14 ).λx : (α 10 → α 13 ).
+                     (λr : {fmap ⊲ ∀ab.(a → b) → (α 10 → a) → (α 10 → b)}.
+                       selfmap [∀ab.(a → b) → (α 10 → a) → (α 10 → b)
+                                  :: {fmap ⊲ ∀ab.(a → b) → (α 10 → a) → (α 10 → b)}
+                                  :: •]
+                           r [α 13 :: α 14 :: •] f x)
+                     (Functor (r→) [α 10 :: •])
+The instantiation of ι 4 is the second set of type arguments to selfmap .
+  Importantly, during the traversal of this term, there was no indication that implicit polymorphism
+could appear after the r argument to selfmap . The type of selfmap has no nested polymorphism. Thus,
+purely syntax guided approaches to introducing implicit instantiation would have no reason to
+consider instantiation at this point in the term. Because ATIA leaves instantiation until constraint
+simplification, it is able to find the additional implicit polymorphism in this example.
+
+7    Metatheory
+We sketch the argument that ATIA (unextended) is sound—that is, that if type inference succeeds,
+the resulting term is well-typed in the elaborated language. We will write T for the set of types, P for
+the set of pseudotypes, A for the set of metavariables, and I for the set of sequence metavariables.
+  Our key challenge is relating the pseudotypes introduced during type inference to their eventual
+solutions. We define a relation on pseudotypes P  Q which holds when either P and Q are the
+same type or when one of them is a pseudotype that includes the other. For example, we have both
+that ∀t.t → t  [A :: •] (A → A) and that ∀t.t → A  [A :: •] (A → A).
+    Definition 1. Define  ⊆ P × P to be the closure of the rules
+
+                                         [S]P  Q{P ′ /t}
+                                        [P ′ :: S]P  ∀t.Q        [•]P  P
+under reflexivity, symmetry, transitivity, congruence, and α-equivalence.
+   We relate constraint sets Θ to substitutions. We begin by restricting our attention to constraint
+sets that can arise from type inference.
+  Definition 2. Θ is consistent if and only if there is an ordering of its equations C1, C2, . . . , Cn such
+that Θ = ε ⊕ C1 ⊕ C2 ⊕ · · · ⊕ Cn .
+   Let substitutions σ range over A ⇀ T × I ⇀ T ★, and define the action of σ on terms Mσ, on
+pseudotypes Pσ, and on pseudotype environments Ψσ as expected. We use fuv(P) ⊆ A ∪ I for the
+free metavariables and sequence metavariables in P, and extend as expected to terms, constraints,
+and environments. We write dom(σ) ⊆ A ∪ I for the domain of definition of the components of σ.
+  Definition 3. We say σ models Θ, σ |= Θ, if and only if fuv(Θ) ⊆ dom(σ) and, for every P = Q ∈ Θ,
+Pσ  Qσ.
+This is a standard definition of the modeling relationship, extended to account for pseudotypes.
+  We establish sufficient conditions for a constraint set to have a model.
+    Lemma 4. If Θ is consistent and reduced, then there is some σ |= Θ.
+The argument is by induction on the ordering of equations C1, C2, . . . , Cn guaranteed by consistency
+of Θ.
+
+                               Proc. ACM Program. Lang., Vol. 10, No. ICFP, Article 304. Publication date: August 2026.
+304:22                                                                                      J. Garrett Morris
+
+
+   In the base case, suppose that Cn is α = P. There are two subcases. If P is already a type, then
+σ is the single mapping α ↦→ P. If P is not a type, then pick some A  P and σ is the singleton
+mapping α ↦→ A. Such a A can be picked deterministically be instantiating free metavariables in
+P to ∀a.a, free sequence metavariables in P to the empty sequence, and unknown instantiations
+[P1 :: · · · :: Pm :: •]Q in P to ∀t1 . . . tm .Q. These choices are sound because Θ is consistent: no free
+metavariable β or ι of P can appear in a constraint β = Q or ι = S in Θ. A parallel argument holds if
+Cn is ι = S.
+   In the inductive case, suppose that Ci is α = P, and σ ′ |= Ci+1, . . . , Cn . There are again two
+subcases. If Pσ ′ is a type, then σ is the extension of σ ′ with α ↦→ P. Otherwise, pick A  Pσ ′
+identically to the previous case, and extend σ ′ with α ↦→ A. A parallel argument holds if Ci is ι = S.
+   Next we establish that the auxiliary judgments preserve models.
+    Lemma 5. If Θ ⊢ P ⇒ Q, σ |= Θ, and there is some A such that A  Pσ, then A  Qσ.
+The lemma is shown by induction on Θ ⊢ P ⇒ Q. The only non-trivial cases are for (s-cat-•) and
+(s-cat), and these each follow immediately from the definition of .
+    Lemma 6.
+     1. If Θ −→ Θ′ then σ |= Θ if and only if σ |= Θ′ .
+     2. If Θ ∼⇝ Θ′ , then σ |= Θ if σ |= Θ′ .
+The two cases follow immediately by induction over their respective judgments.
+  To state our final lemma, we need one more way to account for free metavariables.
+  Definition 7. Define the extension of σ, ˆ
+                                           σ, to behave as σ on its domain of definition, to send all
+other metavariables to ∀a.a, and to send all other sequence metavariables to the empty sequence of
+types.
+We can now state the key lemma for the soundness of type inference.
+   Lemma 8. If Δ; Ψ; Θ ⊢ M : P ↩→ N ⊣ Θ′ , and σ |= Θ′ , then there is some A  P σˆ such that
+Δ; Ψσˆ ⊢ N σˆ : A.
+   The lemma is shown by induction on Δ; Ψ; Θ ⊢ M : P ↩→ N ⊣ Θ′ .
+   The majority of the cases follow immediately from the induction hypothesis. For example, in
+case (i-ulam), we have a derivation Δ; Ψσˆ ⊢ N σˆ : B for some type B. We also have that σ (β 1 ) = A
+for some type A. By (t-→I), we can build a derivation Δ; Ψσˆ ⊢ λx:A.M σˆ : A → B.
+   For the elimination rules, we must additionally rely on the definition of . For example, consider
+case (i-var) with variable x and expected type Q. WLOG assume that x has type ∀t.A in Ψ and
+σ (ι) = B. Because σ |= Θ, ∀t.A = [ι]Q, we must have that A{B/t}  Q. Thus, by (t-var) and (t-∀E),
+we have a derivation Δ; Ψσˆ ⊢ x [B] : A{B/t}.
+   Finally, case (i-subst) follows from Lemma 5 and case (i-simpl) follows from Lemma 6.
+   The soundness of ATIA follows from these lemmata. Type inference for a term M with contexts
+Δ, Ψ and expected type P succeeds exactly when traversal produces an elaborated term N and
+constraint set Θ that is consistent and steps to a reduced constraint set Θ′ . By Lemma 4, there is some
+σ such that σ |= Θ′ . By repeated application of Lemma 6, σ |= Θ. By Lemma 8, Δ; Ψσˆ ⊢ N σˆ : P ˆ    σ.
+   ATIA is terminating by standard arguments. The traversal phase is structurally recursive, except
+for simplification steps. Simplification is an extension of typical descriptions of unification by
+equations [1], and the same arguments for termination apply.
+
+8    Implementation
+We have built an experimental implementation of ATIA in Haskell, as part of an implementation of
+the Rω row type system [7]. This section provides some observations of that implementation.
+
+Proc. ACM Program. Lang., Vol. 10, No. ICFP, Article 304. Publication date: August 2026.
+Another Type Inference Algorithm for First-Class Implicit Polymorphism                                          304:23
+
+
+   Rω adds significant complexity to the type inference problem. Rω is built on top of Fω, and so
+introduces both type normalization and higher-order unification. Row types themselves introduce
+new problems in unification—for example, rows admit various forms of permutation. Rω also
+supports mapping type functions across rows and has a relative complement operator on rows. All
+of these add to the complexity of normalization and unification. Our implementation also supports
+generalization of local definitions, which introduces its own complexities in the flow of constraints
+and treatment of type variables.
+   Much of Rω’s row typing is captured with constraints on row types rather than in the structure
+of row types themselves. These constraints add complexity to our solver. Solving these constraints
+may refine metavariables—our motivation for revisiting the problems of first-class polymorphism.
+   Despite this, our implementation remains (relatively) small and
+simply structured. Figure 10 reports lines of code (excluding com- File                     SLOC
+ments and blank lines) for most of the implementation of our            Monad.hs               194
+type checker. We have omitted type normalization and promo- Preds.hs                           616
+tion, as those are specific to concerns outside the scope of this       Terms.hs               356
+paper. Terms.hs implements the traversal of terms, and Preds.hs         Unify.hs               378
+implements our predicate solver. Monad.hs provides infrastructure       Total                 1544
+for the compiler. Even these numbers are dominated by the row
+typing features of Rω. At a very rough estimate, for example, 500       Fig. 10. Implementation size
+lines of Preds.hs support row types or higher-order unification.
+   One source of concern about ATIA is the extent to which the handling of implicit polymorphism
+leaks into other aspects of type checking and predicate simplification. Our experience suggests
+that there is very little overlap between the implementation of implicit polymorphism and other
+features. Concretely, simplification of the various row predicates includes no special handling of
+implicit polymorphism. Metavariable refinements arising from row predicates may refer to implicit
+polymorphism, but solving those refinements is entirely modular.
+   Another concern is reporting type errors. In general, constraint-based approaches may make it
+more difficult to report type errors, as errors may not be discovered while traversing terms. Our
+implementation makes little attempt to track whence constraints arise, but systems like GHC show
+that this need not be a problem in practice. More significantly, unsolvable constraints may contain
+unknown polymorphism pseudotypes. Two unpleasant options are immediately available. On the
+one hand, pseudotypes can be suppressed when reporting errors. This simplifies the programmer’s
+view, but may provide an incomplete view of the actual error. On the other, pseudotypes may
+be reported. This requires programmers to understand their role. A better option would be to
+report the potential of instantiating types without displaying pseudotypes directly. We suspect that
+resolving these problems would be necessary for wide deployment of ATIA.
+
+9   Evaluation
+We evaluate ATIA using a set of benchmarks originally proposed by Serrano et al. [26], and later
+expanded by Kovács [10, 11]. In doing so, we will make comparisons with QuickLook (QL) [25], as
+implemented in GHC, and with two systems of Kovács, FCIF [10] (first-class implicit functions)
+and DOE [11] (dynamic order of elaboration).
+   Figure 11 gives type signatures for a basic library of functions used in the benchmarks. In contrast
+to Serrano et al. [26] and Kovács [10], but consistent with Kovács [11], we implement the basic
+types (lists, natural numbers, Booleans) by their Church encodings. This adds an additional source
+of first-class polymorphism to many of the examples. In his Church encodings, Kovács makes the
+result type explicit—for example, his list type is (A : U) → A → (A → A) → A—whereas, our
+
+                               Proc. ACM Program. Lang., Vol. 10, No. ICFP, Article 304. Publication date: August 2026.
+304:24                                                                                                   J. Garrett Morris
+
+
+  List a = ∀l.l → (a → l → l) → l                  Nat = ∀n.(n → n) → n → n                IdTy = ∀a.a → a
+     nil : ∀a.List a                               zero : Nat                                id : IdTy
+   cons : ∀a.a → List a → List a                    suc : Nat → Nat                         ids : List IdTy
+append : ∀a.List a → List a → List a              Bool = ∀b.b → b → b                  oneId : Id IdTy
+ length : ∀a.List a → Nat                          true : Bool                             auto : IdTy → IdTy
+   map : ∀ab.(a → b) → List a → List b           ST s a = s → a                        auto2 : ∀b.IdTy → b → b
+Pair a b = ∀p.(a → b → p) → p                    runST : ∀a.(∀s.ST s a → a) → a            Id a = ∀i.(a → i) → i
+    pair : ∀ab.a → b → Pair a b                  argST : ∀s.ST s Nat                   mkId : ∀a.a → Id a
+     fst : ∀ab.Pair a b → a                        app : ∀a b.(a → b) → a → b              unId : ∀a.Id a → a
+                                                revapp : ∀a b.a → (a → b) → b              poly : IdTy → Pair Nat Bool
+
+
+                                Fig. 11. Elaboration benchmarks: type signatures
+
+
+
+
+Church encodings are (necessarily) implicit. However, adjusting his encodings to use implicit result
+types does not change the outcome of the benchmarks.
+    Figure 12 gives our benchmark results. Results for QuickLook are obtained from GHC 9.12.2 and
+9.14.1. For QuickLook benchmarks that use data types, we report the results both using the native
+representation of data types and the version using Church-encoded data types.
+    All four approaches reject benchmark A8a. This benchmark essentially involves “floating” type
+quantifiers: auto2 has type ∀b.(∀a.a → a) → b → b, but to align with id it needs to have type
+(∀a.a → a) → (∀b.b → b). FCIF and DOE reject this term because moving implicit arguments is
+incompatible with supporting dependent types, one of the explicit goals of their system. For us, the
+two types simply have incompatible elaborations—order of implicit and explicit arguments must be
+flipped. This example can be accepted if auto2 is η-expanded, as shown in benchmark A8b, but
+note that all four systems also require an explicit type annotation on the η-expanded function, as
+otherwise argument x will not be given polymorphic type.
+    ATIA fails on benchmarks B1 and B2, as we do not infer polymorphic types in a vacuum. We
+speculate that our approach may scale to inferring some polymorphic argument types (§11.2).
+    We accept benchmark C5, but only when provided with the type List IdTy for the term. The
+other systems accept this term without type annotation. For us, the problem is in the order of
+arguments. We insert type abstraction as guided by the expected type of a term, and the expectation
+of polymorphism in this cases arises from ids. We demonstrate this with benchmark C5c, which
+only changes the order of arguments, and which we accept without type annotation.
+    We reject E1 for the same reason we rejected A8, as it requires permuting the order of quantifiers
+and function arrows. We even reject its η-expansion, as the type of k does not force the result of
+h x to be polymorphic, and so we do not insert an an implicit type abstraction.
+    Overall, these benchmarks show that our approach is competitive with the state of the art. The
+most significant weakness demonstrated in our approach is in the insertion of type abstractions, as
+it is driven only by the type information present during traversal. This is demonstrated by C5: a
+programmer might reasonably be surprised that C5c is accepted without type annotation whereas
+C5a is not. We think this is an important area of future work (§11.1). Nevertheless, particularly
+given the flexibility of our system to accommodate predicate solving features absent from other
+implementations of first-class polymorphism, we think these are positive results.
+
+Proc. ACM Program. Lang., Vol. 10, No. ICFP, Article 304. Publication date: August 2026.
+Another Type Inference Algorithm for First-Class Implicit Polymorphism                                            304:25
+
+                                                                                     QL        FCIF   DOE   ATIA
+                                                                            Native    Church
+    A     Polymorphic Instantiation
+    A1    λx y. y                                                               ✓               ✓     ✓       ✓
+    A2    choose id : IdTy → IdTy                                               ✓               ✓     ✓       ✓
+    A3    choose nil ids                                                     ✓     ✗            ✓     ✓       ✓
+    A4    λx.x x : IdTy → IdTy                                                  ✓               ✓     ✓       ✓
+    A5    id auto                                                               ✓               ✓     ✓       ✓
+    A6    id auto2 : ∀b.IdTy → b → b                                            ✓               ✓     ✓       ✓
+    A7    choose id auto                                                        ✓               ✓     ✓       ✓
+    A8a   choose id auto2                                                       ✗               ✗     ✗       ✗
+    A8b   choose id ( (λx.auto2 x ) : IdTy → IdTy)                              ✓               ✓     ✓       ✓
+    A9    λf .f (choose id) ids : (∀a.(a → a) → List a → a) → IdTy           ✓     ✗            ✓     ✓       ✓
+    A10   poly id                                                            ✓     ✓            ✓     ✓       ✓
+    A11   poly (λx.x )                                                       ✓     ✓            ✓     ✓       ✓
+    A12   id poly (λx.x )                                                    ✓     ✓            ✓     ✓       ✓
+    A13   unId oneId                                                            ✗               ✓     ✓       ✓
+    B     Polymorphic Arguments
+    B1    λf .pair (f zero) (f true)                                         ✗     ✗            ✗     ✗       ✗
+    B2    λx.poly (unId x )                                                     ✗               ✗     ✗       ✗
+    B3    λf :IdTy. pair (f zero) (f true)                                   ✓     ✓            ✓     ✓       ✓
+    B4    λg:( (∀a.a → a) → Pair Nat Bool) → Nat.                            ✓     ✓            ✓     ✓       ✓
+              g (λf .pair (f zero) (f true) )
+    B5    λr:(∀a.a → ∀b.b → b) → Nat.r (λxy.y)                               ✓     ✓            ✓     ✓       ✓
+    C     Polymorphic Lists
+    C1    length ids                                                         ✓     ✗            ✓     ✓       ✓
+    C2    id ids                                                             ✓     ✗            ✓     ✓       ✓
+    C3    single id : List IdTy                                              ✓     ✓            ✓     ✓       ✓
+    C4    cons id ids                                                        ✓     ✗            ✓     ✓       ✓
+    C5a   cons (λx.x ) ids                                                   ✓     ✗            ✓     ✓       ✗
+    C5b   cons (λx.x ) ids : List IdTy                                       ✓     ✓            ✓     ✓       ✓
+    C5c   snoc ids (λx.x ) where snoc = λxs x.cons x xs                      ✓     ✗            ✓     ✓       ✓
+    C6    append (single suc) (single id)                                    ✓     ✗            ✓     ✓       ✓
+    C7    λg.g (single id) ids : (∀a.List a → List a → a) → IdTy             ✓     ✗            ✓     ✓       ✓
+    C8    map poly (single id)                                               ✓     ✓            ✓     ✓       ✓
+    C9    map unId (single oneId)                                            ✗     ✗            ✓     ✓       ✓
+    D     Application Functions
+    D1    app poly id                                                           ✓               ✓     ✓       ✓
+    D2    revapp id poly                                                        ✓               ✓     ✓       ✓
+    D3    runST argST                                                           ✗               ✓     ✓       ✓
+    D4    app runST argST                                                       ✗               ✓     ✓       ✓
+    D5    revapp argST runST                                                    ✗               ✓     ✓       ✓
+    E     η-Expansion
+          Assume h : Nat → (∀a.a → a), k : ∀a.a → List a → a, k ′ : ∀a.List a → a → a,
+          xs : List (∀a.Nat → a → a), and ys : List (IdTy → Pair Nat Bool)
+    E1    k h xs                                                                ✗               ✗     ✗       ✗
+    E2a   k (λx.h x ) xs                                                        ✗               ✗     ✓       ✗
+    E2b   k ( (λx.h x ) : ∀a.Nat → a → a) xs                                    ✗               ✓     ✓       ✓
+    E3a   k (λf .pair (f zero) (f true) ) ys                                 ✓     ✗            ✗     ✓       ✗
+    E3b   k ′ ys (λf .pair (f zero) (f true) )                               ✓     ✗            ✓     ✓       ✓
+
+              Fig. 12. Elaboration benchmarks derived from Kovács [10, 11], Serrano et al. [26]
+
+
+
+
+                               Proc. ACM Program. Lang., Vol. 10, No. ICFP, Article 304. Publication date: August 2026.
+304:26                                                                                     J. Garrett Morris
+
+
+10     Related Work
+There have been many proposals for extending Hindley-Milner type inference to first-class implicit
+polymorphism, with different expressiveness-to-complexity ratios. We summarize some of those
+most relevant to our work.
+    Jones [9] gives one of the first accounts of first-class implicit polymorphism. His approach wraps
+polymorphic values in data constructors, providing clear boundaries for when polymorphism is
+introduced and eliminated, and has been adopted in Haskell among other languages. Emrich et al.
+[3, 4] describe an approach in which variables x can be “frozen” ⌈x⌉, preserving their polymorphic
+types, and are fully instantiated otherwise. In their system, generalization happens at let-bindings,
+but any term M can be wrapped in let x = M in ⌈x⌉ to give it its principal polymorphic type.
+These systems rely on syntactic boundaries to introduce or eliminate polymorphism, whereas we
+introduce type abstractions and applications implicitly, based on type information.
+    Botlan and Rémy [2] define MLF , which matches the expressiveness of System F with fully
+implicit type annotation and application. Parreaux et al. [21] propose a significant generalization
+of MLF , F { ≤ } , and a corresponding type inference algorithm SuperF. SuperF accepts every example
+in Figure 12. MLF and F { ≤ } rely on bounded polymorphism (below for MLF , above and below for
+F { ≤ } ), where the bounds capture required instantiations. In typing example B1, they conclude
+a type like ∀abc.Nat → b ≤ a, Bool → c ≤ a ⇒ a → Pair b c. To paraphrase Parreaux et al.
+[21]: rather than conclude a parametric polymorphic type directly, they rely on intersection-based
+subtyping. The resulting type system has very different expressiveness from System F, and so we
+view the type inference problem as essentially different from ours. Lam et al. [12] describe a further
+extension, in which bounds are treated as constraints (with evidence) in a qualified type system.
+This system could serve as a unification of our work with the generality of bounded quantification,
+while preserving an underlying System F-like semantics.
+    Leijen [14, 15] propose progressive simplifications of MLF called HMF and HML, but at a not
+insignificant expressiveness cost. For example, because HMF maintains principal types, the term
+single id (benchmark C4) can only be given the type ∀a.List (a → a), not also List (∀a.a → a).
+    GHC has seen several approaches to first-class implicit polymorphism, including Boxy Types
+[27], FPH [28], and more recently Guarded Instantiation [26] and QuickLook [25]. QuickLook
+is expressive, and its implementation is local to the treatment of application spines. However,
+QuickLook is less expressive than our approach in some cases, such as the Church-encoded variants
+of benchmarks C6b (without a type annotation) and C8. Moreover, QuickLook’s treatment of
+application spines can be complex, including requiring rechecking arguments.
+    Kovács [10, 11] gives two impressively expressive systems, FCIF and DOE. These systems in-
+corporate unification and insertion within a single bi-directional type checking pass, rather than
+separating constraint solving. We do not know how well they would adapt to incorporating domain-
+specific constraint languages, as motivates our approach. Otherwise, our approaches seem roughly
+comparable in expressiveness.
+
+11     Future Work
+We have presented an expressive and modular approach to type inference with first-class implicit
+polymorphism. We conclude by identifying two particularly promising areas of future work.
+
+11.1     Inserting Type Abstractions
+A guiding principle of our approach is that we must be able to delay the insertion of type application
+to constraint solving. However, we do not have the same flexibility with type abstractions. Implicit
+type abstractions are inserted by rule (i-forall) based on the expected type present during traversal.
+
+Proc. ACM Program. Lang., Vol. 10, No. ICFP, Article 304. Publication date: August 2026.
+Another Type Inference Algorithm for First-Class Implicit Polymorphism                                          304:27
+
+
+If this type is refined later to be polymorphic, it will be too late to insert type abstraction. This
+inexpressiveness appears in benchmark E2: by the time that l forces the instantiation of k to be
+∀a.Nat → a → a, we have already failed to add a type abstraction around λx.h x.
+   It is tempting to wonder if we cannot replay our approach to unknown instantiation by adding
+unknown generalization in types as well. The pseudotype ⟨ι 1 ⟩P, for example, might represent an
+unknown generalization of P. Simplifying ⟨ι 1 ⟩α 1 → α 1 = ∀t.t → t would instantiate ι 1 to the
+argument sequence t :: • and α 1 to t, introducing the corresponding type abstraction.
+   The most significant challenge we see here is the interaction between potential generalizations
+and variable escape. In the example above, if α 1 appears outside the term typed by ⟨ι 1 ⟩α 1 → α 1 , then
+the proposed solution would result in leaking the Λ-bound variable t. With the current treatment,
+where the all Λs are known at traversal time, it is also easy to track the legal instantiations of
+metavariables. With unknown generalizations, it may be less so.
+
+11.2    Inferring Polymorphic Types
+Consider the term λf .pairnb (f zero) (f true) where zero : Nat, true : Bool, and pairnb : Nat →
+Bool → Pair Nat Bool. The challenge in type inference for this term is discovering that f must have
+the polymorphic type ∀a.a → a. Neither our approach, nor QL, FCIF, or DOE rise to this challenge.
+For us, traversal gives:
+             ε ⊢ λf .pairnb (f zero) (f true) : α 1 ↩→
+                   λf :α 2 .pairnb (f [ι 1 ] zero [ι 2 ]) (f [ι 3 ] true [ι 4 ]) ⊣
+                   α 1 = α 2 → Pair Nat Bool, [ι 1 ] (Nat → [ι 2 ]Nat) = [ι 3 ] (Bool → [ι 4 ]Bool)
+We have simplified and substituted the result term and constraint set, and have treated the types
+Nat, Bool, and Pair as opaque to limit irrelevant instantiations.
+    From this point, we go wrong. As neither [ι 1 ] (Nat → [ι 2 ]Nat) nor [ι 3 ] (Bool → [ι 4 ]Bool) are
+quantified types, (c-impl-no) concludes that ι 1 = • and ι 3 = •, leaving the obviously unsatisfiable
+constraint (Nat → [ι 2 ]Nat) = (Bool → [ι 4 ]Bool).
+    It is tempting, however, to observe that other solutions to this constraint set exist. In particular,
+if we consider the constraints α 2 = [ι 1 ] (Nat → [ι 2 ]Nat) and α 2 = [ι 3 ] (Bool → [ι 4 ]Bool) together,
+then it even seems plausible that we could generate the solution α 2 = ∀t.t → t by antiunifica-
+tion, and that, having found it, the constraint set ∀t.t → t = [ι 1 ] (Nat → [ι 2 ]Nat), ∀t.t → t =
+[ι 3 ] (Bool → [ι 4 ]Bool) would simplify and give rise to a correct elaborated term.
+    Introducing antiunification for constraints [ι 1 ]P = [ι 2 ]Q should be conservative with respect to
+our current algorithm. Currently, this constraint solves if and only if P = Q, and in that case the
+least general antiunification of P and Q will be P. On the other hand, we would want to rule out
+misbehaviors like solving α 1 = [ι 1 ]Nat, α 1 = [ι 2 ]Bool with α 1 = ∀a.a. There would also be some
+engineering effort in detecting opportunities for antiunification, as we might eagerly substitute
+when we discover the first solution. Nevertheless, we think this demonstrates a significant potential
+benefit to our approach, and hope to explore it more thoroughly.
+
+Acknowledgments
+Thanks to Andrew Marmaduke, Alex Hubers, and Tristan MacKinlay for feedback on drafts of
+this paper. This material is based upon work supported by the National Science Foundation under
+Grant No. 2044815.
+
+Data Availability Statement
+Our implementation of ATIA, along with the benchmark files used to evaluate ATIA, QuickLook,
+FCIF, and DOE, are preserved [18]. This implementation is a snapshot of our ongoing development
+of a functional language with row types and higher-rank polymorphism [19].
+
+                               Proc. ACM Program. Lang., Vol. 10, No. ICFP, Article 304. Publication date: August 2026.
+304:28                                                                                                    J. Garrett Morris
+
+
+References
+ [1] Franz Baader and Tobias Nipkow. 1998. Term rewriting and all that. Cambridge University Press.
+ [2] Didier Le Botlan and Didier Rémy. 2003. MLF : raising ML to the power of system F. In Proceedings of the Eighth ACM
+     SIGPLAN International Conference on Functional Programming, ICFP 2003, Uppsala, Sweden, August 25-29, 2003, Colin
+     Runciman and Olin Shivers (Eds.). ACM, 27–38. doi:10.1145/944705.944709
+ [3] Frank Emrich, Sam Lindley, Jan Stolarek, James Cheney, and Jonathan Coates. 2020. FreezeML: complete and easy
+     type inference for first-class polymorphism. In Proceedings of the 41st ACM SIGPLAN International Conference on
+     Programming Language Design and Implementation, PLDI 2020, London, UK, June 15-20, 2020, Alastair F. Donaldson and
+     Emina Torlak (Eds.). ACM, 423–437. doi:10.1145/3385412.3386003
+ [4] Frank Emrich, Jan Stolarek, James Cheney, and Sam Lindley. 2022. Constraint-based type inference for FreezeML. Proc.
+     ACM Program. Lang. 6, ICFP (2022), 570–595. doi:10.1145/3547642
+ [5] Jacques Garrigue. 1998. Programming with Polymorphic Variants. In ML Workshop. ACM.
+ [6] Benedict R. Gaster and Mark P. Jones. 1996. A Polymorphic Type System for Extensible Records and Variants. Technical
+     Report NOTTCS-TR-96-3. University of Nottingham.
+ [7] Alex Hubers and J. Garrett Morris. 2023. Generic Programming with Extensible Data Types: Or, Making Ad Hoc
+     Extensible Data Types Less Ad Hoc. Proc. ACM Program. Lang. 7, ICFP (2023), 356–384. doi:10.1145/3607843
+ [8] Mark P. Jones. 1993. Coherence for qualified types. Technical Report YALEU/DCS/RR-989. Yale University.
+ [9] Mark P. Jones. 1997. First-class Polymorphism with Type Inference. In Conference Record of POPL’97: The 24th ACM
+     SIGPLAN-SIGACT Symposium on Principles of Programming Languages, Papers Presented at the Symposium, Paris, France,
+     15-17 January 1997, Peter Lee, Fritz Henglein, and Neil D. Jones (Eds.). ACM Press, 483–496. doi:10.1145/263699.263765
+[10] András Kovács. 2020. Elaboration with first-class implicit function types. Proc. ACM Program. Lang. 4, ICFP (2020),
+     101:1–101:29. doi:10.1145/3408983
+[11] András Kovács. 2026. Elaboration Zoo. https://github.com/AndrasKovacs/elaboration-zoo/.
+[12] Chun Kit Lam, Florent Ferrari, and Lionel Parreaux. 2026. First-Class Constrained Types. Proc. ACM Program. Lang. 10,
+     ICFP (2026), 303:1–303:28. doi:10.1145/3828701
+[13] Oukseh Lee and Kwangkeun Yi. 1998. Proofs about a Folklore Let-Polymorphic Type Inference Algorithm. ACM Trans.
+     Program. Lang. Syst. 20, 4 (1998), 707–723. doi:10.1145/291891.291892
+[14] Daan Leijen. 2008. HMF: simple type inference for first-class polymorphism. In Proceeding of the 13th ACM SIGPLAN
+     international conference on Functional programming, ICFP 2008, Victoria, BC, Canada, September 20-28, 2008, James Hook
+     and Peter Thiemann (Eds.). ACM, 283–294. doi:10.1145/1411204.1411245
+[15] Daan Leijen. 2009. Flexible types: robust type inference for first-class polymorphism. In Proceedings of the 36th ACM
+     SIGPLAN-SIGACT Symposium on Principles of Programming Languages, POPL 2009, Savannah, GA, USA, January 21-23,
+     2009, Zhong Shao and Benjamin C. Pierce (Eds.). ACM, 66–77. doi:10.1145/1480881.1480891
+[16] Daan Leijen and Andres Löh. 2005. Qualified types for MLF. In Proceedings of the 10th ACM SIGPLAN International
+     Conference on Functional Programming, ICFP 2005, Tallinn, Estonia, September 26-28, 2005, Olivier Danvy and Benjamin C.
+     Pierce (Eds.). ACM, 144–155. doi:10.1145/1086365.1086385
+[17] Robin Milner. 1978. A theory of type polymorphism in programming. J. Comput. System Sci. (1978), 348–375.
+[18] J. Garrett Morris. 2025. Artifact for paper “Another Type Inference Algorithm for First-Class Implicit Polymorphism”.
+     Zenodo. doi:10.5281/zenodo.20536370
+[19] J. Garrett Morris, Alex Hubers, Apoorv Ingle, and Tristan MacKinlay. 2026. Rosi: an implementation of a row-typed
+     functional programming language based on the Rose family of calculi. https://github.com/IowaFP/Rosi.
+[20] J. Garrett Morris and James McKinna. 2019. Abstracting extensible data types: or, rows by any other name. Proc. ACM
+     Program. Lang. 3, POPL (2019), 12:1–12:28. doi:10.1145/3290325
+[21] Lionel Parreaux, Aleksander Boruch-Gruszecki, Andong Fan, and Chun Yin Chau. 2024. When Subtyping Constraints
+     Liberate: A Novel Type Inference Approach for First-Class Polymorphism. Proc. ACM Program. Lang. 8, POPL (2024),
+     1418–1450. doi:10.1145/3632890
+[22] Simon L. Peyton Jones, Dimitrios Vytiniotis, Stephanie Weirich, and Geoffrey Washburn. 2006. Simple unification-
+     based type inference for GADTs. In Proceedings of the 11th ACM SIGPLAN International Conference on Functional
+     Programming, ICFP 2006, Portland, Oregon, USA, September 16-21, 2006, John H. Reppy and Julia Lawall (Eds.). ACM,
+     50–61. doi:10.1145/1159803.1159811
+[23] François Pottier and Didier Rémy. 2005. The essence of ML type inference. In Advanced Topics in Types and Programming
+     Languages, Benjamin C. Pierce (Ed.). The MIT Press.
+[24] Tom Schrijvers, Simon L. Peyton Jones, Manuel M. T. Chakravarty, and Martin Sulzmann. 2008. Type checking with
+     open type functions. In Proceeding of the 13th ACM SIGPLAN international conference on Functional programming, ICFP
+     2008, Victoria, BC, Canada, September 20-28, 2008, James Hook and Peter Thiemann (Eds.). ACM, 51–62. doi:10.1145/
+     1411204.1411215
+
+
+
+Proc. ACM Program. Lang., Vol. 10, No. ICFP, Article 304. Publication date: August 2026.
+Another Type Inference Algorithm for First-Class Implicit Polymorphism                                              304:29
+
+
+[25] Alejandro Serrano, Jurriaan Hage, Simon Peyton Jones, and Dimitrios Vytiniotis. 2020. A quick look at impredicativity.
+     Proc. ACM Program. Lang. 4, ICFP (2020), 89:1–89:29. doi:10.1145/3408971
+[26] Alejandro Serrano, Jurriaan Hage, Dimitrios Vytiniotis, and Simon Peyton Jones. 2018. Guarded impredicative
+     polymorphism. In Proceedings of the 39th ACM SIGPLAN Conference on Programming Language Design and Implemen-
+     tation, PLDI 2018, Philadelphia, PA, USA, June 18-22, 2018, Jeffrey S. Foster and Dan Grossman (Eds.). ACM, 783–796.
+     doi:10.1145/3192366.3192389
+[27] Dimitrios Vytiniotis, Stephanie Weirich, and Simon L. Peyton Jones. 2006. Boxy types: inference for higher-rank types
+     and impredicativity. In Proceedings of the 11th ACM SIGPLAN International Conference on Functional Programming,
+     ICFP 2006, Portland, Oregon, USA, September 16-21, 2006, John H. Reppy and Julia Lawall (Eds.). ACM, 251–262.
+     doi:10.1145/1159803.1159838
+[28] Dimitrios Vytiniotis, Stephanie Weirich, and Simon L. Peyton Jones. 2008. FPH: first-class polymorphism for Haskell.
+     In Proceeding of the 13th ACM SIGPLAN international conference on Functional programming, ICFP 2008, Victoria, BC,
+     Canada, September 20-28, 2008, James Hook and Peter Thiemann (Eds.). ACM, 295–306. doi:10.1145/1411204.1411246
+[29] Philip Wadler and Stephen Blott. 1989. How to Make ad-hoc Polymorphism Less ad-hoc. In Conference Record of the
+     Sixteenth Annual ACM Symposium on Principles of Programming Languages, Austin, Texas, USA, January 11-13, 1989.
+     ACM Press, 60–76. doi:10.1145/75277.75283
+
+Received 2026-02-19; accepted 2026-05-13
+
+
+
+
+                                Proc. ACM Program. Lang., Vol. 10, No. ICFP, Article 304. Publication date: August 2026.
+

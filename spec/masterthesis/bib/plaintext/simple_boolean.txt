@@ -1,0 +1,1605 @@
+The Simple Essence of Boolean-Algebraic Subtyping
+Semantic Soundness for Algebraic Union, Intersection, Negation, and Equi-recursive Types
+
+CHUN YIN CHAU and LIONEL PARREAUX, HKUST, Hong Kong, China
+Boolean-algebraic subtyping (BAS) is a powerful subtyping approach introduced in 2022 as the “secret sauce”
+enabling backtracking-free principal type inference in the MLstruct research language, a structurally-typed
+functional programming language with tagged records, tag and record subtyping, and tag-based pattern
+matching. By supporting distributive intersection, union, negation, and equi-recursive types, MLstruct can
+express powerful programming patterns, such as subtyped extensible variants, without needing row variables.
+But the use of atypical subtyping rules that violate some interpretations of intersection and union types, the
+mutual distributivity between these types, and the complexity of coinductive reasoning for equi-recursive
+types have collectively made the study of BAS difficult. The syntactic soundness proofs provided in the original
+work are dauntingly complicated and long-winded, obscuring the intuitions behind the correctness of BAS.
+   In this paper, we distill the simple essence of Boolean-algebraic subtyping: we discover that BAS can be
+understood through five families of characteristic Boolean homomorphisms defined on types in context. Two of
+these map to power sets of simpler objects; the rest map back to types, but under an unguarded coinductive
+assumptions context. Together, these homomorphisms let us prove rather directly that BAS is sound, in that it
+does not relate constructors of incompatible runtime shapes. These homomorphisms are characteristic in the
+sense that they are sufficient to capture the meaning of subyping: we prove that if an inequality holds between
+two types under all these homomorphisms, then subtyping holds between the two types in the original context.
+This directly suggests a new subtyping decision procedure for BAS, which avoids some inefficiencies in the
+original algorithm, although it still has exponential worst-case time complexity. We prove that the subtyping
+problem is in fact co-NP-hard even without recursive types. Finally, we discover that BAS is already powerful
+enough to encode the removal of a field from a type. This allows us to support extensible records through one
+new term form and one new typing rule, but, perhaps surprisingly, no changes to subtyping at all.
+   Our new approach to the semantics of BAS sheds some light on the core of MLstruct’s type system. It could
+be adapted to other languages with algebraic flavors of subtyping, such as Scala 3 and Ceylon, making their
+design and verification more approachable. Tellingly, all our subtyping soundness proofs fit inside the main
+body of this paper, with only some administrative lemmas relegated to the appendix.
+CCS Concepts: • Theory of computation → Type theory; • Software and its engineering → Functional
+languages.
+Additional Key Words and Phrases: subtyping, Boolean algebra, extensible records, structural types.
+ACM Reference Format:
+Chun Yin Chau and Lionel Parreaux. 2026. The Simple Essence of Boolean-Algebraic Subtyping: Semantic
+Soundness for Algebraic Union, Intersection, Negation, and Equi-recursive Types. Proc. ACM Program. Lang.
+10, POPL, Article 47 (January 2026), 30 pages. https://doi.org/10.1145/3776689
+
+1   Introduction
+In 2022, Parreaux and Chau [2022b] presented MLstruct, a type system with Boolean-algebraic types
+(i.e., union, intersection, and negation types), equi-recursive types, tagged records, record subtyping,
+Authors’ Contact Information: Chun Yin Chau, cychauab@connect.ust.hk; Lionel Parreaux, parreaux@cse.ust.hk, HKUST,
+Hong Kong, China.
+
+
+
+
+This work is licensed under a Creative Commons Attribution 4.0 International License.
+© 2026 Copyright held by the owner/author(s).
+ACM 2475-1421/2026/1-ART47
+https://doi.org/10.1145/3776689
+
+
+                               Proc. ACM Program. Lang., Vol. 10, No. POPL, Article 47. Publication date: January 2026.
+47:2                                                                                 Chun Yin Chau and Lionel Parreaux
+
+
+single inheritance between tags, tag-based pattern matching, and principal type inference. MLstruct
+built on Simple-sub [Parreaux 2020], a reformulation of MLsub, from the original algebraic subtyping
+approach of Dolan [2017]; Dolan and Mycroft [2017].
+   Consider the following MLstruct example function1, where Some is a user-defined tag:
+       def mapSome f opt =
+         if opt is Some then f opt . value else opt
+This function has the following inferred type, where unions ⊔ bind less strongly than intersections
+⊓, and where Obj is the “base tag” representing all objects that can be pattern matched:
+        mapSome : ∀𝛼, 𝛽. (𝛼 → 𝛽) → (#Some ⊓ { value : 𝛼 } ⊔ 𝛽 ⊓ ¬ #Some ⊓ #Obj) → 𝛽
+The type specifies that mapSome takes as first argument a function taking 𝛼 to 𝛽 and as second
+argument either an instance of Some2 (i.e., a value of type #Some) that has a field value of type 𝛼
+or a value of type 𝛽 that is not an instance of Some; and that mapSome returns a value of type 𝛽.
+   The above exemplifies that MLstruct can express extensible variants, a feature found in, e.g.,
+OCaml, which calls them polymorphic variants [Garrigue 1998]3. In fact, MLstruct is significantly
+more flexible [Parreaux and Chau 2022b] than OCaml thanks to subtyping, which allows flow-
+sensitive type narrowing, typing conditional branches at different types (taking their union as a
+result), and implicitly widening types when necessary, which in ML/OCaml-style would require
+explicit coercions. To the best of our knowledge, MLstruct was also the first type system with unions
+and intersections that achieved principal type inference. Moreover, it did so without backtracking,
+and while inferring relatively compact types. The key ingredients in achieving these goals were:
+    • an algebraic understanding of types, which allowed the following simplifying rules to be
+      used, which are nonstandard and do not normally hold, except for the last one, when viewing
+      intersection and union types either as intersections and unions of some underlying denota-
+      tions (such as sets of values [Frisch et al. 2002]) or as obligations in a coercive understanding
+      of subtyping (as in, e.g., the work of Pierce [1991]):
+          (𝜏1 → 𝜏2 ) ⊓ (𝜋 1 → 𝜋 2 ) ≡ (𝜏1 ⊔ 𝜋1 ) → (𝜏2 ⊓ 𝜋2 )                                                      (1)
+             {𝑎 : 𝜏 } ⊔ {𝑏 : 𝜋 }        ≡ ⊤                             when 𝑎 ≠ 𝑏                                 (2)
+             { 𝑎 : 𝜏 } ⊔ (𝜋 1 → 𝜋 2 ) ≡ ⊤                                                                          (3)
+                   #𝑇 ⊓ #𝑆              ≡ ⊥                             when tags 𝑇 and 𝑆 are unrelated            (4)
+     • the use of negations to transform constraints containing type variables at the top level into
+       bounds, allowing the simplification of arbitrary constraints.
+The subtyping relationships above follow naturally from an algebraic understanding of types,
+where ⊔ and ⊓ represent respectively the join and meet operations of a particular underlying
+lattice. Subtyping systems with (1) date back at least to the work of Pottier [1998] and later Dolan
+[2017]. In these works, the ⊔ and ⊓ connectives were not referred to as union and intersection, but
+modern programming languages like Scala and Ceylon have adopted the “union” and “intersection”
+terminology for types that do follow some of these laws: Scala 3’s function types satisfy (1), while
+Ceylon’s class types satisfy (4). Rules (2) and (3) are more unusual, but can be understood similarly.
+   There are two main justifications for including these rules in a language like MLstruct, Scala, or
+Ceylon. The philosophical justification is that a type like { 𝑎 : 𝜏 } ⊔ { 𝑏 : 𝜋 } does not embed any
+meaningful information that could be used in programs when 𝑎 ≠ 𝑏, as the language can only match
+1 This example is formulated in MLstruct+ syntax, a slight variation on the original MLstruct syntax.
+2 Technically speaking, it can be an instance of any subtag of Some.
+3 For example, it can be used to implement the extensible programming pattern described by Garrigue [2000]. A more
+
+detailed comparison with polymorphic variants is provided in Section 6 and by Parreaux and Chau [2022b].
+
+
+Proc. ACM Program. Lang., Vol. 10, No. POPL, Article 47. Publication date: January 2026.
+The Simple Essence of Boolean-Algebraic Subtyping                                                                   47:3
+
+
+on tags, not on records themselves, so it cannot tease these two record types apart. Therefore, we
+can equate such types to ⊤. Similarly, #𝑇 ⊓#𝑆 is uninhabited when 𝑇 and 𝑆 are unrelated, as no value
+can have both tags at the same time, so we can equate such types to ⊥. The practical justification
+is that adding these rules has a dramatic simplifying effect on subtype constraint solving, helps
+infer compact type expressions rather than unwieldy sets of constraints, and generally keeps the
+expressiveness of the subtyping system low enough to avoid backtracking in type inference while
+retaining complete and principal type inference. Moreover, all these type forms are meaningful and
+do occur in practice, so we cannot simply rule them out as ill-formed: { 𝑎 : 𝜏 } ⊔ { 𝑏 : 𝜋 } may arise
+from taking the least upper bound of two branch of a conditional expression; #𝑇 ⊓ #𝑆 may arise
+from tag-based pattern matching; and function type intersections may arise from extruding rigid
+type variables with multiple upper bounds [Gao and Parreaux 2025] or, perhaps more importantly,
+from checking an implementation against multiple inherited signatures. To understand the latter,
+consider that in Scala, a class can implement multiple traits that each specify a different signature
+for the same required member. The class must therefore produce an implementation of the member
+whose type is the intersection of all these signatures. When these signatures are function types,
+rule (1) allows merging them (without losing precision) into a single function type that can then be
+used to type check the implementation bidirectionally. Conversely, when the type of a value is an
+intersection of trait types, a common pattern in Scala, accessing such member yields a value whose
+type is in positive position and is the intersection of all signatures of the member in each trait.
+   However, while rules (1)–(4) make sense and are useful in practice, they are difficult to justify
+formally, as they derail the usual techniques for proving subtyping soundness. Tellingly, the Scala
+3 bug tracker has had a long-standing open issue4 asking how unions and intersections should
+distribute over type constructors like function arrows, specifically mentioning that Scala 3 currently
+implements rule (1) for practical reasons but does not have a known theoretical justification for
+doing so. Our work provides a first step towards filling the gap by showing how such rules can be
+formally justified through a Boolean-algebraic subtyping theory.
+   We show that the semantics of Boolean-algebraic subtyping (BAS) can be fully characterized by a
+set of five families of Boolean homomorphisms, which we call characteristic. These homomorphisms
+are enough to semantically justify the soundness of Boolean-algebraic subtyping, leveraging the
+fact that whenever 𝜏 ≤ 𝜋 holds, then ⟦𝜏⟧ ≤ ⟦𝜋⟧ holds as well for each homomorphism. We also
+show a completeness result providing the other side of the characterization: as long as ⟦𝜏⟧ ≤ ⟦𝜋⟧
+holds under all characteristic homomorphisms, then we can show that 𝜏 ≤ 𝜋 also holds.5
+   Another key insight that allowed us to simplify our reasoning was to reconsider the meaning of
+consistent subtyping contexts: the classical definition relies on the existence of a substitution that
+makes all inequalities in the context hold, but we show that for the kind of coinductive reasoning on
+types that we require, it is enough to consider a pseudo-substitution that only substitutes variables
+on the outside of concrete type constructors, without substituting anything inside of them.
+   The proof of subtyping soundness of MLstruct, which took over 50 pages in the original work,
+can be reformulated based on these insights so that it fits in the main body of this paper, with only
+administrative lemmas left to the appendix.
+   Our contributions are as follows:
+     • In Section 2, we present MLstruct+ , a slight simplification and extension of MLstruct, and we
+       present its Boolean-algebraic subtyping system. We also show that
+       – unexpectedly, Eq. (2) above (i.e., the S-RcdTop subtyping rule) does more than just simplify
+          subtyping: it is the key to letting us define a notion of field removal in types; and
+
+4 https://github.com/lampepfl/dotty-feature-requests/issues/51
+5 This introductory description omits considerations of coinductive assumption contexts, which we detail later.
+
+
+
+                                Proc. ACM Program. Lang., Vol. 10, No. POPL, Article 47. Publication date: January 2026.
+47:4                                                                               Chun Yin Chau and Lionel Parreaux
+
+
+         – this can be leveraged to define extensible records, the dual to extensible variants, through
+           a modest modifications to the terms and typing rules of MLstruct.
+       • In Section 3, we present our new notion of subtyping context consistency, another important
+         ingredient in the simplification of the metatheory of BAS and MLstruct.
+       • In Section 4, we present a simple semantic proof of subtyping soundness based on the five
+         families of characteristic homomorphisms of Boolean-algebraic subtyping.
+       • In Section 5, we prove that the presented homomorphisms are indeed characteristic. We also
+         show that while this suggests a new subtyping decision procedure, the subtyping problem is
+         in fact co-NP-hard, even without recursive types.
+
+2      Presentation of MLstruct+ and Boolean-Algebraic Subtyping
+In this section, we describe MLstruct+ , a slight variation on the original MLstruct language, and
+explain its Boolean-algebraic subtyping system.
+
+2.1     MLstruct+ Primer
+MLstruct+ is a research language based on MLstruct [Parreaux and Chau 2022a]. Like MLstruct,
+MLstruct+ features lambda abstractions, tagged records, tag and record subtyping, and tag-based
+pattern matching. Tagged records are written as, e.g., Some { value = 42 } , where Some is the tag
+and value is a field name. (We also assume the existence of base types like Int and Bool , which
+are easily encoded.) Due to tag subtyping, the Some tag may be a subtype of a more general tag, say
+Option , where unlike traditional ML-family languages, the Option tag can also be pattern matched.
+The pattern matching construct of MLstruct+ has syntax if x is C then t else e , where C is a tag
+(e.g., Some , Option ).6 MLstruct+ features flow-sensitive typing: if the scrutinee variable x is initially
+assigned type T , then that type is refined (or narrowed) in the then branch to T ⊓ # C (meaning x has
+both types T and # C ) and in the else branch to T ⊓ ¬# C ( x has types T and ¬# C , i.e., x is not of tag
+C ). MLstruct+ can assign to a pattern matching expression the union of the types of its branches,
+so for example if . . . then Foo {} else Bar {} has type # Foo ⊔ # Bar (i.e., it can be a # Foo or a # Bar ).
+Dually, intersection types can be used to type multiple uses of a variable; for example,
+       def f x = if x . fst is True then x . fst else x . snd
+has type f : ({ fst : 𝛼 ⊓ ( # True ⊔ ¬# True ⊓ # Obj ) } ⊓ { snd : 𝛽 }) → (𝛼 ⊔ 𝛽 ) . Finally, MLstruct+
+supports implicit subsumption (or widening), meaning that no explicit coercions are needed between
+a type and its supertypes: the type checker is always able to insert them automatically in a principal
+way, i.e., without losing any information. This is what allows calling f above with a value arg of
+type, e.g., # Pair ⊓ { fst : # True ⊔ # False , snd : String } , as in f arg , yielding a result type of # True
+⊔ String . By contrast, in a language like OCaml, which does have (a limited form of) subtyping but
+does not support implicit subsumption, explicit coercions would be required to transform an arg of
+the equivalent type just to convince the type checker that arg is indeed a valid argument to f .
+2.1.1 Expressiveness. Exhaustive pattern matching can be encoded: a pattern matching expression
+of the form if x is C 1 then e 1 , · · · , C𝑛 then e𝑛 can be encoded as if x is C 1 then e 1 else · · · if
+x is C𝑛 then e𝑛 else x : ⊥, where the last default branch expression x : ⊥ effectively asserts that
+the last case is unreachable by forcing the scrutinee in that case to be of the uninhabited bottom
+type, making the type checker statically ensure that all cases are handled (a pattern also found in
+TypeScript, though without a syntax sugar). For a larger example illustrating the expressiveness
+of MLstruct+ ’s type system, one may refer to the flatten function given in the appendix, which
+flattens its parameter recursively when it is a list and otherwise leaves it unchanged.
+6 In MLstruct, the pattern matching construct uses a slightly more complex case expression form, which is nonetheless
+
+equivalent (each syntax can be encoded in the other), as explained below.
+
+
+Proc. ACM Program. Lang., Vol. 10, No. POPL, Article 47. Publication date: January 2026.
+The Simple Essence of Boolean-Algebraic Subtyping                                                                            47:5
+
+
+       Field name           𝑎 ∈ F              Tag name       𝑇 ∈ T
+              Type     𝜏, 𝜋 ::= 𝜏 → 𝜏 | { 𝑎 : 𝜏 } | #𝑇 | 𝛼 | ⊤± | 𝜏 ⊔± 𝜏 | ¬𝜏
+             Mode           ± ::= + | −
+       Shorthands       ⊤+ fi ⊤           ⊔+ fi ⊔         ≤ + fi ≤
+                         −                 −
+                        ⊤     fi ⊥        ⊔    fi ⊓       ≤ − fi ≥
+ Polymorphic type         𝜎 ::= ∀ B. 𝜏
+             Term       𝑠, 𝑡 ::= 𝑥, 𝑦, 𝑧 | 𝑡 : 𝜏 | 𝜆𝑥 . 𝑡 | 𝑡 𝑡 | 𝑇 𝑅 | 𝑡 .𝑎 | if 𝑥 = 𝑡 is 𝑇 then 𝑡 else 𝑡
+                                                                                        where      𝑅 ::= { } | { . . . 𝑡, 𝑎 = 𝑡 }
+             Value     𝑣, 𝑤 ::= 𝜆𝑥 . 𝑡 | 𝑇 { } | 𝑇 { . . . 𝑣, 𝑎 = 𝑣 }
+          Program           𝑃 ::= 𝑡 | def 𝑥 = 𝑡 ; 𝑃
+    Typing context          Γ ::= 𝜖 | Γ · (𝑥 : 𝜏 ) | Γ · (𝑥 : 𝜎 )
+Subtyping context      Σ, Δ ::= 𝜖 | Σ · 𝐻 | Σ · 𝐻            where     𝐻 ::= 𝜏 ≤ 𝜏
+   Bounds context     B, A ::= 𝜖 | B · (𝛼 ≤ 𝜏 ) | B · (𝜏 ≤ 𝛼 )
+                                                Fig. 1. Syntax of MLstruct+ .
+
+
+2.1.2 Type Simplification and Compactness. A major advantage of the subtyping relations (1)—(4)
+mentioned in Section 1 is that it allows simplifying types aggressively by merging unions and
+intersections when doing so does not entail a loss of information, which results in the inference
+of compact type representations that can then be printed back to the user. For instance, without
+simplification, fun f → if . . . then f True {} else f False {} would have inferred type (( # True
+→ 𝛼 ) ⊓ ( # False → 𝛽 )) → (𝛼 ⊔ 𝛽 ) , but with simplifications notably based on rule (1) this can be
+reduced to just (( # True ⊔ # False ) → 𝛾 ) → 𝛾 . Similarly, a conditional expression returning a value
+of type { payload : S , a : T } in one branch and { payload : U , b : V } in the other can be simplified
+thanks to rule (2) to just { payload : S ⊔ U } [Parreaux and Chau 2022b, §2.3.2].
+2.1.3 Extension. MLstruct+ features one significant addition over MLstruct: its support for record
+extension, with syntax C { ... s , a = t } , which extends a C -tagged record s with a field a of value
+t , where if a is already present in s , it is replaced in the resulting record. The syntax requires C to
+be provided explicitly so that type checking can be syntax-directed. As a shorthand, plain record
+literal terms of the form { ... } are understood as having tag Obj , i.e., to mean Obj { ... } .
+
+2.2 Formal Syntax of MLstruct+
+                                   𝑥 ∈𝑆
+Notations. We use the notation 𝐸        to denote a repetition of |𝑆 | occurrences of a syntax form 𝐸
+(wherein 𝑥 is free) for each 𝑥 taken from collection 𝑆. When 𝑆 is omitted for brevity, all repetitions
+                                                              𝑥    𝑥           𝑥 ∈𝑆    𝑥 ∈𝑆
+using the same 𝑥 are understood to share the same 𝑆; e.g., 𝐴𝑥 𝐵𝑥 means 𝐴𝑥           𝐵𝑥      for some 𝑆.
+2.2.1 Syntax. The syntax of MLstruct+ is presented in Fig. 1. To avoid repetition in our rules
+and metatheory, we use a polarity notations ± and ⋄ to treat ⊤/⊥, ⊔/⊓, and ≤ /≥ symmetrically
+[Oliveira et al. 2020; Parreaux and Chau 2022a]. For example, ⊤+ is ⊤, while ⊤− is ⊥.
+2.2.2 Objects and Tags. Conceptually, an object 𝑇 { 𝑎 1 = 𝑣 1, 𝑎 2 = 𝑣 2, · · · } is made of a tag 𝑇 and a
+set of fields { 𝑎 1 = 𝑣 1, 𝑎 2 = 𝑣 2, · · · }; its type is #𝑇 ⊓ { 𝑎 1 : 𝜏1 } ⊓ { 𝑎 2 : 𝜏2 } ⊓ · · · when 𝑣 1 : 𝜏1 , 𝑣 2 : 𝜏2 ,
+etc., using an intersection of single-field record types (field types) like in the Forsythe language
+[Reynolds 1997]. Concretely, object literals are encoded using compositions of the empty object at
+tag 𝑇 , written 𝑇 {}, and field extensions at tag 𝑇 , written 𝑇 { . . . 𝑠, 𝑎 = 𝑡 }. Traditional extensible
+records, which are untagged, can be thought of as records using some distinguished tag 𝑇rcd . A tag 𝑇
+may be related to another tag 𝑆 through a tag single-inheritance relation. We write 𝑇 ĺ 𝑆 to denote
+that 𝑇 inherits transitively from 𝑆. By convention, all tags inherit from some distinguished tag
+
+                                   Proc. ACM Program. Lang., Vol. 10, No. POPL, Article 47. Publication date: January 2026.
+47:6                                                                                     Chun Yin Chau and Lionel Parreaux
+
+
+conventionally denoted as Obj (i.e., ∀𝑇 . 𝑇 ĺ Obj), so the directed graph of tag inheritance forms a
+tree7, Note that the tag inheritance relation is reflexive. Moreover, when 𝑇 transitively inherits from
+𝑆, this induces a subtyping relation 𝑇 ≤ 𝑆. We also encode primitive types like Bool and Int as tags.
+Field types { 𝑎 : 𝜏 } are related by the usual depth subtyping, while the traditional width subtyping
+of record types arises from the representation of record types as intersection of field types.
+2.2.3 Polymorphism. Parametric polymorphism in MLstruct+ is attached solely to top-level ‘def’
+bindings, whose semantics, as in languages like Scala, is to re-evaluate their right-hand side every
+time they are referred to in the program. In contrast, local let bindings are desugared to immediately-
+applied lambdas, and are treated monomorphically. Let polymorphism is orthogonal to the features
+presented in this paper, and can be handled by using a level-based algorithm [Parreaux 2020] on
+top of the core algorithm we describe here or through an equivalent of lambda lifting, along with
+the usual value restriction if the language is meant to incorporate mutation.
+2.2.4 Recursion. In MLstruct+ , def bindings are not recursive. This simplification is made without
+loss of generality, as recursion can be recovered using a Z fixed point combinator, typeable in
+MLstruct [Parreaux and Chau 2022b] and thus also in MLstruct+ .
+2.2.5 Encoding of Recursive Data Types. The original presentation of MLstruct included type alias
+definitions and class definitions. A type alias use was treated as equivalent to its body after type
+argument substitution (the subtyping rules could expand them on the fly). On the other hand, a
+class type use was equivalent to the substituted body of the class (a record type) intersected with a
+“class tag” denoting the object’s runtime class. In this paper, we boil this all down to its essence: we
+only describe records and tags, which are sufficient for all intents and purposes. Each use 𝐴[𝜋] of
+an old MLstruct type definition 𝐴[𝑋 ] can be encoded as a fresh type variable 𝛼 with bounds 𝛼 ≤ 𝜏
+and 𝜏 ≤ 𝛼, where 𝜏 is the deeply expanded body of 𝐴 (up until its recursive occurrences), in which
+each 𝑋 is replaced by a fresh 𝛽 with bounds 𝛽 ≤ 𝜋 and 𝜋 ≤ 𝛽. Because the types are regular, this
+approach is fully general. The equi-bounded type variables 𝛽 avoid syntactic substitutions and lead
+to better worst-case complexity of subtype checking: they make the MLscript constraint solver
+behave like QuickSub [Zhou and Oliveira 2025] when specialized to iso-recursive use cases.
+2.2.6 Contexts. We use three kinds of contexts. Typing contexts Γ bind both monomorphic and
+polymorphic types to variables, the latter corresponding to ‘def’ bindings. Subtyping contexts Σ
+record assumptions about subtyping relationships, with some of these assumptions potentially
+hidden behind a  (explained in Section 2.5.1). Finally, bounds contexts B contain bounds on type
+variables. The typing rules will ensure that in a polymorphic type ∀B. 𝜏, context B is consistent.
+2.2.7 Shorthands. Throughout this paper, we make use of the following notations and shorthands:
+
+           𝑇 { } fi #𝑇                { 𝑎 : 𝜏𝑎 𝑎 ∈ 𝑆 , 𝑏 : 𝜏𝑏 } fi { 𝑎 : 𝜏𝑎 𝑎 ∈ 𝑆 } ⊓ { 𝑏 : 𝜏𝑏 }   (𝑏 ∉ 𝑆, 𝑆 ≠ ∅)
+
+        𝑇 { 𝑎 : 𝜏 } fi #𝑇 ⊓ { 𝑎 : 𝜏 }             𝜏 \𝑎 fi 𝜏 ⊔ ¬{ 𝑎 : ⊥ }               𝜏 \ #𝑇 fi 𝜏 ⊓ ¬#𝑇 ⊓ #Obj
+
+ We will clarify the field and tag removal shorthand definitions in Section 2.6 and Section 2.7.
+
+2.3 Evaluation Rules of MLstruct+
+The small-step reduction semantics of MLstruct+ is shown in Fig. 2. The relation 𝑃 ù 𝑃 ′ reads
+“program 𝑃 evaluates to program 𝑃 ′ in one step.” Note that 𝑃 here may refer to a simple term 𝑡.
+
+7 Technically, tags could be left to form any arborescent partial order [Faggian and Piccolo 2009], but rooting them all into a
+
+single Obj base tag simplifies the development and reasoning slightly.
+
+
+Proc. ACM Program. Lang., Vol. 10, No. POPL, Article 47. Publication date: January 2026.
+The Simple Essence of Boolean-Algebraic Subtyping                                                                                   47:7
+
+
+                𝐸 [˝] ::= ˝ 𝑡 | 𝑣 ˝ | ˝.𝑎 | 𝑇 { . . . ˝, 𝑎 = 𝑡 } | 𝑇 { . . . 𝑣, 𝑎 = ˝ } | if 𝑥 = ˝ is 𝑇 then 𝑡 else 𝑡
+
+                E-Ctx                                              𝐸 [𝑡 ] ù 𝐸 [𝑡 ′ ]                           if 𝑡 ù 𝑡 ′
+                 E-Def                                   def 𝑥 = 𝑡 ; 𝑃 ù [𝑥 ↦→ 𝑡 ]𝑃
+                 E-App                                         (𝜆𝑥 . 𝑡 ) 𝑣 ù [𝑥 ↦→ 𝑣 ]𝑡
+                 E-Asc                                              𝑡 :𝜏 ù𝑡
+             E-Proj1                            𝑇 { . . . 𝑣0 , 𝑎 = 𝑣1 }.𝑎 ù 𝑣1
+             E-Proj2                            𝑇 { . . . 𝑣0 , 𝑏 = 𝑣1 }.𝑎 ù 𝑣0 .𝑎                              if 𝑎 ≠ 𝑏
+                  E-If1             if 𝑥 = 𝑇1 𝑅 is 𝑇2 then 𝑡 1 else 𝑡 2 ù [𝑥 ↦→ 𝑇1 𝑅 ]𝑡 1                      if 𝑇1 ĺ 𝑇2
+                  E-If2             if 𝑥 = 𝑇1 𝑅 is 𝑇2 then 𝑡 1 else 𝑡 2 ù [𝑥 ↦→ 𝑇1 𝑅 ]𝑡 2                      if 𝑇1 ł 𝑇2
+                                              Fig. 2. Small-step evaluation rules.
+
+                            T-Body                                 T-Def
+                            B cons.       B, Γ ⊢ 𝑡 : 𝜏             B ′ cons.         B ′, Γ ⊢ 𝑡 : 𝜏    B, Γ·(𝑥 : ∀B ′ . 𝜏) ⊢★ 𝑃 : 𝜏𝑃
+ B, Γ ⊢ 𝑃 : 𝜏
+        ★
+                                   B, Γ ⊢★ 𝑡 : 𝜏                                       B, Γ ⊢★ def 𝑥 = 𝑡 ; 𝑃 : 𝜏𝑃
+
+                     T-Asc                  T-Var1               T-Var2                                  T-Subs
+                       B, Γ ⊢ 𝑡 : 𝜏          Γ(𝑥) = 𝜏            Γ(𝑥) = ∀A. 𝜏          B ⊨ 𝜌 (A)         B, Γ ⊢ 𝑡 : 𝜏1    B ⊢ 𝜏1 ≤ 𝜏2
+ B, Γ ⊢ 𝑡 : 𝜏
+                     B, Γ ⊢ (𝑡 : 𝜏) : 𝜏      B, Γ ⊢ 𝑥 : 𝜏                B, Γ ⊢ 𝑥 : 𝜌 (𝜏)                        B, Γ ⊢ 𝑡 : 𝜏2
+
+      T-Obj                           T-Ext                                                                  T-Proj
+         𝑇 final                        B, Γ ⊢ 𝑡 0 : 𝜏0 ⊓ #𝑇       B, Γ ⊢ 𝑡 1 : 𝜏1     𝑇 final               B, Γ ⊢ 𝑡 : { 𝑎 : 𝜏 }
+       B, Γ ⊢ 𝑇 {} : #𝑇               B, Γ ⊢ 𝑇 { . . . 𝑡 0, 𝑎 = 𝑡 1 } : 𝜏0 \𝑎 ⊓ { 𝑎 : 𝜏1 } ⊓ #𝑇                 B, Γ ⊢ 𝑡 .𝑎 : 𝜏
+
+                                           T-App                             T-If
+      T-Abs                                B, Γ ⊢ 𝑡 0 : 𝜏1 → 𝜏2                    B, Γ ⊢ 𝑡 0 : (𝜏1 ⊓ #𝑇 ) ⊔ (𝜏2 \ #𝑇 )
+       B, Γ·(𝑥 : 𝜏1 ) ⊢ 𝑡 : 𝜏2                B, Γ ⊢ 𝑡 1 : 𝜏1                 B, Γ·(𝑥 : 𝜏1 ) ⊢ 𝑡 1 : 𝜏 B, Γ·(𝑥 : 𝜏2 ) ⊢ 𝑡 2 : 𝜏
+      B, Γ ⊢ 𝜆𝑥 . 𝑡 : 𝜏1 → 𝜏2                B, Γ ⊢ 𝑡 0 𝑡 1 : 𝜏2                B, Γ ⊢ if 𝑥 = 𝑡 0 is 𝑇 then 𝑡 1 else 𝑡 2 : 𝜏
+
+                                                     S-Cons                                           S-Cons
+                           S-Empty                   Σ ⊨ Σ′ Σ ⊢ 𝜏 1 ≤ 𝜏 2                             Σ ⊨ Σ′ Σ ⊢ 𝜏1 ≤ 𝜏2
+ Σ⊨Σ
+                           Σ⊨𝜖                           Σ ⊨ Σ′ ·(𝜏1 ≤ 𝜏2 )                             Σ ⊨ Σ′ ·(𝜏1 ≤ 𝜏2 )
+                                           Fig. 3. Program and term typing rules.
+
+2.4    Typing Rules MLstruct+
+Fig. 3 shows the declarative typing rules of MLstruct+. These rules are not syntax-directed, as they
+have to guess some types, for instance the type of a lambda abstraction’s parameter or the result
+type of an if expression. The algorithmic typing rules of the language would always pick a fresh
+type variable for the former and a union type for the latter [Parreaux and Chau 2022a].
+   Program-typing judgments B, Γ ⊢★ 𝑃 : 𝜏 are used to type programs while term-typing judgments
+B, Γ ⊢ 𝑡 : 𝜏 are used to type def right-hand sides and program bodies. The latter judgment is read
+“under type variable bounds B and in context Γ, term 𝑡 has type 𝜏.” The consistency judgment
+(B cons.), explained later in Section 3.2, is used to make sure we type def s and program bodies
+under valid (i.e., consistent) bounds only.8
+   Rule T-Body is used to type programs that happen to be simple terms, after having accumulated
+a set of definitions in the context.
+   In T-Def, we type the body of a def inside a constraining context B added on top of the current
+declarations context, and subsequently use B as part of the resulting polymorphic type of this
+8 Indeed, under inconsistent bounds, ill-typed terms become typeable. For example, we have (Int ≤ Int → Int) ⊢ 1 1 : Int.
+
+
+
+                                    Proc. ACM Program. Lang., Vol. 10, No. POPL, Article 47. Publication date: January 2026.
+47:8                                                                               Chun Yin Chau and Lionel Parreaux
+
+
+def, which is placed into the typing context for use later in the program. Importantly, B has to
+be checked for consistency, which is done with the B cons. judgment. This is to forbid the use of
+inconsistent bounds on type variables, such as (Bool ≤ 𝛼)·(𝛼 ≤ Int), which could lead to accepting
+ill-typed definitions.
+    As a concrete example for T-Def, consider a definition such as def 𝑓 = 𝜆𝑥 . 𝑥 +1. One hypothetical
+judgment used to type this definition could be ‘(𝛼 ≤ Int), Γ ⊢ 𝜆𝑥 . 𝑥 + 1 : 𝛼 → Int’, where
+B = (𝛼 ≤ Int) is the constraining context. According to T-Def, because B is consistent (as
+witnessed by the top-level substitution { 𝛼 ↦→ Int }★, since applying it to B gives (Int ≤ Int), a
+tautology) we can type the definition 𝑓 as ‘∀(𝛼 ≤ Int). 𝛼 → Int’. As a side note, this type can be
+rewritten equivalently to 𝑓 : Int → Int.
+   Rule T-Obj is used to instantiate a new object of tag 𝑇 . It requires 𝑇 to be “final” using the 𝑇 final
+judgment, which means that there exists no tag 𝑆 such that 𝑆 ĺ 𝑇 , i.e., 𝑇 is not extended by any
+other tag. This ensures that, at runtime, for every tag pattern 𝑆, pattern-matching scrutinees are
+always instances of a tag 𝑇 that is either a subtag of 𝑆 (meaning #𝑇 ≤ #𝑆) or an unrelated tag
+(meaning #𝑇 ≤ ¬#𝑆). This is a mere technicality, necessary to make type preservation hold. Any
+instantiation of a non-final tag 𝑇 can be encoded as an instantiation of a fresh final subtag 𝑇 f of 𝑇 .
+   Rule T-Ext is used to extend an existing object 𝑡 0 of tag 𝑇 with with a new value 𝑡 1 for some field
+𝑎, written 𝑇 { . . . 𝑡 0, 𝑎 = 𝑡 1 }. The first premise ensures that 𝑡 0 is an object of tag 𝑇 and can be typed
+as some type 𝜏0 . The second premise types the new value for field 𝑎 as some 𝜏1 . The conclusion
+states that the extended object can be typed as 𝜏0 with the field 𝑎 removed and intersected with the
+new record field 𝑎 of type 𝜏1 and the tag #𝑇 , i.e., 𝜏0 \𝑎 ⊓ { 𝑎 : 𝜏1 } ⊓ #𝑇 , where 𝜏0 \𝑎 is a shorthand
+for 𝜏0 ⊔ ¬{ 𝑎 : ⊥ }.
+   Rule T-Proj is used to access a field 𝑎 of an object 𝑡. The premise ensures that 𝑡 can be typed as
+{ 𝑎 : 𝜏 }. Then the conclusion states that the field 𝑎 of 𝑡 has type 𝜏.
+  The rule T-Abs types a lambda abstraction 𝜆𝑥 . 𝑡 by typing its body 𝑡 as type 𝜏2 while assuming the
+parameter 𝑥 has type 𝜏1 . The conclusion then states that the lambda abstraction has type 𝜏1 → 𝜏2 .
+  The rule T-App is used to type an application 𝑡 0 𝑡 1 of 𝑡 0 to the argument 𝑡 1 . The first premise
+ensures that 𝑡 0 is a function that accepts an argument of type 𝜏1 and returns a result of type 𝜏2 . The
+second premise then ensures that the type of the argument matches 𝜏1 . Then conclusion then states
+that the result of the application has type 𝜏2 .
+  The rule T-Asc ascribes the type 𝜏 to the term 𝑡. The premise simply ensures that 𝑡 can indeed
+be typed as 𝜏.
+  In T-Subs, we use the current constraining context B as a subtyping context Σ when invoking
+the subtyping judgment B ⊢ 𝜏1 ≤ 𝜏2 (presented in the next subsection), which is possible since the
+syntax of constraining contexts is a special case of the syntax of subtyping contexts.
+   Rule T-Var1 looks up the typing context for a monomorphic binding of a variable.
+   Rule T-Var2 is an interesting counterpart to rule T-Def explained above. It instantiates a given
+polymorphic type using a substitution 𝜌.
+   The entailment judgment B ⊨ 𝜌 (A), makes sure that every subtyping constraint in 𝜌 (A) holds
+in B. The formal definition of substitutions is straightforward and relegated to the appendix.
+   Pattern matching if expressions are handled by the rule T-If. Since the this is a declarative type
+system, the premises of this rule mentions two types 𝜏1 and 𝜏2 picked out of thin air, akin to how
+the type of the parameter is picked in the classical way of typing a lambda abstraction. To type such
+expressions, we first assume that the scrutinee 𝑡 0 has some type 𝜏1 in order to type the matched
+branch, and then assume 𝑡 0 has type 𝜏2 to type the default branch. Then, we make sure that the
+scrutinee 𝑡 0 can be typed at #𝑇 ⊓ 𝜏1 ⊔ 𝜏2 \ #𝑇 , where 𝜏2 \ #𝑇 is a shorthand for 𝜏2 ⊓ ¬#𝑇 ⊓ #Obj. This
+
+Proc. ACM Program. Lang., Vol. 10, No. POPL, Article 47. Publication date: January 2026.
+The Simple Essence of Boolean-Algebraic Subtyping                                                                  47:9
+
+
+ensures that if 𝑡 1 is an instance of 𝑇 , then it is also of type 𝜏1 , and if not, then it is an instance of
+some other tag that is not a subtag of 𝑇 and of type 𝜏2 . In this rule, 𝜏1 can be picked to be anything,
+so assuming Γ·(𝑥 : 𝜏1 ) to type 𝑡 1 is sufficient, and there is no need to assume Γ·(𝑥 : 𝜏1 ⊓ #𝑇 ). If the
+matched branch needs 𝜏1 to be a subtype of #𝑇 , we can always pick 𝜏1 = 𝜏1′ ⊓ #𝑇 . Notice that the
+required type for 𝑡 1 still has the same shape #𝑇 ⊓𝜏1 ⊔𝜏2 \#𝑇 ≡ #𝑇 ⊓(#𝑇 ⊓𝜏1′ )⊔𝜏2 \#𝑇 ≡ #𝑇 ⊓𝜏1′ ⊔𝜏2 \#𝑇 .
+To express exhaustive pattern matching, we can pick the ascription 𝑥 : ⊥ as the default branch,
+which ensures that the scrutinee must have already been matched by assigning to it type ⊥ (the
+type inhabited by no values).
+   The pattern matching syntax and the T-If rule differs from the original MLstruct formulation by
+nesting expressions matching a single tag with a default branch instead of enumerating branches
+as a flat list. This allows us to to condense the three typing for the original formulation into one
+single rule and simplify the soundness proofs.
+
+2.5    Boolean-Algebraic Subtyping
+2.5.1 Subtyping Recursive Types. A consequence of our syntactic account of subtyping is that we
+do not define types as some fixed point over a generative relation, as done by, e.g., Dolan [2017];
+Pierce [2002]. Instead, we have to account for the fact that we manipulate finite syntactic type
+trees, in which recursive types have to be manually unfolded to derive things about them. This is
+achieved by the S-Hyp rules, which allows us to substitute a possibly recursive type with its body,
+which had been encoded as the bounds on a type variable (Section 2.2.5), to expose one layer of
+its underlying definition. As remarked by Amadio and Cardelli [1993, §3.2], to subtype recursive
+types, it is not enough to simply allow unfolding them a certain number of times. Moreover, in
+our system, recursive types may arise from cyclic type variable constraints (which is important for
+type inference), and thus not be attached to any explicit recursive binders. Thus, we cannot simply
+follow Castagna [2012, §1.3.4] in admitting a 𝜇 rule, which would still be insufficient.
+
+
+ Σ⊢𝜏 ≤𝜏                              𝜖 = 𝜖       (Σ · 𝐻 ) = Σ · 𝐻      (Σ · 𝐻 ) = Σ · 𝐻
+
+  S-Refl           S-ToB±               S-Compl±                     S-AndOr11±                 S-AndOr12±
+
+  Σ⊢𝜏 ≤𝜏            Σ ⊢ 𝜏 ≤± ⊤±          Σ ⊢ ⊤± ≤± 𝜏 ⊔± ¬𝜏           Σ ⊢ 𝜏1 ≤± 𝜏1 ⊔± 𝜏2         Σ ⊢ 𝜏2 ≤± 𝜏1 ⊔± 𝜏2
+
+ S-AndOr2±                                                                                S-Trans
+ Σ ⊢ 𝜏1 ≤± 𝜏 Σ ⊢ 𝜏2 ≤± 𝜏          S-Distrib±                                              Σ ⊢ 𝜏0 ≤ 𝜏1     Σ ⊢ 𝜏1 ≤ 𝜏2
+              ±    ±                      ±       ±     ±     ±      ±      ±
+      Σ ⊢ 𝜏1 ⊔ 𝜏2 ≤ 𝜏             Σ ⊢ 𝜏 ⊓ (𝜏1 ⊔ 𝜏2 ) ≤ (𝜏 ⊓ 𝜏1 ) ⊔ (𝜏 ⊓ 𝜏2 )                    Σ ⊢ 𝜏0 ≤ 𝜏2
+
+ S-Assum           S-Hyp          S-TagSub              S-TagBot                    S-FunDepth
+ Σ·𝐻 ⊢ 𝐻          𝐻 ∈Σ              𝑇1 ĺ 𝑇2            𝑇1 ł 𝑇2 𝑇2 ł 𝑇1             Σ ⊢ 𝜏0 ≤ 𝜏1        Σ ⊢ 𝜏2 ≤ 𝜏3
+      Σ⊢𝐻           Σ⊢𝐻           Σ ⊢ #𝑇1 ≤ #𝑇2          Σ ⊢ #𝑇1 ⊓ #𝑇2 ≤ ⊥              Σ ⊢ 𝜏1 → 𝜏2 ≤ 𝜏0 → 𝜏3
+
+                                                                                S-RcdDepth
+            S-FunMrg±                                                               Σ ⊢ 𝜏1 ≤ 𝜏2
+            Σ ⊢ 𝜏1 → 𝜏2 ⊓± 𝜏3 → 𝜏4 ≤± (𝜏1 ⊔± 𝜏3 ) → (𝜏2 ⊓± 𝜏4 )                 Σ ⊢ {𝑎 : 𝜏1 } ≤ {𝑎 : 𝜏2 }
+
+                                                                         S-RcdTop
+              S-RcdMrg±                                                  𝜏 ∈ { { 𝑏 ≠𝑎 : 𝜏2 }, 𝜏2 → 𝜏3 }
+              Σ ⊢ {𝑎 : 𝜏1 ⊔± 𝜏2 } ≤± {𝑎 : 𝜏1 } ⊔± {𝑎 : 𝜏2 }                 Σ ⊢ ⊤ ≤ { 𝑎 : 𝜏1 } ⊔ 𝜏
+                                  Fig. 4. Core subtyping rules of MLstruct+ .
+
+
+                              Proc. ACM Program. Lang., Vol. 10, No. POPL, Article 47. Publication date: January 2026.
+47:10                                                                              Chun Yin Chau and Lionel Parreaux
+
+
+2.5.2 Subtyping Hypotheses. We make use of the Σ environment to store subtyping hypotheses
+via S-Assum, to be leveraged later using the S-Hyp rule. We should be careful not to allow the use
+of a hypothesis right after assuming it, which would obviously make the system unsound (as it
+could derive any subtyping). In the specification of their constraint solving algorithm, Hosoya et al.
+[2005] use two distinct judgments ⊢ and ⊢′ to distinguish from places where the hypotheses can or
+cannot be used. We take a different, but related approach. Our S-Assum subtyping rule resembles
+the Löb rule described by Appel et al. [2007], which uses the “later” modality  in order to delay
+the usability of hypotheses—by placing this symbol in front of the hypothesis being assumed, we
+prevent its immediate usage by S-Hyp. We eliminate  when passing through a function or record
+constructor: the dual  symbol is used to remove all  from the set of hypotheses, making them
+available for use by S-Hyp. These precautions reflect the “guardedness” restrictions used by Dolan
+[2017] and others on recursive types, which prevents usages of 𝛼 that are not guarded by → or
+{ ... } in a recursive type 𝜇𝛼 . 𝜏.
+
+2.5.3 A Boolean Algebra. The first two lines of the subtyping rules in Fig. 4, which we call the
+pure Boolean-algebraic rules, give rise to a Boolean lattice or algebra when taking the equivalence
+relation ‘𝜏1 ≡ 𝜏2 ’ to be the relation induced by ‘𝜏1 ≤ 𝜏2 and 𝜏2 ≤ 𝜏1 ’ [Parreaux and Chau 2022a].
+   The rule S-TagSub relates tags in an inheritance relation by stating that #𝑇1 is a subtype of #𝑇2 if
+𝑇1 transitively inherits from 𝑇2 . The rule S-TagBot states that the intersection of two unrelated
+tags is equivalent to ⊥.
+   The rules S-FunDepth and S-RcdDepth are the standard depth subtyping rules for functions
+and records respectively. All  in the set of hypotheses are eliminated in the premises. The rules
+S-FunMrg and S-RcdMrg merge intersections and unions of functions and records respectively by
+pushing the connectives inside the type constructor, swapping the connective for its dual for the
+argument type of functions due to its contravariance. The rule S-RcdTop states that a union of two
+records with distinct fields, or of a record and a function is equivalent to ⊤.
+
+2.6     Extensible Variants in MLstruct+
+Consider variant types as in the example of Section 1 (#Some ⊓ { value : 𝛼 } ⊔ 𝛽 ⊓ ¬ #Some ⊓ #Obj).
+   One can remove a tag 𝑇𝑖 from a variant type (#𝑇1 ⊓· · · ) ⊔ (#𝑇2 ⊓· · · ) ⊔· · · by taking the intersection
+of that type with the negation of the tag, i.e., ((#𝑇1 ⊓ · · · ) ⊔ (#𝑇2 ⊓ · · · ) ⊔ · · · ) ⊓ ¬#𝑇𝑖 . For instance,
+(#Some ⊓ { value : 𝛼 } ⊔ 𝛽 ⊓ ¬ #Some ⊓ #Obj) ⊓ ¬ #Some is equivalent to just 𝛽 ⊓ ¬ #Some ⊓ #Obj.
+
+2.7     Extensible Records in MLstruct+
+A naive way of typing the extension of a record of type 𝜏 to a new field 𝑎 with a value of type 𝜋 is
+to yield the bound type 𝜏 ⊓ {𝑎 : 𝜋 }. This does not work, however: if 𝜏 already contains a field 𝑎 of
+type 𝜏 ′ , then this means that the resulting type is a subtype of {𝑎 : 𝜏 ′ ⊓ 𝜋 }, which is clearly not true
+in general. Thankfully, we can circumvent this while staying within Boolean-algebraic subtyping.
+   Similar to the removal of a tagged record from an extensible variant, one can remove a record
+field 𝑎𝑖 from a record type {𝑎 1 : 𝜏1 } ⊓ {𝑎 2 : 𝜏2 } ⊓ · · · by taking the union of that type with the
+negation of the field {𝑎 1 : 𝜏1 } ⊓ {𝑎 2 : 𝜏2 } ⊓ · · · ⊔ ¬{𝑎𝑖 : ⊥}. We can show that this record type admits
+all the fields 𝑎 1 through 𝑎𝑛 except for 𝑎𝑖 and that an extension of the language with record removal
+and record extension based on these types is sound.
+   This only works thanks to the powerful algebraic properties of Boolean-algebraic subtyping.
+Indeed, the S-RcdTop rule states that ⊤ ≤ {𝑎 : 𝜏1 } ⊔ {𝑏 : 𝜏2 } when 𝑎 ≠ 𝑏. This means in particular
+that ¬{𝑎 : 𝜏1 } ≤ {𝑏 : 𝜏2 } (𝑎 ≠ 𝑏) and that {𝑎 1 : 𝜏1 } ⊓ {𝑎 2 : 𝜏2 } ⊓ · · · ⊔ ¬{𝑎𝑖 : ⊥} ≤ {𝑎 𝑗 : 𝜏 𝑗 } for all
+𝑗 ≠ 𝑖! This means we can widen the value’s type to the smaller record type.
+
+Proc. ACM Program. Lang., Vol. 10, No. POPL, Article 47. Publication date: January 2026.
+The Simple Essence of Boolean-Algebraic Subtyping                                                               47:11
+
+
+  In conclusion, MLstruct+ does not need row polymorphism, as the corresponding extensible
+programming patterns can be encoded both for extensible variants and for extensible records, in
+ways that are dual to each other.
+
+3     Polymorphism, Consistency, and Soundness
+MLstruct+ expressions are typed under polymorphic type schemes made of type variables 𝛼 and
+bounds B, which Sulzmann et al. [1999] calls a “type system in constrained form”and is related to
+the classical constrained types approach [Odersky et al. 1999; Trifonov and Smith 1996] and is called
+multi-bounded polymorphism by [Parreaux et al. 2024]. Because type variables can be bounded
+on both sides, we must ensure that these bounds are consistent, otherwise one could use unsound
+assumptions to type check programs that go wrong by transitivity of subtyping
+
+3.1     Type Variables & Polymorphism
+In line with ML-style type inference, which is based on prenex polymorphism, we seek to assign
+type schemes to the term definitions and body of a program. We could write such type schemes
+∀𝛼 {B}. 𝜏, as is done by in the work of Parreaux et al. [2024], where 𝛼 are the type variables being
+quantified and B is their bounds. However, since in this work we focus on polymorphism only
+for top-level definitions (we do not support nested let polymorphism, although the extension is
+easy), we instead use the more compact notation ∀B. 𝜏, whereby all variables mentioned in B are
+implicitly quantified.
+   The type schemes of a definition is implicitly and eagerly instantiated whenever the definition
+is used, so that type checking/inference and constraint solving only ever deal with monomorphic
+types: the polymorphism is only at the top level and not part of the core subtyping system.
+
+3.2     Consistency of Bounds Contexts
+A crucial aspect of polymorphic type inference with bounds is that we must ensure that these bounds
+are consistent, in the sense that they are “meaningful” and do not lead to contradictions in the type
+system. For example, we must prevent typing definitions with such bounds as ∀(Bool ≤ 𝛼 ≤ Int). 𝜏,
+which is a shorthand for ∀(Bool ≤ 𝛼)·(𝛼 ≤ Int). 𝜏. Indeed, in the body of the corresponding
+definition, this would allow one to implicitly upcast any value of type Int into a value of type Bool,
+due to the assumptions on the bounds of 𝛼 (leveraged by S-Hyp) and the transitivity of subtyping
+implying that Bool ≤ Int.
+  We denote by B cons. | 𝜌 that a bounds context B is consistent as witnessed by a substitution 𝜌.
+We also just write B cons. when the witness does not need to be named. There are several possible
+ways of defining a consistency criterion that ensures the soundness of the type system.
+3.2.1    Classical Consistency. The most obvious approach is to define consistency as follows:
+                                              ⊨ 𝜌 (B)
+                                                    B cons.★ | 𝜌
+That is, a bounds context B is considered consistent if there exists a substitution 𝜌 that makes all
+the constraints hold in the empty context, written 𝜖 ⊨ 𝜌 (B) or just ⊨ 𝜌 (B).
+   While this definition is quite simple and intuitive, it describes a rather strong consistency
+criterion. To see that, consider the bounds context (⊤ → 𝛼 ≤ 𝛼) · (𝛼 ≤ ⊤ → 𝛼), which is cyclic and
+essentially makes 𝛼 describe a recursive type. Such type schemes are important to support since they
+are required for complete & principal type inference, so we cannot simply reject them. But to show
+that this bounds context is classically consistent requires the existence of some form of first-class
+recursive or infinite types as primitives of the underlying type system. Here, the substitution 𝜌
+
+                              Proc. ACM Program. Lang., Vol. 10, No. POPL, Article 47. Publication date: January 2026.
+47:12                                                                               Chun Yin Chau and Lionel Parreaux
+
+
+would have to map 𝛼 to a type that is a function type from ⊤ to itself. We usually write these types
+using a 𝜇 binder, as in 𝜇𝑋 . ⊤ → 𝑋 .
+   While the requirement that 𝜇 types (or equivalent) should be available as one of the core type
+constructors of the system is not a fundamental problem, it has two major disadvantages:
+     • It can complicate the formal developments, requiring the handling of all possible uses of 𝜇
+       types in the metatheory.
+     • It is unsatisfying from a practical and theoretical point of view, in that the real type system
+       of the programming language under study may already have its own notion of recursive
+       types (e.g., user-defined type aliases and class types) and 𝜇 types would play double duty
+       with them, flaunting the principle of economy of concepts. We would really rather like for
+       a generic theory of Boolean-algebraic subtyping like that of MLstruct+ to not make strong
+       assumptions on the constructors of the underlying language beyond the existence of the base
+       Boolean-algebraic connectives.
+   While this strong consistency definition is sufficient to achieve soundness (making it impossible
+to, say, upcast integers to Booleans), it is in fact not necessary.
+3.2.2 Towards Elementary Consistency. It is possible to design an alternative, more syntactic but
+also more permissive definition of consistency that does not assume the existence of recursive
+structures in the base type forms and instead relies purely on type variables and the  modality.
+We call this elementary consistency, or just consistency in the rest of this article.
+   Recall that the goal of consistency is to prevent problematic assumption from being used by
+S-Hyp in a subtyping derivation. We achieve this by requiring each of the assumptions (after
+substitution) to be derivable under the guarded context, so that S-Hyp cannot be used on the top
+level, and hence cannot introduce immediate inconsistencies:
+                                                     B ⊨ 𝜌 (B)
+   However, this is not sufficient on its own. Recall that our type system allows program bodies
+to be typed under any consistent context B (see rule T-Body).9 Because of this, we must be able
+to reduce terms under contextual assumptions, and for type preservation to hold, we need to be
+able to invert subtyping judgments in consistent contexts. But the sole premise above does not
+rule out contexts that imply indirect subtyping relationships that might be unsound. For instance,
+consider the bounds context B = ({ 𝑎 : Int } ≤ 𝛼) · (𝛼 ≤ { 𝑎 : 𝛽 }). We can satisfy B ⊨ 𝜌 (B) by
+picking 𝜌 = [𝛼 ↦→ { 𝑎 : Int }, 𝛽 ↦→ Int]. But due to the lack of decomposition rules, even though we
+have { 𝑎 : Int } ≤ { 𝑎 : 𝛽 } by transitivity, we do not have Int ≤ 𝛽. Thus reducing terms under that
+context may not preserve well-typedness — indeed, we can type B, 𝜖 ⊢ { 𝑎 : 42 }.𝑎 : 𝛽 (remember
+that 𝜖 is the empty context), but this term reduces to 42, and we do not have B, 𝜖 ⊢ 42 : 𝛽.
+   This issue is due to leaving too much freedom for the substitution, allowing it to map type
+variables to types that are not implied by the type variable’s bounds (i.e., in the example above,
+mapping 𝛽 ↦→ Int). To fix the issue, we take a step back and realize that we do not even need full
+substitutions to define a sufficient notion of consistency. This leads us to the following definition:
+  Definition 3.1 (Top-level substitution). A top-level substitution 𝜙 substitutes all occurrences of
+type variables on the outermost layer of a type. The formal definition is given in the appendix.
+   Thanks to this definition, we can now finally define consistency as follows.
+ Definition 3.2 (Consistent context). B is consistent as witnessed by 𝜙, written B cons. | 𝜙 if
+B ⊨ 𝜙 (B) for some top-level substitution 𝜙.
+9 Requiring T-Body to type the body of the program in an empty context would be sufficient but too restrictive, for the
+
+reason mentioned above relating to recursive types — we could then not define a complete type inference algorithm for it.
+
+
+Proc. ACM Program. Lang., Vol. 10, No. POPL, Article 47. Publication date: January 2026.
+The Simple Essence of Boolean-Algebraic Subtyping                                                               47:13
+
+
+  Do note that we need to guard B, as otherwise ⊤ ≤ 𝛼 ≤ ⊥ would be considered consistent.
+
+3.2.3 Properties of Consistent Contexts. Consistency has a few important properties. For example,
+it allows us to inline consistent bounds into existing subtyping derivations, which is crucial for
+showing the soundness of the type system. This is reflected in the following lemma statements,
+where TTV (·) enumerates the type variables on the top level of a type (i.e., not under a type
+constructor), formally defined in the appendix.
+
+  Lemma 3.3 (Inlining of bounds). If B cons. | 𝜙 and B ⊢ 𝜏 ≤ 𝜏 ′ , then B ⊢ 𝜙 (𝜏) ≤ 𝜙 (𝜏 ′ ).
+
+   Proof. By preservation of subtyping under top-level substitution, we have 𝜙 (B)·B ⊢ 𝜙 (𝜏) ≤
+𝜙 (𝜏 ′ ). By definition of consistency, B ⊢ 𝜙 (B), so we conclude by weakening.              □
+
+  Corollary 3.4. If B cons. | 𝜙 and B ⊢ 𝜏 ≤ 𝜏 ′ and TTV (𝜏) ∪ TTV (𝜏 ′ ) = ∅, then B ⊢ 𝜏 ≤ 𝜏 ′ .
+
+3.3   Subtyping Derivation Shapes
+We now give a few definitions characterizing the shapes of subtyping derivations, and state
+important properties concerning them (the proofs are in the appendix).
+
+  Definition 3.5 (Bottom-level rules). A rule is used at the bottom level in a derivation if it is one of
+the following:
+  (1) the last rule used in the derivation;
+  (2) either premise of a bottom-level application of rule S-Trans;
+  (3) the first premise of a bottom-level application of rule T-Subs.
+
+  Definition 3.6 (Unassuming derivation). An unassuming derivation is a subtyping derivation that
+does not make use of S-Assum at the bottom level.
+
+  Lemma 3.7 (Unassuming derivation). Any subtyping derivation can be rewritten to an equivalent
+unassuming derivation.
+
+  Proof. See the appendix.                                                                                          □
+
+3.4   Soundness Proofs
+We present selected cases for the soundness proof. The full proof can be found in the appendix.
+
+  Lemma 3.8 (Term progress). If 𝜖, 𝜖 ⊢ 𝑡 : 𝜏 and 𝑡 is not a value then 𝑡 ù 𝑡 ′ for some 𝑡 ′ .
+
+  Proof. By induction on typing derivations.
+Case T-Ext. 𝑡 = 𝑇 { . . . 𝑡 0, 𝑎 = 𝑡𝑎 }
+     If 𝑡 0 is not a value, by IH on the first premise we have 𝑡 0 ù 𝑡 ′ for some 𝑡 ′ and thus
+     𝑇 { . . . 𝑡 0, 𝑎 = 𝑡𝑎 } ù 𝑇 { . . . 𝑡 ′, 𝑎 = 𝑡𝑎 } by E-Ctx.
+     If 𝑡𝑎 is not a value, by IH on the second premise we have 𝑡𝑎 ù 𝑡𝑎′ for some 𝑡𝑎′ , and thus
+     𝑇 { . . . 𝑡 0, 𝑎 = 𝑡𝑎 } ù 𝑇 { . . . 𝑡 0, 𝑎 = 𝑡𝑎′ } by E-Ctx.
+     Otherwise, 𝑡 is a value.
+Case T-Proj. 𝑡 = 𝑡 ′ .𝑎
+     If 𝑡 ′ is not a value, by IH we have 𝑡 ′ ù 𝑡 ′′ , and thus 𝑡 ù 𝑡 ′′ .𝑎 by E-Ctx. Otherwise, by
+     canonical form for record types, we have 𝑡 ′ = 𝑇 { . . . 𝑣 0, 𝑏 = 𝑣𝑏 }, and therefore 𝑡 progresses
+     as either 𝑡 ù 𝑣𝑏 by E-Proj1 or 𝑡 ù 𝑣 0 .𝑎 by E-Proj2.
+
+                              Proc. ACM Program. Lang., Vol. 10, No. POPL, Article 47. Publication date: January 2026.
+47:14                                                                              Chun Yin Chau and Lionel Parreaux
+
+
+Case T-If. 𝑡 = if 𝑥 = 𝑡 0 is 𝑇 then 𝑡 1 else 𝑡 2
+     By IH, if 𝑡 0 is not a value, then 𝑡 progresses by E-Ctx. Otherwise, since #𝑇 ⊓ 𝜏1 ⊔ ¬#𝑇 ⊓
+     #Obj ⊓ 𝜏2 ≤ #Obj, we have 𝜖, Γ ⊢ 𝑡 0 : #Obj by T-Subs. Then by canonical form for tag types,
+     𝑡 0 is an object and 𝑡 progresses by E-If1 or E-If2.
+Remaining cases. See the appendix.
+                                                                                               □
+    Lemma 3.9 (Term type preservation). If 𝜖, Γ ⊢ 𝑡 : 𝜏 and 𝑡 ù 𝑡 ′ , then 𝜖, Γ ⊢ 𝑡 ′ : 𝜏.
+   Proof. By induction on typing derivations. In the following, we sometimes abbreviate 𝜖, Γ ⊢ 𝑡 : 𝜏
+to 𝑡 : 𝜏.
+Case T-Ext. 𝑡 = 𝑇 { . . . 𝑡 0, 𝑎 = 𝑡 1 } 𝜏 = 𝜏0 \𝑎 ⊓ { 𝑎 : 𝜏1 } ⊓ #𝑇 𝑡 0 : 𝜏0 ⊓ #𝑇 𝑡 1 : 𝜏1
+       𝑡 ù 𝑡 ′ can only hold by E-Ctx. The result follows by IH on the premise and T-Ext.
+Case T-Proj. 𝑡 = 𝑡 0 .𝑎 𝑡 0 : { 𝑎 : 𝜏 }
+        If 𝑡 ù 𝑡 0′ .𝑎 by E-Ctx, we conclude by IH on the premise and T-Proj.
+        If 𝑡 ù 𝑣 reduces by E-Proj1, this means that 𝑡 0 = 𝑇 { . . . 𝑣 0, 𝑎 = 𝑣 }. By inversion of object
+        types on the premise, we have 𝑣 : 𝜏.
+        Otherwise, 𝑡 ù 𝑣 reduces by E-Proj2, meaning that 𝑡 0 = 𝑇 { . . . 𝑣, 𝑏 = 𝑣𝑏 } where 𝑏 ≠ 𝑎. By
+        inversion of object types on the premise, we have 𝑣 : { 𝑎 : 𝜏 }.
+Case T-If. 𝑡 = if 𝑥 = 𝑡 0 is 𝑇 then 𝑡 1 else 𝑡 2 𝑡 0 : #𝑇 ⊓ 𝜏1 ⊔ ¬#𝑇 ⊓ #Obj ⊓ 𝜏2
+        If the rule that applies is E-Ctx, by IH.
+        Otherwise, if E-If1 is the rule that applies, it means 𝑡 0 is an instance of a subtag of 𝑇2 , so
+        by inversion of discriminated tag types we know that 𝜖, Γ ⊢ 𝑡 0 : 𝜏1 , and we can conclude by
+        substitution.
+        Otherwise, E-If2 must be the rule that applies, so by inversion of discriminated tag types
+       we know that 𝜖, Γ ⊢ 𝑡 0 : #Obj ⊓ 𝜏2 , and we can conclude by T-Subs with S-AndOr11− and
+        substitution.
+Remaining cases. See the appendix.
+                                                                                                       □
+
+4     Soundness of Boolean-Algebraic Subtyping
+The reason we can incorporate rules such as S-FunMrg, S-RcdMrg, and S-RcdTop is that they
+do not threaten any of the properties we need for the syntactic type soundness properties to hold.
+In this section, we demonstrate the soundness of Boolean-algebraic subtyping in MLstruct+ by
+proving that it does not relate the type constructors of unrelated values and that it only relates
+related constructors in a sound way. The soundness of subtyping in MLstruct+ is a key ingredient
+in showing that it can be used as a type-safe programming language whose well-typed programs
+“do not go wrong” and that other languages like Scala can safely be modeled after it.
+
+4.1     High-Level Goal
+Essentially, we want to prove the following property:
+    Theorem 4.1 (Subtyping soundness). If B cons. and B ⊢ 𝜏 ≤ 𝜋, where:
+             𝜏 ∈ { ⊥, ⊤, 𝜏1 → 𝜏2, 𝑇 { 𝑎𝑖 : 𝜏𝑖 𝑖 } }         𝜋 ∈ { ⊥, ⊤, 𝜋 1 → 𝜋2, #𝑇 ′, { 𝑎 ′ : 𝜋1 } }
+then exactly one of the following is true:
+    (a) 𝜏 = ⊥ or 𝜋 = ⊤;
+    (b) 𝜏 = 𝜏1 → 𝜏2 and 𝜋 = 𝜋1 → 𝜋2 and B ⊢ 𝜋1 ≤ 𝜏1 and B ⊢ 𝜏2 ≤ 𝜋 2 ;
+    (c) 𝜏 = 𝑇 { 𝑎𝑖 : 𝜏𝑖 𝑖 } and 𝜋 = #𝑇 ′ and 𝑇 ĺ 𝑇 ′ ;
+    (d) 𝜏 = 𝑇 { 𝑎𝑖 : 𝜏𝑖 𝑖 } and 𝜋 = { 𝑎𝑘 : 𝜋1 } and B ⊢ 𝜏𝑘 ≤ 𝜋1 for some 𝑘.
+
+Proc. ACM Program. Lang., Vol. 10, No. POPL, Article 47. Publication date: January 2026.
+The Simple Essence of Boolean-Algebraic Subtyping                                                               47:15
+
+
+  This property can be read as follows: if the right-hand side of a subtyping relation is a function
+type and the left-hand side is the constructed type of a value (i.e., either a function type or an object
+type) or ⊥ or ⊤, then that constructed type must be either ⊥ or a function type with compatible
+argument and return types, and similarly for the other right-hand side type constructors. This
+describes how the basic type constructors of the language should or should not relate by subtyping,
+and in particular prevents wrong relations, such as function types subtyping record types.
+
+   Proof. As we will see, this will be proved by a weaker form of the property where the context
+is guarded (Lemma 4.12) together with Corollary 3.4 to guard the context.                     □
+
+4.2   Key Proof Idea
+The key idea of our proof approach is to leverage the fact that our subtyping relation is relatively
+well-behaved, despite its non-uniform treatment of unions and intersections (i.e., the rules (1)—(4)
+introduced in Section 1 that correspond to S-TagBot, S-FunMrg, and S-RcdTop).
+   More specifically, we can often map Boolean-algebraic subtyping derivations into other deriva-
+tions defined in some alternative Boolean algebra in a structure-preserving way, which is called a
+Boolean homomorphism. These alternative Boolean algebras can be the standard Boolean-algebraic
+subtyping types but with an unguarded context (when the original derivation was using a guarded
+one) or they can be completely different altogether. All we have to show is that our Boolean homo-
+morphisms are monotonic with respect to our subtyping rules, which ensures that the resulting
+derivation is valid.
+
+4.2.1 Shape Homomorphisms. Consider the problem of showing that function types cannot possibly
+subtype record types of some field 𝑎 in our system. To do so, we want to reject the existence of all
+subtyping derivations of the form 𝜏1 → 𝜏2 ≤ { 𝑎 : 𝜋 } by showing a contradiction.
+   One way to achieve this is to construct a Boolean homomorphism S from the Boolean algebra
+of MLstruct+ types to plain Boolean truth values 0 and 1, which are ordered by 0 < 1, mapping
+functions to 1 and records of field 𝑎 to 0 respectively, i.e.,
+                       S⟦⊥⟧ = 0                                  S⟦𝜏 → 𝜋⟧ = 1
+                       S⟦⊤⟧ = 1
+                                                                                
+                                                                                  0 if 𝑏 = 𝑎
+                                                                 S⟦{ 𝑏 : 𝜏 }⟧ =
+                      S⟦¬𝜏⟧ = ¬⟦𝜏⟧                                                1 otherwise
+                  S⟦𝜏 ⊔± 𝜋⟧ = ⟦𝜏⟧ ∨± ⟦𝜋⟧                               S⟦#𝑇 ⟧ = 0
+
+We can then show that S is monotonic: we inspect each subtyping rule and make sure that it
+is preserved after applying S. Thanks to monotonicity, we can then reason that if there was
+indeed a derivation for 𝜏1 → 𝜏2 ≤ { 𝑎 : 𝜋 }, this would imply the existence of a derivation for
+S⟦𝜏1 → 𝜏2 ⟧ ≤ S⟦{ 𝑎 : 𝜋 }⟧, ie, 1 ≤ 0, a contradiction.
+   We call shape homomorphisms those that allow us to exclude impossible cases by contradiction
+in this way. Down the line, these are the ones that allow us to prove progress.
+
+4.2.2 Component Homomorphisms. The other category of Boolean homomorphisms we use project
+out a sub-component of a type constructor of interest in order to reason about it separately.
+   For example, in order to prove that { 𝑎 1 : 𝜏1 } ⊓ { 𝑎 2 : 𝜏2 } ≤ { 𝑎 1 : 𝜋 } implies 𝜏1 ≤ 𝜋 when 𝑎 1 ≠ 𝑎 2 ,
+we can define a specific homomorphism K that maps any { 𝑎 1 : 𝜋 ′ } to 𝜋 ′ , i.e., K⟦{ 𝑎 1 : 𝜋 ′ }⟧ = 𝜋 ′ ,
+and maps all other record types to ⊤, i.e., K⟦{ 𝑎 ′ : 𝜋 ′ }⟧ = ⊤ when 𝑎 ′ ≠ 𝑎 1 . As before, we show
+that this homomorphism is monotonic by inspecting each subtyping rule in isolation. Thereafter,
+we can reason that if there is indeed a derivation of { 𝑎 1 : 𝜏1 } ⊓ { 𝑎 2 : 𝜏2 } ≤ { 𝑎 1 : 𝜋 }, then there
+
+                              Proc. ACM Program. Lang., Vol. 10, No. POPL, Article 47. Publication date: January 2026.
+47:16                                                                              Chun Yin Chau and Lionel Parreaux
+
+
+must also be a derivation of K⟦{ 𝑎 1 : 𝜏1 } ⊓ { 𝑎 2 : 𝜏2 }⟧ ≤ K⟦{ 𝑎 1 : 𝜋 }⟧, ie, 𝜏1 ⊓ ⊤ ≤ 𝜋, immediately
+implying the existence of a derivation for 𝜏1 ≤ 𝜋, which is the result we wanted.
+   We call component homomorphisms those that allow us to extract sub-components of types in
+this way. Down the line, these are the ones that allow us to prove type preservation.
+4.2.3 Other Homomorphisms. This generic reasoning principle extends far beyond the proof of
+subtyping soundness. For example, we also use Boolean homomorphisms to prove the co-NP-
+hardness of subtyping in MLstruct+ , as shown in Section 5.3.
+
+4.3     Semantic Proof of Subtyping Soundness
+The proof proceeds by constructing homomorphisms from the Boolean algebra of types to some
+other Boolean algebras with variables mapped to ⊤, i.e., mappings ⟦·⟧ where:
+         ⟦𝜏 ⊔± 𝜋⟧ = ⟦𝜏⟧ ⊔± ⟦𝜋⟧                  ⟦⊤± ⟧ = ⊤±              ⟦¬𝜏⟧ = ¬⟦𝜏⟧              ⟦𝛼⟧ = ⊤
+We then prove that the mappings we construct are monotonic by checking that the subtyping
+relation is compatible with each of them. We then deduce the desired properties from the properties
+of the target Boolean algebras. In particular, we show that for each form of 𝜋, only a compatible
+form of 𝜏 is possible.
+   Since S-Hyp can make use of arbitrary assumptions in the context, constructing homomorphisms
+compatible with S-Hyp requires the target Boolean algebra to always be parameterized by a
+corresponding context, which significantly complicates the reasoning. This can be overcome by
+first inlining the bounds in the subtyping judgment, which in turn allows the entire context to
+be guarded. Thus, in the auxiliary Lemma 4.12, we can ignore subtyping rules with unguarded
+assumptions in the context, namely S-Hyp.
+   Another consequence of considering only subtyping rules with guarded contexts is that type
+variables cannot be used in any meaningful way: they can only be introduced and eliminated by
+the pure Boolean-algebraic rules. This allows us to always map type variables to ⊤ regardless of its
+bounds while ensuring monotonicity. The choice of ⊤ here is in fact arbitrary: any element of the
+target Boolean algebra would suffice.
+   Notice that as the component homomorphisms map to a Boolean algebra of types, the order in
+the target Boolean algebra is also parameterized by a subtyping context, which in our case is the
+input context unguarded. For the shape homomorphisms, the target Boolean homomorhism are
+simple power sets, whose orders do not depend on a subtyping context, in which case the input
+subtyping context is simply discarded.
+
+4.4     Boolean Homomorphisms
+The five families of characteristic Boolean homomorphisms of Boolean-algebraic subtyping are
+summarized in Table 1, where ĺ(𝑇 ) denotes the set { 𝑆 | 𝑆 ĺ 𝑇 } of all subtags of 𝑇 .
+   We do not directly include the two example homomorphisms from Sections 4.2.1 and 4.2.2 and in-
+stead prefer to consolidate several shape homomorphisms and several component homomorphisms
+into single ones, reducing the total number of required definitions.
+  Definition 4.2. The mapping H ⟦·⟧ is defined below. It is a Boolean homomorphism from the
+Boolean algebra of types to P (U) ordered by inclusion, where U = T ∪ { →, R } is the set of tags
+together with the symbols → and R.
+             H ⟦𝜏1 → 𝜏2 ⟧ = { → }                  H ⟦{ 𝑎 : 𝜏1 }⟧ = U                 H ⟦#𝑇 ⟧ = ĺ(𝑇 )
+
+   Lemma 4.3. H ⟦·⟧ is monotonic.
+
+Proc. ACM Program. Lang., Vol. 10, No. POPL, Article 47. Publication date: January 2026.
+The Simple Essence of Boolean-Algebraic Subtyping                                                                  47:17
+
+
+Table 1. Summary of the characteristic Boolean homomorphisms of BAS, where T is the set of all tag names,
+F is the set of all record field labels, → and R are constants, U = T ∪ { →, R }, and ĺ(𝑇 ) = { 𝑆 | 𝑆 ĺ 𝑇 }.
+   Def.     Not.       · ⟦𝜏 → 𝜋⟧          · ⟦{ 𝑎 : 𝜏 }⟧            · ⟦#𝑇 ⟧             · ⟦⊤⟧      · ⟦⊥⟧     · ⟦≤⟧
+   4.2      H ⟦·⟧         {→}                   U                   ĺ(𝑇 )                 U          ∅         ⊆
+   4.4      I⟦·⟧          U×F            U × (F \ {𝑎 })           ĺ(𝑇 ) × F            U×F           ∅         ⊆
+                                         𝜏 if 𝑏 = 𝑎              ⊤ if 𝑆 ĺ 𝑇
+   4.6      J ⟦·⟧𝑏𝑆         ⊤                                                             ⊤          ⊥         ≤
+                                         ⊤ otherwise             ⊥ otherwise
+                                                                 ⊤ if 𝑆 ĺ 𝑇
+   4.8      D⟦·⟧𝑆→         ¬𝜏                    ⊤                                        ⊤          ⊥         ≤
+                                                                 ⊥ otherwise
+                                                                 ⊤ if 𝑆 ĺ 𝑇
+   4.10     C⟦·⟧𝑆→          𝜋                    ⊤                                        ⊤          ⊥         ≤
+                                                                 ⊥ otherwise
+
+
+
+  Proof. We show that the subtyping relation is compatible with H ⟦·⟧. The only non-trivial cases
+are S-TagSub and S-TagBot.
+Case S-TagSub. The rule has premise 𝑇1 ĺ 𝑇2 and conclusion #𝑇1 ≤ #𝑇2 . By transitivity of
+     inheritance, all subtags of 𝑇1 are also subtags of 𝑇2 , i.e., ĺ(𝑇1 ) ⊆ ĺ(𝑇2 ).
+Case S-TagBot. The rule has premises 𝑇2 ł 𝑇1 and 𝑇1 ł 𝑇2 , i.e., 𝑇1 and 𝑇2 are unrelated, and
+     conclusion #𝑇1 ⊓ #𝑇2 ≤ ⊥. Due to single inheritance, subtags of 𝑇1 cannot also be subtags of
+     𝑇2 without the two being related. Therefore, ĺ(𝑇1 ) ∩ ĺ(𝑇2 ) = ∅ and the conclusion reduces
+     to ∅ ⊆ ∅.                                                                                 □
+
+
+   Remark 4.1. This homomorphism is critical in ensuring that subtyping relates type constructors
+of compatible shapes. The presence of a rule like {𝑎 : ⊥} ⩽ ⊥, which is commonly seen in set-
+theoretic subtyping systems, would prevent us from using such a homomorphism, at least in its
+simple form: such a rule would require that H ⟦{ 𝑎 : 𝜏 }⟧ ⊆ H ⟦⊥⟧ = ∅ for any 𝜏 equivalent to
+⊥; this would in turn require us to map records to ∅, but that would collapse the types of object
+values, preventing us from concluding the soundness proof by ruling out impossible cases (as we
+will see in the proof of Lemma 4.12 on page 20). It is possible that a more refined mapping could be
+defined and used, but doing so would significantly complicate the proof.
+
+   Definition 4.4. The Boolean homomorphism I⟦·⟧ from the Boolean algebra of types to P (U × F )
+ordered by inclusion, where U = T ∪ { →, R } is the set of tags together with the symbols → and
+R; and F = {𝑎 } is the set of record field labels, is defined as:
+
+         I⟦𝜏1 → 𝜏2 ⟧ = U × F              I⟦{ 𝑎 : 𝜏1 }⟧ = U × (F \ {𝑎 })               I⟦#𝑇 ⟧ = ĺ(𝑇 ) × F
+
+  Lemma 4.5. I⟦·⟧ is monotonic.
+
+  Proof. We show that the subtyping relation is compatible with I⟦·⟧. The only non-trivial cases
+are S-TagSub, S-TagBot, and S-RcdTop.
+Case S-TagSub. The rule has premise 𝑇1 ĺ 𝑇2 and conclusion #𝑇1 ≤ #𝑇2 . By transitivity of
+     inheritance, we have ĺ(𝑇1 ) ⊆ ĺ(𝑇2 ), which implies the mapped conclusion ĺ(𝑇1 ) × F ⊆
+     ĺ(𝑇2 ) × F .
+
+                                Proc. ACM Program. Lang., Vol. 10, No. POPL, Article 47. Publication date: January 2026.
+47:18                                                                              Chun Yin Chau and Lionel Parreaux
+
+
+Case S-TagBot. The rule has premises 𝑇2 ł 𝑇1 and 𝑇1 ł 𝑇2 , i.e., 𝑇1 and 𝑇2 are unrelated, and
+     conclusion #𝑇1 ⊓ #𝑇2 ≤ ⊥. A subtag of 𝑇1 cannot also be a subtag of 𝑇2 at the same time due
+     to single inheritance. Therefore, we have ĺ(𝑇1 ) ∩ ĺ(𝑇2 ) = ∅. The LHS then reduces to:
+                                I⟦#𝑇1 ⊓ #𝑇2 ⟧ = (ĺ(𝑇1 ) × F ) ∩ (ĺ(𝑇2 ) × F )
+                                                 = (ĺ(𝑇1 ) ∩ ĺ(𝑇2 )) × F
+                                                 =∅×F
+                                                 =∅
+     Therefore, the conclusion reduces to ∅ ⊆ ∅.
+Case S-RcdTop.
+     Case RHS = { 𝑎 : 𝜏1 } ⊔ { 𝑏 ≠𝑎 : 𝜏2 }. The RHS is mapped to:
+                     I⟦{ 𝑎 : 𝜏1 } ⊔ { 𝑏 : 𝜏2 }⟧ = (U × (F \ {𝑎 })) ∪ (U × (F \ {𝑏 }))
+                                                   = U × ((F \ {𝑎 }) ∪ (F \ {𝑏 }))
+                                                   = U × (F \ ({𝑎 } ∩ {𝑏 }))
+                                                   = U × (F \ ∅) = U × F
+         Therefore, the conclusion reduces to U × F ⊆ U × F .
+        Case RHS = { 𝑎 : 𝜏1 } ⊔ 𝜏2 → 𝜏3 . Then the RHS is mapped to (U×(F \{𝑎 }))∪(U×F ) = U×F
+         and the conclusion reduces to U × F ⊆ U × F .                                       □
+  Definition 4.6. The Boolean homomorphism J ⟦·⟧𝑇𝑎 from the Boolean algebra of types ordered
+by subtyping under the context Σ to the Boolean algebra of types ordered by subtyping under the
+context Σ is defined as:
+           J ⟦𝜏1 → 𝜏2 ⟧𝑇𝑎 = ⊤
+                                                                     ⊤ if 𝑇 ĺ 𝑇 ′
+                                                                   
+                                                             ′ 𝑇
+                                          ′           J ⟦#𝑇   ⟧  =
+                            
+                ′      𝑇      𝜏1 if 𝑎 = 𝑎                      𝑎     ⊥ otherwise
+         J ⟦{ 𝑎 : 𝜏1 }⟧𝑎 =
+                              ⊤ otherwise
+We may pick a dummy tag unrelated to any other tags for 𝑇 , in which case we denote the resulting
+homomorphism as J ⟦·⟧𝑎 :
+                                                    𝜏1 if 𝑎 = 𝑎 ′
+                                                  
+      J ⟦𝜏1 → 𝜏2 ⟧𝑎 = ⊤       J ⟦{ 𝑎 ′ : 𝜏1 }⟧𝑎 =                          J ⟦#𝑇 ′ ⟧𝑎 = ⊥
+                                                    ⊤ otherwise
+   Lemma 4.7. J ⟦·⟧𝑇𝑎 is monotonic.
+   Proof. We show by case analysis on unassuming subtyping derivations that the subtyping
+relation is compatible with J ⟦·⟧𝑇𝑎 . The non-trivial cases are S-TagSub, S-TagBot, S-RcdDepth,
+and S-RcdTop.
+Case S-TagSub. The rule has premise 𝑇1 ĺ 𝑇2 and conclusion #𝑇1 ≤ #𝑇2 . We proceed by case
+       analysis of the subtag relation of 𝑇1 and 𝑇2 with 𝑇 .
+       Case 𝑇 ĺ 𝑇1 . Then we also have 𝑇 ĺ 𝑇2 by transitivity of inheritance and the conclusion
+         maps to ⊤ ≤ ⊤.
+       Case 𝑇 ł 𝑇1 and 𝑇 ĺ 𝑇2 . Then the conclusion maps to ⊥ ≤ ⊤.
+       Case 𝑇 ł 𝑇1 and 𝑇 ł 𝑇2 . Then the conclusion maps to ⊥ ≤ ⊥.
+Case S-TagBot. The rule has premises 𝑇2 ł 𝑇1 and 𝑇1 ł 𝑇2 , i.e., 𝑇1 and 𝑇2 are unrelated, and
+       conclusion #𝑇1 ⊓ #𝑇2 ≤ ⊥. If either one of 𝑇1 or 𝑇2 maps to ⊤, meaning that it is a supertag
+       of 𝑇 , the other one cannot also be a supertag of 𝑇 without the two being related due to
+       single-inheritance. Therefore one of #𝑇1 and #𝑇2 must map to ⊥ and the conclusion reduces
+       to ⊥ ≤ ⊥.
+
+Proc. ACM Program. Lang., Vol. 10, No. POPL, Article 47. Publication date: January 2026.
+The Simple Essence of Boolean-Algebraic Subtyping                                                               47:19
+
+
+Case S-RcdDepth. The rule has premise Σ ⊢ 𝜏1 ≤ 𝜏2 and conclusion Σ ⊢ { 𝑎 : 𝜏1 } ≤ { 𝑎 : 𝜏2 }
+     for some 𝑎, 𝜏1 , and 𝜏2 .
+     Case 𝑎 = 𝑎 ′ . Then the conclusion maps to Σ ⊢ 𝜏1 ≤ 𝜏2 , which we have as the premise of
+       the rule.
+     Case 𝑎 ≠ 𝑎 ′ . Then the conclusion maps to Σ ⊢ ⊤ ≤ ⊤.
+Case S-RcdTop.
+                                       ′
+     Case RHS = { 𝑎 ′ : 𝜏1 } ⊔ { 𝑏 ≠𝑎 : 𝜏2 }. Since 𝑏 ≠ 𝑎 ′ , we must have either 𝑎 ≠ 𝑎 ′ or 𝑎 ≠ 𝑏. Then
+                 ′
+       either { 𝑎 : 𝜏1 } or { 𝑏 : 𝜏2 } maps to ⊤ and the conclusion reduces to ⊤ ≤ ⊤.
+     Case RHS = { 𝑎 ′ : 𝜏1 } ⊔ 𝜏2 → 𝜏3 . Then the RHS is mapped to J ⟦{ 𝑎 ′ : 𝜏1 }⟧𝑇𝑎 ⊔ ⊤ = ⊤ and
+       the conclusion reduces to ⊤ ≤ ⊤.                                                                □
+   Remark 4.2. This homomorphism ensures that when two record types are in a subtyping
+relationship and share a field, they have compatible types for this field; it is a crucial ingre-
+dient in allowing our semantic proof to be simple and concise. Again, the presence of a rule
+like {𝑎 : ⊥} ⩽ ⊥, discussed in Section 4.4, would preclude this approach, as it would require
+that J ⟦{ 𝑎 ′ : ⊥ }⟧𝑇𝑎 ≤ J ⟦⊥⟧𝑇𝑎 = ⊥. Indeed, this would mean that when 𝑎 ′ ≠ 𝑎, S-RcdTop
+would require that J ⟦⊤⟧𝑇𝑎 = ⊤ ≤ J ⟦{ 𝑎 : 𝜏 } ⊔ { 𝑎 ′ : ⊥ }⟧𝑇𝑎 = J ⟦{ 𝑎 : 𝜏 }⟧𝑇𝑎 ⊔ J ⟦{ 𝑎 ′ : ⊥ }⟧𝑇𝑎 =
+J ⟦{ 𝑎 : 𝜏 }⟧𝑇𝑎 ⊔ ⊥ ≡ J ⟦{ 𝑎 : 𝜏 }⟧𝑇𝑎 , which would require us to make J ⟦{ 𝑎 : 𝜏 }⟧𝑇𝑎 equivalent to
+⊤, preventing us from easily teasing apart the type of a field 𝑥 from the rest of a type expression.
+This is also the place that would break when adding rules like (𝜏1 → 𝜏2 ) ⊓ { 𝑎 : 𝜏3 } ≤ ⊥ and
+⊤ ≤ #𝑇 ⊔ { 𝑎 : 𝜏3 }: due to S-RcdTop and S-TagBot, such additions would again prevent us from
+projecting away to either ⊤ or ⊥ the type components we do not want to focus on.
+   Notice that this homomorphism (together with D⟦·⟧𝑇→ and C⟦·⟧𝑇→ defined below) maps types to
+the codomain of types. In the presence of type variables and recursive types, the inlining performed
+by Corollary 3.4 may result in types that are larger than the input types. However, as our coinductive
+reasoning does not rely on trees being smaller, we can safely apply the homomorphisms on the
+larger types.
+  Definition 4.8. The Boolean homomorphism D⟦·⟧𝑇→ from the Boolean algebra of types ordered
+by subtyping under the context Σ to the Boolean algebra of types ordered by subtyping under the
+context Σ, is defined similarly to 4.6 but with a negation due to function contravariance, as:
+                D⟦𝜏1 → 𝜏2 ⟧𝑇→ = ¬𝜏1                            
+                                                                 ⊤ if 𝑇 ĺ 𝑇 ′
+                                                        ′ →
+                             →                    D⟦#𝑇   ⟧   =
+                D⟦{ 𝑎 : 𝜏1 }⟧𝑇 = ⊤
+                                                          𝑇      ⊥ otherwise
+We may pick a dummy tag unrelated to any other tags for 𝑇 , in which case we denote the resulting
+homomorphism as D⟦·⟧→ :
+            D⟦𝜏1 → 𝜏2 ⟧→ = ¬𝜏1                      D⟦{ 𝑎 : 𝜏1 }⟧→ = ⊤                D⟦#𝑇 ′ ⟧→ = ⊥
+  Lemma 4.9. D⟦·⟧𝑇→ is monotonic.
+   Proof. We show by case analysis on unassuming subtyping derivations that the subtyping
+relation is compatible with D⟦·⟧𝑇→ . The non-trivial cases are S-TagSub, S-TagBot, S-FunDepth,
+and S-RcdTop.
+Case S-TagSub. The rule has premise 𝑇1 ĺ 𝑇2 and conclusion #𝑇1 ≤ #𝑇2 . We proceed by case
+       analysis of the subtag relation of 𝑇1 and 𝑇2 with 𝑇 .
+       Case 𝑇 ĺ 𝑇1 . Then we also have 𝑇 ĺ 𝑇2 by transitivity of inheritance and the conclusion
+         maps to ⊤ ≤ ⊤.
+       Case 𝑇 ł 𝑇1 and 𝑇 ĺ 𝑇2 . Then the conclusion maps to ⊥ ≤ ⊤.
+       Case 𝑇 ł 𝑇1 and 𝑇 ł 𝑇2 . Then the conclusion maps to ⊥ ≤ ⊥.
+
+                              Proc. ACM Program. Lang., Vol. 10, No. POPL, Article 47. Publication date: January 2026.
+47:20                                                                              Chun Yin Chau and Lionel Parreaux
+
+
+Case S-TagBot. The rule has premises 𝑇2 ł 𝑇1 and 𝑇1 ł 𝑇2 , i.e., 𝑇1 and 𝑇2 are unrelated, and
+     conclusion #𝑇1 ⊓ #𝑇2 ≤ ⊥. If either one of 𝑇1 or 𝑇2 maps to ⊤, meaning that it is a supertag
+     of 𝑇 , the other one cannot also be a supertag of 𝑇 without the two being related due to
+     single-inheritance. Therefore one of #𝑇1 and #𝑇2 must map to ⊥ and the conclusion reduces
+     to ⊥ ≤ ⊥.
+Case S-FunDepth. The rule has premises Σ ⊢ 𝜏0 ≤ 𝜏1 and Σ ⊢ 𝜏2 ≤ 𝜏3 and conclusion Σ ⊢
+     𝜏1 → 𝜏2 ≤ 𝜏0 → 𝜏3 for some 𝜏0 , 𝜏1 , 𝜏2 , and 𝜏3 . Then the conclusion maps to Σ ⊢ ¬𝜏1 ≤ ¬𝜏0 ,
+     which holds by S-NegInv on the first premise.                                               □
+  Definition 4.10. The Boolean homomorphism C⟦·⟧𝑇→ from the Boolean algebra of types ordered
+by subtyping under the context Σ to the Boolean algebra of types ordered by subtyping under the
+context Σ, given by:
+                 C⟦𝜏1 → 𝜏2 ⟧𝑇→ = 𝜏2                         
+                                                              ⊤ if 𝑇 ĺ 𝑇 ′
+                                                    ′ 𝑇
+                                               C⟦#𝑇  ⟧→  =
+                              𝑇
+                 C⟦{ 𝑎 : 𝜏1 }⟧→ = ⊤                           ⊥ otherwise
+
+We may pick a dummy tag unrelated to any other tags for 𝑇 , in which case we denote the resulting
+homomorphism as C⟦·⟧→ :
+             C⟦𝜏1 → 𝜏2 ⟧→ = 𝜏2                    C⟦{ 𝑎 : 𝜏1 }⟧→ = ⊤                       C⟦#𝑇 ′ ⟧→ = ⊥
+
+   Lemma 4.11. C⟦·⟧𝑇→ is monotonic.
+   Proof. We show by case analysis on unassuming subtyping derivations that the subtyping
+relation is compatible with C⟦·⟧𝑇→ . The non-trivial cases are S-TagSub, S-TagBot, S-FunDepth,
+and S-RcdTop.
+Cases S-TagSub, S-TagBot. The proof for these two cases are identical to the respective cases
+       for D⟦·⟧𝑇→ above.
+Case S-FunDepth. The rule has premises Σ ⊢ 𝜏0 ≤ 𝜏1 and Σ ⊢ 𝜏2 ≤ 𝜏3 and conclusion
+       Σ ⊢ 𝜏1 → 𝜏2 ≤ 𝜏0 → 𝜏3 for some 𝜏0 , 𝜏1 , 𝜏2 , and 𝜏3 . Then the conclusion maps to Σ ⊢ 𝜏2 ≤ 𝜏3 ,
+       which we have as the premise of the rule.                                                     □
+
+4.5     Subtyping Soundness by Homomorphisms
+We can now state the key lemma that allows us to prove soundness of subtyping. It is similar to
+Theorem 4.1 except that it works on guarded subtyping contexts B:
+   Lemma 4.12 (Subtyping soundness). If B ⊢ 𝜏 ≤ 𝜋, where:
+             𝜏 ∈ { ⊥, ⊤, 𝜏1 → 𝜏2, 𝑇 { 𝑎𝑖 : 𝜏𝑖 𝑖 } }         𝜋 ∈ { ⊥, ⊤, 𝜋 1 → 𝜋2, #𝑇 ′, { 𝑎 ′ : 𝜋1 } }
+then exactly one of the following is true:
+    (a) 𝜏 = ⊥ or 𝜋 = ⊤;
+    (b) 𝜏 = 𝜏1 → 𝜏2 and 𝜋 = 𝜋1 → 𝜋2 and B ⊢ 𝜋1 ≤ 𝜏1 and B ⊢ 𝜏2 ≤ 𝜋 2 ;
+    (c) 𝜏 = 𝑇 { 𝑎𝑖 : 𝜏𝑖 𝑖 } and 𝜋 = #𝑇 ′ and 𝑇 ĺ 𝑇 ′ ;
+    (d) 𝜏 = 𝑇 { 𝑎𝑖 : 𝜏𝑖 𝑖 } and 𝜋 = { 𝑎𝑘 : 𝜋1 } and B ⊢ 𝜏𝑘 ≤ 𝜋1 for some 𝑘.
+  Proof. By case analysis on 𝜏 and 𝜋.
+Case 𝜋 = ⊥. Consider the Boolean homomorphism H ⟦·⟧ defined in Definition 4.2. It is easy to
+     decide the order in the target Boolean algebra, i.e., inclusion of sets. This allows us to rule
+     out the impossible cases.
+     Case 𝜏 = ⊤. Then H ⟦⊤⟧ = U. This case is impossible since U ⊈ ∅.
+     Case 𝜏 = 𝜏1 → 𝜏2 . Then H ⟦𝜏1 → 𝜏2 ⟧ = { → }. This case is impossible since { → } ⊈ ∅.
+
+Proc. ACM Program. Lang., Vol. 10, No. POPL, Article 47. Publication date: January 2026.
+The Simple Essence of Boolean-Algebraic Subtyping                                                               47:21
+
+
+     Case 𝜏 = ⊥. Immediate.
+     Case 𝜏 = 𝑇 { 𝑎𝑖 : 𝜏𝑖 𝑖 }. Then H ⟦𝑇 { 𝑎𝑖 : 𝜏𝑖 𝑖 }⟧ = ĺ(𝑇 ). Since 𝑇 ∈ ĺ(𝑇 ), we have ĺ(𝑇 ) ⊈ ∅.
+       Therefore this case is impossible.
+Case 𝜋 = ⊤. Immediate.
+Case 𝜋 = #𝑇 ′ . Consider the Boolean homomorphism H ⟦·⟧ defined in Definition 4.2. It is easy to
+     decide the order in the target Boolean algebra, i.e., inclusion of sets. This allows us to rule
+     out the impossible cases.
+     Case 𝜏 = ⊤. Then H ⟦⊤⟧ = U. This case is impossible since → ∈ U but → ∉ ĺ(𝑇 ′ ), which
+       implies U ⊈ ĺ(𝑇 ′ ).
+     Case 𝜏 = 𝜏1 → 𝜏2 . Then H ⟦𝜏1 → 𝜏2 ⟧ = { → }. This case is impossible since → ∉ ĺ(𝑇 ′ ),
+       which implies { → } ⊈ ĺ(𝑇 ′ ).
+     Case 𝜏 = ⊥. Immediate
+     Case 𝜏 = 𝑇 { 𝑎𝑖 : 𝜏𝑖 𝑖 }. Applying H ⟦·⟧ to B ⊢ 𝑇 { 𝑎𝑖 : 𝜏𝑖 𝑖 } ≤ #𝑇 ′ , we have ĺ(𝑇 ) ⊆ ĺ(𝑇 ′ ).
+       In particular, we have 𝑇 ∈ ĺ(𝑇 ′ ), which implies 𝑇 ĺ 𝑇 ′ by the definition of the subtag
+       function.
+Case 𝜋 = { 𝑎 ′ : 𝜋1 }.
+     • We first show that 𝜏 = 𝑇 { 𝑎𝑖 : 𝜏𝑖 𝑖 } and 𝑎𝑘 = 𝑎 ′ for some 𝑘 and 𝜏𝑖 . Consider the Boolean
+       homomorphism I⟦·⟧ defined in Definition 4.4. It is easy to decide the order in the target
+       Boolean algebra, i.e., inclusion of sets. This allows us to rule out the impossible cases.
+       Cases 𝜏 = ⊤, 𝜏 = 𝜏1 → 𝜏2 . Then I⟦𝜏⟧ = U × F and I⟦{ 𝑎 ′ : 𝜋 1 }⟧ = U × (F \ {𝑎 ′ }). Since
+         𝑎 ′ ∈ F but 𝑎 ′ ∉ F \ {𝑎 ′ }, we have F ⊈ F \ {𝑎 ′ }, which implies U × F ⊈ U × (F \ {𝑎 ′ }).
+         Therefore this case is impossible.
+       Case 𝜏 = ⊥. Immediate.
+       Case 𝜏 = 𝑇 { 𝑎𝑖 : 𝜏𝑖 𝑖 }.
+         Case 𝑎 ′ ∈ { 𝑎𝑖 𝑖 }. Then we have 𝑎𝑘 = 𝑎 ′ for some 𝑘.
+         Case 𝑎 ′ ∉ { 𝑎𝑖 𝑖 }. Then I⟦𝑇 { 𝑎𝑖 : 𝜏𝑖 𝑖 }⟧ reduces to:
+                                                           Ó
+                       I⟦𝑇 { 𝑎𝑖 : 𝜏𝑖 𝑖 }⟧ = (ĺ(𝑇 ) × F ) ∩ 𝑖 (U × (F \ {𝑎𝑖 }))
+                                                                 Ó
+                                          = (ĺ(𝑇 ) × F ) ∩ (U × 𝑖 (F \ {𝑎𝑖 }))
+                                                                      Ô
+                                          = (ĺ(𝑇 ) × F ) ∩ (U × (F \ 𝑖 {𝑎𝑖 }))
+                                             = (ĺ(𝑇 ) × F ) ∩ (U × (F \ { 𝑎𝑖 𝑖 }))
+                                             = (ĺ(𝑇 ) ∩ U) × (F ∩ (F \ { 𝑎𝑖 𝑖 }))
+                                             = ĺ(𝑇 ) × (F \ { 𝑎𝑖 𝑖 })
+             We also have I⟦{ 𝑎 ′ : 𝜋 1 }⟧ = U × (F \ {𝑎 ′ }). Since 𝑎 ′ ∉ { 𝑎𝑖 𝑖 }, we have 𝑎 ′ ∈ F \ { 𝑎𝑖 𝑖 }
+             and 𝑎 ′ ∉ F \{ 𝑎 ′ }, which implies F \{ 𝑎𝑖 𝑖 } ⊈ F \{ 𝑎 ′ }, which implies U×(F \{ 𝑎𝑖 𝑖 }) ⊈
+             U × (F \ { 𝑎 ′ }). Therefore this case is impossible.
+     • Consider the Boolean homomorphism ⟦·⟧𝑇𝑎′ defined in Definition 4.6. Applying ⟦·⟧𝑇𝑎′ to
+       B ⊢ 𝑇 { 𝑎𝑖 : 𝜏𝑖 𝑖 } ≤ { 𝑎 ′ : 𝜋1 }, we have B ⊢ 𝜏𝑘 ≤ 𝜋1 .
+Case 𝜋 = 𝜋 1 → 𝜋 2 .
+     • We first show that 𝜏 = 𝜏1 → 𝜏2 for some 𝜏1 and 𝜏2 . Consider the Boolean homomorphism
+       H ⟦·⟧ defined in Definition 4.2. It is easy to decide the order in the target Boolean algebra,
+       i.e., inclusion of sets. This allows us to rule out the impossible cases.
+       Case 𝜏 = ⊤. Then H ⟦⊤⟧ = U. This case is impossible since U ⊈ { → }.
+       Cases 𝜏 = ⊥, 𝜏 = 𝜏1 → 𝜏2 . Immediate.
+       Case 𝜏 = 𝑇 { 𝑎𝑖 : 𝜏𝑖 𝑖 }. Then H ⟦𝑇 { 𝑎𝑖 : 𝜏𝑖 𝑖 }⟧ = ĺ(𝑇 ). Since 𝑇 ∈ ĺ(𝑇 ), we have ĺ(𝑇 ) ⊈
+          { → }. Therefore this case is impossible.
+
+                              Proc. ACM Program. Lang., Vol. 10, No. POPL, Article 47. Publication date: January 2026.
+47:22                                                                              Chun Yin Chau and Lionel Parreaux
+
+
+        • We then show that B ⊢ 𝜋1 ≤ 𝜏1 . Consider the Boolean homomorphism D⟦·⟧→ defined in
+          Definition 4.8. Applying D⟦·⟧→ to B ⊢ 𝜏1 → 𝜏2 ≤ 𝜋1 → 𝜋 2 , we have B ⊢ ¬𝜏1 ≤ ¬𝜋1 ,
+          which implies B ⊢ 𝜋 1 ≤ 𝜏1 by S-UniqCompl.
+        • We then show that B ⊢ 𝜏2 ≤ 𝜋2 . Consider the Boolean homomorphism C⟦·⟧→ defined in
+          Definition 4.10. Applying C⟦·⟧→ to B ⊢ 𝜏1 → 𝜏2 ≤ 𝜋1 → 𝜋2 , we have B ⊢ 𝜏2 ≤ 𝜋2 .
+                                                                                            □
+
+5     Completeness of Characteristic Boolean Homomorphisms
+In this section, we show that the characteristic Boolean homomorphisms described previously
+completely characterize Boolean-algebraic subtyping. We also propose a new subtyping decision
+algorithm but show the problem is co-NP-hard.
+
+5.1     Reduced Disjunctive Normal Forms
+It is often useful to massage types into a normal form which we call RDNF, for reduced disjunctive
+normal form [Parreaux and Chau 2022a]. This normal form is similar to a classical disjunctive
+normal form (DNF) except that we reduce all “incompatible” intersections and unions to ⊥ and ⊤
+respectively. Here, incompatible means that the type holds no useful information, because it cannot
+be used meaningfully, as explained in Section 1 and the appendix.
+                 D ::= ⊥ | D ⊔ C                                             𝛼 ¬ ::= 𝛼 | ¬𝛼
+                 C ::= I ⊓ ¬U | C ⊓ 𝛼 ¬                                       N ::= ⊤ | #𝑇
+                  I ::= N ⊓ F ⊓ R                                             F ::= ⊤ | D → D
+                 U ::= ⊥ | D → D | { 𝑎 : D } | U ⊔ #𝑇                         R ::= ⊤ | { 𝑎 : D }
+   The function dnf(·) converts arbitrary types to RDNFs. The task is essentially straightforward,
+if relatively tedious. Essentially, dnf(·) pushes negations in using DeMorgan laws, distributes
+intersections over unions, and at the same time ensures that all constructed conjunctions are
+de-duplicated and as reduced as possible, so that for instance intersections of unrelated tags are
+reduced to ⊥ and function and record types are merged with themselves. See our previous work
+[Parreaux and Chau 2022b] for the full definition of dnf(·), where it is denoted as dnf 0 (·).
+    Lemma 5.1 (Correctness of dnf). For all 𝜏 and D = dnf (𝜏), we have 𝜏 ≡ D.
+
+5.2     Completeness of Homomorphisms
+  Lemma 5.2 (Completeness of characteristic homomorphisms). If TTV (𝜏) ∪ TTV (𝜋) = ∅
+and Σ ⊢ ⟦𝜏⟧ ≤ ⟦𝜋⟧ for all characteristic homomorphisms ⟦·⟧, then Σ ⊢ 𝜏 ≤ 𝜋.
+    Proof. By the laws of Boolean algebras, the assumption Σ ⊢ ⟦𝜏⟧ ≤ ⟦𝜋⟧ implies:
+                                               Σ ⊢ ⟦𝜏 ⊓ ¬𝜋⟧ ≤ ⊥                                                 (1)
+By Lemma 5.1 and the monotonicity of characteristic homomorphisms, (1) imply:
+                                  Σ ⊢ ⟦dnf (𝜏 ⊓ ¬𝜋)⟧ ≤ ⊥                                  (2)
+                                                   Ã                        𝑖      𝑖
+Since TTV (𝜏) ∪ TTV (𝜋) = ∅, we have dnf(𝜏 ⊓ ¬𝜋) = 𝑖 (I𝑖 ⊓ ¬U𝑖 ) for some I𝑖 and U𝑖 . Then (2)
+becomes:
+                                Σ ⊢ 𝑖 (⟦I𝑖 ⟧ ⊓ ¬⟦U𝑖 ⟧) ≤ ⊥
+                                      Ã
+                                                                                           (3)
+By the laws of Boolean algebras, (3) implies:
+                                                                      𝑖
+                                                Σ ⊢ ⟦I𝑖 ⟧ ≤ ⟦U𝑖 ⟧                                               (4)
+
+Proc. ACM Program. Lang., Vol. 10, No. POPL, Article 47. Publication date: January 2026.
+The Simple Essence of Boolean-Algebraic Subtyping                                                               47:23
+
+
+By Lemma 5.3, (4) implies:
+                                                                  𝑖
+                                                   Σ ⊢ I𝑖 ≤ U𝑖                                                   (5)
+By swapping and S-AndOr2+, (5) implies:
+                                            Σ ⊢
+                                                    Ã
+                                                     𝑖 (I𝑖 ⊓ ¬U𝑖 ) ≤ ⊥
+                                    i.e.,   Σ ⊢ dnf (𝜏 ⊓ ¬𝜋) ≤ ⊥                                                 (6)
+By Lemma 5.1 and swapping, (6) implies:
+                                                    Σ ⊢ 𝜏 ≤ 𝜋                                                    (7)
+                                                                                                                    □
+
+  Lemma 5.3 (Completeness of characteristic homomorphisms on reduced intersections
+and unions). If Σ ⊢ ⟦I⟧ ≤ ⟦U⟧ for all characteristic homomorphisms ⟦·⟧, then Σ ⊢ I ≤ U.
+  Proof. We prove the contrapositive:
+                           Ã               if Σ ⊢ I ≰ U, then Σ ⊢ ⟦I⟧ ≰ ⟦U⟧ for some homomor-
+phism ⟦·⟧. Let U = U0 ⊔ 𝑖 #𝑆𝑖 , where U0 is not a union. By case analysis on I and U0 .
+Cases I = { 𝑎 : 𝜏𝑎 𝑎 } and I = 𝜏1 → 𝜏2 ⊓ { 𝑎 : 𝜏𝑎 𝑎 }. See the appendix.
+Case I = #𝑇 ⊓ (𝜏1 → 𝜏2 ) ? ⊓ { 𝑎 : 𝜏𝑎 𝑎 }.
+     Case 𝑇 ĺ 𝑆𝑘 for some 𝑘. By S-TagSub, 𝑇 ĺ 𝑆𝑘 implies #𝑇 ≤ #𝑆𝑘 , which by S-Trans with
+        S-AndOr11±/S-AndOr12± implies I ≤ U, which leads to a contradiction. Therefore this
+        case is impossible.
+                     𝑖
+     Case 𝑇 ł 𝑆𝑖 .
+                                                                         Ð
+        Case U0 = ⊥. Then I⟦I⟧ = ĺ(𝑇 ) × (F \ {𝑎 }) but I⟦U⟧ = 𝑖 ĺ(𝑆𝑖 ) × F . Since (𝑇 , 𝑐) ∈
+          I⟦I⟧ for all 𝑐 ∉ {𝑎 } but (𝑇 , 𝑐) ∉ I⟦U⟧, we have I⟦I⟧ ≰ I⟦U⟧.
+        Case U0 = 𝜋1 → 𝜋2 .
+          Case (𝜏1 → 𝜏2 ) ∈ I.
+            Case Σ ⊢ 𝜋1 ≰ 𝜏1 . Then D⟦I⟧𝑇→ = ¬𝜏1 and D⟦U⟧𝑇→ = ¬𝜋1 . By the contrapositive of
+               S-NegInv and double negation introduction/elimination, the assumption of this case
+               implies Σ ⊢ ¬𝜏1 ≰ ¬𝜋1 , i.e., Σ ⊢ D⟦I⟧𝑇→ ≰ D⟦U⟧𝑇→ .
+            Case Σ ⊢ 𝜏2 ≰ 𝜋 2 . Then C⟦I⟧𝑇→ = 𝜏2 and C⟦U⟧𝑇→ = 𝜋2 . Then from the assumption
+               of this case, we have Σ ⊢ C⟦I⟧𝑇→ ≰ C⟦U⟧𝑇→ .
+            Case Σ ⊢ 𝜋 1 ≤ 𝜏1 ∧ Σ ⊢ 𝜏2 ≤ 𝜋2 . By S-FunDepth, Σ ⊢ 𝜋 1 ≤ 𝜏1 and Σ ⊢ 𝜏2 ≤ 𝜋2
+               imply Σ ⊢ 𝜏1 → 𝜏2 ≤ 𝜋 1 → 𝜋 2 , which by S-Trans with S-AndOr11±/S-AndOr12±
+               implies Σ ⊢ I ≤ U, which leads to a contradiction. Therefore this case is impossible.
+                                                                           Ð
+          Case (𝜏1 → 𝜏2 ) ∉ I. Then H ⟦I⟧ = ĺ(𝑇 ) but H ⟦U⟧ = { → } ∪ 𝑖 ĺ(𝑆𝑖 ). Since 𝑇 ∈ H ⟦I⟧
+            but 𝑇 ∉ H ⟦U⟧, we have H ⟦I⟧ ≰ H ⟦U⟧.
+        Case U0 = { 𝑏 : 𝜋 }.
+                                                                                          Ð
+          Case 𝑏 ∉ {𝑎 }. Then I⟦I⟧ = ĺ(𝑇 ) × (F \{𝑎 }) but I⟦U⟧ = (U× (F \{𝑏 })) ∪ ( 𝑖 ĺ(𝑆𝑖 ) ×
+            F ). Since (𝑇 , 𝑏) ∈ I⟦I⟧ but (𝑇 , 𝑏) ∉ I⟦U⟧, we have I⟦I⟧ ≰ I⟦U⟧.
+          Case 𝑏 ∈ {𝑎 }.
+            Case Σ ⊢ 𝜏𝑏 ≰ 𝜋. Then J ⟦I⟧𝑇𝑏 = 𝜏𝑏 and J ⟦U⟧𝑇𝑏 = 𝜋. Then from the assumption of
+               this case, we have Σ ⊢ J ⟦I⟧𝑇𝑏 ≰ J ⟦U⟧𝑇𝑏 .
+            Case Σ ⊢ 𝜏𝑏 ≤ 𝜋. By S-RcdDepth, Σ ⊢ 𝜏𝑏 ≤ 𝜋 implies Σ ⊢ { 𝑏 : 𝜏𝑏 } ≤ { 𝑏 : 𝜋 },
+               which by S-Trans with S-AndOr11±/S-AndOr12± implies Σ ⊢ I ≤ U, which leads
+               to a contradiction. Therefore this case is impossible.
+                                                                                                  □
+
+                              Proc. ACM Program. Lang., Vol. 10, No. POPL, Article 47. Publication date: January 2026.
+47:24                                                                              Chun Yin Chau and Lionel Parreaux
+
+
+5.3     Hardness of Subtyping
+We now discuss the hardness of subtyping. We only consider subtype checking between two closed
+types, i.e., types without flexible type variables, except for those equi-bounded type variables that
+stand for desugared recursive types (as described in Section 2.2.5). Interestingly, though, recursive
+types are not needed for the proof to go through. The proof relies on unions of function types,
+which will not often arise in practice; nevertheless, when doing type inference, one can get into
+similar problems with a conjunction of type annotations and fresh flexible type variables.
+5.3.1 A New Subtyping Algorithm. The statement of Lemma 5.2 suggests a new subtype checking
+algorithm: checking subtyping between two types is equivalent to checking whether the order of
+their images is preserved under each characteristic homomorphism. This algorithm is described
+in the appendix. However, just like the existing algorithm, this new algorithm is still exponential
+in the worst case. Next, we show that the problem is in fact co-NP-hard, suggesting that no
+polynomial-time algorithm exists unless P = NP [Arora and Barak 2009].
+5.3.2 Co-NP-Hardness. co-NP is the complement class of the complexity class NP. If a decision
+problem is in NP, then its complement problem, obtained by reversing the answers, is in co-NP. A
+problem is co-NP-hard if every problem in co-NP can be reduced to it in polynomial time.
+5.3.3 Co-NP-Hardness of Subtyping Decision. We show the co-NP-hardness of deciding subtyping
+in MLstruct+ by a reduction from the tautology problem, i.e., the complement of the Boolean
+satisfiability problem: the problem of determining if a Boolean formula is true in all possible
+assignments of the variables. The proof proceeds by first defining an encoding of propositional
+logic formulas and the satisfiability problem into respectively types and subtyping problems using
+Boolean homomorphisms and then showing that the homomorphisms are monotonic, i.e., that our
+encoding is sound. Interestingly, the proof applies to any type system with reasonably-behaved
+unions and intersections, base types, and function types, even without recursive types and even
+when unions and intersections do not distribute over functions and records.
+   When we say “Boolean algebra of propositional logic formulas”, we refer to the Boolean algebra
+consisting of the closure of the distinct elements { ⊤, ⊥, 𝑥𝑖 𝑖 } under the three Boolean connectives
+(∧, ∨, ¬), ordered by the minimal relation satisfying the axioms of Boolean algebra.
+
+  Definition 5.4 (Encoding of propositional logic formulas as types). The Boolean homomorphism
+P⟦·⟧ from the Boolean algebra of propositional logic formulas to the Boolean algebra of types
+ordered by subtyping under the empty context is defined as:
+                                        
+                                           #Obj             if 𝑖 = 0
+                               P⟦𝑥𝑖 ⟧ =
+                                           ⊤ → P⟦𝑥𝑖 −1 ⟧ if 𝑖 > 0
+
+   Lemma 5.5. P⟦·⟧ is monotonic.
+
+  Proof. Immediate since the Boolean algebra of propositional logic formulas is ordered by the
+minimal relation satisfying the axioms of Boolean algebra and the pure Boolean-algebraic subtyping
+rules are a proper axiomatization of Boolean algebra [Parreaux and Chau 2022b, §B.8].            □
+
+   Definition 5.6. The logic formula endomorphism S⟦·⟧ is defined as: S⟦𝑥𝑖 ⟧ = 𝑥𝑖+1 .
+
+   Lemma 5.7. S⟦·⟧ is monotonic.
+
+  Proof. Trivial as variables are treated symmetrically in the Boolean algebra of propositional
+logic formulas and S⟦·⟧ is an injective renaming of variables.                               □
+
+Proc. ACM Program. Lang., Vol. 10, No. POPL, Article 47. Publication date: January 2026.
+The Simple Essence of Boolean-Algebraic Subtyping                                                               47:25
+
+
+  Definition 5.8 (Projection of types as propositional logic formulas). The Boolean homomorphism
+Q⟦·⟧ from the Boolean algebra of types ordered by subtyping under the empty context to the
+Boolean algebra of propositional logic formulas is defined as:
+                                                                            
+                                                                              𝑥 0 if 𝑇 = Obj
+      Q⟦𝜏1 → 𝜏2 ⟧ = S⟦Q⟦𝜏2 ⟧⟧             Q⟦{ 𝑎 : 𝜏 }⟧ = ⊤        Q⟦#𝑇 ⟧ =
+                                                                              ⊥ otherwise
+    Lemma 5.9. Q⟦·⟧ is monotonic.
+   Proof. We show by induction on unassuming subtyping derivations that the subtyping relation
+is compatible with Q⟦·⟧. The only non-trivial cases are S-TagSub, S-TagBot, and S-FunDepth.
+Case S-TagSub. The rule has premise 𝑇1 ĺ 𝑇2 and conclusion #𝑇1 ≤ #𝑇2 .
+      Case 𝑇1 = Obj. Then the premise of the rule is Obj ĺ 𝑇2 . Since all tags inherit from Obj, we
+        also have 𝑇2 ĺ Obj. By acyclicity of inheritance, we have 𝑇2 = Obj. Then the conclusion
+        maps to 𝑥 0 ≤ 𝑥 0 .
+      Case 𝑇1 ≠ Obj. Then the conclusion maps to ⊥ ≤ Q⟦#𝑇2 ⟧.
+Case S-TagBot. The rule has premises 𝑇2 ł 𝑇1 and 𝑇1 ł 𝑇2 , i.e., 𝑇1 and 𝑇2 are unrelated, and
+      conclusion #𝑇1 ⊓ #𝑇2 ≤ ⊥. By reflexivity of inheritance, either 𝑇1 ≠ Obj or 𝑇2 ≠ Obj. Then
+      the conclusion maps to ⊥ ∧ Q⟦#𝑇2 ⟧ ≤ ⊥ or Q⟦#𝑇1 ⟧ ∧ ⊥ ≤ ⊥ respectively.
+Case S-FunDepth. The rule has premises 𝜏0 ≤ 𝜏1 and 𝜏2 ≤ 𝜏3 and conclusion 𝜏1 → 𝜏2 ≤ 𝜏0 → 𝜏3
+      for some 𝜏0 , 𝜏1 , 𝜏2 , and 𝜏3 . By IH on the second premise, we have Q⟦𝜏2 ⟧ ≤ Q⟦𝜏3 ⟧. Then by
+      the monotonicity of S⟦·⟧, we have S⟦Q⟦𝜏2 ⟧⟧ ≤ S⟦Q⟦𝜏3 ⟧⟧ which is what the conclusion
+      maps to.                                                                                     □
+    Lemma 5.10. Q⟦P⟦𝑝⟧⟧ = 𝑝 for all 𝑝.
+    Proof. Trivial.                                                                                                 □
+   Lemma 5.11 (Reduction of Boolean satisfiability to subtyping). A propositional logic
+formula 𝑝 is tautological (i.e., ⊤ ≤ 𝑝) if and only if ⊤ is a subtype of P⟦𝑝⟧ (i.e., ⊤ ≤ P⟦𝑝⟧).
+   Proof. First, we justify our assertion that 𝑝 is tautological if and only if ⊤ ≤ 𝑝: this is due to the
+completeness of Boolean algebra. The Boolean algebra of propositional logic formulas is essentially
+the restriction to the zeroth order of the system LK of sequent calculus [Gentzen 1935a], which has
+been shown to be equivalent to other formalizations of classical predicate logic [Gentzen 1935b].
+The fact that a formula 𝑝 is a tautology is expressed by the sequent → 𝑝, which corresponds to
+⊤ ≤ 𝑝 in our notation.
+   The forward direction follows from the monotonicity of P⟦·⟧. The backward direction follows
+from the monotonicity of Q⟦·⟧ and Lemma 5.10.                                                           □
+
+6    Related Work
+We now briefly review some related work.
+   Intersection type systems. Intersection types for lambda calculus were pioneered by Coppo and
+Dezani-Ciancaglini [1980]; Barendregt et al. [1983], after whom the “BCD” type system is named.
+BCD is very powerful and coincides with strong normalization [Ghilezan 1996], making type
+inference undecidable. By contrast, MLstruct+ does not need the powerful intersection introduction
+rule, retaining decidability of type inference. It is worth noting that most other modern type system
+with intersection types, including those of the mainstream programming languages mentioned
+before, do not have that rule either. Some systems use intersection types to encode a form of
+overloading [Pierce 1991], but this is not possible to support as is in a Boolean-algebraic subtyping
+system. Pottier [1998] uses a greatest lower bound connective ⊓ that resembles our type intersection
+
+                              Proc. ACM Program. Lang., Vol. 10, No. POPL, Article 47. Publication date: January 2026.
+47:26                                                                               Chun Yin Chau and Lionel Parreaux
+
+
+   Union and intersection types in programming. Union types were introduced by MacQueen et al.
+[1986], and are present in many modern languages, often along intersection types. These types have
+seen a recent resurgence, gaining a lot of traction both in academia [Alpuim et al. 2017; Binder et al.
+2022; Castagna et al. 2022; Dunfield 2012; Huang and Oliveira 2021; Muehlboeck and Tate 2018;
+Rehman et al. 2022] and in industry,10 with several industry-grade programming languages like
+TypeScript, Flow, and Scala 3 supporting them, in addition to a myriad of lesser-known research
+languages.
+   Type inference for unions and intersections. Aiken and Wimmers [1993]; Aiken et al. [1994] impose
+very strict restrictions on negative unions (they must be disjoint) and on positive intersections
+(they must not have free variables and must be “upward closed”). Trifonov and Smith [1996] go
+further and restrict intersections to negative or input positions (those appearing on the right of ≤
+constraints) and unions types to positive or output positions (those appearing on the left). Binder
+et al. [2022]; Dolan [2017]; Parreaux [2020]; Pottier [1998] all follow the same idea. In these systems,
+unions and intersections are not first-class citizens: they cannot be used freely in type annotations.
+Frisch et al. [2008] infer set-theoretic types (see semantic subtyping below) for a higher-order
+language with overloading but do not infer polymorphic types. Castagna et al. [2016] propose a
+complete polymorphic set-theoretic type inference system, but their types are not principal so their
+algorithm returns several solutions, which leads to the need for backtracking.
+   Recursive types. Equirecursive types, where a recursive type is equivalent to its unfolding, have a
+long history in programming languages research [Abadi and Fiore 1996; Amadio and Cardelli 1993;
+Appel et al. 2007; Hosoya et al. 2005; MacQueen et al. 1986; Pierce 2002], dating as far back as Morris’
+thesis, where he conjectured their use under the name of cyclic types [Morris 1969, pp.122–124].
+Recursive types with subtyping were developed in the foundational work of Amadio and Cardelli
+[1993] and Brandt and Henglein [1998] gave a coinductive axiomatization of such recursive types.
+Jim and Palsberg [1999] described a co-inductive formalization of recursive types as arbitrary
+infinite trees which is more general than approaches like ours, which only allows reasoning about
+regular types. Nevertheless, the algorithms they gave were unsurprisingly restricted to regular
+types. Gapeyev et al. [2002]; Pierce [2002] reconciled the representation as infinite regular trees with
+the representation as 𝜇 types, and described the standard algorithms to decide the corresponding
+subtyping relationship. An important aspect of practical recursive type algorithms is that one
+needs to maintain the cache of discovered subtyping relationships across recursive calls to avoid
+exponential blowup [Gapeyev et al. 2002]. Our implementation of MLstruct+ follows the same
+principle, as a naive implementation of MLstruct+ would lead to exactly the same blowup. Also
+refer to Section 2.5.2 for more parallels between the handling of recursive types in MLstruct+ and
+previous work.
+   Algebraic and Boolean-algebraic subtyping. Approaches like that of Pottier [1998] used a lattice-
+theoretic construction of types inspired by the connection between types and term automata.
+Meet ⊓ and join ⊔ operators resembling intersection and union types are used to compactly
+representing conjunctions of constraints, but these are not first-class types, in that they are restricted
+to appearing respectively in negative and positive positions only. MLstruct originally built on Simple-
+sub [Parreaux 2020], a reformulation of MLsub, from the original algebraic subtyping approach of
+Dolan [2017]; Dolan and Mycroft [2017]. [Bhanuka et al. 2023] showed how to report good errors
+from such type inference approaches. Parreaux et al. [2024] use a similar type inference approach
+in the context of first-class polymorphism. Bachurski et al. [2025] use a subtyping system inspired
+10 The first author of this paper has received emails from various people reimplementing Simple-sub [Parreaux 2020] and
+
+wanting to know how to add support for first-class union and intersection types, showing the enduring interest in these.
+
+
+Proc. ACM Program. Lang., Vol. 10, No. POPL, Article 47. Publication date: January 2026.
+The Simple Essence of Boolean-Algebraic Subtyping                                                               47:27
+
+
+by MLstruct and propose some future extensions to it, including homomorphic computations on
+types, which we have been independently considering.
+  Set- and Boolean-theoretic types. The semantic subtyping approaches [Castagna et al. 2022, 2016;
+Frisch et al. 2002, 2008; Petrucciani 2019] view types as sets of values which inhabit them and
+define the subtyping relationship as set inclusion, giving set-based meaning to union, intersection,
+and negation (or complement) connectives. This is by contrast to algebraic subtyping, which may
+admit subtyping rules that violate the set-theoretic interpretation, such as function distributivity, to
+ensure that the subtyping lattice has desirable algebraic properties. For more detailed discussions
+contrasting semantic subtyping with other approaches, we refer the reader to the works of Parreaux
+[2020] and Muehlboeck and Tate [2018]. Some authors turn to Boolean-algebraic type theories but
+without subtyping, such as Madsen and van de Pol [2020, 2021]. Boolean-algebraic type systems
+have also proven useful in the context of effect systems [Lutze et al. 2023], where subtyping was
+additionally used to avoid the problem of poisoning [Gao and Parreaux 2025].
+   Polymorphic records/variants and row polymorphism. Polymorphic records are structurally-typed
+product types whose types admit the usual width and depth subtyping relationships. Their dual,
+polymorphic variants [Garrigue 1998, 2001], are another useful language feature, used to encode
+structural sum types. In their simplest expression, polymorphic records (resp. variants) do not
+support ad-hoc field extension (resp. default match cases). Previous approaches have thus extended
+polymorphic records and variants with row polymorphism, which uses a new kind of variables,
+named “row” variables, to record the presence and absence of fields (resp. cases) in a given type.
+Some approaches, like OCaml’s polymorphic variants and object types, use row polymorphism
+exclusively to simulate subtype polymorphism, in order to avoid subtyping in the wider languages.
+However, in such systems, row polymorphism and subtyping actually complement each other
+well [Pottier 1998, Chapter 14.7]. There are also techniques for supporting variant and record
+extensibility through union, intersection, and negation types, as shown by Castagna et al. [2016];
+Castagna and Peyrot [2025], who also explain that their system resolves long-standing limitations
+with OCaml-style row polymorphism, and through other mechanisms [Madsen et al. 2023]. In our
+system, we solve many (though not all) of these limitations, but we also support principal type
+inference. It is worth pointing out that OCaml’s polymorphic variants [Garrigue 2001] and related
+systems based on kinds [Ohori 1995] lack support for polymorphic extension [Gaster and Jones 1996;
+White 2015], whereas MLstruct+ does not (see mapSome in the introduction). As a simpler example,
+def foo x dflt els = case x of { Apple → dflt | _ → els x } would be assigned a too restrictive
+type in OCaml and as a consequence foo ( Banana {}) 0 ( fun z → case z of { Banana → 1 }) would
+not type check (OCaml would complain that the function argument does not handle Apple ). A
+more expressive row-polymorphic system exposing row variables to users would support this use
+case [Gaster and Jones 1996; Rémy 1994], but even these are limited compared to MLstruct+ .
+
+7   Conclusion and Future Work
+In this paper, we presented MLstruct+ , a variant of MLstruct that supports record extension without
+modifying the subtyping structure. We showed that the core ingredient of MLstruct and MLstruct+ ,
+namely Boolean-algebraic subtyping, can be condensed down to its in terms of five characteristic
+Boolean homomorphisms, which helped us prove the soundness of subtyping semantically in a
+faction of the space previously required, while suggesting a new decision procedure for subtyping,
+although we also showed that the problem is co-NP-hard, so there is little hope of achieving
+non-exponential worst-case time complexity.
+   In the future, we would like to take these insights further and explore how they could help us
+simplify the specification and proofs of the algorithmic aspects of MLstruct.
+
+                              Proc. ACM Program. Lang., Vol. 10, No. POPL, Article 47. Publication date: January 2026.
+47:28                                                                               Chun Yin Chau and Lionel Parreaux
+
+
+Data-Availability Statement
+The algorithm described in Section 5.3.1 is implemented as the artifact of this paper [Chau and
+Parreaux 2025]. The source code of the artifact can be found at https://github.com/fo5for/sebas. A
+web demo is available at https://fo5for.github.io/sebas/.
+
+Acknowledgments
+We would like to thank the anonymous reviewers for their invaluable comments and suggestions
+to improve the paper, as well as Chun Kit Lam, Yijia Chen, and Ross Tate for their feedback, help,
+and useful discussions.
+
+References
+Martin Abadi and Marcelo P. Fiore. 1996. Syntactic considerations on recursive types. In Proceedings 11th Annual IEEE
+   Symposium on Logic in Computer Science. IEEE, 242–252.
+Alexander Aiken and Edward L. Wimmers. 1993. Type Inclusion Constraints and Type Inference. In Proceedings of
+   the Conference on Functional Programming Languages and Computer Architecture (Copenhagen, Denmark) (FPCA ’93).
+   Association for Computing Machinery, New York, NY, USA, 31–41. doi:10.1145/165180.165188
+Alexander Aiken, Edward L. Wimmers, and T. K. Lakshman. 1994. Soft Typing with Conditional Types. In Proceedings of the
+   21st ACM SIGPLAN-SIGACT Symposium on Principles of Programming Languages (Portland, Oregon, USA) (POPL ’94).
+   Association for Computing Machinery, New York, NY, USA, 163–173. doi:10.1145/174675.177847
+João Alpuim, Bruno C. d. S. Oliveira, and Zhiyuan Shi. 2017. Disjoint Polymorphism. In Programming Languages and Systems,
+   Hongseok Yang (Ed.). Springer Berlin Heidelberg, Berlin, Heidelberg, 1–28.
+Roberto M. Amadio and Luca Cardelli. 1993. Subtyping Recursive Types. ACM Trans. Program. Lang. Syst. 15, 4 (Sept. 1993),
+   575–631. doi:10.1145/155183.155231
+Andrew W. Appel, Paul-André Melliès, Christopher D. Richards, and Jérôme Vouillon. 2007. A Very Modal Model of a
+   Modern, Major, General Type System. In Proceedings of the 34th Annual ACM SIGPLAN-SIGACT Symposium on Principles
+   of Programming Languages (Nice, France) (POPL ’07). Association for Computing Machinery, New York, NY, USA, 109–122.
+   doi:10.1145/1190216.1190235
+Sanjeev Arora and Boaz Barak. 2009. Computational Complexity: A Modern Approach (1st ed.). Cambridge University Press,
+   USA.
+Jakub Bachurski, Alan Mycroft, and Dominic Orchard. 2025. Structuring Arrays with Algebraic Shapes. In Proceedings of the
+   11th ACM SIGPLAN International Workshop on Libraries, Languages and Compilers for Array Programming (Seoul, Republic
+   of Korea) (ARRAY ’25). Association for Computing Machinery, New York, NY, USA, 1–16. doi:10.1145/3736112.3736141
+Henk Barendregt, Mario Coppo, and Mariangiola Dezani-Ciancaglini. 1983. A filter lambda model and the completeness of
+   type assignment. Journal of Symbolic Logic 48, 4 (1983), 931–940. doi:10.2307/2273659
+Ishan Bhanuka, Lionel Parreaux, David Binder, and Jonathan Immanuel Brachthäuser. 2023. Getting into the Flow: Towards
+   Better Type Error Messages for Constraint-Based Type Inference. Proc. ACM Program. Lang. 7, OOPSLA2, Article 237
+   (Oct. 2023), 29 pages. doi:10.1145/3622812
+David Binder, Ingo Skupin, David Läwen, and Klaus Ostermann. 2022. Structural Refinement Types. In Proceedings of the 7th
+   ACM SIGPLAN International Workshop on Type-Driven Development (TyDe ’22). Association for Computing Machinery,
+   New York, NY, USA. doi:10.1145/3546196.3550163
+Michael Brandt and Fritz Henglein. 1998. Coinductive axiomatization of recursive type equality and subtyping. Fundamenta
+   Informaticae 33, 4 (1998), 309–338.
+Giuseppe Castagna. 2012. Object-Oriented Programming A Unified Foundation. Springer Science & Business Media.
+Giuseppe Castagna, Mickaël Laurent, Kim Nguyundefinedn, and Matthew Lutze. 2022. On Type-Cases, Union Elimination,
+   and Occurrence Typing. Proc. ACM Program. Lang. 6, POPL, Article 13 (Jan. 2022), 31 pages. doi:10.1145/3498674
+Giuseppe Castagna, Tommaso Petrucciani, and Kim Nguyen. 2016. Set-theoretic types for polymorphic variants. In
+   Proceedings of the 21st ACM SIGPLAN International Conference on Functional Programming (ICFP 2016). Association for
+   Computing Machinery, Nara, Japan, 378–391. doi:10.1145/2951913.2951928
+Giuseppe Castagna and Loïc Peyrot. 2025. Polymorphic Records for Dynamic Languages. Proc. ACM Program. Lang. 9,
+   OOPSLA1, Article 132 (April 2025), 28 pages. doi:10.1145/3720497
+Chun Yin Chau and Lionel Parreaux. 2025. The Simple Essence of Boolean-Algebraic Subtyping: Semantic Soundness for
+   Algebraic Union, Intersection, Negation, and Equi-recursive Types (Artifact). doi:10.5281/zenodo.17348546
+M. Coppo and M. Dezani-Ciancaglini. 1980. An extension of the basic functionality theory for the 𝜆-calculus. Notre Dame
+   Journal of Formal Logic 21, 4 (1980), 685 – 693. doi:10.1305/ndjfl/1093883253
+Stephen Dolan. 2017. Algebraic subtyping. Ph. D. Dissertation.
+
+
+Proc. ACM Program. Lang., Vol. 10, No. POPL, Article 47. Publication date: January 2026.
+The Simple Essence of Boolean-Algebraic Subtyping                                                                     47:29
+
+
+Stephen Dolan and Alan Mycroft. 2017. Polymorphism, subtyping, and type inference in MLsub. ACM SIGPLAN Notices 52,
+   1 (Jan. 2017), 60–72. doi:10.1145/3093333.3009882
+Jana Dunfield. 2012. Elaborating Intersection and Union Types. In Proceedings of the 17th ACM SIGPLAN International
+    Conference on Functional Programming (Copenhagen, Denmark) (ICFP ’12). Association for Computing Machinery, New
+   York, NY, USA, 17–28. doi:10.1145/2364527.2364534
+Claudia Faggian and Mauro Piccolo. 2009. Partial Orders, Event Structures and Linear Strategies. In Typed Lambda Calculi
+    and Applications, Pierre-Louis Curien (Ed.). Springer Berlin Heidelberg, Berlin, Heidelberg, 95–111.
+Alain Frisch, Giuseppe Castagna, and Véronique Benzaken. 2002. Semantic subtyping. In Proceedings 17th Annual IEEE
+    Symposium on Logic in Computer Science. 137–146. doi:10.1109/LICS.2002.1029823
+Alain Frisch, Giuseppe Castagna, and Véronique Benzaken. 2008. Semantic Subtyping: Dealing Set-Theoretically with
+    Function, Union, Intersection, and Negation Types. J. ACM 55, 4, Article 19 (Sept. 2008), 64 pages. doi:10.1145/1391289.
+   1391293
+Cunyuan Gao and Lionel Parreaux. 2025. A Lightweight Type-and-Effect System for Invalidation Safety: Tracking Permanent
+    and Temporary Invalidation with Constraint-Based Subtype Inference. Proc. ACM Program. Lang. 9, OOPSLA2, Article
+    366 (Oct. 2025), 31 pages. doi:10.1145/3763144
+Vladimir Gapeyev, Michael Y. Levin, and Benjamin C. Pierce. 2002. Recursive subtyping revealed. Journal of Functional
+    Programming 12, 6 (2002), 511–548.
+Jacques Garrigue. 1998. Programming with polymorphic variants. In ML Workshop, Vol. 13. Baltimore, 7.
+Jacques Garrigue. 2000. Code reuse through polymorphic variants. In In Workshop on Foundations of Software Engineering.
+    https://www.math.nagoya-u.ac.jp/~garrigue/papers/variant-reuse.pdf
+Jacques Garrigue. 2001. Simple Type Inference for Structural Polymorphism.. In APLAS. 329–343.
+Benedict R. Gaster and Mark P. Jones. 1996. A Polymorphic Type System for Extensible Records and Variants.
+Gerhard Gentzen. 1935a. Untersuchungen über das logische Schließen. I. Mathematische Zeitschrift 39, 1 (Dec. 1935),
+   176–210. doi:10.1007/BF01201353
+Gerhard Gentzen. 1935b. Untersuchungen über das logische Schließen. II. Mathematische Zeitschrift 39, 1 (Dec. 1935),
+   405–431. doi:10.1007/BF01201363
+Silvia Ghilezan. 1996. Strong Normalization and Typability with Intersection Types. Notre Dame Journal of Formal Logic 37,
+   1 (1996), 44 – 52. doi:10.1305/ndjfl/1040067315
+Haruo Hosoya, Jérôme Vouillon, and Benjamin C. Pierce. 2005. Regular Expression Types for XML. ACM Trans. Program.
+    Lang. Syst. 27, 1 (Jan. 2005), 46–90. doi:10.1145/1053468.1053470
+Xuejing Huang and Bruno C. d. S. Oliveira. 2021. Distributing Intersection and Union Types with Splits and Duality
+   (Functional Pearl). Proc. ACM Program. Lang. 5, ICFP, Article 89 (Aug. 2021), 24 pages. doi:10.1145/3473594
+Trevor Jim and Jens Palsberg. 1999. Type Inference in Systems of Recursive Types With Subtyping.
+Matthew Lutze, Magnus Madsen, Philipp Schuster, and Jonathan Immanuel Brachthäuser. 2023. With or Without You:
+    Programming with Effect Exclusion. Proc. ACM Program. Lang. 7, ICFP, Article 204 (Aug. 2023), 28 pages. doi:10.1145/
+    3607846
+David MacQueen, Gordon Plotkin, and Ravi Sethi. 1986. An ideal model for recursive polymorphic types. Information and
+    Control 71, 1 (1986), 95–130. doi:10.1016/S0019-9958(86)80019-5
+Magnus Madsen, Jonathan Lindegaard Starup, and Matthew Lutze. 2023. Restrictable Variants: A Simple and Practical
+   Alternative to Extensible Variants. In 37th European Conference on Object-Oriented Programming (ECOOP 2023) (Leibniz
+    International Proceedings in Informatics (LIPIcs), Vol. 263), Karim Ali and Guido Salvaneschi (Eds.). Schloss Dagstuhl –
+    Leibniz-Zentrum für Informatik, Dagstuhl, Germany, 17:1–17:27. doi:10.4230/LIPIcs.ECOOP.2023.17
+Magnus Madsen and Jaco van de Pol. 2020. Polymorphic types and effects with Boolean unification. Proc. ACM Program.
+    Lang. 4, OOPSLA, Article 154 (Nov. 2020), 29 pages. doi:10.1145/3428222
+Magnus Madsen and Jaco van de Pol. 2021. Relational nullable types with Boolean unification. Proc. ACM Program. Lang. 5,
+    OOPSLA, Article 110 (Oct. 2021), 28 pages. doi:10.1145/3485487
+James Hiram Morris. 1969. Lambda-calculus models of programming languages. Ph. D. Dissertation. Massachusetts Institute
+    of Technology.
+Fabian Muehlboeck and Ross Tate. 2018. Empowering Union and Intersection Types with Integrated Subtyping. Proc. ACM
+    Program. Lang. 2, OOPSLA, Article 112 (Oct. 2018), 29 pages. doi:10.1145/3276482
+Martin Odersky, Martin Sulzmann, and Martin Wehr. 1999. Type inference with constrained types. Theory and Practice of
+    Object Systems 5, 1 (1999), 35–55.
+Atsushi Ohori. 1995. A Polymorphic Record Calculus and Its Compilation. ACM Trans. Program. Lang. Syst. 17, 6 (Nov.
+   1995), 844–895. doi:10.1145/218570.218572
+Bruno C. d. S. Oliveira, Cui Shaobo, and Baber Rehman. 2020. The Duality of Subtyping. (2020), 29 pages, 728719 bytes.
+    doi:10.4230/LIPICS.ECOOP.2020.29
+
+
+
+                                Proc. ACM Program. Lang., Vol. 10, No. POPL, Article 47. Publication date: January 2026.
+47:30                                                                                  Chun Yin Chau and Lionel Parreaux
+
+
+Lionel Parreaux. 2020. The Simple Essence of Algebraic Subtyping: Principal Type Inference with Subtyping Made Easy
+   (Functional Pearl). Proc. ACM Program. Lang. 4, ICFP, Article 124 (Aug. 2020), 28 pages. doi:10.1145/3409006
+Lionel Parreaux, Aleksander Boruch-Gruszecki, Andong Fan, and Chun Yin Chau. 2024. When Subtyping Constraints
+   Liberate: A Novel Type Inference Approach for First-Class Polymorphism. Proc. ACM Program. Lang. 8, POPL, Article 48
+   (Jan. 2024), 33 pages. doi:10.1145/3632890
+Lionel Parreaux and Chun Yin Chau. 2022a. MLstruct: principal type inference in a Boolean algebra of structural types.
+   Proc. ACM Program. Lang. 6, OOPSLA2, Article 141 (Oct. 2022), 30 pages. doi:10.1145/3563304
+Lionel Parreaux and Chun Yin Chau. 2022b. MLstruct: Principal Type Inference in a Boolean Algebra of Structural Types
+   (Extended Version). Technical Report. The Hong Kong University of Science and Technology. https://lptk.github.io/
+   mlscript-paper
+Tommaso Petrucciani. 2019. Polymorphic set-theoretic types for functional languages. Ph. D. Dissertation. Università di
+   Genova; Université Sorbonne Paris Cité – Université Paris Diderot.
+Benjamin C. Pierce. 1991. Programming with intersection types and bounded polymorphism. Ph. D. Dissertation. Citeseer.
+Benjamin C. Pierce. 2002. Types and programming languages. MIT press.
+François Pottier. 1998. Type Inference in the Presence of Subtyping: from Theory to Practice. Research Report RR-3483. INRIA.
+   https://hal.inria.fr/inria-00073205
+Baber Rehman, Xuejing Huang, Ningning Xie, and Bruno C. d. S. Oliveira. 2022. Union Types with Disjoint Switches. In
+   36th European Conference on Object-Oriented Programming (ECOOP 2022) (Leibniz International Proceedings in Informatics
+   (LIPIcs), Vol. 222), Karim Ali and Jan Vitek (Eds.). Schloss Dagstuhl – Leibniz-Zentrum für Informatik, Dagstuhl, Germany,
+   25:1–25:31. doi:10.4230/LIPIcs.ECOOP.2022.25
+Didier Rémy. 1994. Type Inference for Records in Natural Extension of ML. MIT Press, Cambridge, MA, USA, 67–95.
+John C. Reynolds. 1997. Design of the Programming Language Forsythe. Birkhäuser Boston, Boston, MA, 173–233. doi:10.
+   1007/978-1-4612-4118-8_9
+Martin Sulzmann, Martin Müller, and Christoph Zenger. 1999. Hindley/Milner style type systems in constraint form. Res.
+   Rep. ACRC-99-009, University of South Australia, School of Computer and Information Science (1999).
+Valery Trifonov and Scott Smith. 1996. Subtyping constrained types. In Static Analysis, Radhia Cousot and David A. Schmidt
+   (Eds.). Springer Berlin Heidelberg, Berlin, Heidelberg, 349–365.
+Leo White. 2015. Row polymorphism. https://www.cl.cam.ac.uk/teaching/1415/L28/rows.pdf
+Litao Zhou and Bruno C. d. S. Oliveira. 2025. QuickSub: Efficient Iso-Recursive Subtyping. Proc. ACM Program. Lang. 9,
+   POPL, Article 33 (Jan. 2025), 32 pages. doi:10.1145/3704869
+
+Received 2025-07-10; accepted 2025-11-06
+
+
+
+
+Proc. ACM Program. Lang., Vol. 10, No. POPL, Article 47. Publication date: January 2026.
+
