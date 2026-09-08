@@ -37,33 +37,22 @@ Principality forces qualified schemes that use parked stumps during unification 
 - [?] With
 - [?] Inherit
 
-## Tisch
-- Subtyping for pattern functions
-- Occurence Typing with ifs
-
 
 ## Unification
-
 - Outcomes
-  - success
-    - [x] sound & complete
-    - completeness is ∃θ'/AgreeOn — strict InstanceOf is wrong for a solver that invents vars
-  - clash
-    - [x] sound
-    - core: projClash_no_unifier — ≈ pins l-counts, substitution only grows them
-  - occurs
+  - [x] success: sound & complete
+  - [x] clash: sound
+  - [~] occurs
     - incomplete!
     - [x] the genuine case really has no unifier 
     - [x] SHARP incopmleteness: α ≐ᵣ (β|α|γ) is reported occurs yet has an MGU (occurs_allVar_hasMgu)
   - stuck
-    - *incomplete!* — `.stuck` is a CONSERVATIVE verdict, exactly like `.occurs`
-    - [x] SHARP incompleteness: (k:{β|α} | β) ≐ᵣ (k:{l:𝓫} | l:𝓫) is reported
+    - *incomplete!*
+    - [X] so "stuck -> ¬mgu" is FALSE at the algorithm level.
+    - (k:{β|α} | β) ≐ᵣ (k:{l:𝓫} | l:𝓫) is reported
       stuck yet has a UNIQUE mgu β≔(l:𝓫), α≔ε.  matchL emits {β|α} ≐ {l:𝓫},
       which IS Wand and IS stuck, and UResM.seq propagates that before the
       residual β ≐ᵣ (l:𝓫) — which pins β — is ever looked at.
-      Compare eq_rescued_solved, where the equation is SOLVABLE and
-      the driver does the right thing.
-    - [X] so "stuck -> ¬mgu" is FALSE at the algorithm level.
     - [X] and the retreat to TERMINAL configurations is false TOO
       (terminalNoMgu_false): (l:{w}) ≐ᵣ (w | v) is terminal — all twelve moves
       none by rfl, U-expand refusing on TWO candidate hosts, the Wand shape —
