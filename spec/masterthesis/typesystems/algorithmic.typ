@@ -1,6 +1,5 @@
 == L2 Calculus
-> Minimal calculus + qualified schemes: parked lookups (stumps) carried as
-> scheme constraints, discharged per instantiation
+> Functions, scoped records, record concat, row-vars, let-poly, qualified schemes, parked lookups
 
 
 l ∈ 𝓛  x ∈ 𝓧  𝓫 ∈ 𝓑  c ∈ 𝓒
@@ -10,10 +9,78 @@ e := c | x | (x: e) | e₁e₂ | (e₁ ‖ e₂) | e.l | { ξ } | let x = e₁ i
 
 τ := α | 𝓫 | ★ | τ -> τ | { ρ }
 ρ := ε | α | l: τ | (ρ₁ | ρ₂)
+κ := Type | Row
+
+// the L2-algorithmic part
 q := ⟨ρ.l ↓ δ⟩
 Q := ∅ | q, Q
-σ := ∀ᾱ. Q ⇒ τ
-Γ := • | Γ·(x: σ) | Γ·(α = ρ)
+σ := ∀(ᾱ: κ̄). Q ⇒ τ
+Γ := • | Γ·(x: σ) | Γ·(α: κ) | Γ·(α = ρ)
+
+
+== Sorts
+- κ classifies *variables*, nothing else: τ and ρ are already disjoint
+  syntactic categories, so every closed phrase reads its sort off the grammar.
+  All sorting adds is that α is bound at a sort — α at a type position and α at
+  a row position are no longer the same variable
+- Only T-λ-I and T-let carry a sorting premise: they are the only rules whose
+  conclusion mentions a type resp. a scheme not already determined by the
+  premises
+- Substitutions respect sorts: (Γ ⊢ θ: ᾱ:κ̄) means θ is the identity outside ᾱ
+  and Γ ⊢ θα: κ for every (α: κ) ∈ ᾱ:κ̄
+- A row-solution (α = ρ) ∈ Γ binds α at Row
+
+
+α: Type ∈ Γ
+------------ S-var
+Γ ⊢ α: Type
+
+
+------------ S-base
+Γ ⊢ 𝓫: Type
+
+
+---------- S-★
+Γ ⊢ ★: Type
+
+
+Γ ⊢ τ₁: Type   Γ ⊢ τ₂: Type
+----------------------------- S-fn
+Γ ⊢ τ₁ -> τ₂: Type
+
+
+Γ ⊢ ρ: Row
+-------------- S-rcd
+Γ ⊢ {ρ}: Type
+
+
+α: Row ∈ Γ
+----------- S-ρ-var
+Γ ⊢ α: Row
+
+
+---------- S-ε
+Γ ⊢ ε: Row
+
+
+Γ ⊢ τ: Type
+---------------- S-field
+Γ ⊢ (l: τ): Row
+
+
+Γ ⊢ ρ₁: Row   Γ ⊢ ρ₂: Row
+--------------------------- S-conc
+Γ ⊢ (ρ₁ | ρ₂): Row
+
+
+Γ ⊢ ρ: Row   δ: Type ∈ Γ
+-------------------------- S-stump
+Γ ⊢ ⟨ρ.l ↓ δ⟩ ok
+
+
+(∀ q ∈ Q. Γ·(ᾱ: κ̄) ⊢ q ok)   Γ·(ᾱ: κ̄) ⊢ τ: Type
+------------------------------------------------- S-scheme
+Γ ⊢ (∀(ᾱ: κ̄). Q ⇒ τ) ok
 
 
 == Stumps
@@ -25,8 +92,8 @@ Q := ∅ | q, Q
   generalization time (that is L1, and it loses the found-instances)
 - Plain schemes embed as Q = ∅; the discharge premise is then vacuous and
   ≥\_Γ degenerates to the Γ-independent σ ≥ τ of the minimal calculus
-- ∀β δ. ⟨β.l ↓ δ⟩ ⇒ {β} → δ is the principal scheme of (x: x.l); no plain
-  ∀ᾱ. τ scheme covers both its found- and its ⊥-instances
+- ∀(β: Row)(δ: Type). ⟨β.l ↓ δ⟩ ⇒ {β} → δ is the principal scheme of (x: x.l);
+  no plain ∀ᾱ. τ scheme covers both its found- and its ⊥-instances
 
 
 == Declarative
@@ -45,8 +112,8 @@ x: σ ∈ Γ   σ ≥\_Γ τ
 Γ ⊢ e: τ₂
 
 
-Γ·(x: τ₁) ⊢ e: τ₂
---------------------- T-λ-I
+Γ ⊢ τ₁: Type   Γ·(x: τ₁) ⊢ e: τ₂
+---------------------------------- T-λ-I
 Γ ⊢ (x: e): τ₁ -> τ₂
 
 
@@ -55,8 +122,8 @@ x: σ ∈ Γ   σ ≥\_Γ τ
 Γ ⊢ e₁e₂: τ₂
 
 
-(∀ τ₁. σ ≥\_Γ τ₁ ⟹ Γ ⊢ e₁: τ₁)   (∃ τ₁. σ ≥\_Γ τ₁)   Γ·(x: σ) ⊢ e₂: τ₂
------------------------------------------------------------------------ T-let
+Γ ⊢ σ ok   (∀ τ₁. σ ≥\_Γ τ₁ ⟹ Γ ⊢ e₁: τ₁)   (∃ τ₁. σ ≥\_Γ τ₁)   Γ·(x: σ) ⊢ e₂: τ₂
+------------------------------------------------------------------------------------ T-let
 Γ ⊢ let x = e₁ in e₂: τ₂
 // Instance-closed over *discharged* instances. The inhabitation premise is not
 // bureaucracy: with Q ≠ ∅ a scheme can have NO Γ-instance, and the
@@ -81,7 +148,6 @@ x: σ ∈ Γ   σ ≥\_Γ τ
 Γ ⊢ e.l: ★
 
 
-// Allows to not error on lazy errors
 Γ ⊢ e: {ρ}   Γ ⊢ ρ.l ↓ ⊥
 -------------------------- T-sel-⊥
 Γ ⊢ e.l: ★
@@ -113,17 +179,16 @@ x: σ ∈ Γ   σ ≥\_Γ τ
 
 == Instantiation
 - (σ ≥\_Γ τ) replaces (σ ≥ τ) at T-var: instantiate all quantifiers at once via
-  a substitution θ over ᾱ (identity outside ᾱ), then discharge every q ∈ Q
-- Each α ∈ ᾱ takes a type at type positions and a row at row positions
+  a *sort-respecting* θ over ᾱ, then discharge every q ∈ Q
 - Γ-relative, unlike the minimal calculus: discharge reads Γ's row-solutions.
   That is the price of cross-instantiation refinement
 - *No tail check needed* (unlike λ⟨⟩): By monotonicity of ↓, instantiating a
   row-var can never invalidate a definite lookup result — every position it
   could shadow was already ?-poisoned
 
-θ = [ᾱ ↦ τ̄ | ρ̄]   (∀ q ∈ Q. Γ; θ ⊢ q)
---------------------------------------- I-inst
-(∀ᾱ. Q ⇒ τ) ≥\_Γ θτ
+Γ ⊢ θ: ᾱ:κ̄   (∀ q ∈ Q. Γ; θ ⊢ q)
+---------------------------------- I-inst
+(∀(ᾱ: κ̄). Q ⇒ τ) ≥\_Γ θτ
 
 
 == Discharge
