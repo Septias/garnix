@@ -30,8 +30,9 @@ Principality forces qualified schemes that use parked stumps during unification 
 - [x] Let-Statements
 - [x] Qualified Schemes
 - [~] Unification 
+- [ ] Type inference (L2)
 - [ ] FC-Labels
-- [ ] Patterns
+- [?] Patterns
 - [?] Occurrence Typing
 - [?] Recursive Types
 - [?] With
