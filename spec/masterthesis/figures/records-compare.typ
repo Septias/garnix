@@ -201,7 +201,7 @@
 
   rc-gr(11)[Row theories / qualified types],
 
-  rc-pa[Morris & McKinna '19 @abstracting_extensible_data],
+  rc-pa[Morris & McKinna '19 @rose],
   rc-y,
   rc-y,
   rc-y,
@@ -403,7 +403,7 @@
   rc-n,
   rc-n,
 
-  rc-pa[Morris & McKinna '19 @abstracting_extensible_data],
+  rc-pa[Morris & McKinna '19 @rose],
   rc-nt[row theories],
   rc-y,
   rc-y,

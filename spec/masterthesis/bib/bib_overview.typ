@@ -42,7 +42,7 @@
 - Uses _conditional tail check_
 
 
-== Abstracting Extensible Data Types @abstracting_extensible_data
+== Abstracting Extensible Data Types @rose
 ⊕ Variants & Records
 ⊕ Asymmetric Concat
 ⊕ Expressive constraints: $\_ ⊙_~ \_$(containment) and $ζ ⧀ ζ$(subtype)
