@@ -13,6 +13,11 @@
   - We currently need _closedness_ in the proofs, which does not hold due to `with; e`
   - There is no negative information in our typesystem.
 
+  == Tisch
+  - Laziness part
+    - Laziness allows parts that can not type
+    - Also closed programs
+    - Maybe section about all it's results?
 
   == Goal
   > I want to create a typesystem that handles Nix as best as possible. It should be efficiently computable and have no "breaking" points. Meaning, there is nothing in it that makes it immediately unfeasible for Nix. This is why we need a soft-typing type as well as row- and label-variables. The result should be efficiently computable.
@@ -30,6 +35,16 @@ We propose a novel _soft type system_ based upon the work of Paszke&Xie with sco
 
 = A Note about Nix
 > This section motivates our work in regard to practical application, also the nix language features are guiding the features we are exposing.
+
+// Todo: Start by introducing the motivating example: (a ‖ b).x
+// - This immediately motivates the scoped rows
+// - It removes a class of calculi: Symmetric concat, only single field removal
+//
+// Todo: expand nix lang & feature motivation
+// The features directly motivated by the language:
+// - scoped rows: support FC-labels and Record concat
+// The features motivated by the broader scope:
+// - size: no instrumentation & effective computation
 
 NixLang @nix-language-2-28 @dolstra_phd is the fundamental language of one of the largest bodies of untyped functional code in existence and a language that extends beyond the usual λ-calculus features. Its foundational data structure is the _attribute set_ — a record — and the language provides a gamut of constructs and builtin functions to create, extend, deconstruct and reflect upon them. NixLang powers nixpkgs, a package repository of more than 100,000 packages that is continuously evaluated, updated and rolled out from one central repository, and the same repository carries the Nix standard library, the NixOS module system and the definition of the NixOS distribution itself @nixos_short @nixos_long. Every one of those artefacts is an attribute set assembled out of other attribute sets. NixLang is thus both the motivation for our work and the guiding principle behind the features our calculus exposes.
 
@@ -51,9 +66,6 @@ Nix' update operator `a // b` is a _set-or-replace_ operation: the result carrie
   ```)),
 )<nix-idioms>
 
-@nix-idioms is the empirical argument of this thesis. The first line is worth reading twice: an overlay is a function of two abstract attribute sets that concatenates them and selects from the result. That is _exactly_ the shape of our motivating example `a: b: (a ‖ b).l`. The example is not a synthetic corner case constructed to embarrass row calculi — it is the shape of every overlay in nixpkgs, and any type system that cannot say something useful about it cannot say anything useful about Nix.
-
-_A note on direction._ Nix' `//` is _right_-biased: in `a // b` the fields of `b` win. Scoped rows, following Leijen @extensible_recs, are _left_-biased: a lookup walks the row from the left and stops at the first binding it finds. The two conventions are reconciled once, in the typing rule for concatenation (@declarative), which places the row of the _right_ operand _first_: $Γ ⊢ e₁ ‖ e₂: {ρ₂ | ρ₁}$. Everywhere below, "precedence" refers to the row convention — leftmost wins — and the term-level bias of `//` is obtained by that flip.
 
 == What makes Nix hard
 
@@ -100,25 +112,22 @@ Static typing of NixLang is hard for more reasons than the one above, and the re
 
 Two entries of @nix-features deserve emphasis because they are usually left out of accounts of "typing a dynamic language".
 
-_Laziness._ Nix is lazy, and nixpkgs relies on it: an attribute set may contain bindings that are never forced in any given evaluation, and it is entirely ordinary for a field to hold an expression that would fail if anyone ever looked at it. A type system that _rejects_ programs would therefore reject working code — not as an artefact of imprecision, but because the code genuinely never performs the operation being complained about. Laziness is thus a first-order argument for a system that reports rather than refuses. It is also the reason recursion appears at the level of rows: `rec { }`, `let`, the nixpkgs fixpoint and every overlay tie a record back to itself, so recursive row-variables are the normal case and not a pathology.
+_Non-instrumentability._
+- Adding casts to the language could change the evaluation behaviour because thunks could be forced.
+- Gradual typing @gradual_siek @gradual_tobin @agt is semantically unavailable.
 
-_Non-instrumentability._ Nix programs cannot be instrumented. This is stronger than the usual observation that a large codebase resists breaking changes: a cast inserted into a Nix expression forces a thunk that the original program may never have forced, and can therefore change termination and error behaviour; and because a derivation's output path is content-addressed by the result of evaluation, any change to what evaluation produces changes build results across the entire package set. There is no runtime to attach a monitor to and no boundary at which to place a check. Gradual typing @gradual_siek @gradual_tobin @agt is therefore not merely inconvenient for Nix — it is semantically unavailable.
-
-== What an analysis of Nix must satisfy
-
-From this problem surface we derive four requirements, and every design decision in the remainder of this thesis traces back to one of them.
+We define the following requirements:
 
 / R1 (No source changes): The analysis must run on today's nixpkgs verbatim. Annotations may be admitted, but nothing may be _required_, and no program may need rewriting to become analysable.
 / R2 (No semantic change): No casts, wrappers or runtime checks. Evaluation must produce exactly what it produced before, down to derivation hashes. This is what rules out gradual typing and blame @cantblamethis @blame_for_all and leaves _soft typing_ @soft_typing @practical_soft_typing @coldwar — static warnings over an untouched dynamic semantics — as the only admissible shape.
 / R3 (Totality): Every program must receive a type. Failure of the analysis is a _result_, not an error: where nothing can be established the system must say so, in the type, rather than refuse the program. This is what forces an unknown type ★, in the spirit of the `any` of TypeScript @typescript and Flow @flow but — as @sec-motivation argues — with a controlled origin.
 / R4 (Effective inference): The analysis must scale to a repository that is, semantically, a single fixpoint. This rules out inference approaches whose constraint language has no solving procedure — the ROSE line @rose @extensible_rec_funcs @generic_with_extensible among them — and it rules out backtracking over alternative typings.
 
-What a Nix developer gets in exchange is modest and concrete: misspelled attribute names, arity and argument mismatches in the `callPackage` protocol @special_args, `meta` fields of the wrong shape, and inferred types on hover. What they do not get is any claim about whether a build succeeds; paths, IO, derivations and the store are outside the language fragment we type at all.
 
 Some Nix expressions have no useful static answer, and R3 says the system must still type them. Using first-class labels and the impure builtin `builtins.currentTime`, one can select a field by wall-clock time:
 
 ```nix
-{ before = "moin"; after = 0; }.${if builtins.currentTime < 1767225600 then "before" else "after"}
+{ before = "moin"; after = 0; }.${if builtins.currentTime < 1767236401 then "before" else "after"}
 ```
 
 The selected field, and hence the type of the expression, changes at a fixed instant. A set-theoretic system would answer with the union of the two branches; ours has no unions, and answers ★. Neither answer is a failure of the analysis — the point is that _some_ answer is mandatory, and that the interesting design question is not whether uncertainty arises but where it is allowed to enter and whether its origin can be explained.
@@ -130,6 +139,25 @@ Work on typing Nix itself is scarce. Broekhoff and Krebbers @verified give a ver
 // Still open here:
 // - Parreaux/MLstruct: co-completeness discussion
 // - the full type-connective algebra we give up
+// > Explain the typesystem and why we chose its features the way we did
+//
+// TODO
+// - Note that we don't have width-subtyping (same problem as remy, can gobble fields)
+// - Section about Absence in general (Parreaux, Castagna, etc.)
+//
+// Structure
+// - Row-poly
+// - Plottwist: Constraint systems
+// - (Giuseppe & Parreaux) ?
+//
+// Reason for rows: Concatenation & FC-Labels "obvious"
+// Reason for rows: Good examples from Morris & (P&X)
+//
+// Reason for rows: P&X show efficient unification
+// Reason against Parreaux: No real concatenation, co-complete…?
+// Reason against Castagna: No free concatenation
+// We loose: The full type-connective algebra properties
+
 
 == The shape of the problem
 
@@ -143,7 +171,7 @@ This is the crux, and it organises the entire design space. *Row polymorphism tr
 
 == Why not the obvious answers
 
-_Why not width subtyping?_ Because subsumption and concatenation are incompatible, an observation going back to Harper and Pierce @symm_concat: width subtyping may forget a field, ${l: τ} <= {}$, without leaving a trace, and concatenating the forgotten record with one that _does_ bind $l$ then resolves shadowing the wrong way. A record can always discard exactly the fields that decide precedence. We therefore keep the calculus subtyping-free; the only ordering it admits is the precision gained by instantiation.
+_Why not width subtyping?_ Because subsumption and concatenation are incompatible, an observation going back to Harper and Pierce @symm_concat: width subtyping may forget a field, ${l: τ} <= {}$, without leaving a trace, and concatenating the forgotten record with one that _does_ bind $l$ then resolves shadowing the wrong way. A record can always discard exactly the fields that decide precedence. We therefore keep the calculus subtyping-free; the only ordering it admits is the precision gained by instantiation and row equivalence.
 
 _Why not restrict to symmetric concatenation?_ Requiring the two sides to be disjoint @symm_concat makes shadowing impossible by construction and the operation partial. It also outlaws @nix-idioms outright: overriding `meta` on a package that already has one is the whole purpose of an overlay.
 
@@ -166,23 +194,29 @@ None of these is a wrong choice; each simply trades a different one of three pro
     stroke: 0.4pt + luma(200),
     table.header([*System*], [*P*], [*I*], [*S*], [*What is given up*]),
 
-    [Gaster–Jones @gaster_jones], [·], [●], [●],
-    [no concatenation at all],
+    [Gaster–Jones @gaster_jones], [·], [●], [●], [no concatenation at all],
 
-    [Rose @rose], [●], [●], [·],
+    [Rose @rose],
+    [●],
+    [●],
+    [·],
     [entailment is a parameter: no solver, no bound],
 
-    [MLstruct @mlstruct], [●], [●], [·],
+    [MLstruct @mlstruct],
+    [●],
+    [●],
+    [·],
     [subtyping-constraint solving, and `‖` is unsound under width subtyping],
 
-    [Castagna @castagna2023programming], [●], [·], [·],
+    [Castagna @castagna2023programming],
+    [●],
+    [·],
+    [·],
     [local inference, not let-polymorphic],
 
-    [Ur @ur], [●], [·], [●],
-    [the programmer supplies disjointness witnesses],
+    [Ur @ur], [●], [·], [●], [the programmer supplies disjointness witnesses],
 
-    [This work], [◐], [●], [●],
-    [precision — but only locally, and marked],
+    [This work], [◐], [●], [●], [precision — but only locally, and marked],
   ),
 )<trilemma>
 
@@ -215,8 +249,6 @@ Finally, we are explicit about what this costs. A soft type system makes no soun
 + *An algorithmic system.* We give a sound unification algorithm operating on row _spines_, with verdicts that are provably independent of the recursion budget they were computed under. Two of its rules — a counting rule and a unique-host expansion rule — were surfaced as genuine gaps by the mechanization rather than designed in advance.
 + *An honest account of incompleteness.* The algorithm is incomplete, and we say exactly how. It has three conservative verdicts, each witnessed by a kernel-checked example that reports failure on a problem which in fact has a most general unifier. We further show that the natural converse — "no move applies, therefore no principal solution exists" — is _false_ at every formulation we tried, including the retreat to configurations in which no move fires at all: terminality is a fact about the moves, not about the problem.
 
-We do not claim completeness, and we do not claim an unconditional termination measure; the budgeted formulation and what remains open about it are discussed in @unification.
-
 The remainder of this thesis is organised as follows. @minimal-calculus fixes a minimal calculus — functions, scoped records, concatenation, row-variables and let-polymorphism — and @declarative-system gives its declarative typing rules, the lookup relation and row equivalence. @unification develops the unification algorithm on spines. @metatheory presents the metatheory, the principality argument that forces qualified schemes, and the incompleteness results. @sec-extensions discusses extensions towards full NixLang — first-class labels, patterns, `with`, `inherit`, occurrence typing, and lacks-predicates as the most promising source of the negative information this section identified as the crux — before @related-work places the work in the literature.
 
 
@@ -226,7 +258,6 @@ The remainder of this thesis is organised as follows. @minimal-calculus fixes a 
 - Explain why ★ is covariant in all positions for functions
 
 // Structure
-// - Show the typesystem P1?
 // - I don't think that is really showable without the actual introduction
 // -
 
