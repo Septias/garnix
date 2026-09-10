@@ -201,7 +201,7 @@ inside the right side — an impossible strict growth.
 
 α ≐ᵣ (β | α | γ)     reported OCCURS, yet UNIFIABLE (β, γ ↦ ε)
 ----------------------------------------------------------------
-⚠ (RowUnify.lean: occurs_allVar_unifiable, occurs_allVar_hasMgu) — the occurs
+⚠ CONSERVATIVITY 1 OF 3 the occurs
 check is CONSERVATIVE, and this example proves it. An all-variable interior
 occurrence is perfectly unifiable by collapsing the surrounding variables to ε,
 but the algorithm rejects it. So `.occurs` does NOT carry a no-unifier guarantee
@@ -221,14 +221,20 @@ rejects a problem the trichotomy files under case (a).
 
 ## 6. The stuck leg: what the trichotomy can and cannot claim
 
-(k: {β} | β | α) ≐ᵣ (k: {l: 𝓫} | l: 𝓫)     STUCK — yet an mgu EXISTS
-----------------------------------------------------------------------
-⚠⚠ (Regressions.lean: unify_eq_rescued_stuck) — **the sharpest finding in the
-development, and the one that reshapes the trichotomy.** Feed a field whose
-TYPE embeds the stuck row-var: matchL peels the shared k-field, emitting the
-type equation {β} ≐ {l: 𝓫}; the residual (β | α) ≐ᵣ (l: 𝓫) is exactly Wand,
-hence stuck. But the emitted equation forces β ≈ (l: 𝓫), which then forces
-α ≈ ε — the WHOLE problem has a UNIQUE mgu. Therefore:
+(k: {β | α} | β) ≐ᵣ (k: {l: 𝓫} | l: 𝓫)     STUCK — yet an mgu EXISTS
+--------------------------------------------------------------------
+⚠ CONSERVATIVITY 2 OF 3 (Refutations.lean: stuck_masks_mgu_reported — the
+verdict, by `rfl`, it RUNS; stuck_masks_mgu — the mgu) — **the finding that
+reshaped the trichotomy.** Feed a field whose TYPE embeds the stuck row-var.
+matchL peels the shared k-field, splitting the problem in two:
+
+    emitted equation:  {β | α} ≐ {l: 𝓫}      — that IS Wand, hence STUCK
+    residual row:      β ≐ᵣ (l: 𝓫)           — that PINS β
+
+`UResM.seq` evaluates the emitted equation first and propagates its `.stuck`
+immediately, so the residual — the half that disambiguates — is never looked
+at. But β ≈ (l: 𝓫) forces α ≈ ε, so the WHOLE problem has the UNIQUE mgu
+β ≔ (l: 𝓫), α ≔ ε. Therefore:
 
 > `unifyRow = stuck` does NOT imply "no mgu".
 
@@ -239,70 +245,50 @@ equations Q — which is exactly how unifySpineF_stuck_no_mgu is stated (as a
 reduction carrying Q as an arbitrary unifier predicate), and why its base
 hypothesis is not universally true.
 
-(l: 𝓫 | α) ≐ᵣ (m: 𝓫 | β),  l ≠ m     STUCK — yet an mgu EXISTS
-------------------------------------------------------------------
-⚠⚠ (RowUnify.lean: crossfield_stuck_unifiable) — a SECOND, independent way the
-stuck verdict is wrong, and the more damaging one: unlike unify_eq_rescued_stuck
-this config emits NO equations at all. Every move is dead at the very first step
-(each side's window is closed by the other's leading field, so both matchL
-directions fail; both sides carry a var, so groundMatch and projClash cannot
-fire), hence Q is EMPTY and the Q side condition is vacuously satisfied. There is
-nothing here for a mutually-recursive type solver to solve either. The verdict is
-simply INCOMPLETE.
+(l: {w}) ≐ᵣ (w | v)     TERMINAL — yet an mgu EXISTS
+-----------------------------------------------------
+⚠ CONSERVATIVITY 3 OF 3 (Refutations.lean: terminal_masks_mgu_terminal —
+all thirteen moves dead, each by `rfl`; terminal_masks_mgu — the mgu;
+terminalNoMgu_false) — **the sharpest of the three, because it refutes the
+natural retreat from the previous one.**
 
-The unifier is forced. Reading the ≈-characterization on a unifier θ, writing
-A = θα and B = θβ:
+The obvious response to `stuck_masks_mgu` is that the defect lies in the
+DRIVER's scheduling, not in the row calculus, so one should restate the leg
+about TERMINAL configurations — those where no move fires at all, hence there
+is no scheduling left to get wrong. This example says that is false too.
 
-    proj_m A = (0, 𝓫) :: proj_m B          proj_l B = (0, 𝓫) :: proj_l A
-    proj_k A = proj_k B   (k ∉ {l, m})     vars A = vars B
+The configuration is terminal: every strip, solveVar, match, ground, expand and
+projClash returns none/false. U-expand in particular refuses because the
+l-field has TWO candidate hosts, w and v — syntactically the Wand shape, where
+refusing is the whole point. But one of the two placements is not realizable:
 
-Segment index 0 means "before the first var", so A ≈ (m: 𝓫 | R); feeding that
-back gives B ≈ (l: 𝓫 | R) for the SAME R. Hence
+  · host in w:  θw ≈ (l: {θw})          — an OCCURS violation
+  · host in v:  w ≔ ε,  v ≔ (l: {ε})    — the surviving unifier
 
-    α ↦ (m: 𝓫 | X),   β ↦ (l: 𝓫 | X)      (X fresh)
+and with one placement dead the unifier is UNIQUE, hence trivially most
+general. The algorithm cannot see this: `sFieldCount` gives both sides l-count
+1, and the recursion passes UNDER a record constructor, where neither counting
+nor the var-sequence equation reaches — the two invariants that did all the
+work in §5 are both blind here. What does see it is `Ty.rcdDepth` /
+`Row.rcdDepth` (NoMgu.lean): record nesting, ≈-invariant because `cat` takes a
+max, and **the first invariant in the development that sees THROUGH a field
+payload.**
 
-is an mgu. MECHANIZED so far: the stuck verdict, and that this substitution
-unifies. The maximality half is derived by hand off rowEquiv_iff_char and is NOT
-yet machine-checked.
+> **Terminality is a fact about the MOVES, not about the problem.**
 
-The missing rule is Rémy-style variable EXPANSION. ≐ᵣ refuses to guess which
-variable hosts a demanded field — which is exactly what keeps Wand honest, since
-there TWO variables could host it — but when the host is UNIQUE, refusing costs
-completeness for nothing. The precondition that separates the two cases:
+That is the lesson, and it means there is no general converse to prove at any
+formulation: "no move fires" does not certify that the placements the moves
+declined to choose between are both realizable. Three successive formulations
+of this leg have now been refuted — algorithm-level `.stuck`, the Q-threaded
+version, and terminal configurations — so the fourth leg's content is the
+SPECIFIC no-mgu theorems (vars_vs_field = Wand, two_sided, allvar_swap, each
+also at the `HasMguOn` level) together with these three conservativity
+examples. Complete and honest; just not a converse.
 
-    s₁ = (l: τ | t₁),   windowExtract l s₂ = none,
-    sFieldCount l s₂ = 0        (no l ANYWHERE in s₂, not just its window),
-    s₂ has exactly ONE variable β,     β ∉ vars s₁
-  ⟹  β ≔ (l: τ | β′),  recurse on  (t₁,  s₂[β := β′])
+(l: 𝓫 | α) ≐ᵣ (m: 𝓫 | β),  l ≠ m  
+--------------------------------------------------------------------
+Is found now after mutual recursive ≐/≐ᵣ
 
-All three clauses are load-bearing, and each is refuted by one of the examples
-already in this file:
-
-  · Wand (β | α) ≐ᵣ (l: 𝓫): receiving side has TWO vars, so the field's host is
-    genuinely ambiguous — the move must not fire, and does not.
-  · two-sided (α | l: 𝓫) ≐ᵣ (l: 𝓫 | β): the receiving side already HAS an l,
-    after its var. Its own field can slide to segment 0 when θα turns out
-    var-free (that is precisely the ε witness of two_sided_no_mgu), so the host
-    is again not forced. Hence the count must be checked over the whole spine,
-    not just the window — windowExtract alone would misfire here.
-  · β ∈ vars s₁ would make the expansion grow the LEFT spine too; those configs
-    are cancelled by stripR first anyway (cf. unify_occurs_cancelled).
-
-On the example the move closes the problem outright:
-
-    [l:𝓫, α] ≐ᵣ [m:𝓫, β]   --expand-->   β ≔ (l:𝓫 | β′),  [α] ≐ᵣ [m:𝓫, β′]
-                           --solveVar->  α ≔ (m:𝓫 | β′)
-    σ = [β ≔ (l:𝓫 | β′),  α ≔ (m:𝓫 | β′)]        = the mgu above, X = β′
-
-and it costs nothing in the termination argument: |s₁| loses one atom and |s₂| is
-unchanged (β occurs once in s₂ and not at all in s₁), so the measure |s₁| + |s₂|
-still strictly decreases and the existing fuel structure survives.
-
-**The two failures are exactly complementary: every base-arm witness technique
-needs ≥2 candidate hosts, and exactly-one-host is precisely where none of them
-can fire.** That is why the stuck-leg dispatch could not be closed as stated —
-the unique-host configs do not belong in the base arm at all, they belong in the
-algorithm.
 
 ¬ HasMgu (γ | β | α) (γ | l: 𝓫)
 ---------------------------------
@@ -357,12 +343,3 @@ would catch a silent change in the normal form.
   sharp — §4
 - U-ground exists because window rules alone are incomplete — §4
 - occurs is conservative, not a no-unifier oracle — §5
-- **the stuck verdict is only meaningful relative to the accumulated type
-  equations** — §6, the finding that blocks a clean trichotomy statement; the
-  side condition that repairs it (`Indep Q V`) is now mechanized and carried by
-  all three base techniques
-- **≐ᵣ is INCOMPLETE, independently of that** — §6, crossfield: it reports stuck
-  on a config with an mgu and no equations at all. The missing rule is
-  unique-host variable expansion, and the uniqueness guard is what keeps it from
-  breaking Wand. This is a defect in the algorithm, not in the statement of the
-  trichotomy, and it should be fixed before the base arm is dispatched
