@@ -617,20 +617,15 @@ S ⊢ ⟨α ▷ ρ.l ↓ δ⟩ ⇓ (S′ ∖ ⟨α ▷ ρ.l ↓ δ⟩) +W
 
 
 == Generalization
-- The L1/L2 fork, and the whole reason for qualified schemes. At a let-boundary
-  a stump whose result var δ would be generalized can either be FINALIZED
-  (δ ≐ ★, L1) or CARRIED into the scheme as a constraint (L2)
-- L1 freezes the result and loses every found-instance: no plain ∀ᾱ. τ scheme
-  covers both the found- and the ⊥-typing of (x: x.l). L2 is FORCED, not a
-  convenience
 - A stump is carried iff its blocker is generalized. One blocked on a var free
   in Γ belongs to the enclosing scope and stays in Δ
 - Inhabitation (T-let's second premise) holds by construction: a carried stump
   always finalizes at ★ if nothing better, so the scheme has at least one
   instance
 
-Γ; S ⊢ e₁ ⇒ τ₁; S₁   Δ₁ = Δ_Γ ⊎ Δ_q   ᾱ = (ftv(⟦S₁⟧τ₁) ∪ ftv(Δ_q)) ∖ ftv(⟦S₁⟧Γ)   κ̄ = Γ(ᾱ)   Γ·(x: ∀(ᾱ: κ̄). Δ_q ⇒ ⟦S₁⟧τ₁); S₁ ∖ Δ_q ⊢ e₂ ⇒ τ₂; S₂
---------------------------------------------------------------------------------------------------------------------------------------------------- A-let
+Γ; S ⊢ e₁ ⇒ τ₁; S₁   Δ₁ = Δ_Γ ⊎ Δ_q   ᾱ = (ftv(⟦S₁⟧τ₁) ∪ ftv(Δ_q)) ∖ ftv(⟦S₁⟧Γ)
+κ̄ = Γ(ᾱ)   Γ·(x: ∀(ᾱ: κ̄). Δ_q ⇒ ⟦S₁⟧τ₁); S₁ ∖ Δ_q ⊢ e₂ ⇒ τ₂; S₂
+-------------------------------------------------------------------------------- A-let
 Γ; S ⊢ let x = e₁ in e₂ ⇒ τ₂; S₂
 // Δ_q are the stumps whose blocker lands in ᾱ, Δ_Γ the rest. The split is a
 // least FIXPOINT: putting a stump in Δ_q adds its free vars to ᾱ, which can
