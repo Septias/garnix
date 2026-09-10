@@ -31,113 +31,193 @@ We propose a novel _soft type system_ based upon the work of Paszke&Xie with sco
 = A Note about Nix
 > This section motivates our work in regard to practical application, also the nix language features are guiding the features we are exposing.
 
-// Todo: add some actual nix?
-// Todo: Start by introducing the motivating example: (a ‖ b).x
-// - This immediately motivates the scoped rows
-// - It removes a class of calculi: Symmetric concat, only single field removal
-//
-// Todo: Split in two:
-// - The features directly motivated by the language:
-//   - scoped rows: support FC-labels and Record concat
-//   -
-// - The features motivated by the broader scope:
-//   - size: no instrumentation & effective computation
-//
+NixLang @nix-language-2-28 @dolstra_phd is the fundamental language of one of the largest bodies of untyped functional code in existence and a language that extends beyond the usual λ-calculus features. Its foundational data structure is the _attribute set_ — a record — and the language provides a gamut of constructs and builtin functions to create, extend, deconstruct and reflect upon them. NixLang powers nixpkgs, a package repository of more than 100,000 packages that is continuously evaluated, updated and rolled out from one central repository, and the same repository carries the Nix standard library, the NixOS module system and the definition of the NixOS distribution itself @nixos_short @nixos_long. Every one of those artefacts is an attribute set assembled out of other attribute sets. NixLang is thus both the motivation for our work and the guiding principle behind the features our calculus exposes.
+
+== The operation that drives everything
+
+Nix' update operator `a // b` is a _set-or-replace_ operation: the result carries every field of `a`, every field of `b`, and for colliding labels the binding from `b`. It is _total_ — no disjointness requirement, no partiality, no failure case — and it is the backbone of the idioms that structure nixpkgs.
+
+#figure(
+  caption: [The three idioms that make asymmetric concatenation unavoidable.],
+  box(width: 100%, align(left, ```nix
+  # 1. an overlay: extend or replace fields of a package set given to us
+  self: super: { hello = super.hello // { meta = { broken = false; }; }; }
+
+  # 2. the callPackage idiom: override parts of an argument set we did not build
+  mkDerivation (args // { buildInputs = args.buildInputs ++ [ extra ]; })
+
+  # 3. the module system: merge configuration fragments from many files
+  { config, lib, ... }: { services.nginx = lib.mkMerge [ base config.extra ]; }
+  ```)),
+)<nix-idioms>
+
+@nix-idioms is the empirical argument of this thesis. The first line is worth reading twice: an overlay is a function of two abstract attribute sets that concatenates them and selects from the result. That is _exactly_ the shape of our motivating example `a: b: (a ‖ b).l`. The example is not a synthetic corner case constructed to embarrass row calculi — it is the shape of every overlay in nixpkgs, and any type system that cannot say something useful about it cannot say anything useful about Nix.
+
+_A note on direction._ Nix' `//` is _right_-biased: in `a // b` the fields of `b` win. Scoped rows, following Leijen @extensible_recs, are _left_-biased: a lookup walks the row from the left and stops at the first binding it finds. The two conventions are reconciled once, in the typing rule for concatenation (@declarative), which places the row of the _right_ operand _first_: $Γ ⊢ e₁ ‖ e₂: {ρ₂ | ρ₁}$. Everywhere below, "precedence" refers to the row convention — leftmost wins — and the term-level bias of `//` is obtained by that flip.
+
+== What makes Nix hard
+
+Static typing of NixLang is hard for more reasons than the one above, and the reasons are what fix our feature set rather than the other way round.
+
+#figure(
+  caption: [Language features of NixLang and the demands they place on a type system.],
+  table(
+    columns: (auto, 1fr, 1fr),
+    align: left,
+    inset: 6pt,
+    stroke: 0.4pt + luma(200),
+    table.header([*Feature*], [*Why it is hard*], [*What it forces*]),
+
+    [`a // b`],
+    [precedence is a runtime fact],
+    [scoped rows, total concatenation],
+
+    [`e.${e'}`, `?`, `getAttr`],
+    [labels are ordinary values],
+    [a label sort, first-class labels],
+
+    [`with e; body`],
+    [the _scope_ is a runtime value],
+    [variable lookup itself may be unknown],
+
+    [`rec`, fixpoints, overlays],
+    [rows are recursive],
+    [an occurs class that is not a technicality],
+
+    [laziness],
+    [non-closedness, errors that never fire],
+    [soft typing, per-binding uncertainty],
+
+    [`attrNames`, `removeAttrs`, `intersectAttrs`],
+    [need negative and label-level information],
+    [best-effort signatures, ★ as a sink],
+
+    [no annotations anywhere],
+    [everything must be inferred],
+    [HM-style inference at whole-fixpoint scale],
+  ),
+)<nix-features>
+
+Two entries of @nix-features deserve emphasis because they are usually left out of accounts of "typing a dynamic language".
+
+_Laziness._ Nix is lazy, and nixpkgs relies on it: an attribute set may contain bindings that are never forced in any given evaluation, and it is entirely ordinary for a field to hold an expression that would fail if anyone ever looked at it. A type system that _rejects_ programs would therefore reject working code — not as an artefact of imprecision, but because the code genuinely never performs the operation being complained about. Laziness is thus a first-order argument for a system that reports rather than refuses. It is also the reason recursion appears at the level of rows: `rec { }`, `let`, the nixpkgs fixpoint and every overlay tie a record back to itself, so recursive row-variables are the normal case and not a pathology.
+
+_Non-instrumentability._ Nix programs cannot be instrumented. This is stronger than the usual observation that a large codebase resists breaking changes: a cast inserted into a Nix expression forces a thunk that the original program may never have forced, and can therefore change termination and error behaviour; and because a derivation's output path is content-addressed by the result of evaluation, any change to what evaluation produces changes build results across the entire package set. There is no runtime to attach a monitor to and no boundary at which to place a check. Gradual typing @gradual_siek @gradual_tobin @agt is therefore not merely inconvenient for Nix — it is semantically unavailable.
+
+== What an analysis of Nix must satisfy
+
+From this problem surface we derive four requirements, and every design decision in the remainder of this thesis traces back to one of them.
+
+/ R1 (No source changes): The analysis must run on today's nixpkgs verbatim. Annotations may be admitted, but nothing may be _required_, and no program may need rewriting to become analysable.
+/ R2 (No semantic change): No casts, wrappers or runtime checks. Evaluation must produce exactly what it produced before, down to derivation hashes. This is what rules out gradual typing and blame @cantblamethis @blame_for_all and leaves _soft typing_ @soft_typing @practical_soft_typing @coldwar — static warnings over an untouched dynamic semantics — as the only admissible shape.
+/ R3 (Totality): Every program must receive a type. Failure of the analysis is a _result_, not an error: where nothing can be established the system must say so, in the type, rather than refuse the program. This is what forces an unknown type ★, in the spirit of the `any` of TypeScript @typescript and Flow @flow but — as @sec-motivation argues — with a controlled origin.
+/ R4 (Effective inference): The analysis must scale to a repository that is, semantically, a single fixpoint. This rules out inference approaches whose constraint language has no solving procedure — the ROSE line @rose @extensible_rec_funcs @generic_with_extensible among them — and it rules out backtracking over alternative typings.
+
+What a Nix developer gets in exchange is modest and concrete: misspelled attribute names, arity and argument mismatches in the `callPackage` protocol @special_args, `meta` fields of the wrong shape, and inferred types on hover. What they do not get is any claim about whether a build succeeds; paths, IO, derivations and the store are outside the language fragment we type at all.
+
+Some Nix expressions have no useful static answer, and R3 says the system must still type them. Using first-class labels and the impure builtin `builtins.currentTime`, one can select a field by wall-clock time:
 
 ```nix
-self: super: { foo = super.foo // { meta = …; }; }   # overlay
-mkDerivation (args // { buildInputs = …; })          # the callPackage idiom
-{ config, lib, ... }: { … }                          # module system, mkMerge```
+{ before = "moin"; after = 0; }.${if builtins.currentTime < 1767225600 then "before" else "after"}
+```
+
+The selected field, and hence the type of the expression, changes at a fixed instant. A set-theoretic system would answer with the union of the two branches; ours has no unions, and answers ★. Neither answer is a failure of the analysis — the point is that _some_ answer is mandatory, and that the interesting design question is not whether uncertainty arises but where it is allowed to enter and whether its origin can be explained.
+
+Work on typing Nix itself is scarce. Broekhoff and Krebbers @verified give a verified interpreter and an operational semantics but attempt no type system; an earlier system by the author @simplenix applies off-the-shelf Hindley-Milner inference to a Nix subset and fails precisely on the record operations of @nix-idioms; Nickel @nickel, a Nix-inspired configuration language, adopts gradual typing with row polymorphism but forbids the colliding concatenations that make `//` interesting; and the long-standing community issue @nix-ts-issue documents both the demand for and the difficulty of the problem.
 
 
-┌────────────────────────────────────────┬──────────────────────────────────┬──────────────────────────────────┐
-│                                        │            difficulty            │          what it forces          │
-├────────────────────────────────────────┼──────────────────────────────────┼──────────────────────────────────┤
-│ // with collision                      │ precedence is a runtime fact     │ scoped rows, total concat        │
-├────────────────────────────────────────┼──────────────────────────────────┼──────────────────────────────────┤
-│ .${e}, ?, getAttr                      │ labels are values                │ label sort / FC labels           │
-├────────────────────────────────────────┼──────────────────────────────────┼──────────────────────────────────┤
-│ with e; body                           │ scope is a runtime value         │ name resolution can be ★         │
-├────────────────────────────────────────┼──────────────────────────────────┼──────────────────────────────────┤
-│ rec, fixpoints, overlays               │ recursive rows                   │ occurs class, not a technicality │
-├────────────────────────────────────────┼──────────────────────────────────┼──────────────────────────────────┤
-│ laziness                               │ non-closedness, unforced errors  │ soft, per-binding ★              │
-├────────────────────────────────────────┼──────────────────────────────────┼──────────────────────────────────┤
-│ attrNames, removeAttrs, intersectAttrs │ need negative + label-level info │ best-effort ★ signatures         │
-├────────────────────────────────────────┼──────────────────────────────────┼──────────────────────────────────┤
-│ no annotations anywhere                │ everything inferred              │ HM, whole-fixpoint scale         │
-└────────────────────────────────────────┴──────────────────────────────────┴──────────────────────────────────┘
+= Motivation <sec-motivation>
+// Still open here:
+// - Parreaux/MLstruct: co-completeness discussion
+// - the full type-connective algebra we give up
 
-NixLang is the fundamental language of one of the largest bodies of untyped functional code in existence and a language that extends beyond the usual λ-calculus features. The foundational core of the language are records, with a garmut of language constructs and builtin functions to create, change and deconstruct these. Two features make static typing notably hard: *first-class labels* and the *asymmetric record concatenation* operation with only a few typesystems in existence that supported these features.
+== The shape of the problem
 
+Take the motivating example in the syntax of our calculus and try to type it:
 
-NixLang is the motivation for our work and guiding principle for the calculus we are concerned with. NixLang powers the most up-to-date package repository with more than 100.000 packages, continuously checked, updated and rolled out from one central repository: nixpkgs on Github. All of nix' code including the standart library, module system, and operating system NixOs roots in a single file at the root of that repository.
+$ a: b: (a ‖ b).l $
 
-// Gradual typing is semantically unavailable
-From this problem surface we derive two constraints for our work: First, from our assesment, it is unrealistic to force breaking changes in a software project of this size so the requirements needed to adopt the typesystem should be as benign as possible. This is why gradual typesystems @gradual_siek @gradual_tobin @agt that typically provide a surface and (¿) language that inserts casts is not an option. Instead, we take a soft-typing @soft_typing @soft_typing approach and admit an unknown type ★, similar to the undefined type of typescript.
+The two arguments are abstract, so `a` receives a record type ${α}$ and `b` a record type ${β}$. The concatenation has row $(β | α)$ — the right operand takes precedence and its row therefore comes first — and the selection must resolve $l$ in $(β | α)$. To answer it we must know whether $β$ contains $l$: if it does, the answer is $β$'s binding for $l$; if it definitely does _not_, the answer is $α$'s. Neither is known, and no amount of positive information about $β$ will settle it.
 
-Secondly, we want to create a typesystem that is applicable and thus needs *effective* type-inference. This rules out another class of inference approaches such as ROSE @rose and it's descendants @extensible_rec_funcs @generic_with_extensible as these provide no efficient inference algorithm.
+This is the crux, and it organises the entire design space. *Row polymorphism tracks presence; asymmetric concatenation with shadowing asks about absence.* The result type of a selection from a concatenation is a function of which fields the higher-precedence side _lacks_, and a row-variable, on its own, carries no such information. Every system in the literature that types this example faithfully has paid for it with a mechanism that supplies negative information, and every such mechanism has a price.
 
+== Why not the obvious answers
 
-// This gives reason for why we need a soft typing system, maybe it is misplaced)
-// we might have to remove this section and merge it into `typesystem`)
-#[
-  A complete typesystem for Nix is hindered by impurities (in an otherwise pure language) that can poison typeability. Using first-class labels and the impure builtin `builtins.currentTime`, it is possible to form an expression that looks up a record field based on the wall-clock time:
+_Why not width subtyping?_ Because subsumption and concatenation are incompatible, an observation going back to Harper and Pierce @symm_concat: width subtyping may forget a field, ${l: τ} <= {}$, without leaving a trace, and concatenating the forgotten record with one that _does_ bind $l$ then resolves shadowing the wrong way. A record can always discard exactly the fields that decide precedence. We therefore keep the calculus subtyping-free; the only ordering it admits is the precision gained by instantiation.
 
-  ```nix
-  { before = "moin"; after = 0; }.${if builtins.currentTime < 1767225600 then "before" else "after"}
-  ```
+_Why not restrict to symmetric concatenation?_ Requiring the two sides to be disjoint @symm_concat makes shadowing impossible by construction and the operation partial. It also outlaws @nix-idioms outright: overriding `meta` on a package that already has one is the whole purpose of an overlay.
 
-  The type of this selection depends on the moment of evaluation, so this is an obviously untypable operation: typing it would predict the future.
-]
+_Why not unions of typings?_ Wand's original treatment @concat4multiinher @wand_complete case-splits over which side contributes each field and yields a set of alternative typings rather than a principal one. The number of alternatives is exponential in the number of contested labels, which violates R4, and the absence of principal types propagates into every `let` in the program.
 
-The design constraints for our Nix typesystem are as follows: Full record calculus strength with first-class labels and the problematic asymmetric concat operation are essential to provide usable type-inference. Computability is an essential design constraint as backtracking would render type inference unusably slow. Lastly, a typesystem is needed that admits unavoidable uncertainty with an unknown type ★ similar to the one used in TypeScript or occurrence typing spearheaded by Castagna.
+_Why not lacks-predicates?_ Qualified types with $α backslash l$ constraints @gaster_jones @qualified_types are the cheapest source of negative information available, and they are a good fit for this calculus — cheap enough, in fact, that we return to them in @sec-extensions as the most promising extension. The reason they are absent from the minimal calculus is not the usual complaint that they make types verbose; in a system that requires no annotations, nobody ever writes them. The reason is that *nothing in the calculus generates them*. Lacks-constraints are forced upon Gaster and Jones because record _extension_ is partial and its typing rule must demand absence. Scoped rows make concatenation total, so no rule ever demands anything, and a constraint form with no introduction site buys nothing. The three Nix constructs that _would_ generate them — closed function patterns, `removeAttrs`, and `?`-guards under `if` — all live outside the minimal calculus.
 
-// (note: maybe the section can have *subheadings* for the three main constraints?)
+_Why not stronger row theories?_ Ohori @ohori1995polymorphic obtains efficient compilation for a polymorphic record calculus but restricts records to selection and functional update — concatenation is precisely what his index-passing scheme cannot support. The line of work beginning with Morris and McKinna @rose abstracts rows behind containment and combination constraints strong enough to type asymmetric concatenation faithfully, and Rose is a rank-1 Hindley-Milner language with principal types. But the principality is that of _qualified_ types: inference produces a principal constrained scheme and defers the row predicates to an entailment relation the framework leaves as a parameter, with no solving procedure and hence no complexity bound. Since combination is an equation in a partial monoid, deciding conjunctions of the predicates inference actually generates is unification modulo associativity and commutativity, which is NP-complete @ac_unification. The successor systems @generic_with_extensible @extensible_rec_funcs @extensible_data_adhoc are explicitly typed and leave reconstruction as future work. The same objection applies to HM(X) instances @designing_record_systems, which stipulate that a constraint solver exists without supplying one: in all of these, the hard part of the problem is exactly the part that is deferred.
 
+_Why not set-theoretic types?_ Castagna's programme @frisch_semantic @castagna2023programming @typing_records_etc @poly_records is the most expressive treatment of records for a dynamic language to date, and negation types express precisely the absence information shadowing destroys. The cost is that inference is local rather than let-polymorphic, and that subtyping — with the concatenation problem above — returns in full.
 
-= Motivation
-// > Explain the typesystem and why we chose its features the way we did
-//
-// TODO
-// - Note that we don't have width-subtyping (same problem as remy, can gobble fields)
-// - Section about Absence in general (Parreaux, Castagna, etc.)
-//
-// Structure
-// - Row-poly
-// - Plottwist: Constraint systems
-// - (Giuseppe & Parreaux) ?
-//
-// Reason for rows: Concatenation & FC-Labels "obvious"
-// Reason for rows: Good examples from Morris & (P&X)
-//
-// Reason for rows: P&X show efficient unification
-// Reason against Parreaux: No real concatenation, co-complete…?
-// Reason against Castagna: No free concatenation
-// We loose: The full type-connective algebra properties
-//
-//
-//
+None of these is a wrong choice; each simply trades a different one of three properties. For asymmetric concatenation with shadowing, no system in the literature achieves all of *(P)* precise result types, *(I)* complete inference with principal types, and *(S)* solving at unification cost.
 
-Asymmetric record concatenation is a central problem that many record calculi address. Its set-or-update behaviour in combination with polymorphism makes tracking of fields extremely hard, wording:[and multiple approaches have been suggested that weight benefits againts drawbacks]. *Row polymorphism* is a method to track positive information of records (…)
+#figure(
+  caption: [The trilemma. No system attains all three, and each line names what it surrenders.],
+  table(
+    columns: (auto, auto, auto, auto, 1fr),
+    align: (left, center, center, center, left),
+    inset: 6pt,
+    stroke: 0.4pt + luma(200),
+    table.header([*System*], [*P*], [*I*], [*S*], [*What is given up*]),
 
-// longer part about lacks predicates?
-Without negative information and width-subtyping, overwriting fields is an unrecoverable operation, since width-subtyping can remove a field `a: {l: τ} -> a: {}` without a trace, and concatenating such a record with b: { l: τ'} can not be clearly resolved due to shadowing.
+    [Gaster–Jones @gaster_jones], [·], [●], [●],
+    [no concatenation at all],
 
-Lacks-predicates @? allow to reason about negative information, but are verbose¿ Another option are stronger type systems like the one by Ohori @ohori1995polymorphic or the line of work of Morris @extensible_rec_funcs @rose @another_inference that faithfully track positive and negative information with constraint or dependent types. But both come at the cost of computability. The systems of Morris are theoretically astonishing and even though ROSE @rose is HM, it gives all the heavy lifting the row theory left open. Recent work @another_inference reiterates on type inference but is unable to improve the situation. The systems of Ohori add the full dependent-type complexity.
+    [Rose @rose], [●], [●], [·],
+    [entailment is a parameter: no solver, no bound],
 
-// note: should we keep the arguing that ★ can improve even though we don't do it during unification?
-Our approach, RowNix, positions itself in the middle of both extremes and admits the uncertainty that different kinds of operations can induce by using an *unknown type* that directly marks uncertainty. Our motivating example admits such a type [`a: b: (a ‖ b).l :: α → β → ★`]¡ because it is statically not possible to determine the return type. By surrendering to some form of uncertainty we can adjust the unification algorithm of Paszke&Xie to a system that can be computed efficiently¿.
+    [MLstruct @mlstruct], [●], [●], [·],
+    [subtyping-constraint solving, and `‖` is unsound under width subtyping],
 
-// note: I think we should only talk about the three-way lookup relation in explicit system as it is not really a notable contribution
-To retain as much information as possible, we use scoped rows and a concatenation operation that glues together two records without simplifying either side directly. This, in combination with our three-way lookup relation allows us to faithfully track field presence, absence and ambiguity.
+    [Castagna @castagna2023programming], [●], [·], [·],
+    [local inference, not let-polymorphic],
 
+    [Ur @ur], [●], [·], [●],
+    [the programmer supplies disjointness witnesses],
 
-_Contributions_ We contribute the following items:
+    [This work], [◐], [●], [●],
+    [precision — but only locally, and marked],
+  ),
+)<trilemma>
 
-1. *A best-effort lookup relation.* Our lookup relation `Γ ⊢ ρ.l ↓ r` extends the usual positive and negative results of lookup to a three-way result (τ | ⊥ | ?).
-3. *Mechanized type safety.* We prove _progress_ under erroring terms ↯ and _preservation_ in Lean.
-4. *An algorithmic system.* We give an efficient, sound but incomplete unification algorithm for the minimal calculus, extending the algorithm of Paszke&Xie to rows containing the unknown type.
+Our position in @trilemma — the calculus we call _RowNix_ — is the last line. We keep complete, unification-cost inference and give up precision — but only at the points where the row theory would need a disjunction, and with those points named in the type.
+
+== Our position: two judgements instead of one
+
+The mechanism that makes this possible is a separation that, to our knowledge, has not been made before in this setting.
+
+In a row-based system, a field selection is ordinarily _elaborated into a row constraint_ and handed to unification: `e.l` demands that `e`'s row contain $l$, and unification must discharge that demand — which, when the row ends in a variable, means guessing that the variable contains the field. Paszke and Xie's search rule @extensible_tabular does exactly this, and it is the point at which every system in @trilemma either backtracks, or solves modulo associativity and commutativity, or defers to an unspecified entailment relation.
+
+We take selection out of unification altogether. *Field demands and row equality are different judgements.* Row unification $scripts(≐)_r$ only ever states structural _equality_ of two rows; it never receives a demand of the form "this row must contain $l$", and consequently never has to guess a field into a variable. Field demands are instead answered by a separate _lookup relation_ $Γ ⊢ ρ.l ↓ r$ whose result is three-valued — a definite type $τ$, definite absence $⊥$, or _don't know_ $?$ — and a demand that cannot be answered yet simply parks until instantiation unblocks it.
+
+The consequence is that uncertainty is recorded as a *type* rather than as a *constraint*. Where the row theory would need a disjunction, we write ★. What this buys is stated plainly: inference remains ordinary syntactic first-order unification. There is no constraint solver to supply, no entailment relation left as a parameter, no unification modulo AC, and no backtracking over alternative typings. Paszke and Xie's search rule can be dropped entirely — it is not merely unnecessary but demonstrably loses solutions — and their conditional tail-check is replaced by an algebraic property of rows rather than a side condition. Only one non-forced move survives in the whole algorithm, and it fires exactly when the field it places has a unique possible host.
+
+Three further design decisions follow, and together they are what separates ★ from an ordinary `any`:
+
++ *★ has a controlled origin.* In the algorithmic system it is introduced by the lookup relation alone, so every ★ can be traced to a specific selection on a specific abstract row, and reported as such. (The declarative system additionally admits a blurring rule, which is what makes it declarative; the algorithm never uses it.)
++ *★ is rigid.* Unification matches ★ against itself and rejects it against everything else, so the unknown is never silently absorbed into another type. Once a position is finalized to ★ it is _frozen_: no substitution refines it again. This is why refinement must run through the lookup relation rather than through a subsumption on ★.
++ *★ is not a top type.* It is not a supertype of anything and admits no elimination rule; it marks a place where the analysis surrendered, not a place where anything is permitted.
+
+Finally, we are explicit about what this costs. A soft type system makes no soundness promise at its uncertain boundaries: progress holds only up to a lookup error ↯, and the metatheory reports that residual risk rather than hiding it. That is the honest price of R3, and it is paid in exactly one place.
+
+== Contributions
+
++ *A best-effort lookup relation.* The judgement $Γ ⊢ ρ.l ↓ r$ extends the usual positive and negative results of a record lookup to a three-way result $(τ | ⊥ | ?)$, and separates field demands from row equality — the separation the rest of the design rests on.
++ *An algebraic characterization of row equivalence.* Rows modulo ≈ form a _trace monoid_, hence are cancellative from both ends. This replaces the shared-tail side condition of Paszke and Xie @extensible_tabular with an algebraic property, and is what allows both ends of a row to be processed.
++ *Qualified schemes, forced rather than chosen.* We show that _no_ plain scheme $∀macron(α). τ$ can be principal for our system: the two typing families of `x: x.l` cannot be spanned by one without also admitting instances that are not typings. Schemes carrying their pending lookups are therefore compelled by the calculus, not adopted for convenience.
++ *Mechanized type safety, twice.* We prove _progress_ under erroring terms ↯ and _preservation_ in Lean, for the declarative system and independently for the qualified system, together with the refinement discipline under which a definite result is final and only $?$ may improve.
++ *An algorithmic system.* We give a sound unification algorithm operating on row _spines_, with verdicts that are provably independent of the recursion budget they were computed under. Two of its rules — a counting rule and a unique-host expansion rule — were surfaced as genuine gaps by the mechanization rather than designed in advance.
++ *An honest account of incompleteness.* The algorithm is incomplete, and we say exactly how. It has three conservative verdicts, each witnessed by a kernel-checked example that reports failure on a problem which in fact has a most general unifier. We further show that the natural converse — "no move applies, therefore no principal solution exists" — is _false_ at every formulation we tried, including the retreat to configurations in which no move fires at all: terminality is a fact about the moves, not about the problem.
+
+We do not claim completeness, and we do not claim an unconditional termination measure; the budgeted formulation and what remains open about it are discussed in @unification.
+
+The remainder of this thesis is organised as follows. @minimal-calculus fixes a minimal calculus — functions, scoped records, concatenation, row-variables and let-polymorphism — and @declarative-system gives its declarative typing rules, the lookup relation and row equivalence. @unification develops the unification algorithm on spines. @metatheory presents the metatheory, the principality argument that forces qualified schemes, and the incompleteness results. @sec-extensions discusses extensions towards full NixLang — first-class labels, patterns, `with`, `inherit`, occurrence typing, and lacks-predicates as the most promising source of the negative information this section identified as the crux — before @related-work places the work in the literature.
 
 
 = Informal Description of the TS and it's tricks
@@ -154,7 +234,7 @@ _Contributions_ We contribute the following items:
 The concatenation inside the example `a: ({l: τ} ‖ a).l` will produce a row `(α | l: τ)` with a type variable for the function argument. Upon instantiation at the application site, the row-variable can be eliminated such that the lookup relation that was previously stuck before finding a field can advance further into the row, find the l: τ binding, and return a proper type τ.
 
 
-= Minimal Calculus
+= Minimal Calculus <minimal-calculus>
 > _Functions, scoped records, record concat, row-vars, let-poly_
 
 #let syntax = figure(
@@ -225,7 +305,7 @@ This is deliberately less than Paszke and Xie have. Their kinds are $κ ::= ★ 
 Two typing rules acquire a premise. T-λ-I is the only rule that conjures a type from nothing, so it checks $Γ ⊢ τ₁: "Type"$, and T-let is the only one that conjures a scheme, so its generalization records the sorts $macron(κ)$ that Γ already assigns to the variables it abstracts. Every other rule's types are fixed by its premises and are well-sorted whenever they are.
 
 
-= Declarative
+= Declarative <declarative-system>
 
 // TODO:
 // - small section why plain schemes can not result in a principaled ts
@@ -346,7 +426,7 @@ Two degenerate cases are worth recording. A monotype scheme has itself as its on
 
 @row-equivalence gives the row-equivalence rules of our calculus. The equivalence of rows can be lifted to an equivalence on types `τ₁ ≈ τ₂`. The relation is symmetric, transitive, associative, commutative and admits left- and right units. We note that l₁ ≠ l₂ is only decidable for concrete labels and as such, row-equivalence does not go beyond label and row-variables as that would break the shadowing behaviour.
 
-= Unification
+= Unification <unification>
 // Our algorithm is very similar to the one from P&X, but we depert in a few ways:
 // Our rows are trace-monoids and we cancel on both sides, we can do so because we
 // we have added delayed lookups (stumps) such that we are not forced to make a decision
@@ -674,7 +754,7 @@ U-expand is the one Rémy-style move that invents structure: when the other side
 The two passes recurse into each other — U-rcd hands a row problem to $scripts(≐)_r$, and U-field-L, U-field-R, U-ground hand a type problem back to $≐$ — and each cross-call consumes one unit of an explicit budget. This makes the definition structurally recursive, which is what lets the mechanization compute verdicts by `rfl` and check worked examples in the kernel; exhausting the budget is the separate verdict #u_fuel, so the four real verdicts are never an artefact of the bound. Crucially, the type equations a matching move emits are solved *on the spot* and their solution applied to the residual before the row pass continues. Deferring them instead would make #u_stuck meaningless: an equation must be discharged, or fatal, or itself stuck, never merely postponed.
 
 
-= Metatheory
+= Metatheory <metatheory>
 In the following section we lay out the metatheory of our calculus. We prove progress and a weak form of preservation that admits possible runtime errors in the ★-typed part of the language – a standard version for gradual and soft typing systems.
 
 *Preservation*: If $∅ ⊢ e: τ$ and $e → e'$ then $∅ ⊢ e': τ$
@@ -686,7 +766,7 @@ In the following section we lay out the metatheory of our calculus. We prove pro
 HM-style generalization works at `let`-binding sites: to type `let x = e₁ in e₂`, the algorithm infers a monotype τ₁ for e₁, abstracts over the free type variables $macron(α)$ not appearing in the context, and binds x to the scheme $∀ macron(α). τ₁$ for typing e₂. This proceeds smoothly in standard HM. In our system, however, the inference of e₁ may produce _stumps_ — pending lookups of the form $⟨ρ.l ↓ δ⟩$ that arise when a field selection blocks on an unresolved row-variable. When the stump's result variable δ belongs to the generalized set $macron(α)$, a choice arises: resolve the stump at the `let`-boundary before abstracting, or carry it along in the scheme. These two strategies are L1 and L2.
 
 
-== Extensions to the minimal Calculus
+== Extensions to the minimal Calculus <sec-extensions>
 - Occurrence typing using if's?
 - Inherit statements?
 - With-construct?
@@ -696,7 +776,7 @@ HM-style generalization works at `let`-binding sites: to type `let x = e₁ in e
 > Section about extended features, limitations etc.
 
 
-== Related Work
+== Related Work <related-work>
 _Record concatenation in classic record calculi._ Typing record concatenation is an old and notoriously hard problem. Wand @concat4multiinher first studied type inference for concatenation in the context of multiple inheritance, where the set-or-replace semantics of asymmetric concat already surfaces: his system needs to case-split over which side a field comes from, and typings are unions of alternatives rather than principal types. Harper and Pierce @symm_concat sidestep shadowing by restricting to _symmetric_ concatenation, which is only defined on records with disjoint fields, tracked by compatibility constraints; they also observe that concatenation and width-subtyping do not mix: subtyping can silently forget a field that concatenation later resurrects, breaking soundness — the same observation that steers our calculus away from subsumption and towards row-equivalence. Rémy @concat4free shows that concatenation can be simulated "for free" in a language with polymorphic record extension by abstracting over the extension point, at the price of encoding-style types. Ohori¿ obtains efficient compilation for a polymorphic record calculus, but restricts records to selection and functional update — concatenation is exactly the operation his index-passing compilation scheme cannot support. In the disjoint-polymorphism line @xie2020row the merge operator subsumes symmetric concatenation, with disjointness playing the role of the lacks-constraints. All of these systems either forbid the colliding case that makes Nix' `‖` interesting, or pay for it with non-principal or encoded types; none types the motivating example `a: b: (a ‖ b).l` as-is.
 
 _Scoped rows and first-class labels._ Our row theory descends from Leijen's extensible records with scoped labels @extensible_recs, where duplicate labels are kept in the row and lookup resolves them with left-precedence — precisely the "bag" semantics that makes asymmetric concat a total operation instead of a partially defined one. Leijen later added first-class labels @fc_labels, which Nix needs for its dynamic field selection `e.${e'}`. Paszke and Xie @extensible_tabular combine both into infix-extensible rows with a unification-based inference algorithm over row- and label-variables; their system is the direct basis of ours. It cannot, however, model set-or-replace: extension always happens on a known side of the row, and their conditional tail-check rejects programs whose shadowing behaviour is unresolved — our lookup relation instead accepts them at ★ and refines later.
