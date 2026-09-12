@@ -209,7 +209,7 @@ def Row.deepRowVars {B : Type} : Row B → List TyVar
 end
 
 -- ## U-expand's host detector
--- Three conditions, and the last two are Stage 3 of plans/occurs-depth-plan.md.
+-- Three conditions; the last two are the self-reference filter.
 --
 --  * `sFieldCount l s = 0` — no l-field already on the host side (one further
 --    right could host the pairing instead: (l:𝓪 | α) ≐ᵣ (β | l:𝓫) is unifiable
@@ -224,8 +224,9 @@ end
 --    past everything before the host: the fields there are l-free by the first
 --    condition, but a VARIABLE in front could be substituted to something
 --    carrying an l-field, and nothing in the emitted solution forbids that.
---    Dropping this condition makes the move UNSOUND — see the counterexample
---    in the plan, which the fuzzer and `expand_shift` both reject.
+--    Dropping this condition makes the move UNSOUND — the counterexample is
+--    `Refutations.shadow_order_matters`, which the fuzzer and `expand_shift`
+--    both reject.
 def uniqueHost {B : Type} (l : Label) (τ : Ty B) (s : List (Atom B)) : Option TyVar :=
   match sVarSeq s with
   | β :: rest =>

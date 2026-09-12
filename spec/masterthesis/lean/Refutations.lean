@@ -356,15 +356,15 @@ theorem cyclic_no_unifier : ¬ ∃ θ : TySubst Unit, Unifies θ cρ₁ cρ₂ :
 --------------------------------------------------------------------------------
 -- 4. U-EXPAND'S SELF-REFERENCE FILTER — WHAT IT FIXES, AND WHERE IT STOPS
 --------------------------------------------------------------------------------
--- Stage 3 of plans/occurs-depth-plan.md. `uniqueHost` used to ask for exactly
--- ONE row-variable on the host side. It now filters the candidates first — a
--- variable occurring in the payload τ cannot host an l-field carrying τ
--- (`selfref_no_l_field`) — and then asks for exactly one SURVIVOR, which must
--- additionally be the LEADING variable of the side.
+-- `uniqueHost` used to ask for exactly ONE row-variable on the host side. It
+-- now filters the candidates first — a variable occurring in the payload τ
+-- cannot host an l-field carrying τ (`selfref_no_l_field`) — and then asks for
+-- exactly one SURVIVOR, which must additionally be the LEADING variable of the
+-- side.
 --
--- WHY THE LEADING CONDITION IS NOT COSMETIC. The plan proposed filtering alone:
--- fire wherever the lone survivor sits. That is UNSOUND. The expansion emits
--- β ≔ (l:δ | β′) — the invented field at the FRONT — so the field has to
+-- WHY THE LEADING CONDITION IS NOT COSMETIC. The obvious design is filtering
+-- alone: fire wherever the lone survivor sits. That is UNSOUND. The expansion
+-- emits β ≔ (l:δ | β′) — the invented field at the FRONT — so the field has to
 -- commute out past everything to the host's left. `sFieldCount l s₂ = 0` makes
 -- the FIELDS there harmless, but a VARIABLE to the host's left is a hole θ may
 -- fill with an l-field of its own, and `‖` shadows left-to-right:
