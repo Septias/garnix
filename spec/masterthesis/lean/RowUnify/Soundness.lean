@@ -289,9 +289,9 @@ theorem unifyM_success_sound {B : Type} [DecidableEq B] {θ : TySubst B} (fuel :
               simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, he1] at h
               obtain ⟨s', hrec, rfl⟩ := expandResM_success h
               obtain ⟨h₀, h'⟩ := hsat.comp_inv
-              obtain ⟨hs1, hvv, hcc, hren⟩ := expandL_spec he1
+              obtain ⟨hs1, hshape, hren⟩ := expandL_spec he1
               rw [hs1]
-              refine expand_reflect hvv hcc
+              refine expand_reflect hshape
                 (h₀.2 _ List.mem_cons_self) (h₀.1 _ List.mem_cons_self).symm ?_
               rw [← hren]
               exact ih.2 S.fresh.2.fresh.2 t₁ t₂ hrec h'
@@ -302,9 +302,9 @@ theorem unifyM_success_sound {B : Type} [DecidableEq B] {θ : TySubst B} (fuel :
               simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, he1, he2] at h
               obtain ⟨s', hrec, rfl⟩ := expandResM_success h
               obtain ⟨h₀, h'⟩ := hsat.comp_inv
-              obtain ⟨hs2, hvv, hcc, hren⟩ := expandL_spec he2
+              obtain ⟨hs2, hshape, hren⟩ := expandL_spec he2
               rw [hs2]
-              refine (expand_reflect hvv hcc
+              refine (expand_reflect hshape
                 (h₀.2 _ List.mem_cons_self) (h₀.1 _ List.mem_cons_self).symm ?_).symm
               rw [← hren]
               exact ih.2 S.fresh.2.fresh.2 t₁ t₂ hrec h'

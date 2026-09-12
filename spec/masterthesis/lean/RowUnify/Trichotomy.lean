@@ -32,30 +32,37 @@ theorem unifyRowM_success_iff {B : Type} [DecidableEq B] {fuel : Nat} {ρ₁ ρ�
 --     dead) — the two-sided shape, killed by two_sided_no_mgu.
 -- Step 3 remains: run those witnesses at the general shape.
 
--- ⊢  uniqueHost refuses for exactly two reasons
-theorem uniqueHost_none {B : Type} {l : Label} {s : List (Atom B)}
-    (h : uniqueHost l s = none) :
-    (∀ β, sVarSeq s ≠ [β]) ∨ 0 < sFieldCount l s := by
+-- ⊢  uniqueHost refuses for exactly three reasons
+-- The third is new with the self-reference filter, and it is the benign one:
+-- the LEADING candidate occurs in the payload, so it cannot host — and then the
+-- problem has no unifier at all, rather than an ambiguous one.
+theorem uniqueHost_none {B : Type} {l : Label} {τ : Ty B} {s : List (Atom B)}
+    (h : uniqueHost l τ s = none) : NoHost l τ s := by
   unfold uniqueHost at h
   cases hvs : sVarSeq s with
-  | nil => exact .inl (fun _ hb => by cases hb)
+  | nil => exact .inl (fun _ hb => by rw [hvs] at hb; cases hb)
   | cons γ t =>
-      cases t with
-      | cons _ _ => exact .inl (fun _ hb => by cases hb)
-      | nil =>
-          right
-          rw [hvs] at h
-          simp only at h
-          split at h
-          · cases h
-          · next hc => exact Nat.pos_of_ne_zero hc
+      rw [hvs] at h
+      simp only at h
+      split at h
+      · cases h
+      · rename_i hcond
+        by_cases hc : sFieldCount l s = 0
+        · by_cases hγ : γ ∈ Ty.allRowVars τ
+          · exact .inr (.inr ⟨γ, t, hvs, hγ⟩)
+          · refine .inl (fun β hb => ?_)
+            rw [hvs] at hb
+            injection hb with _ ht
+            subst ht
+            exact hcond ⟨hc, hγ, fun δ hδ => nomatch hδ⟩
+        · exact .inr (.inl (Nat.pos_of_ne_zero hc))
 
 -- ⊢  … and so does U-expand, when the leading atom IS a field
 theorem expandL_none_field {B : Type} {S : Supply} {l : Label} {τ : Ty B}
     {t₁ s₂ : List (Atom B)} (h : expandL S (.field l τ :: t₁) s₂ = none) :
-    (∀ β, sVarSeq s₂ ≠ [β]) ∨ 0 < sFieldCount l s₂ := by
+    NoHost l τ s₂ := by
   simp only [expandL] at h
-  cases hh : uniqueHost l s₂ with
+  cases hh : uniqueHost l τ s₂ with
   | none => exact uniqueHost_none hh
   | some γ => rw [hh] at h; cases h
 
@@ -84,14 +91,11 @@ theorem stuck_leading_shape_expand {B : Type} {S : Supply} {a b : Atom B}
     (he1 : expandL S (a :: s₁) (b :: s₂) = none)
     (he2 : expandL S (b :: s₂) (a :: s₁) = none) :
     (∃ α β, a = .var α ∧ b = .var β ∧ α ≠ β) ∨
-    (∃ α l' τ', a = .var α ∧ b = .field l' τ' ∧
-       ((∀ γ, sVarSeq (a :: s₁) ≠ [γ]) ∨ 0 < sFieldCount l' (a :: s₁))) ∨
-    (∃ l τ β, a = .field l τ ∧ b = .var β ∧
-       ((∀ γ, sVarSeq (b :: s₂) ≠ [γ]) ∨ 0 < sFieldCount l (b :: s₂))) ∨
+    (∃ α l' τ', a = .var α ∧ b = .field l' τ' ∧ NoHost l' τ' (a :: s₁)) ∨
+    (∃ l τ β, a = .field l τ ∧ b = .var β ∧ NoHost l τ (b :: s₂)) ∨
     (∃ l τ l' τ', a = .field l τ ∧ b = .field l' τ' ∧ l ≠ l' ∧
       windowExtract l (b :: s₂) = none ∧ windowExtract l' (a :: s₁) = none ∧
-      ((∀ γ, sVarSeq (b :: s₂) ≠ [γ]) ∨ 0 < sFieldCount l (b :: s₂)) ∧
-      ((∀ γ, sVarSeq (a :: s₁) ≠ [γ]) ∨ 0 < sFieldCount l' (a :: s₁))) := by
+      NoHost l τ (b :: s₂) ∧ NoHost l' τ' (a :: s₁)) := by
   rcases stuck_leading_shape hsl hml hml2 with
     ⟨α, β, ha, hb, hne⟩ | ⟨α, l', τ', ha, hb⟩ | ⟨l, τ, β, ha, hb⟩
     | ⟨l, τ, l', τ', ha, hb, hlne, hw1, hw2⟩
@@ -112,10 +116,15 @@ theorem stuck_leading_shape_expand {B : Type} {S : Supply} {a b : Atom B}
 theorem stuck_field_vs_var {B : Type} {S : Supply} {l : Label} {τ : Ty B}
     {β : TyVar} {s₁ s₂ : List (Atom B)}
     (he1 : expandL S (.field l τ :: s₁) (.var β :: s₂) = none) :
-    2 ≤ (sVarSeq (Atom.var β :: s₂)).length ∨ 0 < sFieldCount l (Atom.var β :: s₂) := by
-  rcases expandL_none_field he1 with h | h
+    2 ≤ (sVarSeq (Atom.var β :: s₂)).length ∨ 0 < sFieldCount l (Atom.var β :: s₂) ∨
+    β ∈ Ty.allRowVars τ := by
+  rcases expandL_none_field he1 with h | h | ⟨γ, rest, hvs, hγ⟩
   · exact .inl (two_vars_of_not_singleton h (by rw [sVarSeq_var_cons]; exact fun hc => by cases hc))
-  · exact .inr h
+  · exact .inr (.inl h)
+  · rw [sVarSeq_var_cons] at hvs
+    injection hvs with hg _
+    subst hg
+    exact .inr (.inr hγ)
 
 
 
@@ -234,14 +243,11 @@ theorem UResM.seq_stuck {B : Type} {r : UResM B} {k : TySubst B → Supply → U
 theorem terminal_leading_shape {B : Type} {S : Supply} {a b : Atom B}
     {s₁ s₂ : List (Atom B)} (ht : Terminal S (a :: s₁) (b :: s₂)) :
     (∃ α β, a = .var α ∧ b = .var β ∧ α ≠ β) ∨
-    (∃ α l' τ', a = .var α ∧ b = .field l' τ' ∧
-       ((∀ γ, sVarSeq (a :: s₁) ≠ [γ]) ∨ 0 < sFieldCount l' (a :: s₁))) ∨
-    (∃ l τ β, a = .field l τ ∧ b = .var β ∧
-       ((∀ γ, sVarSeq (b :: s₂) ≠ [γ]) ∨ 0 < sFieldCount l (b :: s₂))) ∨
+    (∃ α l' τ', a = .var α ∧ b = .field l' τ' ∧ NoHost l' τ' (a :: s₁)) ∨
+    (∃ l τ β, a = .field l τ ∧ b = .var β ∧ NoHost l τ (b :: s₂)) ∨
     (∃ l τ l' τ', a = .field l τ ∧ b = .field l' τ' ∧ l ≠ l' ∧
       windowExtract l (b :: s₂) = none ∧ windowExtract l' (a :: s₁) = none ∧
-      ((∀ γ, sVarSeq (b :: s₂) ≠ [γ]) ∨ 0 < sFieldCount l (b :: s₂)) ∧
-      ((∀ γ, sVarSeq (a :: s₁) ≠ [γ]) ∨ 0 < sFieldCount l' (a :: s₁))) :=
+      NoHost l τ (b :: s₂) ∧ NoHost l' τ' (a :: s₁)) :=
   stuck_leading_shape_expand ht.hstripL ht.hmatchL₁ ht.hmatchL₂ ht.hexpandL ht.hexpandR
 
 

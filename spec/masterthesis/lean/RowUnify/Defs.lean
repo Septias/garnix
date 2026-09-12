@@ -172,19 +172,91 @@ def renameVar {B : Type} (β β' : TyVar) : List (Atom B) → List (Atom B)
   | .var γ :: s => (if γ = β then Atom.var β' else Atom.var γ) :: renameVar β β' s
   | .field l τ :: s => .field l τ :: renameVar β β' s
 
-def uniqueHost {B : Type} (l : Label) (s : List (Atom B)) : Option TyVar :=
+-- Row-variables occurring ANYWHERE, at any depth.
+mutual
+def Ty.allRowVars {B : Type} : Ty B → List TyVar
+  | .var _   => []
+  | .base _  => []
+  | .unk     => []
+  | .fn a b  => Ty.allRowVars a ++ Ty.allRowVars b
+  | .rcd ρ   => Row.allRowVars ρ
+
+def Row.allRowVars {B : Type} : Row B → List TyVar
+  | .empty     => []
+  | .var α     => [α]
+  | .sing _ τ  => Ty.allRowVars τ
+  | .cat ρ₁ ρ₂ => Row.allRowVars ρ₁ ++ Row.allRowVars ρ₂
+end
+
+-- …and the ones that sit under AT LEAST ONE record constructor. A row-variable
+-- reached from a row can only leave the spine by entering a field payload, and
+-- a payload is a Ty, which contains rows only under `.rcd` — so "not at a spine
+-- position" and "under a `.rcd`" are the same thing, and `deepRowVars` is
+-- exactly the complement of `sVarSeq`.
+mutual
+def Ty.deepRowVars {B : Type} : Ty B → List TyVar
+  | .var _   => []
+  | .base _  => []
+  | .unk     => []
+  | .fn a b  => Ty.deepRowVars a ++ Ty.deepRowVars b
+  | .rcd ρ   => Row.allRowVars ρ
+
+def Row.deepRowVars {B : Type} : Row B → List TyVar
+  | .empty     => []
+  | .var _     => []
+  | .sing _ τ  => Ty.deepRowVars τ
+  | .cat ρ₁ ρ₂ => Row.deepRowVars ρ₁ ++ Row.deepRowVars ρ₂
+end
+
+-- ## U-expand's host detector
+-- Three conditions, and the last two are Stage 3 of plans/occurs-depth-plan.md.
+--
+--  * `sFieldCount l s = 0` — no l-field already on the host side (one further
+--    right could host the pairing instead: (l:𝓪 | α) ≐ᵣ (β | l:𝓫) is unifiable
+--    with β ≔ ε).
+--  * The candidate set is FILTERED BY SELF-REFERENCE. A variable γ occurring
+--    inside the payload τ cannot host an l-field carrying τ, whatever tail the
+--    expansion invents (`self_hosting_no_unifier`) — so it is not a candidate,
+--    and a side that `sVarSeq` reports as ambiguous may have exactly one real
+--    host. This is what makes U-expand fire on (l:{w}) ≐ᵣ (v | w).
+--  * The surviving candidate must be the LEADING variable. The invented
+--    l-field is emitted at the FRONT of the binding, so it has to commute out
+--    past everything before the host: the fields there are l-free by the first
+--    condition, but a VARIABLE in front could be substituted to something
+--    carrying an l-field, and nothing in the emitted solution forbids that.
+--    Dropping this condition makes the move UNSOUND — see the counterexample
+--    in the plan, which the fuzzer and `expand_shift` both reject.
+def uniqueHost {B : Type} (l : Label) (τ : Ty B) (s : List (Atom B)) : Option TyVar :=
   match sVarSeq s with
-  | [β] => if sFieldCount l s = 0 then some β else none
-  | _   => none
+  | β :: rest =>
+      if sFieldCount l s = 0 ∧ β ∉ Ty.allRowVars τ ∧
+         (∀ γ ∈ rest, γ ∈ Ty.allRowVars τ) then some β else none
+  | []        => none
 
 def expandL {B : Type} (S : Supply) :
     List (Atom B) → List (Atom B) →
     Option (TyVar × Label × Ty B × List (Atom B) × List (Atom B))
   | .field l τ :: t₁, s₂ =>
-      match uniqueHost l s₂ with
+      match uniqueHost l τ s₂ with
       | some β => some (β, l, τ, t₁, renameVar β S.fresh.2.fresh.1 s₂)
       | none => none
   | _, _ => none
+
+-- ## The shape the host side has when U-expand fires, as a predicate
+-- `uniqueHost l τ s = some β` unpacks to exactly this, and it is what the
+-- expansion metatheory (host_forced, expand_shift, the two reflection lemmas)
+-- is stated in — so those lemmas never mention the detector.
+def HostShape {B : Type} (l : Label) (τ : Ty B) (s : List (Atom B)) (β : TyVar) : Prop :=
+  (∃ rest, sVarSeq s = β :: rest ∧ ∀ γ ∈ rest, γ ∈ Ty.allRowVars τ) ∧
+  sFieldCount l s = 0 ∧ β ∉ Ty.allRowVars τ
+
+-- …and the three reasons it can REFUSE (Trichotomy's step-2 dispatch reads
+-- them off). The first covers both "no variable at all" and "two or more
+-- surviving candidates"; the third is new with the self-reference filter and is
+-- the case where the problem has no unifier at all (selfref_host_no_unifier).
+def NoHost {B : Type} (l : Label) (τ : Ty B) (s : List (Atom B)) : Prop :=
+  (∀ β, sVarSeq s ≠ [β]) ∨ 0 < sFieldCount l s ∨
+  (∃ β rest, sVarSeq s = β :: rest ∧ β ∈ Ty.allRowVars τ)
 
 -- … and at the right end (the expansion is then β ≔ (β′ | l:δ)).
 def expandR {B : Type} (S : Supply) (s₁ s₂ : List (Atom B)) :
@@ -398,7 +470,7 @@ def bindTy {B : Type} (S : Supply) (α : TyVar) (τ : Ty B) : UResM B :=
 -- ## U-var-solve, at the mutual driver's result type
 def solveVarM {B : Type} (S : Supply) : List (Atom B) → List (Atom B) → Option (UResM B)
   | [.var α], s₂ =>
-      some (if (sVarSeq s₂).contains α then .occurs
+      some (if (Row.allRowVars (ofSpine s₂)).contains α then .occurs
             else .success (Sol.ofRow [(α, ofSpine s₂)]) S)
   | _, _ => none
 

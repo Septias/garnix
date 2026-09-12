@@ -63,6 +63,69 @@ def solStr (s : Sol Unit) : String :=
   "[" ++ String.intercalate ", " (s.ty.map  fun p => p.1 ++ "≔" ++ tyStr p.2) ++
   " ; " ++ String.intercalate ", " (s.row.map fun p => p.1 ++ "≔" ++ rowStr p.2) ++ "]"
 
+-- Structural equality on the syntax, so the semantic half of `Sol.WF` can be
+-- decided. (`Ty`/`Row` derive no `DecidableEq`: the algorithm only ever needs
+-- `DecidableEq B` at the leaves.)
+mutual
+def tyEqB : Ty Unit → Ty Unit → Bool
+  | .var a,    .var b     => a == b
+  | .base _,   .base _    => true
+  | .unk,      .unk       => true
+  | .fn a b,   .fn c d    => tyEqB a c && tyEqB b d
+  | .rcd r,    .rcd r'    => rowEqB r r'
+  | _,         _          => false
+
+def rowEqB : Row Unit → Row Unit → Bool
+  | .empty,    .empty     => true
+  | .var a,    .var b     => a == b
+  | .sing l τ, .sing l' τ' => l == l' && tyEqB τ τ'
+  | .cat a b,  .cat c d   => rowEqB a c && rowEqB b d
+  | _,         _          => false
+end
+
+/-- `Sol.WF` (RowUnify/State.lean) as a Bool — the well-formedness ⟦S⟧ needs to
+    be a context at all. `Sol.rowWF_toCtx` is conditioned on the acyclic half and
+    the θ ↦ rowEnv bridge on the applied half, and `UnifyWF` — the claim that the
+    driver RETURNS such a solution — is NOT proved. This is its tripwire.
+
+    Note the applied half is the SEMANTIC one. The syntactic `Sol.NoCapture`
+    ("no bound variable occurs in any binding") is refuted here in one move by
+    `a ≐ᵣ (l:a)` ⇝ `a ≔ (l:a | ε)`, where the bound `a` is a ROW variable and the
+    payload `a` a TYPE variable — different variables that `ftv`, spanning one
+    untagged namespace, cannot tell apart. -/
+def solAcyclicB (s : Sol Unit) : Bool :=
+  let keys := s.row.map Prod.fst
+  s.row.all (fun p => (sVarSeq p.2.toSpine).all (fun β => !keys.contains β))
+
+def solAppliedB (s : Sol Unit) : Bool :=
+  s.ty.all  (fun p => tyEqB (p.2.applySubst s.toSubst) p.2) &&
+  s.row.all (fun p => rowEqB (p.2.applySubst s.toSubst) p.2)
+
+/-- `Sol.Ranked` as a Bool: the sorted dependency graph on the solution's
+    bindings is a DAG. A rank exists exactly when it is — take the longest-path
+    depth, which is below the number of bindings — so this is the decidable face
+    of the ∃-rank in `Sol.Ranked`, and with `Sol.closes_closure` it is what says
+    ⟦S⟧ EXISTS for this solution. It replaces the `Applied` half of the old
+    tripwire, which was false by design against a triangular solution. -/
+def solDeps (s : Sol Unit) : Bool × TyVar → List (Bool × TyVar)
+  | (false, α) =>
+      ((s.ty.filter  (fun p => p.1 == α)).flatMap (fun p => Ty.sortedFtv  p.2)).filter
+        (fun y => s.domS.contains y)
+  | (true,  α) =>
+      ((s.row.filter (fun p => p.1 == α)).flatMap (fun p => Row.sortedFtv p.2)).filter
+        (fun y => s.domS.contains y)
+
+/-- Peel nodes with no surviving dependency; a DAG empties, a cycle stalls. -/
+def peelDeps (s : Sol Unit) : Nat → List (Bool × TyVar) → Bool
+  | 0,     rem => rem.isEmpty
+  | n + 1, rem =>
+      let next := rem.filter (fun x => (solDeps s x).any (fun y => rem.contains y))
+      if next.length == rem.length then rem.isEmpty else peelDeps s n next
+
+def solRankedB (s : Sol Unit) : Bool := peelDeps s (s.domS.length + 1) s.domS
+
+def solWFB (s : Sol Unit) : Bool := solAcyclicB s && solRankedB s
+
 /-- The FULL result, solution included — the tripwire compares these. -/
 def resStr : UResM Unit → String
   | .success s S => "success " ++ solStr s ++ " @supply " ++ toString S.next
@@ -188,6 +251,13 @@ structure Stats where
   nBViol    : Nat := 0
   /-- the smallest slack `boundA - minFuel` seen — how close A came -/
   tightest  : Option (Nat × Nat × Spine × Spine) := none
+  /-- a success whose solution is not well-formed: refutes `UnifyWF` -/
+  idemViol  : List (Spine × Spine × String) := []
+  nIdemViol : Nat := 0
+  /-- …of which: the ACYCLIC half fails (a genuine cycle) -/
+  nAcycViol : Nat := 0
+  /-- …of which: only the APPLIED half fails (a TRIANGULAR solution) -/
+  nApplViol : Nat := 0
 
 def bumpMax : List (Nat × Nat) → Nat → Nat → List (Nat × Nat)
   | [],            k, v => [(k, v)]
@@ -229,7 +299,14 @@ def step (cap : Nat) (s₁ s₂ : Spine) (st : Stats) : Stats :=
                 | some (f', _, _) => if f > f' then { st with worst := some (f, s₁, s₂) } else st
                 | none            => { st with worst := some (f, s₁, s₂) }
       match unifySpineM cap s₁ s₂ with
-      | .success _ _ => { st with success := st.success + 1 }
+      | .success sol _ =>
+          let st := { st with success := st.success + 1 }
+          if solWFB sol then st else
+            { st with idemViol := if st.nIdemViol < keep
+                                  then (s₁, s₂, solStr sol) :: st.idemViol else st.idemViol
+                      nIdemViol := st.nIdemViol + 1
+                      nAcycViol := st.nAcycViol + (if solAcyclicB sol then 0 else 1)
+                      nApplViol := st.nApplViol + (if solRankedB sol then 0 else 1) }
       | .clash       => { st with clash   := st.clash   + 1 }
       | .occurs      => { st with occurs  := st.occurs  + 1 }
       | .stuck       => { st with stuck   := st.stuck   + 1 }
@@ -265,7 +342,12 @@ def report (U : Universe) (cap : Nat) : IO Unit := do
   | some (sl, f, s₁, s₂) => IO.println s!"        A's tightest: slack {sl} (fuel {f}) at {pairStr s₁ s₂}"
   | none                 => pure ()
 
-  IO.println "   [4] fuel profile — max minFuel by problem size |s₁|+|s₂|:"
+  IO.println s!"   [4] ill-formed solutions (refutes UnifyWF): {st.nIdemViol}"
+  IO.println s!"         of which spine-cyclic (Acyclic fails): {st.nAcycViol}; unrankable (Ranked fails): {st.nApplViol}"
+  for (s₁, s₂, sol) in st.idemViol.reverse do
+    IO.println s!"        {pairStr s₁ s₂}\n          solution: {sol}"
+
+  IO.println "   [5] fuel profile — max minFuel by problem size |s₁|+|s₂|:"
   for n in List.range (2 * U.maxLen + 1) do
     match st.bySize.find? (fun p => p.1 = n) with
     | some (_, v) => IO.println s!"        size {n}: {v}"

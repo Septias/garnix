@@ -146,7 +146,8 @@ theorem expand_bounded {B : Type} [DecidableEq B] {fuel : Nat}
     (h : expandResM S β l τ (unifySpineMF S.fresh.2.fresh.2 fuel t₁ t₂) = .success s S') :
     ∃ W : List TyVar, V ⊆ W ∧ S'.Avoids W ∧ SolBelow s W := by
   obtain ⟨s', hrec, rfl⟩ := expandResM_success h
-  obtain ⟨hs1, hvv, hcc, hren⟩ := expandL_spec he
+  obtain ⟨hs1, hshape, hren⟩ := expandL_spec he
+  obtain ⟨⟨hrest0, hvv, -⟩, hcc, -⟩ := id hshape
   have hτV : τ.ftv ⊆ V := fun _ hx =>
     sFtv_sub_left hV (by rw [hs1]; exact List.mem_append_left _ hx)
   have hβV : β ∈ V :=
@@ -702,7 +703,8 @@ theorem expand_completeM {B : Type} [DecidableEq B] {fuel : Nat}
     (hu : RowEquiv ((ofSpine u₁).applySubst θ) ((ofSpine u₂).applySubst θ)) :
     ∃ θ' : TySubst B, AgreeOn θ θ' V ∧ Sol.Sat θ' s := by
   obtain ⟨s', hrec, rfl⟩ := expandResM_success h
-  obtain ⟨hs1, hvv, hcc, hren⟩ := expandL_spec he
+  obtain ⟨hs1, hshape, hren⟩ := expandL_spec he
+  obtain ⟨⟨hrest0, hvv, -⟩, hcc, -⟩ := id hshape
   have hdV := Supply.fresh_not_mem hS
   have hbV := Supply.fresh_not_mem hS.advance
   have hd₁ : S.fresh.1 ∉ sFtv u₁ := fun hm => hdV (sFtv_sub_left hV hm)
@@ -715,7 +717,7 @@ theorem expand_completeM {B : Type} [DecidableEq B] {fuel : Nat}
     sFtv_sub_right hV (mem_sFtv_of_mem_sVarSeq u₂ (by rw [hvv]; exact List.mem_cons_self))
   rw [hs1] at hu hd₁ hb₁
   obtain ⟨θ₀, hβ0, hty0, hrec0, -, hag0⟩ :=
-    expand_reflect_fwd hvv hcc hd₁ hd₂ hb₁ hb₂ hu
+    expand_reflect_fwd hshape hd₁ hd₂ hb₁ hb₂ hu
   have hS' : S.fresh.2.fresh.2.Avoids (S.fresh.2.fresh.1 :: S.fresh.1 :: V) :=
     hS.cons_fresh.cons_fresh
   have hV' : (sFtv t₁ ++ sFtv t₂) ⊆ (S.fresh.2.fresh.1 :: S.fresh.1 :: V) := by

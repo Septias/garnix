@@ -310,4 +310,143 @@ theorem terminalNoMgu_false : ¬ TerminalNoMgu Unit := by
   exact (hasMgu_rowEquiv (Row.toSpine_equiv tρ₁) (Row.toSpine_equiv tρ₂)).mp
     terminal_masks_mgu
 
+
+------------- 3. A SUCCESS VERDICT COULD BE VACUOUS — FOUND AND FIXED ----------
+-- Found 2026-09-12 by the idempotence tripwire in Fuzz.lean while checking
+-- `UnifyWF` (RowUnify/State.lean). Unlike the two results above this was not a
+-- conservativity finding — it ran the other way, and it has since been repaired.
+--
+-- THE DEFECT. The row-level occurs check of U-var-solve was SPINE-ONLY:
+--     solveVarM S [.var α] s₂ = if (sVarSeq s₂).contains α then .occurs else …
+-- `sVarSeq` reads the variables standing at spine positions, so an occurrence of
+-- α inside a FIELD PAYLOAD was invisible to it, and
+--
+--     a ≐ᵣ (l : {a})     was answered  success  with  a ≔ (l : {a} | ε)
+--
+-- on a problem with NO unifier at all. This never contradicted
+-- `unifyRowM_success_sound` or `_complete`: both quantify over θ satisfying the
+-- returned solution, and here no θ does, so both held VACUOUSLY. What failed was
+-- the unstated reading of a success — that the returned solution can be USED as
+-- a substitution. It could not: it was cyclic, and `⟦S⟧` (State.lean) is
+-- undefined on it.
+--
+-- THE REPAIR. The check now tests `Row.allRowVars (ofSpine s₂)` — the row
+-- variables of the row α is about to be bound to, at ANY depth — exactly as the
+-- type-level check in `bindTy` already tested `τ.ftv`. It is strictly more
+-- conservative, so it can only turn successes into `.occurs`, and every
+-- rejection it adds is genuine by `deep_occurs_no_unifier` (NoMgu.lean). The
+-- spine-occurrence conservativity of `occurs_allVar_hasMgu` is untouched by it.
+--
+-- The two theorems below are the regression: the verdict, and the fact that it
+-- is the right one.
+
+private def cρ₁ : Row Unit := .var "a"
+private def cρ₂ : Row Unit := .sing "l" (.rcd (.var "a"))
+
+-- ⊢  the repaired algorithm answers occurs (kernel-checked: it RUNS)
+theorem cyclic_occurs_reported :
+    unifyRowM (B := Unit) 20 cρ₁ cρ₂ = .occurs := rfl
+
+-- ⊢  …and that verdict is correct: the problem has NO unifier whatsoever.
+-- By the general depth-aware occurs theorem, of which this is the smallest
+-- instance: `a` sits under the record constructor of the payload.
+theorem cyclic_no_unifier : ¬ ∃ θ : TySubst Unit, Unifies θ cρ₁ cρ₂ :=
+  cyclic_binding_no_unifier
+
+--------------------------------------------------------------------------------
+-- 4. U-EXPAND'S SELF-REFERENCE FILTER — WHAT IT FIXES, AND WHERE IT STOPS
+--------------------------------------------------------------------------------
+-- Stage 3 of plans/occurs-depth-plan.md. `uniqueHost` used to ask for exactly
+-- ONE row-variable on the host side. It now filters the candidates first — a
+-- variable occurring in the payload τ cannot host an l-field carrying τ
+-- (`selfref_no_l_field`) — and then asks for exactly one SURVIVOR, which must
+-- additionally be the LEADING variable of the side.
+--
+-- WHY THE LEADING CONDITION IS NOT COSMETIC. The plan proposed filtering alone:
+-- fire wherever the lone survivor sits. That is UNSOUND. The expansion emits
+-- β ≔ (l:δ | β′) — the invented field at the FRONT — so the field has to
+-- commute out past everything to the host's left. `sFieldCount l s₂ = 0` makes
+-- the FIELDS there harmless, but a VARIABLE to the host's left is a hole θ may
+-- fill with an l-field of its own, and `‖` shadows left-to-right:
+--
+--     (l : {u} | a)  ≐ᵣ  (u | w)
+--
+-- u occurs in the payload {u}, so filtering alone leaves w as the lone host;
+-- the move emits w ≔ (l:δ | w′), δ ≔ {u}, and the residual a ≐ᵣ (u | w′) is
+-- discharged by U-var-solve as a ≔ (u | w′) — which constrains u not at all.
+-- Take u ≔ (l : 𝓫) and w′ ≔ ε. Then the left side is (l:{(l:𝓫)} , l:𝓫) and the
+-- right side is (l:𝓫 , l:{(l:𝓫)}): the same two fields in the opposite
+-- shadowing order. The theorem below is that shape, and it is not an ≈.
+--
+-- So the leading condition is what keeps U-expand sound, and with it the
+-- algorithm REFUSES that problem (`unrestricted_filter_refused`).
+
+private def shA : Row Unit := .cat (.sing "l" uB) (.sing "l" (.rcd .empty))
+private def shB : Row Unit := .cat (.sing "l" (.rcd .empty)) (.sing "l" uB)
+
+-- ⊢  two l-fields in the opposite order are NOT ≈ — `‖` shadows, it does not
+--    commute on a shared label. This is the step `expand_shift` would have to
+--    take if the host were allowed to sit behind another variable.
+theorem shadow_order_matters : ¬ RowEquiv shA shB := by
+  intro h
+  have hp := (RowEquiv.char h).2 "l"
+  simp only [shA, shB, Row.toSpine, sProj, List.cons_append,
+    List.nil_append, sVarSeq, List.length_nil, List.map_cons, List.map_nil] at hp
+  cases hp with
+  | cons _ hty _ =>
+      have hd := TyEquiv.rcdDepth_eq hty
+      simp only [uB, Ty.rcdDepth, Row.rcdDepth] at hd
+      omega
+
+private def ud₁ : Row Unit := ofSpine [.field "l" (.rcd (.var "u")), .var "a"]
+private def ud₂ : Row Unit := ofSpine [.var "u", .var "w"]
+
+-- ⊢  …and the algorithm does not take that step: the lone survivor `w` does not
+--    LEAD, so U-expand refuses and the configuration is reported stuck.
+theorem unrestricted_filter_refused :
+    unifyRowM (B := Unit) 30 ud₁ ud₂ = .stuck := rfl
+
+-- ## What the filter DOES buy (1): a host behind the filtered candidate
+-- (l : {w}) ≐ᵣ (v | w) was stuck before Stage 3 — `sVarSeq` saw two candidates.
+-- `w` cannot host (self_hosting_no_unifier) and `v` leads, so the move fires.
+private def fρ₁ : Row Unit := .sing "l" (.rcd (.var "w"))
+private def fρ₂ : Row Unit := .cat (.var "v") (.var "w")
+
+theorem selfref_filter_fires :
+    ∃ s S, unifyRowM (B := Unit) 30 fρ₁ fρ₂ = .success s S := ⟨_, _, rfl⟩
+
+-- ## What the filter DOES buy (2): a SECOND vacuous success, closed
+-- Before Stage 3 the lone candidate was accepted without looking at the
+-- payload, so
+--
+--     (l : {w} | a)  ≐ᵣ  (m : 𝓫 | w)
+--
+-- answered success with w ≔ (l : {w} | w′) — a binding no substitution
+-- satisfies, exactly the defect Stage 2 closed at U-var-solve. The problem has
+-- no unifier at all, and the algorithm now says so.
+private def gρ₁ : Row Unit := ofSpine [.field "l" (.rcd (.var "w")), .var "a"]
+private def gρ₂ : Row Unit := ofSpine [.field "m" uB, .var "w"]
+
+theorem selfref_lone_host_reported :
+    unifyRowM (B := Unit) 30 gρ₁ gρ₂ = .occurs := rfl
+
+-- ⊢  …and that verdict is correct. Every variable of the host side occurs in
+--    the payload, so the l-field the left side demands at index 0 has nowhere
+--    to come from.
+theorem selfref_lone_host_no_unifier :
+    ¬ ∃ θ : TySubst Unit, Unifies θ gρ₁ gρ₂ :=
+  selfref_host_no_unifier (t₁ := [.var "a"]) rfl (by
+    intro γ hγ
+    simp only [sVarSeq, List.mem_singleton] at hγ
+    subst hγ
+    simp [Ty.allRowVars, Row.allRowVars])
+
+-- ## Where it stops: terminal_masks_mgu SURVIVES
+-- (l:{w}) ≐ᵣ (w | v) is the mirror image of `selfref_filter_fires`, and the
+-- mirror is exactly what the leading condition forbids: the lone survivor `v`
+-- sits BEHIND the filtered `w`. The right-end expansion `expandR` would take
+-- it — the field is emitted at the END there, so it commutes past the SUFFIX,
+-- which is empty — but the driver has no expandR arm. Adding one is the open
+-- follow-up; until then `terminal_masks_mgu` (section 2) stands unchanged.
+
 end MinimalCalculus

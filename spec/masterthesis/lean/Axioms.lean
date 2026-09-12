@@ -294,4 +294,111 @@ info: 'MinimalCalculus.qPreservation' depends on axioms: [propext, Classical.cho
 -/
 #guard_msgs in #print axioms qPreservation
 
+-- ## ⟦S⟧ as a context (RowUnify.State) — the θ ↦ rowEnv bridge
+-- Without these two, no inference rule that performs a lookup under a partial
+-- solution is even a proposition. rowWF_toCtx is what lets A-sel's premise
+-- HAVE a derivation (it feeds lookup_total); lookup_toCtx is the bridge itself.
+/--
+info: 'MinimalCalculus.Sol.rowWF_toCtx' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms Sol.rowWF_toCtx
+
+/--
+info: 'MinimalCalculus.Sol.lookup_toCtx' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms Sol.lookup_toCtx
+
+/--
+info: 'MinimalCalculus.Sol.lookup_toCtx_iff' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms Sol.lookup_toCtx_iff
+
+-- ## The general depth-aware occurs theorem (RowUnify.NoMgu)
+-- The repair for BOTH spine-level blind spots: `sVarSeq` misses a variable that
+-- sits inside a field payload, and so does `sFieldCount`. Record nesting sees
+-- it at any depth, so α ≐ᵣ ρ with α under a `.rcd` in ρ has no unifier.
+/-- info: 'MinimalCalculus.deep_occurs_no_unifier' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in #print axioms deep_occurs_no_unifier
+
+-- (1) what U-var-solve's occurs check should have caught
+/-- info: 'MinimalCalculus.cyclic_binding_no_unifier' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in #print axioms cyclic_binding_no_unifier
+
+-- (2) the candidate host U-expand should have been able to eliminate
+/-- info: 'MinimalCalculus.self_hosting_no_unifier' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in #print axioms self_hosting_no_unifier
+
+-- ## The repaired row-level occurs check (Refutations)
+-- It used to be spine-only, so `a ≐ᵣ (l:{a})` succeeded with the cyclic binding
+-- a ≔ (l:{a} | ε) on a problem with no unifier at all. It now tests
+-- `Row.allRowVars (ofSpine s₂)` and answers occurs. These two pin the verdict
+-- and the fact that the verdict is correct.
+/--
+info: 'MinimalCalculus.cyclic_occurs_reported' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms cyclic_occurs_reported
+
+/-- info: 'MinimalCalculus.cyclic_no_unifier' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in #print axioms cyclic_no_unifier
+
+-- The syntactic sufficient condition for a legal solver state. NOT an invariant
+-- of the driver — `a ≐ᵣ (l:a)` returns a solution that fails it, because ftv is
+-- sort-blind — which is why Sol.WF is stated semantically. See State.lean.
+/--
+info: 'MinimalCalculus.Sol.wf_of_noCapture' depends on axioms: [propext, Quot.sound]
+-/
+#guard_msgs in #print axioms Sol.wf_of_noCapture
+
+-- ## U-expand's self-reference filter (Stage 3)
+-- The semantic content of the filter: a candidate host occurring in the payload
+-- cannot host, and when NO candidate survives the problem has no unifier.
+/-- info: 'MinimalCalculus.selfref_no_l_field' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in #print axioms selfref_no_l_field
+
+/-- info: 'MinimalCalculus.selfref_host_no_unifier' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in #print axioms selfref_host_no_unifier
+
+-- The multi-candidate generalization of host_proj that makes the filter usable:
+-- the head of the projection sits at index 0, so SOME variable of the side
+-- hosts it at the front.
+/-- info: 'MinimalCalculus.proj_head_zero_var' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in #print axioms proj_head_zero_var
+
+-- Why the surviving candidate must also LEAD: `‖` shadows on a shared label, so
+-- the invented field cannot commute past a variable that might carry one.
+/-- info: 'MinimalCalculus.shadow_order_matters' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in #print axioms shadow_order_matters
+
+/--
+info: 'MinimalCalculus.unrestricted_filter_refused' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms unrestricted_filter_refused
+
+-- What the filter buys: one new success, and one vacuous success closed.
+/--
+info: 'MinimalCalculus.selfref_filter_fires' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms selfref_filter_fires
+
+/--
+info: 'MinimalCalculus.selfref_lone_host_reported' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms selfref_lone_host_reported
+
+/-- info: 'MinimalCalculus.selfref_lone_host_no_unifier' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in #print axioms selfref_lone_host_no_unifier
+
+-- ## ⟦S⟧ as a CLOSURE (State.lean)
+-- `Sol.Applied` is no longer demanded of the driver: a ranked solution HAS a
+-- closure, |dom| rounds of substitution compute it, and the bridge theorems are
+-- stated against `Sol.Closes` instead.
+/-- info: 'MinimalCalculus.Sol.closes_closure' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in #print axioms Sol.closes_closure
+
+/-- info: 'MinimalCalculus.Sol.closes_toSubst_of_applied' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in #print axioms Sol.closes_toSubst_of_applied
+
+/-- info: 'MinimalCalculus.Sol.closes_of_wf' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in #print axioms Sol.closes_of_wf
+
 end MinimalCalculus

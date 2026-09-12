@@ -605,6 +605,131 @@ theorem no_rcd_self_reference {B : Type} {l : Label} {ρ : Row B} :
   omega
 
 
+-- ## THE GENERAL OCCURS THEOREM, at any depth
+-- `no_rcd_self_reference` is the one-step case. The general statement is about
+-- a VARIABLE and an arbitrary row: if α occurs anywhere in ρ *underneath a
+-- record constructor*, then α ≐ᵣ ρ has no unifier at all — no matter how deep
+-- the occurrence, how many constructors it sits under, or what else ρ contains.
+--
+-- This is the tool both spine-level blind spots need. `sVarSeq` sees only the
+-- spine, so U-var-solve's occurs check misses exactly these occurrences
+-- (cyclic_success_* in Refutations.lean), and `sFieldCount` sees only spine
+-- l-counts, so the no-mgu toolkit cannot tell that one candidate host of
+-- U-expand is self-referential (terminal_masks_mgu). Both are decided here.
+
+-- The occurrence vocabulary (`Ty.allRowVars` / `Row.allRowVars` and their
+-- `deep` variants) lives in Defs.lean: U-var-solve's occurs check branches on
+-- it, so it has to be available to the algorithm, not only to its metatheory.
+
+-- Substituting into something that mentions α cannot LOSE α's depth.
+mutual
+theorem Ty.rcdDepth_applySubst_ge {B : Type} {θ : TySubst B} {α : TyVar} :
+    (τ : Ty B) → α ∈ Ty.allRowVars τ →
+    Row.rcdDepth (θ.row α) ≤ Ty.rcdDepth (τ.applySubst θ)
+  | .var _,  h => nomatch h
+  | .base _, h => nomatch h
+  | .unk,    h => nomatch h
+  | .fn a b, h => by
+      simp only [Ty.allRowVars, List.mem_append] at h
+      simp only [Ty.applySubst, Ty.rcdDepth]
+      rcases h with h | h
+      · exact Nat.le_trans (Ty.rcdDepth_applySubst_ge a h) (Nat.le_max_left _ _)
+      · exact Nat.le_trans (Ty.rcdDepth_applySubst_ge b h) (Nat.le_max_right _ _)
+  | .rcd ρ,  h => by
+      simp only [Ty.allRowVars] at h
+      simp only [Ty.applySubst, Ty.rcdDepth]
+      have := Row.rcdDepth_applySubst_ge (θ := θ) (α := α) ρ h
+      omega
+
+theorem Row.rcdDepth_applySubst_ge {B : Type} {θ : TySubst B} {α : TyVar} :
+    (ρ : Row B) → α ∈ Row.allRowVars ρ →
+    Row.rcdDepth (θ.row α) ≤ Row.rcdDepth (ρ.applySubst θ)
+  | .empty,     h => nomatch h
+  | .var β,     h => by
+      simp only [Row.allRowVars, List.mem_singleton] at h
+      subst h
+      simp only [Row.applySubst]
+      exact Nat.le_refl _
+  | .sing _ τ,  h => by
+      simp only [Row.allRowVars] at h
+      simp only [Row.applySubst, Row.rcdDepth]
+      exact Ty.rcdDepth_applySubst_ge τ h
+  | .cat ρ₁ ρ₂, h => by
+      simp only [Row.allRowVars, List.mem_append] at h
+      simp only [Row.applySubst, Row.rcdDepth]
+      rcases h with h | h
+      · exact Nat.le_trans (Row.rcdDepth_applySubst_ge ρ₁ h) (Nat.le_max_left _ _)
+      · exact Nat.le_trans (Row.rcdDepth_applySubst_ge ρ₂ h) (Nat.le_max_right _ _)
+end
+
+-- …and a record constructor on the way makes the inequality STRICT.
+mutual
+theorem Ty.rcdDepth_applySubst_gt {B : Type} {θ : TySubst B} {α : TyVar} :
+    (τ : Ty B) → α ∈ Ty.deepRowVars τ →
+    Row.rcdDepth (θ.row α) < Ty.rcdDepth (τ.applySubst θ)
+  | .var _,  h => nomatch h
+  | .base _, h => nomatch h
+  | .unk,    h => nomatch h
+  | .fn a b, h => by
+      simp only [Ty.deepRowVars, List.mem_append] at h
+      simp only [Ty.applySubst, Ty.rcdDepth]
+      rcases h with h | h
+      · exact Nat.lt_of_lt_of_le (Ty.rcdDepth_applySubst_gt a h) (Nat.le_max_left _ _)
+      · exact Nat.lt_of_lt_of_le (Ty.rcdDepth_applySubst_gt b h) (Nat.le_max_right _ _)
+  | .rcd ρ,  h => by
+      simp only [Ty.deepRowVars] at h
+      simp only [Ty.applySubst, Ty.rcdDepth]
+      have := Row.rcdDepth_applySubst_ge (θ := θ) (α := α) ρ h
+      omega
+
+theorem Row.rcdDepth_applySubst_gt {B : Type} {θ : TySubst B} {α : TyVar} :
+    (ρ : Row B) → α ∈ Row.deepRowVars ρ →
+    Row.rcdDepth (θ.row α) < Row.rcdDepth (ρ.applySubst θ)
+  | .empty,     h => nomatch h
+  | .var _,     h => nomatch h
+  | .sing _ τ,  h => by
+      simp only [Row.deepRowVars] at h
+      simp only [Row.applySubst, Row.rcdDepth]
+      exact Ty.rcdDepth_applySubst_gt τ h
+  | .cat ρ₁ ρ₂, h => by
+      simp only [Row.deepRowVars, List.mem_append] at h
+      simp only [Row.applySubst, Row.rcdDepth]
+      rcases h with h | h
+      · exact Nat.lt_of_lt_of_le (Row.rcdDepth_applySubst_gt ρ₁ h) (Nat.le_max_left _ _)
+      · exact Nat.lt_of_lt_of_le (Row.rcdDepth_applySubst_gt ρ₂ h) (Nat.le_max_right _ _)
+end
+
+-- ⊢  α occurs under a record constructor in ρ   ⟹   α ≐ᵣ ρ has NO unifier
+-- The genuine occurs case at the row sort, in full generality. `≈` pins depth
+-- (RowEquiv.rcdDepth_eq) and the occurrence strictly raises it, so the equation
+-- asks a number to be smaller than itself.
+theorem deep_occurs_no_unifier {B : Type} {α : TyVar} {ρ : Row B}
+    (h : α ∈ Row.deepRowVars ρ) : ¬ ∃ θ : TySubst B, Unifies θ (.var α) ρ := by
+  rintro ⟨θ, hu⟩
+  unfold Unifies at hu
+  simp only [Row.applySubst] at hu
+  have hd := RowEquiv.rcdDepth_eq hu
+  have hlt := Row.rcdDepth_applySubst_gt (θ := θ) (α := α) ρ h
+  omega
+
+-- ## The two blind spots, decided
+
+-- (1) The CYCLIC SUCCESS (cyclic_success_* in Refutations.lean). U-var-solve
+--     answers  α ≐ᵣ (l : {α})  with the binding α ≔ (l:{α} | ε) because
+--     `sVarSeq` finds no α on the spine. There is no unifier.
+theorem cyclic_binding_no_unifier {B : Type} {α : TyVar} {l : Label} :
+    ¬ ∃ θ : TySubst B, Unifies θ (.var α) (.sing l (.rcd (.var α))) :=
+  deep_occurs_no_unifier (by simp [Row.deepRowVars, Ty.deepRowVars, Row.allRowVars])
+
+-- (2) The HOST ELIMINATION U-expand cannot currently make (terminal_masks_mgu).
+--     Placing a field whose payload mentions β INTO β is impossible, whatever
+--     tail the expansion invents — so a candidate host that would capture
+--     itself is not a candidate, and `uniqueHost` may be left with exactly one.
+theorem self_hosting_no_unifier {B : Type} {β γ : TyVar} {l : Label} :
+    ¬ ∃ θ : TySubst B, Unifies θ (.var β) (.cat (.sing l (.rcd (.var β))) (.var γ)) :=
+  deep_occurs_no_unifier (by simp [Row.deepRowVars, Ty.deepRowVars, Row.allRowVars])
+
+
 -- ## PHASE B GROUNDWORK: what a LONE FIELD forces on the other side
 -- Shape (2)/(3) of the terminal dispatch is a leading field facing a leading
 -- variable. When the field side is the whole spine, counting alone pins the
@@ -1055,6 +1180,38 @@ theorem allVarsEmpty_none_no_unifier' {B : Type} {s : List (Atom B)}
   refine allVarsEmpty_none_no_unifier h ⟨θ, ?_⟩
   unfold Unifies at hu ⊢
   exact hu.symm
+
+-- ## At the TYPE sort, "occurs" and "occurs DEEPLY" coincide
+-- A `Ty` reaches a row only through `.rcd`, so every row-variable a type
+-- mentions is already under a record constructor. This is why U-expand's
+-- self-reference filter can test the cheap `Ty.allRowVars` and still get the
+-- STRICT depth inequality out of it.
+theorem Ty.deepRowVars_eq_allRowVars {B : Type} :
+    (τ : Ty B) → Ty.deepRowVars τ = Ty.allRowVars τ
+  | .var _  => rfl
+  | .base _ => rfl
+  | .unk    => rfl
+  | .fn a b => by
+      simp only [Ty.deepRowVars, Ty.allRowVars,
+        Ty.deepRowVars_eq_allRowVars a, Ty.deepRowVars_eq_allRowVars b]
+  | .rcd _  => rfl
+
+-- ⊢  γ occurs in τ,  θγ hosts an l-field whose payload is θτ   ⟹   ⊥
+-- The self-reference filter's soundness, in one line of arithmetic: `≈` pins
+-- rcdDepth, hosting can only raise it, and the occurrence strictly raises it.
+-- This is `self_hosting_no_unifier` in the form U-expand's metatheory needs —
+-- the tail is an arbitrary row and the payload is only ≈-equal, not equal.
+theorem selfref_no_l_field {B : Type} {θ : TySubst B} {γ : TyVar} {τ σ : Ty B}
+    {l : Label} {ρ' : Row B}
+    (hmem : γ ∈ Ty.allRowVars τ)
+    (hty : TyEquiv (τ.applySubst θ) σ)
+    (hγ : RowEquiv (θ.row γ) (.cat (.sing l σ) ρ')) : False := by
+  have hlt := Ty.rcdDepth_applySubst_gt (θ := θ) (α := γ) τ
+    (by rw [Ty.deepRowVars_eq_allRowVars]; exact hmem)
+  have heq := TyEquiv.rcdDepth_eq hty
+  have hd := RowEquiv.rcdDepth_eq hγ
+  simp only [Row.rcdDepth] at hd
+  omega
 
 
 end MinimalCalculus

@@ -15,3 +15,4 @@ import RowUnify.Soundness     -- P5: success soundness
 import RowUnify.Completeness  -- P5: boundedness and success completeness
 import RowUnify.Clash         -- P5: clash soundness
 import RowUnify.Trichotomy    -- P6: the mgu statement and the stuck leg
+import RowUnify.State         -- ⟦S⟧ as a context: the θ ↦ rowEnv bridge

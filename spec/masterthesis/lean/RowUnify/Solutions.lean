@@ -648,28 +648,127 @@ theorem ProjEquiv.head_zero {B : Type} {τ : Ty B} {ps qs : List (Nat × Ty B)}
   cases h with
   | cons hn hty _ => exact ⟨_, _, by rw [← hn], hty⟩
 
--- ⊢  vars(s₂) = [β],  count_l(s₂) = 0,  θ ⊨ (l:τ | ofSpine t₁) ≐ᵣ ofSpine s₂
+-- ## THE HOST IS FORCED, with SEVERAL candidates on the side
+-- `host_proj` collapses the whole projection onto the one variable, which only
+-- works when there IS only one. With the self-reference filter there may be
+-- others, so the argument moves to the HEAD of the projection: it sits at index
+-- 0, index 0 means no variable precedes it, and a field at index 0 inside a
+-- substituted spine can only have come from a variable of that spine hosting it
+-- at the front.
+-- ⊢  count_l(s) = 0,  proj_l(θ(ofSpine s)) starts at index 0 with σ
+--        ⟹   some γ ∈ vars(s) has  θγ ≈ᵣ (l:σ | ρ')
+theorem map_add_zero {B : Type} : (ps : List (Nat × Ty B)) →
+    ps.map (fun p => (p.1 + 0, p.2)) = ps
+  | [] => rfl
+  | p :: t => by
+      show (p.1 + 0, p.2) :: (t.map (fun p => (p.1 + 0, p.2))) = p :: t
+      rw [Nat.add_zero, map_add_zero t]
+
+theorem proj_head_zero_var {B : Type} {θ : TySubst B} {l : Label} {σ : Ty B}
+    {rest : List (Nat × Ty B)} :
+    (s : List (Atom B)) → sFieldCount l s = 0 →
+    sProj l ((ofSpine s).applySubst θ).toSpine = (0, σ) :: rest →
+    ∃ γ ∈ sVarSeq s, ∃ ρ' : Row B, RowEquiv (θ.row γ) (.cat (.sing l σ) ρ')
+  | [], _, h => by simp [ofSpine, Row.applySubst, Row.toSpine, sProj] at h
+  | .field l' τ' :: s, hc, h => by
+      simp only [sFieldCount] at hc
+      have hl : ¬ l' = l := by intro hh; rw [if_pos hh] at hc; omega
+      rw [if_neg hl] at hc
+      have hsp : ((ofSpine (Atom.field l' τ' :: s)).applySubst θ).toSpine =
+          [Atom.field l' (τ'.applySubst θ)] ++
+            ((ofSpine s).applySubst θ).toSpine := rfl
+      rw [hsp, sProj_append] at h
+      simp only [sProj, if_neg hl, sVarSeq, List.length_nil, List.nil_append,
+        map_add_zero] at h
+      obtain ⟨δ, hδ, hres⟩ := proj_head_zero_var s (by omega) h
+      exact ⟨δ, by rw [sVarSeq]; exact hδ, hres⟩
+  | .var γ :: s, hc, h => by
+      simp only [sFieldCount] at hc
+      have hsp : ((ofSpine (Atom.var γ :: s)).applySubst θ).toSpine =
+          (θ.row γ).toSpine ++ ((ofSpine s).applySubst θ).toSpine := rfl
+      rw [hsp, sProj_append] at h
+      cases hg : sProj l (θ.row γ).toSpine with
+      | cons pr tl =>
+          rw [hg] at h
+          obtain ⟨n, τ₀⟩ := pr
+          simp only [List.cons_append, List.cons.injEq, Prod.mk.injEq] at h
+          obtain ⟨⟨hn, hτ⟩, -⟩ := h
+          subst hn; subst hτ
+          obtain ⟨t, hequiv, -, -, -⟩ := spine_extract (θ.row γ).toSpine l hg
+          exact ⟨γ, by rw [sVarSeq]; exact List.mem_cons_self, ofSpine t,
+            (Row.toSpine_equiv _).trans hequiv⟩
+      | nil =>
+          rw [hg] at h
+          simp only [List.nil_append] at h
+          cases hq : sProj l ((ofSpine s).applySubst θ).toSpine with
+          | nil => rw [hq] at h; simp at h
+          | cons pr tl =>
+              rw [hq] at h
+              obtain ⟨n, τ₀⟩ := pr
+              simp only [List.map_cons, List.cons.injEq, Prod.mk.injEq] at h
+              obtain ⟨⟨hn, hτ⟩, -⟩ := h
+              subst hτ
+              have hn0 : n = 0 := by omega
+              subst hn0
+              obtain ⟨δ, hδ, hres⟩ := proj_head_zero_var s hc hq
+              exact ⟨δ, by rw [sVarSeq]; exact List.mem_cons_of_mem _ hδ, hres⟩
+
+-- ⊢  HostShape l τ s₂ β,  θ ⊨ (l:τ | ofSpine t₁) ≐ᵣ ofSpine s₂
 --        ⟹   ∃ σ ρ'.  θτ ≈ₜ σ  ∧  θβ ≈ᵣ (l:σ | ρ')
 -- The host must expand with an l-field IN FRONT: index 0 says nothing precedes
 -- it but fields, and those all carry other labels, so ≈-comm bubbles it out
 -- (spine_extract, RowEquiv.lean:243). This is the maximality argument that
 -- proof-state.md currently carries BY HAND for crossfield.
+--
+-- The candidate the head names need not be β a priori — but every OTHER
+-- variable of the side occurs in τ, and `selfref_no_l_field` says such a
+-- variable cannot host this field. So the filter is exactly what turns "some
+-- variable hosts it" into "β hosts it".
 theorem host_forced {B : Type} {θ : TySubst B} {β : TyVar} {l : Label} {τ : Ty B}
-    {t₁ s₂ : List (Atom B)} (hv : sVarSeq s₂ = [β]) (hc : sFieldCount l s₂ = 0)
+    {t₁ s₂ : List (Atom B)} (hs : HostShape l τ s₂ β)
     (hu : Unifies θ (ofSpine (.field l τ :: t₁)) (ofSpine s₂)) :
     ∃ (σ : Ty B) (ρ' : Row B),
       TyEquiv (τ.applySubst θ) σ ∧ RowEquiv (θ.row β) (.cat (.sing l σ) ρ') := by
+  obtain ⟨⟨rest, hvs, hrest⟩, hc, -⟩ := hs
   have hL : sProj l ((ofSpine (.field l τ :: t₁)).applySubst θ).toSpine =
       (0, τ.applySubst θ) :: sProj l ((ofSpine t₁).applySubst θ).toSpine := by
     show sProj l (((Row.sing l τ).applySubst θ).toSpine ++
                   ((ofSpine t₁).applySubst θ).toSpine) = _
     rw [sProj_append]
     simp [Row.applySubst, Row.toSpine, sProj, sVarSeq]
-  have hp := ((RowEquiv.char hu).2 l).trans (host_proj s₂ hv hc)
+  have hp := (RowEquiv.char hu).2 l
   rw [hL] at hp
-  obtain ⟨σ, rest, hq, hty⟩ := ProjEquiv.head_zero hp
-  obtain ⟨t, hequiv, -, -, -⟩ := spine_extract (θ.row β).toSpine l hq
-  exact ⟨σ, ofSpine t, hty, (Row.toSpine_equiv _).trans hequiv⟩
+  obtain ⟨σ, rest', hq, hty⟩ := ProjEquiv.head_zero hp
+  obtain ⟨γ, hγmem, ρ', hγ⟩ := proj_head_zero_var s₂ hc hq
+  rw [hvs] at hγmem
+  rcases List.mem_cons.mp hγmem with rfl | hmem
+  · exact ⟨σ, ρ', hty, hγ⟩
+  · exact (selfref_no_l_field (hrest _ hmem) hty hγ).elim
+
+-- ## …and when NO candidate survives the filter, there is no unifier
+-- The semantic content of `NoHost`'s third disjunct, and the reason refusing
+-- there is not merely conservative: if EVERY variable of the host side occurs
+-- in the payload, the head of the projection has nowhere to come from, so the
+-- problem has no unifier at all. (`host_forced` is the same argument with one
+-- variable exempted; here the exemption is empty.)
+-- ⊢  count_l(s₂) = 0,  vars(s₂) ⊆ rowVars(τ)  ⟹  (l:τ | t₁) ≐ᵣ s₂ has no unifier
+theorem selfref_host_no_unifier {B : Type} {l : Label} {τ : Ty B}
+    {t₁ s₂ : List (Atom B)}
+    (hc : sFieldCount l s₂ = 0)
+    (hall : ∀ γ ∈ sVarSeq s₂, γ ∈ Ty.allRowVars τ) :
+    ¬ ∃ θ : TySubst B, Unifies θ (ofSpine (.field l τ :: t₁)) (ofSpine s₂) := by
+  rintro ⟨θ, hu⟩
+  have hL : sProj l ((ofSpine (.field l τ :: t₁)).applySubst θ).toSpine =
+      (0, τ.applySubst θ) :: sProj l ((ofSpine t₁).applySubst θ).toSpine := by
+    show sProj l (((Row.sing l τ).applySubst θ).toSpine ++
+                  ((ofSpine t₁).applySubst θ).toSpine) = _
+    rw [sProj_append]
+    simp [Row.applySubst, Row.toSpine, sProj, sVarSeq]
+  have hp := (RowEquiv.char hu).2 l
+  rw [hL] at hp
+  obtain ⟨σ, rest', hq, hty⟩ := ProjEquiv.head_zero hp
+  obtain ⟨γ, hγmem, ρ', hγ⟩ := proj_head_zero_var s₂ hc hq
+  exact selfref_no_l_field (hall _ hγmem) hty hγ
 
 -- ## The move, algebraically
 -- Renaming the host to its fresh tail — the only edit the move makes to the
@@ -689,29 +788,52 @@ theorem renameVar_varFree {B : Type} (β β' : TyVar) :
   | .field _ _ :: s, h =>
       congrArg _ (renameVar_varFree β β' s (by simpa only [sVarSeq] using h))
 
+-- …and the version the multi-variable host shape needs: the OTHER variables of
+-- the side are left alone because the host cannot be one of them (it does not
+-- occur in τ, and they all do).
+theorem renameVar_not_mem {B : Type} (β β' : TyVar) :
+    (s : List (Atom B)) → β ∉ sVarSeq s → renameVar β β' s = s
+  | [], _ => rfl
+  | .var γ :: s, h => by
+      have hγ : ¬ γ = β := fun hh => h (by rw [sVarSeq, hh]; exact List.mem_cons_self)
+      have hs : β ∉ sVarSeq s := fun hh => h (by rw [sVarSeq]; exact List.mem_cons_of_mem _ hh)
+      simp only [renameVar, if_neg hγ, renameVar_not_mem β β' s hs]
+  | .field _ _ :: s, h =>
+      congrArg _ (renameVar_not_mem β β' s (by simpa only [sVarSeq] using h))
+
 -- THE SHIFT. Under a host expansion the whole side factors as "the invented
 -- field, then the side with the host renamed": the fields around the host all
 -- carry other labels, so ≈-comm walks the field out to the front.
--- ⊢  vars(s)=[β], count_l(s)=0, θβ ≈ (l:σ | θβ′)
+-- ⊢  vars(s) = β::rest,  β ∉ rest,  count_l(s) = 0,  θβ ≈ (l:σ | θβ′)
 --        ⟹  θ(ofSpine s) ≈ᵣ (l:σ | θ(ofSpine s[β↦β′]))
+-- WHY THE HOST MUST LEAD. The invented l-field is emitted at the FRONT of the
+-- binding, so it has to commute out past everything to its left. `count_l = 0`
+-- makes the FIELDS there harmless — they all carry other labels — but a
+-- VARIABLE to the left is a hole θ may fill with an l-field, and then the two
+-- sides differ by which l shadows which. That is not a gap in this proof: it is
+-- a genuine unsoundness of the move, and requiring the host to be the LEADING
+-- variable is what rules it out. `rest` may still be non-empty; those variables
+-- sit to the RIGHT of the host and the field never passes them.
 theorem expand_shift {B : Type} {θ : TySubst B} {l : Label} {σ : Ty B}
-    {β β' : TyVar} (hβ : RowEquiv (θ.row β) (.cat (.sing l σ) (θ.row β'))) :
-    (s : List (Atom B)) → sVarSeq s = [β] → sFieldCount l s = 0 →
+    {β β' : TyVar} {rest : List TyVar}
+    (hβ : RowEquiv (θ.row β) (.cat (.sing l σ) (θ.row β'))) (hnr : β ∉ rest) :
+    (s : List (Atom B)) → sVarSeq s = β :: rest → sFieldCount l s = 0 →
     RowEquiv ((ofSpine s).applySubst θ)
              (.cat (.sing l σ) ((ofSpine (renameVar β β' s)).applySubst θ))
   | .var γ :: s, hv, hc => by
       simp only [sVarSeq] at hv
       injection hv with hγ hs
-      rw [← hγ] at hβ
+      subst hγ
       show RowEquiv (.cat (θ.row γ) ((ofSpine s).applySubst θ)) _
-      rw [renameVar, if_pos hγ, renameVar_varFree β β' s hs]
+      rw [renameVar, if_pos rfl,
+        renameVar_not_mem γ β' s (by rw [hs]; exact hnr)]
       exact (RowEquiv.cat hβ (.refl _)).trans RowEquiv.assoc
   | .field l' τ :: s, hv, hc => by
       simp only [sVarSeq] at hv
       simp only [sFieldCount] at hc
       have hl : ¬ l' = l := by intro hh; rw [if_pos hh] at hc; omega
       rw [if_neg hl] at hc
-      have ih := expand_shift hβ s hv (by omega)
+      have ih := expand_shift hβ hnr s hv (by omega)
       show RowEquiv (.cat (.sing l' (τ.applySubst θ)) ((ofSpine s).applySubst θ)) _
       rw [renameVar]
       exact ((RowEquiv.cat (.refl _) ih).trans RowEquiv.assoc.symm).trans
@@ -722,13 +844,15 @@ theorem expand_shift {B : Type} {θ : TySubst B} {l : Label} {σ : Ty B}
 -- unifies the residual unified the original.
 theorem expand_reflect {B : Type} {θ : TySubst B} {l : Label} {τ δ : Ty B}
     {β β' : TyVar} {t₁ s₂ : List (Atom B)}
-    (hv : sVarSeq s₂ = [β]) (hc : sFieldCount l s₂ = 0)
+    (hs : HostShape l τ s₂ β)
     (hβ : RowEquiv (θ.row β) (.cat (.sing l δ) (θ.row β')))
     (hty : TyEquiv (τ.applySubst θ) δ)
     (hrec : Unifies θ (ofSpine t₁) (ofSpine (renameVar β β' s₂))) :
     Unifies θ (ofSpine (.field l τ :: t₁)) (ofSpine s₂) := by
+  obtain ⟨⟨rest, hvs, hrest⟩, hc, hnot⟩ := hs
   show RowEquiv (.cat (.sing l (τ.applySubst θ)) ((ofSpine t₁).applySubst θ)) _
-  exact (RowEquiv.cat (RowEquiv.sing hty) hrec).trans (expand_shift hβ s₂ hv hc).symm
+  exact (RowEquiv.cat (RowEquiv.sing hty) hrec).trans
+    (expand_shift hβ (fun hm => hnot (hrest _ hm)) s₂ hvs hc).symm
 
 theorem mem_sFtv_of_mem_sVarSeq {B : Type} {α : TyVar} :
     (s : List (Atom B)) → α ∈ sVarSeq s → α ∈ sFtv s
@@ -747,7 +871,7 @@ theorem mem_sFtv_of_mem_sVarSeq {B : Type} {α : TyVar} :
 -- shrink the unifier set (unlike matchL/groundMatch).
 theorem expand_reflect_fwd {B : Type} {θ : TySubst B} {l : Label} {τ : Ty B}
     {β dv β' : TyVar} {t₁ s₂ : List (Atom B)}
-    (hv : sVarSeq s₂ = [β]) (hc : sFieldCount l s₂ = 0)
+    (hs : HostShape l τ s₂ β)
     (hd₁ : dv ∉ sFtv (Atom.field l τ :: t₁)) (hd₂ : dv ∉ sFtv s₂)
     (hb₁ : β' ∉ sFtv (Atom.field l τ :: t₁)) (hb₂ : β' ∉ sFtv s₂)
     (hu : Unifies θ (ofSpine (.field l τ :: t₁)) (ofSpine s₂)) :
@@ -757,9 +881,10 @@ theorem expand_reflect_fwd {B : Type} {θ : TySubst B} {l : Label} {τ : Ty B}
       Unifies θ' (ofSpine t₁) (ofSpine (renameVar β β' s₂)) ∧
       Unifies θ' (ofSpine (.field l τ :: t₁)) (ofSpine s₂) ∧
       (∀ γ, γ ≠ dv → γ ≠ β' → θ.ty γ = θ'.ty γ ∧ θ.row γ = θ'.row γ) := by
-  obtain ⟨σ, ρ', hty, hβ⟩ := host_forced hv hc hu
+  obtain ⟨σ, ρ', hty, hβ⟩ := host_forced hs hu
+  obtain ⟨⟨rest, hvs, hrest⟩, hc, hnot⟩ := hs
   have hββ' : β ≠ β' := fun h =>
-    hb₂ (h ▸ mem_sFtv_of_mem_sVarSeq s₂ (by rw [hv]; exact List.mem_cons_self))
+    hb₂ (h ▸ mem_sFtv_of_mem_sVarSeq s₂ (by rw [hvs]; exact List.mem_cons_self))
   have hdv : ((θ.setTy dv σ).setRow β' ρ').ty dv = σ := by
     show (if dv = dv then σ else θ.ty dv) = σ
     rw [if_pos rfl]
@@ -788,7 +913,7 @@ theorem expand_reflect_fwd {B : Type} {θ : TySubst B} {l : Label} {τ : Ty B}
               ((ofSpine t₁).applySubst ((θ.setTy dv σ).setRow β' ρ')))
         (.cat (.sing l σ)
               ((ofSpine (renameVar β β' s₂)).applySubst ((θ.setTy dv σ).setRow β' ρ'))) :=
-      hu'.trans (expand_shift hβ'' s₂ hv hc)
+      hu'.trans (expand_shift hβ'' (fun hm => hnot (hrest _ hm)) s₂ hvs hc)
     exact key.field_cancel_left.2
   · intro γ hγd hγb
     exact ⟨by simp only [TySubst.setRow, TySubst.setTy, if_neg hγd],
@@ -798,23 +923,20 @@ theorem expand_reflect_fwd {B : Type} {θ : TySubst B} {l : Label} {τ : Ty B}
 -- U-expand fires only when the host is UNIQUE: exactly one variable on the
 -- other side, and no l-field anywhere on it (an l-field further right could
 -- host the pairing instead — (l:𝓪 | α) ≐ᵣ (β | l:𝓫) is unifiable with β ≔ ε).
-theorem uniqueHost_spec {B : Type} {l : Label} {s : List (Atom B)} {β : TyVar}
-    (h : uniqueHost l s = some β) : sVarSeq s = [β] ∧ sFieldCount l s = 0 := by
+theorem uniqueHost_spec {B : Type} {l : Label} {τ : Ty B} {s : List (Atom B)}
+    {β : TyVar} (h : uniqueHost l τ s = some β) : HostShape l τ s β := by
   unfold uniqueHost at h
   cases hvs : sVarSeq s with
   | nil => rw [hvs] at h; cases h
   | cons γ t =>
-      cases t with
-      | cons _ _ => rw [hvs] at h; cases h
-      | nil =>
-          rw [hvs] at h
-          replace h : (if sFieldCount l s = 0 then some γ else none) = some β := h
-          by_cases hcc : sFieldCount l s = 0
-          · rw [if_pos hcc] at h
-            injection h with hg
-            subst hg
-            exact ⟨rfl, hcc⟩
-          · rw [if_neg hcc] at h; cases h
+      rw [hvs] at h
+      simp only at h
+      split at h
+      · next hcond =>
+          injection h with hg
+          subst hg
+          exact ⟨⟨t, hvs, hcond.2.2⟩, hcond.1, hcond.2.1⟩
+      · cases h
 
 -- Left end: the leading field of s₁ against the unique host of s₂. δ and β′ are
 -- drawn from the supply; the host side keeps its length (the invented field is
@@ -838,7 +960,8 @@ theorem crossfield_host_forced {B : Type} (b : B) {l m : Label} (hne : l ≠ m)
       (hu.trans (RowEquiv.applySubst θ (Row.toSpine_equiv _)))
   have hc : sFieldCount l [Atom.field m (.base b), .var β] = 0 := by
     simp only [sFieldCount, if_neg (fun h : m = l => hne h.symm)]
-  obtain ⟨σ, ρ', hty, hβ⟩ := host_forced (t₁ := [Atom.var α]) rfl hc hu'
+  obtain ⟨σ, ρ', hty, hβ⟩ := host_forced (t₁ := [Atom.var α])
+    ⟨⟨[], rfl, fun _ hm => nomatch hm⟩, hc, by simp [Ty.allRowVars]⟩ hu'
   exact ⟨ρ', hβ.trans (RowEquiv.cat (RowEquiv.sing hty.symm) (.refl _))⟩
 
 -- THE FUEL OBSERVATION: fusing the expansion with the pairing it enables costs
@@ -853,7 +976,7 @@ theorem expandL_len {B : Type} {S : Supply} {s₁ s₂ : List (Atom B)}
   | .field l' τ' :: u₁ =>
       simp only [expandL] at h
       revert h
-      cases hh : uniqueHost l' s₂ with
+      cases hh : uniqueHost l' τ' s₂ with
       | none => intro h; cases h
       | some γ =>
           intro h
@@ -865,19 +988,18 @@ theorem expandL_len {B : Type} {S : Supply} {s₁ s₂ : List (Atom B)}
 theorem expandL_spec {B : Type} {S : Supply} {s₁ s₂ : List (Atom B)}
     {β : TyVar} {l : Label} {τ : Ty B} {t₁ t₂ : List (Atom B)}
     (h : expandL S s₁ s₂ = some (β, l, τ, t₁, t₂)) :
-    s₁ = .field l τ :: t₁ ∧ sVarSeq s₂ = [β] ∧ sFieldCount l s₂ = 0 ∧
+    s₁ = .field l τ :: t₁ ∧ HostShape l τ s₂ β ∧
     t₂ = renameVar β S.fresh.2.fresh.1 s₂ := by
   match s₁ with
   | .field l' τ' :: u₁ =>
       simp only [expandL] at h
       revert h
-      cases hh : uniqueHost l' s₂ with
+      cases hh : uniqueHost l' τ' s₂ with
       | none => intro h; cases h
       | some γ =>
           intro h
           cases h
-          obtain ⟨hv, hc⟩ := uniqueHost_spec hh
-          exact ⟨rfl, hv, hc, rfl⟩
+          exact ⟨rfl, uniqueHost_spec hh, rfl⟩
 
 -- ## The freshness INVARIANT along the recursion
 -- The three FORWARD legs (clash, completeness, stuck) extend a unifier at δ and
@@ -972,7 +1094,7 @@ theorem expandL_avoids {B : Type} {S : Supply} {s₁ s₂ : List (Atom B)}
     (hS : S.Avoids (sFtv s₁ ++ sFtv s₂))
     (h : expandL S s₁ s₂ = some (β, l, τ, t₁, t₂)) :
     S.fresh.2.fresh.2.Avoids (sFtv t₁ ++ sFtv t₂) := by
-  obtain ⟨hs1, -, -, hren⟩ := expandL_spec h
+  obtain ⟨hs1, -, hren⟩ := expandL_spec h
   have hsub : sFtv t₁ ++ sFtv t₂ ⊆ S.fresh.2.fresh.1 :: (sFtv s₁ ++ sFtv s₂) := by
     intro x hx
     rcases List.mem_append.mp hx with hh | hh
@@ -996,13 +1118,13 @@ theorem expandL_reflect_fwd {B : Type} {S : Supply} {θ : TySubst B}
     (h : expandL S s₁ s₂ = some (β, l, τ, t₁, t₂))
     (hu : Unifies θ (ofSpine s₁) (ofSpine s₂)) :
     ∃ θ' : TySubst B, Unifies θ' (ofSpine t₁) (ofSpine t₂) := by
-  obtain ⟨hs1, hv, hc, hren⟩ := expandL_spec h
+  obtain ⟨hs1, hshape, hren⟩ := expandL_spec h
   have hd := Supply.fresh_not_mem hS
   have hb := Supply.fresh_not_mem hS.advance
   rw [List.mem_append] at hd hb
   rw [hs1] at hu
   obtain ⟨θ', -, -, hrec, -, -⟩ :=
-    expand_reflect_fwd hv hc
+    expand_reflect_fwd hshape
       (fun hm => hd (.inl (hs1 ▸ hm))) (fun hm => hd (.inr hm))
       (fun hm => hb (.inl (hs1 ▸ hm))) (fun hm => hb (.inr hm)) hu
   exact ⟨θ', by rw [hren]; exact hrec⟩
