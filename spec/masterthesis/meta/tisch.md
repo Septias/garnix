@@ -6,3 +6,13 @@
   - With führt dazu, dass closedness nicht gegeben ist
   - Closedness aber auch schon wegen lazyness nicht da
 - Die Semantik ist (noch) nicht definiert
+- Can we extend unification of ★?
+- Can we make recursiveness a prominent feature of our work??
+- Warum muss der Context acyclic sein?
+
+
+## Proposed Extensions
+- Show difference to P&X
+- Show mathematically, what the lower bounds are for the algorithm
+  - This could motivate the incompleteness
+- Gradual guarantee hinzufügen und beweisen
