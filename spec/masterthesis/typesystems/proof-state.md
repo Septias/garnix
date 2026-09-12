@@ -29,8 +29,9 @@ Principality forces qualified schemes that use parked stumps during unification 
 - [x] Unknown Type Abstraction
 - [x] Let-Statements
 - [x] Qualified Schemes
-- [~] Unification 
-- [~] Type inference
+- [~] Unification
+- [~] Type Inference
+- [~] Mathematical Properties
 - [ ] FC-Labels
 - [ ] Negative type information
 - [?] Patterns
@@ -38,6 +39,55 @@ Principality forces qualified schemes that use parked stumps during unification 
 - [?] Recursive Types
 - [?] With
 - [?] Inherit
+
+# Tisch
+> Things that are still open and not refuted, but stalled for now
+- Deferral of row unification
+
+# Current Notes
+> Notes about the current state
+
+
+## Unification
+- Outcomes
+  - [~] success: *sound & complete*
+    - can still be VACUOUS
+  - [¡] occurs: *incomplete*
+    - α ≐ᵣ (β|α|γ)
+  - [~] stuck : *incomplete*
+    - (k:{β|α} | β) ≐ᵣ (k:{l:𝓫} | l:𝓫)
+    - (l:{w}) ≐ᵣ (w | v)
+  
+- Open
+  - [ ] the expandR driver arm — two more cases in `unifySpineMF`, two more
+    `Terminal` fields, and the reversal transport for the four reflection
+    lemmas. The only thing between the self-reference filter and
+    `terminal_masks_mgu`. MEASURED: `expandR` already exists (Defs.lean:263) and
+    is never called; the driver succeeds on (l:𝓫|α) ≐ᵣ (m:𝓫|β) and goes STUCK on
+    the mirror (α|l:𝓫) ≐ᵣ (β|m:𝓫). On terminal_masks_mgu's own configuration
+    (l:{w}) ≐ᵣ (w|v), `expandR` fires with host v and composes to exactly the
+    mgu the prose derives by hand — so the arm INVALIDATES terminalNoMgu_false,
+    the sharpest refutation of the fourth leg. (stuck_masks_mgu is untouched:
+    that one is about UResM.seq, not about terminality.)
+  - [ ] `uniqueHost` needs the SOLVER STATE to close the last vacuous-success
+    class: the offending field is hosted in a fresh tail that an earlier binding
+    already made part of another variable, and the detector only compares the
+    payload with the host variable itself. The accumulated solution is never
+    threaded back into the spines. This is the gate on `UnifyWF`
+    (State.lean:810) and hence on ⟦S⟧ being a total function — i.e. on items 1
+    and 2 of plans/inference-gap-analysis.md's critical path.
+  - [ ] sorted ftv, second half. `Ty/Row.sortedFtv` (State.lean) and
+    `Ty/Row.allRowVars` (Defs.lean) exist; `bindTy` still tests the sort-blind
+    `τ.ftv`, which is the over-conservatism the thesis flags.
+  - [ ] ⊴ covering order on qualified schemes
+  - [ ] solver state S = (θ, Δ, W), stump wake-up, confluence of the final state
+
+## Termination
+- Fuzzing suggests, that the algorithm actually terminates
+
+
+## Principality
+- [ ] covering order on schemes ⊴
 
 
 # Problems
@@ -52,7 +102,7 @@ Principality forces qualified schemes that use parked stumps during unification 
   the solution contains `aaaa ≔ {ε | b}` (type sort) together with
   `b ≔ (l:aa | l:aaaa | ε)` (row sort) — so ⟦S⟧ at `aaaa` never terminates, and
   by rcdDepth no θ satisfies both bindings: the success is VACUOUS and the
-  problem has no unifier. Stage 3's filter cannot see it: the second field is
+  problem has no unifier. The self-reference filter cannot see it: the second field is
   hosted in `aaa`, a fresh tail that is part of `b` by an EARLIER binding, and
   `uniqueHost` only compares the payload with the host variable itself — the
   accumulated solution is never threaded back into the spines. Fixing it means
@@ -71,119 +121,6 @@ Principality forces qualified schemes that use parked stumps during unification 
   that an arm whose type sub-call is stuck can still use the IH, carrying
   the residual as Q — which silently assumes a stuck conjunct makes the
   conjunction ambiguous. It does not.
-
-# Current Notes
-> Notes about the current state
-
-## Unification
-- Outcomes
-  - [~] success: sound & complete — but a success can still be VACUOUS. Both
-    theorems quantify over θ satisfying the returned solution, so a solution no
-    θ satisfies makes them hold trivially. Two such classes are closed (Stage 2
-    at U-var-solve, Stage 3 at a self-referential lone host); a third survives —
-    a cycle through PAYLOADS across two bindings, e.g.
-    `(b | a) ≐ᵣ (l:{l:𝓫 | a} | l:{a | b})` returning `aaaa ≔ {ε | b}` with
-    `b ≔ (l:aa | l:aaaa | ε)`. The fuzzer's `solRankedB` is the live detector
-    (0 / 576 / 8 across the three universes).
-  - [x] clash: sound
-  - [~] occurs
-    - incomplete!
-    - [x] the genuine case really has no unifier 
-    - [x] SHARP incopmleteness: α ≐ᵣ (β|α|γ) is reported occurs yet has an MGU (occurs_allVar_hasMgu)
-  - stuck
-    - *incomplete!*
-    - [X] so "stuck -> ¬mgu" is FALSE at the algorithm level.
-    - (k:{β|α} | β) ≐ᵣ (k:{l:𝓫} | l:𝓫) is reported
-      stuck yet has a UNIQUE mgu β≔(l:𝓫), α≔ε.  matchL emits {β|α} ≐ {l:𝓫},
-      which IS Wand and IS stuck, and UResM.seq propagates that before the
-      residual β ≐ᵣ (l:𝓫) — which pins β — is ever looked at.
-    - [X] and the retreat to TERMINAL configurations is false TOO
-      (terminalNoMgu_false): (l:{w}) ≐ᵣ (w | v) is terminal — all thirteen moves
-      none by rfl — yet hosting in w would force θw ≈ (l:{θw}), *an OCCURS
-      violation that field counting cannot see* (the recursion passes under a
-      record constructor). One placement is ruled out, the unifier is UNIQUE,
-      hence most general.
-      SINCE STAGE 3 the reason U-expand refuses has CHANGED: w IS now filtered
-      out as a candidate, and v is the lone survivor — but v does not LEAD the
-      spine, and the leading condition is what keeps the move sound. The mirror
-      (l:{w}) ≐ᵣ (v | w) now succeeds. So the witness is one driver arm away
-      from dying: right-end expansion emits the field at the END, where it
-      commutes past the (empty) SUFFIX, and `expandR` is already defined — the
-      driver just never calls it.
-      LESSON: terminality is a fact about the MOVES, not about the problem. There
-      is no general converse at any formulation. New tool: Ty/Row.rcdDepth —
-      record nesting, ≈-invariant (every constructor, `cat` taking a max), the
-      first invariant here that sees THROUGH a field payload.
-    - [x] what the fourth leg actually IS: the three SPECIFIC no-mgu theorems
-      (vars_vs_field = Wand, two_sided, allvar_swap — each also at the On level)
-      plus the three conservativity examples (occurs_allVar_hasMgu,
-      stuck_masks_mgu, terminal_masks_mgu). Complete and honest; just not a
-      converse.
-    - [x] step 1: four leading shapes once stripL/matchL are dead
-    - [x] step 2: U-expand refuses for exactly 3 reasons (`NoHost`, Defs.lean)
-      — no unique surviving candidate, an l-field already on the side, or the
-      leading candidate is self-referential. The third is the benign one: there
-      the problem has no unifier at all (`selfref_host_no_unifier`).
-    - [ ] step 3 still needs terminal_masks_mgu gone, and the route is now
-      concrete rather than a guessed side condition: add the expandR arm to the
-      driver (see the terminal entry above). The semantic tools the dispatch
-      needs already exist — `selfref_host_no_unifier` for the new NoHost
-      disjunct, `deep_occurs_no_unifier` underneath it. Three successive
-      formulations of this leg have been refuted, so hunt for a counterexample
-      before proving. Groundwork that survives regardless:
-      lone_field_no_foreign / lone_field_count_le / spine_eq_map_var_of_no_fields
-      / lone_field_other_pure_var (facing a lone field, counting alone forces the
-      other side to be a pure var spine) and terminal_leading_shape.
-- Invariants
-  - [x] fuel monotone: more budget never changes a verdict already reached
-  - [x] bounded: a run only mentions names below the supply it returns
-  - [x] unique-host expansion is forced
-  - [x] ≗-congruence of substitution on rows — axiom-free
-- Open
-  - [x] `HasMguOn V` / `InstanceOfOn V` — mgu relativized to a var set (Defs.lean).
-    `¬HasMguOn V` is the STRONGER statement (factoring on V only is an easier
-    demand), so it yields the thesis-facing `¬HasMgu` for free via
-    not_hasMgu_of_not_hasMguOn — and unlike strict InstanceOf it is insensitive
-    to the vars the algorithm invents. Ported: hasMguOn_congr (axiom-free),
-    hasMguOn_rowEquiv/_symm, instanceOfOn_fieldCount_mono and
-    _eq_of_varFree (both now need `x ∈ V`), no_mgu_on_of_witness_shrinks
-    (stated for an ARBITRARY unifier predicate, which is what A4 needs).
-    All four base techniques re-proved at the On level —
-    wand_no_mgu_count_on, vars_vs_field_no_mgu_on, field_vs_vars_no_mgu_on,
-    two_sided_no_mgu_on, allvar_swap_no_mgu_on — with the old names kept as
-    one-line corollaries, so nothing downstream moved.
-    CAVEAT: A4 was to be its main consumer and A4 is cancelled, so HasMguOn is
-    currently NOT load-bearing — the terminal-configuration statement involves
-    no invented vars and strict HasMgu would do. Kept because ¬HasMguOn V is
-    strictly stronger (the base theorems say more for free) and because a
-    DEFERRING driver would need it. Do not oversell it.
-  - [ ] the algorithm repair suggested by stuck_masks_mgu: on a stuck sub-call,
-    DEFER the equation, run the residual, retry against the solution — the
-    parked-stump idea inside unification. Open: termination, confluence, and
-    whether mgu-on-success survives. The only route to a non-conservative
-    `.stuck`.
-  - [ ] the expandR driver arm — two more cases in `unifySpineMF`, two more
-    `Terminal` fields, and the reversal transport for the four reflection
-    lemmas. The only thing between Stage 3 and `terminal_masks_mgu`.
-  - [ ] `uniqueHost` needs the SOLVER STATE to close the last vacuous-success
-    class: the offending field is hosted in a fresh tail that an earlier binding
-    already made part of another variable, and the detector only compares the
-    payload with the host variable itself. The accumulated solution is never
-    threaded back into the spines.
-  - [ ] sorted ftv, second half. `Ty/Row.sortedFtv` (State.lean) and
-    `Ty/Row.allRowVars` (Defs.lean) exist; `bindTy` still tests the sort-blind
-    `τ.ftv`, which is the over-conservatism the thesis flags.
-  - [ ] termination. Naive Rémy measure does not close: renaming adds no fields,
-    so the host keeps count_l = 0 and the same var is re-expandable at the same
-    label; the bound must come from the other side's l-fields, which solve-and-apply adds.
-  - [ ] ⊴ covering order on qualified schemes — needed to even STATE "principal type improves under reduction"
-  - [ ] solver state S = (θ, Δ, W), stump wake-up, confluence of the final state
-- Not blocked by any of this: L2 type safety (qProgress/qPreservation) and
-  selQ_instance_closed stand on their own. The open work is purely algorithmic.
-- [ ] Termination
-  - Fuzzing suggests, that the algorithm actually terminates
-- [ ] Principality
-  - [ ] covering order on schemes ⊴
 
 ## Symbols
 - ↓: Row-lookup relation, three-way result r := (τ | ⊥ | ?)
