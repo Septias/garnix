@@ -2260,6 +2260,51 @@ theorem TyPrec.unk_below {B : Type} {τ : Ty B}
     (h : TyPrec .unk τ) : τ = .unk := by
   cases h <;> rfl
 
+-- The two row-level inversions, same shape as the type-level ones above.
+-- ⊢  ρ' ⊑ᵣ (l: τ)  ⟹  ρ' = (l: τ') with τ' ⊑ₜ τ
+theorem RowPrec.sing_inv {B : Type} {ρ' : Row B} {l : Label} {τ : Ty B}
+    (h : RowPrec ρ' (.sing l τ)) : ∃ τ', ρ' = .sing l τ' ∧ TyPrec τ' τ := by
+  cases h with
+  | refl _ => exact ⟨τ, rfl, .refl τ⟩
+  | sing h => exact ⟨_, rfl, h⟩
+
+-- ⊢  ρ' ⊑ᵣ (ρ₁ | ρ₂)  ⟹  ρ' = (ρ₁' | ρ₂') with ρᵢ' ⊑ᵣ ρᵢ
+theorem RowPrec.cat_inv {B : Type} {ρ' ρ₁ ρ₂ : Row B}
+    (h : RowPrec ρ' (.cat ρ₁ ρ₂)) :
+    ∃ ρ₁' ρ₂', ρ' = .cat ρ₁' ρ₂' ∧ RowPrec ρ₁' ρ₁ ∧ RowPrec ρ₂' ρ₂ := by
+  cases h with
+  | refl _ => exact ⟨ρ₁, ρ₂, rfl, .refl ρ₁, .refl ρ₂⟩
+  | cat h₁ h₂ => exact ⟨_, _, rfl, h₁, h₂⟩
+
+-- ⊑ IS TRANSITIVE — announced as admissible above, proved here because the
+-- up-to-precision covering order ⊴⊑ (Qualified.lean) composes two precision
+-- steps. The recursion runs on the UPPER derivation and the inversions supply
+-- the matching shape below it; `.unk` is the only place the two derivations
+-- stop being congruent, and it absorbs everything.
+-- ⊢  τ₁ ⊑ₜ τ₂ ⟹ τ₂ ⊑ₜ τ₃ ⟹ τ₁ ⊑ₜ τ₃      (and the row twin)
+mutual
+theorem TyPrec.trans {B : Type} : {τ₁ τ₂ τ₃ : Ty B} →
+    TyPrec τ₁ τ₂ → TyPrec τ₂ τ₃ → TyPrec τ₁ τ₃
+  | _, _, _, h₁, .refl _   => h₁
+  | _, _, _, _,  .unk _    => .unk _
+  | _, _, _, h₁, .fn ha hb => by
+      obtain ⟨_, _, rfl, hp, hq⟩ := TyPrec.fn_inv h₁
+      exact .fn (TyPrec.trans hp ha) (TyPrec.trans hq hb)
+  | _, _, _, h₁, .rcd hr   => by
+      obtain ⟨_, rfl, hρ⟩ := TyPrec.rcd_inv h₁
+      exact .rcd (RowPrec.trans hρ hr)
+
+theorem RowPrec.trans {B : Type} : {ρ₁ ρ₂ ρ₃ : Row B} →
+    RowPrec ρ₁ ρ₂ → RowPrec ρ₂ ρ₃ → RowPrec ρ₁ ρ₃
+  | _, _, _, h₁, .refl _    => h₁
+  | _, _, _, h₁, .sing h    => by
+      obtain ⟨_, rfl, hτ⟩ := RowPrec.sing_inv h₁
+      exact .sing (TyPrec.trans hτ h)
+  | _, _, _, h₁, .cat ha hb => by
+      obtain ⟨_, _, rfl, hA, hB⟩ := RowPrec.cat_inv h₁
+      exact .cat (RowPrec.trans hA ha) (RowPrec.trans hB hb)
+end
+
 -- r' ⊑ r on lookup results: the lifting of ⊑ with ? as top. Only ? can
 -- improve; definite results are final (their found-types may sharpen once
 -- row precision is in play — on a fixed row they stay on the nose).

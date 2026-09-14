@@ -268,6 +268,161 @@ theorem qualified_principal_scheme {B C : Type} (constTy : C → B) :
    selQ_inst_found Ctx.empty (.rcd .empty), selQ_inst_absent Ctx.empty⟩
 
 
+--============================ THE COVERING ORDER ==============================--
+-- σ ⊴ σ' — "σ' is at least as general as σ" [glossar: ⊴]. A scheme says exactly
+-- what its instances say, so generality is instance containment. Two wrinkles
+-- are specific to THIS calculus and both are forced, not chosen:
+--
+--  (1) Γ-RELATIVITY. ≥_Γ reads Γ's row-solutions through discharge, so the
+--      instance set of a stump-carrying scheme MOVES as unification writes
+--      solutions. ⊴[Γ] compares at one context; ⊴ demands containment in EVERY
+--      context, which is what survives the extension Γ ⊑ Γ' that a let-bound
+--      scheme sees between its generalization and its uses. For plain schemes
+--      the two coincide (covered_toQ) — Q = ∅ makes ≥_Γ Γ-independent.
+--
+--  (2) BLUR. The typing relation is closed under T-★-intro (qUnk); an instance
+--      set is not, because ★ is rigid (finalized_no_blur). λx.x.l types at
+--      {(l: 𝓫)} → ★, and that type is NOT an instance of selQ: discharge pins
+--      the result at 𝓫 (selQ_no_blurred_inst). So plain containment can never
+--      state principality here — no scheme's instances exhaust a blur-closed
+--      typing set — and the order that can is ⊴⊑, containment UP TO PRECISION:
+--      σ' must offer, for each instance of σ, an instance at least as precise.
+--
+-- NB: `Covers θ σ σ'` in minimal.lean is a different relation — transport of
+-- instances along one substitution, used by the substitution lemma. This is the
+-- generality preorder on schemes and quantifies over instances, not over θ.
+
+namespace QScheme
+
+-- Inst_Γ(σ) ⊆ Inst_Γ(σ')
+def CoveredAt {B : Type} (Γ : Ctx B) (σ σ' : QScheme B) : Prop :=
+  ∀ τ, QScheme.Inst Γ σ τ → QScheme.Inst Γ σ' τ
+
+-- containment in every context
+def Covered {B : Type} (σ σ' : QScheme B) : Prop :=
+  ∀ Γ, CoveredAt Γ σ σ'
+
+-- ... up to precision: σ' answers each instance of σ with one at least as
+-- precise. This is the order principality is stated in.
+def PrecCoveredAt {B : Type} (Γ : Ctx B) (σ σ' : QScheme B) : Prop :=
+  ∀ τ, QScheme.Inst Γ σ τ → ∃ τ', QScheme.Inst Γ σ' τ' ∧ TyPrec τ' τ
+
+def PrecCovered {B : Type} (σ σ' : QScheme B) : Prop :=
+  ∀ Γ, PrecCoveredAt Γ σ σ'
+
+end QScheme
+
+notation:50 σ:51 " ⊴[" Γ "] " σ':51 => QScheme.CoveredAt Γ σ σ'
+infix:50 " ⊴ "  => QScheme.Covered
+notation:50 σ:51 " ⊴⊑[" Γ "] " σ':51 => QScheme.PrecCoveredAt Γ σ σ'
+infix:50 " ⊴⊑ " => QScheme.PrecCovered
+
+-- Both are preorders, and neither is antisymmetric: α-renamed binders give
+-- distinct schemes with equal instance sets, so ⊴ ∩ ⊵ is the equivalence the
+-- order is really about.
+theorem QScheme.CoveredAt.refl {B : Type} (Γ : Ctx B) (σ : QScheme B) :
+    σ ⊴[Γ] σ := fun _ h => h
+
+theorem QScheme.CoveredAt.trans {B : Type} {Γ : Ctx B} {σ₁ σ₂ σ₃ : QScheme B}
+    (h₁ : σ₁ ⊴[Γ] σ₂) (h₂ : σ₂ ⊴[Γ] σ₃) : σ₁ ⊴[Γ] σ₃ :=
+  fun τ hτ => h₂ τ (h₁ τ hτ)
+
+theorem QScheme.Covered.refl {B : Type} (σ : QScheme B) : σ ⊴ σ :=
+  fun Γ => CoveredAt.refl Γ σ
+
+theorem QScheme.Covered.trans {B : Type} {σ₁ σ₂ σ₃ : QScheme B}
+    (h₁ : σ₁ ⊴ σ₂) (h₂ : σ₂ ⊴ σ₃) : σ₁ ⊴ σ₃ :=
+  fun Γ => (h₁ Γ).trans (h₂ Γ)
+
+theorem QScheme.PrecCoveredAt.refl {B : Type} (Γ : Ctx B) (σ : QScheme B) :
+    σ ⊴⊑[Γ] σ := fun τ hτ => ⟨τ, hτ, .refl τ⟩
+
+-- the only place ⊑-transitivity is consumed
+theorem QScheme.PrecCoveredAt.trans {B : Type} {Γ : Ctx B} {σ₁ σ₂ σ₃ : QScheme B}
+    (h₁ : σ₁ ⊴⊑[Γ] σ₂) (h₂ : σ₂ ⊴⊑[Γ] σ₃) : σ₁ ⊴⊑[Γ] σ₃ := by
+  intro τ hτ
+  obtain ⟨τ', hτ', hp'⟩ := h₁ τ hτ
+  obtain ⟨τ'', hτ'', hp''⟩ := h₂ τ' hτ'
+  exact ⟨τ'', hτ'', hp''.trans hp'⟩
+
+theorem QScheme.PrecCovered.trans {B : Type} {σ₁ σ₂ σ₃ : QScheme B}
+    (h₁ : σ₁ ⊴⊑ σ₂) (h₂ : σ₂ ⊴⊑ σ₃) : σ₁ ⊴⊑ σ₃ :=
+  fun Γ => (h₁ Γ).trans (h₂ Γ)
+
+-- ⊴ refines ⊴⊑ (precision is reflexive), so every result about ⊴ transports.
+theorem QScheme.CoveredAt.toPrec {B : Type} {Γ : Ctx B} {σ σ' : QScheme B}
+    (h : σ ⊴[Γ] σ') : σ ⊴⊑[Γ] σ' := fun τ hτ => ⟨τ, h τ hτ, .refl τ⟩
+
+-- PLAIN SCHEMES: ⊴ is exactly L1 instance containment, in every context at
+-- once. The seam of QScheme.inst_toQ, one level up.
+-- ⊢  σ.toQ ⊴ σ'.toQ  ↔  ∀ τ. σ ≥ τ → σ' ≥ τ
+theorem QScheme.covered_toQ {B : Type} {σ σ' : Scheme B} :
+    σ.toQ ⊴ σ'.toQ ↔ ∀ τ, σ.Inst τ → σ'.Inst τ := by
+  constructor
+  · intro h τ hτ
+    exact QScheme.inst_toQ.mp (h Ctx.empty τ (QScheme.inst_toQ.mpr hτ))
+  · intro h Γ τ hτ
+    exact QScheme.inst_toQ.mpr (h τ (QScheme.inst_toQ.mp hτ))
+
+-- A monotype sits below σ' exactly when σ' instantiates to it — the base case
+-- every generalization argument bottoms out in.
+-- ⊢  ⟨[], [], τ₁⟩ ⊴[Γ] σ'  ↔  σ' ≥_Γ τ₁
+theorem QScheme.coveredAt_mono {B : Type} {Γ : Ctx B} {τ₁ : Ty B}
+    {σ' : QScheme B} :
+    (⟨[], [], τ₁⟩ : QScheme B) ⊴[Γ] σ' ↔ QScheme.Inst Γ σ' τ₁ := by
+  constructor
+  · intro h
+    exact h τ₁ (QScheme.inst_toQ.mpr (Scheme.Inst.self ⟨[], τ₁⟩))
+  · intro h τ hτ
+    rw [QScheme.Inst.mono hτ]
+    exact h
+
+-- ⊴ IS BLIND TO VACUITY: a scheme with no Γ-instance sits below everything.
+-- This is qLet's inhabitation premise seen from the order side — generality
+-- alone cannot rule out a scheme that promises nothing, which is why
+-- Principal (below) carries inhabitation as a separate conjunct.
+-- ⊢  (¬ ∃ τ. σ ≥_Γ τ)  ⟹  σ ⊴[Γ] σ'     (for EVERY σ')
+theorem QScheme.coveredAt_of_uninhabited {B : Type} {Γ : Ctx B}
+    {σ σ' : QScheme B} (h : ¬ ∃ τ, QScheme.Inst Γ σ τ) : σ ⊴[Γ] σ' :=
+  fun τ hτ => absurd ⟨τ, hτ⟩ h
+
+-- WHY ⊴ IS NOT ENOUGH (1): the blurred type {(l: 𝓫)} → ★ is NOT an instance of
+-- selQ. θ must send β to (l: 𝓫), the lookup on that row is definitely found 𝓫,
+-- and discharge then pins δ at 𝓫 — never at ★. (It IS a typing of λx.x.l:
+-- selEx_blurred_typing, at the end of this file.)
+-- ⊢  ¬ ( selQ ≥_∅ ({(l: 𝓫)} → ★) )
+theorem selQ_no_blurred_inst {B : Type} (b : B) :
+    ¬ QScheme.Inst Ctx.empty (selQ B)
+        (.fn (.rcd (.sing "l" (.base b))) .unk) := by
+  rintro ⟨θ, -, hdis, hbody⟩
+  simp only [selQ, Ty.applySubst, Row.applySubst] at hbody
+  injection hbody with h1 h2
+  injection h1 with hβ
+  have hrow : (Row.var "β").applySubst θ = Row.sing "l" (.base b) := hβ
+  have hs := hdis ⟨.var "β", "l", "δ"⟩ (by simp [selQ])
+  cases hs with
+  | hit hl hres =>
+      rw [hrow] at hl
+      cases lookup_det hl (Lookup.hit (Γ := Ctx.empty))
+      rw [h2] at hres
+      cases hres
+  | abs hl _ =>
+      rw [hrow] at hl
+      cases lookup_det hl (Lookup.hit (Γ := Ctx.empty))
+  | unk hl _ =>
+      rw [hrow] at hl
+      cases lookup_det hl (Lookup.hit (Γ := Ctx.empty))
+
+-- ... and (2): under ⊴⊑ the same scheme DOES answer it, with the sharper
+-- found-instance {(l: 𝓫)} → 𝓫 ⊑ {(l: 𝓫)} → ★. Blur is absorbed by the order
+-- instead of by the scheme.
+-- ⊢  ∃ τ'. selQ ≥_∅ τ' ∧ τ' ⊑ₜ ({(l: 𝓫)} → ★)
+theorem selQ_prec_answers_blur {B : Type} (b : B) :
+    ∃ τ', QScheme.Inst Ctx.empty (selQ B) τ' ∧
+      TyPrec τ' (.fn (.rcd (.sing "l" (.base b))) .unk) :=
+  ⟨_, selQ_inst_found Ctx.empty (.base b), .fn (.refl _) (.unk _)⟩
+
+
 --------------------------- THE L2 TYPING RELATION ----------------------------
 -- The qualified declarative system [algorithmic.typ, L2]: contexts bind
 -- QSchemes, T-var instantiates via ≥_Γ (instantiation-with-discharge), and
@@ -1001,5 +1156,520 @@ theorem qPreservation
     (hs : Step e e') :
     QTyped constTy ⟨[], []⟩ e' τ :=
   qpreservation_aux ht rfl hs
+
+--====================== PRINCIPALITY IN THE ⊴⊑ ORDER ========================--
+-- The other half of selQ_no_blurred_inst: the type it refuses IS a typing.
+-- T-★-intro blurs the found-selection, so the typing set of λx.x.l contains
+-- {(l: 𝓫)} → ★ while the instance set of selQ does not.
+-- ⊢  ∅ ⊢_Q λx.x.l : {(l: 𝓫_c)} → ★
+theorem selEx_blurred_typing {B C : Type} (constTy : C → B) (c : C) :
+    QTyped constTy ⟨[], []⟩ (selEx C)
+      (.fn (.rcd (.sing "l" (.base (constTy c)))) .unk) :=
+  by
+  refine .qLam (.qUnk (τ := .base (constTy c)) (.qSel
+    (.qVar (σ := ⟨[], [], .rcd (.sing "l" (.base (constTy c)))⟩) ?_ ?_) .hit))
+  · simp [QCtx.bindTy, QCtx.bindScheme, QCtx.lookup]
+  · exact QScheme.inst_toQ.mpr (Scheme.Inst.self ⟨[], _⟩)
+
+-- The two halves together: selQ is instance-closed, yet a typing of λx.x.l
+-- escapes its instance set. "Instances = typings" is therefore unreachable for
+-- this scheme, and principality MUST be stated up to precision.
+-- ⊢  (∅ ⊢_Q λx.x.l : {(l: 𝓫_c)} → ★)  ∧  ¬ (selQ ≥_∅ {(l: 𝓫_c)} → ★)
+theorem selQ_misses_a_typing {B C : Type} (constTy : C → B) (c : C) :
+    QTyped constTy ⟨[], []⟩ (selEx C)
+        (.fn (.rcd (.sing "l" (.base (constTy c)))) .unk) ∧
+    ¬ QScheme.Inst Ctx.empty (selQ B)
+        (.fn (.rcd (.sing "l" (.base (constTy c)))) .unk) :=
+  ⟨selEx_blurred_typing constTy c, selQ_no_blurred_inst (constTy c)⟩
+
+-- PRINCIPALITY. Three conjuncts, one per failure mode the development has
+-- already exhibited:
+--   (1) SOUND       every instance is a typing        (selQ_instance_closed)
+--   (2) INHABITED   at least one instance exists      (qLet's premise; ⊴ is
+--                   blind to vacuity, coveredAt_of_uninhabited)
+--   (3) COVERING    every typing is answered by an instance AT LEAST AS
+--                   PRECISE — up to precision, because the typing set is
+--                   blur-closed and no instance set is (selQ_misses_a_typing)
+--
+-- CONJUNCT 3 IN THIS ⊑-ONLY FORM IS REFUTED: selQ_not_principalStrict. The
+-- typing set is closed under T-eq as well, and ⊑ cannot absorb ≈. Principal
+-- (below, with ≼) is the corrected statement; this one is kept because it is
+-- what the refutation is about.
+def QScheme.PrincipalStrict {B C : Type} (constTy : C → B) (Γ : QCtx B)
+    (e : Expr C) (σ : QScheme B) : Prop :=
+  (∀ τ, QScheme.Inst Γ.ctx σ τ → QTyped constTy Γ e τ) ∧
+  (∃ τ, QScheme.Inst Γ.ctx σ τ) ∧
+  (∀ τ, QTyped constTy Γ e τ → ∃ τ', QScheme.Inst Γ.ctx σ τ' ∧ TyPrec τ' τ)
+
+-- A principal scheme is ⊴⊑-greatest among the SOUND schemes for e: any scheme
+-- whose instances are all typings sits below it. This is what makes the
+-- definition an order-theoretic one rather than three unrelated clauses.
+-- ⊢  σ principal for e,  every σ''-instance a typing  ⟹  σ'' ⊴⊑[Γ] σ
+theorem QScheme.PrincipalStrict.greatest {B C : Type} {constTy : C → B}
+    {Γ : QCtx B} {e : Expr C} {σ σ'' : QScheme B}
+    (hp : QScheme.PrincipalStrict constTy Γ e σ)
+    (hcl : ∀ τ, QScheme.Inst Γ.ctx σ'' τ → QTyped constTy Γ e τ) :
+    σ'' ⊴⊑[Γ.ctx] σ :=
+  fun τ hτ => hp.2.2 τ (hcl τ hτ)
+
+-- Where selQ stands today: conjuncts (1) and (2) are discharged here. (3) is
+-- REFUTED in its ⊑-only form (selQ_not_principalStrict) and OPEN in the
+-- corrected ≼ form, where it needs an L2 inversion for λx.x.l the way
+-- minimal.lean's sel_var_unk is the L1 one.
+-- ⊢  (∀ τ. selQ ≥_∅ τ ⟹ ∅ ⊢_Q λx.x.l : τ)  ∧  ∃ τ. selQ ≥_∅ τ
+theorem selQ_sound_and_inhabited {B C : Type} (constTy : C → B) :
+    (∀ τ, QScheme.Inst Ctx.empty (selQ B) τ →
+      QTyped constTy (⟨[], []⟩ : QCtx B) (selEx C) τ) ∧
+    (∃ τ, QScheme.Inst Ctx.empty (selQ B) τ) :=
+  ⟨fun τ hτ => (selQ_instance_closed constTy Ctx.empty τ hτ).toQ,
+   ⟨_, selQ_inst_absent Ctx.empty⟩⟩
+
+
+--=================== (1) ⊴ ACTS ON CONTEXTS: SCHEME WEAKENING =================--
+-- The order earns its keep here. A context binding is consumed by qVar ALONE,
+-- and qVar instantiates — so replacing a bound scheme by a ⊴-larger one can
+-- only add instances and every use survives. QCtx.Sub demands EQUAL schemes;
+-- this is the same preorder with ⊴ in its place.
+--
+-- CONTRAVARIANCE WARNING. Generality helps only in the CONTEXT. The scheme a
+-- `let` generalizes to sits in qLet's instance-closed premise, which quantifies
+-- over ALL its instances, so making THAT scheme larger makes the premise
+-- HARDER. `let` is antitone in the scheme it binds and monotone in the context
+-- it types under; only the latter is what this section is about, which is why
+-- the qLet case below rebinds the SAME σ on both sides.
+
+def QCtx.SubCov {B : Type} (Γ₁ Γ₂ : QCtx B) : Prop :=
+  (∀ x σ, Γ₁.lookup x = some σ → ∃ σ', Γ₂.lookup x = some σ' ∧ σ ⊴[Γ₁.ctx] σ') ∧
+  (∀ α, Γ₁.ctx.lookupRow α = Γ₂.ctx.lookupRow α)
+
+-- Equal schemes are a special case: ⊴ is reflexive.
+theorem QCtx.Sub.toSubCov {B : Type} {Γ₁ Γ₂ : QCtx B} (h : QCtx.Sub Γ₁ Γ₂) :
+    QCtx.SubCov Γ₁ Γ₂ :=
+  ⟨fun x σ hx => ⟨σ, h.1 x σ hx, QScheme.CoveredAt.refl _ σ⟩, h.2⟩
+
+theorem QCtx.SubCov.refl {B : Type} (Γ : QCtx B) : QCtx.SubCov Γ Γ :=
+  (QCtx.Sub.refl Γ).toSubCov
+
+-- Binding the same scheme on both sides respects it (the row-view is untouched,
+-- so the ⊴[Γ₁.ctx] carried by the tail still reads the same solutions).
+theorem QCtx.SubCov.bindScheme {B : Type} {Γ₁ Γ₂ : QCtx B}
+    (h : QCtx.SubCov Γ₁ Γ₂) (x : Var) (σ : QScheme B) :
+    QCtx.SubCov (Γ₁.bindScheme x σ) (Γ₂.bindScheme x σ) := by
+  refine ⟨fun y σ' hy => ?_, h.2⟩
+  rw [QCtx.lookup_bindScheme] at hy ⊢
+  cases hxy : (x == y)
+  · simp only [hxy, Bool.false_eq_true, if_false] at hy ⊢
+    exact h.1 y σ' hy
+  · simp only [hxy, if_true] at hy ⊢
+    exact ⟨σ', hy, QScheme.CoveredAt.refl _ σ'⟩
+
+theorem QCtx.SubCov.bindTy {B : Type} {Γ₁ Γ₂ : QCtx B} (h : QCtx.SubCov Γ₁ Γ₂)
+    (x : Var) (τ : Ty B) :
+    QCtx.SubCov (Γ₁.bindTy x τ) (Γ₂.bindTy x τ) :=
+  h.bindScheme x ⟨[], [], τ⟩
+
+-- ⊢  Γ₁ ⊴-sub Γ₂,  Γ₁ ⊢_Q e : τ   ⟹   Γ₂ ⊢_Q e : τ
+mutual
+theorem qtyped_cov {B C : Type} {constTy : C → B} :
+    {Γ₁ Γ₂ : QCtx B} → {e : Expr C} → {τ : Ty B} → QCtx.SubCov Γ₁ Γ₂ →
+    QTyped constTy Γ₁ e τ → QTyped constTy Γ₂ e τ
+  | _, _, _, _, _,  .qCon         => .qCon
+  | _, _, _, _, hs, .qVar h hi    =>
+      let ⟨_, h', hcov⟩ := hs.1 _ _ h
+      .qVar h' ((hcov _ hi).congr_rowEnv hs.2)
+  | _, _, _, _, hs, .qEq h heq    => .qEq (qtyped_cov hs h) heq
+  | _, _, _, _, hs, .qLam h       => .qLam (qtyped_cov (hs.bindTy _ _) h)
+  | _, _, _, _, hs, .qApp h₁ h₂   => .qApp (qtyped_cov hs h₁) (qtyped_cov hs h₂)
+  | _, _, _, _, hs, .qCat h₁ h₂   => .qCat (qtyped_cov hs h₁) (qtyped_cov hs h₂)
+  | _, _, _, _, hs, .qSel h hl    =>
+      .qSel (qtyped_cov hs h) (Lookup.congr_rowEnv hs.2 hl)
+  | _, _, _, _, hs, .qSelUnk h hl =>
+      .qSelUnk (qtyped_cov hs h) (Lookup.congr_rowEnv hs.2 hl)
+  | _, _, _, _, hs, .qSelAbs h hl =>
+      .qSelAbs (qtyped_cov hs h) (Lookup.congr_rowEnv hs.2 hl)
+  | _, _, _, _, hs, .qUnk h       => .qUnk (qtyped_cov hs h)
+  | _, _, _, _, hs, .qLet h₁ hne h₂ =>
+      .qLet (fun τ' hi =>
+              qtyped_cov hs (h₁ τ' (hi.congr_rowEnv (fun α => (hs.2 α).symm))))
+            (let ⟨τ', hi⟩ := hne; ⟨τ', hi.congr_rowEnv hs.2⟩)
+            (qtyped_cov (hs.bindScheme _ _) h₂)
+  | _, _, _, _, hs, .qRcd h       => .qRcd (qtypedBody_cov hs h)
+
+theorem qtypedBody_cov {B C : Type} {constTy : C → B} :
+    {Γ₁ Γ₂ : QCtx B} → {b : RecBody (Expr C)} → {ρ : Row B} →
+    QCtx.SubCov Γ₁ Γ₂ → QTypedBody constTy Γ₁ b ρ → QTypedBody constTy Γ₂ b ρ
+  | _, _, _, _, _,  .empty     => .empty
+  | _, _, _, _, hs, .field h   => .field (qtyped_cov hs h)
+  | _, _, _, _, hs, .cat h₁ h₂ =>
+      .cat (qtypedBody_cov hs h₁) (qtypedBody_cov hs h₂)
+end
+
+-- The headline corollary: swap ONE binding for a ⊴-larger scheme.
+-- ⊢  Γ, x:σ ⊢_Q e : τ,  σ ⊴[Γ.ctx] σ'   ⟹   Γ, x:σ' ⊢_Q e : τ
+theorem qtyped_bind_cov {B C : Type} {constTy : C → B} {Γ : QCtx B} {x : Var}
+    {e : Expr C} {τ : Ty B} {σ σ' : QScheme B}
+    (h : QTyped constTy (Γ.bindScheme x σ) e τ)
+    (hcov : σ ⊴[Γ.ctx] σ') :
+    QTyped constTy (Γ.bindScheme x σ') e τ := by
+  refine qtyped_cov (Γ₁ := Γ.bindScheme x σ) (Γ₂ := Γ.bindScheme x σ')
+    ⟨fun y μ hy => ?_, fun _ => rfl⟩ h
+  rw [QCtx.lookup_bindScheme] at hy ⊢
+  cases hxy : (x == y)
+  · simp only [hxy, Bool.false_eq_true, if_false] at hy ⊢
+    exact ⟨μ, hy, QScheme.CoveredAt.refl _ μ⟩
+  · simp only [hxy, if_true] at hy ⊢
+    cases hy
+    exact ⟨σ', rfl, hcov⟩
+
+
+--============ (3) ⊴[Γ] IS NOT STABLE UNDER CONTEXT EXTENSION =================--
+-- The question the Γ-relative order has to answer: does Γ ⊑ Γ' preserve
+-- σ ⊴[Γ] σ'? NO — and the counterexample is two lines of data, so the uniform
+-- ⊴ (containment in EVERY context) is not belt-and-braces but the only version
+-- that survives unification writing a solution.
+--
+-- The mechanism is exactly the ?-arm of discharge that lookup_mono refuses to
+-- transport: σ below parks on an UNSOLVED row-var, so at Γ it can only
+-- discharge at ★ and its instance set is {★} — matched by the monotype ★.
+-- Solving α turns the same stump into a definite hit, the instance set moves to
+-- {𝓫}, and the monotype cannot follow. Generality claims made against a
+-- context are claims about that context's solutions, nothing more.
+
+-- ∀δ. ⟨α.l ↓ δ⟩ ⇒ δ      (α FREE — the stump parks on the context, not on a binder)
+private def parkQ (B : Type) : QScheme B :=
+  ⟨["δ"], [⟨.var "α", "l", "δ"⟩], .var "δ"⟩
+
+-- Γ' = Γ, α = (l: 𝓫)
+private def solvedCtx {B : Type} (b : B) : Ctx B :=
+  ⟨[], [("α", .sing "l" (.base b))]⟩
+
+private theorem rowExt_solved {B : Type} (b : B) :
+    Ctx.RowExt Ctx.empty (solvedCtx b) := by
+  intro α ρ h
+  simp [Ctx.empty, Ctx.lookupRow] at h
+
+-- With α unsolved the lookup is ? and discharge can only finalize at ★.
+-- ⊢  parkQ ≥_∅ τ  ⟹  τ = ★
+private theorem parkQ_inst_empty {B : Type} {τ : Ty B}
+    (h : QScheme.Inst Ctx.empty (parkQ B) τ) : τ = .unk := by
+  obtain ⟨θ, hfix, hdis, hbody⟩ := h
+  have hrow : (Row.var "α").applySubst θ = Row.var "α" := by
+    simp only [Row.applySubst]
+    exact hfix.2 "α" (by simp [parkQ])
+  have hs := hdis ⟨.var "α", "l", "δ"⟩ (by simp [parkQ])
+  simp only [parkQ, Ty.applySubst] at hbody
+  cases hs with
+  | hit hl _ =>
+      rw [hrow] at hl
+      cases hl with
+      | var h _ => simp [Ctx.empty, Ctx.lookupRow] at h
+  | abs hl _ =>
+      rw [hrow] at hl
+      cases hl with
+      | var h _ => simp [Ctx.empty, Ctx.lookupRow] at h
+  | unk _ hres => rw [← hbody, hres]
+
+-- Solve α and the SAME scheme instantiates to 𝓫 instead.
+-- ⊢  parkQ ≥_(α = (l: 𝓫)) 𝓫
+private theorem parkQ_inst_solved {B : Type} (b : B) :
+    QScheme.Inst (solvedCtx b) (parkQ B) (.base b) := by
+  refine ⟨⟨fun γ => if γ = "δ" then .base b else .var γ, fun γ => .var γ⟩,
+          ⟨fun γ hγ => ?_, fun _ _ => rfl⟩, fun s hs => ?_, ?_⟩
+  · have hne : γ ≠ "δ" := by rintro rfl; exact hγ (by simp [parkQ])
+    simp [hne]
+  · simp only [parkQ, List.mem_singleton] at hs
+    subst hs
+    exact .hit (τ := .base b)
+      (by simpa [Row.applySubst] using
+        Lookup.var (Γ := solvedCtx b) (α := "α") (by simp [solvedCtx, Ctx.lookupRow]) .hit)
+      (by simp)
+  · simp [parkQ, Ty.applySubst]
+
+-- The counterexample, both orders at once.
+-- ⊢  ∅ ⊑ (α = (l: 𝓫))  ∧  parkQ ⊴[∅] ⟨★⟩  ∧  ¬ parkQ ⊴[α = (l: 𝓫)] ⟨★⟩
+--                                          ∧  ¬ parkQ ⊴⊑[α = (l: 𝓫)] ⟨★⟩
+theorem covered_not_rowExt_stable {B : Type} (b : B) :
+    Ctx.RowExt Ctx.empty (solvedCtx b) ∧
+    (parkQ B ⊴[Ctx.empty] ⟨[], [], .unk⟩) ∧
+    ¬ (parkQ B ⊴[solvedCtx b] ⟨[], [], .unk⟩) ∧
+    ¬ (parkQ B ⊴⊑[solvedCtx b] ⟨[], [], .unk⟩) := by
+  refine ⟨rowExt_solved b, fun τ hτ => ?_, fun hcov => ?_, fun hcov => ?_⟩
+  · rw [parkQ_inst_empty hτ]
+    exact QScheme.inst_toQ.mpr (Scheme.Inst.self ⟨[], .unk⟩)
+  · have := QScheme.Inst.mono (hcov _ (parkQ_inst_solved b))
+    cases this
+  · obtain ⟨τ', hτ', hp⟩ := hcov _ (parkQ_inst_solved b)
+    cases QScheme.Inst.mono hτ'
+    cases TyPrec.unk_below hp
+
+
+--================ (2) A SYNTACTIC WITNESS FOR ⊴ ==============================--
+-- ⊴ as defined quantifies over instances, so nothing can ever PRODUCE evidence
+-- of it — a solver needs a certificate. This is the Jones-style generic-instance
+-- condition adapted to stumps: one substitution θ that instantiates σ' to σ,
+-- a freshness side condition, and entailment of σ''s stumps by σ's.
+--
+-- The entailment premise is where this calculus differs from the qualified-type
+-- frameworks it borrows from. There, entailment is a PARAMETER with no solving
+-- procedure. Here discharge is "run the lookup and compare", so the premise is
+-- a decidable check on concrete stumps, not an assumption about a relation.
+
+-- θ cut down to `vars` — the standard fix for composing an instantiation with a
+-- substitution whose domain overlaps the other scheme's binders.
+def TySubst.restrict {B : Type} (θ : TySubst B) (vars : List TyVar) : TySubst B :=
+  ⟨fun γ => if γ ∈ vars then θ.ty γ else .var γ,
+   fun γ => if γ ∈ vars then θ.row γ else .var γ⟩
+
+theorem TySubst.restrict_fixedOutside {B : Type} (θ : TySubst B)
+    (vars : List TyVar) : (θ.restrict vars).FixedOutside vars :=
+  ⟨fun _ h => by simp [TySubst.restrict, h], fun _ h => by simp [TySubst.restrict, h]⟩
+
+-- σ ⊴ σ' certified by θ.
+structure QScheme.Witness {B : Type} (Γ : Ctx B) (σ σ' : QScheme B)
+    (θ : TySubst B) : Prop where
+  -- θ only moves σ''s own binders
+  fixed  : θ.FixedOutside σ'.vars
+  -- ... and instantiates σ' to σ
+  body   : σ'.body.applySubst θ = σ.body
+  -- σ's binders are fresh for σ' (Jones' side condition; without it the two
+  -- binder groups capture each other and the composite is not an instantiation)
+  fresh  : ∀ γ ∈ σ'.body.ftv, γ ∉ σ'.vars → γ ∉ σ.vars
+  -- every instantiation of σ that discharges σ's stumps discharges σ''s
+  entail : ∀ χ : TySubst B, χ.FixedOutside σ.vars →
+             (∀ s ∈ σ.constraints, s.Discharge Γ χ) →
+             ∀ s' ∈ σ'.constraints,
+               s'.Discharge Γ ((χ.comp θ).restrict σ'.vars)
+
+-- ⊢  Witness Γ σ σ' θ   ⟹   σ ⊴[Γ] σ'
+theorem QScheme.covered_of_witness {B : Type} {Γ : Ctx B} {σ σ' : QScheme B}
+    {θ : TySubst B} (h : QScheme.Witness Γ σ σ' θ) : σ ⊴[Γ] σ' := by
+  rintro τ ⟨χ, hχfix, hχdis, hχbody⟩
+  refine ⟨(χ.comp θ).restrict σ'.vars,
+          TySubst.restrict_fixedOutside _ _,
+          h.entail χ hχfix hχdis, ?_⟩
+  -- the restriction is invisible to σ'.body: outside σ'.vars the composite is
+  -- already the identity, by θ's fixedness and σ's binders being fresh
+  have hcongr : σ'.body.applySubst ((χ.comp θ).restrict σ'.vars)
+      = σ'.body.applySubst (χ.comp θ) := by
+    refine Ty.applySubst_congr _ (fun γ hγ => ?_)
+    by_cases hv : γ ∈ σ'.vars
+    · simp [TySubst.restrict, hv]
+    · have hσ : γ ∉ σ.vars := h.fresh γ hγ hv
+      constructor
+      · simp [TySubst.restrict, hv, TySubst.comp, h.fixed.1 γ hv,
+              Ty.applySubst, hχfix.1 γ hσ]
+      · simp [TySubst.restrict, hv, TySubst.comp, h.fixed.2 γ hv,
+              Row.applySubst, hχfix.2 γ hσ]
+  rw [hcongr, ← Ty.applySubst_applySubst, h.body, hχbody]
+
+-- PLAIN SCHEMES: with no stumps the entailment premise is empty and the
+-- condition collapses to the textbook generic-instance rule — σ' covers σ as
+-- soon as one substitution on σ''s binders reaches σ's body.
+-- ⊢  θ(σ'.body) = σ.body,  θ fixed outside σ'.vars,  σ.vars fresh for σ'
+--        ⟹  σ.toQ ⊴ σ'.toQ
+theorem Scheme.covered_of_inst {B : Type} {σ σ' : Scheme B} {θ : TySubst B}
+    (hfix : θ.FixedOutside σ'.vars)
+    (hbody : σ'.body.applySubst θ = σ.body)
+    (hfresh : ∀ γ ∈ σ'.body.ftv, γ ∉ σ'.vars → γ ∉ σ.vars) :
+    σ.toQ ⊴ σ'.toQ :=
+  fun _ => QScheme.covered_of_witness
+    { fixed := hfix, body := hbody, fresh := hfresh,
+      entail := fun _ _ _ s' hs' => by simp [Scheme.toQ] at hs' }
+
+
+-- A WITNESS WITH A REAL STUMP. selQ with its row-variable already solved:
+--   ∀δ. ⟨(l: 𝓫).l ↓ δ⟩ ⇒ {(l: 𝓫)} → δ      ⊴      ∀β δ. ⟨β.l ↓ δ⟩ ⇒ {β} → δ
+-- θ = [β ↦ (l: 𝓫)] certifies it, and the entailment premise is discharged by
+-- RUNNING the lookup: on the solved row it is a definite hit, so χ's image of δ
+-- is pinned at 𝓫 and the composite discharges selQ's stump at the same type.
+-- This is the step a solver would emit when it instantiates a parked scheme.
+private def selQb {B : Type} (b : B) : QScheme B :=
+  ⟨["δ"], [⟨.sing "l" (.base b), "l", "δ"⟩],
+   .fn (.rcd (.sing "l" (.base b))) (.var "δ")⟩
+
+private def solveβ {B : Type} (b : B) : TySubst B :=
+  ⟨fun γ => .var γ, fun γ => if γ = "β" then .sing "l" (.base b) else .var γ⟩
+
+-- ⊢  selQb ⊴ selQ      (in every context)
+theorem selQ_covers_selQb {B : Type} (b : B) : selQb b ⊴ selQ B := by
+  intro Γ
+  refine QScheme.covered_of_witness (θ := solveβ b) ⟨⟨fun _ _ => rfl, ?_⟩, ?_, ?_, ?_⟩
+  · intro γ hγ
+    have hne : γ ≠ "β" := by rintro rfl; exact hγ (by simp [selQ])
+    simp [solveβ, hne]
+  · simp [selQ, selQb, solveβ, Ty.applySubst, Row.applySubst]
+  · intro γ _ hv hc
+    simp [selQb] at hc
+    exact hv (by simp [selQ, hc])
+  · intro χ hχfix hdis s' hs'
+    simp only [selQ, List.mem_singleton] at hs'
+    subst hs'
+    have hs := hdis ⟨.sing "l" (.base b), "l", "δ"⟩ (by simp [selQb])
+    have hrowχ : (Row.sing "l" (Ty.base b)).applySubst χ = .sing "l" (.base b) := by
+      simp [Row.applySubst, Ty.applySubst]
+    have hδ : χ.ty "δ" = .base b := by
+      cases hs with
+      | hit hl hres =>
+          rw [hrowχ] at hl
+          cases lookup_det hl (Lookup.hit (Γ := Γ) (l := "l") (τ := .base b))
+          exact hres
+      | abs hl _ =>
+          rw [hrowχ] at hl
+          cases lookup_det hl (Lookup.hit (Γ := Γ) (l := "l") (τ := .base b))
+      | unk hl _ =>
+          rw [hrowχ] at hl
+          cases lookup_det hl (Lookup.hit (Γ := Γ) (l := "l") (τ := .base b))
+    refine .hit (τ := .base b) ?_ ?_
+    · have hrow : (Row.var "β").applySubst
+            ((χ.comp (solveβ b)).restrict (selQ B).vars) = .sing "l" (.base b) := by
+        simp [Row.applySubst, TySubst.restrict, selQ, TySubst.comp, solveβ,
+              Ty.applySubst]
+      rw [hrow]
+      exact .hit
+    · simp [TySubst.restrict, selQ, TySubst.comp, solveβ, Ty.applySubst, hδ]
+
+
+--========= (4) CONJUNCT 3 IS FALSE AS STATED — ≈ MUST JOIN ⊑ ================--
+-- Attempting `Principal selQ (λx.x.l)` refutes its own third conjunct. The
+-- typing set has TWO closure properties, not one: T-★-intro blurs (which ⊴⊑
+-- absorbs) and T-eq re-associates rows (which it does NOT). ⊑ is pure
+-- congruence on rows — it can sharpen a payload but can never move a field
+-- past a unit — so a typing obtained by ≈ on the RESULT is out of reach of
+-- every instance, however imprecise.
+--
+-- Witness: x.l selects a payload {ε | m: 𝓬} and T-eq retypes it as {m: 𝓬}.
+--   λx. x.l  :  {(l: {ε | m: 𝓬})} → {m: 𝓬}
+-- Any selQ instance ⊑-below this must, by the DOMAIN, put the same payload τ_p
+-- under l, hence have RESULT τ_p (the lookup is a definite hit), and τ_p would
+-- have to be ⊑-below both {ε | m: 𝓬} and {m: 𝓬}. The first forces τ_p's row to
+-- be a `cat`, the second forces it to be a `sing`. Nothing satisfies both.
+
+private def blurA {B : Type} (b : B) : Ty B :=
+  .rcd (.cat .empty (.sing "m" (.base b)))
+
+private def blurB {B : Type} (b : B) : Ty B :=
+  .rcd (.sing "m" (.base b))
+
+-- ⊢  ∅ ⊢_Q λx.x.l : {(l: {ε | m: 𝓫})} → {m: 𝓫}
+theorem selEx_equiv_typing {B C : Type} (constTy : C → B) (c : C) :
+    QTyped constTy ⟨[], []⟩ (selEx C)
+      (.fn (.rcd (.sing "l" (blurA (constTy c)))) (blurB (constTy c))) := by
+  refine .qLam (.qEq (τ₁ := blurA (constTy c)) (.qSel
+    (.qVar (σ := ⟨[], [], .rcd (.sing "l" (blurA (constTy c)))⟩) ?_ ?_) .hit) ?_)
+  · simp [QCtx.bindTy, QCtx.bindScheme, QCtx.lookup]
+  · exact QScheme.inst_toQ.mpr (Scheme.Inst.self ⟨[], _⟩)
+  · exact .rcd .unitL
+
+-- ⊢  ¬ ∃ τ'. selQ ≥_∅ τ' ∧ τ' ⊑ₜ ({(l: {ε | m: 𝓫})} → {m: 𝓫})
+theorem selQ_no_prec_answer {B : Type} (b : B) :
+    ¬ ∃ τ', QScheme.Inst Ctx.empty (selQ B) τ' ∧
+        TyPrec τ' (.fn (.rcd (.sing "l" (blurA b))) (blurB b)) := by
+  rintro ⟨τ', ⟨θ, hfix, hdis, hbody⟩, hprec⟩
+  simp only [selQ, Ty.applySubst, Row.applySubst] at hbody
+  subst hbody
+  obtain ⟨d, r, hfn, hd, hr⟩ := TyPrec.fn_inv hprec
+  injection hfn with h1 h2
+  subst h1; subst h2
+  -- the domain pins θβ to one l-field whose payload τp is ⊑-below blurA
+  obtain ⟨ρp, hρp, hρprec⟩ := TyPrec.rcd_inv hd
+  injection hρp with hβ
+  obtain ⟨τp, hsing, hτp⟩ := RowPrec.sing_inv hρprec
+  subst hsing
+  -- the lookup on that row is a definite hit, so discharge pins θδ = τp
+  have hs := hdis ⟨.var "β", "l", "δ"⟩ (by simp [selQ])
+  have hrow : (Row.var "β").applySubst θ = Row.sing "l" τp := by
+    simp only [Row.applySubst]; exact hβ
+  have hδ : θ.ty "δ" = τp := by
+    cases hs with
+    | hit hl hres =>
+        rw [hrow] at hl
+        cases lookup_det hl (Lookup.hit (Γ := Ctx.empty) (l := "l") (τ := τp))
+        exact hres
+    | abs hl _ =>
+        rw [hrow] at hl
+        cases lookup_det hl (Lookup.hit (Γ := Ctx.empty) (l := "l") (τ := τp))
+    | unk hl _ =>
+        rw [hrow] at hl
+        cases lookup_det hl (Lookup.hit (Γ := Ctx.empty) (l := "l") (τ := τp))
+  rw [hδ] at hr
+  -- τp ⊑ blurA forces a `cat` row, τp ⊑ blurB a `sing` row: no row is both
+  simp only [blurA] at hτp
+  simp only [blurB] at hr
+  obtain ⟨ρ₁, hρ₁, hp₁⟩ := TyPrec.rcd_inv hτp
+  subst hρ₁
+  obtain ⟨ρ₂, hρ₂, hp₂⟩ := TyPrec.rcd_inv hr
+  injection hρ₂ with hρeq
+  subst hρeq
+  obtain ⟨a, a', hcatshape, -, -⟩ := RowPrec.cat_inv hp₁
+  obtain ⟨t, hsingshape, -⟩ := RowPrec.sing_inv hp₂
+  rw [hcatshape] at hsingshape
+  cases hsingshape
+
+-- The corollary, and the correction it forces: principality must be stated
+-- modulo BOTH closure properties. τ' ≼ τ — "τ' is at least as informative as
+-- τ, up to row equivalence" — is the relation that does it.
+def TyBelow {B : Type} (τ' τ : Ty B) : Prop :=
+  ∃ τ₀, TyEquiv τ' τ₀ ∧ TyPrec τ₀ τ
+
+infix:50 " ≼ₜ " => TyBelow
+
+theorem TyBelow.refl {B : Type} (τ : Ty B) : τ ≼ₜ τ := ⟨τ, .refl τ, .refl τ⟩
+
+theorem TyBelow.of_prec {B : Type} {τ' τ : Ty B} (h : TyPrec τ' τ) : τ' ≼ₜ τ :=
+  ⟨τ', .refl τ', h⟩
+
+theorem TyBelow.of_equiv {B : Type} {τ' τ : Ty B} (h : TyEquiv τ' τ) : τ' ≼ₜ τ :=
+  ⟨τ, h, .refl τ⟩
+
+-- ⊑-covering fails for selQ at λx.x.l; ≼-covering does not (the same instance
+-- answers, now via ≈ on the result instead of ⊑).
+-- ⊢  ¬(⊑-answer)  ∧  ∃ τ'. selQ ≥_∅ τ' ∧ τ' ≼ₜ ({(l: {ε | m: 𝓫})} → {m: 𝓫})
+theorem selQ_needs_equiv {B : Type} (b : B) :
+    (¬ ∃ τ', QScheme.Inst Ctx.empty (selQ B) τ' ∧
+        TyPrec τ' (.fn (.rcd (.sing "l" (blurA b))) (blurB b))) ∧
+    (∃ τ', QScheme.Inst Ctx.empty (selQ B) τ' ∧
+        τ' ≼ₜ (.fn (.rcd (.sing "l" (blurA b))) (blurB b))) :=
+  ⟨selQ_no_prec_answer b,
+   ⟨_, selQ_inst_found Ctx.empty (blurA b),
+    TyBelow.of_equiv (.fn (.refl _) (.rcd .unitL))⟩⟩
+
+
+-- selQ does NOT satisfy the ⊑-only principality — conjunct 3 fails on the
+-- T-eq witness. This is the statement that had to be corrected, not a defect
+-- of selQ: no instance set is closed under ≈.
+-- ⊢  ¬ PrincipalStrict selQ (λx.x.l)
+theorem selQ_not_principalStrict {B C : Type} (constTy : C → B) (c : C) :
+    ¬ QScheme.PrincipalStrict constTy (⟨[], []⟩ : QCtx B) (selEx C) (selQ B) :=
+  fun hp => selQ_no_prec_answer (constTy c)
+    (hp.2.2 _ (selEx_equiv_typing constTy c))
+
+-- The corrected order: covering up to ≈-then-⊑.
+def QScheme.BelowCoveredAt {B : Type} (Γ : Ctx B) (σ σ' : QScheme B) : Prop :=
+  ∀ τ, QScheme.Inst Γ σ τ → ∃ τ', QScheme.Inst Γ σ' τ' ∧ τ' ≼ₜ τ
+
+notation:50 σ:51 " ⊴≼[" Γ "] " σ':51 => QScheme.BelowCoveredAt Γ σ σ'
+
+theorem QScheme.BelowCoveredAt.refl {B : Type} (Γ : Ctx B) (σ : QScheme B) :
+    σ ⊴≼[Γ] σ := fun τ hτ => ⟨τ, hτ, TyBelow.refl τ⟩
+
+theorem QScheme.PrecCoveredAt.toBelow {B : Type} {Γ : Ctx B} {σ σ' : QScheme B}
+    (h : σ ⊴⊑[Γ] σ') : σ ⊴≼[Γ] σ' :=
+  fun τ hτ => let ⟨τ', hτ', hp⟩ := h τ hτ; ⟨τ', hτ', TyBelow.of_prec hp⟩
+
+-- PRINCIPALITY, CORRECTED. Same three conjuncts; the covering one now reads
+-- the typing set's OTHER closure property as well.
+def QScheme.Principal {B C : Type} (constTy : C → B) (Γ : QCtx B) (e : Expr C)
+    (σ : QScheme B) : Prop :=
+  (∀ τ, QScheme.Inst Γ.ctx σ τ → QTyped constTy Γ e τ) ∧
+  (∃ τ, QScheme.Inst Γ.ctx σ τ) ∧
+  (∀ τ, QTyped constTy Γ e τ → ∃ τ', QScheme.Inst Γ.ctx σ τ' ∧ τ' ≼ₜ τ)
+
+-- ⊢  σ principal for e,  every σ''-instance a typing  ⟹  σ'' ⊴≼[Γ] σ
+theorem QScheme.Principal.greatest {B C : Type} {constTy : C → B} {Γ : QCtx B}
+    {e : Expr C} {σ σ'' : QScheme B} (hp : QScheme.Principal constTy Γ e σ)
+    (hcl : ∀ τ, QScheme.Inst Γ.ctx σ'' τ → QTyped constTy Γ e τ) :
+    σ'' ⊴≼[Γ.ctx] σ :=
+  fun τ hτ => hp.2.2 τ (hcl τ hτ)
+
 
 end MinimalCalculus
