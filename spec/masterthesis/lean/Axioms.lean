@@ -8,6 +8,7 @@
 import Qualified
 import RowUnify
 import Refutations
+import Infer
 
 namespace MinimalCalculus
 
@@ -244,24 +245,30 @@ info: 'MinimalCalculus.stuck_masks_mgu' depends on axioms: [propext, Classical.c
 -/
 #guard_msgs in #print axioms stuck_masks_mgu
 
--- AND THE SHARPEST. Retreating from the `.stuck` VERDICT to TERMINAL
--- CONFIGURATIONS does not rescue the leg either: (l:{w}) ≐ᵣ (w | v) is terminal
--- (each of the twelve moves `none` by rfl) and has a UNIQUE unifier, because
--- hosting the field in w would force θw ≈ (l:{θw}). Field counts are blind to
--- that — the recursion passes under a record constructor — so the guards miss
--- it; `rcdDepth` is the ≈-invariant that sees it.
-/-- info: 'MinimalCalculus.terminal_masks_mgu_terminal' depends on axioms: [propext] -/
-#guard_msgs in #print axioms terminal_masks_mgu_terminal
+-- AND THE SHARPEST ONE, WHICH NO LONGER HOLDS. Retreating from the `.stuck`
+-- VERDICT to TERMINAL CONFIGURATIONS used to fail too: (l:{w}) ≐ᵣ (w | v) was
+-- terminal and has a UNIQUE unifier, because hosting the field in w would force
+-- θw ≈ (l:{θw}). Field counts are blind to that — the recursion passes under a
+-- record constructor — so the guards missed it; `rcdDepth` is the ≈-invariant
+-- that sees it.
+--
+-- The configuration was terminal only because U-expand was ONE-ENDED. With the
+-- right-end arm it is not terminal any more and the driver solves it, so
+-- `terminalNoMgu_false` is GONE and `TerminalNoMgu` is open — unrefuted and
+-- unproven. What is guarded now is that pair of facts.
+/-- info: 'MinimalCalculus.terminal_masks_mgu_not_terminal' depends on axioms: [propext] -/
+#guard_msgs in #print axioms terminal_masks_mgu_not_terminal
 
+/--
+info: 'MinimalCalculus.terminal_masks_mgu_now_solved' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms terminal_masks_mgu_now_solved
+
+-- … and the hand-built mgu it finds, which is now the arm's correctness witness
 /--
 info: 'MinimalCalculus.terminal_masks_mgu' depends on axioms: [propext, Classical.choice, Quot.sound]
 -/
 #guard_msgs in #print axioms terminal_masks_mgu
-
-/--
-info: 'MinimalCalculus.terminalNoMgu_false' depends on axioms: [propext, Classical.choice, Quot.sound]
--/
-#guard_msgs in #print axioms terminalNoMgu_false
 
 -- The tool behind it: record NESTING is a ≈-invariant, so an occurs violation
 -- that hides inside a field payload is still visible. Axiom-light on purpose.
@@ -293,6 +300,51 @@ info: 'MinimalCalculus.qProgress' depends on axioms: [propext, Classical.choice,
 info: 'MinimalCalculus.qPreservation' depends on axioms: [propext, Classical.choice, Quot.sound]
 -/
 #guard_msgs in #print axioms qPreservation
+
+-- ## The covering order ⊴ / ⊴⊑ (Qualified) — the vocabulary of principality
+-- ⊑-transitivity is what ⊴⊑ composes with; axiom-free, like the ≗-congruence.
+/-- info: 'MinimalCalculus.TyPrec.trans' does not depend on any axioms -/
+#guard_msgs in #print axioms TyPrec.trans
+
+/-- info: 'MinimalCalculus.QScheme.covered_toQ' does not depend on any axioms -/
+#guard_msgs in #print axioms QScheme.covered_toQ
+
+-- The obstruction that forces the up-to-precision order: a TYPING of λx.x.l
+-- that is not an INSTANCE of selQ, because ★ is rigid under substitution.
+/-- info: 'MinimalCalculus.selQ_no_blurred_inst' depends on axioms: [propext] -/
+#guard_msgs in #print axioms selQ_no_blurred_inst
+
+/--
+info: 'MinimalCalculus.selEx_blurred_typing' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms selEx_blurred_typing
+
+-- ⊴ acting on contexts: scheme weakening for the L2 typing relation.
+/-- info: 'MinimalCalculus.qtyped_bind_cov' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in #print axioms qtyped_bind_cov
+
+-- The certificate form of ⊴ — what a solver would emit.
+/-- info: 'MinimalCalculus.QScheme.covered_of_witness' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in #print axioms QScheme.covered_of_witness
+
+-- ⊴[Γ] does NOT survive Γ ⊑ Γ': the ?-arm of discharge moves under a solution,
+-- which is why the uniform ⊴ quantifies over every context.
+/--
+info: 'MinimalCalculus.covered_not_rowExt_stable' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms covered_not_rowExt_stable
+
+-- The second closure property of the typing set: ⊑ alone cannot absorb T-eq,
+-- so ⊑-only principality is refuted for selQ and ≼ replaces it.
+/--
+info: 'MinimalCalculus.selQ_not_principalStrict' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms selQ_not_principalStrict
+
+/--
+info: 'MinimalCalculus.selQ_needs_equiv' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms selQ_needs_equiv
 
 -- ## ⟦S⟧ as a context (RowUnify.State) — the θ ↦ rowEnv bridge
 -- Without these two, no inference rule that performs a lookup under a partial
@@ -400,5 +452,20 @@ info: 'MinimalCalculus.selfref_lone_host_reported' depends on axioms: [propext, 
 
 /-- info: 'MinimalCalculus.Sol.closes_of_wf' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in #print axioms Sol.closes_of_wf
+
+-- ## INFERENCE  Γ; S ⊢ e ⇒ τ; S′  (Infer.lean)
+-- The judgement is new and the first thing to guard is that it is NOT EMPTY:
+-- the motivating program goes through it end to end, landing on A-sel-? with
+-- one stump parked — the shape `selQ` describes declaratively.
+/-- info: 'MinimalCalculus.selEx_infers' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in #print axioms selEx_infers
+
+-- `? on α`: the blocker of an unknown lookup, which A-sel-? and K-repark both
+-- need and `Lookup` does not record. Sound, complete and deterministic.
+/-- info: 'MinimalCalculus.Lookup.unknown_blocked' depends on axioms: [propext] -/
+#guard_msgs in #print axioms Lookup.unknown_blocked
+
+/-- info: 'MinimalCalculus.LookupBlocked.det' depends on axioms: [propext] -/
+#guard_msgs in #print axioms LookupBlocked.det
 
 end MinimalCalculus

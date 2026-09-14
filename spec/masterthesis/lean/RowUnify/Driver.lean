@@ -2,7 +2,7 @@
 --
 -- Part of RowUnify; see RowUnify.lean for the overview.
 
-import RowUnify.Reflection
+import RowUnify.ExpandR
 
 namespace MinimalCalculus
 
@@ -97,6 +97,14 @@ theorem UResM.Mono.expandRes {B : Type} (S : Supply) (β : TyVar) (l : Label) (�
   · subst h; exact .inl rfl
   · subst h; exact .inr rfl
 
+-- ⊢  … and with the RIGHT-end one
+theorem UResM.Mono.expandResR {B : Type} (S : Supply) (β : TyVar) (l : Label) (τ : Ty B)
+    {r r' : UResM B} (h : UResM.Mono r r') :
+    UResM.Mono (expandResRM S β l τ r) (expandResRM S β l τ r') := by
+  rcases h with h | h
+  · subst h; exact .inl rfl
+  · subst h; exact .inr rfl
+
 -- THE FUEL LEMMA, for both sorts at once (the mutual induction is on the
 -- budget, with no measure hypothesis, because `outOfFuel` absorbs the
 -- shortfall).
@@ -104,14 +112,14 @@ theorem UResM.Mono.expandRes {B : Type} (S : Supply) (β : TyVar) (l : Label) (�
 -- that need no recursion at all (a variable binding, ★, a base clash, an
 -- exhausted side) is `outOfFuel`, and those arms do not look at the budget.
 private theorem unifyM_fuel_mono_zero {B : Type} [DecidableEq B] (fuel' : Nat) :
-    (∀ (S : Supply) (τ τ' : Ty B),
-        UResM.Mono (unifyTyF S 0 τ τ') (unifyTyF S fuel' τ τ')) ∧
-    (∀ (S : Supply) (s₁ s₂ : List (Atom B)),
-        UResM.Mono (unifySpineMF S 0 s₁ s₂) (unifySpineMF S fuel' s₁ s₂)) := by
+    (∀ (Θ : DepGraph) (S : Supply) (τ τ' : Ty B),
+        UResM.Mono (unifyTyF Θ S 0 τ τ') (unifyTyF Θ S fuel' τ τ')) ∧
+    (∀ (Θ : DepGraph) (S : Supply) (s₁ s₂ : List (Atom B)),
+        UResM.Mono (unifySpineMF Θ S 0 s₁ s₂) (unifySpineMF Θ S fuel' s₁ s₂)) := by
   cases fuel' with
-  | zero => exact ⟨fun _ _ _ => .inr rfl, fun _ _ _ => .inr rfl⟩
+  | zero => exact ⟨fun _ _ _ _ => .inr rfl, fun _ _ _ _ => .inr rfl⟩
   | succ g =>
-      refine ⟨fun S τ τ' => ?_, fun S s₁ s₂ => ?_⟩
+      refine ⟨fun Θ S τ τ' => ?_, fun Θ S s₁ s₂ => ?_⟩
       · cases τ <;> cases τ' <;> first | exact .inr rfl | exact .inl rfl
       · cases s₁ with
         | nil => exact .inr rfl
@@ -122,10 +130,10 @@ private theorem unifyM_fuel_mono_zero {B : Type} [DecidableEq B] (fuel' : Nat) :
 
 theorem unifyM_fuel_mono {B : Type} [DecidableEq B] (N : Nat) :
     ∀ fuel, fuel ≤ N → ∀ fuel', fuel ≤ fuel' →
-      (∀ (S : Supply) (τ τ' : Ty B),
-          UResM.Mono (unifyTyF S fuel τ τ') (unifyTyF S fuel' τ τ')) ∧
-      (∀ (S : Supply) (s₁ s₂ : List (Atom B)),
-          UResM.Mono (unifySpineMF S fuel s₁ s₂) (unifySpineMF S fuel' s₁ s₂)) := by
+      (∀ (Θ : DepGraph) (S : Supply) (τ τ' : Ty B),
+          UResM.Mono (unifyTyF Θ S fuel τ τ') (unifyTyF Θ S fuel' τ τ')) ∧
+      (∀ (Θ : DepGraph) (S : Supply) (s₁ s₂ : List (Atom B)),
+          UResM.Mono (unifySpineMF Θ S fuel s₁ s₂) (unifySpineMF Θ S fuel' s₁ s₂)) := by
   induction N with
   | zero =>
       intro fuel hfN fuel' _
@@ -139,12 +147,12 @@ theorem unifyM_fuel_mono {B : Type} [DecidableEq B] (N : Nat) :
       | succ f =>
           obtain ⟨f', rfl⟩ : ∃ g, fuel' = g + 1 := ⟨fuel' - 1, by omega⟩
           have IH' := IH f (by omega) f' (by omega)
-          refine ⟨fun S τ τ' => ?_, fun S s₁ s₂ => ?_⟩
+          refine ⟨fun Θ S τ τ' => ?_, fun Θ S s₁ s₂ => ?_⟩
           · cases τ <;> cases τ' <;>
               first
                 | exact .inr rfl
-                | exact UResM.Mono.seq (IH'.1 S _ _) (fun θ S' => IH'.1 S' _ _)
-                | exact IH'.2 S _ _
+                | exact UResM.Mono.seq (IH'.1 Θ S _ _) (fun θ S' => IH'.1 Θ S' _ _)
+                | exact IH'.2 Θ S _ _
           · cases s₁ with
             | nil => exact .inr rfl
             | cons a s₁ =>
@@ -153,73 +161,88 @@ theorem unifyM_fuel_mono {B : Type} [DecidableEq B] (N : Nat) :
               | cons b s₂ =>
                 simp only [unifySpineMF]
                 cases hsl : stripL (a :: s₁) (b :: s₂) with
-                | some p => obtain ⟨t₁, t₂⟩ := p; exact IH'.2 S t₁ t₂
+                | some p => obtain ⟨t₁, t₂⟩ := p; exact IH'.2 Θ S t₁ t₂
                 | none =>
                 cases hsr : stripR (a :: s₁) (b :: s₂) with
-                | some p => obtain ⟨t₁, t₂⟩ := p; exact IH'.2 S t₁ t₂
+                | some p => obtain ⟨t₁, t₂⟩ := p; exact IH'.2 Θ S t₁ t₂
                 | none =>
-                cases hv1 : solveVarM S (a :: s₁) (b :: s₂) with
+                cases hv1 : solveVarM Θ S (a :: s₁) (b :: s₂) with
                 | some r => exact .inr rfl
                 | none =>
-                cases hv2 : solveVarM S (b :: s₂) (a :: s₁) with
+                cases hv2 : solveVarM Θ S (b :: s₂) (a :: s₁) with
                 | some r => exact .inr rfl
                 | none =>
                 cases hml : matchL (a :: s₁) (b :: s₂) with
                 | some p =>
                     obtain ⟨τ0, τ0', t₁, t₂⟩ := p
-                    exact UResM.Mono.seq (IH'.1 S τ0 τ0') (fun θ S' => IH'.2 S' _ _)
+                    exact UResM.Mono.seq (IH'.1 Θ S τ0 τ0') (fun θ S' => IH'.2 Θ S' _ _)
                 | none =>
                 cases hml2 : matchL (b :: s₂) (a :: s₁) with
                 | some p =>
                     obtain ⟨τ0', τ0, t₂, t₁⟩ := p
-                    exact UResM.Mono.seq (IH'.1 S τ0 τ0') (fun θ S' => IH'.2 S' _ _)
+                    exact UResM.Mono.seq (IH'.1 Θ S τ0 τ0') (fun θ S' => IH'.2 Θ S' _ _)
                 | none =>
                 cases hmr : matchR (a :: s₁) (b :: s₂) with
                 | some p =>
                     obtain ⟨τ0, τ0', t₁, t₂⟩ := p
-                    exact UResM.Mono.seq (IH'.1 S τ0 τ0') (fun θ S' => IH'.2 S' _ _)
+                    exact UResM.Mono.seq (IH'.1 Θ S τ0 τ0') (fun θ S' => IH'.2 Θ S' _ _)
                 | none =>
                 cases hmr2 : matchR (b :: s₂) (a :: s₁) with
                 | some p =>
                     obtain ⟨τ0', τ0, t₂, t₁⟩ := p
-                    exact UResM.Mono.seq (IH'.1 S τ0 τ0') (fun θ S' => IH'.2 S' _ _)
+                    exact UResM.Mono.seq (IH'.1 Θ S τ0 τ0') (fun θ S' => IH'.2 Θ S' _ _)
                 | none =>
                 cases hg : groundMatch (a :: s₁) (b :: s₂) with
                 | some p =>
                     obtain ⟨τ0, τ0', t₁, t₂⟩ := p
-                    exact UResM.Mono.seq (IH'.1 S τ0 τ0') (fun θ S' => IH'.2 S' _ _)
+                    exact UResM.Mono.seq (IH'.1 Θ S τ0 τ0') (fun θ S' => IH'.2 Θ S' _ _)
                 | none =>
                 cases hg2 : groundMatch (b :: s₂) (a :: s₁) with
                 | some p =>
                     obtain ⟨τ0', τ0, t₂, t₁⟩ := p
-                    exact UResM.Mono.seq (IH'.1 S τ0 τ0') (fun θ S' => IH'.2 S' _ _)
+                    exact UResM.Mono.seq (IH'.1 Θ S τ0 τ0') (fun θ S' => IH'.2 Θ S' _ _)
                 | none =>
-                cases he1 : expandL S (a :: s₁) (b :: s₂) with
+                cases he1 : expandL Θ S (a :: s₁) (b :: s₂) with
                 | some p =>
                     obtain ⟨β0, l0, τ0, t₁, t₂⟩ := p
                     exact UResM.Mono.expandRes S β0 l0 τ0
-                      (IH'.2 S.fresh.2.fresh.2 t₁ t₂)
+                      (IH'.2 (expandDeps Θ S β0 τ0) S.fresh.2.fresh.2 t₁ t₂)
                 | none =>
-                cases he2 : expandL S (b :: s₂) (a :: s₁) with
+                cases he2 : expandL Θ S (b :: s₂) (a :: s₁) with
                 | some p =>
                     obtain ⟨β0, l0, τ0, t₁, t₂⟩ := p
                     exact UResM.Mono.expandRes S β0 l0 τ0
-                      (IH'.2 S.fresh.2.fresh.2 t₁ t₂)
+                      (IH'.2 (expandDeps Θ S β0 τ0) S.fresh.2.fresh.2 t₁ t₂)
+                | none =>
+                cases hpc : projClash (a :: s₁) (b :: s₂) with
+                | true => exact .inr rfl
+                | false =>
+                cases he3 : expandR Θ S (a :: s₁) (b :: s₂) with
+                | some p =>
+                    obtain ⟨β0, l0, τ0, t₁, t₂⟩ := p
+                    exact UResM.Mono.expandResR S β0 l0 τ0
+                      (IH'.2 (expandDeps Θ S β0 τ0) S.fresh.2.fresh.2 t₁ t₂)
+                | none =>
+                cases he4 : expandR Θ S (b :: s₂) (a :: s₁) with
+                | some p =>
+                    obtain ⟨β0, l0, τ0, t₁, t₂⟩ := p
+                    exact UResM.Mono.expandResR S β0 l0 τ0
+                      (IH'.2 (expandDeps Θ S β0 τ0) S.fresh.2.fresh.2 t₁ t₂)
                 | none => exact .inr rfl
 
 -- ⊢  a REACHED row verdict is fuel-independent
-theorem unifySpineMF_fuel_mono {B : Type} [DecidableEq B] {S : Supply}
+theorem unifySpineMF_fuel_mono {B : Type} [DecidableEq B] {Θ : DepGraph} {S : Supply}
     {fuel fuel' : Nat} {s₁ s₂ : List (Atom B)} (h : fuel ≤ fuel')
-    (hne : unifySpineMF S fuel s₁ s₂ ≠ .outOfFuel) :
-    unifySpineMF S fuel' s₁ s₂ = unifySpineMF S fuel s₁ s₂ :=
-  ((unifyM_fuel_mono fuel fuel (Nat.le_refl _) fuel' h).2 S s₁ s₂).resolve_left hne
+    (hne : unifySpineMF Θ S fuel s₁ s₂ ≠ .outOfFuel) :
+    unifySpineMF Θ S fuel' s₁ s₂ = unifySpineMF Θ S fuel s₁ s₂ :=
+  ((unifyM_fuel_mono fuel fuel (Nat.le_refl _) fuel' h).2 Θ S s₁ s₂).resolve_left hne
 
 -- ⊢  … and a reached type verdict
-theorem unifyTyF_fuel_mono {B : Type} [DecidableEq B] {S : Supply}
+theorem unifyTyF_fuel_mono {B : Type} [DecidableEq B] {Θ : DepGraph} {S : Supply}
     {fuel fuel' : Nat} {τ τ' : Ty B} (h : fuel ≤ fuel')
-    (hne : unifyTyF S fuel τ τ' ≠ .outOfFuel) :
-    unifyTyF S fuel' τ τ' = unifyTyF S fuel τ τ' :=
-  ((unifyM_fuel_mono fuel fuel (Nat.le_refl _) fuel' h).1 S τ τ').resolve_left hne
+    (hne : unifyTyF Θ S fuel τ τ' ≠ .outOfFuel) :
+    unifyTyF Θ S fuel' τ τ' = unifyTyF Θ S fuel τ τ' :=
+  ((unifyM_fuel_mono fuel fuel (Nat.le_refl _) fuel' h).1 Θ S τ τ').resolve_left hne
 
 -- ⊢  … lifted to the entry points
 theorem unifyRowM_fuel_mono {B : Type} [DecidableEq B] {fuel fuel' : Nat}

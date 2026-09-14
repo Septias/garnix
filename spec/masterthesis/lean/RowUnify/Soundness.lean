@@ -20,7 +20,7 @@ namespace MinimalCalculus
 -- unifyM_fuel_mono is not needed here.
 
 -- ⊢  α ≔ τ, once met, unifies α with τ
-theorem bindTy_sound {B : Type} {θ : TySubst B} {S : Supply} {α : TyVar} {τ : Ty B}
+theorem bindTy_sound {B : Type} {θ : TySubst B}  {S : Supply} {α : TyVar} {τ : Ty B}
     {s : Sol B} {S' : Supply}
     (h : bindTy S α τ = .success s S') (hsat : Sol.Sat θ s) :
     TyUnifies θ (.var α) τ := by
@@ -34,9 +34,9 @@ theorem bindTy_sound {B : Type} {θ : TySubst B} {S : Supply} {α : TyVar} {τ :
       exact hsat.1 (α, τ) List.mem_cons_self
 
 -- ⊢  U-var-solve, at the mutual result type
-theorem solveVarM_reflect {B : Type} {θ : TySubst B} {S : Supply}
+theorem solveVarM_reflect {B : Type} {θ : TySubst B} {Θ : DepGraph} {S : Supply}
     {s₁ s₂ : List (Atom B)} {s : Sol B} {S' : Supply}
-    (hsolve : solveVarM S s₁ s₂ = some (.success s S')) (hsat : Sol.Sat θ s) :
+    (hsolve : solveVarM Θ S s₁ s₂ = some (.success s S')) (hsat : Sol.Sat θ s) :
     RowEquiv ((ofSpine s₁).applySubst θ) ((ofSpine s₂).applySubst θ) := by
   cases s₁ with
   | nil => simp [solveVarM] at hsolve
@@ -72,10 +72,26 @@ theorem expandResM_success {B : Type} {S : Supply} {β : TyVar} {l : Label} {τ 
   | stuck     => cases h
   | outOfFuel => cases h
 
+-- ⊢  … and so does the RIGHT-end wrapper
+theorem expandResRM_success {B : Type} {S : Supply} {β : TyVar} {l : Label} {τ : Ty B}
+    {r : UResM B} {s : Sol B} {S' : Supply}
+    (h : expandResRM S β l τ r = .success s S') :
+    ∃ s', r = .success s' S' ∧
+      s = s'.comp ⟨[(S.fresh.1, τ)],
+                   [(β, .cat (.var S.fresh.2.fresh.1) (.sing l (.var S.fresh.1)))]⟩ := by
+  cases r with
+  | success s₀ S₀ =>
+      simp only [expandResRM, UResM.success.injEq] at h
+      exact ⟨s₀, by rw [h.2], h.1.symm⟩
+  | clash     => cases h
+  | occurs    => cases h
+  | stuck     => cases h
+  | outOfFuel => cases h
+
 -- Base cases: one side exhausted ⟹ allVarsEmpty forces the other's vars to ε.
 theorem unifySpineMF_nil_left_sound {B : Type} [DecidableEq B] {θ : TySubst B}
     (S : Supply) (fuel : Nat) (s₂ : List (Atom B)) {s : Sol B} {S' : Supply}
-    (h : unifySpineMF S fuel [] s₂ = .success s S') (hsat : Sol.Sat θ s) :
+    (h : unifySpineMF Θ S fuel [] s₂ = .success s S') (hsat : Sol.Sat θ s) :
     RowEquiv ((ofSpine ([] : List (Atom B))).applySubst θ) ((ofSpine s₂).applySubst θ) := by
   simp only [unifySpineMF] at h
   cases hae : allVarsEmpty s₂ with
@@ -88,7 +104,7 @@ theorem unifySpineMF_nil_left_sound {B : Type} [DecidableEq B] {θ : TySubst B}
 
 theorem unifySpineMF_cons_nil_sound {B : Type} [DecidableEq B] {θ : TySubst B}
     (S : Supply) (fuel : Nat) (a : Atom B) (s₁ : List (Atom B)) {s : Sol B} {S' : Supply}
-    (h : unifySpineMF S fuel (a :: s₁) [] = .success s S') (hsat : Sol.Sat θ s) :
+    (h : unifySpineMF Θ S fuel (a :: s₁) [] = .success s S') (hsat : Sol.Sat θ s) :
     RowEquiv ((ofSpine (a :: s₁)).applySubst θ)
              ((ofSpine ([] : List (Atom B))).applySubst θ) := by
   simp only [unifySpineMF] at h
@@ -103,25 +119,25 @@ theorem unifySpineMF_cons_nil_sound {B : Type} [DecidableEq B] {θ : TySubst B}
 -- ⊢  the base arm succeeds only on equal base types
 theorem base_arm_sound {B : Type} [DecidableEq B] {θ : TySubst B} {b b' : B}
     {S : Supply} {fuel : Nat} {s : Sol B} {S' : Supply}
-    (h : unifyTyF S fuel (.base b) (.base b') = .success s S') :
+    (h : unifyTyF Θ S fuel (.base b) (.base b') = .success s S') :
     TyUnifies θ (.base b) (.base b') := by
   by_cases hb : b = b'
   · subst hb; exact TyEquiv.refl _
   · simp [unifyTyF, hb] at h
 
 -- THE SOUNDNESS LEG, both sorts at once.
--- ⊢  unifyTyF S fuel τ τ' = success s _,  θ ⊨ s   ⟹   θ ⊨ τ ≐ τ'
--- ⊢  unifySpineMF S fuel s₁ s₂ = success s _,  θ ⊨ s
+-- ⊢  unifyTyF Θ S fuel τ τ' = success s _,  θ ⊨ s   ⟹   θ ⊨ τ ≐ τ'
+-- ⊢  unifySpineMF Θ S fuel s₁ s₂ = success s _,  θ ⊨ s
 --        ⟹   θ(ofSpine s₁) ≈ᵣ θ(ofSpine s₂)
 theorem unifyM_success_sound {B : Type} [DecidableEq B] {θ : TySubst B} (fuel : Nat) :
-    (∀ (S : Supply) (τ τ' : Ty B) {s : Sol B} {S' : Supply},
-        unifyTyF S fuel τ τ' = .success s S' → Sol.Sat θ s → TyUnifies θ τ τ') ∧
-    (∀ (S : Supply) (s₁ s₂ : List (Atom B)) {s : Sol B} {S' : Supply},
-        unifySpineMF S fuel s₁ s₂ = .success s S' → Sol.Sat θ s →
+    (∀ (Θ : DepGraph) (S : Supply) (τ τ' : Ty B) {s : Sol B} {S' : Supply},
+        unifyTyF Θ S fuel τ τ' = .success s S' → Sol.Sat θ s → TyUnifies θ τ τ') ∧
+    (∀ (Θ : DepGraph) (S : Supply) (s₁ s₂ : List (Atom B)) {s : Sol B} {S' : Supply},
+        unifySpineMF Θ S fuel s₁ s₂ = .success s S' → Sol.Sat θ s →
         RowEquiv ((ofSpine s₁).applySubst θ) ((ofSpine s₂).applySubst θ)) := by
   induction fuel with
   | zero =>
-      refine ⟨fun S τ τ' s S' h hsat => ?_, fun S s₁ s₂ s S' h hsat => ?_⟩
+      refine ⟨fun Θ S τ τ' s S' h hsat => ?_, fun Θ S s₁ s₂ s S' h hsat => ?_⟩
       · cases τ with
         | var α => exact bindTy_sound h hsat
         | base b =>
@@ -161,19 +177,19 @@ theorem unifyM_success_sound {B : Type} [DecidableEq B] {θ : TySubst B} (fuel :
   | succ fuel ih =>
       -- the shape every eq-emitting arm produces: split the composite, then
       -- undo the substitution the arm applied to the residual
-      have arm : ∀ (S : Supply) (τ τ' : Ty B) (t₁ t₂ : List (Atom B))
+      have arm : ∀ (Θ : DepGraph) (S : Supply) (τ τ' : Ty B) (t₁ t₂ : List (Atom B))
           {s : Sol B} {S' : Supply},
-          ((unifyTyF S fuel τ τ').seq fun θ' S'' =>
-              unifySpineMF S'' fuel (sApplySubst θ' t₁) (sApplySubst θ' t₂))
+          ((unifyTyF Θ S fuel τ τ').seq fun θ' S'' =>
+              unifySpineMF Θ S'' fuel (sApplySubst θ' t₁) (sApplySubst θ' t₂))
             = .success s S' → Sol.Sat θ s →
           TyUnifies θ τ τ' ∧
             RowEquiv ((ofSpine t₁).applySubst θ) ((ofSpine t₂).applySubst θ) := by
-        intro S τ τ' t₁ t₂ s S' h hsat
+        intro Θ S τ τ' t₁ t₂ s S' h hsat
         obtain ⟨s₁, S₁, s₂, hty, hrow, rfl⟩ := UResM.seq_success h
         obtain ⟨h₁, h₂⟩ := hsat.comp_inv
-        exact ⟨ih.1 S τ τ' hty h₁,
-               (unifies_sApplySubst_of_sat h₁ t₁ t₂).mp (ih.2 S₁ _ _ hrow h₂)⟩
-      refine ⟨fun S τ τ' s S' h hsat => ?_, fun S s₁ s₂ s S' h hsat => ?_⟩
+        exact ⟨ih.1 Θ S τ τ' hty h₁,
+               (unifies_sApplySubst_of_sat h₁ t₁ t₂).mp (ih.2 Θ S₁ _ _ hrow h₂)⟩
+      refine ⟨fun Θ S τ τ' s S' h hsat => ?_, fun Θ S s₁ s₂ s S' h hsat => ?_⟩
       · cases τ with
         | var α => exact bindTy_sound h hsat
         | base b =>
@@ -196,13 +212,13 @@ theorem unifyM_success_sound {B : Type} [DecidableEq B] {θ : TySubst B} (fuel :
             | base _ => cases h
             | unk => cases h
             | fn a₂ b₂ =>
-                replace h : ((unifyTyF S fuel a₁ a₂).seq fun θ' S'' =>
-                    unifyTyF S'' fuel (b₁.applySubst θ') (b₂.applySubst θ'))
+                replace h : ((unifyTyF Θ S fuel a₁ a₂).seq fun θ' S'' =>
+                    unifyTyF Θ S'' fuel (b₁.applySubst θ') (b₂.applySubst θ'))
                   = .success s S' := h
                 obtain ⟨s₁, S₁, s₂, hty, hrow, rfl⟩ := UResM.seq_success h
                 obtain ⟨h₁, h₂⟩ := hsat.comp_inv
-                exact TyEquiv.fn (ih.1 S a₁ a₂ hty h₁)
-                  ((tyUnifies_applySubst_of_sat h₁ b₁ b₂).mp (ih.1 S₁ _ _ hrow h₂))
+                exact TyEquiv.fn (ih.1 Θ S a₁ a₂ hty h₁)
+                  ((tyUnifies_applySubst_of_sat h₁ b₁ b₂).mp (ih.1 Θ S₁ _ _ hrow h₂))
             | rcd _ => cases h
         | rcd ρ₁ =>
             cases τ' with
@@ -211,10 +227,10 @@ theorem unifyM_success_sound {B : Type} [DecidableEq B] {θ : TySubst B} (fuel :
             | unk => cases h
             | fn _ _ => cases h
             | rcd ρ₂ =>
-                replace h : unifySpineMF S fuel ρ₁.toSpine ρ₂.toSpine = .success s S' := h
+                replace h : unifySpineMF Θ S fuel ρ₁.toSpine ρ₂.toSpine = .success s S' := h
                 exact TyEquiv.rcd
                   (((RowEquiv.applySubst θ (Row.toSpine_equiv ρ₁)).trans
-                      (ih.2 S _ _ h hsat)).trans
+                      (ih.2 Θ S _ _ h hsat)).trans
                     (RowEquiv.applySubst θ (Row.toSpine_equiv ρ₂)).symm)
       · cases s₁ with
         | nil => exact unifySpineMF_nil_left_sound S (fuel + 1) s₂ h hsat
@@ -226,19 +242,19 @@ theorem unifyM_success_sound {B : Type} [DecidableEq B] {θ : TySubst B} (fuel :
             cases hsl : stripL (a :: s₁) (b :: s₂) with
             | some p =>
               obtain ⟨t₁, t₂⟩ := p; simp only [hsl] at h
-              exact stripL_reflect hsl (ih.2 S t₁ t₂ h hsat)
+              exact stripL_reflect hsl (ih.2 Θ S t₁ t₂ h hsat)
             | none =>
             cases hsr : stripR (a :: s₁) (b :: s₂) with
             | some p =>
               obtain ⟨t₁, t₂⟩ := p; simp only [hsl, hsr] at h
-              exact stripR_reflect hsr (ih.2 S t₁ t₂ h hsat)
+              exact stripR_reflect hsr (ih.2 Θ S t₁ t₂ h hsat)
             | none =>
-            cases hv1 : solveVarM S (a :: s₁) (b :: s₂) with
+            cases hv1 : solveVarM Θ S (a :: s₁) (b :: s₂) with
             | some r =>
               simp only [hsl, hsr, hv1] at h
               exact solveVarM_reflect (hv1.trans (congrArg some h)) hsat
             | none =>
-            cases hv2 : solveVarM S (b :: s₂) (a :: s₁) with
+            cases hv2 : solveVarM Θ S (b :: s₂) (a :: s₁) with
             | some r =>
               simp only [hsl, hsr, hv1, hv2] at h
               exact (solveVarM_reflect (hv2.trans (congrArg some h)) hsat).symm
@@ -246,44 +262,44 @@ theorem unifyM_success_sound {B : Type} [DecidableEq B] {θ : TySubst B} (fuel :
             cases hml : matchL (a :: s₁) (b :: s₂) with
             | some p =>
               obtain ⟨τ0, τ0', t₁, t₂⟩ := p; simp only [hsl, hsr, hv1, hv2, hml] at h
-              obtain ⟨he, hr⟩ := arm S τ0 τ0' t₁ t₂ h hsat
+              obtain ⟨he, hr⟩ := arm Θ S τ0 τ0' t₁ t₂ h hsat
               exact matchL_reflect hml he hr
             | none =>
             cases hml2 : matchL (b :: s₂) (a :: s₁) with
             | some p =>
               obtain ⟨τ0', τ0, t₂, t₁⟩ := p; simp only [hsl, hsr, hv1, hv2, hml, hml2] at h
-              obtain ⟨he, hr⟩ := arm S τ0 τ0' t₁ t₂ h hsat
+              obtain ⟨he, hr⟩ := arm Θ S τ0 τ0' t₁ t₂ h hsat
               exact (matchL_reflect hml2 he.symm hr.symm).symm
             | none =>
             cases hmr : matchR (a :: s₁) (b :: s₂) with
             | some p =>
               obtain ⟨τ0, τ0', t₁, t₂⟩ := p
               simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr] at h
-              obtain ⟨he, hr⟩ := arm S τ0 τ0' t₁ t₂ h hsat
+              obtain ⟨he, hr⟩ := arm Θ S τ0 τ0' t₁ t₂ h hsat
               exact matchR_reflect hmr he hr
             | none =>
             cases hmr2 : matchR (b :: s₂) (a :: s₁) with
             | some p =>
               obtain ⟨τ0', τ0, t₂, t₁⟩ := p
               simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2] at h
-              obtain ⟨he, hr⟩ := arm S τ0 τ0' t₁ t₂ h hsat
+              obtain ⟨he, hr⟩ := arm Θ S τ0 τ0' t₁ t₂ h hsat
               exact (matchR_reflect hmr2 he.symm hr.symm).symm
             | none =>
             cases hg : groundMatch (a :: s₁) (b :: s₂) with
             | some p =>
               obtain ⟨τ0, τ0', t₁, t₂⟩ := p
               simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg] at h
-              obtain ⟨he, hr⟩ := arm S τ0 τ0' t₁ t₂ h hsat
+              obtain ⟨he, hr⟩ := arm Θ S τ0 τ0' t₁ t₂ h hsat
               exact groundMatch_reflect hg he hr
             | none =>
             cases hg2 : groundMatch (b :: s₂) (a :: s₁) with
             | some p =>
               obtain ⟨τ0', τ0, t₂, t₁⟩ := p
               simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2] at h
-              obtain ⟨he, hr⟩ := arm S τ0 τ0' t₁ t₂ h hsat
+              obtain ⟨he, hr⟩ := arm Θ S τ0 τ0' t₁ t₂ h hsat
               exact (groundMatch_reflect hg2 he.symm hr.symm).symm
             | none =>
-            cases he1 : expandL S (a :: s₁) (b :: s₂) with
+            cases he1 : expandL Θ S (a :: s₁) (b :: s₂) with
             | some p =>
               obtain ⟨β0, l0, τ0, t₁, t₂⟩ := p
               simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, he1] at h
@@ -294,9 +310,9 @@ theorem unifyM_success_sound {B : Type} [DecidableEq B] {θ : TySubst B} (fuel :
               refine expand_reflect hshape
                 (h₀.2 _ List.mem_cons_self) (h₀.1 _ List.mem_cons_self).symm ?_
               rw [← hren]
-              exact ih.2 S.fresh.2.fresh.2 t₁ t₂ hrec h'
+              exact ih.2 (expandDeps Θ S β0 τ0) S.fresh.2.fresh.2 t₁ t₂ hrec h'
             | none =>
-            cases he2 : expandL S (b :: s₂) (a :: s₁) with
+            cases he2 : expandL Θ S (b :: s₂) (a :: s₁) with
             | some p =>
               obtain ⟨β0, l0, τ0, t₁, t₂⟩ := p
               simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, he1, he2] at h
@@ -307,10 +323,45 @@ theorem unifyM_success_sound {B : Type} [DecidableEq B] {θ : TySubst B} (fuel :
               refine (expand_reflect hshape
                 (h₀.2 _ List.mem_cons_self) (h₀.1 _ List.mem_cons_self).symm ?_).symm
               rw [← hren]
-              exact ih.2 S.fresh.2.fresh.2 t₁ t₂ hrec h'
+              exact ih.2 (expandDeps Θ S β0 τ0) S.fresh.2.fresh.2 t₁ t₂ hrec h'
             | none =>
-              simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, he1, he2] at h
-              split at h <;> cases h
+            cases hpc : projClash (a :: s₁) (b :: s₂) with
+            | true =>
+              simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, he1, he2,
+                hpc] at h
+              cases h
+            | false =>
+            cases he3 : expandR Θ S (a :: s₁) (b :: s₂) with
+            | some p =>
+              obtain ⟨β0, l0, τ0, t₁, t₂⟩ := p
+              simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, he1, he2,
+                hpc, he3] at h
+              obtain ⟨s', hrec, rfl⟩ := expandResRM_success h
+              obtain ⟨h₀, h'⟩ := hsat.comp_inv
+              obtain ⟨hs1, hshape, hren⟩ := expandR_spec he3
+              rw [hs1]
+              refine expandR_reflect' hshape
+                (h₀.2 _ List.mem_cons_self) (h₀.1 _ List.mem_cons_self).symm ?_
+              rw [← hren]
+              exact ih.2 (expandDeps Θ S β0 τ0) S.fresh.2.fresh.2 t₁ t₂ hrec h'
+            | none =>
+            cases he4 : expandR Θ S (b :: s₂) (a :: s₁) with
+            | some p =>
+              obtain ⟨β0, l0, τ0, t₁, t₂⟩ := p
+              simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, he1, he2,
+                hpc, he3, he4] at h
+              obtain ⟨s', hrec, rfl⟩ := expandResRM_success h
+              obtain ⟨h₀, h'⟩ := hsat.comp_inv
+              obtain ⟨hs2, hshape, hren⟩ := expandR_spec he4
+              rw [hs2]
+              refine (expandR_reflect' hshape
+                (h₀.2 _ List.mem_cons_self) (h₀.1 _ List.mem_cons_self).symm ?_).symm
+              rw [← hren]
+              exact ih.2 (expandDeps Θ S β0 τ0) S.fresh.2.fresh.2 t₁ t₂ hrec h'
+            | none =>
+              simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, he1, he2,
+                hpc, he3, he4] at h
+              cases h
 
 -- The ≐ᵣ success case is SOUND under the mutual driver, with NO residual
 -- equations: the solution is the whole story.
@@ -320,7 +371,7 @@ theorem unifyRowM_success_sound {B : Type} [DecidableEq B] {θ : TySubst B}
     (h : unifyRowM fuel ρ₁ ρ₂ = .success s S') (hsat : Sol.Sat θ s) :
     Unifies θ ρ₁ ρ₂ := by
   unfold unifyRowM unifySpineM at h
-  have key := (unifyM_success_sound fuel).2 _ ρ₁.toSpine ρ₂.toSpine h hsat
+  have key := (unifyM_success_sound fuel).2 _ _ ρ₁.toSpine ρ₂.toSpine h hsat
   have e₁ := RowEquiv.applySubst θ (Row.toSpine_equiv ρ₁)
   have e₂ := RowEquiv.applySubst θ (Row.toSpine_equiv ρ₂)
   exact e₁.trans (key.trans e₂.symm)
@@ -331,7 +382,7 @@ theorem unifyTyM_success_sound {B : Type} [DecidableEq B] {θ : TySubst B}
     {fuel : Nat} {τ τ' : Ty B} {s : Sol B} {S' : Supply}
     (h : unifyTyM fuel τ τ' = .success s S') (hsat : Sol.Sat θ s) :
     TyUnifies θ τ τ' :=
-  (unifyM_success_sound fuel).1 _ τ τ' h hsat
+  (unifyM_success_sound fuel).1 _ _ τ τ' h hsat
 
 
 

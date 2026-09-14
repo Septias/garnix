@@ -208,6 +208,94 @@ def Row.deepRowVars {B : Type} : Row B → List TyVar
   | .cat ρ₁ ρ₂ => Row.deepRowVars ρ₁ ++ Row.deepRowVars ρ₂
 end
 
+-- ## THE ACCUMULATED SOLUTION, AS A DEPENDENCY GRAPH
+-- The occurs guards (`solveVarM`, `bindTy`) and U-expand's self-reference
+-- filter are all LOCAL: they compare a variable with the spine or payload AS
+-- WRITTEN. That is enough for every arm that SOLVES AND APPLIES — matchL/R,
+-- groundMatch, the ≐ congruences — because those push their solution into the
+-- residual, so the residual already carries it.
+--
+-- U-expand is the exception. It RENAMES the host (β ↦ β′) instead of applying
+-- β ≔ (l:δ | β′), and `renameVar` renames SPINE variables only, so a payload
+-- mentioning β still reads β after the move while β is already bound. A later
+-- guard then compares against a stale payload and misses a cycle that only
+-- exists in the TRANSITIVE CLOSURE of the accumulated solution. The result is a
+-- VACUOUS success: a solution no substitution satisfies.
+--
+-- So the expansions — and only they — accumulate here, as a dependency graph:
+-- `(γ, vs)` records that the solution so far sends γ to something mentioning
+-- `vs`, at either sort. Reachability through it is what the guards test.
+abbrev DepGraph := List (TyVar × List TyVar)
+
+-- Reachability is a MARKED SET that only grows, one pass over the edge list per
+-- round. The obvious frontier-plus-`eraseDups` version is correct but unusable:
+-- these guards run inside kernel-checked `rfl` regressions, `TyVar = String`,
+-- and a quadratic dedup over a growing frontier made ONE regression take 76s to
+-- reduce. Here the set is deduped by construction and never grows past the
+-- variables actually mentioned.
+def depInsert (M : List TyVar) (xs : List TyVar) : List TyVar :=
+  xs.foldl (fun acc x => if acc.contains x then acc else x :: acc) M
+
+def depRound (Θ : DepGraph) (M : List TyVar) : List TyVar :=
+  Θ.foldl (fun acc p => if acc.contains p.1 then depInsert acc p.2 else acc) M
+
+def depMark (Θ : DepGraph) : Nat → List TyVar → List TyVar
+  | 0, M => M
+  | n+1, M =>
+      let M' := depRound Θ M
+      if M'.length ≤ M.length then M' else depMark Θ n M'
+
+/-- Variables reachable from `V` through the accumulated expansions. Inflationary
+(`V ⊆ depReach Θ V`), which keeps the strengthened guards STRICTER than the old
+ones — they reject more, never less.
+
+The `[]` fast path is not an optimisation detail: no expansion has happened on
+most paths, and without it every `rfl` regression would pay for a closure
+computation that cannot change its answer. -/
+def depReach (Θ : DepGraph) (V : List TyVar) : List TyVar :=
+  match Θ with
+  | [] => V
+  | _  => depMark Θ (Θ.length + 1) V
+
+theorem mem_depInsert {M xs : List TyVar} {x : TyVar} (h : x ∈ M) :
+    x ∈ depInsert M xs := by
+  unfold depInsert
+  induction xs generalizing M with
+  | nil => exact h
+  | cons y ys ih =>
+      simp only [List.foldl_cons]
+      refine ih ?_
+      by_cases hc : M.contains y = true
+      · rw [if_pos hc]; exact h
+      · rw [if_neg hc]; exact List.mem_cons_of_mem _ h
+
+theorem mem_depRound {Θ : DepGraph} {M : List TyVar} {x : TyVar} (h : x ∈ M) :
+    x ∈ depRound Θ M := by
+  unfold depRound
+  induction Θ generalizing M with
+  | nil => exact h
+  | cons p ps ih =>
+      simp only [List.foldl_cons]
+      refine ih ?_
+      by_cases hc : M.contains p.1 = true
+      · rw [if_pos hc]; exact mem_depInsert h
+      · rw [if_neg hc]; exact h
+
+theorem mem_depMark (Θ : DepGraph) :
+    (n : Nat) → (M : List TyVar) → ∀ {x}, x ∈ M → x ∈ depMark Θ n M
+  | 0, _, _, h => h
+  | n+1, M, x, h => by
+      simp only [depMark]
+      split
+      · exact mem_depRound h
+      · exact mem_depMark Θ n _ (mem_depRound h)
+
+theorem depReach_mono (Θ : DepGraph) (V : List TyVar) {x : TyVar}
+    (h : x ∈ V) : x ∈ depReach Θ V := by
+  unfold depReach; split
+  · exact h
+  · exact mem_depMark Θ _ V h
+
 -- ## U-expand's host detector
 -- Three conditions; the last two are the self-reference filter.
 --
@@ -227,18 +315,26 @@ end
 --    Dropping this condition makes the move UNSOUND — the counterexample is
 --    `Refutations.shadow_order_matters`, which the fuzzer and `expand_shift`
 --    both reject.
-def uniqueHost {B : Type} (l : Label) (τ : Ty B) (s : List (Atom B)) : Option TyVar :=
+--  * The host condition is tested against the payload's REACHABLE set, not the
+--    payload itself: a β that an earlier expansion already wove into τ cannot
+--    host, even though it does not occur in τ as written. `depReach` is
+--    inflationary, so this only ever REJECTS more (`uniqueHost_spec` still
+--    yields the same `HostShape`). The `rest` condition is NOT relaxed the same
+--    way — those variables are excused by `selfref_no_l_field`, which needs the
+--    genuine occurrence in τ, so widening it there would be unsound.
+def uniqueHost {B : Type} (Θ : DepGraph) (l : Label) (τ : Ty B)
+    (s : List (Atom B)) : Option TyVar :=
   match sVarSeq s with
   | β :: rest =>
-      if sFieldCount l s = 0 ∧ β ∉ Ty.allRowVars τ ∧
+      if sFieldCount l s = 0 ∧ β ∉ depReach Θ (Ty.allRowVars τ) ∧
          (∀ γ ∈ rest, γ ∈ Ty.allRowVars τ) then some β else none
   | []        => none
 
-def expandL {B : Type} (S : Supply) :
+def expandL {B : Type} (Θ : DepGraph) (S : Supply) :
     List (Atom B) → List (Atom B) →
     Option (TyVar × Label × Ty B × List (Atom B) × List (Atom B))
   | .field l τ :: t₁, s₂ =>
-      match uniqueHost l τ s₂ with
+      match uniqueHost Θ l τ s₂ with
       | some β => some (β, l, τ, t₁, renameVar β S.fresh.2.fresh.1 s₂)
       | none => none
   | _, _ => none
@@ -251,18 +347,26 @@ def HostShape {B : Type} (l : Label) (τ : Ty B) (s : List (Atom B)) (β : TyVar
   (∃ rest, sVarSeq s = β :: rest ∧ ∀ γ ∈ rest, γ ∈ Ty.allRowVars τ) ∧
   sFieldCount l s = 0 ∧ β ∉ Ty.allRowVars τ
 
--- …and the three reasons it can REFUSE (Trichotomy's step-2 dispatch reads
--- them off). The first covers both "no variable at all" and "two or more
--- surviving candidates"; the third is new with the self-reference filter and is
--- the case where the problem has no unifier at all (selfref_host_no_unifier).
-def NoHost {B : Type} (l : Label) (τ : Ty B) (s : List (Atom B)) : Prop :=
+-- …and the three reasons it can REFUSE (Trichotomy's step-2 dispatch reads them
+-- off). The first covers both "no variable at all" and "two or more surviving
+-- candidates". The third now has TWO sources, and they are not equally strong:
+--   * β ∈ allRowVars τ — the genuine self-reference, where the problem has no
+--     unifier at all (selfref_host_no_unifier);
+--   * β merely REACHABLE from allRowVars τ through the accumulated expansions —
+--     the stale-binding case. Refusing there prevents a vacuous success, but it
+--     is a fact about the solver state, not about the problem, so no no-unifier
+--     theorem follows from it. Anything reading this disjunct must re-split.
+def NoHost {B : Type} (Θ : DepGraph) (l : Label) (τ : Ty B) (s : List (Atom B)) : Prop :=
   (∀ β, sVarSeq s ≠ [β]) ∨ 0 < sFieldCount l s ∨
-  (∃ β rest, sVarSeq s = β :: rest ∧ β ∈ Ty.allRowVars τ)
+  (∃ β rest, sVarSeq s = β :: rest ∧ β ∈ depReach Θ (Ty.allRowVars τ))
 
--- … and at the right end (the expansion is then β ≔ (β′ | l:δ)).
-def expandR {B : Type} (S : Supply) (s₁ s₂ : List (Atom B)) :
+-- … and at the right end: the TRAILING field against the TRAILING host, the
+-- expansion being β ≔ (β′ | l:δ). Its metatheory is RowUnify/ExpandR.lean —
+-- `expand_shift`/`host_forced` do NOT transport through the reversal (see that
+-- module's header), so the mirror lemmas are proved, not derived.
+def expandR {B : Type} (Θ : DepGraph) (S : Supply) (s₁ s₂ : List (Atom B)) :
     Option (TyVar × Label × Ty B × List (Atom B) × List (Atom B)) :=
-  match expandL S s₁.reverse s₂.reverse with
+  match expandL Θ S s₁.reverse s₂.reverse with
   | some (β, l, τ, t₁, t₂) => some (β, l, τ, t₁.reverse, t₂.reverse)
   | none => none
 
@@ -469,9 +573,13 @@ def bindTy {B : Type} (S : Supply) (α : TyVar) (τ : Ty B) : UResM B :=
   else .success ⟨[(α, τ)], []⟩ S
 
 -- ## U-var-solve, at the mutual driver's result type
-def solveVarM {B : Type} (S : Supply) : List (Atom B) → List (Atom B) → Option (UResM B)
+-- The occurs guard also reads the accumulated expansions: α ≔ ofSpine s₂ is a
+-- cycle as soon as α is REACHABLE from s₂, not only when it occurs in it. This
+-- is the guard that the traced spine-level cycle runs through.
+def solveVarM {B : Type} (Θ : DepGraph) (S : Supply) :
+    List (Atom B) → List (Atom B) → Option (UResM B)
   | [.var α], s₂ =>
-      some (if (Row.allRowVars (ofSpine s₂)).contains α then .occurs
+      some (if (depReach Θ (Row.allRowVars (ofSpine s₂))).contains α then .occurs
             else .success (Sol.ofRow [(α, ofSpine s₂)]) S)
   | _, _ => none
 
@@ -487,13 +595,29 @@ def expandResM {B : Type} (S : Supply) (β : TyVar) (l : Label) (τ : Ty B) :
                         [(β, .cat (.sing l (.var S.fresh.1)) (.var S.fresh.2.fresh.1))]⟩) S'
   | r => r
 
+-- ## …and U-expand at the RIGHT end
+-- Same fresh names, same eager δ ≔ τ; only the SIDE the invented field is
+-- emitted on differs, because the pairing it enables is at the other end.
+def expandResRM {B : Type} (S : Supply) (β : TyVar) (l : Label) (τ : Ty B) :
+    UResM B → UResM B
+  | .success s S' =>
+      .success (s.comp ⟨[(S.fresh.1, τ)],
+                        [(β, .cat (.var S.fresh.2.fresh.1) (.sing l (.var S.fresh.1)))]⟩) S'
+  | r => r
+
+-- What one expansion contributes to the graph: β ≔ (l:δ | β′) makes β depend on
+-- δ and β′, and the eagerly solved δ ≔ τ makes δ depend on τ's variables.
+def expandDeps {B : Type} (Θ : DepGraph) (S : Supply) (β : TyVar) (τ : Ty B) : DepGraph :=
+  (β, [S.fresh.1, S.fresh.2.fresh.1]) :: (S.fresh.1, τ.ftv) :: Θ
+
 -- ## The driver
 -- unifyTyF is ≐; unifySpineMF is ≐ᵣ. Both consume one unit of fuel per
 -- cross-call, so the block is STRUCTURALLY recursive on fuel — which is what
 -- keeps the regressions kernel-checked `rfl` executions.
 mutual
 
-def unifyTyF {B : Type} [DecidableEq B] (S : Supply) (fuel : Nat) : Ty B → Ty B → UResM B
+def unifyTyF {B : Type} [DecidableEq B] (Θ : DepGraph) (S : Supply) (fuel : Nat) :
+    Ty B → Ty B → UResM B
   -- The fuel is consumed in the two RECURSIVE arms only, so the match on it
   -- sits inside: every other verdict is reached at any fuel, and the fuel
   -- lemma below then has exactly two interesting cases.
@@ -506,77 +630,94 @@ def unifyTyF {B : Type} [DecidableEq B] (S : Supply) (fuel : Nat) : Ty B → Ty 
       match fuel with
       | 0 => .outOfFuel
       | f+1 =>
-          (unifyTyF S f a₁ a₂).seq fun θ S' =>
-            unifyTyF S' f (b₁.applySubst θ) (b₂.applySubst θ)
+          (unifyTyF Θ S f a₁ a₂).seq fun θ S' =>
+            unifyTyF Θ S' f (b₁.applySubst θ) (b₂.applySubst θ)
   | .rcd ρ₁, .rcd ρ₂ =>
       match fuel with
       | 0 => .outOfFuel
-      | f+1 => unifySpineMF S f ρ₁.toSpine ρ₂.toSpine
+      | f+1 => unifySpineMF Θ S f ρ₁.toSpine ρ₂.toSpine
   | _, _ => .clash
 
 def unifySpineMF {B : Type} [DecidableEq B] :
-    Supply → Nat → List (Atom B) → List (Atom B) → UResM B
-  | S, _, [], s₂ =>
+    DepGraph → Supply → Nat → List (Atom B) → List (Atom B) → UResM B
+  | _, S, _, [], s₂ =>
       match allVarsEmpty s₂ with
       | some σ => .success (Sol.ofRow σ) S
       | none   => .clash
-  | S, _, s₁, [] =>
+  | _, S, _, s₁, [] =>
       match allVarsEmpty s₁ with
       | some σ => .success (Sol.ofRow σ) S
       | none   => .clash
-  | _, 0, _, _ => .outOfFuel
-  | S, fuel+1, s₁, s₂ =>
+  | _, _, 0, _, _ => .outOfFuel
+  | Θ, S, fuel+1, s₁, s₂ =>
       match stripL s₁ s₂ with
-      | some (t₁, t₂) => unifySpineMF S fuel t₁ t₂
+      | some (t₁, t₂) => unifySpineMF Θ S fuel t₁ t₂
       | none =>
       match stripR s₁ s₂ with
-      | some (t₁, t₂) => unifySpineMF S fuel t₁ t₂
+      | some (t₁, t₂) => unifySpineMF Θ S fuel t₁ t₂
       | none =>
-      match solveVarM S s₁ s₂ with
+      match solveVarM Θ S s₁ s₂ with
       | some r => r
       | none =>
-      match solveVarM S s₂ s₁ with
+      match solveVarM Θ S s₂ s₁ with
       | some r => r
       | none =>
       match matchL s₁ s₂ with
       | some (τ, τ', t₁, t₂) =>
-          (unifyTyF S fuel τ τ').seq fun θ S' =>
-            unifySpineMF S' fuel (sApplySubst θ t₁) (sApplySubst θ t₂)
+          (unifyTyF Θ S fuel τ τ').seq fun θ S' =>
+            unifySpineMF Θ S' fuel (sApplySubst θ t₁) (sApplySubst θ t₂)
       | none =>
       match matchL s₂ s₁ with
       | some (τ', τ, t₂, t₁) =>
-          (unifyTyF S fuel τ τ').seq fun θ S' =>
-            unifySpineMF S' fuel (sApplySubst θ t₁) (sApplySubst θ t₂)
+          (unifyTyF Θ S fuel τ τ').seq fun θ S' =>
+            unifySpineMF Θ S' fuel (sApplySubst θ t₁) (sApplySubst θ t₂)
       | none =>
       match matchR s₁ s₂ with
       | some (τ, τ', t₁, t₂) =>
-          (unifyTyF S fuel τ τ').seq fun θ S' =>
-            unifySpineMF S' fuel (sApplySubst θ t₁) (sApplySubst θ t₂)
+          (unifyTyF Θ S fuel τ τ').seq fun θ S' =>
+            unifySpineMF Θ S' fuel (sApplySubst θ t₁) (sApplySubst θ t₂)
       | none =>
       match matchR s₂ s₁ with
       | some (τ', τ, t₂, t₁) =>
-          (unifyTyF S fuel τ τ').seq fun θ S' =>
-            unifySpineMF S' fuel (sApplySubst θ t₁) (sApplySubst θ t₂)
+          (unifyTyF Θ S fuel τ τ').seq fun θ S' =>
+            unifySpineMF Θ S' fuel (sApplySubst θ t₁) (sApplySubst θ t₂)
       | none =>
       match groundMatch s₁ s₂ with
       | some (τ, τ', t₁, t₂) =>
-          (unifyTyF S fuel τ τ').seq fun θ S' =>
-            unifySpineMF S' fuel (sApplySubst θ t₁) (sApplySubst θ t₂)
+          (unifyTyF Θ S fuel τ τ').seq fun θ S' =>
+            unifySpineMF Θ S' fuel (sApplySubst θ t₁) (sApplySubst θ t₂)
       | none =>
       match groundMatch s₂ s₁ with
       | some (τ', τ, t₂, t₁) =>
-          (unifyTyF S fuel τ τ').seq fun θ S' =>
-            unifySpineMF S' fuel (sApplySubst θ t₁) (sApplySubst θ t₂)
+          (unifyTyF Θ S fuel τ τ').seq fun θ S' =>
+            unifySpineMF Θ S' fuel (sApplySubst θ t₁) (sApplySubst θ t₂)
       | none =>
-      match expandL S s₁ s₂ with
+      match expandL Θ S s₁ s₂ with
       | some (β, l, τ, t₁, t₂) =>
-          expandResM S β l τ (unifySpineMF S.fresh.2.fresh.2 fuel t₁ t₂)
+          expandResM S β l τ
+            (unifySpineMF (expandDeps Θ S β τ) S.fresh.2.fresh.2 fuel t₁ t₂)
       | none =>
-      match expandL S s₂ s₁ with
+      match expandL Θ S s₂ s₁ with
       | some (β, l, τ, t₁, t₂) =>
-          expandResM S β l τ (unifySpineMF S.fresh.2.fresh.2 fuel t₁ t₂)
+          expandResM S β l τ
+            (unifySpineMF (expandDeps Θ S β τ) S.fresh.2.fresh.2 fuel t₁ t₂)
       | none =>
-      if projClash s₁ s₂ then .clash else .stuck
+      -- The RIGHT-end expansions come AFTER the projection clash, deliberately.
+      -- `projClash` is a SOUND no-unifier test (projClash_no_unifier), so a
+      -- success reached past a true `projClash` would necessarily be VACUOUS.
+      -- Testing first makes the arm provably monotone: it can only turn a
+      -- `.stuck` into something else, and moves no verdict that was reached.
+      if projClash s₁ s₂ then .clash else
+      match expandR Θ S s₁ s₂ with
+      | some (β, l, τ, t₁, t₂) =>
+          expandResRM S β l τ
+            (unifySpineMF (expandDeps Θ S β τ) S.fresh.2.fresh.2 fuel t₁ t₂)
+      | none =>
+      match expandR Θ S s₂ s₁ with
+      | some (β, l, τ, t₁, t₂) =>
+          expandResRM S β l τ
+            (unifySpineMF (expandDeps Θ S β τ) S.fresh.2.fresh.2 fuel t₁ t₂)
+      | none => .stuck
 
 end
 
@@ -585,13 +726,13 @@ end
 -- defeats it (see the note below unifyM_fuel_mono), and it is not needed —
 -- `outOfFuel` makes every reached verdict fuel-independent.
 def unifySpineM {B : Type} [DecidableEq B] (fuel : Nat) (s₁ s₂ : List (Atom B)) : UResM B :=
-  unifySpineMF (localSupply s₁ s₂) fuel s₁ s₂
+  unifySpineMF [] (localSupply s₁ s₂) fuel s₁ s₂
 
 def unifyRowM {B : Type} [DecidableEq B] (fuel : Nat) (ρ₁ ρ₂ : Row B) : UResM B :=
   unifySpineM fuel ρ₁.toSpine ρ₂.toSpine
 
 def unifyTyM {B : Type} [DecidableEq B] (fuel : Nat) (τ τ' : Ty B) : UResM B :=
-  unifyTyF ⟨lenBound (τ.ftv ++ τ'.ftv) + 1⟩ fuel τ τ'
+  unifyTyF [] ⟨lenBound (τ.ftv ++ τ'.ftv) + 1⟩ fuel τ τ'
 
 /-- `Mono r r'`: `r` is what the algorithm answered on some budget and `r'` on a
 larger one — either the smaller run ran out, or the two agree. -/
@@ -624,39 +765,48 @@ def SolBelow {B : Type} (s : Sol B) (W : List TyVar) : Prop :=
 -- both spines non-empty and every move dead, with no projection clash either.
 -- That is a property of a CONFIGURATION, independent of the driver's recursion
 -- — so it also survives any later change to the driver.
-structure Terminal {B : Type} (S : Supply) (s₁ s₂ : List (Atom B)) : Prop where
+structure Terminal {B : Type} (Θ : DepGraph) (S : Supply)
+    (s₁ s₂ : List (Atom B)) : Prop where
   hstripL  : stripL s₁ s₂ = none
   hstripR  : stripR s₁ s₂ = none
-  hsolveL  : solveVarM S s₁ s₂ = none
-  hsolveR  : solveVarM S s₂ s₁ = none
+  hsolveL  : solveVarM Θ S s₁ s₂ = none
+  hsolveR  : solveVarM Θ S s₂ s₁ = none
   hmatchL₁ : matchL s₁ s₂ = none
   hmatchL₂ : matchL s₂ s₁ = none
   hmatchR₁ : matchR s₁ s₂ = none
   hmatchR₂ : matchR s₂ s₁ = none
   hgroundL : groundMatch s₁ s₂ = none
   hgroundR : groundMatch s₂ s₁ = none
-  hexpandL : expandL S s₁ s₂ = none
-  hexpandR : expandL S s₂ s₁ = none
-  hnoClash : projClash s₁ s₂ = false
+  hexpandL₁ : expandL Θ S s₁ s₂ = none
+  hexpandL₂ : expandL Θ S s₂ s₁ = none
+  hnoClash  : projClash s₁ s₂ = false
+  hexpandR₁ : expandR Θ S s₁ s₂ = none
+  hexpandR₂ : expandR Θ S s₂ s₁ = none
 
-/-- The candidate fourth leg — **and it is REFUTED**: `Refutations.terminalNoMgu_false`.
+/-- The candidate fourth leg — **OPEN**: unrefuted, and unproved.
 
-Kept as a named `def` because the refutation has to be able to name it, and
-because it is the exact statement a side condition would have to repair.
+Kept as a named `def` because it is the exact statement a side condition would
+have to repair, and because the history is worth being able to name.
 
-Why it fails: terminality says "no move fires", which is a fact about the MOVES,
-not about the problem. On (l:{w}) ≐ᵣ (w | v) U-expand sees two candidate hosts
-and refuses — the Wand shape — but hosting in `w` would force θw ≈ (l:{θw}), an
-occurs violation invisible to field counting (the recursion passes under a
-record constructor). One placement is therefore ruled out, the unifier is
-unique, and a unique unifier is most general.
+It USED to be refuted, by `Refutations.terminalNoMgu_false`, on
+(l:{w}) ≐ᵣ (w | v): U-expand saw two candidate hosts and refused — the Wand
+shape — but hosting in `w` would force θw ≈ (l:{θw}), an occurs violation
+invisible to field counting (the recursion passes under a record constructor).
+One placement was ruled out, the unifier was unique, and a unique unifier is
+most general.
 
-The natural repair to TRY is a side condition forbidding exactly that: no
-variable of either side occurring inside a field payload of the other. Whether
-that suffices is OPEN — do not assume it. -/
+That configuration was terminal only because U-expand was ONE-ENDED: the lone
+survivor `v` sits BEHIND the filtered `w`, and a left-end expansion emits its
+field at the FRONT. `expandR` emits at the BACK and hosts in `v`, so the
+configuration is no longer terminal (`terminal_masks_mgu_not_terminal`) and the
+driver solves it. The counterexample is gone.
+
+Nothing here PROVES the statement. Terminality is still a fact about the MOVES,
+not about the problem, and another configuration where the guards miss a forced
+placement is not ruled out. Do not cite this as a theorem. -/
 def TerminalNoMgu (B : Type) : Prop :=
-  ∀ (S : Supply) (a b : Atom B) (s₁ s₂ : List (Atom B)),
-    Terminal S (a :: s₁) (b :: s₂) →
+  ∀ (Θ : DepGraph) (S : Supply) (a b : Atom B) (s₁ s₂ : List (Atom B)),
+    Terminal Θ S (a :: s₁) (b :: s₂) →
     ¬ HasMgu (ofSpine (a :: s₁)) (ofSpine (b :: s₂))
 
 end MinimalCalculus

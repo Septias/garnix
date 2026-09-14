@@ -110,7 +110,7 @@ theorem SolBelow_ofRow {B : Type} {σ : List (TyVar × Row B)} {W : List TyVar}
 -- ⊢  U-var-solve stays inside the problem's variables
 theorem solveVarM_bounded {B : Type} {S : Supply} {s₁ s₂ : List (Atom B)}
     {s : Sol B} {S' : Supply} {V : List TyVar}
-    (h : solveVarM S s₁ s₂ = some (.success s S'))
+    (h : solveVarM Θ S s₁ s₂ = some (.success s S'))
     (hS : S.Avoids V) (hV : (sFtv s₁ ++ sFtv s₂) ⊆ V) :
     ∃ W : List TyVar, V ⊆ W ∧ S'.Avoids W ∧ SolBelow s W := by
   cases s₁ with
@@ -135,15 +135,16 @@ theorem solveVarM_bounded {B : Type} {S : Supply} {s₁ s₂ : List (Atom B)}
 -- ⊢  U-expand's own solution mentions only the problem plus the two names it
 --    just invented, and both are inside the enlarged avoid-set
 theorem expand_bounded {B : Type} [DecidableEq B] {fuel : Nat}
-    (ih : ∀ (S : Supply) (u₁ u₂ : List (Atom B)) (V : List TyVar) {s : Sol B} {S' : Supply},
+    (ih : ∀ (Θ : DepGraph) (S : Supply) (u₁ u₂ : List (Atom B)) (V : List TyVar) {s : Sol B} {S' : Supply},
       S.Avoids V → (sFtv u₁ ++ sFtv u₂) ⊆ V →
-      unifySpineMF S fuel u₁ u₂ = .success s S' →
+      unifySpineMF Θ S fuel u₁ u₂ = .success s S' →
       ∃ W : List TyVar, V ⊆ W ∧ S'.Avoids W ∧ SolBelow s W)
-    {S : Supply} {u₁ u₂ : List (Atom B)} {V : List TyVar}
+    {Θ : DepGraph} {S : Supply} {u₁ u₂ : List (Atom B)} {V : List TyVar}
     {β : TyVar} {l : Label} {τ : Ty B} {t₁ t₂ : List (Atom B)} {s : Sol B} {S' : Supply}
     (hS : S.Avoids V) (hV : (sFtv u₁ ++ sFtv u₂) ⊆ V)
-    (he : expandL S u₁ u₂ = some (β, l, τ, t₁, t₂))
-    (h : expandResM S β l τ (unifySpineMF S.fresh.2.fresh.2 fuel t₁ t₂) = .success s S') :
+    (he : expandL Θ S u₁ u₂ = some (β, l, τ, t₁, t₂))
+    (h : expandResM S β l τ
+      (unifySpineMF (expandDeps Θ S β τ) S.fresh.2.fresh.2 fuel t₁ t₂) = .success s S') :
     ∃ W : List TyVar, V ⊆ W ∧ S'.Avoids W ∧ SolBelow s W := by
   obtain ⟨s', hrec, rfl⟩ := expandResM_success h
   obtain ⟨hs1, hshape, hren⟩ := expandL_spec he
@@ -163,7 +164,7 @@ theorem expand_bounded {B : Type} [DecidableEq B] {fuel : Nat}
       rcases List.mem_cons.mp (sFtv_renameVar _ _ u₂ x hh) with rfl | hh'
       · exact List.mem_cons_self
       · exact List.mem_cons_of_mem _ (List.mem_cons_of_mem _ (sFtv_sub_right hV hh'))
-  obtain ⟨W, hVW, hSW, hbW⟩ := ih S.fresh.2.fresh.2 t₁ t₂ _ hS' hV' hrec
+  obtain ⟨W, hVW, hSW, hbW⟩ := ih (expandDeps Θ S β τ) S.fresh.2.fresh.2 t₁ t₂ _ hS' hV' hrec
   have hVsub : V ⊆ W := fun _ hx => hVW (List.mem_cons_of_mem _ (List.mem_cons_of_mem _ hx))
   have hdW : S.fresh.1 ∈ W := hVW (List.mem_cons_of_mem _ List.mem_cons_self)
   have hbW' : S.fresh.2.fresh.1 ∈ W := hVW List.mem_cons_self
@@ -181,21 +182,73 @@ theorem expand_bounded {B : Type} [DecidableEq B] {fuel : Nat}
       · exact hdW
       · exact hbW'
 
+-- ⊢  … and the same for the RIGHT-end expansion. Only the shape of the emitted
+--    row binding differs, so only the last case analysis is swapped.
+theorem expandR_bounded {B : Type} [DecidableEq B] {fuel : Nat}
+    (ih : ∀ (Θ : DepGraph) (S : Supply) (u₁ u₂ : List (Atom B)) (V : List TyVar) {s : Sol B} {S' : Supply},
+      S.Avoids V → (sFtv u₁ ++ sFtv u₂) ⊆ V →
+      unifySpineMF Θ S fuel u₁ u₂ = .success s S' →
+      ∃ W : List TyVar, V ⊆ W ∧ S'.Avoids W ∧ SolBelow s W)
+    {Θ : DepGraph} {S : Supply} {u₁ u₂ : List (Atom B)} {V : List TyVar}
+    {β : TyVar} {l : Label} {τ : Ty B} {t₁ t₂ : List (Atom B)} {s : Sol B} {S' : Supply}
+    (hS : S.Avoids V) (hV : (sFtv u₁ ++ sFtv u₂) ⊆ V)
+    (he : expandR Θ S u₁ u₂ = some (β, l, τ, t₁, t₂))
+    (h : expandResRM S β l τ
+      (unifySpineMF (expandDeps Θ S β τ) S.fresh.2.fresh.2 fuel t₁ t₂) = .success s S') :
+    ∃ W : List TyVar, V ⊆ W ∧ S'.Avoids W ∧ SolBelow s W := by
+  obtain ⟨s', hrec, rfl⟩ := expandResRM_success h
+  obtain ⟨hs1, hshape, hren⟩ := expandR_spec he
+  obtain ⟨⟨hrest0, hvv, -⟩, hcc, -⟩ := id hshape
+  have hτV : τ.ftv ⊆ V := fun _ hx =>
+    sFtv_sub_left hV (by rw [hs1, sFtv_append]
+                         exact List.mem_append_right _ (by simp only [sFtv, List.append_nil]; exact hx))
+  have hβV : β ∈ V :=
+    sFtv_sub_right hV (mem_sFtv_of_mem_sVarSeq u₂
+      (by rw [hvv]; exact List.mem_append_right _ List.mem_cons_self))
+  have hS' : S.fresh.2.fresh.2.Avoids (S.fresh.2.fresh.1 :: S.fresh.1 :: V) :=
+    hS.cons_fresh.cons_fresh
+  have hV' : (sFtv t₁ ++ sFtv t₂) ⊆ (S.fresh.2.fresh.1 :: S.fresh.1 :: V) := by
+    intro x hx
+    rcases List.mem_append.mp hx with hh | hh
+    · exact List.mem_cons_of_mem _ (List.mem_cons_of_mem _
+        (sFtv_sub_left hV (by rw [hs1, sFtv_append]; exact List.mem_append_left _ hh)))
+    · rw [hren] at hh
+      rcases List.mem_cons.mp (sFtv_renameVar _ _ u₂ x hh) with rfl | hh'
+      · exact List.mem_cons_self
+      · exact List.mem_cons_of_mem _ (List.mem_cons_of_mem _ (sFtv_sub_right hV hh'))
+  obtain ⟨W, hVW, hSW, hbW⟩ := ih (expandDeps Θ S β τ) S.fresh.2.fresh.2 t₁ t₂ _ hS' hV' hrec
+  have hVsub : V ⊆ W := fun _ hx => hVW (List.mem_cons_of_mem _ (List.mem_cons_of_mem _ hx))
+  have hdW : S.fresh.1 ∈ W := hVW (List.mem_cons_of_mem _ List.mem_cons_self)
+  have hbW' : S.fresh.2.fresh.1 ∈ W := hVW List.mem_cons_self
+  refine ⟨W, hVsub, hSW, SolBelow.comp ?_ hbW⟩
+  rintro γ (⟨p, hp, hγ⟩ | ⟨p, hp, hγ⟩)
+  · obtain rfl := List.mem_singleton.mp hp
+    rcases hγ with rfl | hγ
+    · exact hdW
+    · exact hVsub (hτV hγ)
+  · obtain rfl := List.mem_singleton.mp hp
+    rcases hγ with rfl | hγ
+    · exact hVsub hβV
+    · simp only [Row.ftv, Ty.ftv, List.mem_append, List.mem_singleton] at hγ
+      rcases hγ with rfl | rfl
+      · exact hbW'
+      · exact hdW
+
 -- THE BOUNDEDNESS INVARIANT, both sorts at once.
 theorem unifyM_bounded {B : Type} [DecidableEq B] (fuel : Nat) :
-    (∀ (S : Supply) (τ τ' : Ty B) (V : List TyVar) {s : Sol B} {S' : Supply},
+    (∀ (Θ : DepGraph) (S : Supply) (τ τ' : Ty B) (V : List TyVar) {s : Sol B} {S' : Supply},
         S.Avoids V → (τ.ftv ++ τ'.ftv) ⊆ V →
-        unifyTyF S fuel τ τ' = .success s S' →
+        unifyTyF Θ S fuel τ τ' = .success s S' →
         ∃ W : List TyVar, V ⊆ W ∧ S'.Avoids W ∧ SolBelow s W) ∧
-    (∀ (S : Supply) (s₁ s₂ : List (Atom B)) (V : List TyVar) {s : Sol B} {S' : Supply},
+    (∀ (Θ : DepGraph) (S : Supply) (s₁ s₂ : List (Atom B)) (V : List TyVar) {s : Sol B} {S' : Supply},
         S.Avoids V → (sFtv s₁ ++ sFtv s₂) ⊆ V →
-        unifySpineMF S fuel s₁ s₂ = .success s S' →
+        unifySpineMF Θ S fuel s₁ s₂ = .success s S' →
         ∃ W : List TyVar, V ⊆ W ∧ S'.Avoids W ∧ SolBelow s W) := by
   -- the shape shared by bindTy's two orientations
-  have hbind : ∀ (S : Supply) (α : TyVar) (τ : Ty B) (V : List TyVar) {s : Sol B}
+  have hbind : ∀ (Θ : DepGraph) (S : Supply) (α : TyVar) (τ : Ty B) (V : List TyVar) {s : Sol B}
       {S' : Supply}, S.Avoids V → α ∈ V → τ.ftv ⊆ V → bindTy S α τ = .success s S' →
       ∃ W : List TyVar, V ⊆ W ∧ S'.Avoids W ∧ SolBelow s W := by
-    intro S α τ V s S' hS hα hτ h
+    intro Θ S α τ V s S' hS hα hτ h
     unfold bindTy at h
     split at h
     · simp only [UResM.success.injEq] at h
@@ -215,21 +268,21 @@ theorem unifyM_bounded {B : Type} [DecidableEq B] (fuel : Nat) :
   -- the shape shared by the six eq-emitting arms
   induction fuel with
   | zero =>
-      refine ⟨fun S τ τ' V s S' hS hV h => ?_, fun S s₁ s₂ V s S' hS hV h => ?_⟩
+      refine ⟨fun Θ S τ τ' V s S' hS hV h => ?_, fun Θ S s₁ s₂ V s S' hS hV h => ?_⟩
       · cases τ with
         | var α =>
-            exact hbind S α τ' V hS (hV (List.mem_append_left _ List.mem_cons_self))
+            exact hbind Θ S α τ' V hS (hV (List.mem_append_left _ List.mem_cons_self))
               (fun _ hx => hV (List.mem_append_right _ hx)) h
         | base b =>
             cases τ' with
             | var α =>
-                exact hbind S α (.base b) V hS
+                exact hbind Θ S α (.base b) V hS
                   (hV (List.mem_append_right _ List.mem_cons_self))
                   (fun _ hx => hV (List.mem_append_left _ hx)) h
             | base b' =>
                 by_cases hb : b = b'
                 · subst hb
-                  have hred : unifyTyF S 0 (Ty.base b) (Ty.base b)
+                  have hred : unifyTyF Θ S 0 (Ty.base b) (Ty.base b)
                       = .success (Sol.nil (B := B)) S := by simp [unifyTyF]
                   rw [hred] at h
                   simp only [UResM.success.injEq] at h
@@ -242,7 +295,7 @@ theorem unifyM_bounded {B : Type} [DecidableEq B] (fuel : Nat) :
         | unk =>
             cases τ' with
             | var α =>
-                exact hbind S α .unk V hS
+                exact hbind Θ S α .unk V hS
                   (hV (List.mem_append_right _ List.mem_cons_self))
                   (fun _ hx => hV (List.mem_append_left _ hx)) h
             | base _ => cases h
@@ -255,7 +308,7 @@ theorem unifyM_bounded {B : Type} [DecidableEq B] (fuel : Nat) :
         | fn a₁ b₁ =>
             cases τ' with
             | var α =>
-                exact hbind S α (.fn a₁ b₁) V hS
+                exact hbind Θ S α (.fn a₁ b₁) V hS
                   (hV (List.mem_append_right _ List.mem_cons_self))
                   (fun _ hx => hV (List.mem_append_left _ hx)) h
             | base _ => cases h
@@ -265,7 +318,7 @@ theorem unifyM_bounded {B : Type} [DecidableEq B] (fuel : Nat) :
         | rcd ρ₁ =>
             cases τ' with
             | var α =>
-                exact hbind S α (.rcd ρ₁) V hS
+                exact hbind Θ S α (.rcd ρ₁) V hS
                   (hV (List.mem_append_right _ List.mem_cons_self))
                   (fun _ hx => hV (List.mem_append_left _ hx)) h
             | base _ => cases h
@@ -298,16 +351,16 @@ theorem unifyM_bounded {B : Type} [DecidableEq B] (fuel : Nat) :
                         exact fun _ hx => by cases hx⟩)⟩
           | cons b s₂ => cases h
   | succ fuel ih =>
-      have arm : ∀ (S : Supply) (τ τ' : Ty B) (t₁ t₂ : List (Atom B)) (V : List TyVar)
+      have arm : ∀ (Θ : DepGraph) (S : Supply) (τ τ' : Ty B) (t₁ t₂ : List (Atom B)) (V : List TyVar)
           {s : Sol B} {S' : Supply}, S.Avoids V →
           (τ.ftv ++ τ'.ftv) ⊆ V → (sFtv t₁ ++ sFtv t₂) ⊆ V →
-          ((unifyTyF S fuel τ τ').seq fun θ' S'' =>
-              unifySpineMF S'' fuel (sApplySubst θ' t₁) (sApplySubst θ' t₂))
+          ((unifyTyF Θ S fuel τ τ').seq fun θ' S'' =>
+              unifySpineMF Θ S'' fuel (sApplySubst θ' t₁) (sApplySubst θ' t₂))
             = .success s S' →
           ∃ W : List TyVar, V ⊆ W ∧ S'.Avoids W ∧ SolBelow s W := by
-        intro S τ τ' t₁ t₂ V s S' hS hVt hVr h
+        intro Θ S τ τ' t₁ t₂ V s S' hS hVt hVr h
         obtain ⟨s₁, S₁, s₂, hty, hrow, rfl⟩ := UResM.seq_success h
-        obtain ⟨W₁, hVW₁, hS₁, hb₁⟩ := ih.1 S τ τ' V hS hVt hty
+        obtain ⟨W₁, hVW₁, hS₁, hb₁⟩ := ih.1 Θ S τ τ' V hS hVt hty
         have hres : (sFtv (sApplySubst s₁.toSubst t₁) ++
                      sFtv (sApplySubst s₁.toSubst t₂)) ⊆ W₁ := fun x hx => by
           rcases List.mem_append.mp hx with hh | hh
@@ -315,23 +368,23 @@ theorem unifyM_bounded {B : Type} [DecidableEq B] (fuel : Nat) :
               (fun _ hy => hVW₁ (hVr (List.mem_append_left _ hy))) hb₁ hh
           · exact sFtv_sApplySubst_sub
               (fun _ hy => hVW₁ (hVr (List.mem_append_right _ hy))) hb₁ hh
-        obtain ⟨W₂, hW₁W₂, hS₂, hb₂⟩ := ih.2 S₁ _ _ W₁ hS₁ hres hrow
+        obtain ⟨W₂, hW₁W₂, hS₂, hb₂⟩ := ih.2 Θ S₁ _ _ W₁ hS₁ hres hrow
         exact ⟨W₂, fun _ hx => hW₁W₂ (hVW₁ hx), hS₂, (hb₁.mono hW₁W₂).comp hb₂⟩
-      refine ⟨fun S τ τ' V s S' hS hV h => ?_, fun S s₁ s₂ V s S' hS hV h => ?_⟩
+      refine ⟨fun Θ S τ τ' V s S' hS hV h => ?_, fun Θ S s₁ s₂ V s S' hS hV h => ?_⟩
       · cases τ with
         | var α =>
-            exact hbind S α τ' V hS (hV (List.mem_append_left _ List.mem_cons_self))
+            exact hbind Θ S α τ' V hS (hV (List.mem_append_left _ List.mem_cons_self))
               (fun _ hx => hV (List.mem_append_right _ hx)) h
         | base b =>
             cases τ' with
             | var α =>
-                exact hbind S α (.base b) V hS
+                exact hbind Θ S α (.base b) V hS
                   (hV (List.mem_append_right _ List.mem_cons_self))
                   (fun _ hx => hV (List.mem_append_left _ hx)) h
             | base b' =>
                 by_cases hb : b = b'
                 · subst hb
-                  have hred : unifyTyF S (fuel + 1) (Ty.base b) (Ty.base b)
+                  have hred : unifyTyF Θ S (fuel + 1) (Ty.base b) (Ty.base b)
                       = .success (Sol.nil (B := B)) S := by simp [unifyTyF]
                   rw [hred] at h
                   simp only [UResM.success.injEq] at h
@@ -344,7 +397,7 @@ theorem unifyM_bounded {B : Type} [DecidableEq B] (fuel : Nat) :
         | unk =>
             cases τ' with
             | var α =>
-                exact hbind S α .unk V hS
+                exact hbind Θ S α .unk V hS
                   (hV (List.mem_append_right _ List.mem_cons_self))
                   (fun _ hx => hV (List.mem_append_left _ hx)) h
             | base _ => cases h
@@ -357,17 +410,17 @@ theorem unifyM_bounded {B : Type} [DecidableEq B] (fuel : Nat) :
         | fn a₁ b₁ =>
             cases τ' with
             | var α =>
-                exact hbind S α (.fn a₁ b₁) V hS
+                exact hbind Θ S α (.fn a₁ b₁) V hS
                   (hV (List.mem_append_right _ List.mem_cons_self))
                   (fun _ hx => hV (List.mem_append_left _ hx)) h
             | base _ => cases h
             | unk => cases h
             | fn a₂ b₂ =>
-                replace h : ((unifyTyF S fuel a₁ a₂).seq fun θ' S'' =>
-                    unifyTyF S'' fuel (b₁.applySubst θ') (b₂.applySubst θ'))
+                replace h : ((unifyTyF Θ S fuel a₁ a₂).seq fun θ' S'' =>
+                    unifyTyF Θ S'' fuel (b₁.applySubst θ') (b₂.applySubst θ'))
                   = .success s S' := h
                 obtain ⟨s₁, S₁, s₂, hty, hrow, rfl⟩ := UResM.seq_success h
-                obtain ⟨W₁, hVW₁, hS₁, hb₁⟩ := ih.1 S a₁ a₂ V hS
+                obtain ⟨W₁, hVW₁, hS₁, hb₁⟩ := ih.1 Θ S a₁ a₂ V hS
                   (fun x hx => by
                     rcases List.mem_append.mp hx with hh | hh
                     · exact hV (List.mem_append_left _ (List.mem_append_left _ hh))
@@ -379,21 +432,21 @@ theorem unifyM_bounded {B : Type} [DecidableEq B] (fuel : Nat) :
                       (hV (List.mem_append_left _ (List.mem_append_right _ hy)))) hb₁ hh
                   · exact Ty_ftv_applySubst_sub (fun _ hy => hVW₁
                       (hV (List.mem_append_right _ (List.mem_append_right _ hy)))) hb₁ hh
-                obtain ⟨W₂, hW₁W₂, hS₂, hb₂⟩ := ih.1 S₁ _ _ W₁ hS₁ hres hrow
+                obtain ⟨W₂, hW₁W₂, hS₂, hb₂⟩ := ih.1 Θ S₁ _ _ W₁ hS₁ hres hrow
                 exact ⟨W₂, fun _ hx => hW₁W₂ (hVW₁ hx), hS₂, (hb₁.mono hW₁W₂).comp hb₂⟩
             | rcd _ => cases h
         | rcd ρ₁ =>
             cases τ' with
             | var α =>
-                exact hbind S α (.rcd ρ₁) V hS
+                exact hbind Θ S α (.rcd ρ₁) V hS
                   (hV (List.mem_append_right _ List.mem_cons_self))
                   (fun _ hx => hV (List.mem_append_left _ hx)) h
             | base _ => cases h
             | unk => cases h
             | fn _ _ => cases h
             | rcd ρ₂ =>
-                replace h : unifySpineMF S fuel ρ₁.toSpine ρ₂.toSpine = .success s S' := h
-                refine ih.2 S _ _ V hS (fun x hx => ?_) h
+                replace h : unifySpineMF Θ S fuel ρ₁.toSpine ρ₂.toSpine = .success s S' := h
+                refine ih.2 Θ S _ _ V hS (fun x hx => ?_) h
                 rcases List.mem_append.mp hx with hh | hh
                 · exact hV (List.mem_append_left _ ((mem_sFtv_toSpine ρ₁ x).mp hh))
                 · exact hV (List.mem_append_right _ ((mem_sFtv_toSpine ρ₂ x).mp hh))
@@ -426,21 +479,21 @@ theorem unifyM_bounded {B : Type} [DecidableEq B] (fuel : Nat) :
             cases hsl : stripL (a :: s₁) (b :: s₂) with
             | some p =>
               obtain ⟨t₁, t₂⟩ := p; simp only [hsl] at h
-              exact ih.2 S t₁ t₂ V hS
+              exact ih.2 Θ S t₁ t₂ V hS
                 (sFtv_sub_residual hV (stripL_ftv hsl).1 (stripL_ftv hsl).2) h
             | none =>
             cases hsr : stripR (a :: s₁) (b :: s₂) with
             | some p =>
               obtain ⟨t₁, t₂⟩ := p; simp only [hsl, hsr] at h
-              exact ih.2 S t₁ t₂ V hS
+              exact ih.2 Θ S t₁ t₂ V hS
                 (sFtv_sub_residual hV (stripR_ftv hsr).1 (stripR_ftv hsr).2) h
             | none =>
-            cases hv1 : solveVarM S (a :: s₁) (b :: s₂) with
+            cases hv1 : solveVarM Θ S (a :: s₁) (b :: s₂) with
             | some r =>
               simp only [hsl, hsr, hv1] at h
               exact solveVarM_bounded (hv1.trans (congrArg some h)) hS hV
             | none =>
-            cases hv2 : solveVarM S (b :: s₂) (a :: s₁) with
+            cases hv2 : solveVarM Θ S (b :: s₂) (a :: s₁) with
             | some r =>
               simp only [hsl, hsr, hv1, hv2] at h
               exact solveVarM_bounded (hv2.trans (congrArg some h)) hS (sFtv_sub_swap hV)
@@ -448,7 +501,7 @@ theorem unifyM_bounded {B : Type} [DecidableEq B] (fuel : Nat) :
             cases hml : matchL (a :: s₁) (b :: s₂) with
             | some p =>
               obtain ⟨τ0, τ0', t₁, t₂⟩ := p; simp only [hsl, hsr, hv1, hv2, hml] at h
-              exact arm S τ0 τ0' t₁ t₂ V hS
+              exact arm Θ S τ0 τ0' t₁ t₂ V hS
                 (fun x hx => by
                   rcases List.mem_append.mp hx with hh | hh
                   · exact sFtv_sub_left hV ((matchL_ftv hml).1 hh)
@@ -458,7 +511,7 @@ theorem unifyM_bounded {B : Type} [DecidableEq B] (fuel : Nat) :
             cases hml2 : matchL (b :: s₂) (a :: s₁) with
             | some p =>
               obtain ⟨τ0', τ0, t₂, t₁⟩ := p; simp only [hsl, hsr, hv1, hv2, hml, hml2] at h
-              exact arm S τ0 τ0' t₁ t₂ V hS
+              exact arm Θ S τ0 τ0' t₁ t₂ V hS
                 (fun x hx => by
                   rcases List.mem_append.mp hx with hh | hh
                   · exact sFtv_sub_left hV ((matchL_ftv hml2).2.2.1 hh)
@@ -469,7 +522,7 @@ theorem unifyM_bounded {B : Type} [DecidableEq B] (fuel : Nat) :
             | some p =>
               obtain ⟨τ0, τ0', t₁, t₂⟩ := p
               simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr] at h
-              exact arm S τ0 τ0' t₁ t₂ V hS
+              exact arm Θ S τ0 τ0' t₁ t₂ V hS
                 (fun x hx => by
                   rcases List.mem_append.mp hx with hh | hh
                   · exact sFtv_sub_left hV ((matchR_ftv hmr).1 hh)
@@ -480,7 +533,7 @@ theorem unifyM_bounded {B : Type} [DecidableEq B] (fuel : Nat) :
             | some p =>
               obtain ⟨τ0', τ0, t₂, t₁⟩ := p
               simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2] at h
-              exact arm S τ0 τ0' t₁ t₂ V hS
+              exact arm Θ S τ0 τ0' t₁ t₂ V hS
                 (fun x hx => by
                   rcases List.mem_append.mp hx with hh | hh
                   · exact sFtv_sub_left hV ((matchR_ftv hmr2).2.2.1 hh)
@@ -491,7 +544,7 @@ theorem unifyM_bounded {B : Type} [DecidableEq B] (fuel : Nat) :
             | some p =>
               obtain ⟨τ0, τ0', t₁, t₂⟩ := p
               simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg] at h
-              exact arm S τ0 τ0' t₁ t₂ V hS
+              exact arm Θ S τ0 τ0' t₁ t₂ V hS
                 (fun x hx => by
                   rcases List.mem_append.mp hx with hh | hh
                   · exact sFtv_sub_left hV ((groundMatch_ftv hg).1 hh)
@@ -502,27 +555,48 @@ theorem unifyM_bounded {B : Type} [DecidableEq B] (fuel : Nat) :
             | some p =>
               obtain ⟨τ0', τ0, t₂, t₁⟩ := p
               simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2] at h
-              exact arm S τ0 τ0' t₁ t₂ V hS
+              exact arm Θ S τ0 τ0' t₁ t₂ V hS
                 (fun x hx => by
                   rcases List.mem_append.mp hx with hh | hh
                   · exact sFtv_sub_left hV ((groundMatch_ftv hg2).2.2.1 hh)
                   · exact sFtv_sub_right hV ((groundMatch_ftv hg2).1 hh))
                 (sFtv_sub_residual hV (groundMatch_ftv hg2).2.2.2 (groundMatch_ftv hg2).2.1) h
             | none =>
-            cases he1 : expandL S (a :: s₁) (b :: s₂) with
+            cases he1 : expandL Θ S (a :: s₁) (b :: s₂) with
             | some p =>
               obtain ⟨β0, l0, τ0, t₁, t₂⟩ := p
               simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, he1] at h
               exact expand_bounded ih.2 hS hV he1 h
             | none =>
-            cases he2 : expandL S (b :: s₂) (a :: s₁) with
+            cases he2 : expandL Θ S (b :: s₂) (a :: s₁) with
             | some p =>
               obtain ⟨β0, l0, τ0, t₁, t₂⟩ := p
               simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, he1, he2] at h
               exact expand_bounded ih.2 hS (sFtv_sub_swap hV) he2 h
             | none =>
-              simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, he1, he2] at h
-              split at h <;> cases h
+            cases hpc : projClash (a :: s₁) (b :: s₂) with
+            | true =>
+              simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, he1, he2,
+                hpc] at h
+              cases h
+            | false =>
+            cases he3 : expandR Θ S (a :: s₁) (b :: s₂) with
+            | some p =>
+              obtain ⟨β0, l0, τ0, t₁, t₂⟩ := p
+              simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, he1, he2,
+                hpc, he3] at h
+              exact expandR_bounded ih.2 hS hV he3 h
+            | none =>
+            cases he4 : expandR Θ S (b :: s₂) (a :: s₁) with
+            | some p =>
+              obtain ⟨β0, l0, τ0, t₁, t₂⟩ := p
+              simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, he1, he2,
+                hpc, he3, he4] at h
+              exact expandR_bounded ih.2 hS (sFtv_sub_swap hV) he4 h
+            | none =>
+              simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, he1, he2,
+                hpc, he3, he4] at h
+              cases h
 
 
 ------------------ P5: SUCCESS COMPLETENESS (mgu), MUTUALLY -----------------
@@ -545,10 +619,10 @@ theorem Sol.Sat_nil {B : Type} {θ : TySubst B} : Sol.Sat θ (Sol.nil (B := B)) 
 -- ⊢  the base and ★ arms bind nothing, so any unifier meets them vacuously
 theorem base_arm_complete {B : Type} [DecidableEq B] {θ : TySubst B} {b b' : B}
     {S : Supply} {fuel : Nat} {s : Sol B} {S' : Supply}
-    (h : unifyTyF S fuel (.base b) (.base b') = .success s S') : Sol.Sat θ s := by
+    (h : unifyTyF Θ S fuel (.base b) (.base b') = .success s S') : Sol.Sat θ s := by
   by_cases hb : b = b'
   · subst hb
-    have hred : unifyTyF S fuel (Ty.base b) (Ty.base b)
+    have hred : unifyTyF Θ S fuel (Ty.base b) (Ty.base b)
         = .success (Sol.nil (B := B)) S := by simp [unifyTyF]
     rw [hred] at h
     simp only [UResM.success.injEq] at h
@@ -558,7 +632,7 @@ theorem base_arm_complete {B : Type} [DecidableEq B] {θ : TySubst B} {b b' : B}
 
 theorem unk_arm_complete {B : Type} [DecidableEq B] {θ : TySubst B}
     {S : Supply} {fuel : Nat} {s : Sol B} {S' : Supply}
-    (h : unifyTyF S fuel (.unk : Ty B) .unk = .success s S') : Sol.Sat θ s := by
+    (h : unifyTyF Θ S fuel (.unk : Ty B) .unk = .success s S') : Sol.Sat θ s := by
   simp only [unifyTyF, UResM.success.injEq] at h
   obtain ⟨rfl, -⟩ := h
   exact Sol.Sat_nil
@@ -618,7 +692,7 @@ theorem Sol.Sat.comp {B : Type} {θ : TySubst B} {s₁ s₂ : Sol B}
     · exact h₂.2 p hp
 
 -- ⊢  a unifier of α and τ meets the binding α ≔ τ
-theorem bindTy_complete {B : Type} {θ : TySubst B} {S : Supply} {α : TyVar} {τ : Ty B}
+theorem bindTy_complete {B : Type} {θ : TySubst B}  {S : Supply} {α : TyVar} {τ : Ty B}
     {s : Sol B} {S' : Supply}
     (h : bindTy S α τ = .success s S') (hu : TyEquiv (θ.ty α) (τ.applySubst θ)) :
     Sol.Sat θ s := by
@@ -635,9 +709,9 @@ theorem bindTy_complete {B : Type} {θ : TySubst B} {S : Supply} {α : TyVar} {�
       obtain rfl := List.mem_singleton.mp hp
       exact hu
 
-theorem solveVarM_complete {B : Type} {θ : TySubst B} {S : Supply}
+theorem solveVarM_complete {B : Type} {θ : TySubst B} {Θ : DepGraph} {S : Supply}
     {s₁ s₂ : List (Atom B)} {s : Sol B} {S' : Supply}
-    (hsolve : solveVarM S s₁ s₂ = some (.success s S'))
+    (hsolve : solveVarM Θ S s₁ s₂ = some (.success s S'))
     (hu : RowEquiv ((ofSpine s₁).applySubst θ) ((ofSpine s₂).applySubst θ)) :
     Sol.Sat θ s := by
   cases s₁ with
@@ -661,7 +735,7 @@ theorem solveVarM_complete {B : Type} {θ : TySubst B} {S : Supply}
 
 theorem unifySpineMF_nil_left_complete {B : Type} [DecidableEq B] {θ : TySubst B}
     (S : Supply) (fuel : Nat) (s₂ : List (Atom B)) {s : Sol B} {S' : Supply}
-    (h : unifySpineMF S fuel [] s₂ = .success s S')
+    (h : unifySpineMF Θ S fuel [] s₂ = .success s S')
     (hu : RowEquiv ((ofSpine ([] : List (Atom B))).applySubst θ)
                    ((ofSpine s₂).applySubst θ)) : Sol.Sat θ s := by
   simp only [unifySpineMF] at h
@@ -675,7 +749,7 @@ theorem unifySpineMF_nil_left_complete {B : Type} [DecidableEq B] {θ : TySubst 
 
 theorem unifySpineMF_cons_nil_complete {B : Type} [DecidableEq B] {θ : TySubst B}
     (S : Supply) (fuel : Nat) (a : Atom B) (s₁ : List (Atom B)) {s : Sol B} {S' : Supply}
-    (h : unifySpineMF S fuel (a :: s₁) [] = .success s S')
+    (h : unifySpineMF Θ S fuel (a :: s₁) [] = .success s S')
     (hu : RowEquiv ((ofSpine (a :: s₁)).applySubst θ)
                    ((ofSpine ([] : List (Atom B))).applySubst θ)) : Sol.Sat θ s := by
   simp only [unifySpineMF] at h
@@ -689,17 +763,18 @@ theorem unifySpineMF_cons_nil_complete {B : Type} [DecidableEq B] {θ : TySubst 
 
 -- THE U-EXPAND ARM, at both orientations.
 theorem expand_completeM {B : Type} [DecidableEq B] {fuel : Nat}
-    (ih : ∀ (S : Supply) (u₁ u₂ : List (Atom B)) (V : List TyVar) {s : Sol B}
+    (ih : ∀ (Θ : DepGraph) (S : Supply) (u₁ u₂ : List (Atom B)) (V : List TyVar) {s : Sol B}
       {S' : Supply} {θ : TySubst B},
       S.Avoids V → (sFtv u₁ ++ sFtv u₂) ⊆ V →
-      unifySpineMF S fuel u₁ u₂ = .success s S' →
+      unifySpineMF Θ S fuel u₁ u₂ = .success s S' →
       RowEquiv ((ofSpine u₁).applySubst θ) ((ofSpine u₂).applySubst θ) →
       ∃ θ' : TySubst B, AgreeOn θ θ' V ∧ Sol.Sat θ' s)
-    {S : Supply} {u₁ u₂ : List (Atom B)} {V : List TyVar} {θ : TySubst B}
+    {Θ : DepGraph} {S : Supply} {u₁ u₂ : List (Atom B)} {V : List TyVar} {θ : TySubst B}
     {β : TyVar} {l : Label} {τ : Ty B} {t₁ t₂ : List (Atom B)} {s : Sol B} {S' : Supply}
     (hS : S.Avoids V) (hV : (sFtv u₁ ++ sFtv u₂) ⊆ V)
-    (he : expandL S u₁ u₂ = some (β, l, τ, t₁, t₂))
-    (h : expandResM S β l τ (unifySpineMF S.fresh.2.fresh.2 fuel t₁ t₂) = .success s S')
+    (he : expandL Θ S u₁ u₂ = some (β, l, τ, t₁, t₂))
+    (h : expandResM S β l τ
+      (unifySpineMF (expandDeps Θ S β τ) S.fresh.2.fresh.2 fuel t₁ t₂) = .success s S')
     (hu : RowEquiv ((ofSpine u₁).applySubst θ) ((ofSpine u₂).applySubst θ)) :
     ∃ θ' : TySubst B, AgreeOn θ θ' V ∧ Sol.Sat θ' s := by
   obtain ⟨s', hrec, rfl⟩ := expandResM_success h
@@ -731,7 +806,7 @@ theorem expand_completeM {B : Type} [DecidableEq B] {fuel : Nat}
       · exact List.mem_cons_of_mem _ (List.mem_cons_of_mem _ (sFtv_sub_right hV hh'))
   have hrec' : RowEquiv ((ofSpine t₁).applySubst θ₀) ((ofSpine t₂).applySubst θ₀) := by
     rw [hren]; exact hrec0
-  obtain ⟨θ', hag', hsat'⟩ := ih S.fresh.2.fresh.2 t₁ t₂ _ hS' hV' hrec hrec'
+  obtain ⟨θ', hag', hsat'⟩ := ih (expandDeps Θ S β τ) S.fresh.2.fresh.2 t₁ t₂ _ hS' hV' hrec hrec'
   have hVsub : V ⊆ (S.fresh.2.fresh.1 :: S.fresh.1 :: V) :=
     fun _ hx => List.mem_cons_of_mem _ (List.mem_cons_of_mem _ hx)
   have hdvV' : S.fresh.1 ∈ (S.fresh.2.fresh.1 :: S.fresh.1 :: V) :=
@@ -751,22 +826,92 @@ theorem expand_completeM {B : Type} [DecidableEq B] {fuel : Nat}
     rw [← (hag' β (hVsub hβV)).2, ← (hag' _ hdvV').1, ← (hag' _ hb'V').2]
     exact hβ0
 
+-- THE U-EXPAND ARM AT THE RIGHT END, at both orientations.
+theorem expandR_completeM {B : Type} [DecidableEq B] {fuel : Nat}
+    (ih : ∀ (Θ : DepGraph) (S : Supply) (u₁ u₂ : List (Atom B)) (V : List TyVar) {s : Sol B}
+      {S' : Supply} {θ : TySubst B},
+      S.Avoids V → (sFtv u₁ ++ sFtv u₂) ⊆ V →
+      unifySpineMF Θ S fuel u₁ u₂ = .success s S' →
+      RowEquiv ((ofSpine u₁).applySubst θ) ((ofSpine u₂).applySubst θ) →
+      ∃ θ' : TySubst B, AgreeOn θ θ' V ∧ Sol.Sat θ' s)
+    {Θ : DepGraph} {S : Supply} {u₁ u₂ : List (Atom B)} {V : List TyVar} {θ : TySubst B}
+    {β : TyVar} {l : Label} {τ : Ty B} {t₁ t₂ : List (Atom B)} {s : Sol B} {S' : Supply}
+    (hS : S.Avoids V) (hV : (sFtv u₁ ++ sFtv u₂) ⊆ V)
+    (he : expandR Θ S u₁ u₂ = some (β, l, τ, t₁, t₂))
+    (h : expandResRM S β l τ
+      (unifySpineMF (expandDeps Θ S β τ) S.fresh.2.fresh.2 fuel t₁ t₂) = .success s S')
+    (hu : RowEquiv ((ofSpine u₁).applySubst θ) ((ofSpine u₂).applySubst θ)) :
+    ∃ θ' : TySubst B, AgreeOn θ θ' V ∧ Sol.Sat θ' s := by
+  obtain ⟨s', hrec, rfl⟩ := expandResRM_success h
+  obtain ⟨hs1, hshape, hren⟩ := expandR_spec he
+  obtain ⟨⟨hrest0, hvv, -⟩, hcc, -⟩ := id hshape
+  have hdV := Supply.fresh_not_mem hS
+  have hbV := Supply.fresh_not_mem hS.advance
+  have hd₁ : S.fresh.1 ∉ sFtv u₁ := fun hm => hdV (sFtv_sub_left hV hm)
+  have hd₂ : S.fresh.1 ∉ sFtv u₂ := fun hm => hdV (sFtv_sub_right hV hm)
+  have hb₁ : S.fresh.2.fresh.1 ∉ sFtv u₁ := fun hm => hbV (sFtv_sub_left hV hm)
+  have hb₂ : S.fresh.2.fresh.1 ∉ sFtv u₂ := fun hm => hbV (sFtv_sub_right hV hm)
+  have hτV : τ.ftv ⊆ V := fun _ hx =>
+    sFtv_sub_left hV (by rw [hs1, sFtv_append]
+                         exact List.mem_append_right _ (by simp only [sFtv, List.append_nil]; exact hx))
+  have hβV : β ∈ V :=
+    sFtv_sub_right hV (mem_sFtv_of_mem_sVarSeq u₂
+      (by rw [hvv]; exact List.mem_append_right _ List.mem_cons_self))
+  rw [hs1] at hu hd₁ hb₁
+  have hucat : Unifies θ (.cat (ofSpine t₁) (.sing l τ)) (ofSpine u₂) := by
+    unfold Unifies
+    exact (RowEquiv.applySubst θ (ofSpine_snoc t₁ l τ)).symm.trans hu
+  obtain ⟨θ₀, hβ0, hty0, hrec0, -, hag0⟩ :=
+    expandR_reflect_fwd hshape hd₁ hd₂ hb₁ hb₂ hucat
+  have hS' : S.fresh.2.fresh.2.Avoids (S.fresh.2.fresh.1 :: S.fresh.1 :: V) :=
+    hS.cons_fresh.cons_fresh
+  have hV' : (sFtv t₁ ++ sFtv t₂) ⊆ (S.fresh.2.fresh.1 :: S.fresh.1 :: V) := by
+    intro x hx
+    rcases List.mem_append.mp hx with hh | hh
+    · exact List.mem_cons_of_mem _ (List.mem_cons_of_mem _
+        (sFtv_sub_left hV (by rw [hs1, sFtv_append]; exact List.mem_append_left _ hh)))
+    · rw [hren] at hh
+      rcases List.mem_cons.mp (sFtv_renameVar _ _ u₂ x hh) with rfl | hh'
+      · exact List.mem_cons_self
+      · exact List.mem_cons_of_mem _ (List.mem_cons_of_mem _ (sFtv_sub_right hV hh'))
+  have hrec' : RowEquiv ((ofSpine t₁).applySubst θ₀) ((ofSpine t₂).applySubst θ₀) := by
+    rw [hren]; exact hrec0
+  obtain ⟨θ', hag', hsat'⟩ := ih (expandDeps Θ S β τ) S.fresh.2.fresh.2 t₁ t₂ _ hS' hV' hrec hrec'
+  have hVsub : V ⊆ (S.fresh.2.fresh.1 :: S.fresh.1 :: V) :=
+    fun _ hx => List.mem_cons_of_mem _ (List.mem_cons_of_mem _ hx)
+  have hdvV' : S.fresh.1 ∈ (S.fresh.2.fresh.1 :: S.fresh.1 :: V) :=
+    List.mem_cons_of_mem _ List.mem_cons_self
+  have hb'V' : S.fresh.2.fresh.1 ∈ (S.fresh.2.fresh.1 :: S.fresh.1 :: V) :=
+    List.mem_cons_self
+  have hagθ : AgreeOn θ θ₀ V := fun α hα =>
+    hag0 α (fun hh => hdV (by rw [← hh]; exact hα)) (fun hh => hbV (by rw [← hh]; exact hα))
+  refine ⟨θ', hagθ.trans' hag' hVsub, Sol.Sat.comp ⟨fun p hp => ?_, fun p hp => ?_⟩ hsat'⟩
+  · obtain rfl := List.mem_singleton.mp hp
+    show TyEquiv (θ'.ty S.fresh.1) (τ.applySubst θ')
+    rw [← hag'.tyEq (fun _ hx => hVsub (hτV hx)), ← (hag' _ hdvV').1]
+    exact hty0.symm
+  · obtain rfl := List.mem_singleton.mp hp
+    show RowEquiv (θ'.row β)
+      (.cat (θ'.row S.fresh.2.fresh.1) (.sing l (θ'.ty S.fresh.1)))
+    rw [← (hag' β (hVsub hβV)).2, ← (hag' _ hdvV').1, ← (hag' _ hb'V').2]
+    exact hβ0
+
 -- THE COMPLETENESS LEG, both sorts at once.
 theorem unifyM_success_complete {B : Type} [DecidableEq B] (fuel : Nat) :
-    (∀ (S : Supply) (τ τ' : Ty B) (V : List TyVar) {s : Sol B} {S' : Supply}
+    (∀ (Θ : DepGraph) (S : Supply) (τ τ' : Ty B) (V : List TyVar) {s : Sol B} {S' : Supply}
         {θ : TySubst B},
         S.Avoids V → (τ.ftv ++ τ'.ftv) ⊆ V →
-        unifyTyF S fuel τ τ' = .success s S' → TyUnifies θ τ τ' →
+        unifyTyF Θ S fuel τ τ' = .success s S' → TyUnifies θ τ τ' →
         ∃ θ' : TySubst B, AgreeOn θ θ' V ∧ Sol.Sat θ' s) ∧
-    (∀ (S : Supply) (s₁ s₂ : List (Atom B)) (V : List TyVar) {s : Sol B} {S' : Supply}
+    (∀ (Θ : DepGraph) (S : Supply) (s₁ s₂ : List (Atom B)) (V : List TyVar) {s : Sol B} {S' : Supply}
         {θ : TySubst B},
         S.Avoids V → (sFtv s₁ ++ sFtv s₂) ⊆ V →
-        unifySpineMF S fuel s₁ s₂ = .success s S' →
+        unifySpineMF Θ S fuel s₁ s₂ = .success s S' →
         RowEquiv ((ofSpine s₁).applySubst θ) ((ofSpine s₂).applySubst θ) →
         ∃ θ' : TySubst B, AgreeOn θ θ' V ∧ Sol.Sat θ' s) := by
   induction fuel with
   | zero =>
-      refine ⟨fun S τ τ' V s S' θ hS hV h hu => ?_, fun S s₁ s₂ V s S' θ hS hV h hu => ?_⟩
+      refine ⟨fun Θ S τ τ' V s S' θ hS hV h hu => ?_, fun Θ S s₁ s₂ V s S' θ hS hV h hu => ?_⟩
       · cases τ with
         | var α => exact ⟨θ, AgreeOn.refl θ V, bindTy_complete h hu⟩
         | base b =>
@@ -805,19 +950,19 @@ theorem unifyM_success_complete {B : Type} [DecidableEq B] (fuel : Nat) :
               exact ⟨θ, AgreeOn.refl θ V, unifySpineMF_cons_nil_complete S 0 a s₁ h hu⟩
           | cons b s₂ => cases h
   | succ fuel ih =>
-      have arm : ∀ (S : Supply) (τ τ' : Ty B) (t₁ t₂ : List (Atom B)) (V : List TyVar)
+      have arm : ∀ (Θ : DepGraph) (S : Supply) (τ τ' : Ty B) (t₁ t₂ : List (Atom B)) (V : List TyVar)
           {s : Sol B} {S' : Supply} {θ : TySubst B}, S.Avoids V →
           (τ.ftv ++ τ'.ftv) ⊆ V → (sFtv t₁ ++ sFtv t₂) ⊆ V →
-          ((unifyTyF S fuel τ τ').seq fun θ' S'' =>
-              unifySpineMF S'' fuel (sApplySubst θ' t₁) (sApplySubst θ' t₂))
+          ((unifyTyF Θ S fuel τ τ').seq fun θ' S'' =>
+              unifySpineMF Θ S'' fuel (sApplySubst θ' t₁) (sApplySubst θ' t₂))
             = .success s S' →
           TyUnifies θ τ τ' →
           RowEquiv ((ofSpine t₁).applySubst θ) ((ofSpine t₂).applySubst θ) →
           ∃ θ' : TySubst B, AgreeOn θ θ' V ∧ Sol.Sat θ' s := by
-        intro S τ τ' t₁ t₂ V s S' θ hS hVt hVr h hty hru
+        intro Θ S τ τ' t₁ t₂ V s S' θ hS hVt hVr h hty hru
         obtain ⟨s₁, S₁, s₂, hsty, hsrow, rfl⟩ := UResM.seq_success h
-        obtain ⟨W₁, hVW₁, hS₁, hb₁⟩ := (unifyM_bounded fuel).1 S τ τ' V hS hVt hsty
-        obtain ⟨θ₁, hag₁, hsat₁⟩ := ih.1 S τ τ' V hS hVt hsty hty
+        obtain ⟨W₁, hVW₁, hS₁, hb₁⟩ := (unifyM_bounded fuel).1 Θ S τ τ' V hS hVt hsty
+        obtain ⟨θ₁, hag₁, hsat₁⟩ := ih.1 Θ S τ τ' V hS hVt hsty hty
         have hres : (sFtv (sApplySubst s₁.toSubst t₁) ++
                      sFtv (sApplySubst s₁.toSubst t₂)) ⊆ W₁ := fun x hx => by
           rcases List.mem_append.mp hx with hh | hh
@@ -829,10 +974,10 @@ theorem unifyM_success_complete {B : Type} [DecidableEq B] (fuel : Nat) :
                              ((ofSpine (sApplySubst s₁.toSubst t₂)).applySubst θ₁) :=
           (unifies_sApplySubst_of_sat hsat₁ t₁ t₂).mpr
             (hag₁.unifiesSpine (sFtv_sub_left hVr) (sFtv_sub_right hVr) hru)
-        obtain ⟨θ₂, hag₂, hsat₂⟩ := ih.2 S₁ _ _ W₁ hS₁ hres hsrow hru₁
+        obtain ⟨θ₂, hag₂, hsat₂⟩ := ih.2 Θ S₁ _ _ W₁ hS₁ hres hsrow hru₁
         exact ⟨θ₂, hag₁.trans' hag₂ hVW₁,
                Sol.Sat.comp (hsat₁.congrAgree hag₂ hb₁) hsat₂⟩
-      refine ⟨fun S τ τ' V s S' θ hS hV h hu => ?_, fun S s₁ s₂ V s S' θ hS hV h hu => ?_⟩
+      refine ⟨fun Θ S τ τ' V s S' θ hS hV h hu => ?_, fun Θ S s₁ s₂ V s S' θ hS hV h hu => ?_⟩
       · cases τ with
         | var α => exact ⟨θ, AgreeOn.refl θ V, bindTy_complete h hu⟩
         | base b =>
@@ -855,8 +1000,8 @@ theorem unifyM_success_complete {B : Type} [DecidableEq B] (fuel : Nat) :
             | base _ => cases h
             | unk => cases h
             | fn a₂ b₂ =>
-                replace h : ((unifyTyF S fuel a₁ a₂).seq fun θ' S'' =>
-                    unifyTyF S'' fuel (b₁.applySubst θ') (b₂.applySubst θ'))
+                replace h : ((unifyTyF Θ S fuel a₁ a₂).seq fun θ' S'' =>
+                    unifyTyF Θ S'' fuel (b₁.applySubst θ') (b₂.applySubst θ'))
                   = .success s S' := h
                 obtain ⟨σ₁, σ₂, heq, hA, hB⟩ :=
                   TyEquiv.fn_inv (show TyEquiv (Ty.fn (a₁.applySubst θ) (b₁.applySubst θ))
@@ -873,8 +1018,8 @@ theorem unifyM_success_complete {B : Type} [DecidableEq B] (fuel : Nat) :
                   hV (List.mem_append_right _ (List.mem_append_right _ hy))
                 obtain ⟨s₁, S₁, s₂, hsty, hsrow, rfl⟩ := UResM.seq_success h
                 obtain ⟨W₁, hVW₁, hS₁, hb₁⟩ :=
-                  (unifyM_bounded fuel).1 S a₁ a₂ V hS hVa hsty
-                obtain ⟨θ₁, hag₁, hsat₁⟩ := ih.1 S a₁ a₂ V hS hVa hsty hA
+                  (unifyM_bounded fuel).1 Θ S a₁ a₂ V hS hVa hsty
+                obtain ⟨θ₁, hag₁, hsat₁⟩ := ih.1 Θ S a₁ a₂ V hS hVa hsty hA
                 have hres : ((b₁.applySubst s₁.toSubst).ftv ++
                              (b₂.applySubst s₁.toSubst).ftv) ⊆ W₁ := fun x hx => by
                   rcases List.mem_append.mp hx with hh | hh
@@ -884,7 +1029,7 @@ theorem unifyM_success_complete {B : Type} [DecidableEq B] (fuel : Nat) :
                     (b₂.applySubst s₁.toSubst) :=
                   (tyUnifies_applySubst_of_sat hsat₁ b₁ b₂).mpr
                     (hag₁.tyUnifies hVb₁ hVb₂ hB)
-                obtain ⟨θ₂, hag₂, hsat₂⟩ := ih.1 S₁ _ _ W₁ hS₁ hres hsrow hB₁
+                obtain ⟨θ₂, hag₂, hsat₂⟩ := ih.1 Θ S₁ _ _ W₁ hS₁ hres hsrow hB₁
                 exact ⟨θ₂, hag₁.trans' hag₂ hVW₁,
                        Sol.Sat.comp (hsat₁.congrAgree hag₂ hb₁) hsat₂⟩
             | rcd _ => cases h
@@ -895,7 +1040,7 @@ theorem unifyM_success_complete {B : Type} [DecidableEq B] (fuel : Nat) :
             | unk => cases h
             | fn _ _ => cases h
             | rcd ρ₂ =>
-                replace h : unifySpineMF S fuel ρ₁.toSpine ρ₂.toSpine = .success s S' := h
+                replace h : unifySpineMF Θ S fuel ρ₁.toSpine ρ₂.toSpine = .success s S' := h
                 obtain ⟨ρ', heq, hR⟩ :=
                   TyEquiv.rcd_inv (show TyEquiv (Ty.rcd (ρ₁.applySubst θ))
                     (Ty.rcd (ρ₂.applySubst θ)) from hu)
@@ -903,7 +1048,7 @@ theorem unifyM_success_complete {B : Type} [DecidableEq B] (fuel : Nat) :
                 obtain rfl := heq
                 have e₁ := RowEquiv.applySubst θ (Row.toSpine_equiv ρ₁)
                 have e₂ := RowEquiv.applySubst θ (Row.toSpine_equiv ρ₂)
-                refine ih.2 S _ _ V hS (fun x hx => ?_) h (e₁.symm.trans (hR.trans e₂))
+                refine ih.2 Θ S _ _ V hS (fun x hx => ?_) h (e₁.symm.trans (hR.trans e₂))
                 rcases List.mem_append.mp hx with hh | hh
                 · exact hV (List.mem_append_left _ ((mem_sFtv_toSpine ρ₁ x).mp hh))
                 · exact hV (List.mem_append_right _ ((mem_sFtv_toSpine ρ₂ x).mp hh))
@@ -921,24 +1066,24 @@ theorem unifyM_success_complete {B : Type} [DecidableEq B] (fuel : Nat) :
             cases hsl : stripL (a :: s₁) (b :: s₂) with
             | some p =>
               obtain ⟨t₁, t₂⟩ := p; simp only [hsl] at h
-              exact ih.2 S t₁ t₂ V hS
+              exact ih.2 Θ S t₁ t₂ V hS
                 (sFtv_sub_residual hV (stripL_ftv hsl).1 (stripL_ftv hsl).2) h
                 (stripL_reflect_fwd hsl hu)
             | none =>
             cases hsr : stripR (a :: s₁) (b :: s₂) with
             | some p =>
               obtain ⟨t₁, t₂⟩ := p; simp only [hsl, hsr] at h
-              exact ih.2 S t₁ t₂ V hS
+              exact ih.2 Θ S t₁ t₂ V hS
                 (sFtv_sub_residual hV (stripR_ftv hsr).1 (stripR_ftv hsr).2) h
                 (stripR_reflect_fwd hsr hu)
             | none =>
-            cases hv1 : solveVarM S (a :: s₁) (b :: s₂) with
+            cases hv1 : solveVarM Θ S (a :: s₁) (b :: s₂) with
             | some r =>
               simp only [hsl, hsr, hv1] at h
               exact ⟨θ, AgreeOn.refl θ V,
                 solveVarM_complete (hv1.trans (congrArg some h)) hu⟩
             | none =>
-            cases hv2 : solveVarM S (b :: s₂) (a :: s₁) with
+            cases hv2 : solveVarM Θ S (b :: s₂) (a :: s₁) with
             | some r =>
               simp only [hsl, hsr, hv1, hv2] at h
               exact ⟨θ, AgreeOn.refl θ V,
@@ -948,7 +1093,7 @@ theorem unifyM_success_complete {B : Type} [DecidableEq B] (fuel : Nat) :
             | some p =>
               obtain ⟨τ0, τ0', t₁, t₂⟩ := p; simp only [hsl, hsr, hv1, hv2, hml] at h
               obtain ⟨hty, hru⟩ := matchL_reflect_fwd hml hu
-              exact arm S τ0 τ0' t₁ t₂ V hS
+              exact arm Θ S τ0 τ0' t₁ t₂ V hS
                 (fun x hx => by
                   rcases List.mem_append.mp hx with hh | hh
                   · exact sFtv_sub_left hV ((matchL_ftv hml).1 hh)
@@ -960,7 +1105,7 @@ theorem unifyM_success_complete {B : Type} [DecidableEq B] (fuel : Nat) :
             | some p =>
               obtain ⟨τ0', τ0, t₂, t₁⟩ := p; simp only [hsl, hsr, hv1, hv2, hml, hml2] at h
               obtain ⟨hty, hru⟩ := matchL_reflect_fwd hml2 hu.symm
-              exact arm S τ0 τ0' t₁ t₂ V hS
+              exact arm Θ S τ0 τ0' t₁ t₂ V hS
                 (fun x hx => by
                   rcases List.mem_append.mp hx with hh | hh
                   · exact sFtv_sub_left hV ((matchL_ftv hml2).2.2.1 hh)
@@ -973,7 +1118,7 @@ theorem unifyM_success_complete {B : Type} [DecidableEq B] (fuel : Nat) :
               obtain ⟨τ0, τ0', t₁, t₂⟩ := p
               simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr] at h
               obtain ⟨hty, hru⟩ := matchR_reflect_fwd hmr hu
-              exact arm S τ0 τ0' t₁ t₂ V hS
+              exact arm Θ S τ0 τ0' t₁ t₂ V hS
                 (fun x hx => by
                   rcases List.mem_append.mp hx with hh | hh
                   · exact sFtv_sub_left hV ((matchR_ftv hmr).1 hh)
@@ -986,7 +1131,7 @@ theorem unifyM_success_complete {B : Type} [DecidableEq B] (fuel : Nat) :
               obtain ⟨τ0', τ0, t₂, t₁⟩ := p
               simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2] at h
               obtain ⟨hty, hru⟩ := matchR_reflect_fwd hmr2 hu.symm
-              exact arm S τ0 τ0' t₁ t₂ V hS
+              exact arm Θ S τ0 τ0' t₁ t₂ V hS
                 (fun x hx => by
                   rcases List.mem_append.mp hx with hh | hh
                   · exact sFtv_sub_left hV ((matchR_ftv hmr2).2.2.1 hh)
@@ -999,7 +1144,7 @@ theorem unifyM_success_complete {B : Type} [DecidableEq B] (fuel : Nat) :
               obtain ⟨τ0, τ0', t₁, t₂⟩ := p
               simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg] at h
               obtain ⟨hty, hru⟩ := groundMatch_reflect_fwd hg hu
-              exact arm S τ0 τ0' t₁ t₂ V hS
+              exact arm Θ S τ0 τ0' t₁ t₂ V hS
                 (fun x hx => by
                   rcases List.mem_append.mp hx with hh | hh
                   · exact sFtv_sub_left hV ((groundMatch_ftv hg).1 hh)
@@ -1012,7 +1157,7 @@ theorem unifyM_success_complete {B : Type} [DecidableEq B] (fuel : Nat) :
               obtain ⟨τ0', τ0, t₂, t₁⟩ := p
               simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2] at h
               obtain ⟨hty, hru⟩ := groundMatch_reflect_fwd hg2 hu.symm
-              exact arm S τ0 τ0' t₁ t₂ V hS
+              exact arm Θ S τ0 τ0' t₁ t₂ V hS
                 (fun x hx => by
                   rcases List.mem_append.mp hx with hh | hh
                   · exact sFtv_sub_left hV ((groundMatch_ftv hg2).2.2.1 hh)
@@ -1020,20 +1165,41 @@ theorem unifyM_success_complete {B : Type} [DecidableEq B] (fuel : Nat) :
                 (sFtv_sub_residual hV (groundMatch_ftv hg2).2.2.2 (groundMatch_ftv hg2).2.1)
                 h hty.symm hru.symm
             | none =>
-            cases he1 : expandL S (a :: s₁) (b :: s₂) with
+            cases he1 : expandL Θ S (a :: s₁) (b :: s₂) with
             | some p =>
               obtain ⟨β0, l0, τ0, t₁, t₂⟩ := p
               simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, he1] at h
               exact expand_completeM ih.2 hS hV he1 h hu
             | none =>
-            cases he2 : expandL S (b :: s₂) (a :: s₁) with
+            cases he2 : expandL Θ S (b :: s₂) (a :: s₁) with
             | some p =>
               obtain ⟨β0, l0, τ0, t₁, t₂⟩ := p
               simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, he1, he2] at h
               exact expand_completeM ih.2 hS (sFtv_sub_swap hV) he2 h hu.symm
             | none =>
-              simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, he1, he2] at h
-              split at h <;> cases h
+            cases hpc : projClash (a :: s₁) (b :: s₂) with
+            | true =>
+              simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, he1, he2,
+                hpc] at h
+              cases h
+            | false =>
+            cases he3 : expandR Θ S (a :: s₁) (b :: s₂) with
+            | some p =>
+              obtain ⟨β0, l0, τ0, t₁, t₂⟩ := p
+              simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, he1, he2,
+                hpc, he3] at h
+              exact expandR_completeM ih.2 hS hV he3 h hu
+            | none =>
+            cases he4 : expandR Θ S (b :: s₂) (a :: s₁) with
+            | some p =>
+              obtain ⟨β0, l0, τ0, t₁, t₂⟩ := p
+              simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, he1, he2,
+                hpc, he3, he4] at h
+              exact expandR_completeM ih.2 hS (sFtv_sub_swap hV) he4 h hu.symm
+            | none =>
+              simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, he1, he2,
+                hpc, he3, he4] at h
+              cases h
 
 -- ≐ᵣ SUCCESS COMPLETENESS under the mutual driver. With unifyRowM_success_sound
 -- the unifier set of ρ₁ ≐ᵣ ρ₂ is EXACTLY {θ : Sol.Sat θ s}, modulo the fresh
@@ -1048,7 +1214,7 @@ theorem unifyRowM_success_complete {B : Type} [DecidableEq B] {θ : TySubst B}
   unfold Unifies at hu
   have e₁ := RowEquiv.applySubst θ (Row.toSpine_equiv ρ₁)
   have e₂ := RowEquiv.applySubst θ (Row.toSpine_equiv ρ₂)
-  exact (unifyM_success_complete fuel).2 _ ρ₁.toSpine ρ₂.toSpine _
+  exact (unifyM_success_complete fuel).2 _ _ ρ₁.toSpine ρ₂.toSpine _
     (localSupply_avoids _ _) (fun _ hx => hx) h (e₁.symm.trans (hu.trans e₂))
 
 

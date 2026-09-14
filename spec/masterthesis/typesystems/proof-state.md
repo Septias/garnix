@@ -30,7 +30,7 @@ Principality forces qualified schemes that use parked stumps during unification 
 - [x] Let-Statements
 - [x] Qualified Schemes
 - [~] Unification
-- [~] Type Inference
+- [~] Type Inference  (judgement MECHANIZED 2026-09-14, lean/Infer.lean)
 - [~] Mathematical Properties
 - [ ] FC-Labels
 - [ ] Negative type information
@@ -51,43 +51,219 @@ Principality forces qualified schemes that use parked stumps during unification 
 ## Unification
 - Outcomes
   - [~] success: *sound & complete*
-    - can still be VACUOUS
+    - VACUOUS successes: none left in any fuzz universe, either half, since the
+      guards read the accumulated solution (B1). `UnifyWF` is still UNPROVED —
+      empirically clean is not a theorem.
   - [¡] occurs: *incomplete*
     - α ≐ᵣ (β|α|γ)
   - [~] stuck : *incomplete*
     - (k:{β|α} | β) ≐ᵣ (k:{l:𝓫} | l:𝓫)
-    - (l:{w}) ≐ᵣ (w | v)
+    - (l:{w}) ≐ᵣ (w | v) — NO LONGER STUCK, expandR solves it
   
 - Open
-  - [ ] the expandR driver arm — two more cases in `unifySpineMF`, two more
-    `Terminal` fields, and the reversal transport for the four reflection
-    lemmas. The only thing between the self-reference filter and
-    `terminal_masks_mgu`. MEASURED: `expandR` already exists (Defs.lean:263) and
-    is never called; the driver succeeds on (l:𝓫|α) ≐ᵣ (m:𝓫|β) and goes STUCK on
-    the mirror (α|l:𝓫) ≐ᵣ (β|m:𝓫). On terminal_masks_mgu's own configuration
-    (l:{w}) ≐ᵣ (w|v), `expandR` fires with host v and composes to exactly the
-    mgu the prose derives by hand — so the arm INVALIDATES terminalNoMgu_false,
-    the sharpest refutation of the fourth leg. (stuck_masks_mgu is untouched:
-    that one is about UResM.seq, not about terminality.)
-  - [ ] `uniqueHost` needs the SOLVER STATE to close the last vacuous-success
-    class: the offending field is hosted in a fresh tail that an earlier binding
-    already made part of another variable, and the detector only compares the
-    payload with the host variable itself. The accumulated solution is never
-    threaded back into the spines. This is the gate on `UnifyWF`
-    (State.lean:810) and hence on ⟦S⟧ being a total function — i.e. on items 1
-    and 2 of plans/inference-gap-analysis.md's critical path.
+  - [x] the expandR driver arm — DONE (RowUnify/ExpandR.lean, 2026-09-13).
+    `expandR` existed since the self-reference filter and was never called; the
+    driver solved (l:𝓫|α) ≐ᵣ (m:𝓫|β) and went STUCK on the mirror
+    (α|l:𝓫) ≐ᵣ (β|m:𝓫). Two arms added AFTER the projClash test (projClash is a
+    sound no-unifier test, so a success reached past it would be vacuous — the
+    ordering makes the change monotone on reached verdicts).
+    NOT a transport: `revRow` transports the SUBSTITUTION-FREE lemmas (stripR,
+    matchR), but `revRow (ρ.applySubst θ) ≠ (revRow ρ).applySubst θ`, so
+    `expand_shift_R` and `host_forced_R` are genuine mirror proofs. The mirror of
+    `spine_extract` reads the l-field off segment index |vars| ("no variable
+    FOLLOWS it") instead of index 0; `ProjEquiv.reverse` turns "last entry" into
+    a head so the inductions stay left-to-right.
+    All four legs re-proved with the new arms: success soundness, success
+    completeness, boundedness, clash soundness, fuel monotonicity.
+    PAYOFF: `terminal_masks_mgu`'s configuration (l:{w}) ≐ᵣ (w|v) is no longer
+    terminal — expandR hosts in v — and the driver now returns exactly the mgu
+    that section builds by hand (Regressions.unify_terminal_masks_mgu_solved).
+    So `terminalNoMgu_false` is DELETED and `TerminalNoMgu` is OPEN: unrefuted
+    and unproven. Do not cite it either way. `stuck_masks_mgu` is untouched —
+    that one is about UResM.seq, so stuck ⟹ ¬mgu stays FALSE.
+    SWEEP (all three universes, cap 64, vs. pristine HEAD baseline):
+      stuck    2928/258564/4552 → 2664/243356/4352   (≈15k resolved in `deep`)
+      success 13493/ 83430/2917 → 13677/ 94022/2989
+      clash   unchanged in all three; divergence candidates still 0
+    REGRESSION, measured and NOT yet fixed — see the uniqueHost item below.
+
+  - [x] `uniqueHost` / the occurs guards need the SOLVER STATE — DONE
+    (2026-09-13, "B1"). The guards were LOCAL: they compared a variable with the
+    spine or payload AS WRITTEN. That is enough for every arm that SOLVES AND
+    APPLIES (matchL/R, groundMatch, the ≐ congruences) because those push their
+    solution into the residual. U-expand is the exception: it RENAMES the host
+    (β ↦ β′) instead of applying β ≔ (l:δ | β′), and `renameVar` touches SPINE
+    variables only — so a payload mentioning β still reads β after the move
+    while β is already bound, and a later guard misses a cycle that exists only
+    in the transitive closure.
+    THE FIX: `DepGraph` (Defs.lean) — the accumulated EXPANSIONS as an edge
+    list, threaded through `unifyTyF`/`unifySpineMF` and read by
+      * `uniqueHost`: the HOST condition becomes β ∉ depReach Θ (allRowVars τ).
+        The `rest` condition is NOT widened the same way — those variables are
+        excused by `selfref_no_l_field`, which needs the genuine occurrence in
+        τ, so widening there would be UNSOUND.
+      * `solveVarM`: α ≔ ofSpine s₂ is a cycle as soon as α is REACHABLE from
+        s₂, not only when it occurs in it. This is the guard the spine-level
+        cycle ran through — `uniqueHost` alone does not fix it.
+    Only expansions accumulate; every other arm's solution is already in its
+    residual. `depReach` is inflationary, so the guards only ever reject MORE:
+    `uniqueHost_spec` still yields the same `HostShape`, and success soundness /
+    completeness / clash soundness went through unchanged.
+    COST, and it is not incidental: the guards run inside kernel-checked `rfl`
+    regressions and `TyVar = String`. The obvious frontier-plus-`eraseDups`
+    closure made ONE regression take 76s to reduce. `depReach` is a marked set
+    kept deduped by construction, with a `[]` fast path for the (common) case
+    where no expansion has happened.
+    SWEEP — ill-formed solutions, BOTH halves, all three universes:
+      baseline (HEAD)   Acyclic 0/  0/ 0    Ranked 0/576/ 8
+      + expandR         Acyclic 0/ 32/ 0    Ranked 0/1176/16
+      + B1              Acyclic 0/  0/ 0    Ranked 0/  0/ 0     ← BELOW baseline
+    clash counts unchanged throughout; divergence candidates still 0.
+    So `UnifyWF` (State.lean:810) now has NO counterexample in any universe, in
+    either half — the original tripwire finding is closed too, not just the
+    regression expandR introduced. Witnesses are pinned in Regressions.lean
+    (`vacuous_success_payload_cycle` → stuck, `vacuous_success_spine_cycle` →
+    occurs, the latter being the RIGHT answer: that problem has no unifier).
+    WHAT IT COST ELSEWHERE: `NoHost`'s third disjunct is widened to
+    `β ∈ depReach Θ (allRowVars τ)`, which has two sources of different
+    strength — the genuine self-reference (no unifier at all,
+    `selfref_host_no_unifier`) and the stale-binding case (a fact about the
+    solver state, from which no no-unifier theorem follows). Trichotomy's
+    step-2 dispatch is correspondingly WEAKER and anything reading that
+    disjunct must re-split. Recorded, not repaired.
+  - [ ] PROVE `UnifyWF`. Empirically clean since B1 (0/0/0, both halves, three
+    universes) and the gate on ⟦S⟧ being a total function — items 1 and 2 of
+    plans/inference-gap-analysis.md's critical path. But empirically clean is
+    not a theorem, and the cheap routes are now RULED OUT BY MEASUREMENT rather
+    than by intuition. `Sol.Ranked` demands an explicit rank function; three
+    natural candidates were swept over all three universes:
+      * rank = LIST POSITION, bindings mention only LATER ones
+          violations 1036 / 31688 / 324   ✘
+      * rank = LIST POSITION, bindings mention only EARLIER ones
+          violations    0 /   376 /   0   ✘ (clean in `wide`/`nest`, not `deep`)
+      * rank = NAME LENGTH (supply birth order: later-drawn ranks lower)
+          violations   40 /  2336 /  24   ✘
+    Only "a binding never mentions the variable it binds" survives (0/0/0), and
+    that is far too weak to build a rank from.
+    WHY POSITION FAILS, concretely. List order IS creation order — `Sol.comp`
+    puts the earlier stage first in both call sites (`UResM.seq` and
+    `expandResM`). But `comp` also PUSHES the earlier stage's values through the
+    later solution: `expandResM` emits `δ ≔ τ.applySubst s.toSubst` where `s` is
+    the RECURSIVE result. So a binding created early can acquire a dependency on
+    a variable created later, e.g.
+        (l:{a} | a | l:𝓫) ≐ᵣ (m:𝓫 | b)
+        ⟹ aa ≔ {m:aaaa | aaaaa}   with aa created BEFORE aaaa
+    and the DAG order there is aaaa ≺ aa ≺ b — neither list order nor its
+    reverse, nor name length (b is shorter than aa but must rank above it).
+    So the rank is genuinely TOPOLOGICAL and the proof has to show the sorted
+    dependency graph is acyclic from how the driver builds it. The handle is
+    `Sol.ftvAt_rank` (State.lean:421), which already says one unfolding step
+    drops the rank of every bound occurrence; what is missing is the
+    `Sol.comp` preservation step, and that in turn needs to know what the later
+    stage may mention of the earlier stage's domain — which the
+    `Supply`/`Avoids`/`SolBelow` discipline constrains but does not yet pin
+    down. Do not retry the three ranks above.
   - [ ] sorted ftv, second half. `Ty/Row.sortedFtv` (State.lean) and
     `Ty/Row.allRowVars` (Defs.lean) exist; `bindTy` still tests the sort-blind
     `τ.ftv`, which is the over-conservatism the thesis flags.
-  - [ ] ⊴ covering order on qualified schemes
+  - [x] ⊴ covering order on qualified schemes (Qualified.lean, THE COVERING ORDER)
   - [ ] solver state S = (θ, Δ, W), stump wake-up, confluence of the final state
 
 ## Termination
 - Fuzzing suggests, that the algorithm actually terminates
 
 
+## Inference  (lean/Infer.lean, 2026-09-14)
+`Infer` / `InferRec` now EXIST in Lean — the first row of
+plans/inference-gap-analysis.md §B, which every downstream statement was blocked
+on. A RELATION, not a function: a function would owe three termination arguments
+the development does not have (unification's, `A-let`'s Δ-split fixpoint, the
+`↝*` closure). Determinism and totality become theorems ABOUT it instead of
+assumptions inside it.
+
+What the mechanization had to supply that the paper leaves as prose:
+- *`? on α`*: `Lookup` records `.unknown` but not WHICH variable blocked, and
+  both A-sel-? and K-repark need it. `LookupBlocked` refines the three
+  unknown-producing rules with the blocker threaded through — proved sound
+  (`toLookup`), complete (`Lookup.unknown_blocked`), deterministic
+  (`LookupBlocked.det`), and to name an unsolved variable (`.unsolved`).
+- *the failure policy*: "clash = hard error, stuck/occurs degrade to ★ + W" had
+  no rules, so the algorithm was UNDEFINED there. A clash now has no rule at all
+  — that IS the hard error, sound by `unifyM_clash_no_unifier` — and the
+  degradations are explicit (`Infer.appDeg`, `Infer.selDeg`).
+- *K-park*: `Wakes.park` computes a fresh constraint's initial blocker by
+  exhibiting a `LookupBlocked` witness.
+
+NON-VACUITY, which is what a relation is easy to get wrong: `selEx_infers`
+derives λx. x.l end to end with a fully concrete final state — result `α → δ`,
+one stump parked, blocked on the record's row variable `r`, writing into `δ`.
+A-sel-? fires, not A-sel-⊥ and not a degradation, because `α ≐ {r}` binds α at
+the TYPE sort and leaves `r` unsolved at the ROW sort. That is exactly the shape
+`selQ = ∀β δ. ⟨β.l ↓ δ⟩ ⇒ {β} → δ` describes declaratively.
+
+FOUND WHILE WRITING THE RULES: `unifyTyM` / `unifyRowM` start from a LOCAL
+supply (`lenBound … + 1`, `localSupply`), not the threaded one. Used naively in
+an A-rule it hands back a supply BEHIND the state's, and a later `draw`
+re-issues a name inference is already using. `SolveTy`/`SolveRow` therefore go
+through `unifyTyF`/`unifySpineMF` with `S.supply` threaded in and out.
+
+- [ ] `InferSound` (Infer.lean) — `Γ; S ⊢ e ⇒ τ; S′ ⟹ ⟦S′⟧Γ ⊢ e : ⟦S′⟧τ`.
+  STATED, not proved; the statement is the point, since it was unwriteable
+  before. Needs: `UnifyWF` (so ⟦S′⟧ is the closure rather than one step), the
+  parked stumps discharged (hence the `S′.parked = []` hypothesis, with F-★
+  supplying it), capture-avoidance for `QScheme.applySubst`, and an L2
+  type-substitution lemma (L1 has `typed_applySubst_aux`; `QTyped` has only
+  term substitution).
+- [ ] supply monotonicity: `Infer … S e τ S′ ⟹ S.supply ≤ S′.supply`. The first
+  real theorem to prove about the relation, and what "inferred variables are
+  fresh" rests on.
+- [ ] sorts. The paper draws `fresh α: κ`; `Supply` has no kinds, so the rules
+  draw untyped names and `A-let`'s `κ̄ = Γ(ᾱ)` is still not expressible.
+
 ## Principality
-- [ ] covering order on schemes ⊴
+- [x] covering order on schemes ⊴ — defined 2026-09-14, Qualified.lean
+  - *⊴[Γ]* / *⊴*: Inst_Γ(σ) ⊆ Inst_Γ(σ'), at one Γ / at every Γ. Γ-relative because
+    discharge reads the row-solutions; for plain schemes the two collapse (covered_toQ)
+  - *⊴⊑*: the same up to precision — σ' answers each instance of σ with one ⊑ₜ-below it.
+    THIS is the order principality needs, and the reason is a theorem, not taste:
+    typings are blur-closed (T-★-intro) and instance sets are not (★ is rigid), so
+    λx.x.l types at {(l: 𝓫)} → ★ while selQ has no such instance
+    (selEx_blurred_typing + selQ_no_blurred_inst). "Instances = typings" is unreachable
+  - both are PREORDERS, not partial orders: α-renaming gives ⊴-equivalent distinct schemes.
+    Needed TyPrec.trans, which was only ever announced as admissible — now proved (minimal.lean)
+  - *⊴ is blind to vacuity*: an uninhabited scheme sits below everything
+    (coveredAt_of_uninhabited) — qLet's inhabitation premise from the order side, which is
+    why Principal carries it as its own conjunct
+  - *Principal Γ e σ* := instance-closed ∧ inhabited ∧ covers every typing up to ⊑.
+    Sanity: a principal scheme is ⊴⊑-greatest among the sound schemes (Principal.greatest)
+  - *⊴ acts on contexts*: swapping a bound scheme for a ⊴-larger one preserves typing
+    (qtyped_cov / qtyped_bind_cov, the QCtx.Sub induction with ⊴ in place of equality).
+    NB `let` is ANTITONE in the scheme it binds — qLet's premise quantifies over all
+    instances — and monotone only in the context it types under
+  - *syntactic witness*: one θ instantiating σ' to σ + Jones' freshness + stump entailment
+    certifies ⊴ (QScheme.covered_of_witness). Plain schemes give back the textbook
+    generic-instance rule (Scheme.covered_of_inst); selQ_covers_selQb is the stump-carrying
+    case, where entailment is discharged by RUNNING the lookup — the concrete answer to
+    ROSE's "entailment is a parameter"
+  - *⊴[Γ] is NOT stable under Γ ⊑ Γ'* (covered_not_rowExt_stable): ∀δ.⟨α.l↓δ⟩⇒δ with α
+    unsolved has instance set {★} and is covered by the monotype ★; solving α = (l: 𝓫)
+    moves it to {𝓫} and the covering fails — for ⊴ AND ⊴⊑. This is what the uniform
+    ⊴ (∀Γ) is for; Γ-relative generality claims are claims about that Γ's solutions
+- CONJUNCT 3 WAS WRONG, and the attempt is what found it (2026-09-14):
+  - the typing set has TWO closure properties — T-★-intro (blur) and T-eq (≈) — and ⊑ is
+    pure congruence on rows, so it can sharpen a payload but never move a field past a unit
+  - witness: `λx.x.l : {(l: {ε | m: 𝓫})} → {m: 𝓫}` (selEx_equiv_typing) is a typing with NO
+    ⊑-answer among selQ's instances (selQ_no_prec_answer) — the domain forces the payload
+    τ_p, the hit pins the result to the same τ_p, and τ_p would have to be ⊑-below a `cat`
+    row and a `sing` row at once. Hence ¬PrincipalStrict selQ (selQ_not_principalStrict)
+  - fix: *≼ₜ* := ≈ then ⊑ (TyBelow), and *⊴≼* covering. Principal now reads ≼; the same
+    instance answers the witness via ≈ on the result (selQ_needs_equiv)
+  - [ ] OPEN: ≼-transitivity needs ⊑ and ≈ to COMMUTE (a ⊑ τ, τ ≈ b ⟹ ∃a'. a ≈ a' ⊑ b).
+    Not proved, not obviously false — blurred positions should travel with the reassociated
+    subterms. Until it exists, ⊴≼ has refl but no trans
+  - [ ] OPEN: `Principal selQ (λx.x.l)` in the ≼ form — conjuncts 1+2 done
+    (selQ_sound_and_inhabited), 3 still needs the L2 inversion for λx.x.l (analogue of
+    minimal.lean's sel_var_unk)
 
 
 # Problems
@@ -133,7 +309,8 @@ Principality forces qualified schemes that use parked stumps during unification 
   - σ ≥ τ: σ instantiates as τ
 - ≐: Type unification
 - ≐ᵣ: Row unification
-- ⊴: "At least as general" (covering order on schemes)
+- ⊴: "At least as general" (covering order on schemes) — σ ⊴ σ' : σ' covers σ
+- ⊴⊑: covering up to precision — σ' answers each σ-instance with a ⊑ₜ-sharper one
 
 ## Properties
 - ↓: deterministic, monotone, total (under RowWF)
@@ -195,7 +372,23 @@ Proofs are for _closed_ programs (Γ = ∅). e ↯ marks _lookup-errors_: a sele
   - *instance-closedness*: EVERY ≥\_Γ-instance of selQ = ∀β δ. ⟨β.l ↓ δ⟩ ⇒ {β} → δ
     is a declarative typing of λx. x.l, in ANY Γ (selQ_instance_closed) — the three
     discharge cases replay T-sel / T-sel-⊥ / T-sel-★ per instance
-  
+  - *L1 ⊆ L2*: Typed.toQ embeds every plain derivation (Q = ∅ instances)
+- IS L2 »SOUND & COMPLETE«? — audit 2026-09-13, build green, no sorries
+  - *safety*: YES. qProgress/qPreservation are proven over ⊢_Q directly (Step/Value/Err
+    reused from L1), preservation ON THE NOSE, axiom-guarded in Axioms.lean
+  - *vs. L1*: only the ⊆ direction. The converse is believed false, but NOT mechanized:
+    there is no `¬ Typed ∅ two_use ({a: 𝓫_c | b: ★})`. no_plain_principal_scheme is about
+    λx.x.l at ONE instance pair, so the Qualified.lean comment "no single plain scheme
+    could serve both uses" is prose, not a theorem. ⇒ L1 ⊊ L2 is an OPEN refutation
+  - *completeness w.r.t. inference*: NO, and not yet stateable. No W (algorithmic.lean is
+    an import root); unifyRowM_success_iff is completeness for ≐ᵣ, not for ⊢_Q; and
+    principality for L2 exists only as the single-example bookend qualified_principal_scheme
+    (λx.x.l), not as "∀e ∃σ principal". The ⊴ order now exists (see Principality); what is
+    still missing is a W and the covering conjunct for a scheme it produces
+  - *watch item*: qLet's INHABITATION premise (∃τ₁. σ ≥_Γ τ₁) is non-standard — it exists
+    because progress is false without it. Any future completeness proof must show inference
+    always discharges it ("stumps always finalize")
+
 - ≈-characterization:
   - *normal form*: rows flatten to spines
   - *the characterization*: ρ₁ ≈ ρ₂ iff same var sequence and all l-projections pointwise equal

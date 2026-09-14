@@ -512,7 +512,7 @@ def landmarks : List (String × Spine × Spine) :=
     ("stuck_masks_mgu (conservative — unique mgu)",
        [.field "k" (.rcd (.cat (.var "b") (.var "a"))), .var "b"],
        [.field "k" (.rcd (.sing "l" (.base ()))), .field "l" (.base ())]),
-    ("terminal_masks_mgu (terminal — unique mgu)",
+    ("terminal_masks_mgu (WAS terminal — expandR now solves it)",
        [.field "l" (.rcd (.var "w"))], [.var "w", .var "v"]) ]
 
 def landmarkReport (cap : Nat) : IO Unit := do

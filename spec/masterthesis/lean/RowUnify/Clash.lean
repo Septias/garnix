@@ -41,7 +41,7 @@ theorem bindTy_ne_clash {B : Type} {S : Supply} {α : TyVar} {τ : Ty B} :
   · split at h <;> cases h
 
 theorem solveVarM_ne_clash {B : Type} {S : Supply} {s₁ s₂ : List (Atom B)} :
-    solveVarM S s₁ s₂ ≠ some .clash := by
+    solveVarM Θ S s₁ s₂ ≠ some .clash := by
   intro h
   cases s₁ with
   | nil => simp [solveVarM] at h
@@ -62,12 +62,21 @@ theorem expandResM_clash {B : Type} {S : Supply} {β : TyVar} {l : Label} {τ : 
   | stuck => cases h
   | outOfFuel => cases h
 
+theorem expandResRM_clash {B : Type} {S : Supply} {β : TyVar} {l : Label} {τ : Ty B}
+    {r : UResM B} (h : expandResRM S β l τ r = .clash) : r = .clash := by
+  cases r with
+  | success _ _ => cases h
+  | clash => rfl
+  | occurs => cases h
+  | stuck => cases h
+  | outOfFuel => cases h
+
 -- ≐ dispatches on the head constructors: every MISMATCH is refuted here once
 -- and for all (≈ₜ never changes a head, minimal.lean:163ff), and only the two
 -- recursive pairs are handed back to the caller.
-theorem tyClash_dispatch {B : Type} [DecidableEq B] {S : Supply} {fuel : Nat}
+theorem tyClash_dispatch {B : Type} [DecidableEq B] {Θ : DepGraph} {S : Supply} {fuel : Nat}
     {τ τ' : Ty B} {θ : TySubst B}
-    (h : unifyTyF S fuel τ τ' = .clash) (hu : TyUnifies θ τ τ')
+    (h : unifyTyF Θ S fuel τ τ' = .clash) (hu : TyUnifies θ τ τ')
     (hfn : ∀ a₁ b₁ a₂ b₂ : Ty B, τ = .fn a₁ b₁ → τ' = .fn a₂ b₂ → False)
     (hrcd : ∀ ρ₁ ρ₂ : Row B, τ = .rcd ρ₁ → τ' = .rcd ρ₂ → False) : False := by
   cases τ with
@@ -113,15 +122,15 @@ theorem tyClash_dispatch {B : Type} [DecidableEq B] {S : Supply} {fuel : Nat}
 -- call, so the statement stays free of a set parameter; the arms below hand the
 -- enlarged set W to the sub-calls internally.
 theorem unifyM_clash_no_unifier {B : Type} [DecidableEq B] (fuel : Nat) :
-    (∀ (S : Supply) (τ τ' : Ty B),
-        S.Avoids (τ.ftv ++ τ'.ftv) → unifyTyF S fuel τ τ' = .clash →
+    (∀ (Θ : DepGraph) (S : Supply) (τ τ' : Ty B),
+        S.Avoids (τ.ftv ++ τ'.ftv) → unifyTyF Θ S fuel τ τ' = .clash →
         ¬ ∃ θ : TySubst B, TyUnifies θ τ τ') ∧
-    (∀ (S : Supply) (s₁ s₂ : List (Atom B)),
-        S.Avoids (sFtv s₁ ++ sFtv s₂) → unifySpineMF S fuel s₁ s₂ = .clash →
+    (∀ (Θ : DepGraph) (S : Supply) (s₁ s₂ : List (Atom B)),
+        S.Avoids (sFtv s₁ ++ sFtv s₂) → unifySpineMF Θ S fuel s₁ s₂ = .clash →
         ¬ ∃ θ : TySubst B, Unifies θ (ofSpine s₁) (ofSpine s₂)) := by
   induction fuel with
   | zero =>
-      refine ⟨fun S τ τ' _ h => ?_, fun S s₁ s₂ _ h => ?_⟩
+      refine ⟨fun Θ S τ τ' _ h => ?_, fun Θ S s₁ s₂ _ h => ?_⟩
       · rintro ⟨θ, hu⟩
         exact tyClash_dispatch h hu
           (fun _ _ _ _ e₁ e₂ => by subst e₁; subst e₂; cases h)
@@ -142,19 +151,19 @@ theorem unifyM_clash_no_unifier {B : Type} [DecidableEq B] (fuel : Nat) :
             | cons b s₂ => cases h
   | succ fuel ih =>
       -- the shape every eq-emitting arm produces
-      have arm : ∀ (S : Supply) (τ τ' : Ty B) (t₁ t₂ : List (Atom B)) (V : List TyVar)
+      have arm : ∀ (Θ : DepGraph) (S : Supply) (τ τ' : Ty B) (t₁ t₂ : List (Atom B)) (V : List TyVar)
           (θ : TySubst B), S.Avoids V →
           (τ.ftv ++ τ'.ftv) ⊆ V → (sFtv t₁ ++ sFtv t₂) ⊆ V →
-          ((unifyTyF S fuel τ τ').seq fun θ' S'' =>
-              unifySpineMF S'' fuel (sApplySubst θ' t₁) (sApplySubst θ' t₂)) = .clash →
+          ((unifyTyF Θ S fuel τ τ').seq fun θ' S'' =>
+              unifySpineMF Θ S'' fuel (sApplySubst θ' t₁) (sApplySubst θ' t₂)) = .clash →
           TyUnifies θ τ τ' →
           RowEquiv ((ofSpine t₁).applySubst θ) ((ofSpine t₂).applySubst θ) → False := by
-        intro S τ τ' t₁ t₂ V θ hS hVt hVr h hty hru
+        intro Θ S τ τ' t₁ t₂ V θ hS hVt hVr h hty hru
         rcases UResM.seq_clash h with hc | ⟨s₁, S₁, hs, hk⟩
-        · exact ih.1 S τ τ' (hS.mono hVt) hc ⟨θ, hty⟩
-        · obtain ⟨W₁, hVW₁, hS₁, hb₁⟩ := (unifyM_bounded fuel).1 S τ τ' V hS hVt hs
+        · exact ih.1 Θ S τ τ' (hS.mono hVt) hc ⟨θ, hty⟩
+        · obtain ⟨W₁, hVW₁, hS₁, hb₁⟩ := (unifyM_bounded fuel).1 Θ S τ τ' V hS hVt hs
           obtain ⟨θ₁, hag₁, hsat₁⟩ :=
-            (unifyM_success_complete fuel).1 S τ τ' V hS hVt hs hty
+            (unifyM_success_complete fuel).1 Θ S τ τ' V hS hVt hs hty
           have hres : (sFtv (sApplySubst s₁.toSubst t₁) ++
                        sFtv (sApplySubst s₁.toSubst t₂)) ⊆ W₁ := fun x hx => by
             rcases List.mem_append.mp hx with hh | hh
@@ -162,16 +171,16 @@ theorem unifyM_clash_no_unifier {B : Type} [DecidableEq B] (fuel : Nat) :
                 (fun _ hy => hVW₁ (hVr (List.mem_append_left _ hy))) hb₁ hh
             · exact sFtv_sApplySubst_sub
                 (fun _ hy => hVW₁ (hVr (List.mem_append_right _ hy))) hb₁ hh
-          exact ih.2 S₁ _ _ (hS₁.mono hres) hk
+          exact ih.2 Θ S₁ _ _ (hS₁.mono hres) hk
             ⟨θ₁, (unifies_sApplySubst_of_sat hsat₁ t₁ t₂).mpr
               (hag₁.unifiesSpine (sFtv_sub_left hVr) (sFtv_sub_right hVr) hru)⟩
-      refine ⟨fun S τ τ' hS h => ?_, fun S s₁ s₂ hS h => ?_⟩
+      refine ⟨fun Θ S τ τ' hS h => ?_, fun Θ S s₁ s₂ hS h => ?_⟩
       · rintro ⟨θ, hu⟩
         refine tyClash_dispatch h hu (fun a₁ b₁ a₂ b₂ e₁ e₂ => ?_)
           (fun ρ₁ ρ₂ e₁ e₂ => ?_)
         · subst e₁; subst e₂
-          replace h : ((unifyTyF S fuel a₁ a₂).seq fun θ' S'' =>
-              unifyTyF S'' fuel (b₁.applySubst θ') (b₂.applySubst θ')) = .clash := h
+          replace h : ((unifyTyF Θ S fuel a₁ a₂).seq fun θ' S'' =>
+              unifyTyF Θ S'' fuel (b₁.applySubst θ') (b₂.applySubst θ')) = .clash := h
           obtain ⟨σ₁, σ₂, heq, hA, hB⟩ := TyEquiv.fn_inv
             (show TyEquiv (Ty.fn (a₁.applySubst θ) (b₁.applySubst θ)) _ from hu)
           simp only [Ty.applySubst, Ty.fn.injEq] at heq
@@ -186,28 +195,28 @@ theorem unifyM_clash_no_unifier {B : Type} [DecidableEq B] (fuel : Nat) :
           have hVb₂ : b₂.ftv ⊆ ((Ty.fn a₁ b₁).ftv ++ (Ty.fn a₂ b₂).ftv) :=
             fun _ hy => List.mem_append_right _ (List.mem_append_right _ hy)
           rcases UResM.seq_clash h with hc | ⟨s₁, S₁, hs, hk⟩
-          · exact ih.1 S a₁ a₂ (hS.mono hVa) hc ⟨θ, hA⟩
+          · exact ih.1 Θ S a₁ a₂ (hS.mono hVa) hc ⟨θ, hA⟩
           · obtain ⟨W₁, hVW₁, hS₁, hb₁⟩ :=
-              (unifyM_bounded fuel).1 S a₁ a₂ _ hS hVa hs
+              (unifyM_bounded fuel).1 Θ S a₁ a₂ _ hS hVa hs
             obtain ⟨θ₁, hag₁, hsat₁⟩ :=
-              (unifyM_success_complete fuel).1 S a₁ a₂ _ hS hVa hs hA
+              (unifyM_success_complete fuel).1 Θ S a₁ a₂ _ hS hVa hs hA
             have hres : ((b₁.applySubst s₁.toSubst).ftv ++
                          (b₂.applySubst s₁.toSubst).ftv) ⊆ W₁ := fun x hx => by
               rcases List.mem_append.mp hx with hh | hh
               · exact Ty_ftv_applySubst_sub (fun _ hy => hVW₁ (hVb₁ hy)) hb₁ hh
               · exact Ty_ftv_applySubst_sub (fun _ hy => hVW₁ (hVb₂ hy)) hb₁ hh
-            exact ih.1 S₁ _ _ (hS₁.mono hres) hk
+            exact ih.1 Θ S₁ _ _ (hS₁.mono hres) hk
               ⟨θ₁, (tyUnifies_applySubst_of_sat hsat₁ b₁ b₂).mpr
                 (hag₁.tyUnifies hVb₁ hVb₂ hB)⟩
         · subst e₁; subst e₂
-          replace h : unifySpineMF S fuel ρ₁.toSpine ρ₂.toSpine = .clash := h
+          replace h : unifySpineMF Θ S fuel ρ₁.toSpine ρ₂.toSpine = .clash := h
           obtain ⟨ρ', heq, hR⟩ := TyEquiv.rcd_inv
             (show TyEquiv (Ty.rcd (ρ₁.applySubst θ)) _ from hu)
           simp only [Ty.applySubst, Ty.rcd.injEq] at heq
           obtain rfl := heq
           have e₁ := RowEquiv.applySubst θ (Row.toSpine_equiv ρ₁)
           have e₂ := RowEquiv.applySubst θ (Row.toSpine_equiv ρ₂)
-          refine ih.2 S _ _ (hS.mono (fun x hx => ?_)) h
+          refine ih.2 Θ S _ _ (hS.mono (fun x hx => ?_)) h
             ⟨θ, e₁.symm.trans (hR.trans e₂)⟩
           rcases List.mem_append.mp hx with hh | hh
           · exact List.mem_append_left _ ((mem_sFtv_toSpine ρ₁ x).mp hh)
@@ -231,21 +240,21 @@ theorem unifyM_clash_no_unifier {B : Type} [DecidableEq B] (fuel : Nat) :
             cases hsl : stripL (a :: s₁) (b :: s₂) with
             | some p =>
               obtain ⟨t₁, t₂⟩ := p; simp only [hsl] at h
-              exact ih.2 S t₁ t₂ (hS.residual (stripL_ftv hsl).1 (stripL_ftv hsl).2) h
+              exact ih.2 Θ S t₁ t₂ (hS.residual (stripL_ftv hsl).1 (stripL_ftv hsl).2) h
                 ⟨θ, stripL_reflect_fwd hsl hu⟩
             | none =>
             cases hsr : stripR (a :: s₁) (b :: s₂) with
             | some p =>
               obtain ⟨t₁, t₂⟩ := p; simp only [hsl, hsr] at h
-              exact ih.2 S t₁ t₂ (hS.residual (stripR_ftv hsr).1 (stripR_ftv hsr).2) h
+              exact ih.2 Θ S t₁ t₂ (hS.residual (stripR_ftv hsr).1 (stripR_ftv hsr).2) h
                 ⟨θ, stripR_reflect_fwd hsr hu⟩
             | none =>
-            cases hv1 : solveVarM S (a :: s₁) (b :: s₂) with
+            cases hv1 : solveVarM Θ S (a :: s₁) (b :: s₂) with
             | some r =>
               simp only [hsl, hsr, hv1] at h
               exact solveVarM_ne_clash (hv1.trans (congrArg some h))
             | none =>
-            cases hv2 : solveVarM S (b :: s₂) (a :: s₁) with
+            cases hv2 : solveVarM Θ S (b :: s₂) (a :: s₁) with
             | some r =>
               simp only [hsl, hsr, hv1, hv2] at h
               exact solveVarM_ne_clash (hv2.trans (congrArg some h))
@@ -254,7 +263,7 @@ theorem unifyM_clash_no_unifier {B : Type} [DecidableEq B] (fuel : Nat) :
             | some p =>
               obtain ⟨τ0, τ0', t₁, t₂⟩ := p; simp only [hsl, hsr, hv1, hv2, hml] at h
               obtain ⟨hty, hru⟩ := matchL_reflect_fwd hml hu
-              exact arm S τ0 τ0' t₁ t₂ _ θ hS
+              exact arm Θ S τ0 τ0' t₁ t₂ _ θ hS
                 (fun x hx => by
                   rcases List.mem_append.mp hx with hh | hh
                   · exact List.mem_append_left _ ((matchL_ftv hml).1 hh)
@@ -269,7 +278,7 @@ theorem unifyM_clash_no_unifier {B : Type} [DecidableEq B] (fuel : Nat) :
             | some p =>
               obtain ⟨τ0', τ0, t₂, t₁⟩ := p; simp only [hsl, hsr, hv1, hv2, hml, hml2] at h
               obtain ⟨hty, hru⟩ := matchL_reflect_fwd hml2 hu.symm
-              exact arm S τ0 τ0' t₁ t₂ _ θ hS
+              exact arm Θ S τ0 τ0' t₁ t₂ _ θ hS
                 (fun x hx => by
                   rcases List.mem_append.mp hx with hh | hh
                   · exact List.mem_append_left _ ((matchL_ftv hml2).2.2.1 hh)
@@ -285,7 +294,7 @@ theorem unifyM_clash_no_unifier {B : Type} [DecidableEq B] (fuel : Nat) :
               obtain ⟨τ0, τ0', t₁, t₂⟩ := p
               simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr] at h
               obtain ⟨hty, hru⟩ := matchR_reflect_fwd hmr hu
-              exact arm S τ0 τ0' t₁ t₂ _ θ hS
+              exact arm Θ S τ0 τ0' t₁ t₂ _ θ hS
                 (fun x hx => by
                   rcases List.mem_append.mp hx with hh | hh
                   · exact List.mem_append_left _ ((matchR_ftv hmr).1 hh)
@@ -301,7 +310,7 @@ theorem unifyM_clash_no_unifier {B : Type} [DecidableEq B] (fuel : Nat) :
               obtain ⟨τ0', τ0, t₂, t₁⟩ := p
               simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2] at h
               obtain ⟨hty, hru⟩ := matchR_reflect_fwd hmr2 hu.symm
-              exact arm S τ0 τ0' t₁ t₂ _ θ hS
+              exact arm Θ S τ0 τ0' t₁ t₂ _ θ hS
                 (fun x hx => by
                   rcases List.mem_append.mp hx with hh | hh
                   · exact List.mem_append_left _ ((matchR_ftv hmr2).2.2.1 hh)
@@ -317,7 +326,7 @@ theorem unifyM_clash_no_unifier {B : Type} [DecidableEq B] (fuel : Nat) :
               obtain ⟨τ0, τ0', t₁, t₂⟩ := p
               simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg] at h
               obtain ⟨hty, hru⟩ := groundMatch_reflect_fwd hg hu
-              exact arm S τ0 τ0' t₁ t₂ _ θ hS
+              exact arm Θ S τ0 τ0' t₁ t₂ _ θ hS
                 (fun x hx => by
                   rcases List.mem_append.mp hx with hh | hh
                   · exact List.mem_append_left _ ((groundMatch_ftv hg).1 hh)
@@ -333,7 +342,7 @@ theorem unifyM_clash_no_unifier {B : Type} [DecidableEq B] (fuel : Nat) :
               obtain ⟨τ0', τ0, t₂, t₁⟩ := p
               simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2] at h
               obtain ⟨hty, hru⟩ := groundMatch_reflect_fwd hg2 hu.symm
-              exact arm S τ0 τ0' t₁ t₂ _ θ hS
+              exact arm Θ S τ0 τ0' t₁ t₂ _ θ hS
                 (fun x hx => by
                   rcases List.mem_append.mp hx with hh | hh
                   · exact List.mem_append_left _ ((groundMatch_ftv hg2).2.2.1 hh)
@@ -344,24 +353,42 @@ theorem unifyM_clash_no_unifier {B : Type} [DecidableEq B] (fuel : Nat) :
                   · exact List.mem_append_right _ ((groundMatch_ftv hg2).2.1 hh))
                 h hty.symm hru.symm
             | none =>
-            cases he1 : expandL S (a :: s₁) (b :: s₂) with
+            cases he1 : expandL Θ S (a :: s₁) (b :: s₂) with
             | some p =>
               obtain ⟨β0, l0, τ0, t₁, t₂⟩ := p
               simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, he1] at h
-              exact ih.2 S.fresh.2.fresh.2 t₁ t₂ (expandL_avoids hS he1)
+              exact ih.2 (expandDeps Θ S β0 τ0) S.fresh.2.fresh.2 t₁ t₂ (expandL_avoids hS he1)
                 (expandResM_clash h) (expandL_reflect_fwd hS he1 hu)
             | none =>
-            cases he2 : expandL S (b :: s₂) (a :: s₁) with
+            cases he2 : expandL Θ S (b :: s₂) (a :: s₁) with
             | some p =>
               obtain ⟨β0, l0, τ0, t₁, t₂⟩ := p
               simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, he1, he2] at h
-              exact ih.2 S.fresh.2.fresh.2 t₁ t₂ (expandL_avoids hS.swap he2)
+              exact ih.2 (expandDeps Θ S β0 τ0) S.fresh.2.fresh.2 t₁ t₂ (expandL_avoids hS.swap he2)
                 (expandResM_clash h) (expandL_reflect_fwd hS.swap he2 hu.symm)
             | none =>
-              simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, he1, he2] at h
-              split at h
-              · rename_i hpc; exact projClash_no_unifier hpc ⟨θ, hu⟩
-              · cases h
+            cases hpc : projClash (a :: s₁) (b :: s₂) with
+            | true => exact projClash_no_unifier hpc ⟨θ, hu⟩
+            | false =>
+            cases he3 : expandR Θ S (a :: s₁) (b :: s₂) with
+            | some p =>
+              obtain ⟨β0, l0, τ0, t₁, t₂⟩ := p
+              simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, he1, he2,
+                hpc, he3] at h
+              exact ih.2 (expandDeps Θ S β0 τ0) S.fresh.2.fresh.2 t₁ t₂ (expandR_avoids hS he3)
+                (expandResRM_clash h) (expandR_reflect_fwd' hS he3 hu)
+            | none =>
+            cases he4 : expandR Θ S (b :: s₂) (a :: s₁) with
+            | some p =>
+              obtain ⟨β0, l0, τ0, t₁, t₂⟩ := p
+              simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, he1, he2,
+                hpc, he3, he4] at h
+              exact ih.2 (expandDeps Θ S β0 τ0) S.fresh.2.fresh.2 t₁ t₂ (expandR_avoids hS.swap he4)
+                (expandResRM_clash h) (expandR_reflect_fwd' hS.swap he4 hu.symm)
+            | none =>
+              simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, he1, he2,
+                hpc, he3, he4] at h
+              cases h
 
 -- ≐ᵣ CLASH is SOUND under the mutual driver: a clash verdict means the two rows
 -- have no unifier — including when the clash was found inside a field type.
@@ -371,7 +398,7 @@ theorem unifyRowM_clash_no_unifier {B : Type} [DecidableEq B] {fuel : Nat}
     ¬ ∃ θ : TySubst B, Unifies θ ρ₁ ρ₂ := by
   rintro ⟨θ, hu⟩
   unfold unifyRowM unifySpineM at h
-  refine (unifyM_clash_no_unifier fuel).2 _ ρ₁.toSpine ρ₂.toSpine
+  refine (unifyM_clash_no_unifier fuel).2 _ _ ρ₁.toSpine ρ₂.toSpine
     (localSupply_avoids _ _) h ⟨θ, ?_⟩
   have e₁ := RowEquiv.applySubst θ (Row.toSpine_equiv ρ₁)
   have e₂ := RowEquiv.applySubst θ (Row.toSpine_equiv ρ₂)

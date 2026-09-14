@@ -1,0 +1,509 @@
+-- ALGORITHMIC INFERENCE  Γ; S ⊢ e ⇒ τ; S′.
+--
+-- `algorithmic.typ` gives the A-rules on paper; until now there was no Lean
+-- definition at all, which is why `plans/inference-gap-analysis.md` lists "the
+-- judgement itself" as the first missing ingredient of §B. Every downstream
+-- statement — inference soundness, determinism, principality — is unwriteable
+-- without it. This module writes it down.
+--
+-- ## A RELATION, NOT A FUNCTION, and that is deliberate
+-- A function would owe three termination arguments the development does not
+-- have: unification's (the Rémy measure does not close), `A-let`'s Δ-split
+-- least fixpoint, and the `↝*` wake-up closure. A relation owes none of them
+-- and is exactly what "inference is sound w.r.t. the declarative system" has to
+-- be stated over. Determinism and totality then become theorems ABOUT the
+-- relation rather than things smuggled into its definition.
+--
+-- ## What is filled in here that the paper leaves as prose
+--  * `LookupBlocked` — the paper writes `⟦S⟧ ⊢ ρ.l ↓ ? on α`, but `Lookup`
+--    records only `.unknown` and not WHICH variable blocked. A-sel-? and
+--    K-repark both need the blocker.
+--  * the failure policy. "clash = hard error; stuck/occurs degrade to ★ + W" is
+--    prose with no rules, so the algorithm was undefined on those inputs. Here
+--    a clash simply has NO derivation (rejecting is soundness — clash is proved
+--    to mean no unifier exists) and the degradations are explicit rules.
+
+import Qualified
+import RowUnify.State
+
+namespace MinimalCalculus
+
+--------------------- ? ON α: THE BLOCKER OF AN UNKNOWN LOOKUP ----------------
+-- `Lookup Γ ρ l .unknown` says the lookup gave up; it does not say where. The
+-- algorithm needs the variable, because that is what the stump is blocked on
+-- and what wake-up watches. This refines the three `unknown`-producing rules of
+-- `Lookup` (L-α-free, L-α through a solved var, L-conc-skip / L-conc-★) with
+-- the blocker threaded through.
+
+/-- `LookupBlocked Γ ρ l α` — looking up `l` in `ρ` under `Γ` gets stuck at the
+unsolved row-variable `α`. This is the paper's `Γ ⊢ ρ.l ↓ ? on α`. -/
+inductive LookupBlocked {B : Type} (Γ : Ctx B) : Row B → Label → TyVar → Prop where
+  -- L-α-free: the lookup dies here, on α itself
+  | varFree {α : TyVar} {l : Label} :
+      Γ.lookupRow α = none → LookupBlocked Γ (.var α) l α
+  -- L-α: chase a solved variable; the blocker is whatever the solution blocks on
+  | var {α β : TyVar} {ρ : Row B} {l : Label} :
+      Γ.lookupRow α = some ρ → LookupBlocked Γ ρ l β → LookupBlocked Γ (.var α) l β
+  -- L-conc-skip: the left component is definitely absent, so the right decides
+  | catSkip {ρ₁ ρ₂ : Row B} {l : Label} {β : TyVar} :
+      Lookup Γ ρ₁ l .absent → LookupBlocked Γ ρ₂ l β →
+      LookupBlocked Γ (.cat ρ₁ ρ₂) l β
+  -- L-conc-★: the left component already blocks, and ‖ is left-biased
+  | catUnk {ρ₁ ρ₂ : Row B} {l : Label} {β : TyVar} :
+      LookupBlocked Γ ρ₁ l β → LookupBlocked Γ (.cat ρ₁ ρ₂) l β
+
+-- ⊢  the refinement is SOUND: a blocked lookup is an unknown lookup
+theorem LookupBlocked.toLookup {B : Type} {Γ : Ctx B} {ρ : Row B} {l : Label}
+    {α : TyVar} : LookupBlocked Γ ρ l α → Lookup Γ ρ l .unknown
+  | .varFree h        => .varFree h
+  | .var h hb         => .var h hb.toLookup
+  | .catSkip ha hb    => .catSkip ha hb.toLookup
+  | .catUnk hb        => .catUnk hb.toLookup
+
+-- ⊢  …and COMPLETE: an unknown lookup always has a blocker to name
+-- Together these say `? on α` is a faithful reading of `?` — the algorithm
+-- never has to invent a blocker, and never fails to find one.
+theorem Lookup.unknown_blocked {B : Type} {Γ : Ctx B} {ρ : Row B} {l : Label}
+    (h : Lookup Γ ρ l .unknown) : ∃ α, LookupBlocked Γ ρ l α := by
+  generalize hr : (LookupRes.unknown : LookupRes B) = r at h
+  induction h with
+  | emp => exact absurd hr (by simp)
+  | hit => exact absurd hr (by simp)
+  | miss _ => exact absurd hr (by simp)
+  | var hΓ _ ih => obtain ⟨β, hb⟩ := ih hr; exact ⟨β, .var hΓ hb⟩
+  | varFree hΓ => exact ⟨_, .varFree hΓ⟩
+  | catHit _ => exact absurd hr (by simp)
+  | catSkip ha _ _ ihb => obtain ⟨β, hb⟩ := ihb hr; exact ⟨β, .catSkip ha hb⟩
+  | catUnk _ ih => obtain ⟨β, hb⟩ := ih rfl; exact ⟨β, .catUnk hb⟩
+
+-- ⊢  the blocker is UNIQUE — `lookup_det`'s image for `? on α`, and what makes
+--    "the stump is blocked on α" well defined rather than a choice
+theorem LookupBlocked.det {B : Type} {Γ : Ctx B} {ρ : Row B} {l : Label}
+    {α β : TyVar} (h₁ : LookupBlocked Γ ρ l α) (h₂ : LookupBlocked Γ ρ l β) :
+    α = β := by
+  induction h₁ generalizing β with
+  | varFree h =>
+      cases h₂ with
+      | varFree _ => rfl
+      | var h' _ => rw [h] at h'; cases h'
+  | var h _ ih =>
+      cases h₂ with
+      | varFree h' => rw [h] at h'; cases h'
+      | var h' hb' => rw [h] at h'; injection h' with he; exact ih (he ▸ hb')
+  | catSkip ha _ ih =>
+      cases h₂ with
+      | catSkip _ hb' => exact ih hb'
+      | catUnk hb' => exact absurd (lookup_det ha hb'.toLookup) (by simp)
+  | catUnk hb ih =>
+      cases h₂ with
+      | catSkip ha' _ => exact absurd (lookup_det hb.toLookup ha') (by simp)
+      | catUnk hb' => exact ih hb'
+
+-- ⊢  the blocker is genuinely UNSOLVED in Γ — what makes wake-up's trigger
+--    ("a solution α ≔ ρ is written") the right one
+theorem LookupBlocked.unsolved {B : Type} {Γ : Ctx B} {ρ : Row B} {l : Label}
+    {α : TyVar} : LookupBlocked Γ ρ l α → Γ.lookupRow α = none
+  | .varFree h     => h
+  | .var _ hb      => hb.unsolved
+  | .catSkip _ hb  => hb.unsolved
+  | .catUnk hb     => hb.unsolved
+
+
+--------------------- THE SOLVER STATE  S := (θ, Δ, W) ------------------------
+-- `algorithmic.typ`: "θ is only ever refined"; Δ holds the parked selections;
+-- W collects definite-absence flags and ★-degradations and "never affects
+-- typing, only diagnostics". The supply is threaded here rather than left as
+-- the prose's `fresh α: κ` — that is the gap §B lists as "name supply in the
+-- inference rules".
+--
+-- SORTS ARE STILL MISSING. The paper draws `fresh α: κ`; `Supply` has no kinds,
+-- so the rules below draw untyped names and the sort is implied by where the
+-- name is used. `A-let`'s `κ̄ = Γ(ᾱ)` is therefore not yet expressible. This is
+-- the known "sorts of invented variables" gap, unchanged.
+
+/-- A parked selection `⟨α ▷ ρ.l ↓ δ⟩`: `Stump` carries `ρ.l ↓ δ`, and the
+blocker `α` is what wake-up watches. -/
+structure Parked (B : Type) where
+  blocker : TyVar
+  stump   : Stump B
+
+structure SolverState (B : Type) where
+  sol    : Sol B            -- θ
+  parked : List (Parked B)  -- Δ
+  flags  : List Label       -- W — diagnostics only, never read by typing
+  supply : Supply
+
+namespace SolverState
+
+/-- ⟦S⟧ read as a CONTEXT — the coercion `RowUnify/State.lean` supplies. -/
+def ctx {B : Type} (S : SolverState B) : Ctx B := S.sol.toCtx
+
+/-- ⟦S⟧ read as a SUBSTITUTION, one step. Using `Sol.toSubst` rather than the
+closure keeps these rules independent of `UnifyWF`, which is still open; on a
+well-formed state the two agree (`Sol.closes_of_wf`). -/
+def subst {B : Type} (S : SolverState B) : TySubst B := S.sol.toSubst
+
+/-- draw one fresh name and advance -/
+def draw {B : Type} (S : SolverState B) : TyVar × SolverState B :=
+  (S.supply.fresh.1, { S with supply := S.supply.fresh.2 })
+
+/-- refine θ with a newly found solution -/
+def extend {B : Type} (S : SolverState B) (s : Sol B) (S' : Supply) : SolverState B :=
+  { S with sol := s.comp S.sol, supply := S' }
+
+/-- park a stump -/
+def park {B : Type} (S : SolverState B) (p : Parked B) : SolverState B :=
+  { S with parked := p :: S.parked }
+
+/-- raise a diagnostic flag (W) -/
+def flag {B : Type} (S : SolverState B) (l : Label) : SolverState B :=
+  { S with flags := l :: S.flags }
+
+end SolverState
+
+--------------------- SOLVING AN EQUATION, AND THE FAILURE POLICY -------------
+-- "clash is a hard error (it is PROVED to mean no unifier exists, so rejecting
+-- is soundness, not choice). stuck and occurs are conservative and may NOT
+-- reject; they degrade to ★ with a W-flag."
+--
+-- Rendered as a pair of relations. A CLASH satisfies neither, so no A-rule
+-- fires and the program is rejected — that IS the hard error. The degradations
+-- get their own A-rules below, which is what makes the judgement total on
+-- inputs the paper left undefined.
+
+-- THE SUPPLY IS THE STATE'S, not unification's own. `unifyTyM` / `unifyRowM`
+-- start from a LOCAL supply computed from the problem's own ftv
+-- (`⟨lenBound … + 1⟩`, `localSupply`), which is right for a standalone call and
+-- wrong here: it can hand back a supply BEHIND the state's, and then a later
+-- `draw` re-issues a name inference already used. So these go through
+-- `unifyTyF` / `unifySpineMF` with `S.supply` threaded in and out. This is the
+-- concrete content of §B's "name supply in the inference rules".
+
+/-- `S ⊢ τ ≐ τ′ ⇝ S′` — the equation was solved and θ refined. -/
+def SolveTy {B : Type} [DecidableEq B]
+    (S : SolverState B) (τ τ' : Ty B) (S' : SolverState B) : Prop :=
+  ∃ (fuel : Nat) (s : Sol B) (Sup : Supply),
+    unifyTyF [] S.supply fuel (τ.applySubst S.subst) (τ'.applySubst S.subst)
+      = .success s Sup ∧
+    S' = S.extend s Sup
+
+/-- …and the conservative verdicts, which may not reject. -/
+def SolveTyDegrades {B : Type} [DecidableEq B]
+    (S : SolverState B) (τ τ' : Ty B) : Prop :=
+  ∃ fuel : Nat,
+    unifyTyF [] S.supply fuel (τ.applySubst S.subst) (τ'.applySubst S.subst)
+        = .stuck ∨
+    unifyTyF [] S.supply fuel (τ.applySubst S.subst) (τ'.applySubst S.subst)
+        = .occurs
+
+/-- `S ⊢ ρ ≐ᵣ ρ′ ⇝ S′`, for the row equations `A-conc` and `A-rec` emit. -/
+def SolveRow {B : Type} [DecidableEq B]
+    (S : SolverState B) (ρ ρ' : Row B) (S' : SolverState B) : Prop :=
+  ∃ (fuel : Nat) (s : Sol B) (Sup : Supply),
+    unifySpineMF [] S.supply fuel (ρ.applySubst S.subst).toSpine
+      (ρ'.applySubst S.subst).toSpine = .success s Sup ∧
+    S' = S.extend s Sup
+
+-- ⊢  a solved equation really is solved: the emitted solution unifies
+-- The failure policy's justification, mechanized — this is why rejecting a
+-- clash is soundness rather than choice, and why the degradations are the only
+-- verdicts that need a rule of their own.
+theorem SolveTy.unifies {B : Type} [DecidableEq B] {S S' : SolverState B}
+    {τ τ' : Ty B} (h : SolveTy S τ τ' S') {θ : TySubst B}
+    (hsat : Sol.Sat θ S'.sol) :
+    ∃ s, Sol.Sat θ s ∧
+      TyUnifies θ (τ.applySubst S.subst) (τ'.applySubst S.subst) := by
+  obtain ⟨fuel, s, Sup, hu, rfl⟩ := h
+  exact ⟨s, (Sol.Sat.comp_inv hsat).2,
+    unifyM_success_sound fuel |>.1 [] S.supply _ _ hu (Sol.Sat.comp_inv hsat).2⟩
+
+--------------------- WAKE-UP  S ⊢ q ↝ S′  AND FINALIZATION -------------------
+-- K-hit / K-⊥ / K-repark are D-hit / D-⊥ / D-? — "the difference is WHEN:
+-- discharge fires once per instantiation, wake-up fires each time θ grows".
+-- K-repark has no declarative counterpart: declaratively D-? commits to ★ at
+-- once, algorithmically the lookup has merely progressed to the next variable.
+
+/-- `S ⊢ ⟨α ▷ ρ.l ↓ δ⟩ ↝ S′` — one wake-up step. -/
+inductive Wake {B : Type} [DecidableEq B] :
+    SolverState B → Parked B → SolverState B → Prop where
+  -- K-hit: the lookup now lands, so δ is pinned to what it found
+  | hit {S S' : SolverState B} {p : Parked B} {τ : Ty B} :
+      Lookup S.ctx (p.stump.row.applySubst S.subst) p.stump.label (.found τ) →
+      SolveTy S (.var p.stump.res) τ S' →
+      Wake S p { S' with parked := S'.parked.filter (·.stump.res != p.stump.res) }
+  -- K-⊥: definite absence, so δ becomes ★ and W records the site
+  | abs {S S' : SolverState B} {p : Parked B} :
+      Lookup S.ctx (p.stump.row.applySubst S.subst) p.stump.label .absent →
+      SolveTy S (.var p.stump.res) .unk S' →
+      Wake S p
+        ({ S' with parked := S'.parked.filter (·.stump.res != p.stump.res) }.flag
+          p.stump.label)
+  -- K-repark: the lookup progressed to a NEW blocker; nothing is committed
+  | repark {S : SolverState B} {p : Parked B} {α' : TyVar} :
+      LookupBlocked S.ctx (p.stump.row.applySubst S.subst) p.stump.label α' →
+      Wake S p
+        (({ S with parked := S.parked.filter (·.stump.res != p.stump.res) }).park
+          ⟨α', p.stump⟩)
+
+/-- `↝*` — the reflexive-transitive closure the A-rules submit constraints to. -/
+inductive Wakes {B : Type} [DecidableEq B] :
+    SolverState B → List (Parked B) → SolverState B → Prop where
+  | nil {S : SolverState B} : Wakes S [] S
+  | cons {S S₁ S₂ : SolverState B} {p : Parked B} {ps : List (Parked B)} :
+      Wake S p S₁ → Wakes S₁ ps S₂ → Wakes S (p :: ps) S₂
+  -- a constraint whose lookup is still blocked is simply parked
+  | park {S S₁ : SolverState B} {p : Parked B} {ps : List (Parked B)} :
+      LookupBlocked S.ctx (p.stump.row.applySubst S.subst) p.stump.label p.blocker →
+      Wakes (S.park p) ps S₁ → Wakes S (p :: ps) S₁
+
+/-- `S ⊢ q ⇓ S′` — F-★, the algorithmic moment of T-sel-★. Runs at the end of
+inference and at every generalization boundary that does not carry the stump. -/
+inductive Finalize {B : Type} [DecidableEq B] :
+    SolverState B → Parked B → SolverState B → Prop where
+  | star {S S' : SolverState B} {p : Parked B} :
+      SolveTy S (.var p.stump.res) .unk S' →
+      Finalize S p
+        ({ S' with parked := S'.parked.filter (·.stump.res != p.stump.res) }.flag
+          p.stump.label)
+
+
+--------------------- INSTANTIATION AT A-var ---------------------------------
+-- `x: ∀(ᾱ: κ̄). Q ⇒ τ ∈ Γ   fresh β̄: κ̄   S ⊢ Q[β̄/ᾱ] ↝* S′`.
+--
+-- The instantiation is a RENAMING of the binders — that is what `fresh β̄` says
+-- — so a stump's result variable δ is renamed too and stays a variable, which
+-- is what keeps the selection's result position writable.
+
+/-- `θ` renames exactly the binders `vs`, via `f`. -/
+def IsRenaming {B : Type} (θ : TySubst B) (vs : List TyVar) (f : TyVar → TyVar) : Prop :=
+  θ.FixedOutside vs ∧ ∀ α ∈ vs, θ.ty α = .var (f α) ∧ θ.row α = .var (f α)
+
+/-- the freshness the rules need of an instantiation: injective on the binders,
+and landing on names the state has not already committed to. Γ-freshness is NOT
+yet expressible — it needs an ftv of a `QCtx`, and the SORT of each drawn name
+is still implicit (the paper's `κ̄ = Γ(ᾱ)`). Both are recorded gaps. -/
+def FreshRenaming {B : Type} (f : TyVar → TyVar) (vs : List TyVar)
+    (S : SolverState B) : Prop :=
+  (∀ α ∈ vs, ∀ β ∈ vs, f α = f β → α = β) ∧
+  (∀ α ∈ vs, f α ∉ S.sol.dom) ∧
+  (∀ α ∈ vs, ∀ p ∈ S.parked, f α ≠ p.stump.res)
+
+/-- the parked images of a scheme's constraints under an instantiation. The
+BLOCKERS are left free: `Wakes` determines each one, either by resolving the
+constraint or by exhibiting a `LookupBlocked` witness — which is the `K-park`
+rule (“compute the initial blocker”) that the paper leaves out. -/
+def InstStumps {B : Type} (θ : TySubst B) (f : TyVar → TyVar)
+    (Q : List (Stump B)) (ps : List (Parked B)) : Prop :=
+  ps.map Parked.stump =
+    Q.map (fun st => (⟨st.row.applySubst θ, st.label, f st.res⟩ : Stump B))
+
+--------------------- Γ; S ⊢ e ⇒ τ; S′ ---------------------------------------
+-- One rule per term former, plus the DEGRADATION rules the failure policy calls
+-- for and the paper never writes. A clash has no rule at all: that is the hard
+-- error, and it is sound because `unifyM_clash_no_unifier` proves a clash means
+-- no unifier exists.
+
+mutual
+
+inductive Infer {B C : Type} [DecidableEq B] (constTy : C → B) :
+    QCtx B → SolverState B → Expr C → Ty B → SolverState B → Prop where
+  -- A-cons
+  | con {Γ : QCtx B} {S : SolverState B} {c : C} :
+      Infer constTy Γ S (.con c) (.base (constTy c)) S
+  -- A-var — IS I-inst: the instantiated constraints go to wake-up, which
+  -- resolves what θ already decides and parks the rest
+  | var {Γ : QCtx B} {S S' : SolverState B} {x : Var} {σ : QScheme B}
+      {θ : TySubst B} {f : TyVar → TyVar} {ps : List (Parked B)} :
+      Γ.lookup x = some σ →
+      IsRenaming θ σ.vars f → FreshRenaming f σ.vars S →
+      InstStumps θ f σ.constraints ps →
+      Wakes S ps S' →
+      Infer constTy Γ S (.var x) (σ.body.applySubst θ) S'
+  -- A-lam
+  | lam {Γ : QCtx B} {S S' : SolverState B} {x : Var} {e : Expr C} {τ : Ty B}
+      {α : TyVar} {S₀ : SolverState B} :
+      (α, S₀) = S.draw →
+      Infer constTy (Γ.bindTy x (.var α)) S₀ e τ S' →
+      Infer constTy Γ S (.lam x e) (.fn (.var α) τ) S'
+  -- A-app
+  | app {Γ : QCtx B} {S S₁ S₂ S₃ : SolverState B} {e₁ e₂ : Expr C}
+      {τ₁ τ₂ : Ty B} {β : TyVar} {S₂' : SolverState B} :
+      Infer constTy Γ S e₁ τ₁ S₁ → Infer constTy Γ S₁ e₂ τ₂ S₂ →
+      (β, S₂') = S₂.draw →
+      SolveTy S₂' τ₁ (.fn τ₂ (.var β)) S₃ →
+      Infer constTy Γ S (.app e₁ e₂) (.var β) S₃
+  -- A-app-degrade: the arrow equation is stuck or occurs, so the result blurs
+  | appDeg {Γ : QCtx B} {S S₁ S₂ : SolverState B} {e₁ e₂ : Expr C}
+      {τ₁ τ₂ : Ty B} {β : TyVar} {S₂' : SolverState B} :
+      Infer constTy Γ S e₁ τ₁ S₁ → Infer constTy Γ S₁ e₂ τ₂ S₂ →
+      (β, S₂') = S₂.draw →
+      SolveTyDegrades S₂' τ₁ (.fn τ₂ (.var β)) →
+      Infer constTy Γ S (.app e₁ e₂) .unk (S₂'.flag "·app")
+  -- A-conc
+  | conc {Γ : QCtx B} {S S₁ S₂ S₃ S₄ : SolverState B} {e₁ e₂ : Expr C}
+      {τ₁ τ₂ : Ty B} {r₁ r₂ : TyVar} {Sa Sb : SolverState B} :
+      Infer constTy Γ S e₁ τ₁ S₁ → Infer constTy Γ S₁ e₂ τ₂ S₂ →
+      (r₁, Sa) = S₂.draw → (r₂, Sb) = Sa.draw →
+      SolveTy Sb τ₁ (.rcd (.var r₁)) S₃ →
+      SolveTy S₃ τ₂ (.rcd (.var r₂)) S₄ →
+      Infer constTy Γ S (.cat e₁ e₂) (.rcd (.cat (.var r₂) (.var r₁))) S₄
+  -- A-sel: the lookup lands
+  | sel {Γ : QCtx B} {S S₁ S₂ : SolverState B} {e : Expr C} {τ τ' : Ty B}
+      {l : Label} {r : TyVar} {S₁' : SolverState B} :
+      Infer constTy Γ S e τ S₁ →
+      (r, S₁') = S₁.draw →
+      SolveTy S₁' τ (.rcd (.var r)) S₂ →
+      Lookup S₂.ctx (.var r) l (.found τ') →
+      Infer constTy Γ S (.sel e l) τ' S₂
+  -- A-sel-⊥: definite absence. ★ and a W-flag — this is where T-sel-⊥ lives
+  | selAbs {Γ : QCtx B} {S S₁ S₂ : SolverState B} {e : Expr C} {τ : Ty B}
+      {l : Label} {r : TyVar} {S₁' : SolverState B} :
+      Infer constTy Γ S e τ S₁ →
+      (r, S₁') = S₁.draw →
+      SolveTy S₁' τ (.rcd (.var r)) S₂ →
+      Lookup S₂.ctx (.var r) l .absent →
+      Infer constTy Γ S (.sel e l) .unk (S₂.flag l)
+  -- A-sel-?: NOT ★. The stump-var δ keeps the position writable, so a later
+  -- refinement can still fill it in — (x: x.l) must not freeze at {β} → ★
+  | selUnk {Γ : QCtx B} {S S₁ S₂ : SolverState B} {e : Expr C} {τ : Ty B}
+      {l : Label} {r α δ : TyVar} {S₁' S₂' : SolverState B} :
+      Infer constTy Γ S e τ S₁ →
+      (r, S₁') = S₁.draw →
+      SolveTy S₁' τ (.rcd (.var r)) S₂ →
+      LookupBlocked S₂.ctx (.var r) l α →
+      (δ, S₂') = S₂.draw →
+      Infer constTy Γ S (.sel e l) (.var δ)
+        (S₂'.park ⟨α, ⟨.var r, l, δ⟩⟩)
+  -- A-sel-degrade: the record equation itself gave up
+  | selDeg {Γ : QCtx B} {S S₁ : SolverState B} {e : Expr C} {τ : Ty B}
+      {l : Label} {r : TyVar} {S₁' : SolverState B} :
+      Infer constTy Γ S e τ S₁ →
+      (r, S₁') = S₁.draw →
+      SolveTyDegrades S₁' τ (.rcd (.var r)) →
+      Infer constTy Γ S (.sel e l) .unk (S₁'.flag l)
+  -- A-rec
+  | rcd {Γ : QCtx B} {S S' : SolverState B} {ξ : RecBody (Expr C)} {ρ : Row B} :
+      InferRec constTy Γ S ξ ρ S' →
+      Infer constTy Γ S (.rcd ξ) (.rcd ρ) S'
+  -- A-let. The Δ-split is a least FIXPOINT on paper; as a relation it is enough
+  -- to REQUIRE the split's defining equations, which is precisely what a
+  -- relation buys over a function here.
+  | letE {Γ : QCtx B} {S S₁ S₂ : SolverState B} {x : Var} {e₁ e₂ : Expr C}
+      {τ₁ τ₂ : Ty B} {Δq Δγ : List (Parked B)} {ᾱ : List TyVar} :
+      Infer constTy Γ S e₁ τ₁ S₁ →
+      -- Δ₁ = Δ_Γ ⊎ Δ_q
+      S₁.parked = Δq ++ Δγ →
+      -- Δ_q are exactly the stumps whose blocker lands in ᾱ, Δ_Γ the rest
+      (∀ p ∈ Δq, p.blocker ∈ ᾱ) → (∀ p ∈ Δγ, p.blocker ∉ ᾱ) →
+      Infer constTy
+        (Γ.bindScheme x ⟨ᾱ, Δq.map Parked.stump, τ₁.applySubst S₁.subst⟩)
+        { S₁ with parked := Δγ } e₂ τ₂ S₂ →
+      Infer constTy Γ S (.letE x e₁ e₂) τ₂ S₂
+
+inductive InferRec {B C : Type} [DecidableEq B] (constTy : C → B) :
+    QCtx B → SolverState B → RecBody (Expr C) → Row B → SolverState B → Prop where
+  -- A-ξ-empty
+  | empty {Γ : QCtx B} {S : SolverState B} :
+      InferRec constTy Γ S .empty .empty S
+  -- A-ξ-field
+  | field {Γ : QCtx B} {S S' : SolverState B} {l : Label} {e : Expr C} {τ : Ty B} :
+      Infer constTy Γ S e τ S' →
+      InferRec constTy Γ S (.field l e) (.sing l τ) S'
+  -- A-ξ-conc. Literal rows are spine-var-free by construction.
+  | cat {Γ : QCtx B} {S S₁ S₂ : SolverState B} {ξ₁ ξ₂ : RecBody (Expr C)}
+      {ρ₁ ρ₂ : Row B} :
+      InferRec constTy Γ S ξ₁ ρ₁ S₁ → InferRec constTy Γ S₁ ξ₂ ρ₂ S₂ →
+      InferRec constTy Γ S (.cat ξ₁ ξ₂) (.cat ρ₁ ρ₂) S₂
+
+end
+
+
+--------------------- THE JUDGEMENT IS NOT VACUOUS ----------------------------
+-- A relation is cheap to write and easy to write EMPTY. This derives the
+-- motivating program through it end to end.
+--
+--     λx. x.l    with    α fresh for the binder, r for the record row,
+--                        δ for the selection's result
+--
+-- and the result is `α → δ` with EXACTLY ONE stump parked, blocked on `r` and
+-- writing its answer into `δ`. Compare `selQ = ∀β δ. ⟨β.l ↓ δ⟩ ⇒ {β} → δ`
+-- (Qualified.lean): the algorithm produces the shape the declarative side
+-- already proved instance-closed (`selQ_instance_closed`).
+--
+-- Note which rule fires: A-sel-? , not A-sel-⊥ and not a degradation. `r` is
+-- unsolved at the row sort — `α ≐ {r}` binds α at the TYPE sort — so the lookup
+-- blocks on `r` and the position stays writable. That is the whole point of
+-- returning δ rather than ★.
+
+private def idSubst : TySubst Unit := ⟨fun x => .var x, fun x => .var x⟩
+
+theorem selEx_infers :
+    Infer (B := Unit) (C := Unit) (fun _ => ()) ⟨[], []⟩
+      ⟨Sol.nil, [], [], ⟨1⟩⟩ (selEx Unit)
+      (.fn (.var (natName 1)) (.var (natName 3)))
+      ⟨⟨[(natName 1, .rcd (.var (natName 2)))], []⟩,
+       [⟨natName 2, ⟨.var (natName 2), "l", natName 3⟩⟩], [], ⟨4⟩⟩ := by
+  refine Infer.lam (S₀ := ⟨Sol.nil, [], [], ⟨2⟩⟩) rfl ?_
+  refine Infer.selUnk (τ := .var (natName 1))
+    (S₁ := ⟨Sol.nil, [], [], ⟨2⟩⟩) (S₁' := ⟨Sol.nil, [], [], ⟨3⟩⟩)
+    (S₂ := ⟨⟨[(natName 1, .rcd (.var (natName 2)))], []⟩, [], [], ⟨3⟩⟩)
+    (r := natName 2) (α := natName 2) (δ := natName 3)
+    ?_ rfl ?_ ?_ rfl
+  · exact Infer.var (σ := ⟨[], [], .var (natName 1)⟩) (θ := idSubst) (f := id) (ps := []) rfl
+      ⟨⟨fun _ _ => rfl, fun _ _ => rfl⟩, by simp⟩ (by simp [FreshRenaming]) rfl .nil
+  · exact ⟨5, ⟨[(natName 1, .rcd (.var (natName 2)))], []⟩, ⟨3⟩, rfl, rfl⟩
+  · exact .varFree rfl
+
+
+--------------------- ⟦S⟧ APPLIED TO A CONTEXT -------------------------------
+-- The declarative side reads row-solutions out of a CONTEXT; the algorithm
+-- keeps them in θ. `RowUnify/State.lean` bridges the two for a single lookup;
+-- what the soundness statement additionally needs is the whole context read
+-- under the final state — θ pushed through the type environment, and θ's row
+-- component installed as the row environment discharge will consult.
+
+/-- NOTE: this substitutes under the binders `σ.vars` without renaming them.
+That is capture-AVOIDING only when the instantiation discipline keeps `θ` away
+from a scheme's own binders, which `FreshRenaming` arranges at `A-var` but which
+is not yet proved as an invariant. `renameScheme` (minimal.lean) is the
+capture-avoiding version L1 uses; wiring it in here is open. -/
+def QScheme.applySubst {B : Type} (σ : QScheme B) (θ : TySubst B) : QScheme B :=
+  ⟨σ.vars,
+   σ.constraints.map (fun st => (⟨st.row.applySubst θ, st.label, st.res⟩ : Stump B)),
+   σ.body.applySubst θ⟩
+
+/-- `⟦S⟧Γ` — Γ under the state's substitution, with the state's row-solutions
+installed as the row environment that `Lookup` and discharge consult. -/
+def SolverState.applyCtx {B : Type} (S : SolverState B) (Γ : QCtx B) : QCtx B :=
+  { tyEnv  := Γ.tyEnv.map (fun p => (p.1, p.2.applySubst S.subst)),
+    rowEnv := S.sol.row }
+
+--------------------- THE STATEMENT THIS MODULE EXISTS FOR --------------------
+/-- **Inference soundness** — `Γ; S ⊢ e ⇒ τ; S′  ⟹  ⟦S′⟧Γ ⊢ e : ⟦S′⟧τ`.
+
+"The algorithm never infers a type the declarative system rejects." This is the
+statement `plans/inference-gap-analysis.md` §B calls unwriteable, and the reason
+`⟦S⟧`-as-a-context was built at all. It is now WRITEABLE. It is not proved, and
+it is kept as a named `def` for the same reason `UnifyWF` and `TerminalNoMgu`
+are: so the thing being aimed at can be named.
+
+WHAT IT WILL NEED, and none of it is available yet:
+  * `UnifyWF` — without it `⟦S′⟧` is `Sol.toSubst`, one unfolding step, rather
+    than the closure `algorithmic.typ` specifies. The two agree exactly on a
+    well-formed state (`Sol.closes_of_wf`), so this statement is provisional
+    until that lands.
+  * the parked stumps must DISCHARGE. `A-sel-?` returns a stump-variable δ and
+    parks `⟨α ▷ ρ.l ↓ δ⟩`; declaratively `QScheme.Inst` demands
+    `Stump.Discharge`, so soundness holds only for states whose Δ is either
+    empty or finalized (`Finalize`). The honest form of the theorem probably
+    carries `S′.parked = []` as a hypothesis, with `F-★` supplying it.
+  * capture-avoidance for `QScheme.applySubst` (see its note).
+  * an L2 type-substitution lemma. L1 has `typed_applySubst_aux`; `QTyped` has
+    only TERM substitution (`qsubst_preserves_typing`), and transporting a
+    derivation along θ is exactly what this proof does. §B lists it. -/
+def InferSound (B C : Type) [DecidableEq B] (constTy : C → B) : Prop :=
+  ∀ (Γ : QCtx B) (S S' : SolverState B) (e : Expr C) (τ : Ty B),
+    Infer constTy Γ S e τ S' → S'.parked = [] →
+    QTyped constTy (S'.applyCtx Γ) e (τ.applySubst S'.subst)
+
+end MinimalCalculus

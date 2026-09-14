@@ -141,19 +141,80 @@ theorem sFtv_computes :
 -- ⊢  crossfield FIRES, and picks β as the forced host: β ≔ (l:δ | β′), with the
 --    host side keeping its length (β renamed to the fresh β′)
 theorem expandL_crossfield :
-    expandL (B := Unit) ⟨5⟩ [.field "l" uB, .var "a"] [.field "m" uB, .var "b"]
+    expandL (B := Unit) [] ⟨5⟩ [.field "l" uB, .var "a"] [.field "m" uB, .var "b"]
       = some ("b", "l", uB, [.var "a"], [.field "m" uB, .var (natName 6)]) := rfl
 
 -- ⊢  Wand REFUSES: two candidate hosts, and vars_vs_field_no_mgu proves the rule
 --    is right to refuse — there is genuinely no mgu
 theorem expandL_wand_refuses :
-    expandL (B := Unit) ⟨5⟩ [.field "l" uB] [.var "a", .var "b"] = none := rfl
+    expandL (B := Unit) [] ⟨5⟩ [.field "l" uB] [.var "a", .var "b"] = none := rfl
 
 -- ⊢  an l-field on the other side could host the pairing instead, so REFUSE
 --    ((l:𝓪 | α) ≐ᵣ (β | l:𝓫) is unifiable with β ≔ ε)
 theorem expandL_lfield_refuses :
-    expandL (B := Unit) ⟨5⟩ [.field "l" uB, .var "a"] [.var "b", .field "l" uB]
+    expandL (B := Unit) [] ⟨5⟩ [.field "l" uB, .var "a"] [.var "b", .field "l" uB]
       = none := rfl
+
+-- ## P3' the RIGHT-end expansion, kernel-checked
+-- U-expand used to be ONE-ENDED: `uniqueHost` demands the LEADING variable,
+-- because the invented field is emitted at the front of β ≔ (l:δ | β′) and has
+-- to commute out leftwards. So the driver solved a problem and went STUCK on
+-- its mirror image. These two pin the repair.
+
+-- ⊢  the RIGHT-END MIRROR of crossfield. `expandL` is dead here (neither side
+--    leads with a field); `expandR` hosts in β and emits β ≔ (β′ | l:δ).
+--    Before the expandR arm this whole problem was `.stuck`.
+theorem expandR_crossfield_mirror :
+    expandR (B := Unit) [] ⟨5⟩ [.var "a", .field "l" uB] [.var "b", .field "m" uB]
+      = some ("b", "l", uB, [.var "a"], [.var (natName 6), .field "m" uB]) := rfl
+
+-- ⊢  … and the driver solves it
+theorem unify_crossfield_mirror :
+    unifyRowM (B := Unit) 20 (.cat (.var "a") (.sing "l" uB))
+                             (.cat (.var "b") (.sing "m" uB)) =
+      .success ⟨[(natName 2, uB)],
+                [("b", .cat (.var (natName 3)) (.sing "l" (.var (natName 2)))),
+                 ("a", .cat (.var (natName 3)) (.cat (.sing "m" uB) .empty))]⟩
+               ⟨4⟩ := rfl
+
+-- ⊢  (l:{w}) ≐ᵣ (w | v) — `Refutations.terminal_masks_mgu`'s configuration, which
+--    was TERMINAL and used to refute the fourth leg. `expandL` refuses (the lone
+--    survivor v sits BEHIND the filtered w); `expandR` hosts in v, and the
+--    solution is exactly the mgu that section builds by hand: w ≔ ε,
+--    v ≔ (ε | l:{ε}).
+theorem unify_terminal_masks_mgu_solved :
+    unifyRowM (B := Unit) 20 (.sing "l" (.rcd (.var "w")))
+                             (.cat (.var "w") (.var "v")) =
+      .success ⟨[(natName 2, .rcd .empty)],
+                [("v", .cat .empty (.sing "l" (.var (natName 2)))),
+                 ("w", .empty), (natName 3, .empty)]⟩ ⟨4⟩ := rfl
+
+-- ## The accumulated solution, read by the guards
+-- U-expand RENAMES its host instead of applying β ≔ (l:δ | β′), and `renameVar`
+-- touches spine variables only — so a payload mentioning β still reads β after
+-- the move, while β is already bound. A later guard comparing against that
+-- stale payload misses a cycle that exists only in the TRANSITIVE CLOSURE of
+-- the solution, and the run ends in a VACUOUS success: a solution no θ
+-- satisfies. `depReach` is what closes that; these two pin it.
+
+-- ⊢  the tripwire's original witness. The driver used to report SUCCESS here
+--    with b ≔ (l:aa | l:aaaa | ε) alongside aaaa ≔ {ε | b} — a cycle through a
+--    PAYLOAD, so ⟦S⟧ never terminates and no θ satisfies both. Now `.stuck`:
+--    conservative, and it claims nothing.
+theorem vacuous_success_payload_cycle :
+    unifyRowM (B := Unit) 30 (.cat (.var "b") (.var "a"))
+      (.cat (.sing "l" (.rcd (.cat (.sing "l" uB) (.var "a"))))
+            (.sing "l" (.rcd (.cat (.var "a") (.var "b"))))) = .stuck := rfl
+
+-- ⊢  … and the SPINE-level one, which the right-end arm exposed. Two expansions
+--    in sequence: the first binds a ≔ (m:δ | aaa), the second is excused by the
+--    self-reference filter reading the stale payload `{a}`, and the residual
+--    then binds aaa ≔ (a | …) — putting `a` at a spine position of its own
+--    binding. The problem has NO unifier (count_m forces 0 = 1 + …), so
+--    `.occurs` is the right answer, not merely a safe one.
+theorem vacuous_success_spine_cycle :
+    unifyRowM (B := Unit) 30 (.cat (.var "a") (.sing "l" (.rcd (.var "a"))))
+      (.cat (.sing "m" uB) (.cat (.var "a") (.var "b"))) = .occurs := rfl
 
 -- ## P4: ≐ / ≐ᵣ under the MUTUAL driver
 -- (the row verdicts above already run it; these exercise the type pass.)

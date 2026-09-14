@@ -38,16 +38,16 @@ private def ws₂ : List (Atom Unit) := [.field "l" uB]
 -- Every one of hbase's thirteen premises holds on it, kernel-checked.
 example : stripL ws₁ ws₂ = none := rfl
 example : stripR ws₁ ws₂ = none := rfl
-example : solveVarM ⟨9⟩ ws₁ ws₂ = none := rfl
-example : solveVarM ⟨9⟩ ws₂ ws₁ = none := rfl
+example : solveVarM [] ⟨9⟩ ws₁ ws₂ = none := rfl
+example : solveVarM [] ⟨9⟩ ws₂ ws₁ = none := rfl
 example : matchL ws₁ ws₂ = none := rfl
 example : matchL ws₂ ws₁ = none := rfl
 example : matchR ws₁ ws₂ = none := rfl
 example : matchR ws₂ ws₁ = none := rfl
 example : groundMatch ws₁ ws₂ = none := rfl
 example : groundMatch ws₂ ws₁ = none := rfl
-example : expandL ⟨9⟩ ws₁ ws₂ = none := rfl
-example : expandL ⟨9⟩ ws₂ ws₁ = none := rfl
+example : expandL [] ⟨9⟩ ws₁ ws₂ = none := rfl
+example : expandL [] ⟨9⟩ ws₂ ws₁ = none := rfl
 example : projClash ws₁ ws₂ = false := rfl
 
 -- …and it HAS a unifier (that is what makes it stuck rather than a clash).
@@ -195,42 +195,63 @@ theorem stuck_masks_mgu : HasMgu mρ₁ mρ₂ := by
     · simp [mθ, Ty.applySubst]; exact TyEquiv.refl _
 
 
--- ## …AND SO IS THE TERMINAL-CONFIGURATION LEG (the sharpest one)
+-- ## …AND SO WAS THE TERMINAL-CONFIGURATION LEG — UNTIL `expandR`
 --
 -- The natural retreat from stuck_masks_mgu is to state the leg about TERMINAL
 -- configurations — every move dead — rather than about the `.stuck` verdict.
--- That is false too.
 --
 --     (l : {w})  ≐ᵣ  (w | v)
 --
--- Terminal: all twelve moves return `none` and projClash is false, each by
--- `rfl` (terminal_masks_mgu_terminal). U-expand refuses because the l-field has
--- TWO candidate hosts, w and v — which is exactly the Wand shape, and would
--- normally mean two incomparable placements.
+-- This USED to refute that too. All thirteen moves returned `none` and
+-- projClash was false, each by `rfl`, yet the problem has a unique — hence most
+-- general — unifier: hosting the l-field in `w` would force θw ≈ (l : {θw}), an
+-- OCCURS violation that field counting cannot see (both sides have l-count 1;
+-- the recursion passes under a record constructor), so the placement in `v` is
+-- forced. `Ty.rcdDepth` (NoMgu.lean) is the ≈-invariant that does see it.
 --
--- But hosting in w is impossible: it would force θw ≈ (l : {θw}), an OCCURS
--- violation. Field counts cannot see it — both sides have l-count 1, the
--- recursion passing under a record constructor — so the algorithm's guards miss
--- it entirely. `Ty.rcdDepth` (NoMgu.lean) is the ≈-invariant that does see it.
--- With w ruled out the placement is FORCED, the unifier is unique, and a unique
--- unifier is trivially most general.
+-- WHAT CHANGED. The configuration was terminal only because U-expand was
+-- ONE-ENDED. `uniqueHost` demands the host be the LEADING variable, because the
+-- invented field is emitted at the FRONT of `β ≔ (l:δ | β′)` and has to commute
+-- out leftwards. Here the lone survivor `v` sits BEHIND the filtered `w`, so no
+-- left-end expansion could fire. The RIGHT-end expansion emits the field at the
+-- BACK, needs to commute past the SUFFIX — which is empty — and hosts in `v`.
+-- The driver now has that arm (`expandR`, RowUnify/ExpandR.lean), so:
 --
--- CONSEQUENCE. Terminality says "no move fires", which is a fact about the
--- MOVES, not about the problem. It does not imply the two placements are both
--- realizable. So there is no general converse to prove here at all: the honest
--- content of the fourth leg is the specific no-mgu theorems (Wand /
--- vars_vs_field, two-sided, all-variable-swap) plus these conservativity
--- examples. See proof-plan.md.
+--   * the configuration is NOT terminal any more (terminal_masks_mgu_not_terminal),
+--   * the driver SOLVES it (terminal_masks_mgu_now_solved), and the solution it
+--     returns is exactly the mgu this section builds by hand — `w ≔ ε`,
+--     `v ≔ (ε | l:{ε})`.
+--
+-- WHERE THAT LEAVES THE FOURTH LEG. `TerminalNoMgu` (Defs.lean) has lost its
+-- only known counterexample. It is NOT thereby proved: terminality is still a
+-- fact about the MOVES, not about the problem, and nothing here rules out
+-- another configuration where the guards miss a forced placement. The statement
+-- is OPEN — unrefuted and unproven. Do not cite it as either.
+--
+-- `stuck_masks_mgu` above is untouched by this: it is about `UResM.seq`
+-- propagating a sub-call's verdict before the residual that disambiguates is
+-- examined, which no expansion arm changes. `stuck ⟹ ¬mgu` stays FALSE.
+--
+-- `terminal_masks_mgu` itself is kept, and has changed job: it is no longer a
+-- conservativity witness but the CORRECTNESS witness for the right-end arm —
+-- the hand-built mgu that the arm is now checked to find.
 
 private def tρ₁ : Row Unit := .sing "l" (.rcd (.var "w"))
 private def tρ₂ : Row Unit := .cat (.var "w") (.var "v")
 
-theorem terminal_masks_mgu_terminal :
-    Terminal (B := Unit) ⟨9⟩ tρ₁.toSpine tρ₂.toSpine :=
-  ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+-- ⊢  the right-end expansion FIRES here, so the configuration is not terminal
+theorem terminal_masks_mgu_not_terminal :
+    ¬ Terminal (B := Unit) [] ⟨9⟩ tρ₁.toSpine tρ₂.toSpine := by
+  intro ht
+  have h : (expandR (B := Unit) [] ⟨9⟩ tρ₁.toSpine tρ₂.toSpine).isSome = true := rfl
+  rw [ht.hexpandR₁] at h
+  exact Bool.noConfusion h
 
-theorem terminal_masks_mgu_reported :
-    unifyRowM (B := Unit) 20 tρ₁ tρ₂ = .stuck := rfl
+-- ⊢  … and the verdict, which used to be `.stuck`, is now a success. With
+--    `unifyRowM_success_iff` the returned solution DESCRIBES the unifier set,
+--    i.e. it is the mgu `terminal_masks_mgu` exhibits below.
+theorem terminal_masks_mgu_now_solved :
+    ∃ s S', unifyRowM (B := Unit) 20 tρ₁ tρ₂ = .success s S' := ⟨_, _, rfl⟩
 
 private def tθ : TySubst Unit :=
   ⟨fun x => .var x,
@@ -302,13 +323,13 @@ theorem terminal_masks_mgu : HasMgu tρ₁ tρ₂ := by
       exact absurd (hu'.trans ((RowEquiv.cat (.refl _) hV).trans RowEquiv.unitR)).symm
         no_rcd_self_reference
 
--- ⊢  so the terminal-configuration leg is FALSE too
-theorem terminalNoMgu_false : ¬ TerminalNoMgu Unit := by
-  intro h
-  refine h ⟨9⟩ (.field "l" (.rcd (.var "w"))) (.var "w") [] [Atom.var "v"]
-    terminal_masks_mgu_terminal ?_
-  exact (hasMgu_rowEquiv (Row.toSpine_equiv tρ₁) (Row.toSpine_equiv tρ₂)).mp
-    terminal_masks_mgu
+-- `terminalNoMgu_false` USED TO LIVE HERE. It is deleted, not moved: its proof
+-- fed `terminal_masks_mgu_terminal` to `TerminalNoMgu`, and that premise is now
+-- false (terminal_masks_mgu_not_terminal). `TerminalNoMgu` is consequently OPEN
+-- — no counterexample is known and none is proved impossible. Anything that
+-- wants to cite the fourth leg must still use the SPECIFIC no-mgu theorems
+-- (vars_vs_field_no_mgu, two_sided_no_mgu, allvar_swap_no_mgu), which stand on
+-- their own, plus `stuck_masks_mgu`, which is unaffected.
 
 
 ------------- 3. A SUCCESS VERDICT COULD BE VACUOUS — FOUND AND FIXED ----------
@@ -441,12 +462,11 @@ theorem selfref_lone_host_no_unifier :
     subst hγ
     simp [Ty.allRowVars, Row.allRowVars])
 
--- ## Where it stops: terminal_masks_mgu SURVIVES
+-- ## Where it stopped, and where it no longer does
 -- (l:{w}) ≐ᵣ (w | v) is the mirror image of `selfref_filter_fires`, and the
--- mirror is exactly what the leading condition forbids: the lone survivor `v`
--- sits BEHIND the filtered `w`. The right-end expansion `expandR` would take
--- it — the field is emitted at the END there, so it commutes past the SUFFIX,
--- which is empty — but the driver has no expandR arm. Adding one is the open
--- follow-up; until then `terminal_masks_mgu` (section 2) stands unchanged.
-
+-- mirror is exactly what the LEADING condition forbids: the lone survivor `v`
+-- sits BEHIND the filtered `w`. That was the open follow-up recorded here; the
+-- right-end arm `expandR` now takes it (the field is emitted at the END, so it
+-- commutes past the SUFFIX, which is empty). See the section-2 header for what
+-- that did to the fourth leg.
 end MinimalCalculus

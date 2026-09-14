@@ -923,8 +923,9 @@ theorem expand_reflect_fwd {B : Type} {θ : TySubst B} {l : Label} {τ : Ty B}
 -- U-expand fires only when the host is UNIQUE: exactly one variable on the
 -- other side, and no l-field anywhere on it (an l-field further right could
 -- host the pairing instead — (l:𝓪 | α) ≐ᵣ (β | l:𝓫) is unifiable with β ≔ ε).
-theorem uniqueHost_spec {B : Type} {l : Label} {τ : Ty B} {s : List (Atom B)}
-    {β : TyVar} (h : uniqueHost l τ s = some β) : HostShape l τ s β := by
+theorem uniqueHost_spec {B : Type} {Θ : DepGraph} {l : Label} {τ : Ty B}
+    {s : List (Atom B)} {β : TyVar} (h : uniqueHost Θ l τ s = some β) :
+    HostShape l τ s β := by
   unfold uniqueHost at h
   cases hvs : sVarSeq s with
   | nil => rw [hvs] at h; cases h
@@ -935,7 +936,8 @@ theorem uniqueHost_spec {B : Type} {l : Label} {τ : Ty B} {s : List (Atom B)}
       · next hcond =>
           injection h with hg
           subst hg
-          exact ⟨⟨t, hvs, hcond.2.2⟩, hcond.1, hcond.2.1⟩
+          exact ⟨⟨t, hvs, hcond.2.2⟩, hcond.1,
+                 fun hm => hcond.2.1 (depReach_mono _ _ hm)⟩
       · cases h
 
 -- Left end: the leading field of s₁ against the unique host of s₂. δ and β′ are
@@ -968,15 +970,15 @@ theorem crossfield_host_forced {B : Type} (b : B) {l m : Label} (hne : l ≠ m)
 -- ONE atom, so the bound |s₁| + |s₂| still works. Only solve-and-apply grows a
 -- spine.
 -- ⊢  expandL S s₁ s₂ = some (β,l,τ,t₁,t₂)  ⟹  |t₁|+|t₂| + 1 = |s₁|+|s₂|
-theorem expandL_len {B : Type} {S : Supply} {s₁ s₂ : List (Atom B)}
+theorem expandL_len {B : Type} {Θ : DepGraph} {S : Supply} {s₁ s₂ : List (Atom B)}
     {β : TyVar} {l : Label} {τ : Ty B} {t₁ t₂ : List (Atom B)}
-    (h : expandL S s₁ s₂ = some (β, l, τ, t₁, t₂)) :
+    (h : expandL Θ S s₁ s₂ = some (β, l, τ, t₁, t₂)) :
     t₁.length + t₂.length + 1 = s₁.length + s₂.length := by
   match s₁ with
   | .field l' τ' :: u₁ =>
       simp only [expandL] at h
       revert h
-      cases hh : uniqueHost l' τ' s₂ with
+      cases hh : uniqueHost Θ l' τ' s₂ with
       | none => intro h; cases h
       | some γ =>
           intro h
@@ -985,16 +987,16 @@ theorem expandL_len {B : Type} {S : Supply} {s₁ s₂ : List (Atom B)}
           omega
 
 -- ⊢  the detector's side conditions are exactly the reflection lemmas'
-theorem expandL_spec {B : Type} {S : Supply} {s₁ s₂ : List (Atom B)}
+theorem expandL_spec {B : Type} {Θ : DepGraph} {S : Supply} {s₁ s₂ : List (Atom B)}
     {β : TyVar} {l : Label} {τ : Ty B} {t₁ t₂ : List (Atom B)}
-    (h : expandL S s₁ s₂ = some (β, l, τ, t₁, t₂)) :
+    (h : expandL Θ S s₁ s₂ = some (β, l, τ, t₁, t₂)) :
     s₁ = .field l τ :: t₁ ∧ HostShape l τ s₂ β ∧
     t₂ = renameVar β S.fresh.2.fresh.1 s₂ := by
   match s₁ with
   | .field l' τ' :: u₁ =>
       simp only [expandL] at h
       revert h
-      cases hh : uniqueHost l' τ' s₂ with
+      cases hh : uniqueHost Θ l' τ' s₂ with
       | none => intro h; cases h
       | some γ =>
           intro h
@@ -1089,10 +1091,10 @@ theorem sFtv_renameVar {B : Type} (β β' : TyVar) :
 
 -- … so the advanced supply still avoids the residual: β′ is shorter than every
 -- name it can still hand out, and everything else came from the problem.
-theorem expandL_avoids {B : Type} {S : Supply} {s₁ s₂ : List (Atom B)}
+theorem expandL_avoids {B : Type} {Θ : DepGraph} {S : Supply} {s₁ s₂ : List (Atom B)}
     {β : TyVar} {l : Label} {τ : Ty B} {t₁ t₂ : List (Atom B)}
     (hS : S.Avoids (sFtv s₁ ++ sFtv s₂))
-    (h : expandL S s₁ s₂ = some (β, l, τ, t₁, t₂)) :
+    (h : expandL Θ S s₁ s₂ = some (β, l, τ, t₁, t₂)) :
     S.fresh.2.fresh.2.Avoids (sFtv t₁ ++ sFtv t₂) := by
   obtain ⟨hs1, -, hren⟩ := expandL_spec h
   have hsub : sFtv t₁ ++ sFtv t₂ ⊆ S.fresh.2.fresh.1 :: (sFtv s₁ ++ sFtv s₂) := by
@@ -1111,11 +1113,11 @@ theorem expandL_avoids {B : Type} {S : Supply} {s₁ s₂ : List (Atom B)}
 -- FORWARD REFLECTION for the arm: a unifier of the original yields one of the
 -- residual (a different substitution — it fixes δ and β′, which the original
 -- problem does not mention).
-theorem expandL_reflect_fwd {B : Type} {S : Supply} {θ : TySubst B}
+theorem expandL_reflect_fwd {B : Type} {Θ : DepGraph} {S : Supply} {θ : TySubst B}
     {s₁ s₂ : List (Atom B)} {β : TyVar} {l : Label} {τ : Ty B}
     {t₁ t₂ : List (Atom B)}
     (hS : S.Avoids (sFtv s₁ ++ sFtv s₂))
-    (h : expandL S s₁ s₂ = some (β, l, τ, t₁, t₂))
+    (h : expandL Θ S s₁ s₂ = some (β, l, τ, t₁, t₂))
     (hu : Unifies θ (ofSpine s₁) (ofSpine s₂)) :
     ∃ θ' : TySubst B, Unifies θ' (ofSpine t₁) (ofSpine t₂) := by
   obtain ⟨hs1, hshape, hren⟩ := expandL_spec h
