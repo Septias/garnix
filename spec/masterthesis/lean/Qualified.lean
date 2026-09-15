@@ -1693,4 +1693,149 @@ theorem QScheme.Principal.greatest {B C : Type} {constTy : C → B} {Γ : QCtx B
   fun τ hτ => hp.2.2 τ (hcl τ hτ)
 
 
+--=========== (A2) THE L2 INVERSION FOR x.l, AND selQ IS PRINCIPAL ===========--
+-- What was missing for conjunct 3: reading a typing of `λx. x.l` BACKWARDS.
+-- minimal.lean does this for L1 (var_inst_inv, sel_var_unk); these are the
+-- twins over ⊢_Q, and they are what turns "selQ answers every lookup verdict"
+-- into "selQ answers every TYPING".
+
+-- A monotype-bound variable types at ★ or at something ≈ its binding —
+-- qVar pins it via Inst.mono, qEq moves it by ≈, qUnk blurs it.
+-- ⊢  Γ ⊢_Q x : τ,  x : τx ∈ Γ   ⟹   τ = ★  ∨  τx ≈ₜ τ
+theorem qvar_mono_inv {B C : Type} {constTy : C → B} :
+    {Γ : QCtx B} → {e : Expr C} → {τ : Ty B} → QTyped constTy Γ e τ →
+    ∀ {x : Var} {τx : Ty B}, e = .var x →
+    Γ.lookup x = some ⟨[], [], τx⟩ → τ = .unk ∨ TyEquiv τx τ
+  | _, _, _, .qVar h hi => fun he hx => by
+      cases he
+      rw [h] at hx
+      cases Option.some.inj hx
+      rw [QScheme.Inst.mono hi]
+      exact .inr (.refl _)
+  | _, _, _, .qEq h heq => fun he hx =>
+      match qvar_mono_inv h he hx with
+      | .inl hu => .inl (hu ▸ heq).unk_inv
+      | .inr ht => .inr (ht.trans heq)
+  | _, _, _, .qUnk _ => fun _ _ => .inl rfl
+  | _, _, _, .qCon => fun he _ => nomatch he
+  | _, _, _, .qLam _ => fun he _ => nomatch he
+  | _, _, _, .qApp _ _ => fun he _ => nomatch he
+  | _, _, _, .qCat _ _ => fun he _ => nomatch he
+  | _, _, _, .qSel _ _ => fun he _ => nomatch he
+  | _, _, _, .qSelUnk _ _ => fun he _ => nomatch he
+  | _, _, _, .qSelAbs _ _ => fun he _ => nomatch he
+  | _, _, _, .qLet _ _ _ => fun he _ => nomatch he
+  | _, _, _, .qRcd _ => fun he _ => nomatch he
+
+-- Selecting on a monotype-bound variable. EVERY derivation — including the two
+-- that end at ★ and the blur — goes through a record type for the subject, so
+-- the binding is always ≈ a record; and when the result is not ★ it is ≈ the
+-- type a definite lookup on that record returned.
+-- ⊢  Γ ⊢_Q x.l : τ,  x : τx ∈ Γ   ⟹
+--       ∃ρ. τx ≈ₜ {ρ} ∧ (τ = ★ ∨ ∃τ_r. Γ ⊢ ρ.l ↓ τ_r ∧ τ_r ≈ₜ τ)
+theorem qsel_var_inv {B C : Type} {constTy : C → B} :
+    {Γ : QCtx B} → {e : Expr C} → {τ : Ty B} → QTyped constTy Γ e τ →
+    ∀ {x : Var} {l : Label} {τx : Ty B}, e = .sel (.var x) l →
+    Γ.lookup x = some ⟨[], [], τx⟩ →
+    ∃ ρ, TyEquiv τx (.rcd ρ) ∧
+      (τ = .unk ∨ ∃ τr, Lookup Γ.ctx ρ l (.found τr) ∧ TyEquiv τr τ)
+  | _, _, _, .qSel h hl => fun he hx => by
+      cases he
+      rcases qvar_mono_inv h rfl hx with hu | ht
+      · cases hu
+      · exact ⟨_, ht, .inr ⟨_, hl, .refl _⟩⟩
+  | _, _, _, .qSelUnk h hl => fun he hx => by
+      cases he
+      rcases qvar_mono_inv h rfl hx with hu | ht
+      · cases hu
+      · exact ⟨_, ht, .inl rfl⟩
+  | _, _, _, .qSelAbs h hl => fun he hx => by
+      cases he
+      rcases qvar_mono_inv h rfl hx with hu | ht
+      · cases hu
+      · exact ⟨_, ht, .inl rfl⟩
+  | _, _, _, .qEq h heq => fun he hx => by
+      obtain ⟨ρ, hρ, hrest⟩ := qsel_var_inv h he hx
+      refine ⟨ρ, hρ, ?_⟩
+      rcases hrest with hu | ⟨τr, hl, hre⟩
+      · exact .inl (hu ▸ heq).unk_inv
+      · exact .inr ⟨τr, hl, hre.trans heq⟩
+  | _, _, _, .qUnk h => fun he hx => by
+      obtain ⟨ρ, hρ, -⟩ := qsel_var_inv h he hx
+      exact ⟨ρ, hρ, .inl rfl⟩
+  | _, _, _, .qCon => fun he _ => nomatch he
+  | _, _, _, .qVar _ _ => fun he _ => nomatch he
+  | _, _, _, .qLam _ => fun he _ => nomatch he
+  | _, _, _, .qApp _ _ => fun he _ => nomatch he
+  | _, _, _, .qCat _ _ => fun he _ => nomatch he
+  | _, _, _, .qLet _ _ _ => fun he _ => nomatch he
+  | _, _, _, .qRcd _ => fun he _ => nomatch he
+
+-- The empty context solves no row-variable, so every lookup in it terminates.
+private theorem empty_rowWF {B : Type} :
+    (⟨[], []⟩ : QCtx B).ctx.RowWF :=
+  ⟨fun _ => 0, fun α ρ h => by simp [QCtx.ctx, Ctx.lookupRow] at h⟩
+
+-- CONJUNCT 3, closed. Every typing of λx.x.l is answered by an instance of
+-- selQ that is ≼-below it. The two ways a typing can drift from an instance
+-- are handled by the two halves of ≼: T-eq drift is absorbed by ≈ directly,
+-- and a blurred result by ⊑ — with TyPrec.comm_equiv (A1) reordering the
+-- blur past the equivalence, which is exactly why ≼ is ≈-THEN-⊑ and why that
+-- composition had to be shown to commute before this proof could exist.
+-- ⊢  ∀τ. ∅ ⊢_Q λx.x.l : τ  ⟹  ∃τ'. selQ ≥_∅ τ' ∧ τ' ≼ₜ τ
+theorem selQ_covers_typings {B C : Type} (constTy : C → B) (τ : Ty B)
+    (h : QTyped constTy (⟨[], []⟩ : QCtx B) (selEx C) τ) :
+    ∃ τ', QScheme.Inst Ctx.empty (selQ B) τ' ∧ τ' ≼ₜ τ := by
+  obtain ⟨τ₁, τ₂, hshape, hbody⟩ := qtyped_lam_inv h
+  -- the whole lambda blurred: any instance will do
+  rcases hshape with heq | hunk
+  case inr =>
+    subst hunk
+    exact ⟨_, selQ_inst_absent Ctx.empty, TyBelow.of_prec (.unk _)⟩
+  case inl =>
+  -- otherwise the binding is ≈ a record, and the body says which
+  have hx : ((⟨[], []⟩ : QCtx B).bindTy "x" τ₁).lookup "x"
+      = some ⟨[], [], τ₁⟩ := by
+    simp [QCtx.bindTy, QCtx.bindScheme, QCtx.lookup]
+  obtain ⟨ρ, hρ, hrest⟩ := qsel_var_inv hbody rfl hx
+  have hctx : ((⟨[], []⟩ : QCtx B).bindTy "x" τ₁).ctx = (⟨[], []⟩ : QCtx B).ctx :=
+    QCtx.ctx_bindTy _ _ _
+  rcases hrest with hu | ⟨τr, hl, hre⟩
+  · -- result blurred to ★: take the verdict the empty context gives on ρ and
+    -- blur it, then slide the blur past the ≈ with A1
+    obtain ⟨r, hr⟩ := lookup_total (Γ := (⟨[], []⟩ : QCtx B).ctx) empty_rowWF ρ "l"
+    refine ⟨.fn (.rcd ρ) r.collapse, selQ_inst_of_lookup hr, ?_⟩
+    have hmid : TyEquiv (.fn (.rcd ρ) (.unk : Ty B)) τ :=
+      (TyEquiv.fn hρ.symm (hu ▸ TyEquiv.refl _)).trans heq
+    obtain ⟨t, hte, htp⟩ :=
+      (TyPrec.comm_equiv hmid).1 (.fn (.rcd ρ) r.collapse)
+        (.fn (.refl _) (.unk _))
+    exact ⟨t, hte, htp⟩
+  · -- definite result: the instance is ≈ the typing on the nose
+    rw [hctx] at hl
+    exact ⟨.fn (.rcd ρ) τr,
+           selQ_inst_of_lookup (r := .found τr) hl,
+           TyBelow.of_equiv ((TyEquiv.fn hρ.symm hre).trans heq)⟩
+
+-- THE POSITIVE BOOKEND. selQ is principal for λx.x.l in the ⊴≼ order:
+-- instance-closed, inhabited, and covering every typing. Together with
+-- no_plain_principal_scheme (minimal.lean) — no PLAIN scheme can be
+-- instance-closed while spanning the two typing families — this is the claim
+-- of @contributions: qualified schemes are forced, and they do the job.
+-- ⊢  Principal selQ (λx.x.l)
+theorem selQ_principal {B C : Type} (constTy : C → B) :
+    QScheme.Principal constTy (⟨[], []⟩ : QCtx B) (selEx C) (selQ B) :=
+  ⟨(selQ_sound_and_inhabited constTy).1,
+   (selQ_sound_and_inhabited constTy).2,
+   selQ_covers_typings constTy⟩
+
+-- ... and therefore ⊴≼-greatest among every scheme that is sound for λx.x.l.
+-- ⊢  (∀τ. σ ≥_∅ τ ⟹ ∅ ⊢_Q λx.x.l : τ)  ⟹  σ ⊴≼[∅] selQ
+theorem selQ_greatest {B C : Type} (constTy : C → B) {σ : QScheme B}
+    (hcl : ∀ τ, QScheme.Inst Ctx.empty σ τ →
+      QTyped constTy (⟨[], []⟩ : QCtx B) (selEx C) τ) :
+    σ ⊴≼[Ctx.empty] selQ B :=
+  (selQ_principal constTy).greatest hcl
+
+
 end MinimalCalculus

@@ -354,6 +354,17 @@ info: 'MinimalCalculus.selQ_needs_equiv' depends on axioms: [propext, Classical.
 /-- info: 'MinimalCalculus.TyBelow.trans' does not depend on any axioms -/
 #guard_msgs in #print axioms TyBelow.trans
 
+-- THE POSITIVE BOOKEND: selQ is principal for λx.x.l in the ⊴≼ order —
+-- instance-closed, inhabited, and covering EVERY typing (not just every lookup
+-- verdict). Pair with no_plain_principal_scheme for the "forced" claim.
+/--
+info: 'MinimalCalculus.selQ_principal' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms selQ_principal
+
+/-- info: 'MinimalCalculus.qsel_var_inv' depends on axioms: [propext] -/
+#guard_msgs in #print axioms qsel_var_inv
+
 -- ## ⟦S⟧ as a context (RowUnify.State) — the θ ↦ rowEnv bridge
 -- Without these two, no inference rule that performs a lookup under a partial
 -- solution is even a proposition. rowWF_toCtx is what lets A-sel's premise

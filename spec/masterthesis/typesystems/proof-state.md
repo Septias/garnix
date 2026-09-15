@@ -292,9 +292,17 @@ through `unifyTyF`/`unifySpineMF` with `S.supply` threaded in and out.
     ρ ⊑ᵣ ε ⟹ ρ = ε), and comm survives precisely because its l₁ ≠ l₂ is untouched by blur
   - [x] hence *≼ is transitive* (TyBelow.trans) and *⊴≼ is a PREORDER*
     (BelowCoveredAt.refl + .trans) — the order principality is stated in now composes
-  - [ ] OPEN: `Principal selQ (λx.x.l)` in the ≼ form — conjuncts 1+2 done
-    (selQ_sound_and_inhabited), 3 still needs the L2 inversion for λx.x.l (analogue of
-    minimal.lean's sel_var_unk)
+  - [x] `Principal selQ (λx.x.l)` in the ≼ form — CLOSED 2026-09-15 (selQ_principal).
+    Needed the L2 inversions (qvar_mono_inv, qsel_var_inv — the ⊢_Q twins of minimal.lean's
+    var_inst_inv / sel_var_unk). The load-bearing fact is that EVERY derivation of `x.l`
+    goes through a record type for the subject — qSelUnk, qSelAbs and qUnk included — so
+    the binding is always ≈ a record and the ρ is always there to instantiate β with.
+    Both drifts are then absorbed by the two halves of ≼: T-eq drift by ≈ directly, a
+    blurred result by ⊑ with TyPrec.comm_equiv sliding the blur past the ≈ — which is
+    exactly why ≼ had to be ≈-THEN-⊑ and why A1 had to come first
+  - [x] hence *selQ is ⊴≼-greatest* among all schemes sound for λx.x.l (selQ_greatest).
+    With no_plain_principal_scheme this is the full @contributions claim: plain schemes
+    are refuted, the qualified one is exhibited AND shown principal
 
 
 # Problems
