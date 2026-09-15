@@ -1621,6 +1621,17 @@ theorem TyBelow.of_prec {B : Type} {τ' τ : Ty B} (h : TyPrec τ' τ) : τ' ≼
 theorem TyBelow.of_equiv {B : Type} {τ' τ : Ty B} (h : TyEquiv τ' τ) : τ' ≼ₜ τ :=
   ⟨τ, h, .refl τ⟩
 
+-- ≼ IS TRANSITIVE — the composite ≈;⊑;≈;⊑ collapses back to ≈;⊑ because the
+-- middle ⊑;≈ can be swapped (TyPrec.comm_equiv). Without that swap ≼ would be
+-- a relation with no composition law, and ⊴≼ could not be an order at all.
+-- ⊢  τ₁ ≼ₜ τ₂ ⟹ τ₂ ≼ₜ τ₃ ⟹ τ₁ ≼ₜ τ₃
+theorem TyBelow.trans {B : Type} {τ₁ τ₂ τ₃ : Ty B}
+    (h₁ : τ₁ ≼ₜ τ₂) (h₂ : τ₂ ≼ₜ τ₃) : τ₁ ≼ₜ τ₃ := by
+  obtain ⟨a, he₁, hp₁⟩ := h₁
+  obtain ⟨b, he₂, hp₂⟩ := h₂
+  obtain ⟨a', ha', hp'⟩ := (TyPrec.comm_equiv he₂).1 a hp₁
+  exact ⟨a', he₁.trans ha', hp'.trans hp₂⟩
+
 -- ⊑-covering fails for selQ at λx.x.l; ≼-covering does not (the same instance
 -- answers, now via ≈ on the result instead of ⊑).
 -- ⊢  ¬(⊑-answer)  ∧  ∃ τ'. selQ ≥_∅ τ' ∧ τ' ≼ₜ ({(l: {ε | m: 𝓫})} → {m: 𝓫})
@@ -1655,6 +1666,16 @@ theorem QScheme.BelowCoveredAt.refl {B : Type} (Γ : Ctx B) (σ : QScheme B) :
 theorem QScheme.PrecCoveredAt.toBelow {B : Type} {Γ : Ctx B} {σ σ' : QScheme B}
     (h : σ ⊴⊑[Γ] σ') : σ ⊴≼[Γ] σ' :=
   fun τ hτ => let ⟨τ', hτ', hp⟩ := h τ hτ; ⟨τ', hτ', TyBelow.of_prec hp⟩
+
+-- ... and with ≼ transitive, ⊴≼ is a PREORDER: the order principality is
+-- stated in composes, so "σ'' is below the principal scheme" can be chained.
+theorem QScheme.BelowCoveredAt.trans {B : Type} {Γ : Ctx B}
+    {σ₁ σ₂ σ₃ : QScheme B} (h₁ : σ₁ ⊴≼[Γ] σ₂) (h₂ : σ₂ ⊴≼[Γ] σ₃) :
+    σ₁ ⊴≼[Γ] σ₃ := by
+  intro τ hτ
+  obtain ⟨τ', hτ', hb'⟩ := h₁ τ hτ
+  obtain ⟨τ'', hτ'', hb''⟩ := h₂ τ' hτ'
+  exact ⟨τ'', hτ'', hb''.trans hb'⟩
 
 -- PRINCIPALITY, CORRECTED. Same three conjuncts; the covering one now reads
 -- the typing set's OTHER closure property as well.

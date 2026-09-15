@@ -258,9 +258,14 @@ through `unifyTyF`/`unifySpineMF` with `S.supply` threaded in and out.
     row and a `sing` row at once. Hence ¬PrincipalStrict selQ (selQ_not_principalStrict)
   - fix: *≼ₜ* := ≈ then ⊑ (TyBelow), and *⊴≼* covering. Principal now reads ≼; the same
     instance answers the witness via ≈ on the result (selQ_needs_equiv)
-  - [ ] OPEN: ≼-transitivity needs ⊑ and ≈ to COMMUTE (a ⊑ τ, τ ≈ b ⟹ ∃a'. a ≈ a' ⊑ b).
-    Not proved, not obviously false — blurred positions should travel with the reassociated
-    subterms. Until it exists, ⊴≼ has refl but no trans
+  - [x] ⊑ AND ≈ COMMUTE (TyPrec.comm_equiv / RowPrec.comm_equiv, 2026-09-15, axiom-FREE):
+    a ⊑ τ, τ ≈ b ⟹ ∃a'. a ≈ a' ⊑ b. Proved in BOTH directions at once — ≈ has symm/trans
+    as constructors, so the one-directional statement cannot survive its own induction.
+    The content is that ⊑ never touches a LABEL, never merges and never deletes a field:
+    assoc/unitL/unitR re-make the same move on the blurred row (unit needs RowPrec.empty_inv,
+    ρ ⊑ᵣ ε ⟹ ρ = ε), and comm survives precisely because its l₁ ≠ l₂ is untouched by blur
+  - [x] hence *≼ is transitive* (TyBelow.trans) and *⊴≼ is a PREORDER*
+    (BelowCoveredAt.refl + .trans) — the order principality is stated in now composes
   - [ ] OPEN: `Principal selQ (λx.x.l)` in the ≼ form — conjuncts 1+2 done
     (selQ_sound_and_inhabited), 3 still needs the L2 inversion for λx.x.l (analogue of
     minimal.lean's sel_var_unk)
