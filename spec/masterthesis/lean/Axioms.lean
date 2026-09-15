@@ -460,6 +460,14 @@ info: 'MinimalCalculus.selfref_lone_host_reported' depends on axioms: [propext, 
 /-- info: 'MinimalCalculus.selEx_infers' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in #print axioms selEx_infers
 
+-- The freshness invariant: a successful unification never hands back a supply
+-- behind the one it was given, and inference therefore never re-issues a name.
+/-- info: 'MinimalCalculus.unifyM_supply_mono' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in #print axioms unifyM_supply_mono
+
+/-- info: 'MinimalCalculus.Infer.supply_mono' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in #print axioms Infer.supply_mono
+
 -- `? on α`: the blocker of an unknown lookup, which A-sel-? and K-repark both
 -- need and `Lookup` does not record. Sound, complete and deterministic.
 /-- info: 'MinimalCalculus.Lookup.unknown_blocked' depends on axioms: [propext] -/

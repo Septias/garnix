@@ -88,6 +88,239 @@ theorem expandResRM_success {B : Type} {S : Supply} {β : TyVar} {l : Label} {τ
   | stuck     => cases h
   | outOfFuel => cases h
 
+-- ## THE SUPPLY ONLY ADVANCES
+-- Every name the driver invents is drawn from the threaded supply, and a
+-- successful run never hands one back. This is what "inferred variables are
+-- fresh" rests on one level up (Infer.lean): an A-rule that took a supply from
+-- a sub-call and then drew from it would otherwise re-issue a live name.
+--
+-- Every arm has one of three shapes: it returns the supply it was given
+-- (bindTy, solveVarM, allVarsEmpty, the ★/base arms), it SEQUENCES two calls
+-- (the eq-emitting moves and ≐'s congruences), or it advances by two and
+-- recurses (the four expansions).
+private theorem bindTy_supply {B : Type} {S : Supply} {α : TyVar} {τ : Ty B}
+    {s : Sol B} {S' : Supply} (h : bindTy S α τ = .success s S') :
+    S.next ≤ S'.next := by
+  unfold bindTy at h
+  split at h
+  · simp only [UResM.success.injEq] at h; obtain ⟨-, rfl⟩ := h; exact Nat.le_refl _
+  · split at h
+    · cases h
+    · simp only [UResM.success.injEq] at h; obtain ⟨-, rfl⟩ := h; exact Nat.le_refl _
+
+private theorem solveVarM_supply {B : Type} {Θ : DepGraph} {S : Supply}
+    {u₁ u₂ : List (Atom B)} {s : Sol B} {S' : Supply}
+    (h : solveVarM Θ S u₁ u₂ = some (.success s S')) : S.next ≤ S'.next := by
+  match u₁ with
+  | [] => simp [solveVarM] at h
+  | .field _ _ :: _ => simp [solveVarM] at h
+  | [.var α] =>
+      simp only [solveVarM] at h
+      split at h
+      · simp at h
+      · simp only [Option.some.injEq, UResM.success.injEq] at h
+        obtain ⟨-, rfl⟩ := h; exact Nat.le_refl _
+  | .var _ :: _ :: _ => simp [solveVarM] at h
+
+private theorem allVarsEmpty_supply {B : Type} {S : Supply} {u : List (Atom B)}
+    {σ : List (TyVar × Row B)} {s : Sol B} {S' : Supply}
+    (hae : allVarsEmpty u = some σ)
+    (h : (match allVarsEmpty u with
+          | some σ => UResM.success (Sol.ofRow σ) S
+          | none => .clash) = .success s S') : S.next ≤ S'.next := by
+  rw [hae] at h
+  simp only [UResM.success.injEq] at h
+  obtain ⟨-, rfl⟩ := h; exact Nat.le_refl _
+
+private theorem unifySpine_supply {B : Type} [DecidableEq B] {f : Nat}
+    (ih : (∀ (Θ : DepGraph) (S : Supply) (τ τ' : Ty B) {s : Sol B} {S' : Supply},
+              unifyTyF Θ S f τ τ' = .success s S' → S.next ≤ S'.next) ∧
+          (∀ (Θ : DepGraph) (S : Supply) (u₁ u₂ : List (Atom B))
+              {s : Sol B} {S' : Supply},
+              unifySpineMF Θ S f u₁ u₂ = .success s S' → S.next ≤ S'.next))
+    (Θ : DepGraph) (S : Supply) (s₁ s₂ : List (Atom B)) {s : Sol B} {S' : Supply}
+    (h : unifySpineMF Θ S (f + 1) s₁ s₂ = .success s S') : S.next ≤ S'.next := by
+  -- the shape every eq-emitting arm produces
+  have arm : ∀ (Θ : DepGraph) (S : Supply) (τ τ' : Ty B) (t₁ t₂ : List (Atom B))
+      {s : Sol B} {S' : Supply},
+      ((unifyTyF Θ S f τ τ').seq fun θ' S'' =>
+          unifySpineMF Θ S'' f (sApplySubst θ' t₁) (sApplySubst θ' t₂))
+        = .success s S' → S.next ≤ S'.next := by
+    intro Θ S τ τ' t₁ t₂ s S' hh
+    obtain ⟨s₁, S₁, s₂, h₁, h₂, -⟩ := UResM.seq_success hh
+    exact Nat.le_trans (ih.1 Θ S _ _ h₁) (ih.2 Θ S₁ _ _ h₂)
+  -- …and the shape the four expansions produce: advance by two, then recurse
+  have expL : ∀ (Θ' : DepGraph) (β : TyVar) (l : Label) (τ : Ty B)
+      (t₁ t₂ : List (Atom B)) {s : Sol B} {S' : Supply},
+      expandResM S β l τ (unifySpineMF Θ' S.fresh.2.fresh.2 f t₁ t₂)
+        = .success s S' → S.next ≤ S'.next := by
+    intro Θ' β l τ t₁ t₂ s S' hh
+    obtain ⟨s', hrec, -⟩ := expandResM_success hh
+    have := ih.2 Θ' S.fresh.2.fresh.2 t₁ t₂ hrec
+    simp only [Supply.fresh] at this
+    omega
+  have expR : ∀ (Θ' : DepGraph) (β : TyVar) (l : Label) (τ : Ty B)
+      (t₁ t₂ : List (Atom B)) {s : Sol B} {S' : Supply},
+      expandResRM S β l τ (unifySpineMF Θ' S.fresh.2.fresh.2 f t₁ t₂)
+        = .success s S' → S.next ≤ S'.next := by
+    intro Θ' β l τ t₁ t₂ s S' hh
+    obtain ⟨s', hrec, -⟩ := expandResRM_success hh
+    have := ih.2 Θ' S.fresh.2.fresh.2 t₁ t₂ hrec
+    simp only [Supply.fresh] at this
+    omega
+  cases s₁ with
+  | nil =>
+      simp only [unifySpineMF] at h
+      cases hae : allVarsEmpty s₂ with
+      | some σ => exact allVarsEmpty_supply hae h
+      | none => rw [hae] at h; cases h
+  | cons a s₁ =>
+    cases s₂ with
+    | nil =>
+        simp only [unifySpineMF] at h
+        cases hae : allVarsEmpty (a :: s₁) with
+        | some σ => exact allVarsEmpty_supply hae h
+        | none => rw [hae] at h; cases h
+    | cons b s₂ =>
+      unfold unifySpineMF at h
+      cases hsl : stripL (a :: s₁) (b :: s₂) with
+      | some p => obtain ⟨t₁, t₂⟩ := p; simp only [hsl] at h; exact ih.2 Θ S t₁ t₂ h
+      | none =>
+      cases hsr : stripR (a :: s₁) (b :: s₂) with
+      | some p =>
+          obtain ⟨t₁, t₂⟩ := p; simp only [hsl, hsr] at h; exact ih.2 Θ S t₁ t₂ h
+      | none =>
+      cases hv1 : solveVarM Θ S (a :: s₁) (b :: s₂) with
+      | some r =>
+          simp only [hsl, hsr, hv1] at h
+          exact solveVarM_supply (hv1.trans (congrArg some h))
+      | none =>
+      cases hv2 : solveVarM Θ S (b :: s₂) (a :: s₁) with
+      | some r =>
+          simp only [hsl, hsr, hv1, hv2] at h
+          exact solveVarM_supply (hv2.trans (congrArg some h))
+      | none =>
+      cases hml : matchL (a :: s₁) (b :: s₂) with
+      | some p =>
+          obtain ⟨τ0, τ0', t₁, t₂⟩ := p; simp only [hsl, hsr, hv1, hv2, hml] at h
+          exact arm Θ S τ0 τ0' t₁ t₂ h
+      | none =>
+      cases hml2 : matchL (b :: s₂) (a :: s₁) with
+      | some p =>
+          obtain ⟨τ0', τ0, t₂, t₁⟩ := p
+          simp only [hsl, hsr, hv1, hv2, hml, hml2] at h
+          exact arm Θ S τ0 τ0' t₁ t₂ h
+      | none =>
+      cases hmr : matchR (a :: s₁) (b :: s₂) with
+      | some p =>
+          obtain ⟨τ0, τ0', t₁, t₂⟩ := p
+          simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr] at h
+          exact arm Θ S τ0 τ0' t₁ t₂ h
+      | none =>
+      cases hmr2 : matchR (b :: s₂) (a :: s₁) with
+      | some p =>
+          obtain ⟨τ0', τ0, t₂, t₁⟩ := p
+          simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2] at h
+          exact arm Θ S τ0 τ0' t₁ t₂ h
+      | none =>
+      cases hg : groundMatch (a :: s₁) (b :: s₂) with
+      | some p =>
+          obtain ⟨τ0, τ0', t₁, t₂⟩ := p
+          simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg] at h
+          exact arm Θ S τ0 τ0' t₁ t₂ h
+      | none =>
+      cases hg2 : groundMatch (b :: s₂) (a :: s₁) with
+      | some p =>
+          obtain ⟨τ0', τ0, t₂, t₁⟩ := p
+          simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2] at h
+          exact arm Θ S τ0 τ0' t₁ t₂ h
+      | none =>
+      cases he1 : expandL Θ S (a :: s₁) (b :: s₂) with
+      | some p =>
+          obtain ⟨β0, l0, τ0, t₁, t₂⟩ := p
+          simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, he1] at h
+          exact expL _ β0 l0 τ0 t₁ t₂ h
+      | none =>
+      cases he2 : expandL Θ S (b :: s₂) (a :: s₁) with
+      | some p =>
+          obtain ⟨β0, l0, τ0, t₁, t₂⟩ := p
+          simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, he1, he2] at h
+          exact expL _ β0 l0 τ0 t₁ t₂ h
+      | none =>
+      cases hpc : projClash (a :: s₁) (b :: s₂) with
+      | true =>
+          simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, he1, he2,
+            hpc] at h
+          cases h
+      | false =>
+      cases he3 : expandR Θ S (a :: s₁) (b :: s₂) with
+      | some p =>
+          obtain ⟨β0, l0, τ0, t₁, t₂⟩ := p
+          simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, he1, he2,
+            hpc, he3] at h
+          exact expR _ β0 l0 τ0 t₁ t₂ h
+      | none =>
+      cases he4 : expandR Θ S (b :: s₂) (a :: s₁) with
+      | some p =>
+          obtain ⟨β0, l0, τ0, t₁, t₂⟩ := p
+          simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, he1, he2,
+            hpc, he3, he4] at h
+          exact expR _ β0 l0 τ0 t₁ t₂ h
+      | none =>
+          simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, he1, he2,
+            hpc, he3, he4] at h
+          cases h
+
+theorem unifyM_supply_mono {B : Type} [DecidableEq B] (fuel : Nat) :
+    (∀ (Θ : DepGraph) (S : Supply) (τ τ' : Ty B) {s : Sol B} {S' : Supply},
+        unifyTyF Θ S fuel τ τ' = .success s S' → S.next ≤ S'.next) ∧
+    (∀ (Θ : DepGraph) (S : Supply) (s₁ s₂ : List (Atom B)) {s : Sol B} {S' : Supply},
+        unifySpineMF Θ S fuel s₁ s₂ = .success s S' → S.next ≤ S'.next) := by
+  induction fuel with
+  | zero =>
+      refine ⟨fun Θ S τ τ' s S' h => ?_, fun Θ S s₁ s₂ s S' h => ?_⟩
+      · cases τ <;> cases τ' <;> first
+          | exact bindTy_supply h
+          | (simp only [unifyTyF, UResM.success.injEq] at h
+             obtain ⟨-, rfl⟩ := h; exact Nat.le_refl _)
+          | (simp only [unifyTyF] at h
+             split at h
+             · simp only [UResM.success.injEq] at h
+               obtain ⟨-, rfl⟩ := h; exact Nat.le_refl _
+             · cases h)
+          | cases h
+      · cases s₁ with
+        | nil =>
+            simp only [unifySpineMF] at h
+            cases hae : allVarsEmpty s₂ with
+            | some σ => exact allVarsEmpty_supply hae h
+            | none => rw [hae] at h; cases h
+        | cons a t =>
+          cases s₂ with
+          | nil =>
+              simp only [unifySpineMF] at h
+              cases hae : allVarsEmpty (a :: t) with
+              | some σ => exact allVarsEmpty_supply hae h
+              | none => rw [hae] at h; cases h
+          | cons b t' => cases h
+  | succ f ih =>
+      refine ⟨fun Θ S τ τ' s S' h => ?_, fun Θ S s₁ s₂ s S' h => ?_⟩
+      · cases τ <;> cases τ' <;>
+          first
+            | exact bindTy_supply h
+            | (simp only [unifyTyF, UResM.success.injEq] at h
+               obtain ⟨-, rfl⟩ := h; exact Nat.le_refl _)
+            | (simp only [unifyTyF] at h
+               split at h
+               · simp only [UResM.success.injEq] at h
+                 obtain ⟨-, rfl⟩ := h; exact Nat.le_refl _
+               · cases h)
+            | cases h
+            | (obtain ⟨sa, Sa, sb, h₁, h₂, -⟩ := UResM.seq_success h
+               exact Nat.le_trans (ih.1 Θ S _ _ h₁) (ih.1 Θ Sa _ _ h₂))
+            | exact ih.2 Θ S _ _ h
+      · exact unifySpine_supply ih Θ S s₁ s₂ h
+
 -- Base cases: one side exhausted ⟹ allVarsEmpty forces the other's vars to ε.
 theorem unifySpineMF_nil_left_sound {B : Type} [DecidableEq B] {θ : TySubst B}
     (S : Supply) (fuel : Nat) (s₂ : List (Atom B)) {s : Sol B} {S' : Supply}

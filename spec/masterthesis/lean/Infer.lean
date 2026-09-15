@@ -506,4 +506,122 @@ def InferSound (B C : Type) [DecidableEq B] (constTy : C → B) : Prop :=
     Infer constTy Γ S e τ S' → S'.parked = [] →
     QTyped constTy (S'.applyCtx Γ) e (τ.applySubst S'.subst)
 
+
+--------------------- THE SUPPLY ONLY ADVANCES -------------------------------
+-- `unifyM_supply_mono` (Soundness.lean) says a successful unification never
+-- hands back a supply behind the one it was given. Everything here lifts that
+-- through the solver steps and then through inference itself. This is the
+-- invariant "inferred variables are fresh" rests on: an A-rule that takes a
+-- supply from a sub-derivation and then draws from it must not re-issue a name
+-- an earlier step already used.
+
+theorem SolverState.draw_supply {B : Type} (S : SolverState B) :
+    S.draw.2.supply.next = S.supply.next + 1 := rfl
+
+theorem SolveTy.supply {B : Type} [DecidableEq B] {S S' : SolverState B}
+    {τ τ' : Ty B} (h : SolveTy S τ τ' S') : S.supply.next ≤ S'.supply.next := by
+  obtain ⟨fuel, s, Sup, hu, rfl⟩ := h
+  exact (unifyM_supply_mono fuel).1 [] S.supply _ _ hu
+
+theorem SolveRow.supply {B : Type} [DecidableEq B] {S S' : SolverState B}
+    {ρ ρ' : Row B} (h : SolveRow S ρ ρ' S') : S.supply.next ≤ S'.supply.next := by
+  obtain ⟨fuel, s, Sup, hu, rfl⟩ := h
+  exact (unifyM_supply_mono fuel).2 [] S.supply _ _ hu
+
+theorem Wake.supply {B : Type} [DecidableEq B] {S S' : SolverState B}
+    {p : Parked B} : Wake S p S' → S.supply.next ≤ S'.supply.next
+  | .hit _ hs    => hs.supply
+  | .abs _ hs    => hs.supply
+  | .repark _    => Nat.le_refl _
+
+theorem Wakes.supply {B : Type} [DecidableEq B] {S S' : SolverState B}
+    {ps : List (Parked B)} : Wakes S ps S' → S.supply.next ≤ S'.supply.next
+  | .nil            => Nat.le_refl _
+  | .cons hw hws    => Nat.le_trans hw.supply hws.supply
+  | .park _ hws     => hws.supply
+
+theorem Finalize.supply {B : Type} [DecidableEq B] {S S' : SolverState B}
+    {p : Parked B} : Finalize S p S' → S.supply.next ≤ S'.supply.next
+  | .star hs => hs.supply
+
+-- from `(α, S₀) = S.draw`, recover the advanced supply
+private theorem draw_eq {B : Type} {S S₀ : SolverState B} {α : TyVar}
+    (h : (α, S₀) = S.draw) : S₀.supply.next = S.supply.next + 1 := by
+  have h2 : S₀ = S.draw.2 := congrArg Prod.snd h
+  rw [h2]; rfl
+
+mutual
+
+/-- ⊢  inference never re-issues a name: the supply only advances. -/
+theorem Infer.supply_mono {B C : Type} [DecidableEq B] {constTy : C → B}
+    {Γ : QCtx B} {S S' : SolverState B} {e : Expr C} {τ : Ty B} :
+    Infer constTy Γ S e τ S' → S.supply.next ≤ S'.supply.next
+  | .con => Nat.le_refl _
+  | .var _ _ _ _ hw => hw.supply
+  | .lam hd hb => by
+      have := Infer.supply_mono hb
+      have hd' := draw_eq hd
+      omega
+  | .app h₁ h₂ hd hs => by
+      have i₁ := Infer.supply_mono h₁
+      have i₂ := Infer.supply_mono h₂
+      have hd' := draw_eq hd
+      have i₃ := hs.supply
+      omega
+  | .appDeg h₁ h₂ hd _ => by
+      have i₁ := Infer.supply_mono h₁
+      have i₂ := Infer.supply_mono h₂
+      have hd' := draw_eq hd
+      show _ ≤ (SolverState.flag _ _).supply.next
+      simp only [SolverState.flag]
+      omega
+  | .conc h₁ h₂ hd₁ hd₂ hs₁ hs₂ => by
+      have i₁ := Infer.supply_mono h₁
+      have i₂ := Infer.supply_mono h₂
+      have e₁ := draw_eq hd₁
+      have e₂ := draw_eq hd₂
+      have j₁ := hs₁.supply
+      have j₂ := hs₂.supply
+      omega
+  | .sel h₁ hd hs _ => by
+      have i₁ := Infer.supply_mono h₁
+      have hd' := draw_eq hd
+      have j := hs.supply
+      omega
+  | .selAbs h₁ hd hs _ => by
+      have i₁ := Infer.supply_mono h₁
+      have hd' := draw_eq hd
+      have j := hs.supply
+      show _ ≤ (SolverState.flag _ _).supply.next
+      simp only [SolverState.flag]
+      omega
+  | .selUnk h₁ hd hs _ hd₂ => by
+      have i₁ := Infer.supply_mono h₁
+      have hd' := draw_eq hd
+      have j := hs.supply
+      have hd₂' := draw_eq hd₂
+      show _ ≤ (SolverState.park _ _).supply.next
+      simp only [SolverState.park]
+      omega
+  | .selDeg h₁ hd _ => by
+      have i₁ := Infer.supply_mono h₁
+      have hd' := draw_eq hd
+      show _ ≤ (SolverState.flag _ _).supply.next
+      simp only [SolverState.flag]
+      omega
+  | .rcd hb => InferRec.supply_mono hb
+  | .letE h₁ _ _ _ h₂ => by
+      have i₁ := Infer.supply_mono h₁
+      have i₂ := Infer.supply_mono h₂
+      exact Nat.le_trans i₁ i₂
+
+theorem InferRec.supply_mono {B C : Type} [DecidableEq B] {constTy : C → B}
+    {Γ : QCtx B} {S S' : SolverState B} {ξ : RecBody (Expr C)} {ρ : Row B} :
+    InferRec constTy Γ S ξ ρ S' → S.supply.next ≤ S'.supply.next
+  | .empty => Nat.le_refl _
+  | .field h => Infer.supply_mono h
+  | .cat h₁ h₂ => Nat.le_trans (InferRec.supply_mono h₁) (InferRec.supply_mono h₂)
+
+end
+
 end MinimalCalculus

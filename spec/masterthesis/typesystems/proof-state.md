@@ -214,9 +214,15 @@ through `unifyTyF`/`unifySpineMF` with `S.supply` threaded in and out.
   supplying it), capture-avoidance for `QScheme.applySubst`, and an L2
   type-substitution lemma (L1 has `typed_applySubst_aux`; `QTyped` has only
   term substitution).
-- [ ] supply monotonicity: `Infer … S e τ S′ ⟹ S.supply ≤ S′.supply`. The first
-  real theorem to prove about the relation, and what "inferred variables are
-  fresh" rests on.
+- [x] supply monotonicity — DONE 2026-09-15. `unifyM_supply_mono`
+  (Soundness.lean): a SUCCESSFUL unification never hands back a supply behind
+  the one it was given — every arm either returns its supply (bindTy,
+  solveVarM, allVarsEmpty, the ★/base arms), sequences two calls, or advances
+  by two and recurses (the four expansions). Lifted through `SolveTy`/`SolveRow`
+  /`Wake`/`Wakes`/`Finalize` to `Infer.supply_mono` / `InferRec.supply_mono` by
+  mutual structural recursion. This is what "inferred variables are fresh"
+  rests on; it is also the first real theorem ABOUT the relation, so it
+  confirms the mutual induction over Infer/InferRec is workable.
 - [ ] sorts. The paper draws `fresh α: κ`; `Supply` has no kinds, so the rules
   draw untyped names and `A-let`'s `κ̄ = Γ(ᾱ)` is still not expressible.
 
