@@ -807,6 +807,121 @@ theorem Sol.lookup_toCtx_iff {B : Type} {s : Sol B} {σ : TySubst B}
 -- the first one binds — which is what the `Supply`/`Avoids` discipline of
 -- `unifyM_bounded` is for.  `Sol.Applied` is NOT part of this any more: it is
 -- discharged by reading ⟦S⟧ as a closure (`Sol.closes_of_wf`).
+--------------------- TOWARDS `Acyclic`: THE TWO ALGEBRAIC STEPS --------------
+-- `Sol.Acyclic` is the SPINE-only half of well-formedness: no bound row
+-- variable occurs at a spine position of any row binding. It is the half the
+-- fuzzer has never refuted, and the half `Sol.rowWF_toCtx` /
+-- `lookup_total_toCtx` actually consume — so proving it alone already makes
+-- `A-sel`'s premise guaranteed to have a derivation, without any rank function.
+
+-- ⊢  substitution acts on the spine variables by FLATMAP: each spine variable is
+--    replaced by the spine variables of its image. Payloads contribute nothing,
+--    which is exactly why the cross-sort leak that refutes `NoCapture`
+--    (`a ≐ᵣ (l:a)`: `a` bound at the row sort, the payload `a` a TYPE variable)
+--    cannot reach this property — a spine position never holds a type variable.
+theorem sVarSeq_applySubst {B : Type} (θ : TySubst B) :
+    (ρ : Row B) → sVarSeq (ρ.applySubst θ).toSpine
+      = (sVarSeq ρ.toSpine).flatMap (fun γ => sVarSeq (θ.row γ).toSpine)
+  | .empty    => rfl
+  | .var α    => by simp [Row.applySubst, Row.toSpine, sVarSeq]
+  | .sing l τ => by simp [Row.applySubst, Row.toSpine, sVarSeq]
+  | .cat a b  => by
+      simp only [Row.applySubst, Row.toSpine, sVarSeq_append,
+        sVarSeq_applySubst θ a, sVarSeq_applySubst θ b, List.flatMap_append]
+
+/-- `s` is acyclic AND its row bindings keep their spine clear of `V` as well.
+`V` is what the ENCLOSING stages have already bound: composition needs the later
+stage to avoid the earlier stage's domain, and that fact has to be carried
+inductively rather than recovered afterwards. -/
+def Sol.AcyclicAvoiding {B : Type} (V : List TyVar) (s : Sol B) : Prop :=
+  ∀ p ∈ s.row, ∀ β ∈ sVarSeq p.2.toSpine,
+    β ∉ s.row.map Prod.fst ∧ β ∉ V
+
+theorem Sol.AcyclicAvoiding.toAcyclic {B : Type} {V : List TyVar} {s : Sol B}
+    (h : s.AcyclicAvoiding V) : s.Acyclic :=
+  fun p hp β hβ => (h p hp β hβ).1
+
+-- ⊢  COMPOSITION. `Sol.comp s₂ s₁` is "first s₁, then s₂": s₁'s bindings pushed
+--    through s₂, then s₂'s own. Both halves stay spine-clean provided the LATER
+--    stage avoids the earlier stage's domain — which is what `AcyclicAvoiding`
+--    carries.
+theorem Sol.acyclic_comp {B : Type} {s₁ s₂ : Sol B} {V : List TyVar}
+    (h₁ : s₁.AcyclicAvoiding V)
+    (h₂ : s₂.AcyclicAvoiding (V ++ s₁.row.map Prod.fst)) :
+    (s₂.comp s₁).AcyclicAvoiding V := by
+  intro p hp β hβ
+  have hdom : ∀ γ, γ ∈ (s₂.comp s₁).row.map Prod.fst →
+      γ ∈ s₁.row.map Prod.fst ∨ γ ∈ s₂.row.map Prod.fst := by
+    intro γ hγ
+    simp only [Sol.comp, List.map_append, List.map_map, List.mem_append] at hγ
+    rcases hγ with hh | hh
+    · exact .inl (by simpa using hh)
+    · exact .inr hh
+  simp only [Sol.comp, List.mem_append] at hp
+  rcases hp with hp | hp
+  · -- a binding of the EARLIER stage, pushed through the later solution
+    obtain ⟨q, hq, rfl⟩ := List.mem_map.mp hp
+    rw [sVarSeq_applySubst, List.mem_flatMap] at hβ
+    obtain ⟨γ, hγ, hβγ⟩ := hβ
+    rcases rowLookup_cases s₂.row γ with ⟨hnm, he⟩ | ⟨r, hr, -, he⟩
+    · -- γ is untouched by the later stage: it stands for itself, and the
+      -- earlier stage had already cleared it
+      have hlk : s₂.toSubst.row γ = .var γ := he
+      rw [hlk] at hβγ
+      simp only [Row.toSpine, sVarSeq, List.mem_singleton] at hβγ
+      subst hβγ
+      obtain ⟨hnd, hnv⟩ := h₁ q hq β hγ
+      refine ⟨fun hc => ?_, hnv⟩
+      rcases hdom β hc with hh | hh
+      · exact hnd hh
+      · exact hnm hh
+    · -- γ is solved by the later stage: read the answer off s₂
+      have hlk : s₂.toSubst.row γ = r.2 := he
+      rw [hlk] at hβγ
+      obtain ⟨hnd, hnv⟩ := h₂ r hr β hβγ
+      refine ⟨fun hc => ?_, fun hc => hnv (List.mem_append_left _ hc)⟩
+      rcases hdom β hc with hh | hh
+      · exact hnv (List.mem_append_right _ hh)
+      · exact hnd hh
+  · -- a binding of the LATER stage
+    obtain ⟨hnd, hnv⟩ := h₂ p hp β hβ
+    refine ⟨fun hc => ?_, fun hc => hnv (List.mem_append_left _ hc)⟩
+    rcases hdom β hc with hh | hh
+    · exact hnv (List.mem_append_right _ hh)
+    · exact hnd hh
+
+/-- The SPINE half of `UnifyWF`, on its own. Worth separating because it is
+strictly cheaper and already buys the thing inference needs: with `Acyclic`,
+`Sol.rowWF_toCtx` makes ⟦S⟧ a well-formed context and `lookup_total_toCtx`
+makes `A-sel`'s premise guaranteed to HAVE a derivation. The θ ↦ rowEnv bridge
+needs `Closes` and therefore still waits on `Ranked` (or on an applied
+solution) — but the rules can be shown to fire without it.
+
+STATUS. The two algebraic steps are DONE above: `sVarSeq_applySubst` (spine
+variables transform by flatMap, so payloads — and with them the cross-sort leak
+that refutes `NoCapture` — cannot reach this property) and `Sol.acyclic_comp`
+(composition preserves it, given that the later stage avoids the earlier
+stage's domain, which `AcyclicAvoiding` carries). That is exactly the step that
+defeats `Ranked`, and here it closes.
+
+WHAT REMAINS is threading `AcyclicAvoiding V` through the driver, with the
+precondition "the problem's spine variables avoid V". Arm by arm:
+  * `allVarsEmpty` binds to `ε` — no spine variables at all;
+  * `solveVarM` binds `α ≔ ofSpine s₂`, and its occurs guard already gives
+    `α ∉ allRowVars (ofSpine s₂) ⊇ sVarSeq s₂`;
+  * `bindTy` contributes no ROW binding, so it is vacuous;
+  * the eq-emitting arms are `Sol.acyclic_comp` with `V` grown by the first
+    stage's domain, and the residual is `sApplySubst`-ed so it has already lost
+    that domain at spine positions;
+  * the four expansions emit `β ≔ (l:δ | β′)` whose only spine variable is the
+    FRESH `β′`, and recurse on a residual where `β` has been renamed away.
+The missing ingredient is a "spine variables of a `Ty`" measure for the type
+pass (the row variables at spine positions of the records inside it), which the
+`.fn` arm needs because it recurses on `b.applySubst θ`. -/
+def UnifyAcyclic (B : Type) [DecidableEq B] : Prop :=
+  ∀ (fuel : Nat) (ρ₁ ρ₂ : Row B) (s : Sol B) (S' : Supply),
+    unifyRowM fuel ρ₁ ρ₂ = .success s S' → s.Acyclic
+
 def UnifyWF (B : Type) [DecidableEq B] : Prop :=
   ∀ (fuel : Nat) (ρ₁ ρ₂ : Row B) (s : Sol B) (S' : Supply),
     unifyRowM fuel ρ₁ ρ₂ = .success s S' → s.WF

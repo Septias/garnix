@@ -131,6 +131,26 @@ Principality forces qualified schemes that use parked stumps during unification 
     solver state, from which no no-unifier theorem follows). Trichotomy's
     step-2 dispatch is correspondingly WEAKER and anything reading that
     disjunct must re-split. Recorded, not repaired.
+  - [~] `UnifyAcyclic` (State.lean) — the SPINE half of `UnifyWF`, split out
+    because it is cheaper and already buys what inference needs: `Acyclic` gives
+    `rowWF_toCtx` and `lookup_total_toCtx`, i.e. `A-sel`'s premise is guaranteed
+    to HAVE a derivation. (The θ ↦ rowEnv bridge needs `Closes` and still waits
+    on `Ranked`.) THE TWO ALGEBRAIC STEPS ARE DONE (2026-09-15):
+      * `sVarSeq_applySubst` — spine variables transform by FLATMAP under
+        substitution. Payloads contribute nothing, so the cross-sort leak that
+        refutes `NoCapture` (`a ≐ᵣ (l:a)`: `a` bound at the row sort, the
+        payload `a` a TYPE variable) cannot reach this property. A spine
+        position never holds a type variable.
+      * `Sol.acyclic_comp` — COMPOSITION preserves it, given the later stage
+        avoids the earlier stage's domain, which `Sol.AcyclicAvoiding` carries.
+        This is precisely the step that defeats `Ranked`, and at spine
+        positions it CLOSES: `sApplySubst` strips the earlier domain from the
+        residual (by that stage's own acyclicity), and the expansions rename
+        their host away instead.
+    REMAINS: thread `AcyclicAvoiding V` through the driver (the arm-by-arm plan
+    is in the `UnifyAcyclic` docstring). The one missing ingredient is a "spine
+    variables of a `Ty`" measure, which the `.fn` arm needs because it recurses
+    on `b.applySubst θ`.
   - [ ] PROVE `UnifyWF`. Empirically clean since B1 (0/0/0, both halves, three
     universes) and the gate on ⟦S⟧ being a total function — items 1 and 2 of
     plans/inference-gap-analysis.md's critical path. But empirically clean is
