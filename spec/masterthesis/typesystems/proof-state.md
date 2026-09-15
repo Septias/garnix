@@ -415,10 +415,21 @@ Proofs are for _closed_ programs (Γ = ∅). e ↯ marks _lookup-errors_: a sele
 - IS L2 »SOUND & COMPLETE«? — audit 2026-09-13, build green, no sorries
   - *safety*: YES. qProgress/qPreservation are proven over ⊢_Q directly (Step/Value/Err
     reused from L1), preservation ON THE NOSE, axiom-guarded in Axioms.lean
-  - *vs. L1*: only the ⊆ direction. The converse is believed false, but NOT mechanized:
-    there is no `¬ Typed ∅ two_use ({a: 𝓫_c | b: ★})`. no_plain_principal_scheme is about
-    λx.x.l at ONE instance pair, so the Qualified.lean comment "no single plain scheme
-    could serve both uses" is prose, not a theorem. ⇒ L1 ⊊ L2 is an OPEN refutation
+  - *vs. L1*: BOTH directions now. ⊆ is Typed.toQ; the converse is FALSE and mechanized
+    2026-09-15 in lean/Strictness.lean — `l1_strictly_weaker_than_l2`, so the inclusion
+    is STRICT and the old Qualified.lean comment is now a theorem
+    - the refutation core is *no_plain_scheme_two_use*: no plain σ can be instance-closed
+      for λx.x.l while having an instance with a definite result ≈ 𝓫 AND one whose domain
+      is ≈ ε. The a-use forces l INTO the domain, the b-use forces the domain to BE ε
+    - the argument: σ.body must be an arrow whose result is a QUANTIFIED variable (its two
+      images are 𝓫 and ★ — two rigid heads), and re-pointing that variable at {ε} inside
+      the ε-domain instance yields an instance that is not a typing (sel_var_unk)
+    - the one real lemma: the re-pointing must not move the DOMAIN. It doesn't, because a
+      domain whose image is ≈ ε carries no field, and only a field consults the .ty half of
+      a substitution (row_image_empty_ty_irrelevant, on cat_empty_split)
+    - new L1 inversions in minimal.lean, reusable: typed_app_inv, typed_app_shape (keeps
+      the derivation when the result was blurred — typed_app_inv cannot), typed_let_inv,
+      var_scheme_inv, sel_var_rcd, selEx_no_unk_domain (λx.x.l has NO ★-domain typing)
   - *completeness w.r.t. inference*: NO, and not yet stateable. No W (algorithmic.lean is
     an import root); unifyRowM_success_iff is completeness for ≐ᵣ, not for ⊢_Q; and
     principality for L2 exists only as the single-example bookend qualified_principal_scheme

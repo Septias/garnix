@@ -2687,7 +2687,7 @@ theorem finalized_no_blur {B : Type} (θ : TySubst B) {τ₀ : Ty B}
 
 -- Variable typings mod tEq/tUnk: a monotype-bound variable types at ★ or at
 -- something ≈ its binding.
-private theorem var_inst_inv {B C : Type} {constTy : C → B} :
+theorem var_inst_inv {B C : Type} {constTy : C → B} :
     {Γ : Ctx B} → {e : Expr C} → {τ : Ty B} → Typed constTy Γ e τ →
     ∀ {x : Var} {τx : Ty B}, e = .var x → Γ.lookup x = some ⟨[], τx⟩ →
     τ = .unk ∨ TyEquiv τx τ
@@ -2714,7 +2714,7 @@ private theorem var_inst_inv {B C : Type} {constTy : C → B} :
 
 -- On x: τx with τx ≈ {ε}, the selection x.l types ONLY at ★: the lookup on ε
 -- is ⊥ (mod ≈), so T-sel can never fire.
-private theorem sel_var_unk {B C : Type} {constTy : C → B} :
+theorem sel_var_unk {B C : Type} {constTy : C → B} :
     {Γ : Ctx B} → {e : Expr C} → {τ : Ty B} → Typed constTy Γ e τ →
     ∀ {x : Var} {l : Label} {τx : Ty B}, e = .sel (.var x) l →
     Γ.lookup x = some ⟨[], τx⟩ → TyEquiv τx (.rcd .empty) → τ = .unk
@@ -2750,6 +2750,154 @@ private theorem selEx_no_mixed {B C : Type} (constTy : C → B) :
     have hτ₂ : τ₂ = .unk :=
       sel_var_unk hbody rfl (by simp [Ctx.lookup_bindTy]) he₁
     cases (hτ₂ ▸ he₂).unk_inv
+  · cases hu
+
+-- ## PROGRAM-SHAPE INVERSIONS (app, let, var-at-a-scheme)
+-- typed_inv_aux covers con/lam/rcd — the shapes whose type is fixed by the
+-- rule. These three are the shapes whose type is NOT: application, let, and a
+-- variable bound to a SCHEME rather than a monotype. Same recursive pattern as
+-- var_inst_inv: tEq moves the answer by ≈, tUnk collapses it to ★.
+
+-- ⊢  Γ ⊢ e₁ e₂ : τ  ⟹  τ = ★ ∨ ∃τ₁ τ'. Γ ⊢ e₁ : τ₁ → τ' ∧ Γ ⊢ e₂ : τ₁ ∧ τ' ≈ₜ τ
+theorem typed_app_inv {B C : Type} {constTy : C → B} :
+    {Γ : Ctx B} → {e : Expr C} → {τ : Ty B} → Typed constTy Γ e τ →
+    ∀ {e₁ e₂ : Expr C}, e = .app e₁ e₂ →
+    τ = .unk ∨ ∃ τ₁ τ', Typed constTy Γ e₁ (.fn τ₁ τ') ∧
+                        Typed constTy Γ e₂ τ₁ ∧ TyEquiv τ' τ
+  | _, _, _, .tApp h₁ h₂ => fun he => by
+      cases he; exact .inr ⟨_, _, h₁, h₂, .refl _⟩
+  | _, _, _, .tEq h heq => fun he =>
+      match typed_app_inv h he with
+      | .inl hu => .inl (hu ▸ heq).unk_inv
+      | .inr ⟨τ₁, τ', h₁, h₂, hre⟩ => .inr ⟨τ₁, τ', h₁, h₂, hre.trans heq⟩
+  | _, _, _, .tUnk _ => fun _ => .inl rfl
+  | _, _, _, .tCon => fun he => nomatch he
+  | _, _, _, .tVar _ _ => fun he => nomatch he
+  | _, _, _, .tLam _ => fun he => nomatch he
+  | _, _, _, .tCat _ _ => fun he => nomatch he
+  | _, _, _, .tSel _ _ => fun he => nomatch he
+  | _, _, _, .tSelUnk _ _ => fun he => nomatch he
+  | _, _, _, .tSelAbs _ _ => fun he => nomatch he
+  | _, _, _, .tLet _ _ => fun he => nomatch he
+  | _, _, _, .tRcd _ => fun he => nomatch he
+
+-- The SHAPE-only version: an application always decomposes, whatever its type
+-- ended up being. typed_app_inv loses the derivation in the tUnk case (it can
+-- only report ★); this one keeps it, which is what a use whose result was
+-- blurred needs.
+-- ⊢  Γ ⊢ e₁ e₂ : τ  ⟹  ∃τ₁ τ'. Γ ⊢ e₁ : τ₁ → τ' ∧ Γ ⊢ e₂ : τ₁
+theorem typed_app_shape {B C : Type} {constTy : C → B} :
+    {Γ : Ctx B} → {e : Expr C} → {τ : Ty B} → Typed constTy Γ e τ →
+    ∀ {e₁ e₂ : Expr C}, e = .app e₁ e₂ →
+    ∃ τ₁ τ', Typed constTy Γ e₁ (.fn τ₁ τ') ∧ Typed constTy Γ e₂ τ₁
+  | _, _, _, .tApp h₁ h₂ => fun he => by cases he; exact ⟨_, _, h₁, h₂⟩
+  | _, _, _, .tEq h _ => fun he => typed_app_shape h he
+  | _, _, _, .tUnk h => fun he => typed_app_shape h he
+  | _, _, _, .tCon => fun he => nomatch he
+  | _, _, _, .tVar _ _ => fun he => nomatch he
+  | _, _, _, .tLam _ => fun he => nomatch he
+  | _, _, _, .tCat _ _ => fun he => nomatch he
+  | _, _, _, .tSel _ _ => fun he => nomatch he
+  | _, _, _, .tSelUnk _ _ => fun he => nomatch he
+  | _, _, _, .tSelAbs _ _ => fun he => nomatch he
+  | _, _, _, .tLet _ _ => fun he => nomatch he
+  | _, _, _, .tRcd _ => fun he => nomatch he
+
+-- ⊢  Γ ⊢ let x = e₁ in e₂ : τ  ⟹  τ = ★ ∨ ∃σ τ'. (σ instance-closed for e₁)
+--                                  ∧ Γ,x:σ ⊢ e₂ : τ' ∧ τ' ≈ₜ τ
+theorem typed_let_inv {B C : Type} {constTy : C → B} :
+    {Γ : Ctx B} → {e : Expr C} → {τ : Ty B} → Typed constTy Γ e τ →
+    ∀ {x : Var} {e₁ e₂ : Expr C}, e = .letE x e₁ e₂ →
+    τ = .unk ∨ ∃ (σ : Scheme B) (τ' : Ty B),
+      (∀ τ₁, σ.Inst τ₁ → Typed constTy Γ e₁ τ₁) ∧
+      Typed constTy (Γ.bindScheme x σ) e₂ τ' ∧ TyEquiv τ' τ
+  | _, _, _, .tLet h₁ h₂ => fun he => by
+      cases he; exact .inr ⟨_, _, h₁, h₂, .refl _⟩
+  | _, _, _, .tEq h heq => fun he =>
+      match typed_let_inv h he with
+      | .inl hu => .inl (hu ▸ heq).unk_inv
+      | .inr ⟨σ, τ', h₁, h₂, hre⟩ => .inr ⟨σ, τ', h₁, h₂, hre.trans heq⟩
+  | _, _, _, .tUnk _ => fun _ => .inl rfl
+  | _, _, _, .tCon => fun he => nomatch he
+  | _, _, _, .tVar _ _ => fun he => nomatch he
+  | _, _, _, .tLam _ => fun he => nomatch he
+  | _, _, _, .tApp _ _ => fun he => nomatch he
+  | _, _, _, .tCat _ _ => fun he => nomatch he
+  | _, _, _, .tSel _ _ => fun he => nomatch he
+  | _, _, _, .tSelUnk _ _ => fun he => nomatch he
+  | _, _, _, .tSelAbs _ _ => fun he => nomatch he
+  | _, _, _, .tRcd _ => fun he => nomatch he
+
+-- ⊢  Γ ⊢ x : τ,  x : σ ∈ Γ  ⟹  τ = ★ ∨ ∃τ₀. σ ≥ τ₀ ∧ τ₀ ≈ₜ τ
+theorem var_scheme_inv {B C : Type} {constTy : C → B} :
+    {Γ : Ctx B} → {e : Expr C} → {τ : Ty B} → Typed constTy Γ e τ →
+    ∀ {x : Var} {σ : Scheme B}, e = .var x → Γ.lookup x = some σ →
+    τ = .unk ∨ ∃ τ₀, σ.Inst τ₀ ∧ TyEquiv τ₀ τ
+  | _, _, _, .tVar h hi => fun he hx => by
+      cases he
+      rw [h] at hx
+      cases Option.some.inj hx
+      exact .inr ⟨_, hi, .refl _⟩
+  | _, _, _, .tEq h heq => fun he hx =>
+      match var_scheme_inv h he hx with
+      | .inl hu => .inl (hu ▸ heq).unk_inv
+      | .inr ⟨τ₀, hi, hre⟩ => .inr ⟨τ₀, hi, hre.trans heq⟩
+  | _, _, _, .tUnk _ => fun _ _ => .inl rfl
+  | _, _, _, .tCon => fun he _ => nomatch he
+  | _, _, _, .tLam _ => fun he _ => nomatch he
+  | _, _, _, .tApp _ _ => fun he _ => nomatch he
+  | _, _, _, .tCat _ _ => fun he _ => nomatch he
+  | _, _, _, .tSel _ _ => fun he _ => nomatch he
+  | _, _, _, .tSelUnk _ _ => fun he _ => nomatch he
+  | _, _, _, .tSelAbs _ _ => fun he _ => nomatch he
+  | _, _, _, .tLet _ _ => fun he _ => nomatch he
+  | _, _, _, .tRcd _ => fun he _ => nomatch he
+
+-- Selecting on a variable forces its binding to be a RECORD — every derivation
+-- of x.l, the ★-producing ones included, types the subject at some {ρ}.
+-- ⊢  Γ ⊢ x.l : τ,  x : τx ∈ Γ  ⟹  ∃ρ. τx ≈ₜ {ρ}
+theorem sel_var_rcd {B C : Type} {constTy : C → B} :
+    {Γ : Ctx B} → {e : Expr C} → {τ : Ty B} → Typed constTy Γ e τ →
+    ∀ {x : Var} {l : Label} {τx : Ty B}, e = .sel (.var x) l →
+    Γ.lookup x = some ⟨[], τx⟩ → ∃ ρ, TyEquiv τx (.rcd ρ)
+  | _, _, _, .tSel h _ => fun he hx => by
+      cases he
+      rcases var_inst_inv h rfl hx with hu | ht
+      · cases hu
+      · exact ⟨_, ht⟩
+  | _, _, _, .tSelUnk h _ => fun he hx => by
+      cases he
+      rcases var_inst_inv h rfl hx with hu | ht
+      · cases hu
+      · exact ⟨_, ht⟩
+  | _, _, _, .tSelAbs h _ => fun he hx => by
+      cases he
+      rcases var_inst_inv h rfl hx with hu | ht
+      · cases hu
+      · exact ⟨_, ht⟩
+  | _, _, _, .tEq h _ => fun he hx => sel_var_rcd h he hx
+  | _, _, _, .tUnk h => fun he hx => sel_var_rcd h he hx
+  | _, _, _, .tCon => fun he _ => nomatch he
+  | _, _, _, .tVar _ _ => fun he _ => nomatch he
+  | _, _, _, .tLam _ => fun he _ => nomatch he
+  | _, _, _, .tApp _ _ => fun he _ => nomatch he
+  | _, _, _, .tCat _ _ => fun he _ => nomatch he
+  | _, _, _, .tLet _ _ => fun he _ => nomatch he
+  | _, _, _, .tRcd _ => fun he _ => nomatch he
+
+-- A ★-bound variable cannot be selected from: λx.x.l has no typing whose
+-- domain is ★. (sel_var_rcd would have to make ★ ≈ a record.)
+-- ⊢  ¬ (∅ ⊢ λx.x.l : ★ → τ)
+theorem selEx_no_unk_domain {B C : Type} {constTy : C → B} {τ : Ty B} :
+    ¬ Typed constTy Ctx.empty (selEx C) (.fn .unk τ) := by
+  intro h
+  obtain ⟨τ₁, τ₂, heq | hu, hbody⟩ := typed_lam_inv h
+  · obtain ⟨σ₁, σ₂, hσ, he₁, -⟩ := heq.fn_inv
+    cases hσ
+    have hx : (Ctx.empty.bindTy "x" τ₁).lookup "x" = some ⟨[], τ₁⟩ := by
+      simp [Ctx.lookup_bindTy]
+    obtain ⟨ρ, hρ⟩ := sel_var_rcd hbody rfl hx
+    cases (he₁.symm.trans hρ).unk_inv
   · cases hu
 
 -- (2) No plain scheme is instance-closed while covering both the found- and

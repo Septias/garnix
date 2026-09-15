@@ -6,6 +6,7 @@
 -- Update an expected message here only when the change is understood and intended.
 
 import Qualified
+import Strictness
 import RowUnify
 import Refutations
 import Infer
@@ -364,6 +365,18 @@ info: 'MinimalCalculus.selQ_principal' depends on axioms: [propext, Classical.ch
 
 /-- info: 'MinimalCalculus.qsel_var_inv' depends on axioms: [propext] -/
 #guard_msgs in #print axioms qsel_var_inv
+
+-- L1 ⊊ L2, mechanized: the two-use program types in L2 and NOT in L1. Closes
+-- the last claim of the metatheory that was only a comment.
+/--
+info: 'MinimalCalculus.l1_strictly_weaker_than_l2' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms l1_strictly_weaker_than_l2
+
+/--
+info: 'MinimalCalculus.no_plain_scheme_two_use' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms no_plain_scheme_two_use
 
 -- ## ⟦S⟧ as a context (RowUnify.State) — the θ ↦ rowEnv bridge
 -- Without these two, no inference rule that performs a lookup under a partial

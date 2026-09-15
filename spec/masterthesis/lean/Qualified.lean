@@ -430,8 +430,9 @@ theorem selQ_prec_answers_blur {B : Type} (b : B) :
 -- Everything else mirrors minimal.lean's Typed verbatim.
 --
 -- QTyped EXTENDS Typed (Typed.toQ below), strictly: the two-use program at the
--- bottom types one let-binding at BOTH the found- and the ⊥-instance — the
--- combination no_plain_principal_scheme proves impossible for a plain scheme.
+-- bottom types one let-binding at BOTH the found- and the ⊥-instance — a
+-- combination no plain scheme admits (Strictness.not_typed_two_use; the
+-- strictness of the inclusion is l1_strictly_weaker_than_l2).
 
 structure QCtx (B : Type) where
   tyEnv  : List (Var × QScheme B)
@@ -685,8 +686,9 @@ end
 -- ONE binding, TWO uses at incompatible refined instances — the found-typing
 -- AND the ⊥-typing of the same scheme. selQ_instance_closed (lifted through
 -- Typed.toQ) discharges the instance-closed premise; each use discharges its
--- own copy of the stump. By no_plain_principal_scheme, no single plain
--- scheme could serve both uses at these types.
+-- own copy of the stump. No single plain scheme can serve both uses at these
+-- types — proved in Strictness.lean (no_plain_scheme_two_use), which is what
+-- makes the L1 ⊆ L2 inclusion STRICT.
 -- ⊢  ∅ ⊢_Q  let f = (λx. x.l) in { a = f {l = c} | b = f {} }
 --            :  { a: 𝓫_c | b: ★ }
 theorem qtyped_two_use {B C : Type} (constTy : C → B) (c : C) :
