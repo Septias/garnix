@@ -346,6 +346,14 @@ info: 'MinimalCalculus.selQ_needs_equiv' depends on axioms: [propext, Classical.
 -/
 #guard_msgs in #print axioms selQ_needs_equiv
 
+-- ⊑ and ≈ commute — the lemma that makes ≼ transitive and ⊴≼ a preorder.
+-- Axiom-free, like the rest of the precision theory.
+/-- info: 'MinimalCalculus.TyPrec.comm_equiv' does not depend on any axioms -/
+#guard_msgs in #print axioms TyPrec.comm_equiv
+
+/-- info: 'MinimalCalculus.TyBelow.trans' does not depend on any axioms -/
+#guard_msgs in #print axioms TyBelow.trans
+
 -- ## ⟦S⟧ as a context (RowUnify.State) — the θ ↦ rowEnv bridge
 -- Without these two, no inference rule that performs a lookup under a partial
 -- solution is even a proposition. rowWF_toCtx is what lets A-sel's premise

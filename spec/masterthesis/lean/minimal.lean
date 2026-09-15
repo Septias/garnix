@@ -2305,6 +2305,143 @@ theorem RowPrec.trans {B : Type} : {ρ₁ ρ₂ ρ₃ : Row B} →
       exact .cat (RowPrec.trans hA ha) (RowPrec.trans hB hb)
 end
 
+-- Only ε is at least as precise as ε — ⊑ never deletes or creates a field.
+-- ⊢  ρ ⊑ᵣ ε  ⟹  ρ = ε
+theorem RowPrec.empty_inv {B : Type} {ρ : Row B}
+    (h : RowPrec ρ .empty) : ρ = .empty := by
+  cases h with
+  | refl _ => rfl
+
+-- ⊑ AND ≈ COMMUTE. A blur applied BEFORE a row is reassociated can always be
+-- applied AFTER it instead. The reason is structural: ⊑ is congruence plus ★,
+-- so it never changes a label, never merges two fields and never deletes one —
+-- every ≈-move therefore has a counterpart on the blurred side, and `comm`'s
+-- l₁ ≠ l₂ side condition survives because the labels are untouched.
+--
+-- Stated in BOTH directions at once. ≈ carries symm and trans as constructors,
+-- so a one-directional statement does not survive its own induction: the symm
+-- case would need exactly the converse it is trying to prove.
+--
+-- This is what makes ≼ (≈ then ⊑, Qualified.lean) TRANSITIVE, and hence what
+-- makes ⊴≼ a preorder rather than a reflexive relation.
+-- ⊢  τ₁ ≈ₜ τ₂ ⟹ (a ⊑ₜ τ₁ ⟹ ∃a'. a ≈ₜ a' ∧ a' ⊑ₜ τ₂) ∧ (the mirror image)
+mutual
+theorem TyPrec.comm_equiv {B : Type} : {τ₁ τ₂ : Ty B} → TyEquiv τ₁ τ₂ →
+    (∀ a, TyPrec a τ₁ → ∃ a', TyEquiv a a' ∧ TyPrec a' τ₂) ∧
+    (∀ a, TyPrec a τ₂ → ∃ a', TyEquiv a a' ∧ TyPrec a' τ₁)
+  | _, _, .refl _ => ⟨fun a h => ⟨a, .refl a, h⟩, fun a h => ⟨a, .refl a, h⟩⟩
+  | _, _, .symm h => ⟨(TyPrec.comm_equiv h).2, (TyPrec.comm_equiv h).1⟩
+  | _, _, .trans h₁ h₂ =>
+      ⟨fun a ha =>
+         let ⟨a₁, he₁, hp₁⟩ := (TyPrec.comm_equiv h₁).1 a ha
+         let ⟨a₂, he₂, hp₂⟩ := (TyPrec.comm_equiv h₂).1 a₁ hp₁
+         ⟨a₂, he₁.trans he₂, hp₂⟩,
+       fun a ha =>
+         let ⟨a₁, he₁, hp₁⟩ := (TyPrec.comm_equiv h₂).2 a ha
+         let ⟨a₂, he₂, hp₂⟩ := (TyPrec.comm_equiv h₁).2 a₁ hp₁
+         ⟨a₂, he₁.trans he₂, hp₂⟩⟩
+  | _, _, .fn h₁ h₂ => by
+      constructor
+      · intro a ha
+        obtain ⟨p, q, rfl, hp, hq⟩ := TyPrec.fn_inv ha
+        obtain ⟨p', hep, hpp⟩ := (TyPrec.comm_equiv h₁).1 p hp
+        obtain ⟨q', heq, hqq⟩ := (TyPrec.comm_equiv h₂).1 q hq
+        exact ⟨.fn p' q', .fn hep heq, .fn hpp hqq⟩
+      · intro a ha
+        obtain ⟨p, q, rfl, hp, hq⟩ := TyPrec.fn_inv ha
+        obtain ⟨p', hep, hpp⟩ := (TyPrec.comm_equiv h₁).2 p hp
+        obtain ⟨q', heq, hqq⟩ := (TyPrec.comm_equiv h₂).2 q hq
+        exact ⟨.fn p' q', .fn hep heq, .fn hpp hqq⟩
+  | _, _, .rcd hr => by
+      constructor
+      · intro a ha
+        obtain ⟨ρ, rfl, hρ⟩ := TyPrec.rcd_inv ha
+        obtain ⟨ρ', he, hp⟩ := (RowPrec.comm_equiv hr).1 ρ hρ
+        exact ⟨.rcd ρ', .rcd he, .rcd hp⟩
+      · intro a ha
+        obtain ⟨ρ, rfl, hρ⟩ := TyPrec.rcd_inv ha
+        obtain ⟨ρ', he, hp⟩ := (RowPrec.comm_equiv hr).2 ρ hρ
+        exact ⟨.rcd ρ', .rcd he, .rcd hp⟩
+
+theorem RowPrec.comm_equiv {B : Type} : {ρ₁ ρ₂ : Row B} → RowEquiv ρ₁ ρ₂ →
+    (∀ a, RowPrec a ρ₁ → ∃ a', RowEquiv a a' ∧ RowPrec a' ρ₂) ∧
+    (∀ a, RowPrec a ρ₂ → ∃ a', RowEquiv a a' ∧ RowPrec a' ρ₁)
+  | _, _, .refl _ => ⟨fun a h => ⟨a, .refl a, h⟩, fun a h => ⟨a, .refl a, h⟩⟩
+  | _, _, .symm h => ⟨(RowPrec.comm_equiv h).2, (RowPrec.comm_equiv h).1⟩
+  | _, _, .trans h₁ h₂ =>
+      ⟨fun a ha =>
+         let ⟨a₁, he₁, hp₁⟩ := (RowPrec.comm_equiv h₁).1 a ha
+         let ⟨a₂, he₂, hp₂⟩ := (RowPrec.comm_equiv h₂).1 a₁ hp₁
+         ⟨a₂, he₁.trans he₂, hp₂⟩,
+       fun a ha =>
+         let ⟨a₁, he₁, hp₁⟩ := (RowPrec.comm_equiv h₂).2 a ha
+         let ⟨a₂, he₂, hp₂⟩ := (RowPrec.comm_equiv h₁).2 a₁ hp₁
+         ⟨a₂, he₁.trans he₂, hp₂⟩⟩
+  | _, _, .sing h => by
+      constructor
+      · intro a ha
+        obtain ⟨p, rfl, hp⟩ := RowPrec.sing_inv ha
+        obtain ⟨p', he, hpp⟩ := (TyPrec.comm_equiv h).1 p hp
+        exact ⟨.sing _ p', .sing he, .sing hpp⟩
+      · intro a ha
+        obtain ⟨p, rfl, hp⟩ := RowPrec.sing_inv ha
+        obtain ⟨p', he, hpp⟩ := (TyPrec.comm_equiv h).2 p hp
+        exact ⟨.sing _ p', .sing he, .sing hpp⟩
+  | _, _, .cat h₁ h₂ => by
+      constructor
+      · intro a ha
+        obtain ⟨x, y, rfl, hx, hy⟩ := RowPrec.cat_inv ha
+        obtain ⟨x', hex, hpx⟩ := (RowPrec.comm_equiv h₁).1 x hx
+        obtain ⟨y', hey, hpy⟩ := (RowPrec.comm_equiv h₂).1 y hy
+        exact ⟨.cat x' y', .cat hex hey, .cat hpx hpy⟩
+      · intro a ha
+        obtain ⟨x, y, rfl, hx, hy⟩ := RowPrec.cat_inv ha
+        obtain ⟨x', hex, hpx⟩ := (RowPrec.comm_equiv h₁).2 x hx
+        obtain ⟨y', hey, hpy⟩ := (RowPrec.comm_equiv h₂).2 y hy
+        exact ⟨.cat x' y', .cat hex hey, .cat hpx hpy⟩
+  -- the three structural moves: the blurred row makes the SAME move
+  | _, _, .assoc => by
+      constructor
+      · intro a ha
+        obtain ⟨x, c, rfl, hx, hc⟩ := RowPrec.cat_inv ha
+        obtain ⟨p, q, rfl, hp, hq⟩ := RowPrec.cat_inv hx
+        exact ⟨.cat p (.cat q c), .assoc, .cat hp (.cat hq hc)⟩
+      · intro a ha
+        obtain ⟨p, y, rfl, hp, hy⟩ := RowPrec.cat_inv ha
+        obtain ⟨q, c, rfl, hq, hc⟩ := RowPrec.cat_inv hy
+        exact ⟨.cat (.cat p q) c, .symm .assoc, .cat (.cat hp hq) hc⟩
+  | _, _, .unitL => by
+      constructor
+      · intro a ha
+        obtain ⟨e, b, rfl, he, hb⟩ := RowPrec.cat_inv ha
+        cases RowPrec.empty_inv he
+        exact ⟨b, .unitL, hb⟩
+      · intro a ha
+        exact ⟨.cat .empty a, .symm .unitL, .cat (.refl _) ha⟩
+  | _, _, .unitR => by
+      constructor
+      · intro a ha
+        obtain ⟨b, e, rfl, hb, he⟩ := RowPrec.cat_inv ha
+        cases RowPrec.empty_inv he
+        exact ⟨b, .unitR, hb⟩
+      · intro a ha
+        exact ⟨.cat a .empty, .symm .unitR, .cat ha (.refl _)⟩
+  -- comm is the case that would break if ⊑ could touch a label
+  | _, _, .comm hne => by
+      constructor
+      · intro a ha
+        obtain ⟨x, y, rfl, hx, hy⟩ := RowPrec.cat_inv ha
+        obtain ⟨p, rfl, hp⟩ := RowPrec.sing_inv hx
+        obtain ⟨q, rfl, hq⟩ := RowPrec.sing_inv hy
+        exact ⟨.cat (.sing _ q) (.sing _ p), .comm hne, .cat (.sing hq) (.sing hp)⟩
+      · intro a ha
+        obtain ⟨y, x, rfl, hy, hx⟩ := RowPrec.cat_inv ha
+        obtain ⟨q, rfl, hq⟩ := RowPrec.sing_inv hy
+        obtain ⟨p, rfl, hp⟩ := RowPrec.sing_inv hx
+        exact ⟨.cat (.sing _ p) (.sing _ q), .comm (Ne.symm hne),
+               .cat (.sing hp) (.sing hq)⟩
+end
+
 -- r' ⊑ r on lookup results: the lifting of ⊑ with ? as top. Only ? can
 -- improve; definite results are final (their found-types may sharpen once
 -- row precision is in play — on a fixed row they stay on the nose).
