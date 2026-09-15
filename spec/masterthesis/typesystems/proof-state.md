@@ -147,10 +147,31 @@ Principality forces qualified schemes that use parked stumps during unification 
         positions it CLOSES: `sApplySubst` strips the earlier domain from the
         residual (by that stage's own acyclicity), and the expansions rename
         their host away instead.
-    REMAINS: thread `AcyclicAvoiding V` through the driver (the arm-by-arm plan
-    is in the `UnifyAcyclic` docstring). The one missing ingredient is a "spine
-    variables of a `Ty`" measure, which the `.fn` arm needs because it recurses
-    on `b.applySubst θ`.
+    REMAINS, and it is NOT a missing definition (I said it was — wrong). The
+    type-pass measure ALREADY EXISTS: `Ty.allRowVars`/`Row.allRowVars`
+    (Defs.lean:177) is exactly "row variables at spine positions at any nesting
+    depth", and it is sort-aware, so the `NoCapture` leak cannot reach it.
+    The obstruction is that no "values avoid the domain" invariant over it
+    survives. Three swept over all three universes:
+      every binding's allRowVars avoids the row domain   40 / 2336 / 24  ✘
+      ROW bindings only                                  40 / 2160 / 24  ✘
+      TYPE bindings only (what the `.fn` arm needs)        0 /  176 /  0  ✘
+    and the witnesses show it is false BY DESIGN:
+      (l:𝓫 | b) ≐ᵣ (m:{a} | a)  ⟹  b ≔ (m:{a} | aaa | ε)
+    puts the bound row variable `a` inside a PAYLOAD — which `Acyclic` permits,
+    since it reads only top-level spines — and
+      (l:𝓫 | b | l:𝓫) ≐ᵣ (m:{a} | a)  ⟹  aaaa ≔ {a}
+    does the same at the type sort, `aaaa` being a δ an expansion invented with
+    its payload captured before `a` was solved.
+    So the `.fn` arm cannot carry "the problem's row variables avoid V": that is
+    not preserved by `applySubst`, because a triangular solution legitimately
+    holds bound variables under record constructors. What IS true is that such a
+    variable never reaches a top-level SPINE — the driver applies θ before
+    recursing — but that is a fact about solve-and-apply, not about the syntax
+    of the problem, and stating it needs the applied form, which brings the
+    closure (and `Ranked`) back. A different induction is needed.
+    DO NOT retry the three invariants above. `sVarSeq_applySubst` and
+    `Sol.acyclic_comp` stand and are reusable in whatever replaces them.
   - [ ] PROVE `UnifyWF`. Empirically clean since B1 (0/0/0, both halves, three
     universes) and the gate on ⟦S⟧ being a total function — items 1 and 2 of
     plans/inference-gap-analysis.md's critical path. But empirically clean is

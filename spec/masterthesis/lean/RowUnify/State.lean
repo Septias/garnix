@@ -904,20 +904,33 @@ that refutes `NoCapture` — cannot reach this property) and `Sol.acyclic_comp`
 stage's domain, which `AcyclicAvoiding` carries). That is exactly the step that
 defeats `Ranked`, and here it closes.
 
-WHAT REMAINS is threading `AcyclicAvoiding V` through the driver, with the
-precondition "the problem's spine variables avoid V". Arm by arm:
-  * `allVarsEmpty` binds to `ε` — no spine variables at all;
-  * `solveVarM` binds `α ≔ ofSpine s₂`, and its occurs guard already gives
-    `α ∉ allRowVars (ofSpine s₂) ⊇ sVarSeq s₂`;
-  * `bindTy` contributes no ROW binding, so it is vacuous;
-  * the eq-emitting arms are `Sol.acyclic_comp` with `V` grown by the first
-    stage's domain, and the residual is `sApplySubst`-ed so it has already lost
-    that domain at spine positions;
-  * the four expansions emit `β ≔ (l:δ | β′)` whose only spine variable is the
-    FRESH `β′`, and recurse on a residual where `β` has been renamed away.
-The missing ingredient is a "spine variables of a `Ty`" measure for the type
-pass (the row variables at spine positions of the records inside it), which the
-`.fn` arm needs because it recurses on `b.applySubst θ`. -/
+WHAT REMAINS, and it is NOT a missing definition. The measure for the type
+pass already exists: `Ty.allRowVars` / `Row.allRowVars` (Defs.lean) is exactly
+"row variables at spine positions, at any nesting depth", and it is sort-aware
+— a TYPE variable in payload position contributes nothing, which is why the
+`NoCapture` leak cannot reach it.
+
+The obstruction is that no "values avoid the domain" invariant over it
+survives. Three were swept over all three universes:
+  * every binding's `allRowVars` avoids the row domain — 40 / 2336 / 24 ✘
+  * ROW bindings only                                  — 40 / 2160 / 24 ✘
+  * TYPE bindings only (what the `.fn` arm needs)      —  0 /  176 /  0 ✘
+and the witnesses show why it is false BY DESIGN rather than by accident:
+    (l:𝓫 | b) ≐ᵣ (m:{a} | a)   ⟹   b ≔ (m:{a} | aaa | ε)
+puts the bound row variable `a` inside a PAYLOAD, which `Acyclic` permits
+because it reads only top-level spines; and
+    (l:𝓫 | b | l:𝓫) ≐ᵣ (m:{a} | a)   ⟹   aaaa ≔ {a}
+does the same at the type sort, `aaaa` being a δ an expansion invented with the
+payload captured before `a` was solved.
+
+So the `.fn` arm cannot carry "the problem's row variables avoid V": that
+property is not preserved by `applySubst`, because a triangular solution
+legitimately holds bound variables under record constructors. What IS true is
+that such a variable never reaches a top-level spine — the driver applies θ
+before recursing — but that is a fact about solve-and-apply, not about the
+syntax of the problem, and stating it needs the applied form, which brings the
+closure (and hence `Ranked`) back into play. A different induction is needed;
+`sVarSeq_applySubst` and `Sol.acyclic_comp` above stand and are reusable in it. -/
 def UnifyAcyclic (B : Type) [DecidableEq B] : Prop :=
   ∀ (fuel : Nat) (ρ₁ ρ₂ : Row B) (s : Sol B) (S' : Supply),
     unifyRowM fuel ρ₁ ρ₂ = .success s S' → s.Acyclic
