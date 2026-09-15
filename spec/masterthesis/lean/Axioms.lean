@@ -8,6 +8,7 @@
 import Qualified
 import RowUnify
 import Refutations
+import QSubst
 import Infer
 
 namespace MinimalCalculus
@@ -467,6 +468,19 @@ info: 'MinimalCalculus.selfref_lone_host_reported' depends on axioms: [propext, 
 -- one stump parked — the shape `selQ` describes declaratively.
 /-- info: 'MinimalCalculus.selEx_infers' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in #print axioms selEx_infers
+
+-- ## L2 TYPE SUBSTITUTION (QSubst.lean)
+-- A QTyped derivation transports along a solution's closure, into the context
+-- read under it. L1 had `typed_applySubst_aux`; QTyped had only TERM
+-- substitution. This is the engine InferSound runs on — inference concludes at
+-- the FINAL state while its premises type at intermediate ones. All thirteen
+-- QTyped constructors, modulo the one named hypothesis `SchemeImage` (the
+-- capture-avoiding σ-image of a let-bound scheme; L1's counterpart is
+-- `renameScheme`).
+/--
+info: 'MinimalCalculus.qtyped_applySubst' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms qtyped_applySubst
 
 -- The freshness invariant: a successful unification never hands back a supply
 -- behind the one it was given, and inference therefore never re-issues a name.

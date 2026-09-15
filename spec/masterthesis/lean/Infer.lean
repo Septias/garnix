@@ -25,6 +25,7 @@
 
 import Qualified
 import RowUnify.State
+import QSubst
 
 namespace MinimalCalculus
 

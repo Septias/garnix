@@ -248,6 +248,19 @@ an A-rule it hands back a supply BEHIND the state's, and a later `draw`
 re-issues a name inference is already using. `SolveTy`/`SolveRow` therefore go
 through `unifyTyF`/`unifySpineMF` with `S.supply` threaded in and out.
 
+- [x] L2 TYPE SUBSTITUTION — DONE 2026-09-15, `qtyped_applySubst`
+  (lean/QSubst.lean). A `QTyped` derivation transports along a solution's
+  CLOSURE, into the context read under it. All 13 QTyped constructors and the 3
+  body constructors, modulo one named hypothesis `SchemeImage`: every scheme has
+  a capture-avoiding σ-image (L1's counterpart is `renameScheme`), which only
+  `qLet` needs because it introduces a scheme the context map knows nothing of.
+  THE NAIVE SHAPE IS WRONG and the `.var` case says so: a context relation
+  "every row solution survives with θ applied" cannot work, because
+  `(Row.var α).applySubst θ` is `θ.row α` — after substituting there is no
+  variable left for `L-α` to chase. The solution has to be DISCHARGED into the
+  substitution, which is `Sol.Closes`, and the transport is then
+  `Sol.lookup_toCtx` (already proved in State.lean). This is also why
+  `InferSound` carries a `Closes` hypothesis: that was the right call.
 - [ ] `InferSound` (Infer.lean) — `Γ; S ⊢ e ⇒ τ; S′ ⟹ ⟦S′⟧Γ ⊢ e : ⟦S′⟧τ`.
   STATED, not proved; the statement is the point, since it was unwriteable
   before. Needs: `UnifyWF` (so ⟦S′⟧ is the closure rather than one step), the

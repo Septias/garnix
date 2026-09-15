@@ -41,7 +41,7 @@ Legend: ✔ there (mechanized) · ◐ on paper only / partial · ✘ absent
 | **termination of inference** | ✘ | inherits unification termination, *plus* the `A-let` Δ-split least-fixpoint (asserted monotone and bounded by \|Δ₁\|, never stated) *plus* the `↝*` wake-up closure |
 | confluence of wake-up | ◐ claimed | the two pillars exist (`lookup_det`, `Discharge.mono_of_definite`); the statement "final (θ,W,τ) is independent of wake-up order" is not written |
 | top-level entry point | ✘ | `⇓`/`F-★` finalization exists as a rule, but there is no `Infer(e) = finalize(...)` top-level judgement to state soundness *of the algorithm* about |
-| **type substitution for L2** | ✘ | L1 has `typed_applySubst_aux`; `QTyped` has only *term* substitution (`qsubst_preserves_typing`). Inference completeness is proved by transporting a declarative derivation along θ — it needs the L2 version |
+| **type substitution for L2** | ✔ `qtyped_applySubst` (lean/QSubst.lean) | all 13 `QTyped` constructors + the 3 body ones, modulo one named hypothesis `SchemeImage` — the capture-avoiding σ-image of a LET-BOUND scheme, L1's counterpart being `renameScheme`. The naive context relation ("row solutions survive with θ applied") is WRONG: `(Row.var α).applySubst θ` is `θ.row α`, so after substituting there is no variable left for `L-α` to chase. The solution must be DISCHARGED into the substitution — `Sol.Closes` — and the transport is then `Sol.lookup_toCtx` |
 | non-vacuity of qualified schemes | ✘ | `T-let`'s inhabitation premise `∃τ₁. σ ≥_Γ τ₁` is claimed to hold "by construction" (a carried stump finalizes at ★). Needs `lookup_total` + the freshness discipline for δ. Until stated, `A-let` is not known to produce schemes `T-let` accepts |
 
 ## C. Principality — the vocabulary gap
