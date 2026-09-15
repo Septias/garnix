@@ -261,6 +261,29 @@ through `unifyTyF`/`unifySpineMF` with `S.supply` threaded in and out.
   substitution, which is `Sol.Closes`, and the transport is then
   `Sol.lookup_toCtx` (already proved in State.lean). This is also why
   `InferSound` carries a `Closes` hypothesis: that was the right call.
+- [~] `InferSound` — the machinery is built and validated; three cases are the
+  real obstruction. DONE 2026-09-15: `Infer.sat_mono` (θ is only ever refined,
+  stated SEMANTICALLY as "any σ satisfying the later solution satisfies the
+  earlier" — transitive on the nose, needs no associativity of `Sol.comp`, and
+  is what lets the conclusion sit at the FINAL state while premises were solved
+  at intermediate ones); and `infer_sound_app_step`, the A-app case end to end:
+  `Sol.Sat.comp_inv` peels the stage's own solution off the composite, success
+  soundness turns it into a `TyUnifies`, `tyUnifies_applySubst_of_sat` strips
+  the substitution the arm unified under, and `qEq` absorbs the resulting ≈ —
+  which is what T-eq is FOR. So the chain fits.
+  THE THREE HARD CASES, and they are not bookkeeping:
+    * `A-var` — the instantiated constraints were submitted to WAKE-UP, and for
+      the declarative `QScheme.Inst` they must DISCHARGE. Relating the two is
+      the K-/D- correspondence the paper asserts but nobody has proved.
+    * `A-let` — the generalized scheme's instances, needing `SchemeImage`
+      (QSubst.lean) plus the Δ-split.
+    * `A-sel-?` — the deepest. The rule returns a stump-variable δ and parks
+      `⟨α ▷ ρ.l ↓ δ⟩`; declaratively the nearest rule is `qSelUnk`, which gives
+      ★. δ is a PROMISE, not yet a type, and it only becomes ★ at finalization.
+      So an inner `selUnk` has no plain declarative reading, and the
+      `S′.parked = []` hypothesis does not help — it constrains the FINAL state
+      while the parking happens inside. This is a design question about what a
+      parked stump MEANS declaratively, not a proof-effort question.
 - [ ] `InferSound` (Infer.lean) — `Γ; S ⊢ e ⇒ τ; S′ ⟹ ⟦S′⟧Γ ⊢ e : ⟦S′⟧τ`.
   STATED, not proved; the statement is the point, since it was unwriteable
   before. Needs: `UnifyWF` (so ⟦S′⟧ is the closure rather than one step), the

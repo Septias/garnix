@@ -490,6 +490,16 @@ info: 'MinimalCalculus.qtyped_applySubst' depends on axioms: [propext, Classical
 /-- info: 'MinimalCalculus.Infer.supply_mono' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in #print axioms Infer.supply_mono
 
+-- "θ is only ever refined", and one soundness step end to end. The app step
+-- exercises the whole chain — peel the stage's solution off the composite,
+-- success soundness, strip the intermediate substitution, absorb the ≈ with
+-- T-eq — so it validates that the InferSound machinery fits together.
+/-- info: 'MinimalCalculus.Infer.sat_mono' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in #print axioms Infer.sat_mono
+
+/-- info: 'MinimalCalculus.infer_sound_app_step' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in #print axioms infer_sound_app_step
+
 -- `? on α`: the blocker of an unknown lookup, which A-sel-? and K-repark both
 -- need and `Lookup` does not record. Sound, complete and deterministic.
 /-- info: 'MinimalCalculus.Lookup.unknown_blocked' depends on axioms: [propext] -/

@@ -625,4 +625,139 @@ theorem InferRec.supply_mono {B C : Type} [DecidableEq B] {constTy : C → B}
 
 end
 
+
+--------------------- THE SOLUTION IS ONLY EVER REFINED -----------------------
+-- `algorithmic.typ`: "θ is only ever refined". Stated SEMANTICALLY — any σ
+-- satisfying the later solution satisfies the earlier one — rather than as
+-- `∃ t, S'.sol = t.comp S.sol`. The semantic form is transitive on the nose,
+-- needs no associativity of `Sol.comp`, and is exactly what the soundness
+-- induction consumes: the conclusion is stated at the FINAL state while the
+-- premises were solved at intermediate ones, so every sub-derivation's
+-- equations have to be replayed under the final σ.
+
+/-- `S ⊑ S′` at the level of solutions. -/
+def SolverState.SatMono {B : Type} (S S' : SolverState B) : Prop :=
+  ∀ σ : TySubst B, Sol.Sat σ S'.sol → Sol.Sat σ S.sol
+
+theorem SolverState.SatMono.refl {B : Type} (S : SolverState B) : S.SatMono S :=
+  fun _ h => h
+
+theorem SolverState.SatMono.trans {B : Type} {S₁ S₂ S₃ : SolverState B}
+    (h₁ : S₁.SatMono S₂) (h₂ : S₂.SatMono S₃) : S₁.SatMono S₃ :=
+  fun σ h => h₁ σ (h₂ σ h)
+
+-- the three state updates that leave `sol` alone
+theorem SolverState.SatMono.of_sol_eq {B : Type} {S S' : SolverState B}
+    (h : S'.sol = S.sol) : S.SatMono S' := fun σ hs => h ▸ hs
+
+theorem SolveTy.satMono {B : Type} [DecidableEq B] {S S' : SolverState B}
+    {τ τ' : Ty B} (h : SolveTy S τ τ' S') : S.SatMono S' := by
+  obtain ⟨fuel, s, Sup, -, rfl⟩ := h
+  exact fun σ hs => (Sol.Sat.comp_inv hs).1
+
+theorem SolveRow.satMono {B : Type} [DecidableEq B] {S S' : SolverState B}
+    {ρ ρ' : Row B} (h : SolveRow S ρ ρ' S') : S.SatMono S' := by
+  obtain ⟨fuel, s, Sup, -, rfl⟩ := h
+  exact fun σ hs => (Sol.Sat.comp_inv hs).1
+
+theorem Wake.satMono {B : Type} [DecidableEq B] {S S' : SolverState B}
+    {p : Parked B} : Wake S p S' → S.SatMono S'
+  | .hit _ hs  => hs.satMono
+  | .abs _ hs  => hs.satMono
+  | .repark _  => SolverState.SatMono.of_sol_eq rfl
+
+theorem Wakes.satMono {B : Type} [DecidableEq B] {S S' : SolverState B}
+    {ps : List (Parked B)} : Wakes S ps S' → S.SatMono S'
+  | .nil         => SolverState.SatMono.refl _
+  | .cons hw hws => hw.satMono.trans hws.satMono
+  | .park _ hws  => hws.satMono
+
+private theorem draw_sol {B : Type} {S S₀ : SolverState B} {α : TyVar}
+    (h : (α, S₀) = S.draw) : S₀.sol = S.sol := by
+  have h2 : S₀ = S.draw.2 := congrArg Prod.snd h
+  rw [h2]; rfl
+
+mutual
+
+/-- ⊢  inference only refines the solution. -/
+theorem Infer.sat_mono {B C : Type} [DecidableEq B] {constTy : C → B}
+    {Γ : QCtx B} {S S' : SolverState B} {e : Expr C} {τ : Ty B} :
+    Infer constTy Γ S e τ S' → S.SatMono S'
+  | .con => SolverState.SatMono.refl _
+  | .var _ _ _ _ hw => hw.satMono
+  | .lam hd hb =>
+      (SolverState.SatMono.of_sol_eq (draw_sol hd)).trans (Infer.sat_mono hb)
+  | .app h₁ h₂ hd hs =>
+      ((Infer.sat_mono h₁).trans (Infer.sat_mono h₂)).trans
+        ((SolverState.SatMono.of_sol_eq (draw_sol hd)).trans hs.satMono)
+  | .appDeg h₁ h₂ hd _ =>
+      ((Infer.sat_mono h₁).trans (Infer.sat_mono h₂)).trans
+        ((SolverState.SatMono.of_sol_eq (draw_sol hd)).trans
+          (SolverState.SatMono.of_sol_eq rfl))
+  | .conc h₁ h₂ hd₁ hd₂ hs₁ hs₂ =>
+      ((Infer.sat_mono h₁).trans (Infer.sat_mono h₂)).trans
+        ((SolverState.SatMono.of_sol_eq (draw_sol hd₁)).trans
+          ((SolverState.SatMono.of_sol_eq (draw_sol hd₂)).trans
+            (hs₁.satMono.trans hs₂.satMono)))
+  | .sel h₁ hd hs _ =>
+      (Infer.sat_mono h₁).trans
+        ((SolverState.SatMono.of_sol_eq (draw_sol hd)).trans hs.satMono)
+  | .selAbs h₁ hd hs _ =>
+      (Infer.sat_mono h₁).trans
+        ((SolverState.SatMono.of_sol_eq (draw_sol hd)).trans
+          (hs.satMono.trans (SolverState.SatMono.of_sol_eq rfl)))
+  | .selUnk h₁ hd hs _ hd₂ =>
+      (Infer.sat_mono h₁).trans
+        ((SolverState.SatMono.of_sol_eq (draw_sol hd)).trans
+          (hs.satMono.trans
+            ((SolverState.SatMono.of_sol_eq (draw_sol hd₂)).trans
+              (SolverState.SatMono.of_sol_eq rfl))))
+  | .selDeg h₁ hd _ =>
+      (Infer.sat_mono h₁).trans
+        ((SolverState.SatMono.of_sol_eq (draw_sol hd)).trans
+          (SolverState.SatMono.of_sol_eq rfl))
+  | .rcd hb => InferRec.sat_mono hb
+  | .letE h₁ _ _ _ h₂ => by
+      refine (Infer.sat_mono h₁).trans ?_
+      intro σ hσ
+      exact Infer.sat_mono h₂ σ hσ
+
+theorem InferRec.sat_mono {B C : Type} [DecidableEq B] {constTy : C → B}
+    {Γ : QCtx B} {S S' : SolverState B} {ξ : RecBody (Expr C)} {ρ : Row B} :
+    InferRec constTy Γ S ξ ρ S' → S.SatMono S'
+  | .empty      => SolverState.SatMono.refl _
+  | .field h    => Infer.sat_mono h
+  | .cat h₁ h₂  => (InferRec.sat_mono h₁).trans (InferRec.sat_mono h₂)
+
+end
+
+
+--------------------- ONE SOUNDNESS STEP, END TO END --------------------------
+-- The `A-app` case of `InferSound`, isolated. It exercises the whole chain and
+-- so validates that the pieces fit: the arm's emitted equation is replayed
+-- under the FINAL σ (`Sol.Sat.comp_inv` peels the stage's own solution off the
+-- composite), success soundness turns it into a `TyUnifies`,
+-- `tyUnifies_applySubst_of_sat` strips the intermediate substitution the arm
+-- unified under, and `qEq` absorbs the resulting `≈` — which is exactly what
+-- the declarative side has T-eq for.
+--
+-- The two premises are the induction hypotheses the full theorem will supply.
+theorem infer_sound_app_step {B C : Type} [DecidableEq B] {constTy : C → B}
+    {Γ' : QCtx B} {σ : TySubst B} {S S' : SolverState B}
+    {e₁ e₂ : Expr C} {τ₁ τ₂ : Ty B} {β : TyVar}
+    (h₁ : QTyped constTy Γ' e₁ (τ₁.applySubst σ))
+    (h₂ : QTyped constTy Γ' e₂ (τ₂.applySubst σ))
+    (hs : SolveTy S τ₁ (.fn τ₂ (.var β)) S')
+    (hsat : Sol.Sat σ S'.sol) :
+    QTyped constTy Γ' (.app e₁ e₂) ((Ty.var β).applySubst σ) := by
+  obtain ⟨fuel, t, Sup, hu, rfl⟩ := hs
+  -- peel the stage's own solution off the composite
+  obtain ⟨hS, ht⟩ := Sol.Sat.comp_inv hsat
+  -- the emitted equation holds under σ …
+  have huni := (unifyM_success_sound fuel).1 [] S.supply _ _ hu ht
+  -- … and σ absorbs the substitution the arm unified under
+  have huni' : TyUnifies σ τ₁ (.fn τ₂ (.var β)) :=
+    (tyUnifies_applySubst_of_sat hS τ₁ (.fn τ₂ (.var β))).mp huni
+  exact .qApp (.qEq h₁ huni') h₂
+
 end MinimalCalculus
