@@ -271,26 +271,77 @@ through `unifyTyF`/`unifySpineMF` with `S.supply` threaded in and out.
   soundness turns it into a `TyUnifies`, `tyUnifies_applySubst_of_sat` strips
   the substitution the arm unified under, and `qEq` absorbs the resulting ≈ —
   which is what T-eq is FOR. So the chain fits.
-  THE THREE HARD CASES, and they are not bookkeeping:
+  DONE 2026-09-16: `lean/InferSound.lean`, EIGHT of the thirteen A-rules, each
+  as its own lemma, plus A-sel-? modulo one named condition. Proved: A-cons,
+  A-lam, A-rec and the three A-ξ rules (pure congruences); A-app and A-conc
+  (emit an equation, T-eq absorbs the ≈); A-sel and A-sel-⊥ (additionally read
+  a field off the solution). Three pieces of new machinery carry them:
+    * `SolveTy.unifies_sat` — a solved equation holds under ANY σ satisfying the
+      state it produced, and of the ORIGINAL types, not the ones the arm saw.
+      The three moves `infer_sound_app_step` did by hand, done once.
+    * `Sol.lookup_toCtx_sat` — THE FIND. `Sol.lookup_toCtx` asks for
+      `Sol.Closes`, and the induction cannot supply it: at an INTERMEDIATE state
+      σ is never the closure, because later stages bind variables this state
+      left free and `Closes` demands σ fix exactly those. `Sol.Sat` is enough on
+      DEFINITE results — a definite derivation never uses `L-α-free`, the one
+      rule whose result `Sat` cannot control. The price is that `Sat` is only ≈,
+      so the transported lookup lands on an ≈-equivalent row and the conclusion
+      carries a `ResEquiv` where `lookup_toCtx` has an equation; `lookup_equiv`
+      supplies the step, which is a second calibration check on ≈. So `Closes`
+      is needed only at the LAST step, where σ := S′.subst is taken — NOT inside
+      the induction, which refines the QSubst.lean entry above.
+    * `qtyped_sel_star` — a record-typed subject always types a selection at ★:
+      at an empty row environment lookup is total for free, and T-sel / T-sel-⊥
+      / T-sel-? cover the three verdicts with T-★-intro blurring the first.
+  THE REMAINING FIVE, and what each is actually waiting on:
     * `A-var` — the instantiated constraints were submitted to WAKE-UP, and for
       the declarative `QScheme.Inst` they must DISCHARGE. Relating the two is
-      the K-/D- correspondence the paper asserts but nobody has proved.
+      the K-/D- correspondence the paper asserts but nobody has proved. It is
+      also the case that FIXES THE SHAPE of the context correspondence
+      (QSubst.lean's `QCovers` is its instance-level half), so it has to be
+      settled before the induction is assembled, not after.
     * `A-let` — the generalized scheme's instances, needing `SchemeImage`
-      (QSubst.lean) plus the Δ-split.
-    * `A-sel-?` — the deepest. The rule returns a stump-variable δ and parks
-      `⟨α ▷ ρ.l ↓ δ⟩`; declaratively the nearest rule is `qSelUnk`, which gives
-      ★. δ is a PROMISE, not yet a type, and it only becomes ★ at finalization.
-      So an inner `selUnk` has no plain declarative reading, and the
-      `S′.parked = []` hypothesis does not help — it constrains the FINAL state
-      while the parking happens inside. This is a design question about what a
-      parked stump MEANS declaratively, not a proof-effort question.
-- [ ] `InferSound` (Infer.lean) — `Γ; S ⊢ e ⇒ τ; S′ ⟹ ⟦S′⟧Γ ⊢ e : ⟦S′⟧τ`.
-  STATED, not proved; the statement is the point, since it was unwriteable
-  before. Needs: `UnifyWF` (so ⟦S′⟧ is the closure rather than one step), the
-  parked stumps discharged (hence the `S′.parked = []` hypothesis, with F-★
-  supplying it), capture-avoidance for `QScheme.applySubst`, and an L2
-  type-substitution lemma (L1 has `typed_applySubst_aux`; `QTyped` has only
-  term substitution).
+      (QSubst.lean) plus the Δ-split. It also depends on the stump condition
+      below: `qLet`'s INHABITATION premise is met "by construction" only because
+      a parked stump always finalizes.
+    * `A-sel-?` — no longer a design question with no answer. The rule returns a
+      stump-variable δ and parks `⟨α ▷ ρ.l ↓ δ⟩`; δ is a PROMISE, not yet a
+      type. What the promise has to be worth by the time σ is fixed is
+      `StumpHonest`: either the lookup now lands and δ IS what it found (K-hit),
+      or δ is ★ (K-⊥ / F-★) — the two rules that can retire a stump, K-repark
+      retiring none. GIVEN THAT, the rule is PROVED sound
+      (`infer_sound_selUnk_step`). Establishing it is wake-up's job, and it is
+      now a statable obligation rather than an open question about meaning.
+    * `A-app-degrade` and `A-sel-degrade` — SOUNDNESS-GAPPED BY CONSTRUCTION,
+      and not in the way `plans/inference-gap-analysis.md` records. That file
+      asks for "replacing a position by ★ preserves declarative typeability",
+      which is a statement about a term that ALREADY types. Here it does not:
+      when `τ₁ ≐ τ₂ → β` is stuck, `e₁` has a type, `e₂` has a type, and QTyped
+      has NO RULE that applies one to the other. `qApp` wants a literal arrow,
+      `qEq` only moves along ≈, and ≈ relates ★ to nothing but itself
+      (`TyEquiv.unk_inv`), so `qUnk` cannot manufacture the arrow either. What is
+      missing is a DECLARATIVE rule — application at ★, the ★-elimination the
+      failure policy assumes and the type system does not have. The alternative
+      is to prove the degradations unreachable, which A-sel-degrade may well be:
+      `r` is drawn fresh immediately before `τ ≐ {r}`, so that equation can only
+      clash or succeed. A-app-degrade is NOT unreachable — its equation descends
+      into `τ₂ ≐ A`, which is an arbitrary row problem and can genuinely stick.
+  ALSO FOUND: `S′.parked = []` is more usable than the earlier note claimed.
+  `SolveTy`/`extend` leave `parked` alone, so parked only ever GROWS — except at
+  A-let, which drops Δq into the scheme, and at A-var, whose `Wakes` filter only
+  ever removes stumps the instantiation itself created (`FreshRenaming` keeps
+  their result variables off the pre-existing ones). So the hypothesis does push
+  down into sub-derivations everywhere except through A-let, and an inner
+  A-sel-? whose stump is never retired is already excluded by it.
+- [~] `InferSound` (Infer.lean) — `Γ; S ⊢ e ⇒ τ; S′ ⟹ ⟦S′⟧Γ ⊢ e : ⟦S′⟧τ`.
+  The statement is in Infer.lean, the proof in lean/InferSound.lean, case by
+  case; the entry above is the ledger. The whole theorem still needs: `UnifyWF`
+  (so ⟦S′⟧ is the closure rather than one step — the per-case lemmas are stated
+  at an arbitrary σ with `Sol.Sat σ S′.sol` and do NOT need it), the parked
+  stumps discharged (`S′.parked = []` plus `StumpHonest`, with F-★ supplying
+  both), capture-avoidance for `QScheme.applySubst`, and — for the two
+  degradation rules — a declarative rule for application at ★, which does not
+  exist.
 - [x] supply monotonicity — DONE 2026-09-15. `unifyM_supply_mono`
   (Soundness.lean): a SUCCESSFUL unification never hands back a supply behind
   the one it was given — every arm either returns its supply (bindTy,

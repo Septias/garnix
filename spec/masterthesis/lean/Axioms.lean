@@ -10,6 +10,7 @@ import RowUnify
 import Refutations
 import QSubst
 import Infer
+import InferSound
 
 namespace MinimalCalculus
 
@@ -490,15 +491,58 @@ info: 'MinimalCalculus.qtyped_applySubst' depends on axioms: [propext, Classical
 /-- info: 'MinimalCalculus.Infer.supply_mono' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in #print axioms Infer.supply_mono
 
--- "θ is only ever refined", and one soundness step end to end. The app step
--- exercises the whole chain — peel the stage's solution off the composite,
--- success soundness, strip the intermediate substitution, absorb the ≈ with
--- T-eq — so it validates that the InferSound machinery fits together.
+-- "θ is only ever refined" — what lets a premise solved at an INTERMEDIATE
+-- state be replayed under the σ the conclusion is stated at.
 /-- info: 'MinimalCalculus.Infer.sat_mono' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in #print axioms Infer.sat_mono
 
+-- ## INFERENCE SOUNDNESS, CASE BY CASE  (InferSound.lean)
+-- Eight of the thirteen A-rules, plus A-sel-? modulo `StumpHonest`. The two
+-- pieces of new machinery first: replaying a solved equation under any σ that
+-- satisfies the state it produced, and transporting a DEFINITE lookup out of
+-- ⟦S⟧-as-a-context under mere `Sat` rather than `Closes` — the hypothesis the
+-- induction actually has at an intermediate state.
+/-- info: 'MinimalCalculus.SolveTy.unifies_sat' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in #print axioms SolveTy.unifies_sat
+
+/--
+info: 'MinimalCalculus.Sol.lookup_toCtx_sat' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms Sol.lookup_toCtx_sat
+
+-- A record-typed subject always types a selection at ★: the declarative content
+-- of "a selection never gets stuck", and what makes the ★ half of A-sel-? free.
+/--
+info: 'MinimalCalculus.qtyped_sel_star' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms qtyped_sel_star
+
+-- The rules themselves. A-app and A-conc emit an equation and let T-eq absorb
+-- the ≈; A-sel and A-sel-⊥ additionally read a field off the solution.
 /-- info: 'MinimalCalculus.infer_sound_app_step' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in #print axioms infer_sound_app_step
+
+/-- info: 'MinimalCalculus.infer_sound_conc_step' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in #print axioms infer_sound_conc_step
+
+/--
+info: 'MinimalCalculus.infer_sound_sel_step' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms infer_sound_sel_step
+
+/--
+info: 'MinimalCalculus.infer_sound_selAbs_step' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms infer_sound_selAbs_step
+
+-- A-sel-?, the case proof-state.md calls a DESIGN question. `StumpHonest` is
+-- the answer to it as an obligation: by the time σ is fixed, a parked stump's
+-- result variable is either what the lookup finds (K-hit) or ★ (K-⊥ / F-★).
+-- Given that, the rule is sound; establishing it is wake-up's job.
+/--
+info: 'MinimalCalculus.infer_sound_selUnk_step' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms infer_sound_selUnk_step
 
 -- `? on α`: the blocker of an unknown lookup, which A-sel-? and K-repark both
 -- need and `Lookup` does not record. Sound, complete and deterministic.
