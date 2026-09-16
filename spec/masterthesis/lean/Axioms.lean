@@ -44,6 +44,25 @@ info: 'MinimalCalculus.occurs_allVar_hasMgu' depends on axioms: [propext, Classi
 /-- info: 'MinimalCalculus.collapseSol_complete' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in #print axioms collapseSol_complete
 
+-- THE OCCURS VERDICT, SOUND WHERE IT IS LOCAL. The converse-shaped direction —
+-- the only one available anywhere in this development. Both sources: the type
+-- sort (constructor depth) and the row sort (where the case analysis closes).
+/-- info: 'MinimalCalculus.ty_occurs_no_unifier' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in #print axioms ty_occurs_no_unifier
+
+/-- info: 'MinimalCalculus.bindTy_occurs_no_unifier' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in #print axioms bindTy_occurs_no_unifier
+
+/--
+info: 'MinimalCalculus.solveVarM_occurs_no_unifier' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms solveVarM_occurs_no_unifier
+
+/--
+info: 'MinimalCalculus.solveVarM_occurs_no_unifier_nil' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms solveVarM_occurs_no_unifier_nil
+
 -- ## P1: mutual ≐/≐ᵣ scaffolding
 -- The ≗-congruence is the new load-bearing theory; it is axiom-FREE, and the
 -- bridge lemmas built on it stay propext-only.

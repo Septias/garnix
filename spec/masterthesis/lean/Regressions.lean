@@ -232,12 +232,22 @@ theorem tyM_fn_solve_and_apply :
 theorem tyM_unk_refl : unifyTyM (B := Unit) 5 .unk .unk = .success ⟨[], []⟩ ⟨1⟩ := rfl
 theorem tyM_unk_rigid : unifyTyM (B := Unit) 5 .unk uB = .clash := rfl
 
--- The occurs guard spans BOTH sorts: x ≐ {x} is rejected even though the inner
--- x is a ROW variable and θ.ty x = {ε}, θ.row x = ε solves it. Deliberate
--- conservatism, the same price occurs_allVar_hasMgu records for rows.
--- ⊢  x ≐ {x}  =  occurs
-theorem tyM_occurs_cross_sort :
-    unifyTyM (B := Unit) 5 (.var "x") (.rcd (.var "x")) = .occurs := rfl
+-- The occurs guard is SORTED: x ≐ {x} used to be rejected, but the inner x is a
+-- ROW variable, so the binding x ≔ {x} does not reach it and there is no cycle
+-- to break. The answer is the binding itself, and it IS a unifier — at the row
+-- sort x is still free, so both sides read {x}.
+-- ⊢  x ≐ {x}  =  success [x ≔ {x}]
+theorem tyM_cross_sort_success :
+    unifyTyM (B := Unit) 5 (.var "x") (.rcd (.var "x")) =
+      .success ⟨[("x", .rcd (.var "x"))], []⟩ ⟨2⟩ := rfl
+
+-- …and the guard still catches the genuine cycle, at BOTH the arrow and the
+-- field position — there the occurrence really is a TYPE one.
+-- ⊢  x ≐ (x → x)  =  occurs      ⊢  x ≐ {l: x}  =  occurs
+theorem tyM_occurs_fn :
+    unifyTyM (B := Unit) 5 (.var "x") (.fn (.var "x") (.var "x")) = .occurs := rfl
+theorem tyM_occurs_field :
+    unifyTyM (B := Unit) 5 (.var "x") (.rcd (.sing "l" (.var "x"))) = .occurs := rfl
 
 -- ⊢  fuel exhaustion is its OWN verdict, never mistaken for stuck
 theorem outOfFuel_is_separate :

@@ -54,8 +54,20 @@ Principality forces qualified schemes that use parked stumps during unification 
     - VACUOUS successes: none left in any fuzz universe, either half, since the
       guards read the accumulated solution (B1). `UnifyWF` is still UNPROVED —
       empirically clean is not a theorem.
-  - [¡] occurs: *incomplete*
-    - α ≐ᵣ (β|α|γ)
+  - [~] occurs: *sound where it is LOCAL* (2026-09-16)
+    - α ≐ᵣ (β|α|γ) is no longer reported: the ε-collapse rule SOLVES the
+      all-variable occurrence, at any spine and any multiplicity
+      (`allvar_occurs_mgu`). What the guard still rejects is the deep and the
+      field-pinned occurrence, and both are genuine no-unifiers — the case
+      analysis closes (`solveVarM_occurs_no_unifier`). At the type sort the
+      guard is now SORTED and its rejections are genuine too
+      (`bindTy_occurs_no_unifier`, a constructor-depth argument).
+    - THE REMAINING GAP is not about the problem: the guard reads
+      `depReach Θ`, so it can also fire on an α that is merely REACHABLE from s₂
+      through the accumulated expansions. No no-unifier theorem follows from
+      that disjunct, so the driver-level `unifyRowM … = .occurs ⟹ ¬∃θ` is
+      blocked there — and only there. `solveVarM_occurs_no_unifier_nil` is the
+      unconditional statement at Θ = [] (`depReach [] V = V`).
   - [~] stuck : *incomplete*
     - (k:{β|α} | β) ≐ᵣ (k:{l:𝓫} | l:𝓫)
     - (l:{w}) ≐ᵣ (w | v) — NO LONGER STUCK, expandR solves it
@@ -183,9 +195,11 @@ Principality forces qualified schemes that use parked stumps during unification 
     stage may mention of the earlier stage's domain — which the
     `Supply`/`Avoids`/`SolBelow` discipline constrains but does not yet pin
     down. Do not retry the three ranks above.
-  - [ ] sorted ftv, second half. `Ty/Row.sortedFtv` (State.lean) and
-    `Ty/Row.allRowVars` (Defs.lean) exist; `bindTy` still tests the sort-blind
-    `τ.ftv`, which is the over-conservatism the thesis flags.
+  - [x] sorted ftv, second half — DONE (2026-09-16). `Ty/Row.tyVars` (Defs.lean)
+    is the type half next to `Ty/Row.allRowVars`; `bindTy` tests it instead of
+    the sort-blind `τ.ftv`. `x ≐ {x}` now SUCCEEDS with x ≔ {x} (the inner x is a
+    row variable, the binding never reaches it) and the genuine cycles
+    `x ≐ (x→x)`, `x ≐ {l:x}` still report occurs.
   - [x] ⊴ covering order on qualified schemes (Qualified.lean, THE COVERING ORDER)
   - [ ] solver state S = (θ, Δ, W), stump wake-up, confluence of the final state
 

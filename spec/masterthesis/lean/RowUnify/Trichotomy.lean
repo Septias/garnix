@@ -312,7 +312,12 @@ theorem terminal_leading_shape {B : Type} {Θ : DepGraph} {S : Supply} {a b : At
 --    close (renaming adds no fields, so the host side keeps count_l = 0 and the
 --    same variable can be re-expanded at the same label); the bound has to come
 --    from the other side's l-fields, which solve-and-apply can add.
---  * The occurs guard stays deliberately conservative (occurs_allVar_hasMgu).
+--  * The occurs guard's remaining gap is the STALE-BINDING disjunct: the guard
+--    reads `depReach Θ`, so it can fire on an α that is only reachable from s₂
+--    through the accumulated expansions. That is a fact about the solver state,
+--    not about the problem, so the driver-level lift of
+--    `solveVarM_occurs_no_unifier` is blocked there — and only there
+--    (`solveVarM_occurs_no_unifier_nil` is the unconditional Θ = [] case).
 --  * `TerminalNoMgu` lost its counterexample when the right-end expansion
 --    landed. Whether it is now TRUE is the first thing to test: search the
 --    Fuzz universes for a terminal configuration with an mgu. Until that

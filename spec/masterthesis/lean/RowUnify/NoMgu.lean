@@ -989,11 +989,13 @@ theorem sVarSeq_applySubst {B : Type} (θ : TySubst B) :
       simp only [Row.applySubst, Row.toSpine, sVarSeq_append,
         sVarSeq_applySubst θ a, sVarSeq_applySubst θ b, List.flatMap_append]
 
--- ## occurs: what the recursive-row check really guarantees
--- The occurs verdict (solveVarM hitting `(sVarSeq s₂).contains α`) is CONSERVATIVE.
--- It is genuinely no-unifier only when the recursive variable is pinned by a
--- FIELD; an all-variable interior occurrence is unifiable by collapsing the
--- surrounding variables to ε.
+-- ## occurs: the three shapes a recursive occurrence can have
+-- A spine occurrence of α in s₂ is genuinely no-unifier when a FIELD pins it
+-- (below); an all-variable one is not a failure at all — it is solved by
+-- collapsing the surrounding variables to ε, which is what `collapseSol` does
+-- and `allvar_occurs_mgu` proves. The third shape, α under a record
+-- constructor, is `deep_occurs_no_unifier`. Together the three close the case
+-- analysis: `solveVarM_occurs_no_unifier`.
 
 -- A recursive variable α of ρ contributes its whole l-field count to (θρ) on top
 -- of ρ's own explicit l-fields — because α occurs inside ρ, so θα is spliced in.
@@ -1034,10 +1036,11 @@ theorem occurs_field_no_unifier {B : Type} {α : TyVar} {s₂ : List (Atom B)}
   rw [ofSpine_toSpine] at hlb
   omega
 
--- occurs is CONSERVATIVE, not sound-for-no-unifier: the all-variable interior
--- occurrence α ≐ᵣ (β | α | γ) is REPORTED occurs yet IS unifiable — take β,γ ↦ ε.
--- Only the field-pinned case (occurs_field_no_unifier) is a real non-unifier.
--- (the algorithm's verdict on it is `occurs_allVar_reported`, with the driver)
+-- The all-variable interior occurrence α ≐ᵣ (β | α | γ) IS unifiable — take
+-- β,γ ↦ ε. It used to be reported occurs; it is now the ε-collapse rule's
+-- smallest instance (the algorithm's verdict on it is
+-- `allVar_collapse_reported`, with the driver). Only the field-pinned case
+-- (occurs_field_no_unifier) is a real non-unifier.
 -- ⊢  ∃ θ. θ ⊨ α ≐ᵣ (β|α|γ)
 theorem occurs_allVar_unifiable {B : Type} :
     ∃ θ : TySubst B,
@@ -1047,16 +1050,17 @@ theorem occurs_allVar_unifiable {B : Type} :
       simp only [Row.applySubst]
       exact (RowEquiv.unitL.trans RowEquiv.unitR).symm⟩
 
--- INCOMPLETENESS OF THE OCCURS GUARD, SHARPLY. occurs_allVar_unifiable shows the
--- reported-occurs problem α ≐ᵣ (β | α | γ) HAS a unifier; this strengthens that
--- to: it has an MGU (β,γ ↦ ε, identity elsewhere). So the guard rejects a config
--- the trichotomy files under (a) — occurs is not merely incomplete for
--- unifiability, it discards a PRINCIPAL solution. The unifier is FORCED by the
+-- THE RULE, AT ITS SMALLEST INSTANCE — worked by hand before it was a rule.
+-- occurs_allVar_unifiable shows α ≐ᵣ (β | α | γ) has a unifier; this
+-- strengthens that to: it has an MGU (β,γ ↦ ε, identity elsewhere). It was
+-- written as the sharp statement of the occurs guard's incompleteness — the
+-- guard discarded a PRINCIPAL solution — and is now the special case of
+-- `allvar_occurs_mgu` that the algorithm returns. The unifier is FORCED by the
 -- ≈-characterization: counting (rowEquiv_fieldCount_eq) kills every field in θβ,
 -- θγ, and the var-sequence equation A = B ++ A ++ C forces |B| = |C| = 0 by
 -- length; field-free + var-free is ε, so every unifier already agrees with the
 -- candidate on β and γ and factors through it via σ ≔ θ itself.
--- ⊢  HasMgu α (β | α | γ)      (yet ≐ᵣ reports .occurs — occurs_allVar_reported)
+-- ⊢  HasMgu α (β | α | γ)      (and ≐ᵣ now returns it — allVar_collapse_reported)
 theorem occurs_allVar_hasMgu {B : Type} :
     HasMgu (.var "a" : Row B) (.cat (.var "b") (.cat (.var "a") (.var "c"))) := by
   refine ⟨⟨(.var ·), fun x => if x = "b" then .empty
@@ -1540,6 +1544,255 @@ theorem collapseSol_below {B : Type} {a : TyVar} {s : List (Atom B)}
   intro p hp
   obtain ⟨h₁, -, h₃⟩ := epsCollapse_mem s he p hp
   exact ⟨sVarSeq_sub_sFtv s p.1 h₁, h₃⟩
+
+
+------------ THE OCCURS VERDICT IS SOUND WHERE IT IS LOCAL --------------------
+-- Stage 3 of plans/occurs-complete-plan.md. `.occurs` has two sources and they
+-- need different techniques: `bindTy` at the type sort (a constructor-depth
+-- argument, below) and `solveVarM` at the row sort (where the case analysis now
+-- closes, because the ε-collapse rule has taken the solvable third of it).
+
+
+-- ## The CONSTRUCTOR depth — `rcdDepth` with the arrow counted too
+mutual
+def Ty.tyDepth {B : Type} : Ty B → Nat
+  | .var _   => 0
+  | .base _  => 0
+  | .unk     => 0
+  | .fn a b  => 1 + max (Ty.tyDepth a) (Ty.tyDepth b)
+  | .rcd ρ   => 1 + Row.tyDepth ρ
+
+def Row.tyDepth {B : Type} : Row B → Nat
+  | .empty      => 0
+  | .var _      => 0
+  | .sing _ τ   => Ty.tyDepth τ
+  | .cat ρ₁ ρ₂  => max (Row.tyDepth ρ₁) (Row.tyDepth ρ₂)
+end
+
+mutual
+theorem TyEquiv.tyDepth_eq {B : Type} :
+    {τ₁ τ₂ : Ty B} → TyEquiv τ₁ τ₂ → Ty.tyDepth τ₁ = Ty.tyDepth τ₂
+  | _, _, .refl _      => rfl
+  | _, _, .symm h      => (TyEquiv.tyDepth_eq h).symm
+  | _, _, .trans h₁ h₂ => (TyEquiv.tyDepth_eq h₁).trans (TyEquiv.tyDepth_eq h₂)
+  | _, _, .fn h₁ h₂    => by
+      simp only [Ty.tyDepth, TyEquiv.tyDepth_eq h₁, TyEquiv.tyDepth_eq h₂]
+  | _, _, .rcd h       => by
+      simp only [Ty.tyDepth, RowEquiv.tyDepth_eq h]
+
+theorem RowEquiv.tyDepth_eq {B : Type} :
+    {ρ₁ ρ₂ : Row B} → RowEquiv ρ₁ ρ₂ → Row.tyDepth ρ₁ = Row.tyDepth ρ₂
+  | _, _, .refl _      => rfl
+  | _, _, .symm h      => (RowEquiv.tyDepth_eq h).symm
+  | _, _, .trans h₁ h₂ => (RowEquiv.tyDepth_eq h₁).trans (RowEquiv.tyDepth_eq h₂)
+  | _, _, .sing h      => by simp only [Row.tyDepth, TyEquiv.tyDepth_eq h]
+  | _, _, .cat h₁ h₂   => by
+      simp only [Row.tyDepth, RowEquiv.tyDepth_eq h₁, RowEquiv.tyDepth_eq h₂]
+  | _, _, .assoc       => by simp only [Row.tyDepth, Nat.max_assoc]
+  | _, _, .unitL       => by simp only [Row.tyDepth, Nat.max_eq_right (Nat.zero_le _)]
+  | _, _, .unitR       => by simp only [Row.tyDepth, Nat.max_eq_left (Nat.zero_le _)]
+  | _, _, .comm _      => by simp only [Row.tyDepth, Nat.max_comm]
+end
+
+-- the TYPE variables occurring UNDER at least one constructor
+mutual
+def Ty.tyVarsUnder {B : Type} : Ty B → List TyVar
+  | .var _   => []
+  | .base _  => []
+  | .unk     => []
+  | .fn a b  => Ty.tyVars a ++ Ty.tyVars b
+  | .rcd ρ   => Row.tyVars ρ
+
+def Row.tyVarsUnder {B : Type} : Row B → List TyVar
+  | .empty     => []
+  | .var _     => []
+  | .sing _ τ  => Ty.tyVars τ
+  | .cat ρ₁ ρ₂ => Row.tyVarsUnder ρ₁ ++ Row.tyVarsUnder ρ₂
+end
+
+mutual
+theorem Ty.tyDepth_applySubst_ge {B : Type} {θ : TySubst B} {α : TyVar} :
+    (τ : Ty B) → α ∈ Ty.tyVars τ → Ty.tyDepth (θ.ty α) ≤ Ty.tyDepth (τ.applySubst θ)
+  | .var _,  h => by
+      simp only [Ty.tyVars, List.mem_singleton] at h
+      subst h; exact Nat.le_refl _
+  | .base _, h => nomatch h
+  | .unk,    h => nomatch h
+  | .fn a b, h => by
+      simp only [Ty.tyVars, List.mem_append] at h
+      simp only [Ty.applySubst, Ty.tyDepth]
+      rcases h with h | h
+      · have := Ty.tyDepth_applySubst_ge (θ := θ) (α := α) a h; omega
+      · have := Ty.tyDepth_applySubst_ge (θ := θ) (α := α) b h; omega
+  | .rcd ρ,  h => by
+      simp only [Ty.tyVars] at h
+      simp only [Ty.applySubst, Ty.tyDepth]
+      have := Row.tyDepth_applySubst_ge (θ := θ) (α := α) ρ h; omega
+
+theorem Row.tyDepth_applySubst_ge {B : Type} {θ : TySubst B} {α : TyVar} :
+    (ρ : Row B) → α ∈ Row.tyVars ρ → Ty.tyDepth (θ.ty α) ≤ Row.tyDepth (ρ.applySubst θ)
+  | .empty,    h => nomatch h
+  | .var _,    h => nomatch h
+  | .sing _ τ, h => by
+      simp only [Row.tyVars] at h
+      simp only [Row.applySubst, Row.tyDepth]
+      exact Ty.tyDepth_applySubst_ge (θ := θ) (α := α) τ h
+  | .cat ρ₁ ρ₂, h => by
+      simp only [Row.tyVars, List.mem_append] at h
+      simp only [Row.applySubst, Row.tyDepth]
+      rcases h with h | h
+      · have := Row.tyDepth_applySubst_ge (θ := θ) (α := α) ρ₁ h; omega
+      · have := Row.tyDepth_applySubst_ge (θ := θ) (α := α) ρ₂ h; omega
+end
+
+-- ⊢  a constructor on the way makes it STRICT
+theorem Ty.tyDepth_applySubst_gt {B : Type} {θ : TySubst B} {α : TyVar} :
+    (τ : Ty B) → α ∈ Ty.tyVarsUnder τ → Ty.tyDepth (θ.ty α) < Ty.tyDepth (τ.applySubst θ)
+  | .var _,  h => nomatch h
+  | .base _, h => nomatch h
+  | .unk,    h => nomatch h
+  | .fn a b, h => by
+      simp only [Ty.tyVarsUnder, List.mem_append] at h
+      simp only [Ty.applySubst, Ty.tyDepth]
+      rcases h with h | h
+      · have := Ty.tyDepth_applySubst_ge (θ := θ) (α := α) a h; omega
+      · have := Ty.tyDepth_applySubst_ge (θ := θ) (α := α) b h; omega
+  | .rcd ρ,  h => by
+      simp only [Ty.tyVarsUnder] at h
+      simp only [Ty.applySubst, Ty.tyDepth]
+      have := Row.tyDepth_applySubst_ge (θ := θ) (α := α) ρ h; omega
+
+-- ⊢  THE OCCURS CHECK AT THE TYPE SORT
+theorem ty_occurs_no_unifier {B : Type} {α : TyVar} {τ : Ty B}
+    (h : α ∈ Ty.tyVarsUnder τ) : ¬ ∃ θ : TySubst B, TyUnifies θ (.var α) τ := by
+  rintro ⟨θ, hu⟩
+  unfold TyUnifies at hu
+  simp only [Ty.applySubst] at hu
+  have hd := TyEquiv.tyDepth_eq hu
+  have hlt := Ty.tyDepth_applySubst_gt (θ := θ) (α := α) τ h
+  omega
+
+
+
+-- ⊢  at the TYPE sort the two occurrence lists coincide: a row variable is never
+--    at a type position, so every row variable of a Ty is already a DEEP one
+theorem Ty.allRowVars_eq_deep {B : Type} :
+    (τ : Ty B) → Ty.allRowVars τ = Ty.deepRowVars τ
+  | .var _ => rfl | .base _ => rfl | .unk => rfl
+  | .fn a b => by
+      simp only [Ty.allRowVars, Ty.deepRowVars, Ty.allRowVars_eq_deep a, Ty.allRowVars_eq_deep b]
+  | .rcd _ => rfl
+
+-- ⊢  a row variable of ρ is either ON the spine or UNDER a record constructor
+theorem allRowVars_split {B : Type} {α : TyVar} :
+    (ρ : Row B) → α ∈ Row.allRowVars ρ →
+    α ∈ sVarSeq ρ.toSpine ∨ α ∈ Row.deepRowVars ρ
+  | .empty, h => nomatch h
+  | .var β, h => .inl (by
+      simp only [Row.allRowVars, List.mem_singleton] at h
+      simp only [Row.toSpine, sVarSeq, List.mem_singleton]; exact h)
+  | .sing _ τ, h => .inr (by
+      simp only [Row.allRowVars] at h
+      simpa only [Row.deepRowVars, Ty.allRowVars_eq_deep τ] using h)
+  | .cat ρ₁ ρ₂, h => by
+      simp only [Row.allRowVars, List.mem_append] at h
+      simp only [Row.toSpine, sVarSeq_append, Row.deepRowVars, List.mem_append]
+      rcases h with h | h
+      · rcases allRowVars_split ρ₁ h with h' | h'
+        · exact .inl (.inl h')
+        · exact .inr (.inl h')
+      · rcases allRowVars_split ρ₂ h with h' | h'
+        · exact .inl (.inr h')
+        · exact .inr (.inr h')
+
+-- ⊢  the ε-collapse refuses only because a FIELD is there
+theorem epsCollapse_none {B : Type} {keep : Option TyVar} :
+    (s : List (Atom B)) → epsCollapse keep s = none → ∃ l, 0 < sFieldCount l s
+  | [], h => by simp [epsCollapse] at h
+  | .field l _ :: s, _ => ⟨l, by simp [sFieldCount]; omega⟩
+  | .var _ :: s, h => by
+      simp only [epsCollapse, Option.map_eq_none_iff] at h
+      obtain ⟨l, hl⟩ := epsCollapse_none s h
+      exact ⟨l, by simpa only [sFieldCount] using hl⟩
+
+
+----------------------- THE OCCURS VERDICT IS SOUND ---------------------------
+
+-- ## bindTy: the classic occurs check, now that the guard is SORTED
+-- ⊢  bindTy α τ = occurs   ⟹   ¬ ∃ θ. θ ⊨ α ≐ τ
+theorem bindTy_occurs_no_unifier {B : Type} {S : Supply} {α : TyVar} {τ : Ty B}
+    (h : bindTy S α τ = .occurs) : ¬ ∃ θ : TySubst B, TyUnifies θ (.var α) τ := by
+  unfold bindTy at h
+  split at h
+  · exact absurd h (by simp)
+  · next hvar =>
+    split at h
+    · next hmem =>
+      refine ty_occurs_no_unifier ?_
+      have hm : α ∈ Ty.tyVars τ := List.mem_of_elem_eq_true hmem
+      cases τ with
+      | var β =>
+          simp only [Ty.tyVars, List.mem_singleton] at hm
+          exact absurd (by simp only [tyIsVar, hm]) hvar
+      | base _ => exact absurd hm (by simp [Ty.tyVars])
+      | unk    => exact absurd hm (by simp [Ty.tyVars])
+      | fn a b => exact hm
+      | rcd ρ  => exact hm
+    · exact absurd h (by simp)
+
+-- ⊢  what an `.occurs` from U-var-solve says: the collapse rule declined AND the
+--    guard fired
+theorem solveVarM_occurs_inv {B : Type} {Θ : DepGraph} {S : Supply}
+    {α : TyVar} {s₂ : List (Atom B)}
+    (h : solveVarM Θ S [Atom.var α] s₂ = some .occurs) :
+    collapseSol α s₂ = none ∧ α ∈ depReach Θ (Row.allRowVars (ofSpine s₂)) := by
+  rw [solveVarM] at h
+  cases hc : collapseSol α s₂ with
+  | some σ => rw [hc] at h; exact absurd h (by simp)
+  | none =>
+      rw [hc] at h
+      refine ⟨rfl, ?_⟩
+      by_cases hg : (depReach Θ (Row.allRowVars (ofSpine s₂))).contains α = true
+      · exact List.mem_of_elem_eq_true hg
+      · rw [if_neg hg] at h; exact absurd h (by simp)
+
+-- ## U-var-solve: the case analysis CLOSES on a local occurrence
+-- The occurrence the guard rejects is one of three, and the ε-collapse rule has
+-- already taken the third:
+--   * under a record constructor — `deep_occurs_no_unifier` (depth grows)
+--   * on the spine with a field present — `occurs_field_no_unifier` (counting)
+--   * on the spine, field-free — NOT rejected any more; `collapseSol` solves it
+-- so what is left is genuinely unsolvable.
+-- ⊢  α ∈ vars(ofSpine s₂),  solveVarM α s₂ = occurs   ⟹   ¬ ∃ θ. θ ⊨ α ≐ᵣ s₂
+theorem solveVarM_occurs_no_unifier {B : Type} {Θ : DepGraph} {S : Supply}
+    {α : TyVar} {s₂ : List (Atom B)}
+    (hloc : α ∈ Row.allRowVars (ofSpine s₂))
+    (h : solveVarM Θ S [Atom.var α] s₂ = some .occurs) :
+    ¬ ∃ θ : TySubst B, Unifies θ (.var α) (ofSpine s₂) := by
+  rcases allRowVars_split (ofSpine s₂) hloc with hspine | hdeep
+  · -- on the spine: the collapse rule declined, so a FIELD is present
+    rw [ofSpine_toSpine] at hspine
+    have hnone : collapseSol α s₂ = none := (solveVarM_occurs_inv h).1
+    unfold collapseSol at hnone
+    rw [if_pos (List.elem_eq_true_of_mem hspine)] at hnone
+    obtain ⟨l, hl⟩ := epsCollapse_none s₂ hnone
+    exact occurs_field_no_unifier hspine hl
+  · exact deep_occurs_no_unifier hdeep
+
+
+
+-- ## …and with an EMPTY solver state that is the whole story
+-- `depReach [] V = V`, so before any expansion has been accumulated the guard
+-- is exactly local and the verdict is unconditionally sound. What blocks the
+-- same statement at an arbitrary Θ is the stale-binding disjunct: there α is
+-- merely REACHABLE from s₂ through the accumulated expansions, which is a fact
+-- about the solver state, not about the problem in front of it.
+-- ⊢  solveVarM [] α s₂ = occurs   ⟹   ¬ ∃ θ. θ ⊨ α ≐ᵣ s₂
+theorem solveVarM_occurs_no_unifier_nil {B : Type} {S : Supply}
+    {α : TyVar} {s₂ : List (Atom B)}
+    (h : solveVarM [] S [Atom.var α] s₂ = some .occurs) :
+    ¬ ∃ θ : TySubst B, Unifies θ (.var α) (ofSpine s₂) :=
+  solveVarM_occurs_no_unifier (by simpa only [depReach] using (solveVarM_occurs_inv h).2) h
 
 -- ## The stuck verdict that WAS wrong — now fixed by U-expand
 -- (l:𝓫 | α) ≐ᵣ (m:𝓫 | β), l ≠ m, used to be reported STUCK, yet it is not

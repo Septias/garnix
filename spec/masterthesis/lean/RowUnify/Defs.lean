@@ -188,6 +188,29 @@ def Row.allRowVars {B : Type} : Row B → List TyVar
   | .cat ρ₁ ρ₂ => Row.allRowVars ρ₁ ++ Row.allRowVars ρ₂
 end
 
+-- ## …and the TYPE half of the same split
+-- `allRowVars` is the row half of the sorted occurrence list the thesis wants
+-- for the occurs guards (`Ty.sortedFtv`, State.lean, tags every occurrence with
+-- its sort). This is the other half: the variables occurring at a TYPE
+-- position. A row variable is NOT one of them — that is the whole point.
+-- `bindTy` binds at the type sort, so it is `tyVars` its guard must read: in
+-- `x ≐ {x}` the inner x is a ROW variable, the binding x ≔ {x} does not reach
+-- it, and θ.ty x = {ε}, θ.row x = ε solves the problem.
+mutual
+def Ty.tyVars {B : Type} : Ty B → List TyVar
+  | .var α   => [α]
+  | .base _  => []
+  | .unk     => []
+  | .fn a b  => Ty.tyVars a ++ Ty.tyVars b
+  | .rcd ρ   => Row.tyVars ρ
+
+def Row.tyVars {B : Type} : Row B → List TyVar
+  | .empty     => []
+  | .var _     => []
+  | .sing _ τ  => Ty.tyVars τ
+  | .cat ρ₁ ρ₂ => Row.tyVars ρ₁ ++ Row.tyVars ρ₂
+end
+
 -- …and the ones that sit under AT LEAST ONE record constructor. A row-variable
 -- reached from a row can only leave the spine by entering a field payload, and
 -- a payload is a Ty, which contains rows only under `.rcd` — so "not at a spine
@@ -554,12 +577,15 @@ def AgreeOn {B : Type} (θ θ' : TySubst B) (V : List TyVar) : Prop :=
 
 --------------------- THE MUTUAL ≐ / ≐ᵣ DRIVER --------------------------------
 
--- ## Binding a type variable, occurs-checked
--- α ≐ α is vacuous; otherwise α ≔ τ, guarded. ftv spans BOTH sorts
--- (minimal.lean:691), so `α ≐ {… α …}` is rejected even when the inner α is a
--- row variable and the problem is in fact solvable — the same conservatism the
--- row occurs guard has (occurs_allVar_hasMgu). Deliberate: the guard is what
--- makes a binding eliminate its variable.
+-- ## Binding a type variable, occurs-checked AT THE TYPE SORT
+-- α ≐ α is vacuous; otherwise α ≔ τ, guarded. The guard reads `Ty.tyVars`, not
+-- `Ty.ftv`: ftv spans both sorts (minimal.lean:691), so it rejected `α ≐ {… α …}`
+-- even when the inner α is a ROW variable — and there the binding α ≔ {… α …}
+-- never reaches that occurrence, so it is not a cycle and the problem has a
+-- solution (`tyM_cross_sort_success`). Sortedness is the established principle
+-- one level down (`a ≐ᵣ (l:{a})` occurs, `a ≐ᵣ (l:a)` success) and it is the
+-- same observation that refutes `Sol.NoCapture`. What the guard still catches
+-- is the genuine cycle: an occurrence the binding WOULD carry into itself.
 def tyIsVar {B : Type} : Ty B → Option TyVar
   | .var β => some β
   | _      => none
@@ -569,7 +595,7 @@ def tyIsVar {B : Type} : Ty B → Option TyVar
 -- on the shape of τ.
 def bindTy {B : Type} (S : Supply) (α : TyVar) (τ : Ty B) : UResM B :=
   if tyIsVar τ = some α then .success .nil S
-  else if τ.ftv.contains α then .occurs
+  else if τ.tyVars.contains α then .occurs
   else .success ⟨[(α, τ)], []⟩ S
 
 -- ## The ε-collapse solution
@@ -791,9 +817,11 @@ def SolBelow {B : Type} (s : Sol B) (W : List TyVar) : Prop :=
 -- ## What the fourth leg can honestly be about
 -- `unifySpineMF … = .stuck` is NOT the right hypothesis. `UResM.seq` propagates
 -- a sub-call's `.stuck` before the residual is ever examined, and that residual
--- can disambiguate the whole problem — so the verdict is CONSERVATIVE, exactly
--- as `.occurs` is (Refutations.stuck_masks_mgu, Refutations.occurs-side
--- occurs_allVar_hasMgu). "stuck ⟹ no mgu" is false, at every formulation.
+-- can disambiguate the whole problem — so the verdict is CONSERVATIVE
+-- (Refutations.stuck_masks_mgu). "stuck ⟹ no mgu" is false, at every
+-- formulation. The analogy with `.occurs` that used to stand here is gone:
+-- occurs is sound where it is local (`solveVarM_occurs_no_unifier`,
+-- `bindTy_occurs_no_unifier`). `.stuck` now stands alone.
 --
 -- What IS available is the fall-through condition of the driver's last arm:
 -- both spines non-empty and every move dead, with no projection clash either.
