@@ -814,21 +814,6 @@ theorem Sol.lookup_toCtx_iff {B : Type} {s : Sol B} {σ : TySubst B}
 -- `lookup_total_toCtx` actually consume — so proving it alone already makes
 -- `A-sel`'s premise guaranteed to have a derivation, without any rank function.
 
--- ⊢  substitution acts on the spine variables by FLATMAP: each spine variable is
---    replaced by the spine variables of its image. Payloads contribute nothing,
---    which is exactly why the cross-sort leak that refutes `NoCapture`
---    (`a ≐ᵣ (l:a)`: `a` bound at the row sort, the payload `a` a TYPE variable)
---    cannot reach this property — a spine position never holds a type variable.
-theorem sVarSeq_applySubst {B : Type} (θ : TySubst B) :
-    (ρ : Row B) → sVarSeq (ρ.applySubst θ).toSpine
-      = (sVarSeq ρ.toSpine).flatMap (fun γ => sVarSeq (θ.row γ).toSpine)
-  | .empty    => rfl
-  | .var α    => by simp [Row.applySubst, Row.toSpine, sVarSeq]
-  | .sing l τ => by simp [Row.applySubst, Row.toSpine, sVarSeq]
-  | .cat a b  => by
-      simp only [Row.applySubst, Row.toSpine, sVarSeq_append,
-        sVarSeq_applySubst θ a, sVarSeq_applySubst θ b, List.flatMap_append]
-
 /-- `s` is acyclic AND its row bindings keep their spine clear of `V` as well.
 `V` is what the ENCLOSING stages have already bound: composition needs the later
 stage to avoid the earlier stage's domain, and that fact has to be carried

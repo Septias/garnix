@@ -35,13 +35,24 @@ theorem tyIsVar_eq {B : Type} : {τ : Ty B} → {α : TyVar} → tyIsVar τ = so
 -- live here rather than in Regressions.lean because the prose that reads them
 -- is here.
 
--- The occurs guard is CONSERVATIVE: it rejects α ≐ᵣ (β | α | γ), which
--- occurs_allVar_unifiable shows is unifiable and occurs_allVar_hasMgu shows
--- has an MGU. Deliberate.
--- ⊢  unifyRowM α (β | α | γ)  =  occurs
-theorem occurs_allVar_reported {B : Type} [DecidableEq B] :
+-- THE ε-COLLAPSE, COMPUTED. α ≐ᵣ (β | α | γ) was the standing incompleteness
+-- witness of the occurs guard: `occurs_allVar_unifiable` showed it unifiable and
+-- `occurs_allVar_hasMgu` showed the unifier FORCED, yet the algorithm answered
+-- `.occurs`. It now returns exactly that mgu. α occurs ONCE on the spine, so α
+-- itself stays free — ε | α | ε ≈ α whatever α is — and only β, γ collapse.
+-- ⊢  unifyRowM α (β | α | γ)  =  success [β ≔ ε, γ ≔ ε]
+theorem allVar_collapse_reported {B : Type} [DecidableEq B] :
     unifyRowM (B := B) 20 (.var "a") (.cat (.var "b") (.cat (.var "a") (.var "c")))
-      = .occurs := rfl
+      = .success ⟨[], [("b", .empty), ("c", .empty)]⟩ ⟨2⟩ := rfl
+
+-- …and at multiplicity TWO the counting closes on α as well, so every spine
+-- variable collapses — α listed at each of its occurrences (`rowLookup` reads
+-- the first, so the repetition is harmless).
+-- ⊢  unifyRowM α (β | α | α | γ)  =  success [β ≔ ε, α ≔ ε, α ≔ ε, γ ≔ ε]
+theorem allVar_collapse_reported_k2 {B : Type} [DecidableEq B] :
+    unifyRowM (B := B) 20 (.var "a")
+        (.cat (.var "b") (.cat (.var "a") (.cat (.var "a") (.var "c"))))
+      = .success ⟨[], [("b", .empty), ("a", .empty), ("a", .empty), ("c", .empty)]⟩ ⟨2⟩ := rfl
 
 -- U-EXPAND'S PAYOFF, computed. The verdict crossfield used to get was `.stuck`,
 -- and it was WRONG (the prose at :1006 derives the mgu by hand). The driver now

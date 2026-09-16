@@ -229,7 +229,11 @@ theorem solveVarM_ne_stuck {B : Type} {Θ : DepGraph} {S : Supply} {s₁ s₂ : 
     | var α =>
       cases r with
       | cons _ _ => simp [solveVarM] at h
-      | nil => simp only [solveVarM] at h; split at h <;> simp at h
+      | nil =>
+        simp only [solveVarM] at h
+        split at h
+        · simp at h
+        · split at h <;> simp at h
 
 theorem expandResM_stuck {B : Type} {S : Supply} {β : TyVar} {l : Label} {τ : Ty B}
     {r : UResM B} (h : expandResM S β l τ r = .stuck) : r = .stuck := by

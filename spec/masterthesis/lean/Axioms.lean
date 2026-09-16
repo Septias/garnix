@@ -26,13 +26,23 @@ namespace MinimalCalculus
 /-- info: 'MinimalCalculus.stuck_not_both_ground' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in #print axioms stuck_not_both_ground
 
--- The occurs guard's incompleteness, sharply: a reported-occurs problem with an
--- MGU (the algorithm's verdict on it is occurs_allVar_reported).
--- Classical.choice matches its sibling no-mgu/mgu theorems (allvar_swap).
+-- The all-variable occurrence, which the occurs guard used to reject: not a
+-- give-up any more but the CORRECTNESS PROOF of the ε-collapse rule. The
+-- three-atom witness (Classical.choice matches its sibling no-mgu/mgu theorems,
+-- allvar_swap) and the general rule it became.
 /--
 info: 'MinimalCalculus.occurs_allVar_hasMgu' depends on axioms: [propext, Classical.choice, Quot.sound]
 -/
 #guard_msgs in #print axioms occurs_allVar_hasMgu
+
+/-- info: 'MinimalCalculus.allvar_occurs_mgu' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in #print axioms allvar_occurs_mgu
+
+/-- info: 'MinimalCalculus.collapseSol_reflect' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in #print axioms collapseSol_reflect
+
+/-- info: 'MinimalCalculus.collapseSol_complete' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in #print axioms collapseSol_complete
 
 -- ## P1: mutual ≐/≐ᵣ scaffolding
 -- The ≗-congruence is the new load-bearing theory; it is axiom-FREE, and the
