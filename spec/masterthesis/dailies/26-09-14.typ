@@ -1,4 +1,6 @@
 
+./26-09-16.typ
+
 == Claude Prompts
 - [ ] The success leg can be vacuous, tell me how "bad" that is and propose a fix.
 - [ ] What is the unification type of row equivalence under asymmetric concatenation? Unitary, finitary, infinitary, or nullary?
