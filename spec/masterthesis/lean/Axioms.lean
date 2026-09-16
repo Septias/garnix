@@ -561,6 +561,17 @@ info: 'MinimalCalculus.Wake.dischargeEquiv' depends on axioms: [propext, Classic
 /-- info: 'MinimalCalculus.infer_sound_var_step' does not depend on any axioms -/
 #guard_msgs in #print axioms infer_sound_var_step
 
+-- ## F-★ IS DEFECTIVE  (InferSound.lean)
+-- A REFUTATION, in the sense Refutations.lean uses the word: `Finalize.star`
+-- has no premise about the lookup, so it can commit a stump to ★ where the
+-- lookup lands — and then nothing discharges it, not even up to ≈. The witness
+-- is a stump on the literal row (l: 𝓫). Guarded so the defect cannot be
+-- silently "fixed" by a change that makes the statement vacuous.
+/--
+info: 'MinimalCalculus.finalize_star_no_discharge' depends on axioms: [propext]
+-/
+#guard_msgs in #print axioms finalize_star_no_discharge
+
 -- `? on α`: the blocker of an unknown lookup, which A-sel-? and K-repark both
 -- need and `Lookup` does not record. Sound, complete and deterministic.
 /-- info: 'MinimalCalculus.Lookup.unknown_blocked' depends on axioms: [propext] -/

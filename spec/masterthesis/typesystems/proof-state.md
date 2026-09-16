@@ -321,14 +321,24 @@ through `unifyTyF`/`unifySpineMF` with `S.supply` threaded in and out.
       plus capture-avoidance); and the `Finalize.star` defect below.
       A-var is also the case that FIXES THE SHAPE of the context correspondence,
       so it has to be settled before the induction is assembled, not after.
-    * `Finalize.star` HAS NO LOOKUP PREMISE — found 2026-09-16. F-★ sets δ := ★
-      unconditionally, while `Stump.Discharge` offers ★ only when the lookup is
-      `⊥` (D-⊥) or `?` (D-?). So a stump finalized after its lookup has already
-      started to land has NO declarative reading at all. Compare `Wake.abs`,
-      which does carry its `Lookup … .absent`. Either F-★ gets the same side
-      condition, or the theorem has to know that finalization only ever runs
-      where nothing can refine further. This is a defect in the rule, not in the
-      proof.
+    * `Finalize.star` HAS NO LOOKUP PREMISE — found and REFUTED 2026-09-16,
+      `finalize_star_no_discharge` (InferSound.lean), guarded in Axioms.lean.
+      F-★ sets δ := ★ unconditionally, while `Stump.Discharge` offers ★ only
+      when the lookup is `⊥` (D-⊥) or `?` (D-?). So a stump finalized after its
+      lookup has already started to land has NO declarative reading at all.
+      Every OTHER rule that touches a stump's result variable says what the
+      lookup did first: `Wake.hit` carries its `Lookup … (.found τ)`,
+      `Wake.abs` its `Lookup … .absent`, `Wake.repark` its `LookupBlocked`.
+      THE WITNESS is as small as it gets: a stump on the LITERAL row `(l: 𝓫)`,
+      whose lookup lands at every context and under every substitution. F-★
+      fires on it anyway — nothing in the rule looks — and the resulting state
+      forces σδ = ★ while the lookup says `𝓫`. Not even `DischargeEquiv`, the
+      ≈-relaxed version, survives: ★ has no ≈-congruence rule, so `★ ≈ 𝓫` is
+      false too.
+      THE FIX is the premise its siblings have — `LookupBlocked` on the row it
+      is finalizing, which is exactly what A-sel-? already establishes when it
+      parks the stump. Not applied yet: it moves `selEx_infers` and the A-sel-?
+      soundness case with it. This is a defect in the RULE, not in the proof.
     * `A-let` — the generalized scheme's instances, needing `SchemeImage`
       (QSubst.lean) plus the Δ-split. It also depends on the stump condition
       below: `qLet`'s INHABITATION premise is met "by construction" only because

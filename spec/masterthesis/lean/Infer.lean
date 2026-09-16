@@ -258,7 +258,23 @@ inductive Wakes {B : Type} [DecidableEq B] :
       Wakes (S.park p) ps S₁ → Wakes S (p :: ps) S₁
 
 /-- `S ⊢ q ⇓ S′` — F-★, the algorithmic moment of T-sel-★. Runs at the end of
-inference and at every generalization boundary that does not carry the stump. -/
+inference and at every generalization boundary that does not carry the stump.
+
+**DEFECTIVE AS WRITTEN — see `finalize_star_no_discharge` (InferSound.lean).**
+This rule has NO premise about the lookup, while every other rule that touches a
+stump's result variable states what the lookup did first: `Wake.hit` carries its
+`Lookup … (.found τ)`, `Wake.abs` its `Lookup … .absent`, `Wake.repark` its
+`LookupBlocked`. Declaratively `Stump.Discharge` offers ★ only under `D-⊥` (the
+lookup is `⊥`) or `D-?` (it is still `?`); there is no rule pinning δ to ★ when
+the lookup LANDS. So F-★ can commit a stump to ★ in a configuration the
+declarative system cannot read at all, and `finalize_star_no_discharge` exhibits
+one: a stump on the literal row `(l: 𝓫)`, where the lookup lands at every
+context and under every substitution, and F-★ fires anyway.
+
+THE FIX is the premise its siblings have — `LookupBlocked S.ctx
+(p.stump.row.applySubst S.subst) p.stump.label p.blocker`, which is also exactly
+what A-sel-? establishes when it parks the stump. Left unchanged for now because
+changing it moves `selEx_infers` and the A-sel-? soundness case with it. -/
 inductive Finalize {B : Type} [DecidableEq B] :
     SolverState B → Parked B → SolverState B → Prop where
   | star {S S' : SolverState B} {p : Parked B} :

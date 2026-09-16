@@ -372,6 +372,72 @@ theorem infer_sound_var_step {B C : Type} {constTy : C → B} {Γ' : QCtx B}
     QTyped constTy Γ' (.var x) τ :=
   .qEq (.qVar hl ⟨χ, hfix, hdis, rfl⟩) hbody
 
+--------------------- F-★ IS DEFECTIVE, AND HERE IS THE WITNESS --------------
+-- `Finalize.star` (Infer.lean) reads
+--
+--     S ⊢ δ ≐ ★ ⇝ S′
+--     ─────────────────────────
+--     S ⊢ ⟨α ▷ ρ.l ↓ δ⟩ ⇓ S′[δ]
+--
+-- with NO premise about the lookup. `Stump.Discharge` offers ★ only under
+-- `D-⊥` (the lookup is `⊥`) or `D-?` (it is still `?`); there is no rule
+-- pinning δ to ★ when the lookup LANDS. So F-★ can commit a stump to ★ in a
+-- configuration the declarative system cannot read at all — and it is not a
+-- corner of the proof, it is the rule. Compare `Wake.abs`, which carries its
+-- `Lookup … .absent`, and `Wake.hit`, which carries its `Lookup … (.found τ)`:
+-- every OTHER rule that touches a stump's result variable says what the lookup
+-- did first.
+--
+-- The witness is as small as it gets: a stump on the LITERAL row `(l: 𝓫)`,
+-- whose lookup lands at every context and under every substitution. F-★ fires
+-- on it anyway — nothing in the rule looks — and the resulting state forces
+-- σδ = ★ while the lookup says `𝓫`. Not even `DischargeEquiv`, the ≈-relaxed
+-- version, survives that: ★ has no ≈-congruence rule, so `★ ≈ 𝓫` is false too.
+--
+-- THE FIX is to give F-★ the premise its siblings have — `LookupBlocked` on the
+-- row it is finalizing, which is also exactly the hypothesis A-sel-? already
+-- establishes when it parks the stump. Nothing below depends on this; it is
+-- recorded so the rule is not shipped as it stands.
+
+/-- a stump on a LITERAL row: its lookup lands at every context, under every
+substitution. Nothing about it is blocked, and F-★ does not care. -/
+private def fStar_p : Parked Unit := ⟨"a", ⟨.sing "l" (.base ()), "l", "d"⟩⟩
+
+private def fStar_S : SolverState Unit := ⟨Sol.nil, [fStar_p], [], ⟨0⟩⟩
+
+/-- the equation F-★ emits, run: `δ ≐ ★` binds δ, at any fuel and any supply. -/
+example : unifyTyF (B := Unit) [] ⟨0⟩ 0 (.var "d") .unk
+    = .success ⟨[("d", (.unk : Ty Unit))], []⟩ ⟨0⟩ := rfl
+
+/-- ⊢  **F-★ can fire where nothing discharges.** There is a state, a parked
+stump and a finalization step whose result NO substitution satisfying it can
+discharge — not even up to ≈. -/
+theorem finalize_star_no_discharge :
+    ∃ (S S'' : SolverState Unit) (p : Parked Unit),
+      Finalize S p S'' ∧
+      ∀ (Γ' : Ctx Unit) (σ : TySubst Unit), Sol.Sat σ S''.sol →
+        ¬ p.stump.DischargeEquiv Γ' σ := by
+  have hfin : Finalize fStar_S fStar_p _ :=
+    Finalize.star (S' := fStar_S.extend ⟨[("d", .unk)], []⟩ ⟨0⟩)
+      ⟨0, ⟨[("d", .unk)], []⟩, ⟨0⟩, rfl, rfl⟩
+  refine ⟨fStar_S, _, fStar_p, hfin, ?_⟩
+  intro Γ' σ hsat hdis
+  simp only [fStar_p, Row.applySubst, Ty.applySubst] at hdis
+  -- the finalized state binds δ to ★, so every σ satisfying it sends δ to ★
+  have hd : σ.ty "d" = (.unk : Ty Unit) :=
+    (TyEquiv.unk_inv_both (hsat.1 ("d", .unk) List.mem_cons_self)).2 rfl
+  -- …while the lookup on a literal row lands, at every context and every σ
+  have hlit : Lookup Γ' ((.sing "l" (.base ())) : Row Unit) "l"
+      (.found (.base ())) := .hit
+  cases hdis with
+  | hit hlk hty =>
+      have hτ := lookup_det hlk hlit
+      injection hτ with hτ
+      rw [hd, hτ] at hty
+      exact absurd (TyEquiv.unk_inv hty) (by simp)
+  | abs hlk _ => exact absurd (lookup_det hlk hlit) (by simp)
+  | unk hlk _ => exact absurd (lookup_det hlk hlit) (by simp)
+
 --------------------- WHAT IS NOT PROVED --------------------------------------
 -- Eight of the thirteen A-rules are above outright, A-sel-? modulo a discharge,
 -- and A-var down to a statement about SCHEMES. What is left:
