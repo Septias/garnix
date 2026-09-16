@@ -348,6 +348,112 @@ theorem Wake.dischargeEquiv {B : Type} [DecidableEq B] {S S₁ : SolverState B}
   | .repark _, _ =>
       .inr ⟨{ blocker := _, stump := p.stump }, List.mem_cons_self, rfl⟩
 
+--------------------- …AND OVER A WHOLE RUN -----------------------------------
+-- Lifting one step to `Wakes` needs one structural fact, and it is the only
+-- place the FILTERS matter. Every rule that retires a stump filters the parked
+-- list on `stump.res`, so an entry survives a step exactly when its result
+-- variable differs from the one being woken. That is not an accident: it is what
+-- `FreshRenaming` arranges at A-var, which draws a fresh result variable per
+-- instantiated constraint and keeps them off everything already parked.
+--
+-- So the run-level statement carries a DISTINCTNESS hypothesis on the list being
+-- submitted, and nothing else. Its conclusion is the step's, with the parked
+-- alternative now read at the run's final state: every constraint submitted to
+-- wake-up is either discharged, or still parked when the run ends — where
+-- finalization takes over, and where F-★'s missing premise bites.
+
+/-- ⊢  a wake-up step leaves every OTHER parked constraint where it was. -/
+theorem Wake.parked_preserved {B : Type} [DecidableEq B] {S S₁ : SolverState B}
+    {p q : Parked B} (hne : q.stump.res ≠ p.stump.res) :
+    Wake S p S₁ → q ∈ S.parked → q ∈ S₁.parked := by
+  intro hw hq
+  cases hw with
+  | hit _ hs => obtain ⟨_, _, _, -, rfl⟩ := hs; simp [SolverState.extend, hq, hne]
+  | abs _ hs =>
+      obtain ⟨_, _, _, -, rfl⟩ := hs
+      simp [SolverState.extend, SolverState.flag, hq, hne]
+  | repark _ => simp [SolverState.park, hq, hne]
+
+/-- ⊢  …and so does a whole run, for an entry no submitted constraint shares a
+result variable with. -/
+theorem Wakes.parked_preserved {B : Type} [DecidableEq B] {S S' : SolverState B}
+    {ps : List (Parked B)} {q : Parked B} :
+    Wakes S ps S' → q ∈ S.parked →
+    (∀ p ∈ ps, q.stump.res ≠ p.stump.res) → q ∈ S'.parked
+  | .nil, hq, _ => hq
+  | .cons hw hws, hq, hne =>
+      Wakes.parked_preserved hws
+        (Wake.parked_preserved (hne _ List.mem_cons_self) hw hq)
+        (fun p hp => hne p (List.mem_cons_of_mem _ hp))
+  | .park _ hws, hq, hne =>
+      Wakes.parked_preserved hws (List.mem_cons_of_mem _ hq)
+        (fun p hp => hne p (List.mem_cons_of_mem _ hp))
+
+/-- ⊢  **K is D**, over a run: every constraint submitted to wake-up is either
+DISCHARGED (up to ≈) or still parked when the run ends. The hypothesis is that
+the submitted constraints have pairwise distinct result variables, which is what
+`FreshRenaming` gives A-var. -/
+theorem Wakes.dischargeEquiv {B : Type} [DecidableEq B] {S S' : SolverState B}
+    {ps : List (Parked B)} {σ : TySubst B} {Γ' : QCtx B} (hrow : Γ'.rowEnv = []) :
+    Wakes S ps S' → Sol.Sat σ S'.sol →
+    ps.Pairwise (fun a b => a.stump.res ≠ b.stump.res) →
+    ∀ p ∈ ps, p.stump.DischargeEquiv Γ'.ctx σ ∨ ∃ q ∈ S'.parked, q.stump = p.stump
+  | .nil, _, _, _, hp => absurd hp List.not_mem_nil
+  | .cons (p := p) hw hws, hsat, hpw, p', hp' => by
+      rcases List.mem_cons.mp hp' with rfl | hp'
+      · rcases Wake.dischargeEquiv hrow hw (hws.satMono σ hsat) with hd | ⟨q, hq, hqs⟩
+        · exact .inl hd
+        · exact .inr ⟨q, Wakes.parked_preserved hws hq
+            (fun r hr => hqs ▸ (List.pairwise_cons.mp hpw).1 r hr), hqs⟩
+      · exact Wakes.dischargeEquiv hrow hws hsat (List.pairwise_cons.mp hpw).2 p' hp'
+  | .park (p := p) _ hws, hsat, hpw, p', hp' => by
+      rcases List.mem_cons.mp hp' with rfl | hp'
+      · exact .inr ⟨p', Wakes.parked_preserved hws List.mem_cons_self
+          (fun r hr => (List.pairwise_cons.mp hpw).1 r hr), rfl⟩
+      · exact Wakes.dischargeEquiv hrow hws hsat (List.pairwise_cons.mp hpw).2 p' hp'
+
+--------------------- WHERE THE DISTINCTNESS COMES FROM -----------------------
+-- `Wakes.dischargeEquiv` asks the submitted constraints to have pairwise
+-- distinct result variables. A-var submits `InstStumps θ f σ.constraints ps`,
+-- so the question is whether an INSTANTIATION produces distinct ones, and the
+-- answer is: only if the scheme's own constraints already had them, and only if
+-- they are BOUND. `FreshRenaming` makes `f` injective on `σ.vars` and keeps its
+-- image off everything already parked — but injectivity on `σ.vars` says nothing
+-- about a result variable that is not in `σ.vars`, and nothing at all about two
+-- constraints that shared one to begin with.
+--
+-- `QScheme` is a bare structure and carries neither condition. That is a MISSING
+-- INVARIANT, not a live bug: the algorithm only ever builds schemes out of
+-- stumps whose result variables were drawn fresh (A-sel-?) or renamed apart
+-- (A-var), so it never constructs a violating one. But the type permits it, and
+-- if one existed wake-up would silently drop a constraint: every rule that
+-- retires a stump filters on `stump.res`, so two stumps sharing a result
+-- variable are BOTH retired when either fires — the second one's lookup never
+-- performed, its δ pinned by the first's, and `Stump.Discharge.det` only makes
+-- that sound if the two lookups agree, which nothing requires.
+
+/-- the well-formedness `QScheme` does not carry. Named rather than proved: it
+is an invariant of the states inference builds, in the same sense `UnifyWF` is,
+and it belongs with that family. -/
+def QScheme.ResWF {B : Type} (sc : QScheme B) : Prop :=
+  sc.constraints.Pairwise (fun a b => a.res ≠ b.res) ∧
+    ∀ st ∈ sc.constraints, st.res ∈ sc.vars
+
+/-- ⊢  a well-formed scheme's instantiated constraints are pairwise distinct —
+which is exactly what `Wakes.dischargeEquiv` asks of what A-var submits. -/
+theorem InstStumps.pairwise {B : Type} {θ : TySubst B} {f : TyVar → TyVar}
+    {Q : List (Stump B)} {ps : List (Parked B)} {vs : List TyVar}
+    (hi : InstStumps θ f Q ps)
+    (hinj : ∀ α ∈ vs, ∀ β ∈ vs, f α = f β → α = β)
+    (hdist : Q.Pairwise (fun a b => a.res ≠ b.res))
+    (hbound : ∀ st ∈ Q, st.res ∈ vs) :
+    ps.Pairwise (fun a b => a.stump.res ≠ b.stump.res) := by
+  have h : (ps.map Parked.stump).Pairwise (fun a b => a.res ≠ b.res) := by
+    rw [hi, List.pairwise_map]
+    exact hdist.imp_of_mem
+      (fun ha hb hne heq => hne (hinj _ (hbound _ ha) _ (hbound _ hb) heq))
+  exact (List.pairwise_map (f := Parked.stump) (R := fun x y => x.res ≠ y.res)).mp h
+
 --------------------- A-var, GIVEN THE INSTANCE -------------------------------
 -- What is left of A-var once the discharge obligation is separated out: `qVar`
 -- wants a scheme in Γ′ and an INSTANCE of it, and the instance's own
@@ -422,7 +528,7 @@ theorem finalize_star_no_discharge :
       ⟨0, ⟨[("d", .unk)], []⟩, ⟨0⟩, rfl, rfl⟩
   refine ⟨fStar_S, _, fStar_p, hfin, ?_⟩
   intro Γ' σ hsat hdis
-  simp only [fStar_p, Row.applySubst, Ty.applySubst] at hdis
+  simp only [fStar_p] at hdis
   -- the finalized state binds δ to ★, so every σ satisfying it sends δ to ★
   have hd : σ.ty "d" = (.unk : Ty Unit) :=
     (TyEquiv.unk_inv_both (hsat.1 ("d", .unk) List.mem_cons_self)).2 rfl
@@ -442,22 +548,17 @@ theorem finalize_star_no_discharge :
 -- Eight of the thirteen A-rules are above outright, A-sel-? modulo a discharge,
 -- and A-var down to a statement about SCHEMES. What is left:
 --
--- * A-var — the typing half is `infer_sound_var_step` and the constraint half is
---   `Wake.dischargeEquiv`, one step. Three things still separate them from the
---   rule:
---     - LIFTING one step to `Wakes`. The two resolving cases go through
---       unchanged; the `park` constructor does not, because a stump parked here
---       is settled LATER (by a subsequent `Wake`, or by `Finalize`), and
---       proving it still sits in `S′.parked` needs the filter argument — the
---       filters key on `stump.res`, and `FreshRenaming` keeps the instantiated
---       result variables off the pre-existing ones.
---     - FINALIZATION does not discharge. `Finalize.star` (Infer.lean) sets
---       δ := ★ with NO premise about the lookup, while `Stump.Discharge` has a
---       rule for ★ only when the lookup is `⊥` or `?`. So a stump finalized
---       after its lookup has already started to land has no declarative reading
---       at all. Compare `Wake.abs`, which does carry its `Lookup … .absent`.
---       F-★ needs the same side condition, or the theorem needs to know that
---       finalization only ever runs where nothing can refine further.
+-- * A-var — the typing half is `infer_sound_var_step`; the constraint half is
+--   `Wakes.dischargeEquiv`, over a whole run, with `InstStumps.pairwise`
+--   supplying its distinctness side condition from the rule's own
+--   `FreshRenaming`. What is left:
+--     - `QScheme.ResWF`, the invariant `QScheme` does not carry. Stated, not
+--       proved: it is a property of the schemes inference BUILDS, in the same
+--       sense `UnifyWF` is, and it belongs with that family.
+--     - FINALIZATION does not discharge, and that is a defect in F-★ rather
+--       than a gap here — see `finalize_star_no_discharge` above. Every
+--       constraint `Wakes.dischargeEquiv` leaves in the parked alternative is
+--       handed to finalization, and finalization cannot honour it as written.
 --     - the σ-IMAGE OF THE SCHEME, which is `SchemeImage`/`QCovers`
 --       (QSubst.lean) plus the capture-avoidance `QScheme.applySubst` lacks.
 --       This is also where χ is built: σ corrected at the constraints' result

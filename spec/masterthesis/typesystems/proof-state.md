@@ -314,13 +314,33 @@ through `unifyTyF`/`unifySpineMF` with `S.supply` threaded in and out.
           has no ≈-congruence rule). The ≈ is paid for by χ — σ corrected at the
           constraints' result variables to the types the lookups actually found
           — and what is left over is absorbed by T-eq.
-      STILL OPEN for A-var: lifting one step to `Wakes` (the `park` constructor
-      needs the filter argument — filters key on `stump.res`, and
-      `FreshRenaming` keeps the instantiated result variables off the
-      pre-existing ones); the σ-image of the scheme (`SchemeImage`/`QCovers`
-      plus capture-avoidance); and the `Finalize.star` defect below.
+      LIFTED TO A WHOLE RUN the same day: `Wakes.dischargeEquiv` — every
+      constraint submitted to wake-up is either DISCHARGED or still parked when
+      the run ends. The lift needs exactly one structural fact
+      (`Wake.parked_preserved`): every rule that retires a stump filters the
+      parked list on `stump.res`, so an entry survives a step precisely when its
+      result variable differs from the one being woken. Its side condition —
+      the submitted constraints are pairwise distinct in `res` — comes from the
+      rule's own `FreshRenaming` via `InstStumps.pairwise`.
+      STILL OPEN for A-var: `QScheme.ResWF` (below); the σ-image of the scheme
+      (`SchemeImage`/`QCovers` plus capture-avoidance); and the `Finalize.star`
+      defect below, which is where every still-parked constraint lands.
       A-var is also the case that FIXES THE SHAPE of the context correspondence,
       so it has to be settled before the induction is assembled, not after.
+    * `QScheme` CARRIES NO WELL-FORMEDNESS on its constraints — found
+      2026-09-16, stated as `QScheme.ResWF` (InferSound.lean), not proved. A
+      scheme's constraints ought to have pairwise distinct result variables, and
+      every one of them ought to be BOUND; the structure requires neither.
+      A MISSING INVARIANT, not a live bug: the algorithm only ever builds
+      schemes out of stumps whose result variables were drawn fresh (A-sel-?) or
+      renamed apart (A-var), so it never constructs a violating one. But the
+      type permits it, and if one existed wake-up would silently DROP a
+      constraint — every rule that retires a stump filters on `stump.res`, so
+      two stumps sharing one are both retired when either fires, the second's
+      lookup never performed and its δ pinned by the first's.
+      `Stump.Discharge.det` makes that sound only if the two lookups agree,
+      which nothing requires. Belongs with `UnifyWF` in the family of "true of
+      the states inference builds, unproved".
     * `Finalize.star` HAS NO LOOKUP PREMISE — found and REFUTED 2026-09-16,
       `finalize_star_no_discharge` (InferSound.lean), guarded in Axioms.lean.
       F-★ sets δ := ★ unconditionally, while `Stump.Discharge` offers ★ only

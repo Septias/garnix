@@ -555,6 +555,19 @@ info: 'MinimalCalculus.Wake.dischargeEquiv' depends on axioms: [propext, Classic
 -/
 #guard_msgs in #print axioms Wake.dischargeEquiv
 
+-- …and over a whole run. The lift needs exactly one structural fact — every
+-- rule that retires a stump filters the parked list on `stump.res`, so an entry
+-- survives a step precisely when its result variable differs from the one being
+-- woken — plus the distinctness of what was submitted, which is what
+-- `FreshRenaming` gives A-var.
+/--
+info: 'MinimalCalculus.Wakes.dischargeEquiv' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms Wakes.dischargeEquiv
+
+/-- info: 'MinimalCalculus.InstStumps.pairwise' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in #print axioms InstStumps.pairwise
+
 -- A-var, once the discharge obligation is separated out: qVar wants a scheme
 -- and an instance, and the instance's own substitution is ours to choose —
 -- which is what pays for the ≈ the correspondence leaves behind.
