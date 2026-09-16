@@ -535,14 +535,31 @@ info: 'MinimalCalculus.infer_sound_selAbs_step' depends on axioms: [propext, Cla
 -/
 #guard_msgs in #print axioms infer_sound_selAbs_step
 
--- A-sel-?, the case proof-state.md calls a DESIGN question. `StumpHonest` is
--- the answer to it as an obligation: by the time σ is fixed, a parked stump's
--- result variable is either what the lookup finds (K-hit) or ★ (K-⊥ / F-★).
--- Given that, the rule is sound; establishing it is wake-up's job.
+-- A-sel-?, the case proof-state.md calls a DESIGN question. The answer is that
+-- a parked stump is worth a DISCHARGE — the declarative `Stump.Discharge`, read
+-- at σ against a discharged row environment, with the hit payload relaxed to ≈
+-- because a SOLVED equation is only ever an ≈-fact. Given that, the rule is
+-- sound; establishing it is wake-up's job.
 /--
-info: 'MinimalCalculus.infer_sound_selUnk_step' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: 'MinimalCalculus.infer_sound_selUnk_step' depends on axioms: [propext, Quot.sound]
 -/
 #guard_msgs in #print axioms infer_sound_selUnk_step
+
+-- ## THE K-/D- CORRESPONDENCE  (InferSound.lean)
+-- "K-hit / K-⊥ / K-repark are D-hit / D-⊥ / D-?" as a theorem, at the
+-- granularity of one wake-up step: a step either DISCHARGES its constraint or
+-- re-parks it with the stump intact. K-repark corresponds to nothing, which is
+-- why the conclusion is a disjunction and not an implication.
+/--
+info: 'MinimalCalculus.Wake.dischargeEquiv' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms Wake.dischargeEquiv
+
+-- A-var, once the discharge obligation is separated out: qVar wants a scheme
+-- and an instance, and the instance's own substitution is ours to choose —
+-- which is what pays for the ≈ the correspondence leaves behind.
+/-- info: 'MinimalCalculus.infer_sound_var_step' does not depend on any axioms -/
+#guard_msgs in #print axioms infer_sound_var_step
 
 -- `? on α`: the blocker of an unknown lookup, which A-sel-? and K-repark both
 -- need and `Lookup` does not record. Sound, complete and deterministic.

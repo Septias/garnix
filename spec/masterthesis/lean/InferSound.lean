@@ -232,59 +232,177 @@ theorem infer_sound_selAbs_step {B C : Type} [DecidableEq B] {constTy : C → B}
 -- A-sel-? is the case `proof-state.md` calls a DESIGN question rather than a
 -- proof-effort one: the rule returns a stump-variable δ and parks
 -- `⟨α ▷ ρ.l ↓ δ⟩`, and δ is a PROMISE, not yet a type, so an inner A-sel-? has
--- no plain declarative reading. It is still possible to say exactly what the
--- promise has to be worth by the time σ is fixed, and that turns the design
--- question into a statable obligation on wake-up and finalization.
+-- no plain declarative reading. The answer is that the promise is worth exactly
+-- a DISCHARGE — the declarative side's `Stump.Discharge`, read at the σ the
+-- conclusion is stated under, against a discharged row environment. That is the
+-- same condition A-var needs of the constraints it submits to wake-up, so the
+-- two cases share one notion instead of inventing a second.
 --
--- There are only two honest outcomes, and they are precisely the two rules that
--- can retire a stump:
---   * K-hit fired — the lookup landed, and δ IS what it found;
---   * K-⊥ or F-★ fired — δ is ★.
--- K-repark retires nothing: it moves the blocker and the stump lives on, which
--- is why this is a condition on the FINAL σ and not on any one step.
+-- But `Stump.Discharge.hit` pins `θδ = τ` ON THE NOSE, and the algorithm cannot
+-- deliver that. K-hit SOLVES the equation `δ ≐ τ`, and a solved equation is only
+-- ever an ≈-fact (`SolveTy.unifies_sat`): the state can satisfy it with any σ
+-- whose value at δ is ≈-equal to τ, and on records ≈ is not equality. So the
+-- correspondence is stated against `Stump.DischargeEquiv`, which is `Discharge`
+-- with the hit payload relaxed to ≈, and the gap is absorbed where it belongs —
+-- by T-eq in the conclusion, since ≈ is a congruence.
 
-/-- what a parked stump must be worth under σ for A-sel-? to be sound. -/
-def StumpHonest {B : Type} (Γ' : QCtx B) (σ : TySubst B) (st : Stump B) : Prop :=
-  Lookup Γ'.ctx (st.row.applySubst σ) st.label (.found (σ.ty st.res)) ∨
-    σ.ty st.res = .unk
+/-- `Stump.Discharge` with the hit payload up to ≈, which is all a SOLVED
+equation can ever give. `⊥` and `?` stay rigid: ★ has no ≈-congruence rule, so
+`TyEquiv (θδ) ★` already forces `θδ = ★` (`TyEquiv.unk_inv_both`). -/
+inductive Stump.DischargeEquiv {B : Type} (Γ : Ctx B) (θ : TySubst B)
+    (s : Stump B) : Prop where
+  | hit {τ : Ty B} :
+      Lookup Γ (s.row.applySubst θ) s.label (.found τ) →
+      TyEquiv (θ.ty s.res) τ → DischargeEquiv Γ θ s
+  | abs :
+      Lookup Γ (s.row.applySubst θ) s.label .absent →
+      θ.ty s.res = .unk → DischargeEquiv Γ θ s
+  | unk :
+      Lookup Γ (s.row.applySubst θ) s.label .unknown →
+      θ.ty s.res = .unk → DischargeEquiv Γ θ s
 
-/-- A-sel-?, given the promise is kept. Both halves land: `K-hit` reads off as
-`T-sel`, and `★` reads off as whatever the lookup now says, blurred by
-`T-★-intro` — `qtyped_sel_star` is what makes the second half free. -/
+/-- ⊢  a discharge is one, up to ≈. -/
+theorem Stump.Discharge.toEquiv {B : Type} {Γ : Ctx B} {θ : TySubst B}
+    {s : Stump B} : s.Discharge Γ θ → s.DischargeEquiv Γ θ
+  | .hit hl hδ => .hit hl (hδ ▸ .refl _)
+  | .abs hl hδ => .abs hl hδ
+  | .unk hl hδ => .unk hl hδ
+
+/-- A-sel-?, given the promise is kept. All three discharge cases land: D-hit
+reads off as T-sel with the ≈ absorbed by T-eq, D-⊥ as T-sel-⊥, D-? as T-sel-★. -/
 theorem infer_sound_selUnk_step {B C : Type} [DecidableEq B] {constTy : C → B}
     {Γ' : QCtx B} {σ : TySubst B} {S₁' S₂ : SolverState B}
     {e : Expr C} {τ : Ty B} {l : Label} {r δ : TyVar}
-    (hrow : Γ'.rowEnv = [])
     (h : QTyped constTy Γ' e (τ.applySubst σ))
     (hs : SolveTy S₁' τ (.rcd (.var r)) S₂)
     (hsat : Sol.Sat σ S₂.sol)
-    (hst : StumpHonest Γ' σ ⟨.var r, l, δ⟩) :
+    (hst : Stump.DischargeEquiv Γ'.ctx σ ⟨.var r, l, δ⟩) :
     QTyped constTy Γ' (.sel e l) ((Ty.var δ).applySubst σ) := by
   have hrcd : QTyped constTy Γ' e ((Ty.rcd (.var r)).applySubst σ) :=
     .qEq h (hs.unifies_sat hsat)
+  show QTyped constTy Γ' (.sel e l) (σ.ty δ)
   cases hst with
-  | inl hf => exact .qSel hrcd hf
-  | inr hu =>
-      show QTyped constTy Γ' (.sel e l) (σ.ty δ)
-      rw [hu]
-      exact qtyped_sel_star hrow hrcd
+  | hit hl hty => exact .qEq (.qSel hrcd hl) hty.symm
+  | abs hl hδ  => rw [hδ]; exact .qSelAbs hrcd hl
+  | unk hl hδ  => rw [hδ]; exact .qSelUnk hrcd hl
+
+--------------------- THE K-/D- CORRESPONDENCE, ONE STEP ----------------------
+-- "K-hit / K-⊥ / K-repark are D-hit / D-⊥ / D-? — the difference is WHEN"
+-- (Infer.lean). That is the sentence the paper asserts; this is it as a
+-- theorem, at the granularity of a single wake-up step.
+--
+-- Two adjustments the informal statement hides, and both are forced:
+--   * the lookup K performs is on the row THE STATE HAS ALREADY SUBSTITUTED
+--     (`ρ[⟦S⟧]`), while D looks up `ρ[θ]`. Under a σ that satisfies S the two
+--     are ≈-equal (`Sol.Sat.substEquiv` is a ≗, and applySubst is a
+--     ≗-congruence), so the lookups transport into each other — but only up to
+--     ≈, which is why `lookup_equiv` appears again here.
+--   * K-repark corresponds to NOTHING. D-? commits to ★ at once; K-repark
+--     commits to nothing and re-parks with a new blocker. So the honest
+--     conclusion is a disjunction: a step either discharges the constraint or
+--     leaves it parked WITH ITS STUMP INTACT, for a later step or for
+--     finalization to settle.
+
+/-- ⊢  under a σ that satisfies S, substituting with ⟦S⟧ first changes a row
+only up to ≈. This is what lets wake-up's lookup — performed on the row the
+state had already substituted — be read as a lookup on the raw row. -/
+theorem Row.applySubst_sat_equiv {B : Type} {s : Sol B} {σ : TySubst B}
+    (hsat : Sol.Sat σ s) (ρ : Row B) :
+    RowEquiv ((ρ.applySubst s.toSubst).applySubst σ) (ρ.applySubst σ) := by
+  rw [Row.applySubst_applySubst]
+  exact (Row.applySubst_substEquiv hsat.substEquiv ρ).symm
+
+/-- ⊢  **K is D**, one step: a wake-up step either DISCHARGES its constraint
+(up to ≈ on the hit payload) or re-parks it with the same stump. -/
+theorem Wake.dischargeEquiv {B : Type} [DecidableEq B] {S S₁ : SolverState B}
+    {p : Parked B} {σ : TySubst B} {Γ' : QCtx B} (hrow : Γ'.rowEnv = []) :
+    Wake S p S₁ → Sol.Sat σ S₁.sol →
+    p.stump.DischargeEquiv Γ'.ctx σ ∨ ∃ q ∈ S₁.parked, q.stump = p.stump
+  -- K-hit is D-hit: the lookup landed, and the emitted equation `δ ≐ τ` pins δ
+  -- to what it found — up to ≈, which is all an equation can pin.
+  | .hit hlk hs, hsat => by
+      have hS : Sol.Sat σ _ := SolveTy.satMono hs σ hsat
+      have hδ := SolveTy.unifies_sat hs hsat
+      obtain ⟨r₁, hl₁, he₁⟩ :=
+        Sol.lookup_toCtx_sat (Γ' := Γ'.ctx) hS hrow hlk (by intro hh; cases hh)
+      cases he₁ with
+      | found ht₁ =>
+          obtain ⟨_, hl₂, he₂⟩ :=
+            lookup_equiv (Row.applySubst_sat_equiv hS p.stump.row) hl₁
+          cases he₂ with
+          | found ht₂ => exact .inl (.hit hl₂ ((hδ.trans ht₁).trans ht₂))
+  -- K-⊥ is D-⊥: definite absence, and `δ ≐ ★` forces δ = ★ on the nose, since
+  -- ★ has no ≈-congruence rule.
+  | .abs hlk hs, hsat => by
+      have hS : Sol.Sat σ _ := SolveTy.satMono hs σ hsat
+      have hδ := SolveTy.unifies_sat hs hsat
+      obtain ⟨r₁, hl₁, he₁⟩ :=
+        Sol.lookup_toCtx_sat (Γ' := Γ'.ctx) hS hrow hlk (by intro hh; cases hh)
+      cases he₁ with
+      | absent =>
+          obtain ⟨_, hl₂, he₂⟩ :=
+            lookup_equiv (Row.applySubst_sat_equiv hS p.stump.row) hl₁
+          cases he₂ with
+          | absent => exact .inl (.abs hl₂ ((TyEquiv.unk_inv_both hδ).2 rfl))
+  -- K-repark is NOTHING: the blocker moved, the stump did not.
+  | .repark _, _ =>
+      .inr ⟨{ blocker := _, stump := p.stump }, List.mem_cons_self, rfl⟩
+
+--------------------- A-var, GIVEN THE INSTANCE -------------------------------
+-- What is left of A-var once the discharge obligation is separated out: `qVar`
+-- wants a scheme in Γ′ and an INSTANCE of it, and the instance's own
+-- substitution χ is ours to choose — `QScheme.Inst` existentially quantifies
+-- it. That freedom is exactly what pays for the ≈ that `DischargeEquiv` leaves
+-- behind: χ is σ corrected at the constraints' result variables to the types
+-- the lookups actually found, and the body then differs from the inferred one
+-- by an ≈ that T-eq absorbs.
+--
+-- Building χ, and the σ-image of the scheme it instantiates, is the piece that
+-- is NOT here: it is `SchemeImage`/`QCovers` (QSubst.lean) plus the
+-- capture-avoidance `QScheme.applySubst` still lacks. This lemma is the seam,
+-- so that what remains is a statement about SCHEMES rather than about typing.
+
+/-- A-var. -/
+theorem infer_sound_var_step {B C : Type} {constTy : C → B} {Γ' : QCtx B}
+    {x : Var} {sc' : QScheme B} {χ : TySubst B} {τ : Ty B}
+    (hl : Γ'.lookup x = some sc')
+    (hfix : χ.FixedOutside sc'.vars)
+    (hdis : ∀ st ∈ sc'.constraints, st.Discharge Γ'.ctx χ)
+    (hbody : TyEquiv (sc'.body.applySubst χ) τ) :
+    QTyped constTy Γ' (.var x) τ :=
+  .qEq (.qVar hl ⟨χ, hfix, hdis, rfl⟩) hbody
 
 --------------------- WHAT IS NOT PROVED --------------------------------------
--- Eight of the thirteen A-rules are above, plus A-sel-? modulo `StumpHonest`.
--- The remaining four, and what each is actually waiting on:
+-- Eight of the thirteen A-rules are above outright, A-sel-? modulo a discharge,
+-- and A-var down to a statement about SCHEMES. What is left:
 --
--- * A-var — the K-/D- correspondence. The instantiated constraints were
---   submitted to WAKE-UP; the declarative `QScheme.Inst` demands they
---   DISCHARGE. Relating the two is what the paper asserts and nobody has
---   proved. This is also the case that fixes the shape of the context
---   correspondence — `QSubst.lean`'s `QCovers` is the instance-level half of
---   it — so it should be attacked BEFORE the induction is assembled, not after.
+-- * A-var — the typing half is `infer_sound_var_step` and the constraint half is
+--   `Wake.dischargeEquiv`, one step. Three things still separate them from the
+--   rule:
+--     - LIFTING one step to `Wakes`. The two resolving cases go through
+--       unchanged; the `park` constructor does not, because a stump parked here
+--       is settled LATER (by a subsequent `Wake`, or by `Finalize`), and
+--       proving it still sits in `S′.parked` needs the filter argument — the
+--       filters key on `stump.res`, and `FreshRenaming` keeps the instantiated
+--       result variables off the pre-existing ones.
+--     - FINALIZATION does not discharge. `Finalize.star` (Infer.lean) sets
+--       δ := ★ with NO premise about the lookup, while `Stump.Discharge` has a
+--       rule for ★ only when the lookup is `⊥` or `?`. So a stump finalized
+--       after its lookup has already started to land has no declarative reading
+--       at all. Compare `Wake.abs`, which does carry its `Lookup … .absent`.
+--       F-★ needs the same side condition, or the theorem needs to know that
+--       finalization only ever runs where nothing can refine further.
+--     - the σ-IMAGE OF THE SCHEME, which is `SchemeImage`/`QCovers`
+--       (QSubst.lean) plus the capture-avoidance `QScheme.applySubst` lacks.
+--       This is also where χ is built: σ corrected at the constraints' result
+--       variables to the types the lookups actually found, which is what pays
+--       for the ≈ that `DischargeEquiv` leaves behind.
 --
 -- * A-let — needs `SchemeImage` (QSubst.lean) and the Δ-split. `qLet` also
 --   carries an INHABITATION premise, and the algorithmic side satisfies it "by
---   construction" only because a parked stump always finalizes at ★: so A-let
---   depends on `StumpHonest` too, at the generalization boundary rather than at
---   the selection site.
+--   construction" only because a parked stump always finalizes: so A-let
+--   depends on the discharge condition too, at the generalization boundary
+--   rather than at the selection site.
 --
 -- * A-app-degrade and A-sel-degrade — NOT a proof-effort gap, and not the gap
 --   `plans/inference-gap-analysis.md` records either. That file asks for

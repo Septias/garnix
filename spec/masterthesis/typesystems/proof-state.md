@@ -293,25 +293,57 @@ through `unifyTyF`/`unifySpineMF` with `S.supply` threaded in and out.
     * `qtyped_sel_star` — a record-typed subject always types a selection at ★:
       at an empty row environment lookup is total for free, and T-sel / T-sel-⊥
       / T-sel-? cover the three verdicts with T-★-intro blurring the first.
-  THE REMAINING FIVE, and what each is actually waiting on:
-    * `A-var` — the instantiated constraints were submitted to WAKE-UP, and for
-      the declarative `QScheme.Inst` they must DISCHARGE. Relating the two is
-      the K-/D- correspondence the paper asserts but nobody has proved. It is
-      also the case that FIXES THE SHAPE of the context correspondence
-      (QSubst.lean's `QCovers` is its instance-level half), so it has to be
-      settled before the induction is assembled, not after.
+  THE REMAINING FIVE, and what each is actually waiting on (A-var STARTED):
+    * `A-var` — STARTED 2026-09-16, and it splits cleanly in two. The typing
+      half is `infer_sound_var_step`: `qVar` wants a scheme and an INSTANCE, and
+      the instance's own substitution χ is ours to choose, since `QScheme.Inst`
+      quantifies it existentially. The constraint half is
+      `Wake.dischargeEquiv` — "K-hit / K-⊥ / K-repark are D-hit / D-⊥ / D-?"
+      as a theorem, one wake-up step: a step either DISCHARGES its constraint or
+      re-parks it with the stump intact. K-repark corresponds to nothing, so the
+      conclusion is a disjunction, not an implication.
+      TWO THINGS THE INFORMAL STATEMENT HIDES, both forced:
+        - K looks up the row the STATE HAS ALREADY SUBSTITUTED (`ρ[⟦S⟧]`), D
+          looks up `ρ[θ]`. Under a σ satisfying S the two are ≈-equal
+          (`Sol.Sat.substEquiv` is a ≗ and applySubst is a ≗-congruence), so
+          they transport — but only up to ≈, hence `lookup_equiv` again.
+        - `Stump.Discharge.hit` pins `θδ = τ` ON THE NOSE and the algorithm
+          cannot deliver that: K-hit SOLVES `δ ≐ τ`, and a solved equation is
+          only ever an ≈-fact. So the correspondence is stated against
+          `Stump.DischargeEquiv` (hit relaxed to ≈; ⊥ and ? stay rigid, since ★
+          has no ≈-congruence rule). The ≈ is paid for by χ — σ corrected at the
+          constraints' result variables to the types the lookups actually found
+          — and what is left over is absorbed by T-eq.
+      STILL OPEN for A-var: lifting one step to `Wakes` (the `park` constructor
+      needs the filter argument — filters key on `stump.res`, and
+      `FreshRenaming` keeps the instantiated result variables off the
+      pre-existing ones); the σ-image of the scheme (`SchemeImage`/`QCovers`
+      plus capture-avoidance); and the `Finalize.star` defect below.
+      A-var is also the case that FIXES THE SHAPE of the context correspondence,
+      so it has to be settled before the induction is assembled, not after.
+    * `Finalize.star` HAS NO LOOKUP PREMISE — found 2026-09-16. F-★ sets δ := ★
+      unconditionally, while `Stump.Discharge` offers ★ only when the lookup is
+      `⊥` (D-⊥) or `?` (D-?). So a stump finalized after its lookup has already
+      started to land has NO declarative reading at all. Compare `Wake.abs`,
+      which does carry its `Lookup … .absent`. Either F-★ gets the same side
+      condition, or the theorem has to know that finalization only ever runs
+      where nothing can refine further. This is a defect in the rule, not in the
+      proof.
     * `A-let` — the generalized scheme's instances, needing `SchemeImage`
       (QSubst.lean) plus the Δ-split. It also depends on the stump condition
       below: `qLet`'s INHABITATION premise is met "by construction" only because
       a parked stump always finalizes.
     * `A-sel-?` — no longer a design question with no answer. The rule returns a
       stump-variable δ and parks `⟨α ▷ ρ.l ↓ δ⟩`; δ is a PROMISE, not yet a
-      type. What the promise has to be worth by the time σ is fixed is
-      `StumpHonest`: either the lookup now lands and δ IS what it found (K-hit),
-      or δ is ★ (K-⊥ / F-★) — the two rules that can retire a stump, K-repark
-      retiring none. GIVEN THAT, the rule is PROVED sound
-      (`infer_sound_selUnk_step`). Establishing it is wake-up's job, and it is
-      now a statable obligation rather than an open question about meaning.
+      type. What the promise is worth by the time σ is fixed is exactly a
+      DISCHARGE — the declarative `Stump.Discharge`, read at σ against a
+      discharged row environment, with the hit payload relaxed to ≈
+      (`Stump.DischargeEquiv`, see A-var). That is the SAME condition A-var
+      needs of the constraints it submits to wake-up, so the two cases share one
+      notion instead of inventing a second. GIVEN IT, the rule is PROVED sound
+      (`infer_sound_selUnk_step`), all three discharge cases landing on T-sel /
+      T-sel-⊥ / T-sel-★. Establishing it is wake-up's job, and it is now a
+      statable obligation rather than an open question about meaning.
     * `A-app-degrade` and `A-sel-degrade` — SOUNDNESS-GAPPED BY CONSTRUCTION,
       and not in the way `plans/inference-gap-analysis.md` records. That file
       asks for "replacing a position by ★ preserves declarative typeability",
