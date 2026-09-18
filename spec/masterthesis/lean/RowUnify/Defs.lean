@@ -188,6 +188,82 @@ def Row.allRowVars {B : Type} : Row B → List TyVar
   | .cat ρ₁ ρ₂ => Row.allRowVars ρ₁ ++ Row.allRowVars ρ₂
 end
 
+-- …and the TYPE-sort half, the exact complement: variables occurring at a Ty
+-- position. `ftv` is the two of them together (`mem_ftv_iff`), and it is the
+-- sort-blind union that makes `a ≐ᵣ (l:a)` look like a cycle when it is not —
+-- `a` bound at the row sort, the payload `a` a type variable, two different
+-- variables sharing one untagged namespace. `Ty/Row.sortedFtv` (State.lean) is
+-- the tagged form; these two are its fibres (`mem_tyFtv_iff_sortedFtv`).
+mutual
+def Ty.tyFtv {B : Type} : Ty B → List TyVar
+  | .var α   => [α]
+  | .base _  => []
+  | .unk     => []
+  | .fn a b  => Ty.tyFtv a ++ Ty.tyFtv b
+  | .rcd ρ   => Row.tyFtv ρ
+
+def Row.tyFtv {B : Type} : Row B → List TyVar
+  | .empty     => []
+  | .var _     => []
+  | .sing _ τ  => Ty.tyFtv τ
+  | .cat ρ₁ ρ₂ => Row.tyFtv ρ₁ ++ Row.tyFtv ρ₂
+end
+
+-- ⊢ the two sorts partition the sort-blind `ftv`
+mutual
+theorem Ty.mem_ftv_iff {B : Type} {α : TyVar} :
+    (τ : Ty B) → (α ∈ τ.ftv ↔ α ∈ τ.tyFtv ∨ α ∈ τ.allRowVars)
+  | .var _   => by simp [Ty.ftv, Ty.tyFtv, Ty.allRowVars]
+  | .base _  => by simp [Ty.ftv, Ty.tyFtv, Ty.allRowVars]
+  | .unk     => by simp [Ty.ftv, Ty.tyFtv, Ty.allRowVars]
+  | .fn a b  => by
+      simp only [Ty.ftv, Ty.tyFtv, Ty.allRowVars, List.mem_append,
+                 Ty.mem_ftv_iff a, Ty.mem_ftv_iff b]
+      constructor
+      · rintro ((h|h)|(h|h))
+        · exact .inl (.inl h)
+        · exact .inr (.inl h)
+        · exact .inl (.inr h)
+        · exact .inr (.inr h)
+      · rintro ((h|h)|(h|h))
+        · exact .inl (.inl h)
+        · exact .inr (.inl h)
+        · exact .inl (.inr h)
+        · exact .inr (.inr h)
+  | .rcd ρ   => by
+      simp only [Ty.ftv, Ty.tyFtv, Ty.allRowVars, Row.mem_ftv_iff ρ]
+
+theorem Row.mem_ftv_iff {B : Type} {α : TyVar} :
+    (ρ : Row B) → (α ∈ ρ.ftv ↔ α ∈ ρ.tyFtv ∨ α ∈ ρ.allRowVars)
+  | .empty     => by simp [Row.ftv, Row.tyFtv, Row.allRowVars]
+  | .var _     => by simp [Row.ftv, Row.tyFtv, Row.allRowVars]
+  | .sing _ τ  => by
+      simp only [Row.ftv, Row.tyFtv, Row.allRowVars, Ty.mem_ftv_iff τ]
+  | .cat ρ₁ ρ₂ => by
+      simp only [Row.ftv, Row.tyFtv, Row.allRowVars, List.mem_append,
+                 Row.mem_ftv_iff ρ₁, Row.mem_ftv_iff ρ₂]
+      constructor
+      · rintro ((h|h)|(h|h))
+        · exact .inl (.inl h)
+        · exact .inr (.inl h)
+        · exact .inl (.inr h)
+        · exact .inr (.inr h)
+      · rintro ((h|h)|(h|h))
+        · exact .inl (.inl h)
+        · exact .inr (.inl h)
+        · exact .inl (.inr h)
+        · exact .inr (.inr h)
+end
+
+-- ⊢ …so each half is contained in it: the sorted guard is WEAKER than the
+--   sort-blind one, which is exactly the over-conservatism being removed.
+theorem Ty.tyFtv_subset_ftv {B : Type} (τ : Ty B) : ∀ α ∈ τ.tyFtv, α ∈ τ.ftv :=
+  fun _ h => (Ty.mem_ftv_iff τ).mpr (.inl h)
+
+theorem Ty.allRowVars_subset_ftv {B : Type} (τ : Ty B) :
+    ∀ α ∈ τ.allRowVars, α ∈ τ.ftv :=
+  fun _ h => (Ty.mem_ftv_iff τ).mpr (.inr h)
+
 -- …and the ones that sit under AT LEAST ONE record constructor. A row-variable
 -- reached from a row can only leave the spine by entering a field payload, and
 -- a payload is a Ty, which contains rows only under `.rcd` — so "not at a spine
@@ -554,12 +630,18 @@ def AgreeOn {B : Type} (θ θ' : TySubst B) (V : List TyVar) : Prop :=
 
 --------------------- THE MUTUAL ≐ / ≐ᵣ DRIVER --------------------------------
 
--- ## Binding a type variable, occurs-checked
--- α ≐ α is vacuous; otherwise α ≔ τ, guarded. ftv spans BOTH sorts
--- (minimal.lean:691), so `α ≐ {… α …}` is rejected even when the inner α is a
--- row variable and the problem is in fact solvable — the same conservatism the
--- row occurs guard has (occurs_allVar_hasMgu). Deliberate: the guard is what
--- makes a binding eliminate its variable.
+-- ## Binding a type variable, occurs-checked AT THE TYPE SORT
+-- α ≐ α is vacuous; otherwise α ≔ τ, guarded. The binding is made at the TYPE
+-- sort — `Sol.ofTy` writes θ.ty α and leaves θ.row α = α — so the guard that
+-- makes it eliminating is the TYPE-sort occurrence list, `Ty.tyFtv`, not the
+-- sort-blind `ftv`. The two differ exactly on `α ≐ {… α …}` with the inner α at
+-- a row position: `ftv` rejects it, but the binding is idempotent there (the
+-- inner α is a different variable, untouched by θ.ty), so the problem is solvable
+-- and the rejection was over-conservatism. `Ty.tyFtv` and `Ty.allRowVars`
+-- partition `ftv` (`Ty.mem_ftv_iff`); the guard is therefore WEAKER than it was,
+-- which is why every `bindTy` theorem — stated on SUCCESS — carries over
+-- unchanged. The row occurs guard keeps its own conservatism
+-- (occurs_allVar_hasMgu); that one is a separate question.
 def tyIsVar {B : Type} : Ty B → Option TyVar
   | .var β => some β
   | _      => none
@@ -569,7 +651,7 @@ def tyIsVar {B : Type} : Ty B → Option TyVar
 -- on the shape of τ.
 def bindTy {B : Type} (S : Supply) (α : TyVar) (τ : Ty B) : UResM B :=
   if tyIsVar τ = some α then .success .nil S
-  else if τ.ftv.contains α then .occurs
+  else if τ.tyFtv.contains α then .occurs
   else .success ⟨[(α, τ)], []⟩ S
 
 -- ## U-var-solve, at the mutual driver's result type

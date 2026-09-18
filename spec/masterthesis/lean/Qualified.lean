@@ -32,6 +32,39 @@ def Scheme.toQ {B : Type} (σ : Scheme B) : QScheme B :=
   ⟨σ.vars, [], σ.body⟩
 
 
+--------------------------- PUSHING σ UNDER A SCHEME ---------------------------
+-- Substituting under `σ.vars` WITHOUT renaming them. This is capture-avoiding
+-- exactly when θ cannot be captured by those binders, which is what
+-- `QScheme.Avoiding` below says and `QCovers.forward_of_avoiding` (QSubst.lean)
+-- cashes in. `A-var`'s `FreshRenaming` is the discipline that arranges it.
+
+def QScheme.applySubst {B : Type} (σ : QScheme B) (θ : TySubst B) : QScheme B :=
+  ⟨σ.vars,
+   σ.constraints.map (fun st => (⟨st.row.applySubst θ, st.label, st.res⟩ : Stump B)),
+   σ.body.applySubst θ⟩
+
+theorem QScheme.applySubst_vars {B : Type} (σ : QScheme B) (θ : TySubst B) :
+    (σ.applySubst θ).vars = σ.vars := rfl
+
+/-- σ's result variables are among its binders — the well-formedness the header
+states ("δ are drawn from vars like every other quantified variable"), and what
+makes a stump a constraint on the scheme's OWN binder rather than on a free
+variable. -/
+def QScheme.WF {B : Type} (σ : QScheme B) : Prop :=
+  ∀ st ∈ σ.constraints, st.res ∈ σ.vars
+
+/-- what σ mentions at a non-binding position. -/
+def QScheme.freeFtv {B : Type} (σ : QScheme B) : List TyVar :=
+  σ.constraints.flatMap (fun st => st.row.ftv) ++ σ.body.ftv
+
+/-- θ cannot be captured by σ's binders: it fixes them, and its image on σ's
+other variables never mentions one. Exactly the side condition that makes
+`QScheme.applySubst` — which does NOT rename — legitimate. -/
+def QScheme.Avoiding {B : Type} (σ : QScheme B) (θ : TySubst B) : Prop :=
+  (∀ α ∈ σ.vars, θ.ty α = .var α ∧ θ.row α = .var α) ∧
+  (∀ α ∈ σ.freeFtv, α ∉ σ.vars →
+     (∀ β ∈ (θ.ty α).ftv, β ∉ σ.vars) ∧ (∀ β ∈ (θ.row α).ftv, β ∉ σ.vars))
+
 ---------------------------------- DISCHARGE ----------------------------------
 -- Γ ⊢ (θρ).l ↓ r  replayed per instantiation θ:
 --
@@ -465,6 +498,56 @@ theorem ctx_bindTy (Γ : QCtx B) (x : Var) (τ : Ty B) :
     (Γ.bindTy x τ).ctx = Γ.ctx := rfl
 
 end QCtx
+
+--------------------------- WHAT A QCtx MENTIONS -------------------------------
+-- Γ-freshness ("the instantiation lands on names Γ has not committed to") was
+-- not expressible because there was no ftv of a `QCtx`. These supply it. Each is
+-- an OVER-approximation — binders are counted alongside free variables — which
+-- is the safe direction for an avoid-set: freshness against the larger list
+-- implies freshness against the free variables. L1's `Ctx.schemeFtv`
+-- (minimal.lean) over-approximates the same way, for the same reason.
+
+/-- every variable a stump mentions: its row, and its result variable δ. -/
+def Stump.ftv {B : Type} (s : Stump B) : List TyVar := s.res :: s.row.ftv
+
+/-- every variable a qualified scheme mentions, binders included. -/
+def QScheme.ftv {B : Type} (σ : QScheme B) : List TyVar :=
+  σ.vars ++ σ.constraints.flatMap Stump.ftv ++ σ.body.ftv
+
+/-- every variable Γ mentions: its schemes, and the row environment's domain
+together with its solutions. -/
+def QCtx.ftv {B : Type} (Γ : QCtx B) : List TyVar :=
+  Γ.tyEnv.flatMap (fun p => p.2.ftv) ++
+  Γ.rowEnv.flatMap (fun p => p.1 :: p.2.ftv)
+
+-- ⊢ a scheme Γ knows about is covered by Γ.ftv
+theorem QCtx.lookup_ftv_subset {B : Type} {Γ : QCtx B} {x : Var} {σ : QScheme B}
+    (h : Γ.lookup x = some σ) : ∀ α ∈ σ.ftv, α ∈ Γ.ftv := by
+  intro α hα
+  unfold QCtx.lookup at h
+  cases hf : Γ.tyEnv.find? (·.1 == x) with
+  | none => rw [hf] at h; cases h
+  | some p =>
+      rw [hf] at h
+      simp only [Option.map_some, Option.some.injEq] at h
+      subst h
+      exact List.mem_append_left _
+        (List.mem_flatMap.mpr ⟨p, List.mem_of_find?_eq_some hf, hα⟩)
+
+-- ⊢ …and so is every variable of its BODY, which is the form A-var consumes
+theorem QCtx.lookup_body_ftv_subset {B : Type} {Γ : QCtx B} {x : Var}
+    {σ : QScheme B} (h : Γ.lookup x = some σ) : ∀ α ∈ σ.body.ftv, α ∈ Γ.ftv :=
+  fun α hα => QCtx.lookup_ftv_subset h α
+    (List.mem_append_right _ hα)
+
+-- ⊢ binding only ever ADDS variables
+theorem QCtx.ftv_bindScheme {B : Type} (Γ : QCtx B) (x : Var) (σ : QScheme B) :
+    ∀ α ∈ Γ.ftv, α ∈ (Γ.bindScheme x σ).ftv := by
+  intro α hα
+  simp only [QCtx.ftv, QCtx.bindScheme, List.flatMap_cons, List.mem_append] at hα ⊢
+  rcases hα with hα | hα
+  · exact .inl (.inr hα)
+  · exact .inr hα
 
 mutual
   inductive QTyped {B C : Type} (constTy : C → B) :

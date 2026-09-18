@@ -508,4 +508,40 @@ info: 'MinimalCalculus.qtyped_applySubst' depends on axioms: [propext, Classical
 /-- info: 'MinimalCalculus.LookupBlocked.det' depends on axioms: [propext] -/
 #guard_msgs in #print axioms LookupBlocked.det
 
+-- ## SORTED OCCURRENCES (RowUnify/Defs.lean, RowUnify/State.lean)
+-- `Ty.tyFtv` and `Ty.allRowVars` partition the sort-blind `ftv`, and they are
+-- the two fibres of `sortedFtv`'s tag. This is what let `bindTy`'s occurs check
+-- become sort-aware: it binds at the TYPE sort, so it guards on the type fibre.
+/-- info: 'MinimalCalculus.Ty.mem_ftv_iff' depends on axioms: [propext] -/
+#guard_msgs in #print axioms Ty.mem_ftv_iff
+
+/-- info: 'MinimalCalculus.Ty.mem_tyFtv_iff_sortedFtv' depends on axioms: [propext] -/
+#guard_msgs in #print axioms Ty.mem_tyFtv_iff_sortedFtv
+
+-- ## SORTS OF INVENTED VARIABLES (Infer.lean)
+-- Every drawn name now carries the sort it was drawn at, and the record is only
+-- ever extended — which is what makes `A-let`'s `κ̄ = Γ(ᾱ)` premise mean that a
+-- generalized binder is quantified at the kind it was invented at.
+/-- info: 'MinimalCalculus.Infer.kinds_mono' depends on axioms: [propext] -/
+#guard_msgs in #print axioms Infer.kinds_mono
+
+-- ## PUSHING σ UNDER A SCHEME'S BINDERS (QSubst.lean)
+-- The forward half of `QCovers` for the naive `QScheme.applySubst`, under the
+-- capture-avoidance side condition `QScheme.Avoiding`. This is the content the
+-- old "wiring renameScheme in here is open" note on `QScheme.applySubst` was
+-- standing in for.
+/--
+info: 'MinimalCalculus.QCovers.forward_of_avoiding' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms QCovers.forward_of_avoiding
+
+-- …and the BACKWARD half refuted for that same witness: `applySubst σ` is not
+-- surjective, so an instance set — which is as large as its binders allow —
+-- cannot be exactly the σ-image of one. `SchemeImage` therefore cannot be
+-- discharged by pushing σ through the scheme, whatever the freshness discipline.
+/--
+info: 'MinimalCalculus.qcovers_backward_false_for_applySubst' depends on axioms: [propext, Quot.sound]
+-/
+#guard_msgs in #print axioms qcovers_backward_false_for_applySubst
+
 end MinimalCalculus

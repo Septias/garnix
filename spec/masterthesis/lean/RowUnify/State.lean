@@ -277,6 +277,57 @@ def Row.sortedFtv {B : Type} : Row B → List (Bool × TyVar)
   | .cat ρ₁ ρ₂ => Row.sortedFtv ρ₁ ++ Row.sortedFtv ρ₂
 end
 
+-- ## …and its two fibres are the guards the driver actually runs
+-- `Ty.tyFtv` / `Ty.allRowVars` (Defs.lean) are `sortedFtv` split by tag. This is
+-- what connects the closure measure here to `bindTy`'s occurs check: `bindTy`
+-- binds at the TYPE sort and guards on the `false` fibre, so a variable it lets
+-- through occurs only at `true` positions — where θ.ty does not reach it.
+mutual
+theorem Ty.mem_tyFtv_iff_sortedFtv {B : Type} {α : TyVar} :
+    (τ : Ty B) → ((false, α) ∈ Ty.sortedFtv τ ↔ α ∈ τ.tyFtv)
+  | .var _   => by simp [Ty.sortedFtv, Ty.tyFtv]
+  | .base _  => by simp [Ty.sortedFtv, Ty.tyFtv]
+  | .unk     => by simp [Ty.sortedFtv, Ty.tyFtv]
+  | .fn a b  => by
+      simp only [Ty.sortedFtv, Ty.tyFtv, List.mem_append,
+                 Ty.mem_tyFtv_iff_sortedFtv a, Ty.mem_tyFtv_iff_sortedFtv b]
+  | .rcd ρ   => by
+      simp only [Ty.sortedFtv, Ty.tyFtv, Row.mem_tyFtv_iff_sortedFtv ρ]
+
+theorem Row.mem_tyFtv_iff_sortedFtv {B : Type} {α : TyVar} :
+    (ρ : Row B) → ((false, α) ∈ Row.sortedFtv ρ ↔ α ∈ ρ.tyFtv)
+  | .empty     => by simp [Row.sortedFtv, Row.tyFtv]
+  | .var _     => by simp [Row.sortedFtv, Row.tyFtv]
+  | .sing _ τ  => by
+      simp only [Row.sortedFtv, Row.tyFtv, Ty.mem_tyFtv_iff_sortedFtv τ]
+  | .cat ρ₁ ρ₂ => by
+      simp only [Row.sortedFtv, Row.tyFtv, List.mem_append,
+                 Row.mem_tyFtv_iff_sortedFtv ρ₁, Row.mem_tyFtv_iff_sortedFtv ρ₂]
+end
+
+mutual
+theorem Ty.mem_allRowVars_iff_sortedFtv {B : Type} {α : TyVar} :
+    (τ : Ty B) → ((true, α) ∈ Ty.sortedFtv τ ↔ α ∈ τ.allRowVars)
+  | .var _   => by simp [Ty.sortedFtv, Ty.allRowVars]
+  | .base _  => by simp [Ty.sortedFtv, Ty.allRowVars]
+  | .unk     => by simp [Ty.sortedFtv, Ty.allRowVars]
+  | .fn a b  => by
+      simp only [Ty.sortedFtv, Ty.allRowVars, List.mem_append,
+                 Ty.mem_allRowVars_iff_sortedFtv a, Ty.mem_allRowVars_iff_sortedFtv b]
+  | .rcd ρ   => by
+      simp only [Ty.sortedFtv, Ty.allRowVars, Row.mem_allRowVars_iff_sortedFtv ρ]
+
+theorem Row.mem_allRowVars_iff_sortedFtv {B : Type} {α : TyVar} :
+    (ρ : Row B) → ((true, α) ∈ Row.sortedFtv ρ ↔ α ∈ ρ.allRowVars)
+  | .empty     => by simp [Row.sortedFtv, Row.allRowVars]
+  | .var _     => by simp [Row.sortedFtv, Row.allRowVars]
+  | .sing _ τ  => by
+      simp only [Row.sortedFtv, Row.allRowVars, Ty.mem_allRowVars_iff_sortedFtv τ]
+  | .cat ρ₁ ρ₂ => by
+      simp only [Row.sortedFtv, Row.allRowVars, List.mem_append,
+                 Row.mem_allRowVars_iff_sortedFtv ρ₁, Row.mem_allRowVars_iff_sortedFtv ρ₂]
+end
+
 -- What θ puts at a tagged occurrence.
 def TySubst.ftvAt {B : Type} (θ : TySubst B) : Bool × TyVar → List (Bool × TyVar)
   | (false, α) => Ty.sortedFtv  (θ.ty  α)

@@ -117,10 +117,46 @@ theorem LookupBlocked.unsolved {B : Type} {Γ : Ctx B} {ρ : Row B} {l : Label}
 -- the prose's `fresh α: κ` — that is the gap §B lists as "name supply in the
 -- inference rules".
 --
--- SORTS ARE STILL MISSING. The paper draws `fresh α: κ`; `Supply` has no kinds,
--- so the rules below draw untyped names and the sort is implied by where the
--- name is used. `A-let`'s `κ̄ = Γ(ᾱ)` is therefore not yet expressible. This is
--- the known "sorts of invented variables" gap, unchanged.
+--------------------- SORTS OF INVENTED VARIABLES ----------------------------
+-- The paper draws `fresh α: κ` and `A-let` reads `κ̄ = Γ(ᾱ)`. Neither was
+-- expressible here: `Supply` hands out bare names, and ᾱ are exactly the
+-- variables NOT in Γ — so Γ cannot be the source of their kinds, and the paper's
+-- side condition is, read literally, about an environment that does not contain
+-- them. The mechanization's answer: the kinds come from the DRAW. Every invented
+-- name is drawn AT a kind, the state records it, and `κ̄ = Γ(ᾱ)` becomes
+-- `κ̄ = S(ᾱ)` — `KEnv.Assigns`, the premise `A-let` now carries.
+--
+-- Nothing downstream is forced to agree with the record yet: that a name drawn
+-- at `.row` only ever OCCURS at row positions is `KindsSound` below, stated
+-- against `sortedFtv`'s tags and left open, as `UnifyWF` and `InferSound` are.
+
+/-- κ — the sort a variable inhabits. `Ty/Row.sortedFtv` (RowUnify/State.lean)
+already tags OCCURRENCES with a `Bool`, `true` = row; `Kind.tag` is that same
+convention, so a recorded kind and an observed occurrence are comparable. -/
+inductive Kind where
+  | ty
+  | row
+  deriving DecidableEq, Repr
+
+def Kind.tag : Kind → Bool
+  | .ty  => false
+  | .row => true
+
+/-- κ̄ — what each invented name was drawn at. Newest first; `draw` only ever
+CONSES, which is what `Infer.kinds_mono` says. -/
+abbrev KEnv := List (TyVar × Kind)
+
+def KEnv.lookup (K : KEnv) (α : TyVar) : Option Kind :=
+  (K.find? (·.1 == α)).map Prod.snd
+
+/-- the domain: the names the state has committed to a kind. -/
+def KEnv.dom (K : KEnv) : List TyVar := K.map Prod.fst
+
+/-- `κ̄ = K(ᾱ)` — the side condition `A-let` could not write. Every binder has a
+recorded kind, and κ̄ lists them in the binders' own order. -/
+def KEnv.Assigns (K : KEnv) (vs : List TyVar) (ks : List Kind) : Prop :=
+  vs.map K.lookup = ks.map some
+
 
 /-- A parked selection `⟨α ▷ ρ.l ↓ δ⟩`: `Stump` carries `ρ.l ↓ δ`, and the
 blocker `α` is what wake-up watches. -/
@@ -133,6 +169,7 @@ structure SolverState (B : Type) where
   parked : List (Parked B)  -- Δ
   flags  : List Label       -- W — diagnostics only, never read by typing
   supply : Supply
+  kinds  : KEnv := []       -- κ̄ — the sort each drawn name was drawn at
 
 namespace SolverState
 
@@ -144,9 +181,14 @@ closure keeps these rules independent of `UnifyWF`, which is still open; on a
 well-formed state the two agree (`Sol.closes_of_wf`). -/
 def subst {B : Type} (S : SolverState B) : TySubst B := S.sol.toSubst
 
-/-- draw one fresh name and advance -/
-def draw {B : Type} (S : SolverState B) : TyVar × SolverState B :=
-  (S.supply.fresh.1, { S with supply := S.supply.fresh.2 })
+/-- draw one fresh name AT A KIND, record the kind, and advance. The κ argument
+is what makes `fresh α: κ` writable; at every call site below it is forced by
+the position the name is about to be used at, which is exactly the information
+that used to be left implicit. -/
+def draw {B : Type} (S : SolverState B) (κ : Kind) : TyVar × SolverState B :=
+  (S.supply.fresh.1,
+   { S with supply := S.supply.fresh.2,
+            kinds  := (S.supply.fresh.1, κ) :: S.kinds })
 
 /-- refine θ with a newly found solution -/
 def extend {B : Type} (S : SolverState B) (s : Sol B) (S' : Supply) : SolverState B :=
@@ -280,14 +322,17 @@ def IsRenaming {B : Type} (θ : TySubst B) (vs : List TyVar) (f : TyVar → TyVa
   θ.FixedOutside vs ∧ ∀ α ∈ vs, θ.ty α = .var (f α) ∧ θ.row α = .var (f α)
 
 /-- the freshness the rules need of an instantiation: injective on the binders,
-and landing on names the state has not already committed to. Γ-freshness is NOT
-yet expressible — it needs an ftv of a `QCtx`, and the SORT of each drawn name
-is still implicit (the paper's `κ̄ = Γ(ᾱ)`). Both are recorded gaps. -/
+landing on names the state has not already committed to, AND on names Γ does not
+mention. The last clause is Γ-freshness, which used to be unstateable for want of
+an ftv of a `QCtx`; `QCtx.ftv` (Qualified.lean) supplies it. The other half of
+that gap — the SORT of each drawn name, the paper's `κ̄ = Γ(ᾱ)` — is now carried
+by `KEnv`/`KEnv.Assigns` and read off the draw. -/
 def FreshRenaming {B : Type} (f : TyVar → TyVar) (vs : List TyVar)
-    (S : SolverState B) : Prop :=
+    (Γ : QCtx B) (S : SolverState B) : Prop :=
   (∀ α ∈ vs, ∀ β ∈ vs, f α = f β → α = β) ∧
   (∀ α ∈ vs, f α ∉ S.sol.dom) ∧
-  (∀ α ∈ vs, ∀ p ∈ S.parked, f α ≠ p.stump.res)
+  (∀ α ∈ vs, ∀ p ∈ S.parked, f α ≠ p.stump.res) ∧
+  (∀ α ∈ vs, f α ∉ Γ.ftv)
 
 /-- the parked images of a scheme's constraints under an instantiation. The
 BLOCKERS are left free: `Wakes` determines each one, either by resolving the
@@ -316,35 +361,35 @@ inductive Infer {B C : Type} [DecidableEq B] (constTy : C → B) :
   | var {Γ : QCtx B} {S S' : SolverState B} {x : Var} {σ : QScheme B}
       {θ : TySubst B} {f : TyVar → TyVar} {ps : List (Parked B)} :
       Γ.lookup x = some σ →
-      IsRenaming θ σ.vars f → FreshRenaming f σ.vars S →
+      IsRenaming θ σ.vars f → FreshRenaming f σ.vars Γ S →
       InstStumps θ f σ.constraints ps →
       Wakes S ps S' →
       Infer constTy Γ S (.var x) (σ.body.applySubst θ) S'
   -- A-lam
   | lam {Γ : QCtx B} {S S' : SolverState B} {x : Var} {e : Expr C} {τ : Ty B}
       {α : TyVar} {S₀ : SolverState B} :
-      (α, S₀) = S.draw →
+      (α, S₀) = S.draw .ty →
       Infer constTy (Γ.bindTy x (.var α)) S₀ e τ S' →
       Infer constTy Γ S (.lam x e) (.fn (.var α) τ) S'
   -- A-app
   | app {Γ : QCtx B} {S S₁ S₂ S₃ : SolverState B} {e₁ e₂ : Expr C}
       {τ₁ τ₂ : Ty B} {β : TyVar} {S₂' : SolverState B} :
       Infer constTy Γ S e₁ τ₁ S₁ → Infer constTy Γ S₁ e₂ τ₂ S₂ →
-      (β, S₂') = S₂.draw →
+      (β, S₂') = S₂.draw .ty →
       SolveTy S₂' τ₁ (.fn τ₂ (.var β)) S₃ →
       Infer constTy Γ S (.app e₁ e₂) (.var β) S₃
   -- A-app-degrade: the arrow equation is stuck or occurs, so the result blurs
   | appDeg {Γ : QCtx B} {S S₁ S₂ : SolverState B} {e₁ e₂ : Expr C}
       {τ₁ τ₂ : Ty B} {β : TyVar} {S₂' : SolverState B} :
       Infer constTy Γ S e₁ τ₁ S₁ → Infer constTy Γ S₁ e₂ τ₂ S₂ →
-      (β, S₂') = S₂.draw →
+      (β, S₂') = S₂.draw .ty →
       SolveTyDegrades S₂' τ₁ (.fn τ₂ (.var β)) →
       Infer constTy Γ S (.app e₁ e₂) .unk (S₂'.flag "·app")
   -- A-conc
   | conc {Γ : QCtx B} {S S₁ S₂ S₃ S₄ : SolverState B} {e₁ e₂ : Expr C}
       {τ₁ τ₂ : Ty B} {r₁ r₂ : TyVar} {Sa Sb : SolverState B} :
       Infer constTy Γ S e₁ τ₁ S₁ → Infer constTy Γ S₁ e₂ τ₂ S₂ →
-      (r₁, Sa) = S₂.draw → (r₂, Sb) = Sa.draw →
+      (r₁, Sa) = S₂.draw .row → (r₂, Sb) = Sa.draw .row →
       SolveTy Sb τ₁ (.rcd (.var r₁)) S₃ →
       SolveTy S₃ τ₂ (.rcd (.var r₂)) S₄ →
       Infer constTy Γ S (.cat e₁ e₂) (.rcd (.cat (.var r₂) (.var r₁))) S₄
@@ -352,7 +397,7 @@ inductive Infer {B C : Type} [DecidableEq B] (constTy : C → B) :
   | sel {Γ : QCtx B} {S S₁ S₂ : SolverState B} {e : Expr C} {τ τ' : Ty B}
       {l : Label} {r : TyVar} {S₁' : SolverState B} :
       Infer constTy Γ S e τ S₁ →
-      (r, S₁') = S₁.draw →
+      (r, S₁') = S₁.draw .row →
       SolveTy S₁' τ (.rcd (.var r)) S₂ →
       Lookup S₂.ctx (.var r) l (.found τ') →
       Infer constTy Γ S (.sel e l) τ' S₂
@@ -360,7 +405,7 @@ inductive Infer {B C : Type} [DecidableEq B] (constTy : C → B) :
   | selAbs {Γ : QCtx B} {S S₁ S₂ : SolverState B} {e : Expr C} {τ : Ty B}
       {l : Label} {r : TyVar} {S₁' : SolverState B} :
       Infer constTy Γ S e τ S₁ →
-      (r, S₁') = S₁.draw →
+      (r, S₁') = S₁.draw .row →
       SolveTy S₁' τ (.rcd (.var r)) S₂ →
       Lookup S₂.ctx (.var r) l .absent →
       Infer constTy Γ S (.sel e l) .unk (S₂.flag l)
@@ -369,17 +414,17 @@ inductive Infer {B C : Type} [DecidableEq B] (constTy : C → B) :
   | selUnk {Γ : QCtx B} {S S₁ S₂ : SolverState B} {e : Expr C} {τ : Ty B}
       {l : Label} {r α δ : TyVar} {S₁' S₂' : SolverState B} :
       Infer constTy Γ S e τ S₁ →
-      (r, S₁') = S₁.draw →
+      (r, S₁') = S₁.draw .row →
       SolveTy S₁' τ (.rcd (.var r)) S₂ →
       LookupBlocked S₂.ctx (.var r) l α →
-      (δ, S₂') = S₂.draw →
+      (δ, S₂') = S₂.draw .ty →
       Infer constTy Γ S (.sel e l) (.var δ)
         (S₂'.park ⟨α, ⟨.var r, l, δ⟩⟩)
   -- A-sel-degrade: the record equation itself gave up
   | selDeg {Γ : QCtx B} {S S₁ : SolverState B} {e : Expr C} {τ : Ty B}
       {l : Label} {r : TyVar} {S₁' : SolverState B} :
       Infer constTy Γ S e τ S₁ →
-      (r, S₁') = S₁.draw →
+      (r, S₁') = S₁.draw .row →
       SolveTyDegrades S₁' τ (.rcd (.var r)) →
       Infer constTy Γ S (.sel e l) .unk (S₁'.flag l)
   -- A-rec
@@ -390,8 +435,12 @@ inductive Infer {B C : Type} [DecidableEq B] (constTy : C → B) :
   -- to REQUIRE the split's defining equations, which is precisely what a
   -- relation buys over a function here.
   | letE {Γ : QCtx B} {S S₁ S₂ : SolverState B} {x : Var} {e₁ e₂ : Expr C}
-      {τ₁ τ₂ : Ty B} {Δq Δγ : List (Parked B)} {ᾱ : List TyVar} :
+      {τ₁ τ₂ : Ty B} {Δq Δγ : List (Parked B)} {ᾱ : List TyVar} {κs : List Kind} :
       Infer constTy Γ S e₁ τ₁ S₁ →
+      -- κ̄ = Γ(ᾱ), read off the DRAW rather than off Γ (ᾱ is disjoint from Γ,
+      -- which is why the paper's form was never writable here). Forces every
+      -- generalized binder to be one inference actually invented, at a known sort.
+      S₁.kinds.Assigns ᾱ κs →
       -- Δ₁ = Δ_Γ ⊎ Δ_q
       S₁.parked = Δq ++ Δγ →
       -- Δ_q are exactly the stumps whose blocker lands in ᾱ, Δ_Γ the rest
@@ -438,16 +487,24 @@ end
 
 private def idSubst : TySubst Unit := ⟨fun x => .var x, fun x => .var x⟩
 
+-- The kinds the run records, newest first: δ at the type sort, the record's row
+-- variable at the row sort, the λ-binder at the type sort. This is `fresh α: κ`
+-- made concrete — the sorts that used to be readable only off the use sites.
+private def selExKinds : KEnv :=
+  [(natName 3, .ty), (natName 2, .row), (natName 1, .ty)]
+
 theorem selEx_infers :
     Infer (B := Unit) (C := Unit) (fun _ => ()) ⟨[], []⟩
-      ⟨Sol.nil, [], [], ⟨1⟩⟩ (selEx Unit)
+      ⟨Sol.nil, [], [], ⟨1⟩, []⟩ (selEx Unit)
       (.fn (.var (natName 1)) (.var (natName 3)))
       ⟨⟨[(natName 1, .rcd (.var (natName 2)))], []⟩,
-       [⟨natName 2, ⟨.var (natName 2), "l", natName 3⟩⟩], [], ⟨4⟩⟩ := by
-  refine Infer.lam (S₀ := ⟨Sol.nil, [], [], ⟨2⟩⟩) rfl ?_
+       [⟨natName 2, ⟨.var (natName 2), "l", natName 3⟩⟩], [], ⟨4⟩, selExKinds⟩ := by
+  refine Infer.lam (S₀ := ⟨Sol.nil, [], [], ⟨2⟩, [(natName 1, .ty)]⟩) rfl ?_
   refine Infer.selUnk (τ := .var (natName 1))
-    (S₁ := ⟨Sol.nil, [], [], ⟨2⟩⟩) (S₁' := ⟨Sol.nil, [], [], ⟨3⟩⟩)
-    (S₂ := ⟨⟨[(natName 1, .rcd (.var (natName 2)))], []⟩, [], [], ⟨3⟩⟩)
+    (S₁ := ⟨Sol.nil, [], [], ⟨2⟩, [(natName 1, .ty)]⟩)
+    (S₁' := ⟨Sol.nil, [], [], ⟨3⟩, [(natName 2, .row), (natName 1, .ty)]⟩)
+    (S₂ := ⟨⟨[(natName 1, .rcd (.var (natName 2)))], []⟩, [], [], ⟨3⟩,
+            [(natName 2, .row), (natName 1, .ty)]⟩)
     (r := natName 2) (α := natName 2) (δ := natName 3)
     ?_ rfl ?_ ?_ rfl
   · exact Infer.var (σ := ⟨[], [], .var (natName 1)⟩) (θ := idSubst) (f := id) (ps := []) rfl
@@ -463,15 +520,9 @@ theorem selEx_infers :
 -- under the final state — θ pushed through the type environment, and θ's row
 -- component installed as the row environment discharge will consult.
 
-/-- NOTE: this substitutes under the binders `σ.vars` without renaming them.
-That is capture-AVOIDING only when the instantiation discipline keeps `θ` away
-from a scheme's own binders, which `FreshRenaming` arranges at `A-var` but which
-is not yet proved as an invariant. `renameScheme` (minimal.lean) is the
-capture-avoiding version L1 uses; wiring it in here is open. -/
-def QScheme.applySubst {B : Type} (σ : QScheme B) (θ : TySubst B) : QScheme B :=
-  ⟨σ.vars,
-   σ.constraints.map (fun st => (⟨st.row.applySubst θ, st.label, st.res⟩ : Stump B)),
-   σ.body.applySubst θ⟩
+-- `QScheme.applySubst` moved to Qualified.lean, where its capture-avoidance
+-- side condition (`QScheme.Avoiding`) and what that condition buys
+-- (`QCovers.forward_of_avoiding`, QSubst.lean) are stated and proved.
 
 /-- `⟦S⟧Γ` — Γ under the state's substitution, with the state's row-solutions
 installed as the row environment that `Lookup` and discharge consult. -/
@@ -516,8 +567,8 @@ def InferSound (B C : Type) [DecidableEq B] (constTy : C → B) : Prop :=
 -- supply from a sub-derivation and then draws from it must not re-issue a name
 -- an earlier step already used.
 
-theorem SolverState.draw_supply {B : Type} (S : SolverState B) :
-    S.draw.2.supply.next = S.supply.next + 1 := rfl
+theorem SolverState.draw_supply {B : Type} (S : SolverState B) (κ : Kind) :
+    (S.draw κ).2.supply.next = S.supply.next + 1 := rfl
 
 theorem SolveTy.supply {B : Type} [DecidableEq B] {S S' : SolverState B}
     {τ τ' : Ty B} (h : SolveTy S τ τ' S') : S.supply.next ≤ S'.supply.next := by
@@ -545,10 +596,133 @@ theorem Finalize.supply {B : Type} [DecidableEq B] {S S' : SolverState B}
     {p : Parked B} : Finalize S p S' → S.supply.next ≤ S'.supply.next
   | .star hs => hs.supply
 
+--------------------- THE KIND RECORD ONLY GROWS -----------------------------
+-- The `κ̄` counterpart of the supply invariant above. Only `draw` writes to
+-- `kinds`, and it CONSES, so every solver step leaves the record a suffix of
+-- what it becomes: nothing already recorded is dropped or rewritten. This is
+-- what makes `A-let`'s `KEnv.Assigns ᾱ κ̄` mean what it should — the kind a
+-- binder is generalized at is the kind it was DRAWN at, not one a later step
+-- could have overwritten.
+
+theorem SolverState.draw_kinds {B : Type} (S : SolverState B) (κ : Kind) :
+    (S.draw κ).2.kinds = ((S.draw κ).1, κ) :: S.kinds := rfl
+
+-- Solving, waking and finalizing never invent a name, so they never touch κ̄.
+theorem SolveTy.kinds {B : Type} [DecidableEq B] {S S' : SolverState B}
+    {τ τ' : Ty B} (h : SolveTy S τ τ' S') : S'.kinds = S.kinds := by
+  obtain ⟨fuel, s, Sup, hu, rfl⟩ := h; rfl
+
+theorem SolveRow.kinds {B : Type} [DecidableEq B] {S S' : SolverState B}
+    {ρ ρ' : Row B} (h : SolveRow S ρ ρ' S') : S'.kinds = S.kinds := by
+  obtain ⟨fuel, s, Sup, hu, rfl⟩ := h; rfl
+
+theorem Wake.kinds {B : Type} [DecidableEq B] {S S' : SolverState B}
+    {p : Parked B} : Wake S p S' → S'.kinds = S.kinds
+  | .hit _ hs    => hs.kinds
+  | .abs _ hs    => hs.kinds
+  | .repark _    => rfl
+
+theorem Wakes.kinds {B : Type} [DecidableEq B] {S S' : SolverState B}
+    {ps : List (Parked B)} : Wakes S ps S' → S'.kinds = S.kinds
+  | .nil         => rfl
+  | .cons hw hws => (hws.kinds).trans hw.kinds
+  | .park _ hws  => hws.kinds
+
+theorem Finalize.kinds {B : Type} [DecidableEq B] {S S' : SolverState B}
+    {p : Parked B} : Finalize S p S' → S'.kinds = S.kinds
+  | .star hs => hs.kinds
+
+-- from `(α, S₀) = S.draw κ`, recover the extended record
+private theorem draw_kind_eq {B : Type} {S S₀ : SolverState B} {α : TyVar}
+    {κ : Kind} (h : (α, S₀) = S.draw κ) : S₀.kinds = (α, κ) :: S.kinds := by
+  have h1 : α = (S.draw κ).1 := congrArg Prod.fst h
+  have h2 : S₀ = (S.draw κ).2 := congrArg Prod.snd h
+  rw [h2, h1]; rfl
+
+mutual
+
+/-- ⊢  inference never drops or rewrites a recorded kind. -/
+theorem Infer.kinds_mono {B C : Type} [DecidableEq B] {constTy : C → B}
+    {Γ : QCtx B} {S S' : SolverState B} {e : Expr C} {τ : Ty B} :
+    Infer constTy Γ S e τ S' → S.kinds <:+ S'.kinds
+  | .con => List.suffix_refl _
+  | .var _ _ _ _ hw => hw.kinds ▸ List.suffix_refl _
+  | .lam hd hb => by
+      refine List.IsSuffix.trans ?_ (Infer.kinds_mono hb)
+      rw [draw_kind_eq hd]; exact List.suffix_cons _ _
+  | .app h₁ h₂ hd hs => by
+      refine List.IsSuffix.trans (Infer.kinds_mono h₁) ?_
+      refine List.IsSuffix.trans (Infer.kinds_mono h₂) ?_
+      rw [hs.kinds, draw_kind_eq hd]; exact List.suffix_cons _ _
+  | .appDeg h₁ h₂ hd _ => by
+      refine List.IsSuffix.trans (Infer.kinds_mono h₁) ?_
+      refine List.IsSuffix.trans (Infer.kinds_mono h₂) ?_
+      show _ <:+ (SolverState.flag _ _).kinds
+      simp only [SolverState.flag]
+      rw [draw_kind_eq hd]; exact List.suffix_cons _ _
+  | .conc h₁ h₂ hd₁ hd₂ hs₁ hs₂ => by
+      refine List.IsSuffix.trans (Infer.kinds_mono h₁) ?_
+      refine List.IsSuffix.trans (Infer.kinds_mono h₂) ?_
+      rw [hs₂.kinds, hs₁.kinds, draw_kind_eq hd₂, draw_kind_eq hd₁]
+      exact List.IsSuffix.trans (List.suffix_cons _ _) (List.suffix_cons _ _)
+  | .sel h₁ hd hs _ => by
+      refine List.IsSuffix.trans (Infer.kinds_mono h₁) ?_
+      rw [hs.kinds, draw_kind_eq hd]; exact List.suffix_cons _ _
+  | .selAbs h₁ hd hs _ => by
+      refine List.IsSuffix.trans (Infer.kinds_mono h₁) ?_
+      show _ <:+ (SolverState.flag _ _).kinds
+      simp only [SolverState.flag]
+      rw [hs.kinds, draw_kind_eq hd]; exact List.suffix_cons _ _
+  | .selUnk h₁ hd hs _ hd₂ => by
+      refine List.IsSuffix.trans (Infer.kinds_mono h₁) ?_
+      show _ <:+ (SolverState.park _ _).kinds
+      simp only [SolverState.park]
+      rw [draw_kind_eq hd₂, hs.kinds, draw_kind_eq hd]
+      exact List.IsSuffix.trans (List.suffix_cons _ _) (List.suffix_cons _ _)
+  | .selDeg h₁ hd _ => by
+      refine List.IsSuffix.trans (Infer.kinds_mono h₁) ?_
+      show _ <:+ (SolverState.flag _ _).kinds
+      simp only [SolverState.flag]
+      rw [draw_kind_eq hd]; exact List.suffix_cons _ _
+  | .rcd hb => InferRec.kinds_mono hb
+  | .letE h₁ _ _ _ _ h₂ => by
+      have i₁ := Infer.kinds_mono h₁
+      have i₂ := Infer.kinds_mono h₂
+      exact List.IsSuffix.trans i₁ i₂
+
+theorem InferRec.kinds_mono {B C : Type} [DecidableEq B] {constTy : C → B}
+    {Γ : QCtx B} {S S' : SolverState B} {ξ : RecBody (Expr C)} {ρ : Row B} :
+    InferRec constTy Γ S ξ ρ S' → S.kinds <:+ S'.kinds
+  | .empty      => List.suffix_refl _
+  | .field h    => Infer.kinds_mono h
+  | .cat h₁ h₂  => by
+      have i₁ := InferRec.kinds_mono h₁
+      have i₂ := InferRec.kinds_mono h₂
+      exact List.IsSuffix.trans i₁ i₂
+
+end
+
+--------------------- WHAT THE RECORD DOES NOT YET BUY ------------------------
+/-- **Kind soundness** — a name drawn at κ only ever OCCURS at κ-tagged
+positions, read against `Ty/Row.sortedFtv`'s tags (`Kind.tag`). This is the
+statement that would turn `kinds` from a bookkeeping record into a typing
+discipline, and it is the sorted counterpart of the `NoCapture` leak: `a ≐ᵣ (l:a)`
+is legal precisely because the row-sort `a` and the type-sort `a` are different
+variables, and this says inference never confuses the two.
+
+Named, not proved — like `UnifyWF` and `InferSound`, so the target has a name.
+It needs the Γ-freshness invariant (`FreshRenaming`, still not an invariant) to
+rule out a drawn name colliding with one already live at the other sort. -/
+def KindsSound (B C : Type) [DecidableEq B] (constTy : C → B) : Prop :=
+  ∀ (Γ : QCtx B) (S S' : SolverState B) (e : Expr C) (τ : Ty B),
+    Infer constTy Γ S e τ S' →
+    ∀ α κ, S'.kinds.lookup α = some κ →
+      ∀ t, (t, α) ∈ Ty.sortedFtv (τ.applySubst S'.subst) → t = κ.tag
+
 -- from `(α, S₀) = S.draw`, recover the advanced supply
-private theorem draw_eq {B : Type} {S S₀ : SolverState B} {α : TyVar}
-    (h : (α, S₀) = S.draw) : S₀.supply.next = S.supply.next + 1 := by
-  have h2 : S₀ = S.draw.2 := congrArg Prod.snd h
+private theorem draw_eq {B : Type} {S S₀ : SolverState B} {α : TyVar} {κ : Kind}
+    (h : (α, S₀) = S.draw κ) : S₀.supply.next = S.supply.next + 1 := by
+  have h2 : S₀ = (S.draw κ).2 := congrArg Prod.snd h
   rw [h2]; rfl
 
 mutual
@@ -611,7 +785,7 @@ theorem Infer.supply_mono {B C : Type} [DecidableEq B] {constTy : C → B}
       simp only [SolverState.flag]
       omega
   | .rcd hb => InferRec.supply_mono hb
-  | .letE h₁ _ _ _ h₂ => by
+  | .letE h₁ _ _ _ _ h₂ => by
       have i₁ := Infer.supply_mono h₁
       have i₂ := Infer.supply_mono h₂
       exact Nat.le_trans i₁ i₂
@@ -672,9 +846,9 @@ theorem Wakes.satMono {B : Type} [DecidableEq B] {S S' : SolverState B}
   | .cons hw hws => hw.satMono.trans hws.satMono
   | .park _ hws  => hws.satMono
 
-private theorem draw_sol {B : Type} {S S₀ : SolverState B} {α : TyVar}
-    (h : (α, S₀) = S.draw) : S₀.sol = S.sol := by
-  have h2 : S₀ = S.draw.2 := congrArg Prod.snd h
+private theorem draw_sol {B : Type} {S S₀ : SolverState B} {α : TyVar} {κ : Kind}
+    (h : (α, S₀) = S.draw κ) : S₀.sol = S.sol := by
+  have h2 : S₀ = (S.draw κ).2 := congrArg Prod.snd h
   rw [h2]; rfl
 
 mutual
@@ -717,7 +891,7 @@ theorem Infer.sat_mono {B C : Type} [DecidableEq B] {constTy : C → B}
         ((SolverState.SatMono.of_sol_eq (draw_sol hd)).trans
           (SolverState.SatMono.of_sol_eq rfl))
   | .rcd hb => InferRec.sat_mono hb
-  | .letE h₁ _ _ _ h₂ => by
+  | .letE h₁ _ _ _ _ h₂ => by
       refine (Infer.sat_mono h₁).trans ?_
       intro σ hσ
       exact Infer.sat_mono h₂ σ hσ

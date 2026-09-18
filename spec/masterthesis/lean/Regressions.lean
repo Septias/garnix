@@ -232,12 +232,33 @@ theorem tyM_fn_solve_and_apply :
 theorem tyM_unk_refl : unifyTyM (B := Unit) 5 .unk .unk = .success ⟨[], []⟩ ⟨1⟩ := rfl
 theorem tyM_unk_rigid : unifyTyM (B := Unit) 5 .unk uB = .clash := rfl
 
--- The occurs guard spans BOTH sorts: x ≐ {x} is rejected even though the inner
--- x is a ROW variable and θ.ty x = {ε}, θ.row x = ε solves it. Deliberate
--- conservatism, the same price occurs_allVar_hasMgu records for rows.
--- ⊢  x ≐ {x}  =  occurs
-theorem tyM_occurs_cross_sort :
-    unifyTyM (B := Unit) 5 (.var "x") (.rcd (.var "x")) = .occurs := rfl
+-- The type occurs guard is SORTED. `x ≐ {x}` binds x at the TYPE sort while the
+-- inner x occurs at the ROW sort: two different variables sharing one untagged
+-- namespace. The sort-blind `ftv` used to reject this as a cycle; `Ty.tyFtv`
+-- does not, and the two witnesses below show the old `.occurs` was a FALSE
+-- verdict, not conservatism with a reason.
+-- ⊢  x ≐ {x}  =  success (x ≔ {x})
+theorem tyM_cross_sort_solves :
+    unifyTyM (B := Unit) 5 (.var "x") (.rcd (.var "x")) =
+      .success ⟨[("x", .rcd (.var "x"))], []⟩ ⟨2⟩ := rfl
+
+-- θ.ty x = {ε}, θ.row x = ε — the unifier the old comment named and the guard
+-- denied. It unifies the problem…
+private def crossSortSub : TySubst Unit :=
+  ⟨fun _ => .rcd .empty, fun _ => .empty⟩
+
+theorem tyM_cross_sort_unifier :
+    TyUnifies crossSortSub (.var "x") (.rcd (.var "x")) := TyEquiv.refl _
+
+-- …and it MEETS the emitted solution, so success was the right verdict.
+theorem tyM_cross_sort_sat :
+    Sol.Sat crossSortSub ⟨[("x", .rcd (.var "x"))], []⟩ := by
+  refine ⟨fun p hp => ?_, fun _ hp => nomatch hp⟩
+  obtain rfl := List.mem_singleton.mp hp
+  exact TyEquiv.refl _
+
+-- The ROW occurs guard keeps its own conservatism — that is a different
+-- question (occurs_allVar_hasMgu), untouched by sorting the TYPE guard.
 
 -- ⊢  fuel exhaustion is its OWN verdict, never mistaken for stuck
 theorem outOfFuel_is_separate :
