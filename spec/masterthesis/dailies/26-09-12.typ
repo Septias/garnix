@@ -34,5 +34,4 @@ Dafür hat sich eine neue Lücke aufgetan: Inference ist noch gar nicht bewiesen
 - What is the covering order?
   - It describes relations between type-schemes
   - Needed to state Principality
-- Warum muss der Context acyclic sein?
 
