@@ -631,16 +631,120 @@ info: 'MinimalCalculus.Wakes.dischargeEquiv' depends on axioms: [propext, Classi
 /-- info: 'MinimalCalculus.infer_sound_var_step' does not depend on any axioms -/
 #guard_msgs in #print axioms infer_sound_var_step
 
--- ## F-★ IS DEFECTIVE  (InferSound.lean)
--- A REFUTATION, in the sense Refutations.lean uses the word: `Finalize.star`
--- has no premise about the lookup, so it can commit a stump to ★ where the
--- lookup lands — and then nothing discharges it, not even up to ≈. The witness
--- is a stump on the literal row (l: 𝓫). Guarded so the defect cannot be
--- silently "fixed" by a change that makes the statement vacuous.
+-- ## WHY F-★ CARRIES ITS PREMISE  (InferSound.lean)
+-- A REFUTATION, in the sense Refutations.lean uses the word: F-★ USED TO HAVE no
+-- premise about the lookup, so it could commit a stump to ★ where the lookup
+-- lands — and then nothing discharges it, not even up to ≈. The witness is a
+-- stump on the literal row (l: 𝓫). It is stated about `FinalizeUnguarded`, which
+-- IS the old rule kept for the purpose: a fixed rule makes its own
+-- counterexample unstateable, so the counterexample has to name what it refutes.
 /--
 info: 'MinimalCalculus.finalize_star_no_discharge' depends on axioms: [propext]
 -/
 #guard_msgs in #print axioms finalize_star_no_discharge
+
+-- …and the positive half: at that same state the SHIPPED rule has no derivation,
+-- because a `sing` row is never blocked. So the premise is what rules the
+-- configuration out, and the inclusion `Finalize ⊆ FinalizeUnguarded` is proper.
+/--
+info: 'MinimalCalculus.finalize_star_guarded_cannot_fire' depends on axioms: [propext]
+-/
+#guard_msgs in #print axioms finalize_star_guarded_cannot_fire
+
+/-- info: 'MinimalCalculus.Finalize.toUnguarded' depends on axioms: [propext] -/
+#guard_msgs in #print axioms Finalize.toUnguarded
+
+-- ## FINALIZATION, GUARDED  (Infer.lean)
+-- The premise costs nothing where it is used: every state a run produces is
+-- quiescent, and quiescence IS this premise for every parked stump.
+/-- info: 'MinimalCalculus.Finalize.of_quiescent' depends on axioms: [propext] -/
+#guard_msgs in #print axioms Finalize.of_quiescent
+
+-- …and it is what repairs the determinism claim: wherever F-★ applies, the only
+-- wake-up step available on that stump is a K-repark, which commits nothing.
+/-- info: 'MinimalCalculus.Finalize.wake_no_commit' depends on axioms: [propext] -/
+#guard_msgs in #print axioms Finalize.wake_no_commit
+
+/--
+info: 'MinimalCalculus.SolverState.Quiescent.wake_no_commit' depends on axioms: [propext]
+-/
+#guard_msgs in #print axioms SolverState.Quiescent.wake_no_commit
+
+-- ## THE TOP-LEVEL ENTRY JUDGEMENT  (Infer.lean)
+-- §B's last ✘ row, now a definition — and not an empty one. `λx. x.l` runs to
+-- `{β} → ★` with `l` flagged, F-★ supplying the ★: the L1-finalized type, reached
+-- by the algorithm. `fStarEx_runs` is the complementary shape, where saturation
+-- has already discharged the stump and finalization has nothing to do.
+/-- info: 'MinimalCalculus.selEx_runs' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in #print axioms selEx_runs
+
+/-- info: 'MinimalCalculus.selEx_runs_star' does not depend on any axioms -/
+#guard_msgs in #print axioms selEx_runs_star
+
+-- ## THE STATE INVARIANT  (Infer.lean)
+-- `SolverState.Quiescent` — every parked stump is genuinely blocked on the
+-- blocker it records — is the invariant `plans/inference-gap-analysis.md` §B
+-- lists as absent. It is now MAINTAINED: the A-rules take `SolveTySat` /
+-- `WakesSat` (solve, then wake what the solution staled) in place of bare
+-- `SolveTy` / `Wakes`, and every reachable state satisfies it. Before that
+-- change this theorem was false, and `fStarEx_stale_blocker` below is the
+-- counterexample.
+/-- info: 'MinimalCalculus.Infer.quiescent' depends on axioms: [propext] -/
+#guard_msgs in #print axioms Infer.quiescent
+
+/-- info: 'MinimalCalculus.Infer.quiescent_of_nil' depends on axioms: [propext] -/
+#guard_msgs in #print axioms Infer.quiescent_of_nil
+
+-- what the invariant is FOR: in a quiescent state no parked blocker is solved,
+-- so a stump's annotation is a fact about the state rather than a leftover.
+/--
+info: 'MinimalCalculus.SolverState.Quiescent.blocker_unsolved' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms SolverState.Quiescent.blocker_unsolved
+
+-- …AND THE CONFIGURATION WAS REACHABLE. The hand-built witness above leaves one
+-- objection open: A-sel-? parks `.var r`, never a literal row, so at the moment
+-- of parking the lookup IS blocked. These say it does not stay blocked. On the
+-- closed program `(λx. {a = x.l}) {l = c}` the run itself solves the stump's
+-- blocker — A-app's arrow equation writes `r ≔ (l: 𝓫)`, and `Infer.var` is the
+-- only rule that runs wake-up — so the final state carries a stump whose lookup
+-- LANDS. Guarding the whole chain: the run, the stale blocker, the
+-- K-hit/F-★ disagreement (determinism refuted), the non-discharge at that state,
+-- and the type the program loses.
+/-- info: 'MinimalCalculus.fStarEx_infers' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in #print axioms fStarEx_infers
+
+/-- info: 'MinimalCalculus.fStarEx_stale_blocker' does not depend on any axioms -/
+#guard_msgs in #print axioms fStarEx_stale_blocker
+
+/-- info: 'MinimalCalculus.fStarEx_not_quiescent' depends on axioms: [propext] -/
+#guard_msgs in #print axioms fStarEx_not_quiescent
+
+-- and the regression that says saturation FIXED it: the same closed program now
+-- runs to an empty Δ with the refinement intact, `{a: 𝓫}` — the declarative
+-- answer, not the `{a: ★}` the stale state finalized to.
+/-- info: 'MinimalCalculus.fStarEx_recovers' does not depend on any axioms -/
+#guard_msgs in #print axioms fStarEx_recovers
+
+/-- info: 'MinimalCalculus.fStarEx_runs' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in #print axioms fStarEx_runs
+
+-- both halves of the fix at one state: the unguarded rule fires, the shipped one
+-- cannot. Saturation removes the state from any run; the premise removes it from
+-- the rule. Neither alone does both.
+/-- info: 'MinimalCalculus.fStar_guarded_cannot_fire' depends on axioms: [propext] -/
+#guard_msgs in #print axioms fStar_guarded_cannot_fire
+
+/-- info: 'MinimalCalculus.fStar_wake_star_disagree' depends on axioms: [propext] -/
+#guard_msgs in #print axioms fStar_wake_star_disagree
+
+/--
+info: 'MinimalCalculus.fStar_reachable_no_discharge' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms fStar_reachable_no_discharge
+
+/-- info: 'MinimalCalculus.fStarEx_refinement_lost' depends on axioms: [propext] -/
+#guard_msgs in #print axioms fStarEx_refinement_lost
 
 -- `? on α`: the blocker of an unknown lookup, which A-sel-? and K-repark both
 -- need and `Lookup` does not record. Sound, complete and deterministic.
@@ -685,5 +789,52 @@ info: 'MinimalCalculus.QCovers.forward_of_avoiding' depends on axioms: [propext,
 info: 'MinimalCalculus.qcovers_backward_false_for_applySubst' depends on axioms: [propext, Quot.sound]
 -/
 #guard_msgs in #print axioms qcovers_backward_false_for_applySubst
+
+-- ## WHAT A PARKED STUMP MEANS  (InferSound.lean)
+-- `QTypedC` — typing under stump ASSUMPTIONS — is the answer to the question
+-- proof-state.md called a design question rather than a proof-effort one: an inner
+-- A-sel-? types its selection at a variable, and the variable has no declarative
+-- reading until the promise is redeemed. As a hypothesis of the judgement it needs
+-- none: `inferC_sound_selUnk_step` is the case with NO discharge, where
+-- `infer_sound_selUnk_step` needs one.
+/-- info: 'MinimalCalculus.QTyped.toC' does not depend on any axioms -/
+#guard_msgs in #print axioms QTyped.toC
+
+-- …and with no assumptions the two judgements coincide, so nothing was smuggled
+-- in: `stump` is the only new rule and an empty Δ makes it unusable.
+/-- info: 'MinimalCalculus.QTypedC.toQTyped' does not depend on any axioms -/
+#guard_msgs in #print axioms QTypedC.toQTyped
+
+/--
+info: 'MinimalCalculus.inferC_sound_selUnk_step' depends on axioms: [propext, Quot.sound]
+-/
+#guard_msgs in #print axioms inferC_sound_selUnk_step
+
+-- ## WHAT FINALIZATION IS WORTH  (InferSound.lean)
+-- Blockedness gives an unknown lookup at a discharged row environment —
+-- monotonicity read backwards, and the general form of what F-★'s premise buys.
+/--
+info: 'MinimalCalculus.lookup_unknown_of_blocked' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms lookup_unknown_of_blocked
+
+-- …so finalization DISCHARGES the stump it finalizes: D-? with the lookup done by
+-- the algorithm. On the nose, not up to ≈ — the ?-arm is rigid.
+/--
+info: 'MinimalCalculus.Finalize.dischargeEquiv' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms Finalize.dischargeEquiv
+
+/--
+info: 'MinimalCalculus.Finalize.discharge_isUnk' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms Finalize.discharge_isUnk
+
+-- and the join where it is cheap: a run that left nothing parked needs only the
+-- induction, no transport.
+/--
+info: 'MinimalCalculus.runSound_of_inferSoundC_nil' depends on axioms: [propext]
+-/
+#guard_msgs in #print axioms runSound_of_inferSoundC_nil
 
 end MinimalCalculus

@@ -299,31 +299,181 @@ inductive Wakes {B : Type} [DecidableEq B] :
       LookupBlocked S.ctx (p.stump.row.applySubst S.subst) p.stump.label p.blocker →
       Wakes (S.park p) ps S₁ → Wakes S (p :: ps) S₁
 
+--------------------- THE STATE INVARIANT, AND SATURATION ---------------------
+-- `plans/inference-gap-analysis.md` §B lists "every stump in Δ genuinely blocked
+-- on its recorded blocker under ⟦S⟧" among the invariants that nothing yet
+-- states, let alone maintains. `fStarEx_stale_blocker` (InferSound.lean) shows
+-- what its absence costs: A-app's arrow equation can solve a parked stump's
+-- BLOCKER, `Infer.var` is the only rule that runs wake-up, and the stump then
+-- sits in Δ with a stale annotation until finalization commits it to ★ over a
+-- lookup that lands.
+--
+-- So the invariant gets a name, and wake-up gets run wherever a solution is
+-- written — which is what `algorithmic.typ` says happens ("wake-up fires when a
+-- solution α ≔ ρ is written, and only for stumps blocked on α") and what the
+-- rules did not do.
+--
+-- WHY A RELATION, and why quiescence is a PREMISE rather than a theorem: a
+-- saturation FUNCTION would owe a termination measure, and K-repark has none —
+-- each repark moves the blocker to a new variable, and "the unsolved row
+-- variables reachable from the stump's row" is a plausible measure that nobody
+-- has written. Same reason `Infer` is a relation. What saturation can reach is
+-- therefore an existence statement, and it joins `UnifyWF` on the open list:
+-- `Wake`'s arms need `lookup_total` (hence `Acyclic`, hence `UnifyAcyclic`) to
+-- have a step at all, and the equation a step emits can CLASH — the tension
+-- case, which is a hard error by `unifyM_clash_no_unifier`, not a gap.
+
+/-- `Quiescent S` — every parked stump is genuinely blocked on the blocker it
+records, read on the row THE STATE HAS SUBSTITUTED, which is the form `Wake` and
+`Wakes.park` check it in. (On a non-idempotent solution that differs from the
+ctx-chasing form `Lookup S.ctx (.var r) l` — reconciling the two is `Sol.WF`'s
+job, i.e. `UnifyWF`'s; for a stump row that is a bare variable, which is all
+`A-sel-?` ever parks, the two coincide.) -/
+def SolverState.Quiescent {B : Type} (S : SolverState B) : Prop :=
+  ∀ p ∈ S.parked,
+    LookupBlocked S.ctx (p.stump.row.applySubst S.subst) p.stump.label p.blocker
+
+/-- an empty Δ is quiescent, vacuously — the state every run starts in. -/
+theorem SolverState.Quiescent.nil {B : Type} {S : SolverState B}
+    (h : S.parked = []) : S.Quiescent := by
+  intro p hp; rw [h] at hp; exact absurd hp List.not_mem_nil
+
+/-- quiescence travels along the updates that leave the SOLUTION alone and only
+shrink Δ: `draw`, `flag`, and `A-let`'s restriction of Δ to `Δ_Γ`. -/
+theorem SolverState.Quiescent.mono {B : Type} {S S' : SolverState B}
+    (hsol : S'.sol = S.sol) (hsub : ∀ p ∈ S'.parked, p ∈ S.parked)
+    (h : S.Quiescent) : S'.Quiescent := by
+  intro p hp
+  have hb := h p (hsub p hp)
+  show LookupBlocked S'.sol.toCtx (p.stump.row.applySubst S'.sol.toSubst) _ _
+  rw [hsol]; exact hb
+
+/-- ⊢  the invariant §B asks for, in the form it is useful: in a quiescent state
+no parked stump's blocker is SOLVED. `LookupBlocked.unsolved` is the content;
+this is it read through the state. -/
+theorem SolverState.Quiescent.blocker_unsolved {B : Type} {S : SolverState B}
+    (h : S.Quiescent) : ∀ p ∈ S.parked, p.blocker ∉ S.sol.row.map Prod.fst :=
+  fun p hp => Sol.lookupRow_none (h p hp).unsolved
+
+/-- `S ⊢ Δ ↝! S′` — wake-up run to QUIESCENCE. A step is taken only on a stump
+that has gone STALE (its recorded blocker no longer blocks its lookup), which is
+exactly the configuration a solution write creates; `Wake`'s three arms then
+resolve it (K-hit / K-⊥) or move the annotation (K-repark). -/
+inductive Saturate {B : Type} [DecidableEq B] :
+    SolverState B → SolverState B → Prop where
+  | done {S : SolverState B} : S.Quiescent → Saturate S S
+  | step {S S₁ S₂ : SolverState B} {p : Parked B} :
+      p ∈ S.parked →
+      ¬ LookupBlocked S.ctx (p.stump.row.applySubst S.subst) p.stump.label
+          p.blocker →
+      Wake S p S₁ → Saturate S₁ S₂ → Saturate S S₂
+
+/-- ⊢  saturation ends where it says it does. This is what every A-rule below
+gets to conclude about its own output state. -/
+theorem Saturate.quiescent {B : Type} [DecidableEq B] {S S' : SolverState B} :
+    Saturate S S' → S'.Quiescent
+  | .done h            => h
+  | .step _ _ _ hsat => hsat.quiescent
+
+/-- `S ⊢ τ ≐ τ′ ⇝! S′` — solve the equation, then wake what the solution staled.
+This is the form the A-rules take, in place of bare `SolveTy`: writing a solution
+and re-running wake-up is ONE step of the algorithm, not two, and packaging it
+this way keeps every rule's premise count — and so every proof by recursion over
+the rules — unchanged. `Wake` keeps the bare `SolveTy`: its own equation writes
+at the TYPE sort only, and it is what `Saturate` is defined in terms of. -/
+def SolveTySat {B : Type} [DecidableEq B]
+    (S : SolverState B) (τ τ' : Ty B) (S' : SolverState B) : Prop :=
+  ∃ S₁, SolveTy S τ τ' S₁ ∧ Saturate S₁ S'
+
+/-- `S ⊢ Q ↝!* S′` — A-var's closure, then saturation. A-var is not exempt: a
+`Wake` step whose δ is already solved unifies structurally and CAN write a row
+solution, so the closure's own steps can stale a stump it has already parked. -/
+def WakesSat {B : Type} [DecidableEq B]
+    (S : SolverState B) (ps : List (Parked B)) (S' : SolverState B) : Prop :=
+  ∃ S₁, Wakes S ps S₁ ∧ Saturate S₁ S'
+
+theorem SolveTySat.quiescent {B : Type} [DecidableEq B] {S S' : SolverState B}
+    {τ τ' : Ty B} : SolveTySat S τ τ' S' → S'.Quiescent
+  | ⟨_, _, hsat⟩ => hsat.quiescent
+
+theorem WakesSat.quiescent {B : Type} [DecidableEq B] {S S' : SolverState B}
+    {ps : List (Parked B)} : WakesSat S ps S' → S'.Quiescent
+  | ⟨_, _, hsat⟩ => hsat.quiescent
+
 /-- `S ⊢ q ⇓ S′` — F-★, the algorithmic moment of T-sel-★. Runs at the end of
 inference and at every generalization boundary that does not carry the stump.
 
-**DEFECTIVE AS WRITTEN — see `finalize_star_no_discharge` (InferSound.lean).**
-This rule has NO premise about the lookup, while every other rule that touches a
-stump's result variable states what the lookup did first: `Wake.hit` carries its
-`Lookup … (.found τ)`, `Wake.abs` its `Lookup … .absent`, `Wake.repark` its
-`LookupBlocked`. Declaratively `Stump.Discharge` offers ★ only under `D-⊥` (the
-lookup is `⊥`) or `D-?` (it is still `?`); there is no rule pinning δ to ★ when
-the lookup LANDS. So F-★ can commit a stump to ★ in a configuration the
-declarative system cannot read at all, and `finalize_star_no_discharge` exhibits
-one: a stump on the literal row `(l: 𝓫)`, where the lookup lands at every
-context and under every substitution, and F-★ fires anyway.
+THE PREMISE `LookupBlocked` IS THE FIX for what `finalize_star_no_discharge`
+(InferSound.lean) refuted: without it the rule had nothing to say about the
+lookup, while every sibling that touches a stump's result variable states what
+the lookup did first — `Wake.hit` carries its `Lookup … (.found τ)`, `Wake.abs`
+its `Lookup … .absent`, `Wake.repark` its `LookupBlocked`. Declaratively
+`Stump.Discharge` offers ★ only under `D-⊥` (the lookup is `⊥`, which is K-⊥'s
+job) or `D-?` (it is still `?`), so `D-?` is the arm F-★ implements and `? ` is
+what it has to check. It is the same condition A-sel-? establishes when it parks
+the stump, and by `Finalize.of_quiescent` it is FREE at any state a run produces:
+`Infer.quiescent` makes every reachable state quiescent, and quiescence is
+exactly this premise for every parked stump.
 
-THE FIX is the premise its siblings have — `LookupBlocked S.ctx
-(p.stump.row.applySubst S.subst) p.stump.label p.blocker`, which is also exactly
-what A-sel-? establishes when it parks the stump. Left unchanged for now because
-changing it moves `selEx_infers` and the A-sel-? soundness case with it. -/
+`p ∈ S.parked` comes with it: finalization discharges a stump the state HOLDS,
+and without it the rule would also accept a stump invented on the spot. -/
 inductive Finalize {B : Type} [DecidableEq B] :
     SolverState B → Parked B → SolverState B → Prop where
   | star {S S' : SolverState B} {p : Parked B} :
+      p ∈ S.parked →
+      LookupBlocked S.ctx (p.stump.row.applySubst S.subst) p.stump.label
+        p.blocker →
       SolveTy S (.var p.stump.res) .unk S' →
       Finalize S p
         ({ S' with parked := S'.parked.filter (·.stump.res != p.stump.res) }.flag
           p.stump.label)
+
+/-- `S ⊢ Δ ⇓* S′` — the ⇓-closure `algorithmic.typ` leaves implicit: F-★ is
+stated for ONE stump and the end of a run has a list of them. The counterpart of
+`Wakes` for finalization; unlike `Wakes` it has no `park` arm, because
+finalization is where parking stops. -/
+inductive Finalizes {B : Type} [DecidableEq B] :
+    SolverState B → List (Parked B) → SolverState B → Prop where
+  | nil {S : SolverState B} : Finalizes S [] S
+  | cons {S S₁ S₂ : SolverState B} {p : Parked B} {ps : List (Parked B)} :
+      Finalize S p S₁ → Finalizes S₁ ps S₂ → Finalizes S (p :: ps) S₂
+
+/-- ⊢  **the premise costs nothing where it is used.** At a quiescent state — and
+every state a run produces is one (`Infer.quiescent`) — blockedness holds of
+every parked stump, so F-★ fires on any of them whose equation succeeds. -/
+theorem Finalize.of_quiescent {B : Type} [DecidableEq B] {S S' : SolverState B}
+    {p : Parked B} (hq : S.Quiescent) (hp : p ∈ S.parked)
+    (hs : SolveTy S (.var p.stump.res) .unk S') :
+    Finalize S p
+      ({ S' with parked := S'.parked.filter (·.stump.res != p.stump.res) }.flag
+        p.stump.label) :=
+  .star hp (hq p hp) hs
+
+/-- ⊢  **F-★ and K-hit / K-⊥ are now exclusive.** Whenever F-★ applies to a stump,
+the only wake-up step available on it is K-repark, which commits nothing: the
+premise says the lookup is `?`, and `?` is neither `found` nor `absent`. This is
+the determinism the `algorithmic.typ` bullet claims, at the one place
+`fStar_wake_star_disagree` refuted it. -/
+theorem Finalize.wake_no_commit {B : Type} [DecidableEq B] {S S₁ S₂ : SolverState B}
+    {p : Parked B} (hf : Finalize S p S₁) (hw : Wake S p S₂) : S₂.sol = S.sol := by
+  cases hf with
+  | star _ hb _ =>
+      cases hw with
+      | hit hl _  => exact absurd (lookup_det hl hb.toLookup) (by simp)
+      | abs hl _  => exact absurd (lookup_det hl hb.toLookup) (by simp)
+      | repark _  => rfl
+
+/-- ⊢  …and the same fact read off the STATE rather than off a finalization step:
+at a quiescent state wake-up cannot commit anything, so finalization is the only
+progress left. That is what makes it the last step of a run. -/
+theorem SolverState.Quiescent.wake_no_commit {B : Type} [DecidableEq B]
+    {S S' : SolverState B} {p : Parked B} (hq : S.Quiescent) (hp : p ∈ S.parked)
+    (hw : Wake S p S') : S'.sol = S.sol := by
+  have hb := hq p hp
+  cases hw with
+  | hit hl _  => exact absurd (lookup_det hl hb.toLookup) (by simp)
+  | abs hl _  => exact absurd (lookup_det hl hb.toLookup) (by simp)
+  | repark _  => rfl
 
 
 --------------------- INSTANTIATION AT A-var ---------------------------------
@@ -379,7 +529,7 @@ inductive Infer {B C : Type} [DecidableEq B] (constTy : C → B) :
       Γ.lookup x = some σ →
       IsRenaming θ σ.vars f → FreshRenaming f σ.vars Γ S →
       InstStumps θ f σ.constraints ps →
-      Wakes S ps S' →
+      WakesSat S ps S' →
       Infer constTy Γ S (.var x) (σ.body.applySubst θ) S'
   -- A-lam
   | lam {Γ : QCtx B} {S S' : SolverState B} {x : Var} {e : Expr C} {τ : Ty B}
@@ -392,7 +542,7 @@ inductive Infer {B C : Type} [DecidableEq B] (constTy : C → B) :
       {τ₁ τ₂ : Ty B} {β : TyVar} {S₂' : SolverState B} :
       Infer constTy Γ S e₁ τ₁ S₁ → Infer constTy Γ S₁ e₂ τ₂ S₂ →
       (β, S₂') = S₂.draw .ty →
-      SolveTy S₂' τ₁ (.fn τ₂ (.var β)) S₃ →
+      SolveTySat S₂' τ₁ (.fn τ₂ (.var β)) S₃ →
       Infer constTy Γ S (.app e₁ e₂) (.var β) S₃
   -- A-app-degrade: the arrow equation is stuck or occurs, so the result blurs
   | appDeg {Γ : QCtx B} {S S₁ S₂ : SolverState B} {e₁ e₂ : Expr C}
@@ -406,15 +556,15 @@ inductive Infer {B C : Type} [DecidableEq B] (constTy : C → B) :
       {τ₁ τ₂ : Ty B} {r₁ r₂ : TyVar} {Sa Sb : SolverState B} :
       Infer constTy Γ S e₁ τ₁ S₁ → Infer constTy Γ S₁ e₂ τ₂ S₂ →
       (r₁, Sa) = S₂.draw .row → (r₂, Sb) = Sa.draw .row →
-      SolveTy Sb τ₁ (.rcd (.var r₁)) S₃ →
-      SolveTy S₃ τ₂ (.rcd (.var r₂)) S₄ →
+      SolveTySat Sb τ₁ (.rcd (.var r₁)) S₃ →
+      SolveTySat S₃ τ₂ (.rcd (.var r₂)) S₄ →
       Infer constTy Γ S (.cat e₁ e₂) (.rcd (.cat (.var r₂) (.var r₁))) S₄
   -- A-sel: the lookup lands
   | sel {Γ : QCtx B} {S S₁ S₂ : SolverState B} {e : Expr C} {τ τ' : Ty B}
       {l : Label} {r : TyVar} {S₁' : SolverState B} :
       Infer constTy Γ S e τ S₁ →
       (r, S₁') = S₁.draw .row →
-      SolveTy S₁' τ (.rcd (.var r)) S₂ →
+      SolveTySat S₁' τ (.rcd (.var r)) S₂ →
       Lookup S₂.ctx (.var r) l (.found τ') →
       Infer constTy Γ S (.sel e l) τ' S₂
   -- A-sel-⊥: definite absence. ★ and a W-flag — this is where T-sel-⊥ lives
@@ -422,7 +572,7 @@ inductive Infer {B C : Type} [DecidableEq B] (constTy : C → B) :
       {l : Label} {r : TyVar} {S₁' : SolverState B} :
       Infer constTy Γ S e τ S₁ →
       (r, S₁') = S₁.draw .row →
-      SolveTy S₁' τ (.rcd (.var r)) S₂ →
+      SolveTySat S₁' τ (.rcd (.var r)) S₂ →
       Lookup S₂.ctx (.var r) l .absent →
       Infer constTy Γ S (.sel e l) .unk (S₂.flag l)
   -- A-sel-?: NOT ★. The stump-var δ keeps the position writable, so a later
@@ -431,8 +581,8 @@ inductive Infer {B C : Type} [DecidableEq B] (constTy : C → B) :
       {l : Label} {r α δ : TyVar} {S₁' S₂' : SolverState B} :
       Infer constTy Γ S e τ S₁ →
       (r, S₁') = S₁.draw .row →
-      SolveTy S₁' τ (.rcd (.var r)) S₂ →
-      LookupBlocked S₂.ctx (.var r) l α →
+      SolveTySat S₁' τ (.rcd (.var r)) S₂ →
+      LookupBlocked S₂.ctx ((Row.var r).applySubst S₂.subst) l α →
       (δ, S₂') = S₂.draw .ty →
       Infer constTy Γ S (.sel e l) (.var δ)
         (S₂'.park ⟨α, ⟨.var r, l, δ⟩⟩)
@@ -524,8 +674,10 @@ theorem selEx_infers :
     (r := natName 2) (α := natName 2) (δ := natName 3)
     ?_ rfl ?_ ?_ rfl
   · exact Infer.var (σ := ⟨[], [], .var (natName 1)⟩) (θ := idSubst) (f := id) (ps := []) rfl
-      ⟨⟨fun _ _ => rfl, fun _ _ => rfl⟩, by simp⟩ (by simp [FreshRenaming]) rfl .nil
-  · exact ⟨5, ⟨[(natName 1, .rcd (.var (natName 2)))], []⟩, ⟨3⟩, rfl, rfl⟩
+      ⟨⟨fun _ _ => rfl, fun _ _ => rfl⟩, by simp⟩ (by simp [FreshRenaming]) rfl
+      ⟨_, .nil, .done (SolverState.Quiescent.nil rfl)⟩
+  · exact ⟨_, ⟨5, ⟨[(natName 1, .rcd (.var (natName 2)))], []⟩, ⟨3⟩, rfl, rfl⟩,
+      .done (SolverState.Quiescent.nil rfl)⟩
   · exact .varFree rfl
 
 
@@ -582,6 +734,82 @@ def InferSound (B C : Type) [DecidableEq B] (constTy : C → B) : Prop :=
     Infer constTy Γ S e τ S' → S'.parked = [] →
     QTyped constTy (S'.applyCtx Γ) e (τ.applySubst S'.subst)
 
+--------------------- THE TOP-LEVEL ENTRY JUDGEMENT ---------------------------
+-- `plans/inference-gap-analysis.md` §B's last ✘ row: "`⇓`/`F-★` finalization
+-- exists as a rule, but there is no `Infer(e) = finalize(...)` top-level
+-- judgement to state soundness OF THE ALGORITHM about". This is it — run
+-- inference from the empty state, then finalize what is still parked.
+--
+-- `S′.parked = []` is REQUIRED rather than derived. Each `Finalize` step drops
+-- the stump it discharged by filtering on its result variable, so finalizing
+-- every element of Δ empties Δ exactly when those variables are pairwise
+-- distinct — `QScheme.ResWF` / `InstStumps.pairwise` (InferSound.lean) is where
+-- that would come from, and it is not proved. Requiring it is the honest form.
+--
+-- The initial supply is ⟨1⟩, not ⟨0⟩: `natName 0` is the empty string, so
+-- starting at 1 keeps every invented name non-empty.
+
+/-- `⊢ e ⇒ τ; S′` — inference, then finalization, from nothing. -/
+def Run {B C : Type} [DecidableEq B] (constTy : C → B) (e : Expr C) (τ : Ty B)
+    (S' : SolverState B) : Prop :=
+  ∃ S₁ : SolverState B,
+    Infer constTy ⟨[], []⟩ ⟨Sol.nil, [], [], ⟨1⟩, []⟩ e τ S₁ ∧
+    Finalizes S₁ S₁.parked S' ∧ S'.parked = []
+
+-- The state finalization starts at is QUIESCENT: the run begins with Δ = [], so
+-- `Infer.quiescent_of_nil` (below) applies, and `Finalize.of_quiescent` then says
+-- F-★'s `LookupBlocked` premise holds of every stump the run hands it. That is
+-- the sense in which the premise constrains the RULE without constraining the
+-- ALGORITHM.
+
+/-- **Algorithm soundness** — what `InferSound` becomes once there is an entry
+point. `InferSound` carries `S′.parked = []` as a HYPOTHESIS and had nothing to
+supply it; `Run` supplies it by construction, and F-★ is what does the supplying.
+Named, not proved: it needs `InferSound` itself plus the finalization step's own
+soundness, which is `Stump.Discharge.unk` read at the state's own substitution —
+and NOT at an arbitrary satisfying σ, because a later refinement can solve the
+blocker and make the lookup land, which is precisely why finalization runs last. -/
+def RunSound (B C : Type) [DecidableEq B] (constTy : C → B) : Prop :=
+  ∀ (e : Expr C) (τ : Ty B) (S' : SolverState B), Run constTy e τ S' →
+    QTyped constTy (S'.applyCtx ⟨[], []⟩) e (τ.applySubst S'.subst)
+
+
+--------------------- …AND IT RUNS -------------------------------------------
+-- Non-vacuity for the entry judgement, on the two shapes that matter: one where
+-- finalization FIRES, and one where saturation has already left it nothing to do.
+
+private def selExS1 : SolverState Unit :=
+  ⟨⟨[(natName 1, .rcd (.var (natName 2)))], []⟩,
+   [⟨natName 2, ⟨.var (natName 2), "l", natName 3⟩⟩], [], ⟨4⟩, selExKinds⟩
+
+private def selExStar : Sol Unit := ⟨[(natName 3, .unk)], []⟩
+
+private def selExFinal : SolverState Unit :=
+  ({ selExS1.extend selExStar ⟨4⟩ with
+       parked := (selExS1.extend selExStar ⟨4⟩).parked.filter
+         (·.stump.res != natName 3) }).flag "l"
+
+/-- ⊢  **the entry judgement is not empty, and F-★ fires in it.** `λx. x.l` runs
+end to end: A-sel-? parks the stump, nothing ever resolves it — the lookup is
+still blocked on the record's row variable at the end — so finalization commits it
+to ★ and records the label in W. -/
+theorem selEx_runs :
+    Run (B := Unit) (C := Unit) (fun _ => ()) (selEx Unit)
+      (.fn (.var (natName 1)) (.var (natName 3))) selExFinal :=
+  ⟨selExS1, selEx_infers,
+   .cons (Finalize.star (by simp [selExS1]) (.varFree rfl)
+     ⟨5, selExStar, ⟨4⟩, rfl, rfl⟩) .nil, rfl⟩
+
+/-- ⊢  …and the answer is `{β} → ★` with `l` flagged — the L1-finalized type
+(`selEx_absent`, minimal.lean), which `finalized_no_blur` says no substitution
+can sharpen back. So this is the algorithm reaching the type the declarative
+bookend describes, by the route F-★ exists to provide. -/
+theorem selEx_runs_star :
+    (Ty.fn (.var (natName 1)) (.var (natName 3))).applySubst selExFinal.subst
+        = .fn (.rcd (.var (natName 2))) .unk ∧
+      selExFinal.flags = ["l"] ∧ selExFinal.parked = [] :=
+  ⟨rfl, rfl, rfl⟩
+
 
 --------------------- THE SUPPLY ONLY ADVANCES -------------------------------
 -- `unifyM_supply_mono` (Soundness.lean) says a successful unification never
@@ -616,9 +844,27 @@ theorem Wakes.supply {B : Type} [DecidableEq B] {S S' : SolverState B}
   | .cons hw hws    => Nat.le_trans hw.supply hws.supply
   | .park _ hws     => hws.supply
 
+theorem Saturate.supply {B : Type} [DecidableEq B] {S S' : SolverState B} :
+    Saturate S S' → S.supply.next ≤ S'.supply.next
+  | .done _           => Nat.le_refl _
+  | .step _ _ hw hsat => Nat.le_trans hw.supply hsat.supply
+
+theorem SolveTySat.supply {B : Type} [DecidableEq B] {S S' : SolverState B}
+    {τ τ' : Ty B} : SolveTySat S τ τ' S' → S.supply.next ≤ S'.supply.next
+  | ⟨_, hs, hsat⟩ => Nat.le_trans hs.supply hsat.supply
+
+theorem WakesSat.supply {B : Type} [DecidableEq B] {S S' : SolverState B}
+    {ps : List (Parked B)} : WakesSat S ps S' → S.supply.next ≤ S'.supply.next
+  | ⟨_, hw, hsat⟩ => Nat.le_trans hw.supply hsat.supply
+
 theorem Finalize.supply {B : Type} [DecidableEq B] {S S' : SolverState B}
     {p : Parked B} : Finalize S p S' → S.supply.next ≤ S'.supply.next
-  | .star hs => hs.supply
+  | .star _ _ hs => hs.supply
+
+theorem Finalizes.supply {B : Type} [DecidableEq B] {S S' : SolverState B}
+    {ps : List (Parked B)} : Finalizes S ps S' → S.supply.next ≤ S'.supply.next
+  | .nil         => Nat.le_refl _
+  | .cons hf hfs => Nat.le_trans hf.supply hfs.supply
 
 --------------------- THE KIND RECORD ONLY GROWS -----------------------------
 -- The `κ̄` counterpart of the supply invariant above. Only `draw` writes to
@@ -652,9 +898,27 @@ theorem Wakes.kinds {B : Type} [DecidableEq B] {S S' : SolverState B}
   | .cons hw hws => (hws.kinds).trans hw.kinds
   | .park _ hws  => hws.kinds
 
+theorem Saturate.kinds {B : Type} [DecidableEq B] {S S' : SolverState B} :
+    Saturate S S' → S'.kinds = S.kinds
+  | .done _           => rfl
+  | .step _ _ hw hsat => (hsat.kinds).trans hw.kinds
+
+theorem SolveTySat.kinds {B : Type} [DecidableEq B] {S S' : SolverState B}
+    {τ τ' : Ty B} : SolveTySat S τ τ' S' → S'.kinds = S.kinds
+  | ⟨_, hs, hsat⟩ => (hsat.kinds).trans hs.kinds
+
+theorem WakesSat.kinds {B : Type} [DecidableEq B] {S S' : SolverState B}
+    {ps : List (Parked B)} : WakesSat S ps S' → S'.kinds = S.kinds
+  | ⟨_, hw, hsat⟩ => (hsat.kinds).trans hw.kinds
+
 theorem Finalize.kinds {B : Type} [DecidableEq B] {S S' : SolverState B}
     {p : Parked B} : Finalize S p S' → S'.kinds = S.kinds
-  | .star hs => hs.kinds
+  | .star _ _ hs => hs.kinds
+
+theorem Finalizes.kinds {B : Type} [DecidableEq B] {S S' : SolverState B}
+    {ps : List (Parked B)} : Finalizes S ps S' → S'.kinds = S.kinds
+  | .nil         => rfl
+  | .cons hf hfs => (hfs.kinds).trans hf.kinds
 
 -- from `(α, S₀) = S.draw κ`, recover the extended record
 private theorem draw_kind_eq {B : Type} {S S₀ : SolverState B} {α : TyVar}
@@ -870,6 +1134,28 @@ theorem Wakes.satMono {B : Type} [DecidableEq B] {S S' : SolverState B}
   | .cons hw hws => hw.satMono.trans hws.satMono
   | .park _ hws  => hws.satMono
 
+theorem Finalize.satMono {B : Type} [DecidableEq B] {S S' : SolverState B}
+    {p : Parked B} : Finalize S p S' → S.SatMono S'
+  | .star _ _ hs => hs.satMono
+
+theorem Finalizes.satMono {B : Type} [DecidableEq B] {S S' : SolverState B}
+    {ps : List (Parked B)} : Finalizes S ps S' → S.SatMono S'
+  | .nil         => SolverState.SatMono.refl _
+  | .cons hf hfs => hf.satMono.trans hfs.satMono
+
+theorem Saturate.satMono {B : Type} [DecidableEq B] {S S' : SolverState B} :
+    Saturate S S' → S.SatMono S'
+  | .done _           => SolverState.SatMono.refl _
+  | .step _ _ hw hsat => hw.satMono.trans hsat.satMono
+
+theorem SolveTySat.satMono {B : Type} [DecidableEq B] {S S' : SolverState B}
+    {τ τ' : Ty B} : SolveTySat S τ τ' S' → S.SatMono S'
+  | ⟨_, hs, hsat⟩ => hs.satMono.trans hsat.satMono
+
+theorem WakesSat.satMono {B : Type} [DecidableEq B] {S S' : SolverState B}
+    {ps : List (Parked B)} : WakesSat S ps S' → S.SatMono S'
+  | ⟨_, hw, hsat⟩ => hw.satMono.trans hsat.satMono
+
 private theorem draw_sol {B : Type} {S S₀ : SolverState B} {α : TyVar} {κ : Kind}
     (h : (α, S₀) = S.draw κ) : S₀.sol = S.sol := by
   have h2 : S₀ = (S.draw κ).2 := congrArg Prod.snd h
@@ -928,6 +1214,104 @@ theorem InferRec.sat_mono {B C : Type} [DecidableEq B] {constTy : C → B}
   | .cat h₁ h₂  => (InferRec.sat_mono h₁).trans (InferRec.sat_mono h₂)
 
 end
+
+--------------------- EVERY REACHABLE STATE IS QUIESCENT ----------------------
+-- The invariant, earned. Before the A-rules took `SolveTySat` / `WakesSat` this
+-- was FALSE, and `fStarEx_stale_blocker` (InferSound.lean) is the counterexample:
+-- A-app solved a parked stump's blocker and nothing re-checked. Now every rule
+-- that writes a solution ends in a saturation, so the conclusion is
+-- unconditional at exactly those rules — `SolveTySat.quiescent` — and the
+-- congruence rules carry it from the induction hypothesis.
+--
+-- WHAT THIS BUYS, beyond tidiness:
+--   * `Quiescent.blocker_unsolved` — no parked blocker is solved, which is the
+--     §B invariant and what makes a stump's annotation meaningful at all;
+--   * F-★'s missing `LookupBlocked` premise is IMPLIED at any state a run
+--     produces, so finalization's soundness lemma can have the fact without the
+--     rule being changed — though the rule should still carry it, since nothing
+--     stops `Finalize` from being applied at a state no run produced;
+--   * `A-let`'s Δ-split dispatches on `p.blocker`, so it now reads annotations
+--     that are true of the state rather than possibly stale ones.
+
+/-- a draw leaves Δ alone. -/
+private theorem draw_parked {B : Type} {S S₀ : SolverState B} {α : TyVar}
+    {κ : Kind} (h : (α, S₀) = S.draw κ) : S₀.parked = S.parked := by
+  have h2 : S₀ = (S.draw κ).2 := congrArg Prod.snd h
+  rw [h2]; rfl
+
+/-- `draw`, `flag` and `A-let`'s restriction of Δ, each as its own corollary:
+stated at the shape the rule produces, so nothing has to unify a bare `rfl`
+against two different states. -/
+theorem SolverState.Quiescent.draw {B : Type} {S S₀ : SolverState B} {α : TyVar}
+    {κ : Kind} (h : S.Quiescent) (hd : (α, S₀) = S.draw κ) : S₀.Quiescent :=
+  SolverState.Quiescent.mono (draw_sol hd) (fun p hp => (draw_parked hd) ▸ hp) h
+
+theorem SolverState.Quiescent.flag {B : Type} {S : SolverState B} (l : Label)
+    (h : S.Quiescent) : (S.flag l).Quiescent :=
+  SolverState.Quiescent.mono rfl (fun _ hp => hp) h
+
+theorem SolverState.Quiescent.restrict {B : Type} {S : SolverState B}
+    {Δ : List (Parked B)} (hsub : ∀ p ∈ Δ, p ∈ S.parked) (h : S.Quiescent) :
+    ({ S with parked := Δ } : SolverState B).Quiescent :=
+  SolverState.Quiescent.mono (S := S) rfl hsub h
+
+/-- A-sel-?'s shape: park a stump whose blockedness was established at a state
+with the same solution (the draw of δ sits in between). -/
+theorem SolverState.Quiescent.park_draw {B : Type} {S S' : SolverState B}
+    {q : Parked B} (hsol : S'.sol = S.sol) (hpar : S'.parked = S.parked)
+    (hq : S.Quiescent)
+    (hb : LookupBlocked S.ctx (q.stump.row.applySubst S.subst) q.stump.label
+            q.blocker) :
+    (S'.park q).Quiescent := by
+  intro p hp
+  show LookupBlocked S'.sol.toCtx (p.stump.row.applySubst S'.sol.toSubst) _ _
+  rw [hsol]
+  rcases List.mem_cons.mp hp with rfl | hp'
+  · exact hb
+  · rw [hpar] at hp'; exact hq p hp'
+
+mutual
+
+/-- ⊢  **inference maintains the state invariant.** Every parked stump in the
+state a run ends in is genuinely blocked on the blocker it records. -/
+theorem Infer.quiescent {B C : Type} [DecidableEq B] {constTy : C → B}
+    {Γ : QCtx B} {S S' : SolverState B} {e : Expr C} {τ : Ty B} :
+    Infer constTy Γ S e τ S' → S.Quiescent → S'.Quiescent
+  | .con, hq => hq
+  -- the rules that WRITE end in a saturation, so they conclude it outright
+  | .var _ _ _ _ hw, _ => hw.quiescent
+  | .app _ _ _ hs, _ => hs.quiescent
+  | .conc _ _ _ _ _ hs₂, _ => hs₂.quiescent
+  | .sel _ _ hs _, _ => hs.quiescent
+  | .selAbs _ _ hs _, _ => hs.quiescent.flag _
+  | .selUnk _ hd hs hb hd₂, _ =>
+      SolverState.Quiescent.park_draw (draw_sol hd₂) (draw_parked hd₂)
+        hs.quiescent hb
+  -- …and the rules that do not write carry it through
+  | .lam hd hb, hq => Infer.quiescent hb (hq.draw hd)
+  | .appDeg h₁ h₂ hd _, hq =>
+      (((Infer.quiescent h₂ (Infer.quiescent h₁ hq)).draw hd).flag _)
+  | .selDeg h₁ hd _, hq => (((Infer.quiescent h₁ hq).draw hd).flag _)
+  | .rcd hb, hq => InferRec.quiescent hb hq
+  -- A-let: the body runs at Δ_Γ, a SUBLIST of the quiescent Δ₁
+  | .letE h₁ _ hsplit _ _ h₂, hq => by
+      refine Infer.quiescent h₂ ((Infer.quiescent h₁ hq).restrict ?_)
+      intro p hp; rw [hsplit]; exact List.mem_append_right _ hp
+
+theorem InferRec.quiescent {B C : Type} [DecidableEq B] {constTy : C → B}
+    {Γ : QCtx B} {S S' : SolverState B} {ξ : RecBody (Expr C)} {ρ : Row B} :
+    InferRec constTy Γ S ξ ρ S' → S.Quiescent → S'.Quiescent
+  | .empty, hq     => hq
+  | .field h, hq   => Infer.quiescent h hq
+  | .cat h₁ h₂, hq => InferRec.quiescent h₂ (InferRec.quiescent h₁ hq)
+
+end
+
+/-- ⊢  and a run starts with an empty Δ, so this is unconditional. -/
+theorem Infer.quiescent_of_nil {B C : Type} [DecidableEq B] {constTy : C → B}
+    {Γ : QCtx B} {S S' : SolverState B} {e : Expr C} {τ : Ty B}
+    (h : Infer constTy Γ S e τ S') (hnil : S.parked = []) : S'.Quiescent :=
+  h.quiescent (SolverState.Quiescent.nil hnil)
 
 
 end MinimalCalculus
