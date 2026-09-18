@@ -17,14 +17,14 @@ Legend: ✔ there (mechanized) · ◐ on paper only / partial · ✘ absent
 | success completeness — every unifier extends to one meeting `s` | ✔ `unifyRowM_success_complete` | — |
 | **mgu on success** (the two combined) | ✔ `unifyRowM_success_iff` | — |
 | clash soundness — clash ⟹ no unifier | ✔ `unifyM_clash_no_unifier` | — |
-| occurs soundness | ◐ genuine case ✔; `occurs_allVar_hasMgu` refutes the general form | a *guarded* statement: "occurs ⟹ no unifier **unless** all of `vars(s)` are ... ". The side condition has never been formulated |
+| occurs soundness | ✔ at both sorts, where the guard is LOCAL (`solveVarM_occurs_no_unifier`, `bindTy_occurs_no_unifier`, 2026-09-16) | the side condition is formulated and discharged: the all-variable occurrence is not a failure but the ε-collapse rule (`allvar_occurs_mgu`), so what is rejected is deep or field-pinned, and both are genuine. Only the `depReach Θ` stale-binding disjunct is left, and it is a solver-state fact, not a problem fact |
 | stuck ⟹ no mgu | ✘ **false** (`stuck_masks_mgu`, `terminalNoMgu_false`) | nothing to fix at the statement level — the converse does not exist. What is stateable is the *disjunctive* form: the three no-mgu techniques + three conservativity witnesses. Already assembled, not yet written up |
 | fuel independence | ✔ `unifyM_fuel_mono`, `unifyM_bounded` | — |
 | **termination / totality** — `∃ fuel. result ≠ outOfFuel` | ✘ | a well-founded measure. Rémy's does not close (renaming adds no fields → host keeps `count_l = 0`). Without this, `unifyRow` is not a *function* and every inference theorem inherits the fuel parameter |
 | **idempotence / acyclicity of the returned solution** | ✘ | `Sol` has no triangular-form or acyclicity invariant. `⟦S⟧` is specified as "applies the substitution *as a closure*" — closure application is only well-defined on an acyclic solution. Needed before `⟦S⟧` is even a total function |
 | **unification preserves `RowWF`** | ✘ (only a comment at `minimal.lean:2279`) | the statement `RowWF Γ → unify ⇝ θ → RowWF (Γ ⊕ θ)`. This is the hinge between unification and the lookup relation: `lookup_total` is conditioned on `RowWF`, so without it `A-sel`'s premise `⟦S₂⟧ ⊢ ρ.l ↓ r` may have no derivation at all |
 | refinement order on solutions `S ≤ S′` | ✘ | needed to state "inference only ever refines θ", the induction hypothesis of every completeness proof downstream |
-| sorted occurs-check | ◐ paper `S-*` rules; Lean has no `Kind` | the mechanization uses an ftv spanning both sorts, so the proven statement is strictly weaker than the one in the thesis. Either mechanize sorts or state the theorem at the unsorted ftv and say so |
+| sorted occurs-check | ✔ both halves (2026-09-16) | `Row.allRowVars` guards the row sort, `Ty.tyVars` the type sort; `bindTy` no longer reads the sort-blind `τ.ftv`. `x ≐ {x}` succeeds, `x ≐ (x→x)` and `x ≐ {l:x}` report occurs |
 
 ## B. Inference `Γ; S ⊢ e ⇒ τ; S′`
 

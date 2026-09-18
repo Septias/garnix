@@ -124,13 +124,22 @@ theorem solveVarM_bounded {B : Type} {S : Supply} {s₁ s₂ : List (Atom B)}
       | nil =>
         simp only [solveVarM] at h
         split at h
-        · simp at h
-        · simp only [Option.some.injEq, UResM.success.injEq] at h
-          obtain ⟨rfl, rfl⟩ := h
-          refine ⟨V, fun _ hx => hx, hS, SolBelow_ofRow (fun p hp => ?_)⟩
-          obtain rfl := List.mem_singleton.mp hp
-          exact ⟨hV (List.mem_append_left _ List.mem_cons_self),
-                 fun x hx => hV (List.mem_append_right _ (by rw [sFtv_ofSpine]; exact hx))⟩
+        · -- the ε-COLLAPSE arm: every binding is a spine variable ↦ ε, so the
+          --   solution is strictly SMALLER than the problem
+          next σ hc =>
+            simp only [Option.some.injEq, UResM.success.injEq] at h
+            obtain ⟨rfl, rfl⟩ := h
+            refine ⟨V, fun _ hx => hx, hS, SolBelow_ofRow (fun p hp => ?_)⟩
+            obtain ⟨h₁, h₂⟩ := collapseSol_below hc p hp
+            exact ⟨hV (List.mem_append_right _ h₁), by rw [h₂]; simp [Row.ftv]⟩
+        · split at h
+          · simp at h
+          · simp only [Option.some.injEq, UResM.success.injEq] at h
+            obtain ⟨rfl, rfl⟩ := h
+            refine ⟨V, fun _ hx => hx, hS, SolBelow_ofRow (fun p hp => ?_)⟩
+            obtain rfl := List.mem_singleton.mp hp
+            exact ⟨hV (List.mem_append_left _ List.mem_cons_self),
+                   fun x hx => hV (List.mem_append_right _ (by rw [sFtv_ofSpine]; exact hx))⟩
 
 -- ⊢  U-expand's own solution mentions only the problem plus the two names it
 --    just invented, and both are inside the enlarged avoid-set
@@ -725,13 +734,22 @@ theorem solveVarM_complete {B : Type} {θ : TySubst B} {Θ : DepGraph} {S : Supp
       | nil =>
         simp only [solveVarM] at hsolve
         split at hsolve
-        · simp at hsolve
-        · simp only [Option.some.injEq, UResM.success.injEq] at hsolve
-          obtain ⟨rfl, -⟩ := hsolve
-          refine Sol.Sat_ofRow.mpr (fun p hp => ?_)
-          obtain rfl := List.mem_singleton.mp hp
-          simp only [ofSpine, Row.applySubst] at hu
-          exact RowEquiv.unitR.symm.trans hu
+        · -- the ε-COLLAPSE arm: the unifier MEETS the emitted bindings, because
+          --   the ≈-characterization forced them (allvar_collapse)
+          next σ hc =>
+            simp only [Option.some.injEq, UResM.success.injEq] at hsolve
+            obtain ⟨rfl, -⟩ := hsolve
+            simp only [ofSpine, Row.applySubst] at hu
+            exact Sol.Sat_ofRow.mpr
+              (collapseSol_complete hc (RowEquiv.unitR.symm.trans hu))
+        · split at hsolve
+          · simp at hsolve
+          · simp only [Option.some.injEq, UResM.success.injEq] at hsolve
+            obtain ⟨rfl, -⟩ := hsolve
+            refine Sol.Sat_ofRow.mpr (fun p hp => ?_)
+            obtain rfl := List.mem_singleton.mp hp
+            simp only [ofSpine, Row.applySubst] at hu
+            exact RowEquiv.unitR.symm.trans hu
 
 theorem unifySpineMF_nil_left_complete {B : Type} [DecidableEq B] {θ : TySubst B}
     (S : Supply) (fuel : Nat) (s₂ : List (Atom B)) {s : Sol B} {S' : Supply}

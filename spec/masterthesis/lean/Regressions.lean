@@ -260,6 +260,14 @@ theorem tyM_cross_sort_sat :
 -- The ROW occurs guard keeps its own conservatism — that is a different
 -- question (occurs_allVar_hasMgu), untouched by sorting the TYPE guard.
 
+-- …and the guard still catches the genuine cycle, at BOTH the arrow and the
+-- field position — there the occurrence really is a TYPE one.
+-- ⊢  x ≐ (x → x)  =  occurs      ⊢  x ≐ {l: x}  =  occurs
+theorem tyM_occurs_fn :
+    unifyTyM (B := Unit) 5 (.var "x") (.fn (.var "x") (.var "x")) = .occurs := rfl
+theorem tyM_occurs_field :
+    unifyTyM (B := Unit) 5 (.var "x") (.rcd (.sing "l" (.var "x"))) = .occurs := rfl
+
 -- ⊢  fuel exhaustion is its OWN verdict, never mistaken for stuck
 theorem outOfFuel_is_separate :
     unifyRowM (B := Unit) 1 (.cat (.sing "l" uB) (.var "a"))

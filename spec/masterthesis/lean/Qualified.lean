@@ -463,8 +463,9 @@ theorem selQ_prec_answers_blur {B : Type} (b : B) :
 -- Everything else mirrors minimal.lean's Typed verbatim.
 --
 -- QTyped EXTENDS Typed (Typed.toQ below), strictly: the two-use program at the
--- bottom types one let-binding at BOTH the found- and the ⊥-instance — the
--- combination no_plain_principal_scheme proves impossible for a plain scheme.
+-- bottom types one let-binding at BOTH the found- and the ⊥-instance — a
+-- combination no plain scheme admits (l1_rejects_two_use; the
+-- strictness of the inclusion is l1_strictly_weaker).
 
 structure QCtx (B : Type) where
   tyEnv  : List (Var × QScheme B)
@@ -768,8 +769,9 @@ end
 -- ONE binding, TWO uses at incompatible refined instances — the found-typing
 -- AND the ⊥-typing of the same scheme. selQ_instance_closed (lifted through
 -- Typed.toQ) discharges the instance-closed premise; each use discharges its
--- own copy of the stump. By no_plain_principal_scheme, no single plain
--- scheme could serve both uses at these types.
+-- own copy of the stump. No single plain scheme can serve both uses at these
+-- types — proved below (l1_rejects_two_use), which is what
+-- makes the L1 ⊆ L2 inclusion STRICT.
 -- ⊢  ∅ ⊢_Q  let f = (λx. x.l) in { a = f {l = c} | b = f {} }
 --            :  { a: 𝓫_c | b: ★ }
 theorem qtyped_two_use {B C : Type} (constTy : C → B) (c : C) :
@@ -1815,7 +1817,7 @@ private theorem qvar_inst_inv {B C : Type} {constTy : C → B} :
 -- L2 counterpart of `sel_var_unk`, but full: every typing of `x.l` on a
 -- monotype-bound x factors through ONE lookup, and the typing sits ≼-above
 -- that lookup's collapse.
-private theorem qsel_var_inv {B C : Type} {constTy : C → B} :
+theorem qsel_var_inv {B C : Type} {constTy : C → B} :
     {Γ : QCtx B} → {e : Expr C} → {τ : Ty B} → QTyped constTy Γ e τ →
     ∀ {x : Var} {l : Label} {τx : Ty B}, e = .sel (.var x) l →
     Γ.lookup x = some ⟨[], [], τx⟩ →
@@ -1870,6 +1872,14 @@ theorem selQ_principal {B C : Type} (constTy : C → B) :
     QScheme.Principal constTy (⟨[], []⟩ : QCtx B) (selEx C) (selQ B) :=
   ⟨(selQ_sound_and_inhabited constTy).1, (selQ_sound_and_inhabited constTy).2,
    selQ_covers_typings constTy⟩
+
+-- ... and therefore ⊴≼-greatest among every scheme that is sound for λx.x.l.
+-- ⊢  (∀τ. σ ≥_∅ τ ⟹ ∅ ⊢_Q λx.x.l : τ)  ⟹  σ ⊴≼[∅] selQ
+theorem selQ_greatest {B C : Type} (constTy : C → B) {σ : QScheme B}
+    (hcl : ∀ τ, QScheme.Inst Ctx.empty σ τ →
+      QTyped constTy (⟨[], []⟩ : QCtx B) (selEx C) τ) :
+    σ ⊴≼[Ctx.empty] selQ B :=
+  (selQ_principal constTy).greatest hcl
 
 --------------------- FIELD-FREE ROWS (what ≈ ε forces) ------------------------
 -- A row that is ≈-equivalent to ε carries no field ANYWHERE: `≈` never creates

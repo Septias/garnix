@@ -27,13 +27,42 @@ namespace MinimalCalculus
 /-- info: 'MinimalCalculus.stuck_not_both_ground' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in #print axioms stuck_not_both_ground
 
--- The occurs guard's incompleteness, sharply: a reported-occurs problem with an
--- MGU (the algorithm's verdict on it is occurs_allVar_reported).
--- Classical.choice matches its sibling no-mgu/mgu theorems (allvar_swap).
+-- The all-variable occurrence, which the occurs guard used to reject: not a
+-- give-up any more but the CORRECTNESS PROOF of the ε-collapse rule. The
+-- three-atom witness (Classical.choice matches its sibling no-mgu/mgu theorems,
+-- allvar_swap) and the general rule it became.
 /--
 info: 'MinimalCalculus.occurs_allVar_hasMgu' depends on axioms: [propext, Classical.choice, Quot.sound]
 -/
 #guard_msgs in #print axioms occurs_allVar_hasMgu
+
+/-- info: 'MinimalCalculus.allvar_occurs_mgu' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in #print axioms allvar_occurs_mgu
+
+/-- info: 'MinimalCalculus.collapseSol_reflect' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in #print axioms collapseSol_reflect
+
+/-- info: 'MinimalCalculus.collapseSol_complete' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in #print axioms collapseSol_complete
+
+-- THE OCCURS VERDICT, SOUND WHERE IT IS LOCAL. The converse-shaped direction —
+-- the only one available anywhere in this development. Both sources: the type
+-- sort (constructor depth) and the row sort (where the case analysis closes).
+/-- info: 'MinimalCalculus.ty_occurs_no_unifier' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in #print axioms ty_occurs_no_unifier
+
+/-- info: 'MinimalCalculus.bindTy_occurs_no_unifier' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in #print axioms bindTy_occurs_no_unifier
+
+/--
+info: 'MinimalCalculus.solveVarM_occurs_no_unifier' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms solveVarM_occurs_no_unifier
+
+/--
+info: 'MinimalCalculus.solveVarM_occurs_no_unifier_nil' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms solveVarM_occurs_no_unifier_nil
 
 -- ## P1: mutual ≐/≐ᵣ scaffolding
 -- The ≗-congruence is the new load-bearing theory; it is axiom-FREE, and the
@@ -355,6 +384,34 @@ info: 'MinimalCalculus.selQ_needs_equiv' depends on axioms: [propext, Classical.
 
 /-- info: 'MinimalCalculus.TyBelow.trans' does not depend on any axioms -/
 #guard_msgs in #print axioms TyBelow.trans
+
+-- THE POSITIVE BOOKEND: selQ is principal for λx.x.l in the ⊴≼ order —
+-- instance-closed, inhabited, and covering EVERY typing (not just every lookup
+-- verdict). Pair with no_plain_principal_scheme for the "forced" claim.
+/--
+info: 'MinimalCalculus.selQ_principal' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms selQ_principal
+
+/--
+info: 'MinimalCalculus.selQ_greatest' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms selQ_greatest
+
+/-- info: 'MinimalCalculus.qsel_var_inv' depends on axioms: [propext] -/
+#guard_msgs in #print axioms qsel_var_inv
+
+-- L1 ⊊ L2, mechanized: the two-use program types in L2 and NOT in L1. Closes
+-- the last claim of the metatheory that was only a comment.
+/--
+info: 'MinimalCalculus.l1_strictly_weaker' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms l1_strictly_weaker
+
+/--
+info: 'MinimalCalculus.l1_rejects_two_use' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms l1_rejects_two_use
 
 -- ## ⟦S⟧ as a context (RowUnify.State) — the θ ↦ rowEnv bridge
 -- Without these two, no inference rule that performs a lookup under a partial

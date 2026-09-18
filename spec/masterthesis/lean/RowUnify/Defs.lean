@@ -642,6 +642,7 @@ def AgreeOn {B : Type} (θ θ' : TySubst B) (V : List TyVar) : Prop :=
 -- which is why every `bindTy` theorem — stated on SUCCESS — carries over
 -- unchanged. The row occurs guard keeps its own conservatism
 -- (occurs_allVar_hasMgu); that one is a separate question.
+-- The cross-sort success is pinned as a regression: `tyM_cross_sort_solves`.
 def tyIsVar {B : Type} : Ty B → Option TyVar
   | .var β => some β
   | _      => none
@@ -654,15 +655,49 @@ def bindTy {B : Type} (S : Supply) (α : TyVar) (τ : Ty B) : UResM B :=
   else if τ.tyFtv.contains α then .occurs
   else .success ⟨[(α, τ)], []⟩ S
 
+-- ## The ε-collapse solution
+-- Every spine variable to ε, except one the caller asks to KEEP. `none` on a
+-- field: the rule this serves is only justified on a field-free spine.
+def epsCollapse {B : Type} (keep : Option TyVar) :
+    List (Atom B) → Option (List (TyVar × Row B))
+  | []               => some []
+  | .var γ :: s      => (epsCollapse keep s).map
+                          (fun σ => if keep = some γ then σ else (γ, Row.empty) :: σ)
+  | .field _ _ :: _  => none
+
+-- ## …and WHICH collapse an all-variable occurrence calls for
+-- α ≐ᵣ [γ₁ … γₙ] with α on that spine k ≥ 1 times. The ≈-characterization reads
+-- `varseq(θα) = varseq(θγ₁) ++ … ++ varseq(θγₙ)`, hence
+-- `|varseq θα| = k·|varseq θα| + Σ_{γᵢ ≠ α} |varseq θγᵢ|`, and the same equation
+-- holds at every l-field count. At k = 1 that forces the OTHER variables to ε
+-- and leaves α free — genuinely free, `ε | α | ε ≈ α` for whatever α is. At
+-- k ≥ 2 it forces α as well. Both are the unique solution, so both are mgus
+-- (`allvar_occurs_mgu`), which is why this configuration must NOT report
+-- `.occurs`. `none` means "not this rule": α is not on the spine (it is deep,
+-- or only reachable through the accumulated expansions), or a field pins it.
+def collapseSol {B : Type} (α : TyVar) (s : List (Atom B)) :
+    Option (List (TyVar × Row B)) :=
+  if (sVarSeq s).contains α then
+    epsCollapse (if 2 ≤ (sVarSeq s).count α then none else some α) s
+  else none
+
 -- ## U-var-solve, at the mutual driver's result type
--- The occurs guard also reads the accumulated expansions: α ≔ ofSpine s₂ is a
--- cycle as soon as α is REACHABLE from s₂, not only when it occurs in it. This
--- is the guard that the traced spine-level cycle runs through.
+-- Three-way. The occurs guard reads the accumulated expansions: α ≔ ofSpine s₂
+-- is a cycle as soon as α is REACHABLE from s₂, not only when it occurs in it —
+-- that is the guard the traced spine-level cycle runs through. But a purely
+-- VARIABLE occurrence is not a cycle at all: it is solved, uniquely, by the
+-- ε-collapse, and `collapseSol` fires first on exactly that case. What is left
+-- under the guard is the occurrence that is genuinely unsolvable — deep, or
+-- field-pinned — plus the stale-binding case, which is a fact about the solver
+-- state rather than the problem.
 def solveVarM {B : Type} (Θ : DepGraph) (S : Supply) :
     List (Atom B) → List (Atom B) → Option (UResM B)
   | [.var α], s₂ =>
-      some (if (depReach Θ (Row.allRowVars (ofSpine s₂))).contains α then .occurs
-            else .success (Sol.ofRow [(α, ofSpine s₂)]) S)
+      some (match collapseSol α s₂ with
+            | some σ => .success (Sol.ofRow σ) S
+            | none =>
+              if (depReach Θ (Row.allRowVars (ofSpine s₂))).contains α then .occurs
+              else .success (Sol.ofRow [(α, ofSpine s₂)]) S)
   | _, _ => none
 
 -- ## U-expand, at the mutual driver's result type
@@ -839,9 +874,11 @@ def SolBelow {B : Type} (s : Sol B) (W : List TyVar) : Prop :=
 -- ## What the fourth leg can honestly be about
 -- `unifySpineMF … = .stuck` is NOT the right hypothesis. `UResM.seq` propagates
 -- a sub-call's `.stuck` before the residual is ever examined, and that residual
--- can disambiguate the whole problem — so the verdict is CONSERVATIVE, exactly
--- as `.occurs` is (Refutations.stuck_masks_mgu, Refutations.occurs-side
--- occurs_allVar_hasMgu). "stuck ⟹ no mgu" is false, at every formulation.
+-- can disambiguate the whole problem — so the verdict is CONSERVATIVE
+-- (Refutations.stuck_masks_mgu). "stuck ⟹ no mgu" is false, at every
+-- formulation. The analogy with `.occurs` that used to stand here is gone:
+-- occurs is sound where it is local (`solveVarM_occurs_no_unifier`,
+-- `bindTy_occurs_no_unifier`). `.stuck` now stands alone.
 --
 -- What IS available is the fall-through condition of the driver's last arm:
 -- both spines non-empty and every move dead, with no projection clash either.

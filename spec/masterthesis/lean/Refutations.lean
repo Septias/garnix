@@ -3,8 +3,9 @@
 -- Two results, in increasing order of consequence:
 --   1. the parked `hbase` and friends are false in the SHAPE they are stated in
 --      (an unconstrained `Q` conjunct), and
---   2. `.stuck` ⟹ no mgu is false OUTRIGHT — the verdict is CONSERVATIVE, in
---      the same way `.occurs` is (occurs_allVar_hasMgu). See stuck_masks_mgu.
+--   2. `.stuck` ⟹ no mgu is false OUTRIGHT — the verdict is CONSERVATIVE. See
+--      stuck_masks_mgu. `.occurs` used to be its sibling here; it no longer is
+--      (solveVarM_occurs_no_unifier). `.stuck` stands alone.
 --
 -- `unifyM_stuck_no_mgu` (Trichotomy.lean) reduces the stuck leg to four named
 -- hypotheses, each of the shape "for EVERY predicate Q, the configuration has
@@ -356,7 +357,9 @@ theorem terminal_masks_mgu : HasMgu tρ₁ tρ₂ := by
 -- type-level check in `bindTy` already tested `τ.ftv`. It is strictly more
 -- conservative, so it can only turn successes into `.occurs`, and every
 -- rejection it adds is genuine by `deep_occurs_no_unifier` (NoMgu.lean). The
--- spine-occurrence conservativity of `occurs_allVar_hasMgu` is untouched by it.
+-- spine-occurrence case it left alone has since been taken the other way: the
+-- ε-collapse rule SOLVES it (`allvar_occurs_mgu`), so what the guard rejects is
+-- now exactly the deep and the field-pinned occurrence.
 --
 -- The two theorems below are the regression: the verdict, and the fact that it
 -- is the right one.

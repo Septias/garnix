@@ -54,37 +54,25 @@ Principality forces qualified schemes that use parked stumps during unification 
     - VACUOUS successes: none left in any fuzz universe, either half, since the
       guards read the accumulated solution (B1). `UnifyWF` is still UNPROVED —
       empirically clean is not a theorem.
-  - [¡] occurs: *incomplete*
-    - α ≐ᵣ (β|α|γ)
-    - RE-SIZED 2026-09-18, against plans/occurs-complete-plan.md. That plan is
-      partly STALE and the job is NOT the cheap one its framing ("the missing
-      artefact is an algorithm arm, not a theorem") suggests.
-        * Stage 4 (sorted ftv at `bindTy`) is ALREADY DONE — Defs.lean:654 reads
-          `τ.tyFtv`, not `τ.ftv`. Cross off.
-        * Stage 2 has GROWN since the plan was written. It quotes a `solveVarM`
-          with signature `(S : Supply) → …` and a local `Row.allRowVars` guard;
-          B1 rewrote that arm to `solveVarM (Θ : DepGraph) (S : Supply)` guarding
-          on `depReach Θ (Row.allRowVars (ofSpine s₂))`. So the new ε-collapse
-          branch has to be justified against the DEPENDENCY-CLOSED guard, not the
-          syntactic one, and every site in the plan's touch list inherits that.
-        * Stage 1 (`allvar_occurs_mgu`) is additive and zero-risk but is NOT
-          small: lifting `occurs_allVar_hasMgu` off its 3-atom witness needs the
-          k = 1 / k ≥ 2 split (two DIFFERENT witnesses — the all-ε collapse is not
-          most general when α occurs once, and keeping α is not a unifier when it
-          occurs twice), plus list-arithmetic over `List.count` and flatMap
-          lengths. It also needs `sVarSeq_applySubst`, which currently lives in
-          State.lean — the LAST module in the chain — while the occurs theorems
-          are in NoMgu.lean, the second. It should be relocated to NoMgu.lean
-          (its proof needs only `sVarSeq_append`); State.lean still sees it
-          transitively, so the move is free. A field-count counterpart
-          ("on a field-free spine the l-count of the image is the sum over the
-          spine's variables") does not exist and has to be written.
-        * Stage 5 still stands in full: `occurs_allVar_reported` (Driver.lean:42)
-          asserts `.occurs` by `rfl` and becomes FALSE, and the sweep must be
-          re-run because this is the first occurs change that MANUFACTURES
-          successes — `solRankedB` / `solAcyclicB` are live tripwires here.
-      Bottom line: this is a multi-session change that alters verdicts, not a
-      bookkeeping item. Do not bundle it with additive work.
+  - [~] occurs: *sound where it is LOCAL* (2026-09-16)
+    - α ≐ᵣ (β|α|γ) is no longer reported: the ε-collapse rule SOLVES the
+      all-variable occurrence, at any spine and any multiplicity
+      (`allvar_occurs_mgu`). What the guard still rejects is the deep and the
+      field-pinned occurrence, and both are genuine no-unifiers — the case
+      analysis closes (`solveVarM_occurs_no_unifier`). At the type sort the
+      guard is now SORTED and its rejections are genuine too
+      (`bindTy_occurs_no_unifier`, a constructor-depth argument).
+    - THE REMAINING GAP is not about the problem: the guard reads
+      `depReach Θ`, so it can also fire on an α that is merely REACHABLE from s₂
+      through the accumulated expansions. No no-unifier theorem follows from
+      that disjunct, so the driver-level `unifyRowM … = .occurs ⟹ ¬∃θ` is
+      blocked there — and only there. `solveVarM_occurs_no_unifier_nil` is the
+      unconditional statement at Θ = [] (`depReach [] V = V`).
+    - the 2026-09-18 re-size of plans/occurs-complete-plan.md (Stages 1/2/5 read
+      as a multi-session change) was written against pre-merge main and is
+      ANSWERED by the work above: `sVarSeq_applySubst` now lives in NoMgu.lean,
+      `occurs_allVar_reported` is gone and replaced by `allVar_collapse_reported`,
+      and the sweep was re-run clean (ill-formed 0, spine-cyclic 0, unrankable 0).
   - [~] stuck : *incomplete*
     - (k:{β|α} | β) ≐ᵣ (k:{l:𝓫} | l:𝓫)
   
@@ -195,6 +183,8 @@ Principality forces qualified schemes that use parked stumps during unification 
     weaker guard admits nothing that breaks `Acyclic` or `Ranked`.
     The ROW occurs guard keeps its own conservatism (occurs_allVar_hasMgu);
     that is a separate question and is untouched.
+    The genuine cycles are still caught: `x ≐ (x→x)` and `x ≐ {l:x}` report
+    occurs (`tyM_occurs_fn`, `tyM_occurs_field`, Regressions.lean).
   - [x] ⊴ covering order on qualified schemes (Qualified.lean, THE COVERING ORDER)
   - [ ] solver state S = (θ, Δ, W), stump wake-up, confluence of the final state
 
@@ -504,6 +494,9 @@ through `unifyTyF`/`unifySpineMF` with `S.supply` threaded in and out.
     Needed `qvar_inst_inv` (the L2 `var_inst_inv`) as well. Axiom-clean.
     So λx.x.l HAS a principal qualified scheme in the corrected order — the
     bookend `no_plain_principal_scheme` forced, now proved rather than asserted.
+  - [x] hence *selQ is ⊴≼-greatest* among all schemes sound for λx.x.l (selQ_greatest).
+    With no_plain_principal_scheme this is the full @contributions claim: plain schemes
+    are refuted, the qualified one is exhibited AND shown principal
 
 
 # Problems
@@ -645,6 +638,10 @@ Proofs are for _closed_ programs (Γ = ∅). e ↯ marks _lookup-errors_: a sele
     `typed_app_inv'` (typed_inv_aux only covers con/lam/rcd) and `tvar_inv` (the
     general-scheme `var_inst_inv`). `sel_var_unk` / `var_inst_inv` are no longer
     `private` in minimal.lean. Axiom-clean.
+    A second, independent proof of the same theorem existed on
+    worktree-prec-equiv-commutation (lean/Strictness.lean, 2026-09-15:
+    `l1_strictly_weaker_than_l2` / `no_plain_scheme_two_use`). It was dropped as
+    duplicate when that branch was merged — do not re-derive it.
   - *completeness w.r.t. inference*: NO, and not yet stateable. No W (algorithmic.lean is
     an import root); unifyRowM_success_iff is completeness for ≐ᵣ, not for ⊢_Q; and
     principality for L2 exists only as the single-example bookend qualified_principal_scheme

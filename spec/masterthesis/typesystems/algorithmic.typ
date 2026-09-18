@@ -354,18 +354,19 @@ v := θ | clash | occurs | stuck | no-fuel
 α ≐ α ⇝ ∅
 
 
-τ ≠ α   α ∉ ftv(τ)
+τ ≠ α   α ∉ ftv_Ty(τ)
 -------------------- U-bind
 α ≐ τ ⇝ [α ≔ τ]
 
 
-τ ≠ α   α ∈ ftv(τ)
+τ ≠ α   α ∈ ftv_Ty(τ)
 -------------------- U-occurs
 α ≐ τ ⇝ occurs
-// Sorted, the guard tests ftv at Type only. The mechanization still uses the
-// unsorted ftv, which spans both sorts, so it also rejects α ≐ {… α …} when
-// the inner α is a row-var — solvable, and exactly the conservatism sorting
-// removes.
+// SORTED: ftv_Ty collects the occurrences at TYPE positions only, so
+// α ≐ {… α …} with a row-var α is a BINDING, not a failure — the binding never
+// reaches that occurrence. Mechanized as `Ty.tyVars` (RowUnify/Defs.lean); the
+// rejections it keeps are genuine no-unifiers (`bindTy_occurs_no_unifier`,
+// by constructor depth).
 
 
 ----------- U-★
@@ -434,16 +435,28 @@ t₁ ≐ᵣ t₂ ⇝ θ
 t₁·α ≐ᵣ t₂·α ⇝ θ
 
 
-α ∉ vars(s)
+α ∉ rowvars(s)
 ---------------------- U-var-solve
 α ≐ᵣ s ⇝ [α ≔ s]
 
 
-α ∈ vars(s)
----------------------- U-var-occurs
+α ∈ vars(s)   s field-free   k = |α|_s
+------------------------------------------------ U-var-collapse
+α ≐ᵣ s ⇝ [γ ≔ ε : γ ∈ vars(s), γ ≠ α or k ≥ 2]
+// NOT a failure. The ≈-characterization reads |m(θα)| = k·|m(θα)| + Σ_{γ≠α},
+// at the var-sequence length and at every field count alike, so at k = 1 every
+// OTHER spine variable is forced to ε and α stays free (ε | α | ε ≈ α), and at
+// k ≥ 2 α is forced too. Both are unique, hence mgus (`allvar_occurs_mgu`).
+
+
+α ∈ rowvars(s)   ¬(α ∈ vars(s) ∧ s field-free)
+---------------------------------------------- U-var-occurs
 α ≐ᵣ s ⇝ occurs
-// Conservative: α ≐ᵣ (β | α | γ) is reported occurs though it has an mgu.
-// A row-monoid fact, NOT a sorting one — sorting does not remove this leg.
+// What is left after U-var-collapse: α under a record constructor (depth grows
+// — `deep_occurs_no_unifier`) or on the spine with a field present (counting —
+// `occurs_field_no_unifier`). Both are genuine no-unifiers, so the case
+// analysis CLOSES: `solveVarM_occurs_no_unifier`. rowvars(s) is `allRowVars` —
+// the row variables at any depth, the row half of the sorted occurs check.
 
 
 win\_l(s₂) = (τ′, t₂)   τ ≐ τ′ ⇝ θ   θt₁ ≐ᵣ θt₂ ⇝ θ′
@@ -511,8 +524,9 @@ fresh α: κ     draw a name at sort κ from the threaded supply
   counterparts to T-eq and T-★-intro — inversion-mod-≈ and re-blurring account
   for those on the declarative side
 - Failure policy: a `clash` is a hard error (it is PROVED to mean no unifier
-  exists, so rejecting is soundness, not choice). `stuck` and `occurs` are
-  conservative and may NOT reject; they degrade to ★ with a W-flag
+  exists, so rejecting is soundness, not choice). So is `occurs` where the guard
+  is local — that is now proved at both sorts. `stuck` is conservative and may
+  NOT reject; it degrades to ★ with a W-flag
 - The degradation is a RULE, not a side remark: A-app-deg and A-sel-deg are the
   two sites that emit a type equation, and without them the judgement is simply
   undefined on a conservative verdict. A clash has no rule at ALL — that absence

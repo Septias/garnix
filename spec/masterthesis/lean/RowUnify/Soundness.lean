@@ -49,12 +49,20 @@ theorem solveVarM_reflect {B : Type} {θ : TySubst B} {Θ : DepGraph} {S : Suppl
       | nil =>
         simp only [solveVarM] at hsolve
         split at hsolve
-        · simp at hsolve
-        · simp only [Option.some.injEq, UResM.success.injEq] at hsolve
-          obtain ⟨rfl, -⟩ := hsolve
-          have hbind := hsat.2 (α, ofSpine s₂) List.mem_cons_self
-          simp only [ofSpine, Row.applySubst]
-          exact RowEquiv.unitR.trans hbind
+        · -- the ε-COLLAPSE arm: the emitted bindings ARE a unifier
+          next σ hc =>
+            simp only [Option.some.injEq, UResM.success.injEq] at hsolve
+            obtain ⟨rfl, -⟩ := hsolve
+            simp only [ofSpine, Row.applySubst]
+            exact RowEquiv.unitR.trans
+              (collapseSol_reflect hc (fun p hp => hsat.2 p hp))
+        · split at hsolve
+          · simp at hsolve
+          · simp only [Option.some.injEq, UResM.success.injEq] at hsolve
+            obtain ⟨rfl, -⟩ := hsolve
+            have hbind := hsat.2 (α, ofSpine s₂) List.mem_cons_self
+            simp only [ofSpine, Row.applySubst]
+            exact RowEquiv.unitR.trans hbind
 
 -- ⊢  the U-expand wrapper inverts: a success came from a success underneath
 theorem expandResM_success {B : Type} {S : Supply} {β : TyVar} {l : Label} {τ : Ty B}
@@ -117,9 +125,12 @@ private theorem solveVarM_supply {B : Type} {Θ : DepGraph} {S : Supply}
   | [.var α] =>
       simp only [solveVarM] at h
       split at h
-      · simp at h
       · simp only [Option.some.injEq, UResM.success.injEq] at h
         obtain ⟨-, rfl⟩ := h; exact Nat.le_refl _
+      · split at h
+        · simp at h
+        · simp only [Option.some.injEq, UResM.success.injEq] at h
+          obtain ⟨-, rfl⟩ := h; exact Nat.le_refl _
   | .var _ :: _ :: _ => simp [solveVarM] at h
 
 private theorem allVarsEmpty_supply {B : Type} {S : Supply} {u : List (Atom B)}

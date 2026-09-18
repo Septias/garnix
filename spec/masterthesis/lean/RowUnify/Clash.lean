@@ -51,7 +51,11 @@ theorem solveVarM_ne_clash {B : Type} {S : Supply} {s₁ s₂ : List (Atom B)} :
     | var α =>
       cases r with
       | cons _ _ => simp [solveVarM] at h
-      | nil => simp only [solveVarM] at h; split at h <;> simp at h
+      | nil =>
+        simp only [solveVarM] at h
+        split at h
+        · simp at h
+        · split at h <;> simp at h
 
 theorem expandResM_clash {B : Type} {S : Supply} {β : TyVar} {l : Label} {τ : Ty B}
     {r : UResM B} (h : expandResM S β l τ r = .clash) : r = .clash := by
