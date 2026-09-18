@@ -95,6 +95,36 @@ theorem unify_two_sided_stuck :
     unifyRowM (B := Unit) 20 (.cat (.var "a") (.sing "l" uB))
                              (.cat (.sing "l" uB) (.var "b")) = .stuck := rfl
 
+-- THE SHIFT PROBLEM (α | l: 𝓫) ≐ᵣ (l: 𝓫 | α) — the same var on both sides, so
+-- unlike unify_two_sided_stuck this is not a Levi ambiguity but a COUNTING one.
+-- It is solvable (α ≔ ε) and has one maximal unifier per k — α ≔ (l:𝓫)^k — so
+-- no finite answer is complete (RowUnify/UnifType.lean). Stuck here is not a
+-- missing driver arm: shift_no_finite_complete_set says no arm can do better.
+-- ⊢  unifyRowM (a | l:𝓫) (l:𝓫 | a)  =  stuck
+theorem unify_shift_stuck :
+    unifyRowM (B := Unit) 20 (.cat (.var "a") (.sing "l" uB))
+                             (.cat (.sing "l" uB) (.var "a")) = .stuck := rfl
+
+-- … and its mirror, for the same reason.
+-- ⊢  unifyRowM (l:𝓫 | a) (a | l:𝓫)  =  stuck
+theorem unify_shift_stuck_mirror :
+    unifyRowM (B := Unit) 20 (.cat (.sing "l" uB) (.var "a"))
+                             (.cat (.var "a") (.sing "l" uB)) = .stuck := rfl
+
+-- The k = 0 and k = 1 members of that family, instantiated: both succeed, which
+-- is what makes the stuck verdict above a genuine incompleteness rather than a
+-- clash in disguise.
+-- ⊢  unifyRowM (ε | l:𝓫) (l:𝓫 | ε)  =  success ∅
+theorem unify_shift_inst_zero :
+    unifyRowM (B := Unit) 20 (.cat .empty (.sing "l" uB))
+                             (.cat (.sing "l" uB) .empty) = .success ⟨[], []⟩ ⟨1⟩ := rfl
+
+-- ⊢  unifyRowM (l:𝓫 | l:𝓫) (l:𝓫 | l:𝓫)  =  success ∅
+theorem unify_shift_inst_one :
+    unifyRowM (B := Unit) 20 (.cat (.sing "l" uB) (.sing "l" uB))
+                             (.cat (.sing "l" uB) (.sing "l" uB))
+      = .success ⟨[], []⟩ ⟨1⟩ := rfl
+
 -- ## P1 scaffolding, kernel-checked
 -- The mutual driver applies a solution to the residual spine at every
 -- eq-emitting arm, so sApplySubst must REDUCE, not just be provably correct —
