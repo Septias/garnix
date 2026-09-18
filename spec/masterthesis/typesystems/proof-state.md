@@ -54,6 +54,37 @@ Principality forces qualified schemes that use parked stumps during unification 
     - VACUOUS successes: none left in any fuzz universe, either half, since the
       guards read the accumulated solution (B1). `UnifyWF` is still UNPROVED —
       empirically clean is not a theorem.
+    - WHAT VACUITY ACTUALLY IS (assessment, 2026-09-14). The two legs are
+      `Sat θ s → Unifies θ` and `Unifies θ → ∃θ' ⊨ s`. BOTH are vacuously true
+      when `s` is unsatisfiable AND the problem has no unifier, so the pair does
+      not exclude a success on an unsolvable input. Contrapositive of
+      completeness: if the problem HAS a unifier then `s` is satisfiable — so
+      *vacuous success ⟺ success on a problem with no unifier*. Nothing proved
+      today is FALSE; the pair is under-specified, not broken. Blast radius is
+      exactly inference soundness, which is unproved, so nothing currently rests
+      on it — but that is the next item on the critical path.
+    - THE MISSING STATEMENT is NOT `UnifyWF`. It is
+        `unifyRowM … = .success s _ → ∃θ, Sol.Sat θ s`.
+      `UnifyWF` bundles `Acyclic` (⟦S⟧-as-context, the lookup bridge) with
+      `Ranked` (closure exists ⟹ satisfiable). Only the RANKED half bears on
+      vacuity. Unbundle them so the lookup-bridge half does not block this one.
+    - PROPOSED ROUTE: carry `∃θ, Sol.Sat θ s` as a THIRD conjunct of the
+      existing mutual success induction, rather than proving a property of the
+      returned `s` post hoc. Each arm exhibits its own witness; the only hard
+      case is `UResM.seq`/`Sol.comp`, where the two stages' witnesses COMPOSE —
+      no rank function is constructed, so the three refuted rank candidates
+      above do not apply. What composition needs is domain non-collision, which
+      is what `unifyM_bounded`'s Supply/Avoids/SolBelow already delivers.
+      SUB-OBLIGATION: `Sol.Sat` quantifies over every pair in the list while
+      `Sol.toSubst` reads only the FIRST binding for a variable, so
+      `Closes → Sat` silently needs no-duplicate-keys. There is no such
+      invariant anywhere. Prove it or restate Sat through `toSubst`.
+      FALLBACK: the decidable check already exists — `solRankedB`/`peelDeps`
+      (Fuzz.lean) is Kahn's algorithm on the sorted dependency graph. Promote it
+      into the driver as a final gate that downgrades an unrankable success.
+      Then non-vacuity holds by construction. Costs: an extra pass, a changed
+      verdict profile (full re-sweep), and kernel-reduction time — the same
+      `TyVar = String` sensitivity that made one regression take 76s under B1.
   - [~] occurs: *sound where it is LOCAL* (2026-09-16)
     - α ≐ᵣ (β|α|γ) is no longer reported: the ε-collapse rule SOLVES the
       all-variable occurrence, at any spine and any multiplicity
