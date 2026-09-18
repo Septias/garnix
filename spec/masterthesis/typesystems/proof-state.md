@@ -30,7 +30,7 @@ Principality forces qualified schemes that use parked stumps during unification 
 - [x] Let-Statements
 - [x] Qualified Schemes
 - [~] Unification
-- [~] Type Inference  (judgement MECHANIZED 2026-09-14, lean/Infer.lean)
+- [~] Type Inference
 - [~] Mathematical Properties
 - [ ] FC-Labels
 - [ ] Negative type information
@@ -56,65 +56,40 @@ Principality forces qualified schemes that use parked stumps during unification 
       empirically clean is not a theorem.
   - [¡] occurs: *incomplete*
     - α ≐ᵣ (β|α|γ)
+    - RE-SIZED 2026-09-18, against plans/occurs-complete-plan.md. That plan is
+      partly STALE and the job is NOT the cheap one its framing ("the missing
+      artefact is an algorithm arm, not a theorem") suggests.
+        * Stage 4 (sorted ftv at `bindTy`) is ALREADY DONE — Defs.lean:654 reads
+          `τ.tyFtv`, not `τ.ftv`. Cross off.
+        * Stage 2 has GROWN since the plan was written. It quotes a `solveVarM`
+          with signature `(S : Supply) → …` and a local `Row.allRowVars` guard;
+          B1 rewrote that arm to `solveVarM (Θ : DepGraph) (S : Supply)` guarding
+          on `depReach Θ (Row.allRowVars (ofSpine s₂))`. So the new ε-collapse
+          branch has to be justified against the DEPENDENCY-CLOSED guard, not the
+          syntactic one, and every site in the plan's touch list inherits that.
+        * Stage 1 (`allvar_occurs_mgu`) is additive and zero-risk but is NOT
+          small: lifting `occurs_allVar_hasMgu` off its 3-atom witness needs the
+          k = 1 / k ≥ 2 split (two DIFFERENT witnesses — the all-ε collapse is not
+          most general when α occurs once, and keeping α is not a unifier when it
+          occurs twice), plus list-arithmetic over `List.count` and flatMap
+          lengths. It also needs `sVarSeq_applySubst`, which currently lives in
+          State.lean — the LAST module in the chain — while the occurs theorems
+          are in NoMgu.lean, the second. It should be relocated to NoMgu.lean
+          (its proof needs only `sVarSeq_append`); State.lean still sees it
+          transitively, so the move is free. A field-count counterpart
+          ("on a field-free spine the l-count of the image is the sum over the
+          spine's variables") does not exist and has to be written.
+        * Stage 5 still stands in full: `occurs_allVar_reported` (Driver.lean:42)
+          asserts `.occurs` by `rfl` and becomes FALSE, and the sweep must be
+          re-run because this is the first occurs change that MANUFACTURES
+          successes — `solRankedB` / `solAcyclicB` are live tripwires here.
+      Bottom line: this is a multi-session change that alters verdicts, not a
+      bookkeeping item. Do not bundle it with additive work.
   - [~] stuck : *incomplete*
     - (k:{β|α} | β) ≐ᵣ (k:{l:𝓫} | l:𝓫)
-    - (l:{w}) ≐ᵣ (w | v) — NO LONGER STUCK, expandR solves it
   
 - Open
-  - [x] the expandR driver arm — DONE (RowUnify/ExpandR.lean, 2026-09-13).
-    `expandR` existed since the self-reference filter and was never called; the
-    driver solved (l:𝓫|α) ≐ᵣ (m:𝓫|β) and went STUCK on the mirror
-    (α|l:𝓫) ≐ᵣ (β|m:𝓫). Two arms added AFTER the projClash test (projClash is a
-    sound no-unifier test, so a success reached past it would be vacuous — the
-    ordering makes the change monotone on reached verdicts).
-    NOT a transport: `revRow` transports the SUBSTITUTION-FREE lemmas (stripR,
-    matchR), but `revRow (ρ.applySubst θ) ≠ (revRow ρ).applySubst θ`, so
-    `expand_shift_R` and `host_forced_R` are genuine mirror proofs. The mirror of
-    `spine_extract` reads the l-field off segment index |vars| ("no variable
-    FOLLOWS it") instead of index 0; `ProjEquiv.reverse` turns "last entry" into
-    a head so the inductions stay left-to-right.
-    All four legs re-proved with the new arms: success soundness, success
-    completeness, boundedness, clash soundness, fuel monotonicity.
-    PAYOFF: `terminal_masks_mgu`'s configuration (l:{w}) ≐ᵣ (w|v) is no longer
-    terminal — expandR hosts in v — and the driver now returns exactly the mgu
-    that section builds by hand (Regressions.unify_terminal_masks_mgu_solved).
-    So `terminalNoMgu_false` is DELETED and `TerminalNoMgu` is OPEN: unrefuted
-    and unproven. Do not cite it either way. `stuck_masks_mgu` is untouched —
-    that one is about UResM.seq, so stuck ⟹ ¬mgu stays FALSE.
-    SWEEP (all three universes, cap 64, vs. pristine HEAD baseline):
-      stuck    2928/258564/4552 → 2664/243356/4352   (≈15k resolved in `deep`)
-      success 13493/ 83430/2917 → 13677/ 94022/2989
-      clash   unchanged in all three; divergence candidates still 0
-    REGRESSION, measured and NOT yet fixed — see the uniqueHost item below.
-
-  - [x] `uniqueHost` / the occurs guards need the SOLVER STATE — DONE
-    (2026-09-13, "B1"). The guards were LOCAL: they compared a variable with the
-    spine or payload AS WRITTEN. That is enough for every arm that SOLVES AND
-    APPLIES (matchL/R, groundMatch, the ≐ congruences) because those push their
-    solution into the residual. U-expand is the exception: it RENAMES the host
-    (β ↦ β′) instead of applying β ≔ (l:δ | β′), and `renameVar` touches SPINE
-    variables only — so a payload mentioning β still reads β after the move
-    while β is already bound, and a later guard misses a cycle that exists only
-    in the transitive closure.
-    THE FIX: `DepGraph` (Defs.lean) — the accumulated EXPANSIONS as an edge
-    list, threaded through `unifyTyF`/`unifySpineMF` and read by
-      * `uniqueHost`: the HOST condition becomes β ∉ depReach Θ (allRowVars τ).
-        The `rest` condition is NOT widened the same way — those variables are
-        excused by `selfref_no_l_field`, which needs the genuine occurrence in
-        τ, so widening there would be UNSOUND.
-      * `solveVarM`: α ≔ ofSpine s₂ is a cycle as soon as α is REACHABLE from
-        s₂, not only when it occurs in it. This is the guard the spine-level
-        cycle ran through — `uniqueHost` alone does not fix it.
-    Only expansions accumulate; every other arm's solution is already in its
-    residual. `depReach` is inflationary, so the guards only ever reject MORE:
-    `uniqueHost_spec` still yields the same `HostShape`, and success soundness /
-    completeness / clash soundness went through unchanged.
-    COST, and it is not incidental: the guards run inside kernel-checked `rfl`
-    regressions and `TyVar = String`. The obvious frontier-plus-`eraseDups`
-    closure made ONE regression take 76s to reduce. `depReach` is a marked set
-    kept deduped by construction, with a `[]` fast path for the (common) case
-    where no expansion has happened.
-    SWEEP — ill-formed solutions, BOTH halves, all three universes:
+  - SWEEP — ill-formed solutions, BOTH halves, all three universes:
       baseline (HEAD)   Acyclic 0/  0/ 0    Ranked 0/576/ 8
       + expandR         Acyclic 0/ 32/ 0    Ranked 0/1176/16
       + B1              Acyclic 0/  0/ 0    Ranked 0/  0/ 0     ← BELOW baseline
@@ -204,9 +179,22 @@ Principality forces qualified schemes that use parked stumps during unification 
     stage may mention of the earlier stage's domain — which the
     `Supply`/`Avoids`/`SolBelow` discipline constrains but does not yet pin
     down. Do not retry the three ranks above.
-  - [ ] sorted ftv, second half. `Ty/Row.sortedFtv` (State.lean) and
-    `Ty/Row.allRowVars` (Defs.lean) exist; `bindTy` still tests the sort-blind
-    `τ.ftv`, which is the over-conservatism the thesis flags.
+  - [x] sorted ftv, second half — DONE 2026-09-16. `Ty/Row.tyFtv` (Defs.lean) is
+    the TYPE-sort complement of `allRowVars`; the two partition `ftv`
+    (`Ty.mem_ftv_iff`) and are the fibres of `sortedFtv`'s tag @claude: what is a type fibre?
+    (`Ty.mem_tyFtv_iff_sortedFtv`, State.lean). `bindTy` now guards on `tyFtv`:
+    it binds at the TYPE sort, so the type fibre is the guard that makes the
+    binding eliminating. The guard is WEAKER, and every `bindTy` theorem is
+    stated on SUCCESS, so soundness/completeness/clash/stuck/supply all carried
+    over with no proof changes. The behaviour change is exactly one regression:
+    `x ≐ {x}` was `.occurs` and is now `success (x ≔ {x})` — the old verdict was
+    FALSE, and `tyM_cross_sort_unifier` / `tyM_cross_sort_sat` (Regressions.lean)
+    exhibit the unifier θ.ty x = {ε}, θ.row x = ε that the sort-blind guard
+    denied. Fuzz over all three universes after the change: 0 ill-formed
+    solutions, 0 spine-cyclic, 0 unrankable, 0 divergence candidates — so the
+    weaker guard admits nothing that breaks `Acyclic` or `Ranked`.
+    The ROW occurs guard keeps its own conservatism (occurs_allVar_hasMgu);
+    that is a separate question and is untouched.
   - [x] ⊴ covering order on qualified schemes (Qualified.lean, THE COVERING ORDER)
   - [ ] solver state S = (θ, Δ, W), stump wake-up, confluence of the final state
 
@@ -276,7 +264,30 @@ through `unifyTyF`/`unifySpineMF` with `S.supply` threaded in and out.
       the declarative `QScheme.Inst` they must DISCHARGE. Relating the two is
       the K-/D- correspondence the paper asserts but nobody has proved.
     * `A-let` — the generalized scheme's instances, needing `SchemeImage`
-      (QSubst.lean) plus the Δ-split.
+      (QSubst.lean) plus the Δ-split. SHARPENED 2026-09-16, and the news is bad
+      for the obvious route. `QScheme.applySubst` moved to Qualified.lean and now
+      carries its side condition explicitly (`QScheme.Avoiding`: σ fixes the
+      binders and its image on the scheme's other variables never mentions one,
+      plus `QScheme.WF`: the δ's are among the binders). Under it the FORWARD
+      half of `QCovers` is PROVED — `QCovers.forward_of_avoiding` — discharge and
+      all, the three Discharge cases going through `Sol.lookup_toCtx`. That is
+      the whole content of the old "wiring renameScheme in here is open" note on
+      `QScheme.applySubst`, and it is what `qVar` consumes.
+      The BACKWARD half is REFUTED for that witness:
+      `qcovers_backward_false_for_applySubst`. Take s = (b ≔ 𝓫), σ = ⟦s⟧,
+      σ₀ = ∀a.a — which IS `Avoiding` σ, and whose image is σ₀ again. `b` is an
+      instance of the image, and `b` is not the σ-image of anything, because σ
+      sends `b` to 𝓫 and fixes everything else. So the obstruction is NOT
+      capture and no freshness discipline fixes it: `applySubst σ` is not
+      surjective, while an instance set is always as large as its binders allow.
+      A `SchemeImage` proof must therefore produce a DIFFERENT scheme, not the
+      pushed-through one. The same example looks fatal for `SchemeImage` itself —
+      forward forces the image scheme's body to be one of its own binders (its
+      instances must include both 𝓫 and an arrow), and such a scheme has every
+      type as an instance unless a stump blocks it, while the σ-image of ∀a.a is
+      exactly the types not mentioning `b`. Ruling out every stump configuration
+      is what a full refutation still owes; recorded as the shape of the
+      obstruction, not as a theorem. Do not retry `σ₀.applySubst σ`.
     * `A-sel-?` — the deepest. The rule returns a stump-variable δ and parks
       `⟨α ▷ ρ.l ↓ δ⟩`; declaratively the nearest rule is `qSelUnk`, which gives
       ★. δ is a PROMISE, not yet a type, and it only becomes ★ at finalization.
@@ -300,8 +311,24 @@ through `unifyTyF`/`unifySpineMF` with `S.supply` threaded in and out.
   mutual structural recursion. This is what "inferred variables are fresh"
   rests on; it is also the first real theorem ABOUT the relation, so it
   confirms the mutual induction over Infer/InferRec is workable.
-- [ ] sorts. The paper draws `fresh α: κ`; `Supply` has no kinds, so the rules
-  draw untyped names and `A-let`'s `κ̄ = Γ(ᾱ)` is still not expressible.
+- [x] sorts — DONE 2026-09-16. `Kind` (ty/row), `KEnv` and `SolverState.kinds`
+  (Infer.lean); `draw` now takes the kind it draws at and records it, and at
+  every call site the kind is FORCED by the position the name is about to be
+  used at (λ-binder and δ at `.ty`; the record row-variables at `.row`). So
+  `fresh α: κ` is literal, and `selEx_infers` carries the concrete record
+  `[(aaa, ty), (aa, row), (a, ty)]`.
+  `A-let`'s `κ̄ = Γ(ᾱ)` is now writable as `KEnv.Assigns ᾱ κ̄` — read off the
+  DRAW, not off Γ, which is the answer to "ᾱ are exactly the variables not in Γ":
+  Γ never was the right source. `Infer.kinds_mono` says the record is only ever
+  extended, so a generalized binder is quantified at the kind it was invented at.
+  STILL OPEN: `KindsSound` (Infer.lean) — that a name drawn at κ only OCCURS at
+  κ-tagged positions, stated against `sortedFtv`. Named, not proved; it needs the
+  Γ-freshness invariant to rule out a draw colliding at the other sort.
+- [x] Γ-freshness — DONE 2026-09-16. `Stump.ftv` / `QScheme.ftv` / `QCtx.ftv`
+  (Qualified.lean) supply the ftv of a context that `FreshRenaming` was missing;
+  it now carries `∀ α ∈ vs, f α ∉ Γ.ftv`. Both gaps named in its own comment are
+  closed. Each ftv OVER-approximates (binders counted with free variables), which
+  is the safe direction for an avoid-set, as `Ctx.schemeFtv` does at L1.
 
 ## Principality
 - [x] covering order on schemes ⊴ — defined 2026-09-14, Qualified.lean
@@ -349,9 +376,20 @@ through `unifyTyF`/`unifySpineMF` with `S.supply` threaded in and out.
     ρ ⊑ᵣ ε ⟹ ρ = ε), and comm survives precisely because its l₁ ≠ l₂ is untouched by blur
   - [x] hence *≼ is transitive* (TyBelow.trans) and *⊴≼ is a PREORDER*
     (BelowCoveredAt.refl + .trans) — the order principality is stated in now composes
-  - [ ] OPEN: `Principal selQ (λx.x.l)` in the ≼ form — conjuncts 1+2 done
-    (selQ_sound_and_inhabited), 3 still needs the L2 inversion for λx.x.l (analogue of
-    minimal.lean's sel_var_unk)
+  - [x] `Principal selQ (λx.x.l)` in the ≼ form — DONE 2026-09-18, `selQ_principal`
+    (Qualified.lean). Conjuncts 1+2 were selQ_sound_and_inhabited; 3 is
+    `selQ_covers_typings`, and the L2 inversion it needed is `qsel_var_inv` — the
+    counterpart of minimal.lean's sel_var_unk, but FULL rather than the ★-only
+    special case: every typing of a selection on a monotype-bound x factors
+    through ONE lookup, and the typing sits ≼-above that lookup's collapse
+    (`∃ ρ r. τx ≈ {ρ} ∧ Γ ⊢ ρ.l ↓ r ∧ collapse r ≼ₜ τ`). qEq composes by
+    TyBelow.trans, qUnk by TyPrec.unk — which is exactly why the ≼ form goes
+    through where the ⊑-only one was refuted. `selQ_inst_of_lookup` then ANSWERS
+    each typing with the instance for that same lookup, so conjunct 3 is
+    discharged by the lookup the typing already performed, not by a search.
+    Needed `qvar_inst_inv` (the L2 `var_inst_inv`) as well. Axiom-clean.
+    So λx.x.l HAS a principal qualified scheme in the corrected order — the
+    bookend `no_plain_principal_scheme` forced, now proved rather than asserted.
 
 
 # Problems
@@ -464,10 +502,35 @@ Proofs are for _closed_ programs (Γ = ∅). e ↯ marks _lookup-errors_: a sele
 - IS L2 »SOUND & COMPLETE«? — audit 2026-09-13, build green, no sorries
   - *safety*: YES. qProgress/qPreservation are proven over ⊢_Q directly (Step/Value/Err
     reused from L1), preservation ON THE NOSE, axiom-guarded in Axioms.lean
-  - *vs. L1*: only the ⊆ direction. The converse is believed false, but NOT mechanized:
-    there is no `¬ Typed ∅ two_use ({a: 𝓫_c | b: ★})`. no_plain_principal_scheme is about
-    λx.x.l at ONE instance pair, so the Qualified.lean comment "no single plain scheme
-    could serve both uses" is prose, not a theorem. ⇒ L1 ⊊ L2 is an OPEN refutation
+  - *vs. L1*: BOTH directions — DONE 2026-09-18. ⊆ is Typed.toQ; the converse is
+    `l1_rejects_two_use` / `l1_strictly_weaker` (Qualified.lean), so **L1 ⊊ L2 is a
+    THEOREM**, no longer prose. The proof does NOT reuse no_plain_principal_scheme
+    (that one is pinned to τ₀ = {ε} and to syntactic instance types); it re-runs the
+    same argument mod ≈:
+      * the `a` use pins a DEFINITE result — projecting label a out of the record
+        type through `lookup_equiv` + `lookup_det` gives τa ≈ 𝓫_c, so the scheme has
+        an instance whose result is 𝓫_c;
+      * the `b` use forces an ε DOMAIN, and then instance-closedness forces that
+        instance's RESULT to ★ (selEx_dom_empty_res, i.e. sel_var_unk read through
+        the λ). A ★ domain is excluded outright: a selection on a ★-bound variable
+        has NO typing at all (sel_var_of_unk), since every selection rule demands
+        the scrutinee at a record type and ★ is ≈-rigid;
+      * so σ.body's result position is a bare quantified variable, the domain cannot
+        depend on it, and re-pointing it inside the ⊥-use's substitution yields the
+        underivable instance {ε} → 𝓫_c.
+    THE ONE STEP THAT IS NOT IN no_plain_principal_scheme is the last: there the
+    ⊥-instance's domain was SYNTACTICALLY {ε}, here it is only ≈ {ε}, so "the domain
+    does not mention the result variable" had to be earned. `Row.hasSing` +
+    `rowEquiv_hasSing` + `hasSing_applySubst` + `applySubst_rowOnly` (Qualified.lean)
+    do it: ≈ never creates or destroys a field, so a row ≈ ε is field-free ANYWHERE,
+    a field-free row has no TYPE positions at all, and its substitution image
+    therefore reads only θ.row — the re-point cannot reach it. That quartet is
+    general and reusable; it is the field-count invariant in the form the
+    mixed-instance construction needs.
+    New L1 inversions this needed, none of which existed: `typed_let_inv'`,
+    `typed_app_inv'` (typed_inv_aux only covers con/lam/rcd) and `tvar_inv` (the
+    general-scheme `var_inst_inv`). `sel_var_unk` / `var_inst_inv` are no longer
+    `private` in minimal.lean. Axiom-clean.
   - *completeness w.r.t. inference*: NO, and not yet stateable. No W (algorithmic.lean is
     an import root); unifyRowM_success_iff is completeness for ≐ᵣ, not for ⊢_Q; and
     principality for L2 exists only as the single-example bookend qualified_principal_scheme

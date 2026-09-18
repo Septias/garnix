@@ -492,8 +492,9 @@ s₁ ≐ᵣ s₂ ⇝ stuck
 - Δ indexes each parked stump by its *blocker*: the row-var whose L-α-free
   produced the ?. The blocker is a wake-up index, NOT part of the constraint —
   the declarative stump ⟨ρ.l ↓ δ⟩ carries none
-- W collects definite-absence flags and ★-degradations, named by the selection
-  site that produced them. It never affects typing, only diagnostics
+- W collects definite-absence flags and ★-degradations, named by the site that
+  produced them — the label for A-sel-⊥, K-⊥, F-★ and A-sel-deg, the application
+  itself for A-app-deg. It never affects typing, only diagnostics
 - The declarative system READS solutions via L-α; the algorithm WRITES them via
   unification. θ is only ever refined
 
@@ -512,6 +513,14 @@ fresh α: κ     draw a name at sort κ from the threaded supply
 - Failure policy: a `clash` is a hard error (it is PROVED to mean no unifier
   exists, so rejecting is soundness, not choice). `stuck` and `occurs` are
   conservative and may NOT reject; they degrade to ★ with a W-flag
+- The degradation is a RULE, not a side remark: A-app-deg and A-sel-deg are the
+  two sites that emit a type equation, and without them the judgement is simply
+  undefined on a conservative verdict. A clash has no rule at ALL — that absence
+  IS the hard error. `no-fuel` has none either, for the opposite reason: it is a
+  verdict about the budget, not about the problem, so the answer is a bigger one
+- Both degradation rules keep the state they had reached and add the flag. They
+  do NOT emit the equation's would-be solution: a verdict that may not reject
+  may not commit either
 
 ------------------- A-cons
 Γ; S ⊢ c ⇒ 𝓫_c; S
@@ -522,7 +531,8 @@ x: ∀(ᾱ: κ̄). Q ⇒ τ ∈ Γ   fresh β̄: κ̄   S ⊢ Q[β̄/ᾱ] ↝\* 
 Γ; S ⊢ x ⇒ τ[β̄/ᾱ]; S′
 // A-var IS I-inst: the instantiated constraints are submitted to wake-up, which
 // resolves the ones the current θ already decides and parks the rest. Parking
-// is the algorithmic image of D-? — only finalization commits ★.
+// is the algorithmic image of D-? — only finalization commits ★. The blockers
+// of Q[β̄/ᾱ] are not given here; ↝\* computes each one, by K-park.
 
 
 fresh α: Type   Γ·(x: α); S ⊢ e ⇒ τ; S′
@@ -533,6 +543,15 @@ fresh α: Type   Γ·(x: α); S ⊢ e ⇒ τ; S′
 Γ; S ⊢ e₁ ⇒ τ₁; S₁   Γ; S₁ ⊢ e₂ ⇒ τ₂; S₂   fresh β: Type   S₂ ⊢ τ₁ ≐ (τ₂ -> β) ⇝ S₃
 ------------------------------------------------------------------------------------- A-app
 Γ; S ⊢ e₁e₂ ⇒ β; S₃
+
+
+Γ; S ⊢ e₁ ⇒ τ₁; S₁   Γ; S₁ ⊢ e₂ ⇒ τ₂; S₂   fresh β: Type   S₂ ⊢ τ₁ ≐ (τ₂ -> β) ⇝ v   v ∈ {stuck, occurs}
+--------------------------------------------------------------------------------------------------------- A-app-deg
+Γ; S ⊢ e₁e₂ ⇒ ★; S₂ +W
+// The arrow equation gave up, so the application blurs. β is drawn and then
+// abandoned — nothing is written for it, since the verdict decides nothing. The
+// W-entry is named by the application site, the one selection-free site that
+// raises a flag.
 
 
 Γ; S ⊢ e₁ ⇒ τ₁; S₁   Γ; S₁ ⊢ e₂ ⇒ τ₂; S₂   fresh ρ₁ ρ₂: Row   S₂ ⊢ τ₁ ≐ {ρ₁} ⇝ S₃   S₃ ⊢ τ₂ ≐ {ρ₂} ⇝ S₄
@@ -556,6 +575,16 @@ fresh α: Type   Γ·(x: α); S ⊢ e ⇒ τ; S′
 // NOT ★: returning ★ here would freeze the result and lose every later
 // refinement — (x: x.l) would infer {β} -> ★ and no application could recover
 // the field type. The stump-var δ keeps the position writable.
+
+
+Γ; S ⊢ e ⇒ τ; S₁   fresh ρ: Row   S₁ ⊢ τ ≐ {ρ} ⇝ v   v ∈ {stuck, occurs}
+-------------------------------------------------------------------------- A-sel-deg
+Γ; S ⊢ e.l ⇒ ★; S₁ +W
+// The RECORD equation gave up, before any lookup happens — so this is not a
+// third lookup verdict next to A-sel-⊥ and A-sel-?, it is the case where the
+// scrutinee never became a row to look in. No stump is parked: a stump needs a
+// blocker, and there is no ρ-solution to be blocked on. ★ here is final, unlike
+// A-sel-?'s δ.
 
 
 Γ; S ⊢ ξ ⇒ ρ; S′
@@ -584,6 +613,14 @@ fresh α: Type   Γ·(x: α); S ⊢ e ⇒ τ; S′
   instantiation, wake-up fires each time θ grows
 - K-repark has no declarative counterpart: declaratively D-? commits to ★
   immediately, algorithmically the lookup has merely progressed to the next var
+- ↝\* runs over a Δ-shaped list, so its elements are blocker-annotated. A-var
+  submits its instantiated Q with the blockers LEFT FREE: each step of the
+  closure determines one — K-hit and K-⊥ by resolving the constraint outright,
+  K-park by the ? -witness
+- K-park is the ↝\* rule that A-var needs and ↝ cannot state: a FRESHLY
+  instantiated constraint arrives with no blocker yet, so there is no single-step
+  wake-up to take. K-repark is the same move for a stump already in Δ — the
+  difference is only whether an old entry is dropped first
 - Wake-up fires when a solution α ≔ ρ is written, and only for stumps blocked
   on α
 - *Monotone*: a stump resolved found/⊥ is final under every later θ, so resolved
@@ -604,6 +641,24 @@ S ⊢ ⟨α ▷ ρ.l ↓ δ⟩ ↝ (S′ ∖ ⟨α ▷ ρ.l ↓ δ⟩) +W
 ⟦S⟧ ⊢ (⟦S⟧ρ).l ↓ ? on α′
 ------------------------------------------------------------ K-repark
 S ⊢ ⟨α ▷ ρ.l ↓ δ⟩ ↝ (S ∖ ⟨α ▷ ρ.l ↓ δ⟩) ⊎ ⟨α′ ▷ ρ.l ↓ δ⟩
+
+
+--------- K-nil
+S ⊢ ∅ ↝\* S
+
+
+S ⊢ ⟨α ▷ ρ.l ↓ δ⟩ ↝ S₁   S₁ ⊢ Δ′ ↝\* S′
+---------------------------------------- K-cons
+S ⊢ (⟨α ▷ ρ.l ↓ δ⟩, Δ′) ↝\* S′
+
+
+⟦S⟧ ⊢ (⟦S⟧ρ).l ↓ ? on α   (S ⊎ ⟨α ▷ ρ.l ↓ δ⟩) ⊢ Δ′ ↝\* S′
+----------------------------------------------------------- K-park
+S ⊢ (⟨α ▷ ρ.l ↓ δ⟩, Δ′) ↝\* S′
+// The blocker is DETERMINED, not supplied: the premise is what fixes α, so an
+// instantiated stump cannot be parked on a variable that is not the one
+// actually blocking its lookup. That is the state invariant A-var would
+// otherwise be free to break.
 
 
 S ⊢ δ ≐ ★ ⇝ S′
