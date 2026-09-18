@@ -424,8 +424,11 @@ through `unifyTyF`/`unifySpineMF` with `S.supply` threaded in and out.
       false too.
       THE FIX is the premise its siblings have — `LookupBlocked` on the row it
       is finalizing, which is exactly what A-sel-? already establishes when it
-      parks the stump. Not applied yet: it moves `selEx_infers` and the A-sel-?
-      soundness case with it. This is a defect in the RULE, not in the proof.
+      parks the stump. **APPLIED 2026-09-18**, together with the other half the
+      reachable witness forced (saturation in the A-rules); see the F-★ entry
+      under `# Problems` for the whole chain, and `Finalize.dischargeEquiv` for
+      what the premise then buys. The refutations survive the fix by naming what
+      they refute: `FinalizeUnguarded` is the old rule, kept.
     * `A-let` — the generalized scheme's instances, needing `SchemeImage`
       (QSubst.lean) plus the Δ-split. It also depends on the stump condition
       below: `qLet`'s INHABITATION premise is met "by construction" only because
@@ -465,6 +468,19 @@ through `unifyTyF`/`unifySpineMF` with `S.supply` threaded in and out.
       (`infer_sound_selUnk_step`), all three discharge cases landing on T-sel /
       T-sel-⊥ / T-sel-★. Establishing it is wake-up's job, and it is now a
       statable obligation rather than an open question about meaning.
+      SHARPENED 2026-09-18: the case needs no discharge at ALL once the promise
+      is a hypothesis OF THE JUDGEMENT. `QTypedC` (InferSound.lean) is QTyped plus
+      a list of stump ASSUMPTIONS threaded unchanged through every rule, with one
+      new rule `stump` answering at the stump's own result variable, so a parked
+      stump IS a typing hypothesis and δ is a variable standing for its future
+      value. `inferC_sound_selUnk_step` is then the record equation plus one rule,
+      with `σ.ty δ = .var δ` — "σ has no opinion at δ yet", which is what parked
+      MEANS — as its only side condition. The promise is redeemed once, at the
+      end (`QTypedCDischarge`), instead of at every selection site. Sanity:
+      `QTyped.toC` and `QTypedC.toQTyped` (at Δ = [] the two judgements coincide,
+      so `stump` is the only addition). `Parked.toStumpC` builds the assumptions:
+      σ applied to the stump's ROW, result variable left RAW — that pair is the
+      difference between a stump and a typing.
     * `A-app-degrade` and `A-sel-degrade` — SOUNDNESS-GAPPED BY CONSTRUCTION,
       and not in the way `plans/inference-gap-analysis.md` records. That file
       asks for "replacing a position by ★ preserves declarative typeability",
@@ -590,6 +606,177 @@ through `unifyTyF`/`unifySpineMF` with `S.supply` threaded in and out.
 
 # Problems
 > Problems found during mechanized proving and their proposed solutions
+
+- [!] **F-★ IS DEFECTIVE, AND THE DEFECT IS IN THE RULE SET** (2026-09-18).
+  `Finalize.star` (Infer.lean) has one premise, `S ⊢ δ ≐ ★ ⇝ S′`, and says
+  NOTHING about the lookup — while `Stump.Discharge` offers ★ only under D-⊥ or
+  D-?. So F-★ can commit a stump to ★ where the lookup LANDS, and the state it
+  produces discharges under no substitution satisfying it, not even up to ≈.
+  `finalize_star_no_discharge` (InferSound.lean) was the hand-built witness; the
+  news is that the configuration is REACHABLE, which makes this a defect in the
+  rule set and not only in the rule:
+    * `fStarEx_infers` runs `(λx. {a = x.l}) {l = c}` — the thesis' own
+      refinement example, closed — end to end. Inside the λ it is
+      `selEx_infers` verbatim: A-sel-? parks `⟨r ▷ r.l ↓ δ⟩`, blocked on the
+      record's row variable.
+    * `fStarEx_stale_blocker`: A-app's arrow equation then solves `r ≔ (l: 𝓫)`
+      and the stump is STILL PARKED. `Infer.var` is the only rule that runs
+      wake-up, so A-app / A-conc / A-sel / A-let can all break the invariant
+      "every parked stump is blocked on its recorded blocker" — which
+      `plans/inference-gap-analysis.md` §B lists as absent, and which nothing
+      enforces.
+    * `fStar_wake_star_disagree`: from that one state K-hit and F-★ BOTH fire
+      and commit δ to different types (𝓫 and ★). **Determinism is false** —
+      algorithmic.typ's "the final θ, W and τ do not depend on the wake-up
+      order" does not survive a rule that ignores the lookup.
+    * `fStar_reachable_no_discharge`: the non-discharge, at that reachable
+      state, for every σ satisfying it and every discharged row environment.
+    * `fStarEx_refinement_lost`: the program's declarative type is `{a: 𝓫}`
+      (`QTyped`, derived) and the finalized run answers `{a: ★}`, strictly
+      blurrier — and by `finalized_no_blur` (minimal.lean) a ★ is never
+      sharpened back. The refinement this development exists to deliver is
+      discarded by the last rule of the run.
+  THE FIX IS TWO-PART, and the reachable witness is what shows the second half
+  is needed: F-★ gets the `LookupBlocked` premise its siblings carry (K-hit and
+  K-⊥ both state what the lookup did; it is also exactly what A-sel-? already
+  establishes when it parks), AND wake-up must re-run wherever a solution is
+  written — equivalently, a quiescence side condition on the state finalization
+  may run at. The premise ALONE turns a wrong answer into a stuck one: in the
+  state above no finalization rule would apply at all.
+  **SECOND HALF DONE 2026-09-18** — the invariant is now stated AND maintained:
+    * `SolverState.Quiescent` (Infer.lean): every parked stump is genuinely
+      blocked on the blocker it records, read on the row the state has
+      SUBSTITUTED, which is the form `Wake` / `Wakes.park` check. (That differs
+      from the ctx-chasing `Lookup S.ctx (.var r) l` on a non-idempotent
+      solution — `UnifyWF`'s business — but coincides for a bare-variable stump
+      row, which is all A-sel-? ever parks.) `Quiescent.blocker_unsolved` reads
+      it as "no parked blocker is solved", which is §B's invariant.
+    * `Saturate` — wake-up run to quiescence, stepping only on stumps that have
+      gone STALE. A RELATION, and quiescence a PREMISE, for the same reason
+      `Infer` is one: a saturation function owes a termination measure and
+      K-repark has none. "A quiescent state exists" therefore joins the open
+      list: `Wake`'s arms need `lookup_total` (hence `UnifyAcyclic`), and a step's
+      equation can CLASH — the tension case, a hard error, not a gap.
+    * `SolveTySat` / `WakesSat` — solve-then-saturate, wake-then-saturate — now
+      stand in the A-rules where bare `SolveTy` / `Wakes` did (A-app, A-conc, the
+      three A-sel rules, A-var). Packaged as definitions rather than extra
+      premises, so every proof by recursion over the rules — `supply_mono`,
+      `kinds_mono`, `sat_mono` — carried over with NO changes, given
+      `.supply` / `.kinds` / `.satMono` for the three new wrappers.
+    * A-sel-?'s `LookupBlocked` premise now reads the SUBSTITUTED row, matching
+      the invariant. For its freshly drawn `r` that is the same condition.
+    * `Infer.quiescent` / `InferRec.quiescent`: **every reachable state is
+      quiescent**, by mutual recursion over the rules — unconditional at the
+      rules that write (they end in a saturation), from the IH at the rest.
+      `Infer.quiescent_of_nil` drops the hypothesis for a run starting at Δ = [].
+    * `fStarEx_infers` is now the REGRESSION for the fix: the same closed program
+      runs to an empty Δ with `{a: 𝓫}` — the declarative answer
+      (`fStarEx_recovers`). `fStarEx_not_quiescent` names what was wrong with the
+      old final state. The rule-level witnesses (`fStar_wake_star_disagree`,
+      `fStar_reachable_no_discharge`) stay, at that state: saturation makes it
+      unreachable, it does not repair F-★.
+    * CONSEQUENCE FOR THE PREMISE: at a quiescent state F-★'s missing premise is
+      IMPLIED, so Stage 2 can carry it either on the rule or as a `Quiescent`
+      hypothesis on the finalization pass. It still has to be somewhere — the
+      soundness lemma needs the fact, and `Finalize` can be applied at a state no
+      run produced.
+  **FIRST HALF DONE 2026-09-18 too** — F-★ now carries the premise, and the rule
+  set has a top:
+    * `Finalize.star` takes `p ∈ S.parked` and the `LookupBlocked` premise. Chosen
+      on the rule rather than as a `Quiescent` hypothesis on the pass: it is
+      self-contained, it mirrors K-hit/K-⊥/K-repark (every sibling states its
+      verdict), and nothing stops `Finalize` from being applied at a state no run
+      produced. `Finalize.of_quiescent` shows it costs the ALGORITHM nothing —
+      quiescence IS the premise for every parked stump, and every reachable state
+      is quiescent.
+    * `Finalizes` — the `⇓*` closure, which `algorithmic.typ` left implicit.
+    * `Run` / `RunSound` (Infer.lean): **the top-level entry judgement**, §B's last
+      ✘ row. Infer from the empty state, then finalize what is parked. `RunSound`
+      is what `InferSound` becomes once something can supply its `parked = []`
+      hypothesis. Named, not proved — and its shape records WHY finalization runs
+      last: the ★ it writes is only a discharge at the state's OWN substitution,
+      not under every satisfying σ, because a later refinement can solve the
+      blocker and make the lookup land (`Sol.lookup_toCtx_sat` excludes `?` for
+      exactly this reason).
+    * DETERMINISM, repaired: `Quiescent.wake_no_commit` (at a quiescent state no
+      wake-up step commits anything — the only available step is a K-repark onto
+      the same blocker) and `Finalize.wake_no_commit` (wherever F-★ applies, the
+      same holds of that stump). So finalization is the only progress left at the
+      end of a run. Order-independence for a whole run is still design.
+    * NON-VACUITY, the two shapes the entry point has: `selEx_runs` — λx. x.l runs
+      to `{β} → ★` with `l` flagged, F-★ supplying the ★, which is the
+      L1-finalized type `finalized_no_blur` says nothing sharpens back; and
+      `fStarEx_runs` — the refinement example runs to `{a: 𝓫}` with Δ already
+      empty, finalization having nothing to do.
+    * THE WITNESSES, rehomed: a fixed rule makes its own counterexample
+      unstateable, so `FinalizeUnguarded` (InferSound.lean) IS the old premise-free
+      rule, kept so `finalize_star_no_discharge` and `fStar_wake_star_disagree`
+      stay checkable. `Finalize.toUnguarded` says the shipped rule is weaker, and
+      `finalize_star_guarded_cannot_fire` / `fStar_guarded_cannot_fire` say the
+      inclusion is PROPER — at both witness states the guarded rule has no
+      derivation. Neither half of the fix suffices alone: saturation leaves
+      `Finalize` applicable at hand-built states, and the premise alone would have
+      left the run stuck at `fsS` with no finalization step at all.
+    * `algorithmic.typ` UPDATED to match: `⇝!` / `↝!` / `↝*!` in the A-rules, the
+      quiescence invariant in the state section, K!-done / K!-step, F-★ with its
+      premise, F-nil / F-cons, an `== Entry` section, and the "Deterministic"
+      bullet rewritten around what is actually proved. Its "everything below is
+      DESIGN, not mechanization" header is gone — that layer is mechanized now;
+      what is not is termination, determinism up to renaming, and soundness.
+  **STAGE 3 (2026-09-18): WHAT FINALIZATION IS WORTH.** With F-★ guarded and `Run`
+  in place, algorithm soundness FACTORS, and the middle factor is proved:
+      RunSound = InferSoundC ∘ Finalize.dischargeEquiv ∘ QTypedCDischarge
+    * `Finalize.dischargeEquiv` / `Finalize.discharge_isUnk` — **a finalization
+      step discharges the stump it finalizes**, on the nose and not merely up to ≈
+      (the ?-arm is rigid, unlike D-hit). This is the lemma F-★'s premise exists
+      for: the premise supplies the `?`, the equation supplies the ★ (via
+      `SolveTy.unifies_sat` — any σ satisfying the state sends δ to something ≈ ★,
+      and ★ is ≈-rigid). It is `Stump.Discharge.unk` with the lookup performed by
+      the algorithm: the K-/D- correspondence's last row, which used to be the one
+      finalization could not honour.
+    * `lookup_unknown_of_blocked` — the general step under it, worth having alone:
+      blockedness anywhere gives an unknown lookup at a DISCHARGED row
+      environment. Monotonicity read backwards (a definite answer survives
+      extending the row solutions, so a definite answer at the empty environment
+      would contradict blockedness), with totality-for-free at the empty
+      environment supplying the answer to case on.
+    * THE ONE SIDE CONDITION, named not hidden: `hfix` — σ may not refine the row
+      the stump is blocked on. This is the ?-arm's single asymmetry against the
+      definite arms (`Sol.lookup_toCtx_sat` transports those under mere `Sat` and
+      explicitly EXCLUDES `?`), and it is the same fact from the other side as
+      "A-sel-? parks instead of committing to ★": a later σ can solve the blocker
+      and make the lookup land. It is why finalization runs last. Discharged by
+      idempotence (`Sol.Applied`, hence `UnifyWF`) at σ := ⟦S⟧, and by
+      `FixedOutside` at any χ that moves only the δ's.
+    * `InferSoundC` — inference soundness in the CONSTRAINED form, without the
+      `parked = []` hypothesis, its Δ being the σ-images of the stumps the run
+      left parked. That hypothesis is what made `InferSound` unprovable at an
+      inner A-sel-?; this statement does not carry it, and its cases are the
+      existing per-rule lemmas with `QTyped.toC` applied.
+    * `QTypedCDischarge` — the remaining obligation, named: a constrained typing
+      whose assumptions all discharge is a plain one. The QTypedC counterpart of
+      `qtyped_applySubst` and the same kind of work — transport along χ, with χ
+      moving only the δ's and the δ's fresh for Γ. A module's worth, not a lemma;
+      this is the honest edge of Stage 3.
+    * `runSound_of_inferSoundC_nil` — the join where it is free: a run that left
+      nothing parked needs only the induction, no transport. `fStarEx_runs` is
+      such a run, which is the case saturation created.
+  STILL OPEN HERE: `QTypedCDischarge`, `InferSoundC` itself, the spent-δ case
+  (below), and `RunSound`.
+  Two more things the premise buys, neither of them cosmetic: it is what makes
+  `Stump.Discharge.unk` available, so it is the hypothesis a
+  "finalization is sound" lemma needs at all; and it is what `qLet`'s
+  non-standard INHABITATION premise rests on ("a carried stump always finalizes
+  at ★"), which is currently prose. Still open next to it: `Finalize` does not
+  require `p ∈ S.parked`, there is no `⇓*` closure beside `Wakes`, and there is
+  no top-level entry judgement for `Run` — §B's last ✘ row — so `InferSound`'s
+  `S′.parked = []` hypothesis cannot yet be discharged by anything.
+  SEPARATE, AND NOT FIXED BY THE PREMISE: if δ is already solved to a non-★ type
+  when finalization reaches the stump — A-app writes into δ whenever the
+  selection's result is USED, e.g. `λx. (x.l) y` — then `δ ≐ ★` clashes (★ is
+  rigid) and F-★ has NO derivation, so the run cannot finalize at all. By §D
+  that program has no declarative derivation either, so REJECTING is right; it
+  has to be stated as a verdict rather than happen by absence of a rule.
 
 - [!] **AND THE NEW TRIPWIRE FINDING** (2026-09-12). With `Ranked` in place of
   `Applied`, ill-formed solutions fall from 860 / 22408 / 268 to

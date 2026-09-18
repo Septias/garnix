@@ -498,8 +498,12 @@ s₁ ≐ᵣ s₂ ⇝ stuck
 
 
 == Solver State
-- Everything below is DESIGN, not mechanization: ≐/≐ᵣ are mechanized
-  (RowUnify), this layer is not
+- MECHANIZED as of 2026-09-18 (lean/Infer.lean): the state, the A-rules, wake-up,
+  saturation, finalization and the entry judgement below are all relations in
+  Lean, and `selEx_infers` / `selEx_runs` derive (x: x.l) through them end to end.
+  What is still DESIGN rather than theorem: that the algorithm TERMINATES, that it
+  is deterministic up to renaming, and soundness itself (`InferSound` / `RunSound`
+  are named statements, not proofs)
 - θ is sort-respecting, hence really two maps — one per sort. ⟦S⟧τ applies S's
   substitution as a closure
 - Δ indexes each parked stump by its *blocker*: the row-var whose L-α-free
@@ -517,6 +521,18 @@ S := (θ, Δ, W)
 S ⊎ q          park a stump
 S ∖ Δ′         drop a set of stumps
 fresh α: κ     draw a name at sort κ from the threaded supply
+
+- *Quiescence*, the state invariant: every stump in Δ is genuinely blocked on the
+  blocker it records, `⟦S⟧ ⊢ (⟦S⟧ρ).l ↓ ? on α` for each `⟨α ▷ ρ.l ↓ δ⟩ ∈ Δ`. A
+  blocker is then never a SOLVED variable, which is what makes the annotation
+  mean anything
+- It is not automatic, and the mechanization found that out: any rule that writes
+  a solution can solve some other stump's blocker, and only A-var ran wake-up. So
+  every equation in the A-rules below is *solve-then-saturate*
+
+S ⊢ τ ≐ τ′ ⇝! S′    solve, then re-run wake-up on what the solution staled
+S ⊢ Δ ↝! S′         saturation itself: step on stale stumps until quiescent
+S ⊢ Q ↝\*! S′        A-var's closure, then saturation
 
 
 == Inference
@@ -540,7 +556,7 @@ fresh α: κ     draw a name at sort κ from the threaded supply
 Γ; S ⊢ c ⇒ 𝓫_c; S
 
 
-x: ∀(ᾱ: κ̄). Q ⇒ τ ∈ Γ   fresh β̄: κ̄   S ⊢ Q[β̄/ᾱ] ↝\* S′
+x: ∀(ᾱ: κ̄). Q ⇒ τ ∈ Γ   fresh β̄: κ̄   S ⊢ Q[β̄/ᾱ] ↝\*! S′
 -------------------------------------------------------- A-var
 Γ; S ⊢ x ⇒ τ[β̄/ᾱ]; S′
 // A-var IS I-inst: the instantiated constraints are submitted to wake-up, which
@@ -554,7 +570,7 @@ fresh α: Type   Γ·(x: α); S ⊢ e ⇒ τ; S′
 Γ; S ⊢ (x: e) ⇒ α -> τ; S′
 
 
-Γ; S ⊢ e₁ ⇒ τ₁; S₁   Γ; S₁ ⊢ e₂ ⇒ τ₂; S₂   fresh β: Type   S₂ ⊢ τ₁ ≐ (τ₂ -> β) ⇝ S₃
+Γ; S ⊢ e₁ ⇒ τ₁; S₁   Γ; S₁ ⊢ e₂ ⇒ τ₂; S₂   fresh β: Type   S₂ ⊢ τ₁ ≐ (τ₂ -> β) ⇝! S₃
 ------------------------------------------------------------------------------------- A-app
 Γ; S ⊢ e₁e₂ ⇒ β; S₃
 
@@ -568,22 +584,22 @@ fresh α: Type   Γ·(x: α); S ⊢ e ⇒ τ; S′
 // raises a flag.
 
 
-Γ; S ⊢ e₁ ⇒ τ₁; S₁   Γ; S₁ ⊢ e₂ ⇒ τ₂; S₂   fresh ρ₁ ρ₂: Row   S₂ ⊢ τ₁ ≐ {ρ₁} ⇝ S₃   S₃ ⊢ τ₂ ≐ {ρ₂} ⇝ S₄
+Γ; S ⊢ e₁ ⇒ τ₁; S₁   Γ; S₁ ⊢ e₂ ⇒ τ₂; S₂   fresh ρ₁ ρ₂: Row   S₂ ⊢ τ₁ ≐ {ρ₁} ⇝! S₃   S₃ ⊢ τ₂ ≐ {ρ₂} ⇝! S₄
 --------------------------------------------------------------------------------------------------------- A-conc
 Γ; S ⊢ e₁ ‖ e₂ ⇒ { ρ₂ | ρ₁ }; S₄
 
 
-Γ; S ⊢ e ⇒ τ; S₁   fresh ρ: Row   S₁ ⊢ τ ≐ {ρ} ⇝ S₂   ⟦S₂⟧ ⊢ ρ.l ↓ τ′
+Γ; S ⊢ e ⇒ τ; S₁   fresh ρ: Row   S₁ ⊢ τ ≐ {ρ} ⇝! S₂   ⟦S₂⟧ ⊢ ρ.l ↓ τ′
 ----------------------------------------------------------------------- A-sel
 Γ; S ⊢ e.l ⇒ τ′; S₂
 
 
-Γ; S ⊢ e ⇒ τ; S₁   fresh ρ: Row   S₁ ⊢ τ ≐ {ρ} ⇝ S₂   ⟦S₂⟧ ⊢ ρ.l ↓ ⊥
+Γ; S ⊢ e ⇒ τ; S₁   fresh ρ: Row   S₁ ⊢ τ ≐ {ρ} ⇝! S₂   ⟦S₂⟧ ⊢ ρ.l ↓ ⊥
 ---------------------------------------------------------------------- A-sel-⊥
 Γ; S ⊢ e.l ⇒ ★; S₂ +W
 
 
-Γ; S ⊢ e ⇒ τ; S₁   fresh ρ: Row   S₁ ⊢ τ ≐ {ρ} ⇝ S₂   ⟦S₂⟧ ⊢ ρ.l ↓ ? on α   fresh δ: Type
+Γ; S ⊢ e ⇒ τ; S₁   fresh ρ: Row   S₁ ⊢ τ ≐ {ρ} ⇝! S₂   ⟦S₂⟧ ⊢ ρ.l ↓ ? on α   fresh δ: Type
 ------------------------------------------------------------------------------------------- A-sel-?
 Γ; S ⊢ e.l ⇒ δ; S₂ ⊎ ⟨α ▷ ρ.l ↓ δ⟩
 // NOT ★: returning ★ here would freeze the result and lose every later
@@ -622,8 +638,9 @@ fresh α: Type   Γ·(x: α); S ⊢ e ⇒ τ; S′
 
 
 == Wake-up and Finalization
-- (S ⊢ q ↝ S′) wakes one stump, (↝\* its list closure), (S ⊢ q ⇓ S′) finalizes one. K-hit, K-⊥ and F-★
-  are D-hit, D-⊥ and D-? — the difference is WHEN: discharge fires once per
+- (S ⊢ q ↝ S′) wakes one stump, (↝\* its list closure), (S ⊢ Δ ↝! S′) runs it to
+  quiescence, (S ⊢ q ⇓ S′) finalizes one and (⇓\* its list closure). K-hit, K-⊥ and
+  F-★ are D-hit, D-⊥ and D-? — the difference is WHEN: discharge fires once per
   instantiation, wake-up fires each time θ grows
 - K-repark has no declarative counterpart: declaratively D-? commits to ★
   immediately, algorithmically the lookup has merely progressed to the next var
@@ -639,8 +656,22 @@ fresh α: Type   Γ·(x: α); S ⊢ e ⇒ τ; S′
   on α
 - *Monotone*: a stump resolved found/⊥ is final under every later θ, so resolved
   stumps never re-enter Δ and no fixpoint iteration is needed
-- *Deterministic*: lookup is deterministic, so the final θ, W and τ do not
-  depend on the wake-up order
+- *Deterministic*, but NOT for the reason first written here. "Lookup is
+  deterministic, so the final θ, W and τ do not depend on the wake-up order" was
+  FALSE of the earlier rules: F-★ carried no premise about the lookup, so at a
+  state whose stump had gone stale both K-hit and F-★ applied and committed δ to
+  different types (`fStar_wake_star_disagree`, lean/InferSound.lean). What holds,
+  and is proved, is the repaired form: at a quiescent state no wake-up step can
+  commit anything (`Quiescent.wake_no_commit` — the only available step is a
+  K-repark onto the same blocker), and wherever F-★ applies the same is true of
+  that stump (`Finalize.wake_no_commit`). So finalization is the only progress
+  left at the end of a run, which is what determinism needed to mean. Order
+  independence for the WHOLE run is still design, not theorem
+- *Saturation is a relation, not a function*: a saturating function owes a
+  termination measure and K-repark has none — each repark moves the blocker to a
+  new variable. "A quiescent state is always reachable" therefore joins the open
+  list, and it is CONDITIONAL, not just unproved: a K-hit needs the lookup to be
+  total (acyclic θ) and its equation can clash — the tension case below
 
 ⟦S⟧ ⊢ (⟦S⟧ρ).l ↓ τ′   S ⊢ δ ≐ τ′ ⇝ S′
 ---------------------------------------- K-hit
@@ -675,14 +706,69 @@ S ⊢ (⟨α ▷ ρ.l ↓ δ⟩, Δ′) ↝\* S′
 // otherwise be free to break.
 
 
-S ⊢ δ ≐ ★ ⇝ S′
-------------------------------------------- F-★
+S quiescent
+-------------- K!-done
+S ⊢ Δ ↝! S
+
+
+⟨α ▷ ρ.l ↓ δ⟩ ∈ Δ   ⟦S⟧ ⊬ (⟦S⟧ρ).l ↓ ? on α   S ⊢ ⟨α ▷ ρ.l ↓ δ⟩ ↝ S₁   S₁ ⊢ Δ₁ ↝! S′
+-------------------------------------------------------------------------------------- K!-step
+S ⊢ Δ ↝! S′
+// A step only on a STALE stump — one whose recorded blocker no longer blocks its
+// lookup, which is exactly what a solution write creates. ↝ then resolves it
+// (K-hit/K-⊥) or moves the annotation (K-repark). ⇝! and ↝\*! are this composed
+// after ≐ and ↝\* respectively.
+
+
+⟨α ▷ ρ.l ↓ δ⟩ ∈ Δ   ⟦S⟧ ⊢ (⟦S⟧ρ).l ↓ ? on α   S ⊢ δ ≐ ★ ⇝ S′
+--------------------------------------------------------------- F-★
 S ⊢ ⟨α ▷ ρ.l ↓ δ⟩ ⇓ (S′ ∖ ⟨α ▷ ρ.l ↓ δ⟩) +W
+
+
+--------- F-nil
+S ⊢ ∅ ⇓\* S
+
+
+S ⊢ ⟨α ▷ ρ.l ↓ δ⟩ ⇓ S₁   S₁ ⊢ Δ′ ⇓\* S′
+--------------------------------------- F-cons
+S ⊢ (⟨α ▷ ρ.l ↓ δ⟩, Δ′) ⇓\* S′
+
 // The algorithmic moment of T-sel-★. Runs at the end of inference and at every
 // generalization boundary that does not carry the stump.
+//
+// THE `? on α` PREMISE IS NOT DECORATION. Without it F-★ commits δ to ★ over a
+// lookup that LANDS, and the resulting state answers a declarative question
+// nobody asked: Stump.Discharge offers ★ only under D-⊥ (K-⊥'s job) or D-?, so
+// D-? is the arm F-★ implements and `?` is what it has to check. Every sibling
+// states its verdict the same way — K-hit its τ′, K-⊥ its ⊥, K-repark its `? on
+// α′`. Refuted without it: `finalize_star_no_discharge`, lean/InferSound.lean.
+// It costs the algorithm nothing: at a quiescent state the premise holds of every
+// parked stump, and every state a run reaches is quiescent
+// (`Infer.quiescent` + `Finalize.of_quiescent`).
 
 // TENSION CASE: if δ is already solved and wake-up finds a different τ′, the
 // emitted δ ≐ τ′ CLASHES ⟹ hard error, not a degradation.
+
+
+== Entry
+- (⊢ e ⇒ τ; S′) is the TOP LEVEL: infer from the empty state, then finalize what
+  is still parked. Everything above is a judgement about a state; this is the one
+  that takes a program and returns an answer, and it is what soundness of the
+  ALGORITHM — as opposed to soundness of one rule — is stated about
+
+∅; (id, ∅, ∅) ⊢ e ⇒ τ; S₁   S₁ ⊢ Δ₁ ⇓\* S′   Δ′ = ∅
+---------------------------------------------------- Entry
+⊢ e ⇒ τ; S′
+// Δ′ = ∅ is REQUIRED, not derived: ⇓ drops the stump it discharged by its RESULT
+// variable, so finalizing all of Δ empties Δ exactly when those variables are
+// pairwise distinct. True of the δ's inference draws; not yet proved of them.
+//
+// Worked, both shapes: (x: x.l) runs to {β} → ★ with l flagged, F-★ supplying the
+// ★ — the L1-finalized type that finalized_no_blur says nothing can sharpen back
+// (selEx_runs, lean/Infer.lean). And (x: {a = x.l}) {l = c} runs to {a: 𝓫} with Δ
+// already EMPTY: the application solved the blocker, saturation woke the stump
+// with K-hit, and finalization had nothing left to blur (fStarEx_runs,
+// lean/InferSound.lean). The second is the one the earlier rules got wrong.
 
 
 == Generalization
