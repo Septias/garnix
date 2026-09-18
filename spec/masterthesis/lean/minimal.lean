@@ -2687,7 +2687,7 @@ theorem finalized_no_blur {B : Type} (θ : TySubst B) {τ₀ : Ty B}
 
 -- Variable typings mod tEq/tUnk: a monotype-bound variable types at ★ or at
 -- something ≈ its binding.
-private theorem var_inst_inv {B C : Type} {constTy : C → B} :
+theorem var_inst_inv {B C : Type} {constTy : C → B} :
     {Γ : Ctx B} → {e : Expr C} → {τ : Ty B} → Typed constTy Γ e τ →
     ∀ {x : Var} {τx : Ty B}, e = .var x → Γ.lookup x = some ⟨[], τx⟩ →
     τ = .unk ∨ TyEquiv τx τ
@@ -2714,7 +2714,7 @@ private theorem var_inst_inv {B C : Type} {constTy : C → B} :
 
 -- On x: τx with τx ≈ {ε}, the selection x.l types ONLY at ★: the lookup on ε
 -- is ⊥ (mod ≈), so T-sel can never fire.
-private theorem sel_var_unk {B C : Type} {constTy : C → B} :
+theorem sel_var_unk {B C : Type} {constTy : C → B} :
     {Γ : Ctx B} → {e : Expr C} → {τ : Ty B} → Typed constTy Γ e τ →
     ∀ {x : Var} {l : Label} {τx : Ty B}, e = .sel (.var x) l →
     Γ.lookup x = some ⟨[], τx⟩ → TyEquiv τx (.rcd .empty) → τ = .unk

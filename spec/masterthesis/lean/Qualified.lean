@@ -1776,4 +1776,472 @@ theorem QScheme.Principal.greatest {B C : Type} {constTy : C → B} {Γ : QCtx B
   fun τ hτ => hp.2.2 τ (hcl τ hτ)
 
 
+
+
+--============ (4) λx.x.l HAS A PRINCIPAL QUALIFIED SCHEME ===================--
+-- Conjunct 3 of `Principal`, in the corrected ≼ form — the open item that
+-- `selQ_sound_and_inhabited` left. It needs the L2 inversion for λx.x.l, the
+-- counterpart of minimal.lean's `sel_var_unk`: every typing of a selection on a
+-- monotype-bound variable factors through ONE lookup, and the typing sits
+-- ≼-above that lookup's collapse. `selQ_inst_of_lookup` then answers it with the
+-- instance for exactly that lookup.
+
+-- L2 counterpart of minimal.lean's `var_inst_inv`.
+private theorem qvar_inst_inv {B C : Type} {constTy : C → B} :
+    {Γ : QCtx B} → {e : Expr C} → {τ : Ty B} → QTyped constTy Γ e τ →
+    ∀ {x : Var} {τx : Ty B}, e = .var x → Γ.lookup x = some ⟨[], [], τx⟩ →
+    τ = .unk ∨ TyEquiv τx τ
+  | _, _, _, .qVar h hi => fun he hx => by
+      cases he
+      rw [h] at hx
+      cases Option.some.inj hx
+      rw [hi.mono]
+      exact .inr (.refl _)
+  | _, _, _, .qEq h heq => fun he hx =>
+      match qvar_inst_inv h he hx with
+      | .inl hu => .inl (hu ▸ heq).unk_inv
+      | .inr ht => .inr (ht.trans heq)
+  | _, _, _, .qUnk _ => fun _ _ => .inl rfl
+  | _, _, _, .qCon => fun he _ => nomatch he
+  | _, _, _, .qLam _ => fun he _ => nomatch he
+  | _, _, _, .qApp _ _ => fun he _ => nomatch he
+  | _, _, _, .qCat _ _ => fun he _ => nomatch he
+  | _, _, _, .qSel _ _ => fun he _ => nomatch he
+  | _, _, _, .qSelUnk _ _ => fun he _ => nomatch he
+  | _, _, _, .qSelAbs _ _ => fun he _ => nomatch he
+  | _, _, _, .qLet _ _ _ => fun he _ => nomatch he
+  | _, _, _, .qRcd _ => fun he _ => nomatch he
+
+-- L2 counterpart of `sel_var_unk`, but full: every typing of `x.l` on a
+-- monotype-bound x factors through ONE lookup, and the typing sits ≼-above
+-- that lookup's collapse.
+private theorem qsel_var_inv {B C : Type} {constTy : C → B} :
+    {Γ : QCtx B} → {e : Expr C} → {τ : Ty B} → QTyped constTy Γ e τ →
+    ∀ {x : Var} {l : Label} {τx : Ty B}, e = .sel (.var x) l →
+    Γ.lookup x = some ⟨[], [], τx⟩ →
+    ∃ ρ r, TyEquiv τx (.rcd ρ) ∧ Lookup Γ.ctx ρ l r ∧ TyBelow r.collapse τ
+  | _, _, _, .qSel h hl => fun he hx => by
+      cases he
+      rcases qvar_inst_inv h rfl hx with hu | ht
+      · cases hu
+      · exact ⟨_, _, ht, hl, TyBelow.refl _⟩
+  | _, _, _, .qSelUnk h hl => fun he hx => by
+      cases he
+      rcases qvar_inst_inv h rfl hx with hu | ht
+      · cases hu
+      · exact ⟨_, .unknown, ht, hl, TyBelow.refl _⟩
+  | _, _, _, .qSelAbs h hl => fun he hx => by
+      cases he
+      rcases qvar_inst_inv h rfl hx with hu | ht
+      · cases hu
+      · exact ⟨_, .absent, ht, hl, TyBelow.refl _⟩
+  | _, _, _, .qEq h heq => fun he hx =>
+      let ⟨ρ, r, ht, hl, hb⟩ := qsel_var_inv h he hx
+      ⟨ρ, r, ht, hl, hb.trans (TyBelow.of_equiv heq)⟩
+  | _, _, _, .qUnk h => fun he hx =>
+      let ⟨ρ, r, ht, hl, _⟩ := qsel_var_inv h he hx
+      ⟨ρ, r, ht, hl, TyBelow.of_prec (.unk _)⟩
+  | _, _, _, .qCon => fun he _ => nomatch he
+  | _, _, _, .qVar _ _ => fun he _ => nomatch he
+  | _, _, _, .qLam _ => fun he _ => nomatch he
+  | _, _, _, .qApp _ _ => fun he _ => nomatch he
+  | _, _, _, .qCat _ _ => fun he _ => nomatch he
+  | _, _, _, .qLet _ _ _ => fun he _ => nomatch he
+  | _, _, _, .qRcd _ => fun he _ => nomatch he
+
+-- CONJUNCT 3, in the ≼ form.
+theorem selQ_covers_typings {B C : Type} (constTy : C → B) :
+    ∀ τ, QTyped constTy (⟨[], []⟩ : QCtx B) (selEx C) τ →
+      ∃ τ', QScheme.Inst Ctx.empty (selQ B) τ' ∧ τ' ≼ₜ τ := by
+  intro τ h
+  obtain ⟨τ₁, τ₂, heq | hu, hbody⟩ := qtyped_lam_inv h
+  · obtain ⟨ρ, r, hτ₁, hl, hb⟩ :=
+      qsel_var_inv hbody (x := "x") (l := "l") (τx := τ₁) rfl
+        (by simp [QCtx.bindTy, QCtx.lookup_bindScheme])
+    obtain ⟨σ₀, hc, hp⟩ := hb
+    exact ⟨_, selQ_inst_of_lookup hl,
+      TyBelow.trans ⟨.fn τ₁ σ₀, .fn hτ₁.symm hc, .fn (.refl _) hp⟩
+        (TyBelow.of_equiv heq)⟩
+  · subst hu
+    exact ⟨_, selQ_inst_absent Ctx.empty, TyBelow.of_prec (.unk _)⟩
+
+-- λx.x.l HAS a principal qualified scheme.
+theorem selQ_principal {B C : Type} (constTy : C → B) :
+    QScheme.Principal constTy (⟨[], []⟩ : QCtx B) (selEx C) (selQ B) :=
+  ⟨(selQ_sound_and_inhabited constTy).1, (selQ_sound_and_inhabited constTy).2,
+   selQ_covers_typings constTy⟩
+
+--------------------- FIELD-FREE ROWS (what ≈ ε forces) ------------------------
+-- A row that is ≈-equivalent to ε carries no field ANYWHERE: `≈` never creates
+-- or destroys a `.sing` node, only permutes and re-brackets them. That is the
+-- fact the mixed-instance construction needs — a field-free row has no TYPE
+-- positions, so its substitution image cannot depend on the ty-component of the
+-- substitution, and re-pointing a result variable leaves the domain alone.
+
+/-- does the row carry a field at a position not hidden behind a row-variable? -/
+def Row.hasSing {B : Type} : Row B → Bool
+  | .empty     => false
+  | .var _     => false
+  | .sing _ _  => true
+  | .cat ρ₁ ρ₂ => ρ₁.hasSing || ρ₂.hasSing
+
+-- ⊢  ≈ᵣ preserves it: every constructor is a congruence, a re-bracketing or a
+--    permutation of the same `.sing` nodes.
+theorem rowEquiv_hasSing {B : Type} :
+    {ρ₁ ρ₂ : Row B} → RowEquiv ρ₁ ρ₂ → ρ₁.hasSing = ρ₂.hasSing
+  | _, _, .refl _        => rfl
+  | _, _, .symm h        => (rowEquiv_hasSing h).symm
+  | _, _, .trans h₁ h₂   => (rowEquiv_hasSing h₁).trans (rowEquiv_hasSing h₂)
+  | _, _, .sing _        => rfl
+  | _, _, .cat h₁ h₂     => by
+      simp [Row.hasSing, rowEquiv_hasSing h₁, rowEquiv_hasSing h₂]
+  | _, _, .assoc         => by simp [Row.hasSing, Bool.or_assoc]
+  | _, _, .unitL         => by simp [Row.hasSing]
+  | _, _, .unitR         => by simp [Row.hasSing]
+  | _, _, .comm _        => by simp [Row.hasSing]
+
+-- ⊢  substitution never DELETES a field: it maps `.sing` to `.sing`.
+theorem hasSing_applySubst {B : Type} (θ : TySubst B) :
+    (ρ : Row B) → ρ.hasSing = true → (ρ.applySubst θ).hasSing = true
+  | .empty,     h => by simp [Row.hasSing] at h
+  | .var _,     h => by simp [Row.hasSing] at h
+  | .sing _ _,  _ => rfl
+  | .cat ρ₁ ρ₂, h => by
+      simp only [Row.applySubst, Row.hasSing, Bool.or_eq_true] at h ⊢
+      rcases h with h | h
+      · exact .inl (hasSing_applySubst θ ρ₁ h)
+      · exact .inr (hasSing_applySubst θ ρ₂ h)
+
+-- ⊢  a field-free row has no TYPE position, so its image reads only θ.row.
+theorem applySubst_rowOnly {B : Type} {θ₁ θ₂ : TySubst B} (hr : θ₁.row = θ₂.row) :
+    (ρ : Row B) → ρ.hasSing = false → ρ.applySubst θ₁ = ρ.applySubst θ₂
+  | .empty,     _ => rfl
+  | .var α,     _ => by simp only [Row.applySubst, hr]
+  | .sing _ _,  h => by simp [Row.hasSing] at h
+  | .cat ρ₁ ρ₂, h => by
+      simp only [Row.hasSing, Bool.or_eq_false_iff] at h
+      simp only [Row.applySubst, applySubst_rowOnly hr ρ₁ h.1,
+                 applySubst_rowOnly hr ρ₂ h.2]
+
+
+--------------------- L1 INVERSION: let, app, and a general var ---------------
+-- `typed_inv_aux` (minimal.lean) covers con/lam/rcd. Refuting the two-use
+-- program needs the other three formers, in the same mod-≈/mod-★ shape.
+
+private theorem typed_let_inv' {B C : Type} {constTy : C → B} :
+    {Γ : Ctx B} → {e : Expr C} → {τ : Ty B} → Typed constTy Γ e τ →
+    ∀ {x : Var} {e₁ e₂ : Expr C}, e = .letE x e₁ e₂ →
+    ∃ (σ : Scheme B) (τ₂ : Ty B), (TyEquiv τ₂ τ ∨ τ = .unk) ∧
+      (∀ τ', σ.Inst τ' → Typed constTy Γ e₁ τ') ∧
+      Typed constTy (Γ.bindScheme x σ) e₂ τ₂
+  | _, _, _, .tLet h hb => fun he => by cases he; exact ⟨_, _, .inl (.refl _), h, hb⟩
+  | _, _, _, .tEq h heq => fun he =>
+      match typed_let_inv' h he with
+      | ⟨σ, τ₂, .inl ht, hc, hb⟩ => ⟨σ, τ₂, .inl (ht.trans heq), hc, hb⟩
+      | ⟨σ, τ₂, .inr hu, hc, hb⟩ => ⟨σ, τ₂, .inr (hu ▸ heq).unk_inv, hc, hb⟩
+  | _, _, _, .tUnk h => fun he =>
+      match typed_let_inv' h he with
+      | ⟨σ, τ₂, _, hc, hb⟩ => ⟨σ, τ₂, .inr rfl, hc, hb⟩
+  | _, _, _, .tCon => fun he => nomatch he
+  | _, _, _, .tVar _ _ => fun he => nomatch he
+  | _, _, _, .tLam _ => fun he => nomatch he
+  | _, _, _, .tApp _ _ => fun he => nomatch he
+  | _, _, _, .tCat _ _ => fun he => nomatch he
+  | _, _, _, .tSel _ _ => fun he => nomatch he
+  | _, _, _, .tSelUnk _ _ => fun he => nomatch he
+  | _, _, _, .tSelAbs _ _ => fun he => nomatch he
+  | _, _, _, .tRcd _ => fun he => nomatch he
+
+private theorem typed_app_inv' {B C : Type} {constTy : C → B} :
+    {Γ : Ctx B} → {e : Expr C} → {τ : Ty B} → Typed constTy Γ e τ →
+    ∀ {e₁ e₂ : Expr C}, e = .app e₁ e₂ →
+    ∃ τ₁ τ₂, (TyEquiv τ₂ τ ∨ τ = .unk) ∧
+      Typed constTy Γ e₁ (.fn τ₁ τ₂) ∧ Typed constTy Γ e₂ τ₁
+  | _, _, _, .tApp h₁ h₂ => fun he => by
+      cases he; exact ⟨_, _, .inl (.refl _), h₁, h₂⟩
+  | _, _, _, .tEq h heq => fun he =>
+      match typed_app_inv' h he with
+      | ⟨τ₁, τ₂, .inl ht, h₁, h₂⟩ => ⟨τ₁, τ₂, .inl (ht.trans heq), h₁, h₂⟩
+      | ⟨τ₁, τ₂, .inr hu, h₁, h₂⟩ => ⟨τ₁, τ₂, .inr (hu ▸ heq).unk_inv, h₁, h₂⟩
+  | _, _, _, .tUnk h => fun he =>
+      match typed_app_inv' h he with
+      | ⟨τ₁, τ₂, _, h₁, h₂⟩ => ⟨τ₁, τ₂, .inr rfl, h₁, h₂⟩
+  | _, _, _, .tCon => fun he => nomatch he
+  | _, _, _, .tVar _ _ => fun he => nomatch he
+  | _, _, _, .tLam _ => fun he => nomatch he
+  | _, _, _, .tCat _ _ => fun he => nomatch he
+  | _, _, _, .tSel _ _ => fun he => nomatch he
+  | _, _, _, .tSelUnk _ _ => fun he => nomatch he
+  | _, _, _, .tSelAbs _ _ => fun he => nomatch he
+  | _, _, _, .tLet _ _ => fun he => nomatch he
+  | _, _, _, .tRcd _ => fun he => nomatch he
+
+-- `var_inst_inv` at a GENERAL scheme: a use of x reads some instance of the
+-- scheme Γ binds it to, up to ≈ (and ★ from tUnk).
+private theorem tvar_inv {B C : Type} {constTy : C → B} :
+    {Γ : Ctx B} → {e : Expr C} → {τ : Ty B} → Typed constTy Γ e τ →
+    ∀ {x : Var} {σ : Scheme B}, e = .var x → Γ.lookup x = some σ →
+    τ = .unk ∨ ∃ τ', σ.Inst τ' ∧ TyEquiv τ' τ
+  | _, _, _, .tVar h hi => fun he hx => by
+      cases he
+      rw [h] at hx
+      cases Option.some.inj hx
+      exact .inr ⟨_, hi, .refl _⟩
+  | _, _, _, .tEq h heq => fun he hx =>
+      match tvar_inv h he hx with
+      | .inl hu => .inl (hu ▸ heq).unk_inv
+      | .inr ⟨τ', hi, ht⟩ => .inr ⟨τ', hi, ht.trans heq⟩
+  | _, _, _, .tUnk _ => fun _ _ => .inl rfl
+  | _, _, _, .tCon => fun he _ => nomatch he
+  | _, _, _, .tLam _ => fun he _ => nomatch he
+  | _, _, _, .tApp _ _ => fun he _ => nomatch he
+  | _, _, _, .tCat _ _ => fun he _ => nomatch he
+  | _, _, _, .tSel _ _ => fun he _ => nomatch he
+  | _, _, _, .tSelUnk _ _ => fun he _ => nomatch he
+  | _, _, _, .tSelAbs _ _ => fun he _ => nomatch he
+  | _, _, _, .tLet _ _ => fun he _ => nomatch he
+  | _, _, _, .tRcd _ => fun he _ => nomatch he
+
+-- A selection on a ★-bound variable has NO typing at all: every selection rule
+-- demands the scrutinee at a record type, and ★ is ≈-rigid.
+private theorem sel_var_of_unk {B C : Type} {constTy : C → B} :
+    {Γ : Ctx B} → {e : Expr C} → {τ : Ty B} → Typed constTy Γ e τ →
+    ∀ {x : Var} {l : Label}, e = .sel (.var x) l →
+    Γ.lookup x = some ⟨[], .unk⟩ → False
+  | _, _, _, .tSel h _ => fun he hx => by
+      cases he
+      rcases var_inst_inv h rfl hx with hu | ht
+      · cases hu
+      · cases ht.unk_inv
+  | _, _, _, .tSelUnk h _ => fun he hx => by
+      cases he
+      rcases var_inst_inv h rfl hx with hu | ht
+      · cases hu
+      · cases ht.unk_inv
+  | _, _, _, .tSelAbs h _ => fun he hx => by
+      cases he
+      rcases var_inst_inv h rfl hx with hu | ht
+      · cases hu
+      · cases ht.unk_inv
+  | _, _, _, .tEq h _ => fun he hx => sel_var_of_unk h he hx
+  | _, _, _, .tUnk h => fun he hx => sel_var_of_unk h he hx
+  | _, _, _, .tCon => fun he _ => nomatch he
+  | _, _, _, .tVar _ _ => fun he _ => nomatch he
+  | _, _, _, .tLam _ => fun he _ => nomatch he
+  | _, _, _, .tApp _ _ => fun he _ => nomatch he
+  | _, _, _, .tCat _ _ => fun he _ => nomatch he
+  | _, _, _, .tLet _ _ => fun he _ => nomatch he
+  | _, _, _, .tRcd _ => fun he _ => nomatch he
+
+
+------------- WHAT INSTANCE-CLOSEDNESS FORCES ON A SCHEME FOR λx.x.l ----------
+
+-- A ★ domain admits NO typing: the body would be a selection on a ★-bound x.
+private theorem selEx_dom_unk {B C : Type} (constTy : C → B) (R : Ty B) :
+    ¬ Typed constTy Ctx.empty (selEx C) (.fn .unk R) := by
+  intro h
+  obtain ⟨τ₁, τ₂, hd, hbody⟩ := typed_lam_inv h
+  rcases hd with heq | hu
+  · obtain ⟨σ₁, σ₂, hsh, h₁, -⟩ := heq.fn_inv
+    cases hsh
+    cases h₁.symm.unk_inv
+    exact sel_var_of_unk hbody rfl (by simp [Ctx.lookup_bindTy])
+  · cases hu
+
+-- An ε domain forces a ★ result — `sel_var_unk` read through the λ.
+-- ⊢  D ≈ₜ {ε},  ∅ ⊢ λx.x.l : D → R   ⟹   R = ★
+private theorem selEx_dom_empty_res {B C : Type} {constTy : C → B} {D R : Ty B}
+    (hD : TyEquiv (.rcd .empty) D)
+    (h : Typed constTy Ctx.empty (selEx C) (.fn D R)) : R = .unk := by
+  obtain ⟨τ₁, τ₂, hd, hbody⟩ := typed_lam_inv h
+  rcases hd with heq | hu
+  · obtain ⟨σ₁, σ₂, hsh, h₁, h₂⟩ := heq.fn_inv
+    cases hsh
+    have hτ₁ : TyEquiv τ₁ (.rcd .empty) := h₁.trans hD.symm
+    have : τ₂ = .unk :=
+      sel_var_unk hbody rfl (by simp [Ctx.lookup_bindTy]) hτ₁
+    exact (this ▸ h₂).unk_inv
+  · cases hu
+
+-- {ε} is not a typing of λx.x.l either (the head is wrong) — what a fully
+-- quantified body would have to accept.
+private theorem selEx_not_rcd_empty {B C : Type} (constTy : C → B) :
+    ¬ Typed constTy Ctx.empty (selEx C) (.rcd (.empty : Row B)) := by
+  intro h
+  obtain ⟨τ₁, τ₂, hd, -⟩ := typed_lam_inv h
+  rcases hd with heq | hu
+  · obtain ⟨σ₁, σ₂, hsh, -, -⟩ := heq.fn_inv
+    cases hsh
+  · cases hu
+
+
+--======================= L1 ⊊ L2: THE TWO-USE PROGRAM =======================--
+-- `qtyped_two_use` types the program in L2. L1 CANNOT type it, and the reason
+-- is exactly `no_plain_principal_scheme`'s: a plain scheme bound by `let` must
+-- serve both uses, so its result position is a bare quantified variable, and
+-- then the domain cannot depend on it — re-pointing that variable inside the
+-- ⊥-use's substitution yields the underivable instance {ε} → 𝓫_c.
+
+private theorem typedBody_two_fields {B C : Type} {constTy : C → B} {Γ : Ctx B}
+    {la lb : Label} {ea eb : Expr C} {ρ : Row B}
+    (h : TypedBody constTy Γ (.cat (.field la ea) (.field lb eb)) ρ) :
+    ∃ τa τb, ρ = .cat (.sing la τa) (.sing lb τb) ∧
+      Typed constTy Γ ea τa ∧ Typed constTy Γ eb τb := by
+  cases h with
+  | cat hA hB =>
+    cases hA with
+    | field ha =>
+      cases hB with
+      | field hb => exact ⟨_, _, rfl, ha, hb⟩
+
+-- ⊢  ¬ ( ∅ ⊢ let f = λx.x.l in { a = f {l = c} | b = f {} }
+--              : { a: 𝓫_c | b: ★ } )
+theorem l1_rejects_two_use {B C : Type} (constTy : C → B) (c : C) :
+    ¬ Typed constTy Ctx.empty
+      (.letE "f" (selEx C)
+        (.rcd (.cat
+          (.field "a" (.app (.var "f") (.rcd (.field "l" (.con c)))))
+          (.field "b" (.app (.var "f") (.rcd .empty))))))
+      (.rcd (.cat (.sing "a" (.base (constTy c))) (.sing "b" .unk))) := by
+  intro h
+  obtain ⟨σ, τ₂, hd, hclosed, hbody⟩ := typed_let_inv' h rfl
+  have heq : TyEquiv τ₂
+      (.rcd (.cat (.sing "a" (.base (constTy c))) (.sing "b" (.unk : Ty B)))) := by
+    rcases hd with h' | h'
+    · exact h'
+    · cases h'
+  obtain ⟨ρ, hr, hbd⟩ := typed_rcd_inv hbody
+  obtain ⟨τa, τb, hρeq, ha, hb⟩ := typedBody_two_fields hbd
+  subst hρeq
+  have hrow : RowEquiv (.cat (.sing "a" τa) (.sing "b" τb))
+      (.cat (.sing "a" (.base (constTy c))) (.sing "b" (.unk : Ty B))) := by
+    rcases hr with h' | h'
+    · obtain ⟨ρ', hρ', hre⟩ := (h'.trans heq).rcd_inv
+      injection hρ' with hρ''
+      exact hρ'' ▸ hre
+    · subst h'; cases heq.unk_inv
+  -- ## the `a` use pins a DEFINITE result 𝓫_c
+  have hta : TyEquiv τa (.base (constTy c)) := by
+    obtain ⟨r₂, hr₂, hres⟩ :=
+      lookup_equiv (Γ := (Ctx.empty : Ctx B)) hrow (.catHit .hit)
+    have hr₂' : r₂ = .found (.base (constTy c)) := lookup_det hr₂ (.catHit .hit)
+    subst hr₂'
+    cases hres with
+    | found ht => exact ht
+  obtain ⟨τ₁a, τ₂a, hda, hfa, -⟩ := typed_app_inv' ha rfl
+  have heqa : TyEquiv τ₂a τa := by
+    rcases hda with h' | h'
+    · exact h'
+    · subst h'; cases hta.unk_inv
+  rcases tvar_inv hfa (x := "f") (σ := σ) rfl
+    (by simp [Ctx.lookup_bindScheme]) with hu' | ⟨τ'a, hIa, hta'⟩
+  · cases hu'
+  obtain ⟨Aa, Ba, hsa, -, hBa⟩ := hta'.symm.fn_inv
+  subst hsa
+  have hBa' : Ba = .base (constTy c) :=
+    ((hBa.symm.trans heqa).trans hta).symm.base_inv
+  subst hBa'
+  -- ## the `b` use forces an ε DOMAIN
+  obtain ⟨τ₁b, τ₂b, -, hfb, hargb⟩ := typed_app_inv' hb rfl
+  obtain ⟨ρb, hrb, hbe⟩ := typed_rcd_inv hargb
+  cases hbe
+  rcases tvar_inv hfb (x := "f") (σ := σ) rfl
+    (by simp [Ctx.lookup_bindScheme]) with hu' | ⟨τ'b, hIb, htb'⟩
+  · cases hu'
+  obtain ⟨Ab, Bb, hsb, hAb, -⟩ := htb'.symm.fn_inv
+  subst hsb
+  have hAb' : TyEquiv (.rcd (.empty : Row B)) Ab := by
+    rcases hrb with h' | h'
+    · exact h'.trans hAb
+    · subst h'
+      have hAbu : Ab = .unk := hAb.unk_inv
+      subst hAbu
+      exact absurd (hclosed _ hIb) (selEx_dom_unk constTy Bb)
+  obtain ⟨ρ', hρ'shape, hρ'e⟩ := hAb'.rcd_inv
+  subst hρ'shape
+  have hρ'free : ρ'.hasSing = false := by
+    have hh := rowEquiv_hasSing hρ'e
+    simpa [Row.hasSing] using hh.symm
+  -- instance-closedness turns the ε domain into a ★ result
+  have hBb : Bb = .unk :=
+    selEx_dom_empty_res (TyEquiv.rcd hρ'e) (hclosed _ hIb)
+  subst hBb
+  -- ## the endgame: the result position is a bare binder, so mixing is legal
+  obtain ⟨θa, -, hba⟩ := hIa
+  obtain ⟨θb, hfixb, hbb⟩ := hIb
+  cases hbodyσ : σ.body with
+  | base b' => rw [hbodyσ] at hba; simp only [Ty.applySubst] at hba; cases hba
+  | unk     => rw [hbodyσ] at hba; simp only [Ty.applySubst] at hba; cases hba
+  | rcd ρd  => rw [hbodyσ] at hba; simp only [Ty.applySubst] at hba; cases hba
+  | var α   =>
+      rw [hbodyσ] at hbb
+      simp only [Ty.applySubst] at hbb
+      by_cases hα : α ∈ σ.vars
+      · refine selEx_not_rcd_empty constTy (hclosed _ ⟨⟨fun δ =>
+          if δ = α then .rcd .empty else .var δ, fun δ => .var δ⟩,
+          ⟨fun δ hδ => ?_, fun _ _ => rfl⟩, ?_⟩)
+        · have hne : ¬δ = α := by rintro rfl; exact hδ hα
+          simp [hne]
+        · rw [hbodyσ]; simp [Ty.applySubst]
+      · rw [hfixb.1 α hα] at hbb; cases hbb
+  | fn dom res =>
+      rw [hbodyσ] at hba hbb
+      simp only [Ty.applySubst] at hba hbb
+      injection hba with hda hra
+      injection hbb with hdb hrb
+      cases res with
+      | base b' => simp only [Ty.applySubst] at hrb; cases hrb
+      | unk     => simp only [Ty.applySubst] at hra; cases hra
+      | fn _ _  => simp only [Ty.applySubst] at hrb; cases hrb
+      | rcd _   => simp only [Ty.applySubst] at hrb; cases hrb
+      | var α   =>
+          simp only [Ty.applySubst] at hra hrb
+          have hα : α ∈ σ.vars := by
+            by_cases hα : α ∈ σ.vars
+            · exact hα
+            · rw [hfixb.1 α hα] at hrb; cases hrb
+          -- θb with the result variable re-pointed at 𝓫_c
+          have hdm : dom.applySubst
+              (⟨fun δ => if δ = α then .base (constTy c) else θb.ty δ, θb.row⟩ :
+                TySubst B) = .rcd ρ' := by
+            cases dom with
+            | var γ =>
+                simp only [Ty.applySubst] at hdb
+                have hne : ¬γ = α := by
+                  rintro rfl; rw [hdb] at hrb; cases hrb
+                simpa [Ty.applySubst, hne] using hdb
+            | rcd ρd =>
+                simp only [Ty.applySubst] at hdb
+                injection hdb with hρd
+                have hfree : ρd.hasSing = false := by
+                  cases hcon : ρd.hasSing with
+                  | false => rfl
+                  | true =>
+                      have hc := hasSing_applySubst θb ρd hcon
+                      rw [hρd] at hc
+                      simp [hρ'free] at hc
+                simp only [Ty.applySubst, Ty.rcd.injEq]
+                rw [applySubst_rowOnly
+                      (θ₁ := (⟨fun δ => if δ = α then .base (constTy c)
+                                        else θb.ty δ, θb.row⟩ : TySubst B))
+                      (θ₂ := θb) rfl ρd hfree, hρd]
+            | base b' => simp only [Ty.applySubst] at hdb; cases hdb
+            | unk     => simp only [Ty.applySubst] at hdb; cases hdb
+            | fn _ _  => simp only [Ty.applySubst] at hdb; cases hdb
+          have hmix : σ.Inst (.fn (.rcd ρ') (.base (constTy c))) := by
+            refine ⟨⟨fun δ => if δ = α then .base (constTy c) else θb.ty δ, θb.row⟩,
+              ⟨fun δ hδ => ?_, fun δ hδ => hfixb.2 δ hδ⟩, ?_⟩
+            · have hne : ¬δ = α := by rintro rfl; exact hδ hα
+              simp [hne, hfixb.1 δ hδ]
+            · rw [hbodyσ]
+              simp [Ty.applySubst, hdm]
+          have := selEx_dom_empty_res (TyEquiv.rcd hρ'e) (hclosed _ hmix)
+          cases this
+
+-- L1 ⊊ L2, mechanized: the two-use program is in L2 and not in L1.
+theorem l1_strictly_weaker {B C : Type} (constTy : C → B) (c : C) :
+    ∃ (e : Expr C) (τ : Ty B),
+      QTyped constTy ⟨[], []⟩ e τ ∧ ¬ Typed constTy Ctx.empty e τ :=
+  ⟨_, _, qtyped_two_use constTy c, l1_rejects_two_use constTy c⟩
+
 end MinimalCalculus
