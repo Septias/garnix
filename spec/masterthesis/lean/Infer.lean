@@ -300,7 +300,23 @@ inductive Wakes {B : Type} [DecidableEq B] :
       Wakes (S.park p) ps S₁ → Wakes S (p :: ps) S₁
 
 /-- `S ⊢ q ⇓ S′` — F-★, the algorithmic moment of T-sel-★. Runs at the end of
-inference and at every generalization boundary that does not carry the stump. -/
+inference and at every generalization boundary that does not carry the stump.
+
+**DEFECTIVE AS WRITTEN — see `finalize_star_no_discharge` (InferSound.lean).**
+This rule has NO premise about the lookup, while every other rule that touches a
+stump's result variable states what the lookup did first: `Wake.hit` carries its
+`Lookup … (.found τ)`, `Wake.abs` its `Lookup … .absent`, `Wake.repark` its
+`LookupBlocked`. Declaratively `Stump.Discharge` offers ★ only under `D-⊥` (the
+lookup is `⊥`) or `D-?` (it is still `?`); there is no rule pinning δ to ★ when
+the lookup LANDS. So F-★ can commit a stump to ★ in a configuration the
+declarative system cannot read at all, and `finalize_star_no_discharge` exhibits
+one: a stump on the literal row `(l: 𝓫)`, where the lookup lands at every
+context and under every substitution, and F-★ fires anyway.
+
+THE FIX is the premise its siblings have — `LookupBlocked S.ctx
+(p.stump.row.applySubst S.subst) p.stump.label p.blocker`, which is also exactly
+what A-sel-? establishes when it parks the stump. Left unchanged for now because
+changing it moves `selEx_infers` and the A-sel-? soundness case with it. -/
 inductive Finalize {B : Type} [DecidableEq B] :
     SolverState B → Parked B → SolverState B → Prop where
   | star {S S' : SolverState B} {p : Parked B} :
@@ -538,6 +554,14 @@ statement `plans/inference-gap-analysis.md` §B calls unwriteable, and the reaso
 `⟦S⟧`-as-a-context was built at all. It is now WRITEABLE. It is not proved, and
 it is kept as a named `def` for the same reason `UnifyWF` and `TerminalNoMgu`
 are: so the thing being aimed at can be named.
+
+THE PROOF LIVES IN `InferSound.lean`, one lemma per A-rule. Eight of the
+thirteen rules are proved there, plus A-sel-? modulo `StumpHonest`; the census
+at the bottom of that file says what the rest are waiting on. The case lemmas
+are stated at an arbitrary σ with `Sol.Sat σ S′.sol`, NOT at `⟦S′⟧` — that is
+what lets a premise solved at an intermediate state be replayed under the σ the
+conclusion is stated at (`Infer.sat_mono`). Taking σ := S′.subst is the last
+step, not the first.
 
 WHAT IT WILL NEED, and none of it is available yet:
   * `UnifyWF` — without it `⟦S′⟧` is `Sol.toSubst`, one unfolding step, rather
@@ -905,33 +929,5 @@ theorem InferRec.sat_mono {B C : Type} [DecidableEq B] {constTy : C → B}
 
 end
 
-
---------------------- ONE SOUNDNESS STEP, END TO END --------------------------
--- The `A-app` case of `InferSound`, isolated. It exercises the whole chain and
--- so validates that the pieces fit: the arm's emitted equation is replayed
--- under the FINAL σ (`Sol.Sat.comp_inv` peels the stage's own solution off the
--- composite), success soundness turns it into a `TyUnifies`,
--- `tyUnifies_applySubst_of_sat` strips the intermediate substitution the arm
--- unified under, and `qEq` absorbs the resulting `≈` — which is exactly what
--- the declarative side has T-eq for.
---
--- The two premises are the induction hypotheses the full theorem will supply.
-theorem infer_sound_app_step {B C : Type} [DecidableEq B] {constTy : C → B}
-    {Γ' : QCtx B} {σ : TySubst B} {S S' : SolverState B}
-    {e₁ e₂ : Expr C} {τ₁ τ₂ : Ty B} {β : TyVar}
-    (h₁ : QTyped constTy Γ' e₁ (τ₁.applySubst σ))
-    (h₂ : QTyped constTy Γ' e₂ (τ₂.applySubst σ))
-    (hs : SolveTy S τ₁ (.fn τ₂ (.var β)) S')
-    (hsat : Sol.Sat σ S'.sol) :
-    QTyped constTy Γ' (.app e₁ e₂) ((Ty.var β).applySubst σ) := by
-  obtain ⟨fuel, t, Sup, hu, rfl⟩ := hs
-  -- peel the stage's own solution off the composite
-  obtain ⟨hS, ht⟩ := Sol.Sat.comp_inv hsat
-  -- the emitted equation holds under σ …
-  have huni := (unifyM_success_sound fuel).1 [] S.supply _ _ hu ht
-  -- … and σ absorbs the substitution the arm unified under
-  have huni' : TyUnifies σ τ₁ (.fn τ₂ (.var β)) :=
-    (tyUnifies_applySubst_of_sat hS τ₁ (.fn τ₂ (.var β))).mp huni
-  exact .qApp (.qEq h₁ huni') h₂
 
 end MinimalCalculus

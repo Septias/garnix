@@ -10,6 +10,7 @@ import RowUnify
 import Refutations
 import QSubst
 import Infer
+import InferSound
 
 namespace MinimalCalculus
 
@@ -490,15 +491,99 @@ info: 'MinimalCalculus.qtyped_applySubst' depends on axioms: [propext, Classical
 /-- info: 'MinimalCalculus.Infer.supply_mono' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in #print axioms Infer.supply_mono
 
--- "θ is only ever refined", and one soundness step end to end. The app step
--- exercises the whole chain — peel the stage's solution off the composite,
--- success soundness, strip the intermediate substitution, absorb the ≈ with
--- T-eq — so it validates that the InferSound machinery fits together.
+-- "θ is only ever refined" — what lets a premise solved at an INTERMEDIATE
+-- state be replayed under the σ the conclusion is stated at.
 /-- info: 'MinimalCalculus.Infer.sat_mono' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in #print axioms Infer.sat_mono
 
+-- ## INFERENCE SOUNDNESS, CASE BY CASE  (InferSound.lean)
+-- Eight of the thirteen A-rules, plus A-sel-? modulo `StumpHonest`. The two
+-- pieces of new machinery first: replaying a solved equation under any σ that
+-- satisfies the state it produced, and transporting a DEFINITE lookup out of
+-- ⟦S⟧-as-a-context under mere `Sat` rather than `Closes` — the hypothesis the
+-- induction actually has at an intermediate state.
+/-- info: 'MinimalCalculus.SolveTy.unifies_sat' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in #print axioms SolveTy.unifies_sat
+
+/--
+info: 'MinimalCalculus.Sol.lookup_toCtx_sat' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms Sol.lookup_toCtx_sat
+
+-- A record-typed subject always types a selection at ★: the declarative content
+-- of "a selection never gets stuck", and what makes the ★ half of A-sel-? free.
+/--
+info: 'MinimalCalculus.qtyped_sel_star' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms qtyped_sel_star
+
+-- The rules themselves. A-app and A-conc emit an equation and let T-eq absorb
+-- the ≈; A-sel and A-sel-⊥ additionally read a field off the solution.
 /-- info: 'MinimalCalculus.infer_sound_app_step' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in #print axioms infer_sound_app_step
+
+/-- info: 'MinimalCalculus.infer_sound_conc_step' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in #print axioms infer_sound_conc_step
+
+/--
+info: 'MinimalCalculus.infer_sound_sel_step' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms infer_sound_sel_step
+
+/--
+info: 'MinimalCalculus.infer_sound_selAbs_step' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms infer_sound_selAbs_step
+
+-- A-sel-?, the case proof-state.md calls a DESIGN question. The answer is that
+-- a parked stump is worth a DISCHARGE — the declarative `Stump.Discharge`, read
+-- at σ against a discharged row environment, with the hit payload relaxed to ≈
+-- because a SOLVED equation is only ever an ≈-fact. Given that, the rule is
+-- sound; establishing it is wake-up's job.
+/--
+info: 'MinimalCalculus.infer_sound_selUnk_step' depends on axioms: [propext, Quot.sound]
+-/
+#guard_msgs in #print axioms infer_sound_selUnk_step
+
+-- ## THE K-/D- CORRESPONDENCE  (InferSound.lean)
+-- "K-hit / K-⊥ / K-repark are D-hit / D-⊥ / D-?" as a theorem, at the
+-- granularity of one wake-up step: a step either DISCHARGES its constraint or
+-- re-parks it with the stump intact. K-repark corresponds to nothing, which is
+-- why the conclusion is a disjunction and not an implication.
+/--
+info: 'MinimalCalculus.Wake.dischargeEquiv' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms Wake.dischargeEquiv
+
+-- …and over a whole run. The lift needs exactly one structural fact — every
+-- rule that retires a stump filters the parked list on `stump.res`, so an entry
+-- survives a step precisely when its result variable differs from the one being
+-- woken — plus the distinctness of what was submitted, which is what
+-- `FreshRenaming` gives A-var.
+/--
+info: 'MinimalCalculus.Wakes.dischargeEquiv' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms Wakes.dischargeEquiv
+
+/-- info: 'MinimalCalculus.InstStumps.pairwise' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in #print axioms InstStumps.pairwise
+
+-- A-var, once the discharge obligation is separated out: qVar wants a scheme
+-- and an instance, and the instance's own substitution is ours to choose —
+-- which is what pays for the ≈ the correspondence leaves behind.
+/-- info: 'MinimalCalculus.infer_sound_var_step' does not depend on any axioms -/
+#guard_msgs in #print axioms infer_sound_var_step
+
+-- ## F-★ IS DEFECTIVE  (InferSound.lean)
+-- A REFUTATION, in the sense Refutations.lean uses the word: `Finalize.star`
+-- has no premise about the lookup, so it can commit a stump to ★ where the
+-- lookup lands — and then nothing discharges it, not even up to ≈. The witness
+-- is a stump on the literal row (l: 𝓫). Guarded so the defect cannot be
+-- silently "fixed" by a change that makes the statement vacuous.
+/--
+info: 'MinimalCalculus.finalize_star_no_discharge' depends on axioms: [propext]
+-/
+#guard_msgs in #print axioms finalize_star_no_discharge
 
 -- `? on α`: the blocker of an unknown lookup, which A-sel-? and K-repark both
 -- need and `Lookup` does not record. Sound, complete and deterministic.
