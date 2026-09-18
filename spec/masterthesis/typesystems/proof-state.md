@@ -771,12 +771,37 @@ through `unifyTyF`/`unifySpineMF` with `S.supply` threaded in and out.
   require `p ∈ S.parked`, there is no `⇓*` closure beside `Wakes`, and there is
   no top-level entry judgement for `Run` — §B's last ✘ row — so `InferSound`'s
   `S′.parked = []` hypothesis cannot yet be discharged by anything.
-  SEPARATE, AND NOT FIXED BY THE PREMISE: if δ is already solved to a non-★ type
-  when finalization reaches the stump — A-app writes into δ whenever the
-  selection's result is USED, e.g. `λx. (x.l) y` — then `δ ≐ ★` clashes (★ is
-  rigid) and F-★ has NO derivation, so the run cannot finalize at all. By §D
-  that program has no declarative derivation either, so REJECTING is right; it
-  has to be stated as a verdict rather than happen by absence of a rule.
+  **THE SPENT PROMISE — STAGE 4, DONE 2026-09-18, AND THE EARLIER READING OF IT
+  WAS WRONG.** If δ is already solved to a non-★ type when finalization reaches
+  the stump — A-app writes into δ whenever the selection's result is USED — then
+  `δ ≐ ★` clashes (★ is rigid) and F-★ has no derivation, so the run cannot
+  finalize. That much was right, and it is now a stated verdict rather than a
+  stuck derivation: `Ty.Spent` + `no_finalize_of_spent` (Infer.lean), a hard
+  error by the same discipline a clash is rejected under (no rule applies).
+  WHAT WAS WRONG: "by §D that program has no declarative derivation either, so
+  rejecting is right". It does have one. `λx. λy. (x.l) y` runs to a state that is
+  QUIESCENT and otherwise sound, with the stump still blocked, and cannot be
+  finalized (`spentEx_infers`, `spentEx_cannot_finalize`) — while the program is
+  typeable at `{(l: 𝓫 → 𝓫)} → 𝓫 → 𝓫` (`spentEx_declarative`). So this is the
+  algorithm's **INCOMPLETENESS**, not the declarative system's rejection, and it
+  is not §D's ★-elimination gap either, because no ★ is ever formed. The real
+  gap: the algorithm commits `x` to `{r}` with `r` abstract and never guesses a
+  concrete row, so its only possible answer is to CARRY `⟨r.l ↓ (α_y → β)⟩` —
+  which cannot be written, because `Stump.res` is a `TyVar`. A stump's result
+  position holds a variable, not a type.
+  THREE EXITS, in increasing cost:
+    * leave it a hard error and record the incompleteness — what the rules do now;
+    * `Stump.res : Ty B`, so a spent promise is expressible. The discharge arms
+      survive as they are (`hit` already compares up to ≈; `abs`/`unk` demand ★,
+      which a spent arrow simply fails), but it touches `Stump`, `Discharge`,
+      `QScheme.WF`, `selQ` and every principality theorem built on them;
+    * a consistency relation `τ ~ ★` beside `≐`, which §D already prices as a
+      real extension rather than a gap.
+  GENERALIZATION INHERITS IT: A-let carries stumps into a scheme whose `QScheme.WF`
+  wants each `res` among the binders, and a spent δ is not a binder. So whichever
+  exit is taken, it is taken for both sites.
+  This is a completeness limitation with a two-binder witness, which is the form
+  the write-up wants.
 
 - [!] **AND THE NEW TRIPWIRE FINDING** (2026-09-12). With `Ranked` in place of
   `Applied`, ill-formed solutions fall from 860 / 22408 / 268 to

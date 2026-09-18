@@ -828,6 +828,131 @@ theorem fStarEx_refinement_lost :
        (fun s hs => absurd hs List.not_mem_nil), rfl⟩
   · exact QTyped.qRcd (QTypedBody.field QTyped.qCon)
 
+--------------------- …AND IT IS REACHABLE, AND IT IS INCOMPLETENESS ----------
+-- `no_finalize_of_spent` (Infer.lean) is a verdict about a state. This is a RUN
+-- that reaches one, and the news is worse than "the algorithm rejects what the
+-- declarative system rejects":
+--
+--     λx. λy. (x.l) y
+--
+-- A-sel-? parks ⟨r ▷ r.l ↓ δ⟩ and answers δ; A-app then emits `δ ≐ (α_y → β)`,
+-- which SUCCEEDS — δ is an unsolved variable, which is exactly what A-sel-?
+-- returned it for. The state is perfectly well formed at the end: quiescent, the
+-- stump still blocked on an unsolved row variable, nothing stale. And it cannot
+-- be finalized, so `Run` has no answer for this program.
+--
+-- Yet the program IS declaratively typeable, at `{(l: 𝓫 → 𝓫)} → 𝓫 → 𝓫`
+-- (`spentEx_declarative`). So this is INCOMPLETENESS, not a justified rejection —
+-- and it is not the ★-elimination gap of `plans/inference-gap-analysis.md` §D
+-- either, because no ★ is ever formed here. The algorithm commits `x` to `{r}`
+-- with `r` abstract and never guesses a concrete row, so the only way it could
+-- answer is to CARRY the constraint `⟨r.l ↓ (α_y → β)⟩` — and it cannot, because
+-- `Stump.res` is a `TyVar`: a stump's result position holds a variable, not a
+-- type. Three exits, in increasing order of cost:
+--   * leave it a hard error, which is what the rules do now, and record the
+--     incompleteness (this section);
+--   * `Stump.res : Ty B`, so a spent promise is still expressible. The discharge
+--     arms survive (`hit` compares up to ≈ already, `abs`/`unk` demand ★, which a
+--     spent arrow simply fails) — but it touches `Stump`, `Discharge`,
+--     `QScheme.WF`, `selQ` and every principality theorem built on them;
+--   * a consistency relation `τ ~ ★` beside `≐`, which §D already prices as a
+--     real extension rather than a gap.
+-- The generalization boundary inherits the same problem: A-let carries stumps
+-- into a scheme whose `QScheme.WF` wants each `res` among the binders, and a
+-- spent δ is not a binder. So whichever exit is taken, it is taken for both.
+
+private def spentEx : Expr Unit :=
+  .lam "x" (.lam "y" (.app (.sel (.var "x") "l") (.var "y")))
+
+private def spX : TyVar := natName 1
+private def spY : TyVar := natName 2
+private def spRow : TyVar := natName 3
+private def spD : TyVar := natName 4
+private def spB : TyVar := natName 5
+
+private def spS0 : SolverState Unit := ⟨Sol.nil, [], [], ⟨1⟩, []⟩
+private def spLx : SolverState Unit := ⟨Sol.nil, [], [], ⟨2⟩, [(spX, .ty)]⟩
+private def spLy : SolverState Unit := ⟨Sol.nil, [], [], ⟨3⟩, [(spY, .ty), (spX, .ty)]⟩
+private def spDraw : SolverState Unit :=
+  ⟨Sol.nil, [], [], ⟨4⟩, [(spRow, .row), (spY, .ty), (spX, .ty)]⟩
+private def spSol1 : Sol Unit := ⟨[(spX, .rcd (.var spRow))], []⟩
+private def spS2 : SolverState Unit :=
+  ⟨spSol1, [], [], ⟨4⟩, [(spRow, .row), (spY, .ty), (spX, .ty)]⟩
+private def spS2' : SolverState Unit :=
+  ⟨spSol1, [], [], ⟨5⟩, [(spD, .ty), (spRow, .row), (spY, .ty), (spX, .ty)]⟩
+private def spP : Parked Unit := ⟨spRow, ⟨.var spRow, "l", spD⟩⟩
+private def spSp : SolverState Unit :=
+  ⟨spSol1, [spP], [], ⟨5⟩, [(spD, .ty), (spRow, .row), (spY, .ty), (spX, .ty)]⟩
+private def spSb : SolverState Unit :=
+  ⟨spSol1, [spP], [], ⟨6⟩,
+   [(spB, .ty), (spD, .ty), (spRow, .row), (spY, .ty), (spX, .ty)]⟩
+
+/-- what the APPLICATION writes: the promise, spent on an arrow. -/
+private def spApp : Sol Unit := ⟨[(spD, .fn (.var spY) (.var spB))], []⟩
+private def spS : SolverState Unit := spSb.extend spApp ⟨6⟩
+
+/-- ⊢  the state is QUIESCENT — the stump is still blocked on an unsolved row
+variable, so nothing about it is stale. The run did nothing wrong. -/
+theorem spentEx_quiescent : spS.Quiescent := by
+  intro p hp
+  cases hp with
+  | head      => exact .varFree rfl
+  | tail _ h  => exact absurd h List.not_mem_nil
+
+/-- ⊢  …and so is the state A-sel-? parks it in, which is where A-var for `y`
+submits its (empty) constraint list. -/
+theorem spentEx_quiescent_parked : spSp.Quiescent := by
+  intro p hp
+  cases hp with
+  | head      => exact .varFree rfl
+  | tail _ h  => exact absurd h List.not_mem_nil
+
+/-- ⊢  `λx. λy. (x.l) y` infers, with the stump still parked. -/
+theorem spentEx_infers :
+    Infer (B := Unit) (C := Unit) (fun _ => ()) ⟨[], []⟩ spS0 spentEx
+      (.fn (.var spX) (.fn (.var spY) (.var spB))) spS := by
+  refine Infer.lam (S₀ := spLx) rfl (Infer.lam (S₀ := spLy) rfl ?_)
+  refine Infer.app (S₁ := spSp) (S₂ := spSp) (S₂' := spSb)
+    (τ₁ := .var spD) (τ₂ := .var spY) ?_ ?_ rfl ?_
+  · refine Infer.selUnk (τ := .var spX) (S₁ := spLy) (S₁' := spDraw) (S₂ := spS2)
+      (S₂' := spS2') (r := spRow) (α := spRow) (δ := spD) ?_ rfl ?_ ?_ rfl
+    · exact Infer.var (σ := ⟨[], [], .var spX⟩) (θ := fsId) (f := id) (ps := []) rfl
+        ⟨⟨fun _ _ => rfl, fun _ _ => rfl⟩, by simp⟩ (by simp [FreshRenaming]) rfl
+        ⟨_, .nil, .done (SolverState.Quiescent.nil rfl)⟩
+    · exact ⟨_, ⟨5, spSol1, ⟨4⟩, rfl, rfl⟩, .done (SolverState.Quiescent.nil rfl)⟩
+    · exact .varFree rfl
+  · exact Infer.var (σ := ⟨[], [], .var spY⟩) (θ := fsId) (f := id) (ps := []) rfl
+      ⟨⟨fun _ _ => rfl, fun _ _ => rfl⟩, by simp⟩ (by simp [FreshRenaming]) rfl
+      ⟨_, .nil, .done spentEx_quiescent_parked⟩
+  · exact ⟨spS, ⟨5, spApp, ⟨6⟩, rfl, rfl⟩, .done spentEx_quiescent⟩
+
+/-- ⊢  **the promise is spent**: the state has written an arrow into δ. -/
+theorem spentEx_spent : (spS.subst.ty spP.stump.res).Spent := trivial
+
+/-- ⊢  **so the run cannot be finished.** F-★ has no derivation at this stump, and
+it is the only stump there is: `Run` has no answer for the program. -/
+theorem spentEx_cannot_finalize : ¬ ∃ S', Finalize spS spP S' :=
+  no_finalize_of_spent spentEx_spent
+
+theorem spentEx_still_parked : spS.parked = [spP] := rfl
+
+/-- ⊢  **and the program is declaratively typeable**, at `{(l: 𝓫 → 𝓫)} → 𝓫 → 𝓫`.
+So the hard error above is the algorithm's incompleteness, not the declarative
+system's rejection — the gap is that a stump's result position holds a VARIABLE,
+so the constraint the answer would need (`⟨r.l ↓ (α → β)⟩`) cannot be written. -/
+theorem spentEx_declarative :
+    QTyped (B := Unit) (C := Unit) (fun _ => ()) ⟨[], []⟩ spentEx
+      (.fn (.rcd (.sing "l" (.fn (.base ()) (.base ()))))
+        (.fn (.base ()) (.base ()))) := by
+  refine QTyped.qLam (QTyped.qLam (QTyped.qApp (τ₁ := .base ()) ?_ ?_))
+  · refine QTyped.qSel (ρ := .sing "l" (.fn (.base ()) (.base ()))) ?_ .hit
+    exact QTyped.qVar (σ := ⟨[], [], .rcd (.sing "l" (.fn (.base ()) (.base ())))⟩) rfl
+      ⟨fsId, ⟨fun _ _ => rfl, fun _ _ => rfl⟩,
+       (fun s hs => absurd hs List.not_mem_nil), rfl⟩
+  · exact QTyped.qVar (σ := ⟨[], [], .base ()⟩) rfl
+      ⟨fsId, ⟨fun _ _ => rfl, fun _ _ => rfl⟩,
+       (fun s hs => absurd hs List.not_mem_nil), rfl⟩
+
 --------------------- WHAT A PARKED STUMP MEANS, AS A JUDGEMENT ---------------
 -- `proof-state.md` calls A-sel-? "a design question about what a parked stump
 -- MEANS declaratively, not a proof-effort question", and the question is sharp:

@@ -837,4 +837,29 @@ info: 'MinimalCalculus.runSound_of_inferSoundC_nil' depends on axioms: [propext]
 -/
 #guard_msgs in #print axioms runSound_of_inferSoundC_nil
 
+-- ## THE SPENT PROMISE  (Infer.lean, InferSound.lean)
+-- The TENSION CASE as a verdict: A-sel-? hands back δ so the position stays
+-- writable, a USE of the selection writes an arrow into it, and then F-★'s own
+-- `δ ≐ ★` clashes — ★ is rigid. No rule applies, which is the same discipline a
+-- clash is rejected under.
+/-- info: 'MinimalCalculus.no_finalize_of_spent' depends on axioms: [propext] -/
+#guard_msgs in #print axioms no_finalize_of_spent
+
+-- …and it is REACHABLE: `λx. λy. (x.l) y` runs to a quiescent state with the
+-- stump still blocked, which cannot be finalized.
+/-- info: 'MinimalCalculus.spentEx_infers' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in #print axioms spentEx_infers
+
+/--
+info: 'MinimalCalculus.spentEx_cannot_finalize' depends on axioms: [propext]
+-/
+#guard_msgs in #print axioms spentEx_cannot_finalize
+
+-- …while the program IS declaratively typeable, at {(l: 𝓫 → 𝓫)} → 𝓫 → 𝓫. So this
+-- is the algorithm's INCOMPLETENESS, not the declarative system's rejection, and
+-- the gap is that `Stump.res` is a TyVar: the constraint the answer needs,
+-- ⟨r.l ↓ (α → β)⟩, cannot be written.
+/-- info: 'MinimalCalculus.spentEx_declarative' does not depend on any axioms -/
+#guard_msgs in #print axioms spentEx_declarative
+
 end MinimalCalculus

@@ -476,6 +476,45 @@ theorem SolverState.Quiescent.wake_no_commit {B : Type} [DecidableEq B]
   | repark _  => rfl
 
 
+--------------------- THE SPENT PROMISE ---------------------------------------
+-- The TENSION CASE, as a verdict rather than as an absence. A-sel-? returns δ so
+-- that the position stays WRITABLE — and any use of the selection's value writes
+-- to it: `(x.l) y` makes A-app emit `δ ≐ (τ_y → β)`, which succeeds, because δ is
+-- an unsolved variable and that is exactly what "writable" meant. The promise has
+-- then been SPENT on an arrow, and F-★'s own equation `δ ≐ ★` can no longer be
+-- solved: ★ is rigid (`U-★`), so it unifies with nothing but itself and with a
+-- variable. Finalization has no derivation, and the run cannot be completed.
+--
+-- That is a hard error by the same discipline as a clash — no rule applies — and
+-- it is worth SAYING rather than leaving to be discovered as a stuck derivation.
+
+/-- a type a promise has been spent on: neither a variable (still writable) nor ★
+(already the answer F-★ wants). `δ ≐ ★` clashes on exactly these. -/
+def Ty.Spent {B : Type} : Ty B → Prop
+  | .var _ => False
+  | .unk   => False
+  | _      => True
+
+/-- ⊢  **a spent promise cannot be finalized.** If the state has already written a
+non-variable, non-★ type into a parked stump's result variable, F-★ has no
+derivation at that stump — its equation is `⟦S⟧δ ≐ ★` and ★ is rigid. -/
+theorem no_finalize_of_spent {B : Type} [DecidableEq B] {S : SolverState B}
+    {p : Parked B} (h : (S.subst.ty p.stump.res).Spent) :
+    ¬ ∃ S', Finalize S p S' := by
+  rintro ⟨S', hf⟩
+  cases hf with
+  | star _ _ hs =>
+      obtain ⟨fuel, s, Sup, hu, -⟩ := hs
+      simp only [Ty.applySubst] at hu
+      revert h hu
+      cases S.subst.ty p.stump.res with
+      | var _  => intro h; exact absurd h not_false
+      | unk    => intro h; exact absurd h not_false
+      | base b => intro _ hu; simp [unifyTyF] at hu
+      | fn a b => intro _ hu; simp [unifyTyF] at hu
+      | rcd ρ  => intro _ hu; simp [unifyTyF] at hu
+
+
 --------------------- INSTANTIATION AT A-var ---------------------------------
 -- `x: ∀(ᾱ: κ̄). Q ⇒ τ ∈ Γ   fresh β̄: κ̄   S ⊢ Q[β̄/ᾱ] ↝* S′`.
 --

@@ -748,6 +748,26 @@ S ⊢ (⟨α ▷ ρ.l ↓ δ⟩, Δ′) ⇓\* S′
 
 // TENSION CASE: if δ is already solved and wake-up finds a different τ′, the
 // emitted δ ≐ τ′ CLASHES ⟹ hard error, not a degradation.
+//
+// THE SAME TENSION AT FINALIZATION, and it is the sharper one. A-sel-? returns δ
+// so the position stays WRITABLE, and any USE of the selection's value writes to
+// it: in (x: (y: (x.l) y)) the application emits δ ≐ (α_y -> β) and it SUCCEEDS.
+// The promise is then spent on an arrow, F-★'s own δ ≐ ★ clashes (★ is rigid), and
+// the run has no way to finish — a hard error by the same discipline as a clash,
+// no rule applies (no_finalize_of_spent, lean/Infer.lean; the run that reaches it
+// is spentEx_infers, and the state it reaches is quiescent and otherwise sound).
+//
+// This one is INCOMPLETENESS, not a justified rejection: that program IS typeable,
+// at {(l: 𝓫 -> 𝓫)} -> 𝓫 -> 𝓫 (spentEx_declarative). No ★ is ever formed, so it is
+// not the ★-elimination gap either. The algorithm commits x to {ρ} with ρ abstract
+// and never guesses a concrete row, so its only possible answer is to CARRY
+// ⟨ρ.l ↓ (α_y -> β)⟩ — which it cannot write, because a stump's result position
+// holds a VARIABLE. Exits: leave it a hard error and record the incompleteness
+// (what the rules do now); or let a stump's result be a TYPE, which touches
+// Discharge, QScheme.WF, selQ and the principality theorems; or add a consistency
+// relation τ ~ ★ beside ≐, which is a real extension. Generalization inherits it:
+// A-let carries stumps into a scheme whose δ's must be among its binders, and a
+// spent δ is not a binder.
 
 
 == Entry
