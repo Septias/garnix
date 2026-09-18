@@ -188,6 +188,64 @@ Principality forces qualified schemes that use parked stumps during unification 
   - [x] ⊴ covering order on qualified schemes (Qualified.lean, THE COVERING ORDER)
   - [ ] solver state S = (θ, Δ, W), stump wake-up, confluence of the final state
 
+## The unification type of ≈ — A LOWER BOUND ON THE ALGORITHM
+> lean/RowUnify/UnifType.lean, 2026-09-13. Answers the daily's
+> "unitary, finitary, infinitary, or nullary?". All propext/Quot.sound only,
+> guarded in Axioms.lean. Thesis prose drafted in
+> metatheory-unification-type-draft.typ — a fragment for §Metatheory, NOT
+> spliced into thesis.typ; it also carries the two bib entries it needs.
+
+RESULT: ≈-unification under asymmetric concatenation is **at least
+infinitary** — neither unitary nor finitary. Concretely: a solvable ≐ᵣ problem
+exists for which NO finite set of unifiers is complete
+(`shift_no_finite_complete_set`, `rowUnification_not_finitary`).
+
+WHY THIS MATTERS MORE THAN THE OTHER NO-MGU RESULTS. `wand_no_mgu` only kills
+unitary — the Wand problem has a complete set of size two, so it is consistent
+with a finitary theory and with an algorithm that returns a finite disjunction.
+This one kills that escape too. The incompleteness of ≐ᵣ is therefore
+**structural, not a missing driver arm**: no ≐ᵣ that returns one solution (or
+finitely many) can be complete, however many `expandR`-style arms are added.
+This is the "lower bound that motivates the incompleteness" from tisch.md, and
+it is the argument the thesis should make where it currently apologizes for the
+stuck leg.
+
+THE WITNESS — the SHIFT PROBLEM  (α | l: 𝓫) ≐ᵣ (l: 𝓫 | α), same var both sides.
+Distinguish it from `two_sided_no_mgu`'s (α | l:𝓫) ≐ᵣ (l:𝓫 | β), which is a
+Levi ambiguity between TWO variables. Here there is one variable, and the
+obstruction is COUNTING:
+  * solvable — α ≔ ε                                  (`shift_unifiable`)
+  * every unifier forces α SPINE-VAR-FREE             (`shift_unifier_varFree`)
+    The equation admits no symbolic answer at all. Mechanism: the trailing
+    l-field sits at segment index |vars(θα)| on the left and at index 0 on the
+    right, and pointwise projection agreement walks the list down to
+    |vars(θα)| = 0 (`shift_proj_forces_zero`). This is the sharpest rigidity
+    statement we have about ≈ and is reusable.
+  * α ≔ (l:𝓫)^k is a unifier for every k, pairwise INCOMPARABLE
+    (`shiftSub_unifies`, `shiftSub_antichain`) — an infinite antichain. It rests
+    on `instanceOfOn_fieldCount_eq_of_varFree` (NoMgu.lean): covering fixes the
+    l-count exactly once the covered image is var-free, and every unifier here
+    is var-free by the previous point.
+  * hence no mgu (`shift_no_mgu`) and no finite complete set.
+
+THE ALGORITHM'S VERDICT on it is `stuck`, both orientations, pinned as
+`Regressions.unify_shift_stuck` / `_mirror`; the instantiations k = 0, 1
+succeed (`unify_shift_inst_zero` / `_one`), so stuck there is a genuine
+incompleteness and not a clash in disguise. expandR does not and CANNOT fix it.
+
+WHAT IS NOT SETTLED — infinitary vs. nullary. That needs "every solvable
+problem has a MINIMAL complete set", and the antichain above does not decide
+it: it is not itself complete. α ≔ (m:𝓫) with m ≠ l is also a unifier
+(`offSub_unifies`) and factors through no member (`shift_antichain_not_complete`),
+because a non-l label is unconstrained and commutes freely past l. The true
+unifier set of the shift problem is "every var-free row whose l-fields are all
+≈ 𝓫, arbitrary at other labels", so the natural minimal complete set is indexed
+by TRACES (label sequences mod commutation of distinct labels) with fresh
+variables at the non-l payloads. Proving that set complete is the open half.
+DO NOT cite the theory as "infinitary" full stop — cite "not unitary, not
+finitary", which is what is proved and is what the lower bound needs.
+
+
 ## Termination
 - Fuzzing suggests, that the algorithm actually terminates
 
