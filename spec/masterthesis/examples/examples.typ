@@ -1,7 +1,3 @@
-= ∈-Algorithmus
-
-
-
 == Beispiel: Vereinfachung
 ```x: let y = {}; f = x: y: (x ++ y).a in (f x y)```
 
