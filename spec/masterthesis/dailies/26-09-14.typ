@@ -1,6 +1,5 @@
 
 ./26-09-18.typ
-./26-09-13.typ
 ./26-09-16.typ
 
 == Claude Prompts
