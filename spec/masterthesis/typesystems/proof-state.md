@@ -52,8 +52,7 @@ Principality forces qualified schemes that use parked stumps during unification 
 - Outcomes
   - [~] success: *sound & complete*
     - VACUOUS successes: none left in any fuzz universe, either half, since the
-      guards read the accumulated solution (B1). `UnifyWF` is still UNPROVED —
-      empirically clean is not a theorem.
+      guards read the accumulated solution (B1).
     - WHAT VACUITY ACTUALLY IS (assessment, 2026-09-14). The two legs are
       `Sat θ s → Unifies θ` and `Unifies θ → ∃θ' ⊨ s`. BOTH are vacuously true
       when `s` is unsatisfiable AND the problem has no unifier, so the pair does
@@ -99,11 +98,6 @@ Principality forces qualified schemes that use parked stumps during unification 
       that disjunct, so the driver-level `unifyRowM … = .occurs ⟹ ¬∃θ` is
       blocked there — and only there. `solveVarM_occurs_no_unifier_nil` is the
       unconditional statement at Θ = [] (`depReach [] V = V`).
-    - the 2026-09-18 re-size of plans/occurs-complete-plan.md (Stages 1/2/5 read
-      as a multi-session change) was written against pre-merge main and is
-      ANSWERED by the work above: `sVarSeq_applySubst` now lives in NoMgu.lean,
-      `occurs_allVar_reported` is gone and replaced by `allVar_collapse_reported`,
-      and the sweep was re-run clean (ill-formed 0, spine-cyclic 0, unrankable 0).
   - [~] stuck : *incomplete*
     - (k:{β|α} | β) ≐ᵣ (k:{l:𝓫} | l:𝓫)
   
@@ -124,7 +118,7 @@ Principality forces qualified schemes that use parked stumps during unification 
     `selfref_host_no_unifier`) and the stale-binding case (a fact about the
     solver state, from which no no-unifier theorem follows). Trichotomy's
     step-2 dispatch is correspondingly WEAKER and anything reading that
-    disjunct must re-split. Recorded, not repaired.
+    disjunct must re-split. *Recorded, not repaired.*
   - [~] `UnifyAcyclic` (State.lean) — the SPINE half of `UnifyWF`, split out
     because it is cheaper and already buys what inference needs: `Acyclic` gives
     `rowWF_toCtx` and `lookup_total_toCtx`, i.e. `A-sel`'s premise is guaranteed
@@ -141,7 +135,7 @@ Principality forces qualified schemes that use parked stumps during unification 
         positions it CLOSES: `sApplySubst` strips the earlier domain from the
         residual (by that stage's own acyclicity), and the expansions rename
         their host away instead.
-    REMAINS, and it is NOT a missing definition (I said it was — wrong). The
+    REMAINS, and it is NOT a missing definition. The
     type-pass measure ALREADY EXISTS: `Ty.allRowVars`/`Row.allRowVars`
     (Defs.lean:177) is exactly "row variables at spine positions at any nesting
     depth", and it is sort-aware, so the `NoCapture` leak cannot reach it.
@@ -198,96 +192,81 @@ Principality forces qualified schemes that use parked stumps during unification 
     stage may mention of the earlier stage's domain — which the
     `Supply`/`Avoids`/`SolBelow` discipline constrains but does not yet pin
     down. Do not retry the three ranks above.
-  - [x] sorted ftv, second half — DONE 2026-09-16. `Ty/Row.tyFtv` (Defs.lean) is
-    the TYPE-sort complement of `allRowVars`; the two partition `ftv`
-    (`Ty.mem_ftv_iff`) and are the fibres of `sortedFtv`'s tag @claude: what is a type fibre?
-    (`Ty.mem_tyFtv_iff_sortedFtv`, State.lean). `bindTy` now guards on `tyFtv`:
-    it binds at the TYPE sort, so the type fibre is the guard that makes the
-    binding eliminating. The guard is WEAKER, and every `bindTy` theorem is
-    stated on SUCCESS, so soundness/completeness/clash/stuck/supply all carried
-    over with no proof changes. The behaviour change is exactly one regression:
-    `x ≐ {x}` was `.occurs` and is now `success (x ≔ {x})` — the old verdict was
-    FALSE, and `tyM_cross_sort_unifier` / `tyM_cross_sort_sat` (Regressions.lean)
-    exhibit the unifier θ.ty x = {ε}, θ.row x = ε that the sort-blind guard
-    denied. Fuzz over all three universes after the change: 0 ill-formed
-    solutions, 0 spine-cyclic, 0 unrankable, 0 divergence candidates — so the
-    weaker guard admits nothing that breaks `Acyclic` or `Ranked`.
-    The ROW occurs guard keeps its own conservatism (occurs_allVar_hasMgu);
-    that is a separate question and is untouched.
-    The genuine cycles are still caught: `x ≐ (x→x)` and `x ≐ {l:x}` report
-    occurs (`tyM_occurs_fn`, `tyM_occurs_field`, Regressions.lean).
-  - [x] ⊴ covering order on qualified schemes (Qualified.lean, THE COVERING ORDER)
+    THE DEPGRAPH ROUTE IS CLOSED (2026-09-19), and so is the whole rank-by-order
+    family. Measured with a TRACED CLONE of the driver in Fuzz.lean ([6]/[7]) —
+    `Θ` is an input to `unifyTyF`/`unifySpineMF` and never returned, so it had to
+    be cloned to be observed; the clone's verdict is compared against the real
+    driver on every pair (`nDis` = 0 / 0 / 0, so the numbers below stand).
+      * Θ AS THE CARRIER: ✘ twice over.
+        - Θ is itself CYCLIC on 316 / 3232 / 88 successes. The cycle is spurious
+          and cross-sort: `expandDeps` emits `(δ, τ.ftv)` and `DepGraph` is
+          UNTAGGED, so on (l:a | a) ≐ᵣ (a | m:𝓫) it records a→[aa aaa], aa→[a]
+          where the first `a` is a ROW variable and the second a TYPE variable.
+        - Θ is INCOMPLETE: it records expansions only, so U-var-solve's bindings
+          have no edges at all and Θ-reachability MISSES 40 / 2736 / 24 real
+          solution edges — first at (l:𝓫 | b) ≐ᵣ (m:{a} | a), which needs ᵣb→ᵣa.
+        - consequently Θ-depth as the rank fails 332 / 4700 / 96.
+        Tagging Θ and recording U-var-solve in it would make Θ *equal* to the
+        solution's dependency graph — at which point "Θ is acyclic" IS
+        `Sol.Ranked`, so that repair renames the problem rather than reducing it.
+      * CREATION ORDER: ✘, and this kills the family. The clone also records a
+        LEDGER — every key bound, tagged, in the order bound — which is what
+        `domS` is not (`domS` = ty ++ row scrambles two sorts the driver
+        interleaves, so the earlier index candidates were confounded). Both
+        directions, and both intra-expansion orders, fail:
+          payload δ before host β:  decreasing  16 / 15036 /  16   ✘
+          host β before payload δ:  increasing  40 /  2720 /  24   ✘
+        because the two edge sources point OPPOSITE WAYS in time. An expansion's
+        host binding mentions the variables it just invented (forward); a
+        U-var-solve binding mentions variables already there (backward); and
+        `comp`'s push makes an old binding acquire a new dependency. All three
+        occur in one solution at (b | a) ≐ᵣ (l:{a} | l:{a}):
+          [aa≔{ε}, aaaa≔{ε} ; b≔l:aa | l:aaaa | ε, aaa≔l:aaaa | ε, aaaaa≔ε, a≔ε]
+          ledger ₜaa ᵣb ₜaaaa ᵣaaa ᵣaaaaa ᵣa — ᵣb→ₜaa points back, ᵣb→ₜaaaa forward.
+        So no rank read off any timeline can work. Do not retry one.
+      * THE `Sol.comp` PRESERVATION STEP IS FALSE AS STATED. The lemma the entry
+        above asks for — the later stage mentions nothing of the earlier stage's
+        domain, so the two ranks stack — was measured at every `.seq` and every
+        expansion: 388 / 11756 / 132 crossing mentions. And the cause is not
+        capture, it is that THE DRIVER RE-BINDS A KEY IT ALREADY BOUND.
+    THE ACTUAL OBSTRUCTION, and it is new: SHADOWED BINDINGS THAT DISAGREE.
+    Successes whose solution binds one key twice: 348 / 8964 / 108 — and of
+    those, the two bindings are not even syntactically equal in 348 / 8852 / 108.
+    Minimal witness:
+        (b | a) ≐ᵣ (l:{a} | b)   ⟹   [aa≔{a} ; b≔l:aa | aaa, b≔aaa | a | ε]
+    `expandL`'s `renameVar β β′` is applied to the HOST side ONLY — verified:
+      expandL [] (localSupply s₁ s₂) s₂ s₁
+        = host β=b, label=l, residual left [b], residual right [aaa, a]
+    so the `b` on the OTHER side survives the expansion and U-var-solve binds it
+    a second time, to something unrelated to what the expansion bound it to.
+    This is exactly the SUB-OBLIGATION flagged under "success" above — `Sol.Sat`
+    quantifies over every pair while `Sol.toSubst` reads only the FIRST — and it
+    is not a corner case: it fires on a two-atom problem. Everything downstream
+    inherits it. `Sol.Ranked` quantifies over ALL bindings, so the dead second
+    binding must ALSO be rank-decreasing; `Sol.comp` has no disjoint-domain
+    invariant to appeal to; and ⟦S⟧ and `Sat` are describing different
+    substitutions wherever the two values disagree.
+    WHAT IS STILL TRUE, and it is the lead. The solution's dependency graph is a
+    DAG even UNTAGGED — 0 / 0 / 0 over every success in every universe — so a
+    rank on NAMES exists, which is stronger than `Sol.Ranked` needs. And with
+    shadowed bindings dropped (first one kept, which is all `toSubst` reads),
+    domS-index-decreasing is clean in `wide`/`nest` and fails only 1000 times in
+    `deep`. So the order to attack this in is: FIRST decide the duplicate-key
+    question — either give the driver a no-duplicate-keys invariant (make
+    `expandL` apply β's binding to the residual, or have `comp` drop a shadowed
+    key) or restate `Sol.Ranked`/`Sol.Sat` through `toSubst` — and only THEN
+    look for a rank. A rank proved against the current `Sol` has to carry the
+    dead bindings, and that is what every candidate so far has died on.
+    REPRODUCE: `cd lean && lake build fuzz && lake exe fuzz`, sections [6]/[7].
   - [ ] solver state S = (θ, Δ, W), stump wake-up, confluence of the final state
 
-## The unification type of ≈ — A LOWER BOUND ON THE ALGORITHM
-> lean/RowUnify/UnifType.lean, 2026-09-13. Answers the daily's
-> "unitary, finitary, infinitary, or nullary?". All propext/Quot.sound only,
-> guarded in Axioms.lean. Thesis prose drafted in
-> metatheory-unification-type-draft.typ — a fragment for §Metatheory, NOT
-> spliced into thesis.typ; it also carries the two bib entries it needs.
-
-RESULT: ≈-unification under asymmetric concatenation is **at least
-infinitary** — neither unitary nor finitary. Concretely: a solvable ≐ᵣ problem
-exists for which NO finite set of unifiers is complete
-(`shift_no_finite_complete_set`, `rowUnification_not_finitary`).
-
-WHY THIS MATTERS MORE THAN THE OTHER NO-MGU RESULTS. `wand_no_mgu` only kills
-unitary — the Wand problem has a complete set of size two, so it is consistent
-with a finitary theory and with an algorithm that returns a finite disjunction.
-This one kills that escape too. The incompleteness of ≐ᵣ is therefore
-**structural, not a missing driver arm**: no ≐ᵣ that returns one solution (or
-finitely many) can be complete, however many `expandR`-style arms are added.
-This is the "lower bound that motivates the incompleteness" from tisch.md, and
-it is the argument the thesis should make where it currently apologizes for the
-stuck leg.
-
-THE WITNESS — the SHIFT PROBLEM  (α | l: 𝓫) ≐ᵣ (l: 𝓫 | α), same var both sides.
-Distinguish it from `two_sided_no_mgu`'s (α | l:𝓫) ≐ᵣ (l:𝓫 | β), which is a
-Levi ambiguity between TWO variables. Here there is one variable, and the
-obstruction is COUNTING:
-  * solvable — α ≔ ε                                  (`shift_unifiable`)
-  * every unifier forces α SPINE-VAR-FREE             (`shift_unifier_varFree`)
-    The equation admits no symbolic answer at all. Mechanism: the trailing
-    l-field sits at segment index |vars(θα)| on the left and at index 0 on the
-    right, and pointwise projection agreement walks the list down to
-    |vars(θα)| = 0 (`shift_proj_forces_zero`). This is the sharpest rigidity
-    statement we have about ≈ and is reusable.
-  * α ≔ (l:𝓫)^k is a unifier for every k, pairwise INCOMPARABLE
-    (`shiftSub_unifies`, `shiftSub_antichain`) — an infinite antichain. It rests
-    on `instanceOfOn_fieldCount_eq_of_varFree` (NoMgu.lean): covering fixes the
-    l-count exactly once the covered image is var-free, and every unifier here
-    is var-free by the previous point.
-  * hence no mgu (`shift_no_mgu`) and no finite complete set.
-
-THE ALGORITHM'S VERDICT on it is `stuck`, both orientations, pinned as
-`Regressions.unify_shift_stuck` / `_mirror`; the instantiations k = 0, 1
-succeed (`unify_shift_inst_zero` / `_one`), so stuck there is a genuine
-incompleteness and not a clash in disguise. expandR does not and CANNOT fix it.
-
-WHAT IS NOT SETTLED — infinitary vs. nullary. That needs "every solvable
-problem has a MINIMAL complete set", and the antichain above does not decide
-it: it is not itself complete. α ≔ (m:𝓫) with m ≠ l is also a unifier
-(`offSub_unifies`) and factors through no member (`shift_antichain_not_complete`),
-because a non-l label is unconstrained and commutes freely past l. The true
-unifier set of the shift problem is "every var-free row whose l-fields are all
-≈ 𝓫, arbitrary at other labels", so the natural minimal complete set is indexed
-by TRACES (label sequences mod commutation of distinct labels) with fresh
-variables at the non-l payloads. Proving that set complete is the open half.
-DO NOT cite the theory as "infinitary" full stop — cite "not unitary, not
-finitary", which is what is proved and is what the lower bound needs.
 
 
 ## Termination
 - Fuzzing suggests, that the algorithm actually terminates
 
 
-## Inference  (lean/Infer.lean, 2026-09-14)
-`Infer` / `InferRec` now EXIST in Lean — the first row of
-plans/inference-gap-analysis.md §B, which every downstream statement was blocked
-on. A RELATION, not a function: a function would owe three termination arguments
-the development does not have (unification's, `A-let`'s Δ-split fixpoint, the
-`↝*` closure). Determinism and totality become theorems ABOUT it instead of
-assumptions inside it.
+## Inference
 
 What the mechanization had to supply that the paper leaves as prose:
 - *`? on α`*: `Lookup` records `.unknown` but not WHICH variable blocked, and
@@ -315,8 +294,8 @@ an A-rule it hands back a supply BEHIND the state's, and a later `draw`
 re-issues a name inference is already using. `SolveTy`/`SolveRow` therefore go
 through `unifyTyF`/`unifySpineMF` with `S.supply` threaded in and out.
 
-- [x] L2 TYPE SUBSTITUTION — DONE 2026-09-15, `qtyped_applySubst`
-  (lean/QSubst.lean). A `QTyped` derivation transports along a solution's
+- [x] L2 TYPE SUBSTITUTION 
+  A `QTyped` derivation transports along a solution's
   CLOSURE, into the context read under it. All 13 QTyped constructors and the 3
   body constructors, modulo one named hypothesis `SchemeImage`: every scheme has
   a capture-avoiding σ-image (L1's counterpart is `renameScheme`), which only
@@ -511,33 +490,6 @@ through `unifyTyF`/`unifySpineMF` with `S.supply` threaded in and out.
   both), capture-avoidance for `QScheme.applySubst`, and — for the two
   degradation rules — a declarative rule for application at ★, which does not
   exist.
-- [x] supply monotonicity — DONE 2026-09-15. `unifyM_supply_mono`
-  (Soundness.lean): a SUCCESSFUL unification never hands back a supply behind
-  the one it was given — every arm either returns its supply (bindTy,
-  solveVarM, allVarsEmpty, the ★/base arms), sequences two calls, or advances
-  by two and recurses (the four expansions). Lifted through `SolveTy`/`SolveRow`
-  /`Wake`/`Wakes`/`Finalize` to `Infer.supply_mono` / `InferRec.supply_mono` by
-  mutual structural recursion. This is what "inferred variables are fresh"
-  rests on; it is also the first real theorem ABOUT the relation, so it
-  confirms the mutual induction over Infer/InferRec is workable.
-- [x] sorts — DONE 2026-09-16. `Kind` (ty/row), `KEnv` and `SolverState.kinds`
-  (Infer.lean); `draw` now takes the kind it draws at and records it, and at
-  every call site the kind is FORCED by the position the name is about to be
-  used at (λ-binder and δ at `.ty`; the record row-variables at `.row`). So
-  `fresh α: κ` is literal, and `selEx_infers` carries the concrete record
-  `[(aaa, ty), (aa, row), (a, ty)]`.
-  `A-let`'s `κ̄ = Γ(ᾱ)` is now writable as `KEnv.Assigns ᾱ κ̄` — read off the
-  DRAW, not off Γ, which is the answer to "ᾱ are exactly the variables not in Γ":
-  Γ never was the right source. `Infer.kinds_mono` says the record is only ever
-  extended, so a generalized binder is quantified at the kind it was invented at.
-  STILL OPEN: `KindsSound` (Infer.lean) — that a name drawn at κ only OCCURS at
-  κ-tagged positions, stated against `sortedFtv`. Named, not proved; it needs the
-  Γ-freshness invariant to rule out a draw colliding at the other sort.
-- [x] Γ-freshness — DONE 2026-09-16. `Stump.ftv` / `QScheme.ftv` / `QCtx.ftv`
-  (Qualified.lean) supply the ftv of a context that `FreshRenaming` was missing;
-  it now carries `∀ α ∈ vs, f α ∉ Γ.ftv`. Both gaps named in its own comment are
-  closed. Each ftv OVER-approximates (binders counted with free variables), which
-  is the safe direction for an avoid-set, as `Ctx.schemeFtv` does at L1.
 
 ## Principality
 - [x] covering order on schemes ⊴ — defined 2026-09-14, Qualified.lean
