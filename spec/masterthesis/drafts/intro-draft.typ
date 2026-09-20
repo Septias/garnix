@@ -1,7 +1,4 @@
-// DRAFT — replacement for `= A Note about Nix` in thesis.typ (lines 36–137,
-// from `= A Note about Nix` up to but excluding `= Motivation <sec-motivation>`).
-// Fragment: not compilable on its own (refs @sec-motivation, @sec-extensions,
-// @trilemma and the bibliography live in thesis.typ).
+#import "../functions.typ": *
 
 = A Note about Nix
 > This section motivates our work in regard to practical application, also the nix language features are guiding the features we are exposing.
@@ -178,3 +175,5 @@ The selected field, and hence the type of the expression, changes at a fixed ins
 Note that this expression and the motivating example fail for different reasons, and the difference is what the thesis is about. The wall-clock selection is genuinely undetermined: no static information could settle it, and any system must give up. In $a: b: (a ‖ b).l$ nothing is undetermined — the answer is a perfectly definite function of what `b` binds — and the analysis gives up only because a row variable carries no information about what it _lacks_. The first kind of ★ is unavoidable, the second is a price, and @sec-motivation is the account of what that price buys.
 
 Work on typing Nix itself is scarce. Broekhoff and Krebbers @verified give a verified interpreter and an operational semantics but attempt no type system; an earlier system by the author @simplenix applies off-the-shelf Hindley-Milner inference to a Nix subset and fails precisely on the record operations of @nix-idioms; Nickel @nickel, a Nix-inspired configuration language, adopts gradual typing with row polymorphism but forbids the colliding concatenations that make `//` interesting; and the long-standing community issue @nix-ts-issue documents both the demand for and the difficulty of the problem.
+
+#bib
