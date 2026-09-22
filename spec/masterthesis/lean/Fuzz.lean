@@ -1034,6 +1034,275 @@ def landmarkReport (cap : Nat) : IO Unit := do
     IO.println s!"   {v} (fuel {f})  {nm}\n        {pairStr s₁ s₂}"
   IO.println ""
 
+--------------------- STAGE 0 — WHAT U-EXPAND ACTUALLY BUYS -------------------
+-- A second clone of the driver with the four expansion arms stubbed to
+-- `.stuck`, run side by side with the real one over the same universes. The
+-- point is to price the arm BEFORE deleting it: how many verdicts does it
+-- actually move, and are the ones it moves worth 1500 lines of metatheory.
+--
+-- `Θ` is GONE here rather than threaded-and-ignored, and that is already the
+-- first finding: `expandDeps` is the graph's only producer, so with no expand
+-- arm the graph is `[]` at every node, and `depReach [] V = V` (Defs.lean)
+-- makes every guard reading it inert. Passing `[]` to `solveVarM` is faithful,
+-- not an approximation — the DepGraph is dead code without U-expand.
+--
+-- THE PREDICTION this section checks (`nAnom`, below). The stubbed run is the
+-- real run with some subtrees replaced by `.stuck`, and `.stuck` propagates
+-- through `.seq` and through `expandResM`. So at equal fuel, wherever both
+-- reach a verdict, either they agree or the stub says `.stuck`. `nAnom` counts
+-- the pairs where that fails. It is the load-bearing number: the claim that
+-- dropping the arms is VERDICT-MONOTONE — and hence that no headline theorem
+-- is weakened, only its induction shortened — is exactly this prediction. If
+-- `nAnom` is nonzero nothing else in this section means anything.
+
+mutual
+
+def nxTyF (S : Supply) (fuel : Nat) : Ty Unit → Ty Unit → UResM Unit
+  | .var α, τ₂ => bindTy S α τ₂
+  | τ₁, .var α => bindTy S α τ₁
+  | .unk, .unk => .success .nil S
+  | .base b, .base b' => if b = b' then .success .nil S else .clash
+  | .fn a₁ b₁, .fn a₂ b₂ =>
+      match fuel with
+      | 0 => .outOfFuel
+      | f+1 =>
+          (nxTyF S f a₁ a₂).seq fun θ S' =>
+            nxTyF S' f (b₁.applySubst θ) (b₂.applySubst θ)
+  | .rcd ρ₁, .rcd ρ₂ =>
+      match fuel with
+      | 0 => .outOfFuel
+      | f+1 => nxSpineMF S f ρ₁.toSpine ρ₂.toSpine
+  | _, _ => .clash
+
+def nxSpineMF : Supply → Nat → List (Atom Unit) → List (Atom Unit) → UResM Unit
+  | S, _, [], s₂ =>
+      match allVarsEmpty s₂ with
+      | some σ => .success (Sol.ofRow σ) S
+      | none   => .clash
+  | S, _, s₁, [] =>
+      match allVarsEmpty s₁ with
+      | some σ => .success (Sol.ofRow σ) S
+      | none   => .clash
+  | _, 0, _, _ => .outOfFuel
+  | S, fuel+1, s₁, s₂ =>
+      match stripL s₁ s₂ with
+      | some (t₁, t₂) => nxSpineMF S fuel t₁ t₂
+      | none =>
+      match stripR s₁ s₂ with
+      | some (t₁, t₂) => nxSpineMF S fuel t₁ t₂
+      | none =>
+      match solveVarM [] S s₁ s₂ with
+      | some r => r
+      | none =>
+      match solveVarM [] S s₂ s₁ with
+      | some r => r
+      | none =>
+      match matchL s₁ s₂ with
+      | some (τ, τ', t₁, t₂) =>
+          (nxTyF S fuel τ τ').seq fun θ S' =>
+            nxSpineMF S' fuel (sApplySubst θ t₁) (sApplySubst θ t₂)
+      | none =>
+      match matchL s₂ s₁ with
+      | some (τ', τ, t₂, t₁) =>
+          (nxTyF S fuel τ τ').seq fun θ S' =>
+            nxSpineMF S' fuel (sApplySubst θ t₁) (sApplySubst θ t₂)
+      | none =>
+      match matchR s₁ s₂ with
+      | some (τ, τ', t₁, t₂) =>
+          (nxTyF S fuel τ τ').seq fun θ S' =>
+            nxSpineMF S' fuel (sApplySubst θ t₁) (sApplySubst θ t₂)
+      | none =>
+      match matchR s₂ s₁ with
+      | some (τ', τ, t₂, t₁) =>
+          (nxTyF S fuel τ τ').seq fun θ S' =>
+            nxSpineMF S' fuel (sApplySubst θ t₁) (sApplySubst θ t₂)
+      | none =>
+      match groundMatch s₁ s₂ with
+      | some (τ, τ', t₁, t₂) =>
+          (nxTyF S fuel τ τ').seq fun θ S' =>
+            nxSpineMF S' fuel (sApplySubst θ t₁) (sApplySubst θ t₂)
+      | none =>
+      match groundMatch s₂ s₁ with
+      | some (τ', τ, t₂, t₁) =>
+          (nxTyF S fuel τ τ').seq fun θ S' =>
+            nxSpineMF S' fuel (sApplySubst θ t₁) (sApplySubst θ t₂)
+      | none =>
+      -- `projClash` stays. It is a sound no-unifier test in its own right
+      -- (projClash_no_unifier) and owes nothing to the expansion arms it was
+      -- ordered in front of.
+      if projClash s₁ s₂ then .clash else
+      -- expandL ×2, expandR ×2 — the four arms under test.
+      .stuck
+
+end
+
+def nxSpineM (fuel : Nat) (s₁ s₂ : Spine) : UResM Unit :=
+  nxSpineMF (localSupply s₁ s₂) fuel s₁ s₂
+
+def nxMinFuel (cap : Nat) (s₁ s₂ : Spine) : Option Nat :=
+  let p := fun f => reached (nxSpineM f s₁ s₂)
+  if p cap then some (leastSat p (cap + 1) 0 cap) else none
+
+structure NXStats where
+  total     : Nat := 0
+  /-- same verdict from both drivers -/
+  agree     : Nat := 0
+  /-- THE COVERAGE COST: the real driver succeeds, the stub gets stuck. Each of
+  these is a program that would degrade to `★` after the removal. -/
+  sucLost   : Nat := 0
+  /-- FREE LOSSES: `clash`/`occurs` reached only via an expansion. `stuck` is
+  the conservative verdict both of these already degrade to downstream, so
+  losing them costs the user nothing — only the theorem `occurs ⟹ ¬∃θ` cares,
+  and that theorem gets EASIER, not harder. -/
+  clashLost : Nat := 0
+  occLost   : Nat := 0
+  /-- the stub runs out of fuel where the real driver did not. Expansion makes
+  problems bigger, so this should be 0; nonzero would be genuinely strange. -/
+  fuelLost  : Nat := 0
+  /-- the real driver ran out and the stub did not — expansion diverging on a
+  problem the stub decides. These are the pairs U-expand COSTS. -/
+  fuelGain  : Nat := 0
+  /-- THE PREDICTION: disagreement where the stub is not `.stuck`. Must be 0. -/
+  nAnom     : Nat := 0
+  wAnom     : List (Spine × Spine × String × String) := []
+  /-- successes under each driver, and how many of those solutions fail each
+  well-formedness face -/
+  rlSucc    : Nat := 0
+  rlAppl    : Nat := 0
+  rlAcyc    : Nat := 0
+  rlRank    : Nat := 0
+  nxSucc    : Nat := 0
+  nxAppl    : Nat := 0
+  nxAcyc    : Nat := 0
+  nxRank    : Nat := 0
+  /-- witnesses of lost successes, and of a stub solution that is still not
+  `Applied` (which would say triangularity comes from `Sol.comp`, not from
+  expansion — the thing Stage 1 is betting against) -/
+  wLost     : List (Spine × Spine × String) := []
+  nWLost    : Nat := 0
+  wNxAppl   : Option (Spine × Spine × String) := none
+  /-- CROSS-TAB over the driver's successes: is "the solution is not Applied"
+  the SAME EVENT as "the stub loses this success"? Equal totals would not say
+  so; these three do. `xApplKept` and `xLostAppl` must both be 0 for the
+  biconditional, and then `Sol.Applied` ⟺ no expansion fired. -/
+  xApplLost : Nat := 0
+  xApplKept : Nat := 0
+  xLostAppl : Nat := 0
+
+def nxStep (cap : Nat) (s₁ s₂ : Spine) (st : NXStats) : NXStats :=
+  let rl := unifySpineM cap s₁ s₂
+  let nx := nxSpineM cap s₁ s₂
+  let st := { st with total := st.total + 1 }
+  let st := match rl with
+            | .success sol _ =>
+                { st with rlSucc := st.rlSucc + 1
+                          rlAppl := st.rlAppl + (if solAppliedB  sol then 0 else 1)
+                          rlAcyc := st.rlAcyc + (if solAcyclicB  sol then 0 else 1)
+                          rlRank := st.rlRank + (if solRankedB   sol then 0 else 1) }
+            | _ => st
+  let st := match nx with
+            | .success sol _ =>
+                { st with nxSucc  := st.nxSucc + 1
+                          nxAppl  := st.nxAppl + (if solAppliedB sol then 0 else 1)
+                          nxAcyc  := st.nxAcyc + (if solAcyclicB sol then 0 else 1)
+                          nxRank  := st.nxRank + (if solRankedB  sol then 0 else 1)
+                          wNxAppl := if solAppliedB sol then st.wNxAppl else
+                                       st.wNxAppl.orElse fun _ =>
+                                         some (s₁, s₂, solStr sol) }
+            | _ => st
+  let st := match rl, nx with
+            | .success sol _, .stuck =>
+                { st with xApplLost := st.xApplLost + (if solAppliedB sol then 0 else 1)
+                          xLostAppl := st.xLostAppl + (if solAppliedB sol then 1 else 0) }
+            | .success sol _, _ =>
+                { st with xApplKept := st.xApplKept + (if solAppliedB sol then 0 else 1) }
+            | _, _ => st
+  if resStr rl == resStr nx then { st with agree := st.agree + 1 } else
+  match rl, nx with
+  | .outOfFuel, _ => { st with fuelGain := st.fuelGain + 1 }
+  | _, .outOfFuel => { st with fuelLost := st.fuelLost + 1 }
+  | .success sol _, .stuck =>
+      { st with sucLost := st.sucLost + 1
+                wLost   := if st.nWLost < keep then (s₁, s₂, solStr sol) :: st.wLost
+                           else st.wLost
+                nWLost  := st.nWLost + 1 }
+  | .clash,  .stuck => { st with clashLost := st.clashLost + 1 }
+  | .occurs, .stuck => { st with occLost   := st.occLost   + 1 }
+  | _, _ =>
+      { st with nAnom := st.nAnom + 1
+                wAnom := if st.nAnom < keep
+                         then (s₁, s₂, resStr rl, resStr nx) :: st.wAnom else st.wAnom }
+
+def nxSweep (U : Universe) (cap : Nat) : NXStats :=
+  let ss := allSpines U.atoms U.maxLen
+  ss.foldl (fun st s₁ => ss.foldl (fun st s₂ => nxStep cap s₁ s₂ st) st) {}
+
+def pct (a b : Nat) : String :=
+  if b == 0 then "—" else toString (a * 1000 / b / 10) ++ "." ++ toString (a * 1000 / b % 10) ++ "%"
+
+def nxReport (U : Universe) (cap : Nat) : IO Unit := do
+  let st := nxSweep U cap
+  IO.println s!"── universe {U.name} ─ {st.total} pairs, cap {cap}"
+  IO.println s!"   PREDICTION: disagreement with the stub NOT `.stuck`: {st.nAnom}   (must be 0)"
+  for (s₁, s₂, a, b) in st.wAnom.reverse do
+    IO.println s!"        {pairStr s₁ s₂}\n          driver {a}   stub {b}"
+  IO.println s!"   verdicts agree on {st.agree} / {st.total} pairs ({pct st.agree st.total})"
+  IO.println s!"   [cost]  success ⇝ stuck: {st.sucLost} ({pct st.sucLost st.rlSucc} of the {st.rlSucc} successes)"
+  IO.println s!"   [free]  clash   ⇝ stuck: {st.clashLost}"
+  IO.println s!"   [free]  occurs  ⇝ stuck: {st.occLost}"
+  IO.println s!"   [odd]   stub out of fuel where the driver was not: {st.fuelLost}"
+  IO.println s!"   [gain]  driver out of fuel where the stub was not: {st.fuelGain}"
+  IO.println s!"   ── solution well-formedness, driver vs stub"
+  IO.println s!"        successes:  driver {st.rlSucc}   stub {st.nxSucc}"
+  IO.println s!"        Applied  fails: driver {st.rlAppl}   stub {st.nxAppl}"
+  IO.println s!"        Acyclic  fails: driver {st.rlAcyc}   stub {st.nxAcyc}"
+  IO.println s!"        Ranked   fails: driver {st.rlRank}   stub {st.nxRank}"
+  IO.println s!"   ── cross-tab: is `¬Applied` the same event as `lost to the stub`?"
+  IO.println s!"        ¬Applied AND lost: {st.xApplLost}"
+  IO.println s!"        ¬Applied but KEPT: {st.xApplKept}   (must be 0)"
+  IO.println s!"        Applied but LOST:  {st.xLostAppl}   (must be 0)"
+  match st.wNxAppl with
+  | some (s₁, s₂, sol) =>
+      IO.println s!"        stub solution NOT Applied, first at {pairStr s₁ s₂}"
+      IO.println s!"          {sol}"
+  | none => IO.println s!"        every stub solution is Applied — ⟦S⟧ = toSubst, no rank needed"
+  for (s₁, s₂, sol) in st.wLost.reverse.take 6 do
+    IO.println s!"        lost: {pairStr s₁ s₂}\n          driver had {sol}"
+  IO.println ""
+
+def nxFamilyReport (cap n : Nat) : IO Unit := do
+  IO.println s!"── parametric families, driver vs stub (n = 0 … {n}, cap {cap})"
+  IO.println "   'f/g' = minFuel under the driver / under the stub; '—' = still outOfFuel"
+  for F in families do
+    let mut out := ""
+    for i in List.range (n + 1) do
+      let (s₁, s₂) := F.gen i
+      let a := match minFuel   cap s₁ s₂ with | some f => toString f | none => "—"
+      let b := match nxMinFuel cap s₁ s₂ with | some f => toString f | none => "—"
+      let t := (verdictStr (unifySpineM cap s₁ s₂)).take 2
+      let u := (verdictStr (nxSpineM     cap s₁ s₂)).take 2
+      out := out ++ s!" {i}:{a}/{b}" ++ (if t == u then "" else s!"({t}→{u})")
+    IO.println s!"   {F.name}\n      n:fuel {out}"
+  IO.println ""
+
+def nxLandmarkReport (cap : Nat) : IO Unit := do
+  IO.println "── landmarks under the stub (the pinned regressions, re-priced)"
+  for (nm, s₁, s₂) in landmarks do
+    let a := verdictStr (unifySpineM cap s₁ s₂)
+    let b := verdictStr (nxSpineM    cap s₁ s₂)
+    let mark := if a == b then "    " else " !! "
+    IO.println s!"  {mark}{a} → {b}   {nm}"
+  IO.println ""
+
+def nxMain : IO Unit := do
+  let cap := 64
+  IO.println "════ STAGE 0 — pricing U-expand ════\n"
+  nxLandmarkReport cap
+  nxReport wide cap
+  nxReport deep cap
+  nxReport nest cap
+  nxFamilyReport 4000 16
+
 def main : IO Unit := do
   let cap := 64
   IO.println "≐ᵣ divergence hunt — Phase D triage\n"
@@ -1042,6 +1311,7 @@ def main : IO Unit := do
   report deep cap
   report nest cap
   familyReport 4000 24
+  nxMain
   IO.println "A pair still outOfFuel at cap, with a spine of ≤ 6 atoms, is a"
   IO.println "divergence candidate: minimize it by hand and it becomes a theorem."
 

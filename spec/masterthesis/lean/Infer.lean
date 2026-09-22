@@ -549,10 +549,9 @@ def InstStumps {B : Type} (θ : TySubst B) (f : TyVar → TyVar)
     Q.map (fun st => (⟨st.row.applySubst θ, st.label, f st.res⟩ : Stump B))
 
 --------------------- Γ; S ⊢ e ⇒ τ; S′ ---------------------------------------
--- One rule per term former, plus the DEGRADATION rules the failure policy calls
--- for and the paper never writes. A clash has no rule at all: that is the hard
--- error, and it is sound because `unifyM_clash_no_unifier` proves a clash means
--- no unifier exists.
+-- One rule per term former, plus the DEGRADATION rules.
+-- A clash has no rule at all: that is the hard error, and it is sound
+-- because `unifyM_clash_no_unifier` proves a clash means no unifier exists.
 
 mutual
 
