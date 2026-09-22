@@ -801,58 +801,13 @@ theorem renameVar_not_mem {B : Type} (β β' : TyVar) :
   | .field _ _ :: s, h =>
       congrArg _ (renameVar_not_mem β β' s (by simpa only [sVarSeq] using h))
 
--- THE SHIFT. Under a host expansion the whole side factors as "the invented
--- field, then the side with the host renamed": the fields around the host all
--- carry other labels, so ≈-comm walks the field out to the front.
--- ⊢  vars(s) = β::rest,  β ∉ rest,  count_l(s) = 0,  θβ ≈ (l:σ | θβ′)
---        ⟹  θ(ofSpine s) ≈ᵣ (l:σ | θ(ofSpine s[β↦β′]))
--- WHY THE HOST MUST LEAD. The invented l-field is emitted at the FRONT of the
--- binding, so it has to commute out past everything to its left. `count_l = 0`
--- makes the FIELDS there harmless — they all carry other labels — but a
--- VARIABLE to the left is a hole θ may fill with an l-field, and then the two
--- sides differ by which l shadows which. That is not a gap in this proof: it is
--- a genuine unsoundness of the move, and requiring the host to be the LEADING
--- variable is what rules it out. `rest` may still be non-empty; those variables
--- sit to the RIGHT of the host and the field never passes them.
-theorem expand_shift {B : Type} {θ : TySubst B} {l : Label} {σ : Ty B}
-    {β β' : TyVar} {rest : List TyVar}
-    (hβ : RowEquiv (θ.row β) (.cat (.sing l σ) (θ.row β'))) (hnr : β ∉ rest) :
-    (s : List (Atom B)) → sVarSeq s = β :: rest → sFieldCount l s = 0 →
-    RowEquiv ((ofSpine s).applySubst θ)
-             (.cat (.sing l σ) ((ofSpine (renameVar β β' s)).applySubst θ))
-  | .var γ :: s, hv, hc => by
-      simp only [sVarSeq] at hv
-      injection hv with hγ hs
-      subst hγ
-      show RowEquiv (.cat (θ.row γ) ((ofSpine s).applySubst θ)) _
-      rw [renameVar, if_pos rfl,
-        renameVar_not_mem γ β' s (by rw [hs]; exact hnr)]
-      exact (RowEquiv.cat hβ (.refl _)).trans RowEquiv.assoc
-  | .field l' τ :: s, hv, hc => by
-      simp only [sVarSeq] at hv
-      simp only [sFieldCount] at hc
-      have hl : ¬ l' = l := by intro hh; rw [if_pos hh] at hc; omega
-      rw [if_neg hl] at hc
-      have ih := expand_shift hβ hnr s hv (by omega)
-      show RowEquiv (.cat (.sing l' (τ.applySubst θ)) ((ofSpine s).applySubst θ)) _
-      rw [renameVar]
-      exact ((RowEquiv.cat (.refl _) ih).trans RowEquiv.assoc.symm).trans
-        ((RowEquiv.cat (RowEquiv.comm hl) (.refl _)).trans RowEquiv.assoc)
+-- (U-EXPAND'S LEFT-END METATHEORY WAS HERE. What survives above —
+-- host_proj, host_forced, selfref_host_no_unifier, crossfield_host_forced — is
+-- about the CALCULUS, not about the move: they say what a unifier of a
+-- crossfield problem must look like, which stays true whether or not the
+-- algorithm exploits it. plans/drop-expand.md)
 
--- ## Reflection, both directions
--- BACKWARD (soundness): a θ that meets the emitted binding and equation and
--- unifies the residual unified the original.
-theorem expand_reflect {B : Type} {θ : TySubst B} {l : Label} {τ δ : Ty B}
-    {β β' : TyVar} {t₁ s₂ : List (Atom B)}
-    (hs : HostShape l τ s₂ β)
-    (hβ : RowEquiv (θ.row β) (.cat (.sing l δ) (θ.row β')))
-    (hty : TyEquiv (τ.applySubst θ) δ)
-    (hrec : Unifies θ (ofSpine t₁) (ofSpine (renameVar β β' s₂))) :
-    Unifies θ (ofSpine (.field l τ :: t₁)) (ofSpine s₂) := by
-  obtain ⟨⟨rest, hvs, hrest⟩, hc, hnot⟩ := hs
-  show RowEquiv (.cat (.sing l (τ.applySubst θ)) ((ofSpine t₁).applySubst θ)) _
-  exact (RowEquiv.cat (RowEquiv.sing hty) hrec).trans
-    (expand_shift hβ (fun hm => hnot (hrest _ hm)) s₂ hvs hc).symm
+
 
 theorem mem_sFtv_of_mem_sVarSeq {B : Type} {α : TyVar} :
     (s : List (Atom B)) → α ∈ sVarSeq s → α ∈ sFtv s
@@ -865,80 +820,7 @@ theorem mem_sFtv_of_mem_sVarSeq {B : Type} {α : TyVar} :
       simp only [sVarSeq] at h
       exact List.mem_append_right _ (mem_sFtv_of_mem_sVarSeq s h)
 
--- FORWARD (completeness): a unifier of the original EXTENDS to one that meets
--- the binding and the emitted equation and unifies the residual. The extension
--- only touches δ and β′, which are FRESH — which is why the move does not
--- shrink the unifier set (unlike matchL/groundMatch).
-theorem expand_reflect_fwd {B : Type} {θ : TySubst B} {l : Label} {τ : Ty B}
-    {β dv β' : TyVar} {t₁ s₂ : List (Atom B)}
-    (hs : HostShape l τ s₂ β)
-    (hd₁ : dv ∉ sFtv (Atom.field l τ :: t₁)) (hd₂ : dv ∉ sFtv s₂)
-    (hb₁ : β' ∉ sFtv (Atom.field l τ :: t₁)) (hb₂ : β' ∉ sFtv s₂)
-    (hu : Unifies θ (ofSpine (.field l τ :: t₁)) (ofSpine s₂)) :
-    ∃ θ' : TySubst B,
-      RowEquiv (θ'.row β) (.cat (.sing l (θ'.ty dv)) (θ'.row β')) ∧
-      TyEquiv (τ.applySubst θ') (θ'.ty dv) ∧
-      Unifies θ' (ofSpine t₁) (ofSpine (renameVar β β' s₂)) ∧
-      Unifies θ' (ofSpine (.field l τ :: t₁)) (ofSpine s₂) ∧
-      (∀ γ, γ ≠ dv → γ ≠ β' → θ.ty γ = θ'.ty γ ∧ θ.row γ = θ'.row γ) := by
-  obtain ⟨σ, ρ', hty, hβ⟩ := host_forced hs hu
-  obtain ⟨⟨rest, hvs, hrest⟩, hc, hnot⟩ := hs
-  have hββ' : β ≠ β' := fun h =>
-    hb₂ (h ▸ mem_sFtv_of_mem_sVarSeq s₂ (by rw [hvs]; exact List.mem_cons_self))
-  have hdv : ((θ.setTy dv σ).setRow β' ρ').ty dv = σ := by
-    show (if dv = dv then σ else θ.ty dv) = σ
-    rw [if_pos rfl]
-  have hβ'' : RowEquiv (((θ.setTy dv σ).setRow β' ρ').row β)
-      (.cat (.sing l σ) (((θ.setTy dv σ).setRow β' ρ').row β')) := by
-    show RowEquiv (if β = β' then ρ' else θ.row β)
-      (.cat (.sing l σ) (if β' = β' then ρ' else θ.row β'))
-    rw [if_neg hββ', if_pos rfl]
-    exact hβ
-  have hu' : Unifies ((θ.setTy dv σ).setRow β' ρ')
-      (ofSpine (.field l τ :: t₁)) (ofSpine s₂) := by
-    unfold Unifies
-    rw [Row.applySubst_setRow_of_not_mem _ (by rw [← sFtv_ofSpine]; exact hb₁),
-        Row.applySubst_setTy_of_not_mem _ (by rw [← sFtv_ofSpine]; exact hd₁),
-        Row.applySubst_setRow_of_not_mem _ (by rw [← sFtv_ofSpine]; exact hb₂),
-        Row.applySubst_setTy_of_not_mem _ (by rw [← sFtv_ofSpine]; exact hd₂)]
-    exact hu
-  refine ⟨(θ.setTy dv σ).setRow β' ρ', by rw [hdv]; exact hβ'', ?_, ?_, hu', ?_⟩
-  · have hd : dv ∉ τ.ftv := fun h => hd₁ (List.mem_append_left _ h)
-    have hb : β' ∉ τ.ftv := fun h => hb₁ (List.mem_append_left _ h)
-    rw [hdv, Ty.applySubst_setRow_of_not_mem τ hb,
-        Ty.applySubst_setTy_of_not_mem τ hd]
-    exact hty
-  · have key : RowEquiv
-        (.cat (.sing l (τ.applySubst ((θ.setTy dv σ).setRow β' ρ')))
-              ((ofSpine t₁).applySubst ((θ.setTy dv σ).setRow β' ρ')))
-        (.cat (.sing l σ)
-              ((ofSpine (renameVar β β' s₂)).applySubst ((θ.setTy dv σ).setRow β' ρ'))) :=
-      hu'.trans (expand_shift hβ'' (fun hm => hnot (hrest _ hm)) s₂ hvs hc)
-    exact key.field_cancel_left.2
-  · intro γ hγd hγb
-    exact ⟨by simp only [TySubst.setRow, TySubst.setTy, if_neg hγd],
-           by simp only [TySubst.setRow, TySubst.setTy, if_neg hγb]⟩
 
--- ## The detectors
--- U-expand fires only when the host is UNIQUE: exactly one variable on the
--- other side, and no l-field anywhere on it (an l-field further right could
--- host the pairing instead — (l:𝓪 | α) ≐ᵣ (β | l:𝓫) is unifiable with β ≔ ε).
-theorem uniqueHost_spec {B : Type} {Θ : DepGraph} {l : Label} {τ : Ty B}
-    {s : List (Atom B)} {β : TyVar} (h : uniqueHost Θ l τ s = some β) :
-    HostShape l τ s β := by
-  unfold uniqueHost at h
-  cases hvs : sVarSeq s with
-  | nil => rw [hvs] at h; cases h
-  | cons γ t =>
-      rw [hvs] at h
-      simp only at h
-      split at h
-      · next hcond =>
-          injection h with hg
-          subst hg
-          exact ⟨⟨t, hvs, hcond.2.2⟩, hcond.1,
-                 fun hm => hcond.2.1 (depReach_mono _ _ hm)⟩
-      · cases h
 
 -- Left end: the leading field of s₁ against the unique host of s₂. δ and β′ are
 -- drawn from the supply; the host side keeps its length (the invented field is
@@ -966,42 +848,7 @@ theorem crossfield_host_forced {B : Type} (b : B) {l m : Label} (hne : l ≠ m)
     ⟨⟨[], rfl, fun _ hm => nomatch hm⟩, hc, by simp [Ty.allRowVars]⟩ hu'
   exact ⟨ρ', hβ.trans (RowEquiv.cat (RowEquiv.sing hty.symm) (.refl _))⟩
 
--- THE FUEL OBSERVATION: fusing the expansion with the pairing it enables costs
--- ONE atom, so the bound |s₁| + |s₂| still works. Only solve-and-apply grows a
--- spine.
--- ⊢  expandL S s₁ s₂ = some (β,l,τ,t₁,t₂)  ⟹  |t₁|+|t₂| + 1 = |s₁|+|s₂|
-theorem expandL_len {B : Type} {Θ : DepGraph} {S : Supply} {s₁ s₂ : List (Atom B)}
-    {β : TyVar} {l : Label} {τ : Ty B} {t₁ t₂ : List (Atom B)}
-    (h : expandL Θ S s₁ s₂ = some (β, l, τ, t₁, t₂)) :
-    t₁.length + t₂.length + 1 = s₁.length + s₂.length := by
-  match s₁ with
-  | .field l' τ' :: u₁ =>
-      simp only [expandL] at h
-      revert h
-      cases hh : uniqueHost Θ l' τ' s₂ with
-      | none => intro h; cases h
-      | some γ =>
-          intro h
-          cases h
-          simp only [List.length_cons, renameVar_length]
-          omega
 
--- ⊢  the detector's side conditions are exactly the reflection lemmas'
-theorem expandL_spec {B : Type} {Θ : DepGraph} {S : Supply} {s₁ s₂ : List (Atom B)}
-    {β : TyVar} {l : Label} {τ : Ty B} {t₁ t₂ : List (Atom B)}
-    (h : expandL Θ S s₁ s₂ = some (β, l, τ, t₁, t₂)) :
-    s₁ = .field l τ :: t₁ ∧ HostShape l τ s₂ β ∧
-    t₂ = renameVar β S.fresh.2.fresh.1 s₂ := by
-  match s₁ with
-  | .field l' τ' :: u₁ =>
-      simp only [expandL] at h
-      revert h
-      cases hh : uniqueHost Θ l' τ' s₂ with
-      | none => intro h; cases h
-      | some γ =>
-          intro h
-          cases h
-          exact ⟨rfl, uniqueHost_spec hh, rfl⟩
 
 -- ## The freshness INVARIANT along the recursion
 -- The three FORWARD legs (clash, completeness, stuck) extend a unifier at δ and
@@ -1089,47 +936,4 @@ theorem sFtv_renameVar {B : Type} (β β' : TyVar) :
         · exact .inl h'
         · exact .inr (.inr h')
 
--- … so the advanced supply still avoids the residual: β′ is shorter than every
--- name it can still hand out, and everything else came from the problem.
-theorem expandL_avoids {B : Type} {Θ : DepGraph} {S : Supply} {s₁ s₂ : List (Atom B)}
-    {β : TyVar} {l : Label} {τ : Ty B} {t₁ t₂ : List (Atom B)}
-    (hS : S.Avoids (sFtv s₁ ++ sFtv s₂))
-    (h : expandL Θ S s₁ s₂ = some (β, l, τ, t₁, t₂)) :
-    S.fresh.2.fresh.2.Avoids (sFtv t₁ ++ sFtv t₂) := by
-  obtain ⟨hs1, -, hren⟩ := expandL_spec h
-  have hsub : sFtv t₁ ++ sFtv t₂ ⊆ S.fresh.2.fresh.1 :: (sFtv s₁ ++ sFtv s₂) := by
-    intro x hx
-    rcases List.mem_append.mp hx with hh | hh
-    · refine List.mem_cons_of_mem _ (List.mem_append_left _ ?_)
-      rw [hs1]
-      exact List.mem_append_right _ hh
-    · rw [hren] at hh
-      rcases List.mem_cons.mp (sFtv_renameVar _ _ s₂ x hh) with rfl | hh'
-      · exact List.mem_cons_self
-      · exact List.mem_cons_of_mem _ (List.mem_append_right _ hh')
-  refine Supply.Avoids.mono hsub ?_
-  exact hS.advance.cons_fresh
 
--- FORWARD REFLECTION for the arm: a unifier of the original yields one of the
--- residual (a different substitution — it fixes δ and β′, which the original
--- problem does not mention).
-theorem expandL_reflect_fwd {B : Type} {Θ : DepGraph} {S : Supply} {θ : TySubst B}
-    {s₁ s₂ : List (Atom B)} {β : TyVar} {l : Label} {τ : Ty B}
-    {t₁ t₂ : List (Atom B)}
-    (hS : S.Avoids (sFtv s₁ ++ sFtv s₂))
-    (h : expandL Θ S s₁ s₂ = some (β, l, τ, t₁, t₂))
-    (hu : Unifies θ (ofSpine s₁) (ofSpine s₂)) :
-    ∃ θ' : TySubst B, Unifies θ' (ofSpine t₁) (ofSpine t₂) := by
-  obtain ⟨hs1, hshape, hren⟩ := expandL_spec h
-  have hd := Supply.fresh_not_mem hS
-  have hb := Supply.fresh_not_mem hS.advance
-  rw [List.mem_append] at hd hb
-  rw [hs1] at hu
-  obtain ⟨θ', -, -, hrec, -, -⟩ :=
-    expand_reflect_fwd hshape
-      (fun hm => hd (.inl (hs1 ▸ hm))) (fun hm => hd (.inr hm))
-      (fun hm => hb (.inl (hs1 ▸ hm))) (fun hm => hb (.inr hm)) hu
-  exact ⟨θ', by rw [hren]; exact hrec⟩
-
-
-end MinimalCalculus

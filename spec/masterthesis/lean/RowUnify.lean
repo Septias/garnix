@@ -9,9 +9,8 @@
 
 import RowUnify.Defs          -- the algorithm + statement vocabulary, proof-free
 import RowUnify.NoMgu         -- field-count invariant; base no-mgu techniques
-import RowUnify.Solutions     -- Sol algebra, freshness, U-expand metatheory
+import RowUnify.Solutions     -- Sol algebra, freshness, host-shape facts
 import RowUnify.Reflection    -- move reflection, U-ground, agreement
-import RowUnify.ExpandR       -- U-expand at the RIGHT end (mirror, not transport)
 import RowUnify.Driver        -- P4: fuel monotonicity and worked verdicts
 import RowUnify.Soundness     -- P5: success soundness
 import RowUnify.Completeness  -- P5: boundedness and success completeness

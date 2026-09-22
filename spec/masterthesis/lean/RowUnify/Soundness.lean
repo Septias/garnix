@@ -64,37 +64,7 @@ theorem solveVarM_reflect {B : Type} {θ : TySubst B} {Θ : DepGraph} {S : Suppl
             simp only [ofSpine, Row.applySubst]
             exact RowEquiv.unitR.trans hbind
 
--- ⊢  the U-expand wrapper inverts: a success came from a success underneath
-theorem expandResM_success {B : Type} {S : Supply} {β : TyVar} {l : Label} {τ : Ty B}
-    {r : UResM B} {s : Sol B} {S' : Supply}
-    (h : expandResM S β l τ r = .success s S') :
-    ∃ s', r = .success s' S' ∧
-      s = s'.comp ⟨[(S.fresh.1, τ)],
-                   [(β, .cat (.sing l (.var S.fresh.1)) (.var S.fresh.2.fresh.1))]⟩ := by
-  cases r with
-  | success s₀ S₀ =>
-      simp only [expandResM, UResM.success.injEq] at h
-      exact ⟨s₀, by rw [h.2], h.1.symm⟩
-  | clash     => cases h
-  | occurs    => cases h
-  | stuck     => cases h
-  | outOfFuel => cases h
 
--- ⊢  … and so does the RIGHT-end wrapper
-theorem expandResRM_success {B : Type} {S : Supply} {β : TyVar} {l : Label} {τ : Ty B}
-    {r : UResM B} {s : Sol B} {S' : Supply}
-    (h : expandResRM S β l τ r = .success s S') :
-    ∃ s', r = .success s' S' ∧
-      s = s'.comp ⟨[(S.fresh.1, τ)],
-                   [(β, .cat (.var S.fresh.2.fresh.1) (.sing l (.var S.fresh.1)))]⟩ := by
-  cases r with
-  | success s₀ S₀ =>
-      simp only [expandResRM, UResM.success.injEq] at h
-      exact ⟨s₀, by rw [h.2], h.1.symm⟩
-  | clash     => cases h
-  | occurs    => cases h
-  | stuck     => cases h
-  | outOfFuel => cases h
 
 -- ## THE SUPPLY ONLY ADVANCES
 -- Every name the driver invents is drawn from the threaded supply, and a

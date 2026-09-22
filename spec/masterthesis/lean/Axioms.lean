@@ -101,20 +101,18 @@ info: 'MinimalCalculus.Supply.unifies_setRow_fresh' depends on axioms: [propext,
 /-- info: 'MinimalCalculus.groundMatch_ftv' depends on axioms: [propext] -/
 #guard_msgs in #print axioms groundMatch_ftv
 
--- ## P3: unique-host expansion
+-- ## P3: the unique-host ARGUMENT (the arm itself is gone)
 -- host_forced mechanizes the maximality argument proof-state.md carries by hand
--- for crossfield; expand_reflect_fwd is the completeness direction of the move.
+-- for crossfield. These are facts about the CALCULUS — what any unifier of a
+-- crossfield problem must look like — and they stay true now that no arm
+-- exploits them. `expand_reflect` / `expand_reflect_fwd`, which were the
+-- soundness and completeness directions of the MOVE, went with it
+-- (plans/drop-expand.md).
 /-- info: 'MinimalCalculus.host_forced' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in #print axioms host_forced
 
 /-- info: 'MinimalCalculus.crossfield_host_forced' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in #print axioms crossfield_host_forced
-
-/-- info: 'MinimalCalculus.expand_reflect' depends on axioms: [propext, Quot.sound] -/
-#guard_msgs in #print axioms expand_reflect
-
-/-- info: 'MinimalCalculus.expand_reflect_fwd' depends on axioms: [propext, Quot.sound] -/
-#guard_msgs in #print axioms expand_reflect_fwd
 
 -- ## P4: the mutual ≐ / ≐ᵣ driver
 -- The fuel lemma replaces a termination measure: `outOfFuel` is its own

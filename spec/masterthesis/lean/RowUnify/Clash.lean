@@ -57,23 +57,7 @@ theorem solveVarM_ne_clash {B : Type} {S : Supply} {s₁ s₂ : List (Atom B)} :
         · simp at h
         · split at h <;> simp at h
 
-theorem expandResM_clash {B : Type} {S : Supply} {β : TyVar} {l : Label} {τ : Ty B}
-    {r : UResM B} (h : expandResM S β l τ r = .clash) : r = .clash := by
-  cases r with
-  | success _ _ => cases h
-  | clash => rfl
-  | occurs => cases h
-  | stuck => cases h
-  | outOfFuel => cases h
 
-theorem expandResRM_clash {B : Type} {S : Supply} {β : TyVar} {l : Label} {τ : Ty B}
-    {r : UResM B} (h : expandResRM S β l τ r = .clash) : r = .clash := by
-  cases r with
-  | success _ _ => cases h
-  | clash => rfl
-  | occurs => cases h
-  | stuck => cases h
-  | outOfFuel => cases h
 
 -- ≐ dispatches on the head constructors: every MISMATCH is refuted here once
 -- and for all (≈ₜ never changes a head, minimal.lean:163ff), and only the two

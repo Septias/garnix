@@ -2,7 +2,7 @@
 --
 -- Part of RowUnify; see RowUnify.lean for the overview.
 
-import RowUnify.ExpandR
+import RowUnify.Reflection
 
 namespace MinimalCalculus
 
@@ -105,21 +105,7 @@ theorem UResM.Mono.seq {B : Type} {r r' : UResM B}
     | stuck     => exact .inr rfl
     | outOfFuel => exact .inl rfl
 
--- ⊢  … and with the U-expand wrapper
-theorem UResM.Mono.expandRes {B : Type} (S : Supply) (β : TyVar) (l : Label) (τ : Ty B)
-    {r r' : UResM B} (h : UResM.Mono r r') :
-    UResM.Mono (expandResM S β l τ r) (expandResM S β l τ r') := by
-  rcases h with h | h
-  · subst h; exact .inl rfl
-  · subst h; exact .inr rfl
 
--- ⊢  … and with the RIGHT-end one
-theorem UResM.Mono.expandResR {B : Type} (S : Supply) (β : TyVar) (l : Label) (τ : Ty B)
-    {r r' : UResM B} (h : UResM.Mono r r') :
-    UResM.Mono (expandResRM S β l τ r) (expandResRM S β l τ r') := by
-  rcases h with h | h
-  · subst h; exact .inl rfl
-  · subst h; exact .inr rfl
 
 -- THE FUEL LEMMA, for both sorts at once (the mutual induction is on the
 -- budget, with no measure hypothesis, because `outOfFuel` absorbs the
