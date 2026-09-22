@@ -126,6 +126,96 @@ def solRankedB (s : Sol Unit) : Bool := peelDeps s (s.domS.length + 1) s.domS
 
 def solWFB (s : Sol Unit) : Bool := solAcyclicB s && solRankedB s
 
+------------------------- WHICH RANK MEASURE ACTUALLY WORKS -------------------
+-- `solRankedB` DECIDES `Sol.Ranked` by peeling, and the sweep says it never
+-- fails. That is not a proof: `Sol.Ranked` is an ∃-rank, and to prove it the
+-- driver needs a rank it can EXHIBIT and maintain. So the question is not "is the
+-- solution rankable" (measured: yes) but "which candidate rank works".
+--
+-- The candidates, and why these:
+--   * |name| — the supply hands out `natName k`, so a name's LENGTH is its draw
+--     index, and `unifyM_supply_mono` (already proved) says the draw index only
+--     advances. If a rank is monotone in the draw order, that theorem is most of
+--     the proof, and nothing new has to be maintained.
+--   * position in `domS` — `Sol.comp s₂ s₁` appends: `s₁`'s bindings come first,
+--     with their values pushed THROUGH `s₂`. So a binding's value should mention
+--     variables bound LATER, i.e. the solution should be triangular in list
+--     order. `Sol.Ranked`'s own bound (`rank x < domS.length`) suggests the index
+--     was the intended witness.
+-- Both are tested in both directions, because the driver both invents fresh names
+-- (binding an OLD variable to a value mentioning NEW ones) and solves fresh ones
+-- against old payloads.
+--
+-- NOT MEASURED HERE, and why: the `DepGraph` the driver threads for its occurs
+-- guards is an INPUT to `unifyTyF`/`unifySpineMF` and is never returned, so the
+-- accumulated Θ is not observable without cloning the driver. If one of the
+-- candidates below is clean, Θ is not needed as a measure at all — which is the
+-- cheaper question, so it goes first.
+
+/-- Every dependency edge the solution imposes: from a binding's KEY to a
+variable in its value that the solution also binds. `Sol.Ranked` is exactly the
+existence of a rank that strictly decreases along all of these. -/
+def solEdges (s : Sol Unit) : List ((Bool × TyVar) × (Bool × TyVar)) :=
+  (s.ty.flatMap  (fun p => ((Ty.sortedFtv  p.2).filter (fun y => s.domS.contains y)).map
+                             (fun y => ((false, p.1), y)))) ++
+  (s.row.flatMap (fun p => ((Row.sortedFtv p.2).filter (fun y => s.domS.contains y)).map
+                             (fun y => ((true,  p.1), y))))
+
+def domIdx (s : Sol Unit) (x : Bool × TyVar) : Nat := s.domS.findIdx (· == x)
+
+/-- keep the FIRST binding per key — which is the only one `rowLookup`/`tyLookup`
+ever reads, every later one being dead. `Sol.Ranked` quantifies over ALL of them,
+so it constrains bindings ⟦S⟧ cannot see; this is the same solution with the dead
+weight dropped, and the measurement below is what it is for. -/
+def dedupKeys {α : Type} (l : List (TyVar × α)) : List (TyVar × α) :=
+  (l.foldl (fun acc p => if acc.any (fun q => q.1 == p.1) then acc else p :: acc) []).reverse
+
+def solDedup (s : Sol Unit) : Sol Unit := ⟨dedupKeys s.ty, dedupKeys s.row⟩
+
+/-- a key bound TWICE with values that are not syntactically the same row/type.
+`Sol.toSubst` reads only the FIRST binding, while `Sol.Sat` quantifies over
+every pair — so where these disagree, ⟦S⟧ and `Sat` are talking about different
+substitutions. proof-state flags this as a SUB-OBLIGATION with no invariant
+behind it; this counts it. -/
+def solDupDiff (s : Sol Unit) : Bool :=
+  s.ty.any  (fun p => s.ty.any  (fun q => p.1 == q.1 && !tyEqB  p.2 q.2)) ||
+  s.row.any (fun p => s.row.any (fun q => p.1 == q.1 && !rowEqB p.2 q.2))
+
+def solHasDup (s : Sol Unit) : Bool :=
+  (dedupKeys s.ty).length != s.ty.length || (dedupKeys s.row).length != s.row.length
+
+def nodeStr (x : Bool × TyVar) : String := (if x.1 then "ᵣ" else "ₜ") ++ x.2
+
+def edgeStr (e : (Bool × TyVar) × (Bool × TyVar)) : String :=
+  nodeStr e.1 ++ "→" ++ nodeStr e.2
+
+structure RankVerdict where
+  edges  : Nat
+  lenDec : Bool
+  lenInc : Bool
+  idxDec : Bool
+  /-- index-decreasing on the DEDUPED solution -/
+  idxDecD : Bool
+  idxInc : Bool
+  hasDup : Bool
+  ranked : Bool
+
+def rankVerdict (s : Sol Unit) : RankVerdict :=
+  let es := solEdges s
+  { edges  := es.length
+    lenDec := es.all (fun e => e.2.2.length < e.1.2.length)
+    lenInc := es.all (fun e => e.1.2.length < e.2.2.length)
+    idxDec := es.all (fun e => domIdx s e.2 < domIdx s e.1)
+    idxDecD := let d := solDedup s
+               (solEdges d).all (fun e => domIdx d e.2 < domIdx d e.1)
+    hasDup := solHasDup s
+    idxInc := es.all (fun e => domIdx s e.1 < domIdx s e.2)
+    ranked := solRankedB s }
+
+/-- the edges a candidate fails on, for the witness line. -/
+def badEdges (s : Sol Unit) (p : ((Bool × TyVar) × (Bool × TyVar)) → Bool) : String :=
+  String.intercalate ", " (((solEdges s).filter (fun e => !p e)).map edgeStr)
+
 /-- The FULL result, solution included — the tripwire compares these. -/
 def resStr : UResM Unit → String
   | .success s S => "success " ++ solStr s ++ " @supply " ++ toString S.next
@@ -140,6 +230,254 @@ def verdictStr : UResM Unit → String
   | .occurs      => "occurs"
   | .stuck       => "stuck"
   | .outOfFuel   => "outOfFuel"
+
+--------------------- THE ACCUMULATED DEPENDENCY GRAPH ------------------------
+-- The two cheap candidates are REFUTED by the sweep above (|name| in `deep`,
+-- domS-index in `deep`, and after dedup too), so the question the comment above
+-- deferred is now live: does `Θ` carry the topological order?
+--
+-- `Θ` is an INPUT to `unifyTyF`/`unifySpineMF` and is never returned, so the
+-- sweep could not see it. The clone below is the driver with ONE change: it also
+-- returns every expansion edge created anywhere in the EXECUTED recursion tree.
+-- The threaded `Θ` that the guards read is untouched, so the verdicts must agree
+-- with the real driver — `nDisagree` checks that on every pair, and a nonzero
+-- count means this clone has drifted and its numbers are worthless.
+--
+-- Why the union over the tree rather than the threaded `Θ`: at a `.seq` the
+-- second stage is called with the SAME `Θ` as the first (Defs.lean:785-800), so
+-- the threaded graph is the root-to-node PATH, not the timeline. The solution,
+-- though, is composed from both branches. Any rank for `Sol.Ranked` has to order
+-- all of it, so the union is the only candidate carrier.
+
+/-- what the clone returns: the verdict, the expansion graph accumulated over the
+whole executed tree, and the LEDGER — every key the driver bound, in the order it
+bound them. The ledger is the thing `domS` is not: `Sol.domS` is `ty ++ row`, so
+it scrambles two sorts that the driver interleaves, and that alone could be why
+the index candidates failed. -/
+abbrev TRes := UResM Unit × DepGraph × List (Bool × TyVar) × Nat
+
+def solOf : UResM Unit → Sol Unit
+  | .success s _ => s
+  | _            => Sol.nil
+
+/-- every name a solution MENTIONS, tagged: its keys and its values' free
+variables. `SolMentions` (Defs.lean) is the same thing as a predicate. -/
+def solMentionsS (s : Sol Unit) : List (Bool × TyVar) :=
+  s.domS ++ s.ty.flatMap (fun p => Ty.sortedFtv p.2)
+         ++ s.row.flatMap (fun p => Row.sortedFtv p.2)
+
+/-- THE MISSING LEMMA, as a count. `Sol.Ranked` is preserved by `Sol.comp`
+if the LATER stage mentions nothing of the EARLIER stage's domain — then the
+two ranks stack, later-stage below earlier-stage, and no edge crosses back.
+proof-state names exactly this as the step `Supply`/`Avoids`/`SolBelow`
+constrains but does not pin down. Every `.seq` and every expansion is a `comp`,
+so this counts the violations at all of them. -/
+def collides (later earlier : Sol Unit) : Nat :=
+  ((solMentionsS later).filter (fun x => earlier.domS.contains x)).length
+
+def ledgerOf : UResM Unit → List (Bool × TyVar)
+  | .success s _ => s.domS
+  | _            => []
+
+def tSeq (p : TRes) (k : TySubst Unit → Supply → TRes) : TRes :=
+  match p with
+  | (.success s S, g, L, c) =>
+      -- `s'.comp s` makes `s` the EARLIER stage, so its keys are older
+      match k s.toSubst S with
+      | (.success s' S', g', L', c') =>
+          (.success (s'.comp s) S', g' ++ g, L ++ L', c + c' + collides s' s)
+      | (r, g', L', c')          => (r, g' ++ g, L ++ L', c + c')
+  | (r, g, L, c) => (r, g, L, c)
+
+mutual
+
+def traceTyF (Θ : DepGraph) (S : Supply) (fuel : Nat) :
+    Ty Unit → Ty Unit → TRes
+  | .var α, τ₂ => let r := bindTy S α τ₂; (r, [], ledgerOf r, 0)
+  | τ₁, .var α => let r := bindTy S α τ₁; (r, [], ledgerOf r, 0)
+  | .unk, .unk => (.success .nil S, [], [], 0)
+  | .base b, .base b' => (if b = b' then .success .nil S else .clash, [], [], 0)
+  | .fn a₁ b₁, .fn a₂ b₂ =>
+      match fuel with
+      | 0 => (.outOfFuel, [], [], 0)
+      | f+1 =>
+          tSeq (traceTyF Θ S f a₁ a₂) fun θ S' =>
+            traceTyF Θ S' f (b₁.applySubst θ) (b₂.applySubst θ)
+  | .rcd ρ₁, .rcd ρ₂ =>
+      match fuel with
+      | 0 => (.outOfFuel, [], [], 0)
+      | f+1 => traceSpineMF Θ S f ρ₁.toSpine ρ₂.toSpine
+  | _, _ => (.clash, [], [], 0)
+
+def traceSpineMF :
+    DepGraph → Supply → Nat → List (Atom Unit) → List (Atom Unit) → TRes
+  | _, S, _, [], s₂ =>
+      match allVarsEmpty s₂ with
+      | some σ => (.success (Sol.ofRow σ) S, [], (Sol.ofRow σ : Sol Unit).domS, 0)
+      | none   => (.clash, [], [], 0)
+  | _, S, _, s₁, [] =>
+      match allVarsEmpty s₁ with
+      | some σ => (.success (Sol.ofRow σ) S, [], (Sol.ofRow σ : Sol Unit).domS, 0)
+      | none   => (.clash, [], [], 0)
+  | _, _, 0, _, _ => (.outOfFuel, [], [], 0)
+  | Θ, S, fuel+1, s₁, s₂ =>
+      match stripL s₁ s₂ with
+      | some (t₁, t₂) => traceSpineMF Θ S fuel t₁ t₂
+      | none =>
+      match stripR s₁ s₂ with
+      | some (t₁, t₂) => traceSpineMF Θ S fuel t₁ t₂
+      | none =>
+      match solveVarM Θ S s₁ s₂ with
+      | some r => (r, [], ledgerOf r, 0)
+      | none =>
+      match solveVarM Θ S s₂ s₁ with
+      | some r => (r, [], ledgerOf r, 0)
+      | none =>
+      match matchL s₁ s₂ with
+      | some (τ, τ', t₁, t₂) =>
+          tSeq (traceTyF Θ S fuel τ τ') fun θ S' =>
+            traceSpineMF Θ S' fuel (sApplySubst θ t₁) (sApplySubst θ t₂)
+      | none =>
+      match matchL s₂ s₁ with
+      | some (τ', τ, t₂, t₁) =>
+          tSeq (traceTyF Θ S fuel τ τ') fun θ S' =>
+            traceSpineMF Θ S' fuel (sApplySubst θ t₁) (sApplySubst θ t₂)
+      | none =>
+      match matchR s₁ s₂ with
+      | some (τ, τ', t₁, t₂) =>
+          tSeq (traceTyF Θ S fuel τ τ') fun θ S' =>
+            traceSpineMF Θ S' fuel (sApplySubst θ t₁) (sApplySubst θ t₂)
+      | none =>
+      match matchR s₂ s₁ with
+      | some (τ', τ, t₂, t₁) =>
+          tSeq (traceTyF Θ S fuel τ τ') fun θ S' =>
+            traceSpineMF Θ S' fuel (sApplySubst θ t₁) (sApplySubst θ t₂)
+      | none =>
+      match groundMatch s₁ s₂ with
+      | some (τ, τ', t₁, t₂) =>
+          tSeq (traceTyF Θ S fuel τ τ') fun θ S' =>
+            traceSpineMF Θ S' fuel (sApplySubst θ t₁) (sApplySubst θ t₂)
+      | none =>
+      match groundMatch s₂ s₁ with
+      | some (τ', τ, t₂, t₁) =>
+          tSeq (traceTyF Θ S fuel τ τ') fun θ S' =>
+            traceSpineMF Θ S' fuel (sApplySubst θ t₁) (sApplySubst θ t₂)
+      | none =>
+      match expandL Θ S s₁ s₂ with
+      | some (β, l, τ, t₁, t₂) =>
+          let p := traceSpineMF (expandDeps Θ S β τ) S.fresh.2.fresh.2 fuel t₁ t₂
+          (expandResM S β l τ p.1, expandDeps p.2.1 S β τ,
+           (false, S.fresh.1) :: (true, β) :: p.2.2.1,
+           p.2.2.2 + collides (solOf p.1) ⟨[(S.fresh.1, τ)], [(β, (.cat (.sing l (.var S.fresh.1)) (.var S.fresh.2.fresh.1)))]⟩)
+      | none =>
+      match expandL Θ S s₂ s₁ with
+      | some (β, l, τ, t₁, t₂) =>
+          let p := traceSpineMF (expandDeps Θ S β τ) S.fresh.2.fresh.2 fuel t₁ t₂
+          (expandResM S β l τ p.1, expandDeps p.2.1 S β τ,
+           (false, S.fresh.1) :: (true, β) :: p.2.2.1,
+           p.2.2.2 + collides (solOf p.1) ⟨[(S.fresh.1, τ)], [(β, (.cat (.sing l (.var S.fresh.1)) (.var S.fresh.2.fresh.1)))]⟩)
+      | none =>
+      if projClash s₁ s₂ then (.clash, [], [], 0) else
+      match expandR Θ S s₁ s₂ with
+      | some (β, l, τ, t₁, t₂) =>
+          let p := traceSpineMF (expandDeps Θ S β τ) S.fresh.2.fresh.2 fuel t₁ t₂
+          (expandResRM S β l τ p.1, expandDeps p.2.1 S β τ,
+           (false, S.fresh.1) :: (true, β) :: p.2.2.1,
+           p.2.2.2 + collides (solOf p.1) ⟨[(S.fresh.1, τ)], [(β, (.cat (.var S.fresh.2.fresh.1) (.sing l (.var S.fresh.1))))]⟩)
+      | none =>
+      match expandR Θ S s₂ s₁ with
+      | some (β, l, τ, t₁, t₂) =>
+          let p := traceSpineMF (expandDeps Θ S β τ) S.fresh.2.fresh.2 fuel t₁ t₂
+          (expandResRM S β l τ p.1, expandDeps p.2.1 S β τ,
+           (false, S.fresh.1) :: (true, β) :: p.2.2.1,
+           p.2.2.2 + collides (solOf p.1) ⟨[(S.fresh.1, τ)], [(β, (.cat (.var S.fresh.2.fresh.1) (.sing l (.var S.fresh.1))))]⟩)
+      | none => (.stuck, [], [], 0)
+
+end
+
+def traceSpineM (fuel : Nat) (s₁ s₂ : Spine) : TRes :=
+  traceSpineMF [] (localSupply s₁ s₂) fuel s₁ s₂
+
+------------------------------ GRAPH UTILITIES --------------------------------
+
+def gTargets (G : DepGraph) (x : TyVar) : List TyVar :=
+  (G.filter (fun p => p.1 == x)).flatMap Prod.snd
+
+def gNodes (G : DepGraph) : List TyVar :=
+  (G.flatMap (fun p => p.1 :: p.2)).foldl
+    (fun acc x => if acc.contains x then acc else x :: acc) []
+
+/-- Kahn, again: peel nodes with no surviving outgoing edge. -/
+def gPeel (G : DepGraph) : Nat → List TyVar → Bool
+  | 0,     rem => rem.isEmpty
+  | n + 1, rem =>
+      let next := rem.filter (fun x => (gTargets G x).any (fun y => rem.contains y))
+      if next.length == rem.length then rem.isEmpty else gPeel G n next
+
+def gAcyclic (G : DepGraph) : Bool := gPeel G ((gNodes G).length + 1) (gNodes G)
+
+/-- Longest path out of `x`. Meaningful only on an acyclic `G`; on a cyclic one
+the fuel truncates it, which is why `nGCyc` is reported first. -/
+def gDepth (G : DepGraph) : Nat → TyVar → Nat
+  | 0,     _ => 0
+  | n + 1, x => ((gTargets G x).map (fun y => 1 + gDepth G n y)).foldl max 0
+
+def gStr (G : DepGraph) : String :=
+  String.intercalate ", "
+    (G.map (fun p => p.1 ++ "→[" ++ String.intercalate " " p.2 ++ "]"))
+
+/-- the solution's own edges with the sort tag DROPPED — `DepGraph` is untagged
+(`List (TyVar × List TyVar)`), so a rank read off `Θ` ranks NAMES. If this graph
+has a cycle, no untagged rank exists at all and `Θ` cannot be the carrier
+whatever else it does. The cross-sort alias (`a` bound at both sorts) is exactly
+what can make it cyclic. -/
+def solEdgesU (s : Sol Unit) : DepGraph :=
+  (solEdges s).map (fun e => (e.1.2, [e.2.2]))
+
+structure DepVerdict where
+  /-- clone disagrees with the real driver — invalidates the rest -/
+  agree    : Bool
+  gEdges   : Nat
+  gAcyc    : Bool
+  /-- solution edges whose untagged pair is NOT in Θ's reachability -/
+  uncov    : Nat
+  /-- solution edges along which Θ-depth does not strictly decrease -/
+  depthBad : Nat
+  /-- the solution's own edge graph, untagged, is a DAG -/
+  untagged : Bool
+  /-- keys in `domS` the ledger never recorded — a hole in the clone, not a
+  finding about the algorithm -/
+  ledHole  : Nat
+  /-- CREATION ORDER as the rank. `ledInc`: every binding mentions only
+  LATER-bound variables, which is what solve-and-apply plus `comp`'s push
+  predicts. `ledDec` is the same test the other way round. -/
+  ledInc   : Bool
+  ledDec   : Bool
+  /-- `Sol.comp`'s preservation step: how often a LATER stage mentions an
+  EARLIER stage's domain. Zero is what makes the two ranks stack. -/
+  coll     : Nat
+
+def ledgerStr (L : List (Bool × TyVar)) : String :=
+  String.intercalate " " (L.map nodeStr)
+
+def depVerdict (cap : Nat) (s₁ s₂ : Spine) (sol : Sol Unit) : DepVerdict :=
+  let p  := traceSpineM cap s₁ s₂
+  let G  := p.2.1
+  let L  := p.2.2.1
+  let n  := G.length + 1
+  let es := solEdges sol
+  let li := fun (x : Bool × TyVar) => L.findIdx (· == x)
+  { agree    := resStr p.1 == resStr (unifySpineM cap s₁ s₂)
+    gEdges   := G.length
+    gAcyc    := gAcyclic G
+    uncov    := (es.filter (fun e =>
+                   !(depReach G [e.1.2]).contains e.2.2 || e.1.2 == e.2.2)).length
+    depthBad := (es.filter (fun e => !(gDepth G n e.2.2 < gDepth G n e.1.2))).length
+    untagged := gAcyclic (solEdgesU sol)
+    ledHole  := (sol.domS.filter (fun x => !L.contains x)).length
+    ledInc   := es.all (fun e => li e.1 < li e.2)
+    ledDec   := es.all (fun e => li e.2 < li e.1)
+    coll     := p.2.2.2 }
 
 --------------------------------- GENERATION ----------------------------------
 -- Exhaustive, not random: reproducible, and at these sizes complete coverage of
@@ -258,6 +596,50 @@ structure Stats where
   nAcycViol : Nat := 0
   /-- …of which: only the APPLIED half fails (a TRIANGULAR solution) -/
   nApplViol : Nat := 0
+  /-- [6] rank measures. `nEdgy` = successes whose solution has at least one
+  dependency edge at all — the only ones where a rank says anything. -/
+  nEdgy    : Nat := 0
+  nLenDec  : Nat := 0
+  nLenInc  : Nat := 0
+  nIdxDec  : Nat := 0
+  nIdxInc  : Nat := 0
+  /-- widest edge count seen, and a witness for each candidate that failed -/
+  maxEdges : Nat := 0
+  /-- successes no live candidate ranks: neither |name|-increasing nor
+  index-decreasing. If this is 0 a hybrid measure covers everything. -/
+  nNeither : Nat := 0
+  /-- solutions with a shadowed (dead) binding, and index-decreasing failures
+  once those are dropped -/
+  nDup     : Nat := 0
+  nDupDiff : Nat := 0
+  wDupDiff : Option (Spine × Spine × String × String) := none
+  nIdxDecD : Nat := 0
+  wIdxD    : Option (Spine × Spine × String × String) := none
+  wLen     : Option (Spine × Spine × String × String) := none
+  wIdx     : Option (Spine × Spine × String × String) := none
+  /-- [7] the accumulated dependency graph, over the same edgy successes.
+  `nDis` is the tripwire on the traced clone: nonzero and nothing else here
+  counts. -/
+  nDis     : Nat := 0
+  nGEmpty  : Nat := 0
+  maxG     : Nat := 0
+  nGCyc    : Nat := 0
+  nUncov   : Nat := 0
+  nUncovE  : Nat := 0
+  nDepthB  : Nat := 0
+  nUntag   : Nat := 0
+  wGCyc    : Option (Spine × Spine × String × String) := none
+  wUncov   : Option (Spine × Spine × String × String) := none
+  wDepth   : Option (Spine × Spine × String × String) := none
+  wUntag   : Option (Spine × Spine × String × String) := none
+  nLedHole : Nat := 0
+  nLedInc  : Nat := 0
+  nLedDec  : Nat := 0
+  wLed     : Option (Spine × Spine × String × String) := none
+  wLedD    : Option (Spine × Spine × String × String) := none
+  nColl    : Nat := 0
+  nCollE   : Nat := 0
+  wColl    : Option (Spine × Spine × String × String) := none
 
 def bumpMax : List (Nat × Nat) → Nat → Nat → List (Nat × Nat)
   | [],            k, v => [(k, v)]
@@ -301,6 +683,79 @@ def step (cap : Nat) (s₁ s₂ : Spine) (st : Stats) : Stats :=
       match unifySpineM cap s₁ s₂ with
       | .success sol _ =>
           let st := { st with success := st.success + 1 }
+          let rv := rankVerdict sol
+          let st := if rv.edges == 0 then st else
+            { st with
+                nEdgy    := st.nEdgy + 1
+                maxEdges := max st.maxEdges rv.edges
+                nLenDec  := st.nLenDec + (if rv.lenDec then 0 else 1)
+                nLenInc  := st.nLenInc + (if rv.lenInc then 0 else 1)
+                nIdxDec  := st.nIdxDec + (if rv.idxDec then 0 else 1)
+                nIdxInc  := st.nIdxInc + (if rv.idxInc then 0 else 1)
+                wLen     := if rv.lenInc then st.wLen else
+                              st.wLen.orElse fun _ => some (s₁, s₂, solStr sol,
+                                badEdges sol (fun e => e.1.2.length < e.2.2.length))
+                wIdx     := if rv.idxDec then st.wIdx else
+                              st.wIdx.orElse fun _ => some (s₁, s₂, solStr sol,
+                                badEdges sol (fun e => domIdx sol e.2 < domIdx sol e.1))
+                nNeither := st.nNeither + (if rv.idxDec || rv.lenInc then 0 else 1)
+                nDup     := st.nDup + (if rv.hasDup then 1 else 0)
+                nDupDiff := st.nDupDiff + (if solDupDiff sol then 1 else 0)
+                wDupDiff := if !solDupDiff sol then st.wDupDiff else
+                              st.wDupDiff.orElse fun _ => some (s₁, s₂, solStr sol, "")
+                nIdxDecD := st.nIdxDecD + (if rv.idxDecD then 0 else 1)
+                wIdxD    := if rv.idxDecD then st.wIdxD else
+                              st.wIdxD.orElse fun _ =>
+                                let d := solDedup sol
+                                some (s₁, s₂, solStr d,
+                                  badEdges d (fun e => domIdx d e.2 < domIdx d e.1)) }
+          let st := if rv.edges == 0 then st else
+            let dv := depVerdict cap s₁ s₂ sol
+            let tr := traceSpineM cap s₁ s₂
+            let G  := tr.2.1
+            { st with
+                nDis    := st.nDis    + (if dv.agree then 0 else 1)
+                nGEmpty := st.nGEmpty + (if dv.gEdges == 0 then 1 else 0)
+                maxG    := max st.maxG dv.gEdges
+                nGCyc   := st.nGCyc   + (if dv.gAcyc then 0 else 1)
+                nUncov  := st.nUncov  + (if dv.uncov == 0 then 0 else 1)
+                nUncovE := st.nUncovE + dv.uncov
+                nDepthB := st.nDepthB + (if dv.depthBad == 0 then 0 else 1)
+                nUntag  := st.nUntag  + (if dv.untagged then 0 else 1)
+                nLedHole := st.nLedHole + dv.ledHole
+                nLedInc := st.nLedInc + (if dv.ledInc then 0 else 1)
+                nLedDec := st.nLedDec + (if dv.ledDec then 0 else 1)
+                nColl   := st.nColl   + (if dv.coll == 0 then 0 else 1)
+                nCollE  := st.nCollE  + dv.coll
+                wColl   := if dv.coll == 0 then st.wColl else
+                             st.wColl.orElse fun _ => some (s₁, s₂, solStr sol,
+                               s!"{dv.coll} crossing mention(s); ledger: " ++ ledgerStr tr.2.2.1)
+                wLedD   := if dv.ledDec then st.wLedD else
+                             st.wLedD.orElse fun _ => some (s₁, s₂, solStr sol,
+                               "ledger: " ++ ledgerStr tr.2.2.1 ++ "   dup=" ++
+                               toString (solHasDup sol) ++ "   bad at " ++
+                               badEdges sol (fun e =>
+                                 tr.2.2.1.findIdx (· == e.2) < tr.2.2.1.findIdx (· == e.1)))
+                wLed    := if dv.ledInc then st.wLed else
+                             st.wLed.orElse fun _ => some (s₁, s₂, solStr sol,
+                               "ledger: " ++ ledgerStr tr.2.2.1 ++ "   bad at " ++
+                               badEdges sol (fun e =>
+                                 tr.2.2.1.findIdx (· == e.1) < tr.2.2.1.findIdx (· == e.2)))
+                wGCyc   := if dv.gAcyc then st.wGCyc else
+                             st.wGCyc.orElse fun _ => some (s₁, s₂, solStr sol, gStr G)
+                wUncov  := if dv.uncov == 0 then st.wUncov else
+                             st.wUncov.orElse fun _ => some (s₁, s₂, solStr sol,
+                               "Θ = " ++ gStr G ++ "   misses " ++
+                               badEdges sol (fun e =>
+                                 (depReach G [e.1.2]).contains e.2.2 && e.1.2 != e.2.2))
+                wDepth  := if dv.depthBad == 0 then st.wDepth else
+                             st.wDepth.orElse fun _ => some (s₁, s₂, solStr sol,
+                               "Θ = " ++ gStr G ++ "   flat/rising at " ++
+                               badEdges sol (fun e =>
+                                 gDepth G (G.length+1) e.2.2 < gDepth G (G.length+1) e.1.2))
+                wUntag  := if dv.untagged then st.wUntag else
+                             st.wUntag.orElse fun _ => some (s₁, s₂, solStr sol,
+                               "untagged edges: " ++ badEdges sol (fun _ => false)) }
           if solWFB sol then st else
             { st with idemViol := if st.nIdemViol < keep
                                   then (s₁, s₂, solStr sol) :: st.idemViol else st.idemViol
@@ -346,6 +801,60 @@ def report (U : Universe) (cap : Nat) : IO Unit := do
   IO.println s!"         of which spine-cyclic (Acyclic fails): {st.nAcycViol}; unrankable (Ranked fails): {st.nApplViol}"
   for (s₁, s₂, sol) in st.idemViol.reverse do
     IO.println s!"        {pairStr s₁ s₂}\n          solution: {sol}"
+
+  IO.println s!"   [6] rank measures, over the {st.nEdgy} successes whose solution has any edge (max {st.maxEdges} edges):"
+  IO.println s!"        |name| decreasing: {st.nLenDec} fail    |name| increasing: {st.nLenInc} fail"
+  IO.println s!"        domS-index decr.:  {st.nIdxDec} fail    domS-index incr.:  {st.nIdxInc} fail"
+  match st.wLen with
+  | some (s₁, s₂, sol, bad) =>
+      IO.println s!"        |name|-increasing fails first at {pairStr s₁ s₂}"
+      IO.println s!"          solution: {sol}"
+      IO.println s!"          bad edges: {bad}"
+  | none => IO.println "        |name|-increasing: no counterexample"
+  IO.println s!"        ranked by NEITHER live candidate: {st.nNeither}"
+  IO.println s!"        with a SHADOWED binding: {st.nDup}    index-decr. after dedup: {st.nIdxDecD} fail"
+  IO.println s!"        …of which the two bindings DISAGREE: {st.nDupDiff}"
+  match st.wDupDiff with
+  | some (s₁, s₂, sol, _) =>
+      IO.println s!"        disagreeing shadow first at {pairStr s₁ s₂}"
+      IO.println s!"          solution: {sol}"
+  | none => IO.println "        disagreeing shadow: NO COUNTEREXAMPLE"
+  match st.wIdxD with
+  | some (s₁, s₂, sol, bad) =>
+      IO.println s!"        index-decr.-after-dedup fails first at {pairStr s₁ s₂}"
+      IO.println s!"          deduped solution: {sol}"
+      IO.println s!"          bad edges: {bad}"
+  | none => IO.println "        index-decreasing after dedup: NO COUNTEREXAMPLE"
+  match st.wIdx with
+  | some (s₁, s₂, sol, bad) =>
+      IO.println s!"        index-DECREASING fails first at {pairStr s₁ s₂}"
+      IO.println s!"          solution: {sol}"
+      IO.println s!"          bad edges: {bad}"
+  | none => IO.println "        index-decreasing: no counterexample"
+
+  IO.println s!"   [7] the accumulated Θ, over those same {st.nEdgy} successes (max {st.maxG} edges):"
+  IO.println s!"        traced clone DISAGREES with the driver: {st.nDis}   (nonzero ⟹ ignore the rest)"
+  IO.println s!"        Θ EMPTY though the solution has edges: {st.nGEmpty}"
+  IO.println s!"        Θ itself cyclic: {st.nGCyc}"
+  IO.println s!"        solution edges Θ-reachability MISSES: {st.nUncovE} (in {st.nUncov} successes)"
+  IO.println s!"        Θ-depth not strictly decreasing: {st.nDepthB}"
+  IO.println s!"        solution edge graph UNTAGGED is cyclic: {st.nUntag}"
+  IO.println s!"        ── creation order (the tagged, COMPLETE ledger the clone records)"
+  IO.println s!"        keys the ledger missed: {st.nLedHole}   (nonzero ⟹ the clone is incomplete)"
+  IO.println s!"        ledger-index INCREASING (mentions only later): {st.nLedInc} fail"
+  IO.println s!"        ledger-index DECREASING (mentions only earlier): {st.nLedDec} fail"
+  IO.println s!"        ── `Sol.comp` preservation: a LATER stage mentioning the EARLIER stage's domain"
+  IO.println s!"        crossing mentions: {st.nCollE} (in {st.nColl} successes)"
+  for (nm, w) in [("Θ cyclic", st.wGCyc), ("Θ-reach misses", st.wUncov),
+                  ("Θ-depth flat", st.wDepth), ("untagged cycle", st.wUntag),
+                  ("ledger-increasing", st.wLed), ("ledger-DECREASING", st.wLedD),
+                  ("stage collision", st.wColl)] do
+    match w with
+    | some (s₁, s₂, sol, note) =>
+        IO.println s!"        {nm} first at {pairStr s₁ s₂}"
+        IO.println s!"          solution: {sol}"
+        IO.println s!"          {note}"
+    | none => IO.println s!"        {nm}: NO COUNTEREXAMPLE"
 
   IO.println "   [5] fuel profile — max minFuel by problem size |s₁|+|s₂|:"
   for n in List.range (2 * U.maxLen + 1) do
