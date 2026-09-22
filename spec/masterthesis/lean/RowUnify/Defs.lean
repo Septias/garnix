@@ -809,32 +809,23 @@ def unifySpineMF {B : Type} [DecidableEq B] :
           (unifyTyF Θ S fuel τ τ').seq fun θ S' =>
             unifySpineMF Θ S' fuel (sApplySubst θ t₁) (sApplySubst θ t₂)
       | none =>
-      match expandL Θ S s₁ s₂ with
-      | some (β, l, τ, t₁, t₂) =>
-          expandResM S β l τ
-            (unifySpineMF (expandDeps Θ S β τ) S.fresh.2.fresh.2 fuel t₁ t₂)
-      | none =>
-      match expandL Θ S s₂ s₁ with
-      | some (β, l, τ, t₁, t₂) =>
-          expandResM S β l τ
-            (unifySpineMF (expandDeps Θ S β τ) S.fresh.2.fresh.2 fuel t₁ t₂)
-      | none =>
-      -- The RIGHT-end expansions come AFTER the projection clash, deliberately.
-      -- `projClash` is a SOUND no-unifier test (projClash_no_unifier), so a
-      -- success reached past a true `projClash` would necessarily be VACUOUS.
-      -- Testing first makes the arm provably monotone: it can only turn a
-      -- `.stuck` into something else, and moves no verdict that was reached.
+      -- `projClash` is a SOUND no-unifier test (projClash_no_unifier) and owes
+      -- nothing to the expansion arms it used to be ordered in front of.
       if projClash s₁ s₂ then .clash else
-      match expandR Θ S s₁ s₂ with
-      | some (β, l, τ, t₁, t₂) =>
-          expandResRM S β l τ
-            (unifySpineMF (expandDeps Θ S β τ) S.fresh.2.fresh.2 fuel t₁ t₂)
-      | none =>
-      match expandR Θ S s₂ s₁ with
-      | some (β, l, τ, t₁, t₂) =>
-          expandResRM S β l τ
-            (unifySpineMF (expandDeps Θ S β τ) S.fresh.2.fresh.2 fuel t₁ t₂)
-      | none => .stuck
+      -- U-EXPAND WAS HERE: expandL ×2, then projClash, then expandR ×2. The
+      -- four arms were the only ones that INVENTED variables rather than
+      -- applying a substitution, and every expensive invariant in this
+      -- development traced to that — `renameVar`'s stale payloads, the
+      -- `DepGraph` guards, the triangularity of `Sol`, and the `depReach Θ`
+      -- disjunct that blocked `occurs ⟹ ¬∃θ`. See plans/drop-expand.md.
+      --
+      -- Removal is VERDICT-MONOTONE: the arms were last in the dispatch order,
+      -- so this run is the old one with some subtrees replaced by `.stuck`, and
+      -- `.stuck` propagates through `.seq`. Every theorem here is of the form
+      -- "verdict reached ⟹ property" — completeness included, which reads
+      -- `… = .success s S' → Sol.Sat θ s` — so this shortens inductions and
+      -- weakens no statement. Checked on 771 578 pairs: 0 counterexamples.
+      .stuck
 
 end
 

@@ -160,25 +160,10 @@ private theorem unifySpine_supply {B : Type} [DecidableEq B] {f : Nat}
     intro Θ S τ τ' t₁ t₂ s S' hh
     obtain ⟨s₁, S₁, s₂, h₁, h₂, -⟩ := UResM.seq_success hh
     exact Nat.le_trans (ih.1 Θ S _ _ h₁) (ih.2 Θ S₁ _ _ h₂)
-  -- …and the shape the four expansions produce: advance by two, then recurse
-  have expL : ∀ (Θ' : DepGraph) (β : TyVar) (l : Label) (τ : Ty B)
-      (t₁ t₂ : List (Atom B)) {s : Sol B} {S' : Supply},
-      expandResM S β l τ (unifySpineMF Θ' S.fresh.2.fresh.2 f t₁ t₂)
-        = .success s S' → S.next ≤ S'.next := by
-    intro Θ' β l τ t₁ t₂ s S' hh
-    obtain ⟨s', hrec, -⟩ := expandResM_success hh
-    have := ih.2 Θ' S.fresh.2.fresh.2 t₁ t₂ hrec
-    simp only [Supply.fresh] at this
-    omega
-  have expR : ∀ (Θ' : DepGraph) (β : TyVar) (l : Label) (τ : Ty B)
-      (t₁ t₂ : List (Atom B)) {s : Sol B} {S' : Supply},
-      expandResRM S β l τ (unifySpineMF Θ' S.fresh.2.fresh.2 f t₁ t₂)
-        = .success s S' → S.next ≤ S'.next := by
-    intro Θ' β l τ t₁ t₂ s S' hh
-    obtain ⟨s', hrec, -⟩ := expandResRM_success hh
-    have := ih.2 Θ' S.fresh.2.fresh.2 t₁ t₂ hrec
-    simp only [Supply.fresh] at this
-    omega
+  -- (U-expand used to need two more local shapes here, `expL`/`expR`: advance
+  -- the supply by two for the invented δ, β′, then recurse. With no arm
+  -- inventing variables, EVERY arm either preserves the supply or advances it
+  -- through `unifyTyF`, and `arm` covers all of them.)
   cases s₁ with
   | nil =>
       simp only [unifySpineMF] at h
@@ -246,40 +231,13 @@ private theorem unifySpine_supply {B : Type} [DecidableEq B] {f : Nat}
           simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2] at h
           exact arm Θ S τ0 τ0' t₁ t₂ h
       | none =>
-      cases he1 : expandL Θ S (a :: s₁) (b :: s₂) with
-      | some p =>
-          obtain ⟨β0, l0, τ0, t₁, t₂⟩ := p
-          simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, he1] at h
-          exact expL _ β0 l0 τ0 t₁ t₂ h
-      | none =>
-      cases he2 : expandL Θ S (b :: s₂) (a :: s₁) with
-      | some p =>
-          obtain ⟨β0, l0, τ0, t₁, t₂⟩ := p
-          simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, he1, he2] at h
-          exact expL _ β0 l0 τ0 t₁ t₂ h
-      | none =>
+      -- Both terminal outcomes contradict `.success`.
       cases hpc : projClash (a :: s₁) (b :: s₂) with
       | true =>
-          simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, he1, he2,
-            hpc] at h
+          simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, hpc] at h
           cases h
       | false =>
-      cases he3 : expandR Θ S (a :: s₁) (b :: s₂) with
-      | some p =>
-          obtain ⟨β0, l0, τ0, t₁, t₂⟩ := p
-          simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, he1, he2,
-            hpc, he3] at h
-          exact expR _ β0 l0 τ0 t₁ t₂ h
-      | none =>
-      cases he4 : expandR Θ S (b :: s₂) (a :: s₁) with
-      | some p =>
-          obtain ⟨β0, l0, τ0, t₁, t₂⟩ := p
-          simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, he1, he2,
-            hpc, he3, he4] at h
-          exact expR _ β0 l0 τ0 t₁ t₂ h
-      | none =>
-          simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, he1, he2,
-            hpc, he3, he4] at h
+          simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, hpc] at h
           cases h
 
 theorem unifyM_supply_mono {B : Type} [DecidableEq B] (fuel : Nat) :
@@ -543,68 +501,18 @@ theorem unifyM_success_sound {B : Type} [DecidableEq B] {θ : TySubst B} (fuel :
               obtain ⟨he, hr⟩ := arm Θ S τ0 τ0' t₁ t₂ h hsat
               exact (groundMatch_reflect hg2 he.symm hr.symm).symm
             | none =>
-            cases he1 : expandL Θ S (a :: s₁) (b :: s₂) with
-            | some p =>
-              obtain ⟨β0, l0, τ0, t₁, t₂⟩ := p
-              simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, he1] at h
-              obtain ⟨s', hrec, rfl⟩ := expandResM_success h
-              obtain ⟨h₀, h'⟩ := hsat.comp_inv
-              obtain ⟨hs1, hshape, hren⟩ := expandL_spec he1
-              rw [hs1]
-              refine expand_reflect hshape
-                (h₀.2 _ List.mem_cons_self) (h₀.1 _ List.mem_cons_self).symm ?_
-              rw [← hren]
-              exact ih.2 (expandDeps Θ S β0 τ0) S.fresh.2.fresh.2 t₁ t₂ hrec h'
-            | none =>
-            cases he2 : expandL Θ S (b :: s₂) (a :: s₁) with
-            | some p =>
-              obtain ⟨β0, l0, τ0, t₁, t₂⟩ := p
-              simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, he1, he2] at h
-              obtain ⟨s', hrec, rfl⟩ := expandResM_success h
-              obtain ⟨h₀, h'⟩ := hsat.comp_inv
-              obtain ⟨hs2, hshape, hren⟩ := expandL_spec he2
-              rw [hs2]
-              refine (expand_reflect hshape
-                (h₀.2 _ List.mem_cons_self) (h₀.1 _ List.mem_cons_self).symm ?_).symm
-              rw [← hren]
-              exact ih.2 (expandDeps Θ S β0 τ0) S.fresh.2.fresh.2 t₁ t₂ hrec h'
-            | none =>
+            -- Past the last solving arm, neither outcome is a `.success`, so
+            -- there is nothing to reflect. The four expansion cases that used
+            -- to sit here were the only ones needing `expand_reflect` /
+            -- `expandR_reflect'` — i.e. the only ones where soundness had to
+            -- argue about INVENTED variables rather than just propagate the
+            -- induction hypothesis.
             cases hpc : projClash (a :: s₁) (b :: s₂) with
             | true =>
-              simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, he1, he2,
-                hpc] at h
+              simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, hpc] at h
               cases h
             | false =>
-            cases he3 : expandR Θ S (a :: s₁) (b :: s₂) with
-            | some p =>
-              obtain ⟨β0, l0, τ0, t₁, t₂⟩ := p
-              simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, he1, he2,
-                hpc, he3] at h
-              obtain ⟨s', hrec, rfl⟩ := expandResRM_success h
-              obtain ⟨h₀, h'⟩ := hsat.comp_inv
-              obtain ⟨hs1, hshape, hren⟩ := expandR_spec he3
-              rw [hs1]
-              refine expandR_reflect' hshape
-                (h₀.2 _ List.mem_cons_self) (h₀.1 _ List.mem_cons_self).symm ?_
-              rw [← hren]
-              exact ih.2 (expandDeps Θ S β0 τ0) S.fresh.2.fresh.2 t₁ t₂ hrec h'
-            | none =>
-            cases he4 : expandR Θ S (b :: s₂) (a :: s₁) with
-            | some p =>
-              obtain ⟨β0, l0, τ0, t₁, t₂⟩ := p
-              simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, he1, he2,
-                hpc, he3, he4] at h
-              obtain ⟨s', hrec, rfl⟩ := expandResRM_success h
-              obtain ⟨h₀, h'⟩ := hsat.comp_inv
-              obtain ⟨hs2, hshape, hren⟩ := expandR_spec he4
-              rw [hs2]
-              refine (expandR_reflect' hshape
-                (h₀.2 _ List.mem_cons_self) (h₀.1 _ List.mem_cons_self).symm ?_).symm
-              rw [← hren]
-              exact ih.2 (expandDeps Θ S β0 τ0) S.fresh.2.fresh.2 t₁ t₂ hrec h'
-            | none =>
-              simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, he1, he2,
-                hpc, he3, he4] at h
+              simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, hpc] at h
               cases h
 
 -- The ≐ᵣ success case is SOUND under the mutual driver, with NO residual

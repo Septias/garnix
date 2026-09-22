@@ -571,40 +571,17 @@ theorem unifyM_bounded {B : Type} [DecidableEq B] (fuel : Nat) :
                   · exact sFtv_sub_right hV ((groundMatch_ftv hg2).1 hh))
                 (sFtv_sub_residual hV (groundMatch_ftv hg2).2.2.2 (groundMatch_ftv hg2).2.1) h
             | none =>
-            cases he1 : expandL Θ S (a :: s₁) (b :: s₂) with
-            | some p =>
-              obtain ⟨β0, l0, τ0, t₁, t₂⟩ := p
-              simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, he1] at h
-              exact expand_bounded ih.2 hS hV he1 h
-            | none =>
-            cases he2 : expandL Θ S (b :: s₂) (a :: s₁) with
-            | some p =>
-              obtain ⟨β0, l0, τ0, t₁, t₂⟩ := p
-              simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, he1, he2] at h
-              exact expand_bounded ih.2 hS (sFtv_sub_swap hV) he2 h
-            | none =>
+            -- The four expansion cases are gone. They were the ONLY ones whose
+            -- freshness side-condition was non-trivial: every other arm keeps
+            -- the solution inside the problem's own variables, while expansion
+            -- had to argue that the invented δ, β′ stayed above `V`
+            -- (`expand_bounded` / `expandR_bounded`).
             cases hpc : projClash (a :: s₁) (b :: s₂) with
             | true =>
-              simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, he1, he2,
-                hpc] at h
+              simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, hpc] at h
               cases h
             | false =>
-            cases he3 : expandR Θ S (a :: s₁) (b :: s₂) with
-            | some p =>
-              obtain ⟨β0, l0, τ0, t₁, t₂⟩ := p
-              simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, he1, he2,
-                hpc, he3] at h
-              exact expandR_bounded ih.2 hS hV he3 h
-            | none =>
-            cases he4 : expandR Θ S (b :: s₂) (a :: s₁) with
-            | some p =>
-              obtain ⟨β0, l0, τ0, t₁, t₂⟩ := p
-              simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, he1, he2,
-                hpc, he3, he4] at h
-              exact expandR_bounded ih.2 hS (sFtv_sub_swap hV) he4 h
-            | none =>
-              simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, he1, he2,
-                hpc, he3, he4] at h
+              simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, hpc] at h
               cases h
 
 
@@ -1183,40 +1160,19 @@ theorem unifyM_success_complete {B : Type} [DecidableEq B] (fuel : Nat) :
                 (sFtv_sub_residual hV (groundMatch_ftv hg2).2.2.2 (groundMatch_ftv hg2).2.1)
                 h hty.symm hru.symm
             | none =>
-            cases he1 : expandL Θ S (a :: s₁) (b :: s₂) with
-            | some p =>
-              obtain ⟨β0, l0, τ0, t₁, t₂⟩ := p
-              simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, he1] at h
-              exact expand_completeM ih.2 hS hV he1 h hu
-            | none =>
-            cases he2 : expandL Θ S (b :: s₂) (a :: s₁) with
-            | some p =>
-              obtain ⟨β0, l0, τ0, t₁, t₂⟩ := p
-              simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, he1, he2] at h
-              exact expand_completeM ih.2 hS (sFtv_sub_swap hV) he2 h hu.symm
-            | none =>
+            -- No expansion cases. Note what this does NOT change: the statement
+            -- is still "`… = .success s S'` ⟹ every unifier satisfies `s`" —
+            -- conditional on success, never "a unifier exists ⟹ success". So
+            -- removing arms removes cases from this induction and weakens
+            -- nothing. It does drop the `∃ θ'`/`AgreeOn` machinery's reason for
+            -- existing at the leaves: only expansion ever invented a name the
+            -- caller's `θ` could not already see.
             cases hpc : projClash (a :: s₁) (b :: s₂) with
             | true =>
-              simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, he1, he2,
-                hpc] at h
+              simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, hpc] at h
               cases h
             | false =>
-            cases he3 : expandR Θ S (a :: s₁) (b :: s₂) with
-            | some p =>
-              obtain ⟨β0, l0, τ0, t₁, t₂⟩ := p
-              simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, he1, he2,
-                hpc, he3] at h
-              exact expandR_completeM ih.2 hS hV he3 h hu
-            | none =>
-            cases he4 : expandR Θ S (b :: s₂) (a :: s₁) with
-            | some p =>
-              obtain ⟨β0, l0, τ0, t₁, t₂⟩ := p
-              simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, he1, he2,
-                hpc, he3, he4] at h
-              exact expandR_completeM ih.2 hS (sFtv_sub_swap hV) he4 h hu.symm
-            | none =>
-              simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, he1, he2,
-                hpc, he3, he4] at h
+              simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, hpc] at h
               cases h
 
 -- ≐ᵣ SUCCESS COMPLETENESS under the mutual driver. With unifyRowM_success_sound

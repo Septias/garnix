@@ -167,57 +167,29 @@ theorem initSupply_computes :
 theorem sFtv_computes :
     sFtv (B := Unit) [.var "a", .field "l" (.var "t")] = ["a", "t"] := rfl
 
--- ## P3 unique-host expansion, kernel-checked
--- ⊢  crossfield FIRES, and picks β as the forced host: β ≔ (l:δ | β′), with the
---    host side keeping its length (β renamed to the fresh β′)
-theorem expandL_crossfield :
-    expandL (B := Unit) [] ⟨5⟩ [.field "l" uB, .var "a"] [.field "m" uB, .var "b"]
-      = some ("b", "l", uB, [.var "a"], [.field "m" uB, .var (natName 6)]) := rfl
-
--- ⊢  Wand REFUSES: two candidate hosts, and vars_vs_field_no_mgu proves the rule
---    is right to refuse — there is genuinely no mgu
-theorem expandL_wand_refuses :
-    expandL (B := Unit) [] ⟨5⟩ [.field "l" uB] [.var "a", .var "b"] = none := rfl
-
--- ⊢  an l-field on the other side could host the pairing instead, so REFUSE
---    ((l:𝓪 | α) ≐ᵣ (β | l:𝓫) is unifiable with β ≔ ε)
-theorem expandL_lfield_refuses :
-    expandL (B := Unit) [] ⟨5⟩ [.field "l" uB, .var "a"] [.var "b", .field "l" uB]
-      = none := rfl
-
--- ## P3' the RIGHT-end expansion, kernel-checked
--- U-expand used to be ONE-ENDED: `uniqueHost` demands the LEADING variable,
--- because the invented field is emitted at the front of β ≔ (l:δ | β′) and has
--- to commute out leftwards. So the driver solved a problem and went STUCK on
--- its mirror image. These two pin the repair.
-
--- ⊢  the RIGHT-END MIRROR of crossfield. `expandL` is dead here (neither side
---    leads with a field); `expandR` hosts in β and emits β ≔ (β′ | l:δ).
---    Before the expandR arm this whole problem was `.stuck`.
-theorem expandR_crossfield_mirror :
-    expandR (B := Unit) [] ⟨5⟩ [.var "a", .field "l" uB] [.var "b", .field "m" uB]
-      = some ("b", "l", uB, [.var "a"], [.var (natName 6), .field "m" uB]) := rfl
-
--- ⊢  … and the driver solves it
-theorem unify_crossfield_mirror :
+-- ## P3 unique-host expansion — REMOVED
+-- The four expansion arms are gone (plans/drop-expand.md). What used to be
+-- pinned here — `expandL_crossfield`, `expandL_wand_refuses`,
+-- `expandL_lfield_refuses`, `expandR_crossfield_mirror`, and the two driver
+-- verdicts they produced — went with them. The COST of that is pinned instead,
+-- at `crossfield_stuck` (RowUnify/Driver.lean): the crossfield problem has a
+-- unifier, and the driver no longer finds it.
+--
+-- ⊢  the right-end mirror of crossfield, likewise `.stuck` now. `expandR` was
+--    added precisely because this problem was stuck without it; removing the
+--    arm returns it to that state, which is the trade taken knowingly.
+theorem unify_crossfield_mirror_stuck :
     unifyRowM (B := Unit) 20 (.cat (.var "a") (.sing "l" uB))
-                             (.cat (.var "b") (.sing "m" uB)) =
-      .success ⟨[(natName 2, uB)],
-                [("b", .cat (.var (natName 3)) (.sing "l" (.var (natName 2)))),
-                 ("a", .cat (.var (natName 3)) (.cat (.sing "m" uB) .empty))]⟩
-               ⟨4⟩ := rfl
+                             (.cat (.var "b") (.sing "m" uB)) = .stuck := rfl
 
--- ⊢  (l:{w}) ≐ᵣ (w | v) — `Refutations.terminal_masks_mgu`'s configuration, which
---    was TERMINAL and used to refute the fourth leg. `expandL` refuses (the lone
---    survivor v sits BEHIND the filtered w); `expandR` hosts in v, and the
---    solution is exactly the mgu that section builds by hand: w ≔ ε,
---    v ≔ (ε | l:{ε}).
-theorem unify_terminal_masks_mgu_solved :
+-- ⊢  (l:{w}) ≐ᵣ (w | v) — `Refutations.terminal_masks_mgu`'s configuration. It
+--    has an mgu (w ≔ ε, v ≔ (ε | l:{ε})), `expandR` used to find it, and the
+--    driver is back to `.stuck`. So `TerminalNoMgu` is refuted again: a
+--    terminal configuration can still have a unifier. See
+--    `Refutations.terminal_masks_mgu`.
+theorem unify_terminal_masks_mgu_stuck :
     unifyRowM (B := Unit) 20 (.sing "l" (.rcd (.var "w")))
-                             (.cat (.var "w") (.var "v")) =
-      .success ⟨[(natName 2, .rcd .empty)],
-                [("v", .cat .empty (.sing "l" (.var (natName 2)))),
-                 ("w", .empty), (natName 3, .empty)]⟩ ⟨4⟩ := rfl
+                             (.cat (.var "w") (.var "v")) = .stuck := rfl
 
 -- ## The accumulated solution, read by the guards
 -- U-expand RENAMES its host instead of applying β ≔ (l:δ | β′), and `renameVar`
@@ -236,15 +208,19 @@ theorem vacuous_success_payload_cycle :
       (.cat (.sing "l" (.rcd (.cat (.sing "l" uB) (.var "a"))))
             (.sing "l" (.rcd (.cat (.var "a") (.var "b"))))) = .stuck := rfl
 
--- ⊢  … and the SPINE-level one, which the right-end arm exposed. Two expansions
---    in sequence: the first binds a ≔ (m:δ | aaa), the second is excused by the
---    self-reference filter reading the stale payload `{a}`, and the residual
---    then binds aaa ≔ (a | …) — putting `a` at a spine position of its own
---    binding. The problem has NO unifier (count_m forces 0 = 1 + …), so
---    `.occurs` is the right answer, not merely a safe one.
+-- ⊢  … and the SPINE-level one, which the right-end arm exposed. It used to
+--    take two expansions in sequence — the first binding a ≔ (m:δ | aaa), the
+--    second excused by the self-reference filter reading the stale payload
+--    `{a}` — and reached `.occurs`. With no arm to invent `aaa` there is no
+--    stale payload and no cycle to catch, and the driver stops at `.stuck`.
+--
+--    NOTE this is a REAL loss of precision, not just of coverage: the problem
+--    has no unifier (count_m forces 0 = 1 + …), so `.occurs` was the sharp
+--    answer and `.stuck` is merely a safe one. It is also the last witness that
+--    needed `depReach` to be correct — which is why the DepGraph can go.
 theorem vacuous_success_spine_cycle :
     unifyRowM (B := Unit) 30 (.cat (.var "a") (.sing "l" (.rcd (.var "a"))))
-      (.cat (.sing "m" uB) (.cat (.var "a") (.var "b"))) = .occurs := rfl
+      (.cat (.sing "m" uB) (.cat (.var "a") (.var "b"))) = .stuck := rfl
 
 -- ## P4: ≐ / ≐ᵣ under the MUTUAL driver
 -- (the row verdicts above already run it; these exercise the type pass.)
@@ -298,9 +274,21 @@ theorem tyM_occurs_fn :
 theorem tyM_occurs_field :
     unifyTyM (B := Unit) 5 (.var "x") (.rcd (.sing "l" (.var "x"))) = .occurs := rfl
 
--- ⊢  fuel exhaustion is its OWN verdict, never mistaken for stuck
+-- ⊢  fuel exhaustion is its OWN verdict, never mistaken for stuck.
+--    The old witness was crossfield at fuel 1, which only ran out because
+--    U-expand recursed; it is `.stuck` at every budget now, so it could no
+--    longer tell the two apart. This one exhausts fuel in the TYPE pass
+--    instead — `matchL` fires, and the nested record eats the budget — and the
+--    pair of verdicts below is the actual content of the claim: the same
+--    problem is `.outOfFuel` at 2 and `.success` at 3, so `.outOfFuel` is a
+--    statement about the budget and never about the problem.
 theorem outOfFuel_is_separate :
-    unifyRowM (B := Unit) 1 (.cat (.sing "l" uB) (.var "a"))
-                            (.cat (.sing "m" uB) (.var "b")) = .outOfFuel := rfl
+    unifyRowM (B := Unit) 2 (.sing "k" (.rcd (.sing "l" uB)))
+                            (.sing "k" (.rcd (.sing "l" (.var "x")))) = .outOfFuel := rfl
+
+theorem outOfFuel_is_only_the_budget :
+    unifyRowM (B := Unit) 3 (.sing "k" (.rcd (.sing "l" uB)))
+                            (.sing "k" (.rcd (.sing "l" (.var "x")))) =
+      .success ⟨[("x", uB)], []⟩ ⟨2⟩ := rfl
 
 end MinimalCalculus

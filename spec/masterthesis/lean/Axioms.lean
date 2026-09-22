@@ -290,12 +290,13 @@ info: 'MinimalCalculus.stuck_masks_mgu' depends on axioms: [propext, Classical.c
 /-- info: 'MinimalCalculus.terminal_masks_mgu_not_terminal' depends on axioms: [propext] -/
 #guard_msgs in #print axioms terminal_masks_mgu_not_terminal
 
+-- … the driver's verdict on it, back to `.stuck` now that the arm is gone
 /--
-info: 'MinimalCalculus.terminal_masks_mgu_now_solved' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: 'MinimalCalculus.terminal_masks_mgu_stuck' depends on axioms: [propext, Classical.choice, Quot.sound]
 -/
-#guard_msgs in #print axioms terminal_masks_mgu_now_solved
+#guard_msgs in #print axioms terminal_masks_mgu_stuck
 
--- … and the hand-built mgu it finds, which is now the arm's correctness witness
+-- … and the hand-built mgu, which is a CONSERVATIVITY witness again
 /--
 info: 'MinimalCalculus.terminal_masks_mgu' depends on axioms: [propext, Classical.choice, Quot.sound]
 -/
@@ -493,11 +494,11 @@ info: 'MinimalCalculus.unrestricted_filter_refused' depends on axioms: [propext,
 -/
 #guard_msgs in #print axioms unrestricted_filter_refused
 
--- What the filter buys: one new success, and one vacuous success closed.
+-- What the filter used to buy, now `.stuck` on both counts.
 /--
-info: 'MinimalCalculus.selfref_filter_fires' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: 'MinimalCalculus.selfref_filter_stuck' depends on axioms: [propext, Classical.choice, Quot.sound]
 -/
-#guard_msgs in #print axioms selfref_filter_fires
+#guard_msgs in #print axioms selfref_filter_stuck
 
 /--
 info: 'MinimalCalculus.selfref_lone_host_reported' depends on axioms: [propext, Classical.choice, Quot.sound]
@@ -542,7 +543,9 @@ info: 'MinimalCalculus.qtyped_applySubst' depends on axioms: [propext, Classical
 
 -- The freshness invariant: a successful unification never hands back a supply
 -- behind the one it was given, and inference therefore never re-issues a name.
-/-- info: 'MinimalCalculus.unifyM_supply_mono' depends on axioms: [propext, Quot.sound] -/
+-- (It lost its `Quot.sound` dependency with U-expand: the only quotient
+-- reasoning in this proof was the expansion cases' `expandResM_success`.)
+/-- info: 'MinimalCalculus.unifyM_supply_mono' depends on axioms: [propext] -/
 #guard_msgs in #print axioms unifyM_supply_mono
 
 /-- info: 'MinimalCalculus.Infer.supply_mono' depends on axioms: [propext, Quot.sound] -/

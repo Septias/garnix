@@ -54,18 +54,23 @@ theorem allVar_collapse_reported_k2 {B : Type} [DecidableEq B] :
         (.cat (.var "b") (.cat (.var "a") (.cat (.var "a") (.var "c"))))
       = .success ⟨[], [("b", .empty), ("a", .empty), ("a", .empty), ("c", .empty)]⟩ ⟨2⟩ := rfl
 
--- U-EXPAND'S PAYOFF, computed. The verdict crossfield used to get was `.stuck`,
--- and it was WRONG (the prose at :1006 derives the mgu by hand). The driver now
--- finds exactly that mgu, with the equation 𝓫 ≐ δ SOLVED rather than parked.
--- ⊢  unifyRowM (l:𝓫 | α) (m:𝓫 | β)
---      =  success [δ ≔ 𝓫] [β ≔ (l:δ | β′), α ≔ (m:𝓫 | β′ | ε)]
-theorem crossfield_success {B : Type} [DecidableEq B] (b : B) :
+-- WHAT DROPPING U-EXPAND COSTS, computed. This is the crossfield shape, and it
+-- is the price of the removal made concrete: a unifier EXISTS — the prose at
+-- :1006 derives it by hand, and U-expand used to find exactly it, binding
+-- β ≔ (l:δ | β′), α ≔ (m:𝓫 | β′ | ε) with 𝓫 ≐ δ solved rather than parked — and
+-- the driver no longer finds it.
+--
+-- `.stuck` is the CONSERVATIVE verdict, not a wrong one: it claims nothing, and
+-- downstream it degrades to `★` with a W-flag. The soundness contract
+-- ("success ⟹ the solution unifies") is untouched; only coverage shrinks. Cf.
+-- `stuck_masks_mgu`, which has always been this shape.
+--
+-- This is the single most important regression on this branch: if it ever goes
+-- back to `.success`, an expansion arm has been reintroduced somewhere.
+-- ⊢  unifyRowM (l:𝓫 | α) (m:𝓫 | β)  =  stuck
+theorem crossfield_stuck {B : Type} [DecidableEq B] (b : B) :
     unifyRowM (B := B) 20 (.cat (.sing "l" (.base b)) (.var "a"))
-                          (.cat (.sing "m" (.base b)) (.var "b")) =
-      .success ⟨[(natName 2, .base b)],
-                [("b", .cat (.sing "l" (.var (natName 2))) (.var (natName 3))),
-                 ("a", .cat (.sing "m" (.base b)) (.cat (.var (natName 3)) .empty))]⟩
-               ⟨4⟩ := rfl
+                          (.cat (.sing "m" (.base b)) (.var "b")) = .stuck := rfl
 
 -- ## Fuel monotonicity
 -- No closed-form bound yet: solve-and-apply grows the spine, and the variable
@@ -213,33 +218,12 @@ theorem unifyM_fuel_mono {B : Type} [DecidableEq B] (N : Nat) :
                     obtain ⟨τ0', τ0, t₂, t₁⟩ := p
                     exact UResM.Mono.seq (IH'.1 Θ S τ0 τ0') (fun θ S' => IH'.2 Θ S' _ _)
                 | none =>
-                cases he1 : expandL Θ S (a :: s₁) (b :: s₂) with
-                | some p =>
-                    obtain ⟨β0, l0, τ0, t₁, t₂⟩ := p
-                    exact UResM.Mono.expandRes S β0 l0 τ0
-                      (IH'.2 (expandDeps Θ S β0 τ0) S.fresh.2.fresh.2 t₁ t₂)
-                | none =>
-                cases he2 : expandL Θ S (b :: s₂) (a :: s₁) with
-                | some p =>
-                    obtain ⟨β0, l0, τ0, t₁, t₂⟩ := p
-                    exact UResM.Mono.expandRes S β0 l0 τ0
-                      (IH'.2 (expandDeps Θ S β0 τ0) S.fresh.2.fresh.2 t₁ t₂)
-                | none =>
+                -- Past the last recursive arm both remaining outcomes are fuel-
+                -- independent constants. With U-expand gone there is no longer
+                -- an expansion case carrying an induction hypothesis here.
                 cases hpc : projClash (a :: s₁) (b :: s₂) with
-                | true => exact .inr rfl
-                | false =>
-                cases he3 : expandR Θ S (a :: s₁) (b :: s₂) with
-                | some p =>
-                    obtain ⟨β0, l0, τ0, t₁, t₂⟩ := p
-                    exact UResM.Mono.expandResR S β0 l0 τ0
-                      (IH'.2 (expandDeps Θ S β0 τ0) S.fresh.2.fresh.2 t₁ t₂)
-                | none =>
-                cases he4 : expandR Θ S (b :: s₂) (a :: s₁) with
-                | some p =>
-                    obtain ⟨β0, l0, τ0, t₁, t₂⟩ := p
-                    exact UResM.Mono.expandResR S β0 l0 τ0
-                      (IH'.2 (expandDeps Θ S β0 τ0) S.fresh.2.fresh.2 t₁ t₂)
-                | none => exact .inr rfl
+                | true  => exact .inr rfl
+                | false => exact .inr rfl
 
 -- ⊢  a REACHED row verdict is fuel-independent
 theorem unifySpineMF_fuel_mono {B : Type} [DecidableEq B] {Θ : DepGraph} {S : Supply}

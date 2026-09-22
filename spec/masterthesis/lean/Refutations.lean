@@ -248,11 +248,21 @@ theorem terminal_masks_mgu_not_terminal :
   rw [ht.hexpandR₁] at h
   exact Bool.noConfusion h
 
--- ⊢  … and the verdict, which used to be `.stuck`, is now a success. With
---    `unifyRowM_success_iff` the returned solution DESCRIBES the unifier set,
---    i.e. it is the mgu `terminal_masks_mgu` exhibits below.
-theorem terminal_masks_mgu_now_solved :
-    ∃ s S', unifyRowM (B := Unit) 20 tρ₁ tρ₂ = .success s S' := ⟨_, _, rfl⟩
+-- ⊢  … but the DRIVER is `.stuck` again, because the arm that solved it is gone
+--    (plans/drop-expand.md). `terminal_masks_mgu` below still exhibits the mgu
+--    by hand, so this is once more a CONSERVATIVITY witness: a problem with a
+--    most general unifier that the algorithm declines to solve.
+--
+--    NOTE the two theorems around this one now disagree in an expected way, and
+--    the disagreement closes in Stage 1b. `Terminal` (Defs.lean) is defined by
+--    which MOVES refuse, and it still has `hexpandR₁`/`hexpandR₂` fields naming
+--    arms the driver no longer consults — so `terminal_masks_mgu_not_terminal`
+--    above still holds while the driver is stuck. Once `Terminal` drops those
+--    fields the configuration is terminal again and `terminalNoMgu_false`
+--    (deleted by 506bf95) comes back, refuting `TerminalNoMgu` as it did
+--    before. Until then: do not cite `TerminalNoMgu` in either direction.
+theorem terminal_masks_mgu_stuck :
+    unifyRowM (B := Unit) 20 tρ₁ tρ₂ = .stuck := rfl
 
 private def tθ : TySubst Unit :=
   ⟨fun x => .var x,
@@ -436,8 +446,11 @@ theorem unrestricted_filter_refused :
 private def fρ₁ : Row Unit := .sing "l" (.rcd (.var "w"))
 private def fρ₂ : Row Unit := .cat (.var "v") (.var "w")
 
-theorem selfref_filter_fires :
-    ∃ s S, unifyRowM (B := Unit) 30 fρ₁ fρ₂ = .success s S := ⟨_, _, rfl⟩
+-- …it USED to. With the arm gone this is `.stuck`, and it is a third witness of
+-- the same coverage cost as `crossfield_stuck`: the problem is unifiable
+-- (w ≔ ε, v ≔ (l:{ε})) and the driver declines it.
+theorem selfref_filter_stuck :
+    unifyRowM (B := Unit) 30 fρ₁ fρ₂ = .stuck := rfl
 
 -- ## What the filter DOES buy (2): a SECOND vacuous success, closed
 -- Before Stage 3 the lone candidate was accepted without looking at the
@@ -451,8 +464,14 @@ theorem selfref_filter_fires :
 private def gρ₁ : Row Unit := ofSpine [.field "l" (.rcd (.var "w")), .var "a"]
 private def gρ₂ : Row Unit := ofSpine [.field "m" uB, .var "w"]
 
+-- The verdict is `.stuck` rather than `.occurs` now: the vacuous binding the
+-- filter used to catch was one an EXPANSION proposed, and with no expansion
+-- there is nothing to reject. `selfref_lone_host_no_unifier` below is
+-- untouched — it is a fact about the calculus, not about the move — so the two
+-- together still say what matters: the problem has no unifier at all, and the
+-- algorithm does not claim one. Precision drops, soundness does not.
 theorem selfref_lone_host_reported :
-    unifyRowM (B := Unit) 30 gρ₁ gρ₂ = .occurs := rfl
+    unifyRowM (B := Unit) 30 gρ₁ gρ₂ = .stuck := rfl
 
 -- ⊢  …and that verdict is correct. Every variable of the host side occurs in
 --    the payload, so the l-field the left side demands at index 0 has nowhere

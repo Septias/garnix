@@ -357,41 +357,16 @@ theorem unifyM_clash_no_unifier {B : Type} [DecidableEq B] (fuel : Nat) :
                   · exact List.mem_append_right _ ((groundMatch_ftv hg2).2.1 hh))
                 h hty.symm hru.symm
             | none =>
-            cases he1 : expandL Θ S (a :: s₁) (b :: s₂) with
-            | some p =>
-              obtain ⟨β0, l0, τ0, t₁, t₂⟩ := p
-              simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, he1] at h
-              exact ih.2 (expandDeps Θ S β0 τ0) S.fresh.2.fresh.2 t₁ t₂ (expandL_avoids hS he1)
-                (expandResM_clash h) (expandL_reflect_fwd hS he1 hu)
-            | none =>
-            cases he2 : expandL Θ S (b :: s₂) (a :: s₁) with
-            | some p =>
-              obtain ⟨β0, l0, τ0, t₁, t₂⟩ := p
-              simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, he1, he2] at h
-              exact ih.2 (expandDeps Θ S β0 τ0) S.fresh.2.fresh.2 t₁ t₂ (expandL_avoids hS.swap he2)
-                (expandResM_clash h) (expandL_reflect_fwd hS.swap he2 hu.symm)
-            | none =>
+            -- `projClash` is now the LAST arm before `.stuck`, and it carries
+            -- the clash leg here on its own: `projClash_no_unifier` is a sound
+            -- no-unifier test that never depended on the expansion arms it used
+            -- to be ordered in front of. Stage 0 confirms it empirically —
+            -- `clash ⇝ stuck` is 0 in all three universes, i.e. no clash was
+            -- ever reachable ONLY through an expansion.
             cases hpc : projClash (a :: s₁) (b :: s₂) with
             | true => exact projClash_no_unifier hpc ⟨θ, hu⟩
             | false =>
-            cases he3 : expandR Θ S (a :: s₁) (b :: s₂) with
-            | some p =>
-              obtain ⟨β0, l0, τ0, t₁, t₂⟩ := p
-              simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, he1, he2,
-                hpc, he3] at h
-              exact ih.2 (expandDeps Θ S β0 τ0) S.fresh.2.fresh.2 t₁ t₂ (expandR_avoids hS he3)
-                (expandResRM_clash h) (expandR_reflect_fwd' hS he3 hu)
-            | none =>
-            cases he4 : expandR Θ S (b :: s₂) (a :: s₁) with
-            | some p =>
-              obtain ⟨β0, l0, τ0, t₁, t₂⟩ := p
-              simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, he1, he2,
-                hpc, he3, he4] at h
-              exact ih.2 (expandDeps Θ S β0 τ0) S.fresh.2.fresh.2 t₁ t₂ (expandR_avoids hS.swap he4)
-                (expandResRM_clash h) (expandR_reflect_fwd' hS.swap he4 hu.symm)
-            | none =>
-              simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, he1, he2,
-                hpc, he3, he4] at h
+              simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, hpc] at h
               cases h
 
 -- ≐ᵣ CLASH is SOUND under the mutual driver: a clash verdict means the two rows
