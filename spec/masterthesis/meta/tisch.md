@@ -1,18 +1,6 @@
 
-- Declarative System sollte auch qualified types bekommen
-- Ich möchte gerne noch Occurrence-Typing an ifs rein bekommen, oder zumindest sketchen
-- In wieweit kann ich die Semantik von Broekhoff verwenden?
-- Was genau macht with; und inherit;
-  - With führt dazu, dass closedness nicht gegeben ist
-  - Closedness aber auch schon wegen lazyness nicht da
-- Die Semantik ist (noch) nicht definiert
+- Ich möchte gerne noch *occurrence-typing* an ifs rein bekommen, oder zumindest sketchen
 - Can we extend unification of ★?
-- Can we make recursiveness a prominent feature of our work??
-- Warum muss der Context acyclic sein?
-
-
-## Proposed Extensions
+- Can we make *recursiveness* a prominent feature of our work?
+- Rolle von *Lazyiness* dokumentieren
 - Show difference to P&X
-- Show mathematically, what the lower bounds are for the algorithm
-  - This could motivate the incompleteness
-- Gradual guarantee hinzufügen und beweisen
