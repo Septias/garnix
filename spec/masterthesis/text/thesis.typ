@@ -7,20 +7,10 @@
 )
 
 
-
 #let hidden = [
   == Limitations
   - We currently need _closedness_ in the proofs, which does not hold due to `with; e`
   - There is no negative information in our typesystem.
-
-  == Tisch
-  - Laziness part
-    - Laziness allows parts that can not type
-    - Also closed programs
-    - Maybe section about all it's results?
-
-  == Goal
-  > I want to create a typesystem that handles Nix as best as possible. It should be efficiently computable and have no "breaking" points. Meaning, there is nothing in it that makes it immediately unfeasible for Nix. This is why we need a soft-typing type as well as row- and label-variables. The result should be efficiently computable.
 ]
 
 

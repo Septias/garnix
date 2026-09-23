@@ -1,4 +1,4 @@
-#import "./functions.typ": *
+#import "../text/functions.typ": *
 #set document(
   title: "A Soft-Typing Records Calculus with Asymmetric Concatenation for Nix",
   description: "Masterthesis about a Soft-Typing Records Calculus with Asymmetric Concatenation for Nix",

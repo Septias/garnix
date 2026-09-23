@@ -207,6 +207,6 @@ it.
 // render this fragment on its own with
 //   typst compile drafts/semantics-draft.typ
 //
-// #import "../functions.typ": *
+// #import "../text/functions.typ": *
 // #show: template
 // ---------------------------------------------------------------------------

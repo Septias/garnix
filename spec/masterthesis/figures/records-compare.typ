@@ -1,4 +1,4 @@
-#import "./functions.typ": *
+#import "../text/functions.typ": *
 
 // Comparison of the record/row literature against the requirements of this thesis.
 // Legend:  ● yes / full support   ◐ restricted, derived or only in an instance

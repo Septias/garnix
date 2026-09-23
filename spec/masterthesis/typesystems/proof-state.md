@@ -260,6 +260,83 @@ Principality forces qualified schemes that use parked stumps during unification 
     REPRODUCE: `cd lean && lake build fuzz && lake exe fuzz`, sections [6]/[7].
   - [ ] solver state S = (θ, Δ, W), stump wake-up, confluence of the final state
 
+- **2026-09-22 — pricing U-expand (Stage 0).** `Fuzz.lean` now carries a second
+  clone, `nxSpineMF`/`nxTyF`, identical to the driver except that the four
+  expansion arms are `.stuck`. It is a CLONE, not an edit: the real driver and
+  the traced clone are untouched, `nDis` still reads 0, and nothing in
+  `RowUnify/` moved. `Θ` is absent from the clone rather than threaded-and-
+  ignored — `expandDeps` is the graph's only producer, so with no expansion the
+  graph is `[]` at every node and `depReach [] V = V` makes every guard reading
+  it inert. **The DepGraph is dead code without U-expand**, ~80 lines of
+  `Defs.lean` plus a parameter on ~80 signatures.
+  REPRODUCE: `cd lean && lake build fuzz && lake exe fuzz`, section `STAGE 0`.
+
+  Over the three universes (771 578 pairs, cap 64):
+
+  | | wide | deep | nest |
+  |---|---|---|---|
+  | verdicts agree | 98.3% | 92.4% | 97.5% |
+  | success ⇝ stuck (the cost) | 1036 = 7.0% of successes | 38 808 = 30.5% | 348 = 9.1% |
+  | clash ⇝ stuck | 0 | 0 | 0 |
+  | occurs ⇝ stuck | 168 | 11 912 | 256 |
+  | fuel differences either way | 0 | 0 | 0 |
+
+  Three findings, in order of what they settle.
+
+  1. **Verdict-monotonicity, checked rather than argued.** The expansion arms
+     are last in the dispatch order, so the stubbed run should be the real run
+     with some subtrees replaced by `.stuck`, and `.stuck` propagates through
+     `.seq` and `expandResM`. Prediction: at equal fuel, wherever both reach a
+     verdict, either they agree or the stub says `.stuck`. Counterexamples
+     found: **0 / 771 578**. This is what licenses "removing the arm shortens
+     every induction and weakens no theorem" — all four legs (clash soundness,
+     occurs soundness, success soundness, success completeness) are of the form
+     *verdict reached ⟹ property*, and completeness in particular is
+     conditional on success (`… = .success s S' → Sol.Sat θ s`), never
+     "a unifier exists ⟹ success".
+
+  2. **`Sol.Applied` ⟺ no expansion fired — exactly.** Cross-tabbed over the
+     driver's successes, not inferred from equal totals:
+
+     - ¬Applied **and** lost to the stub: 1036 / 38 808 / 348
+     - ¬Applied but **kept**: **0 / 0 / 0**
+     - Applied but **lost**: **0 / 0 / 0**
+
+     and every one of the 105 444 stub successes is `Applied`. So the
+     triangularity of `Sol` is *entirely* an artefact of U-expand; `Sol.comp`'s
+     stage-pushing never produces a non-idempotent solution on its own. This
+     refutes the worry recorded above that the duplicate-key/shadowing problem
+     is `comp`'s rather than the arm's. Consequence: **without U-expand,
+     `Sol.Ranked` is not merely provable, it is unnecessary** — `Applied` is
+     strictly stronger and `Sol.closes_toSubst_of_applied` hands over `⟦S⟧` =
+     `toSubst` directly. The whole rank search (list position, reverse
+     position, name length, DepGraph reachability, DepGraph depth, creation
+     order — all refuted) is searching for something only U-expand makes
+     necessary.
+
+  3. **`Acyclic` and `Ranked` already hold 0/0/0 under BOTH drivers**, so
+     `UnifyWF` is not where removal pays; `Applied` is. And `clash ⇝ stuck` is
+     0 everywhere: no clash is ever reached only through an expansion, so
+     `projClash` alone already catches what the arms would have.
+
+  Two things Stage 0 does NOT establish.
+
+  - **Termination.** The parametric families show no profile change worth the
+    name: `crossfield-n` drops from fuel `n+1` to `1` because it is exactly the
+    expansion engine and now gets stuck at once, and every other family is
+    unchanged. Expansion is already *linear* on these shapes. So the families
+    are not evidence for a post-removal measure; they were designed before the
+    measure question and do not probe it. `fuelGain = 0` also says no pair in
+    these universes diverges *because of* expansion.
+  - **Whether the 7–30% is worth paying.** The universes are exhaustive over
+    synthetic spine pairs and heavily weighted toward exotic shapes; the lost
+    witnesses are all one shape up to renaming, `(l:{a}) ≐ᵣ (b | a)` — a field
+    whose payload mentions the other side's tail. Whether Nix-shaped programs
+    hit it is a question for hand-written `Infer` examples, not for this sweep.
+    Note also that every lost success routes to `A-app-degrade` → `★`, and
+    `appDeg` has no declarative counterpart (no `T-app-★`), so removal makes an
+    already-open gap load-bearing.
+
 
 
 ## Termination
@@ -559,8 +636,8 @@ through `unifyTyF`/`unifySpineMF` with `S.supply` threaded in and out.
 # Problems
 > Problems found during mechanized proving and their proposed solutions
 
-- [!] **F-★ IS DEFECTIVE, AND THE DEFECT IS IN THE RULE SET** (2026-09-18).
-  `Finalize.star` (Infer.lean) has one premise, `S ⊢ δ ≐ ★ ⇝ S′`, and says
+- [!] **F-★ IS DEFECTIVE, AND THE DEFECT IS IN THE RULE SET**.
+  `Finalize.star` has one premise, `S ⊢ δ ≐ ★ ⇝ S′`, and says
   NOTHING about the lookup — while `Stump.Discharge` offers ★ only under D-⊥ or
   D-?. So F-★ can commit a stump to ★ where the lookup LANDS, and the state it
   produces discharges under no substitution satisfying it, not even up to ≈.

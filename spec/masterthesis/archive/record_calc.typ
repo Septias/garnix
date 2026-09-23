@@ -1,4 +1,4 @@
-#import "../functions.typ": *
+#import "../text/functions.typ": *
 #import "../snips/typesystem.typ": *
 #set page(height: auto)
 #let op = $overline(α)$
