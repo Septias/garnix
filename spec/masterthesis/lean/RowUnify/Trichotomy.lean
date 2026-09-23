@@ -21,128 +21,25 @@ theorem unifyRowM_success_iff {B : Type} [DecidableEq B] {fuel : Nat} {ρ₁ ρ�
 
 
 ------------------ P6: THE BASE-ARM DISPATCH, STEP 2 ------------------------
--- `hbase` — "a terminal stuck configuration has no mgu" — is the one hypothesis
--- the trichotomy still reduces to. Step 1 is stuck_leading_shape: with stripL
--- and both matchL directions dead, the two leading atoms take one of four
--- shapes. Step 2 is here — a terminal configuration also has both U-expand
--- directions dead, and uniqueHost refuses for exactly two reasons, so a leading
--- field facing the other side means either
---   * ≥ 2 candidate hosts — Wand's shape, killed by vars_vs_field_no_mgu, or
---   * the label already occurs there, necessarily BEHIND a variable (matchL is
---     dead) — the two-sided shape, killed by two_sided_no_mgu.
--- Step 3 remains: run those witnesses at the general shape.
+-- THIS SECTION IS GONE (Stage 1b, plans/drop-expand.md). It held
+-- `uniqueHost_none`, `expandL_none_field`, `expandR_none_field`,
+-- `stuck_leading_shape_expand`, `stuck_field_vs_var` and the two list helpers
+-- they used.
+--
+-- Step 2 refined the four leading shapes of `stuck_leading_shape` (Reflection)
+-- by what U-EXPAND'S REFUSAL added: a leading field facing the other side meant
+-- either ≥ 2 candidate hosts (Wand's shape) or the label already present behind
+-- a variable. That reading was only ever available because the driver had tried
+-- to host the field and declined. With no expansion arm the driver never asks
+-- the question, so there is nothing to read off, and `NoHost` — the predicate
+-- the whole section was phrased in — no longer exists.
+--
+-- Nothing is lost that was load-bearing: the fourth leg is not a converse (see
+-- THE FOURTH LEG below), so step 2 was feeding a reduction that is itself
+-- refuted. What survives is step 1, `stuck_leading_shape`, which is a fact about
+-- the SHAPES the surviving arms leave behind, and the specific no-mgu theorems
+-- in NoMgu.lean, which never went through the dispatch.
 
--- ⊢  uniqueHost refuses for exactly three reasons
--- The third is new with the self-reference filter, and it is the benign one:
--- the LEADING candidate occurs in the payload, so it cannot host — and then the
--- problem has no unifier at all, rather than an ambiguous one.
-theorem uniqueHost_none {B : Type} {Θ : DepGraph} {l : Label} {τ : Ty B}
-    {s : List (Atom B)} (h : uniqueHost Θ l τ s = none) : NoHost Θ l τ s := by
-  unfold uniqueHost at h
-  cases hvs : sVarSeq s with
-  | nil => exact .inl (fun _ hb => by rw [hvs] at hb; cases hb)
-  | cons γ t =>
-      rw [hvs] at h
-      simp only at h
-      split at h
-      · cases h
-      · rename_i hcond
-        by_cases hc : sFieldCount l s = 0
-        · by_cases hγ : γ ∈ depReach Θ (Ty.allRowVars τ)
-          · exact .inr (.inr ⟨γ, t, hvs, hγ⟩)
-          · refine .inl (fun β hb => ?_)
-            rw [hvs] at hb
-            injection hb with _ ht
-            subst ht
-            exact hcond ⟨hc, hγ, fun δ hδ => nomatch hδ⟩
-        · exact .inr (.inl (Nat.pos_of_ne_zero hc))
-
--- ⊢  … and so does U-expand, when the leading atom IS a field
-theorem expandL_none_field {B : Type} {Θ : DepGraph} {S : Supply} {l : Label}
-    {τ : Ty B} {t₁ s₂ : List (Atom B)}
-    (h : expandL Θ S (.field l τ :: t₁) s₂ = none) : NoHost Θ l τ s₂ := by
-  simp only [expandL] at h
-  cases hh : uniqueHost Θ l τ s₂ with
-  | none => exact uniqueHost_none hh
-  | some γ => rw [hh] at h; cases h
-
--- ⊢  … and U-expand at the right end refuses for the same three reasons, when
---    the TRAILING atom is a field. What a guarded fourth leg would read the
---    right-hand shape off.
-theorem expandR_none_field {B : Type} {Θ : DepGraph} {S : Supply} {l : Label}
-    {τ : Ty B} {t₁ s₂ : List (Atom B)}
-    (h : expandR Θ S (t₁ ++ [Atom.field l τ]) s₂ = none) :
-    NoHost Θ l τ s₂.reverse := by
-  have hrev : (t₁ ++ [Atom.field l τ]).reverse = Atom.field l τ :: t₁.reverse := by
-    rw [List.reverse_append]; simp
-  have key : expandL Θ S (t₁ ++ [Atom.field l τ]).reverse s₂.reverse = none := by
-    unfold expandR at h
-    revert h
-    cases hh : expandL Θ S (t₁ ++ [Atom.field l τ]).reverse s₂.reverse with
-    | none => intro _; rfl
-    | some p => intro h; simp at h
-  rw [hrev] at key
-  exact expandL_none_field key
-
--- ⊢  "no unique variable" plus "at least one variable" means TWO candidate hosts
-theorem two_vars_of_not_singleton {vs : List TyVar}
-    (h : ∀ γ, vs ≠ [γ]) (hne : vs ≠ []) : 2 ≤ vs.length := by
-  cases vs with
-  | nil => exact absurd rfl hne
-  | cons x t =>
-      cases t with
-      | nil => exact absurd rfl (h x)
-      | cons y u => simp only [List.length_cons]; omega
-
-theorem sVarSeq_var_cons {B : Type} (β : TyVar) (s : List (Atom B)) :
-    sVarSeq (Atom.var β :: s) = β :: sVarSeq s := rfl
-
--- STEP 2 OF THE DISPATCH. Every shape stuck_leading_shape allows, refined by
--- what U-expand's refusal adds. Shape (1) — two distinct leading variables — is
--- the only one U-expand says nothing about; it is the non-commutativity
--- territory (allvar_swap_no_mgu), where no leading field exists to host.
-theorem stuck_leading_shape_expand {B : Type} {Θ : DepGraph} {S : Supply} {a b : Atom B}
-    {s₁ s₂ : List (Atom B)}
-    (hsl : stripL (a :: s₁) (b :: s₂) = none)
-    (hml : matchL (a :: s₁) (b :: s₂) = none)
-    (hml2 : matchL (b :: s₂) (a :: s₁) = none)
-    (he1 : expandL Θ S (a :: s₁) (b :: s₂) = none)
-    (he2 : expandL Θ S (b :: s₂) (a :: s₁) = none) :
-    (∃ α β, a = .var α ∧ b = .var β ∧ α ≠ β) ∨
-    (∃ α l' τ', a = .var α ∧ b = .field l' τ' ∧ NoHost Θ l' τ' (a :: s₁)) ∨
-    (∃ l τ β, a = .field l τ ∧ b = .var β ∧ NoHost Θ l τ (b :: s₂)) ∨
-    (∃ l τ l' τ', a = .field l τ ∧ b = .field l' τ' ∧ l ≠ l' ∧
-      windowExtract l (b :: s₂) = none ∧ windowExtract l' (a :: s₁) = none ∧
-      NoHost Θ l τ (b :: s₂) ∧ NoHost Θ l' τ' (a :: s₁)) := by
-  rcases stuck_leading_shape hsl hml hml2 with
-    ⟨α, β, ha, hb, hne⟩ | ⟨α, l', τ', ha, hb⟩ | ⟨l, τ, β, ha, hb⟩
-    | ⟨l, τ, l', τ', ha, hb, hlne, hw1, hw2⟩
-  · exact .inl ⟨α, β, ha, hb, hne⟩
-  · subst ha; subst hb
-    exact .inr (.inl ⟨α, l', τ', rfl, rfl, expandL_none_field he2⟩)
-  · subst ha; subst hb
-    exact .inr (.inr (.inl ⟨l, τ, β, rfl, rfl, expandL_none_field he1⟩))
-  · subst ha; subst hb
-    exact .inr (.inr (.inr ⟨l, τ, l', τ', rfl, rfl, hlne, hw1, hw2,
-      expandL_none_field he1, expandL_none_field he2⟩))
-
--- The reading of shape (3), spelled out: a leading field facing a leading
--- VARIABLE leaves exactly the two configurations the base techniques handle.
--- ⊢  (l:τ | s₁) ≐ᵣ (β | s₂) terminal  ⟹
---      the right side has ≥ 2 variables (count-shrink), or it already carries
---      an l-field — necessarily behind a variable (rigidity)
-theorem stuck_field_vs_var {B : Type} {Θ : DepGraph} {S : Supply} {l : Label} {τ : Ty B}
-    {β : TyVar} {s₁ s₂ : List (Atom B)}
-    (he1 : expandL Θ S (.field l τ :: s₁) (.var β :: s₂) = none) :
-    2 ≤ (sVarSeq (Atom.var β :: s₂)).length ∨ 0 < sFieldCount l (Atom.var β :: s₂) ∨
-    β ∈ depReach Θ (Ty.allRowVars τ) := by
-  rcases expandL_none_field he1 with h | h | ⟨γ, rest, hvs, hγ⟩
-  · exact .inl (two_vars_of_not_singleton h (by rw [sVarSeq_var_cons]; exact fun hc => by cases hc))
-  · exact .inr (.inl h)
-  · rw [sVarSeq_var_cons] at hvs
-    injection hvs with hg _
-    subst hg
-    exact .inr (.inr hγ)
 
 
 
@@ -163,13 +60,14 @@ theorem stuck_field_vs_var {B : Type} {Θ : DepGraph} {S : Supply} {l : Label} {
 --     That is the shadow of the first point: the `Q`-threading assumed a stuck
 --     conjunct makes the conjunction ambiguous.
 --
--- NOR IS IT, YET, the retreat to TERMINAL configurations. `TerminalNoMgu`
--- (Defs.lean) was refuted too, on (l:{w}) ≐ᵣ (w | v), where one of the two
--- candidate placements is ruled out by an occurs violation the guards cannot
--- see, leaving a unique — hence most general — unifier. That configuration was
--- terminal only because U-expand was one-ended: `expandR` now hosts in `v` and
--- the driver solves it, so the counterexample is GONE. `TerminalNoMgu` is
--- therefore open — unrefuted and unproved — and must not be cited as either.
+-- NOR IS IT the retreat to TERMINAL configurations. `TerminalNoMgu` (Defs.lean)
+-- is REFUTED, on (l:{w}) ≐ᵣ (w | v): one of the two candidate placements is
+-- ruled out by an occurs violation the guards cannot see, so the unifier is
+-- unique — hence most general — while every move is dead. The refutation was
+-- briefly suspended while U-expand had a right-end arm that solved that
+-- configuration; with the arms gone it is terminal again and
+-- `Refutations.terminalNoMgu_false` states it. Both candidate converses are
+-- therefore settled NEGATIVE: neither `.stuck` nor terminality implies no-mgu.
 --
 -- WHAT THE LEG ACTUALLY IS, then: the SPECIFIC no-mgu theorems (NoMgu.lean —
 -- vars_vs_field_no_mgu for Wand, two_sided_no_mgu, allvar_swap_no_mgu, each
@@ -218,8 +116,8 @@ theorem bindTy_ne_stuck {B : Type} {S : Supply} {α : TyVar} {τ : Ty B} :
   · cases h
   · split at h <;> cases h
 
-theorem solveVarM_ne_stuck {B : Type} {Θ : DepGraph} {S : Supply} {s₁ s₂ : List (Atom B)} :
-    solveVarM Θ S s₁ s₂ ≠ some .stuck := by
+theorem solveVarM_ne_stuck {B : Type} {S : Supply} {s₁ s₂ : List (Atom B)} :
+    solveVarM S s₁ s₂ ≠ some .stuck := by
   intro h
   cases s₁ with
   | nil => simp [solveVarM] at h
@@ -235,14 +133,8 @@ theorem solveVarM_ne_stuck {B : Type} {Θ : DepGraph} {S : Supply} {s₁ s₂ : 
         · simp at h
         · split at h <;> simp at h
 
-theorem expandResM_stuck {B : Type} {S : Supply} {β : TyVar} {l : Label} {τ : Ty B}
-    {r : UResM B} (h : expandResM S β l τ r = .stuck) : r = .stuck := by
-  cases r with
-  | success _ _ => cases h
-  | clash => cases h
-  | occurs => cases h
-  | stuck => rfl
-  | outOfFuel => cases h
+-- (`expandResM_stuck` LIVED HERE — "the expansion wrapper is stuck only if its
+-- residual was". Its wrapper went with the arms.)
 
 theorem UResM.seq_stuck {B : Type} {r : UResM B} {k : TySubst B → Supply → UResM B}
     (h : r.seq k = .stuck) :
@@ -262,66 +154,72 @@ theorem UResM.seq_stuck {B : Type} {r : UResM B} {k : TySubst B → Supply → U
   | stuck => exact .inl rfl
   | outOfFuel => cases h
 
--- ⊢  the dispatch, packaged from a `Terminal` record — the entry point Phase B
--- proves `TerminalNoMgu` through.
+-- ⊢  the dispatch, packaged from a `Terminal` record
 --
--- Only the LEADING-end fields feed this: the shape analysis is about the two
--- leading atoms, and `expandR`'s refusal is a fact about the TRAILING ones. The
--- two `hexpandR` fields therefore do not weaken the lemma — they make
--- `Terminal` a STRONGER hypothesis, and the extra `NoHost`-at-the-right facts
--- are there for the step-3 witnesses to draw on (`expandR_none_field`).
-theorem terminal_leading_shape {B : Type} {Θ : DepGraph} {S : Supply} {a b : Atom B}
-    {s₁ s₂ : List (Atom B)} (ht : Terminal Θ S (a :: s₁) (b :: s₂)) :
+-- RESTATED at Stage 1b. It used to carry a `NoHost` refinement on each
+-- field-bearing shape, read off U-expand's refusal; with no expansion arm the
+-- four leading shapes are all a terminal configuration says, and the lemma is
+-- exactly `stuck_leading_shape` fed from the record. `Terminal` is a weaker
+-- hypothesis than it was (four fewer fields) and this is a weaker conclusion,
+-- but the pair still lines up: only the LEADING-end fields ever fed it.
+--
+-- It is no longer "the entry point Phase B proves `TerminalNoMgu` through" —
+-- `TerminalNoMgu` is refuted (see above). What it remains is the case analysis
+-- any side-condition-guarded statement about terminal configurations starts
+-- from, and the place the specific no-mgu witnesses get dispatched.
+theorem terminal_leading_shape {B : Type} {S : Supply} {a b : Atom B}
+    {s₁ s₂ : List (Atom B)} (ht : Terminal S (a :: s₁) (b :: s₂)) :
     (∃ α β, a = .var α ∧ b = .var β ∧ α ≠ β) ∨
-    (∃ α l' τ', a = .var α ∧ b = .field l' τ' ∧ NoHost Θ l' τ' (a :: s₁)) ∨
-    (∃ l τ β, a = .field l τ ∧ b = .var β ∧ NoHost Θ l τ (b :: s₂)) ∨
+    (∃ α l' τ', a = .var α ∧ b = .field l' τ') ∨
+    (∃ l τ β, a = .field l τ ∧ b = .var β) ∨
     (∃ l τ l' τ', a = .field l τ ∧ b = .field l' τ' ∧ l ≠ l' ∧
-      windowExtract l (b :: s₂) = none ∧ windowExtract l' (a :: s₁) = none ∧
-      NoHost Θ l τ (b :: s₂) ∧ NoHost Θ l' τ' (a :: s₁)) :=
-  stuck_leading_shape_expand ht.hstripL ht.hmatchL₁ ht.hmatchL₂ ht.hexpandL₁ ht.hexpandL₂
+      windowExtract l (b :: s₂) = none ∧ windowExtract l' (a :: s₁) = none) :=
+  stuck_leading_shape ht.hstripL ht.hmatchL₁ ht.hmatchL₂
 
 
 
 
 ------------------------------------ NEXT ------------------------------------
--- WHERE ≐ / ≐ᵣ STANDS (proof-plan.md is the live plan).
+-- WHERE ≐ / ≐ᵣ STANDS (typesystems/proof-state.md is the live ledger;
+-- plans/drop-expand.md is this branch's plan).
 --
 -- The algorithm is `unifyTyF` / `unifySpineMF` — one mutual block, structurally
 -- recursive on fuel, so every worked example is a kernel-checked `rfl`
 -- (Regressions.lean). Five verdicts: success / clash / occurs / stuck /
--- outOfFuel.
+-- outOfFuel. Since Stage 1b every arm SOLVES AND APPLIES: no arm invents a
+-- variable, no solver state accumulates, and there is no `DepGraph`.
 --
 -- Three of the four legs are THEOREMS, at any fuel: unifyM_success_sound,
 -- unifyM_success_complete (∃θ′/AgreeOn form; with soundness, the solution
 -- DESCRIBES the unifier set — unifyRowM_success_iff), and
--- unifyM_clash_no_unifier. The fourth, unifyM_stuck_no_mgu, is a REDUCTION to
--- hbase, hexp and hsolve/hsolveTy. Supporting invariants: unifyM_fuel_mono and
+-- unifyM_clash_no_unifier. Supporting invariants: unifyM_fuel_mono and
 -- unifyM_bounded.
 --
--- OPEN, in the order the plan wants them:
---  * `HasMguOn V` / `InstanceOfOn V` — mgu RELATIVIZED to a variable set. The
---    strict `InstanceOf` over all variables is the wrong notion for an algorithm
---    that invents variables (the mismatch AgreeOn fixed for completeness, one
---    level up), and it is what blocks all four parked hypotheses above.
---  * hbase, step 3: run the three base-witness techniques (count-shrink,
---    rigidity, non-commutativity) at the GENERAL terminal shape. Steps 1 and 2
---    are done — stuck_leading_shape and stuck_leading_shape_expand, the latter
---    using U-expand's refusal to show a leading field faces either ≥ 2 candidate
---    hosts or a label already present behind a variable.
---  * TERMINATION: a fuel that provably suffices. The naive Rémy measure does not
---    close (renaming adds no fields, so the host side keeps count_l = 0 and the
---    same variable can be re-expanded at the same label); the bound has to come
---    from the other side's l-fields, which solve-and-apply can add.
---  * The occurs guard's remaining gap is the STALE-BINDING disjunct: the guard
---    reads `depReach Θ`, so it can fire on an α that is only reachable from s₂
---    through the accumulated expansions. That is a fact about the solver state,
---    not about the problem, so the driver-level lift of
---    `solveVarM_occurs_no_unifier` is blocked there — and only there
---    (`solveVarM_occurs_no_unifier_nil` is the unconditional Θ = [] case).
---  * `TerminalNoMgu` lost its counterexample when the right-end expansion
---    landed. Whether it is now TRUE is the first thing to test: search the
---    Fuzz universes for a terminal configuration with an mgu. Until that
---    search comes back empty, assume nothing.
+-- The fourth leg is NOT a converse. Both candidates are refuted:
+-- `.stuck ⟹ ¬HasMgu` by `Refutations.stuck_masks_mgu`, and the retreat to
+-- terminal configurations by `Refutations.terminalNoMgu_false`. What stands in
+-- its place is the specific no-mgu theorems of NoMgu.lean together with the
+-- conservativity witnesses that show why no more is available.
+--
+-- OPEN, in dependency order:
+--  * `unifyRowM … = .occurs ⟹ ¬∃θ`, the driver-level lift. Stage 1b UNBLOCKED
+--    this: the occurs guard used to read `depReach Θ`, so it could fire on an α
+--    merely reachable from s₂ through the accumulated expansions — a fact about
+--    the solver state, not the problem. The guard is local again and
+--    `solveVarM_occurs_no_unifier` is unconditional, so what is left is the
+--    induction over the driver, not a missing side condition.
+--  * `Sol.Applied` as a driver invariant. Every arm applies its solution, so no
+--    solution mentions a variable in its own domain; the fuzz sweep reads 0
+--    failures in all three universes. With it, `Sol.Ranked`, `Sol.WF` and the
+--    whole refuted rank search are unnecessary — `Applied` is strictly stronger
+--    and `Sol.closes_toSubst_of_applied` hands over ⟦S⟧ = toSubst directly.
+--  * `HasMguOn V` / `InstanceOfOn V` — mgu RELATIVIZED to a variable set. Less
+--    urgent than it was: the mismatch it repaired was the algorithm inventing
+--    variables, which no arm now does.
+--  * TERMINATION: a fuel that provably suffices. The Rémy-measure obstruction
+--    went with the arm (nothing re-expands a variable any more), but the
+--    lexicographic `(|unsolved vars|, |spine|)` candidate is unproved and
+--    `sApplySubst` can still grow a spine — Stage 0 does not evidence it.
 --
 -- MILESTONES ELSEWHERE THAT BUILD ON THIS FILE (algorithmic.typ, Open questions):
 --  * Non-vacuity of qualified schemes: needs lookup_total (RowWF) plus a

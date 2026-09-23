@@ -1740,19 +1740,23 @@ theorem bindTy_occurs_no_unifier {B : Type} {S : Supply} {α : TyVar} {τ : Ty B
       | rcd ρ  => exact hm
     · exact absurd h (by simp)
 
--- ⊢  what an `.occurs` from U-var-solve says: the collapse rule declined AND the
---    guard fired
-theorem solveVarM_occurs_inv {B : Type} {Θ : DepGraph} {S : Supply}
+-- ⊢  what an `.occurs` from U-var-solve says: the collapse rule declined AND α
+--    really OCCURS in s₂
+-- The guard used to read `depReach Θ`, so this conjunct was reachability through
+-- the accumulated expansions — a fact about the SOLVER STATE. With the graph
+-- gone (Stage 1b) it is a genuine occurrence in the problem, and that is what
+-- makes the no-unifier theorem below unconditional.
+theorem solveVarM_occurs_inv {B : Type} {S : Supply}
     {α : TyVar} {s₂ : List (Atom B)}
-    (h : solveVarM Θ S [Atom.var α] s₂ = some .occurs) :
-    collapseSol α s₂ = none ∧ α ∈ depReach Θ (Row.allRowVars (ofSpine s₂)) := by
+    (h : solveVarM S [Atom.var α] s₂ = some .occurs) :
+    collapseSol α s₂ = none ∧ α ∈ Row.allRowVars (ofSpine s₂) := by
   rw [solveVarM] at h
   cases hc : collapseSol α s₂ with
   | some σ => rw [hc] at h; exact absurd h (by simp)
   | none =>
       rw [hc] at h
       refine ⟨rfl, ?_⟩
-      by_cases hg : (depReach Θ (Row.allRowVars (ofSpine s₂))).contains α = true
+      by_cases hg : (Row.allRowVars (ofSpine s₂)).contains α = true
       · exact List.mem_of_elem_eq_true hg
       · rw [if_neg hg] at h; exact absurd h (by simp)
 
@@ -1763,13 +1767,16 @@ theorem solveVarM_occurs_inv {B : Type} {Θ : DepGraph} {S : Supply}
 --   * on the spine with a field present — `occurs_field_no_unifier` (counting)
 --   * on the spine, field-free — NOT rejected any more; `collapseSol` solves it
 -- so what is left is genuinely unsolvable.
--- ⊢  α ∈ vars(ofSpine s₂),  solveVarM α s₂ = occurs   ⟹   ¬ ∃ θ. θ ⊨ α ≐ᵣ s₂
-theorem solveVarM_occurs_no_unifier {B : Type} {Θ : DepGraph} {S : Supply}
+-- ⊢  solveVarM α s₂ = occurs   ⟹   ¬ ∃ θ. θ ⊨ α ≐ᵣ s₂
+-- UNCONDITIONAL since Stage 1b. The occurrence used to be a HYPOTHESIS, because
+-- the guard could also fire on an α merely REACHABLE from s₂ through the
+-- accumulated expansions, and no no-unifier fact follows from that. The guard is
+-- local again, so `solveVarM_occurs_inv` supplies the occurrence itself.
+theorem solveVarM_occurs_no_unifier {B : Type} {S : Supply}
     {α : TyVar} {s₂ : List (Atom B)}
-    (hloc : α ∈ Row.allRowVars (ofSpine s₂))
-    (h : solveVarM Θ S [Atom.var α] s₂ = some .occurs) :
+    (h : solveVarM S [Atom.var α] s₂ = some .occurs) :
     ¬ ∃ θ : TySubst B, Unifies θ (.var α) (ofSpine s₂) := by
-  rcases allRowVars_split (ofSpine s₂) hloc with hspine | hdeep
+  rcases allRowVars_split (ofSpine s₂) (solveVarM_occurs_inv h).2 with hspine | hdeep
   · -- on the spine: the collapse rule declined, so a FIELD is present
     rw [ofSpine_toSpine] at hspine
     have hnone : collapseSol α s₂ = none := (solveVarM_occurs_inv h).1
@@ -1781,18 +1788,9 @@ theorem solveVarM_occurs_no_unifier {B : Type} {Θ : DepGraph} {S : Supply}
 
 
 
--- ## …and with an EMPTY solver state that is the whole story
--- `depReach [] V = V`, so before any expansion has been accumulated the guard
--- is exactly local and the verdict is unconditionally sound. What blocks the
--- same statement at an arbitrary Θ is the stale-binding disjunct: there α is
--- merely REACHABLE from s₂ through the accumulated expansions, which is a fact
--- about the solver state, not about the problem in front of it.
--- ⊢  solveVarM [] α s₂ = occurs   ⟹   ¬ ∃ θ. θ ⊨ α ≐ᵣ s₂
-theorem solveVarM_occurs_no_unifier_nil {B : Type} {S : Supply}
-    {α : TyVar} {s₂ : List (Atom B)}
-    (h : solveVarM [] S [Atom.var α] s₂ = some .occurs) :
-    ¬ ∃ θ : TySubst B, Unifies θ (.var α) (ofSpine s₂) :=
-  solveVarM_occurs_no_unifier (by simpa only [depReach] using (solveVarM_occurs_inv h).2) h
+-- `solveVarM_occurs_no_unifier_nil` LIVED HERE: the Θ = [] special case, which
+-- was the only shape in which the occurs verdict was known sound. It IS the
+-- general theorem now, so the special case has nothing left to say.
 
 -- ## The stuck verdict that WAS wrong — now fixed by U-expand
 -- (l:𝓫 | α) ≐ᵣ (m:𝓫 | β), l ≠ m, used to be reported STUCK, yet it is not

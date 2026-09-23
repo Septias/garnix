@@ -226,7 +226,7 @@ end SolverState
 def SolveTy {B : Type} [DecidableEq B]
     (S : SolverState B) (τ τ' : Ty B) (S' : SolverState B) : Prop :=
   ∃ (fuel : Nat) (s : Sol B) (Sup : Supply),
-    unifyTyF [] S.supply fuel (τ.applySubst S.subst) (τ'.applySubst S.subst)
+    unifyTyF S.supply fuel (τ.applySubst S.subst) (τ'.applySubst S.subst)
       = .success s Sup ∧
     S' = S.extend s Sup
 
@@ -234,16 +234,16 @@ def SolveTy {B : Type} [DecidableEq B]
 def SolveTyDegrades {B : Type} [DecidableEq B]
     (S : SolverState B) (τ τ' : Ty B) : Prop :=
   ∃ fuel : Nat,
-    unifyTyF [] S.supply fuel (τ.applySubst S.subst) (τ'.applySubst S.subst)
+    unifyTyF S.supply fuel (τ.applySubst S.subst) (τ'.applySubst S.subst)
         = .stuck ∨
-    unifyTyF [] S.supply fuel (τ.applySubst S.subst) (τ'.applySubst S.subst)
+    unifyTyF S.supply fuel (τ.applySubst S.subst) (τ'.applySubst S.subst)
         = .occurs
 
 /-- `S ⊢ ρ ≐ᵣ ρ′ ⇝ S′`, for the row equations `A-conc` and `A-rec` emit. -/
 def SolveRow {B : Type} [DecidableEq B]
     (S : SolverState B) (ρ ρ' : Row B) (S' : SolverState B) : Prop :=
   ∃ (fuel : Nat) (s : Sol B) (Sup : Supply),
-    unifySpineMF [] S.supply fuel (ρ.applySubst S.subst).toSpine
+    unifySpineMF S.supply fuel (ρ.applySubst S.subst).toSpine
       (ρ'.applySubst S.subst).toSpine = .success s Sup ∧
     S' = S.extend s Sup
 
@@ -258,7 +258,7 @@ theorem SolveTy.unifies {B : Type} [DecidableEq B] {S S' : SolverState B}
       TyUnifies θ (τ.applySubst S.subst) (τ'.applySubst S.subst) := by
   obtain ⟨fuel, s, Sup, hu, rfl⟩ := h
   exact ⟨s, (Sol.Sat.comp_inv hsat).2,
-    unifyM_success_sound fuel |>.1 [] S.supply _ _ hu (Sol.Sat.comp_inv hsat).2⟩
+    unifyM_success_sound fuel |>.1 S.supply _ _ hu (Sol.Sat.comp_inv hsat).2⟩
 
 --------------------- WAKE-UP  S ⊢ q ↝ S′  AND FINALIZATION -------------------
 -- K-hit / K-⊥ / K-repark are D-hit / D-⊥ / D-? — "the difference is WHEN:
@@ -863,12 +863,12 @@ theorem SolverState.draw_supply {B : Type} (S : SolverState B) (κ : Kind) :
 theorem SolveTy.supply {B : Type} [DecidableEq B] {S S' : SolverState B}
     {τ τ' : Ty B} (h : SolveTy S τ τ' S') : S.supply.next ≤ S'.supply.next := by
   obtain ⟨fuel, s, Sup, hu, rfl⟩ := h
-  exact (unifyM_supply_mono fuel).1 [] S.supply _ _ hu
+  exact (unifyM_supply_mono fuel).1 S.supply _ _ hu
 
 theorem SolveRow.supply {B : Type} [DecidableEq B] {S S' : SolverState B}
     {ρ ρ' : Row B} (h : SolveRow S ρ ρ' S') : S.supply.next ≤ S'.supply.next := by
   obtain ⟨fuel, s, Sup, hu, rfl⟩ := h
-  exact (unifyM_supply_mono fuel).2 [] S.supply _ _ hu
+  exact (unifyM_supply_mono fuel).2 S.supply _ _ hu
 
 theorem Wake.supply {B : Type} [DecidableEq B] {S S' : SolverState B}
     {p : Parked B} : Wake S p S' → S.supply.next ≤ S'.supply.next

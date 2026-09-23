@@ -223,7 +223,7 @@ hypothesis is not universally true.
 (l: {w}) ≐ᵣ (w | v)     TERMINAL — yet an mgu EXISTS
 -----------------------------------------------------
 ⚠ CONSERVATIVITY 3 OF 3 (Refutations.lean: terminal_masks_mgu_terminal —
-all thirteen moves dead, each by `rfl`; terminal_masks_mgu — the mgu;
+all eleven moves dead, each by `rfl`; terminal_masks_mgu — the mgu;
 terminalNoMgu_false) — **the sharpest of the three, because it refutes the
 natural retreat from the previous one.**
 
@@ -232,10 +232,12 @@ DRIVER's scheduling, not in the row calculus, so one should restate the leg
 about TERMINAL configurations — those where no move fires at all, hence there
 is no scheduling left to get wrong. This example says that is false too.
 
-The configuration is terminal: every strip, solveVar, match, ground, expand and
-projClash returns none/false. U-expand in particular refuses because the
-l-field has TWO candidate hosts, w and v — syntactically the Wand shape, where
-refusing is the whole point. But one of the two placements is not realizable:
+The configuration is terminal: every strip, solveVar, match, ground and
+projClash returns none/false. (While the driver had U-expand, that arm refused
+here too — the l-field has TWO candidate hosts, w and v, syntactically the Wand
+shape, where refusing is the whole point. The arm is gone; the refusal it used
+to contribute is now simply the absence of a move.) One of the two placements is
+not realizable:
 
   · host in w:  θw ≈ (l: {θw})          — an OCCURS violation
   · host in v:  w ≔ ε,  v ≔ (l: {ε})    — the surviving unifier

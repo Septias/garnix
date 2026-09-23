@@ -45,7 +45,7 @@ theorem SolveTy.unifies_sat {B : Type} [DecidableEq B] {S S' : SolverState B}
   obtain ⟨fuel, t, Sup, hu, rfl⟩ := h
   obtain ⟨hS, ht⟩ := Sol.Sat.comp_inv hsat
   exact (tyUnifies_applySubst_of_sat hS τ τ').mp
-    ((unifyM_success_sound fuel).1 [] S.supply _ _ hu ht)
+    ((unifyM_success_sound fuel).1 S.supply _ _ hu ht)
 
 --------------------- A DEFINITE LOOKUP SURVIVES A REFINEMENT -----------------
 -- `Sol.lookup_toCtx` (RowUnify/State.lean) transports a lookup performed in
@@ -536,7 +536,7 @@ private def fStar_S : SolverState Unit :=
   { sol := Sol.nil, parked := [fStar_p], flags := [], supply := ⟨0⟩ }
 
 /-- the equation F-★ emits, run: `δ ≐ ★` binds δ, at any fuel and any supply. -/
-example : unifyTyF (B := Unit) [] ⟨0⟩ 0 (.var "d") .unk
+example : unifyTyF (B := Unit) ⟨0⟩ 0 (.var "d") .unk
     = .success ⟨[("d", (.unk : Ty Unit))], []⟩ ⟨0⟩ := rfl
 
 /-- ⊢  **the unguarded F-★ can fire where nothing discharges.** There is a state,

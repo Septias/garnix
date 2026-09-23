@@ -59,10 +59,8 @@ info: 'MinimalCalculus.solveVarM_occurs_no_unifier' depends on axioms: [propext,
 -/
 #guard_msgs in #print axioms solveVarM_occurs_no_unifier
 
-/--
-info: 'MinimalCalculus.solveVarM_occurs_no_unifier_nil' depends on axioms: [propext, Classical.choice, Quot.sound]
--/
-#guard_msgs in #print axioms solveVarM_occurs_no_unifier_nil
+-- (`solveVarM_occurs_no_unifier_nil` was guarded here. Stage 1b made the
+-- guard above unconditional, so the Θ = [] special case is gone.)
 
 -- ## P1: mutual ≐/≐ᵣ scaffolding
 -- The ≗-congruence is the new load-bearing theory; it is axiom-FREE, and the
@@ -175,29 +173,24 @@ info: 'MinimalCalculus.unifyRowM_clash_no_unifier' depends on axioms: [propext, 
 -/
 #guard_msgs in #print axioms unifyRowM_clash_no_unifier
 
--- ## P6: step 2 of the base-arm dispatch
--- What U-expand's REFUSAL contributes to the terminal stuck configuration: ≥ 2
--- candidate hosts, or the label already present behind a variable. Pure
--- structure, so no Classical.choice.
-/-- info: 'MinimalCalculus.uniqueHost_none' depends on axioms: [propext] -/
-#guard_msgs in #print axioms uniqueHost_none
-
-/-- info: 'MinimalCalculus.stuck_leading_shape_expand' depends on axioms: [propext] -/
-#guard_msgs in #print axioms stuck_leading_shape_expand
-
-/-- info: 'MinimalCalculus.stuck_field_vs_var' depends on axioms: [propext, Quot.sound] -/
-#guard_msgs in #print axioms stuck_field_vs_var
+-- ## P6: step 2 of the base-arm dispatch — GONE at Stage 1b
+-- `uniqueHost_none`, `stuck_leading_shape_expand` and `stuck_field_vs_var` were
+-- guarded here. They read the REFUSAL of U-expand to say a leading field faces
+-- either ≥ 2 candidate hosts or a label already present behind a variable; with
+-- no expansion arm the driver never asks, and `NoHost` — what they concluded —
+-- no longer exists. Step 1, `stuck_leading_shape`, is unaffected.
 
 /--
 info: 'MinimalCalculus.unifyRowM_success_iff' depends on axioms: [propext, Classical.choice, Quot.sound]
 -/
 #guard_msgs in #print axioms unifyRowM_success_iff
 
--- The fourth leg is NOT guarded here: there is nothing to guard yet. The old
--- reduction `unifyM_stuck_no_mgu` was deleted (its hypotheses are false —
--- see the Refutations block below), and its replacement `TerminalNoMgu` is a
--- STATEMENT, not yet a theorem. What is guarded is the dispatch it will be
--- proved through.
+-- The fourth leg is NOT guarded here, and never will be as a converse: the old
+-- reduction `unifyM_stuck_no_mgu` was deleted (its hypotheses are false) and
+-- `TerminalNoMgu`, the retreat, is REFUTED (`terminalNoMgu_false`, below). What
+-- is guarded is the dispatch — the case analysis any guarded statement about
+-- terminal configurations starts from, restated at Stage 1b without the
+-- `NoHost` refinements U-expand's refusal used to supply.
 /-- info: 'MinimalCalculus.terminal_leading_shape' depends on axioms: [propext] -/
 #guard_msgs in #print axioms terminal_leading_shape
 
@@ -274,21 +267,21 @@ info: 'MinimalCalculus.stuck_masks_mgu' depends on axioms: [propext, Classical.c
 -/
 #guard_msgs in #print axioms stuck_masks_mgu
 
--- AND THE SHARPEST ONE, WHICH NO LONGER HOLDS. Retreating from the `.stuck`
--- VERDICT to TERMINAL CONFIGURATIONS used to fail too: (l:{w}) ≐ᵣ (w | v) was
--- terminal and has a UNIQUE unifier, because hosting the field in w would force
+-- AND THE SHARPEST ONE. Retreating from the `.stuck` VERDICT to TERMINAL
+-- CONFIGURATIONS fails too: (l:{w}) ≐ᵣ (w | v) is terminal and has a UNIQUE
+-- unifier, because hosting the field in w would force
 -- θw ≈ (l:{θw}). Field counts are blind to that — the recursion passes under a
 -- record constructor — so the guards missed it; `rcdDepth` is the ≈-invariant
 -- that sees it.
 --
--- The configuration was terminal only because U-expand was ONE-ENDED. With the
--- right-end arm it is not terminal any more and the driver solves it, so
--- `terminalNoMgu_false` is GONE and `TerminalNoMgu` is open — unrefuted and
--- unproven. What is guarded now is that pair of facts.
-/-- info: 'MinimalCalculus.terminal_masks_mgu_not_terminal' depends on axioms: [propext] -/
-#guard_msgs in #print axioms terminal_masks_mgu_not_terminal
+-- The refutation was briefly suspended: a right-end expansion arm solved this
+-- configuration, so it stopped being terminal. Stage 1b removed both arms, every
+-- move is dead again, and `terminalNoMgu_false` is restored below. Guarded here:
+-- terminality, the verdict, and the hand-built mgu.
+/-- info: 'MinimalCalculus.terminal_masks_mgu_terminal' depends on axioms: [propext] -/
+#guard_msgs in #print axioms terminal_masks_mgu_terminal
 
--- … the driver's verdict on it, back to `.stuck` now that the arm is gone
+-- … the driver's verdict on it, `.stuck` now that the arm is gone
 /--
 info: 'MinimalCalculus.terminal_masks_mgu_stuck' depends on axioms: [propext, Classical.choice, Quot.sound]
 -/
@@ -299,6 +292,12 @@ info: 'MinimalCalculus.terminal_masks_mgu_stuck' depends on axioms: [propext, Cl
 info: 'MinimalCalculus.terminal_masks_mgu' depends on axioms: [propext, Classical.choice, Quot.sound]
 -/
 #guard_msgs in #print axioms terminal_masks_mgu
+
+-- … and the leg it refutes
+/--
+info: 'MinimalCalculus.terminalNoMgu_false' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms terminalNoMgu_false
 
 -- The tool behind it: record NESTING is a ≈-invariant, so an occurs violation
 -- that hides inside a field payload is still visible. Axiom-light on purpose.

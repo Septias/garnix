@@ -337,6 +337,60 @@ Principality forces qualified schemes that use parked stumps during unification 
     `appDeg` has no declarative counterpart (no `T-app-★`), so removal makes an
     already-open gap load-bearing.
 
+- **2026-09-23 — U-expand removed (Stages 1a + 1b).** On branch
+  `worktree-drop-expand`, not on `main`. The four expansion arms are `.stuck`
+  and everything they supported is deleted: `RowUnify/ExpandR.lean` whole,
+  `uniqueHost`/`expandL`/`expandR`/`NoHost`/`expandResM`/`expandResRM`/
+  `expandDeps`, the `DepGraph` and its reachability closure, and the `Θ`
+  parameter off the whole driver. ~2450 lines net. Full ledger in
+  `plans/drop-expand.md`.
+  REPRODUCE: `cd lean && lake build && lake build fuzz && lake exe fuzz`.
+
+  Four things this settles that were open above.
+
+  1. **`Sol.Ranked` is vacuous, not merely provable.** The sweep reads
+     `0 successes whose solution has any edge` in all three universes: the
+     solution dependency graph is EDGELESS, so no solution mentions a variable
+     in its own domain and rank ≡ 0 works. The whole rank search — list
+     position, reverse position, name length, DepGraph reachability, DepGraph
+     depth, creation order, all refuted — was searching for something only
+     U-expand made necessary. `Sol.Applied` fails 0 times where it used to fail
+     1036 / 38 808 / 348.
+
+  2. **The occurs guard is LOCAL again, so `occurs ⟹ ¬∃θ` is unblocked.** The
+     guard read `depReach Θ (allRowVars s₂)`, and the stale-binding disjunct —
+     α merely REACHABLE from s₂ through the accumulated expansions — is a fact
+     about the solver state, not the problem, which is why
+     `solveVarM_occurs_no_unifier` had to take the occurrence as a hypothesis
+     and only `..._nil` (Θ = []) was unconditional. `solveVarM_occurs_inv` now
+     yields the occurrence outright, the main theorem is unconditional, and
+     `..._nil` is deleted as subsumed. What remains of the driver-level lift is
+     the ~280-line induction, with no missing side condition under it.
+
+  3. **`TerminalNoMgu` is REFUTED**, not open. `Terminal` no longer has fields
+     naming moves the driver does not consult, so (l:{w}) ≐ᵣ (w | v) is terminal
+     again (`terminal_masks_mgu_terminal`, ⟨rfl ×11⟩) while having a unique —
+     hence most general — unifier, and `terminalNoMgu_false` is restored. With
+     `stuck_masks_mgu` that settles BOTH candidate converses negative: neither
+     the `.stuck` verdict nor terminality implies the absence of an mgu. The
+     fourth leg is the three specific no-mgu theorems plus the conservativity
+     witnesses, and there is no general converse left to look for.
+
+  4. **The Stage-0 stub collapsed into its subject.** After 1b the no-expansion
+     clone was character-for-character the real driver, so its A/B comparison
+     could only report 100% by construction. It is deleted along with the traced
+     clone and report section [7]; the numbers it produced are the 2026-09-22
+     entry above. `Refutations.crossfield_stuck` and
+     `Regressions.unify_crossfield_mirror_stuck` are the tripwire now.
+
+  UNCHANGED and still the blocker for merging this branch: every lost success
+  routes to `A-app-degrade` → `★`, and `appDeg` has no declarative counterpart.
+  Removal did not create that gap; it made it load-bearing for 7.0% / 30.5% /
+  9.1% of successes. Either `T-app-★` exists or `appDeg` is proved unreachable —
+  and it is NOT unreachable (its equation descends into an arbitrary row
+  problem). Still open input: whether Nix-shaped code hits the lost shape
+  `(l:{a}) ≐ᵣ (b | a)` at all, which only hand-written `Infer` examples can say.
+
 
 
 ## Termination

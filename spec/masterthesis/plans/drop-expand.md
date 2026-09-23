@@ -83,7 +83,10 @@ Declarations that go (38 named, plus the bodies they support):
 | `RowUnify/Clash.lean` | `expandResM_clash`, `expandResRM_clash`, two dispatch arms | ~40 |
 | `RowUnify/Soundness.lean` | `expandResM_success`, `expandResRM_success` | ~40 |
 | `RowUnify/Driver.lean` | `UResM.Mono.expandRes`, `UResM.Mono.expandResR`, four `fuel_mono` cases | ~40 |
-| `RowUnify/Defs.lean` | `uniqueHost`, `expandL`, `expandR`, `HostShape`, `NoHost`, `expandResM`, `expandResRM`, `expandDeps` | ~120 |
+| `RowUnify/Defs.lean` | `uniqueHost`, `expandL`, `expandR`, `NoHost`, `expandResM`, `expandResRM`, `expandDeps` | ~120 |
+
+`HostShape` is listed there in error and STAYS: `host_forced` and
+`crossfield_host_forced` are stated in it, and they are kept (below).
 
 **Kept deliberately.** These are facts about the *calculus*, not about the arm,
 and they stop being the soundness argument for a move and become standalone
@@ -223,12 +226,77 @@ and `terminalNoMgu_false` (deleted by `506bf95`) should come back, refuting
 `TerminalNoMgu` as it did before. Until then `TerminalNoMgu` must not be cited
 in either direction.
 
-### Still to do in 1a
+### Still to do in 1a — DONE
 
-Delete the now-unreferenced declarations (the table above): `ExpandR.lean`
-whole, the `Solutions.lean` / `Completeness.lean` blocks, the `Trichotomy.lean`
-restatements, and the `Defs.lean` definitions. Nothing depends on them any more
-— they simply still typecheck because `expandL`/`expandR` still exist.
+`ExpandR.lean` whole and the `Solutions.lean` / `Completeness.lean` /
+`Clash.lean` / `Soundness.lean` / `Driver.lean` blocks went in `e61c65d`
+(−1087). `Trichotomy.lean` and `Defs.lean` were deferred into 1b rather than
+done here: their declarations are phrased *through* `NoHost` / `uniqueHost` /
+`Terminal`, so they could not be restated while `Θ` still existed.
+
+### Stage 1b — DONE, build green, sweep re-run
+
+Merged `main` first (`4e737cf`): the branch was based on `a3a150c` and so
+predated the commit that put Stage 0's findings in `proof-state.md`. `Fuzz.lean`
+merged clean — the branch had re-applied the same 270 lines under a different
+commit, byte-identical.
+
+−1367 / +511 across 12 files. What went:
+
+- **`Defs.lean`** — `DepGraph`, `depInsert`, `depRound`, `depMark`, `depReach`
+  and the four monotonicity lemmas; `uniqueHost`, `expandL`, `expandR`,
+  `NoHost`; `expandResM`, `expandResRM`, `expandDeps`. `HostShape` stays (see
+  above). `Θ` off `solveVarM`, `unifyTyF`, `unifySpineMF`, `Terminal`,
+  `TerminalNoMgu`, and the `[]` argument off every entry point.
+- **`Terminal`** loses `hexpandL₁/₂` and `hexpandR₁/₂` — eleven fields, all
+  naming moves the driver actually consults.
+- **`Trichotomy.lean`** — the whole "BASE-ARM DISPATCH, STEP 2" section
+  (`uniqueHost_none`, `expandL_none_field`, `expandR_none_field`,
+  `stuck_leading_shape_expand`, `stuck_field_vs_var`, two list helpers) and
+  `expandResM_stuck`. `terminal_leading_shape` is **restated**: with `NoHost`
+  gone it is exactly `stuck_leading_shape` fed from the record.
+- **`Fuzz.lean`** — the traced clone (`traceTyF`/`traceSpineMF`), the graph
+  utilities, `depVerdict`, report section [7], and the Stage-0 clone
+  (`nxTyF`/`nxSpineMF` + `NXStats`). The last of those is the one worth naming:
+  after 1b the stub was **character-for-character the real driver**, so its
+  A/B comparison could only report 100% by construction. Its job is done and its
+  numbers are in `proof-state.md`; `crossfield_stuck` and
+  `unify_crossfield_mirror_stuck` are the tripwire now, kernel-checked and one
+  line each.
+
+The mechanical parameter removal across the inference layer was 5 call sites
+(`Infer.lean`, `InferSound.lean`), all of them dropping a literal `[]`, exactly
+as forecast — the 8/13 proved A-rules are untouched.
+
+#### The two prizes, both landed
+
+**`occurs ⟹ ¬∃θ` is unblocked.** `solveVarM`'s guard read
+`depReach Θ (allRowVars s₂)`, so `solveVarM_occurs_inv` could only conclude
+*reachability* — a fact about the solver state — and
+`solveVarM_occurs_no_unifier` had to take the occurrence as a HYPOTHESIS, with
+`solveVarM_occurs_no_unifier_nil` as the only unconditional case (Θ = []). The
+guard is local again: `_inv` now yields `α ∈ allRowVars (ofSpine s₂)` outright,
+`solveVarM_occurs_no_unifier` is unconditional, and `_nil` is deleted as
+subsumed. What is left of Stage 2's item 2 is the induction over the driver, not
+a missing side condition.
+
+**`TerminalNoMgu` is refuted again**, exactly as forecast.
+`terminal_masks_mgu_not_terminal` is replaced by `terminal_masks_mgu_terminal`
+(⟨rfl ×11⟩) and `terminalNoMgu_false` comes back in the form it had before
+`506bf95`. With `stuck_masks_mgu` that settles **both** candidate converses
+negative: neither the `.stuck` verdict nor terminality implies no-mgu. The
+fourth leg is the specific no-mgu theorems plus the conservativity witnesses,
+and there is no general converse left to look for — which is what
+`RowUnify/Trichotomy.lean`'s NEXT block and `Axioms.lean`'s P6 section now say.
+
+#### Verification
+
+`lake build` green (24 jobs), `lake build fuzz` green, no `sorry`. `lake exe
+fuzz` reproduces the Stage-1a verdict counts **exactly** — 13 685 / 88 302 /
+3 457 successes over 74 529 / 672 400 / 24 649 pairs — with `[4] ill-formed
+solutions (refutes UnifyWF): 0` and `[6] … over the **0** successes whose
+solution has any edge` in all three universes. Axiom guards re-pinned;
+`terminal_masks_mgu_terminal` is `[propext]`.
 
 ## Open input
 
