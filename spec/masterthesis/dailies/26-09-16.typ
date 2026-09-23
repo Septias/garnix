@@ -7,8 +7,7 @@
 
 
 == Find: the degradation rules are unsound
-Turned up while proving `InferSound` case by case (lean/InferSound.lean, on
-branch worktree-infer-sound).
+Turned up while proving `InferSound` case by case.
 
 `A-app-degrade` fires when `τ₁ ≐ τ₂ → β` is stuck or occurs, and returns ★.
 Declaratively the application then types *nowhere*:
