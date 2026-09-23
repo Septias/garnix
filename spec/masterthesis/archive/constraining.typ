@@ -1,4 +1,4 @@
-#import "../functions.typ": *
+#import "../text/functions.typ": *
 
 == Constraining
 This one should be for generic accesses:

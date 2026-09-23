@@ -129,12 +129,12 @@
 // ------------------- BIB
 #let bib = page(bibliography(
   (
-    "./bib/misc.bib",
-    "./bib/parreaux.bib",
-    "./bib/nix.bib",
-    "./bib/castagna.bib",
-    "./bib/gradual.bib",
-    "./bib/records.bib",
+    "../bib/misc.bib",
+    "../bib/parreaux.bib",
+    "../bib/nix.bib",
+    "../bib/castagna.bib",
+    "../bib/gradual.bib",
+    "../bib/records.bib",
   ),
   style: "association-for-computing-machinery",
 ))

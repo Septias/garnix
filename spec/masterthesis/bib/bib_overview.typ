@@ -1,4 +1,4 @@
-#import "../functions.typ": *
+#import "../text/functions.typ": *
 
 == Read
 - [x] _A record calculus based on symmetric concatenation_
