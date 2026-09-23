@@ -1,13 +1,18 @@
 
-
+## Fragen
+- Should I write some comparison into the introductory part?
+  - It motivates the work in a sense, but I think a clean introduction of *our contribution* is better
+  - Do we have enough content for it?
+  - We can also add references in retrospective
+- What is currently best style?
 
 
 ## Things
 - Introduction: Should motivate the reader
-- Motivation (Nix)
-- Reasoning (Features)
-- Differences (Other TSs)
-- Positioning ()
+  - Motivation (Nix)
+  - Reasoning (Features)
+  - Differences (Other TSs)
+    - Positioning
 
 
 ## Introduction
@@ -31,5 +36,22 @@
 
 
 ## Declarative
-- 
+- L2 vorstellen
+- Warum brauchen wir T-sel-★ und T-★-intro
+- Motivation für qualified types?
+- Trace monoid
+- The winning example
+- Principality
+
+## Algorithmisch
+- Unification Regeln
+- Sortedness
+- Inference rules
+- State must be a closure
+- Blockers and constraint resolution
+
+
+## Was muss ich alles fürs algorithmische System zeigen?
+- Inference rules
+
 
