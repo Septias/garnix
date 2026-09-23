@@ -358,12 +358,13 @@ info: 'MinimalCalculus.selEx_blurred_typing' depends on axioms: [propext, Classi
 /-- info: 'MinimalCalculus.QScheme.covered_of_witness' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in #print axioms QScheme.covered_of_witness
 
--- ⊴[Γ] does NOT survive Γ ⊑ Γ': the ?-arm of discharge moves under a solution,
--- which is why the uniform ⊴ quantifies over every context.
+-- ⊴ is not a congruence for `QScheme.applySubst`: the ?-arm of discharge moves
+-- when a parked stump wakes up. Was `covered_not_rowExt_stable`, stated over
+-- row-extensions of Γ; refining the solution IS applying a substitution.
 /--
-info: 'MinimalCalculus.covered_not_rowExt_stable' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: 'MinimalCalculus.covered_not_applySubst_stable' depends on axioms: [propext, Classical.choice, Quot.sound]
 -/
-#guard_msgs in #print axioms covered_not_rowExt_stable
+#guard_msgs in #print axioms covered_not_applySubst_stable
 
 -- The second closure property of the typing set: ⊑ alone cannot absorb T-eq,
 -- so ⊑-only principality is refuted for selQ and ≼ replaces it.
@@ -413,24 +414,25 @@ info: 'MinimalCalculus.l1_rejects_two_use' depends on axioms: [propext, Classica
 -/
 #guard_msgs in #print axioms l1_rejects_two_use
 
--- ## ⟦S⟧ as a context (RowUnify.State) — the θ ↦ rowEnv bridge
--- Without these two, no inference rule that performs a lookup under a partial
--- solution is even a proposition. rowWF_toCtx is what lets A-sel's premise
--- HAVE a derivation (it feeds lookup_total); lookup_toCtx is the bridge itself.
+-- ## ⟦S⟧ as a substitution (RowUnify.State)
+-- This section used to audit the θ ↦ rowEnv bridge — `Sol.rowWF_toCtx` (what
+-- let A-sel's premise HAVE a derivation, by feeding `lookup_total`),
+-- `Sol.lookup_toCtx` and `Sol.lookup_toCtx_iff` (the bridge itself). All three
+-- are gone with `L-α`: `lookup_total` is unconditional, and there is only one
+-- reading of ⟦S⟧ left to bridge to. What survives is the statement below, and
+-- it needs neither `Closes` nor `Acyclic`.
 /--
-info: 'MinimalCalculus.Sol.rowWF_toCtx' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: 'MinimalCalculus.Sol.lookup_applySubst_closure' does not depend on any axioms
 -/
-#guard_msgs in #print axioms Sol.rowWF_toCtx
+#guard_msgs in #print axioms Sol.lookup_applySubst_closure
 
-/--
-info: 'MinimalCalculus.Sol.lookup_toCtx' depends on axioms: [propext, Classical.choice, Quot.sound]
--/
-#guard_msgs in #print axioms Sol.lookup_toCtx
+-- ↓ is a FUNCTION of (ρ, l), which is what a context-free lookup buys:
+-- determinism was already provable, totality now needs no well-formedness.
+/-- info: 'MinimalCalculus.lookup_total' does not depend on any axioms -/
+#guard_msgs in #print axioms lookup_total
 
-/--
-info: 'MinimalCalculus.Sol.lookup_toCtx_iff' depends on axioms: [propext, Classical.choice, Quot.sound]
--/
-#guard_msgs in #print axioms Sol.lookup_toCtx_iff
+/-- info: 'MinimalCalculus.lookup_applySubst' does not depend on any axioms -/
+#guard_msgs in #print axioms lookup_applySubst
 
 -- ## The general depth-aware occurs theorem (RowUnify.NoMgu)
 -- The repair for BOTH spine-level blind spots: `sVarSeq` misses a variable that
@@ -535,8 +537,12 @@ info: 'MinimalCalculus.selfref_lone_host_reported' depends on axioms: [propext, 
 -- QTyped constructors, modulo the one named hypothesis `SchemeImage` (the
 -- capture-avoiding σ-image of a let-bound scheme; L1's counterpart is
 -- `renameScheme`).
+-- NOTE the axiom footprint: `[propext, Quot.sound]`, no `Classical.choice`.
+-- It used to need choice, through `Sol.lookup_toCtx`'s `Closes` plumbing; the
+-- selection cases now go through `lookup_applySubst` and `lookup_total`, and
+-- `Sol.Closes` has left the statement altogether.
 /--
-info: 'MinimalCalculus.qtyped_applySubst' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: 'MinimalCalculus.qtyped_applySubst' depends on axioms: [propext, Quot.sound]
 -/
 #guard_msgs in #print axioms qtyped_applySubst
 
@@ -556,21 +562,23 @@ info: 'MinimalCalculus.qtyped_applySubst' depends on axioms: [propext, Classical
 -- ## INFERENCE SOUNDNESS, CASE BY CASE  (InferSound.lean)
 -- Eight of the thirteen A-rules, plus A-sel-? modulo `StumpHonest`. The two
 -- pieces of new machinery first: replaying a solved equation under any σ that
--- satisfies the state it produced, and transporting a DEFINITE lookup out of
--- ⟦S⟧-as-a-context under mere `Sat` rather than `Closes` — the hypothesis the
--- induction actually has at an intermediate state.
+-- satisfies the state it produced, and transporting a DEFINITE lookup along a
+-- refinement under mere `Sat` rather than `Closes` — the hypothesis the
+-- induction actually has at an intermediate state. The second was
+-- `Sol.lookup_toCtx_sat`, a nine-case induction out of ⟦S⟧-as-a-context; it is
+-- now `Sol.lookup_sat`, two existing lemmas composed.
 /-- info: 'MinimalCalculus.SolveTy.unifies_sat' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in #print axioms SolveTy.unifies_sat
 
 /--
-info: 'MinimalCalculus.Sol.lookup_toCtx_sat' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: 'MinimalCalculus.Sol.lookup_sat' depends on axioms: [propext]
 -/
-#guard_msgs in #print axioms Sol.lookup_toCtx_sat
+#guard_msgs in #print axioms Sol.lookup_sat
 
 -- A record-typed subject always types a selection at ★: the declarative content
 -- of "a selection never gets stuck", and what makes the ★ half of A-sel-? free.
 /--
-info: 'MinimalCalculus.qtyped_sel_star' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: 'MinimalCalculus.qtyped_sel_star' does not depend on any axioms
 -/
 #guard_msgs in #print axioms qtyped_sel_star
 
@@ -583,12 +591,12 @@ info: 'MinimalCalculus.qtyped_sel_star' depends on axioms: [propext, Classical.c
 #guard_msgs in #print axioms infer_sound_conc_step
 
 /--
-info: 'MinimalCalculus.infer_sound_sel_step' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: 'MinimalCalculus.infer_sound_sel_step' depends on axioms: [propext, Quot.sound]
 -/
 #guard_msgs in #print axioms infer_sound_sel_step
 
 /--
-info: 'MinimalCalculus.infer_sound_selAbs_step' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: 'MinimalCalculus.infer_sound_selAbs_step' depends on axioms: [propext, Quot.sound]
 -/
 #guard_msgs in #print axioms infer_sound_selAbs_step
 
@@ -608,7 +616,7 @@ info: 'MinimalCalculus.infer_sound_selUnk_step' depends on axioms: [propext, Quo
 -- re-parks it with the stump intact. K-repark corresponds to nothing, which is
 -- why the conclusion is a disjunction and not an implication.
 /--
-info: 'MinimalCalculus.Wake.dischargeEquiv' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: 'MinimalCalculus.Wake.dischargeEquiv' depends on axioms: [propext, Quot.sound]
 -/
 #guard_msgs in #print axioms Wake.dischargeEquiv
 
@@ -618,7 +626,7 @@ info: 'MinimalCalculus.Wake.dischargeEquiv' depends on axioms: [propext, Classic
 -- woken — plus the distinctness of what was submitted, which is what
 -- `FreshRenaming` gives A-var.
 /--
-info: 'MinimalCalculus.Wakes.dischargeEquiv' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: 'MinimalCalculus.Wakes.dischargeEquiv' depends on axioms: [propext, Quot.sound]
 -/
 #guard_msgs in #print axioms Wakes.dischargeEquiv
 
@@ -695,12 +703,12 @@ info: 'MinimalCalculus.SolverState.Quiescent.wake_no_commit' depends on axioms: 
 /-- info: 'MinimalCalculus.Infer.quiescent_of_nil' depends on axioms: [propext] -/
 #guard_msgs in #print axioms Infer.quiescent_of_nil
 
--- what the invariant is FOR: in a quiescent state no parked blocker is solved,
--- so a stump's annotation is a fact about the state rather than a leftover.
-/--
-info: 'MinimalCalculus.SolverState.Quiescent.blocker_unsolved' depends on axioms: [propext, Classical.choice, Quot.sound]
--/
-#guard_msgs in #print axioms SolverState.Quiescent.blocker_unsolved
+-- `SolverState.Quiescent.blocker_unsolved` was audited here: "in a quiescent
+-- state no parked blocker is solved, so a stump's annotation is a fact about
+-- the state rather than a leftover". It is gone along with
+-- `LookupBlocked.unsolved`, and not because it became unprovable — because the
+-- rules look up `ρ.applySubst ⟦S⟧`, so a blocker IS a variable ⟦S⟧ left
+-- standing and there is no longer a claim to make.
 
 -- …AND THE CONFIGURATION WAS REACHABLE. The hand-built witness above leaves one
 -- objection open: A-sel-? parks `.var r`, never a literal row, so at the moment
@@ -739,7 +747,7 @@ info: 'MinimalCalculus.SolverState.Quiescent.blocker_unsolved' depends on axioms
 #guard_msgs in #print axioms fStar_wake_star_disagree
 
 /--
-info: 'MinimalCalculus.fStar_reachable_no_discharge' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: 'MinimalCalculus.fStar_reachable_no_discharge' depends on axioms: [propext, Quot.sound]
 -/
 #guard_msgs in #print axioms fStar_reachable_no_discharge
 
@@ -777,7 +785,7 @@ info: 'MinimalCalculus.fStar_reachable_no_discharge' depends on axioms: [propext
 -- old "wiring renameScheme in here is open" note on `QScheme.applySubst` was
 -- standing in for.
 /--
-info: 'MinimalCalculus.QCovers.forward_of_avoiding' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: 'MinimalCalculus.QCovers.forward_of_avoiding' depends on axioms: [propext, Quot.sound]
 -/
 #guard_msgs in #print axioms QCovers.forward_of_avoiding
 
@@ -786,7 +794,7 @@ info: 'MinimalCalculus.QCovers.forward_of_avoiding' depends on axioms: [propext,
 -- cannot be exactly the σ-image of one. `SchemeImage` therefore cannot be
 -- discharged by pushing σ through the scheme, whatever the freshness discipline.
 /--
-info: 'MinimalCalculus.qcovers_backward_false_for_applySubst' depends on axioms: [propext, Quot.sound]
+info: 'MinimalCalculus.qcovers_backward_false_for_applySubst' depends on axioms: [propext]
 -/
 #guard_msgs in #print axioms qcovers_backward_false_for_applySubst
 
@@ -814,19 +822,19 @@ info: 'MinimalCalculus.inferC_sound_selUnk_step' depends on axioms: [propext, Qu
 -- Blockedness gives an unknown lookup at a discharged row environment —
 -- monotonicity read backwards, and the general form of what F-★'s premise buys.
 /--
-info: 'MinimalCalculus.lookup_unknown_of_blocked' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: 'MinimalCalculus.lookup_unknown_of_blocked' does not depend on any axioms
 -/
 #guard_msgs in #print axioms lookup_unknown_of_blocked
 
 -- …so finalization DISCHARGES the stump it finalizes: D-? with the lookup done by
 -- the algorithm. On the nose, not up to ≈ — the ?-arm is rigid.
 /--
-info: 'MinimalCalculus.Finalize.dischargeEquiv' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: 'MinimalCalculus.Finalize.dischargeEquiv' depends on axioms: [propext, Quot.sound]
 -/
 #guard_msgs in #print axioms Finalize.dischargeEquiv
 
 /--
-info: 'MinimalCalculus.Finalize.discharge_isUnk' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: 'MinimalCalculus.Finalize.discharge_isUnk' depends on axioms: [propext, Quot.sound]
 -/
 #guard_msgs in #print axioms Finalize.discharge_isUnk
 

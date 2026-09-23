@@ -52,18 +52,18 @@ x: σ ∈ Γ   σ ≥ τ
 Γ ⊢ e₁ ‖ e₂: { ρ₂ | ρ₁ }
 
 
-Γ ⊢ e: {ρ}   Γ ⊢ ρ.l ↓ τ
+Γ ⊢ e: {ρ}   ρ.l ↓ τ
 --------------------------- T-sel
 Γ ⊢ e.l: τ
 
 
-Γ ⊢ e: {ρ}   Γ ⊢ ρ.l ↓ ?
+Γ ⊢ e: {ρ}   ρ.l ↓ ?
 -------------------------- T-sel-★
 Γ ⊢ e.l: ★
 
 
 // Allows to not error on lazy errors
-Γ ⊢ e: {ρ}   Γ ⊢ ρ.l ↓ ⊥
+Γ ⊢ e: {ρ}   ρ.l ↓ ⊥
 -------------------------- T-sel-⊥
 Γ ⊢ e.l: ★
 
@@ -96,9 +96,9 @@ x: σ ∈ Γ   σ ≥ τ
 - (σ ≥ τ) instantiates all quantifiers at once via a substitution θ over ᾱ;
   each α ∈ ᾱ takes a type at type positions and a row at row positions (θ acts
   as identity outside ᾱ). I-refl is the ᾱ = ∅ case.
-- *No tail check needed* (unlike λ⟨⟩): By monotonicity of ↓, instantiating a
-  row-var can never invalidate a definite lookup result — every position it
-  could shadow was already ?-poisoned
+- *No tail check needed* (unlike λ⟨⟩): By substitution-stability of ↓,
+  instantiating a row-var can never invalidate a definite lookup result — every
+  position it could shadow was already ?-poisoned
 
 θ = [ᾱ ↦ τ̄ | ρ̄]
 ---------------- I-inst
@@ -106,56 +106,67 @@ x: σ ∈ Γ   σ ≥ τ
 
 
 == Row-Lookup
-- (Γ ⊢ ρ.l ↓ r) with (r := τ | ⊥ | ?)
+- (ρ.l ↓ r) with (r := τ | ⊥ | ?)
 - This statement recursively searches rows for a label l
-- Γ additionally carries *row-solutions* (α = ρ): a partial map from row-vars to
-  the rows they stand for (written α = ρ ∈ Γ). L-α consults it; L-α-free fires
-  when α is unsolved. (α = ρ is a row binding, NOT a record type — a row-var
-  ranges over rows ρ, not over record types {ρ}.)
+- *Context-free*: the judgement reads nothing but the row. There is no Γ, and in
+  particular no *row-solutions* (α = ρ) for a rule to consult — a row-var that
+  stands for a known row is *substituted away* before the lookup runs, which is
+  what substitution-stability below says. An earlier presentation carried row-solutions in Γ
+  and added a rule L-α to chase them; that rule was an implementation of
+  substitution, and it cost three things: ↓ was no longer total by structural
+  recursion (a solution chain can cycle, so totality needed a rank function on
+  row-vars), L-α-free's premise "α unsolved in Γ" was *negative* and therefore
+  not preserved by context extension, and instantiation had to become
+  Γ-relative. Dropping it costs nothing and removes all three.
 - Absent means the label provably does not exist in ρ; T-sel-⊥ still types the
   selection at ★ (soft typing: the checker flags it, the ↯-disjunct of progress
   catches it at runtime)
-- Unknown means an unconstrained row-var could contain l, so no definite type
-  can be derived
+- Unknown means a row-var could contain l, so no definite type can be derived.
+  A row-var is therefore *always* unknown — it is the only rule that mentions
+  one
 
 
 ------------ L-ε
-Γ ⊢ ε.l ↓ ⊥
+ε.l ↓ ⊥
 
 
 l₁ = l₂
 -------------------- L-hit
-Γ ⊢ (l₁: τ).l₂ ↓ τ
+(l₁: τ).l₂ ↓ τ
 
 
 l₁ ≠ l₂
 -------------------- L-miss
-Γ ⊢ (l₁: τ).l₂ ↓ ⊥
+(l₁: τ).l₂ ↓ ⊥
 
 
-α = ρ ∈ Γ   Γ ⊢ ρ.l ↓ r
------------------------- L-α
-Γ ⊢ α.l ↓ r
-
-
-α unsolved in Γ
 --------------- L-α-free
-Γ ⊢ α.l ↓ ?
+α.l ↓ ?
 
 
-Γ ⊢ ρ₁.l ↓ τ
+ρ₁.l ↓ τ
 -------------------- L-conc-hit
-Γ ⊢ (ρ₁ | ρ₂).l ↓ τ
+(ρ₁ | ρ₂).l ↓ τ
 
 
-Γ ⊢ ρ₁.l ↓ ⊥   Γ ⊢ ρ₂.l ↓ r
+ρ₁.l ↓ ⊥   ρ₂.l ↓ r
 ----------------------------- L-conc-skip
-Γ ⊢ (ρ₁ | ρ₂).l ↓ r
+(ρ₁ | ρ₂).l ↓ r
 
 
-Γ ⊢ ρ₁.l ↓ ?
+ρ₁.l ↓ ?
 -------------------- L-conc-★
-Γ ⊢ (ρ₁ | ρ₂).l ↓ ?
+(ρ₁ | ρ₂).l ↓ ?
+
+
+- *Determinism*: every row shape matches exactly one rule
+- *Totality*: by structural recursion on ρ — no side condition. ↓ is therefore
+  a total function of (ρ, l)
+- *Substitution-stability*: if (ρ.l ↓ r) with r definite, then
+  (θρ.l ↓ θr). Only ? can change category, and that demotion is exactly what
+  T-sel-⊥ / T-★-intro absorb. This is the rule L-α used to implement: "chase
+  the solution for α" and "substitute α away, then look up" agree wherever the
+  answer is definite
 
 
 == Row-Equivalence
@@ -241,9 +252,9 @@ l₁ ≠ l₂
 
 
 - Lookup-result precision r′ ⊑ᵣ r: only ? can be improved, definite results are
-  final — the relational form of lookup monotonicity. Found-results are
-  congruent in ⊑ (their types may sharpen once row precision is in play; on a
-  fixed row they stay on the nose), so ⊑-r-refl is derivable
+  final — the relational form of lookup substitution-stability. Found-results are congruent in
+  ⊑ (their types may sharpen once row precision is in play; on a fixed row they
+  stay on the nose), so ⊑-r-refl is derivable
 
 τ′ ⊑ τ
 --------- ⊑-r-found

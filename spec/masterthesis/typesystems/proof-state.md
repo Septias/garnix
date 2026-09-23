@@ -46,6 +46,76 @@ Principality forces qualified schemes that use parked stumps during unification 
 
 # Current Notes
 > Notes about the current state
+## L-α IS REMOVED (2026-09-23) — ↓ is context-free
+`Ctx`/`QCtx` no longer have a `rowEnv`, `Lookup` no longer takes a context, and
+`L-α` is gone. A row-variable is ALWAYS `?`; a variable standing for a known row
+is substituted away before the lookup runs. `lookup_applySubst` is the theorem
+L-α was an implementation of. Whole development builds, 0 new `sorry`s, net −268
+lines.
+
+*What the removal BOUGHT (all verified, not hoped for):*
+- `lookup_total` is bare structural recursion. `Row.rankUnder`, `Ctx.RowWF`, the
+  lexicographic (rank, size) measure and the acyclicity side condition on every
+  consumer are DELETED. A-sel's premise now has a derivation unconditionally.
+- The one non-monotone premise in the system is gone. `L-α-free` read
+  `lookupRow α = none`, which context extension cannot preserve, so `Ctx.Sub`
+  had to demand EXACT agreement on row-solutions. `Ctx.Sub`/`QCtx.Sub` are now
+  one clause.
+- `≥_Γ` is `≥` again. `QScheme.Inst` and `Stump.Discharge` read no context, so
+  the whole "price of cross-instantiation refinement" paragraph goes, and with
+  it `Stump.Discharge.congr_rowEnv`, `QScheme.Inst.congr_rowEnv` and ~33 call
+  sites. The covering order collapses from ⊴[Γ] + ⊴ to one ⊴.
+- The θ ↦ rowEnv bridge is deleted: `Sol.toCtx`, `Sol.rowWF_toCtx`,
+  `Sol.lookup_total_toCtx`, `Sol.lookup_toCtx`, `Sol.lookup_toCtx_iff`,
+  `SolverState.ctx`, `LookupBlocked.unsolved`,
+  `SolverState.Quiescent.blocker_unsolved`. `Sol.lookup_toCtx_sat` (a nine-case
+  induction, THE FIND of 26-09-16) becomes `Sol.lookup_sat`, two existing
+  lemmas composed in one line.
+- `qtyped_applySubst` (L2 type substitution) LOST its `Sol.Closes` hypothesis
+  and its `Classical.choice` dependency. Same for `qtyped_sel_star` (now
+  axiom-free) and `infer_sound_sel_step` / `selAbs_step` / `Wake.dischargeEquiv`
+  (choice dropped).
+- `LookupBlocked` loses its `var` chase and `varFree`'s premise.
+
+*What it COST — the one place, and it is real:*
+`QCovers.forward_of_avoiding` needs a NEW premise, `QScheme.ParkStable σ`:
+"σ resolves no stump the instantiation left parked". `s.Closes σ` was doing
+hidden work in the `unk` arm — a lookup that is `?` in ⟦s⟧-AS-A-CONTEXT is `?`
+after applying the closure, because the closure has nothing left to solve. Read
+the solution as a substitution and the source lookup does not know that: a
+parked `?` on a free row-var CAN become a definite hit under σ, and the arm is
+genuinely FALSE without the premise. Same mechanism as
+`covered_not_applySubst_stable`. `Closes` implies `ParkStable`, so nothing that
+was provable became unprovable — the implication just has to be written down
+now instead of being read off the context.
+
+*Two statements changed MEANING (not just shape), by design:*
+- A-sel / A-sel-⊥ read `Lookup ((Row.var r).applySubst S₂.subst) l r` where they
+  read the bare `.var r` through ⟦S₂⟧-as-a-context. A-sel-? already read the
+  substituted row, so all three arms now agree.
+  *This is VACUOUS on acyclic states, and does NOT inherit `UnifyWF`.* The two
+  readings could only differ if a BOUND row-variable survived one pass at a
+  SPINE position, and `Sol.Acyclic` forbids exactly that; `Row.applySubst` is
+  one simultaneous pass, so one pass clears the spine. And ↓ reads nothing but
+  spine positions — payloads are returned verbatim, never descended into, which
+  is why `Sol.Acyclic` is stated on `sVarSeq ∘ toSpine` and not on `ftv` in the
+  first place. Triangularity lives at PAYLOAD positions (`δ` in `(l: δ | β′)`
+  from U-expand), and no lookup ever looks there. So there is nothing here to
+  upgrade to `S.sol.closure S.sol.domS.length`, and `Sol.Acyclic` — the
+  fuzzer-clean half — is all the premises ever needed.
+  Where the closure DOES still bite: `SolverState.applyCtx` pushes `S.subst`
+  through the SCHEMES and the conclusion is `τ.applySubst S'.subst`. Those read
+  payloads, so `δ ↦ τ` needs the second pass, and that is where `Sol.Closes` /
+  `Sol.Ranked` / `UnifyWF` are owed — at `InferSound`'s last step, where
+  σ := S′.subst is taken and claimed to BE ⟦S′⟧.
+- `covered_not_rowExt_stable` → `covered_not_applySubst_stable`: "⊴ does not
+  survive Γ ⊑ Γ'" becomes "⊴ is not a congruence for `QScheme.applySubst`".
+  Sharper, since the two typings it compares now sit at the SAME row.
+- `refEx_refined` compares `{ε} → 𝓫` against the θ-image `{ε} → ★` instead of
+  two typings at `{β}` in different contexts — so ⊑ can actually see that β was
+  solved.
+
+
 
 
 ## Unification
@@ -876,7 +946,7 @@ through `unifyTyF`/`unifySpineMF` with `S.supply` threaded in and out.
 - ⊴⊑: covering up to precision — σ' answers each σ-instance with a ⊑ₜ-sharper one
 
 ## Properties
-- ↓: deterministic, monotone, total (under RowWF)
+- ↓: deterministic, total, CONTEXT-FREE (a function of (ρ, l); no well-formedness side condition). Monotonicity is now substitution-stability: definite results survive applying θ, only ? can change category
 - ⊑: reflexive, transitive (limmited)
 - ≈: refl, symm, trans, congruence under |; adjacent distinct labels commute, ε is a unit
 - ρ: rows mod ≈ form a trace monoid (partially-commutative, cancellative)
@@ -906,17 +976,16 @@ Proofs are for _closed_ programs (Γ = ∅). e ↯ marks _lookup-errors_: a sele
 - Preservation:
   - *polymorphic substitution*: if x: σ and v types at every instance of σ, then e[x:=v] keeps its type
     - *context conversion*: typing only sees the context through lookups, so contexts that agree on lookups type the same terms. Subsumes weakening, exchange and shadowing.
-    - *rowEnv congruence*: lookup only depends on row-solutions, so substitution leaves lookups untouched
+    - ~~*rowEnv congruence*~~: DELETED with L-α — lookup depends on the row alone, so nothing has to be transported
   - *spine-var-freeness*: literal rows carry no row-var in their spine, so no ★
-- Refinement:
-  - *lookup monotonicity in ⊑-vocabulary*: Γ ⊑ Γ' sharpens a lookup — definite results survive on the nose (monotonicity), ? re-resolves via totality (needs Γ'.RowWF).
+- Refinement (now SUBSTITUTION, not context extension):
+  - *lookup monotonicity in ⊑-vocabulary*: applying θ sharpens a lookup — definite results survive on the nose (lookup_applySubst), ? re-resolves via totality (lookup_applySubst_prec; no side condition).
   - *⊑-rigidity*: below anything but ★ sits only the same head constructor; ★ sits only below itself. 
   - *★-typeability of selections*: a selection on a record-typed term always types at ★
 - Standalone Metatheory:
   - *determinism*: lookup is deterministic.
-  - *monotonicity*: definite results (τ/⊥) survive extending the row-solutions, only ★ can improve
-  - *totality*: under acyclic row-solutions (RowWF) every lookup has a result
-  - *substitution stability*: definite lookups survive type substitution
+  - *totality*: every lookup has a result, by bare structural recursion on the row — UNCONDITIONAL since L-α went (the rank function / `Ctx.RowWF` / lexicographic measure are all gone)
+  - *substitution stability*: definite lookups survive type substitution (`lookup_applySubst`) — this IS the theorem L-α was an implementation of, and it absorbed the old *monotonicity*
 - Type substitution & generalization:
   - *type-substitution lemma*: typing transports along θ into a context whose schemes θ-cover the originals (typed_applySubst_aux); the ?-selection case re-derives through T-sel + T-★-intro / T-sel-⊥ / T-sel-★ per the substituted lookup
   - *scheme renaming*: capture-avoiding renaming of scheme binders against a finite avoid-set (renameScheme) — the only place fresh names are needed

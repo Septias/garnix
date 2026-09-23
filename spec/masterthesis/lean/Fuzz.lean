@@ -84,9 +84,12 @@ def rowEqB : Row Unit → Row Unit → Bool
 end
 
 /-- `Sol.WF` (RowUnify/State.lean) as a Bool — the well-formedness ⟦S⟧ needs to
-    be a context at all. `Sol.rowWF_toCtx` is conditioned on the acyclic half and
-    the θ ↦ rowEnv bridge on the applied half, and `UnifyWF` — the claim that the
-    driver RETURNS such a solution — is NOT proved. This is its tripwire.
+    be the CLOSURE of the state's solution. It used to be needed for two things:
+    that, and making ⟦S⟧ a well-formed CONTEXT so a lookup under it terminated.
+    The second is gone with `L-α` (`lookup_total` is unconditional now), so the
+    acyclic half no longer gates any lookup premise; what remains is the closure
+    claim, and `UnifyWF` — the claim that the driver RETURNS such a solution —
+    is still NOT proved. This is its tripwire.
 
     Note the applied half is the SEMANTIC one. The syntactic `Sol.NoCapture`
     ("no bound variable occurs in any binding") is refuted here in one move by

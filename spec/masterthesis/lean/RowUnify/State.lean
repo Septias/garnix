@@ -1,24 +1,39 @@
--- ⟦S⟧ — THE SOLVER STATE READ AS A CONTEXT.
+-- ⟦S⟧ — THE SOLVER STATE READ AS A SUBSTITUTION.
 --
 -- Part of RowUnify; see RowUnify.lean for the overview.
 --
--- ## The gap this closes
+-- ## The gap this module used to close, and why it is gone
 -- Every algorithmic rule that performs a field selection — A-sel, A-sel-⊥,
 -- A-sel-? — and every wake-up rule — K-hit, K-⊥, K-repark — has a premise of
 -- the shape
 --     ⟦S⟧ ⊢ ρ.l ↓ r
--- a lookup performed UNDER the current solution.  But the declarative lookup
--- relation reads row-solutions out of a CONTEXT (`L-α` consults `Γ.rowEnv`)
--- while the algorithm keeps them in a SUBSTITUTION (`Sol.row`).  The coercion
--- between the two is never defined in `algorithmic.typ`, and without it none of
--- those premises is a proposition.  This module defines it and proves the two
--- facts that make the premise meaningful:
+-- a lookup performed UNDER the current solution.  The declarative lookup
+-- relation used to read row-solutions out of a CONTEXT (`L-α` consulted
+-- `Γ.rowEnv`) while the algorithm keeps them in a SUBSTITUTION (`Sol.row`), so
+-- the premise was not even a proposition until the two were reconciled.  That
+-- was this module's job: `Sol.toCtx` (read the solution as a context),
+-- `Sol.rowWF_toCtx` (so `lookup_total` applies and the premise HAS a
+-- derivation), `Sol.lookup_toCtx` / `Sol.lookup_toCtx_iff` (the θ ↦ rowEnv
+-- bridge).
 --
---   * ⟦S⟧ is a WELL-FORMED context (`Sol.rowWF_toCtx`), so `lookup_total`
---     applies and the premise is guaranteed to HAVE a derivation.  Without
---     this, A-sel could simply fail to fire on a legal state.
---   * reading S as a context and applying it as a substitution AGREE
---     (`Sol.lookup_toCtx`, `Sol.lookup_toCtx_iff`) — the θ ↦ rowEnv bridge.
+-- With `L-α` removed there is one discipline instead of two.  The premise reads
+-- `ρ.applySubst ⟦S⟧` and the lookup is syntactic, so:
+--
+--   * the premise HAS a derivation unconditionally — `lookup_total` needs no
+--     `RowWF`, hence no `Sol.Acyclic`.  `Sol.rowWF_toCtx` and
+--     `Sol.lookup_total_toCtx` are deleted, and A-sel can no longer fail to
+--     fire on a legal state for want of well-formedness.
+--   * there is nothing to bridge.  `Sol.lookup_toCtx` said "reading S as a
+--     context and applying it as a substitution AGREE"; only the second
+--     reading survives, so the theorem has become the identity.  What it
+--     actually bought downstream is `lookup_applySubst` (minimal.lean) plus
+--     `Sol.lookup_sat` (InferSound.lean), both of which are about refining a
+--     substitution and neither of which mentions a context.
+--
+-- `Sol.Closes`, `Sol.Acyclic`, `Sol.Ranked` and `Sol.closure` all STAY: they
+-- are what makes ⟦S⟧-as-a-closure meaningful, which is what `algorithmic.typ`
+-- specifies the rules to read and what `InferSound` takes σ := S′.subst
+-- against at its last step.
 --
 -- ## The invariant both need
 -- `L-α` chases a solution chain RECURSIVELY; a substitution substitutes ONCE.
@@ -96,10 +111,6 @@ def Sol.NoCapture {B : Type} (s : Sol B) : Prop :=
   (∀ p ∈ s.ty,  ∀ β ∈ p.2.ftv, β ∉ s.dom) ∧
   (∀ p ∈ s.row, ∀ β ∈ p.2.ftv, β ∉ s.dom)
 
--- ⟦S⟧ as a context: a solution's row component IS a row environment.  No term
--- bindings — a solver state says nothing about λ- or let-bound variables.
-def Sol.toCtx {B : Type} (s : Sol B) : Ctx B := ⟨[], s.row⟩
-
 ------------------------- ASSOCIATION-LIST PLUMBING ----------------------------
 
 theorem tyLookup_not_mem {B : Type} {α : TyVar} :
@@ -123,69 +134,6 @@ theorem rowLookup_not_mem {B : Type} {α : TyVar} :
         intro hm; exact h (by simp [hm])
       simp only [rowLookup, if_neg hne]
       exact rowLookup_not_mem t ht
-
--- `Ctx.lookupRow` (find?-based) and `rowLookup` (if-based) agree, and a hit
--- exhibits the pair.
-theorem Sol.lookupRow_some {B : Type} {s : Sol B} {α : TyVar} {ρ : Row B}
-    (h : s.toCtx.lookupRow α = some ρ) : rowLookup α s.row = ρ ∧ (α, ρ) ∈ s.row := by
-  simp only [Sol.toCtx, Ctx.lookupRow] at h
-  revert h
-  induction s.row with
-  | nil => intro h; simp at h
-  | cons p t ih =>
-      obtain ⟨a, ρ'⟩ := p
-      intro h
-      by_cases hp : a = α
-      · subst hp
-        have hb : (a == a) = true := by simp
-        simp only [List.find?, hb, Option.map_some] at h
-        cases h
-        exact ⟨by simp [rowLookup], List.Mem.head _⟩
-      · have hb : (a == α) = false := by simp [hp]
-        simp only [List.find?, hb] at h
-        obtain ⟨h₁, h₂⟩ := ih h
-        exact ⟨by simp only [rowLookup, if_neg hp]; exact h₁, List.Mem.tail _ h₂⟩
-
-theorem Sol.lookupRow_none {B : Type} {s : Sol B} {α : TyVar}
-    (h : s.toCtx.lookupRow α = none) : α ∉ s.row.map Prod.fst := by
-  simp only [Sol.toCtx, Ctx.lookupRow] at h
-  revert h
-  induction s.row with
-  | nil => intro _; simp
-  | cons p t ih =>
-      intro h
-      by_cases hp : p.1 = α
-      · have hb : (p.1 == α) = true := by simp [hp]
-        simp only [List.find?, hb, Option.map_some] at h
-        simp at h
-      · have hb : (p.1 == α) = false := by simp [hp]
-        simp only [List.find?, hb] at h
-        intro hm
-        simp only [List.map_cons, List.mem_cons] at hm
-        cases hm with
-        | inl he => exact hp he.symm
-        | inr ht => exact ih h ht
-
----------------------------- ⟦S⟧ AS A CLOSURE ----------------------------------
-
--- ## Why `Sol.Applied` is the wrong demand, and what replaces it
--- The driver returns a TRIANGULAR solution — U-expand emits `δ ≔ τ` at the type
--- sort and `β ≔ (l:δ | β′)` at the row sort in the same solution, and `Sol.comp`
--- pushes the residual through a stage's bindings, not the stage's own — so
--- `Sol.toSubst` is a ONE-STEP substitution that does not reach a fixpoint.  The
--- fuzzer measures this: the tripwire's `Applied` half fails on hundreds of
--- successes while its `Acyclic` half fails on none.
---
--- `algorithmic.typ` never asked for a one-step substitution.  It specifies ⟦S⟧
--- as applying the solution AS A CLOSURE, and a closure is exactly a
--- substitution satisfying its own unfolding equation:
---
---     σ α  =  (S α) σ        at every variable, at either sort
---
--- That is `Sol.Closes` below.  On it the bridge theorems go through with no
--- idempotence hypothesis at all: what the `L-α` case of the induction needs is
--- precisely "σ at a bound variable = σ applied to its binding", which is the
--- unfolding equation read left to right.
 
 -- The association lists, as a DETERMINED case split: either the key is absent
 -- and the lookup is the variable itself, or it names a binding.
@@ -753,97 +701,37 @@ theorem Sol.wf_of_noCapture {B : Type} {s : Sol B} (h : s.NoCapture) : s.WF wher
       exact absurd (Sol.dom_of_mem_domS hxd)
         (h.2 p hp α (Row.mem_ftv_of_mem_sortedFtv p.2 hx))
 
-------------------------- ⟦S⟧ IS A WELL-FORMED CONTEXT -------------------------
-
--- If every SPINE variable of ρ has rank 0 then so does ρ.  `rankUnder` is the
--- max over spine positions only — lookup never descends into a payload — so
--- this is the exact hypothesis, not an approximation of one.
-theorem Row.rankUnder_eq_zero {B : Type} {rank : TyVar → Nat} :
-    (ρ : Row B) → (∀ β ∈ sVarSeq ρ.toSpine, rank β = 0) → ρ.rankUnder rank = 0
-  | .empty,    _ => rfl
-  | .var α,    h => h α (by simp [Row.toSpine, sVarSeq])
-  | .sing _ _, _ => rfl
-  | .cat ρ₁ ρ₂, h => by
-      have hsplit : ∀ (ρ' : Row B), (∀ β ∈ sVarSeq ρ'.toSpine, β ∈ sVarSeq (Row.cat ρ₁ ρ₂).toSpine) →
-          ∀ β ∈ sVarSeq ρ'.toSpine, rank β = 0 := fun _ hin β hβ => h β (hin β hβ)
-      have h1 := hsplit ρ₁ (fun β hβ => by
-        rw [Row.toSpine, sVarSeq_append]; exact List.mem_append_left _ hβ)
-      have h2 := hsplit ρ₂ (fun β hβ => by
-        rw [Row.toSpine, sVarSeq_append]; exact List.mem_append_right _ hβ)
-      simp only [Row.rankUnder, Row.rankUnder_eq_zero ρ₁ h1, Row.rankUnder_eq_zero ρ₂ h2]
-      omega
-
--- ⊢  S acyclic  ⟹  ⟦S⟧ is RowWF
--- The rank is the two-level one: a bound variable outranks everything, and an
--- acyclic solution's bindings reach no bound variable.  This is what
--- `lookup_total` consumes, so A-sel's premise always has a derivation.
-theorem Sol.rowWF_toCtx {B : Type} {s : Sol B} (hac : s.Acyclic) :
-    s.toCtx.RowWF := by
-  refine ⟨fun α => if α ∈ s.row.map Prod.fst then 1 else 0, ?_⟩
-  intro α ρ hα
-  obtain ⟨-, hmem⟩ := Sol.lookupRow_some hα
-  have hkey : α ∈ s.row.map Prod.fst := List.mem_map.2 ⟨(α, ρ), hmem, rfl⟩
-  have hzero : ρ.rankUnder (fun α => if α ∈ s.row.map Prod.fst then 1 else 0) = 0 := by
-    refine Row.rankUnder_eq_zero ρ (fun β hβ => ?_)
-    simp [hac (α, ρ) hmem β hβ]
-  simp [hzero, hkey]
-
--- ⟦S⟧ is total for lookup: the corollary A-sel actually uses.
-theorem Sol.lookup_total_toCtx {B : Type} {s : Sol B} (hac : s.Acyclic)
-    (ρ : Row B) (l : Label) : ∃ r, Lookup s.toCtx ρ l r :=
-  lookup_total (Sol.rowWF_toCtx hac) ρ l
-
---------------------------- THE θ ↦ rowEnv BRIDGE ------------------------------
-
--- ⊢  S idempotent,  Γ′ has no row-solutions  ⟹
---      ⟦S⟧ ⊢ ρ.l ↓ r   implies   Γ′ ⊢ (⟦S⟧ρ).l ↓ ⟦S⟧r
+--------------- ⟦S⟧-AS-A-SUBSTITUTION: WHAT USED TO NEED A BRIDGE --------------
 --
--- Reading a solution as a CONTEXT and applying it as a SUBSTITUTION give the
--- same lookup, the result transported by the same substitution.  The result
--- must move too: `L-hit` inside a binding returns the STORED payload, and the
--- substituted row returns the substituted one.
+-- This section held `Row.rankUnder_eq_zero`, `Sol.rowWF_toCtx`,
+-- `Sol.lookup_total_toCtx`, `Sol.lookup_toCtx` and `Sol.lookup_toCtx_iff`.
+-- All five are gone, and each for the same reason: they existed to reconcile a
+-- lookup that chased `Γ.rowEnv` with one that substituted.  Concretely —
 --
--- The idempotence hypothesis is exactly what reconciles the two disciplines:
--- L-α chases the chain, applySubst substitutes once, and on a fully applied
--- solution one step IS the chain.
-theorem Sol.lookup_toCtx {B : Type} {s : Sol B} {σ : TySubst B} (hcl : s.Closes σ)
-    {Γ' : Ctx B} (hrow : Γ'.rowEnv = []) {ρ : Row B} {l : Label} {r : LookupRes B}
-    (h : Lookup s.toCtx ρ l r) :
-    Lookup Γ' (ρ.applySubst σ) l (r.applySubst σ) := by
-  induction h with
-  | emp => exact .emp
-  | hit => exact .hit
-  | miss hne => exact .miss hne
-  | @var α ρ₀ _ _ hα _ ih =>
-      obtain ⟨hrl, -⟩ := Sol.lookupRow_some hα
-      have hstep : (Row.var α).applySubst σ = ρ₀.applySubst σ := by
-        show σ.row α = _
-        rw [hcl.2.1 α, show s.toSubst.row α = ρ₀ from hrl]
-      rw [hstep]
-      exact ih
-  | @varFree α _ hα =>
-      have hne : σ.row α = .var α := hcl.2.2.2 α (Sol.lookupRow_none hα)
-      simp only [Row.applySubst, LookupRes.applySubst]
-      rw [hne]
-      exact .varFree (by simp [Ctx.lookupRow, hrow])
-  | catHit _ ih => exact .catHit ih
-  | catSkip _ _ ih₁ ih₂ => exact .catSkip ih₁ ih₂
-  | catUnk _ ih => exact .catUnk ih
+--   * `Row.rankUnder_eq_zero` / `Sol.rowWF_toCtx` built the rank function that
+--     made ⟦S⟧-as-a-context well-formed, so that `lookup_total` (which needed
+--     `RowWF`) applied.  `lookup_total` is now unconditional.
+--   * `Sol.lookup_total_toCtx` was the corollary A-sel consumed; A-sel now
+--     consumes `lookup_total` itself, with no `Sol.Acyclic` hypothesis.
+--   * `Sol.lookup_toCtx` / `_iff` were the bridge.  With one discipline there
+--     is nothing to bridge; the statement it proved is below, as a corollary of
+--     `lookup_applySubst`, and says only that a definite lookup under a
+--     solution survives closing that solution.
+--
+-- NOTE the net movement of hypotheses. `Sol.Acyclic` was needed HERE (to make
+-- the chase terminate) and is no longer; `Sol.Closes`/`Sol.Ranked` are still
+-- needed, but only where they were always going to be needed — at the point
+-- `InferSound` takes σ := S′.subst and claims it IS ⟦S⟧. So the acyclicity
+-- obligation is not relocated, it is discharged.
 
--- The same fact as an equivalence: every lookup on the SUBSTITUTED row is the
--- image of one performed in ⟦S⟧.  Backward direction by totality of ⟦S⟧
--- (`Sol.rowWF_toCtx`) plus `lookup_det`.
-theorem Sol.lookup_toCtx_iff {B : Type} {s : Sol B} {σ : TySubst B}
-    (hac : s.Acyclic) (hcl : s.Closes σ) {Γ' : Ctx B}
-    (hrow : Γ'.rowEnv = []) (ρ : Row B) (l : Label) (r' : LookupRes B) :
-    (∃ r, Lookup s.toCtx ρ l r ∧ r.applySubst σ = r') ↔
-      Lookup Γ' (ρ.applySubst σ) l r' := by
-  constructor
-  · rintro ⟨r, hr, rfl⟩
-    exact Sol.lookup_toCtx hcl hrow hr
-  · intro h
-    obtain ⟨r, hr⟩ := Sol.lookup_total_toCtx hac ρ l
-    exact ⟨r, hr, lookup_det (Sol.lookup_toCtx hcl hrow hr) h⟩
+-- ⊢  a DEFINITE lookup under a solution survives closing it
+-- The residue of `Sol.lookup_toCtx`: no context, no `Closes`, no `Acyclic` —
+-- substitution is the only thing left in the statement.
+theorem Sol.lookup_applySubst_closure {B : Type} {s : Sol B} (n : Nat)
+    {ρ : Row B} {l : Label} {r : LookupRes B}
+    (h : Lookup ρ l r) (hr : r ≠ .unknown) :
+    Lookup (ρ.applySubst (s.closure n)) l (r.applySubst (s.closure n)) :=
+  lookup_applySubst _ h hr
 
 ------------------------------ WHAT REMAINS ------------------------------------
 

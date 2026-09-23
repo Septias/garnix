@@ -18,12 +18,13 @@
 -- at the very end, which is also where the `Closes` hypothesis will enter.
 --
 -- ## Where the row environment goes
--- Γ′ carries NO row solutions (`Γ′.rowEnv = []`). The solutions are discharged
--- into σ instead, exactly as `QSubst.lean` found they must be: after
--- substituting, `(Row.var α).applySubst σ` is `σ.row α` and there is no
--- variable left for `L-α` to chase, so carrying them alongside is not an
--- option. Every lookup obligation below is therefore discharged at the empty
--- row environment.
+-- Nowhere: there is no row environment. A context binds term variables only,
+-- and the solutions reach every lookup through σ. This used to be a side
+-- condition (`Γ′.rowEnv = []`) carried by most statements in this file,
+-- justified by what `QSubst.lean` found — after substituting,
+-- `(Row.var α).applySubst σ` is `σ.row α` and there is no variable left for
+-- `L-α` to chase, so carrying solutions alongside was never an option. With
+-- `L-α` removed it is not a side condition but the shape of the relation.
 
 import Infer
 
@@ -48,66 +49,59 @@ theorem SolveTy.unifies_sat {B : Type} [DecidableEq B] {S S' : SolverState B}
     ((unifyM_success_sound fuel).1 [] S.supply _ _ hu ht)
 
 --------------------- A DEFINITE LOOKUP SURVIVES A REFINEMENT -----------------
--- `Sol.lookup_toCtx` (RowUnify/State.lean) transports a lookup performed in
--- ⟦S⟧-as-a-context into one performed on the SUBSTITUTED row — but it asks for
--- `Sol.Closes`: "σ IS the closure of s". That is too strong for this induction,
--- which has only `Sol.Sat σ s`. At an INTERMEDIATE state σ is never the
--- closure: later stages bind variables this state left free, and `Closes`
--- explicitly demands that σ fix those.
+-- This was `Sol.lookup_toCtx_sat`, a nine-case induction. It transported a
+-- lookup performed in ⟦S⟧-AS-A-CONTEXT into one performed on the SUBSTITUTED
+-- row, under `Sol.Sat σ s` rather than the `Sol.Closes` that
+-- `Sol.lookup_toCtx` demanded — because at an INTERMEDIATE state σ is never the
+-- closure (later stages bind variables this state left free, and `Closes`
+-- explicitly demands σ fix those).
 --
--- `Sat` is enough, on DEFINITE results, and the two reasons are worth naming:
---   * `Sat` is only ≈, not equality, so the transported lookup lands on an
---     ≈-equivalent row and the result travels with it — hence `ResEquiv` in the
---     conclusion where `lookup_toCtx` has an equation. `lookup_equiv` is the
---     step, and this is the second place ≈ is CALIBRATED: any coarser and the
---     found types would not match up.
---   * a definite derivation never uses `L-α-free`, the one rule whose result
---     `Sat` cannot control — σ says nothing about variables outside s's domain.
---     Same observation `lookup_applySubst` rests on, and it is exactly why `?`
---     is excluded: under a refinement `?` genuinely CAN become `τ`, which is
---     the whole reason A-sel-? parks a stump instead of committing to ★.
-theorem Sol.lookup_toCtx_sat {B : Type} {s : Sol B} {σ : TySubst B}
-    (hsat : Sol.Sat σ s) {Γ' : Ctx B} (hrow : Γ'.rowEnv = []) :
-    {ρ : Row B} → {l : Label} → {r : LookupRes B} →
-    Lookup s.toCtx ρ l r → r ≠ .unknown →
-    ∃ r', Lookup Γ' (ρ.applySubst σ) l r' ∧ ResEquiv (r.applySubst σ) r'
-  | _, _, _, .emp,       _  => ⟨.absent, .emp, .absent⟩
-  | _, _, _, .hit,       _  => ⟨_, .hit, .refl _⟩
-  | _, _, _, .miss hne,  _  => ⟨.absent, .miss hne, .absent⟩
-  | _, _, _, .varFree _, hr => absurd rfl hr
-  | _, _, _, .catUnk _,  hr => absurd rfl hr
-  | _, _, _, .var hα h, hr => by
-      obtain ⟨-, hmem⟩ := Sol.lookupRow_some hα
-      obtain ⟨r', hl', he'⟩ := Sol.lookup_toCtx_sat hsat hrow h hr
-      obtain ⟨r'', hl'', he''⟩ := lookup_equiv (RowEquiv.symm (hsat.2 _ hmem)) hl'
-      exact ⟨r'', hl'', he'.trans he''⟩
-  | _, _, _, .catHit h, _ => by
-      obtain ⟨r', hl', he'⟩ := Sol.lookup_toCtx_sat hsat hrow h (by intro hh; cases hh)
-      cases he' with
-      | found hty => exact ⟨_, .catHit hl', .found hty⟩
-  | _, _, _, .catSkip h₁ h₂, hr => by
-      obtain ⟨r₁, hl₁, he₁⟩ :=
-        Sol.lookup_toCtx_sat hsat hrow h₁ (by intro hh; cases hh)
-      obtain ⟨r₂, hl₂, he₂⟩ := Sol.lookup_toCtx_sat hsat hrow h₂ hr
-      cases he₁ with
-      | absent => exact ⟨r₂, .catSkip hl₁ hl₂, he₂⟩
+-- With ↓ context-free the source lookup is already on a substituted row, and
+-- the whole statement factors into two lemmas that existed already:
+--   * `lookup_applySubst` — a definite lookup survives applying σ. The `?` case
+--     is still excluded, and for the same reason: under a refinement `?`
+--     genuinely CAN become `τ`, which is why A-sel-? parks a stump instead of
+--     committing to ★.
+--   * `Row.applySubst_sat_equiv` — a σ satisfying s changes a row only up to ≈
+--     when ⟦s⟧ is applied first. `Sat` is only ≈, not equality, so the result
+--     travels with it and the conclusion carries `ResEquiv` where
+--     `Sol.lookup_toCtx` had an equation. This is the second place ≈ is
+--     CALIBRATED: any coarser and the found types would not match up.
+--
+-- The `.var` case of the old induction — chase `s.row`, then re-align with
+-- `lookup_equiv` — is exactly what `Row.applySubst_sat_equiv` now does once,
+-- for the whole row, instead of once per variable.
+
+/-- ⊢  under a σ that satisfies S, substituting with ⟦S⟧ first changes a row
+only up to ≈. This is what lets wake-up's lookup — performed on the row the
+state had already substituted — be read as a lookup on the raw row. -/
+theorem Row.applySubst_sat_equiv {B : Type} {s : Sol B} {σ : TySubst B}
+    (hsat : Sol.Sat σ s) (ρ : Row B) :
+    RowEquiv ((ρ.applySubst s.toSubst).applySubst σ) (ρ.applySubst σ) := by
+  rw [Row.applySubst_applySubst]
+  exact (Row.applySubst_substEquiv hsat.substEquiv ρ).symm
+
+/-- ⊢  a DEFINITE lookup under ⟦s⟧ survives refining to any σ that satisfies s,
+its result transported by σ and matched up to ≈. -/
+theorem Sol.lookup_sat {B : Type} {s : Sol B} {σ : TySubst B}
+    (hsat : Sol.Sat σ s) {ρ : Row B} {l : Label} {r : LookupRes B}
+    (h : Lookup (ρ.applySubst s.toSubst) l r) (hr : r ≠ .unknown) :
+    ∃ r', Lookup (ρ.applySubst σ) l r' ∧ ResEquiv (r.applySubst σ) r' :=
+  lookup_equiv (Row.applySubst_sat_equiv hsat ρ) (lookup_applySubst σ h hr)
 
 --------------------- SELECTION FROM A RECORD ALWAYS TYPES AT ★ ---------------
 -- A record-typed subject can always have a field selected off it at ★, whatever
 -- the lookup says: the three T-sel rules between them cover `found`, `⊥` and
--- `?`, and `T-★-intro` blurs the first. At an EMPTY row environment lookup is
--- total for free (every rank works, since nothing is ever chased), so no
--- well-formedness side condition is needed. This is the declarative content of
--- "a selection never gets stuck", and both A-sel-? and the degradations lean on
--- it.
+-- `?`, and `T-★-intro` blurs the first. Lookup is now total unconditionally, so
+-- the `Γ'.rowEnv = []` hypothesis this used to carry — and the `RowWF` witness
+-- it built from it — are both gone. This is the declarative content of "a
+-- selection never gets stuck", and both A-sel-? and the degradations lean on it.
 
-/-- ⊢  `Γ′ ⊢ e : {ρ}` ⟹ `Γ′ ⊢ e.l : ★`, at a discharged row environment. -/
+/-- ⊢  `Γ′ ⊢ e : {ρ}` ⟹ `Γ′ ⊢ e.l : ★`. -/
 theorem qtyped_sel_star {B C : Type} {constTy : C → B} {Γ' : QCtx B}
-    {e : Expr C} {ρ : Row B} {l : Label} (hrow : Γ'.rowEnv = [])
+    {e : Expr C} {ρ : Row B} {l : Label}
     (h : QTyped constTy Γ' e (.rcd ρ)) : QTyped constTy Γ' (.sel e l) .unk := by
-  have hwf : Γ'.ctx.RowWF :=
-    ⟨fun _ => 0, fun α ρ' hα => by simp [QCtx.ctx, Ctx.lookupRow, hrow] at hα⟩
-  obtain ⟨r, hr⟩ := lookup_total hwf ρ l
+  obtain ⟨r, hr⟩ := lookup_total ρ l
   cases r with
   | found τ => exact .qUnk (.qSel h hr)
   | absent  => exact .qSelAbs h hr
@@ -189,25 +183,25 @@ theorem infer_sound_conc_step {B C : Type} [DecidableEq B] {constTy : C → B}
         (.qEq h₂ (hs₂.unifies_sat hsat))
 
 --------------------- THE RULES THAT CONSULT A LOOKUP -------------------------
--- A-sel and A-sel-⊥. Each solves `τ ≐ {r}` and then reads the field off `r` in
--- ⟦S₂⟧-as-a-context; the declarative side reads it off `σ.row r` at the empty
--- row environment. `Sol.lookup_toCtx_sat` is the bridge, and the ≈ it leaves
--- behind is absorbed by T-eq (A-sel) or is trivial (A-sel-⊥, where `⊥` is rigid).
+-- A-sel and A-sel-⊥. Each solves `τ ≐ {r}` and then reads the field off
+-- `r[⟦S₂⟧]`; the declarative side reads it off `σ.row r`. `Sol.lookup_sat` is
+-- what moves one to the other, and the ≈ it leaves behind is absorbed by T-eq
+-- (A-sel) or is trivial (A-sel-⊥, where `⊥` is rigid). Both premises read the
+-- SUBSTITUTED row now — they used to read the bare `.var r` through
+-- ⟦S₂⟧-as-a-context, which a context-free ↓ has no way to interpret.
 
 /-- A-sel. -/
 theorem infer_sound_sel_step {B C : Type} [DecidableEq B] {constTy : C → B}
     {Γ' : QCtx B} {σ : TySubst B} {S₁' S₂ : SolverState B}
     {e : Expr C} {τ τ' : Ty B} {l : Label} {r : TyVar}
-    (hrow : Γ'.rowEnv = [])
     (h : QTyped constTy Γ' e (τ.applySubst σ))
     (hs : SolveTy S₁' τ (.rcd (.var r)) S₂)
-    (hlk : Lookup S₂.ctx (.var r) l (.found τ'))
+    (hlk : Lookup ((Row.var r).applySubst S₂.subst) l (.found τ'))
     (hsat : Sol.Sat σ S₂.sol) :
     QTyped constTy Γ' (.sel e l) (τ'.applySubst σ) := by
   have hrcd : QTyped constTy Γ' e ((Ty.rcd (.var r)).applySubst σ) :=
     .qEq h (hs.unifies_sat hsat)
-  obtain ⟨r'', hl'', he''⟩ :=
-    Sol.lookup_toCtx_sat (Γ' := Γ'.ctx) hsat hrow hlk (by intro hh; cases hh)
+  obtain ⟨r'', hl'', he''⟩ := Sol.lookup_sat hsat hlk (by intro hh; cases hh)
   cases he'' with
   | found hty => exact .qEq (.qSel hrcd hl'') hty.symm
 
@@ -215,16 +209,14 @@ theorem infer_sound_sel_step {B C : Type} [DecidableEq B] {constTy : C → B}
 theorem infer_sound_selAbs_step {B C : Type} [DecidableEq B] {constTy : C → B}
     {Γ' : QCtx B} {σ : TySubst B} {S₁' S₂ : SolverState B}
     {e : Expr C} {τ : Ty B} {l : Label} {r : TyVar}
-    (hrow : Γ'.rowEnv = [])
     (h : QTyped constTy Γ' e (τ.applySubst σ))
     (hs : SolveTy S₁' τ (.rcd (.var r)) S₂)
-    (hlk : Lookup S₂.ctx (.var r) l .absent)
+    (hlk : Lookup ((Row.var r).applySubst S₂.subst) l .absent)
     (hsat : Sol.Sat σ S₂.sol) :
     QTyped constTy Γ' (.sel e l) ((Ty.unk : Ty B).applySubst σ) := by
   have hrcd : QTyped constTy Γ' e ((Ty.rcd (.var r)).applySubst σ) :=
     .qEq h (hs.unifies_sat hsat)
-  obtain ⟨r'', hl'', he''⟩ :=
-    Sol.lookup_toCtx_sat (Γ' := Γ'.ctx) hsat hrow hlk (by intro hh; cases hh)
+  obtain ⟨r'', hl'', he''⟩ := Sol.lookup_sat hsat hlk (by intro hh; cases hh)
   cases he'' with
   | absent => exact .qSelAbs hrcd hl''
 
@@ -249,21 +241,21 @@ theorem infer_sound_selAbs_step {B C : Type} [DecidableEq B] {constTy : C → B}
 /-- `Stump.Discharge` with the hit payload up to ≈, which is all a SOLVED
 equation can ever give. `⊥` and `?` stay rigid: ★ has no ≈-congruence rule, so
 `TyEquiv (θδ) ★` already forces `θδ = ★` (`TyEquiv.unk_inv_both`). -/
-inductive Stump.DischargeEquiv {B : Type} (Γ : Ctx B) (θ : TySubst B)
+inductive Stump.DischargeEquiv {B : Type} (θ : TySubst B)
     (s : Stump B) : Prop where
   | hit {τ : Ty B} :
-      Lookup Γ (s.row.applySubst θ) s.label (.found τ) →
-      TyEquiv (θ.ty s.res) τ → DischargeEquiv Γ θ s
+      Lookup (s.row.applySubst θ) s.label (.found τ) →
+      TyEquiv (θ.ty s.res) τ → DischargeEquiv θ s
   | abs :
-      Lookup Γ (s.row.applySubst θ) s.label .absent →
-      θ.ty s.res = .unk → DischargeEquiv Γ θ s
+      Lookup (s.row.applySubst θ) s.label .absent →
+      θ.ty s.res = .unk → DischargeEquiv θ s
   | unk :
-      Lookup Γ (s.row.applySubst θ) s.label .unknown →
-      θ.ty s.res = .unk → DischargeEquiv Γ θ s
+      Lookup (s.row.applySubst θ) s.label .unknown →
+      θ.ty s.res = .unk → DischargeEquiv θ s
 
 /-- ⊢  a discharge is one, up to ≈. -/
-theorem Stump.Discharge.toEquiv {B : Type} {Γ : Ctx B} {θ : TySubst B}
-    {s : Stump B} : s.Discharge Γ θ → s.DischargeEquiv Γ θ
+theorem Stump.Discharge.toEquiv {B : Type} {θ : TySubst B}
+    {s : Stump B} : s.Discharge θ → s.DischargeEquiv θ
   | .hit hl hδ => .hit hl (hδ ▸ .refl _)
   | .abs hl hδ => .abs hl hδ
   | .unk hl hδ => .unk hl hδ
@@ -276,7 +268,7 @@ theorem infer_sound_selUnk_step {B C : Type} [DecidableEq B] {constTy : C → B}
     (h : QTyped constTy Γ' e (τ.applySubst σ))
     (hs : SolveTy S₁' τ (.rcd (.var r)) S₂)
     (hsat : Sol.Sat σ S₂.sol)
-    (hst : Stump.DischargeEquiv Γ'.ctx σ ⟨.var r, l, δ⟩) :
+    (hst : Stump.DischargeEquiv σ ⟨.var r, l, δ⟩) :
     QTyped constTy Γ' (.sel e l) ((Ty.var δ).applySubst σ) := by
   have hrcd : QTyped constTy Γ' e ((Ty.rcd (.var r)).applySubst σ) :=
     .qEq h (hs.unifies_sat hsat)
@@ -303,47 +295,33 @@ theorem infer_sound_selUnk_step {B C : Type} [DecidableEq B] {constTy : C → B}
 --     leaves it parked WITH ITS STUMP INTACT, for a later step or for
 --     finalization to settle.
 
-/-- ⊢  under a σ that satisfies S, substituting with ⟦S⟧ first changes a row
-only up to ≈. This is what lets wake-up's lookup — performed on the row the
-state had already substituted — be read as a lookup on the raw row. -/
-theorem Row.applySubst_sat_equiv {B : Type} {s : Sol B} {σ : TySubst B}
-    (hsat : Sol.Sat σ s) (ρ : Row B) :
-    RowEquiv ((ρ.applySubst s.toSubst).applySubst σ) (ρ.applySubst σ) := by
-  rw [Row.applySubst_applySubst]
-  exact (Row.applySubst_substEquiv hsat.substEquiv ρ).symm
-
 /-- ⊢  **K is D**, one step: a wake-up step either DISCHARGES its constraint
 (up to ≈ on the hit payload) or re-parks it with the same stump. -/
 theorem Wake.dischargeEquiv {B : Type} [DecidableEq B] {S S₁ : SolverState B}
-    {p : Parked B} {σ : TySubst B} {Γ' : QCtx B} (hrow : Γ'.rowEnv = []) :
+    {p : Parked B} {σ : TySubst B} :
     Wake S p S₁ → Sol.Sat σ S₁.sol →
-    p.stump.DischargeEquiv Γ'.ctx σ ∨ ∃ q ∈ S₁.parked, q.stump = p.stump
+    p.stump.DischargeEquiv σ ∨ ∃ q ∈ S₁.parked, q.stump = p.stump
   -- K-hit is D-hit: the lookup landed, and the emitted equation `δ ≐ τ` pins δ
   -- to what it found — up to ≈, which is all an equation can pin.
   | .hit hlk hs, hsat => by
       have hS : Sol.Sat σ _ := SolveTy.satMono hs σ hsat
       have hδ := SolveTy.unifies_sat hs hsat
+      -- ONE step, where this used to be two: `Sol.lookup_sat` already lands on
+      -- `ρ[σ]`, because the ⟦S⟧-then-σ ≈ σ realignment that used to follow the
+      -- ctx→subst transport is now the whole of its proof.
       obtain ⟨r₁, hl₁, he₁⟩ :=
-        Sol.lookup_toCtx_sat (Γ' := Γ'.ctx) hS hrow hlk (by intro hh; cases hh)
+        Sol.lookup_sat hS hlk (by intro hh; cases hh)
       cases he₁ with
-      | found ht₁ =>
-          obtain ⟨_, hl₂, he₂⟩ :=
-            lookup_equiv (Row.applySubst_sat_equiv hS p.stump.row) hl₁
-          cases he₂ with
-          | found ht₂ => exact .inl (.hit hl₂ ((hδ.trans ht₁).trans ht₂))
+      | found ht₁ => exact .inl (.hit hl₁ (hδ.trans ht₁))
   -- K-⊥ is D-⊥: definite absence, and `δ ≐ ★` forces δ = ★ on the nose, since
   -- ★ has no ≈-congruence rule.
   | .abs hlk hs, hsat => by
       have hS : Sol.Sat σ _ := SolveTy.satMono hs σ hsat
       have hδ := SolveTy.unifies_sat hs hsat
       obtain ⟨r₁, hl₁, he₁⟩ :=
-        Sol.lookup_toCtx_sat (Γ' := Γ'.ctx) hS hrow hlk (by intro hh; cases hh)
+        Sol.lookup_sat hS hlk (by intro hh; cases hh)
       cases he₁ with
-      | absent =>
-          obtain ⟨_, hl₂, he₂⟩ :=
-            lookup_equiv (Row.applySubst_sat_equiv hS p.stump.row) hl₁
-          cases he₂ with
-          | absent => exact .inl (.abs hl₂ ((TyEquiv.unk_inv_both hδ).2 rfl))
+      | absent => exact .inl (.abs hl₁ ((TyEquiv.unk_inv_both hδ).2 rfl))
   -- K-repark is NOTHING: the blocker moved, the stump did not.
   | .repark _, _ =>
       .inr ⟨{ blocker := _, stump := p.stump }, List.mem_cons_self, rfl⟩
@@ -394,23 +372,23 @@ DISCHARGED (up to ≈) or still parked when the run ends. The hypothesis is that
 the submitted constraints have pairwise distinct result variables, which is what
 `FreshRenaming` gives A-var. -/
 theorem Wakes.dischargeEquiv {B : Type} [DecidableEq B] {S S' : SolverState B}
-    {ps : List (Parked B)} {σ : TySubst B} {Γ' : QCtx B} (hrow : Γ'.rowEnv = []) :
+    {ps : List (Parked B)} {σ : TySubst B} :
     Wakes S ps S' → Sol.Sat σ S'.sol →
     ps.Pairwise (fun a b => a.stump.res ≠ b.stump.res) →
-    ∀ p ∈ ps, p.stump.DischargeEquiv Γ'.ctx σ ∨ ∃ q ∈ S'.parked, q.stump = p.stump
+    ∀ p ∈ ps, p.stump.DischargeEquiv σ ∨ ∃ q ∈ S'.parked, q.stump = p.stump
   | .nil, _, _, _, hp => absurd hp List.not_mem_nil
   | .cons (p := p) hw hws, hsat, hpw, p', hp' => by
       rcases List.mem_cons.mp hp' with rfl | hp'
-      · rcases Wake.dischargeEquiv hrow hw (hws.satMono σ hsat) with hd | ⟨q, hq, hqs⟩
+      · rcases Wake.dischargeEquiv hw (hws.satMono σ hsat) with hd | ⟨q, hq, hqs⟩
         · exact .inl hd
         · exact .inr ⟨q, Wakes.parked_preserved hws hq
             (fun r hr => hqs ▸ (List.pairwise_cons.mp hpw).1 r hr), hqs⟩
-      · exact Wakes.dischargeEquiv hrow hws hsat (List.pairwise_cons.mp hpw).2 p' hp'
+      · exact Wakes.dischargeEquiv hws hsat (List.pairwise_cons.mp hpw).2 p' hp'
   | .park (p := p) _ hws, hsat, hpw, p', hp' => by
       rcases List.mem_cons.mp hp' with rfl | hp'
       · exact .inr ⟨p', Wakes.parked_preserved hws List.mem_cons_self
           (fun r hr => (List.pairwise_cons.mp hpw).1 r hr), rfl⟩
-      · exact Wakes.dischargeEquiv hrow hws hsat (List.pairwise_cons.mp hpw).2 p' hp'
+      · exact Wakes.dischargeEquiv hws hsat (List.pairwise_cons.mp hpw).2 p' hp'
 
 --------------------- WHERE THE DISTINCTNESS COMES FROM -----------------------
 -- `Wakes.dischargeEquiv` asks the submitted constraints to have pairwise
@@ -473,7 +451,7 @@ theorem infer_sound_var_step {B C : Type} {constTy : C → B} {Γ' : QCtx B}
     {x : Var} {sc' : QScheme B} {χ : TySubst B} {τ : Ty B}
     (hl : Γ'.lookup x = some sc')
     (hfix : χ.FixedOutside sc'.vars)
-    (hdis : ∀ st ∈ sc'.constraints, st.Discharge Γ'.ctx χ)
+    (hdis : ∀ st ∈ sc'.constraints, st.Discharge χ)
     (hbody : TyEquiv (sc'.body.applySubst χ) τ) :
     QTyped constTy Γ' (.var x) τ :=
   .qEq (.qVar hl ⟨χ, hfix, hdis, rfl⟩) hbody
@@ -546,7 +524,7 @@ theorem finalize_star_no_discharge :
     ∃ (S S'' : SolverState Unit) (p : Parked Unit),
       FinalizeUnguarded S p S'' ∧
       ∀ (Γ' : Ctx Unit) (σ : TySubst Unit), Sol.Sat σ S''.sol →
-        ¬ p.stump.DischargeEquiv Γ' σ := by
+        ¬ p.stump.DischargeEquiv σ := by
   have hfin : FinalizeUnguarded fStar_S fStar_p _ :=
     FinalizeUnguarded.star (S' := fStar_S.extend ⟨[("d", .unk)], []⟩ ⟨0⟩)
       ⟨0, ⟨[("d", .unk)], []⟩, ⟨0⟩, rfl, rfl⟩
@@ -557,7 +535,7 @@ theorem finalize_star_no_discharge :
   have hd : σ.ty "d" = (.unk : Ty Unit) :=
     (TyEquiv.unk_inv_both (hsat.1 ("d", .unk) List.mem_cons_self)).2 rfl
   -- …while the lookup on a literal row lands, at every context and every σ
-  have hlit : Lookup Γ' ((.sing "l" (.base ())) : Row Unit) "l"
+  have hlit : Lookup ((.sing "l" (.base ())) : Row Unit) "l"
       (.found (.base ())) := .hit
   cases hdis with
   | hit hlk hty =>
@@ -578,7 +556,7 @@ theorem finalize_star_guarded_cannot_fire :
   rintro ⟨S', h⟩
   cases h with
   | star _ hb _ =>
-      have hb' : LookupBlocked fStar_S.ctx ((.sing "l" (.base ())) : Row Unit) "l"
+      have hb' : LookupBlocked ((.sing "l" (.base ())) : Row Unit) "l"
           "a" := hb
       cases hb'
 
@@ -663,21 +641,19 @@ is what made the F-★ defect reachable. It is still a legal state, so it is sti
 where the rules below disagree. -/
 private def fsS : SolverState Unit := fsSb.extend fsApp ⟨5⟩
 
-/-- ⊢  the lookup lands, in ⟦S⟧ read as a context… -/
-theorem fStarEx_lands : Lookup fsS.ctx (.var fsR) "l" (.found (.base ())) :=
-  .var rfl (.catHit .hit)
-
-/-- …and on the substituted row, which is the form `Wake`, `Finalize` and
-`Quiescent` all read it in. -/
+/-- ⊢  the lookup lands, on the substituted row — which is now the ONLY form
+there is, and the form `Wake`, `Finalize` and `Quiescent` all read it in. The
+companion `fStarEx_lands`, which stated the same landing "in ⟦S⟧ read as a
+context" via `Lookup.var`, has no counterpart: `.var fsR` on its own is `?`. -/
 theorem fStarEx_lands' :
-    Lookup fsS.ctx ((Row.var fsR).applySubst fsS.subst) "l" (.found (.base ())) :=
+    Lookup ((Row.var fsR).applySubst fsS.subst) "l" (.found (.base ())) :=
   .catHit .hit
 
 /-- ⊢  **the state is not quiescent** — the stump's recorded blocker does not
 block its lookup any more. This is the staleness `Saturate` steps on, and the
 invariant `plans/inference-gap-analysis.md` §B says nothing enforced. -/
 theorem fStarEx_not_blocked :
-    ¬ LookupBlocked fsS.ctx (fsP.stump.row.applySubst fsS.subst) fsP.stump.label
+    ¬ LookupBlocked (fsP.stump.row.applySubst fsS.subst) fsP.stump.label
         fsP.blocker := by
   intro hb
   exact absurd (lookup_det hb.toLookup fStarEx_lands') (by simp)
@@ -698,7 +674,7 @@ through `Infer`, and A-app's equation no longer leaves a stale stump behind: the
 `Saturate` step the rule now carries wakes it with K-hit, on the strength of
 `fStarEx_not_blocked`. -/
 theorem fStarEx_infers :
-    Infer (B := Unit) (C := Unit) (fun _ => ()) ⟨[], []⟩ fsS0 fStarEx (.var fsB)
+    Infer (B := Unit) (C := Unit) (fun _ => ()) QCtx.empty fsS0 fStarEx (.var fsB)
       fsSfix := by
   refine Infer.app (S₁ := fsSp) (S₂ := fsSp) (S₂' := fsSb)
     (τ₁ := .fn (.var fsA) (.rcd (.sing "a" (.var fsD))))
@@ -710,7 +686,7 @@ theorem fStarEx_infers :
         ⟨⟨fun _ _ => rfl, fun _ _ => rfl⟩, by simp⟩ (by simp [FreshRenaming]) rfl
         ⟨_, .nil, .done (SolverState.Quiescent.nil rfl)⟩
     · exact ⟨_, ⟨5, fsSol1, ⟨3⟩, rfl, rfl⟩, .done (SolverState.Quiescent.nil rfl)⟩
-    · exact .varFree rfl
+    · exact .varFree
   · exact Infer.rcd (InferRec.field Infer.con)
   · exact ⟨fsS, ⟨20, fsApp, ⟨5⟩, rfl, rfl⟩,
       .step (p := fsP) (by simp [fsS, fsSb, SolverState.extend]) fStarEx_not_blocked
@@ -773,9 +749,9 @@ again, at a state with a VARIABLE row rather than a literal one, so the lookup h
 to be transported along σ: every σ satisfying the finalized state sends `r` to a
 row ≈-equal to `(l: 𝓫)`, and ≈ moves neither the label nor the payload, so the
 lookup lands on 𝓫 under every such σ while F-★ has pinned δ to ★. -/
-theorem fStar_reachable_no_discharge (Γ' : Ctx Unit) (hrow : Γ'.rowEnv = [])
+theorem fStar_reachable_no_discharge (Γ' : Ctx Unit)
     (σ : TySubst Unit) (hsat : Sol.Sat σ fsS'.sol) :
-    ¬ fsP.stump.DischargeEquiv Γ' σ := by
+    ¬ fsP.stump.DischargeEquiv σ := by
   have hsat' : Sol.Sat σ (fsStar.comp fsS.sol) := hsat
   obtain ⟨hS, hst⟩ := Sol.Sat.comp_inv hsat'
   -- finalization wrote δ ≔ ★, so every σ satisfying it sends δ to ★
@@ -783,7 +759,7 @@ theorem fStar_reachable_no_discharge (Γ' : Ctx Unit) (hrow : Γ'.rowEnv = [])
     (TyEquiv.unk_inv_both (hst.1 (fsD, .unk) List.mem_cons_self)).2 rfl
   -- …while the lookup lands on 𝓫, under every σ satisfying the state
   obtain ⟨r', hl', he'⟩ :=
-    Sol.lookup_toCtx_sat hS hrow fStarEx_lands (by intro h; cases h)
+    Sol.lookup_sat hS fStarEx_lands' (by intro h; cases h)
   intro hdis
   have hres : fsP.stump.res = fsD := rfl
   cases hdis with
@@ -814,7 +790,7 @@ and by `finalized_no_blur` (minimal.lean) such a ★ is never sharpened back, so
 is the answer and not a recoverable imprecision. `fStarEx_recovers` is the same
 program under the saturating rules, landing on the first of these. -/
 theorem fStarEx_refinement_lost :
-    QTyped (B := Unit) (C := Unit) (fun _ => ()) ⟨[], []⟩ fStarEx
+    QTyped (B := Unit) (C := Unit) (fun _ => ()) QCtx.empty fStarEx
         (.rcd (.sing "a" (.base ()))) ∧
       (Ty.var fsB).applySubst fsS'.subst = .rcd (.sing "a" .unk) ∧
       TyPrec (.rcd (.sing "a" (.base ()))) (.rcd (.sing "a" (.unk : Ty Unit))) ∧
@@ -896,7 +872,7 @@ variable, so nothing about it is stale. The run did nothing wrong. -/
 theorem spentEx_quiescent : spS.Quiescent := by
   intro p hp
   cases hp with
-  | head      => exact .varFree rfl
+  | head      => exact .varFree
   | tail _ h  => exact absurd h List.not_mem_nil
 
 /-- ⊢  …and so is the state A-sel-? parks it in, which is where A-var for `y`
@@ -904,12 +880,12 @@ submits its (empty) constraint list. -/
 theorem spentEx_quiescent_parked : spSp.Quiescent := by
   intro p hp
   cases hp with
-  | head      => exact .varFree rfl
+  | head      => exact .varFree
   | tail _ h  => exact absurd h List.not_mem_nil
 
 /-- ⊢  `λx. λy. (x.l) y` infers, with the stump still parked. -/
 theorem spentEx_infers :
-    Infer (B := Unit) (C := Unit) (fun _ => ()) ⟨[], []⟩ spS0 spentEx
+    Infer (B := Unit) (C := Unit) (fun _ => ()) QCtx.empty spS0 spentEx
       (.fn (.var spX) (.fn (.var spY) (.var spB))) spS := by
   refine Infer.lam (S₀ := spLx) rfl (Infer.lam (S₀ := spLy) rfl ?_)
   refine Infer.app (S₁ := spSp) (S₂ := spSp) (S₂' := spSb)
@@ -920,7 +896,7 @@ theorem spentEx_infers :
         ⟨⟨fun _ _ => rfl, fun _ _ => rfl⟩, by simp⟩ (by simp [FreshRenaming]) rfl
         ⟨_, .nil, .done (SolverState.Quiescent.nil rfl)⟩
     · exact ⟨_, ⟨5, spSol1, ⟨4⟩, rfl, rfl⟩, .done (SolverState.Quiescent.nil rfl)⟩
-    · exact .varFree rfl
+    · exact .varFree
   · exact Infer.var (σ := ⟨[], [], .var spY⟩) (θ := fsId) (f := id) (ps := []) rfl
       ⟨⟨fun _ _ => rfl, fun _ _ => rfl⟩, by simp⟩ (by simp [FreshRenaming]) rfl
       ⟨_, .nil, .done spentEx_quiescent_parked⟩
@@ -941,7 +917,7 @@ So the hard error above is the algorithm's incompleteness, not the declarative
 system's rejection — the gap is that a stump's result position holds a VARIABLE,
 so the constraint the answer would need (`⟨r.l ↓ (α → β)⟩`) cannot be written. -/
 theorem spentEx_declarative :
-    QTyped (B := Unit) (C := Unit) (fun _ => ()) ⟨[], []⟩ spentEx
+    QTyped (B := Unit) (C := Unit) (fun _ => ()) QCtx.empty spentEx
       (.fn (.rcd (.sing "l" (.fn (.base ()) (.base ()))))
         (.fn (.base ()) (.base ()))) := by
   refine QTyped.qLam (QTyped.qLam (QTyped.qApp (τ₁ := .base ()) ?_ ?_))
@@ -982,24 +958,24 @@ mutual
   inductive QTypedC {B C : Type} (constTy : C → B) (Δ : List (Stump B)) :
       QCtx B → Expr C → Ty B → Prop where
     | qCon : QTypedC constTy Δ Γ (.con c) (.base (constTy c))
-    | qVar : Γ.lookup x = some σ → QScheme.Inst Γ.ctx σ τ →
+    | qVar : Γ.lookup x = some σ → QScheme.Inst σ τ →
              QTypedC constTy Δ Γ (.var x) τ
     | qEq  : QTypedC constTy Δ Γ e τ₁ → TyEquiv τ₁ τ₂ → QTypedC constTy Δ Γ e τ₂
     | qLam : QTypedC constTy Δ (Γ.bindTy x τ₁) e τ₂ →
              QTypedC constTy Δ Γ (.lam x e) (.fn τ₁ τ₂)
     | qApp : QTypedC constTy Δ Γ e₁ (.fn τ₁ τ₂) → QTypedC constTy Δ Γ e₂ τ₁ →
              QTypedC constTy Δ Γ (.app e₁ e₂) τ₂
-    | qLet : (∀ τ₁, QScheme.Inst Γ.ctx σ τ₁ → QTypedC constTy Δ Γ e₁ τ₁) →
-             (∃ τ₁, QScheme.Inst Γ.ctx σ τ₁) →
+    | qLet : (∀ τ₁, QScheme.Inst σ τ₁ → QTypedC constTy Δ Γ e₁ τ₁) →
+             (∃ τ₁, QScheme.Inst σ τ₁) →
              QTypedC constTy Δ (Γ.bindScheme x σ) e₂ τ₂ →
              QTypedC constTy Δ Γ (.letE x e₁ e₂) τ₂
     | qCat : QTypedC constTy Δ Γ e₁ (.rcd ρ₁) → QTypedC constTy Δ Γ e₂ (.rcd ρ₂) →
              QTypedC constTy Δ Γ (.cat e₁ e₂) (.rcd (.cat ρ₂ ρ₁))
-    | qSel : QTypedC constTy Δ Γ e (.rcd ρ) → Lookup Γ.ctx ρ l (.found τ) →
+    | qSel : QTypedC constTy Δ Γ e (.rcd ρ) → Lookup ρ l (.found τ) →
              QTypedC constTy Δ Γ (.sel e l) τ
-    | qSelUnk : QTypedC constTy Δ Γ e (.rcd ρ) → Lookup Γ.ctx ρ l .unknown →
+    | qSelUnk : QTypedC constTy Δ Γ e (.rcd ρ) → Lookup ρ l .unknown →
                 QTypedC constTy Δ Γ (.sel e l) .unk
-    | qSelAbs : QTypedC constTy Δ Γ e (.rcd ρ) → Lookup Γ.ctx ρ l .absent →
+    | qSelAbs : QTypedC constTy Δ Γ e (.rcd ρ) → Lookup ρ l .absent →
                 QTypedC constTy Δ Γ (.sel e l) .unk
     | qUnk : QTypedC constTy Δ Γ e τ → QTypedC constTy Δ Γ e .unk
     | qRcd : QTypedCBody constTy Δ Γ b ρ → QTypedC constTy Δ Γ (.rcd b) (.rcd ρ)
@@ -1102,29 +1078,18 @@ theorem inferC_sound_selUnk_step {B C : Type} [DecidableEq B] {constTy : C → B
 -- is what `Stump.Discharge.unk` asks for. This is that fact cashed in.
 --
 -- The first step is general and worth having on its own: BLOCKEDNESS anywhere
--- gives an unknown lookup at a DISCHARGED row environment. The reason is
--- monotonicity read backwards — a definite answer survives extending the row
--- solutions (`lookup_mono`), so if the lookup at the empty environment were
--- definite it would still be definite in ⟦S⟧, contradicting blockedness. The
--- empty environment also makes lookup total for free, so there IS an answer to
--- case on.
+-- gives an unknown lookup. That used to be an argument: monotonicity read
+-- backwards — a definite answer survives extending the row solutions
+-- (the old `lookup_mono`), so if the lookup at the EMPTY row environment were definite
+-- it would still be definite in ⟦S⟧, contradicting blockedness — plus totality
+-- at the empty environment to have an answer to case on. With ↓ context-free
+-- there is one lookup rather than two to compare, and `LookupBlocked.toLookup`
+-- IS the statement.
 
-/-- ⊢  a blocked lookup is `?` at any discharged row environment. -/
-theorem lookup_unknown_of_blocked {B : Type} {Γ' Γ : Ctx B} (hrow : Γ'.rowEnv = [])
-    {ρ : Row B} {l : Label} {α : TyVar} (hb : LookupBlocked Γ ρ l α) :
-    Lookup Γ' ρ l .unknown := by
-  have hwf : Γ'.RowWF :=
-    ⟨fun _ => 0, fun a r ha => by simp [Ctx.lookupRow, hrow] at ha⟩
-  have hext : Ctx.RowExt Γ' Γ := fun a r ha => by simp [Ctx.lookupRow, hrow] at ha
-  obtain ⟨r, hr⟩ := lookup_total hwf ρ l
-  cases r with
-  | unknown => exact hr
-  | found τ =>
-      exact absurd (lookup_det (lookup_mono hext hr (by intro h; cases h)) hb.toLookup)
-        (by simp)
-  | absent =>
-      exact absurd (lookup_det (lookup_mono hext hr (by intro h; cases h)) hb.toLookup)
-        (by simp)
+/-- ⊢  a blocked lookup is `?`. -/
+theorem lookup_unknown_of_blocked {B : Type}
+    {ρ : Row B} {l : Label} {α : TyVar} (hb : LookupBlocked ρ l α) :
+    Lookup ρ l .unknown := hb.toLookup
 
 -- The second step is the ★ itself, and it comes from the equation rather than from
 -- the rule: `δ ≐ ★` was SOLVED, so every σ satisfying the state it produced sends
@@ -1137,36 +1102,36 @@ its equation.
 
 `hfix` is the one side condition, and it is the ONE place the ?-arm differs from
 the definite arms: a definite lookup transports along any refinement
-(`Sol.lookup_toCtx_sat`), a `?` does not — a later σ can solve the blocker and
+(`Sol.lookup_sat`), a `?` does not — a later σ can solve the blocker and
 make the lookup land, which is exactly why A-sel-? parks a stump instead of
 committing to ★ and why finalization runs LAST. So σ may not refine the row this
 stump is blocked on; `hfix` says it does not. It is discharged by an idempotent
 solution (`Sol.Applied`, i.e. what `UnifyWF` is for) at σ := ⟦S⟧, and by
 `FixedOutside` at any χ that moves only the δ's. -/
 theorem Finalize.dischargeEquiv {B : Type} [DecidableEq B] {S S' : SolverState B}
-    {p : Parked B} (hf : Finalize S p S') {Γ' : Ctx B} (hrow : Γ'.rowEnv = [])
+    {p : Parked B} (hf : Finalize S p S') {Γ' : Ctx B}
     {σ : TySubst B} (hsat : Sol.Sat σ S'.sol)
     (hfix : (Parked.toStumpC S.subst p).row.applySubst σ
               = (Parked.toStumpC S.subst p).row) :
-    (Parked.toStumpC S.subst p).DischargeEquiv Γ' σ := by
+    (Parked.toStumpC S.subst p).DischargeEquiv σ := by
   cases hf with
   | star _ hb hs =>
       refine .unk ?_ ?_
-      · rw [hfix]; exact lookup_unknown_of_blocked hrow hb
+      · rw [hfix]; exact lookup_unknown_of_blocked hb
       · exact (TyEquiv.unk_inv_both (hs.unifies_sat hsat)).2 rfl
 
 /-- ⊢  …and that is precisely the arm the DECLARATIVE side calls `D-?`: F-★ is
 `Stump.Discharge.unk` with the lookup performed by the algorithm. -/
 theorem Finalize.discharge_isUnk {B : Type} [DecidableEq B] {S S' : SolverState B}
-    {p : Parked B} (hf : Finalize S p S') {Γ' : Ctx B} (hrow : Γ'.rowEnv = [])
+    {p : Parked B} (hf : Finalize S p S') {Γ' : Ctx B}
     {σ : TySubst B} (hsat : Sol.Sat σ S'.sol)
     (hfix : (Parked.toStumpC S.subst p).row.applySubst σ
               = (Parked.toStumpC S.subst p).row) :
-    (Parked.toStumpC S.subst p).Discharge Γ' σ := by
+    (Parked.toStumpC S.subst p).Discharge σ := by
   cases hf with
   | star _ hb hs =>
       refine .unk ?_ ?_
-      · rw [hfix]; exact lookup_unknown_of_blocked hrow hb
+      · rw [hfix]; exact lookup_unknown_of_blocked hb
       · exact (TyEquiv.unk_inv_both (hs.unifies_sat hsat)).2 rfl
 
 
@@ -1215,7 +1180,7 @@ def QTypedCDischarge (B C : Type) [DecidableEq B] (constTy : C → B) : Prop :=
     QTypedC constTy Δ Γ e τ →
     χ.FixedOutside (Δ.map Stump.res) →
     (∀ α ∈ Δ.map Stump.res, α ∉ Γ.ftv) →
-    (∀ s ∈ Δ, s.DischargeEquiv Γ.ctx χ) →
+    (∀ s ∈ Δ, s.DischargeEquiv χ) →
     QTyped constTy Γ e (τ.applySubst χ)
 
 /-- ⊢  **the join, where it is cheap: no promises left.** If the run's Δ is empty
