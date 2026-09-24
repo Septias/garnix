@@ -1,7 +1,6 @@
 == L2 Calculus
 > Functions, scoped records, record concat, row-vars, let-poly, qualified schemes, parked lookups
 
-
 l ∈ 𝓛  x ∈ 𝓧  𝓫 ∈ 𝓑  c ∈ 𝓒
 
 e := c | x | (x: e) | e₁e₂ | (e₁ ‖ e₂) | e.l | { ξ } | let x = e₁ in e₂
@@ -532,7 +531,7 @@ fresh α: κ     draw a name at sort κ from the threaded supply
 
 S ⊢ τ ≐ τ′ ⇝! S′    solve, then re-run wake-up on what the solution staled
 S ⊢ Δ ↝! S′         saturation itself: step on stale stumps until quiescent
-S ⊢ Q ↝\*! S′        A-var's closure, then saturation
+S ⊢ Q ↝\*! S′       A-var's closure, then saturation
 
 
 == Inference
@@ -595,12 +594,12 @@ fresh α: Type   Γ·(x: α); S ⊢ e ⇒ τ; S′
 
 
 Γ; S ⊢ e ⇒ τ; S₁   fresh ρ: Row   S₁ ⊢ τ ≐ {ρ} ⇝! S₂   ⟦S₂⟧ ⊢ ρ.l ↓ ⊥
----------------------------------------------------------------------- A-sel-⊥
+----------------------------------------------------------------------- A-sel-⊥
 Γ; S ⊢ e.l ⇒ ★; S₂ +W
 
 
 Γ; S ⊢ e ⇒ τ; S₁   fresh ρ: Row   S₁ ⊢ τ ≐ {ρ} ⇝! S₂   ⟦S₂⟧ ⊢ ρ.l ↓ ? on α   fresh δ: Type
-------------------------------------------------------------------------------------------- A-sel-?
+-------------------------------------------------------------------------------------------- A-sel-?
 Γ; S ⊢ e.l ⇒ δ; S₂ ⊎ ⟨α ▷ ρ.l ↓ δ⟩
 // NOT ★: returning ★ here would freeze the result and lose every later
 // refinement — (x: x.l) would infer {β} -> ★ and no application could recover
@@ -634,7 +633,6 @@ fresh α: Type   Γ·(x: α); S ⊢ e ⇒ τ; S′
 Γ; S ⊢ ξ₁ ⇒ ρ₁; S₁   Γ; S₁ ⊢ ξ₂ ⇒ ρ₂; S₂
 ------------------------------------------- A-ξ-conc
 Γ; S ⊢ (ξ₁ | ξ₂) ⇒ (ρ₁ | ρ₂); S₂
-// Literal rows are spine-var-free by construction.
 
 
 == Wake-up and Finalization
@@ -693,7 +691,7 @@ S ⊢ ∅ ↝\* S
 
 
 S ⊢ ⟨α ▷ ρ.l ↓ δ⟩ ↝ S₁   S₁ ⊢ Δ′ ↝\* S′
----------------------------------------- K-cons
+----------------------------------------- K-cons
 S ⊢ (⟨α ▷ ρ.l ↓ δ⟩, Δ′) ↝\* S′
 
 
