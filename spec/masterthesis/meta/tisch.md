@@ -3,3 +3,4 @@
 - Can we extend unification of ★?
 - Can we make *recursiveness* a prominent feature of our work?
 - Rolle von *Lazyiness* dokumentieren
+- Remove L-α-lookup

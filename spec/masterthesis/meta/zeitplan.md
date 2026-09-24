@@ -35,8 +35,8 @@
       - [~] Syntax
       - [~] Types
       - [~] Unification
-  - [x] Metatheory
-  - [¡] Towards Nix
+  - [~] Metatheory
+  - [~] Towards Nix
   - [ ] Related Work
 
 
@@ -50,8 +50,8 @@
 - [] KW 40 (Proofs)
 - [] KW 41 (Schreiben)
 - [] KW 42 (Schreiben)
-- [] KW 43 (Extras)
+- [] KW 43 (Schreiben)
 # November
-- [] KW 44 (Extras)
+- [] KW 44 (Schreiben)
 - [] KW 45 (Reviews)
 - [] KW 46 
