@@ -1,32 +1,69 @@
--- FUZZ: an executable search for DIVERGENCE in the ≐ᵣ / ≐ driver.
+-- FUZZ: an executable REFUTER for the ≐ᵣ / ≐ driver. Every property the
+-- metatheory needs but has not proved is compiled to a Bool here and run over
+-- every pair of a small universe, so a candidate invariant dies in an afternoon
+-- rather than in a week of Lean.
 --
 -- Not part of the library (`lake build` does not touch it). Run with
 --
 --     lake build fuzz && lake exe fuzz
 --
 -- ## Why
--- Phase D of proof-plan.md: there is no closed-form fuel bound, the naive Rémy
--- measure does not close, and the lexicographic measure was retracted because
--- solve-and-apply grows the spine AND the variable count. Before designing a
--- third measure, settle the prior question — is the driver terminating at all?
--- A divergent input is as valuable a result as a bound, and cheaper to find.
+-- It began as Phase D triage: there is no closed-form fuel bound, the naive
+-- Rémy measure does not close, and the lexicographic measure was retracted
+-- because solve-and-apply grows the spine AND the variable count. Before
+-- designing a third measure, settle the prior question — is the driver
+-- terminating at all? That question is now as settled as a sweep can settle it
+-- (section [1] has no survivor in any universe, and the parametric families stay
+-- linear), and the harness has been kept for the job it turned out to be better
+-- at: REFUTING the invariants a proof would otherwise be built on. Every finding
+-- is logged, with the pair that produced it, in ../typesystems/proof-state.md —
+-- whose REPRODUCE lines point at the section numbers below, so those are fixed.
 --
--- ## What it does, per pair of spines drawn from a small universe
---  1. DIVERGENCE HUNT. `minFuel` = the least budget at which the pair reaches a
---     verdict, by binary search up to `cap`. A pair still `outOfFuel` at `cap`
---     — with `cap` far above its size — is a divergence CANDIDATE and gets
---     printed. Zero survivors is evidence for termination, not a proof.
---  2. FUEL-MONOTONICITY TRIPWIRE. `unifyM_fuel_mono` says a verdict once
---     REACHED never changes as the budget grows. So the full result (verdict
---     AND solution) at `minFuel` must equal the one at `cap`. Any mismatch is a
---     counterexample to a theorem in the build — print it loudly.
---  3. FUEL PROFILE. The max `minFuel` observed per problem size |s₁|+|s₂|.
---     This is the empirical shape of the bound a measure would have to beat: if
---     it is flat or linear the Rémy-style argument is worth the effort, if it
---     climbs fast the bound is not what one would guess.
+-- ## What it runs
+-- `report`, over the universes `wide` / `deep` / `nest`: every pair of spines
+-- drawn from a small atom alphabet, exhaustively rather than at random.
+--  [1] DIVERGENCE HUNT. `minFuel` = the least budget at which the pair reaches a
+--      verdict, by binary search up to `cap`. A pair still `outOfFuel` at `cap`
+--      — with `cap` far above its size — is a divergence CANDIDATE and gets
+--      printed. Zero survivors is evidence for termination, not a proof.
+--  [2] FUEL-MONOTONICITY TRIPWIRE. `unifyM_fuel_mono` says a verdict once
+--      REACHED never changes as the budget grows. So the full result (verdict
+--      AND solution) at `minFuel` must equal the one at `cap`. Any mismatch is a
+--      counterexample to a theorem in the build — print it loudly.
+--  [3] CANDIDATE FUEL BOUNDS. `boundA` (tight) and `boundB` (loose), both read
+--      off the parametric families, checked against `minFuel` on every pair.
+--  [4] SOLUTION WELL-FORMEDNESS. `Sol.WF` = `Acyclic` ∧ `Ranked` (State.lean),
+--      decided on every success. `UnifyWF` — the claim that the driver RETURNS
+--      such a solution — is NOT proved; this is its tripwire.
+--  [5] FUEL PROFILE. The max `minFuel` observed per problem size |s₁|+|s₂|.
+--      This is the empirical shape of the bound a measure would have to beat: if
+--      it is flat or linear the Rémy-style argument is worth the effort, if it
+--      climbs fast the bound is not what one would guess.
+--  [6] WHICH RANK MEASURE WORKS. `Sol.Ranked` is an ∃-rank, so a proof needs a
+--      rank the driver can EXHIBIT: candidates (|name|, `domS` index, both
+--      directions, and again with shadowed bindings dropped) are run against the
+--      solution's own dependency edges, together with the count of SHADOWED
+--      bindings — which is where the sweep's current lead came from.
+--  [7] THE ACCUMULATED Θ, and creation order. Measured with `traceSpineM`, a
+--      clone of the driver that also returns the expansion graph and a LEDGER of
+--      every key in the order it was bound; Θ is an input to the real driver and
+--      never returned, so it cannot be observed any other way.
+-- then `familyReport` — the parametric `families`, where the fuel demand is read
+-- as a function of n instead of over a fixed universe — and `landmarkReport`,
+-- which must agree with Regressions.lean / Refutations.lean or it is the
+-- harness that is wrong, not the algorithm.
 --
--- The binary search in (1) and (3) is justified by `unifyM_fuel_mono`:
--- "reaches a verdict" is monotone in the budget. (2) is what checks that.
+-- STAGE 0 (`nxMain`) runs the landmarks, universes and families a second time
+-- against `nxSpineMF`, a clone with the four U-expand arms stubbed to `.stuck`,
+-- to price that arm before deleting it. Its own section comment carries the
+-- prediction it checks.
+--
+-- Two numbers are LOAD-BEARING: `nDis` ([7]) and `nAnom` (Stage 0), each saying
+-- that its clone still agrees with the real driver. Nonzero, and nothing else in
+-- that section means anything.
+--
+-- The binary search in [1], [3] and [5] is justified by `unifyM_fuel_mono`:
+-- "reaches a verdict" is monotone in the budget. [2] is what checks that.
 
 import RowUnify
 
@@ -83,13 +120,14 @@ def rowEqB : Row Unit → Row Unit → Bool
   | _,         _          => false
 end
 
-/-- `Sol.WF` (RowUnify/State.lean) as a Bool — the well-formedness ⟦S⟧ needs to
-    be a context at all. `Sol.rowWF_toCtx` is conditioned on the acyclic half and
-    the θ ↦ rowEnv bridge on the applied half, and `UnifyWF` — the claim that the
-    driver RETURNS such a solution — is NOT proved. This is its tripwire.
+/-- The ACYCLIC half of `Sol.WF` (RowUnify/State.lean) as a Bool: no bound row
+    variable is reachable at a spine position of a binding, which is what makes
+    the `L-α` chase terminate. `Sol.rowWF_toCtx` is conditioned on exactly this,
+    and `UnifyWF` — the claim that the driver RETURNS a well-formed solution —
+    is NOT proved. `solWFB` below is its tripwire.
 
-    Note the applied half is the SEMANTIC one. The syntactic `Sol.NoCapture`
-    ("no bound variable occurs in any binding") is refuted here in one move by
+    The syntactic `Sol.NoCapture` ("no bound variable occurs in any binding")
+    would be sufficient for everything, and is refuted here in one move by
     `a ≐ᵣ (l:a)` ⇝ `a ≔ (l:a | ε)`, where the bound `a` is a ROW variable and the
     payload `a` a TYPE variable — different variables that `ftv`, spanning one
     untagged namespace, cannot tell apart. -/
@@ -97,6 +135,10 @@ def solAcyclicB (s : Sol Unit) : Bool :=
   let keys := s.row.map Prod.fst
   s.row.all (fun p => (sVarSeq p.2.toSpine).all (fun β => !keys.contains β))
 
+/-- `Sol.Applied` as a Bool. NOT part of `Sol.WF` — State.lean drops the demand
+    for an applied solution, the driver's being triangular, and asks for a
+    CLOSURE instead. So this is not in the [4] tripwire; Stage 0 is its only
+    consumer, where the question is whether triangularity comes from U-expand. -/
 def solAppliedB (s : Sol Unit) : Bool :=
   s.ty.all  (fun p => tyEqB (p.2.applySubst s.toSubst) p.2) &&
   s.row.all (fun p => rowEqB (p.2.applySubst s.toSubst) p.2)
@@ -146,11 +188,12 @@ def solWFB (s : Sol Unit) : Bool := solAcyclicB s && solRankedB s
 -- (binding an OLD variable to a value mentioning NEW ones) and solves fresh ones
 -- against old payloads.
 --
--- NOT MEASURED HERE, and why: the `DepGraph` the driver threads for its occurs
--- guards is an INPUT to `unifyTyF`/`unifySpineMF` and is never returned, so the
--- accumulated Θ is not observable without cloning the driver. If one of the
--- candidates below is clean, Θ is not needed as a measure at all — which is the
--- cheaper question, so it goes first.
+-- NOT MEASURED IN THIS SECTION, and why: the `DepGraph` the driver threads for
+-- its occurs guards is an INPUT to `unifyTyF`/`unifySpineMF` and is never
+-- returned, so the accumulated Θ is not observable without cloning the driver.
+-- If one of the candidates below is clean, Θ is not needed as a measure at all
+-- — which is the cheaper question, so it goes first. It is not clean: both
+-- candidates fall, and Θ is taken up in [7] below, where the clone gets built.
 
 /-- Every dependency edge the solution imposes: from a binding's KEY to a
 variable in its value that the solution also binds. `Sol.Ranked` is exactly the
@@ -589,13 +632,13 @@ structure Stats where
   nBViol    : Nat := 0
   /-- the smallest slack `boundA - minFuel` seen — how close A came -/
   tightest  : Option (Nat × Nat × Spine × Spine) := none
-  /-- a success whose solution is not well-formed: refutes `UnifyWF` -/
-  idemViol  : List (Spine × Spine × String) := []
-  nIdemViol : Nat := 0
+  /-- [4] a success whose solution is not well-formed: refutes `UnifyWF` -/
+  wfViol    : List (Spine × Spine × String) := []
+  nWFViol   : Nat := 0
   /-- …of which: the ACYCLIC half fails (a genuine cycle) -/
   nAcycViol : Nat := 0
-  /-- …of which: only the APPLIED half fails (a TRIANGULAR solution) -/
-  nApplViol : Nat := 0
+  /-- …of which: the RANKED half fails (no rank on the bindings exists) -/
+  nRankViol : Nat := 0
   /-- [6] rank measures. `nEdgy` = successes whose solution has at least one
   dependency edge at all — the only ones where a rank says anything. -/
   nEdgy    : Nat := 0
@@ -757,11 +800,11 @@ def step (cap : Nat) (s₁ s₂ : Spine) (st : Stats) : Stats :=
                              st.wUntag.orElse fun _ => some (s₁, s₂, solStr sol,
                                "untagged edges: " ++ badEdges sol (fun _ => false)) }
           if solWFB sol then st else
-            { st with idemViol := if st.nIdemViol < keep
-                                  then (s₁, s₂, solStr sol) :: st.idemViol else st.idemViol
-                      nIdemViol := st.nIdemViol + 1
+            { st with wfViol  := if st.nWFViol < keep
+                                  then (s₁, s₂, solStr sol) :: st.wfViol else st.wfViol
+                      nWFViol   := st.nWFViol + 1
                       nAcycViol := st.nAcycViol + (if solAcyclicB sol then 0 else 1)
-                      nApplViol := st.nApplViol + (if solRankedB sol then 0 else 1) }
+                      nRankViol := st.nRankViol + (if solRankedB sol then 0 else 1) }
       | .clash       => { st with clash   := st.clash   + 1 }
       | .occurs      => { st with occurs  := st.occurs  + 1 }
       | .stuck       => { st with stuck   := st.stuck   + 1 }
@@ -797,10 +840,19 @@ def report (U : Universe) (cap : Nat) : IO Unit := do
   | some (sl, f, s₁, s₂) => IO.println s!"        A's tightest: slack {sl} (fuel {f}) at {pairStr s₁ s₂}"
   | none                 => pure ()
 
-  IO.println s!"   [4] ill-formed solutions (refutes UnifyWF): {st.nIdemViol}"
-  IO.println s!"         of which spine-cyclic (Acyclic fails): {st.nAcycViol}; unrankable (Ranked fails): {st.nApplViol}"
-  for (s₁, s₂, sol) in st.idemViol.reverse do
+  IO.println s!"   [4] ill-formed solutions (refutes UnifyWF): {st.nWFViol}"
+  IO.println s!"         of which spine-cyclic (Acyclic fails): {st.nAcycViol}; unrankable (Ranked fails): {st.nRankViol}"
+  for (s₁, s₂, sol) in st.wfViol.reverse do
     IO.println s!"        {pairStr s₁ s₂}\n          solution: {sol}"
+
+  IO.println "   [5] fuel profile — max minFuel by problem size |s₁|+|s₂|:"
+  for n in List.range (2 * U.maxLen + 1) do
+    match st.bySize.find? (fun p => p.1 = n) with
+    | some (_, v) => IO.println s!"        size {n}: {v}"
+    | none        => pure ()
+  match st.worst with
+  | some (f, s₁, s₂) => IO.println s!"        hungriest: fuel {f} for {pairStr s₁ s₂}"
+  | none             => pure ()
 
   IO.println s!"   [6] rank measures, over the {st.nEdgy} successes whose solution has any edge (max {st.maxEdges} edges):"
   IO.println s!"        |name| decreasing: {st.nLenDec} fail    |name| increasing: {st.nLenInc} fail"
@@ -856,14 +908,6 @@ def report (U : Universe) (cap : Nat) : IO Unit := do
         IO.println s!"          {note}"
     | none => IO.println s!"        {nm}: NO COUNTEREXAMPLE"
 
-  IO.println "   [5] fuel profile — max minFuel by problem size |s₁|+|s₂|:"
-  for n in List.range (2 * U.maxLen + 1) do
-    match st.bySize.find? (fun p => p.1 = n) with
-    | some (_, v) => IO.println s!"        size {n}: {v}"
-    | none        => pure ()
-  match st.worst with
-  | some (f, s₁, s₂) => IO.println s!"        hungriest: fuel {f} for {pairStr s₁ s₂}"
-  | none             => pure ()
   IO.println ""
 
 ---------------------------------- UNIVERSES ----------------------------------
@@ -1305,15 +1349,17 @@ def nxMain : IO Unit := do
 
 def main : IO Unit := do
   let cap := 64
-  IO.println "≐ᵣ divergence hunt — Phase D triage\n"
+  IO.println "≐ᵣ / ≐ driver — invariant refuter: [1]-[7] per universe, then STAGE 0\n"
   landmarkReport cap
   report wide cap
   report deep cap
   report nest cap
   familyReport 4000 24
   nxMain
-  IO.println "A pair still outOfFuel at cap, with a spine of ≤ 6 atoms, is a"
-  IO.println "divergence candidate: minimize it by hand and it becomes a theorem."
+  IO.println "Read [2], [4], `nDis` and `nAnom` first: each is a tripwire on something"
+  IO.println "already claimed, and a nonzero one voids the numbers beside it. A pair"
+  IO.println "still outOfFuel at cap, with a spine of ≤ 6 atoms, is a divergence"
+  IO.println "candidate: minimize it by hand and it becomes a theorem."
 
 end Fuzz
 end MinimalCalculus

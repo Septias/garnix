@@ -1,4 +1,4 @@
--- Lean 4 formalization of minimal.typ
+-- Formalization of minimal.typ
 -- Minimal Calculus: functions, scoped records, record concat, row-vars,
 -- row equivalence, three-way row lookup (τ | ⊥ | ?), let-polymorphism
 -- Specialities: (instance-closed T-let, T-sel-⊥, T-★-intro)
