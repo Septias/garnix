@@ -54,85 +54,18 @@
 #set figure(placement: auto)
 #set raw(lang: "nix")
 
-= A Note about Nix
-> This section motivates our work in regard to practical application, also the nix language features are guiding the features we are exposing.
-
+= Motivation
 // Todo: Start by introducing the motivating example: (a ‖ b).x
 // - This immediately motivates the scoped rows
 // - It removes a class of calculi: Symmetric concat, only single field removal
 // - Occurrence typing in introduction?
 //
-// Todo: expand nix lang & feature motivation
 // The features directly motivated by the language:
 // - scoped rows: support FC-labels and Record concat
 // The features motivated by the broader scope:
 // - size: no instrumentation & effective computation
 
 NixLang @nix-language-2-28 @dolstra_phd is the fundamental language of one of the largest bodies of untyped functional code in existence and a language that extends beyond the usual λ-calculus features. Its foundational data structure is the _attribute set_ — a record — and the language provides a gamut of constructs and builtin functions to create, extend, deconstruct and reflect upon them. NixLang powers nixpkgs, a package repository of more than 100,000 packages that is continuously evaluated, updated and rolled out from one central repository, and the same repository carries the Nix standard library, the NixOS module system and the definition of the NixOS distribution itself @nixos_short @nixos_long. Every one of those artefacts is an attribute set assembled out of other attribute sets. NixLang is thus both the motivation for our work and the guiding principle behind the features our calculus exposes.
-
-== The operation that drives everything
-
-Nix' update operator `a // b` is a _set-or-replace_ operation: the result carries every field of `a`, every field of `b`, and for colliding labels the binding from `b`. It is _total_ — no disjointness requirement, no partiality, no failure case — and it is the backbone of the idioms that structure nixpkgs.
-
-#figure(
-  caption: [The three idioms that make asymmetric concatenation unavoidable.],
-  box(width: 100%, align(left, ```nix
-  # 1. an overlay: extend or replace fields of a package set given to us
-  self: super: { hello = super.hello // { meta = { broken = false; }; }; }
-
-  # 2. the callPackage idiom: override parts of an argument set we did not build
-  mkDerivation (args // { buildInputs = args.buildInputs ++ [ extra ]; })
-
-  # 3. the module system: merge configuration fragments from many files
-  { config, lib, ... }: { services.nginx = lib.mkMerge [ base config.extra ]; }
-  ```)),
-)<nix-idioms>
-
-
-== What makes Nix hard
-
-Static typing of NixLang is hard for more reasons than the one above, and the reasons are what fix our feature set rather than the other way round.
-
-#figure(
-  caption: [Language features of NixLang and the demands they place on a type system.],
-  table(
-    columns: (auto, 1fr, 1fr),
-    align: left,
-    inset: 6pt,
-    stroke: 0.4pt + luma(200),
-    table.header([*Feature*], [*Why it is hard*], [*What it forces*]),
-
-    [`a // b`],
-    [precedence is a runtime fact],
-    [scoped rows, total concatenation],
-
-    [`e.${e'}`, `?`, `getAttr`],
-    [labels are ordinary values],
-    [a label sort, first-class labels],
-
-    [`with e; body`],
-    [the _scope_ is a runtime value],
-    [variable lookup itself may be unknown],
-
-    [`rec`, fixpoints, overlays],
-    [rows are recursive],
-    [an occurs class that is not a technicality],
-
-    [laziness],
-    [non-closedness, errors that never fire],
-    [soft typing, per-binding uncertainty],
-
-    [`attrNames`, `removeAttrs`, `intersectAttrs`],
-    [need negative and label-level information],
-    [best-effort signatures, ★ as a sink],
-
-    [no annotations anywhere],
-    [everything must be inferred],
-    [HM-style inference at whole-fixpoint scale],
-  ),
-)<nix-features>
-
-Two entries of @nix-features deserve emphasis because they are usually left out of accounts of "typing a dynamic language".
 
 _Non-instrumentability._
 - Adding casts to the language could change the evaluation behaviour because thunks could be forced.
@@ -154,7 +87,7 @@ Some Nix expressions have no useful static answer, and R3 says the system must s
 
 The selected field, and hence the type of the expression, changes at a fixed instant. A set-theoretic system would answer with the union of the two branches; ours has no unions, and answers ★. Neither answer is a failure of the analysis — the point is that _some_ answer is mandatory, and that the interesting design question is not whether uncertainty arises but where it is allowed to enter and whether its origin can be explained.
 
-Work on typing Nix itself is scarce. Broekhoff and Krebbers @verified give a verified interpreter and an operational semantics but attempt no type system; an earlier system by the author @simplenix applies off-the-shelf Hindley-Milner inference to a Nix subset and fails precisely on the record operations of @nix-idioms; Nickel @nickel, a Nix-inspired configuration language, adopts gradual typing with row polymorphism but forbids the colliding concatenations that make `//` interesting; and the long-standing community issue @nix-ts-issue documents both the demand for and the difficulty of the problem.
+Work on typing Nix itself is scarce. Broekhoff and Krebbers @verified give a verified interpreter and an operational semantics but attempt no type system; an earlier system by the author @simplenix applies off-the-shelf Hindley-Milner inference to a Nix subset and fails precisely on the record operations of \@nix-idioms; Nickel @nickel, a Nix-inspired configuration language, adopts gradual typing with row polymorphism but forbids the colliding concatenations that make `//` interesting; and the long-standing community issue @nix-ts-issue documents both the demand for and the difficulty of the problem.
 
 
 = Motivation <sec-motivation>
@@ -195,7 +128,7 @@ This is the crux, and it organises the entire design space. *Row polymorphism tr
 
 _Why not width subtyping?_ Because subsumption and concatenation are incompatible, an observation going back to Harper and Pierce @symm_concat: width subtyping may forget a field, ${l: τ} <= {}$, without leaving a trace, and concatenating the forgotten record with one that _does_ bind $l$ then resolves shadowing the wrong way. A record can always discard exactly the fields that decide precedence. We therefore keep the calculus subtyping-free; the only ordering it admits is the precision gained by instantiation and row equivalence.
 
-_Why not restrict to symmetric concatenation?_ Requiring the two sides to be disjoint @symm_concat makes shadowing impossible by construction and the operation partial. It also outlaws @nix-idioms outright: overriding `meta` on a package that already has one is the whole purpose of an overlay.
+_Why not restrict to symmetric concatenation?_ Requiring the two sides to be disjoint @symm_concat makes shadowing impossible by construction and the operation partial. It also outlaws \@nix-idioms outright: overriding `meta` on a package that already has one is the whole purpose of an overlay.
 
 _Why not unions of typings?_ Wand's original treatment @concat4multiinher @wand_complete case-splits over which side contributes each field and yields a set of alternative typings rather than a principal one. The number of alternatives is exponential in the number of contested labels, which violates R4, and the absence of principal types propagates into every `let` in the program.
 

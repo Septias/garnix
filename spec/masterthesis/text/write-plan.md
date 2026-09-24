@@ -1,10 +1,16 @@
-
+# Organization
 ## Fragen
 - Should I write some comparison into the introductory part?
   - It motivates the work in a sense, but I think a clean introduction of *our contribution* is better
   - Do we have enough content for it?
   - We can also add references in retrospective
 - What is currently best style?
+
+
+## Todo
+- Motivate the use of our lookup-relation
+- Add *soft typing* somewhere
+- Document the case of U-expand
 
 
 ## Things
@@ -15,6 +21,12 @@
     - Positioning
 
 
+## Limitations
+- We currently need _closedness_ in the proofs, which does not hold due to `with; e`
+- There is no negative information in our typesystem.
+
+
+# Structure
 ## Introduction
 // Problem: I want a catchy introduction and it feels like this should go into the weeds directly instead of the usual banter 
 // - Maybe only with … ?
@@ -38,10 +50,12 @@
 ## Declarative
 - L2 vorstellen
 - Warum brauchen wir T-sel-★ und T-★-intro
+- Explain why `T-sel-⊥` ★ typed
 - Motivation für qualified types?
 - Trace monoid
 - The winning example
 - Principality
+
 
 ## Algorithmisch
 - Unification Regeln

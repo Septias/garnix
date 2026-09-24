@@ -1,4 +1,3 @@
-¡: can not be written yet
 
 ## Big Todos
 - [ ] Algorithmisch

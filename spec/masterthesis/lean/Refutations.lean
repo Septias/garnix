@@ -7,10 +7,11 @@
 --      stuck_masks_mgu. `.occurs` used to be its sibling here; it no longer is
 --      (solveVarM_occurs_no_unifier). `.stuck` stands alone.
 --
--- `unifyM_stuck_no_mgu` (Trichotomy.lean) reduces the stuck leg to four named
--- hypotheses, each of the shape "for EVERY predicate Q, the configuration has
--- no mgu once Q is conjoined". This file shows that shape is refutable, so the
--- next step on the stuck leg is to RESTATE the leg, not to prove `hbase`.
+-- `unifyM_stuck_no_mgu` (Trichotomy.lean) USED TO reduce the stuck leg to four
+-- named hypotheses, each of the shape "for EVERY predicate Q, the configuration
+-- has no mgu once Q is conjoined". This file showed that shape is refutable, so
+-- the reduction was DELETED and the leg restated as the specific no-mgu
+-- theorems. The refutations below are kept so the shape is not retried.
 --
 -- Both refutations are guarded in Axioms.lean, so a change in what they rest on
 -- breaks the build.

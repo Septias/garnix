@@ -91,7 +91,7 @@ third arm. There are exactly three such rules: L-hit/L-miss, ≈-comm, and the
 field-matching moves of ≐ᵣ.
 
 
-## 3. Sorting  (@sorting, algorithmic.typ §Sorts)
+## 3. Sorting
 
 New:
 

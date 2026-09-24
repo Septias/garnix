@@ -21,16 +21,21 @@ theorem unifyRowM_success_iff {B : Type} [DecidableEq B] {fuel : Nat} {ρ₁ ρ�
 
 
 ------------------ P6: THE BASE-ARM DISPATCH, STEP 2 ------------------------
--- `hbase` — "a terminal stuck configuration has no mgu" — is the one hypothesis
--- the trichotomy still reduces to. Step 1 is stuck_leading_shape: with stripL
--- and both matchL directions dead, the two leading atoms take one of four
--- shapes. Step 2 is here — a terminal configuration also has both U-expand
--- directions dead, and uniqueHost refuses for exactly two reasons, so a leading
--- field facing the other side means either
+-- The case analysis a side-condition-guarded fourth leg would go through.
+-- `hbase` — "a terminal stuck configuration has no mgu" — is NOT a hypothesis
+-- the trichotomy reduces to any more: the reduction that parked it is deleted
+-- and the hypothesis is false in its own right (see THE FOURTH LEG below, and
+-- Refutations.lean). What survives is the dispatch.
+-- Step 1 is stuck_leading_shape: with stripL and both matchL directions dead,
+-- the two leading atoms take one of four shapes. Step 2 is here — a terminal
+-- configuration also has both U-expand directions dead, and uniqueHost refuses
+-- for exactly three reasons, so a leading field facing the other side means
+-- either
 --   * ≥ 2 candidate hosts — Wand's shape, killed by vars_vs_field_no_mgu, or
 --   * the label already occurs there, necessarily BEHIND a variable (matchL is
 --     dead) — the two-sided shape, killed by two_sided_no_mgu.
--- Step 3 remains: run those witnesses at the general shape.
+-- Step 3 would run those witnesses at the general shape. `TerminalNoMgu` is the
+-- statement it would conclude, and it is OPEN — see below.
 
 -- ⊢  uniqueHost refuses for exactly three reasons
 -- The third is new with the self-reference filter, and it is the benign one:
