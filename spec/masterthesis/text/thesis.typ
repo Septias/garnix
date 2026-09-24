@@ -14,10 +14,41 @@
 ]
 
 
-= A Soft-Typing Records Calculus with Asymmetric Concatenation for Nix
+#let title = [A Soft-Typing Records Calculus with Asymmetric Concatenation for Nix]
 
-Asymmetric record concatenation with left-precedence is a _set-or-replace operation_ that, given two records, extends the fields of the first record with every unique field of the second and overwrites fields that collide. This operation is a trivial operation in the Nix programming language and admits a canonical example that can not be statically typed: The expression `a: b: (a ‖ b).l` concatenates two type variables but can not be given a type without instantiating at least b, because of field-precedence and shadowing behaviour.
-We propose a novel _soft type system_ based upon the work of Paszke&Xie with scoped-records, row-variables, asymmetric record concatenation, let-polymorphism, row-equivalence and an unknown type that delineates the exact cases in which the so called wand-ambiguity is hit. Using this soft-typing feature, our calculus positions itself between existing record literature, exploring a new approach. We mechanically prove _type safety_ of the declarative system in Lean and give an sound, efficient but incomplete unification algorithm for a minimal calculus.
+#page(footer: align(
+  center,
+  "Department of Computer Science – University Freiburg",
+))[
+  #align(center, text(25pt)[
+    #image("assets/logo.png", width: 30%)
+    *#title*
+    #set text(16pt)
+
+    \
+
+    *Master Thesis* - Sebastian Klähn\
+    #text(12pt)[*sebastian.klaehn\@email.uni-freiburg.de*]
+
+    #set text(12pt)
+
+    \
+
+    #text(tracking: 0.5pt)[*Examiner*]: #h(2pt) Prof. Dr. Peter Thiemann \
+    #text(tracking: 0.5pt)[*Second Examiner*]: #h(2pt) TBD \
+    #text(tracking: 0.5pt)[*Advisor*]: #h(2pt) Prof. Dr. Peter Thiemann
+
+    \
+  ])
+  #align(center)[
+    #set par(justify: true)
+    #pad(x: 15pt, top: 10pt, bottom: 20pt)[
+      = Abstract
+      Asymmetric record concatenation with right-precedence is a _set-or-replace operation_ that, given two records, extends the fields of the first record with every unique field of the second and overwrites fields that collide. This operation is a trivial operation in the Nix programming language and admits a canonical example that can not be statically typed: The expression `a: b: (a ‖ b).l` concatenates two type variables but can not be given a type without instantiating at least b, because of field-precedence and shadowing behaviour.
+      We propose a novel _soft type system_ based upon the work of Paszke&Xie with scoped-records, row-variables, asymmetric record concatenation, let-polymorphism, row-equivalence and an unknown type that delineates the exact cases in which the so called wand-ambiguity is hit. Using this soft-typing feature, our calculus positions itself between existing record literature, exploring a new approach. We mechanically prove _type safety_ of the declarative system in Lean and give a sound, efficient but incomplete unification algorithm for a minimal calculus.
+    ]
+  ]
+]
 
 #show: template
 #set figure(placement: auto)
