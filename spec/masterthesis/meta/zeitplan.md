@@ -46,7 +46,7 @@
 - [] KW 38 (Proofs)
 - [] KW 39 (Proofs)
 # Oktober
-- [] KW 40 (Proofs)
+- [] KW 40 (Schreiben)
 - [] KW 41 (Schreiben)
 - [] KW 42 (Schreiben)
 - [] KW 43 (Schreiben)
