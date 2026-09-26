@@ -11,7 +11,7 @@ mutual
 def tyS : Ty Unit → String
   | .var α    => "t" ++ toString α.length
   | .base _   => "𝓫"
-  | .lab _   => "𝓫"
+  | .lab l    => "⌊" ++ l ++ "⌋"
   | .unk      => "★"
   | .fn τ₁ τ₂ => "(" ++ tyS τ₁ ++ " → " ++ tyS τ₂ ++ ")"
   | .rcd ρ    => "{" ++ rowS ρ ++ "}"
@@ -85,6 +85,45 @@ def run (e : E) : String := verdict (runF (fun _ => ()) 50 e)
 -- …and an instance's stump is re-generalized with it
 #guard run (.letE "g" (.lam "x" (.sel (v "x") "l")) (.letE "h" (v "g")
     (rec2 "a" (.app (v "h") (rec1 "l" c)) "b" (.app (v "h") (.rcd .empty))))) = "{a: 𝓫 | b: ★}"
+
+-- FC-LABELS (`plans/fc-labels-plan.md`, phase A). The key of a selection is a
+-- value; its TYPE keys the lookup: ⌊l⌋, a label variable, or not a label at all.
+def L (l : String) : E := .lab l
+def sd (e₁ e₂ : E) : E := .selDyn e₁ e₂
+
+-- the headline λa. λx. x.(a): a stump blocked on the record's row, keyed by a
+-- label variable; at the top level it finalizes at ★ …
+#guard run (.lam "a" (.lam "x" (sd (v "x") (v "a")))) = "(t1 → ({r3} → ★))"
+-- … and let-bound it is a qualified scheme, used at two keys: found, and absent
+#guard run (.letE "get" (.lam "a" (.lam "x" (sd (v "x") (v "a"))))
+    (rec2 "p" (.app (.app (v "get") (L "foo")) (rec1 "foo" c))
+          "q" (.app (.app (v "get") (L "bar")) (rec1 "foo" c)))) = "{p: 𝓫 | q: ★}"
+#guard run (.app (.app (.lam "a" (.lam "x" (sd (v "x") (v "a")))) (L "foo")) (rec1 "foo" c))
+  = "𝓫"
+
+-- LABEL REFINEMENT: the record is literal, only the key is unknown, so the stump
+-- is blocked on the KEY (L-?-lab); applying the function solves the key, and
+-- wake-up — which judges staleness by the keyed lookup — finds the field
+#guard run (.lam "a" (sd (rec2 "foo" c "bar" (.rcd .empty)) (v "a"))) = "(t1 → ★)"
+#guard run (.app (.lam "a" (sd (rec2 "foo" c "bar" (.rcd .empty)) (v "a"))) (L "foo"))
+  = "𝓫"
+#guard run (.app (.lam "a" (sd (rec2 "foo" c "bar" (.rcd .empty)) (v "a"))) (L "baz"))
+  = "★"
+
+-- a literal key through the dynamic door is the static selection …
+#guard run (sd (rec1 "foo" c) (L "foo")) = "𝓫"
+-- … and a key that is not a label names no field (L-junk): ★, with a flag
+#guard run (sd (rec1 "foo" c) c) = "★"
+
+-- the spent promise through the second door: the same incompleteness, not a new
+-- class (`spentEx_*`, InferSound.lean)
+#guard run (.lam "r" (.lam "a" (.app (sd (v "r") (v "a")) c)))
+  = "fail: spent promise: a stump's result is no longer a variable"
+
+-- a key that is itself an unresolved selection runs at the top level (under a
+-- let it is not generalized: `QScheme.Correctable`'s key clause)
+#guard run (.lam "r" (.lam "k" (sd (v "r") (.sel (v "k") "name"))))
+  = "({r3} → ({r4} → ★))"
 
 end InferRuns
 end MinimalCalculus

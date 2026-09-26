@@ -2439,4 +2439,51 @@ theorem l1_strictly_weaker {B C : Type} (constTy : C → B) (c : C) :
       QTyped constTy ⟨[], []⟩ e τ ∧ ¬ Typed constTy Ctx.empty e τ :=
   ⟨_, _, qtyped_two_use constTy c, l1_rejects_two_use constTy c⟩
 
+
+--------------------- THE FC-LABEL TWIN OF selQ --------------------------------
+-- The key of a selection is a VALUE, so a selector can take it as an argument:
+-- λa. λx. x.(a). Its qualified scheme has a label variable as the stump's key —
+-- two blockers, two sorts, one stump — and every instance is a typing, the three
+-- discharge arms replaying T-sel-dyn / -⊥ / -★ exactly as `selQ_instance_closed`
+-- replays T-sel. A non-label instance of α (say `int`) is no exception: L-junk
+-- answers ⊥, discharge sends δ to ★, and T-sel-dyn-⊥ types it.
+
+/-- λa. λx. x.(a) -/
+def selDynEx (C : Type) : Expr C := .lam "a" (.lam "x" (.selDyn (.var "x") (.var "a")))
+
+/-- ∀(α : Label)(β : Row)(δ : Type). ⟨β.α ↓ δ⟩ ⇒ α → {β} → δ -/
+def selDynQ (B : Type) : QScheme B :=
+  ⟨["α", "β", "δ"], [⟨.var "β", .var "α", "δ"⟩],
+   .fn (.var "α") (.fn (.rcd (.var "β")) (.var "δ"))⟩
+
+/-- ⊢  **every instance of `selDynQ` types λa. λx. x.(a)**, in any context. -/
+theorem selDynQ_instance_closed {B C : Type} (constTy : C → B) (Γ : QCtx B) :
+    ∀ τ, QScheme.Inst Γ.ctx (selDynQ B) τ → QTyped constTy Γ (selDynEx C) τ := by
+  rintro τ ⟨θ, -, hQ, hbody⟩
+  simp only [selDynQ, Ty.applySubst] at hbody
+  subst hbody
+  have hs := hQ ⟨.var "β", .var "α", "δ"⟩ (by simp [selDynQ])
+  -- the two λ-bound variables type at their annotations …
+  have hx : QTyped constTy ((Γ.bindTy "a" (θ.ty "α")).bindTy "x" (.rcd (θ.row "β")))
+      (.var "x" : Expr C) (.rcd (θ.row "β")) :=
+    .qVar (σ := ⟨[], [], .rcd (θ.row "β")⟩)
+      (by simp [QCtx.bindTy, QCtx.bindScheme, QCtx.lookup])
+      (QScheme.inst_toQ.mpr (Scheme.Inst.self ⟨[], _⟩))
+  have ha : QTyped constTy ((Γ.bindTy "a" (θ.ty "α")).bindTy "x" (.rcd (θ.row "β")))
+      (.var "a" : Expr C) (θ.ty "α") :=
+    .qVar (σ := ⟨[], [], θ.ty "α"⟩)
+      (by simp [QCtx.bindTy, QCtx.bindScheme, QCtx.lookup])
+      (QScheme.inst_toQ.mpr (Scheme.Inst.self ⟨[], _⟩))
+  -- … and binding leaves the row-solutions alone, so the discharge transports
+  have hrow : ∀ α, Γ.ctx.lookupRow α =
+      ((Γ.bindTy "a" (θ.ty "α")).bindTy "x" (.rcd (θ.row "β"))).ctx.lookupRow α :=
+    fun _ => rfl
+  cases hs with
+  | hit hl hδ =>
+      rw [hδ]; exact .qLam (.qLam (.qSelDyn hx ha (LookupQ.congr_rowEnv hrow hl)))
+  | abs hl hδ =>
+      rw [hδ]; exact .qLam (.qLam (.qSelDynAbs hx ha (LookupQ.congr_rowEnv hrow hl)))
+  | unk hl hδ =>
+      rw [hδ]; exact .qLam (.qLam (.qSelDynUnk hx ha (LookupQ.congr_rowEnv hrow hl)))
+
 end MinimalCalculus
