@@ -33,31 +33,26 @@ The named-but-unconcluded obligations are exactly `UnifyWF`, `UnifyAcyclic`,
   - nothing to fix at the statement level: the converse does not exist
   - what IS stateable is the *disjunctive* form — the three no-mgu techniques
     plus the three conservativity witnesses.
-- ◐ **`TerminalNoMgu`** — a terminal configuration has no mgu — stated,
-  `Defs.lean:926`
-  - the retreat position for the fourth leg, and the statement step 3 of the
-    base-arm dispatch would conclude
-  - OPEN, not refuted: `terminalNoMgu_false` is deleted, because U-expand went
-    two-ended — `expandR` hosts in `v`, so its counterexample
-    `(l:{w}) ≐ᵣ (w | v)` is no longer terminal and the driver solves it
-    (`terminal_masks_mgu_not_terminal`, `terminal_masks_mgu_now_solved`)
-  - nor is it thereby proved: terminality is a fact about the MOVES, not about
-    the problem, and another configuration where the guards miss a forced
-    placement is not ruled out. **Cite it as neither** — Refutations.lean:230,
-    Axioms.lean:288 and Trichotomy.lean:170 all say so
-  - `terminal_masks_mgu` survives with a changed job: no longer a conservativity
-    witness but the CORRECTNESS witness for the right-end arm
+- ✘ **`TerminalNoMgu`** — a terminal configuration has no mgu — REFUTED
+  - since U-expand is removed (2026-09-23), `(l:{w}) ≐ᵣ (w | v)` is terminal
+    again (`terminal_masks_mgu_terminal`) while having a unique unifier, and
+    `terminalNoMgu_false` is restored
+  - with `stuck_masks_mgu`, both candidate converses are negative: the fourth
+    leg is the specific no-mgu theorems plus the conservativity witnesses
 - ✔ **fuel independence**
   - `unifyM_fuel_mono`, `unifyM_bounded`
 - ✘ **termination / totality** — `∃ fuel. result ≠ outOfFuel`
-  - missing: a *well-founded measure*. Rémy's does not close — renaming adds no
-    fields, so the host keeps `count_l = 0`
+  - missing: a *well-founded measure*. Rémy's did not close because U-expand's
+    renaming added no fields; with U-expand gone every arm solves-and-applies,
+    so `(#unsolved vars, spine size)` is the candidate — but `sApplySubst` can
+    still grow a spine, so the second component needs a real argument
   - without this `unifyRow` is not a *function*, and every inference theorem
     inherits the fuel parameter
-  - **Stage 0 is not a route out**: with the expansion arms stubbed the fuel
-    profile is unchanged (`fuelGain = 0`, every parametric family flat), so
-    removing U-expand buys nothing here
-- ✘ **no duplicate keys on `Sol`** — and FALSE. *The keystone.*
+  - the fuel PROFILE did not change with U-expand's removal (`fuelGain = 0`),
+    so the fuzz runs give no evidence either way about the measure
+- ◐ **no duplicate keys on `Sol`** — the witness below is GONE with U-expand
+  (its cause was `expandL`'s host-only rename); the invariant itself is not yet
+  proved. Carry it in the `Sol.Applied` induction. *Historical entry:*
   - `Sol.ty` / `Sol.row` are bare association lists with no invariant, and two
     readers disagree: `Sol.toSubst` goes through `tyLookup`/`rowLookup`, which
     are FIRST-MATCH-WINS, while `Sol.Sat` quantifies `∀ p ∈ s.row` over every
@@ -134,8 +129,9 @@ The named-but-unconcluded obligations are exactly `UnifyWF`, `UnifyAcyclic`,
     triangularity is entirely an artefact of the arm, and without it
     `Sol.Ranked` is not merely provable but *unnecessary*
   - cost: 7.0 / 30.5 / 9.1% of successes become stuck, and every one of them
-    routes to `A-app-degrade` → ★, which has no declarative counterpart (§C)
-  - **decide this jointly with the degradation entry, not before it**
+    used to route to `A-app-degrade` → ★; since the degradation rules are
+    deleted they are now rejected
+  - **decided 2026-09-23/26**: U-expand removed, degradation rules removed
 
 ## B. Inference `Γ; S ⊢ e ⇒ τ; S′`
 
@@ -174,11 +170,13 @@ The named-but-unconcluded obligations are exactly `UnifyWF`, `UnifyAcyclic`,
   - the kind environment now exists and is threaded (`Infer.kinds_mono`);
     `KindsSound` is named, not proved
 
-- ✔ **rules for non-success verdicts**
-  - `Infer.appDeg`, `Infer.selDeg` + `SolveTyDegrades`
-  - a clash has NO rule — that IS the hard error, sound by
-    `unifyM_clash_no_unifier`
-  - their declarative counterpart is the open problem, not their statement (§C)
+- ✔ **rules for non-success verdicts** — there are none, by decision
+  - clash, stuck and occurs all have NO rule: the program is rejected
+  - clash: sound by `unifyM_clash_no_unifier`
+  - stuck/occurs: `Infer.appDeg` / `Infer.selDeg` / `SolveTyDegrades` are
+    DELETED (2026-09-26). They degraded to ★, and ★ is rigid, so there was no
+    declarative rule for them to be sound against. Rejection is sound by
+    construction and costs only completeness
 
 - ✔ **parking a fresh constraint**
   - `Wakes.park`
@@ -280,14 +278,11 @@ The named-but-unconcluded obligations are exactly `UnifyWF`, `UnifyAcyclic`,
 `RunSound = InferSoundC ∘ Finalize.dischargeEquiv ∘ QTypedCDischarge`. The middle
 factor is **proved**; the outer two are statements.
 
-- ✔ **per-rule soundness, 12 of the 15 `Infer`/`InferRec` constructors**
+- ✔ **per-rule soundness, 12 of the 13 `Infer`/`InferRec` constructors (A-let open)**
   - `infer_sound_{con,lam,rcd,app,conc,sel,selAbs,selUnk,var}_step`
   - `inferRec_sound_{empty,field,cat}_step`
 
 - ✘ **A-let** — blocked on `SchemeImage` + the Δ-split
-
-- ✘ **A-app-degrade, A-sel-degrade** — blocked on a declarative rule that does
-  not exist (§C)
 
 - ✔ **the K-/D- correspondence**
   - `Wake.dischargeEquiv`, `Wakes.dischargeEquiv`, `InstStumps.pairwise`
@@ -360,20 +355,6 @@ factor is **proved**; the outer two are statements.
   - there is no W: `Infer` is a relation and cannot be a function until
     unification terminates, so "the scheme inference produces" has no subject
     and the covering conjunct cannot be stated about it
-
-- ✘ **soundness of degradation**
-  - NOT "replacing a position by ★ preserves declarative typeability" — that is
-    about a term that already types
-  - when `A-app-degrade` fires the application types *nowhere*: `qApp` wants a
-    literal arrow, `qEq` only moves along ≈, and ≈ relates ★ to nothing but
-    itself (`TyEquiv.unk_inv`), so `qUnk` cannot manufacture one
-  - what is missing is a **declarative rule for application at ★** (the
-    ★-elimination the failure policy assumes), or a proof that the rule is
-    unreachable
-  - **`A-sel-degrade` plausibly IS unreachable** — `r` is drawn fresh
-    immediately before `τ ≐ {r}`, so that equation can only clash or succeed;
-    proving it closes half this entry cheaply
-  - `A-app-degrade` is not: its equation descends into an arbitrary row problem
 
 - ✘ **⊑-monotonicity of inference**
   - "a more precise input context yields a more precise inferred type" — the

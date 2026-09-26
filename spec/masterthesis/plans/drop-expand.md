@@ -141,10 +141,15 @@ theorem. If Stage 2 stalls, Stage 1 still stands alone — ~1500 fewer lines, th
 
 ## Prerequisite for merging, not a follow-up
 
-Every lost success routes to `A-app-degrade` → `★`, and `appDeg` has no
+Every lost success routed to `A-app-degrade` → `★`, and `appDeg` has no
 declarative counterpart — there is no `T-app-★`. Removal does not create that
 gap but makes it load-bearing. Either add the ★-elimination rule or prove
 `appDeg` unreachable **before** this branch merges.
+
+**RESOLVED 2026-09-26 by a third option:** ★ stays rigid, and `appDeg`,
+`selDeg` and `SolveTyDegrades` are deleted from `Infer.lean`. A stuck or occurs
+verdict now has no rule and the program is rejected, just like a clash. That is
+sound by construction; the lost successes become type errors instead of ★.
 
 ## Progress
 

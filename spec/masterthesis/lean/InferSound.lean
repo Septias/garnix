@@ -98,8 +98,7 @@ theorem Sol.lookup_toCtx_sat {B : Type} {s : Sol B} {σ : TySubst B}
 -- `?`, and `T-★-intro` blurs the first. At an EMPTY row environment lookup is
 -- total for free (every rank works, since nothing is ever chased), so no
 -- well-formedness side condition is needed. This is the declarative content of
--- "a selection never gets stuck", and both A-sel-? and the degradations lean on
--- it.
+-- "a selection never gets stuck", and A-sel-? leans on it.
 
 /-- ⊢  `Γ′ ⊢ e : {ρ}` ⟹ `Γ′ ⊢ e.l : ★`, at a discharged row environment. -/
 theorem qtyped_sel_star {B C : Type} {constTy : C → B} {Γ' : QCtx B}
@@ -1278,20 +1277,8 @@ theorem runSound_of_inferSoundC_nil {B C : Type} [DecidableEq B] {constTy : C �
 --   depends on the discharge condition too, at the generalization boundary
 --   rather than at the selection site.
 --
--- * A-app-degrade and A-sel-degrade — NOT a proof-effort gap, and not the gap
---   `plans/inference-gap-analysis.md` records either. That file asks for
---   "replacing a position by ★ preserves declarative typeability", which is a
---   statement about a term that ALREADY types. Here the term does not: when
---   `τ₁ ≐ τ₂ → β` is stuck, `e₁` has some type, `e₂` has some type, and QTyped
---   has no rule that applies one to the other. `qApp` needs a literal arrow,
---   `qEq` only moves along ≈, and ≈ relates ★ to nothing but itself
---   (`TyEquiv.unk_inv`) — so `qUnk` cannot manufacture the arrow either. The
---   missing piece is a DECLARATIVE rule: application at ★, the ★-elimination
---   the failure policy silently assumes and the type system does not have.
---   Until that exists (or the degradations are proved unreachable, which
---   A-sel-degrade may well be — `r` is drawn fresh immediately before, so
---   `τ ≐ {r}` can only clash or succeed), the two degradation rules are
---   soundness-gapped by construction, and no amount of work on this file
---   closes them.
+-- * A-app-degrade and A-sel-degrade are GONE, not open. They had no
+--   declarative counterpart (QTyped has no application or selection at ★, and
+--   ★ is rigid by design), so stuck/occurs now reject instead of degrading.
 
 end MinimalCalculus

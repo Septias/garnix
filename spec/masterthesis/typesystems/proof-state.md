@@ -42,7 +42,7 @@ Principality forces qualified schemes that use parked stumps during unification 
 
 # Property-Overview
 *Soundness*
-★-elim rules  →  A-app-degrade decided  ┐
+degrade rules removed (★ rigid) ✔     ┐
 UnifyAcyclic  →  ⟦S⟧ total  →  A-sel    ├→ InferSoundC → QTypedCDischarge → RunSound
 SchemeImage (forward-only) →  A-let     ┘
 
@@ -92,7 +92,7 @@ covers ≼         ←  W exists  +  ⊴≼  (order done; the conjunct is unstat
 ## Inference
 - [~] InferSound
   - machinery is built
-  - 6 / 13 arms not proved
+  - 12 / 13 constructors proved per rule; only A-let is open (degrade rules deleted)
   
 
 ## Principality
@@ -104,10 +104,10 @@ covers ≼         ←  W exists  +  ⊴≼  (order done; the conjunct is unstat
 # Problems
 > Problems found during mechanized proving and their proposed solutions
 
-- [!] **★ IN AN ELIMINATION POSITION HAS NO A-RULE AT ALL**
-  WHAT IS NEEDED is an `A-app-★` / `A-sel-★` / `A-conc-★` family: when the
-  scrutinee's type is already ★, the elimination yields ★ (plus a W-flag)
-  WITHOUT running an equation. *That is an algorithmic fix and it is small.*
+- [x] **★ in an elimination position** — DECIDED 2026-09-26: ★ stays rigid,
+  no ★-eliminators. `A-app-degrade` / `A-sel-degrade` are deleted, so a stuck
+  or occurs verdict rejects the program, like a clash. ★-elimination with
+  blame is paper-only ("Towards Nix").
 
 
 ## Symbols

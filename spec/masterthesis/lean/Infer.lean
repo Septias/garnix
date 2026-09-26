@@ -18,10 +18,11 @@
 --  * `LookupBlocked` — the paper writes `⟦S⟧ ⊢ ρ.l ↓ ? on α`, but `Lookup`
 --    records only `.unknown` and not WHICH variable blocked. A-sel-? and
 --    K-repark both need the blocker.
---  * the failure policy. "clash = hard error; stuck/occurs degrade to ★ + W" is
---    prose with no rules, so the algorithm was undefined on those inputs. Here
---    a clash simply has NO derivation (rejecting is soundness — clash is proved
---    to mean no unifier exists) and the degradations are explicit rules.
+--  * the failure policy. Every non-success verdict — clash, stuck, occurs — has
+--    NO derivation, so the program is rejected. For clash that is soundness
+--    (clash is proved to mean no unifier exists); for stuck/occurs it is the
+--    price of a rigid ★: degrading to ★ would need a declarative ★-elimination
+--    rule, and ★ has none by design.
 
 import Qualified
 import RowUnify.State
@@ -112,7 +113,7 @@ theorem LookupBlocked.unsolved {B : Type} {Γ : Ctx B} {ρ : Row B} {l : Label}
 
 --------------------- THE SOLVER STATE  S := (θ, Δ, W) ------------------------
 -- `algorithmic.typ`: "θ is only ever refined"; Δ holds the parked selections;
--- W collects definite-absence flags and ★-degradations and "never affects
+-- W collects definite-absence flags and "never affects
 -- typing, only diagnostics". The supply is threaded here rather than left as
 -- the prose's `fresh α: κ` — that is the gap §B lists as "name supply in the
 -- inference rules".
@@ -205,14 +206,13 @@ def flag {B : Type} (S : SolverState B) (l : Label) : SolverState B :=
 end SolverState
 
 --------------------- SOLVING AN EQUATION, AND THE FAILURE POLICY -------------
--- "clash is a hard error (it is PROVED to mean no unifier exists, so rejecting
--- is soundness, not choice). stuck and occurs are conservative and may NOT
--- reject; they degrade to ★ with a W-flag."
---
--- Rendered as a pair of relations. A CLASH satisfies neither, so no A-rule
--- fires and the program is rejected — that IS the hard error. The degradations
--- get their own A-rules below, which is what makes the judgement total on
--- inputs the paper left undefined.
+-- Only a SUCCESS has a rule. A clash is a hard error, and it is PROVED to mean
+-- no unifier exists, so rejecting is soundness, not choice. stuck and occurs
+-- are rejected as well. They used to degrade to ★ with a W-flag (A-app-degrade,
+-- A-sel-degrade), but those rules had no declarative counterpart: ★ is rigid,
+-- so there is no application or selection at ★ for them to be sound against.
+-- Rejecting instead is sound by construction and costs only completeness;
+-- the price is recorded in plans/drop-expand.md.
 
 -- THE SUPPLY IS THE STATE'S, not unification's own. `unifyTyM` / `unifyRowM`
 -- start from a LOCAL supply computed from the problem's own ftv
@@ -230,15 +230,6 @@ def SolveTy {B : Type} [DecidableEq B]
       = .success s Sup ∧
     S' = S.extend s Sup
 
-/-- …and the conservative verdicts, which may not reject. -/
-def SolveTyDegrades {B : Type} [DecidableEq B]
-    (S : SolverState B) (τ τ' : Ty B) : Prop :=
-  ∃ fuel : Nat,
-    unifyTyF S.supply fuel (τ.applySubst S.subst) (τ'.applySubst S.subst)
-        = .stuck ∨
-    unifyTyF S.supply fuel (τ.applySubst S.subst) (τ'.applySubst S.subst)
-        = .occurs
-
 /-- `S ⊢ ρ ≐ᵣ ρ′ ⇝ S′`, for the row equations `A-conc` and `A-rec` emit. -/
 def SolveRow {B : Type} [DecidableEq B]
     (S : SolverState B) (ρ ρ' : Row B) (S' : SolverState B) : Prop :=
@@ -249,8 +240,7 @@ def SolveRow {B : Type} [DecidableEq B]
 
 -- ⊢  a solved equation really is solved: the emitted solution unifies
 -- The failure policy's justification, mechanized — this is why rejecting a
--- clash is soundness rather than choice, and why the degradations are the only
--- verdicts that need a rule of their own.
+-- clash is soundness rather than choice.
 theorem SolveTy.unifies {B : Type} [DecidableEq B] {S S' : SolverState B}
     {τ τ' : Ty B} (h : SolveTy S τ τ' S') {θ : TySubst B}
     (hsat : Sol.Sat θ S'.sol) :
@@ -582,13 +572,6 @@ inductive Infer {B C : Type} [DecidableEq B] (constTy : C → B) :
       (β, S₂') = S₂.draw .ty →
       SolveTySat S₂' τ₁ (.fn τ₂ (.var β)) S₃ →
       Infer constTy Γ S (.app e₁ e₂) (.var β) S₃
-  -- A-app-degrade: the arrow equation is stuck or occurs, so the result blurs
-  | appDeg {Γ : QCtx B} {S S₁ S₂ : SolverState B} {e₁ e₂ : Expr C}
-      {τ₁ τ₂ : Ty B} {β : TyVar} {S₂' : SolverState B} :
-      Infer constTy Γ S e₁ τ₁ S₁ → Infer constTy Γ S₁ e₂ τ₂ S₂ →
-      (β, S₂') = S₂.draw .ty →
-      SolveTyDegrades S₂' τ₁ (.fn τ₂ (.var β)) →
-      Infer constTy Γ S (.app e₁ e₂) .unk (S₂'.flag "·app")
   -- A-conc
   | conc {Γ : QCtx B} {S S₁ S₂ S₃ S₄ : SolverState B} {e₁ e₂ : Expr C}
       {τ₁ τ₂ : Ty B} {r₁ r₂ : TyVar} {Sa Sb : SolverState B} :
@@ -624,13 +607,6 @@ inductive Infer {B C : Type} [DecidableEq B] (constTy : C → B) :
       (δ, S₂') = S₂.draw .ty →
       Infer constTy Γ S (.sel e l) (.var δ)
         (S₂'.park ⟨α, ⟨.var r, l, δ⟩⟩)
-  -- A-sel-degrade: the record equation itself gave up
-  | selDeg {Γ : QCtx B} {S S₁ : SolverState B} {e : Expr C} {τ : Ty B}
-      {l : Label} {r : TyVar} {S₁' : SolverState B} :
-      Infer constTy Γ S e τ S₁ →
-      (r, S₁') = S₁.draw .row →
-      SolveTyDegrades S₁' τ (.rcd (.var r)) →
-      Infer constTy Γ S (.sel e l) .unk (S₁'.flag l)
   -- A-rec
   | rcd {Γ : QCtx B} {S S' : SolverState B} {ξ : RecBody (Expr C)} {ρ : Row B} :
       InferRec constTy Γ S ξ ρ S' →
@@ -684,7 +660,7 @@ end
 -- (Qualified.lean): the algorithm produces the shape the declarative side
 -- already proved instance-closed (`selQ_instance_closed`).
 --
--- Note which rule fires: A-sel-? , not A-sel-⊥ and not a degradation. `r` is
+-- Note which rule fires: A-sel-? , not A-sel-⊥. `r` is
 -- unsolved at the row sort — `α ≐ {r}` binds α at the TYPE sort — so the lookup
 -- blocks on `r` and the position stays writable. That is the whole point of
 -- returning δ rather than ★.
@@ -980,12 +956,6 @@ theorem Infer.kinds_mono {B C : Type} [DecidableEq B] {constTy : C → B}
       refine List.IsSuffix.trans (Infer.kinds_mono h₁) ?_
       refine List.IsSuffix.trans (Infer.kinds_mono h₂) ?_
       rw [hs.kinds, draw_kind_eq hd]; exact List.suffix_cons _ _
-  | .appDeg h₁ h₂ hd _ => by
-      refine List.IsSuffix.trans (Infer.kinds_mono h₁) ?_
-      refine List.IsSuffix.trans (Infer.kinds_mono h₂) ?_
-      show _ <:+ (SolverState.flag _ _).kinds
-      simp only [SolverState.flag]
-      rw [draw_kind_eq hd]; exact List.suffix_cons _ _
   | .conc h₁ h₂ hd₁ hd₂ hs₁ hs₂ => by
       refine List.IsSuffix.trans (Infer.kinds_mono h₁) ?_
       refine List.IsSuffix.trans (Infer.kinds_mono h₂) ?_
@@ -1005,11 +975,6 @@ theorem Infer.kinds_mono {B C : Type} [DecidableEq B] {constTy : C → B}
       simp only [SolverState.park]
       rw [draw_kind_eq hd₂, hs.kinds, draw_kind_eq hd]
       exact List.IsSuffix.trans (List.suffix_cons _ _) (List.suffix_cons _ _)
-  | .selDeg h₁ hd _ => by
-      refine List.IsSuffix.trans (Infer.kinds_mono h₁) ?_
-      show _ <:+ (SolverState.flag _ _).kinds
-      simp only [SolverState.flag]
-      rw [draw_kind_eq hd]; exact List.suffix_cons _ _
   | .rcd hb => InferRec.kinds_mono hb
   | .letE h₁ _ _ _ _ h₂ => by
       have i₁ := Infer.kinds_mono h₁
@@ -1069,13 +1034,6 @@ theorem Infer.supply_mono {B C : Type} [DecidableEq B] {constTy : C → B}
       have hd' := draw_eq hd
       have i₃ := hs.supply
       omega
-  | .appDeg h₁ h₂ hd _ => by
-      have i₁ := Infer.supply_mono h₁
-      have i₂ := Infer.supply_mono h₂
-      have hd' := draw_eq hd
-      show _ ≤ (SolverState.flag _ _).supply.next
-      simp only [SolverState.flag]
-      omega
   | .conc h₁ h₂ hd₁ hd₂ hs₁ hs₂ => by
       have i₁ := Infer.supply_mono h₁
       have i₂ := Infer.supply_mono h₂
@@ -1103,12 +1061,6 @@ theorem Infer.supply_mono {B C : Type} [DecidableEq B] {constTy : C → B}
       have hd₂' := draw_eq hd₂
       show _ ≤ (SolverState.park _ _).supply.next
       simp only [SolverState.park]
-      omega
-  | .selDeg h₁ hd _ => by
-      have i₁ := Infer.supply_mono h₁
-      have hd' := draw_eq hd
-      show _ ≤ (SolverState.flag _ _).supply.next
-      simp only [SolverState.flag]
       omega
   | .rcd hb => InferRec.supply_mono hb
   | .letE h₁ _ _ _ _ h₂ => by
@@ -1212,10 +1164,6 @@ theorem Infer.sat_mono {B C : Type} [DecidableEq B] {constTy : C → B}
   | .app h₁ h₂ hd hs =>
       ((Infer.sat_mono h₁).trans (Infer.sat_mono h₂)).trans
         ((SolverState.SatMono.of_sol_eq (draw_sol hd)).trans hs.satMono)
-  | .appDeg h₁ h₂ hd _ =>
-      ((Infer.sat_mono h₁).trans (Infer.sat_mono h₂)).trans
-        ((SolverState.SatMono.of_sol_eq (draw_sol hd)).trans
-          (SolverState.SatMono.of_sol_eq rfl))
   | .conc h₁ h₂ hd₁ hd₂ hs₁ hs₂ =>
       ((Infer.sat_mono h₁).trans (Infer.sat_mono h₂)).trans
         ((SolverState.SatMono.of_sol_eq (draw_sol hd₁)).trans
@@ -1234,10 +1182,6 @@ theorem Infer.sat_mono {B C : Type} [DecidableEq B] {constTy : C → B}
           (hs.satMono.trans
             ((SolverState.SatMono.of_sol_eq (draw_sol hd₂)).trans
               (SolverState.SatMono.of_sol_eq rfl))))
-  | .selDeg h₁ hd _ =>
-      (Infer.sat_mono h₁).trans
-        ((SolverState.SatMono.of_sol_eq (draw_sol hd)).trans
-          (SolverState.SatMono.of_sol_eq rfl))
   | .rcd hb => InferRec.sat_mono hb
   | .letE h₁ _ _ _ _ h₂ => by
       refine (Infer.sat_mono h₁).trans ?_
@@ -1327,9 +1271,6 @@ theorem Infer.quiescent {B C : Type} [DecidableEq B] {constTy : C → B}
         hs.quiescent hb
   -- …and the rules that do not write carry it through
   | .lam hd hb, hq => Infer.quiescent hb (hq.draw hd)
-  | .appDeg h₁ h₂ hd _, hq =>
-      (((Infer.quiescent h₂ (Infer.quiescent h₁ hq)).draw hd).flag _)
-  | .selDeg h₁ hd _, hq => (((Infer.quiescent h₁ hq).draw hd).flag _)
   | .rcd hb, hq => InferRec.quiescent hb hq
   -- A-let: the body runs at Δ_Γ, a SUBLIST of the quiescent Δ₁
   | .letE h₁ _ hsplit _ _ h₂, hq => by
