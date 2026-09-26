@@ -65,6 +65,10 @@ theorem qtyped_var_inv {B C : Type} {constTy : C → B} :
   | _, _, _, .qSelUnk _ _ => fun he _ => nomatch he
   | _, _, _, .qSelAbs _ _ => fun he _ => nomatch he
   | _, _, _, .qRcd _ => fun he _ => nomatch he
+  | _, _, _, .qLab => fun he _ => nomatch he
+  | _, _, _, .qSelDyn _ _ _ => fun he _ => nomatch he
+  | _, _, _, .qSelDynUnk _ _ _ => fun he _ => nomatch he
+  | _, _, _, .qSelDynAbs _ _ _ => fun he _ => nomatch he
 
 -- ⊢  …at a MONOTYPE binding that instance is the binding itself
 theorem qtyped_var_mono_inv {B C : Type} {constTy : C → B} {Γ : QCtx B}
@@ -104,6 +108,10 @@ theorem qtyped_let_alias_inv {B C : Type} {constTy : C → B} :
   | _, _, _, .qSelUnk _ _ => fun he _ => nomatch he
   | _, _, _, .qSelAbs _ _ => fun he _ => nomatch he
   | _, _, _, .qRcd _ => fun he _ => nomatch he
+  | _, _, _, .qLab => fun he _ => nomatch he
+  | _, _, _, .qSelDyn _ _ _ => fun he _ => nomatch he
+  | _, _, _, .qSelDynUnk _ _ _ => fun he _ => nomatch he
+  | _, _, _, .qSelDynAbs _ _ _ => fun he _ => nomatch he
 
 
 --------------------- 1. GENERALIZING A VARIABLE Γ STILL MENTIONS -------------
@@ -277,7 +285,7 @@ theorem inferSoundC_false : ¬ InferSoundC Unit Unit (fun _ => ()) := by
 
 private def lcS1 : SolverState Unit :=
   ⟨⟨[(natName 1, .rcd (.var (natName 2)))], []⟩,
-   [⟨natName 2, ⟨.var (natName 2), "l", natName 3⟩⟩], [], ⟨4⟩,
+   [⟨natName 2, ⟨.var (natName 2), .lab "l", natName 3⟩⟩], [], ⟨4⟩,
    [(natName 3, .ty), (natName 2, .row), (natName 1, .ty)]⟩
 
 private def lcS2 : SolverState Unit := { lcS1 with parked := [] }

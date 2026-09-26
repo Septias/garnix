@@ -78,6 +78,7 @@ mutual
 def tyStr : Ty Unit → String
   | .var α    => α
   | .base _   => "𝓫"
+  | .lab l    => "⌊" ++ l ++ "⌋"
   | .unk      => "★"
   | .fn τ₁ τ₂ => "(" ++ tyStr τ₁ ++ "→" ++ tyStr τ₂ ++ ")"
   | .rcd ρ    => "{" ++ rowStr ρ ++ "}"
@@ -107,6 +108,7 @@ mutual
 def tyEqB : Ty Unit → Ty Unit → Bool
   | .var a,    .var b     => a == b
   | .base _,   .base _    => true
+  | .lab l,    .lab l'    => l == l'
   | .unk,      .unk       => true
   | .fn a b,   .fn c d    => tyEqB a c && tyEqB b d
   | .rcd r,    .rcd r'    => rowEqB r r'
@@ -349,6 +351,7 @@ mutual
 def tySize : Ty Unit → Nat
   | .var _    => 1
   | .base _   => 1
+  | .lab _    => 1
   | .unk      => 1
   | .fn τ₁ τ₂ => 1 + tySize τ₁ + tySize τ₂
   | .rcd ρ    => 1 + rowSize ρ

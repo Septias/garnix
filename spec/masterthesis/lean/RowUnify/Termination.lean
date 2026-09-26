@@ -36,6 +36,7 @@ mutual
 def Ty.usize {B : Type} : Ty B → Nat
   | .var _   => 1
   | .base _  => 1
+  | .lab _  => 1
   | .unk     => 1
   | .fn a b  => 1 + Ty.usize a + Ty.usize b
   | .rcd ρ   => 1 + Row.usize ρ
@@ -436,6 +437,15 @@ theorem unifyTyF_flat_ne_oof {B : Type} [DecidableEq B] (S : Supply) (τ τ' : T
       cases τ' with
       | var α => exact bindTy_ne_oof S α _
       | base b' => by_cases hb : b = b' <;> simp [unifyTyF, hb]
+      | lab _ => simp [unifyTyF]
+      | unk => simp [unifyTyF]
+      | fn _ _ => simp [unifyTyF]
+      | rcd _ => simp [unifyTyF]
+  | lab b =>
+      cases τ' with
+      | var α => exact bindTy_ne_oof S α _
+      | base _ => simp [unifyTyF]
+      | lab b' => by_cases hb : b = b' <;> simp [unifyTyF, hb]
       | unk => simp [unifyTyF]
       | fn _ _ => simp [unifyTyF]
       | rcd _ => simp [unifyTyF]

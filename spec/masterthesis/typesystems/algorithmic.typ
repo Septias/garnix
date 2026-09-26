@@ -896,3 +896,111 @@ S ⊢ (⟨α ▷ ρ.l ↓ δ⟩, Δ′) ⇓\* S′
 
 ----------- ⊑-r-?
 r ⊑ᵣ ?
+
+
+
+== First-class labels (phase A: selection)
+- MECHANIZED 2026-09-26, branch `worktree-fc-labels`: `LabelLookup.lean`, the
+  rules below in `Qualified.lean` / `Infer.lean`, soundness in
+  `InferSoundA.lean` / `LetCase.lean` / `Finalization.lean`. `runSound`,
+  `run_typed` and `runF_terminates` hold for the extended language; every
+  `Axioms.lean` guard is unchanged
+- The KEY of a selection is a value, and its TYPE keys the lookup: ⌊l⌋ for a
+  literal, a label VARIABLE for a key nobody has chosen yet. Label variables are
+  ordinary type variables — ⌊α⌋ is α, and a label solution α ≔ ⌊l⌋ is an
+  ordinary type binding. ⌊l⌋ is rigid and nullary, like 𝓫, so ⌊l⌋ ≐ ⌊l′⌋ is
+  the whole label pass: equal labels unify, distinct ones clash
+- Phase A has no var-labeled fields: record literals carry literal labels, and
+  A-sel-dyn only emits τ₁ ≐ {r} for a fresh r. So a label variable meets a row
+  only as a lookup KEY, and rows, ≈ and ≐ᵣ are untouched. Dynamic
+  CONSTRUCTION `{ ${e₁} = e₂ }` is phase B (`plans/fc-labels-plan.md`)
+
+e ::= … | 'l | e₁.(e₂)          τ ::= … | ⌊l⌋
+
+- Runtime: 'l is a value; e₁.(e₂) evaluates the record, then the key, and
+  (rcd b).('l) steps like (rcd b).l. A missing label is ↯, and so is a key that
+  is not a label
+
+
+=== The keyed lookup  Γ ⊢ ρ.q ↓ r
+- A label variable is UNDECIDED against a literal field: it may be instantiated
+  to that label or to another. So it never finds — ⊥ on a hollow row (no field,
+  no variable on the spine), ? otherwise — and ? is blocked either on a free row
+  variable or on the KEY itself
+- A key that is not a label names no field (L-junk). This is what keeps every
+  stability lemma unconditional without a kind discipline: a variable key only
+  ever answers ? (improvable) or ⊥ on a hollow row, and a hollow row answers ⊥
+  to EVERY key, label or not. It is also the soft-typing reading of `r.${1}`
+
+Γ ⊢ ρ.l ↓ r
+--------------- LQ-lit
+Γ ⊢ ρ.⌊l⌋ ↓ r
+
+
+------------------ L-?-lab
+Γ ⊢ (l: τ).α ↓ ?
+// …plus L-ε, L-α, L-α-free and the three concatenation rules at a variable key,
+// unchanged. No rule ever lets a variable key FIND (`LookupV.not_found`).
+
+
+q is neither ⌊l⌋ nor a variable
+--------------------------------- L-junk
+Γ ⊢ ρ.q ↓ ⊥
+
+- det / mono / total / ≈-invariance / substitution stability all re-proved
+  (`LookupQ.det`, `.mono`, `.total`, `.equiv`, `.applySubst`). The key is
+  ≈-rigid, so ≈ on the KEY is invisible to the lookup (`LookupQ.key_equiv`) —
+  the algorithm reads the key under ⟦S⟧, the declarative side under σ, and
+  under σ ⊨ S the two are only ≈-equal
+
+
+=== Declarative
+
+---------------- T-lab
+Γ ⊢ 'l: ⌊l⌋
+
+
+Γ ⊢ e₁: {ρ}   Γ ⊢ e₂: q   Γ ⊢ ρ.q ↓ τ
+---------------------------------------- T-sel-dyn
+Γ ⊢ e₁.(e₂): τ
+// …with -★ (?) and -⊥ (⊥) arms at ★, as T-sel. qProgress needs nothing of the
+// key but that it is a value; qPreservation reduces the found arm to the static
+// one, since a label value types only at its singleton or ★ (`qtyped_lab_inv`).
+// L1 types neither former (`typed_lab_false`): FC-labels are an L2 feature.
+
+- Stumps are keyed: ⟨ρ.q ↓ δ⟩ with q a TYPE — ⌊l⌋ for e.l — and Discharge
+  replays the keyed lookup under θ, key included. The headline scheme, and its
+  instance-closedness (`selDynQ_instance_closed`):
+
+  λa. λx. x.(a)  ::  ∀(α: Label)(β: Row)(δ: Type). ⟨β.α ↓ δ⟩ ⇒ α → {β} → δ
+
+  Two blockers, two sorts, one stump. P&X REJECT the analogous (l: String |
+  foo: Int).foo; here it is ? and types at ★ — usable only parametrically,
+  since ★ is rigid, but typed without a restriction operator or lacks-predicate
+
+
+=== Algorithmic
+
+--------------------- A-lab
+Γ; S ⊢ 'l ⇒ ⌊l⌋; S
+
+
+Γ; S ⊢ e₁ ⇒ τ₁; S₁   fresh r: Row   S₁ ⊢ τ₁ ≐ {r} ⇝! S₂   Γ; S₂ ⊢ e₂ ⇒ τ₂; S₃   ⟦S₃⟧ ⊢ r.(⟦S₃⟧τ₂) ↓ τ′
+--------------------------------------------------------------------------------------------------- A-sel-dyn
+Γ; S ⊢ e₁.(e₂) ⇒ τ′; S₃
+// …and -⊥ (★, W-flag named by the key) and -? (fresh δ, park ⟨β ▷ r.τ₂ ↓ δ⟩ where
+// β is the row variable OR the key the keyed lookup is blocked on).
+
+- Wake-up and F-★ read a stump's key under ⟦S⟧ exactly as its row; a key
+  blocker is woken when the key is solved, with no new trigger — staleness is
+  judged by the keyed blocked-lookup, and every equation is solve-then-saturate
+- A-let's premises cover keys: what stays in Δ_Γ does not mention ᾱ in its key,
+  and no generalized key mentions a generalized RESULT (`r.(x.l)` is not
+  generalized — `QScheme.Correctable`'s key clause). Inhabitation: a stump
+  blocked on a generalized variable reads as ? — or ⊥, when its key became a
+  non-label — and either discharges at ★ (`lookupQ_blocked_subst`)
+- F-★ only ever binds a variable to ★ (`Finalizes.starOrVar`), so a key blocker
+  never becomes a LABEL while the other stumps are finalized
+- The spent promise has a second door: λr.λa. (r.(a)) c spends the keyed promise
+  on an arrow exactly as λx.λy.(x.l) y does. The same incompleteness, not a new
+  class (`InferRuns.lean`)

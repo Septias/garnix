@@ -701,6 +701,25 @@ theorem unifyM_good {B : Type} [DecidableEq B] (fuel : Nat) :
               obtain ⟨rfl, rfl⟩ := h
               exact Sol.good_nil _
             · cases fuel <;> simp [unifyTyF, hb] at h
+        | lab _ => cases fuel <;> cases h
+        | unk => cases fuel <;> cases h
+        | fn _ _ => cases fuel <;> cases h
+        | rcd _ => cases fuel <;> cases h
+    | lab b =>
+        cases τ' with
+        | var α => cases fuel <;> exact hbR S α _ h
+        | base _ => cases fuel <;> cases h
+        | lab b' =>
+            by_cases hb : b = b'
+            · subst hb
+              have hred : unifyTyF S fuel (Ty.lab b) (Ty.lab b)
+                  = .success (Sol.nil (B := B)) S := by
+                cases fuel <;> simp [unifyTyF]
+              rw [hred] at h
+              simp only [UResM.success.injEq] at h
+              obtain ⟨rfl, rfl⟩ := h
+              exact Sol.good_nil _
+            · cases fuel <;> simp [unifyTyF, hb] at h
         | unk => cases fuel <;> cases h
         | fn _ _ => cases fuel <;> cases h
         | rcd _ => cases fuel <;> cases h
@@ -708,6 +727,7 @@ theorem unifyM_good {B : Type} [DecidableEq B] (fuel : Nat) :
         cases τ' with
         | var α => cases fuel <;> exact hbR S α _ h
         | base _ => cases fuel <;> cases h
+        | lab _ => cases fuel <;> cases h
         | unk =>
             have hred : unifyTyF S fuel (Ty.unk : Ty B) Ty.unk
                 = .success (Sol.nil (B := B)) S := by cases fuel <;> simp [unifyTyF]
@@ -721,6 +741,7 @@ theorem unifyM_good {B : Type} [DecidableEq B] (fuel : Nat) :
         cases τ' with
         | var α => cases fuel <;> exact hbR S α _ h
         | base _ => cases fuel <;> cases h
+        | lab _ => cases fuel <;> cases h
         | unk => cases fuel <;> cases h
         | fn a₂ b₂ => simp [tyRec] at hrec
         | rcd _ => cases fuel <;> cases h
@@ -728,6 +749,7 @@ theorem unifyM_good {B : Type} [DecidableEq B] (fuel : Nat) :
         cases τ' with
         | var α => cases fuel <;> exact hbR S α _ h
         | base _ => cases fuel <;> cases h
+        | lab _ => cases fuel <;> cases h
         | unk => cases fuel <;> cases h
         | fn _ _ => cases fuel <;> cases h
         | rcd ρ₂ => simp [tyRec] at hrec

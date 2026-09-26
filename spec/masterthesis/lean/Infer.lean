@@ -111,6 +111,122 @@ theorem LookupBlocked.unsolved {B : Type} {Γ : Ctx B} {ρ : Row B} {l : Label}
   | .catUnk hb     => hb.unsolved
 
 
+--------------------- ? ON β FOR A KEYED LOOKUP -------------------------------
+-- A dynamic selection's `?` has a second source: a label-variable key meeting a
+-- literal field (L-?-lab). That `?` is blocked on the KEY — it is the label
+-- variable's solution that decides it, not any row's — so the blocker of a
+-- keyed lookup is a row variable or the key itself.
+
+/-- `LookupVBlocked Γ ρ α β` — the lookup of the label variable α in ρ gets
+stuck at β: at a free row variable, or at α itself on the first field. -/
+inductive LookupVBlocked {B : Type} (Γ : Ctx B) : Row B → TyVar → TyVar → Prop where
+  -- L-?-lab: the first field decides nothing until α is known
+  | sing {α : TyVar} {l : Label} {τ : Ty B} : LookupVBlocked Γ (.sing l τ) α α
+  | varFree {α β : TyVar} :
+      Γ.lookupRow β = none → LookupVBlocked Γ (.var β) α β
+  | var {α β γ : TyVar} {ρ : Row B} :
+      Γ.lookupRow β = some ρ → LookupVBlocked Γ ρ α γ → LookupVBlocked Γ (.var β) α γ
+  | catSkip {ρ₁ ρ₂ : Row B} {α γ : TyVar} :
+      LookupV Γ ρ₁ α .absent → LookupVBlocked Γ ρ₂ α γ →
+      LookupVBlocked Γ (.cat ρ₁ ρ₂) α γ
+  | catUnk {ρ₁ ρ₂ : Row B} {α γ : TyVar} :
+      LookupVBlocked Γ ρ₁ α γ → LookupVBlocked Γ (.cat ρ₁ ρ₂) α γ
+
+/-- `Γ ⊢ ρ.q ↓ ? on β` for a keyed lookup. -/
+inductive LookupBlockedQ {B : Type} (Γ : Ctx B) : Row B → Ty B → TyVar → Prop where
+  | lit {ρ : Row B} {l : Label} {β : TyVar} :
+      LookupBlocked Γ ρ l β → LookupBlockedQ Γ ρ (.lab l) β
+  | var {ρ : Row B} {α β : TyVar} :
+      LookupVBlocked Γ ρ α β → LookupBlockedQ Γ ρ (.var α) β
+
+theorem LookupVBlocked.toLookupV {B : Type} {Γ : Ctx B} {ρ : Row B} {α β : TyVar} :
+    LookupVBlocked Γ ρ α β → LookupV Γ ρ α .unknown
+  | .sing => .sing
+  | .varFree h => .varFree h
+  | .var h hb => .var h hb.toLookupV
+  | .catSkip ha hb => .catSkip ha hb.toLookupV
+  | .catUnk hb => .catUnk hb.toLookupV
+
+-- ⊢  sound: a blocked keyed lookup is an unknown one
+theorem LookupBlockedQ.toLookupQ {B : Type} {Γ : Ctx B} {ρ : Row B} {q : Ty B}
+    {β : TyVar} : LookupBlockedQ Γ ρ q β → LookupQ Γ ρ q .unknown
+  | .lit h => .lit h.toLookup
+  | .var h => .var h.toLookupV
+
+theorem LookupV.unknown_blocked {B : Type} {Γ : Ctx B} {ρ : Row B} {α : TyVar}
+    (h : LookupV Γ ρ α .unknown) : ∃ β, LookupVBlocked Γ ρ α β := by
+  generalize hr : (LookupRes.unknown : LookupRes B) = r at h
+  induction h with
+  | emp => exact absurd hr (by simp)
+  | sing => exact ⟨_, .sing⟩
+  | var hΓ _ ih => obtain ⟨β, hb⟩ := ih hr; exact ⟨β, .var hΓ hb⟩
+  | varFree hΓ => exact ⟨_, .varFree hΓ⟩
+  | catSkip ha _ _ ihb => obtain ⟨β, hb⟩ := ihb hr; exact ⟨β, .catSkip ha hb⟩
+  | catUnk _ ih => obtain ⟨β, hb⟩ := ih rfl; exact ⟨β, .catUnk hb⟩
+
+-- ⊢  complete: an unknown keyed lookup always names its blocker
+theorem LookupQ.unknown_blocked {B : Type} {Γ : Ctx B} {ρ : Row B} {q : Ty B}
+    (h : LookupQ Γ ρ q .unknown) : ∃ β, LookupBlockedQ Γ ρ q β := by
+  cases h with
+  | lit h => obtain ⟨β, hb⟩ := Lookup.unknown_blocked h; exact ⟨β, .lit hb⟩
+  | var h => obtain ⟨β, hb⟩ := LookupV.unknown_blocked h; exact ⟨β, .var hb⟩
+
+theorem LookupVBlocked.det {B : Type} {Γ : Ctx B} {ρ : Row B} {α β γ : TyVar}
+    (h₁ : LookupVBlocked Γ ρ α β) (h₂ : LookupVBlocked Γ ρ α γ) : β = γ := by
+  induction h₁ generalizing γ with
+  | sing => cases h₂; rfl
+  | varFree h =>
+      cases h₂ with
+      | varFree _ => rfl
+      | var h' _ => rw [h] at h'; cases h'
+  | var h _ ih =>
+      cases h₂ with
+      | varFree h' => rw [h] at h'; cases h'
+      | var h' hb' => rw [h] at h'; injection h' with he; exact ih (he ▸ hb')
+  | catSkip ha _ ih =>
+      cases h₂ with
+      | catSkip _ hb' => exact ih hb'
+      | catUnk hb' => exact absurd (ha.det hb'.toLookupV) (by simp)
+  | catUnk hb ih =>
+      cases h₂ with
+      | catSkip ha' _ => exact absurd (hb.toLookupV.det ha') (by simp)
+      | catUnk hb' => exact ih hb'
+
+-- ⊢  the blocker is UNIQUE
+theorem LookupBlockedQ.det {B : Type} {Γ : Ctx B} {ρ : Row B} {q : Ty B}
+    {β γ : TyVar} (h₁ : LookupBlockedQ Γ ρ q β) (h₂ : LookupBlockedQ Γ ρ q γ) :
+    β = γ := by
+  cases h₁ with
+  | lit h => cases h₂ with | lit h' => exact h.det h'
+  | var h => cases h₂ with | var h' => exact h.det h'
+
+-- ⊢  the blocker is an unsolved ROW variable, or it is the key
+theorem LookupVBlocked.unsolved {B : Type} {Γ : Ctx B} {ρ : Row B} {α β : TyVar} :
+    LookupVBlocked Γ ρ α β → Γ.lookupRow β = none ∨ β = α
+  | .sing => .inr rfl
+  | .varFree h => .inl h
+  | .var _ hb => hb.unsolved
+  | .catSkip _ hb => hb.unsolved
+  | .catUnk hb => hb.unsolved
+
+theorem LookupBlockedQ.unsolved {B : Type} {Γ : Ctx B} {ρ : Row B} {q : Ty B}
+    {β : TyVar} : LookupBlockedQ Γ ρ q β → Γ.lookupRow β = none ∨ q = .var β
+  | .lit h => .inl h.unsolved
+  | .var h => (h.unsolved).imp id (fun he => by subst he; rfl)
+
+/-- a static key blocked on a free row variable — the shape every `λx. x.l`
+stump has; stated so that `.varFree` reads at the keyed relation too. -/
+theorem LookupBlockedQ.varFree {B : Type} {Γ : Ctx B} {α : TyVar} {l : Label} :
+    Γ.lookupRow α = none → LookupBlockedQ Γ (.var α) (.lab l) α :=
+  fun h => .lit (.varFree h)
+
+/-- the name a W-flag records for a key: the label itself when it is known. -/
+def Ty.keyName {B : Type} : Ty B → Label
+  | .lab l => l
+  | .var α => "${" ++ α ++ "}"
+  | _      => "${?}"
+
+
 --------------------- THE SOLVER STATE  S := (θ, Δ, W) ------------------------
 -- `algorithmic.typ`: "θ is only ever refined"; Δ holds the parked selections;
 -- W collects definite-absence flags and "never affects
@@ -263,19 +379,19 @@ inductive Wake {B : Type} [DecidableEq B] :
     SolverState B → Parked B → SolverState B → Prop where
   -- K-hit: the lookup now lands, so δ is pinned to what it found
   | hit {S S' : SolverState B} {p : Parked B} {τ : Ty B} :
-      Lookup S.ctx (p.stump.row.applySubst S.subst) p.stump.label (.found τ) →
+      LookupQ S.ctx (p.stump.row.applySubst S.subst) (p.stump.label.applySubst S.subst) (.found τ) →
       SolveTy S (.var p.stump.res) τ S' →
       Wake S p { S' with parked := S'.parked.filter (·.stump.res != p.stump.res) }
   -- K-⊥: definite absence, so δ becomes ★ and W records the site
   | abs {S S' : SolverState B} {p : Parked B} :
-      Lookup S.ctx (p.stump.row.applySubst S.subst) p.stump.label .absent →
+      LookupQ S.ctx (p.stump.row.applySubst S.subst) (p.stump.label.applySubst S.subst) .absent →
       SolveTy S (.var p.stump.res) .unk S' →
       Wake S p
         ({ S' with parked := S'.parked.filter (·.stump.res != p.stump.res) }.flag
-          p.stump.label)
+          (p.stump.label.applySubst S.subst).keyName)
   -- K-repark: the lookup progressed to a NEW blocker; nothing is committed
   | repark {S : SolverState B} {p : Parked B} {α' : TyVar} :
-      LookupBlocked S.ctx (p.stump.row.applySubst S.subst) p.stump.label α' →
+      LookupBlockedQ S.ctx (p.stump.row.applySubst S.subst) (p.stump.label.applySubst S.subst) α' →
       Wake S p
         (({ S with parked := S.parked.filter (·.stump.res != p.stump.res) }).park
           ⟨α', p.stump⟩)
@@ -288,7 +404,7 @@ inductive Wakes {B : Type} [DecidableEq B] :
       Wake S p S₁ → Wakes S₁ ps S₂ → Wakes S (p :: ps) S₂
   -- a constraint whose lookup is still blocked is simply parked
   | park {S S₁ : SolverState B} {p : Parked B} {ps : List (Parked B)} :
-      LookupBlocked S.ctx (p.stump.row.applySubst S.subst) p.stump.label p.blocker →
+      LookupBlockedQ S.ctx (p.stump.row.applySubst S.subst) (p.stump.label.applySubst S.subst) p.blocker →
       Wakes (S.park p) ps S₁ → Wakes S (p :: ps) S₁
 
 --------------------- THE STATE INVARIANT, AND SATURATION ---------------------
@@ -323,7 +439,7 @@ job, i.e. `UnifyWF`'s; for a stump row that is a bare variable, which is all
 `A-sel-?` ever parks, the two coincide.) -/
 def SolverState.Quiescent {B : Type} (S : SolverState B) : Prop :=
   ∀ p ∈ S.parked,
-    LookupBlocked S.ctx (p.stump.row.applySubst S.subst) p.stump.label p.blocker
+    LookupBlockedQ S.ctx (p.stump.row.applySubst S.subst) (p.stump.label.applySubst S.subst) p.blocker
 
 /-- an empty Δ is quiescent, vacuously — the state every run starts in. -/
 theorem SolverState.Quiescent.nil {B : Type} {S : SolverState B}
@@ -337,15 +453,18 @@ theorem SolverState.Quiescent.mono {B : Type} {S S' : SolverState B}
     (h : S.Quiescent) : S'.Quiescent := by
   intro p hp
   have hb := h p (hsub p hp)
-  show LookupBlocked S'.sol.toCtx (p.stump.row.applySubst S'.sol.toSubst) _ _
+  show LookupBlockedQ S'.sol.toCtx (p.stump.row.applySubst S'.sol.toSubst)
+    (p.stump.label.applySubst S'.sol.toSubst) _
   rw [hsol]; exact hb
 
 /-- ⊢  the invariant §B asks for, in the form it is useful: in a quiescent state
-no parked stump's blocker is SOLVED. `LookupBlocked.unsolved` is the content;
+no parked stump's blocker is a SOLVED row variable — unless it is the stump's
+own (unsolved-under-⟦S⟧) label key. `LookupBlockedQ.unsolved` is the content;
 this is it read through the state. -/
 theorem SolverState.Quiescent.blocker_unsolved {B : Type} {S : SolverState B}
-    (h : S.Quiescent) : ∀ p ∈ S.parked, p.blocker ∉ S.sol.row.map Prod.fst :=
-  fun p hp => Sol.lookupRow_none (h p hp).unsolved
+    (h : S.Quiescent) : ∀ p ∈ S.parked, p.blocker ∉ S.sol.row.map Prod.fst ∨
+      p.stump.label.applySubst S.subst = .var p.blocker :=
+  fun p hp => (h p hp).unsolved.imp Sol.lookupRow_none id
 
 /-- `S ⊢ Δ ↝! S′` — wake-up run to QUIESCENCE. A step is taken only on a stump
 that has gone STALE (its recorded blocker no longer blocks its lookup), which is
@@ -356,7 +475,7 @@ inductive Saturate {B : Type} [DecidableEq B] :
   | done {S : SolverState B} : S.Quiescent → Saturate S S
   | step {S S₁ S₂ : SolverState B} {p : Parked B} :
       p ∈ S.parked →
-      ¬ LookupBlocked S.ctx (p.stump.row.applySubst S.subst) p.stump.label
+      ¬ LookupBlockedQ S.ctx (p.stump.row.applySubst S.subst) (p.stump.label.applySubst S.subst)
           p.blocker →
       Wake S p S₁ → Saturate S₁ S₂ → Saturate S S₂
 
@@ -413,12 +532,12 @@ inductive Finalize {B : Type} [DecidableEq B] :
     SolverState B → Parked B → SolverState B → Prop where
   | star {S S' : SolverState B} {p : Parked B} :
       p ∈ S.parked →
-      LookupBlocked S.ctx (p.stump.row.applySubst S.subst) p.stump.label
+      LookupBlockedQ S.ctx (p.stump.row.applySubst S.subst) (p.stump.label.applySubst S.subst)
         p.blocker →
       SolveTy S (.var p.stump.res) .unk S' →
       Finalize S p
         ({ S' with parked := S'.parked.filter (·.stump.res != p.stump.res) }.flag
-          p.stump.label)
+          (p.stump.label.applySubst S.subst).keyName)
 
 /-- `S ⊢ Δ ⇓* S′` — the ⇓-closure `algorithmic.typ` leaves implicit: F-★ is
 stated for ONE stump and the end of a run has a list of them. The counterpart of
@@ -438,7 +557,7 @@ theorem Finalize.of_quiescent {B : Type} [DecidableEq B] {S S' : SolverState B}
     (hs : SolveTy S (.var p.stump.res) .unk S') :
     Finalize S p
       ({ S' with parked := S'.parked.filter (·.stump.res != p.stump.res) }.flag
-        p.stump.label) :=
+        (p.stump.label.applySubst S.subst).keyName) :=
   .star hp (hq p hp) hs
 
 /-- ⊢  **F-★ and K-hit / K-⊥ are now exclusive.** Whenever F-★ applies to a stump,
@@ -451,8 +570,8 @@ theorem Finalize.wake_no_commit {B : Type} [DecidableEq B] {S S₁ S₂ : Solver
   cases hf with
   | star _ hb _ =>
       cases hw with
-      | hit hl _  => exact absurd (lookup_det hl hb.toLookup) (by simp)
-      | abs hl _  => exact absurd (lookup_det hl hb.toLookup) (by simp)
+      | hit hl _  => exact absurd (hl.det hb.toLookupQ) (by simp)
+      | abs hl _  => exact absurd (hl.det hb.toLookupQ) (by simp)
       | repark _  => rfl
 
 /-- ⊢  …and the same fact read off the STATE rather than off a finalization step:
@@ -463,8 +582,8 @@ theorem SolverState.Quiescent.wake_no_commit {B : Type} [DecidableEq B]
     (hw : Wake S p S') : S'.sol = S.sol := by
   have hb := hq p hp
   cases hw with
-  | hit hl _  => exact absurd (lookup_det hl hb.toLookup) (by simp)
-  | abs hl _  => exact absurd (lookup_det hl hb.toLookup) (by simp)
+  | hit hl _  => exact absurd (hl.det hb.toLookupQ) (by simp)
+  | abs hl _  => exact absurd (hl.det hb.toLookupQ) (by simp)
   | repark _  => rfl
 
 
@@ -503,6 +622,7 @@ theorem no_finalize_of_spent {B : Type} [DecidableEq B] {S : SolverState B}
       | var _  => intro h; exact absurd h not_false
       | unk    => intro h; exact absurd h not_false
       | base b => intro _ hu; simp [unifyTyF] at hu
+      | lab b => intro _ hu; simp [unifyTyF] at hu
       | fn a b => intro _ hu; simp [unifyTyF] at hu
       | rcd ρ  => intro _ hu; simp [unifyTyF] at hu
 
@@ -538,7 +658,7 @@ rule (“compute the initial blocker”) that the paper leaves out. -/
 def InstStumps {B : Type} (θ : TySubst B) (f : TyVar → TyVar)
     (Q : List (Stump B)) (ps : List (Parked B)) : Prop :=
   ps.map Parked.stump =
-    Q.map (fun st => (⟨st.row.applySubst θ, st.label, f st.res⟩ : Stump B))
+    Q.map (fun st => (⟨st.row.applySubst θ, st.label.applySubst θ, f st.res⟩ : Stump B))
 
 --------------------- ⟦S⟧ APPLIED TO A CONTEXT -------------------------------
 -- The declarative side reads row-solutions out of a CONTEXT; the algorithm
@@ -574,7 +694,7 @@ unification must be generalized as β, the name the body mentions
 (`InferRuns.lean`, the `h = λy. g y` witness). -/
 def letScheme {B : Type} (S₁ : SolverState B) (ᾱ : List TyVar) (Δq : List (Parked B))
     (τ₁ : Ty B) : QScheme B :=
-  ⟨ᾱ, Δq.map (fun p => (⟨p.stump.row.applySubst S₁.subst, p.stump.label,
+  ⟨ᾱ, Δq.map (fun p => (⟨p.stump.row.applySubst S₁.subst, p.stump.label.applySubst S₁.subst,
       S₁.resVar p.stump.res⟩ : Stump B)), τ₁.applySubst S₁.subst⟩
 
 /-- A-let's premise on the generalized RESULTS: each still reads as a variable at
@@ -678,7 +798,39 @@ inductive Infer {B C : Type} [DecidableEq B] (constTy : C → B) :
       LookupBlocked S₂.ctx ((Row.var r).applySubst S₂.subst) l α →
       (δ, S₂') = S₂.draw .ty →
       Infer constTy Γ S (.sel e l) (.var δ)
-        (S₂'.park ⟨α, ⟨.var r, l, δ⟩⟩)
+        (S₂'.park ⟨α, ⟨.var r, .lab l, δ⟩⟩)
+  -- A-lab: a label literal is its own singleton
+  | lab {Γ : QCtx B} {S : SolverState B} {l : Label} :
+      Infer constTy Γ S (.lab l) (.lab l) S
+  -- A-sel-dyn. The record first (forced to `{r}`), then the key; the lookup is
+  -- keyed by the key's TYPE read under ⟦S⟧ — ⌊l⌋, a label variable, or not a
+  -- label at all — and its three verdicts are A-sel's, A-sel-⊥'s and A-sel-?'s
+  | selDyn {Γ : QCtx B} {S S₁ S₁' S₂ S₃ : SolverState B} {e₁ e₂ : Expr C}
+      {τ₁ τ₂ τ' : Ty B} {r : TyVar} :
+      Infer constTy Γ S e₁ τ₁ S₁ →
+      (r, S₁') = S₁.draw .row →
+      SolveTySat S₁' τ₁ (.rcd (.var r)) S₂ →
+      Infer constTy Γ S₂ e₂ τ₂ S₃ →
+      LookupQ S₃.ctx (.var r) (τ₂.applySubst S₃.subst) (.found τ') →
+      Infer constTy Γ S (.selDyn e₁ e₂) τ' S₃
+  | selDynAbs {Γ : QCtx B} {S S₁ S₁' S₂ S₃ : SolverState B} {e₁ e₂ : Expr C}
+      {τ₁ τ₂ : Ty B} {r : TyVar} :
+      Infer constTy Γ S e₁ τ₁ S₁ →
+      (r, S₁') = S₁.draw .row →
+      SolveTySat S₁' τ₁ (.rcd (.var r)) S₂ →
+      Infer constTy Γ S₂ e₂ τ₂ S₃ →
+      LookupQ S₃.ctx (.var r) (τ₂.applySubst S₃.subst) .absent →
+      Infer constTy Γ S (.selDyn e₁ e₂) .unk (S₃.flag (τ₂.applySubst S₃.subst).keyName)
+  | selDynUnk {Γ : QCtx B} {S S₁ S₁' S₂ S₃ S₃' : SolverState B} {e₁ e₂ : Expr C}
+      {τ₁ τ₂ : Ty B} {r α δ : TyVar} :
+      Infer constTy Γ S e₁ τ₁ S₁ →
+      (r, S₁') = S₁.draw .row →
+      SolveTySat S₁' τ₁ (.rcd (.var r)) S₂ →
+      Infer constTy Γ S₂ e₂ τ₂ S₃ →
+      LookupBlockedQ S₃.ctx ((Row.var r).applySubst S₃.subst) (τ₂.applySubst S₃.subst) α →
+      (δ, S₃') = S₃.draw .ty →
+      Infer constTy Γ S (.selDyn e₁ e₂) (.var δ)
+        (S₃'.park ⟨α, ⟨.var r, τ₂, δ⟩⟩)
   -- A-rec
   | rcd {Γ : QCtx B} {S S' : SolverState B} {ξ : RecBody (Expr C)} {ρ : Row B} :
       InferRec constTy Γ S ξ ρ S' →
@@ -710,16 +862,18 @@ inductive Infer {B C : Type} [DecidableEq B] (constTy : C → B) :
       -- … each generalized stump's answer, READ AT S₁, is generalized with it,
       -- one per stump (`QScheme.WF`) …
       LetResults S₁ ᾱ Δq →
-      -- … what stays parked does not mention ᾱ, READ AT S₁, so it reads the
-      -- same at every instance …
+      -- … what stays parked does not mention ᾱ, READ AT S₁ — row, key and
+      -- answer — so it reads the same at every instance …
       (∀ α ∈ ᾱ, ∀ p ∈ Δγ, α ∉ (p.stump.row.applySubst S₁.subst).ftv ∧
-         α ∉ (S₁.subst.ty p.stump.res).ftv) →
+         α ∉ (S₁.subst.ty p.stump.res).ftv ∧
+         α ∉ (p.stump.label.applySubst S₁.subst).ftv) →
       -- … nothing already solved is generalized …
       (∀ α ∈ ᾱ, α ∉ S₁.sol.dom) →
-      -- … and no generalized stump's row, read at S₁, mentions another's answer:
-      -- then an instance's constraints can be discharged one at a time
+      -- … and no generalized stump's row OR KEY, read at S₁, mentions another's
+      -- answer: then an instance's constraints can be discharged one at a time
       -- (`instEquivCorrects`, InferSoundA.lean), without a fixpoint
-      (∀ p ∈ Δq, ∀ q ∈ Δq, S₁.resVar q.stump.res ∉ (p.stump.row.applySubst S₁.subst).ftv) →
+      (∀ p ∈ Δq, ∀ q ∈ Δq, S₁.resVar q.stump.res ∉ (p.stump.row.applySubst S₁.subst).ftv ∧
+         S₁.resVar q.stump.res ∉ (p.stump.label.applySubst S₁.subst).ftv) →
       Infer constTy (Γ.bindScheme x (letScheme S₁ ᾱ Δq τ₁))
         { S₁ with parked := Δγ } e₂ τ₂ S₂ →
       Infer constTy Γ S (.letE x e₁ e₂) τ₂ S₂
@@ -786,7 +940,7 @@ theorem selEx_infers :
       ⟨Sol.nil, [], [], ⟨1⟩, []⟩ (selEx Unit)
       (.fn (.var (natName 1)) (.var (natName 3)))
       ⟨⟨[(natName 1, .rcd (.var (natName 2)))], []⟩,
-       [⟨natName 2, ⟨.var (natName 2), "l", natName 3⟩⟩], [], ⟨4⟩, selExKinds⟩ := by
+       [⟨natName 2, ⟨.var (natName 2), .lab "l", natName 3⟩⟩], [], ⟨4⟩, selExKinds⟩ := by
   refine Infer.lam (S₀ := ⟨Sol.nil, [], [], ⟨2⟩, [(natName 1, .ty)]⟩) rfl ?_
   refine Infer.selUnk (τ := .var (natName 1))
     (S₁ := ⟨Sol.nil, [], [], ⟨2⟩, [(natName 1, .ty)]⟩)
@@ -859,7 +1013,7 @@ def RunSound (B C : Type) [DecidableEq B] (constTy : C → B) : Prop :=
 
 private def selExS1 : SolverState Unit :=
   ⟨⟨[(natName 1, .rcd (.var (natName 2)))], []⟩,
-   [⟨natName 2, ⟨.var (natName 2), "l", natName 3⟩⟩], [], ⟨4⟩, selExKinds⟩
+   [⟨natName 2, ⟨.var (natName 2), .lab "l", natName 3⟩⟩], [], ⟨4⟩, selExKinds⟩
 
 private def selExStar : Sol Unit := ⟨[(natName 3, .unk)], []⟩
 
@@ -1040,6 +1194,25 @@ theorem Infer.kinds_mono {B C : Type} [DecidableEq B] {constTy : C → B}
       simp only [SolverState.park]
       rw [draw_kind_eq hd₂, hs.kinds, draw_kind_eq hd]
       exact List.IsSuffix.trans (List.suffix_cons _ _) (List.suffix_cons _ _)
+  | .lab => List.suffix_refl _
+  | .selDyn h₁ hd hs h₂ _ => by
+      refine List.IsSuffix.trans (Infer.kinds_mono h₁) ?_
+      refine List.IsSuffix.trans ?_ (Infer.kinds_mono h₂)
+      rw [hs.kinds, draw_kind_eq hd]; exact List.suffix_cons _ _
+  | .selDynAbs h₁ hd hs h₂ _ => by
+      refine List.IsSuffix.trans (Infer.kinds_mono h₁) ?_
+      show _ <:+ (SolverState.flag _ _).kinds
+      simp only [SolverState.flag]
+      refine List.IsSuffix.trans ?_ (Infer.kinds_mono h₂)
+      rw [hs.kinds, draw_kind_eq hd]; exact List.suffix_cons _ _
+  | .selDynUnk h₁ hd hs h₂ _ hd₂ => by
+      refine List.IsSuffix.trans (Infer.kinds_mono h₁) ?_
+      show _ <:+ (SolverState.park _ _).kinds
+      simp only [SolverState.park]
+      rw [draw_kind_eq hd₂]
+      refine List.IsSuffix.trans ?_ (List.suffix_cons _ _)
+      refine List.IsSuffix.trans ?_ (Infer.kinds_mono h₂)
+      rw [hs.kinds, draw_kind_eq hd]; exact List.suffix_cons _ _
   | .rcd hb => InferRec.kinds_mono hb
   | .letE h₁ _ _ _ _ _ _ _ _ _ _ h₂ => by
       have i₁ := Infer.kinds_mono h₁
@@ -1121,6 +1294,30 @@ theorem Infer.supply_mono {B C : Type} [DecidableEq B] {constTy : C → B}
       omega
   | .selUnk h₁ hd hs _ hd₂ => by
       have i₁ := Infer.supply_mono h₁
+      have hd' := draw_eq hd
+      have j := hs.supply
+      have hd₂' := draw_eq hd₂
+      show _ ≤ (SolverState.park _ _).supply.next
+      simp only [SolverState.park]
+      omega
+  | .lab => Nat.le_refl _
+  | .selDyn h₁ hd hs h₂ _ => by
+      have i₁ := Infer.supply_mono h₁
+      have i₂ := Infer.supply_mono h₂
+      have hd' := draw_eq hd
+      have j := hs.supply
+      omega
+  | .selDynAbs h₁ hd hs h₂ _ => by
+      have i₁ := Infer.supply_mono h₁
+      have i₂ := Infer.supply_mono h₂
+      have hd' := draw_eq hd
+      have j := hs.supply
+      show _ ≤ (SolverState.flag _ _).supply.next
+      simp only [SolverState.flag]
+      omega
+  | .selDynUnk h₁ hd hs h₂ _ hd₂ => by
+      have i₁ := Infer.supply_mono h₁
+      have i₂ := Infer.supply_mono h₂
       have hd' := draw_eq hd
       have j := hs.supply
       have hd₂' := draw_eq hd₂
@@ -1247,6 +1444,21 @@ theorem Infer.sat_mono {B C : Type} [DecidableEq B] {constTy : C → B}
           (hs.satMono.trans
             ((SolverState.SatMono.of_sol_eq (draw_sol hd₂)).trans
               (SolverState.SatMono.of_sol_eq rfl))))
+  | .lab => SolverState.SatMono.refl _
+  | .selDyn h₁ hd hs h₂ _ =>
+      (Infer.sat_mono h₁).trans
+        ((SolverState.SatMono.of_sol_eq (draw_sol hd)).trans
+          (hs.satMono.trans (Infer.sat_mono h₂)))
+  | .selDynAbs h₁ hd hs h₂ _ =>
+      (Infer.sat_mono h₁).trans
+        ((SolverState.SatMono.of_sol_eq (draw_sol hd)).trans
+          (hs.satMono.trans ((Infer.sat_mono h₂).trans (SolverState.SatMono.of_sol_eq rfl))))
+  | .selDynUnk h₁ hd hs h₂ _ hd₂ =>
+      (Infer.sat_mono h₁).trans
+        ((SolverState.SatMono.of_sol_eq (draw_sol hd)).trans
+          (hs.satMono.trans ((Infer.sat_mono h₂).trans
+            ((SolverState.SatMono.of_sol_eq (draw_sol hd₂)).trans
+              (SolverState.SatMono.of_sol_eq rfl)))))
   | .rcd hb => InferRec.sat_mono hb
   | .letE h₁ _ _ _ _ _ _ _ _ _ _ h₂ => by
       refine (Infer.sat_mono h₁).trans ?_
@@ -1307,11 +1519,12 @@ with the same solution (the draw of δ sits in between). -/
 theorem SolverState.Quiescent.park_draw {B : Type} {S S' : SolverState B}
     {q : Parked B} (hsol : S'.sol = S.sol) (hpar : S'.parked = S.parked)
     (hq : S.Quiescent)
-    (hb : LookupBlocked S.ctx (q.stump.row.applySubst S.subst) q.stump.label
+    (hb : LookupBlockedQ S.ctx (q.stump.row.applySubst S.subst) (q.stump.label.applySubst S.subst)
             q.blocker) :
     (S'.park q).Quiescent := by
   intro p hp
-  show LookupBlocked S'.sol.toCtx (p.stump.row.applySubst S'.sol.toSubst) _ _
+  show LookupBlockedQ S'.sol.toCtx (p.stump.row.applySubst S'.sol.toSubst)
+    (p.stump.label.applySubst S'.sol.toSubst) _
   rw [hsol]
   rcases List.mem_cons.mp hp with rfl | hp'
   · exact hb
@@ -1333,7 +1546,14 @@ theorem Infer.quiescent {B C : Type} [DecidableEq B] {constTy : C → B}
   | .selAbs _ _ hs _, _ => hs.quiescent.flag _
   | .selUnk _ hd hs hb hd₂, _ =>
       SolverState.Quiescent.park_draw (draw_sol hd₂) (draw_parked hd₂)
-        hs.quiescent hb
+        hs.quiescent (.lit hb)
+  -- the key's inference runs from the saturated state, and carries it
+  | .lab, hq => hq
+  | .selDyn _ _ hs h₂ _, _ => Infer.quiescent h₂ hs.quiescent
+  | .selDynAbs _ _ hs h₂ _, _ => (Infer.quiescent h₂ hs.quiescent).flag _
+  | .selDynUnk _ _ hs h₂ hb hd₂, _ =>
+      SolverState.Quiescent.park_draw (draw_sol hd₂) (draw_parked hd₂)
+        (Infer.quiescent h₂ hs.quiescent) hb
   -- …and the rules that do not write carry it through
   | .lam hd hb, hq => Infer.quiescent hb (hq.draw hd)
   | .rcd hb, hq => InferRec.quiescent hb hq

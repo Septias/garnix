@@ -17,6 +17,72 @@ import RowUnify.State
 
 namespace MinimalCalculus
 
+--------------------- THE θ ↦ rowEnv BRIDGE, FOR QUERIES ---------------------
+-- `Sol.lookup_toCtx` for the key-typed lookup of a dynamic selection. The
+-- context reads ROW solutions (L-α) but has no label solutions, so a key that
+-- is a variable the solution has already bound would be read as undecided on
+-- one side and as its label on the other. For a DEFINITE answer that cannot
+-- matter — a variable key is only ever definitely ⊥, on a hollow row, and a
+-- hollow row answers ⊥ to any key — and for `?` the key must be one σ leaves
+-- alone, which is what reading it under ⟦S⟧ first guarantees.
+
+theorem Sol.lookupV_toCtx {B : Type} {s : Sol B} {σ : TySubst B} (hcl : s.Closes σ)
+    {Γ' : Ctx B} (hrow : Γ'.rowEnv = []) {ρ : Row B} {α : TyVar} {r : LookupRes B}
+    (h : LookupV s.toCtx ρ α r) :
+    LookupV Γ' (ρ.applySubst σ) α (r.applySubst σ) := by
+  induction h with
+  | emp => exact .emp
+  | sing => exact .sing
+  | @var _ β ρ₀ _ hβ _ ih =>
+      obtain ⟨hrl, -⟩ := Sol.lookupRow_some hβ
+      have hstep : (Row.var β).applySubst σ = ρ₀.applySubst σ := by
+        show σ.row β = _
+        rw [hcl.2.1 β, show s.toSubst.row β = ρ₀ from hrl]
+      rw [hstep]
+      exact ih
+  | @varFree _ β hβ =>
+      have hne : σ.row β = .var β := hcl.2.2.2 β (Sol.lookupRow_none hβ)
+      simp only [Row.applySubst, LookupRes.applySubst]
+      rw [hne]
+      exact .varFree (by simp [Ctx.lookupRow, hrow])
+  | catSkip _ _ ih₁ ih₂ => exact .catSkip ih₁ ih₂
+  | catUnk _ ih => exact .catUnk ih
+
+-- ⊢  the bridge, for a key σ leaves alone
+theorem Sol.lookupQ_toCtx {B : Type} {s : Sol B} {σ : TySubst B} (hcl : s.Closes σ)
+    {Γ' : Ctx B} (hrow : Γ'.rowEnv = []) {ρ : Row B} {q : Ty B} {r : LookupRes B}
+    (h : LookupQ s.toCtx ρ q r) (hq : ∀ α, q = .var α → σ.ty α = .var α) :
+    LookupQ Γ' (ρ.applySubst σ) (q.applySubst σ) (r.applySubst σ) := by
+  cases h with
+  | lit h => exact .lit (Sol.lookup_toCtx hcl hrow h)
+  | var h =>
+      have hfix := hq _ rfl
+      simp only [Ty.applySubst]
+      rw [hfix]
+      exact .var (Sol.lookupV_toCtx hcl hrow h)
+  | junk hq' =>
+      refine .junk ?_
+      revert hq'
+      cases q <;> simp [Ty.applySubst, Ty.IsQuery]
+
+-- ⊢  …and for a DEFINITE answer, for every key
+theorem Sol.lookupQ_toCtx_definite {B : Type} {s : Sol B} {σ : TySubst B}
+    (hcl : s.Closes σ) {Γ' : Ctx B} (hrow : Γ'.rowEnv = []) {ρ : Row B} {q : Ty B}
+    {r : LookupRes B} (h : LookupQ s.toCtx ρ q r) (hr : r ≠ .unknown) :
+    LookupQ Γ' (ρ.applySubst σ) (q.applySubst σ) (r.applySubst σ) := by
+  cases h with
+  | lit h => exact .lit (Sol.lookup_toCtx hcl hrow h)
+  | var h =>
+      cases r with
+      | found τ => exact absurd h LookupV.not_found
+      | unknown => exact absurd rfl hr
+      | absent =>
+          exact ((Sol.lookupV_toCtx hcl hrow h).hollow hrow rfl).lookupQ _
+  | junk hq' =>
+      refine .junk ?_
+      revert hq'
+      cases q <;> simp [Ty.applySubst, Ty.IsQuery]
+
 --------------------- WHEN Γ′ IS Γ READ UNDER σ ------------------------------
 
 /-- `QCovers s σ σ₀ σ₀'` — σ₀′ is σ₀ read under σ, at the level of INSTANCES.
@@ -180,10 +246,15 @@ private theorem swap_row {B : Type} {vs : List TyVar} {θ σ : TySubst B}
 
 /-- ⊢  **the forward half of `QCovers`, proved.** Under `Avoiding`, the σ-image
 of every instance of σ₀ is an instance of `σ₀.applySubst σ` — discharge and all.
+For STATIC keys only: a `?` on a label-variable key is read undecided in ⟦s⟧,
+which holds no label solutions, and could be found once σ supplies the label
+(see `Sol.lookupQ_toCtx`). Off the soundness path; lifting it needs label
+solutions in `Ctx`, the old plan's `Γ·(α = ℓ)`.
 The discharge cases go through `Sol.lookup_toCtx`, which is what carries a lookup
 out of ⟦s⟧ and into the empty row environment the image scheme instantiates at. -/
 theorem QCovers.forward_of_avoiding {B : Type} {s : Sol B} {σ : TySubst B}
-    (hcl : s.Closes σ) {σ₀ : QScheme B} (hwf : σ₀.WF) (hav : σ₀.Avoiding σ) :
+    (hcl : s.Closes σ) {σ₀ : QScheme B} (hwf : σ₀.WF) (hav : σ₀.Avoiding σ)
+    (hstatic : ∀ st ∈ σ₀.constraints, ∃ l, st.label = .lab l) :
     ∀ τ, QScheme.Inst s.toCtx σ₀ τ →
       QScheme.Inst (⟨[], []⟩ : Ctx B) (σ₀.applySubst σ) (τ.applySubst σ) := by
   rintro τ ⟨θ, hfix, hdis, rfl⟩
@@ -198,28 +269,33 @@ theorem QCovers.forward_of_avoiding {B : Type} {s : Sol B} {σ : TySubst B}
         = (st.row.applySubst θ).applySubst σ :=
       swap_row hfix hσfix st.row (fun α hα =>
         havf α (List.mem_append_left _
-          (List.mem_flatMap.mpr ⟨st, hst, hα⟩)))
+          (List.mem_flatMap.mpr ⟨st, hst, List.mem_append_left _ hα⟩)))
+    -- a static key is left alone by every substitution
+    obtain ⟨l, hl⟩ := hstatic st hst
     -- δ is a binder, so the witness reads θ at it
     have hres : (instSub σ₀.vars θ σ).ty st.res = (θ.ty st.res).applySubst σ :=
       instSub_mem (hwf st hst)
     cases hdis st hst with
     | @hit τr hlk hδ =>
         refine .hit (τ := τr.applySubst σ) ?_ ?_
-        · show Lookup _ ((st.row.applySubst σ).applySubst _) _ _
-          rw [hrow]
-          exact Sol.lookup_toCtx hcl rfl hlk
+        · show LookupQ _ ((st.row.applySubst σ).applySubst _) _ _
+          rw [hrow, hl]
+          rw [hl] at hlk
+          exact .lit (Sol.lookup_toCtx hcl rfl (LookupQ.lab_iff.mp hlk))
         · rw [hres, hδ]
     | abs hlk hδ =>
         refine .abs ?_ ?_
-        · show Lookup _ ((st.row.applySubst σ).applySubst _) _ _
-          rw [hrow]
-          exact Sol.lookup_toCtx (r := .absent) hcl rfl hlk
+        · show LookupQ _ ((st.row.applySubst σ).applySubst _) _ _
+          rw [hrow, hl]
+          rw [hl] at hlk
+          exact .lit (Sol.lookup_toCtx (r := .absent) hcl rfl (LookupQ.lab_iff.mp hlk))
         · rw [hres, hδ]; rfl
     | unk hlk hδ =>
         refine .unk ?_ ?_
-        · show Lookup _ ((st.row.applySubst σ).applySubst _) _ _
-          rw [hrow]
-          exact Sol.lookup_toCtx (r := .unknown) hcl rfl hlk
+        · show LookupQ _ ((st.row.applySubst σ).applySubst _) _ _
+          rw [hrow, hl]
+          rw [hl] at hlk
+          exact .lit (Sol.lookup_toCtx (r := .unknown) hcl rfl (LookupQ.lab_iff.mp hlk))
         · rw [hres, hδ]; rfl
   · -- and the body lands where it should
     exact swap_ty hfix hσfix σ₀.body (fun α hα =>
@@ -285,6 +361,7 @@ private theorem b_inst :
 private theorem no_preimage (τ : Ty Unit) : τ.applySubst refuteSub ≠ .var "b" := by
   cases τ with
   | base _ => exact fun h => nomatch h
+  | lab _ => exact fun h => nomatch h
   | unk    => exact fun h => nomatch h
   | fn _ _ => exact fun h => nomatch h
   | rcd _  => exact fun h => nomatch h
@@ -382,6 +459,28 @@ theorem qtyped_applySubst {B C : Type} {constTy : C → B} {s : Sol B}
         (by rw [← hm.ctx_src]; exact hlk)
   | _, _, _, _, .qUnk h, hm => .qUnk (qtyped_applySubst hcl him h hm)
   | _, _, _, _, .qRcd h, hm => .qRcd (qtypedBody_applySubst hcl him h hm)
+  | _, _, _, _, .qLab, _ => .qLab
+  | _, _, _, _, .qSelDyn h₁ h₂ hlk, hm =>
+      .qSelDyn (qtyped_applySubst hcl him h₁ hm) (qtyped_applySubst hcl him h₂ hm)
+        (Sol.lookupQ_toCtx_definite hcl hm.ctx_tgt (by rw [← hm.ctx_src]; exact hlk)
+          (by intro h; cases h))
+  | _, _, _, _, .qSelDynAbs h₁ h₂ hlk, hm =>
+      .qSelDynAbs (qtyped_applySubst hcl him h₁ hm) (qtyped_applySubst hcl him h₂ hm)
+        (Sol.lookupQ_toCtx_definite hcl hm.ctx_tgt (by rw [← hm.ctx_src]; exact hlk)
+          (by intro h; cases h))
+  -- a `?` need not survive (σ may have chosen the key), but at an empty row
+  -- environment every lookup has SOME verdict, and each one types at ★
+  | _, _, _, _, .qSelDynUnk h₁ h₂ _, hm => by
+      have h₁' := qtyped_applySubst hcl him h₁ hm
+      have h₂' := qtyped_applySubst hcl him h₂ hm
+      have hwf := (show ∀ Γ₀ : QCtx B, Γ₀.ctx.rowEnv = [] → Γ₀.ctx.RowWF from
+        fun Γ₀ h₀ => ⟨fun _ => 0, fun α ρ hα => by simp [Ctx.lookupRow, h₀] at hα⟩)
+        _ hm.ctx_tgt
+      obtain ⟨r, hr⟩ := LookupQ.total hwf _ _
+      cases r with
+      | found τ => exact .qUnk (.qSelDyn h₁' h₂' hr)
+      | absent => exact .qSelDynAbs h₁' h₂' hr
+      | unknown => exact .qSelDynUnk h₁' h₂' hr
 
 theorem qtypedBody_applySubst {B C : Type} {constTy : C → B} {s : Sol B}
     {σ : TySubst B} (hcl : s.Closes σ) (him : SchemeImage s σ) :

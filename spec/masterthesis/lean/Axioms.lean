@@ -1096,4 +1096,45 @@ info: 'MinimalCalculus.run_typed' depends on axioms: [propext, Classical.choice,
 -/
 #guard_msgs in #print axioms run_typed
 
+
+-- ## FC-LABELS  (LabelLookup.lean, Qualified.lean, LetCase.lean, Finalization.lean)
+-- The keyed lookup and its metatheory, the headline scheme of λa. λx. x.(a), and
+-- the two facts finalization and A-let needed of a key-blocked stump.
+
+/--
+info: 'MinimalCalculus.selDynQ_instance_closed' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms selDynQ_instance_closed
+
+/-- info: 'MinimalCalculus.LookupQ.det' does not depend on any axioms -/
+#guard_msgs in #print axioms LookupQ.det
+
+/-- info: 'MinimalCalculus.LookupQ.mono' does not depend on any axioms -/
+#guard_msgs in #print axioms LookupQ.mono
+
+/--
+info: 'MinimalCalculus.LookupQ.total' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms LookupQ.total
+
+/--
+info: 'MinimalCalculus.LookupQ.key_equiv' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms LookupQ.key_equiv
+
+/-- info: 'MinimalCalculus.LookupQ.applySubst' depends on axioms: [propext] -/
+#guard_msgs in #print axioms LookupQ.applySubst
+
+/-- info: 'MinimalCalculus.lookupQ_blocked_subst' depends on axioms: [propext] -/
+#guard_msgs in #print axioms lookupQ_blocked_subst
+
+/-- info: 'MinimalCalculus.Finalizes.starOrVar' depends on axioms: [propext] -/
+#guard_msgs in #print axioms Finalizes.starOrVar
+
+/-- info: 'MinimalCalculus.typed_lab_false' does not depend on any axioms -/
+#guard_msgs in #print axioms typed_lab_false
+
+/-- info: 'MinimalCalculus.qtyped_lab_inv' does not depend on any axioms -/
+#guard_msgs in #print axioms qtyped_lab_inv
+
 end MinimalCalculus

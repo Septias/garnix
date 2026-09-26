@@ -34,10 +34,10 @@ private abbrev n (k : Nat) : TyVar := natName k
 
 -- 1 (x's type) is SOLVED in S₁, so it is not generalized
 private def nrSc : QScheme Unit :=
-  ⟨[n 2, n 3], [⟨.var (n 2), "l", n 3⟩], .fn (.rcd (.var (n 2))) (.var (n 3))⟩
+  ⟨[n 2, n 3], [⟨.var (n 2), .lab "l", n 3⟩], .fn (.rcd (.var (n 2))) (.var (n 3))⟩
 
 private def nrS1 : SolverState Unit :=
-  ⟨⟨[(n 1, .rcd (.var (n 2)))], []⟩, [⟨n 2, ⟨.var (n 2), "l", n 3⟩⟩], [], ⟨4⟩,
+  ⟨⟨[(n 1, .rcd (.var (n 2)))], []⟩, [⟨n 2, ⟨.var (n 2), .lab "l", n 3⟩⟩], [], ⟨4⟩,
    [(n 3, .ty), (n 2, .row), (n 1, .ty)]⟩
 
 private def nrB0 : SolverState Unit := { nrS1 with parked := [] }
@@ -52,14 +52,14 @@ private def nrθ : TySubst Unit :=
   ⟨fun α => if α ∈ [n 2, n 3] then .var (nrF α) else .var α,
    fun α => if α ∈ [n 2, n 3] then .var (nrF α) else .var α⟩
 
-private def nrP : Parked Unit := ⟨n 8, ⟨.var (n 8), "l", n 6⟩⟩
+private def nrP : Parked Unit := ⟨n 8, ⟨.var (n 8), .lab "l", n 6⟩⟩
 private def nrSa : SolverState Unit := nrB0.park nrP
 private def nrSb : SolverState Unit := (nrSa.draw .ty).2
 private def nrSc' : SolverState Unit := (nrSb.draw .row).2
 private def nrSol : Sol Unit := ⟨[(n 4, .rcd (.var (n 5)))], []⟩
 private def nrSd : SolverState Unit := nrSc'.extend nrSol ⟨6⟩
 private def nrSe : SolverState Unit := (nrSd.draw .ty).2
-private def nrQ : Parked Unit := ⟨n 5, ⟨.var (n 5), "m", n 6⟩⟩
+private def nrQ : Parked Unit := ⟨n 5, ⟨.var (n 5), .lab "m", n 6⟩⟩
 
 /-- the final state of the run. -/
 def nrFinal : SolverState Unit := nrSe.park nrQ
@@ -123,7 +123,7 @@ private theorem nr_var_g (hu : UnguardedVar Unit Unit (fun _ => ())) :
       simp only [nrSc, List.mem_cons, List.not_mem_nil, or_false] at hα
       rcases hα with rfl | rfl <;> decide
   have hinst : InstStumps nrθ nrF nrSc.constraints [nrP] := by
-    show [nrP.stump] = [⟨(Row.var (n 2)).applySubst nrθ, "l", nrF (n 3)⟩]
+    show [nrP.stump] = [⟨(Row.var (n 2)).applySubst nrθ, (Ty.lab "l").applySubst nrθ, nrF (n 3)⟩]
     rfl
   have hbody : nrSc.body.applySubst nrθ = .fn (.rcd (.var (n 8))) (.var (n 6)) := by
     rfl
@@ -184,8 +184,8 @@ different rows and labels. -/
 -- (a property of the witness state alone, so it survives the fix unchanged)
 theorem nameReuse_shared_res :
     nrFinal.parked.map (·.stump.res) = [n 6, n 6] ∧
-      nrFinal.parked.map (·.stump.label) = ["m", "l"] := by
-  decide
+      nrFinal.parked.map (·.stump.label) = [.lab "m", .lab "l"] :=
+  ⟨rfl, rfl⟩
 
 /-- ⊢  **settling either one retires both.** K-hit, K-⊥, K-repark and F-★ all
 filter on `stump.res`. -/

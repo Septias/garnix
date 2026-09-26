@@ -124,6 +124,45 @@ theorem Sol.lookup_toCtx_sat {B : Type} {s : Sol B} {σ : TySubst B}
       cases he₁ with
       | absent => exact ⟨r₂, .catSkip hl₁ hl₂, he₂⟩
 
+-- …and for a KEYED lookup. A variable key's only definite answer is ⊥ on a
+-- hollow row, and a hollow row answers ⊥ to whatever key σ makes of it.
+theorem Sol.lookupV_toCtx_sat {B : Type} {s : Sol B} {σ : TySubst B}
+    (hsat : Sol.Sat σ s) {Γ' : Ctx B} (hrow : Γ'.rowEnv = []) :
+    {ρ : Row B} → {α : TyVar} → {r : LookupRes B} →
+    LookupV s.toCtx ρ α r → r ≠ .unknown → LookupV Γ' (ρ.applySubst σ) α r
+  | _, _, _, .emp, _ => .emp
+  | _, _, _, .sing, hr => absurd rfl hr
+  | _, _, _, .varFree _, hr => absurd rfl hr
+  | _, _, _, .catUnk _, hr => absurd rfl hr
+  | _, _, _, .var hα h, hr => by
+      obtain ⟨-, hmem⟩ := Sol.lookupRow_some hα
+      exact (LookupV.equiv_both (RowEquiv.symm (hsat.2 _ hmem))).1
+        (Sol.lookupV_toCtx_sat hsat hrow h hr)
+  | _, _, _, .catSkip h₁ h₂, hr =>
+      .catSkip (Sol.lookupV_toCtx_sat hsat hrow h₁ (by intro hh; cases hh))
+        (Sol.lookupV_toCtx_sat hsat hrow h₂ hr)
+
+theorem Sol.lookupQ_toCtx_sat {B : Type} {s : Sol B} {σ : TySubst B}
+    (hsat : Sol.Sat σ s) {Γ' : Ctx B} (hrow : Γ'.rowEnv = []) {ρ : Row B} {q : Ty B}
+    {r : LookupRes B} (h : LookupQ s.toCtx ρ q r) (hr : r ≠ .unknown) :
+    ∃ r', LookupQ Γ' (ρ.applySubst σ) (q.applySubst σ) r' ∧
+      ResEquiv (r.applySubst σ) r' := by
+  cases h with
+  | lit h =>
+      obtain ⟨r', hl, he⟩ := Sol.lookup_toCtx_sat hsat hrow h hr
+      exact ⟨r', .lit hl, he⟩
+  | var h =>
+      cases r with
+      | found τ => exact absurd h LookupV.not_found
+      | unknown => exact absurd rfl hr
+      | absent =>
+          exact ⟨_, ((Sol.lookupV_toCtx_sat hsat hrow h hr).hollow hrow rfl).lookupQ _,
+            .absent⟩
+  | junk hq =>
+      refine ⟨_, .junk ?_, .absent⟩
+      revert hq
+      cases q <;> simp [Ty.applySubst, Ty.IsQuery]
+
 --------------------- SELECTION FROM A RECORD ALWAYS TYPES AT ★ ---------------
 -- A record-typed subject can always have a field selected off it at ★, whatever
 -- the lookup says: the three T-sel rules between them cover `found`, `⊥` and
@@ -283,19 +322,19 @@ equation can ever give. `⊥` and `?` stay rigid: ★ has no ≈-congruence rule
 inductive Stump.DischargeEquiv {B : Type} (Γ : Ctx B) (θ : TySubst B)
     (s : Stump B) : Prop where
   | hit {τ : Ty B} :
-      Lookup Γ (s.row.applySubst θ) s.label (.found τ) →
+      LookupQ Γ (s.row.applySubst θ) (s.label.applySubst θ) (.found τ) →
       TyEquiv (θ.ty s.res) τ → DischargeEquiv Γ θ s
   | abs :
-      Lookup Γ (s.row.applySubst θ) s.label .absent →
+      LookupQ Γ (s.row.applySubst θ) (s.label.applySubst θ) .absent →
       θ.ty s.res = .unk → DischargeEquiv Γ θ s
   | unk :
-      Lookup Γ (s.row.applySubst θ) s.label .unknown →
+      LookupQ Γ (s.row.applySubst θ) (s.label.applySubst θ) .unknown →
       θ.ty s.res = .unk → DischargeEquiv Γ θ s
 
 /-- ⊢  a discharge is one, up to ≈. -/
 theorem Stump.Discharge.toEquiv {B : Type} {Γ : Ctx B} {θ : TySubst B}
     {s : Stump B} : s.Discharge Γ θ → s.DischargeEquiv Γ θ
-  | .hit hl hδ => .hit hl (hδ ▸ .refl _)
+  | .hit hl hδ => .hit hl (hδ ▸ TyEquiv.refl _)
   | .abs hl hδ => .abs hl hδ
   | .unk hl hδ => .unk hl hδ
 
@@ -307,15 +346,15 @@ theorem infer_sound_selUnk_step {B C : Type} [DecidableEq B] {constTy : C → B}
     (h : QTyped constTy Γ' e (τ.applySubst σ))
     (hs : SolveTy S₁' τ (.rcd (.var r)) S₂)
     (hsat : Sol.Sat σ S₂.sol)
-    (hst : Stump.DischargeEquiv Γ'.ctx σ ⟨.var r, l, δ⟩) :
+    (hst : Stump.DischargeEquiv Γ'.ctx σ ⟨.var r, .lab l, δ⟩) :
     QTyped constTy Γ' (.sel e l) ((Ty.var δ).applySubst σ) := by
   have hrcd : QTyped constTy Γ' e ((Ty.rcd (.var r)).applySubst σ) :=
     .qEq h (hs.unifies_sat hsat)
   show QTyped constTy Γ' (.sel e l) (σ.ty δ)
   cases hst with
-  | hit hl hty => exact .qEq (.qSel hrcd hl) hty.symm
-  | abs hl hδ  => rw [hδ]; exact .qSelAbs hrcd hl
-  | unk hl hδ  => rw [hδ]; exact .qSelUnk hrcd hl
+  | hit hl hty => exact .qEq (.qSel hrcd (LookupQ.lab_iff.mp hl)) hty.symm
+  | abs hl hδ  => rw [hδ]; exact .qSelAbs hrcd (LookupQ.lab_iff.mp hl)
+  | unk hl hδ  => rw [hδ]; exact .qSelUnk hrcd (LookupQ.lab_iff.mp hl)
 
 --------------------- THE K-/D- CORRESPONDENCE, ONE STEP ----------------------
 -- "K-hit / K-⊥ / K-repark are D-hit / D-⊥ / D-? — the difference is WHEN"
@@ -343,6 +382,13 @@ theorem Row.applySubst_sat_equiv {B : Type} {s : Sol B} {σ : TySubst B}
   rw [Row.applySubst_applySubst]
   exact (Row.applySubst_substEquiv hsat.substEquiv ρ).symm
 
+/-- ⊢  …and a key, likewise: what wake-up reads under ⟦S⟧ is ≈ what σ reads. -/
+theorem Ty.applySubst_sat_equiv {B : Type} {s : Sol B} {σ : TySubst B}
+    (hsat : Sol.Sat σ s) (τ : Ty B) :
+    TyEquiv ((τ.applySubst s.toSubst).applySubst σ) (τ.applySubst σ) := by
+  rw [Ty.applySubst_applySubst]
+  exact (Ty.applySubst_substEquiv hsat.substEquiv τ).symm
+
 /-- ⊢  **K is D**, one step: a wake-up step either DISCHARGES its constraint
 (up to ≈ on the hit payload) or re-parks it with the same stump. -/
 theorem Wake.dischargeEquiv {B : Type} [DecidableEq B] {S S₁ : SolverState B}
@@ -355,26 +401,28 @@ theorem Wake.dischargeEquiv {B : Type} [DecidableEq B] {S S₁ : SolverState B}
       have hS : Sol.Sat σ _ := SolveTy.satMono hs σ hsat
       have hδ := SolveTy.unifies_sat hs hsat
       obtain ⟨r₁, hl₁, he₁⟩ :=
-        Sol.lookup_toCtx_sat (Γ' := Γ'.ctx) hS hrow hlk (by intro hh; cases hh)
+        Sol.lookupQ_toCtx_sat (Γ' := Γ'.ctx) hS hrow hlk (by intro hh; cases hh)
       cases he₁ with
       | found ht₁ =>
           obtain ⟨_, hl₂, he₂⟩ :=
-            lookup_equiv (Row.applySubst_sat_equiv hS p.stump.row) hl₁
+            LookupQ.equiv (Row.applySubst_sat_equiv hS p.stump.row) hl₁
+          have hl₃ := LookupQ.key_equiv (Ty.applySubst_sat_equiv hS p.stump.label) hl₂
           cases he₂ with
-          | found ht₂ => exact .inl (.hit hl₂ ((hδ.trans ht₁).trans ht₂))
+          | found ht₂ => exact .inl (.hit hl₃ ((hδ.trans ht₁).trans ht₂))
   -- K-⊥ is D-⊥: definite absence, and `δ ≐ ★` forces δ = ★ on the nose, since
   -- ★ has no ≈-congruence rule.
   | .abs hlk hs, hsat => by
       have hS : Sol.Sat σ _ := SolveTy.satMono hs σ hsat
       have hδ := SolveTy.unifies_sat hs hsat
       obtain ⟨r₁, hl₁, he₁⟩ :=
-        Sol.lookup_toCtx_sat (Γ' := Γ'.ctx) hS hrow hlk (by intro hh; cases hh)
+        Sol.lookupQ_toCtx_sat (Γ' := Γ'.ctx) hS hrow hlk (by intro hh; cases hh)
       cases he₁ with
       | absent =>
           obtain ⟨_, hl₂, he₂⟩ :=
-            lookup_equiv (Row.applySubst_sat_equiv hS p.stump.row) hl₁
+            LookupQ.equiv (Row.applySubst_sat_equiv hS p.stump.row) hl₁
+          have hl₃ := LookupQ.key_equiv (Ty.applySubst_sat_equiv hS p.stump.label) hl₂
           cases he₂ with
-          | absent => exact .inl (.abs hl₂ ((TyEquiv.unk_inv_both hδ).2 rfl))
+          | absent => exact .inl (.abs hl₃ ((TyEquiv.unk_inv_both hδ).2 rfl))
   -- K-repark is NOTHING: the blocker moved, the stump did not.
   | .repark _, _ =>
       .inr ⟨{ blocker := _, stump := p.stump }, List.mem_cons_self, rfl⟩
@@ -508,7 +556,7 @@ inductive FinalizeUnguarded {B : Type} [DecidableEq B] :
       SolveTy S (.var p.stump.res) .unk S' →
       FinalizeUnguarded S p
         ({ S' with parked := S'.parked.filter (·.stump.res != p.stump.res) }.flag
-          p.stump.label)
+          (p.stump.label.applySubst S.subst).keyName)
 
 /-- ⊢  the shipped rule is strictly stronger: it fires only where the unguarded
 one did, and `finalize_star_guarded_cannot_fire` shows the inclusion is proper. -/
@@ -518,7 +566,7 @@ theorem Finalize.toUnguarded {B : Type} [DecidableEq B] {S S' : SolverState B}
 
 /-- a stump on a LITERAL row: its lookup lands at every context, under every
 substitution. Nothing about it is blocked, and the unguarded rule does not care. -/
-private def fStar_p : Parked Unit := ⟨"a", ⟨.sing "l" (.base ()), "l", "d"⟩⟩
+private def fStar_p : Parked Unit := ⟨"a", ⟨.sing "l" (.base ()), .lab "l", "d"⟩⟩
 
 private def fStar_S : SolverState Unit :=
   { sol := Sol.nil, parked := [fStar_p], flags := [], supply := ⟨0⟩ }
@@ -549,12 +597,12 @@ theorem finalize_star_no_discharge :
       (.found (.base ())) := .hit
   cases hdis with
   | hit hlk hty =>
-      have hτ := lookup_det hlk hlit
+      have hτ := lookup_det (LookupQ.lab_iff.mp hlk) hlit
       injection hτ with hτ
       rw [hd, hτ] at hty
       exact absurd (TyEquiv.unk_inv hty) (by simp)
-  | abs hlk _ => exact absurd (lookup_det hlk hlit) (by simp)
-  | unk hlk _ => exact absurd (lookup_det hlk hlit) (by simp)
+  | abs hlk _ => exact absurd (lookup_det (LookupQ.lab_iff.mp hlk) hlit) (by simp)
+  | unk hlk _ => exact absurd (lookup_det (LookupQ.lab_iff.mp hlk) hlit) (by simp)
 
 /-- ⊢  **and the guarded rule cannot fire there.** A `sing` row has no
 `LookupBlocked` derivation at all — the relation is built from `L-α-free` and the
@@ -566,9 +614,8 @@ theorem finalize_star_guarded_cannot_fire :
   rintro ⟨S', h⟩
   cases h with
   | star _ hb _ =>
-      have hb' : LookupBlocked fStar_S.ctx ((.sing "l" (.base ())) : Row Unit) "l"
-          "a" := hb
-      cases hb'
+      cases hb with
+      | lit hb' => cases hb'
 
 --------------------- …AND THE CONFIGURATION WAS REACHABLE --------------------
 -- The witness above is hand-built, so a reader may fairly ask whether any state
@@ -633,7 +680,7 @@ private def fsS2' : SolverState Unit :=
   ⟨fsSol1, [], [], ⟨4⟩, [(fsD, .ty), (fsR, .row), (fsA, .ty)]⟩
 
 /-- the stump A-sel-? parks: blocked on the record's row variable, writing δ. -/
-private def fsP : Parked Unit := ⟨fsR, ⟨.var fsR, "l", fsD⟩⟩
+private def fsP : Parked Unit := ⟨fsR, ⟨.var fsR, .lab "l", fsD⟩⟩
 
 private def fsSp : SolverState Unit :=
   ⟨fsSol1, [fsP], [], ⟨4⟩, [(fsD, .ty), (fsR, .row), (fsA, .ty)]⟩
@@ -665,10 +712,10 @@ theorem fStarEx_lands' :
 block its lookup any more. This is the staleness `Saturate` steps on, and the
 invariant `plans/inference-gap-analysis.md` §B says nothing enforced. -/
 theorem fStarEx_not_blocked :
-    ¬ LookupBlocked fsS.ctx (fsP.stump.row.applySubst fsS.subst) fsP.stump.label
-        fsP.blocker := by
+    ¬ LookupBlockedQ fsS.ctx (fsP.stump.row.applySubst fsS.subst)
+        (fsP.stump.label.applySubst fsS.subst) fsP.blocker := by
   intro hb
-  exact absurd (lookup_det hb.toLookup fStarEx_lands') (by simp)
+  exact absurd (lookup_det (LookupQ.lab_iff.mp hb.toLookupQ) fStarEx_lands') (by simp)
 
 theorem fStarEx_not_quiescent : ¬ fsS.Quiescent := by
   intro hq
@@ -701,7 +748,7 @@ theorem fStarEx_infers :
   · exact Infer.rcd (InferRec.field Infer.con)
   · exact ⟨fsS, ⟨20, fsApp, ⟨5⟩, rfl, rfl⟩,
       .step (p := fsP) (by simp [fsS, fsSb, SolverState.extend]) fStarEx_not_blocked
-        (Wake.hit (τ := .base ()) fStarEx_lands' ⟨5, fsHit, ⟨5⟩, rfl, rfl⟩)
+        (Wake.hit (τ := .base ()) (.lit fStarEx_lands') ⟨5, fsHit, ⟨5⟩, rfl, rfl⟩)
         (.done (SolverState.Quiescent.nil rfl))⟩
 
 /-- ⊢  **and the refinement survives.** Δ is empty — the stump discharged, so
@@ -735,7 +782,7 @@ theorem fStar_wake_star_disagree :
     ∃ Shit Sstar : SolverState Unit,
       Wake fsS fsP Shit ∧ FinalizeUnguarded fsS fsP Sstar ∧
       Shit.subst.ty fsD = .base () ∧ Sstar.subst.ty fsD = .unk :=
-  ⟨_, _, Wake.hit (τ := .base ()) fStarEx_lands'
+  ⟨_, _, Wake.hit (τ := .base ()) (.lit fStarEx_lands')
       ⟨5, fsHit, ⟨5⟩, rfl, rfl⟩,
     FinalizeUnguarded.star (S' := fsS.extend fsStar ⟨5⟩)
       ⟨5, fsStar, ⟨5⟩, rfl, rfl⟩, rfl, rfl⟩
@@ -777,14 +824,14 @@ theorem fStar_reachable_no_discharge (Γ' : Ctx Unit) (hrow : Γ'.rowEnv = [])
   | hit hlk hty =>
       cases he' with
       | found hb =>
-          have heq := lookup_det hl' hlk
+          have heq := lookup_det hl' (LookupQ.lab_iff.mp hlk)
           injection heq with heq
           subst heq
           rw [hres, hd] at hty
           rw [TyEquiv.unk_inv hty] at hb
           exact absurd ((TyEquiv.unk_inv_both hb).2 rfl) (by simp [Ty.applySubst])
-  | abs hlk _ => cases he' with | found _ => exact absurd (lookup_det hl' hlk) (by simp)
-  | unk hlk _ => cases he' with | found _ => exact absurd (lookup_det hl' hlk) (by simp)
+  | abs hlk _ => cases he' with | found _ => exact absurd (lookup_det hl' (LookupQ.lab_iff.mp hlk)) (by simp)
+  | unk hlk _ => cases he' with | found _ => exact absurd (lookup_det hl' (LookupQ.lab_iff.mp hlk)) (by simp)
 
 /-- ⊢  **the other shape a run can have: nothing left to finalize.** The
 refinement example runs to an EMPTY Δ — saturation discharged the stump at 𝓫 — so
@@ -867,7 +914,7 @@ private def spS2 : SolverState Unit :=
   ⟨spSol1, [], [], ⟨4⟩, [(spRow, .row), (spY, .ty), (spX, .ty)]⟩
 private def spS2' : SolverState Unit :=
   ⟨spSol1, [], [], ⟨5⟩, [(spD, .ty), (spRow, .row), (spY, .ty), (spX, .ty)]⟩
-private def spP : Parked Unit := ⟨spRow, ⟨.var spRow, "l", spD⟩⟩
+private def spP : Parked Unit := ⟨spRow, ⟨.var spRow, .lab "l", spD⟩⟩
 private def spSp : SolverState Unit :=
   ⟨spSol1, [spP], [], ⟨5⟩, [(spD, .ty), (spRow, .row), (spY, .ty), (spX, .ty)]⟩
 private def spSb : SolverState Unit :=
@@ -990,10 +1037,17 @@ mutual
                 QTypedC constTy Δ Γ (.sel e l) .unk
     | qUnk : QTypedC constTy Δ Γ e τ → QTypedC constTy Δ Γ e .unk
     | qRcd : QTypedCBody constTy Δ Γ b ρ → QTypedC constTy Δ Γ (.rcd b) (.rcd ρ)
+    | qLab : QTypedC constTy Δ Γ (.lab l) (.lab l)
+    | qSelDyn : QTypedC constTy Δ Γ e₁ (.rcd ρ) → QTypedC constTy Δ Γ e₂ q →
+                LookupQ Γ.ctx ρ q (.found τ) → QTypedC constTy Δ Γ (.selDyn e₁ e₂) τ
+    | qSelDynUnk : QTypedC constTy Δ Γ e₁ (.rcd ρ) → QTypedC constTy Δ Γ e₂ q →
+                   LookupQ Γ.ctx ρ q .unknown → QTypedC constTy Δ Γ (.selDyn e₁ e₂) .unk
+    | qSelDynAbs : QTypedC constTy Δ Γ e₁ (.rcd ρ) → QTypedC constTy Δ Γ e₂ q →
+                   LookupQ Γ.ctx ρ q .absent → QTypedC constTy Δ Γ (.selDyn e₁ e₂) .unk
     -- THE ONE NEW RULE: a selection whose lookup is ASSUMED, answering at the
     -- stump's own result variable. This is A-sel-? read declaratively.
     | stump {ρ : Row B} {l : Label} {δ : TyVar} :
-             QTypedC constTy Δ Γ e (.rcd ρ) → (⟨ρ, l, δ⟩ : Stump B) ∈ Δ →
+             QTypedC constTy Δ Γ e (.rcd ρ) → (⟨ρ, .lab l, δ⟩ : Stump B) ∈ Δ →
              QTypedC constTy Δ Γ (.sel e l) (.var δ)
 
   inductive QTypedCBody {B C : Type} (constTy : C → B) (Δ : List (Stump B)) :
@@ -1022,6 +1076,10 @@ mutual
     | .qSelAbs h hl   => .qSelAbs h.toC hl
     | .qUnk h         => .qUnk h.toC
     | .qRcd hb        => .qRcd hb.toC
+    | .qLab           => .qLab
+    | .qSelDyn h₁ h₂ hl    => .qSelDyn h₁.toC h₂.toC hl
+    | .qSelDynUnk h₁ h₂ hl => .qSelDynUnk h₁.toC h₂.toC hl
+    | .qSelDynAbs h₁ h₂ hl => .qSelDynAbs h₁.toC h₂.toC hl
 
   theorem QTypedBody.toC {B C : Type} {constTy : C → B} {Δ : List (Stump B)}
       {Γ : QCtx B} {b : RecBody (Expr C)} {ρ : Row B} :
@@ -1049,6 +1107,10 @@ mutual
     | .qSelAbs h hl   => .qSelAbs h.toQTyped hl
     | .qUnk h         => .qUnk h.toQTyped
     | .qRcd hb        => .qRcd hb.toQTyped
+    | .qLab           => .qLab
+    | .qSelDyn h₁ h₂ hl    => .qSelDyn h₁.toQTyped h₂.toQTyped hl
+    | .qSelDynUnk h₁ h₂ hl => .qSelDynUnk h₁.toQTyped h₂.toQTyped hl
+    | .qSelDynAbs h₁ h₂ hl => .qSelDynAbs h₁.toQTyped h₂.toQTyped hl
     | .stump _ hmem   => absurd hmem List.not_mem_nil
 
   theorem QTypedCBody.toQTyped {B C : Type} {constTy : C → B} {Γ : QCtx B}

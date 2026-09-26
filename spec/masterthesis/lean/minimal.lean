@@ -38,11 +38,16 @@ inductive Expr (Const : Type) : Type where
   | sel  : Expr Const → Label → Expr Const               -- e.l
   | rcd  : RecBody (Expr Const) → Expr Const             -- { ξ }
   | letE : Var → Expr Const → Expr Const → Expr Const    -- let x = e₁ in e₂
+  | lab  : Label → Expr Const                            -- `l   (a label, as a value)
+  | selDyn : Expr Const → Expr Const → Expr Const        -- e₁.(e₂)  (e₁.${e₂})
 
 
 ---------------------------------- TYPES ------------------------------------------
 
--- τ := α | 𝓫 | ★ | τ → τ | { ρ }
+-- τ := α | 𝓫 | ★ | τ → τ | { ρ } | ⌊l⌋
+-- Label VARIABLES are ordinary type variables: ⌊α⌋ is `.var α`, and a label
+-- solution α ≔ ⌊l⌋ is an ordinary type binding. ⌊l⌋ is rigid and nullary,
+-- exactly like 𝓫, so every structural fact about 𝓫 has a ⌊l⌋ twin.
 -- ρ := ε | α | l: τ | (ρ₁ | ρ₂)
 
 mutual
@@ -52,6 +57,7 @@ mutual
     | unk  : Ty B                                 -- ★
     | fn   : Ty B → Ty B → Ty B                   -- τ → τ
     | rcd  : Row B → Ty B                         -- { ρ }
+    | lab  : Label → Ty B                         -- ⌊l⌋, a label's singleton type
 
   inductive Row (B : Type) : Type where
     | empty : Row B                               -- ε
@@ -204,6 +210,22 @@ theorem TyEquiv.base_inv_both {B : Type} :
   | _, _, .fn _ _  => ⟨(fun hτ => nomatch hτ), (fun hσ => nomatch hσ)⟩
   | _, _, .rcd _   => ⟨(fun hτ => nomatch hτ), (fun hσ => nomatch hσ)⟩
 
+--   …and so are label singletons, for the same reason:  τ = ⌊l⌋ ⟺ σ = ⌊l⌋
+theorem TyEquiv.lab_inv_both {B : Type} :
+    {τ σ : Ty B} → TyEquiv τ σ →
+    (∀ {l : Label}, τ = .lab l → σ = .lab l) ∧
+    (∀ {l : Label}, σ = .lab l → τ = .lab l)
+  | _, _, .refl _  => ⟨fun h => h, fun h => h⟩
+  | _, _, .symm h  =>
+      have ih := TyEquiv.lab_inv_both h
+      ⟨fun hτ => ih.2 hτ, fun hσ => ih.1 hσ⟩
+  | _, _, .trans h₁ h₂ =>
+      have ih₁ := TyEquiv.lab_inv_both h₁
+      have ih₂ := TyEquiv.lab_inv_both h₂
+      ⟨fun hτ => ih₂.1 (ih₁.1 hτ), fun hσ => ih₁.2 (ih₂.2 hσ)⟩
+  | _, _, .fn _ _  => ⟨(fun hτ => nomatch hτ), (fun hσ => nomatch hσ)⟩
+  | _, _, .rcd _   => ⟨(fun hτ => nomatch hτ), (fun hσ => nomatch hσ)⟩
+
 --   If  τ ≈ₜ σ,  then ★ is rigid in both directions (★ has no congruence
 --   rule in ≈, deliberately — T-★-intro lives in the typing relation instead):
 --
@@ -235,6 +257,10 @@ theorem TyEquiv.rcd_inv {B : Type} {ρ : Row B} {σ : Ty B}
 theorem TyEquiv.base_inv {B : Type} {b : B} {σ : Ty B}
     (h : TyEquiv (.base b) σ) : σ = .base b :=
   (TyEquiv.base_inv_both h).1 rfl
+
+theorem TyEquiv.lab_inv {B : Type} {l : Label} {σ : Ty B}
+    (h : TyEquiv (.lab l) σ) : σ = .lab l :=
+  (TyEquiv.lab_inv_both h).1 rfl
 
 theorem TyEquiv.unk_inv {B : Type} {σ : Ty B}
     (h : TyEquiv (.unk : Ty B) σ) : σ = .unk :=
@@ -653,6 +679,7 @@ mutual
   def Ty.applySubst {B : Type} (θ : TySubst B) : Ty B → Ty B
     | .var α    => θ.ty α
     | .base b   => .base b
+    | .lab b   => .lab b
     | .unk      => .unk
     | .fn τ₁ τ₂ => .fn (τ₁.applySubst θ) (τ₂.applySubst θ)
     | .rcd ρ    => .rcd (ρ.applySubst θ)
@@ -671,6 +698,7 @@ mutual
       (τ : Ty B) → τ.applySubst (TySubst.id B) = τ
     | .var _    => rfl
     | .base _   => rfl
+    | .lab _   => rfl
     | .unk      => rfl
     | .fn τ₁ τ₂ => by
         simp only [Ty.applySubst, Ty.applySubst_id τ₁, Ty.applySubst_id τ₂]
@@ -690,6 +718,7 @@ mutual
   def Ty.ftv {B : Type} : Ty B → List TyVar
     | .var α    => [α]
     | .base _   => []
+    | .lab _   => []
     | .unk      => []
     | .fn τ₁ τ₂ => τ₁.ftv ++ τ₂.ftv
     | .rcd ρ    => ρ.ftv
@@ -784,6 +813,7 @@ mutual
       (τ : Ty B) → τ.applySubst θ = τ
     | .var α    => ht α
     | .base _   => rfl
+    | .lab _   => rfl
     | .unk      => rfl
     | .fn τ₁ τ₂ => by
         simp only [Ty.applySubst, Ty.applySubst_fixed ht hr τ₁,
@@ -1198,6 +1228,8 @@ mutual
     | .rcd b      => .rcd (substBody x v b)
     | .letE y e₁ e₂ =>
         .letE y (subst x v e₁) (if x == y then e₂ else subst x v e₂)
+    | .lab l      => .lab l
+    | .selDyn e₁ e₂ => .selDyn (subst x v e₁) (subst x v e₂)
 
   def substBody {C : Type} (x : Var) (v : Expr C) : RecBody (Expr C) → RecBody (Expr C)
     | .empty      => .empty
@@ -1214,11 +1246,33 @@ inductive Value {C : Type} : Expr C → Prop where
   | con {c : C}                : Value (.con c)
   | lam {x : Var} {e : Expr C} : Value (.lam x e)
   | rcd {b : RecBody (Expr C)} : Value (.rcd b)
+  | lab {l : Label}            : Value (.lab l)
 
 
 ------------------------------- CANONICAL FORMS --------------------------------
 -- Since ≈ₜ preserves head constructors, a value's shape is determined by the
 -- head of its type even though tEq can rewrite it.
+
+-- L1 has no rule for a label literal (FC-labels are an L2 feature), so no
+-- derivation types one: only T-eq and T-★-intro could, and they need one first.
+private theorem typed_lab_false_aux {B C : Type} {constTy : C → B} {l : Label} :
+    ∀ {Γ : Ctx B} {e : Expr C} {τ : Ty B}, Typed constTy Γ e τ → e = .lab l → False
+  | _, _, _, .tEq h _, he => typed_lab_false_aux h he
+  | _, _, _, .tUnk h, he => typed_lab_false_aux h he
+  | _, _, _, .tCon, he => nomatch he
+  | _, _, _, .tVar _ _, he => nomatch he
+  | _, _, _, .tLam _, he => nomatch he
+  | _, _, _, .tApp _ _, he => nomatch he
+  | _, _, _, .tLet _ _, he => nomatch he
+  | _, _, _, .tCat _ _, he => nomatch he
+  | _, _, _, .tSel _ _, he => nomatch he
+  | _, _, _, .tSelUnk _ _, he => nomatch he
+  | _, _, _, .tSelAbs _ _, he => nomatch he
+  | _, _, _, .tRcd _, he => nomatch he
+
+theorem typed_lab_false {B C : Type} {constTy : C → B} {l : Label} {Γ : Ctx B}
+    {τ : Ty B} (h : Typed constTy Γ (.lab l : Expr C) τ) : False :=
+  typed_lab_false_aux h rfl
 
 theorem canonical_fn {B C : Type} {constTy : C → B} {Γ : Ctx B} {v : Expr C}
     {τ₁ τ₂ : Ty B}
@@ -1235,6 +1289,7 @@ theorem canonical_fn {B C : Type} {constTy : C → B} {Γ : Ctx B} {v : Expr C}
       · obtain ⟨ρ', hσ, -⟩ := he.rcd_inv
         cases hσ
       · cases hu
+  | lab => exact (typed_lab_false ht).elim
 
 theorem canonical_rcd {B C : Type} {constTy : C → B} {Γ : Ctx B} {v : Expr C}
     {ρ : Row B}
@@ -1256,6 +1311,7 @@ theorem canonical_rcd {B C : Type} {constTy : C → B} {Γ : Ctx B} {v : Expr C}
         cases hσ
         exact ⟨_, _, rfl, heq, hb⟩
       · cases hu
+  | lab => exact (typed_lab_false ht).elim
 
 
 --------------------------------- REDUCTION ------------------------------------
@@ -1296,6 +1352,17 @@ inductive Step {C : Type} : Expr C → Expr C → Prop where
   | letBeta {x : Var} {v e : Expr C} :
       Value v →
       Step (.letE x v e) (subst x v e)
+  -- dynamic selection: the record first, then the key, then the lookup
+  | selDynL {e₁ e₁' e₂ : Expr C} :
+      Step e₁ e₁' →
+      Step (.selDyn e₁ e₂) (.selDyn e₁' e₂)
+  | selDynR {e₁ e₂ e₂' : Expr C} :
+      Value e₁ →
+      Step e₂ e₂' →
+      Step (.selDyn e₁ e₂) (.selDyn e₁ e₂')
+  | selDynVal {b : RecBody (Expr C)} {l : Label} {e : Expr C} :
+      RecBody.lookup l b = some e →
+      Step (.selDyn (.rcd b) (.lab l)) e
 
 
 ---------------------------------- PROGRESS ---------------------------------
@@ -1317,6 +1384,14 @@ inductive Err {C : Type} : Expr C → Prop where
   | catLeft  : Err e₁ → Err (.cat e₁ e₂)
   | catRight : Value e₁ → Err e₂ → Err (.cat e₁ e₂)
   | letBind  : Err e₁ → Err (.letE x e₁ e₂)
+  -- a dynamic selection errs where a static one does, and also on a key that is
+  -- not a label (L-junk's run-time face)
+  | selDynAbsent {b : RecBody (Expr C)} {l : Label} :
+      RecBody.lookup l b = none → Err (.selDyn (.rcd b) (.lab l))
+  | selDynKey {b : RecBody (Expr C)} {v : Expr C} :
+      Value v → (∀ l, v ≠ .lab l) → Err (.selDyn (.rcd b) v)
+  | selDynL  : Err e₁ → Err (.selDyn e₁ e₂)
+  | selDynR  : Value e₁ → Err e₂ → Err (.selDyn e₁ e₂)
 
 inductive Progress {C : Type} (e : Expr C) : Prop where
   | step : Step e e' → Progress e
@@ -1673,6 +1748,7 @@ mutual
       (τ : Ty B) → (τ.applySubst θ₁).applySubst θ₂ = τ.applySubst (θ₂.comp θ₁)
     | .var _    => by simp only [Ty.applySubst, TySubst.comp]
     | .base _   => rfl
+    | .lab _   => rfl
     | .unk      => rfl
     | .fn τ₁ τ₂ => by
         simp only [Ty.applySubst, Ty.applySubst_applySubst θ₁ θ₂ τ₁,
@@ -1701,6 +1777,7 @@ mutual
         simp only [Ty.applySubst]
         exact (h α (by simp [Ty.ftv])).1
     | .base _, _   => rfl
+    | .lab _, _   => rfl
     | .unk, _      => rfl
     | .fn τ₁ τ₂, h => by
         simp only [Ty.applySubst]
@@ -2914,6 +2991,7 @@ theorem no_plain_principal_scheme {B C : Type} (constTy : C → B) :
   rintro ⟨σ, hclosed, ⟨θa, -, hba⟩, ⟨θb, hfb, hbb⟩⟩
   cases hbody : σ.body with
   | base b => rw [hbody] at hba; simp only [Ty.applySubst] at hba; cases hba
+  | lab b => rw [hbody] at hba; simp only [Ty.applySubst] at hba; cases hba
   | unk => rw [hbody] at hba; simp only [Ty.applySubst] at hba; cases hba
   | rcd ρ => rw [hbody] at hba; simp only [Ty.applySubst] at hba; cases hba
   | var α =>
@@ -2941,6 +3019,7 @@ theorem no_plain_principal_scheme {B C : Type} (constTy : C → B) :
       injection hbb with hdb hrb
       cases res with
       | base b => simp only [Ty.applySubst] at hrb; cases hrb
+      | lab b => simp only [Ty.applySubst] at hrb; cases hrb
       | unk => simp only [Ty.applySubst] at hra; cases hra
       | fn τa τb => simp only [Ty.applySubst] at hrb; cases hrb
       | rcd ρr => simp only [Ty.applySubst] at hrb; cases hrb
@@ -2974,6 +3053,7 @@ theorem no_plain_principal_scheme {B C : Type} (constTy : C → B) :
                 | sing l' t => simp only [Row.applySubst] at hρ; cases hρ
                 | cat ρ₁ ρ₂ => simp only [Row.applySubst] at hρ; cases hρ
             | base b => simp only [Ty.applySubst] at hdb; cases hdb
+            | lab b => simp only [Ty.applySubst] at hdb; cases hdb
             | unk => simp only [Ty.applySubst] at hdb; cases hdb
             | fn τa τb => simp only [Ty.applySubst] at hdb; cases hdb
           have hinst : σ.Inst (.fn (.rcd .empty) (.rcd .empty)) := by

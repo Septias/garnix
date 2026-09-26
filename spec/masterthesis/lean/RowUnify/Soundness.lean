@@ -297,6 +297,15 @@ theorem base_arm_sound {B : Type} [DecidableEq B] {θ : TySubst B} {b b' : B}
   · subst hb; exact TyEquiv.refl _
   · simp [unifyTyF, hb] at h
 
+-- ⊢  …and the label arm only on equal labels
+theorem lab_arm_sound {B : Type} [DecidableEq B] {θ : TySubst B} {l l' : Label}
+    {S : Supply} {fuel : Nat} {s : Sol B} {S' : Supply}
+    (h : unifyTyF S fuel (.lab l) (.lab l') = .success s S') :
+    TyUnifies θ (.lab l) (.lab l') := by
+  by_cases hb : l = l'
+  · subst hb; exact TyEquiv.refl _
+  · simp [unifyTyF, hb] at h
+
 -- THE SOUNDNESS LEG, both sorts at once.
 -- ⊢  unifyTyF S fuel τ τ' = success s _,  θ ⊨ s   ⟹   θ ⊨ τ ≐ τ'
 -- ⊢  unifySpineMF S fuel s₁ s₂ = success s _,  θ ⊨ s
@@ -316,6 +325,15 @@ theorem unifyM_success_sound {B : Type} [DecidableEq B] {θ : TySubst B} (fuel :
             cases τ' with
             | var α => exact (bindTy_sound h hsat).symm
             | base b' => exact base_arm_sound h
+            | lab _ => cases h
+            | unk => cases h
+            | fn _ _ => cases h
+            | rcd _ => cases h
+        | lab b =>
+            cases τ' with
+            | var α => exact (bindTy_sound h hsat).symm
+            | base _ => cases h
+            | lab b' => exact lab_arm_sound h
             | unk => cases h
             | fn _ _ => cases h
             | rcd _ => cases h
@@ -323,6 +341,7 @@ theorem unifyM_success_sound {B : Type} [DecidableEq B] {θ : TySubst B} (fuel :
             cases τ' with
             | var α => exact (bindTy_sound h hsat).symm
             | base _ => cases h
+            | lab _ => cases h
             | unk => exact TyEquiv.refl _
             | fn _ _ => cases h
             | rcd _ => cases h
@@ -330,6 +349,7 @@ theorem unifyM_success_sound {B : Type} [DecidableEq B] {θ : TySubst B} (fuel :
             cases τ' with
             | var α => exact (bindTy_sound h hsat).symm
             | base _ => cases h
+            | lab _ => cases h
             | unk => cases h
             | fn _ _ => cases h
             | rcd _ => cases h
@@ -337,6 +357,7 @@ theorem unifyM_success_sound {B : Type} [DecidableEq B] {θ : TySubst B} (fuel :
             cases τ' with
             | var α => exact (bindTy_sound h hsat).symm
             | base _ => cases h
+            | lab _ => cases h
             | unk => cases h
             | fn _ _ => cases h
             | rcd _ => cases h
@@ -368,6 +389,15 @@ theorem unifyM_success_sound {B : Type} [DecidableEq B] {θ : TySubst B} (fuel :
             cases τ' with
             | var α => exact (bindTy_sound h hsat).symm
             | base b' => exact base_arm_sound h
+            | lab _ => cases h
+            | unk => cases h
+            | fn _ _ => cases h
+            | rcd _ => cases h
+        | lab b =>
+            cases τ' with
+            | var α => exact (bindTy_sound h hsat).symm
+            | base _ => cases h
+            | lab b' => exact lab_arm_sound h
             | unk => cases h
             | fn _ _ => cases h
             | rcd _ => cases h
@@ -375,6 +405,7 @@ theorem unifyM_success_sound {B : Type} [DecidableEq B] {θ : TySubst B} (fuel :
             cases τ' with
             | var α => exact (bindTy_sound h hsat).symm
             | base _ => cases h
+            | lab _ => cases h
             | unk => exact TyEquiv.refl _
             | fn _ _ => cases h
             | rcd _ => cases h
@@ -382,6 +413,7 @@ theorem unifyM_success_sound {B : Type} [DecidableEq B] {θ : TySubst B} (fuel :
             cases τ' with
             | var α => exact (bindTy_sound h hsat).symm
             | base _ => cases h
+            | lab _ => cases h
             | unk => cases h
             | fn a₂ b₂ =>
                 replace h : ((unifyTyF S fuel a₁ a₂).seq fun θ' S'' =>
@@ -396,6 +428,7 @@ theorem unifyM_success_sound {B : Type} [DecidableEq B] {θ : TySubst B} (fuel :
             cases τ' with
             | var α => exact (bindTy_sound h hsat).symm
             | base _ => cases h
+            | lab _ => cases h
             | unk => cases h
             | fn _ _ => cases h
             | rcd ρ₂ =>
@@ -528,6 +561,7 @@ theorem Ty.ftv_applySubst {B : Type} (θ : TySubst B) : (τ : Ty B) →
       ∃ α, α ∈ τ.ftv ∧ (γ ∈ (θ.ty α).ftv ∨ γ ∈ (θ.row α).ftv)
   | .var α => fun _ h => ⟨α, List.mem_cons_self, .inl h⟩
   | .base _ => fun _ h => by simp [Ty.applySubst, Ty.ftv] at h
+  | .lab _ => fun _ h => by simp [Ty.applySubst, Ty.ftv] at h
   | .unk => fun _ h => by simp [Ty.applySubst, Ty.ftv] at h
   | .fn τ₁ τ₂ => fun γ h => by
       simp only [Ty.applySubst, Ty.ftv, List.mem_append] at h ⊢

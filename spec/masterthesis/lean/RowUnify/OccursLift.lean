@@ -94,6 +94,18 @@ theorem unifyM_occurs_no_unifier {B : Type} [DecidableEq B] (fuel : Nat) :
             by_cases hb : b = b'
             · subst hb; cases fuel <;> simp [unifyTyF] at h
             · cases fuel <;> simp [unifyTyF, hb] at h
+        | lab _ => cases fuel <;> cases h
+        | unk => cases fuel <;> cases h
+        | fn _ _ => cases fuel <;> cases h
+        | rcd _ => cases fuel <;> cases h
+    | lab b =>
+        cases τ' with
+        | var α => cases fuel <;> exact bindTy_occurs_no_unifier' h
+        | base _ => cases fuel <;> cases h
+        | lab b' =>
+            by_cases hb : b = b'
+            · subst hb; cases fuel <;> simp [unifyTyF] at h
+            · cases fuel <;> simp [unifyTyF, hb] at h
         | unk => cases fuel <;> cases h
         | fn _ _ => cases fuel <;> cases h
         | rcd _ => cases fuel <;> cases h
@@ -101,6 +113,7 @@ theorem unifyM_occurs_no_unifier {B : Type} [DecidableEq B] (fuel : Nat) :
         cases τ' with
         | var α => cases fuel <;> exact bindTy_occurs_no_unifier' h
         | base _ => cases fuel <;> cases h
+        | lab _ => cases fuel <;> cases h
         | unk => cases fuel <;> simp [unifyTyF] at h
         | fn _ _ => cases fuel <;> cases h
         | rcd _ => cases fuel <;> cases h
@@ -108,6 +121,7 @@ theorem unifyM_occurs_no_unifier {B : Type} [DecidableEq B] (fuel : Nat) :
         cases τ' with
         | var α => cases fuel <;> exact bindTy_occurs_no_unifier' h
         | base _ => cases fuel <;> cases h
+        | lab _ => cases fuel <;> cases h
         | unk => cases fuel <;> cases h
         | fn _ _ => simp [tyRec] at hrec
         | rcd _ => cases fuel <;> cases h
@@ -115,6 +129,7 @@ theorem unifyM_occurs_no_unifier {B : Type} [DecidableEq B] (fuel : Nat) :
         cases τ' with
         | var α => cases fuel <;> exact bindTy_occurs_no_unifier' h
         | base _ => cases fuel <;> cases h
+        | lab _ => cases fuel <;> cases h
         | unk => cases fuel <;> cases h
         | fn _ _ => cases fuel <;> cases h
         | rcd _ => simp [tyRec] at hrec
