@@ -52,7 +52,6 @@
 
 
 == Fragen
-- Are the sorting-rules a-ok?
 - Was genau macht U-ground nochmal?
 - Are the fields matched correctly
   - What happens in the case where more fields (all labeled l) exist in one of the sides?
@@ -60,8 +59,7 @@
 - Can we make claude proof principality of L2?
   - Hard
 - Can I introduce ★ and automatically add the guards?
-  - I don't think so, gradual type system would have done so
-
+  - Nope
 
 == Claude Prompts
 - [ ] The thesis text currently shows the L1 typesystem which provably does not retain principality. Can you swap it for the L2-system?
