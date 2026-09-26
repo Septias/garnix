@@ -56,56 +56,6 @@ mkDerivation (args // { buildInputs = …; })          # the callPackage idiom
 │ no annotations anywhere                │ everything inferred              │ HM, whole-fixpoint scale         │
 └────────────────────────────────────────┴──────────────────────────────────┴──────────────────────────────────┘
 
-NixLang is the fundamental language of one of the largest bodies of untyped functional code in existence and a language that extends beyond the usual λ-calculus features. The foundational core of the language are records, with a garmut of language constructs and builtin functions to create, change and deconstruct these. Two features make static typing notably hard: *first-class labels* and the *asymmetric record concatenation* operation with only a few typesystems in existence that supported these features.
-
-
-NixLang is the motivation for our work and guiding principle for the calculus we are concerned with. NixLang powers the most up-to-date package repository with more than 100.000 packages, continuously checked, updated and rolled out from one central repository: nixpkgs on Github. All of nix' code including the standart library, module system, and operating system NixOs roots in a single file at the root of that repository.
-
-// Gradual typing is semantically unavailable
-From this problem surface we derive two constraints for our work: First, from our assesment, it is unrealistic to force breaking changes in a software project of this size so the requirements needed to adopt the typesystem should be as benign as possible. This is why gradual typesystems @gradual_siek @gradual_tobin @agt that typically provide a surface and (¿) language that inserts casts is not an option. Instead, we take a soft-typing @soft_typing @soft_typing approach and admit an unknown type ★, similar to the undefined type of typescript.
-
-Secondly, we want to create a typesystem that is applicable and thus needs *effective* type-inference. This rules out another class of inference approaches such as ROSE @rose and it's descendants @extensible_rec_funcs @generic_with_extensible as these provide no efficient inference algorithm.
-
-
-// This gives reason for why we need a soft typing system, maybe it is misplaced)
-// we might have to remove this section and merge it into `typesystem`)
-#[
-  A complete typesystem for Nix is hindered by impurities (in an otherwise pure language) that can poison typeability. Using first-class labels and the impure builtin `builtins.currentTime`, it is possible to form an expression that looks up a record field based on the wall-clock time:
-
-  ```nix
-  { before = "moin"; after = 0; }.${if builtins.currentTime < 1767225600 then "before" else "after"}
-  ```
-
-  The type of this selection depends on the moment of evaluation, so this is an obviously untypable operation: typing it would predict the future.
-]
-
-The design constraints for our Nix typesystem are as follows: Full record calculus strength with first-class labels and the problematic asymmetric concat operation are essential to provide usable type-inference. Computability is an essential design constraint as backtracking would render type inference unusably slow. Lastly, a typesystem is needed that admits unavoidable uncertainty with an unknown type ★ similar to the one used in TypeScript or occurrence typing spearheaded by Castagna.
-
-// (note: maybe the section can have *subheadings* for the three main constraints?)
-
-
-= Motivation
-// > Explain the typesystem and why we chose its features the way we did
-//
-// TODO
-// - Note that we don't have width-subtyping (same problem as remy, can gobble fields)
-// - Section about Absence in general (Parreaux, Castagna, etc.)
-//
-// Structure
-// - Row-poly
-// - Plottwist: Constraint systems
-// - (Giuseppe & Parreaux) ?
-//
-// Reason for rows: Concatenation & FC-Labels "obvious"
-// Reason for rows: Good examples from Morris & (P&X)
-//
-// Reason for rows: P&X show efficient unification
-// Reason against Parreaux: No real concatenation, co-complete…?
-// Reason against Castagna: No free concatenation
-// We loose: The full type-connective algebra properties
-//
-//
-//
 
 Asymmetric record concatenation is a central problem that many record calculi address. Its set-or-update behaviour in combination with polymorphism makes tracking of fields extremely hard, wording:[and multiple approaches have been suggested that weight benefits againts drawbacks]. *Row polymorphism* is a method to track positive information of records (…)
 
