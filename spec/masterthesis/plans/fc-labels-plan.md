@@ -77,6 +77,15 @@ it); `Sol.Good`'s "no binding mentions a key" keeps them acyclic.
 
 ## Phase A — dynamic selection
 
+DONE 2026-09-26 (commits 12ea964..fab89c1). Two deviations from the design
+below, both simplifications forced by the proofs:
+  - no `LabelExp` / third substitution component: label variables ARE type
+    variables and ⌊l⌋ is `Ty.lab : Label → Ty B`. The lookup key is a TYPE
+    (`LookupQ`), and a stump's label is a `Ty B`.
+  - L-junk: a key that is not a label answers ⊥. Without it (or a kind
+    discipline) instance-closedness fails, since nothing stops an instance
+    from sending a label variable to `int`.
+
 Rules (paper):
 
     ℓ₂ ≡ l₁                      ℓ₂ # l₁                     ℓ₂ undecided against l₁
@@ -93,22 +102,22 @@ concatenation rule. The ? of L-?-lab is blocked on the LABEL variable, so the
 stump `⟨α ▷ ρ.α ↓ δ⟩` wakes when α is solved — which saturation already
 notices, since staleness is judged by `LookupBlocked`.
 
-  - [ ] A1. `LabelExp`, `labCmp`, `Ty.lab`, `Kind.label`, the `lab` component of
+  - [x] A1. `LabelExp`, `labCmp`, `Ty.lab`, `Kind.label`, the `lab` component of
         `TySubst` / `Sol`; extend `applySubst`, `ftv`, `TyEquiv`, `TyPrec`,
         the head- and ⊑-rigidity inversions
-  - [ ] A2. `Lookup` over a `LabelExp` query + L-?-lab; `LookupBlocked.labFree`;
+  - [x] A2. `Lookup` over a `LabelExp` query + L-?-lab; `LookupBlocked.labFree`;
         re-prove det / mono (also over label-solution extension) / total /
         mono_prec; `Quiescent.blocker_unsolved` checks both sorts
-  - [ ] A3. `Expr.lab`, `Expr.selDyn`; Step, Err; `qLab`, `qSelDyn*`;
+  - [x] A3. `Expr.lab`, `Expr.selDyn`; Step, Err; `qLab`, `qSelDyn*`;
         `qProgress` / `qPreservation` (canonical forms: a value at ⌊l⌋ is `` `l ``)
-  - [ ] A4. the flat label pass `≐ₗ` inside the type pass; ⌊·⌋ in the clash set;
+  - [x] A4. the flat label pass `≐ₗ` inside the type pass; ⌊·⌋ in the clash set;
         re-prove the type-pass success / clash / occurs / termination legs
-  - [ ] A5. `Stump.label : LabelExp`, Discharge via `labCmp`,
+  - [x] A5. `Stump.label : LabelExp`, Discharge via `labCmp`,
         `QScheme.applySubst` on stump labels, `IsRenaming` / A-let at the label
         sort, rules A-lab and A-sel-dyn
-  - [ ] A6. `inferSound` cases, `varCase` / `letCase`, `pinv_keeps`,
+  - [x] A6. `inferSound` cases, `varCase` / `letCase`, `pinv_keeps`,
         `Correctable.correct`, `runSound`, `inferF` / `runF` + termination
-  - [ ] A7. headline: `(a: x: x.(a)) :: ∀(α:Label)(β:Row)(δ:Type). ⟨β.α ↓ δ⟩ ⇒ ⌊α⌋ → {β} → δ`
+  - [x] A7. headline: `(a: x: x.(a)) :: ∀(α:Label)(β:Row)(δ:Type). ⟨β.α ↓ δ⟩ ⇒ ⌊α⌋ → {β} → δ`
         instance-closed (twin of `selQ_instance_closed`); runs for the
         label-refinement example, P&X's example at ★, and the spent promise
         through the second door `λr.λa. (r.(a)) 1` (same incompleteness class)

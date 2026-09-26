@@ -31,7 +31,7 @@ Principality forces qualified schemes that use parked stumps during unification 
 - [x] Qualified Schemes
 - [~] Unification
 - [~] Type Inference
-- [ ] FC-Labels
+- [~] FC-Labels — selection DONE (phase A, 2026-09-26, branch `worktree-fc-labels`); construction open (phase B)
 - [ ] Negative type information
 - [?] Patterns
 - [?] Occurrence Typing
@@ -124,6 +124,22 @@ covers ≼         ←  W exists  +  ⊴≼  +  COMPLETENESS (false 3 ways: spen
   - **`runSound`: `RunSound` holds.** A run from nothing types its program, at the type it reports under its own final substitution, in the empty context
   - ~~finalization~~ PROVED 2026-09-26 (`Finalizes.holds`, `lean/Finalization.lean`): F-★ fires on a stump blocked on a free row variable and writes nothing at the row sort, so at the final ⟦S′⟧ the lookup is still `?` and δ is ★ — D-?. The old `hfix` side condition is now a theorem, at ⟦S′⟧. **`runSound_of_corrects`: `RunSound` holds given `InstEquivCorrects`.** `RunSound` itself was restated in the empty context (it read `S′.applyCtx ∅`, whose row environment is ⟦S′⟧'s row solutions); no refutation depended on that
   
+
+## FC-Labels  (`plans/fc-labels-plan.md`)
+- [x] **Phase A — dynamic selection, mechanized through RunSound** (2026-09-26, branch `worktree-fc-labels`)
+  - ⌊l⌋ is one new type former (`Ty.lab`), rigid and nullary like 𝓫; label VARIABLES are ordinary type variables, so the label pass of ≐ is one arm of `unifyTyF` and `Sol`/`TySubst` are unchanged
+  - the key's TYPE keys the lookup (`LookupQ`, LabelLookup.lean): ⌊l⌋ → `Lookup`; a variable → `LookupV` (never finds: ⊥ on a hollow row, ? at the first field — L-?-lab — or at a free row variable); anything else → ⊥ (L-junk). *L-junk replaces a kind discipline*: without it a substitution sending a label variable to `int` would break instance-closedness (`λa. {}.(a) : int → ★` must be a typing)
+  - `Stump.label : Ty B`; a stump can be blocked on its KEY (`LookupBlockedQ`); Discharge, wake-up and F-★ read the key under the substitution
+  - `'l` and `e₁.(e₂)` in Step/Err (a non-label key is ↯); L2 rules T-lab and T-sel-dyn (3 arms); **qProgress / qPreservation re-proved**; L1 types neither (`typed_lab_false`)
+  - A-lab and A-sel-dyn (found / ⊥ / park); all Infer invariants and the soundness cases proved; `inferF` implements them, sound and settling. **runSound, run_typed, runF_terminates hold for the extended language**; every Axioms.lean guard unchanged
+  - headline: `selDynQ_instance_closed` — every instance of ∀(α:Label)(β:Row)(δ:Type). ⟨β.α ↓ δ⟩ ⇒ α → {β} → δ types λa. λx. x.(a); runs `#guard`ed in InferRuns.lean (label refinement through a key-blocked stump, L-junk, let-polymorphic use at two keys)
+- New premises and costs (all proved, completeness only):
+  - `QScheme.Correctable` and A-let: no generalized KEY mentions a generalized result (`r.(x.l)` stays monomorphic)
+  - A-let inhabitation / F-★: a stump blocked on a generalized variable reads as ? or ⊥ after substitution (`lookupQ_blocked_subst`); F-★ binds only to ★ (`Finalizes.starOrVar`), so a key blocker never becomes a label
+  - `QCovers.forward_of_avoiding` (off the soundness path) restricted to STATIC keys: ⟦s⟧-as-context holds no label solutions, so a `?` on a solved key cannot transport. Lifting it needs `Γ·(α = ℓ)` in `Ctx`
+  - the spent promise has a second door (`λr.λa. (r.(a)) c`): same incompleteness class
+- [ ] **Phase B — dynamic construction** `{ ${e₁} = e₂ }`: var-labeled fields, barriers in ≈, the row unifier (plan §B1–B7)
+- [ ] `e ? ${e'}` — needs a Bool base type; not started
 
 ## Principality
 - [x] covering order on schemes ⊴ 
