@@ -128,6 +128,13 @@ updated.
 
 ## Phase B — dynamic construction (var-labeled fields)
 
+DECIDED 2026-09-26: **not mechanized — paper-only.** Phase A is the mechanized
+result; this section is the design the thesis presents for construction. With
+label variables as type variables (phase A), a field label would also have to
+say what it becomes when its variable is sent to a non-label — the natural
+answer is a JUNK label that every key misses (L-junk's twin), and constructing
+it is a ↯ error at run time.
+
     Rows        ρ ::= ε | α | ℓ: τ | (ρ₁ | ρ₂)       Row.sing : LabelExp → Ty B → Row B
 
     Γ ⊢ ℓ₁ # ℓ₂

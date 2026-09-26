@@ -31,7 +31,7 @@ Principality forces qualified schemes that use parked stumps during unification 
 - [x] Qualified Schemes
 - [~] Unification
 - [~] Type Inference
-- [~] FC-Labels — selection DONE (phase A, 2026-09-26, branch `worktree-fc-labels`); construction open (phase B)
+- [~] FC-Labels — selection DONE and mechanized (phase A, 2026-09-26, branch `worktree-fc-labels`); construction paper-only (phase B)
 - [ ] Negative type information
 - [?] Patterns
 - [?] Occurrence Typing
@@ -138,7 +138,7 @@ covers ≼         ←  W exists  +  ⊴≼  +  COMPLETENESS (false 3 ways: spen
   - A-let inhabitation / F-★: a stump blocked on a generalized variable reads as ? or ⊥ after substitution (`lookupQ_blocked_subst`); F-★ binds only to ★ (`Finalizes.starOrVar`), so a key blocker never becomes a label
   - `QCovers.forward_of_avoiding` (off the soundness path) restricted to STATIC keys: ⟦s⟧-as-context holds no label solutions, so a `?` on a solved key cannot transport. Lifting it needs `Γ·(α = ℓ)` in `Ctx`
   - the spent promise has a second door (`λr.λa. (r.(a)) c`): same incompleteness class
-- [ ] **Phase B — dynamic construction** `{ ${e₁} = e₂ }`: var-labeled fields, barriers in ≈, the row unifier (plan §B1–B7)
+- [—] **Phase B — dynamic construction** `{ ${e₁} = e₂ }`: DECIDED 2026-09-26 paper-only, not mechanized (design in plan §Phase B: var-labeled fields, barriers in ≈, the row unifier)
 - [ ] `e ? ${e'}` — needs a Bool base type; not started
 
 ## Principality
