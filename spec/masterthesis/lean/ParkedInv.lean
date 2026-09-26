@@ -279,7 +279,7 @@ theorem psOk_of_var {S : SolverState B} {sc : QScheme B} {θ : TySubst B}
     PsOk { S with supply := Sup, kinds := K } ps := by
   -- every submitted stump is the image of one constraint
   have himg : ∀ p ∈ ps, ∃ st ∈ sc.constraints,
-      p.stump = ⟨st.row.applySubst θ, st.label, f st.res⟩ := by
+      p.stump = ⟨st.row.applySubst θ, st.label.applySubst θ, f st.res⟩ := by
     intro p hp
     have hm : p.stump ∈ ps.map Parked.stump := List.mem_map_of_mem hp
     rw [hps] at hm
@@ -396,7 +396,7 @@ theorem Infer.pinv_keeps {C : Type} {constTy : C → B} :
       obtain ⟨i₂, k₂⟩ := hs.pinv_keeps ia
       obtain ⟨ib, kb, mb, hδ, hsup, hpk⟩ := draw_pinv_keeps hd₂ i₂
       -- the new stump's result is the name just drawn: issued, and fresh for Δ
-      have hnew : PsOk S₂' [⟨α, ⟨Row.var r, l, δ⟩⟩] :=
+      have hnew : PsOk S₂' [⟨α, ⟨Row.var r, .lab l, δ⟩⟩] :=
         ⟨fun q hq => by
             rw [List.mem_singleton] at hq; rw [hq]
             exact ⟨_, by rw [hsup]; exact Nat.lt_succ_self _, hδ⟩,
@@ -407,10 +407,10 @@ theorem Infer.pinv_keeps {C : Type} {constTy : C → B} :
             exact absurd (hrj.symm.trans (he.trans hδ)) (natName_lt_ne hj),
          fun a ha b hb _ => by rw [List.mem_singleton] at ha hb; rw [ha, hb]⟩
       refine ⟨pinv_park (ps := []) ib hnew, ?_⟩
-      have kp : SolverState.KeepsS S₂' (S₂'.park ⟨α, ⟨Row.var r, l, δ⟩⟩) :=
+      have kp : SolverState.KeepsS S₂' (S₂'.park ⟨α, ⟨Row.var r, .lab l, δ⟩⟩) :=
         SolverState.KeepsS.of_sub (fun q hq => List.mem_cons_of_mem _ hq)
       have mp := SolverState.SatMono.of_sol_eq
-        (S := S₂'.park ⟨α, ⟨Row.var r, l, δ⟩⟩) (S' := S₂') rfl
+        (S := S₂'.park ⟨α, ⟨Row.var r, .lab l, δ⟩⟩) (S' := S₂') rfl
       exact k₁.trans (ka.trans (k₂.trans (kb.trans kp mp) (mb.trans mp))
         (hs.satMono.trans (mb.trans mp))) (ma.trans (hs.satMono.trans (mb.trans mp)))
   | _, _, _, _, _, .rcd hb, h, hΓ => InferRec.pinv_keeps hb h hΓ

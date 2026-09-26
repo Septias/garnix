@@ -55,10 +55,12 @@ structure LetAdmissible (Γ : QCtx B) (S S₁ : SolverState B) (ᾱ : List TyVar
   inj      : ∀ p ∈ S₁.parked, p.blocker ∈ ᾱ → ∀ q ∈ S₁.parked, q.blocker ∈ ᾱ →
                S₁.resVar p.stump.res = S₁.resVar q.stump.res → p.stump = q.stump
   dis      : ∀ α ∈ ᾱ, ∀ p ∈ S₁.parked, p.blocker ∉ ᾱ →
-               α ∉ (p.stump.row.applySubst S₁.subst).ftv ∧ α ∉ (S₁.subst.ty p.stump.res).ftv
+               α ∉ (p.stump.row.applySubst S₁.subst).ftv ∧ α ∉ (S₁.subst.ty p.stump.res).ftv ∧
+               α ∉ (p.stump.label.applySubst S₁.subst).ftv
   unsolved : ∀ α ∈ ᾱ, α ∉ S₁.sol.dom
   indep    : ∀ p ∈ S₁.parked, p.blocker ∈ ᾱ → ∀ q ∈ S₁.parked, q.blocker ∈ ᾱ →
-               S₁.resVar q.stump.res ∉ (p.stump.row.applySubst S₁.subst).ftv
+               S₁.resVar q.stump.res ∉ (p.stump.row.applySubst S₁.subst).ftv ∧
+               S₁.resVar q.stump.res ∉ (p.stump.label.applySubst S₁.subst).ftv
 
 /-- ⊢  nothing generalized is always admissible. -/
 theorem LetAdmissible.nil {Γ : QCtx B} {S S₁ : SolverState B} :
@@ -77,11 +79,13 @@ theorem LetAdmissible.union {Γ : QCtx B} {S S₁ : SolverState B} {ᾱ₁ ᾱ�
   -- (hj's own correctability) or sits in hj's Δγ (hj's Δγ premise)
   have side : ∀ {ᾱ : List TyVar}, LetAdmissible Γ S S₁ ᾱ →
       ∀ p ∈ S₁.parked, ∀ q ∈ S₁.parked, q.blocker ∈ ᾱ →
-      S₁.resVar q.stump.res ∉ (p.stump.row.applySubst S₁.subst).ftv := by
+      S₁.resVar q.stump.res ∉ (p.stump.row.applySubst S₁.subst).ftv ∧
+      S₁.resVar q.stump.res ∉ (p.stump.label.applySubst S₁.subst).ftv := by
     intro ᾱ hj p hp q hq hqb
     by_cases hpb : p.blocker ∈ ᾱ
     · exact hj.indep p hp hpb q hq hqb
-    · exact (hj.dis _ (hj.res q hq hqb).2 p hp hpb).1
+    · have hd := hj.dis _ (hj.res q hq hqb).2 p hp hpb
+      exact ⟨hd.1, hd.2.2⟩
   -- one result per stump, from ONE side: if p is not generalized there, it sits
   -- in that side's Δγ, which may not mention the result q is generalized at
   have sideInj : ∀ {ᾱ : List TyVar}, LetAdmissible Γ S S₁ ᾱ →
@@ -91,7 +95,7 @@ theorem LetAdmissible.union {Γ : QCtx B} {S S₁ : SolverState B} {ᾱ₁ ᾱ�
     intro ᾱ hj p hp q hq hqb hpv he
     by_cases hpb : p.blocker ∈ ᾱ
     · exact hj.inj p hp hpb q hq hqb he
-    · refine absurd ?_ (hj.dis _ (hj.res q hq hqb).2 p hp hpb).2
+    · refine absurd ?_ (hj.dis _ (hj.res q hq hqb).2 p hp hpb).2.1
       rw [hpv, ← he]; simp [Ty.ftv]
   refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
   · intro α hα
@@ -214,11 +218,13 @@ def LetBad (Γ : QCtx B) (S S₁ : SolverState B) (ᾱ : List TyVar) (α : TyVar
       ∃ q ∈ S.parked, p.stump = q.stump)) ∨
   -- a stump that must stay in Δ_Γ mentions α
   (∃ p ∈ S₁.parked, p.blocker ∉ ᾱ ∧
-     (α ∈ (p.stump.row.applySubst S₁.subst).ftv ∨ α ∈ (S₁.subst.ty p.stump.res).ftv)) ∨
+     (α ∈ (p.stump.row.applySubst S₁.subst).ftv ∨ α ∈ (S₁.subst.ty p.stump.res).ftv ∨
+      α ∈ (p.stump.label.applySubst S₁.subst).ftv)) ∨
   -- generalizing a stump blocked on α would generalize its result, which some
   -- parked row mentions
   (∃ q ∈ S₁.parked, q.blocker = α ∧
-     ∃ p ∈ S₁.parked, S₁.resVar q.stump.res ∈ (p.stump.row.applySubst S₁.subst).ftv) ∨
+     ∃ p ∈ S₁.parked, S₁.resVar q.stump.res ∈ (p.stump.row.applySubst S₁.subst).ftv ∨
+       S₁.resVar q.stump.res ∈ (p.stump.label.applySubst S₁.subst).ftv) ∨
   -- a stump blocked on α reads its result as the same variable as another one
   (∃ q ∈ S₁.parked, q.blocker = α ∧
      ∃ p ∈ S₁.parked, p.stump ≠ q.stump ∧ S₁.resVar p.stump.res = S₁.resVar q.stump.res ∧
@@ -245,15 +251,20 @@ theorem LetBad.excluded {Γ : QCtx B} {S S₁ : SolverState B} {ᾱ ᾱ' : List 
     · exact h (hsub _ (hA.res p hp hα).2)
     · exact hA.own p hp hα q hq he
   · have hb' : p.blocker ∉ ᾱ' := fun h' => hb (hsub _ h')
-    rcases h with h | h
+    rcases h with h | h | h
     · exact (hA.dis _ hα p hp hb').1 h
-    · exact (hA.dis _ hα p hp hb').2 h
+    · exact (hA.dis _ hα p hp hb').2.1 h
+    · exact (hA.dis _ hα p hp hb').2.2 h
   · by_cases hpb : p.blocker ∈ ᾱ'
-    · exact hA.indep p hp hpb q hq hα h
-    · exact (hA.dis _ (hA.res q hq hα).2 p hp hpb).1 h
+    · rcases h with h | h
+      · exact (hA.indep p hp hpb q hq hα).1 h
+      · exact (hA.indep p hp hpb q hq hα).2 h
+    · rcases h with h | h
+      · exact (hA.dis _ (hA.res q hq hα).2 p hp hpb).1 h
+      · exact (hA.dis _ (hA.res q hq hα).2 p hp hpb).2.2 h
   · by_cases hpb : p.blocker ∈ ᾱ'
     · exact hne (hA.inj p hp hpb q hq hα he)
-    · refine (hA.dis _ (hA.res q hq hα).2 p hp hpb).2 ?_
+    · refine (hA.dis _ (hA.res q hq hα).2 p hp hpb).2.1 ?_
       rw [hpv, he]; simp [Ty.ftv]
 
 /-- ⊢  a set with no bad member is admissible. -/
@@ -267,7 +278,7 @@ theorem LetAdmissible.of_no_bad {Γ : QCtx B} {S S₁ : SolverState B} {ᾱ : Li
         h _ hb (.inr (.inr (.inr (.inl ⟨p, hp, rfl, .inr (.inl hn)⟩))))⟩
   refine ⟨fun α hα => ?_, fun α hα β hβ => ?_, fun p hp hb q hq he => ?_,
     hres, fun p hp hb q hq hqb he => ?_, fun α hα p hp hb => ?_, fun α hα hd => ?_,
-    fun p hp _ q hq hqb hm => ?_⟩
+    fun p hp _ q hq hqb => ⟨fun hm => ?_, fun hm => ?_⟩⟩
   · exact Classical.byContradiction fun hn => h α hα (.inl hn)
   · refine ⟨fun hm => ?_, fun hm => ?_⟩
     · exact h α hα (.inr (.inl ⟨β, hβ, .inl hm⟩))
@@ -275,11 +286,13 @@ theorem LetAdmissible.of_no_bad {Γ : QCtx B} {S S₁ : SolverState B} {ᾱ : Li
   · exact h _ hb (.inr (.inr (.inr (.inl ⟨p, hp, rfl, .inr (.inr ⟨q, hq, he⟩)⟩))))
   · exact Classical.byContradiction fun hn => h _ hqb
       (.inr (.inr (.inr (.inr (.inr (.inr ⟨q, hq, rfl, p, hp, hn, he, (hres p hp hb).1⟩))))))
-  · refine ⟨fun hm => ?_, fun hm => ?_⟩
+  · refine ⟨fun hm => ?_, fun hm => ?_, fun hm => ?_⟩
     · exact h α hα (.inr (.inr (.inr (.inr (.inl ⟨p, hp, hb, .inl hm⟩)))))
-    · exact h α hα (.inr (.inr (.inr (.inr (.inl ⟨p, hp, hb, .inr hm⟩)))))
+    · exact h α hα (.inr (.inr (.inr (.inr (.inl ⟨p, hp, hb, .inr (.inl hm)⟩)))))
+    · exact h α hα (.inr (.inr (.inr (.inr (.inl ⟨p, hp, hb, .inr (.inr hm)⟩)))))
   · exact h α hα (.inr (.inr (.inl hd)))
-  · exact h _ hqb (.inr (.inr (.inr (.inr (.inr (.inl ⟨q, hq, rfl, p, hp, hm⟩))))))
+  · exact h _ hqb (.inr (.inr (.inr (.inr (.inr (.inl ⟨q, hq, rfl, p, hp, .inl hm⟩))))))
+  · exact h _ hqb (.inr (.inr (.inr (.inr (.inr (.inl ⟨q, hq, rfl, p, hp, .inr hm⟩))))))
 
 /-- one round: delete every variable that is bad for the current ᾱ -/
 def letPruneStep [DecidableEq B] (Γ : QCtx B) (S S₁ : SolverState B) (ᾱ : List TyVar) :
