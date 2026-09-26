@@ -10,3 +10,6 @@ import RowUnify.Completeness  -- boundedness and success completeness
 import RowUnify.Clash         -- clash soundness
 import RowUnify.Trichotomy    -- the mgu statement and the stuck leg
 import RowUnify.State         -- ⟦S⟧ as a context: the θ ↦ rowEnv bridge
+import RowUnify.Applied       -- every success is applied: UnifyWF, non-vacuity
+import RowUnify.OccursLift    -- occurs ⟹ no unifier, for the whole driver
+import RowUnify.Termination   -- every problem has a fuel that suffices; ≐ᵣ total

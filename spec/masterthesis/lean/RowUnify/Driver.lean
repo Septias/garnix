@@ -73,7 +73,9 @@ theorem crossfield_stuck {B : Type} [DecidableEq B] (b : B) :
                           (.cat (.sing "m" (.base b)) (.var "b")) = .stuck := rfl
 
 -- ## Fuel monotonicity
--- No closed-form bound yet: solve-and-apply grows the spine, and the variable
+-- Termination itself is proved in RowUnify/Termination.lean
+-- (`unifyRowM_terminates`), by a lexicographic measure rather than a bound.
+-- What follows is the history of why no CLOSED-FORM bound exists: solve-and-apply grows the spine, and the variable
 -- count can grow too (a type equation solved inside a field may expand a row
 -- variable and hand the invented tail to the residual), so no lexicographic
 -- measure decreases. The missing ingredient is a Rémy-style argument on the

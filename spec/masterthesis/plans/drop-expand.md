@@ -303,11 +303,51 @@ solutions (refutes UnifyWF): 0` and `[6] … over the **0** successes whose
 solution has any edge` in all three universes. Axiom guards re-pinned;
 `terminal_masks_mgu_terminal` is `[propext]`.
 
-## Open input
+### Stage 2.1 — DONE 2026-09-26 (`RowUnify/Applied.lean`)
+
+`Sol.Applied` is a driver invariant, proved by the induction `unifyM_good` in
+the shape of `unifyM_bounded`, over sort-TAGGED variables (untagged it is false:
+`a ≐ᵣ (l:a)` binds row-`a` with type-`a` in the payload). The invariant
+`Sol.Good V s`: keys and mentions ⊆ V, no binding mentions a key, consistent
+keys. Corollaries: `unifyWF`, `unifyAcyclic`, `unifyRowM_success_sat` /
+`_unifies` / `_mgu` (non-vacuity), and at the solver state `SolveTy.clean` /
+`SolveRow.clean`. Axiom-guarded in `Axioms.lean`.
+
+### Stage 2.2 — DONE 2026-09-26 (`RowUnify/OccursLift.lean`)
+
+`unifyM_occurs_no_unifier`: the driver-level lift, same shape as
+`unifyM_success_complete`. With it the verdicts read: success ⟹ non-vacuous
+mgu, clash ⟹ no unifier, occurs ⟹ no unifier, stuck ⟹ conservative.
+
+### Stage 2.3 — DONE 2026-09-26 (`RowUnify/Termination.lean`)
+
+`unifyRowM_terminates` / `unifyTyM_terminates`. The measure is lexicographic
+(problem variables counted in a fixed universe, size). The worry recorded
+above — `sApplySubst` can grow a spine — is harmless: it only happens after a
+stage that bound a key, and that key is then gone from the residual
+(`Sol.Good.clears`), so the first component already dropped. `unifyRow` is
+the total function (noncomputable: the fuel is chosen, there is no closed-form
+bound).
+
+## Open input — ANSWERED 2026-09-26 (`Regressions.lean`, `nix_*`)
 
 The universes are synthetic and exhaustive, heavily weighted toward exotic
-shapes; every lost witness is one shape up to renaming, `(l:{a}) ≐ᵣ (b | a)` — a
-field whose payload mentions the other side's tail. Whether Nix-shaped code hits
-it needs hand-written `Infer` examples (`//` over partially-known rows, applying
-`{l: τ | ρ} → …` to a record with an abstract tail). That is the only evidence
-that can make 30.5% look either irrelevant or fatal.
+shapes; every lost witness is one shape up to renaming. The hand-traced
+Nix idioms (A-conc puts the right operand of `//` first, A-app emits
+`τ_f ≐ τ_arg → β`) say where it arises in practice:
+
+| idiom | verdict |
+|---|---|
+| let-bound builder on an extended record (`mk (args // {name=…;})`), any number of uses | success — A-var instantiates a fresh `{β}` |
+| λ-bound callback, same field, independent tails | success |
+| λ-bound callback, closed literal argument | success |
+| **λ-bound callback, DIFFERENT fields, independent tails** | **stuck ⟹ type error** (was success) |
+| λ-bound callback, different fields, shared tail | clash — no unifier anyway |
+| λ-bound callback on a record and its own extension | clash — no unifier anyway |
+
+So the 7 / 30.5 / 9 % cost is confined to one pattern: a MONOMORPHIC function
+argument applied to two records extended by different fields over independent
+tails. Field selections never reach ≐ᵣ (they park as stumps), and let-bound
+functions — which is how Nix libraries are consumed — are instantiated per use.
+This is the evidence the thesis can cite for "the removal costs little on
+Nix-shaped code"; it is a hand trace, not a corpus measurement.

@@ -60,7 +60,10 @@
 --
 -- ## What is NOT proved here
 -- That the driver returns a well-formed solution (`UnifyWF`, bottom of this
--- file).  Nothing above depends on it.  Its ACYCLIC half has ~100k sweep
+-- file).  Nothing above depends on it.  PROVED since, in RowUnify/Applied.lean
+-- (`unifyWF`, `unifyAcyclic`): with U-expand gone every success is `Applied`,
+-- so the "Why NOT `Sol.Applied`" argument above is historical.  The remainder
+-- of this paragraph records the state before that.  Its ACYCLIC half has ~100k sweep
 -- successes behind it and no counterexample; its RANKED half is the payload
 -- version of the same question, and Stage 3 of the occurs work is what makes it
 -- plausible — `δ ≔ {β}` together with `β ≔ (l:δ | β′)` is exactly the cycle
@@ -926,7 +929,10 @@ theorem Sol.acyclic_comp {B : Type} {s₁ s₂ : Sol B} {V : List TyVar}
     · exact hnv (List.mem_append_right _ hh)
     · exact hnd hh
 
-/-- The SPINE half of `UnifyWF`, on its own. Worth separating because it is
+/-- PROVED: `unifyAcyclic` (RowUnify/Applied.lean), as a corollary of every
+success being `Applied`. The status notes below predate the removal of U-expand.
+
+The SPINE half of `UnifyWF`, on its own. Worth separating because it is
 strictly cheaper and already buys the thing inference needs: with `Acyclic`,
 `Sol.rowWF_toCtx` makes ⟦S⟧ a well-formed context and `lookup_total_toCtx`
 makes `A-sel`'s premise guaranteed to HAVE a derivation. The θ ↦ rowEnv bridge
@@ -971,6 +977,7 @@ def UnifyAcyclic (B : Type) [DecidableEq B] : Prop :=
   ∀ (fuel : Nat) (ρ₁ ρ₂ : Row B) (s : Sol B) (S' : Supply),
     unifyRowM fuel ρ₁ ρ₂ = .success s S' → s.Acyclic
 
+/-- PROVED: `unifyWF` (RowUnify/Applied.lean). -/
 def UnifyWF (B : Type) [DecidableEq B] : Prop :=
   ∀ (fuel : Nat) (ρ₁ ρ₂ : Row B) (s : Sol B) (S' : Supply),
     unifyRowM fuel ρ₁ ρ₂ = .success s S' → s.WF

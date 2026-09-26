@@ -4,10 +4,12 @@
 Legend: ✔ mechanized (a theorem) · ◐ **stated in Lean, not proved** — or partial ·
 ✘ absent, cannot be written down
 
-The named-but-unconcluded obligations are exactly `UnifyWF`, `UnifyAcyclic`,
-`TerminalNoMgu` (RowUnify/), `InferSound`, `RunSound`, `KindsSound` (Infer.lean),
-`InferSoundC`, `QTypedCDischarge`, `QScheme.ResWF` (InferSound.lean) and `SchemeImage`
-(QSubst.lean) — each a `def … : Prop` that no theorem concludes.
+The named-but-unconcluded obligations are exactly `KindsSound` (Infer.lean),
+`SchemeImage` (QSubst.lean) and `GeneralPrincipality` (OpenEnds.lean) — each a
+`def … : Prop` that no theorem concludes. The named statements that are REFUTED
+are kept as the names their refutations are about: `TerminalNoMgu`,
+`InferSoundC`, `InstEquivCorrects`. `InferSound` and `RunSound` are PROVED
+(`inferSound`, `runSound`, 2026-09-26).
 
 ## A. Unification ≐ / ≐ᵣ
 
@@ -19,14 +21,17 @@ The named-but-unconcluded obligations are exactly `UnifyWF`, `UnifyAcyclic`,
   - `unifyRowM_success_iff`
 - ✔ **clash soundness** — clash ⟹ no unifier
   - `unifyM_clash_no_unifier`
-- ✔ **occurs soundness** — at both sorts, where the guard is LOCAL
-  - `solveVarM_occurs_no_unifier`, `bindTy_occurs_no_unifier`
+- ✔ **occurs soundness** — at both sorts, and through the WHOLE DRIVER
+  - local: `solveVarM_occurs_no_unifier`, `bindTy_occurs_no_unifier`
+  - lifted (2026-09-26): `unifyM_occurs_no_unifier`,
+    `unifyRowM_occurs_no_unifier`, `unifyTyM_occurs_no_unifier`
+    (RowUnify/OccursLift.lean) — forced moves carry a unifier to the residual,
+    and success completeness carries it past a solved first stage
   - the all-variable occurrence is not a failure but the ε-collapse rule
     (`allvar_occurs_mgu`), so what is rejected is deep or field-pinned, and both
     are genuine
-  - only the `depReach Θ` stale-binding disjunct is left, and it is a
-    solver-state fact, not a problem fact — `solveVarM_occurs_no_unifier_nil` is
-    the unconditional Θ = [] case
+  - the `depReach Θ` stale-binding disjunct went with U-expand, which is what
+    made the lift a plain induction
 - ✘ **stuck ⟹ no mgu** — FALSE
   - `stuck_masks_mgu` — and it alone. `terminalNoMgu_false` is DELETED
     (Refutations.lean:327); see the `TerminalNoMgu` entry below
@@ -41,68 +46,33 @@ The named-but-unconcluded obligations are exactly `UnifyWF`, `UnifyAcyclic`,
     leg is the specific no-mgu theorems plus the conservativity witnesses
 - ✔ **fuel independence**
   - `unifyM_fuel_mono`, `unifyM_bounded`
-- ✘ **termination / totality** — `∃ fuel. result ≠ outOfFuel`
-  - missing: a *well-founded measure*. Rémy's did not close because U-expand's
-    renaming added no fields; with U-expand gone every arm solves-and-applies,
-    so `(#unsolved vars, spine size)` is the candidate — but `sApplySubst` can
-    still grow a spine, so the second component needs a real argument
-  - without this `unifyRow` is not a *function*, and every inference theorem
-    inherits the fuel parameter
-  - the fuel PROFILE did not change with U-expand's removal (`fuelGain = 0`),
-    so the fuzz runs give no evidence either way about the measure
-- ◐ **no duplicate keys on `Sol`** — the witness below is GONE with U-expand
-  (its cause was `expandL`'s host-only rename); the invariant itself is not yet
-  proved. Carry it in the `Sol.Applied` induction. *Historical entry:*
-  - `Sol.ty` / `Sol.row` are bare association lists with no invariant, and two
-    readers disagree: `Sol.toSubst` goes through `tyLookup`/`rowLookup`, which
-    are FIRST-MATCH-WINS, while `Sol.Sat` quantifies `∀ p ∈ s.row` over every
-    pair
-  - live two-atom witness:
-    `(b | a) ≐ᵣ (l:{a} | b)  ⟹  [aa≔{a} ; b≔l:aa | aaa, b≔aaa | a | ε]` —
-    `b` bound twice, to values that disagree
-  - cause: `expandL` applies `renameVar β β′` to the HOST side only
-    (Defs.lean:414), so the `β` in the field side's residual survives and
-    U-var-solve binds it again; `Sol.comp` is a plain append with no dedup
-  - fix is either a driver invariant (have `expandL` apply β's binding to the
-    residual, or `comp` drop a shadowed key) or restating `Sat`/`Ranked`
-    through `toSubst`. Or remove the expand mechanism.
-- ◐ **well-formed returned solution** (`UnifyWF` = `Acyclic` ∧ `Ranked`) —
-  stated, `State.lean:974`
-  - the vocabulary is complete: `Sol.Acyclic`, `Sol.Ranked`, `Sol.Closes`,
-    `Sol.WF`, `Sol.closes_of_wf`
-  - what is missing is the proof, and the cheap routes are **ruled out by
-    measurement**: six rank candidates refuted (list position both directions,
-    name length, DepGraph reachability, DepGraph depth, creation order both
-    intra-expansion orders), and the `Sol.comp` preservation step is false as
-    stated
-  - the blocker underneath is the duplicate-key entry above — `Ranked`
-    quantifies over ALL bindings, so a dead shadowed binding must also be
-    rank-decreasing. **Decide duplicate keys before looking for a rank again**
-  - empirically 0/0/0 in all three universes since B1
+- ✔ **termination / totality** — `unifyRowM_terminates`, `unifyTyM_terminates`
+  (RowUnify/Termination.lean, 2026-09-26)
+  - measure: (problem variables counted inside a fixed universe, problem size),
+    lexicographic. Forced moves shrink the size over no new variable; a solved
+    stage with a binding loses that key (`Sol.Good.clears`), however much
+    `sApplySubst` grows the spine; a keyless stage is the identity
+  - `unifyRow` is the total function, and `unifyRow_eq` says every run that
+    answers agrees with it. No closed-form fuel bound — the fuel is chosen
+- ✔ **consistent keys on `Sol`** — PROVED 2026-09-26 as part of `Sol.Good`
+  (`RowUnify/Applied.lean`): two bindings of one key agree, so `toSubst`
+  (first match) and `Sat` (all pairs) cannot disagree. The old witness went
+  through U-expand's host-only rename and is gone with it
 
-- ◐ **`UnifyAcyclic`** — the SPINE half alone — stated, `State.lean:970`
-  - strictly cheaper, and already buys what inference needs
-  - two algebraic steps DONE: `sVarSeq_applySubst`, `Sol.acyclic_comp`
-  - remains: no "values avoid the domain" invariant over `Ty.allRowVars`
-    survives — three swept, all ✘, and false BY DESIGN, since a triangular
-    solution legitimately holds bound variables under record constructors. A
-    different induction is needed
+- ✔ **well-formed returned solution** (`UnifyWF`) — `unifyWF`
+  - via `Sol.Good`: every success is `Applied`, so `Ranked` holds at rank ≡ 0
+    and no rank search is needed. The refuted rank candidates were all
+    artefacts of U-expand's triangular solutions
+- ✔ **`UnifyAcyclic`** — `unifyAcyclic`, a corollary
+- ✔ **non-vacuity of success** — `unifyRowM_success_sat`,
+  `unifyRowM_success_unifies`, `unifyRowM_success_mgu`: `s.toSubst` satisfies
+  `s` and unifies the problem, so a success means the problem is solvable
 
-- ✘ **non-vacuity of success** — `success s _ → ∃θ. Sat θ s`
-  - not `UnifyWF`. Both mgu legs are vacuously true when `s` is unsatisfiable
-    AND the problem has no unifier, so the pair does not exclude a success on an
-    unsolvable input. Nothing proved is false; the pair is under-specified
-  - route: carry `∃θ. Sat θ s` as a THIRD conjunct of the mutual success
-    induction
-  - fallback: `solRankedB`/`peelDeps` (Fuzz.lean) already DECIDES it — promote
-    it into the driver as a final gate
-  - sub-obligation is the duplicate-key entry
-
-- ◐ **unification preserves `RowWF`** — reduces to `UnifyAcyclic`
+- ✔ **unification preserves `RowWF`** — via `unifyAcyclic` and `Sol.rowWF_toCtx`
   - no longer a missing statement: `Sol.rowWF_toCtx` derives `RowWF` from
     `Sol.Acyclic`, and `Sol.lookup_total_toCtx` feeds `lookup_total`, so
     `A-sel`'s premise is guaranteed to HAVE a derivation as soon as
-    `UnifyAcyclic` lands
+    `UnifyAcyclic` lands — which it now has
   - the old pointer to a comment at `minimal.lean:2279` is dead — that line is
     `RowPrec.cat_inv` now
 
@@ -137,25 +107,31 @@ The named-but-unconcluded obligations are exactly `UnifyWF`, `UnifyAcyclic`,
 
 - ✔ **the judgement itself**
   - `Infer` / `InferRec` (Infer.lean)
-  - a RELATION, not a function: a function would owe unification's termination,
-    `A-let`'s fixpoint and the `↝*` closure, none of which exist
+  - a RELATION, not a function: a function would owe unification's termination
+    (now PROVED, `unifyRowM_terminates`), `A-let`'s fixpoint and the `↝*`
+    closure (both still absent)
   - non-vacuity pinned by `selEx_infers`, `fStarEx_infers`
 
 - ✔ **`⟦S⟧` as a context**
   - `Sol.toCtx`, `Sol.lookup_toCtx_iff`, `SolverState.applyCtx`
-  - the bridge is conditioned on `Sol.WF`, so it waits on `UnifyWF`; `⟦S⟧` in
+  - the bridge is conditioned on `Sol.WF`, which `SolveTy.clean` /
+    `SolveRow.clean` now maintain across solved equations; `⟦S⟧` in
     the A-rules is currently `Sol.toSubst` (one step), which agrees with the
     closure on a well-formed state
   - `Sol.lookup_toCtx_sat` transports DEFINITE lookups under mere `Sat`, which
     is what the induction actually has at an intermediate state
 
-- ◐ **well-formedness of `S`** — one of four invariants proved
+- ✔ **well-formedness of `S`** — the invariants the soundness proof needs, all proved
   - `SolverState.Quiescent` (every parked stump genuinely blocked on the blocker
     it records, read on the SUBSTITUTED row) is stated AND maintained:
     `Infer.quiescent` / `InferRec.quiescent` show **every reachable state is
     quiescent**, by mutual recursion over the rules
-  - still missing: θ acyclic (`UnifyAcyclic`), δ's distinct (`QScheme.ResWF`
-    below), W irrelevant to typing
+  - θ clean (hence acyclic, applied) over the whole derivation (`Infer.clean`,
+    `Finalizes.clean`, Absorb.lean), and every derivation extends its start
+    (`Infer.ext`)
+  - `PInv` (ParkedInv.lean): parked result variables are issued by the supply
+    and there is one stump per result variable (`Infer.pinv_keeps`)
+  - W (the flags) plays no part in typing, and nothing needs it to
 
 - ✔ **name supply in the inference rules** — threaded and monotone
   - `SolverState.supply`/`draw`, with `SolveTy`/`SolveRow` calling
@@ -163,7 +139,9 @@ The named-but-unconcluded obligations are exactly `UnifyWF`, `UnifyAcyclic`,
     `localSupply` hands back a supply BEHIND the state's and lets a later `draw`
     re-issue a live name
   - `Infer.supply_mono` and `Infer.kinds_mono` are proved
-  - still missing: Γ-freshness
+  - Γ-freshness is no longer missing: A-var draws its renaming from the supply
+    (`Infer.var`'s range premise), and `nameReuse_*` (FreshNames.lean) is the
+    witness that the old unreserved names broke `PInv`
 
 - ◐ **sorts of invented variables** — `KEnv`, `KEnv.Assigns`, `KindsSound` stated
   - `A-let` writes `κ̄ = Γ(ᾱ)` where ᾱ are exactly the variables *not* in Γ
@@ -201,12 +179,18 @@ The named-but-unconcluded obligations are exactly `UnifyWF`, `UnifyAcyclic`,
   - still ✘ for a whole run: stating it needs "unique up to renaming of invented
     names", i.e. an α-equivalence on (τ, S) outputs
 
-- ✘ **termination of inference**
-  - inherits unification termination, *plus* the `A-let` Δ-split least-fixpoint
-    (asserted monotone and bounded by |Δ₁|, never stated), *plus* the `↝*`
-    wake-up closure
-  - the weakest leg in the development: the only `termination_by` anywhere is
-    `minimal.lean:412`, unrelated
+- ◐ **termination of inference** — both closures terminate; the statement
+  awaits a function
+  - unification: `unifyRowM_terminates` / `unifyTyM_terminates`
+  - the `↝*` wake-up closure: `satStep_wf` (OpenEnds.lean) — no infinite
+    saturation run from ANY state, measure (|Δ|, #unblocked) lexicographic
+  - what remains is not a proof but a definition: `Infer` is a relation, so
+    "terminates" needs `infer : … → Option (Ty × SolverState)`. Its one real
+    decision is A-let's ᾱ / Δ-split; whether a greatest admissible ᾱ exists
+    (premises closed under union) is open, and the correctability premise is
+    the suspect. OpenEnds.lean §2
+  - finding: `Infer.letE` asks `S₁.parked = Δq ++ Δγ`, a PREFIX split, not a
+    partition — a completeness cost; the fix is `List.Perm`
 
 - ◐ **confluence of wake-up** — claimed
   - the two pillars exist (`lookup_det`, `Discharge.mono_of_definite`) and the
@@ -217,8 +201,8 @@ The named-but-unconcluded obligations are exactly `UnifyWF`, `UnifyAcyclic`,
   - `Run`, `Finalizes`, `RunSound` (Infer.lean)
   - infer from the empty state, then finalize what is parked — `algorithmic.typ`
     left the `⇓*` closure implicit
-  - `RunSound` is what `InferSound` becomes once something supplies its
-    `parked = []` hypothesis: named, not proved
+  - `RunSound` is PROVED (`runSound`, Finalization.lean). `Run` no longer asks
+    `S′.parked = []` — the proof never used it — so the theorem got stronger
   - non-vacuous on both shapes — `selEx_runs` (F-★ fires) and `fStarEx_runs`
     (saturation left it nothing to do)
 
@@ -235,16 +219,13 @@ The named-but-unconcluded obligations are exactly `UnifyWF`, `UnifyAcyclic`,
   - **cheap probe first**: check whether A-let needs backward at all, or can be
     restated forward-only
 
-- ◐ **`QScheme.ResWF`** — well-formedness of a scheme's constraints — stated,
-  `InferSound.lean:438`
-  - `QScheme` requires neither pairwise-distinct result variables nor that each
-    δ be BOUND
-  - a missing invariant, not a live bug — the algorithm only builds schemes from
-    stumps drawn fresh (A-sel-?) or renamed apart (A-var) — but the type permits
-    a violating one, and then wake-up silently DROPS a constraint, since every
-    rule that retires a stump filters on `stump.res`
-  - belongs with `UnifyWF` in the "true of the states inference builds,
-    unproved" family
+- ✔ **well-formed schemes** — `QScheme.Correctable` (InferSoundA.lean)
+  - bound result variables, one constraint per result variable, and no
+    constraint row mentioning a result variable; A-let builds only such
+    schemes (`letCase`), and they are exactly what the χ-correction needs
+    (`QScheme.Correctable.correct`)
+  - replaces `QScheme.ResWF` / `InstStumps.pairwise`, deleted 2026-09-26
+  - the general correction is FALSE (`instEquivCorrects_false`)
 
 - ◐ **non-vacuity of qualified schemes** — rule-level basis now exists, general
   claim **false**
@@ -273,39 +254,29 @@ The named-but-unconcluded obligations are exactly `UnifyWF`, `UnifyAcyclic`,
   - **A-let inherits it either way** — `QScheme.WF` wants each `res` among the
     binders, and a spent δ is not one
 
-### B′. Inference soundness, as it now factors
+### B′. Inference soundness — PROVED
 
-`RunSound = InferSoundC ∘ Finalize.dischargeEquiv ∘ QTypedCDischarge`. The middle
-factor is **proved**; the outer two are statements.
+`runSound : RunSound` (Finalization.lean), axioms [propext, Classical.choice,
+Quot.sound]. The chain:
 
-- ✔ **per-rule soundness, 12 of the 13 `Infer`/`InferRec` constructors (A-let open)**
-  - `infer_sound_{con,lam,rcd,app,conc,sel,selAbs,selUnk,var}_step`
-  - `inferRec_sound_{empty,field,cat}_step`
-
-- ✘ **A-let** — blocked on `SchemeImage` + the Δ-split
-
-- ✔ **the K-/D- correspondence**
-  - `Wake.dischargeEquiv`, `Wakes.dischargeEquiv`, `InstStumps.pairwise`
-
-- ✔ **a parked stump as a typing HYPOTHESIS**
-  - `QTypedC`, `QTyped.toC`, `QTypedC.toQTyped`, `Parked.toStumpC`
-
-- ✔ **finalization discharges its stump**
-  - `Finalize.dischargeEquiv`, `lookup_unknown_of_blocked` — on the nose, not up
-    to ≈
-  - one named side condition `hfix` (σ may not refine the blocked row), which is
-    why finalization runs last
-
-- ◐ **`InferSoundC`** — soundness without the `parked = []` hypothesis — stated,
-  `InferSound.lean:1194`
-
-- ◐ **`QTypedCDischarge`** — a constrained typing whose assumptions discharge is
-  a plain one — stated, `InferSound.lean:1213`
-  - a module's worth of transport along χ; the honest edge
-
-- ✔ **the join, where it is free**
-  - `runSound_of_inferSoundC_nil` — a run that left nothing parked needs only
-    the induction
+- ✔ **the restated statement** — `InferSound` (InferSoundA.lean), proved as
+  `inferSound` (LetCase.lean)
+  - Γ and τ read under the SAME σ ⊨ S′ (`CtxRead`); the first form read Γ at
+    ⟦S′⟧ and τ at σ and is false (`inferSoundC_false`)
+  - parked stumps are TYPED assumptions (`QTypedA`), not promises;
+    `QTypedA.weaken` drops the ones that hold
+- ✔ **A-var** — `varCase`, via `Wakes.fate` + `KeepsS`
+- ✔ **A-let** — `letCase`; it needed five new premises on `Infer.letE`, each
+  with a witness of what it costs to drop (`runSound_false_unguarded_let`,
+  `runSound_false_let_captures`, LetSound.lean)
+- ✔ **finalization discharges** — `Finalizes.holds`: F-★ is D-?, with the old
+  `hfix` side condition PROVED at ⟦S′⟧ (the blocker stays free)
+- ✔ **the χ-correction** — `QScheme.Correctable.correct`; false in general
+  (`instEquivCorrects_false`), so D-hit stays exact and A-let builds only
+  correctable schemes
+- removed as superseded: `QTypedCDischarge`, `runSound_of_inferSoundC_nil`,
+  `Finalize.dischargeEquiv`, `Finalize.discharge_isUnk`,
+  `lookup_unknown_of_blocked`, `inferC_sound_selUnk_step`, the old `InferSound`
 
 ## C. Principality
 
@@ -350,11 +321,13 @@ factor is **proved**; the outer two are statements.
     monotype-bound x factors through ONE lookup. Axiom-clean
   - bookended by `l1_strictly_weaker` — **L1 ⊊ L2 is a theorem**, no longer prose
 
-- ✘ **general principality** — `∀e ∃σ. Principal Γ e σ`
-  - gated behind TERMINATION, not behind principality work
-  - there is no W: `Infer` is a relation and cannot be a function until
-    unification terminates, so "the scheme inference produces" has no subject
-    and the covering conjunct cannot be stated about it
+- ◐ **general principality** — `GeneralPrincipality` (OpenEnds.lean),
+  `∀Γ e. (∃τ. Γ ⊢ e : τ) → ∃σ. Principal Γ e σ` — stated, not proved
+  - both closures now terminate (`unifyRowM_terminates`, `satStep_wf`), so the
+    gate is no longer termination but the A-let function (see B, termination)
+  - the covering conjunct is algorithmic COMPLETENESS, which is known false
+    three ways: the spent promise, the stuck verdict, A-let's premises. So it
+    can only hold for a fragment; which one is a thesis decision
 
 - ✘ **⊑-monotonicity of inference**
   - "a more precise input context yields a more precise inferred type" — the

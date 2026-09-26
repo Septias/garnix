@@ -43,38 +43,37 @@ Principality forces qualified schemes that use parked stumps during unification 
 # Property-Overview
 *Soundness*
 degrade rules removed (★ rigid) ✔     ┐
-UnifyAcyclic  →  ⟦S⟧ total  →  A-sel    ├→ InferSoundC → QTypedCDischarge → RunSound
-SchemeImage (forward-only) →  A-let     ┘
+UnifyAcyclic ✔ →  ⟦S⟧ total  →  A-sel  ├→ InferSound ✔ → weaken ✔ + finalization ✔ + χ-correction ✔ → RunSound ✔
+generalization lemma → A-let                ┘
 
 *Termination*
-unification measure  ┐
-A-let Δ-fixpoint     ├→ Infer is a FUNCTION → W exists → "the scheme W produces" is sayable
-↝* wake-up closure   ┘
+unification measure ✔ ┐
+A-let ᾱ ✔ (greatest) ├→ inferF ✔ (sound, terminates) → `run` is total → "the scheme W produces" is sayable
+↝* wake-up closure ✔ ┘
                       + determinism up to α-renaming → W's output is unique
 
 *Principality*
 instance-closed  ←  RunSound
 inhabited        ←  "stumps always finalize"  ←  spent promise (FALSE in general — needs one of its three exits)
-covers ≼         ←  W exists  +  ⊴≼  (order done; the conjunct is unstateable without W)
+covers ≼         ←  W exists  +  ⊴≼  +  COMPLETENESS (false 3 ways: spent promise, stuck, A-let premises)
                                     ↓
-                        ∀e ∃σ. Principal Γ e σ
+                        ∀e ∃σ. Principal Γ e σ   (stated: `GeneralPrincipality`)
 
 
 ## Unification
 - Unification Outcomes
-  - [~] success: *sound & complete*
-    - Is vacuous if s is unsatisfiable (is critical for InferSoundness)
-      - Underspecified
-  - [~] occurs: *sound where it is LOCAL*. 
-    - unconditional since U-expand is gone
+  - [x] success: *sound & complete, and NON-VACUOUS*
+    - `s.toSubst` itself satisfies `s` and unifies the problem (`unifyRowM_success_mgu`)
+  - [x] occurs: *no unifier*, through the whole driver (`unifyRowM_occurs_no_unifier`, 2026-09-26)
   - [~] stuck : *conservative, and there is NO general converse*
     - three no-mgu theorems, three witnesses
   
-- Open
-  - [ ] UnifyWF
-    - has no counterexample
-    - [ ] UnifyAcyclic
-    - no rank search needed any more: without U-expand the solution graph is edgeless (see below)
+- [x] UnifyWF, UnifyAcyclic — PROVED 2026-09-26 (`RowUnify/Applied.lean`)
+  - one invariant `Sol.Good V s`, tagged by sort: keys and mentions ⊆ problem vars, no binding mentions a key, keys consistent
+  - gives `Applied` (so ⟦S⟧ = `toSubst`), `WF` at rank ≡ 0, `Sat s.toSubst s`
+  - the duplicate-key "keystone" is closed by the same invariant
+  - state level: `SolveTy.clean` / `SolveRow.clean` keep ⟦S⟧ idempotent across solved equations
+  - lifted over the whole derivation: `Infer.clean`, `Finalizes.clean` (`lean/Absorb.lean`)
 
 - **2026-09-23 — U-expand removed** (Stages 1a + 1b, ledger in `plans/drop-expand.md`)
   - the four expansion arms are `.stuck`; `ExpandR.lean`, `uniqueHost`/`expandL`/`expandR`/`NoHost`, the `DepGraph` and `Θ` are deleted (~2450 lines net)
@@ -83,26 +82,83 @@ covers ≼         ←  W exists  +  ⊴≼  (order done; the conjunct is unstat
   - *the occurs guard is LOCAL again*: `solveVarM_occurs_no_unifier` is unconditional; the driver-level lift is a plain induction
   - *`TerminalNoMgu` is REFUTED* (`terminalNoMgu_false` restored): neither `.stuck` nor terminality implies no-mgu
   - *cost*: 7.0 / 30.5 / 9.1 % of successes become `.stuck`, all of shape `(l:{a}) ≐ᵣ (b | a)`; tripwires `crossfield_stuck`, `unify_crossfield_mirror_stuck`
+  - *on Nix-shaped code* (2026-09-26, `Regressions.nix_*`): only a λ-bound callback applied to two records extended by DIFFERENT fields over INDEPENDENT tails is lost; let-bound builders, same-field uses and literals all succeed
 
 
 ## Termination
-- Fuzzing suggests, that the algorithm actually terminates
+- [x] unification terminates — `unifyRowM_terminates` (RowUnify/Termination.lean, 2026-09-26)
+  - measure: (problem variables inside a fixed universe, size), lexicographic
+  - `unifyRow` is a total function; `unifyRow_eq`: every run that answers agrees with it
+- [x] saturation terminates — `satStep_wf` (`lean/OpenEnds.lean`, 2026-09-26): no infinite ↝* run from ANY state. K-repark does have a measure after all: (|Δ|, #unblocked stumps), lexicographic — K-hit/K-⊥ retire a stump, K-repark swaps an unblocked stump for a blocked one
+- [x] A-let's ᾱ is canonical — `greatestAlpha_spec` (`lean/LetChoice.lean`, 2026-09-26, branch `infer`): admissible ᾱ are closed under union (`LetAdmissible.union`; correctability is saved by Δγ's own premise), `greatestAlpha` computes the greatest by deleting forced-out variables, `LetAdmissible.letE` bridges to the rule
+- [x] inference terminates — PROVED 2026-09-26 (branch `infer`) about a real function. `inferF`/`runF` (`lean/InferFn.lean`): fuelled, executable, answers `ok`/`fail`/`oof`; every `ok` is a derivation (`inferF_sound`, `runF_sound`) and so a declarative typing (`runF_typed`, via `runSound`). `lean/InferFnTerm.lean`: every piece is STABLE (more fuel never changes a verdict) and SETTLES from a clean state (`inferF_terminates`, `runF_terminates`); `run` is the total function (`runF_eq_run`, `run_typed`). Ingredients: `unifyTyF_terminates`, `Sol.rowWF_toCtx` for lookups, `satStep_wf` for saturation
+  - REPRODUCE: `lean/InferRuns.lean` — `#guard`ed runs, incl. the spent promise failing at finalization and witnesses for the kinds and Perm fixes
+  - A-var's renaming is the supply's next |ᾱ| names; `FreshRenaming` and the binders' kinds are CHECKED at run time (a `fail`, never unsoundness). That they always pass is not proved (it is a completeness question)
 
 
 ## Inference
-- [~] InferSound
-  - machinery is built
-  - 12 / 13 constructors proved per rule; only A-let is open (degrade rules deleted)
+- [x] InferSound — restated (the `InferSoundA` of the commits up to defc4be; the name is free since the old statement was deleted) and PROVED 2026-09-26 (`inferSound`, `lean/LetCase.lean`). **`RunSound` is PROVED** (`runSound`, `lean/Finalization.lean`, 2026-09-26)
+- **2026-09-26 — A-let probe** (`lean/LetSound.lean`). Two things were wrong before the proof could start:
+  - *A-let generalized without Γ-freshness.* `λy. let z = y in z` inferred `a → b`; `runSound_false_unguarded_let` (RunSound is false against the unguarded rule) + `letAlias_not_typed`. FIXED: `Infer.letE` now requires `ᾱ ∩ ftv(⟦S₁⟧Γ) = ∅`; `letAlias_infers_guarded` runs the program at `a → a`
+  - *`InferSoundC` is false as stated* (`inferSoundC_false`): context under ⟦S′⟧, type under an arbitrary σ ⊨ S′ — `y:a ⊢ y : 𝓫`. Also not inductive at A-lam. The context must be read under the same σ, with the row environment discharged (what every step lemma already assumes)
+  - *answer to the probe*: A-let does NOT need the backward half of `QCovers`. The soundness induction carries ∀σ, so qLet's instance-closed premise is fed by the IH for e₁ at σ₁ = (θ′∘ρ)∘⟦S₁⟧, one per instance θ′ — a GENERALIZATION lemma, not a transport. `SchemeImage` is only needed for `qtyped_applySubst`, which is off the critical path
+- **2026-09-26 — A-let could generalize an OUTER stump away** (`runSound_false_let_captures`, LetSound.lean). `{a = λx. x.l, b = let y = c in c}`: Γ is empty at the let, so ᾱ = [x's row] passes Γ-freshness, and A-let files field a's stump under y's scheme. y is unused, nothing finalizes the stump, and a ends at `{r} → δ` with δ free; declaratively x.l at a free row is ★ only (`letCapture_not_typed`). RunSound was false even with the Γ-freshness fix. FIXED: `Infer.letE` now also requires (i) Δ_q holds no stump parked before the let, (ii) Δ_q's result variables ∈ ᾱ (`QScheme.WF`, which A-var's bridge needs; since 2026-09-26 read at S₁, `LetResults`), (iii) ᾱ ∩ ftv(Δ_Γ) = ∅ (what the generalization lemma needs; (iii) itself not witnessed)
+- **2026-09-26 — the statement, restated** (`lean/InferSoundA.lean`). Items 1–3 of the probe, done:
+  1. `InferSound`: Γ and τ under the SAME σ ⊨ S′ (`CtxRead σ Γ Γ′`, row environment discharged). No idempotence of ⟦S′⟧ needed, so the ρ∘⟦S′⟧ form was not necessary
+     - `inferSound_of`: the statement IS INDUCTIVE — every rule but A-var and A-let proved, those two plus the parked-list bookkeeping (`InferKeepsA`) as hypotheses
+     - `runSoundA_of`: joins it to a plain `QTyped` at σ, given that the final parked stumps hold (finalization) and `InstEquivCorrects`
+  2. `SchemeRead`: a scheme enters Γ′ with binders renamed (`QScheme.renameBinders`), σ fixing the new binders and avoiding them. `SchemeRead.inst`: the read scheme's instance at χ is the algorithm's instance read under σ, and its constraints at χ are EXACTLY the σ-readings of the stumps A-var parks. `inferA_sound_var_step` is A-var's typing half
+  3. `QTypedA`: assumptions are `ρ.l ↓ τ` with τ a TYPE (`Stump.at σ` reads the result under σ too), and `qVar` accepts assumed constraints. This replaces `QTypedC`, whose raw δ needed "σ has no opinion at δ" — NOT MONOTONE: a stump parked by e₁ and woken later has σδ ≠ δ, so the IH was unusable. Now a woken stump's assumption HOLDS, and `QTypedA.weaken` drops held assumptions: monotonicity and the old `QTypedCDischarge` cash-in are the same lemma, with no χ-transport
+     - `qLet`'s premise: e₁ at EVERY instance χ with the constraints at χ assumed. That is what generalization gives, and the probe's item 4 (partial discharge) disappears into it
+- what is left for `RunSound`:
+  - ~~A-var~~ PROVED 2026-09-26 (`varCase`, via `Wakes.fate` + `KeepsS`). `inferSound_of_let`: **`InferSound` rests on the A-let case alone**
+  - ~~A-let~~ PROVED 2026-09-26 (`letCase`, `lean/LetCase.lean`). Needed first:
+    - `Absorb.lean`: ⟦S⟧ stays idempotent (`Infer.clean`), every derivation extends its start (`Infer.ext`), and σ∘⟦S′⟧ = σ travels back (`Absorbs.back`); `SoundAt` carries `Absorbs`, `InferSound` assumes a clean, quiescent start
+    - `SchemeRead` renames binders and applies σ in ONE substitution (`readSub`), so no condition on σ at the new names; fresh names exist (`fresh_renaming_exists`)
+    - `Infer.letE` changed: the scheme reads its constraints under ⟦S₁⟧ (`letScheme` — raw rows would chase the ORIGINAL tail from every instance), ᾱ avoids solved variables, Δ_Γ's ᾱ-freshness is read at S₁, and Γ-freshness is per variable at both sorts
+    - the case: generalization is e₁'s IH at σ₁ = (χ ∘ readSub) ∘ ⟦S₁⟧; inhabitation sends every generalized result variable to ★, since each generalized stump is blocked on a generalized row variable (`lookup_blocked_subst`)
+  - ~~`InferKeepsA`~~ PROVED 2026-09-26 (`lean/ParkedInv.lean`): `Infer.pinv_keeps` — every reachable state has its parked result variables issued by the supply and one stump per result variable (`PInv`), and every parked stump is kept (same stump) or discharged at any σ ⊨ the later state (`KeepsS`). Needs Γ's schemes well-formed (`QCtx.SchemesWF`), which A-let's new premises maintain. `inferSound_of_cases`: `InferSound` follows from the A-var and A-let cases alone
+  - **CONFIRMED 2026-09-26 — A-var's names are not reserved** (`lean/FreshNames.lean`). `FreshRenaming` only avoids names the state already uses, so a later `draw` can reissue one. `let g = λx. x.l in {a = g, b = λz. z.m}` runs from the empty state against the unguarded rule (`nameReuse_infers_unguarded`) and ends with two parked stumps on different rows and labels sharing result `natName 6` (`nameReuse_shared_res`); retiring either retires both (`nameReuse_filter_drops_both`). So the invariant `InferKeepsA` needs was FALSE. FIXED: `Infer.var` draws its renaming from the supply (each new name is `natName k`, k in `[S.supply.next, Sup.next)`, wake-up runs at `Sup`); monotype uses go through `Infer.var_mono`. The invariant is now proved (`Infer.pinv_keeps`)
+  - ~~`InstEquivCorrects`~~ — FALSE for arbitrary schemes (`instEquivCorrects_false`: two constraints on one δ can find ≈-equal but different types). PROVED for `QScheme.Correctable` schemes (`QScheme.Correctable.correct`): result variables bound, one constraint per result variable, and no constraint row mentions a result variable — then correcting χ at the result variables changes no lookup. D-hit stays exact (decided 2026-09-26). `QTypedA.qLet` carries `Correctable`; A-let supplies it via a new premise: no generalized stump's row, read at S₁, mentions another generalized stump's result (completeness cost only for let-bound functions that concatenate a selection result into a record they then select from while it is still open)
+  - **2026-09-26 — Day 10, cleanup.** `lean_verify` clean (propext, Classical.choice, Quot.sound; no source warnings) on `runSound`, `inferSound`, `unifyRowM_success_iff`, `unifyWF`, `unifyRowM_occurs_no_unifier`, `unifyRowM_terminates`. Superseded statements deleted: the old `InferSound` (parked = [] form), `QTypedCDischarge`, `runSound_of_inferSoundC_nil`, `Finalize.dischargeEquiv`/`discharge_isUnk` (the `hfix` forms), `lookup_unknown_of_blocked`, `inferC_sound_selUnk_step`, `QScheme.ResWF`, `InstStumps.pairwise`. `InferSoundC`/`QTypedC` stay as what `inferSoundC_false` refutes. Renamed: `InferSoundA` → `InferSound` (also `inferSound`, `inferSound_of`, `inferRecSound_of`, `VarCase`, `LetCase`, `varCase`, `letCase`); `QTypedA`, `InstA`, `runSoundA` keep the suffix because the plain name is taken. `Run` no longer requires `S′.parked = []` — `runSound` never used it, so `RunSound` got stronger
+  - **`runSound`: `RunSound` holds.** A run from nothing types its program, at the type it reports under its own final substitution, in the empty context
+  - ~~finalization~~ PROVED 2026-09-26 (`Finalizes.holds`, `lean/Finalization.lean`): F-★ fires on a stump blocked on a free row variable and writes nothing at the row sort, so at the final ⟦S′⟧ the lookup is still `?` and δ is ★ — D-?. The old `hfix` side condition is now a theorem, at ⟦S′⟧. **`runSound_of_corrects`: `RunSound` holds given `InstEquivCorrects`.** `RunSound` itself was restated in the empty context (it read `S′.applyCtx ∅`, whose row environment is ⟦S′⟧'s row solutions); no refutation depended on that
   
 
 ## Principality
 - [x] covering order on schemes ⊴ 
 - [x] `Principal selQ (λx.x.l)`
-- [ ] General principality
+- [~] General principality — STATED as `GeneralPrincipality` (`lean/OpenEnds.lean`), not proved. The covering conjunct is algorithmic completeness, which fails three ways (spent promise, stuck, A-let premises), so it can hold only for a fragment; choosing it is a thesis decision
 
 
 # Problems
 > Problems found during mechanized proving and their proposed solutions
+
+- [x] **A-let cannot generalize over an instance's variables** (INCOMPLETENESS, found 2026-09-26; FIXED 2026-09-26 on `infer`: `Infer.var` carries `S.kinds.Assigns σ.vars κs` and records `(σ.vars.map f).zip κs` — a let binder's kind is already in the state, since `Infer.kinds_mono`; no `QScheme` change. Positive witness pending `inferF`).
+  A-var draws its renaming from the supply but records no KIND for the drawn
+  names, and A-let's `KEnv.Assigns ᾱ κs` premise requires a recorded kind for
+  every generalized variable. So in `let h = λy. g y` the variables of g's
+  instance can never be generalized, and h is monomorphic in them. Not a
+  soundness issue. Fix: `QScheme` carries binder kinds and A-var records them
+  on the draw, the way `draw` records `fresh α: κ`.
+
+- [x] **A-let splits Δ₁ as a PREFIX** (INCOMPLETENESS, found 2026-09-26; FIXED 2026-09-26 on `infer`: `S₁.parked.Perm (Δq ++ Δγ)`, proofs went through membership unchanged).
+  `Infer.letE` asks `S₁.parked = Δq ++ Δγ`, not a partition. Δ₁ is ordered by
+  parking time, so if e₁ parks a Γ-stump in front of a generalizable one, the
+  latter cannot be generalized. Sound; read off the rule, no Lean witness yet. Fix: `S₁.parked ~ Δq ++ Δγ`
+  (`List.Perm`); the soundness lemmas read Δ₁ through membership, so the proof
+  should absorb it.
+
+- [x] **A-let cannot generalize a stump whose RESULT was aliased** (INCOMPLETENESS, found 2026-09-26 by running `inferF`; FIXED 2026-09-26 on `infer`).
+  `let g = λx. x.l in let h = λy. g y in {a = h {l = c}, b = h {}}` failed with a clash: inside h, A-app's
+  `δ ≐ β` binds δ ≔ β, and A-let wanted each generalized result to be an unsolved binder. Now A-let reads the
+  result AT S₁: `SolverState.resVar` (δ itself while unsolved, the variable it was aliased to otherwise),
+  `letScheme` puts that variable in the constraint, and the premise is `LetResults` — each generalized result
+  reads as a variable in ᾱ, and distinct generalized stumps read as distinct variables (one constraint per
+  result; an alias can merge two). The correctability premise reads results at S₁ too. For an unsolved result
+  all of this is the old rule. `letCase` needed only the local reading (`(hres.1 p hp).1` in place of
+  "δ ∉ dom"); `LetChoice` keeps union closure (the new injectivity is saved by Δγ's premise, as correctability
+  was). The program now runs at `{a: 𝓫 | b: ★}` (`InferRuns.lean`).
 
 - [x] **★ in an elimination position** — DECIDED 2026-09-26: ★ stays rigid,
   no ★-eliminators. `A-app-degrade` / `A-sel-degrade` are deleted, so a stuck

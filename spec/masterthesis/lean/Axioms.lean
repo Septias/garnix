@@ -11,6 +11,14 @@ import Refutations
 import QSubst
 import Infer
 import InferSound
+import LetSound
+import InferSoundA
+import LetCase
+import Finalization
+import FreshNames
+import OpenEnds
+import LetChoice
+import InferFnTerm
 
 namespace MinimalCalculus
 
@@ -522,7 +530,7 @@ info: 'MinimalCalculus.selfref_lone_host_reported' depends on axioms: [propext, 
 -- The judgement is new and the first thing to guard is that it is NOT EMPTY:
 -- the motivating program goes through it end to end, landing on A-sel-? with
 -- one stump parked — the shape `selQ` describes declaratively.
-/-- info: 'MinimalCalculus.selEx_infers' depends on axioms: [propext, Quot.sound] -/
+/-- info: 'MinimalCalculus.selEx_infers' depends on axioms: [propext] -/
 #guard_msgs in #print axioms selEx_infers
 
 -- ## L2 TYPE SUBSTITUTION (QSubst.lean)
@@ -622,9 +630,6 @@ info: 'MinimalCalculus.Wakes.dischargeEquiv' depends on axioms: [propext, Classi
 -/
 #guard_msgs in #print axioms Wakes.dischargeEquiv
 
-/-- info: 'MinimalCalculus.InstStumps.pairwise' depends on axioms: [propext, Quot.sound] -/
-#guard_msgs in #print axioms InstStumps.pairwise
-
 -- A-var, once the discharge obligation is separated out: qVar wants a scheme
 -- and an instance, and the instance's own substitution is ours to choose —
 -- which is what pays for the ≈ the correspondence leaves behind.
@@ -675,7 +680,7 @@ info: 'MinimalCalculus.SolverState.Quiescent.wake_no_commit' depends on axioms: 
 -- `{β} → ★` with `l` flagged, F-★ supplying the ★: the L1-finalized type, reached
 -- by the algorithm. `fStarEx_runs` is the complementary shape, where saturation
 -- has already discharged the stump and finalization has nothing to do.
-/-- info: 'MinimalCalculus.selEx_runs' depends on axioms: [propext, Quot.sound] -/
+/-- info: 'MinimalCalculus.selEx_runs' depends on axioms: [propext] -/
 #guard_msgs in #print axioms selEx_runs
 
 /-- info: 'MinimalCalculus.selEx_runs_star' does not depend on any axioms -/
@@ -711,7 +716,7 @@ info: 'MinimalCalculus.SolverState.Quiescent.blocker_unsolved' depends on axioms
 -- LANDS. Guarding the whole chain: the run, the stale blocker, the
 -- K-hit/F-★ disagreement (determinism refuted), the non-discharge at that state,
 -- and the type the program loses.
-/-- info: 'MinimalCalculus.fStarEx_infers' depends on axioms: [propext, Quot.sound] -/
+/-- info: 'MinimalCalculus.fStarEx_infers' depends on axioms: [propext] -/
 #guard_msgs in #print axioms fStarEx_infers
 
 /-- info: 'MinimalCalculus.fStarEx_stale_blocker' does not depend on any axioms -/
@@ -726,7 +731,7 @@ info: 'MinimalCalculus.SolverState.Quiescent.blocker_unsolved' depends on axioms
 /-- info: 'MinimalCalculus.fStarEx_recovers' does not depend on any axioms -/
 #guard_msgs in #print axioms fStarEx_recovers
 
-/-- info: 'MinimalCalculus.fStarEx_runs' depends on axioms: [propext, Quot.sound] -/
+/-- info: 'MinimalCalculus.fStarEx_runs' depends on axioms: [propext] -/
 #guard_msgs in #print axioms fStarEx_runs
 
 -- both halves of the fix at one state: the unguarded rule fires, the shipped one
@@ -791,12 +796,11 @@ info: 'MinimalCalculus.qcovers_backward_false_for_applySubst' depends on axioms:
 #guard_msgs in #print axioms qcovers_backward_false_for_applySubst
 
 -- ## WHAT A PARKED STUMP MEANS  (InferSound.lean)
--- `QTypedC` — typing under stump ASSUMPTIONS — is the answer to the question
+-- `QTypedC` — typing under stump ASSUMPTIONS — was the first answer to the question
 -- proof-state.md called a design question rather than a proof-effort one: an inner
 -- A-sel-? types its selection at a variable, and the variable has no declarative
--- reading until the promise is redeemed. As a hypothesis of the judgement it needs
--- none: `inferC_sound_selUnk_step` is the case with NO discharge, where
--- `infer_sound_selUnk_step` needs one.
+-- reading until the promise is redeemed. Superseded by `QTypedA` (below); kept
+-- because `inferSoundC_false` refutes the statement made over it.
 /-- info: 'MinimalCalculus.QTyped.toC' does not depend on any axioms -/
 #guard_msgs in #print axioms QTyped.toC
 
@@ -804,38 +808,6 @@ info: 'MinimalCalculus.qcovers_backward_false_for_applySubst' depends on axioms:
 -- in: `stump` is the only new rule and an empty Δ makes it unusable.
 /-- info: 'MinimalCalculus.QTypedC.toQTyped' does not depend on any axioms -/
 #guard_msgs in #print axioms QTypedC.toQTyped
-
-/--
-info: 'MinimalCalculus.inferC_sound_selUnk_step' depends on axioms: [propext, Quot.sound]
--/
-#guard_msgs in #print axioms inferC_sound_selUnk_step
-
--- ## WHAT FINALIZATION IS WORTH  (InferSound.lean)
--- Blockedness gives an unknown lookup at a discharged row environment —
--- monotonicity read backwards, and the general form of what F-★'s premise buys.
-/--
-info: 'MinimalCalculus.lookup_unknown_of_blocked' depends on axioms: [propext, Classical.choice, Quot.sound]
--/
-#guard_msgs in #print axioms lookup_unknown_of_blocked
-
--- …so finalization DISCHARGES the stump it finalizes: D-? with the lookup done by
--- the algorithm. On the nose, not up to ≈ — the ?-arm is rigid.
-/--
-info: 'MinimalCalculus.Finalize.dischargeEquiv' depends on axioms: [propext, Classical.choice, Quot.sound]
--/
-#guard_msgs in #print axioms Finalize.dischargeEquiv
-
-/--
-info: 'MinimalCalculus.Finalize.discharge_isUnk' depends on axioms: [propext, Classical.choice, Quot.sound]
--/
-#guard_msgs in #print axioms Finalize.discharge_isUnk
-
--- and the join where it is cheap: a run that left nothing parked needs only the
--- induction, no transport.
-/--
-info: 'MinimalCalculus.runSound_of_inferSoundC_nil' depends on axioms: [propext]
--/
-#guard_msgs in #print axioms runSound_of_inferSoundC_nil
 
 -- ## THE SPENT PROMISE  (Infer.lean, InferSound.lean)
 -- The TENSION CASE as a verdict: A-sel-? hands back δ so the position stays
@@ -847,7 +819,7 @@ info: 'MinimalCalculus.runSound_of_inferSoundC_nil' depends on axioms: [propext]
 
 -- …and it is REACHABLE: `λx. λy. (x.l) y` runs to a quiescent state with the
 -- stump still blocked, which cannot be finalized.
-/-- info: 'MinimalCalculus.spentEx_infers' depends on axioms: [propext, Quot.sound] -/
+/-- info: 'MinimalCalculus.spentEx_infers' depends on axioms: [propext] -/
 #guard_msgs in #print axioms spentEx_infers
 
 /--
@@ -861,5 +833,267 @@ info: 'MinimalCalculus.spentEx_cannot_finalize' depends on axioms: [propext]
 -- ⟨r.l ↓ (α → β)⟩, cannot be written.
 /-- info: 'MinimalCalculus.spentEx_declarative' does not depend on any axioms -/
 #guard_msgs in #print axioms spentEx_declarative
+
+
+-- ## Every success is applied (RowUnify.Applied) — UnifyWF and non-vacuity
+-- Possible only since U-expand is gone: every arm solves and applies, so the
+-- driver's solutions mention no key. See plans/drop-expand.md, Stage 2.
+-- Classical.choice as for the other success legs (unifyRowM_success_sound,
+-- unifyM_bounded): it enters through the same solveVarM case analysis.
+/--
+info: 'MinimalCalculus.unifyM_good' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms unifyM_good
+
+/--
+info: 'MinimalCalculus.unifyWF' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms unifyWF
+
+/--
+info: 'MinimalCalculus.unifyAcyclic' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms unifyAcyclic
+
+/--
+info: 'MinimalCalculus.unifyRowM_success_sat' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms unifyRowM_success_sat
+
+/--
+info: 'MinimalCalculus.unifyRowM_success_mgu' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms unifyRowM_success_mgu
+
+/--
+info: 'MinimalCalculus.unifyTyF_success_unifies' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms unifyTyF_success_unifies
+
+-- …and at the solver state: ⟦S⟧ stays idempotent across every solved equation
+/--
+info: 'MinimalCalculus.SolveTy.clean' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms SolveTy.clean
+
+-- ## occurs ⟹ no unifier, for the whole driver (RowUnify.OccursLift)
+/--
+info: 'MinimalCalculus.unifyM_occurs_no_unifier' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms unifyM_occurs_no_unifier
+
+/--
+info: 'MinimalCalculus.unifyRowM_occurs_no_unifier' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms unifyRowM_occurs_no_unifier
+
+/--
+info: 'MinimalCalculus.unifyTyM_occurs_no_unifier' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms unifyTyM_occurs_no_unifier
+
+-- ## Termination (RowUnify.Termination)
+/--
+info: 'MinimalCalculus.termR_all' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms termR_all
+
+/--
+info: 'MinimalCalculus.unifyRowM_terminates' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms unifyRowM_terminates
+
+/--
+info: 'MinimalCalculus.unifyTyM_terminates' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms unifyTyM_terminates
+
+/--
+info: 'MinimalCalculus.unifyRow_eq' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms unifyRow_eq
+
+-- ## A-let and the shape of the soundness statement (LetSound)
+-- A-let without its generalization premise refutes RunSound, and InferSoundC
+-- (context under ⟦S′⟧, type under σ) is false outright.
+/--
+info: 'MinimalCalculus.runSound_false_unguarded_let' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms runSound_false_unguarded_let
+
+/--
+info: 'MinimalCalculus.letAlias_infers_guarded' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms letAlias_infers_guarded
+
+/--
+info: 'MinimalCalculus.inferSoundC_false' depends on axioms: [propext]
+-/
+#guard_msgs in #print axioms inferSoundC_false
+
+-- A-let filing an OUTER stump under an unused scheme also refutes RunSound.
+/--
+info: 'MinimalCalculus.runSound_false_let_captures' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms runSound_false_let_captures
+
+-- ## The restated soundness statement (InferSound)
+/--
+info: 'MinimalCalculus.QTypedA.weaken' depends on axioms: [propext]
+-/
+#guard_msgs in #print axioms QTypedA.weaken
+
+/--
+info: 'MinimalCalculus.QTypedA.toQTyped' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms QTypedA.toQTyped
+
+/--
+info: 'MinimalCalculus.SchemeRead.inst' depends on axioms: [propext, Quot.sound]
+-/
+#guard_msgs in #print axioms SchemeRead.inst
+
+/--
+info: 'MinimalCalculus.inferA_sound_var_step' depends on axioms: [propext, Quot.sound]
+-/
+#guard_msgs in #print axioms inferA_sound_var_step
+
+/--
+info: 'MinimalCalculus.inferSound_of' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms inferSound_of
+
+/--
+info: 'MinimalCalculus.runSoundA_of' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms runSoundA_of
+
+-- ## One stump per result variable (ParkedInv)
+/--
+info: 'MinimalCalculus.Infer.pinv_keeps' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms Infer.pinv_keeps
+
+/--
+info: 'MinimalCalculus.inferSound_of_cases' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms inferSound_of_cases
+
+/--
+info: 'MinimalCalculus.varCase' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms varCase
+
+/--
+info: 'MinimalCalculus.inferSound_of_let' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms inferSound_of_let
+
+-- ## A-let, and inference soundness in assumption form (LetCase)
+/--
+info: 'MinimalCalculus.letCase' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms letCase
+
+/--
+info: 'MinimalCalculus.inferSound' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms inferSound
+
+-- ## Finalization discharges; RunSound modulo the χ-correction (Finalization)
+/--
+info: 'MinimalCalculus.Finalizes.holds' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms Finalizes.holds
+
+/--
+info: 'MinimalCalculus.runSound' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms runSound
+
+/--
+info: 'MinimalCalculus.QScheme.Correctable.correct' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms QScheme.Correctable.correct
+
+-- …and the χ-correction, stated for every scheme, is FALSE.
+/--
+info: 'MinimalCalculus.instEquivCorrects_false' depends on axioms: [propext]
+-/
+#guard_msgs in #print axioms instEquivCorrects_false
+
+-- ## A-var's names are not reserved (FreshNames)
+-- A reachable state with two parked stumps sharing a result variable.
+/--
+info: 'MinimalCalculus.nameReuse_infers_unguarded' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms nameReuse_infers_unguarded
+
+/--
+info: 'MinimalCalculus.nameReuse_shared_res' does not depend on any axioms
+-/
+#guard_msgs in #print axioms nameReuse_shared_res
+
+-- ## SATURATION TERMINATES  (OpenEnds.lean)
+-- The `↝*` closure has no infinite run from any state: (|Δ|, #unblocked)
+-- decreases lexicographically at every wake-up step.
+/--
+info: 'MinimalCalculus.SatStep.decreases' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms SatStep.decreases
+
+/--
+info: 'MinimalCalculus.satStep_wf' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms satStep_wf
+
+-- ## A-let'S CHOICE IS CANONICAL  (LetChoice.lean)
+-- Admissible ᾱ are closed under union, and `greatestAlpha` computes the greatest
+-- one; an admissible ᾱ is a legal `Infer.letE` step with the filtered split.
+/-- info: 'MinimalCalculus.LetAdmissible.union' depends on axioms: [propext] -/
+#guard_msgs in #print axioms LetAdmissible.union
+
+/--
+info: 'MinimalCalculus.greatestAlpha_spec' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms greatestAlpha_spec
+
+/--
+info: 'MinimalCalculus.LetAdmissible.letE' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms LetAdmissible.letE
+
+-- ## INFERENCE AS A FUNCTION  (InferFn.lean, InferFnTerm.lean)
+-- `runF` answers are `Run`s, hence declarative typings; some fuel always gives a
+-- verdict, and more fuel never changes it — so `run` is a total function.
+/--
+info: 'MinimalCalculus.inferF_sound' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms inferF_sound
+
+/--
+info: 'MinimalCalculus.runF_typed' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms runF_typed
+
+/--
+info: 'MinimalCalculus.inferF_terminates' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms inferF_terminates
+
+/--
+info: 'MinimalCalculus.runF_terminates' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms runF_terminates
+
+/--
+info: 'MinimalCalculus.runF_eq_run' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms runF_eq_run
+
+/--
+info: 'MinimalCalculus.run_typed' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms run_typed
 
 end MinimalCalculus

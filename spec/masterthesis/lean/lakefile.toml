@@ -4,7 +4,7 @@ defaultTargets = ["Spec"]
 [[lean_lib]]
 name = "Spec"
 srcDir = "."
-globs = ["minimal", "Qualified", "RowEquiv", "RowUnify", "RowUnify.+", "QSubst", "Infer", "InferSound", "Regressions", "Refutations", "algorithmic", "Axioms"]
+globs = ["minimal", "Qualified", "RowEquiv", "RowUnify", "RowUnify.+", "QSubst", "Infer", "InferSound", "LetSound", "ParkedInv", "Absorb", "InferSoundA", "LetCase", "Finalization", "FreshNames", "OpenEnds", "LetChoice", "InferFn", "InferFnTerm", "InferRuns", "Regressions", "Refutations", "algorithmic", "Axioms"]
 
 # Not in defaultTargets: `lake build` is unaffected.
 #   lake build fuzz && lake exe fuzz

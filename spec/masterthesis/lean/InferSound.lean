@@ -1,21 +1,30 @@
--- INFERENCE SOUNDNESS, CASE BY CASE.
+-- INFERENCE SOUNDNESS, CASE BY CASE — THE FIRST ATTEMPT, AND WHAT SURVIVED IT.
 --
--- `InferSound` (Infer.lean) is a `def … : Prop`, not a theorem, and the reason
--- is recorded there. This module builds the proof the way
--- `infer_sound_app_step` started it — ONE LEMMA PER A-RULE, each taking the
--- induction hypotheses the full theorem will supply and discharging that rule's
--- own obligation. Nothing here is axiomatised and nothing is `sorry`: what is
--- not proved is not here, and §WHAT IS NOT PROVED at the bottom says which
--- rules those are and what each is waiting on.
+-- This module is where the soundness proof started: ONE LEMMA PER A-RULE, each
+-- stated against plain `QTyped` at a fixed pair (Γ′, σ) with σ ⊨ S′. Most of
+-- the soundness chain now runs elsewhere:
 --
--- ## The shape every case lemma has
--- A case lemma is stated at a FIXED pair (Γ′, σ): a declarative context, and a
--- substitution that SATISFIES the state the rule ends in. It is not stated at
--- `⟦S′⟧`, and that is the whole trick. `Infer.sat_mono` says any σ satisfying a
--- later state satisfies an earlier one, so the premises — solved at
--- INTERMEDIATE states — can all be replayed under one σ, and the conclusion can
--- sit at the final state. `⟦S′⟧` is then the instance σ := S′.subst, taken once
--- at the very end, which is also where the `Closes` hypothesis will enter.
+--   `inferSound`  (InferSoundA.lean + LetCase.lean) — the mutual induction,
+--                  over `QTypedA`, with parked stumps as typed assumptions;
+--   `Finalizes.holds`, `runSound`  (Finalization.lean).
+--
+-- What stays here is what that proof still USES or what is a finding in its own
+-- right:
+--   * the replay lemmas (`SolveTy.clean`, `SolveTy.unifies_sat`,
+--     `Sol.lookup_toCtx_sat`) and the K-/D- correspondence (`Wake.dischargeEquiv`,
+--     `Wakes.dischargeEquiv`), which ParkedInv.lean consumes;
+--   * the plain-`QTyped` case lemmas, as the congruence and equation cases read
+--     without assumptions;
+--   * the F-★ witnesses (`fStarEx_*`, `finalize_star_no_discharge`) and the
+--     spent-promise witnesses (`spentEx_*`);
+--   * `QTypedC` / `InferSoundC`, only because `inferSoundC_false` refutes them.
+--
+-- Removed as superseded (2026-09-26): `QTypedCDischarge` (never proved; the
+-- χ-correction is `QScheme.Correctable.correct`), `runSound_of_inferSoundC_nil`
+-- (its hypothesis is refuted), `Finalize.dischargeEquiv` and its `hfix` side
+-- condition (now `Finalize.holds`, where the condition is PROVED at ⟦S′⟧), and
+-- `QScheme.ResWF` / `InstStumps.pairwise` (now `PInv`'s ResFun half plus
+-- `QScheme.Correctable`).
 --
 -- ## Where the row environment goes
 -- Γ′ carries NO row solutions (`Γ′.rowEnv = []`). The solutions are discharged
@@ -26,6 +35,7 @@
 -- row environment.
 
 import Infer
+import RowUnify.Applied
 
 namespace MinimalCalculus
 
@@ -39,6 +49,28 @@ namespace MinimalCalculus
 
 /-- ⊢  a solved equation holds under ANY σ satisfying the state it produced, and
 holds of the ORIGINAL types, not the ones the arm unified. -/
+-- ⊢  THE STATE STAYS IDEMPOTENT. `SolveTy`/`SolveRow` solve the equation on the
+--    problem already substituted by ⟦S⟧, so the new solution's keys and
+--    mentions avoid the state's keys (`Sol.Clean.clears_*`), and `extend`
+--    composes exactly as `Sol.Clean.extend` needs. With this, ⟦S⟧ =
+--    `S.subst` is a genuine closure (`Sol.closes_toSubst_of_applied`) at every
+--    state these rules reach from a clean one.
+theorem SolveTy.clean {B : Type} [DecidableEq B] {S S' : SolverState B} {τ τ' : Ty B}
+    (h : SolveTy S τ τ' S') (hc : S.sol.Clean) : S'.sol.Clean := by
+  obtain ⟨fuel, s, Sup, hu, rfl⟩ := h
+  refine hc.extend ((unifyM_good fuel).1 _ _ _ hu) (fun x hx => ?_)
+  rcases List.mem_append.mp hx with hx | hx
+  · exact hc.clears_ty hx
+  · exact hc.clears_ty hx
+
+theorem SolveRow.clean {B : Type} [DecidableEq B] {S S' : SolverState B} {ρ ρ' : Row B}
+    (h : SolveRow S ρ ρ' S') (hc : S.sol.Clean) : S'.sol.Clean := by
+  obtain ⟨fuel, s, Sup, hu, rfl⟩ := h
+  refine hc.extend ((unifyM_good fuel).2 _ _ _ hu) (fun x hx => ?_)
+  rcases List.mem_append.mp hx with hx | hx
+  · rw [sSorted_toSpine] at hx; exact hc.clears_row hx
+  · rw [sSorted_toSpine] at hx; exact hc.clears_row hx
+
 theorem SolveTy.unifies_sat {B : Type} [DecidableEq B] {S S' : SolverState B}
     {τ τ' : Ty B} (h : SolveTy S τ τ' S') {σ : TySubst B}
     (hsat : Sol.Sat σ S'.sol) : TyUnifies σ τ τ' := by
@@ -411,48 +443,6 @@ theorem Wakes.dischargeEquiv {B : Type} [DecidableEq B] {S S' : SolverState B}
           (fun r hr => (List.pairwise_cons.mp hpw).1 r hr), rfl⟩
       · exact Wakes.dischargeEquiv hrow hws hsat (List.pairwise_cons.mp hpw).2 p' hp'
 
---------------------- WHERE THE DISTINCTNESS COMES FROM -----------------------
--- `Wakes.dischargeEquiv` asks the submitted constraints to have pairwise
--- distinct result variables. A-var submits `InstStumps θ f σ.constraints ps`,
--- so the question is whether an INSTANTIATION produces distinct ones, and the
--- answer is: only if the scheme's own constraints already had them, and only if
--- they are BOUND. `FreshRenaming` makes `f` injective on `σ.vars` and keeps its
--- image off everything already parked — but injectivity on `σ.vars` says nothing
--- about a result variable that is not in `σ.vars`, and nothing at all about two
--- constraints that shared one to begin with.
---
--- `QScheme` is a bare structure and carries neither condition. That is a MISSING
--- INVARIANT, not a live bug: the algorithm only ever builds schemes out of
--- stumps whose result variables were drawn fresh (A-sel-?) or renamed apart
--- (A-var), so it never constructs a violating one. But the type permits it, and
--- if one existed wake-up would silently drop a constraint: every rule that
--- retires a stump filters on `stump.res`, so two stumps sharing a result
--- variable are BOTH retired when either fires — the second one's lookup never
--- performed, its δ pinned by the first's, and `Stump.Discharge.det` only makes
--- that sound if the two lookups agree, which nothing requires.
-
-/-- the well-formedness `QScheme` does not carry. Named rather than proved: it
-is an invariant of the states inference builds, in the same sense `UnifyWF` is,
-and it belongs with that family. -/
-def QScheme.ResWF {B : Type} (sc : QScheme B) : Prop :=
-  sc.constraints.Pairwise (fun a b => a.res ≠ b.res) ∧
-    ∀ st ∈ sc.constraints, st.res ∈ sc.vars
-
-/-- ⊢  a well-formed scheme's instantiated constraints are pairwise distinct —
-which is exactly what `Wakes.dischargeEquiv` asks of what A-var submits. -/
-theorem InstStumps.pairwise {B : Type} {θ : TySubst B} {f : TyVar → TyVar}
-    {Q : List (Stump B)} {ps : List (Parked B)} {vs : List TyVar}
-    (hi : InstStumps θ f Q ps)
-    (hinj : ∀ α ∈ vs, ∀ β ∈ vs, f α = f β → α = β)
-    (hdist : Q.Pairwise (fun a b => a.res ≠ b.res))
-    (hbound : ∀ st ∈ Q, st.res ∈ vs) :
-    ps.Pairwise (fun a b => a.stump.res ≠ b.stump.res) := by
-  have h : (ps.map Parked.stump).Pairwise (fun a b => a.res ≠ b.res) := by
-    rw [hi, List.pairwise_map]
-    exact hdist.imp_of_mem
-      (fun ha hb hne heq => hne (hinj _ (hbound _ ha) _ (hbound _ hb) heq))
-  exact (List.pairwise_map (f := Parked.stump) (R := fun x y => x.res ≠ y.res)).mp h
-
 --------------------- A-var, GIVEN THE INSTANCE -------------------------------
 -- What is left of A-var once the discharge obligation is separated out: `qVar`
 -- wants a scheme in Γ′ and an INSTANCE of it, and the instance's own
@@ -462,10 +452,9 @@ theorem InstStumps.pairwise {B : Type} {θ : TySubst B} {f : TyVar → TyVar}
 -- the lookups actually found, and the body then differs from the inferred one
 -- by an ≈ that T-eq absorbs.
 --
--- Building χ, and the σ-image of the scheme it instantiates, is the piece that
--- is NOT here: it is `SchemeImage`/`QCovers` (QSubst.lean) plus the
--- capture-avoidance `QScheme.applySubst` still lacks. This lemma is the seam,
--- so that what remains is a statement about SCHEMES rather than about typing.
+-- Building χ, and the σ-image of the scheme it instantiates, is done
+-- elsewhere: `SchemeRead` (InferSoundA.lean) reads the scheme with its binders
+-- renamed apart, and `QScheme.Correctable.correct` builds χ.
 
 /-- A-var. -/
 theorem infer_sound_var_step {B C : Type} {constTy : C → B} {Γ' : QCtx B}
@@ -705,8 +694,7 @@ theorem fStarEx_infers :
   · refine Infer.lam (S₀ := fsSlam) rfl (Infer.rcd (InferRec.field ?_))
     refine Infer.selUnk (τ := .var fsA) (S₁ := fsSlam) (S₁' := fsSr) (S₂ := fsS2)
       (S₂' := fsS2') (r := fsR) (α := fsR) (δ := fsD) ?_ rfl ?_ ?_ rfl
-    · exact Infer.var (σ := ⟨[], [], .var fsA⟩) (θ := fsId) (f := id) (ps := []) rfl
-        ⟨⟨fun _ _ => rfl, fun _ _ => rfl⟩, by simp⟩ (by simp [FreshRenaming]) rfl
+    · exact Infer.var_mono rfl
         ⟨_, .nil, .done (SolverState.Quiescent.nil rfl)⟩
     · exact ⟨_, ⟨5, fsSol1, ⟨3⟩, rfl, rfl⟩, .done (SolverState.Quiescent.nil rfl)⟩
     · exact .varFree rfl
@@ -805,7 +793,7 @@ where it does fire: the difference is whether anything ever resolved the blocker
 which is the whole content of A-sel-?'s promise. -/
 theorem fStarEx_runs :
     Run (B := Unit) (C := Unit) (fun _ => ()) fStarEx (.var fsB) fsSfix :=
-  ⟨fsSfix, fStarEx_infers, .nil, rfl⟩
+  ⟨fsSfix, fStarEx_infers, .nil⟩
 
 /-- ⊢  **the refinement, in types.** The declarative system gives the closed
 program `{a: 𝓫}`; finalizing the stale state answers `{a: ★}`, strictly blurrier —
@@ -915,13 +903,11 @@ theorem spentEx_infers :
     (τ₁ := .var spD) (τ₂ := .var spY) ?_ ?_ rfl ?_
   · refine Infer.selUnk (τ := .var spX) (S₁ := spLy) (S₁' := spDraw) (S₂ := spS2)
       (S₂' := spS2') (r := spRow) (α := spRow) (δ := spD) ?_ rfl ?_ ?_ rfl
-    · exact Infer.var (σ := ⟨[], [], .var spX⟩) (θ := fsId) (f := id) (ps := []) rfl
-        ⟨⟨fun _ _ => rfl, fun _ _ => rfl⟩, by simp⟩ (by simp [FreshRenaming]) rfl
+    · exact Infer.var_mono rfl
         ⟨_, .nil, .done (SolverState.Quiescent.nil rfl)⟩
     · exact ⟨_, ⟨5, spSol1, ⟨4⟩, rfl, rfl⟩, .done (SolverState.Quiescent.nil rfl)⟩
     · exact .varFree rfl
-  · exact Infer.var (σ := ⟨[], [], .var spY⟩) (θ := fsId) (f := id) (ps := []) rfl
-      ⟨⟨fun _ _ => rfl, fun _ _ => rfl⟩, by simp⟩ (by simp [FreshRenaming]) rfl
+  · exact Infer.var_mono rfl
       ⟨_, .nil, .done spentEx_quiescent_parked⟩
   · exact ⟨spS, ⟨5, spApp, ⟨6⟩, rfl, rfl⟩, .done spentEx_quiescent⟩
 
@@ -963,11 +949,13 @@ theorem spentEx_declarative :
 -- bookkeeping: the assumption has to travel with the derivation, and there is
 -- nowhere to put it.
 --
--- `QTypedC` is that nowhere: QTyped plus a list of stump ASSUMPTIONS, threaded
--- unchanged through every rule, and one new rule that consumes one. A parked
--- stump is then exactly a hypothesis of the typing, δ is a variable STANDING FOR
--- its future value, and the promise is redeemed once, at the end, by
--- `QTypedCDischarge` — instead of at every selection site.
+-- `QTypedC` was the first answer: QTyped plus a list of stump ASSUMPTIONS,
+-- threaded unchanged through every rule, and one new rule that consumes one.
+-- The promise was to be redeemed once, at the end, by a transport along χ.
+-- `InferSoundC` stated over it is FALSE (`inferSoundC_false`), and the working
+-- answer is `QTypedA` (InferSoundA.lean): an assumption there is a TYPED stump —
+-- row and result both read under σ — which is what makes weakening and the
+-- let case go through.
 --
 -- WHY THE δ's ARE NOT SUBSTITUTED: the assumptions carry the σ-image of the
 -- stump's ROW (so the subject's type matches) and the result variable RAW. That
@@ -1076,120 +1064,13 @@ form the assumptions take, and the reason δ stays a promise. -/
 def Parked.toStumpC {B : Type} (σ : TySubst B) (p : Parked B) : Stump B :=
   ⟨p.stump.row.applySubst σ, p.stump.label, p.stump.res⟩
 
-/-- ⊢  **A-sel-? needs no discharge any more.** Compare `infer_sound_selUnk_step`,
-which takes a `DischargeEquiv` it cannot get at an inner selection: here the
-stump is an ASSUMPTION, so the case is the record equation followed by one rule.
-`hδ` is the only side condition — σ has no opinion at δ yet, which is exactly
-what "parked" means. -/
-theorem inferC_sound_selUnk_step {B C : Type} [DecidableEq B] {constTy : C → B}
-    {Γ' : QCtx B} {σ : TySubst B} {S₁' S₂ : SolverState B} {Δ : List (Stump B)}
-    {e : Expr C} {τ : Ty B} {l : Label} {r δ : TyVar}
-    (h : QTypedC constTy Δ Γ' e (τ.applySubst σ))
-    (hs : SolveTy S₁' τ (.rcd (.var r)) S₂)
-    (hsat : Sol.Sat σ S₂.sol)
-    (hmem : (⟨(Row.var r).applySubst σ, l, δ⟩ : Stump B) ∈ Δ)
-    (hδ : σ.ty δ = .var δ) :
-    QTypedC constTy Δ Γ' (.sel e l) ((Ty.var δ).applySubst σ) := by
-  have hrcd : QTypedC constTy Δ Γ' e ((Ty.rcd (.var r)).applySubst σ) :=
-    .qEq h (hs.unifies_sat hsat)
-  show QTypedC constTy Δ Γ' (.sel e l) (σ.ty δ)
-  rw [hδ]
-  exact .stump hrcd hmem
-
---------------------- WHAT FINALIZATION IS WORTH ------------------------------
--- F-★'s premise exists to make ONE fact available: the lookup is still `?`, so ★
--- is what `Stump.Discharge.unk` asks for. This is that fact cashed in.
---
--- The first step is general and worth having on its own: BLOCKEDNESS anywhere
--- gives an unknown lookup at a DISCHARGED row environment. The reason is
--- monotonicity read backwards — a definite answer survives extending the row
--- solutions (`lookup_mono`), so if the lookup at the empty environment were
--- definite it would still be definite in ⟦S⟧, contradicting blockedness. The
--- empty environment also makes lookup total for free, so there IS an answer to
--- case on.
-
-/-- ⊢  a blocked lookup is `?` at any discharged row environment. -/
-theorem lookup_unknown_of_blocked {B : Type} {Γ' Γ : Ctx B} (hrow : Γ'.rowEnv = [])
-    {ρ : Row B} {l : Label} {α : TyVar} (hb : LookupBlocked Γ ρ l α) :
-    Lookup Γ' ρ l .unknown := by
-  have hwf : Γ'.RowWF :=
-    ⟨fun _ => 0, fun a r ha => by simp [Ctx.lookupRow, hrow] at ha⟩
-  have hext : Ctx.RowExt Γ' Γ := fun a r ha => by simp [Ctx.lookupRow, hrow] at ha
-  obtain ⟨r, hr⟩ := lookup_total hwf ρ l
-  cases r with
-  | unknown => exact hr
-  | found τ =>
-      exact absurd (lookup_det (lookup_mono hext hr (by intro h; cases h)) hb.toLookup)
-        (by simp)
-  | absent =>
-      exact absurd (lookup_det (lookup_mono hext hr (by intro h; cases h)) hb.toLookup)
-        (by simp)
-
--- The second step is the ★ itself, and it comes from the equation rather than from
--- the rule: `δ ≐ ★` was SOLVED, so every σ satisfying the state it produced sends
--- δ to something ≈-equal to ★ — and ★ is ≈-rigid, so to ★ on the nose.
-
-/-- ⊢  **finalization discharges the stump it finalizes.** At the state's own
-reading of the stump (`Parked.toStumpC S.subst`), the `?` arm of
-`DischargeEquiv` applies: the lookup is blocked by F-★'s premise, and δ is ★ by
-its equation.
-
-`hfix` is the one side condition, and it is the ONE place the ?-arm differs from
-the definite arms: a definite lookup transports along any refinement
-(`Sol.lookup_toCtx_sat`), a `?` does not — a later σ can solve the blocker and
-make the lookup land, which is exactly why A-sel-? parks a stump instead of
-committing to ★ and why finalization runs LAST. So σ may not refine the row this
-stump is blocked on; `hfix` says it does not. It is discharged by an idempotent
-solution (`Sol.Applied`, i.e. what `UnifyWF` is for) at σ := ⟦S⟧, and by
-`FixedOutside` at any χ that moves only the δ's. -/
-theorem Finalize.dischargeEquiv {B : Type} [DecidableEq B] {S S' : SolverState B}
-    {p : Parked B} (hf : Finalize S p S') {Γ' : Ctx B} (hrow : Γ'.rowEnv = [])
-    {σ : TySubst B} (hsat : Sol.Sat σ S'.sol)
-    (hfix : (Parked.toStumpC S.subst p).row.applySubst σ
-              = (Parked.toStumpC S.subst p).row) :
-    (Parked.toStumpC S.subst p).DischargeEquiv Γ' σ := by
-  cases hf with
-  | star _ hb hs =>
-      refine .unk ?_ ?_
-      · rw [hfix]; exact lookup_unknown_of_blocked hrow hb
-      · exact (TyEquiv.unk_inv_both (hs.unifies_sat hsat)).2 rfl
-
-/-- ⊢  …and that is precisely the arm the DECLARATIVE side calls `D-?`: F-★ is
-`Stump.Discharge.unk` with the lookup performed by the algorithm. -/
-theorem Finalize.discharge_isUnk {B : Type} [DecidableEq B] {S S' : SolverState B}
-    {p : Parked B} (hf : Finalize S p S') {Γ' : Ctx B} (hrow : Γ'.rowEnv = [])
-    {σ : TySubst B} (hsat : Sol.Sat σ S'.sol)
-    (hfix : (Parked.toStumpC S.subst p).row.applySubst σ
-              = (Parked.toStumpC S.subst p).row) :
-    (Parked.toStumpC S.subst p).Discharge Γ' σ := by
-  cases hf with
-  | star _ hb hs =>
-      refine .unk ?_ ?_
-      · rw [hfix]; exact lookup_unknown_of_blocked hrow hb
-      · exact (TyEquiv.unk_inv_both (hs.unifies_sat hsat)).2 rfl
-
-
---------------------- THE TWO HALVES, AND WHAT JOINS THEM ---------------------
--- With `Run` (Infer.lean) in place, algorithm soundness factors, and each factor
--- is now a statement rather than a hope:
---
---   RunSound  =  InferSoundC  ∘  Finalize.dischargeEquiv  ∘  QTypedCDischarge
---
--- The first hands back a CONSTRAINED typing whose assumptions are exactly the
--- stumps the run left parked — no `parked = []` hypothesis, which is what made
--- `InferSound` unprovable at an inner A-sel-? (`inferC_sound_selUnk_step` is that
--- case, and it needs no discharge). The second discharges one assumption per
--- finalization step. The third cashes the discharges in, once, at the end.
-
-/-- **Inference soundness, constrained form** — the shape the induction can
-actually carry. Every rule but A-sel-? is the old case lemma with `QTyped.toC`
-applied; A-sel-? is `inferC_sound_selUnk_step`, whose only side condition is that
-σ has no opinion at the δ's yet — `hδ` below, which is what "still parked" means.
-
-Compare `InferSound`: that statement is stuck at an inner A-sel-? no matter how
-much is proved around it, because the inner δ has no declarative reading and the
-`parked = []` hypothesis speaks about the wrong state. This one has no such
-hypothesis. -/
+/-- **Inference soundness, constrained form** — REFUTED as stated
+(`inferSoundC_false`, LetSound.lean): the context is read under ⟦S′⟧ but the type
+under an arbitrary σ ⊨ S′, so `y:a ⊢ y : 𝓫` would follow. Kept only as the name
+the refutation is about. The restatement, PROVED, is `InferSound`
+(InferSoundA.lean, `inferSound` in LetCase.lean): Γ is read under the same σ as
+the type, and parked stumps are typed assumptions (`QTypedA`) rather than
+promises with a raw result variable. -/
 def InferSoundC (B C : Type) [DecidableEq B] (constTy : C → B) : Prop :=
   ∀ (Γ : QCtx B) (S S' : SolverState B) (e : Expr C) (τ : Ty B),
     Infer constTy Γ S e τ S' →
@@ -1197,88 +1078,5 @@ def InferSoundC (B C : Type) [DecidableEq B] (constTy : C → B) : Prop :=
       (∀ p ∈ S'.parked, σ.ty p.stump.res = .var p.stump.res) →
       QTypedC constTy (S'.parked.map (Parked.toStumpC σ)) (S'.applyCtx Γ) e
         (τ.applySubst σ)
-
-/-- **Redeeming the promises** — a constrained typing whose assumptions all
-discharge is a plain typing, at the type the discharges give it. This is the
-QTypedC counterpart of `qtyped_applySubst` (QSubst.lean) and the same kind of
-work: a transport of the whole derivation along χ. The hypotheses are what the
-`stump` case needs (the discharge) and what every other case needs (χ moves
-nothing but the δ's, so the scheme instances and lookups the derivation performed
-are untouched — the δ's are names the ALGORITHM invented, so Γ-freshness is the
-form that fact takes).
-
-Named, not proved. It is the honest remaining obligation of Stage 3: the two
-cheap halves above are theorems, this one is a module's worth of transport. -/
-def QTypedCDischarge (B C : Type) [DecidableEq B] (constTy : C → B) : Prop :=
-  ∀ (Γ : QCtx B) (Δ : List (Stump B)) (e : Expr C) (τ : Ty B) (χ : TySubst B),
-    QTypedC constTy Δ Γ e τ →
-    χ.FixedOutside (Δ.map Stump.res) →
-    (∀ α ∈ Δ.map Stump.res, α ∉ Γ.ftv) →
-    (∀ s ∈ Δ, s.DischargeEquiv Γ.ctx χ) →
-    QTyped constTy Γ e (τ.applySubst χ)
-
-/-- ⊢  **the join, where it is cheap: no promises left.** If the run's Δ is empty
-the constrained typing IS a plain one, so `InferSoundC` alone gives `RunSound` for
-every program whose stumps all resolved — `fStarEx_runs` is one
-(`fStarEx_recovers`: Δ empty, the refinement kept). The general case is the
-`QTypedCDischarge` transport. -/
-theorem runSound_of_inferSoundC_nil {B C : Type} [DecidableEq B] {constTy : C → B}
-    (hc : InferSoundC B C constTy) {Γ : QCtx B} {S S' : SolverState B}
-    {e : Expr C} {τ : Ty B} (h : Infer constTy Γ S e τ S') (hnil : S'.parked = [])
-    {σ : TySubst B} (hsat : Sol.Sat σ S'.sol) :
-    QTyped constTy (S'.applyCtx Γ) e (τ.applySubst σ) := by
-  have := hc Γ S S' e τ h σ hsat (by intro p hp; rw [hnil] at hp; exact absurd hp List.not_mem_nil)
-  rw [hnil] at this
-  exact this.toQTyped
-
---------------------- WHAT IS NOT PROVED --------------------------------------
--- Eight of the thirteen A-rules are above outright, A-sel-? twice over (modulo a
--- discharge in `infer_sound_selUnk_step`, and outright in
--- `inferC_sound_selUnk_step` once the promise is a hypothesis of the judgement),
--- and A-var down to a statement about SCHEMES. What is left:
---
--- * THE SHAPE OF THE WHOLE, so the items below have somewhere to sit:
---       RunSound = InferSoundC ∘ Finalize.dischargeEquiv ∘ QTypedCDischarge
---   The middle factor is PROVED (one stump per finalization step, modulo the
---   `hfix` side condition it names). The outer two are statements: `InferSoundC`
---   is the induction, whose cases are the lemmas above with `QTyped.toC` applied;
---   `QTypedCDischarge` is the transport that cashes the discharges in.
---
--- * A-var — the typing half is `infer_sound_var_step`; the constraint half is
---   `Wakes.dischargeEquiv`, over a whole run, with `InstStumps.pairwise`
---   supplying its distinctness side condition from the rule's own
---   `FreshRenaming`. What is left:
---     - `QScheme.ResWF`, the invariant `QScheme` does not carry. Stated, not
---       proved: it is a property of the schemes inference BUILDS, in the same
---       sense `UnifyWF` is, and it belongs with that family.
---     - FINALIZATION now DOES discharge: `Finalize.dischargeEquiv` (and
---       `Finalize.discharge_isUnk`, on the nose rather than up to ≈, because the
---       ?-arm is rigid). Every constraint `Wakes.dischargeEquiv` leaves in the
---       parked alternative is handed to finalization, and finalization can now
---       honour it. Getting there took both halves of the F-★ fix: the A-rules
---       saturate (`Infer.quiescent`), and the rule carries `LookupBlocked`.
---       What the theorem still NAMES rather than discharges is `hfix` — σ may not
---       refine the row the stump is blocked on, which is the ?-arm's one
---       asymmetry against the definite arms and the reason finalization runs
---       last. Idempotence (`Sol.Applied`, i.e. `UnifyWF`) gives it at ⟦S⟧.
---     - A-var's premise is now `WakesSat`, so this case peels it into `Wakes`
---       (which `Wakes.dischargeEquiv` consumes unchanged) and a `Saturate`,
---       whose own steps are `Wake`s — so `Wake.dischargeEquiv` covers them too,
---       one stump at a time.
---     - the σ-IMAGE OF THE SCHEME, which is `SchemeImage`/`QCovers`
---       (QSubst.lean) plus the capture-avoidance `QScheme.applySubst` lacks.
---       This is also where χ is built: σ corrected at the constraints' result
---       variables to the types the lookups actually found, which is what pays
---       for the ≈ that `DischargeEquiv` leaves behind.
---
--- * A-let — needs `SchemeImage` (QSubst.lean) and the Δ-split. `qLet` also
---   carries an INHABITATION premise, and the algorithmic side satisfies it "by
---   construction" only because a parked stump always finalizes: so A-let
---   depends on the discharge condition too, at the generalization boundary
---   rather than at the selection site.
---
--- * A-app-degrade and A-sel-degrade are GONE, not open. They had no
---   declarative counterpart (QTyped has no application or selection at ★, and
---   ★ is rigid by design), so stuck/occurs now reject instead of degrading.
 
 end MinimalCalculus

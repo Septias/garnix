@@ -10,7 +10,7 @@
 -- `Sol.lookup_toCtx` — already proved.
 --
 -- So the target context has an EMPTY row environment and σ closes the state.
--- That is also why `InferSound` carries a `Closes` hypothesis.
+-- That is also why the first soundness statement carried a `Closes` hypothesis.
 
 import Qualified
 import RowUnify.State

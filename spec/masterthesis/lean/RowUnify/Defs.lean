@@ -714,7 +714,8 @@ def SolBelow {B : Type} (s : Sol B) (W : List TyVar) : Prop :=
 -- (Refutations.stuck_masks_mgu). "stuck ⟹ no mgu" is false, at every
 -- formulation. The analogy with `.occurs` that used to stand here is gone:
 -- occurs is sound where it is local (`solveVarM_occurs_no_unifier`,
--- `bindTy_occurs_no_unifier`). `.stuck` now stands alone.
+-- `bindTy_occurs_no_unifier`), and through the whole driver
+-- (`unifyRowM_occurs_no_unifier`). `.stuck` now stands alone.
 --
 -- What IS available is the fall-through condition of the driver's last arm:
 -- both spines non-empty and every move dead, with no projection clash either.

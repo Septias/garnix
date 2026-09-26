@@ -202,24 +202,15 @@ theorem terminal_leading_shape {B : Type} {S : Supply} {a b : Atom B}
 -- conservativity witnesses that show why no more is available.
 --
 -- OPEN, in dependency order:
---  * `unifyRowM … = .occurs ⟹ ¬∃θ`, the driver-level lift. Stage 1b UNBLOCKED
---    this: the occurs guard used to read `depReach Θ`, so it could fire on an α
---    merely reachable from s₂ through the accumulated expansions — a fact about
---    the solver state, not the problem. The guard is local again and
---    `solveVarM_occurs_no_unifier` is unconditional, so what is left is the
---    induction over the driver, not a missing side condition.
---  * `Sol.Applied` as a driver invariant. Every arm applies its solution, so no
---    solution mentions a variable in its own domain; the fuzz sweep reads 0
---    failures in all three universes. With it, `Sol.Ranked`, `Sol.WF` and the
---    whole refuted rank search are unnecessary — `Applied` is strictly stronger
---    and `Sol.closes_toSubst_of_applied` hands over ⟦S⟧ = toSubst directly.
+--  * DONE 2026-09-26: `unifyRowM … = .occurs ⟹ ¬∃θ`, the driver-level lift
+--    (`unifyRowM_occurs_no_unifier`, RowUnify/OccursLift.lean), and
+--    `Sol.Applied` as a driver invariant (`unifyM_good`, RowUnify/Applied.lean,
+--    giving `unifyWF` and non-vacuity of success).
 --  * `HasMguOn V` / `InstanceOfOn V` — mgu RELATIVIZED to a variable set. Less
 --    urgent than it was: the mismatch it repaired was the algorithm inventing
 --    variables, which no arm now does.
---  * TERMINATION: a fuel that provably suffices. The Rémy-measure obstruction
---    went with the arm (nothing re-expands a variable any more), but the
---    lexicographic `(|unsolved vars|, |spine|)` candidate is unproved and
---    `sApplySubst` can still grow a spine — Stage 0 does not evidence it.
+--  * DONE 2026-09-26: TERMINATION (`unifyRowM_terminates`,
+--    RowUnify/Termination.lean) — lexicographic (variables, size).
 --
 -- MILESTONES ELSEWHERE THAT BUILD ON THIS FILE (algorithmic.typ, Open questions):
 --  * Non-vacuity of qualified schemes: needs lookup_total (RowWF) plus a

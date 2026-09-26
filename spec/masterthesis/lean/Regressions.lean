@@ -280,4 +280,67 @@ theorem outOfFuel_is_only_the_budget :
                             (.sing "k" (.rcd (.sing "l" (.var "x")))) =
       .success ⟨[("x", uB)], []⟩ ⟨2⟩ := rfl
 
+
+-- ## Nix-shaped equations: WHERE does the U-expand removal bite?
+-- The equations below are the ones the A-rules emit for common Nix idioms,
+-- traced by hand through A-conc (`e₁ // e₂ : {r₂ | r₁}` — the RIGHT operand's
+-- row comes first, it wins the left-precedence lookup) and A-app
+-- (`τ_f ≐ τ_arg → β`). Field SELECTIONS never reach ≐ᵣ — they park as stumps —
+-- so a row equation with fields on both sides needs a record-typed value to
+-- meet another record type directly.
+--
+-- Result: of the idioms tried, exactly ONE lands on the shape the removal
+-- costs, and it needs a λ-BOUND (hence monomorphic) function applied to two
+-- records that are extended by DIFFERENT fields over INDEPENDENT tails.
+-- A let-bound function is instantiated afresh at each use (A-var), so its
+-- domain is a fresh `{β}` and the equation is a plain variable solve.
+
+-- ⊢  a let-bound builder applied to an extended record (the mkDerivation
+--    shape `mk (args // { name = …; })`): a variable solve
+theorem nix_builder_succeeds :
+    ∃ s S, unifyTyM (B := Unit) 20 (.fn (.rcd (.var "b")) (.var "d"))
+      (.fn (.rcd (.cat (.var "args") (.sing "name" uB))) (.var "g")) = .success s S :=
+  ⟨_, _, rfl⟩
+
+-- ⊢  …and at a second use with a different field: fresh `{β}` again
+theorem nix_builder_second_use_succeeds :
+    ∃ s S, unifyTyM (B := Unit) 20 (.fn (.rcd (.var "b1")) (.var "d1"))
+      (.fn (.rcd (.cat (.var "q") (.sing "y" uB))) (.var "g2")) = .success s S :=
+  ⟨_, _, rfl⟩
+
+-- ⊢  a λ-bound callback used twice, SAME field, independent tails:
+--    `f: p: q: { a = f (p // {x=…;}); b = f (q // {x=…;}); }` — solved (p ≔ q)
+theorem nix_callback_same_field_succeeds :
+    ∃ s S, unifyTyM (B := Unit) 20 (.fn (.rcd (.cat (.var "p") (.sing "x" uB))) (.var "g1"))
+      (.fn (.rcd (.cat (.var "q") (.sing "x" uB))) (.var "g2")) = .success s S :=
+  ⟨_, _, rfl⟩
+
+-- ⊢  a closed literal where the callback's domain was fixed to `{p | x:𝓫}`
+theorem nix_callback_literal_succeeds :
+    ∃ s S, unifyTyM (B := Unit) 20 (.fn (.rcd (.cat (.var "p") (.sing "x" uB))) (.var "g1"))
+      (.fn (.rcd (.cat (.sing "x" uB) (.sing "y" uB))) (.var "g2")) = .success s S :=
+  ⟨_, _, rfl⟩
+
+-- ⊢  THE ONE THAT BITES: λ-bound callback, DIFFERENT fields, independent tails.
+--    `f: p: q: { a = f (p // {x=…;}); b = f (q // {y=…;}); }`. It has a unifier
+--    (p ≔ (p′ | y), q ≔ (p′ | x)) that U-expand used to find; now `.stuck`, and
+--    since the degradation rules are gone, a type error. It is
+--    `unify_crossfield_mirror_stuck` inside an arrow.
+theorem nix_callback_crossfield_stuck :
+    unifyTyM (B := Unit) 20 (.fn (.rcd (.cat (.var "p") (.sing "x" uB))) (.var "g1"))
+      (.fn (.rcd (.cat (.var "q") (.sing "y" uB))) (.var "g2")) = .stuck := rfl
+
+-- ⊢  …and with a SHARED tail it is P&X's pitfall: no unifier at all, so the
+--    rejection is not the removal's doing
+theorem nix_callback_shared_tail_clash :
+    unifyTyM (B := Unit) 20 (.fn (.rcd (.cat (.var "p") (.sing "x" uB))) (.var "g1"))
+      (.fn (.rcd (.cat (.var "p") (.sing "y" uB))) (.var "g2")) = .clash := rfl
+
+-- ⊢  one record and its own further extension through one λ-bound f:
+--    `f (a // {x=…;})` and `f (a // {x=…;} // {y=…;})` — genuinely no unifier
+theorem nix_callback_extension_clash :
+    unifyTyM (B := Unit) 20 (.fn (.rcd (.cat (.var "a") (.sing "x" uB))) (.var "g1"))
+      (.fn (.rcd (.cat (.sing "y" uB) (.cat (.var "a") (.sing "x" uB)))) (.var "g2"))
+      = .clash := rfl
+
 end MinimalCalculus

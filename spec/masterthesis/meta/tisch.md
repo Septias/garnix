@@ -5,7 +5,7 @@
 
 
 ## Missing
-- First Class Records
+- First Class Labels
 - Recursiveness
 - Lazyness
 - Semantic

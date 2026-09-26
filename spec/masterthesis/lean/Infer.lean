@@ -8,7 +8,7 @@
 --
 -- ## A RELATION, NOT A FUNCTION, and that is deliberate
 -- A function would owe three termination arguments the development does not
--- have: unification's (the Rémy measure does not close), `A-let`'s Δ-split
+-- have: unification's (now PROVED, `unifyRowM_terminates`), `A-let`'s Δ-split
 -- least fixpoint, and the `↝*` wake-up closure. A relation owes none of them
 -- and is exactly what "inference is sound w.r.t. the declarative system" has to
 -- be stated over. Determinism and totality then become theorems ABOUT the
@@ -129,7 +129,7 @@ theorem LookupBlocked.unsolved {B : Type} {Γ : Ctx B} {ρ : Row B} {l : Label}
 --
 -- Nothing downstream is forced to agree with the record yet: that a name drawn
 -- at `.row` only ever OCCURS at row positions is `KindsSound` below, stated
--- against `sortedFtv`'s tags and left open, as `UnifyWF` and `InferSound` are.
+-- against `sortedFtv`'s tags and left open.
 
 /-- κ — the sort a variable inhabits. `Ty/Row.sortedFtv` (RowUnify/State.lean)
 already tags OCCURRENCES with a `Bool`, `true` = row; `Kind.tag` is that same
@@ -178,8 +178,10 @@ namespace SolverState
 def ctx {B : Type} (S : SolverState B) : Ctx B := S.sol.toCtx
 
 /-- ⟦S⟧ read as a SUBSTITUTION, one step. Using `Sol.toSubst` rather than the
-closure keeps these rules independent of `UnifyWF`, which is still open; on a
-well-formed state the two agree (`Sol.closes_of_wf`). -/
+closure keeps these rules independent of `UnifyWF`; on a well-formed state the
+two agree (`Sol.closes_of_wf`). `UnifyWF` is now proved, and every state
+`SolveTy`/`SolveRow` reach from a clean one is clean (`SolveTy.clean`,
+InferSound.lean), hence applied — so `toSubst` IS the closure there. -/
 def subst {B : Type} (S : SolverState B) : TySubst B := S.sol.toSubst
 
 /-- draw one fresh name AT A KIND, record the kind, and advance. The κ argument
@@ -308,7 +310,7 @@ inductive Wakes {B : Type} [DecidableEq B] :
 -- each repark moves the blocker to a new variable, and "the unsolved row
 -- variables reachable from the stump's row" is a plausible measure that nobody
 -- has written. Same reason `Infer` is a relation. What saturation can reach is
--- therefore an existence statement, and it joins `UnifyWF` on the open list:
+-- therefore an existence statement, and it stays on the open list:
 -- `Wake`'s arms need `lookup_total` (hence `Acyclic`, hence `UnifyAcyclic`) to
 -- have a step at all, and the equation a step emits can CLASH — the tension
 -- case, which is a hard error by `unifyM_clash_no_unifier`, not a gap.
@@ -538,6 +540,65 @@ def InstStumps {B : Type} (θ : TySubst B) (f : TyVar → TyVar)
   ps.map Parked.stump =
     Q.map (fun st => (⟨st.row.applySubst θ, st.label, f st.res⟩ : Stump B))
 
+--------------------- ⟦S⟧ APPLIED TO A CONTEXT -------------------------------
+-- The declarative side reads row-solutions out of a CONTEXT; the algorithm
+-- keeps them in θ. `RowUnify/State.lean` bridges the two for a single lookup;
+-- what the soundness statement additionally needs is the whole context read
+-- under the final state — θ pushed through the type environment, and θ's row
+-- component installed as the row environment discharge will consult.
+
+-- `QScheme.applySubst` moved to Qualified.lean, where its capture-avoidance
+-- side condition (`QScheme.Avoiding`) and what that condition buys
+-- (`QCovers.forward_of_avoiding`, QSubst.lean) are stated and proved.
+
+/-- `⟦S⟧Γ` — Γ under the state's substitution, with the state's row-solutions
+installed as the row environment that `Lookup` and discharge consult. -/
+def SolverState.applyCtx {B : Type} (S : SolverState B) (Γ : QCtx B) : QCtx B :=
+  { tyEnv  := Γ.tyEnv.map (fun p => (p.1, p.2.applySubst S.subst)),
+    rowEnv := S.sol.row }
+
+/-- the variable a stump's result READS as at S: itself while unsolved, the
+variable unification aliased it to otherwise. (A result solved to a non-variable
+is a spent promise and has no reading; `LetResults` excludes it.) -/
+def SolverState.resVar {B : Type} (S : SolverState B) (δ : TyVar) : TyVar :=
+  match S.subst.ty δ with
+  | .var β => β
+  | _      => δ
+
+/-- the scheme A-let builds: body AND constraints read under ⟦S₁⟧. Reading the
+constraints raw would keep a stump's row pointing at the variable it was parked
+on, not at the generalized tail that variable has since been solved to — and
+then an instance's stump would chase the ORIGINAL tail, shared by all
+instances. The RESULT is read too (`resVar`): a result aliased to β by
+unification must be generalized as β, the name the body mentions
+(`InferRuns.lean`, the `h = λy. g y` witness). -/
+def letScheme {B : Type} (S₁ : SolverState B) (ᾱ : List TyVar) (Δq : List (Parked B))
+    (τ₁ : Ty B) : QScheme B :=
+  ⟨ᾱ, Δq.map (fun p => (⟨p.stump.row.applySubst S₁.subst, p.stump.label,
+      S₁.resVar p.stump.res⟩ : Stump B)), τ₁.applySubst S₁.subst⟩
+
+/-- A-let's premise on the generalized RESULTS: each still reads as a variable at
+S₁, that variable is generalized, and distinct generalized stumps read as
+distinct variables — one constraint per result (`QScheme.WF`, `Correctable`). -/
+def LetResults {B : Type} (S₁ : SolverState B) (ᾱ : List TyVar) (Δq : List (Parked B)) :
+    Prop :=
+  (∀ p ∈ Δq, S₁.subst.ty p.stump.res = .var (S₁.resVar p.stump.res) ∧
+      S₁.resVar p.stump.res ∈ ᾱ) ∧
+  (∀ p ∈ Δq, ∀ q ∈ Δq, S₁.resVar p.stump.res = S₁.resVar q.stump.res → p.stump = q.stump)
+
+/-- ⊢  an unsolved result reads as itself -/
+theorem SolverState.subst_ty_of_not_dom {B : Type} {S : SolverState B} {δ : TyVar}
+    (h : δ ∉ S.sol.dom) : S.subst.ty δ = .var δ :=
+  tyLookup_not_mem _ (fun hm => h (List.mem_append_left _ hm))
+
+theorem SolverState.resVar_of_not_dom {B : Type} {S : SolverState B} {δ : TyVar}
+    (h : δ ∉ S.sol.dom) : S.resVar δ = δ := by
+  unfold SolverState.resVar; rw [SolverState.subst_ty_of_not_dom h]
+
+theorem SolverState.resVar_of_var {B : Type} {S : SolverState B} {δ β : TyVar}
+    (h : S.subst.ty δ = .var β) : S.resVar δ = β := by
+  unfold SolverState.resVar; rw [h]
+
 --------------------- Γ; S ⊢ e ⇒ τ; S′ ---------------------------------------
 -- One rule per term former, plus the DEGRADATION rules.
 -- A clash has no rule at all: that is the hard error, and it is sound
@@ -553,11 +614,22 @@ inductive Infer {B C : Type} [DecidableEq B] (constTy : C → B) :
   -- A-var — IS I-inst: the instantiated constraints go to wake-up, which
   -- resolves what θ already decides and parks the rest
   | var {Γ : QCtx B} {S S' : SolverState B} {x : Var} {σ : QScheme B}
-      {θ : TySubst B} {f : TyVar → TyVar} {ps : List (Parked B)} :
+      {θ : TySubst B} {f : TyVar → TyVar} {ps : List (Parked B)} {Sup : Supply}
+      {κs : List Kind} :
       Γ.lookup x = some σ →
       IsRenaming θ σ.vars f → FreshRenaming f σ.vars Γ S →
+      -- the renaming is DRAWN: every new name comes from the block the supply
+      -- hands out, and the supply moves past it. Without this a later `draw`
+      -- could reissue one (`nameReuse_infers_unguarded`, FreshNames.lean).
+      (∀ α ∈ σ.vars, ∃ k, S.supply.next ≤ k ∧ k < Sup.next ∧ f α = natName k) →
+      S.supply.next ≤ Sup.next →
+      -- … and it is drawn AT A KIND: each binder's kind is the one the state
+      -- recorded when the binder was itself drawn (a let's ᾱ, `Assigns` in A-let),
+      -- and its image inherits it. Without this A-let could never generalize an
+      -- instance's names — they would have no recorded kind.
+      S.kinds.Assigns σ.vars κs →
       InstStumps θ f σ.constraints ps →
-      WakesSat S ps S' →
+      WakesSat { S with supply := Sup, kinds := (σ.vars.map f).zip κs ++ S.kinds } ps S' →
       Infer constTy Γ S (.var x) (σ.body.applySubst θ) S'
   -- A-lam
   | lam {Γ : QCtx B} {S S' : SolverState B} {x : Var} {e : Expr C} {τ : Ty B}
@@ -621,12 +693,34 @@ inductive Infer {B C : Type} [DecidableEq B] (constTy : C → B) :
       -- which is why the paper's form was never writable here). Forces every
       -- generalized binder to be one inference actually invented, at a known sort.
       S₁.kinds.Assigns ᾱ κs →
-      -- Δ₁ = Δ_Γ ⊎ Δ_q
-      S₁.parked = Δq ++ Δγ →
+      -- Δ₁ = Δ_Γ ⊎ Δ_q — a PARTITION, up to order: Δ₁ is ordered by parking time,
+      -- and a prefix split could not generalize a stump parked after a Γ-stump
+      S₁.parked.Perm (Δq ++ Δγ) →
       -- Δ_q are exactly the stumps whose blocker lands in ᾱ, Δ_Γ the rest
       (∀ p ∈ Δq, p.blocker ∈ ᾱ) → (∀ p ∈ Δγ, p.blocker ∉ ᾱ) →
-      Infer constTy
-        (Γ.bindScheme x ⟨ᾱ, Δq.map Parked.stump, τ₁.applySubst S₁.subst⟩)
+      -- ᾱ ∩ ftv(⟦S₁⟧Γ) = ∅ — generalize only what Γ does not mention. This was
+      -- MISSING, and `runSound_false_unguarded_let` (LetSound.lean) is what it
+      -- cost: `λy. let z = y in z` inferred `a → b`. Stated per variable of Γ
+      -- and at BOTH sorts, since `ftv` does not record which one it saw.
+      (∀ α ∈ ᾱ, ∀ β ∈ Γ.ftv, α ∉ (S₁.subst.ty β).ftv ∧ α ∉ (S₁.subst.row β).ftv) →
+      -- Δ_q is e₁'s OWN: no stump parked before the let may be filed under the
+      -- scheme, or nothing ever finalizes it (`runSound_false_let_captures`,
+      -- LetSound.lean) …
+      (∀ p ∈ Δq, ∀ q ∈ S.parked, p.stump ≠ q.stump) →
+      -- … each generalized stump's answer, READ AT S₁, is generalized with it,
+      -- one per stump (`QScheme.WF`) …
+      LetResults S₁ ᾱ Δq →
+      -- … what stays parked does not mention ᾱ, READ AT S₁, so it reads the
+      -- same at every instance …
+      (∀ α ∈ ᾱ, ∀ p ∈ Δγ, α ∉ (p.stump.row.applySubst S₁.subst).ftv ∧
+         α ∉ (S₁.subst.ty p.stump.res).ftv) →
+      -- … nothing already solved is generalized …
+      (∀ α ∈ ᾱ, α ∉ S₁.sol.dom) →
+      -- … and no generalized stump's row, read at S₁, mentions another's answer:
+      -- then an instance's constraints can be discharged one at a time
+      -- (`instEquivCorrects`, InferSoundA.lean), without a fixpoint
+      (∀ p ∈ Δq, ∀ q ∈ Δq, S₁.resVar q.stump.res ∉ (p.stump.row.applySubst S₁.subst).ftv) →
+      Infer constTy (Γ.bindScheme x (letScheme S₁ ᾱ Δq τ₁))
         { S₁ with parked := Δγ } e₂ τ₂ S₂ →
       Infer constTy Γ S (.letE x e₁ e₂) τ₂ S₂
 
@@ -647,6 +741,20 @@ inductive InferRec {B C : Type} [DecidableEq B] (constTy : C → B) :
 
 end
 
+
+/-- ⊢  A-var at a MONOTYPE: no binders, so nothing is drawn and the instance is
+the body itself. Every example derivation's variable use is this one. -/
+theorem Infer.var_mono {B C : Type} [DecidableEq B] {constTy : C → B}
+    {Γ : QCtx B} {S S' : SolverState B} {x : Var} {τ : Ty B}
+    (hl : Γ.lookup x = some ⟨[], [], τ⟩) (hw : WakesSat S [] S') :
+    Infer constTy Γ S (.var x) τ S' := by
+  have h := Infer.var (constTy := constTy) (σ := ⟨[], [], τ⟩) (θ := TySubst.id B)
+    (f := id) (ps := []) (Sup := S.supply) hl
+    ⟨⟨fun _ _ => rfl, fun _ _ => rfl⟩, fun _ h => absurd h List.not_mem_nil⟩
+    ⟨fun _ h => absurd h List.not_mem_nil, fun _ h => absurd h List.not_mem_nil,
+     fun _ h => absurd h List.not_mem_nil, fun _ h => absurd h List.not_mem_nil⟩
+    (fun _ h => absurd h List.not_mem_nil) (Nat.le_refl _) (κs := []) rfl rfl hw
+  rwa [Ty.applySubst_id] at h
 
 --------------------- THE JUDGEMENT IS NOT VACUOUS ----------------------------
 -- A relation is cheap to write and easy to write EMPTY. This derives the
@@ -687,66 +795,24 @@ theorem selEx_infers :
             [(natName 2, .row), (natName 1, .ty)]⟩)
     (r := natName 2) (α := natName 2) (δ := natName 3)
     ?_ rfl ?_ ?_ rfl
-  · exact Infer.var (σ := ⟨[], [], .var (natName 1)⟩) (θ := idSubst) (f := id) (ps := []) rfl
-      ⟨⟨fun _ _ => rfl, fun _ _ => rfl⟩, by simp⟩ (by simp [FreshRenaming]) rfl
+  · exact Infer.var_mono rfl
       ⟨_, .nil, .done (SolverState.Quiescent.nil rfl)⟩
   · exact ⟨_, ⟨5, ⟨[(natName 1, .rcd (.var (natName 2)))], []⟩, ⟨3⟩, rfl, rfl⟩,
       .done (SolverState.Quiescent.nil rfl)⟩
   · exact .varFree rfl
 
 
---------------------- ⟦S⟧ APPLIED TO A CONTEXT -------------------------------
--- The declarative side reads row-solutions out of a CONTEXT; the algorithm
--- keeps them in θ. `RowUnify/State.lean` bridges the two for a single lookup;
--- what the soundness statement additionally needs is the whole context read
--- under the final state — θ pushed through the type environment, and θ's row
--- component installed as the row environment discharge will consult.
-
--- `QScheme.applySubst` moved to Qualified.lean, where its capture-avoidance
--- side condition (`QScheme.Avoiding`) and what that condition buys
--- (`QCovers.forward_of_avoiding`, QSubst.lean) are stated and proved.
-
-/-- `⟦S⟧Γ` — Γ under the state's substitution, with the state's row-solutions
-installed as the row environment that `Lookup` and discharge consult. -/
-def SolverState.applyCtx {B : Type} (S : SolverState B) (Γ : QCtx B) : QCtx B :=
-  { tyEnv  := Γ.tyEnv.map (fun p => (p.1, p.2.applySubst S.subst)),
-    rowEnv := S.sol.row }
+-- `SolverState.applyCtx` (⟦S⟧Γ) is defined before `Infer`: A-let's
+-- generalization premise reads it.
 
 --------------------- THE STATEMENT THIS MODULE EXISTS FOR --------------------
-/-- **Inference soundness** — `Γ; S ⊢ e ⇒ τ; S′  ⟹  ⟦S′⟧Γ ⊢ e : ⟦S′⟧τ`.
-
-"The algorithm never infers a type the declarative system rejects." This is the
-statement `plans/inference-gap-analysis.md` §B calls unwriteable, and the reason
-`⟦S⟧`-as-a-context was built at all. It is now WRITEABLE. It is not proved, and
-it is kept as a named `def` for the same reason `UnifyWF` and `TerminalNoMgu`
-are: so the thing being aimed at can be named.
-
-THE PROOF LIVES IN `InferSound.lean`, one lemma per A-rule. Eight of the
-thirteen rules are proved there, plus A-sel-? modulo `StumpHonest`; the census
-at the bottom of that file says what the rest are waiting on. The case lemmas
-are stated at an arbitrary σ with `Sol.Sat σ S′.sol`, NOT at `⟦S′⟧` — that is
-what lets a premise solved at an intermediate state be replayed under the σ the
-conclusion is stated at (`Infer.sat_mono`). Taking σ := S′.subst is the last
-step, not the first.
-
-WHAT IT WILL NEED, and none of it is available yet:
-  * `UnifyWF` — without it `⟦S′⟧` is `Sol.toSubst`, one unfolding step, rather
-    than the closure `algorithmic.typ` specifies. The two agree exactly on a
-    well-formed state (`Sol.closes_of_wf`), so this statement is provisional
-    until that lands.
-  * the parked stumps must DISCHARGE. `A-sel-?` returns a stump-variable δ and
-    parks `⟨α ▷ ρ.l ↓ δ⟩`; declaratively `QScheme.Inst` demands
-    `Stump.Discharge`, so soundness holds only for states whose Δ is either
-    empty or finalized (`Finalize`). The honest form of the theorem probably
-    carries `S′.parked = []` as a hypothesis, with `F-★` supplying it.
-  * capture-avoidance for `QScheme.applySubst` (see its note).
-  * an L2 type-substitution lemma. L1 has `typed_applySubst_aux`; `QTyped` has
-    only TERM substitution (`qsubst_preserves_typing`), and transporting a
-    derivation along θ is exactly what this proof does. §B lists it. -/
-def InferSound (B C : Type) [DecidableEq B] (constTy : C → B) : Prop :=
-  ∀ (Γ : QCtx B) (S S' : SolverState B) (e : Expr C) (τ : Ty B),
-    Infer constTy Γ S e τ S' → S'.parked = [] →
-    QTyped constTy (S'.applyCtx Γ) e (τ.applySubst S'.subst)
+-- Inference soundness — "the algorithm never infers a type the declarative
+-- system rejects" — is `InferSound` (InferSoundA.lean), PROVED as
+-- `inferSound` (LetCase.lean). The first statement of it lived here: it read
+-- the conclusion at ⟦S′⟧ under a `S′.parked = []` hypothesis, which speaks
+-- about the wrong state at an inner A-sel-? and so could not be carried by the
+-- induction. It was removed on 2026-09-26; `InferSound.lean`'s header says
+-- what replaced each piece.
 
 --------------------- THE TOP-LEVEL ENTRY JUDGEMENT ---------------------------
 -- `plans/inference-gap-analysis.md` §B's last ✘ row: "`⇓`/`F-★` finalization
@@ -754,11 +820,9 @@ def InferSound (B C : Type) [DecidableEq B] (constTy : C → B) : Prop :=
 -- judgement to state soundness OF THE ALGORITHM about". This is it — run
 -- inference from the empty state, then finalize what is still parked.
 --
--- `S′.parked = []` is REQUIRED rather than derived. Each `Finalize` step drops
--- the stump it discharged by filtering on its result variable, so finalizing
--- every element of Δ empties Δ exactly when those variables are pairwise
--- distinct — `QScheme.ResWF` / `InstStumps.pairwise` (InferSound.lean) is where
--- that would come from, and it is not proved. Requiring it is the honest form.
+-- `Run` used to also demand `S′.parked = []`. `runSound` never needs it — the
+-- conclusion is a plain typing whatever is left parked — so it is gone, and
+-- `RunSound` is stronger for it.
 --
 -- The initial supply is ⟨1⟩, not ⟨0⟩: `natName 0` is the empty string, so
 -- starting at 1 keeps every invented name non-empty.
@@ -768,7 +832,7 @@ def Run {B C : Type} [DecidableEq B] (constTy : C → B) (e : Expr C) (τ : Ty B
     (S' : SolverState B) : Prop :=
   ∃ S₁ : SolverState B,
     Infer constTy ⟨[], []⟩ ⟨Sol.nil, [], [], ⟨1⟩, []⟩ e τ S₁ ∧
-    Finalizes S₁ S₁.parked S' ∧ S'.parked = []
+    Finalizes S₁ S₁.parked S'
 
 -- The state finalization starts at is QUIESCENT: the run begins with Δ = [], so
 -- `Infer.quiescent_of_nil` (below) applies, and `Finalize.of_quiescent` then says
@@ -776,16 +840,17 @@ def Run {B C : Type} [DecidableEq B] (constTy : C → B) (e : Expr C) (τ : Ty B
 -- the sense in which the premise constrains the RULE without constraining the
 -- ALGORITHM.
 
-/-- **Algorithm soundness** — what `InferSound` becomes once there is an entry
-point. `InferSound` carries `S′.parked = []` as a HYPOTHESIS and had nothing to
-supply it; `Run` supplies it by construction, and F-★ is what does the supplying.
-Named, not proved: it needs `InferSound` itself plus the finalization step's own
-soundness, which is `Stump.Discharge.unk` read at the state's own substitution —
-and NOT at an arbitrary satisfying σ, because a later refinement can solve the
-blocker and make the lookup land, which is precisely why finalization runs last. -/
+/-- **Algorithm soundness** — inference soundness at the entry point, with
+finalization run on whatever is still parked. Stated at the state's own substitution — NOT at an arbitrary satisfying σ,
+because a later refinement can solve a blocker and make a lookup land, which is
+precisely why finalization runs last — and in the EMPTY context: the program is
+closed, and ⟦S′⟧ is already pushed into τ, so there is no row environment left to
+consult. (It used to read `S′.applyCtx ⟨[], []⟩`, whose row environment is
+⟦S′⟧'s row solutions; the refutations below never depended on that.)
+PROVED: `runSound` (Finalization.lean). -/
 def RunSound (B C : Type) [DecidableEq B] (constTy : C → B) : Prop :=
   ∀ (e : Expr C) (τ : Ty B) (S' : SolverState B), Run constTy e τ S' →
-    QTyped constTy (S'.applyCtx ⟨[], []⟩) e (τ.applySubst S'.subst)
+    QTyped constTy ⟨[], []⟩ e (τ.applySubst S'.subst)
 
 
 --------------------- …AND IT RUNS -------------------------------------------
@@ -812,7 +877,7 @@ theorem selEx_runs :
       (.fn (.var (natName 1)) (.var (natName 3))) selExFinal :=
   ⟨selExS1, selEx_infers,
    .cons (Finalize.star (by simp [selExS1]) (.varFree rfl)
-     ⟨5, selExStar, ⟨4⟩, rfl, rfl⟩) .nil, rfl⟩
+     ⟨5, selExStar, ⟨4⟩, rfl, rfl⟩) .nil⟩
 
 /-- ⊢  …and the answer is `{β} → ★` with `l` flagged — the L1-finalized type
 (`selEx_absent`, minimal.lean), which `finalized_no_blur` says no substitution
@@ -948,7 +1013,7 @@ theorem Infer.kinds_mono {B C : Type} [DecidableEq B] {constTy : C → B}
     {Γ : QCtx B} {S S' : SolverState B} {e : Expr C} {τ : Ty B} :
     Infer constTy Γ S e τ S' → S.kinds <:+ S'.kinds
   | .con => List.suffix_refl _
-  | .var _ _ _ _ hw => hw.kinds ▸ List.suffix_refl _
+  | .var _ _ _ _ _ _ _ hw => hw.kinds ▸ List.suffix_append _ _
   | .lam hd hb => by
       refine List.IsSuffix.trans ?_ (Infer.kinds_mono hb)
       rw [draw_kind_eq hd]; exact List.suffix_cons _ _
@@ -976,7 +1041,7 @@ theorem Infer.kinds_mono {B C : Type} [DecidableEq B] {constTy : C → B}
       rw [draw_kind_eq hd₂, hs.kinds, draw_kind_eq hd]
       exact List.IsSuffix.trans (List.suffix_cons _ _) (List.suffix_cons _ _)
   | .rcd hb => InferRec.kinds_mono hb
-  | .letE h₁ _ _ _ _ h₂ => by
+  | .letE h₁ _ _ _ _ _ _ _ _ _ _ h₂ => by
       have i₁ := Infer.kinds_mono h₁
       have i₂ := Infer.kinds_mono h₂
       exact List.IsSuffix.trans i₁ i₂
@@ -1001,7 +1066,7 @@ discipline, and it is the sorted counterpart of the `NoCapture` leak: `a ≐ᵣ 
 is legal precisely because the row-sort `a` and the type-sort `a` are different
 variables, and this says inference never confuses the two.
 
-Named, not proved — like `UnifyWF` and `InferSound`, so the target has a name.
+Named, not proved, so the target has a name.
 It needs the Γ-freshness invariant (`FreshRenaming`, still not an invariant) to
 rule out a drawn name colliding with one already live at the other sort. -/
 def KindsSound (B C : Type) [DecidableEq B] (constTy : C → B) : Prop :=
@@ -1023,7 +1088,7 @@ theorem Infer.supply_mono {B C : Type} [DecidableEq B] {constTy : C → B}
     {Γ : QCtx B} {S S' : SolverState B} {e : Expr C} {τ : Ty B} :
     Infer constTy Γ S e τ S' → S.supply.next ≤ S'.supply.next
   | .con => Nat.le_refl _
-  | .var _ _ _ _ hw => hw.supply
+  | .var _ _ _ _ hle _ _ hw => Nat.le_trans hle hw.supply
   | .lam hd hb => by
       have := Infer.supply_mono hb
       have hd' := draw_eq hd
@@ -1063,7 +1128,7 @@ theorem Infer.supply_mono {B C : Type} [DecidableEq B] {constTy : C → B}
       simp only [SolverState.park]
       omega
   | .rcd hb => InferRec.supply_mono hb
-  | .letE h₁ _ _ _ _ h₂ => by
+  | .letE h₁ _ _ _ _ _ _ _ _ _ _ h₂ => by
       have i₁ := Infer.supply_mono h₁
       have i₂ := Infer.supply_mono h₂
       exact Nat.le_trans i₁ i₂
@@ -1158,7 +1223,7 @@ theorem Infer.sat_mono {B C : Type} [DecidableEq B] {constTy : C → B}
     {Γ : QCtx B} {S S' : SolverState B} {e : Expr C} {τ : Ty B} :
     Infer constTy Γ S e τ S' → S.SatMono S'
   | .con => SolverState.SatMono.refl _
-  | .var _ _ _ _ hw => hw.satMono
+  | .var _ _ _ _ _ _ _ hw => hw.satMono
   | .lam hd hb =>
       (SolverState.SatMono.of_sol_eq (draw_sol hd)).trans (Infer.sat_mono hb)
   | .app h₁ h₂ hd hs =>
@@ -1183,7 +1248,7 @@ theorem Infer.sat_mono {B C : Type} [DecidableEq B] {constTy : C → B}
             ((SolverState.SatMono.of_sol_eq (draw_sol hd₂)).trans
               (SolverState.SatMono.of_sol_eq rfl))))
   | .rcd hb => InferRec.sat_mono hb
-  | .letE h₁ _ _ _ _ h₂ => by
+  | .letE h₁ _ _ _ _ _ _ _ _ _ _ h₂ => by
       refine (Infer.sat_mono h₁).trans ?_
       intro σ hσ
       exact Infer.sat_mono h₂ σ hσ
@@ -1261,7 +1326,7 @@ theorem Infer.quiescent {B C : Type} [DecidableEq B] {constTy : C → B}
     Infer constTy Γ S e τ S' → S.Quiescent → S'.Quiescent
   | .con, hq => hq
   -- the rules that WRITE end in a saturation, so they conclude it outright
-  | .var _ _ _ _ hw, _ => hw.quiescent
+  | .var _ _ _ _ _ _ _ hw, _ => hw.quiescent
   | .app _ _ _ hs, _ => hs.quiescent
   | .conc _ _ _ _ _ hs₂, _ => hs₂.quiescent
   | .sel _ _ hs _, _ => hs.quiescent
@@ -1273,9 +1338,9 @@ theorem Infer.quiescent {B C : Type} [DecidableEq B] {constTy : C → B}
   | .lam hd hb, hq => Infer.quiescent hb (hq.draw hd)
   | .rcd hb, hq => InferRec.quiescent hb hq
   -- A-let: the body runs at Δ_Γ, a SUBLIST of the quiescent Δ₁
-  | .letE h₁ _ hsplit _ _ h₂, hq => by
+  | .letE h₁ _ hsplit _ _ _ _ _ _ _ _ h₂, hq => by
       refine Infer.quiescent h₂ ((Infer.quiescent h₁ hq).restrict ?_)
-      intro p hp; rw [hsplit]; exact List.mem_append_right _ hp
+      intro p hp; exact hsplit.mem_iff.mpr <| List.mem_append_right _ hp
 
 theorem InferRec.quiescent {B C : Type} [DecidableEq B] {constTy : C → B}
     {Γ : QCtx B} {S S' : SolverState B} {ξ : RecBody (Expr C)} {ρ : Row B} :
