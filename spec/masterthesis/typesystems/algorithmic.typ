@@ -401,18 +401,25 @@ head(τ₁) ≠ head(τ₂)
 === Row unification  s₁ ≐ᵣ s₂ ⇝ v
 - Tried in this order, first trigger wins: U-ε-var, U-ε-clash (both BEFORE the
   fuel guard — an exhausted side needs no budget), U-var-refl-L, U-var-refl-R,
-  U-var-solve, U-var-occurs, U-field-L, U-field-R, U-ground, U-expand,
-  U-clash, U-stuck
-- U-var-solve, U-var-occurs, U-field-L, U-field-R, U-ground and U-expand are
-  also tried with the two sides exchanged; U-ε-var, U-ε-clash and U-clash are symmetric
-- Every move except U-expand is FORCED (solution-set preserving). U-expand
-  invents structure and fires only when the host variable is unique, which is
-  P&X's LUtail with the guess removed
+  U-var-solve, U-var-occurs, U-field-L, U-field-R, U-ground, U-clash, U-stuck
+- U-var-solve, U-var-occurs, U-field-L, U-field-R and U-ground are also tried
+  with the two sides exchanged; U-ε-var, U-ε-clash and U-clash are symmetric
+- Every move is FORCED (solution-set preserving). U-expand — P&X's LUtail with
+  the guess removed, firing on a unique host variable — is GONE (2026-09-23,
+  plans/drop-expand.md): its four arms now answer `stuck`. Nothing invents
+  structure any more, so a success's solution mentions only problem variables
 - U-clash sits at the BOTTOM, not the top: a clash is diagnosed only once every
   forced move is dead. Cancellativity turns α ≐ᵣ (l: 𝓫 | α) into a clash rather
   than an occurs-failure, which is strictly better information
 - No rule pushes a field demand INTO a var: lookups park as stumps, so the
-  algorithm never guesses a field into a variable outside U-expand
+  algorithm never guesses a field into a variable
+- TERMINATES (`unifyRowM_terminates`, RowUnify/Termination.lean, 2026-09-26):
+  measure (problem variables inside a fixed universe, size), lexicographic.
+  `unifyRow` is the total function and every fuelled run that answers agrees
+  with it (`unifyRow_eq`), so `no-fuel` is never the last word
+- Solutions are well-formed and ACYCLIC (`unifyWF`, RowUnify/Applied.lean,
+  2026-09-26): keys and mentions ⊆ problem variables, no binding mentions a key.
+  So ⟦S⟧ is the solution applied once, and lookups under it are total
 
 s field-free   vars(s) = β̄
 --------------------------- U-ε-var
@@ -447,15 +454,17 @@ t₁·α ≐ᵣ t₂·α ⇝ θ
 // OTHER spine variable is forced to ε and α stays free (ε | α | ε ≈ α), and at
 // k ≥ 2 α is forced too. Both are unique, hence mgus (`allvar_occurs_mgu`).
 
-
 α ∈ rowvars(s)   ¬(α ∈ vars(s) ∧ s field-free)
 ---------------------------------------------- U-var-occurs
 α ≐ᵣ s ⇝ occurs
 // What is left after U-var-collapse: α under a record constructor (depth grows
 // — `deep_occurs_no_unifier`) or on the spine with a field present (counting —
 // `occurs_field_no_unifier`). Both are genuine no-unifiers, so the case
-// analysis CLOSES: `solveVarM_occurs_no_unifier`. rowvars(s) is `allRowVars` —
-// the row variables at any depth, the row half of the sorted occurs check.
+// analysis CLOSES: `solveVarM_occurs_no_unifier`, unconditional now that
+// U-expand is gone, and lifted through the whole driver by plain induction
+// (`unifyRowM_occurs_no_unifier`, RowUnify/OccursLift.lean, 2026-09-26).
+// rowvars(s) is `allRowVars` — the row variables at any depth, the row half of
+// the sorted occurs check.
 
 
 win\_l(s₂) = (τ′, t₂)   τ ≐ τ′ ⇝ θ   θt₁ ≐ᵣ θt₂ ⇝ θ′
@@ -475,14 +484,6 @@ s₁ ≐ᵣ s₂ ⇝ θ′ ∘ θ
 // Not derivable from the window rules — the mechanization surfaced the gap.
 
 
-vars(s₂) = β   |s₂|\_l = 0   δ, β′ fresh   t₁ ≐ᵣ s₂[β′/β] ⇝ θ
--------------------------------------------------------------- U-expand
-(l: τ)·t₁ ≐ᵣ s₂ ⇝ θ ∘ [δ ≔ τ, β ≔ (l: δ | β′)]
-// δ is fresh, so τ ≐ δ has the single solution δ ≔ τ and needs no cross-call —
-// the only field rule that stays inside ≐ᵣ. Wired at the LEFT end only, in
-// both argument orders; expandR exists but the driver never calls it.
-
-
 |s₁|\_l > |s₂|\_l   vars(s₂) = ⟨⟩
 ----------------------------------- U-clash
 s₁ ≐ᵣ s₂ ⇝ clash
@@ -491,26 +492,31 @@ s₁ ≐ᵣ s₂ ⇝ clash
 no rule above applies
 ----------------------- U-stuck
 s₁ ≐ᵣ s₂ ⇝ stuck
-// U-expand refused for one of exactly two reasons (uniqueHost): ≥ 2 candidate
-// hosts (Wand's shape), or l already occurs on the other side but BEHIND a
-// var. No forced move remains — usually, but not always, genuine ambiguity.
+// No forced move remains: a field can only be matched by a label that a VAR on
+// the other side would have to supply — Wand's shape, and since U-expand's
+// removal also the unique-host case, e.g. (l: {a}) ≐ᵣ (b | a) (`crossfield_stuck`).
+// CONSERVATIVE, with no converse: neither `stuck` nor terminality implies that
+// no mgu exists (`terminalNoMgu_false`, Refutations.lean). Cost of the removal on
+// Nix-shaped code (`Regressions.nix_*`): only a λ-bound callback applied to two
+// records extended by DIFFERENT fields over INDEPENDENT tails is lost.
 
 
 == Solver State
 - MECHANIZED as of 2026-09-18 (lean/Infer.lean): the state, the A-rules, wake-up,
   saturation, finalization and the entry judgement below are all relations in
   Lean, and `selEx_infers` / `selEx_runs` derive (x: x.l) through them end to end.
-  What is still DESIGN rather than theorem: that the algorithm TERMINATES, that it
-  is deterministic up to renaming, and soundness itself (`InferSound` / `RunSound`
-  are named statements, not proofs)
+- PROVED as of 2026-09-26: SOUNDNESS (`inferSound`, lean/LetCase.lean;
+  `runSound`, lean/Finalization.lean) and TERMINATION, about a real function
+  (`inferF`/`runF`, lean/InferFn.lean: every `ok` is a derivation; `run` is total,
+  `runF_terminates` / `run_typed`, lean/InferFnTerm.lean). Still DESIGN: that
+  the algorithm is deterministic up to renaming
 - θ is sort-respecting, hence really two maps — one per sort. ⟦S⟧τ applies S's
   substitution as a closure
 - Δ indexes each parked stump by its *blocker*: the row-var whose L-α-free
   produced the ?. The blocker is a wake-up index, NOT part of the constraint —
   the declarative stump ⟨ρ.l ↓ δ⟩ carries none
-- W collects definite-absence flags and ★-degradations, named by the site that
-  produced them — the label for A-sel-⊥, K-⊥, F-★ and A-sel-deg, the application
-  itself for A-app-deg. It never affects typing, only diagnostics
+- W collects definite-absence and ★-finalization flags, named by the label that
+  produced them — A-sel-⊥, K-⊥ and F-★. It never affects typing, only diagnostics
 - The declarative system READS solutions via L-α; the algorithm WRITES them via
   unification. θ is only ever refined
 
@@ -538,18 +544,16 @@ S ⊢ Q ↝\*! S′       A-var's closure, then saturation
 - (Γ; S ⊢ e ⇒ τ; S′) is syntax-directed, one rule per term former. There are no
   counterparts to T-eq and T-★-intro — inversion-mod-≈ and re-blurring account
   for those on the declarative side
-- Failure policy: a `clash` is a hard error (it is PROVED to mean no unifier
-  exists, so rejecting is soundness, not choice). So is `occurs` where the guard
-  is local — that is now proved at both sorts. `stuck` is conservative and may
-  NOT reject; it degrades to ★ with a W-flag
-- The degradation is a RULE, not a side remark: A-app-deg and A-sel-deg are the
-  two sites that emit a type equation, and without them the judgement is simply
-  undefined on a conservative verdict. A clash has no rule at ALL — that absence
-  IS the hard error. `no-fuel` has none either, for the opposite reason: it is a
-  verdict about the budget, not about the problem, so the answer is a bigger one
-- Both degradation rules keep the state they had reached and add the flag. They
-  do NOT emit the equation's would-be solution: a verdict that may not reject
-  may not commit either
+- Failure policy: EVERY non-success verdict rejects — no rule applies, and that
+  absence IS the hard error. For `clash` and `occurs` this is justified: both are
+  PROVED to mean no unifier exists, `occurs` through the whole driver
+- `stuck` rejects too, although it has no such proof (`terminalNoMgu_false`).
+  DECIDED 2026-09-26: ★ stays RIGID, with no ★-eliminators, so A-app-deg /
+  A-sel-deg — which typed a stuck equation's site at ★ — had no declarative
+  counterpart and are DELETED. Rejecting is sound by construction; what it costs
+  is completeness. ★-elimination with blame is paper-only ("Towards Nix")
+- `no-fuel` has no rule either: it is a verdict about the budget, and unification
+  terminates, so a big enough budget never reaches it
 
 ------------------- A-cons
 Γ; S ⊢ c ⇒ 𝓫_c; S
@@ -562,6 +566,15 @@ x: ∀(ᾱ: κ̄). Q ⇒ τ ∈ Γ   fresh β̄: κ̄   S ⊢ Q[β̄/ᾱ] ↝\*!
 // resolves the ones the current θ already decides and parks the rest. Parking
 // is the algorithmic image of D-? — only finalization commits ★. The blockers
 // of Q[β̄/ᾱ] are not given here; ↝\* computes each one, by K-park.
+//
+// `fresh β̄: κ̄` is a DRAW, and it means both halves (fixed 2026-09-26):
+// - FROM THE SUPPLY: β̄ are the supply's next |ᾱ| names and the supply moves past
+//   them. Merely avoiding the names S already uses is NOT enough — a later draw
+//   can reissue one, and two stumps end up sharing a result variable
+//   (`nameReuse_infers_unguarded`, lean/FreshNames.lean)
+// - AT A KIND: each βᵢ is recorded at the kind its binder was drawn at. Without
+//   it A-let can never generalize an instance's names, because A-let only
+//   generalizes variables with a recorded kind
 
 
 fresh α: Type   Γ·(x: α); S ⊢ e ⇒ τ; S′
@@ -572,15 +585,6 @@ fresh α: Type   Γ·(x: α); S ⊢ e ⇒ τ; S′
 Γ; S ⊢ e₁ ⇒ τ₁; S₁   Γ; S₁ ⊢ e₂ ⇒ τ₂; S₂   fresh β: Type   S₂ ⊢ τ₁ ≐ (τ₂ -> β) ⇝! S₃
 ------------------------------------------------------------------------------------- A-app
 Γ; S ⊢ e₁e₂ ⇒ β; S₃
-
-
-Γ; S ⊢ e₁ ⇒ τ₁; S₁   Γ; S₁ ⊢ e₂ ⇒ τ₂; S₂   fresh β: Type   S₂ ⊢ τ₁ ≐ (τ₂ -> β) ⇝ v   v ∈ {stuck, occurs}
---------------------------------------------------------------------------------------------------------- A-app-deg
-Γ; S ⊢ e₁e₂ ⇒ ★; S₂ +W
-// The arrow equation gave up, so the application blurs. β is drawn and then
-// abandoned — nothing is written for it, since the verdict decides nothing. The
-// W-entry is named by the application site, the one selection-free site that
-// raises a flag.
 
 
 Γ; S ⊢ e₁ ⇒ τ₁; S₁   Γ; S₁ ⊢ e₂ ⇒ τ₂; S₂   fresh ρ₁ ρ₂: Row   S₂ ⊢ τ₁ ≐ {ρ₁} ⇝! S₃   S₃ ⊢ τ₂ ≐ {ρ₂} ⇝! S₄
@@ -604,16 +608,6 @@ fresh α: Type   Γ·(x: α); S ⊢ e ⇒ τ; S′
 // NOT ★: returning ★ here would freeze the result and lose every later
 // refinement — (x: x.l) would infer {β} -> ★ and no application could recover
 // the field type. The stump-var δ keeps the position writable.
-
-
-Γ; S ⊢ e ⇒ τ; S₁   fresh ρ: Row   S₁ ⊢ τ ≐ {ρ} ⇝ v   v ∈ {stuck, occurs}
--------------------------------------------------------------------------- A-sel-deg
-Γ; S ⊢ e.l ⇒ ★; S₁ +W
-// The RECORD equation gave up, before any lookup happens — so this is not a
-// third lookup verdict next to A-sel-⊥ and A-sel-?, it is the case where the
-// scrutinee never became a row to look in. No stump is parked: a stump needs a
-// blocker, and there is no ρ-solution to be blocked on. ★ here is final, unlike
-// A-sel-?'s δ.
 
 
 Γ; S ⊢ ξ ⇒ ρ; S′
@@ -665,11 +659,16 @@ fresh α: Type   Γ·(x: α); S ⊢ e ⇒ τ; S′
   that stump (`Finalize.wake_no_commit`). So finalization is the only progress
   left at the end of a run, which is what determinism needed to mean. Order
   independence for the WHOLE run is still design, not theorem
-- *Saturation is a relation, not a function*: a saturating function owes a
-  termination measure and K-repark has none — each repark moves the blocker to a
-  new variable. "A quiescent state is always reachable" therefore joins the open
-  list, and it is CONDITIONAL, not just unproved: a K-hit needs the lookup to be
-  total (acyclic θ) and its equation can clash — the tension case below
+- *Saturation TERMINATES* (`satStep_wf`, lean/OpenEnds.lean, 2026-09-26): there
+  is no infinite ↝ run from ANY state. K-repark does have a measure after all —
+  (|Δ|, #unblocked stumps), lexicographic: K-hit and K-⊥ retire a stump, and
+  K-repark swaps an unblocked stump for a blocked one. The executable form is
+  `saturateF` (lean/InferFnTerm.lean), which settles from every clean state
+  (`saturateF_settles`)
+- What used to make reachability CONDITIONAL is half gone: a K-hit needs the
+  lookup to be total, and acyclic solutions (`unifyWF`) give that
+  (`Sol.rowWF_toCtx`). The other half stays — a K-hit's equation can clash, the
+  tension case below — and that is a rejection, not a divergence
 
 ⟦S⟧ ⊢ (⟦S⟧ρ).l ↓ τ′   S ⊢ δ ≐ τ′ ⇝ S′
 ---------------------------------------- K-hit
@@ -774,12 +773,21 @@ S ⊢ (⟨α ▷ ρ.l ↓ δ⟩, Δ′) ⇓\* S′
   that takes a program and returns an answer, and it is what soundness of the
   ALGORITHM — as opposed to soundness of one rule — is stated about
 
-∅; (id, ∅, ∅) ⊢ e ⇒ τ; S₁   S₁ ⊢ Δ₁ ⇓\* S′   Δ′ = ∅
----------------------------------------------------- Entry
+∅; (id, ∅, ∅) ⊢ e ⇒ τ; S₁   S₁ ⊢ Δ₁ ⇓\* S′
+------------------------------------------- Entry
 ⊢ e ⇒ τ; S′
-// Δ′ = ∅ is REQUIRED, not derived: ⇓ drops the stump it discharged by its RESULT
-// variable, so finalizing all of Δ empties Δ exactly when those variables are
-// pairwise distinct. True of the δ's inference draws; not yet proved of them.
+// The side condition Δ′ = ∅ is GONE (2026-09-26): soundness never needed it —
+// the conclusion is a plain typing whatever is left parked — so dropping it made
+// RunSound stronger. What it guarded is now an invariant anyway: every parked
+// result variable was issued by the supply, one stump per result variable
+// (`Infer.pinv_keeps`, lean/ParkedInv.lean).
+//
+// *RunSound* — PROVED (`runSound`, lean/Finalization.lean): if ⊢ e ⇒ τ; S′ then
+// ∅ ⊢ e : ⟦S′⟧τ declaratively. Stated at the run's OWN final substitution, not an
+// arbitrary σ ⊨ S′, because a later refinement can make a lookup land — which is
+// why finalization runs last. F-★'s `? on α` premise is what makes finalization
+// sound: it writes nothing at the row sort, so at ⟦S′⟧ the lookup is still `?`
+// and δ = ★ is D-? (`Finalizes.holds`).
 //
 // Worked, both shapes: (x: x.l) runs to {β} → ★ with l flagged, F-★ supplying the
 // ★ — the L1-finalized type that finalized_no_blur says nothing can sharpen back
@@ -796,14 +804,43 @@ S ⊢ (⟨α ▷ ρ.l ↓ δ⟩, Δ′) ⇓\* S′
   always finalizes at ★ if nothing better, so the scheme has at least one
   instance
 
-Γ; S ⊢ e₁ ⇒ τ₁; S₁   Δ₁ = Δ_Γ ⊎ Δ_q   ᾱ = (ftv(⟦S₁⟧τ₁) ∪ ftv(Δ_q)) ∖ ftv(⟦S₁⟧Γ)
-κ̄ = Γ(ᾱ)   Γ·(x: ∀(ᾱ: κ̄). Δ_q ⇒ ⟦S₁⟧τ₁); S₁ ∖ Δ_q ⊢ e₂ ⇒ τ₂; S₂
--------------------------------------------------------------------------------- A-let
+Γ; S ⊢ e₁ ⇒ τ₁; S₁   κ̄ = S₁(ᾱ)   Δ₁ ~ Δ_q ⊎ Δ_Γ   ᾱ ∩ ftv(⟦S₁⟧Γ) = ∅   ᾱ ∩ dom(S₁) = ∅
+Δ_q ∩ Δ = ∅   results(Δ_q) at S₁ ⊆ ᾱ, injective   ᾱ ∩ ftv(⟦S₁⟧Δ_Γ) = ∅   Δ_q independent at S₁
+Γ·(x: ∀(ᾱ: κ̄). ⟦S₁⟧Δ_q ⇒ ⟦S₁⟧τ₁); S₁ ∖ Δ_q ⊢ e₂ ⇒ τ₂; S₂
+---------------------------------------------------------------------------------------------- A-let
 Γ; S ⊢ let x = e₁ in e₂ ⇒ τ₂; S₂
-// Δ_q are the stumps whose blocker lands in ᾱ, Δ_Γ the rest. The split is a
-// least FIXPOINT: putting a stump in Δ_q adds its free vars to ᾱ, which can
-// pull in further stumps. Monotone and bounded by |Δ₁|, so it terminates.
-// Surviving stumps of Δ_Γ are NOT finalized here — they outlive the boundary.
+// Δ_q are the stumps whose blocker lands in ᾱ, Δ_Γ the rest. Surviving stumps
+// of Δ_Γ are NOT finalized here — they outlive the boundary. Every premise past
+// the first is one that soundness or completeness turned out to need
+// (2026-09-26; `Infer.letE`, lean/Infer.lean):
+// - κ̄ = S₁(ᾱ): kinds are read off the DRAW, not off Γ — ᾱ is disjoint from Γ,
+//   so Γ(ᾱ) was never writable. Every generalized binder is one inference
+//   invented at a known sort (A-var's draw records one, see there)
+// - Δ₁ ~ Δ_q ⊎ Δ_Γ: a PARTITION up to order. Δ₁ is ordered by parking time, and
+//   a prefix split could not generalize a stump parked after a Γ-stump
+// - ᾱ ∩ ftv(⟦S₁⟧Γ) = ∅, per variable of Γ and at both sorts: Γ-freshness was
+//   MISSING and `λy. let z = y in z` inferred a → b
+//   (`runSound_false_unguarded_let`, lean/LetSound.lean)
+// - ᾱ ∩ dom(S₁) = ∅: nothing already solved is generalized
+// - Δ_q ∩ Δ = ∅: Δ_q is e₁'s OWN. Without it `{a = λx. x.l, b = let y = c in c}`
+//   files a's stump under y's unused scheme and nothing ever finalizes it
+//   (`runSound_false_let_captures`)
+// - results at S₁: each generalized stump's result, read at S₁ (δ itself while
+//   unsolved, the variable it was aliased to otherwise), is a variable in ᾱ, and
+//   distinct stumps read as distinct variables. Reading it RAW rejected
+//   `let h = λy. g y`, where A-app aliases δ ≔ β. A spent δ reads as a
+//   non-variable and still fails here — the spent promise below
+// - ᾱ ∩ ftv(⟦S₁⟧Δ_Γ) = ∅: what stays parked reads the same at every instance
+// - independent: no generalized stump's row, read at S₁, mentions another's
+//   result. Then an instance's constraints discharge one at a time
+//   (`QScheme.Correctable.correct`); without it they need not
+//   (`instEquivCorrects_false`)
+//
+// ᾱ is CANONICAL (`greatestAlpha_spec`, lean/LetChoice.lean): admissible choices
+// are closed under union, so a GREATEST one exists, and `greatestAlpha` computes
+// it by deleting variables no admissible ᾱ can contain until nothing is deleted.
+// This replaces the least-fixpoint reading of the split: the algorithm never has
+// to guess.
 
 
 == Precision
