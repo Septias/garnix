@@ -22,8 +22,7 @@ That is the whole syntactic proposal. Everything below is what it costs and
 what it buys.
 
 
-## 1. Normal form (prove this first — it justifies everything else)
-
+## 1. Normal form
 A negative constraint on a *composite* row is not primitive. Read off the
 existing lookup rules:
 

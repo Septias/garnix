@@ -1,12 +1,5 @@
 -- TYPE SUBSTITUTION FOR L2  —  transporting a `QTyped` derivation along ⟦S⟧.
---
--- L1 has `typed_applySubst_aux` (minimal.lean); `QTyped` had only TERM
--- substitution (`qsubst_preserves_typing`). This is the lemma
--- `plans/inference-gap-analysis.md` §B lists as "type substitution for L2", and
--- it is what `InferSound` runs on: inference's conclusion is stated at the
--- FINAL state while its premises give typings at INTERMEDIATE ones, and getting
--- from one to the other IS "transport a derivation along the extra solution".
---
+-- 
 -- ## The shape, and why the obvious one is wrong
 -- The first attempt was a `RowEnvMap`: "every row-solution of Γ survives into
 -- Γ′ with θ applied", so that `L-α` could chase the θ-image of what it chased
@@ -14,7 +7,7 @@
 -- is `θ.row α`, so after substituting there is no variable left to chase. The
 -- solution has to be DISCHARGED into the substitution rather than carried
 -- alongside it, which is exactly `Sol.Closes`, and the transport is then
--- `Sol.lookup_toCtx` (RowUnify/State.lean) — already proved.
+-- `Sol.lookup_toCtx` — already proved.
 --
 -- So the target context has an EMPTY row environment and σ closes the state.
 -- That is also why `InferSound` carries a `Closes` hypothesis.

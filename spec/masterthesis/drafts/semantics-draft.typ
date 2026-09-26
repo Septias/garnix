@@ -1,31 +1,6 @@
-// DRAFT — new `== Semantics` subsection for `= Minimal Calculus` in thesis.typ.
-// Insert after `== Sorts` (thesis.typ:326–347) and before
-// `= Declarative <declarative-system>` (thesis.typ:349). Closes the one
-// unchecked box under »Declarative« in meta/zeitplan.md:26.
-//
-// Fragment: not compilable on its own — it needs `#import "./functions.typ": *`
-// and it refers to @syntax, @type-safety and @row-lookup, which live in
-// thesis.typ. To render it standalone, see the wrapper at the bottom.
-//
-// Everything below is read off the mechanization; the concordance at the end
-// lists the Lean name for every rule.
-
 == Semantics <semantics>
 
-The calculus of @syntax is given a small-step operational semantics. It is
-written down here because @type-safety quantifies over it: progress and
-preservation are statements about $→$ and about ↯, and neither judgement has so
-far been defined in the text.
-
-Two decisions drive the whole relation, and both are Nix' rather than ours.
-*Records are values at the constructor level.* A record body is not evaluated
-when the record is built; its fields are unevaluated terms and are forced only
-when they are projected out. *Colliding fields resolve to the left.* A body is a
-_bag_ of fields in which the leftmost binding for a label wins, and asymmetric
-concatenation implements set-or-replace by putting the right operand's fields at
-the *front*. This is the term-level counterpart of T-conc's ${ρ₂ | ρ₁}$ and the
-reason the operation is total: nothing is discarded, the loser is merely
-shadowed.
+nothing is discarded, the loser is merely shadowed.
 
 #let values = figure(
   caption: "Values and field lookup.",
@@ -155,58 +130,3 @@ is evaluated: an erroring field inside a value is not itself an error, only its
 projection is. And there is no rule for concatenating non-records or applying a
 non-λ; those configurations are stuck, but canonical forms rule them out for
 well-typed terms, which is why progress can afford to name ↯ and nothing else.
-
-=== Concordance with the mechanization
-
-Every rule above is a constructor in `lean/minimal.lean`, and the two safety
-theorems quantify over these three relations unchanged.
-
-#table(
-  columns: (auto, auto),
-  stroke: none,
-  inset: (x: 8pt, y: 4pt),
-  align: left,
-  [*Text*], [*Lean*],
-  $v$, [`Value` (minimal.lean:1213)],
-  $ξ.l ⇓ w$, [`RecBody.lookup` (minimal.lean:24), `some`/`none` for $e$/⊥],
-  $e[x ≔ v]$, [`subst` / `substBody` (minimal.lean:1191)],
-  $e → e′$, [`Step` (minimal.lean:1264)],
-  $e ↯$, [`Err` (minimal.lean:1311)],
-  [E-β, E-let-β], [`Step.beta`, `Step.letBeta`],
-  [E-app-fn, E-app-arg], [`Step.appFun`, `Step.appArg`],
-  [E-conc-l, E-conc-r, E-conc], [`Step.catLeft`, `Step.catRight`, `Step.catVal`],
-  [E-sel, E-sel-hit], [`Step.selStep`, `Step.selVal`],
-  [↯-sel], [`Err.selAbsent`],
-  [Progress], [`progress` (minimal.lean:1333)],
-  [Preservation], [`preservation` (minimal.lean:1613)],
-  [L2 safety], [`qProgress`, `qPreservation` (Qualified.lean:1230, :1235)],
-)
-
-The qualified system of @declarative-system reuses `Value`, `Step` and `Err`
-verbatim: there is one semantics, and both type systems are proved safe against
-it.
-
-=== Open points
-
-- *Constants are inert.* No δ-rules, so 𝓒 contributes nothing to evaluation.
-  Real Nix builtins would add reduction rules and, with them, the first
-  opportunity for a type error that is not a lookup error.
-- *Binders are by-value, fields are by-name.* Nix is lazy throughout, so E-β
-  and E-let-β diverge from the reference semantics of Broekhoff and Krebbers
-  @verified in a way the text should own rather than pass over. The divergence
-  is harmless for the theorems — laziness only ever *avoids* reaching an error,
-  so progress up to ↯ is if anything conservative — but it is a divergence, and
-  the honest form of the claim in @related-work is "every program keeps its
-  untyped semantics *up to evaluation order*".
-- *No sharing.* Substitution duplicates terms; Nix' thunks do not. Sharing is
-  invisible to typing and was therefore not modelled, but it is the obvious
-  next refinement if the semantics is ever used for anything but safety.
-
-// ---------------------------------------------------------------------------
-// Standalone wrapper: uncomment (and comment out the @-references above) to
-// render this fragment on its own with
-//   typst compile drafts/semantics-draft.typ
-//
-// #import "../text/functions.typ": *
-// #show: template
-// ---------------------------------------------------------------------------

@@ -1,4 +1,3 @@
-¡: can not be written yet
 
 ## Big Todos
 - [ ] Algorithmisch
@@ -35,23 +34,6 @@
       - [~] Syntax
       - [~] Types
       - [~] Unification
-  - [x] Metatheory
-  - [¡] Towards Nix
+  - [~] Metatheory
+  - [~] Towards Nix
   - [ ] Related Work
-
-
-## Kalenderwochen
-# September
-- [] KW 36 (Proofs)
-- [] KW 37 (Proofs) 
-- [] KW 38 (Proofs)
-- [] KW 39 (Proofs)
-# Oktober
-- [] KW 40 (Proofs)
-- [] KW 41 (Schreiben)
-- [] KW 42 (Schreiben)
-- [] KW 43 (Extras)
-# November
-- [] KW 44 (Extras)
-- [] KW 45 (Reviews)
-- [] KW 46 

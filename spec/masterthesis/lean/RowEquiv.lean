@@ -1,6 +1,6 @@
 -- The ≈-characterization: rows mod ≈-assoc/units as spines (Atom lists),
 -- the trace-monoid normal form (toSpine/ofSpine, sVarSeq, sProj), the
--- characterization rowEquiv_iff_char, and full cancellativity. The algebraic
+-- characterization rowEquiv_iff_char, and full *cancellativity*. The algebraic
 -- foundation the row-unification algorithm (RowUnify) consumes.
 
 import minimal

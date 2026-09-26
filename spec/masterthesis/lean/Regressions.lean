@@ -1,6 +1,4 @@
--- Executable regressions: the worked examples, kernel-checked. Each `:= rfl`
--- makes the Lean kernel RUN the algorithm on a concrete input (B := Unit) and
--- check the result — a regression test baked into the build. If ≐ᵣ's behaviour
+-- Executable regressions: the worked examples, kernel-checked. If ≐ᵣ's behaviour
 -- ever changes, the corresponding rfl stops type-checking and the build breaks.
 --
 -- Fuel is explicit: `outOfFuel` is its own verdict, so a `.stuck` below always
@@ -41,7 +39,7 @@ theorem unify_lutail :
 theorem unify_wand :
     unifyRowM (B := Unit) 20 (.cat (.var "b") (.var "a")) (.sing "l" uB) = .stuck := rfl
 
--- THE PAYOFF OF MUTUALIZATION. matchL peels k and emits {β} ≐ {l:𝓫}, leaving
+-- The payoff of mutualization. matchL peels k and emits {β} ≐ {l:𝓫}, leaving
 -- the Wand residual (β | α) ≐ᵣ (l:𝓫) — which alone is ambiguous, but the
 -- equation forces β ≈ (l:𝓫), hence α ≈ ε, so the problem has a UNIQUE mgu.
 -- The mutual driver solves that equation, applies it, and finds exactly it.
@@ -53,7 +51,7 @@ theorem eq_rescued_solved :
       (.cat (.sing "k" (.rcd (.sing "l" uB))) (.sing "l" uB))
       = .success ⟨[], [("b", .cat (.sing "l" uB) .empty), ("a", .empty)]⟩ ⟨2⟩ := rfl
 
--- Worked example 2, (α | l: 𝓫 | β) ≐ᵣ (l: 𝓫): U-ground pairs the l-fields
+-- (α | l: 𝓫 | β) ≐ᵣ (l: 𝓫): U-ground pairs the l-fields
 -- (counting rules the vars out), then U-ε-var forces α ≔ ε, β ≔ ε.
 -- ⊢  unifyRowM (a | l:𝓫 | b) (l:𝓫)  =  success [a ≔ ε, b ≔ ε]
 theorem unify_ground_collapse :
@@ -105,7 +103,6 @@ theorem unify_shift_stuck :
     unifyRowM (B := Unit) 20 (.cat (.var "a") (.sing "l" uB))
                              (.cat (.sing "l" uB) (.var "a")) = .stuck := rfl
 
--- … and its mirror, for the same reason.
 -- ⊢  unifyRowM (l:𝓫 | a) (a | l:𝓫)  =  stuck
 theorem unify_shift_stuck_mirror :
     unifyRowM (B := Unit) 20 (.cat (.sing "l" uB) (.var "a"))
@@ -125,10 +122,9 @@ theorem unify_shift_inst_one :
                              (.cat (.sing "l" uB) (.sing "l" uB))
       = .success ⟨[], []⟩ ⟨1⟩ := rfl
 
--- ## P1 scaffolding, kernel-checked
 -- The mutual driver applies a solution to the residual spine at every
 -- eq-emitting arm, so sApplySubst must REDUCE, not just be provably correct —
--- that is what keeps the regressions above `rfl` once P4 lands.
+-- that is what keeps the regressions above `rfl`.
 private def uS : Sol Unit := ⟨[("t", uB)], [("a", .sing "l" uB)]⟩
 
 -- ⊢  (l: t | a | m: 𝓫)[uS]  =  l: 𝓫 | l: 𝓫 | m: 𝓫      (var expands to a spine)
@@ -152,10 +148,6 @@ theorem seq_composes :
 theorem seq_propagates :
     (UResM.success (B := Unit) ⟨[("t", uB)], []⟩ ⟨7⟩).seq (fun _ _ => .stuck) = .stuck := rfl
 
--- ## P2 freshness, kernel-checked
--- The supply is a Nat and the avoid-set is proof-only, so drawing a name
--- reduces — expandVar's arm will stay a `rfl` regression.
--- ⊢  two draws from a supply are two DIFFERENT names
 theorem fresh_draws :
     ((Supply.mk 2).fresh.1, (Supply.mk 2).fresh.2.fresh.1) = ("aa", "aaa") := rfl
 
@@ -221,9 +213,6 @@ theorem vacuous_success_payload_cycle :
 theorem vacuous_success_spine_cycle :
     unifyRowM (B := Unit) 30 (.cat (.var "a") (.sing "l" (.rcd (.var "a"))))
       (.cat (.sing "m" uB) (.cat (.var "a") (.var "b"))) = .stuck := rfl
-
--- ## P4: ≐ / ≐ᵣ under the MUTUAL driver
--- (the row verdicts above already run it; these exercise the type pass.)
 
 -- ## ≐ itself, kernel-checked
 -- The type pass was FUTURE WORK until P4; these are its first regressions.
