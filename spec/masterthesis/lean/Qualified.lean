@@ -2181,6 +2181,7 @@ theorem l1_rejects_two_use {B C : Type} (constTy : C → B) (c : C) :
   obtain ⟨θb, hfixb, hbb⟩ := hIb
   cases hbodyσ : σ.body with
   | base b' => rw [hbodyσ] at hba; simp only [Ty.applySubst] at hba; cases hba
+  | lab b' => rw [hbodyσ] at hba; simp only [Ty.applySubst] at hba; cases hba
   | unk     => rw [hbodyσ] at hba; simp only [Ty.applySubst] at hba; cases hba
   | rcd ρd  => rw [hbodyσ] at hba; simp only [Ty.applySubst] at hba; cases hba
   | var α   =>
@@ -2201,6 +2202,7 @@ theorem l1_rejects_two_use {B C : Type} (constTy : C → B) (c : C) :
       injection hbb with hdb hrb
       cases res with
       | base b' => simp only [Ty.applySubst] at hrb; cases hrb
+      | lab b' => simp only [Ty.applySubst] at hrb; cases hrb
       | unk     => simp only [Ty.applySubst] at hra; cases hra
       | fn _ _  => simp only [Ty.applySubst] at hrb; cases hrb
       | rcd _   => simp only [Ty.applySubst] at hrb; cases hrb
@@ -2236,6 +2238,7 @@ theorem l1_rejects_two_use {B C : Type} (constTy : C → B) (c : C) :
                                         else θb.ty δ, θb.row⟩ : TySubst B))
                       (θ₂ := θb) rfl ρd hfree, hρd]
             | base b' => simp only [Ty.applySubst] at hdb; cases hdb
+            | lab b' => simp only [Ty.applySubst] at hdb; cases hdb
             | unk     => simp only [Ty.applySubst] at hdb; cases hdb
             | fn _ _  => simp only [Ty.applySubst] at hdb; cases hdb
           have hmix : σ.Inst (.fn (.rcd ρ') (.base (constTy c))) := by

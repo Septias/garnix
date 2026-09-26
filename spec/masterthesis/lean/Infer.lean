@@ -503,6 +503,7 @@ theorem no_finalize_of_spent {B : Type} [DecidableEq B] {S : SolverState B}
       | var _  => intro h; exact absurd h not_false
       | unk    => intro h; exact absurd h not_false
       | base b => intro _ hu; simp [unifyTyF] at hu
+      | lab b => intro _ hu; simp [unifyTyF] at hu
       | fn a b => intro _ hu; simp [unifyTyF] at hu
       | rcd ρ  => intro _ hu; simp [unifyTyF] at hu
 

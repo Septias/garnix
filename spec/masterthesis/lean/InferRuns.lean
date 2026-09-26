@@ -11,6 +11,7 @@ mutual
 def tyS : Ty Unit → String
   | .var α    => "t" ++ toString α.length
   | .base _   => "𝓫"
+  | .lab _   => "𝓫"
   | .unk      => "★"
   | .fn τ₁ τ₂ => "(" ++ tyS τ₁ ++ " → " ++ tyS τ₂ ++ ")"
   | .rcd ρ    => "{" ++ rowS ρ ++ "}"

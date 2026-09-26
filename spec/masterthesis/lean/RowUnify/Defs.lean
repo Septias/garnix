@@ -177,6 +177,7 @@ mutual
 def Ty.allRowVars {B : Type} : Ty B → List TyVar
   | .var _   => []
   | .base _  => []
+  | .lab _  => []
   | .unk     => []
   | .fn a b  => Ty.allRowVars a ++ Ty.allRowVars b
   | .rcd ρ   => Row.allRowVars ρ
@@ -198,6 +199,7 @@ mutual
 def Ty.tyFtv {B : Type} : Ty B → List TyVar
   | .var α   => [α]
   | .base _  => []
+  | .lab _  => []
   | .unk     => []
   | .fn a b  => Ty.tyFtv a ++ Ty.tyFtv b
   | .rcd ρ   => Row.tyFtv ρ
@@ -215,6 +217,7 @@ theorem Ty.mem_ftv_iff {B : Type} {α : TyVar} :
     (τ : Ty B) → (α ∈ τ.ftv ↔ α ∈ τ.tyFtv ∨ α ∈ τ.allRowVars)
   | .var _   => by simp [Ty.ftv, Ty.tyFtv, Ty.allRowVars]
   | .base _  => by simp [Ty.ftv, Ty.tyFtv, Ty.allRowVars]
+  | .lab _  => by simp [Ty.ftv, Ty.tyFtv, Ty.allRowVars]
   | .unk     => by simp [Ty.ftv, Ty.tyFtv, Ty.allRowVars]
   | .fn a b  => by
       simp only [Ty.ftv, Ty.tyFtv, Ty.allRowVars, List.mem_append,
@@ -273,6 +276,7 @@ mutual
 def Ty.deepRowVars {B : Type} : Ty B → List TyVar
   | .var _   => []
   | .base _  => []
+  | .lab _  => []
   | .unk     => []
   | .fn a b  => Ty.deepRowVars a ++ Ty.deepRowVars b
   | .rcd ρ   => Row.allRowVars ρ
@@ -587,6 +591,8 @@ def unifyTyF {B : Type} [DecidableEq B] (S : Supply) (fuel : Nat) :
   -- ★ is RIGID: it unifies with itself and clashes with everything else
   | .unk, .unk => .success .nil S
   | .base b, .base b' => if b = b' then .success .nil S else .clash
+  -- ⌊l⌋ is rigid like 𝓫: the whole label pass is this one arm
+  | .lab l, .lab l' => if l = l' then .success .nil S else .clash
   | .fn a₁ b₁, .fn a₂ b₂ =>
       match fuel with
       | 0 => .outOfFuel

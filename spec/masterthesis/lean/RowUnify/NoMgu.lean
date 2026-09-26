@@ -542,6 +542,7 @@ mutual
 def Ty.rcdDepth {B : Type} : Ty B → Nat
   | .var _   => 0
   | .base _  => 0
+  | .lab _  => 0
   | .unk     => 0
   | .fn a b  => max (Ty.rcdDepth a) (Ty.rcdDepth b)
   | .rcd ρ   => 1 + Row.rcdDepth ρ
@@ -1558,6 +1559,7 @@ mutual
 def Ty.tyDepth {B : Type} : Ty B → Nat
   | .var _   => 0
   | .base _  => 0
+  | .lab _  => 0
   | .unk     => 0
   | .fn a b  => 1 + max (Ty.tyDepth a) (Ty.tyDepth b)
   | .rcd ρ   => 1 + Row.tyDepth ρ
@@ -1599,6 +1601,7 @@ mutual
 def Ty.tyFtvUnder {B : Type} : Ty B → List TyVar
   | .var _   => []
   | .base _  => []
+  | .lab _  => []
   | .unk     => []
   | .fn a b  => Ty.tyFtv a ++ Ty.tyFtv b
   | .rcd ρ   => Row.tyFtv ρ
@@ -1650,6 +1653,7 @@ theorem Ty.tyDepth_applySubst_gt {B : Type} {θ : TySubst B} {α : TyVar} :
     (τ : Ty B) → α ∈ Ty.tyFtvUnder τ → Ty.tyDepth (θ.ty α) < Ty.tyDepth (τ.applySubst θ)
   | .var _,  h => nomatch h
   | .base _, h => nomatch h
+  | .lab _, h => nomatch h
   | .unk,    h => nomatch h
   | .fn a b, h => by
       simp only [Ty.tyFtvUnder, List.mem_append] at h
@@ -1678,7 +1682,7 @@ theorem ty_occurs_no_unifier {B : Type} {α : TyVar} {τ : Ty B}
 --    at a type position, so every row variable of a Ty is already a DEEP one
 theorem Ty.allRowVars_eq_deep {B : Type} :
     (τ : Ty B) → Ty.allRowVars τ = Ty.deepRowVars τ
-  | .var _ => rfl | .base _ => rfl | .unk => rfl
+  | .var _ => rfl | .base _ => rfl | .unk => rfl | .lab _ => rfl
   | .fn a b => by
       simp only [Ty.allRowVars, Ty.deepRowVars, Ty.allRowVars_eq_deep a, Ty.allRowVars_eq_deep b]
   | .rcd _ => rfl
@@ -1735,6 +1739,7 @@ theorem bindTy_occurs_no_unifier {B : Type} {S : Supply} {α : TyVar} {τ : Ty B
           simp only [Ty.tyFtv, List.mem_singleton] at hm
           exact absurd (by simp only [tyIsVar, hm]) hvar
       | base _ => exact absurd hm (by simp [Ty.tyFtv])
+      | lab _ => exact absurd hm (by simp [Ty.tyFtv])
       | unk    => exact absurd hm (by simp [Ty.tyFtv])
       | fn a b => exact hm
       | rcd ρ  => exact hm
@@ -1889,6 +1894,7 @@ theorem Ty.deepRowVars_eq_allRowVars {B : Type} :
     (τ : Ty B) → Ty.deepRowVars τ = Ty.allRowVars τ
   | .var _  => rfl
   | .base _ => rfl
+  | .lab _ => rfl
   | .unk    => rfl
   | .fn a b => by
       simp only [Ty.deepRowVars, Ty.allRowVars,

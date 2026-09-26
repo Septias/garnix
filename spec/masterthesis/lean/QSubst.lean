@@ -285,6 +285,7 @@ private theorem b_inst :
 private theorem no_preimage (τ : Ty Unit) : τ.applySubst refuteSub ≠ .var "b" := by
   cases τ with
   | base _ => exact fun h => nomatch h
+  | lab _ => exact fun h => nomatch h
   | unk    => exact fun h => nomatch h
   | fn _ _ => exact fun h => nomatch h
   | rcd _  => exact fun h => nomatch h

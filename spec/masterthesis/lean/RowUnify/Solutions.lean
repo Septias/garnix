@@ -69,6 +69,7 @@ mutual
       (τ : Ty B) → TyEquiv (τ.applySubst θ₁) (τ.applySubst θ₂)
     | .var α    => h.1 α
     | .base _   => .refl _
+    | .lab _   => .refl _
     | .unk      => .refl _
     | .fn τ₁ τ₂ =>
         .fn (Ty.applySubst_substEquiv h τ₁) (Ty.applySubst_substEquiv h τ₂)

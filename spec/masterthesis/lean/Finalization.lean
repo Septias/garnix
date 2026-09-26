@@ -62,6 +62,7 @@ private theorem solve_star_row_free {S S₀ : SolverState B} {δ : TyVar}
     | var γ => intro _ h; simp [Ty.sortedFtv] at h
     | unk => intro _ h; simp [Ty.sortedFtv] at h
     | base b => intro hu; simp [unifyTyF] at hu
+    | lab b => intro hu; simp [unifyTyF] at hu
     | fn a b => intro hu; simp [unifyTyF] at hu
     | rcd ρ => intro hu; simp [unifyTyF] at hu
   rw [SolverState.extend_subst_row, hβ]

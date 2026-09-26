@@ -269,6 +269,7 @@ mutual
 def Ty.sortedFtv {B : Type} : Ty B → List (Bool × TyVar)
   | .var α    => [(false, α)]
   | .base _   => []
+  | .lab _   => []
   | .unk      => []
   | .fn a b   => Ty.sortedFtv a ++ Ty.sortedFtv b
   | .rcd ρ    => Row.sortedFtv ρ
@@ -290,6 +291,7 @@ theorem Ty.mem_tyFtv_iff_sortedFtv {B : Type} {α : TyVar} :
     (τ : Ty B) → ((false, α) ∈ Ty.sortedFtv τ ↔ α ∈ τ.tyFtv)
   | .var _   => by simp [Ty.sortedFtv, Ty.tyFtv]
   | .base _  => by simp [Ty.sortedFtv, Ty.tyFtv]
+  | .lab _  => by simp [Ty.sortedFtv, Ty.tyFtv]
   | .unk     => by simp [Ty.sortedFtv, Ty.tyFtv]
   | .fn a b  => by
       simp only [Ty.sortedFtv, Ty.tyFtv, List.mem_append,
@@ -313,6 +315,7 @@ theorem Ty.mem_allRowVars_iff_sortedFtv {B : Type} {α : TyVar} :
     (τ : Ty B) → ((true, α) ∈ Ty.sortedFtv τ ↔ α ∈ τ.allRowVars)
   | .var _   => by simp [Ty.sortedFtv, Ty.allRowVars]
   | .base _  => by simp [Ty.sortedFtv, Ty.allRowVars]
+  | .lab _  => by simp [Ty.sortedFtv, Ty.allRowVars]
   | .unk     => by simp [Ty.sortedFtv, Ty.allRowVars]
   | .fn a b  => by
       simp only [Ty.sortedFtv, Ty.allRowVars, List.mem_append,
@@ -344,6 +347,7 @@ theorem Ty.mem_sortedFtv_applySubst {B : Type} {θ : TySubst B} {x : Bool × TyV
     ∃ y ∈ Ty.sortedFtv τ, x ∈ θ.ftvAt y
   | .var α,  h => ⟨(false, α), by simp [Ty.sortedFtv], h⟩
   | .base _, h => by simp [Ty.applySubst, Ty.sortedFtv] at h
+  | .lab _, h => by simp [Ty.applySubst, Ty.sortedFtv] at h
   | .unk,    h => by simp [Ty.applySubst, Ty.sortedFtv] at h
   | .fn a b, h => by
       simp only [Ty.applySubst, Ty.sortedFtv, List.mem_append] at h
@@ -385,6 +389,7 @@ theorem Ty.applySubst_fixed_sorted {B : Type} {θ : TySubst B} :
     τ.applySubst θ = τ
   | .var α,  ht, _  => by simp only [Ty.applySubst]; exact ht α (by simp [Ty.sortedFtv])
   | .base _, _,  _  => rfl
+  | .lab _, _,  _  => rfl
   | .unk,    _,  _  => rfl
   | .fn a b, ht, hr => by
       simp only [Ty.applySubst,
@@ -671,6 +676,7 @@ theorem Ty.mem_ftv_of_mem_sortedFtv {B : Type} {b : Bool} {α : TyVar} :
       simp only [Ty.sortedFtv, List.mem_singleton, Prod.mk.injEq] at h
       simp [Ty.ftv, h.2]
   | .base _, h => by simp [Ty.sortedFtv] at h
+  | .lab _, h => by simp [Ty.sortedFtv] at h
   | .unk,    h => by simp [Ty.sortedFtv] at h
   | .fn x y, h => by
       simp only [Ty.sortedFtv, List.mem_append] at h

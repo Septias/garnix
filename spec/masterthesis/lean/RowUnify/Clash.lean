@@ -76,6 +76,18 @@ theorem tyClash_dispatch {B : Type} [DecidableEq B] {S : Supply} {fuel : Nat}
       | base b' =>
           simp only [Ty.applySubst, Ty.base.injEq] at hb
           subst hb; cases fuel <;> simp [unifyTyF] at h
+      | lab _ => simp only [Ty.applySubst] at hb; cases hb
+      | unk => simp only [Ty.applySubst] at hb; cases hb
+      | fn _ _ => simp only [Ty.applySubst] at hb; cases hb
+      | rcd _ => simp only [Ty.applySubst] at hb; cases hb
+  | lab b =>
+      have hb := TyEquiv.lab_inv (show TyEquiv (Ty.lab b) _ from hu)
+      cases τ' with
+      | var α => cases fuel <;> exact bindTy_ne_clash (S := S) (α := α) (τ := Ty.lab b) h
+      | base _ => simp only [Ty.applySubst] at hb; cases hb
+      | lab b' =>
+          simp only [Ty.applySubst, Ty.lab.injEq] at hb
+          subst hb; cases fuel <;> simp [unifyTyF] at h
       | unk => simp only [Ty.applySubst] at hb; cases hb
       | fn _ _ => simp only [Ty.applySubst] at hb; cases hb
       | rcd _ => simp only [Ty.applySubst] at hb; cases hb
@@ -85,6 +97,7 @@ theorem tyClash_dispatch {B : Type} [DecidableEq B] {S : Supply} {fuel : Nat}
       | var α =>
           cases fuel <;> exact bindTy_ne_clash (S := S) (α := α) (τ := (Ty.unk : Ty B)) h
       | base _ => simp only [Ty.applySubst] at hb; cases hb
+      | lab _ => simp only [Ty.applySubst] at hb; cases hb
       | unk => cases fuel <;> simp [unifyTyF] at h
       | fn _ _ => simp only [Ty.applySubst] at hb; cases hb
       | rcd _ => simp only [Ty.applySubst] at hb; cases hb
@@ -94,6 +107,7 @@ theorem tyClash_dispatch {B : Type} [DecidableEq B] {S : Supply} {fuel : Nat}
       cases τ' with
       | var α => cases fuel <;> exact bindTy_ne_clash (S := S) (α := α) (τ := Ty.fn a₁ b₁) h
       | base _ => obtain ⟨_, _, he, -, -⟩ := hb; simp only [Ty.applySubst] at he; cases he
+      | lab _ => obtain ⟨_, _, he, -, -⟩ := hb; simp only [Ty.applySubst] at he; cases he
       | unk => obtain ⟨_, _, he, -, -⟩ := hb; simp only [Ty.applySubst] at he; cases he
       | fn a₂ b₂ => exact hfn a₁ b₁ a₂ b₂ rfl rfl
       | rcd _ => obtain ⟨_, _, he, -, -⟩ := hb; simp only [Ty.applySubst] at he; cases he
@@ -102,6 +116,7 @@ theorem tyClash_dispatch {B : Type} [DecidableEq B] {S : Supply} {fuel : Nat}
       cases τ' with
       | var α => cases fuel <;> exact bindTy_ne_clash (S := S) (α := α) (τ := Ty.rcd ρ₁) h
       | base _ => obtain ⟨_, he, -⟩ := hb; simp only [Ty.applySubst] at he; cases he
+      | lab _ => obtain ⟨_, he, -⟩ := hb; simp only [Ty.applySubst] at he; cases he
       | unk => obtain ⟨_, he, -⟩ := hb; simp only [Ty.applySubst] at he; cases he
       | fn _ _ => obtain ⟨_, he, -⟩ := hb; simp only [Ty.applySubst] at he; cases he
       | rcd ρ₂ => exact hrcd ρ₁ ρ₂ rfl rfl
