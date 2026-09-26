@@ -65,6 +65,10 @@ theorem qtyped_var_inv {B C : Type} {constTy : C → B} :
   | _, _, _, .qSelUnk _ _ => fun he _ => nomatch he
   | _, _, _, .qSelAbs _ _ => fun he _ => nomatch he
   | _, _, _, .qRcd _ => fun he _ => nomatch he
+  | _, _, _, .qLab => fun he _ => nomatch he
+  | _, _, _, .qSelDyn _ _ _ => fun he _ => nomatch he
+  | _, _, _, .qSelDynUnk _ _ _ => fun he _ => nomatch he
+  | _, _, _, .qSelDynAbs _ _ _ => fun he _ => nomatch he
 
 -- ⊢  …at a MONOTYPE binding that instance is the binding itself
 theorem qtyped_var_mono_inv {B C : Type} {constTy : C → B} {Γ : QCtx B}
@@ -104,6 +108,10 @@ theorem qtyped_let_alias_inv {B C : Type} {constTy : C → B} :
   | _, _, _, .qSelUnk _ _ => fun he _ => nomatch he
   | _, _, _, .qSelAbs _ _ => fun he _ => nomatch he
   | _, _, _, .qRcd _ => fun he _ => nomatch he
+  | _, _, _, .qLab => fun he _ => nomatch he
+  | _, _, _, .qSelDyn _ _ _ => fun he _ => nomatch he
+  | _, _, _, .qSelDynUnk _ _ _ => fun he _ => nomatch he
+  | _, _, _, .qSelDynAbs _ _ _ => fun he _ => nomatch he
 
 
 --------------------- 1. GENERALIZING A VARIABLE Γ STILL MENTIONS -------------

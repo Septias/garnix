@@ -112,6 +112,18 @@ mutual
     | assume {ρ : Row B} {l : Label} {τ : Ty B} :
              QTypedA constTy Δ Γ e (.rcd ρ) → (⟨ρ, .lab l, τ⟩ : Assume B) ∈ Δ →
              QTypedA constTy Δ Γ (.sel e l) τ
+    -- FC-labels, as in `QTyped`
+    | qLab : QTypedA constTy Δ Γ (.lab l) (.lab l)
+    | qSelDyn : QTypedA constTy Δ Γ e₁ (.rcd ρ) → QTypedA constTy Δ Γ e₂ q →
+                LookupQ Γ.ctx ρ q (.found τ) → QTypedA constTy Δ Γ (.selDyn e₁ e₂) τ
+    | qSelDynUnk : QTypedA constTy Δ Γ e₁ (.rcd ρ) → QTypedA constTy Δ Γ e₂ q →
+                   LookupQ Γ.ctx ρ q .unknown → QTypedA constTy Δ Γ (.selDyn e₁ e₂) .unk
+    | qSelDynAbs : QTypedA constTy Δ Γ e₁ (.rcd ρ) → QTypedA constTy Δ Γ e₂ q →
+                   LookupQ Γ.ctx ρ q .absent → QTypedA constTy Δ Γ (.selDyn e₁ e₂) .unk
+    -- A-sel-dyn-? read declaratively: the keyed lookup's answer is assumed
+    | assumeDyn {ρ : Row B} {q τ : Ty B} :
+             QTypedA constTy Δ Γ e₁ (.rcd ρ) → QTypedA constTy Δ Γ e₂ q →
+             (⟨ρ, q, τ⟩ : Assume B) ∈ Δ → QTypedA constTy Δ Γ (.selDyn e₁ e₂) τ
 
   inductive QTypedABody {B C : Type} (constTy : C → B) :
       List (Assume B) → QCtx B → RecBody (Expr C) → Row B → Prop where
@@ -121,6 +133,17 @@ mutual
     | cat : QTypedABody constTy Δ Γ b₁ ρ₁ → QTypedABody constTy Δ Γ b₂ ρ₂ →
             QTypedABody constTy Δ Γ (.cat b₁ b₂) (.cat ρ₁ ρ₂)
 end
+
+-- a held keyed assumption, used at a dynamic selection, is one of T-sel-dyn's
+private theorem selDyn_of_holds {B C : Type} {constTy : C → B} {Δ : List (Assume B)}
+    {Γ : QCtx B} {e₁ e₂ : Expr C} {ρ : Row B} {q τ : Ty B}
+    (h₁ : QTypedA constTy Δ Γ e₁ (.rcd ρ)) (h₂ : QTypedA constTy Δ Γ e₂ q)
+    (hh : (⟨ρ, q, τ⟩ : Assume B).Holds Γ.ctx) :
+    QTypedA constTy Δ Γ (.selDyn e₁ e₂) τ := by
+  cases hh with
+  | hit hl he => exact .qEq (.qSelDyn h₁ h₂ hl) he.symm
+  | abs hl he => cases he; exact .qSelDynAbs h₁ h₂ hl
+  | unk hl he => cases he; exact .qSelDynUnk h₁ h₂ hl
 
 -- a held assumption, used at a selection, is one of the three T-sel rules
 private theorem sel_of_holds {B C : Type} {constTy : C → B} {Δ : List (Assume B)}
@@ -171,6 +194,17 @@ mutual
         match hΔ _ hm with
         | .inl hm' => .assume (QTypedA.weaken h hΔ) hm'
         | .inr hh  => sel_of_holds (QTypedA.weaken h hΔ) hh
+    | _, _, _, _, _, .qLab, _ => .qLab
+    | _, _, _, _, _, .qSelDyn h₁ h₂ hl, hΔ =>
+        .qSelDyn (QTypedA.weaken h₁ hΔ) (QTypedA.weaken h₂ hΔ) hl
+    | _, _, _, _, _, .qSelDynUnk h₁ h₂ hl, hΔ =>
+        .qSelDynUnk (QTypedA.weaken h₁ hΔ) (QTypedA.weaken h₂ hΔ) hl
+    | _, _, _, _, _, .qSelDynAbs h₁ h₂ hl, hΔ =>
+        .qSelDynAbs (QTypedA.weaken h₁ hΔ) (QTypedA.weaken h₂ hΔ) hl
+    | _, _, _, _, _, .assumeDyn h₁ h₂ hm, hΔ =>
+        match hΔ _ hm with
+        | .inl hm' => .assumeDyn (QTypedA.weaken h₁ hΔ) (QTypedA.weaken h₂ hΔ) hm'
+        | .inr hh  => selDyn_of_holds (QTypedA.weaken h₁ hΔ) (QTypedA.weaken h₂ hΔ) hh
 
   theorem QTypedABody.weaken {B C : Type} {constTy : C → B} :
       {Δ₁ Δ₂ : List (Assume B)} → {Γ : QCtx B} → {b : RecBody (Expr C)} →
@@ -329,6 +363,20 @@ mutual
         | hit hl he => exact .qEq (.qSel h' (LookupQ.lab_iff.mp hl)) he.symm
         | abs hl he => cases he; exact .qSelAbs h' (LookupQ.lab_iff.mp hl)
         | unk hl he => cases he; exact .qSelUnk h' (LookupQ.lab_iff.mp hl)
+    | _, _, _, _, .qLab, _, _ => .qLab
+    | _, _, _, _, .qSelDyn h₁ h₂ hl, hΓ, hΔ =>
+        .qSelDyn (QTypedA.toQTyped h₁ hΓ hΔ) (QTypedA.toQTyped h₂ hΓ hΔ) hl
+    | _, _, _, _, .qSelDynUnk h₁ h₂ hl, hΓ, hΔ =>
+        .qSelDynUnk (QTypedA.toQTyped h₁ hΓ hΔ) (QTypedA.toQTyped h₂ hΓ hΔ) hl
+    | _, _, _, _, .qSelDynAbs h₁ h₂ hl, hΓ, hΔ =>
+        .qSelDynAbs (QTypedA.toQTyped h₁ hΓ hΔ) (QTypedA.toQTyped h₂ hΓ hΔ) hl
+    | _, _, _, _, .assumeDyn h₁ h₂ hm, hΓ, hΔ => by
+        have h₁' := QTypedA.toQTyped h₁ hΓ hΔ
+        have h₂' := QTypedA.toQTyped h₂ hΓ hΔ
+        cases hΔ _ hm with
+        | hit hl he => exact .qEq (.qSelDyn h₁' h₂' hl) he.symm
+        | abs hl he => cases he; exact .qSelDynAbs h₁' h₂' hl
+        | unk hl he => cases he; exact .qSelDynUnk h₁' h₂' hl
 
   theorem QTypedABody.toQTyped {B C : Type} {constTy : C → B} :
       {Δ : List (Assume B)} → {Γ : QCtx B} → {b : RecBody (Expr C)} → {ρ : Row B} →
@@ -887,6 +935,96 @@ theorem inferSound_of {B C : Type} [DecidableEq B] {constTy : C → B}
       have hσ₁ := ma σ (hsolve.satMono σ hσ₂')
       exact .assume (.qEq (K.lift hσ hr (inferSound_of hvar hlet h₁ h hΓ hc hq σ
         (hab.back x₁ c₁) hσ₁ Γ' hr)) (hsolve.unifies_sat hσ₂')) List.mem_cons_self
+  | _, _, _, _, _, .lab, _, _, _, _ => fun _ _ _ _ _ => .qLab
+  -- A-sel-dyn: the record's IH and the key's IH, both lifted to the end, and the
+  -- lookup carried over the ⟦S⟧/σ gap on the row AND on the key
+  | _, _, _, _, _, .selDyn (τ₂ := τ₂) h₁ hd hs h₂ hlk, h, hΓ, hc, hq =>
+      fun σ hab hσ Γ' hr => by
+      obtain ⟨i₁, -⟩ := Infer.pinv_keeps h₁ h hΓ
+      obtain ⟨ia, ka, ma, -, -, -⟩ := draw_pinv_keeps hd i₁
+      obtain ⟨i₂, k₂⟩ := hs.pinv_keeps ia
+      obtain ⟨-, k₃⟩ := Infer.pinv_keeps h₂ i₂ hΓ
+      have c₁ := Infer.clean h₁ hc
+      obtain ⟨hsd, hpd⟩ := draw_eqs hd
+      have c₂ := hs.clean (hsd ▸ c₁)
+      have q₂ := hs.quiescent
+      have x₂ := Infer.ext h₂
+      have x₁ := (draw_ext hd).trans (hs.ext.trans x₂)
+      have mt := hs.satMono.trans (Infer.sat_mono h₂)
+      have K₁ := ka.trans (k₂.trans k₃ (Infer.sat_mono h₂)) mt
+      have hσ₂ := Infer.sat_mono h₂ σ hσ
+      obtain ⟨S₂', hsolve, hsatu⟩ := hs
+      have hσ₂' := hsatu.satMono σ hσ₂
+      have hσ₁ := ma σ (hsolve.satMono σ hσ₂')
+      have ih₁ := K₁.lift hσ hr (inferSound_of hvar hlet h₁ h hΓ hc hq σ
+        (hab.back x₁ c₁) hσ₁ Γ' hr)
+      have ih₂ := inferSound_of hvar hlet h₂ i₂ hΓ c₂ q₂ σ hab hσ Γ' hr
+      have hrcd := QTypedA.qEq ih₁ (hsolve.unifies_sat hσ₂')
+      obtain ⟨r'', hl'', he''⟩ :=
+        Sol.lookupQ_toCtx_sat (Γ' := Γ'.ctx) hσ hr.row hlk (by intro hh; cases hh)
+      have hl₃ := LookupQ.key_equiv (Ty.applySubst_sat_equiv hσ τ₂) hl''
+      cases he'' with
+      | found hty => exact .qEq (.qSelDyn hrcd ih₂ hl₃) hty.symm
+  | _, _, _, _, _, .selDynAbs (τ₂ := τ₂) h₁ hd hs h₂ hlk, h, hΓ, hc, hq =>
+      fun σ hab hσ Γ' hr => by
+      obtain ⟨i₁, -⟩ := Infer.pinv_keeps h₁ h hΓ
+      obtain ⟨ia, ka, ma, -, -, -⟩ := draw_pinv_keeps hd i₁
+      obtain ⟨i₂, k₂⟩ := hs.pinv_keeps ia
+      obtain ⟨-, k₃⟩ := Infer.pinv_keeps h₂ i₂ hΓ
+      have c₁ := Infer.clean h₁ hc
+      obtain ⟨hsd, hpd⟩ := draw_eqs hd
+      have c₂ := hs.clean (hsd ▸ c₁)
+      have q₂ := hs.quiescent
+      have x₂ := (Infer.ext h₂).trans (.of_sol_eq rfl)
+      have x₁ := (draw_ext hd).trans (hs.ext.trans x₂)
+      have mt := hs.satMono.trans (Infer.sat_mono h₂)
+      have K₁ := ka.trans (k₂.trans k₃ (Infer.sat_mono h₂)) mt
+      have hσ₂ := Infer.sat_mono h₂ σ hσ
+      obtain ⟨S₂', hsolve, hsatu⟩ := hs
+      have hσ₂' := hsatu.satMono σ hσ₂
+      have hσ₁ := ma σ (hsolve.satMono σ hσ₂')
+      have ih₁ := K₁.lift hσ hr (inferSound_of hvar hlet h₁ h hΓ hc hq σ
+        (hab.back x₁ c₁) hσ₁ Γ' hr)
+      have ih₂ := inferSound_of hvar hlet h₂ i₂ hΓ c₂ q₂ σ hab hσ Γ' hr
+      have hrcd := QTypedA.qEq ih₁ (hsolve.unifies_sat hσ₂')
+      obtain ⟨r'', hl'', he''⟩ :=
+        Sol.lookupQ_toCtx_sat (Γ' := Γ'.ctx) hσ hr.row hlk (by intro hh; cases hh)
+      have hl₃ := LookupQ.key_equiv (Ty.applySubst_sat_equiv hσ τ₂) hl''
+      cases he'' with
+      | absent => exact .qSelDynAbs hrcd ih₂ hl₃
+  | _, _, _, _, _, .selDynUnk (S₃ := S₃) (S₃' := S₃d) (τ₂ := τ₂) (r := r) (α := α) (δ := δ)
+      h₁ hd hs h₂ _ hd₂, h, hΓ, hc, hq => fun σ hab hσ Γ' hr => by
+      obtain ⟨i₁, -⟩ := Infer.pinv_keeps h₁ h hΓ
+      obtain ⟨ia, ka, ma, -, -, -⟩ := draw_pinv_keeps hd i₁
+      obtain ⟨i₂, k₂⟩ := hs.pinv_keeps ia
+      obtain ⟨i₃, k₃⟩ := Infer.pinv_keeps h₂ i₂ hΓ
+      obtain ⟨-, kb, mb, -, -, -⟩ := draw_pinv_keeps hd₂ i₃
+      have c₁ := Infer.clean h₁ hc
+      obtain ⟨hsd, hpd⟩ := draw_eqs hd
+      have c₂ := hs.clean (hsd ▸ c₁)
+      have q₂ := hs.quiescent
+      have kp : SolverState.KeepsS S₃d (S₃d.park ⟨α, ⟨Row.var r, τ₂, δ⟩⟩) :=
+        SolverState.KeepsS.of_sub (fun q hq => List.mem_cons_of_mem _ hq)
+      have mp := SolverState.SatMono.of_sol_eq
+        (S := S₃d.park ⟨α, ⟨Row.var r, τ₂, δ⟩⟩) (S' := S₃d) rfl
+      have x₂ := (Infer.ext h₂).trans ((draw_ext hd₂).trans
+        (SolverState.Ext.of_sol_eq (S := S₃d) (S' := S₃d.park ⟨α, ⟨Row.var r, τ₂, δ⟩⟩) rfl))
+      have x₁ := (draw_ext hd).trans (hs.ext.trans x₂)
+      have K₂ := k₃.trans (kb.trans kp mp) (mb.trans mp)
+      have m₂ := (Infer.sat_mono h₂).trans (mb.trans mp)
+      have K₁ := ka.trans (k₂.trans K₂ m₂) (hs.satMono.trans m₂)
+      obtain ⟨hs₃, -⟩ := draw_eqs hd₂
+      have hσ₃ : Sol.Sat σ S₃.sol := hs₃ ▸ hσ
+      have hσ₂ := Infer.sat_mono h₂ σ hσ₃
+      obtain ⟨S₂', hsolve, hsatu⟩ := hs
+      have hσ₂' := hsatu.satMono σ hσ₂
+      have hσ₁ := ma σ (hsolve.satMono σ hσ₂')
+      have ih₁ := K₁.lift hσ hr (inferSound_of hvar hlet h₁ h hΓ hc hq σ
+        (hab.back x₁ c₁) hσ₁ Γ' hr)
+      have ih₂ := (kb.trans kp mp).lift hσ hr (inferSound_of hvar hlet h₂ i₂ hΓ c₂ q₂ σ
+        (hab.back ((draw_ext hd₂).trans (SolverState.Ext.of_sol_eq (S := S₃d)
+          (S' := S₃d.park ⟨α, ⟨Row.var r, τ₂, δ⟩⟩) rfl)) (Infer.clean h₂ c₂)) hσ₃ Γ' hr)
+      exact .assumeDyn (.qEq ih₁ (hsolve.unifies_sat hσ₂')) ih₂ List.mem_cons_self
   | _, _, _, _, _, .rcd hb, h, hΓ, hc, hq => fun σ hab hσ Γ' hr =>
       .qRcd (inferRecSound_of hvar hlet hb h hΓ hc hq σ hab hσ Γ' hr)
   | _, _, _, _, _, .letE (S₁ := S₁) (Δγ := Δγ) h₁ hA hsplit hbq hγ hfresh hown hres hdis hdom hind h₂,

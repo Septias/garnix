@@ -413,6 +413,49 @@ theorem Infer.pinv_keeps {C : Type} {constTy : C → B} :
         (S := S₂'.park ⟨α, ⟨Row.var r, .lab l, δ⟩⟩) (S' := S₂') rfl
       exact k₁.trans (ka.trans (k₂.trans (kb.trans kp mp) (mb.trans mp))
         (hs.satMono.trans (mb.trans mp))) (ma.trans (hs.satMono.trans (mb.trans mp)))
+  | _, _, _, _, _, .lab, h, _ => ⟨h, .refl _⟩
+  | _, _, _, _, _, .selDyn h₁ hd hs h₂ _, h, hΓ => by
+      obtain ⟨i₁, k₁⟩ := Infer.pinv_keeps h₁ h hΓ
+      obtain ⟨ia, ka, ma, -, -, -⟩ := draw_pinv_keeps hd i₁
+      obtain ⟨i₂, k₂⟩ := hs.pinv_keeps ia
+      obtain ⟨i₃, k₃⟩ := Infer.pinv_keeps h₂ i₂ hΓ
+      have mt := hs.satMono.trans (Infer.sat_mono h₂)
+      exact ⟨i₃, k₁.trans (ka.trans (k₂.trans k₃ (Infer.sat_mono h₂)) mt) (ma.trans mt)⟩
+  | _, _, _, _, _, .selDynAbs h₁ hd hs h₂ _, h, hΓ => by
+      obtain ⟨i₁, k₁⟩ := Infer.pinv_keeps h₁ h hΓ
+      obtain ⟨ia, ka, ma, -, -, -⟩ := draw_pinv_keeps hd i₁
+      obtain ⟨i₂, k₂⟩ := hs.pinv_keeps ia
+      obtain ⟨i₃, k₃⟩ := Infer.pinv_keeps h₂ i₂ hΓ
+      have mt := hs.satMono.trans (Infer.sat_mono h₂)
+      have r := And.intro i₃ (k₁.trans (ka.trans (k₂.trans k₃ (Infer.sat_mono h₂)) mt)
+        (ma.trans mt))
+      exact r
+  | _, _, _, _, _, .selDynUnk (S₃ := S₃) (S₃' := S₃') (τ₂ := τ₂) (r := r) (α := α) (δ := δ)
+      h₁ hd hs h₂ _ hd₂, h, hΓ => by
+      obtain ⟨i₁, k₁⟩ := Infer.pinv_keeps h₁ h hΓ
+      obtain ⟨ia, ka, ma, -, -, -⟩ := draw_pinv_keeps hd i₁
+      obtain ⟨i₂, k₂⟩ := hs.pinv_keeps ia
+      obtain ⟨i₃, k₃⟩ := Infer.pinv_keeps h₂ i₂ hΓ
+      obtain ⟨ib, kb, mb, hδ, hsup, hpk⟩ := draw_pinv_keeps hd₂ i₃
+      -- the new stump's result is the name just drawn: issued, and fresh for Δ
+      have hnew : PsOk S₃' [⟨α, ⟨Row.var r, τ₂, δ⟩⟩] :=
+        ⟨fun q hq => by
+            rw [List.mem_singleton] at hq; rw [hq]
+            exact ⟨_, by rw [hsup]; exact Nat.lt_succ_self _, hδ⟩,
+         fun q hq r hr he => by
+            rw [List.mem_singleton] at hq; rw [hq] at he
+            rw [hpk] at hr
+            obtain ⟨j, hj, hrj⟩ := i₃.1 r hr
+            exact absurd (hrj.symm.trans (he.trans hδ)) (natName_lt_ne hj),
+         fun a ha b hb _ => by rw [List.mem_singleton] at ha hb; rw [ha, hb]⟩
+      refine ⟨pinv_park (ps := []) ib hnew, ?_⟩
+      have kp : SolverState.KeepsS S₃' (S₃'.park ⟨α, ⟨Row.var r, τ₂, δ⟩⟩) :=
+        SolverState.KeepsS.of_sub (fun q hq => List.mem_cons_of_mem _ hq)
+      have mp := SolverState.SatMono.of_sol_eq
+        (S := S₃'.park ⟨α, ⟨Row.var r, τ₂, δ⟩⟩) (S' := S₃') rfl
+      have m₃ := (Infer.sat_mono h₂).trans (mb.trans mp)
+      exact k₁.trans (ka.trans (k₂.trans (k₃.trans (kb.trans kp mp) (mb.trans mp)) m₃)
+        (hs.satMono.trans m₃)) (ma.trans (hs.satMono.trans m₃))
   | _, _, _, _, _, .rcd hb, h, hΓ => InferRec.pinv_keeps hb h hΓ
   | _, _, _, _, _, .letE (S₁ := S₁) (Δq := Δq) (Δγ := Δγ) (x := x) (τ₁ := τ₁) (ᾱ := ᾱ) h₁ _ hsplit _ _ _ hown hres _ _ _ h₂,
       h, hΓ => by

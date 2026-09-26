@@ -590,6 +590,22 @@ def inferF (constTy : C → B) (n : Nat) :
               pure (.var (S₂.draw .ty).1,
                 (S₂.draw .ty).2.park ⟨α, ⟨.var rv, .lab l, (S₂.draw .ty).1⟩⟩)
           | _ => .fail "A-sel: the two lookup forms disagree"
+  | _, S, .lab l => .ok (.lab l, S)
+  | Γ, S, .selDyn e₁ e₂ => do
+      let r₁ ← inferF constTy n Γ S e₁
+      let rv := (r₁.2.draw .row).1
+      let S₂ ← solveTySatF n (r₁.2.draw .row).2 r₁.1 (.rcd (.var rv))
+      let r₂ ← inferF constTy n Γ S₂ e₂
+      match ← lookupQF r₂.2.ctx n (.var rv) (r₂.1.applySubst r₂.2.subst) with
+      | .found τ' => pure (τ', r₂.2)
+      | .absent   => pure (.unk, r₂.2.flag (r₂.1.applySubst r₂.2.subst).keyName)
+      | .blocked _ =>
+          match ← lookupQF r₂.2.ctx n ((Row.var rv).applySubst r₂.2.subst)
+              (r₂.1.applySubst r₂.2.subst) with
+          | .blocked α =>
+              pure (.var (r₂.2.draw .ty).1,
+                (r₂.2.draw .ty).2.park ⟨α, ⟨.var rv, r₂.1, (r₂.2.draw .ty).1⟩⟩)
+          | _ => .fail "A-sel-dyn: the two lookup forms disagree"
   | Γ, S, .rcd ξ => do
       let r ← inferRecF constTy n Γ S ξ
       pure (.rcd r.1, r.2)
@@ -661,6 +677,33 @@ theorem inferF_sound {constTy : C → B} {n : Nat} :
               obtain ⟨rfl, rfl⟩ := h
               exact .selUnk (inferF_sound h₁) rfl (solveTySatF_sound h₂)
                 (lookupF_sound ho') rfl
+          | found _ => cases h
+          | absent => cases h
+  | _, S, S', .lab l, τ, h => by
+      simp only [inferF, IRes.ok.injEq, Prod.mk.injEq] at h
+      obtain ⟨rfl, rfl⟩ := h; exact .lab
+  | Γ, S, S', .selDyn e₁ e₂, τ, h => by
+      simp only [inferF, IRes.bind_eq_ok] at h
+      obtain ⟨⟨τ₁, S₁⟩, h₁, S₂, h₂, ⟨τ₂, S₃⟩, h₃, o, ho, h⟩ := h
+      have hH := lookupQF_sound ho
+      cases o with
+      | found τ' =>
+          simp only [IRes.pure_eq_ok, Prod.mk.injEq] at h
+          obtain ⟨rfl, rfl⟩ := h
+          exact .selDyn (inferF_sound h₁) rfl (solveTySatF_sound h₂) (inferF_sound h₃) hH
+      | absent =>
+          simp only [IRes.pure_eq_ok, Prod.mk.injEq] at h
+          obtain ⟨rfl, rfl⟩ := h
+          exact .selDynAbs (inferF_sound h₁) rfl (solveTySatF_sound h₂) (inferF_sound h₃) hH
+      | blocked β =>
+          simp only [IRes.bind_eq_ok] at h
+          obtain ⟨o', ho', h⟩ := h
+          cases o' with
+          | blocked α =>
+              simp only [IRes.pure_eq_ok, Prod.mk.injEq] at h
+              obtain ⟨rfl, rfl⟩ := h
+              exact .selDynUnk (inferF_sound h₁) rfl (solveTySatF_sound h₂)
+                (inferF_sound h₃) (lookupQF_sound ho') rfl
           | found _ => cases h
           | absent => cases h
   | Γ, S, S', .rcd ξ, τ, h => by

@@ -799,6 +799,38 @@ inductive Infer {B C : Type} [DecidableEq B] (constTy : C → B) :
       (δ, S₂') = S₂.draw .ty →
       Infer constTy Γ S (.sel e l) (.var δ)
         (S₂'.park ⟨α, ⟨.var r, .lab l, δ⟩⟩)
+  -- A-lab: a label literal is its own singleton
+  | lab {Γ : QCtx B} {S : SolverState B} {l : Label} :
+      Infer constTy Γ S (.lab l) (.lab l) S
+  -- A-sel-dyn. The record first (forced to `{r}`), then the key; the lookup is
+  -- keyed by the key's TYPE read under ⟦S⟧ — ⌊l⌋, a label variable, or not a
+  -- label at all — and its three verdicts are A-sel's, A-sel-⊥'s and A-sel-?'s
+  | selDyn {Γ : QCtx B} {S S₁ S₁' S₂ S₃ : SolverState B} {e₁ e₂ : Expr C}
+      {τ₁ τ₂ τ' : Ty B} {r : TyVar} :
+      Infer constTy Γ S e₁ τ₁ S₁ →
+      (r, S₁') = S₁.draw .row →
+      SolveTySat S₁' τ₁ (.rcd (.var r)) S₂ →
+      Infer constTy Γ S₂ e₂ τ₂ S₃ →
+      LookupQ S₃.ctx (.var r) (τ₂.applySubst S₃.subst) (.found τ') →
+      Infer constTy Γ S (.selDyn e₁ e₂) τ' S₃
+  | selDynAbs {Γ : QCtx B} {S S₁ S₁' S₂ S₃ : SolverState B} {e₁ e₂ : Expr C}
+      {τ₁ τ₂ : Ty B} {r : TyVar} :
+      Infer constTy Γ S e₁ τ₁ S₁ →
+      (r, S₁') = S₁.draw .row →
+      SolveTySat S₁' τ₁ (.rcd (.var r)) S₂ →
+      Infer constTy Γ S₂ e₂ τ₂ S₃ →
+      LookupQ S₃.ctx (.var r) (τ₂.applySubst S₃.subst) .absent →
+      Infer constTy Γ S (.selDyn e₁ e₂) .unk (S₃.flag (τ₂.applySubst S₃.subst).keyName)
+  | selDynUnk {Γ : QCtx B} {S S₁ S₁' S₂ S₃ S₃' : SolverState B} {e₁ e₂ : Expr C}
+      {τ₁ τ₂ : Ty B} {r α δ : TyVar} :
+      Infer constTy Γ S e₁ τ₁ S₁ →
+      (r, S₁') = S₁.draw .row →
+      SolveTySat S₁' τ₁ (.rcd (.var r)) S₂ →
+      Infer constTy Γ S₂ e₂ τ₂ S₃ →
+      LookupBlockedQ S₃.ctx ((Row.var r).applySubst S₃.subst) (τ₂.applySubst S₃.subst) α →
+      (δ, S₃') = S₃.draw .ty →
+      Infer constTy Γ S (.selDyn e₁ e₂) (.var δ)
+        (S₃'.park ⟨α, ⟨.var r, τ₂, δ⟩⟩)
   -- A-rec
   | rcd {Γ : QCtx B} {S S' : SolverState B} {ξ : RecBody (Expr C)} {ρ : Row B} :
       InferRec constTy Γ S ξ ρ S' →
@@ -1162,6 +1194,25 @@ theorem Infer.kinds_mono {B C : Type} [DecidableEq B] {constTy : C → B}
       simp only [SolverState.park]
       rw [draw_kind_eq hd₂, hs.kinds, draw_kind_eq hd]
       exact List.IsSuffix.trans (List.suffix_cons _ _) (List.suffix_cons _ _)
+  | .lab => List.suffix_refl _
+  | .selDyn h₁ hd hs h₂ _ => by
+      refine List.IsSuffix.trans (Infer.kinds_mono h₁) ?_
+      refine List.IsSuffix.trans ?_ (Infer.kinds_mono h₂)
+      rw [hs.kinds, draw_kind_eq hd]; exact List.suffix_cons _ _
+  | .selDynAbs h₁ hd hs h₂ _ => by
+      refine List.IsSuffix.trans (Infer.kinds_mono h₁) ?_
+      show _ <:+ (SolverState.flag _ _).kinds
+      simp only [SolverState.flag]
+      refine List.IsSuffix.trans ?_ (Infer.kinds_mono h₂)
+      rw [hs.kinds, draw_kind_eq hd]; exact List.suffix_cons _ _
+  | .selDynUnk h₁ hd hs h₂ _ hd₂ => by
+      refine List.IsSuffix.trans (Infer.kinds_mono h₁) ?_
+      show _ <:+ (SolverState.park _ _).kinds
+      simp only [SolverState.park]
+      rw [draw_kind_eq hd₂]
+      refine List.IsSuffix.trans ?_ (List.suffix_cons _ _)
+      refine List.IsSuffix.trans ?_ (Infer.kinds_mono h₂)
+      rw [hs.kinds, draw_kind_eq hd]; exact List.suffix_cons _ _
   | .rcd hb => InferRec.kinds_mono hb
   | .letE h₁ _ _ _ _ _ _ _ _ _ _ h₂ => by
       have i₁ := Infer.kinds_mono h₁
@@ -1243,6 +1294,30 @@ theorem Infer.supply_mono {B C : Type} [DecidableEq B] {constTy : C → B}
       omega
   | .selUnk h₁ hd hs _ hd₂ => by
       have i₁ := Infer.supply_mono h₁
+      have hd' := draw_eq hd
+      have j := hs.supply
+      have hd₂' := draw_eq hd₂
+      show _ ≤ (SolverState.park _ _).supply.next
+      simp only [SolverState.park]
+      omega
+  | .lab => Nat.le_refl _
+  | .selDyn h₁ hd hs h₂ _ => by
+      have i₁ := Infer.supply_mono h₁
+      have i₂ := Infer.supply_mono h₂
+      have hd' := draw_eq hd
+      have j := hs.supply
+      omega
+  | .selDynAbs h₁ hd hs h₂ _ => by
+      have i₁ := Infer.supply_mono h₁
+      have i₂ := Infer.supply_mono h₂
+      have hd' := draw_eq hd
+      have j := hs.supply
+      show _ ≤ (SolverState.flag _ _).supply.next
+      simp only [SolverState.flag]
+      omega
+  | .selDynUnk h₁ hd hs h₂ _ hd₂ => by
+      have i₁ := Infer.supply_mono h₁
+      have i₂ := Infer.supply_mono h₂
       have hd' := draw_eq hd
       have j := hs.supply
       have hd₂' := draw_eq hd₂
@@ -1369,6 +1444,21 @@ theorem Infer.sat_mono {B C : Type} [DecidableEq B] {constTy : C → B}
           (hs.satMono.trans
             ((SolverState.SatMono.of_sol_eq (draw_sol hd₂)).trans
               (SolverState.SatMono.of_sol_eq rfl))))
+  | .lab => SolverState.SatMono.refl _
+  | .selDyn h₁ hd hs h₂ _ =>
+      (Infer.sat_mono h₁).trans
+        ((SolverState.SatMono.of_sol_eq (draw_sol hd)).trans
+          (hs.satMono.trans (Infer.sat_mono h₂)))
+  | .selDynAbs h₁ hd hs h₂ _ =>
+      (Infer.sat_mono h₁).trans
+        ((SolverState.SatMono.of_sol_eq (draw_sol hd)).trans
+          (hs.satMono.trans ((Infer.sat_mono h₂).trans (SolverState.SatMono.of_sol_eq rfl))))
+  | .selDynUnk h₁ hd hs h₂ _ hd₂ =>
+      (Infer.sat_mono h₁).trans
+        ((SolverState.SatMono.of_sol_eq (draw_sol hd)).trans
+          (hs.satMono.trans ((Infer.sat_mono h₂).trans
+            ((SolverState.SatMono.of_sol_eq (draw_sol hd₂)).trans
+              (SolverState.SatMono.of_sol_eq rfl)))))
   | .rcd hb => InferRec.sat_mono hb
   | .letE h₁ _ _ _ _ _ _ _ _ _ _ h₂ => by
       refine (Infer.sat_mono h₁).trans ?_
@@ -1457,6 +1547,13 @@ theorem Infer.quiescent {B C : Type} [DecidableEq B] {constTy : C → B}
   | .selUnk _ hd hs hb hd₂, _ =>
       SolverState.Quiescent.park_draw (draw_sol hd₂) (draw_parked hd₂)
         hs.quiescent (.lit hb)
+  -- the key's inference runs from the saturated state, and carries it
+  | .lab, hq => hq
+  | .selDyn _ _ hs h₂ _, _ => Infer.quiescent h₂ hs.quiescent
+  | .selDynAbs _ _ hs h₂ _, _ => (Infer.quiescent h₂ hs.quiescent).flag _
+  | .selDynUnk _ _ hs h₂ hb hd₂, _ =>
+      SolverState.Quiescent.park_draw (draw_sol hd₂) (draw_parked hd₂)
+        (Infer.quiescent h₂ hs.quiescent) hb
   -- …and the rules that do not write carry it through
   | .lam hd hb, hq => Infer.quiescent hb (hq.draw hd)
   | .rcd hb, hq => InferRec.quiescent hb hq

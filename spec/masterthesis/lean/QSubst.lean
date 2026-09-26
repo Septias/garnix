@@ -459,6 +459,28 @@ theorem qtyped_applySubst {B C : Type} {constTy : C → B} {s : Sol B}
         (by rw [← hm.ctx_src]; exact hlk)
   | _, _, _, _, .qUnk h, hm => .qUnk (qtyped_applySubst hcl him h hm)
   | _, _, _, _, .qRcd h, hm => .qRcd (qtypedBody_applySubst hcl him h hm)
+  | _, _, _, _, .qLab, _ => .qLab
+  | _, _, _, _, .qSelDyn h₁ h₂ hlk, hm =>
+      .qSelDyn (qtyped_applySubst hcl him h₁ hm) (qtyped_applySubst hcl him h₂ hm)
+        (Sol.lookupQ_toCtx_definite hcl hm.ctx_tgt (by rw [← hm.ctx_src]; exact hlk)
+          (by intro h; cases h))
+  | _, _, _, _, .qSelDynAbs h₁ h₂ hlk, hm =>
+      .qSelDynAbs (qtyped_applySubst hcl him h₁ hm) (qtyped_applySubst hcl him h₂ hm)
+        (Sol.lookupQ_toCtx_definite hcl hm.ctx_tgt (by rw [← hm.ctx_src]; exact hlk)
+          (by intro h; cases h))
+  -- a `?` need not survive (σ may have chosen the key), but at an empty row
+  -- environment every lookup has SOME verdict, and each one types at ★
+  | _, _, _, _, .qSelDynUnk h₁ h₂ _, hm => by
+      have h₁' := qtyped_applySubst hcl him h₁ hm
+      have h₂' := qtyped_applySubst hcl him h₂ hm
+      have hwf := (show ∀ Γ₀ : QCtx B, Γ₀.ctx.rowEnv = [] → Γ₀.ctx.RowWF from
+        fun Γ₀ h₀ => ⟨fun _ => 0, fun α ρ hα => by simp [Ctx.lookupRow, h₀] at hα⟩)
+        _ hm.ctx_tgt
+      obtain ⟨r, hr⟩ := LookupQ.total hwf _ _
+      cases r with
+      | found τ => exact .qUnk (.qSelDyn h₁' h₂' hr)
+      | absent => exact .qSelDynAbs h₁' h₂' hr
+      | unknown => exact .qSelDynUnk h₁' h₂' hr
 
 theorem qtypedBody_applySubst {B C : Type} {constTy : C → B} {s : Sol B}
     {σ : TySubst B} (hcl : s.Closes σ) (him : SchemeImage s σ) :

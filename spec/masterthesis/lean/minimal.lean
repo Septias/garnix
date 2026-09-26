@@ -38,6 +38,8 @@ inductive Expr (Const : Type) : Type where
   | sel  : Expr Const → Label → Expr Const               -- e.l
   | rcd  : RecBody (Expr Const) → Expr Const             -- { ξ }
   | letE : Var → Expr Const → Expr Const → Expr Const    -- let x = e₁ in e₂
+  | lab  : Label → Expr Const                            -- `l   (a label, as a value)
+  | selDyn : Expr Const → Expr Const → Expr Const        -- e₁.(e₂)  (e₁.${e₂})
 
 
 ---------------------------------- TYPES ------------------------------------------
@@ -1226,6 +1228,8 @@ mutual
     | .rcd b      => .rcd (substBody x v b)
     | .letE y e₁ e₂ =>
         .letE y (subst x v e₁) (if x == y then e₂ else subst x v e₂)
+    | .lab l      => .lab l
+    | .selDyn e₁ e₂ => .selDyn (subst x v e₁) (subst x v e₂)
 
   def substBody {C : Type} (x : Var) (v : Expr C) : RecBody (Expr C) → RecBody (Expr C)
     | .empty      => .empty
@@ -1242,11 +1246,33 @@ inductive Value {C : Type} : Expr C → Prop where
   | con {c : C}                : Value (.con c)
   | lam {x : Var} {e : Expr C} : Value (.lam x e)
   | rcd {b : RecBody (Expr C)} : Value (.rcd b)
+  | lab {l : Label}            : Value (.lab l)
 
 
 ------------------------------- CANONICAL FORMS --------------------------------
 -- Since ≈ₜ preserves head constructors, a value's shape is determined by the
 -- head of its type even though tEq can rewrite it.
+
+-- L1 has no rule for a label literal (FC-labels are an L2 feature), so no
+-- derivation types one: only T-eq and T-★-intro could, and they need one first.
+private theorem typed_lab_false_aux {B C : Type} {constTy : C → B} {l : Label} :
+    ∀ {Γ : Ctx B} {e : Expr C} {τ : Ty B}, Typed constTy Γ e τ → e = .lab l → False
+  | _, _, _, .tEq h _, he => typed_lab_false_aux h he
+  | _, _, _, .tUnk h, he => typed_lab_false_aux h he
+  | _, _, _, .tCon, he => nomatch he
+  | _, _, _, .tVar _ _, he => nomatch he
+  | _, _, _, .tLam _, he => nomatch he
+  | _, _, _, .tApp _ _, he => nomatch he
+  | _, _, _, .tLet _ _, he => nomatch he
+  | _, _, _, .tCat _ _, he => nomatch he
+  | _, _, _, .tSel _ _, he => nomatch he
+  | _, _, _, .tSelUnk _ _, he => nomatch he
+  | _, _, _, .tSelAbs _ _, he => nomatch he
+  | _, _, _, .tRcd _, he => nomatch he
+
+theorem typed_lab_false {B C : Type} {constTy : C → B} {l : Label} {Γ : Ctx B}
+    {τ : Ty B} (h : Typed constTy Γ (.lab l : Expr C) τ) : False :=
+  typed_lab_false_aux h rfl
 
 theorem canonical_fn {B C : Type} {constTy : C → B} {Γ : Ctx B} {v : Expr C}
     {τ₁ τ₂ : Ty B}
@@ -1263,6 +1289,7 @@ theorem canonical_fn {B C : Type} {constTy : C → B} {Γ : Ctx B} {v : Expr C}
       · obtain ⟨ρ', hσ, -⟩ := he.rcd_inv
         cases hσ
       · cases hu
+  | lab => exact (typed_lab_false ht).elim
 
 theorem canonical_rcd {B C : Type} {constTy : C → B} {Γ : Ctx B} {v : Expr C}
     {ρ : Row B}
@@ -1284,6 +1311,7 @@ theorem canonical_rcd {B C : Type} {constTy : C → B} {Γ : Ctx B} {v : Expr C}
         cases hσ
         exact ⟨_, _, rfl, heq, hb⟩
       · cases hu
+  | lab => exact (typed_lab_false ht).elim
 
 
 --------------------------------- REDUCTION ------------------------------------
@@ -1324,6 +1352,17 @@ inductive Step {C : Type} : Expr C → Expr C → Prop where
   | letBeta {x : Var} {v e : Expr C} :
       Value v →
       Step (.letE x v e) (subst x v e)
+  -- dynamic selection: the record first, then the key, then the lookup
+  | selDynL {e₁ e₁' e₂ : Expr C} :
+      Step e₁ e₁' →
+      Step (.selDyn e₁ e₂) (.selDyn e₁' e₂)
+  | selDynR {e₁ e₂ e₂' : Expr C} :
+      Value e₁ →
+      Step e₂ e₂' →
+      Step (.selDyn e₁ e₂) (.selDyn e₁ e₂')
+  | selDynVal {b : RecBody (Expr C)} {l : Label} {e : Expr C} :
+      RecBody.lookup l b = some e →
+      Step (.selDyn (.rcd b) (.lab l)) e
 
 
 ---------------------------------- PROGRESS ---------------------------------
@@ -1345,6 +1384,14 @@ inductive Err {C : Type} : Expr C → Prop where
   | catLeft  : Err e₁ → Err (.cat e₁ e₂)
   | catRight : Value e₁ → Err e₂ → Err (.cat e₁ e₂)
   | letBind  : Err e₁ → Err (.letE x e₁ e₂)
+  -- a dynamic selection errs where a static one does, and also on a key that is
+  -- not a label (L-junk's run-time face)
+  | selDynAbsent {b : RecBody (Expr C)} {l : Label} :
+      RecBody.lookup l b = none → Err (.selDyn (.rcd b) (.lab l))
+  | selDynKey {b : RecBody (Expr C)} {v : Expr C} :
+      Value v → (∀ l, v ≠ .lab l) → Err (.selDyn (.rcd b) v)
+  | selDynL  : Err e₁ → Err (.selDyn e₁ e₂)
+  | selDynR  : Value e₁ → Err e₂ → Err (.selDyn e₁ e₂)
 
 inductive Progress {C : Type} (e : Expr C) : Prop where
   | step : Step e e' → Progress e
