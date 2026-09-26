@@ -1,37 +1,9 @@
 -- THE SOUNDNESS STATEMENT, RESTATED.
---
--- `InferSoundC` is false (`inferSoundC_false`, LetSound.lean): it read Γ under
--- ⟦S′⟧ and τ under σ. Fixing only that is not enough, and this file is the
--- three changes the fix turned out to need.
---
---   1. Γ IS READ UNDER σ, with the row environment discharged: `CtxRead σ Γ Γ′`.
---      Every step lemma already assumed `Γ'.rowEnv = []`, so the per-rule work
---      carries over.
---   2. A SCHEME ENTERS Γ′ WITH ITS BINDERS RENAMED (`QScheme.renameBinders`),
---      so that `Avoiding` holds by construction rather than by luck. This is the
---      L2 counterpart of L1's `renameScheme`, and what A-var's forward covering
---      (`QCovers.forward_of_avoiding`) consumes.
---   3. ASSUMPTIONS ARE TYPED, NOT PROMISES. `QTypedC` kept a stump's result
---      variable RAW and needed "σ has no opinion at δ" (`hδ`). That hypothesis
---      is not monotone: a stump parked by e₁ can be woken by a later equation,
---      and then σ ⊨ S′ DOES have an opinion at δ, so the IH for e₁ is unusable
---      at the σ the conclusion is stated at. Here an assumption is a lookup
---      whose answer is assumed — `Assume` = ρ.l ↓ τ with τ a TYPE — and a
---      parked stump contributes `p.stump.at σ`, its result read under σ too.
---      Then a woken stump's assumption simply HOLDS (`Assume.Holds`), and
---      `QTypedA.weaken` removes held assumptions. That one lemma is both the
---      monotonicity the induction needs and the cash-in `QTypedCDischarge` was
---      meant to be — there is no χ-transport left in it.
---      A-var's constraints may be assumed as well (`QScheme.InstA`): an
---      instantiated stump that stays parked has no discharge yet, and `qVar`
---      now accepts it as an assumption instead.
 
 import ParkedInv
 import Absorb
 
 namespace MinimalCalculus
-
---------------------- 3. ASSUMED LOOKUPS -------------------------------------
 
 /-- `ρ.l ↓ τ` assumed: `e : {ρ}` is taken to give `e.l : τ`. -/
 structure Assume (B : Type) where
