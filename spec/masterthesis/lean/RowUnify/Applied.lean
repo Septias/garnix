@@ -41,10 +41,12 @@ def sSorted {B : Type} : List (Atom B) → List (Bool × TyVar)
   | [] => []
   | .field _ τ :: s => Ty.sortedFtv τ ++ sSorted s
   | .var α :: s     => (true, α) :: sSorted s
+  | .dfield o τ :: s => Ty.sortedFtv (Atom.keyTy (B := B) o) ++ Ty.sortedFtv τ ++ sSorted s
 
 def Atom.sorted {B : Type} : Atom B → List (Bool × TyVar)
   | .field _ τ => Ty.sortedFtv τ
   | .var α     => [(true, α)]
+  | .dfield o τ => Ty.sortedFtv (Atom.keyTy (B := B) o) ++ Ty.sortedFtv τ
 
 theorem mem_sSorted {B : Type} {x : Bool × TyVar} :
     (s : List (Atom B)) → (x ∈ sSorted s ↔ ∃ a ∈ s, x ∈ a.sorted)
@@ -55,6 +57,9 @@ theorem mem_sSorted {B : Type} {x : Bool × TyVar} :
   | .var α :: s => by
       simp only [sSorted, List.mem_cons, mem_sSorted s, exists_eq_or_imp,
         Atom.sorted, List.not_mem_nil, or_false]
+  | .dfield o τ :: s => by
+      simp only [sSorted, List.mem_append, mem_sSorted s, List.mem_cons,
+        exists_eq_or_imp, Atom.sorted]
 
 -- ⊢  a spine built from atoms of another has no variable the other lacks
 theorem sSorted_sub_of_atoms {B : Type} {s t : List (Atom B)}
@@ -72,25 +77,43 @@ theorem sSorted_append {B : Type} :
   | .field _ τ :: s, t => by
       simp only [List.cons_append, sSorted, sSorted_append s t, List.append_assoc]
   | .var _ :: s, t => by simp only [List.cons_append, sSorted, sSorted_append s t]
+  | .dfield _ τ :: s, t => by
+      simp only [List.cons_append, sSorted, sSorted_append s t, List.append_assoc]
 
-theorem sSorted_toSpine {B : Type} : (ρ : Row B) → sSorted ρ.toSpine = Row.sortedFtv ρ
-  | .empty => rfl
-  | .var _ => rfl
-  | .sing _ τ => by simp [Row.toSpine, sSorted, Row.sortedFtv]
-  | .cat ρ₁ ρ₂ => by
-      simp only [Row.toSpine, sSorted_append, sSorted_toSpine ρ₁, sSorted_toSpine ρ₂,
-        Row.sortedFtv]
+-- ⊢  a spine's tagged variables are its row's (a junk key's are forgotten)
+theorem sSorted_toSpine {B : Type} : (ρ : Row B) → ∀ x, x ∈ sSorted ρ.toSpine →
+    x ∈ Row.sortedFtv ρ
+  | .empty => fun _ h => h
+  | .var _ => fun _ h => by simpa [Row.toSpine, sSorted, Row.sortedFtv] using h
+  | .sing _ τ => fun _ h => by simpa [Row.toSpine, sSorted, Row.sortedFtv] using h
+  | .cat ρ₁ ρ₂ => fun x h => by
+      simp only [Row.toSpine, sSorted_append, List.mem_append] at h
+      simp only [Row.sortedFtv, List.mem_append]
+      rcases h with h | h
+      · exact .inl (sSorted_toSpine ρ₁ x h)
+      · exact .inr (sSorted_toSpine ρ₂ x h)
+  | .dsing q τ => fun x h => by
+      simp only [Row.toSpine] at h
+      simp only [Row.sortedFtv, List.mem_append]
+      cases q <;> simp only [Atom.ofKey, sSorted, Atom.keyTy, Ty.sortedFtv,
+        List.append_nil, List.nil_append, List.mem_append] at h ⊢ <;>
+        first | exact .inr h | exact h
 
 theorem sortedFtv_ofSpine {B : Type} : (s : List (Atom B)) →
     Row.sortedFtv (ofSpine s) = sSorted s
   | [] => rfl
   | .field _ τ :: s => by simp only [ofSpine, Row.sortedFtv, sortedFtv_ofSpine s, sSorted]
   | .var _ :: s => by simp only [ofSpine, Row.sortedFtv, sortedFtv_ofSpine s, sSorted]; rfl
+  | .dfield _ τ :: s => by
+      simp only [ofSpine, Row.sortedFtv, sortedFtv_ofSpine s, sSorted, List.append_assoc]
 
 theorem sVarSeq_mem_sSorted {B : Type} {γ : TyVar} :
     (s : List (Atom B)) → γ ∈ sVarSeq s → (true, γ) ∈ sSorted s
   | [], h => by simp [sVarSeq] at h
   | .field _ _ :: s, h => by
+      simp only [sVarSeq] at h
+      exact List.mem_append_right _ (sVarSeq_mem_sSorted s h)
+  | .dfield _ _ :: s, h => by
       simp only [sVarSeq] at h
       exact List.mem_append_right _ (sVarSeq_mem_sSorted s h)
   | .var δ :: s, h => by
@@ -114,10 +137,26 @@ theorem mem_sSorted_sApplySubst {B : Type} {θ : TySubst B} {x : Bool × TyVar} 
   | .var α :: t, h => by
       simp only [sApplySubst, sSorted_append, List.mem_append] at h
       rcases h with h | h
-      · rw [sSorted_toSpine] at h
-        exact ⟨(true, α), List.mem_cons_self, h⟩
+      · exact ⟨(true, α), List.mem_cons_self, sSorted_toSpine _ _ h⟩
       · obtain ⟨y, hy, hx⟩ := mem_sSorted_sApplySubst t h
         exact ⟨y, List.mem_cons_of_mem _ hy, hx⟩
+  | .dfield o τ :: t, h => by
+      simp only [sApplySubst] at h
+      rw [show sSorted (Atom.ofKey ((Atom.keyTy o).applySubst θ) (τ.applySubst θ) ::
+            sApplySubst θ t) = sSorted [Atom.ofKey ((Atom.keyTy o).applySubst θ)
+              (τ.applySubst θ)] ++ sSorted (sApplySubst θ t) from by
+          rw [← sSorted_append]; rfl, List.mem_append] at h
+      rcases h with h | h
+      · have h' : x ∈ Row.sortedFtv (.dsing ((Atom.keyTy o).applySubst θ) (τ.applySubst θ)) :=
+          sSorted_toSpine _ _ h
+        simp only [Row.sortedFtv, List.mem_append] at h'
+        rcases h' with h' | h'
+        · obtain ⟨y, hy, hx⟩ := Ty.mem_sortedFtv_applySubst _ h'
+          exact ⟨y, by simp only [sSorted, List.mem_append]; exact .inl (.inl hy), hx⟩
+        · obtain ⟨y, hy, hx⟩ := Ty.mem_sortedFtv_applySubst τ h'
+          exact ⟨y, by simp only [sSorted, List.mem_append]; exact .inl (.inr hy), hx⟩
+      · obtain ⟨y, hy, hx⟩ := mem_sSorted_sApplySubst t h
+        exact ⟨y, by simp only [sSorted, List.mem_append]; exact .inr hy, hx⟩
 
 ------------------------- THE DETECTORS TAKE ATOMS APART -----------------------
 -- Every non-solving move returns sub-spines of its input and payloads of its
@@ -174,6 +213,19 @@ theorem removeField_atoms {B : Type} {l : Label} :
     (s : List (Atom B)) → {τ : Ty B} → {s' : List (Atom B)} →
     removeField l s = some (τ, s') → (∃ l', .field l' τ ∈ s) ∧ ∀ a ∈ s', a ∈ s
   | .var β :: t, τ, s', h => by
+      simp only [removeField] at h
+      revert h
+      cases hw : removeField l t with
+      | none => intro h; cases h
+      | some p =>
+          intro h
+          obtain ⟨⟨l'', hτ⟩, hs⟩ := removeField_atoms t hw
+          cases h
+          refine ⟨⟨l'', List.mem_cons_of_mem _ hτ⟩, fun a ha => ?_⟩
+          rcases List.mem_cons.mp ha with rfl | ha
+          · exact List.mem_cons_self
+          · exact List.mem_cons_of_mem _ (hs a ha)
+  | .dfield o σ :: t, τ, s', h => by
       simp only [removeField] at h
       revert h
       cases hw : removeField l t with
@@ -490,7 +542,7 @@ theorem Sol.Good.wf {B : Type} {V : List (Bool × TyVar)} {s : Sol B}
   acyclic := by
     intro p hp β hβ hmem
     have hs : (true, β) ∈ Row.sortedFtv p.2 := by
-      rw [← sSorted_toSpine]; exact sVarSeq_mem_sSorted _ hβ
+      exact sSorted_toSpine _ _ (sVarSeq_mem_sSorted _ hβ)
     exact (hg.rng _ (.inr ⟨p, hp, hs⟩)).2 (Sol.mem_domS_row hmem)
   ranked := by
     refine ⟨fun _ => 0, fun x hx => ?_, fun p hp x hx hxd => ?_, fun p hp x hx hxd => ?_⟩
@@ -532,20 +584,25 @@ theorem Sol.good_bindTy {B : Type} {S : Supply} {α : TyVar} {τ : Ty B}
   · split at h
     · cases h
     · next hocc =>
-      simp only [UResM.success.injEq] at h
-      obtain ⟨rfl, rfl⟩ := h
-      have hdom : ∀ x, x ∈ Sol.domS (⟨[(α, τ)], []⟩ : Sol B) → x = (false, α) := by
-        intro x hx; simpa [Sol.domS] using hx
-      refine ⟨fun x hx => by rw [hdom x hx]; exact hα, fun x hx => ?_,
-              fun p hp q hq _ => by
-                rw [List.mem_singleton.mp hp, List.mem_singleton.mp hq],
-              fun p hp => by simp at hp⟩
-      rcases hx with ⟨p, hp, hx⟩ | ⟨p, hp, -⟩
-      · obtain rfl := List.mem_singleton.mp hp
-        refine ⟨hτ hx, fun hd => hocc ?_⟩
-        rw [hdom x hd] at hx
-        exact List.elem_eq_true_of_mem ((Ty.mem_tyFtv_iff_sortedFtv τ).mp hx)
-      · simp at hp
+      split at h
+      · cases h
+      · next hkey =>
+        simp only [UResM.success.injEq] at h
+        obtain ⟨rfl, rfl⟩ := h
+        have hdom : ∀ x, x ∈ Sol.domS (⟨[(α, τ)], []⟩ : Sol B) → x = (false, α) := by
+          intro x hx; simpa [Sol.domS] using hx
+        refine ⟨fun x hx => by rw [hdom x hx]; exact hα, fun x hx => ?_,
+                fun p hp q hq _ => by
+                  rw [List.mem_singleton.mp hp, List.mem_singleton.mp hq],
+                fun p hp => by simp at hp⟩
+        rcases hx with ⟨p, hp, hx⟩ | ⟨p, hp, -⟩
+        · obtain rfl := List.mem_singleton.mp hp
+          refine ⟨hτ hx, fun hd => ?_⟩
+          rw [hdom x hd] at hx
+          rcases Ty.mem_tyFtv_of_sortedFtv τ hx with h' | h'
+          · exact hocc (List.elem_eq_true_of_mem h')
+          · exact hkey (List.elem_eq_true_of_mem h')
+        · simp at hp
 
 -- ⊢  bindings of spine variables to ε
 theorem Sol.good_ofRow_eps {B : Type} {σ : List (TyVar × Row B)}
@@ -582,6 +639,7 @@ theorem Sol.good_solveVarM {B : Type} {S : Supply} {s₁ s₂ : List (Atom B)}
   | cons a₁ r₁ =>
     cases a₁ with
     | field _ _ => simp [solveVarM] at h
+    | dfield _ _ => simp [solveVarM] at h
     | var α =>
       cases r₁ with
       | cons _ _ => simp [solveVarM] at h
@@ -591,33 +649,37 @@ theorem Sol.good_solveVarM {B : Type} {S : Supply} {s₁ s₂ : List (Atom B)}
         · next σ hc =>
             simp only [Option.some.injEq, UResM.success.injEq] at h
             obtain ⟨rfl, rfl⟩ := h
-            obtain ⟨-, -, he⟩ := collapseSol_spec hc
+            obtain ⟨-, -, -, he⟩ := collapseSol_spec hc
             refine Sol.good_ofRow_eps (fun p hp => ?_)
             obtain ⟨h₁, -, h₃⟩ := epsCollapse_mem s₂ he p hp
             exact ⟨List.mem_append_right _ (sVarSeq_mem_sSorted s₂ h₁), h₃⟩
         · split at h
-          · simp at h
+          · split at h <;> (try split at h) <;> simp at h
           · next hocc =>
-            simp only [Option.some.injEq, UResM.success.injEq] at h
-            obtain ⟨rfl, rfl⟩ := h
-            have hdom : ∀ x, x ∈ (Sol.ofRow [(α, ofSpine s₂)] : Sol B).domS →
-                x = (true, α) := by
-              intro x hx; simpa [Sol.domS, Sol.ofRow] using hx
-            refine ⟨fun x hx => by
-                      rw [hdom x hx]; exact List.mem_append_left _ List.mem_cons_self,
-                    fun x hx => ?_, fun p hp => by simp [Sol.ofRow] at hp,
-                    fun p hp q hq _ => by
-                      simp only [Sol.ofRow, List.mem_singleton] at hp hq
-                      rw [hp, hq]⟩
-            rcases hx with ⟨p, hp, -⟩ | ⟨p, hp, hx⟩
-            · simp [Sol.ofRow] at hp
-            · simp only [Sol.ofRow, List.mem_singleton] at hp
-              subst hp
-              simp only [sortedFtv_ofSpine] at hx
-              refine ⟨List.mem_append_right _ hx, fun hd => hocc ?_⟩
-              rw [hdom x hd, ← sortedFtv_ofSpine] at hx
-              exact List.elem_eq_true_of_mem
-                ((Row.mem_allRowVars_iff_sortedFtv (ofSpine s₂)).mp hx)
+            split at h
+            · simp at h
+            · next hkey =>
+              simp only [Option.some.injEq, UResM.success.injEq] at h
+              obtain ⟨rfl, rfl⟩ := h
+              have hdom : ∀ x, x ∈ (Sol.ofRow [(α, ofSpine s₂)] : Sol B).domS →
+                  x = (true, α) := by
+                intro x hx; simpa [Sol.domS, Sol.ofRow] using hx
+              refine ⟨fun x hx => by
+                        rw [hdom x hx]; exact List.mem_append_left _ List.mem_cons_self,
+                      fun x hx => ?_, fun p hp => by simp [Sol.ofRow] at hp,
+                      fun p hp q hq _ => by
+                        simp only [Sol.ofRow, List.mem_singleton] at hp hq
+                        rw [hp, hq]⟩
+              rcases hx with ⟨p, hp, -⟩ | ⟨p, hp, hx⟩
+              · simp [Sol.ofRow] at hp
+              · simp only [Sol.ofRow, List.mem_singleton] at hp
+                subst hp
+                simp only [sortedFtv_ofSpine] at hx
+                refine ⟨List.mem_append_right _ hx, fun hd => ?_⟩
+                rw [hdom x hd, ← sortedFtv_ofSpine] at hx
+                rcases Row.mem_allRowVars_of_sortedFtv (ofSpine s₂) hx with h' | h'
+                · exact hocc (List.elem_eq_true_of_mem h')
+                · exact hkey (List.elem_eq_true_of_mem h')
 
 ------------------------- THE INDUCTION ----------------------------------------
 
@@ -818,8 +880,10 @@ theorem unifyM_good {B : Type} [DecidableEq B] (fuel : Nat) :
             (fun x hx => (hR x (g₂.dom x hx)).2) (fun x hx => (hR x (g₂.rng x hx).1).2)
         · replace h : unifySpineMF S fuel ρ₁.toSpine ρ₂.toSpine = .success s S' := h
           have g := ih.2 S _ _ h
-          rw [sSorted_toSpine, sSorted_toSpine] at g
-          exact g
+          exact g.mono (fun x hx => by
+            rcases List.mem_append.mp hx with hx | hx
+            · exact List.mem_append_left _ (sSorted_toSpine _ _ hx)
+            · exact List.mem_append_right _ (sSorted_toSpine _ _ hx))
       · cases s₁ with
         | nil => exact hnilL S s₂ _ h
         | cons a s₁ =>
@@ -908,8 +972,10 @@ theorem unifyRowM_good {B : Type} [DecidableEq B] {fuel : Nat} {ρ₁ ρ₂ : Ro
     s.Good (Row.sortedFtv ρ₁ ++ Row.sortedFtv ρ₂) := by
   unfold unifyRowM unifySpineM at h
   have g := (unifyM_good fuel).2 _ _ _ h
-  rw [sSorted_toSpine, sSorted_toSpine] at g
-  exact g
+  exact g.mono (fun x hx => by
+    rcases List.mem_append.mp hx with hx | hx
+    · exact List.mem_append_left _ (sSorted_toSpine _ _ hx)
+    · exact List.mem_append_right _ (sSorted_toSpine _ _ hx))
 
 -- ⊢  `UnifyWF` and `UnifyAcyclic` (State.lean), no longer open
 theorem unifyWF (B : Type) [DecidableEq B] : UnifyWF B :=

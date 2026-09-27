@@ -48,7 +48,11 @@ inductive Expr (Const : Type) : Type where
 -- Label VARIABLES are ordinary type variables: ⌊α⌋ is `.var α`, and a label
 -- solution α ≔ ⌊l⌋ is an ordinary type binding. ⌊l⌋ is rigid and nullary,
 -- exactly like 𝓫, so every structural fact about 𝓫 has a ⌊l⌋ twin.
--- ρ := ε | α | l: τ | (ρ₁ | ρ₂)
+-- ρ := ε | α | l: τ | ${q}: τ | (ρ₁ | ρ₂)
+-- `${q}: τ` (FC-labels phase B) is a field whose label is only known through
+-- its KEY TYPE q — a label variable α, a literal ⌊l⌋ once α is solved, or junk
+-- (any other type) once α is sent to a non-label. ⌊l⌋-keyed fields are ≈ to
+-- the literal field (`RowEquiv.dsingLab`); substitution does not normalize.
 
 mutual
   inductive Ty (B : Type) : Type where
@@ -64,6 +68,7 @@ mutual
     | var   : TyVar → Row B                       -- α
     | sing  : Label → Ty B → Row B                -- l: τ
     | cat   : Row B → Row B → Row B               -- ρ₁ | ρ₂
+    | dsing : Ty B → Ty B → Row B                 -- ${q}: τ
 end
 
 
@@ -78,6 +83,29 @@ structure Scheme (B : Type) where
   body : Ty B
 
 
+-- ## Key classes (FC-labels phase B; the comparison is under ROW LOOKUP)
+inductive KeyClass : Type where
+  | lit  : Label → KeyClass
+  | var  : TyVar → KeyClass
+  | junk : KeyClass
+
+-- (spelled out: a wildcard arm compiles through `propext`)
+def Ty.keyClass {B : Type} : Ty B → KeyClass
+  | .lab l  => .lit l
+  | .var α  => .var α
+  | .base _ => .junk
+  | .unk    => .junk
+  | .fn _ _ => .junk
+  | .rcd _  => .junk
+
+theorem Ty.keyClass_var_iff {B : Type} {q : Ty B} {α : TyVar} :
+    q.keyClass = .var α ↔ q = .var α := by
+  cases q <;> simp [Ty.keyClass]
+
+theorem Ty.keyClass_lit_iff {B : Type} {q : Ty B} {l : Label} :
+    q.keyClass = .lit l ↔ q = .lab l := by
+  cases q <;> simp [Ty.keyClass]
+
 ------------------------------ ROW EQUIVALENCE ---------------------------------
 -- ρ₁ ≈ ρ₂  (mutually with τ₁ ≈ τ₂, since types contain rows)
 --
@@ -85,9 +113,13 @@ structure Scheme (B : Type) where
 --   assoc        reassociating concatenation
 --   unitL/unitR  ε is a unit of concatenation
 --   comm         swapping two adjacent singletons with *distinct* labels
+--   dsing        keyed fields with keys of one class (`Ty.keyClass`)
+--   dsingLab     a ⌊l⌋-keyed field is the literal field l
 -- Deliberately NOT derivable:
 --   swapping equal labels         (would change shadowing)
 --   moving a field past a row-var (its instantiation could shadow it)
+--   moving a keyed field at all   (a key is a BARRIER, like a row-var: two
+--                                  label variables may be instantiated equal)
 
 mutual
   inductive TyEquiv {B : Type} : Ty B → Ty B → Prop where
@@ -111,6 +143,11 @@ mutual
     | comm  : l₁ ≠ l₂ →
               RowEquiv (.cat (.sing l₁ τ₁) (.sing l₂ τ₂))
                        (.cat (.sing l₂ τ₂) (.sing l₁ τ₁))
+    -- a key is read only through its class, so keys of one class are ≈
+    -- (every junk key names the same nothing)
+    | dsing : q.keyClass = q'.keyClass → TyEquiv τ₁ τ₂ →
+              RowEquiv (.dsing q τ₁) (.dsing q' τ₂)
+    | dsingLab : RowEquiv (.dsing (.lab l) τ) (.sing l τ)
 end
 
 infix:50 " ≈ᵣ " => RowEquiv
@@ -266,6 +303,15 @@ theorem TyEquiv.unk_inv {B : Type} {σ : Ty B}
     (h : TyEquiv (.unk : Ty B) σ) : σ = .unk :=
   (TyEquiv.unk_inv_both h).1 rfl
 
+-- ⊢  ≈ keeps a key's class (≈ keeps heads, and fixes ⌊l⌋ and variables)
+theorem TyEquiv.keyClass_both {B : Type} :
+    {τ σ : Ty B} → TyEquiv τ σ → τ.keyClass = σ.keyClass
+  | _, _, .refl _ => rfl
+  | _, _, .symm h => (TyEquiv.keyClass_both h).symm
+  | _, _, .trans h₁ h₂ => (TyEquiv.keyClass_both h₁).trans (TyEquiv.keyClass_both h₂)
+  | _, _, .fn _ _ => rfl
+  | _, _, .rcd _ => rfl
+
 
 ------------------------------------ CONTEXT -----------------------------------
 
@@ -308,6 +354,58 @@ end Ctx
 -- removes the one non-monotone premise in the system (L-α-free needed
 -- `lookupRow α = none`, which context extension could not preserve).
 
+-- ## Keys (FC-labels phase B)
+-- A keyed field `${q}: τ` is compared against a lookup key by CLASS: a literal
+-- ⌊l⌋, a label variable α, or JUNK (any other type — what a label variable
+-- becomes when it is sent to a non-label). All junk keys are one class, so the
+-- comparison reads only a key's head and a variable's name:
+--
+--   ⌊l⌋ / ⌊l⌋   eq iff same label, else apart
+--   α / α       eq                      (α ≡ α)
+--   junk / junk eq                      (so (α: τ).α ↓ τ survives α ↦ int)
+--   ⌊l⌋ / junk  apart
+--   otherwise   undec                   (a variable against anything else)
+--
+-- eq and apart are stable under substitution (heads are rigid, a substituted
+-- junk key is still junk), and all three are invariant under ≈ of the key
+-- (≈ keeps heads fixed). undec is where `?` lives.
+
+inductive KeyRel : Type where
+  | eq | apart | undec
+  deriving DecidableEq
+
+def KeyClass.cmp : KeyClass → KeyClass → KeyRel
+  | .lit l, .lit l' => if l = l' then .eq else .apart
+  | .lit _, .var _  => .undec
+  | .lit _, .junk   => .apart
+  | .var _, .lit _  => .undec
+  | .var α, .var β  => if α = β then .eq else .undec
+  | .var _, .junk   => .undec
+  | .junk,  .lit _  => .apart
+  | .junk,  .var _  => .undec
+  | .junk,  .junk   => .eq
+
+/-- how lookup key `k` compares with field key `q`. -/
+def Ty.keyCmp {B : Type} (k q : Ty B) : KeyRel := k.keyClass.cmp q.keyClass
+
+theorem Ty.keyCmp_congr_right {B : Type} {k q q' : Ty B}
+    (h : q.keyClass = q'.keyClass) : Ty.keyCmp k q = Ty.keyCmp k q' := by
+  unfold Ty.keyCmp; rw [h]
+
+@[simp] theorem Ty.keyCmp_lab_lab {B : Type} (l l' : Label) :
+    Ty.keyCmp (.lab l : Ty B) (.lab l') = if l = l' then .eq else .apart := rfl
+
+-- a literal key is undecided only against a label variable
+theorem Ty.keyCmp_lab_undec {B : Type} {l : Label} {q : Ty B}
+    (h : Ty.keyCmp (.lab l) q = .undec) : ∃ α, q = .var α := by
+  cases q with
+  | var α => exact ⟨α, rfl⟩
+  | lab l' => simp only [Ty.keyCmp_lab_lab] at h; split at h <;> cases h
+  | base _ => cases h
+  | unk => cases h
+  | fn _ _ => cases h
+  | rcd _ => cases h
+
 inductive LookupRes (B : Type) : Type where
   | found   : Ty B → LookupRes B   -- τ
   | absent  : LookupRes B          -- ⊥
@@ -328,6 +426,10 @@ inductive Lookup {B : Type} : Row B → Label → LookupRes B → Prop where
   | catSkip : Lookup ρ₁ l .absent → Lookup ρ₂ l r → Lookup (.cat ρ₁ ρ₂) l r
   -- L-conc-★
   | catUnk : Lookup ρ₁ l .unknown → Lookup (.cat ρ₁ ρ₂) l .unknown
+  -- L-hit / L-miss / L-?-lab against a keyed field
+  | dhit : Ty.keyCmp (.lab l) q = .eq → Lookup (.dsing q τ) l (.found τ)
+  | dmiss : Ty.keyCmp (.lab l) q = .apart → Lookup (.dsing q τ) l .absent
+  | dunk : Ty.keyCmp (.lab l) q = .undec → Lookup (.dsing q τ) l .unknown
 
 
 ------------------------------ LOOKUP METATHEORY --------------------------------
@@ -362,6 +464,21 @@ theorem lookup_det {B : Type} {ρ : Row B} {l : Label}
       | catHit h'    => cases ih h'
       | catSkip h' _ => cases ih h'
       | catUnk _     => rfl
+  | dhit h =>
+      cases h₂ with
+      | dhit _ => rfl
+      | dmiss h' => rw [h] at h'; cases h'
+      | dunk h' => rw [h] at h'; cases h'
+  | dmiss h =>
+      cases h₂ with
+      | dhit h' => rw [h] at h'; cases h'
+      | dmiss _ => rfl
+      | dunk h' => rw [h] at h'; cases h'
+  | dunk h =>
+      cases h₂ with
+      | dhit h' => rw [h] at h'; cases h'
+      | dmiss h' => rw [h] at h'; cases h'
+      | dunk _ => rfl
 
 -- Totality, by BARE STRUCTURAL RECURSION on the row.
 --
@@ -385,6 +502,11 @@ theorem lookup_total {B : Type} : (ρ : Row B) → (l : Label) → ∃ r, Lookup
           match lookup_total ρ₂ l with
           | ⟨_, hr₂⟩ => ⟨_, .catSkip hr₁ hr₂⟩
       | ⟨.unknown, hr₁⟩ => ⟨_, .catUnk hr₁⟩
+  | .dsing q _, l =>
+      match h : Ty.keyCmp (.lab l) q with
+      | .eq => ⟨_, .dhit h⟩
+      | .apart => ⟨_, .dmiss h⟩
+      | .undec => ⟨_, .dunk h⟩
 
 -- ↓ is therefore a FUNCTION of (ρ, l) — `lookup_det` + `lookup_total`, packaged.
 noncomputable def Row.look {B : Type} (ρ : Row B) (l : Label) : LookupRes B :=
@@ -555,6 +677,33 @@ theorem lookup_equiv_both {B : Type} :
   | _, _, .comm hne =>
       ⟨fun hl => ⟨_, lookup_comm_fwd hne hl, .refl _⟩,
        fun hl => ⟨_, lookup_comm_fwd (Ne.symm hne) hl, .refl _⟩⟩
+  | _, _, .dsing hk hty =>
+      have e := fun {k} => Ty.keyCmp_congr_right (k := k) hk
+      ⟨fun hl => match hl with
+        | .dhit h  => ⟨_, .dhit (e ▸ h), .found hty⟩
+        | .dmiss h => ⟨_, .dmiss (e ▸ h), .absent⟩
+        | .dunk h  => ⟨_, .dunk (e ▸ h), .unknown⟩,
+       fun hl => match hl with
+        | .dhit h  => ⟨_, .dhit (e.symm ▸ h), .found hty.symm⟩
+        | .dmiss h => ⟨_, .dmiss (e.symm ▸ h), .absent⟩
+        | .dunk h  => ⟨_, .dunk (e.symm ▸ h), .unknown⟩⟩
+  | _, _, .dsingLab (l := l') =>
+      ⟨fun {l _} hl => match hl with
+        | .dhit h => (by
+            simp only [Ty.keyCmp_lab_lab] at h
+            split at h
+            · subst l'; exact ⟨_, .hit, .refl _⟩
+            · cases h)
+        | .dmiss h => (by
+            simp only [Ty.keyCmp_lab_lab] at h
+            split at h
+            · cases h
+            · exact ⟨_, .miss (Ne.symm ‹_›), .absent⟩)
+        | .dunk h => (by
+            simp only [Ty.keyCmp_lab_lab] at h; split at h <;> cases h),
+       fun hl => match hl with
+        | .hit => ⟨_, .dhit (by simp), .refl _⟩
+        | .miss hne => ⟨_, .dmiss (by simp [Ne.symm hne]), .absent⟩⟩
 
 -- Lookup respects row equivalence. Calibration check for ≈: any stronger
 -- (swapping equal labels) and this lemma breaks, any weaker and T-eq is useless.
@@ -574,6 +723,7 @@ inductive Row.SpineVarFree {B : Type} : Row B → Prop where
   | empty : SpineVarFree .empty
   | sing  : SpineVarFree (.sing l τ)
   | cat   : SpineVarFree ρ₁ → SpineVarFree ρ₂ → SpineVarFree (.cat ρ₁ ρ₂)
+  | dsing : (∀ α, q ≠ .var α) → SpineVarFree (.dsing q τ)
 
 -- ≈ preserves the spine: no rule creates or removes a spine variable.
 theorem RowEquiv.spineVarFree {B : Type} :
@@ -600,6 +750,13 @@ theorem RowEquiv.spineVarFree {B : Type} :
       ⟨(fun hv => match hv with | .cat v _ => v), (fun hv => .cat hv .empty)⟩
   | _, _, .comm _ =>
       ⟨(fun _ => .cat .sing .sing), (fun _ => .cat .sing .sing)⟩
+  | _, _, .dsing hk _ =>
+      ⟨(fun | .dsing h => .dsing (fun α hα => h α
+                (Ty.keyClass_var_iff.mp (hk.trans (hα ▸ rfl))))),
+       (fun | .dsing h => .dsing (fun α hα => h α
+                (Ty.keyClass_var_iff.mp (hk.symm.trans (hα ▸ rfl)))))⟩
+  | _, _, .dsingLab =>
+      ⟨(fun _ => .sing), (fun _ => .dsing (fun _ h => nomatch h))⟩
 
 theorem Lookup.not_unknown_of_spineVarFree {B : Type} {ρ : Row B}
     {l : Label} (hv : ρ.SpineVarFree) (h : Lookup ρ l .unknown) : False := by
@@ -610,6 +767,9 @@ theorem Lookup.not_unknown_of_spineVarFree {B : Type} {ρ : Row B}
       cases h with
       | catSkip _ h₂ => exact ih₂ h₂
       | catUnk h₁    => exact ih₁ h₁
+  | dsing hq =>
+      cases h with
+      | dunk h => obtain ⟨α, rfl⟩ := Ty.keyCmp_lab_undec h; exact hq α rfl
 
 
 ------------------------------ TYPE SUBSTITUTION -------------------------------
@@ -637,6 +797,7 @@ mutual
     | .var α     => θ.row α
     | .sing l τ  => .sing l (τ.applySubst θ)
     | .cat ρ₁ ρ₂ => .cat (ρ₁.applySubst θ) (ρ₂.applySubst θ)
+    | .dsing q τ => .dsing (q.applySubst θ) (τ.applySubst θ)
 end
 
 def TySubst.id (B : Type) : TySubst B := ⟨(.var ·), (.var ·)⟩
@@ -659,6 +820,8 @@ mutual
     | .sing _ τ  => by simp only [Row.applySubst, Ty.applySubst_id τ]
     | .cat ρ₁ ρ₂ => by
         simp only [Row.applySubst, Row.applySubst_id ρ₁, Row.applySubst_id ρ₂]
+    | .dsing q τ => by
+        simp only [Row.applySubst, Ty.applySubst_id q, Ty.applySubst_id τ]
 end
 
 -- Free type/row variables, spine and field positions alike.
@@ -676,7 +839,23 @@ mutual
     | .var α     => [α]
     | .sing _ τ  => τ.ftv
     | .cat ρ₁ ρ₂ => ρ₁.ftv ++ ρ₂.ftv
+    | .dsing q τ => q.ftv ++ τ.ftv
 end
+
+-- keys of one class stay of one class (⌊l⌋ and junk heads are rigid; a
+-- variable class pins the variable)
+theorem Ty.keyClass_applySubst_congr {B : Type} (θ : TySubst B) {q q' : Ty B}
+    (h : q.keyClass = q'.keyClass) :
+    (q.applySubst θ).keyClass = (q'.applySubst θ).keyClass := by
+  cases q <;> cases q' <;> simp_all [Ty.keyClass, Ty.applySubst]
+
+-- ≈-equal substitutions give a key one class
+theorem Ty.keyClass_applySubst_equiv {B : Type} {θ₁ θ₂ : TySubst B}
+    (h : ∀ α, TyEquiv (θ₁.ty α) (θ₂.ty α)) (q : Ty B) :
+    (q.applySubst θ₁).keyClass = (q.applySubst θ₂).keyClass := by
+  cases q with
+  | var α => exact TyEquiv.keyClass_both (h α)
+  | _ => rfl
 
 -- ≈ is a congruence for substitution: every axiom is label-driven and
 -- substitution never touches labels (comm's l₁ ≠ l₂ survives untouched).
@@ -712,7 +891,28 @@ mutual
     | _, _, .unitL       => by simp only [Row.applySubst]; exact .unitL
     | _, _, .unitR       => by simp only [Row.applySubst]; exact .unitR
     | _, _, .comm hne    => by simp only [Row.applySubst]; exact .comm hne
+    | _, _, .dsing hk hty => by
+        simp only [Row.applySubst]
+        exact .dsing (Ty.keyClass_applySubst_congr θ hk) (TyEquiv.applySubst θ hty)
+    | _, _, .dsingLab    => by simp only [Row.applySubst, Ty.applySubst]; exact .dsingLab
 end
+
+-- A non-variable key keeps its class under substitution (heads are rigid, and
+-- a substituted junk key is still junk) — so a DEFINITE key comparison against
+-- a literal survives substitution.
+theorem Ty.keyClass_applySubst {B : Type} (θ : TySubst B) {q : Ty B}
+    (hq : ∀ α, q ≠ .var α) : (q.applySubst θ).keyClass = q.keyClass := by
+  cases q with
+  | var α => exact absurd rfl (hq α)
+  | _ => rfl
+
+theorem Ty.keyCmp_lab_applySubst {B : Type} (θ : TySubst B) {l : Label}
+    {q : Ty B} {c : KeyRel} (h : Ty.keyCmp (.lab l) q = c) (hc : c ≠ .undec) :
+    Ty.keyCmp (.lab l) (q.applySubst θ) = c := by
+  have hq : ∀ α, q ≠ .var α := by
+    rintro α rfl; subst h; exact hc rfl
+  unfold Ty.keyCmp at h ⊢
+  rw [Ty.keyClass_applySubst θ hq]; exact h
 
 -- Substitution acts on lookup results pointwise (definite ones, see below).
 def LookupRes.applySubst {B : Type} (θ : TySubst B) : LookupRes B → LookupRes B
@@ -743,6 +943,9 @@ theorem lookup_applySubst {B : Type} {ρ : Row B} {l : Label}
       simp only [Row.applySubst]
       exact .catSkip (ih₁ (by intro h; cases h)) (ih₂ hr)
   | catUnk _ _ => exact absurd rfl hr
+  | dhit h     => exact .dhit (Ty.keyCmp_lab_applySubst θ h (by simp))
+  | dmiss h    => exact .dmiss (Ty.keyCmp_lab_applySubst θ h (by simp))
+  | dunk _     => exact absurd rfl hr
 
 -- ## Instantiation  σ ≥ τ
 -- θ acts only on the quantified variables; everything else stays put.
@@ -776,6 +979,9 @@ mutual
     | .cat ρ₁ ρ₂ => by
         simp only [Row.applySubst, Row.applySubst_fixed ht hr ρ₁,
                    Row.applySubst_fixed ht hr ρ₂]
+    | .dsing q τ => by
+        simp only [Row.applySubst, Ty.applySubst_fixed ht hr q,
+                   Ty.applySubst_fixed ht hr τ]
 end
 
 -- Monotype schemes instantiate only to themselves (I-refl is the whole story).
@@ -1703,6 +1909,9 @@ mutual
     | .cat ρ₁ ρ₂ => by
         simp only [Row.applySubst, Row.applySubst_applySubst θ₁ θ₂ ρ₁,
                    Row.applySubst_applySubst θ₁ θ₂ ρ₂]
+    | .dsing q τ => by
+        simp only [Row.applySubst, Ty.applySubst_applySubst θ₁ θ₂ q,
+                   Ty.applySubst_applySubst θ₁ θ₂ τ]
 end
 
 -- applySubst only consults θ on the subject's free variables.
@@ -1740,6 +1949,10 @@ mutual
         simp only [Row.applySubst]
         rw [Row.applySubst_congr ρ₁ (fun α hα => h α (by simp [Row.ftv, hα])),
             Row.applySubst_congr ρ₂ (fun α hα => h α (by simp [Row.ftv, hα]))]
+    | .dsing q τ, h => by
+        simp only [Row.applySubst]
+        rw [Ty.applySubst_congr q (fun α hα => h α (by simp [Row.ftv, hα])),
+            Ty.applySubst_congr τ (fun α hα => h α (by simp [Row.ftv, hα]))]
 end
 
 -- Local version of applySubst_fixed: fixing just the subject's ftv suffices.
@@ -2246,6 +2459,8 @@ mutual
     | sing : TyPrec τ τ' → RowPrec (.sing l τ) (.sing l τ')
     | cat  : RowPrec ρ₁ ρ₁' → RowPrec ρ₂ ρ₂' →
              RowPrec (.cat ρ₁ ρ₂) (.cat ρ₁' ρ₂')
+    -- a key is never blurred: ⊑ acts on the field type only
+    | dsing : TyPrec τ τ' → RowPrec (.dsing q τ) (.dsing q τ')
 end
 
 infix:50 " ⊑ₜ " => TyPrec
@@ -2279,6 +2494,13 @@ theorem RowPrec.sing_inv {B : Type} {ρ' : Row B} {l : Label} {τ : Ty B}
   cases h with
   | refl _ => exact ⟨τ, rfl, .refl τ⟩
   | sing h => exact ⟨_, rfl, h⟩
+
+-- ⊢  ρ' ⊑ᵣ (${q}: τ)  ⟹  ρ' = (${q}: τ') with τ' ⊑ₜ τ
+theorem RowPrec.dsing_inv {B : Type} {ρ' : Row B} {q τ : Ty B}
+    (h : RowPrec ρ' (.dsing q τ)) : ∃ τ', ρ' = .dsing q τ' ∧ TyPrec τ' τ := by
+  cases h with
+  | refl _ => exact ⟨τ, rfl, .refl τ⟩
+  | dsing h => exact ⟨_, rfl, h⟩
 
 -- ⊢  ρ' ⊑ᵣ (ρ₁ | ρ₂)  ⟹  ρ' = (ρ₁' | ρ₂') with ρᵢ' ⊑ᵣ ρᵢ
 theorem RowPrec.cat_inv {B : Type} {ρ' ρ₁ ρ₂ : Row B}
@@ -2315,6 +2537,9 @@ theorem RowPrec.trans {B : Type} : {ρ₁ ρ₂ ρ₃ : Row B} →
   | _, _, _, h₁, .cat ha hb => by
       obtain ⟨_, _, rfl, hA, hB⟩ := RowPrec.cat_inv h₁
       exact .cat (RowPrec.trans hA ha) (RowPrec.trans hB hb)
+  | _, _, _, h₁, .dsing h   => by
+      obtain ⟨_, rfl, hτ⟩ := RowPrec.dsing_inv h₁
+      exact .dsing (TyPrec.trans hτ h)
 end
 
 -- Only ε is at least as precise as ε — ⊑ never deletes or creates a field.
@@ -2399,6 +2624,24 @@ theorem RowPrec.comm_equiv {B : Type} : {ρ₁ ρ₂ : Row B} → RowEquiv ρ₁
         obtain ⟨p, rfl, hp⟩ := RowPrec.sing_inv ha
         obtain ⟨p', he, hpp⟩ := (TyPrec.comm_equiv h).2 p hp
         exact ⟨.sing _ p', .sing he, .sing hpp⟩
+  | _, _, .dsing hk h => by
+      constructor
+      · intro a ha
+        obtain ⟨p, rfl, hp⟩ := RowPrec.dsing_inv ha
+        obtain ⟨p', he, hpp⟩ := (TyPrec.comm_equiv h).1 p hp
+        exact ⟨.dsing _ p', .dsing hk he, .dsing hpp⟩
+      · intro a ha
+        obtain ⟨p, rfl, hp⟩ := RowPrec.dsing_inv ha
+        obtain ⟨p', he, hpp⟩ := (TyPrec.comm_equiv h).2 p hp
+        exact ⟨.dsing _ p', .dsing hk.symm he, .dsing hpp⟩
+  | _, _, .dsingLab => by
+      constructor
+      · intro a ha
+        obtain ⟨p, rfl, hp⟩ := RowPrec.dsing_inv ha
+        exact ⟨.sing _ p, .dsingLab, .sing hp⟩
+      · intro a ha
+        obtain ⟨p, rfl, hp⟩ := RowPrec.sing_inv ha
+        exact ⟨.dsing _ p, .symm .dsingLab, .dsing hp⟩
   | _, _, .cat h₁ h₂ => by
       constructor
       · intro a ha
@@ -2934,6 +3177,7 @@ theorem no_plain_principal_scheme {B C : Type} (constTy : C → B) :
                     simp [Ty.applySubst, Row.applySubst, hρ]
                 | sing l' t => simp only [Row.applySubst] at hρ; cases hρ
                 | cat ρ₁ ρ₂ => simp only [Row.applySubst] at hρ; cases hρ
+                | dsing q t => simp only [Row.applySubst] at hρ; cases hρ
             | base b => simp only [Ty.applySubst] at hdb; cases hdb
             | lab b => simp only [Ty.applySubst] at hdb; cases hdb
             | unk => simp only [Ty.applySubst] at hdb; cases hdb

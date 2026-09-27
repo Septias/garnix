@@ -223,8 +223,8 @@ theorem unifyM_occurs_no_unifier {B : Type} [DecidableEq B] (fuel : Nat) :
           have e₂ := RowEquiv.applySubst θ (Row.toSpine_equiv ρ₂)
           refine ih.2 S _ _ V hS (fun x hx => ?_) h ⟨θ, e₁.symm.trans (hR.trans e₂)⟩
           rcases List.mem_append.mp hx with hh | hh
-          · exact hV (List.mem_append_left _ ((mem_sFtv_toSpine ρ₁ x).mp hh))
-          · exact hV (List.mem_append_right _ ((mem_sFtv_toSpine ρ₂ x).mp hh))
+          · exact hV (List.mem_append_left _ (mem_sFtv_toSpine ρ₁ x hh))
+          · exact hV (List.mem_append_right _ (mem_sFtv_toSpine ρ₂ x hh))
       · cases s₁ with
         | nil => exact absurd h (hnilL S s₂ _)
         | cons a s₁ =>

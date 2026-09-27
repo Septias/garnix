@@ -227,59 +227,7 @@ def Row.sortedFtv {B : Type} : Row B → List (Bool × TyVar)
   | .var α     => [(true, α)]
   | .sing _ τ  => Ty.sortedFtv τ
   | .cat ρ₁ ρ₂ => Row.sortedFtv ρ₁ ++ Row.sortedFtv ρ₂
-end
-
--- ## …and its two fibres are the guards the driver actually runs
--- `Ty.tyFtv` / `Ty.allRowVars` (Defs.lean) are `sortedFtv` split by tag. This is
--- what connects the closure measure here to `bindTy`'s occurs check: `bindTy`
--- binds at the TYPE sort and guards on the `false` fibre, so a variable it lets
--- through occurs only at `true` positions — where θ.ty does not reach it.
-mutual
-theorem Ty.mem_tyFtv_iff_sortedFtv {B : Type} {α : TyVar} :
-    (τ : Ty B) → ((false, α) ∈ Ty.sortedFtv τ ↔ α ∈ τ.tyFtv)
-  | .var _   => by simp [Ty.sortedFtv, Ty.tyFtv]
-  | .base _  => by simp [Ty.sortedFtv, Ty.tyFtv]
-  | .lab _  => by simp [Ty.sortedFtv, Ty.tyFtv]
-  | .unk     => by simp [Ty.sortedFtv, Ty.tyFtv]
-  | .fn a b  => by
-      simp only [Ty.sortedFtv, Ty.tyFtv, List.mem_append,
-                 Ty.mem_tyFtv_iff_sortedFtv a, Ty.mem_tyFtv_iff_sortedFtv b]
-  | .rcd ρ   => by
-      simp only [Ty.sortedFtv, Ty.tyFtv, Row.mem_tyFtv_iff_sortedFtv ρ]
-
-theorem Row.mem_tyFtv_iff_sortedFtv {B : Type} {α : TyVar} :
-    (ρ : Row B) → ((false, α) ∈ Row.sortedFtv ρ ↔ α ∈ ρ.tyFtv)
-  | .empty     => by simp [Row.sortedFtv, Row.tyFtv]
-  | .var _     => by simp [Row.sortedFtv, Row.tyFtv]
-  | .sing _ τ  => by
-      simp only [Row.sortedFtv, Row.tyFtv, Ty.mem_tyFtv_iff_sortedFtv τ]
-  | .cat ρ₁ ρ₂ => by
-      simp only [Row.sortedFtv, Row.tyFtv, List.mem_append,
-                 Row.mem_tyFtv_iff_sortedFtv ρ₁, Row.mem_tyFtv_iff_sortedFtv ρ₂]
-end
-
-mutual
-theorem Ty.mem_allRowVars_iff_sortedFtv {B : Type} {α : TyVar} :
-    (τ : Ty B) → ((true, α) ∈ Ty.sortedFtv τ ↔ α ∈ τ.allRowVars)
-  | .var _   => by simp [Ty.sortedFtv, Ty.allRowVars]
-  | .base _  => by simp [Ty.sortedFtv, Ty.allRowVars]
-  | .lab _  => by simp [Ty.sortedFtv, Ty.allRowVars]
-  | .unk     => by simp [Ty.sortedFtv, Ty.allRowVars]
-  | .fn a b  => by
-      simp only [Ty.sortedFtv, Ty.allRowVars, List.mem_append,
-                 Ty.mem_allRowVars_iff_sortedFtv a, Ty.mem_allRowVars_iff_sortedFtv b]
-  | .rcd ρ   => by
-      simp only [Ty.sortedFtv, Ty.allRowVars, Row.mem_allRowVars_iff_sortedFtv ρ]
-
-theorem Row.mem_allRowVars_iff_sortedFtv {B : Type} {α : TyVar} :
-    (ρ : Row B) → ((true, α) ∈ Row.sortedFtv ρ ↔ α ∈ ρ.allRowVars)
-  | .empty     => by simp [Row.sortedFtv, Row.allRowVars]
-  | .var _     => by simp [Row.sortedFtv, Row.allRowVars]
-  | .sing _ τ  => by
-      simp only [Row.sortedFtv, Row.allRowVars, Ty.mem_allRowVars_iff_sortedFtv τ]
-  | .cat ρ₁ ρ₂ => by
-      simp only [Row.sortedFtv, Row.allRowVars, List.mem_append,
-                 Row.mem_allRowVars_iff_sortedFtv ρ₁, Row.mem_allRowVars_iff_sortedFtv ρ₂]
+  | .dsing q τ => Ty.sortedFtv q ++ Ty.sortedFtv τ
 end
 
 -- What θ puts at a tagged occurrence.
@@ -325,6 +273,13 @@ theorem Row.mem_sortedFtv_applySubst {B : Type} {θ : TySubst B} {x : Bool × Ty
         exact ⟨y, by simp only [Row.sortedFtv, List.mem_append]; exact .inl hy, hx⟩
       · obtain ⟨y, hy, hx⟩ := Row.mem_sortedFtv_applySubst ρ₂ h
         exact ⟨y, by simp only [Row.sortedFtv, List.mem_append]; exact .inr hy, hx⟩
+  | .dsing q τ, h => by
+      simp only [Row.applySubst, Row.sortedFtv, List.mem_append] at h
+      rcases h with h | h
+      · obtain ⟨y, hy, hx⟩ := Ty.mem_sortedFtv_applySubst q h
+        exact ⟨y, by simp only [Row.sortedFtv, List.mem_append]; exact .inl hy, hx⟩
+      · obtain ⟨y, hy, hx⟩ := Ty.mem_sortedFtv_applySubst τ h
+        exact ⟨y, by simp only [Row.sortedFtv, List.mem_append]; exact .inr hy, hx⟩
 end
 
 -- ⊢ a substitution that is the identity at every occurring SORT is the identity
@@ -365,6 +320,14 @@ theorem Row.applySubst_fixed_sorted {B : Type} {θ : TySubst B} :
           (fun α hα => ht α (by simp only [Row.sortedFtv, List.mem_append]; exact .inl hα))
           (fun α hα => hr α (by simp only [Row.sortedFtv, List.mem_append]; exact .inl hα)),
         Row.applySubst_fixed_sorted ρ₂
+          (fun α hα => ht α (by simp only [Row.sortedFtv, List.mem_append]; exact .inr hα))
+          (fun α hα => hr α (by simp only [Row.sortedFtv, List.mem_append]; exact .inr hα))]
+  | .dsing q τ, ht, hr => by
+      simp only [Row.applySubst,
+        Ty.applySubst_fixed_sorted q
+          (fun α hα => ht α (by simp only [Row.sortedFtv, List.mem_append]; exact .inl hα))
+          (fun α hα => hr α (by simp only [Row.sortedFtv, List.mem_append]; exact .inl hα)),
+        Ty.applySubst_fixed_sorted τ
           (fun α hα => ht α (by simp only [Row.sortedFtv, List.mem_append]; exact .inr hα))
           (fun α hα => hr α (by simp only [Row.sortedFtv, List.mem_append]; exact .inr hα))]
 end
@@ -645,6 +608,106 @@ theorem Row.mem_ftv_of_mem_sortedFtv {B : Type} {b : Bool} {α : TyVar} :
       rcases h with h | h
       · exact List.mem_append_left  _ (Row.mem_ftv_of_mem_sortedFtv ρ₁ h)
       · exact List.mem_append_right _ (Row.mem_ftv_of_mem_sortedFtv ρ₂ h)
+  | .dsing q τ, h => by
+      simp only [Row.sortedFtv, List.mem_append] at h
+      rcases h with h | h
+      · exact List.mem_append_left  _ (Ty.mem_ftv_of_mem_sortedFtv q h)
+      · exact List.mem_append_right _ (Ty.mem_ftv_of_mem_sortedFtv τ h)
+end
+
+-- ## …and its fibres are the guards the driver actually runs
+-- `Ty.tyFtv` / `Ty.allRowVars` (Defs.lean) are `sortedFtv` split by tag, up to
+-- the occurrences under a KEY (`Ty.keyFtv`), which `sortedFtv` counts at
+-- whatever sort they sit and the guards set aside. This is what connects the
+-- closure measure here to `bindTy`'s occurs check: `bindTy` binds at the TYPE
+-- sort and guards on the `false` fibre AND on the keys, so a variable it lets
+-- through occurs only at `true` positions — where θ.ty does not reach it.
+mutual
+theorem Ty.mem_tyFtv_of_sortedFtv {B : Type} {α : TyVar} :
+    (τ : Ty B) → (false, α) ∈ Ty.sortedFtv τ → α ∈ τ.tyFtv ∨ α ∈ τ.keyFtv
+  | .var _,  h => by simp [Ty.sortedFtv] at h; exact .inl (by simp [Ty.tyFtv, h])
+  | .base _, h => by simp [Ty.sortedFtv] at h
+  | .lab _,  h => by simp [Ty.sortedFtv] at h
+  | .unk,    h => by simp [Ty.sortedFtv] at h
+  | .fn a b, h => by
+      simp only [Ty.sortedFtv, List.mem_append] at h
+      simp only [Ty.tyFtv, Ty.keyFtv, List.mem_append]
+      rcases h with h | h
+      · rcases Ty.mem_tyFtv_of_sortedFtv a h with h | h
+        · exact .inl (.inl h)
+        · exact .inr (.inl h)
+      · rcases Ty.mem_tyFtv_of_sortedFtv b h with h | h
+        · exact .inl (.inr h)
+        · exact .inr (.inr h)
+  | .rcd ρ,  h => Row.mem_tyFtv_of_sortedFtv ρ h
+
+theorem Row.mem_tyFtv_of_sortedFtv {B : Type} {α : TyVar} :
+    (ρ : Row B) → (false, α) ∈ Row.sortedFtv ρ → α ∈ ρ.tyFtv ∨ α ∈ ρ.keyFtv
+  | .empty,     h => by simp [Row.sortedFtv] at h
+  | .var _,     h => by simp [Row.sortedFtv] at h
+  | .sing _ τ,  h => Ty.mem_tyFtv_of_sortedFtv τ h
+  | .cat ρ₁ ρ₂, h => by
+      simp only [Row.sortedFtv, List.mem_append] at h
+      simp only [Row.tyFtv, Row.keyFtv, List.mem_append]
+      rcases h with h | h
+      · rcases Row.mem_tyFtv_of_sortedFtv ρ₁ h with h | h
+        · exact .inl (.inl h)
+        · exact .inr (.inl h)
+      · rcases Row.mem_tyFtv_of_sortedFtv ρ₂ h with h | h
+        · exact .inl (.inr h)
+        · exact .inr (.inr h)
+  | .dsing q τ, h => by
+      simp only [Row.sortedFtv, List.mem_append] at h
+      simp only [Row.tyFtv, Row.keyFtv, List.mem_append]
+      rcases h with h | h
+      · exact .inr (.inl (Ty.mem_ftv_of_mem_sortedFtv q h))
+      · rcases Ty.mem_tyFtv_of_sortedFtv τ h with h | h
+        · exact .inl h
+        · exact .inr (.inr h)
+end
+
+mutual
+theorem Ty.mem_allRowVars_of_sortedFtv {B : Type} {α : TyVar} :
+    (τ : Ty B) → (true, α) ∈ Ty.sortedFtv τ → α ∈ τ.allRowVars ∨ α ∈ τ.keyFtv
+  | .var _,  h => by simp [Ty.sortedFtv] at h
+  | .base _, h => by simp [Ty.sortedFtv] at h
+  | .lab _,  h => by simp [Ty.sortedFtv] at h
+  | .unk,    h => by simp [Ty.sortedFtv] at h
+  | .fn a b, h => by
+      simp only [Ty.sortedFtv, List.mem_append] at h
+      simp only [Ty.allRowVars, Ty.keyFtv, List.mem_append]
+      rcases h with h | h
+      · rcases Ty.mem_allRowVars_of_sortedFtv a h with h | h
+        · exact .inl (.inl h)
+        · exact .inr (.inl h)
+      · rcases Ty.mem_allRowVars_of_sortedFtv b h with h | h
+        · exact .inl (.inr h)
+        · exact .inr (.inr h)
+  | .rcd ρ,  h => Row.mem_allRowVars_of_sortedFtv ρ h
+
+theorem Row.mem_allRowVars_of_sortedFtv {B : Type} {α : TyVar} :
+    (ρ : Row B) → (true, α) ∈ Row.sortedFtv ρ → α ∈ ρ.allRowVars ∨ α ∈ ρ.keyFtv
+  | .empty,     h => by simp [Row.sortedFtv] at h
+  | .var _,     h => by simp [Row.sortedFtv] at h; exact .inl (by simp [Row.allRowVars, h])
+  | .sing _ τ,  h => Ty.mem_allRowVars_of_sortedFtv τ h
+  | .cat ρ₁ ρ₂, h => by
+      simp only [Row.sortedFtv, List.mem_append] at h
+      simp only [Row.allRowVars, Row.keyFtv, List.mem_append]
+      rcases h with h | h
+      · rcases Row.mem_allRowVars_of_sortedFtv ρ₁ h with h | h
+        · exact .inl (.inl h)
+        · exact .inr (.inl h)
+      · rcases Row.mem_allRowVars_of_sortedFtv ρ₂ h with h | h
+        · exact .inl (.inr h)
+        · exact .inr (.inr h)
+  | .dsing q τ, h => by
+      simp only [Row.sortedFtv, List.mem_append] at h
+      simp only [Row.allRowVars, Row.keyFtv, List.mem_append]
+      rcases h with h | h
+      · exact .inr (.inl (Ty.mem_ftv_of_mem_sortedFtv q h))
+      · rcases Ty.mem_allRowVars_of_sortedFtv τ h with h | h
+        · exact .inl h
+        · exact .inr (.inr h)
 end
 
 -- ⊢ …and a tagged binding is a binding
@@ -676,6 +739,7 @@ theorem mem_ftv_of_mem_sVarSeq {B : Type} {β : TyVar} :
       simp only [Row.toSpine, sVarSeq, List.mem_singleton] at h
       simp [Row.ftv, h]
   | .sing _ _, h => by simp only [Row.toSpine, sVarSeq] at h; exact nomatch h
+  | .dsing q _, h => by cases q <;> simp [Row.toSpine, Atom.ofKey, sVarSeq] at h
   | .cat ρ₁ ρ₂, h => by
       rw [Row.toSpine, sVarSeq_append, List.mem_append] at h
       rcases h with h | h

@@ -118,6 +118,7 @@ theorem solveVarM_bounded {B : Type} {S : Supply} {s₁ s₂ : List (Atom B)}
   | cons a₁ r₁ =>
     cases a₁ with
     | field _ _ => simp [solveVarM] at h
+    | dfield _ _ => simp [solveVarM] at h
     | var α =>
       cases r₁ with
       | cons _ _ => simp [solveVarM] at h
@@ -133,13 +134,15 @@ theorem solveVarM_bounded {B : Type} {S : Supply} {s₁ s₂ : List (Atom B)}
             obtain ⟨h₁, h₂⟩ := collapseSol_below hc p hp
             exact ⟨hV (List.mem_append_right _ h₁), by rw [h₂]; simp [Row.ftv]⟩
         · split at h
-          · simp at h
-          · simp only [Option.some.injEq, UResM.success.injEq] at h
-            obtain ⟨rfl, rfl⟩ := h
-            refine ⟨V, fun _ hx => hx, hS, SolBelow_ofRow (fun p hp => ?_)⟩
-            obtain rfl := List.mem_singleton.mp hp
-            exact ⟨hV (List.mem_append_left _ List.mem_cons_self),
-                   fun x hx => hV (List.mem_append_right _ (by rw [sFtv_ofSpine]; exact hx))⟩
+          · split at h <;> (try split at h) <;> simp at h
+          · split at h
+            · simp at h
+            · simp only [Option.some.injEq, UResM.success.injEq] at h
+              obtain ⟨rfl, rfl⟩ := h
+              refine ⟨V, fun _ hx => hx, hS, SolBelow_ofRow (fun p hp => ?_)⟩
+              obtain rfl := List.mem_singleton.mp hp
+              exact ⟨hV (List.mem_append_left _ List.mem_cons_self),
+                     fun x hx => hV (List.mem_append_right _ (by rw [sFtv_ofSpine]; exact hx))⟩
 
 -- (U-EXPAND'S FRESHNESS LEMMAS WERE HERE: expand_bounded, expandR_bounded,
 -- expand_completeM, expandR_completeM. They were the only ones in this file
@@ -169,15 +172,17 @@ theorem unifyM_bounded {B : Type} [DecidableEq B] (fuel : Nat) :
       exact ⟨V, fun _ hx => hx, hS, SolBelow.nil V⟩
     · split at h
       · cases h
-      · simp only [UResM.success.injEq] at h
-        obtain ⟨rfl, rfl⟩ := h
-        refine ⟨V, fun _ hx => hx, hS, ?_⟩
-        rintro γ (⟨p, hp, hγ⟩ | ⟨p, hp, -⟩)
-        · obtain rfl := List.mem_singleton.mp hp
-          rcases hγ with rfl | hγ
-          · exact hα
-          · exact hτ hγ
-        · cases hp
+      · split at h
+        · cases h
+        · simp only [UResM.success.injEq] at h
+          obtain ⟨rfl, rfl⟩ := h
+          refine ⟨V, fun _ hx => hx, hS, ?_⟩
+          rintro γ (⟨p, hp, hγ⟩ | ⟨p, hp, -⟩)
+          · obtain rfl := List.mem_singleton.mp hp
+            rcases hγ with rfl | hγ
+            · exact hα
+            · exact hτ hγ
+          · cases hp
   -- the shape shared by the six eq-emitting arms
   induction fuel with
   | zero =>
@@ -409,8 +414,8 @@ theorem unifyM_bounded {B : Type} [DecidableEq B] (fuel : Nat) :
                 replace h : unifySpineMF S fuel ρ₁.toSpine ρ₂.toSpine = .success s S' := h
                 refine ih.2 S _ _ V hS (fun x hx => ?_) h
                 rcases List.mem_append.mp hx with hh | hh
-                · exact hV (List.mem_append_left _ ((mem_sFtv_toSpine ρ₁ x).mp hh))
-                · exact hV (List.mem_append_right _ ((mem_sFtv_toSpine ρ₂ x).mp hh))
+                · exact hV (List.mem_append_left _ (mem_sFtv_toSpine ρ₁ x hh))
+                · exact hV (List.mem_append_right _ (mem_sFtv_toSpine ρ₂ x hh))
       · cases s₁ with
         | nil =>
             simp only [unifySpineMF] at h
@@ -655,11 +660,13 @@ theorem bindTy_complete {B : Type} {θ : TySubst B}  {S : Supply} {α : TyVar} {
     exact Sol.Sat_nil
   · split at h
     · cases h
-    · simp only [UResM.success.injEq] at h
-      obtain ⟨rfl, -⟩ := h
-      refine ⟨fun p hp => ?_, fun _ hp => (nomatch hp)⟩
-      obtain rfl := List.mem_singleton.mp hp
-      exact hu
+    · split at h
+      · cases h
+      · simp only [UResM.success.injEq] at h
+        obtain ⟨rfl, -⟩ := h
+        refine ⟨fun p hp => ?_, fun _ hp => (nomatch hp)⟩
+        obtain rfl := List.mem_singleton.mp hp
+        exact hu
 
 theorem solveVarM_complete {B : Type} {θ : TySubst B} {S : Supply}
     {s₁ s₂ : List (Atom B)} {s : Sol B} {S' : Supply}
@@ -671,6 +678,7 @@ theorem solveVarM_complete {B : Type} {θ : TySubst B} {S : Supply}
   | cons a₁ r₁ =>
     cases a₁ with
     | field _ _ => simp [solveVarM] at hsolve
+    | dfield _ _ => simp [solveVarM] at hsolve
     | var α =>
       cases r₁ with
       | cons _ _ => simp [solveVarM] at hsolve
@@ -686,13 +694,15 @@ theorem solveVarM_complete {B : Type} {θ : TySubst B} {S : Supply}
             exact Sol.Sat_ofRow.mpr
               (collapseSol_complete hc (RowEquiv.unitR.symm.trans hu))
         · split at hsolve
-          · simp at hsolve
-          · simp only [Option.some.injEq, UResM.success.injEq] at hsolve
-            obtain ⟨rfl, -⟩ := hsolve
-            refine Sol.Sat_ofRow.mpr (fun p hp => ?_)
-            obtain rfl := List.mem_singleton.mp hp
-            simp only [ofSpine, Row.applySubst] at hu
-            exact RowEquiv.unitR.symm.trans hu
+          · split at hsolve <;> (try split at hsolve) <;> simp at hsolve
+          · split at hsolve
+            · simp at hsolve
+            · simp only [Option.some.injEq, UResM.success.injEq] at hsolve
+              obtain ⟨rfl, -⟩ := hsolve
+              refine Sol.Sat_ofRow.mpr (fun p hp => ?_)
+              obtain rfl := List.mem_singleton.mp hp
+              simp only [ofSpine, Row.applySubst] at hu
+              exact RowEquiv.unitR.symm.trans hu
 
 theorem unifySpineMF_nil_left_complete {B : Type} [DecidableEq B] {θ : TySubst B}
     (S : Supply) (fuel : Nat) (s₂ : List (Atom B)) {s : Sol B} {S' : Supply}
@@ -902,8 +912,8 @@ theorem unifyM_success_complete {B : Type} [DecidableEq B] (fuel : Nat) :
                 have e₂ := RowEquiv.applySubst θ (Row.toSpine_equiv ρ₂)
                 refine ih.2 S _ _ V hS (fun x hx => ?_) h (e₁.symm.trans (hR.trans e₂))
                 rcases List.mem_append.mp hx with hh | hh
-                · exact hV (List.mem_append_left _ ((mem_sFtv_toSpine ρ₁ x).mp hh))
-                · exact hV (List.mem_append_right _ ((mem_sFtv_toSpine ρ₂ x).mp hh))
+                · exact hV (List.mem_append_left _ (mem_sFtv_toSpine ρ₁ x hh))
+                · exact hV (List.mem_append_right _ (mem_sFtv_toSpine ρ₂ x hh))
       · cases s₁ with
         | nil =>
             exact ⟨θ, AgreeOn.refl θ V,

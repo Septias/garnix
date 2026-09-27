@@ -109,29 +109,10 @@ theorem unifies_toSpine_iff {B : Type} (θ : TySubst B) (ρ₁ ρ₂ : Row B) :
   exact ⟨fun h => e₁.trans (h.trans e₂.symm), fun h => e₁.symm.trans (h.trans e₂)⟩
 
 -- ## Which arms can answer `stuck` at all
-theorem bindTy_ne_stuck {B : Type} {S : Supply} {α : TyVar} {τ : Ty B} :
-    bindTy S α τ ≠ .stuck := by
-  intro h; unfold bindTy at h
-  split at h
-  · cases h
-  · split at h <;> cases h
-
-theorem solveVarM_ne_stuck {B : Type} {S : Supply} {s₁ s₂ : List (Atom B)} :
-    solveVarM S s₁ s₂ ≠ some .stuck := by
-  intro h
-  cases s₁ with
-  | nil => simp [solveVarM] at h
-  | cons a r =>
-    cases a with
-    | field _ _ => simp [solveVarM] at h
-    | var α =>
-      cases r with
-      | cons _ _ => simp [solveVarM] at h
-      | nil =>
-        simp only [solveVarM] at h
-        split at h
-        · simp at h
-        · split at h <;> simp at h
+-- (`bindTy_ne_stuck` / `solveVarM_ne_stuck` LIVED HERE. Since FC-labels phase B
+-- both CAN answer stuck: `bindTy` on an occurrence only under a key, and
+-- `solveVarM` when the declined collapse faces a keyed field. Neither lemma
+-- had a caller.)
 
 -- (`expandResM_stuck` LIVED HERE — "the expansion wrapper is stuck only if its
 -- residual was". Its wrapper went with the arms.)
@@ -173,7 +154,8 @@ theorem terminal_leading_shape {B : Type} {S : Supply} {a b : Atom B}
     (∃ α l' τ', a = .var α ∧ b = .field l' τ') ∨
     (∃ l τ β, a = .field l τ ∧ b = .var β) ∨
     (∃ l τ l' τ', a = .field l τ ∧ b = .field l' τ' ∧ l ≠ l' ∧
-      windowExtract l (b :: s₂) = none ∧ windowExtract l' (a :: s₁) = none) :=
+      windowExtract l (b :: s₂) = none ∧ windowExtract l' (a :: s₁) = none) ∨
+    (∃ o τ, a = .dfield o τ) ∨ (∃ o τ, b = .dfield o τ) :=
   stuck_leading_shape ht.hstripL ht.hmatchL₁ ht.hmatchL₂
 
 

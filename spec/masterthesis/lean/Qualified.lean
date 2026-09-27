@@ -1084,6 +1084,23 @@ theorem QTypedBody.lookup_absent {B C : Type} {constTy : C → B} {Γ : QCtx B} 
           simp [RecBody.lookup, QTypedBody.lookup_absent h₁ ha,
                 QTypedBody.lookup_absent h₂ hr]
 
+-- ⊢  a JUNK key finds nothing in a record literal's row: every field there is
+--    literal, and junk is apart from every literal
+theorem QTypedBody.lookupQ_junk_absent {B C : Type} {constTy : C → B} {Γ : QCtx B} :
+    {b : RecBody (Expr C)} → {ρ : Row B} → QTypedBody constTy Γ b ρ →
+    ∀ {q : Ty B} {r : LookupRes B}, q.keyClass = .junk → LookupQ ρ q r → r = .absent
+  | _, _, .empty => fun _ hl => by cases hl; rfl
+  | _, _, .field _ => fun hq hl => by
+      cases hl with
+      | hit h => unfold Ty.keyCmp at h; rw [hq] at h; simp [Ty.keyClass, KeyClass.cmp] at h
+      | miss _ => rfl
+      | sunk h => unfold Ty.keyCmp at h; rw [hq] at h; simp [Ty.keyClass, KeyClass.cmp] at h
+  | _, _, .cat h₁ h₂ => fun hq hl => by
+      cases hl with
+      | catHit hf => cases QTypedBody.lookupQ_junk_absent h₁ hq hf
+      | catSkip _ hr => exact QTypedBody.lookupQ_junk_absent h₂ hq hr
+      | catUnk hu => cases QTypedBody.lookupQ_junk_absent h₁ hq hu
+
 theorem QTypedBody.lookup_found {B C : Type} {constTy : C → B} {Γ : QCtx B} :
     {b : RecBody (Expr C)} → {ρ : Row B} → QTypedBody constTy Γ b ρ →
     ∀ {l : Label} {τ : Ty B}, Lookup ρ l (.found τ) →
@@ -1209,7 +1226,15 @@ private theorem qpreservation_aux {B C : Type} {constTy : C → B} :
       | selDynR _ s => exact .qSelDyn h₁ (qpreservation_aux h₂ hΓ s) hl
       | @selDynVal b l _ hbl =>
           rcases qtyped_lab_inv h₂ with he | hu
-          case inr => subst hu; cases hl
+          case inr =>
+            subst hu
+            obtain ⟨ρ', he | hu, hb⟩ := qtyped_rcd_inv h₁
+            · obtain ⟨_, hσ, hr⟩ := he.rcd_inv
+              cases hσ
+              obtain ⟨r', hl', hre⟩ := LookupQ.equiv (RowEquiv.symm hr) hl
+              cases hre
+              cases QTypedBody.lookupQ_junk_absent hb rfl hl'
+            · cases hu
           rw [he.lab_inv] at hl
           have hl := LookupQ.lab_iff.mp hl
           obtain ⟨ρ', he | hu, hb⟩ := qtyped_rcd_inv h₁
@@ -1607,7 +1632,7 @@ private theorem parkQ_inst_solved {B : Type} (b : B) :
     show LookupQ ((Row.applySubst (solveAlpha b) (.var "α")).applySubst _) _ _
     simp only [solveAlpha, Row.applySubst, Ty.applySubst, beq_self_eq_true,
                if_true]
-    exact .lit Lookup.hit
+    exact LookupQ.lab_iff.mpr Lookup.hit
   · simp [parkQ, QScheme.applySubst, solveAlpha, Ty.applySubst]
 
 -- ⊢  χ·⟨★⟩ = ⟨★⟩   (a monotype ★ has nothing for χ to act on)
@@ -1756,7 +1781,7 @@ theorem selQ_covers_selQb {B : Type} (b : B) : selQb b ⊴ selQ B := by
         simp [Row.applySubst, TySubst.restrict, selQ, TySubst.comp, solveβ,
               Ty.applySubst]
       rw [hrow]
-      exact .lit .hit
+      exact LookupQ.lab_iff.mpr .hit
     · simp [TySubst.restrict, selQ, TySubst.comp, solveβ, Ty.applySubst, hδ]
 
 
@@ -2048,6 +2073,7 @@ def Row.hasSing {B : Type} : Row B → Bool
   | .var _     => false
   | .sing _ _  => true
   | .cat ρ₁ ρ₂ => ρ₁.hasSing || ρ₂.hasSing
+  | .dsing _ _ => true
 
 -- ⊢  ≈ᵣ preserves it: every constructor is a congruence, a re-bracketing or a
 --    permutation of the same `.sing` nodes.
@@ -2063,6 +2089,8 @@ theorem rowEquiv_hasSing {B : Type} :
   | _, _, .unitL         => by simp [Row.hasSing]
   | _, _, .unitR         => by simp [Row.hasSing]
   | _, _, .comm _        => by simp [Row.hasSing]
+  | _, _, .dsing _ _     => rfl
+  | _, _, .dsingLab      => rfl
 
 -- ⊢  substitution never DELETES a field: it maps `.sing` to `.sing`.
 theorem hasSing_applySubst {B : Type} (θ : TySubst B) :
@@ -2070,6 +2098,7 @@ theorem hasSing_applySubst {B : Type} (θ : TySubst B) :
   | .empty,     h => by simp [Row.hasSing] at h
   | .var _,     h => by simp [Row.hasSing] at h
   | .sing _ _,  _ => rfl
+  | .dsing _ _, _ => rfl
   | .cat ρ₁ ρ₂, h => by
       simp only [Row.applySubst, Row.hasSing, Bool.or_eq_true] at h ⊢
       rcases h with h | h
@@ -2082,6 +2111,7 @@ theorem applySubst_rowOnly {B : Type} {θ₁ θ₂ : TySubst B} (hr : θ₁.row 
   | .empty,     _ => rfl
   | .var α,     _ => by simp only [Row.applySubst, hr]
   | .sing _ _,  h => by simp [Row.hasSing] at h
+  | .dsing _ _, h => by simp [Row.hasSing] at h
   | .cat ρ₁ ρ₂, h => by
       simp only [Row.hasSing, Bool.or_eq_false_iff] at h
       simp only [Row.applySubst, applySubst_rowOnly hr ρ₁ h.1,

@@ -29,9 +29,11 @@ theorem bindTy_sound {B : Type} {θ : TySubst B}  {S : Supply} {α : TyVar} {τ 
   · next hv => rw [tyIsVar_eq hv]; exact TyEquiv.refl _
   · split at h
     · exact absurd h (by simp)
-    · simp only [UResM.success.injEq] at h
-      obtain ⟨rfl, -⟩ := h
-      exact hsat.1 (α, τ) List.mem_cons_self
+    · split at h
+      · exact absurd h (by simp)
+      · simp only [UResM.success.injEq] at h
+        obtain ⟨rfl, -⟩ := h
+        exact hsat.1 (α, τ) List.mem_cons_self
 
 -- ⊢  U-var-solve, at the mutual result type
 theorem solveVarM_reflect {B : Type} {θ : TySubst B} {S : Supply}
@@ -43,6 +45,7 @@ theorem solveVarM_reflect {B : Type} {θ : TySubst B} {S : Supply}
   | cons a₁ r₁ =>
     cases a₁ with
     | field _ _ => simp [solveVarM] at hsolve
+    | dfield _ _ => simp [solveVarM] at hsolve
     | var α =>
       cases r₁ with
       | cons _ _ => simp [solveVarM] at hsolve
@@ -57,12 +60,14 @@ theorem solveVarM_reflect {B : Type} {θ : TySubst B} {S : Supply}
             exact RowEquiv.unitR.trans
               (collapseSol_reflect hc (fun p hp => hsat.2 p hp))
         · split at hsolve
-          · simp at hsolve
-          · simp only [Option.some.injEq, UResM.success.injEq] at hsolve
-            obtain ⟨rfl, -⟩ := hsolve
-            have hbind := hsat.2 (α, ofSpine s₂) List.mem_cons_self
-            simp only [ofSpine, Row.applySubst]
-            exact RowEquiv.unitR.trans hbind
+          · split at hsolve <;> (try split at hsolve) <;> simp at hsolve
+          · split at hsolve
+            · simp at hsolve
+            · simp only [Option.some.injEq, UResM.success.injEq] at hsolve
+              obtain ⟨rfl, -⟩ := hsolve
+              have hbind := hsat.2 (α, ofSpine s₂) List.mem_cons_self
+              simp only [ofSpine, Row.applySubst]
+              exact RowEquiv.unitR.trans hbind
 
 
 
@@ -84,7 +89,9 @@ private theorem bindTy_supply {B : Type} {S : Supply} {α : TyVar} {τ : Ty B}
   · simp only [UResM.success.injEq] at h; obtain ⟨-, rfl⟩ := h; exact Nat.le_refl _
   · split at h
     · cases h
-    · simp only [UResM.success.injEq] at h; obtain ⟨-, rfl⟩ := h; exact Nat.le_refl _
+    · split at h
+      · cases h
+      · simp only [UResM.success.injEq] at h; obtain ⟨-, rfl⟩ := h; exact Nat.le_refl _
 
 private theorem solveVarM_supply {B : Type} {S : Supply}
     {u₁ u₂ : List (Atom B)} {s : Sol B} {S' : Supply}
@@ -92,15 +99,18 @@ private theorem solveVarM_supply {B : Type} {S : Supply}
   match u₁ with
   | [] => simp [solveVarM] at h
   | .field _ _ :: _ => simp [solveVarM] at h
+  | .dfield _ _ :: _ => simp [solveVarM] at h
   | [.var α] =>
       simp only [solveVarM] at h
       split at h
       · simp only [Option.some.injEq, UResM.success.injEq] at h
         obtain ⟨-, rfl⟩ := h; exact Nat.le_refl _
       · split at h
-        · simp at h
-        · simp only [Option.some.injEq, UResM.success.injEq] at h
-          obtain ⟨-, rfl⟩ := h; exact Nat.le_refl _
+        · split at h <;> (try split at h) <;> simp at h
+        · split at h
+          · simp at h
+          · simp only [Option.some.injEq, UResM.success.injEq] at h
+            obtain ⟨-, rfl⟩ := h; exact Nat.le_refl _
   | .var _ :: _ :: _ => simp [solveVarM] at h
 
 private theorem allVarsEmpty_supply {B : Type} {S : Supply} {u : List (Atom B)}
@@ -581,17 +591,35 @@ theorem Row.ftv_applySubst {B : Type} (θ : TySubst B) : (ρ : Row B) →
       rcases h with h | h
       · obtain ⟨α, hα, hγ⟩ := Row.ftv_applySubst θ ρ₁ γ h; exact ⟨α, .inl hα, hγ⟩
       · obtain ⟨α, hα, hγ⟩ := Row.ftv_applySubst θ ρ₂ γ h; exact ⟨α, .inr hα, hγ⟩
+  | .dsing q τ => fun γ h => by
+      simp only [Row.applySubst, Row.ftv, List.mem_append] at h ⊢
+      rcases h with h | h
+      · obtain ⟨α, hα, hγ⟩ := Ty.ftv_applySubst θ q γ h; exact ⟨α, .inl hα, hγ⟩
+      · obtain ⟨α, hα, hγ⟩ := Ty.ftv_applySubst θ τ γ h; exact ⟨α, .inr hα, hγ⟩
 end
 
--- ⊢  a row and its spine have the same variables
-theorem mem_sFtv_toSpine {B : Type} : (ρ : Row B) → ∀ γ, (γ ∈ sFtv ρ.toSpine ↔ γ ∈ ρ.ftv)
-  | .empty => fun _ => Iff.rfl
-  | .var _ => fun _ => Iff.rfl
-  | .sing _ τ => fun γ => by
-      simp only [Row.toSpine, sFtv, Row.ftv, List.append_nil]
-  | .cat ρ₁ ρ₂ => fun γ => by
-      rw [Row.toSpine, sFtv_append, Row.ftv]
-      simp only [List.mem_append, mem_sFtv_toSpine ρ₁ γ, mem_sFtv_toSpine ρ₂ γ]
+-- the spine atom of a keyed field mentions only the key's variable and the payload's
+theorem sFtv_ofKey {B : Type} (q τ : Ty B) :
+    ∀ γ, γ ∈ sFtv [Atom.ofKey q τ] → γ ∈ q.ftv ∨ γ ∈ τ.ftv := by
+  intro γ h
+  cases q <;> simp_all [Atom.ofKey, sFtv, Ty.ftv]
+
+-- ⊢  a spine's variables are its row's (a junk key's are forgotten: ⊆, not =)
+theorem mem_sFtv_toSpine {B : Type} : (ρ : Row B) → ∀ γ, γ ∈ sFtv ρ.toSpine → γ ∈ ρ.ftv
+  | .empty => fun _ h => h
+  | .var _ => fun _ h => by simpa [Row.toSpine, sFtv, Row.ftv] using h
+  | .sing _ τ => fun γ h => by
+      simpa only [Row.toSpine, sFtv, Row.ftv, List.append_nil] using h
+  | .cat ρ₁ ρ₂ => fun γ h => by
+      rw [Row.toSpine, sFtv_append] at h
+      rw [Row.ftv]
+      rcases List.mem_append.mp h with h | h
+      · exact List.mem_append_left _ (mem_sFtv_toSpine ρ₁ γ h)
+      · exact List.mem_append_right _ (mem_sFtv_toSpine ρ₂ γ h)
+  | .dsing q τ => fun γ h => by
+      simp only [Row.toSpine] at h
+      simp only [Row.ftv, List.mem_append]
+      exact sFtv_ofKey q τ γ h
 
 -- ⊢  … and the same, for a substituted SPINE
 theorem sFtv_sApplySubst {B : Type} (θ : TySubst B) : (t : List (Atom B)) →
@@ -606,9 +634,22 @@ theorem sFtv_sApplySubst {B : Type} (θ : TySubst B) : (t : List (Atom B)) →
   | .var α :: t => fun γ h => by
       rw [sApplySubst, sFtv_append] at h
       rcases List.mem_append.mp h with h | h
-      · exact ⟨α, List.mem_cons_self, .inr ((mem_sFtv_toSpine _ γ).mp h)⟩
+      · exact ⟨α, List.mem_cons_self, .inr (mem_sFtv_toSpine _ γ h)⟩
       · obtain ⟨β, hβ, hγ⟩ := sFtv_sApplySubst θ t γ h
         exact ⟨β, List.mem_cons_of_mem _ hβ, hγ⟩
+  | .dfield o τ :: t => fun γ h => by
+      simp only [sApplySubst] at h
+      rw [sFtv_cons] at h
+      rcases List.mem_append.mp h with h | h
+      · rcases sFtv_ofKey _ _ γ h with h | h
+        · cases o with
+          | none => simp [Atom.keyTy, Ty.applySubst, Ty.ftv] at h
+          | some α =>
+              exact ⟨α, by simp [sFtv], .inl (by simpa [Atom.keyTy, Ty.applySubst] using h)⟩
+        · obtain ⟨α, hα, hγ⟩ := Ty.ftv_applySubst θ τ γ h
+          exact ⟨α, by simp only [sFtv, List.mem_append]; exact .inl (.inr hα), hγ⟩
+      · obtain ⟨β, hβ, hγ⟩ := sFtv_sApplySubst θ t γ h
+        exact ⟨β, by simp only [sFtv, List.mem_append]; exact .inr hβ, hγ⟩
 
 
 end MinimalCalculus

@@ -69,8 +69,8 @@ theorem SolveRow.clean {B : Type} [DecidableEq B] {S S' : SolverState B} {ρ ρ'
   obtain ⟨fuel, s, Sup, hu, rfl⟩ := h
   refine hc.extend ((unifyM_good fuel).2 _ _ _ hu) (fun x hx => ?_)
   rcases List.mem_append.mp hx with hx | hx
-  · rw [sSorted_toSpine] at hx; exact hc.clears_row hx
-  · rw [sSorted_toSpine] at hx; exact hc.clears_row hx
+  · exact hc.clears_row (sSorted_toSpine _ _ hx)
+  · exact hc.clears_row (sSorted_toSpine _ _ hx)
 
 theorem SolveTy.unifies_sat {B : Type} [DecidableEq B] {S S' : SolverState B}
     {τ τ' : Ty B} (h : SolveTy S τ τ' S') {σ : TySubst B}

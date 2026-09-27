@@ -46,12 +46,14 @@ def Row.usize {B : Type} : Row B → Nat
   | .var _     => 1
   | .sing _ τ  => 1 + Ty.usize τ
   | .cat ρ₁ ρ₂ => Row.usize ρ₁ + Row.usize ρ₂
+  | .dsing _ τ => 1 + Ty.usize τ    -- a key is read by class only: not counted
 end
 
 def spineSize {B : Type} : List (Atom B) → Nat
   | [] => 0
   | .field _ τ :: s => 1 + τ.usize + spineSize s
   | .var _ :: s     => 1 + spineSize s
+  | .dfield _ τ :: s => 1 + τ.usize + spineSize s
 
 theorem spineSize_append {B : Type} :
     (s t : List (Atom B)) → spineSize (s ++ t) = spineSize s + spineSize t
@@ -59,6 +61,8 @@ theorem spineSize_append {B : Type} :
   | .field _ τ :: s, t => by
       simp only [List.cons_append, spineSize, spineSize_append s t]; omega
   | .var _ :: s, t => by
+      simp only [List.cons_append, spineSize, spineSize_append s t]; omega
+  | .dfield _ τ :: s, t => by
       simp only [List.cons_append, spineSize, spineSize_append s t]; omega
 
 theorem spineSize_toSpine {B : Type} : (ρ : Row B) → spineSize ρ.toSpine = ρ.usize
@@ -68,6 +72,7 @@ theorem spineSize_toSpine {B : Type} : (ρ : Row B) → spineSize ρ.toSpine = �
   | .cat ρ₁ ρ₂ => by
       simp only [Row.toSpine, spineSize_append, spineSize_toSpine ρ₁, spineSize_toSpine ρ₂,
         Row.usize]
+  | .dsing q τ => by cases q <;> simp [Row.toSpine, Atom.ofKey, spineSize, Row.usize]
 
 theorem spineSize_reverse {B : Type} : (s : List (Atom B)) →
     spineSize s.reverse = spineSize s
@@ -75,6 +80,8 @@ theorem spineSize_reverse {B : Type} : (s : List (Atom B)) →
   | .field _ τ :: s => by
       simp only [List.reverse_cons, spineSize_append, spineSize_reverse s, spineSize]; omega
   | .var _ :: s => by
+      simp only [List.reverse_cons, spineSize_append, spineSize_reverse s, spineSize]; omega
+  | .dfield _ τ :: s => by
       simp only [List.reverse_cons, spineSize_append, spineSize_reverse s, spineSize]; omega
 
 ------------------------- THE DETECTORS SHRINK THE PROBLEM ---------------------
@@ -130,6 +137,16 @@ theorem removeField_size {B : Type} {l : Label} :
     (s : List (Atom B)) → {τ : Ty B} → {s' : List (Atom B)} →
     removeField l s = some (τ, s') → spineSize s = spineSize s' + 1 + τ.usize
   | .var β :: t, τ, s', h => by
+      simp only [removeField] at h
+      revert h
+      cases hw : removeField l t with
+      | none => intro h; cases h
+      | some p =>
+          intro h
+          have e := removeField_size t hw
+          cases h
+          simp only [spineSize]; omega
+  | .dfield o σ :: t, τ, s', h => by
       simp only [removeField] at h
       revert h
       cases hw : removeField l t with
@@ -274,6 +291,10 @@ theorem sApplySubst_fixed {B : Type} {θ : TySubst B} (ht : ∀ α, θ.ty α = .
   | .var α :: t => by
       simp only [sApplySubst, hr α, Row.toSpine, List.singleton_append,
         sApplySubst_fixed ht hr t]
+  | .dfield o τ :: t => by
+      simp only [sApplySubst, Ty.applySubst_fixed_sorted τ (fun α _ => ht α) (fun α _ => hr α),
+        sApplySubst_fixed ht hr t]
+      cases o <;> simp [Atom.keyTy, Ty.applySubst, ht, Atom.ofKey]
 
 ------------------------- VERDICTS THAT ARE NOT `outOfFuel` --------------------
 
@@ -295,7 +316,9 @@ theorem bindTy_ne_oof {B : Type} (S : Supply) (α : TyVar) (τ : Ty B) :
     bindTy S α τ ≠ .outOfFuel := by
   unfold bindTy; split
   · simp
-  · split <;> simp
+  · split
+    · simp
+    · split <;> simp
 
 theorem solveVarM_ne_oof {B : Type} {S : Supply} {s₁ s₂ : List (Atom B)} {r : UResM B}
     (h : solveVarM S s₁ s₂ = some r) : r ≠ .outOfFuel := by
@@ -305,7 +328,9 @@ theorem solveVarM_ne_oof {B : Type} {S : Supply} {s₁ s₂ : List (Atom B)} {r 
       subst h
       split
       · simp
-      · split <;> simp
+      · split
+        · split <;> simp
+        · split <;> simp
 
 theorem mono_ty_eq {B : Type} [DecidableEq B] {S : Supply} {f F : Nat} {τ τ' : Ty B}
     (hle : f ≤ F) (h : unifyTyF S f τ τ' ≠ .outOfFuel) :
@@ -503,10 +528,14 @@ theorem termR_all {B : Type} [DecidableEq B] (U : List (Bool × TyVar)) :
           (by omega) (by omega)
         exact ⟨F + 1, hF⟩
       · have hsz : (Ty.rcd ρ₁).usize + (Ty.rcd ρ₂).usize = 1 + ρ₁.usize + (1 + ρ₂.usize) := rfl
-        have hP : SpP (B := B) ρ₁.toSpine ρ₂.toSpine = TyP (Ty.rcd ρ₁) (Ty.rcd ρ₂) := by
-          simp only [SpP, TyP, sSorted_toSpine, Ty.sortedFtv]
+        have hP : SpP (B := B) ρ₁.toSpine ρ₂.toSpine ⊆ TyP (Ty.rcd ρ₁) (Ty.rcd ρ₂) := by
+          intro x hx
+          simp only [SpP, TyP, Ty.sortedFtv, List.mem_append] at hx ⊢
+          rcases hx with hx | hx
+          · exact .inl (sSorted_toSpine _ _ hx)
+          · exact .inr (sSorted_toSpine _ _ hx)
         obtain ⟨f, hf⟩ := (ihm (ρ₁.usize + ρ₂.usize) (by omega)).2 S ρ₁.toSpine ρ₂.toSpine
-          (by rw [hP]; exact hU) (by rw [hP]; exact hn)
+          (fun x hx => hU (hP hx)) (Nat.le_trans (cntIn_mono hP) hn)
           (by rw [spineSize_toSpine, spineSize_toSpine]; exact Nat.le_refl _)
         exact ⟨f + 1, hf⟩
   · cases s₁ with

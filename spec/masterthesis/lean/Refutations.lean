@@ -266,12 +266,12 @@ theorem terminal_masks_mgu : HasMgu tρ₁ tρ₂ := by
                         (Row.cat (θ'.row "w") (θ'.row "v")) := by
       simpa [tρ₁, tρ₂, Row.applySubst, Ty.applySubst, Unifies] using hu
     -- the two components are var-free, and the l-field sits in exactly one
-    obtain ⟨hvar, -⟩ := hu'.char
+    obtain ⟨hvar, -, -⟩ := hu'.char
     have hspine : (Row.cat (θ'.row "w") (θ'.row "v")).toSpine
         = (θ'.row "w").toSpine ++ (θ'.row "v").toSpine := rfl
-    rw [hspine, sVarSeq_append] at hvar
-    have hvnil : sVarSeq (θ'.row "w").toSpine = [] ∧
-                 sVarSeq (θ'.row "v").toSpine = [] :=
+    rw [hspine, sBarSeq_append] at hvar
+    have hvnil : sBarSeq (θ'.row "w").toSpine = [] ∧
+                 sBarSeq (θ'.row "v").toSpine = [] :=
       List.append_eq_nil_iff.mp hvar.symm
     have hcount : ∀ m, (if ("l" : Label) = m then 1 else 0)
         = sFieldCount m (θ'.row "w").toSpine + sFieldCount m (θ'.row "v").toSpine := by
@@ -412,9 +412,9 @@ private def shB : Row Unit := .cat (.sing "l" (.rcd .empty)) (.sing "l" uB)
 --    take if the host were allowed to sit behind another variable.
 theorem shadow_order_matters : ¬ RowEquiv shA shB := by
   intro h
-  have hp := (RowEquiv.char h).2 "l"
+  have hp := (RowEquiv.char h).2.1 "l"
   simp only [shA, shB, Row.toSpine, sProj, List.cons_append,
-    List.nil_append, sVarSeq, List.length_nil, List.map_cons, List.map_nil] at hp
+    List.nil_append, sBarSeq, List.length_nil, List.map_cons, List.map_nil] at hp
   cases hp with
   | cons _ hty _ =>
       have hd := TyEquiv.rcdDepth_eq hty
@@ -467,7 +467,7 @@ theorem selfref_lone_host_reported :
 --    to come from.
 theorem selfref_lone_host_no_unifier :
     ¬ ∃ θ : TySubst Unit, Unifies θ gρ₁ gρ₂ :=
-  selfref_host_no_unifier (t₁ := [.var "a"]) rfl (by
+  selfref_host_no_unifier (t₁ := [.var "a"]) rfl rfl (by
     intro γ hγ
     simp only [sVarSeq, List.mem_singleton] at hγ
     subst hγ
