@@ -31,67 +31,61 @@ import QSubst
 namespace MinimalCalculus
 
 --------------------- ? ON α: THE BLOCKER OF AN UNKNOWN LOOKUP ----------------
--- `Lookup Γ ρ l .unknown` says the lookup gave up; it does not say where. The
+-- `Lookup ρ l .unknown` says the lookup gave up; it does not say where. The
 -- algorithm needs the variable, because that is what the stump is blocked on
--- and what wake-up watches. This refines the three `unknown`-producing rules of
--- `Lookup` (L-α-free, L-α through a solved var, L-conc-skip / L-conc-★) with
--- the blocker threaded through.
+-- and what wake-up watches. This refines the `unknown`-producing rules of
+-- `Lookup` (L-α-free, L-conc-skip / L-conc-★) with the blocker threaded
+-- through.
 
-/-- `LookupBlocked Γ ρ l α` — looking up `l` in `ρ` under `Γ` gets stuck at the
-unsolved row-variable `α`. This is the paper's `Γ ⊢ ρ.l ↓ ? on α`. -/
-inductive LookupBlocked {B : Type} (Γ : Ctx B) : Row B → Label → TyVar → Prop where
+/-- `LookupBlocked ρ l α` — looking up `l` in `ρ` gets stuck at the row-variable
+`α`. This is the paper's `ρ.l ↓ ? on α`.
+
+CONTEXT-FREE, like `Lookup` itself. The `var` constructor — "chase a solved
+variable; the blocker is whatever the solution blocks on" — went with `L-α`, and
+`varFree`'s premise `Γ.lookupRow α = none` went with it: the rows these rules
+look up have already had the solution applied, so a row variable still standing
+in one is unsolved by construction. -/
+inductive LookupBlocked {B : Type} : Row B → Label → TyVar → Prop where
   -- L-α-free: the lookup dies here, on α itself
   | varFree {α : TyVar} {l : Label} :
-      Γ.lookupRow α = none → LookupBlocked Γ (.var α) l α
-  -- L-α: chase a solved variable; the blocker is whatever the solution blocks on
-  | var {α β : TyVar} {ρ : Row B} {l : Label} :
-      Γ.lookupRow α = some ρ → LookupBlocked Γ ρ l β → LookupBlocked Γ (.var α) l β
+      LookupBlocked (.var α) l α
   -- L-conc-skip: the left component is definitely absent, so the right decides
   | catSkip {ρ₁ ρ₂ : Row B} {l : Label} {β : TyVar} :
-      Lookup Γ ρ₁ l .absent → LookupBlocked Γ ρ₂ l β →
-      LookupBlocked Γ (.cat ρ₁ ρ₂) l β
+      Lookup ρ₁ l .absent → LookupBlocked ρ₂ l β →
+      LookupBlocked (.cat ρ₁ ρ₂) l β
   -- L-conc-★: the left component already blocks, and ‖ is left-biased
   | catUnk {ρ₁ ρ₂ : Row B} {l : Label} {β : TyVar} :
-      LookupBlocked Γ ρ₁ l β → LookupBlocked Γ (.cat ρ₁ ρ₂) l β
+      LookupBlocked ρ₁ l β → LookupBlocked (.cat ρ₁ ρ₂) l β
 
 -- ⊢  the refinement is SOUND: a blocked lookup is an unknown lookup
-theorem LookupBlocked.toLookup {B : Type} {Γ : Ctx B} {ρ : Row B} {l : Label}
-    {α : TyVar} : LookupBlocked Γ ρ l α → Lookup Γ ρ l .unknown
-  | .varFree h        => .varFree h
-  | .var h hb         => .var h hb.toLookup
-  | .catSkip ha hb    => .catSkip ha hb.toLookup
-  | .catUnk hb        => .catUnk hb.toLookup
+theorem LookupBlocked.toLookup {B : Type} {ρ : Row B} {l : Label}
+    {α : TyVar} : LookupBlocked ρ l α → Lookup ρ l .unknown
+  | .varFree         => .varFree
+  | .catSkip ha hb   => .catSkip ha hb.toLookup
+  | .catUnk hb       => .catUnk hb.toLookup
 
 -- ⊢  …and COMPLETE: an unknown lookup always has a blocker to name
 -- Together these say `? on α` is a faithful reading of `?` — the algorithm
 -- never has to invent a blocker, and never fails to find one.
-theorem Lookup.unknown_blocked {B : Type} {Γ : Ctx B} {ρ : Row B} {l : Label}
-    (h : Lookup Γ ρ l .unknown) : ∃ α, LookupBlocked Γ ρ l α := by
+theorem Lookup.unknown_blocked {B : Type} {ρ : Row B} {l : Label}
+    (h : Lookup ρ l .unknown) : ∃ α, LookupBlocked ρ l α := by
   generalize hr : (LookupRes.unknown : LookupRes B) = r at h
   induction h with
   | emp => exact absurd hr (by simp)
   | hit => exact absurd hr (by simp)
   | miss _ => exact absurd hr (by simp)
-  | var hΓ _ ih => obtain ⟨β, hb⟩ := ih hr; exact ⟨β, .var hΓ hb⟩
-  | varFree hΓ => exact ⟨_, .varFree hΓ⟩
+  | varFree => exact ⟨_, .varFree⟩
   | catHit _ => exact absurd hr (by simp)
   | catSkip ha _ _ ihb => obtain ⟨β, hb⟩ := ihb hr; exact ⟨β, .catSkip ha hb⟩
   | catUnk _ ih => obtain ⟨β, hb⟩ := ih rfl; exact ⟨β, .catUnk hb⟩
 
 -- ⊢  the blocker is UNIQUE — `lookup_det`'s image for `? on α`, and what makes
 --    "the stump is blocked on α" well defined rather than a choice
-theorem LookupBlocked.det {B : Type} {Γ : Ctx B} {ρ : Row B} {l : Label}
-    {α β : TyVar} (h₁ : LookupBlocked Γ ρ l α) (h₂ : LookupBlocked Γ ρ l β) :
+theorem LookupBlocked.det {B : Type} {ρ : Row B} {l : Label}
+    {α β : TyVar} (h₁ : LookupBlocked ρ l α) (h₂ : LookupBlocked ρ l β) :
     α = β := by
   induction h₁ generalizing β with
-  | varFree h =>
-      cases h₂ with
-      | varFree _ => rfl
-      | var h' _ => rw [h] at h'; cases h'
-  | var h _ ih =>
-      cases h₂ with
-      | varFree h' => rw [h] at h'; cases h'
-      | var h' hb' => rw [h] at h'; injection h' with he; exact ih (he ▸ hb')
+  | varFree => cases h₂; rfl
   | catSkip ha _ ih =>
       cases h₂ with
       | catSkip _ hb' => exact ih hb'
@@ -101,14 +95,12 @@ theorem LookupBlocked.det {B : Type} {Γ : Ctx B} {ρ : Row B} {l : Label}
       | catSkip ha' _ => exact absurd (lookup_det hb.toLookup ha') (by simp)
       | catUnk hb' => exact ih hb'
 
--- ⊢  the blocker is genuinely UNSOLVED in Γ — what makes wake-up's trigger
---    ("a solution α ≔ ρ is written") the right one
-theorem LookupBlocked.unsolved {B : Type} {Γ : Ctx B} {ρ : Row B} {l : Label}
-    {α : TyVar} : LookupBlocked Γ ρ l α → Γ.lookupRow α = none
-  | .varFree h     => h
-  | .var _ hb      => hb.unsolved
-  | .catSkip _ hb  => hb.unsolved
-  | .catUnk hb     => hb.unsolved
+-- `LookupBlocked.unsolved` used to live here: "the blocker is genuinely
+-- UNSOLVED in Γ", which is what made wake-up's trigger ("a solution α ≔ ρ is
+-- written") the right one. It has no content left to state — a blocker is a row
+-- variable of the row as given, and the row the rules look up has already had
+-- the solution applied, so being unsolved is not a fact about a context but the
+-- reason the variable is still there at all.
 
 
 --------------------- ? ON β FOR A KEYED LOOKUP -------------------------------
@@ -117,72 +109,60 @@ theorem LookupBlocked.unsolved {B : Type} {Γ : Ctx B} {ρ : Row B} {l : Label}
 -- variable's solution that decides it, not any row's — so the blocker of a
 -- keyed lookup is a row variable or the key itself.
 
-/-- `LookupVBlocked Γ ρ α β` — the lookup of the label variable α in ρ gets
-stuck at β: at a free row variable, or at α itself on the first field. -/
-inductive LookupVBlocked {B : Type} (Γ : Ctx B) : Row B → TyVar → TyVar → Prop where
+/-- `LookupVBlocked ρ α β` — the lookup of the label variable α in ρ gets
+stuck at β: at a row variable, or at α itself on the first field. -/
+inductive LookupVBlocked {B : Type} : Row B → TyVar → TyVar → Prop where
   -- L-?-lab: the first field decides nothing until α is known
-  | sing {α : TyVar} {l : Label} {τ : Ty B} : LookupVBlocked Γ (.sing l τ) α α
-  | varFree {α β : TyVar} :
-      Γ.lookupRow β = none → LookupVBlocked Γ (.var β) α β
-  | var {α β γ : TyVar} {ρ : Row B} :
-      Γ.lookupRow β = some ρ → LookupVBlocked Γ ρ α γ → LookupVBlocked Γ (.var β) α γ
+  | sing {α : TyVar} {l : Label} {τ : Ty B} : LookupVBlocked (.sing l τ) α α
+  | varFree {α β : TyVar} : LookupVBlocked (.var β) α β
   | catSkip {ρ₁ ρ₂ : Row B} {α γ : TyVar} :
-      LookupV Γ ρ₁ α .absent → LookupVBlocked Γ ρ₂ α γ →
-      LookupVBlocked Γ (.cat ρ₁ ρ₂) α γ
+      LookupV ρ₁ α .absent → LookupVBlocked ρ₂ α γ →
+      LookupVBlocked (.cat ρ₁ ρ₂) α γ
   | catUnk {ρ₁ ρ₂ : Row B} {α γ : TyVar} :
-      LookupVBlocked Γ ρ₁ α γ → LookupVBlocked Γ (.cat ρ₁ ρ₂) α γ
+      LookupVBlocked ρ₁ α γ → LookupVBlocked (.cat ρ₁ ρ₂) α γ
 
-/-- `Γ ⊢ ρ.q ↓ ? on β` for a keyed lookup. -/
-inductive LookupBlockedQ {B : Type} (Γ : Ctx B) : Row B → Ty B → TyVar → Prop where
+/-- `ρ.q ↓ ? on β` for a keyed lookup. -/
+inductive LookupBlockedQ {B : Type} : Row B → Ty B → TyVar → Prop where
   | lit {ρ : Row B} {l : Label} {β : TyVar} :
-      LookupBlocked Γ ρ l β → LookupBlockedQ Γ ρ (.lab l) β
+      LookupBlocked ρ l β → LookupBlockedQ ρ (.lab l) β
   | var {ρ : Row B} {α β : TyVar} :
-      LookupVBlocked Γ ρ α β → LookupBlockedQ Γ ρ (.var α) β
+      LookupVBlocked ρ α β → LookupBlockedQ ρ (.var α) β
 
-theorem LookupVBlocked.toLookupV {B : Type} {Γ : Ctx B} {ρ : Row B} {α β : TyVar} :
-    LookupVBlocked Γ ρ α β → LookupV Γ ρ α .unknown
+theorem LookupVBlocked.toLookupV {B : Type} {ρ : Row B} {α β : TyVar} :
+    LookupVBlocked ρ α β → LookupV ρ α .unknown
   | .sing => .sing
-  | .varFree h => .varFree h
-  | .var h hb => .var h hb.toLookupV
+  | .varFree => .varFree
   | .catSkip ha hb => .catSkip ha hb.toLookupV
   | .catUnk hb => .catUnk hb.toLookupV
 
 -- ⊢  sound: a blocked keyed lookup is an unknown one
-theorem LookupBlockedQ.toLookupQ {B : Type} {Γ : Ctx B} {ρ : Row B} {q : Ty B}
-    {β : TyVar} : LookupBlockedQ Γ ρ q β → LookupQ Γ ρ q .unknown
+theorem LookupBlockedQ.toLookupQ {B : Type} {ρ : Row B} {q : Ty B}
+    {β : TyVar} : LookupBlockedQ ρ q β → LookupQ ρ q .unknown
   | .lit h => .lit h.toLookup
   | .var h => .var h.toLookupV
 
-theorem LookupV.unknown_blocked {B : Type} {Γ : Ctx B} {ρ : Row B} {α : TyVar}
-    (h : LookupV Γ ρ α .unknown) : ∃ β, LookupVBlocked Γ ρ α β := by
+theorem LookupV.unknown_blocked {B : Type} {ρ : Row B} {α : TyVar}
+    (h : LookupV ρ α .unknown) : ∃ β, LookupVBlocked ρ α β := by
   generalize hr : (LookupRes.unknown : LookupRes B) = r at h
   induction h with
   | emp => exact absurd hr (by simp)
   | sing => exact ⟨_, .sing⟩
-  | var hΓ _ ih => obtain ⟨β, hb⟩ := ih hr; exact ⟨β, .var hΓ hb⟩
-  | varFree hΓ => exact ⟨_, .varFree hΓ⟩
+  | varFree => exact ⟨_, .varFree⟩
   | catSkip ha _ _ ihb => obtain ⟨β, hb⟩ := ihb hr; exact ⟨β, .catSkip ha hb⟩
   | catUnk _ ih => obtain ⟨β, hb⟩ := ih rfl; exact ⟨β, .catUnk hb⟩
 
 -- ⊢  complete: an unknown keyed lookup always names its blocker
-theorem LookupQ.unknown_blocked {B : Type} {Γ : Ctx B} {ρ : Row B} {q : Ty B}
-    (h : LookupQ Γ ρ q .unknown) : ∃ β, LookupBlockedQ Γ ρ q β := by
+theorem LookupQ.unknown_blocked {B : Type} {ρ : Row B} {q : Ty B}
+    (h : LookupQ ρ q .unknown) : ∃ β, LookupBlockedQ ρ q β := by
   cases h with
   | lit h => obtain ⟨β, hb⟩ := Lookup.unknown_blocked h; exact ⟨β, .lit hb⟩
   | var h => obtain ⟨β, hb⟩ := LookupV.unknown_blocked h; exact ⟨β, .var hb⟩
 
-theorem LookupVBlocked.det {B : Type} {Γ : Ctx B} {ρ : Row B} {α β γ : TyVar}
-    (h₁ : LookupVBlocked Γ ρ α β) (h₂ : LookupVBlocked Γ ρ α γ) : β = γ := by
+theorem LookupVBlocked.det {B : Type} {ρ : Row B} {α β γ : TyVar}
+    (h₁ : LookupVBlocked ρ α β) (h₂ : LookupVBlocked ρ α γ) : β = γ := by
   induction h₁ generalizing γ with
   | sing => cases h₂; rfl
-  | varFree h =>
-      cases h₂ with
-      | varFree _ => rfl
-      | var h' _ => rw [h] at h'; cases h'
-  | var h _ ih =>
-      cases h₂ with
-      | varFree h' => rw [h] at h'; cases h'
-      | var h' hb' => rw [h] at h'; injection h' with he; exact ih (he ▸ hb')
+  | varFree => cases h₂; rfl
   | catSkip ha _ ih =>
       cases h₂ with
       | catSkip _ hb' => exact ih hb'
@@ -193,32 +173,23 @@ theorem LookupVBlocked.det {B : Type} {Γ : Ctx B} {ρ : Row B} {α β γ : TyVa
       | catUnk hb' => exact ih hb'
 
 -- ⊢  the blocker is UNIQUE
-theorem LookupBlockedQ.det {B : Type} {Γ : Ctx B} {ρ : Row B} {q : Ty B}
-    {β γ : TyVar} (h₁ : LookupBlockedQ Γ ρ q β) (h₂ : LookupBlockedQ Γ ρ q γ) :
+theorem LookupBlockedQ.det {B : Type} {ρ : Row B} {q : Ty B}
+    {β γ : TyVar} (h₁ : LookupBlockedQ ρ q β) (h₂ : LookupBlockedQ ρ q γ) :
     β = γ := by
   cases h₁ with
   | lit h => cases h₂ with | lit h' => exact h.det h'
   | var h => cases h₂ with | var h' => exact h.det h'
 
--- ⊢  the blocker is an unsolved ROW variable, or it is the key
-theorem LookupVBlocked.unsolved {B : Type} {Γ : Ctx B} {ρ : Row B} {α β : TyVar} :
-    LookupVBlocked Γ ρ α β → Γ.lookupRow β = none ∨ β = α
-  | .sing => .inr rfl
-  | .varFree h => .inl h
-  | .var _ hb => hb.unsolved
-  | .catSkip _ hb => hb.unsolved
-  | .catUnk hb => hb.unsolved
+-- (`LookupVBlocked.unsolved` / `LookupBlockedQ.unsolved` — "the blocker is an
+-- unsolved row variable, or it is the key" — went the way of
+-- `LookupBlocked.unsolved`: the row is looked up after substitution, so a row
+-- variable still standing in it is unsolved by construction.)
 
-theorem LookupBlockedQ.unsolved {B : Type} {Γ : Ctx B} {ρ : Row B} {q : Ty B}
-    {β : TyVar} : LookupBlockedQ Γ ρ q β → Γ.lookupRow β = none ∨ q = .var β
-  | .lit h => .inl h.unsolved
-  | .var h => (h.unsolved).imp id (fun he => by subst he; rfl)
-
-/-- a static key blocked on a free row variable — the shape every `λx. x.l`
-stump has; stated so that `.varFree` reads at the keyed relation too. -/
-theorem LookupBlockedQ.varFree {B : Type} {Γ : Ctx B} {α : TyVar} {l : Label} :
-    Γ.lookupRow α = none → LookupBlockedQ Γ (.var α) (.lab l) α :=
-  fun h => .lit (.varFree h)
+/-- a static key blocked on a row variable — the shape every `λx. x.l` stump
+has; stated so that `.varFree` reads at the keyed relation too. -/
+theorem LookupBlockedQ.varFree {B : Type} {α : TyVar} {l : Label} :
+    LookupBlockedQ (B := B) (.var α) (.lab l) α :=
+  .lit .varFree
 
 /-- the name a W-flag records for a key: the label itself when it is known. -/
 def Ty.keyName {B : Type} : Ty B → Label
@@ -290,8 +261,11 @@ structure SolverState (B : Type) where
 
 namespace SolverState
 
-/-- ⟦S⟧ read as a CONTEXT — the coercion `RowUnify/State.lean` supplies. -/
-def ctx {B : Type} (S : SolverState B) : Ctx B := S.sol.toCtx
+-- `SolverState.ctx` used to live here: "⟦S⟧ read as a CONTEXT — the coercion
+-- `RowUnify/State.lean` supplies". There is no such reading any more. Every
+-- rule below reads ⟦S⟧ as a SUBSTITUTION, which is what it already did to the
+-- row (`ρ.applySubst S.subst`); dropping the context argument removes the
+-- second, redundant reading and with it the whole θ ↦ rowEnv bridge.
 
 /-- ⟦S⟧ read as a SUBSTITUTION, one step. Using `Sol.toSubst` rather than the
 closure keeps these rules independent of `UnifyWF`; on a well-formed state the
@@ -379,19 +353,19 @@ inductive Wake {B : Type} [DecidableEq B] :
     SolverState B → Parked B → SolverState B → Prop where
   -- K-hit: the lookup now lands, so δ is pinned to what it found
   | hit {S S' : SolverState B} {p : Parked B} {τ : Ty B} :
-      LookupQ S.ctx (p.stump.row.applySubst S.subst) (p.stump.label.applySubst S.subst) (.found τ) →
+      LookupQ (p.stump.row.applySubst S.subst) (p.stump.label.applySubst S.subst) (.found τ) →
       SolveTy S (.var p.stump.res) τ S' →
       Wake S p { S' with parked := S'.parked.filter (·.stump.res != p.stump.res) }
   -- K-⊥: definite absence, so δ becomes ★ and W records the site
   | abs {S S' : SolverState B} {p : Parked B} :
-      LookupQ S.ctx (p.stump.row.applySubst S.subst) (p.stump.label.applySubst S.subst) .absent →
+      LookupQ (p.stump.row.applySubst S.subst) (p.stump.label.applySubst S.subst) .absent →
       SolveTy S (.var p.stump.res) .unk S' →
       Wake S p
         ({ S' with parked := S'.parked.filter (·.stump.res != p.stump.res) }.flag
           (p.stump.label.applySubst S.subst).keyName)
   -- K-repark: the lookup progressed to a NEW blocker; nothing is committed
   | repark {S : SolverState B} {p : Parked B} {α' : TyVar} :
-      LookupBlockedQ S.ctx (p.stump.row.applySubst S.subst) (p.stump.label.applySubst S.subst) α' →
+      LookupBlockedQ (p.stump.row.applySubst S.subst) (p.stump.label.applySubst S.subst) α' →
       Wake S p
         (({ S with parked := S.parked.filter (·.stump.res != p.stump.res) }).park
           ⟨α', p.stump⟩)
@@ -404,7 +378,7 @@ inductive Wakes {B : Type} [DecidableEq B] :
       Wake S p S₁ → Wakes S₁ ps S₂ → Wakes S (p :: ps) S₂
   -- a constraint whose lookup is still blocked is simply parked
   | park {S S₁ : SolverState B} {p : Parked B} {ps : List (Parked B)} :
-      LookupBlockedQ S.ctx (p.stump.row.applySubst S.subst) (p.stump.label.applySubst S.subst) p.blocker →
+      LookupBlockedQ (p.stump.row.applySubst S.subst) (p.stump.label.applySubst S.subst) p.blocker →
       Wakes (S.park p) ps S₁ → Wakes S (p :: ps) S₁
 
 --------------------- THE STATE INVARIANT, AND SATURATION ---------------------
@@ -432,14 +406,12 @@ inductive Wakes {B : Type} [DecidableEq B] :
 -- case, which is a hard error by `unifyM_clash_no_unifier`, not a gap.
 
 /-- `Quiescent S` — every parked stump is genuinely blocked on the blocker it
-records, read on the row THE STATE HAS SUBSTITUTED, which is the form `Wake` and
-`Wakes.park` check it in. (On a non-idempotent solution that differs from the
-ctx-chasing form `Lookup S.ctx (.var r) l` — reconciling the two is `Sol.WF`'s
-job, i.e. `UnifyWF`'s; for a stump row that is a bare variable, which is all
-`A-sel-?` ever parks, the two coincide.) -/
+records, read on the row THE STATE HAS SUBSTITUTED — the only reading there is
+since ↓ stopped consulting a context, and the form `Wake`, `Wakes.park` and the
+A-rules all check it in. -/
 def SolverState.Quiescent {B : Type} (S : SolverState B) : Prop :=
   ∀ p ∈ S.parked,
-    LookupBlockedQ S.ctx (p.stump.row.applySubst S.subst) (p.stump.label.applySubst S.subst) p.blocker
+    LookupBlockedQ (p.stump.row.applySubst S.subst) (p.stump.label.applySubst S.subst) p.blocker
 
 /-- an empty Δ is quiescent, vacuously — the state every run starts in. -/
 theorem SolverState.Quiescent.nil {B : Type} {S : SolverState B}
@@ -453,18 +425,16 @@ theorem SolverState.Quiescent.mono {B : Type} {S S' : SolverState B}
     (h : S.Quiescent) : S'.Quiescent := by
   intro p hp
   have hb := h p (hsub p hp)
-  show LookupBlockedQ S'.sol.toCtx (p.stump.row.applySubst S'.sol.toSubst)
+  show LookupBlockedQ (p.stump.row.applySubst S'.sol.toSubst)
     (p.stump.label.applySubst S'.sol.toSubst) _
   rw [hsol]; exact hb
 
-/-- ⊢  the invariant §B asks for, in the form it is useful: in a quiescent state
-no parked stump's blocker is a SOLVED row variable — unless it is the stump's
-own (unsolved-under-⟦S⟧) label key. `LookupBlockedQ.unsolved` is the content;
-this is it read through the state. -/
-theorem SolverState.Quiescent.blocker_unsolved {B : Type} {S : SolverState B}
-    (h : S.Quiescent) : ∀ p ∈ S.parked, p.blocker ∉ S.sol.row.map Prod.fst ∨
-      p.stump.label.applySubst S.subst = .var p.blocker :=
-  fun p hp => (h p hp).unsolved.imp Sol.lookupRow_none id
+-- `SolverState.Quiescent.blocker_unsolved` used to live here: "in a quiescent
+-- state no parked stump's blocker is SOLVED", read off `LookupBlockedQ.unsolved`
+-- through the state. Both are gone for the same reason. The rules look up
+-- `ρ.applySubst ⟦S⟧`, so a blocker IS a variable ⟦S⟧ left standing, and
+-- "the blocker is unsolved" is true by the shape of the premise rather than a
+-- lemma about a row environment. §B's invariant is discharged, not relocated.
 
 /-- `S ⊢ Δ ↝! S′` — wake-up run to QUIESCENCE. A step is taken only on a stump
 that has gone STALE (its recorded blocker no longer blocks its lookup), which is
@@ -475,7 +445,7 @@ inductive Saturate {B : Type} [DecidableEq B] :
   | done {S : SolverState B} : S.Quiescent → Saturate S S
   | step {S S₁ S₂ : SolverState B} {p : Parked B} :
       p ∈ S.parked →
-      ¬ LookupBlockedQ S.ctx (p.stump.row.applySubst S.subst) (p.stump.label.applySubst S.subst)
+      ¬ LookupBlockedQ (p.stump.row.applySubst S.subst) (p.stump.label.applySubst S.subst)
           p.blocker →
       Wake S p S₁ → Saturate S₁ S₂ → Saturate S S₂
 
@@ -532,7 +502,7 @@ inductive Finalize {B : Type} [DecidableEq B] :
     SolverState B → Parked B → SolverState B → Prop where
   | star {S S' : SolverState B} {p : Parked B} :
       p ∈ S.parked →
-      LookupBlockedQ S.ctx (p.stump.row.applySubst S.subst) (p.stump.label.applySubst S.subst)
+      LookupBlockedQ (p.stump.row.applySubst S.subst) (p.stump.label.applySubst S.subst)
         p.blocker →
       SolveTy S (.var p.stump.res) .unk S' →
       Finalize S p
@@ -661,21 +631,21 @@ def InstStumps {B : Type} (θ : TySubst B) (f : TyVar → TyVar)
     Q.map (fun st => (⟨st.row.applySubst θ, st.label.applySubst θ, f st.res⟩ : Stump B))
 
 --------------------- ⟦S⟧ APPLIED TO A CONTEXT -------------------------------
--- The declarative side reads row-solutions out of a CONTEXT; the algorithm
--- keeps them in θ. `RowUnify/State.lean` bridges the two for a single lookup;
--- what the soundness statement additionally needs is the whole context read
--- under the final state — θ pushed through the type environment, and θ's row
--- component installed as the row environment discharge will consult.
+-- What the soundness statement needs is the whole context read under the final
+-- state: θ pushed through the type environment. Lookups need nothing further —
+-- they read rows that have already had θ applied.
 
 -- `QScheme.applySubst` moved to Qualified.lean, where its capture-avoidance
 -- side condition (`QScheme.Avoiding`) and what that condition buys
 -- (`QCovers.forward_of_avoiding`, QSubst.lean) are stated and proved.
 
-/-- `⟦S⟧Γ` — Γ under the state's substitution, with the state's row-solutions
-installed as the row environment that `Lookup` and discharge consult. -/
+/-- `⟦S⟧Γ` — Γ under the state's substitution. The `rowEnv := S.sol.row` field
+this used to carry ("the state's row-solutions installed as the row environment
+that `Lookup` and discharge consult") has no counterpart: discharge substitutes
+and then looks up, so the solution reaches it through `S.subst` on the schemes,
+once, instead of through the context a second time. -/
 def SolverState.applyCtx {B : Type} (S : SolverState B) (Γ : QCtx B) : QCtx B :=
-  { tyEnv  := Γ.tyEnv.map (fun p => (p.1, p.2.applySubst S.subst)),
-    rowEnv := S.sol.row }
+  { tyEnv := Γ.tyEnv.map (fun p => (p.1, p.2.applySubst S.subst)) }
 
 /-- the variable a stump's result READS as at S: itself while unsolved, the
 variable unification aliased it to otherwise. (A result solved to a non-variable
@@ -778,7 +748,12 @@ inductive Infer {B C : Type} [DecidableEq B] (constTy : C → B) :
       Infer constTy Γ S e τ S₁ →
       (r, S₁') = S₁.draw .row →
       SolveTySat S₁' τ (.rcd (.var r)) S₂ →
-      Lookup S₂.ctx (.var r) l (.found τ') →
+      -- the row is SUBSTITUTED before the lookup runs. It always was — A-sel-?
+      -- below reads `(Row.var r).applySubst S₂.subst` — but A-sel and A-sel-⊥
+      -- used to read the bare `.var r` and let `Lookup S₂.ctx` chase the
+      -- solution instead. With ↓ context-free that reading is gone (a bare
+      -- variable is always `?`), so all three arms now substitute first.
+      Lookup ((Row.var r).applySubst S₂.subst) l (.found τ') →
       Infer constTy Γ S (.sel e l) τ' S₂
   -- A-sel-⊥: definite absence. ★ and a W-flag — this is where T-sel-⊥ lives
   | selAbs {Γ : QCtx B} {S S₁ S₂ : SolverState B} {e : Expr C} {τ : Ty B}
@@ -786,7 +761,7 @@ inductive Infer {B C : Type} [DecidableEq B] (constTy : C → B) :
       Infer constTy Γ S e τ S₁ →
       (r, S₁') = S₁.draw .row →
       SolveTySat S₁' τ (.rcd (.var r)) S₂ →
-      Lookup S₂.ctx (.var r) l .absent →
+      Lookup ((Row.var r).applySubst S₂.subst) l .absent →
       Infer constTy Γ S (.sel e l) .unk (S₂.flag l)
   -- A-sel-?: NOT ★. The stump-var δ keeps the position writable, so a later
   -- refinement can still fill it in — (x: x.l) must not freeze at {β} → ★
@@ -795,7 +770,7 @@ inductive Infer {B C : Type} [DecidableEq B] (constTy : C → B) :
       Infer constTy Γ S e τ S₁ →
       (r, S₁') = S₁.draw .row →
       SolveTySat S₁' τ (.rcd (.var r)) S₂ →
-      LookupBlocked S₂.ctx ((Row.var r).applySubst S₂.subst) l α →
+      LookupBlocked ((Row.var r).applySubst S₂.subst) l α →
       (δ, S₂') = S₂.draw .ty →
       Infer constTy Γ S (.sel e l) (.var δ)
         (S₂'.park ⟨α, ⟨.var r, .lab l, δ⟩⟩)
@@ -811,7 +786,7 @@ inductive Infer {B C : Type} [DecidableEq B] (constTy : C → B) :
       (r, S₁') = S₁.draw .row →
       SolveTySat S₁' τ₁ (.rcd (.var r)) S₂ →
       Infer constTy Γ S₂ e₂ τ₂ S₃ →
-      LookupQ S₃.ctx (.var r) (τ₂.applySubst S₃.subst) (.found τ') →
+      LookupQ ((Row.var r).applySubst S₃.subst) (τ₂.applySubst S₃.subst) (.found τ') →
       Infer constTy Γ S (.selDyn e₁ e₂) τ' S₃
   | selDynAbs {Γ : QCtx B} {S S₁ S₁' S₂ S₃ : SolverState B} {e₁ e₂ : Expr C}
       {τ₁ τ₂ : Ty B} {r : TyVar} :
@@ -819,7 +794,7 @@ inductive Infer {B C : Type} [DecidableEq B] (constTy : C → B) :
       (r, S₁') = S₁.draw .row →
       SolveTySat S₁' τ₁ (.rcd (.var r)) S₂ →
       Infer constTy Γ S₂ e₂ τ₂ S₃ →
-      LookupQ S₃.ctx (.var r) (τ₂.applySubst S₃.subst) .absent →
+      LookupQ ((Row.var r).applySubst S₃.subst) (τ₂.applySubst S₃.subst) .absent →
       Infer constTy Γ S (.selDyn e₁ e₂) .unk (S₃.flag (τ₂.applySubst S₃.subst).keyName)
   | selDynUnk {Γ : QCtx B} {S S₁ S₁' S₂ S₃ S₃' : SolverState B} {e₁ e₂ : Expr C}
       {τ₁ τ₂ : Ty B} {r α δ : TyVar} :
@@ -827,7 +802,7 @@ inductive Infer {B C : Type} [DecidableEq B] (constTy : C → B) :
       (r, S₁') = S₁.draw .row →
       SolveTySat S₁' τ₁ (.rcd (.var r)) S₂ →
       Infer constTy Γ S₂ e₂ τ₂ S₃ →
-      LookupBlockedQ S₃.ctx ((Row.var r).applySubst S₃.subst) (τ₂.applySubst S₃.subst) α →
+      LookupBlockedQ ((Row.var r).applySubst S₃.subst) (τ₂.applySubst S₃.subst) α →
       (δ, S₃') = S₃.draw .ty →
       Infer constTy Γ S (.selDyn e₁ e₂) (.var δ)
         (S₃'.park ⟨α, ⟨.var r, τ₂, δ⟩⟩)
@@ -936,7 +911,7 @@ private def selExKinds : KEnv :=
   [(natName 3, .ty), (natName 2, .row), (natName 1, .ty)]
 
 theorem selEx_infers :
-    Infer (B := Unit) (C := Unit) (fun _ => ()) ⟨[], []⟩
+    Infer (B := Unit) (C := Unit) (fun _ => ()) QCtx.empty
       ⟨Sol.nil, [], [], ⟨1⟩, []⟩ (selEx Unit)
       (.fn (.var (natName 1)) (.var (natName 3)))
       ⟨⟨[(natName 1, .rcd (.var (natName 2)))], []⟩,
@@ -953,7 +928,7 @@ theorem selEx_infers :
       ⟨_, .nil, .done (SolverState.Quiescent.nil rfl)⟩
   · exact ⟨_, ⟨5, ⟨[(natName 1, .rcd (.var (natName 2)))], []⟩, ⟨3⟩, rfl, rfl⟩,
       .done (SolverState.Quiescent.nil rfl)⟩
-  · exact .varFree rfl
+  · exact .varFree
 
 
 -- `SolverState.applyCtx` (⟦S⟧Γ) is defined before `Infer`: A-let's
@@ -985,7 +960,7 @@ theorem selEx_infers :
 def Run {B C : Type} [DecidableEq B] (constTy : C → B) (e : Expr C) (τ : Ty B)
     (S' : SolverState B) : Prop :=
   ∃ S₁ : SolverState B,
-    Infer constTy ⟨[], []⟩ ⟨Sol.nil, [], [], ⟨1⟩, []⟩ e τ S₁ ∧
+    Infer constTy QCtx.empty ⟨Sol.nil, [], [], ⟨1⟩, []⟩ e τ S₁ ∧
     Finalizes S₁ S₁.parked S'
 
 -- The state finalization starts at is QUIESCENT: the run begins with Δ = [], so
@@ -1004,7 +979,7 @@ consult. (It used to read `S′.applyCtx ⟨[], []⟩`, whose row environment is
 PROVED: `runSound` (Finalization.lean). -/
 def RunSound (B C : Type) [DecidableEq B] (constTy : C → B) : Prop :=
   ∀ (e : Expr C) (τ : Ty B) (S' : SolverState B), Run constTy e τ S' →
-    QTyped constTy ⟨[], []⟩ e (τ.applySubst S'.subst)
+    QTyped constTy QCtx.empty e (τ.applySubst S'.subst)
 
 
 --------------------- …AND IT RUNS -------------------------------------------
@@ -1030,7 +1005,7 @@ theorem selEx_runs :
     Run (B := Unit) (C := Unit) (fun _ => ()) (selEx Unit)
       (.fn (.var (natName 1)) (.var (natName 3))) selExFinal :=
   ⟨selExS1, selEx_infers,
-   .cons (Finalize.star (by simp [selExS1]) (.varFree rfl)
+   .cons (Finalize.star (by simp [selExS1]) .varFree
      ⟨5, selExStar, ⟨4⟩, rfl, rfl⟩) .nil⟩
 
 /-- ⊢  …and the answer is `{β} → ★` with `l` flagged — the L1-finalized type
@@ -1483,8 +1458,9 @@ end
 -- congruence rules carry it from the induction hypothesis.
 --
 -- WHAT THIS BUYS, beyond tidiness:
---   * `Quiescent.blocker_unsolved` — no parked blocker is solved, which is the
---     §B invariant and what makes a stump's annotation meaningful at all;
+--   * no parked blocker is solved — the §B invariant, and what makes a stump's
+--     annotation meaningful at all (true by the shape of the premise, which
+--     reads the row under ⟦S⟧);
 --   * F-★'s missing `LookupBlocked` premise is IMPLIED at any state a run
 --     produces, so finalization's soundness lemma can have the fact without the
 --     rule being changed — though the rule should still carry it, since nothing
@@ -1519,11 +1495,11 @@ with the same solution (the draw of δ sits in between). -/
 theorem SolverState.Quiescent.park_draw {B : Type} {S S' : SolverState B}
     {q : Parked B} (hsol : S'.sol = S.sol) (hpar : S'.parked = S.parked)
     (hq : S.Quiescent)
-    (hb : LookupBlockedQ S.ctx (q.stump.row.applySubst S.subst) (q.stump.label.applySubst S.subst)
+    (hb : LookupBlockedQ (q.stump.row.applySubst S.subst) (q.stump.label.applySubst S.subst)
             q.blocker) :
     (S'.park q).Quiescent := by
   intro p hp
-  show LookupBlockedQ S'.sol.toCtx (p.stump.row.applySubst S'.sol.toSubst)
+  show LookupBlockedQ (p.stump.row.applySubst S'.sol.toSubst)
     (p.stump.label.applySubst S'.sol.toSubst) _
   rw [hsol]
   rcases List.mem_cons.mp hp with rfl | hp'

@@ -123,10 +123,10 @@ def rowEqB : Row Unit → Row Unit → Bool
 end
 
 /-- The ACYCLIC half of `Sol.WF` (RowUnify/State.lean) as a Bool: no bound row
-    variable is reachable at a spine position of a binding, which is what makes
-    the `L-α` chase terminate. `Sol.rowWF_toCtx` is conditioned on exactly this,
-    and `UnifyWF` — the claim that the driver RETURNS a well-formed solution —
-    is NOT proved. `solWFB` below is its tripwire.
+    variable is reachable at a spine position of a binding. It used to be what
+    made the `L-α` chase terminate; with ↓ context-free no lookup depends on it,
+    and it remains a tripwire for `UnifyWF` — the claim that the driver RETURNS
+    a well-formed solution.
 
     The syntactic `Sol.NoCapture` ("no bound variable occurs in any binding")
     would be sufficient for everything, and is refuted here in one move by

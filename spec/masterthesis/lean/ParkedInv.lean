@@ -45,7 +45,7 @@ def QCtx.SchemesWF (Γ : QCtx B) : Prop :=
 def SolverState.KeepsS (S S' : SolverState B) : Prop :=
   ∀ σ : TySubst B, Sol.Sat σ S'.sol → ∀ p ∈ S.parked,
     (∃ q ∈ S'.parked, q.stump = p.stump) ∨
-    p.stump.DischargeEquiv (⟨[], []⟩ : Ctx B) σ
+    p.stump.DischargeEquiv σ
 
 /-- a list of constraints about to be submitted is compatible with S. -/
 def PsOk (S : SolverState B) (ps : List (Parked B)) : Prop :=
@@ -162,7 +162,7 @@ theorem Wake.keepsS {S S₁ : SolverState B} {p : Parked B} (hw : Wake S p S₁)
   intro σ hσ q hq
   by_cases hr : q.stump.res = p.stump.res
   · have hqs : q.stump = p.stump := hp.2.1 p List.mem_cons_self q hq hr
-    rcases Wake.dischargeEquiv (Γ' := (⟨[], []⟩ : QCtx B)) rfl hw hσ with hd | ⟨q', hq', hq's⟩
+    rcases Wake.dischargeEquiv hw hσ with hd | ⟨q', hq', hq's⟩
     · exact .inr (hqs ▸ hd)
     · exact .inl ⟨q', hq', hq's.trans hqs.symm⟩
   · exact .inl ⟨q, Wake.parked_preserved hr hw hq, rfl⟩
@@ -265,7 +265,7 @@ theorem QCtx.SchemesWF.bindTy {Γ : QCtx B} (h : Γ.SchemesWF) (x : Var) (τ : T
     (Γ.bindTy x τ).SchemesWF :=
   h.bindScheme x (fun _ h => nomatch h) (fun _ h => nomatch h)
 
-theorem QCtx.SchemesWF.nil : (⟨[], []⟩ : QCtx B).SchemesWF :=
+theorem QCtx.SchemesWF.nil : (QCtx.empty : QCtx B).SchemesWF :=
   fun _ _ h => nomatch h
 
 --------------------- A-var: THE SUBMITTED LIST IS COMPATIBLE -----------------
@@ -311,7 +311,7 @@ that it is compatible with the state (`PsOk`). -/
 theorem Wakes.fate {S S' : SolverState B} {ps : List (Parked B)} :
     Wakes S ps S' → S.PInv → PsOk S ps → ∀ σ : TySubst B, Sol.Sat σ S'.sol →
     ∀ p ∈ ps, (∃ q ∈ S'.parked, q.stump = p.stump) ∨
-      p.stump.DischargeEquiv (⟨[], []⟩ : Ctx B) σ
+      p.stump.DischargeEquiv σ
   | .nil, _, _, _, _, p, hp => absurd hp List.not_mem_nil
   | .cons hw hws, h, hp, σ, hσ, p', hp' => by
       have hp1 := psOk_head hp
@@ -319,7 +319,7 @@ theorem Wakes.fate {S S' : SolverState B} {ps : List (Parked B)} :
       have ht := hw.psOk_tail hp
       rcases List.mem_cons.mp hp' with rfl | hp'
       · obtain ⟨-, hk⟩ := hws.pinv_keeps h₁ ht
-        rcases Wake.dischargeEquiv (Γ' := (⟨[], []⟩ : QCtx B)) rfl hw (hws.satMono σ hσ)
+        rcases Wake.dischargeEquiv hw (hws.satMono σ hσ)
           with hd | ⟨q, hq, hqs⟩
         · exact .inr hd
         · rcases hk σ hσ q hq with ⟨q', hq', hq's⟩ | hd

@@ -14,19 +14,20 @@ e := c | x | (x: e) | e₁e₂ | (e₁ ‖ e₂) | e.l | { ξ } | let x = e₁ i
 q := ⟨ρ.l ↓ δ⟩
 Q := ∅ | q, Q
 σ := ∀(ᾱ: κ̄). Q ⇒ τ
-Γ := • | Γ·(x: σ) | Γ·(α: κ) | Γ·(α = ρ)
+Γ := • | Γ·(x: σ) | Γ·(α: κ)
 
 
 == Sorts
 - κ classifies *variables*, nothing else: τ and ρ are already disjoint
-  syntactic categories, so every closed phrase reads its sort off the grammar.
+  syntactic categories, so every closed phrase reads it's sort off the grammar.
   α at a type position and α at a row position are not the same variable
 - Only T-λ-I and T-let carry a sorting premise: they are the only rules whose
   conclusion mentions a type resp. a scheme not already determined by the
   premises
 - Substitutions respect sorts: (Γ ⊢ θ: ᾱ:κ̄) means θ is the identity outside ᾱ
   and Γ ⊢ θα: κ for every (α: κ) ∈ ᾱ:κ̄
-- A row-solution (α = ρ) ∈ Γ binds α at Row
+- Γ binds no row-solutions. Solved row-vars live in the solver's θ and are
+  applied as a substitution; ↓ never reads Γ (see Row-Lookup)
 
 
 α: Type ∈ Γ
@@ -38,7 +39,7 @@ Q := ∅ | q, Q
 Γ ⊢ 𝓫: Type
 
 
----------- S-★
+----------- S-★
 Γ ⊢ ★: Type
 
 
@@ -57,12 +58,12 @@ Q := ∅ | q, Q
 Γ ⊢ α: Row
 
 
----------- S-ε
+----------- S-ε
 Γ ⊢ ε: Row
 
 
 Γ ⊢ τ: Type
----------------- S-field
+----------------- S-field
 Γ ⊢ (l: τ): Row
 
 
@@ -77,7 +78,7 @@ Q := ∅ | q, Q
 
 
 (∀ q ∈ Q. Γ·(ᾱ: κ̄) ⊢ q ok)   Γ·(ᾱ: κ̄) ⊢ τ: Type
-------------------------------------------------- S-scheme
+-------------------------------------------------- [S-scheme]¿
 Γ ⊢ (∀(ᾱ: κ̄). Q ⇒ τ) ok
 
 
@@ -87,9 +88,9 @@ Q := ∅ | q, Q
   turn out to be
 - δ ∈ ᾱ, drawn from the quantifier like every other variable: the constraint
   pins δ's image at *instantiation* time instead of freezing it at
-  generalization time (that is L1, and it loses the found-instances)
+  generalization time
 - Plain schemes embed as Q = ∅; the discharge premise is then vacuous and
-  ≥\_Γ degenerates to the Γ-independent σ ≥ τ of the minimal calculus
+  ≥ degenerates to the σ ≥ τ of the minimal calculus
 - ∀(β: Row)(δ: Type). ⟨β.l ↓ δ⟩ ⇒ {β} → δ is the principal scheme of (x: x.l);
   no plain ∀ᾱ. τ scheme covers both its found- and its ⊥-instances
 
@@ -100,7 +101,7 @@ Q := ∅ | q, Q
 Γ ⊢ c: 𝓫_c
 
 
-x: σ ∈ Γ   σ ≥\_Γ τ
+x: σ ∈ Γ   σ ≥ τ
 -------------------- T-var
 Γ ⊢ x: τ
 
@@ -111,7 +112,7 @@ x: σ ∈ Γ   σ ≥\_Γ τ
 
 
 Γ ⊢ τ₁: Type   Γ·(x: τ₁) ⊢ e: τ₂
----------------------------------- T-λ-I
+----------------------------------- T-λ-I
 Γ ⊢ (x: e): τ₁ -> τ₂
 
 
@@ -120,7 +121,7 @@ x: σ ∈ Γ   σ ≥\_Γ τ
 Γ ⊢ e₁e₂: τ₂
 
 
-Γ ⊢ σ ok   (∀ τ₁. σ ≥\_Γ τ₁ ⟹ Γ ⊢ e₁: τ₁)   (∃ τ₁. σ ≥\_Γ τ₁)   Γ·(x: σ) ⊢ e₂: τ₂
+Γ ⊢ σ ok   (∀ τ₁. σ ≥ τ₁ ⟹ Γ ⊢ e₁: τ₁)   (∃ τ₁. σ ≥ τ₁)   Γ·(x: σ) ⊢ e₂: τ₂
 ------------------------------------------------------------------------------------ T-let
 Γ ⊢ let x = e₁ in e₂: τ₂
 // Instance-closed over *discharged* instances. The inhabitation premise is not
@@ -136,17 +137,17 @@ x: σ ∈ Γ   σ ≥\_Γ τ
 Γ ⊢ e₁ ‖ e₂: { ρ₂ | ρ₁ }
 
 
-Γ ⊢ e: {ρ}   Γ ⊢ ρ.l ↓ τ
+Γ ⊢ e: {ρ}   ρ.l ↓ τ
 --------------------------- T-sel
 Γ ⊢ e.l: τ
 
 
-Γ ⊢ e: {ρ}   Γ ⊢ ρ.l ↓ ?
+Γ ⊢ e: {ρ}   ρ.l ↓ ?
 -------------------------- T-sel-★
 Γ ⊢ e.l: ★
 
 
-Γ ⊢ e: {ρ}   Γ ⊢ ρ.l ↓ ⊥
+Γ ⊢ e: {ρ}   ρ.l ↓ ⊥
 -------------------------- T-sel-⊥
 Γ ⊢ e.l: ★
 
@@ -176,93 +177,105 @@ x: σ ∈ Γ   σ ≥\_Γ τ
 
 
 == Instantiation
-- (σ ≥\_Γ τ) replaces (σ ≥ τ) at T-var: instantiate all quantifiers at once via
-  a *sort-respecting* θ over ᾱ, then discharge every q ∈ Q
-- Γ-relative, unlike the minimal calculus: discharge reads Γ's row-solutions.
-  That is the price of cross-instantiation refinement
-- *No tail check needed* (unlike λ⟨⟩): By monotonicity of ↓, instantiating a
-  row-var can never invalidate a definite lookup result — every position it
-  could shadow was already ?-poisoned
+- (σ ≥ τ) instantiates all quantifiers at once via a *sort-respecting* θ over ᾱ,
+  then discharges every q ∈ Q
+- *Not Γ-relative*, unlike an earlier presentation. That one carried
+  row-solutions in Γ and had discharge read them, and called the Γ-dependence
+  "the price of cross-instantiation refinement". It is not a price anyone has to
+  pay: discharge substitutes the row with θ and then looks up, and ↓ reads
+  nothing else. So ≥ is again the Γ-independent relation of the minimal
+  calculus, and the refinement Γ was carrying is carried by θ — which is where
+  the algorithm keeps it anyway
+- *No tail check needed*: By substitution-stability of ↓,
+  instantiating a row-var can never invalidate a definite lookup result — every
+  position it could shadow was already ?-poisoned
 
-Γ ⊢ θ: ᾱ:κ̄   (∀ q ∈ Q. Γ; θ ⊢ q)
+Γ ⊢ θ: ᾱ:κ̄   (∀ q ∈ Q. θ ⊢ q)
 ---------------------------------- I-inst
-(∀(ᾱ: κ̄). Q ⇒ τ) ≥\_Γ θτ
+(∀(ᾱ: κ̄). Q ⇒ τ) ≥ θτ
 
 
 == Discharge
-- (Γ; θ ⊢ q) replays the parked lookup under θ and pins δ to the verdict
+- (θ ⊢ q) replays the parked lookup under θ and pins δ to the verdict
 - The three arms are exactly T-sel / T-sel-⊥ / T-sel-★, replayed per instance
-- Determinism, monotonicity and totality of ↓ are what keep discharge
-  well-behaved
+- Determinism and totality of ↓ are what keep discharge well-behaved
 
-Γ ⊢ (θρ).l ↓ τ_r   θδ = τ_r
+(θρ).l ↓ τ_r   θδ = τ_r
 ----------------------------- D-hit
-Γ; θ ⊢ ⟨ρ.l ↓ δ⟩
+θ ⊢ ⟨ρ.l ↓ δ⟩
 
 
-Γ ⊢ (θρ).l ↓ ⊥   θδ = ★
+(θρ).l ↓ ⊥   θδ = ★
 ------------------------- D-⊥
-Γ; θ ⊢ ⟨ρ.l ↓ δ⟩
+θ ⊢ ⟨ρ.l ↓ δ⟩
 
 
-Γ ⊢ (θρ).l ↓ ?   θδ = ★
+(θρ).l ↓ ?   θδ = ★
 ------------------------- D-?
-Γ; θ ⊢ ⟨ρ.l ↓ δ⟩
+θ ⊢ ⟨ρ.l ↓ δ⟩
 // Declaratively a still-unknown lookup stays blurred; algorithmically this
 // case RE-PARKS instead, and only finalization commits ★.
 
 
 == Row-Lookup
-- (Γ ⊢ ρ.l ↓ r) with (r := τ | ⊥ | ?)
+- (ρ.l ↓ r) with (r := τ | ⊥ | ?)
 - This statement recursively searches rows for a label l
-- Γ's *row-solutions* (α = ρ) are a partial map from row-vars to the rows they
-  stand for. L-α consults it; L-α-free fires when α is unsolved. (α = ρ is a
-  row binding, NOT a record type — a row-var ranges over rows ρ, not over
-  record types {ρ}.)
+- *Context-free*: the judgement reads nothing but the row. An earlier
+  presentation carried *row-solutions* (α = ρ) in Γ and added a rule L-α to
+  chase them, with L-α-free firing when α was unsolved. L-α was an
+  implementation of substitution, and it cost three things: ↓ was not total by
+  structural recursion (a solution chain can cycle, so totality needed a rank
+  function on row-vars), L-α-free's premise "α unsolved in Γ" was *negative* and
+  so not preserved by context extension, and instantiation had to become
+  Γ-relative. A row-var that stands for a known row is substituted away before
+  the lookup runs, which is what substitution-stability below says, so nothing is lost
 - Absent means the label provably does not exist in ρ; T-sel-⊥ still types the
   selection at ★ (soft typing: the checker flags it, the ↯-disjunct of progress
   catches it at runtime)
-- Unknown means an unconstrained row-var could contain l, so no definite type
-  can be derived
+- Unknown means a row-var could contain l, so no definite type can be derived.
+  A row-var is therefore *always* unknown — L-α-free is the only rule that
+  mentions one, and the algorithm reads it as `? on α` (see Solver State)
 
 
 ------------ L-ε
-Γ ⊢ ε.l ↓ ⊥
+ε.l ↓ ⊥
 
 
 l₁ = l₂
 -------------------- L-hit
-Γ ⊢ (l₁: τ).l₂ ↓ τ
+(l₁: τ).l₂ ↓ τ
 
 
 l₁ ≠ l₂
 -------------------- L-miss
-Γ ⊢ (l₁: τ).l₂ ↓ ⊥
+(l₁: τ).l₂ ↓ ⊥
 
 
-α = ρ ∈ Γ   Γ ⊢ ρ.l ↓ r
------------------------- L-α
-Γ ⊢ α.l ↓ r
-
-
-α unsolved in Γ
 --------------- L-α-free
-Γ ⊢ α.l ↓ ?
+α.l ↓ ?
 
 
-Γ ⊢ ρ₁.l ↓ τ
+ρ₁.l ↓ τ
 -------------------- L-conc-hit
-Γ ⊢ (ρ₁ | ρ₂).l ↓ τ
+(ρ₁ | ρ₂).l ↓ τ
 
 
-Γ ⊢ ρ₁.l ↓ ⊥   Γ ⊢ ρ₂.l ↓ r
+ρ₁.l ↓ ⊥   ρ₂.l ↓ r
 ----------------------------- L-conc-skip
-Γ ⊢ (ρ₁ | ρ₂).l ↓ r
+(ρ₁ | ρ₂).l ↓ r
 
 
-Γ ⊢ ρ₁.l ↓ ?
+ρ₁.l ↓ ?
 -------------------- L-conc-★
-Γ ⊢ (ρ₁ | ρ₂).l ↓ ?
+(ρ₁ | ρ₂).l ↓ ?
+
+
+- *Determinism*: every row shape matches exactly one rule
+- *Totality*: by structural recursion on ρ — no side condition. In particular
+  the solver's θ need not be acyclic for a lookup premise to have a derivation
+- *Substitution-stability*: if (ρ.l ↓ r) with r definite, then
+  (θρ.l ↓ θr). Only ? can change category, and that demotion is what
+  T-sel-⊥ / T-★-intro absorb. This is the rule L-α used to implement
 
 
 == Row-Equivalence
@@ -324,7 +337,7 @@ a := l: τ | α
 s := ⟨⟩ | a·s
 
 |s|\_l          number of l-fields in s
-vars(s)        the var sequence of s
+vars(s)         the var sequence of s
 win\_l(s)       remove the first l-field of the LEADING var-free window
 win^R\_l(s)     remove the last l-field of the TRAILING var-free window
 rem\_l(s)       remove the first l-field ANYWHERE (vars skipped)
@@ -332,14 +345,7 @@ rem\_l(s)       remove the first l-field ANYWHERE (vars skipped)
 
 == Unification
 - Two mutual judgements, one per sort: (τ₁ ≐ τ₂ ⇝ v) at Type and
-  (s₁ ≐ᵣ s₂ ⇝ v) at Row. Sorting makes the split a consequence rather than a
-  coincidence, and a solution is sort-respecting by construction
-- Fuel is explicit and shared: both passes spend a unit per cross-call, so the
-  block is structurally recursive and `no-fuel` is its own verdict — every
-  verdict actually reached is budget-independent
-- A success carries the name supply it stopped at. Threaded, not re-derived
-  per call: a move that drops a field drops its type's variables, and a locally
-  recomputed bound can fall below a name still in scope
+  (s₁ ≐ᵣ s₂ ⇝ v) at Row.
 - Type equations emitted by the row pass are solved ON THE SPOT and their
   solution applied to the residual before recursing — never deferred, which is
   what makes `stuck` mean something
@@ -363,14 +369,12 @@ v := θ | clash | occurs | stuck | no-fuel
 α ≐ τ ⇝ occurs
 // SORTED: ftv_Ty collects the occurrences at TYPE positions only, so
 // α ≐ {… α …} with a row-var α is a BINDING, not a failure — the binding never
-// reaches that occurrence. Mechanized as `Ty.tyVars` (RowUnify/Defs.lean); the
-// rejections it keeps are genuine no-unifiers (`bindTy_occurs_no_unifier`,
-// by constructor depth).
+// reaches that occurrence. Mechanized as `Ty.tyVars`; the
+// rejections it keeps are genuine no-unifiers
 
 
 ----------- U-★
 ★ ≐ ★ ⇝ ∅
-// ★ is RIGID: it unifies with itself and clashes with everything else.
 
 
 𝓫 = 𝓫′
@@ -446,7 +450,7 @@ t₁·α ≐ᵣ t₂·α ⇝ θ
 α ≐ᵣ s ⇝ [α ≔ s]
 
 
-α ∈ vars(s)   s field-free   k = |α|_s
+α ∈ vars(s)   s field-free   k = |α|\_s
 ------------------------------------------------ U-var-collapse
 α ≐ᵣ s ⇝ [γ ≔ ε : γ ∈ vars(s), γ ≠ α or k ≥ 2]
 // NOT a failure. The ≈-characterization reads |m(θα)| = k·|m(θα)| + Σ_{γ≠α},
@@ -512,13 +516,13 @@ s₁ ≐ᵣ s₂ ⇝ stuck
   the algorithm is deterministic up to renaming
 - θ is sort-respecting, hence really two maps — one per sort. ⟦S⟧τ applies S's
   substitution as a closure
-- Δ indexes each parked stump by its *blocker*: the row-var whose L-α-free
-  produced the ?. The blocker is a wake-up index, NOT part of the constraint —
+- Δ indexes each parked stump by its *blocker*: the variable the lookup of the
+  substituted row stopped at (L-α-free, or the key for L-?-lab). The blocker is a wake-up index, NOT part of the constraint —
   the declarative stump ⟨ρ.l ↓ δ⟩ carries none
 - W collects definite-absence and ★-finalization flags, named by the label that
   produced them — A-sel-⊥, K-⊥ and F-★. It never affects typing, only diagnostics
-- The declarative system READS solutions via L-α; the algorithm WRITES them via
-  unification. θ is only ever refined
+- The declarative system READS solutions by substitution — discharge looks up
+  θρ; the algorithm WRITES them via unification. θ is only ever refined
 
 S := (θ, Δ, W)
 Δ := ∅ | ⟨α ▷ ρ.l ↓ δ⟩, Δ
@@ -528,7 +532,7 @@ S ∖ Δ′         drop a set of stumps
 fresh α: κ     draw a name at sort κ from the threaded supply
 
 - *Quiescence*, the state invariant: every stump in Δ is genuinely blocked on the
-  blocker it records, `⟦S⟧ ⊢ (⟦S⟧ρ).l ↓ ? on α` for each `⟨α ▷ ρ.l ↓ δ⟩ ∈ Δ`. A
+  blocker it records, `(⟦S⟧ρ).l ↓ ? on α` for each `⟨α ▷ ρ.l ↓ δ⟩ ∈ Δ`. A
   blocker is then never a SOLVED variable, which is what makes the annotation
   mean anything
 - It is not automatic, and the mechanization found that out: any rule that writes
@@ -592,17 +596,17 @@ fresh α: Type   Γ·(x: α); S ⊢ e ⇒ τ; S′
 Γ; S ⊢ e₁ ‖ e₂ ⇒ { ρ₂ | ρ₁ }; S₄
 
 
-Γ; S ⊢ e ⇒ τ; S₁   fresh ρ: Row   S₁ ⊢ τ ≐ {ρ} ⇝! S₂   ⟦S₂⟧ ⊢ ρ.l ↓ τ′
+Γ; S ⊢ e ⇒ τ; S₁   fresh ρ: Row   S₁ ⊢ τ ≐ {ρ} ⇝! S₂   (⟦S₂⟧ρ).l ↓ τ′
 ----------------------------------------------------------------------- A-sel
 Γ; S ⊢ e.l ⇒ τ′; S₂
 
 
-Γ; S ⊢ e ⇒ τ; S₁   fresh ρ: Row   S₁ ⊢ τ ≐ {ρ} ⇝! S₂   ⟦S₂⟧ ⊢ ρ.l ↓ ⊥
+Γ; S ⊢ e ⇒ τ; S₁   fresh ρ: Row   S₁ ⊢ τ ≐ {ρ} ⇝! S₂   (⟦S₂⟧ρ).l ↓ ⊥
 ----------------------------------------------------------------------- A-sel-⊥
 Γ; S ⊢ e.l ⇒ ★; S₂ +W
 
 
-Γ; S ⊢ e ⇒ τ; S₁   fresh ρ: Row   S₁ ⊢ τ ≐ {ρ} ⇝! S₂   ⟦S₂⟧ ⊢ ρ.l ↓ ? on α   fresh δ: Type
+Γ; S ⊢ e ⇒ τ; S₁   fresh ρ: Row   S₁ ⊢ τ ≐ {ρ} ⇝! S₂   (⟦S₂⟧ρ).l ↓ ? on α   fresh δ: Type
 -------------------------------------------------------------------------------------------- A-sel-?
 Γ; S ⊢ e.l ⇒ δ; S₂ ⊎ ⟨α ▷ ρ.l ↓ δ⟩
 // NOT ★: returning ★ here would freeze the result and lose every later
@@ -646,8 +650,12 @@ fresh α: Type   Γ·(x: α); S ⊢ e ⇒ τ; S′
   difference is only whether an old entry is dropped first
 - Wake-up fires when a solution α ≔ ρ is written, and only for stumps blocked
   on α
-- *Monotone*: a stump resolved found/⊥ is final under every later θ, so resolved
-  stumps never re-enter Δ and no fixpoint iteration is needed
+- *Monotone*: a stump resolved found/⊥ is final under every later θ
+  (substitution-stability of ↓), so resolved stumps never re-enter Δ and no fixpoint iteration
+  is needed. The ?-arm is deliberately NOT stable — wake-up exists to improve
+  it — and that instability is load-bearing: a scheme's instance set MOVES when
+  a parked stump wakes, so generality claims about a scheme are claims about the
+  substitution they were made under
 - *Deterministic*, but NOT for the reason first written here. "Lookup is
   deterministic, so the final θ, W and τ do not depend on the wake-up order" was
   FALSE of the earlier rules: F-★ carried no premise about the lookup, so at a
@@ -666,21 +674,21 @@ fresh α: Type   Γ·(x: α); S ⊢ e ⇒ τ; S′
   `saturateF` (lean/InferFnTerm.lean), which settles from every clean state
   (`saturateF_settles`)
 - What used to make reachability CONDITIONAL is half gone: a K-hit needs the
-  lookup to be total, and acyclic solutions (`unifyWF`) give that
-  (`Sol.rowWF_toCtx`). The other half stays — a K-hit's equation can clash, the
+  lookup to be total, and ↓ is total unconditionally (structural recursion; no
+  solution is chased). The other half stays — a K-hit's equation can clash, the
   tension case below — and that is a rejection, not a divergence
 
-⟦S⟧ ⊢ (⟦S⟧ρ).l ↓ τ′   S ⊢ δ ≐ τ′ ⇝ S′
+(⟦S⟧ρ).l ↓ τ′   S ⊢ δ ≐ τ′ ⇝ S′
 ---------------------------------------- K-hit
 S ⊢ ⟨α ▷ ρ.l ↓ δ⟩ ↝ S′ ∖ ⟨α ▷ ρ.l ↓ δ⟩
 
 
-⟦S⟧ ⊢ (⟦S⟧ρ).l ↓ ⊥   S ⊢ δ ≐ ★ ⇝ S′
+(⟦S⟧ρ).l ↓ ⊥   S ⊢ δ ≐ ★ ⇝ S′
 --------------------------------------------- K-⊥
 S ⊢ ⟨α ▷ ρ.l ↓ δ⟩ ↝ (S′ ∖ ⟨α ▷ ρ.l ↓ δ⟩) +W
 
 
-⟦S⟧ ⊢ (⟦S⟧ρ).l ↓ ? on α′
+(⟦S⟧ρ).l ↓ ? on α′
 ------------------------------------------------------------ K-repark
 S ⊢ ⟨α ▷ ρ.l ↓ δ⟩ ↝ (S ∖ ⟨α ▷ ρ.l ↓ δ⟩) ⊎ ⟨α′ ▷ ρ.l ↓ δ⟩
 
@@ -694,7 +702,7 @@ S ⊢ ⟨α ▷ ρ.l ↓ δ⟩ ↝ S₁   S₁ ⊢ Δ′ ↝\* S′
 S ⊢ (⟨α ▷ ρ.l ↓ δ⟩, Δ′) ↝\* S′
 
 
-⟦S⟧ ⊢ (⟦S⟧ρ).l ↓ ? on α   (S ⊎ ⟨α ▷ ρ.l ↓ δ⟩) ⊢ Δ′ ↝\* S′
+(⟦S⟧ρ).l ↓ ? on α   (S ⊎ ⟨α ▷ ρ.l ↓ δ⟩) ⊢ Δ′ ↝\* S′
 ----------------------------------------------------------- K-park
 S ⊢ (⟨α ▷ ρ.l ↓ δ⟩, Δ′) ↝\* S′
 // The blocker is DETERMINED, not supplied: the premise is what fixes α, so an
@@ -708,7 +716,7 @@ S quiescent
 S ⊢ Δ ↝! S
 
 
-⟨α ▷ ρ.l ↓ δ⟩ ∈ Δ   ⟦S⟧ ⊬ (⟦S⟧ρ).l ↓ ? on α   S ⊢ ⟨α ▷ ρ.l ↓ δ⟩ ↝ S₁   S₁ ⊢ Δ₁ ↝! S′
+⟨α ▷ ρ.l ↓ δ⟩ ∈ Δ   ¬ (⟦S⟧ρ).l ↓ ? on α   S ⊢ ⟨α ▷ ρ.l ↓ δ⟩ ↝ S₁   S₁ ⊢ Δ₁ ↝! S′
 -------------------------------------------------------------------------------------- K!-step
 S ⊢ Δ ↝! S′
 // A step only on a STALE stump — one whose recorded blocker no longer blocks its
@@ -717,7 +725,7 @@ S ⊢ Δ ↝! S′
 // after ≐ and ↝\* respectively.
 
 
-⟨α ▷ ρ.l ↓ δ⟩ ∈ Δ   ⟦S⟧ ⊢ (⟦S⟧ρ).l ↓ ? on α   S ⊢ δ ≐ ★ ⇝ S′
+⟨α ▷ ρ.l ↓ δ⟩ ∈ Δ   (⟦S⟧ρ).l ↓ ? on α   S ⊢ δ ≐ ★ ⇝ S′
 --------------------------------------------------------------- F-★
 S ⊢ ⟨α ▷ ρ.l ↓ δ⟩ ⇓ (S′ ∖ ⟨α ▷ ρ.l ↓ δ⟩) +W
 
@@ -881,7 +889,7 @@ S ⊢ (⟨α ▷ ρ.l ↓ δ⟩, Δ′) ⇓\* S′
 
 
 - Lookup-result precision r′ ⊑ᵣ r: only ? can be improved, definite results are
-  final — the relational form of lookup monotonicity. Found-results are
+  final — the relational form of lookup substitution-stability. Found-results are
   congruent in ⊑ (their types may sharpen once row precision is in play; on a
   fixed row they stay on the nose), so ⊑-r-refl is derivable
 
@@ -922,7 +930,7 @@ e ::= … | 'l | e₁.(e₂)          τ ::= … | ⌊l⌋
   is not a label
 
 
-=== The keyed lookup  Γ ⊢ ρ.q ↓ r
+=== The keyed lookup  ρ.q ↓ r
 - A label variable is UNDECIDED against a literal field: it may be instantiated
   to that label or to another. So it never finds — ⊥ on a hollow row (no field,
   no variable on the spine), ? otherwise — and ? is blocked either on a free row
@@ -932,23 +940,23 @@ e ::= … | 'l | e₁.(e₂)          τ ::= … | ⌊l⌋
   ever answers ? (improvable) or ⊥ on a hollow row, and a hollow row answers ⊥
   to EVERY key, label or not. It is also the soft-typing reading of `r.${1}`
 
-Γ ⊢ ρ.l ↓ r
---------------- LQ-lit
-Γ ⊢ ρ.⌊l⌋ ↓ r
+ρ.l ↓ r
+----------- LQ-lit
+ρ.⌊l⌋ ↓ r
 
 
------------------- L-?-lab
-Γ ⊢ (l: τ).α ↓ ?
-// …plus L-ε, L-α, L-α-free and the three concatenation rules at a variable key,
+-------------- L-?-lab
+(l: τ).α ↓ ?
+// …plus L-ε, L-α-free and the three concatenation rules at a variable key,
 // unchanged. No rule ever lets a variable key FIND (`LookupV.not_found`).
 
 
 q is neither ⌊l⌋ nor a variable
 --------------------------------- L-junk
-Γ ⊢ ρ.q ↓ ⊥
+ρ.q ↓ ⊥
 
-- det / mono / total / ≈-invariance / substitution stability all re-proved
-  (`LookupQ.det`, `.mono`, `.total`, `.equiv`, `.applySubst`). The key is
+- det / total / ≈-invariance / substitution stability all re-proved
+  (`LookupQ.det`, `.total`, `.equiv`, `.applySubst`). The key is
   ≈-rigid, so ≈ on the KEY is invisible to the lookup (`LookupQ.key_equiv`) —
   the algorithm reads the key under ⟦S⟧, the declarative side under σ, and
   under σ ⊨ S the two are only ≈-equal
@@ -960,7 +968,7 @@ q is neither ⌊l⌋ nor a variable
 Γ ⊢ 'l: ⌊l⌋
 
 
-Γ ⊢ e₁: {ρ}   Γ ⊢ e₂: q   Γ ⊢ ρ.q ↓ τ
+Γ ⊢ e₁: {ρ}   Γ ⊢ e₂: q   ρ.q ↓ τ
 ---------------------------------------- T-sel-dyn
 Γ ⊢ e₁.(e₂): τ
 // …with -★ (?) and -⊥ (⊥) arms at ★, as T-sel. qProgress needs nothing of the
@@ -985,7 +993,7 @@ q is neither ⌊l⌋ nor a variable
 Γ; S ⊢ 'l ⇒ ⌊l⌋; S
 
 
-Γ; S ⊢ e₁ ⇒ τ₁; S₁   fresh r: Row   S₁ ⊢ τ₁ ≐ {r} ⇝! S₂   Γ; S₂ ⊢ e₂ ⇒ τ₂; S₃   ⟦S₃⟧ ⊢ r.(⟦S₃⟧τ₂) ↓ τ′
+Γ; S ⊢ e₁ ⇒ τ₁; S₁   fresh r: Row   S₁ ⊢ τ₁ ≐ {r} ⇝! S₂   Γ; S₂ ⊢ e₂ ⇒ τ₂; S₃   (⟦S₃⟧r).(⟦S₃⟧τ₂) ↓ τ′
 --------------------------------------------------------------------------------------------------- A-sel-dyn
 Γ; S ⊢ e₁.(e₂) ⇒ τ′; S₃
 // …and -⊥ (★, W-flag named by the key) and -? (fresh δ, park ⟨β ▷ r.τ₂ ↓ δ⟩ where

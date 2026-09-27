@@ -45,7 +45,7 @@ theorem TyEquiv.var_inv {B : Type} {α : TyVar} {σ : Ty B}
 theorem qtyped_var_inv {B C : Type} {constTy : C → B} :
     {Γ : QCtx B} → {e : Expr C} → {τ : Ty B} → QTyped constTy Γ e τ →
     ∀ {x : Var} {σ : QScheme B}, e = .var x → Γ.lookup x = some σ →
-    τ = .unk ∨ ∃ τ', QScheme.Inst Γ.ctx σ τ' ∧ TyEquiv τ' τ
+    τ = .unk ∨ ∃ τ', QScheme.Inst σ τ' ∧ TyEquiv τ' τ
   | _, _, _, .qVar h hi => fun he hx => by
       cases he
       rw [h] at hx
@@ -90,8 +90,7 @@ theorem qtyped_let_alias_inv {B C : Type} {constTy : C → B} :
         fun Γ' w => by rw [QCtx.lookup_bindScheme]; simp
       rcases qtyped_var_inv hbody rfl (hz _ _) with hu | ⟨τ', hi, ht⟩
       · exact .inl hu
-      · rw [QCtx.ctx_bindScheme] at hi
-        rcases qtyped_var_mono_inv (hinst τ' hi) hy with hu | h₀
+      · rcases qtyped_var_mono_inv (hinst τ' hi) hy with hu | h₀
         · subst hu; exact .inl ht.unk_inv
         · exact .inr (h₀.trans ht)
   | _, _, _, .qEq h heq => fun he hy =>
@@ -128,7 +127,7 @@ private def laE : Expr Unit := .lam "y" (.letE "z" (.var "y") (.var "z"))
 private def laA : TyVar := natName 1
 private def laB : TyVar := natName 2
 private def laS : SolverState Unit := ⟨Sol.nil, [], [], ⟨2⟩, [(laA, .ty)]⟩
-private def laΓ : QCtx Unit := (⟨[], []⟩ : QCtx Unit).bindTy "y" (.var laA)
+private def laΓ : QCtx Unit := (QCtx.empty : QCtx Unit).bindTy "y" (.var laA)
 private def laSc : QScheme Unit := ⟨[laA], [], .var laA⟩
 private def laId : TySubst Unit := ⟨fun x => .var x, fun x => .var x⟩
 private def laRen : TySubst Unit :=
@@ -141,7 +140,7 @@ private theorem laA_ne_laB : laA ≠ laB := fun h => by
 /-- ⊢  **the declarative side refuses the witness.** No derivation gives
 `λy. let z = y in z` two unrelated type variables — nor any ★-free pair. -/
 theorem letAlias_not_typed {α β : TyVar} (hne : α ≠ β) :
-    ¬ QTyped (B := Unit) (C := Unit) (fun _ => ()) ⟨[], []⟩ laE
+    ¬ QTyped (B := Unit) (C := Unit) (fun _ => ()) QCtx.empty laE
         (.fn (.var α) (.var β)) := by
   intro h
   obtain ⟨τ₁, τ₂, hfn | hu, hb⟩ := qtyped_lam_inv h
@@ -204,7 +203,7 @@ private theorem la_var_z :
       rw [hl] at hm
       simp only [List.mem_cons, List.mem_nil_iff, or_false, or_self] at hm
       exact hne hm.symm
-  exact Infer.var (constTy := fun (_ : Unit) => ()) (Γ := laΓ.bindScheme "z" laSc)
+  exact Infer.var (constTy := fun (_ : Unit) => ())
     (S := { laS with parked := [] }) (x := "z") (σ := laSc) (θ := laRen)
     (f := fun _ => laB) (ps := []) (Sup := ⟨3⟩)
     (by rw [QCtx.lookup_bindScheme]; simp) hren hfr
@@ -217,7 +216,7 @@ closed under A-let without the Γ-freshness premise runs `λy. let z = y in z` t
 theorem runSound_false_unguarded_let (hu : UnguardedLet Unit Unit (fun _ => ())) :
     ¬ RunSound Unit Unit (fun _ => ()) := by
   intro h
-  have hinf : Infer (B := Unit) (C := Unit) (fun _ => ()) ⟨[], []⟩
+  have hinf : Infer (B := Unit) (C := Unit) (fun _ => ()) QCtx.empty
       ⟨Sol.nil, [], [], ⟨1⟩, []⟩ laE (.fn (.var laA) (.var laB)) laS3 := by
     refine Infer.lam (S₀ := laS) rfl ?_
     exact hu (Δq := []) (Δγ := []) (ᾱ := [laA]) (κs := [.ty]) la_var_y
@@ -234,7 +233,7 @@ theorem letAlias_premise_fails :
 /-- ⊢  the guarded rule still runs the program — generalizing nothing, at the
 declaratively right `a → a`. -/
 theorem letAlias_infers_guarded :
-    Infer (B := Unit) (C := Unit) (fun _ => ()) ⟨[], []⟩
+    Infer (B := Unit) (C := Unit) (fun _ => ()) QCtx.empty
       ⟨Sol.nil, [], [], ⟨1⟩, []⟩ laE (.fn (.var laA) (.var laA)) laS := by
   refine Infer.lam (S₀ := laS) rfl ?_
   refine Infer.letE (Δq := []) (Δγ := []) (ᾱ := []) (κs := []) la_var_y rfl (.refl _)
@@ -253,9 +252,8 @@ theorem letAlias_infers_guarded :
 --
 -- The same mismatch makes the statement non-inductive at A-lam: the IH is at
 -- ⟦S′⟧(Γ, y:a) = ⟦S′⟧Γ, y:⟦S′⟧a, while `infer_sound_lam_step` wants the binder
--- at σ a. Both go away when the context is read under σ too, with the row
--- environment discharged — the shape every step lemma already assumes
--- (`hrow : Γ'.rowEnv = []`).
+-- at σ a. Both go away when the context is read under σ too — the shape every
+-- step lemma already assumes.
 
 private def laSub : TySubst Unit :=
   ⟨fun x => if x = laA then .base () else .var x, fun x => .var x⟩
@@ -302,7 +300,7 @@ private def lcE : Expr Unit :=
 -- ⊢  a selection at a free row has only the ★ typing, so `λx. x.l` is never
 --    `{r} → d` for a variable d
 private theorem selEx_not_var_result {r d : TyVar} {τa : Ty Unit}
-    (h : QTyped (B := Unit) (C := Unit) (fun _ => ()) ⟨[], []⟩ (selEx Unit) τa)
+    (h : QTyped (B := Unit) (C := Unit) (fun _ => ()) QCtx.empty (selEx Unit) τa)
     (he : TyEquiv τa (.fn (.rcd (.var r)) (.var d))) : False := by
   obtain ⟨τ₁, τ₂, hfn | hu, hb⟩ := qtyped_lam_inv h
   · obtain ⟨σ₁, σ₂, heq, h₁, h₂⟩ := (hfn.trans he).fn_inv
@@ -313,9 +311,7 @@ private theorem selEx_not_var_result {r d : TyVar} {τa : Ty Unit}
     cases hρ'
     obtain ⟨r', hl', hres⟩ := lookup_equiv hre hl
     have hr' : r' = .unknown := by
-      cases hl' with
-      | var hα _ => simp [QCtx.bindTy, QCtx.bindScheme, QCtx.ctx, Ctx.lookupRow] at hα
-      | varFree _ => rfl
+      cases hl'; rfl
     subst hr'
     cases hres
     obtain ⟨τ₀, h₀, hp⟩ := hbel
@@ -328,7 +324,7 @@ private theorem selEx_not_var_result {r d : TyVar} {τa : Ty Unit}
 
 /-- ⊢  **the declarative side refuses the witness's type.** -/
 theorem letCapture_not_typed :
-    ¬ QTyped (B := Unit) (C := Unit) (fun _ => ()) ⟨[], []⟩ lcE
+    ¬ QTyped (B := Unit) (C := Unit) (fun _ => ()) QCtx.empty lcE
         (.rcd (.cat (.sing "a" (.fn (.rcd (.var (natName 2))) (.var (natName 3))))
                     (.sing "b" (.base ())))) := by
   intro h
@@ -340,7 +336,7 @@ theorem letCapture_not_typed :
         cases ha with
         | field hea =>
             obtain ⟨r₂, hl₂, hres⟩ :=
-              lookup_equiv (Γ := (⟨[], []⟩ : Ctx Unit)) hre (.catHit .hit)
+              lookup_equiv hre (.catHit .hit)
             have := lookup_det hl₂ (.catHit .hit)
             subst this
             cases hres with
@@ -349,7 +345,7 @@ theorem letCapture_not_typed :
 
 /-- ⊢  **…and inference, as A-let stood, runs to it.** -/
 theorem letCapture_infers_unguarded (hu : UnguardedLet Unit Unit (fun _ => ())) :
-    Infer (B := Unit) (C := Unit) (fun _ => ()) ⟨[], []⟩ ⟨Sol.nil, [], [], ⟨1⟩, []⟩
+    Infer (B := Unit) (C := Unit) (fun _ => ()) QCtx.empty ⟨Sol.nil, [], [], ⟨1⟩, []⟩
       lcE (.rcd (.cat (.sing "a" (.fn (.var (natName 1)) (.var (natName 3))))
                       (.sing "b" (.base ())))) lcS2 := by
   refine Infer.rcd (.cat (.field selEx_infers) (.field ?_))

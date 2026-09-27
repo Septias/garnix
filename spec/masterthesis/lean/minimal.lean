@@ -269,19 +269,18 @@ theorem TyEquiv.unk_inv {B : Type} {σ : Ty B}
 
 ------------------------------------ CONTEXT -----------------------------------
 
+-- A context binds TERM variables only. There is no row environment: `↓` never
+-- consults Γ, so a solved row-variable is not a context entry but a
+-- SUBSTITUTION, applied to the row before the lookup runs (`lookup_applySubst`).
 structure Ctx (B : Type) where
   tyEnv  : List (Var × Scheme B) -- x: σ   (λ binds monotypes, let binds schemes)
-  rowEnv : List (TyVar × Row B)  -- α = ρ  (solved row-vars, consulted by L-α)
 
 namespace Ctx
 
-def empty : Ctx B := ⟨[], []⟩
+def empty : Ctx B := ⟨[]⟩
 
 def lookup (Γ : Ctx B) (x : Var) : Option (Scheme B) :=
   (Γ.tyEnv.find? (·.1 == x)).map (·.2)
-
-def lookupRow (Γ : Ctx B) (α : TyVar) : Option (Row B) :=
-  (Γ.rowEnv.find? (·.1 == α)).map (·.2)
 
 -- Γ · (x: σ)
 def bindScheme (Γ : Ctx B) (x : Var) (σ : Scheme B) : Ctx B :=
@@ -291,53 +290,52 @@ def bindScheme (Γ : Ctx B) (x : Var) (σ : Scheme B) : Ctx B :=
 def bindTy (Γ : Ctx B) (x : Var) (τ : Ty B) : Ctx B :=
   Γ.bindScheme x ⟨[], τ⟩
 
--- Γ · (α = ρ)
-def bindRow (Γ : Ctx B) (α : TyVar) (ρ : Row B) : Ctx B :=
-  { Γ with rowEnv := (α, ρ) :: Γ.rowEnv }
-
--- Γ ⊑ Γ' on row-vars: Γ' keeps every solution of Γ
-def RowExt (Γ Γ' : Ctx B) : Prop :=
-  ∀ α ρ, Γ.lookupRow α = some ρ → Γ'.lookupRow α = some ρ
-
 end Ctx
 
 
 ---------------------------------- ROW LOOKUP -----------------------------------
---   Γ ⊢ ρ.l ↓ r   with r := τ | ⊥ | ?
+--   ρ.l ↓ r   with r := τ | ⊥ | ?
 --
 -- Leftmost occurrence wins; an unknown row in higher-priority position
 -- poisons the result, since it could shadow a hit further right.
+--
+-- CONTEXT-FREE. The relation reads nothing but the row: a row-variable is
+-- always `?` (L-α-free), because a variable that STANDS FOR a known row is
+-- substituted away before the lookup runs. The old L-α — "chase Γ's
+-- row-solutions recursively" — was an implementation of substitution, and
+-- `lookup_applySubst` is the statement it was implementing. Dropping it makes
+-- ↓ a total function of (ρ, l) with no well-foundedness side condition, and
+-- removes the one non-monotone premise in the system (L-α-free needed
+-- `lookupRow α = none`, which context extension could not preserve).
 
 inductive LookupRes (B : Type) : Type where
   | found   : Ty B → LookupRes B   -- τ
   | absent  : LookupRes B          -- ⊥
   | unknown : LookupRes B          -- ?
 
-inductive Lookup {B : Type} (Γ : Ctx B) : Row B → Label → LookupRes B → Prop where
+inductive Lookup {B : Type} : Row B → Label → LookupRes B → Prop where
   -- L-ε
-  | emp : Lookup Γ .empty l .absent
+  | emp : Lookup .empty l .absent
   -- L-hit
-  | hit : Lookup Γ (.sing l τ) l (.found τ)
+  | hit : Lookup (.sing l τ) l (.found τ)
   -- L-miss
-  | miss : l₁ ≠ l₂ → Lookup Γ (.sing l₁ τ) l₂ .absent
-  -- L-α
-  | var : Γ.lookupRow α = some ρ → Lookup Γ ρ l r → Lookup Γ (.var α) l r
+  | miss : l₁ ≠ l₂ → Lookup (.sing l₁ τ) l₂ .absent
   -- L-α-free
-  | varFree : Γ.lookupRow α = none → Lookup Γ (.var α) l .unknown
+  | varFree : Lookup (.var α) l .unknown
   -- L-conc-hit
-  | catHit : Lookup Γ ρ₁ l (.found τ) → Lookup Γ (.cat ρ₁ ρ₂) l (.found τ)
+  | catHit : Lookup ρ₁ l (.found τ) → Lookup (.cat ρ₁ ρ₂) l (.found τ)
   -- L-conc-skip
-  | catSkip : Lookup Γ ρ₁ l .absent → Lookup Γ ρ₂ l r → Lookup Γ (.cat ρ₁ ρ₂) l r
+  | catSkip : Lookup ρ₁ l .absent → Lookup ρ₂ l r → Lookup (.cat ρ₁ ρ₂) l r
   -- L-conc-★
-  | catUnk : Lookup Γ ρ₁ l .unknown → Lookup Γ (.cat ρ₁ ρ₂) l .unknown
+  | catUnk : Lookup ρ₁ l .unknown → Lookup (.cat ρ₁ ρ₂) l .unknown
 
 
 ------------------------------ LOOKUP METATHEORY --------------------------------
 
 -- Lookup is deterministic: every row shape matches exactly one rule.
-theorem lookup_det {B : Type} {Γ : Ctx B} {ρ : Row B} {l : Label}
+theorem lookup_det {B : Type} {ρ : Row B} {l : Label}
     {r₁ r₂ : LookupRes B}
-    (h₁ : Lookup Γ ρ l r₁) (h₂ : Lookup Γ ρ l r₂) : r₁ = r₂ := by
+    (h₁ : Lookup ρ l r₁) (h₂ : Lookup ρ l r₂) : r₁ = r₂ := by
   induction h₁ generalizing r₂ with
   | emp => cases h₂; rfl
   | hit =>
@@ -348,17 +346,7 @@ theorem lookup_det {B : Type} {Γ : Ctx B} {ρ : Row B} {l : Label}
       cases h₂ with
       | hit    => exact absurd rfl hne
       | miss _ => rfl
-  | var hΓ _ ih =>
-      cases h₂ with
-      | var hΓ' h' =>
-          rw [hΓ] at hΓ'
-          injection hΓ' with heq
-          exact ih (heq ▸ h')
-      | varFree hΓ' => rw [hΓ] at hΓ'; cases hΓ'
-  | varFree hΓ =>
-      cases h₂ with
-      | var hΓ' _  => rw [hΓ] at hΓ'; cases hΓ'
-      | varFree _  => rfl
+  | varFree => cases h₂; rfl
   | catHit _ ih =>
       cases h₂ with
       | catHit h'     => exact ih h'
@@ -375,78 +363,38 @@ theorem lookup_det {B : Type} {Γ : Ctx B} {ρ : Row B} {l : Label}
       | catSkip h' _ => cases ih h'
       | catUnk _     => rfl
 
--- Monotonicity: definite results (τ/⊥) survive extending the row-solutions.
--- Only ? can improve under a larger context. This is the lemma that makes
--- deferring lookups (stumps) sound.
-theorem lookup_mono {B : Type} {Γ Γ' : Ctx B} {ρ : Row B} {l : Label}
-    {r : LookupRes B}
-    (hext : Ctx.RowExt Γ Γ') (h : Lookup Γ ρ l r) (hr : r ≠ .unknown) :
-    Lookup Γ' ρ l r := by
-  induction h with
-  | emp        => exact .emp
-  | hit        => exact .hit
-  | miss hne   => exact .miss hne
-  | var hΓ _ ih   => exact .var (hext _ _ hΓ) (ih hr)
-  | varFree _     => exact absurd rfl hr
-  | catHit _ ih   => exact .catHit (ih (by intro h; cases h))
-  | catSkip _ _ ih₁ ih₂ =>
-      exact .catSkip (ih₁ (by intro h; cases h)) (ih₂ hr)
-  | catUnk _ _    => exact absurd rfl hr
-
--- Totality. NOT provable by bare structural induction — L-α recurses through
--- Γ's row-solutions, which could be cyclic (α = α | ρ loops forever). The
--- acyclicity condition: some ranking of row-vars strictly drops when stepping
--- into a solution. The telescope discipline (each solution mentions only vars
--- solved strictly later in rowEnv) yields such a ranking; so does an empty or
--- fully-ground rowEnv (rank ≡ 0 vacuously).
-
--- Largest rank of a row-var in the spine (field types don't matter: lookup
--- never descends into them).
-def Row.rankUnder {B : Type} (rank : TyVar → Nat) : Row B → Nat
-  | .empty     => 0
-  | .var α     => rank α
-  | .sing _ _  => 0
-  | .cat ρ₁ ρ₂ => max (ρ₁.rankUnder rank) (ρ₂.rankUnder rank)
-
-def Ctx.RowWF {B : Type} (Γ : Ctx B) : Prop :=
-  ∃ rank : TyVar → Nat,
-    ∀ α ρ, Γ.lookupRow α = some ρ → ρ.rankUnder rank < rank α
-
--- Recursion on (spine rank, row size) lexicographically: stepping into a
--- solution drops the rank (RowWF), stepping into a concatenand drops the size.
-private theorem lookup_total_go {B : Type} {Γ : Ctx B} (rank : TyVar → Nat)
-    (hrank : ∀ α ρ, Γ.lookupRow α = some ρ → ρ.rankUnder rank < rank α)
-    (ρ : Row B) (l : Label) : ∃ r, Lookup Γ ρ l r :=
-  match ρ with
-  | .empty => ⟨_, .emp⟩
-  | .sing l' _ =>
+-- Totality, by BARE STRUCTURAL RECURSION on the row.
+--
+-- This is where dropping L-α pays. With row-solutions in the context, totality
+-- was not structural: L-α recursed through Γ, which could be cyclic
+-- (α = α | ρ loops forever), so the proof needed a ranking of row-variables
+-- that strictly drops when stepping into a solution (`Ctx.RowWF`), a
+-- lexicographic (rank, size) measure, and every consumer had to carry the
+-- well-formedness hypothesis. A context-free ↓ recurses only into subrows, so
+-- all of that machinery is gone and the statement has no side condition at all.
+theorem lookup_total {B : Type} : (ρ : Row B) → (l : Label) → ∃ r, Lookup ρ l r
+  | .empty, _ => ⟨_, .emp⟩
+  | .var _, _ => ⟨_, .varFree⟩
+  | .sing l' _, l =>
       if hl : l' = l then by subst hl; exact ⟨_, .hit⟩
       else ⟨_, .miss hl⟩
-  | .cat ρ₁ ρ₂ =>
-      match lookup_total_go rank hrank ρ₁ l with
+  | .cat ρ₁ ρ₂, l =>
+      match lookup_total ρ₁ l with
       | ⟨.found _, hr₁⟩ => ⟨_, .catHit hr₁⟩
-      | ⟨.absent, hr₁⟩ =>
-          match lookup_total_go rank hrank ρ₂ l with
+      | ⟨.absent, hr₁⟩  =>
+          match lookup_total ρ₂ l with
           | ⟨_, hr₂⟩ => ⟨_, .catSkip hr₁ hr₂⟩
       | ⟨.unknown, hr₁⟩ => ⟨_, .catUnk hr₁⟩
-  | .var α =>
-      match hα : Γ.lookupRow α with
-      | none => ⟨_, .varFree hα⟩
-      | some ρ' =>
-          match lookup_total_go rank hrank ρ' l with
-          | ⟨_, hr⟩ => ⟨_, .var hα hr⟩
-termination_by (ρ.rankUnder rank, sizeOf ρ)
-decreasing_by
-  · simp only [Prod.lex_def, Row.rankUnder]; simp; omega
-  · simp only [Prod.lex_def, Row.rankUnder]; simp; omega
-  · have := hrank _ _ hα
-    simp only [Prod.lex_def, Row.rankUnder]
-    omega
 
-theorem lookup_total {B : Type} {Γ : Ctx B} (hwf : Γ.RowWF) (ρ : Row B)
-    (l : Label) : ∃ r, Lookup Γ ρ l r :=
-  match hwf with
-  | ⟨rank, hrank⟩ => lookup_total_go rank hrank ρ l
+-- ↓ is therefore a FUNCTION of (ρ, l) — `lookup_det` + `lookup_total`, packaged.
+noncomputable def Row.look {B : Type} (ρ : Row B) (l : Label) : LookupRes B :=
+  (lookup_total ρ l).choose
+
+theorem Row.look_spec {B : Type} (ρ : Row B) (l : Label) :
+    Lookup ρ l (ρ.look l) := (lookup_total ρ l).choose_spec
+
+theorem Row.look_eq {B : Type} {ρ : Row B} {l : Label} {r : LookupRes B}
+    (h : Lookup ρ l r) : ρ.look l = r := lookup_det (ρ.look_spec l) h
 
 -- Result equivalence: found-types match up to ≈, ⊥/? on the nose.
 inductive ResEquiv {B : Type} : LookupRes B → LookupRes B → Prop where
@@ -474,10 +422,10 @@ theorem ResEquiv.trans {B : Type} {r₁ r₂ r₃ : LookupRes B} :
 -- The ≈-axioms preserve lookup results *on the nose* (only `sing` changes the
 -- found type, handled separately). One helper per axiom, both directions.
 section EquivHelpers
-variable {B : Type} {Γ : Ctx B} {ρ ρ₁ ρ₂ ρ₃ : Row B} {l : Label} {r : LookupRes B}
+variable {B : Type} {ρ ρ₁ ρ₂ ρ₃ : Row B} {l : Label} {r : LookupRes B}
 
 private theorem lookup_assoc_fwd :
-    Lookup Γ (.cat (.cat ρ₁ ρ₂) ρ₃) l r → Lookup Γ (.cat ρ₁ (.cat ρ₂ ρ₃)) l r := by
+    Lookup (.cat (.cat ρ₁ ρ₂) ρ₃) l r → Lookup (.cat ρ₁ (.cat ρ₂ ρ₃)) l r := by
   intro h
   cases h with
   | catHit h₁₂ =>
@@ -493,7 +441,7 @@ private theorem lookup_assoc_fwd :
       | catUnk h₁     => exact .catUnk h₁
 
 private theorem lookup_assoc_bwd :
-    Lookup Γ (.cat ρ₁ (.cat ρ₂ ρ₃)) l r → Lookup Γ (.cat (.cat ρ₁ ρ₂) ρ₃) l r := by
+    Lookup (.cat ρ₁ (.cat ρ₂ ρ₃)) l r → Lookup (.cat (.cat ρ₁ ρ₂) ρ₃) l r := by
   intro h
   cases h with
   | catHit h₁ => exact .catHit (.catHit h₁)
@@ -505,35 +453,35 @@ private theorem lookup_assoc_bwd :
   | catUnk h₁ => exact .catUnk (.catUnk h₁)
 
 private theorem lookup_unitL_fwd :
-    Lookup Γ (.cat .empty ρ) l r → Lookup Γ ρ l r := by
+    Lookup (.cat .empty ρ) l r → Lookup ρ l r := by
   intro h
   cases h with
   | catHit hε     => cases hε
   | catSkip _ h₂  => exact h₂
   | catUnk hε     => cases hε
 
-private theorem lookup_unitL_bwd (h : Lookup Γ ρ l r) :
-    Lookup Γ (.cat .empty ρ) l r :=
+private theorem lookup_unitL_bwd (h : Lookup ρ l r) :
+    Lookup (.cat .empty ρ) l r :=
   .catSkip .emp h
 
 private theorem lookup_unitR_fwd :
-    Lookup Γ (.cat ρ .empty) l r → Lookup Γ ρ l r := by
+    Lookup (.cat ρ .empty) l r → Lookup ρ l r := by
   intro h
   cases h with
   | catHit h₁     => exact h₁
   | catSkip h₁ hε => cases hε; exact h₁
   | catUnk h₁     => exact h₁
 
-private theorem lookup_unitR_bwd (h : Lookup Γ ρ l r) :
-    Lookup Γ (.cat ρ .empty) l r := by
+private theorem lookup_unitR_bwd (h : Lookup ρ l r) :
+    Lookup (.cat ρ .empty) l r := by
   cases r with
   | found τ => exact .catHit h
   | absent  => exact .catSkip h .emp
   | unknown => exact .catUnk h
 
 private theorem lookup_comm_fwd {l₁ l₂ : Label} {τ₁ τ₂ : Ty B} (hne : l₁ ≠ l₂) :
-    Lookup Γ (.cat (.sing l₁ τ₁) (.sing l₂ τ₂)) l r →
-    Lookup Γ (.cat (.sing l₂ τ₂) (.sing l₁ τ₁)) l r := by
+    Lookup (.cat (.sing l₁ τ₁) (.sing l₂ τ₂)) l r →
+    Lookup (.cat (.sing l₂ τ₂) (.sing l₁ τ₁)) l r := by
   intro h
   cases h with
   | catHit h₁ =>
@@ -551,10 +499,10 @@ end EquivHelpers
 
 -- Lookup respects row equivalence, in both directions at once (≈ is symmetric,
 -- so a one-directional induction hypothesis would be too weak).
-theorem lookup_equiv_both {B : Type} {Γ : Ctx B} :
+theorem lookup_equiv_both {B : Type} :
     {ρ₁ ρ₂ : Row B} → RowEquiv ρ₁ ρ₂ →
-    (∀ {l r}, Lookup Γ ρ₁ l r → ∃ r', Lookup Γ ρ₂ l r' ∧ ResEquiv r r') ∧
-    (∀ {l r}, Lookup Γ ρ₂ l r → ∃ r', Lookup Γ ρ₁ l r' ∧ ResEquiv r r')
+    (∀ {l r}, Lookup ρ₁ l r → ∃ r', Lookup ρ₂ l r' ∧ ResEquiv r r') ∧
+    (∀ {l r}, Lookup ρ₂ l r → ∃ r', Lookup ρ₁ l r' ∧ ResEquiv r r')
   | _, _, .refl _ =>
       ⟨fun h => ⟨_, h, .refl _⟩, fun h => ⟨_, h, .refl _⟩⟩
   | _, _, .symm h => (lookup_equiv_both h).symm
@@ -610,10 +558,10 @@ theorem lookup_equiv_both {B : Type} {Γ : Ctx B} :
 
 -- Lookup respects row equivalence. Calibration check for ≈: any stronger
 -- (swapping equal labels) and this lemma breaks, any weaker and T-eq is useless.
-theorem lookup_equiv {B : Type} {Γ : Ctx B} {ρ₁ ρ₂ : Row B} {l : Label}
+theorem lookup_equiv {B : Type} {ρ₁ ρ₂ : Row B} {l : Label}
     {r₁ : LookupRes B}
-    (heq : RowEquiv ρ₁ ρ₂) (h : Lookup Γ ρ₁ l r₁) :
-    ∃ r₂, Lookup Γ ρ₂ l r₂ ∧ ResEquiv r₁ r₂ :=
+    (heq : RowEquiv ρ₁ ρ₂) (h : Lookup ρ₁ l r₁) :
+    ∃ r₂, Lookup ρ₂ l r₂ ∧ ResEquiv r₁ r₂ :=
   (lookup_equiv_both heq).1 h
 
 
@@ -653,8 +601,8 @@ theorem RowEquiv.spineVarFree {B : Type} :
   | _, _, .comm _ =>
       ⟨(fun _ => .cat .sing .sing), (fun _ => .cat .sing .sing)⟩
 
-theorem Lookup.not_unknown_of_spineVarFree {B : Type} {Γ : Ctx B} {ρ : Row B}
-    {l : Label} (hv : ρ.SpineVarFree) (h : Lookup Γ ρ l .unknown) : False := by
+theorem Lookup.not_unknown_of_spineVarFree {B : Type} {ρ : Row B}
+    {l : Label} (hv : ρ.SpineVarFree) (h : Lookup ρ l .unknown) : False := by
   induction hv with
   | empty => cases h
   | sing  => cases h
@@ -772,23 +720,22 @@ def LookupRes.applySubst {B : Type} (θ : TySubst B) : LookupRes B → LookupRes
   | .absent  => .absent
   | .unknown => .unknown
 
--- Definite lookups are stable under substitution — the *syntactic* analog of
--- lookup_mono: at an empty rowEnv a definite derivation never consults the
--- context (L-α needs a solution, L-α-free yields ?), so it transports into
--- any context after substituting the row. Only ? can change category — that
--- demotion is exactly what T-sel-⊥ / T-★-intro absorb.
-theorem lookup_applySubst {B : Type} {Γ Γ' : Ctx B} {ρ : Row B} {l : Label}
-    {r : LookupRes B} (hrow : Γ.rowEnv = []) (θ : TySubst B)
-    (h : Lookup Γ ρ l r) (hr : r ≠ .unknown) :
-    Lookup Γ' (ρ.applySubst θ) l (r.applySubst θ) := by
+-- THE RULE L-α USED TO IMPLEMENT. A definite lookup is stable under
+-- substitution: substituting can only act on row-variables, and a definite
+-- derivation never looked at one (the only rule that mentions a variable,
+-- L-α-free, yields ?). So "chase the solution for α" and "substitute α away,
+-- then look up" agree wherever the answer is definite — which is the whole
+-- content of the deleted L-α. Only ? can change category, and that demotion is
+-- exactly what T-sel-⊥ / T-★-intro absorb.
+theorem lookup_applySubst {B : Type} {ρ : Row B} {l : Label}
+    {r : LookupRes B} (θ : TySubst B)
+    (h : Lookup ρ l r) (hr : r ≠ .unknown) :
+    Lookup (ρ.applySubst θ) l (r.applySubst θ) := by
   induction h with
   | emp        => exact .emp
   | hit        => exact .hit
   | miss hne   => exact .miss hne
-  | var hΓ _ _ =>
-      rw [show Γ.lookupRow _ = none by simp [Ctx.lookupRow, hrow]] at hΓ
-      cases hΓ
-  | varFree _  => exact absurd rfl hr
+  | varFree    => exact absurd rfl hr
   | catHit _ ih =>
       simp only [Row.applySubst]
       exact .catHit (ih (by intro h; cases h))
@@ -908,13 +855,13 @@ mutual
     -- Γ ⊢ e : {ρ}   Γ ⊢ ρ.l ↓ τ
     -- --------------------------- T-sel
     -- Γ ⊢ e.l : τ
-    | tSel : Typed constTy Γ e (.rcd ρ) → Lookup Γ ρ l (.found τ) →
+    | tSel : Typed constTy Γ e (.rcd ρ) → Lookup ρ l (.found τ) →
              Typed constTy Γ (.sel e l) τ
 
     -- Γ ⊢ e : {ρ}   Γ ⊢ ρ.l ↓ ?
     -- --------------------------- T-sel-★
     -- Γ ⊢ e.l : ★
-    | tSelUnk : Typed constTy Γ e (.rcd ρ) → Lookup Γ ρ l .unknown →
+    | tSelUnk : Typed constTy Γ e (.rcd ρ) → Lookup ρ l .unknown →
                 Typed constTy Γ (.sel e l) .unk
 
     -- Γ ⊢ e : {ρ}   Γ ⊢ ρ.l ↓ ⊥
@@ -923,7 +870,7 @@ mutual
     -- Definitely errs at runtime (soft typing: flagged statically, caught by
     -- the ↯-disjunct of progress). Needed for preservation under let-poly:
     -- instantiation can demote a ?-lookup to ⊥, cf. let f = (x: x.l) in f {}.
-    | tSelAbs : Typed constTy Γ e (.rcd ρ) → Lookup Γ ρ l .absent →
+    | tSelAbs : Typed constTy Γ e (.rcd ρ) → Lookup ρ l .absent →
                 Typed constTy Γ (.sel e l) .unk
 
     -- Γ ⊢ e : τ
@@ -1067,7 +1014,7 @@ theorem TypedBody.spineVarFree {B C : Type} {constTy : C → B} {Γ : Ctx B} :
 
 theorem TypedBody.lookup_absent {B C : Type} {constTy : C → B} {Γ : Ctx B} :
     {b : RecBody (Expr C)} → {ρ : Row B} → TypedBody constTy Γ b ρ →
-    ∀ {l : Label}, Lookup Γ ρ l .absent → RecBody.lookup l b = none
+    ∀ {l : Label}, Lookup ρ l .absent → RecBody.lookup l b = none
   | _, _, .empty => fun _ => rfl
   | _, _, .field _ => fun hl => by
       cases hl with
@@ -1080,7 +1027,7 @@ theorem TypedBody.lookup_absent {B C : Type} {constTy : C → B} {Γ : Ctx B} :
 
 theorem TypedBody.lookup_found {B C : Type} {constTy : C → B} {Γ : Ctx B} :
     {b : RecBody (Expr C)} → {ρ : Row B} → TypedBody constTy Γ b ρ →
-    ∀ {l : Label} {τ : Ty B}, Lookup Γ ρ l (.found τ) →
+    ∀ {l : Label} {τ : Ty B}, Lookup ρ l (.found τ) →
     ∃ e, RecBody.lookup l b = some e ∧ Typed constTy Γ e τ
   | _, _, .empty => fun hl => nomatch hl
   | _, _, .field ht => fun hl => by
@@ -1098,14 +1045,18 @@ theorem TypedBody.lookup_found {B C : Type} {constTy : C → B} {Γ : Ctx B} :
 
 
 ------------------------------ CONTEXT CONVERSION ------------------------------
--- Typing sees the context only through successful tyEnv lookups and the
--- *exact* rowEnv lookup function (L-α-free needs `none` preserved!), so it
+-- Typing sees the context only through successful tyEnv lookups, so it
 -- transports along this preorder. Subsumes weakening, exchange and shadowing —
 -- the named-binder plumbing the substitution lemma needs.
+--
+-- ONE CLAUSE, where there used to be two. The second demanded that Γ₁ and Γ₂
+-- agree on row-solutions EXACTLY (not just that Γ₂ keep Γ₁'s), because
+-- L-α-free read `lookupRow α = none` and context extension does not preserve a
+-- negative lookup. That was the only non-monotone premise in the system; with
+-- ↓ context-free it has nothing to constrain.
 
 def Ctx.Sub {B : Type} (Γ₁ Γ₂ : Ctx B) : Prop :=
-  (∀ x σ, Γ₁.lookup x = some σ → Γ₂.lookup x = some σ) ∧
-  (∀ α, Γ₁.lookupRow α = Γ₂.lookupRow α)
+  ∀ x σ, Γ₁.lookup x = some σ → Γ₂.lookup x = some σ
 
 theorem Ctx.lookup_bindScheme {B : Type} (Γ : Ctx B) (x y : Var)
     (σ : Scheme B) :
@@ -1118,21 +1069,21 @@ theorem Ctx.lookup_bindTy {B : Type} (Γ : Ctx B) (x y : Var) (τ : Ty B) :
   Ctx.lookup_bindScheme Γ x y ⟨[], τ⟩
 
 theorem Ctx.Sub.refl {B : Type} (Γ : Ctx B) : Ctx.Sub Γ Γ :=
-  ⟨fun _ _ h => h, fun _ => rfl⟩
+  fun _ _ h => h
 
 theorem Ctx.Sub.trans {B : Type} {Γ₁ Γ₂ Γ₃ : Ctx B}
     (h₁ : Ctx.Sub Γ₁ Γ₂) (h₂ : Ctx.Sub Γ₂ Γ₃) : Ctx.Sub Γ₁ Γ₃ :=
-  ⟨fun x τ h => h₂.1 x τ (h₁.1 x τ h), fun α => (h₁.2 α).trans (h₂.2 α)⟩
+  fun x τ h => h₂ x τ (h₁ x τ h)
 
 -- Binding respects the preorder.
 theorem Ctx.Sub.bindScheme {B : Type} {Γ₁ Γ₂ : Ctx B} (h : Ctx.Sub Γ₁ Γ₂)
     (x : Var) (σ : Scheme B) :
     Ctx.Sub (Γ₁.bindScheme x σ) (Γ₂.bindScheme x σ) := by
-  refine ⟨fun y σ' hy => ?_, h.2⟩
+  intro y σ' hy
   rw [Ctx.lookup_bindScheme] at hy ⊢
   cases hxy : (x == y)
   · simp only [hxy, Bool.false_eq_true, if_false] at hy ⊢
-    exact h.1 y σ' hy
+    exact h y σ' hy
   · simpa [hxy] using hy
 
 theorem Ctx.Sub.bindTy {B : Type} {Γ₁ Γ₂ : Ctx B} (h : Ctx.Sub Γ₁ Γ₂)
@@ -1144,7 +1095,7 @@ theorem Ctx.Sub.exchange {B : Type} (Γ : Ctx B) {x y : Var} (hne : x ≠ y)
     (σ₁ σ₂ : Scheme B) :
     Ctx.Sub ((Γ.bindScheme x σ₁).bindScheme y σ₂)
             ((Γ.bindScheme y σ₂).bindScheme x σ₁) := by
-  refine ⟨fun z μ hz => ?_, fun _ => rfl⟩
+  intro z μ hz
   simp only [Ctx.lookup_bindScheme] at hz ⊢
   cases hyz : (y == z) <;> cases hxz : (x == z) <;>
     simp only [hyz, hxz, Bool.false_eq_true, if_false, if_true] at hz ⊢ <;>
@@ -1155,50 +1106,40 @@ theorem Ctx.Sub.exchange {B : Type} (Γ : Ctx B) {x y : Var} (hne : x ≠ y)
 theorem Ctx.Sub.shadowed {B : Type} {Δ Γ : Ctx B} {x : Var} {σ₁ : Scheme B}
     (h : Ctx.Sub Δ (Γ.bindScheme x σ₁)) (σ : Scheme B) :
     Ctx.Sub (Δ.bindScheme x σ) (Γ.bindScheme x σ) := by
-  refine ⟨fun z μ hz => ?_, fun α => h.2 α⟩
+  intro z μ hz
   rw [Ctx.lookup_bindScheme] at hz ⊢
   cases hxz : (x == z)
   · simp only [hxz, Bool.false_eq_true, if_false] at hz ⊢
-    have := h.1 z μ hz
+    have := h z μ hz
     rwa [Ctx.lookup_bindScheme, hxz, if_neg (by simp)] at this
   · simpa [hxz] using hz
 
--- A closed term types in any context over the same row-solutions.
+-- A closed term types in any context.
 theorem Ctx.Sub.ofEmptyTyEnv {B : Type} (Γ : Ctx B) :
-    Ctx.Sub ⟨[], Γ.rowEnv⟩ Γ :=
-  ⟨fun x τ h => by simp [Ctx.lookup] at h, fun _ => rfl⟩
+    Ctx.Sub Ctx.empty Γ :=
+  fun x τ h => by simp [Ctx.lookup, Ctx.empty] at h
 
--- Lookup consults only the row-solutions.
-theorem Lookup.congr_rowEnv {B : Type} {Γ₁ Γ₂ : Ctx B}
-    (hrow : ∀ α, Γ₁.lookupRow α = Γ₂.lookupRow α) :
-    {ρ : Row B} → {l : Label} → {r : LookupRes B} →
-    Lookup Γ₁ ρ l r → Lookup Γ₂ ρ l r
-  | _, _, _, .emp          => .emp
-  | _, _, _, .hit          => .hit
-  | _, _, _, .miss hne     => .miss hne
-  | _, _, _, .var hΓ h     => .var (hrow _ ▸ hΓ) (Lookup.congr_rowEnv hrow h)
-  | _, _, _, .varFree hΓ   => .varFree (hrow _ ▸ hΓ)
-  | _, _, _, .catHit h     => .catHit (Lookup.congr_rowEnv hrow h)
-  | _, _, _, .catSkip h₁ h₂ =>
-      .catSkip (Lookup.congr_rowEnv hrow h₁) (Lookup.congr_rowEnv hrow h₂)
-  | _, _, _, .catUnk h     => .catUnk (Lookup.congr_rowEnv hrow h)
+-- `Lookup.congr_rowEnv` used to live here: "a lookup depends on Γ only through
+-- its row-solutions, so it transports whenever those agree". A context-free ↓
+-- transports along ANY context change with no lemma at all, so the selection
+-- cases of `typed_sub` now pass their lookup through untouched.
 
 mutual
 theorem typed_sub {B C : Type} {constTy : C → B} :
     {Γ₁ Γ₂ : Ctx B} → {e : Expr C} → {τ : Ty B} → Ctx.Sub Γ₁ Γ₂ →
     Typed constTy Γ₁ e τ → Typed constTy Γ₂ e τ
   | _, _, _, _, _,  .tCon        => .tCon
-  | _, _, _, _, hs, .tVar h hi   => .tVar (hs.1 _ _ h) hi
+  | _, _, _, _, hs, .tVar h hi   => .tVar (hs _ _ h) hi
   | _, _, _, _, hs, .tEq h heq   => .tEq (typed_sub hs h) heq
   | _, _, _, _, hs, .tLam h      => .tLam (typed_sub (hs.bindTy _ _) h)
   | _, _, _, _, hs, .tApp h₁ h₂  => .tApp (typed_sub hs h₁) (typed_sub hs h₂)
   | _, _, _, _, hs, .tCat h₁ h₂  => .tCat (typed_sub hs h₁) (typed_sub hs h₂)
   | _, _, _, _, hs, .tSel h hl   =>
-      .tSel (typed_sub hs h) (Lookup.congr_rowEnv hs.2 hl)
+      .tSel (typed_sub hs h) hl
   | _, _, _, _, hs, .tSelUnk h hl =>
-      .tSelUnk (typed_sub hs h) (Lookup.congr_rowEnv hs.2 hl)
+      .tSelUnk (typed_sub hs h) hl
   | _, _, _, _, hs, .tSelAbs h hl =>
-      .tSelAbs (typed_sub hs h) (Lookup.congr_rowEnv hs.2 hl)
+      .tSelAbs (typed_sub hs h) hl
   | _, _, _, _, hs, .tUnk h      => .tUnk (typed_sub hs h)
   | _, _, _, _, hs, .tLet h₁ h₂  =>
       .tLet (fun τ' hi => typed_sub hs (h₁ τ' hi))
@@ -1497,11 +1438,11 @@ private theorem subst_aux {B C : Type} {constTy : C → B} :
     {Δ : Ctx B} → {e : Expr C} → {τ : Ty B} → Typed constTy Δ e τ →
     ∀ {Γ : Ctx B} {x : Var} {v : Expr C} {σ : Scheme B},
       Ctx.Sub Δ (Γ.bindScheme x σ) →
-      (∀ τ', σ.Inst τ' → Typed constTy ⟨[], Γ.rowEnv⟩ v τ') →
+      (∀ τ', σ.Inst τ' → Typed constTy Ctx.empty v τ') →
       Typed constTy Γ (subst x v e) τ
   | _, _, _, .tCon, _, _, _, _, _, _ => .tCon
   | _, .var y, _, .tVar h hi, _, x, _, _, hsub, hv => by
-      have hy := hsub.1 _ _ h
+      have hy := hsub _ _ h
       rw [Ctx.lookup_bindScheme] at hy
       simp only [subst]
       cases hxy : (x == y)
@@ -1531,13 +1472,13 @@ private theorem subst_aux {B C : Type} {constTy : C → B} :
       .tCat (subst_aux h₁ hsub hv) (subst_aux h₂ hsub hv)
   | _, _, _, .tSel h hl, Γ, _, _, _, hsub, hv =>
       .tSel (subst_aux h hsub hv)
-            (Lookup.congr_rowEnv (Γ₂ := Γ) (fun α => hsub.2 α) hl)
+            hl
   | _, _, _, .tSelUnk h hl, Γ, _, _, _, hsub, hv =>
       .tSelUnk (subst_aux h hsub hv)
-               (Lookup.congr_rowEnv (Γ₂ := Γ) (fun α => hsub.2 α) hl)
+               hl
   | _, _, _, .tSelAbs h hl, Γ, _, _, _, hsub, hv =>
       .tSelAbs (subst_aux h hsub hv)
-               (Lookup.congr_rowEnv (Γ₂ := Γ) (fun α => hsub.2 α) hl)
+               hl
   | _, _, _, .tUnk h, _, _, _, _, hsub, hv =>
       .tUnk (subst_aux h hsub hv)
   | _, .letE y e₁ e₂, _, .tLet h₁ h₂, _, x, _, _, hsub, hv => by
@@ -1561,7 +1502,7 @@ private theorem substBody_aux {B C : Type} {constTy : C → B} :
     TypedBody constTy Δ b ρ →
     ∀ {Γ : Ctx B} {x : Var} {v : Expr C} {σ : Scheme B},
       Ctx.Sub Δ (Γ.bindScheme x σ) →
-      (∀ τ', σ.Inst τ' → Typed constTy ⟨[], Γ.rowEnv⟩ v τ') →
+      (∀ τ', σ.Inst τ' → Typed constTy Ctx.empty v τ') →
       TypedBody constTy Γ (substBody x v b) ρ
   | _, _, _, .empty, _, _, _, _, _, _ => .empty
   | _, _, _, .field h, _, _, _, _, hsub, hv => .field (subst_aux h hsub hv)
@@ -1716,10 +1657,7 @@ example {B C : Type} (constTy : C → B) :
     have hx : (Ctx.empty.bindTy "x" (.rcd (θ.row "β"))).lookup "x"
         = some ⟨[], .rcd (θ.row "β")⟩ := by
       simp [Ctx.lookup_bindTy]
-    have hwf : (Ctx.empty.bindTy "x" (.rcd (θ.row "β")) : Ctx B).RowWF :=
-      ⟨fun _ => 0, fun α ρ h => by
-        simp [Ctx.lookupRow, Ctx.bindTy, Ctx.bindScheme, Ctx.empty] at h⟩
-    obtain ⟨r, hr⟩ := lookup_total hwf (θ.row "β") "l"
+    obtain ⟨r, hr⟩ := lookup_total (θ.row "β") "l"
     cases r with
     | found τf => exact .tUnk (.tSel (.tVar hx (Scheme.Inst.refl _)) hr)
     | absent   => exact .tSelAbs (.tVar hx (Scheme.Inst.refl _)) hr
@@ -2069,11 +2007,12 @@ theorem renameScheme {B : Type} (θ : TySubst B) (σ : Scheme B)
 -- substitution can refine (? → τ) or demote (? → ⊥) a lookup, and the
 -- derivation is rebuilt through T-sel + T-★-intro / T-sel-⊥ / T-sel-★
 -- according to the (total) lookup on the substituted row — exactly the job
--- those rules were added for. Stated for empty rowEnv (as progress and
--- preservation are), so lookups never consult row-solutions.
+-- those rules were added for. No side condition on the contexts: with ↓
+-- context-free, "lookups never consult row-solutions" is not a hypothesis to
+-- assume but a fact about the relation, so the two `rowEnv = []` clauses this
+-- definition used to carry are gone.
 
 def InstMap {B : Type} (θ : TySubst B) (Γ Γ' : Ctx B) : Prop :=
-  Γ.rowEnv = [] ∧ Γ'.rowEnv = [] ∧
   ∀ x σ, Γ.lookup x = some σ → ∃ σ', Γ'.lookup x = some σ' ∧ Covers θ σ σ'
 
 -- All outward-visible variables of Γ's schemes.
@@ -2097,8 +2036,8 @@ theorem InstMap.perturb {B : Type} {θ χ : TySubst B} {Γ Γ' : Ctx B}
     (h : InstMap θ Γ Γ')
     (hagree : ∀ γ ∈ Γ.schemeFtv, χ.ty γ = θ.ty γ ∧ χ.row γ = θ.row γ) :
     InstMap χ Γ Γ' := by
-  refine ⟨h.1, h.2.1, fun x σ hx => ?_⟩
-  obtain ⟨σ', hx', hcov⟩ := h.2.2 x σ hx
+  intro x σ hx
+  obtain ⟨σ', hx', hcov⟩ := h x σ hx
   refine ⟨σ', hx', fun χ₂ hagree₂ τ hinst => ?_⟩
   refine hcov χ₂ (fun α hα hnv => ?_) τ hinst
   obtain ⟨e1, e2⟩ := hagree₂ α hα hnv
@@ -2116,12 +2055,12 @@ theorem Covers.mono {B : Type} (θ : TySubst B) (τ₁ : Ty B) :
 theorem InstMap.bindScheme {B : Type} {θ : TySubst B} {Γ Γ' : Ctx B}
     {σ σ' : Scheme B} (h : InstMap θ Γ Γ') (x : Var) (hcov : Covers θ σ σ') :
     InstMap θ (Γ.bindScheme x σ) (Γ'.bindScheme x σ') := by
-  refine ⟨h.1, h.2.1, fun y σy hy => ?_⟩
+  intro y σy hy
   rw [Ctx.lookup_bindScheme] at hy
   rw [Ctx.lookup_bindScheme]
   cases hxy : (x == y)
   · simp only [hxy, Bool.false_eq_true, if_false] at hy ⊢
-    exact h.2.2 y σy hy
+    exact h y σy hy
   · simp only [hxy, if_true] at hy
     cases Option.some.inj hy
     exact ⟨σ', by simp, hcov⟩
@@ -2139,7 +2078,7 @@ theorem typed_applySubst_aux {B C : Type} {constTy : C → B} :
   | _, _, _, .tCon, _, _, _ => by
       simp only [Ty.applySubst]; exact .tCon
   | _, _, _, .tVar h hi, θ, _, hmap => by
-      obtain ⟨σ', hlook, hcov⟩ := hmap.2.2 _ _ h
+      obtain ⟨σ', hlook, hcov⟩ := hmap _ _ h
       exact .tVar hlook (hcov θ (fun α _ _ => ⟨rfl, rfl⟩) _ hi)
   | _, _, _, .tEq h heq, θ, _, hmap =>
       .tEq (typed_applySubst_aux h hmap) (TyEquiv.applySubst θ heq)
@@ -2159,15 +2098,13 @@ theorem typed_applySubst_aux {B C : Type} {constTy : C → B} :
   | _, _, _, .tSel h hl, θ, Γ', hmap => by
       have ih := typed_applySubst_aux h hmap
       simp only [Ty.applySubst] at ih
-      have hlk := lookup_applySubst (Γ' := Γ') hmap.1 θ hl (by intro hh; cases hh)
+      have hlk := lookup_applySubst θ hl (by intro hh; cases hh)
       simp only [LookupRes.applySubst] at hlk
       exact .tSel ih hlk
   | _, .sel _ l, _, .tSelUnk (ρ := ρ) h hl, θ, Γ', hmap => by
       have ih := typed_applySubst_aux h hmap
       simp only [Ty.applySubst] at ih ⊢
-      have hwf : Γ'.RowWF := ⟨fun _ => 0, fun α ρ' hα => by
-        simp [Ctx.lookupRow, hmap.2.1] at hα⟩
-      obtain ⟨r, hr⟩ := lookup_total hwf (ρ.applySubst θ) l
+      obtain ⟨r, hr⟩ := lookup_total (ρ.applySubst θ) l
       cases r with
       | found τf => exact .tUnk (.tSel ih hr)
       | absent   => exact .tSelAbs ih hr
@@ -2175,7 +2112,7 @@ theorem typed_applySubst_aux {B C : Type} {constTy : C → B} :
   | _, _, _, .tSelAbs h hl, θ, Γ', hmap => by
       have ih := typed_applySubst_aux h hmap
       simp only [Ty.applySubst] at ih ⊢
-      have hlk := lookup_applySubst (Γ' := Γ') hmap.1 θ hl (by intro hh; cases hh)
+      have hlk := lookup_applySubst θ hl (by intro hh; cases hh)
       simp only [LookupRes.applySubst] at hlk
       exact .tSelAbs ih hlk
   | _, _, _, .tUnk h, θ, _, hmap => by
@@ -2222,11 +2159,11 @@ end
 -- along θ within the *same* context: Γ ⊢ e : τ  ⟹  Γ ⊢ e : θτ.
 theorem typed_applySubst {B C : Type} {constTy : C → B} {Γ : Ctx B}
     {e : Expr C} {τ : Ty B} {θ : TySubst B}
-    (h : Typed constTy Γ e τ) (hrow : Γ.rowEnv = [])
+    (h : Typed constTy Γ e τ)
     (hfix : ∀ x σ, Γ.lookup x = some σ → ∀ α ∈ σ.body.ftv, α ∉ σ.vars →
       θ.ty α = .var α ∧ θ.row α = .var α) :
     Typed constTy Γ e (τ.applySubst θ) := by
-  refine typed_applySubst_aux h ⟨hrow, hrow, fun x σ hx => ⟨σ, hx, ?_⟩⟩
+  refine typed_applySubst_aux h (fun x σ hx => ⟨σ, hx, ?_⟩)
   -- every scheme covers itself: χ agrees with θ outside the binders, and θ is
   -- the identity there, so the composite is again an instantiation
   rintro χ hagree τ' ⟨θ₁, ⟨hfixTy, hfixRow⟩, rfl⟩
@@ -2249,14 +2186,13 @@ theorem typed_applySubst {B C : Type} {constTy : C → B} {Γ : Ctx B}
 -- discharges the instance-closed premise of T-let.
 theorem tLet_syntactic {B C : Type} {constTy : C → B} {Γ : Ctx B} {x : Var}
     {e₁ e₂ : Expr C} {τ₁ τ₂ : Ty B} {ᾱ : List TyVar}
-    (hrow : Γ.rowEnv = [])
     (hfresh : ∀ α ∈ ᾱ, ∀ y σ, Γ.lookup y = some σ → α ∈ σ.body.ftv → α ∈ σ.vars)
     (h₁ : Typed constTy Γ e₁ τ₁)
     (h₂ : Typed constTy (Γ.bindScheme x ⟨ᾱ, τ₁⟩) e₂ τ₂) :
     Typed constTy Γ (.letE x e₁ e₂) τ₂ := by
   refine .tLet (σ := ⟨ᾱ, τ₁⟩) (fun τ' hi => ?_) h₂
   obtain ⟨θ, ⟨hty, hrw⟩, rfl⟩ := hi
-  refine typed_applySubst h₁ hrow (fun y σ hy α hα hnv => ?_)
+  refine typed_applySubst h₁ (fun y σ hy α hα hnv => ?_)
   by_cases hin : α ∈ ᾱ
   · exact absurd (hfresh α hin y σ hy hα) hnv
   · exact ⟨hty α hin, hrw α hin⟩
@@ -2270,14 +2206,13 @@ example {B C : Type} (constTy : C → B) :
         (.app (.var "f") (.rcd .empty)))
       .unk := by
   refine tLet_syntactic (τ₁ := .fn (.rcd (.var "β")) .unk) (ᾱ := ["β"])
-    rfl ?_ ?_ ?_
+    ?_ ?_ ?_
   · intro α hα y σ hy
     simp [Ctx.lookup, Ctx.empty] at hy
   · -- the single symbolic derivation: λx. x.l : {β} → ★  (lookup is ?)
     apply Typed.tLam
-    refine .tSelUnk (ρ := .var "β") (.tVar ?_ (Scheme.Inst.refl _)) (.varFree ?_)
+    refine .tSelUnk (ρ := .var "β") (.tVar ?_ (Scheme.Inst.refl _)) .varFree
     · simp [Ctx.lookup_bindTy]
-    · simp [Ctx.lookupRow, Ctx.bindTy, Ctx.bindScheme, Ctx.empty]
   · -- the body instantiates f at β ≔ ε and applies it to {}
     have hif : Scheme.Inst (⟨["β"], .fn (.rcd (.var "β")) .unk⟩ : Scheme B)
         (.fn (.rcd .empty) .unk) := by
@@ -2532,65 +2467,32 @@ theorem ResPrec.refl {B : Type} : (r : LookupRes B) → ResPrec r r
   | .absent   => .absent
   | .unknown  => .unk _
 
--- Lookup monotonicity in ⊑ vocabulary: extending the row-solutions can only
--- sharpen a lookup. Definite results survive on the nose (lookup_mono); a ?
--- re-resolves to whatever the richer context finds — which needs totality,
--- hence Γ'.RowWF (maintained by unification's occurs-check).
-theorem lookup_mono_prec {B : Type} {Γ Γ' : Ctx B} {ρ : Row B} {l : Label}
-    {r : LookupRes B}
-    (hext : Ctx.RowExt Γ Γ') (hwf : Γ'.RowWF) (h : Lookup Γ ρ l r) :
-    ∃ r', Lookup Γ' ρ l r' ∧ ResPrec r' r := by
+-- Lookup monotonicity in ⊑ vocabulary. This used to read "extending the
+-- row-solutions can only sharpen a lookup" and needed Γ'.RowWF for the
+-- ?-case; the substitution form needs no side condition, because totality
+-- no longer does. Definite results survive on the nose (`lookup_applySubst`);
+-- a ? re-resolves to whatever the substituted row yields.
+theorem lookup_applySubst_prec {B : Type} {ρ : Row B} {l : Label}
+    {r : LookupRes B} (θ : TySubst B) (h : Lookup ρ l r) :
+    ∃ r', Lookup (ρ.applySubst θ) l r' ∧ ResPrec r' (r.applySubst θ) := by
   cases r with
   | found τ =>
-      exact ⟨_, lookup_mono hext h (by intro hc; cases hc), .found (.refl τ)⟩
+      exact ⟨_, lookup_applySubst θ h (by intro hc; cases hc), .refl _⟩
   | absent  =>
-      exact ⟨_, lookup_mono hext h (by intro hc; cases hc), .absent⟩
+      exact ⟨_, lookup_applySubst θ h (by intro hc; cases hc), .absent⟩
   | unknown =>
-      obtain ⟨r', hr'⟩ := lookup_total hwf ρ l
+      obtain ⟨r', hr'⟩ := lookup_total (ρ.applySubst θ) l
       exact ⟨r', hr', .unk r'⟩
 
 
--------------------------- CONTEXT EXTENSION (Γ ⊑ Γ') --------------------------
--- The algorithmic system only ever *adds* row-solutions (unification writes,
--- never rewrites): term bindings are preserved, rowEnv only grows. Unlike
--- Ctx.Sub this does NOT preserve `lookupRow α = none` — L-α-free results may
--- change category, which is the whole point of refinement.
-
-def Ctx.Ext {B : Type} (Γ Γ' : Ctx B) : Prop :=
-  (∀ x σ, Γ.lookup x = some σ → Γ'.lookup x = some σ) ∧ Ctx.RowExt Γ Γ'
-
-theorem Ctx.Ext.refl {B : Type} (Γ : Ctx B) : Ctx.Ext Γ Γ :=
-  ⟨fun _ _ h => h, fun _ _ h => h⟩
-
--- Binding respects the extension (term-binding leaves rowEnv untouched).
-theorem Ctx.Ext.bindScheme {B : Type} {Γ Γ' : Ctx B} (h : Ctx.Ext Γ Γ')
-    (x : Var) (σ : Scheme B) :
-    Ctx.Ext (Γ.bindScheme x σ) (Γ'.bindScheme x σ) := by
-  refine ⟨fun y σ' hy => ?_, h.2⟩
-  rw [Ctx.lookup_bindScheme] at hy ⊢
-  cases hxy : (x == y)
-  · simp only [hxy, Bool.false_eq_true, if_false] at hy ⊢
-    exact h.1 y σ' hy
-  · simpa [hxy] using hy
-
-theorem Ctx.Ext.bindTy {B : Type} {Γ Γ' : Ctx B} (h : Ctx.Ext Γ Γ')
-    (x : Var) (τ : Ty B) : Ctx.Ext (Γ.bindTy x τ) (Γ'.bindTy x τ) :=
-  h.bindScheme x ⟨[], τ⟩
-
-theorem Ctx.RowWF.bindScheme {B : Type} {Γ : Ctx B} (h : Γ.RowWF)
-    (x : Var) (σ : Scheme B) : (Γ.bindScheme x σ).RowWF := h
-
-theorem Ctx.RowWF.bindTy {B : Type} {Γ : Ctx B} (h : Γ.RowWF)
-    (x : Var) (τ : Ty B) : (Γ.bindTy x τ).RowWF := h
-
 -- A selection on a record-typed term is always typeable at ★ — whatever the
 -- lookup result is, one of the three selection rules fires (the typing analog
--- of sel_rcd_progress; totality supplies the result).
+-- of sel_rcd_progress; totality supplies the result, now unconditionally).
 private theorem sel_unk_of_total {B C : Type} {constTy : C → B} {Γ : Ctx B}
     {e : Expr C} {ρ : Row B} {l : Label}
-    (hwf : Γ.RowWF) (h : Typed constTy Γ e (.rcd ρ)) :
+    (h : Typed constTy Γ e (.rcd ρ)) :
     Typed constTy Γ (.sel e l) .unk := by
-  obtain ⟨r, hr⟩ := lookup_total hwf ρ l
+  obtain ⟨r, hr⟩ := lookup_total ρ l
   cases r with
   | found τ => exact .tUnk (.tSel h hr)
   | absent  => exact .tSelAbs h hr
@@ -2598,77 +2500,65 @@ private theorem sel_unk_of_total {B C : Type} {constTy : C → B} {Γ : Ctx B}
 
 
 --------------------- TYPING MONOTONICITY (refinement) -------------------------
--- Extending the row-solutions preserves typing ON THE NOSE — not just up to ⊑.
--- Design finding (26-07-19): the ∃ τ' ⊑ τ form of the refinement theorem
--- (typed_mono below) is a trivial corollary (τ' := τ), because T-★-intro
--- re-blurs any lookup that became definite: tSelUnk survives as tSel + tUnk
--- (found) or tSelAbs (absent). Without re-blurring, the tApp case would be
--- unprovable up to ⊑ alone: function domain and argument may refine
--- *differently*, and no rule lifts one refined type to another. The genuinely
--- ⊑-flavored content of refinement therefore lives in the algorithmic system
--- (the principal type improves); declaratively, refinement is visible as "the
--- term also admits a more precise type" (see the example below).
--- Γ'.RowWF is needed exactly once: a ?-lookup must re-resolve to *something*.
+-- Refinement is SUBSTITUTION, not context extension.
+--
+-- This section used to carry `Ctx.Ext` (term bindings preserved, row-solutions
+-- grown) together with `typed_ext`: "extending the row-solutions preserves
+-- typing on the nose". That theorem was the context-shaped twin of
+-- `typed_applySubst`, which says the same thing about θ, and with row-solutions
+-- gone from the context only the θ-form remains. Nothing is lost: solving
+-- β ≔ ε is applying [β ↦ ε], and `typed_applySubst` is the transport.
+--
+-- Design finding (26-07-19), unchanged by the move: the ∃ τ' ⊑ τ form is
+-- trivial (τ' := τ), because T-★-intro re-blurs any lookup that became
+-- definite — tSelUnk survives as tSel + tUnk (found) or tSelAbs (absent).
+-- Without re-blurring the tApp case would be unprovable up to ⊑ alone, since
+-- domain and argument may refine differently and no rule lifts one refined
+-- type to another. The genuinely ⊑-flavored content of refinement therefore
+-- lives in the algorithmic system (the principal type improves);
+-- declaratively, refinement is visible as "the term also admits a more precise
+-- type" (see the example below).
 
-mutual
-theorem typed_ext {B C : Type} {constTy : C → B} :
-    {Γ Γ' : Ctx B} → {e : Expr C} → {τ : Ty B} →
-    Ctx.Ext Γ Γ' → Γ'.RowWF →
-    Typed constTy Γ e τ → Typed constTy Γ' e τ
-  | _, _, _, _, _,    _,   .tCon         => .tCon
-  | _, _, _, _, hext, _,   .tVar h hi    => .tVar (hext.1 _ _ h) hi
-  | _, _, _, _, hext, hwf, .tEq h heq    => .tEq (typed_ext hext hwf h) heq
-  | _, _, _, _, hext, hwf, .tLam h       =>
-      .tLam (typed_ext (hext.bindTy _ _) (hwf.bindTy _ _) h)
-  | _, _, _, _, hext, hwf, .tApp h₁ h₂   =>
-      .tApp (typed_ext hext hwf h₁) (typed_ext hext hwf h₂)
-  | _, _, _, _, hext, hwf, .tCat h₁ h₂   =>
-      .tCat (typed_ext hext hwf h₁) (typed_ext hext hwf h₂)
-  | _, _, _, _, hext, hwf, .tSel h hl    =>
-      .tSel (typed_ext hext hwf h)
-            (lookup_mono hext.2 hl (by intro hc; cases hc))
-  | _, _, _, _, hext, hwf, .tSelUnk h _  =>
-      sel_unk_of_total hwf (typed_ext hext hwf h)
-  | _, _, _, _, hext, hwf, .tSelAbs h hl =>
-      .tSelAbs (typed_ext hext hwf h)
-               (lookup_mono hext.2 hl (by intro hc; cases hc))
-  | _, _, _, _, hext, hwf, .tUnk h       => .tUnk (typed_ext hext hwf h)
-  | _, _, _, _, hext, hwf, .tLet h₁ h₂   =>
-      .tLet (fun τ' hi => typed_ext hext hwf (h₁ τ' hi))
-            (typed_ext (hext.bindScheme _ _) (hwf.bindScheme _ _) h₂)
-  | _, _, _, _, hext, hwf, .tRcd h       => .tRcd (typedBody_ext hext hwf h)
+-- Refinement only ever ADDS typings: under a θ that fixes Γ, the θ-image is
+-- derivable and the original still is.
+theorem typed_refine {B C : Type} {constTy : C → B} {Γ : Ctx B}
+    {e : Expr C} {τ : Ty B} {θ : TySubst B}
+    (h : Typed constTy Γ e τ)
+    (hfix : ∀ x σ, Γ.lookup x = some σ → ∀ α ∈ σ.body.ftv, α ∉ σ.vars →
+      θ.ty α = .var α ∧ θ.row α = .var α) :
+    Typed constTy Γ e τ ∧ Typed constTy Γ e (τ.applySubst θ) :=
+  ⟨h, typed_applySubst h hfix⟩
 
-theorem typedBody_ext {B C : Type} {constTy : C → B} :
-    {Γ Γ' : Ctx B} → {b : RecBody (Expr C)} → {ρ : Row B} →
-    Ctx.Ext Γ Γ' → Γ'.RowWF →
-    TypedBody constTy Γ b ρ → TypedBody constTy Γ' b ρ
-  | _, _, _, _, _,    _,   .empty     => .empty
-  | _, _, _, _, hext, hwf, .field h   => .field (typed_ext hext hwf h)
-  | _, _, _, _, hext, hwf, .cat h₁ h₂ =>
-      .cat (typedBody_ext hext hwf h₁) (typedBody_ext hext hwf h₂)
-end
-
--- The ⊑-form of refinement (thesis.typ, Motivation) — the shape the
--- algorithmic soundness proof will consume.
+-- The ⊑-form (thesis.typ, Motivation) — the shape the algorithmic soundness
+-- proof will consume.
 theorem typed_mono {B C : Type} {constTy : C → B} {Γ Γ' : Ctx B}
     {e : Expr C} {τ : Ty B}
-    (hext : Ctx.Ext Γ Γ') (hwf : Γ'.RowWF) (h : Typed constTy Γ e τ) :
+    (hsub : Ctx.Sub Γ Γ') (h : Typed constTy Γ e τ) :
     ∃ τ', Typed constTy Γ' e τ' ∧ TyPrec τ' τ :=
-  ⟨τ, typed_ext hext hwf h, .refl τ⟩
+  ⟨τ, typed_sub hsub h, .refl τ⟩
 
 
 ------------------------------ REFINEMENT EXAMPLE ------------------------------
 -- The Motivation example (thesis.typ)  x: ({l = c} ‖ x).l  — refinement made
--- visible.
+-- visible, now WITHOUT a row environment.
 -- With x: {β} the concatenation has row (β | l: 𝓫_c) and the lookup of l is ?
--- (β could shadow it), so the λ types at {β} → ★. Solving β ≔ ε lets the
--- lookup advance past β and hit l: the same term now ALSO types at the
--- strictly more precise {β} → 𝓫_c — while typed_ext keeps the old {β} → ★
--- derivable (the found-lookup is re-blurred through T-★-intro). Refinement
--- only ever adds typings, it never invalidates one.
+-- (β could shadow it), so the λ types at {β} → ★. Applying θ := [β ↦ ε] lets
+-- the lookup advance past the (now empty) first component and hit l: the same
+-- term types at the strictly more precise {ε} → 𝓫_c — while typed_applySubst
+-- keeps the blurred θ-image {ε} → ★ derivable (the found-lookup is re-blurred
+-- through T-★-intro). Refinement only ever adds typings.
+--
+-- Note the shape of the comparison is BETTER than the rowEnv version's: there,
+-- the two typings sat at the same syntactic row {β} in different contexts, and
+-- the ⊑-comparison could not see that β had been solved. Here both sit at {ε}
+-- and ⊑ relates them directly.
 
 private def refEx {C : Type} (c : C) : Expr C :=
   .lam "x" (.sel (.cat (.rcd (.field "l" (.con c))) (.var "x")) "l")
+
+/-- θ := [β ↦ ε] at the row sort, identity elsewhere. -/
+private def betaEps (B : Type) : TySubst B :=
+  ⟨(.var ·), fun α => if α == "β" then .empty else .var α⟩
 
 private theorem refEx_unk {B C : Type} (constTy : C → B) (c : C) :
     Typed constTy Ctx.empty (refEx c) (.fn (.rcd (.var "β")) .unk) := by
@@ -2676,43 +2566,35 @@ private theorem refEx_unk {B C : Type} (constTy : C → B) (c : C) :
   refine .tSelUnk (ρ := .cat (.var "β") (.sing "l" (.base (constTy c))))
     (.tCat (.tRcd (.field .tCon)) (.tVar ?_ (Scheme.Inst.refl _))) ?_
   · simp [Ctx.lookup_bindTy]
-  · exact .catUnk (.varFree
-      (by simp [Ctx.lookupRow, Ctx.bindTy, Ctx.bindScheme, Ctx.empty]))
+  · exact .catUnk .varFree
 
 private theorem refEx_refined {B C : Type} (constTy : C → B) (c : C) :
-    Typed constTy (Ctx.empty.bindRow "β" .empty) (refEx c)
-      (.fn (.rcd (.var "β")) (.base (constTy c))) := by
+    Typed constTy Ctx.empty (refEx c)
+      (.fn (.rcd .empty) (.base (constTy c))) := by
   apply Typed.tLam
-  refine .tSel (ρ := .cat (.var "β") (.sing "l" (.base (constTy c))))
+  refine .tSel (ρ := .cat .empty (.sing "l" (.base (constTy c))))
     (.tCat (.tRcd (.field .tCon)) (.tVar ?_ (Scheme.Inst.refl _))) ?_
   · simp [Ctx.lookup_bindTy]
-  · exact .catSkip (.var rfl .emp) .hit
+  · exact .catSkip .emp .hit
 
--- The two typings are related by precision:
+-- The refined typing is strictly more precise than the θ-image of the blurred
+-- one — and both are typings of the SAME row {ε}, which is what makes ⊑ the
+-- right comparison.
 example {B C : Type} (constTy : C → B) (c : C) :
-    TyPrec (.fn (.rcd (.var "β")) (.base (constTy c)))
-           (.fn (.rcd (.var "β")) .unk) :=
-  .fn (.refl _) (.unk _)
+    TyPrec (.fn (.rcd .empty) (.base (constTy c)))
+           ((Ty.fn (.rcd (.var "β")) .unk).applySubst (betaEps B)) := by
+  show TyPrec _ (.fn (.rcd .empty) .unk)
+  exact .fn (.refl _) (.unk _)
 
-private theorem betaCtx_wf {B : Type} :
-    (Ctx.empty.bindRow "β" (.empty : Row B)).RowWF :=
-  ⟨fun _ => 1, fun α ρ h => by
-    simp only [Ctx.lookupRow, Ctx.bindRow, Ctx.empty, List.find?] at h
-    split at h
-    · simp only [Option.map_some] at h
-      cases h
-      simp [Row.rankUnder]
-    · simp at h⟩
-
--- …and the ★-typing transports into the richer context on the nose:
+-- …and the ★-typing transports along θ on the nose, so refinement invalidates
+-- nothing: `typed_applySubst` at the empty context, where the fixing side
+-- condition is vacuous.
 example {B C : Type} (constTy : C → B) (c : C) :
-    Typed constTy (Ctx.empty.bindRow "β" .empty) (refEx c)
-      (.fn (.rcd (.var "β")) .unk) :=
-  typed_ext
-    ⟨fun x σ h => by simp [Ctx.lookup, Ctx.empty] at h,
-     fun α ρ h => by simp [Ctx.lookupRow, Ctx.empty] at h⟩
-    betaCtx_wf
-    (refEx_unk constTy c)
+    Typed constTy Ctx.empty (refEx c)
+      ((Ty.fn (.rcd (.var "β")) .unk).applySubst (betaEps B)) :=
+  typed_applySubst (refEx_unk constTy c)
+    (fun x σ h => by simp [Ctx.lookup, Ctx.empty] at h)
+
 
 ------------------- PLAIN SCHEMES ARE NOT PRINCIPAL (L1 refutation) ------------
 -- The algorithmic design (algorithmic.typ, Generalization) forks on whether

@@ -26,7 +26,7 @@ variable {B : Type} [DecidableEq B]
 
 /-- a parked stump is still blocked on the blocker it records -/
 def Parked.BlockedAt (S : SolverState B) (p : Parked B) : Prop :=
-  LookupBlockedQ S.ctx (p.stump.row.applySubst S.subst) (p.stump.label.applySubst S.subst)
+  LookupBlockedQ (p.stump.row.applySubst S.subst) (p.stump.label.applySubst S.subst)
     p.blocker
 
 /-- one `Saturate.step`: wake a stump whose blocker was solved. Written

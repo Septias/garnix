@@ -21,142 +21,113 @@ namespace MinimalCalculus
 variable {B : Type} [DecidableEq B]
 
 --------------------- BLOCKED LOOKUPS SURVIVE A SUBSTITUTION --------------------
--- If no row variable of ρ is chased, a definite absence does not depend on
--- anything a substitution can change, and a lookup blocked on β stays `?` as
--- long as β is sent to a variable.
+-- A definite absence survives any substitution (`lookup_applySubst`), and a
+-- lookup blocked on β stays `?` as long as β is sent to a variable. The blocker
+-- of a row-blocked lookup is a row variable ON THE SPINE of the row looked up,
+-- which is what callers use to show it is sent to a variable.
+--
+-- (This section used to carry `NoChase Γ ρ` — "no row variable of ρ has a
+-- solution in Γ" — on every lemma, to rule out the L-α chase. There is no chase
+-- any more, so there is nothing to rule out.)
 
-/-- no row variable of ρ has a solution in Γ. -/
-def NoChase (Γ : Ctx B) (ρ : Row B) : Prop :=
-  ∀ α, (true, α) ∈ Row.sortedFtv ρ → Γ.lookupRow α = none
-
-private theorem noChase_cat {Γ : Ctx B} {ρ₁ ρ₂ : Row B} (h : NoChase Γ (.cat ρ₁ ρ₂)) :
-    NoChase Γ ρ₁ ∧ NoChase Γ ρ₂ :=
-  ⟨fun α hα => h α (List.mem_append_left _ hα),
-   fun α hα => h α (List.mem_append_right _ hα)⟩
-
-theorem lookup_absent_subst {Γ : Ctx B} {ρ : Row B} {l : Label} {r : LookupRes B}
-    (h : Lookup Γ ρ l r) (hr : r = .absent) (hn : NoChase Γ ρ) (θ : TySubst B) :
-    Lookup (⟨[], []⟩ : Ctx B) (ρ.applySubst θ) l .absent := by
+-- ⊢  the blocker of a row lookup is a row variable of the row's spine
+theorem LookupBlocked.mem_sortedFtv {ρ : Row B} {l : Label} {β : TyVar}
+    (h : LookupBlocked ρ l β) : (true, β) ∈ ρ.sortedFtv := by
   induction h with
-  | emp => exact .emp
-  | hit => exact nomatch hr
-  | miss hne => exact .miss hne
-  | var hα _ _ =>
-      have := hn _ (List.mem_singleton_self _)
-      rw [this] at hα; exact nomatch hα
-  | varFree _ => exact nomatch hr
-  | catHit _ _ => exact nomatch hr
-  | catSkip _ _ ih₁ ih₂ =>
-      exact .catSkip (ih₁ rfl (noChase_cat hn).1) (ih₂ hr (noChase_cat hn).2)
-  | catUnk _ _ => exact nomatch hr
+  | varFree => exact List.mem_singleton_self _
+  | catSkip _ _ ih => exact List.mem_append_right _ ih
+  | catUnk _ ih => exact List.mem_append_left _ ih
 
-theorem lookup_blocked_subst {Γ : Ctx B} {ρ : Row B} {l : Label} {β : TyVar}
-    (h : LookupBlocked Γ ρ l β) (hn : NoChase Γ ρ) (θ : TySubst B) {β' : TyVar}
+theorem lookup_blocked_subst {ρ : Row B} {l : Label} {β : TyVar}
+    (h : LookupBlocked ρ l β) (θ : TySubst B) {β' : TyVar}
     (hβ : θ.row β = .var β') :
-    Lookup (⟨[], []⟩ : Ctx B) (ρ.applySubst θ) l .unknown := by
+    Lookup (ρ.applySubst θ) l .unknown := by
   induction h with
-  | varFree _ =>
-      show Lookup _ (θ.row _) _ _
-      rw [hβ]; exact .varFree rfl
-  | var hα _ _ =>
-      have := hn _ (List.mem_singleton_self _)
-      rw [this] at hα; exact nomatch hα
+  | varFree =>
+      show Lookup (θ.row _) _ _
+      rw [hβ]; exact .varFree
   | catSkip ha _ ih =>
-      exact .catSkip (lookup_absent_subst ha rfl (noChase_cat hn).1 θ)
-        (ih (noChase_cat hn).2 hβ)
-  | catUnk _ ih => exact .catUnk (ih (noChase_cat hn).1 hβ)
+      exact .catSkip (lookup_applySubst (r := .absent) θ ha (by intro h; cases h)) (ih hβ)
+  | catUnk _ ih => exact .catUnk (ih hβ)
 
 -- …and for a KEYED lookup. A variable key is definitely ⊥ only on a hollow row,
 -- and it is blocked either on a row variable — which, sent to a variable, blocks
 -- every key but a non-label one (L-junk: ⊥) — or on the key itself, which must
 -- then stay a variable.
 
-theorem lookupV_absent_subst {Γ : Ctx B} {ρ : Row B} {α : TyVar} {r : LookupRes B}
-    (h : LookupV Γ ρ α r) (hr : r = .absent) (hn : NoChase Γ ρ) (θ : TySubst B) :
-    (ρ.applySubst θ).Hollow := by
-  induction h with
-  | emp => exact .empty
-  | sing => exact nomatch hr
-  | var hα _ _ =>
-      have := hn _ (List.mem_singleton_self _)
-      rw [this] at hα; exact nomatch hα
-  | varFree _ => exact nomatch hr
-  | catSkip _ _ ih₁ ih₂ => exact .cat (ih₁ rfl (noChase_cat hn).1) (ih₂ hr (noChase_cat hn).2)
-  | catUnk _ _ => exact nomatch hr
+theorem lookupV_absent_subst {ρ : Row B} {α : TyVar}
+    (h : LookupV ρ α .absent) (θ : TySubst B) : (ρ.applySubst θ).Hollow :=
+  (h.hollow rfl).applySubst θ
 
-private theorem lookupQ_catSkip_hollow {Γ : Ctx B} {ρ₁ ρ₂ : Row B} {q : Ty B}
-    {r : LookupRes B} (h₁ : ρ₁.Hollow) (h₂ : LookupQ Γ ρ₂ q r) :
-    LookupQ Γ (.cat ρ₁ ρ₂) q r := by
+private theorem lookupQ_catSkip_hollow {ρ₁ ρ₂ : Row B} {q : Ty B}
+    {r : LookupRes B} (h₁ : ρ₁.Hollow) (h₂ : LookupQ ρ₂ q r) :
+    LookupQ (.cat ρ₁ ρ₂) q r := by
   cases h₂ with
   | lit h => exact .lit (.catSkip (h₁.lookup _) h)
   | var h => exact .var (.catSkip (h₁.lookupV _) h)
   | junk h => exact .junk h
 
-private theorem lookupQ_catUnk {Γ : Ctx B} {ρ₁ ρ₂ : Row B} {q : Ty B}
-    (h₁ : LookupQ Γ ρ₁ q .unknown) : LookupQ Γ (.cat ρ₁ ρ₂) q .unknown := by
+private theorem lookupQ_catUnk {ρ₁ ρ₂ : Row B} {q : Ty B}
+    (h₁ : LookupQ ρ₁ q .unknown) : LookupQ (.cat ρ₁ ρ₂) q .unknown := by
   cases h₁ with
   | lit h => exact .lit (.catUnk h)
   | var h => exact .var (.catUnk h)
 
 /-- blocked, read under a substitution: `?`, or `⊥` because the key stopped being
 a label. Either way the stump discharges at ★. -/
-def BlockedAfter (Γ : Ctx B) (ρ : Row B) (q : Ty B) : Prop :=
-  LookupQ Γ ρ q .unknown ∨ (LookupQ Γ ρ q .absent ∧ ¬ q.IsQuery)
+def BlockedAfter (ρ : Row B) (q : Ty B) : Prop :=
+  LookupQ ρ q .unknown ∨ (LookupQ ρ q .absent ∧ ¬ q.IsQuery)
 
-theorem lookupV_blocked_subst {Γ : Ctx B} {ρ : Row B} {α β : TyVar}
-    (h : LookupVBlocked Γ ρ α β) (hn : NoChase Γ ρ) (θ : TySubst B)
-    (hβ : Γ.lookupRow β = none → ∃ β', θ.row β = .var β')
+theorem lookupV_blocked_subst {ρ : Row B} {α β : TyVar}
+    (h : LookupVBlocked ρ α β) (θ : TySubst B)
+    (hβ : (true, β) ∈ ρ.sortedFtv → ∃ β', θ.row β = .var β')
     (hk : β = α → ∀ l, θ.ty α ≠ .lab l) :
-    BlockedAfter (⟨[], []⟩ : Ctx B) (ρ.applySubst θ) (θ.ty α) := by
+    BlockedAfter (ρ.applySubst θ) (θ.ty α) := by
   induction h with
   | @sing α l τ =>
       cases hq : θ.ty α with
       | lab l' => exact absurd hq (hk rfl l')
       | var γ => exact .inl (.var .sing)
       | _ => exact .inr ⟨.junk (by simp [Ty.IsQuery]), by simp [Ty.IsQuery]⟩
-  | @varFree α β₀ hΓ =>
-      obtain ⟨β', hβ'⟩ := hβ hΓ
-      show BlockedAfter _ (θ.row _) _
+  | @varFree α β₀ =>
+      obtain ⟨β', hβ'⟩ := hβ (List.mem_singleton_self _)
+      show BlockedAfter (θ.row _) _
       rw [hβ']
       cases hq : θ.ty α with
-      | lab l => exact .inl (.lit (.varFree rfl))
-      | var γ => exact .inl (.var (.varFree rfl))
+      | lab l => exact .inl (.lit (.varFree))
+      | var γ => exact .inl (.var (.varFree))
       | _ => exact .inr ⟨.junk (by simp [Ty.IsQuery]), by simp [Ty.IsQuery]⟩
-  | var hα _ _ =>
-      have := hn _ (List.mem_singleton_self _)
-      rw [this] at hα; exact nomatch hα
   | catSkip ha _ ih =>
-      have hh := lookupV_absent_subst ha rfl (noChase_cat hn).1 θ
-      rcases ih (noChase_cat hn).2 hβ hk with h₂ | ⟨h₂, hq⟩
+      have hh := lookupV_absent_subst ha θ
+      rcases ih (fun hm => hβ (List.mem_append_right _ hm)) hk with h₂ | ⟨h₂, hq⟩
       · exact .inl (lookupQ_catSkip_hollow hh h₂)
       · exact .inr ⟨.junk hq, hq⟩
   | catUnk _ ih =>
-      rcases ih (noChase_cat hn).1 hβ hk with h₁ | ⟨_, hq⟩
+      rcases ih (fun hm => hβ (List.mem_append_left _ hm)) hk with h₁ | ⟨_, hq⟩
       · exact .inl (lookupQ_catUnk h₁)
       · exact .inr ⟨.junk hq, hq⟩
 
-theorem lookupQ_blocked_subst {Γ : Ctx B} {ρ : Row B} {q : Ty B} {β : TyVar}
-    (h : LookupBlockedQ Γ ρ q β) (hn : NoChase Γ ρ) (θ : TySubst B)
-    (hβ : Γ.lookupRow β = none → ∃ β', θ.row β = .var β')
+theorem lookupQ_blocked_subst {ρ : Row B} {q : Ty B} {β : TyVar}
+    (h : LookupBlockedQ ρ q β) (θ : TySubst B)
+    (hβ : (true, β) ∈ ρ.sortedFtv → ∃ β', θ.row β = .var β')
     (hk : q = .var β → ∀ l, θ.ty β ≠ .lab l) :
-    BlockedAfter (⟨[], []⟩ : Ctx B) (ρ.applySubst θ) (q.applySubst θ) := by
+    BlockedAfter (ρ.applySubst θ) (q.applySubst θ) := by
   cases h with
   | lit h =>
-      obtain ⟨β', hβ'⟩ := hβ h.unsolved
-      exact .inl (.lit (lookup_blocked_subst h hn θ hβ'))
+      obtain ⟨β', hβ'⟩ := hβ h.mem_sortedFtv
+      exact .inl (.lit (lookup_blocked_subst h θ hβ'))
   | var h =>
-      exact lookupV_blocked_subst h hn θ hβ (fun he => by subst he; exact hk rfl)
+      exact lookupV_blocked_subst h θ hβ (fun he => by subst he; exact hk rfl)
 
--- ⊢  a clean state chases nothing in a row it has already substituted
-theorem noChase_of_clean {S : SolverState B} (hc : S.sol.Clean) (ρ : Row B) :
-    NoChase S.ctx (ρ.applySubst S.subst) := by
-  intro α hα
-  cases hl : S.ctx.lookupRow α with
-  | none => rfl
-  | some ρ₀ =>
-      obtain ⟨-, hmem⟩ := Sol.lookupRow_some hl
-      exact absurd (List.mem_append_right _ (List.mem_map_of_mem (f := fun p => (true, p.1)) hmem))
-        (hc.clears_row hα)
+-- ⊢  a clean state leaves every spine variable of a row it has substituted alone
+theorem SolverState.row_var_of_clean {S : SolverState B} (hc : S.sol.Clean) {ρ : Row B}
+    {α : TyVar} (hα : (true, α) ∈ (ρ.applySubst S.subst).sortedFtv) :
+    S.subst.row α = .var α := by
+  apply rowLookup_not_mem
+  intro hm
+  obtain ⟨p, hp, rfl⟩ := List.mem_map.mp hm
+  exact hc.clears_row hα
+    (List.mem_append_right _ (List.mem_map_of_mem (f := fun p => (true, p.1)) hp))
 
 --------------------- THE CASE -------------------------------------------------
 
@@ -292,7 +263,7 @@ theorem letCase {C : Type} {constTy : C → B} : LetCase B C constTy := by
         rw [← Ty.applySubst_applySubst, hi₁]
       · show (S₁.subst.row α).applySubst (ρ.comp S₁.subst) = (S₁.subst.row α).applySubst ρ
         rw [← Row.applySubst_applySubst, hi₂]
-    have hr₁ : CtxRead σ₁ Γ Γ' := ⟨hr.row, fun y sc₀ hy => by
+    have hr₁ : CtxRead σ₁ Γ Γ' := ⟨fun y sc₀ hy => by
       obtain ⟨sc₀', hl', hs⟩ := hr.schem y sc₀ hy
       refine ⟨sc₀', hl', hs.congr (fun α hα _ => hΓag α ?_)⟩
       refine QCtx.lookup_ftv_subset hy α ?_
@@ -354,7 +325,7 @@ theorem letCase {C : Type} {constTy : C → B} : LetCase B C constTy := by
           exact Ty.applySubst_congr _ (fun γ hγ =>
             hρ γ (hLΔ γ (List.mem_append_left _ (List.mem_append_right _ hγ)))
             (fun hm => (hdis γ hm p hp).2.1 hγ))
-      rw [hsame, hr.ctx_eq]
+      rw [hsame]
       rcases k₂ σ hσ p hp with ⟨q, hq', hqs⟩ | hd
       · exact .inl (List.mem_append_right _ (List.mem_map.mpr ⟨q, hq', by rw [hqs]⟩))
       · exact .inr (Stump.dischargeEquiv_iff_holds.mp hd)
@@ -375,10 +346,10 @@ theorem letCase {C : Type} {constTy : C → B} : LetCase B C constTy := by
         rw [if_pos (List.mem_map.mpr ⟨p, hp, rfl⟩)]
       -- the blocker is generalized, so it is read as a fresh variable; a KEY
       -- blocker is moreover no generalized answer, so χ₀ leaves it a variable
-      have hblk : BlockedAfter (⟨[], []⟩ : Ctx B)
+      have hblk : BlockedAfter
           ((p.stump.row.applySubst S₁.subst).applySubst (χ₀.comp (readSub σ ᾱ f)))
           ((p.stump.label.applySubst S₁.subst).applySubst (χ₀.comp (readSub σ ᾱ f))) := by
-        refine lookupQ_blocked_subst (q₁ p (hΔq p hp)) (noChase_of_clean c₁ _) _ ?_ ?_
+        refine lookupQ_blocked_subst (q₁ p (hΔq p hp)) _ ?_ ?_
         · intro _
           refine ⟨f p.blocker, ?_⟩
           show ((readSub σ ᾱ f).row p.blocker).applySubst χ₀ = _
@@ -394,15 +365,14 @@ theorem letCase {C : Type} {constTy : C → B} : LetCase B C constTy := by
             have hb := hinj _ (hres.1 q hq).2 _ (hbq p hp) hfq
             exact (hind p hp q hq).2 (by rw [hkey, hb]; simp [Ty.ftv])
           rw [hv]; exact nofun
-      rw [hr.ctx_eq]
       rcases hblk with hu | ⟨ha, -⟩
       · refine .unk ?_ hδ
-        show LookupQ _ (((p.stump.row.applySubst S₁.subst).applySubst (readSub σ ᾱ f)).applySubst χ₀)
+        show LookupQ (((p.stump.row.applySubst S₁.subst).applySubst (readSub σ ᾱ f)).applySubst χ₀)
           (((p.stump.label.applySubst S₁.subst).applySubst (readSub σ ᾱ f)).applySubst χ₀) _
         rw [Row.applySubst_applySubst, Ty.applySubst_applySubst]
         exact hu
       · refine .abs ?_ hδ
-        show LookupQ _ (((p.stump.row.applySubst S₁.subst).applySubst (readSub σ ᾱ f)).applySubst χ₀)
+        show LookupQ (((p.stump.row.applySubst S₁.subst).applySubst (readSub σ ᾱ f)).applySubst χ₀)
           (((p.stump.label.applySubst S₁.subst).applySubst (readSub σ ᾱ f)).applySubst χ₀) _
         rw [Row.applySubst_applySubst, Ty.applySubst_applySubst]
         exact ha
@@ -421,10 +391,10 @@ inference ends in, is a plain L2 typing — given that the stumps still parked
 hold at σ, which is finalization's job (`Finalizes.holds`). -/
 theorem runSoundA {C : Type} {constTy : C → B}
     {e : Expr C} {τ : Ty B} {S₁ : SolverState B}
-    (h : Infer constTy ⟨[], []⟩ ⟨Sol.nil, [], [], ⟨1⟩, []⟩ e τ S₁)
+    (h : Infer constTy QCtx.empty ⟨Sol.nil, [], [], ⟨1⟩, []⟩ e τ S₁)
     {σ : TySubst B} (hab : Absorbs σ S₁) (hsat : Sol.Sat σ S₁.sol)
-    (hfin : ∀ p ∈ S₁.parked, (p.stump.at σ).Holds (⟨[], []⟩ : Ctx B)) :
-    QTyped constTy ⟨[], []⟩ e (τ.applySubst σ) :=
+    (hfin : ∀ p ∈ S₁.parked, (p.stump.at σ).Holds) :
+    QTyped constTy QCtx.empty e (τ.applySubst σ) :=
   runSoundA_of inferSound h hab hsat hfin
 
 end MinimalCalculus

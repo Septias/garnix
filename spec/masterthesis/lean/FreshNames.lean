@@ -42,7 +42,7 @@ private def nrS1 : SolverState Unit :=
 
 private def nrB0 : SolverState Unit := { nrS1 with parked := [] }
 
-private def nrΓg : QCtx Unit := (⟨[], []⟩ : QCtx Unit).bindScheme "g" nrSc
+private def nrΓg : QCtx Unit := (QCtx.empty : QCtx Unit).bindScheme "g" nrSc
 
 -- A-var's renaming: 2 ↦ 8, 3 ↦ 6. The second one is the reuse.
 private def nrF (α : TyVar) : TyVar :=
@@ -80,13 +80,13 @@ private theorem nr_quiescent_a : nrSb.Quiescent := by
   intro p hp
   simp only [nrSb, nrSa, nrB0, SolverState.draw, SolverState.park, List.mem_cons,
     List.not_mem_nil, or_false] at hp
-  subst hp; exact .varFree rfl
+  subst hp; exact .varFree
 
 private theorem nr_quiescent_d : nrSd.Quiescent := by
   intro p hp
   simp only [nrSd, nrSc', nrSb, nrSa, nrB0, SolverState.draw, SolverState.park,
     SolverState.extend, List.mem_cons, List.not_mem_nil, or_false] at hp
-  subst hp; exact .varFree rfl
+  subst hp; exact .varFree
 
 /-- A-var as it stood: the renaming is fresh for the state but not drawn. -/
 def UnguardedVar (B C : Type) [DecidableEq B] (constTy : C → B) : Prop :=
@@ -130,11 +130,11 @@ private theorem nr_var_g (hu : UnguardedVar Unit Unit (fun _ => ())) :
   rw [← hbody]
   exact hu (x := "g") (σ := nrSc) (θ := nrθ) (f := nrF) (ps := [nrP])
     (by rw [nrΓg, QCtx.lookup_bindScheme]; simp) hren hfr hinst
-    ⟨nrSa, .park (.varFree rfl) .nil, .done (by
+    ⟨nrSa, .park (.varFree) .nil, .done (by
       intro p hp
       simp only [nrSa, nrB0, SolverState.park, List.mem_cons, List.not_mem_nil,
         or_false] at hp
-      subst hp; exact .varFree rfl)⟩
+      subst hp; exact .varFree)⟩
 
 private theorem nr_lam :
     Infer (B := Unit) (C := Unit) (fun _ => ()) nrΓg nrSa
@@ -147,11 +147,11 @@ private theorem nr_lam :
       (by rw [QCtx.bindTy, QCtx.lookup_bindScheme]; simp)
       ⟨_, .nil, .done nr_quiescent_a⟩
   · exact ⟨nrSd, ⟨5, nrSol, ⟨6⟩, rfl, rfl⟩, .done nr_quiescent_d⟩
-  · exact .varFree rfl
+  · exact .varFree
 
 /-- ⊢  **the run goes through** against the unguarded A-var. -/
 theorem nameReuse_infers_unguarded (hu : UnguardedVar Unit Unit (fun _ => ())) :
-    Infer (B := Unit) (C := Unit) (fun _ => ()) ⟨[], []⟩ ⟨Sol.nil, [], [], ⟨1⟩, []⟩
+    Infer (B := Unit) (C := Unit) (fun _ => ()) QCtx.empty ⟨Sol.nil, [], [], ⟨1⟩, []⟩
       nrE nrTy nrFinal := by
   refine Infer.letE (τ₁ := .fn (.var (n 1)) (.var (n 3))) (S₁ := nrS1)
     (Δq := nrS1.parked) (Δγ := []) (ᾱ := [n 2, n 3]) (κs := [.row, .ty])

@@ -1,11 +1,11 @@
 -- FINALIZATION DISCHARGES, AND `RunSound` — PROVED.
 --
--- F-★ fires on a parked stump whose lookup is BLOCKED on a free row variable β,
+-- F-★ fires on a parked stump whose lookup is BLOCKED on a row variable β,
 -- and solves `δ ≐ ★`. That equation writes nothing at the row sort, so β stays
 -- free through every later finalization step, and at the final ⟦S′⟧:
 --
---   * the lookup, read under ⟦S′⟧, is still blocked on β — so it is `?` at the
---     discharged context (`lookup_blocked_subst`), and
+--   * the lookup, read under ⟦S′⟧, is still blocked on β — so it is `?`
+--     (`lookup_blocked_subst`), and
 --   * δ is ★, since ⟦S′⟧ satisfies the equation F-★ solved and ★ is ≈-rigid.
 --
 -- That is D-?. So every stump a run hands to finalization HOLDS at ⟦S′⟧, and
@@ -24,25 +24,12 @@ variable {B : Type} [DecidableEq B]
 
 --------------------- THE BLOCKER IS FREE, AND STAYS FREE ----------------------
 
--- ⊢  a lookup blocked on β has β unsolved in the context it was blocked in
-theorem LookupBlocked.free {Γ : Ctx B} {ρ : Row B} {l : Label} {β : TyVar}
-    (h : LookupBlocked Γ ρ l β) : Γ.lookupRow β = none := by
-  induction h with
-  | varFree hα => exact hα
-  | var _ _ ih => exact ih
-  | catSkip _ _ ih => exact ih
-  | catUnk _ ih => exact ih
-
-theorem SolverState.row_var_of_free {S : SolverState B} {β : TyVar}
-    (h : S.ctx.lookupRow β = none) : S.subst.row β = .var β := by
-  apply rowLookup_not_mem
-  intro hm
-  obtain ⟨p, hp, rfl⟩ := List.mem_map.mp hm
-  have : (S.sol.row.find? (·.1 == p.1)).isSome := by
-    rw [List.find?_isSome]; exact ⟨p, hp, by simp⟩
-  simp only [SolverState.ctx, Sol.toCtx, Ctx.lookupRow] at h
-  rw [Option.map_eq_none_iff] at h
-  rw [h] at this; exact nomatch this
+-- (`LookupBlocked.free` — "a lookup blocked on β has β unsolved in the context
+-- it was blocked in" — and `SolverState.row_var_of_free`, which read that off
+-- ⟦S⟧-as-a-context, went with L-α. Their content is now
+-- `LookupBlocked.mem_sortedFtv` plus `SolverState.row_var_of_clean`
+-- (LetCase.lean): the blocker sits on the spine of a row ⟦S⟧ has already
+-- substituted, and a clean ⟦S⟧ leaves such a variable alone.)
 
 -- ⊢  `δ ≐ ★` binds nothing at the row sort
 private theorem solve_star_row_free {S S₀ : SolverState B} {δ : TyVar}
@@ -153,13 +140,14 @@ theorem Finalizes.ext {S S' : SolverState B} {ps : List (Parked B)} :
 where it lands, and leaves the blocker a variable. -/
 theorem Finalize.holds {S S' : SolverState B} {p : Parked B} (hf : Finalize S p S')
     (hc : S.sol.Clean) {σ : TySubst B} (hab : Absorbs σ S) (hsat : Sol.Sat σ S'.sol)
-    (hβ : S.ctx.lookupRow p.blocker = none → ∃ β', σ.row p.blocker = .var β')
+    (hβ : (true, p.blocker) ∈ (p.stump.row.applySubst S.subst).sortedFtv →
+      ∃ β', σ.row p.blocker = .var β')
     (hk : p.stump.label.applySubst S.subst = .var p.blocker → ∀ l, σ.ty p.blocker ≠ .lab l) :
-    (p.stump.at σ).Holds (⟨[], []⟩ : Ctx B) := by
+    (p.stump.at σ).Holds := by
   cases hf with
   | star _ hb hs =>
       have hδ := (TyEquiv.unk_inv_both (hs.unifies_sat hsat)).2 rfl
-      have hblk := lookupQ_blocked_subst hb (noChase_of_clean hc _) σ hβ hk
+      have hblk := lookupQ_blocked_subst hb σ hβ hk
       rw [hab.row, hab.ty] at hblk
       rcases hblk with hu | ⟨ha, -⟩
       · exact .unk hu hδ
@@ -168,7 +156,7 @@ theorem Finalize.holds {S S' : SolverState B} {p : Parked B} (hf : Finalize S p 
 /-- ⊢  **…and so does a whole finalization run**, at the state it ends in. -/
 theorem Finalizes.holds {S S' : SolverState B} {ps : List (Parked B)} :
     Finalizes S ps S' → S.sol.Clean →
-    ∀ p ∈ ps, (p.stump.at S'.subst).Holds (⟨[], []⟩ : Ctx B)
+    ∀ p ∈ ps, (p.stump.at S'.subst).Holds
   | .nil, _, p, hp => absurd hp List.not_mem_nil
   | .cons (S := S₀) (S₁ := S₁) (p := p) hf hfs, hc, p', hp' => by
       have c₁ := hf.clean hc
@@ -176,8 +164,8 @@ theorem Finalizes.holds {S S' : SolverState B} {ps : List (Parked B)} :
       rcases List.mem_cons.mp hp' with rfl | hp'
       · have hab : Absorbs S'.subst S₀ := (Absorbs.self c').back (hf.ext.trans hfs.ext) hc
         have hab₁ : Absorbs S'.subst S₁ := (Absorbs.self c').back hfs.ext c₁
-        refine hf.holds hc hab (hab₁.sat c₁) (fun hfree => ⟨p'.blocker,
-          hfs.row_free (hf.row_free (SolverState.row_var_of_free hfree))⟩) ?_
+        refine hf.holds hc hab (hab₁.sat c₁) (fun hmem => ⟨p'.blocker,
+          hfs.row_free (hf.row_free (SolverState.row_var_of_clean hc hmem))⟩) ?_
         -- a key blocker is unsolved at S₀ (the state is clean), and finalization
         -- only ever sends a variable to ★
         intro hkey l hl
@@ -221,7 +209,7 @@ result variable, at least — which is why it is stated for `Correctable` scheme
 (`QScheme.Correctable.correct`) and A-let builds only those. -/
 theorem instEquivCorrects_false : ¬ InstEquivCorrects Unit := by
   intro h
-  obtain ⟨τ', ⟨θ, -, hdis, -⟩, -⟩ := h ⟨[], []⟩ icSc icχ
+  obtain ⟨τ', ⟨θ, -, hdis, -⟩, -⟩ := h icSc icχ
     ⟨fun α hα => by
         have : α ≠ "d" := fun he => hα (by simp [icSc, he])
         simp [icχ, this], fun _ _ => rfl⟩

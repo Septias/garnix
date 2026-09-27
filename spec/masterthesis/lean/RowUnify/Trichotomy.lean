@@ -213,7 +213,7 @@ theorem terminal_leading_shape {B : Type} {S : Supply} {a b : Atom B}
 --    RowUnify/Termination.lean) — lexicographic (variables, size).
 --
 -- MILESTONES ELSEWHERE THAT BUILD ON THIS FILE (algorithmic.typ, Open questions):
---  * Non-vacuity of qualified schemes: needs lookup_total (RowWF) plus a
+--  * Non-vacuity of qualified schemes: needs lookup_total (now unconditional) plus a
 --    freshness discipline for the result variables δ — P2/P5 now supply that
 --    discipline (Supply/Avoids, SolBelow, AgreeOn, the substitution-ftv toolkit).
 --  * STRICTNESS of the QTyped extension, and type safety for QTyped itself.

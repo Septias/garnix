@@ -16,25 +16,25 @@ structure Assume (B : Type) where
 def Stump.at {B : Type} (σ : TySubst B) (st : Stump B) : Assume B :=
   ⟨st.row.applySubst σ, st.label.applySubst σ, σ.ty st.res⟩
 
-/-- the assumption is true of Γ: the lookup, performed, agrees — found up to ≈,
+/-- the assumption is true: the lookup, performed, agrees — found up to ≈,
 or ⊥/? at ★. `Stump.DischargeEquiv` is exactly this at `st.at θ`. -/
-inductive Assume.Holds {B : Type} (Γ : Ctx B) (a : Assume B) : Prop where
-  | hit {τ : Ty B} : LookupQ Γ a.row a.label (.found τ) → TyEquiv a.ty τ → Holds Γ a
-  | abs : LookupQ Γ a.row a.label .absent → a.ty = .unk → Holds Γ a
-  | unk : LookupQ Γ a.row a.label .unknown → a.ty = .unk → Holds Γ a
+inductive Assume.Holds {B : Type} (a : Assume B) : Prop where
+  | hit {τ : Ty B} : LookupQ a.row a.label (.found τ) → TyEquiv a.ty τ → Holds a
+  | abs : LookupQ a.row a.label .absent → a.ty = .unk → Holds a
+  | unk : LookupQ a.row a.label .unknown → a.ty = .unk → Holds a
 
 -- ⊢  a stump discharges at θ (up to ≈) iff its θ-reading holds
-theorem Stump.dischargeEquiv_iff_holds {B : Type} {Γ : Ctx B} {θ : TySubst B}
-    {st : Stump B} : st.DischargeEquiv Γ θ ↔ (st.at θ).Holds Γ :=
+theorem Stump.dischargeEquiv_iff_holds {B : Type} {θ : TySubst B}
+    {st : Stump B} : st.DischargeEquiv θ ↔ (st.at θ).Holds :=
   ⟨fun | .hit h e => .hit h e | .abs h e => .abs h e | .unk h e => .unk h e,
    fun | .hit h e => .hit h e | .abs h e => .abs h e | .unk h e => .unk h e⟩
 
 /-- instantiation under assumptions: every constraint discharges (up to ≈) or
 its reading is assumed. -/
-def QScheme.InstA {B : Type} (Δ : List (Assume B)) (Γ : Ctx B) (sc : QScheme B)
+def QScheme.InstA {B : Type} (Δ : List (Assume B)) (sc : QScheme B)
     (τ : Ty B) : Prop :=
   ∃ χ : TySubst B, χ.FixedOutside sc.vars ∧
-    (∀ st ∈ sc.constraints, st.DischargeEquiv Γ χ ∨ st.at χ ∈ Δ) ∧
+    (∀ st ∈ sc.constraints, st.DischargeEquiv χ ∨ st.at χ ∈ Δ) ∧
     sc.body.applySubst χ = τ
 
 /-- a scheme whose constraints can be discharged ONE AT A TIME: result variables
@@ -54,7 +54,7 @@ mutual
   inductive QTypedA {B C : Type} (constTy : C → B) :
       List (Assume B) → QCtx B → Expr C → Ty B → Prop where
     | qCon : QTypedA constTy Δ Γ (.con c) (.base (constTy c))
-    | qVar : Γ.lookup x = some σ → QScheme.InstA Δ Γ.ctx σ τ →
+    | qVar : Γ.lookup x = some σ → QScheme.InstA Δ σ τ →
              QTypedA constTy Δ Γ (.var x) τ
     | qEq  : QTypedA constTy Δ Γ e τ₁ → TyEquiv τ₁ τ₂ → QTypedA constTy Δ Γ e τ₂
     | qLam : QTypedA constTy Δ (Γ.bindTy x τ₁) e τ₂ →
@@ -67,16 +67,16 @@ mutual
              (∀ χ : TySubst B, χ.FixedOutside σ.vars →
                QTypedA constTy (σ.constraints.map (Stump.at χ) ++ Δ) Γ e₁
                  (σ.body.applySubst χ)) →
-             (∃ τ₁, QScheme.Inst Γ.ctx σ τ₁) →
+             (∃ τ₁, QScheme.Inst σ τ₁) →
              QTypedA constTy Δ (Γ.bindScheme x σ) e₂ τ₂ →
              QTypedA constTy Δ Γ (.letE x e₁ e₂) τ₂
     | qCat : QTypedA constTy Δ Γ e₁ (.rcd ρ₁) → QTypedA constTy Δ Γ e₂ (.rcd ρ₂) →
              QTypedA constTy Δ Γ (.cat e₁ e₂) (.rcd (.cat ρ₂ ρ₁))
-    | qSel : QTypedA constTy Δ Γ e (.rcd ρ) → Lookup Γ.ctx ρ l (.found τ) →
+    | qSel : QTypedA constTy Δ Γ e (.rcd ρ) → Lookup ρ l (.found τ) →
              QTypedA constTy Δ Γ (.sel e l) τ
-    | qSelUnk : QTypedA constTy Δ Γ e (.rcd ρ) → Lookup Γ.ctx ρ l .unknown →
+    | qSelUnk : QTypedA constTy Δ Γ e (.rcd ρ) → Lookup ρ l .unknown →
                 QTypedA constTy Δ Γ (.sel e l) .unk
-    | qSelAbs : QTypedA constTy Δ Γ e (.rcd ρ) → Lookup Γ.ctx ρ l .absent →
+    | qSelAbs : QTypedA constTy Δ Γ e (.rcd ρ) → Lookup ρ l .absent →
                 QTypedA constTy Δ Γ (.sel e l) .unk
     | qUnk : QTypedA constTy Δ Γ e τ → QTypedA constTy Δ Γ e .unk
     | qRcd : QTypedABody constTy Δ Γ b ρ → QTypedA constTy Δ Γ (.rcd b) (.rcd ρ)
@@ -87,11 +87,11 @@ mutual
     -- FC-labels, as in `QTyped`
     | qLab : QTypedA constTy Δ Γ (.lab l) (.lab l)
     | qSelDyn : QTypedA constTy Δ Γ e₁ (.rcd ρ) → QTypedA constTy Δ Γ e₂ q →
-                LookupQ Γ.ctx ρ q (.found τ) → QTypedA constTy Δ Γ (.selDyn e₁ e₂) τ
+                LookupQ ρ q (.found τ) → QTypedA constTy Δ Γ (.selDyn e₁ e₂) τ
     | qSelDynUnk : QTypedA constTy Δ Γ e₁ (.rcd ρ) → QTypedA constTy Δ Γ e₂ q →
-                   LookupQ Γ.ctx ρ q .unknown → QTypedA constTy Δ Γ (.selDyn e₁ e₂) .unk
+                   LookupQ ρ q .unknown → QTypedA constTy Δ Γ (.selDyn e₁ e₂) .unk
     | qSelDynAbs : QTypedA constTy Δ Γ e₁ (.rcd ρ) → QTypedA constTy Δ Γ e₂ q →
-                   LookupQ Γ.ctx ρ q .absent → QTypedA constTy Δ Γ (.selDyn e₁ e₂) .unk
+                   LookupQ ρ q .absent → QTypedA constTy Δ Γ (.selDyn e₁ e₂) .unk
     -- A-sel-dyn-? read declaratively: the keyed lookup's answer is assumed
     | assumeDyn {ρ : Row B} {q τ : Ty B} :
              QTypedA constTy Δ Γ e₁ (.rcd ρ) → QTypedA constTy Δ Γ e₂ q →
@@ -110,7 +110,7 @@ end
 private theorem selDyn_of_holds {B C : Type} {constTy : C → B} {Δ : List (Assume B)}
     {Γ : QCtx B} {e₁ e₂ : Expr C} {ρ : Row B} {q τ : Ty B}
     (h₁ : QTypedA constTy Δ Γ e₁ (.rcd ρ)) (h₂ : QTypedA constTy Δ Γ e₂ q)
-    (hh : (⟨ρ, q, τ⟩ : Assume B).Holds Γ.ctx) :
+    (hh : (⟨ρ, q, τ⟩ : Assume B).Holds) :
     QTypedA constTy Δ Γ (.selDyn e₁ e₂) τ := by
   cases hh with
   | hit hl he => exact .qEq (.qSelDyn h₁ h₂ hl) he.symm
@@ -120,7 +120,7 @@ private theorem selDyn_of_holds {B C : Type} {constTy : C → B} {Δ : List (Ass
 -- a held assumption, used at a selection, is one of the three T-sel rules
 private theorem sel_of_holds {B C : Type} {constTy : C → B} {Δ : List (Assume B)}
     {Γ : QCtx B} {e : Expr C} {ρ : Row B} {l : Label} {τ : Ty B}
-    (h : QTypedA constTy Δ Γ e (.rcd ρ)) (hh : (⟨ρ, .lab l, τ⟩ : Assume B).Holds Γ.ctx) :
+    (h : QTypedA constTy Δ Γ e (.rcd ρ)) (hh : (⟨ρ, .lab l, τ⟩ : Assume B).Holds) :
     QTypedA constTy Δ Γ (.sel e l) τ := by
   cases hh with
   | hit hl he => exact .qEq (.qSel h (LookupQ.lab_iff.mp hl)) he.symm
@@ -134,7 +134,7 @@ mutual
   theorem QTypedA.weaken {B C : Type} {constTy : C → B} :
       {Δ₁ Δ₂ : List (Assume B)} → {Γ : QCtx B} → {e : Expr C} → {τ : Ty B} →
       QTypedA constTy Δ₁ Γ e τ →
-      (∀ a ∈ Δ₁, a ∈ Δ₂ ∨ a.Holds Γ.ctx) → QTypedA constTy Δ₂ Γ e τ
+      (∀ a ∈ Δ₁, a ∈ Δ₂ ∨ a.Holds) → QTypedA constTy Δ₂ Γ e τ
     | _, _, _, _, _, .qCon, _ => .qCon
     | _, _, _, _, _, .qVar hl ⟨χ, hfix, hc, hb⟩, hΔ =>
         .qVar hl ⟨χ, hfix, fun st hst =>
@@ -181,7 +181,7 @@ mutual
   theorem QTypedABody.weaken {B C : Type} {constTy : C → B} :
       {Δ₁ Δ₂ : List (Assume B)} → {Γ : QCtx B} → {b : RecBody (Expr C)} →
       {ρ : Row B} → QTypedABody constTy Δ₁ Γ b ρ →
-      (∀ a ∈ Δ₁, a ∈ Δ₂ ∨ a.Holds Γ.ctx) → QTypedABody constTy Δ₂ Γ b ρ
+      (∀ a ∈ Δ₁, a ∈ Δ₂ ∨ a.Holds) → QTypedABody constTy Δ₂ Γ b ρ
     | _, _, _, _, _, .empty, _ => .empty
     | _, _, _, _, _, .field h, hΔ => .field (QTypedA.weaken h hΔ)
     | _, _, _, _, _, .cat h₁ h₂, hΔ =>
@@ -209,26 +209,26 @@ theorem QTypedA.weaken_sub {B C : Type} {constTy : C → B} {Δ₁ Δ₂ : List 
 
 /-- the χ-correction for EVERY scheme — refuted (`instEquivCorrects_false`). -/
 def InstEquivCorrects (B : Type) : Prop :=
-  ∀ (Γ : Ctx B) (sc : QScheme B) (χ : TySubst B), χ.FixedOutside sc.vars →
-    (∀ st ∈ sc.constraints, st.DischargeEquiv Γ χ) →
-    ∃ τ', QScheme.Inst Γ sc τ' ∧ TyEquiv τ' (sc.body.applySubst χ)
+  ∀ (sc : QScheme B) (χ : TySubst B), χ.FixedOutside sc.vars →
+    (∀ st ∈ sc.constraints, st.DischargeEquiv χ) →
+    ∃ τ', QScheme.Inst sc τ' ∧ TyEquiv τ' (sc.body.applySubst χ)
 
 open Classical in
 /-- ⊢  **the χ-correction, for correctable schemes.** Send each result variable
 to the type its constraint's lookup found; everything else stays. -/
-theorem QScheme.Correctable.correct {B : Type} {Γ : Ctx B} {sc : QScheme B}
+theorem QScheme.Correctable.correct {B : Type} {sc : QScheme B}
     (hc : sc.Correctable) {χ : TySubst B} (hfix : χ.FixedOutside sc.vars)
-    (hd : ∀ st ∈ sc.constraints, st.DischargeEquiv Γ χ) :
-    ∃ τ', QScheme.Inst Γ sc τ' ∧ TyEquiv τ' (sc.body.applySubst χ) := by
+    (hd : ∀ st ∈ sc.constraints, st.DischargeEquiv χ) :
+    ∃ τ', QScheme.Inst sc τ' ∧ TyEquiv τ' (sc.body.applySubst χ) := by
   obtain ⟨hwf, hfun, hind⟩ := hc
   let P : TyVar → Ty B → Prop := fun β τ =>
     ∃ st ∈ sc.constraints, st.res = β ∧
-      LookupQ Γ (st.row.applySubst χ) (st.label.applySubst χ) (.found τ)
+      LookupQ (st.row.applySubst χ) (st.label.applySubst χ) (.found τ)
   let χ' : TySubst B :=
     ⟨fun β => if h : ∃ τ, P β τ then Classical.choose h else χ.ty β, χ.row⟩
   -- the chosen type is the one the constraint on β finds
   have hchoose : ∀ st ∈ sc.constraints, ∀ τ,
-      LookupQ Γ (st.row.applySubst χ) (st.label.applySubst χ) (.found τ) →
+      LookupQ (st.row.applySubst χ) (st.label.applySubst χ) (.found τ) →
         χ'.ty st.res = τ := by
     intro st hst τ hl
     have hex : ∃ τ, P st.res τ := ⟨τ, st, hst, rfl, hl⟩
@@ -300,7 +300,7 @@ mutual
   a plain L2 typing. -/
   theorem QTypedA.toQTyped {B C : Type} {constTy : C → B} :
       {Δ : List (Assume B)} → {Γ : QCtx B} → {e : Expr C} → {τ : Ty B} →
-      QTypedA constTy Δ Γ e τ → Γ.Correctable → (∀ a ∈ Δ, a.Holds Γ.ctx) →
+      QTypedA constTy Δ Γ e τ → Γ.Correctable → (∀ a ∈ Δ, a.Holds) →
       QTyped constTy Γ e τ
     | _, _, _, _, .qCon, _, _ => .qCon
     | _, _, _, _, .qVar hl ⟨χ, hfix, hc, hb⟩, hΓ, hΔ => by
@@ -352,7 +352,7 @@ mutual
 
   theorem QTypedABody.toQTyped {B C : Type} {constTy : C → B} :
       {Δ : List (Assume B)} → {Γ : QCtx B} → {b : RecBody (Expr C)} → {ρ : Row B} →
-      QTypedABody constTy Δ Γ b ρ → Γ.Correctable → (∀ a ∈ Δ, a.Holds Γ.ctx) →
+      QTypedABody constTy Δ Γ b ρ → Γ.Correctable → (∀ a ∈ Δ, a.Holds) →
       QTypedBody constTy Γ b ρ
     | _, _, _, _, .empty, _, _ => .empty
     | _, _, _, _, .field h, hΓ, hΔ => .field (QTypedA.toQTyped h hΓ hΔ)
@@ -394,19 +394,15 @@ def SchemeRead {B : Type} (σ : TySubst B) (sc sc' : QScheme B) : Prop :=
        (∀ β ∈ (σ.row α).ftv, β ∉ sc.vars.map f)) ∧
     sc' = sc.readAt σ f
 
-/-- `Γ′` is `Γ` read under σ: row environment discharged, each scheme read. -/
+/-- `Γ′` is `Γ` read under σ: each scheme read. (It used to demand an empty row
+environment as well; there is no row environment any more.) -/
 structure CtxRead {B : Type} (σ : TySubst B) (Γ Γ' : QCtx B) : Prop where
-  row   : Γ'.rowEnv = []
   schem : ∀ x sc, Γ.lookup x = some sc →
             ∃ sc', Γ'.lookup x = some sc' ∧ SchemeRead σ sc sc'
 
-theorem CtxRead.ctx_eq {B : Type} {σ : TySubst B} {Γ Γ' : QCtx B}
-    (h : CtxRead σ Γ Γ') : Γ'.ctx = (⟨[], []⟩ : Ctx B) := by
-  unfold QCtx.ctx; rw [h.row]
-
 theorem CtxRead.nil {B : Type} (σ : TySubst B) :
-    CtxRead σ (⟨[], []⟩ : QCtx B) ⟨[], []⟩ :=
-  ⟨rfl, fun _ _ h => nomatch h⟩
+    CtxRead σ (QCtx.empty : QCtx B) QCtx.empty :=
+  ⟨fun _ _ h => nomatch h⟩
 
 -- ⊢  a monotype is read by substituting: nothing to rename
 theorem SchemeRead.mono {B : Type} (σ : TySubst B) (τ : Ty B) :
@@ -420,7 +416,6 @@ theorem SchemeRead.mono {B : Type} (σ : TySubst B) (τ : Ty B) :
 theorem CtxRead.bindScheme {B : Type} {σ : TySubst B} {Γ Γ' : QCtx B}
     (h : CtxRead σ Γ Γ') (x : Var) {sc sc' : QScheme B} (hs : SchemeRead σ sc sc') :
     CtxRead σ (Γ.bindScheme x sc) (Γ'.bindScheme x sc') where
-  row := h.row
   schem := by
     intro y sc₁ hy
     simp only [QCtx.lookup_bindScheme] at hy ⊢
@@ -615,7 +610,7 @@ theorem inferA_sound_var_step {B C : Type} {constTy : C → B} {σ θ : TySubst 
     {ps : List (Parked B)} {Δ : List (Assume B)}
     (hread : CtxRead σ Γ Γ') (hl : Γ.lookup x = some sc) (hwf : sc.WF)
     (hθ : IsRenaming θ sc.vars g) (hps : InstStumps θ g sc.constraints ps)
-    (hcov : ∀ p ∈ ps, (p.stump.at σ).Holds Γ'.ctx ∨ p.stump.at σ ∈ Δ) :
+    (hcov : ∀ p ∈ ps, (p.stump.at σ).Holds ∨ p.stump.at σ ∈ Δ) :
     QTypedA constTy Δ Γ' (.var x) ((sc.body.applySubst θ).applySubst σ) := by
   obtain ⟨sc', hl', hr⟩ := hread.schem x sc hl
   obtain ⟨χ, hfix, hbody, hcs⟩ := hr.inst hwf hθ hps
@@ -664,7 +659,6 @@ theorem SolverState.KeepsS.lift {B C : Type} [DecidableEq B] {constTy : C → B}
     QTypedA constTy (S'.parked.map (fun p => p.stump.at σ)) Γ' e τ :=
   h.weaken (fun a ha => by
     obtain ⟨p, hp, rfl⟩ := List.mem_map.mp ha
-    rw [hr.ctx_eq]
     rcases hk σ hσ p hp with ⟨q, hq, hqs⟩ | hd
     · exact .inl (List.mem_map.mpr ⟨q, hq, by rw [hqs]⟩)
     · exact .inr (Stump.dischargeEquiv_iff_holds.mp hd))
@@ -676,7 +670,6 @@ theorem SolverState.KeepsS.liftBody {B C : Type} [DecidableEq B] {constTy : C �
     QTypedABody constTy (S'.parked.map (fun p => p.stump.at σ)) Γ' ξ ρ :=
   h.weaken (fun a ha => by
     obtain ⟨p, hp, rfl⟩ := List.mem_map.mp ha
-    rw [hr.ctx_eq]
     rcases hk σ hσ p hp with ⟨q, hq, hqs⟩ | hd
     · exact .inl (List.mem_map.mpr ⟨q, hq, by rw [hqs]⟩)
     · exact .inr (Stump.dischargeEquiv_iff_holds.mp hd))
@@ -765,7 +758,6 @@ theorem varCase {B C : Type} [DecidableEq B] {constTy : C → B} :
   obtain ⟨-, k₂⟩ := hsat.pinv_keeps i₁
   have hfate := hws.fate hup hok σ (hsat.satMono σ hσ)
   refine inferA_sound_var_step hr hl hwf hθ hps (fun p hp => ?_)
-  rw [hr.ctx_eq]
   rcases hfate p hp with ⟨q, hq, hqs⟩ | hd
   · rcases k₂ σ hσ q hq with ⟨q', hq', hq's⟩ | hd'
     · exact .inr (List.mem_map.mpr ⟨q', hq', by rw [hq's, hqs]⟩)
@@ -777,7 +769,7 @@ private theorem quiescent_of_eq {B : Type} {S S' : SolverState B}
     S'.Quiescent := by
   intro p hpm
   have := hq p (hp ▸ hpm)
-  unfold SolverState.ctx SolverState.subst at this ⊢
+  unfold SolverState.subst at this ⊢
   rw [hs]; exact this
 
 private theorem quiescent_sub {B : Type} {S : SolverState B} {Δ : List (Parked B)}
@@ -865,7 +857,7 @@ theorem inferSound_of {B C : Type} [DecidableEq B] {constTy : C → B}
         (hab.back x₁ c₁) hσ₁ Γ' hr)
       have hrcd := QTypedA.qEq ih (hsolve.unifies_sat hσ₂')
       obtain ⟨r'', hl'', he''⟩ :=
-        Sol.lookup_toCtx_sat (Γ' := Γ'.ctx) hσ hr.row hlk (by intro hh; cases hh)
+        Sol.lookup_sat hσ hlk (by intro hh; cases hh)
       cases he'' with
       | found hty => exact .qEq (.qSel hrcd hl'') hty.symm
   | _, _, _, _, _, .selAbs h₁ hd hs hlk, h, hΓ, hc, hq => fun σ hab hσ Γ' hr => by
@@ -882,7 +874,7 @@ theorem inferSound_of {B C : Type} [DecidableEq B] {constTy : C → B}
         (hab.back x₁ c₁) hσ₁ Γ' hr)
       have hrcd := QTypedA.qEq ih (hsolve.unifies_sat hσ₂')
       obtain ⟨r'', hl'', he''⟩ :=
-        Sol.lookup_toCtx_sat (Γ' := Γ'.ctx) hσ hr.row hlk (by intro hh; cases hh)
+        Sol.lookup_sat hσ hlk (by intro hh; cases hh)
       cases he'' with
       | absent => exact .qSelAbs hrcd hl''
   | _, _, _, _, _, .selUnk (S₂ := S₂) (S₂' := S₂d) (l := l) (r := r) (α := α) (δ := δ)
@@ -933,8 +925,8 @@ theorem inferSound_of {B C : Type} [DecidableEq B] {constTy : C → B}
       have ih₂ := inferSound_of hvar hlet h₂ i₂ hΓ c₂ q₂ σ hab hσ Γ' hr
       have hrcd := QTypedA.qEq ih₁ (hsolve.unifies_sat hσ₂')
       obtain ⟨r'', hl'', he''⟩ :=
-        Sol.lookupQ_toCtx_sat (Γ' := Γ'.ctx) hσ hr.row hlk (by intro hh; cases hh)
-      have hl₃ := LookupQ.key_equiv (Ty.applySubst_sat_equiv hσ τ₂) hl''
+        Sol.lookupQ_sat hσ hlk (by intro hh; cases hh)
+      have hl₃ := hl''
       cases he'' with
       | found hty => exact .qEq (.qSelDyn hrcd ih₂ hl₃) hty.symm
   | _, _, _, _, _, .selDynAbs (τ₂ := τ₂) h₁ hd hs h₂ hlk, h, hΓ, hc, hq =>
@@ -960,8 +952,8 @@ theorem inferSound_of {B C : Type} [DecidableEq B] {constTy : C → B}
       have ih₂ := inferSound_of hvar hlet h₂ i₂ hΓ c₂ q₂ σ hab hσ Γ' hr
       have hrcd := QTypedA.qEq ih₁ (hsolve.unifies_sat hσ₂')
       obtain ⟨r'', hl'', he''⟩ :=
-        Sol.lookupQ_toCtx_sat (Γ' := Γ'.ctx) hσ hr.row hlk (by intro hh; cases hh)
-      have hl₃ := LookupQ.key_equiv (Ty.applySubst_sat_equiv hσ τ₂) hl''
+        Sol.lookupQ_sat hσ hlk (by intro hh; cases hh)
+      have hl₃ := hl''
       cases he'' with
       | absent => exact .qSelDynAbs hrcd ih₂ hl₃
   | _, _, _, _, _, .selDynUnk (S₃ := S₃) (S₃' := S₃d) (τ₂ := τ₂) (r := r) (α := α) (δ := δ)
@@ -1048,10 +1040,10 @@ No transport along χ is left: `QTypedA.weaken` did the cashing-in. -/
 theorem runSoundA_of {B C : Type} [DecidableEq B] {constTy : C → B}
     (hs : InferSound B C constTy)
     {e : Expr C} {τ : Ty B} {S₁ : SolverState B}
-    (h : Infer constTy ⟨[], []⟩ ⟨Sol.nil, [], [], ⟨1⟩, []⟩ e τ S₁)
+    (h : Infer constTy QCtx.empty ⟨Sol.nil, [], [], ⟨1⟩, []⟩ e τ S₁)
     {σ : TySubst B} (hab : Absorbs σ S₁) (hsat : Sol.Sat σ S₁.sol)
-    (hfin : ∀ p ∈ S₁.parked, (p.stump.at σ).Holds (⟨[], []⟩ : Ctx B)) :
-    QTyped constTy ⟨[], []⟩ e (τ.applySubst σ) :=
+    (hfin : ∀ p ∈ S₁.parked, (p.stump.at σ).Holds) :
+    QTyped constTy QCtx.empty e (τ.applySubst σ) :=
   (hs _ _ _ _ _ h .init .nil Sol.clean_nil (SolverState.Quiescent.nil rfl) σ hab hsat _
     (CtxRead.nil σ)).toQTyped (fun _ _ h => nomatch h) (fun a ha => by
     obtain ⟨p, hp, rfl⟩ := List.mem_map.mp ha

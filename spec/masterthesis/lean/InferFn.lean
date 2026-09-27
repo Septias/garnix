@@ -12,7 +12,7 @@
 --
 -- The choices, rule by rule:
 --   * equations — `unifyTyF` at the given fuel;
---   * lookups — `lookupF`, fuel spent on each solved variable it chases;
+--   * lookups — `lookupF`, structural: no fuel, since nothing is chased;
 --   * saturation — `saturateF` wakes the FIRST stale stump, until none is;
 --   * A-var — the renaming is the next |ᾱ| names of the supply, in binder
 --     order; `FreshRenaming` is CHECKED, as is that each binder has a kind;
@@ -71,40 +71,38 @@ inductive LOut (B : Type) where
   | blocked : TyVar → LOut B
 
 /-- what an answer asserts of the row -/
-def LOut.Holds (Γ : Ctx B) (ρ : Row B) (l : Label) : LOut B → Prop
-  | .found τ   => Lookup Γ ρ l (.found τ)
-  | .absent    => Lookup Γ ρ l .absent
-  | .blocked α => LookupBlocked Γ ρ l α
+def LOut.Holds (ρ : Row B) (l : Label) : LOut B → Prop
+  | .found τ   => Lookup ρ l (.found τ)
+  | .absent    => Lookup ρ l .absent
+  | .blocked α => LookupBlocked ρ l α
 
-/-- `Γ ⊢ ρ.l ↓ r`, computed. Fuel is spent on each solved variable chased. -/
-def lookupF (Γ : Ctx B) : Nat → Row B → Label → IRes (LOut B)
-  | _, .empty, _ => .ok .absent
-  | _, .sing l' τ, l => if l' = l then .ok (.found τ) else .ok .absent
-  | n, .cat ρ₁ ρ₂, l =>
-      match lookupF Γ n ρ₁ l with
+/-- `ρ.l ↓ r`, computed. Bare structural recursion: with L-α gone there is no
+solution to chase, so no fuel and no way to fail — the `IRes` is only there so
+lookups compose with the fuelled steps in `do`-blocks. -/
+def lookupF : Row B → Label → IRes (LOut B)
+  | .empty, _ => .ok .absent
+  | .sing l' τ, l => if l' = l then .ok (.found τ) else .ok .absent
+  | .cat ρ₁ ρ₂, l =>
+      match lookupF ρ₁ l with
       | .ok (.found τ)   => .ok (.found τ)
-      | .ok .absent      => lookupF Γ n ρ₂ l
+      | .ok .absent      => lookupF ρ₂ l
       | .ok (.blocked α) => .ok (.blocked α)
       | .fail m          => .fail m
       | .oof             => .oof
-  | 0, .var _, _ => .oof
-  | n + 1, .var α, l =>
-      match Γ.lookupRow α with
-      | none   => .ok (.blocked α)
-      | some ρ => lookupF Γ n ρ l
+  | .var α, _ => .ok (.blocked α)
 
 omit [DecidableEq B] in
-theorem lookupF_sound {Γ : Ctx B} :
-    ∀ {n : Nat} {ρ : Row B} {l : Label} {r : LOut B},
-      lookupF Γ n ρ l = .ok r → r.Holds Γ ρ l
-  | _, .empty, _, r, h => by
+theorem lookupF_sound :
+    ∀ {ρ : Row B} {l : Label} {r : LOut B},
+      lookupF ρ l = .ok r → r.Holds ρ l
+  | .empty, _, r, h => by
       simp only [lookupF, IRes.ok.injEq] at h; subst h; exact .emp
-  | _, .sing l' τ, l, r, h => by
+  | .sing l' τ, l, r, h => by
       simp only [lookupF] at h
       split at h
       · rename_i he; subst he; cases h; exact .hit
       · rename_i hne; cases h; exact .miss hne
-  | n, .cat ρ₁ ρ₂, l, r, h => by
+  | .cat ρ₁ ρ₂, l, r, h => by
       simp only [lookupF] at h
       split at h
       · rename_i τ h₁; cases h; exact .catHit (lookupF_sound h₁)
@@ -117,22 +115,13 @@ theorem lookupF_sound {Γ : Ctx B} :
       · rename_i α h₁; cases h; exact .catUnk (lookupF_sound h₁)
       · cases h
       · cases h
-  | 0, .var _, _, _, h => by simp [lookupF] at h
-  | n + 1, .var α, l, r, h => by
-      simp only [lookupF] at h
-      split at h
-      · rename_i hα; cases h; exact .varFree hα
-      · rename_i ρ hα
-        have ih := lookupF_sound h
-        cases r with
-        | found τ => exact .var hα ih
-        | absent => exact .var hα ih
-        | blocked β => exact .var hα ih
+  | .var α, l, r, h => by
+      simp only [lookupF, IRes.ok.injEq] at h; subst h; exact .varFree
 
 omit [DecidableEq B] in
 /-- ⊢  an answer other than `blocked β` rules out being blocked on β -/
-theorem LOut.not_blocked {Γ : Ctx B} {ρ : Row B} {l : Label} {r : LOut B} {β : TyVar}
-    (h : r.Holds Γ ρ l) (hne : r ≠ .blocked β) : ¬ LookupBlocked Γ ρ l β := by
+theorem LOut.not_blocked {ρ : Row B} {l : Label} {r : LOut B} {β : TyVar}
+    (h : r.Holds ρ l) (hne : r ≠ .blocked β) : ¬ LookupBlocked ρ l β := by
   intro hb
   cases r with
   | found τ => exact absurd (lookup_det h hb.toLookup) (by simp)
@@ -141,52 +130,48 @@ theorem LOut.not_blocked {Γ : Ctx B} {ρ : Row B} {l : Label} {r : LOut B} {β 
 
 --------------------- KEYED LOOKUP ---------------------------------------------
 -- A dynamic selection's lookup, computed: a literal key is `lookupF`, a variable
--- key never finds (it is blocked on the first field, or on a free row variable),
+-- key never finds (it is blocked on the first field, or on a row variable),
 -- and any other key is not a label and names no field.
 
-/-- `Γ ⊢ ρ.α ↓ r` for a label variable α, computed -/
-def lookupVF (Γ : Ctx B) : Nat → Row B → TyVar → IRes (LOut B)
-  | _, .empty, _ => .ok .absent
-  | _, .sing _ _, α => .ok (.blocked α)
-  | n, .cat ρ₁ ρ₂, α =>
-      match lookupVF Γ n ρ₁ α with
-      | .ok .absent      => lookupVF Γ n ρ₂ α
+/-- `ρ.α ↓ r` for a label variable α, computed -/
+def lookupVF : Row B → TyVar → IRes (LOut B)
+  | .empty, _ => .ok .absent
+  | .sing _ _, α => .ok (.blocked α)
+  | .cat ρ₁ ρ₂, α =>
+      match lookupVF ρ₁ α with
+      | .ok .absent      => lookupVF ρ₂ α
       | .ok r            => .ok r
       | .fail m          => .fail m
       | .oof             => .oof
-  | 0, .var _, _ => .oof
-  | n + 1, .var β, α =>
-      match Γ.lookupRow β with
-      | none   => .ok (.blocked β)
-      | some ρ => lookupVF Γ n ρ α
+  | .var β, _ => .ok (.blocked β)
 
 /-- what an answer asserts of a keyed lookup -/
-def LOut.HoldsQ (Γ : Ctx B) (ρ : Row B) (q : Ty B) : LOut B → Prop
-  | .found τ   => LookupQ Γ ρ q (.found τ)
-  | .absent    => LookupQ Γ ρ q .absent
-  | .blocked α => LookupBlockedQ Γ ρ q α
+def LOut.HoldsQ (ρ : Row B) (q : Ty B) : LOut B → Prop
+  | .found τ   => LookupQ ρ q (.found τ)
+  | .absent    => LookupQ ρ q .absent
+  | .blocked α => LookupBlockedQ ρ q α
 
-/-- `Γ ⊢ ρ.q ↓ r`, computed -/
-def lookupQF (Γ : Ctx B) (n : Nat) (ρ : Row B) : Ty B → IRes (LOut B)
-  | .lab l => lookupF Γ n ρ l
-  | .var α => lookupVF Γ n ρ α
+/-- `ρ.q ↓ r`, computed -/
+def lookupQF (ρ : Row B) : Ty B → IRes (LOut B)
+  | .lab l => lookupF ρ l
+  | .var α => lookupVF ρ α
   | _      => .ok .absent
 
 omit [DecidableEq B] in
-theorem lookupVF_sound {Γ : Ctx B} :
-    ∀ {n : Nat} {ρ : Row B} {α : TyVar} {r : LOut B},
-      lookupVF Γ n ρ α = .ok r → r.HoldsQ Γ ρ (.var α)
-  | _, .empty, _, r, h => by
+theorem lookupVF_sound :
+    ∀ {ρ : Row B} {α : TyVar} {r : LOut B},
+      lookupVF ρ α = .ok r → r.HoldsQ ρ (.var α)
+  | .empty, _, r, h => by
       simp only [lookupVF, IRes.ok.injEq] at h; subst h; exact .var .emp
-  | _, .sing _ _, _, r, h => by
+  | .sing _ _, _, r, h => by
       simp only [lookupVF, IRes.ok.injEq] at h; subst h; exact .var .sing
-  | n, .cat ρ₁ ρ₂, α, r, h => by
+  | .cat ρ₁ ρ₂, α, r, h => by
       simp only [lookupVF] at h
       split at h
       · rename_i h₁
         have ih₁ := lookupVF_sound h₁
         have ih₂ := lookupVF_sound h
-        have ha : LookupV Γ ρ₁ α .absent := LookupQ.var_iff.mp ih₁
+        have ha : LookupV ρ₁ α .absent := LookupQ.var_iff.mp ih₁
         cases r with
         | found τ => exact .var (.catSkip ha (LookupQ.var_iff.mp ih₂))
         | absent => exact .var (.catSkip ha (LookupQ.var_iff.mp ih₂))
@@ -202,21 +187,12 @@ theorem lookupVF_sound {Γ : Ctx B} :
         | blocked β => cases ih₁ with | var hb => exact .var (.catUnk hb)
       · cases h
       · cases h
-  | 0, .var _, _, _, h => by simp [lookupVF] at h
-  | n + 1, .var β, α, r, h => by
-      simp only [lookupVF] at h
-      split at h
-      · rename_i hβ; cases h; exact .var (.varFree hβ)
-      · rename_i ρ hβ
-        have ih := lookupVF_sound h
-        cases r with
-        | found τ => exact .var (.var hβ (LookupQ.var_iff.mp ih))
-        | absent => exact .var (.var hβ (LookupQ.var_iff.mp ih))
-        | blocked γ => cases ih with | var hb => exact .var (.var hβ hb)
+  | .var β, α, r, h => by
+      simp only [lookupVF, IRes.ok.injEq] at h; subst h; exact .var .varFree
 
 omit [DecidableEq B] in
-theorem lookupQF_sound {Γ : Ctx B} {n : Nat} {ρ : Row B} {q : Ty B} {r : LOut B}
-    (h : lookupQF Γ n ρ q = .ok r) : r.HoldsQ Γ ρ q := by
+theorem lookupQF_sound {ρ : Row B} {q : Ty B} {r : LOut B}
+    (h : lookupQF ρ q = .ok r) : r.HoldsQ ρ q := by
   cases q with
   | lab l =>
       have := lookupF_sound h
@@ -231,8 +207,8 @@ theorem lookupQF_sound {Γ : Ctx B} {n : Nat} {ρ : Row B} {q : Ty B} {r : LOut 
 
 omit [DecidableEq B] in
 /-- ⊢  an answer other than `blocked β` rules out being blocked on β -/
-theorem LOut.not_blockedQ {Γ : Ctx B} {ρ : Row B} {q : Ty B} {r : LOut B} {β : TyVar}
-    (h : r.HoldsQ Γ ρ q) (hne : r ≠ .blocked β) : ¬ LookupBlockedQ Γ ρ q β := by
+theorem LOut.not_blockedQ {ρ : Row B} {q : Ty B} {r : LOut B} {β : TyVar}
+    (h : r.HoldsQ ρ q) (hne : r ≠ .blocked β) : ¬ LookupBlockedQ ρ q β := by
   intro hb
   cases r with
   | found τ => exact absurd (h.det hb.toLookupQ) (by simp)
@@ -261,7 +237,7 @@ theorem solveTyF_sound {n : Nat} {S S' : SolverState B} {τ τ' : Ty B}
 
 /-- one wake-up step on `p`: K-hit, K-⊥ or K-repark, as the lookup decides -/
 def wakeF (n : Nat) (S : SolverState B) (p : Parked B) : IRes (SolverState B) := do
-  match ← lookupQF S.ctx n (p.stump.row.applySubst S.subst)
+  match ← lookupQF (p.stump.row.applySubst S.subst)
       (p.stump.label.applySubst S.subst) with
   | .found τ =>
       let S' ← solveTyF n S (.var p.stump.res) τ
@@ -296,14 +272,14 @@ theorem wakeF_sound {n : Nat} {S S' : SolverState B} {p : Parked B}
 def staleF (n : Nat) (S : SolverState B) : List (Parked B) → IRes (Option (Parked B))
   | [] => .ok none
   | p :: ps => do
-      match ← lookupQF S.ctx n (p.stump.row.applySubst S.subst)
+      match ← lookupQF (p.stump.row.applySubst S.subst)
           (p.stump.label.applySubst S.subst) with
       | .blocked α => if α = p.blocker then staleF n S ps else pure (some p)
       | _ => pure (some p)
 
 theorem staleF_none {n : Nat} {S : SolverState B} :
     ∀ {ps : List (Parked B)}, staleF n S ps = .ok none →
-      ∀ p ∈ ps, LookupBlockedQ S.ctx (p.stump.row.applySubst S.subst)
+      ∀ p ∈ ps, LookupBlockedQ (p.stump.row.applySubst S.subst)
         (p.stump.label.applySubst S.subst) p.blocker
   | [], _, _, hp => absurd hp List.not_mem_nil
   | q :: qs, h, p, hp => by
@@ -323,7 +299,7 @@ theorem staleF_none {n : Nat} {S : SolverState B} :
 
 theorem staleF_some {n : Nat} {S : SolverState B} {p : Parked B} :
     ∀ {ps : List (Parked B)}, staleF n S ps = .ok (some p) →
-      p ∈ ps ∧ ¬ LookupBlockedQ S.ctx (p.stump.row.applySubst S.subst)
+      p ∈ ps ∧ ¬ LookupBlockedQ (p.stump.row.applySubst S.subst)
         (p.stump.label.applySubst S.subst) p.blocker
   | [], h => by simp [staleF] at h
   | q :: qs, h => by
@@ -389,7 +365,7 @@ images — the blockers are what the lookups said. -/
 def wakesF (n : Nat) : SolverState B → List (Stump B) → IRes (List (Parked B) × SolverState B)
   | S, [] => .ok ([], S)
   | S, st :: sts => do
-      match ← lookupQF S.ctx n (st.row.applySubst S.subst) (st.label.applySubst S.subst) with
+      match ← lookupQF (st.row.applySubst S.subst) (st.label.applySubst S.subst) with
       | .blocked α =>
           let r ← wakesF n (S.park ⟨α, st⟩) sts
           pure (⟨α, st⟩ :: r.1, r.2)
@@ -436,7 +412,7 @@ theorem wakesF_sound {n : Nat} : ∀ {S S' : SolverState B} {sts : List (Stump B
 /-- F-★ on one stump, computed. A spent promise fails here. -/
 def finalizeF (n : Nat) (S : SolverState B) (p : Parked B) : IRes (SolverState B) := do
   if p ∉ S.parked then .fail "finalize: stump no longer parked" else
-  match ← lookupQF S.ctx n (p.stump.row.applySubst S.subst)
+  match ← lookupQF (p.stump.row.applySubst S.subst)
       (p.stump.label.applySubst S.subst) with
   | .blocked α =>
       if α = p.blocker then do
@@ -581,31 +557,24 @@ def inferF (constTy : C → B) (n : Nat) :
       let r₁ ← inferF constTy n Γ S e
       let rv := (r₁.2.draw .row).1
       let S₂ ← solveTySatF n (r₁.2.draw .row).2 r₁.1 (.rcd (.var rv))
-      match ← lookupF S₂.ctx n (.var rv) l with
+      match ← lookupF ((Row.var rv).applySubst S₂.subst) l with
       | .found τ' => pure (τ', S₂)
       | .absent   => pure (.unk, S₂.flag l)
-      | .blocked _ =>
-          match ← lookupF S₂.ctx n ((Row.var rv).applySubst S₂.subst) l with
-          | .blocked α =>
-              pure (.var (S₂.draw .ty).1,
-                (S₂.draw .ty).2.park ⟨α, ⟨.var rv, .lab l, (S₂.draw .ty).1⟩⟩)
-          | _ => .fail "A-sel: the two lookup forms disagree"
+      | .blocked α =>
+          pure (.var (S₂.draw .ty).1,
+            (S₂.draw .ty).2.park ⟨α, ⟨.var rv, .lab l, (S₂.draw .ty).1⟩⟩)
   | _, S, .lab l => .ok (.lab l, S)
   | Γ, S, .selDyn e₁ e₂ => do
       let r₁ ← inferF constTy n Γ S e₁
       let rv := (r₁.2.draw .row).1
       let S₂ ← solveTySatF n (r₁.2.draw .row).2 r₁.1 (.rcd (.var rv))
       let r₂ ← inferF constTy n Γ S₂ e₂
-      match ← lookupQF r₂.2.ctx n (.var rv) (r₂.1.applySubst r₂.2.subst) with
+      match ← lookupQF ((Row.var rv).applySubst r₂.2.subst) (r₂.1.applySubst r₂.2.subst) with
       | .found τ' => pure (τ', r₂.2)
       | .absent   => pure (.unk, r₂.2.flag (r₂.1.applySubst r₂.2.subst).keyName)
-      | .blocked _ =>
-          match ← lookupQF r₂.2.ctx n ((Row.var rv).applySubst r₂.2.subst)
-              (r₂.1.applySubst r₂.2.subst) with
-          | .blocked α =>
-              pure (.var (r₂.2.draw .ty).1,
-                (r₂.2.draw .ty).2.park ⟨α, ⟨.var rv, r₂.1, (r₂.2.draw .ty).1⟩⟩)
-          | _ => .fail "A-sel-dyn: the two lookup forms disagree"
+      | .blocked α =>
+          pure (.var (r₂.2.draw .ty).1,
+            (r₂.2.draw .ty).2.park ⟨α, ⟨.var rv, r₂.1, (r₂.2.draw .ty).1⟩⟩)
   | Γ, S, .rcd ξ => do
       let r ← inferRecF constTy n Γ S ξ
       pure (.rcd r.1, r.2)
@@ -668,17 +637,10 @@ theorem inferF_sound {constTy : C → B} {n : Nat} :
           simp only [IRes.pure_eq_ok, Prod.mk.injEq] at h
           obtain ⟨rfl, rfl⟩ := h
           exact .selAbs (inferF_sound h₁) rfl (solveTySatF_sound h₂) hH
-      | blocked β =>
-          simp only [IRes.bind_eq_ok] at h
-          obtain ⟨o', ho', h⟩ := h
-          cases o' with
-          | blocked α =>
-              simp only [IRes.pure_eq_ok, Prod.mk.injEq] at h
-              obtain ⟨rfl, rfl⟩ := h
-              exact .selUnk (inferF_sound h₁) rfl (solveTySatF_sound h₂)
-                (lookupF_sound ho') rfl
-          | found _ => cases h
-          | absent => cases h
+      | blocked α =>
+          simp only [IRes.pure_eq_ok, Prod.mk.injEq] at h
+          obtain ⟨rfl, rfl⟩ := h
+          exact .selUnk (inferF_sound h₁) rfl (solveTySatF_sound h₂) hH rfl
   | _, S, S', .lab l, τ, h => by
       simp only [inferF, IRes.ok.injEq, Prod.mk.injEq] at h
       obtain ⟨rfl, rfl⟩ := h; exact .lab
@@ -695,17 +657,11 @@ theorem inferF_sound {constTy : C → B} {n : Nat} :
           simp only [IRes.pure_eq_ok, Prod.mk.injEq] at h
           obtain ⟨rfl, rfl⟩ := h
           exact .selDynAbs (inferF_sound h₁) rfl (solveTySatF_sound h₂) (inferF_sound h₃) hH
-      | blocked β =>
-          simp only [IRes.bind_eq_ok] at h
-          obtain ⟨o', ho', h⟩ := h
-          cases o' with
-          | blocked α =>
-              simp only [IRes.pure_eq_ok, Prod.mk.injEq] at h
-              obtain ⟨rfl, rfl⟩ := h
-              exact .selDynUnk (inferF_sound h₁) rfl (solveTySatF_sound h₂)
-                (inferF_sound h₃) (lookupQF_sound ho') rfl
-          | found _ => cases h
-          | absent => cases h
+      | blocked α =>
+          simp only [IRes.pure_eq_ok, Prod.mk.injEq] at h
+          obtain ⟨rfl, rfl⟩ := h
+          exact .selDynUnk (inferF_sound h₁) rfl (solveTySatF_sound h₂)
+            (inferF_sound h₃) hH rfl
   | Γ, S, S', .rcd ξ, τ, h => by
       simp only [inferF, IRes.bind_eq_ok, IRes.pure_eq_ok, Prod.mk.injEq] at h
       obtain ⟨⟨ρ, S''⟩, hb, rfl, rfl⟩ := h
@@ -739,7 +695,7 @@ def runStart : SolverState B := ⟨Sol.nil, [], [], ⟨1⟩, []⟩
 
 /-- a run, computed: infer from nothing, then finalize every parked stump -/
 def runF (constTy : C → B) (n : Nat) (e : Expr C) : IRes (Ty B × SolverState B) := do
-  let r ← inferF constTy n ⟨[], []⟩ runStart e
+  let r ← inferF constTy n QCtx.empty runStart e
   let S' ← finalizesF n r.2 r.2.parked
   pure (r.1, S')
 
@@ -754,7 +710,7 @@ theorem runF_sound {constTy : C → B} {n : Nat} {e : Expr C} {τ : Ty B}
 read under its own final substitution. -/
 theorem runF_typed {constTy : C → B} {n : Nat} {e : Expr C} {τ : Ty B}
     {S' : SolverState B} (h : runF constTy n e = .ok (τ, S')) :
-    QTyped constTy ⟨[], []⟩ e (τ.applySubst S'.subst) :=
+    QTyped constTy QCtx.empty e (τ.applySubst S'.subst) :=
   runSound e τ S' (runF_sound h)
 
 end MinimalCalculus
