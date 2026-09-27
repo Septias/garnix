@@ -67,37 +67,64 @@ We use a custom lookup relation ⟨ρ.l ↓ r⟩ with return values ⟨τ | ⊥ 
  ⊢ₗ₁ = `Typed`, ⊢ = `QTyped`.
 
 **Lookup**
-- `lookup_det`:   ρ.l ↓ r₁ → ρ.l ↓ r₂ → r₁ = r₂
-- `lookup_total`: ∃ r, ρ.l ↓ r   (unconditional: ↓ is context-free, no L-α)
-- `LookupQ.applySubst`: ρ.q ↓ r → r ≠ ? → (θρ).(θq) ↓ θr
+- lookup_det:   ρ.l ↓ r₁ → ρ.l ↓ r₂ → r₁ = r₂
+- lookup_total: ∃ r, ρ.l ↓ r   (unconditional: ↓ is context-free, no L-α)
+- LookupQ.applySubst: ρ.q ↓ r → r ≠ ? → (θρ).(θq) ↓ θr
 
-**Row equivalence** (`RowEquiv.lean`)
-- `rowEquiv_iff_char`: ρ₁ ≈ ρ₂ ↔ Char ρ₁ ρ₂
+**Row equivalence**
+- rowEquiv_iff_char: ρ₁ ≈ ρ₂ ↔ Char ρ₁ ρ₂
 
 **Type safety**
-- `preservation`:  ∅ ⊢ₗ₁ e : τ → e ⟶ e' → ∅ ⊢ₗ₁ e' : τ
-- `qProgress`:     ∅ ⊢ e : τ → (∃e', e ⟶ e') ∨ Value e ∨ Err e
+- preservation:  ∅ ⊢ₗ₁ e : τ → e ⟶ e' → ∅ ⊢ₗ₁ e' : τ
+- qProgress:     ∅ ⊢ e : τ → (∃e', e ⟶ e') ∨ Value e ∨ Err e
   where Err e :≡ e = E[{b}.l] with l ∉ b, or E[{b}.(v)] with v not a label or v = l ∉ b
   (progress up to lookup errors: soft typing types ⊥-lookups at ★)
-- `qPreservation`: ∅ ⊢ e : τ → e ⟶ e' → ∅ ⊢ e' : τ
-- `l1_strictly_weaker`: ∃ e τ, ∅ ⊢ e : τ ∧ ¬ ∅ ⊢ₗ₁ e : τ
+- qPreservation: ∅ ⊢ e : τ → e ⟶ e' → ∅ ⊢ e' : τ
+- l1_strictly_weaker: ∃ e τ, ∅ ⊢ e : τ ∧ ¬ ∅ ⊢ₗ₁ e : τ
 
-**Principality** (`Qualified.lean`)
-- `selQ_principal`: Principal ∅ (λx.x.l) selQ
-  where Principal Γ e σ :≡ (∀τ ≤ σ, Γ ⊢ e : τ) ∧ (∃τ, τ ≤ σ) ∧ (∀τ, Γ ⊢ e : τ → ∃τ' ≤ σ, τ' ≼ τ)
+**Principality**
+- selQ_principal: Principal ∅ (λx.x.l) selQ
+    where Principal Γ e σ :≡ (∀τ ≤ σ, Γ ⊢ e : τ) ∧ (∃τ, τ ≤ σ) ∧ (∀τ, Γ ⊢ e : τ → ∃τ' ≤ σ, τ' ≼ τ)
 
-**Unification ρ₁ ≐ᵣ ρ₂** (`RowUnify/`)
-- `unifyRowM_success_mgu`: ≐ᵣ = success s → θ_s ⊨ ρ₁ ≐ ρ₂ ∧ ∀θ ⊨ ρ₁ ≐ ρ₂, ∃θ' =_{ftv ρ₁ρ₂} θ, θ' ⊨ s
-- `unifyRowM_success_iff`: ≐ᵣ = success s → (∀θ ⊨ s, θ ⊨ ρ₁ ≐ ρ₂) ∧ (∀θ ⊨ ρ₁ ≐ ρ₂, ∃θ' =_{ftv ρ₁ρ₂} θ, θ' ⊨ s)
-- `unifyRowM_clash_no_unifier`: ≐ᵣ = clash → ∄θ, θ ⊨ ρ₁ ≐ ρ₂
-- `unifyM_occurs_no_unifier`:   ≐ / ≐ᵣ = occurs → ∄θ unifier   (supply avoids ftv)
-- `unifyRowM_terminates` / `unifyTyM_terminates`: ∃ fuel, ≐ᵣ / ≐ ≠ outOfFuel
-- `stuck_masks_mgu`, `terminalNoMgu_false`: stuck ⇏ no mgu, terminal ⇏ no mgu
+**Unification** ρ₁ ≐ᵣ ρ₂
+  - unifyRowM_success_mgu: ≐ᵣ = success s → θ_s ⊨ ρ₁ ≐ ρ₂ ∧ ∀θ ⊨ ρ₁ ≐ ρ₂, ∃θ' =_{ftv ρ₁ρ₂} θ, θ' ⊨ s
+  - unifyRowM_success_iff: ≐ᵣ = success s → (∀θ ⊨ s, θ ⊨ ρ₁ ≐ ρ₂) ∧ (∀θ ⊨ ρ₁ ≐ ρ₂, ∃θ' =_{ftv ρ₁ρ₂} θ, θ' ⊨ s)
+  - unifyRowM_clash_no_unifier: ≐ᵣ = clash → ∄θ, θ ⊨ ρ₁ ≐ ρ₂
+  - unifyM_occurs_no_unifier:   ≐ / ≐ᵣ = occurs → ∄θ unifier   (supply avoids ftv)
+  - unifyRowM_terminates / unifyTyM_terminates: ∃ fuel, ≐ᵣ / ≐ ≠ outOfFuel
+  - stuck_masks_mgu, terminalNoMgu_false: stuck ⇏ no mgu, terminal ⇏ no mgu
 
-**Inference** Γ; S ⊢ e ⇒ τ; S′
-- `inferSound`: Γ; S ⊢ e ⇒ τ; S′ → PInv S → SchemesWF Γ → Clean S → Quiescent S →
+**Inference**  Γ; S ⊢ e ⇒ τ; S′
+- inferSound: Γ; S ⊢ e ⇒ τ; S′ → PInv S → SchemesWF Γ → Clean S → Quiescent S →
   ∀σ, σ absorbs S′ → σ ⊨ S′ → ∀Γ', Γ ⇝_σ Γ' → parked(S′)σ; Γ' ⊢ₐ e : τσ
-- `runSound`: Run e τ S′ → ∅ ⊢ e : τ⟦S′⟧
-- `runF_terminates`: ∃ n, runF n e ≠ oof
-- `runF_eq_run`:     runF n e ≠ oof → runF n e = run e
-- `run_typed`:       run e = ok (τ, S′) → ∅ ⊢ e : τ⟦S′⟧
+- runSound: Run e τ S′ → ∅ ⊢ e : τ⟦S′⟧
+- runF_terminates: ∃ n, runF n e ≠ oof
+- runF_eq_run:     runF n e ≠ oof → runF n e = run e
+- run_typed:       run e = ok (τ, S′) → ∅ ⊢ e : τ⟦S′⟧
+
+
+# Incompleteness
+**Irreducible**
+- Wand `(β|α) ≐ᵣ (l:𝓫)`: `vars_vs_field_no_mgu_on`
+- Levi `(α|l) ≐ᵣ (l|β)`: `two_sided_no_mgu_on`; var swap: `allvar_swap_no_mgu_on`
+- Shift `(α|l:𝓫) ≐ᵣ (l:𝓫|α)`: `shift_no_finite_complete_set` — survives negative info
+- Fix: negative info (Wand, Levi); row equations as scheme qualifiers
+
+**Stuck with an mgu**
+- Crossfield `(l:𝓫|α) ≐ᵣ (m:𝓫|β)`: cost of dropping U-expand
+  - Fix: unique-host expansion as an *applied* binding, not a rename
+- `stuck_masks_mgu`: stuck payload equation propagates before the residual pins β
+  - Fix: defer the stuck equation, retry after the residual
+
+**Spent promise** — `Stump.res : TyVar`
+- Any use of a parked result fails: `λx.(x.l).m`, `λx. x.l ‖ {m=c}`, `λx y.(x.l) y` (`spentEx_*`)
+- Hits nested selection on λ-bound args — the NixOS module shape
+
+**A-let premises**
+- Γ-freshness, `LetResults`, independence, unresolved key ⇒ monomorphic let ⇒ later clash/stuck
+- Fix: independence could become ordered discharge; the rest are justified
+
+**Unrestricted T-★-intro**
+- `λg. {a = g {l=c}; b = g {m=c}}` : `(★ → 𝓫) → {a:𝓫 | b:𝓫}`, `run` = clash
+- Same trick types every stuck witness above (`f : ★ → 𝓫`)
+- "clash is soundness" holds for ≐, not for inference
