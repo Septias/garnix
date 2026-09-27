@@ -1,17 +1,10 @@
-
 > This file serves as an overview of the current formalization efforts. It should give a comprehensible overview of current effort but even more importantly, an outlook of what to do next. 
 
 
 ## Motivation
-We are creating a calculus that can be used to type real Nixlang code and base it on a row theory inspired by Paszke&Xie extending it with an unknown type ★ and a _delayed lookup relation_ (`Γ ⊢ ρ.l ↓ r`) to form a soft typing system with _type refinement_. We use _scoped rows_ since they give a natural semantic to _asymmetric concat_ where all concatenations are stored in a "bag" and looked up with left-precedence. The row theory of Paszke&Xie shows how to form a _sound typesystem_ with row- and label-variables that can be efficiently solved by _unification_. We want to provide a declarative typesystem and extend it to an algorithmic one in a similar fashion.
+We are creating a calculus that can be used to type real Nixlang code and base it on a row theory inspired by Paszke&Xie extending it with an unknown type ★ and a _delayed lookup relation_ (`Γ ⊢ ρ.l ↓ r`) to form a soft typing system with _type refinement_. We use _scoped rows_ since they give a natural semantic to _asymmetric concat_ where all concatenations are stored in a "bag" and looked up with left-precedence. The row theory of Paszke&Xie shows how to form a _sound typesystem_ with row- and label-variables that can be efficiently solved by _unification_. We want to provide a declarative and algorithmic system and provide the usual proofs.
 
-Our contribution is a _lookup relation_ that tries to solve one motivating example: `a: b: (a || b).l` which is a lookup on a concatenation of two row-variables that can not be typed easily. This wand-example is actually unsolvable, even with our effort. The novelty of our approach is to lookup a type on a _best-effort_ basis and give back an unkown result ★ in the wand-example. Our lookup relation thus returns a result out of (τ | ⊥ | ?) where ⊥ symbolises definite absence of a field and ? means "we don't know" (yet). Our lookup relation `Γ ⊢ ρ.l ↓ r` is able to lookup row-variables in the context that were instantiated on application. This can also be done with normal substitution of type-variables, but already shows the algorithmic implementation.
-
-This mechanism allows to _refine_ types on function application. See the example `x: ({l: τ} || x).l` of type `{β} → ★` since the lookup-relation can not look past the type-variable introduced by x. Only after instantiation, it becomes clear whether the label is _shadowed_ or not. Applying the argument `x = {}` promotes the unknown type ★ to τ because it becomes clear that x does not shadow the label defined in the literal record.
-
-The type-safety proofs have to account for this new lookup-mechanism in two ways: Progress can only be proven for definite types, but ★ forms a boundary where programs can get stuck. The preservation proof has to account for type refinement by allowing types to become more precise during small steps.
-
-Principality forces qualified schemes that use parked stumps during unification to get mgus in many cases. The algorithm outputs three solution: A sucees with MGU, a failure without MGU, stuck for the wand example and finally an outcome »occurs«, that cuts across the other output paths. The occurs class of outputs is a syntactic check for recursive row-variables that naturally occur in nix.
+We use a custom lookup relation ⟨ρ.l ↓ r⟩ with return values ⟨τ | ⊥ | ?⟩ to delineate the sources of uncertainty due to the wand-configuration. We want to extend this to proper gradual typing in the future and are still looking for breaking cases and problems with it.
 
 
 ## Related Files
@@ -21,6 +14,7 @@ Principality forces qualified schemes that use parked stumps during unification 
 - algorithmic.lean: Root of the formal algorithmic system with unification
 - In the bib/plaintext folder there is the plaintext version of relevant literature
 
+
 # Progress
 - [x] Scoped Records
 - [x] Asymmetric Concat
@@ -29,80 +23,20 @@ Principality forces qualified schemes that use parked stumps during unification 
 - [x] Unknown Type Abstraction
 - [x] Let-Statements
 - [x] Qualified Schemes
-- [~] Unification
-- [~] Type Inference
-- [~] FC-Labels — selection DONE and mechanized (phase A, 2026-09-26, branch `worktree-fc-labels`); construction paper-only (phase B)
+- [x] Unification
+- [x] Type Inference
+- [~] FC-Labels
 - [ ] Negative type information
-- [?] Patterns
-- [?] Occurrence Typing
-- [?] Recursive Types
-- [?] With
-- [?] Inherit
-
-
-# Property-Overview
-*Soundness*
-degrade rules removed (★ rigid) ✔     ┐
-UnifyAcyclic ✔ →  ⟦S⟧ total  →  A-sel  ├→ InferSound ✔ → weaken ✔ + finalization ✔ + χ-correction ✔ → RunSound ✔
-generalization lemma → A-let                ┘
-
-*Termination*
-unification measure ✔ ┐
-A-let ᾱ ✔ (greatest) ├→ inferF ✔ (sound, terminates) → `run` is total → "the scheme W produces" is sayable
-↝* wake-up closure ✔ ┘
-                      + determinism up to α-renaming → W's output is unique
-
-*Principality*
-instance-closed  ←  RunSound
-inhabited        ←  "stumps always finalize"  ←  spent promise (FALSE in general — needs one of its three exits)
-covers ≼         ←  W exists  +  ⊴≼  +  COMPLETENESS (false 3 ways: spent promise, stuck, A-let premises)
-                                    ↓
-                        ∀e ∃σ. Principal Γ e σ   (stated: `GeneralPrincipality`)
-
-
-## Unification
-- Unification Outcomes
-  - [x] success: *sound & complete, and NON-VACUOUS*
-    - `s.toSubst` itself satisfies `s` and unifies the problem (`unifyRowM_success_mgu`)
-  - [x] occurs: *no unifier*, through the whole driver (`unifyRowM_occurs_no_unifier`, 2026-09-26)
-  - [~] stuck : *conservative, and there is NO general converse*
-    - three no-mgu theorems, three witnesses
-  
-- [x] UnifyWF, UnifyAcyclic — PROVED 2026-09-26 (`RowUnify/Applied.lean`)
-  - one invariant `Sol.Good V s`, tagged by sort: keys and mentions ⊆ problem vars, no binding mentions a key, keys consistent
-  - gives `Applied` (so ⟦S⟧ = `toSubst`), `WF` at rank ≡ 0, `Sat s.toSubst s`
-  - the duplicate-key "keystone" is closed by the same invariant
-  - state level: `SolveTy.clean` / `SolveRow.clean` keep ⟦S⟧ idempotent across solved equations
-  - lifted over the whole derivation: `Infer.clean`, `Finalizes.clean` (`lean/Absorb.lean`)
-
-
-## Termination
-- [x] inference terminates — PROVED 2026-09-26 (branch `infer`) about a real function. `inferF`/`runF` (`lean/InferFn.lean`): fuelled, executable, answers `ok`/`fail`/`oof`; every `ok` is a derivation (`inferF_sound`, `runF_sound`) and so a declarative typing (`runF_typed`, via `runSound`). `lean/InferFnTerm.lean`: every piece is STABLE (more fuel never changes a verdict) and SETTLES from a clean state (`inferF_terminates`, `runF_terminates`); `run` is the total function (`runF_eq_run`, `run_typed`). Ingredients: `unifyTyF_terminates`, `Sol.rowWF_toCtx` for lookups, `satStep_wf` for saturation
-  - REPRODUCE: `lean/InferRuns.lean` — `#guard`ed runs, incl. the spent promise failing at finalization and witnesses for the kinds and Perm fixes
-  - A-var's renaming is the supply's next |ᾱ| names; `FreshRenaming` and the binders' kinds are CHECKED at run time (a `fail`, never unsoundness). That they always pass is not proved (it is a completeness question)
-
+- [ ] Patterns
+- [ ] Occurrence Typing
+- [ ] Recursive Types
+- [ ] With
+- [ ] Inherit
 
 
 ## FC-Labels  (`plans/fc-labels-plan.md`)
-- [x] **Phase A — dynamic selection, mechanized through RunSound** (2026-09-26, branch `worktree-fc-labels`)
-  - ⌊l⌋ is one new type former (`Ty.lab`), rigid and nullary like 𝓫; label VARIABLES are ordinary type variables, so the label pass of ≐ is one arm of `unifyTyF` and `Sol`/`TySubst` are unchanged
-  - the key's TYPE keys the lookup (`LookupQ`, LabelLookup.lean): ⌊l⌋ → `Lookup`; a variable → `LookupV` (never finds: ⊥ on a hollow row, ? at the first field — L-?-lab — or at a free row variable); anything else → ⊥ (L-junk). *L-junk replaces a kind discipline*: without it a substitution sending a label variable to `int` would break instance-closedness (`λa. {}.(a) : int → ★` must be a typing)
-  - `Stump.label : Ty B`; a stump can be blocked on its KEY (`LookupBlockedQ`); Discharge, wake-up and F-★ read the key under the substitution
-  - `'l` and `e₁.(e₂)` in Step/Err (a non-label key is ↯); L2 rules T-lab and T-sel-dyn (3 arms); **qProgress / qPreservation re-proved**; L1 types neither (`typed_lab_false`)
-  - A-lab and A-sel-dyn (found / ⊥ / park); all Infer invariants and the soundness cases proved; `inferF` implements them, sound and settling. **runSound, run_typed, runF_terminates hold for the extended language**; every Axioms.lean guard unchanged
-  - headline: `selDynQ_instance_closed` — every instance of ∀(α:Label)(β:Row)(δ:Type). ⟨β.α ↓ δ⟩ ⇒ α → {β} → δ types λa. λx. x.(a); runs `#guard`ed in InferRuns.lean (label refinement through a key-blocked stump, L-junk, let-polymorphic use at two keys)
-- New premises and costs (all proved, completeness only):
-  - `QScheme.Correctable` and A-let: no generalized KEY mentions a generalized result (`r.(x.l)` stays monomorphic)
-  - A-let inhabitation / F-★: a stump blocked on a generalized variable reads as ? or ⊥ after substitution (`lookupQ_blocked_subst`); F-★ binds only to ★ (`Finalizes.starOrVar`), so a key blocker never becomes a label
-  - `QCovers.forward_of_avoiding` (off the soundness path) restricted to STATIC keys: ⟦s⟧-as-context holds no label solutions, so a `?` on a solved key cannot transport. Lifting it needs `Γ·(α = ℓ)` in `Ctx`
-  - the spent promise has a second door (`λr.λa. (r.(a)) c`): same incompleteness class
-- [—] **Phase B — dynamic construction** `{ ${e₁} = e₂ }`: DECIDED 2026-09-26 paper-only, not mechanized (design in plan §Phase B: var-labeled fields, barriers in ≈, the row unifier)
-- [ ] `e ? ${e'}` — needs a Bool base type; not started
-
-## Principality
-- [x] covering order on schemes ⊴ 
-- [x] `Principal selQ (λx.x.l)`
-- [~] General principality — STATED as `GeneralPrincipality` (`lean/OpenEnds.lean`), not proved. The covering conjunct is algorithmic completeness, which fails three ways (spent promise, stuck, A-let premises), so it can hold only for a fragment; choosing it is a thesis decision
+- [x] **Phase A — Reading dynamic**
+- [ ] **Phase B — dynamic construction**
 
 
 # Problems
@@ -124,124 +58,46 @@ covers ≼         ←  W exists  +  ⊴≼  +  COMPLETENESS (false 3 ways: spen
 - ⊴⊑: covering up to precision — σ' answers each σ-instance with a ⊑ₜ-sharper one
 
 ## Properties
-- ↓: deterministic, monotone, total (under RowWF)
+- ↓: deterministic, total, context-free; stable under substitution
 - ⊑: reflexive, transitive (limmited)
 - ≈: refl, symm, trans, congruence under |; adjacent distinct labels commute, ε is a unit
 - ρ: rows mod ≈ form a trace monoid (partially-commutative, cancellative)
 
-## Proof Overview
-Proofs are for _closed_ programs (Γ = ∅). e ↯ marks _lookup-errors_: a selection reached a record literal without the label. ★ makes such programs typeable (now also via T-sel-⊥), so progress only holds up to ↯. 
+# Headliners
+ ⊢ₗ₁ = `Typed`, ⊢ = `QTyped`.
 
-*Progress*: If Γ = ∅ and Γ ⊢ e: τ, then `Progress e`
-  - step: ∃e' with e → e'
-  - done: or e ∈ Values
-  - err: e ↯
+**Lookup**
+- `lookup_det`:   ρ.l ↓ r₁ → ρ.l ↓ r₂ → r₁ = r₂
+- `lookup_total`: ∃ r, ρ.l ↓ r   (unconditional: ↓ is context-free, no L-α)
+- `LookupQ.applySubst`: ρ.q ↓ r → r ≠ ? → (θρ).(θq) ↓ θr
 
-*Preservation*: If ∅ ⊢ e: τ and e → e' then ∅ ⊢ e'
-*Soundness*: If ⊨ e: τ then ⊢ e: τ
-*Completeness*: If ⊢ e: τ then ⊨ e: τ
+**Row equivalence** (`RowEquiv.lean`)
+- `rowEquiv_iff_char`: ρ₁ ≈ ρ₂ ↔ Char ρ₁ ρ₂
 
-## Lemma Overview
-### Declarative (L1)
-- Progress & Preservation
-  - *record inversion*: T-eq and T-★-intro can wrap any derivation and have to be stripped; each inversion gains a `∨ τ = ★` disjunct (harmless for canonical forms since fn/rcd heads ≠ ★).
-  - *head rigidity*: ≈ₜ never changes the head constructor, so we can get "back" our shape. Now includes ★-rigidity (★ ≈ σ ⟹ σ = ★) because T-★-intro lives outside ≈.
-  - *lookup-equivalence*: Lookup-category (τ | ⊥ | ★) is not changed by row-equivalence.
-  - *term/type agreement*: Lookup on types carries over to syntax-lookup
-- Progress:
-  - *canonical forms*: A value's syntactic shape is determined by its type's head.
-  - *scheme non-vacuity*: Every scheme has its own body as instance (θ = id).
-- Preservation:
-  - *polymorphic substitution*: if x: σ and v types at every instance of σ, then e[x:=v] keeps its type
-    - *context conversion*: typing only sees the context through lookups, so contexts that agree on lookups type the same terms. Subsumes weakening, exchange and shadowing.
-    - *rowEnv congruence*: lookup only depends on row-solutions, so substitution leaves lookups untouched
-  - *spine-var-freeness*: literal rows carry no row-var in their spine, so no ★
-- Refinement:
-  - *lookup monotonicity in ⊑-vocabulary*: Γ ⊑ Γ' sharpens a lookup — definite results survive on the nose (monotonicity), ? re-resolves via totality (needs Γ'.RowWF).
-  - *⊑-rigidity*: below anything but ★ sits only the same head constructor; ★ sits only below itself. 
-  - *★-typeability of selections*: a selection on a record-typed term always types at ★
-- Standalone Metatheory:
-  - *determinism*: lookup is deterministic.
-  - *monotonicity*: definite results (τ/⊥) survive extending the row-solutions, only ★ can improve
-  - *totality*: under acyclic row-solutions (RowWF) every lookup has a result
-  - *substitution stability*: definite lookups survive type substitution
-- Type substitution & generalization:
-  - *type-substitution lemma*: typing transports along θ into a context whose schemes θ-cover the originals (typed_applySubst_aux); the ?-selection case re-derives through T-sel + T-★-intro / T-sel-⊥ / T-sel-★ per the substituted lookup
-  - *scheme renaming*: capture-avoiding renaming of scheme binders against a finite avoid-set (renameScheme) — the only place fresh names are needed
-  - *syntactic let*: the standard HM generalization rule (one derivation + ᾱ ∩ ftv(Γ) = ∅) is admissible for instance-closed T-let (tLet_syntactic)
-- Principality refutation:
-  - *no blur factoring*: no substitution instance of the L1-finalized {β} → ★ sits ⊑-below a found-typing {(l: τ₀)} → τ₀ with τ₀ ≠ ★ (finalized_no_blur)
-  - *no plain principal scheme*: no ∀ᾱ.τ scheme is instance-closed while having both the found-typing and the ⊥-typing of λx. x.l as instances (no_plain_principal_scheme) — plain schemes cannot be principal; qualified/stump-carrying schemes (L2) are forced
+**Type safety**
+- `preservation`:  ∅ ⊢ₗ₁ e : τ → e ⟶ e' → ∅ ⊢ₗ₁ e' : τ
+- `qProgress`:     ∅ ⊢ e : τ → (∃e', e ⟶ e') ∨ Value e ∨ Err e
+  where Err e :≡ e = E[{b}.l] with l ∉ b, or E[{b}.(v)] with v not a label or v = l ∉ b
+  (progress up to lookup errors: soft typing types ⊥-lookups at ★)
+- `qPreservation`: ∅ ⊢ e : τ → e ⟶ e' → ∅ ⊢ e' : τ
+- `l1_strictly_weaker`: ∃ e τ, ∅ ⊢ e : τ ∧ ¬ ∅ ⊢ₗ₁ e : τ
 
-### Algorithmic (L2) 
-- Qualified schemes:
-  - *L2 TYPE SAFETY*: qProgress + qPreservation — the qualified system is safe in
-    its own right, not via L1. 
-  - *plain embedding*: Q = ∅ degenerates ≥\_Γ to the Γ-independent Scheme.Inst
-  - *discharge determinism*: Row discharge is deterministic
-  - *definite-stability*: a resolved stump never re-checks, wake-up only improves
-  - *instance-closedness*: EVERY ≥\_Γ-instance of selQ = ∀β δ. ⟨β.l ↓ δ⟩ ⇒ {β} → δ
-    is a declarative typing of λx. x.l, in ANY Γ (selQ_instance_closed) — the three
-    discharge cases replay T-sel / T-sel-⊥ / T-sel-★ per instance
-  - *L1 ⊆ L2*: Typed.toQ embeds every plain derivation (Q = ∅ instances)
-- IS L2 »SOUND & COMPLETE«? — audit 2026-09-13, build green, no sorries
-  - *safety*: YES. qProgress/qPreservation are proven over ⊢_Q directly (Step/Value/Err
-    reused from L1), preservation ON THE NOSE, axiom-guarded in Axioms.lean
-  - *vs. L1*: BOTH directions — DONE 2026-09-18. ⊆ is Typed.toQ; the converse is
-    `l1_rejects_two_use` / `l1_strictly_weaker` (Qualified.lean), so **L1 ⊊ L2 is a
-    THEOREM**, no longer prose. The proof does NOT reuse no_plain_principal_scheme
-    (that one is pinned to τ₀ = {ε} and to syntactic instance types); it re-runs the
-    same argument mod ≈:
-      * the `a` use pins a DEFINITE result — projecting label a out of the record
-        type through `lookup_equiv` + `lookup_det` gives τa ≈ 𝓫_c, so the scheme has
-        an instance whose result is 𝓫_c;
-      * the `b` use forces an ε DOMAIN, and then instance-closedness forces that
-        instance's RESULT to ★ (selEx_dom_empty_res, i.e. sel_var_unk read through
-        the λ). A ★ domain is excluded outright: a selection on a ★-bound variable
-        has NO typing at all (sel_var_of_unk), since every selection rule demands
-        the scrutinee at a record type and ★ is ≈-rigid;
-      * so σ.body's result position is a bare quantified variable, the domain cannot
-        depend on it, and re-pointing it inside the ⊥-use's substitution yields the
-        underivable instance {ε} → 𝓫_c.
-    THE ONE STEP THAT IS NOT IN no_plain_principal_scheme is the last: there the
-    ⊥-instance's domain was SYNTACTICALLY {ε}, here it is only ≈ {ε}, so "the domain
-    does not mention the result variable" had to be earned. `Row.hasSing` +
-    `rowEquiv_hasSing` + `hasSing_applySubst` + `applySubst_rowOnly` (Qualified.lean)
-    do it: ≈ never creates or destroys a field, so a row ≈ ε is field-free ANYWHERE,
-    a field-free row has no TYPE positions at all, and its substitution image
-    therefore reads only θ.row — the re-point cannot reach it. That quartet is
-    general and reusable; it is the field-count invariant in the form the
-    mixed-instance construction needs.
-    New L1 inversions this needed, none of which existed: `typed_let_inv'`,
-    `typed_app_inv'` (typed_inv_aux only covers con/lam/rcd) and `tvar_inv` (the
-    general-scheme `var_inst_inv`). `sel_var_unk` / `var_inst_inv` are no longer
-    `private` in minimal.lean. Axiom-clean.
-    A second, independent proof of the same theorem existed on
-    worktree-prec-equiv-commutation (lean/Strictness.lean, 2026-09-15:
-    `l1_strictly_weaker_than_l2` / `no_plain_scheme_two_use`). It was dropped as
-    duplicate when that branch was merged — do not re-derive it.
-  - *completeness w.r.t. inference*: NO, and not yet stateable. No W (algorithmic.lean is
-    an import root); unifyRowM_success_iff is completeness for ≐ᵣ, not for ⊢_Q; and
-    principality for L2 exists only as the single-example bookend qualified_principal_scheme
-    (λx.x.l), not as "∀e ∃σ principal". The ⊴ order now exists (see Principality); what is
-    still missing is a W and the covering conjunct for a scheme it produces
-  - *watch item*: qLet's INHABITATION premise (∃τ₁. σ ≥_Γ τ₁) is non-standard — it exists
-    because progress is false without it. Any future completeness proof must show inference
-    always discharges it ("stumps always finalize")
+**Principality** (`Qualified.lean`)
+- `selQ_principal`: Principal ∅ (λx.x.l) selQ
+  where Principal Γ e σ :≡ (∀τ ≤ σ, Γ ⊢ e : τ) ∧ (∃τ, τ ≤ σ) ∧ (∀τ, Γ ⊢ e : τ → ∃τ' ≤ σ, τ' ≼ τ)
 
-- ≈-characterization:
-  - *normal form*: rows flatten to spines
-  - *the characterization*: ρ₁ ≈ ρ₂ iff same var sequence and all l-projections pointwise equal
-  - *end-var cancellativity*: shared leading/trailing vars cancel
-  - *full cancellativity*: any shared prefix/suffix row cancels 
-  - *ground rows*: SpineVarFree ↔ empty var sequence
-  - *Some examples*: Wand ambiguity & Regression
+**Unification ρ₁ ≐ᵣ ρ₂** (`RowUnify/`)
+- `unifyRowM_success_mgu`: ≐ᵣ = success s → θ_s ⊨ ρ₁ ≐ ρ₂ ∧ ∀θ ⊨ ρ₁ ≐ ρ₂, ∃θ' =_{ftv ρ₁ρ₂} θ, θ' ⊨ s
+- `unifyRowM_success_iff`: ≐ᵣ = success s → (∀θ ⊨ s, θ ⊨ ρ₁ ≐ ρ₂) ∧ (∀θ ⊨ ρ₁ ≐ ρ₂, ∃θ' =_{ftv ρ₁ρ₂} θ, θ' ⊨ s)
+- `unifyRowM_clash_no_unifier`: ≐ᵣ = clash → ∄θ, θ ⊨ ρ₁ ≐ ρ₂
+- `unifyM_occurs_no_unifier`:   ≐ / ≐ᵣ = occurs → ∄θ unifier   (supply avoids ftv)
+- `unifyRowM_terminates` / `unifyTyM_terminates`: ∃ fuel, ≐ᵣ / ≐ ≠ outOfFuel
+- `stuck_masks_mgu`, `terminalNoMgu_false`: stuck ⇏ no mgu, terminal ⇏ no mgu
 
-- The unification algorithm ≐:
-  - *forced steps*: There is always a forced step we can take during unification that keeps mgus
-  - *field-count invariant*: ≈ preserves l-field count; substitution only increases count
-  - *projClash soundness*: projClash s₁ s₂ → no unifier (projClash_no_unifier)
-  - *SUCCESS SOUNDNESS*:
-    - *MOVE-REFLECTION lemmas*: θ unifies the residual ofSpine tᵢ ⟹ θ unified the original ofSpine sᵢ"
-    - *U-GROUND*: a field does NOT commute past a var, shadowing
-
+**Inference** Γ; S ⊢ e ⇒ τ; S′
+- `inferSound`: Γ; S ⊢ e ⇒ τ; S′ → PInv S → SchemesWF Γ → Clean S → Quiescent S →
+  ∀σ, σ absorbs S′ → σ ⊨ S′ → ∀Γ', Γ ⇝_σ Γ' → parked(S′)σ; Γ' ⊢ₐ e : τσ
+- `runSound`: Run e τ S′ → ∅ ⊢ e : τ⟦S′⟧
+- `runF_terminates`: ∃ n, runF n e ≠ oof
+- `runF_eq_run`:     runF n e ≠ oof → runF n e = run e
+- `run_typed`:       run e = ok (τ, S′) → ∅ ⊢ e : τ⟦S′⟧
