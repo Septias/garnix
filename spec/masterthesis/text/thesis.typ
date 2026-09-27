@@ -186,35 +186,11 @@ The consequence is that uncertainty is recorded as a *type* rather than as a *co
 + *A best-effort lookup relation.* The judgement $Γ ⊢ ρ.l ↓ r$ extends the usual positive and negative results of a record lookup to a three-way result $(τ | ⊥ | ?)$, and separates field demands from row equality — the separation the rest of the design rests on.
 + *An algebraic characterization of row equivalence.* Rows modulo ≈ form a _trace monoid_, hence are cancellative from both ends. This replaces the shared-tail side condition of Paszke and Xie @extensible_tabular with an algebraic property, and is what allows both ends of a row to be processed.
 + *Qualified schemes, forced rather than chosen.* We show that _no_ plain scheme $∀macron(α). τ$ can be principal for our system: the two typing families of `x: x.l` cannot be spanned by one without also admitting instances that are not typings. Schemes carrying their pending lookups are therefore compelled by the calculus, not adopted for convenience.
-+ *Mechanized type safety, twice.* We prove _progress_ under erroring terms ↯ and _preservation_ in Lean, for the declarative system and independently for the qualified system, together with the refinement discipline under which a definite result is final and only $?$ may improve.
++ *Mechanized type safety.* We prove _progress_ under erroring terms ↯ and _preservation_ in Lean for the declarative system with qualified schemes, together with the refinement discipline under which a definite result is final and only $?$ may improve.
 + *An algorithmic system.* We give a sound unification algorithm operating on row _spines_, with verdicts that are provably independent of the recursion budget they were computed under. Two of its rules — a counting rule and a unique-host expansion rule — were surfaced as genuine gaps by the mechanization rather than designed in advance.
 + *An honest account of incompleteness.* The algorithm is incomplete, and we say exactly how. It has three conservative verdicts, each witnessed by a kernel-checked example that reports failure on a problem which in fact has a most general unifier. We further show that the natural converse — "no move applies, therefore no principal solution exists" — is _false_ at every formulation we tried, including the retreat to configurations in which no move fires at all: terminality is a fact about the moves, not about the problem.
 
-The remainder of this thesis is organised as follows. @minimal-calculus fixes a minimal calculus — functions, scoped records, concatenation, row-variables and let-polymorphism — and @declarative-system gives its declarative typing rules, the lookup relation and row equivalence. @unification develops the unification algorithm on spines. @metatheory presents the metatheory, the principality argument that forces qualified schemes, and the incompleteness results. @sec-extensions discusses extensions towards full NixLang — first-class labels, patterns, `with`, `inherit`, occurrence typing, and lacks-predicates as the most promising source of the negative information this section identified as the crux — before @related-work places the work in the literature.
-
-// == Principality forces qualified schemes <principality>
-
-// The term `x: x.l` can be typed at two families that no plain scheme can span. It types at ${(l: τ₀)} → τ₀$ for *every* $τ₀$, and it types at ${ε} → ★$. Both are derivable, and neither is an instance of the other.
-
-// $
-//   #h(0em) "There is no plain scheme" ∀macron(α). τ "that is instance-closed and covers both."
-// $
-
-// no σ has all its instances derivable for `x: x.l` while covering ${(l: {ε})} → {ε}$ and ${ε} → ★$.). The scheme's result position must be a quantified variable, since it instantiates to two *rigid* types — ${ε}$ and ★ — that no single non-variable shape covers. But then re-pointing that variable at ${ε}$ inside the ⊥-instance's substitution leaves the domain image at ${ε}$ untouched, because the domain never consults the result variable, and produces the instance ${ε} → {ε}$, which is not a typing. Instance-closure and coverage are incompatible. The step that rules out "just weaken it to ★" is `finalized_no_blur`.
-
-// The positive bookend is that a scheme carrying its pending lookup does span both. With
-
-// $ "selQ" quad = quad ∀(β: "Row", δ: "Type"). #h(0.3em) ⟨β.l ↓ δ⟩ ⇒ {β} → δ $
-
-// every lookup verdict on the argument row yields the corresponding instance — $ρ.l ↓ τ_r$ gives ${ρ} → τ_r$, and both $⊥$ and $?$ give ${ρ} → ★$ (`selQ_inst_of_lookup`) — and every instance of `selQ` is a typing (`selQ_instance_closed`), so it satisfies all three conditions the plain scheme could not (`qualified_principal_scheme`). One binding can then serve two uses at incompatible refined instances in a single derivation:
-
-// $
-//   ∅ ⊢_Q #h(0.3em) bold("let") f = (x: x.l) bold("in") { a = f {l = c}; b = f {} } quad : quad {a: 𝓫_c | b: ★}
-// $
-
-// (`qtyped_two_use`). Each use discharges its own copy of the stump. Taken together the two results are the contribution claimed in @contributions: qualified schemes are not adopted because they are convenient, they are *forced* — plain schemes are refuted for this calculus, and the qualified ones are exhibited doing the job.
-
-// Type safety is then re-established for the qualified system independently, not transported: `qProgress` and `qPreservation` are the statements of @type-safety over $⊢_Q$, proved against the qualified derivations directly. The embedding `Scheme.toQ` of plain schemes into qualified ones exists, but the safety proof does not go through it.
+The remainder of this thesis is organised as follows. \@minimal-calculus fixes a minimal calculus — functions, scoped records, concatenation, row-variables and let-polymorphism — and \@declarative-system gives its declarative typing rules, the lookup relation and row equivalence. @unification develops the unification algorithm on spines. @metatheory presents the metatheory, the principality argument that forces qualified schemes, and the incompleteness results. @sec-extensions discusses extensions towards full NixLang — first-class labels, patterns, `with`, `inherit`, occurrence typing, and lacks-predicates as the most promising source of the negative information this section identified as the crux — before @related-work places the work in the literature.
 
 = Declarative
 
@@ -239,14 +215,15 @@ The remainder of this thesis is organised as follows. @minimal-calculus fixes a 
                #type_name("Type") τ & ::= α | 𝓫 | ★ | τ -> τ | { ρ } \
                 #type_name("Row") ρ & ::= ε | α | l: τ | (ρ₁ | ρ₂) \
                #type_name("Sort") κ & ::= "Type" | "Row" \
-        #type_name("Type Scheme") σ & ::= ∀(macron(α): macron(κ)). τ | τ \
+        #type_name("Constraints") Q & ::= ε | Q, ⟨ρ.l ↓ δ⟩ \
+        #type_name("Type Scheme") σ & ::= ∀(macron(α): macron(κ)). Q ⇒ τ | τ \
       $
     ],
   )),
 )
 #syntax <syntax>
 
-@syntax shows the term- and type-syntax of a standard lambda-calculus extended with records, record-concatenation and let-polymorphism. Functions use the unusual syntax (x: e) where x is the variable to be replaced in the function body e. This distinction is chosen because it is Nix's syntax for functions. We admit a finite set 𝓒 of constants $c ∈ 𝓒$ that can be typed by base types 𝓫 from the finite set of base types 𝓑 and require that 𝓑 has at least the types needed to type every constant such that `c: 𝓫_c` is a complete mapping. We admit an "unknown" ★ type for our soft-typing system that can be used to type expressions the type system cannot reason about. Term-rows ${ξ}$ and row-types ${ρ}$ are both trees, which shows their similarity. As usual, we stratify our type system with a polymorphic σ-type that subsumes the monomorphic types τ to sidestep set-paradoxes.
+@syntax shows the term- and type-syntax of a standard lambda-calculus extended with records, record-concatenation and let-polymorphism. Functions use the unusual syntax (x: e) where x is the variable to be replaced in the function body e. This distinction is chosen because it is Nix's syntax for functions. We admit a finite set 𝓒 of constants $c ∈ 𝓒$ that can be typed by base types 𝓫 from the finite set of base types 𝓑 and require that 𝓑 has at least the types needed to type every constant such that `c: 𝓫_c` is a complete mapping. We admit an "unknown" ★ type for our soft-typing system that can be used to type expressions the type system cannot reason about. Term-rows ${ξ}$ and row-types ${ρ}$ are both trees, which shows their similarity. As usual, we stratify our type system with a polymorphic σ-type that subsumes the monomorphic types τ to sidestep set-paradoxes. Unlike Hindley-Milner schemes, ours are _qualified_: a scheme carries a list Q of pending lookups ⟨ρ.l ↓ δ⟩, called _stumps_, whose result δ is one of the scheme's own quantified variables. A plain scheme is the special case Q = ε. @principality shows that the qualification is forced rather than chosen.
 
 
 == Sorts
@@ -272,8 +249,11 @@ The remainder of this thesis is organised as follows. @minimal-calculus fixes a 
     ),
     derive(
       "S-scheme",
-      ($Γ · (macron(α): macron(κ)) ⊢ τ: "Type"$,),
-      $Γ ⊢ (∀(macron(α): macron(κ)). τ) #h(3pt) "ok"$,
+      (
+        $Γ · (macron(α): macron(κ)) ⊢ τ: "Type"$,
+        $∀⟨ρ.l ↓ δ⟩ ∈ Q. #h(0.3em) Γ · (macron(α): macron(κ)) ⊢ ρ: "Row" and δ: "Type" ∈ (macron(α): macron(κ))$,
+      ),
+      $Γ ⊢ (∀(macron(α): macron(κ)). Q ⇒ τ) #h(3pt) "ok"$,
     ),
   ),
 )
@@ -283,7 +263,7 @@ The remainder of this thesis is organised as follows. @minimal-calculus fixes a 
 
 This is deliberately less than Paszke and Xie have. Their kinds are $κ ::= ★ | κ₁ → κ₂ | "Label" | "Row"$, and they need the arrow because their types include type application, first-class rows and label singletons; ours include none of these, so the arrow kind and its application rule would be borrowed machinery. We also avoid their notation, in which ★ _is_ the type kind — here ★ is the unknown type, and the sorts are named instead. A `Label` sort is absent for the same reason: the minimal calculus has concrete labels only. First-class labels, which Nix needs for `e.${e'}`, add a third sort and change nothing else about the discipline.
 
-Two typing rules acquire a premise. T-λ-I is the only rule that conjures a type from nothing, so it checks $Γ ⊢ τ₁: "Type"$, and T-let is the only one that conjures a scheme, so its generalization records the sorts $macron(κ)$ that Γ already assigns to the variables it abstracts. Every other rule's types are fixed by its premises and are well-sorted whenever they are.
+Two typing rules acquire a premise. T-λ-I is the only rule that conjures a type from nothing, so it checks $Γ ⊢ τ₁: "Type"$, and T-let is the only one that conjures a scheme, so it checks $Γ ⊢ σ "ok"$: the body is well-sorted, every stump looks up in a row, and every stump's result is a quantified `Type` variable of σ itself. Every other rule's types are fixed by its premises and are well-sorted whenever they are.
 
 
 #let declarative = figure(
@@ -301,10 +281,10 @@ Two typing rules acquire a premise. T-λ-I is the only rule that conjures a type
     derive(
       "T-let",
       (
-        $Γ ⊢ e₁: τ₁$,
-        $macron(α) = "ftv"(τ₁) ∖ "ftv"(Γ)$,
-        $macron(κ) = Γ(macron(α))$,
-        $Γ · (x: ∀(macron(α): macron(κ)). τ₁) ⊢ e₂: τ₂$,
+        $Γ ⊢ σ #h(3pt) "ok"$,
+        $∀τ₁. #h(0.3em) σ ≥ τ₁ ⟹ Γ ⊢ e₁: τ₁$,
+        $∃τ₁. #h(0.3em) σ ≥ τ₁$,
+        $Γ · (x: σ) ⊢ e₂: τ₂$,
       ),
       $Γ ⊢ #b[let] x = e₁ #b[in] e₂: τ₂$,
     ),
@@ -329,7 +309,7 @@ Two typing rules acquire a premise. T-λ-I is the only rule that conjures a type
 )
 #declarative <declarative>
 
-The declarative system's typing rules follow the standard λ-calculus rules. T-cons is used to type the set of constants of the language with their respective type $𝓫_c$. T-var not only looks up variables in the context Γ, but also instantiates polymorphic types using the instantiation rules from @instantiation discussed in the following section. T-eq equates types equal up to the row-equivalence relation from @row-equivalence. T-conc concatenates two row types by concatenating their type representation and T-sel types record lookups by lifting the hard work to the row-lookup relation, defined in @row-lookup.
+The declarative system's typing rules follow the standard λ-calculus rules. T-cons is used to type the set of constants of the language with their respective type $𝓫_c$. T-var not only looks up variables in the context Γ, but also instantiates polymorphic types using the instantiation rules from @instantiation discussed in the following section. T-let binds x to any well-sorted scheme σ that is _instance-closed_ for e₁ — every instance of σ is a typing of e₁ — and _inhabited_. The second premise is not bureaucracy: a plain scheme always has its own body as an instance, but a qualified one can have none, and then instance-closure says nothing about e₁ at all. Without it, `let x = (3 4) in 5` would type while being stuck. T-eq equates types equal up to the row-equivalence relation from @row-equivalence. T-conc concatenates two row types by concatenating their type representation and T-sel types record lookups by lifting the hard work to the row-lookup relation, defined in @row-lookup.
 
 
 T-sel-★ and T-sel-⊥ are needed to type otherwise stuck terms and T-★-intro to blur a type into the unknown. The rules T-rec, T-ξ-empty, T-ξ-field and T-ξ-conc type record literals. (…)
@@ -341,9 +321,15 @@ T-sel-★ and T-sel-⊥ are needed to type otherwise stuck terms and T-★-intro
   flexbox(
     derive(
       "I-inst",
-      ($Γ ⊢ θ: (macron(α): macron(κ))$,),
-      $(∀(macron(α): macron(κ)). τ) ≥ θ τ$,
+      (
+        $Γ ⊢ θ: (macron(α): macron(κ))$,
+        $∀q ∈ Q. #h(0.3em) θ ⊨ q$,
+      ),
+      $(∀(macron(α): macron(κ)). Q ⇒ τ) ≥ θ τ$,
     ),
+    derive("D-hit", ($(θ ρ).l ↓ τ$, $θ δ = τ$), $θ ⊨ ⟨ρ.l ↓ δ⟩$),
+    derive("D-⊥", ($(θ ρ).l ↓ ⊥$, $θ δ = ★$), $θ ⊨ ⟨ρ.l ↓ δ⟩$),
+    derive("D-?", ($(θ ρ).l ↓ #h(0.2em) ?$, $θ δ = ★$), $θ ⊨ ⟨ρ.l ↓ δ⟩$),
   ),
 )
 #instantiation <instantiation>
@@ -352,7 +338,9 @@ T-sel-★ and T-sel-⊥ are needed to type otherwise stuck terms and T-★-intro
 
 Sorting is what makes this a *single* rule. Without the annotation a quantifier could be discharged with a type or with a row, and the relation needed two rules with identical conclusions differing only in the witness's sort, with nothing to say which was intended and no account at all of a variable standing at positions of both kinds. The sort settles it at the binder: $α: "Row"$ takes a row, $α: "Type"$ takes a type, and θ is one sort-respecting map. This is the concrete payoff of @sorting. The mechanization, which predates it, encodes the same discipline as a *pair* of maps over a single untagged namespace — a workaround the annotation makes unnecessary.
 
-Two degenerate cases are worth recording. A monotype scheme has itself as its only instance, so on the monotypes the relation collapses to I-refl. And every scheme has at least its own body as an instance, witnessed by the identity substitution; schemes are never vacuous, which is what lets the progress proof extract _some_ typing for a `let`-bound expression.
+The second premise, _discharge_ $θ ⊨ q$, is what the qualification adds. Each stump is replayed per instance: θ is applied to the stump's row, the lookup is performed, and the stump's result variable δ is pinned to the verdict — to the found type by D-hit, and to ★ by D-⊥ and D-?. These are exactly T-sel, T-sel-⊥ and T-sel-★ once more, now evaluated at instantiation time instead of generalization time, which is how one `let`-bound selector can answer a definite type at one use and ★ at another. Discharge reads nothing but the substituted row, so ≥ does not depend on Γ.
+
+Two degenerate cases are worth recording. A monotype scheme has itself as its only instance, so on the monotypes the relation collapses to I-refl. And with Q = ε the discharge premise is vacuous, so on plain schemes ≥ is the Hindley-Milner instance relation (`QScheme.inst_toQ`) and every plain scheme has its own body as an instance. A qualified scheme need not have any instance — two stumps may pin the same δ to different verdicts — which is why T-let demands inhabitation explicitly.
 
 
 == Row-Lookup
@@ -761,9 +749,9 @@ Progress and preservation hold in the shape a soft type system permits.
 $ "Progress." quad ∅ ⊢ e : τ quad ==> quad e ∈ "Values" or ∃e'. e → e' or e ↯ $
 $ "Preservation." quad ∅ ⊢ e : τ and e → e' quad ==> quad ∅ ⊢ e' : τ $
 
-(`progress`, `preservation`.) The ↯-disjunct is the price named in \@our-position, and it is paid in exactly one place: `Err` is generated by selecting a label absent from a record *literal*, and is otherwise only propagated through evaluation contexts. Every other way for a well-typed term to get stuck is ruled out, so the theorem locates the residual risk rather than spreading it.
+(`qProgress`, `qPreservation`.) The ↯-disjunct is the price named in \@our-position, and it is paid in exactly one place: `Err` is generated by selecting a label absent from a record *literal*, and is otherwise only propagated through evaluation contexts. Every other way for a well-typed term to get stuck is ruled out, so the theorem locates the residual risk rather than spreading it.
 
-Preservation holds *on the nose* — the type is unchanged, not merely refined. That is worth stating explicitly because it is not free, and the mechanization contains the program that breaks it: without T-sel-⊥ and T-★-intro, `let f = (x: x.l) in f {}` has no preserved type, since `f`'s scheme $∀β. {β} → ★$ demands the lambda be typed at *every* instance, including the one where the lookup succeeds and the honest result is not ★. The two rules that let a definite lookup be re-blurred to ★ are what close that gap. Refinement, correspondingly, is not a weakening of preservation but a separate statement — the next subsection.
+Preservation holds *on the nose* — the type is unchanged, not merely refined. Refinement, correspondingly, is not a weakening of preservation but a separate statement — the next subsection. The qualified schemes leave their mark on progress in exactly one place: T-let's inhabitation premise picks *one* discharged instance at which the bound expression types, and that typing is all progress needs to drive it to a value, a step or an error.
 
 == Refinement and the rigidity of ★ <refinement>
 
@@ -781,6 +769,37 @@ The other half of the story is that this improvement has a hard floor. Once a po
 $ θ({β} → ★) ⊑ {(l: τ₀)} → τ₀ $
 
 (`finalized_no_blur`). A frozen ★ sits ⊑-below nothing but ★. This is the rigidity of \@our-position made formal, and it is not a curiosity — it is the engine of the negative principality result, since it says a plain scheme cannot promise ★ and deliver a type.
+
+
+== Principality forces qualified schemes <principality>
+
+A scheme σ is _principal_ for e in Γ when every instance of σ is a typing of e, σ has at least one instance, and every typing of e is answered by an instance of σ that is at least as precise:
+
+$
+  "Principal"(Γ, e, σ) quad :≡ quad (∀τ. #h(0.3em) σ ≥ τ ⟹ Γ ⊢ e : τ) and (∃τ. #h(0.3em) σ ≥ τ) and (∀τ. #h(0.3em) Γ ⊢ e : τ ⟹ ∃τ'. #h(0.3em) σ ≥ τ' and τ' ≼ τ)
+$
+
+The order ≼ is ≈ followed by ⊑. Both closures are needed: T-★-intro makes the typing set closed under blurring while no instance set is — ★ is rigid — and T-eq makes it closed under ≈ while instance sets are not; with ⊑ alone the third conjunct fails already for the example below (`selQ_not_principalStrict`).
+
+*Plain schemes do not suffice.* The term `x: x.l` types at ${(l: τ₀)} → τ₀$ for *every* $τ₀$ (the lookup hits), and at ${ε} → ★$ (the lookup is ⊥). Both are derivable, and neither is an instance of the other.
+
+$
+  #h(0em) "There is no plain scheme" ∀macron(α). τ "that is instance-closed and covers both."
+$
+
+(`no_plain_principal_scheme`.) The scheme's result position must be a quantified variable, since it instantiates to two *rigid* types — ${ε}$ and ★ — that no single non-variable shape covers. But then re-pointing that variable at ${ε}$ inside the ⊥-instance's substitution leaves the domain image at ${ε}$ untouched, because the domain never consults the result variable, and produces the instance ${ε} → {ε}$, which is not a typing: on ${ε}$ the lookup is ⊥, and the body types only at ★. Instance-closure and coverage are incompatible. Weakening the result to ★ does not help either — by `finalized_no_blur` a ★ result can never be sharpened back into $τ₀$.
+
+*A qualified scheme does.* With
+
+$ "selQ" quad = quad ∀(β: "Row", δ: "Type"). #h(0.3em) ⟨β.l ↓ δ⟩ ⇒ {β} → δ $
+
+every lookup verdict on the argument row yields the corresponding instance — $ρ.l ↓ τ_r$ gives ${ρ} → τ_r$, and both $⊥$ and $?$ give ${ρ} → ★$ (`selQ_inst_of_lookup`). The mixed instance ${ε} → {ε}$ that broke every plain candidate is not an instance, because discharge on ε pins δ to ★ (`selQ_no_mixed`); every instance of selQ is a typing (`selQ_instance_closed`); and selQ is principal (`selQ_principal`) and hence the greatest scheme sound for `x: x.l` (`selQ_greatest`). One binding can then serve two uses at incompatible instances in a single derivation:
+
+$
+  ∅ ⊢ #h(0.3em) bold("let") f = (x: x.l) bold("in") { a = f {l = c}; b = f {} } quad : quad {a: 𝓫_c | b: ★}
+$
+
+(`qtyped_two_use`). Each use discharges its own copy of the stump. Restricted to plain schemes, the system rejects this program (`l1_strictly_weaker`), so the qualification strictly enlarges the typable programs. Qualified schemes are not adopted because they are convenient; they are *forced* — plain schemes are refuted for this calculus, and the qualified ones are exhibited doing the job.
 
 
 == What unification proves <unification-metatheory>
