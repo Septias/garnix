@@ -1,7 +1,7 @@
 -- A-let'S CHOICE OF ᾱ IS CANONICAL: THERE IS A GREATEST ADMISSIBLE ᾱ.
 --
 -- `Infer.letE` REQUIRES its split; it does not say how to find one. A function
--- has to choose ᾱ, and the question `OpenEnds.lean` §2 left open was whether a
+-- has to choose ᾱ, and the open question was whether a
 -- choice exists that every other admissible choice sits below — otherwise the
 -- algorithm would have to guess, and lose principality at every let.
 --

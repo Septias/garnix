@@ -16,7 +16,6 @@ import InferSoundA
 import LetCase
 import Finalization
 import FreshNames
-import OpenEnds
 import LetChoice
 import InferFnTerm
 
@@ -1042,7 +1041,7 @@ info: 'MinimalCalculus.nameReuse_shared_res' does not depend on any axioms
 -/
 #guard_msgs in #print axioms nameReuse_shared_res
 
--- ## SATURATION TERMINATES  (OpenEnds.lean)
+-- ## SATURATION TERMINATES  (InferFnTerm.lean)
 -- The `↝*` closure has no infinite run from any state: (|Δ|, #unblocked)
 -- decreases lexicographically at every wake-up step.
 /--
