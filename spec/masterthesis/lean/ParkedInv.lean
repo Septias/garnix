@@ -28,7 +28,7 @@ variable {B : Type} [DecidableEq B]
 
 /-- every parked result variable has been issued by the supply. -/
 def SolverState.ResBelow (S : SolverState B) : Prop :=
-  ∀ p ∈ S.parked, ∃ k, k < S.supply.next ∧ p.stump.res = natName k
+  ∀ p ∈ S.parked, ∃ k, k < S.supply.next ∧ p.stump.res = .var (natName k)
 
 /-- a parked result variable names one stump. -/
 def SolverState.ResFun (S : SolverState B) : Prop :=
@@ -49,7 +49,7 @@ def SolverState.KeepsS (S S' : SolverState B) : Prop :=
 
 /-- a list of constraints about to be submitted is compatible with S. -/
 def PsOk (S : SolverState B) (ps : List (Parked B)) : Prop :=
-  (∀ p ∈ ps, ∃ k, k < S.supply.next ∧ p.stump.res = natName k) ∧
+  (∀ p ∈ ps, ∃ k, k < S.supply.next ∧ p.stump.res = .var (natName k)) ∧
   (∀ p ∈ ps, ∀ q ∈ S.parked, q.stump.res = p.stump.res → q.stump = p.stump) ∧
   (∀ p ∈ ps, ∀ p' ∈ ps, p.stump.res = p'.stump.res → p.stump = p'.stump)
 
@@ -270,16 +270,24 @@ theorem QCtx.SchemesWF.nil : (QCtx.empty : QCtx B).SchemesWF :=
 
 --------------------- A-var: THE SUBMITTED LIST IS COMPATIBLE -----------------
 
+/-- ⊢  a well-formed constraint's result, instantiated: the renamed binder. -/
+theorem inst_res {θ : TySubst B} {vs : List TyVar} {f : TyVar → TyVar} {st : Stump B}
+    (hren : IsRenaming θ vs f) (h : ∃ δ ∈ vs, st.res = .var δ) :
+    ∃ δ ∈ vs, st.res = .var δ ∧ st.res.applySubst θ = .var (f δ) := by
+  obtain ⟨δ, hδ, hre⟩ := h
+  exact ⟨δ, hδ, hre, by rw [hre]; exact (hren.2 δ hδ).1⟩
+
 theorem psOk_of_var {S : SolverState B} {sc : QScheme B} {θ : TySubst B}
     {f : TyVar → TyVar} {ps : List (Parked B)} {Sup : Supply} {K : KEnv} (h : S.PInv)
     (hwf : sc.WF) (hfun : ∀ a ∈ sc.constraints, ∀ b ∈ sc.constraints, a.res = b.res → a = b)
+    (hren : IsRenaming θ sc.vars f)
     (hinj : ∀ α ∈ sc.vars, ∀ β ∈ sc.vars, f α = f β → α = β)
     (hdr : ∀ α ∈ sc.vars, ∃ k, S.supply.next ≤ k ∧ k < Sup.next ∧ f α = natName k)
     (hps : InstStumps θ f sc.constraints ps) :
     PsOk { S with supply := Sup, kinds := K } ps := by
   -- every submitted stump is the image of one constraint
   have himg : ∀ p ∈ ps, ∃ st ∈ sc.constraints,
-      p.stump = ⟨st.row.applySubst θ, st.label.applySubst θ, f st.res⟩ := by
+      p.stump = ⟨st.row.applySubst θ, st.label.applySubst θ, st.res.applySubst θ⟩ := by
     intro p hp
     have hm : p.stump ∈ ps.map Parked.stump := List.mem_map_of_mem hp
     rw [hps] at hm
@@ -287,19 +295,26 @@ theorem psOk_of_var {S : SolverState B} {sc : QScheme B} {θ : TySubst B}
     exact ⟨st, hst, he.symm⟩
   refine ⟨fun p hp => ?_, fun p hp q hq he => ?_, fun p hp p' hp' he => ?_⟩
   · obtain ⟨st, hst, he⟩ := himg p hp
-    obtain ⟨k, -, hk, hfk⟩ := hdr st.res (hwf st hst)
-    exact ⟨k, hk, by rw [he]; exact hfk⟩
+    obtain ⟨δ, hδ, -, happ⟩ := inst_res hren (hwf st hst)
+    obtain ⟨k, -, hk, hfk⟩ := hdr δ hδ
+    exact ⟨k, hk, by rw [he]; show st.res.applySubst θ = _; rw [happ, hfk]⟩
   · obtain ⟨st, hst, hpe⟩ := himg p hp
-    obtain ⟨k, hk₁, -, hfk⟩ := hdr st.res (hwf st hst)
+    obtain ⟨δ, hδ, -, happ⟩ := inst_res hren (hwf st hst)
+    obtain ⟨k, hk₁, -, hfk⟩ := hdr δ hδ
     obtain ⟨j, hj, hqj⟩ := h.1 q hq
     have : natName j = natName k := by
-      rw [← hqj, ← hfk, he, hpe]
+      have h' : (Ty.var (natName j) : Ty B) = .var (natName k) := by
+        rw [← hqj, ← hfk, he, hpe]; exact happ
+      exact Ty.var.inj h'
     exact absurd this (natName_lt_ne (Nat.lt_of_lt_of_le hj hk₁))
   · obtain ⟨st, hst, hpe⟩ := himg p hp
     obtain ⟨st', hst', hpe'⟩ := himg p' hp'
-    have hres : f st.res = f st'.res := by
-      have := he; rw [hpe, hpe'] at this; exact this
-    have := hfun st hst st' hst' (hinj _ (hwf st hst) _ (hwf st' hst') hres)
+    obtain ⟨δ, hδ, hre, happ⟩ := inst_res hren (hwf st hst)
+    obtain ⟨δ', hδ', hre', happ'⟩ := inst_res hren (hwf st' hst')
+    have hres : f δ = f δ' := by
+      have := he; rw [hpe, hpe'] at this
+      exact Ty.var.inj (happ.symm.trans (this.trans happ'))
+    have := hfun st hst st' hst' (by rw [hre, hre', hinj _ hδ _ hδ' hres])
     rw [hpe, hpe', this]
 
 --------------------- WHAT HAPPENS TO A SUBMITTED CONSTRAINT -----------------
@@ -350,10 +365,10 @@ theorem Infer.pinv_keeps {C : Type} {constTy : C → B} :
     {Γ : QCtx B} → {S S' : SolverState B} → {e : Expr C} → {τ : Ty B} →
     Infer constTy Γ S e τ S' → S.PInv → Γ.SchemesWF → S'.PInv ∧ S.KeepsS S'
   | _, _, _, _, _, .con, h, _ => ⟨h, .refl _⟩
-  | _, _, _, _, _, .var hl _ hfr hdr hle _ hps ⟨S₁, hws, hsat⟩, h, hΓ => by
+  | _, _, _, _, _, .var hl hren hfr hdr hle _ hps ⟨S₁, hws, hsat⟩, h, hΓ => by
       obtain ⟨hwf, hfun⟩ := hΓ _ _ hl
       obtain ⟨h₁, hk₁⟩ := hws.pinv_keeps (supply_up_pinv h hle)
-        (psOk_of_var h hwf hfun hfr.1 hdr hps)
+        (psOk_of_var h hwf hfun hren hfr.1 hdr hps)
       obtain ⟨h₂, hk₂⟩ := hsat.pinv_keeps h₁
       exact ⟨h₂, ((SolverState.KeepsS.of_sub (fun p hp => hp)).trans hk₁
         (hws.satMono)).trans hk₂ hsat.satMono⟩
@@ -396,21 +411,21 @@ theorem Infer.pinv_keeps {C : Type} {constTy : C → B} :
       obtain ⟨i₂, k₂⟩ := hs.pinv_keeps ia
       obtain ⟨ib, kb, mb, hδ, hsup, hpk⟩ := draw_pinv_keeps hd₂ i₂
       -- the new stump's result is the name just drawn: issued, and fresh for Δ
-      have hnew : PsOk S₂' [⟨α, ⟨Row.var r, .lab l, δ⟩⟩] :=
+      have hnew : PsOk S₂' [⟨α, ⟨Row.var r, .lab l, .var δ⟩⟩] :=
         ⟨fun q hq => by
             rw [List.mem_singleton] at hq; rw [hq]
-            exact ⟨_, by rw [hsup]; exact Nat.lt_succ_self _, hδ⟩,
+            exact ⟨_, by rw [hsup]; exact Nat.lt_succ_self _, by rw [hδ]⟩,
          fun q hq r hr he => by
             rw [List.mem_singleton] at hq; rw [hq] at he
             rw [hpk] at hr
             obtain ⟨j, hj, hrj⟩ := i₂.1 r hr
-            exact absurd (hrj.symm.trans (he.trans hδ)) (natName_lt_ne hj),
+            exact absurd (Ty.var.inj (hrj.symm.trans (he.trans (by rw [hδ])))) (natName_lt_ne hj),
          fun a ha b hb _ => by rw [List.mem_singleton] at ha hb; rw [ha, hb]⟩
       refine ⟨pinv_park (ps := []) ib hnew, ?_⟩
-      have kp : SolverState.KeepsS S₂' (S₂'.park ⟨α, ⟨Row.var r, .lab l, δ⟩⟩) :=
+      have kp : SolverState.KeepsS S₂' (S₂'.park ⟨α, ⟨Row.var r, .lab l, .var δ⟩⟩) :=
         SolverState.KeepsS.of_sub (fun q hq => List.mem_cons_of_mem _ hq)
       have mp := SolverState.SatMono.of_sol_eq
-        (S := S₂'.park ⟨α, ⟨Row.var r, .lab l, δ⟩⟩) (S' := S₂') rfl
+        (S := S₂'.park ⟨α, ⟨Row.var r, .lab l, .var δ⟩⟩) (S' := S₂') rfl
       exact k₁.trans (ka.trans (k₂.trans (kb.trans kp mp) (mb.trans mp))
         (hs.satMono.trans (mb.trans mp))) (ma.trans (hs.satMono.trans (mb.trans mp)))
   | _, _, _, _, _, .lab, h, _ => ⟨h, .refl _⟩
@@ -438,21 +453,21 @@ theorem Infer.pinv_keeps {C : Type} {constTy : C → B} :
       obtain ⟨i₃, k₃⟩ := Infer.pinv_keeps h₂ i₂ hΓ
       obtain ⟨ib, kb, mb, hδ, hsup, hpk⟩ := draw_pinv_keeps hd₂ i₃
       -- the new stump's result is the name just drawn: issued, and fresh for Δ
-      have hnew : PsOk S₃' [⟨α, ⟨Row.var r, τ₂, δ⟩⟩] :=
+      have hnew : PsOk S₃' [⟨α, ⟨Row.var r, τ₂, .var δ⟩⟩] :=
         ⟨fun q hq => by
             rw [List.mem_singleton] at hq; rw [hq]
-            exact ⟨_, by rw [hsup]; exact Nat.lt_succ_self _, hδ⟩,
+            exact ⟨_, by rw [hsup]; exact Nat.lt_succ_self _, by rw [hδ]⟩,
          fun q hq r hr he => by
             rw [List.mem_singleton] at hq; rw [hq] at he
             rw [hpk] at hr
             obtain ⟨j, hj, hrj⟩ := i₃.1 r hr
-            exact absurd (hrj.symm.trans (he.trans hδ)) (natName_lt_ne hj),
+            exact absurd (Ty.var.inj (hrj.symm.trans (he.trans (by rw [hδ])))) (natName_lt_ne hj),
          fun a ha b hb _ => by rw [List.mem_singleton] at ha hb; rw [ha, hb]⟩
       refine ⟨pinv_park (ps := []) ib hnew, ?_⟩
-      have kp : SolverState.KeepsS S₃' (S₃'.park ⟨α, ⟨Row.var r, τ₂, δ⟩⟩) :=
+      have kp : SolverState.KeepsS S₃' (S₃'.park ⟨α, ⟨Row.var r, τ₂, .var δ⟩⟩) :=
         SolverState.KeepsS.of_sub (fun q hq => List.mem_cons_of_mem _ hq)
       have mp := SolverState.SatMono.of_sol_eq
-        (S := S₃'.park ⟨α, ⟨Row.var r, τ₂, δ⟩⟩) (S' := S₃') rfl
+        (S := S₃'.park ⟨α, ⟨Row.var r, τ₂, .var δ⟩⟩) (S' := S₃') rfl
       have m₃ := (Infer.sat_mono h₂).trans (mb.trans mp)
       exact k₁.trans (ka.trans (k₂.trans (k₃.trans (kb.trans kp mp) (mb.trans mp)) m₃)
         (hs.satMono.trans m₃)) (ma.trans (hs.satMono.trans m₃))
@@ -466,11 +481,11 @@ theorem Infer.pinv_keeps {C : Type} {constTy : C → B} :
       have hΓ' := hΓ.bindScheme x (sc := letScheme S₁ ᾱ Δq τ₁)
         (fun st hst => by
           obtain ⟨p, hp, rfl⟩ := List.mem_map.mp hst
-          exact (hres.1 p hp).2)
+          exact ⟨_, (hres.1 p hp).2, rfl⟩)
         (fun a ha b hb he => by
           obtain ⟨p, hp, rfl⟩ := List.mem_map.mp ha
           obtain ⟨q, hq, rfl⟩ := List.mem_map.mp hb
-          rw [hres.2 p hp q hq he])
+          rw [hres.2 p hp q hq (Ty.var.inj he)])
       obtain ⟨i₂, k₂⟩ := Infer.pinv_keeps h₂ i₁' hΓ'
       refine ⟨i₂, fun σ hσ p hp => ?_⟩
       rcases k₁ σ (Infer.sat_mono h₂ σ hσ) p hp with ⟨q, hq, hqs⟩ | hd

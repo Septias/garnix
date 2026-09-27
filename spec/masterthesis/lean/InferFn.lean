@@ -240,10 +240,10 @@ def wakeF (n : Nat) (S : SolverState B) (p : Parked B) : IRes (SolverState B) :=
   match ← lookupQF (p.stump.row.applySubst S.subst)
       (p.stump.label.applySubst S.subst) with
   | .found τ =>
-      let S' ← solveTyF n S (.var p.stump.res) τ
+      let S' ← solveTyF n S p.stump.res τ
       pure { S' with parked := S'.parked.filter (·.stump.res != p.stump.res) }
   | .absent =>
-      let S' ← solveTyF n S (.var p.stump.res) .unk
+      let S' ← solveTyF n S p.stump.res .unk
       pure ({ S' with parked := S'.parked.filter (·.stump.res != p.stump.res) }.flag
         (p.stump.label.applySubst S.subst).keyName)
   | .blocked α' =>
@@ -370,9 +370,10 @@ def wakesF (n : Nat) : SolverState B → List (Stump B) → IRes (List (Parked B
           let r ← wakesF n (S.park ⟨α, st⟩) sts
           pure (⟨α, st⟩ :: r.1, r.2)
       | _ =>
-          let S₁ ← wakeF n S ⟨st.res, st⟩
+          -- it resolves at once, so it never waits and its blocker is never read
+          let S₁ ← wakeF n S ⟨"", st⟩
           let r ← wakesF n S₁ sts
-          pure (⟨st.res, st⟩ :: r.1, r.2)
+          pure (⟨"", st⟩ :: r.1, r.2)
 
 theorem wakesF_sound {n : Nat} : ∀ {S S' : SolverState B} {sts : List (Stump B)}
     {ps : List (Parked B)}, wakesF n S sts = .ok (ps, S') →
@@ -416,7 +417,7 @@ def finalizeF (n : Nat) (S : SolverState B) (p : Parked B) : IRes (SolverState B
       (p.stump.label.applySubst S.subst) with
   | .blocked α =>
       if α = p.blocker then do
-        let S' ← (solveTyF n S (.var p.stump.res) .unk).withMsg
+        let S' ← (solveTyF n S p.stump.res .unk).withMsg
           "spent promise: a stump's result is no longer a variable"
         pure ({ S' with parked := S'.parked.filter (·.stump.res != p.stump.res) }.flag
           (p.stump.label.applySubst S.subst).keyName)
@@ -475,7 +476,7 @@ theorem renSubst_isRenaming (vs : List TyVar) (f : TyVar → TyVar) :
 
 /-- the constraints of an instance, before their blockers are known -/
 def instStumps (θ : TySubst B) (f : TyVar → TyVar) (Q : List (Stump B)) : List (Stump B) :=
-  Q.map (fun st => ⟨st.row.applySubst θ, st.label.applySubst θ, f st.res⟩)
+  Q.map (fun st => ⟨st.row.applySubst θ, st.label.applySubst θ, st.res.applySubst θ⟩)
 
 instance {f : TyVar → TyVar} {vs : List TyVar} {Γ : QCtx B} {S : SolverState B} :
     Decidable (FreshRenaming f vs Γ S) := by
@@ -562,7 +563,7 @@ def inferF (constTy : C → B) (n : Nat) :
       | .absent   => pure (.unk, S₂.flag l)
       | .blocked α =>
           pure (.var (S₂.draw .ty).1,
-            (S₂.draw .ty).2.park ⟨α, ⟨.var rv, .lab l, (S₂.draw .ty).1⟩⟩)
+            (S₂.draw .ty).2.park ⟨α, ⟨.var rv, .lab l, .var (S₂.draw .ty).1⟩⟩)
   | _, S, .lab l => .ok (.lab l, S)
   | Γ, S, .selDyn e₁ e₂ => do
       let r₁ ← inferF constTy n Γ S e₁
@@ -574,7 +575,7 @@ def inferF (constTy : C → B) (n : Nat) :
       | .absent   => pure (.unk, r₂.2.flag (r₂.1.applySubst r₂.2.subst).keyName)
       | .blocked α =>
           pure (.var (r₂.2.draw .ty).1,
-            (r₂.2.draw .ty).2.park ⟨α, ⟨.var rv, r₂.1, (r₂.2.draw .ty).1⟩⟩)
+            (r₂.2.draw .ty).2.park ⟨α, ⟨.var rv, r₂.1, .var (r₂.2.draw .ty).1⟩⟩)
   | Γ, S, .rcd ξ => do
       let r ← inferRecF constTy n Γ S ξ
       pure (.rcd r.1, r.2)

@@ -14,7 +14,7 @@ structure Assume (B : Type) where
 
 /-- a stump read under σ — row, key AND result. -/
 def Stump.at {B : Type} (σ : TySubst B) (st : Stump B) : Assume B :=
-  ⟨st.row.applySubst σ, st.label.applySubst σ, σ.ty st.res⟩
+  ⟨st.row.applySubst σ, st.label.applySubst σ, st.res.applySubst σ⟩
 
 /-- the assumption is true: the lookup, performed, agrees — found up to ≈,
 or ⊥/? at ★. `Stump.DischargeEquiv` is exactly this at `st.at θ`. -/
@@ -46,7 +46,7 @@ variable, and correcting it would move the lookup.) -/
 def QScheme.Correctable {B : Type} (sc : QScheme B) : Prop :=
   sc.WF ∧
   (∀ a ∈ sc.constraints, ∀ b ∈ sc.constraints, a.res = b.res → a = b) ∧
-  (∀ a ∈ sc.constraints, ∀ b ∈ sc.constraints, b.res ∉ a.row.ftv ∧ b.res ∉ a.label.ftv)
+  (∀ a ∈ sc.constraints, ∀ b ∈ sc.constraints, ∀ δ ∈ b.res.ftv, δ ∉ a.row.ftv ∧ δ ∉ a.label.ftv)
 
 mutual
   /-- `Δ; Γ ⊢ e : τ` — L2 typing under assumed lookups. Δ is an INDEX: qLet's
@@ -222,20 +222,22 @@ theorem QScheme.Correctable.correct {B : Type} {sc : QScheme B}
     ∃ τ', QScheme.Inst sc τ' ∧ TyEquiv τ' (sc.body.applySubst χ) := by
   obtain ⟨hwf, hfun, hind⟩ := hc
   let P : TyVar → Ty B → Prop := fun β τ =>
-    ∃ st ∈ sc.constraints, st.res = β ∧
+    ∃ st ∈ sc.constraints, st.res = .var β ∧
       LookupQ (st.row.applySubst χ) (st.label.applySubst χ) (.found τ)
   let χ' : TySubst B :=
     ⟨fun β => if h : ∃ τ, P β τ then Classical.choose h else χ.ty β, χ.row⟩
   -- the chosen type is the one the constraint on β finds
   have hchoose : ∀ st ∈ sc.constraints, ∀ τ,
       LookupQ (st.row.applySubst χ) (st.label.applySubst χ) (.found τ) →
-        χ'.ty st.res = τ := by
+        st.res.applySubst χ' = τ := by
     intro st hst τ hl
-    have hex : ∃ τ, P st.res τ := ⟨τ, st, hst, rfl, hl⟩
-    show (if h : ∃ τ, P st.res τ then Classical.choose h else χ.ty st.res) = τ
+    obtain ⟨d, -, hre⟩ := hwf st hst
+    have hex : ∃ τ, P d τ := ⟨τ, st, hst, hre, hl⟩
+    rw [hre]
+    show (if h : ∃ τ, P d τ then Classical.choose h else χ.ty d) = τ
     rw [dif_pos hex]
     obtain ⟨st', hst', hres, hl'⟩ := Classical.choose_spec hex
-    have := hfun st' hst' st hst hres
+    have := hfun st' hst' st hst (hres.trans hre.symm)
     subst this
     cases hl'.det hl; rfl
   have hnone : ∀ β, (¬ ∃ τ, P β τ) → χ'.ty β = χ.ty β := by
@@ -246,35 +248,46 @@ theorem QScheme.Correctable.correct {B : Type} {sc : QScheme B}
   have hrow : ∀ st ∈ sc.constraints, st.row.applySubst χ' = st.row.applySubst χ := by
     intro st hst
     refine Row.applySubst_congr _ (fun α hα => ⟨hnone α ?_, rfl⟩)
-    rintro ⟨τ, st', hst', rfl, -⟩
-    exact (hind st hst st' hst').1 hα
+    rintro ⟨τ, st', hst', hre', -⟩
+    exact (hind st hst st' hst' α (by rw [hre']; simp [Ty.ftv])).1 hα
   have hkey : ∀ st ∈ sc.constraints, st.label.applySubst χ' = st.label.applySubst χ := by
     intro st hst
     refine Ty.applySubst_congr _ (fun α hα => ⟨hnone α ?_, rfl⟩)
-    rintro ⟨τ, st', hst', rfl, -⟩
-    exact (hind st hst st' hst').2 hα
+    rintro ⟨τ, st', hst', hre', -⟩
+    exact (hind st hst st' hst' α (by rw [hre']; simp [Ty.ftv])).2 hα
+  -- a constraint that found nothing keeps χ at its result
+  have hkeep : ∀ st ∈ sc.constraints,
+      (∀ τ, ¬ LookupQ (st.row.applySubst χ) (st.label.applySubst χ) (.found τ)) →
+        st.res.applySubst χ' = st.res.applySubst χ := by
+    intro st hst hno
+    obtain ⟨d, -, hre⟩ := hwf st hst
+    rw [hre]
+    show χ'.ty d = χ.ty d
+    refine hnone d ?_
+    rintro ⟨τ, st', hst', hres, hl'⟩
+    have := hfun st' hst' st hst (hres.trans hre.symm); subst this
+    exact hno τ hl'
   refine ⟨sc.body.applySubst χ', ⟨χ', ⟨fun β hβ => ?_, hfix.2⟩, fun st hst => ?_, rfl⟩, ?_⟩
   · rw [hnone β ?_]; exact hfix.1 β hβ
-    rintro ⟨τ, st, hst, rfl, -⟩; exact hβ (hwf st hst)
+    rintro ⟨τ, st, hst, hre, -⟩
+    obtain ⟨d, hd, hre'⟩ := hwf st hst
+    rw [hre] at hre'; cases hre'; exact hβ hd
   · rcases hd st hst with ⟨hl, -⟩ | ⟨hl, hδ⟩ | ⟨hl, hδ⟩
     · exact .hit ((hkey st hst) ▸ (hrow st hst) ▸ hl) (hchoose st hst _ hl)
     · refine .abs ((hkey st hst) ▸ (hrow st hst) ▸ hl) ?_
-      rw [hnone _ ?_]; exact hδ
-      rintro ⟨τ, st', hst', hres, hl'⟩
-      have := hfun st' hst' st hst hres; subst this
-      exact nomatch hl.det hl'
+      rw [hkeep st hst (fun τ hl' => nomatch hl.det hl')]; exact hδ
     · refine .unk ((hkey st hst) ▸ (hrow st hst) ▸ hl) ?_
-      rw [hnone _ ?_]; exact hδ
-      rintro ⟨τ, st', hst', hres, hl'⟩
-      have := hfun st' hst' st hst hres; subst this
-      exact nomatch hl.det hl'
+      rw [hkeep st hst (fun τ hl' => nomatch hl.det hl')]; exact hδ
   · refine Ty.applySubst_substEquiv (θ₁ := χ') (θ₂ := χ)
       ⟨fun β => ?_, fun β => RowEquiv.refl (χ.row β)⟩ _
     by_cases hex : ∃ τ, P β τ
-    · obtain ⟨τ, st, hst, rfl, hl⟩ := hex
-      rw [hchoose st hst τ hl]
+    · obtain ⟨τ, st, hst, hre, hl⟩ := hex
+      have hc := hchoose st hst τ hl
+      rw [hre] at hc
+      change χ'.ty β = τ at hc
+      rw [hc]
       rcases hd st hst with ⟨hl', he⟩ | ⟨hl', _⟩ | ⟨hl', _⟩
-      · cases hl.det hl'; exact he.symm
+      · cases hl.det hl'; rw [hre] at he; exact he.symm
       · exact nomatch hl.det hl'
       · exact nomatch hl.det hl'
     · rw [hnone β hex]; exact .refl _
@@ -381,7 +394,7 @@ def QScheme.readAt {B : Type} (sc : QScheme B) (σ : TySubst B) (f : TyVar → T
   ⟨sc.vars.map f,
    sc.constraints.map (fun st =>
      (⟨st.row.applySubst (readSub σ sc.vars f), st.label.applySubst (readSub σ sc.vars f),
-       if st.res ∈ sc.vars then f st.res else st.res⟩ : Stump B)),
+       st.res.applySubst (readSub σ sc.vars f)⟩ : Stump B)),
    sc.body.applySubst (readSub σ sc.vars f)⟩
 
 /-- `sc′` is `sc` read under σ, with binders renamed apart by an injective f
@@ -433,7 +446,7 @@ theorem CtxRead.bindTy {B : Type} {σ : TySubst B} {Γ Γ' : QCtx B}
 
 -- ⊢  reading depends on σ only at the scheme's free variables
 theorem SchemeRead.congr {B : Type} {σ σ₁ : TySubst B} {sc sc' : QScheme B}
-    (hr : SchemeRead σ sc sc')
+    (hr : SchemeRead σ sc sc') (hwf : sc.WF)
     (hag : ∀ α ∈ sc.freeFtv, α ∉ sc.vars → σ₁.ty α = σ.ty α ∧ σ₁.row α = σ.row α) :
     SchemeRead σ₁ sc sc' := by
   obtain ⟨f, hinj, hav, rfl⟩ := hr
@@ -456,6 +469,9 @@ theorem SchemeRead.congr {B : Type} {σ σ₁ : TySubst B} {sc sc' : QScheme B}
         Ty.applySubst_congr st.label (fun α hα =>
         hsub α (List.mem_append_left _
           (List.mem_flatMap.mpr ⟨st, hst, List.mem_append_right _ hα⟩)))]
+      -- the result is a binder, which both readings rename alike
+      obtain ⟨d, hd, hre⟩ := hwf st hst
+      simp [hre, Ty.applySubst, readSub, hd]
     · exact Ty.applySubst_congr _ (fun α hα =>
         ⟨(hsub α (List.mem_append_right _ hα)).1.symm, (hsub α (List.mem_append_right _ hα)).2.symm⟩)
 
@@ -563,8 +579,8 @@ theorem SchemeRead.instAt {B : Type} {σ κ : TySubst B} {sc sc' : QScheme B}
   · simp only [QScheme.readAt, List.map_map]
     apply List.map_congr_left
     intro st hst
-    have hres := hwf st hst
-    simp only [Function.comp, Stump.at, if_pos hres]
+    obtain ⟨d, hd, hre⟩ := hwf st hst
+    simp only [Function.comp, Stump.at]
     congr 1
     · rw [Row.applySubst_applySubst]
       exact Row.applySubst_congr _ (fun α hα => readInst_agree hinj hκ
@@ -574,8 +590,8 @@ theorem SchemeRead.instAt {B : Type} {σ κ : TySubst B} {sc sc' : QScheme B}
       exact Ty.applySubst_congr _ (fun α hα => readInst_agree hinj hκ
         (hav α (List.mem_append_left _
           (List.mem_flatMap.mpr ⟨st, hst, List.mem_append_right _ hα⟩))))
-    · have hm : f st.res ∈ sc.vars.map f := List.mem_map_of_mem hres
-      simp only [readInst, if_pos hm, finv_f hinj hres]
+    · rw [Ty.applySubst_applySubst, hre]
+      exact (readInst_agree hinj hκ (fun h => absurd hd h)).1
 
 /-- ⊢  …and in particular A-var's instance: κ = σ ∘ θ, whose constraint readings
 are exactly the σ-readings of the stumps A-var parks. -/
@@ -600,8 +616,7 @@ theorem SchemeRead.inst {B : Type} {σ θ : TySubst B} {sc sc' : QScheme B}
   congr 1
   · rw [Row.applySubst_applySubst]
   · rw [Ty.applySubst_applySubst]
-  · show (θ.ty st.res).applySubst σ = σ.ty (g st.res)
-    rw [(hθ.2 st.res (hwf st hst)).1]; rfl
+  · rw [Ty.applySubst_applySubst]
 
 /-- A-var, given what wake-up did with the instantiated constraints: each one
 either holds (it was discharged) or is assumed (it is still parked). -/
@@ -701,7 +716,7 @@ def LetCase (B C : Type) [DecidableEq B] (constTy : C → B) : Prop :=
     (∀ p ∈ Δq, ∀ q ∈ S.parked, p.stump ≠ q.stump) →
     LetResults S₁ ᾱ Δq →
     (∀ α ∈ ᾱ, ∀ p ∈ Δγ, α ∉ (p.stump.row.applySubst S₁.subst).ftv ∧
-       α ∉ (S₁.subst.ty p.stump.res).ftv ∧
+       α ∉ (p.stump.res.applySubst S₁.subst).ftv ∧
        α ∉ (p.stump.label.applySubst S₁.subst).ftv) →
     (∀ α ∈ ᾱ, α ∉ S₁.sol.dom) →
     (∀ p ∈ Δq, ∀ q ∈ Δq, S₁.resVar q.stump.res ∉ (p.stump.row.applySubst S₁.subst).ftv ∧
@@ -722,11 +737,11 @@ theorem letScheme_wf {B : Type} [DecidableEq B] {Γ : QCtx B} {S₁ : SolverStat
   refine hΓ.bindScheme x ?_ ?_
   · intro st hst
     obtain ⟨p, hp, rfl⟩ := List.mem_map.mp hst
-    exact (hres.1 p hp).2
+    exact ⟨_, (hres.1 p hp).2, rfl⟩
   · intro a ha b hb he
     obtain ⟨p, hp, rfl⟩ := List.mem_map.mp ha
     obtain ⟨q, hq, rfl⟩ := List.mem_map.mp hb
-    rw [hres.2 p hp q hq he]
+    rw [hres.2 p hp q hq (Ty.var.inj he)]
 
 -- the let body's context and state satisfy the invariants too (ParkedInv's
 -- let case, restated for the induction's use)
@@ -753,7 +768,7 @@ theorem varCase {B C : Type} [DecidableEq B] {constTy : C → B} :
   obtain ⟨S₁, hws, hsat⟩ := hw
   obtain ⟨hwf, hfun⟩ := hΓ x sc hl
   have hup := supply_up_pinv (K := K) h hle
-  have hok := psOk_of_var (K := K) h hwf hfun hfr.1 hdr hps
+  have hok := psOk_of_var (K := K) h hwf hfun hθ hfr.1 hdr hps
   obtain ⟨i₁, -⟩ := hws.pinv_keeps hup hok
   obtain ⟨-, k₂⟩ := hsat.pinv_keeps i₁
   have hfate := hws.fate hup hok σ (hsat.satMono σ hσ)
@@ -885,11 +900,11 @@ theorem inferSound_of {B C : Type} [DecidableEq B] {constTy : C → B}
       obtain ⟨-, kb, mb, -, -, -⟩ := draw_pinv_keeps hd₂ i₂
       have c₁ := Infer.clean h₁ hc
       have x₁ := (draw_ext hd).trans (hs.ext.trans ((draw_ext hd₂).trans
-        (SolverState.Ext.of_sol_eq (S := S₂d) (S' := S₂d.park ⟨α, ⟨Row.var r, .lab l, δ⟩⟩) rfl)))
-      have kp : SolverState.KeepsS S₂d (S₂d.park ⟨α, ⟨Row.var r, .lab l, δ⟩⟩) :=
+        (SolverState.Ext.of_sol_eq (S := S₂d) (S' := S₂d.park ⟨α, ⟨Row.var r, .lab l, .var δ⟩⟩) rfl)))
+      have kp : SolverState.KeepsS S₂d (S₂d.park ⟨α, ⟨Row.var r, .lab l, .var δ⟩⟩) :=
         SolverState.KeepsS.of_sub (fun q hq => List.mem_cons_of_mem _ hq)
       have mp := SolverState.SatMono.of_sol_eq
-        (S := S₂d.park ⟨α, ⟨Row.var r, .lab l, δ⟩⟩) (S' := S₂d) rfl
+        (S := S₂d.park ⟨α, ⟨Row.var r, .lab l, .var δ⟩⟩) (S' := S₂d) rfl
       have K := ka.trans (k₂.trans (kb.trans kp mp) (mb.trans mp))
         (hs.satMono.trans (mb.trans mp))
       obtain ⟨hs₂, -⟩ := draw_eqs hd₂
@@ -967,12 +982,12 @@ theorem inferSound_of {B C : Type} [DecidableEq B] {constTy : C → B}
       obtain ⟨hsd, hpd⟩ := draw_eqs hd
       have c₂ := hs.clean (hsd ▸ c₁)
       have q₂ := hs.quiescent
-      have kp : SolverState.KeepsS S₃d (S₃d.park ⟨α, ⟨Row.var r, τ₂, δ⟩⟩) :=
+      have kp : SolverState.KeepsS S₃d (S₃d.park ⟨α, ⟨Row.var r, τ₂, .var δ⟩⟩) :=
         SolverState.KeepsS.of_sub (fun q hq => List.mem_cons_of_mem _ hq)
       have mp := SolverState.SatMono.of_sol_eq
-        (S := S₃d.park ⟨α, ⟨Row.var r, τ₂, δ⟩⟩) (S' := S₃d) rfl
+        (S := S₃d.park ⟨α, ⟨Row.var r, τ₂, .var δ⟩⟩) (S' := S₃d) rfl
       have x₂ := (Infer.ext h₂).trans ((draw_ext hd₂).trans
-        (SolverState.Ext.of_sol_eq (S := S₃d) (S' := S₃d.park ⟨α, ⟨Row.var r, τ₂, δ⟩⟩) rfl))
+        (SolverState.Ext.of_sol_eq (S := S₃d) (S' := S₃d.park ⟨α, ⟨Row.var r, τ₂, .var δ⟩⟩) rfl))
       have x₁ := (draw_ext hd).trans (hs.ext.trans x₂)
       have K₂ := k₃.trans (kb.trans kp mp) (mb.trans mp)
       have m₂ := (Infer.sat_mono h₂).trans (mb.trans mp)
@@ -987,7 +1002,7 @@ theorem inferSound_of {B C : Type} [DecidableEq B] {constTy : C → B}
         (hab.back x₁ c₁) hσ₁ Γ' hr)
       have ih₂ := (kb.trans kp mp).lift hσ hr (inferSound_of hvar hlet h₂ i₂ hΓ c₂ q₂ σ
         (hab.back ((draw_ext hd₂).trans (SolverState.Ext.of_sol_eq (S := S₃d)
-          (S' := S₃d.park ⟨α, ⟨Row.var r, τ₂, δ⟩⟩) rfl)) (Infer.clean h₂ c₂)) hσ₃ Γ' hr)
+          (S' := S₃d.park ⟨α, ⟨Row.var r, τ₂, .var δ⟩⟩) rfl)) (Infer.clean h₂ c₂)) hσ₃ Γ' hr)
       exact .assumeDyn (.qEq ih₁ (hsolve.unifies_sat hσ₂')) ih₂ List.mem_cons_self
   | _, _, _, _, _, .rcd hb, h, hΓ, hc, hq => fun σ hab hσ Γ' hr =>
       .qRcd (inferRecSound_of hvar hlet hb h hΓ hc hq σ hab hσ Γ' hr)

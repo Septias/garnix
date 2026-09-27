@@ -283,7 +283,7 @@ theorem inferSoundC_false : ¬ InferSoundC Unit Unit (fun _ => ()) := by
 
 private def lcS1 : SolverState Unit :=
   ⟨⟨[(natName 1, .rcd (.var (natName 2)))], []⟩,
-   [⟨natName 2, ⟨.var (natName 2), .lab "l", natName 3⟩⟩], [], ⟨4⟩,
+   [⟨natName 2, ⟨.var (natName 2), .lab "l", .var (natName 3)⟩⟩], [], ⟨4⟩,
    [(natName 3, .ty), (natName 2, .row), (natName 1, .ty)]⟩
 
 private def lcS2 : SolverState Unit := { lcS1 with parked := [] }

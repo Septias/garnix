@@ -21,7 +21,6 @@ import Infer
 
 namespace MinimalCalculus
 
-deriving instance DecidableEq for Ty, Row
 deriving instance DecidableEq for Stump
 
 variable {B : Type}
@@ -51,11 +50,11 @@ structure LetAdmissible (Γ : QCtx B) (S S₁ : SolverState B) (ᾱ : List TyVar
   gfresh   : ∀ α ∈ ᾱ, ∀ β ∈ Γ.ftv, α ∉ (S₁.subst.ty β).ftv ∧ α ∉ (S₁.subst.row β).ftv
   own      : ∀ p ∈ S₁.parked, p.blocker ∈ ᾱ → ∀ q ∈ S.parked, p.stump ≠ q.stump
   res      : ∀ p ∈ S₁.parked, p.blocker ∈ ᾱ →
-               S₁.subst.ty p.stump.res = .var (S₁.resVar p.stump.res) ∧ S₁.resVar p.stump.res ∈ ᾱ
+               p.stump.res.applySubst S₁.subst = .var (S₁.resVar p.stump.res) ∧ S₁.resVar p.stump.res ∈ ᾱ
   inj      : ∀ p ∈ S₁.parked, p.blocker ∈ ᾱ → ∀ q ∈ S₁.parked, q.blocker ∈ ᾱ →
                S₁.resVar p.stump.res = S₁.resVar q.stump.res → p.stump = q.stump
   dis      : ∀ α ∈ ᾱ, ∀ p ∈ S₁.parked, p.blocker ∉ ᾱ →
-               α ∉ (p.stump.row.applySubst S₁.subst).ftv ∧ α ∉ (S₁.subst.ty p.stump.res).ftv ∧
+               α ∉ (p.stump.row.applySubst S₁.subst).ftv ∧ α ∉ (p.stump.res.applySubst S₁.subst).ftv ∧
                α ∉ (p.stump.label.applySubst S₁.subst).ftv
   unsolved : ∀ α ∈ ᾱ, α ∉ S₁.sol.dom
   indep    : ∀ p ∈ S₁.parked, p.blocker ∈ ᾱ → ∀ q ∈ S₁.parked, q.blocker ∈ ᾱ →
@@ -90,7 +89,7 @@ theorem LetAdmissible.union {Γ : QCtx B} {S S₁ : SolverState B} {ᾱ₁ ᾱ�
   -- in that side's Δγ, which may not mention the result q is generalized at
   have sideInj : ∀ {ᾱ : List TyVar}, LetAdmissible Γ S S₁ ᾱ →
       ∀ p ∈ S₁.parked, ∀ q ∈ S₁.parked, q.blocker ∈ ᾱ →
-      S₁.subst.ty p.stump.res = .var (S₁.resVar p.stump.res) →
+      p.stump.res.applySubst S₁.subst = .var (S₁.resVar p.stump.res) →
       S₁.resVar p.stump.res = S₁.resVar q.stump.res → p.stump = q.stump := by
     intro ᾱ hj p hp q hq hqb hpv he
     by_cases hpb : p.blocker ∈ ᾱ
@@ -115,7 +114,7 @@ theorem LetAdmissible.union {Γ : QCtx B} {S S₁ : SolverState B} {ᾱ₁ ᾱ�
     · exact ⟨(h₁.res p hp h).1, List.mem_append_left _ (h₁.res p hp h).2⟩
     · exact ⟨(h₂.res p hp h).1, List.mem_append_right _ (h₂.res p hp h).2⟩
   · intro p hp hb q hq hqb he
-    have hpv : S₁.subst.ty p.stump.res = .var (S₁.resVar p.stump.res) := by
+    have hpv : p.stump.res.applySubst S₁.subst = .var (S₁.resVar p.stump.res) := by
       rcases List.mem_append.mp hb with h | h
       · exact (h₁.res p hp h).1
       · exact (h₂.res p hp h).1
@@ -214,11 +213,11 @@ def LetBad (Γ : QCtx B) (S S₁ : SolverState B) (ᾱ : List TyVar) (α : TyVar
   -- a stump blocked on α answers with a non-variable or outside ᾱ, or was
   -- parked before the let
   (∃ p ∈ S₁.parked, p.blocker = α ∧
-     (S₁.subst.ty p.stump.res ≠ .var (S₁.resVar p.stump.res) ∨ S₁.resVar p.stump.res ∉ ᾱ ∨
+     (p.stump.res.applySubst S₁.subst ≠ .var (S₁.resVar p.stump.res) ∨ S₁.resVar p.stump.res ∉ ᾱ ∨
       ∃ q ∈ S.parked, p.stump = q.stump)) ∨
   -- a stump that must stay in Δ_Γ mentions α
   (∃ p ∈ S₁.parked, p.blocker ∉ ᾱ ∧
-     (α ∈ (p.stump.row.applySubst S₁.subst).ftv ∨ α ∈ (S₁.subst.ty p.stump.res).ftv ∨
+     (α ∈ (p.stump.row.applySubst S₁.subst).ftv ∨ α ∈ (p.stump.res.applySubst S₁.subst).ftv ∨
       α ∈ (p.stump.label.applySubst S₁.subst).ftv)) ∨
   -- generalizing a stump blocked on α would generalize its result, which some
   -- parked row mentions
@@ -228,7 +227,7 @@ def LetBad (Γ : QCtx B) (S S₁ : SolverState B) (ᾱ : List TyVar) (α : TyVar
   -- a stump blocked on α reads its result as the same variable as another one
   (∃ q ∈ S₁.parked, q.blocker = α ∧
      ∃ p ∈ S₁.parked, p.stump ≠ q.stump ∧ S₁.resVar p.stump.res = S₁.resVar q.stump.res ∧
-       S₁.subst.ty p.stump.res = .var (S₁.resVar p.stump.res))
+       p.stump.res.applySubst S₁.subst = .var (S₁.resVar p.stump.res))
 
 instance [DecidableEq B] {Γ : QCtx B} {S S₁ : SolverState B} {ᾱ : List TyVar} {α : TyVar} :
     Decidable (LetBad Γ S S₁ ᾱ α) := by
@@ -271,7 +270,7 @@ theorem LetBad.excluded {Γ : QCtx B} {S S₁ : SolverState B} {ᾱ ᾱ' : List 
 theorem LetAdmissible.of_no_bad {Γ : QCtx B} {S S₁ : SolverState B} {ᾱ : List TyVar}
     (h : ∀ α ∈ ᾱ, ¬ LetBad Γ S S₁ ᾱ α) : LetAdmissible Γ S S₁ ᾱ := by
   have hres : ∀ p ∈ S₁.parked, p.blocker ∈ ᾱ →
-      S₁.subst.ty p.stump.res = .var (S₁.resVar p.stump.res) ∧ S₁.resVar p.stump.res ∈ ᾱ :=
+      p.stump.res.applySubst S₁.subst = .var (S₁.resVar p.stump.res) ∧ S₁.resVar p.stump.res ∈ ᾱ :=
     fun p hp hb => ⟨Classical.byContradiction fun hn =>
         h _ hb (.inr (.inr (.inr (.inl ⟨p, hp, rfl, .inl hn⟩)))),
       Classical.byContradiction fun hn =>

@@ -152,7 +152,7 @@ theorem letCase {C : Type} {constTy : C → B} : LetCase B C constTy := by
   let sc := letScheme S₁ ᾱ Δq τ₁
   let LΓ : List TyVar := Γ.ftv.flatMap (fun β => (S₁.subst.ty β).ftv ++ (S₁.subst.row β).ftv)
   let LΔ : List TyVar := Δγ.flatMap (fun p =>
-    (p.stump.row.applySubst S₁.subst).ftv ++ (S₁.subst.ty p.stump.res).ftv ++
+    (p.stump.row.applySubst S₁.subst).ftv ++ (p.stump.res.applySubst S₁.subst).ftv ++
       (p.stump.label.applySubst S₁.subst).ftv)
   obtain ⟨f, hinj, -, havL⟩ := fresh_renaming_exists σ ᾱ (sc.freeFtv ++ LΓ ++ LΔ)
   let sc' := sc.readAt σ f
@@ -172,9 +172,10 @@ theorem letCase {C : Type} {constTy : C → B} : LetCase B C constTy := by
     · intro st hst
       obtain ⟨st₀, hst₀, rfl⟩ := List.mem_map.mp hst
       obtain ⟨p, hp, rfl⟩ := List.mem_map.mp hst₀
-      show (if S₁.resVar p.stump.res ∈ ᾱ then f (S₁.resVar p.stump.res)
-        else S₁.resVar p.stump.res) ∈ ᾱ.map f
-      rw [if_pos (hres.1 p hp).2]; exact List.mem_map_of_mem (hres.1 p hp).2
+      refine ⟨f (S₁.resVar p.stump.res), List.mem_map_of_mem (hres.1 p hp).2, ?_⟩
+      show (if S₁.resVar p.stump.res ∈ ᾱ then Ty.var (f (S₁.resVar p.stump.res))
+        else σ.ty (S₁.resVar p.stump.res)) = _
+      rw [if_pos (hres.1 p hp).2]
     · intro a ha b hb he
       obtain ⟨a₀, ha₀, rfl⟩ := List.mem_map.mp ha
       obtain ⟨p, hp, rfl⟩ := List.mem_map.mp ha₀
@@ -182,9 +183,10 @@ theorem letCase {C : Type} {constTy : C → B} : LetCase B C constTy := by
       obtain ⟨q, hq, rfl⟩ := List.mem_map.mp hb₀
       have he' : f (S₁.resVar p.stump.res) = f (S₁.resVar q.stump.res) := by
         have := he
-        simp only [if_pos (show S₁.resVar p.stump.res ∈ sc.vars from (hres.1 p hp).2),
-          if_pos (show S₁.resVar q.stump.res ∈ sc.vars from (hres.1 q hq).2)] at this
-        exact this
+        change (readSub σ ᾱ f).ty (S₁.resVar p.stump.res)
+          = (readSub σ ᾱ f).ty (S₁.resVar q.stump.res) at this
+        simp only [readSub, if_pos (hres.1 p hp).2, if_pos (hres.1 q hq).2] at this
+        exact Ty.var.inj this
       have hpq := hres.2 p hp q hq (hinj _ (hres.1 p hp).2 _ (hres.1 q hq).2 he')
       rw [hpq]
     · intro a ha b hb
@@ -192,7 +194,13 @@ theorem letCase {C : Type} {constTy : C → B} : LetCase B C constTy := by
       obtain ⟨p, hp, rfl⟩ := List.mem_map.mp ha₀
       obtain ⟨b₀, hb₀, rfl⟩ := List.mem_map.mp hb
       obtain ⟨q, hq, rfl⟩ := List.mem_map.mp hb₀
-      simp only [if_pos (show S₁.resVar q.stump.res ∈ sc.vars from (hres.1 q hq).2)]
+      intro δ hδm
+      have hbres : (readSub σ ᾱ f).ty (S₁.resVar q.stump.res) = .var (f (S₁.resVar q.stump.res)) := by
+        simp only [readSub, if_pos (hres.1 q hq).2]
+      change δ ∈ ((readSub σ ᾱ f).ty (S₁.resVar q.stump.res)).ftv at hδm
+      rw [hbres] at hδm
+      simp only [Ty.ftv, List.mem_singleton] at hδm
+      subst hδm
       -- the same argument at the row and at the key
       have hin : f (S₁.resVar q.stump.res) ∈ ᾱ.map f := List.mem_map_of_mem (hres.1 q hq).2
       refine ⟨fun hm => ?_, fun hm => ?_⟩
@@ -265,13 +273,13 @@ theorem letCase {C : Type} {constTy : C → B} : LetCase B C constTy := by
         rw [← Row.applySubst_applySubst, hi₂]
     have hr₁ : CtxRead σ₁ Γ Γ' := ⟨fun y sc₀ hy => by
       obtain ⟨sc₀', hl', hs⟩ := hr.schem y sc₀ hy
-      refine ⟨sc₀', hl', hs.congr (fun α hα _ => hΓag α ?_)⟩
+      refine ⟨sc₀', hl', hs.congr (hΓ y sc₀ hy).1 (fun α hα _ => hΓag α ?_)⟩
       refine QCtx.lookup_ftv_subset hy α ?_
       unfold QScheme.freeFtv at hα; unfold QScheme.ftv
       rcases List.mem_append.mp hα with hα | hα
       · obtain ⟨st, hst, hα⟩ := List.mem_flatMap.mp hα
         exact List.mem_append_left _ (List.mem_append_right _
-          (List.mem_flatMap.mpr ⟨st, hst, List.mem_cons_of_mem _ hα⟩))
+          (List.mem_flatMap.mpr ⟨st, hst, List.mem_append_right _ hα⟩))
       · exact List.mem_append_right _ hα⟩
     have ih := IH₁ σ₁ hab₁' (hab₁'.sat c₁) Γ' hr₁
     -- the type e₁ gets is the read body at χ
@@ -287,8 +295,7 @@ theorem letCase {C : Type} {constTy : C → B} : LetCase B C constTy := by
     · -- a generalized stump: it IS the read constraint at χ
       refine .inl (List.mem_append_left _ (List.mem_map.mpr ⟨_, List.mem_map.mpr
         ⟨_, List.mem_map.mpr ⟨p, hp, rfl⟩, rfl⟩, ?_⟩))
-      have hr' := (hres.1 p hp).2
-      simp only [Stump.at, if_pos hr']
+      simp only [Stump.at]
       congr 1
       · show ((p.stump.row.applySubst S₁.subst).applySubst (readSub σ ᾱ f)).applySubst χ
           = p.stump.row.applySubst (ρ.comp S₁.subst)
@@ -296,16 +303,13 @@ theorem letCase {C : Type} {constTy : C → B} : LetCase B C constTy := by
       · show ((p.stump.label.applySubst S₁.subst).applySubst (readSub σ ᾱ f)).applySubst χ
           = p.stump.label.applySubst (ρ.comp S₁.subst)
         rw [Ty.applySubst_applySubst, Ty.applySubst_applySubst]
-      · rw [if_pos (show S₁.resVar p.stump.res ∈ sc.vars from hr')]
-        show χ.ty (f (S₁.resVar p.stump.res)) = (S₁.subst.ty p.stump.res).applySubst ρ
-        rw [(hres.1 p hp).1]
-        show χ.ty (f (S₁.resVar p.stump.res))
-          = ((readSub σ ᾱ f).ty (S₁.resVar p.stump.res)).applySubst χ
-        simp only [readSub, if_pos hr', Ty.applySubst]
+      · show ((Ty.var (S₁.resVar p.stump.res)).applySubst (readSub σ ᾱ f)).applySubst χ
+          = p.stump.res.applySubst (ρ.comp S₁.subst)
+        rw [← Ty.applySubst_applySubst _ _ p.stump.res, (hres.1 p hp).1, Ty.applySubst_applySubst]
     · -- a stump that stays: its σ₁-reading is its σ-reading, and it is kept
       have hsame : p.stump.at σ₁ = p.stump.at σ := by
         have hLΔ : ∀ γ, γ ∈ (p.stump.row.applySubst S₁.subst).ftv ++
-            (S₁.subst.ty p.stump.res).ftv ++ (p.stump.label.applySubst S₁.subst).ftv →
+            (p.stump.res.applySubst S₁.subst).ftv ++ (p.stump.label.applySubst S₁.subst).ftv →
             γ ∈ sc.freeFtv ++ LΓ ++ LΔ :=
           fun γ hγ => List.mem_append_right _ (List.mem_flatMap.mpr ⟨p, hp, hγ⟩)
         simp only [Stump.at]
@@ -320,8 +324,8 @@ theorem letCase {C : Type} {constTy : C → B} : LetCase B C constTy := by
           exact Ty.applySubst_congr _ (fun γ hγ =>
             hρ γ (hLΔ γ (List.mem_append_right _ hγ))
             (fun hm => (hdis γ hm p hp).2.2 hγ))
-        · show (S₁.subst.ty p.stump.res).applySubst ρ = _
-          rw [← (hab₁ p.stump.res).1]
+        · show p.stump.res.applySubst (ρ.comp S₁.subst) = _
+          rw [← Ty.applySubst_applySubst, ← hab₁.ty]
           exact Ty.applySubst_congr _ (fun γ hγ =>
             hρ γ (hLΔ γ (List.mem_append_left _ (List.mem_append_right _ hγ)))
             (fun hm => (hdis γ hm p hp).2.1 hγ))
@@ -340,9 +344,8 @@ theorem letCase {C : Type} {constTy : C → B} : LetCase B C constTy := by
     · obtain ⟨st₀, hst₀, rfl⟩ := List.mem_map.mp hst
       obtain ⟨p, hp, rfl⟩ := List.mem_map.mp hst₀
       have hr' := (hres.1 p hp).2
-      have hδ : χ₀.ty (if S₁.resVar p.stump.res ∈ ᾱ then f (S₁.resVar p.stump.res)
-          else S₁.resVar p.stump.res) = .unk := by
-        simp only [if_pos hr', χ₀]
+      have hδ : ((readSub σ ᾱ f).ty (S₁.resVar p.stump.res)).applySubst χ₀ = .unk := by
+        simp only [readSub, if_pos hr', Ty.applySubst, χ₀]
         rw [if_pos (List.mem_map.mpr ⟨p, hp, rfl⟩)]
       -- the blocker is generalized, so it is read as a fresh variable; a KEY
       -- blocker is moreover no generalized answer, so χ₀ leaves it a variable

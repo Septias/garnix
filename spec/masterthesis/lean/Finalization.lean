@@ -32,8 +32,8 @@ variable {B : Type} [DecidableEq B]
 -- substituted, and a clean ⟦S⟧ leaves such a variable alone.)
 
 -- ⊢  `δ ≐ ★` binds nothing at the row sort
-private theorem solve_star_row_free {S S₀ : SolverState B} {δ : TyVar}
-    (hs : SolveTy S (.var δ) .unk S₀) {β : TyVar} (hβ : S.subst.row β = .var β) :
+private theorem solve_star_row_free {S S₀ : SolverState B} {τ : Ty B}
+    (hs : SolveTy S τ .unk S₀) {β : TyVar} (hβ : S.subst.row β = .var β) :
     S₀.subst.row β = .var β := by
   obtain ⟨fuel, s, Sup, hu, rfl⟩ := hs
   have hg := (unifyM_good fuel).1 S.supply _ _ hu
@@ -45,7 +45,7 @@ private theorem solve_star_row_free {S S₀ : SolverState B} {δ : TyVar}
     have := hg.dom _ hd
     revert this hu
     simp only [Ty.applySubst]
-    cases S.subst.ty δ with
+    cases τ.applySubst S.subst with
     | var γ => intro _ h; simp [Ty.sortedFtv] at h
     | unk => intro _ h; simp [Ty.sortedFtv] at h
     | base b => intro hu; simp [unifyTyF] at hu
@@ -71,14 +71,14 @@ private theorem starOrVar_tyLookup {s : List (TyVar × Ty B)}
       · exact .inl (hs p List.mem_cons_self)
       · exact ih (fun q hq => hs q (List.mem_cons_of_mem _ hq))
 
-private theorem solve_star_sol {S S₀ : SolverState B} {δ : TyVar}
-    (hs : SolveTy S (.var δ) .unk S₀) :
+private theorem solve_star_sol {S S₀ : SolverState B} {τ : Ty B}
+    (hs : SolveTy S τ .unk S₀) :
     ∃ s Sup, S₀ = S.extend s Sup ∧ ∀ p ∈ s.ty, p.2 = .unk := by
   obtain ⟨fuel, s, Sup, hu, rfl⟩ := hs
   refine ⟨s, Sup, rfl, ?_⟩
   revert hu
   simp only [Ty.applySubst]
-  cases S.subst.ty δ with
+  cases τ.applySubst S.subst with
   | var γ =>
       intro hu
       cases fuel <;>
@@ -198,7 +198,7 @@ theorem runSound {C : Type} {constTy : C → B} : RunSound B C constTy := by
 private def icA : Ty Unit := .rcd (.cat (.sing "a" (.base ())) (.sing "b" (.base ())))
 private def icB : Ty Unit := .rcd (.cat (.sing "b" (.base ())) (.sing "a" (.base ())))
 private def icSc : QScheme Unit :=
-  ⟨["d"], [⟨.sing "l" icA, .lab "l", "d"⟩, ⟨.sing "l" icB, .lab "l", "d"⟩], .var "d"⟩
+  ⟨["d"], [⟨.sing "l" icA, .lab "l", .var "d"⟩, ⟨.sing "l" icB, .lab "l", .var "d"⟩], .var "d"⟩
 private def icχ : TySubst Unit := ⟨fun x => if x = "d" then icA else .var x, fun x => .var x⟩
 
 private theorem icA_equiv_icB : TyEquiv icA icB :=
@@ -218,8 +218,8 @@ theorem instEquivCorrects_false : ¬ InstEquivCorrects Unit := by
       rcases hst with rfl | rfl
       · exact .hit (τ := icA) (.lit .hit) (by simp [icχ]; exact .refl _)
       · exact .hit (τ := icB) (.lit .hit) (by simp [icχ]; exact icA_equiv_icB))
-  have h1 := hdis ⟨.sing "l" icA, .lab "l", "d"⟩ (by simp [icSc])
-  have h2 := hdis ⟨.sing "l" icB, .lab "l", "d"⟩ (by simp [icSc])
+  have h1 := hdis ⟨.sing "l" icA, .lab "l", .var "d"⟩ (by simp [icSc])
+  have h2 := hdis ⟨.sing "l" icB, .lab "l", .var "d"⟩ (by simp [icSc])
   cases h1 with
   | hit hl₁ he₁ =>
     cases h2 with
