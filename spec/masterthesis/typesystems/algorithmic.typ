@@ -1,5 +1,5 @@
 == L2 Calculus
-> Functions, scoped records, record concat, row-vars, let-poly, qualified schemes, parked lookups
+> Functions, scoped records, record-concat, row-vars, fc-labels, let-poly, qualified schemes, parked lookups
 
 l ∈ 𝓛  x ∈ 𝓧  𝓫 ∈ 𝓑  c ∈ 𝓒
 
@@ -18,16 +18,8 @@ Q := ∅ | q, Q
 
 
 == Sorts
-- κ classifies *variables*, nothing else: τ and ρ are already disjoint
-  syntactic categories, so every closed phrase reads it's sort off the grammar.
-  α at a type position and α at a row position are not the same variable
-- Only T-λ-I and T-let carry a sorting premise: they are the only rules whose
-  conclusion mentions a type resp. a scheme not already determined by the
-  premises
-- Substitutions respect sorts: (Γ ⊢ θ: ᾱ:κ̄) means θ is the identity outside ᾱ
-  and Γ ⊢ θα: κ for every (α: κ) ∈ ᾱ:κ̄
-- Γ binds no row-solutions. Solved row-vars live in the solver's θ and are
-  applied as a substitution; ↓ never reads Γ (see Row-Lookup)
+- κ classifies variables
+- τ and ρ are syntactically disjoint
 
 
 α: Type ∈ Γ
@@ -78,7 +70,7 @@ Q := ∅ | q, Q
 
 
 (∀ q ∈ Q. Γ·(ᾱ: κ̄) ⊢ q ok)   Γ·(ᾱ: κ̄) ⊢ τ: Type
--------------------------------------------------- [S-scheme]¿
+-------------------------------------------------- S-scheme
 Γ ⊢ (∀(ᾱ: κ̄). Q ⇒ τ) ok
 
 
@@ -91,8 +83,6 @@ Q := ∅ | q, Q
   generalization time
 - Plain schemes embed as Q = ∅; the discharge premise is then vacuous and
   ≥ degenerates to the σ ≥ τ of the minimal calculus
-- ∀(β: Row)(δ: Type). ⟨β.l ↓ δ⟩ ⇒ {β} → δ is the principal scheme of (x: x.l);
-  no plain ∀ᾱ. τ scheme covers both its found- and its ⊥-instances
 
 
 == Declarative
@@ -124,12 +114,6 @@ x: σ ∈ Γ   σ ≥ τ
 Γ ⊢ σ ok   (∀ τ₁. σ ≥ τ₁ ⟹ Γ ⊢ e₁: τ₁)   (∃ τ₁. σ ≥ τ₁)   Γ·(x: σ) ⊢ e₂: τ₂
 ------------------------------------------------------------------------------------ T-let
 Γ ⊢ let x = e₁ in e₂: τ₂
-// Instance-closed over *discharged* instances. The inhabitation premise is not
-// bureaucracy: with Q ≠ ∅ a scheme can have NO Γ-instance, and the
-// instance-closed premise then says nothing about e₁ — `let x = (3 4) in 5`
-// would type while being stuck and progress would be false. Plain schemes
-// satisfy it by I-inst with θ = id; the solver satisfies it by construction,
-// a parked stump discharging at ★ if nothing better.
 
 
 Γ ⊢ e₁: { ρ₁ }  Γ ⊢ e₂: { ρ₂ }
@@ -141,7 +125,7 @@ x: σ ∈ Γ   σ ≥ τ
 --------------------------- T-sel
 Γ ⊢ e.l: τ
 
-
+// -------------------- The soft-typing rules -----------------------
 Γ ⊢ e: {ρ}   ρ.l ↓ ?
 -------------------------- T-sel-★
 Γ ⊢ e.l: ★
@@ -155,6 +139,8 @@ x: σ ∈ Γ   σ ≥ τ
 Γ ⊢ e: τ
 --------- T-★-intro
 Γ ⊢ e: ★
+
+// ------------------------------------------------------------------
 
 
 Γ ⊢ ξ: ρ
@@ -179,13 +165,6 @@ x: σ ∈ Γ   σ ≥ τ
 == Instantiation
 - (σ ≥ τ) instantiates all quantifiers at once via a *sort-respecting* θ over ᾱ,
   then discharges every q ∈ Q
-- *Not Γ-relative*, unlike an earlier presentation. That one carried
-  row-solutions in Γ and had discharge read them, and called the Γ-dependence
-  "the price of cross-instantiation refinement". It is not a price anyone has to
-  pay: discharge substitutes the row with θ and then looks up, and ↓ reads
-  nothing else. So ≥ is again the Γ-independent relation of the minimal
-  calculus, and the refinement Γ was carrying is carried by θ — which is where
-  the algorithm keeps it anyway
 - *No tail check needed*: By substitution-stability of ↓,
   instantiating a row-var can never invalidate a definite lookup result — every
   position it could shadow was already ?-poisoned
@@ -220,21 +199,6 @@ x: σ ∈ Γ   σ ≥ τ
 == Row-Lookup
 - (ρ.l ↓ r) with (r := τ | ⊥ | ?)
 - This statement recursively searches rows for a label l
-- *Context-free*: the judgement reads nothing but the row. An earlier
-  presentation carried *row-solutions* (α = ρ) in Γ and added a rule L-α to
-  chase them, with L-α-free firing when α was unsolved. L-α was an
-  implementation of substitution, and it cost three things: ↓ was not total by
-  structural recursion (a solution chain can cycle, so totality needed a rank
-  function on row-vars), L-α-free's premise "α unsolved in Γ" was *negative* and
-  so not preserved by context extension, and instantiation had to become
-  Γ-relative. A row-var that stands for a known row is substituted away before
-  the lookup runs, which is what substitution-stability below says, so nothing is lost
-- Absent means the label provably does not exist in ρ; T-sel-⊥ still types the
-  selection at ★ (soft typing: the checker flags it, the ↯-disjunct of progress
-  catches it at runtime)
-- Unknown means a row-var could contain l, so no definite type can be derived.
-  A row-var is therefore *always* unknown — L-α-free is the only rule that
-  mentions one, and the algorithm reads it as `? on α` (see Solver State)
 
 
 ------------ L-ε
@@ -268,14 +232,6 @@ l₁ ≠ l₂
 ρ₁.l ↓ ?
 -------------------- L-conc-★
 (ρ₁ | ρ₂).l ↓ ?
-
-
-- *Determinism*: every row shape matches exactly one rule
-- *Totality*: by structural recursion on ρ — no side condition. In particular
-  the solver's θ need not be acyclic for a lookup premise to have a derivation
-- *Substitution-stability*: if (ρ.l ↓ r) with r definite, then
-  (θρ.l ↓ θr). Only ? can change category, and that demotion is what
-  T-sel-⊥ / T-★-intro absorb. This is the rule L-α used to implement
 
 
 == Row-Equivalence
@@ -344,14 +300,7 @@ rem\_l(s)       remove the first l-field ANYWHERE (vars skipped)
 
 
 == Unification
-- Two mutual judgements, one per sort: (τ₁ ≐ τ₂ ⇝ v) at Type and
-  (s₁ ≐ᵣ s₂ ⇝ v) at Row.
-- Type equations emitted by the row pass are solved ON THE SPOT and their
-  solution applied to the residual before recursing — never deferred, which is
-  what makes `stuck` mean something
-
 v := θ | clash | occurs | stuck | no-fuel
-
 
 === Type unification  τ₁ ≐ τ₂ ⇝ v
 
@@ -367,10 +316,6 @@ v := θ | clash | occurs | stuck | no-fuel
 τ ≠ α   α ∈ ftv_Ty(τ)
 -------------------- U-occurs
 α ≐ τ ⇝ occurs
-// SORTED: ftv_Ty collects the occurrences at TYPE positions only, so
-// α ≐ {… α …} with a row-var α is a BINDING, not a failure — the binding never
-// reaches that occurrence. Mechanized as `Ty.tyVars`; the
-// rejections it keeps are genuine no-unifiers
 
 
 ----------- U-★
@@ -403,27 +348,10 @@ head(τ₁) ≠ head(τ₂)
 
 
 === Row unification  s₁ ≐ᵣ s₂ ⇝ v
-- Tried in this order, first trigger wins: U-ε-var, U-ε-clash (both BEFORE the
-  fuel guard — an exhausted side needs no budget), U-var-refl-L, U-var-refl-R,
-  U-var-solve, U-var-occurs, U-field-L, U-field-R, U-ground, U-clash, U-stuck
-- U-var-solve, U-var-occurs, U-field-L, U-field-R and U-ground are also tried
-  with the two sides exchanged; U-ε-var, U-ε-clash and U-clash are symmetric
-- Every move is FORCED (solution-set preserving). U-expand — P&X's LUtail with
-  the guess removed, firing on a unique host variable — is GONE (2026-09-23,
-  plans/drop-expand.md): its four arms now answer `stuck`. Nothing invents
-  structure any more, so a success's solution mentions only problem variables
-- U-clash sits at the BOTTOM, not the top: a clash is diagnosed only once every
-  forced move is dead. Cancellativity turns α ≐ᵣ (l: 𝓫 | α) into a clash rather
-  than an occurs-failure, which is strictly better information
-- No rule pushes a field demand INTO a var: lookups park as stumps, so the
-  algorithm never guesses a field into a variable
-- TERMINATES (`unifyRowM_terminates`, RowUnify/Termination.lean, 2026-09-26):
-  measure (problem variables inside a fixed universe, size), lexicographic.
-  `unifyRow` is the total function and every fuelled run that answers agrees
-  with it (`unifyRow_eq`), so `no-fuel` is never the last word
-- Solutions are well-formed and ACYCLIC (`unifyWF`, RowUnify/Applied.lean,
-  2026-09-26): keys and mentions ⊆ problem variables, no binding mentions a key.
-  So ⟦S⟧ is the solution applied once, and lookups under it are total
+- Every move is FORCED (solution-set preserving).
+- Tried top-to-bottom
+- No rule pushes a field demand INTO a var: lookups park as stumps, so *the
+  algorithm never guesses a field into a variable*
 
 s field-free   vars(s) = β̄
 --------------------------- U-ε-var
@@ -461,14 +389,6 @@ t₁·α ≐ᵣ t₂·α ⇝ θ
 α ∈ rowvars(s)   ¬(α ∈ vars(s) ∧ s field-free)
 ---------------------------------------------- U-var-occurs
 α ≐ᵣ s ⇝ occurs
-// What is left after U-var-collapse: α under a record constructor (depth grows
-// — `deep_occurs_no_unifier`) or on the spine with a field present (counting —
-// `occurs_field_no_unifier`). Both are genuine no-unifiers, so the case
-// analysis CLOSES: `solveVarM_occurs_no_unifier`, unconditional now that
-// U-expand is gone, and lifted through the whole driver by plain induction
-// (`unifyRowM_occurs_no_unifier`, RowUnify/OccursLift.lean, 2026-09-26).
-// rowvars(s) is `allRowVars` — the row variables at any depth, the row half of
-// the sorted occurs check.
 
 
 win\_l(s₂) = (τ′, t₂)   τ ≐ τ′ ⇝ θ   θt₁ ≐ᵣ θt₂ ⇝ θ′
@@ -496,33 +416,13 @@ s₁ ≐ᵣ s₂ ⇝ clash
 no rule above applies
 ----------------------- U-stuck
 s₁ ≐ᵣ s₂ ⇝ stuck
-// No forced move remains: a field can only be matched by a label that a VAR on
-// the other side would have to supply — Wand's shape, and since U-expand's
-// removal also the unique-host case, e.g. (l: {a}) ≐ᵣ (b | a) (`crossfield_stuck`).
-// CONSERVATIVE, with no converse: neither `stuck` nor terminality implies that
-// no mgu exists (`terminalNoMgu_false`, Refutations.lean). Cost of the removal on
-// Nix-shaped code (`Regressions.nix_*`): only a λ-bound callback applied to two
-// records extended by DIFFERENT fields over INDEPENDENT tails is lost.
 
 
 == Solver State
-- MECHANIZED as of 2026-09-18 (lean/Infer.lean): the state, the A-rules, wake-up,
-  saturation, finalization and the entry judgement below are all relations in
-  Lean, and `selEx_infers` / `selEx_runs` derive (x: x.l) through them end to end.
-- PROVED as of 2026-09-26: SOUNDNESS (`inferSound`, lean/LetCase.lean;
-  `runSound`, lean/Finalization.lean) and TERMINATION, about a real function
-  (`inferF`/`runF`, lean/InferFn.lean: every `ok` is a derivation; `run` is total,
-  `runF_terminates` / `run_typed`, lean/InferFnTerm.lean). Still DESIGN: that
-  the algorithm is deterministic up to renaming
-- θ is sort-respecting, hence really two maps — one per sort. ⟦S⟧τ applies S's
-  substitution as a closure
-- Δ indexes each parked stump by its *blocker*: the variable the lookup of the
-  substituted row stopped at (L-α-free, or the key for L-?-lab). The blocker is a wake-up index, NOT part of the constraint —
-  the declarative stump ⟨ρ.l ↓ δ⟩ carries none
-- W collects definite-absence and ★-finalization flags, named by the label that
-  produced them — A-sel-⊥, K-⊥ and F-★. It never affects typing, only diagnostics
-- The declarative system READS solutions by substitution — discharge looks up
-  θρ; the algorithm WRITES them via unification. θ is only ever refined
+- θ: Sort-respecting substitution. ⟦S⟧τ applies the substition of S to τ.
+- Δ: Indexed list of parked stumps
+- W: List of warnings
+- S: Solvest state
 
 S := (θ, Δ, W)
 Δ := ∅ | ⟨α ▷ ρ.l ↓ δ⟩, Δ
@@ -532,12 +432,8 @@ S ∖ Δ′         drop a set of stumps
 fresh α: κ     draw a name at sort κ from the threaded supply
 
 - *Quiescence*, the state invariant: every stump in Δ is genuinely blocked on the
-  blocker it records, `(⟦S⟧ρ).l ↓ ? on α` for each `⟨α ▷ ρ.l ↓ δ⟩ ∈ Δ`. A
-  blocker is then never a SOLVED variable, which is what makes the annotation
-  mean anything
-- It is not automatic, and the mechanization found that out: any rule that writes
-  a solution can solve some other stump's blocker, and only A-var ran wake-up. So
-  every equation in the A-rules below is *solve-then-saturate*
+  blocker it records, `(⟦S⟧ρ).l ↓ ? on α` for each `⟨α ▷ ρ.l ↓ δ⟩ ∈ Δ`.
+- Every equation in the A-rules below has to be  *solve-then-saturate*
 
 S ⊢ τ ≐ τ′ ⇝! S′    solve, then re-run wake-up on what the solution staled
 S ⊢ Δ ↝! S′         saturation itself: step on stale stumps until quiescent
@@ -545,19 +441,9 @@ S ⊢ Q ↝\*! S′       A-var's closure, then saturation
 
 
 == Inference
-- (Γ; S ⊢ e ⇒ τ; S′) is syntax-directed, one rule per term former. There are no
-  counterparts to T-eq and T-★-intro — inversion-mod-≈ and re-blurring account
-  for those on the declarative side
-- Failure policy: EVERY non-success verdict rejects — no rule applies, and that
-  absence IS the hard error. For `clash` and `occurs` this is justified: both are
-  PROVED to mean no unifier exists, `occurs` through the whole driver
-- `stuck` rejects too, although it has no such proof (`terminalNoMgu_false`).
-  DECIDED 2026-09-26: ★ stays RIGID, with no ★-eliminators, so A-app-deg /
-  A-sel-deg — which typed a stuck equation's site at ★ — had no declarative
-  counterpart and are DELETED. Rejecting is sound by construction; what it costs
-  is completeness. ★-elimination with blame is paper-only ("Towards Nix")
-- `no-fuel` has no rule either: it is a verdict about the budget, and unification
-  terminates, so a big enough budget never reaches it
+- Statements of the form: Γ; S ⊢ e ⇒ τ; S′
+- S stores the constraints
+
 
 ------------------- A-cons
 Γ; S ⊢ c ⇒ 𝓫_c; S
@@ -566,19 +452,6 @@ S ⊢ Q ↝\*! S′       A-var's closure, then saturation
 x: ∀(ᾱ: κ̄). Q ⇒ τ ∈ Γ   fresh β̄: κ̄   S ⊢ Q[β̄/ᾱ] ↝\*! S′
 -------------------------------------------------------- A-var
 Γ; S ⊢ x ⇒ τ[β̄/ᾱ]; S′
-// A-var IS I-inst: the instantiated constraints are submitted to wake-up, which
-// resolves the ones the current θ already decides and parks the rest. Parking
-// is the algorithmic image of D-? — only finalization commits ★. The blockers
-// of Q[β̄/ᾱ] are not given here; ↝\* computes each one, by K-park.
-//
-// `fresh β̄: κ̄` is a DRAW, and it means both halves (fixed 2026-09-26):
-// - FROM THE SUPPLY: β̄ are the supply's next |ᾱ| names and the supply moves past
-//   them. Merely avoiding the names S already uses is NOT enough — a later draw
-//   can reissue one, and two stumps end up sharing a result variable
-//   (`nameReuse_infers_unguarded`, lean/FreshNames.lean)
-// - AT A KIND: each βᵢ is recorded at the kind its binder was drawn at. Without
-//   it A-let can never generalize an instance's names, because A-let only
-//   generalizes variables with a recorded kind
 
 
 fresh α: Type   Γ·(x: α); S ⊢ e ⇒ τ; S′
@@ -609,9 +482,6 @@ fresh α: Type   Γ·(x: α); S ⊢ e ⇒ τ; S′
 Γ; S ⊢ e ⇒ τ; S₁   fresh ρ: Row   S₁ ⊢ τ ≐ {ρ} ⇝! S₂   (⟦S₂⟧ρ).l ↓ ? on α   fresh δ: Type
 -------------------------------------------------------------------------------------------- A-sel-?
 Γ; S ⊢ e.l ⇒ δ; S₂ ⊎ ⟨α ▷ ρ.l ↓ δ⟩
-// NOT ★: returning ★ here would freeze the result and lose every later
-// refinement — (x: x.l) would infer {β} -> ★ and no application could recover
-// the field type. The stump-var δ keeps the position writable.
 
 
 Γ; S ⊢ ξ ⇒ ρ; S′
@@ -632,51 +502,51 @@ fresh α: Type   Γ·(x: α); S ⊢ e ⇒ τ; S′
 ------------------------------------------- A-ξ-conc
 Γ; S ⊢ (ξ₁ | ξ₂) ⇒ (ρ₁ | ρ₂); S₂
 
+Γ; S ⊢ e₁ ⇒ τ₁; S₁   κ̄ = S₁(ᾱ)   Δ₁ ~ Δ_q ⊎ Δ_Γ   ᾱ ∩ ftv(⟦S₁⟧Γ) = ∅   ᾱ ∩ dom(S₁) = ∅
+Δ_q ∩ Δ = ∅   results(Δ_q) at S₁ ⊆ ᾱ, injective   ᾱ ∩ ftv(⟦S₁⟧Δ_Γ) = ∅   Δ_q independent at S₁
+Γ·(x: ∀(ᾱ: κ̄). ⟦S₁⟧Δ_q ⇒ ⟦S₁⟧τ₁); S₁ ∖ Δ_q ⊢ e₂ ⇒ τ₂; S₂
+---------------------------------------------------------------------------------------------- A-let
+Γ; S ⊢ let x = e₁ in e₂ ⇒ τ₂; S₂
+// Δ_q are the stumps whose blocker lands in ᾱ, Δ_Γ the rest.
+// Surviving stumps of Δ_Γ are NOT finalized here — they outlive the boundary.
+// Every premise past the first is one that soundness or completeness turned out to need
+// - κ̄ = S₁(ᾱ): kinds are read off the DRAW, not off Γ — ᾱ is disjoint from Γ,
+//   so Γ(ᾱ) was never writable. Every generalized binder is one inference
+//   invented at a known sort (A-var's draw records one, see there)
+// - Δ₁ ~ Δ_q ⊎ Δ_Γ: a PARTITION up to order. Δ₁ is ordered by parking time, and
+//   a prefix split could not generalize a stump parked after a Γ-stump
+// - ᾱ ∩ ftv(⟦S₁⟧Γ) = ∅, per variable of Γ and at both sorts: Γ-freshness was
+//   MISSING and `λy. let z = y in z` inferred a → b
+//   (`runSound_false_unguarded_let`, lean/LetSound.lean)
+// - ᾱ ∩ dom(S₁) = ∅: nothing already solved is generalized
+// - Δ_q ∩ Δ = ∅: Δ_q is e₁'s OWN. Without it `{a = λx. x.l, b = let y = c in c}`
+//   files a's stump under y's unused scheme and nothing ever finalizes it
+//   (`runSound_false_let_captures`)
+// - results at S₁: each generalized stump's result, read at S₁ (δ itself while
+//   unsolved, the variable it was aliased to otherwise), is a variable in ᾱ, and
+//   distinct stumps read as distinct variables. Reading it RAW rejected
+//   `let h = λy. g y`, where A-app aliases δ ≔ β. A spent δ reads as a
+//   non-variable and still fails here — the spent promise below
+// - ᾱ ∩ ftv(⟦S₁⟧Δ_Γ) = ∅: what stays parked reads the same at every instance
+// - independent: no generalized stump's row, read at S₁, mentions another's
+//   result. Then an instance's constraints discharge one at a time
+//   (`QScheme.Correctable.correct`); without it they need not
+//   (`instEquivCorrects_false`)
+//
+// ᾱ is CANONICAL (`greatestAlpha_spec`, lean/LetChoice.lean): admissible choices
+// are closed under union, so a GREATEST one exists, and `greatestAlpha` computes
+// it by deleting variables no admissible ᾱ can contain until nothing is deleted.
+// This replaces the least-fixpoint reading of the split: the algorithm never has
+// to guess.
+
 
 == Wake-up and Finalization
-- (S ⊢ q ↝ S′) wakes one stump, (↝\* its list closure), (S ⊢ Δ ↝! S′) runs it to
-  quiescence, (S ⊢ q ⇓ S′) finalizes one and (⇓\* its list closure). K-hit, K-⊥ and
-  F-★ are D-hit, D-⊥ and D-? — the difference is WHEN: discharge fires once per
-  instantiation, wake-up fires each time θ grows
-- K-repark has no declarative counterpart: declaratively D-? commits to ★
-  immediately, algorithmically the lookup has merely progressed to the next var
-- ↝\* runs over a Δ-shaped list, so its elements are blocker-annotated. A-var
-  submits its instantiated Q with the blockers LEFT FREE: each step of the
-  closure determines one — K-hit and K-⊥ by resolving the constraint outright,
-  K-park by the ? -witness
-- K-park is the ↝\* rule that A-var needs and ↝ cannot state: a FRESHLY
-  instantiated constraint arrives with no blocker yet, so there is no single-step
-  wake-up to take. K-repark is the same move for a stump already in Δ — the
-  difference is only whether an old entry is dropped first
-- Wake-up fires when a solution α ≔ ρ is written, and only for stumps blocked
-  on α
-- *Monotone*: a stump resolved found/⊥ is final under every later θ
-  (substitution-stability of ↓), so resolved stumps never re-enter Δ and no fixpoint iteration
-  is needed. The ?-arm is deliberately NOT stable — wake-up exists to improve
-  it — and that instability is load-bearing: a scheme's instance set MOVES when
-  a parked stump wakes, so generality claims about a scheme are claims about the
-  substitution they were made under
-- *Deterministic*, but NOT for the reason first written here. "Lookup is
-  deterministic, so the final θ, W and τ do not depend on the wake-up order" was
-  FALSE of the earlier rules: F-★ carried no premise about the lookup, so at a
-  state whose stump had gone stale both K-hit and F-★ applied and committed δ to
-  different types (`fStar_wake_star_disagree`, lean/InferSound.lean). What holds,
-  and is proved, is the repaired form: at a quiescent state no wake-up step can
-  commit anything (`Quiescent.wake_no_commit` — the only available step is a
-  K-repark onto the same blocker), and wherever F-★ applies the same is true of
-  that stump (`Finalize.wake_no_commit`). So finalization is the only progress
-  left at the end of a run, which is what determinism needed to mean. Order
-  independence for the WHOLE run is still design, not theorem
-- *Saturation TERMINATES* (`satStep_wf`, lean/OpenEnds.lean, 2026-09-26): there
-  is no infinite ↝ run from ANY state. K-repark does have a measure after all —
-  (|Δ|, #unblocked stumps), lexicographic: K-hit and K-⊥ retire a stump, and
-  K-repark swaps an unblocked stump for a blocked one. The executable form is
-  `saturateF` (lean/InferFnTerm.lean), which settles from every clean state
-  (`saturateF_settles`)
-- What used to make reachability CONDITIONAL is half gone: a K-hit needs the
-  lookup to be total, and ↓ is total unconditionally (structural recursion; no
-  solution is chased). The other half stays — a K-hit's equation can clash, the
-  tension case below — and that is a rejection, not a divergence
+- (S ⊢ q ↝ S′) wakes one stump
+- ↝\* its list closure,
+- (S ⊢ Δ ↝! S′) runs it to quiescence
+- (S ⊢ q ⇓ S′) finalizes one
+- (⇓\* its list closure).
+
 
 (⟦S⟧ρ).l ↓ τ′   S ⊢ δ ≐ τ′ ⇝ S′
 ---------------------------------------- K-hit
@@ -738,122 +608,24 @@ S ⊢ ⟨α ▷ ρ.l ↓ δ⟩ ⇓ S₁   S₁ ⊢ Δ′ ⇓\* S′
 --------------------------------------- F-cons
 S ⊢ (⟨α ▷ ρ.l ↓ δ⟩, Δ′) ⇓\* S′
 
-// The algorithmic moment of T-sel-★. Runs at the end of inference and at every
-// generalization boundary that does not carry the stump.
-//
-// THE `? on α` PREMISE IS NOT DECORATION. Without it F-★ commits δ to ★ over a
-// lookup that LANDS, and the resulting state answers a declarative question
-// nobody asked: Stump.Discharge offers ★ only under D-⊥ (K-⊥'s job) or D-?, so
-// D-? is the arm F-★ implements and `?` is what it has to check. Every sibling
-// states its verdict the same way — K-hit its τ′, K-⊥ its ⊥, K-repark its `? on
-// α′`. Refuted without it: `finalize_star_no_discharge`, lean/InferSound.lean.
-// It costs the algorithm nothing: at a quiescent state the premise holds of every
-// parked stump, and every state a run reaches is quiescent
-// (`Infer.quiescent` + `Finalize.of_quiescent`).
-
-// TENSION CASE: if δ is already solved and wake-up finds a different τ′, the
-// emitted δ ≐ τ′ CLASHES ⟹ hard error, not a degradation.
-//
-// THE SAME TENSION AT FINALIZATION, and it is the sharper one. A-sel-? returns δ
-// so the position stays WRITABLE, and any USE of the selection's value writes to
-// it: in (x: (y: (x.l) y)) the application emits δ ≐ (α_y -> β) and it SUCCEEDS.
-// The promise is then spent on an arrow, F-★'s own δ ≐ ★ clashes (★ is rigid), and
-// the run has no way to finish — a hard error by the same discipline as a clash,
-// no rule applies (no_finalize_of_spent, lean/Infer.lean; the run that reaches it
-// is spentEx_infers, and the state it reaches is quiescent and otherwise sound).
-//
 // This one is INCOMPLETENESS, not a justified rejection: that program IS typeable,
 // at {(l: 𝓫 -> 𝓫)} -> 𝓫 -> 𝓫 (spentEx_declarative). No ★ is ever formed, so it is
 // not the ★-elimination gap either. The algorithm commits x to {ρ} with ρ abstract
 // and never guesses a concrete row, so its only possible answer is to CARRY
 // ⟨ρ.l ↓ (α_y -> β)⟩ — which it cannot write, because a stump's result position
-// holds a VARIABLE. Exits: leave it a hard error and record the incompleteness
-// (what the rules do now); or let a stump's result be a TYPE, which touches
-// Discharge, QScheme.WF, selQ and the principality theorems; or add a consistency
-// relation τ ~ ★ beside ≐, which is a real extension. Generalization inherits it:
-// A-let carries stumps into a scheme whose δ's must be among its binders, and a
-// spent δ is not a binder.
 
 
 == Entry
-- (⊢ e ⇒ τ; S′) is the TOP LEVEL: infer from the empty state, then finalize what
-  is still parked. Everything above is a judgement about a state; this is the one
-  that takes a program and returns an answer, and it is what soundness of the
-  ALGORITHM — as opposed to soundness of one rule — is stated about
+Toplevel (⊢ e ⇒ τ; S′)
 
 ∅; (id, ∅, ∅) ⊢ e ⇒ τ; S₁   S₁ ⊢ Δ₁ ⇓\* S′
 ------------------------------------------- Entry
 ⊢ e ⇒ τ; S′
-// The side condition Δ′ = ∅ is GONE (2026-09-26): soundness never needed it —
-// the conclusion is a plain typing whatever is left parked — so dropping it made
-// RunSound stronger. What it guarded is now an invariant anyway: every parked
-// result variable was issued by the supply, one stump per result variable
-// (`Infer.pinv_keeps`, lean/ParkedInv.lean).
-//
-// *RunSound* — PROVED (`runSound`, lean/Finalization.lean): if ⊢ e ⇒ τ; S′ then
-// ∅ ⊢ e : ⟦S′⟧τ declaratively. Stated at the run's OWN final substitution, not an
-// arbitrary σ ⊨ S′, because a later refinement can make a lookup land — which is
-// why finalization runs last. F-★'s `? on α` premise is what makes finalization
-// sound: it writes nothing at the row sort, so at ⟦S′⟧ the lookup is still `?`
-// and δ = ★ is D-? (`Finalizes.holds`).
-//
-// Worked, both shapes: (x: x.l) runs to {β} → ★ with l flagged, F-★ supplying the
-// ★ — the L1-finalized type that finalized_no_blur says nothing can sharpen back
-// (selEx_runs, lean/Infer.lean). And (x: {a = x.l}) {l = c} runs to {a: 𝓫} with Δ
-// already EMPTY: the application solved the blocker, saturation woke the stump
-// with K-hit, and finalization had nothing left to blur (fStarEx_runs,
-// lean/InferSound.lean). The second is the one the earlier rules got wrong.
-
-
-== Generalization
-- A stump is carried iff its blocker is generalized. One blocked on a var free
-  in Γ belongs to the enclosing scope and stays in Δ
-- Inhabitation (T-let's second premise) holds by construction: a carried stump
-  always finalizes at ★ if nothing better, so the scheme has at least one
-  instance
-
-Γ; S ⊢ e₁ ⇒ τ₁; S₁   κ̄ = S₁(ᾱ)   Δ₁ ~ Δ_q ⊎ Δ_Γ   ᾱ ∩ ftv(⟦S₁⟧Γ) = ∅   ᾱ ∩ dom(S₁) = ∅
-Δ_q ∩ Δ = ∅   results(Δ_q) at S₁ ⊆ ᾱ, injective   ᾱ ∩ ftv(⟦S₁⟧Δ_Γ) = ∅   Δ_q independent at S₁
-Γ·(x: ∀(ᾱ: κ̄). ⟦S₁⟧Δ_q ⇒ ⟦S₁⟧τ₁); S₁ ∖ Δ_q ⊢ e₂ ⇒ τ₂; S₂
----------------------------------------------------------------------------------------------- A-let
-Γ; S ⊢ let x = e₁ in e₂ ⇒ τ₂; S₂
-// Δ_q are the stumps whose blocker lands in ᾱ, Δ_Γ the rest. Surviving stumps
-// of Δ_Γ are NOT finalized here — they outlive the boundary. Every premise past
-// the first is one that soundness or completeness turned out to need
-// (2026-09-26; `Infer.letE`, lean/Infer.lean):
-// - κ̄ = S₁(ᾱ): kinds are read off the DRAW, not off Γ — ᾱ is disjoint from Γ,
-//   so Γ(ᾱ) was never writable. Every generalized binder is one inference
-//   invented at a known sort (A-var's draw records one, see there)
-// - Δ₁ ~ Δ_q ⊎ Δ_Γ: a PARTITION up to order. Δ₁ is ordered by parking time, and
-//   a prefix split could not generalize a stump parked after a Γ-stump
-// - ᾱ ∩ ftv(⟦S₁⟧Γ) = ∅, per variable of Γ and at both sorts: Γ-freshness was
-//   MISSING and `λy. let z = y in z` inferred a → b
-//   (`runSound_false_unguarded_let`, lean/LetSound.lean)
-// - ᾱ ∩ dom(S₁) = ∅: nothing already solved is generalized
-// - Δ_q ∩ Δ = ∅: Δ_q is e₁'s OWN. Without it `{a = λx. x.l, b = let y = c in c}`
-//   files a's stump under y's unused scheme and nothing ever finalizes it
-//   (`runSound_false_let_captures`)
-// - results at S₁: each generalized stump's result, read at S₁ (δ itself while
-//   unsolved, the variable it was aliased to otherwise), is a variable in ᾱ, and
-//   distinct stumps read as distinct variables. Reading it RAW rejected
-//   `let h = λy. g y`, where A-app aliases δ ≔ β. A spent δ reads as a
-//   non-variable and still fails here — the spent promise below
-// - ᾱ ∩ ftv(⟦S₁⟧Δ_Γ) = ∅: what stays parked reads the same at every instance
-// - independent: no generalized stump's row, read at S₁, mentions another's
-//   result. Then an instance's constraints discharge one at a time
-//   (`QScheme.Correctable.correct`); without it they need not
-//   (`instEquivCorrects_false`)
-//
-// ᾱ is CANONICAL (`greatestAlpha_spec`, lean/LetChoice.lean): admissible choices
-// are closed under union, so a GREATEST one exists, and `greatestAlpha` computes
-// it by deleting variables no admissible ᾱ can contain until nothing is deleted.
-// This replaces the least-fixpoint reading of the split: the algorithm never has
-// to guess.
 
 
 == Precision
-- τ′ ⊑ τ reads "τ′ is at least as precise as τ": ★ is the top, everything else
-  is structural congruence.
+- τ′ ⊑ τ reads "τ′ is at least as precise as τ"
+- ★ is the top
 
 
 ------ ⊑-refl
@@ -908,37 +680,18 @@ r ⊑ᵣ ?
 
 
 == First-class labels (phase A: selection)
-- MECHANIZED 2026-09-26, branch `worktree-fc-labels`: `LabelLookup.lean`, the
-  rules below in `Qualified.lean` / `Infer.lean`, soundness in
-  `InferSoundA.lean` / `LetCase.lean` / `Finalization.lean`. `runSound`,
-  `run_typed` and `runF_terminates` hold for the extended language; every
-  `Axioms.lean` guard is unchanged
-- The KEY of a selection is a value, and its TYPE keys the lookup: ⌊l⌋ for a
-  literal, a label VARIABLE for a key nobody has chosen yet. Label variables are
-  ordinary type variables — ⌊α⌋ is α, and a label solution α ≔ ⌊l⌋ is an
-  ordinary type binding. ⌊l⌋ is rigid and nullary, like 𝓫, so ⌊l⌋ ≐ ⌊l′⌋ is
-  the whole label pass: equal labels unify, distinct ones clash
-- Phase A has no var-labeled fields: record literals carry literal labels, and
-  A-sel-dyn only emits τ₁ ≐ {r} for a fresh r. So a label variable meets a row
-  only as a lookup KEY, and rows, ≈ and ≐ᵣ are untouched. Dynamic
-  CONSTRUCTION `{ ${e₁} = e₂ }` is phase B (`plans/fc-labels-plan.md`)
+- ⌊α⌋ is α, α ≔ ⌊l⌋ is ordinary type binding.
+- ⌊l⌋ is rigid and nullary
+- ⌊l⌋ ≐ ⌊l′⌋ is the whole label pass: equal labels unify, distinct ones clash
 
 e ::= … | 'l | e₁.(e₂)          τ ::= … | ⌊l⌋
 
 - Runtime: 'l is a value; e₁.(e₂) evaluates the record, then the key, and
-  (rcd b).('l) steps like (rcd b).l. A missing label is ↯, and so is a key that
-  is not a label
+  (rcd b).('l) steps like (rcd b).l.
+  A missing label is ↯, and so is a key thatis not a label
 
 
-=== The keyed lookup  ρ.q ↓ r
-- A label variable is UNDECIDED against a literal field: it may be instantiated
-  to that label or to another. So it never finds — ⊥ on a hollow row (no field,
-  no variable on the spine), ? otherwise — and ? is blocked either on a free row
-  variable or on the KEY itself
-- A key that is not a label names no field (L-junk). This is what keeps every
-  stability lemma unconditional without a kind discipline: a variable key only
-  ever answers ? (improvable) or ⊥ on a hollow row, and a hollow row answers ⊥
-  to EVERY key, label or not. It is also the soft-typing reading of `r.${1}`
+=== Label lookup  Γ ⊢ ρ.q ↓ r
 
 ρ.l ↓ r
 ----------- LQ-lit
@@ -947,19 +700,11 @@ e ::= … | 'l | e₁.(e₂)          τ ::= … | ⌊l⌋
 
 -------------- L-?-lab
 (l: τ).α ↓ ?
-// …plus L-ε, L-α-free and the three concatenation rules at a variable key,
-// unchanged. No rule ever lets a variable key FIND (`LookupV.not_found`).
 
 
 q is neither ⌊l⌋ nor a variable
 --------------------------------- L-junk
 ρ.q ↓ ⊥
-
-- det / total / ≈-invariance / substitution stability all re-proved
-  (`LookupQ.det`, `.total`, `.equiv`, `.applySubst`). The key is
-  ≈-rigid, so ≈ on the KEY is invisible to the lookup (`LookupQ.key_equiv`) —
-  the algorithm reads the key under ⟦S⟧, the declarative side under σ, and
-  under σ ⊨ S the two are only ≈-equal
 
 
 === Declarative
@@ -971,20 +716,7 @@ q is neither ⌊l⌋ nor a variable
 Γ ⊢ e₁: {ρ}   Γ ⊢ e₂: q   ρ.q ↓ τ
 ---------------------------------------- T-sel-dyn
 Γ ⊢ e₁.(e₂): τ
-// …with -★ (?) and -⊥ (⊥) arms at ★, as T-sel. qProgress needs nothing of the
-// key but that it is a value; qPreservation reduces the found arm to the static
-// one, since a label value types only at its singleton or ★ (`qtyped_lab_inv`).
-// L1 types neither former (`typed_lab_false`): FC-labels are an L2 feature.
 
-- Stumps are keyed: ⟨ρ.q ↓ δ⟩ with q a TYPE — ⌊l⌋ for e.l — and Discharge
-  replays the keyed lookup under θ, key included. The headline scheme, and its
-  instance-closedness (`selDynQ_instance_closed`):
-
-  λa. λx. x.(a)  ::  ∀(α: Label)(β: Row)(δ: Type). ⟨β.α ↓ δ⟩ ⇒ α → {β} → δ
-
-  Two blockers, two sorts, one stump. P&X REJECT the analogous (l: String |
-  foo: Int).foo; here it is ? and types at ★ — usable only parametrically,
-  since ★ is rigid, but typed without a restriction operator or lacks-predicate
 
 
 === Algorithmic
@@ -996,19 +728,3 @@ q is neither ⌊l⌋ nor a variable
 Γ; S ⊢ e₁ ⇒ τ₁; S₁   fresh r: Row   S₁ ⊢ τ₁ ≐ {r} ⇝! S₂   Γ; S₂ ⊢ e₂ ⇒ τ₂; S₃   (⟦S₃⟧r).(⟦S₃⟧τ₂) ↓ τ′
 --------------------------------------------------------------------------------------------------- A-sel-dyn
 Γ; S ⊢ e₁.(e₂) ⇒ τ′; S₃
-// …and -⊥ (★, W-flag named by the key) and -? (fresh δ, park ⟨β ▷ r.τ₂ ↓ δ⟩ where
-// β is the row variable OR the key the keyed lookup is blocked on).
-
-- Wake-up and F-★ read a stump's key under ⟦S⟧ exactly as its row; a key
-  blocker is woken when the key is solved, with no new trigger — staleness is
-  judged by the keyed blocked-lookup, and every equation is solve-then-saturate
-- A-let's premises cover keys: what stays in Δ_Γ does not mention ᾱ in its key,
-  and no generalized key mentions a generalized RESULT (`r.(x.l)` is not
-  generalized — `QScheme.Correctable`'s key clause). Inhabitation: a stump
-  blocked on a generalized variable reads as ? — or ⊥, when its key became a
-  non-label — and either discharges at ★ (`lookupQ_blocked_subst`)
-- F-★ only ever binds a variable to ★ (`Finalizes.starOrVar`), so a key blocker
-  never becomes a LABEL while the other stumps are finalized
-- The spent promise has a second door: λr.λa. (r.(a)) c spends the keyed promise
-  on an arrow exactly as λx.λy.(x.l) y does. The same incompleteness, not a new
-  class (`InferRuns.lean`)
