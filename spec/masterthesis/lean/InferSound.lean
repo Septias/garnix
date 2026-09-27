@@ -825,20 +825,20 @@ theorem fStarEx_refinement_lost :
 -- and it is not the ★-elimination gap of `plans/inference-gap-analysis.md` §D
 -- either, because no ★ is ever formed here. The algorithm commits `x` to `{r}`
 -- with `r` abstract and never guesses a concrete row, so the only way it could
--- answer is to CARRY the constraint `⟨r.l ↓ (α_y → β)⟩` — and it cannot, because
--- `Stump.res` is a `TyVar`: a stump's result position holds a variable, not a
--- type. Three exits, in increasing order of cost:
---   * leave it a hard error, which is what the rules do now, and record the
---     incompleteness (this section);
---   * `Stump.res : Ty B`, so a spent promise is still expressible. The discharge
---     arms survive (`hit` compares up to ≈ already, `abs`/`unk` demand ★, which a
---     spent arrow simply fails) — but it touches `Stump`, `Discharge`,
---     `QScheme.WF`, `selQ` and every principality theorem built on them;
---   * a consistency relation `τ ~ ★` beside `≐`, which §D already prices as a
---     real extension rather than a gap.
--- The generalization boundary inherits the same problem: A-let carries stumps
--- into a scheme whose `QScheme.WF` wants each `res` among the binders, and a
--- spent δ is not a binder. So whichever exit is taken, it is taken for both.
+-- answer is to CARRY the constraint `⟨r.l ↓ (α_y → β)⟩`.
+--
+-- TAKEN (2026-09-27): `Stump.res : Ty B`, so a spent promise is still a stump,
+-- and finalization MATERIALIZES it before F-★ (`Materialize`, Infer.lean): the
+-- lookup is blocked on r, nothing has committed r, so `r ≔ (l : α_y → β | r′)`
+-- makes it hit. The run now answers `{l: t2 → t5 | r6} → t2 → t5` (InferRuns),
+-- an instance-mate of `spentEx_declarative`'s typing, and `runSound` covers it.
+-- The witnesses below still stand: they are about the F-★ STEP, which still
+-- cannot fire on a spent stump — materialization is what runs instead.
+--
+-- Still open: a spent promise blocked on its KEY (`λr. λa. r.(a) c`) has no row
+-- to extend and still fails; and A-let still refuses to generalize a spent stump
+-- (`LetResults`, `QScheme.WF` wants a bound variable), so it waits for the top
+-- level.
 
 private def spentEx : Expr Unit :=
   .lam "x" (.lam "y" (.app (.sel (.var "x") "l") (.var "y")))

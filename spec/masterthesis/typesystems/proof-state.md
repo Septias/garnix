@@ -42,6 +42,12 @@ We use a custom lookup relation ⟨ρ.l ↓ r⟩ with return values ⟨τ | ⊥ 
 # Problems
 > Problems found during mechanized proving and their proposed solutions
 
+## Spent promise at F-★  (branch `stump-ty-res`)
+- `λx. λy. (x.l) y`: A-app writes `δ ≔ α → β` into a parked stump's result, F-★'s `δ ≐ ★` clashes (`no_finalize_of_spent`)
+- Fix: `Stump.res : Ty B`; new finalization phase `Materialize` (F-hit) before F-★: blocker `r ≔ (l : res | r')`, then saturate
+- `Run` = infer → `Materializes` → `Finalizes`; `runSound`, `runF_terminates` re-proved, same axioms
+- Open: key-blocked spent stump (`λr. λa. r.(a) c`) still fails; A-let does not generalize spent stumps (`QScheme.WF` wants `res` a bound var)
+
 
 ## Symbols
 - ↓: Row-lookup relation, three-way result r := (τ | ⊥ | ?)

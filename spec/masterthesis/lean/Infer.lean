@@ -576,9 +576,10 @@ def Ty.Spent {B : Type} : Ty B → Prop
   | .unk   => False
   | _      => True
 
-/-- ⊢  **a spent promise cannot be finalized.** If the state has already written a
-non-variable, non-★ type into a parked stump's result variable, F-★ has no
-derivation at that stump — its equation is `⟦S⟧δ ≐ ★` and ★ is rigid. -/
+/-- ⊢  **a spent promise cannot be finalized BY F-★.** If the state has already
+written a non-variable, non-★ type into a parked stump's result, F-★ has no
+derivation at that stump — its equation is `⟦S⟧δ ≐ ★` and ★ is rigid. This is
+why `Run` materializes spent promises first (`Materialize`, below). -/
 theorem no_finalize_of_spent {B : Type} [DecidableEq B] {S : SolverState B}
     {p : Parked B} (h : (p.stump.res.applySubst S.subst).Spent) :
     ¬ ∃ S', Finalize S p S' := by
