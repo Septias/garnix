@@ -785,7 +785,7 @@ where it does fire: the difference is whether anything ever resolved the blocker
 which is the whole content of A-sel-?'s promise. -/
 theorem fStarEx_runs :
     Run (B := Unit) (C := Unit) (fun _ => ()) fStarEx (.var fsB) fsSfix :=
-  ⟨fsSfix, fStarEx_infers, .nil⟩
+  ⟨fsSfix, fsSfix, fStarEx_infers, .nil, .nil⟩
 
 /-- ⊢  **the refinement, in types.** The declarative system gives the closed
 program `{a: 𝓫}`; finalizing the stale state answers `{a: ★}`, strictly blurrier —

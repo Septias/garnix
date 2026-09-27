@@ -596,6 +596,43 @@ theorem no_finalize_of_spent {B : Type} [DecidableEq B] {S : SolverState B}
       | fn a b => intro _ hu; simp [unifyTyF] at hu
       | rcd ρ  => intro _ hu; simp [unifyTyF] at hu
 
+/-- `S ⊢ p ⇓ₘ S′` — F-hit, MATERIALIZATION of a spent promise. A-app can write a
+non-variable into a parked stump's result (`λx. λy. (x.l) y` writes
+`δ ≔ α_y → β`), and then F-★'s `δ ≐ ★` clashes (`no_finalize_of_spent`). But the
+lookup is blocked on a row variable β that nothing has committed, so the stump can
+be made to HIT instead: `β ≔ (l : res | r′)` for a fresh r′. Saturation then wakes
+the stump itself (K-hit, `res ≐ res`) and everything else that waited on β.
+
+Only a literal key can be materialized; a stump blocked on its KEY has nothing to
+extend and stays a spent promise. -/
+inductive Materialize {B : Type} [DecidableEq B] :
+    SolverState B → Parked B → SolverState B → Prop where
+  | hit {S S₀ S' : SolverState B} {p : Parked B} {l : Label} {r' : TyVar} :
+      p ∈ S.parked →
+      (p.stump.res.applySubst S.subst).Spent →
+      p.stump.label.applySubst S.subst = .lab l →
+      LookupBlockedQ (p.stump.row.applySubst S.subst) (.lab l) p.blocker →
+      (r', S₀) = S.draw .row →
+      SolveTySat S₀ (.rcd (.var p.blocker)) (.rcd (.cat (.sing l p.stump.res) (.var r'))) S' →
+      Materialize S p S'
+
+/-- `S ⊢ Δ ⇓ₘ* S′` — materialization over a list, before F-★. A stump may be
+skipped: it is not spent, or an earlier step's saturation already discharged it. -/
+inductive Materializes {B : Type} [DecidableEq B] :
+    SolverState B → List (Parked B) → SolverState B → Prop where
+  | nil {S : SolverState B} : Materializes S [] S
+  | skip {S S' : SolverState B} {p : Parked B} {ps : List (Parked B)} :
+      Materializes S ps S' → Materializes S (p :: ps) S'
+  | cons {S S₁ S₂ : SolverState B} {p : Parked B} {ps : List (Parked B)} :
+      Materialize S p S₁ → Materializes S₁ ps S₂ → Materializes S (p :: ps) S₂
+
+/-- ⊢  materializing nothing is always a derivation. -/
+theorem Materializes.refl {B : Type} [DecidableEq B] (S : SolverState B) :
+    ∀ ps : List (Parked B), Materializes S ps S
+  | [] => .nil
+  | _ :: ps => .skip (Materializes.refl S ps)
+
+
 
 --------------------- INSTANTIATION AT A-var ---------------------------------
 -- `x: ∀(ᾱ: κ̄). Q ⇒ τ ∈ Γ   fresh β̄: κ̄   S ⊢ Q[β̄/ᾱ] ↝* S′`.
@@ -961,12 +998,14 @@ theorem selEx_infers :
 -- The initial supply is ⟨1⟩, not ⟨0⟩: `natName 0` is the empty string, so
 -- starting at 1 keeps every invented name non-empty.
 
-/-- `⊢ e ⇒ τ; S′` — inference, then finalization, from nothing. -/
+/-- `⊢ e ⇒ τ; S′` — inference, then materialization of spent promises, then
+F-★ on what is still parked, from nothing. -/
 def Run {B C : Type} [DecidableEq B] (constTy : C → B) (e : Expr C) (τ : Ty B)
     (S' : SolverState B) : Prop :=
-  ∃ S₁ : SolverState B,
+  ∃ S₁ S₂ : SolverState B,
     Infer constTy QCtx.empty ⟨Sol.nil, [], [], ⟨1⟩, []⟩ e τ S₁ ∧
-    Finalizes S₁ S₁.parked S'
+    Materializes S₁ S₁.parked S₂ ∧
+    Finalizes S₂ S₂.parked S'
 
 -- The state finalization starts at is QUIESCENT: the run begins with Δ = [], so
 -- `Infer.quiescent_of_nil` (below) applies, and `Finalize.of_quiescent` then says
@@ -1009,7 +1048,7 @@ to ★ and records the label in W. -/
 theorem selEx_runs :
     Run (B := Unit) (C := Unit) (fun _ => ()) (selEx Unit)
       (.fn (.var (natName 1)) (.var (natName 3))) selExFinal :=
-  ⟨selExS1, selEx_infers,
+  ⟨selExS1, selExS1, selEx_infers, .skip .nil,
    .cons (Finalize.star (by simp [selExS1]) .varFree
      ⟨5, selExStar, ⟨4⟩, rfl, rfl⟩) .nil⟩
 

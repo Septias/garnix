@@ -178,17 +178,75 @@ theorem Finalizes.holds {S S' : SolverState B} {ps : List (Parked B)} :
         rcases hso with h | ⟨_, h⟩ <;> exact nomatch h
       · exact Finalizes.holds hfs c₁ p' hp'
 
+--------------------- MATERIALIZATION KEEPS ------------------------------------
+-- F-hit is an equation plus saturation, so it inherits `KeepsS` from
+-- `SolveTySat`: every stump parked before it is still parked after it — the same
+-- stump — or discharged under any σ satisfying the state it ends in. Nothing
+-- about the materialized stump itself is needed: saturation wakes it, and
+-- `KeepsS` already says what that means.
+
+private theorem draw_sol {S S₀ : SolverState B} {α : TyVar} {κ : Kind}
+    (h : (α, S₀) = S.draw κ) : S₀.sol = S.sol := by
+  have h2 : S₀ = (S.draw κ).2 := congrArg Prod.snd h
+  subst h2; rfl
+
+/-- ⊢  one F-hit step keeps the invariant, every stump, cleanliness, and extends. -/
+theorem Materialize.keeps {S S' : SolverState B} {p : Parked B} (hm : Materialize S p S')
+    (h : S.PInv) (hc : S.sol.Clean) :
+    S'.PInv ∧ S.KeepsS S' ∧ S'.sol.Clean ∧ S.Ext S' ∧ S.SatMono S' := by
+  cases hm with
+  | hit _ _ _ _ hd hs =>
+      obtain ⟨i₀, k₀, m₀, -⟩ := draw_pinv_keeps hd h
+      obtain ⟨i', k'⟩ := hs.pinv_keeps i₀
+      exact ⟨i', k₀.trans k' hs.satMono, hs.clean (draw_sol hd ▸ hc),
+        (draw_ext hd).trans hs.ext, m₀.trans hs.satMono⟩
+
+theorem Materialize.clean {S S' : SolverState B} {p : Parked B} (hm : Materialize S p S')
+    (hc : S.sol.Clean) : S'.sol.Clean := by
+  cases hm with
+  | hit _ _ _ _ hd hs => exact hs.clean (draw_sol hd ▸ hc)
+
+theorem Materializes.clean {S S' : SolverState B} {ps : List (Parked B)} :
+    Materializes S ps S' → S.sol.Clean → S'.sol.Clean
+  | .nil, hc => hc
+  | .skip hms, hc => Materializes.clean hms hc
+  | .cons hm hms, hc => Materializes.clean hms (hm.clean hc)
+
+/-- ⊢  …and so does the whole materialization phase. -/
+theorem Materializes.keeps {S S' : SolverState B} {ps : List (Parked B)} :
+    Materializes S ps S' → S.PInv → S.sol.Clean →
+      S'.PInv ∧ S.KeepsS S' ∧ S'.sol.Clean ∧ S.Ext S' ∧ S.SatMono S'
+  | .nil, h, hc => ⟨h, .refl _, hc, .refl _, .refl _⟩
+  | .skip hms, h, hc => Materializes.keeps hms h hc
+  | .cons hm hms, h, hc => by
+      obtain ⟨i₁, k₁, c₁, x₁, m₁⟩ := hm.keeps h hc
+      obtain ⟨i₂, k₂, c₂, x₂, m₂⟩ := Materializes.keeps hms i₁ c₁
+      exact ⟨i₂, k₁.trans k₂ m₂, c₂, x₁.trans x₂, m₁.trans m₂⟩
+
 --------------------- RunSound -------------------------------------------------
 
 /-- ⊢  **ALGORITHM SOUNDNESS — `RunSound`.** A run from nothing — inference,
-then finalization of everything still parked — types its program at the type
-it reports, read under its own final substitution, in the empty context. -/
+materialization of spent promises, then F-★ on everything still parked — types
+its program at the type it reports, read under its own final substitution, in
+the empty context.
+
+A stump parked at the end of inference either survives materialization — and
+F-★ discharges it (`Finalizes.holds`) — or materialization's saturation
+discharged it already (`KeepsS`). -/
 theorem runSound {C : Type} {constTy : C → B} : RunSound B C constTy := by
-  rintro e τ S' ⟨S₁, hinf, hfins⟩
+  rintro e τ S' ⟨S₁, S₂, hinf, hmat, hfins⟩
   have c₁ := Infer.clean hinf Sol.clean_nil
-  have c' := hfins.clean c₁
-  have hab₁ : Absorbs S'.subst S₁ := (Absorbs.self c').back hfins.ext c₁
-  exact runSoundA hinf hab₁ (hab₁.sat c₁) (fun p hp => hfins.holds c₁ p hp)
+  have i₁ := (Infer.pinv_keeps hinf ⟨fun _ h => (nomatch h), fun _ h => (nomatch h)⟩
+    QCtx.SchemesWF.nil).1
+  obtain ⟨-, k₁₂, c₂, x₁₂, -⟩ := hmat.keeps i₁ c₁
+  have c' := hfins.clean c₂
+  have hab₁ : Absorbs S'.subst S₁ := (Absorbs.self c').back (x₁₂.trans hfins.ext) c₁
+  have hab₂ : Absorbs S'.subst S₂ := (Absorbs.self c').back hfins.ext c₂
+  refine runSoundA hinf hab₁ (hab₁.sat c₁) (fun p hp => ?_)
+  rcases k₁₂ S'.subst (hab₂.sat c₂) p hp with ⟨q, hq, hqs⟩ | hd
+  · have := hfins.holds c₂ q hq
+    rwa [hqs] at this
+  · exact Stump.dischargeEquiv_iff_holds.mp hd
 
 --------------------- THE χ-CORRECTION IS FALSE IN GENERAL ----------------------
 -- Two constraints on the SAME result variable whose lookups find ≈-equal but

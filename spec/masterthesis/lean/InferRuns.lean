@@ -63,9 +63,17 @@ def run (e : E) : String := verdict (runF (fun _ => ()) 50 e)
     (rec2 "p" (.app (v "f") (rec1 "l" c)) "q" (.app (v "f") (.rcd .empty)))))
   = "({r5} → {p: 𝓫 | q: ★})"
 
--- the spent promise (`spentEx_declarative`): typeable, but no run finalizes it
+-- the spent promise (`spentEx_declarative`): A-app writes δ ≔ t2 → t5, so F-★
+-- cannot fire — MATERIALIZATION extends x's row with the field instead
+-- (`Materialize`). The trailing ε is the unifier's spine form, ≈-invisible.
 #guard run (.lam "x" (.lam "y" (.app (.sel (v "x") "l") (v "y"))))
-  = "fail: spent promise: a stump's result is no longer a variable"
+  = "({l: (t2 → t5) | r6 | ε} → (t2 → t5))"
+-- …the materialized row stays open: a second, unspent selection on it is F-★'s
+#guard run (.lam "x" (rec2 "p" (.app (.sel (v "x") "l") c) "q" (.sel (v "x") "m")))
+  = "({l: (𝓫 → t4) | r7 | ε | ε} → {p: t4 | q: ★})"
+-- …and a second selection of the SAME field wakes and hits what was materialized
+#guard run (.lam "x" (rec2 "p" (.app (.sel (v "x") "l") c) "q" (.app (.sel (v "x") "l") c)))
+  = "({l: (𝓫 → t7) | r8 | ε | ε} → {p: t7 | q: t7})"
 
 -- an instance's stump whose RESULT was aliased (found by this function,
 -- 2026-09-26, then fixed): in `h = λy. g y`, A-app emits δ ≐ β and the unifier
@@ -115,8 +123,8 @@ def sd (e₁ e₂ : E) : E := .selDyn e₁ e₂
 -- … and a key that is not a label names no field (L-junk): ★, with a flag
 #guard run (sd (rec1 "foo" c) c) = "★"
 
--- the spent promise through the second door: the same incompleteness, not a new
--- class (`spentEx_*`, InferSound.lean)
+-- the spent promise through the second door: blocked on its KEY, so there is no
+-- row to extend and materialization does not apply — still incomplete
 #guard run (.lam "r" (.lam "a" (.app (sd (v "r") (v "a")) c)))
   = "fail: spent promise: a stump's result is no longer a variable"
 

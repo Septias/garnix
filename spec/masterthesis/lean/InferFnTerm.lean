@@ -520,6 +520,73 @@ theorem finalizeF_settles {S : SolverState B} (hc : S.sol.Clean) (p : Parked B) 
       | found τ => exact Settles.fail _
       | absent => exact Settles.fail _
 
+--------------------- MATERIALIZATION ------------------------------------------
+
+theorem materializeF_stable (S : SolverState B) (p : Parked B) :
+    Stable (fun m => materializeF m S p) := by
+  unfold materializeF
+  by_cases hc : p ∈ S.parked ∧ (p.stump.res.applySubst S.subst).isSpent = true
+  · simp only [if_pos hc]
+    cases hl : p.stump.label.applySubst S.subst with
+    | lab l =>
+        simp only
+        refine Stable.bind (lookupQF_stable _ _) (fun r => ?_)
+        cases r with
+        | blocked α =>
+            by_cases he : α = p.blocker
+            · simp only [he, if_true]; exact solveTySatF_stable _ _ _
+            · simp only [he, if_false]; exact Stable.const _
+        | found τ => exact Stable.const _
+        | absent => exact Stable.const _
+    | _ => exact Stable.const _
+  · simp only [if_neg hc]; exact Stable.const _
+
+theorem materializeF_settles {S : SolverState B} (hcl : S.sol.Clean) (p : Parked B) :
+    Settles (fun m => materializeF m S p) := by
+  unfold materializeF
+  by_cases hc : p ∈ S.parked ∧ (p.stump.res.applySubst S.subst).isSpent = true
+  · simp only [if_pos hc]
+    cases hl : p.stump.label.applySubst S.subst with
+    | lab l =>
+        simp only
+        refine Settles.bind (lookupQF_stable _ _) (lookupQF_settles _ _)
+          (fun r => ?_) (fun r _ _ => ?_)
+        · cases r with
+          | blocked α =>
+              by_cases he : α = p.blocker
+              · simp only [he, if_true]; exact solveTySatF_stable _ _ _
+              · simp only [he, if_false]; exact Stable.const _
+          | found τ => exact Stable.const _
+          | absent => exact Stable.const _
+        · cases r with
+          | blocked α =>
+              by_cases he : α = p.blocker
+              · simp only [he, if_true]; exact solveTySatF_settles (S := (S.draw .row).2) hcl _ _
+              · simp only [he, if_false]; exact Settles.pure _
+          | found τ => exact Settles.pure _
+          | absent => exact Settles.pure _
+    | _ => exact Settles.pure _
+  · simp only [if_neg hc]; exact Settles.pure _
+
+theorem materializesF_stable : ∀ (ps : List (Parked B)) (S : SolverState B),
+    Stable (fun m => materializesF m S ps)
+  | [], S => by simp only [materializesF]; exact Stable.const _
+  | p :: ps, S => by
+      simp only [materializesF]
+      exact Stable.bind (materializeF_stable _ _) (fun S₁ => materializesF_stable ps S₁)
+
+theorem materializesF_settles : ∀ (ps : List (Parked B)) {S : SolverState B}, S.sol.Clean →
+    Settles (fun m => materializesF m S ps)
+  | [], S, _ => by simp only [materializesF]; exact ⟨0, fun h => nomatch h⟩
+  | p :: ps, S, hc => by
+      simp only [materializesF]
+      exact Settles.bind (materializeF_stable _ _) (materializeF_settles hc _)
+        (fun S₁ => materializesF_stable ps S₁)
+        (fun S₁ _ h => materializesF_settles ps (by
+          rcases materializeF_sound h with rfl | hm
+          · exact hc
+          · exact hm.clean hc))
+
 theorem finalizesF_stable : ∀ (ps : List (Parked B)) (S : SolverState B),
     Stable (fun m => finalizesF m S ps)
   | [], S => by simp only [finalizesF]; exact Stable.const _
@@ -790,16 +857,22 @@ theorem inferF_terminates {constTy : C → B} {Γ : QCtx B} {S : SolverState B} 
 theorem runF_stable (constTy : C → B) (e : Expr C) : Stable (fun m => runF constTy m e) := by
   unfold runF
   exact Stable.bind (inferF_stable constTy _ _ e) (fun r =>
-    Stable.bind (finalizesF_stable _ _) (fun _ => Stable.const _))
+    Stable.bind (materializesF_stable _ _) (fun _ =>
+      Stable.bind (finalizesF_stable _ _) (fun _ => Stable.const _)))
 
 /-- ⊢  **A RUN TERMINATES**: every program gets a verdict at some fuel. -/
 theorem runF_terminates (constTy : C → B) (e : Expr C) : ∃ n, runF constTy n e ≠ .oof := by
   unfold runF
   exact Settles.bind (inferF_stable constTy _ _ e) (inferF_settles constTy _ _ e Sol.clean_nil)
-    (fun r => Stable.bind (finalizesF_stable _ _) (fun _ => Stable.const _))
-    (fun r _ h => Settles.bind (finalizesF_stable _ _)
-      (finalizesF_settles _ (Infer.clean (inferF_sound h) Sol.clean_nil))
-      (fun _ => Stable.const _) (fun _ _ _ => Settles.pure _))
+    (fun r => Stable.bind (materializesF_stable _ _) (fun _ =>
+      Stable.bind (finalizesF_stable _ _) (fun _ => Stable.const _)))
+    (fun r _ h => Settles.bind (materializesF_stable _ _)
+      (materializesF_settles _ (Infer.clean (inferF_sound h) Sol.clean_nil))
+      (fun _ => Stable.bind (finalizesF_stable _ _) (fun _ => Stable.const _))
+      (fun _ _ h₂ => Settles.bind (finalizesF_stable _ _)
+        (finalizesF_settles _ ((materializesF_sound h₂).clean
+          (Infer.clean (inferF_sound h) Sol.clean_nil)))
+        (fun _ => Stable.const _) (fun _ _ _ => Settles.pure _)))
 
 --------------------- THE TOTAL FUNCTION ---------------------------------------
 
