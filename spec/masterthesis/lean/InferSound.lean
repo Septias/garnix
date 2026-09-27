@@ -968,7 +968,8 @@ mutual
              QTypedC constTy Δ Γ (.lam x e) (.fn τ₁ τ₂)
     | qApp : QTypedC constTy Δ Γ e₁ (.fn τ₁ τ₂) → QTypedC constTy Δ Γ e₂ τ₁ →
              QTypedC constTy Δ Γ (.app e₁ e₂) τ₂
-    | qLet : (∀ τ₁, QScheme.Inst σ τ₁ → QTypedC constTy Δ Γ e₁ τ₁) →
+    | qLet : σ.WF →
+             (∀ τ₁, QScheme.Inst σ τ₁ → QTypedC constTy Δ Γ e₁ τ₁) →
              (∃ τ₁, QScheme.Inst σ τ₁) →
              QTypedC constTy Δ (Γ.bindScheme x σ) e₂ τ₂ →
              QTypedC constTy Δ Γ (.letE x e₁ e₂) τ₂
@@ -1014,7 +1015,7 @@ mutual
     | .qEq h he       => .qEq h.toC he
     | .qLam h         => .qLam h.toC
     | .qApp h₁ h₂     => .qApp h₁.toC h₂.toC
-    | .qLet hi hin hb => .qLet (fun τ₁ h => (hi τ₁ h).toC) hin hb.toC
+    | .qLet hwf hi hin hb => .qLet hwf (fun τ₁ h => (hi τ₁ h).toC) hin hb.toC
     | .qCat h₁ h₂     => .qCat h₁.toC h₂.toC
     | .qSel h hl      => .qSel h.toC hl
     | .qSelUnk h hl   => .qSelUnk h.toC hl
@@ -1045,7 +1046,7 @@ mutual
     | .qEq h he       => .qEq h.toQTyped he
     | .qLam h         => .qLam h.toQTyped
     | .qApp h₁ h₂     => .qApp h₁.toQTyped h₂.toQTyped
-    | .qLet hi hin hb => .qLet (fun τ₁ h => (hi τ₁ h).toQTyped) hin hb.toQTyped
+    | .qLet hwf hi hin hb => .qLet hwf (fun τ₁ h => (hi τ₁ h).toQTyped) hin hb.toQTyped
     | .qCat h₁ h₂     => .qCat h₁.toQTyped h₂.toQTyped
     | .qSel h hl      => .qSel h.toQTyped hl
     | .qSelUnk h hl   => .qSelUnk h.toQTyped hl

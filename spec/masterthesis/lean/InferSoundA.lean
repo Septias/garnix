@@ -314,7 +314,7 @@ mutual
     | _, _, _, _, .qApp h₁ h₂, hΓ, hΔ =>
         .qApp (QTypedA.toQTyped h₁ hΓ hΔ) (QTypedA.toQTyped h₂ hΓ hΔ)
     | _, _, _, _, .qLet hcs hi hin hb, hΓ, hΔ =>
-        .qLet (fun τ₁ ⟨χ, hfix, hdis, hbody⟩ => hbody ▸
+        .qLet hcs.1 (fun τ₁ ⟨χ, hfix, hdis, hbody⟩ => hbody ▸
             QTypedA.toQTyped (hi χ hfix) hΓ (fun a ha =>
               match List.mem_append.mp ha with
               | .inl hc => by

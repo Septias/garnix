@@ -562,7 +562,8 @@ mutual
     -- would be false. Plain schemes satisfy it by Scheme.Inst.self; the solver
     -- satisfies it by construction (a parked stump discharges at ★ if nothing
     -- better), so this is the declarative shadow of "stumps always finalize".
-    | qLet : (∀ τ₁, QScheme.Inst σ τ₁ → QTyped constTy Γ e₁ τ₁) →
+    | qLet : σ.WF →
+             (∀ τ₁, QScheme.Inst σ τ₁ → QTyped constTy Γ e₁ τ₁) →
              (∃ τ₁, QScheme.Inst σ τ₁) →
              QTyped constTy (Γ.bindScheme x σ) e₂ τ₂ →
              QTyped constTy Γ (.letE x e₁ e₂) τ₂
@@ -649,7 +650,7 @@ private theorem qtyped_inv_aux {B C : Type} {constTy : C → B} :
       ⟨(fun h => nomatch h), (fun h => nomatch h), (fun h => nomatch h)⟩
   | _, _, _, .qSelAbs _ _ =>
       ⟨(fun h => nomatch h), (fun h => nomatch h), (fun h => nomatch h)⟩
-  | _, _, _, .qLet _ _ _ =>
+  | _, _, _, .qLet _ _ _ _ =>
       ⟨(fun h => nomatch h), (fun h => nomatch h), (fun h => nomatch h)⟩
   | _, _, _, .qLab =>
       ⟨(fun h => nomatch h), (fun h => nomatch h), (fun h => nomatch h)⟩
@@ -696,7 +697,7 @@ private theorem qtyped_lab_inv_aux {B C : Type} {constTy : C → B} {l : Label} 
   | _, _, _, .qVar _ _, he => nomatch he
   | _, _, _, .qLam _, he => nomatch he
   | _, _, _, .qApp _ _, he => nomatch he
-  | _, _, _, .qLet _ _ _, he => nomatch he
+  | _, _, _, .qLet _ _ _ _, he => nomatch he
   | _, _, _, .qCat _ _, he => nomatch he
   | _, _, _, .qSel _ _, he => nomatch he
   | _, _, _, .qSelUnk _ _, he => nomatch he
@@ -786,7 +787,8 @@ theorem Typed.toQ {B C : Type} {constTy : C → B} :
   | _, _, _, .tLam h => .qLam (Typed.toQ h)
   | _, _, _, .tApp h₁ h₂ => .qApp (Typed.toQ h₁) (Typed.toQ h₂)
   | _, _, _, .tLet hprem hbody =>
-      .qLet (fun τ₁ hq => Typed.toQ (hprem τ₁ (QScheme.inst_toQ.mp hq)))
+      .qLet (by simp [QScheme.WF, Scheme.toQ])
+            (fun τ₁ hq => Typed.toQ (hprem τ₁ (QScheme.inst_toQ.mp hq)))
             ⟨_, QScheme.inst_toQ.mpr (Scheme.Inst.self _)⟩
             (Typed.toQ hbody)
   | _, _, _, .tCat h₁ h₂ => .qCat (Typed.toQ h₁) (Typed.toQ h₂)
@@ -829,7 +831,7 @@ theorem qtyped_two_use {B C : Type} (constTy : C → B) (c : C) :
           (.field "a" (.app (.var "f") (.rcd (.field "l" (.con c)))))
           (.field "b" (.app (.var "f") (.rcd .empty))))))
       (.rcd (.cat (.sing "a" (.base (constTy c))) (.sing "b" .unk))) := by
-  refine .qLet (σ := selQ B) (fun τ₁ hq => ?_) ⟨_, selQ_inst_absent⟩ ?_
+  refine .qLet (σ := selQ B) (by simp [QScheme.WF, selQ]) (fun τ₁ hq => ?_) ⟨_, selQ_inst_absent⟩ ?_
   · exact (selQ_instance_closed constTy Ctx.empty τ₁ hq).toQ
   · refine .qRcd (.cat (.field ?_) (.field ?_))
     · exact .qApp
@@ -927,8 +929,8 @@ theorem qtyped_sub {B C : Type} {constTy : C → B} :
   | _, _, _, _, hs, .qSelAbs h hl =>
       .qSelAbs (qtyped_sub hs h) hl
   | _, _, _, _, hs, .qUnk h       => .qUnk (qtyped_sub hs h)
-  | _, _, _, _, hs, .qLet h₁ hne h₂   =>
-      .qLet (fun τ' hi =>
+  | _, _, _, _, hs, .qLet hwf h₁ hne h₂   =>
+      .qLet hwf (fun τ' hi =>
               qtyped_sub hs (h₁ τ' hi))
             hne
             (qtyped_sub (hs.bindScheme _ _) h₂)
@@ -1006,11 +1008,11 @@ private theorem qsubst_aux {B C : Type} {constTy : C → B} :
   | _, _, _, .qSelDynAbs h₁ h₂ hl, _, _, _, _, hsub, hv =>
       .qSelDynAbs (qsubst_aux h₁ hsub hv) (qsubst_aux h₂ hsub hv)
         hl
-  | _, .letE y e₁ e₂, _, .qLet h₁ hne h₂, _, x, _, _, hsub, hv => by
+  | _, .letE y e₁ e₂, _, .qLet hwf h₁ hne h₂, _, x, _, _, hsub, hv => by
       simp only [subst]
       cases hxy : (x == y)
       · simp only [Bool.false_eq_true, if_false]
-        exact .qLet
+        exact .qLet hwf
           (fun τ' hi =>
             qsubst_aux (h₁ τ' hi) hsub hv)
           hne
@@ -1018,7 +1020,7 @@ private theorem qsubst_aux {B C : Type} {constTy : C → B} :
             ((hsub.bindScheme _ _).trans
               (QCtx.Sub.exchange _ (by simpa using hxy) _ _)) hv)
       · simp only [if_true]
-        exact .qLet
+        exact .qLet hwf
           (fun τ' hi =>
             qsubst_aux (h₁ τ' hi) hsub hv)
           hne
@@ -1239,10 +1241,10 @@ private theorem qpreservation_aux {B C : Type} {constTy : C → B} :
           obtain ⟨ρ', -, hb⟩ := qtyped_rcd_inv h₁
           obtain ⟨_, _, hte⟩ := QTypedBody.lookup_some hb hbl
           exact .qUnk hte
-  | _, _, _, .qLet h₁ hne h₂, hΓ, _ => fun hs => by
+  | _, _, _, .qLet hwf h₁ hne h₂, hΓ, _ => fun hs => by
       cases hs with
       | letCong s =>
-          exact .qLet (fun τ' hi => qpreservation_aux (h₁ τ' hi) hΓ s) hne h₂
+          exact .qLet hwf (fun τ' hi => qpreservation_aux (h₁ τ' hi) hΓ s) hne h₂
       | letBeta hval =>
           subst hΓ
           exact qsubst_scheme_preserves_typing _ _ _ _ _ _ _
@@ -1356,7 +1358,7 @@ def qprogress {B C : Type} {constTy : C → B} {Γ : QCtx B} {e : Expr C} {τ : 
           exact qsel_rcd_progress b _
   -- the inhabitation premise picks ONE discharged instance; the binding types
   -- there, which is all progress needs to drive it to a value, error or step
-  | .qLet h₁ hne h₂ =>
+  | .qLet hwf h₁ hne h₂ =>
       match qprogress hΓ (h₁ _ hne.choose_spec) with
       | .step s  => .step (.letCong s)
       | .err er  => .err (.letBind er)
@@ -1512,8 +1514,8 @@ theorem qtyped_cov {B C : Type} {constTy : C → B} :
   | _, _, _, _, hs, .qSelAbs h hl =>
       .qSelAbs (qtyped_cov hs h) hl
   | _, _, _, _, hs, .qUnk h       => .qUnk (qtyped_cov hs h)
-  | _, _, _, _, hs, .qLet h₁ hne h₂ =>
-      .qLet (fun τ' hi =>
+  | _, _, _, _, hs, .qLet hwf h₁ hne h₂ =>
+      .qLet hwf (fun τ' hi =>
               qtyped_cov hs (h₁ τ' hi))
             hne
             (qtyped_cov (hs.bindScheme _ _) h₂)
@@ -1957,7 +1959,7 @@ private theorem qvar_inst_inv {B C : Type} {constTy : C → B} :
   | _, _, _, .qSel _ _ => fun he _ => nomatch he
   | _, _, _, .qSelUnk _ _ => fun he _ => nomatch he
   | _, _, _, .qSelAbs _ _ => fun he _ => nomatch he
-  | _, _, _, .qLet _ _ _ => fun he _ => nomatch he
+  | _, _, _, .qLet _ _ _ _ => fun he _ => nomatch he
   | _, _, _, .qRcd _ => fun he _ => nomatch he
   | _, _, _, .qLab => fun he _ => nomatch he
   | _, _, _, .qSelDyn _ _ _ => fun he _ => nomatch he
@@ -1998,7 +2000,7 @@ theorem qsel_var_inv {B C : Type} {constTy : C → B} :
   | _, _, _, .qLam _ => fun he _ => nomatch he
   | _, _, _, .qApp _ _ => fun he _ => nomatch he
   | _, _, _, .qCat _ _ => fun he _ => nomatch he
-  | _, _, _, .qLet _ _ _ => fun he _ => nomatch he
+  | _, _, _, .qLet _ _ _ _ => fun he _ => nomatch he
   | _, _, _, .qRcd _ => fun he _ => nomatch he
   | _, _, _, .qLab => fun he _ => nomatch he
   | _, _, _, .qSelDyn _ _ _ => fun he _ => nomatch he
