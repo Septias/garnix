@@ -25,10 +25,9 @@ sound, stuck ⟹ `★`" is the real contract. The question is only where to draw
 incompleteness line, and U-expand is a defensible place.
 
 ## What Stage 0 established (2026-09-22, on `main`)
-
-Full numbers in `typesystems/proof-state.md`. The three that drive this plan,
-measured over 771 578 pairs in the `wide`/`deep`/`nest` universes at cap 64 by a
-stubbed clone of the driver (`nxSpineMF` in `Fuzz.lean`):
+ The three that drive this plan, measured over 771 578 pairs in the
+`wide`/`deep`/`nest` universes at cap 64 by a stubbed clone of the driver
+(`nxSpineMF` in `Fuzz.lean`):
 
 1. **Verdict-monotone: 0 counterexamples.** Wherever both drivers reach a
    verdict, either they agree or the stub is `.stuck`. So every proof obligation
