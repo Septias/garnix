@@ -162,11 +162,13 @@ theorem nameReuse_infers_unguarded (hu : UnguardedVar Unit Unit (fun _ => ())) :
     subst hp; decide
   · intro α _ β hβ
     exact absurd hβ List.not_mem_nil
-  · refine ⟨fun p hp => ?_, fun p hp q hq _ => ?_⟩
+  · refine ⟨fun p hp => ?_, fun p hp q hq _ _ _ => ?_, fun p hp hsp => ?_⟩
     · simp only [nrS1, List.mem_cons, List.not_mem_nil, or_false] at hp
-      subst hp; exact ⟨rfl, by decide⟩
+      subst hp; decide
     · simp only [nrS1, List.mem_cons, List.not_mem_nil, or_false] at hp hq
       subst hp; subst hq; rfl
+    · simp only [nrS1, List.mem_cons, List.not_mem_nil, or_false] at hp
+      subst hp; exact absurd hsp (by decide)
   · intro α hα
     simp only [List.mem_cons, List.not_mem_nil, or_false] at hα
     rcases hα with rfl | rfl <;> decide

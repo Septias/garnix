@@ -21,10 +21,9 @@ variable {B : Type} [DecidableEq B]
 /-- vacuous since the filters key on the stump (header). -/
 def SolverState.PInv (_S : SolverState B) : Prop := True
 
-/-- the schemes of Γ are well-formed and one constraint per result variable. -/
+/-- the schemes of Γ are well-formed. -/
 def QCtx.SchemesWF (Γ : QCtx B) : Prop :=
-  ∀ x sc, Γ.lookup x = some sc →
-    sc.WF ∧ ∀ a ∈ sc.constraints, ∀ b ∈ sc.constraints, a.res = b.res → a = b
+  ∀ x sc, Γ.lookup x = some sc → sc.WF
 
 /-- a stump parked at S survives to S′ as the same stump, or discharges. -/
 def SolverState.KeepsS (S S' : SolverState B) : Prop :=
@@ -149,18 +148,17 @@ theorem SolveTySat.pinv_keeps {S S' : SolverState B} {τ τ' : Ty B} :
 --------------------- CONTEXTS -------------------------------------------------
 
 theorem QCtx.SchemesWF.bindScheme {Γ : QCtx B} (h : Γ.SchemesWF) (x : Var)
-    {sc : QScheme B} (hwf : sc.WF)
-    (hf : ∀ a ∈ sc.constraints, ∀ b ∈ sc.constraints, a.res = b.res → a = b) :
+    {sc : QScheme B} (hwf : sc.WF) :
     (Γ.bindScheme x sc).SchemesWF := by
   intro y sc' hy
   rw [QCtx.lookup_bindScheme] at hy
   by_cases hxy : (x == y) = true
-  · rw [if_pos hxy] at hy; injection hy with hy; subst hy; exact ⟨hwf, hf⟩
+  · rw [if_pos hxy] at hy; injection hy with hy; subst hy; exact hwf
   · rw [if_neg hxy] at hy; exact h y sc' hy
 
 theorem QCtx.SchemesWF.bindTy {Γ : QCtx B} (h : Γ.SchemesWF) (x : Var) (τ : Ty B) :
     (Γ.bindTy x τ).SchemesWF :=
-  h.bindScheme x (fun _ h => nomatch h) (fun _ h => nomatch h)
+  h.bindScheme x (fun _ h => nomatch h)
 
 theorem QCtx.SchemesWF.nil : (QCtx.empty : QCtx B).SchemesWF :=
   fun _ _ h => nomatch h
@@ -223,7 +221,6 @@ theorem Infer.pinv_keeps {C : Type} {constTy : C → B} :
     Infer constTy Γ S e τ S' → S.PInv → Γ.SchemesWF → S'.PInv ∧ S.KeepsS S'
   | _, _, _, _, _, .con, h, _ => ⟨h, .refl _⟩
   | _, _, _, _, _, .var hl hren hfr hdr hle _ hps ⟨S₁, hws, hsat⟩, h, hΓ => by
-      obtain ⟨hwf, hfun⟩ := hΓ _ _ hl
       obtain ⟨h₁, hk₁⟩ := hws.pinv_keeps (supply_up_pinv h hle) trivial
       obtain ⟨h₂, hk₂⟩ := hsat.pinv_keeps h₁
       exact ⟨h₂, ((SolverState.KeepsS.of_sub (fun p hp => hp)).trans hk₁
@@ -317,11 +314,7 @@ theorem Infer.pinv_keeps {C : Type} {constTy : C → B} :
       have hΓ' := hΓ.bindScheme x (sc := letScheme S₁ ᾱ Δq τ₁)
         (fun st hst => by
           obtain ⟨p, hp, rfl⟩ := List.mem_map.mp hst
-          exact ⟨_, (hres.1 p hp).2, rfl⟩)
-        (fun a ha b hb he => by
-          obtain ⟨p, hp, rfl⟩ := List.mem_map.mp ha
-          obtain ⟨q, hq, rfl⟩ := List.mem_map.mp hb
-          rw [hres.2 p hp q hq (Ty.var.inj he)])
+          exact (hres.1 p hp).1)
       obtain ⟨i₂, k₂⟩ := Infer.pinv_keeps h₂ i₁' hΓ'
       refine ⟨i₂, fun σ hσ p hp => ?_⟩
       rcases k₁ σ (Infer.sat_mono h₂ σ hσ) p hp with ⟨q, hq, hqs⟩ | hd

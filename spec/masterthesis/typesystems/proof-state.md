@@ -46,7 +46,9 @@ We use a custom lookup relation ⟨ρ.l ↓ r⟩ with return values ⟨τ | ⊥ 
 - `λx. λy. (x.l) y`: A-app writes `δ ≔ α → β` into a parked stump's result, F-★'s `δ ≐ ★` clashes (`no_finalize_of_spent`)
 - Fix: `Stump.res : Ty B`; new finalization phase `Materialize` (F-hit) before F-★: blocker `r ≔ (l : res | r')`, then saturate
 - `Run` = infer → `Materializes` → `Finalizes`; `runSound`, `runF_terminates` re-proved, same axioms
-- Open: key-blocked spent stump (`λr. λa. r.(a) c`) still fails; A-let does not generalize spent stumps (`QScheme.WF` wants `res` a bound var)
+- Parked stumps are retired by stump, not by result: `PInv`/`PsOk` vacuous
+- A-let generalizes spent stumps: `QScheme.WF` = result vars are binders; `Correctable` = linear pattern results (`Ty.correct`); inhabitation fills spent blockers (`fillRow`)
+- Open: key-blocked spent stump (`λr. λa. r.(a) c`) still fails; spent results with record literals, or two spent stumps on one field, stay monomorphic
 
 
 ## Symbols

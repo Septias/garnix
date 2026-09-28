@@ -75,6 +75,22 @@ def run (e : E) : String := verdict (runF (fun _ => ()) 50 e)
 #guard run (.lam "x" (rec2 "p" (.app (.sel (v "x") "l") c) "q" (.app (.sel (v "x") "l") c)))
   = "({l: (𝓫 → t7) | r8 | ε | ε} → {p: t7 | q: t7})"
 
+-- a spent promise under a let is GENERALIZED: f stays polymorphic in x's row
+-- (it used to be forced monomorphic, and the second use clashed)
+#guard run (.letE "f" (.lam "x" (.lam "y" (.app (.sel (v "x") "l") (v "y"))))
+    (rec2 "a" (.app (.app (v "f") (rec1 "l" (.lam "z" (v "z")))) c)
+          "b" (.app (.app (v "f") (rec2 "l" (.lam "z" (v "z")) "m" c)) c)))
+  = "{a: 𝓫 | b: 𝓫}"
+-- …two spent selections of different fields on one row generalize together
+#guard run (.letE "f" (.lam "x" (rec2 "p" (.app (.sel (v "x") "l") c) "q" (.app (.sel (v "x") "m") c)))
+    (.app (v "f") (rec2 "l" (.lam "z" (v "z")) "m" (.lam "z" (.rcd .empty)))))
+  = "{p: 𝓫 | q: {ε}}"
+-- …and an instance at a row WITHOUT the field has no typing: ⊥ wants ★, the
+-- promise was spent on an arrow (declaratively: ★ cannot be applied)
+#guard run (.letE "f" (.lam "x" (.lam "y" (.app (.sel (v "x") "l") (v "y"))))
+    (.app (.app (v "f") (rec1 "m" c)) c))
+  = "fail: clash"
+
 -- an instance's stump whose RESULT was aliased (found by this function,
 -- 2026-09-26, then fixed): in `h = λy. g y`, A-app emits δ ≐ β and the unifier
 -- binds δ ≔ β. A-let used to want δ itself unsolved, so h stayed monomorphic and

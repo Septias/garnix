@@ -1019,6 +1019,11 @@ info: 'MinimalCalculus.Materializes.keeps' depends on axioms: [propext, Classica
 #guard_msgs in #print axioms Materializes.keeps
 
 /--
+info: 'MinimalCalculus.Ty.correct' depends on axioms: [propext, Quot.sound]
+-/
+#guard_msgs in #print axioms Ty.correct
+
+/--
 info: 'MinimalCalculus.runSound' depends on axioms: [propext, Classical.choice, Quot.sound]
 -/
 #guard_msgs in #print axioms runSound

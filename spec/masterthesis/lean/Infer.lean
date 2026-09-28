@@ -702,22 +702,39 @@ def SolverState.resVar {B : Type} (S : SolverState B) : Ty B → TyVar
 constraints raw would keep a stump's row pointing at the variable it was parked
 on, not at the generalized tail that variable has since been solved to — and
 then an instance's stump would chase the ORIGINAL tail, shared by all
-instances. The RESULT is read too (`resVar`): a result aliased to β by
-unification must be generalized as β, the name the body mentions
-(`InferRuns.lean`, the `h = λy. g y` witness). -/
+instances. The RESULT is read too: a result aliased to β by unification must be
+generalized as β, the name the body mentions (`InferRuns.lean`, the
+`h = λy. g y` witness), and a spent result is generalized as the type it was
+spent on. -/
 def letScheme {B : Type} (S₁ : SolverState B) (ᾱ : List TyVar) (Δq : List (Parked B))
     (τ₁ : Ty B) : QScheme B :=
   ⟨ᾱ, Δq.map (fun p => (⟨p.stump.row.applySubst S₁.subst, p.stump.label.applySubst S₁.subst,
-      .var (S₁.resVar p.stump.res)⟩ : Stump B)), τ₁.applySubst S₁.subst⟩
+      p.stump.res.applySubst S₁.subst⟩ : Stump B)), τ₁.applySubst S₁.subst⟩
 
-/-- A-let's premise on the generalized RESULTS: each still reads as a variable at
-S₁, that variable is generalized, and distinct generalized stumps read as
-distinct variables — one constraint per result (`QScheme.WF`, `Correctable`). -/
+/-- A-let's premise on the generalized RESULTS, read at S₁ (`QScheme.WF`,
+`Correctable`, and the inhabitation of the scheme):
+* each is a linear pattern over ᾱ — a variable, or a type a promise was spent on
+  that the χ-correction can still reach (`Ty.correct`);
+* distinct stumps share no result variable;
+* a SPENT result can be met at some instance, by extending its blocker row with
+  the field (as `Materialize` does at the top level): its key is literal, every
+  stump on the same blocker is literally keyed and is it if it has its key, and
+  no spent stump's blocker occurs in it. -/
 def LetResults {B : Type} (S₁ : SolverState B) (ᾱ : List TyVar) (Δq : List (Parked B)) :
     Prop :=
-  (∀ p ∈ Δq, p.stump.res.applySubst S₁.subst = .var (S₁.resVar p.stump.res) ∧
-      S₁.resVar p.stump.res ∈ ᾱ) ∧
-  (∀ p ∈ Δq, ∀ q ∈ Δq, S₁.resVar p.stump.res = S₁.resVar q.stump.res → p.stump = q.stump)
+  (∀ p ∈ Δq, (∀ δ ∈ (p.stump.res.applySubst S₁.subst).ftv, δ ∈ ᾱ) ∧
+      (p.stump.res.applySubst S₁.subst).isPat = true ∧
+      (p.stump.res.applySubst S₁.subst).ftv.Nodup) ∧
+  (∀ p ∈ Δq, ∀ q ∈ Δq, ∀ δ ∈ (p.stump.res.applySubst S₁.subst).ftv,
+      δ ∈ (q.stump.res.applySubst S₁.subst).ftv → p.stump = q.stump) ∧
+  (∀ p ∈ Δq, (p.stump.res.applySubst S₁.subst).isVar = false →
+      (p.stump.label.applySubst S₁.subst).isLab = true ∧
+      (∀ q ∈ Δq, q.blocker = p.blocker →
+        (q.stump.label.applySubst S₁.subst).isLab = true ∧
+        (q.stump.label.applySubst S₁.subst = p.stump.label.applySubst S₁.subst →
+          q.stump = p.stump)) ∧
+      (∀ q ∈ Δq, (q.stump.res.applySubst S₁.subst).isVar = false →
+        q.blocker ∉ (p.stump.res.applySubst S₁.subst).ftv))
 
 /-- ⊢  an unsolved result reads as itself -/
 theorem SolverState.subst_ty_of_not_dom {B : Type} {S : SolverState B} {δ : TyVar}
@@ -890,8 +907,9 @@ inductive Infer {B C : Type} [DecidableEq B] (constTy : C → B) :
       -- … and no generalized stump's row OR KEY, read at S₁, mentions another's
       -- answer: then an instance's constraints can be discharged one at a time
       -- (`instEquivCorrects`, InferSoundA.lean), without a fixpoint
-      (∀ p ∈ Δq, ∀ q ∈ Δq, S₁.resVar q.stump.res ∉ (p.stump.row.applySubst S₁.subst).ftv ∧
-         S₁.resVar q.stump.res ∉ (p.stump.label.applySubst S₁.subst).ftv) →
+      (∀ p ∈ Δq, ∀ q ∈ Δq, ∀ δ ∈ (q.stump.res.applySubst S₁.subst).ftv,
+         δ ∉ (p.stump.row.applySubst S₁.subst).ftv ∧
+         δ ∉ (p.stump.label.applySubst S₁.subst).ftv) →
       Infer constTy (Γ.bindScheme x (letScheme S₁ ᾱ Δq τ₁))
         { S₁ with parked := Δγ } e₂ τ₂ S₂ →
       Infer constTy Γ S (.letE x e₁ e₂) τ₂ S₂

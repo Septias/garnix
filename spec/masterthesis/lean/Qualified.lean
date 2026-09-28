@@ -29,6 +29,25 @@ structure Stump (B : Type) where
 
 deriving instance DecidableEq for Stump
 
+/-- a result the χ-correction can reach (`Ty.correct`, InferSoundA.lean):
+records only as a bare row variable, since ≈ moves fields inside a record. -/
+def Ty.isPat {B : Type} : Ty B → Bool
+  | .var _         => true
+  | .base _        => true
+  | .lab _         => true
+  | .unk           => true
+  | .fn τ₁ τ₂      => τ₁.isPat && τ₂.isPat
+  | .rcd (.var _)  => true
+  | .rcd _         => false
+
+def Ty.isVar {B : Type} : Ty B → Bool
+  | .var _ => true
+  | _      => false
+
+def Ty.isLab {B : Type} : Ty B → Bool
+  | .lab _ => true
+  | _      => false
+
 -- ## Qualified schemes  σ := ∀ᾱ. Q ⇒ τ
 -- A plain HM scheme is the special case Q = ∅ (Scheme.toQ below). The result
 -- variables δ are drawn from vars like every other quantified variable; the
@@ -58,12 +77,13 @@ def QScheme.applySubst {B : Type} (σ : QScheme B) (θ : TySubst B) : QScheme B 
 theorem QScheme.applySubst_vars {B : Type} (σ : QScheme B) (θ : TySubst B) :
     (σ.applySubst θ).vars = σ.vars := rfl
 
-/-- σ's result variables are among its binders — the well-formedness the header
+/-- σ's results mention only its binders — the well-formedness the header
 states ("δ are drawn from vars like every other quantified variable"), and what
-makes a stump a constraint on the scheme's OWN binder rather than on a free
-variable. -/
+makes a stump a constraint on the scheme's OWN binders rather than on free
+variables. A result is usually one binder δ; a spent promise's result is a type
+over binders (`𝓫 → β`). -/
 def QScheme.WF {B : Type} (σ : QScheme B) : Prop :=
-  ∀ st ∈ σ.constraints, ∃ δ ∈ σ.vars, st.res = .var δ
+  ∀ st ∈ σ.constraints, ∀ δ ∈ st.res.ftv, δ ∈ σ.vars
 
 /-- what σ mentions at a non-binding position. -/
 def QScheme.freeFtv {B : Type} (σ : QScheme B) : List TyVar :=
@@ -836,7 +856,7 @@ theorem qtyped_two_use {B C : Type} (constTy : C → B) (c : C) :
           (.field "a" (.app (.var "f") (.rcd (.field "l" (.con c)))))
           (.field "b" (.app (.var "f") (.rcd .empty))))))
       (.rcd (.cat (.sing "a" (.base (constTy c))) (.sing "b" .unk))) := by
-  refine .qLet (σ := selQ B) (by simp [QScheme.WF, selQ]) (fun τ₁ hq => ?_) ⟨_, selQ_inst_absent⟩ ?_
+  refine .qLet (σ := selQ B) (by simp [QScheme.WF, selQ, Ty.ftv]) (fun τ₁ hq => ?_) ⟨_, selQ_inst_absent⟩ ?_
   · exact (selQ_instance_closed constTy Ctx.empty τ₁ hq).toQ
   · refine .qRcd (.cat (.field ?_) (.field ?_))
     · exact .qApp

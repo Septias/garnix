@@ -835,10 +835,13 @@ theorem fStarEx_refinement_lost :
 -- The witnesses below still stand: they are about the F-★ STEP, which still
 -- cannot fire on a spent stump — materialization is what runs instead.
 --
+-- A-let generalizes a spent stump too (2026-09-28): `QScheme.WF` asks only that
+-- a result mention binders, `Correctable` that it be a linear pattern
+-- (`Ty.correct`), and `LetResults` that its blocker can be filled to witness an
+-- instance. What those premises exclude falls back to a monomorphic let.
+--
 -- Still open: a spent promise blocked on its KEY (`λr. λa. r.(a) c`) has no row
--- to extend and still fails; and A-let still refuses to generalize a spent stump
--- (`LetResults`, `QScheme.WF` wants a bound variable), so it waits for the top
--- level.
+-- to extend and still fails.
 
 private def spentEx : Expr Unit :=
   .lam "x" (.lam "y" (.app (.sel (.var "x") "l") (.var "y")))
