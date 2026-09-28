@@ -42,13 +42,25 @@ We use a custom lookup relation ⟨ρ.l ↓ r⟩ with return values ⟨τ | ⊥ 
 # Problems
 > Problems found during mechanized proving and their proposed solutions
 
-## Spent promise at F-★  (branch `stump-ty-res`)
+## Spent promise at F-★  (fixed, merged 2026-09-28)
 - `λx. λy. (x.l) y`: A-app writes `δ ≔ α → β` into a parked stump's result, F-★'s `δ ≐ ★` clashes (`no_finalize_of_spent`)
 - Fix: `Stump.res : Ty B`; new finalization phase `Materialize` (F-hit) before F-★: blocker `r ≔ (l : res | r')`, then saturate
 - `Run` = infer → `Materializes` → `Finalizes`; `runSound`, `runF_terminates` re-proved, same axioms
 - Parked stumps are retired by stump, not by result: the parked-list invariant (`PInv`) is gone
 - A-let generalizes spent stumps: `QScheme.WF` = result vars are binders; `Correctable` = linear pattern results (`Ty.correct`); inhabitation fills spent blockers (`fillRow`)
-- Open: key-blocked spent stump (`λr. λa. r.(a) c`) still fails; spent results with record literals, or two spent stumps on one field, stay monomorphic
+- Remaining incompleteness (monomorphic let, or no run):
+  - spent result with a record literal (`(x.l) {a = c}`): ≈ reorders fields, `Ty.correct` cannot
+  - two spent stumps on the same field of one row (`LetBad`)
+  - key-blocked spent stump never given its key (`λr. λa. r.(a) c`): no run, see below
+
+## Key-blocked spent promise  (open, deliberately kept)
+- Only bites when the key is never supplied: applied, `(λr. λa. r.(a) c) {k = λz.z} ⌊k⌋` runs to `𝓫`
+- No row to extend: the lookup waits on the KEY, so `Materialize` does not apply
+- Declaratively typeable (`a : ⌊foo⌋`, `r : {foo: 𝓫 → β}`), so this is incompleteness, not a rejection
+- Fix A — guess the key: F-key binds `α ≔ ⌊ℓ_fresh⌋`, then materialize; small, `runSound` carries over; answer valid but non-principal (made-up label in the type)
+- Fix B — qualified top-level type: `Run` reports `∀. ⟨ρ.(α) ↓ 𝓫 → β⟩ ⇒ {ρ} → α → β`; principal (top level = `let main = e in main`), but `Run`/`RunSound`/`runF` and printed answers change; soundness becomes "every instance is typed"
+- Guessing is fine inside a proof (inhabitation witness), not in a reported type → B preferred when taken up
+- Same idea would extend A-let to key-blocked spent stumps (inhabitation: key ↦ fresh label, then `fillRow`)
 
 
 ## Symbols
