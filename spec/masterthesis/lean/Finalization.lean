@@ -32,8 +32,8 @@ variable {B : Type} [DecidableEq B]
 -- substituted, and a clean ⟦S⟧ leaves such a variable alone.)
 
 -- ⊢  `δ ≐ ★` binds nothing at the row sort
-private theorem solve_star_row_free {S S₀ : SolverState B} {δ : TyVar}
-    (hs : SolveTy S (.var δ) .unk S₀) {β : TyVar} (hβ : S.subst.row β = .var β) :
+private theorem solve_star_row_free {S S₀ : SolverState B} {τ : Ty B}
+    (hs : SolveTy S τ .unk S₀) {β : TyVar} (hβ : S.subst.row β = .var β) :
     S₀.subst.row β = .var β := by
   obtain ⟨fuel, s, Sup, hu, rfl⟩ := hs
   have hg := (unifyM_good fuel).1 S.supply _ _ hu
@@ -45,7 +45,7 @@ private theorem solve_star_row_free {S S₀ : SolverState B} {δ : TyVar}
     have := hg.dom _ hd
     revert this hu
     simp only [Ty.applySubst]
-    cases S.subst.ty δ with
+    cases τ.applySubst S.subst with
     | var γ => intro _ h; simp [Ty.sortedFtv] at h
     | unk => intro _ h; simp [Ty.sortedFtv] at h
     | base b => intro hu; simp [unifyTyF] at hu
@@ -71,14 +71,14 @@ private theorem starOrVar_tyLookup {s : List (TyVar × Ty B)}
       · exact .inl (hs p List.mem_cons_self)
       · exact ih (fun q hq => hs q (List.mem_cons_of_mem _ hq))
 
-private theorem solve_star_sol {S S₀ : SolverState B} {δ : TyVar}
-    (hs : SolveTy S (.var δ) .unk S₀) :
+private theorem solve_star_sol {S S₀ : SolverState B} {τ : Ty B}
+    (hs : SolveTy S τ .unk S₀) :
     ∃ s Sup, S₀ = S.extend s Sup ∧ ∀ p ∈ s.ty, p.2 = .unk := by
   obtain ⟨fuel, s, Sup, hu, rfl⟩ := hs
   refine ⟨s, Sup, rfl, ?_⟩
   revert hu
   simp only [Ty.applySubst]
-  cases S.subst.ty δ with
+  cases τ.applySubst S.subst with
   | var γ =>
       intro hu
       cases fuel <;>
@@ -178,17 +178,73 @@ theorem Finalizes.holds {S S' : SolverState B} {ps : List (Parked B)} :
         rcases hso with h | ⟨_, h⟩ <;> exact nomatch h
       · exact Finalizes.holds hfs c₁ p' hp'
 
+--------------------- MATERIALIZATION KEEPS ------------------------------------
+-- F-hit is an equation plus saturation, so it inherits `KeepsS` from
+-- `SolveTySat`: every stump parked before it is still parked after it — the same
+-- stump — or discharged under any σ satisfying the state it ends in. Nothing
+-- about the materialized stump itself is needed: saturation wakes it, and
+-- `KeepsS` already says what that means.
+
+private theorem draw_sol {S S₀ : SolverState B} {α : TyVar} {κ : Kind}
+    (h : (α, S₀) = S.draw κ) : S₀.sol = S.sol := by
+  have h2 : S₀ = (S.draw κ).2 := congrArg Prod.snd h
+  subst h2; rfl
+
+/-- ⊢  one F-hit step keeps every stump and cleanliness, and extends. -/
+theorem Materialize.keeps {S S' : SolverState B} {p : Parked B} (hm : Materialize S p S')
+    (hc : S.sol.Clean) :
+    S.KeepsS S' ∧ S'.sol.Clean ∧ S.Ext S' ∧ S.SatMono S' := by
+  cases hm with
+  | hit _ _ _ _ hd hs =>
+      obtain ⟨k₀, m₀, -⟩ := draw_keeps hd
+      have k' := hs.keeps
+      exact ⟨k₀.trans k' hs.satMono, hs.clean (draw_sol hd ▸ hc),
+        (draw_ext hd).trans hs.ext, m₀.trans hs.satMono⟩
+
+theorem Materialize.clean {S S' : SolverState B} {p : Parked B} (hm : Materialize S p S')
+    (hc : S.sol.Clean) : S'.sol.Clean := by
+  cases hm with
+  | hit _ _ _ _ hd hs => exact hs.clean (draw_sol hd ▸ hc)
+
+theorem Materializes.clean {S S' : SolverState B} {ps : List (Parked B)} :
+    Materializes S ps S' → S.sol.Clean → S'.sol.Clean
+  | .nil, hc => hc
+  | .skip hms, hc => Materializes.clean hms hc
+  | .cons hm hms, hc => Materializes.clean hms (hm.clean hc)
+
+/-- ⊢  …and so does the whole materialization phase. -/
+theorem Materializes.keeps {S S' : SolverState B} {ps : List (Parked B)} :
+    Materializes S ps S' → S.sol.Clean →
+      S.KeepsS S' ∧ S'.sol.Clean ∧ S.Ext S' ∧ S.SatMono S'
+  | .nil, hc => ⟨.refl _, hc, .refl _, .refl _⟩
+  | .skip hms, hc => Materializes.keeps hms hc
+  | .cons hm hms, hc => by
+      obtain ⟨k₁, c₁, x₁, m₁⟩ := hm.keeps hc
+      obtain ⟨k₂, c₂, x₂, m₂⟩ := Materializes.keeps hms c₁
+      exact ⟨k₁.trans k₂ m₂, c₂, x₁.trans x₂, m₁.trans m₂⟩
+
 --------------------- RunSound -------------------------------------------------
 
 /-- ⊢  **ALGORITHM SOUNDNESS — `RunSound`.** A run from nothing — inference,
-then finalization of everything still parked — types its program at the type
-it reports, read under its own final substitution, in the empty context. -/
+materialization of spent promises, then F-★ on everything still parked — types
+its program at the type it reports, read under its own final substitution, in
+the empty context.
+
+A stump parked at the end of inference either survives materialization — and
+F-★ discharges it (`Finalizes.holds`) — or materialization's saturation
+discharged it already (`KeepsS`). -/
 theorem runSound {C : Type} {constTy : C → B} : RunSound B C constTy := by
-  rintro e τ S' ⟨S₁, hinf, hfins⟩
+  rintro e τ S' ⟨S₁, S₂, hinf, hmat, hfins⟩
   have c₁ := Infer.clean hinf Sol.clean_nil
-  have c' := hfins.clean c₁
-  have hab₁ : Absorbs S'.subst S₁ := (Absorbs.self c').back hfins.ext c₁
-  exact runSoundA hinf hab₁ (hab₁.sat c₁) (fun p hp => hfins.holds c₁ p hp)
+  obtain ⟨k₁₂, c₂, x₁₂, -⟩ := hmat.keeps c₁
+  have c' := hfins.clean c₂
+  have hab₁ : Absorbs S'.subst S₁ := (Absorbs.self c').back (x₁₂.trans hfins.ext) c₁
+  have hab₂ : Absorbs S'.subst S₂ := (Absorbs.self c').back hfins.ext c₂
+  refine runSoundA hinf hab₁ (hab₁.sat c₁) (fun p hp => ?_)
+  rcases k₁₂ S'.subst (hab₂.sat c₂) p hp with ⟨q, hq, hqs⟩ | hd
+  · have := hfins.holds c₂ q hq
+    rwa [hqs] at this
+  · exact Stump.dischargeEquiv_iff_holds.mp hd
 
 --------------------- THE χ-CORRECTION IS FALSE IN GENERAL ----------------------
 -- Two constraints on the SAME result variable whose lookups find ≈-equal but
@@ -198,7 +254,7 @@ theorem runSound {C : Type} {constTy : C → B} : RunSound B C constTy := by
 private def icA : Ty Unit := .rcd (.cat (.sing "a" (.base ())) (.sing "b" (.base ())))
 private def icB : Ty Unit := .rcd (.cat (.sing "b" (.base ())) (.sing "a" (.base ())))
 private def icSc : QScheme Unit :=
-  ⟨["d"], [⟨.sing "l" icA, .lab "l", "d"⟩, ⟨.sing "l" icB, .lab "l", "d"⟩], .var "d"⟩
+  ⟨["d"], [⟨.sing "l" icA, .lab "l", .var "d"⟩, ⟨.sing "l" icB, .lab "l", .var "d"⟩], .var "d"⟩
 private def icχ : TySubst Unit := ⟨fun x => if x = "d" then icA else .var x, fun x => .var x⟩
 
 private theorem icA_equiv_icB : TyEquiv icA icB :=
@@ -218,8 +274,8 @@ theorem instEquivCorrects_false : ¬ InstEquivCorrects Unit := by
       rcases hst with rfl | rfl
       · exact .hit (τ := icA) (.lit .hit) (by simp [icχ]; exact .refl _)
       · exact .hit (τ := icB) (.lit .hit) (by simp [icχ]; exact icA_equiv_icB))
-  have h1 := hdis ⟨.sing "l" icA, .lab "l", "d"⟩ (by simp [icSc])
-  have h2 := hdis ⟨.sing "l" icB, .lab "l", "d"⟩ (by simp [icSc])
+  have h1 := hdis ⟨.sing "l" icA, .lab "l", .var "d"⟩ (by simp [icSc])
+  have h2 := hdis ⟨.sing "l" icB, .lab "l", .var "d"⟩ (by simp [icSc])
   cases h1 with
   | hit hl₁ he₁ =>
     cases h2 with

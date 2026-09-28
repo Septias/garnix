@@ -23,8 +23,8 @@
 -- χ-correction is `QScheme.Correctable.correct`), `runSound_of_inferSoundC_nil`
 -- (its hypothesis is refuted), `Finalize.dischargeEquiv` and its `hfix` side
 -- condition (now `Finalize.holds`, where the condition is PROVED at ⟦S′⟧), and
--- `QScheme.ResWF` / `InstStumps.pairwise` (now `PInv`'s ResFun half plus
--- `QScheme.Correctable`).
+-- `QScheme.ResWF` / `InstStumps.pairwise` (now the stump-keyed filters —
+-- `Infer.keeps`, ParkedInv.lean — plus `QScheme.Correctable`).
 --
 -- ## Where the row environment goes
 -- Nowhere: there is no row environment. A context binds term variables only,
@@ -296,13 +296,13 @@ inductive Stump.DischargeEquiv {B : Type} (θ : TySubst B)
     (s : Stump B) : Prop where
   | hit {τ : Ty B} :
       LookupQ (s.row.applySubst θ) (s.label.applySubst θ) (.found τ) →
-      TyEquiv (θ.ty s.res) τ → DischargeEquiv θ s
+      TyEquiv (s.res.applySubst θ) τ → DischargeEquiv θ s
   | abs :
       LookupQ (s.row.applySubst θ) (s.label.applySubst θ) .absent →
-      θ.ty s.res = .unk → DischargeEquiv θ s
+      s.res.applySubst θ = .unk → DischargeEquiv θ s
   | unk :
       LookupQ (s.row.applySubst θ) (s.label.applySubst θ) .unknown →
-      θ.ty s.res = .unk → DischargeEquiv θ s
+      s.res.applySubst θ = .unk → DischargeEquiv θ s
 
 /-- ⊢  a discharge is one, up to ≈. -/
 theorem Stump.Discharge.toEquiv {B : Type} {θ : TySubst B}
@@ -319,15 +319,15 @@ theorem infer_sound_selUnk_step {B C : Type} [DecidableEq B] {constTy : C → B}
     (h : QTyped constTy Γ' e (τ.applySubst σ))
     (hs : SolveTy S₁' τ (.rcd (.var r)) S₂)
     (hsat : Sol.Sat σ S₂.sol)
-    (hst : Stump.DischargeEquiv σ ⟨.var r, .lab l, δ⟩) :
+    (hst : Stump.DischargeEquiv σ ⟨.var r, .lab l, .var δ⟩) :
     QTyped constTy Γ' (.sel e l) ((Ty.var δ).applySubst σ) := by
   have hrcd : QTyped constTy Γ' e ((Ty.rcd (.var r)).applySubst σ) :=
     .qEq h (hs.unifies_sat hsat)
   show QTyped constTy Γ' (.sel e l) (σ.ty δ)
   cases hst with
   | hit hl hty => exact .qEq (.qSel hrcd (LookupQ.lab_iff.mp hl)) hty.symm
-  | abs hl hδ  => rw [hδ]; exact .qSelAbs hrcd (LookupQ.lab_iff.mp hl)
-  | unk hl hδ  => rw [hδ]; exact .qSelUnk hrcd (LookupQ.lab_iff.mp hl)
+  | abs hl hδ  => rw [show σ.ty δ = _ from hδ]; exact .qSelAbs hrcd (LookupQ.lab_iff.mp hl)
+  | unk hl hδ  => rw [show σ.ty δ = _ from hδ]; exact .qSelUnk hrcd (LookupQ.lab_iff.mp hl)
 
 --------------------- THE K-/D- CORRESPONDENCE, ONE STEP ----------------------
 -- "K-hit / K-⊥ / K-repark are D-hit / D-⊥ / D-? — the difference is WHEN"
@@ -390,7 +390,7 @@ theorem Wake.dischargeEquiv {B : Type} [DecidableEq B] {S S₁ : SolverState B}
 
 /-- ⊢  a wake-up step leaves every OTHER parked constraint where it was. -/
 theorem Wake.parked_preserved {B : Type} [DecidableEq B] {S S₁ : SolverState B}
-    {p q : Parked B} (hne : q.stump.res ≠ p.stump.res) :
+    {p q : Parked B} (hne : q.stump ≠ p.stump) :
     Wake S p S₁ → q ∈ S.parked → q ∈ S₁.parked := by
   intro hw hq
   cases hw with
@@ -405,7 +405,7 @@ result variable with. -/
 theorem Wakes.parked_preserved {B : Type} [DecidableEq B] {S S' : SolverState B}
     {ps : List (Parked B)} {q : Parked B} :
     Wakes S ps S' → q ∈ S.parked →
-    (∀ p ∈ ps, q.stump.res ≠ p.stump.res) → q ∈ S'.parked
+    (∀ p ∈ ps, q.stump ≠ p.stump) → q ∈ S'.parked
   | .nil, hq, _ => hq
   | .cons hw hws, hq, hne =>
       Wakes.parked_preserved hws
@@ -422,7 +422,7 @@ the submitted constraints have pairwise distinct result variables, which is what
 theorem Wakes.dischargeEquiv {B : Type} [DecidableEq B] {S S' : SolverState B}
     {ps : List (Parked B)} {σ : TySubst B} :
     Wakes S ps S' → Sol.Sat σ S'.sol →
-    ps.Pairwise (fun a b => a.stump.res ≠ b.stump.res) →
+    ps.Pairwise (fun a b => a.stump ≠ b.stump) →
     ∀ p ∈ ps, p.stump.DischargeEquiv σ ∨ ∃ q ∈ S'.parked, q.stump = p.stump
   | .nil, _, _, _, hp => absurd hp List.not_mem_nil
   | .cons (p := p) hw hws, hsat, hpw, p', hp' => by
@@ -500,9 +500,9 @@ section is a statement about THIS relation, which is why it outlives the fix. -/
 inductive FinalizeUnguarded {B : Type} [DecidableEq B] :
     SolverState B → Parked B → SolverState B → Prop where
   | star {S S' : SolverState B} {p : Parked B} :
-      SolveTy S (.var p.stump.res) .unk S' →
+      SolveTy S p.stump.res .unk S' →
       FinalizeUnguarded S p
-        ({ S' with parked := S'.parked.filter (·.stump.res != p.stump.res) }.flag
+        ({ S' with parked := S'.parked.filter (·.stump != p.stump) }.flag
           (p.stump.label.applySubst S.subst).keyName)
 
 /-- ⊢  the shipped rule is strictly stronger: it fires only where the unguarded
@@ -513,7 +513,7 @@ theorem Finalize.toUnguarded {B : Type} [DecidableEq B] {S S' : SolverState B}
 
 /-- a stump on a LITERAL row: its lookup lands at every context, under every
 substitution. Nothing about it is blocked, and the unguarded rule does not care. -/
-private def fStar_p : Parked Unit := ⟨"a", ⟨.sing "l" (.base ()), .lab "l", "d"⟩⟩
+private def fStar_p : Parked Unit := ⟨"a", ⟨.sing "l" (.base ()), .lab "l", .var "d"⟩⟩
 
 private def fStar_S : SolverState Unit :=
   { sol := Sol.nil, parked := [fStar_p], flags := [], supply := ⟨0⟩ }
@@ -546,7 +546,7 @@ theorem finalize_star_no_discharge :
   | hit hlk hty =>
       have hτ := lookup_det (LookupQ.lab_iff.mp hlk) hlit
       injection hτ with hτ
-      rw [hd, hτ] at hty
+      simp only [Ty.applySubst] at hty; rw [hd, hτ] at hty
       exact absurd (TyEquiv.unk_inv hty) (by simp)
   | abs hlk _ => exact absurd (lookup_det (LookupQ.lab_iff.mp hlk) hlit) (by simp)
   | unk hlk _ => exact absurd (lookup_det (LookupQ.lab_iff.mp hlk) hlit) (by simp)
@@ -626,7 +626,7 @@ private def fsS2' : SolverState Unit :=
   ⟨fsSol1, [], [], ⟨4⟩, [(fsD, .ty), (fsR, .row), (fsA, .ty)]⟩
 
 /-- the stump A-sel-? parks: blocked on the record's row variable, writing δ. -/
-private def fsP : Parked Unit := ⟨fsR, ⟨.var fsR, .lab "l", fsD⟩⟩
+private def fsP : Parked Unit := ⟨fsR, ⟨.var fsR, .lab "l", .var fsD⟩⟩
 
 private def fsSp : SolverState Unit :=
   ⟨fsSol1, [fsP], [], ⟨4⟩, [(fsD, .ty), (fsR, .row), (fsA, .ty)]⟩
@@ -670,7 +670,7 @@ dropped from Δ. -/
 private def fsHit : Sol Unit := ⟨[(fsD, .base ())], []⟩
 private def fsSfix : SolverState Unit :=
   { fsS.extend fsHit ⟨5⟩ with
-      parked := (fsS.extend fsHit ⟨5⟩).parked.filter (·.stump.res != fsP.stump.res) }
+      parked := (fsS.extend fsHit ⟨5⟩).parked.filter (·.stump != fsP.stump) }
 
 /-- ⊢  **the run, with saturation in the rules.** The same closed program goes
 through `Infer`, and A-app's equation no longer leaves a stale stump behind: the
@@ -716,7 +716,7 @@ theorem fStarEx_stale_blocker :
 private def fsStar : Sol Unit := ⟨[(fsD, .unk)], []⟩
 private def fsS' : SolverState Unit :=
   ({ fsS.extend fsStar ⟨5⟩ with
-       parked := (fsS.extend fsStar ⟨5⟩).parked.filter (·.stump.res != fsP.stump.res) }).flag "l"
+       parked := (fsS.extend fsStar ⟨5⟩).parked.filter (·.stump != fsP.stump) }).flag "l"
 
 /-- ⊢  **why determinism was false.** From that state K-hit and the UNGUARDED F-★
 both fire on the same stump and commit δ to different types — `𝓫` and `★`. The
@@ -763,7 +763,7 @@ theorem fStar_reachable_no_discharge (Γ' : Ctx Unit)
   obtain ⟨r', hl', he'⟩ :=
     Sol.lookup_sat hS fStarEx_lands' (by intro h; cases h)
   intro hdis
-  have hres : fsP.stump.res = fsD := rfl
+  have hres : fsP.stump.res = .var fsD := rfl
   cases hdis with
   | hit hlk hty =>
       cases he' with
@@ -771,7 +771,7 @@ theorem fStar_reachable_no_discharge (Γ' : Ctx Unit)
           have heq := lookup_det hl' (LookupQ.lab_iff.mp hlk)
           injection heq with heq
           subst heq
-          rw [hres, hd] at hty
+          rw [hres] at hty; change σ.ty fsD ≈ₜ _ at hty; rw [hd] at hty
           rw [TyEquiv.unk_inv hty] at hb
           exact absurd ((TyEquiv.unk_inv_both hb).2 rfl) (by simp [Ty.applySubst])
   | abs hlk _ => cases he' with | found _ => exact absurd (lookup_det hl' (LookupQ.lab_iff.mp hlk)) (by simp)
@@ -784,7 +784,7 @@ where it does fire: the difference is whether anything ever resolved the blocker
 which is the whole content of A-sel-?'s promise. -/
 theorem fStarEx_runs :
     Run (B := Unit) (C := Unit) (fun _ => ()) fStarEx (.var fsB) fsSfix :=
-  ⟨fsSfix, fStarEx_infers, .nil⟩
+  ⟨fsSfix, fsSfix, fStarEx_infers, .nil, .nil⟩
 
 /-- ⊢  **the refinement, in types.** The declarative system gives the closed
 program `{a: 𝓫}`; finalizing the stale state answers `{a: ★}`, strictly blurrier —
@@ -824,20 +824,23 @@ theorem fStarEx_refinement_lost :
 -- and it is not the ★-elimination gap of `plans/inference-gap-analysis.md` §D
 -- either, because no ★ is ever formed here. The algorithm commits `x` to `{r}`
 -- with `r` abstract and never guesses a concrete row, so the only way it could
--- answer is to CARRY the constraint `⟨r.l ↓ (α_y → β)⟩` — and it cannot, because
--- `Stump.res` is a `TyVar`: a stump's result position holds a variable, not a
--- type. Three exits, in increasing order of cost:
---   * leave it a hard error, which is what the rules do now, and record the
---     incompleteness (this section);
---   * `Stump.res : Ty B`, so a spent promise is still expressible. The discharge
---     arms survive (`hit` compares up to ≈ already, `abs`/`unk` demand ★, which a
---     spent arrow simply fails) — but it touches `Stump`, `Discharge`,
---     `QScheme.WF`, `selQ` and every principality theorem built on them;
---   * a consistency relation `τ ~ ★` beside `≐`, which §D already prices as a
---     real extension rather than a gap.
--- The generalization boundary inherits the same problem: A-let carries stumps
--- into a scheme whose `QScheme.WF` wants each `res` among the binders, and a
--- spent δ is not a binder. So whichever exit is taken, it is taken for both.
+-- answer is to CARRY the constraint `⟨r.l ↓ (α_y → β)⟩`.
+--
+-- TAKEN (2026-09-27): `Stump.res : Ty B`, so a spent promise is still a stump,
+-- and finalization MATERIALIZES it before F-★ (`Materialize`, Infer.lean): the
+-- lookup is blocked on r, nothing has committed r, so `r ≔ (l : α_y → β | r′)`
+-- makes it hit. The run now answers `{l: t2 → t5 | r6} → t2 → t5` (InferRuns),
+-- an instance-mate of `spentEx_declarative`'s typing, and `runSound` covers it.
+-- The witnesses below still stand: they are about the F-★ STEP, which still
+-- cannot fire on a spent stump — materialization is what runs instead.
+--
+-- A-let generalizes a spent stump too (2026-09-28): `QScheme.WF` asks only that
+-- a result mention binders, `Correctable` that it be a linear pattern
+-- (`Ty.correct`), and `LetResults` that its blocker can be filled to witness an
+-- instance. What those premises exclude falls back to a monomorphic let.
+--
+-- Still open: a spent promise blocked on its KEY (`λr. λa. r.(a) c`) has no row
+-- to extend and still fails.
 
 private def spentEx : Expr Unit :=
   .lam "x" (.lam "y" (.app (.sel (.var "x") "l") (.var "y")))
@@ -858,7 +861,7 @@ private def spS2 : SolverState Unit :=
   ⟨spSol1, [], [], ⟨4⟩, [(spRow, .row), (spY, .ty), (spX, .ty)]⟩
 private def spS2' : SolverState Unit :=
   ⟨spSol1, [], [], ⟨5⟩, [(spD, .ty), (spRow, .row), (spY, .ty), (spX, .ty)]⟩
-private def spP : Parked Unit := ⟨spRow, ⟨.var spRow, .lab "l", spD⟩⟩
+private def spP : Parked Unit := ⟨spRow, ⟨.var spRow, .lab "l", .var spD⟩⟩
 private def spSp : SolverState Unit :=
   ⟨spSol1, [spP], [], ⟨5⟩, [(spD, .ty), (spRow, .row), (spY, .ty), (spX, .ty)]⟩
 private def spSb : SolverState Unit :=
@@ -903,7 +906,7 @@ theorem spentEx_infers :
   · exact ⟨spS, ⟨5, spApp, ⟨6⟩, rfl, rfl⟩, .done spentEx_quiescent⟩
 
 /-- ⊢  **the promise is spent**: the state has written an arrow into δ. -/
-theorem spentEx_spent : (spS.subst.ty spP.stump.res).Spent := trivial
+theorem spentEx_spent : (spP.stump.res.applySubst spS.subst).Spent := trivial
 
 /-- ⊢  **so the run cannot be finished.** F-★ has no derivation at this stump, and
 it is the only stump there is: `Run` has no answer for the program. -/
@@ -967,7 +970,8 @@ mutual
              QTypedC constTy Δ Γ (.lam x e) (.fn τ₁ τ₂)
     | qApp : QTypedC constTy Δ Γ e₁ (.fn τ₁ τ₂) → QTypedC constTy Δ Γ e₂ τ₁ →
              QTypedC constTy Δ Γ (.app e₁ e₂) τ₂
-    | qLet : (∀ τ₁, QScheme.Inst σ τ₁ → QTypedC constTy Δ Γ e₁ τ₁) →
+    | qLet : σ.WF →
+             (∀ τ₁, QScheme.Inst σ τ₁ → QTypedC constTy Δ Γ e₁ τ₁) →
              (∃ τ₁, QScheme.Inst σ τ₁) →
              QTypedC constTy Δ (Γ.bindScheme x σ) e₂ τ₂ →
              QTypedC constTy Δ Γ (.letE x e₁ e₂) τ₂
@@ -991,7 +995,7 @@ mutual
     -- THE ONE NEW RULE: a selection whose lookup is ASSUMED, answering at the
     -- stump's own result variable. This is A-sel-? read declaratively.
     | stump {ρ : Row B} {l : Label} {δ : TyVar} :
-             QTypedC constTy Δ Γ e (.rcd ρ) → (⟨ρ, .lab l, δ⟩ : Stump B) ∈ Δ →
+             QTypedC constTy Δ Γ e (.rcd ρ) → (⟨ρ, .lab l, .var δ⟩ : Stump B) ∈ Δ →
              QTypedC constTy Δ Γ (.sel e l) (.var δ)
 
   inductive QTypedCBody {B C : Type} (constTy : C → B) (Δ : List (Stump B)) :
@@ -1013,7 +1017,7 @@ mutual
     | .qEq h he       => .qEq h.toC he
     | .qLam h         => .qLam h.toC
     | .qApp h₁ h₂     => .qApp h₁.toC h₂.toC
-    | .qLet hi hin hb => .qLet (fun τ₁ h => (hi τ₁ h).toC) hin hb.toC
+    | .qLet hwf hi hin hb => .qLet hwf (fun τ₁ h => (hi τ₁ h).toC) hin hb.toC
     | .qCat h₁ h₂     => .qCat h₁.toC h₂.toC
     | .qSel h hl      => .qSel h.toC hl
     | .qSelUnk h hl   => .qSelUnk h.toC hl
@@ -1044,7 +1048,7 @@ mutual
     | .qEq h he       => .qEq h.toQTyped he
     | .qLam h         => .qLam h.toQTyped
     | .qApp h₁ h₂     => .qApp h₁.toQTyped h₂.toQTyped
-    | .qLet hi hin hb => .qLet (fun τ₁ h => (hi τ₁ h).toQTyped) hin hb.toQTyped
+    | .qLet hwf hi hin hb => .qLet hwf (fun τ₁ h => (hi τ₁ h).toQTyped) hin hb.toQTyped
     | .qCat h₁ h₂     => .qCat h₁.toQTyped h₂.toQTyped
     | .qSel h hl      => .qSel h.toQTyped hl
     | .qSelUnk h hl   => .qSelUnk h.toQTyped hl
@@ -1081,7 +1085,7 @@ def InferSoundC (B C : Type) [DecidableEq B] (constTy : C → B) : Prop :=
   ∀ (Γ : QCtx B) (S S' : SolverState B) (e : Expr C) (τ : Ty B),
     Infer constTy Γ S e τ S' →
     ∀ σ : TySubst B, Sol.Sat σ S'.sol →
-      (∀ p ∈ S'.parked, σ.ty p.stump.res = .var p.stump.res) →
+      (∀ p ∈ S'.parked, p.stump.res.applySubst σ = p.stump.res) →
       QTypedC constTy (S'.parked.map (Parked.toStumpC σ)) (S'.applyCtx Γ) e
         (τ.applySubst σ)
 

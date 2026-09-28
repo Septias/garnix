@@ -240,14 +240,14 @@ def wakeF (n : Nat) (S : SolverState B) (p : Parked B) : IRes (SolverState B) :=
   match ← lookupQF (p.stump.row.applySubst S.subst)
       (p.stump.label.applySubst S.subst) with
   | .found τ =>
-      let S' ← solveTyF n S (.var p.stump.res) τ
-      pure { S' with parked := S'.parked.filter (·.stump.res != p.stump.res) }
+      let S' ← solveTyF n S p.stump.res τ
+      pure { S' with parked := S'.parked.filter (·.stump != p.stump) }
   | .absent =>
-      let S' ← solveTyF n S (.var p.stump.res) .unk
-      pure ({ S' with parked := S'.parked.filter (·.stump.res != p.stump.res) }.flag
+      let S' ← solveTyF n S p.stump.res .unk
+      pure ({ S' with parked := S'.parked.filter (·.stump != p.stump) }.flag
         (p.stump.label.applySubst S.subst).keyName)
   | .blocked α' =>
-      pure (({ S with parked := S.parked.filter (·.stump.res != p.stump.res) }).park
+      pure (({ S with parked := S.parked.filter (·.stump != p.stump) }).park
         ⟨α', p.stump⟩)
 
 theorem wakeF_sound {n : Nat} {S S' : SolverState B} {p : Parked B}
@@ -370,9 +370,10 @@ def wakesF (n : Nat) : SolverState B → List (Stump B) → IRes (List (Parked B
           let r ← wakesF n (S.park ⟨α, st⟩) sts
           pure (⟨α, st⟩ :: r.1, r.2)
       | _ =>
-          let S₁ ← wakeF n S ⟨st.res, st⟩
+          -- it resolves at once, so it never waits and its blocker is never read
+          let S₁ ← wakeF n S ⟨"", st⟩
           let r ← wakesF n S₁ sts
-          pure (⟨st.res, st⟩ :: r.1, r.2)
+          pure (⟨"", st⟩ :: r.1, r.2)
 
 theorem wakesF_sound {n : Nat} : ∀ {S S' : SolverState B} {sts : List (Stump B)}
     {ps : List (Parked B)}, wakesF n S sts = .ok (ps, S') →
@@ -416,9 +417,9 @@ def finalizeF (n : Nat) (S : SolverState B) (p : Parked B) : IRes (SolverState B
       (p.stump.label.applySubst S.subst) with
   | .blocked α =>
       if α = p.blocker then do
-        let S' ← (solveTyF n S (.var p.stump.res) .unk).withMsg
+        let S' ← (solveTyF n S p.stump.res .unk).withMsg
           "spent promise: a stump's result is no longer a variable"
-        pure ({ S' with parked := S'.parked.filter (·.stump.res != p.stump.res) }.flag
+        pure ({ S' with parked := S'.parked.filter (·.stump != p.stump) }.flag
           (p.stump.label.applySubst S.subst).keyName)
       else .fail "finalize: stale blocker"
   | _ => .fail "finalize: lookup resolved"
@@ -442,6 +443,73 @@ theorem finalizeF_sound {n : Nat} {S S' : SolverState B} {p : Parked B}
         · cases h
     | found τ => cases h
     | absent => cases h
+
+--------------------- MATERIALIZATION -----------------------------------------
+
+/-- `Ty.Spent`, computed. -/
+def Ty.isSpent : Ty B → Bool
+  | .var _ => false
+  | .unk   => false
+  | _      => true
+
+theorem Ty.spent_of_isSpent {τ : Ty B} (h : τ.isSpent = true) : τ.Spent := by
+  cases τ <;> first | exact trivial | simp [Ty.isSpent] at h
+
+/-- F-hit on one stump, computed: a spent promise with a literal key, blocked on
+its row, has that row extended so the lookup hits. Anything else is left for
+F-★ — which is where a key-blocked spent promise still fails. -/
+def materializeF (n : Nat) (S : SolverState B) (p : Parked B) : IRes (SolverState B) :=
+  if p ∈ S.parked ∧ (p.stump.res.applySubst S.subst).isSpent = true then
+    match p.stump.label.applySubst S.subst with
+    | .lab l => do
+        match ← lookupQF (p.stump.row.applySubst S.subst) (.lab l) with
+        | .blocked α =>
+            if α = p.blocker then
+              solveTySatF n (S.draw .row).2 (.rcd (.var p.blocker))
+                (.rcd (.cat (.sing l p.stump.res) (.var (S.draw .row).1)))
+            else pure S
+        | _ => pure S
+    | _ => pure S
+  else pure S
+
+theorem materializeF_sound {n : Nat} {S S' : SolverState B} {p : Parked B}
+    (h : materializeF n S p = .ok S') : S' = S ∨ Materialize S p S' := by
+  unfold materializeF at h
+  split at h
+  · next hc =>
+    split at h
+    · next l hl =>
+      simp only [IRes.bind_eq_ok] at h
+      obtain ⟨r, hr, h⟩ := h
+      cases r with
+      | blocked α =>
+          simp only at h
+          split at h
+          · next he =>
+            subst he
+            exact .inr (.hit hc.1 (Ty.spent_of_isSpent hc.2) hl (lookupQF_sound hr) rfl
+              (solveTySatF_sound h))
+          · simp only [IRes.pure_eq_ok] at h; exact .inl h.symm
+      | found τ => simp only [IRes.pure_eq_ok] at h; exact .inl h.symm
+      | absent => simp only [IRes.pure_eq_ok] at h; exact .inl h.symm
+    · simp only [IRes.pure_eq_ok] at h; exact .inl h.symm
+  · simp only [IRes.pure_eq_ok] at h; exact .inl h.symm
+
+def materializesF (n : Nat) : SolverState B → List (Parked B) → IRes (SolverState B)
+  | S, [] => .ok S
+  | S, p :: ps => do
+      let S₁ ← materializeF n S p
+      materializesF n S₁ ps
+
+theorem materializesF_sound {n : Nat} : ∀ {S S' : SolverState B} {ps : List (Parked B)},
+    materializesF n S ps = .ok S' → Materializes S ps S'
+  | S, S', [], h => by simp only [materializesF, IRes.ok.injEq] at h; subst h; exact .nil
+  | S, S', p :: ps, h => by
+      simp only [materializesF, IRes.bind_eq_ok] at h
+      obtain ⟨S₁, h₁, h₂⟩ := h
+      rcases materializeF_sound h₁ with rfl | hm
+      · exact .skip (materializesF_sound h₂)
+      · exact .cons hm (materializesF_sound h₂)
 
 def finalizesF (n : Nat) : SolverState B → List (Parked B) → IRes (SolverState B)
   | S, [] => .ok S
@@ -475,7 +543,7 @@ theorem renSubst_isRenaming (vs : List TyVar) (f : TyVar → TyVar) :
 
 /-- the constraints of an instance, before their blockers are known -/
 def instStumps (θ : TySubst B) (f : TyVar → TyVar) (Q : List (Stump B)) : List (Stump B) :=
-  Q.map (fun st => ⟨st.row.applySubst θ, st.label.applySubst θ, f st.res⟩)
+  Q.map (fun st => ⟨st.row.applySubst θ, st.label.applySubst θ, st.res.applySubst θ⟩)
 
 instance {f : TyVar → TyVar} {vs : List TyVar} {Γ : QCtx B} {S : SolverState B} :
     Decidable (FreshRenaming f vs Γ S) := by
@@ -562,7 +630,7 @@ def inferF (constTy : C → B) (n : Nat) :
       | .absent   => pure (.unk, S₂.flag l)
       | .blocked α =>
           pure (.var (S₂.draw .ty).1,
-            (S₂.draw .ty).2.park ⟨α, ⟨.var rv, .lab l, (S₂.draw .ty).1⟩⟩)
+            (S₂.draw .ty).2.park ⟨α, ⟨.var rv, .lab l, .var (S₂.draw .ty).1⟩⟩)
   | _, S, .lab l => .ok (.lab l, S)
   | Γ, S, .selDyn e₁ e₂ => do
       let r₁ ← inferF constTy n Γ S e₁
@@ -574,7 +642,7 @@ def inferF (constTy : C → B) (n : Nat) :
       | .absent   => pure (.unk, r₂.2.flag (r₂.1.applySubst r₂.2.subst).keyName)
       | .blocked α =>
           pure (.var (r₂.2.draw .ty).1,
-            (r₂.2.draw .ty).2.park ⟨α, ⟨.var rv, r₂.1, (r₂.2.draw .ty).1⟩⟩)
+            (r₂.2.draw .ty).2.park ⟨α, ⟨.var rv, r₂.1, .var (r₂.2.draw .ty).1⟩⟩)
   | Γ, S, .rcd ξ => do
       let r ← inferRecF constTy n Γ S ξ
       pure (.rcd r.1, r.2)
@@ -693,18 +761,20 @@ end
 /-- the state every run starts in -/
 def runStart : SolverState B := ⟨Sol.nil, [], [], ⟨1⟩, []⟩
 
-/-- a run, computed: infer from nothing, then finalize every parked stump -/
+/-- a run, computed: infer from nothing, materialize the spent promises, then
+finalize every stump still parked -/
 def runF (constTy : C → B) (n : Nat) (e : Expr C) : IRes (Ty B × SolverState B) := do
   let r ← inferF constTy n QCtx.empty runStart e
-  let S' ← finalizesF n r.2 r.2.parked
+  let S₂ ← materializesF n r.2 r.2.parked
+  let S' ← finalizesF n S₂ S₂.parked
   pure (r.1, S')
 
 /-- ⊢  every answer of `runF` is a `Run`. -/
 theorem runF_sound {constTy : C → B} {n : Nat} {e : Expr C} {τ : Ty B}
     {S' : SolverState B} (h : runF constTy n e = .ok (τ, S')) : Run constTy e τ S' := by
   simp only [runF, IRes.bind_eq_ok, IRes.pure_eq_ok, Prod.mk.injEq] at h
-  obtain ⟨⟨τ₁, S₁⟩, h₁, S₂, h₂, rfl, rfl⟩ := h
-  exact ⟨S₁, inferF_sound h₁, finalizesF_sound h₂⟩
+  obtain ⟨⟨τ₁, S₁⟩, h₁, S₂, h₂, S₃, h₃, rfl, rfl⟩ := h
+  exact ⟨S₁, S₂, inferF_sound h₁, materializesF_sound h₂, finalizesF_sound h₃⟩
 
 /-- ⊢  **what `runF` answers is declaratively typed**, at the type it reports
 read under its own final substitution. -/

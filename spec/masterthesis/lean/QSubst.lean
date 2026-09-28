@@ -218,8 +218,11 @@ theorem QCovers.forward_of_avoiding {B : Type} {σ : TySubst B}
         havf α (List.mem_append_left _
           (List.mem_flatMap.mpr ⟨st, hst, List.mem_append_right _ hα⟩)))
     -- δ is a binder, so the witness reads θ at it
-    have hres : (instSub σ₀.vars θ σ).ty st.res = (θ.ty st.res).applySubst σ :=
-      instSub_mem (hwf st hst)
+    have hres : st.res.applySubst (instSub σ₀.vars θ σ) = (st.res.applySubst θ).applySubst σ := by
+      rw [Ty.applySubst_applySubst]
+      exact Ty.applySubst_congr _ (fun δ hδ => by
+        have hm := hwf st hst δ hδ
+        exact ⟨by simp [instSub, hm, TySubst.comp], by simp [instSub, hm, TySubst.comp]⟩)
     cases hdis st hst with
     | @hit τr hlk hδ =>
         refine .hit (τ := τr.applySubst σ) ?_ ?_
@@ -353,10 +356,10 @@ theorem qcovers_backward_false_for_applySubst :
 -- taken as a hypothesis here so the rest of the transport can be proved and the
 -- remaining obligation named exactly.
 
-/-- every scheme has a σ-image that covers it. The capture-avoiding
-construction; L1's counterpart is `renameScheme`. -/
+/-- every well-formed scheme has a well-formed σ-image that covers it. The
+capture-avoiding construction; L1's counterpart is `renameScheme`. -/
 def SchemeImage {B : Type} (σ : TySubst B) : Prop :=
-  ∀ σ₀ : QScheme B, ∃ σ₀', QCovers σ σ₀ σ₀'
+  ∀ σ₀ : QScheme B, σ₀.WF → ∃ σ₀', σ₀'.WF ∧ QCovers σ σ₀ σ₀'
 
 mutual
 
@@ -386,9 +389,9 @@ theorem qtyped_applySubst {B C : Type} {constTy : C → B}
       .qLam (qtyped_applySubst him h (hm.bindTy _ _))
   | _, _, _, _, .qApp h₁ h₂, hm =>
       .qApp (qtyped_applySubst him h₁ hm) (qtyped_applySubst him h₂ hm)
-  | _, _, _, _, .qLet (σ := σ₀) hinst hinh hbody, hm => by
-      obtain ⟨σ₀', hc⟩ := him σ₀
-      refine .qLet (σ := σ₀') (fun τ₁' hi => ?_) ?_ ?_
+  | _, _, _, _, .qLet (σ := σ₀) hwf hinst hinh hbody, hm => by
+      obtain ⟨σ₀', hwf', hc⟩ := him σ₀ hwf
+      refine .qLet (σ := σ₀') hwf' (fun τ₁' hi => ?_) ?_ ?_
       · obtain ⟨τ₁, hi₁, rfl⟩ := hc.2 _ hi
         exact qtyped_applySubst him (hinst τ₁ hi₁) hm
       · obtain ⟨τ₁, hi₁⟩ := hinh

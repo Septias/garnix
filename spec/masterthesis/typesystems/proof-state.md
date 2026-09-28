@@ -42,6 +42,23 @@ We use a custom lookup relation ⟨ρ.l ↓ r⟩ with return values ⟨τ | ⊥ 
 # Problems
 > Problems found during mechanized proving and their proposed solutions
 
+## Spent promise at F-★  (fixed, merged 2026-09-28)
+- `λx. λy. (x.l) y`: A-app writes `δ ≔ α → β` into a parked stump's result, F-★'s `δ ≐ ★` clashes (`no_finalize_of_spent`)
+- Fix: `Stump.res : Ty B`; new finalization phase `Materialize` (F-hit) before F-★: blocker `r ≔ (l : res | r')`, then saturate
+- `Run` = infer → `Materializes` → `Finalizes`; `runSound`, `runF_terminates` re-proved, same axioms
+- Parked stumps are retired by stump, not by result: the parked-list invariant (`PInv`) is gone
+- A-let generalizes spent stumps: `QScheme.WF` = result vars are binders; `Correctable` = linear pattern results (`Ty.correct`); inhabitation fills spent blockers (`fillRow`)
+- What is left: # Incompleteness → Spent promise
+
+## Key-blocked spent promise  (open, deliberately kept)
+- Only bites when the key is never supplied: applied, `(λr. λa. r.(a) c) {k = λz.z} ⌊k⌋` runs to `𝓫`
+- No row to extend: the lookup waits on the KEY, so `Materialize` does not apply
+- Declaratively typeable (`a : ⌊foo⌋`, `r : {foo: 𝓫 → β}`), so this is incompleteness, not a rejection
+- Fix A — guess the key: F-key binds `α ≔ ⌊ℓ_fresh⌋`, then materialize; small, `runSound` carries over; answer valid but non-principal (made-up label in the type)
+- Fix B — qualified top-level type: `Run` reports `∀. ⟨ρ.(α) ↓ 𝓫 → β⟩ ⇒ {ρ} → α → β`; principal (top level = `let main = e in main`), but `Run`/`RunSound`/`runF` and printed answers change; soundness becomes "every instance is typed"
+- Guessing is fine inside a proof (inhabitation witness), not in a reported type → B preferred when taken up
+- Same idea would extend A-let to key-blocked spent stumps (inhabitation: key ↦ fresh label, then `fillRow`)
+
 
 ## Symbols
 - ↓: Row-lookup relation, three-way result r := (τ | ⊥ | ?)
@@ -67,37 +84,68 @@ We use a custom lookup relation ⟨ρ.l ↓ r⟩ with return values ⟨τ | ⊥ 
  ⊢ₗ₁ = `Typed`, ⊢ = `QTyped`.
 
 **Lookup**
-- `lookup_det`:   ρ.l ↓ r₁ → ρ.l ↓ r₂ → r₁ = r₂
-- `lookup_total`: ∃ r, ρ.l ↓ r   (unconditional: ↓ is context-free, no L-α)
-- `LookupQ.applySubst`: ρ.q ↓ r → r ≠ ? → (θρ).(θq) ↓ θr
+- lookup_det:   ρ.l ↓ r₁ → ρ.l ↓ r₂ → r₁ = r₂
+- lookup_total: ∃ r, ρ.l ↓ r   (unconditional: ↓ is context-free, no L-α)
+- LookupQ.applySubst: ρ.q ↓ r → r ≠ ? → (θρ).(θq) ↓ θr
 
-**Row equivalence** (`RowEquiv.lean`)
-- `rowEquiv_iff_char`: ρ₁ ≈ ρ₂ ↔ Char ρ₁ ρ₂
+**Row equivalence**
+- rowEquiv_iff_char: ρ₁ ≈ ρ₂ ↔ Char ρ₁ ρ₂
 
 **Type safety**
-- `preservation`:  ∅ ⊢ₗ₁ e : τ → e ⟶ e' → ∅ ⊢ₗ₁ e' : τ
-- `qProgress`:     ∅ ⊢ e : τ → (∃e', e ⟶ e') ∨ Value e ∨ Err e
+- preservation:  ∅ ⊢ₗ₁ e : τ → e ⟶ e' → ∅ ⊢ₗ₁ e' : τ
+- qProgress:     ∅ ⊢ e : τ → (∃e', e ⟶ e') ∨ Value e ∨ Err e
   where Err e :≡ e = E[{b}.l] with l ∉ b, or E[{b}.(v)] with v not a label or v = l ∉ b
   (progress up to lookup errors: soft typing types ⊥-lookups at ★)
-- `qPreservation`: ∅ ⊢ e : τ → e ⟶ e' → ∅ ⊢ e' : τ
-- `l1_strictly_weaker`: ∃ e τ, ∅ ⊢ e : τ ∧ ¬ ∅ ⊢ₗ₁ e : τ
+- qPreservation: ∅ ⊢ e : τ → e ⟶ e' → ∅ ⊢ e' : τ
+- l1_strictly_weaker: ∃ e τ, ∅ ⊢ e : τ ∧ ¬ ∅ ⊢ₗ₁ e : τ
 
-**Principality** (`Qualified.lean`)
-- `selQ_principal`: Principal ∅ (λx.x.l) selQ
-  where Principal Γ e σ :≡ (∀τ ≤ σ, Γ ⊢ e : τ) ∧ (∃τ, τ ≤ σ) ∧ (∀τ, Γ ⊢ e : τ → ∃τ' ≤ σ, τ' ≼ τ)
+**Principality**
+- selQ_principal: Principal ∅ (λx.x.l) selQ
+    where Principal Γ e σ :≡ (∀τ ≤ σ, Γ ⊢ e : τ) ∧ (∃τ, τ ≤ σ) ∧ (∀τ, Γ ⊢ e : τ → ∃τ' ≤ σ, τ' ≼ τ)
 
-**Unification ρ₁ ≐ᵣ ρ₂** (`RowUnify/`)
-- `unifyRowM_success_mgu`: ≐ᵣ = success s → θ_s ⊨ ρ₁ ≐ ρ₂ ∧ ∀θ ⊨ ρ₁ ≐ ρ₂, ∃θ' =_{ftv ρ₁ρ₂} θ, θ' ⊨ s
-- `unifyRowM_success_iff`: ≐ᵣ = success s → (∀θ ⊨ s, θ ⊨ ρ₁ ≐ ρ₂) ∧ (∀θ ⊨ ρ₁ ≐ ρ₂, ∃θ' =_{ftv ρ₁ρ₂} θ, θ' ⊨ s)
-- `unifyRowM_clash_no_unifier`: ≐ᵣ = clash → ∄θ, θ ⊨ ρ₁ ≐ ρ₂
-- `unifyM_occurs_no_unifier`:   ≐ / ≐ᵣ = occurs → ∄θ unifier   (supply avoids ftv)
-- `unifyRowM_terminates` / `unifyTyM_terminates`: ∃ fuel, ≐ᵣ / ≐ ≠ outOfFuel
-- `stuck_masks_mgu`, `terminalNoMgu_false`: stuck ⇏ no mgu, terminal ⇏ no mgu
+**Unification** ρ₁ ≐ᵣ ρ₂
+  - unifyRowM_success_mgu: ≐ᵣ = success s → θ_s ⊨ ρ₁ ≐ ρ₂ ∧ ∀θ ⊨ ρ₁ ≐ ρ₂, ∃θ' =_{ftv ρ₁ρ₂} θ, θ' ⊨ s
+  - unifyRowM_success_iff: ≐ᵣ = success s → (∀θ ⊨ s, θ ⊨ ρ₁ ≐ ρ₂) ∧ (∀θ ⊨ ρ₁ ≐ ρ₂, ∃θ' =_{ftv ρ₁ρ₂} θ, θ' ⊨ s)
+  - unifyRowM_clash_no_unifier: ≐ᵣ = clash → ∄θ, θ ⊨ ρ₁ ≐ ρ₂
+  - unifyM_occurs_no_unifier:   ≐ / ≐ᵣ = occurs → ∄θ unifier   (supply avoids ftv)
+  - unifyRowM_terminates / unifyTyM_terminates: ∃ fuel, ≐ᵣ / ≐ ≠ outOfFuel
+  - stuck_masks_mgu, terminalNoMgu_false: stuck ⇏ no mgu, terminal ⇏ no mgu
 
-**Inference** Γ; S ⊢ e ⇒ τ; S′
-- `inferSound`: Γ; S ⊢ e ⇒ τ; S′ → PInv S → SchemesWF Γ → Clean S → Quiescent S →
+**Inference**  Γ; S ⊢ e ⇒ τ; S′
+- inferSound: Γ; S ⊢ e ⇒ τ; S′ → SchemesWF Γ → Clean S → Quiescent S →
   ∀σ, σ absorbs S′ → σ ⊨ S′ → ∀Γ', Γ ⇝_σ Γ' → parked(S′)σ; Γ' ⊢ₐ e : τσ
-- `runSound`: Run e τ S′ → ∅ ⊢ e : τ⟦S′⟧
-- `runF_terminates`: ∃ n, runF n e ≠ oof
-- `runF_eq_run`:     runF n e ≠ oof → runF n e = run e
-- `run_typed`:       run e = ok (τ, S′) → ∅ ⊢ e : τ⟦S′⟧
+- runSound: Run e τ S′ → ∅ ⊢ e : τ⟦S′⟧
+- runF_terminates: ∃ n, runF n e ≠ oof
+- runF_eq_run:     runF n e ≠ oof → runF n e = run e
+- run_typed:       run e = ok (τ, S′) → ∅ ⊢ e : τ⟦S′⟧
+
+
+# Incompleteness
+**Irreducible**
+- Wand `(β|α) ≐ᵣ (l:𝓫)`: `vars_vs_field_no_mgu_on`
+- Levi `(α|l) ≐ᵣ (l|β)`: `two_sided_no_mgu_on`; var swap: `allvar_swap_no_mgu_on`
+- Shift `(α|l:𝓫) ≐ᵣ (l:𝓫|α)`: `shift_no_finite_complete_set` — survives negative info
+- Fix: negative info (Wand, Levi); row equations as scheme qualifiers
+
+**Stuck with an mgu**
+- Crossfield `(l:𝓫|α) ≐ᵣ (m:𝓫|β)`: cost of dropping U-expand
+  - Fix: unique-host expansion as an *applied* binding, not a rename
+- `stuck_masks_mgu`: stuck payload equation propagates before the residual pins β
+  - Fix: defer the stuck equation, retry after the residual
+
+**Spent promise** — fixed: `Stump.res : Ty B`, `Materialize`, spent stumps generalize
+- `λx.(x.l).m`, `λx. x.l ‖ {m=c}`, `λx y.(x.l) y` now run (was: fail)
+- Left: key-blocked spent stump never given its key, `λr. λa. r.(a) c` ⇒ no run
+  - Fix: guess the key (non-principal) or qualified top-level type — see # Problems
+
+**A-let premises**
+- Γ-freshness, `LetResults`, independence, unresolved key ⇒ monomorphic let ⇒ later clash/stuck
+- Spent stumps generalize only if the result is a linear pattern and its blocker can be filled
+  - Not: record literal in the result (`(x.l) {a=c}`), same field spent twice on one row, key-blocked
+- Independence also bites nested selection: `let g = λx.(x.l).m` used twice ⇒ clash
+- Fix: independence could become ordered discharge; the rest are justified
+
+**Unrestricted T-★-intro**
+- `λg. {a = g {l=c}; b = g {m=c}}` : `(★ → 𝓫) → {a:𝓫 | b:𝓫}`, `run` = clash
+- Same trick types every stuck witness above (`f : ★ → 𝓫`)
+- "clash is soundness" holds for ≐, not for inference
