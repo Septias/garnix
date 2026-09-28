@@ -561,8 +561,7 @@ theorem finalize_star_guarded_cannot_fire :
   rintro ⟨S', h⟩
   cases h with
   | star _ hb _ =>
-      cases hb with
-      | lit hb' => cases hb'
+      cases hb
 
 --------------------- …AND THE CONFIGURATION WAS REACHABLE --------------------
 -- The witness above is hand-built, so a reader may fairly ask whether any state
@@ -693,7 +692,7 @@ theorem fStarEx_infers :
   · exact Infer.rcd (InferRec.field Infer.con)
   · exact ⟨fsS, ⟨20, fsApp, ⟨5⟩, rfl, rfl⟩,
       .step (p := fsP) (by simp [fsS, fsSb, SolverState.extend]) fStarEx_not_blocked
-        (Wake.hit (τ := .base ()) (.lit fStarEx_lands') ⟨5, fsHit, ⟨5⟩, rfl, rfl⟩)
+        (Wake.hit (τ := .base ()) (LookupQ.lab_iff.mpr fStarEx_lands') ⟨5, fsHit, ⟨5⟩, rfl, rfl⟩)
         (.done (SolverState.Quiescent.nil rfl))⟩
 
 /-- ⊢  **and the refinement survives.** Δ is empty — the stump discharged, so
@@ -727,7 +726,7 @@ theorem fStar_wake_star_disagree :
     ∃ Shit Sstar : SolverState Unit,
       Wake fsS fsP Shit ∧ FinalizeUnguarded fsS fsP Sstar ∧
       Shit.subst.ty fsD = .base () ∧ Sstar.subst.ty fsD = .unk :=
-  ⟨_, _, Wake.hit (τ := .base ()) (.lit fStarEx_lands')
+  ⟨_, _, Wake.hit (τ := .base ()) (LookupQ.lab_iff.mpr fStarEx_lands')
       ⟨5, fsHit, ⟨5⟩, rfl, rfl⟩,
     FinalizeUnguarded.star (S' := fsS.extend fsStar ⟨5⟩)
       ⟨5, fsStar, ⟨5⟩, rfl, rfl⟩, rfl, rfl⟩

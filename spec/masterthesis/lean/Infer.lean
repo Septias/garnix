@@ -56,6 +56,9 @@ inductive LookupBlocked {B : Type} : Row B → Label → TyVar → Prop where
   -- L-conc-★: the left component already blocks, and ‖ is left-biased
   | catUnk {ρ₁ ρ₂ : Row B} {l : Label} {β : TyVar} :
       LookupBlocked ρ₁ l β → LookupBlocked (.cat ρ₁ ρ₂) l β
+  -- L-?-lab against a keyed field: a label meets `${γ}`, and only γ decides
+  | dunk {γ : TyVar} {l : Label} {τ : Ty B} :
+      LookupBlocked (.dsing (.var γ) τ) l γ
 
 -- ⊢  the refinement is SOUND: a blocked lookup is an unknown lookup
 theorem LookupBlocked.toLookup {B : Type} {ρ : Row B} {l : Label}
@@ -63,6 +66,7 @@ theorem LookupBlocked.toLookup {B : Type} {ρ : Row B} {l : Label}
   | .varFree         => .varFree
   | .catSkip ha hb   => .catSkip ha hb.toLookup
   | .catUnk hb       => .catUnk hb.toLookup
+  | .dunk            => .dunk rfl
 
 -- ⊢  …and COMPLETE: an unknown lookup always has a blocker to name
 -- Together these say `? on α` is a faithful reading of `?` — the algorithm
@@ -78,6 +82,9 @@ theorem Lookup.unknown_blocked {B : Type} {ρ : Row B} {l : Label}
   | catHit _ => exact absurd hr (by simp)
   | catSkip ha _ _ ihb => obtain ⟨β, hb⟩ := ihb hr; exact ⟨β, .catSkip ha hb⟩
   | catUnk _ ih => obtain ⟨β, hb⟩ := ih rfl; exact ⟨β, .catUnk hb⟩
+  | dhit _ => exact absurd hr (by simp)
+  | dmiss _ => exact absurd hr (by simp)
+  | dunk h => obtain ⟨γ, rfl⟩ := Ty.keyCmp_lab_undec h; exact ⟨γ, .dunk⟩
 
 -- ⊢  the blocker is UNIQUE — `lookup_det`'s image for `? on α`, and what makes
 --    "the stump is blocked on α" well defined rather than a choice
@@ -94,6 +101,7 @@ theorem LookupBlocked.det {B : Type} {ρ : Row B} {l : Label}
       cases h₂ with
       | catSkip ha' _ => exact absurd (lookup_det hb.toLookup ha') (by simp)
       | catUnk hb' => exact ih hb'
+  | dunk => cases h₂; rfl
 
 -- `LookupBlocked.unsolved` used to live here: "the blocker is genuinely
 -- UNSOLVED in Γ", which is what made wake-up's trigger ("a solution α ≔ ρ is
@@ -104,92 +112,137 @@ theorem LookupBlocked.det {B : Type} {ρ : Row B} {l : Label}
 
 
 --------------------- ? ON β FOR A KEYED LOOKUP -------------------------------
--- A dynamic selection's `?` has a second source: a label-variable key meeting a
--- literal field (L-?-lab). That `?` is blocked on the KEY — it is the label
--- variable's solution that decides it, not any row's — so the blocker of a
--- keyed lookup is a row variable or the key itself.
-
-/-- `LookupVBlocked ρ α β` — the lookup of the label variable α in ρ gets
-stuck at β: at a row variable, or at α itself on the first field. -/
-inductive LookupVBlocked {B : Type} : Row B → TyVar → TyVar → Prop where
-  -- L-?-lab: the first field decides nothing until α is known
-  | sing {α : TyVar} {l : Label} {τ : Ty B} : LookupVBlocked (.sing l τ) α α
-  | varFree {α β : TyVar} : LookupVBlocked (.var β) α β
-  | catSkip {ρ₁ ρ₂ : Row B} {α γ : TyVar} :
-      LookupV ρ₁ α .absent → LookupVBlocked ρ₂ α γ →
-      LookupVBlocked (.cat ρ₁ ρ₂) α γ
-  | catUnk {ρ₁ ρ₂ : Row B} {α γ : TyVar} :
-      LookupVBlocked ρ₁ α γ → LookupVBlocked (.cat ρ₁ ρ₂) α γ
+-- A keyed lookup's `?` has a second source besides a row variable: two keys
+-- that `Ty.keyCmp` cannot compare (L-?-lab, and its keyed-field twin). That `?`
+-- is blocked on a KEY variable. When the lookup key is a variable α, α is the
+-- blocker (it is on every undecided comparison); otherwise the field key is.
+-- Any deterministic choice would do — nothing downstream reads the blocker
+-- beyond `det` and the round trip to `LookupQ` — this one mirrors `LookupQ`'s
+-- `?` rules one-for-one.
 
 /-- `ρ.q ↓ ? on β` for a keyed lookup. -/
 inductive LookupBlockedQ {B : Type} : Row B → Ty B → TyVar → Prop where
-  | lit {ρ : Row B} {l : Label} {β : TyVar} :
-      LookupBlocked ρ l β → LookupBlockedQ ρ (.lab l) β
-  | var {ρ : Row B} {α β : TyVar} :
-      LookupVBlocked ρ α β → LookupBlockedQ ρ (.var α) β
+  | varFree {k : Ty B} {β : TyVar} : LookupBlockedQ (.var β) k β
+  -- L-?-lab: a variable key meets a literal field
+  | sunk {α : TyVar} {l : Label} {τ : Ty B} :
+      LookupBlockedQ (.sing l τ) (.var α) α
+  -- a variable key meets a keyed field it cannot decide against
+  | dunkQ {α : TyVar} {q τ : Ty B} :
+      Ty.keyCmp (.var α) q = .undec → LookupBlockedQ (.dsing q τ) (.var α) α
+  -- a non-variable key meets `${γ}`
+  | dunkF {k τ : Ty B} {γ : TyVar} :
+      (∀ α, k ≠ .var α) → LookupBlockedQ (.dsing (.var γ) τ) k γ
+  | catSkip {ρ₁ ρ₂ : Row B} {k : Ty B} {β : TyVar} :
+      LookupQ ρ₁ k .absent → LookupBlockedQ ρ₂ k β →
+      LookupBlockedQ (.cat ρ₁ ρ₂) k β
+  | catUnk {ρ₁ ρ₂ : Row B} {k : Ty B} {β : TyVar} :
+      LookupBlockedQ ρ₁ k β → LookupBlockedQ (.cat ρ₁ ρ₂) k β
 
-theorem LookupVBlocked.toLookupV {B : Type} {ρ : Row B} {α β : TyVar} :
-    LookupVBlocked ρ α β → LookupV ρ α .unknown
-  | .sing => .sing
-  | .varFree => .varFree
-  | .catSkip ha hb => .catSkip ha hb.toLookupV
-  | .catUnk hb => .catUnk hb.toLookupV
+/-- the label-variable instance. -/
+abbrev LookupVBlocked {B : Type} (ρ : Row B) (α β : TyVar) : Prop :=
+  LookupBlockedQ ρ (.var α) β
+
+theorem Ty.keyCmp_undec_lab {B : Type} {k : Ty B} {l : Label}
+    (h : Ty.keyCmp k (.lab l) = .undec) : ∃ α, k = .var α := by
+  cases k <;> simp [Ty.keyCmp, Ty.keyClass, KeyClass.cmp] at h ⊢
+  split at h <;> cases h
+
+theorem Ty.keyCmp_nonvar_var {B : Type} {k : Ty B} (hk : ∀ α, k ≠ .var α)
+    (γ : TyVar) : Ty.keyCmp k (.var γ) = .undec := by
+  cases k <;> first | exact absurd rfl (hk _) | rfl
 
 -- ⊢  sound: a blocked keyed lookup is an unknown one
 theorem LookupBlockedQ.toLookupQ {B : Type} {ρ : Row B} {q : Ty B}
     {β : TyVar} : LookupBlockedQ ρ q β → LookupQ ρ q .unknown
-  | .lit h => .lit h.toLookup
-  | .var h => .var h.toLookupV
+  | .varFree => .varFree
+  | .sunk => .sunk rfl
+  | .dunkQ h => .dunk h
+  | .dunkF hk => .dunk (Ty.keyCmp_nonvar_var hk _)
+  | .catSkip ha hb => .catSkip ha hb.toLookupQ
+  | .catUnk hb => .catUnk hb.toLookupQ
 
-theorem LookupV.unknown_blocked {B : Type} {ρ : Row B} {α : TyVar}
-    (h : LookupV ρ α .unknown) : ∃ β, LookupVBlocked ρ α β := by
-  generalize hr : (LookupRes.unknown : LookupRes B) = r at h
-  induction h with
-  | emp => exact absurd hr (by simp)
-  | sing => exact ⟨_, .sing⟩
-  | varFree => exact ⟨_, .varFree⟩
-  | catSkip ha _ _ ihb => obtain ⟨β, hb⟩ := ihb hr; exact ⟨β, .catSkip ha hb⟩
-  | catUnk _ ih => obtain ⟨β, hb⟩ := ih rfl; exact ⟨β, .catUnk hb⟩
+theorem LookupVBlocked.toLookupV {B : Type} {ρ : Row B} {α β : TyVar}
+    (h : LookupVBlocked ρ α β) : LookupV ρ α .unknown := h.toLookupQ
 
 -- ⊢  complete: an unknown keyed lookup always names its blocker
 theorem LookupQ.unknown_blocked {B : Type} {ρ : Row B} {q : Ty B}
     (h : LookupQ ρ q .unknown) : ∃ β, LookupBlockedQ ρ q β := by
-  cases h with
-  | lit h => obtain ⟨β, hb⟩ := Lookup.unknown_blocked h; exact ⟨β, .lit hb⟩
-  | var h => obtain ⟨β, hb⟩ := LookupV.unknown_blocked h; exact ⟨β, .var hb⟩
+  generalize hr : (LookupRes.unknown : LookupRes B) = r at h
+  induction h with
+  | emp => exact absurd hr (by simp)
+  | hit _ => exact absurd hr (by simp)
+  | miss _ => exact absurd hr (by simp)
+  | sunk h => obtain ⟨α, rfl⟩ := Ty.keyCmp_undec_lab h; exact ⟨α, .sunk⟩
+  | varFree => exact ⟨_, .varFree⟩
+  | catHit _ => exact absurd hr (by simp)
+  | catSkip ha _ _ ihb => obtain ⟨β, hb⟩ := ihb hr; exact ⟨β, .catSkip ha hb⟩
+  | catUnk _ ih => obtain ⟨β, hb⟩ := ih rfl; exact ⟨β, .catUnk hb⟩
+  | dhit _ => exact absurd hr (by simp)
+  | dmiss _ => exact absurd hr (by simp)
+  | @dunk k q τ h =>
+      cases k with
+      | var α => exact ⟨α, .dunkQ h⟩
+      | _ =>
+          cases q with
+          | var γ => exact ⟨γ, .dunkF (by intro _ h; cases h)⟩
+          | _ => simp [Ty.keyCmp, Ty.keyClass, KeyClass.cmp] at h <;>
+                   (try split at h) <;> cases h
 
-theorem LookupVBlocked.det {B : Type} {ρ : Row B} {α β γ : TyVar}
-    (h₁ : LookupVBlocked ρ α β) (h₂ : LookupVBlocked ρ α γ) : β = γ := by
-  induction h₁ generalizing γ with
-  | sing => cases h₂; rfl
-  | varFree => cases h₂; rfl
-  | catSkip ha _ ih =>
-      cases h₂ with
-      | catSkip _ hb' => exact ih hb'
-      | catUnk hb' => exact absurd (ha.det hb'.toLookupV) (by simp)
-  | catUnk hb ih =>
-      cases h₂ with
-      | catSkip ha' _ => exact absurd (hb.toLookupV.det ha') (by simp)
-      | catUnk hb' => exact ih hb'
+theorem LookupV.unknown_blocked {B : Type} {ρ : Row B} {α : TyVar}
+    (h : LookupV ρ α .unknown) : ∃ β, LookupVBlocked ρ α β :=
+  LookupQ.unknown_blocked h
 
 -- ⊢  the blocker is UNIQUE
 theorem LookupBlockedQ.det {B : Type} {ρ : Row B} {q : Ty B}
     {β γ : TyVar} (h₁ : LookupBlockedQ ρ q β) (h₂ : LookupBlockedQ ρ q γ) :
     β = γ := by
-  cases h₁ with
-  | lit h => cases h₂ with | lit h' => exact h.det h'
-  | var h => cases h₂ with | var h' => exact h.det h'
+  induction h₁ generalizing γ with
+  | varFree => cases h₂; rfl
+  | sunk => cases h₂; rfl
+  | dunkQ _ =>
+      cases h₂ with
+      | dunkQ _ => rfl
+      | dunkF hk => exact absurd rfl (hk _)
+  | dunkF hk =>
+      cases h₂ with
+      | dunkQ _ => exact absurd rfl (hk _)
+      | dunkF _ => rfl
+  | catSkip ha _ ih =>
+      cases h₂ with
+      | catSkip _ hb' => exact ih hb'
+      | catUnk hb' => exact absurd (ha.det hb'.toLookupQ) (by simp)
+  | catUnk hb ih =>
+      cases h₂ with
+      | catSkip ha' _ => exact absurd (hb.toLookupQ.det ha') (by simp)
+      | catUnk hb' => exact ih hb'
+
+theorem LookupVBlocked.det {B : Type} {ρ : Row B} {α β γ : TyVar}
+    (h₁ : LookupVBlocked ρ α β) (h₂ : LookupVBlocked ρ α γ) : β = γ :=
+  LookupBlockedQ.det h₁ h₂
+
+-- ⊢  a literal key blocks exactly where the label relation does
+theorem LookupBlockedQ.lit {B : Type} {ρ : Row B} {l : Label} {β : TyVar} :
+    LookupBlocked ρ l β → LookupBlockedQ ρ (.lab l) β
+  | .varFree => .varFree
+  | .catSkip ha hb => .catSkip (LookupQ.lab_iff.mpr ha) (LookupBlockedQ.lit hb)
+  | .catUnk hb => .catUnk (LookupBlockedQ.lit hb)
+  | .dunk => .dunkF (by intro _ h; cases h)
+
+theorem LookupBlockedQ.toLit {B : Type} {ρ : Row B} {l : Label} {β : TyVar}
+    (h : LookupBlockedQ ρ (.lab l) β) : LookupBlocked ρ l β := by
+  generalize hk : (Ty.lab l : Ty B) = k at h
+  induction h with
+  | varFree => exact .varFree
+  | sunk => cases hk
+  | dunkQ _ => cases hk
+  | dunkF _ => exact .dunk
+  | catSkip ha _ ih => subst hk; exact .catSkip (LookupQ.lab_iff.mp ha) (ih rfl)
+  | catUnk _ ih => exact .catUnk (ih hk)
 
 -- (`LookupVBlocked.unsolved` / `LookupBlockedQ.unsolved` — "the blocker is an
 -- unsolved row variable, or it is the key" — went the way of
 -- `LookupBlocked.unsolved`: the row is looked up after substitution, so a row
 -- variable still standing in it is unsolved by construction.)
-
-/-- a static key blocked on a row variable — the shape every `λx. x.l` stump
-has; stated so that `.varFree` reads at the keyed relation too. -/
-theorem LookupBlockedQ.varFree {B : Type} {α : TyVar} {l : Label} :
-    LookupBlockedQ (B := B) (.var α) (.lab l) α :=
-  .lit .varFree
 
 /-- the name a W-flag records for a key: the label itself when it is known. -/
 def Ty.keyName {B : Type} : Ty B → Label
