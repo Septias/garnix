@@ -509,7 +509,7 @@ inductive FinalizeUnguarded {B : Type} [DecidableEq B] :
 one did, and `finalize_star_guarded_cannot_fire` shows the inclusion is proper. -/
 theorem Finalize.toUnguarded {B : Type} [DecidableEq B] {S S' : SolverState B}
     {p : Parked B} : Finalize S p S' → FinalizeUnguarded S p S'
-  | .star _ _ hs => .star hs
+  | .star _ _ _ hs => .star hs
 
 /-- a stump on a LITERAL row: its lookup lands at every context, under every
 substitution. Nothing about it is blocked, and the unguarded rule does not care. -/
@@ -560,7 +560,7 @@ theorem finalize_star_guarded_cannot_fire :
     ¬ ∃ S', Finalize fStar_S fStar_p S' := by
   rintro ⟨S', h⟩
   cases h with
-  | star _ hb _ =>
+  | star _ hb _ _ =>
       cases hb
 
 --------------------- …AND THE CONFIGURATION WAS REACHABLE --------------------
@@ -740,7 +740,7 @@ premise alone would have left the run stuck here with no finalization step. -/
 theorem fStar_guarded_cannot_fire : ¬ ∃ S', Finalize fsS fsP S' := by
   rintro ⟨S', h⟩
   cases h with
-  | star _ hb _ => exact fStarEx_not_blocked hb
+  | star _ hb _ _ => exact fStarEx_not_blocked hb
 
 /-- ⊢  …and the unguarded rule's step, which the refutation below is about. -/
 theorem fStarEx_finalizes_unguarded : FinalizeUnguarded fsS fsP fsS' :=

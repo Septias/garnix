@@ -20,6 +20,7 @@ def rowS : Row Unit → String
   | .var α     => "r" ++ toString α.length
   | .sing l τ  => l ++ ": " ++ tyS τ
   | .cat ρ₁ ρ₂ => rowS ρ₁ ++ " | " ++ rowS ρ₂
+  | .dsing q τ => "${" ++ tyS q ++ "}: " ++ tyS τ
 end
 
 def verdict : IRes (Ty Unit × SolverState Unit) → String

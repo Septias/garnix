@@ -57,9 +57,9 @@ structure LetAdmissible (Γ : QCtx B) (S S₁ : SolverState B) (ᾱ : List TyVar
                ∀ δ ∈ (p.stump.res.applySubst S₁.subst).ftv,
                δ ∈ (q.stump.res.applySubst S₁.subst).ftv → p.stump = q.stump
   spent    : ∀ p ∈ S₁.parked, p.blocker ∈ ᾱ → (p.stump.res.applySubst S₁.subst).isVar = false →
-               (p.stump.label.applySubst S₁.subst).isLab = true ∧
+               (p.fillable S₁) = true ∧
                (∀ q ∈ S₁.parked, q.blocker = p.blocker →
-                 (q.stump.label.applySubst S₁.subst).isLab = true ∧
+                 (q.fillable S₁) = true ∧
                  (q.stump.label.applySubst S₁.subst = p.stump.label.applySubst S₁.subst →
                    q.stump = p.stump)) ∧
                (∀ q ∈ S₁.parked, q.blocker ∈ ᾱ → (q.stump.res.applySubst S₁.subst).isVar = false →
@@ -112,9 +112,9 @@ theorem LetAdmissible.union {Γ : QCtx B} {S S₁ : SolverState B} {ᾱ₁ ᾱ�
   -- that side too, and a blocker from the other side is no variable of its result
   have sideSpent : ∀ {ᾱ ᾱ' : List TyVar}, LetAdmissible Γ S S₁ ᾱ →
       ∀ p ∈ S₁.parked, p.blocker ∈ ᾱ → (p.stump.res.applySubst S₁.subst).isVar = false →
-      (p.stump.label.applySubst S₁.subst).isLab = true ∧
+      (p.fillable S₁) = true ∧
       (∀ q ∈ S₁.parked, q.blocker = p.blocker →
-        (q.stump.label.applySubst S₁.subst).isLab = true ∧
+        (q.fillable S₁) = true ∧
         (q.stump.label.applySubst S₁.subst = p.stump.label.applySubst S₁.subst →
           q.stump = p.stump)) ∧
       (∀ q ∈ S₁.parked, q.blocker ∈ ᾱ' → (q.stump.res.applySubst S₁.subst).isVar = false →
@@ -274,8 +274,8 @@ def LetBad (Γ : QCtx B) (S S₁ : SolverState B) (ᾱ : List TyVar) (α : TyVar
        δ ∈ (q.stump.res.applySubst S₁.subst).ftv) ∨
   -- a spent stump blocked on α cannot be met by extending α
   (∃ p ∈ S₁.parked, p.blocker = α ∧ (p.stump.res.applySubst S₁.subst).isVar = false ∧
-     ((p.stump.label.applySubst S₁.subst).isLab = false ∨
-      ∃ q ∈ S₁.parked, q.blocker = α ∧ ((q.stump.label.applySubst S₁.subst).isLab = false ∨
+     ((p.fillable S₁) = false ∨
+      ∃ q ∈ S₁.parked, q.blocker = α ∧ ((q.fillable S₁) = false ∨
         (q.stump.label.applySubst S₁.subst = p.stump.label.applySubst S₁.subst ∧
          q.stump ≠ p.stump)))) ∨
   -- a spent stump blocked on α has α inside a spent result
@@ -359,17 +359,17 @@ theorem LetAdmissible.of_no_bad {Γ : QCtx B} {S S₁ : SolverState B} {ᾱ : Li
     · rfl
   · exact Classical.byContradiction fun hn => h _ hqb
       (.inr (.inr (.inr (.inr (.inr (.inr (.inl ⟨q, hq, rfl, p, hp, hn, δ, hδp, hδq⟩)))))))
-  · have b8 : ¬ ((p.stump.label.applySubst S₁.subst).isLab = false ∨
+  · have b8 : ¬ ((p.fillable S₁) = false ∨
         ∃ q ∈ S₁.parked, q.blocker = p.blocker ∧
-          ((q.stump.label.applySubst S₁.subst).isLab = false ∨
+          ((q.fillable S₁) = false ∨
            (q.stump.label.applySubst S₁.subst = p.stump.label.applySubst S₁.subst ∧
             q.stump ≠ p.stump))) :=
       fun hn => h _ hb (.inr (.inr (.inr (.inr (.inr (.inr (.inr (.inl ⟨p, hp, rfl, hsp, hn⟩))))))))
     refine ⟨?_, fun q hq hqb => ⟨?_, fun he => ?_⟩, fun q hq hqb hqs hm => ?_⟩
-    · cases hc : (p.stump.label.applySubst S₁.subst).isLab
+    · cases hc : (p.fillable S₁)
       · exact absurd (.inl hc) b8
       · rfl
-    · cases hc : (q.stump.label.applySubst S₁.subst).isLab
+    · cases hc : (q.fillable S₁)
       · exact absurd (.inr ⟨q, hq, hqb, .inl hc⟩) b8
       · rfl
     · exact Classical.byContradiction fun hn => b8 (.inr ⟨q, hq, hqb, .inr ⟨he, hn⟩⟩)

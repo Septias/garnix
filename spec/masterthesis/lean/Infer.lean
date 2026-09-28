@@ -534,6 +534,21 @@ theorem WakesSat.quiescent {B : Type} [DecidableEq B] {S S' : SolverState B}
     {ps : List (Parked B)} : WakesSat S ps S' → S'.Quiescent
   | ⟨_, _, hsat⟩ => hsat.quiescent
 
+/-- a KEY-blocked stump may be committed to ★ only while its blocker is no
+answer still to be finalized. F-★ sends answers to ★, and a key blocker sent to
+★ is a junk key: it walks on past the field it waited at, and may land on a junk
+field key (`${★}`, `${int}`) that it now EQUALS — the lookup would find a field
+after its answer was fixed at ★. A row blocker is never touched (F-★ writes no
+row), so the condition only fires for a blocker at the type sort. -/
+def Parked.KeySafe {B : Type} (S : SolverState B) (p : Parked B) : Prop :=
+  (false, p.blocker) ∈ (p.stump.label.applySubst S.subst).sortedFtv ++
+      (p.stump.row.applySubst S.subst).sortedFtv →
+    ∀ q ∈ S.parked, p.blocker ∉ (q.stump.res.applySubst S.subst).ftv
+
+instance {B : Type} [DecidableEq B] (S : SolverState B) (p : Parked B) :
+    Decidable (p.KeySafe S) := by
+  unfold Parked.KeySafe; infer_instance
+
 /-- `S ⊢ q ⇓ S′` — F-★, the algorithmic moment of T-sel-★. Runs at the end of
 inference and at every generalization boundary that does not carry the stump.
 
@@ -557,6 +572,7 @@ inductive Finalize {B : Type} [DecidableEq B] :
       p ∈ S.parked →
       LookupBlockedQ (p.stump.row.applySubst S.subst) (p.stump.label.applySubst S.subst)
         p.blocker →
+      p.KeySafe S →
       SolveTy S p.stump.res .unk S' →
       Finalize S p
         ({ S' with parked := S'.parked.filter (·.stump != p.stump) }.flag
@@ -576,12 +592,12 @@ inductive Finalizes {B : Type} [DecidableEq B] :
 every state a run produces is one (`Infer.quiescent`) — blockedness holds of
 every parked stump, so F-★ fires on any of them whose equation succeeds. -/
 theorem Finalize.of_quiescent {B : Type} [DecidableEq B] {S S' : SolverState B}
-    {p : Parked B} (hq : S.Quiescent) (hp : p ∈ S.parked)
+    {p : Parked B} (hq : S.Quiescent) (hp : p ∈ S.parked) (hk : p.KeySafe S)
     (hs : SolveTy S p.stump.res .unk S') :
     Finalize S p
       ({ S' with parked := S'.parked.filter (·.stump != p.stump) }.flag
         (p.stump.label.applySubst S.subst).keyName) :=
-  .star hp (hq p hp) hs
+  .star hp (hq p hp) hk hs
 
 /-- ⊢  **F-★ and K-hit / K-⊥ are now exclusive.** Whenever F-★ applies to a stump,
 the only wake-up step available on it is K-repark, which commits nothing: the
@@ -591,7 +607,7 @@ the determinism the `algorithmic.typ` bullet claims, at the one place
 theorem Finalize.wake_no_commit {B : Type} [DecidableEq B] {S S₁ S₂ : SolverState B}
     {p : Parked B} (hf : Finalize S p S₁) (hw : Wake S p S₂) : S₂.sol = S.sol := by
   cases hf with
-  | star _ hb _ =>
+  | star _ hb _ _ =>
       cases hw with
       | hit hl _  => exact absurd (hl.det hb.toLookupQ) (by simp)
       | abs hl _  => exact absurd (hl.det hb.toLookupQ) (by simp)
@@ -638,7 +654,7 @@ theorem no_finalize_of_spent {B : Type} [DecidableEq B] {S : SolverState B}
     ¬ ∃ S', Finalize S p S' := by
   rintro ⟨S', hf⟩
   cases hf with
-  | star _ _ hs =>
+  | star _ _ _ hs =>
       obtain ⟨fuel, s, Sup, hu, -⟩ := hs
       simp only [Ty.applySubst] at hu
       revert h hu
@@ -764,6 +780,18 @@ def letScheme {B : Type} (S₁ : SolverState B) (ᾱ : List TyVar) (Δq : List (
   ⟨ᾱ, Δq.map (fun p => (⟨p.stump.row.applySubst S₁.subst, p.stump.label.applySubst S₁.subst,
       p.stump.res.applySubst S₁.subst⟩ : Stump B)), τ₁.applySubst S₁.subst⟩
 
+/-- a spent stump can be met by filling its blocker as a ROW: its key is a label,
+and the blocker is not a key variable of the row — a label lookup blocked on a
+`${γ}` field waits on γ, and no row extension decides it. -/
+def Parked.fillable {B : Type} (S : SolverState B) (p : Parked B) : Bool :=
+  (p.stump.label.applySubst S.subst).isLab &&
+    !((p.stump.row.applySubst S.subst).sortedFtv.contains (false, p.blocker))
+
+theorem Parked.fillable_iff {B : Type} {S : SolverState B} {p : Parked B} :
+    p.fillable S = true ↔ (p.stump.label.applySubst S.subst).isLab = true ∧
+      (false, p.blocker) ∉ (p.stump.row.applySubst S.subst).sortedFtv := by
+  simp [Parked.fillable]
+
 /-- A-let's premise on the generalized RESULTS, read at S₁ (`QScheme.WF`,
 `Correctable`, and the inhabitation of the scheme):
 * each is a linear pattern over ᾱ — a variable, or a type a promise was spent on
@@ -781,9 +809,9 @@ def LetResults {B : Type} (S₁ : SolverState B) (ᾱ : List TyVar) (Δq : List 
   (∀ p ∈ Δq, ∀ q ∈ Δq, ∀ δ ∈ (p.stump.res.applySubst S₁.subst).ftv,
       δ ∈ (q.stump.res.applySubst S₁.subst).ftv → p.stump = q.stump) ∧
   (∀ p ∈ Δq, (p.stump.res.applySubst S₁.subst).isVar = false →
-      (p.stump.label.applySubst S₁.subst).isLab = true ∧
+      p.fillable S₁ = true ∧
       (∀ q ∈ Δq, q.blocker = p.blocker →
-        (q.stump.label.applySubst S₁.subst).isLab = true ∧
+        q.fillable S₁ = true ∧
         (q.stump.label.applySubst S₁.subst = p.stump.label.applySubst S₁.subst →
           q.stump = p.stump)) ∧
       (∀ q ∈ Δq, (q.stump.res.applySubst S₁.subst).isVar = false →
@@ -1121,7 +1149,7 @@ theorem selEx_runs :
     Run (B := Unit) (C := Unit) (fun _ => ()) (selEx Unit)
       (.fn (.var (natName 1)) (.var (natName 3))) selExFinal :=
   ⟨selExS1, selExS1, selEx_infers, .skip .nil,
-   .cons (Finalize.star (by simp [selExS1]) .varFree
+   .cons (Finalize.star (by simp [selExS1]) .varFree (by decide)
      ⟨5, selExStar, ⟨4⟩, rfl, rfl⟩) .nil⟩
 
 /-- ⊢  …and the answer is `{β} → ★` with `l` flagged — the L1-finalized type
@@ -1183,7 +1211,7 @@ theorem WakesSat.supply {B : Type} [DecidableEq B] {S S' : SolverState B}
 
 theorem Finalize.supply {B : Type} [DecidableEq B] {S S' : SolverState B}
     {p : Parked B} : Finalize S p S' → S.supply.next ≤ S'.supply.next
-  | .star _ _ hs => hs.supply
+  | .star _ _ _ hs => hs.supply
 
 theorem Finalizes.supply {B : Type} [DecidableEq B] {S S' : SolverState B}
     {ps : List (Parked B)} : Finalizes S ps S' → S.supply.next ≤ S'.supply.next
@@ -1237,7 +1265,7 @@ theorem WakesSat.kinds {B : Type} [DecidableEq B] {S S' : SolverState B}
 
 theorem Finalize.kinds {B : Type} [DecidableEq B] {S S' : SolverState B}
     {p : Parked B} : Finalize S p S' → S'.kinds = S.kinds
-  | .star _ _ hs => hs.kinds
+  | .star _ _ _ hs => hs.kinds
 
 theorem Finalizes.kinds {B : Type} [DecidableEq B] {S S' : SolverState B}
     {ps : List (Parked B)} : Finalizes S ps S' → S'.kinds = S.kinds
@@ -1479,7 +1507,7 @@ theorem Wakes.satMono {B : Type} [DecidableEq B] {S S' : SolverState B}
 
 theorem Finalize.satMono {B : Type} [DecidableEq B] {S S' : SolverState B}
     {p : Parked B} : Finalize S p S' → S.SatMono S'
-  | .star _ _ hs => hs.satMono
+  | .star _ _ _ hs => hs.satMono
 
 theorem Finalizes.satMono {B : Type} [DecidableEq B] {S S' : SolverState B}
     {ps : List (Parked B)} : Finalizes S ps S' → S.SatMono S'

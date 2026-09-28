@@ -44,7 +44,7 @@ theorem SolveTySat.clean {S S' : SolverState B} {τ τ' : Ty B} :
 
 theorem Finalize.clean {S S' : SolverState B} {p : Parked B} :
     Finalize S p S' → S.sol.Clean → S'.sol.Clean
-  | .star _ _ hs, hc => hs.clean hc
+  | .star _ _ _ hs, hc => hs.clean hc
 
 theorem Finalizes.clean {S S' : SolverState B} {ps : List (Parked B)} :
     Finalizes S ps S' → S.sol.Clean → S'.sol.Clean
