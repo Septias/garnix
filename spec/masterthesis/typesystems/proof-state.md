@@ -46,7 +46,7 @@ We use a custom lookup relation ⟨ρ.l ↓ r⟩ with return values ⟨τ | ⊥ 
 - `λx. λy. (x.l) y`: A-app writes `δ ≔ α → β` into a parked stump's result, F-★'s `δ ≐ ★` clashes (`no_finalize_of_spent`)
 - Fix: `Stump.res : Ty B`; new finalization phase `Materialize` (F-hit) before F-★: blocker `r ≔ (l : res | r')`, then saturate
 - `Run` = infer → `Materializes` → `Finalizes`; `runSound`, `runF_terminates` re-proved, same axioms
-- Parked stumps are retired by stump, not by result: `PInv`/`PsOk` vacuous
+- Parked stumps are retired by stump, not by result: the parked-list invariant (`PInv`) is gone
 - A-let generalizes spent stumps: `QScheme.WF` = result vars are binders; `Correctable` = linear pattern results (`Ty.correct`); inhabitation fills spent blockers (`fillRow`)
 - Open: key-blocked spent stump (`λr. λa. r.(a) c`) still fails; spent results with record literals, or two spent stumps on one field, stay monomorphic
 
@@ -103,7 +103,7 @@ We use a custom lookup relation ⟨ρ.l ↓ r⟩ with return values ⟨τ | ⊥ 
 - `stuck_masks_mgu`, `terminalNoMgu_false`: stuck ⇏ no mgu, terminal ⇏ no mgu
 
 **Inference** Γ; S ⊢ e ⇒ τ; S′
-- `inferSound`: Γ; S ⊢ e ⇒ τ; S′ → PInv S → SchemesWF Γ → Clean S → Quiescent S →
+- `inferSound`: Γ; S ⊢ e ⇒ τ; S′ → SchemesWF Γ → Clean S → Quiescent S →
   ∀σ, σ absorbs S′ → σ ⊨ S′ → ∀Γ', Γ ⇝_σ Γ' → parked(S′)σ; Γ' ⊢ₐ e : τσ
 - `runSound`: Run e τ S′ → ∅ ⊢ e : τ⟦S′⟧
 - `runF_terminates`: ∃ n, runF n e ≠ oof

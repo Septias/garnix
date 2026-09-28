@@ -190,15 +190,15 @@ private theorem draw_sol {S S₀ : SolverState B} {α : TyVar} {κ : Kind}
   have h2 : S₀ = (S.draw κ).2 := congrArg Prod.snd h
   subst h2; rfl
 
-/-- ⊢  one F-hit step keeps the invariant, every stump, cleanliness, and extends. -/
+/-- ⊢  one F-hit step keeps every stump and cleanliness, and extends. -/
 theorem Materialize.keeps {S S' : SolverState B} {p : Parked B} (hm : Materialize S p S')
-    (h : S.PInv) (hc : S.sol.Clean) :
-    S'.PInv ∧ S.KeepsS S' ∧ S'.sol.Clean ∧ S.Ext S' ∧ S.SatMono S' := by
+    (hc : S.sol.Clean) :
+    S.KeepsS S' ∧ S'.sol.Clean ∧ S.Ext S' ∧ S.SatMono S' := by
   cases hm with
   | hit _ _ _ _ hd hs =>
-      obtain ⟨i₀, k₀, m₀, -⟩ := draw_pinv_keeps hd h
-      obtain ⟨i', k'⟩ := hs.pinv_keeps i₀
-      exact ⟨i', k₀.trans k' hs.satMono, hs.clean (draw_sol hd ▸ hc),
+      obtain ⟨k₀, m₀, -⟩ := draw_keeps hd
+      have k' := hs.keeps
+      exact ⟨k₀.trans k' hs.satMono, hs.clean (draw_sol hd ▸ hc),
         (draw_ext hd).trans hs.ext, m₀.trans hs.satMono⟩
 
 theorem Materialize.clean {S S' : SolverState B} {p : Parked B} (hm : Materialize S p S')
@@ -214,14 +214,14 @@ theorem Materializes.clean {S S' : SolverState B} {ps : List (Parked B)} :
 
 /-- ⊢  …and so does the whole materialization phase. -/
 theorem Materializes.keeps {S S' : SolverState B} {ps : List (Parked B)} :
-    Materializes S ps S' → S.PInv → S.sol.Clean →
-      S'.PInv ∧ S.KeepsS S' ∧ S'.sol.Clean ∧ S.Ext S' ∧ S.SatMono S'
-  | .nil, h, hc => ⟨h, .refl _, hc, .refl _, .refl _⟩
-  | .skip hms, h, hc => Materializes.keeps hms h hc
-  | .cons hm hms, h, hc => by
-      obtain ⟨i₁, k₁, c₁, x₁, m₁⟩ := hm.keeps h hc
-      obtain ⟨i₂, k₂, c₂, x₂, m₂⟩ := Materializes.keeps hms i₁ c₁
-      exact ⟨i₂, k₁.trans k₂ m₂, c₂, x₁.trans x₂, m₁.trans m₂⟩
+    Materializes S ps S' → S.sol.Clean →
+      S.KeepsS S' ∧ S'.sol.Clean ∧ S.Ext S' ∧ S.SatMono S'
+  | .nil, hc => ⟨.refl _, hc, .refl _, .refl _⟩
+  | .skip hms, hc => Materializes.keeps hms hc
+  | .cons hm hms, hc => by
+      obtain ⟨k₁, c₁, x₁, m₁⟩ := hm.keeps hc
+      obtain ⟨k₂, c₂, x₂, m₂⟩ := Materializes.keeps hms c₁
+      exact ⟨k₁.trans k₂ m₂, c₂, x₁.trans x₂, m₁.trans m₂⟩
 
 --------------------- RunSound -------------------------------------------------
 
@@ -236,9 +236,7 @@ discharged it already (`KeepsS`). -/
 theorem runSound {C : Type} {constTy : C → B} : RunSound B C constTy := by
   rintro e τ S' ⟨S₁, S₂, hinf, hmat, hfins⟩
   have c₁ := Infer.clean hinf Sol.clean_nil
-  have i₁ := (Infer.pinv_keeps hinf trivial
-    QCtx.SchemesWF.nil).1
-  obtain ⟨-, k₁₂, c₂, x₁₂, -⟩ := hmat.keeps i₁ c₁
+  obtain ⟨k₁₂, c₂, x₁₂, -⟩ := hmat.keeps c₁
   have c' := hfins.clean c₂
   have hab₁ : Absorbs S'.subst S₁ := (Absorbs.self c').back (x₁₂.trans hfins.ext) c₁
   have hab₂ : Absorbs S'.subst S₂ := (Absorbs.self c').back hfins.ext c₂

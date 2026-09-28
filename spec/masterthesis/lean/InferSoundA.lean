@@ -753,11 +753,11 @@ def SoundAtRec {B C : Type} (constTy : C → B) (Γ : QCtx B) (ξ : RecBody (Exp
 said. Γ and τ are read under the SAME σ, which is any substitution satisfying the
 final state AND absorbs it (σ ∘ ⟦S′⟧ = σ — `Absorbs`, Absorb.lean; A-let needs
 the exact form); what is still parked is assumed, read under σ as well. The
-start state satisfies the parked-list invariant, is clean and quiescent, and Γ's
+start state is clean and quiescent, and Γ's
 schemes are well-formed — all trivially true of a run from nothing. -/
 def InferSound (B C : Type) [DecidableEq B] (constTy : C → B) : Prop :=
   ∀ (Γ : QCtx B) (S S' : SolverState B) (e : Expr C) (τ : Ty B),
-    Infer constTy Γ S e τ S' → S.PInv → Γ.SchemesWF → S.sol.Clean → S.Quiescent →
+    Infer constTy Γ S e τ S' → Γ.SchemesWF → S.sol.Clean → S.Quiescent →
     SoundAt constTy Γ e τ S'
 
 --------------------- WHAT HAPPENS TO A PARKED STUMP ---------------------------
@@ -790,7 +790,7 @@ theorem SolverState.KeepsS.liftBody {B C : Type} [DecidableEq B] {constTy : C �
 --------------------- THE INDUCTION, MODULO A-var AND A-let --------------------
 -- The two cases whose own obligations are elsewhere are hypotheses, stated as
 -- the case with its induction hypotheses. The parked-list bookkeeping is no
--- longer one: `Infer.pinv_keeps` (ParkedInv.lean) proves it.
+-- longer one: `Infer.keeps` (ParkedInv.lean) proves it.
 
 /-- the A-var case. `inferA_sound_var_step` is its typing half. -/
 def VarCase (B C : Type) [DecidableEq B] (constTy : C → B) : Prop :=
@@ -800,7 +800,7 @@ def VarCase (B C : Type) [DecidableEq B] (constTy : C → B) : Prop :=
     (∀ α ∈ sc.vars, ∃ k, S.supply.next ≤ k ∧ k < Sup.next ∧ f α = natName k) →
     S.supply.next ≤ Sup.next →
     InstStumps θ f sc.constraints ps → WakesSat { S with supply := Sup, kinds := K } ps S' →
-    S.PInv → Γ.SchemesWF → S.sol.Clean → S.Quiescent →
+    Γ.SchemesWF → S.sol.Clean → S.Quiescent →
     SoundAt constTy Γ (.var x) (sc.body.applySubst θ) S'
 
 /-- the A-let case, given both induction hypotheses. -/
@@ -822,7 +822,7 @@ def LetCase (B C : Type) [DecidableEq B] (constTy : C → B) : Prop :=
        δ ∉ (p.stump.label.applySubst S₁.subst).ftv) →
     Infer constTy (Γ.bindScheme x (letScheme S₁ ᾱ Δq τ₁))
       { S₁ with parked := Δγ } e₂ τ₂ S₂ →
-    S.PInv → Γ.SchemesWF → S.sol.Clean → S.Quiescent →
+    Γ.SchemesWF → S.sol.Clean → S.Quiescent →
     SoundAt constTy Γ e₁ τ₁ S₁ →
     SoundAt constTy (Γ.bindScheme x (letScheme S₁ ᾱ Δq τ₁)) e₂ τ₂ S₂ →
     SoundAt constTy Γ (.letE x e₁ e₂) τ₂ S₂
@@ -838,17 +838,6 @@ theorem letScheme_wf {B : Type} [DecidableEq B] {Γ : QCtx B} {S₁ : SolverStat
   obtain ⟨p, hp, rfl⟩ := List.mem_map.mp hst
   exact (hres.1 p hp).1
 
--- the let body's context and state satisfy the invariants too (ParkedInv's
--- let case, restated for the induction's use)
-theorem let_body_inv {B : Type} [DecidableEq B] {Γ : QCtx B}
-    {S₁ : SolverState B} {x : Var} {τ₁ : Ty B} {Δq Δγ : List (Parked B)}
-    {ᾱ : List TyVar} (i₁ : S₁.PInv) (hΓ : Γ.SchemesWF) (hsplit : S₁.parked.Perm (Δq ++ Δγ))
-    (hres : LetResults S₁ ᾱ Δq) :
-    ({ S₁ with parked := Δγ } : SolverState B).PInv ∧
-    (Γ.bindScheme x (letScheme S₁ ᾱ Δq τ₁)).SchemesWF := by
-  refine ⟨i₁.of_sub (fun p hp => by exact hsplit.mem_iff.mpr <| List.mem_append_right _ hp)
-    (Nat.le_refl _), letScheme_wf hΓ hres⟩
-
 private theorem draw_eqs {B : Type} {S S₀ : SolverState B} {α : TyVar} {κ : Kind}
     (h : (α, S₀) = S.draw κ) : S₀.sol = S.sol ∧ S₀.parked = S.parked := by
   have h2 : S₀ = (S.draw κ).2 := congrArg Prod.snd h
@@ -859,14 +848,11 @@ constraint or leaves it parked; saturation keeps it that way or discharges it
 later. Either way `inferA_sound_var_step`'s `hcov` holds at the final state. -/
 theorem varCase {B C : Type} [DecidableEq B] {constTy : C → B} :
     VarCase B C constTy := by
-  intro Γ S S' x sc θ f ps Sup K hl hθ hfr hdr hle hps hw h hΓ _ _ σ _ hσ Γ' hr
+  intro Γ S S' x sc θ f ps Sup K hl hθ hfr hdr hle hps hw hΓ _ _ σ _ hσ Γ' hr
   obtain ⟨S₁, hws, hsat⟩ := hw
   have hwf := hΓ x sc hl
-  have hup := supply_up_pinv (K := K) h hle
-  have hok : PsOk { S with supply := Sup, kinds := K } ps := trivial
-  obtain ⟨i₁, -⟩ := hws.pinv_keeps hup hok
-  obtain ⟨-, k₂⟩ := hsat.pinv_keeps i₁
-  have hfate := hws.fate hup hok σ (hsat.satMono σ hσ)
+  have k₂ := hsat.keeps
+  have hfate := hws.fate σ (hsat.satMono σ hσ)
   refine inferA_sound_var_step hr hl hwf hθ hps (fun p hp => ?_)
   rcases hfate p hp with ⟨q, hq, hqs⟩ | hd
   · rcases k₂ σ hσ q hq with ⟨q', hq', hq's⟩ | hd'
@@ -890,26 +876,25 @@ private theorem quiescent_sub {B : Type} {S : SolverState B} {Δ : List (Parked 
 mutual
 
 /-- ⊢  **`InferSound` is inductive**: every rule but A-var and A-let, with those
-two as hypotheses. The parked-list bookkeeping is proved (`Infer.pinv_keeps`),
+two as hypotheses. The parked-list bookkeeping is proved (`Infer.keeps`),
 and absorption is carried back to each premise's state (`Absorbs.back`). -/
 theorem inferSound_of {B C : Type} [DecidableEq B] {constTy : C → B}
     (hvar : VarCase B C constTy) (hlet : LetCase B C constTy) :
     {Γ : QCtx B} → {S S' : SolverState B} → {e : Expr C} → {τ : Ty B} →
-    Infer constTy Γ S e τ S' → S.PInv → Γ.SchemesWF → S.sol.Clean → S.Quiescent →
+    Infer constTy Γ S e τ S' → Γ.SchemesWF → S.sol.Clean → S.Quiescent →
     SoundAt constTy Γ e τ S'
-  | _, _, _, _, _, .con, _, _, _, _ => fun _ _ _ _ _ => .qCon
-  | _, _, _, _, _, .var hl hθ hfr hdr hle _ hps hw, h, hΓ, hc, hq =>
-      hvar hl hθ hfr hdr hle hps hw h hΓ hc hq
-  | _, _, _, _, _, .lam hd hb, h, hΓ, hc, hq => fun σ hab hσ Γ' hr => by
-      obtain ⟨h₀, -, -, -, -, hp₀⟩ := draw_pinv_keeps hd h
+  | _, _, _, _, _, .con, _, _, _ => fun _ _ _ _ _ => .qCon
+  | _, _, _, _, _, .var hl hθ hfr hdr hle _ hps hw, hΓ, hc, hq =>
+      hvar hl hθ hfr hdr hle hps hw hΓ hc hq
+  | _, _, _, _, _, .lam hd hb, hΓ, hc, hq => fun σ hab hσ Γ' hr => by
+      obtain ⟨-, -, -, -, hp₀⟩ := draw_keeps hd
       obtain ⟨hs₀, -⟩ := draw_eqs hd
-      exact .qLam (inferSound_of hvar hlet hb h₀ (hΓ.bindTy _ _) (hs₀ ▸ hc)
+      exact .qLam (inferSound_of hvar hlet hb (hΓ.bindTy _ _) (hs₀ ▸ hc)
         (quiescent_of_eq hs₀ hp₀ hq) σ hab hσ _ (hr.bindTy _ (.var _)))
-  | _, _, _, _, _, .app h₁ h₂ hd hs, h, hΓ, hc, hq => fun σ hab hσ Γ' hr => by
-      obtain ⟨i₁, -⟩ := Infer.pinv_keeps h₁ h hΓ
-      obtain ⟨i₂, k₂⟩ := Infer.pinv_keeps h₂ i₁ hΓ
-      obtain ⟨i₃, k₃, m₃, -, -, -⟩ := draw_pinv_keeps hd i₂
-      obtain ⟨-, k₄⟩ := hs.pinv_keeps i₃
+  | _, _, _, _, _, .app h₁ h₂ hd hs, hΓ, hc, hq => fun σ hab hσ Γ' hr => by
+      have k₂ := Infer.keeps h₂
+      obtain ⟨k₃, m₃, -, -, -⟩ := draw_keeps hd
+      have k₄ := hs.keeps
       have c₁ := Infer.clean h₁ hc
       have c₂ := Infer.clean h₂ c₁
       have x₂ := (draw_ext hd).trans hs.ext
@@ -921,18 +906,17 @@ theorem inferSound_of {B C : Type} [DecidableEq B] {constTy : C → B}
       have hσ₂ := m₃ σ (hsolve.satMono σ hσ₃')
       have hσ₁ := Infer.sat_mono h₂ σ hσ₂
       have q₁ := Infer.quiescent h₁ hq
-      have ih₁ := K₁.lift hσ hr (inferSound_of hvar hlet h₁ h hΓ hc hq σ
+      have ih₁ := K₁.lift hσ hr (inferSound_of hvar hlet h₁ hΓ hc hq σ
         (hab.back x₁ c₁) hσ₁ Γ' hr)
-      have ih₂ := K₂.lift hσ hr (inferSound_of hvar hlet h₂ i₁ hΓ c₁ q₁ σ
+      have ih₂ := K₂.lift hσ hr (inferSound_of hvar hlet h₂ hΓ c₁ q₁ σ
         (hab.back x₂ c₂) hσ₂ Γ' hr)
       exact .qApp (.qEq ih₁ (hsolve.unifies_sat hσ₃')) ih₂
-  | _, _, _, _, _, .conc h₁ h₂ hd₁ hd₂ hs₁ hs₂, h, hΓ, hc, hq => fun σ hab hσ Γ' hr => by
-      obtain ⟨i₁, -⟩ := Infer.pinv_keeps h₁ h hΓ
-      obtain ⟨i₂, k₂⟩ := Infer.pinv_keeps h₂ i₁ hΓ
-      obtain ⟨ia, ka, ma, -, -, -⟩ := draw_pinv_keeps hd₁ i₂
-      obtain ⟨ib, kb, mb, -, -, -⟩ := draw_pinv_keeps hd₂ ia
-      obtain ⟨i₃, k₃⟩ := hs₁.pinv_keeps ib
-      obtain ⟨-, k₄⟩ := hs₂.pinv_keeps i₃
+  | _, _, _, _, _, .conc h₁ h₂ hd₁ hd₂ hs₁ hs₂, hΓ, hc, hq => fun σ hab hσ Γ' hr => by
+      have k₂ := Infer.keeps h₂
+      obtain ⟨ka, ma, -, -, -⟩ := draw_keeps hd₁
+      obtain ⟨kb, mb, -, -, -⟩ := draw_keeps hd₂
+      have k₃ := hs₁.keeps
+      have k₄ := hs₂.keeps
       have c₁ := Infer.clean h₁ hc
       have c₂ := Infer.clean h₂ c₁
       have x₂ := (draw_ext hd₁).trans ((draw_ext hd₂).trans (hs₁.ext.trans hs₂.ext))
@@ -948,39 +932,37 @@ theorem inferSound_of {B C : Type} [DecidableEq B] {constTy : C → B}
       have hσ₂ := ma σ (mb σ (hsolve₁.satMono σ hσ₃'))
       have hσ₁ := Infer.sat_mono h₂ σ hσ₂
       have q₁ := Infer.quiescent h₁ hq
-      have ih₁ := K₁.lift hσ hr (inferSound_of hvar hlet h₁ h hΓ hc hq σ
+      have ih₁ := K₁.lift hσ hr (inferSound_of hvar hlet h₁ hΓ hc hq σ
         (hab.back x₁ c₁) hσ₁ Γ' hr)
-      have ih₂ := K₂.lift hσ hr (inferSound_of hvar hlet h₂ i₁ hΓ c₁ q₁ σ
+      have ih₂ := K₂.lift hσ hr (inferSound_of hvar hlet h₂ hΓ c₁ q₁ σ
         (hab.back x₂ c₂) hσ₂ Γ' hr)
       exact .qCat (.qEq ih₁ (hsolve₁.unifies_sat hσ₃')) (.qEq ih₂ (hsolve₂.unifies_sat hσ₄'))
-  | _, _, _, _, _, .sel h₁ hd hs hlk, h, hΓ, hc, hq => fun σ hab hσ Γ' hr => by
-      obtain ⟨i₁, -⟩ := Infer.pinv_keeps h₁ h hΓ
-      obtain ⟨ia, ka, ma, -, -, -⟩ := draw_pinv_keeps hd i₁
-      obtain ⟨-, k₂⟩ := hs.pinv_keeps ia
+  | _, _, _, _, _, .sel h₁ hd hs hlk, hΓ, hc, hq => fun σ hab hσ Γ' hr => by
+      obtain ⟨ka, ma, -, -, -⟩ := draw_keeps hd
+      have k₂ := hs.keeps
       have c₁ := Infer.clean h₁ hc
       have x₁ := (draw_ext hd).trans hs.ext
       have K := ka.trans k₂ hs.satMono
       obtain ⟨S₂', hsolve, hsatu⟩ := hs
       have hσ₂' := hsatu.satMono σ hσ
       have hσ₁ := ma σ (hsolve.satMono σ hσ₂')
-      have ih := K.lift hσ hr (inferSound_of hvar hlet h₁ h hΓ hc hq σ
+      have ih := K.lift hσ hr (inferSound_of hvar hlet h₁ hΓ hc hq σ
         (hab.back x₁ c₁) hσ₁ Γ' hr)
       have hrcd := QTypedA.qEq ih (hsolve.unifies_sat hσ₂')
       obtain ⟨r'', hl'', he''⟩ :=
         Sol.lookup_sat hσ hlk (by intro hh; cases hh)
       cases he'' with
       | found hty => exact .qEq (.qSel hrcd hl'') hty.symm
-  | _, _, _, _, _, .selAbs h₁ hd hs hlk, h, hΓ, hc, hq => fun σ hab hσ Γ' hr => by
-      obtain ⟨i₁, -⟩ := Infer.pinv_keeps h₁ h hΓ
-      obtain ⟨ia, ka, ma, -, -, -⟩ := draw_pinv_keeps hd i₁
-      obtain ⟨-, k₂⟩ := hs.pinv_keeps ia
+  | _, _, _, _, _, .selAbs h₁ hd hs hlk, hΓ, hc, hq => fun σ hab hσ Γ' hr => by
+      obtain ⟨ka, ma, -, -, -⟩ := draw_keeps hd
+      have k₂ := hs.keeps
       have c₁ := Infer.clean h₁ hc
       have x₁ := (draw_ext hd).trans (hs.ext.trans (.of_sol_eq rfl))
       have K := ka.trans k₂ hs.satMono
       obtain ⟨S₂', hsolve, hsatu⟩ := hs
       have hσ₂' := hsatu.satMono σ hσ
       have hσ₁ := ma σ (hsolve.satMono σ hσ₂')
-      have ih := K.lift hσ hr (inferSound_of hvar hlet h₁ h hΓ hc hq σ
+      have ih := K.lift hσ hr (inferSound_of hvar hlet h₁ hΓ hc hq σ
         (hab.back x₁ c₁) hσ₁ Γ' hr)
       have hrcd := QTypedA.qEq ih (hsolve.unifies_sat hσ₂')
       obtain ⟨r'', hl'', he''⟩ :=
@@ -988,11 +970,10 @@ theorem inferSound_of {B C : Type} [DecidableEq B] {constTy : C → B}
       cases he'' with
       | absent => exact .qSelAbs hrcd hl''
   | _, _, _, _, _, .selUnk (S₂ := S₂) (S₂' := S₂d) (l := l) (r := r) (α := α) (δ := δ)
-      h₁ hd hs _ hd₂, h, hΓ, hc, hq => fun σ hab hσ Γ' hr => by
-      obtain ⟨i₁, -⟩ := Infer.pinv_keeps h₁ h hΓ
-      obtain ⟨ia, ka, ma, -, -, -⟩ := draw_pinv_keeps hd i₁
-      obtain ⟨i₂, k₂⟩ := hs.pinv_keeps ia
-      obtain ⟨-, kb, mb, -, -, -⟩ := draw_pinv_keeps hd₂ i₂
+      h₁ hd hs _ hd₂, hΓ, hc, hq => fun σ hab hσ Γ' hr => by
+      obtain ⟨ka, ma, -, -, -⟩ := draw_keeps hd
+      have k₂ := hs.keeps
+      obtain ⟨kb, mb, -, -, -⟩ := draw_keeps hd₂
       have c₁ := Infer.clean h₁ hc
       have x₁ := (draw_ext hd).trans (hs.ext.trans ((draw_ext hd₂).trans
         (SolverState.Ext.of_sol_eq (S := S₂d) (S' := S₂d.park ⟨α, ⟨Row.var r, .lab l, .var δ⟩⟩) rfl)))
@@ -1007,17 +988,16 @@ theorem inferSound_of {B C : Type} [DecidableEq B] {constTy : C → B}
       obtain ⟨S₂', hsolve, hsatu⟩ := hs
       have hσ₂' := hsatu.satMono σ hσ₂
       have hσ₁ := ma σ (hsolve.satMono σ hσ₂')
-      exact .assume (.qEq (K.lift hσ hr (inferSound_of hvar hlet h₁ h hΓ hc hq σ
+      exact .assume (.qEq (K.lift hσ hr (inferSound_of hvar hlet h₁ hΓ hc hq σ
         (hab.back x₁ c₁) hσ₁ Γ' hr)) (hsolve.unifies_sat hσ₂')) List.mem_cons_self
-  | _, _, _, _, _, .lab, _, _, _, _ => fun _ _ _ _ _ => .qLab
+  | _, _, _, _, _, .lab, _, _, _ => fun _ _ _ _ _ => .qLab
   -- A-sel-dyn: the record's IH and the key's IH, both lifted to the end, and the
   -- lookup carried over the ⟦S⟧/σ gap on the row AND on the key
-  | _, _, _, _, _, .selDyn (τ₂ := τ₂) h₁ hd hs h₂ hlk, h, hΓ, hc, hq =>
+  | _, _, _, _, _, .selDyn (τ₂ := τ₂) h₁ hd hs h₂ hlk, hΓ, hc, hq =>
       fun σ hab hσ Γ' hr => by
-      obtain ⟨i₁, -⟩ := Infer.pinv_keeps h₁ h hΓ
-      obtain ⟨ia, ka, ma, -, -, -⟩ := draw_pinv_keeps hd i₁
-      obtain ⟨i₂, k₂⟩ := hs.pinv_keeps ia
-      obtain ⟨-, k₃⟩ := Infer.pinv_keeps h₂ i₂ hΓ
+      obtain ⟨ka, ma, -, -, -⟩ := draw_keeps hd
+      have k₂ := hs.keeps
+      have k₃ := Infer.keeps h₂
       have c₁ := Infer.clean h₁ hc
       obtain ⟨hsd, hpd⟩ := draw_eqs hd
       have c₂ := hs.clean (hsd ▸ c₁)
@@ -1030,21 +1010,20 @@ theorem inferSound_of {B C : Type} [DecidableEq B] {constTy : C → B}
       obtain ⟨S₂', hsolve, hsatu⟩ := hs
       have hσ₂' := hsatu.satMono σ hσ₂
       have hσ₁ := ma σ (hsolve.satMono σ hσ₂')
-      have ih₁ := K₁.lift hσ hr (inferSound_of hvar hlet h₁ h hΓ hc hq σ
+      have ih₁ := K₁.lift hσ hr (inferSound_of hvar hlet h₁ hΓ hc hq σ
         (hab.back x₁ c₁) hσ₁ Γ' hr)
-      have ih₂ := inferSound_of hvar hlet h₂ i₂ hΓ c₂ q₂ σ hab hσ Γ' hr
+      have ih₂ := inferSound_of hvar hlet h₂ hΓ c₂ q₂ σ hab hσ Γ' hr
       have hrcd := QTypedA.qEq ih₁ (hsolve.unifies_sat hσ₂')
       obtain ⟨r'', hl'', he''⟩ :=
         Sol.lookupQ_sat hσ hlk (by intro hh; cases hh)
       have hl₃ := hl''
       cases he'' with
       | found hty => exact .qEq (.qSelDyn hrcd ih₂ hl₃) hty.symm
-  | _, _, _, _, _, .selDynAbs (τ₂ := τ₂) h₁ hd hs h₂ hlk, h, hΓ, hc, hq =>
+  | _, _, _, _, _, .selDynAbs (τ₂ := τ₂) h₁ hd hs h₂ hlk, hΓ, hc, hq =>
       fun σ hab hσ Γ' hr => by
-      obtain ⟨i₁, -⟩ := Infer.pinv_keeps h₁ h hΓ
-      obtain ⟨ia, ka, ma, -, -, -⟩ := draw_pinv_keeps hd i₁
-      obtain ⟨i₂, k₂⟩ := hs.pinv_keeps ia
-      obtain ⟨-, k₃⟩ := Infer.pinv_keeps h₂ i₂ hΓ
+      obtain ⟨ka, ma, -, -, -⟩ := draw_keeps hd
+      have k₂ := hs.keeps
+      have k₃ := Infer.keeps h₂
       have c₁ := Infer.clean h₁ hc
       obtain ⟨hsd, hpd⟩ := draw_eqs hd
       have c₂ := hs.clean (hsd ▸ c₁)
@@ -1057,9 +1036,9 @@ theorem inferSound_of {B C : Type} [DecidableEq B] {constTy : C → B}
       obtain ⟨S₂', hsolve, hsatu⟩ := hs
       have hσ₂' := hsatu.satMono σ hσ₂
       have hσ₁ := ma σ (hsolve.satMono σ hσ₂')
-      have ih₁ := K₁.lift hσ hr (inferSound_of hvar hlet h₁ h hΓ hc hq σ
+      have ih₁ := K₁.lift hσ hr (inferSound_of hvar hlet h₁ hΓ hc hq σ
         (hab.back x₁ c₁) hσ₁ Γ' hr)
-      have ih₂ := inferSound_of hvar hlet h₂ i₂ hΓ c₂ q₂ σ hab hσ Γ' hr
+      have ih₂ := inferSound_of hvar hlet h₂ hΓ c₂ q₂ σ hab hσ Γ' hr
       have hrcd := QTypedA.qEq ih₁ (hsolve.unifies_sat hσ₂')
       obtain ⟨r'', hl'', he''⟩ :=
         Sol.lookupQ_sat hσ hlk (by intro hh; cases hh)
@@ -1067,12 +1046,11 @@ theorem inferSound_of {B C : Type} [DecidableEq B] {constTy : C → B}
       cases he'' with
       | absent => exact .qSelDynAbs hrcd ih₂ hl₃
   | _, _, _, _, _, .selDynUnk (S₃ := S₃) (S₃' := S₃d) (τ₂ := τ₂) (r := r) (α := α) (δ := δ)
-      h₁ hd hs h₂ _ hd₂, h, hΓ, hc, hq => fun σ hab hσ Γ' hr => by
-      obtain ⟨i₁, -⟩ := Infer.pinv_keeps h₁ h hΓ
-      obtain ⟨ia, ka, ma, -, -, -⟩ := draw_pinv_keeps hd i₁
-      obtain ⟨i₂, k₂⟩ := hs.pinv_keeps ia
-      obtain ⟨i₃, k₃⟩ := Infer.pinv_keeps h₂ i₂ hΓ
-      obtain ⟨-, kb, mb, -, -, -⟩ := draw_pinv_keeps hd₂ i₃
+      h₁ hd hs h₂ _ hd₂, hΓ, hc, hq => fun σ hab hσ Γ' hr => by
+      obtain ⟨ka, ma, -, -, -⟩ := draw_keeps hd
+      have k₂ := hs.keeps
+      have k₃ := Infer.keeps h₂
+      obtain ⟨kb, mb, -, -, -⟩ := draw_keeps hd₂
       have c₁ := Infer.clean h₁ hc
       obtain ⟨hsd, hpd⟩ := draw_eqs hd
       have c₂ := hs.clean (hsd ▸ c₁)
@@ -1093,41 +1071,39 @@ theorem inferSound_of {B C : Type} [DecidableEq B] {constTy : C → B}
       obtain ⟨S₂', hsolve, hsatu⟩ := hs
       have hσ₂' := hsatu.satMono σ hσ₂
       have hσ₁ := ma σ (hsolve.satMono σ hσ₂')
-      have ih₁ := K₁.lift hσ hr (inferSound_of hvar hlet h₁ h hΓ hc hq σ
+      have ih₁ := K₁.lift hσ hr (inferSound_of hvar hlet h₁ hΓ hc hq σ
         (hab.back x₁ c₁) hσ₁ Γ' hr)
-      have ih₂ := (kb.trans kp mp).lift hσ hr (inferSound_of hvar hlet h₂ i₂ hΓ c₂ q₂ σ
+      have ih₂ := (kb.trans kp mp).lift hσ hr (inferSound_of hvar hlet h₂ hΓ c₂ q₂ σ
         (hab.back ((draw_ext hd₂).trans (SolverState.Ext.of_sol_eq (S := S₃d)
           (S' := S₃d.park ⟨α, ⟨Row.var r, τ₂, .var δ⟩⟩) rfl)) (Infer.clean h₂ c₂)) hσ₃ Γ' hr)
       exact .assumeDyn (.qEq ih₁ (hsolve.unifies_sat hσ₂')) ih₂ List.mem_cons_self
-  | _, _, _, _, _, .rcd hb, h, hΓ, hc, hq => fun σ hab hσ Γ' hr =>
-      .qRcd (inferRecSound_of hvar hlet hb h hΓ hc hq σ hab hσ Γ' hr)
-  | _, _, _, _, _, .letE (S₁ := S₁) (Δγ := Δγ) h₁ hA hsplit hbq hγ hfresh hown hres hdis hdom hind h₂,
-      h, hΓ, hc, hq => by
-      obtain ⟨i₁, -⟩ := Infer.pinv_keeps h₁ h hΓ
-      obtain ⟨i₁', hΓ'⟩ := let_body_inv (x := _) (τ₁ := _) i₁ hΓ hsplit hres
+  | _, _, _, _, _, .rcd hb, hΓ, hc, hq => fun σ hab hσ Γ' hr =>
+      .qRcd (inferRecSound_of hvar hlet hb hΓ hc hq σ hab hσ Γ' hr)
+  | _, _, _, _, _, .letE (S₁ := S₁) (Δγ := Δγ) (x := x) (τ₁ := τ₁) h₁ hA hsplit hbq hγ hfresh hown hres hdis hdom hind h₂,
+      hΓ, hc, hq => by
+      have hΓ' := letScheme_wf (x := x) (τ₁ := τ₁) hΓ hres
       have c₁ := Infer.clean h₁ hc
       have q₁ : ({ S₁ with parked := Δγ } : SolverState B).Quiescent :=
         quiescent_sub (Infer.quiescent h₁ hq)
           (fun p hp => by exact hsplit.mem_iff.mpr <| List.mem_append_right _ hp)
-      exact hlet h₁ hA hsplit hbq hγ hfresh hown hres hdis hdom hind h₂ h hΓ hc hq
-        (inferSound_of hvar hlet h₁ h hΓ hc hq) (inferSound_of hvar hlet h₂ i₁' hΓ' c₁ q₁)
+      exact hlet h₁ hA hsplit hbq hγ hfresh hown hres hdis hdom hind h₂ hΓ hc hq
+        (inferSound_of hvar hlet h₁ hΓ hc hq) (inferSound_of hvar hlet h₂ hΓ' c₁ q₁)
 
 theorem inferRecSound_of {B C : Type} [DecidableEq B] {constTy : C → B}
     (hvar : VarCase B C constTy) (hlet : LetCase B C constTy) :
     {Γ : QCtx B} → {S S' : SolverState B} → {ξ : RecBody (Expr C)} → {ρ : Row B} →
-    InferRec constTy Γ S ξ ρ S' → S.PInv → Γ.SchemesWF → S.sol.Clean → S.Quiescent →
+    InferRec constTy Γ S ξ ρ S' → Γ.SchemesWF → S.sol.Clean → S.Quiescent →
     SoundAtRec constTy Γ ξ ρ S'
-  | _, _, _, _, _, .empty, _, _, _, _ => fun _ _ _ _ _ => .empty
-  | _, _, _, _, _, .field h₁, h, hΓ, hc, hq => fun σ hab hσ Γ' hr =>
-      .field (inferSound_of hvar hlet h₁ h hΓ hc hq σ hab hσ Γ' hr)
-  | _, _, _, _, _, .cat h₁ h₂, h, hΓ, hc, hq => fun σ hab hσ Γ' hr => by
-      obtain ⟨i₁, -⟩ := InferRec.pinv_keeps h₁ h hΓ
-      obtain ⟨-, k₂⟩ := InferRec.pinv_keeps h₂ i₁ hΓ
+  | _, _, _, _, _, .empty, _, _, _ => fun _ _ _ _ _ => .empty
+  | _, _, _, _, _, .field h₁, hΓ, hc, hq => fun σ hab hσ Γ' hr =>
+      .field (inferSound_of hvar hlet h₁ hΓ hc hq σ hab hσ Γ' hr)
+  | _, _, _, _, _, .cat h₁ h₂, hΓ, hc, hq => fun σ hab hσ Γ' hr => by
+      have k₂ := InferRec.keeps h₂
       have c₁ := InferRec.clean h₁ hc
       have hσ₁ := InferRec.sat_mono h₂ σ hσ
-      exact .cat (k₂.liftBody hσ hr (inferRecSound_of hvar hlet h₁ h hΓ hc hq σ
+      exact .cat (k₂.liftBody hσ hr (inferRecSound_of hvar hlet h₁ hΓ hc hq σ
           (hab.back (InferRec.ext h₂) c₁) hσ₁ Γ' hr))
-        (inferRecSound_of hvar hlet h₂ i₁ hΓ c₁ (InferRec.quiescent h₁ hq) σ hab hσ Γ' hr)
+        (inferRecSound_of hvar hlet h₂ hΓ c₁ (InferRec.quiescent h₁ hq) σ hab hσ Γ' hr)
 
 end
 
@@ -1154,7 +1130,7 @@ theorem runSoundA_of {B C : Type} [DecidableEq B] {constTy : C → B}
     {σ : TySubst B} (hab : Absorbs σ S₁) (hsat : Sol.Sat σ S₁.sol)
     (hfin : ∀ p ∈ S₁.parked, (p.stump.at σ).Holds) :
     QTyped constTy QCtx.empty e (τ.applySubst σ) :=
-  (hs _ _ _ _ _ h .init .nil Sol.clean_nil (SolverState.Quiescent.nil rfl) σ hab hsat _
+  (hs _ _ _ _ _ h .nil Sol.clean_nil (SolverState.Quiescent.nil rfl) σ hab hsat _
     (CtxRead.nil σ)).toQTyped (fun _ _ h => nomatch h) (fun a ha => by
     obtain ⟨p, hp, rfl⟩ := List.mem_map.mp ha
     exact hfin p hp)

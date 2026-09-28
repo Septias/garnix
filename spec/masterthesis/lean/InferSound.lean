@@ -23,8 +23,8 @@
 -- χ-correction is `QScheme.Correctable.correct`), `runSound_of_inferSoundC_nil`
 -- (its hypothesis is refuted), `Finalize.dischargeEquiv` and its `hfix` side
 -- condition (now `Finalize.holds`, where the condition is PROVED at ⟦S′⟧), and
--- `QScheme.ResWF` / `InstStumps.pairwise` (now `PInv`'s ResFun half plus
--- `QScheme.Correctable`).
+-- `QScheme.ResWF` / `InstStumps.pairwise` (now the stump-keyed filters —
+-- `Infer.keeps`, ParkedInv.lean — plus `QScheme.Correctable`).
 --
 -- ## Where the row environment goes
 -- Nowhere: there is no row environment. A context binds term variables only,

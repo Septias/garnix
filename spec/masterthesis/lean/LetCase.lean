@@ -284,13 +284,11 @@ theorem Ty.exists_of_isVar {τ : Ty B} (h : τ.isVar = true) : ∃ δ, τ = .var
 /-- ⊢  **the A-let case.** -/
 theorem letCase {C : Type} {constTy : C → B} : LetCase B C constTy := by
   intro Γ S S₁ S₂ x e₁ e₂ τ₁ τ₂ Δq Δγ ᾱ κs h₁ _ hsplit hbq _ hfresh _ hres hdis hdom hind h₂
-    h hΓ hc hq IH₁ IH₂ σ hab hσ Γ' hr
+    hΓ hc hq IH₁ IH₂ σ hab hσ Γ' hr
   -- the state e₁ ends in
   have c₁ := Infer.clean h₁ hc
   have q₁ := Infer.quiescent h₁ hq
-  obtain ⟨i₁, -⟩ := Infer.pinv_keeps h₁ h hΓ
-  obtain ⟨i₁', hΓ'⟩ := let_body_inv (x := x) (τ₁ := τ₁) i₁ hΓ hsplit hres
-  obtain ⟨-, k₂⟩ := Infer.pinv_keeps h₂ i₁' hΓ'
+  have k₂ := Infer.keeps h₂
   have x₁₂ : S₁.Ext S₂ := (SolverState.Ext.of_sol_eq (S := S₁)
     (S' := { S₁ with parked := Δγ }) rfl).trans (Infer.ext h₂)
   have hab₁ : Absorbs σ S₁ := hab.back x₁₂ c₁
@@ -664,7 +662,7 @@ theorem letCase {C : Type} {constTy : C → B} : LetCase B C constTy := by
 --------------------- …AND THE STATEMENT ---------------------------------------
 
 /-- ⊢  **Inference soundness, assumption form — PROVED.** Every derivation from a
-clean, quiescent state with the parked-list invariant, in a context of
+clean, quiescent state, in a context of
 well-formed schemes, is a typing under the assumptions it leaves parked, at every
 σ that absorbs and satisfies its final state, in Γ read under σ. -/
 theorem inferSound {C : Type} {constTy : C → B} : InferSound B C constTy :=
