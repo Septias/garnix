@@ -21,8 +21,6 @@ import Infer
 
 namespace MinimalCalculus
 
-deriving instance DecidableEq for Stump
-
 variable {B : Type}
 
 --------------------- ADMISSIBILITY -------------------------------------------

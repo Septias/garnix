@@ -355,19 +355,19 @@ inductive Wake {B : Type} [DecidableEq B] :
   | hit {S S' : SolverState B} {p : Parked B} {τ : Ty B} :
       LookupQ (p.stump.row.applySubst S.subst) (p.stump.label.applySubst S.subst) (.found τ) →
       SolveTy S p.stump.res τ S' →
-      Wake S p { S' with parked := S'.parked.filter (·.stump.res != p.stump.res) }
+      Wake S p { S' with parked := S'.parked.filter (·.stump != p.stump) }
   -- K-⊥: definite absence, so δ becomes ★ and W records the site
   | abs {S S' : SolverState B} {p : Parked B} :
       LookupQ (p.stump.row.applySubst S.subst) (p.stump.label.applySubst S.subst) .absent →
       SolveTy S p.stump.res .unk S' →
       Wake S p
-        ({ S' with parked := S'.parked.filter (·.stump.res != p.stump.res) }.flag
+        ({ S' with parked := S'.parked.filter (·.stump != p.stump) }.flag
           (p.stump.label.applySubst S.subst).keyName)
   -- K-repark: the lookup progressed to a NEW blocker; nothing is committed
   | repark {S : SolverState B} {p : Parked B} {α' : TyVar} :
       LookupBlockedQ (p.stump.row.applySubst S.subst) (p.stump.label.applySubst S.subst) α' →
       Wake S p
-        (({ S with parked := S.parked.filter (·.stump.res != p.stump.res) }).park
+        (({ S with parked := S.parked.filter (·.stump != p.stump) }).park
           ⟨α', p.stump⟩)
 
 /-- `↝*` — the reflexive-transitive closure the A-rules submit constraints to. -/
@@ -506,7 +506,7 @@ inductive Finalize {B : Type} [DecidableEq B] :
         p.blocker →
       SolveTy S p.stump.res .unk S' →
       Finalize S p
-        ({ S' with parked := S'.parked.filter (·.stump.res != p.stump.res) }.flag
+        ({ S' with parked := S'.parked.filter (·.stump != p.stump) }.flag
           (p.stump.label.applySubst S.subst).keyName)
 
 /-- `S ⊢ Δ ⇓* S′` — the ⇓-closure `algorithmic.typ` leaves implicit: F-★ is
@@ -526,7 +526,7 @@ theorem Finalize.of_quiescent {B : Type} [DecidableEq B] {S S' : SolverState B}
     {p : Parked B} (hq : S.Quiescent) (hp : p ∈ S.parked)
     (hs : SolveTy S p.stump.res .unk S') :
     Finalize S p
-      ({ S' with parked := S'.parked.filter (·.stump.res != p.stump.res) }.flag
+      ({ S' with parked := S'.parked.filter (·.stump != p.stump) }.flag
         (p.stump.label.applySubst S.subst).keyName) :=
   .star hp (hq p hp) hs
 

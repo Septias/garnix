@@ -768,7 +768,7 @@ theorem varCase {B C : Type} [DecidableEq B] {constTy : C → B} :
   obtain ⟨S₁, hws, hsat⟩ := hw
   obtain ⟨hwf, hfun⟩ := hΓ x sc hl
   have hup := supply_up_pinv (K := K) h hle
-  have hok := psOk_of_var (K := K) h hwf hfun hθ hfr.1 hdr hps
+  have hok : PsOk { S with supply := Sup, kinds := K } ps := trivial
   obtain ⟨i₁, -⟩ := hws.pinv_keeps hup hok
   obtain ⟨-, k₂⟩ := hsat.pinv_keeps i₁
   have hfate := hws.fate hup hok σ (hsat.satMono σ hσ)

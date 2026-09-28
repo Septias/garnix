@@ -390,7 +390,7 @@ theorem Wake.dischargeEquiv {B : Type} [DecidableEq B] {S S₁ : SolverState B}
 
 /-- ⊢  a wake-up step leaves every OTHER parked constraint where it was. -/
 theorem Wake.parked_preserved {B : Type} [DecidableEq B] {S S₁ : SolverState B}
-    {p q : Parked B} (hne : q.stump.res ≠ p.stump.res) :
+    {p q : Parked B} (hne : q.stump ≠ p.stump) :
     Wake S p S₁ → q ∈ S.parked → q ∈ S₁.parked := by
   intro hw hq
   cases hw with
@@ -405,7 +405,7 @@ result variable with. -/
 theorem Wakes.parked_preserved {B : Type} [DecidableEq B] {S S' : SolverState B}
     {ps : List (Parked B)} {q : Parked B} :
     Wakes S ps S' → q ∈ S.parked →
-    (∀ p ∈ ps, q.stump.res ≠ p.stump.res) → q ∈ S'.parked
+    (∀ p ∈ ps, q.stump ≠ p.stump) → q ∈ S'.parked
   | .nil, hq, _ => hq
   | .cons hw hws, hq, hne =>
       Wakes.parked_preserved hws
@@ -422,7 +422,7 @@ the submitted constraints have pairwise distinct result variables, which is what
 theorem Wakes.dischargeEquiv {B : Type} [DecidableEq B] {S S' : SolverState B}
     {ps : List (Parked B)} {σ : TySubst B} :
     Wakes S ps S' → Sol.Sat σ S'.sol →
-    ps.Pairwise (fun a b => a.stump.res ≠ b.stump.res) →
+    ps.Pairwise (fun a b => a.stump ≠ b.stump) →
     ∀ p ∈ ps, p.stump.DischargeEquiv σ ∨ ∃ q ∈ S'.parked, q.stump = p.stump
   | .nil, _, _, _, hp => absurd hp List.not_mem_nil
   | .cons (p := p) hw hws, hsat, hpw, p', hp' => by
@@ -502,7 +502,7 @@ inductive FinalizeUnguarded {B : Type} [DecidableEq B] :
   | star {S S' : SolverState B} {p : Parked B} :
       SolveTy S p.stump.res .unk S' →
       FinalizeUnguarded S p
-        ({ S' with parked := S'.parked.filter (·.stump.res != p.stump.res) }.flag
+        ({ S' with parked := S'.parked.filter (·.stump != p.stump) }.flag
           (p.stump.label.applySubst S.subst).keyName)
 
 /-- ⊢  the shipped rule is strictly stronger: it fires only where the unguarded
@@ -671,7 +671,7 @@ dropped from Δ. -/
 private def fsHit : Sol Unit := ⟨[(fsD, .base ())], []⟩
 private def fsSfix : SolverState Unit :=
   { fsS.extend fsHit ⟨5⟩ with
-      parked := (fsS.extend fsHit ⟨5⟩).parked.filter (·.stump.res != fsP.stump.res) }
+      parked := (fsS.extend fsHit ⟨5⟩).parked.filter (·.stump != fsP.stump) }
 
 /-- ⊢  **the run, with saturation in the rules.** The same closed program goes
 through `Infer`, and A-app's equation no longer leaves a stale stump behind: the
@@ -717,7 +717,7 @@ theorem fStarEx_stale_blocker :
 private def fsStar : Sol Unit := ⟨[(fsD, .unk)], []⟩
 private def fsS' : SolverState Unit :=
   ({ fsS.extend fsStar ⟨5⟩ with
-       parked := (fsS.extend fsStar ⟨5⟩).parked.filter (·.stump.res != fsP.stump.res) }).flag "l"
+       parked := (fsS.extend fsStar ⟨5⟩).parked.filter (·.stump != fsP.stump) }).flag "l"
 
 /-- ⊢  **why determinism was false.** From that state K-hit and the UNGUARDED F-★
 both fire on the same stump and commit δ to different types — `𝓫` and `★`. The

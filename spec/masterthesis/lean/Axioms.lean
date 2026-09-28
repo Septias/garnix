@@ -977,7 +977,7 @@ info: 'MinimalCalculus.runSoundA_of' depends on axioms: [propext, Classical.choi
 
 -- ## One stump per result variable (ParkedInv)
 /--
-info: 'MinimalCalculus.Infer.pinv_keeps' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: 'MinimalCalculus.Infer.pinv_keeps' depends on axioms: [propext, Quot.sound]
 -/
 #guard_msgs in #print axioms Infer.pinv_keeps
 
@@ -987,7 +987,7 @@ info: 'MinimalCalculus.inferSound_of_cases' depends on axioms: [propext, Classic
 #guard_msgs in #print axioms inferSound_of_cases
 
 /--
-info: 'MinimalCalculus.varCase' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: 'MinimalCalculus.varCase' depends on axioms: [propext, Quot.sound]
 -/
 #guard_msgs in #print axioms varCase
 

@@ -40,23 +40,23 @@ noncomputable def SolverState.unblocked (S : SolverState B) : Nat :=
   S.parked.countP (fun p => ¬ p.BlockedAt S)
 
 private theorem filter_res_lt {p : Parked B} {l : List (Parked B)} (hp : p ∈ l) :
-    (l.filter (·.stump.res != p.stump.res)).length < l.length :=
+    (l.filter (·.stump != p.stump)).length < l.length :=
   List.length_filter_lt_length_iff_exists.mpr ⟨p, hp, by simp⟩
 
 private theorem countP_filter_lt {p : Parked B} {l : List (Parked B)}
     (q : Parked B → Bool) (hp : p ∈ l) (hq : q p = true) :
-    (l.filter (·.stump.res != p.stump.res)).countP q < l.countP q := by
+    (l.filter (·.stump != p.stump)).countP q < l.countP q := by
   induction l with
   | nil => exact absurd hp List.not_mem_nil
   | cons a l ih =>
-      have hle : (l.filter (·.stump.res != p.stump.res)).countP q
+      have hle : (l.filter (·.stump != p.stump)).countP q
           ≤ l.countP q := by
         rw [List.countP_filter]
         exact List.countP_mono_left (fun x _ h => by simp at h ⊢; exact h.1)
       rcases List.mem_cons.mp hp with rfl | hp'
       · simp [List.filter_cons, List.countP_cons, hq]; omega
       · have := ih hp'
-        by_cases ha : a.stump.res = p.stump.res
+        by_cases ha : a.stump = p.stump
         · simp only [List.filter_cons, ha, bne_self_eq_false, Bool.false_eq_true,
             if_false, List.countP_cons]
           omega
@@ -81,7 +81,7 @@ theorem SatStep.decreases {S S' : SolverState B} (h : SatStep S' S) :
       refine .inr ⟨filter_res_lt hp, ?_⟩
       -- the new entry is blocked at the SAME state reading: nothing was solved
       have hnew : Parked.BlockedAt
-          (({ S with parked := S.parked.filter (·.stump.res != p.stump.res) }).park
+          (({ S with parked := S.parked.filter (·.stump != p.stump) }).park
             ⟨α', p.stump⟩) ⟨α', p.stump⟩ := hb
       classical
       simp only [SolverState.unblocked]
@@ -90,7 +90,7 @@ theorem SatStep.decreases {S S' : SolverState B} (h : SatStep S' S) :
       simp only [hnew, not_true_eq_false, decide_false, Bool.false_eq_true, if_false,
         Nat.add_zero]
       have heq : (fun x : Parked B => decide (¬ x.BlockedAt
-          (({ S with parked := S.parked.filter (·.stump.res != p.stump.res) }).park
+          (({ S with parked := S.parked.filter (·.stump != p.stump) }).park
             ⟨α', p.stump⟩)))
           = (fun x : Parked B => decide (¬ x.BlockedAt S)) :=
         funext fun x => decide_eq_decide.mpr Iff.rfl

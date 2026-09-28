@@ -1,24 +1,16 @@
--- ONE STUMP PER RESULT VARIABLE, AND WHAT THAT BUYS.
+-- EVERY PARKED STUMP IS KEPT.
 --
--- Every rule that retires a parked stump filters Δ on `stump.res`. That is only
--- right if a result variable names ONE stump: otherwise retiring one retires its
--- namesakes too, silently (`nameReuse_shared_res`, FreshNames.lean). With A-var
--- now drawing its names from the supply, the invariant is provable:
+-- Every rule that retires a parked stump filters Δ on the STUMP. Equal stumps
+-- discharge alike, so retiring one retires only what the discharge covers. The
+-- filters used to key on `stump.res`, which needed an invariant — each result
+-- variable names one stump (`nameReuse_shared_res`, FreshNames.lean) — and broke
+-- down once a result could be a TYPE: two instances of a spent promise can share
+-- `𝓫 → 𝓫`.
 --
---   `PInv S` — every parked result variable is a name the supply has already
---              issued, and two parked entries with the same result variable
---              carry the same stump.
---
--- The first half is what makes a DRAWN name fresh for Δ; the second is what the
--- filters need. Together they give `KeepsS`: a stump parked at S is, at every
--- later state, still parked — the same stump — or discharged under any σ that
--- satisfies the later state. That is the bookkeeping `inferSound_of` used to
--- take as a hypothesis.
---
--- Contexts need their own condition, because A-var instantiates Γ's schemes:
--- each scheme's result variables are bound (`QScheme.WF`), and its constraints
--- are one per result variable. A-let's premises supply both for the schemes it
--- builds.
+-- What remains is `KeepsS`: a stump parked at S is, at every later state, still
+-- parked — the same stump — or discharged under any σ that satisfies the later
+-- state. `PInv`/`PsOk` are kept as names and are now vacuous; they can be
+-- dropped from the signatures that thread them.
 
 import InferSound
 
@@ -26,15 +18,8 @@ namespace MinimalCalculus
 
 variable {B : Type} [DecidableEq B]
 
-/-- every parked result variable has been issued by the supply. -/
-def SolverState.ResBelow (S : SolverState B) : Prop :=
-  ∀ p ∈ S.parked, ∃ k, k < S.supply.next ∧ p.stump.res = .var (natName k)
-
-/-- a parked result variable names one stump. -/
-def SolverState.ResFun (S : SolverState B) : Prop :=
-  ∀ p ∈ S.parked, ∀ q ∈ S.parked, p.stump.res = q.stump.res → p.stump = q.stump
-
-def SolverState.PInv (S : SolverState B) : Prop := S.ResBelow ∧ S.ResFun
+/-- vacuous since the filters key on the stump (header). -/
+def SolverState.PInv (_S : SolverState B) : Prop := True
 
 /-- the schemes of Γ are well-formed and one constraint per result variable. -/
 def QCtx.SchemesWF (Γ : QCtx B) : Prop :=
@@ -47,11 +32,8 @@ def SolverState.KeepsS (S S' : SolverState B) : Prop :=
     (∃ q ∈ S'.parked, q.stump = p.stump) ∨
     p.stump.DischargeEquiv σ
 
-/-- a list of constraints about to be submitted is compatible with S. -/
-def PsOk (S : SolverState B) (ps : List (Parked B)) : Prop :=
-  (∀ p ∈ ps, ∃ k, k < S.supply.next ∧ p.stump.res = .var (natName k)) ∧
-  (∀ p ∈ ps, ∀ q ∈ S.parked, q.stump.res = p.stump.res → q.stump = p.stump) ∧
-  (∀ p ∈ ps, ∀ p' ∈ ps, p.stump.res = p'.stump.res → p.stump = p'.stump)
+/-- vacuous since the filters key on the stump (header). -/
+def PsOk (_S : SolverState B) (_ps : List (Parked B)) : Prop := True
 
 --------------------- ELEMENTARY STEPS -----------------------------------------
 
@@ -71,21 +53,12 @@ theorem SolverState.KeepsS.trans {S₁ S₂ S₃ : SolverState B}
     · exact .inr (hqs ▸ hd')
   · exact .inr hd
 
-theorem SolverState.PInv.of_sub {S S' : SolverState B} (h : S.PInv)
-    (hs : ∀ p ∈ S'.parked, p ∈ S.parked) (hn : S.supply.next ≤ S'.supply.next) :
-    S'.PInv := by
-  refine ⟨fun p hp => ?_, fun p hp q hq he => h.2 p (hs p hp) q (hs q hq) he⟩
-  obtain ⟨k, hk, he⟩ := h.1 p (hs p hp)
-  exact ⟨k, Nat.lt_of_lt_of_le hk hn, he⟩
+theorem SolverState.PInv.of_sub {S S' : SolverState B} (_h : S.PInv)
+    (_hs : ∀ p ∈ S'.parked, p ∈ S.parked) (_hn : S.supply.next ≤ S'.supply.next) :
+    S'.PInv := trivial
 
-private theorem natName_lt_ne {j k : Nat} (h : j < k) : natName j ≠ natName k :=
-  fun he => by have := natName_inj he; omega
-
-theorem SolveTy.pinv {S S' : SolverState B} {τ τ' : Ty B} (hs : SolveTy S τ τ' S')
-    (h : S.PInv) : S'.PInv := by
-  have hn := hs.supply
-  obtain ⟨_, _, _, _, rfl⟩ := hs
-  exact h.of_sub (fun p hp => hp) hn
+theorem SolveTy.pinv {S S' : SolverState B} {τ τ' : Ty B} (_hs : SolveTy S τ τ' S')
+    (_h : S.PInv) : S'.PInv := trivial
 
 theorem SolveTy.keepsS {S S' : SolverState B} {τ τ' : Ty B} (hs : SolveTy S τ τ' S') :
     S.KeepsS S' := by
@@ -118,103 +91,31 @@ private theorem Wake.parked_sub {S S₁ : SolverState B} {p : Parked B} :
       · exact .inr rfl
       · exact .inl (List.mem_filter.mp hq).1
 
-theorem Wake.pinv {S S₁ : SolverState B} {p : Parked B} (hw : Wake S p S₁)
-    (h : S.PInv) (hp : PsOk S [p]) : S₁.PInv := by
-  have hn := hw.supply
-  obtain ⟨hpb, hpf, -⟩ := hp
-  refine ⟨fun q hq => ?_, fun q hq q' hq' he => ?_⟩
-  · rcases Wake.parked_sub hw q hq with hq | hqs
-    · obtain ⟨k, hk, he⟩ := h.1 q hq
-      exact ⟨k, Nat.lt_of_lt_of_le hk hn, he⟩
-    · obtain ⟨k, hk, he⟩ := hpb p List.mem_cons_self
-      exact ⟨k, Nat.lt_of_lt_of_le hk hn, hqs ▸ he⟩
-  · -- the filters keep only entries whose res differs from p's
-    have hfilt : ∀ r ∈ S₁.parked, r ∈ S.parked → r.stump.res ≠ p.stump.res ∨ r.stump = p.stump := by
-      intro r hr _
-      cases hw with
-      | hit _ hs =>
-          obtain ⟨_, _, _, _, rfl⟩ := hs
-          have := (List.mem_filter.mp hr).2
-          exact .inl (by simpa using this)
-      | abs _ hs =>
-          obtain ⟨_, _, _, _, rfl⟩ := hs
-          have := (List.mem_filter.mp hr).2
-          exact .inl (by simpa using this)
-      | repark _ =>
-          rcases List.mem_cons.mp hr with rfl | hr
-          · exact .inr rfl
-          · have := (List.mem_filter.mp hr).2
-            exact .inl (by simpa using this)
-    rcases Wake.parked_sub hw q hq with hq₀ | hqs <;>
-      rcases Wake.parked_sub hw q' hq' with hq₀' | hq's
-    · exact h.2 q hq₀ q' hq₀' he
-    · -- q old, q' the reparked p
-      rcases hfilt q hq hq₀ with hne | hs
-      · exact absurd (he.trans (congrArg Stump.res hq's)) hne
-      · exact hs.trans hq's.symm
-    · rcases hfilt q' hq' hq₀' with hne | hs
-      · exact absurd ((congrArg Stump.res hqs).symm.trans he).symm hne
-      · exact hqs.trans hs.symm
-    · exact hqs.trans hq's.symm
+theorem Wake.pinv {S S₁ : SolverState B} {p : Parked B} (_hw : Wake S p S₁)
+    (_h : S.PInv) (_hp : PsOk S [p]) : S₁.PInv := trivial
 
 theorem Wake.keepsS {S S₁ : SolverState B} {p : Parked B} (hw : Wake S p S₁)
-    (hp : PsOk S [p]) : S.KeepsS S₁ := by
+    (_hp : PsOk S [p]) : S.KeepsS S₁ := by
   intro σ hσ q hq
-  by_cases hr : q.stump.res = p.stump.res
-  · have hqs : q.stump = p.stump := hp.2.1 p List.mem_cons_self q hq hr
-    rcases Wake.dischargeEquiv hw hσ with hd | ⟨q', hq', hq's⟩
+  by_cases hqs : q.stump = p.stump
+  · rcases Wake.dischargeEquiv hw hσ with hd | ⟨q', hq', hq's⟩
     · exact .inr (hqs ▸ hd)
     · exact .inl ⟨q', hq', hq's.trans hqs.symm⟩
-  · exact .inl ⟨q, Wake.parked_preserved hr hw hq, rfl⟩
+  · exact .inl ⟨q, Wake.parked_preserved hqs hw hq, rfl⟩
 
 -- ⊢  after one step, the rest of the submitted list is still compatible
 private theorem Wake.psOk_tail {S S₁ : SolverState B} {p : Parked B}
-    {ps : List (Parked B)} (hw : Wake S p S₁) (hp : PsOk S (p :: ps)) : PsOk S₁ ps := by
-  have hn := hw.supply
-  obtain ⟨h1, h2, h3⟩ := hp
-  refine ⟨fun p' hp' => ?_, fun p' hp' q hq he => ?_, fun a ha b hb he =>
-    h3 a (List.mem_cons_of_mem _ ha) b (List.mem_cons_of_mem _ hb) he⟩
-  · obtain ⟨k, hk, he⟩ := h1 p' (List.mem_cons_of_mem _ hp')
-    exact ⟨k, Nat.lt_of_lt_of_le hk hn, he⟩
-  · rcases Wake.parked_sub hw q hq with hq | hqs
-    · exact h2 p' (List.mem_cons_of_mem _ hp') q hq he
-    · have hpp := h3 p List.mem_cons_self p' (List.mem_cons_of_mem _ hp')
-        ((congrArg Stump.res hqs).symm.trans he)
-      exact hqs.trans hpp
+    {ps : List (Parked B)} (_hw : Wake S p S₁) (_hp : PsOk S (p :: ps)) : PsOk S₁ ps :=
+  trivial
 
 private theorem psOk_park_tail {S : SolverState B} {p : Parked B} {ps : List (Parked B)}
-    (hp : PsOk S (p :: ps)) : PsOk (S.park p) ps := by
-  obtain ⟨h1, h2, h3⟩ := hp
-  refine ⟨fun p' hp' => h1 p' (List.mem_cons_of_mem _ hp'), fun p' hp' q hq he => ?_,
-    fun a ha b hb he => h3 a (List.mem_cons_of_mem _ ha) b (List.mem_cons_of_mem _ hb) he⟩
-  rcases List.mem_cons.mp hq with rfl | hq
-  · exact h3 q List.mem_cons_self p' (List.mem_cons_of_mem _ hp') he
-  · exact h2 p' (List.mem_cons_of_mem _ hp') q hq he
+    (_hp : PsOk S (p :: ps)) : PsOk (S.park p) ps := trivial
 
 private theorem pinv_park {S : SolverState B} {p : Parked B} {ps : List (Parked B)}
-    (h : S.PInv) (hp : PsOk S (p :: ps)) : (S.park p).PInv := by
-  obtain ⟨h1, h2, -⟩ := hp
-  refine ⟨fun q hq => ?_, fun q hq q' hq' he => ?_⟩
-  · rcases List.mem_cons.mp hq with rfl | hq
-    · exact h1 q List.mem_cons_self
-    · exact h.1 q hq
-  · rcases List.mem_cons.mp hq with e1 | hq₁ <;> rcases List.mem_cons.mp hq' with e1' | hq₁'
-    · rw [e1, e1']
-    · rw [e1] at he ⊢
-      exact (h2 p List.mem_cons_self q' hq₁' he.symm).symm
-    · rw [e1'] at he ⊢
-      exact h2 p List.mem_cons_self q hq₁ he
-    · exact h.2 q hq₁ q' hq₁' he
+    (_h : S.PInv) (_hp : PsOk S (p :: ps)) : (S.park p).PInv := trivial
 
 private theorem psOk_head {S : SolverState B} {p : Parked B} {ps : List (Parked B)}
-    (hp : PsOk S (p :: ps)) : PsOk S [p] :=
-  ⟨fun q hq => by
-      rw [List.mem_singleton] at hq; rw [hq]; exact hp.1 p List.mem_cons_self,
-   fun q hq r hr he => by
-      rw [List.mem_singleton] at hq; rw [hq] at he ⊢
-      exact hp.2.1 p List.mem_cons_self r hr he,
-   fun a ha b hb _ => by
-      rw [List.mem_singleton] at ha hb; rw [ha, hb]⟩
+    (_hp : PsOk S (p :: ps)) : PsOk S [p] := trivial
 
 theorem Wakes.pinv_keeps {S S' : SolverState B} {ps : List (Parked B)} :
     Wakes S ps S' → S.PInv → PsOk S ps → S'.PInv ∧ S.KeepsS S'
@@ -228,12 +129,8 @@ theorem Wakes.pinv_keeps {S S' : SolverState B} {ps : List (Parked B)} :
       exact ⟨h', (SolverState.KeepsS.of_sub (S' := SolverState.park _ _)
         (fun q hq => List.mem_cons_of_mem _ hq)).trans hk' hws.satMono⟩
 
-private theorem psOk_of_parked {S : SolverState B} {p : Parked B} (h : S.PInv)
-    (hp : p ∈ S.parked) : PsOk S [p] :=
-  ⟨fun q hq => by rw [List.mem_singleton] at hq; rw [hq]; exact h.1 p hp,
-   fun q hq r hr he => by
-      rw [List.mem_singleton] at hq; rw [hq] at he ⊢; exact h.2 r hr p hp he,
-   fun a ha b hb _ => by rw [List.mem_singleton] at ha hb; rw [ha, hb]⟩
+private theorem psOk_of_parked {S : SolverState B} {p : Parked B} (_h : S.PInv)
+    (_hp : p ∈ S.parked) : PsOk S [p] := trivial
 
 theorem Saturate.pinv_keeps {S S' : SolverState B} :
     Saturate S S' → S.PInv → S'.PInv ∧ S.KeepsS S'
@@ -276,46 +173,6 @@ theorem inst_res {θ : TySubst B} {vs : List TyVar} {f : TyVar → TyVar} {st : 
     ∃ δ ∈ vs, st.res = .var δ ∧ st.res.applySubst θ = .var (f δ) := by
   obtain ⟨δ, hδ, hre⟩ := h
   exact ⟨δ, hδ, hre, by rw [hre]; exact (hren.2 δ hδ).1⟩
-
-theorem psOk_of_var {S : SolverState B} {sc : QScheme B} {θ : TySubst B}
-    {f : TyVar → TyVar} {ps : List (Parked B)} {Sup : Supply} {K : KEnv} (h : S.PInv)
-    (hwf : sc.WF) (hfun : ∀ a ∈ sc.constraints, ∀ b ∈ sc.constraints, a.res = b.res → a = b)
-    (hren : IsRenaming θ sc.vars f)
-    (hinj : ∀ α ∈ sc.vars, ∀ β ∈ sc.vars, f α = f β → α = β)
-    (hdr : ∀ α ∈ sc.vars, ∃ k, S.supply.next ≤ k ∧ k < Sup.next ∧ f α = natName k)
-    (hps : InstStumps θ f sc.constraints ps) :
-    PsOk { S with supply := Sup, kinds := K } ps := by
-  -- every submitted stump is the image of one constraint
-  have himg : ∀ p ∈ ps, ∃ st ∈ sc.constraints,
-      p.stump = ⟨st.row.applySubst θ, st.label.applySubst θ, st.res.applySubst θ⟩ := by
-    intro p hp
-    have hm : p.stump ∈ ps.map Parked.stump := List.mem_map_of_mem hp
-    rw [hps] at hm
-    obtain ⟨st, hst, he⟩ := List.mem_map.mp hm
-    exact ⟨st, hst, he.symm⟩
-  refine ⟨fun p hp => ?_, fun p hp q hq he => ?_, fun p hp p' hp' he => ?_⟩
-  · obtain ⟨st, hst, he⟩ := himg p hp
-    obtain ⟨δ, hδ, -, happ⟩ := inst_res hren (hwf st hst)
-    obtain ⟨k, -, hk, hfk⟩ := hdr δ hδ
-    exact ⟨k, hk, by rw [he]; show st.res.applySubst θ = _; rw [happ, hfk]⟩
-  · obtain ⟨st, hst, hpe⟩ := himg p hp
-    obtain ⟨δ, hδ, -, happ⟩ := inst_res hren (hwf st hst)
-    obtain ⟨k, hk₁, -, hfk⟩ := hdr δ hδ
-    obtain ⟨j, hj, hqj⟩ := h.1 q hq
-    have : natName j = natName k := by
-      have h' : (Ty.var (natName j) : Ty B) = .var (natName k) := by
-        rw [← hqj, ← hfk, he, hpe]; exact happ
-      exact Ty.var.inj h'
-    exact absurd this (natName_lt_ne (Nat.lt_of_lt_of_le hj hk₁))
-  · obtain ⟨st, hst, hpe⟩ := himg p hp
-    obtain ⟨st', hst', hpe'⟩ := himg p' hp'
-    obtain ⟨δ, hδ, hre, happ⟩ := inst_res hren (hwf st hst)
-    obtain ⟨δ', hδ', hre', happ'⟩ := inst_res hren (hwf st' hst')
-    have hres : f δ = f δ' := by
-      have := he; rw [hpe, hpe'] at this
-      exact Ty.var.inj (happ.symm.trans (this.trans happ'))
-    have := hfun st hst st' hst' (by rw [hre, hre', hinj _ hδ _ hδ' hres])
-    rw [hpe, hpe', this]
 
 --------------------- WHAT HAPPENS TO A SUBMITTED CONSTRAINT -----------------
 
@@ -367,8 +224,7 @@ theorem Infer.pinv_keeps {C : Type} {constTy : C → B} :
   | _, _, _, _, _, .con, h, _ => ⟨h, .refl _⟩
   | _, _, _, _, _, .var hl hren hfr hdr hle _ hps ⟨S₁, hws, hsat⟩, h, hΓ => by
       obtain ⟨hwf, hfun⟩ := hΓ _ _ hl
-      obtain ⟨h₁, hk₁⟩ := hws.pinv_keeps (supply_up_pinv h hle)
-        (psOk_of_var h hwf hfun hren hfr.1 hdr hps)
+      obtain ⟨h₁, hk₁⟩ := hws.pinv_keeps (supply_up_pinv h hle) trivial
       obtain ⟨h₂, hk₂⟩ := hsat.pinv_keeps h₁
       exact ⟨h₂, ((SolverState.KeepsS.of_sub (fun p hp => hp)).trans hk₁
         (hws.satMono)).trans hk₂ hsat.satMono⟩
@@ -410,17 +266,7 @@ theorem Infer.pinv_keeps {C : Type} {constTy : C → B} :
       obtain ⟨ia, ka, ma, -, -, -⟩ := draw_pinv_keeps hd i₁
       obtain ⟨i₂, k₂⟩ := hs.pinv_keeps ia
       obtain ⟨ib, kb, mb, hδ, hsup, hpk⟩ := draw_pinv_keeps hd₂ i₂
-      -- the new stump's result is the name just drawn: issued, and fresh for Δ
-      have hnew : PsOk S₂' [⟨α, ⟨Row.var r, .lab l, .var δ⟩⟩] :=
-        ⟨fun q hq => by
-            rw [List.mem_singleton] at hq; rw [hq]
-            exact ⟨_, by rw [hsup]; exact Nat.lt_succ_self _, by rw [hδ]⟩,
-         fun q hq r hr he => by
-            rw [List.mem_singleton] at hq; rw [hq] at he
-            rw [hpk] at hr
-            obtain ⟨j, hj, hrj⟩ := i₂.1 r hr
-            exact absurd (Ty.var.inj (hrj.symm.trans (he.trans (by rw [hδ])))) (natName_lt_ne hj),
-         fun a ha b hb _ => by rw [List.mem_singleton] at ha hb; rw [ha, hb]⟩
+      have hnew : PsOk S₂' [⟨α, ⟨Row.var r, .lab l, .var δ⟩⟩] := trivial
       refine ⟨pinv_park (ps := []) ib hnew, ?_⟩
       have kp : SolverState.KeepsS S₂' (S₂'.park ⟨α, ⟨Row.var r, .lab l, .var δ⟩⟩) :=
         SolverState.KeepsS.of_sub (fun q hq => List.mem_cons_of_mem _ hq)
@@ -452,17 +298,7 @@ theorem Infer.pinv_keeps {C : Type} {constTy : C → B} :
       obtain ⟨i₂, k₂⟩ := hs.pinv_keeps ia
       obtain ⟨i₃, k₃⟩ := Infer.pinv_keeps h₂ i₂ hΓ
       obtain ⟨ib, kb, mb, hδ, hsup, hpk⟩ := draw_pinv_keeps hd₂ i₃
-      -- the new stump's result is the name just drawn: issued, and fresh for Δ
-      have hnew : PsOk S₃' [⟨α, ⟨Row.var r, τ₂, .var δ⟩⟩] :=
-        ⟨fun q hq => by
-            rw [List.mem_singleton] at hq; rw [hq]
-            exact ⟨_, by rw [hsup]; exact Nat.lt_succ_self _, by rw [hδ]⟩,
-         fun q hq r hr he => by
-            rw [List.mem_singleton] at hq; rw [hq] at he
-            rw [hpk] at hr
-            obtain ⟨j, hj, hrj⟩ := i₃.1 r hr
-            exact absurd (Ty.var.inj (hrj.symm.trans (he.trans (by rw [hδ])))) (natName_lt_ne hj),
-         fun a ha b hb _ => by rw [List.mem_singleton] at ha hb; rw [ha, hb]⟩
+      have hnew : PsOk S₃' [⟨α, ⟨Row.var r, τ₂, .var δ⟩⟩] := trivial
       refine ⟨pinv_park (ps := []) ib hnew, ?_⟩
       have kp : SolverState.KeepsS S₃' (S₃'.park ⟨α, ⟨Row.var r, τ₂, .var δ⟩⟩) :=
         SolverState.KeepsS.of_sub (fun q hq => List.mem_cons_of_mem _ hq)
@@ -510,6 +346,6 @@ theorem InferRec.pinv_keeps {C : Type} {constTy : C → B} :
 end
 
 theorem SolverState.PInv.init : (⟨Sol.nil, [], [], ⟨1⟩, []⟩ : SolverState B).PInv :=
-  ⟨fun _ h => (nomatch h), fun _ h => (nomatch h)⟩
+  trivial
 
 end MinimalCalculus

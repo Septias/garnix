@@ -241,13 +241,13 @@ def wakeF (n : Nat) (S : SolverState B) (p : Parked B) : IRes (SolverState B) :=
       (p.stump.label.applySubst S.subst) with
   | .found τ =>
       let S' ← solveTyF n S p.stump.res τ
-      pure { S' with parked := S'.parked.filter (·.stump.res != p.stump.res) }
+      pure { S' with parked := S'.parked.filter (·.stump != p.stump) }
   | .absent =>
       let S' ← solveTyF n S p.stump.res .unk
-      pure ({ S' with parked := S'.parked.filter (·.stump.res != p.stump.res) }.flag
+      pure ({ S' with parked := S'.parked.filter (·.stump != p.stump) }.flag
         (p.stump.label.applySubst S.subst).keyName)
   | .blocked α' =>
-      pure (({ S with parked := S.parked.filter (·.stump.res != p.stump.res) }).park
+      pure (({ S with parked := S.parked.filter (·.stump != p.stump) }).park
         ⟨α', p.stump⟩)
 
 theorem wakeF_sound {n : Nat} {S S' : SolverState B} {p : Parked B}
@@ -419,7 +419,7 @@ def finalizeF (n : Nat) (S : SolverState B) (p : Parked B) : IRes (SolverState B
       if α = p.blocker then do
         let S' ← (solveTyF n S p.stump.res .unk).withMsg
           "spent promise: a stump's result is no longer a variable"
-        pure ({ S' with parked := S'.parked.filter (·.stump.res != p.stump.res) }.flag
+        pure ({ S' with parked := S'.parked.filter (·.stump != p.stump) }.flag
           (p.stump.label.applySubst S.subst).keyName)
       else .fail "finalize: stale blocker"
   | _ => .fail "finalize: lookup resolved"

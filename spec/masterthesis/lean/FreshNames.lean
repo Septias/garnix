@@ -187,10 +187,15 @@ theorem nameReuse_shared_res :
       nrFinal.parked.map (·.stump.label) = [.lab "m", .lab "l"] :=
   ⟨rfl, rfl⟩
 
-/-- ⊢  **settling either one retires both.** K-hit, K-⊥, K-repark and F-★ all
-filter on `stump.res`. -/
+/-- ⊢  **settling either one retired both** while K-hit, K-⊥, K-repark and F-★
+filtered on `stump.res`. -/
 theorem nameReuse_filter_drops_both :
     nrFinal.parked.filter (·.stump.res != .var (n 6)) = [] := by
   decide
+
+/-- ⊢  …the filters now key on the stump, and settling one keeps the other. -/
+theorem nameReuse_filter_keeps_other :
+    nrFinal.parked.filter (·.stump != nrQ.stump) = [nrP] := by
+  rfl
 
 end MinimalCalculus

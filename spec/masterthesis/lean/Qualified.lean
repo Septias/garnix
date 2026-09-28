@@ -27,6 +27,8 @@ structure Stump (B : Type) where
   label : Ty B
   res   : Ty B
 
+deriving instance DecidableEq for Stump
+
 -- ## Qualified schemes  σ := ∀ᾱ. Q ⇒ τ
 -- A plain HM scheme is the special case Q = ∅ (Scheme.toQ below). The result
 -- variables δ are drawn from vars like every other quantified variable; the

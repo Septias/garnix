@@ -236,7 +236,7 @@ discharged it already (`KeepsS`). -/
 theorem runSound {C : Type} {constTy : C → B} : RunSound B C constTy := by
   rintro e τ S' ⟨S₁, S₂, hinf, hmat, hfins⟩
   have c₁ := Infer.clean hinf Sol.clean_nil
-  have i₁ := (Infer.pinv_keeps hinf ⟨fun _ h => (nomatch h), fun _ h => (nomatch h)⟩
+  have i₁ := (Infer.pinv_keeps hinf trivial
     QCtx.SchemesWF.nil).1
   obtain ⟨-, k₁₂, c₂, x₁₂, -⟩ := hmat.keeps i₁ c₁
   have c' := hfins.clean c₂
