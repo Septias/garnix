@@ -16,17 +16,29 @@ That plan left Phase B on paper only. This one mechanizes it.
 | Step | State |
 |---|---|
 | B1 syntax | done |
-| B2 lookup | done in LabelLookup/minimal. The blocked-lookup relations in Infer.lean still need updating (see "Next") |
+| B2 lookup | done, incl. Infer's blocker relation (`LookupBlockedQ` keyed by `Ty`) |
 | B3 ≈ with barriers | done |
-| B4 row unifier | done: all of RowUnify/* builds, no sorry |
-| Qualified, Refutations | build |
-| Infer.lean and downstream | **broken: next up** |
-| B5, B6, B7, B0 | not started |
+| B4 row unifier | done |
+| Infer.lean and downstream | done: merged main (Materialize/F-hit, Stump.res : Ty), `lake build` green, no sorry (53d3fe2) |
+| B5 | **blocked on a design decision: ★ keys (see below)** |
+| B6, B7, B0 | not started |
 
-The build currently fails first at `Infer.lean`. Everything upstream of it builds sorry-free:
-minimal, RowEquiv, LabelLookup, RowUnify/*, Qualified, Refutations, QSubst.
-InferSound.lean has one edit already (`hc.clears_row (sSorted_toSpine _ _ hx)`),
-but it has not been built yet.
+## Done since the handoff (settled)
+
+- `LookupBlockedQ`: varFree / sunk / dunkQ (key var blocks) / dunkF (field key var blocks) / catSkip / catUnk; `LookupVBlocked` is an abbrev; `LookupBlockedQ.lit`/`toLit` bridge to `LookupBlocked` (which gained `dunk`)
+- `lookupQ_blocked_subst` now concludes `?` outright. The key blocker must go to a variable nothing else in key position reaches (`KeyFresh`); "not a label" no longer suffices with structural junk
+- A-let: a spent stump must be `Parked.fillable` (label key AND blocker not a type-sort variable of its row); LetChoice pruning unchanged otherwise
+- F-★ premise `Parked.KeySafe`: a key blocker is no pending answer. `Finalizes.holds` carries `SolverState.Untouched` through later steps
+- `lookupQF`: one structural keyed lookup in InferFn; `lookupF`/`lookupVF` gone
+- Axioms guards: `lookup_applySubst`, `Sol.lookup_applySubst_closure`, `LookupQ.det` now [propext]; `LookupQ.total` axiom-free; `Ty.mem_tyFtv_iff_sortedFtv` → `Ty.mem_tyFtv_of_sortedFtv`
+- Costs: `λr. {x = 1}.(r.a)` no longer runs (outer stump key-blocked on inner's answer, KeySafe refuses; F-★ on inner first leaves outer ⊥, no F-⊥ rule). InferRuns unchanged
+
+## Open: ★ keys in construction (B5)
+
+- `{${e₁} = e₂}` with `e₁ : ★`: the key value is a label l at run time, the step gives `{l = e₂} : {l: τ}`, typed before as `{${★}: τ}`; not ≈ (★ rigid) → qPreservation fails
+- Can't just forbid ★ keys: σ (F-★, or any instance) sends key variables to ★ after inference built `{${α}: τ}`; unification can send them to `int` too
+- ★ ≡ ★ (junk/junk eq) is also run-time unsound once ★-keyed fields are inhabited: `{${★}: τ₂} ‖ {l': τ₃}` looked up with a ★ key that is l' at run time
+- junk/junk eq is what keeps α-vs-α eq stable under α ↦ ★, so it can't simply go
 
 ## Design as implemented (these decisions are settled)
 
@@ -77,7 +89,7 @@ but it has not been built yet.
   constraint kind). An undecided dfield pairing in ≐ᵣ is **stuck, which rejects**.
   Parking stuck row equations is out of scope.
 
-## Next: make Infer.lean and downstream build
+## (done) Make Infer.lean and downstream build
 
 Infer.lean defines three blocker relations (lines ~40–195):
 `LookupBlocked ρ l α` (over `Lookup`), `LookupVBlocked ρ α β`, and `LookupBlockedQ ρ q β`
