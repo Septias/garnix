@@ -354,20 +354,20 @@ inductive Wake {B : Type} [DecidableEq B] :
   -- K-hit: the lookup now lands, so δ is pinned to what it found
   | hit {S S' : SolverState B} {p : Parked B} {τ : Ty B} :
       LookupQ (p.stump.row.applySubst S.subst) (p.stump.label.applySubst S.subst) (.found τ) →
-      SolveTy S (.var p.stump.res) τ S' →
-      Wake S p { S' with parked := S'.parked.filter (·.stump.res != p.stump.res) }
+      SolveTy S p.stump.res τ S' →
+      Wake S p { S' with parked := S'.parked.filter (·.stump != p.stump) }
   -- K-⊥: definite absence, so δ becomes ★ and W records the site
   | abs {S S' : SolverState B} {p : Parked B} :
       LookupQ (p.stump.row.applySubst S.subst) (p.stump.label.applySubst S.subst) .absent →
-      SolveTy S (.var p.stump.res) .unk S' →
+      SolveTy S p.stump.res .unk S' →
       Wake S p
-        ({ S' with parked := S'.parked.filter (·.stump.res != p.stump.res) }.flag
+        ({ S' with parked := S'.parked.filter (·.stump != p.stump) }.flag
           (p.stump.label.applySubst S.subst).keyName)
   -- K-repark: the lookup progressed to a NEW blocker; nothing is committed
   | repark {S : SolverState B} {p : Parked B} {α' : TyVar} :
       LookupBlockedQ (p.stump.row.applySubst S.subst) (p.stump.label.applySubst S.subst) α' →
       Wake S p
-        (({ S with parked := S.parked.filter (·.stump.res != p.stump.res) }).park
+        (({ S with parked := S.parked.filter (·.stump != p.stump) }).park
           ⟨α', p.stump⟩)
 
 /-- `↝*` — the reflexive-transitive closure the A-rules submit constraints to. -/
@@ -504,9 +504,9 @@ inductive Finalize {B : Type} [DecidableEq B] :
       p ∈ S.parked →
       LookupBlockedQ (p.stump.row.applySubst S.subst) (p.stump.label.applySubst S.subst)
         p.blocker →
-      SolveTy S (.var p.stump.res) .unk S' →
+      SolveTy S p.stump.res .unk S' →
       Finalize S p
-        ({ S' with parked := S'.parked.filter (·.stump.res != p.stump.res) }.flag
+        ({ S' with parked := S'.parked.filter (·.stump != p.stump) }.flag
           (p.stump.label.applySubst S.subst).keyName)
 
 /-- `S ⊢ Δ ⇓* S′` — the ⇓-closure `algorithmic.typ` leaves implicit: F-★ is
@@ -524,9 +524,9 @@ every state a run produces is one (`Infer.quiescent`) — blockedness holds of
 every parked stump, so F-★ fires on any of them whose equation succeeds. -/
 theorem Finalize.of_quiescent {B : Type} [DecidableEq B] {S S' : SolverState B}
     {p : Parked B} (hq : S.Quiescent) (hp : p ∈ S.parked)
-    (hs : SolveTy S (.var p.stump.res) .unk S') :
+    (hs : SolveTy S p.stump.res .unk S') :
     Finalize S p
-      ({ S' with parked := S'.parked.filter (·.stump.res != p.stump.res) }.flag
+      ({ S' with parked := S'.parked.filter (·.stump != p.stump) }.flag
         (p.stump.label.applySubst S.subst).keyName) :=
   .star hp (hq p hp) hs
 
@@ -576,11 +576,12 @@ def Ty.Spent {B : Type} : Ty B → Prop
   | .unk   => False
   | _      => True
 
-/-- ⊢  **a spent promise cannot be finalized.** If the state has already written a
-non-variable, non-★ type into a parked stump's result variable, F-★ has no
-derivation at that stump — its equation is `⟦S⟧δ ≐ ★` and ★ is rigid. -/
+/-- ⊢  **a spent promise cannot be finalized BY F-★.** If the state has already
+written a non-variable, non-★ type into a parked stump's result, F-★ has no
+derivation at that stump — its equation is `⟦S⟧δ ≐ ★` and ★ is rigid. This is
+why `Run` materializes spent promises first (`Materialize`, below). -/
 theorem no_finalize_of_spent {B : Type} [DecidableEq B] {S : SolverState B}
-    {p : Parked B} (h : (S.subst.ty p.stump.res).Spent) :
+    {p : Parked B} (h : (p.stump.res.applySubst S.subst).Spent) :
     ¬ ∃ S', Finalize S p S' := by
   rintro ⟨S', hf⟩
   cases hf with
@@ -588,13 +589,50 @@ theorem no_finalize_of_spent {B : Type} [DecidableEq B] {S : SolverState B}
       obtain ⟨fuel, s, Sup, hu, -⟩ := hs
       simp only [Ty.applySubst] at hu
       revert h hu
-      cases S.subst.ty p.stump.res with
+      cases p.stump.res.applySubst S.subst with
       | var _  => intro h; exact absurd h not_false
       | unk    => intro h; exact absurd h not_false
       | base b => intro _ hu; simp [unifyTyF] at hu
       | lab b => intro _ hu; simp [unifyTyF] at hu
       | fn a b => intro _ hu; simp [unifyTyF] at hu
       | rcd ρ  => intro _ hu; simp [unifyTyF] at hu
+
+/-- `S ⊢ p ⇓ₘ S′` — F-hit, MATERIALIZATION of a spent promise. A-app can write a
+non-variable into a parked stump's result (`λx. λy. (x.l) y` writes
+`δ ≔ α_y → β`), and then F-★'s `δ ≐ ★` clashes (`no_finalize_of_spent`). But the
+lookup is blocked on a row variable β that nothing has committed, so the stump can
+be made to HIT instead: `β ≔ (l : res | r′)` for a fresh r′. Saturation then wakes
+the stump itself (K-hit, `res ≐ res`) and everything else that waited on β.
+
+Only a literal key can be materialized; a stump blocked on its KEY has nothing to
+extend and stays a spent promise. -/
+inductive Materialize {B : Type} [DecidableEq B] :
+    SolverState B → Parked B → SolverState B → Prop where
+  | hit {S S₀ S' : SolverState B} {p : Parked B} {l : Label} {r' : TyVar} :
+      p ∈ S.parked →
+      (p.stump.res.applySubst S.subst).Spent →
+      p.stump.label.applySubst S.subst = .lab l →
+      LookupBlockedQ (p.stump.row.applySubst S.subst) (.lab l) p.blocker →
+      (r', S₀) = S.draw .row →
+      SolveTySat S₀ (.rcd (.var p.blocker)) (.rcd (.cat (.sing l p.stump.res) (.var r'))) S' →
+      Materialize S p S'
+
+/-- `S ⊢ Δ ⇓ₘ* S′` — materialization over a list, before F-★. A stump may be
+skipped: it is not spent, or an earlier step's saturation already discharged it. -/
+inductive Materializes {B : Type} [DecidableEq B] :
+    SolverState B → List (Parked B) → SolverState B → Prop where
+  | nil {S : SolverState B} : Materializes S [] S
+  | skip {S S' : SolverState B} {p : Parked B} {ps : List (Parked B)} :
+      Materializes S ps S' → Materializes S (p :: ps) S'
+  | cons {S S₁ S₂ : SolverState B} {p : Parked B} {ps : List (Parked B)} :
+      Materialize S p S₁ → Materializes S₁ ps S₂ → Materializes S (p :: ps) S₂
+
+/-- ⊢  materializing nothing is always a derivation. -/
+theorem Materializes.refl {B : Type} [DecidableEq B] (S : SolverState B) :
+    ∀ ps : List (Parked B), Materializes S ps S
+  | [] => .nil
+  | _ :: ps => .skip (Materializes.refl S ps)
+
 
 
 --------------------- INSTANTIATION AT A-var ---------------------------------
@@ -618,7 +656,7 @@ def FreshRenaming {B : Type} (f : TyVar → TyVar) (vs : List TyVar)
     (Γ : QCtx B) (S : SolverState B) : Prop :=
   (∀ α ∈ vs, ∀ β ∈ vs, f α = f β → α = β) ∧
   (∀ α ∈ vs, f α ∉ S.sol.dom) ∧
-  (∀ α ∈ vs, ∀ p ∈ S.parked, f α ≠ p.stump.res) ∧
+  (∀ α ∈ vs, ∀ p ∈ S.parked, .var (f α) ≠ p.stump.res) ∧
   (∀ α ∈ vs, f α ∉ Γ.ftv)
 
 /-- the parked images of a scheme's constraints under an instantiation. The
@@ -628,7 +666,7 @@ rule (“compute the initial blocker”) that the paper leaves out. -/
 def InstStumps {B : Type} (θ : TySubst B) (f : TyVar → TyVar)
     (Q : List (Stump B)) (ps : List (Parked B)) : Prop :=
   ps.map Parked.stump =
-    Q.map (fun st => (⟨st.row.applySubst θ, st.label.applySubst θ, f st.res⟩ : Stump B))
+    Q.map (fun st => (⟨st.row.applySubst θ, st.label.applySubst θ, st.res.applySubst θ⟩ : Stump B))
 
 --------------------- ⟦S⟧ APPLIED TO A CONTEXT -------------------------------
 -- What the soundness statement needs is the whole context read under the final
@@ -650,31 +688,53 @@ def SolverState.applyCtx {B : Type} (S : SolverState B) (Γ : QCtx B) : QCtx B :
 /-- the variable a stump's result READS as at S: itself while unsolved, the
 variable unification aliased it to otherwise. (A result solved to a non-variable
 is a spent promise and has no reading; `LetResults` excludes it.) -/
-def SolverState.resVar {B : Type} (S : SolverState B) (δ : TyVar) : TyVar :=
-  match S.subst.ty δ with
-  | .var β => β
-  | _      => δ
+def SolverState.resVar {B : Type} (S : SolverState B) : Ty B → TyVar
+  | .var δ =>
+      match S.subst.ty δ with
+      | .var β => β
+      | _      => δ
+  | τ =>
+      match τ.applySubst S.subst with
+      | .var β => β
+      | _      => ""
 
 /-- the scheme A-let builds: body AND constraints read under ⟦S₁⟧. Reading the
 constraints raw would keep a stump's row pointing at the variable it was parked
 on, not at the generalized tail that variable has since been solved to — and
 then an instance's stump would chase the ORIGINAL tail, shared by all
-instances. The RESULT is read too (`resVar`): a result aliased to β by
-unification must be generalized as β, the name the body mentions
-(`InferRuns.lean`, the `h = λy. g y` witness). -/
+instances. The RESULT is read too: a result aliased to β by unification must be
+generalized as β, the name the body mentions (`InferRuns.lean`, the
+`h = λy. g y` witness), and a spent result is generalized as the type it was
+spent on. -/
 def letScheme {B : Type} (S₁ : SolverState B) (ᾱ : List TyVar) (Δq : List (Parked B))
     (τ₁ : Ty B) : QScheme B :=
   ⟨ᾱ, Δq.map (fun p => (⟨p.stump.row.applySubst S₁.subst, p.stump.label.applySubst S₁.subst,
-      S₁.resVar p.stump.res⟩ : Stump B)), τ₁.applySubst S₁.subst⟩
+      p.stump.res.applySubst S₁.subst⟩ : Stump B)), τ₁.applySubst S₁.subst⟩
 
-/-- A-let's premise on the generalized RESULTS: each still reads as a variable at
-S₁, that variable is generalized, and distinct generalized stumps read as
-distinct variables — one constraint per result (`QScheme.WF`, `Correctable`). -/
+/-- A-let's premise on the generalized RESULTS, read at S₁ (`QScheme.WF`,
+`Correctable`, and the inhabitation of the scheme):
+* each is a linear pattern over ᾱ — a variable, or a type a promise was spent on
+  that the χ-correction can still reach (`Ty.correct`);
+* distinct stumps share no result variable;
+* a SPENT result can be met at some instance, by extending its blocker row with
+  the field (as `Materialize` does at the top level): its key is literal, every
+  stump on the same blocker is literally keyed and is it if it has its key, and
+  no spent stump's blocker occurs in it. -/
 def LetResults {B : Type} (S₁ : SolverState B) (ᾱ : List TyVar) (Δq : List (Parked B)) :
     Prop :=
-  (∀ p ∈ Δq, S₁.subst.ty p.stump.res = .var (S₁.resVar p.stump.res) ∧
-      S₁.resVar p.stump.res ∈ ᾱ) ∧
-  (∀ p ∈ Δq, ∀ q ∈ Δq, S₁.resVar p.stump.res = S₁.resVar q.stump.res → p.stump = q.stump)
+  (∀ p ∈ Δq, (∀ δ ∈ (p.stump.res.applySubst S₁.subst).ftv, δ ∈ ᾱ) ∧
+      (p.stump.res.applySubst S₁.subst).isPat = true ∧
+      (p.stump.res.applySubst S₁.subst).ftv.Nodup) ∧
+  (∀ p ∈ Δq, ∀ q ∈ Δq, ∀ δ ∈ (p.stump.res.applySubst S₁.subst).ftv,
+      δ ∈ (q.stump.res.applySubst S₁.subst).ftv → p.stump = q.stump) ∧
+  (∀ p ∈ Δq, (p.stump.res.applySubst S₁.subst).isVar = false →
+      (p.stump.label.applySubst S₁.subst).isLab = true ∧
+      (∀ q ∈ Δq, q.blocker = p.blocker →
+        (q.stump.label.applySubst S₁.subst).isLab = true ∧
+        (q.stump.label.applySubst S₁.subst = p.stump.label.applySubst S₁.subst →
+          q.stump = p.stump)) ∧
+      (∀ q ∈ Δq, (q.stump.res.applySubst S₁.subst).isVar = false →
+        q.blocker ∉ (p.stump.res.applySubst S₁.subst).ftv))
 
 /-- ⊢  an unsolved result reads as itself -/
 theorem SolverState.subst_ty_of_not_dom {B : Type} {S : SolverState B} {δ : TyVar}
@@ -682,12 +742,12 @@ theorem SolverState.subst_ty_of_not_dom {B : Type} {S : SolverState B} {δ : TyV
   tyLookup_not_mem _ (fun hm => h (List.mem_append_left _ hm))
 
 theorem SolverState.resVar_of_not_dom {B : Type} {S : SolverState B} {δ : TyVar}
-    (h : δ ∉ S.sol.dom) : S.resVar δ = δ := by
-  unfold SolverState.resVar; rw [SolverState.subst_ty_of_not_dom h]
+    (h : δ ∉ S.sol.dom) : S.resVar (.var δ) = δ := by
+  simp only [SolverState.resVar, SolverState.subst_ty_of_not_dom h]
 
 theorem SolverState.resVar_of_var {B : Type} {S : SolverState B} {δ β : TyVar}
-    (h : S.subst.ty δ = .var β) : S.resVar δ = β := by
-  unfold SolverState.resVar; rw [h]
+    (h : S.subst.ty δ = .var β) : S.resVar (.var δ) = β := by
+  simp only [SolverState.resVar, h]
 
 --------------------- Γ; S ⊢ e ⇒ τ; S′ ---------------------------------------
 -- One rule per term former, plus the DEGRADATION rules.
@@ -773,7 +833,7 @@ inductive Infer {B C : Type} [DecidableEq B] (constTy : C → B) :
       LookupBlocked ((Row.var r).applySubst S₂.subst) l α →
       (δ, S₂') = S₂.draw .ty →
       Infer constTy Γ S (.sel e l) (.var δ)
-        (S₂'.park ⟨α, ⟨.var r, .lab l, δ⟩⟩)
+        (S₂'.park ⟨α, ⟨.var r, .lab l, .var δ⟩⟩)
   -- A-lab: a label literal is its own singleton
   | lab {Γ : QCtx B} {S : SolverState B} {l : Label} :
       Infer constTy Γ S (.lab l) (.lab l) S
@@ -805,7 +865,7 @@ inductive Infer {B C : Type} [DecidableEq B] (constTy : C → B) :
       LookupBlockedQ ((Row.var r).applySubst S₃.subst) (τ₂.applySubst S₃.subst) α →
       (δ, S₃') = S₃.draw .ty →
       Infer constTy Γ S (.selDyn e₁ e₂) (.var δ)
-        (S₃'.park ⟨α, ⟨.var r, τ₂, δ⟩⟩)
+        (S₃'.park ⟨α, ⟨.var r, τ₂, .var δ⟩⟩)
   -- A-rec
   | rcd {Γ : QCtx B} {S S' : SolverState B} {ξ : RecBody (Expr C)} {ρ : Row B} :
       InferRec constTy Γ S ξ ρ S' →
@@ -840,15 +900,16 @@ inductive Infer {B C : Type} [DecidableEq B] (constTy : C → B) :
       -- … what stays parked does not mention ᾱ, READ AT S₁ — row, key and
       -- answer — so it reads the same at every instance …
       (∀ α ∈ ᾱ, ∀ p ∈ Δγ, α ∉ (p.stump.row.applySubst S₁.subst).ftv ∧
-         α ∉ (S₁.subst.ty p.stump.res).ftv ∧
+         α ∉ (p.stump.res.applySubst S₁.subst).ftv ∧
          α ∉ (p.stump.label.applySubst S₁.subst).ftv) →
       -- … nothing already solved is generalized …
       (∀ α ∈ ᾱ, α ∉ S₁.sol.dom) →
       -- … and no generalized stump's row OR KEY, read at S₁, mentions another's
       -- answer: then an instance's constraints can be discharged one at a time
       -- (`instEquivCorrects`, InferSoundA.lean), without a fixpoint
-      (∀ p ∈ Δq, ∀ q ∈ Δq, S₁.resVar q.stump.res ∉ (p.stump.row.applySubst S₁.subst).ftv ∧
-         S₁.resVar q.stump.res ∉ (p.stump.label.applySubst S₁.subst).ftv) →
+      (∀ p ∈ Δq, ∀ q ∈ Δq, ∀ δ ∈ (q.stump.res.applySubst S₁.subst).ftv,
+         δ ∉ (p.stump.row.applySubst S₁.subst).ftv ∧
+         δ ∉ (p.stump.label.applySubst S₁.subst).ftv) →
       Infer constTy (Γ.bindScheme x (letScheme S₁ ᾱ Δq τ₁))
         { S₁ with parked := Δγ } e₂ τ₂ S₂ →
       Infer constTy Γ S (.letE x e₁ e₂) τ₂ S₂
@@ -915,7 +976,7 @@ theorem selEx_infers :
       ⟨Sol.nil, [], [], ⟨1⟩, []⟩ (selEx Unit)
       (.fn (.var (natName 1)) (.var (natName 3)))
       ⟨⟨[(natName 1, .rcd (.var (natName 2)))], []⟩,
-       [⟨natName 2, ⟨.var (natName 2), .lab "l", natName 3⟩⟩], [], ⟨4⟩, selExKinds⟩ := by
+       [⟨natName 2, ⟨.var (natName 2), .lab "l", .var (natName 3)⟩⟩], [], ⟨4⟩, selExKinds⟩ := by
   refine Infer.lam (S₀ := ⟨Sol.nil, [], [], ⟨2⟩, [(natName 1, .ty)]⟩) rfl ?_
   refine Infer.selUnk (τ := .var (natName 1))
     (S₁ := ⟨Sol.nil, [], [], ⟨2⟩, [(natName 1, .ty)]⟩)
@@ -956,12 +1017,14 @@ theorem selEx_infers :
 -- The initial supply is ⟨1⟩, not ⟨0⟩: `natName 0` is the empty string, so
 -- starting at 1 keeps every invented name non-empty.
 
-/-- `⊢ e ⇒ τ; S′` — inference, then finalization, from nothing. -/
+/-- `⊢ e ⇒ τ; S′` — inference, then materialization of spent promises, then
+F-★ on what is still parked, from nothing. -/
 def Run {B C : Type} [DecidableEq B] (constTy : C → B) (e : Expr C) (τ : Ty B)
     (S' : SolverState B) : Prop :=
-  ∃ S₁ : SolverState B,
+  ∃ S₁ S₂ : SolverState B,
     Infer constTy QCtx.empty ⟨Sol.nil, [], [], ⟨1⟩, []⟩ e τ S₁ ∧
-    Finalizes S₁ S₁.parked S'
+    Materializes S₁ S₁.parked S₂ ∧
+    Finalizes S₂ S₂.parked S'
 
 -- The state finalization starts at is QUIESCENT: the run begins with Δ = [], so
 -- `Infer.quiescent_of_nil` (below) applies, and `Finalize.of_quiescent` then says
@@ -988,14 +1051,14 @@ def RunSound (B C : Type) [DecidableEq B] (constTy : C → B) : Prop :=
 
 private def selExS1 : SolverState Unit :=
   ⟨⟨[(natName 1, .rcd (.var (natName 2)))], []⟩,
-   [⟨natName 2, ⟨.var (natName 2), .lab "l", natName 3⟩⟩], [], ⟨4⟩, selExKinds⟩
+   [⟨natName 2, ⟨.var (natName 2), .lab "l", .var (natName 3)⟩⟩], [], ⟨4⟩, selExKinds⟩
 
 private def selExStar : Sol Unit := ⟨[(natName 3, .unk)], []⟩
 
 private def selExFinal : SolverState Unit :=
   ({ selExS1.extend selExStar ⟨4⟩ with
        parked := (selExS1.extend selExStar ⟨4⟩).parked.filter
-         (·.stump.res != natName 3) }).flag "l"
+         (·.stump.res != (.var (natName 3) : Ty Unit)) }).flag "l"
 
 /-- ⊢  **the entry judgement is not empty, and F-★ fires in it.** `λx. x.l` runs
 end to end: A-sel-? parks the stump, nothing ever resolves it — the lookup is
@@ -1004,7 +1067,7 @@ to ★ and records the label in W. -/
 theorem selEx_runs :
     Run (B := Unit) (C := Unit) (fun _ => ()) (selEx Unit)
       (.fn (.var (natName 1)) (.var (natName 3))) selExFinal :=
-  ⟨selExS1, selEx_infers,
+  ⟨selExS1, selExS1, selEx_infers, .skip .nil,
    .cons (Finalize.star (by simp [selExS1]) .varFree
      ⟨5, selExStar, ⟨4⟩, rfl, rfl⟩) .nil⟩
 

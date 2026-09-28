@@ -218,8 +218,11 @@ theorem QCovers.forward_of_avoiding {B : Type} {σ : TySubst B}
         havf α (List.mem_append_left _
           (List.mem_flatMap.mpr ⟨st, hst, List.mem_append_right _ hα⟩)))
     -- δ is a binder, so the witness reads θ at it
-    have hres : (instSub σ₀.vars θ σ).ty st.res = (θ.ty st.res).applySubst σ :=
-      instSub_mem (hwf st hst)
+    have hres : st.res.applySubst (instSub σ₀.vars θ σ) = (st.res.applySubst θ).applySubst σ := by
+      rw [Ty.applySubst_applySubst]
+      exact Ty.applySubst_congr _ (fun δ hδ => by
+        have hm := hwf st hst δ hδ
+        exact ⟨by simp [instSub, hm, TySubst.comp], by simp [instSub, hm, TySubst.comp]⟩)
     cases hdis st hst with
     | @hit τr hlk hδ =>
         refine .hit (τ := τr.applySubst σ) ?_ ?_

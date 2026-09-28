@@ -42,6 +42,23 @@ We use a custom lookup relation ⟨ρ.l ↓ r⟩ with return values ⟨τ | ⊥ 
 # Problems
 > Problems found during mechanized proving and their proposed solutions
 
+## Spent promise at F-★  (fixed, merged 2026-09-28)
+- `λx. λy. (x.l) y`: A-app writes `δ ≔ α → β` into a parked stump's result, F-★'s `δ ≐ ★` clashes (`no_finalize_of_spent`)
+- Fix: `Stump.res : Ty B`; new finalization phase `Materialize` (F-hit) before F-★: blocker `r ≔ (l : res | r')`, then saturate
+- `Run` = infer → `Materializes` → `Finalizes`; `runSound`, `runF_terminates` re-proved, same axioms
+- Parked stumps are retired by stump, not by result: the parked-list invariant (`PInv`) is gone
+- A-let generalizes spent stumps: `QScheme.WF` = result vars are binders; `Correctable` = linear pattern results (`Ty.correct`); inhabitation fills spent blockers (`fillRow`)
+- What is left: # Incompleteness → Spent promise
+
+## Key-blocked spent promise  (open, deliberately kept)
+- Only bites when the key is never supplied: applied, `(λr. λa. r.(a) c) {k = λz.z} ⌊k⌋` runs to `𝓫`
+- No row to extend: the lookup waits on the KEY, so `Materialize` does not apply
+- Declaratively typeable (`a : ⌊foo⌋`, `r : {foo: 𝓫 → β}`), so this is incompleteness, not a rejection
+- Fix A — guess the key: F-key binds `α ≔ ⌊ℓ_fresh⌋`, then materialize; small, `runSound` carries over; answer valid but non-principal (made-up label in the type)
+- Fix B — qualified top-level type: `Run` reports `∀. ⟨ρ.(α) ↓ 𝓫 → β⟩ ⇒ {ρ} → α → β`; principal (top level = `let main = e in main`), but `Run`/`RunSound`/`runF` and printed answers change; soundness becomes "every instance is typed"
+- Guessing is fine inside a proof (inhabitation witness), not in a reported type → B preferred when taken up
+- Same idea would extend A-let to key-blocked spent stumps (inhabitation: key ↦ fresh label, then `fillRow`)
+
 
 ## Symbols
 - ↓: Row-lookup relation, three-way result r := (τ | ⊥ | ?)
@@ -95,7 +112,7 @@ We use a custom lookup relation ⟨ρ.l ↓ r⟩ with return values ⟨τ | ⊥ 
   - stuck_masks_mgu, terminalNoMgu_false: stuck ⇏ no mgu, terminal ⇏ no mgu
 
 **Inference**  Γ; S ⊢ e ⇒ τ; S′
-- inferSound: Γ; S ⊢ e ⇒ τ; S′ → PInv S → SchemesWF Γ → Clean S → Quiescent S →
+- inferSound: Γ; S ⊢ e ⇒ τ; S′ → SchemesWF Γ → Clean S → Quiescent S →
   ∀σ, σ absorbs S′ → σ ⊨ S′ → ∀Γ', Γ ⇝_σ Γ' → parked(S′)σ; Γ' ⊢ₐ e : τσ
 - runSound: Run e τ S′ → ∅ ⊢ e : τ⟦S′⟧
 - runF_terminates: ∃ n, runF n e ≠ oof
@@ -116,12 +133,16 @@ We use a custom lookup relation ⟨ρ.l ↓ r⟩ with return values ⟨τ | ⊥ 
 - `stuck_masks_mgu`: stuck payload equation propagates before the residual pins β
   - Fix: defer the stuck equation, retry after the residual
 
-**Spent promise** — `Stump.res : TyVar`
-- Any use of a parked result fails: `λx.(x.l).m`, `λx. x.l ‖ {m=c}`, `λx y.(x.l) y` (`spentEx_*`)
-- Hits nested selection on λ-bound args — the NixOS module shape
+**Spent promise** — fixed: `Stump.res : Ty B`, `Materialize`, spent stumps generalize
+- `λx.(x.l).m`, `λx. x.l ‖ {m=c}`, `λx y.(x.l) y` now run (was: fail)
+- Left: key-blocked spent stump never given its key, `λr. λa. r.(a) c` ⇒ no run
+  - Fix: guess the key (non-principal) or qualified top-level type — see # Problems
 
 **A-let premises**
 - Γ-freshness, `LetResults`, independence, unresolved key ⇒ monomorphic let ⇒ later clash/stuck
+- Spent stumps generalize only if the result is a linear pattern and its blocker can be filled
+  - Not: record literal in the result (`(x.l) {a=c}`), same field spent twice on one row, key-blocked
+- Independence also bites nested selection: `let g = λx.(x.l).m` used twice ⇒ clash
 - Fix: independence could become ordered discharge; the rest are justified
 
 **Unrestricted T-★-intro**

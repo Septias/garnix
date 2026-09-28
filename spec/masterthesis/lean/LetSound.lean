@@ -222,7 +222,7 @@ theorem runSound_false_unguarded_let (hu : UnguardedLet Unit Unit (fun _ => ()))
     exact hu (Δq := []) (Δγ := []) (ᾱ := [laA]) (κs := [.ty]) la_var_y
       (by show [laA].map laS.kinds.lookup = [some Kind.ty]; simp [KEnv.lookup, laS])
       rfl (fun _ h => nomatch h) (fun _ h => nomatch h) la_var_z
-  exact letAlias_not_typed laA_ne_laB (h _ _ _ ⟨laS3, hinf, .nil⟩)
+  exact letAlias_not_typed laA_ne_laB (h _ _ _ ⟨laS3, laS3, hinf, Materializes.refl _ _, .nil⟩)
 
 /-- ⊢  **…and the premise is exactly what the witness violates**: the generalized
 `a` is y's type, a variable of Γ that ⟦S₁⟧ leaves in place. -/
@@ -238,7 +238,8 @@ theorem letAlias_infers_guarded :
   refine Infer.lam (S₀ := laS) rfl ?_
   refine Infer.letE (Δq := []) (Δγ := []) (ᾱ := []) (κs := []) la_var_y rfl (.refl _)
     (fun _ h => nomatch h) (fun _ h => nomatch h) (fun _ h => nomatch h)
-    (fun _ h => nomatch h) ⟨fun _ h => absurd h List.not_mem_nil, fun _ h => absurd h List.not_mem_nil⟩ (fun _ h => nomatch h)
+    (fun _ h => nomatch h) ⟨fun _ h => absurd h List.not_mem_nil, fun _ h => absurd h List.not_mem_nil,
+      fun _ h => absurd h List.not_mem_nil⟩ (fun _ h => nomatch h)
     (fun _ h => nomatch h) (fun _ h => nomatch h) ?_
   exact Infer.var_mono
     (by rw [QCtx.lookup_bindScheme]; simp; rfl)
@@ -283,7 +284,7 @@ theorem inferSoundC_false : ¬ InferSoundC Unit Unit (fun _ => ()) := by
 
 private def lcS1 : SolverState Unit :=
   ⟨⟨[(natName 1, .rcd (.var (natName 2)))], []⟩,
-   [⟨natName 2, ⟨.var (natName 2), .lab "l", natName 3⟩⟩], [], ⟨4⟩,
+   [⟨natName 2, ⟨.var (natName 2), .lab "l", .var (natName 3)⟩⟩], [], ⟨4⟩,
    [(natName 3, .ty), (natName 2, .row), (natName 1, .ty)]⟩
 
 private def lcS2 : SolverState Unit := { lcS1 with parked := [] }
@@ -360,7 +361,7 @@ theorem letCapture_infers_unguarded (hu : UnguardedLet Unit Unit (fun _ => ())) 
 scheme nobody instantiates, so no finalization ever commits its answer. -/
 theorem runSound_false_let_captures (hu : UnguardedLet Unit Unit (fun _ => ())) :
     ¬ RunSound Unit Unit (fun _ => ()) := fun h =>
-  letCapture_not_typed (h _ _ _ ⟨lcS2, letCapture_infers_unguarded hu, .nil⟩)
+  letCapture_not_typed (h _ _ _ ⟨lcS2, lcS2, letCapture_infers_unguarded hu, Materializes.refl _ _, .nil⟩)
 
 /-- ⊢  the witness violates the new ownership premise: y's let is entered at
 `lcS1` (e₁ is a constant, so it is also S₁), and Δ_q = `lcS1.parked` — the stump
