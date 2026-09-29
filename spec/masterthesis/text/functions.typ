@@ -103,7 +103,8 @@
 
 #let _to_seq(x) = if type(x) == array { x } else { (x,) }
 #let derive(name, prem, conclusion) = {
-  let prems = _to_seq(prem)
+  // An empty premise row would collapse; an invisible strut keeps its height.
+  let prems = if _to_seq(prem).len() == 0 { (box(width: 0pt, hide($α$)),) } else { _to_seq(prem) }
   let concl = _to_seq(conclusion)
 
   [
