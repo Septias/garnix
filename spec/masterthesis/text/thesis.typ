@@ -59,13 +59,13 @@ Firstly, since the ultimate goal is to aid programmers today, we need an _effici
 { .. }.${builtins.currentTime}
 ```
 
-This simple example combines records, impure functions and first-class labels to dynamically look up a record field based on the system time at program execution. Whether this program will succeed or error cannot be determined statically, as deciding it would predict the time of execution and as such, the future. An unknown type (★) that can be used to delineate the cases in which type inference has to stop is thus a natural decision for our type system. This unknown type can gobble uncertainty of two kinds: Incompleteness due to language features that are definite (see the example) and placeholders for source code that could be typed by a stronger type system in the future. We thus introduce the ★-type, an _unknown type_ that directly marks places where the type inference algorithm gives up to keep its termination and soundness properties.
+This simple example combines records, impure functions and first-class labels to dynamically look up a record field based on the system time at program execution. Whether this program will succeed or error cannot be determined statically, as deciding it would predict the time of execution and as such, the future. An unknown type (★) that can be used to delineate the cases in which type inference has to stop is thus a natural decision for our type system. This unknown type absorbs uncertainty of two kinds: behaviour that is dynamic by nature, as in the example, and placeholders for source code that could be typed by a stronger type system in the future. We thus introduce the ★-type, an _unknown type_ that directly marks places where the type inference algorithm gives up to keep its termination and soundness properties.
 
 In conclusion, we state the following design goals for a reasonable type system for Nix:
 / R1 (No source changes): The analysis must run on today's nixpkgs verbatim. No program needs rewriting to become analysable.
 / R2 (No semantic change): Evaluation must produce exactly what it produced before, down to derivation hashes.
-/ R3 (Totality): Every program must receive a type. Failure of the analysis is a _result_ (★).
-/ R4 (Effective inference): The analysis must scale to a repository that is, semantically, a single fixpoint.
+/ R3 (Totality): Every program must receive a type. Where the analysis cannot decide, the result is ★ or a reported stuck verdict, never a rejection of a program that runs.
+/ R4 (Effective inference): The analysis must scale to a repository of more than 100,000 packages, evaluated as one program.
 
 == Guiding features of Nix
 #figure(
@@ -91,19 +91,11 @@ Asymmetric record concatenation is a record operation that uses the fields of th
 //the selection must resolve $l$ in $(β | α)$. To answer it we must know whether $β$ contains $l$: if it does, the answer is $β$'s binding for $l$; if it definitely does _not_, the answer is $α$'s. Neither is known, and no amount of positive information about $β$ will settle it.
 
 Overwriting existing fields is one of the most important features for Nix because it is used ubiquitously to merge configurations, overwrite package fields and to extend or overwrite the existing package set. An example of all three cases can be seen in @nix-idioms. This requirement immediately rules out record calculi that restrict themselves to _symmetric concatenation_ @symm_concat where both halves (the two operands) have disjoint labels. It also rules out another feature commonly seen in record calculi. Using _width-subtyping_, one can remove or forget fields ${l: τ} <= {}$ in a record. This, in combination with asymmetric record concatenation, leads to unsoundness, because previously forgotten and then untracked fields overwrite existing fields semantically but cannot be tracked by the record system. Lacks-predicates can salvage this situation by denoting the absence of a field, but they have to be supplied explicitly, which contradicts our requirement R2.
-// meta: nothing ever invents negative types?
-
 We therefore keep the calculus subtyping-free; the only ordering it admits is the precision gained by instantiation and row equivalence (≈).
 
-With _scoped records_, the concatenation operation merely becomes a concatenation operation. Our calculus uses rows ρ that hold label-type bindings and type variables. Such a row ρ can be put into curly braces to form a record type {ρ}. For concatenation, both record-halves {ρ} and {ρ'} are just glued together to form {ρ | ρ'} and no information is lost. We combine this with a novel lookup relation of the form `(ρ.l ↓ r)` that traverses the natural structure of rows to look up a label l in the row ρ. The result r can be of three kinds:
+With _scoped records_, the concatenation operation merely becomes a concatenation operation. Our calculus uses rows ρ that hold label-type bindings and type variables. Such a row ρ can be put into curly braces to form a record type {ρ}. For concatenation, both record-halves {ρ} and {ρ'} are just glued together to form {ρ | ρ'} and no information is lost. We combine this with a novel lookup relation of the form `(ρ.l ↓ r)` (@row-lookup) that traverses the natural structure of rows to look up a label l in the row ρ. The result r can be of three kinds:
 
 The obvious two results are either a type τ in case the lookup was successful or a marker ⊥ in case the lookup did not succeed. A row can consist of fixed label-type bindings but also row-variables and our lookup relation stops at these, returning a result ? because shadowing behaviour after this point is not clear. Type substitution will clear those type variables and make the lookup advance further into the record. Only at the end of typing, every still remaining ? will be turned into the unknown type ★.
-
-_Why not stronger row theories?_ Ohori @ohori1995polymorphic obtains efficient compilation for a polymorphic record calculus but restricts records to selection and functional update — concatenation is precisely what his index-passing scheme cannot support. The line of work beginning with Morris and McKinna @rose abstracts rows behind containment and combination constraints strong enough to type asymmetric concatenation faithfully, and Rose is a rank-1 Hindley-Milner language with principal types. But the principality is that of _qualified_ types: inference produces a principal constrained scheme and defers the row predicates to an entailment relation the framework leaves as a parameter, with no solving procedure and hence no complexity bound. Since combination is an equation in a partial monoid, deciding conjunctions of the predicates inference actually generates is unification modulo associativity and commutativity, which is NP-complete @ac_unification. The successor systems @generic_with_extensible @extensible_rec_funcs @extensible_data_adhoc are explicitly typed and leave reconstruction as future work. The same objection applies to HM(X) instances @designing_record_systems, which stipulate that a constraint solver exists without supplying one: in all of these, the hard part of the problem is exactly the part that is deferred.
-
-// Efficiency rules out a whole cluster of approaches on its own.
-// Parreaux: Co-Np-Complete
-// Lacks: might be added later?
 
 // _Why not unions of typings?_ Wand's original treatment @concat4multiinher @wand_complete case-splits over which side contributes each field and yields a set of alternative typings rather than a principal one. The number of alternatives is exponential in the number of contested labels, which violates R4, and the absence of principal types propagates into every `let` in the program.
 
@@ -111,7 +103,6 @@ _Why not stronger row theories?_ Ohori @ohori1995polymorphic obtains efficient c
 
 // _Why not lacks-predicates?_ Qualified types with $α backslash l$ constraints @gaster_jones @qualified_types are the cheapest source of negative information available, and they are a good fit for this calculus — cheap enough, in fact, that we return to them in @sec-extensions as the most promising extension. The reason they are absent from the minimal calculus is not the usual complaint that they make types verbose; in a system that requires no annotations, nobody ever writes them. The reason is that *nothing in the calculus generates them*. Lacks-constraints are forced upon Gaster and Jones because record _extension_ is partial and its typing rule must demand absence. Scoped rows make concatenation total, so no rule ever demands anything, and a constraint form with no introduction site buys nothing. The three Nix constructs that _would_ generate them — closed function patterns, `removeAttrs`, and `?`-guards under `if` — all live outside the minimal calculus.
 
-Basically I think my choosing of P&X was good because they provide a unification algorithm. This one I wanted to extend in a meaningful way with ★ and the lookup relation, but it is not really a contribution lule.
 
 
 // #figure(
@@ -152,27 +143,24 @@ Basically I think my choosing of P&X was good because they provide a unification
 
 // == Our position: two judgements instead of one <our-position>
 
-The mechanism that [makes this possible]¡ is a separation that, to our knowledge, has not been made before in this setting.
+The design rests on a separation that, to our knowledge, has not been made before in this setting.
 
-In a row-based system, a field selection is ordinarily _elaborated into a row constraint_ and handed to unification: `e.l` demands that `e`'s row contain $l$, and unification must discharge that demand — which, when the row ends in a variable, means guessing that the variable contains the field. Paszke and Xie's search rule @extensible_tabular does exactly this, and it is the point at which every system in \@trilemma either backtracks, or solves modulo associativity and commutativity, or defers to an unspecified entailment relation.
+In a row-based system, a field selection is ordinarily _elaborated into a row constraint_ and handed to unification: `e.l` demands that `e`'s row contain $l$, and unification must discharge that demand — which, when the row ends in a variable, means guessing that the variable contains the field. Paszke and Xie's search rule @extensible_tabular does exactly this, and it is the point at which the systems discussed in @related-work either backtrack, or solves modulo associativity and commutativity, or defers to an unspecified entailment relation.
 
 We take selection out of unification altogether. *Field demands and row equality are different judgements.* Row unification $scripts(≐)_r$ only ever states structural _equality_ of two rows; it never receives a demand of the form "this row must contain $l$", and consequently never has to guess a field into a variable. Field demands are instead answered by a separate _lookup relation_ $ρ.l ↓ r$ whose result is three-valued — a definite type $τ$, definite absence $⊥$, or _don't know_ $?$ — and a demand that cannot be answered yet simply parks until instantiation unblocks it.
 
-The consequence is that uncertainty is recorded as a *type* rather than as a *constraint*. Where the row theory would need a disjunction, we write ★. What this buys is stated plainly: inference remains ordinary syntactic first-order unification. There is no constraint solver to supply, no entailment relation left as a parameter, no unification modulo AC, and no backtracking over alternative typings. Paszke and Xie's search rule can be dropped entirely — it is not merely unnecessary but demonstrably loses solutions — and their conditional tail-check is replaced by an algebraic property of rows rather than a side condition. Only one non-forced move survives in the whole algorithm, and it fires exactly when the field it places has a unique possible host.
+The consequence is that uncertainty is recorded as a *type* rather than as a *constraint*. Where the row theory would need a disjunction, we write ★. What this buys is stated plainly: inference remains ordinary syntactic first-order unification. There is no constraint solver to supply, no entailment relation left as a parameter, no unification modulo AC, and no backtracking over alternative typings. Paszke and Xie's search rule can be dropped entirely, and their conditional tail-check is replaced by an algebraic property of rows rather than a side condition. Every move of the algorithm is forced; where none applies, the configuration is reported as stuck rather than resolved by a guess.
 
 
 
 == Contributions <contributions>
 
-+ *A best-effort lookup relation.* The judgement $ρ.l ↓ r$ extends the usual positive and negative results of a record lookup to a three-way result $(τ | ⊥ | ?)$, and separates field demands from row equality — the separation the rest of the design rests on. The relation is context-free, deterministic and total, and a definite result $τ$ or $⊥$ is stable under substitution: only $?$ may improve.
-+ *An algebraic characterization of row equivalence.* Rows modulo ≈ form a _trace monoid_, hence are cancellative from both ends, and two rows are equivalent exactly when they agree on their sequence of row variables and, for every label, on their projection to that label. This replaces the shared-tail side condition of Paszke and Xie @extensible_tabular with an algebraic property, and is what allows both ends of a row to be processed.
-+ *Qualified schemes, forced rather than chosen.* We show that _no_ plain scheme $∀macron(α). τ$ can be principal for our system: the two typing families of `x: x.l` cannot be spanned by one without also admitting instances that are not typings. A scheme carrying its pending lookups is principal for the same term, and the qualified system types strictly more programs than the unqualified one. Qualified schemes are therefore compelled by the calculus, not adopted for convenience.
-+ *Mechanized type safety.* We prove _progress_ and _preservation_ in Lean for the declarative system with qualified schemes. Progress holds up to lookup errors ↯: a selection whose lookup answers $⊥$ is typed at ★ rather than rejected, and is the only way a well-typed program can get stuck.
-+ *A unification algorithm on spines.* Row unification $scripts(≐)_r$ operates on row _spines_ and is mechanized end to end: a successful run returns a most general unifier, a clash or occurs-failure proves that no unifier exists, and the algorithm terminates, so that its verdicts are independent of the recursion budget they were computed under. Its counting rule was surfaced as a genuine gap by the mechanization rather than designed in advance.
-+ *Sound type inference.* We give an inference algorithm $Γ; S ⊢ e ⇒ τ; S′$ that parks lookups it cannot yet answer as stumps and finalizes them at generalization. Inference terminates, and every type it returns is a declarative typing of the program.
-+ *An honest account of incompleteness.* The algorithm is incomplete, and we say exactly how. It has a single conservative verdict, _stuck_, and a kernel-checked example shows it reported on a problem which in fact has a most general unifier. We further show that the natural converse — "no move applies, therefore no principal solution exists" — is _false_ at every formulation we tried, including the retreat to configurations in which no move fires at all: terminality is a fact about the moves, not about the problem.
++ *Lookup and row equivalence.* A context-free, total lookup $ρ.l ↓ r$ with a three-way result $(τ | ⊥ | ?)$ separates field demands from row equality, and rows modulo ≈ form a trace monoid, which replaces the shared-tail side condition of Paszke and Xie @extensible_tabular (@row-lookup, @trace-monoid).
++ *A type-safe calculus with forced qualified schemes.* Progress (up to lookup errors ↯) and preservation are mechanized in Lean. No plain scheme is principal for `x: x.l`, while a scheme carrying its pending lookups is (@type-safety, @principality).
++ *Sound unification and inference.* Row unification on spines returns most general unifiers, its clash and occurs verdicts are sound, and it terminates. Inference parks unanswered lookups as stumps, terminates, and returns declarative typings (@unification, @inference).
++ *A delimited incompleteness.* Some row equations have no most general unifier and no algorithm returning one answer can solve them; others are stuck at the price of forced moves; inference adds limits of its own (@incompleteness).
 
-The remainder of this thesis is organised as follows. @declarative shows the declarative calculus with functions, scoped records, concatenation, row-variables and let-polymorphism. @unification develops the unification algorithm on spines and @inference the inference algorithm built on it. @metatheory presents the metatheory, the principality argument that forces qualified schemes, and the incompleteness results. @sec-extensions discusses extensions towards full NixLang — first-class labels, patterns, `with`, `inherit`, occurrence typing, and lacks-predicates as the most promising source of the negative information this section identified as the crux — before @related-work places the work in the literature.
+The remainder of this thesis is organised as follows. @declarative shows the declarative calculus with functions, scoped records, concatenation, row-variables and let-polymorphism. @unification develops the unification algorithm on spines and @inference the inference algorithm built on it. The metatheory of each component is stated where the component is introduced; @metatheory collects the results about the calculus as a whole — type safety, refinement and the principality argument that forces qualified schemes — and @incompleteness the places where the algorithm gives up. @sec-extensions discusses extensions towards full NixLang — first-class labels, patterns, `with`, `inherit`, occurrence typing, and lacks-predicates as the most promising source of the negative information this section identified as the crux — before @related-work places the work in the literature.
 
 = Declarative <declarative>
 
@@ -245,7 +233,7 @@ The remainder of this thesis is organised as follows. @declarative shows the dec
 
 This is deliberately less than Paszke and Xie have. Their kinds are $κ ::= ★ | κ₁ → κ₂ | "Label" | "Row"$, and they need the arrow because their types include type application, first-class rows and label singletons; ours include none of these, so the arrow kind and its application rule would be borrowed machinery. We also avoid their notation, in which ★ _is_ the type kind — here ★ is the unknown type, and the sorts are named instead. A `Label` sort is absent for the same reason: the minimal calculus has concrete labels only. First-class labels, which Nix needs for `e.${e'}`, add a third sort and change nothing else about the discipline.
 
-Two typing rules acquire a premise. T-λ-I is the only rule that conjures a type from nothing, so it checks $Γ ⊢ τ₁: "Type"$, and T-let is the only one that conjures a scheme, so it checks $Γ ⊢ σ "ok"$: the body is well-sorted, every stump looks up in a row, and every stump's result is a quantified `Type` variable of σ itself. Every other rule's types are fixed by its premises and are well-sorted whenever they are.
+Two typing rules of @declarative-rules acquire a premise. T-λ-I is the only rule that conjures a type from nothing, so it checks $Γ ⊢ τ₁: "Type"$, and T-let is the only one that conjures a scheme, so it checks $Γ ⊢ σ "ok"$: the body is well-sorted, every stump looks up in a row, and every stump's result is a quantified `Type` variable of σ itself. Every other rule's types are fixed by its premises and are well-sorted whenever they are.
 
 
 #let declarative = figure(
@@ -291,10 +279,10 @@ Two typing rules acquire a premise. T-λ-I is the only rule that conjures a type
 )
 #declarative <declarative-rules>
 
-The declarative system's typing rules follow the standard λ-calculus rules. T-cons is used to type the set of constants of the language with their respective type $𝓫_c$. T-var not only looks up variables in the context Γ, but also instantiates polymorphic types using the instantiation rules from @instantiation discussed in the following section. T-let binds x to any well-sorted scheme σ that is _instance-closed_ for e₁ — every instance of σ is a typing of e₁ — and _inhabited_. The second premise is not bureaucracy: a plain scheme always has its own body as an instance, but a qualified one can have none, and then instance-closure says nothing about e₁ at all. Without it, `let x = (3 4) in 5` would type while being stuck. T-eq equates types equal up to the row-equivalence relation from @row-equivalence. T-conc concatenates two row types by concatenating their type representation and T-sel types record lookups by lifting the hard work to the row-lookup relation, defined in @row-lookup.
+The declarative system's typing rules follow the standard λ-calculus rules. T-cons is used to type the set of constants of the language with their respective type $𝓫_c$. T-var not only looks up variables in the context Γ, but also instantiates polymorphic types using the instantiation rules from @instantiation discussed in the following section. T-let binds x to any well-sorted scheme σ that is _instance-closed_ for e₁ — every instance of σ is a typing of e₁ — and _inhabited_. The second premise is not bureaucracy: a plain scheme always has its own body as an instance, but a qualified one can have none, and then instance-closure says nothing about e₁ at all. Without it, `let x = (3 4) in 5` would type while being stuck. T-eq equates types equal up to the row-equivalence relation from @row-equivalence. T-conc concatenates two row types by concatenating their type representation, with the right operand first: lookup prefers the left of a row, so left-precedence on rows realizes the right-precedence of ‖. T-sel types record lookups by lifting the hard work to the row-lookup relation, defined in @row-lookup.
 
 
-T-sel-★ and T-sel-⊥ are needed to type otherwise stuck terms and T-★-intro to blur a type into the unknown. The rules T-rec, T-ξ-empty, T-ξ-field and T-ξ-conc type record literals. (…)
+T-sel-★ and T-sel-⊥ are needed to type otherwise stuck terms and T-★-intro to blur a type into the unknown. The rules T-rec, T-ξ-empty, T-ξ-field and T-ξ-conc type record literals.
 
 
 == Instantiation
@@ -320,9 +308,9 @@ T-sel-★ and T-sel-⊥ are needed to type otherwise stuck terms and T-★-intro
 
 Sorting is what makes this a *single* rule. Without the annotation a quantifier could be discharged with a type or with a row, and the relation needed two rules with identical conclusions differing only in the witness's sort, with nothing to say which was intended and no account at all of a variable standing at positions of both kinds. The sort settles it at the binder: $α: "Row"$ takes a row, $α: "Type"$ takes a type, and θ is one sort-respecting map. This is the concrete payoff of @sorting. The mechanization, which predates it, encodes the same discipline as a *pair* of maps over a single untagged namespace — a workaround the annotation makes unnecessary.
 
-The second premise, _discharge_ $θ ⊨ q$, is what the qualification adds. Each stump is replayed per instance: θ is applied to the stump's row, the lookup is performed, and the stump's result variable δ is pinned to the verdict — to the found type by D-hit, and to ★ by D-⊥ and D-?. These are exactly T-sel, T-sel-⊥ and T-sel-★ once more, now evaluated at instantiation time instead of generalization time, which is how one `let`-bound selector can answer a definite type at one use and ★ at another. Discharge reads nothing but the substituted row, so ≥ does not depend on Γ.
+The second premise, _discharge_ $θ ⊨ q$, is what the qualification adds. Each stump is replayed per instance: θ is applied to the stump's row, the lookup is performed, and the stump's result variable δ is pinned to the verdict — to the found type by D-hit, and to ★ by D-⊥ and D-?. These are exactly T-sel, T-sel-⊥ and T-sel-★ of @declarative-rules once more, now evaluated at instantiation time instead of generalization time, which is how one `let`-bound selector can answer a definite type at one use and ★ at another. Discharge reads nothing but the substituted row, so ≥ does not depend on Γ.
 
-Two degenerate cases are worth recording. A monotype scheme has itself as its only instance, so on the monotypes the relation collapses to I-refl. And with Q = ε the discharge premise is vacuous, so on plain schemes ≥ is the Hindley-Milner instance relation (`QScheme.inst_toQ`) and every plain scheme has its own body as an instance. A qualified scheme need not have any instance — two stumps may pin the same δ to different verdicts — which is why T-let demands inhabitation explicitly.
+Two degenerate cases are worth recording. A monotype scheme has itself as its only instance, so on the monotypes the relation collapses to identity. And with Q = ε the discharge premise is vacuous, so on plain schemes ≥ is the Hindley-Milner instance relation and every plain scheme has its own body as an instance. A qualified scheme need not have any instance — two stumps may pin the same δ to different verdicts — which is why T-let demands inhabitation explicitly.
 
 
 == Row-Lookup
@@ -342,15 +330,22 @@ Two degenerate cases are worth recording. A monotype scheme has itself as its on
         ($ρ₁.l ↓ ⊥$, $ρ₂.l ↓ r$),
         $(ρ₁ | ρ₂).l ↓ r$,
       ),
-      derive("L-conc-★", ($ρ₁.l ↓ #h(0.2em) ?$,), $(ρ₁ | ρ₂).l ↓ #h(0.2em) ?$),
+      derive("L-conc-?", ($ρ₁.l ↓ #h(0.2em) ?$,), $(ρ₁ | ρ₂).l ↓ #h(0.2em) ?$),
     ),
   ),
 )
 #row_lookup <row-lookup>
 
-@row-lookup gives the derivation rules for record-type lookups. The judgement $ρ.l ↓ r$ is read as »the lookup of label $l$ in row $ρ$ has result $r$« with $r := τ | ⊥ | #h(0.2em) ?$. The lookup succeeds either with a definite type τ due to a successful lookup, ⊥ when the label is definitely absent, or ? if the search reaches a row-variable before it finds the label. Accordingly, L-ε and L-miss return with a negative lookup result, L-hit with a positive result and the rules L-conc-hit and L-conc-skip recurse into the left and right subtrees a row can form, with left precedence. L-var terminates the search at a row-variable α with the unknown result ?, since α may or may not shadow l, and L-conc-★ bubbles such a result up.
+@row-lookup gives the derivation rules for record-type lookups. The judgement $ρ.l ↓ r$ is read as »the lookup of label $l$ in row $ρ$ has result $r$« with $r := τ | ⊥ | #h(0.2em) ?$. The lookup succeeds either with a definite type τ due to a successful lookup, ⊥ when the label is definitely absent, or ? if the search reaches a row-variable before it finds the label. Accordingly, L-ε and L-miss return with a negative lookup result, L-hit with a positive result and the rules L-conc-hit and L-conc-skip recurse into the left and right subtrees a row can form, with left precedence. L-var terminates the search at a row-variable α with the unknown result ?, since α may or may not shadow l, and L-conc-? bubbles such a result up.
 
-The relation is _context-free_: it reads nothing but the row. In particular it never consults what a row-variable has been solved to. That job belongs to substitution — solving $α ≔ ρ'$ replaces α by ρ' in the row, and looking the label up again lets the search advance past the former variable. Refinement of ★ at function application is thus plain type-variable instantiation followed by a fresh lookup, and never a property of the lookup relation itself.
+The relation is _context-free_: it reads nothing but the row. In particular it never consults what a row-variable has been solved to. That job belongs to substitution — solving $α ≔ ρ'$ replaces α by ρ' in the row, and looking the label up again lets the search advance past the former variable. Refinement of a $?$ is thus plain substitution of a row-variable, at instantiation or at application, followed by a fresh lookup, and never a property of the lookup relation itself.
+
+
+=== Properties of the lookup relation <lookup-metatheory>
+
+Lookup is deterministic and total: every row shape matches exactly one rule, so each $ρ.l$ has exactly one result. Totality needs no side condition, because the relation never leaves the row it was given. Determinism makes ★ a verdict rather than a choice.
+
+Lookup is stable under substitution. If $ρ.l ↓ r$ with $r ≠ #h(0.2em) ?$, then $(θ ρ).l ↓ θ r$ for every θ, since a definite derivation never reaches a row-variable. Only $?$ may change, to whatever the substituted row yields. This makes parking sound: a deferred lookup can be re-asked after every substitution, and a definite one never needs to be.
 
 
 == Row-Equivalence
@@ -366,24 +361,22 @@ The relation is _context-free_: it reads nothing but the row. In particular it n
     derive("≈-unit-l", (), $(ε | ρ) ≈ ρ$),
     derive("≈-unit-r", (), $(ρ | ε) ≈ ρ$),
     derive("≈-comm", ($l₁ ≠ l₂$,), $(l₁: τ₁ | l₂: τ₂) ≈ (l₂: τ₂ | l₁: τ₁)$),
+    derive("≈-rcd", ($ρ₁ ≈ ρ₂$,), ${ρ₁} ≈ {ρ₂}$),
+    derive("≈-fn", ($τ₁ ≈ τ₁′$, $τ₂ ≈ τ₂′$), $(τ₁ -> τ₂) ≈ (τ₁′ -> τ₂′)$),
   ),
 )
 #row_equivalence <row-equivalence>
 
-@row-equivalence gives the row-equivalence rules of our calculus. The equivalence of rows can be lifted to an equivalence on types `τ₁ ≈ τ₂`. The relation is symmetric, transitive, associative, commutative and admits left- and right units. We note that l₁ ≠ l₂ is only decidable for concrete labels and as such, row-equivalence does not go beyond label and row-variables as that would break the shadowing behaviour.
+@row-equivalence gives the row-equivalence rules of our calculus. The relation is an equivalence and a congruence, admits associativity and the units ε, and lets two fields commute only when their labels are distinct. Adjacent fields with the same label keep their order, and so does every field next to a row-variable, since a variable may stand for a row that contains the label and shadowing must be preserved. That $l₁ ≠ l₂$ is decidable for concrete labels is what makes ≈-comm a rule rather than a side problem. ≈-rcd and ≈-fn lift ≈ to types: base types, ★ and type variables are equivalent only to themselves, and ≈ is a congruence below records and arrows, with fields handled by ≈-ext.
+
+=== Row equivalence is a trace monoid <trace-monoid>
+
+Read a row as a word over an alphabet of fields $(l: τ)$ and row-variables α. Two letters may swap when they are fields with distinct labels; a row-variable commutes with nothing, and neither do two fields with the same label. Rows modulo ≈ are then the free partially commutative monoid, a _trace monoid_, on this independence relation, with ε as unit.
+
+This has two consequences. First, ≈ is decidable and has a normal form: two rows are equivalent exactly when they agree on their sequence of row-variables and, for every label, on the subsequence of fields carrying that label. Second, the monoid is _cancellative on both sides_: $ρ | ρ₁ ≈ ρ | ρ₂$ implies $ρ₁ ≈ ρ₂$, and likewise from the right. Unification uses both. It processes a row as a _spine_ from either end and cancels a common prefix or suffix without guessing, and the forced moves of @unification-cascade are counting arguments over this projection.
+
 
 = Unification <unification>
-// Our algorithm is very similar to the one from P&X, but we depart in a few ways:
-// Our rows are trace-monoids and we cancel on both sides, we can do so because
-// we have added delayed lookups (stumps) such that we are not forced to make a decision
-// This lets us type strictly more types: see (…)
-// Our algorithm is sound and complete in the success case, sound in the clash case and
-// incomplete in the occurs and stuck case. These are the two examples where mgus are missed:
-// - (…)
-// - (…)
-//
-// We have to make sure, that the δ are not substituted during unification.
-// That is what D-* is for…
 
 
 We present our unification algorithm, which is sound and efficient but incomplete. It is a _mutual_ pair of judgements: $τ₁ ≐ τ₂ ⇝ v$ solves an equation between types and $s₁ scripts(≐)_r s₂ ⇝ v$ one between rows.  @unification-helpers fixes this vocabulary.
@@ -443,17 +436,16 @@ A verdict is either a solution θ or one of four refusals. #u_clash and #u_occur
 
 @unification-ty is standard first-order unification, read top-to-bottom, with two deviations. First, ★ is *rigid*: U-★ unifies it with itself and U-clash rejects it against everything else, so the unknown is never silently absorbed into another type — a ★ in a solution is always one that the lookup relation put there. Second, the occurs check of U-occurs is sort-indexed: it tests ftv at `Type` only. Here too the mechanization predates @sorting and uses an ftv spanning *both* sorts, so it also refuses $α ≐ {… α …}$ when the inner α occurs as a row-variable and the equation is in fact solvable — a conservatism sorting removes. What the guard must do either way is make a binding _eliminate_ its variable, since eliminating variables is what bounds the recursion.
 
-U-bind and U-occurs are stated for a variable on the left and are tried on both sides. U-fn is the only place where the type pass sequences: the solution of the argument equation is applied to the results before they are unified, and the two solutions are composed.
+U-bind and U-occurs are stated for a variable on the left and are tried on both sides. U-fn is the only place where the type pass sequences: the solution of the argument equation is applied to the results before they are unified, and the two solutions are composed. A refusal from either premise of U-fn, or from the row problem of U-rcd, is the verdict of the conclusion.
 
 == Row Unification
-The row pass is a deterministic cascade. Every move it makes is _forced_ — it preserves the solution set of the problem rather than choosing among alternatives — with the single exception of U-expand, which invents structure and is therefore tried last. @unification-cascade gives the order in which the moves are attempted; the first one whose trigger fires decides the step, and if none fires the configuration is terminal.
+The row pass is a deterministic cascade. Every move it makes is _forced_ — it preserves the solution set of the problem rather than choosing among alternatives — and no move invents structure. @unification-cascade gives the order in which the moves are attempted; the first one whose trigger fires decides the step, and if none fires the configuration is terminal.
 
 #let u_band = (
   exhaust: oklch(95%, 0.025, 250deg),
   cancel: oklch(95%, 0.028, 195deg),
   solve: oklch(95%, 0.03, 155deg),
   matchp: oklch(95%, 0.035, 95deg),
-  guess: oklch(95%, 0.035, 320deg),
   give: oklch(94%, 0.012, 285deg),
 )
 #let u_ok = text(fill: oklch(48%, 0.11, 155deg), weight: "bold", "✓")
@@ -569,15 +561,6 @@ The row pass is a deterministic cascade. Every move it makes is _forced_ — it 
         u_go,
       ),
 
-      u_phase("guess", u_band.guess, 1),
-      ..u_step(
-        "U-expand",
-        both: true,
-        [leading $l: τ$, other side has a unique var $β$ and no $l$],
-        $β ≔ (l: δ | β′)$ + [, recurse],
-        u_go,
-      ),
-
       u_phase("give up", u_band.give, 2),
       ..u_step(
         "U-clash",
@@ -602,11 +585,11 @@ The row pass is a deterministic cascade. Every move it makes is _forced_ — it 
 )
 #unification_cascade <unification-cascade>
 
-The two exhaustion rules are checked at every depth and before the budget: once a side is empty, its counterpart's variables are forced to ε and a surviving field has nowhere to come from. The cancellation rules exploit that spines cancel at both ends, which is exactly the trace-monoid property @row-equivalence buys us. U-var-solve fires only when one side is a *lone* variable, so the binding really eliminates it; its occurs-check is the same conservative guard as at the type sort.
+The two exhaustion rules are checked at every depth and before the budget: once a side is empty, its counterpart's variables are forced to ε and a surviving field has nowhere to come from. The cancellation rules exploit that spines cancel at both ends, which is exactly the trace-monoid property of @trace-monoid. U-var-solve fires only when one side is a *lone* variable, so the binding really eliminates it; its occurs-check is the same conservative guard as at the type sort.
 
 The three matching moves differ in how far they may look for a partner. A _window_ is a maximal var-free segment at one end of a spine: U-field-L and U-field-R may pair a field only inside it, because a row-variable in between could be instantiated to a colliding field and the pairing would be a guess about shadowing. U-ground lifts that restriction by *counting*: if one side has no variables at all and some label occurs equally often and positively on both sides, then the other side's variables cannot carry that label, the pairing is positional, and it is again forced. This rule is not derivable from the window rules — the mechanization surfaced it as a genuine gap.
 
-U-expand is the one Rémy-style move that invents structure: when the other side has exactly one variable β and no field for the label at hand, β is the only place the field can live, so $β ≔ (l: δ | β′)$ with fresh δ and β′. Uniqueness is what makes it forced; with two candidate hosts the placement would be a choice, and that is precisely the wand-ambiguity the algorithm refuses to resolve. The fresh names are drawn from a supply that is _threaded_ through the recursion rather than re-derived at each call: a move that drops a field also drops the variables its type mentioned, so a locally recomputed bound could fall below a name still in scope. Finally U-clash is a global projection check rather than a per-window one, and U-stuck reports a terminal configuration.
+No move places a field into a row-variable. A field facing only variables on the other side is left where it is, even when a single variable is its only possible host: that placement would be forced, but it is not made, and the configuration is reported as stuck. Finally U-clash is a global projection check rather than a per-window one, and U-stuck reports a terminal configuration.
 
 #let unification_row = figure(
   caption: "Unification of rows, on spines.",
@@ -670,16 +653,6 @@ U-expand is the one Rémy-style move that invents structure: when the other side
         $s₁ scripts(≐)_r s₂ ⇝ θ′ ∘ θ$,
       ),
       derive(
-        "U-expand",
-        (
-          $"vars"(s₂) = β$,
-          $|s₂|_l = 0$,
-          $δ, β′ #[fresh]$,
-          $t₁ scripts(≐)_r s₂[β′\/β] ⇝ θ$,
-        ),
-        $(l: τ) · t₁ scripts(≐)_r s₂ ⇝ θ ∘ [δ ≔ τ, β ≔ (l: δ | β′)]$,
-      ),
-      derive(
         "U-clash",
         ($|s₁|_l > |s₂|_l$, $"vars"(s₂) = ⟨⟩$),
         $s₁ scripts(≐)_r s₂ ⇝ #u_clash$,
@@ -694,11 +667,23 @@ U-expand is the one Rémy-style move that invents structure: when the other side
 )
 #unification_row <unification-row>
 
-@unification-row states the moves as rules. They are to be read *in the order of @unification-cascade*, and U-var-solve, U-var-occurs, U-field-L, U-field-R, U-ground and U-expand are additionally tried with the two sides exchanged; U-ε-var, U-ε-clash and U-clash are symmetric as stated. Note that no rule ever pushes a *field demand* into a row-variable: field lookups do not travel through $scripts(≐)_r$, they park as stumps, so the algorithm never guesses a field into a variable except in the unique-host case of U-expand.
+@unification-row states the moves as rules. They are to be read *in the order of @unification-cascade*, and U-var-solve, U-var-occurs, U-field-L, U-field-R and U-ground are additionally tried with the two sides exchanged; U-ε-var, U-ε-clash and U-clash are symmetric as stated. Note that no rule ever pushes a *field demand* into a row-variable: field lookups do not travel through $scripts(≐)_r$, they park as stumps, so the algorithm never guesses a field into a variable.
 
 The two passes recurse into each other — U-rcd hands a row problem to $scripts(≐)_r$, and U-field-L, U-field-R, U-ground hand a type problem back to $≐$ — and each cross-call consumes one unit of an explicit budget. This makes the definition structurally recursive, which is what lets the mechanization compute verdicts by `rfl` and check worked examples in the kernel; exhausting the budget is the separate verdict #u_fuel, so the four real verdicts are never an artefact of the bound. Crucially, the type equations a matching move emits are solved *on the spot* and their solution applied to the residual before the row pass continues. Deferring them instead would make #u_stuck meaningless: an equation must be discharged, or fatal, or itself stuck, never merely postponed.
 
-// TODO: we can add the algorithmic rules here as well
+
+
+== What unification proves <unification-metatheory>
+
+The algorithm terminates: every problem has a budget at which it returns a verdict, and a verdict reached at one budget is reached, with the same solution, at every larger one.
+
+*Success is most general.* A successful run returns a solution $s$ whose models are exactly the unifiers of the problem, up to agreement on the problem's own variables:
+
+$ {θ : θ "unifies" ρ₁, ρ₂} quad = quad {θ : θ ⊨ s} $
+
+*Clash and occurs are sound.* Either verdict means that no unifier exists.
+
+*Stuck is conservative.* Every move preserves the solution set, but not every solvable problem is solved. Where the algorithm stops, and why it must, is the subject of @incompleteness.
 
 
 = Inference <inference>
@@ -846,13 +831,13 @@ The state is kept under one invariant, *quiescence*: every stump in Δ is genuin
 )
 #generalization <generalization>
 
-@inference-rules gives the syntax-directed counterpart of the declarative rules. T-eq and T-★-intro have no algorithmic counterpart: the former is built into row unification, and the latter is never needed to produce a typing, only to blur one. A-cons, A-λ and the record-literal rules are the familiar ones. A-app and A-conc introduce fresh variables for the shapes their premises demand and hand the resulting equations to $#st_solve$; A-conc glues the two row variables together exactly as T-conc does, so concatenation itself never forces a decision.
+@inference-rules gives the syntax-directed counterpart of the declarative rules of @declarative-rules. T-eq and T-★-intro have no algorithmic counterpart: the former is built into row unification, and the latter is never needed to produce a typing, only to blur one. A-cons, A-λ and the record-literal rules are the familiar ones. A-app and A-conc introduce fresh variables for the shapes their premises demand and hand the resulting equations to $#st_solve$; A-conc glues the two row variables together exactly as T-conc does, so concatenation itself never forces a decision.
 
 Selection is where the algorithm departs from W. The subject is first unified with a record ${ρ}$ of a fresh row, and then the lookup relation of @row-lookup is asked about the row *as solved so far*. Its three answers select the three rules. A definite type τ′ is returned by A-sel; a definite absence ⊥ yields ★ and a warning by A-sel-⊥, mirroring T-sel-⊥. Only when the lookup reaches a row-variable α does A-sel-\? fire: it returns a fresh δ in place of the answer it does not have and parks the stump $⟨α ▷ ρ.l ↓ δ⟩$ — the promise that δ will be pinned to whatever the lookup eventually answers. No equation mentioning l is ever emitted, and this is the entire reason row unification never has to guess a field into a variable.
 
-A-var instantiates a qualified scheme with fresh variables of the binder's sorts. The scheme's stumps are instantiated alongside its body and immediately replayed by $scripts(↝)^(*!)$: those that the instantiation already decides are answered on the spot, and the others are parked on the variable that actually blocks them. This is the algorithmic reading of the discharge premise of I-inst — each use of a `let`-bound variable discharges its own copy of the stumps.
+A-var instantiates a qualified scheme with fresh variables of the binder's sorts. The scheme's stumps are instantiated alongside its body and immediately replayed by $scripts(↝)^(*!)$: those that the instantiation already decides are answered on the spot, and the others are parked on the variable that actually blocks them. This is the algorithmic reading of the discharge premise of I-inst (@instantiation) — each use of a `let`-bound variable discharges its own copy of the stumps.
 
-A-let, given separately in @generalization, is the only rule with real content. It generalizes a set $macron(α)$ of variables and *splits* the stumps of $e₁$: $Δ_q$, whose results lie in $macron(α)$, travel into the scheme as its qualifier Q, while $Δ_Γ$ stays parked in the state and outlives the binding. The side conditions each exclude a concrete failure that soundness turned up. The generalized variables must be free in neither Γ nor the solved part of the state; the split is a partition up to order, since a stump that is generalized may have been parked after one that is not; $Δ_q$ consists only of stumps parked while inferring $e₁$; each generalized stump's result, read at $S₁$, is a distinct variable of $macron(α)$; what stays parked mentions none of $macron(α)$, so it reads the same at every instance; and no generalized stump's row mentions another's result, so that an instance's stumps can be discharged one at a time. The algorithm does not choose $macron(α)$: the admissible choices are closed under union, so a greatest one exists and is computed by deleting variables until nothing more is deleted (`greatestAlpha_spec`).
+A-let, given separately in @generalization, is the only rule with real content. It generalizes a set $macron(α)$ of variables and *splits* the stumps of $e₁$: $Δ_q$, whose results lie in $macron(α)$, travel into the scheme as its qualifier Q, while $Δ_Γ$ stays parked in the state and outlives the binding. The side conditions each exclude a concrete failure that soundness turned up. The generalized variables must be free in neither Γ nor the solved part of the state; the split is a partition up to order, since a stump that is generalized may have been parked after one that is not; $Δ_q$ consists only of stumps parked while inferring $e₁$; each generalized stump's result, read at $S₁$, is a distinct variable of $macron(α)$; what stays parked mentions none of $macron(α)$, so it reads the same at every instance; and no generalized stump's row mentions another's result, so that an instance's stumps can be discharged one at a time. The algorithm does not choose $macron(α)$: the admissible choices are closed under union, so a greatest one exists and is computed by deleting variables until nothing more is deleted.
 
 == Wake-up and finalization
 
@@ -951,114 +936,92 @@ Finalization, in @finalization, happens once, at the top. Entry runs inference f
 
 == What inference proves <inference-metatheory>
 
-Inference is sound: a successful top-level run yields a declarative typing of the program once the final state's substitution is applied,
+Inference terminates and is sound: a successful run yields a declarative typing once the final substitution is applied,
 
 $ ⊢ e ⇒ τ; S′ quad ==> quad ∅ ⊢ e : ⟦S′⟧τ $
 
-(`runSound`, `run_typed`). The inductive statement behind it (`inferSound`) is considerably more general: for every scheme assignment that absorbs the final state and satisfies its stumps, the still-parked stumps become the qualifier of a derivation in the corresponding context, so that A-let can hand them on as a scheme. Inference also terminates — the executable version `runF` returns a verdict other than out-of-fuel at some budget (`runF_terminates`) and agrees with the relational definition whenever it does (`runF_eq_run`).
-
-Inference is not complete, and cannot be made so by adding rules. Beyond the unification gaps of @unification-metatheory, the stumps themselves impose a limit: a stump's result is a single variable, so a parked result that is subsequently *used* — selected from again, concatenated, or applied — cannot be expressed. `x: (x.l).m` is typable declaratively but not inferred; it is the shape of nested option access in the NixOS module system and the most pressing target for future work.
+Inference is not complete; @incompleteness lists where it gives up.
 
 
 = Metatheory <metatheory>
 
-This section states what the calculus is proved to satisfy. Everything below is mechanized in Lean 4 unless it is explicitly flagged as open.
+The metatheory of each component is stated where the component is introduced. This section gives the results about the declarative system as a whole. All results of this thesis are mechanized in Lean 4.
 
-== Row equivalence is a trace monoid <trace-monoid>
-
-- Explain row equivalence
-- Explain the spines
-- Rows form a trace monoid
-- Explain proofs by counting
-- This one is cancellative on both sides
-- Row- and label-vars cannot cross places in the scoped row
-- Explain the use of forced moves
-- Explain what we gain
-
-
-== The lookup relation <lookup-metatheory>
-
-- Explain $ρ.l ↓ r$
-
-- *Determinism.* Every row shape matches exactly one rule, so a lookup has at most one result: if $ρ.l ↓ r₁$ and $ρ.l ↓ r₂$ then $r₁ = r₂$ (`lookup_det`). A three-valued relation would be worth little if a row could be looked up to both a type and to ⊥; this is what makes ★ a *verdict* rather than a choice.
-- *Totality.* A lookup always has some result: $∀ ρ, l. #h(0.3em) ∃ r. #h(0.3em) ρ.l ↓ r$ (`lookup_total`). The proof is structural recursion on ρ and needs no side condition, because the relation never leaves the row it was given — there is no solution to chase and hence no cycle to rule out.
-- *Stability under substitution.* Substitution can only ever *sharpen* a lookup. Definite results survive on the nose: if $ρ.l ↓ r$ with $r ≠ #h(0.2em) ?$, then $(θ ρ).l ↓ θ r$ for every θ (`lookup_applySubst`, and `LookupQ.applySubst` for first-class labels). A definite derivation never looked at a row-variable — L-var is the only rule that mentions one, and it yields ? — so substituting cannot disturb it. Only $?$ may move, and when it does it moves to whatever the substituted row yields (`lookup_applySubst_prec`, which is where totality is consumed). This is the lemma that makes *parking* a lookup sound: a demand deferred at $?$ can be re-asked after the next substitution without invalidating anything already concluded, and a demand answered definitely never needs re-asking. Without it, stumps would be unsound rather than merely deferred.
 
 == Type Safety <type-safety>
-
-Progress and preservation hold in the shape a soft type system permits.
 
 $ "Progress." quad ∅ ⊢ e : τ quad ==> quad e ∈ "Values" or ∃e'. e → e' or e ↯ $
 $ "Preservation." quad ∅ ⊢ e : τ and e → e' quad ==> quad ∅ ⊢ e' : τ $
 
-(`qProgress`, `qPreservation`.) The ↯-disjunct is the price named in \@our-position, and it is paid in exactly one place: `Err` is generated by selecting a label absent from a record *literal*, and is otherwise only propagated through evaluation contexts. Every other way for a well-typed term to get stuck is ruled out, so the theorem locates the residual risk rather than spreading it.
+Values are constants, functions and record literals of values, and → is call-by-value small-step reduction, where selecting from a record literal returns the leftmost binding of the label, in agreement with ↓. The judgement $e ↯$ is a _lookup error_: a selection reaches a record literal that lacks the selected label or, with first-class labels, a key that is not a label. The ↯-disjunct is the price of typing an absent field at ★ by T-sel-⊥ (@declarative-rules). Lookup errors arise only at such a selection and are otherwise only propagated. Preservation holds on the nose: the type is unchanged, not merely refined.
 
-Preservation holds *on the nose* — the type is unchanged, not merely refined. Refinement, correspondingly, is not a weakening of preservation but a separate statement — the next subsection. The qualified schemes leave their mark on progress in exactly one place: T-let's inhabitation premise picks *one* discharged instance at which the bound expression types, and that typing is all progress needs to drive it to a value, a step or an error.
 
 == Refinement and the rigidity of ★ <refinement>
 
-// Todo: this should be clear from the description of the type system
-*Refinement is the claim that solving a row-variable can only improve a typing*. Solving a variable is applying a substitution, so refinement is a substitution lemma: let ⊑ on types be the precision order in which ★ is top and everything else is structural congruence. Then, for every θ that has an image for each scheme in Γ,
+Solving a row-variable can only improve a typing. Let ⊑ be the precision order in which ★ is top. For every θ that has an image for each scheme in Γ,
 
-$
-  Γ ⊢ e : τ quad ==> quad θ Γ ⊢ e : θ τ
-$
+$ Γ ⊢ e : τ quad ==> quad θ Γ ⊢ e : θ τ $
 
-(`qtyped_applySubst`). Read together with @lookup-metatheory: definite lookups survive the substitution unchanged, and a lookup that was ? re-resolves against the substituted row. The old typing is not invalidated by this — T-★-intro re-blurs a lookup that has become definite — so refinement only ever *adds* typings; the term also admits a more precise type. The motivating example of @sec-motivation is the instance — with $x : {β}$ the term `x: ({l = c} ‖ x).l` types at ${β} → ★$ because β might shadow; applying $θ = [β ≔ ε]$ lets the lookup advance past the now empty row and the same term also types at the strictly more precise ${ε} → 𝓫_c$, while the blurred image ${ε} → ★$ stays derivable.
+By @lookup-metatheory, definite lookups survive θ and a $?$ re-resolves against the substituted row. For `x: ({l = c} ‖ x).l` with $x : {β}$, the type ${β} → ★$ becomes ${ε} → 𝓫_c$ under $[β ≔ ε]$, while ${ε} → ★$ stays derivable by T-★-intro.
 
-The other half of the story is that this improvement has a hard floor. Once a position *is* ★, no substitution refines it: for $τ₀ ≠ ★$ there is no θ with
-
-$ θ({β} → ★) ⊑ {(l: τ₀)} → τ₀ $
-
-(`finalized_no_blur`). A frozen ★ sits ⊑-below nothing but ★. This is the rigidity of \@our-position made formal, and it is not a curiosity — it is the engine of the negative principality result, since it says a plain scheme cannot promise ★ and deliver a type.
+Conversely, ★ is never sharpened: for $τ₀ ≠ ★$ there is no θ with $θ({β} → ★) ⊑ {(l: τ₀)} → τ₀$. This is the rigidity of ★ in unification (@unification-ty), and it drives the principality result below.
 
 
 == Principality forces qualified schemes <principality>
 
-A scheme σ is _principal_ for e in Γ when every instance of σ is a typing of e, σ has at least one instance, and every typing of e is answered by an instance of σ that is at least as precise:
+A scheme σ is _principal_ for e in Γ when all its instances are typings of e, it has one, and every typing of e is matched by an instance at least as precise:
 
 $
   "Principal"(Γ, e, σ) quad :≡ quad (∀τ. #h(0.3em) σ ≥ τ ⟹ Γ ⊢ e : τ) and (∃τ. #h(0.3em) σ ≥ τ) and (∀τ. #h(0.3em) Γ ⊢ e : τ ⟹ ∃τ'. #h(0.3em) σ ≥ τ' and τ' ≼ τ)
 $
 
-The order ≼ is ≈ followed by ⊑. Both closures are needed: T-★-intro makes the typing set closed under blurring while no instance set is — ★ is rigid — and T-eq makes it closed under ≈ while instance sets are not; with ⊑ alone the third conjunct fails already for the example below (`selQ_not_principalStrict`).
+Here ≼ is ≈ followed by ⊑, since typings are closed under T-eq and T-★-intro while instance sets are not.
 
-*Plain schemes do not suffice.* The term `x: x.l` types at ${(l: τ₀)} → τ₀$ for *every* $τ₀$ (the lookup hits), and at ${ε} → ★$ (the lookup is ⊥). Both are derivable, and neither is an instance of the other.
+*No plain scheme is principal.* `x: x.l` types at ${(l: τ₀)} → τ₀$ for every $τ₀$ and at ${ε} → ★$. A plain scheme covering both must quantify its result, and then also admits ${ε} → {ε}$, which is not a typing. Choosing ★ as result does not help, since ★ is never sharpened.
 
-$
-  #h(0em) "There is no plain scheme" ∀macron(α). τ "that is instance-closed and covers both."
-$
-
-(`no_plain_principal_scheme`.) The scheme's result position must be a quantified variable, since it instantiates to two *rigid* types — ${ε}$ and ★ — that no single non-variable shape covers. But then re-pointing that variable at ${ε}$ inside the ⊥-instance's substitution leaves the domain image at ${ε}$ untouched, because the domain never consults the result variable, and produces the instance ${ε} → {ε}$, which is not a typing: on ${ε}$ the lookup is ⊥, and the body types only at ★. Instance-closure and coverage are incompatible. Weakening the result to ★ does not help either — by `finalized_no_blur` a ★ result can never be sharpened back into $τ₀$.
-
-*A qualified scheme does.* With
+*A qualified scheme is.* The scheme
 
 $ "selQ" quad = quad ∀(β: "Row", δ: "Type"). #h(0.3em) ⟨β.l ↓ δ⟩ ⇒ {β} → δ $
 
-every lookup verdict on the argument row yields the corresponding instance — $ρ.l ↓ τ_r$ gives ${ρ} → τ_r$, and both $⊥$ and $?$ give ${ρ} → ★$ (`selQ_inst_of_lookup`). The mixed instance ${ε} → {ε}$ that broke every plain candidate is not an instance, because discharge on ε pins δ to ★ (`selQ_no_mixed`); every instance of selQ is a typing (`selQ_instance_closed`); and selQ is principal (`selQ_principal`) and hence the greatest scheme sound for `x: x.l` (`selQ_greatest`). One binding can then serve two uses at incompatible instances in a single derivation:
+is principal for `x: x.l`: discharge pins δ to the lookup's verdict, so ${ε} → {ε}$ is excluded. One binding then serves incompatible uses,
 
 $
   ∅ ⊢ #h(0.3em) bold("let") f = (x: x.l) bold("in") { a = f {l = c}; b = f {} } quad : quad {a: 𝓫_c | b: ★}
 $
 
-(`qtyped_two_use`). Each use discharges its own copy of the stump. Restricted to plain schemes, the system rejects this program (`l1_strictly_weaker`), so the qualification strictly enlarges the typable programs. Qualified schemes are not adopted because they are convenient; they are *forced* — plain schemes are refuted for this calculus, and the qualified ones are exhibited doing the job.
+a program the system with plain schemes rejects. Writing L₁ for the system with plain schemes and L₂ for the qualified one, L₂ types strictly more programs than L₁. Qualified schemes are thus forced, not chosen.
 
 
-== What unification proves <unification-metatheory>
+= Incompleteness <incompleteness>
 
-The algorithm of @unification is fuel-indexed, so the first thing to establish is that its answers are not artefacts of the budget. A verdict once reached is reached at every larger budget, with the same solution (`unifyM_fuel_mono`, `unifyRowM_fuel_mono`); #u_fuel is the separate verdict that says the budget ran out. So the four real verdicts mean what they say.
+The algorithm is sound but not complete. This section collects the places where it gives up, in decreasing order of inevitability. The first family is a limit of the row theory, the second a price paid for forced moves, the third a limit of the inference algorithm on top.
 
-*Success is a most general unifier.* For a successful row run returning a solution $s$,
+== Irreducible problems <incompleteness-irreducible>
 
-$ {θ : θ "unifies" ρ₁, ρ₂} quad = quad {θ : θ ⊨ s} $
+Some row equations have no most general unifier, and no algorithm that returns a single unifier can solve them.
 
-modulo the variables the run invented (`unifyRowM_success_iff`, from `unifyRowM_success_sound` and `unifyRowM_success_complete`). Soundness is the left-to-right containment, completeness the other: every unifier of the problem agrees, *on the problem's own free variables*, with one satisfying $s$. The `AgreeOn` qualification is not slack. U-expand invents variables, *so "most general" can only be asserted relative to a variable set*, and the development therefore works with $"HasMguOn" V$ throughout rather than an unrelativized notion that quantifies over a namespace the solver is still extending. *Freshness is maintained by an explicit invariant*: a successful run leaves the supply avoiding a set that contains the problem's variables and bounds the solution (`unifyM_bounded`). Notably there are *no* residual equations to qualify the statement — the type equations a matching move emits are solved on the spot and applied to the residual before the row pass continues.
+- The _wand_ $(β | α) scripts(≐)_r (l: 𝓫)$: either variable may carry the field, and neither choice subsumes the other.
+- The _two-sided_ problem $(α | l: 𝓫) scripts(≐)_r (l: 𝓫 | β)$, and the swap of two variables: the same deadlock at both ends of the spine.
+- The _shift_ $(α | l: 𝓫) scripts(≐)_r (l: 𝓫 | α)$ has no finite complete set of unifiers either, so returning several answers does not help.
 
-*A success can be vacuous.* /* todo */
+All three are stuck in the algorithm because there is nothing else it could report. The wand and the two-sided problem become solvable with negative information, that is, lacks-predicates on row variables (@sec-extensions). The shift survives it; only row equations as scheme qualifiers would cover it.
 
-*Clash is sound.* A #u_clash verdict means there is no unifier at all, including when the clash was found inside a field payload by the mutually recursive type pass (`unifyRowM_clash_no_unifier`).
+What is shown is a limit of principal solutions over scoped rows, not of typing: a program whose inference is stuck may still be typed by placing ★ where the problem sits.
 
-*The one non-forced move is forced after all.* Every move except U-expand is justified by a cancellation lemma of @trace-monoid and therefore loses nothing. U-expand — placing a field into a row-variable — is the single Rémy-style guess in the algorithm, and it fires only when the field has a *unique* possible host (`host_forced`, and `crossfield_host_forced` for the case where the competing hosts sit on opposite sides). When it does fire it preserves the unifier set in both directions (`expand_reflect`, `expand_reflect_fwd`), so it is not a guess at all but a forced step whose side condition happens to be a uniqueness check. `uniqueHost_none` characterizes the two ways the check can refuse — no candidate host, or more than one — and `stuck_not_both_ground` records that a stuck configuration never has both sides variable-free, which is the case U-ground's counting already covers.
+== The price of forced moves <incompleteness-forced>
+
+Two stuck problems do have a most general unifier.
+
+- The _crossfield_ problem $(l: 𝓫 | α) scripts(≐)_r (m: 𝓫 | β)$ is solved by extending each variable with the other side's field, but that is an expansion of a variable and not a forced pairing. Dropping the expansion move made every move forced, and crossfield is the cost. A repair is to expand only when the host is unique, as an applied binding rather than a rename.
+- A stuck equation between payloads is propagated before a residual equation pins the variable it depends on, which masks a solution that exists. Deferring the stuck equation and retrying after the residual repairs it.
+
+Stuck is therefore conservative: it does not imply that no most general unifier exists, not even in a configuration where no move applies.
+
+== Inference <incompleteness-inference>
+
+- *Monomorphic lets.* A `let` generalizes only when its side conditions hold: the bound term's parked lookups must be independent of the environment, and each must have a linear result whose blocker can be filled. When they fail, the binding stays monomorphic and a second use at another record clashes, as in `let g = x: (x.l).m` used on two records. Independence also bites nested selection. A record literal in the result, the same field demanded twice on one row, and an unresolved key are further failures. Ordered discharge would relax independence; the remaining conditions are justified.
+- *Spent promises.* A lookup whose answer was already consumed can be blocked on its key rather than on a row, so there is no row to extend and nothing to wake. Such a stump is never answered unless the key is supplied. The declarative system types the program, so this is incompleteness and not rejection. The repairs are to guess the key, which answers non-principally with an invented label, or to report a qualified type at the top level, which is principal but changes what a run returns.
+- *Unrestricted T-★-intro.* The declarative system may replace any type by ★, so it types programs the algorithm clashes on: `g: { a = g {l = c}; b = g {m = c} }` has type $(★ → 𝓫) → {a: 𝓫 | b: 𝓫}$, while inference unifies the two argument records and clashes. Every stuck witness above becomes typable in the same way. A clash therefore certifies the absence of a unifier, but not the absence of a typing.
 
 
 = Extensions to the minimal Calculus <sec-extensions>
@@ -1072,19 +1035,19 @@ modulo the variables the run invented (`unifyRowM_success_iff`, from `unifyRowM_
 
 
 = Related Work <related-work>
-_Record concatenation in classic record calculi._ Typing record concatenation is an old and notoriously hard problem. Wand @concat4multiinher first studied type inference for concatenation in the context of multiple inheritance, where the set-or-replace semantics of asymmetric concat already surfaces: his system needs to case-split over which side a field comes from, and typings are unions of alternatives rather than principal types. Harper and Pierce @symm_concat sidestep shadowing by restricting to _symmetric_ concatenation, which is only defined on records with disjoint fields, tracked by compatibility constraints; they also observe that concatenation and width-subtyping do not mix: subtyping can silently forget a field that concatenation later resurrects, breaking soundness — the same observation that steers our calculus away from subsumption and towards row-equivalence. Rémy @concat4free shows that concatenation can be simulated "for free" in a language with polymorphic record extension by abstracting over the extension point, at the price of encoding-style types. Ohori¿ obtains efficient compilation for a polymorphic record calculus, but restricts records to selection and functional update — concatenation is exactly the operation his index-passing compilation scheme cannot support. In the disjoint-polymorphism line @xie2020row the merge operator subsumes symmetric concatenation, with disjointness playing the role of the lacks-constraints. All of these systems either forbid the colliding case that makes Nix's `‖` interesting, or pay for it with non-principal or encoded types; none types the motivating example `a: b: (a ‖ b).l` as-is.
+_Record concatenation in classic record calculi._ Typing record concatenation is an old and notoriously hard problem. Wand @concat4multiinher first studied type inference for concatenation in the context of multiple inheritance, where the set-or-replace semantics of asymmetric concat already surfaces: his system needs to case-split over which side a field comes from, and typings are unions of alternatives rather than principal types. Harper and Pierce @symm_concat sidestep shadowing by restricting to _symmetric_ concatenation, which is only defined on records with disjoint fields, tracked by compatibility constraints; they also observe that concatenation and width-subtyping do not mix: subtyping can silently forget a field that concatenation later resurrects, breaking soundness — the same observation that steers our calculus away from subsumption and towards row-equivalence. Rémy @concat4free shows that concatenation can be simulated "for free" in a language with polymorphic record extension by abstracting over the extension point, at the price of encoding-style types. Ohori @ohori1995polymorphic obtains efficient compilation for a polymorphic record calculus, but restricts records to selection and functional update — concatenation is exactly the operation his index-passing compilation scheme cannot support. In the disjoint-polymorphism line @xie2020row the merge operator subsumes symmetric concatenation, with disjointness playing the role of the lacks-constraints. All of these systems either forbid the colliding case that makes Nix's `‖` interesting, or pay for it with non-principal or encoded types; none types the motivating example `a: b: (a ‖ b).l` as-is.
 
 _Scoped rows and first-class labels._ Our row theory descends from Leijen's extensible records with scoped labels @extensible_recs, where duplicate labels are kept in the row and lookup resolves them with left-precedence — precisely the "bag" semantics that makes asymmetric concat a total operation instead of a partially defined one. Leijen later added first-class labels @fc_labels, which Nix needs for its dynamic field selection `e.${e'}`. Paszke and Xie @extensible_tabular combine both into infix-extensible rows with a unification-based inference algorithm over row- and label-variables; their system is the direct basis of ours. It cannot, however, model set-or-replace: extension always happens on a known side of the row, and their conditional tail-check rejects programs whose shadowing behaviour is unresolved — our lookup relation instead accepts them at ★ and refines later.
 
-_Expressive row theories._ The line of work started by Morris and McKinna @rose abstracts rows behind an algebra of containment and combination constraints strong enough to type asymmetric concatenation faithfully, and has been extended to generic programming @generic_with_extensible, extensible recursive functions @extensible_rec_funcs and ad-hoc polymorphism @extensible_data_adhoc. These systems track strictly more information than ours, and Rose is in fact a rank-1 Hindley-Milner language that does establish principal types — but the principality is that of qualified types @qualified_types: inference produces a principal _constrained_ scheme and defers the row predicates to an entailment relation that the framework leaves as a parameter, required only to be invariant under row equivalence, monotone and transitive, and nowhere shown to be decidable. The entailment rules actually given decide only ground predicates and discharge everything else by assumption lookup, so no solving procedure — and hence no complexity bound — is offered for the predicates with row variables that inference actually generates. Since combination is an equation in a partial monoid, deciding conjunctions of such predicates is unification modulo associativity and commutativity rather than syntactic unification, and is NP-complete @ac_unification. The successor systems move to System Fω and are explicitly typed, with type reconstruction left as future work @generic_with_extensible; unrestricted second-order reconstruction is in any case undecidable @undecidable. Sulzmann @designing_record_systems designs record systems in the HM(X) framework, where concatenation becomes a constraint; HM(X) however only stipulates that a constraint solver exists without providing one, and predicate-based systems in general trade completeness of inference for expressiveness¿. Our position is dual: we keep plain unification-based inference and instead weaken the types themselves with ★ where the row theory would need a disjunction.
+_Expressive row theories._ The line of work started by Morris and McKinna @rose abstracts rows behind an algebra of containment and combination constraints strong enough to type asymmetric concatenation faithfully, and has been extended to generic programming @generic_with_extensible, extensible recursive functions @extensible_rec_funcs and ad-hoc polymorphism @extensible_data_adhoc. These systems track strictly more information than ours, and Rose is in fact a rank-1 Hindley-Milner language that does establish principal types — but the principality is that of qualified types @qualified_types: inference produces a principal _constrained_ scheme and defers the row predicates to an entailment relation that the framework leaves as a parameter, required only to be invariant under row equivalence, monotone and transitive, and nowhere shown to be decidable. The entailment rules actually given decide only ground predicates and discharge everything else by assumption lookup, so no solving procedure — and hence no complexity bound — is offered for the predicates with row variables that inference actually generates. Since combination is an equation in a partial monoid, deciding conjunctions of such predicates is unification modulo associativity and commutativity rather than syntactic unification, and is NP-complete @ac_unification. The successor systems move to System Fω and are explicitly typed, with type reconstruction left as future work @generic_with_extensible; unrestricted second-order reconstruction is in any case undecidable @undecidable. Sulzmann @designing_record_systems designs record systems in the HM(X) framework, where concatenation becomes a constraint; HM(X) however only stipulates that a constraint solver exists without providing one. Our position is dual: we keep plain unification-based inference and instead weaken the types themselves with ★ where the row theory would need a disjunction.
 
 _Subtyping-based systems._ Algebraic subtyping @algebraic_subtyping @mlsub and its simplifications @simplesub give principal inference for structural subtyping, and MLstruct @mlstruct extends this to a Boolean algebra of types with unions, intersections and negations — negation being one way to express the absence information that shadowing destroys. However, these systems support record extension and field update rather than general concatenation of unknown records, and by the width-subtyping argument above @symm_concat, adding `‖` to a subtyping-based system is problematic at the core: a record can always forget the very fields that decide precedence. We deliberately keep our system subtyping-free; the only ordering is the precision gained by instantiation.
 
-_Set-theoretic types and dynamic languages._ Castagna's programme of semantic subtyping @frisch_semantic @castagna2023programming types dynamic languages with unions, intersections and negations, including detailed accounts of records, maps and structs @typing_records_etc and polymorphic records for Elixir @poly_records, together with occurrence typing to refine types along control flow @revisiting_occurrence @on_occurrence and a gradual guard-based system deployed for Elixir @gradual_elixir. This is the most expressive treatment of records for a dynamic language to date, and occurrence typing is a natural future extension of our calculus (@?). The cost is the full set-theoretic machinery: inference is local rather than let-polymorphic, and the subtyping problems with concatenation resurface. Our ★ plays a role similar to their `Dynamic()`¿, but is introduced by the _lookup relation_ itself rather than by explicit annotation.
+_Set-theoretic types and dynamic languages._ Castagna's programme of semantic subtyping @frisch_semantic @castagna2023programming types dynamic languages with unions, intersections and negations, including detailed accounts of records, maps and structs @typing_records_etc and polymorphic records for Elixir @poly_records, together with occurrence typing to refine types along control flow @revisiting_occurrence @on_occurrence and a gradual guard-based system deployed for Elixir @gradual_elixir. This is the most expressive treatment of records for a dynamic language to date, and occurrence typing is a natural future extension of our calculus (@sec-extensions). The cost is the full set-theoretic machinery: inference is local rather than let-polymorphic, and the subtyping problems with concatenation resurface. Our ★ plays a role similar to their `dynamic()` @elixir_design_principles, but is introduced by the _lookup relation_ itself rather than by explicit annotation.
 
-_Gradual and soft typing._ Gradual typing @gradual_siek @gradual_criteria inserts runtime casts at the boundary between typed and untyped code, with blame tracking @cantblamethis @blame_for_all, and has been instantiated for extensible rows by Sekiyama and Igarashi @gradual_extensible_rows, the system closest in spirit to our ★-typed rows. We differ in a fundamental way: Nix programs cannot be instrumented, so there are no casts, no blame, and no runtime monitoring. Our system is instead a _soft_ typing system in the tradition of Cartwright and Fagan¿ and the "static where possible, dynamic when needed" school @coldwar: every program keeps its untyped semantics, ★ marks the places the analysis gave up, and the metatheory honestly reports the residual risk as the ↯-disjunct of progress. Industrial gradual systems such as TypeScript @typescript and Flow @flow make the same pragmatic choice of an unsound `any`, but without a formal account of when `any` arises; in our system ★ is introduced only by the lookup relation and T-★-intro, and its origin is therefore always explainable.
+_Gradual and soft typing._ Gradual typing @gradual_siek @gradual_criteria inserts runtime casts at the boundary between typed and untyped code, with blame tracking @cantblamethis @blame_for_all, and has been instantiated for extensible rows by Sekiyama and Igarashi @gradual_extensible_rows, the system closest in spirit to our ★-typed rows. We differ in a fundamental way: Nix programs cannot be instrumented, so there are no casts, no blame, and no runtime monitoring. Our system is instead a _soft_ typing system in the tradition of Cartwright and Fagan @soft_typing @practical_soft_typing and the "static where possible, dynamic when needed" school @coldwar: every program keeps its untyped semantics, ★ marks the places the analysis gave up, and the metatheory honestly reports the residual risk as the ↯-disjunct of progress (@type-safety). Industrial gradual systems such as TypeScript @typescript and Flow @flow make the same pragmatic choice of an unsound `any`, but without a formal account of when `any` arises; in our system ★ is introduced only by the lookup relation and T-★-intro, and its origin is therefore always explainable.
 
-_Typing Nix._ Work on Nix itself is scarce. Broekhoff and Krebbers @verified give a verified interpreter and an operational semantics for the Nix expression language — the semantic foundation our step relation is modelled after¿ — but do not attempt a type system. An earlier system by the author @simplenix applies off-the-shelf HM inference to a Nix subset and fails exactly on the record operations this thesis addresses. The long-standing community issue @nix-ts-issue documents both the demand for and the difficulty of typing Nix; Nickel¿, a Nix-inspired configuration language, opts for gradual typing with row polymorphism but forbids the colliding concatenations we target.
+_Typing Nix._ Work on Nix itself is scarce. Broekhoff and Krebbers @verified give a verified interpreter and an operational semantics for the Nix expression language, but do not attempt a type system. An earlier system by the author @simplenix applies off-the-shelf HM inference to a Nix subset and fails exactly on the record operations this thesis addresses. The long-standing community issue @nix-ts-issue documents both the demand for and the difficulty of typing Nix; Nickel @nickel, a Nix-inspired configuration language, opts for gradual typing with row polymorphism but forbids the colliding concatenations we target.
 
 
 = Conclusion
