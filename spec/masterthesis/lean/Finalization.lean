@@ -41,7 +41,7 @@ private theorem solve_star_row_free {S S₀ : SolverState B} {τ : Ty B}
     intro hm
     obtain ⟨p, hp, hpe⟩ := List.mem_map.mp hm
     have hd : (.row, β) ∈ s.domS :=
-      List.mem_append_right _ (List.mem_map.mpr ⟨p, hp, by rw [hpe]⟩)
+      Sol.mem_domS_row (List.mem_map.mpr ⟨p, hp, hpe⟩)
     have := hg.dom _ hd
     revert this hu
     simp only [Ty.applySubst]
@@ -101,7 +101,7 @@ private theorem solve_star_sol {S S₀ : SolverState B} {τ : Ty B}
 theorem Finalize.starOrVar {S S' : SolverState B} {p : Parked B} {β : TyVar}
     (hf : Finalize S p S') (hβ : (S.subst.ty β).StarOrVar) : (S'.subst.ty β).StarOrVar := by
   cases hf with
-  | star _ _ _ hs =>
+  | star _ _ hs =>
       obtain ⟨s, Sup, rfl, hstar⟩ := solve_star_sol hs
       show ((S.extend s Sup).subst.ty β).StarOrVar
       rw [SolverState.extend_subst_ty]
@@ -115,27 +115,14 @@ theorem Finalizes.starOrVar {S S' : SolverState B} {ps : List (Parked B)} {β : 
   | .cons hf hfs, h => Finalizes.starOrVar hfs (hf.starOrVar h)
 
 --------------------- A KEY BLOCKER STAYS A VARIABLE ---------------------------
--- F-★ binds exactly the variables of the answer it commits, and only to ★. So a
--- type variable that is no parked stump's answer is left alone by a step, and is
--- still no answer after it: the remaining answers only lose variables. That is
--- what `Parked.KeySafe` buys a key-blocked stump for every step after its own.
+-- F-★ solves `δ ≐ ★`, a TYPE equation: its solution binds no label variable.
+-- So a key blocker — a label variable — is never touched by finalization, and
+-- neither is any other label variable of the lookup.
 
-private theorem idOrStar_tyLookup {s : List (TyVar × Ty B)}
-    (hs : ∀ p ∈ s, p.2 = .unk) (γ : TyVar) :
-    tyLookup γ s = .unk ∨ tyLookup γ s = .var γ := by
-  induction s with
-  | nil => exact .inr rfl
-  | cons p t ih =>
-      simp only [tyLookup]
-      split
-      · exact .inl (hs p List.mem_cons_self)
-      · exact ih (fun q hq => hs q (List.mem_cons_of_mem _ hq))
-
--- ⊢  what `δ ≐ ★` writes: ★, at the answer's own variables, and no row
+-- ⊢  what `δ ≐ ★` writes: no row, and no label
 private theorem solve_star_dom {S S₀ : SolverState B} {τ : Ty B}
     (hs : SolveTy S τ .unk S₀) :
-    ∃ s Sup, S₀ = S.extend s Sup ∧ (∀ p ∈ s.ty, p.2 = .unk) ∧
-      (∀ p ∈ s.ty, p.1 ∈ (τ.applySubst S.subst).ftv) ∧ s.row = [] := by
+    ∃ s Sup, S₀ = S.extend s Sup ∧ s.row = [] ∧ s.lab = [] := by
   obtain ⟨fuel, s, Sup, hu, rfl⟩ := hs
   refine ⟨s, Sup, rfl, ?_⟩
   revert hu
@@ -147,103 +134,65 @@ private theorem solve_star_dom {S S₀ : SolverState B} {τ : Ty B}
       · simp only [unifyTyF, bindTy, tyIsVar, Ty.tyFtv] at hu
         simp at hu
         obtain ⟨rfl, -⟩ := hu
-        refine ⟨fun p hp => ?_, fun p hp => ?_, rfl⟩ <;> simp at hp <;> subst hp <;>
-          simp [Ty.ftv]
+        exact ⟨rfl, rfl⟩
   | unk =>
       intro hu
       cases fuel <;>
       · simp only [unifyTyF] at hu
         simp only [UResM.success.injEq] at hu
         obtain ⟨rfl, -⟩ := hu
-        exact ⟨fun p hp => (nomatch hp), fun p hp => (nomatch hp), rfl⟩
+        exact ⟨rfl, rfl⟩
   | base b => intro hu; cases fuel <;> simp [unifyTyF] at hu
   | lab b => intro hu; cases fuel <;> simp [unifyTyF] at hu
   | fn a b => intro hu; cases fuel <;> simp [unifyTyF] at hu
   | rcd ρ => intro hu; cases fuel <;> simp [unifyTyF] at hu
 
-/-- β reads as itself, and no parked answer mentions it. -/
-def SolverState.Untouched (S : SolverState B) (β : TyVar) : Prop :=
-  S.subst.ty β = .var β ∧ ∀ q ∈ S.parked, β ∉ (q.stump.res.applySubst S.subst).ftv
-
-theorem Finalize.untouched {S S' : SolverState B} {p : Parked B} {β : TyVar}
-    (hf : Finalize S p S') (h : S.Untouched β) : S'.Untouched β := by
-  obtain ⟨hv, hn⟩ := h
+theorem Finalize.lab_free {S S' : SolverState B} {p : Parked B} {β : TyVar}
+    (hf : Finalize S p S') (hβ : S.subst.lab β = .var β) : S'.subst.lab β = .var β := by
   cases hf with
-  | star hp _ _ hs =>
-      obtain ⟨s, Sup, rfl, hstar, hdom, hrow⟩ := solve_star_dom hs
-      have hβs : β ∉ s.ty.map Prod.fst := fun hm => by
-        obtain ⟨e, he, rfl⟩ := List.mem_map.mp hm
-        exact hn p hp (hdom e he)
-      refine ⟨?_, fun q hq hm => ?_⟩
-      · show (S.extend s Sup).subst.ty β = _
-        rw [SolverState.extend_subst_ty, hv]
-        exact tyLookup_not_mem _ hβs
-      · have hq' : q ∈ S.parked := (List.mem_filter.mp hq).1
-        change β ∈ (q.stump.res.applySubst (S.extend s Sup).subst).ftv at hm
-        have heq : q.stump.res.applySubst (S.extend s Sup).subst =
-            (q.stump.res.applySubst S.subst).applySubst s.toSubst := by
-          rw [Ty.applySubst_applySubst]
-          exact Ty.applySubst_congr _ (fun γ _ =>
-            ⟨SolverState.extend_subst_ty S s Sup γ, SolverState.extend_subst_row S s Sup γ⟩)
-        rw [heq] at hm
-        obtain ⟨α, hα, hγ⟩ := Ty.ftv_applySubst s.toSubst _ β hm
-        rcases hγ with hγ | hγ
-        · rcases idOrStar_tyLookup hstar α with h | h
-          · simp [Sol.toSubst, h, Ty.ftv] at hγ
-          · simp only [Sol.toSubst, h, Ty.ftv, List.mem_singleton] at hγ
-            subst hγ; exact hn q hq' hα
-        · simp only [Sol.toSubst, hrow, rowLookup, Row.ftv, List.mem_singleton] at hγ
-          subst hγ; exact hn q hq' hα
+  | star _ _ hs =>
+      obtain ⟨s, Sup, rfl, -, hlab⟩ := solve_star_dom hs
+      show (S.extend s Sup).subst.lab β = _
+      rw [SolverState.extend_subst_lab, hβ]
+      simp [Sol.toSubst, hlab, labLookup]
 
-theorem Finalizes.untouched {S S' : SolverState B} {ps : List (Parked B)} {β : TyVar} :
-    Finalizes S ps S' → S.Untouched β → S'.Untouched β
+theorem Finalizes.lab_free {S S' : SolverState B} {ps : List (Parked B)} {β : TyVar} :
+    Finalizes S ps S' → S.subst.lab β = .var β → S'.subst.lab β = .var β
   | .nil, h => h
-  | .cons hf hfs, h => Finalizes.untouched hfs (hf.untouched h)
+  | .cons hf hfs, h => Finalizes.lab_free hfs (hf.lab_free h)
 
--- ⊢  a variable reads as itself or as ★, before and after a step
-theorem Finalize.idOrStar {S S' : SolverState B} {p : Parked B} {γ : TyVar}
-    (hf : Finalize S p S') (h : S.subst.ty γ = .unk ∨ S.subst.ty γ = .var γ) :
-    S'.subst.ty γ = .unk ∨ S'.subst.ty γ = .var γ := by
-  cases hf with
-  | star _ _ _ hs =>
-      obtain ⟨s, Sup, rfl, hstar, -⟩ := solve_star_dom hs
-      show (S.extend s Sup).subst.ty γ = _ ∨ (S.extend s Sup).subst.ty γ = _
-      rw [SolverState.extend_subst_ty]
-      rcases h with h | h <;> rw [h]
-      · exact .inl rfl
-      · exact idOrStar_tyLookup hstar γ
-
-theorem Finalizes.idOrStar {S S' : SolverState B} {ps : List (Parked B)} {γ : TyVar} :
-    Finalizes S ps S' → (S.subst.ty γ = .unk ∨ S.subst.ty γ = .var γ) →
-      (S'.subst.ty γ = .unk ∨ S'.subst.ty γ = .var γ)
-  | .nil, h => h
-  | .cons hf hfs, h => Finalizes.idOrStar hfs (hf.idOrStar h)
-
--- ⊢  a clean state leaves every type-sort variable of what it substituted alone
+-- ⊢  a clean state leaves every label variable of what it substituted alone
 omit [DecidableEq B] in
-theorem SolverState.ty_var_of_clean_row {S : SolverState B} (hc : S.sol.Clean) {ρ : Row B}
-    {α : TyVar} (hα : (.ty, α) ∈ (ρ.applySubst S.subst).sortedFtv) :
-    S.subst.ty α = .var α := by
-  apply tyLookup_not_mem
+theorem SolverState.lab_var_of_clean_row {S : SolverState B} (hc : S.sol.Clean) {ρ : Row B}
+    {α : TyVar} (hα : (.lab, α) ∈ (ρ.applySubst S.subst).sortedFtv) :
+    S.subst.lab α = .var α := by
+  apply labLookup_not_mem
   intro hm
-  obtain ⟨p, hp, rfl⟩ := List.mem_map.mp hm
-  exact hc.clears_row hα
-    (List.mem_append_left _ (List.mem_map_of_mem (f := fun p => (.ty, p.1)) hp))
+  exact hc.clears_row hα (Sol.mem_domS_lab hm)
 
 omit [DecidableEq B] in
-theorem SolverState.ty_var_of_clean_ty {S : SolverState B} (hc : S.sol.Clean) {τ : Ty B}
-    {α : TyVar} (hα : (.ty, α) ∈ (τ.applySubst S.subst).sortedFtv) :
-    S.subst.ty α = .var α := by
-  apply tyLookup_not_mem
+theorem SolverState.lab_var_of_clean_key {S : SolverState B} (hc : S.sol.Clean) {k : Key}
+    {α : TyVar} (hα : (.lab, α) ∈ Key.sortedFtv (k.applySubst S.subst)) :
+    S.subst.lab α = .var α := by
+  apply labLookup_not_mem
   intro hm
-  obtain ⟨p, hp, rfl⟩ := List.mem_map.mp hm
-  exact hc.clears_ty hα
-    (List.mem_append_left _ (List.mem_map_of_mem (f := fun p => (.ty, p.1)) hp))
+  have hd : (.lab, α) ∈ S.sol.domS := Sol.mem_domS_lab hm
+  cases k with
+  | lit _ => simp [Key.sortedFtv] at hα
+  | var β =>
+      change (.lab, α) ∈ Key.sortedFtv (labLookup β S.sol.lab) at hα
+      rcases labLookup_cases S.sol.lab β with ⟨hnm, he⟩ | ⟨q, hq, -, he⟩
+      · rw [he] at hα
+        simp [Key.sortedFtv] at hα
+        subst hα
+        exact hnm hm
+      · rw [he] at hα
+        exact hc.1 _ (.inr (.inr ⟨q, hq, hα⟩)) hd
 
 theorem Finalize.row_free {S S' : SolverState B} {p : Parked B} {β : TyVar}
     (hf : Finalize S p S') (hβ : S.subst.row β = .var β) : S'.subst.row β = .var β := by
   cases hf with
-  | star _ _ _ hs => exact solve_star_row_free hs hβ
+  | star _ _ hs => exact solve_star_row_free hs hβ
 
 theorem Finalizes.row_free {S S' : SolverState B} {ps : List (Parked B)} {β : TyVar} :
     Finalizes S ps S' → S.subst.row β = .var β → S'.subst.row β = .var β
@@ -253,7 +202,7 @@ theorem Finalizes.row_free {S S' : SolverState B} {ps : List (Parked B)} {β : T
 theorem Finalize.ext {S S' : SolverState B} {p : Parked B} (hf : Finalize S p S') :
     S.Ext S' := by
   cases hf with
-  | star _ _ _ hs => exact hs.ext.trans (.of_sol_eq rfl)
+  | star _ _ hs => exact hs.ext.trans (.of_sol_eq rfl)
 
 theorem Finalizes.ext {S S' : SolverState B} {ps : List (Parked B)} :
     Finalizes S ps S' → S.Ext S'
@@ -268,16 +217,16 @@ theorem Finalize.holds {S S' : SolverState B} {p : Parked B} (hf : Finalize S p 
     {σ : TySubst B} (hab : Absorbs σ S) (hsat : Sol.Sat σ S'.sol)
     (hβ : (.row, p.blocker) ∈ (p.stump.row.applySubst S.subst).sortedFtv →
       ∃ β', σ.row p.blocker = .var β')
-    (hk : (.ty, p.blocker) ∈ (p.stump.label.applySubst S.subst).sortedFtv ++
+    (hk : (.lab, p.blocker) ∈ Key.sortedFtv (p.stump.label.applySubst S.subst) ++
         (p.stump.row.applySubst S.subst).sortedFtv →
-      KeyFresh σ ((p.stump.label.applySubst S.subst).sortedFtv ++
+      KeyFresh σ (Key.sortedFtv (p.stump.label.applySubst S.subst) ++
         (p.stump.row.applySubst S.subst).sortedFtv) p.blocker) :
     (p.stump.at σ).Holds := by
   cases hf with
-  | star _ hb _ hs =>
+  | star _ hb hs =>
       have hδ := (TyEquiv.unk_inv_both (hs.unifies_sat hsat)).2 rfl
       have hu := lookupQ_blocked_subst hb σ hβ hk
-      rw [hab.row, hab.ty] at hu
+      rw [hab.row, hab.key] at hu
       exact .unk hu hδ
 
 /-- ⊢  **…and so does a whole finalization run**, at the state it ends in. -/
@@ -291,24 +240,20 @@ theorem Finalizes.holds {S S' : SolverState B} {ps : List (Parked B)} :
       rcases List.mem_cons.mp hp' with rfl | hp'
       · have hab : Absorbs S'.subst S₀ := (Absorbs.self c').back (hf.ext.trans hfs.ext) hc
         have hab₁ : Absorbs S'.subst S₁ := (Absorbs.self c').back hfs.ext c₁
-        -- a type variable of the looked-up row or key is unsolved at S₀ (clean)
-        have hv : ∀ {γ}, (.ty, γ) ∈ (p'.stump.label.applySubst S₀.subst).sortedFtv ++
-            (p'.stump.row.applySubst S₀.subst).sortedFtv → S₀.subst.ty γ = .var γ := by
+        -- a label variable of the looked-up row or key is unsolved at S₀ (clean),
+        -- and finalization binds no label: it is still itself at S′
+        have hv : ∀ {γ}, (.lab, γ) ∈ Key.sortedFtv (p'.stump.label.applySubst S₀.subst) ++
+            (p'.stump.row.applySubst S₀.subst).sortedFtv → S'.subst.lab γ = .var γ := by
           intro γ h
+          refine hfs.lab_free (hf.lab_free ?_)
           rcases List.mem_append.mp h with h | h
-          · exact SolverState.ty_var_of_clean_ty hc h
-          · exact SolverState.ty_var_of_clean_row hc h
+          · exact SolverState.lab_var_of_clean_key hc h
+          · exact SolverState.lab_var_of_clean_row hc h
         refine hf.holds hab (hab₁.sat c₁) (fun hmem => ⟨p'.blocker,
           hfs.row_free (hf.row_free (SolverState.row_var_of_clean hc hmem))⟩) ?_
-        -- a key blocker is no pending answer (KeySafe), so no later step touches
-        -- it; every other variable becomes itself or ★
         intro hkey
-        have hsafe : p'.KeySafe S₀ := by cases hf with | star _ _ h _ => exact h
-        have hu := hfs.untouched (hf.untouched ⟨hv hkey, hsafe hkey⟩)
-        refine ⟨p'.blocker, hu.1, fun γ hγ he => ?_⟩
-        rcases hfs.idOrStar (hf.idOrStar (.inr (hv hγ))) with h | h
-        · rw [h] at he; cases he
-        · rw [h] at he; injection he
+        refine ⟨p'.blocker, hv hkey, fun γ hγ he => ?_⟩
+        rw [hv hγ] at he; injection he
       · exact Finalizes.holds hfs c₁ p' hp'
 
 --------------------- MATERIALIZATION KEEPS ------------------------------------
@@ -387,8 +332,9 @@ theorem runSound {C : Type} {constTy : C → B} : RunSound B C constTy := by
 private def icA : Ty Unit := .rcd (.cat (.sing "a" (.base ())) (.sing "b" (.base ())))
 private def icB : Ty Unit := .rcd (.cat (.sing "b" (.base ())) (.sing "a" (.base ())))
 private def icSc : QScheme Unit :=
-  ⟨["d"], [⟨.sing "l" icA, .lab "l", .var "d"⟩, ⟨.sing "l" icB, .lab "l", .var "d"⟩], .var "d"⟩
-private def icχ : TySubst Unit := ⟨fun x => if x = "d" then icA else .var x, fun x => .var x⟩
+  ⟨["d"], [⟨.sing "l" icA, .lit "l", .var "d"⟩, ⟨.sing "l" icB, .lit "l", .var "d"⟩], .var "d"⟩
+private def icχ : TySubst Unit :=
+  ⟨fun x => if x = "d" then icA else .var x, fun x => .var x, fun x => .var x⟩
 
 private theorem icA_equiv_icB : TyEquiv icA icB :=
   .rcd (.comm (by decide))
@@ -401,14 +347,14 @@ theorem instEquivCorrects_false : ¬ InstEquivCorrects Unit := by
   obtain ⟨τ', ⟨θ, -, hdis, -⟩, -⟩ := h icSc icχ
     ⟨fun α hα => by
         have : α ≠ "d" := fun he => hα (by simp [icSc, he])
-        simp [icχ, this], fun _ _ => rfl⟩
+        simp [icχ, this], fun _ _ => rfl, fun _ _ => rfl⟩
     (fun st hst => by
       simp only [icSc, List.mem_cons, List.not_mem_nil, or_false] at hst
       rcases hst with rfl | rfl
       · exact .hit (τ := icA) (LookupQ.lab_iff.mpr .hit) (by simp [icχ]; exact .refl _)
       · exact .hit (τ := icB) (LookupQ.lab_iff.mpr .hit) (by simp [icχ]; exact icA_equiv_icB))
-  have h1 := hdis ⟨.sing "l" icA, .lab "l", .var "d"⟩ (by simp [icSc])
-  have h2 := hdis ⟨.sing "l" icB, .lab "l", .var "d"⟩ (by simp [icSc])
+  have h1 := hdis ⟨.sing "l" icA, .lit "l", .var "d"⟩ (by simp [icSc])
+  have h2 := hdis ⟨.sing "l" icB, .lit "l", .var "d"⟩ (by simp [icSc])
   cases h1 with
   | hit hl₁ he₁ =>
     cases h2 with

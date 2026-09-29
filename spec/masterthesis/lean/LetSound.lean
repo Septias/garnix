@@ -129,9 +129,10 @@ private def laB : TyVar := natName 2
 private def laS : SolverState Unit := ⟨Sol.nil, [], [], ⟨2⟩, [(laA, .ty)]⟩
 private def laΓ : QCtx Unit := (QCtx.empty : QCtx Unit).bindTy "y" (.var laA)
 private def laSc : QScheme Unit := ⟨[laA], [], .var laA⟩
-private def laId : TySubst Unit := ⟨fun x => .var x, fun x => .var x⟩
+private def laId : TySubst Unit := ⟨fun x => .var x, fun x => .var x, fun x => .var x⟩
 private def laRen : TySubst Unit :=
   ⟨fun x => if x = laA then .var laB else .var x,
+   fun x => if x = laA then .var laB else .var x,
    fun x => if x = laA then .var laB else .var x⟩
 
 private theorem laA_ne_laB : laA ≠ laB := fun h => by
@@ -183,7 +184,9 @@ private theorem la_var_z :
     Infer (B := Unit) (C := Unit) (fun _ => ()) (laΓ.bindScheme "z" laSc)
       { laS with parked := [] } (.var "z") (.var laB) laS3 := by
   have hren : IsRenaming laRen laSc.vars (fun _ => laB) := by
-    refine ⟨⟨fun α h => ?_, fun α h => ?_⟩, fun α h => ?_⟩
+    refine ⟨⟨fun α h => ?_, fun α h => ?_, fun α h => ?_⟩, fun α h => ?_⟩
+    · have : α ≠ laA := fun he => h (by simp [laSc, he])
+      simp [laRen, this]
     · have : α ≠ laA := fun he => h (by simp [laSc, he])
       simp [laRen, this]
     · have : α ≠ laA := fun he => h (by simp [laSc, he])
@@ -257,12 +260,13 @@ theorem letAlias_infers_guarded :
 -- step lemma already assumes.
 
 private def laSub : TySubst Unit :=
-  ⟨fun x => if x = laA then .base () else .var x, fun x => .var x⟩
+  ⟨fun x => if x = laA then .base () else .var x, fun x => .var x, fun x => .var x⟩
 
 /-- ⊢  **`InferSoundC` is false as stated.** -/
 theorem inferSoundC_false : ¬ InferSoundC Unit Unit (fun _ => ()) := by
   intro h
-  have hsat : Sol.Sat laSub laS.sol := ⟨fun _ h => (nomatch h), fun _ h => (nomatch h)⟩
+  have hsat : Sol.Sat laSub laS.sol :=
+    ⟨fun _ h => (nomatch h), fun _ h => (nomatch h), fun _ h => (nomatch h)⟩
   have ht := (h laΓ laS laS (.var "y") (.var laA) la_var_y laSub hsat
     (fun _ hp => nomatch hp)).toQTyped
   have hl : (laS.applyCtx laΓ).lookup "y" = some ⟨[], [], .var laA⟩ := rfl
@@ -283,8 +287,8 @@ theorem inferSoundC_false : ¬ InferSoundC Unit Unit (fun _ => ()) := by
 -- Declaratively x.l at a free row is `?`, so its only typing is ★.
 
 private def lcS1 : SolverState Unit :=
-  ⟨⟨[(natName 1, .rcd (.var (natName 2)))], []⟩,
-   [⟨natName 2, ⟨.var (natName 2), .lab "l", .var (natName 3)⟩⟩], [], ⟨4⟩,
+  ⟨⟨[(natName 1, .rcd (.var (natName 2)))], [], []⟩,
+   [⟨natName 2, ⟨.var (natName 2), .lit "l", .var (natName 3)⟩⟩], [], ⟨4⟩,
    [(natName 3, .ty), (natName 2, .row), (natName 1, .ty)]⟩
 
 private def lcS2 : SolverState Unit := { lcS1 with parked := [] }

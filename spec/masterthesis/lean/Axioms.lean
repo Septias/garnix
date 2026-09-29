@@ -1139,9 +1139,6 @@ info: 'MinimalCalculus.selDynQ_instance_closed' depends on axioms: [propext, Cla
 /-- info: 'MinimalCalculus.LookupQ.total' does not depend on any axioms -/
 #guard_msgs in #print axioms LookupQ.total
 
-/-- info: 'MinimalCalculus.LookupQ.key_equiv' does not depend on any axioms -/
-#guard_msgs in #print axioms LookupQ.key_equiv
-
 /-- info: 'MinimalCalculus.LookupQ.applySubst' depends on axioms: [propext] -/
 #guard_msgs in #print axioms LookupQ.applySubst
 

@@ -199,7 +199,7 @@ theorem Stable.settled {α : Type} {f : Nat → IRes α} (hs : Stable f) {n m : 
 -- from a rank function on ⟦S⟧'s row solutions (`Sol.rowWF_toCtx`).
 
 omit [DecidableEq B] in
-theorem lookupQF_ok : ∀ (ρ : Row B) (q : Ty B), ∃ r, lookupQF ρ q = .ok r
+theorem lookupQF_ok : ∀ (ρ : Row B) (q : Key), ∃ r, lookupQF ρ q = .ok r
   | .empty, _ => ⟨_, rfl⟩
   | .var _, _ => ⟨_, rfl⟩
   | .sing _ _, _ => by simp only [lookupQF]; split <;> exact ⟨_, rfl⟩
@@ -213,11 +213,11 @@ theorem lookupQF_ok : ∀ (ρ : Row B) (q : Ty B), ∃ r, lookupQF ρ q = .ok r
       | blocked α => exact ⟨_, rfl⟩
 
 omit [DecidableEq B] in
-theorem lookupQF_stable (ρ : Row B) (q : Ty B) :
+theorem lookupQF_stable (ρ : Row B) (q : Key) :
     Stable (fun _ : Nat => lookupQF ρ q) := Stable.const _
 
 omit [DecidableEq B] in
-theorem lookupQF_settles (ρ : Row B) (q : Ty B) :
+theorem lookupQF_settles (ρ : Row B) (q : Key) :
     Settles (fun _ : Nat => lookupQF ρ q) := by
   obtain ⟨r, h⟩ := lookupQF_ok ρ q
   exact ⟨0, by rw [h]; exact nofun⟩
@@ -454,10 +454,7 @@ theorem finalizeF_stable (S : SolverState B) (p : Parked B) :
     | blocked α =>
         by_cases he : α = p.blocker
         · simp only [he, if_true]
-          by_cases hk : p.KeySafe S
-          · simp only [if_pos hk]
-            exact Stable.bind (Stable.withMsg (solveTyF_stable _ _ _) _) (fun _ => Stable.const _)
-          · simp only [if_neg hk]; exact Stable.const _
+          exact Stable.bind (Stable.withMsg (solveTyF_stable _ _ _) _) (fun _ => Stable.const _)
         · simp only [he, if_false]; exact Stable.const _
     | found τ => exact Stable.const _
     | absent => exact Stable.const _
@@ -474,10 +471,7 @@ theorem finalizeF_settles {S : SolverState B} (hc : S.sol.Clean) (p : Parked B) 
       | blocked α =>
           by_cases he : α = p.blocker
           · simp only [he, if_true]
-            by_cases hk : p.KeySafe S
-            · simp only [if_pos hk]
-              exact Stable.bind (Stable.withMsg (solveTyF_stable _ _ _) _) (fun _ => Stable.const _)
-            · simp only [if_neg hk]; exact Stable.const _
+            exact Stable.bind (Stable.withMsg (solveTyF_stable _ _ _) _) (fun _ => Stable.const _)
           · simp only [he, if_false]; exact Stable.const _
       | found τ => exact Stable.const _
       | absent => exact Stable.const _
@@ -485,12 +479,9 @@ theorem finalizeF_settles {S : SolverState B} (hc : S.sol.Clean) (p : Parked B) 
       | blocked α =>
           by_cases he : α = p.blocker
           · simp only [he, if_true]
-            by_cases hk : p.KeySafe S
-            · simp only [if_pos hk]
-              exact Settles.bind (Stable.withMsg (solveTyF_stable _ _ _) _)
-                (Settles.withMsg (solveTyF_settles _ _ _) _) (fun _ => Stable.const _)
-                (fun _ _ _ => Settles.pure _)
-            · simp only [if_neg hk]; exact Settles.fail _
+            exact Settles.bind (Stable.withMsg (solveTyF_stable _ _ _) _)
+              (Settles.withMsg (solveTyF_settles _ _ _) _) (fun _ => Stable.const _)
+              (fun _ _ _ => Settles.pure _)
           · simp only [he, if_false]; exact Settles.fail _
       | found τ => exact Settles.fail _
       | absent => exact Settles.fail _
@@ -503,7 +494,7 @@ theorem materializeF_stable (S : SolverState B) (p : Parked B) :
   by_cases hc : p ∈ S.parked ∧ (p.stump.res.applySubst S.subst).isSpent = true
   · simp only [if_pos hc]
     cases hl : p.stump.label.applySubst S.subst with
-    | lab l =>
+    | lit l =>
         simp only
         refine Stable.bind (lookupQF_stable _ _) (fun r => ?_)
         cases r with
@@ -522,7 +513,7 @@ theorem materializeF_settles {S : SolverState B} (hcl : S.sol.Clean) (p : Parked
   by_cases hc : p ∈ S.parked ∧ (p.stump.res.applySubst S.subst).isSpent = true
   · simp only [if_pos hc]
     cases hl : p.stump.label.applySubst S.subst with
-    | lab l =>
+    | lit l =>
         simp only
         refine Settles.bind (lookupQF_stable _ _) (lookupQF_settles _ _)
           (fun r => ?_) (fun r _ _ => ?_)
@@ -650,7 +641,8 @@ theorem inferF_stable (constTy : C → B) :
       refine Stable.bind (inferF_stable constTy _ _ e₁) (fun r₁ =>
         Stable.bind (solveTySatF_stable _ _ _) (fun S₂ =>
           Stable.bind (inferF_stable constTy _ _ e₂) (fun r₂ =>
-            Stable.bind (lookupQF_stable _ _) (fun o => ?_))))
+            Stable.bind (solveTySatF_stable _ _ _) (fun S₄ =>
+              Stable.bind (lookupQF_stable _ _) (fun o => ?_)))))
       cases o with
       | found τ => exact Stable.const _
       | absent => exact Stable.const _
@@ -760,7 +752,8 @@ theorem inferF_settles (constTy : C → B) :
       refine Settles.bind (inferF_stable constTy _ _ e₁) (inferF_settles constTy _ _ e₁ hc)
         (fun r₁ => Stable.bind (solveTySatF_stable _ _ _) (fun S₂ =>
           Stable.bind (inferF_stable constTy _ _ e₂) (fun r₂ =>
-            Stable.bind (lookupQF_stable _ _) (fun o => ?_))))
+            Stable.bind (solveTySatF_stable _ _ _) (fun S₄ =>
+              Stable.bind (lookupQF_stable _ _) (fun o => ?_)))))
         (fun r₁ _ h₁ => ?_)
       · cases o with
         | found τ => exact Stable.const _
@@ -770,19 +763,28 @@ theorem inferF_settles (constTy : C → B) :
       refine Settles.bind (solveTySatF_stable _ _ _)
         (solveTySatF_settles (S := (r₁.2.draw .row).2) c₁ _ _)
         (fun S₂ => Stable.bind (inferF_stable constTy _ _ e₂) (fun r₂ =>
-          Stable.bind (lookupQF_stable _ _) (fun o => ?_))) (fun S₂ _ h₂ => ?_)
+          Stable.bind (solveTySatF_stable _ _ _) (fun S₄ =>
+            Stable.bind (lookupQF_stable _ _) (fun o => ?_)))) (fun S₂ _ h₂ => ?_)
       · cases o with
         | found τ => exact Stable.const _
         | absent => exact Stable.const _
         | blocked β => exact Stable.const _
       have c₂ : S₂.sol.Clean := (solveTySatF_sound h₂).clean c₁
       refine Settles.bind (inferF_stable constTy _ _ e₂) (inferF_settles constTy _ _ e₂ c₂)
-        (fun r₂ => Stable.bind (lookupQF_stable _ _) (fun o => ?_)) (fun r₂ _ h₃ => ?_)
+        (fun r₂ => Stable.bind (solveTySatF_stable _ _ _) (fun S₄ =>
+          Stable.bind (lookupQF_stable _ _) (fun o => ?_))) (fun r₂ _ h₃ => ?_)
       · cases o with
         | found τ => exact Stable.const _
         | absent => exact Stable.const _
         | blocked β => exact Stable.const _
       have c₃ : r₂.2.sol.Clean := Infer.clean (inferF_sound h₃) c₂
+      refine Settles.bind (solveTySatF_stable _ _ _)
+        (solveTySatF_settles (S := (r₂.2.draw .lab).2) c₃ _ _)
+        (fun S₄ => Stable.bind (lookupQF_stable _ _) (fun o => ?_)) (fun S₄ _ _ => ?_)
+      · cases o with
+        | found τ => exact Stable.const _
+        | absent => exact Stable.const _
+        | blocked β => exact Stable.const _
       refine Settles.bind (lookupQF_stable _ _)
         (lookupQF_settles _ _)
         (fun o => ?_) (fun o _ _ => ?_)

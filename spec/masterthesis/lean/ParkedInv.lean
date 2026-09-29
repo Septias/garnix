@@ -161,36 +161,45 @@ theorem Infer.keeps {C : Type} {constTy : C → B} :
   | _, _, _, _, _, .selUnk (S₂' := S₂') (l := l) (r := r) (α := α) (δ := δ) h₁ hd hs _ hd₂ => by
       obtain ⟨ka, ma, -⟩ := draw_keeps hd
       obtain ⟨kb, mb, -⟩ := draw_keeps hd₂
-      have kp : SolverState.KeepsS S₂' (S₂'.park ⟨α, ⟨Row.var r, .lab l, .var δ⟩⟩) :=
+      have kp : SolverState.KeepsS S₂' (S₂'.park ⟨α, ⟨Row.var r, .lit l, .var δ⟩⟩) :=
         SolverState.KeepsS.of_sub (fun q hq => List.mem_cons_of_mem _ hq)
       have mp := SolverState.SatMono.of_sol_eq
-        (S := S₂'.park ⟨α, ⟨Row.var r, .lab l, .var δ⟩⟩) (S' := S₂') rfl
+        (S := S₂'.park ⟨α, ⟨Row.var r, .lit l, .var δ⟩⟩) (S' := S₂') rfl
       exact (Infer.keeps h₁).trans (ka.trans (hs.keeps.trans (kb.trans kp mp) (mb.trans mp))
         (hs.satMono.trans (mb.trans mp))) (ma.trans (hs.satMono.trans (mb.trans mp)))
   | _, _, _, _, _, .lab => .refl _
-  | _, _, _, _, _, .selDyn h₁ hd hs h₂ _ => by
+  | _, _, _, _, _, .selDyn h₁ hd hs h₂ hdk hsk _ => by
       obtain ⟨ka, ma, -⟩ := draw_keeps hd
-      have mt := hs.satMono.trans (Infer.sat_mono h₂)
-      exact (Infer.keeps h₁).trans (ka.trans (hs.keeps.trans (Infer.keeps h₂)
-        (Infer.sat_mono h₂)) mt) (ma.trans mt)
-  | _, _, _, _, _, .selDynAbs h₁ hd hs h₂ _ => by
+      obtain ⟨kc, mc, -⟩ := draw_keeps hdk
+      have mk := mc.trans hsk.satMono
+      have m₂ := (Infer.sat_mono h₂).trans mk
+      exact (Infer.keeps h₁).trans (ka.trans (hs.keeps.trans ((Infer.keeps h₂).trans
+        (kc.trans hsk.keeps hsk.satMono) mk) m₂) (hs.satMono.trans m₂))
+        (ma.trans (hs.satMono.trans m₂))
+  | _, _, _, _, _, .selDynAbs h₁ hd hs h₂ hdk hsk _ => by
       obtain ⟨ka, ma, -⟩ := draw_keeps hd
-      have mt := hs.satMono.trans (Infer.sat_mono h₂)
-      have r := (Infer.keeps h₁).trans (ka.trans (hs.keeps.trans (Infer.keeps h₂)
-        (Infer.sat_mono h₂)) mt) (ma.trans mt)
+      obtain ⟨kc, mc, -⟩ := draw_keeps hdk
+      have mk := mc.trans hsk.satMono
+      have m₂ := (Infer.sat_mono h₂).trans mk
+      have r := (Infer.keeps h₁).trans (ka.trans (hs.keeps.trans ((Infer.keeps h₂).trans
+        (kc.trans hsk.keeps hsk.satMono) mk) m₂) (hs.satMono.trans m₂))
+        (ma.trans (hs.satMono.trans m₂))
       exact r
-  | _, _, _, _, _, .selDynUnk (S₃' := S₃') (τ₂ := τ₂) (r := r) (α := α) (δ := δ)
-      h₁ hd hs h₂ _ hd₂ => by
+  | _, _, _, _, _, .selDynUnk (S₄' := S₄') (r := r) (κ := κ) (α := α) (δ := δ)
+      h₁ hd hs h₂ hdk hsk _ hd₂ => by
       obtain ⟨ka, ma, -⟩ := draw_keeps hd
+      obtain ⟨kc, mc, -⟩ := draw_keeps hdk
       obtain ⟨kb, mb, -⟩ := draw_keeps hd₂
-      have kp : SolverState.KeepsS S₃' (S₃'.park ⟨α, ⟨Row.var r, τ₂, .var δ⟩⟩) :=
+      have kp : SolverState.KeepsS S₄' (S₄'.park ⟨α, ⟨Row.var r, .var κ, .var δ⟩⟩) :=
         SolverState.KeepsS.of_sub (fun q hq => List.mem_cons_of_mem _ hq)
       have mp := SolverState.SatMono.of_sol_eq
-        (S := S₃'.park ⟨α, ⟨Row.var r, τ₂, .var δ⟩⟩) (S' := S₃') rfl
-      have m₃ := (Infer.sat_mono h₂).trans (mb.trans mp)
+        (S := S₄'.park ⟨α, ⟨Row.var r, .var κ, .var δ⟩⟩) (S' := S₄') rfl
+      have mt := hsk.satMono.trans (mb.trans mp)
+      have mk := mc.trans mt
+      have m₂ := (Infer.sat_mono h₂).trans mk
       exact (Infer.keeps h₁).trans (ka.trans (hs.keeps.trans ((Infer.keeps h₂).trans
-        (kb.trans kp mp) (mb.trans mp)) m₃) (hs.satMono.trans m₃))
-        (ma.trans (hs.satMono.trans m₃))
+        (kc.trans (hsk.keeps.trans (kb.trans kp mp) (mb.trans mp)) mt) mk) m₂)
+        (hs.satMono.trans m₂)) (ma.trans (hs.satMono.trans m₂))
   | _, _, _, _, _, .rcd hb => InferRec.keeps hb
   | _, _, _, _, _, .letE (Δq := Δq) (Δγ := Δγ) h₁ _ hsplit _ _ _ hown _ _ _ _ h₂ => by
       have k₁ := Infer.keeps h₁

@@ -14,7 +14,7 @@ private def uB : Ty Unit := .base ()
 -- U-ε.
 -- ⊢  unifyRowM ε ε  =  success ∅
 theorem unify_empty :
-    unifyRowM (B := Unit) 20 .empty .empty = .success ⟨[], []⟩ ⟨1⟩ := rfl
+    unifyRowM (B := Unit) 20 .empty .empty = .success ⟨[], [], []⟩ ⟨1⟩ := rfl
 
 -- P&X's shared-tail pitfall (l₁: 𝓫 | α) ≐ᵣ (l₂: 𝓫 | α): U-var-refl
 -- right-cancels α, then U-clash — matches shared_tail_no_unifier.
@@ -30,7 +30,7 @@ theorem unify_shared_tail :
 -- ⊢  unifyRowM (l:𝓫) (a | l:𝓫)  =  success [a ≔ ε]
 theorem unify_lutail :
     unifyRowM (B := Unit) 20 (.sing "l" uB) (.cat (.var "a") (.sing "l" uB)) =
-      .success ⟨[], [("a", .empty)]⟩ ⟨2⟩ := rfl
+      .success ⟨[], [("a", .empty)], []⟩ ⟨2⟩ := rfl
 
 -- Wand's ambiguity (β | α) ≐ᵣ (l: 𝓫): STUCK — solvable but no mgu
 -- (wand_unifiable, wand_no_mgu). Solving equations cannot and does not shrink
@@ -49,7 +49,7 @@ theorem eq_rescued_solved :
     unifyRowM (B := Unit) 20
       (.cat (.sing "k" (.rcd (.var "b"))) (.cat (.var "b") (.var "a")))
       (.cat (.sing "k" (.rcd (.sing "l" uB))) (.sing "l" uB))
-      = .success ⟨[], [("b", .cat (.sing "l" uB) .empty), ("a", .empty)]⟩ ⟨2⟩ := rfl
+      = .success ⟨[], [("b", .cat (.sing "l" uB) .empty), ("a", .empty)], []⟩ ⟨2⟩ := rfl
 
 -- (α | l: 𝓫 | β) ≐ᵣ (l: 𝓫): U-ground pairs the l-fields
 -- (counting rules the vars out), then U-ε-var forces α ≔ ε, β ≔ ε.
@@ -57,7 +57,7 @@ theorem eq_rescued_solved :
 theorem unify_ground_collapse :
     unifyRowM (B := Unit) 20 (.cat (.var "a") (.cat (.sing "l" uB) (.var "b")))
                              (.sing "l" uB) =
-      .success ⟨[], [("a", .empty), ("b", .empty)]⟩ ⟨2⟩ := rfl
+      .success ⟨[], [("a", .empty), ("b", .empty)], []⟩ ⟨2⟩ := rfl
 
 -- (β | l: 𝓫 | α) ≐ᵣ (l′: 𝓫), l ≠ l′: U-clash, NOT stuck — the projection
 -- check is global, a window-only rule would misfile this.
@@ -84,7 +84,7 @@ theorem unify_occurs :
 -- ⊢  unifyRowM a b  =  success [a ≔ (b | ε)]
 theorem unify_var_var :
     unifyRowM (B := Unit) 20 (.var "a") (.var "b") =
-      .success ⟨[], [("a", .cat (.var "b") .empty)]⟩ ⟨2⟩ := rfl
+      .success ⟨[], [("a", .cat (.var "b") .empty)], []⟩ ⟨2⟩ := rfl
 
 -- The ambiguous mirror (α | l: 𝓫) ≐ᵣ (l: 𝓫 | β): both windows closed by a
 -- var, both sides have vars — correctly stuck (Levi splits two ways).
@@ -114,18 +114,18 @@ theorem unify_shift_stuck_mirror :
 -- ⊢  unifyRowM (ε | l:𝓫) (l:𝓫 | ε)  =  success ∅
 theorem unify_shift_inst_zero :
     unifyRowM (B := Unit) 20 (.cat .empty (.sing "l" uB))
-                             (.cat (.sing "l" uB) .empty) = .success ⟨[], []⟩ ⟨1⟩ := rfl
+                             (.cat (.sing "l" uB) .empty) = .success ⟨[], [], []⟩ ⟨1⟩ := rfl
 
 -- ⊢  unifyRowM (l:𝓫 | l:𝓫) (l:𝓫 | l:𝓫)  =  success ∅
 theorem unify_shift_inst_one :
     unifyRowM (B := Unit) 20 (.cat (.sing "l" uB) (.sing "l" uB))
                              (.cat (.sing "l" uB) (.sing "l" uB))
-      = .success ⟨[], []⟩ ⟨1⟩ := rfl
+      = .success ⟨[], [], []⟩ ⟨1⟩ := rfl
 
 -- The mutual driver applies a solution to the residual spine at every
 -- eq-emitting arm, so sApplySubst must REDUCE, not just be provably correct —
 -- that is what keeps the regressions above `rfl`.
-private def uS : Sol Unit := ⟨[("t", uB)], [("a", .sing "l" uB)]⟩
+private def uS : Sol Unit := ⟨[("t", uB)], [("a", .sing "l" uB)], []⟩
 
 -- ⊢  (l: t | a | m: 𝓫)[uS]  =  l: 𝓫 | l: 𝓫 | m: 𝓫      (var expands to a spine)
 theorem sApplySubst_computes :
@@ -140,13 +140,13 @@ theorem toSubst_free : uS.toSubst.row "z" = .var "z" := rfl
 -- ⊢  success ⟨[t ≔ 𝓫], []⟩ >>= (fun _ => success ⟨[], [a ≔ ε]⟩)
 --      =  success ⟨[t ≔ 𝓫], [a ≔ ε]⟩
 theorem seq_composes :
-    (UResM.success (B := Unit) ⟨[("t", uB)], []⟩ ⟨7⟩).seq
-        (fun _ S => .success ⟨[], [("a", .empty)]⟩ S) =
-      .success ⟨[("t", uB)], [("a", .empty)]⟩ ⟨7⟩ := rfl
+    (UResM.success (B := Unit) ⟨[("t", uB)], [], []⟩ ⟨7⟩).seq
+        (fun _ S => .success ⟨[], [("a", .empty)], []⟩ S) =
+      .success ⟨[("t", uB)], [("a", .empty)], []⟩ ⟨7⟩ := rfl
 
 -- ⊢  a stuck second stage is the verdict of the whole
 theorem seq_propagates :
-    (UResM.success (B := Unit) ⟨[("t", uB)], []⟩ ⟨7⟩).seq (fun _ _ => .stuck) = .stuck := rfl
+    (UResM.success (B := Unit) ⟨[("t", uB)], [], []⟩ ⟨7⟩).seq (fun _ _ => .stuck) = .stuck := rfl
 
 theorem fresh_draws :
     ((Supply.mk 2).fresh.1, (Supply.mk 2).fresh.2.fresh.1) = ("aa", "aaa") := rfl
@@ -220,11 +220,11 @@ theorem vacuous_success_spine_cycle :
 --    (y ≔ 𝓫, not y ≔ x: the first solution is APPLIED to the second component)
 theorem tyM_fn_solve_and_apply :
     unifyTyM (B := Unit) 5 (.fn (.var "x") (.var "x")) (.fn uB (.var "y")) =
-      .success ⟨[("x", uB), ("y", uB)], []⟩ ⟨2⟩ := rfl
+      .success ⟨[("x", uB), ("y", uB)], [], []⟩ ⟨2⟩ := rfl
 
 -- ★ is RIGID: it unifies with itself and nothing else.
 -- ⊢  ★ ≐ ★  =  success ∅      ⊢  ★ ≐ 𝓫  =  clash
-theorem tyM_unk_refl : unifyTyM (B := Unit) 5 .unk .unk = .success ⟨[], []⟩ ⟨1⟩ := rfl
+theorem tyM_unk_refl : unifyTyM (B := Unit) 5 .unk .unk = .success ⟨[], [], []⟩ ⟨1⟩ := rfl
 theorem tyM_unk_rigid : unifyTyM (B := Unit) 5 .unk uB = .clash := rfl
 
 -- The type occurs guard is SORTED. `x ≐ {x}` binds x at the TYPE sort while the
@@ -235,20 +235,20 @@ theorem tyM_unk_rigid : unifyTyM (B := Unit) 5 .unk uB = .clash := rfl
 -- ⊢  x ≐ {x}  =  success (x ≔ {x})
 theorem tyM_cross_sort_solves :
     unifyTyM (B := Unit) 5 (.var "x") (.rcd (.var "x")) =
-      .success ⟨[("x", .rcd (.var "x"))], []⟩ ⟨2⟩ := rfl
+      .success ⟨[("x", .rcd (.var "x"))], [], []⟩ ⟨2⟩ := rfl
 
 -- θ.ty x = {ε}, θ.row x = ε — the unifier the old comment named and the guard
 -- denied. It unifies the problem…
 private def crossSortSub : TySubst Unit :=
-  ⟨fun _ => .rcd .empty, fun _ => .empty⟩
+  ⟨fun _ => .rcd .empty, fun _ => .empty, fun x => .var x⟩
 
 theorem tyM_cross_sort_unifier :
     TyUnifies crossSortSub (.var "x") (.rcd (.var "x")) := TyEquiv.refl _
 
 -- …and it MEETS the emitted solution, so success was the right verdict.
 theorem tyM_cross_sort_sat :
-    Sol.Sat crossSortSub ⟨[("x", .rcd (.var "x"))], []⟩ := by
-  refine ⟨fun p hp => ?_, fun _ hp => nomatch hp⟩
+    Sol.Sat crossSortSub ⟨[("x", .rcd (.var "x"))], [], []⟩ := by
+  refine ⟨fun p hp => ?_, fun _ hp => (nomatch hp), fun _ hp => (nomatch hp)⟩
   obtain rfl := List.mem_singleton.mp hp
   exact TyEquiv.refl _
 
@@ -278,7 +278,7 @@ theorem outOfFuel_is_separate :
 theorem outOfFuel_is_only_the_budget :
     unifyRowM (B := Unit) 3 (.sing "k" (.rcd (.sing "l" uB)))
                             (.sing "k" (.rcd (.sing "l" (.var "x")))) =
-      .success ⟨[("x", uB)], []⟩ ⟨2⟩ := rfl
+      .success ⟨[("x", uB)], [], []⟩ ⟨2⟩ := rfl
 
 
 -- ## Nix-shaped equations: WHERE does the U-expand removal bite?

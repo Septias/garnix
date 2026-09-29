@@ -47,7 +47,8 @@ through membership only. `kinded` is `Assigns` read as a set condition. Results,
 rows and keys are read at S₁. -/
 structure LetAdmissible (Γ : QCtx B) (S S₁ : SolverState B) (ᾱ : List TyVar) : Prop where
   kinded   : ∀ α ∈ ᾱ, α ∈ KEnv.dom S₁.kinds
-  gfresh   : ∀ α ∈ ᾱ, ∀ β ∈ Γ.ftv, α ∉ (S₁.subst.ty β).ftv ∧ α ∉ (S₁.subst.row β).ftv
+  gfresh   : ∀ α ∈ ᾱ, ∀ β ∈ Γ.ftv, α ∉ (S₁.subst.ty β).ftv ∧ α ∉ (S₁.subst.row β).ftv ∧
+               α ∉ (S₁.subst.lab β).ftv
   own      : ∀ p ∈ S₁.parked, p.blocker ∈ ᾱ → ∀ q ∈ S.parked, p.stump ≠ q.stump
   res      : ∀ p ∈ S₁.parked, p.blocker ∈ ᾱ →
                (∀ δ ∈ (p.stump.res.applySubst S₁.subst).ftv, δ ∈ ᾱ) ∧
@@ -250,7 +251,8 @@ theorem LetAdmissible.letE [DecidableEq B] {C : Type} {constTy : C → B} {Γ : 
 single variable can make admissibility fail. -/
 def LetBad (Γ : QCtx B) (S S₁ : SolverState B) (ᾱ : List TyVar) (α : TyVar) : Prop :=
   α ∉ KEnv.dom S₁.kinds ∨
-  (∃ β ∈ Γ.ftv, α ∈ (S₁.subst.ty β).ftv ∨ α ∈ (S₁.subst.row β).ftv) ∨
+  (∃ β ∈ Γ.ftv, α ∈ (S₁.subst.ty β).ftv ∨ α ∈ (S₁.subst.row β).ftv ∨
+    α ∈ (S₁.subst.lab β).ftv) ∨
   α ∈ S₁.sol.dom ∨
   -- a stump blocked on α answers with no linear pattern, or outside ᾱ, or was
   -- parked before the let
@@ -298,9 +300,10 @@ theorem LetBad.excluded {Γ : QCtx B} {S S₁ : SolverState B} {ᾱ ᾱ' : List 
     ⟨q, hq, rfl, p, hp, δ, hδ, h⟩ | ⟨q, hq, rfl, p, hp, hne, δ, hδp, hδq⟩ |
     ⟨p, hp, rfl, hsp, h⟩ | ⟨q, hq, rfl, hqs, p, hp, hps, hm⟩
   · exact h (hA.kinded _ hα)
-  · rcases h with h | h
+  · rcases h with h | h | h
     · exact (hA.gfresh _ hα β hβ).1 h
-    · exact (hA.gfresh _ hα β hβ).2 h
+    · exact (hA.gfresh _ hα β hβ).2.1 h
+    · exact (hA.gfresh _ hα β hβ).2.2 h
   · exact hA.unsolved _ hα h
   · obtain ⟨hs, hpat, hnd⟩ := hA.res p hp hα
     rcases h with h | h | ⟨δ, hδ, hn⟩ | ⟨q, hq, he⟩
@@ -347,9 +350,10 @@ theorem LetAdmissible.of_no_bad {Γ : QCtx B} {S S₁ : SolverState B} {ᾱ : Li
     fun α hα p hp hb => ?_, fun α hα hd => ?_,
     fun p hp _ q hq hqb δ hδ => ⟨fun hm => ?_, fun hm => ?_⟩⟩
   · exact Classical.byContradiction fun hn => h α hα (.inl hn)
-  · refine ⟨fun hm => ?_, fun hm => ?_⟩
+  · refine ⟨fun hm => ?_, fun hm => ?_, fun hm => ?_⟩
     · exact h α hα (.inr (.inl ⟨β, hβ, .inl hm⟩))
-    · exact h α hα (.inr (.inl ⟨β, hβ, .inr hm⟩))
+    · exact h α hα (.inr (.inl ⟨β, hβ, .inr (.inl hm)⟩))
+    · exact h α hα (.inr (.inl ⟨β, hβ, .inr (.inr hm)⟩))
   · exact b4 p hp hb (.inr (.inr (.inr ⟨q, hq, he⟩)))
   · refine ⟨fun δ hδ => Classical.byContradiction fun hn =>
         b4 p hp hb (.inr (.inr (.inl ⟨δ, hδ, hn⟩))), ?_,

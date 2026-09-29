@@ -34,10 +34,10 @@ private abbrev n (k : Nat) : TyVar := natName k
 
 -- 1 (x's type) is SOLVED in S₁, so it is not generalized
 private def nrSc : QScheme Unit :=
-  ⟨[n 2, n 3], [⟨.var (n 2), .lab "l", .var (n 3)⟩], .fn (.rcd (.var (n 2))) (.var (n 3))⟩
+  ⟨[n 2, n 3], [⟨.var (n 2), .lit "l", .var (n 3)⟩], .fn (.rcd (.var (n 2))) (.var (n 3))⟩
 
 private def nrS1 : SolverState Unit :=
-  ⟨⟨[(n 1, .rcd (.var (n 2)))], []⟩, [⟨n 2, ⟨.var (n 2), .lab "l", .var (n 3)⟩⟩], [], ⟨4⟩,
+  ⟨⟨[(n 1, .rcd (.var (n 2)))], [], []⟩, [⟨n 2, ⟨.var (n 2), .lit "l", .var (n 3)⟩⟩], [], ⟨4⟩,
    [(n 3, .ty), (n 2, .row), (n 1, .ty)]⟩
 
 private def nrB0 : SolverState Unit := { nrS1 with parked := [] }
@@ -50,21 +50,22 @@ private def nrF (α : TyVar) : TyVar :=
 
 private def nrθ : TySubst Unit :=
   ⟨fun α => if α ∈ [n 2, n 3] then .var (nrF α) else .var α,
+   fun α => if α ∈ [n 2, n 3] then .var (nrF α) else .var α,
    fun α => if α ∈ [n 2, n 3] then .var (nrF α) else .var α⟩
 
-private def nrP : Parked Unit := ⟨n 8, ⟨.var (n 8), .lab "l", .var (n 6)⟩⟩
+private def nrP : Parked Unit := ⟨n 8, ⟨.var (n 8), .lit "l", .var (n 6)⟩⟩
 private def nrSa : SolverState Unit := nrB0.park nrP
 private def nrSb : SolverState Unit := (nrSa.draw .ty).2
 private def nrSc' : SolverState Unit := (nrSb.draw .row).2
-private def nrSol : Sol Unit := ⟨[(n 4, .rcd (.var (n 5)))], []⟩
+private def nrSol : Sol Unit := ⟨[(n 4, .rcd (.var (n 5)))], [], []⟩
 private def nrSd : SolverState Unit := nrSc'.extend nrSol ⟨6⟩
 private def nrSe : SolverState Unit := (nrSd.draw .ty).2
-private def nrQ : Parked Unit := ⟨n 5, ⟨.var (n 5), .lab "m", .var (n 6)⟩⟩
+private def nrQ : Parked Unit := ⟨n 5, ⟨.var (n 5), .lit "m", .var (n 6)⟩⟩
 
 /-- the final state of the run. -/
 def nrFinal : SolverState Unit := nrSe.park nrQ
 
-private def nrId : TySubst Unit := ⟨fun x => .var x, fun x => .var x⟩
+private def nrId : TySubst Unit := ⟨fun x => .var x, fun x => .var x, fun x => .var x⟩
 
 private def nrE : Expr Unit :=
   .letE "g" (selEx Unit)
@@ -102,7 +103,9 @@ private theorem nr_var_g (hu : UnguardedVar Unit Unit (fun _ => ())) :
     Infer (B := Unit) (C := Unit) (fun _ => ()) nrΓg nrB0 (.var "g")
       (.fn (.rcd (.var (n 8))) (.var (n 6))) nrSa := by
   have hren : IsRenaming nrθ nrSc.vars nrF := by
-    refine ⟨⟨fun α h => ?_, fun α h => ?_⟩, fun α h => ?_⟩
+    refine ⟨⟨fun α h => ?_, fun α h => ?_, fun α h => ?_⟩, fun α h => ?_⟩
+    · have h' : α ∉ [n 2, n 3] := h
+      simp only [nrθ, if_neg h']
     · have h' : α ∉ [n 2, n 3] := h
       simp only [nrθ, if_neg h']
     · have h' : α ∉ [n 2, n 3] := h
@@ -123,7 +126,7 @@ private theorem nr_var_g (hu : UnguardedVar Unit Unit (fun _ => ())) :
       simp only [nrSc, List.mem_cons, List.not_mem_nil, or_false] at hα
       rcases hα with rfl | rfl <;> decide
   have hinst : InstStumps nrθ nrF nrSc.constraints [nrP] := by
-    show [nrP.stump] = [⟨(Row.var (n 2)).applySubst nrθ, (Ty.lab "l").applySubst nrθ, (Ty.var (n 3)).applySubst nrθ⟩]
+    show [nrP.stump] = [⟨(Row.var (n 2)).applySubst nrθ, (Key.lit "l").applySubst nrθ, (Ty.var (n 3)).applySubst nrθ⟩]
     rfl
   have hbody : nrSc.body.applySubst nrθ = .fn (.rcd (.var (n 8))) (.var (n 6)) := by
     rfl
@@ -186,7 +189,7 @@ different rows and labels. -/
 -- (a property of the witness state alone, so it survives the fix unchanged)
 theorem nameReuse_shared_res :
     nrFinal.parked.map (·.stump.res) = [.var (n 6), .var (n 6)] ∧
-      nrFinal.parked.map (·.stump.label) = [.lab "m", .lab "l"] :=
+      nrFinal.parked.map (·.stump.label) = [.lit "m", .lit "l"] :=
   ⟨rfl, rfl⟩
 
 /-- ⊢  **settling either one retired both** while K-hit, K-⊥, K-repark and F-★

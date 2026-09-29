@@ -44,7 +44,7 @@ theorem SolveTySat.clean {S S' : SolverState B} {τ τ' : Ty B} :
 
 theorem Finalize.clean {S S' : SolverState B} {p : Parked B} :
     Finalize S p S' → S.sol.Clean → S'.sol.Clean
-  | .star _ _ _ hs, hc => hs.clean hc
+  | .star _ _ hs, hc => hs.clean hc
 
 theorem Finalizes.clean {S S' : SolverState B} {ps : List (Parked B)} :
     Finalizes S ps S' → S.sol.Clean → S'.sol.Clean
@@ -77,13 +77,15 @@ theorem Infer.clean {C : Type} {constTy : C → B} :
   | _, _, _, _, _, .selUnk h₁ hd hs _ hd₂, hc =>
       (draw_sol' hd₂) ▸ hs.clean ((draw_sol' hd) ▸ Infer.clean h₁ hc)
   | _, _, _, _, _, .lab, hc => hc
-  | _, _, _, _, _, .selDyn h₁ hd hs h₂ _, hc =>
-      Infer.clean h₂ (hs.clean ((draw_sol' hd) ▸ Infer.clean h₁ hc))
-  | _, _, _, _, _, .selDynAbs h₁ hd hs h₂ _, hc => by
-      have := Infer.clean h₂ (hs.clean ((draw_sol' hd) ▸ Infer.clean h₁ hc))
+  | _, _, _, _, _, .selDyn h₁ hd hs h₂ hdk hsk _, hc =>
+      hsk.clean ((draw_sol' hdk) ▸ Infer.clean h₂ (hs.clean ((draw_sol' hd) ▸ Infer.clean h₁ hc)))
+  | _, _, _, _, _, .selDynAbs h₁ hd hs h₂ hdk hsk _, hc => by
+      have := hsk.clean ((draw_sol' hdk) ▸
+        Infer.clean h₂ (hs.clean ((draw_sol' hd) ▸ Infer.clean h₁ hc)))
       exact this
-  | _, _, _, _, _, .selDynUnk h₁ hd hs h₂ _ hd₂, hc =>
-      (draw_sol' hd₂) ▸ Infer.clean h₂ (hs.clean ((draw_sol' hd) ▸ Infer.clean h₁ hc))
+  | _, _, _, _, _, .selDynUnk h₁ hd hs h₂ hdk hsk _ hd₂, hc =>
+      (draw_sol' hd₂) ▸ hsk.clean ((draw_sol' hdk) ▸
+        Infer.clean h₂ (hs.clean ((draw_sol' hd) ▸ Infer.clean h₁ hc)))
   | _, _, _, _, _, .rcd hb, hc => InferRec.clean hb hc
   | _, _, _, _, _, .letE h₁ _ _ _ _ _ _ _ _ _ _ h₂, hc => by
       have := Infer.clean h₁ hc
@@ -104,24 +106,27 @@ end
 def SolverState.Ext (S S' : SolverState B) : Prop :=
   ∃ r : TySubst B, ∀ α,
     S'.subst.ty α = (S.subst.ty α).applySubst r ∧
-    S'.subst.row α = (S.subst.row α).applySubst r
+    S'.subst.row α = (S.subst.row α).applySubst r ∧
+    S'.subst.lab α = (S.subst.lab α).applySubst r
 
 theorem SolverState.Ext.refl (S : SolverState B) : S.Ext S :=
-  ⟨TySubst.id B, fun _ => ⟨(Ty.applySubst_id _).symm, (Row.applySubst_id _).symm⟩⟩
+  ⟨TySubst.id B, fun _ => ⟨(Ty.applySubst_id _).symm, (Row.applySubst_id _).symm,
+    (Key.applySubst_id _).symm⟩⟩
 
 theorem SolverState.Ext.trans {S₁ S₂ S₃ : SolverState B} :
     S₁.Ext S₂ → S₂.Ext S₃ → S₁.Ext S₃
   | ⟨r₁, h₁⟩, ⟨r₂, h₂⟩ => ⟨r₂.comp r₁, fun α => by
-      refine ⟨?_, ?_⟩
+      refine ⟨?_, ?_, ?_⟩
       · rw [(h₂ α).1, (h₁ α).1, Ty.applySubst_applySubst]
-      · rw [(h₂ α).2, (h₁ α).2, Row.applySubst_applySubst]⟩
+      · rw [(h₂ α).2.1, (h₁ α).2.1, Row.applySubst_applySubst]
+      · rw [(h₂ α).2.2, (h₁ α).2.2, Key.applySubst_applySubst]⟩
 
 theorem SolverState.Ext.of_sol_eq {S S' : SolverState B} (h : S'.sol = S.sol) :
     S.Ext S' := by
   refine ⟨TySubst.id B, fun α => ?_⟩
-  show (S'.sol.toSubst.ty α) = _ ∧ (S'.sol.toSubst.row α) = _
+  show (S'.sol.toSubst.ty α) = _ ∧ (S'.sol.toSubst.row α) = _ ∧ (S'.sol.toSubst.lab α) = _
   rw [h]
-  exact ⟨(Ty.applySubst_id _).symm, (Row.applySubst_id _).symm⟩
+  exact ⟨(Ty.applySubst_id _).symm, (Row.applySubst_id _).symm, (Key.applySubst_id _).symm⟩
 
 private theorem tyLookup_comp (s : Sol B) (α : TyVar) :
     (l : List (TyVar × Ty B)) →
@@ -145,6 +150,17 @@ private theorem rowLookup_comp (s : Sol B) (α : TyVar) :
       · simp only [List.map_cons, List.cons_append, rowLookup, if_neg h]
         exact rowLookup_comp s α t
 
+private theorem labLookup_comp (s : Sol B) (α : TyVar) :
+    (l : List (TyVar × Key)) →
+    labLookup α (l.map (fun p => (p.1, p.2.applySubst s.toSubst)) ++ s.lab)
+      = (labLookup α l).applySubst s.toSubst
+  | [] => rfl
+  | (β, k) :: t => by
+      by_cases h : β = α
+      · simp [labLookup, h]
+      · simp only [List.map_cons, List.cons_append, labLookup, if_neg h]
+        exact labLookup_comp s α t
+
 -- ⊢  ⟦S.extend s⟧ = ⟦s⟧ ∘ ⟦S⟧, pointwise
 theorem SolverState.extend_subst_ty (S : SolverState B) (s : Sol B) (Sup : Supply)
     (α : TyVar) : (S.extend s Sup).subst.ty α = (S.subst.ty α).applySubst s.toSubst :=
@@ -154,9 +170,14 @@ theorem SolverState.extend_subst_row (S : SolverState B) (s : Sol B) (Sup : Supp
     (α : TyVar) : (S.extend s Sup).subst.row α = (S.subst.row α).applySubst s.toSubst :=
   rowLookup_comp s α S.sol.row
 
+theorem SolverState.extend_subst_lab (S : SolverState B) (s : Sol B) (Sup : Supply)
+    (α : TyVar) : (S.extend s Sup).subst.lab α = (S.subst.lab α).applySubst s.toSubst :=
+  labLookup_comp s α S.sol.lab
+
 theorem SolverState.Ext.extend (S : SolverState B) (s : Sol B) (Sup : Supply) :
     S.Ext (S.extend s Sup) :=
-  ⟨s.toSubst, fun α => ⟨tyLookup_comp s α S.sol.ty, rowLookup_comp s α S.sol.row⟩⟩
+  ⟨s.toSubst, fun α => ⟨tyLookup_comp s α S.sol.ty, rowLookup_comp s α S.sol.row,
+    labLookup_comp s α S.sol.lab⟩⟩
 
 theorem SolveTy.ext {S S' : SolverState B} {τ τ' : Ty B} (h : SolveTy S τ τ' S') :
     S.Ext S' := by
@@ -212,14 +233,16 @@ theorem Infer.ext {C : Type} {constTy : C → B} :
       (Infer.ext h₁).trans ((draw_ext hd).trans (hs.ext.trans
         ((draw_ext hd₂).trans (.of_sol_eq rfl))))
   | _, _, _, _, _, .lab => .refl _
-  | _, _, _, _, _, .selDyn h₁ hd hs h₂ _ =>
-      (Infer.ext h₁).trans ((draw_ext hd).trans (hs.ext.trans (Infer.ext h₂)))
-  | _, _, _, _, _, .selDynAbs h₁ hd hs h₂ _ =>
+  | _, _, _, _, _, .selDyn h₁ hd hs h₂ hdk hsk _ =>
+      (Infer.ext h₁).trans ((draw_ext hd).trans (hs.ext.trans ((Infer.ext h₂).trans
+        ((draw_ext hdk).trans hsk.ext))))
+  | _, _, _, _, _, .selDynAbs h₁ hd hs h₂ hdk hsk _ =>
       (Infer.ext h₁).trans ((draw_ext hd).trans (hs.ext.trans
-        ((Infer.ext h₂).trans (.of_sol_eq rfl))))
-  | _, _, _, _, _, .selDynUnk h₁ hd hs h₂ _ hd₂ =>
+        ((Infer.ext h₂).trans ((draw_ext hdk).trans (hsk.ext.trans (.of_sol_eq rfl))))))
+  | _, _, _, _, _, .selDynUnk h₁ hd hs h₂ hdk hsk _ hd₂ =>
       (Infer.ext h₁).trans ((draw_ext hd).trans (hs.ext.trans
-        ((Infer.ext h₂).trans ((draw_ext hd₂).trans (.of_sol_eq rfl)))))
+        ((Infer.ext h₂).trans ((draw_ext hdk).trans (hsk.ext.trans
+          ((draw_ext hd₂).trans (.of_sol_eq rfl)))))))
   | _, _, _, _, _, .rcd hb => InferRec.ext hb
   | _, _, _, _, _, .letE (S₁ := S₁) (Δγ := Δγ) h₁ _ _ _ _ _ _ _ _ _ _ h₂ =>
       (Infer.ext h₁).trans ((SolverState.Ext.of_sol_eq (S := S₁)
@@ -238,14 +261,16 @@ end
 
 /-- σ ∘ ⟦S⟧ = σ, pointwise: σ has already done everything ⟦S⟧ does. -/
 def Absorbs (σ : TySubst B) (S : SolverState B) : Prop :=
-  ∀ α, (S.subst.ty α).applySubst σ = σ.ty α ∧ (S.subst.row α).applySubst σ = σ.row α
+  ∀ α, (S.subst.ty α).applySubst σ = σ.ty α ∧ (S.subst.row α).applySubst σ = σ.row α ∧
+    (S.subst.lab α).applySubst σ = σ.lab α
 
 -- ⊢  ⟦S⟧ is idempotent at a clean state
 theorem SolverState.idem {S : SolverState B} (hc : S.sol.Clean) (α : TyVar) :
     (S.subst.ty α).applySubst S.subst = S.subst.ty α ∧
-    (S.subst.row α).applySubst S.subst = S.subst.row α := by
+    (S.subst.row α).applySubst S.subst = S.subst.row α ∧
+    (S.subst.lab α).applySubst S.subst = S.subst.lab α := by
   have hcl := Sol.closes_toSubst_of_applied hc.applied
-  exact ⟨((hcl.1 α)).symm, ((hcl.2.1 α)).symm⟩
+  exact ⟨((hcl.1 α)).symm, ((hcl.2.1 α)).symm, (hcl.2.2.2.2.1 α).symm⟩
 
 -- ⊢  a clean state's own substitution absorbs it
 theorem Absorbs.self {S : SolverState B} (hc : S.sol.Clean) : Absorbs S.subst S :=
@@ -255,6 +280,11 @@ theorem Absorbs.ty {σ : TySubst B} {S : SolverState B} (h : Absorbs σ S) (τ :
     (τ.applySubst S.subst).applySubst σ = τ.applySubst σ := by
   rw [Ty.applySubst_applySubst]
   exact Ty.applySubst_congr τ (fun α _ => h α)
+
+theorem Absorbs.key {σ : TySubst B} {S : SolverState B} (h : Absorbs σ S) (k : Key) :
+    (k.applySubst S.subst).applySubst σ = k.applySubst σ := by
+  rw [Key.applySubst_applySubst]
+  exact Key.applySubst_congr k (fun α _ => (h α).2.2)
 
 theorem Absorbs.row {σ : TySubst B} {S : SolverState B} (h : Absorbs σ S) (ρ : Row B) :
     (ρ.applySubst S.subst).applySubst σ = ρ.applySubst σ := by
@@ -267,34 +297,43 @@ theorem Absorbs.back {σ : TySubst B} {S S' : SolverState B} (h : Absorbs σ S')
     (hx : S.Ext S') (hc : S.sol.Clean) : Absorbs σ S := by
   obtain ⟨r, hr⟩ := hx
   intro α
-  obtain ⟨hi₁, hi₂⟩ := SolverState.idem hc α
-  refine ⟨?_, ?_⟩
+  obtain ⟨hi₁, hi₂, hi₃⟩ := SolverState.idem hc α
+  refine ⟨?_, ?_, ?_⟩
   · -- (⟦S⟧α)[σ] = (⟦S⟧α)[⟦S′⟧][σ] = (⟦S⟧α)[⟦S⟧][r][σ] = (⟦S′⟧α)[σ] = σ α
     have e1 : (S.subst.ty α).applySubst S'.subst = S'.subst.ty α := by
       rw [(hr α).1, show (S.subst.ty α).applySubst S'.subst
           = (S.subst.ty α).applySubst (r.comp S.subst) from
-            Ty.applySubst_congr _ (fun β _ => ⟨(hr β).1, (hr β).2⟩),
+            Ty.applySubst_congr _ (fun β _ => ⟨(hr β).1, (hr β).2.1, (hr β).2.2⟩),
         ← Ty.applySubst_applySubst, hi₁]
     rw [← h.ty (S.subst.ty α), e1]; exact (h α).1
   · have e1 : (S.subst.row α).applySubst S'.subst = S'.subst.row α := by
-      rw [(hr α).2, show (S.subst.row α).applySubst S'.subst
+      rw [(hr α).2.1, show (S.subst.row α).applySubst S'.subst
           = (S.subst.row α).applySubst (r.comp S.subst) from
-            Row.applySubst_congr _ (fun β _ => ⟨(hr β).1, (hr β).2⟩),
+            Row.applySubst_congr _ (fun β _ => ⟨(hr β).1, (hr β).2.1, (hr β).2.2⟩),
         ← Row.applySubst_applySubst, hi₂]
-    rw [← h.row (S.subst.row α), e1]; exact (h α).2
+    rw [← h.row (S.subst.row α), e1]; exact (h α).2.1
+  · have e1 : (S.subst.lab α).applySubst S'.subst = S'.subst.lab α := by
+      rw [(hr α).2.2, show (S.subst.lab α).applySubst S'.subst
+          = (S.subst.lab α).applySubst (r.comp S.subst) from
+            Key.applySubst_congr _ (fun β _ => (hr β).2.2),
+        ← Key.applySubst_applySubst, hi₃]
+    rw [← h.key (S.subst.lab α), e1]; exact (h α).2.2
 
 /-- ⊢  absorbing a clean state means satisfying it. -/
 theorem Absorbs.sat {σ : TySubst B} {S : SolverState B} (h : Absorbs σ S)
     (hc : S.sol.Clean) : Sol.Sat σ S.sol := by
   have hs := hc.sat
-  refine ⟨fun p hp => ?_, fun p hp => ?_⟩
+  refine ⟨fun p hp => ?_, fun p hp => ?_, fun p hp => ?_⟩
   · have := TyEquiv.applySubst σ (hs.1 p hp)
     change TyEquiv ((S.subst.ty p.1).applySubst σ) ((p.2.applySubst S.subst).applySubst σ)
       at this
     rw [(h p.1).1, h.ty] at this; exact this
-  · have := RowEquiv.applySubst σ (hs.2 p hp)
+  · have := RowEquiv.applySubst σ (hs.2.1 p hp)
     change RowEquiv ((S.subst.row p.1).applySubst σ) ((p.2.applySubst S.subst).applySubst σ)
       at this
-    rw [(h p.1).2, h.row] at this; exact this
+    rw [(h p.1).2.1, h.row] at this; exact this
+  · have := congrArg (Key.applySubst σ) (hs.2.2 p hp)
+    change (S.subst.lab p.1).applySubst σ = (p.2.applySubst S.subst).applySubst σ at this
+    rw [(h p.1).2.2, h.key] at this; exact this
 
 end MinimalCalculus

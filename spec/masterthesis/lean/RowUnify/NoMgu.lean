@@ -214,13 +214,13 @@ theorem wand_no_mgu_count_on {B : Type} (b : B) (l : Label) :
   by_cases hα : sFieldCount l (θ.row "α").toSpine = 0
   · -- the field is in β (count β = 1); empty-β witness undercuts at "β"
     refine ⟨⟨fun x => .var x, fun x => if x = "β" then .empty
-              else if x = "α" then .sing l (.base b) else .var x, fun _l => .var _l⟩, "β", l, ?_,
+              else if x = "α" then .sing l (.base b) else .var x, fun x => .var x⟩, "β", l, ?_,
             by simp, ?_⟩
     · unfold Unifies; simp [Row.applySubst, Ty.applySubst]; exact RowEquiv.unitL
     · show 0 < sFieldCount l (θ.row "β").toSpine; omega
   · -- the field is in α (count α = 1); empty-α witness undercuts at "α"
     refine ⟨⟨fun x => .var x, fun x => if x = "β" then .sing l (.base b)
-              else if x = "α" then .empty else .var x, fun _l => .var _l⟩, "α", l, ?_,
+              else if x = "α" then .empty else .var x, fun x => .var x⟩, "α", l, ?_,
             by simp, ?_⟩
     · unfold Unifies; simp [Row.applySubst, Ty.applySubst]; exact RowEquiv.unitR
     · show 0 < sFieldCount l (θ.row "α").toSpine; omega
@@ -277,7 +277,7 @@ theorem two_sided_no_mgu_on {B : Type} (b : B) (l : Label) :
   -- witness u₁ = (α,β ↦ ε): a unifier
   have hu1 : Unifies
       (⟨fun x => .var x, fun x => if x = "α" then .empty
-        else if x = "β" then .empty else .var x, fun _l => .var _l⟩ : TySubst B)
+        else if x = "β" then .empty else .var x, fun x => .var x⟩ : TySubst B)
       (.cat (.var "α") (.sing l (.base b))) (.cat (.sing l (.base b)) (.var "β")) := by
     unfold Unifies
     show RowEquiv (Row.cat Row.empty (Row.sing l (.base b)))
@@ -331,7 +331,7 @@ theorem two_sided_no_mgu_on {B : Type} (b : B) (l : Label) :
   -- witness u₂ = (α,β ↦ l:𝓫): needs count 1 at α, which rigidity forbids
   have hu2 : Unifies
       (⟨fun x => .var x, fun x => if x = "α" then .sing l (.base b)
-        else if x = "β" then .sing l (.base b) else .var x, fun _l => .var _l⟩ : TySubst B)
+        else if x = "β" then .sing l (.base b) else .var x, fun x => .var x⟩ : TySubst B)
       (.cat (.var "α") (.sing l (.base b))) (.cat (.sing l (.base b)) (.var "β")) := by
     unfold Unifies
     show RowEquiv (Row.cat (Row.sing l (.base b)) (Row.sing l (.base b)))
@@ -443,7 +443,7 @@ theorem hasMguOn_symm {B : Type} {V : List TyVar} {ρ₁ ρ₂ : Row B} :
 private theorem subst_empty_of_notMem {B : Type} (b : B) (l : Label) (w' : TyVar) :
     (ws : List TyVar) → w' ∉ ws →
     RowEquiv ((ofSpine (ws.map Atom.var)).applySubst
-        ⟨fun x => .var x, fun x => if x = w' then .sing l (.base b) else .empty, fun _l => .var _l⟩)
+        ⟨fun x => .var x, fun x => if x = w' then .sing l (.base b) else .empty, fun x => .var x⟩)
       Row.empty
   | [], _ => by simp only [List.map_nil, ofSpine, Row.applySubst]; exact RowEquiv.refl _
   | c :: rest, hmem => by
@@ -457,7 +457,7 @@ private theorem subst_empty_of_notMem {B : Type} (b : B) (l : Label) (w' : TyVar
 private theorem witness_unifies {B : Type} (b : B) (l : Label) (w' : TyVar) :
     (ws : List TyVar) → ws.Nodup → w' ∈ ws →
     RowEquiv ((ofSpine (ws.map Atom.var)).applySubst
-        ⟨fun x => .var x, fun x => if x = w' then .sing l (.base b) else .empty, fun _l => .var _l⟩)
+        ⟨fun x => .var x, fun x => if x = w' then .sing l (.base b) else .empty, fun x => .var x⟩)
       (.sing l (.base b))
   | [], _, hmem => by simp at hmem
   | c :: rest, hnd, hmem => by
@@ -518,7 +518,7 @@ theorem vars_vs_field_no_mgu_on {B : Type} {vs : List TyVar} (hnd : vs.Nodup)
     intro h
     exact (List.nodup_cons.mp hnd).1 (by rw [h]; exact List.mem_cons_self)
   refine ⟨⟨fun x => .var x, fun x => if x = (if w = a then b' else a)
-            then .sing l (.base b) else .empty, fun _l => .var _l⟩, w, l, ?_, hwmem, ?_⟩
+            then .sing l (.base b) else .empty, fun x => .var x⟩, w, l, ?_, hwmem, ?_⟩
   · exact witness_unifies b l _ (a :: b' :: rest) hnd (by
       split
       · exact List.mem_cons_of_mem _ List.mem_cons_self
@@ -983,13 +983,13 @@ theorem allvar_swap_no_mgu_on {B : Type} :
   simp only [Row.applySubst] at hu
   -- the two witnesses (α↦l, β↦ε) and (α↦ε, β↦l), for any label l
   have hUu : ∀ l : Label, Unifies
-      (⟨fun x => .var x, fun x => if x = "α" then .sing l .unk else .empty, fun _l => .var _l⟩ : TySubst B)
+      (⟨fun x => .var x, fun x => if x = "α" then .sing l .unk else .empty, fun x => .var x⟩ : TySubst B)
       (.cat (.var "α") (.var "β")) (.cat (.var "β") (.var "α")) := fun l => by
     unfold Unifies
     show RowEquiv (Row.cat (Row.sing l .unk) Row.empty) (Row.cat Row.empty (Row.sing l .unk))
     exact RowEquiv.unitR.trans RowEquiv.unitL.symm
   have hUu' : ∀ l : Label, Unifies
-      (⟨fun x => .var x, fun x => if x = "α" then .empty else .sing l .unk, fun _l => .var _l⟩ : TySubst B)
+      (⟨fun x => .var x, fun x => if x = "α" then .empty else .sing l .unk, fun x => .var x⟩ : TySubst B)
       (.cat (.var "α") (.var "β")) (.cat (.var "β") (.var "α")) := fun l => by
     unfold Unifies
     show RowEquiv (Row.cat Row.empty (Row.sing l .unk)) (Row.cat (Row.sing l .unk) Row.empty)
@@ -1190,7 +1190,7 @@ theorem occurs_field_no_unifier {B : Type} {α : TyVar} {s₂ : List (Atom B)}
 theorem occurs_allVar_unifiable {B : Type} :
     ∃ θ : TySubst B,
         Unifies θ (.var "a") (.cat (.var "b") (.cat (.var "a") (.var "c"))) :=
-  ⟨⟨(.var ·), fun x => if x = "b" then .empty else if x = "c" then .empty else .var x, fun _l => .var _l⟩,
+  ⟨⟨(.var ·), fun x => if x = "b" then .empty else if x = "c" then .empty else .var x, fun x => .var x⟩,
    by unfold Unifies
       simp only [Row.applySubst]
       exact (RowEquiv.unitL.trans RowEquiv.unitR).symm⟩
@@ -1209,7 +1209,7 @@ theorem occurs_allVar_unifiable {B : Type} :
 theorem occurs_allVar_hasMgu {B : Type} :
     HasMgu (.var "a" : Row B) (.cat (.var "b") (.cat (.var "a") (.var "c"))) := by
   refine ⟨⟨(.var ·), fun x => if x = "b" then .empty
-                              else if x = "c" then .empty else .var x, fun _l => .var _l⟩, ?_, ?_⟩
+                              else if x = "c" then .empty else .var x, fun x => .var x⟩, ?_, ?_⟩
   · -- ε | α | ε ≈ α
     unfold Unifies
     show RowEquiv (Row.var "a" : Row B)
@@ -1453,7 +1453,7 @@ theorem allvar_occurs_mgu {a : TyVar} {s₂ : List (Atom B)}
   have hk' : sHasKey (ofSpine s₂).toSpine = false := by rw [ofSpine_toSpine]; exact hk
   by_cases hk2 : 2 ≤ (sVarSeq s₂).count a
   · -- k ≥ 2: EVERY spine variable collapses, α included
-    refine ⟨⟨(.var ·), fun x => if x ∈ sVarSeq s₂ then .empty else .var x, fun _l => .var _l⟩, ?_, ?_⟩
+    refine ⟨⟨(.var ·), fun x => if x ∈ sVarSeq s₂ then .empty else .var x, fun x => .var x⟩, ?_, ?_⟩
     · show RowEquiv _ _
       simp only [Row.applySubst, if_pos hmem]
       refine (rowEquiv_empty_of_clean ?_ ?_).symm
@@ -1476,7 +1476,7 @@ theorem allvar_occurs_mgu {a : TyVar} {s₂ : List (Atom B)}
   · -- k = 1: α is unconstrained and must stay free; the OTHERS collapse
     have hone : (sVarSeq s₂).count a = 1 := by omega
     refine ⟨⟨(.var ·), fun x => if x = a then .var a
-                                else if x ∈ sVarSeq s₂ then .empty else .var x, fun _l => .var _l⟩, ?_, ?_⟩
+                                else if x ∈ sVarSeq s₂ then .empty else .var x, fun x => .var x⟩, ?_, ?_⟩
     · show RowEquiv _ _
       simp only [Row.applySubst]
       refine RowEquiv.ofChar ⟨?_, fun l => ?_, ?_⟩
@@ -1489,7 +1489,7 @@ theorem allvar_occurs_mgu {a : TyVar} {s₂ : List (Atom B)}
         rfl
       · have hz : sFieldCount l ((ofSpine s₂).applySubst
             ⟨(.var ·), fun x => if x = a then Row.var a
-                                else if x ∈ sVarSeq s₂ then Row.empty else Row.var x, fun _l => .var _l⟩).toSpine
+                                else if x ∈ sVarSeq s₂ then Row.empty else Row.var x, fun x => .var x⟩).toSpine
             = 0 := by
           rw [sFieldCount_applySubst_eq _ _ _ hk', ofSpine_toSpine, hff l,
             sum_map_nil_of _ (fun γ hγ => by
@@ -2019,7 +2019,7 @@ theorem crossfield_unifiable {B : Type} (b : B) :
         (⟨(.var ·), fun x =>
             if x = "a" then .cat (.sing "m" (.base b)) (.var "X")
             else if x = "b" then .cat (.sing "l" (.base b)) (.var "X")
-            else .var x, fun _l => .var _l⟩ : TySubst B)
+            else .var x, fun x => .var x⟩ : TySubst B)
         (.cat (.sing "l" (.base b)) (.var "a"))
         (.cat (.sing "m" (.base b)) (.var "b")) := by
   unfold Unifies
