@@ -27,8 +27,8 @@ We use a custom lookup relation ⟨ρ.l ↓ r⟩ with return values ⟨τ | ⊥ 
 - [x] Type Inference
 - [~] FC-Labels
 - [ ] Negative type information
-- [ ] Patterns
 - [ ] Occurrence Typing
+- [ ] Patterns
 - [ ] Recursive Types
 - [ ] With
 - [ ] Inherit
@@ -36,19 +36,12 @@ We use a custom lookup relation ⟨ρ.l ↓ r⟩ with return values ⟨τ | ⊥ 
 
 ## FC-Labels  (`plans/fc-labels-plan.md`)
 - [x] **Phase A — Reading dynamic**
-- [ ] **Phase B — dynamic construction**
+- [~] **Phase B — dynamic construction**
 
 
 # Problems
 > Problems found during mechanized proving and their proposed solutions
 
-## Spent promise at F-★  (fixed, merged 2026-09-28)
-- `λx. λy. (x.l) y`: A-app writes `δ ≔ α → β` into a parked stump's result, F-★'s `δ ≐ ★` clashes (`no_finalize_of_spent`)
-- Fix: `Stump.res : Ty B`; new finalization phase `Materialize` (F-hit) before F-★: blocker `r ≔ (l : res | r')`, then saturate
-- `Run` = infer → `Materializes` → `Finalizes`; `runSound`, `runF_terminates` re-proved, same axioms
-- Parked stumps are retired by stump, not by result: the parked-list invariant (`PInv`) is gone
-- A-let generalizes spent stumps: `QScheme.WF` = result vars are binders; `Correctable` = linear pattern results (`Ty.correct`); inhabitation fills spent blockers (`fillRow`)
-- What is left: # Incompleteness → Spent promise
 
 ## Key-blocked spent promise  (open, deliberately kept)
 - Only bites when the key is never supplied: applied, `(λr. λa. r.(a) c) {k = λz.z} ⌊k⌋` runs to `𝓫`
@@ -133,9 +126,8 @@ We use a custom lookup relation ⟨ρ.l ↓ r⟩ with return values ⟨τ | ⊥ 
 - `stuck_masks_mgu`: stuck payload equation propagates before the residual pins β
   - Fix: defer the stuck equation, retry after the residual
 
-**Spent promise** — fixed: `Stump.res : Ty B`, `Materialize`, spent stumps generalize
-- `λx.(x.l).m`, `λx. x.l ‖ {m=c}`, `λx y.(x.l) y` now run (was: fail)
-- Left: key-blocked spent stump never given its key, `λr. λa. r.(a) c` ⇒ no run
+**Spent promise** — 
+- key-blocked spent stump never given its key, `λr. λa. r.(a) c` ⇒ no run
   - Fix: guess the key (non-principal) or qualified top-level type — see # Problems
 
 **A-let premises**
