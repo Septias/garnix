@@ -52,14 +52,20 @@ theorem SolSat.tail {B : Type} {θ : TySubst B} {α : TyVar} {ρ : Row B}
 
 
 theorem SubstEquiv.refl {B : Type} (θ : TySubst B) : θ ≗ θ :=
-  ⟨fun _ => .refl _, fun _ => .refl _⟩
+  ⟨fun _ => .refl _, fun _ => .refl _, fun _ => rfl⟩
 
 theorem SubstEquiv.symm {B : Type} {θ₁ θ₂ : TySubst B} (h : θ₁ ≗ θ₂) : θ₂ ≗ θ₁ :=
-  ⟨fun α => (h.1 α).symm, fun α => (h.2 α).symm⟩
+  ⟨fun α => (h.1 α).symm, fun α => (h.2.1 α).symm, fun α => (h.2.2 α).symm⟩
 
 theorem SubstEquiv.trans {B : Type} {θ₁ θ₂ θ₃ : TySubst B}
     (h₁ : θ₁ ≗ θ₂) (h₂ : θ₂ ≗ θ₃) : θ₁ ≗ θ₃ :=
-  ⟨fun α => (h₁.1 α).trans (h₂.1 α), fun α => (h₁.2 α).trans (h₂.2 α)⟩
+  ⟨fun α => (h₁.1 α).trans (h₂.1 α), fun α => (h₁.2.1 α).trans (h₂.2.1 α),
+   fun α => (h₁.2.2 α).trans (h₂.2.2 α)⟩
+
+theorem Key.applySubst_substEquiv {B : Type} {θ₁ θ₂ : TySubst B} (h : θ₁ ≗ θ₂) :
+    (k : Key) → k.applySubst θ₁ = k.applySubst θ₂
+  | .lit _ => rfl
+  | .var α => h.2.2 α
 
 -- THE CONGRUENCE. Structural, at both sorts at once (types contain rows).
 -- ⊢  θ₁ ≗ θ₂   ⟹   τ.applySubst θ₁ ≈ₜ τ.applySubst θ₂
@@ -69,7 +75,7 @@ mutual
       (τ : Ty B) → TyEquiv (τ.applySubst θ₁) (τ.applySubst θ₂)
     | .var α    => h.1 α
     | .base _   => .refl _
-    | .lab _   => .refl _
+    | .lab k   => by simp only [Ty.applySubst, Key.applySubst_substEquiv h k]; exact .refl _
     | .unk      => .refl _
     | .fn τ₁ τ₂ =>
         .fn (Ty.applySubst_substEquiv h τ₁) (Ty.applySubst_substEquiv h τ₂)
@@ -78,12 +84,13 @@ mutual
   theorem Row.applySubst_substEquiv {B : Type} {θ₁ θ₂ : TySubst B} (h : θ₁ ≗ θ₂) :
       (ρ : Row B) → RowEquiv (ρ.applySubst θ₁) (ρ.applySubst θ₂)
     | .empty     => .refl _
-    | .var α     => h.2 α
+    | .var α     => h.2.1 α
     | .sing _ τ  => .sing (Ty.applySubst_substEquiv h τ)
     | .cat ρ₁ ρ₂ =>
         .cat (Row.applySubst_substEquiv h ρ₁) (Row.applySubst_substEquiv h ρ₂)
-    | .dsing q τ =>
-        .dsing (Ty.keyClass_applySubst_equiv h.1 q) (Ty.applySubst_substEquiv h τ)
+    | .dsing q τ => by
+        simp only [Row.applySubst, Key.applySubst_substEquiv h q]
+        exact .dsing (Ty.applySubst_substEquiv h τ)
 end
 
 
@@ -96,6 +103,15 @@ theorem tyLookup_spec {B : Type} (α : TyVar) :
       · subst h; exact .inr (by simp only [tyLookup, if_pos]; exact List.mem_cons_self)
       · simp only [tyLookup, if_neg h]
         exact (tyLookup_spec α t).imp id (List.mem_cons_of_mem _)
+
+theorem labLookup_spec (α : TyVar) :
+    (l : List (TyVar × Key)) → labLookup α l = .var α ∨ (α, labLookup α l) ∈ l
+  | [] => .inl rfl
+  | (β, k) :: t => by
+      by_cases h : β = α
+      · subst h; exact .inr (by simp only [labLookup, if_pos]; exact List.mem_cons_self)
+      · simp only [labLookup, if_neg h]
+        exact (labLookup_spec α t).imp id (List.mem_cons_of_mem _)
 
 theorem rowLookup_spec {B : Type} (α : TyVar) :
     (l : List (TyVar × Row B)) → rowLookup α l = .var α ∨ (α, rowLookup α l) ∈ l
@@ -110,14 +126,14 @@ theorem rowLookup_spec {B : Type} (α : TyVar) :
 -- ⊢  Sol.Sat θ (Sol.ofRow σ)  ↔  SolSat θ σ      (the embedding is faithful)
 theorem Sol.Sat_ofRow {B : Type} {θ : TySubst B} {σ : List (TyVar × Row B)} :
     Sol.Sat θ (Sol.ofRow σ) ↔ SolSat θ σ :=
-  ⟨fun h => h.2, fun h => ⟨fun _ hp => (nomatch hp), h⟩⟩
+  ⟨fun h => h.2.1, fun h => ⟨fun _ hp => (nomatch hp), h, fun _ hp => (nomatch hp)⟩⟩
 
 -- THE POINT OF Sat: meeting a solution means being ≈-unchanged by it. This is
 -- what turns "solve, then apply to the residual" into "same problem".
 -- ⊢  Sol.Sat θ s   ⟹   θ ≗ θ ∘ s.toSubst
 theorem Sol.Sat.substEquiv {B : Type} {θ : TySubst B} {s : Sol B}
     (h : Sol.Sat θ s) : θ ≗ θ.comp s.toSubst := by
-  constructor
+  refine ⟨?_, ?_, ?_⟩
   · intro α
     show TyEquiv (θ.ty α) ((tyLookup α s.ty).applySubst θ)
     rcases tyLookup_spec α s.ty with he | hm
@@ -127,7 +143,12 @@ theorem Sol.Sat.substEquiv {B : Type} {θ : TySubst B} {s : Sol B}
     show RowEquiv (θ.row α) ((rowLookup α s.row).applySubst θ)
     rcases rowLookup_spec α s.row with he | hm
     · rw [he]; exact .refl _
-    · exact h.2 _ hm
+    · exact h.2.1 _ hm
+  · intro α
+    show θ.lab α = (labLookup α s.lab).applySubst θ
+    rcases labLookup_spec α s.lab with he | hm
+    · rw [he]; rfl
+    · exact h.2.2 _ hm
 
 
 -- THE COMPOSE LEMMA the P5 arms need: meeting a
@@ -139,8 +160,9 @@ theorem Sol.Sat.comp_inv {B : Type} {θ : TySubst B} {s₁ s₂ : Sol B}
     (h : Sol.Sat θ (s₂.comp s₁)) : Sol.Sat θ s₁ ∧ Sol.Sat θ s₂ := by
   have h₂ : Sol.Sat θ s₂ :=
     ⟨fun p hp => h.1 p (List.mem_append_right _ hp),
-     fun p hp => h.2 p (List.mem_append_right _ hp)⟩
-  refine ⟨⟨fun p hp => ?_, fun p hp => ?_⟩, h₂⟩
+     fun p hp => h.2.1 p (List.mem_append_right _ hp),
+     fun p hp => h.2.2 p (List.mem_append_right _ hp)⟩
+  refine ⟨⟨fun p hp => ?_, fun p hp => ?_, fun p hp => ?_⟩, h₂⟩
   · have hm : (p.1, p.2.applySubst s₂.toSubst) ∈ (s₂.comp s₁).ty :=
       List.mem_append_left _ (List.mem_map_of_mem hp)
     have := h.1 _ hm
@@ -149,10 +171,15 @@ theorem Sol.Sat.comp_inv {B : Type} {θ : TySubst B} {s₁ s₂ : Sol B}
     exact (Ty.applySubst_substEquiv h₂.substEquiv p.2).symm
   · have hm : (p.1, p.2.applySubst s₂.toSubst) ∈ (s₂.comp s₁).row :=
       List.mem_append_left _ (List.mem_map_of_mem hp)
-    have := h.2 _ hm
+    have := h.2.1 _ hm
     refine this.trans ?_
     rw [Row.applySubst_applySubst]
     exact (Row.applySubst_substEquiv h₂.substEquiv p.2).symm
+  · have hm : (p.1, p.2.applySubst s₂.toSubst) ∈ (s₂.comp s₁).lab :=
+      List.mem_append_left _ (List.mem_map_of_mem hp)
+    have := h.2.2 _ hm
+    rw [this, Key.applySubst_applySubst]
+    exact (Key.applySubst_substEquiv h₂.substEquiv p.2).symm
 
 
 -- ⊢  seq inverts: a success came from two successes whose composite it is
@@ -323,8 +350,8 @@ theorem sFtv_ofSpine {B : Type} : (s : List (Atom B)) → sFtv s = (ofSpine s).f
   | [] => rfl
   | .field _ τ :: s => by simp only [sFtv, ofSpine, Row.ftv, sFtv_ofSpine s]
   | .var α :: s => by simp only [sFtv, ofSpine, Row.ftv, sFtv_ofSpine s]; rfl
-  | .dfield o τ :: s => by
-      cases o <;> simp [sFtv, ofSpine, Row.ftv, Atom.keyTy, Ty.ftv, sFtv_ofSpine s]
+  | .dfield α τ :: s => by
+      simp only [sFtv, ofSpine, Row.ftv, Key.ftv, sFtv_ofSpine s]
 
 theorem sFtv_append {B : Type} :
     (s t : List (Atom B)) → sFtv (s ++ t) = sFtv s ++ sFtv t
@@ -351,10 +378,10 @@ theorem mem_sFtv_reverse {B : Type} {α : TyVar} :
 
 -- ## Perturbing a substitution at a fresh variable
 def TySubst.setTy {B : Type} (θ : TySubst B) (α : TyVar) (τ : Ty B) : TySubst B :=
-  ⟨fun β => if β = α then τ else θ.ty β, θ.row⟩
+  ⟨fun β => if β = α then τ else θ.ty β, θ.row, θ.lab⟩
 
 def TySubst.setRow {B : Type} (θ : TySubst B) (α : TyVar) (ρ : Row B) : TySubst B :=
-  ⟨θ.ty, fun β => if β = α then ρ else θ.row β⟩
+  ⟨θ.ty, fun β => if β = α then ρ else θ.row β, θ.lab⟩
 
 -- THE INVISIBILITY LEMMAS: a value chosen at a variable the subject does not
 -- mention is not observable. Straight off Ty/Row.applySubst_congr
@@ -366,7 +393,7 @@ theorem Row.applySubst_setRow_of_not_mem {B : Type} {θ : TySubst B} {α : TyVar
   Row.applySubst_congr ρ' fun β hβ =>
     ⟨rfl, by
       have hne : β ≠ α := fun hb => h (by rw [← hb]; exact hβ)
-      simp only [TySubst.setRow, if_neg hne]⟩
+      simp only [TySubst.setRow, if_neg hne], rfl⟩
 
 theorem Ty.applySubst_setRow_of_not_mem {B : Type} {θ : TySubst B} {α : TyVar}
     {ρ : Row B} (τ : Ty B) (h : α ∉ τ.ftv) :
@@ -374,7 +401,7 @@ theorem Ty.applySubst_setRow_of_not_mem {B : Type} {θ : TySubst B} {α : TyVar}
   Ty.applySubst_congr τ fun β hβ =>
     ⟨rfl, by
       have hne : β ≠ α := fun hb => h (by rw [← hb]; exact hβ)
-      simp only [TySubst.setRow, if_neg hne]⟩
+      simp only [TySubst.setRow, if_neg hne], rfl⟩
 
 theorem Row.applySubst_setTy_of_not_mem {B : Type} {θ : TySubst B} {α : TyVar}
     {τ : Ty B} (ρ' : Row B) (h : α ∉ ρ'.ftv) :
@@ -382,7 +409,7 @@ theorem Row.applySubst_setTy_of_not_mem {B : Type} {θ : TySubst B} {α : TyVar}
   Row.applySubst_congr ρ' fun β hβ =>
     ⟨by
       have hne : β ≠ α := fun hb => h (by rw [← hb]; exact hβ)
-      simp only [TySubst.setTy, if_neg hne], rfl⟩
+      simp only [TySubst.setTy, if_neg hne], rfl, rfl⟩
 
 theorem Ty.applySubst_setTy_of_not_mem {B : Type} {θ : TySubst B} {α : TyVar}
     {τ : Ty B} (τ' : Ty B) (h : α ∉ τ'.ftv) :
@@ -390,7 +417,7 @@ theorem Ty.applySubst_setTy_of_not_mem {B : Type} {θ : TySubst B} {α : TyVar}
   Ty.applySubst_congr τ' fun β hβ =>
     ⟨by
       have hne : β ≠ α := fun hb => h (by rw [← hb]; exact hβ)
-      simp only [TySubst.setTy, if_neg hne], rfl⟩
+      simp only [TySubst.setTy, if_neg hne], rfl, rfl⟩
 
 -- … lifted to the two unification predicates.
 -- ⊢  α ∉ ftv ρ₁, ftv ρ₂   ⟹   ( θ[α ≔ ρ] ⊨ ρ₁ ≐ᵣ ρ₂  ↔  θ ⊨ ρ₁ ≐ᵣ ρ₂ )
@@ -597,10 +624,7 @@ theorem spineVarFree_applySubst {B : Type} (θ : TySubst B) :
   | .sing _ _, _ => .sing
   | .cat _ _, .cat h₁ h₂ =>
       .cat (spineVarFree_applySubst θ h₁) (spineVarFree_applySubst θ h₂)
-  | .dsing q _, .dsing hq => .dsing (by
-      cases q with
-      | var α => exact absurd rfl (hq α)
-      | _ => intro α h; nomatch h)
+  | .dsing _ _, .dsing => .dsing
 
 -- ⊢  s barrier-free and l-free   ⟹   proj_l(θ(ofSpine s)) = []   and it adds
 --    no barrier
@@ -989,7 +1013,7 @@ theorem sFtv_renameVar {B : Type} (β β' : TyVar) :
       simp only [renameVar, sFtv, List.mem_append] at hx
       simp only [sFtv, List.mem_cons, List.mem_append]
       rcases hx with hx | hx
-      · exact .inr (.inl hx)
+      · exact .inr (.inl (by simpa using hx))
       · rcases List.mem_cons.mp (sFtv_renameVar β β' s x hx) with h' | h'
         · exact .inl h'
         · exact .inr (.inr h')

@@ -40,7 +40,7 @@ private theorem solve_star_row_free {S S₀ : SolverState B} {τ : Ty B}
   have hkey : β ∉ s.row.map Prod.fst := by
     intro hm
     obtain ⟨p, hp, hpe⟩ := List.mem_map.mp hm
-    have hd : (true, β) ∈ s.domS :=
+    have hd : (.row, β) ∈ s.domS :=
       List.mem_append_right _ (List.mem_map.mpr ⟨p, hp, by rw [hpe]⟩)
     have := hg.dom _ hd
     revert this hu
@@ -222,23 +222,23 @@ theorem Finalizes.idOrStar {S S' : SolverState B} {ps : List (Parked B)} {γ : T
 -- ⊢  a clean state leaves every type-sort variable of what it substituted alone
 omit [DecidableEq B] in
 theorem SolverState.ty_var_of_clean_row {S : SolverState B} (hc : S.sol.Clean) {ρ : Row B}
-    {α : TyVar} (hα : (false, α) ∈ (ρ.applySubst S.subst).sortedFtv) :
+    {α : TyVar} (hα : (.ty, α) ∈ (ρ.applySubst S.subst).sortedFtv) :
     S.subst.ty α = .var α := by
   apply tyLookup_not_mem
   intro hm
   obtain ⟨p, hp, rfl⟩ := List.mem_map.mp hm
   exact hc.clears_row hα
-    (List.mem_append_left _ (List.mem_map_of_mem (f := fun p => (false, p.1)) hp))
+    (List.mem_append_left _ (List.mem_map_of_mem (f := fun p => (.ty, p.1)) hp))
 
 omit [DecidableEq B] in
 theorem SolverState.ty_var_of_clean_ty {S : SolverState B} (hc : S.sol.Clean) {τ : Ty B}
-    {α : TyVar} (hα : (false, α) ∈ (τ.applySubst S.subst).sortedFtv) :
+    {α : TyVar} (hα : (.ty, α) ∈ (τ.applySubst S.subst).sortedFtv) :
     S.subst.ty α = .var α := by
   apply tyLookup_not_mem
   intro hm
   obtain ⟨p, hp, rfl⟩ := List.mem_map.mp hm
   exact hc.clears_ty hα
-    (List.mem_append_left _ (List.mem_map_of_mem (f := fun p => (false, p.1)) hp))
+    (List.mem_append_left _ (List.mem_map_of_mem (f := fun p => (.ty, p.1)) hp))
 
 theorem Finalize.row_free {S S' : SolverState B} {p : Parked B} {β : TyVar}
     (hf : Finalize S p S') (hβ : S.subst.row β = .var β) : S'.subst.row β = .var β := by
@@ -266,9 +266,9 @@ theorem Finalizes.ext {S S' : SolverState B} {ps : List (Parked B)} :
 where it lands, and leaves the blocker a variable — at a key, one of its own. -/
 theorem Finalize.holds {S S' : SolverState B} {p : Parked B} (hf : Finalize S p S')
     {σ : TySubst B} (hab : Absorbs σ S) (hsat : Sol.Sat σ S'.sol)
-    (hβ : (true, p.blocker) ∈ (p.stump.row.applySubst S.subst).sortedFtv →
+    (hβ : (.row, p.blocker) ∈ (p.stump.row.applySubst S.subst).sortedFtv →
       ∃ β', σ.row p.blocker = .var β')
-    (hk : (false, p.blocker) ∈ (p.stump.label.applySubst S.subst).sortedFtv ++
+    (hk : (.ty, p.blocker) ∈ (p.stump.label.applySubst S.subst).sortedFtv ++
         (p.stump.row.applySubst S.subst).sortedFtv →
       KeyFresh σ ((p.stump.label.applySubst S.subst).sortedFtv ++
         (p.stump.row.applySubst S.subst).sortedFtv) p.blocker) :
@@ -292,7 +292,7 @@ theorem Finalizes.holds {S S' : SolverState B} {ps : List (Parked B)} :
       · have hab : Absorbs S'.subst S₀ := (Absorbs.self c').back (hf.ext.trans hfs.ext) hc
         have hab₁ : Absorbs S'.subst S₁ := (Absorbs.self c').back hfs.ext c₁
         -- a type variable of the looked-up row or key is unsolved at S₀ (clean)
-        have hv : ∀ {γ}, (false, γ) ∈ (p'.stump.label.applySubst S₀.subst).sortedFtv ++
+        have hv : ∀ {γ}, (.ty, γ) ∈ (p'.stump.label.applySubst S₀.subst).sortedFtv ++
             (p'.stump.row.applySubst S₀.subst).sortedFtv → S₀.subst.ty γ = .var γ := by
           intro γ h
           rcases List.mem_append.mp h with h | h

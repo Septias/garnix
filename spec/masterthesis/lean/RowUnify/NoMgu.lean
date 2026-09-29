@@ -22,10 +22,9 @@ theorem ofSpine_toSpine {B : Type} : (s : List (Atom B)) → (ofSpine s).toSpine
   | .var α :: s => by
       simp only [ofSpine, Row.toSpine, List.singleton_append]
       exact congrArg (.var α :: ·) (ofSpine_toSpine s)
-  | .dfield o τ :: s => by
-      cases o <;>
-      · simp only [ofSpine, Row.toSpine, List.singleton_append, Atom.keyTy, Atom.ofKey]
-        exact congrArg (_ :: ·) (ofSpine_toSpine s)
+  | .dfield α τ :: s => by
+      simp only [ofSpine, Row.toSpine, List.singleton_append, Atom.ofKey]
+      exact congrArg (_ :: ·) (ofSpine_toSpine s)
 
 -- l-field count distributes over spine append.
 -- ⊢  count_l(s₁ ++ s₂) = count_l(s₁) + count_l(s₂)
@@ -125,10 +124,8 @@ theorem sFieldCount_applySubst_varFree {B : Type} (θ : TySubst B) (l : Label) :
   | .cat ρ₁ ρ₂, .cat hv₁ hv₂ => by
       simp only [Row.applySubst, Row.toSpine, sFieldCount_append]
       rw [sFieldCount_applySubst_varFree θ l hv₁, sFieldCount_applySubst_varFree θ l hv₂]
-  | .dsing q _, .dsing hq => by
-      cases q with
-      | var α => exact absurd rfl (hq α)
-      | _ => simp [Row.applySubst, Row.toSpine, Atom.ofKey, sFieldCount, Ty.applySubst]
+  | .dsing _ _, .dsing => by
+      simp [Row.applySubst, Row.toSpine, Atom.ofKey, sFieldCount]
 
 -- ## The stuck ⟹ no-unique-mgu direction, via field-count monotonicity
 -- Substitution never DELETES an l-field (sFieldCount_applySubst_le) and ≈
@@ -217,13 +214,13 @@ theorem wand_no_mgu_count_on {B : Type} (b : B) (l : Label) :
   by_cases hα : sFieldCount l (θ.row "α").toSpine = 0
   · -- the field is in β (count β = 1); empty-β witness undercuts at "β"
     refine ⟨⟨fun x => .var x, fun x => if x = "β" then .empty
-              else if x = "α" then .sing l (.base b) else .var x⟩, "β", l, ?_,
+              else if x = "α" then .sing l (.base b) else .var x, fun _l => .var _l⟩, "β", l, ?_,
             by simp, ?_⟩
     · unfold Unifies; simp [Row.applySubst, Ty.applySubst]; exact RowEquiv.unitL
     · show 0 < sFieldCount l (θ.row "β").toSpine; omega
   · -- the field is in α (count α = 1); empty-α witness undercuts at "α"
     refine ⟨⟨fun x => .var x, fun x => if x = "β" then .sing l (.base b)
-              else if x = "α" then .empty else .var x⟩, "α", l, ?_,
+              else if x = "α" then .empty else .var x, fun _l => .var _l⟩, "α", l, ?_,
             by simp, ?_⟩
     · unfold Unifies; simp [Row.applySubst, Ty.applySubst]; exact RowEquiv.unitR
     · show 0 < sFieldCount l (θ.row "α").toSpine; omega
@@ -280,7 +277,7 @@ theorem two_sided_no_mgu_on {B : Type} (b : B) (l : Label) :
   -- witness u₁ = (α,β ↦ ε): a unifier
   have hu1 : Unifies
       (⟨fun x => .var x, fun x => if x = "α" then .empty
-        else if x = "β" then .empty else .var x⟩ : TySubst B)
+        else if x = "β" then .empty else .var x, fun _l => .var _l⟩ : TySubst B)
       (.cat (.var "α") (.sing l (.base b))) (.cat (.sing l (.base b)) (.var "β")) := by
     unfold Unifies
     show RowEquiv (Row.cat Row.empty (Row.sing l (.base b)))
@@ -334,7 +331,7 @@ theorem two_sided_no_mgu_on {B : Type} (b : B) (l : Label) :
   -- witness u₂ = (α,β ↦ l:𝓫): needs count 1 at α, which rigidity forbids
   have hu2 : Unifies
       (⟨fun x => .var x, fun x => if x = "α" then .sing l (.base b)
-        else if x = "β" then .sing l (.base b) else .var x⟩ : TySubst B)
+        else if x = "β" then .sing l (.base b) else .var x, fun _l => .var _l⟩ : TySubst B)
       (.cat (.var "α") (.sing l (.base b))) (.cat (.sing l (.base b)) (.var "β")) := by
     unfold Unifies
     show RowEquiv (Row.cat (Row.sing l (.base b)) (Row.sing l (.base b)))
@@ -446,7 +443,7 @@ theorem hasMguOn_symm {B : Type} {V : List TyVar} {ρ₁ ρ₂ : Row B} :
 private theorem subst_empty_of_notMem {B : Type} (b : B) (l : Label) (w' : TyVar) :
     (ws : List TyVar) → w' ∉ ws →
     RowEquiv ((ofSpine (ws.map Atom.var)).applySubst
-        ⟨fun x => .var x, fun x => if x = w' then .sing l (.base b) else .empty⟩)
+        ⟨fun x => .var x, fun x => if x = w' then .sing l (.base b) else .empty, fun _l => .var _l⟩)
       Row.empty
   | [], _ => by simp only [List.map_nil, ofSpine, Row.applySubst]; exact RowEquiv.refl _
   | c :: rest, hmem => by
@@ -460,7 +457,7 @@ private theorem subst_empty_of_notMem {B : Type} (b : B) (l : Label) (w' : TyVar
 private theorem witness_unifies {B : Type} (b : B) (l : Label) (w' : TyVar) :
     (ws : List TyVar) → ws.Nodup → w' ∈ ws →
     RowEquiv ((ofSpine (ws.map Atom.var)).applySubst
-        ⟨fun x => .var x, fun x => if x = w' then .sing l (.base b) else .empty⟩)
+        ⟨fun x => .var x, fun x => if x = w' then .sing l (.base b) else .empty, fun _l => .var _l⟩)
       (.sing l (.base b))
   | [], _, hmem => by simp at hmem
   | c :: rest, hnd, hmem => by
@@ -521,7 +518,7 @@ theorem vars_vs_field_no_mgu_on {B : Type} {vs : List TyVar} (hnd : vs.Nodup)
     intro h
     exact (List.nodup_cons.mp hnd).1 (by rw [h]; exact List.mem_cons_self)
   refine ⟨⟨fun x => .var x, fun x => if x = (if w = a then b' else a)
-            then .sing l (.base b) else .empty⟩, w, l, ?_, hwmem, ?_⟩
+            then .sing l (.base b) else .empty, fun _l => .var _l⟩, w, l, ?_, hwmem, ?_⟩
   · exact witness_unifies b l _ (a :: b' :: rest) hnd (by
       split
       · exact List.mem_cons_of_mem _ List.mem_cons_self
@@ -612,7 +609,7 @@ theorem RowEquiv.rcdDepth_eq {B : Type} :
   | _, _, .unitL       => by simp only [Row.rcdDepth, Nat.max_eq_right (Nat.zero_le _)]
   | _, _, .unitR       => by simp only [Row.rcdDepth, Nat.max_eq_left (Nat.zero_le _)]
   | _, _, .comm _      => by simp only [Row.rcdDepth, Nat.max_comm]
-  | _, _, .dsing _ h   => by
+  | _, _, .dsing h     => by
       simp only [Row.rcdDepth, TyEquiv.rcdDepth_eq h]
   | _, _, .dsingLab    => by simp only [Row.rcdDepth]
 end
@@ -959,8 +956,8 @@ theorem varsEmpty_forces_applySubst_empty {B : Type} (σ : TySubst B) :
   | .dsing q _, _, hk, hf => by
       exfalso
       cases q with
-      | lab l => have := hf l; simp [Row.toSpine, Atom.ofKey, sFieldCount] at this
-      | _ => simp [Row.toSpine, Atom.ofKey, sHasKey] at hk
+      | lit l => have := hf l; simp [Row.toSpine, Atom.ofKey, sFieldCount] at this
+      | var _ => simp [Row.toSpine, Atom.ofKey, sHasKey] at hk
   | .cat R₁ R₂, hv, hk, hf => by
       simp only [Row.applySubst]
       have hv1 : ∀ v ∈ sVarSeq R₁.toSpine, RowEquiv (σ.row v) Row.empty := fun v hm =>
@@ -986,13 +983,13 @@ theorem allvar_swap_no_mgu_on {B : Type} :
   simp only [Row.applySubst] at hu
   -- the two witnesses (α↦l, β↦ε) and (α↦ε, β↦l), for any label l
   have hUu : ∀ l : Label, Unifies
-      (⟨fun x => .var x, fun x => if x = "α" then .sing l .unk else .empty⟩ : TySubst B)
+      (⟨fun x => .var x, fun x => if x = "α" then .sing l .unk else .empty, fun _l => .var _l⟩ : TySubst B)
       (.cat (.var "α") (.var "β")) (.cat (.var "β") (.var "α")) := fun l => by
     unfold Unifies
     show RowEquiv (Row.cat (Row.sing l .unk) Row.empty) (Row.cat Row.empty (Row.sing l .unk))
     exact RowEquiv.unitR.trans RowEquiv.unitL.symm
   have hUu' : ∀ l : Label, Unifies
-      (⟨fun x => .var x, fun x => if x = "α" then .empty else .sing l .unk⟩ : TySubst B)
+      (⟨fun x => .var x, fun x => if x = "α" then .empty else .sing l .unk, fun _l => .var _l⟩ : TySubst B)
       (.cat (.var "α") (.var "β")) (.cat (.var "β") (.var "α")) := fun l => by
     unfold Unifies
     show RowEquiv (Row.cat Row.empty (Row.sing l .unk)) (Row.cat (Row.sing l .unk) Row.empty)
@@ -1193,7 +1190,7 @@ theorem occurs_field_no_unifier {B : Type} {α : TyVar} {s₂ : List (Atom B)}
 theorem occurs_allVar_unifiable {B : Type} :
     ∃ θ : TySubst B,
         Unifies θ (.var "a") (.cat (.var "b") (.cat (.var "a") (.var "c"))) :=
-  ⟨⟨(.var ·), fun x => if x = "b" then .empty else if x = "c" then .empty else .var x⟩,
+  ⟨⟨(.var ·), fun x => if x = "b" then .empty else if x = "c" then .empty else .var x, fun _l => .var _l⟩,
    by unfold Unifies
       simp only [Row.applySubst]
       exact (RowEquiv.unitL.trans RowEquiv.unitR).symm⟩
@@ -1212,7 +1209,7 @@ theorem occurs_allVar_unifiable {B : Type} :
 theorem occurs_allVar_hasMgu {B : Type} :
     HasMgu (.var "a" : Row B) (.cat (.var "b") (.cat (.var "a") (.var "c"))) := by
   refine ⟨⟨(.var ·), fun x => if x = "b" then .empty
-                              else if x = "c" then .empty else .var x⟩, ?_, ?_⟩
+                              else if x = "c" then .empty else .var x, fun _l => .var _l⟩, ?_, ?_⟩
   · -- ε | α | ε ≈ α
     unfold Unifies
     show RowEquiv (Row.var "a" : Row B)
@@ -1244,7 +1241,7 @@ theorem occurs_allVar_hasMgu {B : Type} :
         (∀ l, sFieldCount l (θ.row x).toSpine = 0) → RowEquiv (θ.row x) (Row.empty : Row B) :=
       fun x hv hf => rowEquiv_empty_of_no_vars_no_fields hv hf
     -- σ ≔ θ: the candidate is the identity away from β, γ, and θ already sends both to ε
-    refine ⟨θ, fun x => ?_, fun x => ?_⟩
+    refine ⟨θ, fun x => ?_, fun x => ?_, fun x => rfl⟩
     · by_cases hb : x = "b"
       · subst hb
         exact (hε "b" hvar.1 (fun l => (hcount l).1)).trans
@@ -1456,7 +1453,7 @@ theorem allvar_occurs_mgu {a : TyVar} {s₂ : List (Atom B)}
   have hk' : sHasKey (ofSpine s₂).toSpine = false := by rw [ofSpine_toSpine]; exact hk
   by_cases hk2 : 2 ≤ (sVarSeq s₂).count a
   · -- k ≥ 2: EVERY spine variable collapses, α included
-    refine ⟨⟨(.var ·), fun x => if x ∈ sVarSeq s₂ then .empty else .var x⟩, ?_, ?_⟩
+    refine ⟨⟨(.var ·), fun x => if x ∈ sVarSeq s₂ then .empty else .var x, fun _l => .var _l⟩, ?_, ?_⟩
     · show RowEquiv _ _
       simp only [Row.applySubst, if_pos hmem]
       refine (rowEquiv_empty_of_clean ?_ ?_).symm
@@ -1467,7 +1464,7 @@ theorem allvar_occurs_mgu {a : TyVar} {s₂ : List (Atom B)}
           sum_map_nil_of _ (fun γ hγ => by simp only [if_pos hγ]; rfl)]
     · intro θ' hu
       obtain ⟨hrest, hself⟩ := allvar_collapse hff hk hmem hu
-      refine ⟨θ', fun x => ?_, fun x => ?_⟩
+      refine ⟨θ', fun x => ?_, fun x => ?_, fun x => rfl⟩
       · by_cases hx : x ∈ sVarSeq s₂
         · simp only [if_pos hx, Row.applySubst]
           by_cases hxa : x = a
@@ -1479,7 +1476,7 @@ theorem allvar_occurs_mgu {a : TyVar} {s₂ : List (Atom B)}
   · -- k = 1: α is unconstrained and must stay free; the OTHERS collapse
     have hone : (sVarSeq s₂).count a = 1 := by omega
     refine ⟨⟨(.var ·), fun x => if x = a then .var a
-                                else if x ∈ sVarSeq s₂ then .empty else .var x⟩, ?_, ?_⟩
+                                else if x ∈ sVarSeq s₂ then .empty else .var x, fun _l => .var _l⟩, ?_, ?_⟩
     · show RowEquiv _ _
       simp only [Row.applySubst]
       refine RowEquiv.ofChar ⟨?_, fun l => ?_, ?_⟩
@@ -1492,7 +1489,7 @@ theorem allvar_occurs_mgu {a : TyVar} {s₂ : List (Atom B)}
         rfl
       · have hz : sFieldCount l ((ofSpine s₂).applySubst
             ⟨(.var ·), fun x => if x = a then Row.var a
-                                else if x ∈ sVarSeq s₂ then Row.empty else Row.var x⟩).toSpine
+                                else if x ∈ sVarSeq s₂ then Row.empty else Row.var x, fun _l => .var _l⟩).toSpine
             = 0 := by
           rw [sFieldCount_applySubst_eq _ _ _ hk', ofSpine_toSpine, hff l,
             sum_map_nil_of _ (fun γ hγ => by
@@ -1509,7 +1506,7 @@ theorem allvar_occurs_mgu {a : TyVar} {s₂ : List (Atom B)}
         exact .nil
     · intro θ' hu
       obtain ⟨hrest, -⟩ := allvar_collapse hff hk hmem hu
-      refine ⟨θ', fun x => ?_, fun x => ?_⟩
+      refine ⟨θ', fun x => ?_, fun x => ?_, fun x => rfl⟩
       · by_cases hxa : x = a
         · simp only [if_pos hxa, Row.applySubst]
           rw [hxa]
@@ -1778,7 +1775,7 @@ theorem RowEquiv.tyDepth_eq {B : Type} :
   | _, _, .unitL       => by simp only [Row.tyDepth, Nat.max_eq_right (Nat.zero_le _)]
   | _, _, .unitR       => by simp only [Row.tyDepth, Nat.max_eq_left (Nat.zero_le _)]
   | _, _, .comm _      => by simp only [Row.tyDepth, Nat.max_comm]
-  | _, _, .dsing _ h   => by simp only [Row.tyDepth, TyEquiv.tyDepth_eq h]
+  | _, _, .dsing h     => by simp only [Row.tyDepth, TyEquiv.tyDepth_eq h]
   | _, _, .dsingLab    => by simp only [Row.tyDepth]
 end
 
@@ -1939,7 +1936,7 @@ theorem bindTy_occurs_no_unifier {B : Type} {S : Supply} {α : TyVar} {τ : Ty B
       | unk    => exact absurd hm (by simp [Ty.tyFtv])
       | fn a b => exact hm
       | rcd ρ  => exact hm
-    · split at h <;> exact absurd h (by simp)
+    · exact absurd h (by simp)
 
 -- ⊢  what an `.occurs` from U-var-solve says: the collapse rule declined AND α
 --    really OCCURS in s₂
@@ -1962,10 +1959,7 @@ theorem solveVarM_occurs_inv {B : Type} {S : Supply}
         cases hk : sHasKey s₂ with
         | false => rfl
         | true => rw [hk] at h; exact absurd h (by simp)
-      · rw [if_neg hg] at h
-        by_cases hk : (Row.keyFtv (ofSpine s₂)).contains α = true
-        · rw [if_pos hk] at h; simp at h
-        · rw [if_neg hk] at h; simp at h
+      · rw [if_neg hg] at h; simp at h
 
 -- ## U-var-solve: the case analysis CLOSES on a local occurrence
 -- The occurrence the guard rejects is one of three, and the ε-collapse rule has
@@ -2025,7 +2019,7 @@ theorem crossfield_unifiable {B : Type} (b : B) :
         (⟨(.var ·), fun x =>
             if x = "a" then .cat (.sing "m" (.base b)) (.var "X")
             else if x = "b" then .cat (.sing "l" (.base b)) (.var "X")
-            else .var x⟩ : TySubst B)
+            else .var x, fun _l => .var _l⟩ : TySubst B)
         (.cat (.sing "l" (.base b)) (.var "a"))
         (.cat (.sing "m" (.base b)) (.var "b")) := by
   unfold Unifies

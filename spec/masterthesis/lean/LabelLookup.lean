@@ -1,26 +1,21 @@
--- FC-labels: the lookup QUERY is a type.
+-- FC-labels: the lookup QUERY is a key.
 --
--- A selection `e₁.(e₂)` looks up whatever label e₂ has, and its type is either
--- ⌊l⌋ (a literal, and the lookup is the old `Lookup`) or a label VARIABLE α
--- (a type variable standing for a label nobody has chosen yet). Against a
--- literal field, a label variable is UNDECIDED — α might be instantiated to that
--- very label, or to another — so the lookup answers `?` there (L-?-lab).
+-- A selection `e₁.(e₂)` looks up whatever label e₂ has; its type is ⌊k⌋ for a
+-- KEY k — a literal l (and the lookup is the old `Lookup`) or a LABEL variable
+-- α (a label nobody has chosen yet). Against a literal field, a label variable
+-- is UNDECIDED — α might be instantiated to that very label, or to another — so
+-- the lookup answers `?` there (L-?-lab).
 --
--- Label variables are ordinary type variables, so nothing stops a substitution
--- from sending one to `int`. Rather than a kind discipline, the lookup says what
--- that means: a key that is not a label is JUNK, and it compares like every
--- other key (`Ty.keyCmp`): apart from every literal, undecided against a
--- variable, and EQUAL to every other junk key. So `r.${1}` on a record of
--- literal fields answers ⊥ (types at ★ with a flag, a ↯ lookup error at run
--- time), and on a row variable it answers ? — the variable might hold a keyed
--- field whose key became junk too.
+-- Label variables are a sort of their own (`TySubst.lab`): a substitution sends
+-- one to a key, never to `int` or ★. So there is no junk key: a selection whose
+-- argument is not label-typed is simply ill-typed.
 --
--- Phase B (dynamic construction) adds keyed fields `${q}: τ`, and then α ≡ α
--- fires: `(α: τ).α ↓ τ`. The junk class is what keeps that stable under α ↦ int
--- (L-junk used to answer ⊥ to a junk key unconditionally, which this breaks).
+-- Phase B (dynamic construction) adds keyed fields `${k}: τ`, and then α ≡ α
+-- fires: `(${α}: τ).α ↓ τ`, stable under every substitution because α goes to
+-- one key.
 --
 -- One structural relation serves every key; `Lookup` (label-keyed, in
--- minimal.lean) is its ⌊l⌋ instance (`LookupQ.lab_iff`), and `LookupV` its
+-- minimal.lean) is its literal instance (`LookupQ.lab_iff`), and `LookupV` its
 -- label-variable instance.
 import minimal
 
@@ -28,134 +23,93 @@ namespace MinimalCalculus
 
 variable {B : Type}
 
-/-- `ρ.k ↓ r` — the lookup a dynamic selection performs, keyed by the TYPE of
-its label argument. Every field is compared with the key by `Ty.keyCmp`. -/
-inductive LookupQ : Row B → Ty B → LookupRes B → Prop where
+/-- `ρ.k ↓ r` — the lookup a dynamic selection performs, keyed by the key of its
+label argument. Every field is compared with the key by `Key.cmp`. -/
+inductive LookupQ : Row B → Key → LookupRes B → Prop where
   -- L-ε
-  | emp {k : Ty B} : LookupQ .empty k .absent
+  | emp {k : Key} : LookupQ .empty k .absent
   -- L-hit / L-miss / L-?-lab against a literal field
-  | hit {k : Ty B} {l : Label} {τ : Ty B} :
-      Ty.keyCmp k (.lab l) = .eq → LookupQ (.sing l τ) k (.found τ)
-  | miss {k : Ty B} {l : Label} {τ : Ty B} :
-      Ty.keyCmp k (.lab l) = .apart → LookupQ (.sing l τ) k .absent
-  | sunk {k : Ty B} {l : Label} {τ : Ty B} :
-      Ty.keyCmp k (.lab l) = .undec → LookupQ (.sing l τ) k .unknown
+  | hit {k : Key} {l : Label} {τ : Ty B} :
+      Key.cmp k (.lit l) = .eq → LookupQ (.sing l τ) k (.found τ)
+  | miss {k : Key} {l : Label} {τ : Ty B} :
+      Key.cmp k (.lit l) = .apart → LookupQ (.sing l τ) k .absent
+  | sunk {k : Key} {l : Label} {τ : Ty B} :
+      Key.cmp k (.lit l) = .undec → LookupQ (.sing l τ) k .unknown
   -- L-α-free
-  | varFree {k : Ty B} {β : TyVar} : LookupQ (.var β) k .unknown
+  | varFree {k : Key} {β : TyVar} : LookupQ (.var β) k .unknown
   -- L-conc-hit
-  | catHit {k : Ty B} {ρ₁ ρ₂ : Row B} {τ : Ty B} :
+  | catHit {k : Key} {ρ₁ ρ₂ : Row B} {τ : Ty B} :
       LookupQ ρ₁ k (.found τ) → LookupQ (.cat ρ₁ ρ₂) k (.found τ)
   -- L-conc-skip
-  | catSkip {k : Ty B} {ρ₁ ρ₂ : Row B} {r : LookupRes B} :
+  | catSkip {k : Key} {ρ₁ ρ₂ : Row B} {r : LookupRes B} :
       LookupQ ρ₁ k .absent → LookupQ ρ₂ k r → LookupQ (.cat ρ₁ ρ₂) k r
   -- L-conc-★
-  | catUnk {k : Ty B} {ρ₁ ρ₂ : Row B} :
+  | catUnk {k : Key} {ρ₁ ρ₂ : Row B} :
       LookupQ ρ₁ k .unknown → LookupQ (.cat ρ₁ ρ₂) k .unknown
   -- the same three against a keyed field
-  | dhit {k q τ : Ty B} : Ty.keyCmp k q = .eq → LookupQ (.dsing q τ) k (.found τ)
-  | dmiss {k q τ : Ty B} : Ty.keyCmp k q = .apart → LookupQ (.dsing q τ) k .absent
-  | dunk {k q τ : Ty B} : Ty.keyCmp k q = .undec → LookupQ (.dsing q τ) k .unknown
+  | dhit {k q : Key} {τ : Ty B} : Key.cmp k q = .eq → LookupQ (.dsing q τ) k (.found τ)
+  | dmiss {k q : Key} {τ : Ty B} : Key.cmp k q = .apart → LookupQ (.dsing q τ) k .absent
+  | dunk {k q : Key} {τ : Ty B} : Key.cmp k q = .undec → LookupQ (.dsing q τ) k .unknown
 
 /-- the label-variable instance. -/
 abbrev LookupV (ρ : Row B) (α : TyVar) (r : LookupRes B) : Prop :=
   LookupQ ρ (.var α) r
 
-/-- a type that can stand in label position: ⌊l⌋ or a (label) variable. -/
-def Ty.IsQuery : Ty B → Prop
-  | .lab _  => True
-  | .var _  => True
-  | .base _ => False
-  | .unk    => False
-  | .fn _ _ => False
-  | .rcd _  => False
--- (spelled out: a wildcard arm here compiles through `propext`, and every
--- declarative statement would inherit it)
-
 
 ------------------------------ KEY COMPARISON ----------------------------------
 
-@[simp] theorem KeyClass.cmp_self : (c : KeyClass) → c.cmp c = .eq
-  | .lit _ => by simp [KeyClass.cmp]
-  | .var _ => by simp [KeyClass.cmp]
-  | .junk => rfl
-
-@[simp] theorem Ty.keyCmp_self (k : Ty B) : Ty.keyCmp k k = .eq :=
-  KeyClass.cmp_self _
-
-theorem KeyClass.cmp_symm_eq : (c d : KeyClass) → c.cmp d = .eq → d.cmp c = .eq
+theorem Key.cmp_symm_eq : (c d : Key) → c.cmp d = .eq → d.cmp c = .eq
   | .lit l, .lit l', h => by
-      simp only [KeyClass.cmp] at h ⊢; split at h
+      simp only [Key.cmp] at h ⊢; split at h
       · subst l; simp
       · cases h
   | .var α, .var β, h => by
-      simp only [KeyClass.cmp] at h ⊢; split at h
+      simp only [Key.cmp] at h ⊢; split at h
       · subst α; simp
       · cases h
-  | .junk, .junk, _ => rfl
   | .lit _, .var _, h => nomatch h
-  | .lit _, .junk, h => nomatch h
   | .var _, .lit _, h => nomatch h
-  | .var _, .junk, h => nomatch h
-  | .junk, .lit _, h => nomatch h
-  | .junk, .var _, h => nomatch h
 
--- a definite comparison is between two non-variables, or one variable with itself
-theorem Ty.keyCmp_eq_cases {k q : Ty B} (h : Ty.keyCmp k q = .eq) :
-    k.keyClass = q.keyClass := by
-  unfold Ty.keyCmp at h
-  revert h
-  cases k.keyClass <;> cases q.keyClass <;> simp [KeyClass.cmp] <;>
-    first | (intro h; subst h; rfl) | skip
+-- a definite comparison is between one key and itself
+theorem Key.cmp_eq_cases {k q : Key} (h : Key.cmp k q = .eq) : k = q := by
+  cases k <;> cases q <;> simp only [Key.cmp] at h <;> (try split at h) <;>
+    first | (subst_vars; rfl) | cases h
 
--- ⊢  eq and apart survive substitution (heads are rigid; junk stays junk)
-theorem Ty.keyClass_applySubst' (θ : TySubst B) {k : Ty B}
-    (hk : ∀ α, k.keyClass ≠ .var α) : (k.applySubst θ).keyClass = k.keyClass := by
+-- a key undecided against a literal is a label variable
+theorem Key.cmp_undec_lit {k : Key} {l : Label}
+    (h : Key.cmp k (.lit l) = .undec) : ∃ α, k = .var α := by
   cases k with
-  | var α => exact absurd rfl (hk α)
-  | _ => rfl
+  | var α => exact ⟨α, rfl⟩
+  | lit l' => simp only [Key.cmp_lit_lit] at h; split at h <;> cases h
 
-theorem Ty.keyCmp_applySubst (θ : TySubst B) {k q : Ty B} {c : KeyRel}
-    (h : Ty.keyCmp k q = c) (hc : c ≠ .undec) :
-    Ty.keyCmp (k.applySubst θ) (q.applySubst θ) = c := by
-  cases k with
-  | var α =>
-      cases q with
-      | var β =>
-          unfold Ty.keyCmp at h
-          simp only [Ty.keyClass, KeyClass.cmp] at h
-          split at h
-          · subst h; subst β; exact Ty.keyCmp_self _
-          · subst h; exact absurd rfl hc
-      | _ => subst h; exact absurd rfl hc
-  | lab l =>
-      cases q with
-      | var β => subst h; exact absurd rfl hc
-      | _ => exact h
-  | _ =>
-      cases q with
-      | var β => subst h; exact absurd rfl hc
-      | _ => exact h
-
+-- a label variable is undecided against everything but itself
+theorem Key.cmp_var_ne {x : Key} {β : TyVar} (h : x ≠ .var β) :
+    Key.cmp (.var β) x = .undec := by
+  cases x with
+  | var γ =>
+      simp only [Key.cmp]
+      rw [if_neg (fun he => h (by rw [he]))]
+  | lit _ => rfl
 
 
 ------------------------------ BASIC METATHEORY --------------------------------
 
 @[simp] theorem LookupQ.lab_iff {ρ : Row B} {l : Label} {r : LookupRes B} :
-    LookupQ ρ (.lab l) r ↔ Lookup ρ l r := by
+    LookupQ ρ (.lit l) r ↔ Lookup ρ l r := by
   constructor
   · intro h
-    generalize hk : (Ty.lab l : Ty B) = k at h
+    generalize hk : (Key.lit l) = k at h
     induction h with
     | emp => exact .emp
     | hit h =>
-        subst hk; simp only [Ty.keyCmp_lab_lab] at h; split at h
+        subst hk; simp only [Key.cmp_lit_lit] at h; split at h
         · subst l; exact .hit
         · cases h
     | miss h =>
-        subst hk; simp only [Ty.keyCmp_lab_lab] at h; split at h
+        subst hk; simp only [Key.cmp_lit_lit] at h; split at h
         · cases h
         · exact .miss (Ne.symm ‹_›)
-    | sunk h => subst hk; simp only [Ty.keyCmp_lab_lab] at h; split at h <;> cases h
+    | sunk h => subst hk; simp only [Key.cmp_lit_lit] at h; split at h <;> cases h
     | varFree => exact .varFree
     | catHit _ ih => exact .catHit (ih hk)
     | catSkip _ _ ih₁ ih₂ => exact .catSkip (ih₁ hk) (ih₂ hk)
@@ -179,7 +133,7 @@ theorem Ty.keyCmp_applySubst (θ : TySubst B) {k q : Ty B} {c : KeyRel}
 theorem LookupQ.var_iff {ρ : Row B} {α : TyVar} {r : LookupRes B} :
     LookupQ ρ (.var α) r ↔ LookupV ρ α r := Iff.rfl
 
-theorem LookupQ.det {ρ : Row B} {q : Ty B} {r₁ r₂ : LookupRes B}
+theorem LookupQ.det {ρ : Row B} {q : Key} {r₁ r₂ : LookupRes B}
     (h₁ : LookupQ ρ q r₁) (h₂ : LookupQ ρ q r₂) : r₁ = r₂ := by
   induction h₁ generalizing r₂ with
   | emp => cases h₂; rfl
@@ -210,16 +164,16 @@ theorem LookupV.det {ρ : Row B} {α : TyVar} {r₁ r₂ : LookupRes B}
     (h₁ : LookupV ρ α r₁) (h₂ : LookupV ρ α r₂) : r₁ = r₂ := LookupQ.det h₁ h₂
 
 -- ⊢  totality: bare structural recursion, as for `lookup_total`
-theorem LookupQ.total : (ρ : Row B) → (q : Ty B) → ∃ r, LookupQ ρ q r
+theorem LookupQ.total : (ρ : Row B) → (q : Key) → ∃ r, LookupQ ρ q r
   | .empty, _ => ⟨_, .emp⟩
   | .var _, _ => ⟨_, .varFree⟩
   | .sing l _, k =>
-      match h : Ty.keyCmp k (.lab l) with
+      match h : Key.cmp k (.lit l) with
       | .eq => ⟨_, .hit h⟩
       | .apart => ⟨_, .miss h⟩
       | .undec => ⟨_, .sunk h⟩
   | .dsing q _, k =>
-      match h : Ty.keyCmp k q with
+      match h : Key.cmp k q with
       | .eq => ⟨_, .dhit h⟩
       | .apart => ⟨_, .dmiss h⟩
       | .undec => ⟨_, .dunk h⟩
@@ -238,7 +192,7 @@ theorem LookupV.total (ρ : Row B) (α : TyVar) : ∃ r, LookupV ρ α r :=
 ------------------------------ ROW EQUIVALENCE ---------------------------------
 
 section EquivHelpers
-variable {ρ ρ₁ ρ₂ ρ₃ : Row B} {k : Ty B} {r : LookupRes B}
+variable {ρ ρ₁ ρ₂ ρ₃ : Row B} {k : Key} {r : LookupRes B}
 
 private theorem lookupQ_assoc_fwd :
     LookupQ (.cat (.cat ρ₁ ρ₂) ρ₃) k r → LookupQ (.cat ρ₁ (.cat ρ₂ ρ₃)) k r := by
@@ -290,25 +244,23 @@ private theorem lookupQ_unitR_bwd (h : LookupQ ρ k r) : LookupQ (.cat ρ .empty
 
 -- two distinct literal fields: a key is eq to at most one of them, and
 -- undecided against both or neither
-private theorem keyCmp_two_labs {k : Ty B} {l₁ l₂ : Label} (hne : l₁ ≠ l₂) :
-    (Ty.keyCmp k (.lab l₁) = .eq → Ty.keyCmp k (.lab l₂) = .apart) ∧
-    (Ty.keyCmp k (.lab l₁) = .undec ↔ Ty.keyCmp k (.lab l₂) = .undec) := by
+private theorem keyCmp_two_labs {k : Key} {l₁ l₂ : Label} (hne : l₁ ≠ l₂) :
+    (Key.cmp k (.lit l₁) = .eq → Key.cmp k (.lit l₂) = .apart) ∧
+    (Key.cmp k (.lit l₁) = .undec ↔ Key.cmp k (.lit l₂) = .undec) := by
   cases k with
-  | lab l =>
-      simp only [Ty.keyCmp_lab_lab]
+  | lit l =>
+      simp only [Key.cmp_lit_lit]
       refine ⟨fun h => ?_, ?_⟩
       · split at h
         · subst l; simp [hne]
         · cases h
       · constructor <;> intro h <;> split at h <;> cases h
-  | var α => simp [Ty.keyCmp, Ty.keyClass, KeyClass.cmp]
-  | _ => simp [Ty.keyCmp, Ty.keyClass, KeyClass.cmp]
+  | var α => simp [Key.cmp]
 
 private theorem lookupQ_comm_fwd {l₁ l₂ : Label} {τ₁ τ₂ : Ty B} (hne : l₁ ≠ l₂) :
     LookupQ (.cat (.sing l₁ τ₁) (.sing l₂ τ₂)) k r →
     LookupQ (.cat (.sing l₂ τ₂) (.sing l₁ τ₁)) k r := by
   have F := keyCmp_two_labs (k := k) hne
-  have G := keyCmp_two_labs (k := k) (Ne.symm hne)
   intro h
   cases h with
   | catHit h₁ =>
@@ -352,16 +304,15 @@ theorem LookupQ.equiv_both :
         | .hit h => ⟨_, .hit h, .found hty.symm⟩
         | .miss h => ⟨_, .miss h, .absent⟩
         | .sunk h => ⟨_, .sunk h, .unknown⟩⟩
-  | _, _, .dsing hk hty =>
-      have e := fun {k} => Ty.keyCmp_congr_right (k := k) hk
+  | _, _, .dsing hty =>
       ⟨fun hl => match hl with
-        | .dhit h => ⟨_, .dhit (e ▸ h), .found hty⟩
-        | .dmiss h => ⟨_, .dmiss (e ▸ h), .absent⟩
-        | .dunk h => ⟨_, .dunk (e ▸ h), .unknown⟩,
+        | .dhit h => ⟨_, .dhit h, .found hty⟩
+        | .dmiss h => ⟨_, .dmiss h, .absent⟩
+        | .dunk h => ⟨_, .dunk h, .unknown⟩,
        fun hl => match hl with
-        | .dhit h => ⟨_, .dhit (e.symm ▸ h), .found hty.symm⟩
-        | .dmiss h => ⟨_, .dmiss (e.symm ▸ h), .absent⟩
-        | .dunk h => ⟨_, .dunk (e.symm ▸ h), .unknown⟩⟩
+        | .dhit h => ⟨_, .dhit h, .found hty.symm⟩
+        | .dmiss h => ⟨_, .dmiss h, .absent⟩
+        | .dunk h => ⟨_, .dunk h, .unknown⟩⟩
   | _, _, .dsingLab =>
       ⟨fun hl => match hl with
         | .dhit h => ⟨_, .hit h, .refl _⟩
@@ -403,7 +354,7 @@ theorem LookupQ.equiv_both :
       ⟨fun hl => ⟨_, lookupQ_comm_fwd hne hl, .refl _⟩,
        fun hl => ⟨_, lookupQ_comm_fwd (Ne.symm hne) hl, .refl _⟩⟩
 
-theorem LookupQ.equiv {ρ₁ ρ₂ : Row B} {q : Ty B} {r₁ : LookupRes B}
+theorem LookupQ.equiv {ρ₁ ρ₂ : Row B} {q : Key} {r₁ : LookupRes B}
     (heq : RowEquiv ρ₁ ρ₂) (h : LookupQ ρ₁ q r₁) :
     ∃ r₂, LookupQ ρ₂ q r₂ ∧ ResEquiv r₁ r₂ :=
   (LookupQ.equiv_both heq).1 h
@@ -411,8 +362,8 @@ theorem LookupQ.equiv {ρ₁ ρ₂ : Row B} {q : Ty B} {r₁ : LookupRes B}
 
 ------------------------------ SUBSTITUTION ------------------------------------
 -- A definite answer is stable under substitution, the key included: eq and
--- apart comparisons survive (`Ty.keyCmp_applySubst`), and a definite
--- derivation never looked at a row variable.
+-- apart comparisons survive (`Key.cmp_applySubst`), and a definite derivation
+-- never looked at a row variable.
 
 /-- no field and no variable on the spine: ε's, concatenated. -/
 inductive Row.Hollow : Row B → Prop where
@@ -423,14 +374,14 @@ inductive Row.Hollow : Row B → Prop where
 theorem LookupV.hollow {ρ : Row B} {α : TyVar}
     {r : LookupRes B} (h : LookupV ρ α r) (hr : r = .absent) : ρ.Hollow := by
   unfold LookupV at h
-  generalize hk : (Ty.var α : Ty B) = k at h
+  generalize hk : (Key.var α) = k at h
   induction h with
   | emp => exact .empty
-  | miss h => subst hk; simp [Ty.keyCmp, Ty.keyClass, KeyClass.cmp] at h
+  | miss h => subst hk; simp [Key.cmp] at h
   | dmiss h =>
       subst hk
       rename_i q _
-      cases q <;> simp [Ty.keyCmp, Ty.keyClass, KeyClass.cmp] at h
+      cases q <;> simp [Key.cmp] at h
       split at h <;> cases h
   | catSkip _ _ ih₁ ih₂ => exact .cat (ih₁ rfl hk) (ih₂ hr hk)
   | _ => cases hr
@@ -447,7 +398,7 @@ theorem Row.Hollow.lookup {ρ : Row B} (h : ρ.Hollow) (l : Label) :
   | empty => exact .emp
   | cat _ _ ih₁ ih₂ => exact .catSkip ih₁ ih₂
 
-theorem Row.Hollow.lookupQ {ρ : Row B} (h : ρ.Hollow) (q : Ty B) :
+theorem Row.Hollow.lookupQ {ρ : Row B} (h : ρ.Hollow) (q : Key) :
     LookupQ ρ q .absent := by
   induction h with
   | empty => exact .emp
@@ -457,13 +408,13 @@ theorem Row.Hollow.lookupV {ρ : Row B} (h : ρ.Hollow) (α : TyVar) :
     LookupV ρ α .absent := h.lookupQ _
 
 -- ⊢  the twin of `lookup_applySubst`, with the key substituted too
-theorem LookupQ.applySubst {ρ : Row B} {q : Ty B} {r : LookupRes B}
+theorem LookupQ.applySubst {ρ : Row B} {q : Key} {r : LookupRes B}
     (θ : TySubst B) (h : LookupQ ρ q r) (hr : r ≠ .unknown) :
     LookupQ (ρ.applySubst θ) (q.applySubst θ) (r.applySubst θ) := by
   induction h with
   | emp => exact .emp
-  | hit h => exact .hit (Ty.keyCmp_applySubst θ h (by simp))
-  | miss h => exact .miss (Ty.keyCmp_applySubst θ h (by simp))
+  | hit h => exact .hit (Key.cmp_applySubst θ h (by simp))
+  | miss h => exact .miss (Key.cmp_applySubst θ h (by simp))
   | sunk _ => exact absurd rfl hr
   | varFree => exact absurd rfl hr
   | catHit _ ih =>
@@ -473,37 +424,8 @@ theorem LookupQ.applySubst {ρ : Row B} {q : Ty B} {r : LookupRes B}
       simp only [Row.applySubst]
       exact .catSkip (ih₁ (by intro h; cases h)) (ih₂ hr)
   | catUnk _ _ => exact absurd rfl hr
-  | dhit h => exact .dhit (Ty.keyCmp_applySubst θ h (by simp))
-  | dmiss h => exact .dmiss (Ty.keyCmp_applySubst θ h (by simp))
+  | dhit h => exact .dhit (Key.cmp_applySubst θ h (by simp))
+  | dmiss h => exact .dmiss (Key.cmp_applySubst θ h (by simp))
   | dunk _ => exact absurd rfl hr
-
-
------------------------------- ≈ ON THE KEY ------------------------------------
--- The algorithm reads a key under ⟦S⟧, the declarative side under σ, and under a
--- σ satisfying S the two are only ≈-equal. That costs nothing: the lookup reads
--- only the key's CLASS, and ≈ keeps it.
-
-theorem Ty.keyCmp_key_equiv {k k' q : Ty B} (he : TyEquiv k k') :
-    Ty.keyCmp k q = Ty.keyCmp k' q := by
-  unfold Ty.keyCmp; rw [TyEquiv.keyClass_both he]
-
--- ⊢  the keyed lookup does not see ≈ on its key
-theorem LookupQ.key_equiv {ρ : Row B} {q q' : Ty B} {r : LookupRes B}
-    (he : TyEquiv q q') (h : LookupQ ρ q r) : LookupQ ρ q' r := by
-  have e : ∀ x : Ty B, Ty.keyCmp q x = Ty.keyCmp q' x :=
-    fun _ => Ty.keyCmp_key_equiv he
-  clear he
-  induction h with
-  | emp => exact .emp
-  | hit h => exact .hit (e _ ▸ h)
-  | miss h => exact .miss (e _ ▸ h)
-  | sunk h => exact .sunk (e _ ▸ h)
-  | varFree => exact .varFree
-  | catHit _ ih => exact .catHit (ih e)
-  | catSkip _ _ ih₁ ih₂ => exact .catSkip (ih₁ e) (ih₂ e)
-  | catUnk _ ih => exact .catUnk (ih e)
-  | dhit h => exact .dhit (e _ ▸ h)
-  | dmiss h => exact .dmiss (e _ ▸ h)
-  | dunk h => exact .dunk (e _ ▸ h)
 
 end MinimalCalculus

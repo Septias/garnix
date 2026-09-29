@@ -82,13 +82,15 @@ theorem tyClash_dispatch {B : Type} [DecidableEq B] {S : Supply} {fuel : Nat}
       | fn _ _ => simp only [Ty.applySubst] at hb; cases hb
       | rcd _ => simp only [Ty.applySubst] at hb; cases hb
   | lab b =>
-      have hb := TyEquiv.lab_inv (show TyEquiv (Ty.lab b) _ from hu)
+      have hb := TyEquiv.lab_inv (show TyEquiv (Ty.lab (b.applySubst θ)) _ from hu)
       cases τ' with
       | var α => cases fuel <;> exact bindTy_ne_clash (S := S) (α := α) (τ := Ty.lab b) h
       | base _ => simp only [Ty.applySubst] at hb; cases hb
       | lab b' =>
           simp only [Ty.applySubst, Ty.lab.injEq] at hb
-          subst hb; cases fuel <;> simp [unifyTyF] at h
+          simp only [unifyTyF] at h
+          cases b <;> cases b' <;> simp [unifyKey, bindLab] at h <;>
+            (try split at h) <;> (try cases h) <;> simp_all
       | unk => simp only [Ty.applySubst] at hb; cases hb
       | fn _ _ => simp only [Ty.applySubst] at hb; cases hb
       | rcd _ => simp only [Ty.applySubst] at hb; cases hb

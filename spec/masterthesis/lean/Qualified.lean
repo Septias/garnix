@@ -15,8 +15,8 @@ namespace MinimalCalculus
 -- a TYPE, not a variable: a promise unification has already spent (δ ≔ α → β,
 -- `spentEx_*`) is still a stump ⟨ρ.l ↓ α → β⟩. A-sel-? parks `.var δ`.
 
--- The label is a QUERY TYPE (LabelLookup.lean): ⌊l⌋ for a static selection
--- `e.l`, a label variable for a dynamic `e₁.(e₂)` whose label is not known yet.
+-- The label is a KEY (LabelLookup.lean): l for a static selection `e.l`, a
+-- label variable for a dynamic `e₁.(e₂)` whose label is not known yet.
 -- A label-variable query is a second source of `?`, and the stump then waits
 -- for that variable exactly as it waits for a row variable.
 -- a stump's result is a type, and parked stumps are told apart by it
@@ -24,7 +24,7 @@ deriving instance DecidableEq for Ty, Row
 
 structure Stump (B : Type) where
   row   : Row B
-  label : Ty B
+  label : Key
   res   : Ty B
 
 deriving instance DecidableEq for Stump
@@ -93,9 +93,10 @@ def QScheme.freeFtv {B : Type} (σ : QScheme B) : List TyVar :=
 other variables never mentions one. Exactly the side condition that makes
 `QScheme.applySubst` — which does NOT rename — legitimate. -/
 def QScheme.Avoiding {B : Type} (σ : QScheme B) (θ : TySubst B) : Prop :=
-  (∀ α ∈ σ.vars, θ.ty α = .var α ∧ θ.row α = .var α) ∧
+  (∀ α ∈ σ.vars, θ.ty α = .var α ∧ θ.row α = .var α ∧ θ.lab α = .var α) ∧
   (∀ α ∈ σ.freeFtv, α ∉ σ.vars →
-     (∀ β ∈ (θ.ty α).ftv, β ∉ σ.vars) ∧ (∀ β ∈ (θ.row α).ftv, β ∉ σ.vars))
+     (∀ β ∈ (θ.ty α).ftv, β ∉ σ.vars) ∧ (∀ β ∈ (θ.row α).ftv, β ∉ σ.vars) ∧
+     (∀ β ∈ (θ.lab α).ftv, β ∉ σ.vars))
 
 ---------------------------------- DISCHARGE ----------------------------------
 -- Γ ⊢ (θρ).l ↓ r  replayed per instantiation θ:
@@ -204,12 +205,12 @@ theorem Stump.Discharge.applySubst_of_definite {B : Type}
   cases h with
   | @hit τ hl hδ =>
       refine .hit (τ := τ.applySubst χ) ?_ ?_
-      · rw [← Row.applySubst_applySubst, ← Ty.applySubst_applySubst]
+      · rw [← Row.applySubst_applySubst, ← Key.applySubst_applySubst]
         exact LookupQ.applySubst χ hl (by intro hc; cases hc)
       · rw [← Ty.applySubst_applySubst, hδ]
   | abs hl hδ =>
       refine .abs ?_ ?_
-      · rw [← Row.applySubst_applySubst, ← Ty.applySubst_applySubst]
+      · rw [← Row.applySubst_applySubst, ← Key.applySubst_applySubst]
         exact LookupQ.applySubst (r := .absent) χ hl (by intro hc; cases hc)
       · rw [← Ty.applySubst_applySubst, hδ]; rfl
   | unk hl _ => exact absurd hl hdef
@@ -238,7 +239,7 @@ def selEx (C : Type) : Expr C := .lam "x" (.sel (.var "x") "l")
 -- ∀β δ. ⟨β.l ↓ δ⟩ ⇒ {β} → δ
 def selQ (B : Type) : QScheme B :=
   ⟨["β", "δ"],
-   [⟨.var "β", .lab "l", .var "δ"⟩],
+   [⟨.var "β", .lit "l", .var "δ"⟩],
    .fn (.rcd (.var "β")) (.var "δ")⟩
 
 -- The worked-example table of algorithmic.typ in one statement: ANY lookup
@@ -251,8 +252,8 @@ theorem selQ_inst_of_lookup {B : Type} {ρ : Row B}
     {r : LookupRes B} (h : Lookup ρ "l" r) :
     QScheme.Inst (selQ B) (.fn (.rcd ρ) r.collapse) := by
   refine ⟨⟨fun γ => if γ = "δ" then r.collapse else .var γ,
-           fun γ => if γ = "β" then ρ else .var γ⟩,
-          ⟨fun γ hγ => ?_, fun γ hγ => ?_⟩, fun s hs => ?_, ?_⟩
+           fun γ => if γ = "β" then ρ else .var γ, fun γ => .var γ⟩,
+          ⟨fun γ hγ => ?_, fun γ hγ => ?_, fun _ _ => rfl⟩, fun s hs => ?_, ?_⟩
   · have hne : γ ≠ "δ" := by rintro rfl; exact hγ (by simp [selQ])
     simp [hne]
   · have hne : γ ≠ "β" := by rintro rfl; exact hγ (by simp [selQ])
@@ -293,10 +294,10 @@ theorem selQ_no_mixed {B : Type} :
   simp only [selQ, Ty.applySubst, Row.applySubst] at hbody
   injection hbody with hdom hres
   injection hdom with hβ
-  have hs := hQ ⟨.var "β", .lab "l", .var "δ"⟩ (by simp [selQ])
+  have hs := hQ ⟨.var "β", .lit "l", .var "δ"⟩ (by simp [selQ])
   cases hs with
   | hit hl _ =>
-      simp only [Row.applySubst, Ty.applySubst, LookupQ.lab_iff] at hl
+      simp only [Row.applySubst, Ty.applySubst, Key.applySubst_lit, LookupQ.lab_iff] at hl
       rw [hβ] at hl
       cases hl
   | abs _ hδ => rw [show θ.ty "δ" = _ from hδ] at hres; cases hres
@@ -312,7 +313,7 @@ theorem selQ_instance_closed {B C : Type} (constTy : C → B) (Γ : Ctx B) :
   rintro τ ⟨θ, -, hQ, hbody⟩
   simp only [selQ, Ty.applySubst, Row.applySubst] at hbody
   subst hbody
-  have hs := hQ ⟨.var "β", .lab "l", .var "δ"⟩ (by simp [selQ])
+  have hs := hQ ⟨.var "β", .lit "l", .var "δ"⟩ (by simp [selQ])
   -- the λ-bound variable types at its annotation …
   have hvar : Typed constTy (Γ.bindTy "x" (.rcd (θ.row "β")))
       (.var "x" : Expr C) (.rcd (θ.row "β")) :=
@@ -321,15 +322,15 @@ theorem selQ_instance_closed {B C : Type} (constTy : C → B) (Γ : Ctx B) :
   -- the row alone, so there is nothing to transport under the binder.
   cases hs with
   | hit hl hδ =>
-      simp only [Row.applySubst, Ty.applySubst, LookupQ.lab_iff] at hl
+      simp only [Row.applySubst, Ty.applySubst, Key.applySubst_lit, LookupQ.lab_iff] at hl
       rw [show θ.ty "δ" = _ from hδ]
       exact .tLam (.tSel hvar hl)
   | abs hl hδ =>
-      simp only [Row.applySubst, Ty.applySubst, LookupQ.lab_iff] at hl
+      simp only [Row.applySubst, Ty.applySubst, Key.applySubst_lit, LookupQ.lab_iff] at hl
       rw [show θ.ty "δ" = _ from hδ]
       exact .tLam (.tSelAbs hvar hl)
   | unk hl hδ =>
-      simp only [Row.applySubst, Ty.applySubst, LookupQ.lab_iff] at hl
+      simp only [Row.applySubst, Ty.applySubst, Key.applySubst_lit, LookupQ.lab_iff] at hl
       rw [show θ.ty "δ" = _ from hδ]
       exact .tLam (.tSelUnk hvar hl)
 
@@ -464,7 +465,7 @@ theorem selQ_no_blurred_inst {B : Type} (b : B) :
   injection hbody with h1 h2
   injection h1 with hβ
   have hrow : (Row.var "β").applySubst θ = Row.sing "l" (.base b) := hβ
-  have hs := hdis ⟨.var "β", .lab "l", .var "δ"⟩ (by simp [selQ])
+  have hs := hdis ⟨.var "β", .lit "l", .var "δ"⟩ (by simp [selQ])
   cases hs with
   | hit hl hres =>
       rw [hrow] at hl
@@ -603,14 +604,14 @@ mutual
     | qUnk : QTyped constTy Γ e τ → QTyped constTy Γ e .unk
     | qRcd : QTypedBody constTy Γ b ρ → QTyped constTy Γ (.rcd b) (.rcd ρ)
     -- FC-labels. A label literal types at its singleton; a dynamic selection
-    -- looks up whatever its key's TYPE says (`LookupQ`: ⌊l⌋, a label variable,
-    -- or no label at all), with the three verdicts of T-sel / T-sel-★ / T-sel-⊥
-    | qLab : QTyped constTy Γ (.lab l) (.lab l)
-    | qSelDyn : QTyped constTy Γ e₁ (.rcd ρ) → QTyped constTy Γ e₂ q →
+    -- needs a LABEL-typed key ⌊k⌋ and looks k up (`LookupQ`), with the three
+    -- verdicts of T-sel / T-sel-★ / T-sel-⊥
+    | qLab : QTyped constTy Γ (.lab l) (.lab (.lit l))
+    | qSelDyn : QTyped constTy Γ e₁ (.rcd ρ) → QTyped constTy Γ e₂ (.lab q) →
                 LookupQ ρ q (.found τ) → QTyped constTy Γ (.selDyn e₁ e₂) τ
-    | qSelDynUnk : QTyped constTy Γ e₁ (.rcd ρ) → QTyped constTy Γ e₂ q →
+    | qSelDynUnk : QTyped constTy Γ e₁ (.rcd ρ) → QTyped constTy Γ e₂ (.lab q) →
                    LookupQ ρ q .unknown → QTyped constTy Γ (.selDyn e₁ e₂) .unk
-    | qSelDynAbs : QTyped constTy Γ e₁ (.rcd ρ) → QTyped constTy Γ e₂ q →
+    | qSelDynAbs : QTyped constTy Γ e₁ (.rcd ρ) → QTyped constTy Γ e₂ (.lab q) →
                    LookupQ ρ q .absent → QTyped constTy Γ (.selDyn e₁ e₂) .unk
 
   inductive QTypedBody {B C : Type} (constTy : C → B) :
@@ -711,7 +712,7 @@ theorem qtyped_rcd_inv {B C : Type} {constTy : C → B} {Γ : QCtx B}
 -- a label literal types at its singleton, up to ≈ and blur
 private theorem qtyped_lab_inv_aux {B C : Type} {constTy : C → B} {l : Label} :
     ∀ {Γ : QCtx B} {e : Expr C} {τ : Ty B}, QTyped constTy Γ e τ → e = .lab l →
-      TyEquiv (.lab l) τ ∨ τ = .unk
+      TyEquiv (.lab (.lit l)) τ ∨ τ = .unk
   | _, _, _, .qLab, he => by cases he; exact .inl (.refl _)
   | _, _, _, .qEq h heq, he =>
       match qtyped_lab_inv_aux h he with
@@ -734,7 +735,7 @@ private theorem qtyped_lab_inv_aux {B C : Type} {constTy : C → B} {l : Label} 
 
 theorem qtyped_lab_inv {B C : Type} {constTy : C → B} {Γ : QCtx B} {l : Label}
     {τ : Ty B} (h : QTyped constTy Γ (.lab l : Expr C) τ) :
-    TyEquiv (.lab l) τ ∨ τ = .unk :=
+    TyEquiv (.lab (.lit l)) τ ∨ τ = .unk :=
   qtyped_lab_inv_aux h rfl
 
 ------------------------------ L2 CANONICAL FORMS ------------------------------
@@ -1111,23 +1112,6 @@ theorem QTypedBody.lookup_absent {B C : Type} {constTy : C → B} {Γ : QCtx B} 
           simp [RecBody.lookup, QTypedBody.lookup_absent h₁ ha,
                 QTypedBody.lookup_absent h₂ hr]
 
--- ⊢  a JUNK key finds nothing in a record literal's row: every field there is
---    literal, and junk is apart from every literal
-theorem QTypedBody.lookupQ_junk_absent {B C : Type} {constTy : C → B} {Γ : QCtx B} :
-    {b : RecBody (Expr C)} → {ρ : Row B} → QTypedBody constTy Γ b ρ →
-    ∀ {q : Ty B} {r : LookupRes B}, q.keyClass = .junk → LookupQ ρ q r → r = .absent
-  | _, _, .empty => fun _ hl => by cases hl; rfl
-  | _, _, .field _ => fun hq hl => by
-      cases hl with
-      | hit h => unfold Ty.keyCmp at h; rw [hq] at h; simp [Ty.keyClass, KeyClass.cmp] at h
-      | miss _ => rfl
-      | sunk h => unfold Ty.keyCmp at h; rw [hq] at h; simp [Ty.keyClass, KeyClass.cmp] at h
-  | _, _, .cat h₁ h₂ => fun hq hl => by
-      cases hl with
-      | catHit hf => cases QTypedBody.lookupQ_junk_absent h₁ hq hf
-      | catSkip _ hr => exact QTypedBody.lookupQ_junk_absent h₂ hq hr
-      | catUnk hu => cases QTypedBody.lookupQ_junk_absent h₁ hq hu
-
 theorem QTypedBody.lookup_found {B C : Type} {constTy : C → B} {Γ : QCtx B} :
     {b : RecBody (Expr C)} → {ρ : Row B} → QTypedBody constTy Γ b ρ →
     ∀ {l : Label} {τ : Ty B}, Lookup ρ l (.found τ) →
@@ -1253,16 +1237,8 @@ private theorem qpreservation_aux {B C : Type} {constTy : C → B} :
       | selDynR _ s => exact .qSelDyn h₁ (qpreservation_aux h₂ hΓ s) hl
       | @selDynVal b l _ hbl =>
           rcases qtyped_lab_inv h₂ with he | hu
-          case inr =>
-            subst hu
-            obtain ⟨ρ', he | hu, hb⟩ := qtyped_rcd_inv h₁
-            · obtain ⟨_, hσ, hr⟩ := he.rcd_inv
-              cases hσ
-              obtain ⟨r', hl', hre⟩ := LookupQ.equiv (RowEquiv.symm hr) hl
-              cases hre
-              cases QTypedBody.lookupQ_junk_absent hb rfl hl'
-            · cases hu
-          rw [he.lab_inv] at hl
+          case inr => cases hu
+          cases he.lab_inv
           have hl := LookupQ.lab_iff.mp hl
           obtain ⟨ρ', he | hu, hb⟩ := qtyped_rcd_inv h₁
           · obtain ⟨_, hσ, hr⟩ := he.rcd_inv
@@ -1622,11 +1598,11 @@ theorem qtyped_bind_cov {B C : Type} {constTy : C → B} {Γ : QCtx B} {x : Var}
 
 -- ∀δ. ⟨α.l ↓ δ⟩ ⇒ δ      (α FREE — the stump parks on a free variable, not on a binder)
 private def parkQ (B : Type) : QScheme B :=
-  ⟨["δ"], [⟨.var "α", .lab "l", .var "δ"⟩], .var "δ"⟩
+  ⟨["δ"], [⟨.var "α", .lit "l", .var "δ"⟩], .var "δ"⟩
 
 -- χ = [α ↦ (l: 𝓫)] at the row sort — "the solver solved α"
 private def solveAlpha {B : Type} (b : B) : TySubst B :=
-  ⟨(.var ·), fun γ => if γ == "α" then .sing "l" (.base b) else .var γ⟩
+  ⟨(.var ·), fun γ => if γ == "α" then .sing "l" (.base b) else .var γ, (.var ·)⟩
 
 -- With α free the lookup is ? and discharge can only finalize at ★.
 -- ⊢  parkQ ≥ τ  ⟹  τ = ★
@@ -1635,8 +1611,8 @@ private theorem parkQ_inst_free {B : Type} {τ : Ty B}
   obtain ⟨θ, hfix, hdis, hbody⟩ := h
   have hrow : (Row.var "α").applySubst θ = Row.var "α" := by
     simp only [Row.applySubst]
-    exact hfix.2 "α" (by simp [parkQ])
-  have hs := hdis ⟨.var "α", .lab "l", .var "δ"⟩ (by simp [parkQ])
+    exact hfix.2.1 "α" (by simp [parkQ])
+  have hs := hdis ⟨.var "α", .lit "l", .var "δ"⟩ (by simp [parkQ])
   simp only [parkQ, Ty.applySubst] at hbody
   cases hs with
   | hit hl _ => rw [hrow] at hl; cases LookupQ.lab_iff.mp hl
@@ -1647,8 +1623,8 @@ private theorem parkQ_inst_free {B : Type} {τ : Ty B}
 -- ⊢  χ·parkQ ≥ 𝓫
 private theorem parkQ_inst_solved {B : Type} (b : B) :
     QScheme.Inst ((parkQ B).applySubst (solveAlpha b)) (.base b) := by
-  refine ⟨⟨fun γ => if γ = "δ" then .base b else .var γ, fun γ => .var γ⟩,
-          ⟨fun γ hγ => ?_, fun _ _ => rfl⟩, fun st hst => ?_, ?_⟩
+  refine ⟨⟨fun γ => if γ = "δ" then .base b else .var γ, fun γ => .var γ, fun γ => .var γ⟩,
+          ⟨fun γ hγ => ?_, fun _ _ => rfl, fun _ _ => rfl⟩, fun st hst => ?_, ?_⟩
   · have hne : γ ≠ "δ" := by
       rintro rfl; exact hγ (by simp [parkQ, QScheme.applySubst])
     simp [hne]
@@ -1702,11 +1678,13 @@ theorem covered_not_applySubst_stable {B : Type} (b : B) :
 -- substitution whose domain overlaps the other scheme's binders.
 def TySubst.restrict {B : Type} (θ : TySubst B) (vars : List TyVar) : TySubst B :=
   ⟨fun γ => if γ ∈ vars then θ.ty γ else .var γ,
-   fun γ => if γ ∈ vars then θ.row γ else .var γ⟩
+   fun γ => if γ ∈ vars then θ.row γ else .var γ,
+   fun γ => if γ ∈ vars then θ.lab γ else .var γ⟩
 
 theorem TySubst.restrict_fixedOutside {B : Type} (θ : TySubst B)
     (vars : List TyVar) : (θ.restrict vars).FixedOutside vars :=
-  ⟨fun _ h => by simp [TySubst.restrict, h], fun _ h => by simp [TySubst.restrict, h]⟩
+  ⟨fun _ h => by simp [TySubst.restrict, h], fun _ h => by simp [TySubst.restrict, h],
+   fun _ h => by simp [TySubst.restrict, h]⟩
 
 -- σ ⊴ σ' certified by θ.
 structure QScheme.Witness {B : Type} (σ σ' : QScheme B)
@@ -1739,11 +1717,12 @@ theorem QScheme.covered_of_witness {B : Type} {σ σ' : QScheme B}
     by_cases hv : γ ∈ σ'.vars
     · simp [TySubst.restrict, hv]
     · have hσ : γ ∉ σ.vars := h.fresh γ hγ hv
-      constructor
+      refine ⟨?_, ?_, ?_⟩
       · simp [TySubst.restrict, hv, TySubst.comp, h.fixed.1 γ hv,
               Ty.applySubst, hχfix.1 γ hσ]
-      · simp [TySubst.restrict, hv, TySubst.comp, h.fixed.2 γ hv,
-              Row.applySubst, hχfix.2 γ hσ]
+      · simp [TySubst.restrict, hv, TySubst.comp, h.fixed.2.1 γ hv,
+              Row.applySubst, hχfix.2.1 γ hσ]
+      · simp [TySubst.restrict, hv, TySubst.comp, h.fixed.2.2 γ hv, hχfix.2.2 γ hσ]
   rw [hcongr, ← Ty.applySubst_applySubst, h.body, hχbody]
 
 -- PLAIN SCHEMES: with no stumps the entailment premise is empty and the
@@ -1768,15 +1747,15 @@ theorem Scheme.covered_of_inst {B : Type} {σ σ' : Scheme B} {θ : TySubst B}
 -- is pinned at 𝓫 and the composite discharges selQ's stump at the same type.
 -- This is the step a solver would emit when it instantiates a parked scheme.
 private def selQb {B : Type} (b : B) : QScheme B :=
-  ⟨["δ"], [⟨.sing "l" (.base b), .lab "l", .var "δ"⟩],
+  ⟨["δ"], [⟨.sing "l" (.base b), .lit "l", .var "δ"⟩],
    .fn (.rcd (.sing "l" (.base b))) (.var "δ")⟩
 
 private def solveβ {B : Type} (b : B) : TySubst B :=
-  ⟨fun γ => .var γ, fun γ => if γ = "β" then .sing "l" (.base b) else .var γ⟩
+  ⟨fun γ => .var γ, fun γ => if γ = "β" then .sing "l" (.base b) else .var γ, fun γ => .var γ⟩
 
 -- ⊢  selQb ⊴ selQ
 theorem selQ_covers_selQb {B : Type} (b : B) : selQb b ⊴ selQ B := by
-  refine QScheme.covered_of_witness (θ := solveβ b) ⟨⟨fun _ _ => rfl, ?_⟩, ?_, ?_, ?_⟩
+  refine QScheme.covered_of_witness (θ := solveβ b) ⟨⟨fun _ _ => rfl, ?_, fun _ _ => rfl⟩, ?_, ?_, ?_⟩
   · intro γ hγ
     have hne : γ ≠ "β" := by rintro rfl; exact hγ (by simp [selQ])
     simp [solveβ, hne]
@@ -1787,7 +1766,7 @@ theorem selQ_covers_selQb {B : Type} (b : B) : selQb b ⊴ selQ B := by
   · intro χ hχfix hdis s' hs'
     simp only [selQ, List.mem_singleton] at hs'
     subst hs'
-    have hs := hdis ⟨.sing "l" (.base b), .lab "l", .var "δ"⟩ (by simp [selQb])
+    have hs := hdis ⟨.sing "l" (.base b), .lit "l", .var "δ"⟩ (by simp [selQb])
     have hrowχ : (Row.sing "l" (Ty.base b)).applySubst χ = .sing "l" (.base b) := by
       simp [Row.applySubst, Ty.applySubst]
     have hδ : χ.ty "δ" = .base b := by
@@ -1859,7 +1838,7 @@ theorem selQ_no_prec_answer {B : Type} (b : B) :
   obtain ⟨τp, hsing, hτp⟩ := RowPrec.sing_inv hρprec
   subst hsing
   -- the lookup on that row is a definite hit, so discharge pins θδ = τp
-  have hs := hdis ⟨.var "β", .lab "l", .var "δ"⟩ (by simp [selQ])
+  have hs := hdis ⟨.var "β", .lit "l", .var "δ"⟩ (by simp [selQ])
   have hrow : (Row.var "β").applySubst θ = Row.sing "l" τp := by
     simp only [Row.applySubst]; exact hβ
   have hδ : θ.ty "δ" = τp := by
@@ -2116,7 +2095,7 @@ theorem rowEquiv_hasSing {B : Type} :
   | _, _, .unitL         => by simp [Row.hasSing]
   | _, _, .unitR         => by simp [Row.hasSing]
   | _, _, .comm _        => by simp [Row.hasSing]
-  | _, _, .dsing _ _     => rfl
+  | _, _, .dsing _       => rfl
   | _, _, .dsingLab      => rfl
 
 -- ⊢  substitution never DELETES a field: it maps `.sing` to `.sing`.
@@ -2400,8 +2379,8 @@ theorem l1_rejects_two_use {B C : Type} (constTy : C → B) (c : C) :
       simp only [Ty.applySubst] at hbb
       by_cases hα : α ∈ σ.vars
       · refine selEx_not_rcd_empty constTy (hclosed _ ⟨⟨fun δ =>
-          if δ = α then .rcd .empty else .var δ, fun δ => .var δ⟩,
-          ⟨fun δ hδ => ?_, fun _ _ => rfl⟩, ?_⟩)
+          if δ = α then .rcd .empty else .var δ, fun δ => .var δ, fun δ => .var δ⟩,
+          ⟨fun δ hδ => ?_, fun _ _ => rfl, fun _ _ => rfl⟩, ?_⟩)
         · have hne : ¬δ = α := by rintro rfl; exact hδ hα
           simp [hne]
         · rw [hbodyσ]; simp [Ty.applySubst]
@@ -2425,7 +2404,7 @@ theorem l1_rejects_two_use {B C : Type} (constTy : C → B) (c : C) :
             · rw [hfixb.1 α hα] at hrb; cases hrb
           -- θb with the result variable re-pointed at 𝓫_c
           have hdm : dom.applySubst
-              (⟨fun δ => if δ = α then .base (constTy c) else θb.ty δ, θb.row⟩ :
+              (⟨fun δ => if δ = α then .base (constTy c) else θb.ty δ, θb.row, θb.lab⟩ :
                 TySubst B) = .rcd ρ' := by
             cases dom with
             | var γ =>
@@ -2446,15 +2425,15 @@ theorem l1_rejects_two_use {B C : Type} (constTy : C → B) (c : C) :
                 simp only [Ty.applySubst, Ty.rcd.injEq]
                 rw [applySubst_rowOnly
                       (θ₁ := (⟨fun δ => if δ = α then .base (constTy c)
-                                        else θb.ty δ, θb.row⟩ : TySubst B))
+                                        else θb.ty δ, θb.row, θb.lab⟩ : TySubst B))
                       (θ₂ := θb) rfl ρd hfree, hρd]
             | base b' => simp only [Ty.applySubst] at hdb; cases hdb
             | lab b' => simp only [Ty.applySubst] at hdb; cases hdb
             | unk     => simp only [Ty.applySubst] at hdb; cases hdb
             | fn _ _  => simp only [Ty.applySubst] at hdb; cases hdb
           have hmix : σ.Inst (.fn (.rcd ρ') (.base (constTy c))) := by
-            refine ⟨⟨fun δ => if δ = α then .base (constTy c) else θb.ty δ, θb.row⟩,
-              ⟨fun δ hδ => ?_, fun δ hδ => hfixb.2 δ hδ⟩, ?_⟩
+            refine ⟨⟨fun δ => if δ = α then .base (constTy c) else θb.ty δ, θb.row, θb.lab⟩,
+              ⟨fun δ hδ => ?_, fun δ hδ => hfixb.2.1 δ hδ, fun δ hδ => hfixb.2.2 δ hδ⟩, ?_⟩
             · have hne : ¬δ = α := by rintro rfl; exact hδ hα
               simp [hne, hfixb.1 δ hδ]
             · rw [hbodyσ]
@@ -2474,8 +2453,7 @@ theorem l1_strictly_weaker {B C : Type} (constTy : C → B) (c : C) :
 -- λa. λx. x.(a). Its qualified scheme has a label variable as the stump's key —
 -- two blockers, two sorts, one stump — and every instance is a typing, the three
 -- discharge arms replaying T-sel-dyn / -⊥ / -★ exactly as `selQ_instance_closed`
--- replays T-sel. A non-label instance of α (say `int`) is no exception: L-junk
--- answers ⊥, discharge sends δ to ★, and T-sel-dyn-⊥ types it.
+-- replays T-sel. α is a LABEL variable, so every instance of it is a key.
 
 /-- λa. λx. x.(a) -/
 def selDynEx (C : Type) : Expr C := .lam "a" (.lam "x" (.selDyn (.var "x") (.var "a")))
@@ -2483,24 +2461,24 @@ def selDynEx (C : Type) : Expr C := .lam "a" (.lam "x" (.selDyn (.var "x") (.var
 /-- ∀(α : Label)(β : Row)(δ : Type). ⟨β.α ↓ δ⟩ ⇒ α → {β} → δ -/
 def selDynQ (B : Type) : QScheme B :=
   ⟨["α", "β", "δ"], [⟨.var "β", .var "α", .var "δ"⟩],
-   .fn (.var "α") (.fn (.rcd (.var "β")) (.var "δ"))⟩
+   .fn (.lab (.var "α")) (.fn (.rcd (.var "β")) (.var "δ"))⟩
 
 /-- ⊢  **every instance of `selDynQ` types λa. λx. x.(a)**, in any context. -/
 theorem selDynQ_instance_closed {B C : Type} (constTy : C → B) (Γ : QCtx B) :
     ∀ τ, QScheme.Inst (selDynQ B) τ → QTyped constTy Γ (selDynEx C) τ := by
   rintro τ ⟨θ, -, hQ, hbody⟩
-  simp only [selDynQ, Ty.applySubst] at hbody
+  simp only [selDynQ, Ty.applySubst, Key.applySubst_var] at hbody
   subst hbody
   have hs := hQ ⟨.var "β", .var "α", .var "δ"⟩ (by simp [selDynQ])
   -- the two λ-bound variables type at their annotations …
-  have hx : QTyped constTy ((Γ.bindTy "a" (θ.ty "α")).bindTy "x" (.rcd (θ.row "β")))
+  have hx : QTyped constTy ((Γ.bindTy "a" (.lab (θ.lab "α"))).bindTy "x" (.rcd (θ.row "β")))
       (.var "x" : Expr C) (.rcd (θ.row "β")) :=
     .qVar (σ := ⟨[], [], .rcd (θ.row "β")⟩)
       (by simp [QCtx.bindTy, QCtx.bindScheme, QCtx.lookup])
       (QScheme.inst_toQ.mpr (Scheme.Inst.self ⟨[], _⟩))
-  have ha : QTyped constTy ((Γ.bindTy "a" (θ.ty "α")).bindTy "x" (.rcd (θ.row "β")))
-      (.var "a" : Expr C) (θ.ty "α") :=
-    .qVar (σ := ⟨[], [], θ.ty "α"⟩)
+  have ha : QTyped constTy ((Γ.bindTy "a" (.lab (θ.lab "α"))).bindTy "x" (.rcd (θ.row "β")))
+      (.var "a" : Expr C) (.lab (θ.lab "α")) :=
+    .qVar (σ := ⟨[], [], .lab (θ.lab "α")⟩)
       (by simp [QCtx.bindTy, QCtx.bindScheme, QCtx.lookup])
       (QScheme.inst_toQ.mpr (Scheme.Inst.self ⟨[], _⟩))
   -- … and the discharge's lookup is the selection's, verbatim

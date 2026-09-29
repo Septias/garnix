@@ -37,10 +37,10 @@ variable {B : Type} [DecidableEq B]
 -- longer enough — only an undecided comparison stays undecided.
 
 /-- β is sent to a variable β′ that no other type-sort variable of `xs` reaches. -/
-def KeyFresh (θ : TySubst B) (xs : List (Bool × TyVar)) (β : TyVar) : Prop :=
-  ∃ β', θ.ty β = .var β' ∧ ∀ γ, (false, γ) ∈ xs → θ.ty γ = .var β' → γ = β
+def KeyFresh (θ : TySubst B) (xs : List (Srt × TyVar)) (β : TyVar) : Prop :=
+  ∃ β', θ.ty β = .var β' ∧ ∀ γ, (.ty, γ) ∈ xs → θ.ty γ = .var β' → γ = β
 
-theorem KeyFresh.mono {θ : TySubst B} {xs ys : List (Bool × TyVar)} {β : TyVar}
+theorem KeyFresh.mono {θ : TySubst B} {xs ys : List (Srt × TyVar)} {β : TyVar}
     (h : KeyFresh θ xs β) (hs : ∀ x ∈ ys, x ∈ xs) : KeyFresh θ ys β :=
   let ⟨β', hβ, hf⟩ := h
   ⟨β', hβ, fun γ hγ he => hf γ (hs _ hγ) he⟩
@@ -59,13 +59,13 @@ theorem Ty.keyCmp_var_ne {x : Ty B} {β : TyVar} (h : x ≠ .var β) :
       rw [if_neg (fun he => h (by rw [he]))]
   | _ => rfl
 
-private theorem mem_q_cat_r {x : Bool × TyVar} {a b c : List (Bool × TyVar)}
+private theorem mem_q_cat_r {x : Srt × TyVar} {a b c : List (Srt × TyVar)}
     (h : x ∈ a ++ c) : x ∈ a ++ (b ++ c) := by
   rcases List.mem_append.mp h with h | h
   · exact List.mem_append_left _ h
   · exact List.mem_append_right _ (List.mem_append_right _ h)
 
-private theorem mem_q_cat_l {x : Bool × TyVar} {a b c : List (Bool × TyVar)}
+private theorem mem_q_cat_l {x : Srt × TyVar} {a b c : List (Srt × TyVar)}
     (h : x ∈ a ++ b) : x ∈ a ++ (b ++ c) := by
   rcases List.mem_append.mp h with h | h
   · exact List.mem_append_left _ h
@@ -75,8 +75,8 @@ private theorem mem_q_cat_l {x : Bool × TyVar} {a b c : List (Bool × TyVar)}
 --    variable (and, at a key, a variable of its own)
 theorem lookupQ_blocked_subst {ρ : Row B} {q : Ty B} {β : TyVar}
     (h : LookupBlockedQ ρ q β) (θ : TySubst B)
-    (hrow : (true, β) ∈ ρ.sortedFtv → ∃ β', θ.row β = .var β')
-    (hkey : (false, β) ∈ q.sortedFtv ++ ρ.sortedFtv →
+    (hrow : (.row, β) ∈ ρ.sortedFtv → ∃ β', θ.row β = .var β')
+    (hkey : (.ty, β) ∈ q.sortedFtv ++ ρ.sortedFtv →
       KeyFresh θ (q.sortedFtv ++ ρ.sortedFtv) β) :
     LookupQ (ρ.applySubst θ) (q.applySubst θ) .unknown := by
   revert hrow hkey
@@ -121,13 +121,13 @@ theorem lookupQ_blocked_subst {ρ : Row B} {q : Ty B} {β : TyVar}
 
 -- ⊢  a clean state leaves every spine variable of a row it has substituted alone
 theorem SolverState.row_var_of_clean {S : SolverState B} (hc : S.sol.Clean) {ρ : Row B}
-    {α : TyVar} (hα : (true, α) ∈ (ρ.applySubst S.subst).sortedFtv) :
+    {α : TyVar} (hα : (.row, α) ∈ (ρ.applySubst S.subst).sortedFtv) :
     S.subst.row α = .var α := by
   apply rowLookup_not_mem
   intro hm
   obtain ⟨p, hp, rfl⟩ := List.mem_map.mp hm
   exact hc.clears_row hα
-    (List.mem_append_right _ (List.mem_map_of_mem (f := fun p => (true, p.1)) hp))
+    (List.mem_append_right _ (List.mem_map_of_mem (f := fun p => (.row, p.1)) hp))
 
 --------------------- RENAMING A RESULT ---------------------------------------
 -- A-let reads each generalized result under `readSub`, which renames the
@@ -245,7 +245,7 @@ theorem lookup_cat_left {ρ₁ ρ₂ : Row B} {l : Label} {r : LookupRes B}
 
 theorem lookup_blocked_fill {ρ : Row B} {l : Label} {β : TyVar}
     (h : LookupBlocked ρ l β) (θ : TySubst B) {fs : List (Label × Ty B)} {γ : TyVar}
-    (hβ : θ.row β = fillRow fs γ) (hk : (false, β) ∉ ρ.sortedFtv) :
+    (hβ : θ.row β = fillRow fs γ) (hk : (.ty, β) ∉ ρ.sortedFtv) :
     Lookup (ρ.applySubst θ) l (fillRes fs l) := by
   induction h with
   | varFree =>

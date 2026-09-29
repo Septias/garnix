@@ -29,11 +29,9 @@ theorem bindTy_sound {B : Type} {θ : TySubst B}  {S : Supply} {α : TyVar} {τ 
   · next hv => rw [tyIsVar_eq hv]; exact TyEquiv.refl _
   · split at h
     · exact absurd h (by simp)
-    · split at h
-      · exact absurd h (by simp)
-      · simp only [UResM.success.injEq] at h
-        obtain ⟨rfl, -⟩ := h
-        exact hsat.1 (α, τ) List.mem_cons_self
+    · simp only [UResM.success.injEq] at h
+      obtain ⟨rfl, -⟩ := h
+      exact hsat.1 (α, τ) List.mem_cons_self
 
 -- ⊢  U-var-solve, at the mutual result type
 theorem solveVarM_reflect {B : Type} {θ : TySubst B} {S : Supply}
@@ -58,16 +56,14 @@ theorem solveVarM_reflect {B : Type} {θ : TySubst B} {S : Supply}
             obtain ⟨rfl, -⟩ := hsolve
             simp only [ofSpine, Row.applySubst]
             exact RowEquiv.unitR.trans
-              (collapseSol_reflect hc (fun p hp => hsat.2 p hp))
+              (collapseSol_reflect hc (fun p hp => hsat.2.1 p hp))
         · split at hsolve
           · split at hsolve <;> (try split at hsolve) <;> simp at hsolve
-          · split at hsolve
-            · simp at hsolve
-            · simp only [Option.some.injEq, UResM.success.injEq] at hsolve
-              obtain ⟨rfl, -⟩ := hsolve
-              have hbind := hsat.2 (α, ofSpine s₂) List.mem_cons_self
-              simp only [ofSpine, Row.applySubst]
-              exact RowEquiv.unitR.trans hbind
+          · simp only [Option.some.injEq, UResM.success.injEq] at hsolve
+            obtain ⟨rfl, -⟩ := hsolve
+            have hbind := hsat.2.1 (α, ofSpine s₂) List.mem_cons_self
+            simp only [ofSpine, Row.applySubst]
+            exact RowEquiv.unitR.trans hbind
 
 
 
@@ -81,6 +77,63 @@ theorem solveVarM_reflect {B : Type} {θ : TySubst B} {S : Supply}
 -- (bindTy, solveVarM, allVarsEmpty, the ★/base arms), it SEQUENCES two calls
 -- (the eq-emitting moves and ≐'s congruences), or it advances by two and
 -- recurses (the four expansions).
+-- ## The key arm: label variables bind, literals compare
+private theorem bindLab_cases {B : Type} {S : Supply} {α : TyVar} {k : Key}
+    {s : Sol B} {S' : Supply} (h : bindLab S α k = .success s S') :
+    S' = S ∧ ((k = .var α ∧ s = .nil) ∨ s = ⟨[], [], [(α, k)]⟩) := by
+  unfold bindLab at h
+  split at h
+  · next hk => simp only [UResM.success.injEq] at h; exact ⟨h.2.symm, .inl ⟨hk, h.1.symm⟩⟩
+  · simp only [UResM.success.injEq] at h; exact ⟨h.2.symm, .inr h.1.symm⟩
+
+theorem unifyKey_supply {B : Type} {S : Supply} {k₁ k₂ : Key} {s : Sol B}
+    {S' : Supply} (h : unifyKey S k₁ k₂ = .success s S') : S' = S := by
+  cases k₁ with
+  | var α => exact (bindLab_cases h).1
+  | lit l =>
+      cases k₂ with
+      | var α => exact (bindLab_cases h).1
+      | lit l' =>
+          simp only [unifyKey] at h
+          split at h
+          · simp only [UResM.success.injEq] at h; exact h.2.symm
+          · cases h
+
+-- ⊢  the key arm only ever succeeds or clashes
+theorem unifyKey_cases {B : Type} (S : Supply) (k₁ k₂ : Key) :
+    (∃ s S', unifyKey (B := B) S k₁ k₂ = .success s S') ∨ unifyKey (B := B) S k₁ k₂ = .clash := by
+  cases k₁ with
+  | var α => left; simp only [unifyKey, bindLab]; split <;> exact ⟨_, _, rfl⟩
+  | lit l =>
+      cases k₂ with
+      | var α => left; simp only [unifyKey, bindLab]; split <;> exact ⟨_, _, rfl⟩
+      | lit l' =>
+          simp only [unifyKey]
+          split
+          · exact .inl ⟨_, _, rfl⟩
+          · exact .inr rfl
+
+private theorem bindLab_sound {B : Type} {θ : TySubst B} {S : Supply} {α : TyVar}
+    {k : Key} {s : Sol B} {S' : Supply} (h : bindLab S α k = .success s S')
+    (hsat : Sol.Sat θ s) : θ.lab α = k.applySubst θ := by
+  rcases (bindLab_cases h).2 with ⟨rfl, -⟩ | rfl
+  · rfl
+  · exact hsat.2.2 (α, k) List.mem_cons_self
+
+theorem unifyKey_sound {B : Type} {θ : TySubst B} {S : Supply} {k₁ k₂ : Key}
+    {s : Sol B} {S' : Supply} (h : unifyKey S k₁ k₂ = .success s S')
+    (hsat : Sol.Sat θ s) : k₁.applySubst θ = k₂.applySubst θ := by
+  cases k₁ with
+  | var α => exact bindLab_sound h hsat
+  | lit l =>
+      cases k₂ with
+      | var α => exact (bindLab_sound h hsat).symm
+      | lit l' =>
+          simp only [unifyKey] at h
+          split at h
+          · next he => rw [he]
+          · cases h
+
 private theorem bindTy_supply {B : Type} {S : Supply} {α : TyVar} {τ : Ty B}
     {s : Sol B} {S' : Supply} (h : bindTy S α τ = .success s S') :
     S.next ≤ S'.next := by
@@ -89,9 +142,7 @@ private theorem bindTy_supply {B : Type} {S : Supply} {α : TyVar} {τ : Ty B}
   · simp only [UResM.success.injEq] at h; obtain ⟨-, rfl⟩ := h; exact Nat.le_refl _
   · split at h
     · cases h
-    · split at h
-      · cases h
-      · simp only [UResM.success.injEq] at h; obtain ⟨-, rfl⟩ := h; exact Nat.le_refl _
+    · simp only [UResM.success.injEq] at h; obtain ⟨-, rfl⟩ := h; exact Nat.le_refl _
 
 private theorem solveVarM_supply {B : Type} {S : Supply}
     {u₁ u₂ : List (Atom B)} {s : Sol B} {S' : Supply}
@@ -107,10 +158,8 @@ private theorem solveVarM_supply {B : Type} {S : Supply}
         obtain ⟨-, rfl⟩ := h; exact Nat.le_refl _
       · split at h
         · split at h <;> (try split at h) <;> simp at h
-        · split at h
-          · simp at h
-          · simp only [Option.some.injEq, UResM.success.injEq] at h
-            obtain ⟨-, rfl⟩ := h; exact Nat.le_refl _
+        · simp only [Option.some.injEq, UResM.success.injEq] at h
+          obtain ⟨-, rfl⟩ := h; exact Nat.le_refl _
   | .var _ :: _ :: _ => simp [solveVarM] at h
 
 private theorem allVarsEmpty_supply {B : Type} {S : Supply} {u : List (Atom B)}
@@ -230,6 +279,8 @@ theorem unifyM_supply_mono {B : Type} [DecidableEq B] (fuel : Nat) :
       refine ⟨fun S τ τ' s S' h => ?_, fun S s₁ s₂ s S' h => ?_⟩
       · cases τ <;> cases τ' <;> first
           | exact bindTy_supply h
+          | (simp only [unifyTyF] at h
+             rw [unifyKey_supply h]; exact Nat.le_refl _)
           | (simp only [unifyTyF, UResM.success.injEq] at h
              obtain ⟨-, rfl⟩ := h; exact Nat.le_refl _)
           | (simp only [unifyTyF] at h
@@ -257,6 +308,8 @@ theorem unifyM_supply_mono {B : Type} [DecidableEq B] (fuel : Nat) :
       · cases τ <;> cases τ' <;>
           first
             | exact bindTy_supply h
+            | (simp only [unifyTyF] at h
+               rw [unifyKey_supply h]; exact Nat.le_refl _)
             | (simp only [unifyTyF, UResM.success.injEq] at h
                obtain ⟨-, rfl⟩ := h; exact Nat.le_refl _)
             | (simp only [unifyTyF] at h
@@ -307,14 +360,15 @@ theorem base_arm_sound {B : Type} [DecidableEq B] {θ : TySubst B} {b b' : B}
   · subst hb; exact TyEquiv.refl _
   · simp [unifyTyF, hb] at h
 
--- ⊢  …and the label arm only on equal labels
-theorem lab_arm_sound {B : Type} [DecidableEq B] {θ : TySubst B} {l l' : Label}
+-- ⊢  …and the label arm unifies its keys
+theorem lab_arm_sound {B : Type} [DecidableEq B] {θ : TySubst B} {l l' : Key}
     {S : Supply} {fuel : Nat} {s : Sol B} {S' : Supply}
-    (h : unifyTyF S fuel (.lab l) (.lab l') = .success s S') :
+    (h : unifyTyF S fuel (.lab l) (.lab l') = .success s S') (hsat : Sol.Sat θ s) :
     TyUnifies θ (.lab l) (.lab l') := by
-  by_cases hb : l = l'
-  · subst hb; exact TyEquiv.refl _
-  · simp [unifyTyF, hb] at h
+  simp only [unifyTyF] at h
+  unfold TyUnifies
+  simp only [Ty.applySubst, unifyKey_sound h hsat]
+  exact TyEquiv.refl _
 
 -- THE SOUNDNESS LEG, both sorts at once.
 -- ⊢  unifyTyF S fuel τ τ' = success s _,  θ ⊨ s   ⟹   θ ⊨ τ ≐ τ'
@@ -343,7 +397,7 @@ theorem unifyM_success_sound {B : Type} [DecidableEq B] {θ : TySubst B} (fuel :
             cases τ' with
             | var α => exact (bindTy_sound h hsat).symm
             | base _ => cases h
-            | lab b' => exact lab_arm_sound h
+            | lab b' => exact lab_arm_sound h hsat
             | unk => cases h
             | fn _ _ => cases h
             | rcd _ => cases h
@@ -407,7 +461,7 @@ theorem unifyM_success_sound {B : Type} [DecidableEq B] {θ : TySubst B} (fuel :
             cases τ' with
             | var α => exact (bindTy_sound h hsat).symm
             | base _ => cases h
-            | lab b' => exact lab_arm_sound h
+            | lab b' => exact lab_arm_sound h hsat
             | unk => cases h
             | fn _ _ => cases h
             | rcd _ => cases h
@@ -562,16 +616,23 @@ theorem unifyTyM_success_sound {B : Type} [DecidableEq B] {θ : TySubst B}
 -- solution is allowed to mention.
 
 -- ## Substitution moves variables only along θ
--- γ survives into τθ only through some free variable of τ. (Both sorts are
--- allowed on the right: Ty.ftv does not record which positions are row
+-- γ survives into τθ only through some free variable of τ. (Every sort is
+-- allowed on the right: Ty.ftv does not record which positions are row or key
 -- positions, and the union is all the bound we need.)
+theorem Key.ftv_applySubst {B : Type} (θ : TySubst B) : (k : Key) →
+    ∀ γ, γ ∈ (k.applySubst θ).ftv → ∃ α, α ∈ k.ftv ∧ γ ∈ (θ.lab α).ftv
+  | .lit _ => fun _ h => by simp [Key.ftv] at h
+  | .var α => fun _ h => ⟨α, by simp [Key.ftv], h⟩
+
 mutual
 theorem Ty.ftv_applySubst {B : Type} (θ : TySubst B) : (τ : Ty B) →
     ∀ γ, γ ∈ (τ.applySubst θ).ftv →
-      ∃ α, α ∈ τ.ftv ∧ (γ ∈ (θ.ty α).ftv ∨ γ ∈ (θ.row α).ftv)
+      ∃ α, α ∈ τ.ftv ∧ (γ ∈ (θ.ty α).ftv ∨ γ ∈ (θ.row α).ftv ∨ γ ∈ (θ.lab α).ftv)
   | .var α => fun _ h => ⟨α, List.mem_cons_self, .inl h⟩
   | .base _ => fun _ h => by simp [Ty.applySubst, Ty.ftv] at h
-  | .lab _ => fun _ h => by simp [Ty.applySubst, Ty.ftv] at h
+  | .lab k => fun γ h => by
+      obtain ⟨α, hα, hγ⟩ := Key.ftv_applySubst θ k γ h
+      exact ⟨α, hα, .inr (.inr hγ)⟩
   | .unk => fun _ h => by simp [Ty.applySubst, Ty.ftv] at h
   | .fn τ₁ τ₂ => fun γ h => by
       simp only [Ty.applySubst, Ty.ftv, List.mem_append] at h ⊢
@@ -582,9 +643,9 @@ theorem Ty.ftv_applySubst {B : Type} (θ : TySubst B) : (τ : Ty B) →
 
 theorem Row.ftv_applySubst {B : Type} (θ : TySubst B) : (ρ : Row B) →
     ∀ γ, γ ∈ (ρ.applySubst θ).ftv →
-      ∃ α, α ∈ ρ.ftv ∧ (γ ∈ (θ.ty α).ftv ∨ γ ∈ (θ.row α).ftv)
+      ∃ α, α ∈ ρ.ftv ∧ (γ ∈ (θ.ty α).ftv ∨ γ ∈ (θ.row α).ftv ∨ γ ∈ (θ.lab α).ftv)
   | .empty => fun _ h => by simp [Row.applySubst, Row.ftv] at h
-  | .var α => fun _ h => ⟨α, List.mem_cons_self, .inr h⟩
+  | .var α => fun _ h => ⟨α, List.mem_cons_self, .inr (.inl h)⟩
   | .sing _ τ => fun γ h => Ty.ftv_applySubst θ τ γ h
   | .cat ρ₁ ρ₂ => fun γ h => by
       simp only [Row.applySubst, Row.ftv, List.mem_append] at h ⊢
@@ -594,17 +655,17 @@ theorem Row.ftv_applySubst {B : Type} (θ : TySubst B) : (ρ : Row B) →
   | .dsing q τ => fun γ h => by
       simp only [Row.applySubst, Row.ftv, List.mem_append] at h ⊢
       rcases h with h | h
-      · obtain ⟨α, hα, hγ⟩ := Ty.ftv_applySubst θ q γ h; exact ⟨α, .inl hα, hγ⟩
+      · obtain ⟨α, hα, hγ⟩ := Key.ftv_applySubst θ q γ h; exact ⟨α, .inl hα, .inr (.inr hγ)⟩
       · obtain ⟨α, hα, hγ⟩ := Ty.ftv_applySubst θ τ γ h; exact ⟨α, .inr hα, hγ⟩
 end
 
 -- the spine atom of a keyed field mentions only the key's variable and the payload's
-theorem sFtv_ofKey {B : Type} (q τ : Ty B) :
+theorem sFtv_ofKey {B : Type} (q : Key) (τ : Ty B) :
     ∀ γ, γ ∈ sFtv [Atom.ofKey q τ] → γ ∈ q.ftv ∨ γ ∈ τ.ftv := by
   intro γ h
-  cases q <;> simp_all [Atom.ofKey, sFtv, Ty.ftv]
+  cases q <;> simp_all [Atom.ofKey, sFtv, Key.ftv]
 
--- ⊢  a spine's variables are its row's (a junk key's are forgotten: ⊆, not =)
+-- ⊢  a spine's variables are its row's
 theorem mem_sFtv_toSpine {B : Type} : (ρ : Row B) → ∀ γ, γ ∈ sFtv ρ.toSpine → γ ∈ ρ.ftv
   | .empty => fun _ h => h
   | .var _ => fun _ h => by simpa [Row.toSpine, sFtv, Row.ftv] using h
@@ -624,7 +685,7 @@ theorem mem_sFtv_toSpine {B : Type} : (ρ : Row B) → ∀ γ, γ ∈ sFtv ρ.to
 -- ⊢  … and the same, for a substituted SPINE
 theorem sFtv_sApplySubst {B : Type} (θ : TySubst B) : (t : List (Atom B)) →
     ∀ γ, γ ∈ sFtv (sApplySubst θ t) →
-      ∃ α, α ∈ sFtv t ∧ (γ ∈ (θ.ty α).ftv ∨ γ ∈ (θ.row α).ftv)
+      ∃ α, α ∈ sFtv t ∧ (γ ∈ (θ.ty α).ftv ∨ γ ∈ (θ.row α).ftv ∨ γ ∈ (θ.lab α).ftv)
   | [] => fun _ h => by simp [sApplySubst, sFtv] at h
   | .field _ τ :: t => fun γ h => by
       simp only [sApplySubst, sFtv, List.mem_append] at h ⊢
@@ -634,7 +695,7 @@ theorem sFtv_sApplySubst {B : Type} (θ : TySubst B) : (t : List (Atom B)) →
   | .var α :: t => fun γ h => by
       rw [sApplySubst, sFtv_append] at h
       rcases List.mem_append.mp h with h | h
-      · exact ⟨α, List.mem_cons_self, .inr (mem_sFtv_toSpine _ γ h)⟩
+      · exact ⟨α, List.mem_cons_self, .inr (.inl (mem_sFtv_toSpine _ γ h))⟩
       · obtain ⟨β, hβ, hγ⟩ := sFtv_sApplySubst θ t γ h
         exact ⟨β, List.mem_cons_of_mem _ hβ, hγ⟩
   | .dfield o τ :: t => fun γ h => by
@@ -642,10 +703,7 @@ theorem sFtv_sApplySubst {B : Type} (θ : TySubst B) : (t : List (Atom B)) →
       rw [sFtv_cons] at h
       rcases List.mem_append.mp h with h | h
       · rcases sFtv_ofKey _ _ γ h with h | h
-        · cases o with
-          | none => simp [Atom.keyTy, Ty.applySubst, Ty.ftv] at h
-          | some α =>
-              exact ⟨α, by simp [sFtv], .inl (by simpa [Atom.keyTy, Ty.applySubst] using h)⟩
+        · exact ⟨o, by simp [sFtv], .inr (.inr h)⟩
         · obtain ⟨α, hα, hγ⟩ := Ty.ftv_applySubst θ τ γ h
           exact ⟨α, by simp only [sFtv, List.mem_append]; exact .inl (.inr hα), hγ⟩
       · obtain ⟨β, hβ, hγ⟩ := sFtv_sApplySubst θ t γ h

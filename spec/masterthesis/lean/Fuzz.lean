@@ -151,16 +151,16 @@ def solAppliedB (s : Sol Unit) : Bool :=
     of the ∃-rank in `Sol.Ranked`, and with `Sol.closes_closure` it is what says
     ⟦S⟧ EXISTS for this solution. It replaces the `Applied` half of the old
     tripwire, which was false by design against a triangular solution. -/
-def solDeps (s : Sol Unit) : Bool × TyVar → List (Bool × TyVar)
-  | (false, α) =>
+def solDeps (s : Sol Unit) : Srt × TyVar → List (Srt × TyVar)
+  | (.ty, α) =>
       ((s.ty.filter  (fun p => p.1 == α)).flatMap (fun p => Ty.sortedFtv  p.2)).filter
         (fun y => s.domS.contains y)
-  | (true,  α) =>
+  | (.row, α) =>
       ((s.row.filter (fun p => p.1 == α)).flatMap (fun p => Row.sortedFtv p.2)).filter
         (fun y => s.domS.contains y)
 
 /-- Peel nodes with no surviving dependency; a DAG empties, a cycle stalls. -/
-def peelDeps (s : Sol Unit) : Nat → List (Bool × TyVar) → Bool
+def peelDeps (s : Sol Unit) : Nat → List (Srt × TyVar) → Bool
   | 0,     rem => rem.isEmpty
   | n + 1, rem =>
       let next := rem.filter (fun x => (solDeps s x).any (fun y => rem.contains y))
@@ -201,13 +201,13 @@ def solWFB (s : Sol Unit) : Bool := solAcyclicB s && solRankedB s
 /-- Every dependency edge the solution imposes: from a binding's KEY to a
 variable in its value that the solution also binds. `Sol.Ranked` is exactly the
 existence of a rank that strictly decreases along all of these. -/
-def solEdges (s : Sol Unit) : List ((Bool × TyVar) × (Bool × TyVar)) :=
+def solEdges (s : Sol Unit) : List ((Srt × TyVar) × (Srt × TyVar)) :=
   (s.ty.flatMap  (fun p => ((Ty.sortedFtv  p.2).filter (fun y => s.domS.contains y)).map
-                             (fun y => ((false, p.1), y)))) ++
+                             (fun y => ((.ty, p.1), y)))) ++
   (s.row.flatMap (fun p => ((Row.sortedFtv p.2).filter (fun y => s.domS.contains y)).map
-                             (fun y => ((true,  p.1), y))))
+                             (fun y => ((.row, p.1), y))))
 
-def domIdx (s : Sol Unit) (x : Bool × TyVar) : Nat := s.domS.findIdx (· == x)
+def domIdx (s : Sol Unit) (x : Srt × TyVar) : Nat := s.domS.findIdx (· == x)
 
 /-- keep the FIRST binding per key — which is the only one `rowLookup`/`tyLookup`
 ever reads, every later one being dead. `Sol.Ranked` quantifies over ALL of them,
@@ -230,9 +230,9 @@ def solDupDiff (s : Sol Unit) : Bool :=
 def solHasDup (s : Sol Unit) : Bool :=
   (dedupKeys s.ty).length != s.ty.length || (dedupKeys s.row).length != s.row.length
 
-def nodeStr (x : Bool × TyVar) : String := (if x.1 then "ᵣ" else "ₜ") ++ x.2
+def nodeStr (x : Srt × TyVar) : String := (if x.1 then "ᵣ" else "ₜ") ++ x.2
 
-def edgeStr (e : (Bool × TyVar) × (Bool × TyVar)) : String :=
+def edgeStr (e : (Srt × TyVar) × (Srt × TyVar)) : String :=
   nodeStr e.1 ++ "→" ++ nodeStr e.2
 
 structure RankVerdict where
@@ -259,7 +259,7 @@ def rankVerdict (s : Sol Unit) : RankVerdict :=
     ranked := solRankedB s }
 
 /-- the edges a candidate fails on, for the witness line. -/
-def badEdges (s : Sol Unit) (p : ((Bool × TyVar) × (Bool × TyVar)) → Bool) : String :=
+def badEdges (s : Sol Unit) (p : ((Srt × TyVar) × (Srt × TyVar)) → Bool) : String :=
   String.intercalate ", " (((solEdges s).filter (fun e => !p e)).map edgeStr)
 
 /-- The FULL result, solution included — the tripwire compares these. -/

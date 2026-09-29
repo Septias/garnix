@@ -242,13 +242,13 @@ theorem groundMatch_size {B : Type} {s₁ s₂ : List (Atom B)} {τ τ' : Ty B}
 ------------------------- COUNTING VARIABLES INSIDE A UNIVERSE -----------------
 
 /-- How many members of the universe `U` occur in `P`. -/
-def cntIn (U P : List (Bool × TyVar)) : Nat := U.countP (fun x => decide (x ∈ P))
+def cntIn (U P : List (Srt × TyVar)) : Nat := U.countP (fun x => decide (x ∈ P))
 
-theorem cntIn_mono {U P P' : List (Bool × TyVar)} (h : P' ⊆ P) : cntIn U P' ≤ cntIn U P :=
+theorem cntIn_mono {U P P' : List (Srt × TyVar)} (h : P' ⊆ P) : cntIn U P' ≤ cntIn U P :=
   List.countP_mono_left (fun x _ hx => by simp only [decide_eq_true_eq] at hx ⊢; exact h hx)
 
 -- ⊢  losing a member of the universe strictly lowers the count
-theorem cntIn_lt {U P P' : List (Bool × TyVar)} (hsub : P' ⊆ P) {x : Bool × TyVar}
+theorem cntIn_lt {U P P' : List (Srt × TyVar)} (hsub : P' ⊆ P) {x : Srt × TyVar}
     (hxU : x ∈ U) (hxP : x ∈ P) (hxP' : x ∉ P') : cntIn U P' < cntIn U P := by
   induction U with
   | nil => cases hxU
@@ -270,31 +270,33 @@ theorem cntIn_lt {U P P' : List (Bool × TyVar)} (hsub : P' ⊆ P) {x : Bool × 
           · simp [h']
         omega
 
-def TyP {B : Type} (τ τ' : Ty B) : List (Bool × TyVar) := Ty.sortedFtv τ ++ Ty.sortedFtv τ'
-def SpP {B : Type} (s₁ s₂ : List (Atom B)) : List (Bool × TyVar) := sSorted s₁ ++ sSorted s₂
+def TyP {B : Type} (τ τ' : Ty B) : List (Srt × TyVar) := Ty.sortedFtv τ ++ Ty.sortedFtv τ'
+def SpP {B : Type} (s₁ s₂ : List (Atom B)) : List (Srt × TyVar) := sSorted s₁ ++ sSorted s₂
 
 ------------------------- A KEYLESS SOLUTION IS THE IDENTITY -------------------
 
 theorem Sol.toSubst_of_domS_nil {B : Type} {s : Sol B} (h : s.domS = []) :
-    (∀ α, s.toSubst.ty α = .var α) ∧ (∀ α, s.toSubst.row α = .var α) := by
+    (∀ α, s.toSubst.ty α = .var α) ∧ (∀ α, s.toSubst.row α = .var α) ∧
+      (∀ α, s.toSubst.lab α = .var α) := by
   simp only [Sol.domS, List.append_eq_nil_iff, List.map_eq_nil_iff] at h
-  obtain ⟨h₁, h₂⟩ := h
+  obtain ⟨⟨h₁, h₂⟩, h₃⟩ := h
   exact ⟨fun α => by simp [Sol.toSubst, h₁, tyLookup],
-         fun α => by simp [Sol.toSubst, h₂, rowLookup]⟩
+         fun α => by simp [Sol.toSubst, h₂, rowLookup],
+         fun α => by simp [Sol.toSubst, h₃, labLookup]⟩
 
 theorem sApplySubst_fixed {B : Type} {θ : TySubst B} (ht : ∀ α, θ.ty α = .var α)
-    (hr : ∀ α, θ.row α = .var α) : (t : List (Atom B)) → sApplySubst θ t = t
+    (hr : ∀ α, θ.row α = .var α) (hl : ∀ α, θ.lab α = .var α) :
+    (t : List (Atom B)) → sApplySubst θ t = t
   | [] => rfl
   | .field l τ :: t => by
-      simp only [sApplySubst, Ty.applySubst_fixed_sorted τ (fun α _ => ht α) (fun α _ => hr α),
-        sApplySubst_fixed ht hr t]
+      simp only [sApplySubst, Ty.applySubst_fixed_sorted τ (fun α _ => ht α) (fun α _ => hr α)
+        (fun α _ => hl α), sApplySubst_fixed ht hr hl t]
   | .var α :: t => by
       simp only [sApplySubst, hr α, Row.toSpine, List.singleton_append,
-        sApplySubst_fixed ht hr t]
+        sApplySubst_fixed ht hr hl t]
   | .dfield o τ :: t => by
-      simp only [sApplySubst, Ty.applySubst_fixed_sorted τ (fun α _ => ht α) (fun α _ => hr α),
-        sApplySubst_fixed ht hr t]
-      cases o <;> simp [Atom.keyTy, Ty.applySubst, ht, Atom.ofKey]
+      simp only [sApplySubst, Ty.applySubst_fixed_sorted τ (fun α _ => ht α) (fun α _ => hr α)
+        (fun α _ => hl α), sApplySubst_fixed ht hr hl t, hl o, Atom.ofKey]
 
 ------------------------- VERDICTS THAT ARE NOT `outOfFuel` --------------------
 
@@ -316,9 +318,7 @@ theorem bindTy_ne_oof {B : Type} (S : Supply) (α : TyVar) (τ : Ty B) :
     bindTy S α τ ≠ .outOfFuel := by
   unfold bindTy; split
   · simp
-  · split
-    · simp
-    · split <;> simp
+  · split <;> simp
 
 theorem solveVarM_ne_oof {B : Type} {S : Supply} {s₁ s₂ : List (Atom B)} {r : UResM B}
     (h : solveVarM S s₁ s₂ = some r) : r ≠ .outOfFuel := by
@@ -330,7 +330,7 @@ theorem solveVarM_ne_oof {B : Type} {S : Supply} {s₁ s₂ : List (Atom B)} {r 
       · simp
       · split
         · split <;> simp
-        · split <;> simp
+        · simp
 
 theorem mono_ty_eq {B : Type} [DecidableEq B] {S : Supply} {f F : Nat} {τ τ' : Ty B}
     (hle : f ≤ F) (h : unifyTyF S f τ τ' ≠ .outOfFuel) :
@@ -350,7 +350,7 @@ theorem mono_sp_eq {B : Type} [DecidableEq B] {S : Supply} {f F : Nat}
 
 /-- Every problem inside `U` with at most `n` of its variables and size at most
 `m` has a fuel at which the driver answers — at both sorts. -/
-def TermR (B : Type) [DecidableEq B] (U : List (Bool × TyVar)) (n m : Nat) : Prop :=
+def TermR (B : Type) [DecidableEq B] (U : List (Srt × TyVar)) (n m : Nat) : Prop :=
   (∀ (S : Supply) (τ τ' : Ty B), TyP τ τ' ⊆ U → cntIn U (TyP τ τ') ≤ n →
       τ.usize + τ'.usize ≤ m → ∃ f, unifyTyF S f τ τ' ≠ .outOfFuel) ∧
   (∀ (S : Supply) (s₁ s₂ : List (Atom B)), SpP s₁ s₂ ⊆ U → cntIn U (SpP s₁ s₂) ≤ n →
@@ -359,7 +359,7 @@ def TermR (B : Type) [DecidableEq B] (U : List (Bool × TyVar)) (n m : Nat) : Pr
 -- ⊢  AN EQ-EMITTING ARM whose residual is a spine pair. The first stage is a
 --    strictly smaller problem over no new variables; the second is either the
 --    unsubstituted residual (no key: strictly smaller) or has lost a key.
-theorem arm_sp_terminates {B : Type} [DecidableEq B] {U Pv : List (Bool × TyVar)} {n m : Nat}
+theorem arm_sp_terminates {B : Type} [DecidableEq B] {U Pv : List (Srt × TyVar)} {n m : Nat}
     (ihn : ∀ n' < n, ∀ m', TermR B U n' m') (ihm : ∀ m' < m, TermR B U n m')
     (hPU : Pv ⊆ U) (hPn : cntIn U Pv ≤ n) (S : Supply) (τ τ' : Ty B)
     (t₁ t₂ : List (Atom B)) (hT : TyP τ τ' ⊆ Pv) (hR : SpP t₁ t₂ ⊆ Pv)
@@ -381,8 +381,8 @@ theorem arm_sp_terminates {B : Type} [DecidableEq B] {U Pv : List (Bool × TyVar
           (sApplySubst s₁.toSubst t₂) ≠ .outOfFuel := by
         cases hd : s₁.domS with
         | nil =>
-            obtain ⟨ht, hrw⟩ := Sol.toSubst_of_domS_nil hd
-            rw [sApplySubst_fixed ht hrw, sApplySubst_fixed ht hrw]
+            obtain ⟨ht, hrw, hlb⟩ := Sol.toSubst_of_domS_nil hd
+            rw [sApplySubst_fixed ht hrw hlb, sApplySubst_fixed ht hrw hlb]
             exact (ihm _ hsR).2 S₁ t₁ t₂ (fun _ hx => hPU (hR hx))
               (Nat.le_trans (cntIn_mono hR) hPn) (Nat.le_refl _)
         | cons x xs =>
@@ -406,7 +406,7 @@ theorem arm_sp_terminates {B : Type} [DecidableEq B] {U Pv : List (Bool × TyVar
   | outOfFuel => exact absurd hr h₁
 
 -- ⊢  …and the arrow arm, whose residual is a type pair
-theorem arm_ty_terminates {B : Type} [DecidableEq B] {U Pv : List (Bool × TyVar)} {n m : Nat}
+theorem arm_ty_terminates {B : Type} [DecidableEq B] {U Pv : List (Srt × TyVar)} {n m : Nat}
     (ihn : ∀ n' < n, ∀ m', TermR B U n' m') (ihm : ∀ m' < m, TermR B U n m')
     (hPU : Pv ⊆ U) (hPn : cntIn U Pv ≤ n) (S : Supply) (a₁ a₂ b₁ b₂ : Ty B)
     (hT : TyP a₁ a₂ ⊆ Pv) (hR : TyP b₁ b₂ ⊆ Pv)
@@ -428,9 +428,9 @@ theorem arm_ty_terminates {B : Type} [DecidableEq B] {U Pv : List (Bool × TyVar
           (b₂.applySubst s₁.toSubst) ≠ .outOfFuel := by
         cases hd : s₁.domS with
         | nil =>
-            obtain ⟨ht, hrw⟩ := Sol.toSubst_of_domS_nil hd
-            rw [Ty.applySubst_fixed_sorted b₁ (fun α _ => ht α) (fun α _ => hrw α),
-                Ty.applySubst_fixed_sorted b₂ (fun α _ => ht α) (fun α _ => hrw α)]
+            obtain ⟨ht, hrw, hlb⟩ := Sol.toSubst_of_domS_nil hd
+            rw [Ty.applySubst_fixed_sorted b₁ (fun α _ => ht α) (fun α _ => hrw α) (fun α _ => hlb α),
+                Ty.applySubst_fixed_sorted b₂ (fun α _ => ht α) (fun α _ => hrw α) (fun α _ => hlb α)]
             exact (ihm _ hsR).1 S₁ b₁ b₂ (fun _ hx => hPU (hR hx))
               (Nat.le_trans (cntIn_mono hR) hPn) (Nat.le_refl _)
         | cons x xs =>
@@ -470,7 +470,9 @@ theorem unifyTyF_flat_ne_oof {B : Type} [DecidableEq B] (S : Supply) (τ τ' : T
       cases τ' with
       | var α => exact bindTy_ne_oof S α _
       | base _ => simp [unifyTyF]
-      | lab b' => by_cases hb : b = b' <;> simp [unifyTyF, hb]
+      | lab b' =>
+          simp only [unifyTyF]
+          rcases unifyKey_cases (B := B) S b b' with ⟨_, _, he⟩ | he <;> rw [he] <;> simp
       | unk => simp [unifyTyF]
       | fn _ _ => simp [unifyTyF]
       | rcd _ => simp [unifyTyF]
@@ -499,7 +501,7 @@ theorem unifySpineMF_cons_nil_ne_oof {B : Type} [DecidableEq B] (S : Supply) (f 
   simp only [unifySpineMF]
   cases allVarsEmpty (a :: s₁) <;> simp
 
-theorem termR_all {B : Type} [DecidableEq B] (U : List (Bool × TyVar)) :
+theorem termR_all {B : Type} [DecidableEq B] (U : List (Srt × TyVar)) :
     ∀ n m, TermR B U n m := by
   intro n
   induction n using Nat.strongRecOn with

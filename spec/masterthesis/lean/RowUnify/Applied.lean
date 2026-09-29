@@ -37,18 +37,18 @@ namespace MinimalCalculus
 
 -- The sort-tagged variables of a spine: `Row.sortedFtv ∘ ofSpine`, written
 -- directly on atoms so the detector lemmas below are atom-membership facts.
-def sSorted {B : Type} : List (Atom B) → List (Bool × TyVar)
+def sSorted {B : Type} : List (Atom B) → List (Srt × TyVar)
   | [] => []
   | .field _ τ :: s => Ty.sortedFtv τ ++ sSorted s
-  | .var α :: s     => (true, α) :: sSorted s
-  | .dfield o τ :: s => Ty.sortedFtv (Atom.keyTy (B := B) o) ++ Ty.sortedFtv τ ++ sSorted s
+  | .var α :: s     => (.row, α) :: sSorted s
+  | .dfield o τ :: s => [(.lab, o)] ++ Ty.sortedFtv τ ++ sSorted s
 
-def Atom.sorted {B : Type} : Atom B → List (Bool × TyVar)
+def Atom.sorted {B : Type} : Atom B → List (Srt × TyVar)
   | .field _ τ => Ty.sortedFtv τ
-  | .var α     => [(true, α)]
-  | .dfield o τ => Ty.sortedFtv (Atom.keyTy (B := B) o) ++ Ty.sortedFtv τ
+  | .var α     => [(.row, α)]
+  | .dfield o τ => [(.lab, o)] ++ Ty.sortedFtv τ
 
-theorem mem_sSorted {B : Type} {x : Bool × TyVar} :
+theorem mem_sSorted {B : Type} {x : Srt × TyVar} :
     (s : List (Atom B)) → (x ∈ sSorted s ↔ ∃ a ∈ s, x ∈ a.sorted)
   | [] => by simp [sSorted]
   | .field l τ :: s => by
@@ -95,7 +95,7 @@ theorem sSorted_toSpine {B : Type} : (ρ : Row B) → ∀ x, x ∈ sSorted ρ.to
   | .dsing q τ => fun x h => by
       simp only [Row.toSpine] at h
       simp only [Row.sortedFtv, List.mem_append]
-      cases q <;> simp only [Atom.ofKey, sSorted, Atom.keyTy, Ty.sortedFtv,
+      cases q <;> simp only [Atom.ofKey, sSorted, Key.sortedFtv,
         List.append_nil, List.nil_append, List.mem_append] at h ⊢ <;>
         first | exact .inr h | exact h
 
@@ -106,9 +106,10 @@ theorem sortedFtv_ofSpine {B : Type} : (s : List (Atom B)) →
   | .var _ :: s => by simp only [ofSpine, Row.sortedFtv, sortedFtv_ofSpine s, sSorted]; rfl
   | .dfield _ τ :: s => by
       simp only [ofSpine, Row.sortedFtv, sortedFtv_ofSpine s, sSorted, List.append_assoc]
+      rfl
 
 theorem sVarSeq_mem_sSorted {B : Type} {γ : TyVar} :
-    (s : List (Atom B)) → γ ∈ sVarSeq s → (true, γ) ∈ sSorted s
+    (s : List (Atom B)) → γ ∈ sVarSeq s → (.row, γ) ∈ sSorted s
   | [], h => by simp [sVarSeq] at h
   | .field _ _ :: s, h => by
       simp only [sVarSeq] at h
@@ -123,7 +124,7 @@ theorem sVarSeq_mem_sSorted {B : Type} {γ : TyVar} :
       · exact List.mem_cons_of_mem _ (sVarSeq_mem_sSorted s h)
 
 -- ⊢  every occurrence in a substituted spine comes from one of the original's
-theorem mem_sSorted_sApplySubst {B : Type} {θ : TySubst B} {x : Bool × TyVar} :
+theorem mem_sSorted_sApplySubst {B : Type} {θ : TySubst B} {x : Srt × TyVar} :
     (t : List (Atom B)) → x ∈ sSorted (sApplySubst θ t) →
     ∃ y ∈ sSorted t, x ∈ θ.ftvAt y
   | [], h => by simp [sApplySubst, sSorted] at h
@@ -137,22 +138,24 @@ theorem mem_sSorted_sApplySubst {B : Type} {θ : TySubst B} {x : Bool × TyVar} 
   | .var α :: t, h => by
       simp only [sApplySubst, sSorted_append, List.mem_append] at h
       rcases h with h | h
-      · exact ⟨(true, α), List.mem_cons_self, sSorted_toSpine _ _ h⟩
+      · exact ⟨(.row, α), List.mem_cons_self, sSorted_toSpine _ _ h⟩
       · obtain ⟨y, hy, hx⟩ := mem_sSorted_sApplySubst t h
         exact ⟨y, List.mem_cons_of_mem _ hy, hx⟩
   | .dfield o τ :: t, h => by
       simp only [sApplySubst] at h
-      rw [show sSorted (Atom.ofKey ((Atom.keyTy o).applySubst θ) (τ.applySubst θ) ::
-            sApplySubst θ t) = sSorted [Atom.ofKey ((Atom.keyTy o).applySubst θ)
+      rw [show sSorted (Atom.ofKey (θ.lab o) (τ.applySubst θ) ::
+            sApplySubst θ t) = sSorted [Atom.ofKey (θ.lab o)
               (τ.applySubst θ)] ++ sSorted (sApplySubst θ t) from by
           rw [← sSorted_append]; rfl, List.mem_append] at h
       rcases h with h | h
-      · have h' : x ∈ Row.sortedFtv (.dsing ((Atom.keyTy o).applySubst θ) (τ.applySubst θ)) :=
+      · have h' : x ∈ Row.sortedFtv (.dsing (θ.lab o) (τ.applySubst θ)) :=
           sSorted_toSpine _ _ h
         simp only [Row.sortedFtv, List.mem_append] at h'
         rcases h' with h' | h'
-        · obtain ⟨y, hy, hx⟩ := Ty.mem_sortedFtv_applySubst _ h'
-          exact ⟨y, by simp only [sSorted, List.mem_append]; exact .inl (.inl hy), hx⟩
+        · obtain ⟨y, hy, hx⟩ := Key.mem_sortedFtv_applySubst (θ := θ) (.var o) h'
+          have hy' : y = (.lab, o) := by simpa [Key.sortedFtv] using hy
+          subst hy'
+          exact ⟨_, by simp only [sSorted, List.mem_append]; exact .inl (.inl (by simp)), hx⟩
         · obtain ⟨y, hy, hx⟩ := Ty.mem_sortedFtv_applySubst τ h'
           exact ⟨y, by simp only [sSorted, List.mem_append]; exact .inl (.inr hy), hx⟩
       · obtain ⟨y, hy, hx⟩ := mem_sSorted_sApplySubst t h
@@ -358,35 +361,38 @@ theorem sSorted_sub_pair {B : Type} {s₁ s₂ t₁ t₂ : List (Atom B)}
 ------------------------- THE INVARIANT ----------------------------------------
 
 /-- `x` occurs, sort-tagged, in some binding of `s`. -/
-def Sol.BVar {B : Type} (s : Sol B) (x : Bool × TyVar) : Prop :=
-  (∃ p ∈ s.ty, x ∈ Ty.sortedFtv p.2) ∨ (∃ p ∈ s.row, x ∈ Row.sortedFtv p.2)
+def Sol.BVar {B : Type} (s : Sol B) (x : Srt × TyVar) : Prop :=
+  (∃ p ∈ s.ty, x ∈ Ty.sortedFtv p.2) ∨ (∃ p ∈ s.row, x ∈ Row.sortedFtv p.2) ∨
+    (∃ p ∈ s.lab, x ∈ Key.sortedFtv p.2)
 
 /-- `s` is a GOOD solution over the tagged variable set `V`: its keys and
 everything its bindings mention lie in `V`, no binding mentions a key, and two
 bindings of one key agree. -/
-structure Sol.Good {B : Type} (V : List (Bool × TyVar)) (s : Sol B) : Prop where
+structure Sol.Good {B : Type} (V : List (Srt × TyVar)) (s : Sol B) : Prop where
   dom  : ∀ x ∈ s.domS, x ∈ V
   rng  : ∀ x, s.BVar x → x ∈ V ∧ x ∉ s.domS
   fty  : ∀ p ∈ s.ty,  ∀ q ∈ s.ty,  p.1 = q.1 → p.2 = q.2
   frow : ∀ p ∈ s.row, ∀ q ∈ s.row, p.1 = q.1 → p.2 = q.2
+  flab : ∀ p ∈ s.lab, ∀ q ∈ s.lab, p.1 = q.1 → p.2 = q.2
 
-theorem Sol.Good.mono {B : Type} {V W : List (Bool × TyVar)} {s : Sol B}
+theorem Sol.Good.mono {B : Type} {V W : List (Srt × TyVar)} {s : Sol B}
     (h : s.Good V) (hW : V ⊆ W) : s.Good W :=
   ⟨fun x hx => hW (h.dom x hx), fun x hx => ⟨hW (h.rng x hx).1, (h.rng x hx).2⟩,
-   h.fty, h.frow⟩
+   h.fty, h.frow, h.flab⟩
 
-theorem Sol.good_nil {B : Type} (V : List (Bool × TyVar)) : (Sol.nil : Sol B).Good V :=
+theorem Sol.good_nil {B : Type} (V : List (Srt × TyVar)) : (Sol.nil : Sol B).Good V :=
   ⟨fun x hx => by simp [Sol.domS, Sol.nil] at hx,
-   fun x hx => by rcases hx with ⟨p, hp, -⟩ | ⟨p, hp, -⟩ <;> simp [Sol.nil] at hp,
-   fun p hp => by simp [Sol.nil] at hp, fun p hp => by simp [Sol.nil] at hp⟩
+   fun x hx => by rcases hx with ⟨p, hp, -⟩ | ⟨p, hp, -⟩ | ⟨p, hp, -⟩ <;> simp [Sol.nil] at hp,
+   fun p hp => by simp [Sol.nil] at hp, fun p hp => by simp [Sol.nil] at hp,
+   fun p hp => by simp [Sol.nil] at hp⟩
 
 -- ⊢  what `toSubst s` puts at a tagged variable: the variable itself (if it is
 --    not a key), or something a binding mentions (if it is)
-theorem Sol.ftvAt_toSubst {B : Type} {s : Sol B} {x y : Bool × TyVar}
+theorem Sol.ftvAt_toSubst {B : Type} {s : Sol B} {x y : Srt × TyVar}
     (h : x ∈ s.toSubst.ftvAt y) : (x = y ∧ y ∉ s.domS) ∨ (s.BVar x ∧ y ∈ s.domS) := by
   obtain ⟨b, α⟩ := y
   cases b with
-  | false =>
+  | ty =>
       change x ∈ Ty.sortedFtv (tyLookup α s.ty) at h
       rcases tyLookup_cases s.ty α with ⟨hnm, he⟩ | ⟨p, hp, h1, h2⟩
       · rw [he] at h
@@ -394,57 +400,71 @@ theorem Sol.ftvAt_toSubst {B : Type} {s : Sol B} {x y : Bool × TyVar}
         exact .inl ⟨h, fun hd => hnm (Sol.domS_ty_of_mem hd)⟩
       · rw [h2] at h
         exact .inr ⟨.inl ⟨p, hp, h⟩, Sol.mem_domS_ty (List.mem_map.2 ⟨p, hp, h1⟩)⟩
-  | true =>
+  | row =>
       change x ∈ Row.sortedFtv (rowLookup α s.row) at h
       rcases rowLookup_cases s.row α with ⟨hnm, he⟩ | ⟨p, hp, h1, h2⟩
       · rw [he] at h
         simp only [Row.sortedFtv, List.mem_singleton] at h
         exact .inl ⟨h, fun hd => hnm (Sol.domS_row_of_mem hd)⟩
       · rw [h2] at h
-        exact .inr ⟨.inr ⟨p, hp, h⟩, Sol.mem_domS_row (List.mem_map.2 ⟨p, hp, h1⟩)⟩
+        exact .inr ⟨.inr (.inl ⟨p, hp, h⟩), Sol.mem_domS_row (List.mem_map.2 ⟨p, hp, h1⟩)⟩
+  | lab =>
+      change x ∈ Key.sortedFtv (labLookup α s.lab) at h
+      rcases labLookup_cases s.lab α with ⟨hnm, he⟩ | ⟨p, hp, h1, h2⟩
+      · rw [he] at h
+        simp only [Key.sortedFtv, List.mem_singleton] at h
+        exact .inl ⟨h, fun hd => hnm (Sol.domS_lab_of_mem hd)⟩
+      · rw [h2] at h
+        exact .inr ⟨.inr (.inr ⟨p, hp, h⟩), Sol.mem_domS_lab (List.mem_map.2 ⟨p, hp, h1⟩)⟩
 
 -- ⊢  applying a good solution to something inside `V` stays inside `V` and
 --    clears every key — the RESIDUAL a later stage sees
-theorem Sol.Good.clears {B : Type} {V : List (Bool × TyVar)} {s : Sol B}
-    (hg : s.Good V) {y x : Bool × TyVar} (hy : y ∈ V)
+theorem Sol.Good.clears {B : Type} {V : List (Srt × TyVar)} {s : Sol B}
+    (hg : s.Good V) {y x : Srt × TyVar} (hy : y ∈ V)
     (hx : x ∈ s.toSubst.ftvAt y) : x ∈ V ∧ x ∉ s.domS := by
   rcases Sol.ftvAt_toSubst hx with ⟨rfl, hnd⟩ | ⟨hb, -⟩
   · exact ⟨hy, hnd⟩
   · exact hg.rng x hb
 
-theorem Sol.Good.clears_ty {B : Type} {V : List (Bool × TyVar)} {s : Sol B}
-    (hg : s.Good V) {τ : Ty B} (hτ : Ty.sortedFtv τ ⊆ V) {x : Bool × TyVar}
+theorem Sol.Good.clears_ty {B : Type} {V : List (Srt × TyVar)} {s : Sol B}
+    (hg : s.Good V) {τ : Ty B} (hτ : Ty.sortedFtv τ ⊆ V) {x : Srt × TyVar}
     (hx : x ∈ Ty.sortedFtv (τ.applySubst s.toSubst)) : x ∈ V ∧ x ∉ s.domS := by
   obtain ⟨y, hy, hxy⟩ := Ty.mem_sortedFtv_applySubst τ hx
   exact hg.clears (hτ hy) hxy
 
-theorem Sol.Good.clears_spine {B : Type} {V : List (Bool × TyVar)} {s : Sol B}
-    (hg : s.Good V) {t : List (Atom B)} (ht : sSorted t ⊆ V) {x : Bool × TyVar}
+theorem Sol.Good.clears_spine {B : Type} {V : List (Srt × TyVar)} {s : Sol B}
+    (hg : s.Good V) {t : List (Atom B)} (ht : sSorted t ⊆ V) {x : Srt × TyVar}
     (hx : x ∈ sSorted (sApplySubst s.toSubst t)) : x ∈ V ∧ x ∉ s.domS := by
   obtain ⟨y, hy, hxy⟩ := mem_sSorted_sApplySubst t hx
   exact hg.clears (ht hy) hxy
 
-theorem Sol.mem_domS_comp {B : Type} {s₁ s₂ : Sol B} {x : Bool × TyVar}
+theorem Sol.mem_domS_comp {B : Type} {s₁ s₂ : Sol B} {x : Srt × TyVar}
     (h : x ∈ (s₂.comp s₁).domS) : x ∈ s₁.domS ∨ x ∈ s₂.domS := by
   obtain ⟨b, α⟩ := x
   cases b with
-  | false =>
+  | ty =>
       have := Sol.domS_ty_of_mem h
       simp only [Sol.comp, List.map_append, List.map_map, List.mem_append] at this
       rcases this with hh | hh
       · exact .inl (Sol.mem_domS_ty (by simpa using hh))
       · exact .inr (Sol.mem_domS_ty hh)
-  | true =>
+  | row =>
       have := Sol.domS_row_of_mem h
       simp only [Sol.comp, List.map_append, List.map_map, List.mem_append] at this
       rcases this with hh | hh
       · exact .inl (Sol.mem_domS_row (by simpa using hh))
       · exact .inr (Sol.mem_domS_row hh)
+  | lab =>
+      have := Sol.domS_lab_of_mem h
+      simp only [Sol.comp, List.map_append, List.map_map, List.mem_append] at this
+      rcases this with hh | hh
+      · exact .inl (Sol.mem_domS_lab (by simpa using hh))
+      · exact .inr (Sol.mem_domS_lab hh)
 
 -- ⊢  COMPOSITION. If the later stage's keys and mentions avoid the earlier
 --    stage's keys — which is what solve-and-apply guarantees, by `clears` —
 --    the composite is good.
-theorem Sol.Good.comp {B : Type} {V : List (Bool × TyVar)} {s₁ s₂ : Sol B}
+theorem Sol.Good.comp {B : Type} {V : List (Srt × TyVar)} {s₁ s₂ : Sol B}
     (g₁ : s₁.Good V) (g₂ : s₂.Good V)
     (hdom : ∀ x ∈ s₂.domS, x ∉ s₁.domS) (hrng : ∀ x, s₂.BVar x → x ∉ s₁.domS) :
     (s₂.comp s₁).Good V := by
@@ -471,11 +491,12 @@ theorem Sol.Good.comp {B : Type} {V : List (Bool × TyVar)} {s₁ s₂ : Sol B}
     rcases Sol.mem_domS_comp hc with hc | hc
     · exact hrng x hb hc
     · exact hxd hc
-  refine ⟨fun x hx => ?_, fun x hx => ?_, fun p hp q hq he => ?_, fun p hp q hq he => ?_⟩
+  refine ⟨fun x hx => ?_, fun x hx => ?_, fun p hp q hq he => ?_, fun p hp q hq he => ?_,
+    fun p hp q hq he => ?_⟩
   · rcases Sol.mem_domS_comp hx with hx | hx
     · exact g₁.dom x hx
     · exact g₂.dom x hx
-  · rcases hx with ⟨p, hp, hx⟩ | ⟨p, hp, hx⟩
+  · rcases hx with ⟨p, hp, hx⟩ | ⟨p, hp, hx⟩ | ⟨p, hp, hx⟩
     · simp only [Sol.comp, List.mem_append] at hp
       rcases hp with hp | hp
       · obtain ⟨q, hq, rfl⟩ := List.mem_map.mp hp
@@ -486,8 +507,14 @@ theorem Sol.Good.comp {B : Type} {V : List (Bool × TyVar)} {s₁ s₂ : Sol B}
       rcases hp with hp | hp
       · obtain ⟨q, hq, rfl⟩ := List.mem_map.mp hp
         obtain ⟨y, hy, hxy⟩ := Row.mem_sortedFtv_applySubst q.2 hx
-        exact pushed y x (.inr ⟨q, hq, hy⟩) hxy
-      · exact later x (.inr ⟨p, hp, hx⟩)
+        exact pushed y x (.inr (.inl ⟨q, hq, hy⟩)) hxy
+      · exact later x (.inr (.inl ⟨p, hp, hx⟩))
+    · simp only [Sol.comp, List.mem_append] at hp
+      rcases hp with hp | hp
+      · obtain ⟨q, hq, rfl⟩ := List.mem_map.mp hp
+        obtain ⟨y, hy, hxy⟩ := Key.mem_sortedFtv_applySubst q.2 hx
+        exact pushed y x (.inr (.inr ⟨q, hq, hy⟩)) hxy
+      · exact later x (.inr (.inr ⟨p, hp, hx⟩))
   · simp only [Sol.comp, List.mem_append] at hp hq
     rcases hp with hp | hp <;> rcases hq with hq | hq
     · obtain ⟨p', hp', rfl⟩ := List.mem_map.mp hp
@@ -518,63 +545,91 @@ theorem Sol.Good.comp {B : Type} {V : List (Bool × TyVar)} {s₁ s₂ : Sol B}
         (by simp only at he; rw [← he]
             exact hdom _ (Sol.mem_domS_row (List.mem_map.2 ⟨p, hp, rfl⟩)))
     · exact g₂.frow p hp q hq he
+  · simp only [Sol.comp, List.mem_append] at hp hq
+    rcases hp with hp | hp <;> rcases hq with hq | hq
+    · obtain ⟨p', hp', rfl⟩ := List.mem_map.mp hp
+      obtain ⟨q', hq', rfl⟩ := List.mem_map.mp hq
+      simp only at he ⊢
+      rw [g₁.flab p' hp' q' hq' he]
+    · obtain ⟨p', hp', rfl⟩ := List.mem_map.mp hp
+      exact absurd (Sol.mem_domS_lab (List.mem_map.2 ⟨p', hp', rfl⟩))
+        (by simp only at he; rw [he]
+            exact hdom _ (Sol.mem_domS_lab (List.mem_map.2 ⟨q, hq, rfl⟩)))
+    · obtain ⟨q', hq', rfl⟩ := List.mem_map.mp hq
+      exact absurd (Sol.mem_domS_lab (List.mem_map.2 ⟨q', hq', rfl⟩))
+        (by simp only at he; rw [← he]
+            exact hdom _ (Sol.mem_domS_lab (List.mem_map.2 ⟨p, hp, rfl⟩)))
+    · exact g₂.flab p hp q hq he
 
 ------------------------- WHAT A GOOD SOLUTION IS ------------------------------
 
 -- ⊢  a good solution is FULLY APPLIED — idempotent, so ⟦S⟧ is `toSubst`
-theorem Sol.Good.applied {B : Type} {V : List (Bool × TyVar)} {s : Sol B}
+theorem Sol.Good.applied {B : Type} {V : List (Srt × TyVar)} {s : Sol B}
     (hg : s.Good V) : s.Applied := by
-  have fix_ty : ∀ α, (false, α) ∉ s.domS → s.toSubst.ty α = .var α :=
+  have fix_ty : ∀ α, (.ty, α) ∉ s.domS → s.toSubst.ty α = .var α :=
     fun α h => tyLookup_not_mem _ (fun hm => h (Sol.mem_domS_ty hm))
-  have fix_row : ∀ α, (true, α) ∉ s.domS → s.toSubst.row α = .var α :=
+  have fix_row : ∀ α, (.row, α) ∉ s.domS → s.toSubst.row α = .var α :=
     fun α h => rowLookup_not_mem _ (fun hm => h (Sol.mem_domS_row hm))
+  have fix_lab : ∀ α, (.lab, α) ∉ s.domS → s.toSubst.lab α = .var α :=
+    fun α h => labLookup_not_mem _ (fun hm => h (Sol.mem_domS_lab hm))
   exact ⟨fun p hp => Ty.applySubst_fixed_sorted p.2
           (fun α hα => fix_ty α (hg.rng _ (.inl ⟨p, hp, hα⟩)).2)
-          (fun α hα => fix_row α (hg.rng _ (.inl ⟨p, hp, hα⟩)).2),
+          (fun α hα => fix_row α (hg.rng _ (.inl ⟨p, hp, hα⟩)).2)
+          (fun α hα => fix_lab α (hg.rng _ (.inl ⟨p, hp, hα⟩)).2),
          fun p hp => Row.applySubst_fixed_sorted p.2
-          (fun α hα => fix_ty α (hg.rng _ (.inr ⟨p, hp, hα⟩)).2)
-          (fun α hα => fix_row α (hg.rng _ (.inr ⟨p, hp, hα⟩)).2)⟩
+          (fun α hα => fix_ty α (hg.rng _ (.inr (.inl ⟨p, hp, hα⟩))).2)
+          (fun α hα => fix_row α (hg.rng _ (.inr (.inl ⟨p, hp, hα⟩))).2)
+          (fun α hα => fix_lab α (hg.rng _ (.inr (.inl ⟨p, hp, hα⟩))).2),
+         fun p hp => Key.applySubst_fixed_sorted p.2
+          (fun α hα => fix_lab α (hg.rng _ (.inr (.inr ⟨p, hp, hα⟩))).2)⟩
 
 -- ⊢  …WELL-FORMED, at rank ≡ 0: no binding mentions a key, so the descent
 --    condition of `Ranked` is vacuous
-theorem Sol.Good.wf {B : Type} {V : List (Bool × TyVar)} {s : Sol B}
+theorem Sol.Good.wf {B : Type} {V : List (Srt × TyVar)} {s : Sol B}
     (hg : s.Good V) : s.WF where
   acyclic := by
     intro p hp β hβ hmem
-    have hs : (true, β) ∈ Row.sortedFtv p.2 := by
+    have hs : (.row, β) ∈ Row.sortedFtv p.2 := by
       exact sSorted_toSpine _ _ (sVarSeq_mem_sSorted _ hβ)
-    exact (hg.rng _ (.inr ⟨p, hp, hs⟩)).2 (Sol.mem_domS_row hmem)
+    exact (hg.rng _ (.inr (.inl ⟨p, hp, hs⟩))).2 (Sol.mem_domS_row hmem)
   ranked := by
-    refine ⟨fun _ => 0, fun x hx => ?_, fun p hp x hx hxd => ?_, fun p hp x hx hxd => ?_⟩
+    refine ⟨fun _ => 0, fun x hx => ?_, fun p hp x hx hxd => ?_, fun p hp x hx hxd => ?_,
+      fun p hp x hx hxd => ?_⟩
     · cases hlen : s.domS with
       | nil => rw [hlen] at hx; cases hx
       | cons _ _ => simp
     · exact absurd hxd (hg.rng x (.inl ⟨p, hp, hx⟩)).2
-    · exact absurd hxd (hg.rng x (.inr ⟨p, hp, hx⟩)).2
+    · exact absurd hxd (hg.rng x (.inr (.inl ⟨p, hp, hx⟩))).2
+    · exact absurd hxd (hg.rng x (.inr (.inr ⟨p, hp, hx⟩))).2
 
 -- ⊢  …and SATISFIABLE, by its own substitution. The success legs of the
 --    trichotomy are vacuous on an unsatisfiable solution; this rules that out.
-theorem Sol.Good.sat {B : Type} {V : List (Bool × TyVar)} {s : Sol B}
+theorem Sol.Good.sat {B : Type} {V : List (Srt × TyVar)} {s : Sol B}
     (hg : s.Good V) : Sol.Sat s.toSubst s := by
   have ha := hg.applied
-  refine ⟨fun p hp => ?_, fun p hp => ?_⟩
+  refine ⟨fun p hp => ?_, fun p hp => ?_, fun p hp => ?_⟩
   · rw [ha.1 p hp]
     change TyEquiv (tyLookup p.1 s.ty) p.2
     rcases tyLookup_cases s.ty p.1 with ⟨hnm, -⟩ | ⟨q, hq, h1, h2⟩
     · exact absurd (List.mem_map.2 ⟨p, hp, rfl⟩) hnm
     · rw [h2, hg.fty q hq p hp h1]; exact TyEquiv.refl _
-  · rw [ha.2 p hp]
+  · rw [ha.2.1 p hp]
     change RowEquiv (rowLookup p.1 s.row) p.2
     rcases rowLookup_cases s.row p.1 with ⟨hnm, -⟩ | ⟨q, hq, h1, h2⟩
     · exact absurd (List.mem_map.2 ⟨p, hp, rfl⟩) hnm
     · rw [h2, hg.frow q hq p hp h1]; exact RowEquiv.refl _
+  · rw [ha.2.2 p hp]
+    change labLookup p.1 s.lab = p.2
+    rcases labLookup_cases s.lab p.1 with ⟨hnm, -⟩ | ⟨q, hq, h1, h2⟩
+    · exact absurd (List.mem_map.2 ⟨p, hp, rfl⟩) hnm
+    · rw [h2, hg.flab q hq p hp h1]
 
 ------------------------- THE BASE ARMS ----------------------------------------
 
 -- ⊢  U-var at the type sort: α ≔ τ with α ∉ τ at the TYPE sort
 theorem Sol.good_bindTy {B : Type} {S : Supply} {α : TyVar} {τ : Ty B}
-    {V : List (Bool × TyVar)} {s : Sol B} {S' : Supply}
-    (h : bindTy S α τ = .success s S') (hα : (false, α) ∈ V)
+    {V : List (Srt × TyVar)} {s : Sol B} {S' : Supply}
+    (h : bindTy S α τ = .success s S') (hα : (.ty, α) ∈ V)
     (hτ : Ty.sortedFtv τ ⊆ V) : s.Good V := by
   unfold bindTy at h
   split at h
@@ -584,42 +639,41 @@ theorem Sol.good_bindTy {B : Type} {S : Supply} {α : TyVar} {τ : Ty B}
   · split at h
     · cases h
     · next hocc =>
-      split at h
-      · cases h
-      · next hkey =>
-        simp only [UResM.success.injEq] at h
-        obtain ⟨rfl, rfl⟩ := h
-        have hdom : ∀ x, x ∈ Sol.domS (⟨[(α, τ)], []⟩ : Sol B) → x = (false, α) := by
-          intro x hx; simpa [Sol.domS] using hx
-        refine ⟨fun x hx => by rw [hdom x hx]; exact hα, fun x hx => ?_,
-                fun p hp q hq _ => by
-                  rw [List.mem_singleton.mp hp, List.mem_singleton.mp hq],
-                fun p hp => by simp at hp⟩
-        rcases hx with ⟨p, hp, hx⟩ | ⟨p, hp, -⟩
-        · obtain rfl := List.mem_singleton.mp hp
-          refine ⟨hτ hx, fun hd => ?_⟩
-          rw [hdom x hd] at hx
-          rcases Ty.mem_tyFtv_of_sortedFtv τ hx with h' | h'
-          · exact hocc (List.elem_eq_true_of_mem h')
-          · exact hkey (List.elem_eq_true_of_mem h')
-        · simp at hp
+      simp only [UResM.success.injEq] at h
+      obtain ⟨rfl, rfl⟩ := h
+      have hdom : ∀ x, x ∈ Sol.domS (⟨[(α, τ)], [], []⟩ : Sol B) → x = (.ty, α) := by
+        intro x hx; simpa [Sol.domS] using hx
+      refine ⟨fun x hx => by rw [hdom x hx]; exact hα, fun x hx => ?_,
+              fun p hp q hq _ => by
+                rw [List.mem_singleton.mp hp, List.mem_singleton.mp hq],
+              fun p hp => by simp at hp, fun p hp => by simp at hp⟩
+      rcases hx with ⟨p, hp, hx⟩ | ⟨p, hp, -⟩ | ⟨p, hp, -⟩
+      · obtain rfl := List.mem_singleton.mp hp
+        refine ⟨hτ hx, fun hd => ?_⟩
+        rw [hdom x hd] at hx
+        exact hocc (List.elem_eq_true_of_mem (Ty.mem_tyFtv_of_sortedFtv τ hx))
+      · simp at hp
+      · simp at hp
 
 -- ⊢  bindings of spine variables to ε
 theorem Sol.good_ofRow_eps {B : Type} {σ : List (TyVar × Row B)}
-    {V : List (Bool × TyVar)} (h : ∀ p ∈ σ, (true, p.1) ∈ V ∧ p.2 = .empty) :
+    {V : List (Srt × TyVar)} (h : ∀ p ∈ σ, (.row, p.1) ∈ V ∧ p.2 = .empty) :
     (Sol.ofRow σ).Good V := by
   refine ⟨fun x hx => ?_, fun x hx => ?_, fun p hp => by simp [Sol.ofRow] at hp,
-          fun p hp q hq _ => by rw [(h p hp).2, (h q hq).2]⟩
-  · simp only [Sol.domS, Sol.ofRow, List.map_nil, List.nil_append, List.mem_map] at hx
+          fun p hp q hq _ => by rw [(h p hp).2, (h q hq).2],
+          fun p hp => by simp [Sol.ofRow] at hp⟩
+  · simp only [Sol.domS, Sol.ofRow, List.map_nil, List.nil_append, List.append_nil,
+      List.mem_map] at hx
     obtain ⟨p, hp, rfl⟩ := hx
     exact (h p hp).1
-  · rcases hx with ⟨p, hp, -⟩ | ⟨p, hp, hx⟩
+  · rcases hx with ⟨p, hp, -⟩ | ⟨p, hp, hx⟩ | ⟨p, hp, -⟩
     · simp [Sol.ofRow] at hp
     · rw [(h p hp).2] at hx; simp [Row.sortedFtv] at hx
+    · simp [Sol.ofRow] at hp
 
 theorem allVarsEmpty_sorted {B : Type} : (s : List (Atom B)) →
     {σ : List (TyVar × Row B)} → allVarsEmpty s = some σ →
-    ∀ p ∈ σ, (true, p.1) ∈ sSorted s ∧ p.2 = Row.empty
+    ∀ p ∈ σ, (.row, p.1) ∈ sSorted s ∧ p.2 = Row.empty
   | [], σ, h, p, hp => by simp only [allVarsEmpty, Option.some.injEq] at h; cases h; cases hp
   | .field _ _ :: _, σ, h, p, hp => by simp [allVarsEmpty] at h
   | .var α :: s, σ, h, p, hp => by
@@ -656,30 +710,71 @@ theorem Sol.good_solveVarM {B : Type} {S : Supply} {s₁ s₂ : List (Atom B)}
         · split at h
           · split at h <;> (try split at h) <;> simp at h
           · next hocc =>
-            split at h
-            · simp at h
-            · next hkey =>
-              simp only [Option.some.injEq, UResM.success.injEq] at h
-              obtain ⟨rfl, rfl⟩ := h
-              have hdom : ∀ x, x ∈ (Sol.ofRow [(α, ofSpine s₂)] : Sol B).domS →
-                  x = (true, α) := by
-                intro x hx; simpa [Sol.domS, Sol.ofRow] using hx
-              refine ⟨fun x hx => by
-                        rw [hdom x hx]; exact List.mem_append_left _ List.mem_cons_self,
-                      fun x hx => ?_, fun p hp => by simp [Sol.ofRow] at hp,
-                      fun p hp q hq _ => by
-                        simp only [Sol.ofRow, List.mem_singleton] at hp hq
-                        rw [hp, hq]⟩
-              rcases hx with ⟨p, hp, -⟩ | ⟨p, hp, hx⟩
-              · simp [Sol.ofRow] at hp
-              · simp only [Sol.ofRow, List.mem_singleton] at hp
-                subst hp
-                simp only [sortedFtv_ofSpine] at hx
-                refine ⟨List.mem_append_right _ hx, fun hd => ?_⟩
-                rw [hdom x hd, ← sortedFtv_ofSpine] at hx
-                rcases Row.mem_allRowVars_of_sortedFtv (ofSpine s₂) hx with h' | h'
-                · exact hocc (List.elem_eq_true_of_mem h')
-                · exact hkey (List.elem_eq_true_of_mem h')
+            simp only [Option.some.injEq, UResM.success.injEq] at h
+            obtain ⟨rfl, rfl⟩ := h
+            have hdom : ∀ x, x ∈ (Sol.ofRow [(α, ofSpine s₂)] : Sol B).domS →
+                x = (.row, α) := by
+              intro x hx; simpa [Sol.domS, Sol.ofRow] using hx
+            refine ⟨fun x hx => by
+                      rw [hdom x hx]; exact List.mem_append_left _ List.mem_cons_self,
+                    fun x hx => ?_, fun p hp => by simp [Sol.ofRow] at hp,
+                    fun p hp q hq _ => by
+                      simp only [Sol.ofRow, List.mem_singleton] at hp hq
+                      rw [hp, hq],
+                    fun p hp => by simp [Sol.ofRow] at hp⟩
+            rcases hx with ⟨p, hp, -⟩ | ⟨p, hp, hx⟩ | ⟨p, hp, -⟩
+            · simp [Sol.ofRow] at hp
+            · simp only [Sol.ofRow, List.mem_singleton] at hp
+              subst hp
+              simp only [sortedFtv_ofSpine] at hx
+              refine ⟨List.mem_append_right _ hx, fun hd => ?_⟩
+              rw [hdom x hd, ← sortedFtv_ofSpine] at hx
+              exact hocc (List.elem_eq_true_of_mem (Row.mem_allRowVars_of_sortedFtv (ofSpine s₂) hx))
+            · simp [Sol.ofRow] at hp
+
+-- ⊢  the key arm: a label variable bound to a key it is not
+theorem Sol.good_unifyKey {B : Type} {S : Supply} {k₁ k₂ : Key} {s : Sol B}
+    {S' : Supply} (h : unifyKey S k₁ k₂ = .success s S') :
+    s.Good (Key.sortedFtv k₁ ++ Key.sortedFtv k₂) := by
+  have hb : ∀ {α k} {V : List (Srt × TyVar)}, (.lab, α) ∈ V → Key.sortedFtv k ⊆ V →
+      bindLab (B := B) S α k = .success s S' → s.Good V := by
+    intro α k V hα hk h
+    unfold bindLab at h
+    split at h
+    · simp only [UResM.success.injEq] at h; obtain ⟨rfl, rfl⟩ := h; exact Sol.good_nil V
+    · next hne =>
+      simp only [UResM.success.injEq] at h; obtain ⟨rfl, rfl⟩ := h
+      have hdom : ∀ x, x ∈ Sol.domS (⟨[], [], [(α, k)]⟩ : Sol B) → x = (.lab, α) := by
+        intro x hx; simpa [Sol.domS] using hx
+      refine ⟨fun x hx => by rw [hdom x hx]; exact hα, fun x hx => ?_,
+              fun p hp => by simp at hp, fun p hp => by simp at hp,
+              fun p hp q hq _ => by rw [List.mem_singleton.mp hp, List.mem_singleton.mp hq]⟩
+      rcases hx with ⟨p, hp, -⟩ | ⟨p, hp, -⟩ | ⟨p, hp, hx⟩
+      · simp at hp
+      · simp at hp
+      · obtain rfl := List.mem_singleton.mp hp
+        refine ⟨hk hx, fun hd => ?_⟩
+        rw [hdom x hd] at hx
+        cases k with
+        | lit _ => simp [Key.sortedFtv] at hx
+        | var β =>
+            simp [Key.sortedFtv] at hx
+            exact hne (by rw [hx])
+  cases k₁ with
+  | var α =>
+      exact hb (List.mem_append_left _ (by simp [Key.sortedFtv]))
+        (fun _ hx => List.mem_append_right _ hx) h
+  | lit l =>
+      cases k₂ with
+      | var α =>
+          exact hb (List.mem_append_right _ (by simp [Key.sortedFtv]))
+            (by simp [Key.sortedFtv]) h
+      | lit l' =>
+          simp only [unifyKey] at h
+          split at h
+          · simp only [UResM.success.injEq] at h; obtain ⟨rfl, rfl⟩ := h
+            exact Sol.good_nil _
+          · cases h
 
 ------------------------- THE INDUCTION ----------------------------------------
 
@@ -772,16 +867,8 @@ theorem unifyM_good {B : Type} [DecidableEq B] (fuel : Nat) :
         | var α => cases fuel <;> exact hbR S α _ h
         | base _ => cases fuel <;> cases h
         | lab b' =>
-            by_cases hb : b = b'
-            · subst hb
-              have hred : unifyTyF S fuel (Ty.lab b) (Ty.lab b)
-                  = .success (Sol.nil (B := B)) S := by
-                cases fuel <;> simp [unifyTyF]
-              rw [hred] at h
-              simp only [UResM.success.injEq] at h
-              obtain ⟨rfl, rfl⟩ := h
-              exact Sol.good_nil _
-            · cases fuel <;> simp [unifyTyF, hb] at h
+            have h' : unifyKey S b b' = .success s S' := by cases fuel <;> exact h
+            exact Sol.good_unifyKey h'
         | unk => cases fuel <;> cases h
         | fn _ _ => cases fuel <;> cases h
         | rcd _ => cases fuel <;> cases h
@@ -832,7 +919,7 @@ theorem unifyM_good {B : Type} [DecidableEq B] (fuel : Nat) :
           | cons b s₂ => cases h
   | succ fuel ih =>
       have arm : ∀ (S : Supply) (τ τ' : Ty B) (t₁ t₂ : List (Atom B))
-          (Q : List (Bool × TyVar)) {s : Sol B} {S' : Supply},
+          (Q : List (Srt × TyVar)) {s : Sol B} {S' : Supply},
           Ty.sortedFtv τ ++ Ty.sortedFtv τ' ⊆ Q → sSorted t₁ ++ sSorted t₂ ⊆ Q →
           ((unifyTyF S fuel τ τ').seq fun θ' S'' =>
               unifySpineMF S'' fuel (sApplySubst θ' t₁) (sApplySubst θ' t₂))
@@ -1041,22 +1128,26 @@ theorem unifyRowM_success_mgu {B : Type} [DecidableEq B] {fuel : Nat} {ρ₁ ρ�
 def Sol.Clean {B : Type} (s : Sol B) : Prop :=
   (∀ x, s.BVar x → x ∉ s.domS) ∧
   (∀ p ∈ s.ty,  ∀ q ∈ s.ty,  p.1 = q.1 → p.2 = q.2) ∧
-  (∀ p ∈ s.row, ∀ q ∈ s.row, p.1 = q.1 → p.2 = q.2)
+  (∀ p ∈ s.row, ∀ q ∈ s.row, p.1 = q.1 → p.2 = q.2) ∧
+  (∀ p ∈ s.lab, ∀ q ∈ s.lab, p.1 = q.1 → p.2 = q.2)
 
 /-- Every tagged variable `s` mentions, keys included — the `V` a clean
 solution is good over. -/
-def Sol.allS {B : Type} (s : Sol B) : List (Bool × TyVar) :=
+def Sol.allS {B : Type} (s : Sol B) : List (Srt × TyVar) :=
   s.domS ++ s.ty.flatMap (fun p => Ty.sortedFtv p.2) ++
-    s.row.flatMap (fun p => Row.sortedFtv p.2)
+    s.row.flatMap (fun p => Row.sortedFtv p.2) ++ s.lab.flatMap (fun p => Key.sortedFtv p.2)
 
-theorem Sol.Good.clean {B : Type} {V : List (Bool × TyVar)} {s : Sol B}
+theorem Sol.Good.clean {B : Type} {V : List (Srt × TyVar)} {s : Sol B}
     (h : s.Good V) : s.Clean :=
-  ⟨fun x hx => (h.rng x hx).2, h.fty, h.frow⟩
+  ⟨fun x hx => (h.rng x hx).2, h.fty, h.frow, h.flab⟩
 
 theorem Sol.Clean.good {B : Type} {s : Sol B} (h : s.Clean) : s.Good s.allS := by
-  refine ⟨fun x hx => List.mem_append_left _ (List.mem_append_left _ hx),
-          fun x hx => ⟨?_, h.1 x hx⟩, h.2.1, h.2.2⟩
-  rcases hx with ⟨p, hp, hx⟩ | ⟨p, hp, hx⟩
+  refine ⟨fun x hx => List.mem_append_left _ (List.mem_append_left _
+            (List.mem_append_left _ hx)),
+          fun x hx => ⟨?_, h.1 x hx⟩, h.2.1, h.2.2.1, h.2.2.2⟩
+  rcases hx with ⟨p, hp, hx⟩ | ⟨p, hp, hx⟩ | ⟨p, hp, hx⟩
+  · exact List.mem_append_left _ (List.mem_append_left _
+      (List.mem_append_right _ (List.mem_flatMap.2 ⟨p, hp, hx⟩)))
   · exact List.mem_append_left _ (List.mem_append_right _ (List.mem_flatMap.2 ⟨p, hp, hx⟩))
   · exact List.mem_append_right _ (List.mem_flatMap.2 ⟨p, hp, hx⟩)
 
@@ -1071,13 +1162,13 @@ theorem Sol.Clean.sat {B : Type} {s : Sol B} (h : s.Clean) : Sol.Sat s.toSubst s
 
 -- ⊢  applying a clean solution clears its keys, at both sorts
 theorem Sol.Clean.clears_ty {B : Type} {s : Sol B} (h : s.Clean) {τ : Ty B}
-    {x : Bool × TyVar} (hx : x ∈ Ty.sortedFtv (τ.applySubst s.toSubst)) : x ∉ s.domS :=
+    {x : Srt × TyVar} (hx : x ∈ Ty.sortedFtv (τ.applySubst s.toSubst)) : x ∉ s.domS :=
   ((h.good.mono (V := s.allS) (W := s.allS ++ Ty.sortedFtv τ)
       (fun _ hy => List.mem_append_left _ hy)).clears_ty
     (fun _ hy => List.mem_append_right _ hy) hx).2
 
 theorem Sol.Clean.clears_row {B : Type} {s : Sol B} (h : s.Clean) {ρ : Row B}
-    {x : Bool × TyVar} (hx : x ∈ Row.sortedFtv (ρ.applySubst s.toSubst)) : x ∉ s.domS := by
+    {x : Srt × TyVar} (hx : x ∈ Row.sortedFtv (ρ.applySubst s.toSubst)) : x ∉ s.domS := by
   obtain ⟨y, hy, hxy⟩ := Row.mem_sortedFtv_applySubst ρ hx
   exact ((h.good.mono (W := s.allS ++ Row.sortedFtv ρ)
       (fun _ hy => List.mem_append_left _ hy)).clears
@@ -1093,7 +1184,7 @@ theorem Sol.Clean.comp {B : Type} {s₁ s₂ : Sol B} (h₁ : s₁.Clean) (h₂ 
 -- ⊢  A NEW SOLUTION FOR AN ALREADY-SUBSTITUTED PROBLEM keeps the state clean:
 --    whatever `s` binds or mentions is a variable of the substituted problem,
 --    and those avoid the state's keys.
-theorem Sol.Clean.extend {B : Type} {s₀ s : Sol B} {P : List (Bool × TyVar)}
+theorem Sol.Clean.extend {B : Type} {s₀ s : Sol B} {P : List (Srt × TyVar)}
     (h₀ : s₀.Clean) (hg : s.Good P) (hP : ∀ x ∈ P, x ∉ s₀.domS) : (s.comp s₀).Clean :=
   h₀.comp hg.clean (fun x hx => hP x (hg.dom x hx)) (fun x hx => hP x (hg.rng x hx).1)
 

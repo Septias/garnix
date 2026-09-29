@@ -22,31 +22,22 @@ namespace MinimalCalculus
 -- trace-monoid presentation; cancellativity of shared end-vars — what makes
 -- U-var-refl sound AND complete — falls out as a corollary.
 
--- FC-labels phase B adds a third atom, the KEYED field ${q}: τ. A key is read
--- only through its class (≈-rule `dsing`), so the atom records the class: a
--- ⌊l⌋ key IS the literal field l, a variable key is `some α`, and every junk
--- key is `none`. A keyed field is a BARRIER like a var: nothing commutes past it.
+-- FC-labels phase B adds a third atom, the KEYED field ${α}: τ. A literal key
+-- IS the literal field l (≈-rule `dsingLab`), so only a label-variable key
+-- makes a keyed atom. A keyed field is a BARRIER like a var: nothing commutes
+-- past it.
 -- "var sequence" below reads "barrier sequence" (vars and keys, in order), a
 -- segment is a barrier-free run, and the keyed fields' TYPES are a third
 -- invariant (pointwise ≈, in order).
 inductive Atom (B : Type) : Type where
   | field  : Label → Ty B → Atom B
   | var    : TyVar → Atom B
-  | dfield : Option TyVar → Ty B → Atom B
+  | dfield : TyVar → Ty B → Atom B
 
-/-- the spine atom of a keyed field, by the key's class. -/
-def Atom.ofKey {B : Type} : Ty B → Ty B → Atom B
-  | .lab l,  τ => .field l τ
-  | .var α,  τ => .dfield (some α) τ
-  | .base _, τ => .dfield none τ
-  | .unk,    τ => .dfield none τ
-  | .fn _ _, τ => .dfield none τ
-  | .rcd _,  τ => .dfield none τ
-
-/-- the canonical key of a keyed atom (★ stands for every junk key). -/
-def Atom.keyTy {B : Type} : Option TyVar → Ty B
-  | some α => .var α
-  | none   => .unk
+/-- the spine atom of a keyed field. -/
+def Atom.ofKey {B : Type} : Key → Ty B → Atom B
+  | .lit l, τ => .field l τ
+  | .var α, τ => .dfield α τ
 
 def Row.toSpine {B : Type} : Row B → List (Atom B)
   | .empty     => []
@@ -60,12 +51,12 @@ def ofSpine {B : Type} : List (Atom B) → Row B
   | []               => .empty
   | .field l τ :: s  => .cat (.sing l τ) (ofSpine s)
   | .var α :: s      => .cat (.var α) (ofSpine s)
-  | .dfield o τ :: s => .cat (.dsing (Atom.keyTy o) τ) (ofSpine s)
+  | .dfield α τ :: s => .cat (.dsing (.var α) τ) (ofSpine s)
 
 -- A barrier's identity: a var, or a key (its field type is tracked apart).
 inductive Barrier (B : Type) : Type where
   | var : TyVar → Barrier B
-  | key : Option TyVar → Barrier B
+  | key : TyVar → Barrier B
 
 -- Invariant 1: the barrier sequence.
 def sBarSeq {B : Type} : List (Atom B) → List (Barrier B)
@@ -297,18 +288,16 @@ theorem RowEquiv.char {B : Type} : {ρ₁ ρ₂ : Row B} → ρ₁ ≈ᵣ ρ₂ 
         · simp only [Row.toSpine, List.cons_append, List.nil_append, sProj,
                      if_neg h₁, if_neg h₂]
           exact .nil, .nil⟩
-  | .dsing q τ₁, .dsing q' τ₂, .dsing hk hty => by
-      cases q <;> cases q' <;> simp only [Ty.keyClass] at hk <;>
-        (try cases hk) <;>
-        first
-        | exact ⟨rfl, fun _ => .nil, .cons rfl hty .nil⟩
-        | (rename_i l
-           refine ⟨rfl, fun l' => ?_, .nil⟩
-           by_cases h : l = l'
-           · simp only [Row.toSpine, Atom.ofKey, sProj, if_pos h]
-             exact .cons rfl hty .nil
-           · simp only [Row.toSpine, Atom.ofKey, sProj, if_neg h]
-             exact .nil)
+  | .dsing q τ₁, .dsing _ τ₂, .dsing hty => by
+      cases q with
+      | var _ => exact ⟨rfl, fun _ => .nil, .cons rfl hty .nil⟩
+      | lit l =>
+          refine ⟨rfl, fun l' => ?_, .nil⟩
+          by_cases h : l = l'
+          · simp only [Row.toSpine, Atom.ofKey, sProj, if_pos h]
+            exact .cons rfl hty .nil
+          · simp only [Row.toSpine, Atom.ofKey, sProj, if_neg h]
+            exact .nil
   | _, _, .dsingLab => Row.Char.of_eq rfl
 
 -- ## Refold: every row is ≈ to its right-nested spine form
@@ -325,22 +314,18 @@ theorem ofSpine_append {B : Type} : (s₁ s₂ : List (Atom B)) →
       (RowEquiv.cat (.refl _) (ofSpine_append s₁ s₂)).trans RowEquiv.assoc.symm
 
 -- ⊢  ${q}: τ ≈ᵣ ofSpine [ofKey q τ]
-theorem ofKey_equiv {B : Type} (q τ : Ty B) :
+theorem ofKey_equiv {B : Type} (q : Key) (τ : Ty B) :
     RowEquiv (.dsing q τ) (ofSpine [Atom.ofKey q τ]) := by
   cases q with
-  | lab l => exact RowEquiv.dsingLab.trans RowEquiv.unitR.symm
+  | lit l => exact RowEquiv.dsingLab.trans RowEquiv.unitR.symm
   | var α => exact RowEquiv.unitR.symm
-  | _ =>
-      refine RowEquiv.trans (RowEquiv.dsing ?_ (.refl τ)) RowEquiv.unitR.symm
-      rfl
 
 -- ⊢  ofSpine (ofKey q τ :: s) ≈ᵣ (${q}: τ | ofSpine s)
-theorem ofSpine_cons_ofKey {B : Type} (q τ : Ty B) (s : List (Atom B)) :
+theorem ofSpine_cons_ofKey {B : Type} (q : Key) (τ : Ty B) (s : List (Atom B)) :
     RowEquiv (ofSpine (Atom.ofKey q τ :: s)) (.cat (.dsing q τ) (ofSpine s)) := by
   cases q with
-  | lab l => exact .cat RowEquiv.dsingLab.symm (.refl _)
+  | lit l => exact .cat RowEquiv.dsingLab.symm (.refl _)
   | var α => exact .refl _
-  | _ => exact .cat (.dsing rfl (.refl τ)) (.refl _)
 
 -- ⊢  ρ ≈ᵣ ofSpine(spine ρ)      (every row ≈ its refolded spine)
 theorem Row.toSpine_equiv {B : Type} : (ρ : Row B) → RowEquiv ρ (ofSpine ρ.toSpine)
@@ -467,7 +452,7 @@ theorem char_complete {B : Type} :
               injection heq with hhd htl
               injection hhd with _ hτ'
               subst hτ'; subst htl
-              exact .cat (.dsing rfl hty)
+              exact .cat (.dsing hty)
                 (char_complete t₁ t₂ hv' (fun l => (hp l).unshift) hd')
   | .field l τ :: t₁, s₂, hv, hp, hd => by
       have h := hp l
@@ -705,7 +690,7 @@ theorem spineVarFree_of_barSeq_nil {B : Type} :
       exact .cat (spineVarFree_of_barSeq_nil ρ₁ h.1) (spineVarFree_of_barSeq_nil ρ₂ h.2)
   | .dsing q _, h => by
       cases q <;> simp [Row.toSpine, Atom.ofKey, sBarSeq] at h
-      exact .dsing (fun _ h => nomatch h)
+      exact .dsing
 
 -- ⊢  ρ₁, ρ₂ rigid   ⟹
 --       ( ρ₁ ≈ᵣ ρ₂   ↔   ∀ l. proj_l(ρ₁) ≈ₚ proj_l(ρ₂) )
@@ -780,7 +765,8 @@ unifier factor through it. -/
 def InstanceOf {B : Type} (θ' θ : TySubst B) : Prop :=
   ∃ σ : TySubst B,
     (∀ x, RowEquiv (θ'.row x) ((θ.row x).applySubst σ)) ∧
-    (∀ x, TyEquiv (θ'.ty x) ((θ.ty x).applySubst σ))
+    (∀ x, TyEquiv (θ'.ty x) ((θ.ty x).applySubst σ)) ∧
+    (∀ x, θ'.lab x = (θ.lab x).applySubst σ)
 
 -- A ProjEquiv into a singleton splits: the entry comes from exactly one of
 -- the two appended sides (per-label counting across a concatenation).
@@ -827,7 +813,8 @@ theorem wand_unifiable {B : Type} (b : B) (l : Label) :
       Unifies θ (.cat (.var "β") (.var "α")) (.sing l (.base b)) :=
   ⟨⟨fun x => .var x,
     fun x => if x = "β" then .sing l (.base b)
-             else if x = "α" then .empty else .var x⟩,
+             else if x = "α" then .empty else .var x,
+    fun x => .var x⟩,
    by unfold Unifies
       simp [Row.applySubst, Ty.applySubst]
       exact RowEquiv.unitR⟩
@@ -868,7 +855,8 @@ theorem wand_no_mgu {B : Type} (b : B) (l : Label) :
     obtain ⟨σ, hrow, -⟩ := hmgu
       ⟨fun x => .var x,
        fun x => if x = "β" then .sing l (.base b)
-                else if x = "α" then .empty else .var x⟩
+                else if x = "α" then .empty else .var x,
+       fun x => .var x⟩
       (by unfold Unifies
           simp [Row.applySubst, Ty.applySubst]
           exact RowEquiv.unitR)
@@ -886,7 +874,8 @@ theorem wand_no_mgu {B : Type} (b : B) (l : Label) :
     obtain ⟨σ, hrow, -⟩ := hmgu
       ⟨fun x => .var x,
        fun x => if x = "β" then .empty
-                else if x = "α" then .sing l (.base b) else .var x⟩
+                else if x = "α" then .sing l (.base b) else .var x,
+       fun x => .var x⟩
       (by unfold Unifies
           simp [Row.applySubst, Ty.applySubst]
           exact RowEquiv.unitL)

@@ -103,9 +103,8 @@ theorem unifyM_occurs_no_unifier {B : Type} [DecidableEq B] (fuel : Nat) :
         | var α => cases fuel <;> exact bindTy_occurs_no_unifier' h
         | base _ => cases fuel <;> cases h
         | lab b' =>
-            by_cases hb : b = b'
-            · subst hb; cases fuel <;> simp [unifyTyF] at h
-            · cases fuel <;> simp [unifyTyF, hb] at h
+            have h' : unifyKey (B := B) S b b' = .occurs := by cases fuel <;> exact h
+            rcases unifyKey_cases (B := B) S b b' with ⟨_, _, he⟩ | he <;> rw [he] at h' <;> cases h'
         | unk => cases fuel <;> cases h
         | fn _ _ => cases fuel <;> cases h
         | rcd _ => cases fuel <;> cases h

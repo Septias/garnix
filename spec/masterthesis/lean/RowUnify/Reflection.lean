@@ -231,7 +231,7 @@ theorem RowEquiv.revRow {B : Type} :
   | _, _, .unitL       => RowEquiv.unitR
   | _, _, .unitR       => RowEquiv.unitL
   | _, _, .comm hne    => RowEquiv.comm (fun h => hne h.symm)
-  | _, _, .dsing hk hty => .dsing hk hty
+  | _, _, .dsing hty => .dsing hty
   | _, _, .dsingLab    => .dsingLab
 
 -- ofSpine of a reversed spine is the row-reversal of ofSpine (mod ≈).
@@ -488,7 +488,7 @@ theorem field_comm_lfree {B : Type} (l : Label) (τ : Ty B) :
 /-- a spine's KEYED atoms all become literal fields with labels other than l
 under θ (the keyed half of U-ground's side condition). -/
 def KeysLit {B : Type} (θ : TySubst B) (l : Label) (s : List (Atom B)) : Prop :=
-  ∀ o τ, Atom.dfield o τ ∈ s → ∃ l', (Atom.keyTy o).applySubst θ = .lab l' ∧ l' ≠ l
+  ∀ o τ, Atom.dfield o τ ∈ s → ∃ l', θ.lab o = .lit l' ∧ l' ≠ l
 
 theorem KeysLit.tail {B : Type} {θ : TySubst B} {l : Label} {a : Atom B}
     {s : List (Atom B)} (h : KeysLit θ l (a :: s)) : KeysLit θ l s :=
@@ -545,9 +545,9 @@ theorem removeField_equiv_of {B : Type} {θ : TySubst B} (l : Label) :
             sBarSeq (θ.row β).toSpine = [] ∧ sFieldCount l (θ.row β).toSpine = 0 :=
           fun β hβ => hvars β (by simp only [sVarSeq]; exact hβ)
         have IH := removeField_equiv_of l s hrem hvars' hkeys.tail
-        show RowEquiv (.cat (.dsing ((Atom.keyTy o).applySubst θ) (σ.applySubst θ))
+        show RowEquiv (.cat (.dsing (θ.lab o) (σ.applySubst θ))
                             ((ofSpine s).applySubst θ)) _
-        show RowEquiv _ (.cat _ (.cat (.dsing ((Atom.keyTy o).applySubst θ) (σ.applySubst θ))
+        show RowEquiv _ (.cat _ (.cat (.dsing (θ.lab o) (σ.applySubst θ))
                             ((ofSpine s'').applySubst θ)))
         rw [hk]
         exact (RowEquiv.cat RowEquiv.dsingLab IH).trans
@@ -708,7 +708,7 @@ theorem allBars_rigid_of {B : Type} {θ : TySubst B} :
     (s : List (Atom B)) →
     sBarSeq ((ofSpine s).applySubst θ).toSpine = [] →
     (∀ β ∈ sVarSeq s, sBarSeq (θ.row β).toSpine = []) ∧
-    (∀ o τ, Atom.dfield o τ ∈ s → ∃ l', (Atom.keyTy o).applySubst θ = .lab l')
+    (∀ o τ, Atom.dfield o τ ∈ s → ∃ l', θ.lab o = .lit l')
   | [], _ => ⟨fun β hβ => by simp [sVarSeq] at hβ, fun _ _ h => by cases h⟩
   | .field l τ :: s, h => by
       simp only [ofSpine_field_cons, Row.applySubst, Row.toSpine, sBarSeq_append,
@@ -724,8 +724,9 @@ theorem allBars_rigid_of {B : Type} {θ : TySubst B} :
         List.append_eq_nil_iff] at h
       obtain ⟨hk, hs⟩ := h
       obtain ⟨h₁, h₂⟩ := allBars_rigid_of s hs
-      have hlit : ∃ l', (Atom.keyTy o₀).applySubst θ = .lab l' := by
-        cases hq : (Atom.keyTy o₀).applySubst θ <;> rw [hq] at hk <;>
+      have hlit : ∃ l', θ.lab o₀ = .lit l' := by
+        change sBarSeq [Atom.ofKey (θ.lab o₀) _] = [] at hk
+        cases hq : θ.lab o₀ <;> rw [hq] at hk <;>
           simp [Atom.ofKey, sBarSeq] at hk
         exact ⟨_, rfl⟩
       exact ⟨fun β hβ => h₁ β (by simpa [sVarSeq] using hβ),
@@ -756,7 +757,7 @@ theorem allVars_lfree_of {B : Type} {θ : TySubst B} (l : Label) :
     (s : List (Atom B)) →
     sFieldCount l ((ofSpine s).applySubst θ).toSpine = sFieldCount l s →
     (∀ β ∈ sVarSeq s, sFieldCount l (θ.row β).toSpine = 0) ∧
-    (∀ o τ, Atom.dfield o τ ∈ s → (Atom.keyTy o).applySubst θ ≠ .lab l)
+    (∀ o τ, Atom.dfield o τ ∈ s → θ.lab o ≠ .lit l)
   | [], _ => ⟨fun β hβ => by simp [sVarSeq] at hβ, fun _ _ h => by cases h⟩
   | .field l' τ :: s, h => by
       simp only [ofSpine_field_cons, Row.applySubst, Row.toSpine, sFieldCount_append,
@@ -770,13 +771,13 @@ theorem allVars_lfree_of {B : Type} {θ : TySubst B} (l : Label) :
           · exact hm)⟩
   | .dfield o₀ σ₀ :: s, h => by
       have hsp : ((ofSpine (Atom.dfield o₀ σ₀ :: s)).applySubst θ).toSpine =
-          [Atom.ofKey ((Atom.keyTy o₀).applySubst θ) (σ₀.applySubst θ)] ++
+          [Atom.ofKey (θ.lab o₀) (σ₀.applySubst θ)] ++
             ((ofSpine s).applySubst θ).toSpine := rfl
       rw [hsp, sFieldCount_append] at h
       simp only [sFieldCount] at h
       have hmono : sFieldCount l s ≤ sFieldCount l ((ofSpine s).applySubst θ).toSpine := by
         have hle := sFieldCount_applySubst_le θ l (ofSpine s); rwa [ofSpine_toSpine] at hle
-      have hkey0 : sFieldCount l [Atom.ofKey ((Atom.keyTy o₀).applySubst θ) (σ₀.applySubst θ)] = 0 := by
+      have hkey0 : sFieldCount l [Atom.ofKey (θ.lab o₀) (σ₀.applySubst θ)] = 0 := by
         omega
       have hs : sFieldCount l ((ofSpine s).applySubst θ).toSpine = sFieldCount l s := by omega
       obtain ⟨h₁, h₂⟩ := allVars_lfree_of l s hs
@@ -805,8 +806,8 @@ theorem allVars_lfree_of {B : Type} {θ : TySubst B} (l : Label) :
 
 -- the two together are U-ground's keyed side condition
 theorem keysLit_of {B : Type} {θ : TySubst B} {l : Label} {s : List (Atom B)}
-    (h₁ : ∀ o τ, Atom.dfield o τ ∈ s → ∃ l', (Atom.keyTy o).applySubst θ = .lab l')
-    (h₂ : ∀ o τ, Atom.dfield o τ ∈ s → (Atom.keyTy o).applySubst θ ≠ .lab l) :
+    (h₁ : ∀ o τ, Atom.dfield o τ ∈ s → ∃ l', θ.lab o = .lit l')
+    (h₂ : ∀ o τ, Atom.dfield o τ ∈ s → θ.lab o ≠ .lit l) :
     KeysLit θ l s := fun o τ hm => by
   obtain ⟨l', hl'⟩ := h₁ o τ hm
   exact ⟨l', hl', fun h => h₂ o τ hm (h ▸ hl')⟩
@@ -1068,12 +1069,13 @@ theorem wand_under_match_no_mgu {B : Type} (a b : B) :
 
 
 theorem AgreeOn.refl {B : Type} (θ : TySubst B) (V : List TyVar) : AgreeOn θ θ V :=
-  fun _ _ => ⟨rfl, rfl⟩
+  fun _ _ => ⟨rfl, rfl, rfl⟩
 
 theorem AgreeOn.trans' {B : Type} {θ₁ θ₂ θ₃ : TySubst B} {V W : List TyVar}
     (h₁ : AgreeOn θ₁ θ₂ V) (h₂ : AgreeOn θ₂ θ₃ W) (hVW : V ⊆ W) : AgreeOn θ₁ θ₃ V :=
   fun α hα => ⟨(h₁ α hα).1.trans (h₂ α (hVW hα)).1,
-               (h₁ α hα).2.trans (h₂ α (hVW hα)).2⟩
+               (h₁ α hα).2.1.trans (h₂ α (hVW hα)).2.1,
+               (h₁ α hα).2.2.trans (h₂ α (hVW hα)).2.2⟩
 
 theorem AgreeOn.tyEq {B : Type} {θ θ' : TySubst B} {V : List TyVar}
     (h : AgreeOn θ θ' V) {τ : Ty B} (hsub : τ.ftv ⊆ V) :

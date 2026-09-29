@@ -76,6 +76,7 @@ def fieldPow {B : Type} (l : Label) (b : B) : Nat → Row B
 def shiftSub {B : Type} (α : TyVar) (l : Label) (b : B) (k : Nat) : TySubst B where
   ty  := (.var ·)
   row := fun x => if x = α then fieldPow l b k else .var x
+  lab := (.var ·)
 
 -- ⊢  (shiftSub α l b k).row α  =  (l:𝓫)^k
 theorem shiftSub_row_self {B : Type} (α : TyVar) (l : Label) (b : B) (k : Nat) :
@@ -219,6 +220,7 @@ theorem shiftSub_antichain {B : Type} (α : TyVar) (l : Label) (b : B) {j k : Na
 def offSub {B : Type} (α : TyVar) (m : Label) (b : B) : TySubst B where
   ty  := (.var ·)
   row := fun x => if x = α then .sing m (.base b) else .var x
+  lab := (.var ·)
 
 -- ⊢  (offSub α m b).row α  =  (m:𝓫)
 theorem offSub_row_self {B : Type} (α : TyVar) (m : Label) (b : B) :

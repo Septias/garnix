@@ -541,7 +541,7 @@ field key (`${★}`, `${int}`) that it now EQUALS — the lookup would find a fi
 after its answer was fixed at ★. A row blocker is never touched (F-★ writes no
 row), so the condition only fires for a blocker at the type sort. -/
 def Parked.KeySafe {B : Type} (S : SolverState B) (p : Parked B) : Prop :=
-  (false, p.blocker) ∈ (p.stump.label.applySubst S.subst).sortedFtv ++
+  (.ty, p.blocker) ∈ (p.stump.label.applySubst S.subst).sortedFtv ++
       (p.stump.row.applySubst S.subst).sortedFtv →
     ∀ q ∈ S.parked, p.blocker ∉ (q.stump.res.applySubst S.subst).ftv
 
@@ -785,11 +785,11 @@ and the blocker is not a key variable of the row — a label lookup blocked on a
 `${γ}` field waits on γ, and no row extension decides it. -/
 def Parked.fillable {B : Type} (S : SolverState B) (p : Parked B) : Bool :=
   (p.stump.label.applySubst S.subst).isLab &&
-    !((p.stump.row.applySubst S.subst).sortedFtv.contains (false, p.blocker))
+    !((p.stump.row.applySubst S.subst).sortedFtv.contains (.ty, p.blocker))
 
 theorem Parked.fillable_iff {B : Type} {S : SolverState B} {p : Parked B} :
     p.fillable S = true ↔ (p.stump.label.applySubst S.subst).isLab = true ∧
-      (false, p.blocker) ∉ (p.stump.row.applySubst S.subst).sortedFtv := by
+      (.ty, p.blocker) ∉ (p.stump.row.applySubst S.subst).sortedFtv := by
   simp [Parked.fillable]
 
 /-- A-let's premise on the generalized RESULTS, read at S₁ (`QScheme.WF`,
