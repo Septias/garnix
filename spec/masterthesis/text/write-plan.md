@@ -9,46 +9,45 @@ We are rewriting the thesis text, section for section, paragraph for paragraph. 
 
 # Section Content
 ## Introduction
-- [x] We are motivated by the nix language itself
-- [?] Nix is the largest body of untyped functional code 
-- [x] It revolves largely around records (3 examples)
-- [x] That is why we want to solve *asymmetric concat*
-- [x] Our path: We use *scoped records* & *unknown type*
-- [x] The unknown type is motivated by the *untypability*, similar to typescript
-- [x] This is a *natural choice*
-- [x] It oftenly uses open record concatenation (unhandled in many cases)
-- [x] The motivating example of our work is the `//` operator, it can be used in nix this way (•)
+- [ ] We are motivated by the nix language itself
+- [ ] Nix is the largest body of untyped functional code 
+- [ ] It revolves largely around records (3 examples)
+- [ ] That is why we want to solve *asymmetric concat*
+- [ ] Our path: We use *scoped records* & *unknown type*
+- [ ] The unknown type is motivated by the *untypability*, similar to typescript
+- [ ] This is a *natural choice*
+- [ ] It oftenly uses open record concatenation (unhandled in many cases)
+- [ ] The motivating example of our work is the `//` operator, it can be used in nix this way (•)
 
 
-## Declarative
-- [ ] L2 vorstellen
-- [ ] Warum brauchen wir T-sel-★ und T-★-intro
-- [ ] Explain why `T-sel-⊥` ★ typed
-- [ ] Motivation für qualified types?
-- [ ] Trace monoid
-- [ ] The winning example
-- [ ] Principality
 
 
 # Section Fixes
 - Global
-  - [ ] Mechanization mismatch: sorting + sort-indexed occurs check not in Lean (pair of maps, two-sorted ftv)
-- Motivation
-  - [ ] Old positioning
+  - [ ] Declarative sorting not in Lean (pair of maps); only stated in Mechanization
 - Declarative
   - [ ] Stump result δ a variable in Q — Lean now `Stump.res : Ty B`
+  - [ ] Lookup properties: drop unclear "no side condition" in totality
+  - [ ] Row equivalence: reword "rather than a side problem"
+  - [ ] Spine: add example (uncommon technique)
+  - [ ] Sorts: too boring for 2 paragraphs, shorten
+  - [ ] T-sel-★ / T-sel-⊥: expand, non-standard
+  - [ ] Instantiation: too verbose; sorting para removable
   - Row lookup:
     - [ ] `selDyn` not covered
-- Inference
-  - [ ] No F-hit / materialization / spent promises
-  - [ ] "Finalization … is the only point" and "result is a single variable" outdated
-  - [ ] `x: (x.l).m` "not inferred" — check against materialization; name remaining limits (key-blocked, independence, `let g = λx.(x.l).m` used twice)
 - Refinement
   - [ ] ⊑ defined inline — move to declarative
+- Unification
+  - [ ] Fuel sentence: reword or drop
+  - [ ] Rules not tangible — examples
+  - [ ] Window: add sketch
+- Inference
+  - [ ] F-hit / materialization only in prose, no rule
+  - [ ] Quiescence: example why it matters
+  - [ ] A-let: explain mechanism, list side conditions literally
+  - [ ] Finalization: explain phases and their order
+- Incompleteness
+  - [ ] Irreducible: say why α = β = ε fails (wand) / is not most general (two-sided)
+  - [ ] Irreducible: re-check last paragraph
 - Extensions
-  - [ ] Only stub bullets
-  - [ ] Towards Nix placeholder
-- Related work
-  - [ ] Missing citations marked ¿: Ohori, Cartwright–Fagan, `Dynamic()`, Broekhoff–Krebbers step relation, "expressiveness", Nickel
-- Conclusion
-  - [ ] Placeholder text
+  - [ ] Stub subsections only
