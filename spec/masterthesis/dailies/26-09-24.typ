@@ -1,7 +1,9 @@
 *MY WORK WILL NOT BE A SIGPLAN PAPER*
 
 
+./26-09-23.typ
 ./26-09-25.typ
+
 == Fäden
 - Proofs beenden
 - Thesis texte schreiben
@@ -19,7 +21,7 @@
 
 == Todo
 - [x] Check plans
-- Add Lean MCP
+- [x] Add Lean MCP
 
 
 == Claude Prompts

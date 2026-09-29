@@ -1,4 +1,5 @@
 
+./26-09-22.typ
 ./26-09-24.typ
 
 == Todo
@@ -11,8 +12,7 @@
 - [x] Check algorithmic rules
 - [x] Check toplevel lean files
 - [x] Check ./26-09-16.typ
-- [ ] Check plans
-
+- [x] Check plans
 
 == Misc
 - We dodge renaming by forcing closed terms

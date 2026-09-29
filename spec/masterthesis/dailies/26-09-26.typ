@@ -1,6 +1,7 @@
 
-
+./26-09-25.typ
 ./26-09-27.typ
+
 == Vorgehen
 1. [!] Neue Ansätze suchen
 2. [x] Wert im Bestehenden suchen
@@ -16,9 +17,9 @@
   - *Unification rules for unexpected cases*
   - *The formalization as a trace monoid*
 - What is missing:
-  - Termination proofs für unification
+  - [x] Termination proofs für unification
   - Incoming maybe
-- What is missing now is a *framing*
+- [x] What is missing now is a *framing*
 - *Approach 1*:
   - Just write down what we have
   - Framing is a calculus that is similar to nix
@@ -96,7 +97,7 @@ Ich könnte auch das Outcome einfach auf alle Fälle testen lule. Eine Möglichk
 - Sind die qualified schemes ⟨ρ.l ↓ δ⟩ wirklich nur lazyness?
   - Irgendwie schon, die sind anscheinend auch nur substitution
 - Wie ernst nimmt Thiemann meine AI-contributions?
-  - Wahrscheinlich gar nicht
+  - Wenn sie gut sind why not
 - Was macht der parked stump wirklich?
   - Das bringt Principality für Selection
   - Das ist eine ganz okaye Contribution

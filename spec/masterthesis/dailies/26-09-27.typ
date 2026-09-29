@@ -1,17 +1,12 @@
 
 
+./26-09-26.typ
 ./26-09-28.typ
 
 == Till Thursday
 - Have the whole thesis written with AI slop
 - Then I can use the whole weekend to remove stuff
 - Extend the thesis by two more features
-
-
-== Todo
-- [x] Check the InferSound statement and why it has so many side conditions
-- [ ] Solve the F-★ incompleteness
-- [ ] T-★-intro lets the declarative system type through a clash
 
 
 == Misc

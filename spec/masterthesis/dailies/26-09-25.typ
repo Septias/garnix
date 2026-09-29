@@ -16,13 +16,13 @@
 - Reposition Masterarbeit for the application of Nix
   - Actually not too strong
 - Even worse, the soundness proofs we have *just yet* are trash aswell
-  - Die Verwendung von ★ für nur
+  - Die Verwendung von ★ für nur lookup-errors
 - Good news: I can probably just fill the pages
   - But only with trash luuule
   - DIE ERGEBNISSE SIND HALT NICHT DA
   - Oder ich muss die einfach kreativ formulieren 💀
-- *The real contribution is keeping field demands out of row unification*, plus the monotonicity theorem that makes *parking a lookup sound*. Present it as the design idea behind everything else, not as a result on its own.
 - AI möchte irgendwie unbedingt, dass ich jetzt mit dem Schreiben anfange…
+  - Duuuum
 - Paar Sachen scheinen halt noch offen. Es gibt kein klares Ende und keine Begründung, warum es dort ist.
 - It seems like nothing I actually want to show is proven
 - All my contributions are mechanical
@@ -39,6 +39,7 @@
 == MAIN PROBLEM
 - A contagious ★ can only be admissible, when it is contained by casts
 - My main promise "this is extensible to real nix" breaks
+  - Nope, geht mit _gradual typing_
 
 
 == Problems
@@ -47,7 +48,7 @@
 
 
 == Todo
-- Decide the two problems: A-app-degrade, U-expand
+- [x] Decide the two problems: A-app-degrade, U-expand
 - Do gradual systems really imply semantic changes??
 
 
@@ -62,4 +63,4 @@
   - Nope
 
 == Claude Prompts
-- [ ] The thesis text currently shows the L1 typesystem which provably does not retain principality. Can you swap it for the L2-system?
+- [x] The thesis text currently shows the L1 typesystem which provably does not retain principality. Can you swap it for the L2-system?
