@@ -141,3 +141,13 @@ We use a custom lookup relation ⟨ρ.l ↓ r⟩ with return values ⟨τ | ⊥ 
 - `λg. {a = g {l=c}; b = g {m=c}}` : `(★ → 𝓫) → {a:𝓫 | b:𝓫}`, `run` = clash
 - Same trick types every stuck witness above (`f : ★ → 𝓫`)
 - "clash is soundness" holds for ≐, not for inference
+- Cause: T-★-intro = subsumption into a top; ★ joins any two types, ≐ only computes common instances
+- Kept deliberately; thesis argues it as incompleteness
+- Restrict to selection results: breaks `qPreservation` — blurred `{a=⌊l⌋}.a` steps to `⌊l⌋` (Qualified.lean:1260/1268)
+- Blur only under selection: still incomplete — `λg. {a = g ({x={l=c}}.x); b = g ({x={m=c}}.x)}` clashes
+- Fix A — completeness against the blur-free fragment (★ only from lookup verdicts)
+- Fix B — join on clash: `τ ≲ α` edges, α ≔ ★ on clashing lower bounds; rigidity of ★ rejects eliminations; principal only on definite clash (unify-vs-★ choice stays open)
+
+
+# Findings
+- Eliminators for ★ can not be added without gradual typing because otherwise progress and preservation die
