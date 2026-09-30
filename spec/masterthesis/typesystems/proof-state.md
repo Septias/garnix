@@ -25,7 +25,7 @@ We use a custom lookup relation ⟨ρ.l ↓ r⟩ with return values ⟨τ | ⊥ 
 - [x] Qualified Schemes
 - [x] Unification
 - [x] Type Inference
-- [~] FC-Labels
+- [x] FC-Labels
 - [ ] Negative type information
 - [ ] Patterns
 - [ ] Occurrence Typing
@@ -36,7 +36,16 @@ We use a custom lookup relation ⟨ρ.l ↓ r⟩ with return values ⟨τ | ⊥ 
 
 ## FC-Labels  (`plans/fc-labels-plan.md`)
 - [x] **Phase A — Reading dynamic**
-- [ ] **Phase B — dynamic construction**
+- [x] **Phase B — dynamic construction**  (branch `fc-labels-phase-b-wip`, `plans/fc-labels-phase-b-plan.md`)
+  - Keys are their own sort: `Key := l | α`, `⌊k⌋ : Ty`, `${k}: τ : Row`, `TySubst.lab`, `Sol.lab`; no junk keys
+  - `{ ${e₁} = e₂ }`: lazy step to `{l = e₂}`, `qRcdDyn`, A-rcd-dyn (fresh label var κ, `τ₁ ≐ ⌊κ⌋`)
+  - Headline `rcdDynQ_instance_closed`: `λa. λv. {${a} = v} :: ∀α δ. ⌊α⌋ → δ → {${α}: δ}`; runF infers exactly that
+  - qProgress, qPreservation, runSound, runF_terminates: same axioms as before
+  - Costs:
+    - a non-label key is a type error (`{foo = c}.(c)`, `{${c} = c}` clash), was ★ + W-flag
+    - keyed fields are barriers: `(foo: τ) ≐ᵣ (${α}: τ′)` is stuck; keyed Fuzz universe 88% stuck
+    - two keyed fields under the SAME unknown key are stuck (# Incompleteness → Same unknown key)
+  - Gained: `KeySafe` gone (F-★ never binds labels); `λr. {x = 1}.(r.a)` runs again; `α ≐ {${α}: σ}` solves (sorts differ)
 
 
 # Problems
@@ -58,6 +67,13 @@ We use a custom lookup relation ⟨ρ.l ↓ r⟩ with return values ⟨τ | ⊥ 
 - Fix B — qualified top-level type: `Run` reports `∀. ⟨ρ.(α) ↓ 𝓫 → β⟩ ⇒ {ρ} → α → β`; principal (top level = `let main = e in main`), but `Run`/`RunSound`/`runF` and printed answers change; soundness becomes "every instance is typed"
 - Guessing is fine inside a proof (inhabitation witness), not in a reported type → B preferred when taken up
 - Same idea would extend A-let to key-blocked spent stumps (inhabitation: key ↦ fresh label, then `fillRow`)
+
+
+## Same unknown key  (open)
+- `${α}: τ ≐ᵣ ${α}: τ′` is stuck: no driver arm matches a dfield (`unify_same_key_stuck`)
+- Bites in inference: `λa. λf. {p = f {${a} = c}; q = f {${a} = c}}` fails stuck
+- Literal keys unaffected (a `${l}` field is the field `l`)
+- Fix: U-dkey-match arm, same key at the head (or tail) of both spines → `τ ≐ τ′`, continue; mgu by `Row.Char` (barrier sequences + first `α`-projection); needs Soundness/Completeness/Termination/Applied cases
 
 
 ## Symbols

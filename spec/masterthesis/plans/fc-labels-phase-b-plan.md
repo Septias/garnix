@@ -20,8 +20,9 @@ That plan left Phase B on paper only. This one mechanizes it.
 | B3 ≈ with barriers | done |
 | B4 row unifier | done |
 | Infer.lean and downstream | done: merged main (Materialize/F-hit, Stump.res : Ty), `lake build` green, no sorry (53d3fe2) |
-| B5 | **blocked on a design decision: ★ keys (see below)** |
-| B6, B7, B0 | not started |
+| key sort | done (39e5718): keys got their own sort, resolves ★ keys |
+| B5, B6, B7, B0 | done (9ebcada); `lake build` green, no sorry, Fuzz clean |
+| proof-state.md | updated on this branch |
 
 ## Done since the handoff (settled)
 
@@ -33,14 +34,17 @@ That plan left Phase B on paper only. This one mechanizes it.
 - Axioms guards: `lookup_applySubst`, `Sol.lookup_applySubst_closure`, `LookupQ.det` now [propext]; `LookupQ.total` axiom-free; `Ty.mem_tyFtv_iff_sortedFtv` → `Ty.mem_tyFtv_of_sortedFtv`
 - Costs: `λr. {x = 1}.(r.a)` no longer runs (outer stump key-blocked on inner's answer, KeySafe refuses; F-★ on inner first leaves outer ⊥, no F-⊥ rule). InferRuns unchanged
 
-## Open: ★ keys in construction (B5)
+## Resolved: ★ keys → key sort
 
-- `{${e₁} = e₂}` with `e₁ : ★`: the key value is a label l at run time, the step gives `{l = e₂} : {l: τ}`, typed before as `{${★}: τ}`; not ≈ (★ rigid) → qPreservation fails
-- Can't just forbid ★ keys: σ (F-★, or any instance) sends key variables to ★ after inference built `{${α}: τ}`; unification can send them to `int` too
-- ★ ≡ ★ (junk/junk eq) is also run-time unsound once ★-keyed fields are inhabited: `{${★}: τ₂} ‖ {l': τ₃}` looked up with a ★ key that is l' at run time
-- junk/junk eq is what keeps α-vs-α eq stable under α ↦ ★, so it can't simply go
+- Problem was: `{${e₁} = e₂}` with `e₁ : ★` breaks qPreservation; junk ≡ junk unsound at run time
+- Decision: keys get their own sort. `Key := lit l | var α`; `Ty.lab : Key → Ty`, `Row.dsing : Key → Ty → Row`
+- `TySubst.lab : TyVar → Key`, `Sol.lab`, `Srt := ty | row | lab`; `unifyKey`/`bindLab` is the label arm
+- `Key.cmp`: eq (same lit / same var), apart (different lits), undec otherwise; no junk
+- A-sel-dyn / A-rcd-dyn draw a label var κ and solve `τ ≐ ⌊κ⌋`; non-label keys clash
+- `KeySafe` removed: F-★ never binds labels (`solve_star_dom`: `s.row = [] ∧ s.lab = []`)
+- Costs and the open same-unknown-key incompleteness: see proof-state.md
 
-## Design as implemented (these decisions are settled)
+## Design as implemented before the key sort (superseded where it says `Ty` key, keyClass, junk, KeySafe)
 
 - **`Row.dsing : Ty B → Ty B → Row B`** is a keyed field `${q}: τ`. `Row.sing` is unchanged.
   - `applySubst (.dsing q τ) = .dsing (θq) (θτ)`. It does NOT normalize, so
