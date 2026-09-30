@@ -42,7 +42,7 @@ That plan left Phase B on paper only. This one mechanizes it.
 - `Key.cmp`: eq (same lit / same var), apart (different lits), undec otherwise; no junk
 - A-sel-dyn / A-rcd-dyn draw a label var κ and solve `τ ≐ ⌊κ⌋`; non-label keys clash
 - `KeySafe` removed: F-★ never binds labels (`solve_star_dom`: `s.row = [] ∧ s.lab = []`)
-- Costs and the open same-unknown-key incompleteness: see proof-state.md
+- Costs: see proof-state.md; same-unknown-key incompleteness closed by U-key (729fd84)
 
 ## Design as implemented before the key sort (superseded where it says `Ty` key, keyClass, junk, KeySafe)
 
