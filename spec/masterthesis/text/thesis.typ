@@ -149,41 +149,6 @@ The [ubiquity](wording) of overwriting rules out record calculi that restrict th
 We therefore keep the calculus subtyping-free; the only ordering it admits is the precision gained by instantiation and row equivalence (≈).
 
 
-// #figure(
-//   caption: [The trilemma. No system attains all three, and each line names what it surrenders.],
-//   table(
-//     columns: (auto, auto, auto, auto, 1fr),
-//     align: (left, center, center, center, left),
-//     inset: 6pt,
-//     stroke: 0.4pt + luma(200),
-//     table.header([*System*], [*P*], [*I*], [*S*], [*What is given up*]),
-
-//     [Gaster-Jones @gaster_jones], [·], [●], [●], [no concatenation at all],
-
-//     [Rose @rose],
-//     [●],
-//     [●],
-//     [·],
-//     [entailment is a parameter: no solver, no bound],
-
-//     [MLstruct @mlstruct],
-//     [●],
-//     [●],
-//     [·],
-//     [subtyping-constraint solving, and `‖` is unsound under width subtyping],
-
-//     [Castagna @castagna2023programming],
-//     [●],
-//     [·],
-//     [·],
-//     [local inference, not let-polymorphic],
-
-//     [Ur @ur], [●], [·], [●], [the programmer supplies disjointness witnesses],
-
-//     [This work], [◐], [●], [●], [precision — but only locally, and marked],
-//   ),
-// )<trilemma>
-
 == Paszke and Xie
 Paszke and Xie @extensible_tabular combine scoped labels with first-class labels into infix-extensible rows and give a unification-based inference algorithm over row- and label-variables. Their system is the direct basis of ours. Its field selection is handled by a search rule inside unification, and a conditional tail-check rejects programs whose shadowing behaviour is unresolved.
 
