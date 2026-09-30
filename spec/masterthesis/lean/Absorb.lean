@@ -67,6 +67,8 @@ theorem Infer.clean {C : Type} {constTy : C → B} :
   | _, _, _, _, _, .lam hd hb, hc => Infer.clean hb ((draw_sol' hd) ▸ hc)
   | _, _, _, _, _, .app h₁ h₂ hd hs, hc =>
       hs.clean ((draw_sol' hd) ▸ Infer.clean h₂ (Infer.clean h₁ hc))
+  | _, _, _, _, _, .rcdDyn h₁ h₂ hd hs, hc =>
+      hs.clean ((draw_sol' hd) ▸ Infer.clean h₂ (Infer.clean h₁ hc))
   | _, _, _, _, _, .conc h₁ h₂ hd₁ hd₂ hs₁ hs₂, hc =>
       hs₂.clean (hs₁.clean ((draw_sol' hd₂) ▸ (draw_sol' hd₁) ▸
         Infer.clean h₂ (Infer.clean h₁ hc)))
@@ -222,6 +224,8 @@ theorem Infer.ext {C : Type} {constTy : C → B} :
       ((SolverState.Ext.of_sol_eq rfl).trans hws.ext).trans hsat.ext
   | _, _, _, _, _, .lam hd hb => (draw_ext hd).trans (Infer.ext hb)
   | _, _, _, _, _, .app h₁ h₂ hd hs =>
+      ((Infer.ext h₁).trans (Infer.ext h₂)).trans ((draw_ext hd).trans hs.ext)
+  | _, _, _, _, _, .rcdDyn h₁ h₂ hd hs =>
       ((Infer.ext h₁).trans (Infer.ext h₂)).trans ((draw_ext hd).trans hs.ext)
   | _, _, _, _, _, .conc h₁ h₂ hd₁ hd₂ hs₁ hs₂ =>
       ((Infer.ext h₁).trans (Infer.ext h₂)).trans ((draw_ext hd₁).trans

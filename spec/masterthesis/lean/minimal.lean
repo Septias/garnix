@@ -40,6 +40,7 @@ inductive Expr (Const : Type) : Type where
   | letE : Var → Expr Const → Expr Const → Expr Const    -- let x = e₁ in e₂
   | lab  : Label → Expr Const                            -- `l   (a label, as a value)
   | selDyn : Expr Const → Expr Const → Expr Const        -- e₁.(e₂)  (e₁.${e₂})
+  | rcdDyn : Expr Const → Expr Const → Expr Const        -- { ${e₁} = e₂ }
 
 
 ---------------------------------- TYPES ------------------------------------------
@@ -1343,6 +1344,7 @@ mutual
         .letE y (subst x v e₁) (if x == y then e₂ else subst x v e₂)
     | .lab l      => .lab l
     | .selDyn e₁ e₂ => .selDyn (subst x v e₁) (subst x v e₂)
+    | .rcdDyn e₁ e₂ => .rcdDyn (subst x v e₁) (subst x v e₂)
 
   def substBody {C : Type} (x : Var) (v : Expr C) : RecBody (Expr C) → RecBody (Expr C)
     | .empty      => .empty
@@ -1476,6 +1478,13 @@ inductive Step {C : Type} : Expr C → Expr C → Prop where
   | selDynVal {b : RecBody (Expr C)} {l : Label} {e : Expr C} :
       RecBody.lookup l b = some e →
       Step (.selDyn (.rcd b) (.lab l)) e
+  -- dynamic construction: the key is evaluated, the field stays a thunk (lazy,
+  -- as in a record literal); a label key makes it the literal record
+  | rcdDynKey {e₁ e₁' e₂ : Expr C} :
+      Step e₁ e₁' →
+      Step (.rcdDyn e₁ e₂) (.rcdDyn e₁' e₂)
+  | rcdDynVal {l : Label} {e : Expr C} :
+      Step (.rcdDyn (.lab l) e) (.rcd (.field l e))
 
 
 ---------------------------------- PROGRESS ---------------------------------
@@ -1505,6 +1514,10 @@ inductive Err {C : Type} : Expr C → Prop where
       Value v → (∀ l, v ≠ .lab l) → Err (.selDyn (.rcd b) v)
   | selDynL  : Err e₁ → Err (.selDyn e₁ e₂)
   | selDynR  : Value e₁ → Err e₂ → Err (.selDyn e₁ e₂)
+  -- a dynamic construction errs on a key that is not a label
+  | rcdDynKeyBad {v : Expr C} :
+      Value v → (∀ l, v ≠ .lab l) → Err (.rcdDyn v e₂)
+  | rcdDynKey : Err e₁ → Err (.rcdDyn e₁ e₂)
 
 inductive Progress {C : Type} (e : Expr C) : Prop where
   | step : Step e e' → Progress e

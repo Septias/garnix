@@ -1128,6 +1128,12 @@ info: 'MinimalCalculus.selDynQ_instance_closed' depends on axioms: [propext, Cla
 -/
 #guard_msgs in #print axioms selDynQ_instance_closed
 
+-- …and of the construction λa. λv. {${a} = v} (phase B)
+/--
+info: 'MinimalCalculus.rcdDynQ_instance_closed' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms rcdDynQ_instance_closed
+
 -- (propext since Phase B: the rules compare keys through `Ty.keyCmp`.)
 /-- info: 'MinimalCalculus.LookupQ.det' depends on axioms: [propext] -/
 #guard_msgs in #print axioms LookupQ.det

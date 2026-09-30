@@ -925,6 +925,15 @@ inductive Infer {B C : Type} [DecidableEq B] (constTy : C → B) :
       (δ, S₄') = S₄.draw .ty →
       Infer constTy Γ S (.selDyn e₁ e₂) (.var δ)
         (S₄'.park ⟨α, ⟨.var r, .var κ, .var δ⟩⟩)
+  -- A-rcd-dyn. Both halves first, then the key's type is forced to ⌊κ⌋ for a
+  -- fresh LABEL variable κ, which keys the field (a non-label key clashes). No
+  -- lookup, so nothing parks
+  | rcdDyn {Γ : QCtx B} {S S₁ S₂ S₂' S₃ : SolverState B} {e₁ e₂ : Expr C}
+      {τ₁ τ₂ : Ty B} {κ : TyVar} :
+      Infer constTy Γ S e₁ τ₁ S₁ → Infer constTy Γ S₁ e₂ τ₂ S₂ →
+      (κ, S₂') = S₂.draw .lab →
+      SolveTySat S₂' τ₁ (.lab (.var κ)) S₃ →
+      Infer constTy Γ S (.rcdDyn e₁ e₂) (.rcd (.dsing (.var κ) τ₂)) S₃
   -- A-rec
   | rcd {Γ : QCtx B} {S S' : SolverState B} {ξ : RecBody (Expr C)} {ρ : Row B} :
       InferRec constTy Γ S ξ ρ S' →
@@ -1273,6 +1282,10 @@ theorem Infer.kinds_mono {B C : Type} [DecidableEq B] {constTy : C → B}
       refine List.IsSuffix.trans (Infer.kinds_mono h₁) ?_
       refine List.IsSuffix.trans (Infer.kinds_mono h₂) ?_
       rw [hs.kinds, draw_kind_eq hd]; exact List.suffix_cons _ _
+  | .rcdDyn h₁ h₂ hd hs => by
+      refine List.IsSuffix.trans (Infer.kinds_mono h₁) ?_
+      refine List.IsSuffix.trans (Infer.kinds_mono h₂) ?_
+      rw [hs.kinds, draw_kind_eq hd]; exact List.suffix_cons _ _
   | .conc h₁ h₂ hd₁ hd₂ hs₁ hs₂ => by
       refine List.IsSuffix.trans (Infer.kinds_mono h₁) ?_
       refine List.IsSuffix.trans (Infer.kinds_mono h₂) ?_
@@ -1371,6 +1384,12 @@ theorem Infer.supply_mono {B C : Type} [DecidableEq B] {constTy : C → B}
       have hd' := draw_eq hd
       omega
   | .app h₁ h₂ hd hs => by
+      have i₁ := Infer.supply_mono h₁
+      have i₂ := Infer.supply_mono h₂
+      have hd' := draw_eq hd
+      have i₃ := hs.supply
+      omega
+  | .rcdDyn h₁ h₂ hd hs => by
       have i₁ := Infer.supply_mono h₁
       have i₂ := Infer.supply_mono h₂
       have hd' := draw_eq hd
@@ -1536,6 +1555,9 @@ theorem Infer.sat_mono {B C : Type} [DecidableEq B] {constTy : C → B}
   | .app h₁ h₂ hd hs =>
       ((Infer.sat_mono h₁).trans (Infer.sat_mono h₂)).trans
         ((SolverState.SatMono.of_sol_eq (draw_sol hd)).trans hs.satMono)
+  | .rcdDyn h₁ h₂ hd hs =>
+      ((Infer.sat_mono h₁).trans (Infer.sat_mono h₂)).trans
+        ((SolverState.SatMono.of_sol_eq (draw_sol hd)).trans hs.satMono)
   | .conc h₁ h₂ hd₁ hd₂ hs₁ hs₂ =>
       ((Infer.sat_mono h₁).trans (Infer.sat_mono h₂)).trans
         ((SolverState.SatMono.of_sol_eq (draw_sol hd₁)).trans
@@ -1657,6 +1679,7 @@ theorem Infer.quiescent {B C : Type} [DecidableEq B] {constTy : C → B}
   -- the rules that WRITE end in a saturation, so they conclude it outright
   | .var _ _ _ _ _ _ _ hw, _ => hw.quiescent
   | .app _ _ _ hs, _ => hs.quiescent
+  | .rcdDyn _ _ _ hs, _ => hs.quiescent
   | .conc _ _ _ _ _ hs₂, _ => hs₂.quiescent
   | .sel _ _ hs _, _ => hs.quiescent
   | .selAbs _ _ hs _, _ => hs.quiescent.flag _

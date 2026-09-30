@@ -613,6 +613,9 @@ mutual
                    LookupQ ρ q .unknown → QTyped constTy Γ (.selDyn e₁ e₂) .unk
     | qSelDynAbs : QTyped constTy Γ e₁ (.rcd ρ) → QTyped constTy Γ e₂ (.lab q) →
                    LookupQ ρ q .absent → QTyped constTy Γ (.selDyn e₁ e₂) .unk
+    -- a dynamic construction: a LABEL-typed key ⌊q⌋ keys the field `${q}: τ`
+    | qRcdDyn : QTyped constTy Γ e₁ (.lab q) → QTyped constTy Γ e₂ τ →
+                QTyped constTy Γ (.rcdDyn e₁ e₂) (.rcd (.dsing q τ))
 
   inductive QTypedBody {B C : Type} (constTy : C → B) :
       QCtx B → RecBody (Expr C) → Row B → Prop where
@@ -685,6 +688,8 @@ private theorem qtyped_inv_aux {B C : Type} {constTy : C → B} :
   | _, _, _, .qSelDynUnk _ _ _ =>
       ⟨(fun h => nomatch h), (fun h => nomatch h), (fun h => nomatch h)⟩
   | _, _, _, .qSelDynAbs _ _ _ =>
+      ⟨(fun h => nomatch h), (fun h => nomatch h), (fun h => nomatch h)⟩
+  | _, _, _, .qRcdDyn _ _ =>
       ⟨(fun h => nomatch h), (fun h => nomatch h), (fun h => nomatch h)⟩
   | _, _, _, .qRcd h =>
       ⟨(fun hc => nomatch hc), (fun hl => nomatch hl),
@@ -968,6 +973,8 @@ theorem qtyped_sub {B C : Type} {constTy : C → B} :
       .qSelDynUnk (qtyped_sub hs h₁) (qtyped_sub hs h₂) hl
   | _, _, _, _, hs, .qSelDynAbs h₁ h₂ hl =>
       .qSelDynAbs (qtyped_sub hs h₁) (qtyped_sub hs h₂) hl
+  | _, _, _, _, hs, .qRcdDyn h₁ h₂ =>
+      .qRcdDyn (qtyped_sub hs h₁) (qtyped_sub hs h₂)
 
 theorem qtypedBody_sub {B C : Type} {constTy : C → B} :
     {Γ₁ Γ₂ : QCtx B} → {b : RecBody (Expr C)} → {ρ : Row B} → QCtx.Sub Γ₁ Γ₂ →
@@ -1034,6 +1041,8 @@ private theorem qsubst_aux {B C : Type} {constTy : C → B} :
   | _, _, _, .qSelDynAbs h₁ h₂ hl, _, _, _, _, hsub, hv =>
       .qSelDynAbs (qsubst_aux h₁ hsub hv) (qsubst_aux h₂ hsub hv)
         hl
+  | _, _, _, .qRcdDyn h₁ h₂, _, _, _, _, hsub, hv =>
+      .qRcdDyn (qsubst_aux h₁ hsub hv) (qsubst_aux h₂ hsub hv)
   | _, .letE y e₁ e₂, _, .qLet hwf h₁ hne h₂, _, x, _, _, hsub, hv => by
       simp only [subst]
       cases hxy : (x == y)
@@ -1267,6 +1276,16 @@ private theorem qpreservation_aux {B C : Type} {constTy : C → B} :
           obtain ⟨ρ', -, hb⟩ := qtyped_rcd_inv h₁
           obtain ⟨_, _, hte⟩ := QTypedBody.lookup_some hb hbl
           exact .qUnk hte
+  -- a dynamic construction whose key is a label value: the key's type is its
+  -- singleton, so `${l}: τ` is the literal field (`dsingLab`)
+  | _, _, _, .qRcdDyn h₁ h₂, hΓ, _ => fun hs => by
+      cases hs with
+      | rcdDynKey s => exact .qRcdDyn (qpreservation_aux h₁ hΓ s) h₂
+      | rcdDynVal =>
+          rcases qtyped_lab_inv h₁ with he | hu
+          case inr => cases hu
+          cases he.lab_inv
+          exact .qEq (.qRcd (.field h₂)) (.rcd (RowEquiv.symm .dsingLab))
   | _, _, _, .qLet hwf h₁ hne h₂, hΓ, _ => fun hs => by
       cases hs with
       | letCong s =>
@@ -1322,6 +1341,18 @@ private def qselDyn_progress {C : Type} {e₁ e₂ : Expr C}
       | .done v₂ => by
           obtain ⟨b, rfl⟩ := hrcd v₁
           exact qselDyn_rcd_progress b v₂
+
+-- a dynamic construction steps its key, then builds the record or errs on a
+-- key that is not a label
+private def qrcdDyn_progress {C : Type} {e₁ e₂ : Expr C} (p₁ : Progress e₁) :
+    Progress (.rcdDyn e₁ e₂) :=
+  match p₁ with
+  | .step s => .step (.rcdDynKey s)
+  | .err er => .err (.rcdDynKey er)
+  | .done v₁ => by
+      by_cases hl : ∃ l, e₁ = .lab l
+      · obtain ⟨l, rfl⟩ := hl; exact .step .rcdDynVal
+      · exact .err (.rcdDynKeyBad v₁ (fun l he => hl ⟨l, he⟩))
 
 def qprogress {B C : Type} {constTy : C → B} {Γ : QCtx B} {e : Expr C} {τ : Ty B}
     (hΓ : Γ.tyEnv = []) (ht : QTyped constTy Γ e τ) : Progress e :=
@@ -1396,6 +1427,7 @@ def qprogress {B C : Type} {constTy : C → B} {Γ : QCtx B} {e : Expr C} {τ : 
       (fun v => let ⟨b, _, he, _⟩ := qcanonical_rcd v h₁; ⟨b, he⟩)
   | .qSelDynAbs h₁ h₂ _ => qselDyn_progress (qprogress hΓ h₁) (qprogress hΓ h₂)
       (fun v => let ⟨b, _, he, _⟩ := qcanonical_rcd v h₁; ⟨b, he⟩)
+  | .qRcdDyn h₁ _ => qrcdDyn_progress (qprogress hΓ h₁)
 
 -- ⊢  ⊢_Q e : τ   ⟹   e is a value, steps, or is a lookup-error
 theorem qProgress {B C : Type} (constTy : C → B) (e : Expr C) (τ : Ty B)
@@ -1553,6 +1585,8 @@ theorem qtyped_cov {B C : Type} {constTy : C → B} :
       .qSelDynUnk (qtyped_cov hs h₁) (qtyped_cov hs h₂) hl
   | _, _, _, _, hs, .qSelDynAbs h₁ h₂ hl =>
       .qSelDynAbs (qtyped_cov hs h₁) (qtyped_cov hs h₂) hl
+  | _, _, _, _, hs, .qRcdDyn h₁ h₂ =>
+      .qRcdDyn (qtyped_cov hs h₁) (qtyped_cov hs h₂)
 
 theorem qtypedBody_cov {B C : Type} {constTy : C → B} :
     {Γ₁ Γ₂ : QCtx B} → {b : RecBody (Expr C)} → {ρ : Row B} →
@@ -1994,6 +2028,7 @@ private theorem qvar_inst_inv {B C : Type} {constTy : C → B} :
   | _, _, _, .qSelDyn _ _ _ => fun he _ => nomatch he
   | _, _, _, .qSelDynUnk _ _ _ => fun he _ => nomatch he
   | _, _, _, .qSelDynAbs _ _ _ => fun he _ => nomatch he
+  | _, _, _, .qRcdDyn _ _ => fun he _ => nomatch he
 
 -- L2 counterpart of `sel_var_unk`, but full: every typing of `x.l` on a
 -- monotype-bound x factors through ONE lookup, and the typing sits ≼-above
@@ -2035,6 +2070,7 @@ theorem qsel_var_inv {B C : Type} {constTy : C → B} :
   | _, _, _, .qSelDyn _ _ _ => fun he _ => nomatch he
   | _, _, _, .qSelDynUnk _ _ _ => fun he _ => nomatch he
   | _, _, _, .qSelDynAbs _ _ _ => fun he _ => nomatch he
+  | _, _, _, .qRcdDyn _ _ => fun he _ => nomatch he
 
 -- CONJUNCT 3, in the ≼ form.
 theorem selQ_covers_typings {B C : Type} (constTy : C → B) :
@@ -2489,5 +2525,29 @@ theorem selDynQ_instance_closed {B C : Type} (constTy : C → B) (Γ : QCtx B) :
       rw [show θ.ty "δ" = _ from hδ]; exact .qLam (.qLam (.qSelDynAbs hx ha hl))
   | unk hl hδ =>
       rw [show θ.ty "δ" = _ from hδ]; exact .qLam (.qLam (.qSelDynUnk hx ha hl))
+
+------------------------ λa. λv. { ${a} = v } ---------------------------------
+-- The construction headline (FC-labels phase B): the key is a label variable,
+-- the field is keyed by it, and there is nothing to discharge.
+
+def rcdDynEx (C : Type) : Expr C := .lam "a" (.lam "v" (.rcdDyn (.var "a") (.var "v")))
+
+/-- ∀(α : Label)(δ : Type). ⌊α⌋ → δ → {${α}: δ} -/
+def rcdDynQ (B : Type) : QScheme B :=
+  ⟨["α", "δ"], [], .fn (.lab (.var "α")) (.fn (.var "δ") (.rcd (.dsing (.var "α") (.var "δ"))))⟩
+
+/-- ⊢  **every instance of `rcdDynQ` types λa. λv. {${a} = v}**, in any context. -/
+theorem rcdDynQ_instance_closed {B C : Type} (constTy : C → B) (Γ : QCtx B) :
+    ∀ τ, QScheme.Inst (rcdDynQ B) τ → QTyped constTy Γ (rcdDynEx C) τ := by
+  rintro τ ⟨θ, -, -, hbody⟩
+  simp only [rcdDynQ, Ty.applySubst, Row.applySubst, Key.applySubst_var] at hbody
+  subst hbody
+  refine .qLam (.qLam (.qRcdDyn ?_ ?_))
+  · exact .qVar (σ := ⟨[], [], .lab (θ.lab "α")⟩)
+      (by simp [QCtx.bindTy, QCtx.bindScheme, QCtx.lookup])
+      (QScheme.inst_toQ.mpr (Scheme.Inst.self ⟨[], _⟩))
+  · exact .qVar (σ := ⟨[], [], θ.ty "δ"⟩)
+      (by simp [QCtx.bindTy, QCtx.bindScheme, QCtx.lookup])
+      (QScheme.inst_toQ.mpr (Scheme.Inst.self ⟨[], _⟩))
 
 end MinimalCalculus

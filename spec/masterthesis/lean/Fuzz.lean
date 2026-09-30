@@ -318,10 +318,12 @@ structure Universe where
   labels : List Label
   tys    : List (Ty Unit)      -- field payloads
   maxLen : Nat                 -- spines of length 0 .. maxLen, both sides
+  keys   : List TyVar := []    -- label variables keying `${k}:` fields (phase B)
 
-/-- Atom alphabet: every row variable, and every label at every payload. -/
+/-- Atom alphabet: every row variable, and every label and key at every payload. -/
 def Universe.atoms (U : Universe) : List (Atom Unit) :=
-  U.vars.map .var ++ U.labels.flatMap fun l => U.tys.map (Atom.field l ·)
+  U.vars.map .var ++ U.labels.flatMap (fun l => U.tys.map (Atom.field l ·)) ++
+    U.keys.flatMap fun k => U.tys.map (Atom.dfield k ·)
 
 def spinesOfLen (as : List (Atom Unit)) : Nat → List Spine
   | 0     => [[]]
@@ -659,6 +661,18 @@ def deep : Universe :=
     tys    := [.base (), .var "a", .rcd (.var "a")]
     maxLen := 3 }
 
+/-- Keyed fields (FC-labels phase B): `${p}:` / `${q}:` barriers next to a
+    literal field, with label-typed and keyed payloads, so the label arm of the
+    unifier and the dfield barriers both get exercised. -/
+def keyed : Universe :=
+  { name   := "keyed"
+    vars   := ["a", "b"]
+    labels := ["l"]
+    keys   := ["p", "q"]
+    tys    := [.base (), .var "a", .lab (.var "p"), .lab (.lit "l"),
+               .rcd (.dsing (.var "p") (.base ()))]
+    maxLen := 2 }
+
 --------------------------- PARAMETRIC SCALING --------------------------------
 -- Exhaustive search over a small universe can only say "no divergence HERE".
 -- The families below say something a measure can be checked against: how the
@@ -806,6 +820,7 @@ def main : IO Unit := do
   report wide cap
   report deep cap
   report nest cap
+  report keyed cap
   familyReport 4000 24
   IO.println "A pair still outOfFuel at cap, with a spine of ≤ 6 atoms, is a"
   IO.println "divergence candidate: minimize it by hand and it becomes a theorem."

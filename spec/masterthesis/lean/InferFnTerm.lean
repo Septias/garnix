@@ -620,6 +620,11 @@ theorem inferF_stable (constTy : C → B) :
       exact Stable.bind (inferF_stable constTy _ _ e₁) (fun r₁ =>
         Stable.bind (inferF_stable constTy _ _ e₂) (fun r₂ =>
           Stable.bind (solveTySatF_stable _ _ _) (fun _ => Stable.const _)))
+  | Γ, S, .rcdDyn e₁ e₂ => by
+      simp only [inferF]
+      exact Stable.bind (inferF_stable constTy _ _ e₁) (fun r₁ =>
+        Stable.bind (inferF_stable constTy _ _ e₂) (fun r₂ =>
+          Stable.bind (solveTySatF_stable _ _ _) (fun _ => Stable.const _)))
   | Γ, S, .cat e₁ e₂ => by
       simp only [inferF]
       exact Stable.bind (inferF_stable constTy _ _ e₁) (fun r₁ =>
@@ -696,6 +701,20 @@ theorem inferF_settles (constTy : C → B) :
       have c₂ : r₂.2.sol.Clean := Infer.clean (inferF_sound h₂) c₁
       exact Settles.bind (solveTySatF_stable _ _ _)
         (solveTySatF_settles (S := (r₂.2.draw .ty).2) c₂ _ _)
+        (fun _ => Stable.const _) (fun _ _ _ => Settles.pure _)
+  | Γ, S, .rcdDyn e₁ e₂, hc => by
+      simp only [inferF]
+      refine Settles.bind (inferF_stable constTy _ _ e₁) (inferF_settles constTy _ _ e₁ hc)
+        (fun r₁ => Stable.bind (inferF_stable constTy _ _ e₂) (fun r₂ =>
+          Stable.bind (solveTySatF_stable _ _ _) (fun _ => Stable.const _)))
+        (fun r₁ _ h₁ => ?_)
+      have c₁ : r₁.2.sol.Clean := Infer.clean (inferF_sound h₁) hc
+      refine Settles.bind (inferF_stable constTy _ _ e₂) (inferF_settles constTy _ _ e₂ c₁)
+        (fun r₂ => Stable.bind (solveTySatF_stable _ _ _) (fun _ => Stable.const _))
+        (fun r₂ _ h₂ => ?_)
+      have c₂ : r₂.2.sol.Clean := Infer.clean (inferF_sound h₂) c₁
+      exact Settles.bind (solveTySatF_stable _ _ _)
+        (solveTySatF_settles (S := (r₂.2.draw .lab).2) c₂ _ _)
         (fun _ => Stable.const _) (fun _ _ _ => Settles.pure _)
   | Γ, S, .cat e₁ e₂, hc => by
       simp only [inferF]

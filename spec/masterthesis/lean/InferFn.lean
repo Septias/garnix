@@ -563,6 +563,11 @@ def inferF (constTy : C → B) (n : Nat) :
       let r₂ ← inferF constTy n Γ r₁.2 e₂
       let S₃ ← solveTySatF n (r₂.2.draw .ty).2 r₁.1 (.fn r₂.1 (.var (r₂.2.draw .ty).1))
       pure (.var (r₂.2.draw .ty).1, S₃)
+  | Γ, S, .rcdDyn e₁ e₂ => do
+      let r₁ ← inferF constTy n Γ S e₁
+      let r₂ ← inferF constTy n Γ r₁.2 e₂
+      let S₃ ← solveTySatF n (r₂.2.draw .lab).2 r₁.1 (.lab (.var (r₂.2.draw .lab).1))
+      pure (.rcd (.dsing (.var (r₂.2.draw .lab).1) r₂.1), S₃)
   | Γ, S, .cat e₁ e₂ => do
       let r₁ ← inferF constTy n Γ S e₁
       let r₂ ← inferF constTy n Γ r₁.2 e₂
@@ -638,6 +643,10 @@ theorem inferF_sound {constTy : C → B} {n : Nat} :
       simp only [inferF, IRes.bind_eq_ok, IRes.pure_eq_ok, Prod.mk.injEq] at h
       obtain ⟨⟨τ₁, S₁⟩, h₁, ⟨τ₂, S₂⟩, h₂, S₃, h₃, rfl, rfl⟩ := h
       exact .app (inferF_sound h₁) (inferF_sound h₂) rfl (solveTySatF_sound h₃)
+  | Γ, S, S', .rcdDyn e₁ e₂, τ, h => by
+      simp only [inferF, IRes.bind_eq_ok, IRes.pure_eq_ok, Prod.mk.injEq] at h
+      obtain ⟨⟨τ₁, S₁⟩, h₁, ⟨τ₂, S₂⟩, h₂, S₃, h₃, rfl, rfl⟩ := h
+      exact .rcdDyn (inferF_sound h₁) (inferF_sound h₂) rfl (solveTySatF_sound h₃)
   | Γ, S, S', .cat e₁ e₂, τ, h => by
       simp only [inferF, IRes.bind_eq_ok, IRes.pure_eq_ok, Prod.mk.injEq] at h
       obtain ⟨⟨τ₁, S₁⟩, h₁, ⟨τ₂, S₂⟩, h₂, S₃, h₃, S₄, h₄, rfl, rfl⟩ := h

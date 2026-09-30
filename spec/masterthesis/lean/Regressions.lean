@@ -6,6 +6,7 @@
 -- enough for every example here.
 
 import RowUnify
+import LabelLookup
 
 namespace MinimalCalculus
 
@@ -342,5 +343,45 @@ theorem nix_callback_extension_clash :
     unifyTyM (B := Unit) 20 (.fn (.rcd (.cat (.var "a") (.sing "x" uB))) (.var "g1"))
       (.fn (.rcd (.cat (.sing "y" uB) (.cat (.var "a") (.sing "x" uB)))) (.var "g2"))
       = .clash := rfl
+
+
+-- ## FC-LABELS PHASE B: keyed fields `${k}: τ` and the label sort
+
+-- ⊢  a literal field against a keyed one is not a clash: α may still be `foo`.
+--    A keyed field is a barrier, so the verdict is stuck
+theorem unify_lit_vs_key_stuck :
+    unifyRowM (B := Unit) 20 (.sing "foo" uB) (.dsing (.var "α") uB) = .stuck := rfl
+
+-- ⊢  …but the empty row has no field of any key
+theorem unify_empty_vs_key_clash :
+    unifyRowM (B := Unit) 20 .empty (.dsing (.var "α") uB) = .clash := rfl
+
+-- ⊢  α ≐ {${α}: 𝓫} is NOT an occurrence: the key α is a LABEL variable, the
+--    left α a type variable. (Before the label sort this was stuck.)
+theorem unify_key_not_occurs :
+    unifyTyM (B := Unit) 20 (.var "α") (.rcd (.dsing (.var "α") uB)) =
+      .success ⟨[("α", .rcd (.dsing (.var "α") uB))], [], []⟩ ⟨2⟩ := rfl
+
+-- ⊢  the label arm: a label variable binds to a label …
+theorem unify_lab_var_lit :
+    unifyTyM (B := Unit) 20 (.lab (.var "α")) (.lab (.lit "l")) =
+      .success ⟨[], [], [("α", .lit "l")]⟩ ⟨2⟩ := rfl
+
+-- ⊢  … and never to a type: there are no junk keys
+theorem unify_lab_vs_base_clash :
+    unifyTyM (B := Unit) 20 (.lab (.var "α")) uB = .clash := rfl
+
+-- ⊢  (${α}: τ).α ↓ τ, and it stays found under α ↦ l (the key comparison is
+--    stable: `Key.cmp_applySubst`)
+theorem lookup_key_self :
+    LookupQ (.dsing (.var "α") uB : Row Unit) (.var "α") (.found uB) := .dhit rfl
+theorem lookup_key_self_subst :
+    LookupQ (.dsing (.lit "l") uB : Row Unit) (.lit "l") (.found uB) := .dhit rfl
+
+-- ⊢  KNOWN INCOMPLETENESS: two keyed fields under the SAME unknown key do not
+--    meet — no arm matches a dfield — so the verdict is stuck although
+--    α ↦ anything is an mgu. Literal keys are unaffected (they are fields).
+theorem unify_same_key_stuck :
+    unifyRowM (B := Unit) 20 (.dsing (.var "α") uB) (.dsing (.var "α") uB) = .stuck := rfl
 
 end MinimalCalculus

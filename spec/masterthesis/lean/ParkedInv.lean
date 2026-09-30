@@ -145,6 +145,10 @@ theorem Infer.keeps {C : Type} {constTy : C → B} :
       obtain ⟨k₃, m₃, -⟩ := draw_keeps hd
       exact (Infer.keeps h₁).trans ((Infer.keeps h₂).trans (k₃.trans hs.keeps hs.satMono)
         (m₃.trans hs.satMono)) ((Infer.sat_mono h₂).trans (m₃.trans hs.satMono))
+  | _, _, _, _, _, .rcdDyn h₁ h₂ hd hs => by
+      obtain ⟨k₃, m₃, -⟩ := draw_keeps hd
+      exact (Infer.keeps h₁).trans ((Infer.keeps h₂).trans (k₃.trans hs.keeps hs.satMono)
+        (m₃.trans hs.satMono)) ((Infer.sat_mono h₂).trans (m₃.trans hs.satMono))
   | _, _, _, _, _, .conc h₁ h₂ hd₁ hd₂ hs₁ hs₂ => by
       obtain ⟨ka, ma, -⟩ := draw_keeps hd₁
       obtain ⟨kb, mb, -⟩ := draw_keeps hd₂

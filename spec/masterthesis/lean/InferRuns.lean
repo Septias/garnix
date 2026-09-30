@@ -159,5 +159,26 @@ def sd (e₁ e₂ : E) : E := .selDyn e₁ e₂
 #guard run (.lam "r" (rec1 "x" (sd (rec1 "x" c) (.sel (v "r") "a"))))
   = "({a: ⌊k5⌋ | r7 | ε} → {x: ★})"
 
+-- DYNAMIC CONSTRUCTION (phase B). `{${a} = v}` keys its field by the key's
+-- label variable; the headline infers exactly `rcdDynQ`
+def rd (e₁ e₂ : E) : E := .rcdDyn e₁ e₂
+def mk : E := .lam "a" (.lam "v" (rd (v "a") (v "v")))
+#guard run mk = "(⌊k3⌋ → (t2 → {${k3}: t2}))"
+-- a literal key makes it the static record, let-bound at two keys
+#guard run (.sel (.app (.app mk (L "foo")) c) "foo") = "𝓫"
+#guard run (.letE "mk" mk (rec2 "p" (.sel (.app (.app (v "mk") (L "foo")) c) "foo")
+    "q" (.sel (.app (.app (v "mk") (L "bar")) (.rcd .empty)) "bar"))) = "{p: 𝓫 | q: {ε}}"
+-- the same key variable finds its own field; a literal one is blocked on it
+#guard run (.lam "a" (sd (rd (v "a") c) (v "a"))) = "(⌊k4⌋ → 𝓫)"
+#guard run (.lam "a" (.sel (rd (v "a") c) "foo")) = "(⌊k2⌋ → ★)"
+#guard run (.app (.lam "a" (.sel (rd (v "a") c) "foo")) (L "foo")) = "𝓫"
+-- `r // { ${n} = v }`: the update, which shadows an old field of that name
+def upd : E := .lam "n" (.lam "r" (.cat (v "r") (rd (v "n") c)))
+#guard run upd = "(⌊k3⌋ → ({r4} → {${k3}: 𝓫 | ε | r4}))"
+#guard run (.sel (.app (.app upd (L "x")) (rec1 "x" (.rcd .empty))) "x") = "𝓫"
+-- a key that is not a label is a type error
+#guard run (rd c c) = "fail: clash"
+#guard run (.lam "a" (rd (.sel (v "a") "k") c)) = "({k: ⌊k4⌋ | r5 | ε} → {${k4}: 𝓫})"
+
 end InferRuns
 end MinimalCalculus

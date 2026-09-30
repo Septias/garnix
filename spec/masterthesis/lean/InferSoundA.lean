@@ -175,6 +175,8 @@ mutual
                    LookupQ ρ q .unknown → QTypedA constTy Δ Γ (.selDyn e₁ e₂) .unk
     | qSelDynAbs : QTypedA constTy Δ Γ e₁ (.rcd ρ) → QTypedA constTy Δ Γ e₂ (.lab q) →
                    LookupQ ρ q .absent → QTypedA constTy Δ Γ (.selDyn e₁ e₂) .unk
+    | qRcdDyn : QTypedA constTy Δ Γ e₁ (.lab q) → QTypedA constTy Δ Γ e₂ τ →
+                QTypedA constTy Δ Γ (.rcdDyn e₁ e₂) (.rcd (.dsing q τ))
     -- A-sel-dyn-? read declaratively: the keyed lookup's answer is assumed
     | assumeDyn {ρ : Row B} {q : Key} {τ : Ty B} :
              QTypedA constTy Δ Γ e₁ (.rcd ρ) → QTypedA constTy Δ Γ e₂ (.lab q) →
@@ -256,6 +258,8 @@ mutual
         .qSelDynUnk (QTypedA.weaken h₁ hΔ) (QTypedA.weaken h₂ hΔ) hl
     | _, _, _, _, _, .qSelDynAbs h₁ h₂ hl, hΔ =>
         .qSelDynAbs (QTypedA.weaken h₁ hΔ) (QTypedA.weaken h₂ hΔ) hl
+    | _, _, _, _, _, .qRcdDyn h₁ h₂, hΔ =>
+        .qRcdDyn (QTypedA.weaken h₁ hΔ) (QTypedA.weaken h₂ hΔ)
     | _, _, _, _, _, .assumeDyn h₁ h₂ hm, hΔ =>
         match hΔ _ hm with
         | .inl hm' => .assumeDyn (QTypedA.weaken h₁ hΔ) (QTypedA.weaken h₂ hΔ) hm'
@@ -471,6 +475,8 @@ mutual
         .qSelDynUnk (QTypedA.toQTyped h₁ hΓ hΔ) (QTypedA.toQTyped h₂ hΓ hΔ) hl
     | _, _, _, _, .qSelDynAbs h₁ h₂ hl, hΓ, hΔ =>
         .qSelDynAbs (QTypedA.toQTyped h₁ hΓ hΔ) (QTypedA.toQTyped h₂ hΓ hΔ) hl
+    | _, _, _, _, .qRcdDyn h₁ h₂, hΓ, hΔ =>
+        .qRcdDyn (QTypedA.toQTyped h₁ hΓ hΔ) (QTypedA.toQTyped h₂ hΓ hΔ)
     | _, _, _, _, .assumeDyn h₁ h₂ hm, hΓ, hΔ => by
         have h₁' := QTypedA.toQTyped h₁ hΓ hΔ
         have h₂' := QTypedA.toQTyped h₂ hΓ hΔ
@@ -957,6 +963,26 @@ theorem inferSound_of {B C : Type} [DecidableEq B] {constTy : C → B}
       have ih₂ := K₂.lift hσ hr (inferSound_of hvar hlet h₂ hΓ c₁ q₁ σ
         (hab.back x₂ c₂) hσ₂ Γ' hr)
       exact .qApp (.qEq ih₁ (hsolve.unifies_sat hσ₃')) ih₂
+  | _, _, _, _, _, .rcdDyn h₁ h₂ hd hs, hΓ, hc, hq => fun σ hab hσ Γ' hr => by
+      have k₂ := Infer.keeps h₂
+      obtain ⟨k₃, m₃, -, -, -⟩ := draw_keeps hd
+      have k₄ := hs.keeps
+      have c₁ := Infer.clean h₁ hc
+      have c₂ := Infer.clean h₂ c₁
+      have x₂ := (draw_ext hd).trans hs.ext
+      have x₁ := (Infer.ext h₂).trans x₂
+      have K₂ := k₃.trans k₄ hs.satMono
+      have K₁ := k₂.trans K₂ (m₃.trans hs.satMono)
+      obtain ⟨S₃', hsolve, hsatu⟩ := hs
+      have hσ₃' := hsatu.satMono σ hσ
+      have hσ₂ := m₃ σ (hsolve.satMono σ hσ₃')
+      have hσ₁ := Infer.sat_mono h₂ σ hσ₂
+      have q₁ := Infer.quiescent h₁ hq
+      have ih₁ := K₁.lift hσ hr (inferSound_of hvar hlet h₁ hΓ hc hq σ
+        (hab.back x₁ c₁) hσ₁ Γ' hr)
+      have ih₂ := K₂.lift hσ hr (inferSound_of hvar hlet h₂ hΓ c₁ q₁ σ
+        (hab.back x₂ c₂) hσ₂ Γ' hr)
+      exact .qRcdDyn (.qEq ih₁ (hsolve.unifies_sat hσ₃')) ih₂
   | _, _, _, _, _, .conc h₁ h₂ hd₁ hd₂ hs₁ hs₂, hΓ, hc, hq => fun σ hab hσ Γ' hr => by
       have k₂ := Infer.keeps h₂
       obtain ⟨ka, ma, -, -, -⟩ := draw_keeps hd₁
