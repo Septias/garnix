@@ -71,6 +71,26 @@ theorem sSorted_of_field {B : Type} {s : List (Atom B)} {l : Label} {τ : Ty B}
     (h : .field l τ ∈ s) : Ty.sortedFtv τ ⊆ sSorted s := fun x hx =>
   (mem_sSorted s).mpr ⟨.field l τ, h, hx⟩
 
+theorem sSorted_of_dfield {B : Type} {s : List (Atom B)} {α : TyVar} {τ : Ty B}
+    (h : .dfield α τ ∈ s) : Ty.sortedFtv τ ⊆ sSorted s := fun x hx =>
+  (mem_sSorted s).mpr ⟨.dfield α τ, h, by simp [Atom.sorted, hx]⟩
+
+/-- `τ` is the payload of some field of `s`, literal or keyed. -/
+def PayIn {B : Type} (τ : Ty B) (s : List (Atom B)) : Prop :=
+  (∃ l, .field l τ ∈ s) ∨ (∃ α, .dfield α τ ∈ s)
+
+theorem PayIn.sorted_sub {B : Type} {τ : Ty B} {s : List (Atom B)} (h : PayIn τ s) :
+    Ty.sortedFtv τ ⊆ sSorted s := by
+  rcases h with ⟨_, h⟩ | ⟨_, h⟩
+  · exact sSorted_of_field h
+  · exact sSorted_of_dfield h
+
+theorem PayIn.reverse {B : Type} {τ : Ty B} {s : List (Atom B)} (h : PayIn τ s.reverse) :
+    PayIn τ s := by
+  rcases h with ⟨l, h⟩ | ⟨α, h⟩
+  · exact .inl ⟨l, List.mem_reverse.mp h⟩
+  · exact .inr ⟨α, List.mem_reverse.mp h⟩
+
 theorem sSorted_append {B : Type} :
     (s t : List (Atom B)) → sSorted (s ++ t) = sSorted s ++ sSorted t
   | [], _ => rfl
@@ -264,8 +284,7 @@ theorem removeField_atoms {B : Type} {l : Label} :
 of each side, all made of the input's atoms. -/
 def EqEmit {B : Type} (s₁ s₂ : List (Atom B)) (τ τ' : Ty B) (t₁ t₂ : List (Atom B)) :
     Prop :=
-  (∃ l, .field l τ ∈ s₁) ∧ (∀ a ∈ t₁, a ∈ s₁) ∧
-  (∃ l, .field l τ' ∈ s₂) ∧ (∀ a ∈ t₂, a ∈ s₂)
+  PayIn τ s₁ ∧ (∀ a ∈ t₁, a ∈ s₁) ∧ PayIn τ' s₂ ∧ (∀ a ∈ t₂, a ∈ s₂)
 
 theorem matchL_atoms {B : Type} {s₁ s₂ : List (Atom B)} {τ τ' : Ty B}
     {t₁ t₂ : List (Atom B)} (h : matchL s₁ s₂ = some (τ, τ', t₁, t₂)) :
@@ -280,7 +299,18 @@ theorem matchL_atoms {B : Type} {s₁ s₂ : List (Atom B)} {τ τ' : Ty B}
           intro h
           cases h
           obtain ⟨hτ, hs⟩ := windowExtract_atoms s₂ hw
-          exact ⟨⟨l, List.mem_cons_self⟩, fun _ ha => List.mem_cons_of_mem _ ha, hτ, hs⟩
+          exact ⟨.inl ⟨l, List.mem_cons_self⟩, fun _ ha => List.mem_cons_of_mem _ ha, .inl hτ, hs⟩
+  | .dfield α σ :: u₁ =>
+      simp only [matchL] at h
+      revert h
+      cases hw : keyExtract α s₂ with
+      | none => intro h; cases h
+      | some p =>
+          intro h
+          cases h
+          rw [keyExtract_inv hw]
+          exact ⟨.inr ⟨α, List.mem_cons_self⟩, fun _ ha => List.mem_cons_of_mem _ ha,
+                 .inr ⟨α, List.mem_cons_self⟩, fun _ ha => List.mem_cons_of_mem _ ha⟩
 
 theorem matchR_atoms {B : Type} {s₁ s₂ : List (Atom B)} {τ τ' : Ty B}
     {t₁ t₂ : List (Atom B)} (h : matchR s₁ s₂ = some (τ, τ', t₁, t₂)) :
@@ -294,10 +324,10 @@ theorem matchR_atoms {B : Type} {s₁ s₂ : List (Atom B)} {τ τ' : Ty B}
       obtain ⟨σ0, σ0', u₁, u₂⟩ := p
       simp only [Option.some.injEq, Prod.mk.injEq] at h
       obtain ⟨rfl, rfl, rfl, rfl⟩ := h
-      obtain ⟨⟨l, g₀⟩, g₁, ⟨l', g₀'⟩, g₂⟩ := matchL_atoms hl
-      exact ⟨⟨l, List.mem_reverse.mp g₀⟩,
+      obtain ⟨g₀, g₁, g₀', g₂⟩ := matchL_atoms hl
+      exact ⟨g₀.reverse,
              fun a ha => List.mem_reverse.mp (g₁ a (List.mem_reverse.mp ha)),
-             ⟨l', List.mem_reverse.mp g₀'⟩,
+             g₀'.reverse,
              fun a ha => List.mem_reverse.mp (g₂ a (List.mem_reverse.mp ha))⟩
 
 theorem groundMatchAux_atoms {B : Type} {s₁ s₂ : List (Atom B)} :
@@ -318,7 +348,7 @@ theorem groundMatchAux_atoms {B : Type} {s₁ s₂ : List (Atom B)} :
                 cases h
                 obtain ⟨ha, hb⟩ := removeField_atoms s₁ h₁
                 obtain ⟨hc', hd⟩ := removeField_atoms s₂ h₂
-                exact ⟨ha, hb, hc', hd⟩
+                exact ⟨.inl ha, hb, .inl hc', hd⟩
       · rw [if_neg hc] at h
         exact groundMatchAux_atoms ls h
 
@@ -338,10 +368,10 @@ theorem EqEmit.swap {B : Type} {s₁ s₂ : List (Atom B)} {τ τ' : Ty B}
 theorem EqEmit.ty_sub {B : Type} {s₁ s₂ : List (Atom B)} {τ τ' : Ty B}
     {t₁ t₂ : List (Atom B)} (h : EqEmit s₁ s₂ τ τ' t₁ t₂) :
     Ty.sortedFtv τ ++ Ty.sortedFtv τ' ⊆ sSorted s₁ ++ sSorted s₂ := fun x hx => by
-  obtain ⟨⟨l, h₁⟩, -, ⟨l', h₂⟩, -⟩ := h
+  obtain ⟨h₁, -, h₂, -⟩ := h
   rcases List.mem_append.mp hx with hx | hx
-  · exact List.mem_append_left _ (sSorted_of_field h₁ hx)
-  · exact List.mem_append_right _ (sSorted_of_field h₂ hx)
+  · exact List.mem_append_left _ (h₁.sorted_sub hx)
+  · exact List.mem_append_right _ (h₂.sorted_sub hx)
 
 theorem EqEmit.res_sub {B : Type} {s₁ s₂ : List (Atom B)} {τ τ' : Ty B}
     {t₁ t₂ : List (Atom B)} (h : EqEmit s₁ s₂ τ τ' t₁ t₂) :

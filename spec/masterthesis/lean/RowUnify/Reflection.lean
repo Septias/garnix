@@ -121,6 +121,39 @@ theorem windowExtract_equiv {B : Type} (l : Label) :
               ((RowEquiv.cat (.comm hl) (.refl _)).trans RowEquiv.assoc))
         · simp at h
 
+-- Inversion of a leading match: a literal field against its window occurrence,
+-- or a keyed field against the same key at the other head.
+-- ⊢  matchL s₁ s₂ = some (τ,τ',t₁,t₂)
+--        ⟹  (∃ l. s₁ = (l:τ)::t₁ ∧ windowExtract l s₂ = some (τ',t₂))
+--          ∨ (∃ α. s₁ = (${α}:τ)::t₁ ∧ s₂ = (${α}:τ')::t₂)
+theorem matchL_inv {B : Type} {s₁ s₂ t₁ t₂ : List (Atom B)} {τ τ' : Ty B} :
+    matchL s₁ s₂ = some (τ, τ', t₁, t₂) →
+    (∃ l, s₁ = .field l τ :: t₁ ∧ windowExtract l s₂ = some (τ', t₂)) ∨
+    (∃ α, s₁ = .dfield α τ :: t₁ ∧ s₂ = .dfield α τ' :: t₂) := by
+  cases s₁ with
+  | nil => simp [matchL]
+  | cons a₁ r₁ =>
+    cases a₁ with
+    | var α => simp [matchL]
+    | dfield α τ₀ =>
+      intro h
+      simp only [matchL] at h
+      split at h
+      · rename_i τ'' s₂' hke
+        simp only [Option.some.injEq, Prod.mk.injEq] at h
+        obtain ⟨rfl, rfl, rfl, rfl⟩ := h
+        exact .inr ⟨α, rfl, keyExtract_inv hke⟩
+      · simp at h
+    | field l τ₀ =>
+      intro h
+      simp only [matchL] at h
+      split at h
+      · rename_i τ'' s₂' hwe
+        simp only [Option.some.injEq, Prod.mk.injEq] at h
+        obtain ⟨rfl, rfl, rfl, rfl⟩ := h
+        exact .inl ⟨l, rfl, hwe⟩
+      · simp at h
+
 -- ⊢  matchL s₁ s₂ = some (τ,τ',t₁,t₂),  θτ ≈ θτ',  θ(ofSpine t₁) ≈ᵣ θ(ofSpine t₂)
 --        ⟹   θ(ofSpine s₁) ≈ᵣ θ(ofSpine s₂)
 theorem matchL_reflect {B : Type} {θ : TySubst B} {s₁ s₂ t₁ t₂ : List (Atom B)}
@@ -129,24 +162,14 @@ theorem matchL_reflect {B : Type} {θ : TySubst B} {s₁ s₂ t₁ t₂ : List (
     (heq : TyEquiv (τ.applySubst θ) (τ'.applySubst θ))
     (hrec : RowEquiv ((ofSpine t₁).applySubst θ) ((ofSpine t₂).applySubst θ)) :
     RowEquiv ((ofSpine s₁).applySubst θ) ((ofSpine s₂).applySubst θ) := by
-  cases s₁ with
-  | nil => simp [matchL] at hmatch
-  | cons a₁ r₁ =>
-    cases a₁ with
-    | var α => simp [matchL] at hmatch
-    | dfield _ _ => simp [matchL] at hmatch
-    | field l τ₀ =>
-      simp only [matchL] at hmatch
-      split at hmatch
-      · rename_i τ'' s₂' hwe
-        simp only [Option.some.injEq, Prod.mk.injEq] at hmatch
-        obtain ⟨rfl, rfl, rfl, rfl⟩ := hmatch
-        have hw := RowEquiv.applySubst θ (windowExtract_equiv l s₂ hwe)
-        simp only [ofSpine_field_cons, Row.applySubst]
-        refine RowEquiv.trans ?_ hw.symm
-        simp only [Row.applySubst]
-        exact RowEquiv.cat (.sing heq) hrec
-      · simp at hmatch
+  rcases matchL_inv hmatch with ⟨l, rfl, hwe⟩ | ⟨α, rfl, rfl⟩
+  · have hw := RowEquiv.applySubst θ (windowExtract_equiv l s₂ hwe)
+    simp only [ofSpine_field_cons, Row.applySubst]
+    refine RowEquiv.trans ?_ hw.symm
+    simp only [Row.applySubst]
+    exact RowEquiv.cat (.sing heq) hrec
+  · simp only [ofSpine, Row.applySubst]
+    exact RowEquiv.cat (.dsing heq) hrec
 
 -- Base case: an all-vars remainder, each solved to ε, unifies with the empty
 -- side (allVarsEmpty forces every var to ε).
@@ -273,27 +296,16 @@ theorem windowExtract_reverse_equiv {B : Type} (l : Label) (s : List (Atom B))
   simp only [revRow] at h2
   exact h2.trans (RowEquiv.cat (ofSpine_reverse_equiv q).symm (.refl _))
 
--- Inversion of a leading field-match.
--- ⊢  matchL s₁ s₂ = some (τ,τ',t₁,t₂)
---        ⟹  ∃ l. s₁ = (l:τ)::t₁ ∧ windowExtract l s₂ = some (τ',t₂)
-theorem matchL_inv {B : Type} {s₁ s₂ t₁ t₂ : List (Atom B)} {τ τ' : Ty B} :
-    matchL s₁ s₂ = some (τ, τ', t₁, t₂) →
-    ∃ l, s₁ = .field l τ :: t₁ ∧ windowExtract l s₂ = some (τ', t₂) := by
-  cases s₁ with
-  | nil => simp [matchL]
-  | cons a₁ r₁ =>
-    cases a₁ with
-    | var α => simp [matchL]
-    | dfield _ _ => simp [matchL]
-    | field l τ₀ =>
-      intro h
-      simp only [matchL] at h
-      split at h
-      · rename_i τ'' s₂' hwe
-        simp only [Option.some.injEq, Prod.mk.injEq] at h
-        obtain ⟨rfl, rfl, rfl, rfl⟩ := h
-        exact ⟨l, rfl, hwe⟩
-      · simp at h
+-- a spine whose reverse starts with a keyed field ends in it
+-- ⊢  s.reverse = (${α}:τ)::u   ⟹   ofSpine s ≈ᵣ (ofSpine u.reverse | ${α}:τ)
+theorem ofSpine_key_snoc {B : Type} {s u : List (Atom B)} {α : TyVar} {τ : Ty B}
+    (h : s.reverse = .dfield α τ :: u) :
+    RowEquiv (ofSpine s) (.cat (ofSpine u.reverse) (.dsing (.var α) τ)) := by
+  have hs : s = u.reverse ++ [Atom.dfield α τ] := by
+    rw [← List.reverse_reverse s, h]; simp
+  rw [hs]
+  exact (ofSpine_append u.reverse [Atom.dfield α τ]).trans
+    (RowEquiv.cat (.refl _) RowEquiv.unitR)
 
 -- ⊢  matchR s₁ s₂ = some (τ,τ',t₁,t₂),  θτ ≈ θτ',  θ(ofSpine t₁) ≈ᵣ θ(ofSpine t₂)
 --        ⟹   θ(ofSpine s₁) ≈ᵣ θ(ofSpine s₂)      (trailing-field mirror)
@@ -313,21 +325,26 @@ theorem matchR_reflect {B : Type} {θ : TySubst B} {s₁ s₂ t₁ t₂ : List (
     -- matchR returns (τa, τb, u₁.reverse, u₂.reverse); pin the theorem vars.
     simp only [Option.some.injEq, Prod.mk.injEq] at hmatch
     obtain ⟨rfl, rfl, rfl, rfl⟩ := hmatch
-    obtain ⟨l, hrev, hwe⟩ := matchL_inv hml
-    -- hrev : s₁.reverse = field l τa :: u₁ ; so s₁ = u₁.reverse ++ [field l τa]
-    have hs₁ : s₁ = u₁.reverse ++ [Atom.field l τa] := by
-      rw [← List.reverse_reverse s₁, hrev]; simp
-    -- windowExtract l s₂.reverse = some (τb, u₂); right-bubble on s₂.
-    have hs₂equiv := windowExtract_reverse_equiv l s₂ hwe
-    have hs₁equiv : RowEquiv (ofSpine s₁) (.cat (ofSpine u₁.reverse) (.sing l τa)) := by
-      rw [hs₁]
-      exact (ofSpine_append u₁.reverse [Atom.field l τa]).trans
-        (RowEquiv.cat (.refl _) RowEquiv.unitR)
-    have e₁ := RowEquiv.applySubst θ hs₁equiv
-    have e₂ := RowEquiv.applySubst θ hs₂equiv
-    simp only [Row.applySubst] at e₁ e₂
-    refine e₁.trans (RowEquiv.trans ?_ e₂.symm)
-    exact RowEquiv.cat hrec (.sing heq)
+    rcases matchL_inv hml with ⟨l, hrev, hwe⟩ | ⟨α, hrev₁, hrev₂⟩
+    · -- hrev : s₁.reverse = field l τa :: u₁ ; so s₁ = u₁.reverse ++ [field l τa]
+      have hs₁ : s₁ = u₁.reverse ++ [Atom.field l τa] := by
+        rw [← List.reverse_reverse s₁, hrev]; simp
+      -- windowExtract l s₂.reverse = some (τb, u₂); right-bubble on s₂.
+      have hs₂equiv := windowExtract_reverse_equiv l s₂ hwe
+      have hs₁equiv : RowEquiv (ofSpine s₁) (.cat (ofSpine u₁.reverse) (.sing l τa)) := by
+        rw [hs₁]
+        exact (ofSpine_append u₁.reverse [Atom.field l τa]).trans
+          (RowEquiv.cat (.refl _) RowEquiv.unitR)
+      have e₁ := RowEquiv.applySubst θ hs₁equiv
+      have e₂ := RowEquiv.applySubst θ hs₂equiv
+      simp only [Row.applySubst] at e₁ e₂
+      refine e₁.trans (RowEquiv.trans ?_ e₂.symm)
+      exact RowEquiv.cat hrec (.sing heq)
+    · have e₁ := RowEquiv.applySubst θ (ofSpine_key_snoc hrev₁)
+      have e₂ := RowEquiv.applySubst θ (ofSpine_key_snoc hrev₂)
+      simp only [Row.applySubst] at e₁ e₂
+      refine e₁.trans (RowEquiv.trans ?_ e₂.symm)
+      exact RowEquiv.cat hrec (.dsing heq)
 
 -- ## FORWARD reflection: a unifier of the ORIGINAL unifies the RESIDUAL (+ eqs)
 -- The converse of the *_reflect lemmas — the COMPLETENESS direction each move
@@ -341,6 +358,15 @@ theorem RowEquiv.field_cancel_right {B : Type} {l : Label} {τ₁ τ₂ : Ty B}
     (h : RowEquiv (.cat R₁ (.sing l τ₁)) (.cat R₂ (.sing l τ₂))) :
     TyEquiv τ₁ τ₂ ∧ RowEquiv R₁ R₂ := by
   obtain ⟨hty, hR⟩ := (h.revRow).field_cancel_left
+  refine ⟨hty, ?_⟩
+  have hRR := hR.revRow
+  rwa [revRow_involutive, revRow_involutive] at hRR
+
+theorem RowEquiv.dsing_cancel_right {B : Type} {k : Key} {τ₁ τ₂ : Ty B}
+    {R₁ R₂ : Row B}
+    (h : RowEquiv (.cat R₁ (.dsing k τ₁)) (.cat R₂ (.dsing k τ₂))) :
+    TyEquiv τ₁ τ₂ ∧ RowEquiv R₁ R₂ := by
+  obtain ⟨hty, hR⟩ := (h.revRow).dsing_cancel_left
   refine ⟨hty, ?_⟩
   have hRR := hR.revRow
   rwa [revRow_involutive, revRow_involutive] at hRR
@@ -415,10 +441,12 @@ theorem matchL_reflect_fwd {B : Type} {θ : TySubst B} {s₁ s₂ t₁ t₂ : Li
     (hu : RowEquiv ((ofSpine s₁).applySubst θ) ((ofSpine s₂).applySubst θ)) :
     TyEquiv (τ.applySubst θ) (τ'.applySubst θ) ∧
     RowEquiv ((ofSpine t₁).applySubst θ) ((ofSpine t₂).applySubst θ) := by
-  obtain ⟨l, rfl, hwe⟩ := matchL_inv hmatch
-  have hs₂ := RowEquiv.applySubst θ (windowExtract_equiv l s₂ hwe)
-  simp only [ofSpine, Row.applySubst] at hu hs₂
-  exact (hu.trans hs₂).field_cancel_left
+  rcases matchL_inv hmatch with ⟨l, rfl, hwe⟩ | ⟨α, rfl, rfl⟩
+  · have hs₂ := RowEquiv.applySubst θ (windowExtract_equiv l s₂ hwe)
+    simp only [ofSpine, Row.applySubst] at hu hs₂
+    exact (hu.trans hs₂).field_cancel_left
+  · simp only [ofSpine, Row.applySubst] at hu
+    exact hu.dsing_cancel_left
 
 -- ⊢  matchR s₁ s₂ = some (τ,τ',t₁,t₂),  θ ⊨ ofSpine s₁ ≐ᵣ ofSpine s₂
 --        ⟹   θτ ≈ₜ θτ'  ∧  θ ⊨ ofSpine t₁ ≐ᵣ ofSpine t₂
@@ -436,18 +464,22 @@ theorem matchR_reflect_fwd {B : Type} {θ : TySubst B} {s₁ s₂ t₁ t₂ : Li
     obtain ⟨τa, τb, u₁, u₂⟩ := p
     simp only [Option.some.injEq, Prod.mk.injEq] at hmatch
     obtain ⟨rfl, rfl, rfl, rfl⟩ := hmatch
-    obtain ⟨l, hrev, hwe⟩ := matchL_inv hml
-    have hs₁ : s₁ = u₁.reverse ++ [Atom.field l τa] := by
-      rw [← List.reverse_reverse s₁, hrev]; simp
-    have hs₂equiv := windowExtract_reverse_equiv l s₂ hwe
-    have hs₁equiv : RowEquiv (ofSpine s₁) (.cat (ofSpine u₁.reverse) (.sing l τa)) := by
-      rw [hs₁]
-      exact (ofSpine_append u₁.reverse [Atom.field l τa]).trans
-        (RowEquiv.cat (.refl _) RowEquiv.unitR)
-    have e₁ := RowEquiv.applySubst θ hs₁equiv
-    have e₂ := RowEquiv.applySubst θ hs₂equiv
-    simp only [Row.applySubst] at e₁ e₂
-    exact (e₁.symm.trans (hu.trans e₂)).field_cancel_right
+    rcases matchL_inv hml with ⟨l, hrev, hwe⟩ | ⟨α, hrev₁, hrev₂⟩
+    · have hs₁ : s₁ = u₁.reverse ++ [Atom.field l τa] := by
+        rw [← List.reverse_reverse s₁, hrev]; simp
+      have hs₂equiv := windowExtract_reverse_equiv l s₂ hwe
+      have hs₁equiv : RowEquiv (ofSpine s₁) (.cat (ofSpine u₁.reverse) (.sing l τa)) := by
+        rw [hs₁]
+        exact (ofSpine_append u₁.reverse [Atom.field l τa]).trans
+          (RowEquiv.cat (.refl _) RowEquiv.unitR)
+      have e₁ := RowEquiv.applySubst θ hs₁equiv
+      have e₂ := RowEquiv.applySubst θ hs₂equiv
+      simp only [Row.applySubst] at e₁ e₂
+      exact (e₁.symm.trans (hu.trans e₂)).field_cancel_right
+    · have e₁ := RowEquiv.applySubst θ (ofSpine_key_snoc hrev₁)
+      have e₂ := RowEquiv.applySubst θ (ofSpine_key_snoc hrev₂)
+      simp only [Row.applySubst] at e₁ e₂
+      exact (e₁.symm.trans (hu.trans e₂)).dsing_cancel_right
 
 -- ## U-ground: the reusable algebraic core
 -- A field ≈-commutes past a row that is BOTH barrier-free and l-free. (Past a

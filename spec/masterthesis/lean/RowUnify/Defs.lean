@@ -117,12 +117,24 @@ def windowExtract {B : Type} (l : Label) :
         | some (τ', s') => some (τ', .field l' τ :: s')
         | none => none
 
+-- A keyed field `${α}:` at the very head: nothing may be skipped, since a
+-- field before it could be the label α turns out to be.
+def keyExtract {B : Type} (α : TyVar) : List (Atom B) → Option (Ty B × List (Atom B))
+  | .dfield β τ :: s => if β = α then some (τ, s) else none
+  | _ => none
+
 -- U-field at the left end: leading field of one side matched against the
--- first same-label occurrence in the other side's window.
+-- first same-label occurrence in the other side's window. U-key: a leading
+-- keyed field against a leading keyed field under the SAME key — whatever label
+-- α becomes, the two are the same field in the same place.
 def matchL {B : Type} : List (Atom B) → List (Atom B) →
     Option (Ty B × Ty B × List (Atom B) × List (Atom B))
   | .field l τ :: t₁, s₂ =>
       match windowExtract l s₂ with
+      | some (τ', s₂') => some (τ, τ', t₁, s₂')
+      | none => none
+  | .dfield α τ :: t₁, s₂ =>
+      match keyExtract α s₂ with
       | some (τ', s₂') => some (τ, τ', t₁, s₂')
       | none => none
   | _, _ => none

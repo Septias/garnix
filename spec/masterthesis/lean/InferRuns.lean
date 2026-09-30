@@ -176,6 +176,9 @@ def mk : E := .lam "a" (.lam "v" (rd (v "a") (v "v")))
 def upd : E := .lam "n" (.lam "r" (.cat (v "r") (rd (v "n") c)))
 #guard run upd = "(⌊k3⌋ → ({r4} → {${k3}: 𝓫 | ε | r4}))"
 #guard run (.sel (.app (.app upd (L "x")) (rec1 "x" (.rcd .empty))) "x") = "𝓫"
+-- two records under one unknown key flow into one function (U-key)
+#guard run (.lam "a" (.lam "f" (rec2 "p" (.app (v "f") (rd (v "a") c))
+    "q" (.app (v "f") (rd (v "a") c))))) = "(⌊k5⌋ → (({${k5}: 𝓫} → t6) → {p: t6 | q: t6}))"
 -- a key that is not a label is a type error
 #guard run (rd c c) = "fail: clash"
 #guard run (.lam "a" (rd (.sel (v "a") "k") c)) = "({k: ⌊k4⌋ | r5 | ε} → {${k4}: 𝓫})"

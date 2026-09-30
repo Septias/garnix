@@ -1134,6 +1134,12 @@ info: 'MinimalCalculus.rcdDynQ_instance_closed' depends on axioms: [propext, Cla
 -/
 #guard_msgs in #print axioms rcdDynQ_instance_closed
 
+-- U-key's completeness ingredient: a shared leading key cancels
+/--
+info: 'MinimalCalculus.RowEquiv.dsing_cancel_left' depends on axioms: [propext, Quot.sound]
+-/
+#guard_msgs in #print axioms RowEquiv.dsing_cancel_left
+
 -- (propext since Phase B: the rules compare keys through `Ty.keyCmp`.)
 /-- info: 'MinimalCalculus.LookupQ.det' depends on axioms: [propext] -/
 #guard_msgs in #print axioms LookupQ.det

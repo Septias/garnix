@@ -378,10 +378,19 @@ theorem lookup_key_self :
 theorem lookup_key_self_subst :
     LookupQ (.dsing (.lit "l") uB : Row Unit) (.lit "l") (.found uB) := .dhit rfl
 
--- ⊢  KNOWN INCOMPLETENESS: two keyed fields under the SAME unknown key do not
---    meet — no arm matches a dfield — so the verdict is stuck although
---    α ↦ anything is an mgu. Literal keys are unaffected (they are fields).
-theorem unify_same_key_stuck :
-    unifyRowM (B := Unit) 20 (.dsing (.var "α") uB) (.dsing (.var "α") uB) = .stuck := rfl
+-- ⊢  U-key: two keyed fields under the SAME unknown key meet at the head …
+theorem unify_same_key :
+    unifyRowM (B := Unit) 20 (.dsing (.var "α") (.var "t")) (.dsing (.var "α") uB) =
+      .success ⟨[("t", uB)], [], []⟩ ⟨2⟩ := rfl
+
+-- ⊢  … and at the tail, behind distinct row variables
+theorem unify_same_key_tail :
+    ∃ s S, unifyRowM (B := Unit) 20 (.cat (.var "r") (.dsing (.var "α") (.var "t")))
+      (.cat (.var "q") (.dsing (.var "α") uB)) = .success s S := ⟨_, _, rfl⟩
+
+-- ⊢  different unknown keys still do not meet: α ≔ β and α, β ≔ l are both
+--    unifiers, with no common generalization
+theorem unify_diff_key_stuck :
+    unifyRowM (B := Unit) 20 (.dsing (.var "α") uB) (.dsing (.var "β") uB) = .stuck := rfl
 
 end MinimalCalculus

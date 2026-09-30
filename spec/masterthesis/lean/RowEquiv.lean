@@ -646,6 +646,37 @@ theorem RowEquiv.field_cancel_left {B : Type} {l : Label} {τ₁ τ₂ : Ty B}
       exact h'
   · simpa [Row.toSpine, sDProj] using hd
 
+-- ## Leading keyed-field cancellation (U-key's completeness ingredient)
+-- ⊢  (${α}:τ₁ | R₁) ≈ᵣ (${α}:τ₂ | R₂)   ⟹   τ₁ ≈ₜ τ₂  ∧  R₁ ≈ᵣ R₂
+theorem RowEquiv.dfield_cancel_left {B : Type} {α : TyVar} {τ₁ τ₂ : Ty B}
+    {R₁ R₂ : Row B}
+    (h : RowEquiv (.cat (.dsing (.var α) τ₁) R₁) (.cat (.dsing (.var α) τ₂) R₂)) :
+    TyEquiv τ₁ τ₂ ∧ RowEquiv R₁ R₂ := by
+  obtain ⟨hv, hp, hd⟩ := h.char
+  simp only [Row.toSpine, Atom.ofKey, List.cons_append, List.nil_append, sBarSeq] at hv
+  simp only [Row.toSpine, Atom.ofKey, List.cons_append, List.nil_append, sDProj] at hd
+  obtain ⟨τ', rest, heq, hty, hrest⟩ := hd.cons_inv
+  injection heq with hhd htl
+  injection hhd with _ hτ'
+  subst hτ'; subst htl
+  refine ⟨hty, RowEquiv.ofChar ⟨?_, fun l => ?_, hrest⟩⟩
+  · injection hv
+  · have h' := hp l
+    simp only [Row.toSpine, Atom.ofKey, List.cons_append, List.nil_append, sProj] at h'
+    exact h'.unshift
+
+-- …at any key: a literal key is a literal field (`dsingLab`)
+-- ⊢  (${k}:τ₁ | R₁) ≈ᵣ (${k}:τ₂ | R₂)   ⟹   τ₁ ≈ₜ τ₂  ∧  R₁ ≈ᵣ R₂
+theorem RowEquiv.dsing_cancel_left {B : Type} {k : Key} {τ₁ τ₂ : Ty B}
+    {R₁ R₂ : Row B}
+    (h : RowEquiv (.cat (.dsing k τ₁) R₁) (.cat (.dsing k τ₂) R₂)) :
+    TyEquiv τ₁ τ₂ ∧ RowEquiv R₁ R₂ := by
+  cases k with
+  | var α => exact h.dfield_cancel_left
+  | lit l =>
+      exact ((RowEquiv.cat RowEquiv.dsingLab.symm (.refl _)).trans
+        (h.trans (RowEquiv.cat RowEquiv.dsingLab (.refl _)))).field_cancel_left
+
 -- A product ≈ ε forces each factor ≈ ε (a cancellative monoid with no inverses:
 -- ε has empty barrier sequence and empty projections, and all split over ++).
 -- The base case of ≐ᵣ completeness — an exhausted side pins every leftover

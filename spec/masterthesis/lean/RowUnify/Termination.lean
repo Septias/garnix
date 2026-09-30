@@ -194,6 +194,16 @@ theorem matchL_size {B : Type} {s₁ s₂ : List (Atom B)} {τ τ' : Ty B}
           intro h
           cases h
           exact ⟨by simp only [spineSize]; omega, windowExtract_size s₂ hw⟩
+  | .dfield α σ :: u₁ =>
+      simp only [matchL] at h
+      revert h
+      cases hw : keyExtract α s₂ with
+      | none => intro h; cases h
+      | some p =>
+          intro h
+          cases h
+          rw [keyExtract_inv hw]
+          exact ⟨by simp only [spineSize]; omega, by simp only [spineSize]; omega⟩
 
 theorem matchR_size {B : Type} {s₁ s₂ : List (Atom B)} {τ τ' : Ty B}
     {t₁ t₂ : List (Atom B)} (h : matchR s₁ s₂ = some (τ, τ', t₁, t₂)) :

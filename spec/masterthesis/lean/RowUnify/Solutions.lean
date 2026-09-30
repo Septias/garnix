@@ -529,6 +529,21 @@ theorem stripL_ftv {B : Type} {s₁ s₂ t₁ t₂ : List (Atom B)}
                fun _ hx => List.mem_cons_of_mem _ hx⟩
       · rw [if_neg hab] at h; cases h
 
+-- the keyed head `keyExtract` takes off
+theorem keyExtract_inv {B : Type} {α : TyVar} :
+    {s : List (Atom B)} → {τ : Ty B} → {s' : List (Atom B)} →
+    keyExtract α s = some (τ, s') → s = .dfield α τ :: s'
+  | .dfield β σ :: t, τ, s', h => by
+      simp only [keyExtract] at h
+      split at h
+      · rename_i hb; subst hb
+        simp only [Option.some.injEq, Prod.mk.injEq] at h
+        obtain ⟨rfl, rfl⟩ := h; rfl
+      · cases h
+  | [], _, _, h => by simp [keyExtract] at h
+  | .var _ :: _, _, _, h => by simp [keyExtract] at h
+  | .field _ _ :: _, _, _, h => by simp [keyExtract] at h
+
 -- ⊢  matchL pairs a leading field with a window occurrence: the emitted types
 --    and both residuals live inside the original problem
 theorem matchL_ftv {B : Type} {s₁ s₂ : List (Atom B)} {τ τ' : Ty B}
@@ -545,6 +560,18 @@ theorem matchL_ftv {B : Type} {s₁ s₂ : List (Atom B)} {τ τ' : Ty B}
           cases h
           obtain ⟨hτ, hs⟩ := windowExtract_ftv s₂ hw
           exact ⟨List.subset_append_left _ _, List.subset_append_right _ _, hτ, hs⟩
+  | .dfield α σ :: u₁ =>
+      simp only [matchL] at h
+      revert h
+      cases hw : keyExtract α s₂ with
+      | none => intro h; cases h
+      | some p =>
+          intro h
+          cases h
+          rw [keyExtract_inv hw]
+          simp only [sFtv]
+          exact ⟨fun _ hx => by simp [hx], fun _ hx => by simp [hx],
+                 fun _ hx => by simp [hx], fun _ hx => by simp [hx]⟩
 
 theorem groundMatchAux_ftv {B : Type} {s₁ s₂ : List (Atom B)} :
     (ls : List Label) → {τ τ' : Ty B} → {t₁ t₂ : List (Atom B)} →
