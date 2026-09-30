@@ -69,8 +69,8 @@ theorem SolveRow.clean {B : Type} [DecidableEq B] {S S' : SolverState B} {ρ ρ'
   obtain ⟨fuel, s, Sup, hu, rfl⟩ := h
   refine hc.extend ((unifyM_good fuel).2 _ _ _ hu) (fun x hx => ?_)
   rcases List.mem_append.mp hx with hx | hx
-  · rw [sSorted_toSpine] at hx; exact hc.clears_row hx
-  · rw [sSorted_toSpine] at hx; exact hc.clears_row hx
+  · exact hc.clears_row (sSorted_toSpine _ _ hx)
+  · exact hc.clears_row (sSorted_toSpine _ _ hx)
 
 theorem SolveTy.unifies_sat {B : Type} [DecidableEq B] {S S' : SolverState B}
     {τ τ' : Ty B} (h : SolveTy S τ τ' S') {σ : TySubst B}
@@ -128,17 +128,24 @@ theorem Ty.applySubst_sat_equiv {B : Type} {s : Sol B} {σ : TySubst B}
   rw [Ty.applySubst_applySubst]
   exact (Ty.applySubst_substEquiv hsat.substEquiv τ).symm
 
+/-- ⊢  …and a key: a solution σ satisfies reads it exactly as ⟦s⟧-then-σ does. -/
+theorem Key.applySubst_sat_eq {B : Type} {s : Sol B} {σ : TySubst B}
+    (hsat : Sol.Sat σ s) (k : Key) :
+    (k.applySubst s.toSubst).applySubst σ = k.applySubst σ := by
+  rw [Key.applySubst_applySubst]
+  exact (Key.applySubst_substEquiv hsat.substEquiv k).symm
+
 /-- ⊢  …and for a KEYED lookup: the same two steps, with the key substituted
-and realigned alongside the row (a query key is ≈-rigid, `LookupQ.key_equiv`). -/
+alongside the row. -/
 theorem Sol.lookupQ_sat {B : Type} {s : Sol B} {σ : TySubst B}
-    (hsat : Sol.Sat σ s) {ρ : Row B} {q : Ty B} {r : LookupRes B}
+    (hsat : Sol.Sat σ s) {ρ : Row B} {q : Key} {r : LookupRes B}
     (h : LookupQ (ρ.applySubst s.toSubst) (q.applySubst s.toSubst) r)
     (hr : r ≠ .unknown) :
     ∃ r', LookupQ (ρ.applySubst σ) (q.applySubst σ) r' ∧
       ResEquiv (r.applySubst σ) r' := by
-  obtain ⟨r', hl, he⟩ :=
-    LookupQ.equiv (Row.applySubst_sat_equiv hsat ρ) (LookupQ.applySubst σ h hr)
-  exact ⟨r', LookupQ.key_equiv (Ty.applySubst_sat_equiv hsat q) hl, he⟩
+  have h' := LookupQ.applySubst σ h hr
+  rw [Key.applySubst_sat_eq hsat q] at h'
+  exact LookupQ.equiv (Row.applySubst_sat_equiv hsat ρ) h'
 
 --------------------- SELECTION FROM A RECORD ALWAYS TYPES AT ★ ---------------
 -- A record-typed subject can always have a field selected off it at ★, whatever
@@ -319,7 +326,7 @@ theorem infer_sound_selUnk_step {B C : Type} [DecidableEq B] {constTy : C → B}
     (h : QTyped constTy Γ' e (τ.applySubst σ))
     (hs : SolveTy S₁' τ (.rcd (.var r)) S₂)
     (hsat : Sol.Sat σ S₂.sol)
-    (hst : Stump.DischargeEquiv σ ⟨.var r, .lab l, .var δ⟩) :
+    (hst : Stump.DischargeEquiv σ ⟨.var r, .lit l, .var δ⟩) :
     QTyped constTy Γ' (.sel e l) ((Ty.var δ).applySubst σ) := by
   have hrcd : QTyped constTy Γ' e ((Ty.rcd (.var r)).applySubst σ) :=
     .qEq h (hs.unifies_sat hsat)
@@ -513,14 +520,14 @@ theorem Finalize.toUnguarded {B : Type} [DecidableEq B] {S S' : SolverState B}
 
 /-- a stump on a LITERAL row: its lookup lands at every context, under every
 substitution. Nothing about it is blocked, and the unguarded rule does not care. -/
-private def fStar_p : Parked Unit := ⟨"a", ⟨.sing "l" (.base ()), .lab "l", .var "d"⟩⟩
+private def fStar_p : Parked Unit := ⟨"a", ⟨.sing "l" (.base ()), .lit "l", .var "d"⟩⟩
 
 private def fStar_S : SolverState Unit :=
   { sol := Sol.nil, parked := [fStar_p], flags := [], supply := ⟨0⟩ }
 
 /-- the equation F-★ emits, run: `δ ≐ ★` binds δ, at any fuel and any supply. -/
 example : unifyTyF (B := Unit) ⟨0⟩ 0 (.var "d") .unk
-    = .success ⟨[("d", (.unk : Ty Unit))], []⟩ ⟨0⟩ := rfl
+    = .success ⟨[("d", (.unk : Ty Unit))], [], []⟩ ⟨0⟩ := rfl
 
 /-- ⊢  **the unguarded F-★ can fire where nothing discharges.** There is a state,
 a parked stump and a finalization step whose result NO substitution satisfying it
@@ -531,8 +538,8 @@ theorem finalize_star_no_discharge :
       ∀ (Γ' : Ctx Unit) (σ : TySubst Unit), Sol.Sat σ S''.sol →
         ¬ p.stump.DischargeEquiv σ := by
   have hfin : FinalizeUnguarded fStar_S fStar_p _ :=
-    FinalizeUnguarded.star (S' := fStar_S.extend ⟨[("d", .unk)], []⟩ ⟨0⟩)
-      ⟨0, ⟨[("d", .unk)], []⟩, ⟨0⟩, rfl, rfl⟩
+    FinalizeUnguarded.star (S' := fStar_S.extend ⟨[("d", .unk)], [], []⟩ ⟨0⟩)
+      ⟨0, ⟨[("d", .unk)], [], []⟩, ⟨0⟩, rfl, rfl⟩
   refine ⟨fStar_S, _, fStar_p, hfin, ?_⟩
   intro Γ' σ hsat hdis
   simp only [fStar_p] at hdis
@@ -561,8 +568,7 @@ theorem finalize_star_guarded_cannot_fire :
   rintro ⟨S', h⟩
   cases h with
   | star _ hb _ =>
-      cases hb with
-      | lit hb' => cases hb'
+      cases hb
 
 --------------------- …AND THE CONFIGURATION WAS REACHABLE --------------------
 -- The witness above is hand-built, so a reader may fairly ask whether any state
@@ -616,18 +622,18 @@ private def fsR : TyVar := natName 2
 private def fsD : TyVar := natName 3
 private def fsB : TyVar := natName 4
 
-private def fsId : TySubst Unit := ⟨fun x => .var x, fun x => .var x⟩
+private def fsId : TySubst Unit := ⟨fun x => .var x, fun x => .var x, fun x => .var x⟩
 
 private def fsS0 : SolverState Unit := ⟨Sol.nil, [], [], ⟨1⟩, []⟩
 private def fsSlam : SolverState Unit := ⟨Sol.nil, [], [], ⟨2⟩, [(fsA, .ty)]⟩
 private def fsSr : SolverState Unit := ⟨Sol.nil, [], [], ⟨3⟩, [(fsR, .row), (fsA, .ty)]⟩
-private def fsSol1 : Sol Unit := ⟨[(fsA, .rcd (.var fsR))], []⟩
+private def fsSol1 : Sol Unit := ⟨[(fsA, .rcd (.var fsR))], [], []⟩
 private def fsS2 : SolverState Unit := ⟨fsSol1, [], [], ⟨3⟩, [(fsR, .row), (fsA, .ty)]⟩
 private def fsS2' : SolverState Unit :=
   ⟨fsSol1, [], [], ⟨4⟩, [(fsD, .ty), (fsR, .row), (fsA, .ty)]⟩
 
 /-- the stump A-sel-? parks: blocked on the record's row variable, writing δ. -/
-private def fsP : Parked Unit := ⟨fsR, ⟨.var fsR, .lab "l", .var fsD⟩⟩
+private def fsP : Parked Unit := ⟨fsR, ⟨.var fsR, .lit "l", .var fsD⟩⟩
 
 private def fsSp : SolverState Unit :=
   ⟨fsSol1, [fsP], [], ⟨4⟩, [(fsD, .ty), (fsR, .row), (fsA, .ty)]⟩
@@ -637,7 +643,7 @@ private def fsSb : SolverState Unit :=
 /-- what A-app's arrow equation solves: β at the result record, and — the point
 — the stump's BLOCKER, at the row sort. -/
 private def fsApp : Sol Unit :=
-  ⟨[(fsB, .rcd (.sing "a" (.var fsD)))], [(fsR, .cat (.sing "l" (.base ())) .empty)]⟩
+  ⟨[(fsB, .rcd (.sing "a" (.var fsD)))], [(fsR, .cat (.sing "l" (.base ())) .empty)], []⟩
 
 /-- the state the equation leaves behind: blocker solved, stump still parked.
 Before saturation was wired into the A-rules this is where the run ENDED, which
@@ -668,7 +674,7 @@ theorem fStarEx_not_quiescent : ¬ fsS.Quiescent := by
 
 /-- what K-hit writes once saturation runs: δ ≔ 𝓫, the stump discharged and
 dropped from Δ. -/
-private def fsHit : Sol Unit := ⟨[(fsD, .base ())], []⟩
+private def fsHit : Sol Unit := ⟨[(fsD, .base ())], [], []⟩
 private def fsSfix : SolverState Unit :=
   { fsS.extend fsHit ⟨5⟩ with
       parked := (fsS.extend fsHit ⟨5⟩).parked.filter (·.stump != fsP.stump) }
@@ -693,7 +699,7 @@ theorem fStarEx_infers :
   · exact Infer.rcd (InferRec.field Infer.con)
   · exact ⟨fsS, ⟨20, fsApp, ⟨5⟩, rfl, rfl⟩,
       .step (p := fsP) (by simp [fsS, fsSb, SolverState.extend]) fStarEx_not_blocked
-        (Wake.hit (τ := .base ()) (.lit fStarEx_lands') ⟨5, fsHit, ⟨5⟩, rfl, rfl⟩)
+        (Wake.hit (τ := .base ()) (LookupQ.lab_iff.mpr fStarEx_lands') ⟨5, fsHit, ⟨5⟩, rfl, rfl⟩)
         (.done (SolverState.Quiescent.nil rfl))⟩
 
 /-- ⊢  **and the refinement survives.** Δ is empty — the stump discharged, so
@@ -714,7 +720,7 @@ theorem fStarEx_stale_blocker :
   ⟨rfl, rfl⟩
 
 /-- what F-★ emits at that state, and the state it produces. -/
-private def fsStar : Sol Unit := ⟨[(fsD, .unk)], []⟩
+private def fsStar : Sol Unit := ⟨[(fsD, .unk)], [], []⟩
 private def fsS' : SolverState Unit :=
   ({ fsS.extend fsStar ⟨5⟩ with
        parked := (fsS.extend fsStar ⟨5⟩).parked.filter (·.stump != fsP.stump) }).flag "l"
@@ -727,7 +733,7 @@ theorem fStar_wake_star_disagree :
     ∃ Shit Sstar : SolverState Unit,
       Wake fsS fsP Shit ∧ FinalizeUnguarded fsS fsP Sstar ∧
       Shit.subst.ty fsD = .base () ∧ Sstar.subst.ty fsD = .unk :=
-  ⟨_, _, Wake.hit (τ := .base ()) (.lit fStarEx_lands')
+  ⟨_, _, Wake.hit (τ := .base ()) (LookupQ.lab_iff.mpr fStarEx_lands')
       ⟨5, fsHit, ⟨5⟩, rfl, rfl⟩,
     FinalizeUnguarded.star (S' := fsS.extend fsStar ⟨5⟩)
       ⟨5, fsStar, ⟨5⟩, rfl, rfl⟩, rfl, rfl⟩
@@ -803,7 +809,7 @@ theorem fStarEx_refinement_lost :
   · refine QTyped.qLam (QTyped.qRcd (QTypedBody.field ?_))
     refine QTyped.qSel (ρ := .sing "l" (.base ())) ?_ .hit
     exact QTyped.qVar (σ := ⟨[], [], .rcd (.sing "l" (.base ()))⟩) rfl
-      ⟨fsId, ⟨fun _ _ => rfl, fun _ _ => rfl⟩,
+      ⟨fsId, ⟨fun _ _ => rfl, fun _ _ => rfl, fun _ _ => rfl⟩,
        (fun s hs => absurd hs List.not_mem_nil), rfl⟩
   · exact QTyped.qRcd (QTypedBody.field QTyped.qCon)
 
@@ -857,12 +863,12 @@ private def spLx : SolverState Unit := ⟨Sol.nil, [], [], ⟨2⟩, [(spX, .ty)]
 private def spLy : SolverState Unit := ⟨Sol.nil, [], [], ⟨3⟩, [(spY, .ty), (spX, .ty)]⟩
 private def spDraw : SolverState Unit :=
   ⟨Sol.nil, [], [], ⟨4⟩, [(spRow, .row), (spY, .ty), (spX, .ty)]⟩
-private def spSol1 : Sol Unit := ⟨[(spX, .rcd (.var spRow))], []⟩
+private def spSol1 : Sol Unit := ⟨[(spX, .rcd (.var spRow))], [], []⟩
 private def spS2 : SolverState Unit :=
   ⟨spSol1, [], [], ⟨4⟩, [(spRow, .row), (spY, .ty), (spX, .ty)]⟩
 private def spS2' : SolverState Unit :=
   ⟨spSol1, [], [], ⟨5⟩, [(spD, .ty), (spRow, .row), (spY, .ty), (spX, .ty)]⟩
-private def spP : Parked Unit := ⟨spRow, ⟨.var spRow, .lab "l", .var spD⟩⟩
+private def spP : Parked Unit := ⟨spRow, ⟨.var spRow, .lit "l", .var spD⟩⟩
 private def spSp : SolverState Unit :=
   ⟨spSol1, [spP], [], ⟨5⟩, [(spD, .ty), (spRow, .row), (spY, .ty), (spX, .ty)]⟩
 private def spSb : SolverState Unit :=
@@ -870,7 +876,7 @@ private def spSb : SolverState Unit :=
    [(spB, .ty), (spD, .ty), (spRow, .row), (spY, .ty), (spX, .ty)]⟩
 
 /-- what the APPLICATION writes: the promise, spent on an arrow. -/
-private def spApp : Sol Unit := ⟨[(spD, .fn (.var spY) (.var spB))], []⟩
+private def spApp : Sol Unit := ⟨[(spD, .fn (.var spY) (.var spB))], [], []⟩
 private def spS : SolverState Unit := spSb.extend spApp ⟨6⟩
 
 /-- ⊢  the state is QUIESCENT — the stump is still blocked on an unsolved row
@@ -927,10 +933,10 @@ theorem spentEx_declarative :
   refine QTyped.qLam (QTyped.qLam (QTyped.qApp (τ₁ := .base ()) ?_ ?_))
   · refine QTyped.qSel (ρ := .sing "l" (.fn (.base ()) (.base ()))) ?_ .hit
     exact QTyped.qVar (σ := ⟨[], [], .rcd (.sing "l" (.fn (.base ()) (.base ())))⟩) rfl
-      ⟨fsId, ⟨fun _ _ => rfl, fun _ _ => rfl⟩,
+      ⟨fsId, ⟨fun _ _ => rfl, fun _ _ => rfl, fun _ _ => rfl⟩,
        (fun s hs => absurd hs List.not_mem_nil), rfl⟩
   · exact QTyped.qVar (σ := ⟨[], [], .base ()⟩) rfl
-      ⟨fsId, ⟨fun _ _ => rfl, fun _ _ => rfl⟩,
+      ⟨fsId, ⟨fun _ _ => rfl, fun _ _ => rfl, fun _ _ => rfl⟩,
        (fun s hs => absurd hs List.not_mem_nil), rfl⟩
 
 --------------------- WHAT A PARKED STUMP MEANS, AS A JUDGEMENT ---------------
@@ -986,17 +992,19 @@ mutual
                 QTypedC constTy Δ Γ (.sel e l) .unk
     | qUnk : QTypedC constTy Δ Γ e τ → QTypedC constTy Δ Γ e .unk
     | qRcd : QTypedCBody constTy Δ Γ b ρ → QTypedC constTy Δ Γ (.rcd b) (.rcd ρ)
-    | qLab : QTypedC constTy Δ Γ (.lab l) (.lab l)
-    | qSelDyn : QTypedC constTy Δ Γ e₁ (.rcd ρ) → QTypedC constTy Δ Γ e₂ q →
+    | qLab : QTypedC constTy Δ Γ (.lab l) (.lab (.lit l))
+    | qSelDyn : QTypedC constTy Δ Γ e₁ (.rcd ρ) → QTypedC constTy Δ Γ e₂ (.lab q) →
                 LookupQ ρ q (.found τ) → QTypedC constTy Δ Γ (.selDyn e₁ e₂) τ
-    | qSelDynUnk : QTypedC constTy Δ Γ e₁ (.rcd ρ) → QTypedC constTy Δ Γ e₂ q →
+    | qSelDynUnk : QTypedC constTy Δ Γ e₁ (.rcd ρ) → QTypedC constTy Δ Γ e₂ (.lab q) →
                    LookupQ ρ q .unknown → QTypedC constTy Δ Γ (.selDyn e₁ e₂) .unk
-    | qSelDynAbs : QTypedC constTy Δ Γ e₁ (.rcd ρ) → QTypedC constTy Δ Γ e₂ q →
+    | qSelDynAbs : QTypedC constTy Δ Γ e₁ (.rcd ρ) → QTypedC constTy Δ Γ e₂ (.lab q) →
                    LookupQ ρ q .absent → QTypedC constTy Δ Γ (.selDyn e₁ e₂) .unk
+    | qRcdDyn : QTypedC constTy Δ Γ e₁ (.lab q) → QTypedC constTy Δ Γ e₂ τ →
+                QTypedC constTy Δ Γ (.rcdDyn e₁ e₂) (.rcd (.dsing q τ))
     -- THE ONE NEW RULE: a selection whose lookup is ASSUMED, answering at the
     -- stump's own result variable. This is A-sel-? read declaratively.
     | stump {ρ : Row B} {l : Label} {δ : TyVar} :
-             QTypedC constTy Δ Γ e (.rcd ρ) → (⟨ρ, .lab l, .var δ⟩ : Stump B) ∈ Δ →
+             QTypedC constTy Δ Γ e (.rcd ρ) → (⟨ρ, .lit l, .var δ⟩ : Stump B) ∈ Δ →
              QTypedC constTy Δ Γ (.sel e l) (.var δ)
 
   inductive QTypedCBody {B C : Type} (constTy : C → B) (Δ : List (Stump B)) :
@@ -1029,6 +1037,7 @@ mutual
     | .qSelDyn h₁ h₂ hl    => .qSelDyn h₁.toC h₂.toC hl
     | .qSelDynUnk h₁ h₂ hl => .qSelDynUnk h₁.toC h₂.toC hl
     | .qSelDynAbs h₁ h₂ hl => .qSelDynAbs h₁.toC h₂.toC hl
+    | .qRcdDyn h₁ h₂       => .qRcdDyn h₁.toC h₂.toC
 
   theorem QTypedBody.toC {B C : Type} {constTy : C → B} {Δ : List (Stump B)}
       {Γ : QCtx B} {b : RecBody (Expr C)} {ρ : Row B} :
@@ -1060,6 +1069,7 @@ mutual
     | .qSelDyn h₁ h₂ hl    => .qSelDyn h₁.toQTyped h₂.toQTyped hl
     | .qSelDynUnk h₁ h₂ hl => .qSelDynUnk h₁.toQTyped h₂.toQTyped hl
     | .qSelDynAbs h₁ h₂ hl => .qSelDynAbs h₁.toQTyped h₂.toQTyped hl
+    | .qRcdDyn h₁ h₂       => .qRcdDyn h₁.toQTyped h₂.toQTyped
     | .stump _ hmem   => absurd hmem List.not_mem_nil
 
   theorem QTypedCBody.toQTyped {B C : Type} {constTy : C → B} {Γ : QCtx B}

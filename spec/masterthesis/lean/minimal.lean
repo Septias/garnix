@@ -40,15 +40,31 @@ inductive Expr (Const : Type) : Type where
   | letE : Var → Expr Const → Expr Const → Expr Const    -- let x = e₁ in e₂
   | lab  : Label → Expr Const                            -- `l   (a label, as a value)
   | selDyn : Expr Const → Expr Const → Expr Const        -- e₁.(e₂)  (e₁.${e₂})
+  | rcdDyn : Expr Const → Expr Const → Expr Const        -- { ${e₁} = e₂ }
 
 
 ---------------------------------- TYPES ------------------------------------------
 
--- τ := α | 𝓫 | ★ | τ → τ | { ρ } | ⌊l⌋
--- Label VARIABLES are ordinary type variables: ⌊α⌋ is `.var α`, and a label
--- solution α ≔ ⌊l⌋ is an ordinary type binding. ⌊l⌋ is rigid and nullary,
--- exactly like 𝓫, so every structural fact about 𝓫 has a ⌊l⌋ twin.
--- ρ := ε | α | l: τ | (ρ₁ | ρ₂)
+-- τ := α | 𝓫 | ★ | τ → τ | { ρ } | ⌊k⌋
+-- k := l | α                     (keys: a label, or a LABEL variable)
+-- Label variables are a SORT of their own, like row variables: ⌊α⌋ is
+-- `.lab (.var α)`, a substitution sends α to a KEY (`TySubst.lab`), never to a
+-- type. So a key is always a label or a label variable — there is no junk key,
+-- and nothing (unification, F-★, instantiation) can make a key ★ or 𝓫.
+-- ⌊l⌋ is rigid and nullary, exactly like 𝓫.
+-- ρ := ε | α | l: τ | ${k}: τ | (ρ₁ | ρ₂)
+-- `${k}: τ` (FC-labels phase B) is a field whose label is only known through
+-- its key k. ⌊l⌋-keyed fields are ≈ to the literal field
+-- (`RowEquiv.dsingLab`); substitution does not normalize.
+
+inductive Key : Type where
+  | lit : Label → Key          -- l
+  | var : TyVar → Key          -- α, a label variable
+  deriving DecidableEq, Repr
+
+def Key.ftv : Key → List TyVar
+  | .lit _ => []
+  | .var α => [α]
 
 mutual
   inductive Ty (B : Type) : Type where
@@ -57,13 +73,14 @@ mutual
     | unk  : Ty B                                 -- ★
     | fn   : Ty B → Ty B → Ty B                   -- τ → τ
     | rcd  : Row B → Ty B                         -- { ρ }
-    | lab  : Label → Ty B                         -- ⌊l⌋, a label's singleton type
+    | lab  : Key → Ty B                           -- ⌊k⌋, a label's singleton type
 
   inductive Row (B : Type) : Type where
     | empty : Row B                               -- ε
     | var   : TyVar → Row B                       -- α
     | sing  : Label → Ty B → Row B                -- l: τ
     | cat   : Row B → Row B → Row B               -- ρ₁ | ρ₂
+    | dsing : Key → Ty B → Row B                  -- ${k}: τ
 end
 
 
@@ -85,9 +102,13 @@ structure Scheme (B : Type) where
 --   assoc        reassociating concatenation
 --   unitL/unitR  ε is a unit of concatenation
 --   comm         swapping two adjacent singletons with *distinct* labels
+--   dsing        congruence under a keyed field
+--   dsingLab     a ⌊l⌋-keyed field is the literal field l
 -- Deliberately NOT derivable:
 --   swapping equal labels         (would change shadowing)
 --   moving a field past a row-var (its instantiation could shadow it)
+--   moving a keyed field at all   (a key is a BARRIER, like a row-var: two
+--                                  label variables may be instantiated equal)
 
 mutual
   inductive TyEquiv {B : Type} : Ty B → Ty B → Prop where
@@ -111,6 +132,8 @@ mutual
     | comm  : l₁ ≠ l₂ →
               RowEquiv (.cat (.sing l₁ τ₁) (.sing l₂ τ₂))
                        (.cat (.sing l₂ τ₂) (.sing l₁ τ₁))
+    | dsing : TyEquiv τ₁ τ₂ → RowEquiv (.dsing k τ₁) (.dsing k τ₂)
+    | dsingLab : RowEquiv (.dsing (.lit l) τ) (.sing l τ)
 end
 
 infix:50 " ≈ᵣ " => RowEquiv
@@ -210,11 +233,11 @@ theorem TyEquiv.base_inv_both {B : Type} :
   | _, _, .fn _ _  => ⟨(fun hτ => nomatch hτ), (fun hσ => nomatch hσ)⟩
   | _, _, .rcd _   => ⟨(fun hτ => nomatch hτ), (fun hσ => nomatch hσ)⟩
 
---   …and so are label singletons, for the same reason:  τ = ⌊l⌋ ⟺ σ = ⌊l⌋
+--   …and so are label singletons, for the same reason:  τ = ⌊k⌋ ⟺ σ = ⌊k⌋
 theorem TyEquiv.lab_inv_both {B : Type} :
     {τ σ : Ty B} → TyEquiv τ σ →
-    (∀ {l : Label}, τ = .lab l → σ = .lab l) ∧
-    (∀ {l : Label}, σ = .lab l → τ = .lab l)
+    (∀ {l : Key}, τ = .lab l → σ = .lab l) ∧
+    (∀ {l : Key}, σ = .lab l → τ = .lab l)
   | _, _, .refl _  => ⟨fun h => h, fun h => h⟩
   | _, _, .symm h  =>
       have ih := TyEquiv.lab_inv_both h
@@ -258,14 +281,13 @@ theorem TyEquiv.base_inv {B : Type} {b : B} {σ : Ty B}
     (h : TyEquiv (.base b) σ) : σ = .base b :=
   (TyEquiv.base_inv_both h).1 rfl
 
-theorem TyEquiv.lab_inv {B : Type} {l : Label} {σ : Ty B}
+theorem TyEquiv.lab_inv {B : Type} {l : Key} {σ : Ty B}
     (h : TyEquiv (.lab l) σ) : σ = .lab l :=
   (TyEquiv.lab_inv_both h).1 rfl
 
 theorem TyEquiv.unk_inv {B : Type} {σ : Ty B}
     (h : TyEquiv (.unk : Ty B) σ) : σ = .unk :=
   (TyEquiv.unk_inv_both h).1 rfl
-
 
 ------------------------------------ CONTEXT -----------------------------------
 
@@ -308,6 +330,41 @@ end Ctx
 -- removes the one non-monotone premise in the system (L-α-free needed
 -- `lookupRow α = none`, which context extension could not preserve).
 
+-- ## Keys (FC-labels phase B)
+-- A keyed field `${k}: τ` is compared against a lookup key:
+--
+--   l / l       eq iff same label, else apart
+--   α / α       eq
+--   otherwise   undec                   (a label variable against anything else)
+--
+-- eq and apart are stable under substitution (labels are rigid, and one
+-- variable goes to one key). undec is where `?` lives.
+
+inductive KeyRel : Type where
+  | eq | apart | undec
+  deriving DecidableEq
+
+/-- how lookup key `k` compares with field key `q`. -/
+def Key.cmp : Key → Key → KeyRel
+  | .lit l, .lit l' => if l = l' then .eq else .apart
+  | .lit _, .var _  => .undec
+  | .var _, .lit _  => .undec
+  | .var α, .var β  => if α = β then .eq else .undec
+
+@[simp] theorem Key.cmp_lit_lit (l l' : Label) :
+    Key.cmp (.lit l) (.lit l') = if l = l' then .eq else .apart := rfl
+
+@[simp] theorem Key.cmp_self : (k : Key) → k.cmp k = .eq
+  | .lit _ => by simp [Key.cmp]
+  | .var _ => by simp [Key.cmp]
+
+-- a literal key is undecided only against a label variable
+theorem Key.cmp_lit_undec {l : Label} {q : Key}
+    (h : Key.cmp (.lit l) q = .undec) : ∃ α, q = .var α := by
+  cases q with
+  | var α => exact ⟨α, rfl⟩
+  | lit l' => simp only [Key.cmp_lit_lit] at h; split at h <;> cases h
+
 inductive LookupRes (B : Type) : Type where
   | found   : Ty B → LookupRes B   -- τ
   | absent  : LookupRes B          -- ⊥
@@ -328,6 +385,10 @@ inductive Lookup {B : Type} : Row B → Label → LookupRes B → Prop where
   | catSkip : Lookup ρ₁ l .absent → Lookup ρ₂ l r → Lookup (.cat ρ₁ ρ₂) l r
   -- L-conc-★
   | catUnk : Lookup ρ₁ l .unknown → Lookup (.cat ρ₁ ρ₂) l .unknown
+  -- L-hit / L-miss / L-?-lab against a keyed field
+  | dhit : Key.cmp (.lit l) q = .eq → Lookup (.dsing q τ) l (.found τ)
+  | dmiss : Key.cmp (.lit l) q = .apart → Lookup (.dsing q τ) l .absent
+  | dunk : Key.cmp (.lit l) q = .undec → Lookup (.dsing q τ) l .unknown
 
 
 ------------------------------ LOOKUP METATHEORY --------------------------------
@@ -362,6 +423,21 @@ theorem lookup_det {B : Type} {ρ : Row B} {l : Label}
       | catHit h'    => cases ih h'
       | catSkip h' _ => cases ih h'
       | catUnk _     => rfl
+  | dhit h =>
+      cases h₂ with
+      | dhit _ => rfl
+      | dmiss h' => rw [h] at h'; cases h'
+      | dunk h' => rw [h] at h'; cases h'
+  | dmiss h =>
+      cases h₂ with
+      | dhit h' => rw [h] at h'; cases h'
+      | dmiss _ => rfl
+      | dunk h' => rw [h] at h'; cases h'
+  | dunk h =>
+      cases h₂ with
+      | dhit h' => rw [h] at h'; cases h'
+      | dmiss h' => rw [h] at h'; cases h'
+      | dunk _ => rfl
 
 -- Totality, by BARE STRUCTURAL RECURSION on the row.
 --
@@ -385,6 +461,11 @@ theorem lookup_total {B : Type} : (ρ : Row B) → (l : Label) → ∃ r, Lookup
           match lookup_total ρ₂ l with
           | ⟨_, hr₂⟩ => ⟨_, .catSkip hr₁ hr₂⟩
       | ⟨.unknown, hr₁⟩ => ⟨_, .catUnk hr₁⟩
+  | .dsing q _, l =>
+      match h : Key.cmp (.lit l) q with
+      | .eq => ⟨_, .dhit h⟩
+      | .apart => ⟨_, .dmiss h⟩
+      | .undec => ⟨_, .dunk h⟩
 
 -- ↓ is therefore a FUNCTION of (ρ, l) — `lookup_det` + `lookup_total`, packaged.
 noncomputable def Row.look {B : Type} (ρ : Row B) (l : Label) : LookupRes B :=
@@ -555,6 +636,32 @@ theorem lookup_equiv_both {B : Type} :
   | _, _, .comm hne =>
       ⟨fun hl => ⟨_, lookup_comm_fwd hne hl, .refl _⟩,
        fun hl => ⟨_, lookup_comm_fwd (Ne.symm hne) hl, .refl _⟩⟩
+  | _, _, .dsing hty =>
+      ⟨fun hl => match hl with
+        | .dhit h  => ⟨_, .dhit h, .found hty⟩
+        | .dmiss h => ⟨_, .dmiss h, .absent⟩
+        | .dunk h  => ⟨_, .dunk h, .unknown⟩,
+       fun hl => match hl with
+        | .dhit h  => ⟨_, .dhit h, .found hty.symm⟩
+        | .dmiss h => ⟨_, .dmiss h, .absent⟩
+        | .dunk h  => ⟨_, .dunk h, .unknown⟩⟩
+  | _, _, .dsingLab (l := l') =>
+      ⟨fun {l _} hl => match hl with
+        | .dhit h => (by
+            simp only [Key.cmp_lit_lit] at h
+            split at h
+            · subst l'; exact ⟨_, .hit, .refl _⟩
+            · cases h)
+        | .dmiss h => (by
+            simp only [Key.cmp_lit_lit] at h
+            split at h
+            · cases h
+            · exact ⟨_, .miss (Ne.symm ‹_›), .absent⟩)
+        | .dunk h => (by
+            simp only [Key.cmp_lit_lit] at h; split at h <;> cases h),
+       fun hl => match hl with
+        | .hit => ⟨_, .dhit (by simp), .refl _⟩
+        | .miss hne => ⟨_, .dmiss (by simp [Ne.symm hne]), .absent⟩⟩
 
 -- Lookup respects row equivalence. Calibration check for ≈: any stronger
 -- (swapping equal labels) and this lemma breaks, any weaker and T-eq is useless.
@@ -574,6 +681,7 @@ inductive Row.SpineVarFree {B : Type} : Row B → Prop where
   | empty : SpineVarFree .empty
   | sing  : SpineVarFree (.sing l τ)
   | cat   : SpineVarFree ρ₁ → SpineVarFree ρ₂ → SpineVarFree (.cat ρ₁ ρ₂)
+  | dsing : SpineVarFree (.dsing (.lit l) τ)
 
 -- ≈ preserves the spine: no rule creates or removes a spine variable.
 theorem RowEquiv.spineVarFree {B : Type} :
@@ -600,6 +708,10 @@ theorem RowEquiv.spineVarFree {B : Type} :
       ⟨(fun hv => match hv with | .cat v _ => v), (fun hv => .cat hv .empty)⟩
   | _, _, .comm _ =>
       ⟨(fun _ => .cat .sing .sing), (fun _ => .cat .sing .sing)⟩
+  | _, _, .dsing _ =>
+      ⟨(fun | .dsing => .dsing), (fun | .dsing => .dsing)⟩
+  | _, _, .dsingLab =>
+      ⟨(fun _ => .sing), (fun _ => .dsing)⟩
 
 theorem Lookup.not_unknown_of_spineVarFree {B : Type} {ρ : Row B}
     {l : Label} (hv : ρ.SpineVarFree) (h : Lookup ρ l .unknown) : False := by
@@ -610,6 +722,9 @@ theorem Lookup.not_unknown_of_spineVarFree {B : Type} {ρ : Row B}
       cases h with
       | catSkip _ h₂ => exact ih₂ h₂
       | catUnk h₁    => exact ih₁ h₁
+  | dsing =>
+      cases h with
+      | dunk h => obtain ⟨α, h⟩ := Key.cmp_lit_undec h; cases h
 
 
 ------------------------------ TYPE SUBSTITUTION -------------------------------
@@ -622,12 +737,24 @@ theorem Lookup.not_unknown_of_spineVarFree {B : Type} {ρ : Row B}
 structure TySubst (B : Type) where
   ty  : TyVar → Ty B
   row : TyVar → Row B
+  lab : TyVar → Key
+
+/-- a key under θ: a label variable goes where θ sends it, a label stays -/
+def Key.applySubst {B : Type} (θ : TySubst B) : Key → Key
+  | .lit l => .lit l
+  | .var α => θ.lab α
+
+@[simp] theorem Key.applySubst_lit {B : Type} (θ : TySubst B) (l : Label) :
+    (Key.lit l).applySubst θ = .lit l := rfl
+
+@[simp] theorem Key.applySubst_var {B : Type} (θ : TySubst B) (α : TyVar) :
+    (Key.var α).applySubst θ = θ.lab α := rfl
 
 mutual
   def Ty.applySubst {B : Type} (θ : TySubst B) : Ty B → Ty B
     | .var α    => θ.ty α
     | .base b   => .base b
-    | .lab b   => .lab b
+    | .lab k   => .lab (k.applySubst θ)
     | .unk      => .unk
     | .fn τ₁ τ₂ => .fn (τ₁.applySubst θ) (τ₂.applySubst θ)
     | .rcd ρ    => .rcd (ρ.applySubst θ)
@@ -637,16 +764,21 @@ mutual
     | .var α     => θ.row α
     | .sing l τ  => .sing l (τ.applySubst θ)
     | .cat ρ₁ ρ₂ => .cat (ρ₁.applySubst θ) (ρ₂.applySubst θ)
+    | .dsing q τ => .dsing (q.applySubst θ) (τ.applySubst θ)
 end
 
-def TySubst.id (B : Type) : TySubst B := ⟨(.var ·), (.var ·)⟩
+def TySubst.id (B : Type) : TySubst B := ⟨(.var ·), (.var ·), (.var ·)⟩
+
+theorem Key.applySubst_id {B : Type} : (k : Key) → k.applySubst (TySubst.id B) = k
+  | .lit _ => rfl
+  | .var _ => rfl
 
 mutual
   theorem Ty.applySubst_id {B : Type} :
       (τ : Ty B) → τ.applySubst (TySubst.id B) = τ
     | .var _    => rfl
     | .base _   => rfl
-    | .lab _   => rfl
+    | .lab k   => by simp only [Ty.applySubst, Key.applySubst_id k]
     | .unk      => rfl
     | .fn τ₁ τ₂ => by
         simp only [Ty.applySubst, Ty.applySubst_id τ₁, Ty.applySubst_id τ₂]
@@ -659,6 +791,8 @@ mutual
     | .sing _ τ  => by simp only [Row.applySubst, Ty.applySubst_id τ]
     | .cat ρ₁ ρ₂ => by
         simp only [Row.applySubst, Row.applySubst_id ρ₁, Row.applySubst_id ρ₂]
+    | .dsing q τ => by
+        simp only [Row.applySubst, Key.applySubst_id q, Ty.applySubst_id τ]
 end
 
 -- Free type/row variables, spine and field positions alike.
@@ -666,7 +800,7 @@ mutual
   def Ty.ftv {B : Type} : Ty B → List TyVar
     | .var α    => [α]
     | .base _   => []
-    | .lab _   => []
+    | .lab k   => k.ftv
     | .unk      => []
     | .fn τ₁ τ₂ => τ₁.ftv ++ τ₂.ftv
     | .rcd ρ    => ρ.ftv
@@ -676,6 +810,7 @@ mutual
     | .var α     => [α]
     | .sing _ τ  => τ.ftv
     | .cat ρ₁ ρ₂ => ρ₁.ftv ++ ρ₂.ftv
+    | .dsing q τ => q.ftv ++ τ.ftv
 end
 
 -- ≈ is a congruence for substitution: every axiom is label-driven and
@@ -712,7 +847,30 @@ mutual
     | _, _, .unitL       => by simp only [Row.applySubst]; exact .unitL
     | _, _, .unitR       => by simp only [Row.applySubst]; exact .unitR
     | _, _, .comm hne    => by simp only [Row.applySubst]; exact .comm hne
+    | _, _, .dsing hty => by
+        simp only [Row.applySubst]
+        exact .dsing (TyEquiv.applySubst θ hty)
+    | _, _, .dsingLab    => by simp only [Row.applySubst, Key.applySubst]; exact .dsingLab
 end
+
+-- ⊢  a DEFINITE key comparison survives substitution: labels are rigid, and
+--    one variable goes to one key
+theorem Key.cmp_applySubst {B : Type} (θ : TySubst B) {k q : Key} {c : KeyRel}
+    (h : Key.cmp k q = c) (hc : c ≠ .undec) :
+    Key.cmp (k.applySubst θ) (q.applySubst θ) = c := by
+  cases k with
+  | lit l =>
+      cases q with
+      | lit l' => exact h
+      | var _ => subst h; exact absurd rfl hc
+  | var α =>
+      cases q with
+      | lit _ => subst h; exact absurd rfl hc
+      | var β =>
+          simp only [Key.cmp] at h
+          split at h
+          · subst h; subst β; exact Key.cmp_self _
+          · subst h; exact absurd rfl hc
 
 -- Substitution acts on lookup results pointwise (definite ones, see below).
 def LookupRes.applySubst {B : Type} (θ : TySubst B) : LookupRes B → LookupRes B
@@ -743,58 +901,73 @@ theorem lookup_applySubst {B : Type} {ρ : Row B} {l : Label}
       simp only [Row.applySubst]
       exact .catSkip (ih₁ (by intro h; cases h)) (ih₂ hr)
   | catUnk _ _ => exact absurd rfl hr
+  | dhit h     => exact .dhit (Key.cmp_applySubst θ h (by simp))
+  | dmiss h    => exact .dmiss (Key.cmp_applySubst θ h (by simp))
+  | dunk _     => exact absurd rfl hr
 
 -- ## Instantiation  σ ≥ τ
 -- θ acts only on the quantified variables; everything else stays put.
 
 def TySubst.FixedOutside {B : Type} (θ : TySubst B) (ᾱ : List TyVar) : Prop :=
-  (∀ α, α ∉ ᾱ → θ.ty α = .var α) ∧ (∀ α, α ∉ ᾱ → θ.row α = .var α)
+  (∀ α, α ∉ ᾱ → θ.ty α = .var α) ∧ (∀ α, α ∉ ᾱ → θ.row α = .var α) ∧
+    (∀ α, α ∉ ᾱ → θ.lab α = .var α)
 
 def Scheme.Inst {B : Type} (σ : Scheme B) (τ : Ty B) : Prop :=
   ∃ θ : TySubst B, θ.FixedOutside σ.vars ∧ σ.body.applySubst θ = τ
 
 -- A pointwise-identity substitution acts as the identity.
+theorem Key.applySubst_fixed {B : Type} {θ : TySubst B}
+    (hl : ∀ α, θ.lab α = .var α) : (k : Key) → k.applySubst θ = k
+  | .lit _ => rfl
+  | .var α => hl α
+
 mutual
   theorem Ty.applySubst_fixed {B : Type} {θ : TySubst B}
-      (ht : ∀ α, θ.ty α = .var α) (hr : ∀ α, θ.row α = .var α) :
+      (ht : ∀ α, θ.ty α = .var α) (hr : ∀ α, θ.row α = .var α)
+      (hl : ∀ α, θ.lab α = .var α) :
       (τ : Ty B) → τ.applySubst θ = τ
     | .var α    => ht α
     | .base _   => rfl
-    | .lab _   => rfl
+    | .lab k    => by simp only [Ty.applySubst, Key.applySubst_fixed hl k]
     | .unk      => rfl
     | .fn τ₁ τ₂ => by
-        simp only [Ty.applySubst, Ty.applySubst_fixed ht hr τ₁,
-                   Ty.applySubst_fixed ht hr τ₂]
-    | .rcd ρ    => by simp only [Ty.applySubst, Row.applySubst_fixed ht hr ρ]
+        simp only [Ty.applySubst, Ty.applySubst_fixed ht hr hl τ₁,
+                   Ty.applySubst_fixed ht hr hl τ₂]
+    | .rcd ρ    => by simp only [Ty.applySubst, Row.applySubst_fixed ht hr hl ρ]
 
   theorem Row.applySubst_fixed {B : Type} {θ : TySubst B}
-      (ht : ∀ α, θ.ty α = .var α) (hr : ∀ α, θ.row α = .var α) :
+      (ht : ∀ α, θ.ty α = .var α) (hr : ∀ α, θ.row α = .var α)
+      (hl : ∀ α, θ.lab α = .var α) :
       (ρ : Row B) → ρ.applySubst θ = ρ
     | .empty     => rfl
     | .var α     => hr α
-    | .sing _ τ  => by simp only [Row.applySubst, Ty.applySubst_fixed ht hr τ]
+    | .sing _ τ  => by simp only [Row.applySubst, Ty.applySubst_fixed ht hr hl τ]
     | .cat ρ₁ ρ₂ => by
-        simp only [Row.applySubst, Row.applySubst_fixed ht hr ρ₁,
-                   Row.applySubst_fixed ht hr ρ₂]
+        simp only [Row.applySubst, Row.applySubst_fixed ht hr hl ρ₁,
+                   Row.applySubst_fixed ht hr hl ρ₂]
+    | .dsing q τ => by
+        simp only [Row.applySubst, Key.applySubst_fixed hl q,
+                   Ty.applySubst_fixed ht hr hl τ]
 end
 
 -- Monotype schemes instantiate only to themselves (I-refl is the whole story).
 theorem Scheme.Inst.mono {B : Type} {τ₁ τ : Ty B}
     (h : Scheme.Inst ⟨[], τ₁⟩ τ) : τ = τ₁ := by
-  obtain ⟨θ, ⟨ht, hr⟩, hτ⟩ := h
+  obtain ⟨θ, ⟨ht, hr, hl⟩, hτ⟩ := h
   rw [← hτ]
   exact Ty.applySubst_fixed
     (fun α => ht α (List.not_mem_nil))
-    (fun α => hr α (List.not_mem_nil)) τ₁
+    (fun α => hr α (List.not_mem_nil))
+    (fun α => hl α (List.not_mem_nil)) τ₁
 
 theorem Scheme.Inst.refl {B : Type} (τ : Ty B) : Scheme.Inst ⟨[], τ⟩ τ :=
-  ⟨TySubst.id B, ⟨fun _ _ => rfl, fun _ _ => rfl⟩, Ty.applySubst_id τ⟩
+  ⟨TySubst.id B, ⟨fun _ _ => rfl, fun _ _ => rfl, fun _ _ => rfl⟩, Ty.applySubst_id τ⟩
 
 -- Every scheme has at least its own body as an instance (θ = id): schemes are
 -- never vacuous, which is what lets progress extract *some* typing for a
 -- let-bound expression.
 theorem Scheme.Inst.self {B : Type} (σ : Scheme B) : σ.Inst σ.body :=
-  ⟨TySubst.id B, ⟨fun _ _ => rfl, fun _ _ => rfl⟩, Ty.applySubst_id σ.body⟩
+  ⟨TySubst.id B, ⟨fun _ _ => rfl, fun _ _ => rfl, fun _ _ => rfl⟩, Ty.applySubst_id σ.body⟩
 
 
 ------------------------------- TYPING RELATION --------------------------------
@@ -1171,6 +1344,7 @@ mutual
         .letE y (subst x v e₁) (if x == y then e₂ else subst x v e₂)
     | .lab l      => .lab l
     | .selDyn e₁ e₂ => .selDyn (subst x v e₁) (subst x v e₂)
+    | .rcdDyn e₁ e₂ => .rcdDyn (subst x v e₁) (subst x v e₂)
 
   def substBody {C : Type} (x : Var) (v : Expr C) : RecBody (Expr C) → RecBody (Expr C)
     | .empty      => .empty
@@ -1304,6 +1478,13 @@ inductive Step {C : Type} : Expr C → Expr C → Prop where
   | selDynVal {b : RecBody (Expr C)} {l : Label} {e : Expr C} :
       RecBody.lookup l b = some e →
       Step (.selDyn (.rcd b) (.lab l)) e
+  -- dynamic construction: the key is evaluated, the field stays a thunk (lazy,
+  -- as in a record literal); a label key makes it the literal record
+  | rcdDynKey {e₁ e₁' e₂ : Expr C} :
+      Step e₁ e₁' →
+      Step (.rcdDyn e₁ e₂) (.rcdDyn e₁' e₂)
+  | rcdDynVal {l : Label} {e : Expr C} :
+      Step (.rcdDyn (.lab l) e) (.rcd (.field l e))
 
 
 ---------------------------------- PROGRESS ---------------------------------
@@ -1333,6 +1514,10 @@ inductive Err {C : Type} : Expr C → Prop where
       Value v → (∀ l, v ≠ .lab l) → Err (.selDyn (.rcd b) v)
   | selDynL  : Err e₁ → Err (.selDyn e₁ e₂)
   | selDynR  : Value e₁ → Err e₂ → Err (.selDyn e₁ e₂)
+  -- a dynamic construction errs on a key that is not a label
+  | rcdDynKeyBad {v : Expr C} :
+      Value v → (∀ l, v ≠ .lab l) → Err (.rcdDyn v e₂)
+  | rcdDynKey : Err e₁ → Err (.rcdDyn e₁ e₂)
 
 inductive Progress {C : Type} (e : Expr C) : Prop where
   | step : Step e e' → Progress e
@@ -1665,8 +1850,8 @@ example {B C : Type} (constTy : C → B) :
   · -- the body instantiates f at β ≔ ε and applies it to {}
     have hif : Scheme.Inst (⟨["β"], .fn (.rcd (.var "β")) .unk⟩ : Scheme B)
         (.fn (.rcd .empty) .unk) := by
-      refine ⟨⟨fun α => .var α, fun α => if α == "β" then .empty else .var α⟩,
-        ⟨fun _ _ => rfl, fun α hα => ?_⟩, ?_⟩
+      refine ⟨⟨fun α => .var α, fun α => if α == "β" then .empty else .var α, fun α => .var α⟩,
+        ⟨fun _ _ => rfl, fun α hα => ?_, fun _ _ => rfl⟩, ?_⟩
       · simp only [List.mem_singleton] at hα
         simp [hα]
       · simp [Ty.applySubst, Row.applySubst]
@@ -1679,14 +1864,25 @@ example {B C : Type} (constTy : C → B) :
 
 -- θ₂.comp θ₁: first θ₁, then θ₂.
 def TySubst.comp {B : Type} (θ₂ θ₁ : TySubst B) : TySubst B :=
-  ⟨fun α => (θ₁.ty α).applySubst θ₂, fun α => (θ₁.row α).applySubst θ₂⟩
+  ⟨fun α => (θ₁.ty α).applySubst θ₂, fun α => (θ₁.row α).applySubst θ₂,
+   fun α => (θ₁.lab α).applySubst θ₂⟩
+
+theorem Key.applySubst_applySubst {B : Type} (θ₁ θ₂ : TySubst B) :
+    (k : Key) → (k.applySubst θ₁).applySubst θ₂ = k.applySubst (θ₂.comp θ₁)
+  | .lit _ => rfl
+  | .var _ => rfl
+
+theorem Key.applySubst_congr {B : Type} {θ₁ θ₂ : TySubst B} :
+    (k : Key) → (∀ α ∈ k.ftv, θ₁.lab α = θ₂.lab α) → k.applySubst θ₁ = k.applySubst θ₂
+  | .lit _, _ => rfl
+  | .var α, h => h α (by simp [Key.ftv])
 
 mutual
   theorem Ty.applySubst_applySubst {B : Type} (θ₁ θ₂ : TySubst B) :
       (τ : Ty B) → (τ.applySubst θ₁).applySubst θ₂ = τ.applySubst (θ₂.comp θ₁)
     | .var _    => by simp only [Ty.applySubst, TySubst.comp]
     | .base _   => rfl
-    | .lab _   => rfl
+    | .lab k   => by simp only [Ty.applySubst, Key.applySubst_applySubst θ₁ θ₂ k]
     | .unk      => rfl
     | .fn τ₁ τ₂ => by
         simp only [Ty.applySubst, Ty.applySubst_applySubst θ₁ θ₂ τ₁,
@@ -1703,19 +1899,24 @@ mutual
     | .cat ρ₁ ρ₂ => by
         simp only [Row.applySubst, Row.applySubst_applySubst θ₁ θ₂ ρ₁,
                    Row.applySubst_applySubst θ₁ θ₂ ρ₂]
+    | .dsing q τ => by
+        simp only [Row.applySubst, Key.applySubst_applySubst θ₁ θ₂ q,
+                   Ty.applySubst_applySubst θ₁ θ₂ τ]
 end
 
 -- applySubst only consults θ on the subject's free variables.
 mutual
   theorem Ty.applySubst_congr {B : Type} {θ₁ θ₂ : TySubst B} :
       (τ : Ty B) →
-      (∀ α ∈ τ.ftv, θ₁.ty α = θ₂.ty α ∧ θ₁.row α = θ₂.row α) →
+      (∀ α ∈ τ.ftv, θ₁.ty α = θ₂.ty α ∧ θ₁.row α = θ₂.row α ∧ θ₁.lab α = θ₂.lab α) →
       τ.applySubst θ₁ = τ.applySubst θ₂
     | .var α, h    => by
         simp only [Ty.applySubst]
         exact (h α (by simp [Ty.ftv])).1
     | .base _, _   => rfl
-    | .lab _, _   => rfl
+    | .lab k, h   => by
+        simp only [Ty.applySubst]
+        rw [Key.applySubst_congr k (fun α hα => (h α (by simpa [Ty.ftv] using hα)).2.2)]
     | .unk, _      => rfl
     | .fn τ₁ τ₂, h => by
         simp only [Ty.applySubst]
@@ -1727,12 +1928,12 @@ mutual
 
   theorem Row.applySubst_congr {B : Type} {θ₁ θ₂ : TySubst B} :
       (ρ : Row B) →
-      (∀ α ∈ ρ.ftv, θ₁.ty α = θ₂.ty α ∧ θ₁.row α = θ₂.row α) →
+      (∀ α ∈ ρ.ftv, θ₁.ty α = θ₂.ty α ∧ θ₁.row α = θ₂.row α ∧ θ₁.lab α = θ₂.lab α) →
       ρ.applySubst θ₁ = ρ.applySubst θ₂
     | .empty, _     => rfl
     | .var α, h     => by
         simp only [Row.applySubst]
-        exact (h α (by simp [Row.ftv])).2
+        exact (h α (by simp [Row.ftv])).2.1
     | .sing _ τ, h  => by
         simp only [Row.applySubst]
         rw [Ty.applySubst_congr τ (fun α hα => h α (by simpa [Row.ftv] using hα))]
@@ -1740,18 +1941,22 @@ mutual
         simp only [Row.applySubst]
         rw [Row.applySubst_congr ρ₁ (fun α hα => h α (by simp [Row.ftv, hα])),
             Row.applySubst_congr ρ₂ (fun α hα => h α (by simp [Row.ftv, hα]))]
+    | .dsing q τ, h => by
+        simp only [Row.applySubst]
+        rw [Key.applySubst_congr q (fun α hα => (h α (by simp [Row.ftv, hα])).2.2),
+            Ty.applySubst_congr τ (fun α hα => h α (by simp [Row.ftv, hα]))]
 end
 
 -- Local version of applySubst_fixed: fixing just the subject's ftv suffices.
 theorem Ty.applySubst_fixed_ftv {B : Type} {θ : TySubst B} (τ : Ty B)
-    (h : ∀ α ∈ τ.ftv, θ.ty α = .var α ∧ θ.row α = .var α) :
+    (h : ∀ α ∈ τ.ftv, θ.ty α = .var α ∧ θ.row α = .var α ∧ θ.lab α = .var α) :
     τ.applySubst θ = τ := by
   rw [Ty.applySubst_congr (θ₂ := TySubst.id B) τ
         (fun α hα => by simpa [TySubst.id] using h α hα),
       Ty.applySubst_id]
 
 theorem Row.applySubst_fixed_ftv {B : Type} {θ : TySubst B} (ρ : Row B)
-    (h : ∀ α ∈ ρ.ftv, θ.ty α = .var α ∧ θ.row α = .var α) :
+    (h : ∀ α ∈ ρ.ftv, θ.ty α = .var α ∧ θ.row α = .var α ∧ θ.lab α = .var α) :
     ρ.applySubst θ = ρ := by
   rw [Row.applySubst_congr (θ₂ := TySubst.id B) ρ
         (fun α hα => by simpa [TySubst.id] using h α hα),
@@ -1857,7 +2062,7 @@ theorem mkRen_spec {α : TyVar} :
 -- substitution lemma, where θ must be perturbed on freshly chosen binders.
 
 def SchemeAgree {B : Type} (θ χ : TySubst B) (σ : Scheme B) : Prop :=
-  ∀ α ∈ σ.body.ftv, α ∉ σ.vars → χ.ty α = θ.ty α ∧ χ.row α = θ.row α
+  ∀ α ∈ σ.body.ftv, α ∉ σ.vars → χ.ty α = θ.ty α ∧ χ.row α = θ.row α ∧ χ.lab α = θ.lab α
 
 def Covers {B : Type} (θ : TySubst B) (σ σ' : Scheme B) : Prop :=
   ∀ χ, SchemeAgree θ χ σ → ∀ τ, σ.Inst τ → σ'.Inst (τ.applySubst χ)
@@ -1866,13 +2071,15 @@ def Covers {B : Type} (θ : TySubst B) (σ σ' : Scheme B) : Prop :=
 -- bound variables to their fresh partners (identity elsewhere)
 private def renSub {B : Type} (prs : List (TyVar × TyVar)) : TySubst B :=
   ⟨fun α => .var (match prs.find? (·.1 == α) with | some p => p.2 | none => α),
+   fun α => .var (match prs.find? (·.1 == α) with | some p => p.2 | none => α),
    fun α => .var (match prs.find? (·.1 == α) with | some p => p.2 | none => α)⟩
 
 -- θ acting through the renamed binder (identity on the fresh names)
 private def outSub {B : Type} (θ : TySubst B) (prs : List (TyVar × TyVar)) :
     TySubst B :=
   ⟨fun β => if (prs.find? (·.2 == β)).isSome then .var β else θ.ty β,
-   fun β => if (prs.find? (·.2 == β)).isSome then .var β else θ.row β⟩
+   fun β => if (prs.find? (·.2 == β)).isSome then .var β else θ.row β,
+   fun β => if (prs.find? (·.2 == β)).isSome then .var β else θ.lab β⟩
 
 -- bwdSub: instantiate a fresh binder the way χ ∘ θ₁ instantiates its original
 private def bwdSub {B : Type} (prs : List (TyVar × TyVar)) (θ₁ χ : TySubst B) :
@@ -1882,13 +2089,17 @@ private def bwdSub {B : Type} (prs : List (TyVar × TyVar)) (θ₁ χ : TySubst 
      | none => .var β,
    fun β => match prs.find? (·.2 == β) with
      | some p => (θ₁.row p.1).applySubst χ
+     | none => .var β,
+   fun β => match prs.find? (·.2 == β) with
+     | some p => (θ₁.lab p.1).applySubst χ
      | none => .var β⟩
 
 -- mixSub: θ₂ on the fresh binders, θ elsewhere
 private def mixSub {B : Type} (prs : List (TyVar × TyVar)) (θ₂ θ : TySubst B) :
     TySubst B :=
   ⟨fun γ => if (prs.find? (·.2 == γ)).isSome then θ₂.ty γ else θ.ty γ,
-   fun γ => if (prs.find? (·.2 == γ)).isSome then θ₂.row γ else θ.row γ⟩
+   fun γ => if (prs.find? (·.2 == γ)).isSome then θ₂.row γ else θ.row γ,
+   fun γ => if (prs.find? (·.2 == γ)).isSome then θ₂.lab γ else θ.lab γ⟩
 
 -- Core of the renaming argument, abstracted over the pairing list prs.
 private theorem renameScheme_core {B : Type} (θ : TySubst B) (σ : Scheme B)
@@ -1896,6 +2107,7 @@ private theorem renameScheme_core {B : Type} (θ : TySubst B) (σ : Scheme B)
     (hbody : ∀ α ∈ σ.body.ftv, α ∈ avoid)
     (himgTy : ∀ α ∈ σ.body.ftv, ∀ β ∈ (θ.ty α).ftv, β ∈ avoid)
     (himgRow : ∀ α ∈ σ.body.ftv, ∀ β ∈ (θ.row α).ftv, β ∈ avoid)
+    (himgLab : ∀ α ∈ σ.body.ftv, ∀ β ∈ (θ.lab α).ftv, β ∈ avoid)
     (hspec : ∀ α ∈ σ.vars, ∃ β, prs.find? (·.1 == α) = some (α, β) ∧
         prs.find? (·.2 == β) = some (α, β))
     (hfstNone : ∀ α ∉ σ.vars, prs.find? (·.1 == α) = none)
@@ -1903,7 +2115,7 @@ private theorem renameScheme_core {B : Type} (θ : TySubst B) (σ : Scheme B)
     ∃ σ' : Scheme B,
       Covers θ σ σ' ∧
       (∀ τ'', σ'.Inst τ'' → ∃ χ τ₀, σ.Inst τ₀ ∧ τ'' = τ₀.applySubst χ ∧
-        ∀ γ ∈ avoid, χ.ty γ = θ.ty γ ∧ χ.row γ = θ.row γ) := by
+        ∀ γ ∈ avoid, χ.ty γ = θ.ty γ ∧ χ.row γ = θ.row γ ∧ χ.lab γ = θ.lab γ) := by
   -- avoid-members never appear among the fresh binders
   have hnotMemNone : ∀ β, β ∉ prs.map (·.2) → prs.find? (·.2 == β) = none := by
     intro β hβ
@@ -1920,8 +2132,10 @@ private theorem renameScheme_core {B : Type} (θ : TySubst B) (σ : Scheme B)
   refine ⟨⟨prs.map (·.2),
     (σ.body.applySubst (renSub prs)).applySubst (outSub θ prs)⟩, ?_, ?_⟩
   · -- Covers: a χ-image of an instance θ₁ is the bwdSub-instance of σ'
-    rintro χ hagree τ ⟨θ₁, ⟨hfixTy, hfixRow⟩, rfl⟩
-    refine ⟨bwdSub prs θ₁ χ, ⟨?_, ?_⟩, ?_⟩
+    rintro χ hagree τ ⟨θ₁, ⟨hfixTy, hfixRow, hfixLab⟩, rfl⟩
+    refine ⟨bwdSub prs θ₁ χ, ⟨?_, ?_, ?_⟩, ?_⟩
+    · intro β hβ
+      simp [bwdSub, hnotMemNone β hβ]
     · intro β hβ
       simp [bwdSub, hnotMemNone β hβ]
     · intro β hβ
@@ -1932,26 +2146,37 @@ private theorem renameScheme_core {B : Type} (θ : TySubst B) (σ : Scheme B)
       intro α hα
       by_cases hv : α ∈ σ.vars
       · obtain ⟨β, hfwd, hbwd⟩ := hspec α hv
-        constructor
+        refine ⟨?_, ?_, ?_⟩
         · simp [TySubst.comp, renSub, hfwd, Ty.applySubst, outSub, hbwd, bwdSub]
         · simp [TySubst.comp, renSub, hfwd, Ty.applySubst, Row.applySubst,
                 outSub, hbwd, bwdSub]
+        · simp [TySubst.comp, renSub, hfwd, outSub, hbwd, bwdSub]
       · have h1 : (θ.ty α).applySubst (bwdSub prs θ₁ χ) = θ.ty α :=
           Ty.applySubst_fixed_ftv _ (fun γ hγ => by
             simp [bwdSub, hsndNone γ (himgTy α hα γ hγ)])
         have h2 : (θ.row α).applySubst (bwdSub prs θ₁ χ) = θ.row α :=
           Row.applySubst_fixed_ftv _ (fun γ hγ => by
             simp [bwdSub, hsndNone γ (himgRow α hα γ hγ)])
-        constructor
+        have h3 : (θ.lab α).applySubst (bwdSub prs θ₁ χ) = θ.lab α := by
+          cases hk : θ.lab α with
+          | lit _ => rfl
+          | var γ =>
+              have := hsndNone γ (himgLab α hα γ (by simp [hk, Key.ftv]))
+              simp [bwdSub, this]
+        refine ⟨?_, ?_, ?_⟩
         · simp [TySubst.comp, renSub, hfstNone α hv, Ty.applySubst, outSub,
                 hsndNone α (hbody α hα), h1, hfixTy α hv, (hagree α hα hv).1]
         · simp [TySubst.comp, renSub, hfstNone α hv, Ty.applySubst,
                 Row.applySubst, outSub, hsndNone α (hbody α hα), h2,
-                hfixRow α hv, (hagree α hα hv).2]
+                hfixRow α hv, (hagree α hα hv).2.1]
+        · simp [TySubst.comp, renSub, hfstNone α hv,
+                outSub, hsndNone α (hbody α hα), h3,
+                hfixLab α hv, (hagree α hα hv).2.2]
   · -- every σ'-instance θ₂ is the mixSub-image of the renamed σ-instance
-    rintro τ'' ⟨θ₂, ⟨hfx2Ty, hfx2Row⟩, rfl⟩
+    rintro τ'' ⟨θ₂, ⟨hfx2Ty, hfx2Row, hfx2Lab⟩, rfl⟩
     refine ⟨mixSub prs θ₂ θ, σ.body.applySubst (renSub prs),
-      ⟨renSub prs, ⟨?_, ?_⟩, rfl⟩, ?_, ?_⟩
+      ⟨renSub prs, ⟨?_, ?_, ?_⟩, rfl⟩, ?_, ?_⟩
+    · intro α hα; simp [renSub, hfstNone α hα]
     · intro α hα; simp [renSub, hfstNone α hα]
     · intro α hα; simp [renSub, hfstNone α hα]
     · rw [Ty.applySubst_applySubst, Ty.applySubst_applySubst,
@@ -1960,23 +2185,33 @@ private theorem renameScheme_core {B : Type} (θ : TySubst B) (σ : Scheme B)
       intro α hα
       by_cases hv : α ∈ σ.vars
       · obtain ⟨β, hfwd, hbwd⟩ := hspec α hv
-        constructor
+        refine ⟨?_, ?_, ?_⟩
         · simp [TySubst.comp, renSub, hfwd, Ty.applySubst, outSub, hbwd, mixSub]
         · simp [TySubst.comp, renSub, hfwd, Ty.applySubst, Row.applySubst,
                 outSub, hbwd, mixSub]
+        · simp [TySubst.comp, renSub, hfwd, outSub, hbwd, mixSub]
       · have h1 : (θ.ty α).applySubst θ₂ = θ.ty α :=
           Ty.applySubst_fixed_ftv _ (fun γ hγ =>
             ⟨hfx2Ty γ (hsndNotMem γ (himgTy α hα γ hγ)),
-             hfx2Row γ (hsndNotMem γ (himgTy α hα γ hγ))⟩)
+             hfx2Row γ (hsndNotMem γ (himgTy α hα γ hγ)),
+             hfx2Lab γ (hsndNotMem γ (himgTy α hα γ hγ))⟩)
         have h2 : (θ.row α).applySubst θ₂ = θ.row α :=
           Row.applySubst_fixed_ftv _ (fun γ hγ =>
             ⟨hfx2Ty γ (hsndNotMem γ (himgRow α hα γ hγ)),
-             hfx2Row γ (hsndNotMem γ (himgRow α hα γ hγ))⟩)
-        constructor
+             hfx2Row γ (hsndNotMem γ (himgRow α hα γ hγ)),
+             hfx2Lab γ (hsndNotMem γ (himgRow α hα γ hγ))⟩)
+        have h3 : (θ.lab α).applySubst θ₂ = θ.lab α := by
+          cases hk : θ.lab α with
+          | lit _ => rfl
+          | var γ =>
+              exact hfx2Lab γ (hsndNotMem γ (himgLab α hα γ (by simp [hk, Key.ftv])))
+        refine ⟨?_, ?_, ?_⟩
         · simp [TySubst.comp, renSub, hfstNone α hv, Ty.applySubst, outSub,
                 hsndNone α (hbody α hα), h1, mixSub]
         · simp [TySubst.comp, renSub, hfstNone α hv, Ty.applySubst,
                 Row.applySubst, outSub, hsndNone α (hbody α hα), h2, mixSub]
+        · simp [TySubst.comp, renSub, hfstNone α hv,
+                outSub, hsndNone α (hbody α hα), h3, mixSub]
     · intro γ hγ
       simp [mixSub, hsndNone γ hγ]
 
@@ -1986,13 +2221,14 @@ theorem renameScheme {B : Type} (θ : TySubst B) (σ : Scheme B)
     (avoid : List TyVar)
     (hbody : ∀ α ∈ σ.body.ftv, α ∈ avoid)
     (himgTy : ∀ α ∈ σ.body.ftv, ∀ β ∈ (θ.ty α).ftv, β ∈ avoid)
-    (himgRow : ∀ α ∈ σ.body.ftv, ∀ β ∈ (θ.row α).ftv, β ∈ avoid) :
+    (himgRow : ∀ α ∈ σ.body.ftv, ∀ β ∈ (θ.row α).ftv, β ∈ avoid)
+    (himgLab : ∀ α ∈ σ.body.ftv, ∀ β ∈ (θ.lab α).ftv, β ∈ avoid) :
     ∃ σ' : Scheme B,
       Covers θ σ σ' ∧
       (∀ τ'', σ'.Inst τ'' → ∃ χ τ₀, σ.Inst τ₀ ∧ τ'' = τ₀.applySubst χ ∧
-        ∀ γ ∈ avoid, χ.ty γ = θ.ty γ ∧ χ.row γ = θ.row γ) := by
+        ∀ γ ∈ avoid, χ.ty γ = θ.ty γ ∧ χ.row γ = θ.row γ ∧ χ.lab γ = θ.lab γ) := by
   refine renameScheme_core θ σ avoid (mkRen σ.vars (lenBound avoid + 1))
-    hbody himgTy himgRow ?_ ?_ ?_
+    hbody himgTy himgRow himgLab ?_ ?_ ?_
   · intro α hα
     obtain ⟨β, hfwd, hbwd, -⟩ := mkRen_spec (n := lenBound avoid + 1) hα
     exact ⟨β, hfwd, hbwd⟩
@@ -2034,15 +2270,15 @@ theorem Ctx.lookup_ftv_subset {B : Type} {Γ : Ctx B} {x : Var} {σ : Scheme B}
 -- Perturbing θ outside Γ's outward-visible variables preserves the relation.
 theorem InstMap.perturb {B : Type} {θ χ : TySubst B} {Γ Γ' : Ctx B}
     (h : InstMap θ Γ Γ')
-    (hagree : ∀ γ ∈ Γ.schemeFtv, χ.ty γ = θ.ty γ ∧ χ.row γ = θ.row γ) :
+    (hagree : ∀ γ ∈ Γ.schemeFtv, χ.ty γ = θ.ty γ ∧ χ.row γ = θ.row γ ∧ χ.lab γ = θ.lab γ) :
     InstMap χ Γ Γ' := by
   intro x σ hx
   obtain ⟨σ', hx', hcov⟩ := h x σ hx
   refine ⟨σ', hx', fun χ₂ hagree₂ τ hinst => ?_⟩
   refine hcov χ₂ (fun α hα hnv => ?_) τ hinst
-  obtain ⟨e1, e2⟩ := hagree₂ α hα hnv
-  obtain ⟨f1, f2⟩ := hagree α (Ctx.lookup_ftv_subset hx α hα)
-  exact ⟨e1.trans f1, e2.trans f2⟩
+  obtain ⟨e1, e2, e3⟩ := hagree₂ α hα hnv
+  obtain ⟨f1, f2, f3⟩ := hagree α (Ctx.lookup_ftv_subset hx α hα)
+  exact ⟨e1.trans f1, e2.trans f2, e3.trans f3⟩
 
 -- Monotype bindings are covered by their θ-image.
 theorem Covers.mono {B : Type} (θ : TySubst B) (τ₁ : Ty B) :
@@ -2079,7 +2315,7 @@ theorem typed_applySubst_aux {B C : Type} {constTy : C → B} :
       simp only [Ty.applySubst]; exact .tCon
   | _, _, _, .tVar h hi, θ, _, hmap => by
       obtain ⟨σ', hlook, hcov⟩ := hmap _ _ h
-      exact .tVar hlook (hcov θ (fun α _ _ => ⟨rfl, rfl⟩) _ hi)
+      exact .tVar hlook (hcov θ (fun α _ _ => ⟨rfl, rfl, rfl⟩) _ hi)
   | _, _, _, .tEq h heq, θ, _, hmap =>
       .tEq (typed_applySubst_aux h hmap) (TyEquiv.applySubst θ heq)
   | _, _, _, .tLam h, θ, _, hmap => by
@@ -2124,10 +2360,12 @@ theorem typed_applySubst_aux {B C : Type} {constTy : C → B} :
   | Γ, .letE x e₁ e₂, _, .tLet (σ := σ) h₁ h₂, θ, Γ', hmap => by
       obtain ⟨σ'', hcov, hsrc⟩ := renameScheme θ σ
         (σ.body.ftv ++ (Γ.schemeFtv ++
-          σ.body.ftv.flatMap (fun α => (θ.ty α).ftv ++ (θ.row α).ftv)))
+          σ.body.ftv.flatMap (fun α => (θ.ty α).ftv ++ (θ.row α).ftv ++ (θ.lab α).ftv)))
         (fun α hα => List.mem_append_left _ hα)
         (fun α hα β hβ => List.mem_append_right _ (List.mem_append_right _
-          (List.mem_flatMap.mpr ⟨α, hα, List.mem_append_left _ hβ⟩)))
+          (List.mem_flatMap.mpr ⟨α, hα, List.mem_append_left _ (List.mem_append_left _ hβ)⟩)))
+        (fun α hα β hβ => List.mem_append_right _ (List.mem_append_right _
+          (List.mem_flatMap.mpr ⟨α, hα, List.mem_append_left _ (List.mem_append_right _ hβ)⟩)))
         (fun α hα β hβ => List.mem_append_right _ (List.mem_append_right _
           (List.mem_flatMap.mpr ⟨α, hα, List.mem_append_right _ hβ⟩)))
       refine .tLet (σ := σ'') (fun τ'' hi => ?_)
@@ -2161,25 +2399,28 @@ theorem typed_applySubst {B C : Type} {constTy : C → B} {Γ : Ctx B}
     {e : Expr C} {τ : Ty B} {θ : TySubst B}
     (h : Typed constTy Γ e τ)
     (hfix : ∀ x σ, Γ.lookup x = some σ → ∀ α ∈ σ.body.ftv, α ∉ σ.vars →
-      θ.ty α = .var α ∧ θ.row α = .var α) :
+      θ.ty α = .var α ∧ θ.row α = .var α ∧ θ.lab α = .var α) :
     Typed constTy Γ e (τ.applySubst θ) := by
   refine typed_applySubst_aux h (fun x σ hx => ⟨σ, hx, ?_⟩)
   -- every scheme covers itself: χ agrees with θ outside the binders, and θ is
   -- the identity there, so the composite is again an instantiation
-  rintro χ hagree τ' ⟨θ₁, ⟨hfixTy, hfixRow⟩, rfl⟩
+  rintro χ hagree τ' ⟨θ₁, ⟨hfixTy, hfixRow, hfixLab⟩, rfl⟩
   refine ⟨⟨fun α => if α ∈ σ.vars then (θ₁.ty α).applySubst χ else .var α,
-           fun α => if α ∈ σ.vars then (θ₁.row α).applySubst χ else .var α⟩,
-    ⟨fun α hα => by simp [hα], fun α hα => by simp [hα]⟩, ?_⟩
+           fun α => if α ∈ σ.vars then (θ₁.row α).applySubst χ else .var α,
+           fun α => if α ∈ σ.vars then (θ₁.lab α).applySubst χ else .var α⟩,
+    ⟨fun α hα => by simp [hα], fun α hα => by simp [hα], fun α hα => by simp [hα]⟩, ?_⟩
   rw [Ty.applySubst_applySubst]
   apply Ty.applySubst_congr
   intro α hα
   by_cases hv : α ∈ σ.vars
-  · constructor <;> simp [TySubst.comp, hv]
-  · constructor
+  · refine ⟨?_, ?_, ?_⟩ <;> simp [TySubst.comp, hv]
+  · refine ⟨?_, ?_, ?_⟩
     · simp [TySubst.comp, hv, hfixTy α hv, Ty.applySubst,
             (hagree α hα hv).1, (hfix x σ hx α hα hv).1]
     · simp [TySubst.comp, hv, hfixRow α hv, Row.applySubst,
-            (hagree α hα hv).2, (hfix x σ hx α hα hv).2]
+            (hagree α hα hv).2.1, (hfix x σ hx α hα hv).2.1]
+    · simp [TySubst.comp, hv, hfixLab α hv,
+            (hagree α hα hv).2.2, (hfix x σ hx α hα hv).2.2]
 
 -- Admissibility of the standard, syntactic HM generalization rule: ONE
 -- derivation of the binding, plus ᾱ ∩ ftv(Γ) = ∅ (phrased through lookups),
@@ -2191,11 +2432,11 @@ theorem tLet_syntactic {B C : Type} {constTy : C → B} {Γ : Ctx B} {x : Var}
     (h₂ : Typed constTy (Γ.bindScheme x ⟨ᾱ, τ₁⟩) e₂ τ₂) :
     Typed constTy Γ (.letE x e₁ e₂) τ₂ := by
   refine .tLet (σ := ⟨ᾱ, τ₁⟩) (fun τ' hi => ?_) h₂
-  obtain ⟨θ, ⟨hty, hrw⟩, rfl⟩ := hi
+  obtain ⟨θ, ⟨hty, hrw, hlb⟩, rfl⟩ := hi
   refine typed_applySubst h₁ (fun y σ hy α hα hnv => ?_)
   by_cases hin : α ∈ ᾱ
   · exact absurd (hfresh α hin y σ hy hα) hnv
-  · exact ⟨hty α hin, hrw α hin⟩
+  · exact ⟨hty α hin, hrw α hin, hlb α hin⟩
 
 -- The regression example, rederived through the syntactic rule: the manual
 -- three-way case split on the lookup now lives once and for all inside the
@@ -2216,8 +2457,8 @@ example {B C : Type} (constTy : C → B) :
   · -- the body instantiates f at β ≔ ε and applies it to {}
     have hif : Scheme.Inst (⟨["β"], .fn (.rcd (.var "β")) .unk⟩ : Scheme B)
         (.fn (.rcd .empty) .unk) := by
-      refine ⟨⟨fun α => .var α, fun α => if α == "β" then .empty else .var α⟩,
-        ⟨fun _ _ => rfl, fun α hα => ?_⟩, ?_⟩
+      refine ⟨⟨fun α => .var α, fun α => if α == "β" then .empty else .var α, fun α => .var α⟩,
+        ⟨fun _ _ => rfl, fun α hα => ?_, fun _ _ => rfl⟩, ?_⟩
       · simp only [List.mem_singleton] at hα
         simp [hα]
       · simp [Ty.applySubst, Row.applySubst]
@@ -2246,6 +2487,8 @@ mutual
     | sing : TyPrec τ τ' → RowPrec (.sing l τ) (.sing l τ')
     | cat  : RowPrec ρ₁ ρ₁' → RowPrec ρ₂ ρ₂' →
              RowPrec (.cat ρ₁ ρ₂) (.cat ρ₁' ρ₂')
+    -- a key is never blurred: ⊑ acts on the field type only
+    | dsing : TyPrec τ τ' → RowPrec (.dsing q τ) (.dsing q τ')
 end
 
 infix:50 " ⊑ₜ " => TyPrec
@@ -2279,6 +2522,13 @@ theorem RowPrec.sing_inv {B : Type} {ρ' : Row B} {l : Label} {τ : Ty B}
   cases h with
   | refl _ => exact ⟨τ, rfl, .refl τ⟩
   | sing h => exact ⟨_, rfl, h⟩
+
+-- ⊢  ρ' ⊑ᵣ (${q}: τ)  ⟹  ρ' = (${q}: τ') with τ' ⊑ₜ τ
+theorem RowPrec.dsing_inv {B : Type} {ρ' : Row B} {q : Key} {τ : Ty B}
+    (h : RowPrec ρ' (.dsing q τ)) : ∃ τ', ρ' = .dsing q τ' ∧ TyPrec τ' τ := by
+  cases h with
+  | refl _ => exact ⟨τ, rfl, .refl τ⟩
+  | dsing h => exact ⟨_, rfl, h⟩
 
 -- ⊢  ρ' ⊑ᵣ (ρ₁ | ρ₂)  ⟹  ρ' = (ρ₁' | ρ₂') with ρᵢ' ⊑ᵣ ρᵢ
 theorem RowPrec.cat_inv {B : Type} {ρ' ρ₁ ρ₂ : Row B}
@@ -2315,6 +2565,9 @@ theorem RowPrec.trans {B : Type} : {ρ₁ ρ₂ ρ₃ : Row B} →
   | _, _, _, h₁, .cat ha hb => by
       obtain ⟨_, _, rfl, hA, hB⟩ := RowPrec.cat_inv h₁
       exact .cat (RowPrec.trans hA ha) (RowPrec.trans hB hb)
+  | _, _, _, h₁, .dsing h   => by
+      obtain ⟨_, rfl, hτ⟩ := RowPrec.dsing_inv h₁
+      exact .dsing (TyPrec.trans hτ h)
 end
 
 -- Only ε is at least as precise as ε — ⊑ never deletes or creates a field.
@@ -2399,6 +2652,24 @@ theorem RowPrec.comm_equiv {B : Type} : {ρ₁ ρ₂ : Row B} → RowEquiv ρ₁
         obtain ⟨p, rfl, hp⟩ := RowPrec.sing_inv ha
         obtain ⟨p', he, hpp⟩ := (TyPrec.comm_equiv h).2 p hp
         exact ⟨.sing _ p', .sing he, .sing hpp⟩
+  | _, _, .dsing h => by
+      constructor
+      · intro a ha
+        obtain ⟨p, rfl, hp⟩ := RowPrec.dsing_inv ha
+        obtain ⟨p', he, hpp⟩ := (TyPrec.comm_equiv h).1 p hp
+        exact ⟨.dsing _ p', .dsing he, .dsing hpp⟩
+      · intro a ha
+        obtain ⟨p, rfl, hp⟩ := RowPrec.dsing_inv ha
+        obtain ⟨p', he, hpp⟩ := (TyPrec.comm_equiv h).2 p hp
+        exact ⟨.dsing _ p', .dsing he, .dsing hpp⟩
+  | _, _, .dsingLab => by
+      constructor
+      · intro a ha
+        obtain ⟨p, rfl, hp⟩ := RowPrec.dsing_inv ha
+        exact ⟨.sing _ p, .dsingLab, .sing hp⟩
+      · intro a ha
+        obtain ⟨p, rfl, hp⟩ := RowPrec.sing_inv ha
+        exact ⟨.dsing _ p, .symm .dsingLab, .dsing hp⟩
   | _, _, .cat h₁ h₂ => by
       constructor
       · intro a ha
@@ -2525,7 +2796,7 @@ theorem typed_refine {B C : Type} {constTy : C → B} {Γ : Ctx B}
     {e : Expr C} {τ : Ty B} {θ : TySubst B}
     (h : Typed constTy Γ e τ)
     (hfix : ∀ x σ, Γ.lookup x = some σ → ∀ α ∈ σ.body.ftv, α ∉ σ.vars →
-      θ.ty α = .var α ∧ θ.row α = .var α) :
+      θ.ty α = .var α ∧ θ.row α = .var α ∧ θ.lab α = .var α) :
     Typed constTy Γ e τ ∧ Typed constTy Γ e (τ.applySubst θ) :=
   ⟨h, typed_applySubst h hfix⟩
 
@@ -2558,7 +2829,7 @@ private def refEx {C : Type} (c : C) : Expr C :=
 
 /-- θ := [β ↦ ε] at the row sort, identity elsewhere. -/
 private def betaEps (B : Type) : TySubst B :=
-  ⟨(.var ·), fun α => if α == "β" then .empty else .var α⟩
+  ⟨(.var ·), fun α => if α == "β" then .empty else .var α, (.var ·)⟩
 
 private theorem refEx_unk {B C : Type} (constTy : C → B) (c : C) :
     Typed constTy Ctx.empty (refEx c) (.fn (.rcd (.var "β")) .unk) := by
@@ -2883,7 +3154,7 @@ theorem no_plain_principal_scheme {B C : Type} (constTy : C → B) :
       · -- α quantified: every type is an instance, e.g. {ε} — not a typing
         have hinst : σ.Inst (.rcd .empty : Ty B) := by
           refine ⟨⟨fun δ => if δ = α then .rcd .empty else .var δ,
-            fun δ => .var δ⟩, ⟨fun δ hδ => ?_, fun _ _ => rfl⟩, ?_⟩
+            fun δ => .var δ, fun δ => .var δ⟩, ⟨fun δ hδ => ?_, fun _ _ => rfl, fun _ _ => rfl⟩, ?_⟩
           · have hne : ¬δ = α := by rintro rfl; exact hδ hα
             simp [hne]
           · rw [hbody]; simp [Ty.applySubst]
@@ -2914,7 +3185,7 @@ theorem no_plain_principal_scheme {B C : Type} (constTy : C → B) :
               cases hrb
           -- the mixed substitution: θb with α re-pointed at {ε}
           have hd' : dom.applySubst
-              (⟨fun δ => if δ = α then .rcd .empty else θb.ty δ, θb.row⟩ :
+              (⟨fun δ => if δ = α then .rcd .empty else θb.ty δ, θb.row, θb.lab⟩ :
                 TySubst B) = .rcd .empty := by
             cases dom with
             | var γ =>
@@ -2934,13 +3205,14 @@ theorem no_plain_principal_scheme {B C : Type} (constTy : C → B) :
                     simp [Ty.applySubst, Row.applySubst, hρ]
                 | sing l' t => simp only [Row.applySubst] at hρ; cases hρ
                 | cat ρ₁ ρ₂ => simp only [Row.applySubst] at hρ; cases hρ
+                | dsing q t => simp only [Row.applySubst] at hρ; cases hρ
             | base b => simp only [Ty.applySubst] at hdb; cases hdb
             | lab b => simp only [Ty.applySubst] at hdb; cases hdb
             | unk => simp only [Ty.applySubst] at hdb; cases hdb
             | fn τa τb => simp only [Ty.applySubst] at hdb; cases hdb
           have hinst : σ.Inst (.fn (.rcd .empty) (.rcd .empty)) := by
-            refine ⟨⟨fun δ => if δ = α then .rcd .empty else θb.ty δ, θb.row⟩,
-              ⟨fun δ hδ => ?_, fun δ hδ => hfb.2 δ hδ⟩, ?_⟩
+            refine ⟨⟨fun δ => if δ = α then .rcd .empty else θb.ty δ, θb.row, θb.lab⟩,
+              ⟨fun δ hδ => ?_, fun δ hδ => hfb.2.1 δ hδ, fun δ hδ => hfb.2.2 δ hδ⟩, ?_⟩
             · have hne : ¬δ = α := by rintro rfl; exact hδ hα
               simp [hne, hfb.1 δ hδ]
             · rw [hbody]

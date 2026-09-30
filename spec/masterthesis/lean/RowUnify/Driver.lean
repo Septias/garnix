@@ -43,7 +43,7 @@ theorem tyIsVar_eq {B : Type} : {τ : Ty B} → {α : TyVar} → tyIsVar τ = so
 -- ⊢  unifyRowM α (β | α | γ)  =  success [β ≔ ε, γ ≔ ε]
 theorem allVar_collapse_reported {B : Type} [DecidableEq B] :
     unifyRowM (B := B) 20 (.var "a") (.cat (.var "b") (.cat (.var "a") (.var "c")))
-      = .success ⟨[], [("b", .empty), ("c", .empty)]⟩ ⟨2⟩ := rfl
+      = .success ⟨[], [("b", .empty), ("c", .empty)], []⟩ ⟨2⟩ := rfl
 
 -- …and at multiplicity TWO the counting closes on α as well, so every spine
 -- variable collapses — α listed at each of its occurrences (`rowLookup` reads
@@ -52,7 +52,7 @@ theorem allVar_collapse_reported {B : Type} [DecidableEq B] :
 theorem allVar_collapse_reported_k2 {B : Type} [DecidableEq B] :
     unifyRowM (B := B) 20 (.var "a")
         (.cat (.var "b") (.cat (.var "a") (.cat (.var "a") (.var "c"))))
-      = .success ⟨[], [("b", .empty), ("a", .empty), ("a", .empty), ("c", .empty)]⟩ ⟨2⟩ := rfl
+      = .success ⟨[], [("b", .empty), ("a", .empty), ("a", .empty), ("c", .empty)], []⟩ ⟨2⟩ := rfl
 
 -- WHAT DROPPING U-EXPAND COSTS, computed. This is the crossfield shape, and it
 -- is the price of the removal made concrete: a unifier EXISTS — the prose at

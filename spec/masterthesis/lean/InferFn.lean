@@ -12,7 +12,7 @@
 --
 -- The choices, rule by rule:
 --   * equations — `unifyTyF` at the given fuel;
---   * lookups — `lookupF`, structural: no fuel, since nothing is chased;
+--   * lookups — `lookupQF`, structural: no fuel, since nothing is chased;
 --   * saturation — `saturateF` wakes the FIRST stale stump, until none is;
 --   * A-var — the renaming is the next |ᾱ| names of the supply, in binder
 --     order; `FreshRenaming` is CHECKED, as is that each binder has a kind;
@@ -63,151 +63,98 @@ def IRes.withMsg {α : Type} (x : IRes α) (msg : String) : IRes α :=
   simp [pure]
 
 --------------------- LOOKUP ---------------------------------------------------
+-- One keyed lookup, structural: with L-α gone there is no solution to chase, so
+-- no fuel and no way to fail — the `IRes` is only there so lookups compose with
+-- the fuelled steps in `do`-blocks. A label key is the key `⌊l⌋`
+-- (`LookupQ.lab_iff`).
 
-/-- what `lookupF` answers: `Lookup`'s three results, with `?` carrying its blocker -/
+/-- what `lookupQF` answers: `LookupQ`'s three results, with `?` carrying its blocker -/
 inductive LOut (B : Type) where
   | found   : Ty B → LOut B
   | absent  : LOut B
   | blocked : TyVar → LOut B
 
-/-- what an answer asserts of the row -/
-def LOut.Holds (ρ : Row B) (l : Label) : LOut B → Prop
-  | .found τ   => Lookup ρ l (.found τ)
-  | .absent    => Lookup ρ l .absent
-  | .blocked α => LookupBlocked ρ l α
-
-/-- `ρ.l ↓ r`, computed. Bare structural recursion: with L-α gone there is no
-solution to chase, so no fuel and no way to fail — the `IRes` is only there so
-lookups compose with the fuelled steps in `do`-blocks. -/
-def lookupF : Row B → Label → IRes (LOut B)
-  | .empty, _ => .ok .absent
-  | .sing l' τ, l => if l' = l then .ok (.found τ) else .ok .absent
-  | .cat ρ₁ ρ₂, l =>
-      match lookupF ρ₁ l with
-      | .ok (.found τ)   => .ok (.found τ)
-      | .ok .absent      => lookupF ρ₂ l
-      | .ok (.blocked α) => .ok (.blocked α)
-      | .fail m          => .fail m
-      | .oof             => .oof
-  | .var α, _ => .ok (.blocked α)
-
-omit [DecidableEq B] in
-theorem lookupF_sound :
-    ∀ {ρ : Row B} {l : Label} {r : LOut B},
-      lookupF ρ l = .ok r → r.Holds ρ l
-  | .empty, _, r, h => by
-      simp only [lookupF, IRes.ok.injEq] at h; subst h; exact .emp
-  | .sing l' τ, l, r, h => by
-      simp only [lookupF] at h
-      split at h
-      · rename_i he; subst he; cases h; exact .hit
-      · rename_i hne; cases h; exact .miss hne
-  | .cat ρ₁ ρ₂, l, r, h => by
-      simp only [lookupF] at h
-      split at h
-      · rename_i τ h₁; cases h; exact .catHit (lookupF_sound h₁)
-      · rename_i h₁
-        have ih₂ := lookupF_sound h
-        cases r with
-        | found τ => exact .catSkip (lookupF_sound h₁) ih₂
-        | absent => exact .catSkip (lookupF_sound h₁) ih₂
-        | blocked β => exact .catSkip (lookupF_sound h₁) ih₂
-      · rename_i α h₁; cases h; exact .catUnk (lookupF_sound h₁)
-      · cases h
-      · cases h
-  | .var α, l, r, h => by
-      simp only [lookupF, IRes.ok.injEq] at h; subst h; exact .varFree
-
-omit [DecidableEq B] in
-/-- ⊢  an answer other than `blocked β` rules out being blocked on β -/
-theorem LOut.not_blocked {ρ : Row B} {l : Label} {r : LOut B} {β : TyVar}
-    (h : r.Holds ρ l) (hne : r ≠ .blocked β) : ¬ LookupBlocked ρ l β := by
-  intro hb
-  cases r with
-  | found τ => exact absurd (lookup_det h hb.toLookup) (by simp)
-  | absent => exact absurd (lookup_det h hb.toLookup) (by simp)
-  | blocked α => exact hne (by rw [LookupBlocked.det h hb])
-
---------------------- KEYED LOOKUP ---------------------------------------------
--- A dynamic selection's lookup, computed: a literal key is `lookupF`, a variable
--- key never finds (it is blocked on the first field, or on a row variable),
--- and any other key is not a label and names no field.
-
-/-- `ρ.α ↓ r` for a label variable α, computed -/
-def lookupVF : Row B → TyVar → IRes (LOut B)
-  | .empty, _ => .ok .absent
-  | .sing _ _, α => .ok (.blocked α)
-  | .cat ρ₁ ρ₂, α =>
-      match lookupVF ρ₁ α with
-      | .ok .absent      => lookupVF ρ₂ α
-      | .ok r            => .ok r
-      | .fail m          => .fail m
-      | .oof             => .oof
-  | .var β, _ => .ok (.blocked β)
-
 /-- what an answer asserts of a keyed lookup -/
-def LOut.HoldsQ (ρ : Row B) (q : Ty B) : LOut B → Prop
+def LOut.HoldsQ (ρ : Row B) (q : Key) : LOut B → Prop
   | .found τ   => LookupQ ρ q (.found τ)
   | .absent    => LookupQ ρ q .absent
   | .blocked α => LookupBlockedQ ρ q α
 
-/-- `ρ.q ↓ r`, computed -/
-def lookupQF (ρ : Row B) : Ty B → IRes (LOut B)
-  | .lab l => lookupF ρ l
-  | .var α => lookupVF ρ α
-  | _      => .ok .absent
+/-- the blocker of an undecided comparison of lookup key k with field key q:
+the lookup key when it is a label variable (`dunkQ`, `sunk`), the field key
+otherwise (`dunkF`). Two literals always compare, so the last arm is never
+reached. -/
+def keyBlocker (k q : Key) : TyVar :=
+  match k, q with
+  | .var α, _ => α
+  | .lit _, .var γ => γ
+  | .lit _, .lit _ => ""
+
+/-- `ρ.k ↓ r`, computed -/
+def lookupQF : Row B → Key → IRes (LOut B)
+  | .empty, _ => .ok .absent
+  | .var β, _ => .ok (.blocked β)
+  | .sing l τ, k =>
+      match Key.cmp k (.lit l) with
+      | .eq    => .ok (.found τ)
+      | .apart => .ok .absent
+      | .undec => .ok (.blocked (keyBlocker k (.lit l)))
+  | .dsing q τ, k =>
+      match Key.cmp k q with
+      | .eq    => .ok (.found τ)
+      | .apart => .ok .absent
+      | .undec => .ok (.blocked (keyBlocker k q))
+  | .cat ρ₁ ρ₂, k =>
+      match lookupQF ρ₁ k with
+      | .ok (.found τ)   => .ok (.found τ)
+      | .ok .absent      => lookupQF ρ₂ k
+      | .ok (.blocked α) => .ok (.blocked α)
+      | .fail m          => .fail m
+      | .oof             => .oof
 
 omit [DecidableEq B] in
-theorem lookupVF_sound :
-    ∀ {ρ : Row B} {α : TyVar} {r : LOut B},
-      lookupVF ρ α = .ok r → r.HoldsQ ρ (.var α)
+theorem lookupQF_sound :
+    ∀ {ρ : Row B} {k : Key} {r : LOut B}, lookupQF ρ k = .ok r → r.HoldsQ ρ k
   | .empty, _, r, h => by
-      simp only [lookupVF, IRes.ok.injEq] at h; subst h; exact .var .emp
-  | .sing _ _, _, r, h => by
-      simp only [lookupVF, IRes.ok.injEq] at h; subst h; exact .var .sing
-  | .cat ρ₁ ρ₂, α, r, h => by
-      simp only [lookupVF] at h
+      simp only [lookupQF, IRes.ok.injEq] at h; subst h; exact .emp
+  | .var β, _, r, h => by
+      simp only [lookupQF, IRes.ok.injEq] at h; subst h; exact .varFree
+  | .sing l τ, k, r, h => by
+      simp only [lookupQF] at h
       split at h
+      · rename_i he; cases h; exact .hit he
+      · rename_i he; cases h; exact .miss he
+      · rename_i he; cases h
+        obtain ⟨α, rfl⟩ := Key.cmp_undec_lit he
+        exact .sunk
+  | .dsing q τ, k, r, h => by
+      simp only [lookupQF] at h
+      split at h
+      · rename_i he; cases h; exact .dhit he
+      · rename_i he; cases h; exact .dmiss he
+      · rename_i he; cases h
+        cases k with
+        | var α => exact .dunkQ he
+        | lit l =>
+            obtain ⟨γ, rfl⟩ := Key.cmp_lit_undec he
+            exact .dunkF
+  | .cat ρ₁ ρ₂, k, r, h => by
+      simp only [lookupQF] at h
+      split at h
+      · rename_i τ h₁; cases h; exact .catHit (lookupQF_sound h₁)
       · rename_i h₁
-        have ih₁ := lookupVF_sound h₁
-        have ih₂ := lookupVF_sound h
-        have ha : LookupV ρ₁ α .absent := LookupQ.var_iff.mp ih₁
+        have ih₂ := lookupQF_sound h
         cases r with
-        | found τ => exact .var (.catSkip ha (LookupQ.var_iff.mp ih₂))
-        | absent => exact .var (.catSkip ha (LookupQ.var_iff.mp ih₂))
-        | blocked β =>
-            cases ih₂ with
-            | var hb => exact .var (.catSkip ha hb)
-      · rename_i r' hne h₁
-        cases h
-        have ih₁ := lookupVF_sound h₁
-        cases r with
-        | found τ => exact absurd (LookupQ.var_iff.mp ih₁) LookupV.not_found
-        | absent => exact absurd rfl hne
-        | blocked β => cases ih₁ with | var hb => exact .var (.catUnk hb)
+        | found τ => exact .catSkip (lookupQF_sound h₁) ih₂
+        | absent => exact .catSkip (lookupQF_sound h₁) ih₂
+        | blocked β => exact .catSkip (lookupQF_sound h₁) ih₂
+      · rename_i α h₁; cases h; exact .catUnk (lookupQF_sound h₁)
       · cases h
       · cases h
-  | .var β, α, r, h => by
-      simp only [lookupVF, IRes.ok.injEq] at h; subst h; exact .var .varFree
-
-omit [DecidableEq B] in
-theorem lookupQF_sound {ρ : Row B} {q : Ty B} {r : LOut B}
-    (h : lookupQF ρ q = .ok r) : r.HoldsQ ρ q := by
-  cases q with
-  | lab l =>
-      have := lookupF_sound h
-      cases r with
-      | found τ => exact .lit this
-      | absent => exact .lit this
-      | blocked α => exact .lit this
-  | var α => exact lookupVF_sound h
-  | _ =>
-      simp only [lookupQF, IRes.ok.injEq] at h; subst h
-      exact .junk (by simp [Ty.IsQuery])
 
 omit [DecidableEq B] in
 /-- ⊢  an answer other than `blocked β` rules out being blocked on β -/
-theorem LOut.not_blockedQ {ρ : Row B} {q : Ty B} {r : LOut B} {β : TyVar}
+theorem LOut.not_blockedQ {ρ : Row B} {q : Key} {r : LOut B} {β : TyVar}
     (h : r.HoldsQ ρ q) (hne : r ≠ .blocked β) : ¬ LookupBlockedQ ρ q β := by
   intro hb
   cases r with
@@ -461,8 +408,8 @@ F-★ — which is where a key-blocked spent promise still fails. -/
 def materializeF (n : Nat) (S : SolverState B) (p : Parked B) : IRes (SolverState B) :=
   if p ∈ S.parked ∧ (p.stump.res.applySubst S.subst).isSpent = true then
     match p.stump.label.applySubst S.subst with
-    | .lab l => do
-        match ← lookupQF (p.stump.row.applySubst S.subst) (.lab l) with
+    | .lit l => do
+        match ← lookupQF (p.stump.row.applySubst S.subst) (.lit l) with
         | .blocked α =>
             if α = p.blocker then
               solveTySatF n (S.draw .row).2 (.rcd (.var p.blocker))
@@ -533,12 +480,14 @@ def varRen (next : Nat) (vs : List TyVar) (α : TyVar) : TyVar := natName (next 
 /-- the substitution that renames `vs` by `f` and fixes everything else -/
 def renSubst (vs : List TyVar) (f : TyVar → TyVar) : TySubst B :=
   ⟨fun α => if α ∈ vs then .var (f α) else .var α,
+   fun α => if α ∈ vs then .var (f α) else .var α,
    fun α => if α ∈ vs then .var (f α) else .var α⟩
 
 omit [DecidableEq B] in
 theorem renSubst_isRenaming (vs : List TyVar) (f : TyVar → TyVar) :
     IsRenaming (renSubst (B := B) vs f) vs f :=
-  ⟨⟨fun α h => by simp [renSubst, h], fun α h => by simp [renSubst, h]⟩,
+  ⟨⟨fun α h => by simp [renSubst, h], fun α h => by simp [renSubst, h],
+    fun α h => by simp [renSubst, h]⟩,
    fun α h => by simp [renSubst, h]⟩
 
 /-- the constraints of an instance, before their blockers are known -/
@@ -614,6 +563,11 @@ def inferF (constTy : C → B) (n : Nat) :
       let r₂ ← inferF constTy n Γ r₁.2 e₂
       let S₃ ← solveTySatF n (r₂.2.draw .ty).2 r₁.1 (.fn r₂.1 (.var (r₂.2.draw .ty).1))
       pure (.var (r₂.2.draw .ty).1, S₃)
+  | Γ, S, .rcdDyn e₁ e₂ => do
+      let r₁ ← inferF constTy n Γ S e₁
+      let r₂ ← inferF constTy n Γ r₁.2 e₂
+      let S₃ ← solveTySatF n (r₂.2.draw .lab).2 r₁.1 (.lab (.var (r₂.2.draw .lab).1))
+      pure (.rcd (.dsing (.var (r₂.2.draw .lab).1) r₂.1), S₃)
   | Γ, S, .cat e₁ e₂ => do
       let r₁ ← inferF constTy n Γ S e₁
       let r₂ ← inferF constTy n Γ r₁.2 e₂
@@ -625,24 +579,26 @@ def inferF (constTy : C → B) (n : Nat) :
       let r₁ ← inferF constTy n Γ S e
       let rv := (r₁.2.draw .row).1
       let S₂ ← solveTySatF n (r₁.2.draw .row).2 r₁.1 (.rcd (.var rv))
-      match ← lookupF ((Row.var rv).applySubst S₂.subst) l with
+      match ← lookupQF ((Row.var rv).applySubst S₂.subst) (.lit l) with
       | .found τ' => pure (τ', S₂)
       | .absent   => pure (.unk, S₂.flag l)
       | .blocked α =>
           pure (.var (S₂.draw .ty).1,
-            (S₂.draw .ty).2.park ⟨α, ⟨.var rv, .lab l, .var (S₂.draw .ty).1⟩⟩)
-  | _, S, .lab l => .ok (.lab l, S)
+            (S₂.draw .ty).2.park ⟨α, ⟨.var rv, .lit l, .var (S₂.draw .ty).1⟩⟩)
+  | _, S, .lab l => .ok (.lab (.lit l), S)
   | Γ, S, .selDyn e₁ e₂ => do
       let r₁ ← inferF constTy n Γ S e₁
       let rv := (r₁.2.draw .row).1
       let S₂ ← solveTySatF n (r₁.2.draw .row).2 r₁.1 (.rcd (.var rv))
       let r₂ ← inferF constTy n Γ S₂ e₂
-      match ← lookupQF ((Row.var rv).applySubst r₂.2.subst) (r₂.1.applySubst r₂.2.subst) with
-      | .found τ' => pure (τ', r₂.2)
-      | .absent   => pure (.unk, r₂.2.flag (r₂.1.applySubst r₂.2.subst).keyName)
+      let κ := (r₂.2.draw .lab).1
+      let S₄ ← solveTySatF n (r₂.2.draw .lab).2 r₂.1 (.lab (.var κ))
+      match ← lookupQF ((Row.var rv).applySubst S₄.subst) ((Key.var κ).applySubst S₄.subst) with
+      | .found τ' => pure (τ', S₄)
+      | .absent   => pure (.unk, S₄.flag ((Key.var κ).applySubst S₄.subst).keyName)
       | .blocked α =>
-          pure (.var (r₂.2.draw .ty).1,
-            (r₂.2.draw .ty).2.park ⟨α, ⟨.var rv, r₂.1, .var (r₂.2.draw .ty).1⟩⟩)
+          pure (.var (S₄.draw .ty).1,
+            (S₄.draw .ty).2.park ⟨α, ⟨.var rv, .var κ, .var (S₄.draw .ty).1⟩⟩)
   | Γ, S, .rcd ξ => do
       let r ← inferRecF constTy n Γ S ξ
       pure (.rcd r.1, r.2)
@@ -687,6 +643,10 @@ theorem inferF_sound {constTy : C → B} {n : Nat} :
       simp only [inferF, IRes.bind_eq_ok, IRes.pure_eq_ok, Prod.mk.injEq] at h
       obtain ⟨⟨τ₁, S₁⟩, h₁, ⟨τ₂, S₂⟩, h₂, S₃, h₃, rfl, rfl⟩ := h
       exact .app (inferF_sound h₁) (inferF_sound h₂) rfl (solveTySatF_sound h₃)
+  | Γ, S, S', .rcdDyn e₁ e₂, τ, h => by
+      simp only [inferF, IRes.bind_eq_ok, IRes.pure_eq_ok, Prod.mk.injEq] at h
+      obtain ⟨⟨τ₁, S₁⟩, h₁, ⟨τ₂, S₂⟩, h₂, S₃, h₃, rfl, rfl⟩ := h
+      exact .rcdDyn (inferF_sound h₁) (inferF_sound h₂) rfl (solveTySatF_sound h₃)
   | Γ, S, S', .cat e₁ e₂, τ, h => by
       simp only [inferF, IRes.bind_eq_ok, IRes.pure_eq_ok, Prod.mk.injEq] at h
       obtain ⟨⟨τ₁, S₁⟩, h₁, ⟨τ₂, S₂⟩, h₂, S₃, h₃, S₄, h₄, rfl, rfl⟩ := h
@@ -695,41 +655,44 @@ theorem inferF_sound {constTy : C → B} {n : Nat} :
   | Γ, S, S', .sel e l, τ, h => by
       simp only [inferF, IRes.bind_eq_ok] at h
       obtain ⟨⟨τ₁, S₁⟩, h₁, S₂, h₂, o, ho, h⟩ := h
-      have hH := lookupF_sound ho
-      cases o with
-      | found τ' =>
-          simp only [IRes.pure_eq_ok, Prod.mk.injEq] at h
-          obtain ⟨rfl, rfl⟩ := h
-          exact .sel (inferF_sound h₁) rfl (solveTySatF_sound h₂) hH
-      | absent =>
-          simp only [IRes.pure_eq_ok, Prod.mk.injEq] at h
-          obtain ⟨rfl, rfl⟩ := h
-          exact .selAbs (inferF_sound h₁) rfl (solveTySatF_sound h₂) hH
-      | blocked α =>
-          simp only [IRes.pure_eq_ok, Prod.mk.injEq] at h
-          obtain ⟨rfl, rfl⟩ := h
-          exact .selUnk (inferF_sound h₁) rfl (solveTySatF_sound h₂) hH rfl
-  | _, S, S', .lab l, τ, h => by
-      simp only [inferF, IRes.ok.injEq, Prod.mk.injEq] at h
-      obtain ⟨rfl, rfl⟩ := h; exact .lab
-  | Γ, S, S', .selDyn e₁ e₂, τ, h => by
-      simp only [inferF, IRes.bind_eq_ok] at h
-      obtain ⟨⟨τ₁, S₁⟩, h₁, S₂, h₂, ⟨τ₂, S₃⟩, h₃, o, ho, h⟩ := h
       have hH := lookupQF_sound ho
       cases o with
       | found τ' =>
           simp only [IRes.pure_eq_ok, Prod.mk.injEq] at h
           obtain ⟨rfl, rfl⟩ := h
-          exact .selDyn (inferF_sound h₁) rfl (solveTySatF_sound h₂) (inferF_sound h₃) hH
+          exact .sel (inferF_sound h₁) rfl (solveTySatF_sound h₂) (LookupQ.lab_iff.mp hH)
       | absent =>
           simp only [IRes.pure_eq_ok, Prod.mk.injEq] at h
           obtain ⟨rfl, rfl⟩ := h
-          exact .selDynAbs (inferF_sound h₁) rfl (solveTySatF_sound h₂) (inferF_sound h₃) hH
+          exact .selAbs (inferF_sound h₁) rfl (solveTySatF_sound h₂) (LookupQ.lab_iff.mp hH)
+      | blocked α =>
+          simp only [IRes.pure_eq_ok, Prod.mk.injEq] at h
+          obtain ⟨rfl, rfl⟩ := h
+          exact .selUnk (inferF_sound h₁) rfl (solveTySatF_sound h₂)
+            (LookupBlockedQ.toLit hH) rfl
+  | _, S, S', .lab l, τ, h => by
+      simp only [inferF, IRes.ok.injEq, Prod.mk.injEq] at h
+      obtain ⟨rfl, rfl⟩ := h; exact .lab
+  | Γ, S, S', .selDyn e₁ e₂, τ, h => by
+      simp only [inferF, IRes.bind_eq_ok] at h
+      obtain ⟨⟨τ₁, S₁⟩, h₁, S₂, h₂, ⟨τ₂, S₃⟩, h₃, S₄, h₄, o, ho, h⟩ := h
+      have hH := lookupQF_sound ho
+      cases o with
+      | found τ' =>
+          simp only [IRes.pure_eq_ok, Prod.mk.injEq] at h
+          obtain ⟨rfl, rfl⟩ := h
+          exact .selDyn (inferF_sound h₁) rfl (solveTySatF_sound h₂) (inferF_sound h₃) rfl
+            (solveTySatF_sound h₄) hH
+      | absent =>
+          simp only [IRes.pure_eq_ok, Prod.mk.injEq] at h
+          obtain ⟨rfl, rfl⟩ := h
+          exact .selDynAbs (inferF_sound h₁) rfl (solveTySatF_sound h₂) (inferF_sound h₃) rfl
+            (solveTySatF_sound h₄) hH
       | blocked α =>
           simp only [IRes.pure_eq_ok, Prod.mk.injEq] at h
           obtain ⟨rfl, rfl⟩ := h
           exact .selDynUnk (inferF_sound h₁) rfl (solveTySatF_sound h₂)
-            (inferF_sound h₃) hH rfl
+            (inferF_sound h₃) rfl (solveTySatF_sound h₄) hH rfl
   | Γ, S, S', .rcd ξ, τ, h => by
       simp only [inferF, IRes.bind_eq_ok, IRes.pure_eq_ok, Prod.mk.injEq] at h
       obtain ⟨⟨ρ, S''⟩, hb, rfl, rfl⟩ := h

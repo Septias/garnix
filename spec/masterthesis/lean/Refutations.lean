@@ -31,7 +31,8 @@ theorem hasMguP_singleton {B : Type} (θ₀ : TySubst B) :
   intro θ' h
   subst h
   exact ⟨TySubst.id B, fun x => by rw [Row.applySubst_id]; exact RowEquiv.refl _,
-                       fun x => by rw [Ty.applySubst_id]; exact TyEquiv.refl _⟩
+                       fun x => by rw [Ty.applySubst_id]; exact TyEquiv.refl _,
+                       fun x => by rw [Key.applySubst_id]⟩
 
 -- The Wand spine (β | α) ≐ᵣ (l:𝓫), the canonical terminal configuration.
 private def ws₁ : List (Atom Unit) := [.var "b", .var "a"]
@@ -53,7 +54,7 @@ example : projClash ws₁ ws₂ = false := rfl
 -- …and it HAS a unifier (that is what makes it stuck rather than a clash).
 private def wθ : TySubst Unit :=
   ⟨fun x => .var x,
-   fun x => if x = "b" then .sing "l" uB else if x = "a" then .empty else .var x⟩
+   fun x => if x = "b" then .sing "l" uB else if x = "a" then .empty else .var x, fun x => .var x⟩
 
 theorem wθ_unifies : Unifies wθ (ofSpine ws₁) (ofSpine ws₂) := by
   unfold Unifies ws₁ ws₂ ofSpine wθ
@@ -72,7 +73,8 @@ theorem hbase_shape_false :
   intro θ' hθ'
   cases hθ'.2
   exact ⟨TySubst.id Unit, fun x => by rw [Row.applySubst_id]; exact RowEquiv.refl _,
-                          fun x => by rw [Ty.applySubst_id]; exact TyEquiv.refl _⟩
+                          fun x => by rw [Ty.applySubst_id]; exact TyEquiv.refl _,
+                          fun x => by rw [Key.applySubst_id]⟩
 
 -- DEFECT 2, the deeper one: restricting Q to the shape an emitted type equation
 -- actually has does NOT save the statement. Qeq below is `TyUnifies · τ τ'`,
@@ -86,7 +88,7 @@ private def Qeq (θ : TySubst Unit) : Prop :=
 
 private def wθ' : TySubst Unit :=
   ⟨fun x => .var x,
-   fun x => if x = "b" then .sing "l" uB else if x = "a" then .empty else .var x⟩
+   fun x => if x = "b" then .sing "l" uB else if x = "a" then .empty else .var x, fun x => .var x⟩
 
 -- ⊢  HasMguP (θ ⊨ Wand ∧ θ ⊨ {β} ≐ {l:𝓫})
 theorem hbase_stableQ_false :
@@ -116,7 +118,7 @@ theorem hbase_stableQ_false :
       have := RowEquiv.cancel_cat_left this
       exact RowEquiv.unitR.symm.trans this
     -- both bindings of wθ' are var-free, so θ' itself is the factoring σ
-    refine ⟨θ', fun x => ?_, fun x => ?_⟩
+    refine ⟨θ', fun x => ?_, fun x => ?_, fun x => rfl⟩
     · by_cases hx : x = "b"
       · subst hx; simpa [wθ', Row.applySubst, Ty.applySubst, uB] using hb
       · by_cases hy : x = "a"
@@ -158,7 +160,7 @@ theorem stuck_masks_mgu_reported :
 
 private def mθ : TySubst Unit :=
   ⟨fun x => .var x,
-   fun x => if x = "b" then .sing "l" uB else if x = "a" then .empty else .var x⟩
+   fun x => if x = "b" then .sing "l" uB else if x = "a" then .empty else .var x, fun x => .var x⟩
 
 -- ⊢  …yet the problem has an mgu:  β ≔ (l:𝓫),  α ≔ ε
 theorem stuck_masks_mgu : HasMgu mρ₁ mρ₂ := by
@@ -186,7 +188,7 @@ theorem stuck_masks_mgu : HasMgu mρ₁ mρ₂ := by
         ((RowEquiv.cat hb.symm (.refl _)).trans hin).trans RowEquiv.unitR.symm
       exact RowEquiv.cancel_cat_left h1
     -- both bindings are var-free, so θ' itself is the factoring σ
-    refine ⟨θ', fun x => ?_, fun x => ?_⟩
+    refine ⟨θ', fun x => ?_, fun x => ?_, fun x => rfl⟩
     · by_cases hx : x = "b"
       · subst hx; simpa [mθ, Row.applySubst, Ty.applySubst, uB] using hb
       · by_cases hy : x = "a"
@@ -253,7 +255,7 @@ theorem terminal_masks_mgu_stuck :
 private def tθ : TySubst Unit :=
   ⟨fun x => .var x,
    fun x => if x = "w" then .empty
-            else if x = "v" then .sing "l" (.rcd .empty) else .var x⟩
+            else if x = "v" then .sing "l" (.rcd .empty) else .var x, fun x => .var x⟩
 
 theorem terminal_masks_mgu : HasMgu tρ₁ tρ₂ := by
   refine ⟨tθ, ?_, ?_⟩
@@ -266,12 +268,12 @@ theorem terminal_masks_mgu : HasMgu tρ₁ tρ₂ := by
                         (Row.cat (θ'.row "w") (θ'.row "v")) := by
       simpa [tρ₁, tρ₂, Row.applySubst, Ty.applySubst, Unifies] using hu
     -- the two components are var-free, and the l-field sits in exactly one
-    obtain ⟨hvar, -⟩ := hu'.char
+    obtain ⟨hvar, -, -⟩ := hu'.char
     have hspine : (Row.cat (θ'.row "w") (θ'.row "v")).toSpine
         = (θ'.row "w").toSpine ++ (θ'.row "v").toSpine := rfl
-    rw [hspine, sVarSeq_append] at hvar
-    have hvnil : sVarSeq (θ'.row "w").toSpine = [] ∧
-                 sVarSeq (θ'.row "v").toSpine = [] :=
+    rw [hspine, sBarSeq_append] at hvar
+    have hvnil : sBarSeq (θ'.row "w").toSpine = [] ∧
+                 sBarSeq (θ'.row "v").toSpine = [] :=
       List.append_eq_nil_iff.mp hvar.symm
     have hcount : ∀ m, (if ("l" : Label) = m then 1 else 0)
         = sFieldCount m (θ'.row "w").toSpine + sFieldCount m (θ'.row "v").toSpine := by
@@ -302,7 +304,7 @@ theorem terminal_masks_mgu : HasMgu tρ₁ tρ₂ := by
         have h2 : RowEquiv (Row.cat (θ'.row "w") (θ'.row "v")) (θ'.row "v") :=
           (RowEquiv.cat hW (.refl _)).trans RowEquiv.unitL
         exact ((h1.trans hu').trans h2).symm
-      refine ⟨θ', fun x => ?_, fun x => ?_⟩
+      refine ⟨θ', fun x => ?_, fun x => ?_, fun x => rfl⟩
       · by_cases hx : x = "w"
         · subst hx; simpa [tθ, Row.applySubst] using hW
         · by_cases hy : x = "v"
@@ -412,9 +414,9 @@ private def shB : Row Unit := .cat (.sing "l" (.rcd .empty)) (.sing "l" uB)
 --    take if the host were allowed to sit behind another variable.
 theorem shadow_order_matters : ¬ RowEquiv shA shB := by
   intro h
-  have hp := (RowEquiv.char h).2 "l"
+  have hp := (RowEquiv.char h).2.1 "l"
   simp only [shA, shB, Row.toSpine, sProj, List.cons_append,
-    List.nil_append, sVarSeq, List.length_nil, List.map_cons, List.map_nil] at hp
+    List.nil_append, sBarSeq, List.length_nil, List.map_cons, List.map_nil] at hp
   cases hp with
   | cons _ hty _ =>
       have hd := TyEquiv.rcdDepth_eq hty
@@ -467,7 +469,7 @@ theorem selfref_lone_host_reported :
 --    to come from.
 theorem selfref_lone_host_no_unifier :
     ¬ ∃ θ : TySubst Unit, Unifies θ gρ₁ gρ₂ :=
-  selfref_host_no_unifier (t₁ := [.var "a"]) rfl (by
+  selfref_host_no_unifier (t₁ := [.var "a"]) rfl rfl (by
     intro γ hγ
     simp only [sVarSeq, List.mem_singleton] at hγ
     subst hγ

@@ -10,6 +10,12 @@ import RowEquiv
 
 namespace MinimalCalculus
 
+/-- the three sorts a variable can be used at: type, row, label (key). Tagged
+occurrence lists (`Ty/Row.sortedFtv`, State.lean) keep them apart. -/
+inductive Srt where
+  | ty | row | lab
+  deriving DecidableEq, Repr
+
 ------------------------ THE ROW UNIFICATION ALGORITHM ------------------------
 -- ≐ᵣ Works on spines; every
 -- step is FORCED (solution-set preserving):
@@ -40,20 +46,35 @@ namespace MinimalCalculus
 -- computes by rfl) and exhaustion is its own verdict, `outOfFuel`.
 
 -- ## Spine measurements
+-- FC-labels phase B: a keyed field `${q}: τ` is a BARRIER. It may become any
+-- label under instantiation, so every "is this side var-free?" test below reads
+-- "is this side barrier-free?" — `sHasVar` answers true on a keyed field — and
+-- the literal-field counts skip it. This is what keeps U-clash sound:
+-- `(foo: τ) ≐ᵣ (${α}: τ′)` is solved by α ≔ ⌊foo⌋, so it must not clash.
 def sHasVar {B : Type} : List (Atom B) → Bool
   | [] => false
   | .var _ :: _ => true
+  | .dfield _ _ :: _ => true
   | .field _ _ :: s => sHasVar s
 
 def sFieldCount {B : Type} (l : Label) : List (Atom B) → Nat
   | [] => 0
   | .field l' _ :: s => (if l' = l then 1 else 0) + sFieldCount l s
   | .var _ :: s => sFieldCount l s
+  | .dfield _ _ :: s => sFieldCount l s
 
 def sLabels {B : Type} : List (Atom B) → List Label
   | [] => []
   | .field l _ :: s => l :: sLabels s
   | .var _ :: s => sLabels s
+  | .dfield _ _ :: s => sLabels s
+
+-- does the spine carry a keyed field?
+def sHasKey {B : Type} : List (Atom B) → Bool
+  | [] => false
+  | .dfield _ _ :: _ => true
+  | .field _ _ :: s => sHasKey s
+  | .var _ :: s => sHasKey s
 
 -- U-clash, projection-based (checked globally, not per-window — cf. the
 -- (β | l: Int | α) ≐ᵣ (l′: Bool) example for why).
@@ -69,6 +90,7 @@ def allVarsEmpty {B : Type} : List (Atom B) → Option (List (TyVar × Row B))
   | [] => some []
   | .var α :: s => (allVarsEmpty s).map ((α, Row.empty) :: ·)
   | .field _ _ :: _ => none
+  | .dfield _ _ :: _ => none
 
 -- U-var-refl at the left end.
 def stripL {B : Type} : List (Atom B) → List (Atom B) →
@@ -88,18 +110,31 @@ def windowExtract {B : Type} (l : Label) :
     List (Atom B) → Option (Ty B × List (Atom B))
   | [] => none
   | .var _ :: _ => none
+  | .dfield _ _ :: _ => none
   | .field l' τ :: s =>
       if l' = l then some (τ, s)
       else match windowExtract l s with
         | some (τ', s') => some (τ', .field l' τ :: s')
         | none => none
 
+-- A keyed field `${α}:` at the very head: nothing may be skipped, since a
+-- field before it could be the label α turns out to be.
+def keyExtract {B : Type} (α : TyVar) : List (Atom B) → Option (Ty B × List (Atom B))
+  | .dfield β τ :: s => if β = α then some (τ, s) else none
+  | _ => none
+
 -- U-field at the left end: leading field of one side matched against the
--- first same-label occurrence in the other side's window.
+-- first same-label occurrence in the other side's window. U-key: a leading
+-- keyed field against a leading keyed field under the SAME key — whatever label
+-- α becomes, the two are the same field in the same place.
 def matchL {B : Type} : List (Atom B) → List (Atom B) →
     Option (Ty B × Ty B × List (Atom B) × List (Atom B))
   | .field l τ :: t₁, s₂ =>
       match windowExtract l s₂ with
+      | some (τ', s₂') => some (τ, τ', t₁, s₂')
+      | none => none
+  | .dfield α τ :: t₁, s₂ =>
+      match keyExtract α s₂ with
       | some (τ', s₂') => some (τ, τ', t₁, s₂')
       | none => none
   | _, _ => none
@@ -119,6 +154,10 @@ def removeField {B : Type} (l : Label) :
   | .var β :: s =>
       match removeField l s with
       | some (τ, s') => some (τ, .var β :: s')
+      | none => none
+  | .dfield o σ :: s =>
+      match removeField l s with
+      | some (τ, s') => some (τ, .dfield o σ :: s')
       | none => none
   | .field l' τ :: s =>
       if l' = l then some (τ, s)
@@ -161,6 +200,7 @@ def sFtv {B : Type} : List (Atom B) → List TyVar
   | [] => []
   | .field _ τ :: s => τ.ftv ++ sFtv s
   | .var α :: s     => α :: sFtv s
+  | .dfield α τ :: s => [α] ++ τ.ftv ++ sFtv s
 
 -- The names this problem may invent: strictly longer than everything in it.
 def localSupply {B : Type} (s₁ s₂ : List (Atom B)) : Supply :=
@@ -171,6 +211,7 @@ def renameVar {B : Type} (β β' : TyVar) : List (Atom B) → List (Atom B)
   | [] => []
   | .var γ :: s => (if γ = β then Atom.var β' else Atom.var γ) :: renameVar β β' s
   | .field l τ :: s => .field l τ :: renameVar β β' s
+  | .dfield o τ :: s => .dfield o τ :: renameVar β β' s
 
 -- Row-variables occurring ANYWHERE, at any depth.
 mutual
@@ -187,6 +228,7 @@ def Row.allRowVars {B : Type} : Row B → List TyVar
   | .var α     => [α]
   | .sing _ τ  => Ty.allRowVars τ
   | .cat ρ₁ ρ₂ => Row.allRowVars ρ₁ ++ Row.allRowVars ρ₂
+  | .dsing _ τ => Ty.allRowVars τ
 end
 
 -- …and the TYPE-sort half, the exact complement: variables occurring at a Ty
@@ -209,53 +251,60 @@ def Row.tyFtv {B : Type} : Row B → List TyVar
   | .var _     => []
   | .sing _ τ  => Ty.tyFtv τ
   | .cat ρ₁ ρ₂ => Row.tyFtv ρ₁ ++ Row.tyFtv ρ₂
+  | .dsing _ τ => Ty.tyFtv τ
 end
 
--- ⊢ the two sorts partition the sort-blind `ftv`
+-- …and the LABEL-sort fibre: the label variables, in a key `${k}` or a label
+-- singleton ⌊k⌋. A label variable is a different variable from a type or row
+-- variable of the same name (`TySubst.lab`), so an occurrence here is no
+-- occurrence for the occurs check at all: `α ≐ {${α}: σ}` is an ordinary,
+-- idempotent binding.
+mutual
+def Ty.keyFtv {B : Type} : Ty B → List TyVar
+  | .var _   => []
+  | .base _  => []
+  | .lab k   => k.ftv
+  | .unk     => []
+  | .fn a b  => Ty.keyFtv a ++ Ty.keyFtv b
+  | .rcd ρ   => Row.keyFtv ρ
+
+def Row.keyFtv {B : Type} : Row B → List TyVar
+  | .empty     => []
+  | .var _     => []
+  | .sing _ τ  => Ty.keyFtv τ
+  | .cat ρ₁ ρ₂ => Row.keyFtv ρ₁ ++ Row.keyFtv ρ₂
+  | .dsing q τ => q.ftv ++ Ty.keyFtv τ
+end
+
+-- ⊢ the two sorts and the key positions partition the sort-blind `ftv`
 mutual
 theorem Ty.mem_ftv_iff {B : Type} {α : TyVar} :
-    (τ : Ty B) → (α ∈ τ.ftv ↔ α ∈ τ.tyFtv ∨ α ∈ τ.allRowVars)
-  | .var _   => by simp [Ty.ftv, Ty.tyFtv, Ty.allRowVars]
-  | .base _  => by simp [Ty.ftv, Ty.tyFtv, Ty.allRowVars]
-  | .lab _  => by simp [Ty.ftv, Ty.tyFtv, Ty.allRowVars]
-  | .unk     => by simp [Ty.ftv, Ty.tyFtv, Ty.allRowVars]
+    (τ : Ty B) → (α ∈ τ.ftv ↔ α ∈ τ.tyFtv ∨ α ∈ τ.allRowVars ∨ α ∈ τ.keyFtv)
+  | .var _   => by simp [Ty.ftv, Ty.tyFtv, Ty.allRowVars, Ty.keyFtv]
+  | .base _  => by simp [Ty.ftv, Ty.tyFtv, Ty.allRowVars, Ty.keyFtv]
+  | .lab _   => by simp [Ty.ftv, Ty.tyFtv, Ty.allRowVars, Ty.keyFtv]
+  | .unk     => by simp [Ty.ftv, Ty.tyFtv, Ty.allRowVars, Ty.keyFtv]
   | .fn a b  => by
-      simp only [Ty.ftv, Ty.tyFtv, Ty.allRowVars, List.mem_append,
+      simp only [Ty.ftv, Ty.tyFtv, Ty.allRowVars, Ty.keyFtv, List.mem_append,
                  Ty.mem_ftv_iff a, Ty.mem_ftv_iff b]
-      constructor
-      · rintro ((h|h)|(h|h))
-        · exact .inl (.inl h)
-        · exact .inr (.inl h)
-        · exact .inl (.inr h)
-        · exact .inr (.inr h)
-      · rintro ((h|h)|(h|h))
-        · exact .inl (.inl h)
-        · exact .inr (.inl h)
-        · exact .inl (.inr h)
-        · exact .inr (.inr h)
+      simp only [or_assoc, or_left_comm, or_comm]
   | .rcd ρ   => by
-      simp only [Ty.ftv, Ty.tyFtv, Ty.allRowVars, Row.mem_ftv_iff ρ]
+      simp only [Ty.ftv, Ty.tyFtv, Ty.allRowVars, Ty.keyFtv, Row.mem_ftv_iff ρ]
 
 theorem Row.mem_ftv_iff {B : Type} {α : TyVar} :
-    (ρ : Row B) → (α ∈ ρ.ftv ↔ α ∈ ρ.tyFtv ∨ α ∈ ρ.allRowVars)
-  | .empty     => by simp [Row.ftv, Row.tyFtv, Row.allRowVars]
-  | .var _     => by simp [Row.ftv, Row.tyFtv, Row.allRowVars]
+    (ρ : Row B) → (α ∈ ρ.ftv ↔ α ∈ ρ.tyFtv ∨ α ∈ ρ.allRowVars ∨ α ∈ ρ.keyFtv)
+  | .empty     => by simp [Row.ftv, Row.tyFtv, Row.allRowVars, Row.keyFtv]
+  | .var _     => by simp [Row.ftv, Row.tyFtv, Row.allRowVars, Row.keyFtv]
   | .sing _ τ  => by
-      simp only [Row.ftv, Row.tyFtv, Row.allRowVars, Ty.mem_ftv_iff τ]
+      simp only [Row.ftv, Row.tyFtv, Row.allRowVars, Row.keyFtv, Ty.mem_ftv_iff τ]
   | .cat ρ₁ ρ₂ => by
-      simp only [Row.ftv, Row.tyFtv, Row.allRowVars, List.mem_append,
+      simp only [Row.ftv, Row.tyFtv, Row.allRowVars, Row.keyFtv, List.mem_append,
                  Row.mem_ftv_iff ρ₁, Row.mem_ftv_iff ρ₂]
-      constructor
-      · rintro ((h|h)|(h|h))
-        · exact .inl (.inl h)
-        · exact .inr (.inl h)
-        · exact .inl (.inr h)
-        · exact .inr (.inr h)
-      · rintro ((h|h)|(h|h))
-        · exact .inl (.inl h)
-        · exact .inr (.inl h)
-        · exact .inl (.inr h)
-        · exact .inr (.inr h)
+      simp only [or_assoc, or_left_comm, or_comm]
+  | .dsing q τ => by
+      simp only [Row.ftv, Row.tyFtv, Row.allRowVars, Row.keyFtv, List.mem_append,
+                 Ty.mem_ftv_iff τ]
+      simp only [or_assoc, or_left_comm, or_comm]
 end
 
 -- ⊢ …so each half is contained in it: the sorted guard is WEAKER than the
@@ -265,7 +314,11 @@ theorem Ty.tyFtv_subset_ftv {B : Type} (τ : Ty B) : ∀ α ∈ τ.tyFtv, α ∈
 
 theorem Ty.allRowVars_subset_ftv {B : Type} (τ : Ty B) :
     ∀ α ∈ τ.allRowVars, α ∈ τ.ftv :=
-  fun _ h => (Ty.mem_ftv_iff τ).mpr (.inr h)
+  fun _ h => (Ty.mem_ftv_iff τ).mpr (.inr (.inl h))
+
+theorem Ty.keyFtv_subset_ftv {B : Type} (τ : Ty B) :
+    ∀ α ∈ τ.keyFtv, α ∈ τ.ftv :=
+  fun _ h => (Ty.mem_ftv_iff τ).mpr (.inr (.inr h))
 
 -- …and the ones that sit under AT LEAST ONE record constructor. A row-variable
 -- reached from a row can only leave the spine by entering a field payload, and
@@ -286,6 +339,7 @@ def Row.deepRowVars {B : Type} : Row B → List TyVar
   | .var _     => []
   | .sing _ τ  => Ty.deepRowVars τ
   | .cat ρ₁ ρ₂ => Row.deepRowVars ρ₁ ++ Row.deepRowVars ρ₂
+  | .dsing _ τ => Ty.deepRowVars τ
 end
 
 -- THE DEPENDENCY GRAPH LIVED HERE (`DepGraph`, `depInsert`, `depRound`,
@@ -309,7 +363,7 @@ end
 -- configuration must do, independently of any move that exploits it.
 def HostShape {B : Type} (l : Label) (τ : Ty B) (s : List (Atom B)) (β : TyVar) : Prop :=
   (∃ rest, sVarSeq s = β :: rest ∧ ∀ γ ∈ rest, γ ∈ Ty.allRowVars τ) ∧
-  sFieldCount l s = 0 ∧ β ∉ Ty.allRowVars τ
+  sFieldCount l s = 0 ∧ β ∉ Ty.allRowVars τ ∧ sHasKey s = false
 
 -- `NoHost` and `expandR` LIVED HERE, with `uniqueHost`/`expandL` above: the
 -- refusal predicate the trichotomy's step-2 dispatch read off, and the
@@ -356,7 +410,8 @@ def HasMguP {B : Type} (P : TySubst B → Prop) : Prop :=
 def InstanceOfOn {B : Type} (V : List TyVar) (θ' θ : TySubst B) : Prop :=
   ∃ σ : TySubst B,
     (∀ x ∈ V, RowEquiv (θ'.row x) ((θ.row x).applySubst σ)) ∧
-    (∀ x ∈ V, TyEquiv (θ'.ty x) ((θ.ty x).applySubst σ))
+    (∀ x ∈ V, TyEquiv (θ'.ty x) ((θ.ty x).applySubst σ)) ∧
+    (∀ x ∈ V, θ'.lab x = (θ.lab x).applySubst σ)
 
 def HasMguOn {B : Type} (V : List TyVar) (P : TySubst B → Prop) : Prop :=
   ∃ θ : TySubst B, P θ ∧ ∀ θ' : TySubst B, P θ' → InstanceOfOn V θ' θ
@@ -364,8 +419,8 @@ def HasMguOn {B : Type} (V : List TyVar) (P : TySubst B → Prop) : Prop :=
 -- ⊢  factoring everywhere factors on V
 theorem InstanceOf.on {B : Type} {θ' θ : TySubst B} (V : List TyVar)
     (h : InstanceOf θ' θ) : InstanceOfOn V θ' θ :=
-  let ⟨σ, hrow, hty⟩ := h
-  ⟨σ, fun x _ => hrow x, fun x _ => hty x⟩
+  let ⟨σ, hrow, hty, hlab⟩ := h
+  ⟨σ, fun x _ => hrow x, fun x _ => hty x, fun x _ => hlab x⟩
 
 -- ⊢  a strict mgu is an mgu on V
 theorem hasMguOn_of_hasMguP {B : Type} {P : TySubst B → Prop} (V : List TyVar)
@@ -394,7 +449,8 @@ def EqsSat {B : Type} (θ : TySubst B) (eqs : List (Ty B × Ty B)) : Prop :=
 
 -- ## ≗ : pointwise ≈-equality of substitutions
 def SubstEquiv {B : Type} (θ₁ θ₂ : TySubst B) : Prop :=
-  (∀ α, TyEquiv (θ₁.ty α) (θ₂.ty α)) ∧ (∀ α, RowEquiv (θ₁.row α) (θ₂.row α))
+  (∀ α, TyEquiv (θ₁.ty α) (θ₂.ty α)) ∧ (∀ α, RowEquiv (θ₁.row α) (θ₂.row α)) ∧
+    (∀ α, θ₁.lab α = θ₂.lab α)
 
 infix:50 " ≗ " => SubstEquiv
 
@@ -405,11 +461,12 @@ infix:50 " ≗ " => SubstEquiv
 structure Sol (B : Type) where
   ty  : List (TyVar × Ty B)
   row : List (TyVar × Row B)
+  lab : List (TyVar × Key) := []
 
-def Sol.nil {B : Type} : Sol B := ⟨[], []⟩
+def Sol.nil {B : Type} : Sol B := ⟨[], [], []⟩
 
 -- The old row-only solution, embedded.
-def Sol.ofRow {B : Type} (σ : List (TyVar × Row B)) : Sol B := ⟨[], σ⟩
+def Sol.ofRow {B : Type} (σ : List (TyVar × Row B)) : Sol B := ⟨[], σ, []⟩
 
 -- Association lists, resolved with `if β = α` rather than List.lookup so the
 -- membership spec below is a two-line structural induction.
@@ -421,22 +478,28 @@ def rowLookup {B : Type} (α : TyVar) : List (TyVar × Row B) → Row B
   | [] => .var α
   | (β, ρ) :: t => if β = α then ρ else rowLookup α t
 
+def labLookup (α : TyVar) : List (TyVar × Key) → Key
+  | [] => .var α
+  | (β, k) :: t => if β = α then k else labLookup α t
+
 -- The substitution a solution denotes: bound variables go to their binding,
 -- every other variable stays free.
 def Sol.toSubst {B : Type} (s : Sol B) : TySubst B :=
-  ⟨fun α => tyLookup α s.ty, fun α => rowLookup α s.row⟩
+  ⟨fun α => tyLookup α s.ty, fun α => rowLookup α s.row, fun α => labLookup α s.lab⟩
 
 -- SolSat at both sorts.
 def Sol.Sat {B : Type} (θ : TySubst B) (s : Sol B) : Prop :=
   (∀ p ∈ s.ty, TyEquiv (θ.ty p.1) (p.2.applySubst θ)) ∧
-  (∀ p ∈ s.row, RowEquiv (θ.row p.1) (p.2.applySubst θ))
+  (∀ p ∈ s.row, RowEquiv (θ.row p.1) (p.2.applySubst θ)) ∧
+  (∀ p ∈ s.lab, θ.lab p.1 = p.2.applySubst θ)
 
 -- ## Composing solutions
 -- s₂.comp s₁ — first s₁, then s₂ — the Sol-level image of TySubst.comp
 -- (minimal.lean:1669): push s₂ through s₁'s bindings, then keep s₂'s own.
 def Sol.comp {B : Type} (s₂ s₁ : Sol B) : Sol B :=
   ⟨s₁.ty.map  (fun p => (p.1, p.2.applySubst s₂.toSubst)) ++ s₂.ty,
-   s₁.row.map (fun p => (p.1, p.2.applySubst s₂.toSubst)) ++ s₂.row⟩
+   s₁.row.map (fun p => (p.1, p.2.applySubst s₂.toSubst)) ++ s₂.row,
+   s₁.lab.map (fun p => (p.1, p.2.applySubst s₂.toSubst)) ++ s₂.lab⟩
 
 -- ## The result type of the mutual driver
 -- A success carries the SUPPLY it stopped at, so the fresh names invented by
@@ -476,6 +539,8 @@ def sApplySubst {B : Type} (θ : TySubst B) : List (Atom B) → List (Atom B)
   | [] => []
   | .field l τ :: s => .field l (τ.applySubst θ) :: sApplySubst θ s
   | .var α :: s     => (θ.row α).toSpine ++ sApplySubst θ s
+  | .dfield α τ :: s =>
+      Atom.ofKey (θ.lab α) (τ.applySubst θ) :: sApplySubst θ s
 
 -- ## The supply
 /-- The invariant: every name `S` can still produce is longer than everything
@@ -495,7 +560,7 @@ def initSupply {B : Type} (ρ₁ ρ₂ : Row B) : Supply := ⟨lenBound (ρ₁.f
 -- without moving on the problem's own variables". `V` is any variable set the
 -- problem lives inside; it is what the extension promises to leave alone.
 def AgreeOn {B : Type} (θ θ' : TySubst B) (V : List TyVar) : Prop :=
-  ∀ α ∈ V, θ.ty α = θ'.ty α ∧ θ.row α = θ'.row α
+  ∀ α ∈ V, θ.ty α = θ'.ty α ∧ θ.row α = θ'.row α ∧ θ.lab α = θ'.lab α
 
 
 --------------------- THE MUTUAL ≐ / ≐ᵣ DRIVER --------------------------------
@@ -523,7 +588,20 @@ def tyIsVar {B : Type} : Ty B → Option TyVar
 def bindTy {B : Type} (S : Supply) (α : TyVar) (τ : Ty B) : UResM B :=
   if tyIsVar τ = some α then .success .nil S
   else if τ.tyFtv.contains α then .occurs
-  else .success ⟨[(α, τ)], []⟩ S
+  else .success ⟨[(α, τ)], [], []⟩ S
+
+-- ## Binding a LABEL variable
+-- Keys are flat — a label or a label variable — so there is nothing to occur
+-- in: α ≐ α is vacuous, anything else binds.
+def bindLab {B : Type} (S : Supply) (α : TyVar) (k : Key) : UResM B :=
+  if k = .var α then .success .nil S
+  else .success ⟨[], [], [(α, k)]⟩ S
+
+-- ⌊k₁⌋ ≐ ⌊k₂⌋: a label variable binds, two labels are equal or clash
+def unifyKey {B : Type} (S : Supply) : Key → Key → UResM B
+  | .var α, k => bindLab S α k
+  | .lit l, .var α => bindLab S α (.lit l)
+  | .lit l, .lit l' => if l = l' then .success .nil S else .clash
 
 -- ## The ε-collapse solution
 -- Every spine variable to ε, except one the caller asks to KEEP. `none` on a
@@ -534,6 +612,7 @@ def epsCollapse {B : Type} (keep : Option TyVar) :
   | .var γ :: s      => (epsCollapse keep s).map
                           (fun σ => if keep = some γ then σ else (γ, Row.empty) :: σ)
   | .field _ _ :: _  => none
+  | .dfield _ _ :: _ => none
 
 -- ## …and WHICH collapse an all-variable occurrence calls for
 -- α ≐ᵣ [γ₁ … γₙ] with α on that spine k ≥ 1 times. The ≈-characterization reads
@@ -566,7 +645,10 @@ def solveVarM {B : Type} (S : Supply) :
       some (match collapseSol α s₂ with
             | some σ => .success (Sol.ofRow σ) S
             | none =>
-              if (Row.allRowVars (ofSpine s₂)).contains α then .occurs
+              -- a keyed field on the spine: occurs would need a key-aware
+              -- counting argument, and stuck rejects just the same
+              if (Row.allRowVars (ofSpine s₂)).contains α then
+                (if sHasKey s₂ then .stuck else .occurs)
               else .success (Sol.ofRow [(α, ofSpine s₂)]) S)
   | _, _ => none
 
@@ -591,8 +673,8 @@ def unifyTyF {B : Type} [DecidableEq B] (S : Supply) (fuel : Nat) :
   -- ★ is RIGID: it unifies with itself and clashes with everything else
   | .unk, .unk => .success .nil S
   | .base b, .base b' => if b = b' then .success .nil S else .clash
-  -- ⌊l⌋ is rigid like 𝓫: the whole label pass is this one arm
-  | .lab l, .lab l' => if l = l' then .success .nil S else .clash
+  -- the whole label pass is this one arm: keys are flat
+  | .lab k₁, .lab k₂ => unifyKey S k₁ k₂
   | .fn a₁ b₁, .fn a₂ b₂ =>
       match fuel with
       | 0 => .outOfFuel
@@ -704,7 +786,8 @@ def UResM.Mono {B : Type} (r r' : UResM B) : Prop := r = .outOfFuel ∨ r' = r
 -- Keys and ranges, at both sorts. Kept as a PREDICATE rather than a list: it is
 -- only ever used inside a `⊆ W`, and a predicate needs no membership algebra.
 def SolMentions {B : Type} (s : Sol B) (γ : TyVar) : Prop :=
-  (∃ p ∈ s.ty, γ = p.1 ∨ γ ∈ p.2.ftv) ∨ (∃ p ∈ s.row, γ = p.1 ∨ γ ∈ p.2.ftv)
+  (∃ p ∈ s.ty, γ = p.1 ∨ γ ∈ p.2.ftv) ∨ (∃ p ∈ s.row, γ = p.1 ∨ γ ∈ p.2.ftv) ∨
+  (∃ p ∈ s.lab, γ = p.1 ∨ γ ∈ p.2.ftv)
 
 /-- `SolBelow s W`: every name the solution mentions is already in `W`. -/
 def SolBelow {B : Type} (s : Sol B) (W : List TyVar) : Prop :=

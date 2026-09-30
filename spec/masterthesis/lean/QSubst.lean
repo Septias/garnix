@@ -47,7 +47,7 @@ theorem inst_mono_eq {B : Type} {τ τ' : Ty B}
   obtain ⟨θ, hfix, -, hb⟩ := h
   rw [← hb]
   exact Ty.applySubst_fixed_ftv τ
-    (fun α _ => ⟨hfix.1 α (by simp), hfix.2 α (by simp)⟩)
+    (fun α _ => ⟨hfix.1 α (by simp), hfix.2.1 α (by simp), hfix.2.2 α (by simp)⟩)
 
 -- ⊢  a MONOTYPE binding is covered for free: with no quantifiers its only
 --    instance is its own body, at either context
@@ -102,11 +102,13 @@ theorem QInstMap.bindScheme {B : Type} {σ : TySubst B} {Γ Γ' : QCtx B}
 
 private def instSub {B : Type} (vs : List TyVar) (θ σ : TySubst B) : TySubst B :=
   ⟨fun α => if α ∈ vs then (θ.ty  α).applySubst σ else .var α,
-   fun α => if α ∈ vs then (θ.row α).applySubst σ else .var α⟩
+   fun α => if α ∈ vs then (θ.row α).applySubst σ else .var α,
+   fun α => if α ∈ vs then (θ.lab α).applySubst σ else .var α⟩
 
 private theorem instSub_fixed {B : Type} (vs : List TyVar) (θ σ : TySubst B) :
     (instSub vs θ σ).FixedOutside vs :=
-  ⟨fun _ h => by simp [instSub, h], fun _ h => by simp [instSub, h]⟩
+  ⟨fun _ h => by simp [instSub, h], fun _ h => by simp [instSub, h],
+   fun _ h => by simp [instSub, h]⟩
 
 private theorem instSub_mem {B : Type} {vs : List TyVar} {θ σ : TySubst B}
     {α : TyVar} (h : α ∈ vs) :
@@ -116,51 +118,76 @@ private theorem instSub_mem {B : Type} {vs : List TyVar} {θ σ : TySubst B}
 --   variable the scheme can reach.
 private theorem comp_agree {B : Type} {vs : List TyVar} {θ σ : TySubst B}
     (hfix : θ.FixedOutside vs)
-    (hσfix : ∀ α ∈ vs, σ.ty α = .var α ∧ σ.row α = .var α)
+    (hσfix : ∀ α ∈ vs, σ.ty α = .var α ∧ σ.row α = .var α ∧ σ.lab α = .var α)
     {α : TyVar}
-    (hav : α ∉ vs → (∀ β ∈ (σ.ty α).ftv, β ∉ vs) ∧ (∀ β ∈ (σ.row α).ftv, β ∉ vs)) :
+    (hav : α ∉ vs → (∀ β ∈ (σ.ty α).ftv, β ∉ vs) ∧ (∀ β ∈ (σ.row α).ftv, β ∉ vs) ∧
+      (∀ β ∈ (σ.lab α).ftv, β ∉ vs)) :
     ((instSub vs θ σ).comp σ).ty α = (σ.comp θ).ty α ∧
-    ((instSub vs θ σ).comp σ).row α = (σ.comp θ).row α := by
+    ((instSub vs θ σ).comp σ).row α = (σ.comp θ).row α ∧
+    ((instSub vs θ σ).comp σ).lab α = (σ.comp θ).lab α := by
   by_cases hα : α ∈ vs
-  · obtain ⟨ht, hr⟩ := hσfix α hα
-    refine ⟨?_, ?_⟩
+  · obtain ⟨ht, hr, hl⟩ := hσfix α hα
+    refine ⟨?_, ?_, ?_⟩
     · show (σ.ty α).applySubst _ = (θ.ty α).applySubst σ
       rw [ht]; show (instSub vs θ σ).ty α = _; simp [instSub, hα]
     · show (σ.row α).applySubst _ = (θ.row α).applySubst σ
       rw [hr]; show (instSub vs θ σ).row α = _; simp [instSub, hα]
-  · obtain ⟨hvt, hvr⟩ := hav hα
-    refine ⟨?_, ?_⟩
+    · show (σ.lab α).applySubst _ = (θ.lab α).applySubst σ
+      rw [hl]; show (instSub vs θ σ).lab α = _; simp [instSub, hα]
+  · obtain ⟨hvt, hvr, hvl⟩ := hav hα
+    refine ⟨?_, ?_, ?_⟩
     · show (σ.ty α).applySubst _ = (θ.ty α).applySubst σ
       rw [hfix.1 α hα]
       show _ = σ.ty α
       exact Ty.applySubst_fixed_ftv _
         (fun β hβ => by simp [instSub, hvt β hβ])
     · show (σ.row α).applySubst _ = (θ.row α).applySubst σ
-      rw [hfix.2 α hα]
+      rw [hfix.2.1 α hα]
       show _ = σ.row α
       exact Row.applySubst_fixed_ftv _
         (fun β hβ => by simp [instSub, hvr β hβ])
+    · show (σ.lab α).applySubst _ = (θ.lab α).applySubst σ
+      rw [hfix.2.2 α hα]
+      show _ = σ.lab α
+      cases hk : σ.lab α with
+      | lit _ => rfl
+      | var γ =>
+          have := hvl γ (by simp [hk, Key.ftv])
+          simp [instSub, this]
 
--- the two congruence corollaries, at each sort
+-- the congruence corollaries, at each sort
 private theorem swap_ty {B : Type} {vs : List TyVar} {θ σ : TySubst B}
     (hfix : θ.FixedOutside vs)
-    (hσfix : ∀ α ∈ vs, σ.ty α = .var α ∧ σ.row α = .var α)
+    (hσfix : ∀ α ∈ vs, σ.ty α = .var α ∧ σ.row α = .var α ∧ σ.lab α = .var α)
     (τ : Ty B)
     (hav : ∀ α ∈ τ.ftv, α ∉ vs →
-      (∀ β ∈ (σ.ty α).ftv, β ∉ vs) ∧ (∀ β ∈ (σ.row α).ftv, β ∉ vs)) :
+      (∀ β ∈ (σ.ty α).ftv, β ∉ vs) ∧ (∀ β ∈ (σ.row α).ftv, β ∉ vs) ∧
+      (∀ β ∈ (σ.lab α).ftv, β ∉ vs)) :
     (τ.applySubst σ).applySubst (instSub vs θ σ) = (τ.applySubst θ).applySubst σ := by
   rw [Ty.applySubst_applySubst, Ty.applySubst_applySubst]
   exact Ty.applySubst_congr τ (fun α hα => comp_agree hfix hσfix (hav α hα))
 
 private theorem swap_row {B : Type} {vs : List TyVar} {θ σ : TySubst B}
     (hfix : θ.FixedOutside vs)
-    (hσfix : ∀ α ∈ vs, σ.ty α = .var α ∧ σ.row α = .var α)
+    (hσfix : ∀ α ∈ vs, σ.ty α = .var α ∧ σ.row α = .var α ∧ σ.lab α = .var α)
     (ρ : Row B)
     (hav : ∀ α ∈ ρ.ftv, α ∉ vs →
-      (∀ β ∈ (σ.ty α).ftv, β ∉ vs) ∧ (∀ β ∈ (σ.row α).ftv, β ∉ vs)) :
+      (∀ β ∈ (σ.ty α).ftv, β ∉ vs) ∧ (∀ β ∈ (σ.row α).ftv, β ∉ vs) ∧
+      (∀ β ∈ (σ.lab α).ftv, β ∉ vs)) :
     (ρ.applySubst σ).applySubst (instSub vs θ σ) = (ρ.applySubst θ).applySubst σ := by
   rw [Row.applySubst_applySubst, Row.applySubst_applySubst]
   exact Row.applySubst_congr ρ (fun α hα => comp_agree hfix hσfix (hav α hα))
+
+private theorem swap_key {B : Type} {vs : List TyVar} {θ σ : TySubst B}
+    (hfix : θ.FixedOutside vs)
+    (hσfix : ∀ α ∈ vs, σ.ty α = .var α ∧ σ.row α = .var α ∧ σ.lab α = .var α)
+    (k : Key)
+    (hav : ∀ α ∈ k.ftv, α ∉ vs →
+      (∀ β ∈ (σ.ty α).ftv, β ∉ vs) ∧ (∀ β ∈ (σ.row α).ftv, β ∉ vs) ∧
+      (∀ β ∈ (σ.lab α).ftv, β ∉ vs)) :
+    (k.applySubst σ).applySubst (instSub vs θ σ) = (k.applySubst θ).applySubst σ := by
+  rw [Key.applySubst_applySubst, Key.applySubst_applySubst]
+  exact Key.applySubst_congr k (fun α hα => (comp_agree hfix hσfix (hav α hα)).2.2)
 
 /-- σ resolves no stump that the instantiation left PARKED: wherever its lookup
 came out `?`, it is still `?` after σ.
@@ -214,7 +241,7 @@ theorem QCovers.forward_of_avoiding {B : Type} {σ : TySubst B}
           (List.mem_flatMap.mpr ⟨st, hst, List.mem_append_left _ hα⟩)))
     have hlab : (st.label.applySubst σ).applySubst (instSub σ₀.vars θ σ)
         = (st.label.applySubst θ).applySubst σ :=
-      swap_ty hfix hσfix st.label (fun α hα =>
+      swap_key hfix hσfix st.label (fun α hα =>
         havf α (List.mem_append_left _
           (List.mem_flatMap.mpr ⟨st, hst, List.mem_append_right _ hα⟩)))
     -- δ is a binder, so the witness reads θ at it
@@ -222,7 +249,8 @@ theorem QCovers.forward_of_avoiding {B : Type} {σ : TySubst B}
       rw [Ty.applySubst_applySubst]
       exact Ty.applySubst_congr _ (fun δ hδ => by
         have hm := hwf st hst δ hδ
-        exact ⟨by simp [instSub, hm, TySubst.comp], by simp [instSub, hm, TySubst.comp]⟩)
+        exact ⟨by simp [instSub, hm, TySubst.comp], by simp [instSub, hm, TySubst.comp],
+          by simp [instSub, hm, TySubst.comp]⟩)
     cases hdis st hst with
     | @hit τr hlk hδ =>
         refine .hit (τ := τr.applySubst σ) ?_ ?_
@@ -266,12 +294,12 @@ theorem QCovers.forward_of_avoiding {B : Type} {σ : TySubst B}
 -- witness is refuted, so a proof must produce a DIFFERENT scheme. See the note
 -- after the refutation for how far that looks like it can go.
 
-private def refuteSol : Sol Unit := ⟨[("b", .base ())], []⟩
+private def refuteSol : Sol Unit := ⟨[("b", .base ())], [], []⟩
 private def refuteSub : TySubst Unit := refuteSol.toSubst
 private def refuteScheme : QScheme Unit := ⟨["a"], [], .var "a"⟩
 
 private theorem refuteSol_applied : refuteSol.Applied := by
-  refine ⟨fun p hp => ?_, fun _ hp => nomatch hp⟩
+  refine ⟨fun p hp => ?_, fun _ hp => (nomatch hp), fun _ hp => (nomatch hp)⟩
   obtain rfl := List.mem_singleton.mp hp
   rfl
 
@@ -283,7 +311,7 @@ private theorem refuteScheme_wf : refuteScheme.WF := fun _ hst => nomatch hst
 private theorem refuteScheme_avoiding : refuteScheme.Avoiding refuteSub := by
   refine ⟨fun α hα => ?_, fun α hα hn => ?_⟩
   · obtain rfl := List.mem_singleton.mp hα
-    exact ⟨rfl, rfl⟩
+    exact ⟨rfl, rfl, rfl⟩
   · exact absurd hα hn
 
 -- the image scheme is σ₀ itself: σ fixes `a`
@@ -292,12 +320,12 @@ private theorem refuteScheme_image :
 
 -- `b` IS an instance of the image scheme…
 private def bWitness : TySubst Unit :=
-  ⟨fun α => if α = "a" then .var "b" else .var α, fun α => .var α⟩
+  ⟨fun α => if α = "a" then .var "b" else .var α, fun α => .var α, fun x => .var x⟩
 
 private theorem b_inst :
     QScheme.Inst (refuteScheme.applySubst refuteSub)
       (.var "b") := by
-  refine ⟨bWitness, ⟨fun α h => ?_, fun _ _ => rfl⟩, ?_, rfl⟩
+  refine ⟨bWitness, ⟨fun α h => ?_, fun _ _ => rfl, fun _ _ => rfl⟩, ?_, rfl⟩
   · have hne : α ≠ "a" := by
       intro he
       exact h (by rw [he]; show "a" ∈ ["a"]; simp)
@@ -437,6 +465,8 @@ theorem qtyped_applySubst {B C : Type} {constTy : C → B}
       | found τ => exact .qUnk (.qSelDyn h₁' h₂' hr)
       | absent => exact .qSelDynAbs h₁' h₂' hr
       | unknown => exact .qSelDynUnk h₁' h₂' hr
+  | _, _, _, _, .qRcdDyn h₁ h₂, hm =>
+      .qRcdDyn (qtyped_applySubst him h₁ hm) (qtyped_applySubst him h₂ hm)
 
 theorem qtypedBody_applySubst {B C : Type} {constTy : C → B}
     {σ : TySubst B} (him : SchemeImage σ) :

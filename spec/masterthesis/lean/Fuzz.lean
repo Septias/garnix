@@ -74,11 +74,15 @@ abbrev Spine := List (Atom Unit)
 
 ---------------------------------- PRINTING -----------------------------------
 
+def keyStr : Key → String
+  | .lit l => l
+  | .var α => α
+
 mutual
 def tyStr : Ty Unit → String
   | .var α    => α
   | .base _   => "𝓫"
-  | .lab l    => "⌊" ++ l ++ "⌋"
+  | .lab k    => "⌊" ++ keyStr k ++ "⌋"
   | .unk      => "★"
   | .fn τ₁ τ₂ => "(" ++ tyStr τ₁ ++ "→" ++ tyStr τ₂ ++ ")"
   | .rcd ρ    => "{" ++ rowStr ρ ++ "}"
@@ -88,18 +92,21 @@ def rowStr : Row Unit → String
   | .var α     => α
   | .sing l τ  => l ++ ":" ++ tyStr τ
   | .cat ρ₁ ρ₂ => rowStr ρ₁ ++ " | " ++ rowStr ρ₂
+  | .dsing k τ => "${" ++ keyStr k ++ "}:" ++ tyStr τ
 end
 
 def atomStr : Atom Unit → String
-  | .field l τ => l ++ ":" ++ tyStr τ
-  | .var α     => α
+  | .field l τ  => l ++ ":" ++ tyStr τ
+  | .dfield α τ => "${" ++ α ++ "}:" ++ tyStr τ
+  | .var α      => α
 
 def spineStr (s : Spine) : String :=
   "(" ++ String.intercalate " | " (s.map atomStr) ++ ")"
 
 def solStr (s : Sol Unit) : String :=
   "[" ++ String.intercalate ", " (s.ty.map  fun p => p.1 ++ "≔" ++ tyStr p.2) ++
-  " ; " ++ String.intercalate ", " (s.row.map fun p => p.1 ++ "≔" ++ rowStr p.2) ++ "]"
+  " ; " ++ String.intercalate ", " (s.row.map fun p => p.1 ++ "≔" ++ rowStr p.2) ++
+  " ; " ++ String.intercalate ", " (s.lab.map fun p => p.1 ++ "≔" ++ keyStr p.2) ++ "]"
 
 -- Structural equality on the syntax, so the semantic half of `Sol.WF` can be
 -- decided. (`Ty`/`Row` derive no `DecidableEq`: the algorithm only ever needs
@@ -108,7 +115,7 @@ mutual
 def tyEqB : Ty Unit → Ty Unit → Bool
   | .var a,    .var b     => a == b
   | .base _,   .base _    => true
-  | .lab l,    .lab l'    => l == l'
+  | .lab k,    .lab k'    => decide (k = k')
   | .unk,      .unk       => true
   | .fn a b,   .fn c d    => tyEqB a c && tyEqB b d
   | .rcd r,    .rcd r'    => rowEqB r r'
@@ -119,6 +126,7 @@ def rowEqB : Row Unit → Row Unit → Bool
   | .var a,    .var b     => a == b
   | .sing l τ, .sing l' τ' => l == l' && tyEqB τ τ'
   | .cat a b,  .cat c d   => rowEqB a c && rowEqB b d
+  | .dsing k τ, .dsing k' τ' => decide (k = k') && tyEqB τ τ'
   | _,         _          => false
 end
 
@@ -143,7 +151,8 @@ def solAcyclicB (s : Sol Unit) : Bool :=
     consumer, where the question is whether triangularity comes from U-expand. -/
 def solAppliedB (s : Sol Unit) : Bool :=
   s.ty.all  (fun p => tyEqB (p.2.applySubst s.toSubst) p.2) &&
-  s.row.all (fun p => rowEqB (p.2.applySubst s.toSubst) p.2)
+  s.row.all (fun p => rowEqB (p.2.applySubst s.toSubst) p.2) &&
+  s.lab.all (fun p => decide (p.2.applySubst s.toSubst = p.2))
 
 /-- `Sol.Ranked` as a Bool: the sorted dependency graph on the solution's
     bindings is a DAG. A rank exists exactly when it is — take the longest-path
@@ -151,16 +160,19 @@ def solAppliedB (s : Sol Unit) : Bool :=
     of the ∃-rank in `Sol.Ranked`, and with `Sol.closes_closure` it is what says
     ⟦S⟧ EXISTS for this solution. It replaces the `Applied` half of the old
     tripwire, which was false by design against a triangular solution. -/
-def solDeps (s : Sol Unit) : Bool × TyVar → List (Bool × TyVar)
-  | (false, α) =>
+def solDeps (s : Sol Unit) : Srt × TyVar → List (Srt × TyVar)
+  | (.ty, α) =>
       ((s.ty.filter  (fun p => p.1 == α)).flatMap (fun p => Ty.sortedFtv  p.2)).filter
         (fun y => s.domS.contains y)
-  | (true,  α) =>
+  | (.row, α) =>
       ((s.row.filter (fun p => p.1 == α)).flatMap (fun p => Row.sortedFtv p.2)).filter
+        (fun y => s.domS.contains y)
+  | (.lab, α) =>
+      ((s.lab.filter (fun p => p.1 == α)).flatMap (fun p => Key.sortedFtv p.2)).filter
         (fun y => s.domS.contains y)
 
 /-- Peel nodes with no surviving dependency; a DAG empties, a cycle stalls. -/
-def peelDeps (s : Sol Unit) : Nat → List (Bool × TyVar) → Bool
+def peelDeps (s : Sol Unit) : Nat → List (Srt × TyVar) → Bool
   | 0,     rem => rem.isEmpty
   | n + 1, rem =>
       let next := rem.filter (fun x => (solDeps s x).any (fun y => rem.contains y))
@@ -201,13 +213,15 @@ def solWFB (s : Sol Unit) : Bool := solAcyclicB s && solRankedB s
 /-- Every dependency edge the solution imposes: from a binding's KEY to a
 variable in its value that the solution also binds. `Sol.Ranked` is exactly the
 existence of a rank that strictly decreases along all of these. -/
-def solEdges (s : Sol Unit) : List ((Bool × TyVar) × (Bool × TyVar)) :=
+def solEdges (s : Sol Unit) : List ((Srt × TyVar) × (Srt × TyVar)) :=
   (s.ty.flatMap  (fun p => ((Ty.sortedFtv  p.2).filter (fun y => s.domS.contains y)).map
-                             (fun y => ((false, p.1), y)))) ++
+                             (fun y => ((.ty, p.1), y)))) ++
   (s.row.flatMap (fun p => ((Row.sortedFtv p.2).filter (fun y => s.domS.contains y)).map
-                             (fun y => ((true,  p.1), y))))
+                             (fun y => ((.row, p.1), y)))) ++
+  (s.lab.flatMap (fun p => ((Key.sortedFtv p.2).filter (fun y => s.domS.contains y)).map
+                             (fun y => ((.lab, p.1), y))))
 
-def domIdx (s : Sol Unit) (x : Bool × TyVar) : Nat := s.domS.findIdx (· == x)
+def domIdx (s : Sol Unit) (x : Srt × TyVar) : Nat := s.domS.findIdx (· == x)
 
 /-- keep the FIRST binding per key — which is the only one `rowLookup`/`tyLookup`
 ever reads, every later one being dead. `Sol.Ranked` quantifies over ALL of them,
@@ -216,7 +230,7 @@ weight dropped, and the measurement below is what it is for. -/
 def dedupKeys {α : Type} (l : List (TyVar × α)) : List (TyVar × α) :=
   (l.foldl (fun acc p => if acc.any (fun q => q.1 == p.1) then acc else p :: acc) []).reverse
 
-def solDedup (s : Sol Unit) : Sol Unit := ⟨dedupKeys s.ty, dedupKeys s.row⟩
+def solDedup (s : Sol Unit) : Sol Unit := ⟨dedupKeys s.ty, dedupKeys s.row, dedupKeys s.lab⟩
 
 /-- a key bound TWICE with values that are not syntactically the same row/type.
 `Sol.toSubst` reads only the FIRST binding, while `Sol.Sat` quantifies over
@@ -225,14 +239,16 @@ substitutions. proof-state flags this as a SUB-OBLIGATION with no invariant
 behind it; this counts it. -/
 def solDupDiff (s : Sol Unit) : Bool :=
   s.ty.any  (fun p => s.ty.any  (fun q => p.1 == q.1 && !tyEqB  p.2 q.2)) ||
-  s.row.any (fun p => s.row.any (fun q => p.1 == q.1 && !rowEqB p.2 q.2))
+  s.row.any (fun p => s.row.any (fun q => p.1 == q.1 && !rowEqB p.2 q.2)) ||
+  s.lab.any (fun p => s.lab.any (fun q => p.1 == q.1 && !decide (p.2 = q.2)))
 
 def solHasDup (s : Sol Unit) : Bool :=
-  (dedupKeys s.ty).length != s.ty.length || (dedupKeys s.row).length != s.row.length
+  (dedupKeys s.ty).length != s.ty.length || (dedupKeys s.row).length != s.row.length ||
+    (dedupKeys s.lab).length != s.lab.length
 
-def nodeStr (x : Bool × TyVar) : String := (if x.1 then "ᵣ" else "ₜ") ++ x.2
+def nodeStr (x : Srt × TyVar) : String := (match x.1 with | .row => "ᵣ" | .ty => "ₜ" | .lab => "ₗ") ++ x.2
 
-def edgeStr (e : (Bool × TyVar) × (Bool × TyVar)) : String :=
+def edgeStr (e : (Srt × TyVar) × (Srt × TyVar)) : String :=
   nodeStr e.1 ++ "→" ++ nodeStr e.2
 
 structure RankVerdict where
@@ -259,7 +275,7 @@ def rankVerdict (s : Sol Unit) : RankVerdict :=
     ranked := solRankedB s }
 
 /-- the edges a candidate fails on, for the witness line. -/
-def badEdges (s : Sol Unit) (p : ((Bool × TyVar) × (Bool × TyVar)) → Bool) : String :=
+def badEdges (s : Sol Unit) (p : ((Srt × TyVar) × (Srt × TyVar)) → Bool) : String :=
   String.intercalate ", " (((solEdges s).filter (fun e => !p e)).map edgeStr)
 
 /-- The FULL result, solution included — the tripwire compares these. -/
@@ -302,10 +318,12 @@ structure Universe where
   labels : List Label
   tys    : List (Ty Unit)      -- field payloads
   maxLen : Nat                 -- spines of length 0 .. maxLen, both sides
+  keys   : List TyVar := []    -- label variables keying `${k}:` fields (phase B)
 
-/-- Atom alphabet: every row variable, and every label at every payload. -/
+/-- Atom alphabet: every row variable, and every label and key at every payload. -/
 def Universe.atoms (U : Universe) : List (Atom Unit) :=
-  U.vars.map .var ++ U.labels.flatMap fun l => U.tys.map (Atom.field l ·)
+  U.vars.map .var ++ U.labels.flatMap (fun l => U.tys.map (Atom.field l ·)) ++
+    U.keys.flatMap fun k => U.tys.map (Atom.dfield k ·)
 
 def spinesOfLen (as : List (Atom Unit)) : Nat → List Spine
   | 0     => [[]]
@@ -361,11 +379,13 @@ def rowSize : Row Unit → Nat
   | .var _     => 1
   | .sing _ τ  => 1 + tySize τ
   | .cat ρ₁ ρ₂ => 1 + rowSize ρ₁ + rowSize ρ₂
+  | .dsing _ τ => 1 + tySize τ
 end
 
 def atomSize : Atom Unit → Nat
   | .var _     => 1
   | .field _ τ => 1 + tySize τ
+  | .dfield _ τ => 1 + tySize τ
 
 def sSize (s : Spine) : Nat := (s.map atomSize).foldl (· + ·) 0
 
@@ -641,6 +661,18 @@ def deep : Universe :=
     tys    := [.base (), .var "a", .rcd (.var "a")]
     maxLen := 3 }
 
+/-- Keyed fields (FC-labels phase B): `${p}:` / `${q}:` barriers next to a
+    literal field, with label-typed and keyed payloads, so the label arm of the
+    unifier and the dfield barriers both get exercised. -/
+def keyed : Universe :=
+  { name   := "keyed"
+    vars   := ["a", "b"]
+    labels := ["l"]
+    keys   := ["p", "q"]
+    tys    := [.base (), .var "a", .lab (.var "p"), .lab (.lit "l"),
+               .rcd (.dsing (.var "p") (.base ()))]
+    maxLen := 2 }
+
 --------------------------- PARAMETRIC SCALING --------------------------------
 -- Exhaustive search over a small universe can only say "no divergence HERE".
 -- The families below say something a measure can be checked against: how the
@@ -788,6 +820,7 @@ def main : IO Unit := do
   report wide cap
   report deep cap
   report nest cap
+  report keyed cap
   familyReport 4000 24
   IO.println "A pair still outOfFuel at cap, with a spine of ≤ 6 atoms, is a"
   IO.println "divergence candidate: minimize it by hand and it becomes a theorem."

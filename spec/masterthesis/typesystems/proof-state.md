@@ -25,7 +25,7 @@ We use a custom lookup relation ⟨ρ.l ↓ r⟩ with return values ⟨τ | ⊥ 
 - [x] Qualified Schemes
 - [x] Unification
 - [x] Type Inference
-- [~] FC-Labels
+- [x] FC-Labels
 - [ ] Negative type information
 - [ ] Occurrence Typing
 - [ ] Patterns
@@ -36,7 +36,16 @@ We use a custom lookup relation ⟨ρ.l ↓ r⟩ with return values ⟨τ | ⊥ 
 
 ## FC-Labels  (`plans/fc-labels-plan.md`)
 - [x] **Phase A — Reading dynamic**
-- [~] **Phase B — dynamic construction**
+- [x] **Phase B — dynamic construction**  (`plans/fc-labels-phase-b-plan.md`)
+  - Keys are their own sort: `Key := l | α`, `⌊k⌋ : Ty`, `${k}: τ : Row`, `TySubst.lab`, `Sol.lab`; no junk keys
+  - `{ ${e₁} = e₂ }`: lazy step to `{l = e₂}`, `qRcdDyn`, A-rcd-dyn (fresh label var κ, `τ₁ ≐ ⌊κ⌋`)
+  - Headline `rcdDynQ_instance_closed`: `λa. λv. {${a} = v} :: ∀α δ. ⌊α⌋ → δ → {${α}: δ}`; runF infers exactly that
+  - qProgress, qPreservation, runSound, runF_terminates: same axioms as before
+  - Costs:
+    - a non-label key is a type error (`{foo = c}.(c)`, `{${c} = c}` clash), was ★ + W-flag
+    - keyed fields are barriers: `(foo: τ) ≐ᵣ (${α}: τ′)` and different unknown keys are stuck; keyed Fuzz universe 67% stuck
+  - U-key: same unknown key at the head/tail of both spines → `τ ≐ τ′`, continue (`matchL` arm, `RowEquiv.dsing_cancel_left`)
+  - Gained: `KeySafe` gone (F-★ never binds labels); `λr. {x = 1}.(r.a)` runs again; `α ≐ {${α}: σ}` solves (sorts differ)
 
 
 # Problems

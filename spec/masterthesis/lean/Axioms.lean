@@ -426,8 +426,10 @@ info: 'MinimalCalculus.l1_rejects_two_use' depends on axioms: [propext, Classica
 -- are gone with `L-α`: `lookup_total` is unconditional, and there is only one
 -- reading of ⟦S⟧ left to bridge to. What survives is the statement below, and
 -- it needs neither `Closes` nor `Acyclic`.
+-- (propext since Phase B: the keyed-field arms compare keys by `Ty.keyCmp`,
+-- whose stability lemma splits an `if`.)
 /--
-info: 'MinimalCalculus.Sol.lookup_applySubst_closure' does not depend on any axioms
+info: 'MinimalCalculus.Sol.lookup_applySubst_closure' depends on axioms: [propext]
 -/
 #guard_msgs in #print axioms Sol.lookup_applySubst_closure
 
@@ -436,7 +438,7 @@ info: 'MinimalCalculus.Sol.lookup_applySubst_closure' does not depend on any axi
 /-- info: 'MinimalCalculus.lookup_total' does not depend on any axioms -/
 #guard_msgs in #print axioms lookup_total
 
-/-- info: 'MinimalCalculus.lookup_applySubst' does not depend on any axioms -/
+/-- info: 'MinimalCalculus.lookup_applySubst' depends on axioms: [propext] -/
 #guard_msgs in #print axioms lookup_applySubst
 
 -- ## The general depth-aware occurs theorem (RowUnify.NoMgu)
@@ -773,8 +775,11 @@ info: 'MinimalCalculus.fStar_reachable_no_discharge' depends on axioms: [propext
 /-- info: 'MinimalCalculus.Ty.mem_ftv_iff' depends on axioms: [propext] -/
 #guard_msgs in #print axioms Ty.mem_ftv_iff
 
-/-- info: 'MinimalCalculus.Ty.mem_tyFtv_iff_sortedFtv' depends on axioms: [propext] -/
-#guard_msgs in #print axioms Ty.mem_tyFtv_iff_sortedFtv
+-- (was `Ty.mem_tyFtv_iff_sortedFtv`. Phase B splits the type fibre: a variable
+-- under a `${·}` key is a WEAK occurrence (`keyFtv`), so only this direction
+-- survives, with a keyFtv disjunct.)
+/-- info: 'MinimalCalculus.Ty.mem_tyFtv_of_sortedFtv' depends on axioms: [propext] -/
+#guard_msgs in #print axioms Ty.mem_tyFtv_of_sortedFtv
 
 -- ## SORTS OF INVENTED VARIABLES (Infer.lean)
 -- Every drawn name now carries the sort it was drawn at, and the record is only
@@ -1123,17 +1128,28 @@ info: 'MinimalCalculus.selDynQ_instance_closed' depends on axioms: [propext, Cla
 -/
 #guard_msgs in #print axioms selDynQ_instance_closed
 
-/-- info: 'MinimalCalculus.LookupQ.det' does not depend on any axioms -/
+-- …and of the construction λa. λv. {${a} = v} (phase B)
+/--
+info: 'MinimalCalculus.rcdDynQ_instance_closed' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms rcdDynQ_instance_closed
+
+-- U-key's completeness ingredient: a shared leading key cancels
+/--
+info: 'MinimalCalculus.RowEquiv.dsing_cancel_left' depends on axioms: [propext, Quot.sound]
+-/
+#guard_msgs in #print axioms RowEquiv.dsing_cancel_left
+
+-- (propext since Phase B: the rules compare keys through `Ty.keyCmp`.)
+/-- info: 'MinimalCalculus.LookupQ.det' depends on axioms: [propext] -/
 #guard_msgs in #print axioms LookupQ.det
 
 -- (`LookupQ.mono` — stability under extending the row-solutions — went with
 -- L-α; its substitution form is `LookupQ.applySubst`, guarded below.)
 
-/-- info: 'MinimalCalculus.LookupQ.total' depends on axioms: [propext] -/
+-- (axiom-free since Phase B: L-junk is structural, no `IsQuery` case split.)
+/-- info: 'MinimalCalculus.LookupQ.total' does not depend on any axioms -/
 #guard_msgs in #print axioms LookupQ.total
-
-/-- info: 'MinimalCalculus.LookupQ.key_equiv' does not depend on any axioms -/
-#guard_msgs in #print axioms LookupQ.key_equiv
 
 /-- info: 'MinimalCalculus.LookupQ.applySubst' depends on axioms: [propext] -/
 #guard_msgs in #print axioms LookupQ.applySubst

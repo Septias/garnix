@@ -56,6 +56,9 @@ inductive LookupBlocked {B : Type} : Row B → Label → TyVar → Prop where
   -- L-conc-★: the left component already blocks, and ‖ is left-biased
   | catUnk {ρ₁ ρ₂ : Row B} {l : Label} {β : TyVar} :
       LookupBlocked ρ₁ l β → LookupBlocked (.cat ρ₁ ρ₂) l β
+  -- L-?-lab against a keyed field: a label meets `${γ}`, and only γ decides
+  | dunk {γ : TyVar} {l : Label} {τ : Ty B} :
+      LookupBlocked (.dsing (.var γ) τ) l γ
 
 -- ⊢  the refinement is SOUND: a blocked lookup is an unknown lookup
 theorem LookupBlocked.toLookup {B : Type} {ρ : Row B} {l : Label}
@@ -63,6 +66,7 @@ theorem LookupBlocked.toLookup {B : Type} {ρ : Row B} {l : Label}
   | .varFree         => .varFree
   | .catSkip ha hb   => .catSkip ha hb.toLookup
   | .catUnk hb       => .catUnk hb.toLookup
+  | .dunk            => .dunk rfl
 
 -- ⊢  …and COMPLETE: an unknown lookup always has a blocker to name
 -- Together these say `? on α` is a faithful reading of `?` — the algorithm
@@ -78,6 +82,9 @@ theorem Lookup.unknown_blocked {B : Type} {ρ : Row B} {l : Label}
   | catHit _ => exact absurd hr (by simp)
   | catSkip ha _ _ ihb => obtain ⟨β, hb⟩ := ihb hr; exact ⟨β, .catSkip ha hb⟩
   | catUnk _ ih => obtain ⟨β, hb⟩ := ih rfl; exact ⟨β, .catUnk hb⟩
+  | dhit _ => exact absurd hr (by simp)
+  | dmiss _ => exact absurd hr (by simp)
+  | dunk h => obtain ⟨γ, rfl⟩ := Key.cmp_lit_undec h; exact ⟨γ, .dunk⟩
 
 -- ⊢  the blocker is UNIQUE — `lookup_det`'s image for `? on α`, and what makes
 --    "the stump is blocked on α" well defined rather than a choice
@@ -94,6 +101,7 @@ theorem LookupBlocked.det {B : Type} {ρ : Row B} {l : Label}
       cases h₂ with
       | catSkip ha' _ => exact absurd (lookup_det hb.toLookup ha') (by simp)
       | catUnk hb' => exact ih hb'
+  | dunk => cases h₂; rfl
 
 -- `LookupBlocked.unsolved` used to live here: "the blocker is genuinely
 -- UNSOLVED in Γ", which is what made wake-up's trigger ("a solution α ≔ ρ is
@@ -104,98 +112,117 @@ theorem LookupBlocked.det {B : Type} {ρ : Row B} {l : Label}
 
 
 --------------------- ? ON β FOR A KEYED LOOKUP -------------------------------
--- A dynamic selection's `?` has a second source: a label-variable key meeting a
--- literal field (L-?-lab). That `?` is blocked on the KEY — it is the label
--- variable's solution that decides it, not any row's — so the blocker of a
--- keyed lookup is a row variable or the key itself.
+-- A keyed lookup's `?` has a second source besides a row variable: a label
+-- variable on one side of a key comparison (L-?-lab, and its keyed-field twin).
+-- When the lookup key is a label variable α, α is the blocker (it is on every
+-- undecided comparison); against a literal key the field's label variable is.
 
-/-- `LookupVBlocked ρ α β` — the lookup of the label variable α in ρ gets
-stuck at β: at a row variable, or at α itself on the first field. -/
-inductive LookupVBlocked {B : Type} : Row B → TyVar → TyVar → Prop where
-  -- L-?-lab: the first field decides nothing until α is known
-  | sing {α : TyVar} {l : Label} {τ : Ty B} : LookupVBlocked (.sing l τ) α α
-  | varFree {α β : TyVar} : LookupVBlocked (.var β) α β
-  | catSkip {ρ₁ ρ₂ : Row B} {α γ : TyVar} :
-      LookupV ρ₁ α .absent → LookupVBlocked ρ₂ α γ →
-      LookupVBlocked (.cat ρ₁ ρ₂) α γ
-  | catUnk {ρ₁ ρ₂ : Row B} {α γ : TyVar} :
-      LookupVBlocked ρ₁ α γ → LookupVBlocked (.cat ρ₁ ρ₂) α γ
+/-- `ρ.k ↓ ? on β` for a keyed lookup. -/
+inductive LookupBlockedQ {B : Type} : Row B → Key → TyVar → Prop where
+  | varFree {k : Key} {β : TyVar} : LookupBlockedQ (.var β) k β
+  -- L-?-lab: a label-variable key meets a literal field
+  | sunk {α : TyVar} {l : Label} {τ : Ty B} :
+      LookupBlockedQ (.sing l τ) (.var α) α
+  -- a label-variable key meets a keyed field it cannot decide against
+  | dunkQ {α : TyVar} {q : Key} {τ : Ty B} :
+      Key.cmp (.var α) q = .undec → LookupBlockedQ (.dsing q τ) (.var α) α
+  -- a literal key meets `${γ}`
+  | dunkF {l : Label} {τ : Ty B} {γ : TyVar} :
+      LookupBlockedQ (.dsing (.var γ) τ) (.lit l) γ
+  | catSkip {ρ₁ ρ₂ : Row B} {k : Key} {β : TyVar} :
+      LookupQ ρ₁ k .absent → LookupBlockedQ ρ₂ k β →
+      LookupBlockedQ (.cat ρ₁ ρ₂) k β
+  | catUnk {ρ₁ ρ₂ : Row B} {k : Key} {β : TyVar} :
+      LookupBlockedQ ρ₁ k β → LookupBlockedQ (.cat ρ₁ ρ₂) k β
 
-/-- `ρ.q ↓ ? on β` for a keyed lookup. -/
-inductive LookupBlockedQ {B : Type} : Row B → Ty B → TyVar → Prop where
-  | lit {ρ : Row B} {l : Label} {β : TyVar} :
-      LookupBlocked ρ l β → LookupBlockedQ ρ (.lab l) β
-  | var {ρ : Row B} {α β : TyVar} :
-      LookupVBlocked ρ α β → LookupBlockedQ ρ (.var α) β
-
-theorem LookupVBlocked.toLookupV {B : Type} {ρ : Row B} {α β : TyVar} :
-    LookupVBlocked ρ α β → LookupV ρ α .unknown
-  | .sing => .sing
-  | .varFree => .varFree
-  | .catSkip ha hb => .catSkip ha hb.toLookupV
-  | .catUnk hb => .catUnk hb.toLookupV
+/-- the label-variable instance. -/
+abbrev LookupVBlocked {B : Type} (ρ : Row B) (α β : TyVar) : Prop :=
+  LookupBlockedQ ρ (.var α) β
 
 -- ⊢  sound: a blocked keyed lookup is an unknown one
-theorem LookupBlockedQ.toLookupQ {B : Type} {ρ : Row B} {q : Ty B}
+theorem LookupBlockedQ.toLookupQ {B : Type} {ρ : Row B} {q : Key}
     {β : TyVar} : LookupBlockedQ ρ q β → LookupQ ρ q .unknown
-  | .lit h => .lit h.toLookup
-  | .var h => .var h.toLookupV
+  | .varFree => .varFree
+  | .sunk => .sunk rfl
+  | .dunkQ h => .dunk h
+  | .dunkF => .dunk rfl
+  | .catSkip ha hb => .catSkip ha hb.toLookupQ
+  | .catUnk hb => .catUnk hb.toLookupQ
 
-theorem LookupV.unknown_blocked {B : Type} {ρ : Row B} {α : TyVar}
-    (h : LookupV ρ α .unknown) : ∃ β, LookupVBlocked ρ α β := by
+theorem LookupVBlocked.toLookupV {B : Type} {ρ : Row B} {α β : TyVar}
+    (h : LookupVBlocked ρ α β) : LookupV ρ α .unknown := h.toLookupQ
+
+-- ⊢  complete: an unknown keyed lookup always names its blocker
+theorem LookupQ.unknown_blocked {B : Type} {ρ : Row B} {q : Key}
+    (h : LookupQ ρ q .unknown) : ∃ β, LookupBlockedQ ρ q β := by
   generalize hr : (LookupRes.unknown : LookupRes B) = r at h
   induction h with
   | emp => exact absurd hr (by simp)
-  | sing => exact ⟨_, .sing⟩
+  | hit _ => exact absurd hr (by simp)
+  | miss _ => exact absurd hr (by simp)
+  | sunk h => obtain ⟨α, rfl⟩ := Key.cmp_undec_lit h; exact ⟨α, .sunk⟩
   | varFree => exact ⟨_, .varFree⟩
+  | catHit _ => exact absurd hr (by simp)
   | catSkip ha _ _ ihb => obtain ⟨β, hb⟩ := ihb hr; exact ⟨β, .catSkip ha hb⟩
   | catUnk _ ih => obtain ⟨β, hb⟩ := ih rfl; exact ⟨β, .catUnk hb⟩
+  | dhit _ => exact absurd hr (by simp)
+  | dmiss _ => exact absurd hr (by simp)
+  | @dunk k q τ h =>
+      cases k with
+      | var α => exact ⟨α, .dunkQ h⟩
+      | lit l =>
+          obtain ⟨γ, rfl⟩ := Key.cmp_lit_undec h
+          exact ⟨γ, .dunkF⟩
 
--- ⊢  complete: an unknown keyed lookup always names its blocker
-theorem LookupQ.unknown_blocked {B : Type} {ρ : Row B} {q : Ty B}
-    (h : LookupQ ρ q .unknown) : ∃ β, LookupBlockedQ ρ q β := by
-  cases h with
-  | lit h => obtain ⟨β, hb⟩ := Lookup.unknown_blocked h; exact ⟨β, .lit hb⟩
-  | var h => obtain ⟨β, hb⟩ := LookupV.unknown_blocked h; exact ⟨β, .var hb⟩
+theorem LookupV.unknown_blocked {B : Type} {ρ : Row B} {α : TyVar}
+    (h : LookupV ρ α .unknown) : ∃ β, LookupVBlocked ρ α β :=
+  LookupQ.unknown_blocked h
 
-theorem LookupVBlocked.det {B : Type} {ρ : Row B} {α β γ : TyVar}
-    (h₁ : LookupVBlocked ρ α β) (h₂ : LookupVBlocked ρ α γ) : β = γ := by
+-- ⊢  the blocker is UNIQUE
+theorem LookupBlockedQ.det {B : Type} {ρ : Row B} {q : Key}
+    {β γ : TyVar} (h₁ : LookupBlockedQ ρ q β) (h₂ : LookupBlockedQ ρ q γ) :
+    β = γ := by
   induction h₁ generalizing γ with
-  | sing => cases h₂; rfl
   | varFree => cases h₂; rfl
+  | sunk => cases h₂; rfl
+  | dunkQ _ => cases h₂; rfl
+  | dunkF => cases h₂; rfl
   | catSkip ha _ ih =>
       cases h₂ with
       | catSkip _ hb' => exact ih hb'
-      | catUnk hb' => exact absurd (ha.det hb'.toLookupV) (by simp)
+      | catUnk hb' => exact absurd (ha.det hb'.toLookupQ) (by simp)
   | catUnk hb ih =>
       cases h₂ with
-      | catSkip ha' _ => exact absurd (hb.toLookupV.det ha') (by simp)
+      | catSkip ha' _ => exact absurd (hb.toLookupQ.det ha') (by simp)
       | catUnk hb' => exact ih hb'
 
--- ⊢  the blocker is UNIQUE
-theorem LookupBlockedQ.det {B : Type} {ρ : Row B} {q : Ty B}
-    {β γ : TyVar} (h₁ : LookupBlockedQ ρ q β) (h₂ : LookupBlockedQ ρ q γ) :
-    β = γ := by
-  cases h₁ with
-  | lit h => cases h₂ with | lit h' => exact h.det h'
-  | var h => cases h₂ with | var h' => exact h.det h'
+theorem LookupVBlocked.det {B : Type} {ρ : Row B} {α β γ : TyVar}
+    (h₁ : LookupVBlocked ρ α β) (h₂ : LookupVBlocked ρ α γ) : β = γ :=
+  LookupBlockedQ.det h₁ h₂
 
--- (`LookupVBlocked.unsolved` / `LookupBlockedQ.unsolved` — "the blocker is an
--- unsolved row variable, or it is the key" — went the way of
--- `LookupBlocked.unsolved`: the row is looked up after substitution, so a row
--- variable still standing in it is unsolved by construction.)
+-- ⊢  a literal key blocks exactly where the label relation does
+theorem LookupBlockedQ.lit {B : Type} {ρ : Row B} {l : Label} {β : TyVar} :
+    LookupBlocked ρ l β → LookupBlockedQ ρ (.lit l) β
+  | .varFree => .varFree
+  | .catSkip ha hb => .catSkip (LookupQ.lab_iff.mpr ha) (LookupBlockedQ.lit hb)
+  | .catUnk hb => .catUnk (LookupBlockedQ.lit hb)
+  | .dunk => .dunkF
 
-/-- a static key blocked on a row variable — the shape every `λx. x.l` stump
-has; stated so that `.varFree` reads at the keyed relation too. -/
-theorem LookupBlockedQ.varFree {B : Type} {α : TyVar} {l : Label} :
-    LookupBlockedQ (B := B) (.var α) (.lab l) α :=
-  .lit .varFree
+theorem LookupBlockedQ.toLit {B : Type} {ρ : Row B} {l : Label} {β : TyVar}
+    (h : LookupBlockedQ ρ (.lit l) β) : LookupBlocked ρ l β := by
+  generalize hk : (Key.lit l) = k at h
+  induction h with
+  | varFree => exact .varFree
+  | sunk => cases hk
+  | dunkQ _ => cases hk
+  | dunkF => exact .dunk
+  | catSkip ha _ ih => subst hk; exact .catSkip (LookupQ.lab_iff.mp ha) (ih rfl)
+  | catUnk _ ih => exact .catUnk (ih hk)
 
 /-- the name a W-flag records for a key: the label itself when it is known. -/
-def Ty.keyName {B : Type} : Ty B → Label
-  | .lab l => l
+def Key.keyName : Key → Label
+  | .lit l => l
   | .var α => "${" ++ α ++ "}"
-  | _      => "${?}"
 
 
 --------------------- THE SOLVER STATE  S := (θ, Δ, W) ------------------------
@@ -224,11 +251,13 @@ convention, so a recorded kind and an observed occurrence are comparable. -/
 inductive Kind where
   | ty
   | row
+  | lab
   deriving DecidableEq, Repr
 
-def Kind.tag : Kind → Bool
-  | .ty  => false
-  | .row => true
+def Kind.tag : Kind → Srt
+  | .ty  => .ty
+  | .row => .row
+  | .lab => .lab
 
 /-- κ̄ — what each invented name was drawn at. Newest first; `draw` only ever
 CONSES, which is what `Infer.kinds_mono` says. -/
@@ -481,6 +510,7 @@ theorem WakesSat.quiescent {B : Type} [DecidableEq B] {S S' : SolverState B}
     {ps : List (Parked B)} : WakesSat S ps S' → S'.Quiescent
   | ⟨_, _, hsat⟩ => hsat.quiescent
 
+
 /-- `S ⊢ q ⇓ S′` — F-★, the algorithmic moment of T-sel-★. Runs at the end of
 inference and at every generalization boundary that does not carry the stump.
 
@@ -611,8 +641,8 @@ inductive Materialize {B : Type} [DecidableEq B] :
   | hit {S S₀ S' : SolverState B} {p : Parked B} {l : Label} {r' : TyVar} :
       p ∈ S.parked →
       (p.stump.res.applySubst S.subst).Spent →
-      p.stump.label.applySubst S.subst = .lab l →
-      LookupBlockedQ (p.stump.row.applySubst S.subst) (.lab l) p.blocker →
+      p.stump.label.applySubst S.subst = .lit l →
+      LookupBlockedQ (p.stump.row.applySubst S.subst) (.lit l) p.blocker →
       (r', S₀) = S.draw .row →
       SolveTySat S₀ (.rcd (.var p.blocker)) (.rcd (.cat (.sing l p.stump.res) (.var r'))) S' →
       Materialize S p S'
@@ -644,7 +674,8 @@ theorem Materializes.refl {B : Type} [DecidableEq B] (S : SolverState B) :
 
 /-- `θ` renames exactly the binders `vs`, via `f`. -/
 def IsRenaming {B : Type} (θ : TySubst B) (vs : List TyVar) (f : TyVar → TyVar) : Prop :=
-  θ.FixedOutside vs ∧ ∀ α ∈ vs, θ.ty α = .var (f α) ∧ θ.row α = .var (f α)
+  θ.FixedOutside vs ∧
+    ∀ α ∈ vs, θ.ty α = .var (f α) ∧ θ.row α = .var (f α) ∧ θ.lab α = .var (f α)
 
 /-- the freshness the rules need of an instantiation: injective on the binders,
 landing on names the state has not already committed to, AND on names Γ does not
@@ -711,6 +742,25 @@ def letScheme {B : Type} (S₁ : SolverState B) (ᾱ : List TyVar) (Δq : List (
   ⟨ᾱ, Δq.map (fun p => (⟨p.stump.row.applySubst S₁.subst, p.stump.label.applySubst S₁.subst,
       p.stump.res.applySubst S₁.subst⟩ : Stump B)), τ₁.applySubst S₁.subst⟩
 
+/-- a spent stump can be met by filling its blocker as a ROW: its key is a label,
+and the blocker is not a key variable of the row — a label lookup blocked on a
+`${γ}` field waits on γ, and no row extension decides it. -/
+def Key.isLit : Key → Bool
+  | .lit _ => true
+  | .var _ => false
+
+theorem Key.exists_of_isLit {k : Key} (h : k.isLit = true) : ∃ l, k = .lit l := by
+  cases k <;> simp_all [Key.isLit]
+
+def Parked.fillable {B : Type} (S : SolverState B) (p : Parked B) : Bool :=
+  (p.stump.label.applySubst S.subst).isLit &&
+    !((p.stump.row.applySubst S.subst).sortedFtv.contains (.lab, p.blocker))
+
+theorem Parked.fillable_iff {B : Type} {S : SolverState B} {p : Parked B} :
+    p.fillable S = true ↔ (p.stump.label.applySubst S.subst).isLit = true ∧
+      (.lab, p.blocker) ∉ (p.stump.row.applySubst S.subst).sortedFtv := by
+  simp [Parked.fillable]
+
 /-- A-let's premise on the generalized RESULTS, read at S₁ (`QScheme.WF`,
 `Correctable`, and the inhabitation of the scheme):
 * each is a linear pattern over ᾱ — a variable, or a type a promise was spent on
@@ -728,9 +778,9 @@ def LetResults {B : Type} (S₁ : SolverState B) (ᾱ : List TyVar) (Δq : List 
   (∀ p ∈ Δq, ∀ q ∈ Δq, ∀ δ ∈ (p.stump.res.applySubst S₁.subst).ftv,
       δ ∈ (q.stump.res.applySubst S₁.subst).ftv → p.stump = q.stump) ∧
   (∀ p ∈ Δq, (p.stump.res.applySubst S₁.subst).isVar = false →
-      (p.stump.label.applySubst S₁.subst).isLab = true ∧
+      p.fillable S₁ = true ∧
       (∀ q ∈ Δq, q.blocker = p.blocker →
-        (q.stump.label.applySubst S₁.subst).isLab = true ∧
+        q.fillable S₁ = true ∧
         (q.stump.label.applySubst S₁.subst = p.stump.label.applySubst S₁.subst →
           q.stump = p.stump)) ∧
       (∀ q ∈ Δq, (q.stump.res.applySubst S₁.subst).isVar = false →
@@ -739,7 +789,7 @@ def LetResults {B : Type} (S₁ : SolverState B) (ᾱ : List TyVar) (Δq : List 
 /-- ⊢  an unsolved result reads as itself -/
 theorem SolverState.subst_ty_of_not_dom {B : Type} {S : SolverState B} {δ : TyVar}
     (h : δ ∉ S.sol.dom) : S.subst.ty δ = .var δ :=
-  tyLookup_not_mem _ (fun hm => h (List.mem_append_left _ hm))
+  tyLookup_not_mem _ (fun hm => h (List.mem_append_left _ (List.mem_append_left _ hm)))
 
 theorem SolverState.resVar_of_not_dom {B : Type} {S : SolverState B} {δ : TyVar}
     (h : δ ∉ S.sol.dom) : S.resVar (.var δ) = δ := by
@@ -833,39 +883,57 @@ inductive Infer {B C : Type} [DecidableEq B] (constTy : C → B) :
       LookupBlocked ((Row.var r).applySubst S₂.subst) l α →
       (δ, S₂') = S₂.draw .ty →
       Infer constTy Γ S (.sel e l) (.var δ)
-        (S₂'.park ⟨α, ⟨.var r, .lab l, .var δ⟩⟩)
+        (S₂'.park ⟨α, ⟨.var r, .lit l, .var δ⟩⟩)
   -- A-lab: a label literal is its own singleton
   | lab {Γ : QCtx B} {S : SolverState B} {l : Label} :
-      Infer constTy Γ S (.lab l) (.lab l) S
-  -- A-sel-dyn. The record first (forced to `{r}`), then the key; the lookup is
-  -- keyed by the key's TYPE read under ⟦S⟧ — ⌊l⌋, a label variable, or not a
-  -- label at all — and its three verdicts are A-sel's, A-sel-⊥'s and A-sel-?'s
-  | selDyn {Γ : QCtx B} {S S₁ S₁' S₂ S₃ : SolverState B} {e₁ e₂ : Expr C}
-      {τ₁ τ₂ τ' : Ty B} {r : TyVar} :
+      Infer constTy Γ S (.lab l) (.lab (.lit l)) S
+  -- A-sel-dyn. The record first (forced to `{r}`), then the key, whose type is
+  -- forced to ⌊κ⌋ for a fresh LABEL variable κ (a non-label key clashes: there
+  -- is no junk key). The lookup is keyed by κ read under ⟦S⟧, and its three
+  -- verdicts are A-sel's, A-sel-⊥'s and A-sel-?'s
+  | selDyn {Γ : QCtx B} {S S₁ S₁' S₂ S₃ S₃' S₄ : SolverState B} {e₁ e₂ : Expr C}
+      {τ₁ τ₂ τ' : Ty B} {r κ : TyVar} :
       Infer constTy Γ S e₁ τ₁ S₁ →
       (r, S₁') = S₁.draw .row →
       SolveTySat S₁' τ₁ (.rcd (.var r)) S₂ →
       Infer constTy Γ S₂ e₂ τ₂ S₃ →
-      LookupQ ((Row.var r).applySubst S₃.subst) (τ₂.applySubst S₃.subst) (.found τ') →
-      Infer constTy Γ S (.selDyn e₁ e₂) τ' S₃
-  | selDynAbs {Γ : QCtx B} {S S₁ S₁' S₂ S₃ : SolverState B} {e₁ e₂ : Expr C}
-      {τ₁ τ₂ : Ty B} {r : TyVar} :
+      (κ, S₃') = S₃.draw .lab →
+      SolveTySat S₃' τ₂ (.lab (.var κ)) S₄ →
+      LookupQ ((Row.var r).applySubst S₄.subst) ((Key.var κ).applySubst S₄.subst)
+        (.found τ') →
+      Infer constTy Γ S (.selDyn e₁ e₂) τ' S₄
+  | selDynAbs {Γ : QCtx B} {S S₁ S₁' S₂ S₃ S₃' S₄ : SolverState B} {e₁ e₂ : Expr C}
+      {τ₁ τ₂ : Ty B} {r κ : TyVar} :
       Infer constTy Γ S e₁ τ₁ S₁ →
       (r, S₁') = S₁.draw .row →
       SolveTySat S₁' τ₁ (.rcd (.var r)) S₂ →
       Infer constTy Γ S₂ e₂ τ₂ S₃ →
-      LookupQ ((Row.var r).applySubst S₃.subst) (τ₂.applySubst S₃.subst) .absent →
-      Infer constTy Γ S (.selDyn e₁ e₂) .unk (S₃.flag (τ₂.applySubst S₃.subst).keyName)
-  | selDynUnk {Γ : QCtx B} {S S₁ S₁' S₂ S₃ S₃' : SolverState B} {e₁ e₂ : Expr C}
-      {τ₁ τ₂ : Ty B} {r α δ : TyVar} :
+      (κ, S₃') = S₃.draw .lab →
+      SolveTySat S₃' τ₂ (.lab (.var κ)) S₄ →
+      LookupQ ((Row.var r).applySubst S₄.subst) ((Key.var κ).applySubst S₄.subst) .absent →
+      Infer constTy Γ S (.selDyn e₁ e₂) .unk
+        (S₄.flag ((Key.var κ).applySubst S₄.subst).keyName)
+  | selDynUnk {Γ : QCtx B} {S S₁ S₁' S₂ S₃ S₃' S₄ S₄' : SolverState B} {e₁ e₂ : Expr C}
+      {τ₁ τ₂ : Ty B} {r κ α δ : TyVar} :
       Infer constTy Γ S e₁ τ₁ S₁ →
       (r, S₁') = S₁.draw .row →
       SolveTySat S₁' τ₁ (.rcd (.var r)) S₂ →
       Infer constTy Γ S₂ e₂ τ₂ S₃ →
-      LookupBlockedQ ((Row.var r).applySubst S₃.subst) (τ₂.applySubst S₃.subst) α →
-      (δ, S₃') = S₃.draw .ty →
+      (κ, S₃') = S₃.draw .lab →
+      SolveTySat S₃' τ₂ (.lab (.var κ)) S₄ →
+      LookupBlockedQ ((Row.var r).applySubst S₄.subst) ((Key.var κ).applySubst S₄.subst) α →
+      (δ, S₄') = S₄.draw .ty →
       Infer constTy Γ S (.selDyn e₁ e₂) (.var δ)
-        (S₃'.park ⟨α, ⟨.var r, τ₂, .var δ⟩⟩)
+        (S₄'.park ⟨α, ⟨.var r, .var κ, .var δ⟩⟩)
+  -- A-rcd-dyn. Both halves first, then the key's type is forced to ⌊κ⌋ for a
+  -- fresh LABEL variable κ, which keys the field (a non-label key clashes). No
+  -- lookup, so nothing parks
+  | rcdDyn {Γ : QCtx B} {S S₁ S₂ S₂' S₃ : SolverState B} {e₁ e₂ : Expr C}
+      {τ₁ τ₂ : Ty B} {κ : TyVar} :
+      Infer constTy Γ S e₁ τ₁ S₁ → Infer constTy Γ S₁ e₂ τ₂ S₂ →
+      (κ, S₂') = S₂.draw .lab →
+      SolveTySat S₂' τ₁ (.lab (.var κ)) S₃ →
+      Infer constTy Γ S (.rcdDyn e₁ e₂) (.rcd (.dsing (.var κ) τ₂)) S₃
   -- A-rec
   | rcd {Γ : QCtx B} {S S' : SolverState B} {ξ : RecBody (Expr C)} {ρ : Row B} :
       InferRec constTy Γ S ξ ρ S' →
@@ -889,7 +957,8 @@ inductive Infer {B C : Type} [DecidableEq B] (constTy : C → B) :
       -- MISSING, and `runSound_false_unguarded_let` (LetSound.lean) is what it
       -- cost: `λy. let z = y in z` inferred `a → b`. Stated per variable of Γ
       -- and at BOTH sorts, since `ftv` does not record which one it saw.
-      (∀ α ∈ ᾱ, ∀ β ∈ Γ.ftv, α ∉ (S₁.subst.ty β).ftv ∧ α ∉ (S₁.subst.row β).ftv) →
+      (∀ α ∈ ᾱ, ∀ β ∈ Γ.ftv, α ∉ (S₁.subst.ty β).ftv ∧ α ∉ (S₁.subst.row β).ftv ∧
+         α ∉ (S₁.subst.lab β).ftv) →
       -- Δ_q is e₁'s OWN: no stump parked before the let may be filed under the
       -- scheme, or nothing ever finalizes it (`runSound_false_let_captures`,
       -- LetSound.lean) …
@@ -940,7 +1009,7 @@ theorem Infer.var_mono {B C : Type} [DecidableEq B] {constTy : C → B}
     Infer constTy Γ S (.var x) τ S' := by
   have h := Infer.var (constTy := constTy) (σ := ⟨[], [], τ⟩) (θ := TySubst.id B)
     (f := id) (ps := []) (Sup := S.supply) hl
-    ⟨⟨fun _ _ => rfl, fun _ _ => rfl⟩, fun _ h => absurd h List.not_mem_nil⟩
+    ⟨⟨fun _ _ => rfl, fun _ _ => rfl, fun _ _ => rfl⟩, fun _ h => absurd h List.not_mem_nil⟩
     ⟨fun _ h => absurd h List.not_mem_nil, fun _ h => absurd h List.not_mem_nil,
      fun _ h => absurd h List.not_mem_nil, fun _ h => absurd h List.not_mem_nil⟩
     (fun _ h => absurd h List.not_mem_nil) (Nat.le_refl _) (κs := []) rfl rfl hw
@@ -963,7 +1032,7 @@ theorem Infer.var_mono {B C : Type} [DecidableEq B] {constTy : C → B}
 -- blocks on `r` and the position stays writable. That is the whole point of
 -- returning δ rather than ★.
 
-private def idSubst : TySubst Unit := ⟨fun x => .var x, fun x => .var x⟩
+private def idSubst : TySubst Unit := ⟨fun x => .var x, fun x => .var x, fun x => .var x⟩
 
 -- The kinds the run records, newest first: δ at the type sort, the record's row
 -- variable at the row sort, the λ-binder at the type sort. This is `fresh α: κ`
@@ -975,19 +1044,19 @@ theorem selEx_infers :
     Infer (B := Unit) (C := Unit) (fun _ => ()) QCtx.empty
       ⟨Sol.nil, [], [], ⟨1⟩, []⟩ (selEx Unit)
       (.fn (.var (natName 1)) (.var (natName 3)))
-      ⟨⟨[(natName 1, .rcd (.var (natName 2)))], []⟩,
-       [⟨natName 2, ⟨.var (natName 2), .lab "l", .var (natName 3)⟩⟩], [], ⟨4⟩, selExKinds⟩ := by
+      ⟨⟨[(natName 1, .rcd (.var (natName 2)))], [], []⟩,
+       [⟨natName 2, ⟨.var (natName 2), .lit "l", .var (natName 3)⟩⟩], [], ⟨4⟩, selExKinds⟩ := by
   refine Infer.lam (S₀ := ⟨Sol.nil, [], [], ⟨2⟩, [(natName 1, .ty)]⟩) rfl ?_
   refine Infer.selUnk (τ := .var (natName 1))
     (S₁ := ⟨Sol.nil, [], [], ⟨2⟩, [(natName 1, .ty)]⟩)
     (S₁' := ⟨Sol.nil, [], [], ⟨3⟩, [(natName 2, .row), (natName 1, .ty)]⟩)
-    (S₂ := ⟨⟨[(natName 1, .rcd (.var (natName 2)))], []⟩, [], [], ⟨3⟩,
+    (S₂ := ⟨⟨[(natName 1, .rcd (.var (natName 2)))], [], []⟩, [], [], ⟨3⟩,
             [(natName 2, .row), (natName 1, .ty)]⟩)
     (r := natName 2) (α := natName 2) (δ := natName 3)
     ?_ rfl ?_ ?_ rfl
   · exact Infer.var_mono rfl
       ⟨_, .nil, .done (SolverState.Quiescent.nil rfl)⟩
-  · exact ⟨_, ⟨5, ⟨[(natName 1, .rcd (.var (natName 2)))], []⟩, ⟨3⟩, rfl, rfl⟩,
+  · exact ⟨_, ⟨5, ⟨[(natName 1, .rcd (.var (natName 2)))], [], []⟩, ⟨3⟩, rfl, rfl⟩,
       .done (SolverState.Quiescent.nil rfl)⟩
   · exact .varFree
 
@@ -1050,10 +1119,10 @@ def RunSound (B C : Type) [DecidableEq B] (constTy : C → B) : Prop :=
 -- finalization FIRES, and one where saturation has already left it nothing to do.
 
 private def selExS1 : SolverState Unit :=
-  ⟨⟨[(natName 1, .rcd (.var (natName 2)))], []⟩,
-   [⟨natName 2, ⟨.var (natName 2), .lab "l", .var (natName 3)⟩⟩], [], ⟨4⟩, selExKinds⟩
+  ⟨⟨[(natName 1, .rcd (.var (natName 2)))], [], []⟩,
+   [⟨natName 2, ⟨.var (natName 2), .lit "l", .var (natName 3)⟩⟩], [], ⟨4⟩, selExKinds⟩
 
-private def selExStar : Sol Unit := ⟨[(natName 3, .unk)], []⟩
+private def selExStar : Sol Unit := ⟨[(natName 3, .unk)], [], []⟩
 
 private def selExFinal : SolverState Unit :=
   ({ selExS1.extend selExStar ⟨4⟩ with
@@ -1213,6 +1282,10 @@ theorem Infer.kinds_mono {B C : Type} [DecidableEq B] {constTy : C → B}
       refine List.IsSuffix.trans (Infer.kinds_mono h₁) ?_
       refine List.IsSuffix.trans (Infer.kinds_mono h₂) ?_
       rw [hs.kinds, draw_kind_eq hd]; exact List.suffix_cons _ _
+  | .rcdDyn h₁ h₂ hd hs => by
+      refine List.IsSuffix.trans (Infer.kinds_mono h₁) ?_
+      refine List.IsSuffix.trans (Infer.kinds_mono h₂) ?_
+      rw [hs.kinds, draw_kind_eq hd]; exact List.suffix_cons _ _
   | .conc h₁ h₂ hd₁ hd₂ hs₁ hs₂ => by
       refine List.IsSuffix.trans (Infer.kinds_mono h₁) ?_
       refine List.IsSuffix.trans (Infer.kinds_mono h₂) ?_
@@ -1233,21 +1306,27 @@ theorem Infer.kinds_mono {B C : Type} [DecidableEq B] {constTy : C → B}
       rw [draw_kind_eq hd₂, hs.kinds, draw_kind_eq hd]
       exact List.IsSuffix.trans (List.suffix_cons _ _) (List.suffix_cons _ _)
   | .lab => List.suffix_refl _
-  | .selDyn h₁ hd hs h₂ _ => by
+  | .selDyn h₁ hd hs h₂ hdk hsk _ => by
       refine List.IsSuffix.trans (Infer.kinds_mono h₁) ?_
+      rw [hsk.kinds, draw_kind_eq hdk]
+      refine List.IsSuffix.trans ?_ (List.suffix_cons _ _)
       refine List.IsSuffix.trans ?_ (Infer.kinds_mono h₂)
       rw [hs.kinds, draw_kind_eq hd]; exact List.suffix_cons _ _
-  | .selDynAbs h₁ hd hs h₂ _ => by
+  | .selDynAbs h₁ hd hs h₂ hdk hsk _ => by
       refine List.IsSuffix.trans (Infer.kinds_mono h₁) ?_
       show _ <:+ (SolverState.flag _ _).kinds
       simp only [SolverState.flag]
+      rw [hsk.kinds, draw_kind_eq hdk]
+      refine List.IsSuffix.trans ?_ (List.suffix_cons _ _)
       refine List.IsSuffix.trans ?_ (Infer.kinds_mono h₂)
       rw [hs.kinds, draw_kind_eq hd]; exact List.suffix_cons _ _
-  | .selDynUnk h₁ hd hs h₂ _ hd₂ => by
+  | .selDynUnk h₁ hd hs h₂ hdk hsk _ hd₂ => by
       refine List.IsSuffix.trans (Infer.kinds_mono h₁) ?_
       show _ <:+ (SolverState.park _ _).kinds
       simp only [SolverState.park]
       rw [draw_kind_eq hd₂]
+      refine List.IsSuffix.trans ?_ (List.suffix_cons _ _)
+      rw [hsk.kinds, draw_kind_eq hdk]
       refine List.IsSuffix.trans ?_ (List.suffix_cons _ _)
       refine List.IsSuffix.trans ?_ (Infer.kinds_mono h₂)
       rw [hs.kinds, draw_kind_eq hd]; exact List.suffix_cons _ _
@@ -1310,6 +1389,12 @@ theorem Infer.supply_mono {B C : Type} [DecidableEq B] {constTy : C → B}
       have hd' := draw_eq hd
       have i₃ := hs.supply
       omega
+  | .rcdDyn h₁ h₂ hd hs => by
+      have i₁ := Infer.supply_mono h₁
+      have i₂ := Infer.supply_mono h₂
+      have hd' := draw_eq hd
+      have i₃ := hs.supply
+      omega
   | .conc h₁ h₂ hd₁ hd₂ hs₁ hs₂ => by
       have i₁ := Infer.supply_mono h₁
       have i₂ := Infer.supply_mono h₂
@@ -1339,25 +1424,31 @@ theorem Infer.supply_mono {B C : Type} [DecidableEq B] {constTy : C → B}
       simp only [SolverState.park]
       omega
   | .lab => Nat.le_refl _
-  | .selDyn h₁ hd hs h₂ _ => by
+  | .selDyn h₁ hd hs h₂ hdk hsk _ => by
       have i₁ := Infer.supply_mono h₁
       have i₂ := Infer.supply_mono h₂
       have hd' := draw_eq hd
       have j := hs.supply
+      have hdk' := draw_eq hdk
+      have jk := hsk.supply
       omega
-  | .selDynAbs h₁ hd hs h₂ _ => by
+  | .selDynAbs h₁ hd hs h₂ hdk hsk _ => by
       have i₁ := Infer.supply_mono h₁
       have i₂ := Infer.supply_mono h₂
       have hd' := draw_eq hd
       have j := hs.supply
+      have hdk' := draw_eq hdk
+      have jk := hsk.supply
       show _ ≤ (SolverState.flag _ _).supply.next
       simp only [SolverState.flag]
       omega
-  | .selDynUnk h₁ hd hs h₂ _ hd₂ => by
+  | .selDynUnk h₁ hd hs h₂ hdk hsk _ hd₂ => by
       have i₁ := Infer.supply_mono h₁
       have i₂ := Infer.supply_mono h₂
       have hd' := draw_eq hd
       have j := hs.supply
+      have hdk' := draw_eq hdk
+      have jk := hsk.supply
       have hd₂' := draw_eq hd₂
       show _ ≤ (SolverState.park _ _).supply.next
       simp only [SolverState.park]
@@ -1464,6 +1555,9 @@ theorem Infer.sat_mono {B C : Type} [DecidableEq B] {constTy : C → B}
   | .app h₁ h₂ hd hs =>
       ((Infer.sat_mono h₁).trans (Infer.sat_mono h₂)).trans
         ((SolverState.SatMono.of_sol_eq (draw_sol hd)).trans hs.satMono)
+  | .rcdDyn h₁ h₂ hd hs =>
+      ((Infer.sat_mono h₁).trans (Infer.sat_mono h₂)).trans
+        ((SolverState.SatMono.of_sol_eq (draw_sol hd)).trans hs.satMono)
   | .conc h₁ h₂ hd₁ hd₂ hs₁ hs₂ =>
       ((Infer.sat_mono h₁).trans (Infer.sat_mono h₂)).trans
         ((SolverState.SatMono.of_sol_eq (draw_sol hd₁)).trans
@@ -1483,20 +1577,25 @@ theorem Infer.sat_mono {B C : Type} [DecidableEq B] {constTy : C → B}
             ((SolverState.SatMono.of_sol_eq (draw_sol hd₂)).trans
               (SolverState.SatMono.of_sol_eq rfl))))
   | .lab => SolverState.SatMono.refl _
-  | .selDyn h₁ hd hs h₂ _ =>
-      (Infer.sat_mono h₁).trans
-        ((SolverState.SatMono.of_sol_eq (draw_sol hd)).trans
-          (hs.satMono.trans (Infer.sat_mono h₂)))
-  | .selDynAbs h₁ hd hs h₂ _ =>
-      (Infer.sat_mono h₁).trans
-        ((SolverState.SatMono.of_sol_eq (draw_sol hd)).trans
-          (hs.satMono.trans ((Infer.sat_mono h₂).trans (SolverState.SatMono.of_sol_eq rfl))))
-  | .selDynUnk h₁ hd hs h₂ _ hd₂ =>
+  | .selDyn h₁ hd hs h₂ hdk hsk _ =>
       (Infer.sat_mono h₁).trans
         ((SolverState.SatMono.of_sol_eq (draw_sol hd)).trans
           (hs.satMono.trans ((Infer.sat_mono h₂).trans
-            ((SolverState.SatMono.of_sol_eq (draw_sol hd₂)).trans
-              (SolverState.SatMono.of_sol_eq rfl)))))
+            ((SolverState.SatMono.of_sol_eq (draw_sol hdk)).trans hsk.satMono))))
+  | .selDynAbs h₁ hd hs h₂ hdk hsk _ =>
+      (Infer.sat_mono h₁).trans
+        ((SolverState.SatMono.of_sol_eq (draw_sol hd)).trans
+          (hs.satMono.trans ((Infer.sat_mono h₂).trans
+            ((SolverState.SatMono.of_sol_eq (draw_sol hdk)).trans
+              (hsk.satMono.trans (SolverState.SatMono.of_sol_eq rfl))))))
+  | .selDynUnk h₁ hd hs h₂ hdk hsk _ hd₂ =>
+      (Infer.sat_mono h₁).trans
+        ((SolverState.SatMono.of_sol_eq (draw_sol hd)).trans
+          (hs.satMono.trans ((Infer.sat_mono h₂).trans
+            ((SolverState.SatMono.of_sol_eq (draw_sol hdk)).trans
+              (hsk.satMono.trans
+                ((SolverState.SatMono.of_sol_eq (draw_sol hd₂)).trans
+                  (SolverState.SatMono.of_sol_eq rfl)))))))
   | .rcd hb => InferRec.sat_mono hb
   | .letE h₁ _ _ _ _ _ _ _ _ _ _ h₂ => by
       refine (Infer.sat_mono h₁).trans ?_
@@ -1580,6 +1679,7 @@ theorem Infer.quiescent {B C : Type} [DecidableEq B] {constTy : C → B}
   -- the rules that WRITE end in a saturation, so they conclude it outright
   | .var _ _ _ _ _ _ _ hw, _ => hw.quiescent
   | .app _ _ _ hs, _ => hs.quiescent
+  | .rcdDyn _ _ _ hs, _ => hs.quiescent
   | .conc _ _ _ _ _ hs₂, _ => hs₂.quiescent
   | .sel _ _ hs _, _ => hs.quiescent
   | .selAbs _ _ hs _, _ => hs.quiescent.flag _
@@ -1588,11 +1688,10 @@ theorem Infer.quiescent {B C : Type} [DecidableEq B] {constTy : C → B}
         hs.quiescent (.lit hb)
   -- the key's inference runs from the saturated state, and carries it
   | .lab, hq => hq
-  | .selDyn _ _ hs h₂ _, _ => Infer.quiescent h₂ hs.quiescent
-  | .selDynAbs _ _ hs h₂ _, _ => (Infer.quiescent h₂ hs.quiescent).flag _
-  | .selDynUnk _ _ hs h₂ hb hd₂, _ =>
-      SolverState.Quiescent.park_draw (draw_sol hd₂) (draw_parked hd₂)
-        (Infer.quiescent h₂ hs.quiescent) hb
+  | .selDyn _ _ _ _ _ hsk _, _ => hsk.quiescent
+  | .selDynAbs _ _ _ _ _ hsk _, _ => hsk.quiescent.flag _
+  | .selDynUnk _ _ _ _ _ hsk hb hd₂, _ =>
+      SolverState.Quiescent.park_draw (draw_sol hd₂) (draw_parked hd₂) hsk.quiescent hb
   -- …and the rules that do not write carry it through
   | .lam hd hb, hq => Infer.quiescent hb (hq.draw hd)
   | .rcd hb, hq => InferRec.quiescent hb hq

@@ -76,6 +76,7 @@ def fieldPow {B : Type} (l : Label) (b : B) : Nat → Row B
 def shiftSub {B : Type} (α : TyVar) (l : Label) (b : B) (k : Nat) : TySubst B where
   ty  := (.var ·)
   row := fun x => if x = α then fieldPow l b k else .var x
+  lab := (.var ·)
 
 -- ⊢  (shiftSub α l b k).row α  =  (l:𝓫)^k
 theorem shiftSub_row_self {B : Type} (α : TyVar) (l : Label) (b : B) (k : Nat) :
@@ -165,11 +166,11 @@ theorem shift_proj_forces_zero {B : Type} {n : Nat} {τ : Ty B} :
 theorem shift_unifier_varFree {B : Type} {α : TyVar} {l : Label} {b : B}
     {θ : TySubst B} (h : Unifies θ (shiftL α l b) (shiftR α l b)) :
     (θ.row α).SpineVarFree := by
-  obtain ⟨-, hp⟩ := h.char
+  obtain ⟨-, hp, -⟩ := h.char
   have hl := hp l
   have eL : sProj l (Row.toSpine ((shiftL α l b).applySubst θ))
       = sProj l (θ.row α).toSpine
-          ++ [((sVarSeq (θ.row α).toSpine).length, Ty.base b)] := by
+          ++ [((sBarSeq (θ.row α).toSpine).length, Ty.base b)] := by
     show sProj l ((θ.row α).toSpine ++ [Atom.field l (.base b)]) = _
     rw [sProj_append]
     simp [sProj]
@@ -179,7 +180,7 @@ theorem shift_unifier_varFree {B : Type} {α : TyVar} {l : Label} {b : B}
     simp [sProj]
   rw [eL, eR] at hl
   have hn := shift_proj_forces_zero _ _ hl
-  exact (spineVarFree_iff_varSeq_nil _).mpr (nil_of_len_zero hn)
+  exact spineVarFree_of_barSeq_nil _ (nil_of_len_zero hn)
 
 ------------------- COVERING PINS THE l-COUNT (the antichain) ------------------
 
@@ -219,6 +220,7 @@ theorem shiftSub_antichain {B : Type} (α : TyVar) (l : Label) (b : B) {j k : Na
 def offSub {B : Type} (α : TyVar) (m : Label) (b : B) : TySubst B where
   ty  := (.var ·)
   row := fun x => if x = α then .sing m (.base b) else .var x
+  lab := (.var ·)
 
 -- ⊢  (offSub α m b).row α  =  (m:𝓫)
 theorem offSub_row_self {B : Type} (α : TyVar) (m : Label) (b : B) :

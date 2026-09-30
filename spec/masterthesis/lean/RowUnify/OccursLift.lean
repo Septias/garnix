@@ -103,9 +103,8 @@ theorem unifyM_occurs_no_unifier {B : Type} [DecidableEq B] (fuel : Nat) :
         | var α => cases fuel <;> exact bindTy_occurs_no_unifier' h
         | base _ => cases fuel <;> cases h
         | lab b' =>
-            by_cases hb : b = b'
-            · subst hb; cases fuel <;> simp [unifyTyF] at h
-            · cases fuel <;> simp [unifyTyF, hb] at h
+            have h' : unifyKey (B := B) S b b' = .occurs := by cases fuel <;> exact h
+            rcases unifyKey_cases (B := B) S b b' with ⟨_, _, he⟩ | he <;> rw [he] at h' <;> cases h'
         | unk => cases fuel <;> cases h
         | fn _ _ => cases fuel <;> cases h
         | rcd _ => cases fuel <;> cases h
@@ -223,8 +222,8 @@ theorem unifyM_occurs_no_unifier {B : Type} [DecidableEq B] (fuel : Nat) :
           have e₂ := RowEquiv.applySubst θ (Row.toSpine_equiv ρ₂)
           refine ih.2 S _ _ V hS (fun x hx => ?_) h ⟨θ, e₁.symm.trans (hR.trans e₂)⟩
           rcases List.mem_append.mp hx with hh | hh
-          · exact hV (List.mem_append_left _ ((mem_sFtv_toSpine ρ₁ x).mp hh))
-          · exact hV (List.mem_append_right _ ((mem_sFtv_toSpine ρ₂ x).mp hh))
+          · exact hV (List.mem_append_left _ (mem_sFtv_toSpine ρ₁ x hh))
+          · exact hV (List.mem_append_right _ (mem_sFtv_toSpine ρ₂ x hh))
       · cases s₁ with
         | nil => exact absurd h (hnilL S s₂ _)
         | cons a s₁ =>

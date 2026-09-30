@@ -38,7 +38,7 @@ theorem bindTy_ne_clash {B : Type} {S : Supply} {α : TyVar} {τ : Ty B} :
   intro h; unfold bindTy at h
   split at h
   · cases h
-  · split at h <;> cases h
+  · split at h <;> (try split at h) <;> cases h
 
 theorem solveVarM_ne_clash {B : Type} {S : Supply} {s₁ s₂ : List (Atom B)} :
     solveVarM S s₁ s₂ ≠ some .clash := by
@@ -48,6 +48,7 @@ theorem solveVarM_ne_clash {B : Type} {S : Supply} {s₁ s₂ : List (Atom B)} :
   | cons a r =>
     cases a with
     | field _ _ => simp [solveVarM] at h
+    | dfield _ _ => simp [solveVarM] at h
     | var α =>
       cases r with
       | cons _ _ => simp [solveVarM] at h
@@ -55,7 +56,7 @@ theorem solveVarM_ne_clash {B : Type} {S : Supply} {s₁ s₂ : List (Atom B)} :
         simp only [solveVarM] at h
         split at h
         · simp at h
-        · split at h <;> simp at h
+        · split at h <;> (try split at h) <;> simp at h
 
 
 
@@ -81,13 +82,15 @@ theorem tyClash_dispatch {B : Type} [DecidableEq B] {S : Supply} {fuel : Nat}
       | fn _ _ => simp only [Ty.applySubst] at hb; cases hb
       | rcd _ => simp only [Ty.applySubst] at hb; cases hb
   | lab b =>
-      have hb := TyEquiv.lab_inv (show TyEquiv (Ty.lab b) _ from hu)
+      have hb := TyEquiv.lab_inv (show TyEquiv (Ty.lab (b.applySubst θ)) _ from hu)
       cases τ' with
       | var α => cases fuel <;> exact bindTy_ne_clash (S := S) (α := α) (τ := Ty.lab b) h
       | base _ => simp only [Ty.applySubst] at hb; cases hb
       | lab b' =>
           simp only [Ty.applySubst, Ty.lab.injEq] at hb
-          subst hb; cases fuel <;> simp [unifyTyF] at h
+          simp only [unifyTyF] at h
+          cases b <;> cases b' <;> simp [unifyKey, bindLab] at h <;>
+            (try split at h) <;> (try cases h) <;> simp_all
       | unk => simp only [Ty.applySubst] at hb; cases hb
       | fn _ _ => simp only [Ty.applySubst] at hb; cases hb
       | rcd _ => simp only [Ty.applySubst] at hb; cases hb
@@ -222,8 +225,8 @@ theorem unifyM_clash_no_unifier {B : Type} [DecidableEq B] (fuel : Nat) :
           refine ih.2 S _ _ (hS.mono (fun x hx => ?_)) h
             ⟨θ, e₁.symm.trans (hR.trans e₂)⟩
           rcases List.mem_append.mp hx with hh | hh
-          · exact List.mem_append_left _ ((mem_sFtv_toSpine ρ₁ x).mp hh)
-          · exact List.mem_append_right _ ((mem_sFtv_toSpine ρ₂ x).mp hh)
+          · exact List.mem_append_left _ (mem_sFtv_toSpine ρ₁ x hh)
+          · exact List.mem_append_right _ (mem_sFtv_toSpine ρ₂ x hh)
       · cases s₁ with
         | nil =>
             simp only [unifySpineMF] at h

@@ -52,14 +52,20 @@ theorem SolSat.tail {B : Type} {θ : TySubst B} {α : TyVar} {ρ : Row B}
 
 
 theorem SubstEquiv.refl {B : Type} (θ : TySubst B) : θ ≗ θ :=
-  ⟨fun _ => .refl _, fun _ => .refl _⟩
+  ⟨fun _ => .refl _, fun _ => .refl _, fun _ => rfl⟩
 
 theorem SubstEquiv.symm {B : Type} {θ₁ θ₂ : TySubst B} (h : θ₁ ≗ θ₂) : θ₂ ≗ θ₁ :=
-  ⟨fun α => (h.1 α).symm, fun α => (h.2 α).symm⟩
+  ⟨fun α => (h.1 α).symm, fun α => (h.2.1 α).symm, fun α => (h.2.2 α).symm⟩
 
 theorem SubstEquiv.trans {B : Type} {θ₁ θ₂ θ₃ : TySubst B}
     (h₁ : θ₁ ≗ θ₂) (h₂ : θ₂ ≗ θ₃) : θ₁ ≗ θ₃ :=
-  ⟨fun α => (h₁.1 α).trans (h₂.1 α), fun α => (h₁.2 α).trans (h₂.2 α)⟩
+  ⟨fun α => (h₁.1 α).trans (h₂.1 α), fun α => (h₁.2.1 α).trans (h₂.2.1 α),
+   fun α => (h₁.2.2 α).trans (h₂.2.2 α)⟩
+
+theorem Key.applySubst_substEquiv {B : Type} {θ₁ θ₂ : TySubst B} (h : θ₁ ≗ θ₂) :
+    (k : Key) → k.applySubst θ₁ = k.applySubst θ₂
+  | .lit _ => rfl
+  | .var α => h.2.2 α
 
 -- THE CONGRUENCE. Structural, at both sorts at once (types contain rows).
 -- ⊢  θ₁ ≗ θ₂   ⟹   τ.applySubst θ₁ ≈ₜ τ.applySubst θ₂
@@ -69,7 +75,7 @@ mutual
       (τ : Ty B) → TyEquiv (τ.applySubst θ₁) (τ.applySubst θ₂)
     | .var α    => h.1 α
     | .base _   => .refl _
-    | .lab _   => .refl _
+    | .lab k   => by simp only [Ty.applySubst, Key.applySubst_substEquiv h k]; exact .refl _
     | .unk      => .refl _
     | .fn τ₁ τ₂ =>
         .fn (Ty.applySubst_substEquiv h τ₁) (Ty.applySubst_substEquiv h τ₂)
@@ -78,10 +84,13 @@ mutual
   theorem Row.applySubst_substEquiv {B : Type} {θ₁ θ₂ : TySubst B} (h : θ₁ ≗ θ₂) :
       (ρ : Row B) → RowEquiv (ρ.applySubst θ₁) (ρ.applySubst θ₂)
     | .empty     => .refl _
-    | .var α     => h.2 α
+    | .var α     => h.2.1 α
     | .sing _ τ  => .sing (Ty.applySubst_substEquiv h τ)
     | .cat ρ₁ ρ₂ =>
         .cat (Row.applySubst_substEquiv h ρ₁) (Row.applySubst_substEquiv h ρ₂)
+    | .dsing q τ => by
+        simp only [Row.applySubst, Key.applySubst_substEquiv h q]
+        exact .dsing (Ty.applySubst_substEquiv h τ)
 end
 
 
@@ -94,6 +103,15 @@ theorem tyLookup_spec {B : Type} (α : TyVar) :
       · subst h; exact .inr (by simp only [tyLookup, if_pos]; exact List.mem_cons_self)
       · simp only [tyLookup, if_neg h]
         exact (tyLookup_spec α t).imp id (List.mem_cons_of_mem _)
+
+theorem labLookup_spec (α : TyVar) :
+    (l : List (TyVar × Key)) → labLookup α l = .var α ∨ (α, labLookup α l) ∈ l
+  | [] => .inl rfl
+  | (β, k) :: t => by
+      by_cases h : β = α
+      · subst h; exact .inr (by simp only [labLookup, if_pos]; exact List.mem_cons_self)
+      · simp only [labLookup, if_neg h]
+        exact (labLookup_spec α t).imp id (List.mem_cons_of_mem _)
 
 theorem rowLookup_spec {B : Type} (α : TyVar) :
     (l : List (TyVar × Row B)) → rowLookup α l = .var α ∨ (α, rowLookup α l) ∈ l
@@ -108,14 +126,14 @@ theorem rowLookup_spec {B : Type} (α : TyVar) :
 -- ⊢  Sol.Sat θ (Sol.ofRow σ)  ↔  SolSat θ σ      (the embedding is faithful)
 theorem Sol.Sat_ofRow {B : Type} {θ : TySubst B} {σ : List (TyVar × Row B)} :
     Sol.Sat θ (Sol.ofRow σ) ↔ SolSat θ σ :=
-  ⟨fun h => h.2, fun h => ⟨fun _ hp => (nomatch hp), h⟩⟩
+  ⟨fun h => h.2.1, fun h => ⟨fun _ hp => (nomatch hp), h, fun _ hp => (nomatch hp)⟩⟩
 
 -- THE POINT OF Sat: meeting a solution means being ≈-unchanged by it. This is
 -- what turns "solve, then apply to the residual" into "same problem".
 -- ⊢  Sol.Sat θ s   ⟹   θ ≗ θ ∘ s.toSubst
 theorem Sol.Sat.substEquiv {B : Type} {θ : TySubst B} {s : Sol B}
     (h : Sol.Sat θ s) : θ ≗ θ.comp s.toSubst := by
-  constructor
+  refine ⟨?_, ?_, ?_⟩
   · intro α
     show TyEquiv (θ.ty α) ((tyLookup α s.ty).applySubst θ)
     rcases tyLookup_spec α s.ty with he | hm
@@ -125,7 +143,12 @@ theorem Sol.Sat.substEquiv {B : Type} {θ : TySubst B} {s : Sol B}
     show RowEquiv (θ.row α) ((rowLookup α s.row).applySubst θ)
     rcases rowLookup_spec α s.row with he | hm
     · rw [he]; exact .refl _
-    · exact h.2 _ hm
+    · exact h.2.1 _ hm
+  · intro α
+    show θ.lab α = (labLookup α s.lab).applySubst θ
+    rcases labLookup_spec α s.lab with he | hm
+    · rw [he]; rfl
+    · exact h.2.2 _ hm
 
 
 -- THE COMPOSE LEMMA the P5 arms need: meeting a
@@ -137,8 +160,9 @@ theorem Sol.Sat.comp_inv {B : Type} {θ : TySubst B} {s₁ s₂ : Sol B}
     (h : Sol.Sat θ (s₂.comp s₁)) : Sol.Sat θ s₁ ∧ Sol.Sat θ s₂ := by
   have h₂ : Sol.Sat θ s₂ :=
     ⟨fun p hp => h.1 p (List.mem_append_right _ hp),
-     fun p hp => h.2 p (List.mem_append_right _ hp)⟩
-  refine ⟨⟨fun p hp => ?_, fun p hp => ?_⟩, h₂⟩
+     fun p hp => h.2.1 p (List.mem_append_right _ hp),
+     fun p hp => h.2.2 p (List.mem_append_right _ hp)⟩
+  refine ⟨⟨fun p hp => ?_, fun p hp => ?_, fun p hp => ?_⟩, h₂⟩
   · have hm : (p.1, p.2.applySubst s₂.toSubst) ∈ (s₂.comp s₁).ty :=
       List.mem_append_left _ (List.mem_map_of_mem hp)
     have := h.1 _ hm
@@ -147,10 +171,15 @@ theorem Sol.Sat.comp_inv {B : Type} {θ : TySubst B} {s₁ s₂ : Sol B}
     exact (Ty.applySubst_substEquiv h₂.substEquiv p.2).symm
   · have hm : (p.1, p.2.applySubst s₂.toSubst) ∈ (s₂.comp s₁).row :=
       List.mem_append_left _ (List.mem_map_of_mem hp)
-    have := h.2 _ hm
+    have := h.2.1 _ hm
     refine this.trans ?_
     rw [Row.applySubst_applySubst]
     exact (Row.applySubst_substEquiv h₂.substEquiv p.2).symm
+  · have hm : (p.1, p.2.applySubst s₂.toSubst) ∈ (s₂.comp s₁).lab :=
+      List.mem_append_left _ (List.mem_map_of_mem hp)
+    have := h.2.2 _ hm
+    rw [this, Key.applySubst_applySubst]
+    exact (Key.applySubst_substEquiv h₂.substEquiv p.2).symm
 
 
 -- ⊢  seq inverts: a success came from two successes whose composite it is
@@ -185,6 +214,8 @@ theorem sApplySubst_equiv {B : Type} (θ : TySubst B) :
   | .var α :: s =>
       (ofSpine_append _ _).trans
         (.cat (Row.toSpine_equiv (θ.row α)).symm (sApplySubst_equiv θ s))
+  | .dfield o τ :: s =>
+      (ofSpine_cons_ofKey _ _ _).trans (.cat (.refl _) (sApplySubst_equiv θ s))
 
 -- ## THE BRIDGE
 -- Unifying the σ-substituted problem = unifying the original under θ ∘ σ.
@@ -319,6 +350,8 @@ theorem sFtv_ofSpine {B : Type} : (s : List (Atom B)) → sFtv s = (ofSpine s).f
   | [] => rfl
   | .field _ τ :: s => by simp only [sFtv, ofSpine, Row.ftv, sFtv_ofSpine s]
   | .var α :: s => by simp only [sFtv, ofSpine, Row.ftv, sFtv_ofSpine s]; rfl
+  | .dfield α τ :: s => by
+      simp only [sFtv, ofSpine, Row.ftv, Key.ftv, sFtv_ofSpine s]
 
 theorem sFtv_append {B : Type} :
     (s t : List (Atom B)) → sFtv (s ++ t) = sFtv s ++ sFtv t
@@ -326,6 +359,8 @@ theorem sFtv_append {B : Type} :
   | .field _ τ :: s, t => by
       simp only [List.cons_append, sFtv, sFtv_append s t, List.append_assoc]
   | .var _ :: s, t => by simp only [List.cons_append, sFtv, sFtv_append s t]
+  | .dfield _ _ :: s, t => by
+      simp only [List.cons_append, sFtv, sFtv_append s t, List.append_assoc]
 
 theorem sFtv_cons {B : Type} (a : Atom B) (s : List (Atom B)) :
     sFtv (a :: s) = sFtv [a] ++ sFtv s := by
@@ -343,10 +378,10 @@ theorem mem_sFtv_reverse {B : Type} {α : TyVar} :
 
 -- ## Perturbing a substitution at a fresh variable
 def TySubst.setTy {B : Type} (θ : TySubst B) (α : TyVar) (τ : Ty B) : TySubst B :=
-  ⟨fun β => if β = α then τ else θ.ty β, θ.row⟩
+  ⟨fun β => if β = α then τ else θ.ty β, θ.row, θ.lab⟩
 
 def TySubst.setRow {B : Type} (θ : TySubst B) (α : TyVar) (ρ : Row B) : TySubst B :=
-  ⟨θ.ty, fun β => if β = α then ρ else θ.row β⟩
+  ⟨θ.ty, fun β => if β = α then ρ else θ.row β, θ.lab⟩
 
 -- THE INVISIBILITY LEMMAS: a value chosen at a variable the subject does not
 -- mention is not observable. Straight off Ty/Row.applySubst_congr
@@ -358,7 +393,7 @@ theorem Row.applySubst_setRow_of_not_mem {B : Type} {θ : TySubst B} {α : TyVar
   Row.applySubst_congr ρ' fun β hβ =>
     ⟨rfl, by
       have hne : β ≠ α := fun hb => h (by rw [← hb]; exact hβ)
-      simp only [TySubst.setRow, if_neg hne]⟩
+      simp only [TySubst.setRow, if_neg hne], rfl⟩
 
 theorem Ty.applySubst_setRow_of_not_mem {B : Type} {θ : TySubst B} {α : TyVar}
     {ρ : Row B} (τ : Ty B) (h : α ∉ τ.ftv) :
@@ -366,7 +401,7 @@ theorem Ty.applySubst_setRow_of_not_mem {B : Type} {θ : TySubst B} {α : TyVar}
   Ty.applySubst_congr τ fun β hβ =>
     ⟨rfl, by
       have hne : β ≠ α := fun hb => h (by rw [← hb]; exact hβ)
-      simp only [TySubst.setRow, if_neg hne]⟩
+      simp only [TySubst.setRow, if_neg hne], rfl⟩
 
 theorem Row.applySubst_setTy_of_not_mem {B : Type} {θ : TySubst B} {α : TyVar}
     {τ : Ty B} (ρ' : Row B) (h : α ∉ ρ'.ftv) :
@@ -374,7 +409,7 @@ theorem Row.applySubst_setTy_of_not_mem {B : Type} {θ : TySubst B} {α : TyVar}
   Row.applySubst_congr ρ' fun β hβ =>
     ⟨by
       have hne : β ≠ α := fun hb => h (by rw [← hb]; exact hβ)
-      simp only [TySubst.setTy, if_neg hne], rfl⟩
+      simp only [TySubst.setTy, if_neg hne], rfl, rfl⟩
 
 theorem Ty.applySubst_setTy_of_not_mem {B : Type} {θ : TySubst B} {α : TyVar}
     {τ : Ty B} (τ' : Ty B) (h : α ∉ τ'.ftv) :
@@ -382,7 +417,7 @@ theorem Ty.applySubst_setTy_of_not_mem {B : Type} {θ : TySubst B} {α : TyVar}
   Ty.applySubst_congr τ' fun β hβ =>
     ⟨by
       have hne : β ≠ α := fun hb => h (by rw [← hb]; exact hβ)
-      simp only [TySubst.setTy, if_neg hne], rfl⟩
+      simp only [TySubst.setTy, if_neg hne], rfl, rfl⟩
 
 -- … lifted to the two unification predicates.
 -- ⊢  α ∉ ftv ρ₁, ftv ρ₂   ⟹   ( θ[α ≔ ρ] ⊨ ρ₁ ≐ᵣ ρ₂  ↔  θ ⊨ ρ₁ ≐ᵣ ρ₂ )
@@ -440,6 +475,18 @@ theorem windowExtract_ftv {B : Type} {l : Label} :
 theorem removeField_ftv {B : Type} {l : Label} :
     (s : List (Atom B)) → {τ : Ty B} → {s' : List (Atom B)} →
     removeField l s = some (τ, s') → τ.ftv ⊆ sFtv s ∧ sFtv s' ⊆ sFtv s
+  | .dfield o σ :: t, τ, s', h => by
+      simp only [removeField] at h
+      revert h
+      cases hw : removeField l t with
+      | none => intro h; cases h
+      | some p =>
+          intro h
+          obtain ⟨hτ, hs⟩ := removeField_ftv t hw
+          cases h
+          refine ⟨fun x hx => List.mem_append_right _ (hτ hx), fun x hx => ?_⟩
+          simp only [sFtv, List.mem_append] at hx ⊢
+          exact hx.imp id (fun hh => hs hh)
   | .var β :: t, τ, s', h => by
       simp only [removeField] at h
       revert h
@@ -482,6 +529,21 @@ theorem stripL_ftv {B : Type} {s₁ s₂ t₁ t₂ : List (Atom B)}
                fun _ hx => List.mem_cons_of_mem _ hx⟩
       · rw [if_neg hab] at h; cases h
 
+-- the keyed head `keyExtract` takes off
+theorem keyExtract_inv {B : Type} {α : TyVar} :
+    {s : List (Atom B)} → {τ : Ty B} → {s' : List (Atom B)} →
+    keyExtract α s = some (τ, s') → s = .dfield α τ :: s'
+  | .dfield β σ :: t, τ, s', h => by
+      simp only [keyExtract] at h
+      split at h
+      · rename_i hb; subst hb
+        simp only [Option.some.injEq, Prod.mk.injEq] at h
+        obtain ⟨rfl, rfl⟩ := h; rfl
+      · cases h
+  | [], _, _, h => by simp [keyExtract] at h
+  | .var _ :: _, _, _, h => by simp [keyExtract] at h
+  | .field _ _ :: _, _, _, h => by simp [keyExtract] at h
+
 -- ⊢  matchL pairs a leading field with a window occurrence: the emitted types
 --    and both residuals live inside the original problem
 theorem matchL_ftv {B : Type} {s₁ s₂ : List (Atom B)} {τ τ' : Ty B}
@@ -498,6 +560,18 @@ theorem matchL_ftv {B : Type} {s₁ s₂ : List (Atom B)} {τ τ' : Ty B}
           cases h
           obtain ⟨hτ, hs⟩ := windowExtract_ftv s₂ hw
           exact ⟨List.subset_append_left _ _, List.subset_append_right _ _, hτ, hs⟩
+  | .dfield α σ :: u₁ =>
+      simp only [matchL] at h
+      revert h
+      cases hw : keyExtract α s₂ with
+      | none => intro h; cases h
+      | some p =>
+          intro h
+          cases h
+          rw [keyExtract_inv hw]
+          simp only [sFtv]
+          exact ⟨fun _ hx => by simp [hx], fun _ hx => by simp [hx],
+                 fun _ hx => by simp [hx], fun _ hx => by simp [hx]⟩
 
 theorem groundMatchAux_ftv {B : Type} {s₁ s₂ : List (Atom B)} :
     (ls : List Label) → {τ τ' : Ty B} → {t₁ t₂ : List (Atom B)} →
@@ -559,6 +633,9 @@ theorem sProj_nil_of_count_zero {B : Type} (l : Label) :
   | .var _ :: s, h => by
       simp only [sFieldCount] at h
       simp only [sProj, sProj_nil_of_count_zero l s h, List.map_nil]
+  | .dfield _ _ :: s, h => by
+      simp only [sFieldCount] at h
+      simp only [sProj, sProj_nil_of_count_zero l s h, List.map_nil]
   | .field l' _ :: s, h => by
       simp only [sFieldCount] at h
       by_cases hl : l' = l
@@ -574,23 +651,28 @@ theorem spineVarFree_applySubst {B : Type} (θ : TySubst B) :
   | .sing _ _, _ => .sing
   | .cat _ _, .cat h₁ h₂ =>
       .cat (spineVarFree_applySubst θ h₁) (spineVarFree_applySubst θ h₂)
+  | .dsing _ _, .dsing => .dsing
 
--- ⊢  s var-free and l-free   ⟹   proj_l(θ(ofSpine s)) = []   and it adds no vars
+-- ⊢  s barrier-free and l-free   ⟹   proj_l(θ(ofSpine s)) = []   and it adds
+--    no barrier
 theorem sProj_applySubst_nil {B : Type} {θ : TySubst B} (l : Label)
-    (s : List (Atom B)) (hv : sVarSeq s = []) (hc : sFieldCount l s = 0) :
+    (s : List (Atom B)) (hv : sBarSeq s = []) (hc : sFieldCount l s = 0) :
     sProj l ((ofSpine s).applySubst θ).toSpine = [] := by
   have hvf : (ofSpine s).SpineVarFree :=
-    (spineVarFree_iff_varSeq_nil _).2 (by rw [ofSpine_toSpine]; exact hv)
+    spineVarFree_of_barSeq_nil _ (by rw [ofSpine_toSpine]; exact hv)
   refine sProj_nil_of_count_zero l _ ?_
   rw [sFieldCount_applySubst_varFree θ l hvf, ofSpine_toSpine]
   exact hc
 
-theorem sVarSeq_applySubst_nil {B : Type} {θ : TySubst B}
-    (s : List (Atom B)) (hv : sVarSeq s = []) :
-    sVarSeq ((ofSpine s).applySubst θ).toSpine = [] :=
-  (spineVarFree_iff_varSeq_nil _).1
-    (spineVarFree_applySubst θ ((spineVarFree_iff_varSeq_nil _).2
-      (by rw [ofSpine_toSpine]; exact hv)))
+theorem sBarSeq_applySubst_nil {B : Type} {θ : TySubst B} :
+    (s : List (Atom B)) → sBarSeq s = [] →
+    sBarSeq ((ofSpine s).applySubst θ).toSpine = []
+  | [], _ => rfl
+  | .var _ :: _, h => nomatch h
+  | .dfield _ _ :: _, h => nomatch h
+  | .field _ _ :: s, h => by
+      show sBarSeq ([Atom.field _ _] ++ ((ofSpine s).applySubst θ).toSpine) = []
+      rw [sBarSeq_append]; exact sBarSeq_applySubst_nil s h
 
 -- ## A one-variable spine splits around its variable
 theorem sVarSeq_singleton_split {B : Type} {β : TyVar} :
@@ -600,6 +682,10 @@ theorem sVarSeq_singleton_split {B : Type} {β : TyVar} :
       simp only [sVarSeq] at h
       obtain ⟨w, v, rfl, hw, hv⟩ := sVarSeq_singleton_split s h
       exact ⟨.field l τ :: w, v, rfl, by simpa only [sVarSeq] using hw, hv⟩
+  | .dfield o τ :: s, h => by
+      simp only [sVarSeq] at h
+      obtain ⟨w, v, rfl, hw, hv⟩ := sVarSeq_singleton_split s h
+      exact ⟨.dfield o τ :: w, v, rfl, by simpa only [sVarSeq] using hw, hv⟩
   | .var γ :: s, h => by
       simp only [sVarSeq] at h
       injection h with hγ hs
@@ -612,10 +698,14 @@ theorem sVarSeq_singleton_split {B : Type} {β : TyVar} :
 -- ⊢  vars(s) = [β],  count_l(s) = 0   ⟹   proj_l(θ(ofSpine s)) ≈ₚ proj_l(θβ)
 theorem host_proj {B : Type} {θ : TySubst B} {β : TyVar} {l : Label} :
     (s : List (Atom B)) → sVarSeq s = [β] → sFieldCount l s = 0 →
+    sHasKey s = false →
     ProjEquiv (sProj l ((ofSpine s).applySubst θ).toSpine)
               (sProj l (θ.row β).toSpine) := by
-  intro s hv hc
-  obtain ⟨w, v, rfl, hw, hvv⟩ := sVarSeq_singleton_split s hv
+  intro s hv hc hk
+  obtain ⟨w, v, rfl, hw₀, hvv₀⟩ := sVarSeq_singleton_split s hv
+  simp only [sHasKey_append, sHasKey, Bool.or_eq_false_iff] at hk
+  have hw := (sBarSeq_nil_of w hw₀ hk.1).1
+  have hvv := (sBarSeq_nil_of v hvv₀ hk.2).1
   rw [sFieldCount_append] at hc
   simp only [sFieldCount] at hc
   have hcw : sFieldCount l w = 0 := by omega
@@ -623,11 +713,11 @@ theorem host_proj {B : Type} {θ : TySubst B} {β : TyVar} {l : Label} :
   have hstep : RowEquiv ((ofSpine (w ++ .var β :: v)).applySubst θ)
       (.cat ((ofSpine w).applySubst θ) ((ofSpine (.var β :: v)).applySubst θ)) :=
     RowEquiv.applySubst θ (ofSpine_append w (.var β :: v))
-  refine (hstep.char.2 l).trans (ProjEquiv.of_eq ?_)
+  refine (hstep.char.2.1 l).trans (ProjEquiv.of_eq ?_)
   show sProj l (((ofSpine w).applySubst θ).toSpine ++
                 ((ofSpine (.var β :: v)).applySubst θ).toSpine) = _
   rw [sProj_append, sProj_applySubst_nil l w hw hcw,
-      sVarSeq_applySubst_nil w hw]
+      sBarSeq_applySubst_nil w hw]
   show ([] : List (Nat × Ty B)) ++
       (sProj l ((Row.cat (θ.row β) ((ofSpine v).applySubst θ)).toSpine)).map
         (fun p => (p.1 + 0, p.2)) = _
@@ -667,11 +757,12 @@ theorem map_add_zero {B : Type} : (ps : List (Nat × Ty B)) →
 
 theorem proj_head_zero_var {B : Type} {θ : TySubst B} {l : Label} {σ : Ty B}
     {rest : List (Nat × Ty B)} :
-    (s : List (Atom B)) → sFieldCount l s = 0 →
+    (s : List (Atom B)) → sFieldCount l s = 0 → sHasKey s = false →
     sProj l ((ofSpine s).applySubst θ).toSpine = (0, σ) :: rest →
     ∃ γ ∈ sVarSeq s, ∃ ρ' : Row B, RowEquiv (θ.row γ) (.cat (.sing l σ) ρ')
-  | [], _, h => by simp [ofSpine, Row.applySubst, Row.toSpine, sProj] at h
-  | .field l' τ' :: s, hc, h => by
+  | [], _, _, h => by simp [ofSpine, Row.applySubst, Row.toSpine, sProj] at h
+  | .dfield _ _ :: _, _, hk, _ => by simp [sHasKey] at hk
+  | .field l' τ' :: s, hc, hk, h => by
       simp only [sFieldCount] at hc
       have hl : ¬ l' = l := by intro hh; rw [if_pos hh] at hc; omega
       rw [if_neg hl] at hc
@@ -679,11 +770,11 @@ theorem proj_head_zero_var {B : Type} {θ : TySubst B} {l : Label} {σ : Ty B}
           [Atom.field l' (τ'.applySubst θ)] ++
             ((ofSpine s).applySubst θ).toSpine := rfl
       rw [hsp, sProj_append] at h
-      simp only [sProj, if_neg hl, sVarSeq, List.length_nil, List.nil_append,
+      simp only [sProj, if_neg hl, sBarSeq, List.length_nil, List.nil_append,
         map_add_zero] at h
-      obtain ⟨δ, hδ, hres⟩ := proj_head_zero_var s (by omega) h
+      obtain ⟨δ, hδ, hres⟩ := proj_head_zero_var s (by omega) (by simpa [sHasKey] using hk) h
       exact ⟨δ, by rw [sVarSeq]; exact hδ, hres⟩
-  | .var γ :: s, hc, h => by
+  | .var γ :: s, hc, hk, h => by
       simp only [sFieldCount] at hc
       have hsp : ((ofSpine (Atom.var γ :: s)).applySubst θ).toSpine =
           (θ.row γ).toSpine ++ ((ofSpine s).applySubst θ).toSpine := rfl
@@ -711,7 +802,8 @@ theorem proj_head_zero_var {B : Type} {θ : TySubst B} {l : Label} {σ : Ty B}
               subst hτ
               have hn0 : n = 0 := by omega
               subst hn0
-              obtain ⟨δ, hδ, hres⟩ := proj_head_zero_var s hc hq
+              obtain ⟨δ, hδ, hres⟩ :=
+                proj_head_zero_var s hc (by simpa [sHasKey] using hk) hq
               exact ⟨δ, by rw [sVarSeq]; exact List.mem_cons_of_mem _ hδ, hres⟩
 
 -- ⊢  HostShape l τ s₂ β,  θ ⊨ (l:τ | ofSpine t₁) ≐ᵣ ofSpine s₂
@@ -730,17 +822,17 @@ theorem host_forced {B : Type} {θ : TySubst B} {β : TyVar} {l : Label} {τ : T
     (hu : Unifies θ (ofSpine (.field l τ :: t₁)) (ofSpine s₂)) :
     ∃ (σ : Ty B) (ρ' : Row B),
       TyEquiv (τ.applySubst θ) σ ∧ RowEquiv (θ.row β) (.cat (.sing l σ) ρ') := by
-  obtain ⟨⟨rest, hvs, hrest⟩, hc, -⟩ := hs
+  obtain ⟨⟨rest, hvs, hrest⟩, hc, -, hk⟩ := hs
   have hL : sProj l ((ofSpine (.field l τ :: t₁)).applySubst θ).toSpine =
       (0, τ.applySubst θ) :: sProj l ((ofSpine t₁).applySubst θ).toSpine := by
     show sProj l (((Row.sing l τ).applySubst θ).toSpine ++
                   ((ofSpine t₁).applySubst θ).toSpine) = _
     rw [sProj_append]
-    simp [Row.applySubst, Row.toSpine, sProj, sVarSeq]
-  have hp := (RowEquiv.char hu).2 l
+    simp [Row.applySubst, Row.toSpine, sProj, sBarSeq]
+  have hp := (RowEquiv.char hu).2.1 l
   rw [hL] at hp
   obtain ⟨σ, rest', hq, hty⟩ := ProjEquiv.head_zero hp
-  obtain ⟨γ, hγmem, ρ', hγ⟩ := proj_head_zero_var s₂ hc hq
+  obtain ⟨γ, hγmem, ρ', hγ⟩ := proj_head_zero_var s₂ hc hk hq
   rw [hvs] at hγmem
   rcases List.mem_cons.mp hγmem with rfl | hmem
   · exact ⟨σ, ρ', hty, hγ⟩
@@ -755,7 +847,7 @@ theorem host_forced {B : Type} {θ : TySubst B} {β : TyVar} {l : Label} {τ : T
 -- ⊢  count_l(s₂) = 0,  vars(s₂) ⊆ rowVars(τ)  ⟹  (l:τ | t₁) ≐ᵣ s₂ has no unifier
 theorem selfref_host_no_unifier {B : Type} {l : Label} {τ : Ty B}
     {t₁ s₂ : List (Atom B)}
-    (hc : sFieldCount l s₂ = 0)
+    (hc : sFieldCount l s₂ = 0) (hk : sHasKey s₂ = false)
     (hall : ∀ γ ∈ sVarSeq s₂, γ ∈ Ty.allRowVars τ) :
     ¬ ∃ θ : TySubst B, Unifies θ (ofSpine (.field l τ :: t₁)) (ofSpine s₂) := by
   rintro ⟨θ, hu⟩
@@ -764,11 +856,11 @@ theorem selfref_host_no_unifier {B : Type} {l : Label} {τ : Ty B}
     show sProj l (((Row.sing l τ).applySubst θ).toSpine ++
                   ((ofSpine t₁).applySubst θ).toSpine) = _
     rw [sProj_append]
-    simp [Row.applySubst, Row.toSpine, sProj, sVarSeq]
-  have hp := (RowEquiv.char hu).2 l
+    simp [Row.applySubst, Row.toSpine, sProj, sBarSeq]
+  have hp := (RowEquiv.char hu).2.1 l
   rw [hL] at hp
   obtain ⟨σ, rest', hq, hty⟩ := ProjEquiv.head_zero hp
-  obtain ⟨γ, hγmem, ρ', hγ⟩ := proj_head_zero_var s₂ hc hq
+  obtain ⟨γ, hγmem, ρ', hγ⟩ := proj_head_zero_var s₂ hc hk hq
   exact selfref_no_l_field (hall _ hγmem) hty hγ
 
 -- ## The move, algebraically
@@ -781,12 +873,15 @@ theorem renameVar_length {B : Type} (β β' : TyVar) :
   | [] => rfl
   | .var _ :: s => congrArg (· + 1) (renameVar_length β β' s)
   | .field _ _ :: s => congrArg (· + 1) (renameVar_length β β' s)
+  | .dfield _ _ :: s => congrArg (· + 1) (renameVar_length β β' s)
 
 theorem renameVar_varFree {B : Type} (β β' : TyVar) :
     (s : List (Atom B)) → sVarSeq s = [] → renameVar β β' s = s
   | [], _ => rfl
   | .var _ :: _, h => nomatch h
   | .field _ _ :: s, h =>
+      congrArg _ (renameVar_varFree β β' s (by simpa only [sVarSeq] using h))
+  | .dfield _ _ :: s, h =>
       congrArg _ (renameVar_varFree β β' s (by simpa only [sVarSeq] using h))
 
 -- …and the version the multi-variable host shape needs: the OTHER variables of
@@ -800,6 +895,8 @@ theorem renameVar_not_mem {B : Type} (β β' : TyVar) :
       have hs : β ∉ sVarSeq s := fun hh => h (by rw [sVarSeq]; exact List.mem_cons_of_mem _ hh)
       simp only [renameVar, if_neg hγ, renameVar_not_mem β β' s hs]
   | .field _ _ :: s, h =>
+      congrArg _ (renameVar_not_mem β β' s (by simpa only [sVarSeq] using h))
+  | .dfield _ _ :: s, h =>
       congrArg _ (renameVar_not_mem β β' s (by simpa only [sVarSeq] using h))
 
 -- (U-EXPAND'S LEFT-END METATHEORY WAS HERE. What survives above —
@@ -818,6 +915,9 @@ theorem mem_sFtv_of_mem_sVarSeq {B : Type} {α : TyVar} :
       · exact List.mem_cons_self
       · exact List.mem_cons_of_mem _ (mem_sFtv_of_mem_sVarSeq s h)
   | .field _ _ :: s, h => by
+      simp only [sVarSeq] at h
+      exact List.mem_append_right _ (mem_sFtv_of_mem_sVarSeq s h)
+  | .dfield _ _ :: s, h => by
       simp only [sVarSeq] at h
       exact List.mem_append_right _ (mem_sFtv_of_mem_sVarSeq s h)
 
@@ -846,7 +946,7 @@ theorem crossfield_host_forced {B : Type} (b : B) {l m : Label} (hne : l ≠ m)
   have hc : sFieldCount l [Atom.field m (.base b), .var β] = 0 := by
     simp only [sFieldCount, if_neg (fun h : m = l => hne h.symm)]
   obtain ⟨σ, ρ', hty, hβ⟩ := host_forced (t₁ := [Atom.var α])
-    ⟨⟨[], rfl, fun _ hm => nomatch hm⟩, hc, by simp [Ty.allRowVars]⟩ hu'
+    ⟨⟨[], rfl, fun _ hm => nomatch hm⟩, hc, by simp [Ty.allRowVars], rfl⟩ hu'
   exact ⟨ρ', hβ.trans (RowEquiv.cat (RowEquiv.sing hty.symm) (.refl _))⟩
 
 
@@ -933,6 +1033,14 @@ theorem sFtv_renameVar {B : Type} (β β' : TyVar) :
       simp only [sFtv, List.mem_cons, List.mem_append]
       rcases hx with hx | hx
       · exact .inr (.inl hx)
+      · rcases List.mem_cons.mp (sFtv_renameVar β β' s x hx) with h' | h'
+        · exact .inl h'
+        · exact .inr (.inr h')
+  | .dfield o τ :: s, x, hx => by
+      simp only [renameVar, sFtv, List.mem_append] at hx
+      simp only [sFtv, List.mem_cons, List.mem_append]
+      rcases hx with hx | hx
+      · exact .inr (.inl (by simpa using hx))
       · rcases List.mem_cons.mp (sFtv_renameVar β β' s x hx) with h' | h'
         · exact .inl h'
         · exact .inr (.inr h')

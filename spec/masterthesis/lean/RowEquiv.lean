@@ -22,33 +22,69 @@ namespace MinimalCalculus
 -- trace-monoid presentation; cancellativity of shared end-vars — what makes
 -- U-var-refl sound AND complete — falls out as a corollary.
 
+-- FC-labels phase B adds a third atom, the KEYED field ${α}: τ. A literal key
+-- IS the literal field l (≈-rule `dsingLab`), so only a label-variable key
+-- makes a keyed atom. A keyed field is a BARRIER like a var: nothing commutes
+-- past it.
+-- "var sequence" below reads "barrier sequence" (vars and keys, in order), a
+-- segment is a barrier-free run, and the keyed fields' TYPES are a third
+-- invariant (pointwise ≈, in order).
 inductive Atom (B : Type) : Type where
-  | field : Label → Ty B → Atom B
-  | var   : TyVar → Atom B
+  | field  : Label → Ty B → Atom B
+  | var    : TyVar → Atom B
+  | dfield : TyVar → Ty B → Atom B
+
+/-- the spine atom of a keyed field. -/
+def Atom.ofKey {B : Type} : Key → Ty B → Atom B
+  | .lit l, τ => .field l τ
+  | .var α, τ => .dfield α τ
 
 def Row.toSpine {B : Type} : Row B → List (Atom B)
   | .empty     => []
   | .var α     => [.var α]
   | .sing l τ  => [.field l τ]
   | .cat ρ₁ ρ₂ => ρ₁.toSpine ++ ρ₂.toSpine
+  | .dsing q τ => [Atom.ofKey q τ]
 
 -- Fold a spine back into a right-nested row (the ≈-normal shape).
 def ofSpine {B : Type} : List (Atom B) → Row B
   | []               => .empty
   | .field l τ :: s  => .cat (.sing l τ) (ofSpine s)
   | .var α :: s      => .cat (.var α) (ofSpine s)
+  | .dfield α τ :: s => .cat (.dsing (.var α) τ) (ofSpine s)
 
--- Invariant 1: the var sequence.
+-- A barrier's identity: a var, or a key (its field type is tracked apart).
+inductive Barrier (B : Type) : Type where
+  | var : TyVar → Barrier B
+  | key : TyVar → Barrier B
+
+-- Invariant 1: the barrier sequence.
+def sBarSeq {B : Type} : List (Atom B) → List (Barrier B)
+  | []               => []
+  | .field _ _ :: s  => sBarSeq s
+  | .var α :: s      => .var α :: sBarSeq s
+  | .dfield o _ :: s => .key o :: sBarSeq s
+
+-- The var sequence (keys skipped) — what the unifier's var bookkeeping reads.
 def sVarSeq {B : Type} : List (Atom B) → List TyVar
-  | []              => []
-  | .field _ _ :: s => sVarSeq s
-  | .var α :: s     => α :: sVarSeq s
+  | []               => []
+  | .field _ _ :: s  => sVarSeq s
+  | .var α :: s      => α :: sVarSeq s
+  | .dfield _ _ :: s => sVarSeq s
 
 -- Invariant 2: the l-projection — (segment index, type) per l-field, in order.
 def sProj {B : Type} (l : Label) : List (Atom B) → List (Nat × Ty B)
   | []               => []
   | .field l' τ :: s => if l' = l then (0, τ) :: sProj l s else sProj l s
   | .var _ :: s      => (sProj l s).map (fun p => (p.1 + 1, p.2))
+  | .dfield _ _ :: s => (sProj l s).map (fun p => (p.1 + 1, p.2))
+
+-- Invariant 3: the keyed fields' types, in order.
+def sDProj {B : Type} : List (Atom B) → List (Nat × Ty B)
+  | []               => []
+  | .field _ _ :: s  => sDProj s
+  | .var _ :: s      => sDProj s
+  | .dfield _ τ :: s => (0, τ) :: sDProj s
 
 -- ⊢  vars(s₁ ++ s₂) = vars(s₁) ++ vars(s₂)
 theorem sVarSeq_append {B : Type} : (s₁ s₂ : List (Atom B)) →
@@ -56,17 +92,49 @@ theorem sVarSeq_append {B : Type} : (s₁ s₂ : List (Atom B)) →
   | [], _ => rfl
   | .field _ _ :: s₁, s₂ => sVarSeq_append s₁ s₂
   | .var _ :: s₁, s₂ => congrArg (_ :: ·) (sVarSeq_append s₁ s₂)
+  | .dfield _ _ :: s₁, s₂ => sVarSeq_append s₁ s₂
 
--- ⊢  proj_l(s₁ ++ s₂) = proj_l(s₁) ++ map(·+|vars s₁|) proj_l(s₂)
+-- ⊢  bars(s₁ ++ s₂) = bars(s₁) ++ bars(s₂)
+theorem sBarSeq_append {B : Type} : (s₁ s₂ : List (Atom B)) →
+    sBarSeq (s₁ ++ s₂) = sBarSeq s₁ ++ sBarSeq s₂
+  | [], _ => rfl
+  | .field _ _ :: s₁, s₂ => sBarSeq_append s₁ s₂
+  | .var _ :: s₁, s₂ => congrArg (_ :: ·) (sBarSeq_append s₁ s₂)
+  | .dfield _ _ :: s₁, s₂ => congrArg (_ :: ·) (sBarSeq_append s₁ s₂)
+
+theorem sDProj_append {B : Type} : (s₁ s₂ : List (Atom B)) →
+    sDProj (s₁ ++ s₂) = sDProj s₁ ++ sDProj s₂
+  | [], _ => rfl
+  | .field _ _ :: s₁, s₂ => sDProj_append s₁ s₂
+  | .var _ :: s₁, s₂ => sDProj_append s₁ s₂
+  | .dfield _ _ :: s₁, s₂ => congrArg (_ :: ·) (sDProj_append s₁ s₂)
+
+-- The var sequence is read off the barrier sequence.
+def Barrier.vars {B : Type} : List (Barrier B) → List TyVar
+  | [] => []
+  | .var α :: bs => α :: Barrier.vars bs
+  | .key _ :: bs => Barrier.vars bs
+
+theorem sVarSeq_eq_vars {B : Type} : (s : List (Atom B)) →
+    sVarSeq s = Barrier.vars (sBarSeq s)
+  | [] => rfl
+  | .field _ _ :: s => sVarSeq_eq_vars s
+  | .var _ :: s => congrArg (_ :: ·) (sVarSeq_eq_vars s)
+  | .dfield _ _ :: s => sVarSeq_eq_vars s
+
+-- ⊢  proj_l(s₁ ++ s₂) = proj_l(s₁) ++ map(·+|bars s₁|) proj_l(s₂)
 theorem sProj_append {B : Type} (l : Label) : (s₁ s₂ : List (Atom B)) →
     sProj l (s₁ ++ s₂) =
-      sProj l s₁ ++ (sProj l s₂).map (fun p => (p.1 + (sVarSeq s₁).length, p.2))
-  | [], s₂ => by simp [sProj, sVarSeq]
+      sProj l s₁ ++ (sProj l s₂).map (fun p => (p.1 + (sBarSeq s₁).length, p.2))
+  | [], s₂ => by simp [sProj, sBarSeq]
   | .field l' τ :: s₁, s₂ => by
       by_cases h : l' = l <;>
-        simp [sProj, sVarSeq, h, sProj_append l s₁ s₂]
+        simp [sProj, sBarSeq, h, sProj_append l s₁ s₂]
   | .var _ :: s₁, s₂ => by
-      simp [sProj, sVarSeq, sProj_append l s₁ s₂, List.map_map,
+      simp [sProj, sBarSeq, sProj_append l s₁ s₂, List.map_map,
+            Function.comp, Nat.add_assoc]
+  | .dfield _ _ :: s₁, s₂ => by
+      simp [sProj, sBarSeq, sProj_append l s₁ s₂, List.map_map,
             Function.comp, Nat.add_assoc]
 
 -- Pointwise equivalence of projections: equal segment indices, ≈-equal types.
@@ -160,13 +228,19 @@ theorem map_shift_ne_zero_head {B : Type} {ps qs : List (Nat × Ty B)} {τ : Ty 
 
 -- ## The characterization predicate
 def Row.Char {B : Type} (ρ₁ ρ₂ : Row B) : Prop :=
-  sVarSeq ρ₁.toSpine = sVarSeq ρ₂.toSpine ∧
-  ∀ l, ProjEquiv (sProj l ρ₁.toSpine) (sProj l ρ₂.toSpine)
+  sBarSeq ρ₁.toSpine = sBarSeq ρ₂.toSpine ∧
+  (∀ l, ProjEquiv (sProj l ρ₁.toSpine) (sProj l ρ₂.toSpine)) ∧
+  ProjEquiv (sDProj ρ₁.toSpine) (sDProj ρ₂.toSpine)
 
 -- ⊢  spine ρ₁ = spine ρ₂   ⟹   Char(ρ₁, ρ₂)
 theorem Row.Char.of_eq {B : Type} {ρ₁ ρ₂ : Row B}
     (h : ρ₁.toSpine = ρ₂.toSpine) : Row.Char ρ₁ ρ₂ :=
-  ⟨by rw [h], fun _ => .of_eq (by rw [h])⟩
+  ⟨by rw [h], fun _ => .of_eq (by rw [h]), .of_eq (by rw [h])⟩
+
+-- the var sequences agree, too
+theorem Row.Char.vars {B : Type} {ρ₁ ρ₂ : Row B} (h : Row.Char ρ₁ ρ₂) :
+    sVarSeq ρ₁.toSpine = sVarSeq ρ₂.toSpine := by
+  rw [sVarSeq_eq_vars, sVarSeq_eq_vars, h.1]
 
 -- ## Soundness: ≈ preserves both invariants
 -- Every ≈-axiom is invariant-preserving: assoc/units don't move atoms
@@ -174,26 +248,30 @@ theorem Row.Char.of_eq {B : Type} {ρ₁ ρ₂ : Row B}
 -- lists), congruence is pointwise, and no rule crosses a var.
 -- ⊢  ρ₁ ≈ᵣ ρ₂   ⟹   Char(ρ₁, ρ₂)      (≈ soundness)
 theorem RowEquiv.char {B : Type} : {ρ₁ ρ₂ : Row B} → ρ₁ ≈ᵣ ρ₂ → Row.Char ρ₁ ρ₂
-  | _, _, .refl _ => ⟨rfl, fun _ => .refl _⟩
+  | _, _, .refl _ => ⟨rfl, fun _ => .refl _, .refl _⟩
   | _, _, .symm h =>
-      ⟨(RowEquiv.char h).1.symm, fun l => ((RowEquiv.char h).2 l).symm⟩
+      ⟨(RowEquiv.char h).1.symm, fun l => ((RowEquiv.char h).2.1 l).symm,
+       (RowEquiv.char h).2.2.symm⟩
   | _, _, .trans h₁ h₂ =>
       ⟨(RowEquiv.char h₁).1.trans (RowEquiv.char h₂).1,
-       fun l => ((RowEquiv.char h₁).2 l).trans ((RowEquiv.char h₂).2 l)⟩
+       fun l => ((RowEquiv.char h₁).2.1 l).trans ((RowEquiv.char h₂).2.1 l),
+       (RowEquiv.char h₁).2.2.trans (RowEquiv.char h₂).2.2⟩
   | .sing l τ₁, .sing _ τ₂, .sing hty =>
       ⟨rfl, fun l' => by
         by_cases h : l = l'
         · simp only [Row.toSpine, sProj, if_pos h]
           exact .cons rfl hty .nil
         · simp only [Row.toSpine, sProj, if_neg h]
-          exact .nil⟩
+          exact .nil, .nil⟩
   | .cat ρ₁ ρ₂, .cat ρ₁' ρ₂', .cat h₁ h₂ => by
-      obtain ⟨hv₁, hp₁⟩ := RowEquiv.char h₁
-      obtain ⟨hv₂, hp₂⟩ := RowEquiv.char h₂
-      refine ⟨?_, fun l => ?_⟩
-      · simp only [Row.toSpine, sVarSeq_append, hv₁, hv₂]
+      obtain ⟨hv₁, hp₁, hd₁⟩ := RowEquiv.char h₁
+      obtain ⟨hv₂, hp₂, hd₂⟩ := RowEquiv.char h₂
+      refine ⟨?_, fun l => ?_, ?_⟩
+      · simp only [Row.toSpine, sBarSeq_append, hv₁, hv₂]
       · simp only [Row.toSpine, sProj_append, hv₁]
         exact (hp₁ l).append ((hp₂ l).mapShift _)
+      · simp only [Row.toSpine, sDProj_append]
+        exact hd₁.append hd₂
   | _, _, .assoc => Row.Char.of_eq (List.append_assoc _ _ _)
   | _, _, .unitL => Row.Char.of_eq (List.nil_append _)
   | _, _, .unitR => Row.Char.of_eq (List.append_nil _)
@@ -209,7 +287,18 @@ theorem RowEquiv.char {B : Type} : {ρ₁ ρ₂ : Row B} → ρ₁ ≈ᵣ ρ₂ 
           exact .refl _
         · simp only [Row.toSpine, List.cons_append, List.nil_append, sProj,
                      if_neg h₁, if_neg h₂]
-          exact .nil⟩
+          exact .nil, .nil⟩
+  | .dsing q τ₁, .dsing _ τ₂, .dsing hty => by
+      cases q with
+      | var _ => exact ⟨rfl, fun _ => .nil, .cons rfl hty .nil⟩
+      | lit l =>
+          refine ⟨rfl, fun l' => ?_, .nil⟩
+          by_cases h : l = l'
+          · simp only [Row.toSpine, Atom.ofKey, sProj, if_pos h]
+            exact .cons rfl hty .nil
+          · simp only [Row.toSpine, Atom.ofKey, sProj, if_neg h]
+            exact .nil
+  | _, _, .dsingLab => Row.Char.of_eq rfl
 
 -- ## Refold: every row is ≈ to its right-nested spine form
 -- (assoc + units are exactly the axioms this consumes).
@@ -221,6 +310,22 @@ theorem ofSpine_append {B : Type} : (s₁ s₂ : List (Atom B)) →
       (RowEquiv.cat (.refl _) (ofSpine_append s₁ s₂)).trans RowEquiv.assoc.symm
   | .var _ :: s₁, s₂ =>
       (RowEquiv.cat (.refl _) (ofSpine_append s₁ s₂)).trans RowEquiv.assoc.symm
+  | .dfield _ _ :: s₁, s₂ =>
+      (RowEquiv.cat (.refl _) (ofSpine_append s₁ s₂)).trans RowEquiv.assoc.symm
+
+-- ⊢  ${q}: τ ≈ᵣ ofSpine [ofKey q τ]
+theorem ofKey_equiv {B : Type} (q : Key) (τ : Ty B) :
+    RowEquiv (.dsing q τ) (ofSpine [Atom.ofKey q τ]) := by
+  cases q with
+  | lit l => exact RowEquiv.dsingLab.trans RowEquiv.unitR.symm
+  | var α => exact RowEquiv.unitR.symm
+
+-- ⊢  ofSpine (ofKey q τ :: s) ≈ᵣ (${q}: τ | ofSpine s)
+theorem ofSpine_cons_ofKey {B : Type} (q : Key) (τ : Ty B) (s : List (Atom B)) :
+    RowEquiv (ofSpine (Atom.ofKey q τ :: s)) (.cat (.dsing q τ) (ofSpine s)) := by
+  cases q with
+  | lit l => exact .cat RowEquiv.dsingLab.symm (.refl _)
+  | var α => exact .refl _
 
 -- ⊢  ρ ≈ᵣ ofSpine(spine ρ)      (every row ≈ its refolded spine)
 theorem Row.toSpine_equiv {B : Type} : (ρ : Row B) → RowEquiv ρ (ofSpine ρ.toSpine)
@@ -230,25 +335,30 @@ theorem Row.toSpine_equiv {B : Type} : (ρ : Row B) → RowEquiv ρ (ofSpine ρ.
   | .cat ρ₁ ρ₂ =>
       (RowEquiv.cat (toSpine_equiv ρ₁) (toSpine_equiv ρ₂)).trans
         (ofSpine_append _ _).symm
+  | .dsing q τ => ofKey_equiv q τ
 
 -- ## Extraction
 -- If the l-projection of a spine starts at segment index 0, the first l-field
 -- sits in the leading segment: everything before it is a field with a
--- DIFFERENT label (index 0 ⟹ no preceding var; first l-occurrence ⟹ no
+-- DIFFERENT label (index 0 ⟹ no preceding barrier; first l-occurrence ⟹ no
 -- preceding l-field), so ≈-comm bubbles it to the front. All other
--- invariants are untouched — removing a field crosses no var.
+-- invariants are untouched — removing a field crosses no barrier.
 -- ⊢  proj_l(s) = (0,τ)::rest   ⟹
 --       ∃ t.  ofSpine s ≈ᵣ (l:τ | ofSpine t)  ∧  proj_l(t) = rest
---             ∧  (∀ l'≠l. proj_l'(t) = proj_l'(s))  ∧  vars(t) = vars(s)
+--             ∧  (∀ l'≠l. proj_l'(t) = proj_l'(s))  ∧  bars(t) = bars(s)
+--             ∧  dproj(t) = dproj(s)
 theorem spine_extract {B : Type} {τ : Ty B} {rest : List (Nat × Ty B)} :
     (s : List (Atom B)) → (l : Label) →
     sProj l s = (0, τ) :: rest →
     ∃ t, RowEquiv (ofSpine s) (.cat (.sing l τ) (ofSpine t)) ∧
          sProj l t = rest ∧
          (∀ l', l' ≠ l → sProj l' t = sProj l' s) ∧
-         sVarSeq t = sVarSeq s
+         sBarSeq t = sBarSeq s ∧ sDProj t = sDProj s
   | [], l, h => by simp [sProj] at h
   | .var β :: s', l, h => by
+      simp only [sProj] at h
+      exact (map_shift_ne_zero_head h).elim
+  | .dfield _ _ :: s', l, h => by
       simp only [sProj] at h
       exact (map_shift_ne_zero_head h).elim
   | .field l₀ τ₀ :: s', l, h => by
@@ -261,12 +371,12 @@ theorem spine_extract {B : Type} {τ : Ty B} {rest : List (Nat × Ty B)} :
           fun l' hl' => by
             have hne : ¬ l = l' := fun hh => hl' hh.symm
             simp [sProj, if_neg hne],
-          rfl⟩
+          rfl, rfl⟩
       · have hEq : sProj l (.field l₀ τ₀ :: s') = sProj l s' := by
           simp [sProj, if_neg hl]
         rw [hEq] at h
-        obtain ⟨t', hequiv, hproj, hothers, hvars⟩ := spine_extract s' l h
-        refine ⟨.field l₀ τ₀ :: t', ?_, ?_, ?_, ?_⟩
+        obtain ⟨t', hequiv, hproj, hothers, hvars, hd⟩ := spine_extract s' l h
+        refine ⟨.field l₀ τ₀ :: t', ?_, ?_, ?_, ?_, ?_⟩
         · exact (RowEquiv.cat (.refl _) hequiv).trans
             (RowEquiv.assoc.symm.trans
               ((RowEquiv.cat (.comm hl) (.refl _)).trans RowEquiv.assoc))
@@ -275,35 +385,39 @@ theorem spine_extract {B : Type} {τ : Ty B} {rest : List (Nat × Ty B)} :
           by_cases hl₀ : l₀ = l'
           · simp [sProj, hl₀, hothers l' hl']
           · simp [sProj, if_neg hl₀, hothers l' hl']
-        · simp [sVarSeq, hvars]
+        · simp [sBarSeq, hvars]
+        · simp [sDProj, hd]
 
--- A spine with no vars and no fields is empty.
--- ⊢  vars(s) = []  ∧  (∀ l. proj_l(s) = [])   ⟹   s = []
+-- A spine with no barriers and no fields is empty.
+-- ⊢  bars(s) = []  ∧  (∀ l. proj_l(s) = [])   ⟹   s = []
 theorem spine_nil_of {B : Type} : (s : List (Atom B)) →
-    sVarSeq s = [] → (∀ l, sProj l s = []) → s = []
+    sBarSeq s = [] → (∀ l, sProj l s = []) → s = []
   | [], _, _ => rfl
   | .var _ :: _, hv, _ => nomatch hv
+  | .dfield _ _ :: _, hv, _ => nomatch hv
   | .field l _ :: _, _, hp => by have := hp l; simp [sProj] at this
 
 -- ## Completeness: the invariants pin the spine up to ≈
--- Walk s₁ atom by atom. A leading var forces s₂'s first segment empty (no
--- index-0 projection entry), so s₂ leads with the SAME var (var sequence) —
--- strip both (unshift). A leading field l:τ is s₁'s first l-occurrence at
--- index 0, so s₂'s l-projection also starts (0, τ') with τ ≈ τ' — extract it,
--- recurse on the remainders.
--- ⊢  vars(s₁) = vars(s₂)  ∧  (∀ l. proj_l(s₁) ≈ₚ proj_l(s₂))
---        ⟹   ofSpine s₁ ≈ᵣ ofSpine s₂      (≈ completeness)
+-- Walk s₁ atom by atom. A leading barrier forces s₂'s first segment empty (no
+-- index-0 projection entry), so s₂ leads with the SAME barrier (barrier
+-- sequence; a key's type by the third invariant) — strip both (unshift). A
+-- leading field l:τ is s₁'s first l-occurrence at index 0, so s₂'s
+-- l-projection also starts (0, τ') with τ ≈ τ' — extract it, recurse on the
+-- remainders.
+-- ⊢  bars(s₁) = bars(s₂)  ∧  (∀ l. proj_l(s₁) ≈ₚ proj_l(s₂))
+--      ∧  dproj(s₁) ≈ₚ dproj(s₂)   ⟹   ofSpine s₁ ≈ᵣ ofSpine s₂  (≈ completeness)
 theorem char_complete {B : Type} :
     (s₁ s₂ : List (Atom B)) →
-    sVarSeq s₁ = sVarSeq s₂ →
+    sBarSeq s₁ = sBarSeq s₂ →
     (∀ l, ProjEquiv (sProj l s₁) (sProj l s₂)) →
+    ProjEquiv (sDProj s₁) (sDProj s₂) →
     RowEquiv (ofSpine s₁) (ofSpine s₂)
-  | [], s₂, hv, hp => by
+  | [], s₂, hv, hp, _ => by
       rw [spine_nil_of s₂ hv.symm (fun l => (hp l).nil_inv)]
       exact .refl _
-  | .var α :: t₁, s₂, hv, hp => by
+  | .var α :: t₁, s₂, hv, hp, hd => by
       cases s₂ with
-      | nil => simp [sVarSeq] at hv
+      | nil => simp [sBarSeq] at hv
       | cons a t₂ =>
           cases a with
           | field l' τ' =>
@@ -311,18 +425,42 @@ theorem char_complete {B : Type} :
               simp [sProj] at h
               exact absurd h (ProjEquiv.no_zero_head _)
           | var β =>
-              simp only [sVarSeq] at hv
+              simp only [sBarSeq] at hv
               injection hv with hαβ hv'
+              injection hαβ with hαβ
               subst hαβ
               exact .cat (.refl _)
-                (char_complete t₁ t₂ hv' fun l => (hp l).unshift)
-  | .field l τ :: t₁, s₂, hv, hp => by
+                (char_complete t₁ t₂ hv' (fun l => (hp l).unshift) hd)
+          | dfield _ _ => simp [sBarSeq] at hv
+  | .dfield q τ :: t₁, s₂, hv, hp, hd => by
+      cases s₂ with
+      | nil => simp [sBarSeq] at hv
+      | cons a t₂ =>
+          cases a with
+          | field l' τ' =>
+              have h := hp l'
+              simp [sProj] at h
+              exact absurd h (ProjEquiv.no_zero_head _)
+          | var β => simp [sBarSeq] at hv
+          | dfield q' τ' =>
+              simp only [sBarSeq] at hv
+              injection hv with hqq hv'
+              injection hqq with hqq
+              subst hqq
+              simp only [sDProj] at hd
+              obtain ⟨_, _, heq, hty, hd'⟩ := hd.cons_inv
+              injection heq with hhd htl
+              injection hhd with _ hτ'
+              subst hτ'; subst htl
+              exact .cat (.dsing hty)
+                (char_complete t₁ t₂ hv' (fun l => (hp l).unshift) hd')
+  | .field l τ :: t₁, s₂, hv, hp, hd => by
       have h := hp l
       simp [sProj] at h
       obtain ⟨τ', rest, hs₂, hty, hrest⟩ := h.cons_inv
-      obtain ⟨t₂, hequiv, hproj, hothers, hvars⟩ := spine_extract s₂ l hs₂
-      have hv' : sVarSeq t₁ = sVarSeq t₂ := by
-        simp only [sVarSeq] at hv
+      obtain ⟨t₂, hequiv, hproj, hothers, hvars, hds⟩ := spine_extract s₂ l hs₂
+      have hv' : sBarSeq t₁ = sBarSeq t₂ := by
+        simp only [sBarSeq] at hv
         rw [hv, ← hvars]
       have hp' : ∀ l', ProjEquiv (sProj l' t₁) (sProj l' t₂) := by
         intro l'
@@ -335,7 +473,10 @@ theorem char_complete {B : Type} :
           simp only [sProj, if_neg hne] at h'
           rw [hothers l' hl]
           exact h'
-      exact (RowEquiv.cat (.sing hty) (char_complete t₁ t₂ hv' hp')).trans
+      have hd' : ProjEquiv (sDProj t₁) (sDProj t₂) := by
+        simp only [sDProj] at hd
+        rw [hds]; exact hd
+      exact (RowEquiv.cat (.sing hty) (char_complete t₁ t₂ hv' hp' hd')).trans
         hequiv.symm
 
 -- ## The characterization
@@ -343,9 +484,10 @@ theorem char_complete {B : Type} :
 theorem RowEquiv.ofChar {B : Type} {ρ₁ ρ₂ : Row B} (h : Row.Char ρ₁ ρ₂) :
     ρ₁ ≈ᵣ ρ₂ :=
   ρ₁.toSpine_equiv.trans
-    ((char_complete _ _ h.1 h.2).trans ρ₂.toSpine_equiv.symm)
+    ((char_complete _ _ h.1 h.2.1 h.2.2).trans ρ₂.toSpine_equiv.symm)
 
---   ρ₁ ≈ ρ₂   iff   same var sequence ∧ pointwise-≈ l-projections
+--   ρ₁ ≈ ρ₂   iff   same barrier sequence ∧ pointwise-≈ l-projections
+--                   ∧ pointwise-≈ keyed-field types
 -- ⊢  ρ₁ ≈ᵣ ρ₂   ↔   Char(ρ₁, ρ₂)
 theorem rowEquiv_iff_char {B : Type} {ρ₁ ρ₂ : Row B} :
     ρ₁ ≈ᵣ ρ₂ ↔ Row.Char ρ₁ ρ₂ :=
@@ -358,26 +500,28 @@ theorem rowEquiv_iff_char {B : Type} {ρ₁ ρ₂ : Row B} :
 -- ⊢  (α | ρ₁) ≈ᵣ (α | ρ₂)   ⟹   ρ₁ ≈ᵣ ρ₂
 theorem RowEquiv.cancel_var_left {B : Type} {α : TyVar} {ρ₁ ρ₂ : Row B}
     (h : RowEquiv (.cat (.var α) ρ₁) (.cat (.var α) ρ₂)) : ρ₁ ≈ᵣ ρ₂ := by
-  obtain ⟨hv, hp⟩ := h.char
-  simp only [Row.toSpine, List.cons_append, List.nil_append, sVarSeq] at hv
-  refine RowEquiv.ofChar ⟨?_, fun l => ?_⟩
+  obtain ⟨hv, hp, hd⟩ := h.char
+  simp only [Row.toSpine, List.cons_append, List.nil_append, sBarSeq] at hv
+  refine RowEquiv.ofChar ⟨?_, fun l => ?_, ?_⟩
   · injection hv
   · have h' := hp l
     simp only [Row.toSpine, List.cons_append, List.nil_append, sProj] at h'
     exact h'.unshift
+  · simpa [Row.toSpine, sDProj] using hd
 
 -- ⊢  (ρ₁ | α) ≈ᵣ (ρ₂ | α)   ⟹   ρ₁ ≈ᵣ ρ₂
 theorem RowEquiv.cancel_var_right {B : Type} {α : TyVar} {ρ₁ ρ₂ : Row B}
     (h : RowEquiv (.cat ρ₁ (.var α)) (.cat ρ₂ (.var α))) : ρ₁ ≈ᵣ ρ₂ := by
-  obtain ⟨hv, hp⟩ := h.char
-  simp only [Row.toSpine, sVarSeq_append, sVarSeq] at hv
-  have hveq : sVarSeq ρ₁.toSpine = sVarSeq ρ₂.toSpine :=
+  obtain ⟨hv, hp, hd⟩ := h.char
+  simp only [Row.toSpine, sBarSeq_append, sBarSeq] at hv
+  have hveq : sBarSeq ρ₁.toSpine = sBarSeq ρ₂.toSpine :=
     (List.append_inj' hv rfl).1
-  refine RowEquiv.ofChar ⟨hveq, fun l => ?_⟩
-  have h' := hp l
-  simp only [Row.toSpine, sProj_append, sProj, List.map_nil,
-             List.append_nil] at h'
-  exact h'
+  refine RowEquiv.ofChar ⟨hveq, fun l => ?_, ?_⟩
+  · have h' := hp l
+    simp only [Row.toSpine, sProj_append, sProj, List.map_nil,
+               List.append_nil] at h'
+    exact h'
+  · simpa [Row.toSpine, sDProj_append, sDProj] using hd
 
 -- ## Full cancellativity (the trace-monoid theorem proper)
 -- Not just end-vars: ANY shared prefix or suffix row cancels. This is Levi's
@@ -417,35 +561,49 @@ theorem ProjEquiv.unshiftK {B : Type} (k : Nat) :
       | cons hn hty h' =>
           exact .cons (Nat.add_right_cancel hn) hty (ProjEquiv.unshiftK k h')
 
+-- the keyed-field types of a shared block have equal length on both sides
+private theorem sDProj_len_of_bars {B : Type} : (s₁ s₂ : List (Atom B)) →
+    sBarSeq s₁ = sBarSeq s₂ → ProjEquiv (sDProj s₁) (sDProj s₂) →
+    (sDProj s₁).length = (sDProj s₂).length
+  | _, _, _, h => h.length
+
 -- ⊢  (ρ | ρ₁) ≈ᵣ (ρ | ρ₂)   ⟹   ρ₁ ≈ᵣ ρ₂      (shared prefix cancels)
 theorem RowEquiv.cancel_cat_left {B : Type} {ρ ρ₁ ρ₂ : Row B}
     (h : RowEquiv (.cat ρ ρ₁) (.cat ρ ρ₂)) : ρ₁ ≈ᵣ ρ₂ := by
-  obtain ⟨hv, hp⟩ := h.char
-  simp only [Row.toSpine, sVarSeq_append] at hv
-  refine RowEquiv.ofChar ⟨(List.append_inj hv rfl).2, fun l => ?_⟩
-  have h' := hp l
-  simp only [Row.toSpine, sProj_append] at h'
-  exact ((ProjEquiv.split h' rfl).2).unshiftK _
+  obtain ⟨hv, hp, hd⟩ := h.char
+  simp only [Row.toSpine, sBarSeq_append] at hv
+  refine RowEquiv.ofChar ⟨(List.append_inj hv rfl).2, fun l => ?_, ?_⟩
+  · have h' := hp l
+    simp only [Row.toSpine, sProj_append] at h'
+    exact ((ProjEquiv.split h' rfl).2).unshiftK _
+  · simp only [Row.toSpine, sDProj_append] at hd
+    exact (ProjEquiv.split hd rfl).2
 
 -- ⊢  (ρ₁ | ρ) ≈ᵣ (ρ₂ | ρ)   ⟹   ρ₁ ≈ᵣ ρ₂      (shared suffix cancels)
 theorem RowEquiv.cancel_cat_right {B : Type} {ρ ρ₁ ρ₂ : Row B}
     (h : RowEquiv (.cat ρ₁ ρ) (.cat ρ₂ ρ)) : ρ₁ ≈ᵣ ρ₂ := by
-  obtain ⟨hv, hp⟩ := h.char
-  simp only [Row.toSpine, sVarSeq_append] at hv
-  have hlen : (sVarSeq ρ₁.toSpine).length = (sVarSeq ρ₂.toSpine).length := by
+  obtain ⟨hv, hp, hd⟩ := h.char
+  simp only [Row.toSpine, sBarSeq_append] at hv
+  have hlen : (sBarSeq ρ₁.toSpine).length = (sBarSeq ρ₂.toSpine).length := by
     have := congrArg List.length hv
     simp only [List.length_append] at this
     exact Nat.add_right_cancel this
-  have hveq : sVarSeq ρ₁.toSpine = sVarSeq ρ₂.toSpine :=
+  have hveq : sBarSeq ρ₁.toSpine = sBarSeq ρ₂.toSpine :=
     (List.append_inj hv hlen).1
-  refine RowEquiv.ofChar ⟨hveq, fun l => ?_⟩
-  have h' := hp l
-  simp only [Row.toSpine, sProj_append, hveq] at h'
-  have hplen : (sProj l ρ₁.toSpine).length = (sProj l ρ₂.toSpine).length := by
-    have := h'.length
-    simp only [List.length_append, List.length_map] at this
-    exact Nat.add_right_cancel this
-  exact (ProjEquiv.split h' hplen).1
+  refine RowEquiv.ofChar ⟨hveq, fun l => ?_, ?_⟩
+  · have h' := hp l
+    simp only [Row.toSpine, sProj_append, hveq] at h'
+    have hplen : (sProj l ρ₁.toSpine).length = (sProj l ρ₂.toSpine).length := by
+      have := h'.length
+      simp only [List.length_append, List.length_map] at this
+      exact Nat.add_right_cancel this
+    exact (ProjEquiv.split h' hplen).1
+  · simp only [Row.toSpine, sDProj_append] at hd
+    have hdlen : (sDProj ρ₁.toSpine).length = (sDProj ρ₂.toSpine).length := by
+      have := hd.length
+      simp only [List.length_append] at this
+      exact Nat.add_right_cancel this
+    exact (ProjEquiv.split hd hdlen).1
 
 -- ## Leading-field cancellation (the completeness ingredient for U-field)
 -- Unlike cancel_cat_left (identical shared prefix), the two leading fields carry
@@ -458,8 +616,8 @@ theorem RowEquiv.field_cancel_left {B : Type} {l : Label} {τ₁ τ₂ : Ty B}
     {R₁ R₂ : Row B}
     (h : RowEquiv (.cat (.sing l τ₁) R₁) (.cat (.sing l τ₂) R₂)) :
     TyEquiv τ₁ τ₂ ∧ RowEquiv R₁ R₂ := by
-  obtain ⟨hv, hp⟩ := h.char
-  simp only [Row.toSpine, sVarSeq_append, sVarSeq, List.nil_append] at hv
+  obtain ⟨hv, hp, hd⟩ := h.char
+  simp only [Row.toSpine, sBarSeq_append, sBarSeq, List.nil_append] at hv
   have hred : ∀ (τ : Ty B) (R : Row B),
       sProj l (Row.toSpine (.cat (.sing l τ) R)) = (0, τ) :: sProj l R.toSpine := by
     intro τ R
@@ -473,29 +631,62 @@ theorem RowEquiv.field_cancel_left {B : Type} {l : Label} {τ₁ τ₂ : Ty B}
   injection heq with hhd htl
   injection hhd with _ hτ'
   subst hτ'; subst htl
-  refine ⟨hty, RowEquiv.ofChar ⟨hv, fun l' => ?_⟩⟩
-  by_cases hll' : l = l'
-  · subst hll'; exact hrest
-  · have h' := hp l'
-    have hred' : ∀ (τ : Ty B) (R : Row B),
-        sProj l' (Row.toSpine (.cat (.sing l τ) R)) = sProj l' R.toSpine := by
-      intro τ R
-      simp only [Row.toSpine, List.cons_append, List.nil_append, sProj]
-      split
-      · rename_i heq; exact absurd heq hll'
-      · rfl
-    rw [hred', hred'] at h'
-    exact h'
+  refine ⟨hty, RowEquiv.ofChar ⟨hv, fun l' => ?_, ?_⟩⟩
+  · by_cases hll' : l = l'
+    · subst hll'; exact hrest
+    · have h' := hp l'
+      have hred' : ∀ (τ : Ty B) (R : Row B),
+          sProj l' (Row.toSpine (.cat (.sing l τ) R)) = sProj l' R.toSpine := by
+        intro τ R
+        simp only [Row.toSpine, List.cons_append, List.nil_append, sProj]
+        split
+        · rename_i heq; exact absurd heq hll'
+        · rfl
+      rw [hred', hred'] at h'
+      exact h'
+  · simpa [Row.toSpine, sDProj] using hd
+
+-- ## Leading keyed-field cancellation (U-key's completeness ingredient)
+-- ⊢  (${α}:τ₁ | R₁) ≈ᵣ (${α}:τ₂ | R₂)   ⟹   τ₁ ≈ₜ τ₂  ∧  R₁ ≈ᵣ R₂
+theorem RowEquiv.dfield_cancel_left {B : Type} {α : TyVar} {τ₁ τ₂ : Ty B}
+    {R₁ R₂ : Row B}
+    (h : RowEquiv (.cat (.dsing (.var α) τ₁) R₁) (.cat (.dsing (.var α) τ₂) R₂)) :
+    TyEquiv τ₁ τ₂ ∧ RowEquiv R₁ R₂ := by
+  obtain ⟨hv, hp, hd⟩ := h.char
+  simp only [Row.toSpine, Atom.ofKey, List.cons_append, List.nil_append, sBarSeq] at hv
+  simp only [Row.toSpine, Atom.ofKey, List.cons_append, List.nil_append, sDProj] at hd
+  obtain ⟨τ', rest, heq, hty, hrest⟩ := hd.cons_inv
+  injection heq with hhd htl
+  injection hhd with _ hτ'
+  subst hτ'; subst htl
+  refine ⟨hty, RowEquiv.ofChar ⟨?_, fun l => ?_, hrest⟩⟩
+  · injection hv
+  · have h' := hp l
+    simp only [Row.toSpine, Atom.ofKey, List.cons_append, List.nil_append, sProj] at h'
+    exact h'.unshift
+
+-- …at any key: a literal key is a literal field (`dsingLab`)
+-- ⊢  (${k}:τ₁ | R₁) ≈ᵣ (${k}:τ₂ | R₂)   ⟹   τ₁ ≈ₜ τ₂  ∧  R₁ ≈ᵣ R₂
+theorem RowEquiv.dsing_cancel_left {B : Type} {k : Key} {τ₁ τ₂ : Ty B}
+    {R₁ R₂ : Row B}
+    (h : RowEquiv (.cat (.dsing k τ₁) R₁) (.cat (.dsing k τ₂) R₂)) :
+    TyEquiv τ₁ τ₂ ∧ RowEquiv R₁ R₂ := by
+  cases k with
+  | var α => exact h.dfield_cancel_left
+  | lit l =>
+      exact ((RowEquiv.cat RowEquiv.dsingLab.symm (.refl _)).trans
+        (h.trans (RowEquiv.cat RowEquiv.dsingLab (.refl _)))).field_cancel_left
 
 -- A product ≈ ε forces each factor ≈ ε (a cancellative monoid with no inverses:
--- ε has empty var sequence and empty projections, and both split over ++). The
--- base case of ≐ᵣ completeness — an exhausted side pins every leftover var to ε.
+-- ε has empty barrier sequence and empty projections, and all split over ++).
+-- The base case of ≐ᵣ completeness — an exhausted side pins every leftover
+-- var to ε.
 -- ⊢  (ρ₁ | ρ₂) ≈ᵣ ε   ⟹   ρ₁ ≈ᵣ ε  ∧  ρ₂ ≈ᵣ ε
 theorem RowEquiv.cat_empty_split {B : Type} {ρ₁ ρ₂ : Row B}
     (h : RowEquiv (.cat ρ₁ ρ₂) .empty) :
     RowEquiv ρ₁ .empty ∧ RowEquiv ρ₂ .empty := by
-  obtain ⟨hv, hp⟩ := h.char
-  simp only [Row.toSpine, sVarSeq_append, sVarSeq] at hv
+  obtain ⟨hv, hp, hd⟩ := h.char
+  simp only [Row.toSpine, sBarSeq_append, sBarSeq] at hv
   obtain ⟨hv₁, hv₂⟩ := List.append_eq_nil_iff.mp hv
   have hpe : ∀ l, sProj l ρ₁.toSpine = [] ∧ sProj l ρ₂.toSpine = [] := by
     intro l
@@ -504,39 +695,52 @@ theorem RowEquiv.cat_empty_split {B : Type} {ρ₁ ρ₂ : Row B}
     have heq := ProjEquiv.nil_inv h'.symm
     obtain ⟨hx, hym⟩ := List.append_eq_nil_iff.mp heq
     exact ⟨hx, List.map_eq_nil_iff.mp hym⟩
-  exact ⟨RowEquiv.ofChar ⟨by rw [hv₁]; rfl, fun l => ProjEquiv.of_eq (by rw [(hpe l).1]; rfl)⟩,
-         RowEquiv.ofChar ⟨by rw [hv₂]; rfl, fun l => ProjEquiv.of_eq (by rw [(hpe l).2]; rfl)⟩⟩
+  simp only [Row.toSpine, sDProj_append, sDProj] at hd
+  obtain ⟨hd₁, hd₂⟩ := List.append_eq_nil_iff.mp (ProjEquiv.nil_inv hd.symm)
+  exact ⟨RowEquiv.ofChar ⟨by rw [hv₁]; rfl,
+            fun l => ProjEquiv.of_eq (by rw [(hpe l).1]; rfl),
+            ProjEquiv.of_eq (by rw [hd₁]; rfl)⟩,
+         RowEquiv.ofChar ⟨by rw [hv₂]; rfl,
+            fun l => ProjEquiv.of_eq (by rw [(hpe l).2]; rfl),
+            ProjEquiv.of_eq (by rw [hd₂]; rfl)⟩⟩
 
 -- ## Ground rows: the characterization degenerates to the projections
--- (the T-eq workhorse for ≐ᵣ's ground completeness).
--- ⊢  ρ.SpineVarFree   ↔   vars(spine ρ) = []
-theorem spineVarFree_iff_varSeq_nil {B : Type} :
-    (ρ : Row B) → (ρ.SpineVarFree ↔ sVarSeq ρ.toSpine = [])
-  | .empty => ⟨fun _ => rfl, fun _ => .empty⟩
-  | .var α => ⟨(fun h => nomatch h), (fun h => nomatch h)⟩
-  | .sing l τ => ⟨fun _ => rfl, fun _ => .sing⟩
-  | .cat ρ₁ ρ₂ => by
-      rw [show (Row.cat ρ₁ ρ₂).toSpine = ρ₁.toSpine ++ ρ₂.toSpine from rfl,
-          sVarSeq_append, List.append_eq_nil_iff]
-      constructor
-      · intro hv
-        match hv with
-        | .cat h₁ h₂ =>
-          exact ⟨(spineVarFree_iff_varSeq_nil ρ₁).1 h₁,
-                 (spineVarFree_iff_varSeq_nil ρ₂).1 h₂⟩
-      · rintro ⟨h₁, h₂⟩
-        exact .cat ((spineVarFree_iff_varSeq_nil ρ₁).2 h₁)
-                   ((spineVarFree_iff_varSeq_nil ρ₂).2 h₂)
+-- (the T-eq workhorse for ≐ᵣ's ground completeness). "Ground" = no barrier:
+-- no var and no keyed field on the spine.
+def Row.Rigid {B : Type} (ρ : Row B) : Prop := sBarSeq ρ.toSpine = []
 
--- ⊢  ρ₁, ρ₂ var-free   ⟹
+-- ⊢  no barrier on the spine   ⟹   ρ.SpineVarFree
+theorem spineVarFree_of_barSeq_nil {B : Type} :
+    (ρ : Row B) → sBarSeq ρ.toSpine = [] → ρ.SpineVarFree
+  | .empty, _ => .empty
+  | .var _, h => nomatch h
+  | .sing _ _, _ => .sing
+  | .cat ρ₁ ρ₂, h => by
+      rw [show (Row.cat ρ₁ ρ₂).toSpine = ρ₁.toSpine ++ ρ₂.toSpine from rfl,
+          sBarSeq_append, List.append_eq_nil_iff] at h
+      exact .cat (spineVarFree_of_barSeq_nil ρ₁ h.1) (spineVarFree_of_barSeq_nil ρ₂ h.2)
+  | .dsing q _, h => by
+      cases q <;> simp [Row.toSpine, Atom.ofKey, sBarSeq] at h
+      exact .dsing
+
+-- ⊢  ρ₁, ρ₂ rigid   ⟹
 --       ( ρ₁ ≈ᵣ ρ₂   ↔   ∀ l. proj_l(ρ₁) ≈ₚ proj_l(ρ₂) )
 theorem ground_char {B : Type} {ρ₁ ρ₂ : Row B}
-    (h₁ : ρ₁.SpineVarFree) (h₂ : ρ₂.SpineVarFree) :
+    (h₁ : ρ₁.Rigid) (h₂ : ρ₂.Rigid) :
     ρ₁ ≈ᵣ ρ₂ ↔ ∀ l, ProjEquiv (sProj l ρ₁.toSpine) (sProj l ρ₂.toSpine) :=
-  ⟨fun h => h.char.2,
+  ⟨fun h => h.char.2.1,
    fun hp => RowEquiv.ofChar
-     ⟨((spineVarFree_iff_varSeq_nil ρ₁).1 h₁).trans
-        ((spineVarFree_iff_varSeq_nil ρ₂).1 h₂).symm, hp⟩⟩
+     ⟨h₁.trans h₂.symm, hp, by
+        have e : ∀ s : List (Atom B), sBarSeq s = [] → sDProj s = [] := by
+          intro s hs
+          induction s with
+          | nil => rfl
+          | cons a t ih =>
+              cases a with
+              | field _ _ => exact ih hs
+              | var _ => nomatch hs
+              | dfield _ _ => nomatch hs
+        rw [e _ h₁, e _ h₂]; exact .nil⟩⟩
 
 -- ## The two ≐ᵣ regression examples, mechanized
 -- A unifier equates the θ-images up to ≈:
@@ -554,7 +758,7 @@ theorem shared_tail_no_unifier {B : Type} {b : B} {l₁ l₂ : Label} {α : TyVa
   intro h
   unfold Unifies at h
   simp only [Row.applySubst, Ty.applySubst] at h
-  obtain ⟨-, hp⟩ := h.cancel_cat_right.char
+  obtain ⟨-, hp, -⟩ := h.cancel_cat_right.char
   have hcontra := hp l₁
   have hne' : ¬ l₂ = l₁ := fun hh => hne hh.symm
   simp only [Row.toSpine, sProj, if_neg hne'] at hcontra
@@ -592,7 +796,8 @@ unifier factor through it. -/
 def InstanceOf {B : Type} (θ' θ : TySubst B) : Prop :=
   ∃ σ : TySubst B,
     (∀ x, RowEquiv (θ'.row x) ((θ.row x).applySubst σ)) ∧
-    (∀ x, TyEquiv (θ'.ty x) ((θ.ty x).applySubst σ))
+    (∀ x, TyEquiv (θ'.ty x) ((θ.ty x).applySubst σ)) ∧
+    (∀ x, θ'.lab x = (θ.lab x).applySubst σ)
 
 -- A ProjEquiv into a singleton splits: the entry comes from exactly one of
 -- the two appended sides (per-label counting across a concatenation).
@@ -615,12 +820,13 @@ theorem ProjEquiv.append_singleton {B : Type} {p₁ p₂ : List (Nat × Ty B)}
 -- ⊢  vars(spine ρ) = [],  proj_l(ρ) ≈ₚ [(0,𝓫)],  (∀ l'≠l. proj_l'(ρ) = [])
 --        ⟹   ρ ≈ᵣ (l:𝓫)
 theorem row_equiv_sing_of_char {B : Type} {ρ : Row B} {l : Label} {b : B}
-    (hv : sVarSeq ρ.toSpine = [])
+    (hv : sBarSeq ρ.toSpine = [])
     (hl : ProjEquiv (sProj l ρ.toSpine) [(0, .base b)])
-    (hothers : ∀ l', l' ≠ l → sProj l' ρ.toSpine = []) :
+    (hothers : ∀ l', l' ≠ l → sProj l' ρ.toSpine = [])
+    (hd : sDProj ρ.toSpine = []) :
     RowEquiv ρ (.sing l (.base b)) := by
-  refine RowEquiv.ofChar ⟨?_, fun l' => ?_⟩
-  · simpa [Row.toSpine, sVarSeq] using hv
+  refine RowEquiv.ofChar ⟨?_, fun l' => ?_, ?_⟩
+  · simpa [Row.toSpine, sBarSeq] using hv
   · by_cases h : l' = l
     · subst h
       simpa [Row.toSpine, sProj] using hl
@@ -629,6 +835,7 @@ theorem row_equiv_sing_of_char {B : Type} {ρ : Row B} {l : Label} {b : B}
           show sProj l' (Row.sing l (.base b)).toSpine = [] from by
             simp [Row.toSpine, sProj, if_neg hne]]
       exact .nil
+  · rw [hd]; exact .nil
 
 -- Solutions exist …
 -- ⊢  ∃ θ.  θ ⊨ (β | α) ≐ᵣ (l:𝓫)
@@ -637,7 +844,8 @@ theorem wand_unifiable {B : Type} (b : B) (l : Label) :
       Unifies θ (.cat (.var "β") (.var "α")) (.sing l (.base b)) :=
   ⟨⟨fun x => .var x,
     fun x => if x = "β" then .sing l (.base b)
-             else if x = "α" then .empty else .var x⟩,
+             else if x = "α" then .empty else .var x,
+    fun x => .var x⟩,
    by unfold Unifies
       simp [Row.applySubst, Ty.applySubst]
       exact RowEquiv.unitR⟩
@@ -657,9 +865,11 @@ theorem wand_no_mgu {B : Type} (b : B) (l : Label) :
   rintro ⟨θ, hu, hmgu⟩
   unfold Unifies at hu
   simp only [Row.applySubst, Ty.applySubst] at hu
-  obtain ⟨hv, hp⟩ := hu.char
-  simp only [Row.toSpine, sVarSeq_append, sVarSeq] at hv
+  obtain ⟨hv, hp, hd⟩ := hu.char
+  simp only [Row.toSpine, sBarSeq_append, sBarSeq] at hv
   obtain ⟨hvβ, hvα⟩ := List.append_eq_nil_iff.mp hv
+  simp only [Row.toSpine, sDProj_append, sDProj] at hd
+  obtain ⟨hdβ, hdα⟩ := List.append_eq_nil_iff.mp (ProjEquiv.nil_inv hd.symm)
   have hpl := hp l
   simp [Row.toSpine, sProj_append, hvβ, sProj] at hpl
   have hothers : ∀ l', l' ≠ l →
@@ -672,11 +882,12 @@ theorem wand_no_mgu {B : Type} (b : B) (l : Label) :
   rcases hpl.append_singleton with ⟨hβnil, hαl⟩ | ⟨hβl, hαnil⟩
   · -- the l-field lives in θα: the field-from-β unifier cannot factor
     have hα : RowEquiv (θ.row "α") (.sing l (.base b)) :=
-      row_equiv_sing_of_char hvα hαl (fun l' hl' => (hothers l' hl').2)
+      row_equiv_sing_of_char hvα hαl (fun l' hl' => (hothers l' hl').2) hdα
     obtain ⟨σ, hrow, -⟩ := hmgu
       ⟨fun x => .var x,
        fun x => if x = "β" then .sing l (.base b)
-                else if x = "α" then .empty else .var x⟩
+                else if x = "α" then .empty else .var x,
+       fun x => .var x⟩
       (by unfold Unifies
           simp [Row.applySubst, Ty.applySubst]
           exact RowEquiv.unitR)
@@ -684,17 +895,18 @@ theorem wand_no_mgu {B : Type} (b : B) (l : Label) :
     simp at hcl
     have hcontra : RowEquiv (.empty : Row B) (.sing l (.base b)) :=
       hcl.trans (RowEquiv.applySubst σ hα)
-    obtain ⟨-, hpc⟩ := hcontra.char
+    obtain ⟨-, hpc, -⟩ := hcontra.char
     have hfalse := hpc l
     simp [Row.toSpine, sProj] at hfalse
     cases hfalse
   · -- the l-field lives in θβ: the field-from-α unifier cannot factor
     have hβ : RowEquiv (θ.row "β") (.sing l (.base b)) :=
-      row_equiv_sing_of_char hvβ hβl (fun l' hl' => (hothers l' hl').1)
+      row_equiv_sing_of_char hvβ hβl (fun l' hl' => (hothers l' hl').1) hdβ
     obtain ⟨σ, hrow, -⟩ := hmgu
       ⟨fun x => .var x,
        fun x => if x = "β" then .empty
-                else if x = "α" then .sing l (.base b) else .var x⟩
+                else if x = "α" then .sing l (.base b) else .var x,
+       fun x => .var x⟩
       (by unfold Unifies
           simp [Row.applySubst, Ty.applySubst]
           exact RowEquiv.unitL)
@@ -702,7 +914,7 @@ theorem wand_no_mgu {B : Type} (b : B) (l : Label) :
     simp at hcl
     have hcontra : RowEquiv (.empty : Row B) (.sing l (.base b)) :=
       hcl.trans (RowEquiv.applySubst σ hβ)
-    obtain ⟨-, hpc⟩ := hcontra.char
+    obtain ⟨-, hpc, -⟩ := hcontra.char
     have hfalse := hpc l
     simp [Row.toSpine, sProj] at hfalse
     cases hfalse

@@ -14,14 +14,14 @@ theorem SolBelow.mono {B : Type} {s : Sol B} {W W' : List TyVar}
     (h : SolBelow s W) (hW : W ⊆ W') : SolBelow s W' := fun γ hγ => hW (h γ hγ)
 
 theorem SolBelow.nil {B : Type} (W : List TyVar) : SolBelow (Sol.nil (B := B)) W := by
-  rintro γ (⟨p, hp, -⟩ | ⟨p, hp, -⟩) <;> cases hp
+  rintro γ (⟨p, hp, -⟩ | ⟨p, hp, -⟩ | ⟨p, hp, -⟩) <;> cases hp
 
 -- ⊢  a solution's substitution only ever produces names it mentions (or the
 --    variable it was asked about, which it left alone)
 theorem SolMentions.toSubst {B : Type} (s : Sol B) (α γ : TyVar)
-    (h : γ ∈ (s.toSubst.ty α).ftv ∨ γ ∈ (s.toSubst.row α).ftv) :
+    (h : γ ∈ (s.toSubst.ty α).ftv ∨ γ ∈ (s.toSubst.row α).ftv ∨ γ ∈ (s.toSubst.lab α).ftv) :
     γ = α ∨ SolMentions s γ := by
-  rcases h with h | h
+  rcases h with h | h | h
   · rcases tyLookup_spec (B := B) α s.ty with he | hm
     · left; rw [show (s.toSubst.ty α) = tyLookup α s.ty from rfl, he] at h
       simpa [Ty.ftv] using h
@@ -29,7 +29,11 @@ theorem SolMentions.toSubst {B : Type} (s : Sol B) (α γ : TyVar)
   · rcases rowLookup_spec (B := B) α s.row with he | hm
     · left; rw [show (s.toSubst.row α) = rowLookup α s.row from rfl, he] at h
       simpa [Row.ftv] using h
-    · exact .inr (.inr ⟨(α, rowLookup α s.row), hm, .inr h⟩)
+    · exact .inr (.inr (.inl ⟨(α, rowLookup α s.row), hm, .inr h⟩))
+  · rcases labLookup_spec α s.lab with he | hm
+    · left; rw [show (s.toSubst.lab α) = labLookup α s.lab from rfl, he] at h
+      simpa [Key.ftv] using h
+    · exact .inr (.inr (.inr ⟨(α, labLookup α s.lab), hm, .inr h⟩))
 
 -- ⊢  applying a W-bounded solution to a W-bounded spine stays inside W
 theorem sFtv_sApplySubst_sub {B : Type} {s : Sol B} {t : List (Atom B)} {W : List TyVar}
@@ -57,10 +61,18 @@ theorem Row_ftv_applySubst_sub {B : Type} {s : Sol B} {ρ : Row B} {W : List TyV
   · exact ht hα
   · exact hs γ hm
 
+theorem Key_ftv_applySubst_sub {B : Type} {s : Sol B} {k : Key} {W : List TyVar}
+    (ht : k.ftv ⊆ W) (hs : SolBelow s W) : (k.applySubst s.toSubst).ftv ⊆ W := by
+  intro γ hγ
+  obtain ⟨α, hα, hg⟩ := Key.ftv_applySubst s.toSubst k γ hγ
+  rcases SolMentions.toSubst s α γ (.inr (.inr hg)) with rfl | hm
+  · exact ht hα
+  · exact hs γ hm
+
 -- ⊢  composing two W-bounded solutions stays W-bounded
 theorem SolBelow.comp {B : Type} {s₁ s₂ : Sol B} {W : List TyVar}
     (h₁ : SolBelow s₁ W) (h₂ : SolBelow s₂ W) : SolBelow (s₂.comp s₁) W := by
-  rintro γ (⟨p, hp, hγ⟩ | ⟨p, hp, hγ⟩)
+  rintro γ (⟨p, hp, hγ⟩ | ⟨p, hp, hγ⟩ | ⟨p, hp, hγ⟩)
   · rcases List.mem_append.mp hp with hp | hp
     · obtain ⟨q, hq, rfl⟩ := List.mem_map.mp hp
       rcases hγ with rfl | hγ
@@ -71,10 +83,17 @@ theorem SolBelow.comp {B : Type} {s₁ s₂ : Sol B} {W : List TyVar}
   · rcases List.mem_append.mp hp with hp | hp
     · obtain ⟨q, hq, rfl⟩ := List.mem_map.mp hp
       rcases hγ with rfl | hγ
-      · exact h₁ _ (.inr ⟨q, hq, .inl rfl⟩)
+      · exact h₁ _ (.inr (.inl ⟨q, hq, .inl rfl⟩))
       · exact Row_ftv_applySubst_sub
-          (fun _ hx => h₁ _ (.inr ⟨q, hq, .inr hx⟩)) h₂ hγ
-    · exact h₂ _ (.inr ⟨p, hp, hγ⟩)
+          (fun _ hx => h₁ _ (.inr (.inl ⟨q, hq, .inr hx⟩))) h₂ hγ
+    · exact h₂ _ (.inr (.inl ⟨p, hp, hγ⟩))
+  · rcases List.mem_append.mp hp with hp | hp
+    · obtain ⟨q, hq, rfl⟩ := List.mem_map.mp hp
+      rcases hγ with rfl | hγ
+      · exact h₁ _ (.inr (.inr ⟨q, hq, .inl rfl⟩))
+      · exact Key_ftv_applySubst_sub
+          (fun _ hx => h₁ _ (.inr (.inr ⟨q, hq, .inr hx⟩))) h₂ hγ
+    · exact h₂ _ (.inr (.inr ⟨p, hp, hγ⟩))
 
 
 ------------------ P5: THE FRESHNESS INVARIANT, TRANSPORTED -----------------
@@ -100,11 +119,48 @@ theorem allVarsEmpty_mem {B : Type} : (s : List (Atom B)) → {σ : List (TyVar 
 
 theorem SolBelow_ofRow {B : Type} {σ : List (TyVar × Row B)} {W : List TyVar}
     (h : ∀ p ∈ σ, p.1 ∈ W ∧ p.2.ftv ⊆ W) : SolBelow (Sol.ofRow σ) W := by
-  rintro γ (⟨p, hp, -⟩ | ⟨p, hp, hγ⟩)
+  rintro γ (⟨p, hp, -⟩ | ⟨p, hp, hγ⟩ | ⟨p, hp, -⟩)
   · cases hp
   · rcases hγ with rfl | hγ
     · exact (h p hp).1
     · exact (h p hp).2 hγ
+  · cases hp
+
+-- ⊢  the key arm stays inside its keys' variables
+theorem unifyKey_bounded {B : Type} {S : Supply} {k₁ k₂ : Key} {s : Sol B}
+    {S' : Supply} {V : List TyVar} (h : unifyKey S k₁ k₂ = .success s S')
+    (hS : S.Avoids V) (hV : (k₁.ftv ++ k₂.ftv) ⊆ V) :
+    ∃ W : List TyVar, V ⊆ W ∧ S'.Avoids W ∧ SolBelow s W := by
+  have hb : ∀ {α k}, α ∈ V → k.ftv ⊆ V → bindLab (B := B) S α k = .success s S' →
+      ∃ W : List TyVar, V ⊆ W ∧ S'.Avoids W ∧ SolBelow s W := by
+    intro α k hα hk h
+    unfold bindLab at h
+    split at h
+    · simp only [UResM.success.injEq] at h; obtain ⟨rfl, rfl⟩ := h
+      exact ⟨V, fun _ hx => hx, hS, SolBelow.nil V⟩
+    · simp only [UResM.success.injEq] at h; obtain ⟨rfl, rfl⟩ := h
+      refine ⟨V, fun _ hx => hx, hS, ?_⟩
+      rintro γ (⟨p, hp, -⟩ | ⟨p, hp, -⟩ | ⟨p, hp, hγ⟩)
+      · cases hp
+      · cases hp
+      · obtain rfl := List.mem_singleton.mp hp
+        rcases hγ with rfl | hγ
+        · exact hα
+        · exact hk hγ
+  cases k₁ with
+  | var α =>
+      exact hb (hV (List.mem_append_left _ (by simp [Key.ftv])))
+        (fun _ hx => hV (List.mem_append_right _ hx)) h
+  | lit l =>
+      cases k₂ with
+      | var α =>
+          exact hb (hV (List.mem_append_right _ (by simp [Key.ftv]))) (by simp [Key.ftv]) h
+      | lit l' =>
+          simp only [unifyKey] at h
+          split at h
+          · simp only [UResM.success.injEq] at h; obtain ⟨rfl, rfl⟩ := h
+            exact ⟨V, fun _ hx => hx, hS, SolBelow.nil V⟩
+          · cases h
 
 
 -- ⊢  U-var-solve stays inside the problem's variables
@@ -118,6 +174,7 @@ theorem solveVarM_bounded {B : Type} {S : Supply} {s₁ s₂ : List (Atom B)}
   | cons a₁ r₁ =>
     cases a₁ with
     | field _ _ => simp [solveVarM] at h
+    | dfield _ _ => simp [solveVarM] at h
     | var α =>
       cases r₁ with
       | cons _ _ => simp [solveVarM] at h
@@ -133,7 +190,7 @@ theorem solveVarM_bounded {B : Type} {S : Supply} {s₁ s₂ : List (Atom B)}
             obtain ⟨h₁, h₂⟩ := collapseSol_below hc p hp
             exact ⟨hV (List.mem_append_right _ h₁), by rw [h₂]; simp [Row.ftv]⟩
         · split at h
-          · simp at h
+          · split at h <;> (try split at h) <;> simp at h
           · simp only [Option.some.injEq, UResM.success.injEq] at h
             obtain ⟨rfl, rfl⟩ := h
             refine ⟨V, fun _ hx => hx, hS, SolBelow_ofRow (fun p hp => ?_)⟩
@@ -172,11 +229,12 @@ theorem unifyM_bounded {B : Type} [DecidableEq B] (fuel : Nat) :
       · simp only [UResM.success.injEq] at h
         obtain ⟨rfl, rfl⟩ := h
         refine ⟨V, fun _ hx => hx, hS, ?_⟩
-        rintro γ (⟨p, hp, hγ⟩ | ⟨p, hp, -⟩)
+        rintro γ (⟨p, hp, hγ⟩ | ⟨p, hp, -⟩ | ⟨p, hp, -⟩)
         · obtain rfl := List.mem_singleton.mp hp
           rcases hγ with rfl | hγ
           · exact hα
           · exact hτ hγ
+        · cases hp
         · cases hp
   -- the shape shared by the six eq-emitting arms
   induction fuel with
@@ -214,15 +272,8 @@ theorem unifyM_bounded {B : Type} [DecidableEq B] (fuel : Nat) :
                   (fun _ hx => hV (List.mem_append_left _ hx)) h
             | base _ => cases h
             | lab b' =>
-                by_cases hb : b = b'
-                · subst hb
-                  have hred : unifyTyF S 0 (Ty.lab b) (Ty.lab b)
-                      = .success (Sol.nil (B := B)) S := by simp [unifyTyF]
-                  rw [hred] at h
-                  simp only [UResM.success.injEq] at h
-                  obtain ⟨rfl, rfl⟩ := h
-                  exact ⟨V, fun _ hx => hx, hS, SolBelow.nil V⟩
-                · simp [unifyTyF, hb] at h
+                simp only [unifyTyF] at h
+                exact unifyKey_bounded h hS (by simpa [Ty.ftv] using hV)
             | unk => cases h
             | fn _ _ => cases h
             | rcd _ => cases h
@@ -340,15 +391,8 @@ theorem unifyM_bounded {B : Type} [DecidableEq B] (fuel : Nat) :
                   (fun _ hx => hV (List.mem_append_left _ hx)) h
             | base _ => cases h
             | lab b' =>
-                by_cases hb : b = b'
-                · subst hb
-                  have hred : unifyTyF S (fuel + 1) (Ty.lab b) (Ty.lab b)
-                      = .success (Sol.nil (B := B)) S := by simp [unifyTyF]
-                  rw [hred] at h
-                  simp only [UResM.success.injEq] at h
-                  obtain ⟨rfl, rfl⟩ := h
-                  exact ⟨V, fun _ hx => hx, hS, SolBelow.nil V⟩
-                · simp [unifyTyF, hb] at h
+                simp only [unifyTyF] at h
+                exact unifyKey_bounded h hS (by simpa [Ty.ftv] using hV)
             | unk => cases h
             | fn _ _ => cases h
             | rcd _ => cases h
@@ -409,8 +453,8 @@ theorem unifyM_bounded {B : Type} [DecidableEq B] (fuel : Nat) :
                 replace h : unifySpineMF S fuel ρ₁.toSpine ρ₂.toSpine = .success s S' := h
                 refine ih.2 S _ _ V hS (fun x hx => ?_) h
                 rcases List.mem_append.mp hx with hh | hh
-                · exact hV (List.mem_append_left _ ((mem_sFtv_toSpine ρ₁ x).mp hh))
-                · exact hV (List.mem_append_right _ ((mem_sFtv_toSpine ρ₂ x).mp hh))
+                · exact hV (List.mem_append_left _ (mem_sFtv_toSpine ρ₁ x hh))
+                · exact hV (List.mem_append_right _ (mem_sFtv_toSpine ρ₂ x hh))
       · cases s₁ with
         | nil =>
             simp only [unifySpineMF] at h
@@ -552,7 +596,7 @@ theorem unifyM_bounded {B : Type} [DecidableEq B] (fuel : Nat) :
 
 -- ⊢  the empty solution is met by everything
 theorem Sol.Sat_nil {B : Type} {θ : TySubst B} : Sol.Sat θ (Sol.nil (B := B)) :=
-  ⟨fun _ hp => (nomatch hp), fun _ hp => (nomatch hp)⟩
+  ⟨fun _ hp => (nomatch hp), fun _ hp => (nomatch hp), fun _ hp => (nomatch hp)⟩
 
 -- ⊢  the base and ★ arms bind nothing, so any unifier meets them vacuously
 theorem base_arm_complete {B : Type} [DecidableEq B] {θ : TySubst B} {b b' : B}
@@ -568,19 +612,37 @@ theorem base_arm_complete {B : Type} [DecidableEq B] {θ : TySubst B} {b b' : B}
     exact Sol.Sat_nil
   · simp [unifyTyF, hb] at h
 
--- ⊢  …and so does the label arm
-theorem lab_arm_complete {B : Type} [DecidableEq B] {θ : TySubst B} {l l' : Label}
+-- ⊢  …and a unifier of two label singletons meets the key arm's binding
+theorem lab_arm_complete {B : Type} [DecidableEq B] {θ : TySubst B} {l l' : Key}
     {S : Supply} {fuel : Nat} {s : Sol B} {S' : Supply}
-    (h : unifyTyF S fuel (.lab l) (.lab l') = .success s S') : Sol.Sat θ s := by
-  by_cases hb : l = l'
-  · subst hb
-    have hred : unifyTyF S fuel (Ty.lab (B := B) l) (Ty.lab l)
-        = .success (Sol.nil (B := B)) S := by simp [unifyTyF]
-    rw [hred] at h
-    simp only [UResM.success.injEq] at h
-    obtain ⟨rfl, -⟩ := h
-    exact Sol.Sat_nil
-  · simp [unifyTyF, hb] at h
+    (h : unifyTyF S fuel (.lab l) (.lab l') = .success s S')
+    (hu : TyUnifies θ (.lab l) (.lab l')) : Sol.Sat θ s := by
+  have he : l.applySubst θ = l'.applySubst θ := by
+    have := TyEquiv.lab_inv hu
+    simp only [Ty.applySubst] at this
+    injection this with this
+    exact this.symm
+  simp only [unifyTyF] at h
+  have hb : ∀ {α k}, θ.lab α = k.applySubst θ → bindLab (B := B) S α k = .success s S' →
+      Sol.Sat θ s := by
+    intro α k hk h
+    unfold bindLab at h
+    split at h
+    · simp only [UResM.success.injEq] at h; obtain ⟨rfl, -⟩ := h; exact Sol.Sat_nil
+    · simp only [UResM.success.injEq] at h; obtain ⟨rfl, -⟩ := h
+      refine ⟨fun _ hp => (nomatch hp), fun _ hp => (nomatch hp), fun p hp => ?_⟩
+      obtain rfl := List.mem_singleton.mp hp
+      exact hk
+  cases l with
+  | var α => exact hb he h
+  | lit m =>
+      cases l' with
+      | var α => exact hb he.symm h
+      | lit m' =>
+          simp only [unifyKey] at h
+          split at h
+          · simp only [UResM.success.injEq] at h; obtain ⟨rfl, -⟩ := h; exact Sol.Sat_nil
+          · cases h
 
 theorem unk_arm_complete {B : Type} [DecidableEq B] {θ : TySubst B}
     {S : Supply} {fuel : Nat} {s : Sol B} {S' : Supply}
@@ -613,21 +675,25 @@ theorem AgreeOn.tyUnifies {B : Type} {θ θ' : TySubst B} {V : List TyVar}
 --    covers every name the solution mentions
 theorem Sol.Sat.congrAgree {B : Type} {θ θ' : TySubst B} {s : Sol B} {W : List TyVar}
     (h : Sol.Sat θ s) (hag : AgreeOn θ θ' W) (hb : SolBelow s W) : Sol.Sat θ' s := by
-  constructor
+  refine ⟨?_, ?_, ?_⟩
   · intro p hp
     rw [← (hag p.1 (hb p.1 (.inl ⟨p, hp, .inl rfl⟩))).1,
         ← hag.tyEq (fun x hx => hb x (.inl ⟨p, hp, .inr hx⟩))]
     exact h.1 p hp
   · intro p hp
-    rw [← (hag p.1 (hb p.1 (.inr ⟨p, hp, .inl rfl⟩))).2,
-        ← hag.rowEq (fun x hx => hb x (.inr ⟨p, hp, .inr hx⟩))]
-    exact h.2 p hp
+    rw [← (hag p.1 (hb p.1 (.inr (.inl ⟨p, hp, .inl rfl⟩)))).2.1,
+        ← hag.rowEq (fun x hx => hb x (.inr (.inl ⟨p, hp, .inr hx⟩)))]
+    exact h.2.1 p hp
+  · intro p hp
+    rw [← (hag p.1 (hb p.1 (.inr (.inr ⟨p, hp, .inl rfl⟩)))).2.2,
+        ← Key.applySubst_congr p.2 (fun x hx => (hag x (hb x (.inr (.inr ⟨p, hp, .inr hx⟩)))).2.2)]
+    exact h.2.2 p hp
 
 -- ⊢  meeting both halves of a composite means meeting the composite
 --    (the converse of Sol.Sat.comp_inv, and what the arms actually build)
 theorem Sol.Sat.comp {B : Type} {θ : TySubst B} {s₁ s₂ : Sol B}
     (h₁ : Sol.Sat θ s₁) (h₂ : Sol.Sat θ s₂) : Sol.Sat θ (s₂.comp s₁) := by
-  constructor
+  refine ⟨?_, ?_, ?_⟩
   · intro p hp
     rcases List.mem_append.mp hp with hp | hp
     · obtain ⟨q, hq, rfl⟩ := List.mem_map.mp hp
@@ -640,8 +706,15 @@ theorem Sol.Sat.comp {B : Type} {θ : TySubst B} {s₁ s₂ : Sol B}
     · obtain ⟨q, hq, rfl⟩ := List.mem_map.mp hp
       show RowEquiv (θ.row q.1) ((q.2.applySubst s₂.toSubst).applySubst θ)
       rw [Row.applySubst_applySubst]
-      exact (h₁.2 q hq).trans (Row.applySubst_substEquiv h₂.substEquiv q.2)
-    · exact h₂.2 p hp
+      exact (h₁.2.1 q hq).trans (Row.applySubst_substEquiv h₂.substEquiv q.2)
+    · exact h₂.2.1 p hp
+  · intro p hp
+    rcases List.mem_append.mp hp with hp | hp
+    · obtain ⟨q, hq, rfl⟩ := List.mem_map.mp hp
+      show θ.lab q.1 = (q.2.applySubst s₂.toSubst).applySubst θ
+      rw [Key.applySubst_applySubst, h₁.2.2 q hq]
+      exact Key.applySubst_substEquiv h₂.substEquiv q.2
+    · exact h₂.2.2 p hp
 
 -- ⊢  a unifier of α and τ meets the binding α ≔ τ
 theorem bindTy_complete {B : Type} {θ : TySubst B}  {S : Supply} {α : TyVar} {τ : Ty B}
@@ -657,7 +730,7 @@ theorem bindTy_complete {B : Type} {θ : TySubst B}  {S : Supply} {α : TyVar} {
     · cases h
     · simp only [UResM.success.injEq] at h
       obtain ⟨rfl, -⟩ := h
-      refine ⟨fun p hp => ?_, fun _ hp => (nomatch hp)⟩
+      refine ⟨fun p hp => ?_, fun _ hp => (nomatch hp), fun _ hp => (nomatch hp)⟩
       obtain rfl := List.mem_singleton.mp hp
       exact hu
 
@@ -671,6 +744,7 @@ theorem solveVarM_complete {B : Type} {θ : TySubst B} {S : Supply}
   | cons a₁ r₁ =>
     cases a₁ with
     | field _ _ => simp [solveVarM] at hsolve
+    | dfield _ _ => simp [solveVarM] at hsolve
     | var α =>
       cases r₁ with
       | cons _ _ => simp [solveVarM] at hsolve
@@ -686,7 +760,7 @@ theorem solveVarM_complete {B : Type} {θ : TySubst B} {S : Supply}
             exact Sol.Sat_ofRow.mpr
               (collapseSol_complete hc (RowEquiv.unitR.symm.trans hu))
         · split at hsolve
-          · simp at hsolve
+          · split at hsolve <;> (try split at hsolve) <;> simp at hsolve
           · simp only [Option.some.injEq, UResM.success.injEq] at hsolve
             obtain ⟨rfl, -⟩ := hsolve
             refine Sol.Sat_ofRow.mpr (fun p hp => ?_)
@@ -754,7 +828,7 @@ theorem unifyM_success_complete {B : Type} [DecidableEq B] (fuel : Nat) :
             cases τ' with
             | var α => exact ⟨θ, AgreeOn.refl θ V, bindTy_complete h hu.symm⟩
             | base _ => cases h
-            | lab b' => exact ⟨θ, AgreeOn.refl θ V, lab_arm_complete h⟩
+            | lab b' => exact ⟨θ, AgreeOn.refl θ V, lab_arm_complete h hu⟩
             | unk => cases h
             | fn _ _ => cases h
             | rcd _ => cases h
@@ -832,7 +906,7 @@ theorem unifyM_success_complete {B : Type} [DecidableEq B] (fuel : Nat) :
             cases τ' with
             | var α => exact ⟨θ, AgreeOn.refl θ V, bindTy_complete h hu.symm⟩
             | base _ => cases h
-            | lab b' => exact ⟨θ, AgreeOn.refl θ V, lab_arm_complete h⟩
+            | lab b' => exact ⟨θ, AgreeOn.refl θ V, lab_arm_complete h hu⟩
             | unk => cases h
             | fn _ _ => cases h
             | rcd _ => cases h
@@ -902,8 +976,8 @@ theorem unifyM_success_complete {B : Type} [DecidableEq B] (fuel : Nat) :
                 have e₂ := RowEquiv.applySubst θ (Row.toSpine_equiv ρ₂)
                 refine ih.2 S _ _ V hS (fun x hx => ?_) h (e₁.symm.trans (hR.trans e₂))
                 rcases List.mem_append.mp hx with hh | hh
-                · exact hV (List.mem_append_left _ ((mem_sFtv_toSpine ρ₁ x).mp hh))
-                · exact hV (List.mem_append_right _ ((mem_sFtv_toSpine ρ₂ x).mp hh))
+                · exact hV (List.mem_append_left _ (mem_sFtv_toSpine ρ₁ x hh))
+                · exact hV (List.mem_append_right _ (mem_sFtv_toSpine ρ₂ x hh))
       · cases s₁ with
         | nil =>
             exact ⟨θ, AgreeOn.refl θ V,
