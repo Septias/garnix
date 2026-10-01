@@ -60,9 +60,6 @@ The style should be similar to the motivation and abstract so I feel comfortable
 # Section Fixes
 - Declarative
   - [ ] Stump result δ a variable in Q — Lean now `Stump.res : Ty B`
-  - [ ] Lookup properties: drop unclear "no side condition" in totality
-  - [ ] Row equivalence: reword "rather than a side problem"
-  - [ ] Spine: add example (uncommon technique)
   - [ ] T-sel-★ / T-sel-⊥: expand, non-standard
   - [ ] Instantiation: too verbose; sorting para removable
   - Row lookup:
@@ -75,7 +72,6 @@ The style should be similar to the motivation and abstract so I feel comfortable
 - Inference
   - [ ] F-hit / materialization only in prose, no rule
   - [ ] Quiescence: example why it matters
-  - [ ] A-let: explain mechanism, list side conditions literally
   - [ ] Finalization: explain phases and their order
 - Incompleteness
   - [ ] Irreducible: say why α = β = ε fails (wand) / is not most general (two-sided)
