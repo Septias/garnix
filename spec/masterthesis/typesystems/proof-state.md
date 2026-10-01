@@ -34,20 +34,6 @@ We use a custom lookup relation ⟨ρ.l ↓ r⟩ with return values ⟨τ | ⊥ 
 - [ ] Inherit
 
 
-## FC-Labels  (`plans/fc-labels-plan.md`)
-- [x] **Phase A — Reading dynamic**
-- [x] **Phase B — dynamic construction**  (`plans/fc-labels-phase-b-plan.md`)
-  - Keys are their own sort: `Key := l | α`, `⌊k⌋ : Ty`, `${k}: τ : Row`, `TySubst.lab`, `Sol.lab`; no junk keys
-  - `{ ${e₁} = e₂ }`: lazy step to `{l = e₂}`, `qRcdDyn`, A-rcd-dyn (fresh label var κ, `τ₁ ≐ ⌊κ⌋`)
-  - Headline `rcdDynQ_instance_closed`: `λa. λv. {${a} = v} :: ∀α δ. ⌊α⌋ → δ → {${α}: δ}`; runF infers exactly that
-  - qProgress, qPreservation, runSound, runF_terminates: same axioms as before
-  - Costs:
-    - a non-label key is a type error (`{foo = c}.(c)`, `{${c} = c}` clash), was ★ + W-flag
-    - keyed fields are barriers: `(foo: τ) ≐ᵣ (${α}: τ′)` and different unknown keys are stuck; keyed Fuzz universe 67% stuck
-  - U-key: same unknown key at the head/tail of both spines → `τ ≐ τ′`, continue (`matchL` arm, `RowEquiv.dsing_cancel_left`)
-  - Gained: `KeySafe` gone (F-★ never binds labels); `λr. {x = 1}.(r.a)` runs again; `α ≐ {${α}: σ}` solves (sorts differ)
-
-
 # Problems
 > Problems found during mechanized proving and their proposed solutions
 
@@ -124,9 +110,9 @@ We use a custom lookup relation ⟨ρ.l ↓ r⟩ with return values ⟨τ | ⊥ 
 
 # Incompleteness
 **Irreducible**
-- Wand `(β|α) ≐ᵣ (l:𝓫)`: `vars_vs_field_no_mgu_on`
-- Levi `(α|l) ≐ᵣ (l|β)`: `two_sided_no_mgu_on`; var swap: `allvar_swap_no_mgu_on`
-- Shift `(α|l:𝓫) ≐ᵣ (l:𝓫|α)`: `shift_no_finite_complete_set` — survives negative info
+- Wand `(β|α) ≐ᵣ (l:𝓫)`: 
+- Levi `(α|l) ≐ᵣ (l|β)`: 
+- Shift `(α|l:𝓫) ≐ᵣ (l:𝓫|α)`: 
 - Fix: negative info (Wand, Levi); row equations as scheme qualifiers
 
 **Stuck with an mgu**
@@ -141,7 +127,7 @@ We use a custom lookup relation ⟨ρ.l ↓ r⟩ with return values ⟨τ | ⊥ 
 
 **A-let premises**
 - Γ-freshness, `LetResults`, independence, unresolved key ⇒ monomorphic let ⇒ later clash/stuck
-- Spent stumps generalize only if the result is a linear pattern and its blocker can be filled
+- Spent stumps generalize only if the result is a [linear pattern](?) and its blocker can be filled
   - Not: record literal in the result (`(x.l) {a=c}`), same field spent twice on one row, key-blocked
 - Independence also bites nested selection: `let g = λx.(x.l).m` used twice ⇒ clash
 - Fix: independence could become ordered discharge; the rest are justified
