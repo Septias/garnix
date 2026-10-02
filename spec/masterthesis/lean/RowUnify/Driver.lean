@@ -61,7 +61,8 @@ theorem allVar_collapse_reported_k2 {B : Type} [DecidableEq B] :
 -- the driver no longer finds it.
 --
 -- `.stuck` is the CONSERVATIVE verdict, not a wrong one: it claims nothing, and
--- downstream it degrades to `★` with a W-flag. The soundness contract
+-- downstream it fails the run (InferFn.lean, `.stuck => .fail`); the degrade
+-- rules that once turned it into `★` are gone (`1781909`). The soundness contract
 -- ("success ⟹ the solution unifies") is untouched; only coverage shrinks. Cf.
 -- `stuck_masks_mgu`, which has always been this shape.
 --

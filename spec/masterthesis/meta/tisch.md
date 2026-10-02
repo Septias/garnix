@@ -18,3 +18,4 @@ Order of new features: Inherit -> With -> negative info -> occurrence typing -> 
 ## Fortführende Ideen
 - Kann man die Providenz von ★ besser tracken?
 - Automatische Instrumentation?
+- Verbingdung von ★ und bi-unification?
