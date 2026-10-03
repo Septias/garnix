@@ -205,14 +205,14 @@ theorem Infer.keeps {C : Type} {constTy : C → B} :
         (kc.trans (hsk.keeps.trans (kb.trans kp mp) (mb.trans mp)) mt) mk) m₂)
         (hs.satMono.trans m₂)) (ma.trans (hs.satMono.trans m₂))
   | _, _, _, _, _, .rcd hb => InferRec.keeps hb
-  | _, _, _, _, _, .letE (Δq := Δq) (Δγ := Δγ) h₁ _ hsplit _ _ _ hown _ _ _ h₂ => by
+  | _, _, _, _, _, .letE (S₁ := S₁) (ᾱ := ᾱ) h₁ hA h₂ => by
       have k₁ := Infer.keeps h₁
       have k₂ := Infer.keeps h₂
       intro σ hσ p hp
       rcases k₁ σ (Infer.sat_mono h₂ σ hσ) p hp with ⟨q, hq, hqs⟩ | hd
-      · replace hq := hsplit.mem_iff.mp hq
+      · replace hq := (letSplit S₁ ᾱ).mem_iff.mp hq
         rcases List.mem_append.mp hq with hq | hq
-        · exact absurd hqs (hown q hq p hp)
+        · exact absurd hqs (hA.own q hq p hp)
         · rcases k₂ σ hσ q hq with ⟨q', hq', hq's⟩ | hd'
           · exact .inl ⟨q', hq', hq's.trans hqs⟩
           · exact .inr (hqs ▸ hd')

@@ -126,11 +126,12 @@ We use a custom lookup relation ⟨ρ.l ↓ r⟩ with return values ⟨τ | ⊥ 
   - Fix: guess the key (non-principal) or qualified top-level type — see # Problems
 
 **A-let premises**
-- Γ-freshness, `LetResults`, independence, unresolved key ⇒ monomorphic let ⇒ later clash/stuck
-- Spent stumps generalize only if the result is a [linear pattern](?) and its blocker can be filled
-  - Not: record literal in the result (`(x.l) {a=c}`), same field spent twice on one row, key-blocked
-- Independence also bites nested selection: `let g = λx.(x.l).m` used twice ⇒ clash
-- Fix: independence could become ordered discharge; the rest are justified
+- `Infer.letE` = Infer e₁ + `LetAdmissible Γ S S₁ ᾱ` + Infer e₂; Δ_q/Δ_Γ = `letQ`/`letG`
+- Admissible: `fresh` (ᾱ ∩ ftv⟦S₁⟧(Γ, Δ_Γ) = ∅), `own`, `res` (results ⊆ ᾱ), `spent` (`LetSpent`)
+- A failing condition prunes the offending variables (`greatestAlpha`), not the whole let
+- Still lost: key-blocked spent stump, same field spent twice on one row (`LetSpent` is syntactic)
+- Justified: Γ-mentioned (HM), Δ_Γ-mentioned, outer stump capture (`own`)
+- Open: `LetSpent` → semantic inhabitation (union-closure unknown); derive `own` (let-review §4.3)
 
 **Unrestricted T-★-intro**
 - `λg. {a = g {l=c}; b = g {m=c}}` : `(★ → 𝓫) → {a:𝓫 | b:𝓫}`, `run` = clash
@@ -147,3 +148,4 @@ We use a custom lookup relation ⟨ρ.l ↓ r⟩ with return values ⟨τ | ⊥ 
 # Findings
 - Eliminators for ★ can not be added without gradual typing because otherwise progress and preservation die
 - D-hit up to ≈ (branch `discharge-equiv`, let-review §4.4): χ-correction gone; A-let drops linear-pattern, nodup, independence, disjoint results (P8d needed a fix in LetCase's inhabitation witness: fill with the ★-substituted result). Nested selection, record literal in a spent result, spent result over an unspent one now generalize.
+- A-let in §6 shape: P2 (sorts) and P10 (unsolved) were unused by every proof, dropped; P3-P5 are the filters `letQ`/`letG`; P6 + P9 merged into `LetAdmissible.fresh`; `greatestAlpha` chooses from ftv(⟦S₁⟧τ₁, ⟦S₁⟧Δ₁) (`letCand`)

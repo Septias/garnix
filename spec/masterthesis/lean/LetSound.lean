@@ -7,8 +7,8 @@
 --   1. `A-let` generalizes without a Γ-freshness premise. `λy. let z = y in z`
 --      then infers `a → b`, which no declarative derivation gives, so `RunSound`
 --      is FALSE against the rule as it stood (`runSound_false_unguarded_let`).
---      The fix is the textbook side condition ᾱ ∩ ftv(⟦S₁⟧Γ) = ∅, now a premise
---      of `Infer.letE` (stated per variable of Γ, at both sorts).
+--      The fix is the textbook side condition ᾱ ∩ ftv(⟦S₁⟧Γ) = ∅, now half of
+--      `LetAdmissible.fresh` (stated per variable of Γ, at all sorts).
 --   2. `InferSoundC` read the CONTEXT under ⟦S′⟧ and the TYPE under an arbitrary
 --      σ ⊨ S′. That is false at an open Γ already at A-var
 --      (`inferSoundC_false`), and it is not inductive at A-lam either, whose
@@ -241,10 +241,10 @@ theorem letAlias_infers_guarded :
     Infer (B := Unit) (C := Unit) (fun _ => ()) QCtx.empty
       ⟨Sol.nil, [], [], ⟨1⟩, []⟩ laE (.fn (.var laA) (.var laA)) laS := by
   refine Infer.lam (S₀ := laS) rfl ?_
-  refine Infer.letE (Δq := []) (Δγ := []) (ᾱ := []) (κs := []) la_var_y rfl (.refl _)
-    (fun _ h => nomatch h) (fun _ h => nomatch h) (fun _ h => nomatch h)
-    (fun _ h => nomatch h) ⟨fun _ h => absurd h List.not_mem_nil, fun _ h => absurd h List.not_mem_nil⟩ (fun _ h => nomatch h)
-    (fun _ h => nomatch h) ?_
+  refine Infer.letE (ᾱ := []) la_var_y
+    ⟨fun _ h => (nomatch h), fun _ hp => absurd (mem_letQ.mp hp).2 List.not_mem_nil,
+     fun _ hp => absurd (mem_letQ.mp hp).2 List.not_mem_nil,
+     fun _ hp => absurd (mem_letQ.mp hp).2 List.not_mem_nil⟩ ?_
   exact Infer.var_mono
     (by rw [QCtx.lookup_bindScheme]; simp; rfl)
     ⟨_, .nil, .done (SolverState.Quiescent.nil rfl)⟩

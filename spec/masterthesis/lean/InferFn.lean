@@ -604,7 +604,7 @@ def inferF (constTy : C → B) (n : Nat) :
       pure (.rcd r.1, r.2)
   | Γ, S, .letE x e₁ e₂ => do
       let r₁ ← inferF constTy n Γ S e₁
-      let ᾱ := greatestAlpha Γ S r₁.2
+      let ᾱ := greatestAlpha Γ S r₁.2 r₁.1
       inferF constTy n (Γ.bindScheme x (letScheme r₁.2 ᾱ (letQ r₁.2 ᾱ) r₁.1))
         { r₁.2 with parked := letG r₁.2 ᾱ } e₂
 
@@ -700,7 +700,7 @@ theorem inferF_sound {constTy : C → B} {n : Nat} :
   | Γ, S, S', .letE x e₁ e₂, τ, h => by
       simp only [inferF, IRes.bind_eq_ok] at h
       obtain ⟨⟨τ₁, S₁⟩, h₁, h₂⟩ := h
-      exact ((greatestAlpha_spec Γ S S₁).1).letE (inferF_sound h₁) (inferF_sound h₂)
+      exact .letE (inferF_sound h₁) (greatestAlpha_spec Γ S S₁ τ₁).1 (inferF_sound h₂)
 
 theorem inferRecF_sound {constTy : C → B} {n : Nat} :
     ∀ {Γ : QCtx B} {S S' : SolverState B} {ξ : RecBody (Expr C)} {ρ : Row B},

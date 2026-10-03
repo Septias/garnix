@@ -89,7 +89,7 @@ theorem Infer.clean {C : Type} {constTy : C → B} :
       (draw_sol' hd₂) ▸ hsk.clean ((draw_sol' hdk) ▸
         Infer.clean h₂ (hs.clean ((draw_sol' hd) ▸ Infer.clean h₁ hc)))
   | _, _, _, _, _, .rcd hb, hc => InferRec.clean hb hc
-  | _, _, _, _, _, .letE h₁ _ _ _ _ _ _ _ _ _ h₂, hc => by
+  | _, _, _, _, _, .letE h₁ _ h₂, hc => by
       have := Infer.clean h₁ hc
       exact Infer.clean h₂ this
 
@@ -248,9 +248,9 @@ theorem Infer.ext {C : Type} {constTy : C → B} :
         ((Infer.ext h₂).trans ((draw_ext hdk).trans (hsk.ext.trans
           ((draw_ext hd₂).trans (.of_sol_eq rfl)))))))
   | _, _, _, _, _, .rcd hb => InferRec.ext hb
-  | _, _, _, _, _, .letE (S₁ := S₁) (Δγ := Δγ) h₁ _ _ _ _ _ _ _ _ _ h₂ =>
+  | _, _, _, _, _, .letE (S₁ := S₁) (ᾱ := ᾱ) h₁ _ h₂ =>
       (Infer.ext h₁).trans ((SolverState.Ext.of_sol_eq (S := S₁)
-        (S' := { S₁ with parked := Δγ }) rfl).trans (Infer.ext h₂))
+        (S' := { S₁ with parked := letG S₁ ᾱ }) rfl).trans (Infer.ext h₂))
 
 theorem InferRec.ext {C : Type} {constTy : C → B} :
     {Γ : QCtx B} → {S S' : SolverState B} → {ξ : RecBody (Expr C)} → {ρ : Row B} →

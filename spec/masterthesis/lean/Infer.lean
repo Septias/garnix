@@ -761,24 +761,141 @@ theorem Parked.fillable_iff {B : Type} {S : SolverState B} {p : Parked B} :
       (.lab, p.blocker) ∉ (p.stump.row.applySubst S.subst).sortedFtv := by
   simp [Parked.fillable]
 
-/-- A-let's premise on the generalized RESULTS, read at S₁ (`QScheme.WF` and
-the inhabitation of the scheme):
-* each is a type over ᾱ — a variable, or a type a promise was spent on;
-* a SPENT result can be met at some instance, by extending its blocker row with
-  the field (as `Materialize` does at the top level): its key is literal, every
-  stump on the same blocker is literally keyed and is it if it has its key, and
-  no spent stump's blocker occurs in it. -/
-def LetResults {B : Type} (S₁ : SolverState B) (ᾱ : List TyVar) (Δq : List (Parked B)) :
-    Prop :=
-  (∀ p ∈ Δq, ∀ δ ∈ (p.stump.res.applySubst S₁.subst).ftv, δ ∈ ᾱ) ∧
-  (∀ p ∈ Δq, (p.stump.res.applySubst S₁.subst).isVar = false →
+/-- A spent result can be met at some instance, by extending its blocker row
+with the field (as `Materialize` does at the top level): its key is literal,
+every stump on the same blocker is literally keyed and is it if it has its key,
+and no spent stump's blocker occurs in it. A sufficient, syntactic test for the
+inhabitation of the scheme (`∃ τ₁. σ ≥ τ₁`, the T-let premise); unlike the
+property itself it is closed under union (`LetAdmissible.union`). -/
+def LetSpent {B : Type} (S₁ : SolverState B) (Δq : List (Parked B)) : Prop :=
+  ∀ p ∈ Δq, (p.stump.res.applySubst S₁.subst).isVar = false →
       p.fillable S₁ = true ∧
       (∀ q ∈ Δq, q.blocker = p.blocker →
         q.fillable S₁ = true ∧
         (q.stump.label.applySubst S₁.subst = p.stump.label.applySubst S₁.subst →
           q.stump = p.stump)) ∧
       (∀ q ∈ Δq, (q.stump.res.applySubst S₁.subst).isVar = false →
-        q.blocker ∉ (p.stump.res.applySubst S₁.subst).ftv))
+        q.blocker ∉ (p.stump.res.applySubst S₁.subst).ftv)
+
+/-- A-let's premise on the generalized RESULTS, read at S₁ (`QScheme.WF` and
+the inhabitation of the scheme): each is a type over ᾱ — a variable, or a type
+a promise was spent on — and the spent ones can be met (`LetSpent`). -/
+def LetResults {B : Type} (S₁ : SolverState B) (ᾱ : List TyVar) (Δq : List (Parked B)) :
+    Prop :=
+  (∀ p ∈ Δq, ∀ δ ∈ (p.stump.res.applySubst S₁.subst).ftv, δ ∈ ᾱ) ∧ LetSpent S₁ Δq
+
+--------------------- A-let'S CHOICE OF ᾱ -------------------------------------
+
+/-- Δ_q for a choice ᾱ: the stumps blocked on a generalized variable. -/
+def letQ {B : Type} (S₁ : SolverState B) (ᾱ : List TyVar) : List (Parked B) :=
+  S₁.parked.filter (fun p => decide (p.blocker ∈ ᾱ))
+
+/-- Δ_Γ for a choice ᾱ: the rest. -/
+def letG {B : Type} (S₁ : SolverState B) (ᾱ : List TyVar) : List (Parked B) :=
+  S₁.parked.filter (fun p => !decide (p.blocker ∈ ᾱ))
+
+theorem mem_letQ {B : Type} {S₁ : SolverState B} {ᾱ : List TyVar} {p : Parked B} :
+    p ∈ letQ S₁ ᾱ ↔ p ∈ S₁.parked ∧ p.blocker ∈ ᾱ := by
+  simp [letQ]
+
+theorem mem_letG {B : Type} {S₁ : SolverState B} {ᾱ : List TyVar} {p : Parked B} :
+    p ∈ letG S₁ ᾱ ↔ p ∈ S₁.parked ∧ p.blocker ∉ ᾱ := by
+  simp [letG]
+
+/-- ⊢  Δ₁ ~ Δ_q ⊎ Δ_Γ: a PARTITION, up to order. Δ₁ is ordered by parking
+time, and a stump that is generalized may have been parked after one that is
+not. -/
+theorem letSplit {B : Type} (S₁ : SolverState B) (ᾱ : List TyVar) :
+    S₁.parked.Perm (letQ S₁ ᾱ ++ letG S₁ ᾱ) :=
+  (List.filter_append_perm _ _).symm
+
+/-- ftv(⟦S₁⟧(Γ, Δ)): the environment a let must not generalize over — Γ, and
+the stumps Δ that stay parked — read at S₁. Stated per variable and at all
+three sorts, since `ftv` does not record which one it saw. -/
+def letEnvFtv {B : Type} (Γ : QCtx B) (S₁ : SolverState B) (Δ : List (Parked B)) :
+    List TyVar :=
+  Γ.ftv.flatMap (fun β =>
+    (S₁.subst.ty β).ftv ++ (S₁.subst.row β).ftv ++ (S₁.subst.lab β).ftv) ++
+  Δ.flatMap (fun p =>
+    (p.stump.row.applySubst S₁.subst).ftv ++ (p.stump.res.applySubst S₁.subst).ftv ++
+      (p.stump.label.applySubst S₁.subst).ftv)
+
+/-- ᾱ is an admissible choice at A-let (`gen` in the thesis): Δ_q and Δ_Γ are
+determined by ᾱ (`letQ`, `letG`), and four conditions remain.
+* `fresh`: ᾱ ∩ ftv(⟦S₁⟧(Γ, Δ_Γ)) = ∅ — the HM(X) side condition. Γ's half was
+  once MISSING, and `runSound_false_unguarded_let` (LetSound.lean) is what it
+  cost: `λy. let z = y in z` inferred `a → b`. Δ_Γ's half makes what stays
+  parked read the same at every instance.
+* `own`: Δ_q is e₁'s OWN; no stump parked before the let may be filed under
+  the scheme, or nothing ever finalizes it (`runSound_false_let_captures`).
+* `res`: each generalized result, read at S₁, is generalized with it
+  (`QScheme.WF`).
+* `spent`: the spent results can be met (`LetSpent`, inhabitation).
+Neither the sorts of ᾱ nor "nothing solved is generalized" are premises: the
+scheme carries no sorts, and a solved variable does not occur in anything read
+at S₁. -/
+structure LetAdmissible {B : Type} (Γ : QCtx B) (S S₁ : SolverState B) (ᾱ : List TyVar) :
+    Prop where
+  fresh : ∀ α ∈ ᾱ, α ∉ letEnvFtv Γ S₁ (letG S₁ ᾱ)
+  own   : ∀ p ∈ letQ S₁ ᾱ, ∀ q ∈ S.parked, p.stump ≠ q.stump
+  res   : ∀ p ∈ letQ S₁ ᾱ, ∀ δ ∈ (p.stump.res.applySubst S₁.subst).ftv, δ ∈ ᾱ
+  spent : LetSpent S₁ (letQ S₁ ᾱ)
+
+theorem mem_letEnvFtv {B : Type} {Γ : QCtx B} {S₁ : SolverState B} {Δ : List (Parked B)}
+    {α : TyVar} :
+    α ∈ letEnvFtv Γ S₁ Δ ↔
+      (∃ β ∈ Γ.ftv, α ∈ (S₁.subst.ty β).ftv ∨ α ∈ (S₁.subst.row β).ftv ∨
+        α ∈ (S₁.subst.lab β).ftv) ∨
+      (∃ p ∈ Δ, α ∈ (p.stump.row.applySubst S₁.subst).ftv ∨
+        α ∈ (p.stump.res.applySubst S₁.subst).ftv ∨
+        α ∈ (p.stump.label.applySubst S₁.subst).ftv) := by
+  simp [letEnvFtv, or_assoc]
+
+/-- ⊢  `fresh`, Γ's half: ᾱ ∩ ftv(⟦S₁⟧Γ) = ∅. -/
+theorem LetAdmissible.gfresh {B : Type} {Γ : QCtx B} {S S₁ : SolverState B}
+    {ᾱ : List TyVar} (h : LetAdmissible Γ S S₁ ᾱ) :
+    ∀ α ∈ ᾱ, ∀ β ∈ Γ.ftv, α ∉ (S₁.subst.ty β).ftv ∧ α ∉ (S₁.subst.row β).ftv ∧
+      α ∉ (S₁.subst.lab β).ftv := by
+  intro α hα β hβ
+  have := h.fresh α hα
+  rw [mem_letEnvFtv] at this
+  exact ⟨fun hm => this (.inl ⟨β, hβ, .inl hm⟩), fun hm => this (.inl ⟨β, hβ, .inr (.inl hm)⟩),
+    fun hm => this (.inl ⟨β, hβ, .inr (.inr hm)⟩)⟩
+
+/-- ⊢  `fresh`, Δ_Γ's half: ᾱ ∩ ftv(⟦S₁⟧Δ_Γ) = ∅ — row, key and answer. -/
+theorem LetAdmissible.dis {B : Type} {Γ : QCtx B} {S S₁ : SolverState B}
+    {ᾱ : List TyVar} (h : LetAdmissible Γ S S₁ ᾱ) :
+    ∀ α ∈ ᾱ, ∀ p ∈ letG S₁ ᾱ, α ∉ (p.stump.row.applySubst S₁.subst).ftv ∧
+      α ∉ (p.stump.res.applySubst S₁.subst).ftv ∧
+      α ∉ (p.stump.label.applySubst S₁.subst).ftv := by
+  intro α hα p hp
+  have := h.fresh α hα
+  rw [mem_letEnvFtv] at this
+  exact ⟨fun hm => this (.inr ⟨p, hp, .inl hm⟩), fun hm => this (.inr ⟨p, hp, .inr (.inl hm)⟩),
+    fun hm => this (.inr ⟨p, hp, .inr (.inr hm)⟩)⟩
+
+/-- ⊢  `fresh` from its two halves. -/
+theorem LetAdmissible.fresh_of {B : Type} {Γ : QCtx B} {S₁ : SolverState B}
+    {ᾱ : List TyVar}
+    (hg : ∀ α ∈ ᾱ, ∀ β ∈ Γ.ftv, α ∉ (S₁.subst.ty β).ftv ∧ α ∉ (S₁.subst.row β).ftv ∧
+      α ∉ (S₁.subst.lab β).ftv)
+    (hd : ∀ α ∈ ᾱ, ∀ p ∈ letG S₁ ᾱ, α ∉ (p.stump.row.applySubst S₁.subst).ftv ∧
+      α ∉ (p.stump.res.applySubst S₁.subst).ftv ∧
+      α ∉ (p.stump.label.applySubst S₁.subst).ftv) :
+    ∀ α ∈ ᾱ, α ∉ letEnvFtv Γ S₁ (letG S₁ ᾱ) := by
+  intro α hα hm
+  rcases mem_letEnvFtv.mp hm with ⟨β, hβ, h | h | h⟩ | ⟨p, hp, h | h | h⟩
+  · exact (hg α hα β hβ).1 h
+  · exact (hg α hα β hβ).2.1 h
+  · exact (hg α hα β hβ).2.2 h
+  · exact (hd α hα p hp).1 h
+  · exact (hd α hα p hp).2.1 h
+  · exact (hd α hα p hp).2.2 h
+
+/-- ⊢  `res` and `spent` together are `LetResults` at Δ_q. -/
+theorem LetAdmissible.results {B : Type} {Γ : QCtx B} {S S₁ : SolverState B}
+    {ᾱ : List TyVar} (h : LetAdmissible Γ S S₁ ᾱ) : LetResults S₁ ᾱ (letQ S₁ ᾱ) :=
+  ⟨h.res, h.spent⟩
 
 /-- ⊢  an unsolved result reads as itself -/
 theorem SolverState.subst_ty_of_not_dom {B : Type} {S : SolverState B} {δ : TyVar}
@@ -936,39 +1053,13 @@ inductive Infer {B C : Type} [DecidableEq B] (constTy : C → B) :
   -- to REQUIRE the split's defining equations, which is precisely what a
   -- relation buys over a function here.
   | letE {Γ : QCtx B} {S S₁ S₂ : SolverState B} {x : Var} {e₁ e₂ : Expr C}
-      {τ₁ τ₂ : Ty B} {Δq Δγ : List (Parked B)} {ᾱ : List TyVar} {κs : List Kind} :
+      {τ₁ τ₂ : Ty B} {ᾱ : List TyVar} :
       Infer constTy Γ S e₁ τ₁ S₁ →
-      -- κ̄ = Γ(ᾱ), read off the DRAW rather than off Γ (ᾱ is disjoint from Γ,
-      -- which is why the paper's form was never writable here). Forces every
-      -- generalized binder to be one inference actually invented, at a known sort.
-      S₁.kinds.Assigns ᾱ κs →
-      -- Δ₁ = Δ_Γ ⊎ Δ_q — a PARTITION, up to order: Δ₁ is ordered by parking time,
-      -- and a prefix split could not generalize a stump parked after a Γ-stump
-      S₁.parked.Perm (Δq ++ Δγ) →
-      -- Δ_q are exactly the stumps whose blocker lands in ᾱ, Δ_Γ the rest
-      (∀ p ∈ Δq, p.blocker ∈ ᾱ) → (∀ p ∈ Δγ, p.blocker ∉ ᾱ) →
-      -- ᾱ ∩ ftv(⟦S₁⟧Γ) = ∅ — generalize only what Γ does not mention. This was
-      -- MISSING, and `runSound_false_unguarded_let` (LetSound.lean) is what it
-      -- cost: `λy. let z = y in z` inferred `a → b`. Stated per variable of Γ
-      -- and at BOTH sorts, since `ftv` does not record which one it saw.
-      (∀ α ∈ ᾱ, ∀ β ∈ Γ.ftv, α ∉ (S₁.subst.ty β).ftv ∧ α ∉ (S₁.subst.row β).ftv ∧
-         α ∉ (S₁.subst.lab β).ftv) →
-      -- Δ_q is e₁'s OWN: no stump parked before the let may be filed under the
-      -- scheme, or nothing ever finalizes it (`runSound_false_let_captures`,
-      -- LetSound.lean) …
-      (∀ p ∈ Δq, ∀ q ∈ S.parked, p.stump ≠ q.stump) →
-      -- … each generalized stump's answer, READ AT S₁, is generalized with it
-      -- (`QScheme.WF`), and a spent one can be met (inhabitation) …
-      LetResults S₁ ᾱ Δq →
-      -- … what stays parked does not mention ᾱ, READ AT S₁ — row, key and
-      -- answer — so it reads the same at every instance …
-      (∀ α ∈ ᾱ, ∀ p ∈ Δγ, α ∉ (p.stump.row.applySubst S₁.subst).ftv ∧
-         α ∉ (p.stump.res.applySubst S₁.subst).ftv ∧
-         α ∉ (p.stump.label.applySubst S₁.subst).ftv) →
-      -- … and nothing already solved is generalized
-      (∀ α ∈ ᾱ, α ∉ S₁.sol.dom) →
-      Infer constTy (Γ.bindScheme x (letScheme S₁ ᾱ Δq τ₁))
-        { S₁ with parked := Δγ } e₂ τ₂ S₂ →
+      -- ᾱ = gen_{Γ,S}(S₁, τ₁): any admissible choice. Which one a function
+      -- takes, the greatest, is `greatestAlpha` (LetChoice.lean).
+      LetAdmissible Γ S S₁ ᾱ →
+      Infer constTy (Γ.bindScheme x (letScheme S₁ ᾱ (letQ S₁ ᾱ) τ₁))
+        { S₁ with parked := letG S₁ ᾱ } e₂ τ₂ S₂ →
       Infer constTy Γ S (.letE x e₁ e₂) τ₂ S₂
 
 inductive InferRec {B C : Type} [DecidableEq B] (constTy : C → B) :
@@ -1198,9 +1289,9 @@ theorem Finalizes.supply {B : Type} [DecidableEq B] {S S' : SolverState B}
 -- The `κ̄` counterpart of the supply invariant above. Only `draw` writes to
 -- `kinds`, and it CONSES, so every solver step leaves the record a suffix of
 -- what it becomes: nothing already recorded is dropped or rewritten. This is
--- what makes `A-let`'s `KEnv.Assigns ᾱ κ̄` mean what it should — the kind a
--- binder is generalized at is the kind it was DRAWN at, not one a later step
--- could have overwritten.
+-- what makes A-var's `κ̄` mean what it should — the kind a binder is
+-- instantiated at is the kind it was DRAWN at, not one a later step could have
+-- overwritten.
 
 theorem SolverState.draw_kinds {B : Type} (S : SolverState B) (κ : Kind) :
     (S.draw κ).2.kinds = ((S.draw κ).1, κ) :: S.kinds := rfl
@@ -1319,7 +1410,7 @@ theorem Infer.kinds_mono {B C : Type} [DecidableEq B] {constTy : C → B}
       refine List.IsSuffix.trans ?_ (Infer.kinds_mono h₂)
       rw [hs.kinds, draw_kind_eq hd]; exact List.suffix_cons _ _
   | .rcd hb => InferRec.kinds_mono hb
-  | .letE h₁ _ _ _ _ _ _ _ _ _ h₂ => by
+  | .letE h₁ _ h₂ => by
       have i₁ := Infer.kinds_mono h₁
       have i₂ := Infer.kinds_mono h₂
       exact List.IsSuffix.trans i₁ i₂
@@ -1442,7 +1533,7 @@ theorem Infer.supply_mono {B C : Type} [DecidableEq B] {constTy : C → B}
       simp only [SolverState.park]
       omega
   | .rcd hb => InferRec.supply_mono hb
-  | .letE h₁ _ _ _ _ _ _ _ _ _ h₂ => by
+  | .letE h₁ _ h₂ => by
       have i₁ := Infer.supply_mono h₁
       have i₂ := Infer.supply_mono h₂
       exact Nat.le_trans i₁ i₂
@@ -1585,7 +1676,7 @@ theorem Infer.sat_mono {B C : Type} [DecidableEq B] {constTy : C → B}
                 ((SolverState.SatMono.of_sol_eq (draw_sol hd₂)).trans
                   (SolverState.SatMono.of_sol_eq rfl)))))))
   | .rcd hb => InferRec.sat_mono hb
-  | .letE h₁ _ _ _ _ _ _ _ _ _ h₂ => by
+  | .letE h₁ _ h₂ => by
       refine (Infer.sat_mono h₁).trans ?_
       intro σ hσ
       exact Infer.sat_mono h₂ σ hσ
@@ -1684,9 +1775,9 @@ theorem Infer.quiescent {B C : Type} [DecidableEq B] {constTy : C → B}
   | .lam hd hb, hq => Infer.quiescent hb (hq.draw hd)
   | .rcd hb, hq => InferRec.quiescent hb hq
   -- A-let: the body runs at Δ_Γ, a SUBLIST of the quiescent Δ₁
-  | .letE h₁ _ hsplit _ _ _ _ _ _ _ h₂, hq => by
+  | .letE h₁ _ h₂, hq => by
       refine Infer.quiescent h₂ ((Infer.quiescent h₁ hq).restrict ?_)
-      intro p hp; exact hsplit.mem_iff.mpr <| List.mem_append_right _ hp
+      intro p hp; exact (mem_letG.mp hp).1
 
 theorem InferRec.quiescent {B C : Type} [DecidableEq B] {constTy : C → B}
     {Γ : QCtx B} {S S' : SolverState B} {ξ : RecBody (Expr C)} {ρ : Row B} :

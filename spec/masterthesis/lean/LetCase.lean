@@ -254,8 +254,15 @@ theorem Ty.exists_of_isVar {τ : Ty B} (h : τ.isVar = true) : ∃ δ, τ = .var
 
 /-- ⊢  **the A-let case.** -/
 theorem letCase {C : Type} {constTy : C → B} : LetCase B C constTy := by
-  intro Γ S S₁ S₂ x e₁ e₂ τ₁ τ₂ Δq Δγ ᾱ κs h₁ _ hsplit hbq _ hfresh _ hres hdis hdom h₂
-    hΓ hc hq IH₁ IH₂ σ hab hσ Γ' hr
+  intro Γ S S₁ S₂ x e₁ e₂ τ₁ τ₂ ᾱ h₁ hA h₂ hΓ hc hq IH₁ IH₂ σ hab hσ Γ' hr
+  -- Δ_q, Δ_Γ and the conditions on ᾱ, in the form the proof reads them
+  generalize hQ : letQ S₁ ᾱ = Δq at h₂ IH₂
+  generalize hG : letG S₁ ᾱ = Δγ at h₂ IH₂
+  have hsplit : S₁.parked.Perm (Δq ++ Δγ) := hQ ▸ hG ▸ letSplit S₁ ᾱ
+  have hbq : ∀ p ∈ Δq, p.blocker ∈ ᾱ := fun p hp => (mem_letQ.mp (hQ ▸ hp)).2
+  have hfresh := hA.gfresh
+  have hres : LetResults S₁ ᾱ Δq := hQ ▸ hA.results
+  have hdis : ∀ α ∈ ᾱ, ∀ p ∈ Δγ, _ := fun α hα p hp => hA.dis α hα p (hG ▸ hp)
   -- the state e₁ ends in
   have c₁ := Infer.clean h₁ hc
   have q₁ := Infer.quiescent h₁ hq

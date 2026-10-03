@@ -174,7 +174,7 @@ def sd (e₁ e₂ : E) : E := .selDyn e₁ e₂
 -- … and under a let it is generalized (it used to be held back by the
 -- independence premise's key clause: the key IS another stump's result)
 #guard run (.letE "f" (.lam "r" (.lam "k" (sd (v "r") (.sel (v "k") "name")))) (v "f"))
-  = "({r11} → ({name: ⌊k9⌋ | r12 | ε} → ★))"
+  = "({r8} → ({name: ⌊k11⌋ | r12 | ε} → ★))"
 -- no KeySafe: a key blocked on a row variable stays a label variable
 #guard run (.lam "r" (rec1 "x" (sd (rec1 "x" c) (.sel (v "r") "a"))))
   = "({a: ⌊k5⌋ | r7 | ε} → {x: ★})"

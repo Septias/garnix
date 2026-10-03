@@ -157,23 +157,18 @@ theorem nameReuse_infers_unguarded (hu : UnguardedVar Unit Unit (fun _ => ())) :
     Infer (B := Unit) (C := Unit) (fun _ => ()) QCtx.empty ⟨Sol.nil, [], [], ⟨1⟩, []⟩
       nrE nrTy nrFinal := by
   refine Infer.letE (τ₁ := .fn (.var (n 1)) (.var (n 3))) (S₁ := nrS1)
-    (Δq := nrS1.parked) (Δγ := []) (ᾱ := [n 2, n 3]) (κs := [.row, .ty])
-    selEx_infers rfl (by simp [nrS1]) ?_ (fun _ h => nomatch h) ?_
-    (fun _ _ _ h => nomatch h) ?_ (fun _ _ _ h => nomatch h) ?_ ?_
-  · intro p hp
-    simp only [nrS1, List.mem_cons, List.not_mem_nil, or_false] at hp
-    subst hp; decide
-  · intro α _ β hβ
-    exact absurd hβ List.not_mem_nil
-  · refine ⟨fun p hp => ?_, fun p hp hsp => ?_⟩
-    · simp only [nrS1, List.mem_cons, List.not_mem_nil, or_false] at hp
-      subst hp; decide
-    · simp only [nrS1, List.mem_cons, List.not_mem_nil, or_false] at hp
-      subst hp; exact absurd hsp (by decide)
+    (ᾱ := [n 2, n 3]) selEx_infers ⟨?_, fun _ _ _ h => (nomatch h), fun p hp => ?_,
+      fun p hp hsp => ?_⟩ ?_
   · intro α hα
     simp only [List.mem_cons, List.not_mem_nil, or_false] at hα
     rcases hα with rfl | rfl <;> decide
-  · have hsc : letScheme nrS1 [n 2, n 3] nrS1.parked (Ty.fn (.var (n 1)) (.var (n 3)))
+  · replace hp := (mem_letQ.mp hp).1
+    simp only [nrS1, List.mem_cons, List.not_mem_nil, or_false] at hp
+    subst hp; decide
+  · replace hp := (mem_letQ.mp hp).1
+    simp only [nrS1, List.mem_cons, List.not_mem_nil, or_false] at hp
+    subst hp; exact absurd hsp (by decide)
+  · have hsc : letScheme nrS1 [n 2, n 3] (letQ nrS1 [n 2, n 3]) (Ty.fn (.var (n 1)) (.var (n 3)))
         = nrSc := by
       rfl
     rw [hsc]

@@ -621,23 +621,14 @@ def VarCase (B C : Type) [DecidableEq B] (constTy : C → B) : Prop :=
 /-- the A-let case, given both induction hypotheses. -/
 def LetCase (B C : Type) [DecidableEq B] (constTy : C → B) : Prop :=
   ∀ {Γ : QCtx B} {S S₁ S₂ : SolverState B} {x : Var} {e₁ e₂ : Expr C}
-    {τ₁ τ₂ : Ty B} {Δq Δγ : List (Parked B)} {ᾱ : List TyVar} {κs : List Kind},
+    {τ₁ τ₂ : Ty B} {ᾱ : List TyVar},
     Infer constTy Γ S e₁ τ₁ S₁ →
-    S₁.kinds.Assigns ᾱ κs → S₁.parked.Perm (Δq ++ Δγ) →
-    (∀ p ∈ Δq, p.blocker ∈ ᾱ) → (∀ p ∈ Δγ, p.blocker ∉ ᾱ) →
-    (∀ α ∈ ᾱ, ∀ β ∈ Γ.ftv, α ∉ (S₁.subst.ty β).ftv ∧ α ∉ (S₁.subst.row β).ftv ∧
-         α ∉ (S₁.subst.lab β).ftv) →
-    (∀ p ∈ Δq, ∀ q ∈ S.parked, p.stump ≠ q.stump) →
-    LetResults S₁ ᾱ Δq →
-    (∀ α ∈ ᾱ, ∀ p ∈ Δγ, α ∉ (p.stump.row.applySubst S₁.subst).ftv ∧
-       α ∉ (p.stump.res.applySubst S₁.subst).ftv ∧
-       α ∉ (p.stump.label.applySubst S₁.subst).ftv) →
-    (∀ α ∈ ᾱ, α ∉ S₁.sol.dom) →
-    Infer constTy (Γ.bindScheme x (letScheme S₁ ᾱ Δq τ₁))
-      { S₁ with parked := Δγ } e₂ τ₂ S₂ →
+    LetAdmissible Γ S S₁ ᾱ →
+    Infer constTy (Γ.bindScheme x (letScheme S₁ ᾱ (letQ S₁ ᾱ) τ₁))
+      { S₁ with parked := letG S₁ ᾱ } e₂ τ₂ S₂ →
     Γ.SchemesWF → S.sol.Clean → S.Quiescent →
     SoundAt constTy Γ e₁ τ₁ S₁ →
-    SoundAt constTy (Γ.bindScheme x (letScheme S₁ ᾱ Δq τ₁)) e₂ τ₂ S₂ →
+    SoundAt constTy (Γ.bindScheme x (letScheme S₁ ᾱ (letQ S₁ ᾱ) τ₁)) e₂ τ₂ S₂ →
     SoundAt constTy Γ (.letE x e₁ e₂) τ₂ S₂
 
 /-- ⊢  the let scheme is well formed: `LetResults` is exactly `QScheme.WF` read
@@ -947,14 +938,13 @@ theorem inferSound_of {B C : Type} [DecidableEq B] {constTy : C → B}
       exact .assumeDyn (.qEq ih₁ (hsolve.unifies_sat hσ₂')) (.qEq ih₂ hkey) List.mem_cons_self
   | _, _, _, _, _, .rcd hb, hΓ, hc, hq => fun σ hab hσ Γ' hr =>
       .qRcd (inferRecSound_of hvar hlet hb hΓ hc hq σ hab hσ Γ' hr)
-  | _, _, _, _, _, .letE (S₁ := S₁) (Δγ := Δγ) (x := x) (τ₁ := τ₁) h₁ hA hsplit hbq hγ hfresh hown hres hdis hdom h₂,
+  | _, _, _, _, _, .letE (S₁ := S₁) (ᾱ := ᾱ) (x := x) (τ₁ := τ₁) h₁ hA h₂,
       hΓ, hc, hq => by
-      have hΓ' := letScheme_wf (x := x) (τ₁ := τ₁) hΓ hres
+      have hΓ' := letScheme_wf (x := x) (τ₁ := τ₁) hΓ hA.results
       have c₁ := Infer.clean h₁ hc
-      have q₁ : ({ S₁ with parked := Δγ } : SolverState B).Quiescent :=
-        quiescent_sub (Infer.quiescent h₁ hq)
-          (fun p hp => by exact hsplit.mem_iff.mpr <| List.mem_append_right _ hp)
-      exact hlet h₁ hA hsplit hbq hγ hfresh hown hres hdis hdom h₂ hΓ hc hq
+      have q₁ : ({ S₁ with parked := letG S₁ ᾱ } : SolverState B).Quiescent :=
+        quiescent_sub (Infer.quiescent h₁ hq) (fun p hp => (mem_letG.mp hp).1)
+      exact hlet h₁ hA h₂ hΓ hc hq
         (inferSound_of hvar hlet h₁ hΓ hc hq) (inferSound_of hvar hlet h₂ hΓ' c₁ q₁)
 
 theorem inferRecSound_of {B C : Type} [DecidableEq B] {constTy : C → B}

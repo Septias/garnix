@@ -50,7 +50,7 @@
 // meta: this paragraph still feels all over the place
 The Nix programming language @nix-language-2-28 @dolstra_phd (NixLang) is the language of nixpkgs, a single repository of more than four million lines of untyped functional code#footnote[Counted over the `.nix` files of nixpkgs 26.05.] and one of the ten GitHub projects with the most contributors @octoverse2024. It is a language with features that extend well beyond the basic λ-calculus. Its foundational data structure is the _attribute set_ — a record […](maybe add that it is important for configuration?) — and the language provides a wide range of constructs and builtin functions to create, extend, deconstruct and inspect them. NixLang powers nixpkgs, a package repository of more than 100,000 packages @repology that is continuously evaluated, updated and rolled out from one central repository, and the same repository carries the Nix standard library, the NixOS module system and the definition of the NixOS distribution itself @nixos_short @nixos_long. Every one of those artefacts is an attribute set assembled out of other attribute sets. NixLang is thus both the motivation for our work and the guiding principle behind the features of our calculus.
 
-// meta: maybe one or to more paragraphs before we disclouse our goal
+// meta: maybe one or to more paragraphs before we disclose our goal
 Our aim is a type system that applies to this existing body of code as it is and helps its programmers write safer code.
 
 From our goal to type existing NixLang code and create an applicable type system, we derive our design constraints. Since the ultimate goal is to aid programmers today, we need an _efficiently computable_ algorithm that knows its own limitations. Using only the builtin functions, it is possible to write code that no static analysis can type completely:
@@ -148,7 +148,8 @@ Leijen's scoped labels @extensible_recs drop uniqueness. A row may contain a lab
 The [ubiquity](wording) of overwriting rules out record calculi that restrict themselves to _symmetric concatenation_ @symm_concat, in which both operands have disjoint labels. It also rules out another feature commonly seen in record calculi. Using _width-subtyping_, one can remove or forget fields ${l: τ} <= {}$ in a record. This, in combination with asymmetric record concatenation, [leads to unsoundness, because previously forgotten and then untracked fields overwrite existing fields semantically but cannot be tracked by the record system](good). Lacks-predicates @gaster_jones @qualified_types can salvage this situation by denoting the absence of a field. They are absent from the minimal calculus not because they would burden the programmer — in a system without annotations, nobody writes them — [but because nothing in the calculus generates them](recheck, nix has constructs that generate them). [Gaster and Jones need them because record extension is partial and its typing rule must demand absence. With scoped rows, concatenation is total, no rule demands anything, and a constraint form without an introduction site buys nothing](is this really an argument?). [The NixLang constructs that would generate them — closed function patterns, `removeAttrs` and `?`-guards under `if` — lie outside the minimal calculus, which is why @sec-extensions returns to them as the most promising extension](reduce this somehow, either drop entirely or…).
 We therefore keep the calculus subtyping-free; the only ordering it admits is the precision gained by instantiation and row equivalence (≈).
 
-
+// meta: this is somewhat out of place. Put it in front mayebe?
+// meta: Maybe clear up the heritance right in the abstract?
 == Paszke and Xie
 Paszke and Xie @extensible_tabular combine scoped labels with first-class labels into infix-extensible rows and give a unification-based inference algorithm over row- and label-variables. Their system is the direct basis of ours. Its field selection is handled by a search rule inside unification, and a conditional tail-check rejects programs whose shadowing behaviour is unresolved.
 
@@ -157,11 +158,12 @@ Paszke and Xie @extensible_tabular combine scoped labels with first-class labels
 
 The design rests on a separation between field demands and row equality.
 
-In a row-based system, a field selection is ordinarily _elaborated into a row constraint_ and handed to unification: `e.l` demands that `e`'s row contain $l$, and unification must discharge that demand — which, when the row ends in a variable, means guessing that the variable contains the field. Paszke and Xie's search rule @extensible_tabular does exactly this, and it is the point at which the systems discussed in @related-work either backtrack, solve modulo associativity and commutativity, or defer to an unspecified entailment relation.
+[In a row-based system, a field selection is ordinarily _elaborated into a row constraint_ and handed to unification: `e.l` demands that `e`'s row contain $l$, and unification must discharge that demand — which, when the row ends in a variable, means guessing that the variable contains the field. Paszke and Xie's search rule @extensible_tabular does exactly this, and it is the point at which the systems discussed in @related-work either backtrack, solve modulo associativity and commutativity, or defer to an unspecified entailment relation.](best sentence so far)
 
-We take selection out of unification altogether. Field demands and row equality are different judgements. Row unification $scripts(≐)_r$ only ever states structural _equality_ of two rows; it never receives a demand of the form "this row must contain $l$", and consequently never has to guess a field into a variable. Field demands are instead answered by a separate _lookup relation_ $ρ.l ↓ r$ whose result is three-valued — a definite type $τ$, definite absence $⊥$, or _don't know_ $?$ — and a demand that cannot be answered yet simply parks until instantiation unblocks it.
+[We take selection out of unification altogether](!). Field demands and row equality are different judgements. Row unification $scripts(≐)_r$ only ever states structural _equality_ of two rows; it never receives a demand of the form "this row must contain $l$", and consequently never has to guess a field into a variable. Field demands are instead answered by a separate _lookup relation_ $ρ.l ↓ r$ whose result is three-valued — a definite type $τ$, definite absence $⊥$, or _don't know_ $?$ — [and a demand that cannot be answered yet simply parks until instantiation unblocks it](explain parking a bit more?).
 
-The consequence is that a field demand is never a constraint to be solved. A demand that cannot be answered yet is either answered later, by running the lookup again on a more instantiated row, or recorded as ★. Schemes do carry such pending lookups as qualifiers (@principality), but their entailment is evaluation: a qualifier is discharged by computing a total and deterministic lookup, never by search. Where the row theory would need a disjunction, we write ★. As a result, inference remains ordinary syntactic first-order unification. There is no constraint solver to supply, no entailment relation left as a parameter, no unification modulo AC, and no backtracking over alternative typings. Paszke and Xie's search rule can be dropped entirely, and their conditional tail-check is replaced by an algebraic property of rows rather than a side condition. Every move of the algorithm is forced; where none applies, the configuration is reported as stuck rather than resolved by a guess.
+The consequence is that a field demand is never a constraint to be solved. A demand that cannot be answered yet is either answered later, [by running the lookup again on a more instantiated row, or recorded as ★](this is the gist). [Schemes do carry such pending lookups as qualifiers](good) (@principality), but their entailment is evaluation: a qualifier is discharged by computing a total and deterministic lookup, never by search. Where the row theory would need a disjunction, we write ★. [As a result, inference remains ordinary syntactic first-order unification.](good) There is no constraint solver to supply, no entailment relation left as a parameter, no unification modulo AC, and no backtracking over alternative typings. Paszke and Xie's search rule can be dropped entirely, and their conditional tail-check is replaced by an algebraic property of rows rather than a side condition. Every move of the algorithm is forced; where none applies, the configuration is reported as stuck rather than resolved by a guess.
+// meta: maybe not that this is due to efficiency reasons?
 
 = The Declarative Calculus <declarative>
 
@@ -194,7 +196,7 @@ The consequence is that a field demand is never a constraint to be solved. A dem
 )
 #syntax <syntax>
 
-@syntax shows the term- and type-syntax of a standard λ-calculus extended with records, record concatenation and let-polymorphism. Functions use the unusual syntax (x: e) where x is the variable to be replaced in the function body e. This distinction is chosen because it is NixLang's syntax for functions. We admit a finite set 𝓒 of constants $c ∈ 𝓒$ that can be typed by base types 𝓫 from the finite set of base types 𝓑 and require that 𝓑 has at least the types needed to type every constant such that $c ↦ 𝓫_c$ is a complete mapping. We admit an "unknown" ★ type for our soft-typing system that can be used to type expressions the type system cannot reason about. Term-rows ${ξ}$ and row-types ${ρ}$ are both trees, which shows their similarity. As in Hindley-Milner, polymorphism is stratified: a scheme σ quantifies over monotypes and rows only, which keeps instantiation predicative and inference decidable. Unlike Hindley-Milner schemes, ours are _qualified_: a scheme carries a list Q of pending lookups ⟨ρ.l ↓ δ⟩, called _stumps_, whose result δ is one of the scheme's own quantified variables. A plain scheme is the special case Q = ε. @principality shows that the qualification is forced rather than chosen.
+@syntax shows the term- and type-syntax of a standard λ-calculus extended with records, record concatenation and let-polymorphism. Functions use the unusual syntax (x: e) where x is the variable to be replaced in the function body e. This NixLang's syntax for functions. We admit a finite set 𝓒 of constants $c ∈ 𝓒$ that can be typed by base types 𝓫 from the finite set of base types 𝓑 and require that 𝓑 has at least the types needed to type every constant such that $c ↦ 𝓫_c$ is a complete mapping. We admit an "unknown" ★ type for our soft-typing[-inspired](?) system that can be used to type expressions the type system cannot reason about. Term-rows ${ξ}$ and row-types ${ρ}$ are both trees, which shows their similarity. As in Hindley-Milner, polymorphism is stratified: a scheme σ quantifies over monotypes and rows only, which keeps instantiation predicative and inference decidable. Unlike Hindley-Milner schemes, ours are _qualified_: a scheme carries a list Q of pending lookups ⟨ρ.l ↓ δ⟩, called _stumps_, whose result δ is one of the scheme's own quantified variables. A plain scheme is the special case Q = ε. @principality shows the addition of qualification is forced by the language constraints.
 
 
 == Row Lookup
@@ -222,14 +224,18 @@ The consequence is that a field demand is never a constraint to be solved. A dem
 
 @row-lookup gives the derivation rules for record-type lookups. The judgement $ρ.l ↓ r$ is read as "the lookup of label $l$ in row $ρ$ has result $r$" with $r := τ | ⊥ | #h(0.2em) ?$. The lookup succeeds either with a definite type τ due to a successful lookup, ⊥ when the label is definitely absent, or ? if the search reaches a row-variable before it finds the label. Accordingly, L-ε and L-miss return with a negative lookup result, L-hit with a positive result and the rules L-conc-hit and L-conc-skip recurse into the left and right subtrees a row can form, with left precedence. L-var terminates the search at a row-variable α with the unknown result ?, since α may or may not shadow l, and L-conc-? bubbles such a result up.
 
+// meta: context-freeness is an old artifact. Don't flex it.
+// maybe add an intuition section explaining my own reasoning
 The relation is _context-free_: it reads nothing but the row. Solving $α ≔ ρ'$ replaces α by ρ' in the row, and looking the label up again lets the search advance past the former variable. Refinement of a $?$ is thus plain substitution of a row-variable, at instantiation or at application, followed by a fresh lookup, and never a property of the lookup relation itself.
 
 
 === Properties of the Lookup Relation <lookup-metatheory>
 
-Lookup is deterministic and total: every row shape matches exactly one rule, so each $ρ.l$ has exactly one result. Totality needs no side condition, because the relation never leaves the row it was given. Determinism makes ★ a verdict rather than a choice.
+Lookup is deterministic and total: every row shape matches exactly one rule, so each $ρ.l$ has exactly one result. [Determinism makes ★ a verdict rather than a choice](wording).
 // meta: remove the mention of a possible side condition which is not clear what it is.
 
+
+// meta: parking is not introduced yet, no?
 Lookup is stable under substitution. If $ρ.l ↓ r$ with $r ≠ #h(0.2em) ?$, then $(θ ρ).l ↓ θ r$ for every θ, since a definite derivation never reaches a row-variable. Only $?$ may change, to whatever the substituted row yields. This makes parking sound: a deferred lookup can be re-asked after every substitution, and a definite one never needs to be.
 
 
@@ -255,10 +261,10 @@ Lookup is stable under substitution. If $ρ.l ↓ r$ with $r ≠ #h(0.2em) ?$, t
 @row-equivalence gives the row-equivalence rules of our calculus. The relation is an equivalence and a congruence, admits associativity and the units ε, and lets two fields commute only when their labels are distinct. Adjacent fields with the same label keep their order, and so does every field next to a row-variable, since a variable may stand for a row that contains the label and shadowing must be preserved. For concrete labels the premise $l₁ ≠ l₂$ of ≈-comm is decidable, so ≈ needs no separate constraint on labels. ≈-rcd and ≈-fn lift ≈ to types: base types, ★ and type variables are equivalent only to themselves, and ≈ is a congruence below records and arrows, with fields handled by ≈-ext.
 
 === Row Equivalence Is a Trace Monoid <trace-monoid>
-
+//meta: this section could use some more life
 Read a row as a word over an alphabet of fields $(l: τ)$ and row-variables α. Two letters may swap when they are fields with distinct labels; a row-variable commutes with nothing, and neither do two fields with the same label. Rows modulo ≈ are then the free partially commutative monoid, a _trace monoid_, on this independence relation, with ε as unit.
 
-This has two consequences. First, ≈ is decidable and has a normal form. A row splits at its row-variables into var-free segments, and sorting each segment stably by label yields a representative of its class: two rows are equivalent exactly when they agree on their sequence of row-variables and, segment by segment, on the subsequence of fields carrying each label. Equivalently, their projections onto every pair of dependent letters coincide. For example, $(m: 𝓫 | l: 𝓫 | α | l: 𝓫′ | m: 𝓫)$ splits into the segments $(m: 𝓫 | l: 𝓫)$ and $(l: 𝓫′ | m: 𝓫)$ around α, and its representative is $(l: 𝓫 | m: 𝓫 | α | l: 𝓫′ | m: 𝓫)$: the first segment is reordered, and no field crosses α. Second, the monoid is _cancellative on both sides_: $ρ | ρ₁ ≈ ρ | ρ₂$ implies $ρ₁ ≈ ρ₂$, and likewise from the right. Unification uses both. It processes a row as a _spine_ from either end and cancels a common prefix or suffix without guessing, and the forced moves of @unification-cascade are counting arguments over the projection onto a single label.
+This has two consequences. First, ≈ is decidable and has a normal form. A row splits at its row-variables into var-free segments, and sorting each segment stably by label yields a representative of its class: two rows are equivalent exactly when they agree on their sequence of row-variables and, segment by segment, on the subsequence of fields carrying each label. Equivalently, their projections onto every pair of dependent letters coincide. For example, $(m: 𝓫 | l: 𝓫 | α | l: 𝓫′ | m: 𝓫)$ splits into the segments $(m: 𝓫 | l: 𝓫)$ and $(l: 𝓫′ | m: 𝓫)$ around α, and its representative is $(l: 𝓫 | m: 𝓫 | α | l: 𝓫′ | m: 𝓫)$: the first segment is reordered, and no field crosses α. Second, the monoid is _cancellative on both sides_: $ρ | ρ₁ ≈ ρ | ρ₂$ implies $ρ₁ ≈ ρ₂$, and likewise from the right. Unification uses both. [to…](todo) It processes a row as a _spine_ from either end and cancels a common prefix or suffix without guessing, and the forced moves of @unification-cascade are [counting arguments](wasn't introduced!) over the projection onto a single label.
 
 
 == Sorts
@@ -294,10 +300,10 @@ This has two consequences. First, ≈ is decidable and has a normal form. A row 
 )
 
 
-@sorting, in @app-sorting, classifies every type-level phrase as a `Type` or a `Row`. Since τ and ρ are disjoint syntactic categories, the only rules with content are S-var and S-ρ-var, which read the sort of a variable off Γ. The sorts are deliberately fewer than the kinds of Paszke and Xie @extensible_tabular, $κ ::= ★ | κ₁ → κ₂ | "Label" | "Row"$: the arrow kind serves type application, first-class rows and label singletons, none of which the minimal calculus has, and we name the sorts because ★ is the unknown type here. First-class labels add a `Label` sort and change nothing else about the discipline (@sec-fc-labels).
+@sorting, in @app-sorting, classifies every type-level phrase as a `Type` or a `Row`. Since τ and ρ are disjoint syntactic categories, the only rules with content are S-var and S-ρ-var, which read the sort of a variable off Γ. The sorts are deliberately fewer than the kinds of Paszke and Xie @extensible_tabular, $κ ::= ★ | κ₁ → κ₂ | "Label" | "Row"$: the arrow kind serves type application, first-class rows and label singletons, none of which the [minimal calculus](don't use it) has, and we name the sorts because ★ is the unknown type here. First-class labels add a `Label` sort and change nothing else about the discipline (@sec-fc-labels).
 
-
-Two typing rules of @declarative-rules acquire a premise. T-λ-I is the only rule that conjures a type from nothing, so it checks $Γ ⊢ τ₁: "Type"$, and T-let is the only one that conjures a scheme, so it checks $Γ ⊢ σ "ok"$: the body is well-sorted, every stump looks up in a row, and every stump's result is a quantified `Type` variable of σ itself. Every other rule's types are fixed by its premises and are well-sorted whenever they are.
+// meta: remove conjure
+[Two typing rules of @declarative-rules acquire a premise](why not mention them??). T-λ-I is the only rule that conjures a type from nothing, so it checks $Γ ⊢ τ₁: "Type"$, and T-let is the only one that conjures a scheme, so it checks $Γ ⊢ σ "ok"$: the body is well-sorted, every stump looks up in a row, and every stump's result is a quantified `Type` variable of σ itself. Every other rule's types are fixed by its premises and are well-sorted whenever they are.
 
 
 == Typing Rules
@@ -344,12 +350,13 @@ Two typing rules of @declarative-rules acquire a premise. T-λ-I is the only rul
 )
 #declarative <declarative-rules>
 
-The declarative system's typing rules follow the standard λ-calculus rules. T-cons is used to type the set of constants of the language with their respective type $𝓫_c$. T-var not only looks up variables in the context Γ, but also instantiates polymorphic types using the instantiation rules from @instantiation discussed in the following section. T-let binds x to any well-sorted scheme σ that is _instance-closed_ for e₁ — every instance of σ is a typing of e₁ — and _inhabited_. The inhabitation premise is necessary: a plain scheme always has its own body as an instance, but a qualified one can have none, and then instance-closure says nothing about e₁ at all. Without it, `let x = (3 4) in 5` would type while being stuck. T-eq equates types equal up to the row-equivalence relation from @row-equivalence. T-conc concatenates two row types by concatenating their type representation, with the right operand first: lookup prefers the left of a row, so left-precedence on rows realizes the right-precedence of ‖. T-sel types a selection by delegating to the row-lookup relation of @row-lookup.
+[The declarative system's typing rules follow the standard λ-calculus rules](wording). T-cons is used to type the set of constants of the language with their respective type $𝓫_c$. T-var not only looks up variables in the context Γ, but also instantiates polymorphic types using the instantiation rules from @instantiation discussed in the following section. T-let binds x to any well-sorted scheme σ that is _instance-closed_ for e₁ — every instance of σ is a typing of e₁ — and _inhabited_. The inhabitation premise is necessary: a plain scheme always has its own body as an instance, but a qualified one can have none, and then instance-closure says nothing about e₁ at all. Without it, `let x = (3 4) in 5` would type while being stuck. T-eq equates types equal up to the row-equivalence relation from @row-equivalence. T-conc concatenates two row types by concatenating their type representation, with the right operand first: lookup prefers the left of a row, so left-precedence on rows realizes the right-precedence of ‖. T-sel types a selection by delegating to the row-lookup relation of @row-lookup.
 
+// meta: the reader already read something similar before
 Schemes are qualified because a `let`-bound selector must answer differently at different uses. In `let f = x: x.l in …`, the lookup in the body of f reaches the row-variable of x and can only answer $?$. A plain scheme has to fix that answer once, at generalization: either as ★ for every use, or as a variable that some instance sends to a type the lookup never produces. A qualified scheme keeps the lookup as a stump $⟨β.l ↓ δ⟩$ and replays it at every instance, so that δ becomes the found type where the argument has l and ★ where it does not (@instantiation). @principality shows that no plain scheme is principal for `x: x.l`, so the qualification is forced rather than chosen.
 
-T-sel-★ and T-sel-⊥ are needed to type otherwise stuck terms and T-★-intro to blur a type into the unknown. The rules T-rec, T-ξ-empty, T-ξ-field and T-ξ-conc type record literals.
 // meta: expand this section bescause these two rules are non-standart
+T-sel-★ and T-sel-⊥ are needed to type otherwise stuck terms and T-★-intro to blur a type into the unknown. The rules T-rec, T-ξ-empty, T-ξ-field and T-ξ-conc type record literals.
 
 
 == Instantiation
@@ -364,7 +371,7 @@ T-sel-★ and T-sel-⊥ are needed to type otherwise stuck terms and T-★-intro
       ),
       $(∀(macron(α): macron(κ)). Q ⇒ τ) ≥ θ τ$,
     ),
-    derive("D-hit", ($(θ ρ).l ↓ τ$, $θ δ = τ$), $θ ⊨ ⟨ρ.l ↓ δ⟩$),
+    derive("D-hit", ($(θ ρ).l ↓ τ$, $θ δ ≈ τ$), $θ ⊨ ⟨ρ.l ↓ δ⟩$),
     derive("D-⊥", ($(θ ρ).l ↓ ⊥$, $θ δ = ★$), $θ ⊨ ⟨ρ.l ↓ δ⟩$),
     derive("D-?", ($(θ ρ).l ↓ #h(0.2em) ?$, $θ δ = ★$), $θ ⊨ ⟨ρ.l ↓ δ⟩$),
   ),
@@ -373,7 +380,7 @@ T-sel-★ and T-sel-⊥ are needed to type otherwise stuck terms and T-★-intro
 
 // meta: too verbose
 @instantiation defines the instance relation $σ ≥ τ$, read "τ is an instance of σ". It is consumed by T-var, the only rule that ever opens a scheme, and it discharges every quantifier at once: the side condition $Γ ⊢ θ: (macron(α): macron(κ))$ says that θ is the identity outside $macron(α)$ and sends each $α: κ$ to a phrase of sort κ. Instantiation is _predicative_ — the witnesses are monotypes and rows, never schemes — which is what keeps the system a rank-1 HM calculus.
-The second premise, _discharge_ $θ ⊨ q$, is what the qualification adds. Each stump is replayed per instance: θ is applied to the stump's row, the lookup is performed, and the stump's result variable δ is pinned to the verdict — to the found type by D-hit, and to ★ by D-⊥ and D-?. These are exactly T-sel, T-sel-⊥ and T-sel-★ of @declarative-rules once more, now evaluated at instantiation time instead of generalization time, which is how one `let`-bound selector can answer a definite type at one use and ★ at another.
+The second premise, _discharge_ $θ ⊨ q$, is what the qualification adds. Each stump is replayed per instance: θ is applied to the stump's row, the lookup is performed, and the stump's result δ is pinned to the verdict — to the found type up to row equivalence by D-hit, and to ★ by D-⊥ and D-?. Asking for ≈ rather than equality in D-hit loses nothing, since T-eq already closes every set of instances under ≈. It matters for inference, which can guarantee the found type only up to ≈ when the stumps of one instance are discharged in turn. These are exactly T-sel, T-sel-⊥ and T-sel-★ of @declarative-rules once more, now evaluated at instantiation time instead of generalization time, which is how one `let`-bound selector can answer a definite type at one use and ★ at another.
 
 Two degenerate cases are worth recording. A monotype scheme has itself as its only instance, so on the monotypes the relation collapses to identity. And with Q = ε the discharge premise is vacuous, so on plain schemes ≥ is the Hindley-Milner instance relation and every plain scheme has its own body as an instance. A qualified scheme need not have any instance — two stumps may pin the same δ to different verdicts — which is why T-let demands inhabitation explicitly.
 
@@ -438,13 +445,14 @@ Conversely, ★ is never sharpened: for $τ₀ ≠ ★$ there is no θ with $θ(
 
 == Principality Forces Qualified Schemes <principality>
 
+// meta: use mathematical jargon
 A scheme σ is _principal_ for e in Γ when all its instances are typings of e, it has one, and every typing of e is matched by an instance at least as precise:
 
 $
   "Principal"(Γ, e, σ) quad :≡ quad (∀τ. #h(0.3em) σ ≥ τ ⟹ Γ ⊢ e : τ) and (∃τ. #h(0.3em) σ ≥ τ) and (∀τ. #h(0.3em) Γ ⊢ e : τ ⟹ ∃τ'. #h(0.3em) σ ≥ τ' and τ' ≼ τ)
 $
 
-Here ≼ is ≈ followed by ⊑, since typings are closed under T-eq and T-★-intro while instance sets are not.
+[Here](wording) ≼ is ≈ followed by ⊑, since typings are closed under T-eq and T-★-intro while instance sets are not.
 
 No plain scheme is principal. `x: x.l` types at ${(l: τ₀)} → τ₀$ for every $τ₀$ and at ${ε} → ★$. A plain scheme covering both must quantify its result, and then also admits ${ε} → {ε}$, which is not a typing. Choosing ★ as result does not help, since ★ is never sharpened.
 
@@ -463,7 +471,7 @@ a program the system with plain schemes rejects. Writing L₁ for the system wit
 
 = Unification <unification>
 
-We present our unification algorithm, which is sound and terminating but incomplete. It is a _mutual_ pair of judgements: $τ₁ ≐ τ₂ ⇝ v$ solves an equation between types and $s₁ scripts(≐)_r s₂ ⇝ v$ one between rows. @unification-helpers fixes this vocabulary.
+We present our unification algorithm, which is sound and terminating but incomplete. It is a _mutual_ pair of judgements: $τ₁ ≐ τ₂ ⇝ v$ solves an equation between types and $s₁ scripts(≐)_r s₂ ⇝ v$ one between rows. @unification-helpers [fixes this vocabulary](wording).
 
 #let u_clash = smallcaps("Clash")
 #let u_occurs = smallcaps("Occurs")
@@ -519,7 +527,6 @@ A verdict is either a solution θ or one of four refusals. #u_clash and #u_occur
 )
 #unification_ty <unification-ty>
 
-// Meta: the sort-index is just artisanery, no?
 @unification-ty is standard first-order unification, read top-to-bottom, with one deviation: ★ is rigid. U-★ unifies it with itself and U-clash rejects it against everything else, so the unknown is never silently absorbed into another type — a ★ in a solution is always one that the lookup relation put there. The occurs check of U-occurs ensures that a binding _eliminates_ its variable, and the elimination of variables is what bounds the recursion.
 
 U-bind and U-occurs are stated for a variable on the left and are tried on both sides. U-fn is the only place where the type pass sequences: the solution of the argument equation is applied to the results before they are unified, and the two solutions are composed. A refusal from either premise of U-fn, or from the row problem of U-rcd, is the verdict of the conclusion.
@@ -676,8 +683,9 @@ The two exhaustion rules are checked at every depth and before the budget: once 
 
 The three matching moves differ in how far they may look for a partner. A _window_ is a maximal var-free segment at one end of a spine: U-field-L and U-field-R may pair a field only inside it, because a row-variable in between could be instantiated to a colliding field and the pairing would be a guess about shadowing. In $⟨m: 𝓫, l: 𝓫, α, l: 𝓫′⟩$ the leading window is $⟨m: 𝓫, l: 𝓫⟩$ and the trailing window is $⟨l: 𝓫′⟩$. A leading $l: τ$ on the other side is paired with $l: 𝓫$. Against $⟨m: 𝓫, α, l: 𝓫′⟩$ it has no partner in the leading window, and pairing it with $l: 𝓫′$ would assume that α carries no l. U-ground lifts that restriction by counting: if one side has no variables at all and some label occurs equally often and positively on both sides, then the other side's variables cannot carry that label, the pairing is positional, and it is again forced.
 
-// what does global here?
-No move places a field into a row-variable. A field facing only variables on the other side is left where it is, even when a single variable is its only possible host: that placement would be forced, but it is not made, and the configuration is reported as stuck (@incompleteness-forced). The only place where a field is placed into a row-variable is the materialization of spent promises at finalization (@inference), after unification has run. Finally U-clash is a global projection check rather than a per-window one, and U-stuck reports a terminal configuration.
+// what does global do here?
+// explain the F-★ step somewhere?
+[No move places a field into a row-variable](this sentenc appears way too often). A field facing only variables on the other side is left where it is, even when a single variable is its only possible host: that placement would be forced, but it is not made, and the configuration is reported as stuck (@incompleteness-forced). The only place where a field is placed into a row-variable is the materialization of spent promises at finalization (@inference), after unification has run. Finally U-clash is a global projection check rather than a per-window one, and U-stuck reports a terminal configuration.
 
 #let unification_row = figure(
   caption: "Unification of rows, on spines.",
@@ -755,15 +763,17 @@ No move places a field into a row-variable. A field facing only variables on the
 )
 #unification_row <unification-row>
 
+// meta: expand this a bit with interesting explanation of the extra rules
 @unification-row states the moves as rules. They are to be read in the order of @unification-cascade, and U-var-solve, U-var-occurs, U-field-L, U-field-R and U-ground are additionally tried with the two sides exchanged; U-ε-var, U-ε-clash and U-clash are symmetric as stated. Note that no rule ever pushes a field demand into a row-variable: field lookups do not travel through $scripts(≐)_r$, they park as stumps, so row unification never guesses a field into a variable.
 
-The two passes recurse into each other — U-rcd hands a row problem to $scripts(≐)_r$, and U-field-L, U-field-R, U-ground hand a type problem back to $≐$ — and each cross-call consumes one unit of an explicit budget. This makes the definition structurally recursive, which is what lets the mechanization compute verdicts by `rfl` and check worked examples in the kernel; exhausting the budget is the separate verdict #u_fuel, so the four real verdicts are never an artefact of the bound. Crucially, the type equations a matching move emits are solved on the spot and their solution applied to the residual before the row pass continues. Deferring them instead would make #u_stuck meaningless: an equation must be discharged, or fatal, or itself stuck, never merely postponed.
+The two passes recurse into each other — U-rcd hands a row problem to $scripts(≐)_r$, and U-field-L, U-field-R, U-ground hand a type problem back to $≐$ — [and each cross-call consumes one unit of an explicit budget](no one cares). This makes the definition structurally recursive, [which is what lets the mechanization compute verdicts by `rfl` and check worked examples in the kernel](no one cares again); exhausting the budget is the separate verdict #u_fuel, so the four real verdicts are never an artefact of the bound. Crucially, the type equations a matching move emits are solved on the spot and their solution applied to the residual before the row pass continues. Deferring them instead would make #u_stuck meaningless: an equation must be discharged, or fatal, or itself stuck, never merely postponed.
 
 == Unification Metatheory <unification-metatheory>
 
+// meta: mathematical jargon
 The algorithm terminates: every problem has a budget at which it returns a verdict, and a verdict reached at one budget is reached, with the same solution, at every larger one.
 
-Success is most general. A successful run returns a solution Θ whose models are exactly the unifiers of the problem, up to agreement on the problem's own variables:
+Success is most general. A successful run returns a solution Θ whose models are exactly the unifiers of the problem, [up to agreement on the problem's own variables](?):
 
 $ {θ : θ "unifies" ρ₁, ρ₂} quad = quad {θ : θ "satisfies" Θ} $
 
@@ -774,7 +784,7 @@ Stuck is conservative. Every move preserves the solution set, but not every solv
 
 = Inference <inference>
 
-The inference algorithm is a judgement $Γ; S ⊢ e ⇒ τ; S′$ that threads a _solver state_ S through the term. It differs from algorithm W in one respect only: a selection whose lookup answers $?$ is not turned into a row constraint but parked as a stump, and the state carries these stumps until a later substitution lets them advance or the end of inference forces them to ★. Unification, as developed in @unification, is only ever called on equations between types; it never sees a field demand.
+The inference algorithm is a judgement $Γ; S ⊢ e ⇒ τ; S′$ [that threads a _solver state_ S through the term](threading is weird here). It differs from algorithm W in one respect: a selection whose lookup answers $?$ is not turned into a row constraint but parked as a stump, and the state carries these stumps until a later substitution lets them advance or the end of inference forces them to ★. Unification, as developed in @unification, is only ever called on equations between types; it never sees a field demand.
 
 #let st_park = $⊎$
 #let st_drop = $∖$
@@ -818,9 +828,9 @@ The inference algorithm is a judgement $Γ; S ⊢ e ⇒ τ; S′$ that threads a
 )
 #solver_state <solver-state>
 
-@solver-state fixes the vocabulary. The state is a quadruple of a sort-respecting substitution θ, a list Δ of parked stumps, a list W of warnings and a record $macron(κ)$ of the sort at which each name was drawn. ⟦S⟧τ applies S's substitution to τ, $S(α)$ reads the sort of α off $macron(κ)$, and $Δ_i$ denotes the parked stumps of $S_i$. A parked stump $⟨α ▷ ρ.l ↓ δ⟩$ is a lookup of l in ρ whose result has been promised to the fresh variable δ, annotated with the row-variable α that blocks it — the variable at which L-var stopped the search. The blocker is what lets the algorithm tell, after a solution has been written, which stumps might now advance. Stumps are ordered by the time they were parked, and warnings record every place a ★ was committed, so that the user learns where the analysis gave up.
+@solver-state [fixes the vocabulary](weird wording, again). The state is a quadruple of a sort-respecting substitution θ, a list Δ of parked stumps, a list W of warnings and a record $macron(κ)$ of the sort at which each name was drawn. ⟦S⟧τ applies S's substitution to τ, $S(α)$ reads the sort of α off $macron(κ)$, and $Δ_i$ denotes the parked stumps of $S_i$. A parked stump $⟨α ▷ ρ.l ↓ δ⟩$ is a lookup of l in ρ whose result has been promised to the fresh variable δ, annotated with the row-variable α that blocks it — the variable at which L-var stopped the search. The blocker is what lets the algorithm tell, after a solution has been written, which stumps might now advance. Stumps are ordered by the time they were parked, and warnings record every place a ★ was committed, so that the user learns where the analysis gave up.
 
-//meta:  an example for why quiescence is important might be nice
+//meta: an example for why quiescence is important might be nice
 The state is kept under one invariant, _quiescence_: every stump in Δ is genuinely blocked on the variable it records, $(⟦S⟧ρ).l ↓ #h(0.2em) ? "on" α$. Every solution write can break it — it may solve the very blocker a stump is waiting on — so outside of saturation no equation is solved on its own. The judgement $S ⊢ τ ≐ τ′ ⇝ S′$ runs the unifier of @unification and writes its solution into the state, and $S ⊢ τ ≐ τ′ #st_solve S′$ does so and then _saturates_: it re-examines the stumps the solution made stale until the state is quiescent again.
 
 == Inference Rules
@@ -905,30 +915,38 @@ The state is kept under one invariant, _quiescence_: every stump in Δ is genuin
 
 #let generalization = figure(
   caption: "Generalization.",
-  flexbox(
-    derive(
-      "A-let",
-      stack(
-        spacing: 8pt,
-        $Γ; S ⊢ e₁ ⇒ τ₁; S₁ #h(2em) macron(κ) = S₁(macron(α)) #h(2em) Δ₁ ∼ Δ_q ⊎ Δ_Γ$,
-        $macron(α) ∩ "ftv"(⟦S₁⟧Γ) = ∅ #h(2em) macron(α) ∩ "dom"(S₁) = ∅ #h(2em) Δ_q ∩ Δ = ∅$,
-        $"results"(Δ_q) "at" S₁ ⊆ macron(α) "injectively" #h(2em) macron(α) ∩ "ftv"(⟦S₁⟧Δ_Γ) = ∅ #h(2em) Δ_q "independent at" S₁$,
-        $Γ · (x: ∀(macron(α): macron(κ)). ⟦S₁⟧Δ_q ⇒ ⟦S₁⟧τ₁); S₁ #st_drop Δ_q ⊢ e₂ ⇒ τ₂; S₂$,
+  stack(
+    spacing: 14pt,
+    flexbox(
+      derive(
+        "A-let",
+        stack(
+          spacing: 8pt,
+          $Γ; S ⊢ e₁ ⇒ τ₁; S₁ #h(2em) macron(α) = "gen"_(Γ, S)(S₁, τ₁)$,
+          $Γ · (x: ∀(macron(α): S₁(macron(α))). ⟦S₁⟧Δ_q ⇒ ⟦S₁⟧τ₁); S₁ #st_drop Δ_q ⊢ e₂ ⇒ τ₂; S₂$,
+        ),
+        $Γ; S ⊢ #b[let] x = e₁ #b[in] e₂ ⇒ τ₂; S₂$,
       ),
-      $Γ; S ⊢ #b[let] x = e₁ #b[in] e₂ ⇒ τ₂; S₂$,
     ),
+    align(left, $
+      Δ_q &= {p ∈ Δ₁ | "blocker"(p) ∈ macron(α)} #h(3em) Δ_Γ = Δ₁ #st_drop Δ_q \
+      "gen"_(Γ, S)(S₁, τ₁) &= "the greatest" macron(α) ⊆ "ftv"(⟦S₁⟧τ₁, ⟦S₁⟧Δ₁) "such that" \
+        & #h(1em) macron(α) ∩ "ftv"(⟦S₁⟧(Γ, Δ_Γ)) = ∅ \
+        & #h(1em) Δ_q ∩ Δ = ∅ \
+        & #h(1em) "ftv"(⟦S₁⟧"results"(Δ_q)) ⊆ macron(α) \
+        & #h(1em) Δ_q "fillable at" S₁
+    $),
   ),
 )
 #generalization <generalization>
 
 @inference-rules gives the syntax-directed counterpart of the declarative rules of @declarative-rules. T-eq and T-★-intro have no algorithmic counterpart: the former is built into row unification, and the latter is never needed to produce a typing, only to blur one. A-cons, A-λ and the record-literal rules are the familiar ones. A-app and A-conc introduce fresh variables for the shapes their premises demand and hand the resulting equations to $#st_solve$; A-conc glues the two row-variables together exactly as T-conc does, so concatenation itself never forces a decision.
 
-Selection is where the algorithm departs from W. The subject is first unified with a record ${ρ}$ of a fresh row, and then the lookup relation of @row-lookup is asked about the row as solved so far. Its three answers select the three rules. A definite type τ′ is returned by A-sel; a definite absence ⊥ yields ★ and a warning by A-sel-⊥, mirroring T-sel-⊥. Only when the lookup reaches a row-variable α does A-sel-\? fire: it returns a fresh δ in place of the answer it does not have and parks the stump $⟨α ▷ ρ.l ↓ δ⟩$ — the promise that δ will be pinned to whatever the lookup eventually answers. No equation mentioning l is ever emitted, and this is the entire reason row unification never has to guess a field into a variable.
+Selection is where the algorithm departs from W. The subject is first unified with a record ${ρ}$ of a fresh row, and then the lookup relation of @row-lookup is asked about the row as solved so far. Its three answers select the three rules. A definite type τ′ is returned by A-sel; a definite absence ⊥ yields ★ and a warning by A-sel-⊥, mirroring T-sel-⊥. Only when the lookup reaches a row-variable α does A-sel-\? fire: it returns a fresh δ in place of the answer it does not have and _parks_ the stump $⟨α ▷ ρ.l ↓ δ⟩$ — the promise that δ will be pinned to whatever the lookup eventually answers. No equation mentioning l is ever emitted, and this is the entire reason row unification never has to guess a field into a variable.
 
-// meta: explain the mechanism for lets in more detail
 A-var instantiates a qualified scheme with fresh variables of the binder's sorts. The scheme's stumps are instantiated alongside its body and immediately replayed by $scripts(↝)^(*!)$: those that the instantiation already decides are answered on the spot, and the others are parked on the variable that actually blocks them. This is the algorithmic reading of the discharge premise of I-inst (@instantiation) — each use of a `let`-bound variable discharges its own copy of the stumps.
 
-A-let, given separately in @generalization, is the only rule with real content. It generalizes a set $macron(α)$ of variables and splits the stumps of $e₁$: $Δ_q$, whose results lie in $macron(α)$, travel into the scheme as its qualifier Q, while $Δ_Γ$ stays parked in the state and outlives the binding. The side conditions are as follows. The generalized variables must be free in neither Γ nor the solved part of the state; the split is a partition up to order, since a stump that is generalized may have been parked after one that is not; $Δ_q$ consists only of stumps parked while inferring $e₁$; each generalized stump's result, read at $S₁$, is a distinct variable of $macron(α)$; what stays parked mentions none of $macron(α)$, so it reads the same at every instance; and no generalized stump's row mentions another's result, so that an instance's stumps can be discharged one at a time. The algorithm does not choose $macron(α)$: the admissible choices are closed under union, so a greatest one exists and is computed by deleting variables until nothing more is deleted.
+A-let, given separately in @generalization, is the only rule with real content. As in algorithm W, the choice of what to generalize is delegated to a function, here $"gen"_(Γ, S)$, and the rule itself only infers $e₁$, binds the scheme and continues with $e₂$. A choice $macron(α)$ determines the split of the stumps of $e₁$: $Δ_q$, the stumps blocked on a variable of $macron(α)$, travel into the scheme as its qualifier Q, while $Δ_Γ$ stays parked in the state and outlives the binding. Four conditions make a choice admissible. The generalized variables must be fresh for the environment, which here consists of Γ together with the stumps that stay parked; this is the side condition of HM(X), and it ensures that a parked stump reads the same at every instance. $Δ_q$ may contain only stumps parked while inferring $e₁$, since a stump of an outer binding that is captured by the scheme would never be finalized. Every variable in a generalized stump's result must itself be generalized, since otherwise each instance would pin a variable of the environment. Finally, the scheme must be inhabited, as the declarative T-let requires through $∃ τ₁. σ ≥ τ₁$. A stump whose result is still a variable is harmless, since its result can be sent to ★ while its lookup stays blocked. A stump whose result has been spent on a non-variable type must instead hit at some instance. The algorithm does not decide this property but checks a sufficient syntactic condition, written $Δ_q$ fillable at $S₁$: every spent stump has a literal label, all stumps on its blocker have literal labels and coincide when their labels do, and no spent blocker occurs in a spent result. Under this condition each blocker can be extended by the fields its spent stumps demand, which yields the witness instance. The admissible choices are closed under union, so a greatest one exists and is computed by deleting variables until nothing more is deleted. A failing condition therefore does not make the binding monomorphic; it removes the offending variables and whatever they drag along.
 
 As an example, consider `let f = x: x.l in f {l = c}`. For the bound term, A-λ gives x a fresh α, and A-sel-\? unifies α with ${ρ}$ for a fresh ρ, finds that $ρ.l$ answers $?$ on ρ, and parks $⟨ρ ▷ ρ.l ↓ δ⟩$ with a fresh δ. The result is $⟦S₁⟧(α → δ) = {ρ} → δ$. Since α is solved, $macron(α) = ρ, δ$; the single stump has its result in $macron(α)$ and moves into the scheme, and nothing stays parked. f is bound to $∀(ρ: "Row", δ: "Type"). ⟨ρ.l ↓ δ⟩ ⇒ {ρ} → δ$, which is selQ of @principality. At the use, A-var instantiates the scheme with fresh ρ′ and δ′ and replays the stump, which is still blocked and is parked on ρ′. A-app then solves $ρ′ ≔ (l: 𝓫_c)$ and identifies δ′ with the result variable. Saturation finds the stump stale, K-hit re-asks the lookup, which now hits, and the result is unified with $𝓫_c$.
 
@@ -1065,7 +1083,7 @@ Stuck is therefore conservative: it does not imply that no most general unifier 
 
 == Limits of Inference <incompleteness-inference>
 
-- Monomorphic lets. A `let` generalizes only when its side conditions hold: the bound term's parked lookups must be independent of the environment, and each must have a linear result whose blocker can be filled. When they fail, the binding stays monomorphic and a second use at another record clashes, as in `let g = x: (x.l).m` used on two records. Independence also bites nested selection. A record literal in the result, the same field demanded twice on one row, and an unresolved key are further failures. Discharging the stumps of an instance in order would relax independence; the remaining conditions are required for the soundness of A-let.
+- Partially generalized lets. A-let generalizes the greatest admissible $macron(α)$, and a variable that violates a condition stays monomorphic together with whatever it drags along; a second use at another record may then clash. Freshness for Γ and for the stumps that stay parked is the side condition of Hindley-Milner and HM(X), and a stump of an outer binding may not be captured, since it would never be finalized. These losses are inherent to let-polymorphism. The fillability test for spent results is not: it is a syntactic approximation of inhabitation and rejects two inhabited cases, the same field spent twice on one row and a spent stump blocked on its key. Nested selection such as `let g = x: (x.l).m` and record literals in a spent result are generalized.
 - Spent promises. With first-class labels (@sec-fc-labels), a lookup whose answer was already consumed can be blocked on its key rather than on a row, so there is no row to extend and nothing to wake. Such a stump is never answered unless the key is supplied. The declarative system types the program, so this is incompleteness and not rejection. Two remedies are possible: guessing the key, which answers non-principally with an invented label, or reporting a qualified type at the top level, which is principal but changes what a run returns.
 - Unrestricted T-★-intro. The declarative system may replace any type by ★, so it types programs the algorithm clashes on: `g: { a = g {l = c}; b = g {m = c} }` has type $(★ → 𝓫) → {a: 𝓫 | b: 𝓫}$, while inference unifies the two argument records and clashes. Every stuck witness above becomes typable in the same way. A clash therefore certifies the absence of a unifier, but not the absence of a typing. T-★-intro acts as subsumption into a top type, and ★ is the join of any two distinct types, whereas unification only computes common instances. Closing the gap therefore requires either inference that joins incompatible lower bounds at ★ or a completeness statement restricted to typings without T-★-intro.
 

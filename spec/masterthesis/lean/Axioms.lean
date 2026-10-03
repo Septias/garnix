@@ -1056,19 +1056,14 @@ info: 'MinimalCalculus.satStep_wf' depends on axioms: [propext, Classical.choice
 
 -- ## A-let'S CHOICE IS CANONICAL  (LetChoice.lean)
 -- Admissible ᾱ are closed under union, and `greatestAlpha` computes the greatest
--- one; an admissible ᾱ is a legal `Infer.letE` step with the filtered split.
-/-- info: 'MinimalCalculus.LetAdmissible.union' depends on axioms: [propext] -/
+-- one among ftv(⟦S₁⟧τ₁, ⟦S₁⟧Δ₁). `Infer.letE` takes any admissible ᾱ directly.
+/-- info: 'MinimalCalculus.LetAdmissible.union' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in #print axioms LetAdmissible.union
 
 /--
 info: 'MinimalCalculus.greatestAlpha_spec' depends on axioms: [propext, Classical.choice, Quot.sound]
 -/
 #guard_msgs in #print axioms greatestAlpha_spec
-
-/--
-info: 'MinimalCalculus.LetAdmissible.letE' depends on axioms: [propext, Classical.choice, Quot.sound]
--/
-#guard_msgs in #print axioms LetAdmissible.letE
 
 -- ## INFERENCE AS A FUNCTION  (InferFn.lean, InferFnTerm.lean)
 -- `runF` answers are `Run`s, hence declarative typings; some fuel always gives a
