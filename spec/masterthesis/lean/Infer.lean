@@ -761,10 +761,9 @@ theorem Parked.fillable_iff {B : Type} {S : SolverState B} {p : Parked B} :
       (.lab, p.blocker) ∉ (p.stump.row.applySubst S.subst).sortedFtv := by
   simp [Parked.fillable]
 
-/-- A-let's premise on the generalized RESULTS, read at S₁ (`QScheme.WF`,
-`Correctable`, and the inhabitation of the scheme):
-* each is a linear pattern over ᾱ — a variable, or a type a promise was spent on
-  that the χ-correction can still reach (`Ty.correct`);
+/-- A-let's premise on the generalized RESULTS, read at S₁ (`QScheme.WF` and
+the inhabitation of the scheme):
+* each is a type over ᾱ — a variable, or a type a promise was spent on;
 * distinct stumps share no result variable;
 * a SPENT result can be met at some instance, by extending its blocker row with
   the field (as `Materialize` does at the top level): its key is literal, every
@@ -772,9 +771,7 @@ theorem Parked.fillable_iff {B : Type} {S : SolverState B} {p : Parked B} :
   no spent stump's blocker occurs in it. -/
 def LetResults {B : Type} (S₁ : SolverState B) (ᾱ : List TyVar) (Δq : List (Parked B)) :
     Prop :=
-  (∀ p ∈ Δq, (∀ δ ∈ (p.stump.res.applySubst S₁.subst).ftv, δ ∈ ᾱ) ∧
-      (p.stump.res.applySubst S₁.subst).isPat = true ∧
-      (p.stump.res.applySubst S₁.subst).ftv.Nodup) ∧
+  (∀ p ∈ Δq, ∀ δ ∈ (p.stump.res.applySubst S₁.subst).ftv, δ ∈ ᾱ) ∧
   (∀ p ∈ Δq, ∀ q ∈ Δq, ∀ δ ∈ (p.stump.res.applySubst S₁.subst).ftv,
       δ ∈ (q.stump.res.applySubst S₁.subst).ftv → p.stump = q.stump) ∧
   (∀ p ∈ Δq, (p.stump.res.applySubst S₁.subst).isVar = false →
@@ -971,14 +968,8 @@ inductive Infer {B C : Type} [DecidableEq B] (constTy : C → B) :
       (∀ α ∈ ᾱ, ∀ p ∈ Δγ, α ∉ (p.stump.row.applySubst S₁.subst).ftv ∧
          α ∉ (p.stump.res.applySubst S₁.subst).ftv ∧
          α ∉ (p.stump.label.applySubst S₁.subst).ftv) →
-      -- … nothing already solved is generalized …
+      -- … and nothing already solved is generalized
       (∀ α ∈ ᾱ, α ∉ S₁.sol.dom) →
-      -- … and no generalized stump's row OR KEY, read at S₁, mentions another's
-      -- answer: then an instance's constraints can be discharged one at a time
-      -- (`instEquivCorrects`, InferSoundA.lean), without a fixpoint
-      (∀ p ∈ Δq, ∀ q ∈ Δq, ∀ δ ∈ (q.stump.res.applySubst S₁.subst).ftv,
-         δ ∉ (p.stump.row.applySubst S₁.subst).ftv ∧
-         δ ∉ (p.stump.label.applySubst S₁.subst).ftv) →
       Infer constTy (Γ.bindScheme x (letScheme S₁ ᾱ Δq τ₁))
         { S₁ with parked := Δγ } e₂ τ₂ S₂ →
       Infer constTy Γ S (.letE x e₁ e₂) τ₂ S₂
@@ -1331,7 +1322,7 @@ theorem Infer.kinds_mono {B C : Type} [DecidableEq B] {constTy : C → B}
       refine List.IsSuffix.trans ?_ (Infer.kinds_mono h₂)
       rw [hs.kinds, draw_kind_eq hd]; exact List.suffix_cons _ _
   | .rcd hb => InferRec.kinds_mono hb
-  | .letE h₁ _ _ _ _ _ _ _ _ _ _ h₂ => by
+  | .letE h₁ _ _ _ _ _ _ _ _ _ h₂ => by
       have i₁ := Infer.kinds_mono h₁
       have i₂ := Infer.kinds_mono h₂
       exact List.IsSuffix.trans i₁ i₂
@@ -1454,7 +1445,7 @@ theorem Infer.supply_mono {B C : Type} [DecidableEq B] {constTy : C → B}
       simp only [SolverState.park]
       omega
   | .rcd hb => InferRec.supply_mono hb
-  | .letE h₁ _ _ _ _ _ _ _ _ _ _ h₂ => by
+  | .letE h₁ _ _ _ _ _ _ _ _ _ h₂ => by
       have i₁ := Infer.supply_mono h₁
       have i₂ := Infer.supply_mono h₂
       exact Nat.le_trans i₁ i₂
@@ -1597,7 +1588,7 @@ theorem Infer.sat_mono {B C : Type} [DecidableEq B] {constTy : C → B}
                 ((SolverState.SatMono.of_sol_eq (draw_sol hd₂)).trans
                   (SolverState.SatMono.of_sol_eq rfl)))))))
   | .rcd hb => InferRec.sat_mono hb
-  | .letE h₁ _ _ _ _ _ _ _ _ _ _ h₂ => by
+  | .letE h₁ _ _ _ _ _ _ _ _ _ h₂ => by
       refine (Infer.sat_mono h₁).trans ?_
       intro σ hσ
       exact Infer.sat_mono h₂ σ hσ
@@ -1696,7 +1687,7 @@ theorem Infer.quiescent {B C : Type} [DecidableEq B] {constTy : C → B}
   | .lam hd hb, hq => Infer.quiescent hb (hq.draw hd)
   | .rcd hb, hq => InferRec.quiescent hb hq
   -- A-let: the body runs at Δ_Γ, a SUBLIST of the quiescent Δ₁
-  | .letE h₁ _ hsplit _ _ _ _ _ _ _ _ h₂, hq => by
+  | .letE h₁ _ hsplit _ _ _ _ _ _ _ h₂, hq => by
       refine Infer.quiescent h₂ ((Infer.quiescent h₁ hq).restrict ?_)
       intro p hp; exact hsplit.mem_iff.mpr <| List.mem_append_right _ hp
 

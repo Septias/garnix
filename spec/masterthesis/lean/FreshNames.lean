@@ -159,7 +159,7 @@ theorem nameReuse_infers_unguarded (hu : UnguardedVar Unit Unit (fun _ => ())) :
   refine Infer.letE (τ₁ := .fn (.var (n 1)) (.var (n 3))) (S₁ := nrS1)
     (Δq := nrS1.parked) (Δγ := []) (ᾱ := [n 2, n 3]) (κs := [.row, .ty])
     selEx_infers rfl (by simp [nrS1]) ?_ (fun _ h => nomatch h) ?_
-    (fun _ _ _ h => nomatch h) ?_ (fun _ _ _ h => nomatch h) ?_ ?_ ?_
+    (fun _ _ _ h => nomatch h) ?_ (fun _ _ _ h => nomatch h) ?_ ?_
   · intro p hp
     simp only [nrS1, List.mem_cons, List.not_mem_nil, or_false] at hp
     subst hp; decide
@@ -175,9 +175,6 @@ theorem nameReuse_infers_unguarded (hu : UnguardedVar Unit Unit (fun _ => ())) :
   · intro α hα
     simp only [List.mem_cons, List.not_mem_nil, or_false] at hα
     rcases hα with rfl | rfl <;> decide
-  · intro p hp q hq
-    simp only [nrS1, List.mem_cons, List.not_mem_nil, or_false] at hp hq
-    subst hp; subst hq; decide
   · have hsc : letScheme nrS1 [n 2, n 3] nrS1.parked (Ty.fn (.var (n 1)) (.var (n 3)))
         = nrSc := by
       rfl

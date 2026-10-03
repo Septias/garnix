@@ -9,7 +9,7 @@
 --   * δ is ★, since ⟦S′⟧ satisfies the equation F-★ solved and ★ is ≈-rigid.
 --
 -- That is D-?. So every stump a run hands to finalization HOLDS at ⟦S′⟧, and
--- `inferSound` plus the χ-correction gives `RunSound`.
+-- `inferSound` plus the cash-in (`QTypedA.toQTyped`) gives `RunSound`.
 --
 -- This is also where the old `hfix` side condition of `Finalize.dischargeEquiv`
 -- went: "σ does not refine the blocked row" is exactly "β is still free at
@@ -324,10 +324,11 @@ theorem runSound {C : Type} {constTy : C → B} : RunSound B C constTy := by
     rwa [hqs] at this
   · exact Stump.dischargeEquiv_iff_holds.mp hd
 
---------------------- THE χ-CORRECTION IS FALSE IN GENERAL ----------------------
+--------------------- ≈-EQUAL HITS ON ONE RESULT ------------------------------
 -- Two constraints on the SAME result variable whose lookups find ≈-equal but
--- syntactically different types: one χ discharges both up to ≈, but an exact
--- instance would have to send δ to both at once.
+-- syntactically different types. With an exact D-hit no instance existed (δ
+-- would go to both at once), which refuted the χ-correction for arbitrary
+-- schemes. With D-hit up to ≈, one δ serves both.
 
 private def icA : Ty Unit := .rcd (.cat (.sing "a" (.base ())) (.sing "b" (.base ())))
 private def icB : Ty Unit := .rcd (.cat (.sing "b" (.base ())) (.sing "a" (.base ())))
@@ -339,34 +340,16 @@ private def icχ : TySubst Unit :=
 private theorem icA_equiv_icB : TyEquiv icA icB :=
   .rcd (.comm (by decide))
 
-/-- ⊢  **`InstEquivCorrects` is false**: the correction needs one constraint per
-result variable, at least — which is why it is stated for `Correctable` schemes
-(`QScheme.Correctable.correct`) and A-let builds only those. -/
-theorem instEquivCorrects_false : ¬ InstEquivCorrects Unit := by
-  intro h
-  obtain ⟨τ', ⟨θ, -, hdis, -⟩, -⟩ := h icSc icχ
-    ⟨fun α hα => by
+/-- ⊢  the scheme with two ≈-equal hits on one result is instantiable. -/
+theorem icSc_inst : QScheme.Inst icSc icA :=
+  ⟨icχ, ⟨fun α hα => by
         have : α ≠ "d" := fun he => hα (by simp [icSc, he])
-        simp [icχ, this], fun _ _ => rfl, fun _ _ => rfl⟩
-    (fun st hst => by
+        simp [icχ, this], fun _ _ => rfl, fun _ _ => rfl⟩,
+    fun st hst => by
       simp only [icSc, List.mem_cons, List.not_mem_nil, or_false] at hst
       rcases hst with rfl | rfl
       · exact .hit (τ := icA) (LookupQ.lab_iff.mpr .hit) (by simp [icχ]; exact .refl _)
-      · exact .hit (τ := icB) (LookupQ.lab_iff.mpr .hit) (by simp [icχ]; exact icA_equiv_icB))
-  have h1 := hdis ⟨.sing "l" icA, .lit "l", .var "d"⟩ (by simp [icSc])
-  have h2 := hdis ⟨.sing "l" icB, .lit "l", .var "d"⟩ (by simp [icSc])
-  cases h1 with
-  | hit hl₁ he₁ =>
-    cases h2 with
-    | hit hl₂ he₂ =>
-        cases lookup_det (LookupQ.lab_iff.mp hl₁) .hit
-        cases lookup_det (LookupQ.lab_iff.mp hl₂) .hit
-        have : icA = icB := he₁.symm.trans he₂
-        simp only [icA, icB, Ty.rcd.injEq, Row.cat.injEq, Row.sing.injEq] at this
-        exact absurd this.1.1 (by decide)
-    | abs hl _ => exact nomatch lookup_det (LookupQ.lab_iff.mp hl) .hit
-    | unk hl _ => exact nomatch lookup_det (LookupQ.lab_iff.mp hl) .hit
-  | abs hl _ => exact nomatch lookup_det (LookupQ.lab_iff.mp hl) .hit
-  | unk hl _ => exact nomatch lookup_det (LookupQ.lab_iff.mp hl) .hit
+      · exact .hit (τ := icB) (LookupQ.lab_iff.mpr .hit) (by simp [icχ]; exact icA_equiv_icB),
+    by simp [icSc, icχ, Ty.applySubst]⟩
 
 end MinimalCalculus

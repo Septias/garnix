@@ -245,7 +245,7 @@ theorem letAlias_infers_guarded :
     (fun _ h => nomatch h) (fun _ h => nomatch h) (fun _ h => nomatch h)
     (fun _ h => nomatch h) ⟨fun _ h => absurd h List.not_mem_nil, fun _ h => absurd h List.not_mem_nil,
       fun _ h => absurd h List.not_mem_nil⟩ (fun _ h => nomatch h)
-    (fun _ h => nomatch h) (fun _ h => nomatch h) ?_
+    (fun _ h => nomatch h) ?_
   exact Infer.var_mono
     (by rw [QCtx.lookup_bindScheme]; simp; rfl)
     ⟨_, .nil, .done (SolverState.Quiescent.nil rfl)⟩

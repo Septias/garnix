@@ -29,16 +29,6 @@ structure Stump (B : Type) where
 
 deriving instance DecidableEq for Stump
 
-/-- a result the χ-correction can reach (`Ty.correct`, InferSoundA.lean):
-records only as a bare row variable, since ≈ moves fields inside a record. -/
-def Ty.isPat {B : Type} : Ty B → Bool
-  | .var _         => true
-  | .base _        => true
-  | .lab _         => true
-  | .unk           => true
-  | .fn τ₁ τ₂      => τ₁.isPat && τ₂.isPat
-  | .rcd (.var _)  => true
-  | .rcd _         => false
 
 def Ty.isVar {B : Type} : Ty B → Bool
   | .var _ => true
@@ -101,17 +91,23 @@ def QScheme.Avoiding {B : Type} (σ : QScheme B) (θ : TySubst B) : Prop :=
 ---------------------------------- DISCHARGE ----------------------------------
 -- Γ ⊢ (θρ).l ↓ r  replayed per instantiation θ:
 --
---   D-hit    r = τ_r  ⟹  θδ = τ_r    (the T-sel moment)
+--   D-hit    r = τ_r  ⟹  θδ ≈ τ_r    (the T-sel moment; up to ≈, since
+--                                     instance sets are ≈-closed via T-eq
+--                                     anyway — and the algorithm can only
+--                                     guarantee ≈)
 --   D-⊥      r = ⊥    ⟹  θδ = ★      (T-sel-⊥; W-flag on the algo side)
 --   D-?      r = ?    ⟹  θδ = ★      (T-sel-★: still-unknown stays blurred;
 --                                     algorithmically this case re-parks
 --                                     instead — only finalization commits ★)
 
+theorem TyEquiv.of_eq {B : Type} {τ₁ τ₂ : Ty B} (h : τ₁ = τ₂) : TyEquiv τ₁ τ₂ :=
+  h ▸ .refl _
+
 inductive Stump.Discharge {B : Type} (θ : TySubst B) (s : Stump B) :
     Prop where
   | hit {τ : Ty B} :
       LookupQ (s.row.applySubst θ) (s.label.applySubst θ) (.found τ) →
-      s.res.applySubst θ = τ → Discharge θ s
+      TyEquiv (s.res.applySubst θ) τ → Discharge θ s
   | abs :
       LookupQ (s.row.applySubst θ) (s.label.applySubst θ) .absent →
       s.res.applySubst θ = .unk → Discharge θ s
@@ -157,34 +153,35 @@ theorem QScheme.Inst.mono {B : Type} {τ₁ τ : Ty B}
 ---------------------------- DISCHARGE METATHEORY -----------------------------
 
 -- Determinism: two discharges of the same stump that substitute the row the
--- same way pin the result variable to the same type (lookup_det lifted).
--- This is what makes ≥ a well-defined relation per θ rather than a choice.
+-- same way pin the result variable to the same type up to ≈ (lookup_det
+-- lifted). This is what makes ≥ a well-defined relation per θ rather than a
+-- choice.
 -- ⊢  discharge s @θ₁,  discharge s @θ₂,  θ₁·s.row = θ₂·s.row
---        ⟹   θ₁·s.res = θ₂·s.res
+--        ⟹   θ₁·s.res ≈ θ₂·s.res
 theorem Stump.Discharge.det {B : Type} {θ₁ θ₂ : TySubst B}
     {s : Stump B} (h₁ : s.Discharge θ₁) (h₂ : s.Discharge θ₂)
     (hrow : s.row.applySubst θ₁ = s.row.applySubst θ₂)
     (hlab : s.label.applySubst θ₁ = s.label.applySubst θ₂) :
-    s.res.applySubst θ₁ = s.res.applySubst θ₂ := by
+    TyEquiv (s.res.applySubst θ₁) (s.res.applySubst θ₂) := by
   cases h₁ with
   | hit hl₁ hδ₁ =>
       rw [hrow, hlab] at hl₁
       cases h₂ with
-      | hit hl₂ hδ₂ => cases hl₁.det hl₂; rw [hδ₁, hδ₂]
+      | hit hl₂ hδ₂ => cases hl₁.det hl₂; exact hδ₁.trans hδ₂.symm
       | abs hl₂ _   => cases hl₁.det hl₂
       | unk hl₂ _   => cases hl₁.det hl₂
   | abs hl₁ hδ₁ =>
       rw [hrow, hlab] at hl₁
       cases h₂ with
       | hit hl₂ _   => cases hl₁.det hl₂
-      | abs _ hδ₂   => rw [hδ₁, hδ₂]
-      | unk _ hδ₂   => rw [hδ₁, hδ₂]
+      | abs _ hδ₂   => rw [hδ₁, hδ₂]; exact .refl _
+      | unk _ hδ₂   => rw [hδ₁, hδ₂]; exact .refl _
   | unk hl₁ hδ₁ =>
       rw [hrow, hlab] at hl₁
       cases h₂ with
       | hit hl₂ _   => cases hl₁.det hl₂
-      | abs _ hδ₂   => rw [hδ₁, hδ₂]
-      | unk _ hδ₂   => rw [hδ₁, hδ₂]
+      | abs _ hδ₂   => rw [hδ₁, hδ₂]; exact .refl _
+      | unk _ hδ₂   => rw [hδ₁, hδ₂]; exact .refl _
 
 -- Definite-stability: a discharge whose lookup came out definite (τ/⊥)
 -- survives any FURTHER SUBSTITUTION χ, with the pinned result carried along.
@@ -207,7 +204,7 @@ theorem Stump.Discharge.applySubst_of_definite {B : Type}
       refine .hit (τ := τ.applySubst χ) ?_ ?_
       · rw [← Row.applySubst_applySubst, ← Key.applySubst_applySubst]
         exact LookupQ.applySubst χ hl (by intro hc; cases hc)
-      · rw [← Ty.applySubst_applySubst, hδ]
+      · rw [← Ty.applySubst_applySubst]; exact TyEquiv.applySubst χ hδ
   | abs hl hδ =>
       refine .abs ?_ ?_
       · rw [← Row.applySubst_applySubst, ← Key.applySubst_applySubst]
@@ -262,7 +259,7 @@ theorem selQ_inst_of_lookup {B : Type} {ρ : Row B}
     subst hs
     cases r with
     | found τ => exact .hit (by simpa [Row.applySubst, Ty.applySubst] using h)
-                            (by simp [LookupRes.collapse, Ty.applySubst])
+                            (by simpa [LookupRes.collapse, Ty.applySubst] using TyEquiv.refl τ)
     | absent  => exact .abs (by simpa [Row.applySubst, Ty.applySubst] using h)
                             (by simp [LookupRes.collapse, Ty.applySubst])
     | unknown => exact .unk (by simpa [Row.applySubst, Ty.applySubst] using h)
@@ -323,8 +320,7 @@ theorem selQ_instance_closed {B C : Type} (constTy : C → B) (Γ : Ctx B) :
   cases hs with
   | hit hl hδ =>
       simp only [Row.applySubst, Ty.applySubst, Key.applySubst_lit, LookupQ.lab_iff] at hl
-      rw [show θ.ty "δ" = _ from hδ]
-      exact .tLam (.tSel hvar hl)
+      exact .tEq (.tLam (.tSel hvar hl)) (.fn (.refl _) hδ.symm)
   | abs hl hδ =>
       simp only [Row.applySubst, Ty.applySubst, Key.applySubst_lit, LookupQ.lab_iff] at hl
       rw [show θ.ty "δ" = _ from hδ]
@@ -470,8 +466,8 @@ theorem selQ_no_blurred_inst {B : Type} (b : B) :
   | hit hl hres =>
       rw [hrow] at hl
       cases lookup_det (LookupQ.lab_iff.mp hl) (Lookup.hit)
-      change θ.ty "δ" = _ at hres; rw [h2] at hres
-      cases hres
+      change TyEquiv (θ.ty "δ") _ at hres; rw [h2] at hres
+      cases hres.unk_inv
   | abs hl _ =>
       rw [hrow] at hl
       cases lookup_det (LookupQ.lab_iff.mp hl) (Lookup.hit)
@@ -1477,10 +1473,11 @@ theorem selQ_misses_a_typing {B C : Type} (constTy : C → B) (c : C) :
 --                   PRECISE — up to precision, because the typing set is
 --                   blur-closed and no instance set is (selQ_misses_a_typing)
 --
--- CONJUNCT 3 IN THIS ⊑-ONLY FORM IS REFUTED: selQ_not_principalStrict. The
--- typing set is closed under T-eq as well, and ⊑ cannot absorb ≈. Principal
--- (below, with ≼) is the corrected statement; this one is kept because it is
--- what the refutation is about.
+-- CONJUNCT 3 IN THIS ⊑-ONLY FORM was refuted while D-hit was exact: the
+-- typing set is closed under T-eq, and ⊑ cannot absorb ≈. With ≈-discharge
+-- the refuting witness is an instance (selQ_inst_equiv); whether ⊑-only
+-- covering now holds is OPEN. Principal (below, with ≼) is the statement
+-- carried forward.
 def QScheme.PrincipalStrict {B C : Type} (constTy : C → B) (Γ : QCtx B)
     (e : Expr C) (σ : QScheme B) : Prop :=
   (∀ τ, QScheme.Inst σ τ → QTyped constTy Γ e τ) ∧
@@ -1499,8 +1496,7 @@ theorem QScheme.PrincipalStrict.greatest {B C : Type} {constTy : C → B}
   fun τ hτ => hp.2.2 τ (hcl τ hτ)
 
 -- Where selQ stands today: conjuncts (1) and (2) are discharged here. (3) is
--- REFUTED in its ⊑-only form (selQ_not_principalStrict) and OPEN in the
--- corrected ≼ form, where it needs an L2 inversion for λx.x.l the way
+-- OPEN, in the ⊑-only and the ≼ form alike, where it needs an L2 inversion for λx.x.l the way
 -- minimal.lean's sel_var_unk is the L1 one.
 -- ⊢  (∀ τ. selQ ≥_∅ τ ⟹ ∅ ⊢_Q λx.x.l : τ)  ∧  ∃ τ. selQ ≥_∅ τ
 theorem selQ_sound_and_inhabited {B C : Type} (constTy : C → B) :
@@ -1665,7 +1661,7 @@ private theorem parkQ_inst_solved {B : Type} (b : B) :
   · simp only [parkQ, QScheme.applySubst, List.map_cons, List.map_nil,
                List.mem_singleton] at hst
     subst hst
-    refine .hit (τ := .base b) ?_ (by simp [solveAlpha, Ty.applySubst])
+    refine .hit (τ := .base b) ?_ (by simp [Ty.applySubst]; exact .refl _)
     show LookupQ ((Row.applySubst (solveAlpha b) (.var "α")).applySubst _) _ _
     simp only [solveAlpha, Row.applySubst, Ty.applySubst, beq_self_eq_true,
                if_true]
@@ -1808,7 +1804,7 @@ theorem selQ_covers_selQb {B : Type} (b : B) : selQb b ⊴ selQ B := by
       | hit hl hres =>
           rw [hrowχ] at hl
           cases lookup_det (LookupQ.lab_iff.mp hl) (Lookup.hit (l := "l") (τ := .base b))
-          exact hres
+          exact TyEquiv.base_inv hres.symm
       | abs hl _ =>
           rw [hrowχ] at hl
           cases lookup_det (LookupQ.lab_iff.mp hl) (Lookup.hit (l := "l") (τ := .base b))
@@ -1823,22 +1819,19 @@ theorem selQ_covers_selQb {B : Type} (b : B) : selQb b ⊴ selQ B := by
       rw [hrow]
       exact LookupQ.lab_iff.mpr .hit
     · simp [TySubst.restrict, selQ, TySubst.comp, solveβ, Ty.applySubst, hδ]
+      exact .refl _
 
 
---========= (4) CONJUNCT 3 IS FALSE AS STATED — ≈ MUST JOIN ⊑ ================--
--- Attempting `Principal selQ (λx.x.l)` refutes its own third conjunct. The
--- typing set has TWO closure properties, not one: T-★-intro blurs (which ⊴⊑
--- absorbs) and T-eq re-associates rows (which it does NOT). ⊑ is pure
--- congruence on rows — it can sharpen a payload but can never move a field
--- past a unit — so a typing obtained by ≈ on the RESULT is out of reach of
--- every instance, however imprecise.
---
--- Witness: x.l selects a payload {ε | m: 𝓬} and T-eq retypes it as {m: 𝓬}.
+--========= (4) THE T-EQ WITNESS — ≈ IN DISCHARGE ABSORBS IT ================--
+-- The typing set has TWO closure properties: T-★-intro blurs (which ⊴⊑
+-- absorbs) and T-eq re-associates rows. ⊑ is pure congruence on rows — it can
+-- never move a field past a unit — so with D-hit pinning θδ = τ_r ON THE NOSE,
+-- a typing obtained by ≈ on the RESULT was out of reach of every instance, and
+-- conjunct 3 of PrincipalStrict was refuted on this witness:
 --   λx. x.l  :  {(l: {ε | m: 𝓬})} → {m: 𝓬}
--- Any selQ instance ⊑-below this must, by the DOMAIN, put the same payload τ_p
--- under l, hence have RESULT τ_p (the lookup is a definite hit), and τ_p would
--- have to be ⊑-below both {ε | m: 𝓬} and {m: 𝓬}. The first forces τ_p's row to
--- be a `cat`, the second forces it to be a `sing`. Nothing satisfies both.
+-- D-hit now reads θδ ≈ τ_r, and the witness IS an instance: θβ = (l: {ε|m:𝓬}),
+-- θδ = {m: 𝓬}, and the hit's payload {ε | m: 𝓬} ≈ {m: 𝓬}. The refutation is
+-- gone; the scheme says directly what T-eq used to add from outside.
 
 private def blurA {B : Type} (b : B) : Ty B :=
   .rcd (.cat .empty (.sing "m" (.base b)))
@@ -1856,50 +1849,23 @@ theorem selEx_equiv_typing {B C : Type} (constTy : C → B) (c : C) :
   · exact QScheme.inst_toQ.mpr (Scheme.Inst.self ⟨[], _⟩)
   · exact .rcd .unitL
 
--- ⊢  ¬ ∃ τ'. selQ ≥_∅ τ' ∧ τ' ⊑ₜ ({(l: {ε | m: 𝓫})} → {m: 𝓫})
-theorem selQ_no_prec_answer {B : Type} (b : B) :
-    ¬ ∃ τ', QScheme.Inst (selQ B) τ' ∧
-        TyPrec τ' (.fn (.rcd (.sing "l" (blurA b))) (blurB b)) := by
-  rintro ⟨τ', ⟨θ, hfix, hdis, hbody⟩, hprec⟩
-  simp only [selQ, Ty.applySubst, Row.applySubst] at hbody
-  subst hbody
-  obtain ⟨d, r, hfn, hd, hr⟩ := TyPrec.fn_inv hprec
-  injection hfn with h1 h2
-  subst h1; subst h2
-  -- the domain pins θβ to one l-field whose payload τp is ⊑-below blurA
-  obtain ⟨ρp, hρp, hρprec⟩ := TyPrec.rcd_inv hd
-  injection hρp with hβ
-  obtain ⟨τp, hsing, hτp⟩ := RowPrec.sing_inv hρprec
-  subst hsing
-  -- the lookup on that row is a definite hit, so discharge pins θδ = τp
-  have hs := hdis ⟨.var "β", .lit "l", .var "δ"⟩ (by simp [selQ])
-  have hrow : (Row.var "β").applySubst θ = Row.sing "l" τp := by
-    simp only [Row.applySubst]; exact hβ
-  have hδ : θ.ty "δ" = τp := by
-    cases hs with
-    | hit hl hres =>
-        rw [hrow] at hl
-        cases lookup_det (LookupQ.lab_iff.mp hl) (Lookup.hit (l := "l") (τ := τp))
-        exact hres
-    | abs hl _ =>
-        rw [hrow] at hl
-        cases lookup_det (LookupQ.lab_iff.mp hl) (Lookup.hit (l := "l") (τ := τp))
-    | unk hl _ =>
-        rw [hrow] at hl
-        cases lookup_det (LookupQ.lab_iff.mp hl) (Lookup.hit (l := "l") (τ := τp))
-  rw [hδ] at hr
-  -- τp ⊑ blurA forces a `cat` row, τp ⊑ blurB a `sing` row: no row is both
-  simp only [blurA] at hτp
-  simp only [blurB] at hr
-  obtain ⟨ρ₁, hρ₁, hp₁⟩ := TyPrec.rcd_inv hτp
-  subst hρ₁
-  obtain ⟨ρ₂, hρ₂, hp₂⟩ := TyPrec.rcd_inv hr
-  injection hρ₂ with hρeq
-  subst hρeq
-  obtain ⟨a, a', hcatshape, -, -⟩ := RowPrec.cat_inv hp₁
-  obtain ⟨t, hsingshape, -⟩ := RowPrec.sing_inv hp₂
-  rw [hcatshape] at hsingshape
-  cases hsingshape
+-- ⊢  selQ ≥ ({(l: {ε | m: 𝓫})} → {m: 𝓫})
+theorem selQ_inst_equiv {B : Type} (b : B) :
+    QScheme.Inst (selQ B) (.fn (.rcd (.sing "l" (blurA b))) (blurB b)) := by
+  refine ⟨⟨fun γ => if γ = "δ" then blurB b else .var γ,
+           fun γ => if γ = "β" then .sing "l" (blurA b) else .var γ, fun γ => .var γ⟩,
+          ⟨fun γ hγ => ?_, fun γ hγ => ?_, fun _ _ => rfl⟩, fun s hs => ?_, ?_⟩
+  · have hne : γ ≠ "δ" := by rintro rfl; exact hγ (by simp [selQ])
+    simp [hne]
+  · have hne : γ ≠ "β" := by rintro rfl; exact hγ (by simp [selQ])
+    simp [hne]
+  · simp only [selQ, List.mem_singleton] at hs
+    subst hs
+    refine .hit (τ := blurA b) ?_ ?_
+    · simpa [Row.applySubst] using (LookupQ.lab_iff.mpr (Lookup.hit (l := "l") (τ := blurA b)))
+    · simpa [Ty.applySubst, blurA, blurB] using
+        (TyEquiv.rcd (RowEquiv.unitL (ρ := .sing "m" (.base b)))).symm
+  · simp [selQ, Ty.applySubst, Row.applySubst]
 
 -- The corollary, and the correction it forces: principality must be stated
 -- modulo BOTH closure properties. τ' ≼ τ — "τ' is at least as informative as
@@ -1927,28 +1893,6 @@ theorem TyBelow.trans {B : Type} {τ₁ τ₂ τ₃ : Ty B}
   obtain ⟨b, he₂, hp₂⟩ := h₂
   obtain ⟨a', ha', hp'⟩ := (TyPrec.comm_equiv he₂).1 a hp₁
   exact ⟨a', he₁.trans ha', hp'.trans hp₂⟩
-
--- ⊑-covering fails for selQ at λx.x.l; ≼-covering does not (the same instance
--- answers, now via ≈ on the result instead of ⊑).
--- ⊢  ¬(⊑-answer)  ∧  ∃ τ'. selQ ≥_∅ τ' ∧ τ' ≼ₜ ({(l: {ε | m: 𝓫})} → {m: 𝓫})
-theorem selQ_needs_equiv {B : Type} (b : B) :
-    (¬ ∃ τ', QScheme.Inst (selQ B) τ' ∧
-        TyPrec τ' (.fn (.rcd (.sing "l" (blurA b))) (blurB b))) ∧
-    (∃ τ', QScheme.Inst (selQ B) τ' ∧
-        τ' ≼ₜ (.fn (.rcd (.sing "l" (blurA b))) (blurB b))) :=
-  ⟨selQ_no_prec_answer b,
-   ⟨_, selQ_inst_found (blurA b),
-    TyBelow.of_equiv (.fn (.refl _) (.rcd .unitL))⟩⟩
-
-
--- selQ does NOT satisfy the ⊑-only principality — conjunct 3 fails on the
--- T-eq witness. This is the statement that had to be corrected, not a defect
--- of selQ: no instance set is closed under ≈.
--- ⊢  ¬ PrincipalStrict selQ (λx.x.l)
-theorem selQ_not_principalStrict {B C : Type} (constTy : C → B) (c : C) :
-    ¬ QScheme.PrincipalStrict constTy (QCtx.empty : QCtx B) (selEx C) (selQ B) :=
-  fun hp => selQ_no_prec_answer (constTy c)
-    (hp.2.2 _ (selEx_equiv_typing constTy c))
 
 -- The corrected order: covering up to ≈-then-⊑.
 def QScheme.BelowCovered {B : Type} (σ σ' : QScheme B) : Prop :=
@@ -2520,7 +2464,7 @@ theorem selDynQ_instance_closed {B C : Type} (constTy : C → B) (Γ : QCtx B) :
   -- … and the discharge's lookup is the selection's, verbatim
   cases hs with
   | hit hl hδ =>
-      rw [show θ.ty "δ" = _ from hδ]; exact .qLam (.qLam (.qSelDyn hx ha hl))
+      exact .qEq (.qLam (.qLam (.qSelDyn hx ha hl))) (.fn (.refl _) (.fn (.refl _) hδ.symm))
   | abs hl hδ =>
       rw [show θ.ty "δ" = _ from hδ]; exact .qLam (.qLam (.qSelDynAbs hx ha hl))
   | unk hl hδ =>

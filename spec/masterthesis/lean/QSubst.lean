@@ -258,7 +258,7 @@ theorem QCovers.forward_of_avoiding {B : Type} {σ : TySubst B}
             ((st.label.applySubst σ).applySubst _) _
           rw [hrow, hlab]
           exact LookupQ.applySubst σ hlk (by intro hc; cases hc)
-        · rw [hres, hδ]
+        · rw [hres]; exact TyEquiv.applySubst σ hδ
     | abs hlk hδ =>
         refine .abs ?_ ?_
         · show LookupQ ((st.row.applySubst σ).applySubst _)

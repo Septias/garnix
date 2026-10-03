@@ -155,41 +155,12 @@ mutual
           Ty.ftv_rename τ (fun α hα => h α (List.mem_append_right _ hα))]
 end
 
-theorem Ty.isPat_rename {θ : TySubst B} {g : TyVar → TyVar} : (τ : Ty B) →
-    (∀ α ∈ τ.ftv, θ.ty α = .var (g α) ∧ θ.row α = .var (g α) ∧ θ.lab α = .var (g α)) →
-    (τ.applySubst θ).isPat = τ.isPat
-  | .var α, h => by simp [Ty.applySubst, (h α (by simp [Ty.ftv])).1, Ty.isPat]
-  | .base _, _ => rfl
-  | .lab _, _ => rfl
-  | .unk, _ => rfl
-  | .fn a b, h => by
-      simp only [Ty.applySubst, Ty.isPat]
-      rw [Ty.isPat_rename a (fun α hα => h α (by simp [Ty.ftv, hα])),
-        Ty.isPat_rename b (fun α hα => h α (by simp [Ty.ftv, hα]))]
-  | .rcd (.var ρ), h => by
-      simp [Ty.applySubst, Row.applySubst, (h ρ (by simp [Ty.ftv, Row.ftv])).2.1, Ty.isPat]
-  | .rcd .empty, _ => rfl
-  | .rcd (.sing _ _), _ => rfl
-  | .rcd (.cat _ _), _ => rfl
-  | .rcd (.dsing _ _), _ => rfl
-
 theorem Ty.isVar_rename {θ : TySubst B} {g : TyVar → TyVar} (τ : Ty B)
     (h : ∀ α ∈ τ.ftv, θ.ty α = .var (g α) ∧ θ.row α = .var (g α) ∧ θ.lab α = .var (g α)) :
     (τ.applySubst θ).isVar = τ.isVar := by
   cases τ with
   | var α => simp [Ty.applySubst, (h α (by simp [Ty.ftv])).1, Ty.isVar]
   | _ => rfl
-
-theorem nodup_map_on {α β : Type} {g : α → β} :
-    ∀ {l : List α}, (∀ x ∈ l, ∀ y ∈ l, g x = g y → x = y) → l.Nodup → (l.map g).Nodup
-  | [], _, _ => List.nodup_nil
-  | a :: l, hi, hn => by
-      rw [List.nodup_cons] at hn
-      rw [List.map_cons, List.nodup_cons]
-      refine ⟨fun hm => ?_, nodup_map_on (fun x hx y hy => hi x (List.mem_cons_of_mem _ hx)
-        y (List.mem_cons_of_mem _ hy)) hn.2⟩
-      obtain ⟨b, hb, he⟩ := List.mem_map.mp hm
-      exact hn.1 (hi b (List.mem_cons_of_mem _ hb) a List.mem_cons_self he ▸ hb)
 
 --------------------- FILLING A BLOCKER ----------------------------------------
 -- The witness that a let scheme has an instance meets each SPENT constraint by
@@ -283,7 +254,7 @@ theorem Ty.exists_of_isVar {τ : Ty B} (h : τ.isVar = true) : ∃ δ, τ = .var
 
 /-- ⊢  **the A-let case.** -/
 theorem letCase {C : Type} {constTy : C → B} : LetCase B C constTy := by
-  intro Γ S S₁ S₂ x e₁ e₂ τ₁ τ₂ Δq Δγ ᾱ κs h₁ _ hsplit hbq _ hfresh _ hres hdis hdom hind h₂
+  intro Γ S S₁ S₂ x e₁ e₂ τ₁ τ₂ Δq Δγ ᾱ κs h₁ _ hsplit hbq _ hfresh _ hres hdis hdom h₂
     hΓ hc hq IH₁ IH₂ σ hab hσ Γ' hr
   -- the state e₁ ends in
   have c₁ := Infer.clean h₁ hc
@@ -311,89 +282,19 @@ theorem letCase {C : Type} {constTy : C → B} : LetCase B C constTy := by
   have hrd : ∀ p ∈ Δq, ∀ α ∈ (p.stump.res.applySubst S₁.subst).ftv,
       (readSub σ ᾱ f).ty α = .var (f α) ∧ (readSub σ ᾱ f).row α = .var (f α) ∧
         (readSub σ ᾱ f).lab α = .var (f α) :=
-    fun p hp α hα => by simp [readSub, (hres.1 p hp).1 α hα]
+    fun p hp α hα => by simp [readSub, hres.1 p hp α hα]
   have hrdftv : ∀ p ∈ Δq, ((p.stump.res.applySubst S₁.subst).applySubst (readSub σ ᾱ f)).ftv
       = (p.stump.res.applySubst S₁.subst).ftv.map f :=
     fun p hp => Ty.ftv_rename _ (hrd p hp)
   refine .qLet (σ := sc') ?_ ?_ ?_ (IH₂ σ hab hσ _ (hr.bindScheme x hread))
-  · ------------------------------------------------ the read scheme is correctable
-    have hfree : ∀ p ∈ Δq, ∀ α ∈ (p.stump.row.applySubst S₁.subst).ftv,
-        α ∈ sc.freeFtv ++ LΓ ++ LΔ := fun p hp α hα =>
-      List.mem_append_left _ (List.mem_append_left _ (List.mem_append_left _
-        (List.mem_flatMap.mpr ⟨_, List.mem_map.mpr ⟨p, hp, rfl⟩, List.mem_append_left _ hα⟩)))
-    have hfreeK : ∀ p ∈ Δq, ∀ α ∈ (p.stump.label.applySubst S₁.subst).ftv,
-        α ∈ sc.freeFtv ++ LΓ ++ LΔ := fun p hp α hα =>
-      List.mem_append_left _ (List.mem_append_left _ (List.mem_append_left _
-        (List.mem_flatMap.mpr ⟨_, List.mem_map.mpr ⟨p, hp, rfl⟩, List.mem_append_right _ hα⟩)))
-    refine ⟨?_, ?_, ?_, ?_⟩
-    · intro st hst δ hδ
-      obtain ⟨st₀, hst₀, rfl⟩ := List.mem_map.mp hst
-      obtain ⟨p, hp, rfl⟩ := List.mem_map.mp hst₀
-      change δ ∈ ((p.stump.res.applySubst S₁.subst).applySubst (readSub σ ᾱ f)).ftv at hδ
-      rw [hrdftv p hp] at hδ
-      obtain ⟨α, hα, rfl⟩ := List.mem_map.mp hδ
-      exact List.mem_map_of_mem ((hres.1 p hp).1 α hα)
-    · intro a ha
-      obtain ⟨a₀, ha₀, rfl⟩ := List.mem_map.mp ha
-      obtain ⟨p, hp, rfl⟩ := List.mem_map.mp ha₀
-      refine ⟨?_, ?_⟩
-      · change ((p.stump.res.applySubst S₁.subst).applySubst (readSub σ ᾱ f)).isPat = true
-        rw [Ty.isPat_rename _ (hrd p hp)]; exact (hres.1 p hp).2.1
-      · change ((p.stump.res.applySubst S₁.subst).applySubst (readSub σ ᾱ f)).ftv.Nodup
-        rw [hrdftv p hp]
-        exact nodup_map_on (fun x hx y hy he =>
-          hinj x ((hres.1 p hp).1 x hx) y ((hres.1 p hp).1 y hy) he) (hres.1 p hp).2.2
-    · intro a ha b hb δ hδa hδb
-      obtain ⟨a₀, ha₀, rfl⟩ := List.mem_map.mp ha
-      obtain ⟨p, hp, rfl⟩ := List.mem_map.mp ha₀
-      obtain ⟨b₀, hb₀, rfl⟩ := List.mem_map.mp hb
-      obtain ⟨q, hq, rfl⟩ := List.mem_map.mp hb₀
-      change δ ∈ ((p.stump.res.applySubst S₁.subst).applySubst (readSub σ ᾱ f)).ftv at hδa
-      change δ ∈ ((q.stump.res.applySubst S₁.subst).applySubst (readSub σ ᾱ f)).ftv at hδb
-      rw [hrdftv p hp] at hδa; rw [hrdftv q hq] at hδb
-      obtain ⟨α, hα, rfl⟩ := List.mem_map.mp hδa
-      obtain ⟨β, hβ, hfe⟩ := List.mem_map.mp hδb
-      have hβα := hinj β ((hres.1 q hq).1 β hβ) α ((hres.1 p hp).1 α hα) hfe
-      subst hβα
-      have hpq := hres.2.1 p hp q hq β hα hβ
-      rw [hpq]
-    · intro a ha b hb
-      obtain ⟨a₀, ha₀, rfl⟩ := List.mem_map.mp ha
-      obtain ⟨p, hp, rfl⟩ := List.mem_map.mp ha₀
-      obtain ⟨b₀, hb₀, rfl⟩ := List.mem_map.mp hb
-      obtain ⟨q, hq, rfl⟩ := List.mem_map.mp hb₀
-      intro δ hδm
-      change δ ∈ ((q.stump.res.applySubst S₁.subst).applySubst (readSub σ ᾱ f)).ftv at hδm
-      rw [hrdftv q hq] at hδm
-      obtain ⟨δ₀, hδ₀, rfl⟩ := List.mem_map.mp hδm
-      have hδ₀ᾱ := (hres.1 q hq).1 δ₀ hδ₀
-      -- the same argument at the row and at the key
-      have hin : f δ₀ ∈ ᾱ.map f := List.mem_map_of_mem hδ₀ᾱ
-      refine ⟨fun hm => ?_, fun hm => ?_⟩
-      · obtain ⟨α, hα, hγ⟩ := Row.ftv_applySubst _ _ _ hm
-        by_cases hαv : α ∈ ᾱ
-        · have hfα : f δ₀ = f α := by
-            rcases hγ with hγ | hγ | hγ <;>
-            · simp only [readSub, if_pos (show α ∈ sc.vars from hαv), Ty.ftv, Row.ftv, Key.ftv,
-                List.mem_singleton] at hγ
-              exact hγ
-          have := hinj _ hδ₀ᾱ _ hαv hfα
-          exact (hind p hp q hq δ₀ hδ₀).1 (this ▸ hα)
-        · have hnot := havL α (hfree p hp α hα)
-          rcases hγ with hγ | hγ | hγ
-          · simp only [readSub, if_neg (show α ∉ sc.vars from hαv)] at hγ; exact hnot.1 _ hγ hin
-          · simp only [readSub, if_neg (show α ∉ sc.vars from hαv)] at hγ; exact hnot.2.1 _ hγ hin
-          · simp only [readSub, if_neg (show α ∉ sc.vars from hαv)] at hγ; exact hnot.2.2 _ hγ hin
-      · obtain ⟨α, hα, hγ⟩ := Key.ftv_applySubst _ _ _ hm
-        by_cases hαv : α ∈ ᾱ
-        · have hfα : f δ₀ = f α := by
-            simp only [readSub, if_pos (show α ∈ sc.vars from hαv), Key.ftv,
-              List.mem_singleton] at hγ
-            exact hγ
-          have := hinj _ hδ₀ᾱ _ hαv hfα
-          exact (hind p hp q hq δ₀ hδ₀).2 (this ▸ hα)
-        · have hnot := havL α (hfreeK p hp α hα)
-          simp only [readSub, if_neg (show α ∉ sc.vars from hαv)] at hγ; exact hnot.2.2 _ hγ hin
+  · ------------------------------------------------ the read scheme is well-formed
+    intro st hst δ hδ
+    obtain ⟨st₀, hst₀, rfl⟩ := List.mem_map.mp hst
+    obtain ⟨p, hp, rfl⟩ := List.mem_map.mp hst₀
+    change δ ∈ ((p.stump.res.applySubst S₁.subst).applySubst (readSub σ ᾱ f)).ftv at hδ
+    rw [hrdftv p hp] at hδ
+    obtain ⟨α, hα, rfl⟩ := List.mem_map.mp hδ
+    exact List.mem_map_of_mem (hres.1 p hp α hα)
   · ------------------------------------------------ the instances
     intro χ hχ
     let ρ : TySubst B := χ.comp (readSub σ ᾱ f)
@@ -553,7 +454,7 @@ theorem letCase {C : Type} {constTy : C → B} : LetCase B C constTy := by
         obtain ⟨q, hq, -, hm⟩ := mem_resF hm
         rw [hrdftv q hq] at hm
         obtain ⟨δ, hδ, rfl⟩ := List.mem_map.mp hm
-        exact hβ (List.mem_map_of_mem ((hres.1 q hq).1 δ hδ))
+        exact hβ (List.mem_map_of_mem (hres.1 q hq δ hδ))
       simp only [χ₀, if_neg this]
     · have : fills β = [] := by
         rcases h : fills β with _ | ⟨lt, _⟩
@@ -596,7 +497,7 @@ theorem letCase {C : Type} {constTy : C → B} : LetCase B C constTy := by
               have hqp := (hsame q hq hqb).2 (hql.trans hl.symm)
               simp only [rd, hqp]
         rw [hfound] at hfind
-        refine .hit (τ := rd p) (hlk _ ?_) ?_
+        refine .hit (τ := rd p) (hlk _ ?_) (.of_eq ?_)
         · rw [hl]; exact LookupQ.lab_iff.mpr hfind
         · -- χ₀ leaves the result alone: no unspent result, no spent blocker in it
           apply Ty.applySubst_fixed_ftv
@@ -604,14 +505,14 @@ theorem letCase {C : Type} {constTy : C → B} : LetCase B C constTy := by
           change α ∈ (rd p).ftv at hα
           rw [hrdftv p hp] at hα
           obtain ⟨δ, hδ, rfl⟩ := List.mem_map.mp hα
-          have hδα := (hres.1 p hp).1 δ hδ
+          have hδα := hres.1 p hp δ hδ
           refine ⟨?_, ?_, rfl⟩
           · have : f δ ∉ resF := by
               intro hm
               obtain ⟨q, hq, hqv, hm⟩ := mem_resF hm
               rw [hrdftv q hq] at hm
               obtain ⟨δ', hδ', he⟩ := List.mem_map.mp hm
-              have hδδ := hinj _ ((hres.1 q hq).1 δ' hδ') _ hδα he
+              have hδδ := hinj _ (hres.1 q hq δ' hδ') _ hδα he
               subst hδδ
               have hpq := hres.2.1 p hp q hq δ' hδ hδ'
               rw [hpq] at hsp; rw [hsp] at hqv; exact Bool.noConfusion hqv
@@ -626,7 +527,7 @@ theorem letCase {C : Type} {constTy : C → B} : LetCase B C constTy := by
             rw [this]; rfl
       · ---------------- UNSPENT: the result goes to ★, the lookup stays blocked
         obtain ⟨δ, hδe⟩ := Ty.exists_of_isVar hsp
-        have hδα : δ ∈ ᾱ := (hres.1 p hp).1 δ (by rw [hδe]; simp [Ty.ftv])
+        have hδα : δ ∈ ᾱ := hres.1 p hp δ (by rw [hδe]; simp [Ty.ftv])
         have hin : f δ ∈ resF := List.mem_flatMap.mpr ⟨p, List.mem_filter.mpr ⟨hp, hsp⟩, by
           show f δ ∈ ((p.stump.res.applySubst S₁.subst).applySubst (readSub σ ᾱ f)).ftv
           rw [hδe]; simp [Ty.applySubst, readSub, hδα, Ty.ftv]⟩

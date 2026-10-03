@@ -20,11 +20,11 @@
 --   * `QTypedC` / `InferSoundC`, only because `inferSoundC_false` refutes them.
 --
 -- Removed as superseded (2026-09-26): `QTypedCDischarge` (never proved; the
--- χ-correction is `QScheme.Correctable.correct`), `runSound_of_inferSoundC_nil`
+-- `runSound_of_inferSoundC_nil`
 -- (its hypothesis is refuted), `Finalize.dischargeEquiv` and its `hfix` side
 -- condition (now `Finalize.holds`, where the condition is PROVED at ⟦S′⟧), and
 -- `QScheme.ResWF` / `InstStumps.pairwise` (now the stump-keyed filters —
--- `Infer.keeps`, ParkedInv.lean — plus `QScheme.Correctable`).
+-- `Infer.keeps`, ParkedInv.lean).
 --
 -- ## Where the row environment goes
 -- Nowhere: there is no row environment. A context binds term variables only,
@@ -288,35 +288,12 @@ theorem infer_sound_selAbs_step {B C : Type} [DecidableEq B] {constTy : C → B}
 -- same condition A-var needs of the constraints it submits to wake-up, so the
 -- two cases share one notion instead of inventing a second.
 --
--- But `Stump.Discharge.hit` pins `θδ = τ` ON THE NOSE, and the algorithm cannot
--- deliver that. K-hit SOLVES the equation `δ ≐ τ`, and a solved equation is only
--- ever an ≈-fact (`SolveTy.unifies_sat`): the state can satisfy it with any σ
--- whose value at δ is ≈-equal to τ, and on records ≈ is not equality. So the
--- correspondence is stated against `Stump.DischargeEquiv`, which is `Discharge`
--- with the hit payload relaxed to ≈, and the gap is absorbed where it belongs —
--- by T-eq in the conclusion, since ≈ is a congruence.
-
-/-- `Stump.Discharge` with the hit payload up to ≈, which is all a SOLVED
-equation can ever give. `⊥` and `?` stay rigid: ★ has no ≈-congruence rule, so
-`TyEquiv (θδ) ★` already forces `θδ = ★` (`TyEquiv.unk_inv_both`). -/
-inductive Stump.DischargeEquiv {B : Type} (θ : TySubst B)
-    (s : Stump B) : Prop where
-  | hit {τ : Ty B} :
-      LookupQ (s.row.applySubst θ) (s.label.applySubst θ) (.found τ) →
-      TyEquiv (s.res.applySubst θ) τ → DischargeEquiv θ s
-  | abs :
-      LookupQ (s.row.applySubst θ) (s.label.applySubst θ) .absent →
-      s.res.applySubst θ = .unk → DischargeEquiv θ s
-  | unk :
-      LookupQ (s.row.applySubst θ) (s.label.applySubst θ) .unknown →
-      s.res.applySubst θ = .unk → DischargeEquiv θ s
-
-/-- ⊢  a discharge is one, up to ≈. -/
-theorem Stump.Discharge.toEquiv {B : Type} {θ : TySubst B}
-    {s : Stump B} : s.Discharge θ → s.DischargeEquiv θ
-  | .hit hl hδ => .hit hl (hδ ▸ TyEquiv.refl _)
-  | .abs hl hδ => .abs hl hδ
-  | .unk hl hδ => .unk hl hδ
+-- `Stump.Discharge.hit` asks only `θδ ≈ τ`, which is what the algorithm can
+-- deliver: K-hit SOLVES the equation `δ ≐ τ`, and a solved equation is only
+-- ever an ≈-fact (`SolveTy.unifies_sat`). (It used to pin `θδ = τ` on the nose,
+-- and this file carried a separate ≈-relaxed `Stump.Discharge`; with D-hit
+-- relaxed the two coincide and only `Discharge` is left.) `⊥` and `?` stay
+-- rigid: ★ has no ≈-congruence rule (`TyEquiv.unk_inv_both`).
 
 /-- A-sel-?, given the promise is kept. All three discharge cases land: D-hit
 reads off as T-sel with the ≈ absorbed by T-eq, D-⊥ as T-sel-⊥, D-? as T-sel-★. -/
@@ -326,7 +303,7 @@ theorem infer_sound_selUnk_step {B C : Type} [DecidableEq B] {constTy : C → B}
     (h : QTyped constTy Γ' e (τ.applySubst σ))
     (hs : SolveTy S₁' τ (.rcd (.var r)) S₂)
     (hsat : Sol.Sat σ S₂.sol)
-    (hst : Stump.DischargeEquiv σ ⟨.var r, .lit l, .var δ⟩) :
+    (hst : Stump.Discharge σ ⟨.var r, .lit l, .var δ⟩) :
     QTyped constTy Γ' (.sel e l) ((Ty.var δ).applySubst σ) := by
   have hrcd : QTyped constTy Γ' e ((Ty.rcd (.var r)).applySubst σ) :=
     .qEq h (hs.unifies_sat hsat)
@@ -358,7 +335,7 @@ theorem infer_sound_selUnk_step {B C : Type} [DecidableEq B] {constTy : C → B}
 theorem Wake.dischargeEquiv {B : Type} [DecidableEq B] {S S₁ : SolverState B}
     {p : Parked B} {σ : TySubst B} :
     Wake S p S₁ → Sol.Sat σ S₁.sol →
-    p.stump.DischargeEquiv σ ∨ ∃ q ∈ S₁.parked, q.stump = p.stump
+    p.stump.Discharge σ ∨ ∃ q ∈ S₁.parked, q.stump = p.stump
   -- K-hit is D-hit: the lookup landed, and the emitted equation `δ ≐ τ` pins δ
   -- to what it found — up to ≈, which is all an equation can pin.
   | .hit hlk hs, hsat => by
@@ -430,7 +407,7 @@ theorem Wakes.dischargeEquiv {B : Type} [DecidableEq B] {S S' : SolverState B}
     {ps : List (Parked B)} {σ : TySubst B} :
     Wakes S ps S' → Sol.Sat σ S'.sol →
     ps.Pairwise (fun a b => a.stump ≠ b.stump) →
-    ∀ p ∈ ps, p.stump.DischargeEquiv σ ∨ ∃ q ∈ S'.parked, q.stump = p.stump
+    ∀ p ∈ ps, p.stump.Discharge σ ∨ ∃ q ∈ S'.parked, q.stump = p.stump
   | .nil, _, _, _, hp => absurd hp List.not_mem_nil
   | .cons (p := p) hw hws, hsat, hpw, p', hp' => by
       rcases List.mem_cons.mp hp' with rfl | hp'
@@ -449,14 +426,11 @@ theorem Wakes.dischargeEquiv {B : Type} [DecidableEq B] {S S' : SolverState B}
 -- What is left of A-var once the discharge obligation is separated out: `qVar`
 -- wants a scheme in Γ′ and an INSTANCE of it, and the instance's own
 -- substitution χ is ours to choose — `QScheme.Inst` existentially quantifies
--- it. That freedom is exactly what pays for the ≈ that `DischargeEquiv` leaves
--- behind: χ is σ corrected at the constraints' result variables to the types
--- the lookups actually found, and the body then differs from the inferred one
--- by an ≈ that T-eq absorbs.
+-- it. Since D-hit asks only ≈, χ can be σ itself at the instance.
 --
--- Building χ, and the σ-image of the scheme it instantiates, is done
--- elsewhere: `SchemeRead` (InferSoundA.lean) reads the scheme with its binders
--- renamed apart, and `QScheme.Correctable.correct` builds χ.
+-- Building the σ-image of the scheme it instantiates is done elsewhere:
+-- `SchemeRead` (InferSoundA.lean) reads the scheme with its binders renamed
+-- apart.
 
 /-- A-var. -/
 theorem infer_sound_var_step {B C : Type} {constTy : C → B} {Γ' : QCtx B}
@@ -493,7 +467,7 @@ theorem infer_sound_var_step {B C : Type} {constTy : C → B} {Γ' : QCtx B}
 -- The witness is as small as it gets: a stump on the LITERAL row `(l: 𝓫)`,
 -- whose lookup lands at every context and under every substitution. F-★ fires
 -- on it anyway — nothing in the rule looks — and the resulting state forces
--- σδ = ★ while the lookup says `𝓫`. Not even `DischargeEquiv`, the ≈-relaxed
+-- σδ = ★ while the lookup says `𝓫`. Not even `Discharge`, the ≈-relaxed
 -- version, survives that: ★ has no ≈-congruence rule, so `★ ≈ 𝓫` is false too.
 --
 -- THE FIX, now in place, is the premise its siblings have — `LookupBlocked` on
@@ -536,7 +510,7 @@ theorem finalize_star_no_discharge :
     ∃ (S S'' : SolverState Unit) (p : Parked Unit),
       FinalizeUnguarded S p S'' ∧
       ∀ (Γ' : Ctx Unit) (σ : TySubst Unit), Sol.Sat σ S''.sol →
-        ¬ p.stump.DischargeEquiv σ := by
+        ¬ p.stump.Discharge σ := by
   have hfin : FinalizeUnguarded fStar_S fStar_p _ :=
     FinalizeUnguarded.star (S' := fStar_S.extend ⟨[("d", .unk)], [], []⟩ ⟨0⟩)
       ⟨0, ⟨[("d", .unk)], [], []⟩, ⟨0⟩, rfl, rfl⟩
@@ -760,7 +734,7 @@ row ≈-equal to `(l: 𝓫)`, and ≈ moves neither the label nor the payload, s
 lookup lands on 𝓫 under every such σ while F-★ has pinned δ to ★. -/
 theorem fStar_reachable_no_discharge (Γ' : Ctx Unit)
     (σ : TySubst Unit) (hsat : Sol.Sat σ fsS'.sol) :
-    ¬ fsP.stump.DischargeEquiv σ := by
+    ¬ fsP.stump.Discharge σ := by
   have hsat' : Sol.Sat σ (fsStar.comp fsS.sol) := hsat
   obtain ⟨hS, hst⟩ := Sol.Sat.comp_inv hsat'
   -- finalization wrote δ ≔ ★, so every σ satisfying it sends δ to ★
@@ -842,9 +816,9 @@ theorem fStarEx_refinement_lost :
 -- cannot fire on a spent stump — materialization is what runs instead.
 --
 -- A-let generalizes a spent stump too (2026-09-28): `QScheme.WF` asks only that
--- a result mention binders, `Correctable` that it be a linear pattern
--- (`Ty.correct`), and `LetResults` that its blocker can be filled to witness an
--- instance. What those premises exclude falls back to a monomorphic let.
+-- a result mention binders, and `LetResults` that its blocker can be filled to
+-- witness an instance (the linear-pattern premise went with the χ-correction,
+-- 2026-10-03). What those premises exclude falls back to a monomorphic let.
 --
 -- Still open: a spent promise blocked on its KEY (`λr. λa. r.(a) c`) has no row
 -- to extend and still fails.
@@ -946,7 +920,7 @@ theorem spentEx_declarative :
 -- a variable that has no declarative reading yet, and `S′.parked = []` does not
 -- help because it constrains the FINAL state while the parking happens inside.
 -- `infer_sound_selUnk_step` above answers it by ASSUMING the promise is kept —
--- it takes a `DischargeEquiv` — which is the right content but the wrong
+-- it takes a `Discharge` — which is the right content but the wrong
 -- bookkeeping: the assumption has to travel with the derivation, and there is
 -- nowhere to put it.
 --

@@ -17,7 +17,7 @@ def Stump.at {B : Type} (σ : TySubst B) (st : Stump B) : Assume B :=
   ⟨st.row.applySubst σ, st.label.applySubst σ, st.res.applySubst σ⟩
 
 /-- the assumption is true: the lookup, performed, agrees — found up to ≈,
-or ⊥/? at ★. `Stump.DischargeEquiv` is exactly this at `st.at θ`. -/
+or ⊥/? at ★. `Stump.Discharge` is exactly this at `st.at θ`. -/
 inductive Assume.Holds {B : Type} (a : Assume B) : Prop where
   | hit {τ : Ty B} : LookupQ a.row a.label (.found τ) → TyEquiv a.ty τ → Holds a
   | abs : LookupQ a.row a.label .absent → a.ty = .unk → Holds a
@@ -25,7 +25,7 @@ inductive Assume.Holds {B : Type} (a : Assume B) : Prop where
 
 -- ⊢  a stump discharges at θ (up to ≈) iff its θ-reading holds
 theorem Stump.dischargeEquiv_iff_holds {B : Type} {θ : TySubst B}
-    {st : Stump B} : st.DischargeEquiv θ ↔ (st.at θ).Holds :=
+    {st : Stump B} : st.Discharge θ ↔ (st.at θ).Holds :=
   ⟨fun | .hit h e => .hit h e | .abs h e => .abs h e | .unk h e => .unk h e,
    fun | .hit h e => .hit h e | .abs h e => .abs h e | .unk h e => .unk h e⟩
 
@@ -34,102 +34,8 @@ its reading is assumed. -/
 def QScheme.InstA {B : Type} (Δ : List (Assume B)) (sc : QScheme B)
     (τ : Ty B) : Prop :=
   ∃ χ : TySubst B, χ.FixedOutside sc.vars ∧
-    (∀ st ∈ sc.constraints, st.DischargeEquiv χ ∨ st.at χ ∈ Δ) ∧
+    (∀ st ∈ sc.constraints, st.Discharge χ ∨ st.at χ ∈ Δ) ∧
     sc.body.applySubst χ = τ
-
---------------------- CORRECTING A RESULT -------------------------------------
--- The χ-correction re-chooses χ at a constraint's result so the lookup's answer
--- is met EXACTLY rather than up to ≈. For a result VARIABLE that is one
--- assignment. A spent result is a type, and re-choosing its variables reaches
--- every ≈-variant exactly when the type is a linear PATTERN: ≈ only moves
--- fields inside a record, so a record may appear only as `{ρ}` with ρ a
--- variable, and no variable twice.
-
-/-- χ₁ on `vs`, χ₂ elsewhere — at both sorts. -/
-def TySubst.override {B : Type} (vs : List TyVar) (χ₁ χ₂ : TySubst B) : TySubst B :=
-  ⟨fun α => if α ∈ vs then χ₁.ty α else χ₂.ty α,
-   fun α => if α ∈ vs then χ₁.row α else χ₂.row α,
-   fun α => if α ∈ vs then χ₁.lab α else χ₂.lab α⟩
-
-/-- ⊢  **a linear pattern can be corrected exactly**: if χ sends it ≈-close to
-τ, re-choosing χ on its variables alone sends it to τ, ≈-close to χ there. -/
-theorem Ty.correct {B : Type} :
-    (r : Ty B) → r.isPat = true → r.ftv.Nodup → {χ : TySubst B} → {τ : Ty B} →
-    TyEquiv (r.applySubst χ) τ →
-    ∃ χ' : TySubst B, (∀ α ∉ r.ftv, χ'.ty α = χ.ty α ∧ χ'.row α = χ.row α) ∧
-      (∀ α, TyEquiv (χ'.ty α) (χ.ty α) ∧ RowEquiv (χ'.row α) (χ.row α)) ∧
-      (∀ α, χ'.lab α = χ.lab α) ∧
-      r.applySubst χ' = τ
-  | .var β, _, _, χ, τ, he => by
-      refine ⟨⟨fun α => if α = β then τ else χ.ty α, χ.row, χ.lab⟩, fun α hα => ?_, fun α => ?_,
-        fun _ => rfl, ?_⟩
-      · have : α ≠ β := fun h => hα (by simp [Ty.ftv, h])
-        simp [this]
-      · by_cases h : α = β
-        · subst h; simp only [ite_true]; exact ⟨he.symm, .refl _⟩
-        · simp only [if_neg h]; exact ⟨.refl _, .refl _⟩
-      · simp [Ty.applySubst]
-  | .base b, _, _, χ, τ, he => ⟨χ, fun _ _ => ⟨rfl, rfl⟩, fun _ => ⟨.refl _, .refl _⟩,
-      fun _ => rfl, (TyEquiv.base_inv he).symm⟩
-  | .lab l, _, _, χ, τ, he => ⟨χ, fun _ _ => ⟨rfl, rfl⟩, fun _ => ⟨.refl _, .refl _⟩,
-      fun _ => rfl, (TyEquiv.lab_inv he).symm⟩
-  | .unk, _, _, χ, τ, he => ⟨χ, fun _ _ => ⟨rfl, rfl⟩, fun _ => ⟨.refl _, .refl _⟩,
-      fun _ => rfl, (TyEquiv.unk_inv he).symm⟩
-  | .rcd (.var ρ), _, _, χ, τ, he => by
-      obtain ⟨ρ', rfl, hρ⟩ := TyEquiv.rcd_inv he
-      refine ⟨⟨χ.ty, fun α => if α = ρ then ρ' else χ.row α, χ.lab⟩, fun α hα => ?_, fun α => ?_,
-        fun _ => rfl, ?_⟩
-      · have : α ≠ ρ := fun h => hα (by simp [Ty.ftv, Row.ftv, h])
-        simp [this]
-      · by_cases h : α = ρ
-        · subst h; simp only [ite_true]; exact ⟨.refl _, hρ.symm⟩
-        · simp only [if_neg h]; exact ⟨.refl _, .refl _⟩
-      · simp [Ty.applySubst, Row.applySubst]
-  | .rcd .empty, hp, _, _, _, _ => by simp [Ty.isPat] at hp
-  | .rcd (.sing _ _), hp, _, _, _, _ => by simp [Ty.isPat] at hp
-  | .rcd (.cat _ _), hp, _, _, _, _ => by simp [Ty.isPat] at hp
-  | .fn a b, hp, hn, χ, τ, he => by
-      simp only [Ty.isPat, Bool.and_eq_true] at hp
-      simp only [Ty.ftv] at hn
-      obtain ⟨σ₁, σ₂, rfl, h₁, h₂⟩ := TyEquiv.fn_inv he
-      obtain ⟨χa, ha₁, ha₂, ha₄, ha₃⟩ := Ty.correct a hp.1 (List.nodup_append.mp hn).1 h₁
-      obtain ⟨χb, hb₁, hb₂, hb₄, hb₃⟩ := Ty.correct b hp.2 (List.nodup_append.mp hn).2.1 h₂
-      have hdis : ∀ α ∈ a.ftv, α ∉ b.ftv := fun α ha hb =>
-        (List.nodup_append.mp hn).2.2 α ha α hb rfl
-      refine ⟨TySubst.override a.ftv χa χb, fun α hα => ?_, fun α => ?_, fun α => ?_, ?_⟩
-      · have hna : α ∉ a.ftv := fun h => hα (by simp [Ty.ftv, h])
-        have hnb : α ∉ b.ftv := fun h => hα (by simp [Ty.ftv, h])
-        simp only [TySubst.override, if_neg hna]
-        exact hb₁ α hnb
-      · by_cases h : α ∈ a.ftv
-        · simp only [TySubst.override, if_pos h]; exact ha₂ α
-        · simp only [TySubst.override, if_neg h]; exact hb₂ α
-      · by_cases h : α ∈ a.ftv
-        · simp only [TySubst.override, if_pos h]; exact ha₄ α
-        · simp only [TySubst.override, if_neg h]; exact hb₄ α
-      · simp only [Ty.applySubst]
-        congr 1
-        · rw [← ha₃]
-          exact Ty.applySubst_congr a (fun α hα => by simp [TySubst.override, hα])
-        · rw [← hb₃]
-          exact Ty.applySubst_congr b (fun α hα => by
-            have hna : α ∉ a.ftv := fun h => hdis α h hα
-            simp [TySubst.override, hna])
-
-/-- a scheme whose constraints can be discharged ONE AT A TIME: result variables
-bound, one constraint per result variable, and no constraint's row OR KEY
-mentions any result variable. Then changing an instance at the result variables
-changes no lookup (`QScheme.Correctable.correct`). A-let builds only such
-schemes. (The key clause is FC-labels' share: in `r.(x.l)` the key IS a result
-variable, and correcting it would move the lookup.) -/
-def QScheme.Correctable {B : Type} (sc : QScheme B) : Prop :=
-  sc.WF ∧
-  -- each result is a linear pattern (`Ty.correct`) …
-  (∀ a ∈ sc.constraints, a.res.isPat = true ∧ a.res.ftv.Nodup) ∧
-  -- … no two constraints share a result variable …
-  (∀ a ∈ sc.constraints, ∀ b ∈ sc.constraints, ∀ δ ∈ a.res.ftv, δ ∈ b.res.ftv → a = b) ∧
-  -- … and no row or key mentions one
-  (∀ a ∈ sc.constraints, ∀ b ∈ sc.constraints, ∀ δ ∈ b.res.ftv, δ ∉ a.row.ftv ∧ δ ∉ a.label.ftv)
 
 mutual
   /-- `Δ; Γ ⊢ e : τ` — L2 typing under assumed lookups. Δ is an INDEX: qLet's
@@ -146,7 +52,7 @@ mutual
              QTypedA constTy Δ Γ (.app e₁ e₂) τ₂
     -- e₁ at EVERY instance, assuming the constraints there. That is what
     -- generalization produces; which instances discharge is decided at the use.
-    | qLet : σ.Correctable →
+    | qLet : σ.WF →
              (∀ χ : TySubst B, χ.FixedOutside σ.vars →
                QTypedA constTy (σ.constraints.map (Stump.at χ) ++ Δ) Γ e₁
                  (σ.body.applySubst χ)) →
@@ -282,204 +188,62 @@ theorem QTypedA.weaken_sub {B C : Type} {constTy : C → B} {Δ₁ Δ₂ : List 
   h.weaken (fun a ha => .inl (hs a ha))
 
 --------------------- FROM ASSUMED TO PLAIN ----------------------------------
--- With every assumption held, a `QTypedA` derivation is a `QTyped` one — except
--- at `qVar`, where the constraints discharge only UP TO ≈ and `QScheme.Inst`
--- wants them on the nose. Closing that gap is correcting χ at the constraints'
--- result variables to the types the lookups found, which moves the body by an ≈
--- T-eq absorbs.
---
--- For an ARBITRARY scheme that correction does not exist
--- (`instEquivCorrects_false`, Finalization.lean): two constraints on one result
--- variable can find ≈-equal but different types. For a `Correctable` scheme it
--- does, in one step: no row mentions a result variable, so the correction
--- changes no lookup.
-
-/-- the χ-correction for EVERY scheme — refuted (`instEquivCorrects_false`). -/
-def InstEquivCorrects (B : Type) : Prop :=
-  ∀ (sc : QScheme B) (χ : TySubst B), χ.FixedOutside sc.vars →
-    (∀ st ∈ sc.constraints, st.DischargeEquiv χ) →
-    ∃ τ', QScheme.Inst sc τ' ∧ TyEquiv τ' (sc.body.applySubst χ)
-
-/-- a correction of `st`'s result under χ that meets the lookup exactly. -/
-def CorrGood {B : Type} (χ : TySubst B) (st : Stump B) (χ₁ : TySubst B) : Prop :=
-  (∀ α ∉ st.res.ftv, χ₁.ty α = χ.ty α ∧ χ₁.row α = χ.row α) ∧
-  (∀ α, TyEquiv (χ₁.ty α) (χ.ty α) ∧ RowEquiv (χ₁.row α) (χ.row α)) ∧
-  (∀ α, χ₁.lab α = χ.lab α) ∧
-  ∃ τ, LookupQ (st.row.applySubst χ) (st.label.applySubst χ) (.found τ) ∧
-    st.res.applySubst χ₁ = τ
-
-open Classical in
-/-- `st`'s correction, or χ where its lookup found nothing. -/
-noncomputable def corrAt {B : Type} (χ : TySubst B) (st : Stump B) : TySubst B :=
-  if h : ∃ χ₁, CorrGood χ st χ₁ then Classical.choose h else χ
-
-open Classical in
-/-- every constraint's correction at once: each result variable belongs to one
-constraint, and is read off that constraint's correction. -/
-noncomputable def corrAll {B : Type} (χ : TySubst B) (cs : List (Stump B)) : TySubst B :=
-  ⟨fun α => if h : ∃ st ∈ cs, α ∈ st.res.ftv then (corrAt χ (Classical.choose h)).ty α
-     else χ.ty α,
-   fun α => if h : ∃ st ∈ cs, α ∈ st.res.ftv then (corrAt χ (Classical.choose h)).row α
-     else χ.row α,
-   χ.lab⟩
-
-theorem corrAt_lab {B : Type} (χ : TySubst B) (st : Stump B) (α : TyVar) :
-    (corrAt χ st).lab α = χ.lab α := by
-  unfold corrAt
-  split
-  · next h => exact (Classical.choose_spec h).2.2.1 α
-  · rfl
-
-theorem corrAt_equiv {B : Type} (χ : TySubst B) (st : Stump B) (α : TyVar) :
-    TyEquiv ((corrAt χ st).ty α) (χ.ty α) ∧ RowEquiv ((corrAt χ st).row α) (χ.row α) := by
-  unfold corrAt
-  split
-  · next h => exact (Classical.choose_spec h).2.1 α
-  · exact ⟨.refl _, .refl _⟩
-
-/-- ⊢  **the χ-correction, for correctable schemes.** Re-choose each result's
-variables so the type its constraint's lookup found is met exactly; everything
-else stays. -/
-theorem QScheme.Correctable.correct {B : Type} {sc : QScheme B}
-    (hc : sc.Correctable) {χ : TySubst B} (hfix : χ.FixedOutside sc.vars)
-    (hd : ∀ st ∈ sc.constraints, st.DischargeEquiv χ) :
-    ∃ τ', QScheme.Inst sc τ' ∧ TyEquiv τ' (sc.body.applySubst χ) := by
-  obtain ⟨hwf, hpat, hdisj, hind⟩ := hc
-  let χ' := corrAll χ sc.constraints
-  -- on a constraint's result, χ′ is that constraint's correction …
-  have hat : ∀ st ∈ sc.constraints, ∀ α ∈ st.res.ftv,
-      χ'.ty α = (corrAt χ st).ty α ∧ χ'.row α = (corrAt χ st).row α ∧
-        χ'.lab α = (corrAt χ st).lab α := by
-    intro st hst α hα
-    have h : ∃ st ∈ sc.constraints, α ∈ st.res.ftv := ⟨st, hst, hα⟩
-    have he : Classical.choose h = st :=
-      hdisj _ (Classical.choose_spec h).1 st hst α (Classical.choose_spec h).2 hα
-    refine ⟨?_, ?_, ?_⟩
-    · simp only [χ', corrAll, dif_pos h, he]
-    · simp only [χ', corrAll, dif_pos h, he]
-    · simp only [χ', corrAll, corrAt_lab]
-  -- … and elsewhere it is χ
-  have hoff : ∀ α, (¬ ∃ st ∈ sc.constraints, α ∈ st.res.ftv) →
-      χ'.ty α = χ.ty α ∧ χ'.row α = χ.row α ∧ χ'.lab α = χ.lab α := by
-    intro α h
-    simp only [χ', corrAll, dif_neg h, and_self]
-  have hres : ∀ st ∈ sc.constraints,
-      st.res.applySubst χ' = st.res.applySubst (corrAt χ st) :=
-    fun st hst => Ty.applySubst_congr _ (hat st hst)
-  -- rows and keys are untouched: neither mentions a result variable
-  have hrow : ∀ st ∈ sc.constraints, st.row.applySubst χ' = st.row.applySubst χ :=
-    fun st hst => Row.applySubst_congr _ (fun α hα => hoff α (by
-      rintro ⟨st', hst', hα'⟩; exact (hind st hst st' hst' α hα').1 hα))
-  have hkey : ∀ st ∈ sc.constraints, st.label.applySubst χ' = st.label.applySubst χ :=
-    fun st hst => Key.applySubst_congr _ (fun α _ => rfl)
-  refine ⟨sc.body.applySubst χ', ⟨χ', ⟨fun β hβ => ?_, fun β hβ => ?_, fun β hβ => hfix.2.2 β hβ⟩,
-    fun st hst => ?_, rfl⟩, ?_⟩
-  · have hn : ¬ ∃ st ∈ sc.constraints, β ∈ st.res.ftv :=
-      fun ⟨st, hst, hm⟩ => hβ (hwf st hst β hm)
-    rw [(hoff β hn).1]; exact hfix.1 β hβ
-  · have hn : ¬ ∃ st ∈ sc.constraints, β ∈ st.res.ftv :=
-      fun ⟨st, hst, hm⟩ => hβ (hwf st hst β hm)
-    rw [(hoff β hn).2.1]; exact hfix.2.1 β hβ
-  · rcases hd st hst with ⟨hl, he⟩ | ⟨hl, hδ⟩ | ⟨hl, hδ⟩
-    · -- a hit: the correction exists, and meets the lookup
-      have hg : ∃ χ₁, CorrGood χ st χ₁ := by
-        obtain ⟨χ₁, h₁, h₂, h₃⟩ := Ty.correct st.res (hpat st hst).1 (hpat st hst).2 he
-        exact ⟨χ₁, h₁, h₂, h₃.1, _, hl, h₃.2⟩
-      obtain ⟨-, -, -, τ', hl', he'⟩ := Classical.choose_spec hg
-      refine .hit ((hkey st hst) ▸ (hrow st hst) ▸ hl') ?_
-      rw [hres st hst]
-      unfold corrAt; rw [dif_pos hg]; exact he'
-    · -- ⊥ or ?: nothing was found, so nothing was corrected
-      have hng : ¬ ∃ χ₁, CorrGood χ st χ₁ :=
-        fun ⟨_, _, _, _, _, hl', _⟩ => nomatch hl.det hl'
-      refine .abs ((hkey st hst) ▸ (hrow st hst) ▸ hl) ?_
-      rw [hres st hst]
-      unfold corrAt; rw [dif_neg hng]; exact hδ
-    · have hng : ¬ ∃ χ₁, CorrGood χ st χ₁ :=
-        fun ⟨_, _, _, _, _, hl', _⟩ => nomatch hl.det hl'
-      refine .unk ((hkey st hst) ▸ (hrow st hst) ▸ hl) ?_
-      rw [hres st hst]
-      unfold corrAt; rw [dif_neg hng]; exact hδ
-  · -- χ′ is ≈-close to χ everywhere, so the body moves by ≈ only
-    refine Ty.applySubst_substEquiv (θ₁ := χ') (θ₂ := χ) ⟨fun β => ?_, fun β => ?_, fun β => rfl⟩ _
-    · by_cases h : ∃ st ∈ sc.constraints, β ∈ st.res.ftv
-      · obtain ⟨st, hst, hm⟩ := h
-        rw [(hat st hst β hm).1]; exact (corrAt_equiv χ st β).1
-      · rw [(hoff β h).1]; exact .refl _
-    · by_cases h : ∃ st ∈ sc.constraints, β ∈ st.res.ftv
-      · obtain ⟨st, hst, hm⟩ := h
-        rw [(hat st hst β hm).2.1]; exact (corrAt_equiv χ st β).2
-      · rw [(hoff β h).2.1]; exact .refl _
-
-/-- every scheme a context binds is correctable. -/
-def QCtx.Correctable {B : Type} (Γ : QCtx B) : Prop :=
-  ∀ x sc, Γ.lookup x = some sc → sc.Correctable
-
-theorem QCtx.Correctable.bindScheme {B : Type} {Γ : QCtx B} (h : Γ.Correctable)
-    (x : Var) {sc : QScheme B} (hs : sc.Correctable) : (Γ.bindScheme x sc).Correctable := by
-  intro y sc' hy
-  rw [QCtx.lookup_bindScheme] at hy
-  by_cases hxy : (x == y) = true
-  · rw [if_pos hxy] at hy; injection hy with hy; subst hy; exact hs
-  · rw [if_neg hxy] at hy; exact h y sc' hy
-
-theorem QCtx.Correctable.bindTy {B : Type} {Γ : QCtx B} (h : Γ.Correctable)
-    (x : Var) (τ : Ty B) : (Γ.bindTy x τ).Correctable :=
-  h.bindScheme x ⟨fun _ h => (nomatch h), fun _ h => (nomatch h), fun _ h => (nomatch h),
-    fun _ h => (nomatch h)⟩
+-- With every assumption held, a `QTypedA` derivation is a `QTyped` one. At
+-- `qVar` the instance χ already IS a `QScheme.Inst` witness: an assumed
+-- constraint holds, i.e. discharges, and D-hit asks only ≈. (With an exact
+-- D-hit this step needed a χ-correction, and with it linear-pattern, nodup,
+-- disjoint-result and independence side conditions on every let-scheme.)
 
 mutual
-  /-- ⊢  **cash-in**: all assumptions held, every scheme in sight correctable ⟹
-  a plain L2 typing. -/
+  /-- ⊢  **cash-in**: all assumptions held ⟹ a plain L2 typing. -/
   theorem QTypedA.toQTyped {B C : Type} {constTy : C → B} :
       {Δ : List (Assume B)} → {Γ : QCtx B} → {e : Expr C} → {τ : Ty B} →
-      QTypedA constTy Δ Γ e τ → Γ.Correctable → (∀ a ∈ Δ, a.Holds) →
+      QTypedA constTy Δ Γ e τ → (∀ a ∈ Δ, a.Holds) →
       QTyped constTy Γ e τ
-    | _, _, _, _, .qCon, _, _ => .qCon
-    | _, _, _, _, .qVar hl ⟨χ, hfix, hc, hb⟩, hΓ, hΔ => by
-        obtain ⟨τ', hi, he⟩ := (hΓ _ _ hl).correct hfix (fun st hst =>
+    | _, _, _, _, .qCon, _ => .qCon
+    | _, _, _, _, .qVar hl ⟨χ, hfix, hc, hb⟩, hΔ =>
+        .qVar hl ⟨χ, hfix, fun st hst =>
           match hc st hst with
           | .inl hd => hd
-          | .inr hm => Stump.dischargeEquiv_iff_holds.mpr (hΔ _ hm))
-        exact .qEq (.qVar hl hi) (hb ▸ he)
-    | _, _, _, _, .qEq h he, hΓ, hΔ => .qEq (QTypedA.toQTyped h hΓ hΔ) he
-    | _, _, _, _, .qLam h, hΓ, hΔ => .qLam (QTypedA.toQTyped h (hΓ.bindTy _ _) hΔ)
-    | _, _, _, _, .qApp h₁ h₂, hΓ, hΔ =>
-        .qApp (QTypedA.toQTyped h₁ hΓ hΔ) (QTypedA.toQTyped h₂ hΓ hΔ)
-    | _, _, _, _, .qLet hcs hi hin hb, hΓ, hΔ =>
-        .qLet hcs.1 (fun τ₁ ⟨χ, hfix, hdis, hbody⟩ => hbody ▸
-            QTypedA.toQTyped (hi χ hfix) hΓ (fun a ha =>
+          | .inr hm => Stump.dischargeEquiv_iff_holds.mpr (hΔ _ hm), hb⟩
+    | _, _, _, _, .qEq h he, hΔ => .qEq (QTypedA.toQTyped h hΔ) he
+    | _, _, _, _, .qLam h, hΔ => .qLam (QTypedA.toQTyped h hΔ)
+    | _, _, _, _, .qApp h₁ h₂, hΔ =>
+        .qApp (QTypedA.toQTyped h₁ hΔ) (QTypedA.toQTyped h₂ hΔ)
+    | _, _, _, _, .qLet hcs hi hin hb, hΔ =>
+        .qLet hcs (fun τ₁ ⟨χ, hfix, hdis, hbody⟩ => hbody ▸
+            QTypedA.toQTyped (hi χ hfix) (fun a ha =>
               match List.mem_append.mp ha with
               | .inl hc => by
                   obtain ⟨st, hst, rfl⟩ := List.mem_map.mp hc
-                  exact Stump.dischargeEquiv_iff_holds.mp (hdis st hst).toEquiv
+                  exact Stump.dischargeEquiv_iff_holds.mp (hdis st hst)
               | .inr hd => hΔ a hd))
-          hin (QTypedA.toQTyped hb (hΓ.bindScheme _ hcs) hΔ)
-    | _, _, _, _, .qCat h₁ h₂, hΓ, hΔ =>
-        .qCat (QTypedA.toQTyped h₁ hΓ hΔ) (QTypedA.toQTyped h₂ hΓ hΔ)
-    | _, _, _, _, .qSel h hl, hΓ, hΔ => .qSel (QTypedA.toQTyped h hΓ hΔ) hl
-    | _, _, _, _, .qSelUnk h hl, hΓ, hΔ => .qSelUnk (QTypedA.toQTyped h hΓ hΔ) hl
-    | _, _, _, _, .qSelAbs h hl, hΓ, hΔ => .qSelAbs (QTypedA.toQTyped h hΓ hΔ) hl
-    | _, _, _, _, .qUnk h, hΓ, hΔ => .qUnk (QTypedA.toQTyped h hΓ hΔ)
-    | _, _, _, _, .qRcd h, hΓ, hΔ => .qRcd (QTypedABody.toQTyped h hΓ hΔ)
-    | _, _, _, _, .assume h hm, hΓ, hΔ => by
-        have h' := QTypedA.toQTyped h hΓ hΔ
+          hin (QTypedA.toQTyped hb hΔ)
+    | _, _, _, _, .qCat h₁ h₂, hΔ =>
+        .qCat (QTypedA.toQTyped h₁ hΔ) (QTypedA.toQTyped h₂ hΔ)
+    | _, _, _, _, .qSel h hl, hΔ => .qSel (QTypedA.toQTyped h hΔ) hl
+    | _, _, _, _, .qSelUnk h hl, hΔ => .qSelUnk (QTypedA.toQTyped h hΔ) hl
+    | _, _, _, _, .qSelAbs h hl, hΔ => .qSelAbs (QTypedA.toQTyped h hΔ) hl
+    | _, _, _, _, .qUnk h, hΔ => .qUnk (QTypedA.toQTyped h hΔ)
+    | _, _, _, _, .qRcd h, hΔ => .qRcd (QTypedABody.toQTyped h hΔ)
+    | _, _, _, _, .assume h hm, hΔ => by
+        have h' := QTypedA.toQTyped h hΔ
         cases hΔ _ hm with
         | hit hl he => exact .qEq (.qSel h' (LookupQ.lab_iff.mp hl)) he.symm
         | abs hl he => cases he; exact .qSelAbs h' (LookupQ.lab_iff.mp hl)
         | unk hl he => cases he; exact .qSelUnk h' (LookupQ.lab_iff.mp hl)
-    | _, _, _, _, .qLab, _, _ => .qLab
-    | _, _, _, _, .qSelDyn h₁ h₂ hl, hΓ, hΔ =>
-        .qSelDyn (QTypedA.toQTyped h₁ hΓ hΔ) (QTypedA.toQTyped h₂ hΓ hΔ) hl
-    | _, _, _, _, .qSelDynUnk h₁ h₂ hl, hΓ, hΔ =>
-        .qSelDynUnk (QTypedA.toQTyped h₁ hΓ hΔ) (QTypedA.toQTyped h₂ hΓ hΔ) hl
-    | _, _, _, _, .qSelDynAbs h₁ h₂ hl, hΓ, hΔ =>
-        .qSelDynAbs (QTypedA.toQTyped h₁ hΓ hΔ) (QTypedA.toQTyped h₂ hΓ hΔ) hl
-    | _, _, _, _, .qRcdDyn h₁ h₂, hΓ, hΔ =>
-        .qRcdDyn (QTypedA.toQTyped h₁ hΓ hΔ) (QTypedA.toQTyped h₂ hΓ hΔ)
-    | _, _, _, _, .assumeDyn h₁ h₂ hm, hΓ, hΔ => by
-        have h₁' := QTypedA.toQTyped h₁ hΓ hΔ
-        have h₂' := QTypedA.toQTyped h₂ hΓ hΔ
+    | _, _, _, _, .qLab, _ => .qLab
+    | _, _, _, _, .qSelDyn h₁ h₂ hl, hΔ =>
+        .qSelDyn (QTypedA.toQTyped h₁ hΔ) (QTypedA.toQTyped h₂ hΔ) hl
+    | _, _, _, _, .qSelDynUnk h₁ h₂ hl, hΔ =>
+        .qSelDynUnk (QTypedA.toQTyped h₁ hΔ) (QTypedA.toQTyped h₂ hΔ) hl
+    | _, _, _, _, .qSelDynAbs h₁ h₂ hl, hΔ =>
+        .qSelDynAbs (QTypedA.toQTyped h₁ hΔ) (QTypedA.toQTyped h₂ hΔ) hl
+    | _, _, _, _, .qRcdDyn h₁ h₂, hΔ =>
+        .qRcdDyn (QTypedA.toQTyped h₁ hΔ) (QTypedA.toQTyped h₂ hΔ)
+    | _, _, _, _, .assumeDyn h₁ h₂ hm, hΔ => by
+        have h₁' := QTypedA.toQTyped h₁ hΔ
+        have h₂' := QTypedA.toQTyped h₂ hΔ
         cases hΔ _ hm with
         | hit hl he => exact .qEq (.qSelDyn h₁' h₂' hl) he.symm
         | abs hl he => cases he; exact .qSelDynAbs h₁' h₂' hl
@@ -487,12 +251,12 @@ mutual
 
   theorem QTypedABody.toQTyped {B C : Type} {constTy : C → B} :
       {Δ : List (Assume B)} → {Γ : QCtx B} → {b : RecBody (Expr C)} → {ρ : Row B} →
-      QTypedABody constTy Δ Γ b ρ → Γ.Correctable → (∀ a ∈ Δ, a.Holds) →
+      QTypedABody constTy Δ Γ b ρ → (∀ a ∈ Δ, a.Holds) →
       QTypedBody constTy Γ b ρ
-    | _, _, _, _, .empty, _, _ => .empty
-    | _, _, _, _, .field h, hΓ, hΔ => .field (QTypedA.toQTyped h hΓ hΔ)
-    | _, _, _, _, .cat h₁ h₂, hΓ, hΔ =>
-        .cat (QTypedABody.toQTyped h₁ hΓ hΔ) (QTypedABody.toQTyped h₂ hΓ hΔ)
+    | _, _, _, _, .empty, _ => .empty
+    | _, _, _, _, .field h, hΔ => .field (QTypedA.toQTyped h hΔ)
+    | _, _, _, _, .cat h₁ h₂, hΔ =>
+        .cat (QTypedABody.toQTyped h₁ hΔ) (QTypedABody.toQTyped h₂ hΔ)
 end
 
 --------------------- 2. A SCHEME ENTERS Γ′ RENAMED --------------------------
@@ -869,9 +633,6 @@ def LetCase (B C : Type) [DecidableEq B] (constTy : C → B) : Prop :=
        α ∉ (p.stump.res.applySubst S₁.subst).ftv ∧
        α ∉ (p.stump.label.applySubst S₁.subst).ftv) →
     (∀ α ∈ ᾱ, α ∉ S₁.sol.dom) →
-    (∀ p ∈ Δq, ∀ q ∈ Δq, ∀ δ ∈ (q.stump.res.applySubst S₁.subst).ftv,
-       δ ∉ (p.stump.row.applySubst S₁.subst).ftv ∧
-       δ ∉ (p.stump.label.applySubst S₁.subst).ftv) →
     Infer constTy (Γ.bindScheme x (letScheme S₁ ᾱ Δq τ₁))
       { S₁ with parked := Δγ } e₂ τ₂ S₂ →
     Γ.SchemesWF → S.sol.Clean → S.Quiescent →
@@ -888,7 +649,7 @@ theorem letScheme_wf {B : Type} [DecidableEq B] {Γ : QCtx B} {S₁ : SolverStat
   refine hΓ.bindScheme x ?_
   intro st hst
   obtain ⟨p, hp, rfl⟩ := List.mem_map.mp hst
-  exact (hres.1 p hp).1
+  exact hres.1 p hp
 
 private theorem draw_eqs {B : Type} {S S₀ : SolverState B} {α : TyVar} {κ : Kind}
     (h : (α, S₀) = S.draw κ) : S₀.sol = S.sol ∧ S₀.parked = S.parked := by
@@ -1186,14 +947,14 @@ theorem inferSound_of {B C : Type} [DecidableEq B] {constTy : C → B}
       exact .assumeDyn (.qEq ih₁ (hsolve.unifies_sat hσ₂')) (.qEq ih₂ hkey) List.mem_cons_self
   | _, _, _, _, _, .rcd hb, hΓ, hc, hq => fun σ hab hσ Γ' hr =>
       .qRcd (inferRecSound_of hvar hlet hb hΓ hc hq σ hab hσ Γ' hr)
-  | _, _, _, _, _, .letE (S₁ := S₁) (Δγ := Δγ) (x := x) (τ₁ := τ₁) h₁ hA hsplit hbq hγ hfresh hown hres hdis hdom hind h₂,
+  | _, _, _, _, _, .letE (S₁ := S₁) (Δγ := Δγ) (x := x) (τ₁ := τ₁) h₁ hA hsplit hbq hγ hfresh hown hres hdis hdom h₂,
       hΓ, hc, hq => by
       have hΓ' := letScheme_wf (x := x) (τ₁ := τ₁) hΓ hres
       have c₁ := Infer.clean h₁ hc
       have q₁ : ({ S₁ with parked := Δγ } : SolverState B).Quiescent :=
         quiescent_sub (Infer.quiescent h₁ hq)
           (fun p hp => by exact hsplit.mem_iff.mpr <| List.mem_append_right _ hp)
-      exact hlet h₁ hA hsplit hbq hγ hfresh hown hres hdis hdom hind h₂ hΓ hc hq
+      exact hlet h₁ hA hsplit hbq hγ hfresh hown hres hdis hdom h₂ hΓ hc hq
         (inferSound_of hvar hlet h₁ hΓ hc hq) (inferSound_of hvar hlet h₂ hΓ' c₁ q₁)
 
 theorem inferRecSound_of {B C : Type} [DecidableEq B] {constTy : C → B}
@@ -1228,7 +989,7 @@ theorem inferSound_of_let {B C : Type} [DecidableEq B] {constTy : C → B}
 --------------------- …AND WHERE IT JOINS -------------------------------------
 /-- ⊢  **the join**: a run from nothing whose parked stumps all hold at σ is a
 plain L2 typing at σ. The `hfin` premise is what finalization supplies (F-★ at
-⟦S′⟧ — `Finalizes.holds`); the χ-correction is `QScheme.Correctable.correct`.
+⟦S′⟧ — `Finalizes.holds`).
 No transport along χ is left: `QTypedA.weaken` did the cashing-in. -/
 theorem runSoundA_of {B C : Type} [DecidableEq B] {constTy : C → B}
     (hs : InferSound B C constTy)
@@ -1238,7 +999,7 @@ theorem runSoundA_of {B C : Type} [DecidableEq B] {constTy : C → B}
     (hfin : ∀ p ∈ S₁.parked, (p.stump.at σ).Holds) :
     QTyped constTy QCtx.empty e (τ.applySubst σ) :=
   (hs _ _ _ _ _ h .nil Sol.clean_nil (SolverState.Quiescent.nil rfl) σ hab hsat _
-    (CtxRead.nil σ)).toQTyped (fun _ _ h => nomatch h) (fun a ha => by
+    (CtxRead.nil σ)).toQTyped (fun a ha => by
     obtain ⟨p, hp, rfl⟩ := List.mem_map.mp ha
     exact hfin p hp)
 

@@ -96,6 +96,17 @@ def run (e : E) : String := verdict (runF (fun _ => ()) 50 e)
     (.app (.app (v "f") (rec1 "m" c)) c))
   = "fail: clash"
 
+-- D-HIT UP TO ≈ (`analysis/let-review.md` §4.4). With no χ-correction, A-let
+-- dropped linear-pattern, nodup and independence; these used to be monomorphic.
+-- nested selection: the second stump's row is the first one's result
+#guard run (.letE "g" (.lam "x" (.sel (.sel (v "x") "l") "m"))
+    (rec2 "a" (.app (v "g") (rec1 "l" (rec1 "m" c))) "b" (.app (v "g") (rec1 "l" (.rcd .empty)))))
+  = "{a: 𝓫 | b: ★}"
+-- a record literal in a spent result ({a: 𝓫} → β is no linear pattern)
+#guard run (.letE "f" (.lam "x" (.app (.sel (v "x") "l") (rec1 "a" c)))
+    (rec2 "a" (.app (v "f") (rec1 "l" (.lam "y" (v "y")))) "b" (.app (v "f") (rec1 "l" (.lam "y" c)))))
+  = "{a: {a: 𝓫} | b: 𝓫}"
+
 -- an instance's stump whose RESULT was aliased (found by this function,
 -- 2026-09-26, then fixed): in `h = λy. g y`, A-app emits δ ≐ β and the unifier
 -- binds δ ≔ β. A-let used to want δ itself unsolved, so h stayed monomorphic and
@@ -150,11 +161,14 @@ def sd (e₁ e₂ : E) : E := .selDyn e₁ e₂
 #guard run (.lam "r" (.lam "a" (.app (sd (v "r") (v "a")) c)))
   = "fail: spent promise: a stump's result is no longer a variable"
 
--- a key that is itself an unresolved selection runs at the top level (under a
--- let it is not generalized: `QScheme.Correctable`'s key clause); the key's
--- field is forced to a label, so F-★ never touches it
+-- a key that is itself an unresolved selection; the key's field is forced to a
+-- label, so F-★ never touches it …
 #guard run (.lam "r" (.lam "k" (sd (v "r") (.sel (v "k") "name"))))
   = "({r3} → ({name: ⌊k6⌋ | r8 | ε} → ★))"
+-- … and under a let it is generalized (it used to be held back by the
+-- independence premise's key clause: the key IS another stump's result)
+#guard run (.letE "f" (.lam "r" (.lam "k" (sd (v "r") (.sel (v "k") "name")))) (v "f"))
+  = "({r11} → ({name: ⌊k9⌋ | r12 | ε} → ★))"
 -- no KeySafe: a key blocked on a row variable stays a label variable
 #guard run (.lam "r" (rec1 "x" (sd (rec1 "x" c) (.sel (v "r") "a"))))
   = "({a: ⌊k5⌋ | r7 | ε} → {x: ★})"

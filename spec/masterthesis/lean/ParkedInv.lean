@@ -25,7 +25,7 @@ def QCtx.SchemesWF (Γ : QCtx B) : Prop :=
 def SolverState.KeepsS (S S' : SolverState B) : Prop :=
   ∀ σ : TySubst B, Sol.Sat σ S'.sol → ∀ p ∈ S.parked,
     (∃ q ∈ S'.parked, q.stump = p.stump) ∨
-    p.stump.DischargeEquiv σ
+    p.stump.Discharge σ
 
 --------------------- ELEMENTARY STEPS -----------------------------------------
 
@@ -111,7 +111,7 @@ this needs no distinctness of the submitted list. -/
 theorem Wakes.fate {S S' : SolverState B} {ps : List (Parked B)} :
     Wakes S ps S' → ∀ σ : TySubst B, Sol.Sat σ S'.sol →
     ∀ p ∈ ps, (∃ q ∈ S'.parked, q.stump = p.stump) ∨
-      p.stump.DischargeEquiv σ
+      p.stump.Discharge σ
   | .nil, _, _, p, hp => absurd hp List.not_mem_nil
   | .cons hw hws, σ, hσ, p', hp' => by
       rcases List.mem_cons.mp hp' with rfl | hp'
@@ -205,7 +205,7 @@ theorem Infer.keeps {C : Type} {constTy : C → B} :
         (kc.trans (hsk.keeps.trans (kb.trans kp mp) (mb.trans mp)) mt) mk) m₂)
         (hs.satMono.trans m₂)) (ma.trans (hs.satMono.trans m₂))
   | _, _, _, _, _, .rcd hb => InferRec.keeps hb
-  | _, _, _, _, _, .letE (Δq := Δq) (Δγ := Δγ) h₁ _ hsplit _ _ _ hown _ _ _ _ h₂ => by
+  | _, _, _, _, _, .letE (Δq := Δq) (Δγ := Δγ) h₁ _ hsplit _ _ _ hown _ _ _ h₂ => by
       have k₁ := Infer.keeps h₁
       have k₂ := Infer.keeps h₂
       intro σ hσ p hp

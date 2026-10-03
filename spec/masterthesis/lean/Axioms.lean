@@ -371,17 +371,12 @@ info: 'MinimalCalculus.covered_not_applySubst_stable' depends on axioms: [propex
 -/
 #guard_msgs in #print axioms covered_not_applySubst_stable
 
--- The second closure property of the typing set: ⊑ alone cannot absorb T-eq,
--- so ⊑-only principality is refuted for selQ and ≼ replaces it.
+-- The second closure property of the typing set: T-eq on a selected payload.
+-- D-hit up to ≈ puts the T-eq witness inside selQ's instance set.
 /--
-info: 'MinimalCalculus.selQ_not_principalStrict' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: 'MinimalCalculus.selQ_inst_equiv' depends on axioms: [propext, Classical.choice, Quot.sound]
 -/
-#guard_msgs in #print axioms selQ_not_principalStrict
-
-/--
-info: 'MinimalCalculus.selQ_needs_equiv' depends on axioms: [propext, Classical.choice, Quot.sound]
--/
-#guard_msgs in #print axioms selQ_needs_equiv
+#guard_msgs in #print axioms selQ_inst_equiv
 
 -- ⊑ and ≈ commute — the lemma that makes ≼ transitive and ⊴≼ a preorder.
 -- Axiom-free, like the rest of the precision theory.
@@ -956,7 +951,7 @@ info: 'MinimalCalculus.QTypedA.weaken' depends on axioms: [propext]
 #guard_msgs in #print axioms QTypedA.weaken
 
 /--
-info: 'MinimalCalculus.QTypedA.toQTyped' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: 'MinimalCalculus.QTypedA.toQTyped' depends on axioms: [propext, Quot.sound]
 -/
 #guard_msgs in #print axioms QTypedA.toQTyped
 
@@ -976,7 +971,7 @@ info: 'MinimalCalculus.inferSound_of' depends on axioms: [propext, Classical.cho
 #guard_msgs in #print axioms inferSound_of
 
 /--
-info: 'MinimalCalculus.runSoundA_of' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: 'MinimalCalculus.runSoundA_of' depends on axioms: [propext, Quot.sound]
 -/
 #guard_msgs in #print axioms runSoundA_of
 
@@ -1012,7 +1007,7 @@ info: 'MinimalCalculus.inferSound' depends on axioms: [propext, Classical.choice
 -/
 #guard_msgs in #print axioms inferSound
 
--- ## Finalization discharges; RunSound modulo the χ-correction (Finalization)
+-- ## Finalization discharges; RunSound (Finalization)
 /--
 info: 'MinimalCalculus.Finalizes.holds' depends on axioms: [propext, Classical.choice, Quot.sound]
 -/
@@ -1024,25 +1019,15 @@ info: 'MinimalCalculus.Materializes.keeps' depends on axioms: [propext, Classica
 #guard_msgs in #print axioms Materializes.keeps
 
 /--
-info: 'MinimalCalculus.Ty.correct' depends on axioms: [propext, Quot.sound]
--/
-#guard_msgs in #print axioms Ty.correct
-
-/--
 info: 'MinimalCalculus.runSound' depends on axioms: [propext, Classical.choice, Quot.sound]
 -/
 #guard_msgs in #print axioms runSound
 
+-- Two ≈-equal hits on one result variable: instantiable (no χ-correction).
 /--
-info: 'MinimalCalculus.QScheme.Correctable.correct' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: 'MinimalCalculus.icSc_inst' depends on axioms: [propext]
 -/
-#guard_msgs in #print axioms QScheme.Correctable.correct
-
--- …and the χ-correction, stated for every scheme, is FALSE.
-/--
-info: 'MinimalCalculus.instEquivCorrects_false' depends on axioms: [propext]
--/
-#guard_msgs in #print axioms instEquivCorrects_false
+#guard_msgs in #print axioms icSc_inst
 
 -- ## A-var's names are not reserved (FreshNames)
 -- A reachable state with two parked stumps sharing a result variable.
