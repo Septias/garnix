@@ -764,7 +764,6 @@ theorem Parked.fillable_iff {B : Type} {S : SolverState B} {p : Parked B} :
 /-- A-let's premise on the generalized RESULTS, read at S₁ (`QScheme.WF` and
 the inhabitation of the scheme):
 * each is a type over ᾱ — a variable, or a type a promise was spent on;
-* distinct stumps share no result variable;
 * a SPENT result can be met at some instance, by extending its blocker row with
   the field (as `Materialize` does at the top level): its key is literal, every
   stump on the same blocker is literally keyed and is it if it has its key, and
@@ -772,8 +771,6 @@ the inhabitation of the scheme):
 def LetResults {B : Type} (S₁ : SolverState B) (ᾱ : List TyVar) (Δq : List (Parked B)) :
     Prop :=
   (∀ p ∈ Δq, ∀ δ ∈ (p.stump.res.applySubst S₁.subst).ftv, δ ∈ ᾱ) ∧
-  (∀ p ∈ Δq, ∀ q ∈ Δq, ∀ δ ∈ (p.stump.res.applySubst S₁.subst).ftv,
-      δ ∈ (q.stump.res.applySubst S₁.subst).ftv → p.stump = q.stump) ∧
   (∀ p ∈ Δq, (p.stump.res.applySubst S₁.subst).isVar = false →
       p.fillable S₁ = true ∧
       (∀ q ∈ Δq, q.blocker = p.blocker →
@@ -960,8 +957,8 @@ inductive Infer {B C : Type} [DecidableEq B] (constTy : C → B) :
       -- scheme, or nothing ever finalizes it (`runSound_false_let_captures`,
       -- LetSound.lean) …
       (∀ p ∈ Δq, ∀ q ∈ S.parked, p.stump ≠ q.stump) →
-      -- … each generalized stump's answer, READ AT S₁, is generalized with it,
-      -- one per stump (`QScheme.WF`) …
+      -- … each generalized stump's answer, READ AT S₁, is generalized with it
+      -- (`QScheme.WF`), and a spent one can be met (inhabitation) …
       LetResults S₁ ᾱ Δq →
       -- … what stays parked does not mention ᾱ, READ AT S₁ — row, key and
       -- answer — so it reads the same at every instance …

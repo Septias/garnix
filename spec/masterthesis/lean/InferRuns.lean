@@ -97,7 +97,8 @@ def run (e : E) : String := verdict (runF (fun _ => ()) 50 e)
   = "fail: clash"
 
 -- D-HIT UP TO ≈ (`analysis/let-review.md` §4.4). With no χ-correction, A-let
--- dropped linear-pattern, nodup and independence; these used to be monomorphic.
+-- dropped linear-pattern, nodup, independence and disjoint results; these used
+-- to be monomorphic.
 -- nested selection: the second stump's row is the first one's result
 #guard run (.letE "g" (.lam "x" (.sel (.sel (v "x") "l") "m"))
     (rec2 "a" (.app (v "g") (rec1 "l" (rec1 "m" c))) "b" (.app (v "g") (rec1 "l" (.rcd .empty)))))
@@ -106,6 +107,11 @@ def run (e : E) : String := verdict (runF (fun _ => ()) 50 e)
 #guard run (.letE "f" (.lam "x" (.app (.sel (v "x") "l") (rec1 "a" c)))
     (rec2 "a" (.app (v "f") (rec1 "l" (.lam "y" (v "y")))) "b" (.app (v "f") (rec1 "l" (.lam "y" c)))))
   = "{a: {a: 𝓫} | b: 𝓫}"
+-- a spent result mentioning an unspent one (x.m's result is x.l's argument)
+#guard run (.letE "f" (.lam "x" (.app (.sel (v "x") "l") (.sel (v "x") "m")))
+    (rec2 "a" (.app (v "f") (rec2 "l" (.lam "y" (v "y")) "m" c))
+          "b" (.app (v "f") (rec2 "l" (.lam "y" c) "m" (.rcd .empty)))))
+  = "{a: 𝓫 | b: 𝓫}"
 
 -- an instance's stump whose RESULT was aliased (found by this function,
 -- 2026-09-26, then fixed): in `h = λy. g y`, A-app emits δ ≐ β and the unifier

@@ -146,4 +146,4 @@ We use a custom lookup relation ⟨ρ.l ↓ r⟩ with return values ⟨τ | ⊥ 
 
 # Findings
 - Eliminators for ★ can not be added without gradual typing because otherwise progress and preservation die
-- D-hit up to ≈ (branch `discharge-equiv`, let-review §4.4): χ-correction gone; A-let drops linear-pattern, nodup, independence. Disjoint results (P8d) still used by the inhabitation witness (LetCase), not only by the correction. Nested selection and record-literal-in-spent-result now generalize.
+- D-hit up to ≈ (branch `discharge-equiv`, let-review §4.4): χ-correction gone; A-let drops linear-pattern, nodup, independence, disjoint results (P8d needed a fix in LetCase's inhabitation witness: fill with the ★-substituted result). Nested selection, record literal in a spent result, spent result over an unspent one now generalize.

@@ -243,8 +243,7 @@ theorem letAlias_infers_guarded :
   refine Infer.lam (S₀ := laS) rfl ?_
   refine Infer.letE (Δq := []) (Δγ := []) (ᾱ := []) (κs := []) la_var_y rfl (.refl _)
     (fun _ h => nomatch h) (fun _ h => nomatch h) (fun _ h => nomatch h)
-    (fun _ h => nomatch h) ⟨fun _ h => absurd h List.not_mem_nil, fun _ h => absurd h List.not_mem_nil,
-      fun _ h => absurd h List.not_mem_nil⟩ (fun _ h => nomatch h)
+    (fun _ h => nomatch h) ⟨fun _ h => absurd h List.not_mem_nil, fun _ h => absurd h List.not_mem_nil⟩ (fun _ h => nomatch h)
     (fun _ h => nomatch h) ?_
   exact Infer.var_mono
     (by rw [QCtx.lookup_bindScheme]; simp; rfl)
