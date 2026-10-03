@@ -1,10 +1,3 @@
-> Analysis of the first-class labels extension (phase B: keys as a sort,
-> keyed lookup, keyed fields, dynamic construction). What it buys, where it
-> falls short of NixLang, where the theory is imprecise, and what to do next.
-> Sources: thesis @sec-fc-labels, `typesystems/algorithmic.typ` (# First-class
-> labels), `lean/LabelLookup.lean`, `lean/Regressions.lean` (FC-labels phase B),
-> `lean/InferRuns.lean` (FC-labels). Siblings: `incompleteness.md` (kinds 8, 9),
-> `let-review.md`.
 
 
 # 0. Findings, ranked
@@ -100,13 +93,13 @@ In NixLang `"foo"` is a string; it is a label only by virtue of being used as
 one. Real keys are computed: `"${prefix}-${name}"`, `toString n`,
 `builtins.head names`, `lib.toLower x`. In the calculus:
 
-| Program | Today | With §2's rules |
-|---|---|---|
-| `x.${"foo"}` | `⌊foo⌋`, static selection | same |
-| `x.${toString t}` (the intro example) | **clash** | ★ |
-| `"foo" + "bar"` | **clash**, `⌊foo⌋ ≐ 𝓫_str` | still clash |
-| `n: x.${n}` | `⌊α⌋`, stump on α | same |
-| `n: { a = x.${n}; b = n + "-suffix"; }` | **clash** | still clash |
+| Program                                 | Today                      | With §2's rules |
+|-----------------------------------------|----------------------------|-----------------|
+| `x.${"foo"}`                            | `⌊foo⌋`, static selection  | same            |
+| `x.${toString t}` (the intro example)   | **clash**                  | ★               |
+| `"foo" + "bar"`                         | **clash**, `⌊foo⌋ ≐ 𝓫_str` | still clash     |
+| `n: x.${n}`                             | `⌊α⌋`, stump on α          | same            |
+| `n: { a = x.${n}; b = n + "-suffix"; }` | **clash**                  | still clash     |
 
 The last two rows are the hard part: one value used as a key AND as a string.
 Options:
@@ -216,18 +209,18 @@ Nothing to fix; worth one sentence in the thesis, since a reader will ask.
 
 Verdicts on the keyed shapes (singletons unless stated):
 
-| Problem | mgu | Verdict | Lean |
-|---|---|---|---|
-| `⌊α⌋ ≐ ⌊l⌋` | `[α ≔ l]` | success | `unify_lab_var_lit` |
-| `⌊α⌋ ≐ 𝓫` | none | clash | `unify_lab_vs_base_clash` |
-| `ε ≐ᵣ ${α}:𝓫` | none | clash | `unify_empty_vs_key_clash` |
-| `${α}:t ≐ᵣ ${α}:𝓫` | `[t ≔ 𝓫]` | success | `unify_same_key` |
-| `(r \| ${α}:t) ≐ᵣ (q \| ${α}:𝓫)` | yes | success | `unify_same_key_tail` |
-| `(foo:𝓫) ≐ᵣ (${α}:𝓫)` | `[α ≔ foo]` | **stuck** | `unify_lit_vs_key_stuck` |
-| `${α}:𝓫 ≐ᵣ ${β}:𝓫` | `[α ≔ β]` | **stuck** | `unify_diff_key_stuck` |
-| `(${α}:𝓫 \| m:𝓫) ≐ᵣ (m:𝓫 \| ${β}:𝓫)` | none (`α, β ≔ x` for every x; `α ≔ β` is not a unifier, barrier) | stuck | not pinned |
-| `α ≐ {${α}:𝓫}` | identity on keys, `α ≔ {…}` | success | `unify_key_not_occurs` |
-| occurrence next to a keyed field | usually none | stuck (not occurs) | Defs.lean:651 |
+| Problem                              | mgu                                                              | Verdict            |
+|--------------------------------------|------------------------------------------------------------------|--------------------|
+| `⌊α⌋ ≐ ⌊l⌋`                          | `[α ≔ l]`                                                        | success            |
+| `⌊α⌋ ≐ 𝓫`                            | none                                                             | clash              |
+| `ε ≐ᵣ ${α}:𝓫`                        | none                                                             | clash              |
+| `${α}:t ≐ᵣ ${α}:𝓫`                   | `[t ≔ 𝓫]`                                                        | success            |
+| `(r \| ${α}:t) ≐ᵣ (q \| ${α}:𝓫)`     | yes                                                              | success            |
+| `(foo:𝓫) ≐ᵣ (${α}:𝓫)`                | `[α ≔ foo]`                                                      | **stuck**          |
+| `${α}:𝓫 ≐ᵣ ${β}:𝓫`                   | `[α ≔ β]`                                                        | **stuck**          |
+| `(${α}:𝓫 \| m:𝓫) ≐ᵣ (m:𝓫 \| ${β}:𝓫)` | none (`α, β ≔ x` for every x; `α ≔ β` is not a unifier, barrier) | stuck              |
+| `α ≐ {${α}:𝓫}`                       | identity on keys, `α ≔ {…}`                                      | success            |
+| occurrence next to a keyed field     | usually none                                                     | stuck (not occurs) |
 
 **The wrong claim.** For the singleton, every unifier needs `θα = θβ` as
 keys (≈-dfield demands the same key, ≈-dlab turns literal keys into literal

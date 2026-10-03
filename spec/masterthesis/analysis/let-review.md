@@ -1,8 +1,3 @@
-> Critical review of A-let: what each premise is for, which can go, and which
-> of its incompleteness can be removed. Companion to `incompleteness.md` (kind
-> 10). Nothing here is kernel-checked yet; claims that need a Lean run are
-> marked **[check]**.
-
 
 # 1. The rule today
 
@@ -59,23 +54,22 @@ itself accepts any admissible ᾱ.
 
 # 3. What each premise is actually for
 
-Traced through the soundness proof (`LetCase`, `QTypedA.toQTyped`,
-`QScheme.Correctable.correct`):
+Traced through the soundness proof:
 
-| Premise | Needed by | Without it | Verdict |
-|---|---|---|---|
-| P2 kinds | instantiation draws at a recorded sort | ᾱ var with no sort | bookkeeping |
-| P3-P5 split | definition of Δq/Δγ | n/a | definitional |
-| P6 Γ-fresh | HM soundness | `λy. let z = y in z ⇒ a → b` (`runSound_false_unguarded_let`) | **essential** |
-| P7 ownership | finalization reaches every stump | `{a = λx. x.l, b = let y = c in c}` loses a's stump (`runSound_false_let_captures`) | **essential**, maybe derivable (§4.3) |
-| P8a results ⊆ ᾱ | `QScheme.WF` | a constraint pins a global var per instance | **essential** |
-| P8b linear pattern | `Correctable.correct` only | | **incidental** (§4.4) |
-| P8c nodup | `Correctable.correct` only | | **incidental** |
-| P8d disjoint results | `Correctable.correct` only | `instEquivCorrects_false` | **incidental** |
-| P8e spent fillable | T-let's `∃ τ₁` (inhabitation) | vacuous scheme, progress fails | **essential as a property**, not as this syntactic test (§4.5) |
-| P9 Δγ-fresh | parked stumps read the same at every instance | | **essential** |
-| P10 unsolved | nothing a Clean state does not give | | likely redundant (§4.1) |
-| P11 independence | `Correctable.correct` only | `instEquivCorrects_false` | **incidental** |
+| Premise              | Needed by                                     | Without it                                           | Verdict                              |
+|----------------------|-----------------------------------------------|------------------------------------------------------|--------------------------------------|
+| P2 kinds             | instantiation draws at a recorded sort        | ᾱ var with no sort                                   | bookkeeping                          |
+| P3-P5 split          | definition of Δq/Δγ                           | n/a                                                  | definitional                         |
+| P6 Γ-fresh           | HM soundness                                  | `λy. let z = y in z ⇒ a → b`                         | **essential**                        |
+| P7 ownership         | finalization reaches every stump              | `{a = λx. x.l, b = let y = c in c}` loses a's stump  | **essential**, maybe derivable (§4.3)|
+| P8a results ⊆ ᾱ      | `QScheme.WF`                                  | a constraint pins a global var per instance          | **essential**                        |
+| P8b linear pattern   | `Correctable.correct` only                    |                                                      | **incidental** (§4.4)                |
+| P8c nodup            | `Correctable.correct` only                    |                                                      | **incidental**                       |
+| P8d disjoint results | `Correctable.correct` only                    | `instEquivCorrects_false`                            | **incidental**                       |
+| P8e spent fillable   | T-let's `∃ τ₁` (inhabitation)                 | vacuous scheme, progress fails                       | **essential as a property**,         |  
+| P9 Δγ-fresh          | parked stumps read the same at every instance |                                                      | **essential**                        |
+| P10 unsolved         | nothing a Clean state does not give           |                                                      | likely redundant (§4.1)              |
+| P11 independence     | `Correctable.correct` only                    | `instEquivCorrects_false`                            | **incidental**                       |
 
 The key observation: `QScheme.Correctable` is used in exactly one place,
 the `qVar` case of `QTypedA.toQTyped` (InferSoundA.lean:440), to turn an
@@ -174,15 +168,15 @@ instance satisfying all of them.
 
 # 5. Incompleteness, before and after
 
-| Case | Example | Failing premise | After §4 |
-|---|---|---|---|
-| Nested selection | `let g = λx. (x.l).m in {a = g r₁; b = g r₂}` | P11 (p₂'s row γ is p₁'s result `{γ}`), cascades through P8a and P9 until β, γ, δ₂ are all pruned | **fixed** by §4.4 |
-| Record literal in a spent result | `λx. (x.l) {a = c}` | P8b (`{a: 𝓫} → β` is not a linear pattern) | **fixed** by §4.4 |
-| Same field spent twice on one row | `λx. {a = (x.l) c; b = (x.l) c}` | P8d / P8e | **fixed** by §4.4 + §4.5 (one materialization hits both) |
-| Key-blocked spent stump | `let f = λr. λa. r.(a) c` | P8e (no literal key) | **fixed at the let** by §4.5; the top-level report stays kind 9 |
-| Γ-mentioned variable | `λy. let z = y in z` | P6 | justified, HM |
-| Outer stump capture | `{a = λx. x.l, b = let y = c in c}` | P7 | justified |
-| Δ_Γ-mentioned variable | `λr. let f = λy. r.l in …` keeps δ monomorphic | P9 | justified, and costs nothing: every instance would read the same r.l |
+| Case                              | Example                                        | Failing premise                                                                                  | After §4                                                             |
+|-----------------------------------|------------------------------------------------|--------------------------------------------------------------------------------------------------|----------------------------------------------------------------------|
+| Nested selection                  | `let g = λx. (x.l).m in {a = g r₁; b = g r₂}`  | P11 (p₂'s row γ is p₁'s result `{γ}`), cascades through P8a and P9 until β, γ, δ₂ are all pruned | **fixed** by §4.4                                                    |
+| Record literal in a spent result  | `λx. (x.l) {a = c}`                            | P8b (`{a: 𝓫} → β` is not a linear pattern)                                                       | **fixed** by §4.4                                                    |
+| Same field spent twice on one row | `λx. {a = (x.l) c; b = (x.l) c}`               | P8d / P8e                                                                                        | **fixed** by §4.4 + §4.5 (one materialization hits both)             |
+| Key-blocked spent stump           | `let f = λr. λa. r.(a) c`                      | P8e (no literal key)                                                                             | **fixed at the let** by §4.5; the top-level report stays kind 9      |
+| Γ-mentioned variable              | `λy. let z = y in z`                           | P6                                                                                               | justified, HM                                                        |
+| Outer stump capture               | `{a = λx. x.l, b = let y = c in c}`            | P7                                                                                               | justified                                                            |
+| Δ_Γ-mentioned variable            | `λr. let f = λy. r.l in …` keeps δ monomorphic | P9                                                                                               | justified, and costs nothing: every instance would read the same r.l |
 
 Nested selection, after §4.4: the scheme is
 

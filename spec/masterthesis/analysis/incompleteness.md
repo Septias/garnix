@@ -36,20 +36,14 @@ eliminator, a non-label key is a type error. See # Not incompleteness.
 # 1. Wand  `(β | α) ≐ᵣ (l:𝓫)`
 
 **Unifier set.** The right side has one field and no variable, so
-`θβ | θα ≈ (l:𝓫)`: by counting (`rowEquiv_fieldCount_eq`) exactly one of θβ,
-θα carries the l-field, the other is ε. Two unifiers, `{β ≔ ε, α ≔ l:𝓫}` and
+`θβ | θα ≈ (l:𝓫)`: by counting exactly one of θβ, θα carries the l-field,
+the other is ε. Two unifiers, `{β ≔ ε, α ≔ l:𝓫}` and
 `{β ≔ l:𝓫, α ≔ ε}`, neither an instance of the other.
 
-**Why stuck.** Every move is dead (`Refutations.lean:42-52`, all `rfl`): no
+**Why stuck.** Every move is dead: no
 cancellation, no lone variable, no window match (the left side has no
 fields), no ground match (left side has vars), no projection clash (left side
 has vars). Nothing else could be reported.
-
-**Lean.**
-- `wand_no_mgu_count`, `vars_vs_field_no_mgu_on` (NoMgu.lean:489): n ≥ 2
-  distinct variables against one field have no mgu, at `HasMguOn vs`
-- `field_vs_vars_no_mgu_on`: the mirror
-- Fuzz `wand-n` family: stays stuck and cheap
 
 **Program.** Any monomorphic function used at a concatenation and at a literal:
 
@@ -63,18 +57,6 @@ reaches unification: the selection parks a stump blocked on `a`'s row, and
 finalization answers ★. The unification wand is the same ambiguity arriving
 through `≐` instead of `↓`, and it has no ★ fallback.
 
-**Fixes.**
-- Negative info (`plans/negative-info-plan.md` §8): with `β ⊬ l`, the unifier
-  set collapses to `{β ≔ ε, α ≔ l:𝓫}`. Unique, hence an mgu.
-  - CAVEAT: the plan's §8 says "U-expand fires". U-expand is gone
-    (`plans/archive/drop-expand.md`). The fix therefore needs BOTH the atom and
-    a host move: "every variable but one lacks l, so the survivor hosts it".
-    That move invents `α′` in `α ≔ (l:δ | α′)`, which is exactly what was
-    dropped. Decide before running the §8 experiment.
-  - Even then, the atom needs a source (annotation, `?`-guard, builtin); it is
-    never inferred. Without one, Wand stays stuck.
-- No fix at the level of mgus: `vars_vs_field_no_mgu_on` is unconditional.
-
 
 # 2. Levi / two-sided  `(α | l:𝓫) ≐ᵣ (l:𝓫 | β)`
 
@@ -84,7 +66,7 @@ through `≐` instead of `↓`, and it has no ★ fallback.
 - `α ≔ R, β ≔ R` for any var-free R without l-fields (distinct labels commute)
 
 The first has l-count 0, the second ≥ 1 at α: incomparable. This is the Levi
-lemma for word equations (`xa = ay`), and why the name.
+lemma for word equations (`xa = ay`), and reason for the name.
 
 **Why stuck.** Both windows are closed by a variable at the other end (the
 leading field on the right faces `α` on the left, the trailing field on the
@@ -123,10 +105,6 @@ covers `α ≔ l:𝓫, β ≔ ε`. The all-variable stuck class.
 
 **Fix.** None short of qualifiers. Negative info does not help, there is no
 field to be absent.
-
-Related, no longer incompleteness: `α ≐ᵣ (β | α | γ)` used to be reported
-occurs, has the mgu `β, γ ≔ ε` (`occurs_allVar_hasMgu`), and the ε-collapse
-rule now returns it.
 
 
 # 4. Shift  `(α | l:𝓫) ≐ᵣ (l:𝓫 | α)`
@@ -316,15 +294,17 @@ cases below the pruning cascades until the binding is monomorphic, and the
 second use at a different record clashes (or goes stuck). Not every premise is
 incompleteness. Full review and proposed reductions: `let-review.md`.
 
-| Premise                           | Without it                                     | Status        |
-|-----------------------------------|------------------------------------------------|---------------|
-| Γ-freshness `ᾱ ∩ ftv(⟦S₁⟧Γ) = ∅`   | `λy. let z = y in z` infers `a → b` (`runSound_false_unguarded_let`) | required, justified |
-| ownership `Δ_q ∩ Δ = ∅`            | a stump is filed under an unused scheme, never finalized (`runSound_false_let_captures`) | required, justified |
-| `ᾱ ∩ dom(S₁) = ∅`                  | generalizing solved vars                       | required, justified |
-| `ᾱ ∩ ftv(⟦S₁⟧Δ_Γ) = ∅`             | parked Γ-stumps read differently per instance  | required, justified |
-| results ok (linear pattern)        | an instance cannot be corrected to meet each lookup exactly | required for the correction argument |
-| spent result fillable              | T-let's `∃ τ₁` fails                           | required (inhabitation) |
-| independence                       | `instEquivCorrects_false` (Finalization.lean:345) | relaxable |
+
+| Premise                          | Without it                                                  | Status                               |
+|----------------------------------|-------------------------------------------------------------|--------------------------------------|
+| Γ-freshness `ᾱ ∩ ftv(⟦S₁⟧Γ) = ∅` | `λy. let z = y in z` infers `a → b`                         | required, justified                  |
+| ownership `Δ_q ∩ Δ = ∅`          | a stump is filed under an unused scheme, never finalized    | required, justified                  |
+| `ᾱ ∩ dom(S₁) = ∅`                | generalizing solved vars                                    | required, justified                  |
+| `ᾱ ∩ ftv(⟦S₁⟧Δ_Γ) = ∅`           | parked Γ-stumps read differently per instance               | required, justified                  |
+| results ok (linear pattern)      | an instance cannot be corrected to meet each lookup exactly | required for the correction argument |
+| spent result fillable            | T-let's `∃ τ₁` fails                                        | required (inhabitation)              |
+| independence                     | `instEquivCorrects_false` (Finalization.lean:345)           | relaxable                            |
+
 
 **What it costs.**
 - Nested selection: `let g = λx. (x.l).m in {a = g r₁; b = g r₂}`. The stump
@@ -336,6 +316,7 @@ incompleteness. Full review and proposed reductions: `let-review.md`.
 - Same field spent twice on one row: two stumps share a blocker and a label,
   the linearity condition fails.
 - Key-blocked spent stump: no blocker to fill (kind 9 again, at a let).
+
 
 **Fixes.**
 - Independence → ordered discharge: discharge an instance's constraints in
@@ -400,18 +381,3 @@ judgements. They are gaps against R3 (totality), argued in @sec-goals:
 - **Clash / occurs** where no unifier exists (`nix_callback_shared_tail_clash`,
   `nix_callback_extension_clash`, `selfref_lone_host_no_unifier`): correct
   rejections.
-
-
-# Findings from writing this
-
-- [ ] Levi and negative info: with context-free ≈ the atom does not produce an
-      mgu (kind 2). Thesis @incompleteness-irreducible and proof-state.md
-      # Incompleteness both claim it does
-- [ ] Wand and negative info: the plan's §8 experiment assumes U-expand, which
-      is gone. The fix needs atom AND host move (kind 1)
-- [ ] `unify_diff_key_stuck` justification is wrong for the singleton (kind
-      8b); fix the comments in Regressions.lean:391 and algorithmic.typ:916
-- [x] `RowUnify/Driver.lean:64` said stuck "degrades to ★ with a W-flag". It fails the
-      run (`InferFn.lean:173`). Comment fixed
-- [ ] T-★-intro witness was never committed to `lean/` (kind 11)
-- [ ] key-blocked spent promise has no Lean witness (kind 9)
