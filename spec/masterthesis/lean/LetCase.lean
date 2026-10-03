@@ -427,21 +427,29 @@ theorem letCase {C : Type} {constTy : C → B} : LetCase B C constTy := by
     -- shared between a spent and an unspent result is no obstacle
     let rd : Parked B → Ty B := fun p =>
       (p.stump.res.applySubst S₁.subst).applySubst (readSub σ ᾱ f)
-    let resF : List TyVar :=
-      (Δq.filter (fun p => (p.stump.res.applySubst S₁.subst).isVar)).flatMap (fun p => (rd p).ftv)
     let χR : TySubst B :=
-      ⟨fun β => if β ∈ resF then .unk else .var β, fun γ => .var γ, fun x => .var x⟩
+      ⟨fun β => if β ∈ ᾱ.map f then .unk else .var β, fun γ => .var γ, fun x => .var x⟩
     let fills : TyVar → List (Label × Ty B) := fun γ =>
       (Δq.filter (fun p => !(p.stump.res.applySubst S₁.subst).isVar && decide (f p.blocker = γ))).map
         (fun p => ((p.stump.label.applySubst S₁.subst).keyName, (rd p).applySubst χR))
     let χ₀ : TySubst B :=
       ⟨χR.ty, fun γ => fillRow (fills γ) γ, fun x => .var x⟩
-    have mem_resF : ∀ {β}, β ∈ resF → ∃ q ∈ Δq,
-        (q.stump.res.applySubst S₁.subst).isVar = true ∧ β ∈ (rd q).ftv := by
-      intro β h
-      obtain ⟨q, hq, hm⟩ := List.mem_flatMap.mp h
-      obtain ⟨hq, hv⟩ := List.mem_filter.mp hq
-      exact ⟨q, hq, hv, hm⟩
+    -- a generalized result under χR is its ★-image, renamed
+    have hstar : ∀ p ∈ Δq, (rd p).applySubst χR =
+        ((p.stump.res.applySubst S₁.subst).applySubst TySubst.starTy).applySubst
+          (readSub σ ᾱ f) := by
+      have key : ∀ τ : Ty B, (∀ α ∈ τ.ftv, α ∈ ᾱ) →
+          (τ.applySubst (readSub σ ᾱ f)).applySubst χR =
+            (τ.applySubst TySubst.starTy).applySubst (readSub σ ᾱ f) := by
+        intro τ hτ
+        rw [Ty.applySubst_applySubst, Ty.applySubst_applySubst]
+        apply Ty.applySubst_congr
+        intro α hα
+        have hαᾱ := hτ α hα
+        simp [TySubst.comp, readSub, hαᾱ, TySubst.starTy, χR, Ty.applySubst, Row.applySubst,
+          Key.applySubst, List.mem_map_of_mem hαᾱ]
+        exact ⟨α, hαᾱ, rfl⟩
+      exact fun p hp => key _ (hres.1 p hp)
     have mem_fills : ∀ {γ lt}, lt ∈ fills γ → ∃ q ∈ Δq,
         (q.stump.res.applySubst S₁.subst).isVar = false ∧ f q.blocker = γ ∧
         lt = ((q.stump.label.applySubst S₁.subst).keyName, (rd q).applySubst χR) := by
@@ -461,12 +469,7 @@ theorem letCase {C : Type} {constTy : C → B} : LetCase B C constTy := by
       simp only [Prod.mk.injEq, hl', Key.keyName] at he
       exact ⟨q, hq, hqs, hqb', by rw [hl', he.1], he.2⟩
     refine ⟨_, χ₀, ⟨fun β hβ => ?_, fun β hβ => ?_, fun _ _ => rfl⟩, fun st hst => ?_, rfl⟩
-    · have : β ∉ resF := fun hm => by
-        obtain ⟨q, hq, -, hm⟩ := mem_resF hm
-        rw [hrdftv q hq] at hm
-        obtain ⟨δ, hδ, rfl⟩ := List.mem_map.mp hm
-        exact hβ (List.mem_map_of_mem (hres.1 q hq δ hδ))
-      simp only [χ₀, χR, if_neg this]
+    · exact if_neg hβ
     · have : fills β = [] := by
         rcases h : fills β with _ | ⟨lt, _⟩
         · rfl
@@ -505,8 +508,8 @@ theorem letCase {C : Type} {constTy : C → B} : LetCase B C constTy := by
           | none => exact absurd hlk' (lookup_none_of_mem hmem)
           | some τ =>
               obtain ⟨q, hq, -, hqb, hql, rfl⟩ := fill_key p hp hlk'
-              have hqp := (hsame q hq hqb).2 (hql.trans hl.symm)
-              simp only [rd, hqp]
+              have hqp := ((hsame q hq hqb).2 (hql.trans hl.symm)).2
+              rw [hstar q hq, hstar p hp, hqp]
         rw [hfound] at hfind
         refine .hit (τ := (rd p).applySubst χR) (hlk _ ?_) (.of_eq ?_)
         · rw [hl]; exact LookupQ.lab_iff.mpr hfind
@@ -529,9 +532,7 @@ theorem letCase {C : Type} {constTy : C → B} : LetCase B C constTy := by
       · ---------------- UNSPENT: the result goes to ★, the lookup stays blocked
         obtain ⟨δ, hδe⟩ := Ty.exists_of_isVar hsp
         have hδα : δ ∈ ᾱ := hres.1 p hp δ (by rw [hδe]; simp [Ty.ftv])
-        have hin : f δ ∈ resF := List.mem_flatMap.mpr ⟨p, List.mem_filter.mpr ⟨hp, hsp⟩, by
-          show f δ ∈ ((p.stump.res.applySubst S₁.subst).applySubst (readSub σ ᾱ f)).ftv
-          rw [hδe]; simp [Ty.applySubst, readSub, hδα, Ty.ftv]⟩
+        have hin : f δ ∈ ᾱ.map f := List.mem_map_of_mem hδα
         have hδres : (rd p).applySubst χ₀ = .unk := by
           show ((p.stump.res.applySubst S₁.subst).applySubst (readSub σ ᾱ f)).applySubst χ₀ = _
           rw [hδe]
@@ -599,8 +600,8 @@ theorem letCase {C : Type} {constTy : C → B} : LetCase B C constTy := by
             | some τ =>
                 exfalso
                 obtain ⟨q', hq', hq's, hq'b, hq'l, -⟩ := fill_key p hp hlk'
-                have hpq := ((hres.2 q' hq' hq's).2.1 p hp hq'b.symm).2 (hl.trans hq'l.symm)
-                rw [hpq] at hsp; rw [hsp] at hq's; exact Bool.noConfusion hq's
+                have hpq := (((hres.2 q' hq' hq's).2.1 p hp hq'b.symm).2 (hl.trans hq'l.symm)).1
+                rw [hpq] at hsp; exact Bool.noConfusion hsp
           rw [hnone] at hfind
           refine .unk (hlk _ ?_) hδres
           rw [hl]; exact LookupQ.lab_iff.mpr hfind

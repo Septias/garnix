@@ -368,6 +368,52 @@ theorem runSound_false_let_captures (hu : UnguardedLet Unit Unit (fun _ => ())) 
     ¬ RunSound Unit Unit (fun _ => ()) := fun h =>
   letCapture_not_typed (h _ _ _ ⟨lcS2, lcS2, letCapture_infers_unguarded hu, Materializes.refl _ _, .nil⟩)
 
+/-- A-let without its ownership premise, but with the other three conditions of
+`LetAdmissible`: freshness for Γ and Δ_Γ, results generalized, spent results
+fillable. -/
+def UnownedLet (B C : Type) [DecidableEq B] (constTy : C → B) : Prop :=
+  ∀ {Γ : QCtx B} {S S₁ S₂ : SolverState B} {x : Var} {e₁ e₂ : Expr C}
+    {τ₁ τ₂ : Ty B} {ᾱ : List TyVar},
+    Infer constTy Γ S e₁ τ₁ S₁ →
+    (∀ α ∈ ᾱ, α ∉ letEnvFtv Γ S₁ (letG S₁ ᾱ)) →
+    (∀ p ∈ letQ S₁ ᾱ, ∀ δ ∈ (p.stump.res.applySubst S₁.subst).ftv, δ ∈ ᾱ) →
+    LetSpent S₁ (letQ S₁ ᾱ) →
+    Infer constTy (Γ.bindScheme x (letScheme S₁ ᾱ (letQ S₁ ᾱ) τ₁))
+      { S₁ with parked := letG S₁ ᾱ } e₂ τ₂ S₂ →
+    Infer constTy Γ S (.letE x e₁ e₂) τ₂ S₂
+
+/-- ⊢  **ownership is not derivable from the other conditions.** y's let
+generalizes ᾱ = {2, 3}, the variables of field a's stump — the candidates
+ftv(⟦S₁⟧τ₁, ⟦S₁⟧Δ₁) minus nothing: Γ is empty, Δ_Γ is empty, the result 3 is
+generalized and is a variable. The run ends at the untypable `a : {2} → 3`. -/
+theorem runSound_false_unowned_let (hu : UnownedLet Unit Unit (fun _ => ())) :
+    ¬ RunSound Unit Unit (fun _ => ()) := by
+  intro h
+  have hinf : Infer (B := Unit) (C := Unit) (fun _ => ()) QCtx.empty
+      ⟨Sol.nil, [], [], ⟨1⟩, []⟩ lcE
+      (.rcd (.cat (.sing "a" (.fn (.var (natName 1)) (.var (natName 3))))
+                  (.sing "b" (.base ())))) lcS2 := by
+    refine Infer.rcd (.cat (.field selEx_infers) (.field ?_))
+    have hG : letG lcS1 [natName 2, natName 3] = [] := by decide
+    have hS : ({ lcS1 with parked := letG lcS1 [natName 2, natName 3] } : SolverState Unit)
+        = lcS2 := by rw [hG]; rfl
+    rw [← hS]
+    refine hu (S₁ := lcS1) (ᾱ := [natName 2, natName 3]) .con ?_ ?_ ?_ .con
+    · intro α _
+      have hE : letEnvFtv (B := Unit) QCtx.empty lcS1 [] = [] := by decide
+      rw [hG, hE]; exact List.not_mem_nil
+    · intro p hp δ hδ
+      replace hp := (mem_letQ.mp hp).1
+      simp only [lcS1, List.mem_cons, List.not_mem_nil, or_false] at hp
+      subst hp
+      revert δ; decide
+    · intro p hp hsp
+      replace hp := (mem_letQ.mp hp).1
+      simp only [lcS1, List.mem_cons, List.not_mem_nil, or_false] at hp
+      subst hp
+      exact absurd hsp (by decide)
+  exact letCapture_not_typed (h _ _ _ ⟨lcS2, lcS2, hinf, Materializes.refl _ _, .nil⟩)
+
 /-- ⊢  the witness violates the new ownership premise: y's let is entered at
 `lcS1` (e₁ is a constant, so it is also S₁), and Δ_q = `lcS1.parked` — the stump
 field a parked before the let. -/

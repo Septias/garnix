@@ -944,6 +944,12 @@ info: 'MinimalCalculus.runSound_false_let_captures' depends on axioms: [propext,
 -/
 #guard_msgs in #print axioms runSound_false_let_captures
 
+-- …even with every other condition of `LetAdmissible` kept: ownership is not derivable.
+/--
+info: 'MinimalCalculus.runSound_false_unowned_let' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms runSound_false_unowned_let
+
 -- ## The restated soundness statement (InferSound)
 /--
 info: 'MinimalCalculus.QTypedA.weaken' depends on axioms: [propext]

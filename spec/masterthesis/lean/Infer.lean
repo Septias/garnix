@@ -761,10 +761,30 @@ theorem Parked.fillable_iff {B : Type} {S : SolverState B} {p : Parked B} :
       (.lab, p.blocker) ∉ (p.stump.row.applySubst S.subst).sortedFtv := by
   simp [Parked.fillable]
 
+/-- every type variable to ★; rows and keys stay -/
+def TySubst.starTy {B : Type} : TySubst B := ⟨fun _ => .unk, fun γ => .var γ, fun x => .var x⟩
+
+/-- q demands the same field as the spent p, and agrees with it once every type
+variable is sent to ★: q is spent too, and the two results differ only in type
+variables. One field then answers both, at the instance that sends the
+generalized type variables to ★. -/
+def Parked.spentAlike {B : Type} (S₁ : SolverState B) (q p : Parked B) : Prop :=
+  (q.stump.res.applySubst S₁.subst).isVar = false ∧
+    (q.stump.res.applySubst S₁.subst).applySubst TySubst.starTy =
+      (p.stump.res.applySubst S₁.subst).applySubst TySubst.starTy
+
+instance {B : Type} [DecidableEq B] {S₁ : SolverState B} {q p : Parked B} :
+    Decidable (q.spentAlike S₁ p) := by
+  unfold Parked.spentAlike; infer_instance
+
+theorem Parked.spentAlike_refl {B : Type} {S₁ : SolverState B} {p : Parked B}
+    (h : (p.stump.res.applySubst S₁.subst).isVar = false) : p.spentAlike S₁ p :=
+  ⟨h, rfl⟩
+
 /-- A spent result can be met at some instance, by extending its blocker row
 with the field (as `Materialize` does at the top level): its key is literal,
-every stump on the same blocker is literally keyed and is it if it has its key,
-and no spent stump's blocker occurs in it. A sufficient, syntactic test for the
+every stump on the same blocker is literally keyed and, if it has its key, is
+spent alike (`Parked.spentAlike`), and no spent stump's blocker occurs in it. A sufficient, syntactic test for the
 inhabitation of the scheme (`∃ τ₁. σ ≥ τ₁`, the T-let premise); unlike the
 property itself it is closed under union (`LetAdmissible.union`). -/
 def LetSpent {B : Type} (S₁ : SolverState B) (Δq : List (Parked B)) : Prop :=
@@ -773,7 +793,7 @@ def LetSpent {B : Type} (S₁ : SolverState B) (Δq : List (Parked B)) : Prop :=
       (∀ q ∈ Δq, q.blocker = p.blocker →
         q.fillable S₁ = true ∧
         (q.stump.label.applySubst S₁.subst = p.stump.label.applySubst S₁.subst →
-          q.stump = p.stump)) ∧
+          q.spentAlike S₁ p)) ∧
       (∀ q ∈ Δq, (q.stump.res.applySubst S₁.subst).isVar = false →
         q.blocker ∉ (p.stump.res.applySubst S₁.subst).ftv)
 

@@ -43,7 +43,7 @@ theorem LetAdmissible.spent' {Γ : QCtx B} {S S₁ : SolverState B} {ᾱ : List 
       (∀ q ∈ S₁.parked, q.blocker = p.blocker →
         (q.fillable S₁) = true ∧
         (q.stump.label.applySubst S₁.subst = p.stump.label.applySubst S₁.subst →
-          q.stump = p.stump)) ∧
+          q.spentAlike S₁ p)) ∧
       (∀ q ∈ S₁.parked, q.blocker ∈ ᾱ → (q.stump.res.applySubst S₁.subst).isVar = false →
         q.blocker ∉ (p.stump.res.applySubst S₁.subst).ftv) := by
   intro p hp hb hsp
@@ -63,7 +63,7 @@ theorem LetAdmissible.of_parts {Γ : QCtx B} {S S₁ : SolverState B} {ᾱ : Lis
       (∀ q ∈ S₁.parked, q.blocker = p.blocker →
         (q.fillable S₁) = true ∧
         (q.stump.label.applySubst S₁.subst = p.stump.label.applySubst S₁.subst →
-          q.stump = p.stump)) ∧
+          q.spentAlike S₁ p)) ∧
       (∀ q ∈ S₁.parked, q.blocker ∈ ᾱ → (q.stump.res.applySubst S₁.subst).isVar = false →
         q.blocker ∉ (p.stump.res.applySubst S₁.subst).ftv))
     (dis : ∀ α ∈ ᾱ, ∀ p ∈ S₁.parked, p.blocker ∉ ᾱ →
@@ -91,7 +91,7 @@ theorem LetAdmissible.union {Γ : QCtx B} {S S₁ : SolverState B} {ᾱ₁ ᾱ�
       (∀ q ∈ S₁.parked, q.blocker = p.blocker →
         (q.fillable S₁) = true ∧
         (q.stump.label.applySubst S₁.subst = p.stump.label.applySubst S₁.subst →
-          q.stump = p.stump)) ∧
+          q.spentAlike S₁ p)) ∧
       (∀ q ∈ S₁.parked, q.blocker ∈ ᾱ' → (q.stump.res.applySubst S₁.subst).isVar = false →
         q.blocker ∉ (p.stump.res.applySubst S₁.subst).ftv) := by
     intro ᾱ ᾱ' hj p hp hpb hsp
@@ -157,7 +157,7 @@ def LetBad (Γ : QCtx B) (S S₁ : SolverState B) (ᾱ : List TyVar) (α : TyVar
      ((p.fillable S₁) = false ∨
       ∃ q ∈ S₁.parked, q.blocker = α ∧ ((q.fillable S₁) = false ∨
         (q.stump.label.applySubst S₁.subst = p.stump.label.applySubst S₁.subst ∧
-         q.stump ≠ p.stump)))) ∨
+         ¬ q.spentAlike S₁ p)))) ∨
   -- a spent stump blocked on α has α inside a spent result
   (∃ q ∈ S₁.parked, q.blocker = α ∧ (q.stump.res.applySubst S₁.subst).isVar = false ∧
      ∃ p ∈ S₁.parked, (p.stump.res.applySubst S₁.subst).isVar = false ∧
@@ -218,7 +218,7 @@ theorem LetAdmissible.of_no_bad {Γ : QCtx B} {S S₁ : SolverState B} {ᾱ : Li
         ∃ q ∈ S₁.parked, q.blocker = p.blocker ∧
           ((q.fillable S₁) = false ∨
            (q.stump.label.applySubst S₁.subst = p.stump.label.applySubst S₁.subst ∧
-            q.stump ≠ p.stump))) :=
+            ¬ q.spentAlike S₁ p))) :=
       fun hn => h _ hb (.inr (.inr (.inr (.inl ⟨p, hp, rfl, hsp, hn⟩))))
     refine ⟨?_, fun q hq hqb => ⟨?_, fun he => ?_⟩, fun q hq hqb hqs hm => ?_⟩
     · cases hc : (p.fillable S₁)

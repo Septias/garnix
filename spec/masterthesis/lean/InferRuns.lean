@@ -112,6 +112,12 @@ def run (e : E) : String := verdict (runF (fun _ => ()) 50 e)
     (rec2 "a" (.app (v "f") (rec2 "l" (.lam "y" (v "y")) "m" c))
           "b" (.app (v "f") (rec2 "l" (.lam "y" c) "m" (.rcd .empty)))))
   = "{a: 𝓫 | b: 𝓫}"
+-- the same field spent twice on one row (`Parked.spentAlike`): the two results
+-- 𝓫 → β₁ and 𝓫 → β₂ agree once β₁, β₂ go to ★, so one field answers both
+#guard run (.letE "f" (.lam "x" (rec2 "p" (.app (.sel (v "x") "l") c) "q" (.app (.sel (v "x") "l") c)))
+    (rec2 "a" (.app (v "f") (rec1 "l" (.lam "z" (v "z"))))
+          "b" (.app (v "f") (rec1 "l" (.lam "z" (.rcd .empty))))))
+  = "{a: {p: 𝓫 | q: 𝓫} | b: {p: {ε} | q: {ε}}}"
 
 -- an instance's stump whose RESULT was aliased (found by this function,
 -- 2026-09-26, then fixed): in `h = λy. g y`, A-app emits δ ≐ β and the unifier
