@@ -1,7 +1,7 @@
 
-
 ./26-09-28.typ
 ./26-09-30.typ
+
 
 == State: Fäden
 - Remove as many as possible inconsistencies

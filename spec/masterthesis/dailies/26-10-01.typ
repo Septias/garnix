@@ -1,6 +1,7 @@
 
 
 ./26-10-02.typ
+./26-09-30.typ
 
 == State: Fäden
 - Remove as much incompleteness as possible
@@ -11,10 +12,7 @@
 == State
 - I have a writing-surplus
 - But I do have some understanding defecit to make up for
-
-
-== Fragen
-- Wie groß ist mein Verstehens-Defizit wirklich?
+  - Wie groß wirklich?
 
 
 == Fragen
