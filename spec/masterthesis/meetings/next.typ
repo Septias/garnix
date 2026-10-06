@@ -13,7 +13,7 @@
   - Stumps that allow to remove guessing
   - Unification with strong metatheory
   - Rows form a trace monoid
-- Zustand: Beweise für Systeme größtenteils durch
+- Zustand: Beweise für Systeme durch
   - Sound&Complete: Für L1 und L2
   - Termination für Unification
   - Principality für ein Beispiel (qualified schemes are forced)
@@ -29,7 +29,6 @@
       - ?
 - Ongoing
   - Thesis text schreiben, AI legt die foundation
-  - Eigentlich schon fertig?
 - Fragen
   - Ist AI assisted work so far okay?
   - Sind das genügend contributions?
