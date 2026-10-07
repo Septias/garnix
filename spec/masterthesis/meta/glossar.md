@@ -25,3 +25,5 @@
 - *↯*: Lookup error — a selection reached a record literal without the label; the residual-risk disjunct of progress
 - *Soft typing*: Programs keep their untyped semantics; ★ marks where the analysis gave up, warnings say why
 - *Instance-Closed T-let*: ∀ τ₁ ≤ σ. Γ ⊢ e₁: τ₁
+- *spent stump*: A stump that needs to be materialized
+- *materialization*: The process of inserting a pre-found type

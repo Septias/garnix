@@ -334,7 +334,7 @@ incompleteness. Full review and proposed reductions: `let-review.md`.
 
 **Shape.**
 
-    λg. {a = g {l = c}; b = g {m = c}}   :   (★ → 𝓫) → {a: 𝓫 | b: 𝓫}
+    λg. {a = g {l = c}; b = g {m = c}}:   (★ → 𝓫) → {a: 𝓫 | b: 𝓫}
 
 Declaratively typed by sending both argument records up to ★. The algorithm
 unifies `{l:𝓫} ≐ {m:𝓫}` and clashes. Claimed kernel-checked in
