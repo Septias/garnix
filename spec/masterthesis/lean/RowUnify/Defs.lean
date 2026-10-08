@@ -206,6 +206,18 @@ def sFtv {B : Type} : List (Atom B) → List TyVar
 def localSupply {B : Type} (s₁ s₂ : List (Atom B)) : Supply :=
   ⟨lenBound (sFtv s₁ ++ sFtv s₂) + 1⟩
 
+/-- A bound on the names of `V`, by bytes: `String.length` depends on
+`Classical.choice` in core, `utf8ByteSize` on nothing, and the inference rules
+that use `Supply.above` stay choice-free. -/
+def byteBound (V : List (Srt × TyVar)) : Nat := V.foldr (fun x m => max x.2.utf8ByteSize m) 0
+
+/-- `S`, advanced past every name of `V`. -/
+def Supply.above (S : Supply) (V : List (Srt × TyVar)) : Supply :=
+  ⟨max S.next (byteBound V + 1)⟩
+
+theorem Supply.le_above (S : Supply) (V : List (Srt × TyVar)) : S.next ≤ (S.above V).next :=
+  Nat.le_max_left _ _
+
 
 def renameVar {B : Type} (β β' : TyVar) : List (Atom B) → List (Atom B)
   | [] => []
@@ -364,6 +376,35 @@ end
 def HostShape {B : Type} (l : Label) (τ : Ty B) (s : List (Atom B)) (β : TyVar) : Prop :=
   (∃ rest, sVarSeq s = β :: rest ∧ ∀ γ ∈ rest, γ ∈ Ty.allRowVars τ) ∧
   sFieldCount l s = 0 ∧ β ∉ Ty.allRowVars τ ∧ sHasKey s = false
+
+-- ## U-host's detector
+-- `HostShape`, plus SOLE OCCURRENCE: β occurs nowhere in the problem but at its
+-- host position — not in the other side `t₁`, not in τ (HostShape already says
+-- that), not in any payload of `s`, and once on the spine. Under that guard,
+-- renaming β ↦ β′ on the host side IS applying β ≔ (l:τ | β′) to the whole
+-- problem: nothing stale survives, so the solution stays applied. This is the
+-- whole difference from the old U-expand, whose host-only rename left β alive
+-- elsewhere.
+def soleHost {B : Type} (l : Label) (τ : Ty B) (t₁ s : List (Atom B)) : Option TyVar :=
+  match sVarSeq s with
+  | β :: rest =>
+      if sFieldCount l s = 0 ∧ sHasKey s = false ∧ β ∉ Ty.allRowVars τ ∧
+         (∀ γ ∈ rest, γ ∈ Ty.allRowVars τ) ∧
+         β ∉ Row.allRowVars (ofSpine t₁) ∧ (Row.allRowVars (ofSpine s)).count β = 1
+      then some β else none
+  | [] => none
+
+-- A leading field `l:τ` on one side against a sole host on the other. Returns
+-- the host, the field, and the residual: the field dropped, the host renamed to
+-- the supply's next name.
+def hostL {B : Type} (S : Supply) :
+    List (Atom B) → List (Atom B) →
+    Option (TyVar × Label × Ty B × List (Atom B) × List (Atom B))
+  | .field l τ :: t₁, s₂ =>
+      match soleHost l τ t₁ s₂ with
+      | some β => some (β, l, τ, t₁, renameVar β S.fresh.1 s₂)
+      | none => none
+  | _, _ => none
 
 -- `NoHost` and `expandR` LIVED HERE, with `uniqueHost`/`expandL` above: the
 -- refusal predicate the trichotomy's step-2 dispatch read off, and the
@@ -657,6 +698,15 @@ def solveVarM {B : Type} (S : Supply) :
 -- graph update that recorded it. `expandDeps` was the DepGraph's only producer,
 -- which is why the graph could go with the arms rather than after them.
 
+-- ## U-host, at the mutual driver's result type
+-- The residual's solution is composed ON TOP, so the host's own binding sees
+-- whatever the residual did to β′ and to τ's variables.
+def hostResM {B : Type} (S : Supply) (β : TyVar) (l : Label) (τ : Ty B) :
+    UResM B → UResM B
+  | .success s S' =>
+      .success (s.comp ⟨[], [(β, .cat (.sing l τ) (.var S.fresh.1))], []⟩) S'
+  | r => r
+
 -- ## The driver
 -- unifyTyF is ≐; unifySpineMF is ≐ᵣ. Both consume one unit of fuel per
 -- cross-call, so the block is STRUCTURALLY recursive on fuel — which is what
@@ -744,21 +794,18 @@ def unifySpineMF {B : Type} [DecidableEq B] :
       -- `projClash` is a SOUND no-unifier test (projClash_no_unifier) and owes
       -- nothing to the expansion arms it used to be ordered in front of.
       if projClash s₁ s₂ then .clash else
-      -- U-EXPAND WAS HERE: expandL ×2, then projClash, then expandR ×2. The
-      -- four arms were the only ones that INVENTED variables rather than
-      -- applying a substitution, and every expensive invariant in this
-      -- development traced to that — `renameVar`'s stale payloads, the
-      -- dependency-graph guards, the triangularity of `Sol`, and the
-      -- reachability disjunct that blocked `occurs ⟹ ¬∃θ`. All four are gone
-      -- with them (Stage 1b). See plans/drop-expand.md.
-      --
-      -- Removal is VERDICT-MONOTONE: the arms were last in the dispatch order,
-      -- so this run is the old one with some subtrees replaced by `.stuck`, and
-      -- `.stuck` propagates through `.seq`. Every theorem here is of the form
-      -- "verdict reached ⟹ property" — completeness included, which reads
-      -- `… = .success s S' → Sol.Sat θ s` — so this shortens inductions and
-      -- weakens no statement. Checked on 771 578 pairs: 0 counterexamples.
-      .stuck
+      -- U-HOST, last: a leading field against a SOLE host on the other side
+      -- (`hostL`). It is the only arm that invents a name, and the sole-
+      -- occurrence guard is what keeps that invention harmless — see `soleHost`.
+      -- Being last, it only ever replaces a `.stuck` leaf.
+      match hostL S s₁ s₂ with
+      | some (β, l, τ, t₁, t₂) =>
+          hostResM S β l τ (unifySpineMF S.fresh.2 fuel t₁ t₂)
+      | none =>
+      match hostL S s₂ s₁ with
+      | some (β, l, τ, t₂, t₁) =>
+          hostResM S β l τ (unifySpineMF S.fresh.2 fuel t₁ t₂)
+      | none => .stuck
 
 end
 

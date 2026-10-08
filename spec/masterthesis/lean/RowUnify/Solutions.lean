@@ -950,6 +950,124 @@ theorem crossfield_host_forced {B : Type} (b : B) {l m : Label} (hne : l ≠ m)
   exact ⟨ρ', hβ.trans (RowEquiv.cat (RowEquiv.sing hty.symm) (.refl _))⟩
 
 
+---------------------------- U-HOST: THE MOVE ------------------------------------
+-- The arm (`hostL`, Defs.lean) drops the leading field `l:τ` and renames the
+-- sole host β to the fresh β′. Under the sole-occurrence guard that rename IS
+-- the substitution β ≔ (l:τ | β′) followed by the pairing, which is what the
+-- two reflection lemmas below say — backward for soundness, forward for
+-- completeness.
+
+-- THE SHIFT. Under the host's binding the whole side factors as "the field,
+-- then the side with the host renamed": the fields in front of the host carry
+-- other labels, so ≈-comm walks the field out to the front.
+-- ⊢  vars(s) = β::rest,  β ∉ rest,  count_l(s) = 0,  no key,  θβ ≈ (l:σ | θβ′)
+--        ⟹  θ(ofSpine s) ≈ᵣ (l:σ | θ(ofSpine s[β↦β′]))
+-- WHY THE HOST MUST LEAD. The field is emitted at the FRONT of the binding, so
+-- it commutes out past everything to its left. `count_l = 0` makes the FIELDS
+-- there harmless, but a VARIABLE to the left is a hole θ may fill with an
+-- l-field, and then the two sides differ by which l shadows which
+-- (`Refutations.shadow_order_matters`).
+theorem host_shift {B : Type} {θ : TySubst B} {l : Label} {σ : Ty B}
+    {β β' : TyVar} {rest : List TyVar}
+    (hβ : RowEquiv (θ.row β) (.cat (.sing l σ) (θ.row β'))) (hnr : β ∉ rest) :
+    (s : List (Atom B)) → sVarSeq s = β :: rest → sFieldCount l s = 0 →
+    sHasKey s = false →
+    RowEquiv ((ofSpine s).applySubst θ)
+             (.cat (.sing l σ) ((ofSpine (renameVar β β' s)).applySubst θ))
+  | .var γ :: s, hv, _, _ => by
+      simp only [sVarSeq] at hv
+      injection hv with hγ hs
+      subst hγ
+      show RowEquiv (.cat (θ.row γ) ((ofSpine s).applySubst θ)) _
+      rw [renameVar, if_pos rfl,
+        renameVar_not_mem γ β' s (by rw [hs]; exact hnr)]
+      exact (RowEquiv.cat hβ (.refl _)).trans RowEquiv.assoc
+  | .field l' τ :: s, hv, hc, hk => by
+      simp only [sVarSeq] at hv
+      simp only [sFieldCount] at hc
+      simp only [sHasKey] at hk
+      have hl : ¬ l' = l := by intro hh; rw [if_pos hh] at hc; omega
+      rw [if_neg hl] at hc
+      have ih := host_shift hβ hnr s hv (by omega) hk
+      show RowEquiv (.cat (.sing l' (τ.applySubst θ)) ((ofSpine s).applySubst θ)) _
+      rw [renameVar]
+      exact ((RowEquiv.cat (.refl _) ih).trans RowEquiv.assoc.symm).trans
+        ((RowEquiv.cat (RowEquiv.comm hl) (.refl _)).trans RowEquiv.assoc)
+  | .dfield _ _ :: _, _, _, hk => by simp [sHasKey] at hk
+
+-- ⊢  what the detector certifies
+theorem soleHost_spec {B : Type} {l : Label} {τ : Ty B} {t₁ s : List (Atom B)}
+    {β : TyVar} (h : soleHost l τ t₁ s = some β) :
+    HostShape l τ s β ∧ β ∉ Row.allRowVars (ofSpine t₁) ∧
+      (Row.allRowVars (ofSpine s)).count β = 1 := by
+  unfold soleHost at h
+  cases hvs : sVarSeq s with
+  | nil => rw [hvs] at h; cases h
+  | cons γ rest =>
+      rw [hvs] at h
+      simp only at h
+      split at h
+      · next hcond =>
+          injection h with hg
+          subst hg
+          obtain ⟨hc, hk, hnot, hrest, ht₁, hcnt⟩ := hcond
+          exact ⟨⟨⟨rest, hvs, hrest⟩, hc, hnot, hk⟩, ht₁, hcnt⟩
+      · cases h
+
+theorem hostL_spec {B : Type} {S : Supply} {s₁ s₂ : List (Atom B)}
+    {β : TyVar} {l : Label} {τ : Ty B} {t₁ t₂ : List (Atom B)}
+    (h : hostL S s₁ s₂ = some (β, l, τ, t₁, t₂)) :
+    s₁ = .field l τ :: t₁ ∧ HostShape l τ s₂ β ∧
+      β ∉ Row.allRowVars (ofSpine t₁) ∧ (Row.allRowVars (ofSpine s₂)).count β = 1 ∧
+      t₂ = renameVar β S.fresh.1 s₂ := by
+  match s₁ with
+  | .field l' τ' :: u₁ =>
+      simp only [hostL] at h
+      revert h
+      cases hh : soleHost l' τ' u₁ s₂ with
+      | none => intro h; cases h
+      | some γ =>
+          intro h
+          cases h
+          obtain ⟨hs, ht, hc⟩ := soleHost_spec hh
+          exact ⟨rfl, hs, ht, hc, rfl⟩
+
+-- ⊢  the wrapper inverts: a success came from a residual success, with the
+--    host's binding composed underneath
+theorem hostResM_success {B : Type} {S : Supply} {β : TyVar} {l : Label} {τ : Ty B}
+    {r : UResM B} {s : Sol B} {S' : Supply} (h : hostResM S β l τ r = .success s S') :
+    ∃ s₀, r = .success s₀ S' ∧
+      s = s₀.comp ⟨[], [(β, .cat (.sing l τ) (.var S.fresh.1))], []⟩ := by
+  cases r with
+  | success s₀ S₀ =>
+      simp only [hostResM, UResM.success.injEq] at h
+      obtain ⟨rfl, rfl⟩ := h
+      exact ⟨s₀, rfl, rfl⟩
+  | _ => cases h
+
+-- ⊢  what satisfying the host's binding says about θ
+theorem hostBind_sat {B : Type} {θ : TySubst B} {β β' : TyVar} {l : Label} {τ : Ty B}
+    (h : Sol.Sat θ ⟨[], [(β, .cat (.sing l τ) (.var β'))], []⟩) :
+    RowEquiv (θ.row β) (.cat (.sing l (τ.applySubst θ)) (θ.row β')) :=
+  h.2.1 _ List.mem_cons_self
+
+-- ## Reflection, backward (soundness)
+-- A θ that meets the host's binding and unifies the residual unified the
+-- original. Sole occurrence plays no part here: soundness only reads the
+-- binding off `Sol.Sat`.
+theorem hostL_reflect {B : Type} {S : Supply} {θ : TySubst B}
+    {s₁ s₂ : List (Atom B)} {β : TyVar} {l : Label} {τ : Ty B}
+    {t₁ t₂ : List (Atom B)}
+    (h : hostL S s₁ s₂ = some (β, l, τ, t₁, t₂))
+    (hβ : RowEquiv (θ.row β) (.cat (.sing l (τ.applySubst θ)) (θ.row S.fresh.1)))
+    (hrec : RowEquiv ((ofSpine t₁).applySubst θ) ((ofSpine t₂).applySubst θ)) :
+    RowEquiv ((ofSpine s₁).applySubst θ) ((ofSpine s₂).applySubst θ) := by
+  obtain ⟨rfl, ⟨⟨rest, hvs, hrest⟩, hc, hnot, hk⟩, -, -, rfl⟩ := hostL_spec h
+  show RowEquiv (.cat (.sing l (τ.applySubst θ)) ((ofSpine t₁).applySubst θ)) _
+  exact (RowEquiv.cat (.refl _) hrec).trans
+    (host_shift hβ (fun hm => hnot (hrest _ hm)) s₂ hvs hc hk).symm
+
+
 
 -- ## The freshness INVARIANT along the recursion
 -- The three FORWARD legs (clash, completeness, stuck) extend a unifier at δ and

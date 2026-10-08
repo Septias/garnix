@@ -228,16 +228,21 @@ theorem solveTyF_stable (S : SolverState B) (τ τ' : Ty B) :
     Stable (fun m => solveTyF m S τ τ') := by
   intro m m' hle h
   simp only [solveTyF] at h ⊢
-  have hne : unifyTyF S.supply m (τ.applySubst S.subst) (τ'.applySubst S.subst) ≠ .outOfFuel := by
+  have hne : unifyTyF (S.supplyTy (τ.applySubst S.subst) (τ'.applySubst S.subst)) m
+      (τ.applySubst S.subst) (τ'.applySubst S.subst) ≠ .outOfFuel := by
     intro he; rw [he] at h; exact h rfl
   rw [mono_ty_eq hle hne]
 
 theorem solveTyF_settles (S : SolverState B) (τ τ' : Ty B) :
     Settles (fun m => solveTyF m S τ τ') := by
-  obtain ⟨n, hn⟩ := unifyTyF_terminates S.supply (τ.applySubst S.subst) (τ'.applySubst S.subst)
+  obtain ⟨n, hn⟩ := unifyTyF_terminates
+    (S := S.supplyTy (τ.applySubst S.subst) (τ'.applySubst S.subst))
+    (τ := τ.applySubst S.subst) (τ' := τ'.applySubst S.subst)
+    (fun x hx => below_above S.supply _ x (List.mem_append_left _ hx))
   refine ⟨n, ?_⟩
   simp only [solveTyF]
-  cases hu : unifyTyF S.supply n (τ.applySubst S.subst) (τ'.applySubst S.subst) with
+  cases hu : unifyTyF (S.supplyTy (τ.applySubst S.subst) (τ'.applySubst S.subst)) n
+      (τ.applySubst S.subst) (τ'.applySubst S.subst) with
   | outOfFuel => exact absurd hu hn
   | _ => simp
 

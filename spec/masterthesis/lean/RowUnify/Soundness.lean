@@ -260,14 +260,31 @@ private theorem unifySpine_supply {B : Type} [DecidableEq B] {f : Nat}
           simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2] at h
           exact arm S τ0 τ0' t₁ t₂ h
       | none =>
-      -- Both terminal outcomes contradict `.success`.
       cases hpc : projClash (a :: s₁) (b :: s₂) with
       | true =>
           simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, hpc] at h
           cases h
       | false =>
-          simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, hpc] at h
-          cases h
+          -- U-host advances the supply by one, then recurses
+          cases hh1 : hostL S (a :: s₁) (b :: s₂) with
+          | some p =>
+              obtain ⟨β0, l0, τ0, t₁, t₂⟩ := p
+              simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, hpc, hh1,
+                Bool.false_eq_true, ite_false] at h
+              obtain ⟨s₀, hr, -⟩ := hostResM_success h
+              exact Nat.le_trans (Nat.le_succ _) (ih.2 S.fresh.2 t₁ t₂ hr)
+          | none =>
+          cases hh2 : hostL S (b :: s₂) (a :: s₁) with
+          | some p =>
+              obtain ⟨β0, l0, τ0, t₂, t₁⟩ := p
+              simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, hpc, hh1, hh2,
+                Bool.false_eq_true, ite_false] at h
+              obtain ⟨s₀, hr, -⟩ := hostResM_success h
+              exact Nat.le_trans (Nat.le_succ _) (ih.2 S.fresh.2 t₁ t₂ hr)
+          | none =>
+              simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, hpc, hh1, hh2,
+                Bool.false_eq_true, ite_false] at h
+              cases h
 
 theorem unifyM_supply_mono {B : Type} [DecidableEq B] (fuel : Nat) :
     (∀ (S : Supply) (τ τ' : Ty B) {s : Sol B} {S' : Supply},
@@ -579,7 +596,26 @@ theorem unifyM_success_sound {B : Type} [DecidableEq B] {θ : TySubst B} (fuel :
               simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, hpc] at h
               cases h
             | false =>
-              simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, hpc] at h
+            cases hh1 : hostL S (a :: s₁) (b :: s₂) with
+            | some p =>
+              obtain ⟨β0, l0, τ0, t₁, t₂⟩ := p
+              simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, hpc, hh1,
+                Bool.false_eq_true, ite_false] at h
+              obtain ⟨s₀, hr, rfl⟩ := hostResM_success h
+              obtain ⟨hb, h₀⟩ := hsat.comp_inv
+              exact hostL_reflect hh1 (hostBind_sat hb) (ih.2 _ t₁ t₂ hr h₀)
+            | none =>
+            cases hh2 : hostL S (b :: s₂) (a :: s₁) with
+            | some p =>
+              obtain ⟨β0, l0, τ0, t₂, t₁⟩ := p
+              simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, hpc, hh1, hh2,
+                Bool.false_eq_true, ite_false] at h
+              obtain ⟨s₀, hr, rfl⟩ := hostResM_success h
+              obtain ⟨hb, h₀⟩ := hsat.comp_inv
+              exact (hostL_reflect hh2 (hostBind_sat hb) (ih.2 _ t₁ t₂ hr h₀).symm).symm
+            | none =>
+              simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, hpc, hh1, hh2,
+                Bool.false_eq_true, ite_false] at h
               cases h
 
 -- The ≐ᵣ success case is SOUND under the mutual driver, with NO residual

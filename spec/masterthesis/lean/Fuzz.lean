@@ -813,6 +813,314 @@ def landmarkReport (cap : Nat) : IO Unit := do
 -- `Regressions.unify_crossfield_mirror_stuck` — kernel-checked, one line each,
 -- and they fire the moment an arm that invents variables comes back.
 
+------------------ U-HOST — CAN A SOLE-OCCURRENCE EXPANSION COME BACK? ----------
+-- A clone of the driver with ONE new arm, last in dispatch order: the old
+-- U-expand detector (`HostShape`) plus SOLE OCCURRENCE — the host β occurs
+-- nowhere in the problem except at its spine position. Under that guard,
+-- renaming β ↦ β′ on the host side IS applying β ≔ (l:τ | β′) to the whole
+-- problem, so nothing stale survives and the solution should stay `Applied`.
+-- No δ, no Θ: the arm emits the binding with τ itself.
+--
+-- Checked against the real driver, per pair:
+--  * `recov` — stuck ⇝ success: what the arm buys. Stage 0 priced the old arms
+--    at 1036 / 38 808 / 348 lost successes in wide / deep / nest.
+--  * `nAnom` — a NON-stuck driver verdict that moved. MUST be 0: the arm is
+--    last, so the clone is the real run with some `.stuck` leaves replaced.
+--    A replaced leaf may continue to clash/occurs (`sharpen`), never to
+--    outOfFuel (`nFuel`).
+--  * `wr` adds the right-end mirror, by reversal: β ≔ (β′ | l:τ).
+--  * `nAppl` — a clone success whose solution is not `Applied`. Must be 0.
+--  * `nSat`  — a clone success whose `toSubst` does not unify the problem,
+--    decided by the ≈-characterization (`canonRow`). Must be 0. `rlSat` runs
+--    the same check on the real driver as a CONTROL for the checker itself.
+
+/-- β occurs ONLY as the leading spine variable of `s₂`: the `HostShape`
+    conditions plus sole occurrence. -/
+def soleHost (l : Label) (τ : Ty Unit) (t₁ s₂ : Spine) : Option TyVar :=
+  match sVarSeq s₂ with
+  | β :: rest =>
+      let τv := Ty.allRowVars τ
+      let payloadVars := s₂.flatMap fun
+        | .field _ σ => Ty.allRowVars σ
+        | .dfield _ σ => Ty.allRowVars σ
+        | .var _ => []
+      if sFieldCount l s₂ == 0 && !sHasKey s₂ && !τv.contains β &&
+         rest.all τv.contains &&
+         !(Row.allRowVars (ofSpine t₁)).contains β &&
+         !payloadVars.contains β && (sVarSeq s₂).count β == 1
+      then some β else none
+  | [] => none
+
+def hostBind (β β' : TyVar) (l : Label) (τ : Ty Unit) : UResM Unit → UResM Unit
+  | .success s S' => .success (s.comp ⟨[], [(β, .cat (.sing l τ) (.var β'))], []⟩) S'
+  | r => r
+
+def hostBindR (β β' : TyVar) (l : Label) (τ : Ty Unit) : UResM Unit → UResM Unit
+  | .success s S' => .success (s.comp ⟨[], [(β, .cat (.var β') (.sing l τ))], []⟩) S'
+  | r => r
+
+instance : Inhabited (UResM Unit) := ⟨.stuck⟩
+
+mutual
+
+partial def hxTyF (wr : Bool) (S : Supply) (fuel : Nat) : Ty Unit → Ty Unit → UResM Unit
+  | .var α, τ₂ => bindTy S α τ₂
+  | τ₁, .var α => bindTy S α τ₁
+  | .unk, .unk => .success .nil S
+  | .base b, .base b' => if b = b' then .success .nil S else .clash
+  | .lab k₁, .lab k₂ => unifyKey S k₁ k₂
+  | .fn a₁ b₁, .fn a₂ b₂ =>
+      match fuel with
+      | 0 => .outOfFuel
+      | f+1 =>
+          (hxTyF wr S f a₁ a₂).seq fun θ S' =>
+            hxTyF wr S' f (b₁.applySubst θ) (b₂.applySubst θ)
+  | .rcd ρ₁, .rcd ρ₂ =>
+      match fuel with
+      | 0 => .outOfFuel
+      | f+1 => hxSpineMF wr S f ρ₁.toSpine ρ₂.toSpine
+  | _, _ => .clash
+
+partial def hxSpineMF (wr : Bool) : Supply → Nat → Spine → Spine → UResM Unit
+  | S, _, [], s₂ =>
+      match allVarsEmpty s₂ with
+      | some σ => .success (Sol.ofRow σ) S
+      | none   => .clash
+  | S, _, s₁, [] =>
+      match allVarsEmpty s₁ with
+      | some σ => .success (Sol.ofRow σ) S
+      | none   => .clash
+  | _, 0, _, _ => .outOfFuel
+  | S, fuel+1, s₁, s₂ =>
+      match stripL s₁ s₂ with
+      | some (t₁, t₂) => hxSpineMF wr S fuel t₁ t₂
+      | none =>
+      match stripR s₁ s₂ with
+      | some (t₁, t₂) => hxSpineMF wr S fuel t₁ t₂
+      | none =>
+      match solveVarM S s₁ s₂ with
+      | some r => r
+      | none =>
+      match solveVarM S s₂ s₁ with
+      | some r => r
+      | none =>
+      match matchL s₁ s₂ with
+      | some (τ, τ', t₁, t₂) =>
+          (hxTyF wr S fuel τ τ').seq fun θ S' =>
+            hxSpineMF wr S' fuel (sApplySubst θ t₁) (sApplySubst θ t₂)
+      | none =>
+      match matchL s₂ s₁ with
+      | some (τ', τ, t₂, t₁) =>
+          (hxTyF wr S fuel τ τ').seq fun θ S' =>
+            hxSpineMF wr S' fuel (sApplySubst θ t₁) (sApplySubst θ t₂)
+      | none =>
+      match matchR s₁ s₂ with
+      | some (τ, τ', t₁, t₂) =>
+          (hxTyF wr S fuel τ τ').seq fun θ S' =>
+            hxSpineMF wr S' fuel (sApplySubst θ t₁) (sApplySubst θ t₂)
+      | none =>
+      match matchR s₂ s₁ with
+      | some (τ', τ, t₂, t₁) =>
+          (hxTyF wr S fuel τ τ').seq fun θ S' =>
+            hxSpineMF wr S' fuel (sApplySubst θ t₁) (sApplySubst θ t₂)
+      | none =>
+      match groundMatch s₁ s₂ with
+      | some (τ, τ', t₁, t₂) =>
+          (hxTyF wr S fuel τ τ').seq fun θ S' =>
+            hxSpineMF wr S' fuel (sApplySubst θ t₁) (sApplySubst θ t₂)
+      | none =>
+      match groundMatch s₂ s₁ with
+      | some (τ', τ, t₂, t₁) =>
+          (hxTyF wr S fuel τ τ').seq fun θ S' =>
+            hxSpineMF wr S' fuel (sApplySubst θ t₁) (sApplySubst θ t₂)
+      | none =>
+      if projClash s₁ s₂ then .clash else
+      -- U-HOST, leading end, both orientations
+      match s₁ with
+      | .field l τ :: t₁ =>
+          match soleHost l τ t₁ s₂ with
+          | some β =>
+              let (β', S₁) := S.fresh
+              hostBind β β' l τ (hxSpineMF wr S₁ fuel t₁ (renameVar β β' s₂))
+          | none => hostR wr S fuel s₁ s₂
+      | _ => hostR wr S fuel s₁ s₂
+
+partial def hostR (wr : Bool) : Supply → Nat → Spine → Spine → UResM Unit
+  | S, fuel, s₁, s₂ =>
+      match s₂ with
+      | .field l τ :: t₂ =>
+          match soleHost l τ t₂ s₁ with
+          | some β =>
+              let (β', S₁) := S.fresh
+              hostBind β β' l τ (hxSpineMF wr S₁ fuel (renameVar β β' s₁) t₂)
+          | none => hostEnd wr S fuel s₁ s₂
+      | _ => hostEnd wr S fuel s₁ s₂
+
+-- the RIGHT end, by reversal: trailing field against trailing host,
+-- emitting β ≔ (β′ | l:τ). Only when `wr`.
+partial def hostEnd (wr : Bool) : Supply → Nat → Spine → Spine → UResM Unit
+  | S, fuel, s₁, s₂ =>
+      if !wr then .stuck else
+      match s₁.reverse with
+      | .field l τ :: t₁r =>
+          match soleHost l τ t₁r s₂.reverse with
+          | some β =>
+              let (β', S₁) := S.fresh
+              hostBindR β β' l τ (hxSpineMF wr S₁ fuel t₁r.reverse (renameVar β β' s₂))
+          | none => hostEnd2 S fuel s₁ s₂
+      | _ => hostEnd2 S fuel s₁ s₂
+
+partial def hostEnd2 : Supply → Nat → Spine → Spine → UResM Unit
+  | S, fuel, s₁, s₂ =>
+      match s₂.reverse with
+      | .field l τ :: t₂r =>
+          match soleHost l τ t₂r s₁.reverse with
+          | some β =>
+              let (β', S₁) := S.fresh
+              hostBindR β β' l τ (hxSpineMF true S₁ fuel (renameVar β β' s₁) t₂r.reverse)
+          | none => .stuck
+      | _ => .stuck
+
+end
+
+def hxSpineM (fuel : Nat) (s₁ s₂ : Spine) (wr : Bool := false) : UResM Unit :=
+  hxSpineMF wr (localSupply s₁ s₂) fuel s₁ s₂
+
+-- ## Deciding ≈ by the characterization (`rowEquiv_iff_char`)
+-- A canonical string: barrier sequence, then per label (sorted) the projection
+-- with canonical payloads, then the keyed projection. Two rows are ≈ iff their
+-- strings agree, since `Row.Char` is exactly componentwise equality up to ≈ on
+-- payloads, and ≈ on types is the congruence closure.
+mutual
+partial def canonTy : Ty Unit → String
+  | .var α  => "t" ++ α
+  | .base _ => "B"
+  | .lab k  => "L" ++ keyStr k
+  | .unk    => "★"
+  | .fn a b => "(" ++ canonTy a ++ "→" ++ canonTy b ++ ")"
+  | .rcd ρ  => "{" ++ canonRow ρ ++ "}"
+
+partial def canonRow (ρ : Row Unit) : String :=
+  let s := ρ.toSpine
+  let bars := (sBarSeq s).map fun
+    | .var α => "v" ++ α
+    | .key o => "k" ++ o
+  let labels := (s.filterMap fun
+    | .field l _ => some l
+    | _ => none).eraseDups.mergeSort (fun a b => decide (a < b))
+  let projs := labels.map fun l =>
+    l ++ ":" ++ toString ((sProj l s).map fun p => (p.1, canonTy p.2))
+  let dp := toString ((sDProj s).map fun p => (p.1, canonTy p.2))
+  toString bars ++ "|" ++ toString projs ++ "|" ++ dp
+end
+
+def satB (sol : Sol Unit) (s₁ s₂ : Spine) : Bool :=
+  let θ := sol.toSubst
+  canonRow ((ofSpine s₁).applySubst θ) == canonRow ((ofSpine s₂).applySubst θ)
+
+structure HXStats where
+  total   : Nat := 0
+  rlSucc  : Nat := 0
+  hxSucc  : Nat := 0
+  recov   : Nat := 0
+  bothStuck : Nat := 0
+  nAnom   : Nat := 0
+  sharpen : Nat := 0
+  nFuel   : Nat := 0
+  nAppl   : Nat := 0
+  nSat    : Nat := 0
+  rlSat   : Nat := 0
+  wRecov  : List (Spine × Spine × String) := []
+  wStuck  : List (Spine × Spine) := []
+  wAnom   : List (Spine × Spine × String × String) := []
+  wBad    : List (Spine × Spine × String) := []
+
+def hxStep (wr : Bool) (cap : Nat) (s₁ s₂ : Spine) (st : HXStats) : HXStats :=
+  let rl := unifySpineM cap s₁ s₂
+  let hx := hxSpineM cap s₁ s₂ wr
+  let st := { st with total := st.total + 1 }
+  let st := match rl with
+    | .success sol _ =>
+        { st with rlSucc := st.rlSucc + 1
+                  rlSat  := st.rlSat + (if satB sol s₁ s₂ then 0 else 1) }
+    | _ => st
+  let st := match hx with
+    | .success sol _ =>
+        let bad := !solAppliedB sol || !satB sol s₁ s₂
+        { st with hxSucc := st.hxSucc + 1
+                  nAppl  := st.nAppl + (if solAppliedB sol then 0 else 1)
+                  nSat   := st.nSat + (if satB sol s₁ s₂ then 0 else 1)
+                  wBad   := if bad && st.wBad.length < keep
+                            then (s₁, s₂, solStr sol) :: st.wBad else st.wBad }
+    | _ => st
+  if resStr rl == resStr hx then
+    match rl with
+    | .stuck => { st with bothStuck := st.bothStuck + 1
+                          wStuck := if st.wStuck.length < keep
+                                    then (s₁, s₂) :: st.wStuck else st.wStuck }
+    | _ => st
+  else match rl, hx with
+    | .stuck, .success sol _ =>
+        { st with recov  := st.recov + 1
+                  wRecov := if st.wRecov.length < keep
+                            then (s₁, s₂, solStr sol) :: st.wRecov else st.wRecov }
+    | .stuck, .clash | .stuck, .occurs => { st with sharpen := st.sharpen + 1 }
+    | .stuck, .outOfFuel => { st with nFuel := st.nFuel + 1 }
+    | _, _ =>
+        { st with nAnom := st.nAnom + 1
+                  wAnom := if st.wAnom.length < keep
+                           then (s₁, s₂, resStr rl, resStr hx) :: st.wAnom else st.wAnom }
+
+def hxReport (U : Universe) (cap : Nat) (wr : Bool := false) : IO Unit := do
+  let ss := allSpines U.atoms U.maxLen
+  let st := ss.foldl (fun st s₁ => ss.foldl (fun st s₂ => hxStep wr cap s₁ s₂ st) st) {}
+  IO.println s!"── U-host{if wr then " (both ends)" else ""} vs driver: universe {U.name}, {st.total} pairs, cap {cap}"
+  IO.println s!"   driver successes {st.rlSucc}, U-host successes {st.hxSucc}"
+  IO.println s!"   RECOVERED (stuck ⇝ success)  {st.recov}"
+  IO.println s!"   still stuck under both        {st.bothStuck}"
+  IO.println s!"   stuck ⇝ clash/occurs          {st.sharpen}"
+  IO.println s!"   stuck ⇝ outOfFuel (must be 0) {st.nFuel}"
+  IO.println s!"   ANOMALIES: a non-stuck verdict moved (must be 0) {st.nAnom}"
+  IO.println s!"   ¬Applied successes (must be 0) {st.nAppl}"
+  IO.println s!"   unsound successes (must be 0)  {st.nSat}   [checker control on driver: {st.rlSat}]"
+  for (a, b, s) in st.wRecov.reverse do
+    IO.println s!"     recov  {pairStr a b}\n            {s}"
+  for (a, b) in st.wStuck.reverse do
+    IO.println s!"     stuck  {pairStr a b}"
+  for (a, b, r, h) in st.wAnom.reverse do
+    IO.println s!"     ANOM   {pairStr a b}\n            driver {r}\n            U-host {h}"
+  for (a, b, s) in st.wBad.reverse do
+    IO.println s!"     BAD    {pairStr a b}\n            {s}"
+  IO.println ""
+
+def hxFamilies (cap n : Nat) : IO Unit := do
+  IO.println s!"── U-host on the parametric families (verdict at cap {cap})"
+  for F in families do
+    let mut out := ""
+    for i in List.range (n + 1) do
+      let (s₁, s₂) := F.gen i
+      out := out ++ s!" {i}:{(verdictStr (hxSpineM cap s₁ s₂)).take 2}"
+    IO.println s!"   {F.name}: {out}"
+  IO.println ""
+
+def hostMain : IO Unit := do
+  let cap := 64
+  IO.println "U-HOST — sole-occurrence expansion, priced against the driver\n"
+  for (nm, s₁, s₂) in landmarks do
+    IO.println s!"   {verdictStr (unifySpineM cap s₁ s₂)} ⇝ {resStr (hxSpineM cap s₁ s₂)}  {nm}"
+  IO.println ""
+  hxReport wide cap
+  hxReport nest cap
+  hxReport keyed cap
+  hxReport deep cap
+  hxFamilies 200 12
+  IO.println "── AGAIN WITH THE RIGHT-END MIRROR\n"
+  for (nm, s₁, s₂) in landmarks do
+    IO.println s!"   {verdictStr (unifySpineM cap s₁ s₂)} ⇝ {resStr (hxSpineM cap s₁ s₂ true)}  {nm}"
+  hxReport wide cap true
+  hxReport nest cap true
+  hxReport deep cap true
+
 def main : IO Unit := do
   let cap := 64
   IO.println "≐ᵣ / ≐ driver — invariant refuter: [1]-[7] per universe, then STAGE 0\n"
@@ -828,4 +1136,5 @@ def main : IO Unit := do
 end Fuzz
 end MinimalCalculus
 
-def main : IO Unit := MinimalCalculus.Fuzz.main
+def main (args : List String) : IO Unit :=
+  if args == ["host"] then MinimalCalculus.Fuzz.hostMain else MinimalCalculus.Fuzz.main

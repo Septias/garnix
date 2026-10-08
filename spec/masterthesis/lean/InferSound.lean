@@ -59,18 +59,33 @@ holds of the ORIGINAL types, not the ones the arm unified. -/
 theorem SolveTy.clean {B : Type} [DecidableEq B] {S S' : SolverState B} {τ τ' : Ty B}
     (h : SolveTy S τ τ' S') (hc : S.sol.Clean) : S'.sol.Clean := by
   obtain ⟨fuel, s, Sup, hu, rfl⟩ := h
-  refine hc.extend ((unifyM_good fuel).1 _ _ _ hu) (fun x hx => ?_)
+  have hB := below_above S.supply (Ty.sortedFtv (τ.applySubst S.subst) ++
+    Ty.sortedFtv (τ'.applySubst S.subst) ++ S.sol.domS)
+  obtain ⟨R, hf, g⟩ := (unifyM_good fuel).1 _ _ _
+    (fun x hx => hB x (List.mem_append_left _ hx)) hu
+  refine hc.extend g (fun x hx => ?_)
   rcases List.mem_append.mp hx with hx | hx
-  · exact hc.clears_ty hx
-  · exact hc.clears_ty hx
+  · rcases List.mem_append.mp hx with hx | hx
+    · exact hc.clears_ty hx
+    · exact hc.clears_ty hx
+  · -- a drawn name is past ⟦S⟧'s keys
+    exact fun hd => absurd (hB x (List.mem_append_right _ hd)) (Nat.not_lt.mpr (hf x hx).1)
 
 theorem SolveRow.clean {B : Type} [DecidableEq B] {S S' : SolverState B} {ρ ρ' : Row B}
     (h : SolveRow S ρ ρ' S') (hc : S.sol.Clean) : S'.sol.Clean := by
   obtain ⟨fuel, s, Sup, hu, rfl⟩ := h
-  refine hc.extend ((unifyM_good fuel).2 _ _ _ hu) (fun x hx => ?_)
+  have hB := below_above S.supply (Row.sortedFtv (ρ.applySubst S.subst) ++
+    Row.sortedFtv (ρ'.applySubst S.subst) ++ S.sol.domS)
+  obtain ⟨R, hf, g⟩ := (unifyM_good fuel).2 _ _ _ (fun x hx => hB x (by
+    rcases List.mem_append.mp hx with hx | hx
+    · exact List.mem_append_left _ (List.mem_append_left _ (sSorted_toSpine _ _ hx))
+    · exact List.mem_append_left _ (List.mem_append_right _ (sSorted_toSpine _ _ hx)))) hu
+  refine hc.extend g (fun x hx => ?_)
   rcases List.mem_append.mp hx with hx | hx
-  · exact hc.clears_row (sSorted_toSpine _ _ hx)
-  · exact hc.clears_row (sSorted_toSpine _ _ hx)
+  · rcases List.mem_append.mp hx with hx | hx
+    · exact hc.clears_row (sSorted_toSpine _ _ hx)
+    · exact hc.clears_row (sSorted_toSpine _ _ hx)
+  · exact fun hd => absurd (hB x (List.mem_append_right _ hd)) (Nat.not_lt.mpr (hf x hx).1)
 
 theorem SolveTy.unifies_sat {B : Type} [DecidableEq B] {S S' : SolverState B}
     {τ τ' : Ty B} (h : SolveTy S τ τ' S') {σ : TySubst B}
@@ -78,7 +93,7 @@ theorem SolveTy.unifies_sat {B : Type} [DecidableEq B] {S S' : SolverState B}
   obtain ⟨fuel, t, Sup, hu, rfl⟩ := h
   obtain ⟨hS, ht⟩ := Sol.Sat.comp_inv hsat
   exact (tyUnifies_applySubst_of_sat hS τ τ').mp
-    ((unifyM_success_sound fuel).1 S.supply _ _ hu ht)
+    ((unifyM_success_sound fuel).1 _ _ _ hu ht)
 
 --------------------- A DEFINITE LOOKUP SURVIVES A REFINEMENT -----------------
 -- This was `Sol.lookup_toCtx_sat`, a nine-case induction. It transported a
@@ -512,8 +527,8 @@ theorem finalize_star_no_discharge :
       ∀ (Γ' : Ctx Unit) (σ : TySubst Unit), Sol.Sat σ S''.sol →
         ¬ p.stump.Discharge σ := by
   have hfin : FinalizeUnguarded fStar_S fStar_p _ :=
-    FinalizeUnguarded.star (S' := fStar_S.extend ⟨[("d", .unk)], [], []⟩ ⟨0⟩)
-      ⟨0, ⟨[("d", .unk)], [], []⟩, ⟨0⟩, rfl, rfl⟩
+    FinalizeUnguarded.star (S' := fStar_S.extend ⟨[("d", .unk)], [], []⟩ ⟨2⟩)
+      ⟨0, ⟨[("d", .unk)], [], []⟩, ⟨2⟩, rfl, rfl⟩
   refine ⟨fStar_S, _, fStar_p, hfin, ?_⟩
   intro Γ' σ hsat hdis
   simp only [fStar_p] at hdis

@@ -198,11 +198,111 @@ theorem solveVarM_bounded {B : Type} {S : Supply} {s₁ s₂ : List (Atom B)}
             exact ⟨hV (List.mem_append_left _ List.mem_cons_self),
                    fun x hx => hV (List.mem_append_right _ (by rw [sFtv_ofSpine]; exact hx))⟩
 
--- (U-EXPAND'S FRESHNESS LEMMAS WERE HERE: expand_bounded, expandR_bounded,
--- expand_completeM, expandR_completeM. They were the only ones in this file
--- that had to argue about INVENTED names staying above V. plans/drop-expand.md)
+-- ## U-host: the one arm that invents a name
+-- β′ is the supply's next name, so it is fresh for `V`; the residual lives in
+-- `β′ :: V`, and the advanced supply avoids that (`Supply.Avoids.cons_fresh`).
 
+-- FORWARD REFLECTION (completeness): a unifier of the original EXTENDS, at the
+-- fresh β′ only, to one that meets the host's binding and unifies the residual.
+theorem hostL_reflect_fwd {B : Type} {θ : TySubst B} {S : Supply}
+    {s₁ s₂ : List (Atom B)} {β : TyVar} {l : Label} {τ : Ty B}
+    {t₁ t₂ : List (Atom B)}
+    (h : hostL S s₁ s₂ = some (β, l, τ, t₁, t₂))
+    (hb₁ : S.fresh.1 ∉ sFtv s₁) (hb₂ : S.fresh.1 ∉ sFtv s₂)
+    (hu : RowEquiv ((ofSpine s₁).applySubst θ) ((ofSpine s₂).applySubst θ)) :
+    ∃ θ' : TySubst B,
+      RowEquiv (θ'.row β) (.cat (.sing l (τ.applySubst θ')) (θ'.row S.fresh.1)) ∧
+      RowEquiv ((ofSpine t₁).applySubst θ') ((ofSpine t₂).applySubst θ') ∧
+      (∀ γ, γ ≠ S.fresh.1 → θ.ty γ = θ'.ty γ ∧ θ.row γ = θ'.row γ ∧ θ.lab γ = θ'.lab γ) := by
+  obtain ⟨rfl, hs, -, -, rfl⟩ := hostL_spec h
+  obtain ⟨σ, ρ', hty, hβ⟩ := host_forced hs hu
+  obtain ⟨⟨rest, hvs, hrest⟩, hc, hnot, hk⟩ := hs
+  have hββ' : β ≠ S.fresh.1 := fun hh =>
+    hb₂ (hh ▸ mem_sFtv_of_mem_sVarSeq s₂ (by rw [hvs]; exact List.mem_cons_self))
+  have hτ : S.fresh.1 ∉ τ.ftv := fun hm => hb₁ (List.mem_append_left _ hm)
+  have hβ'' : RowEquiv ((θ.setRow S.fresh.1 ρ').row β)
+      (.cat (.sing l (τ.applySubst (θ.setRow S.fresh.1 ρ')))
+        ((θ.setRow S.fresh.1 ρ').row S.fresh.1)) := by
+    show RowEquiv (if β = S.fresh.1 then ρ' else θ.row β)
+      (.cat (.sing l (τ.applySubst (θ.setRow S.fresh.1 ρ')))
+        (if S.fresh.1 = S.fresh.1 then ρ' else θ.row S.fresh.1))
+    rw [if_neg hββ', if_pos rfl, Ty.applySubst_setRow_of_not_mem τ hτ]
+    exact hβ.trans (RowEquiv.cat (RowEquiv.sing hty.symm) (.refl _))
+  have hu' : RowEquiv ((ofSpine (.field l τ :: t₁)).applySubst (θ.setRow S.fresh.1 ρ'))
+      ((ofSpine s₂).applySubst (θ.setRow S.fresh.1 ρ')) := by
+    rw [Row.applySubst_setRow_of_not_mem _ (by rw [← sFtv_ofSpine]; exact hb₁),
+        Row.applySubst_setRow_of_not_mem _ (by rw [← sFtv_ofSpine]; exact hb₂)]
+    exact hu
+  refine ⟨θ.setRow S.fresh.1 ρ', hβ'', ?_, ?_⟩
+  · have key := hu'.trans (host_shift hβ'' (fun hm => hnot (hrest _ hm)) s₂ hvs hc hk)
+    exact (RowEquiv.field_cancel_left key).2
+  · intro γ hγ
+    exact ⟨rfl, by simp only [TySubst.setRow, if_neg hγ], rfl⟩
 
+-- ⊢  the residual stays inside `β′ :: V`
+theorem hostL_residual_sub {B : Type} {S : Supply} {s₁ s₂ : List (Atom B)}
+    {β : TyVar} {l : Label} {τ : Ty B} {t₁ t₂ : List (Atom B)} {V : List TyVar}
+    (hV : (sFtv s₁ ++ sFtv s₂) ⊆ V) (h : hostL S s₁ s₂ = some (β, l, τ, t₁, t₂)) :
+    (sFtv t₁ ++ sFtv t₂) ⊆ (S.fresh.1 :: V) := by
+  obtain ⟨hs1, -, -, -, hren⟩ := hostL_spec h
+  intro x hx
+  rcases List.mem_append.mp hx with hh | hh
+  · exact List.mem_cons_of_mem _
+      (sFtv_sub_left hV (by rw [hs1]; exact List.mem_append_right _ hh))
+  · rw [hren] at hh
+    rcases List.mem_cons.mp (sFtv_renameVar _ _ s₂ x hh) with rfl | hh'
+    · exact List.mem_cons_self
+    · exact List.mem_cons_of_mem _ (sFtv_sub_right hV hh')
+
+-- ⊢  U-host's solution mentions only the problem plus β′. The residual call is
+--    on (x, y), which is (t₁, t₂) or — in the swapped orientation — (t₂, t₁).
+theorem host_bounded {B : Type} [DecidableEq B] {fuel : Nat}
+    (ih : ∀ (S : Supply) (u₁ u₂ : List (Atom B)) (V : List TyVar) {s : Sol B} {S' : Supply},
+      S.Avoids V → (sFtv u₁ ++ sFtv u₂) ⊆ V →
+      unifySpineMF S fuel u₁ u₂ = .success s S' →
+      ∃ W : List TyVar, V ⊆ W ∧ S'.Avoids W ∧ SolBelow s W)
+    {S : Supply} {u₁ u₂ : List (Atom B)} {V : List TyVar}
+    {β : TyVar} {l : Label} {τ : Ty B} {t₁ t₂ x y : List (Atom B)} {s : Sol B} {S' : Supply}
+    (hS : S.Avoids V) (hV : (sFtv u₁ ++ sFtv u₂) ⊆ V)
+    (he : hostL S u₁ u₂ = some (β, l, τ, t₁, t₂))
+    (hxy : (x = t₁ ∧ y = t₂) ∨ (x = t₂ ∧ y = t₁))
+    (h : hostResM S β l τ (unifySpineMF S.fresh.2 fuel x y) = .success s S') :
+    ∃ W : List TyVar, V ⊆ W ∧ S'.Avoids W ∧ SolBelow s W := by
+  obtain ⟨s', hrec, rfl⟩ := hostResM_success h
+  obtain ⟨hs1, ⟨⟨rest, hvv, -⟩, -, -, -⟩, -, -, -⟩ := hostL_spec he
+  have hτV : τ.ftv ⊆ V := fun _ hx =>
+    sFtv_sub_left hV (by rw [hs1]; exact List.mem_append_left _ hx)
+  have hβV : β ∈ V :=
+    sFtv_sub_right hV (mem_sFtv_of_mem_sVarSeq u₂ (by rw [hvv]; exact List.mem_cons_self))
+  have hsub := hostL_residual_sub hV he
+  have hsub' : (sFtv x ++ sFtv y) ⊆ (S.fresh.1 :: V) := by
+    rcases hxy with ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩
+    · exact hsub
+    · intro z hz
+      rcases List.mem_append.mp hz with hh | hh
+      · exact hsub (List.mem_append_right _ hh)
+      · exact hsub (List.mem_append_left _ hh)
+  obtain ⟨W, hVW, hSW, hbW⟩ := ih S.fresh.2 x y _ hS.cons_fresh hsub' hrec
+  have hVsub : V ⊆ W := fun _ hx => hVW (List.mem_cons_of_mem _ hx)
+  have hbW' : S.fresh.1 ∈ W := hVW List.mem_cons_self
+  refine ⟨W, hVsub, hSW, SolBelow.comp ?_ hbW⟩
+  rintro γ (⟨p, hp, -⟩ | ⟨p, hp, hγ⟩ | ⟨p, hp, -⟩)
+  · cases hp
+  · obtain rfl := List.mem_singleton.mp hp
+    rcases hγ with rfl | hγ
+    · exact hVsub hβV
+    · simp only [Row.ftv, List.mem_append, List.mem_singleton] at hγ
+      rcases hγ with hγ | rfl
+      · exact hVsub (hτV hγ)
+      · exact hbW'
+  · cases hp
+
+-- ⊢  the hypothesis on a problem is symmetric in its two sides
+theorem append_sub_swap {α : Type} {a b V : List α} (h : a ++ b ⊆ V) : b ++ a ⊆ V :=
+  fun _ hz => by
+    rcases List.mem_append.mp hz with hh | hh
+    · exact h (List.mem_append_right _ hh)
+    · exact h (List.mem_append_left _ hh)
 
 -- THE BOUNDEDNESS INVARIANT, both sorts at once.
 theorem unifyM_bounded {B : Type} [DecidableEq B] (fuel : Nat) :
@@ -577,7 +677,22 @@ theorem unifyM_bounded {B : Type} [DecidableEq B] (fuel : Nat) :
               simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, hpc] at h
               cases h
             | false =>
-              simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, hpc] at h
+            cases hh1 : hostL S (a :: s₁) (b :: s₂) with
+            | some p =>
+              obtain ⟨β0, l0, τ0, t₁, t₂⟩ := p
+              simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, hpc, hh1,
+                Bool.false_eq_true, ite_false] at h
+              exact host_bounded ih.2 hS hV hh1 (.inl ⟨rfl, rfl⟩) h
+            | none =>
+            cases hh2 : hostL S (b :: s₂) (a :: s₁) with
+            | some p =>
+              obtain ⟨β0, l0, τ0, t₂, t₁⟩ := p
+              simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, hpc, hh1, hh2,
+                Bool.false_eq_true, ite_false] at h
+              exact host_bounded ih.2 hS (append_sub_swap hV) hh2 (.inr ⟨rfl, rfl⟩) h
+            | none =>
+              simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, hpc, hh1, hh2,
+                Bool.false_eq_true, ite_false] at h
               cases h
 
 
@@ -799,6 +914,54 @@ theorem unifySpineMF_cons_nil_complete {B : Type} [DecidableEq B] {θ : TySubst 
 
 
 -- THE COMPLETENESS LEG, both sorts at once.
+-- THE U-HOST ARM, either orientation (the residual call is on (x, y)).
+-- `hostL_reflect_fwd` extends θ at β′ only, so the extension agrees with θ on
+-- `V`, and the residual's unifier carries the host's binding back.
+theorem host_completeM {B : Type} [DecidableEq B] {fuel : Nat}
+    (ih : ∀ (S : Supply) (u₁ u₂ : List (Atom B)) (V : List TyVar) {s : Sol B}
+      {S' : Supply} {θ : TySubst B},
+      S.Avoids V → (sFtv u₁ ++ sFtv u₂) ⊆ V →
+      unifySpineMF S fuel u₁ u₂ = .success s S' →
+      RowEquiv ((ofSpine u₁).applySubst θ) ((ofSpine u₂).applySubst θ) →
+      ∃ θ' : TySubst B, AgreeOn θ θ' V ∧ Sol.Sat θ' s)
+    {S : Supply} {u₁ u₂ : List (Atom B)} {V : List TyVar} {θ : TySubst B}
+    {β : TyVar} {l : Label} {τ : Ty B} {t₁ t₂ x y : List (Atom B)} {s : Sol B} {S' : Supply}
+    (hS : S.Avoids V) (hV : (sFtv u₁ ++ sFtv u₂) ⊆ V)
+    (he : hostL S u₁ u₂ = some (β, l, τ, t₁, t₂))
+    (hxy : (x = t₁ ∧ y = t₂) ∨ (x = t₂ ∧ y = t₁))
+    (h : hostResM S β l τ (unifySpineMF S.fresh.2 fuel x y) = .success s S')
+    (hu : RowEquiv ((ofSpine u₁).applySubst θ) ((ofSpine u₂).applySubst θ)) :
+    ∃ θ' : TySubst B, AgreeOn θ θ' V ∧ Sol.Sat θ' s := by
+  obtain ⟨s', hrec, rfl⟩ := hostResM_success h
+  obtain ⟨hs1, ⟨⟨rest, hvv, -⟩, -, -, -⟩, -, -, -⟩ := hostL_spec he
+  have hbV := Supply.fresh_not_mem hS
+  have hτV : τ.ftv ⊆ V := fun _ hx =>
+    sFtv_sub_left hV (by rw [hs1]; exact List.mem_append_left _ hx)
+  have hβV : β ∈ V :=
+    sFtv_sub_right hV (mem_sFtv_of_mem_sVarSeq u₂ (by rw [hvv]; exact List.mem_cons_self))
+  obtain ⟨θ₀, hβ0, hrec0, hag0⟩ := hostL_reflect_fwd he
+    (fun hm => hbV (sFtv_sub_left hV hm)) (fun hm => hbV (sFtv_sub_right hV hm)) hu
+  have hsub := hostL_residual_sub hV he
+  have hsub' : (sFtv x ++ sFtv y) ⊆ (S.fresh.1 :: V) := by
+    rcases hxy with ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩
+    · exact hsub
+    · exact append_sub_swap hsub
+  have hrec' : RowEquiv ((ofSpine x).applySubst θ₀) ((ofSpine y).applySubst θ₀) := by
+    rcases hxy with ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩
+    · exact hrec0
+    · exact hrec0.symm
+  obtain ⟨θ', hag', hsat'⟩ := ih S.fresh.2 x y _ hS.cons_fresh hsub' hrec hrec'
+  have hVsub : V ⊆ (S.fresh.1 :: V) := fun _ hx => List.mem_cons_of_mem _ hx
+  have hagθ : AgreeOn θ θ₀ V := fun α hα =>
+    hag0 α (fun hh => hbV (by rw [← hh]; exact hα))
+  refine ⟨θ', hagθ.trans' hag' hVsub,
+    Sol.Sat.comp ⟨(fun p hp => by cases hp), (fun p hp => ?_), (fun p hp => by cases hp)⟩ hsat'⟩
+  obtain rfl := List.mem_singleton.mp hp
+  show RowEquiv (θ'.row β) (.cat (.sing l (τ.applySubst θ')) (θ'.row S.fresh.1))
+  rw [← (hag' β (hVsub hβV)).2.1, ← hag'.tyEq (fun _ hx => hVsub (hτV hx)),
+    ← (hag' _ List.mem_cons_self).2.1]
+  exact hβ0
+
 theorem unifyM_success_complete {B : Type} [DecidableEq B] (fuel : Nat) :
     (∀ (S : Supply) (τ τ' : Ty B) (V : List TyVar) {s : Sol B} {S' : Supply}
         {θ : TySubst B},
@@ -1103,7 +1266,22 @@ theorem unifyM_success_complete {B : Type} [DecidableEq B] (fuel : Nat) :
               simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, hpc] at h
               cases h
             | false =>
-              simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, hpc] at h
+            cases hh1 : hostL S (a :: s₁) (b :: s₂) with
+            | some p =>
+              obtain ⟨β0, l0, τ0, t₁, t₂⟩ := p
+              simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, hpc, hh1,
+                Bool.false_eq_true, ite_false] at h
+              exact host_completeM ih.2 hS hV hh1 (.inl ⟨rfl, rfl⟩) h hu
+            | none =>
+            cases hh2 : hostL S (b :: s₂) (a :: s₁) with
+            | some p =>
+              obtain ⟨β0, l0, τ0, t₂, t₁⟩ := p
+              simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, hpc, hh1, hh2,
+                Bool.false_eq_true, ite_false] at h
+              exact host_completeM ih.2 hS (append_sub_swap hV) hh2 (.inr ⟨rfl, rfl⟩) h hu.symm
+            | none =>
+              simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, hpc, hh1, hh2,
+                Bool.false_eq_true, ite_false] at h
               cases h
 
 -- ≐ᵣ SUCCESS COMPLETENESS under the mutual driver. With unifyRowM_success_sound
