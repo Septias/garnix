@@ -356,11 +356,13 @@ theorem stage_count {B : Type} {S S₁ : Supply} {Pv Res R₁ : List (Srt × TyV
 -- ⊢  AN EQ-EMITTING ARM whose residual is a spine pair. The first stage is a
 --    strictly smaller problem over no new variables; the second is either the
 --    unsubstituted residual (no key: strictly smaller) or has fewer variables.
-theorem arm_sp_terminates {B : Type} [DecidableEq B] {Pv : List (Srt × TyVar)} {n m : Nat}
+theorem arm_sp_terminates' {B : Type} [DecidableEq B] {Pv : List (Srt × TyVar)} {n m : Nat}
     (ihn : ∀ n' < n, ∀ m', TermR B n' m') (ihm : ∀ m' < m, TermR B n m')
     {S : Supply} (hB : Below S Pv) (hPn : nv Pv ≤ n) (τ τ' : Ty B)
     (t₁ t₂ : List (Atom B)) (hT : TyP τ τ' ⊆ Pv) (hR : SpP t₁ t₂ ⊆ Pv)
-    (hsT : τ.usize + τ'.usize < m) (hsR : spineSize t₁ + spineSize t₂ < m) :
+    (hsT : τ.usize + τ'.usize < m)
+    (hsR : ∀ {f s₁ S₁}, unifyTyF S f τ τ' = .success s₁ S₁ → s₁.domS = [] →
+      spineSize t₁ + spineSize t₂ < m) :
     ∃ F, ((unifyTyF S F τ τ').seq fun θ S'' =>
         unifySpineMF S'' F (sApplySubst θ t₁) (sApplySubst θ t₂)) ≠ .outOfFuel := by
   have hBT : Below S (TyP τ τ') := fun x hx => hB x (hT hx)
@@ -383,7 +385,7 @@ theorem arm_sp_terminates {B : Type} [DecidableEq B] {Pv : List (Srt × TyVar)} 
         by_cases hd : s₁.domS = []
         · obtain ⟨ht, hrw, hlb⟩ := Sol.toSubst_of_domS_nil hd
           rw [sApplySubst_fixed ht hrw hlb, sApplySubst_fixed ht hrw hlb]
-          exact (ihm _ hsR).2 S₁ t₁ t₂
+          exact (ihm _ (hsR hr hd)).2 S₁ t₁ t₂
             (Below.residual hB hS₁ hf₁ (fun x hx => List.mem_append_left _ (hR hx)))
             (Nat.le_trans (nv_mono hR) hPn) (Nat.le_refl _)
         · have hdr := ((unifyM_draws f₁).1 S τ τ' hBT hr).resolve_right (fun h => hd h.1)
@@ -403,6 +405,50 @@ theorem arm_sp_terminates {B : Type} [DecidableEq B] {Pv : List (Srt × TyVar)} 
   | occurs => exact ⟨f₁, by rw [hr]; simp [UResM.seq]⟩
   | stuck => exact ⟨f₁, by rw [hr]; simp [UResM.seq]⟩
   | outOfFuel => exact absurd hr h₁
+
+theorem arm_sp_terminates {B : Type} [DecidableEq B] {Pv : List (Srt × TyVar)} {n m : Nat}
+    (ihn : ∀ n' < n, ∀ m', TermR B n' m') (ihm : ∀ m' < m, TermR B n m')
+    {S : Supply} (hB : Below S Pv) (hPn : nv Pv ≤ n) (τ τ' : Ty B)
+    (t₁ t₂ : List (Atom B)) (hT : TyP τ τ' ⊆ Pv) (hR : SpP t₁ t₂ ⊆ Pv)
+    (hsT : τ.usize + τ'.usize < m) (hsR : spineSize t₁ + spineSize t₂ < m) :
+    ∃ F, ((unifyTyF S F τ τ').seq fun θ S'' =>
+        unifySpineMF S'' F (sApplySubst θ t₁) (sApplySubst θ t₂)) ≠ .outOfFuel :=
+  arm_sp_terminates' ihn ihm hB hPn τ τ' t₁ t₂ hT hR hsT (fun _ _ => hsR)
+
+-- ⊢  U-KEY-PIN re-runs the SAME spines, so the size does not drop; but its
+--    stage always binds the key, so the residual has fewer variables
+theorem keyPin_facts {B : Type} {s₁ s₂ : List (Atom B)} {α : TyVar} {k : Key}
+    (h : keyPin s₁ s₂ = some (α, k)) :
+    k ≠ .var α ∧ 2 < spineSize s₁ + spineSize s₂ := by
+  have pos : ∀ τ : Ty B, 0 < τ.usize := fun τ => by cases τ <;> simp [Ty.usize] <;> omega
+  unfold keyPin at h
+  split at h
+  next a τ b τ' =>
+    split at h
+    · cases h
+    · rename_i hab
+      simp only [Option.some.injEq, Prod.mk.injEq] at h
+      obtain ⟨rfl, rfl⟩ := h
+      have := pos τ; have := pos τ'
+      exact ⟨fun e => hab (Key.var.inj e).symm, (by simp [spineSize]; omega)⟩
+  next a τ l τ' =>
+    simp only [Option.some.injEq, Prod.mk.injEq] at h
+    obtain ⟨rfl, rfl⟩ := h
+    have := pos τ; have := pos τ'
+    exact ⟨fun e => (by cases e), (by simp [spineSize]; omega)⟩
+  next l τ a τ' =>
+    simp only [Option.some.injEq, Prod.mk.injEq] at h
+    obtain ⟨rfl, rfl⟩ := h
+    have := pos τ; have := pos τ'
+    exact ⟨fun e => (by cases e), (by simp [spineSize]; omega)⟩
+  next => cases h
+
+theorem keyPin_binds {B : Type} [DecidableEq B] {S S₁ : Supply} {f : Nat} {α : TyVar}
+    {k : Key} {s : Sol B} (hk : k ≠ .var α)
+    (h : unifyTyF S f (.lab (.var α)) (.lab k) = .success s S₁) : s.domS ≠ [] := by
+  simp only [unifyTyF, unifyKey, bindLab, hk, ite_false, UResM.success.injEq] at h
+  obtain ⟨rfl, rfl⟩ := h
+  simp [Sol.domS]
 
 -- ⊢  …and the arrow arm, whose residual is a type pair
 theorem arm_ty_terminates {B : Type} [DecidableEq B] {Pv : List (Srt × TyVar)} {n m : Nat}
@@ -680,6 +726,19 @@ theorem termR_all {B : Type} [DecidableEq B] : ∀ n m, TermR B n m := by
             simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, hpc]
             simp⟩
         | false =>
+        cases hkp : keyPin (a :: s₁) (b :: s₂) with
+        | some p =>
+          obtain ⟨α, k⟩ := p
+          obtain ⟨hne, hsz⟩ := keyPin_facts hkp
+          obtain ⟨F, hF⟩ := arm_sp_terminates' ihn ihm hB hn (.lab (.var α)) (.lab k)
+            (a :: s₁) (b :: s₂) (keyPin_sorted hkp) (fun _ hx => hx)
+            (by simp only [Ty.usize]; omega) (fun hr hd => absurd hd (keyPin_binds hne hr))
+          exact ⟨F + 1, by
+            unfold unifySpineMF
+            simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, hpc, hkp,
+              Bool.false_eq_true, ite_false]
+            exact hF⟩
+        | none =>
         cases hh1 : hostL S (a :: s₁) (b :: s₂) with
         | some p =>
           obtain ⟨β0, l0, τ0, t₁, t₂⟩ := p
@@ -688,7 +747,7 @@ theorem termR_all {B : Type} [DecidableEq B] : ∀ n m, TermR B n m := by
             (Nat.le_trans hn' hn) (Nat.le_refl _)
           exact ⟨f + 1, by
             unfold unifySpineMF
-            simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, hpc, hh1,
+            simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, hpc, hkp, hh1,
               Bool.false_eq_true, ite_false]
             exact hostResM_ne_oof hf⟩
         | none =>
@@ -705,13 +764,13 @@ theorem termR_all {B : Type} [DecidableEq B] : ∀ n m, TermR B n m := by
             (Nat.le_refl _)
           exact ⟨f + 1, by
             unfold unifySpineMF
-            simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, hpc, hh1, hh2,
+            simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, hpc, hkp, hh1, hh2,
               Bool.false_eq_true, ite_false]
             exact hostResM_ne_oof hf⟩
         | none =>
           exact ⟨0 + 1, by
             unfold unifySpineMF
-            simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, hpc, hh1, hh2,
+            simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, hpc, hkp, hh1, hh2,
               Bool.false_eq_true, ite_false]
             simp⟩
 

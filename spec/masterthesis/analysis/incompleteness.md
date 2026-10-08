@@ -227,10 +227,12 @@ A keyed field `${α}: τ` may become any label, so it is a barrier like a row
 variable: no field commutes past it.
 
 **8a. Literal vs key, `(foo:𝓫) ≐ᵣ (${α}:𝓫)`.** mgu `[α ≔ foo]` (label
-component). Stuck (`unify_lit_vs_key_stuck`, Regressions.lean:352).
+component). RESOLVED by U-key-pin (`unify_lit_vs_key_pins`); with anything
+around the keyed field still stuck (`unify_lit_vs_key_ctx_stuck`).
 
-**8b. Different keys, `(${α}:𝓫) ≐ᵣ (${β}:𝓫)`.** Stuck
-(`unify_diff_key_stuck`, Regressions.lean:393).
+**8b. Different keys, `(${α}:𝓫) ≐ᵣ (${β}:𝓫)`.** RESOLVED by U-key-pin
+(`unify_diff_key_pins`): `[α ≔ β]`. Contextual 8b stays stuck
+(`unify_diff_key_ctx_stuck`).
 
 - FINDING: the justification in algorithmic.typ (U-key-R comment) and in the
   Lean comment is wrong for the singleton. It says `α ≔ β` and `α, β ≔ l`
@@ -249,7 +251,7 @@ fail the run, so this is a precision loss in the verdict, not a typing gap.
 **Lean.** keyed Fuzz universe: 67% stuck (algorithmic.typ, # First-class labels
 / Costs). How much of that is 8a/8b-singleton is not measured.
 
-**Fix.** A key-binding move when both sides are a single field (or the key is
+**Fix.** DONE as U-key-pin (`keyPin`, `keyPin_forced`), singletons only. A key-binding move when both sides are a single field (or the key is
 the only barrier on both sides and the windows are otherwise empty). Small,
 forced, needs no invention. Generalizing past singletons needs a proof that
 the barrier sequence pins the pairing.

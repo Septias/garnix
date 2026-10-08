@@ -140,7 +140,8 @@ def run (e : E) : String := verdict (runF (fun _ => ()) 50 e)
 
 -- FC-LABELS (`plans/fc-labels-plan.md`, phase A). The key of a selection is a
 -- value of the label sort; its TYPE ⌊k⌋ keys the lookup, k a literal or a label
--- variable (phase B: keys got their own sort, so a non-label key clashes).
+-- variable (phase B: keys got their own sort; a key of base type answers ★, a key
+-- variable is forced to a label).
 def L (l : String) : E := .lab l
 def sd (e₁ e₂ : E) : E := .selDyn e₁ e₂
 
@@ -165,8 +166,12 @@ def sd (e₁ e₂ : E) : E := .selDyn e₁ e₂
 
 -- a literal key through the dynamic door is the static selection …
 #guard run (sd (rec1 "foo" c) (L "foo")) = "𝓫"
--- … and a key that is not a label is a type error (no junk keys since phase B)
-#guard run (sd (rec1 "foo" c) c) = "fail: clash"
+-- … and a key of BASE type (a computed string) answers ★ (A-sel-dyn-𝓫): the
+-- intro's `{…}.${toString t}`
+#guard run (sd (rec1 "foo" c) c) = "★"
+-- only a DEFINITE base type: a key variable is still forced to a label first, so
+-- supplying a base-typed key later clashes (the conflict is not definite yet)
+#guard run (.app (.lam "a" (sd (rec1 "foo" c) (v "a"))) c) = "fail: clash"
 
 -- the spent promise through the second door: blocked on its KEY, so there is no
 -- row to extend and materialization does not apply — still incomplete
@@ -205,8 +210,10 @@ def upd : E := .lam "n" (.lam "r" (.cat (v "r") (rd (v "n") c)))
 -- two records under one unknown key flow into one function (U-key)
 #guard run (.lam "a" (.lam "f" (rec2 "p" (.app (v "f") (rd (v "a") c))
     "q" (.app (v "f") (rd (v "a") c))))) = "(⌊k5⌋ → (({${k5}: 𝓫} → t6) → {p: t6 | q: t6}))"
--- a key that is not a label is a type error
-#guard run (rd c c) = "fail: clash"
+-- a key of base type makes the record ★ (A-rcd-dyn-𝓫) …
+#guard run (rd c c) = "★"
+-- … which has no eliminator: selecting from it clashes (★ ≐ {r})
+#guard run (.sel (rd c c) "foo") = "fail: clash"
 #guard run (.lam "a" (rd (.sel (v "a") "k") c)) = "({k: ⌊k4⌋ | r5 | ε} → {${k4}: 𝓫})"
 
 end InferRuns

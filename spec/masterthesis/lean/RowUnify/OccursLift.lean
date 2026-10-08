@@ -367,21 +367,29 @@ theorem unifyM_occurs_no_unifier {B : Type} [DecidableEq B] (fuel : Nat) :
               simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, hpc] at h
               cases h
             | false =>
+            cases hkp : keyPin (a :: s₁) (b :: s₂) with
+            | some p =>
+              obtain ⟨α, k⟩ := p
+              simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, hpc, hkp,
+                Bool.false_eq_true, ite_false] at h
+              exact arm S _ _ (a :: s₁) (b :: s₂) V hS
+                (fun _ hx => hV (keyPin_ftv hkp hx)) hV h (keyPin_forced hkp hu) hu
+            | none =>
             cases hh1 : hostL S (a :: s₁) (b :: s₂) with
             | some p =>
               obtain ⟨β0, l0, τ0, t₁, t₂⟩ := p
-              simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, hpc, hh1,
+              simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, hpc, hkp, hh1,
                 Bool.false_eq_true, ite_false] at h
               exact host_occurs ih.2 hS hV hh1 (.inl ⟨rfl, rfl⟩) h hu
             | none =>
             cases hh2 : hostL S (b :: s₂) (a :: s₁) with
             | some p =>
               obtain ⟨β0, l0, τ0, t₂, t₁⟩ := p
-              simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, hpc, hh1, hh2,
+              simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, hpc, hkp, hh1, hh2,
                 Bool.false_eq_true, ite_false] at h
               exact host_occurs ih.2 hS (append_sub_swap hV) hh2 (.inr ⟨rfl, rfl⟩) h hu.symm
             | none =>
-              simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, hpc, hh1, hh2,
+              simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, hpc, hkp, hh1, hh2,
                 Bool.false_eq_true, ite_false] at h
               cases h
 

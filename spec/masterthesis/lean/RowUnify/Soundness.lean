@@ -265,11 +265,18 @@ private theorem unifySpine_supply {B : Type} [DecidableEq B] {f : Nat}
           simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, hpc] at h
           cases h
       | false =>
+          cases hkp : keyPin (a :: s₁) (b :: s₂) with
+          | some p =>
+              obtain ⟨α, k⟩ := p
+              simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, hpc, hkp,
+                Bool.false_eq_true, ite_false] at h
+              exact arm S _ _ _ _ h
+          | none =>
           -- U-host advances the supply by one, then recurses
           cases hh1 : hostL S (a :: s₁) (b :: s₂) with
           | some p =>
               obtain ⟨β0, l0, τ0, t₁, t₂⟩ := p
-              simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, hpc, hh1,
+              simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, hpc, hkp, hh1,
                 Bool.false_eq_true, ite_false] at h
               obtain ⟨s₀, hr, -⟩ := hostResM_success h
               exact Nat.le_trans (Nat.le_succ _) (ih.2 S.fresh.2 t₁ t₂ hr)
@@ -277,12 +284,12 @@ private theorem unifySpine_supply {B : Type} [DecidableEq B] {f : Nat}
           cases hh2 : hostL S (b :: s₂) (a :: s₁) with
           | some p =>
               obtain ⟨β0, l0, τ0, t₂, t₁⟩ := p
-              simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, hpc, hh1, hh2,
+              simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, hpc, hkp, hh1, hh2,
                 Bool.false_eq_true, ite_false] at h
               obtain ⟨s₀, hr, -⟩ := hostResM_success h
               exact Nat.le_trans (Nat.le_succ _) (ih.2 S.fresh.2 t₁ t₂ hr)
           | none =>
-              simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, hpc, hh1, hh2,
+              simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, hpc, hkp, hh1, hh2,
                 Bool.false_eq_true, ite_false] at h
               cases h
 
@@ -596,10 +603,18 @@ theorem unifyM_success_sound {B : Type} [DecidableEq B] {θ : TySubst B} (fuel :
               simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, hpc] at h
               cases h
             | false =>
+            -- U-key-pin: the residual is the problem itself
+            cases hkp : keyPin (a :: s₁) (b :: s₂) with
+            | some p =>
+              obtain ⟨α, k⟩ := p
+              simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, hpc, hkp,
+                Bool.false_eq_true, ite_false] at h
+              exact (arm S _ _ (a :: s₁) (b :: s₂) h hsat).2
+            | none =>
             cases hh1 : hostL S (a :: s₁) (b :: s₂) with
             | some p =>
               obtain ⟨β0, l0, τ0, t₁, t₂⟩ := p
-              simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, hpc, hh1,
+              simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, hpc, hkp, hh1,
                 Bool.false_eq_true, ite_false] at h
               obtain ⟨s₀, hr, rfl⟩ := hostResM_success h
               obtain ⟨hb, h₀⟩ := hsat.comp_inv
@@ -608,13 +623,13 @@ theorem unifyM_success_sound {B : Type} [DecidableEq B] {θ : TySubst B} (fuel :
             cases hh2 : hostL S (b :: s₂) (a :: s₁) with
             | some p =>
               obtain ⟨β0, l0, τ0, t₂, t₁⟩ := p
-              simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, hpc, hh1, hh2,
+              simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, hpc, hkp, hh1, hh2,
                 Bool.false_eq_true, ite_false] at h
               obtain ⟨s₀, hr, rfl⟩ := hostResM_success h
               obtain ⟨hb, h₀⟩ := hsat.comp_inv
               exact (hostL_reflect hh2 (hostBind_sat hb) (ih.2 _ t₁ t₂ hr h₀).symm).symm
             | none =>
-              simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, hpc, hh1, hh2,
+              simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, hpc, hkp, hh1, hh2,
                 Bool.false_eq_true, ite_false] at h
               cases h
 

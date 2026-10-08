@@ -467,6 +467,10 @@ theorem qtyped_applySubst {B C : Type} {constTy : C → B}
       | unknown => exact .qSelDynUnk h₁' h₂' hr
   | _, _, _, _, .qRcdDyn h₁ h₂, hm =>
       .qRcdDyn (qtyped_applySubst him h₁ hm) (qtyped_applySubst him h₂ hm)
+  | _, _, _, _, .qSelDynBase h₁ h₂, hm =>
+      .qSelDynBase (qtyped_applySubst him h₁ hm) (qtyped_applySubst him h₂ hm)
+  | _, _, _, _, .qRcdDynBase h₁ h₂, hm =>
+      .qRcdDynBase (qtyped_applySubst him h₁ hm) (qtyped_applySubst him h₂ hm)
 
 theorem qtypedBody_applySubst {B C : Type} {constTy : C → B}
     {σ : TySubst B} (him : SchemeImage σ) :

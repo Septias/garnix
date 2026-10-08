@@ -171,6 +171,15 @@ theorem Infer.keeps {C : Type} {constTy : C → B} :
         (S := S₂'.park ⟨α, ⟨Row.var r, .lit l, .var δ⟩⟩) (S' := S₂') rfl
       exact (Infer.keeps h₁).trans (ka.trans (hs.keeps.trans (kb.trans kp mp) (mb.trans mp))
         (hs.satMono.trans (mb.trans mp))) (ma.trans (hs.satMono.trans (mb.trans mp)))
+  | _, _, _, _, _, .selDynBase h₁ hd hs h₂ _ => by
+      obtain ⟨ka, ma, -⟩ := draw_keeps hd
+      have m₂ := Infer.sat_mono h₂
+      have r := (Infer.keeps h₁).trans (ka.trans (hs.keeps.trans (Infer.keeps h₂) m₂)
+        (hs.satMono.trans m₂)) (ma.trans (hs.satMono.trans m₂))
+      exact r
+  | _, _, _, _, _, .rcdDynBase h₁ h₂ _ => by
+      have r := (Infer.keeps h₁).trans (Infer.keeps h₂) (Infer.sat_mono h₂)
+      exact r
   | _, _, _, _, _, .lab => .refl _
   | _, _, _, _, _, .selDyn h₁ hd hs h₂ hdk hsk _ => by
       obtain ⟨ka, ma, -⟩ := draw_keeps hd

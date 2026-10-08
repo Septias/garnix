@@ -907,8 +907,19 @@ t₁·(\${α}: τ) ≐ᵣ t₂·(\${α}: τ′) ⇝ θ′ ∘ θ
 // Only at the very ends: a field before ${α} could be the label α becomes.
 // Complete by cancellation (`RowEquiv.dsing_cancel_left/right`): the barrier
 // sequences share key α, the keyed projections start with τ and τ′.
-// Different unknown keys, ${α}: τ ≐ᵣ ${β}: τ′, stay stuck: α ≔ β and
-// α, β ≔ l are unifiers with no common generalization.
+
+
+⌊α⌋ ≐ ⌊k⌋ ⇝ θ   θ(f₁) ≐ᵣ θ(f₂) ⇝ θ′
+---------------------------------------- U-key-pin
+f₁ ≐ᵣ f₂ ⇝ θ′ ∘ θ
+// f₁, f₂ ONE field each, at least one keyed (\${α}), under different keys;
+// k the other key (β or l). Forced (`keyPin_forced`): one-field rows are ≈
+// only under the same key. Re-runs the same spines, now U-key / U-field.
+// Terminates: the stage binds, so the residual has one variable less.
+// ${α}: τ ≐ᵣ ${β}: τ′ ⇝ [α ≔ β] ∘ mgu(τ, τ′), most general since
+// [α, β ≔ l] = [β ≔ l] ∘ [α ≔ β]. Beyond one field: stuck, and forced.
+// (${α}: 𝓫 | m: 𝓫) ≐ᵣ (m: 𝓫 | ${β}: 𝓫) has no mgu: α, β ≔ x for every
+// label x, and α ≔ β is no unifier (barrier).
 
 
 === Declarative
@@ -937,6 +948,18 @@ t₁·(\${α}: τ) ≐ᵣ t₂·(\${α}: τ′) ⇝ θ′ ∘ θ
 Γ ⊢ { ${e₁} = e₂ }: {${k}: τ }
 
 
+Γ ⊢ e₁: {ρ}   Γ ⊢ e₂: 𝓫
+------------------------- T-sel-dyn-𝓫
+Γ ⊢ e₁.(e₂): ★
+
+
+Γ ⊢ e₁: 𝓫   Γ ⊢ e₂: τ
+--------------------------- T-rcd-dyn-𝓫
+Γ ⊢ { ${e₁} = e₂ }: ★
+// A computed key (a string in NixLang) answers ★. No type mentions the key,
+// so the Label sort stays free of ★
+
+
 - Discharge replays keyed stumps with the keyed lookup: θ ⊢ ⟨ρ.k ↓ δ⟩ reads
   (θρ).(θk) ↓ r, arms as D-hit / D-⊥ / D-?
 
@@ -947,7 +970,9 @@ t₁·(\${α}: τ) ≐ᵣ t₂·(\${α}: τ′) ⇝ θ′ ∘ θ
 - { \${e₁} = e₂ }: the key is evaluated, the field stays a thunk (lazy, like a
   record literal): {\${'l} = e } ⟶ { l = e }
 - ↯ on a missing label and on a key that is not a label, for both forms
-- qProgress / qPreservation hold; T-rcd-dyn's preservation case is ≈-dlab
+- qProgress / qPreservation hold; T-rcd-dyn's preservation case is ≈-dlab;
+  the 𝓫-rules' cases retype the reduct and blur it with T-★-intro (needs
+  T-★-intro unrestricted)
 
 
 === Algorithmic
@@ -979,6 +1004,18 @@ fresh κ: Label   S₃ ⊢ τ₂ ≐ ⌊κ⌋ ⇝! S₄   (⟦S₄⟧r).(⟦S₄
 // No lookup, so nothing parks. Shaped like A-app
 
 
+Γ; S ⊢ e₁ ⇒ τ₁; S₁   fresh r: Row   S₁ ⊢ τ₁ ≐ {r} ⇝! S₂   Γ; S₂ ⊢ e₂ ⇒ τ₂; S₃   ⟦S₃⟧τ₂ = 𝓫
+------------------------------------------------------------------------------------------------ A-sel-dyn-𝓫
+Γ; S ⊢ e₁.(e₂) ⇒ ★; S₃ +W
+
+
+Γ; S ⊢ e₁ ⇒ τ₁; S₁   Γ; S₁ ⊢ e₂ ⇒ τ₂; S₂   ⟦S₂⟧τ₁ = 𝓫
+--------------------------------------------------------- A-rcd-dyn-𝓫
+Γ; S ⊢ { ${e₁} = e₂ } ⇒ ★; S₂ +W
+// Only a DEFINITE base type: a key still typed by a variable is forced to ⌊κ⌋,
+// so (λa. {foo = c}.(a)) c clashes at the application
+
+
 === Wake-up, let, finalization
 - K-rules and saturation are unchanged, over keyed lookups: solving a key wakes
   the stumps blocked on it (λa. {foo = c, bar = ε}.(a) applied to 'foo hits)
@@ -1002,7 +1039,9 @@ fresh κ: Label   S₃ ⊢ τ₂ ≐ ⌊κ⌋ ⇝! S₄   (⟦S₄⟧r).(⟦S₄
 
 
 === Costs
-- A non-label key is a type error ({foo = c}.(c), {\${c} = c} clash)
-  - Keyed fields are barriers: (foo: τ) ≐ᵣ (\${α}: τ′) and different unknown keys
-  are stuck (keyed Fuzz universe: 67% stuck)
+- Labels are not strings: a key of base type is ★ only when known at the
+  selection; (λa. {foo = c}.(a)) c clashes
+- Keyed fields are barriers: beyond one field each (U-key-pin), (foo: τ) ≐ᵣ
+  (\${α}: τ′) and different unknown keys are stuck (keyed Fuzz universe: 67%
+  stuck, measured before U-key-pin)
 - A key-blocked spent promise is not materialized (incompleteness)

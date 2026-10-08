@@ -220,6 +220,12 @@ theorem unifyM_fuel_mono {B : Type} [DecidableEq B] (N : Nat) :
                 cases hpc : projClash (a :: s₁) (b :: s₂) with
                 | true  => exact .inr rfl
                 | false =>
+                -- U-key-pin recurses like an eq-emitting arm
+                cases hkp : keyPin (a :: s₁) (b :: s₂) with
+                | some p =>
+                    obtain ⟨α, k⟩ := p
+                    exact UResM.Mono.seq (IH'.1 S _ _) (fun θ S' => IH'.2 S' _ _)
+                | none =>
                 cases hh1 : hostL S (a :: s₁) (b :: s₂) with
                 | some p =>
                     obtain ⟨β0, l0, τ0, t₁, t₂⟩ := p

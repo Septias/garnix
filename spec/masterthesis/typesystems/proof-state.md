@@ -166,6 +166,9 @@ We use a custom lookup relation ⟨ρ.l ↓ r⟩ with return values ⟨τ | ⊥ 
 - D-hit up to ≈ (branch `discharge-equiv`, let-review §4.4): χ-correction gone; A-let drops linear-pattern, nodup, independence, disjoint results (P8d needed a fix in LetCase's inhabitation witness: fill with the ★-substituted result). Nested selection, record literal in a spent result, spent result over an unspent one now generalize.
 - A-let in §6 shape: P2 (sorts) and P10 (unsolved) were unused by every proof, dropped; P3-P5 are the filters `letQ`/`letG`; P6 + P9 merged into `LetAdmissible.fresh`; `greatestAlpha` chooses from ftv(⟦S₁⟧τ₁, ⟦S₁⟧Δ₁) (`letCand`)
 - `LetSpent` same-key clause: `q.stump = p.stump` → `Parked.spentAlike` (q spent, results equal after all type vars ↦ ★); witness sends generalized type vars to ★. `λx.{p=(x.l) c; q=(x.l) c}` now generalizes
+- Base-typed keys (fc-labels.md §8.1): T-sel-dyn-𝓫 / T-rcd-dyn-𝓫 (`qSelDynBase`, `qRcdDynBase`) type a key of base type at ★; A-sel-dyn-𝓫 / A-rcd-dyn-𝓫 fire only when ⟦S⟧τ_key is already 𝓫 (+W). Preservation via unrestricted qUnk. `{foo = c}.${c}` and `{${c} = c}` now ★; `(a: {foo = c}.${a}) c` still clashes (key variable forced to ⌊κ⌋ first)
+- U-key-pin (fc-labels.md §5): one field each side, ≥1 keyed, different keys ⇒ bind the key (`keyPin`, forced by `keyPin_forced`), re-run. `${α}:τ ≐ᵣ ${β}:τ′` ⇝ `[α ≔ β] ∘ mgu(τ,τ′)`, `foo:τ ≐ᵣ ${α}:τ′` ⇝ `[α ≔ foo]`. Termination: `arm_sp_terminates'` (stage binds ⇒ fewer vars). In context still stuck, and forced: `(${α}:𝓫 | m:𝓫) ≐ᵣ (m:𝓫 | ${β}:𝓫)` has no mgu (`unify_diff_key_ctx_stuck`)
+
 ## Real-world Nix (`lean/NixSuite.lean`)
 - 14 `testdata/eval-okay-*` hand-translated, run through `runF`; every typed result agrees with `.exp`
 - Works: `//` chains, nested attrpaths, `inherit (e)`, non-recursive `rec`, shadowing, `or` chains (also a missing intermediate), first-class keys

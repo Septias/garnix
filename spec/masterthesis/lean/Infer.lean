@@ -224,6 +224,18 @@ def Key.keyName : Key → Label
   | .lit l => l
   | .var α => "${" ++ α ++ "}"
 
+/-- the name a W-flag records for a base-typed (non-label) key. -/
+def Key.baseName : Label := "${𝓫}"
+
+/-- a type's base, when it is one: the test A-sel-dyn-𝓫 / A-rcd-dyn-𝓫 run. -/
+def Ty.asBase {B : Type} : Ty B → Option B
+  | .base b => some b
+  | _       => none
+
+theorem Ty.asBase_eq_some {B : Type} {τ : Ty B} {b : B} (h : τ.asBase = some b) :
+    τ = .base b := by
+  cases τ <;> simp_all [Ty.asBase]
+
 
 --------------------- THE SOLVER STATE  S := (θ, Δ, W) ------------------------
 -- `algorithmic.typ`: "θ is only ever refined"; Δ holds the parked selections;
@@ -1035,8 +1047,8 @@ inductive Infer {B C : Type} [DecidableEq B] (constTy : C → B) :
   | lab {Γ : QCtx B} {S : SolverState B} {l : Label} :
       Infer constTy Γ S (.lab l) (.lab (.lit l)) S
   -- A-sel-dyn. The record first (forced to `{r}`), then the key, whose type is
-  -- forced to ⌊κ⌋ for a fresh LABEL variable κ (a non-label key clashes: there
-  -- is no junk key). The lookup is keyed by κ read under ⟦S⟧, and its three
+  -- forced to ⌊κ⌋ for a fresh LABEL variable κ (a key whose type is not yet a
+  -- base type: there is no junk key; a definite 𝓫 takes A-sel-dyn-𝓫). The lookup is keyed by κ read under ⟦S⟧, and its three
   -- verdicts are A-sel's, A-sel-⊥'s and A-sel-?'s
   | selDyn {Γ : QCtx B} {S S₁ S₁' S₂ S₃ S₃' S₄ : SolverState B} {e₁ e₂ : Expr C}
       {τ₁ τ₂ τ' : Ty B} {r κ : TyVar} :
@@ -1073,7 +1085,7 @@ inductive Infer {B C : Type} [DecidableEq B] (constTy : C → B) :
       Infer constTy Γ S (.selDyn e₁ e₂) (.var δ)
         (S₄'.park ⟨α, ⟨.var r, .var κ, .var δ⟩⟩)
   -- A-rcd-dyn. Both halves first, then the key's type is forced to ⌊κ⌋ for a
-  -- fresh LABEL variable κ, which keys the field (a non-label key clashes). No
+  -- fresh LABEL variable κ, which keys the field (unless A-rcd-dyn-𝓫 fired). No
   -- lookup, so nothing parks
   | rcdDyn {Γ : QCtx B} {S S₁ S₂ S₂' S₃ : SolverState B} {e₁ e₂ : Expr C}
       {τ₁ τ₂ : Ty B} {κ : TyVar} :
@@ -1081,6 +1093,22 @@ inductive Infer {B C : Type} [DecidableEq B] (constTy : C → B) :
       (κ, S₂') = S₂.draw .lab →
       SolveTySat S₂' τ₁ (.lab (.var κ)) S₃ →
       Infer constTy Γ S (.rcdDyn e₁ e₂) (.rcd (.dsing (.var κ) τ₂)) S₃
+  -- A-sel-dyn-𝓫 / A-rcd-dyn-𝓫. A key whose type is already a BASE type under ⟦S⟧
+  -- answers ★ with a W-flag instead of clashing against ⌊κ⌋. Only a DEFINITE
+  -- base type takes this arm: an unsolved key variable is still forced to ⌊κ⌋
+  | selDynBase {Γ : QCtx B} {S S₁ S₁' S₂ S₃ : SolverState B} {e₁ e₂ : Expr C}
+      {τ₁ τ₂ : Ty B} {r : TyVar} {b : B} :
+      Infer constTy Γ S e₁ τ₁ S₁ →
+      (r, S₁') = S₁.draw .row →
+      SolveTySat S₁' τ₁ (.rcd (.var r)) S₂ →
+      Infer constTy Γ S₂ e₂ τ₂ S₃ →
+      τ₂.applySubst S₃.subst = .base b →
+      Infer constTy Γ S (.selDyn e₁ e₂) .unk (S₃.flag Key.baseName)
+  | rcdDynBase {Γ : QCtx B} {S S₁ S₂ : SolverState B} {e₁ e₂ : Expr C}
+      {τ₁ τ₂ : Ty B} {b : B} :
+      Infer constTy Γ S e₁ τ₁ S₁ → Infer constTy Γ S₁ e₂ τ₂ S₂ →
+      τ₁.applySubst S₂.subst = .base b →
+      Infer constTy Γ S (.rcdDyn e₁ e₂) .unk (S₂.flag Key.baseName)
   -- A-rec
   | rcd {Γ : QCtx B} {S S' : SolverState B} {ξ : RecBody (Expr C)} {ρ : Row B} :
       InferRec constTy Γ S ξ ρ S' →
@@ -1445,6 +1473,17 @@ theorem Infer.kinds_mono {B C : Type} [DecidableEq B] {constTy : C → B}
       refine List.IsSuffix.trans ?_ (List.suffix_cons _ _)
       refine List.IsSuffix.trans ?_ (Infer.kinds_mono h₂)
       rw [hs.kinds, draw_kind_eq hd]; exact List.suffix_cons _ _
+  | .selDynBase h₁ hd hs h₂ _ => by
+      refine List.IsSuffix.trans (Infer.kinds_mono h₁) ?_
+      show _ <:+ (SolverState.flag _ _).kinds
+      simp only [SolverState.flag]
+      refine List.IsSuffix.trans ?_ (Infer.kinds_mono h₂)
+      rw [hs.kinds, draw_kind_eq hd]; exact List.suffix_cons _ _
+  | .rcdDynBase h₁ h₂ _ => by
+      refine List.IsSuffix.trans (Infer.kinds_mono h₁) ?_
+      show _ <:+ (SolverState.flag _ _).kinds
+      simp only [SolverState.flag]
+      exact Infer.kinds_mono h₂
   | .rcd hb => InferRec.kinds_mono hb
   | .letE h₁ _ h₂ => by
       have i₁ := Infer.kinds_mono h₁
@@ -1567,6 +1606,20 @@ theorem Infer.supply_mono {B C : Type} [DecidableEq B] {constTy : C → B}
       have hd₂' := draw_eq hd₂
       show _ ≤ (SolverState.park _ _).supply.next
       simp only [SolverState.park]
+      omega
+  | .selDynBase h₁ hd hs h₂ _ => by
+      have i₁ := Infer.supply_mono h₁
+      have i₂ := Infer.supply_mono h₂
+      have hd' := draw_eq hd
+      have j := hs.supply
+      show _ ≤ (SolverState.flag _ _).supply.next
+      simp only [SolverState.flag]
+      omega
+  | .rcdDynBase h₁ h₂ _ => by
+      have i₁ := Infer.supply_mono h₁
+      have i₂ := Infer.supply_mono h₂
+      show _ ≤ (SolverState.flag _ _).supply.next
+      simp only [SolverState.flag]
       omega
   | .rcd hb => InferRec.supply_mono hb
   | .letE h₁ _ h₂ => by
@@ -1711,6 +1764,14 @@ theorem Infer.sat_mono {B C : Type} [DecidableEq B] {constTy : C → B}
               (hsk.satMono.trans
                 ((SolverState.SatMono.of_sol_eq (draw_sol hd₂)).trans
                   (SolverState.SatMono.of_sol_eq rfl)))))))
+  | .selDynBase h₁ hd hs h₂ _ =>
+      (Infer.sat_mono h₁).trans
+        ((SolverState.SatMono.of_sol_eq (draw_sol hd)).trans
+          (hs.satMono.trans ((Infer.sat_mono h₂).trans
+            (SolverState.SatMono.of_sol_eq rfl))))
+  | .rcdDynBase h₁ h₂ _ =>
+      ((Infer.sat_mono h₁).trans (Infer.sat_mono h₂)).trans
+        (SolverState.SatMono.of_sol_eq rfl)
   | .rcd hb => InferRec.sat_mono hb
   | .letE h₁ _ h₂ => by
       refine (Infer.sat_mono h₁).trans ?_
@@ -1807,6 +1868,8 @@ theorem Infer.quiescent {B C : Type} [DecidableEq B] {constTy : C → B}
   | .selDynAbs _ _ _ _ _ hsk _, _ => hsk.quiescent.flag _
   | .selDynUnk _ _ _ _ _ hsk hb hd₂, _ =>
       SolverState.Quiescent.park_draw (draw_sol hd₂) (draw_parked hd₂) hsk.quiescent hb
+  | .selDynBase _ _ hs h₂ _, _ => (Infer.quiescent h₂ hs.quiescent).flag _
+  | .rcdDynBase h₁ h₂ _, hq => (Infer.quiescent h₂ (Infer.quiescent h₁ hq)).flag _
   -- …and the rules that do not write carry it through
   | .lam hd hb, hq => Infer.quiescent hb (hq.draw hd)
   | .rcd hb, hq => InferRec.quiescent hb hq

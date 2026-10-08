@@ -990,6 +990,10 @@ mutual
                    LookupQ ρ q .absent → QTypedC constTy Δ Γ (.selDyn e₁ e₂) .unk
     | qRcdDyn : QTypedC constTy Δ Γ e₁ (.lab q) → QTypedC constTy Δ Γ e₂ τ →
                 QTypedC constTy Δ Γ (.rcdDyn e₁ e₂) (.rcd (.dsing q τ))
+    | qSelDynBase : QTypedC constTy Δ Γ e₁ (.rcd ρ) → QTypedC constTy Δ Γ e₂ (.base b) →
+                    QTypedC constTy Δ Γ (.selDyn e₁ e₂) .unk
+    | qRcdDynBase : QTypedC constTy Δ Γ e₁ (.base b) → QTypedC constTy Δ Γ e₂ τ →
+                    QTypedC constTy Δ Γ (.rcdDyn e₁ e₂) .unk
     -- THE ONE NEW RULE: a selection whose lookup is ASSUMED, answering at the
     -- stump's own result variable. This is A-sel-? read declaratively.
     | stump {ρ : Row B} {l : Label} {δ : TyVar} :
@@ -1027,6 +1031,8 @@ mutual
     | .qSelDynUnk h₁ h₂ hl => .qSelDynUnk h₁.toC h₂.toC hl
     | .qSelDynAbs h₁ h₂ hl => .qSelDynAbs h₁.toC h₂.toC hl
     | .qRcdDyn h₁ h₂       => .qRcdDyn h₁.toC h₂.toC
+    | .qSelDynBase h₁ h₂   => .qSelDynBase h₁.toC h₂.toC
+    | .qRcdDynBase h₁ h₂   => .qRcdDynBase h₁.toC h₂.toC
 
   theorem QTypedBody.toC {B C : Type} {constTy : C → B} {Δ : List (Stump B)}
       {Γ : QCtx B} {b : RecBody (Expr C)} {ρ : Row B} :
@@ -1059,6 +1065,8 @@ mutual
     | .qSelDynUnk h₁ h₂ hl => .qSelDynUnk h₁.toQTyped h₂.toQTyped hl
     | .qSelDynAbs h₁ h₂ hl => .qSelDynAbs h₁.toQTyped h₂.toQTyped hl
     | .qRcdDyn h₁ h₂       => .qRcdDyn h₁.toQTyped h₂.toQTyped
+    | .qSelDynBase h₁ h₂   => .qSelDynBase h₁.toQTyped h₂.toQTyped
+    | .qRcdDynBase h₁ h₂   => .qRcdDynBase h₁.toQTyped h₂.toQTyped
     | .stump _ hmem   => absurd hmem List.not_mem_nil
 
   theorem QTypedCBody.toQTyped {B C : Type} {constTy : C → B} {Γ : QCtx B}

@@ -348,9 +348,15 @@ theorem nix_callback_extension_clash :
 -- ## FC-LABELS PHASE B: keyed fields `${k}: τ` and the label sort
 
 -- ⊢  a literal field against a keyed one is not a clash: α may still be `foo`.
---    A keyed field is a barrier, so the verdict is stuck
-theorem unify_lit_vs_key_stuck :
-    unifyRowM (B := Unit) 20 (.sing "foo" uB) (.dsing (.var "α") uB) = .stuck := rfl
+--    One field each, so U-key-pin binds α ≔ foo (forced: `keyPin_forced`)
+theorem unify_lit_vs_key_pins :
+    ∃ s S, unifyRowM (B := Unit) 20 (.sing "foo" uB) (.dsing (.var "α") uB) = .success s S :=
+  ⟨_, _, rfl⟩
+
+-- ⊢  …with anything around the keyed field it is a barrier, and stuck
+theorem unify_lit_vs_key_ctx_stuck :
+    unifyRowM (B := Unit) 20 (.sing "foo" uB) (.cat (.dsing (.var "α") uB) (.var "r"))
+      = .stuck := rfl
 
 -- ⊢  …but the empty row has no field of any key
 theorem unify_empty_vs_key_clash :
@@ -388,9 +394,16 @@ theorem unify_same_key_tail :
     ∃ s S, unifyRowM (B := Unit) 20 (.cat (.var "r") (.dsing (.var "α") (.var "t")))
       (.cat (.var "q") (.dsing (.var "α") uB)) = .success s S := ⟨_, _, rfl⟩
 
--- ⊢  different unknown keys still do not meet: α ≔ β and α, β ≔ l are both
---    unifiers, with no common generalization
-theorem unify_diff_key_stuck :
-    unifyRowM (B := Unit) 20 (.dsing (.var "α") uB) (.dsing (.var "β") uB) = .stuck := rfl
+-- ⊢  different unknown keys, alone: the mgu is α ≔ β ([α, β ≔ l] =
+--    [β ≔ l] ∘ [α ≔ β]), and U-key-pin finds it …
+theorem unify_diff_key_pins :
+    ∃ s S, unifyRowM (B := Unit) 20 (.dsing (.var "α") uB) (.dsing (.var "β") uB)
+      = .success s S := ⟨_, _, rfl⟩
+
+-- ⊢  … while in context there is none: α, β ≔ x for every label x solves it, and
+--    α ≔ β does not (the keyed field is a barrier that m cannot cross)
+theorem unify_diff_key_ctx_stuck :
+    unifyRowM (B := Unit) 20 (.cat (.dsing (.var "α") uB) (.sing "m" uB))
+      (.cat (.sing "m" uB) (.dsing (.var "β") uB)) = .stuck := rfl
 
 end MinimalCalculus

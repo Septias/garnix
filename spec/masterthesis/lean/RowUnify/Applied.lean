@@ -381,6 +381,39 @@ theorem EqEmit.res_sub {B : Type} {s₁ s₂ : List (Atom B)} {τ τ' : Ty B}
   · exact List.mem_append_left _ (sSorted_sub_of_atoms h₁ hx)
   · exact List.mem_append_right _ (sSorted_sub_of_atoms h₂ hx)
 
+-- ⊢  U-key-pin's equation ⌊α⌋ ≐ ⌊k⌋ lives inside the problem
+theorem keyPin_sorted {B : Type} {s₁ s₂ : List (Atom B)} {α : TyVar} {k : Key}
+    (h : keyPin s₁ s₂ = some (α, k)) :
+    Ty.sortedFtv (B := B) (.lab (.var α)) ++ Ty.sortedFtv (B := B) (.lab k) ⊆
+      sSorted s₁ ++ sSorted s₂ := by
+  unfold keyPin at h
+  split at h
+  next a τ b τ' =>
+    split at h
+    · cases h
+    · simp only [Option.some.injEq, Prod.mk.injEq] at h
+      obtain ⟨rfl, rfl⟩ := h
+      intro x hx
+      simp only [Ty.sortedFtv, Key.sortedFtv, List.mem_append, List.mem_singleton] at hx
+      rcases hx with rfl | rfl <;> simp [sSorted]
+  next a τ l τ' =>
+    simp only [Option.some.injEq, Prod.mk.injEq] at h
+    obtain ⟨rfl, rfl⟩ := h
+    intro x hx
+    simp only [Ty.sortedFtv, Key.sortedFtv, List.mem_append, List.mem_singleton] at hx
+    rcases hx with rfl | hx
+    · simp [sSorted]
+    · simp at hx
+  next l τ a τ' =>
+    simp only [Option.some.injEq, Prod.mk.injEq] at h
+    obtain ⟨rfl, rfl⟩ := h
+    intro x hx
+    simp only [Ty.sortedFtv, Key.sortedFtv, List.mem_append, List.mem_singleton] at hx
+    rcases hx with rfl | hx
+    · simp [sSorted]
+    · simp at hx
+  next => cases h
+
 theorem sSorted_sub_pair {B : Type} {s₁ s₂ t₁ t₂ : List (Atom B)}
     (h₁ : ∀ a ∈ t₁, a ∈ s₁) (h₂ : ∀ a ∈ t₂, a ∈ s₂) :
     sSorted t₁ ++ sSorted t₂ ⊆ sSorted s₁ ++ sSorted s₂ := fun x hx => by
@@ -1402,23 +1435,30 @@ theorem unifyM_good {B : Type} [DecidableEq B] (fuel : Nat) :
               simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, hpc] at h
               cases h
             | false =>
+            cases hkp : keyPin (a :: s₁) (b :: s₂) with
+            | some p =>
+              obtain ⟨α, k⟩ := p
+              simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, hpc, hkp,
+                Bool.false_eq_true, ite_false] at h
+              exact arm S _ _ (a :: s₁) (b :: s₂) _ (keyPin_sorted hkp) (fun _ hx => hx) hB h
+            | none =>
             cases hh1 : hostL S (a :: s₁) (b :: s₂) with
             | some p =>
               obtain ⟨β0, l0, τ0, t₁, t₂⟩ := p
-              simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, hpc, hh1,
+              simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, hpc, hkp, hh1,
                 Bool.false_eq_true, ite_false] at h
               exact host_good ih.2 hB hh1 (.inl ⟨rfl, rfl⟩) h
             | none =>
             cases hh2 : hostL S (b :: s₂) (a :: s₁) with
             | some p =>
               obtain ⟨β0, l0, τ0, t₂, t₁⟩ := p
-              simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, hpc, hh1, hh2,
+              simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, hpc, hkp, hh1, hh2,
                 Bool.false_eq_true, ite_false] at h
               obtain ⟨R, hf, g⟩ := host_good ih.2
                 (fun x hx => hB x (append_sub_swap (fun _ h => h) hx)) hh2 (.inr ⟨rfl, rfl⟩) h
               exact ⟨R, hf, g.freshMono (append_sub_swap (fun _ h => h))⟩
             | none =>
-              simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, hpc, hh1, hh2,
+              simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, hpc, hkp, hh1, hh2,
                 Bool.false_eq_true, ite_false] at h
               cases h
 

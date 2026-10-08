@@ -180,6 +180,17 @@ def groundMatch {B : Type} (s₁ s₂ : List (Atom B)) :
     Option (Ty B × Ty B × List (Atom B) × List (Atom B)) :=
   if sHasVar s₂ then none else groundMatchAux s₁ s₂ (sLabels s₁)
 
+-- U-key-pin: both sides ONE field, at least one of them keyed, under different
+-- keys. Every unifier gives the two fields the same key (`keyPin_forced`), so
+-- binding the key is forced; the U-key / U-field pass then pairs the fields.
+-- With anything around the fields the binding is no longer forced:
+-- (${α}: 𝓫 | m: 𝓫) ≐ᵣ (m: 𝓫 | ${β}: 𝓫) has no mgu.
+def keyPin {B : Type} : List (Atom B) → List (Atom B) → Option (TyVar × Key)
+  | [.dfield α _], [.dfield β _] => if α = β then none else some (α, .var β)
+  | [.dfield α _], [.field l _]  => some (α, .lit l)
+  | [.field l _],  [.dfield α _] => some (α, .lit l)
+  | _, _ => none
+
 -- ## U-expand: unique-host variable expansion
 -- The DETECTORS only; the metatheory (host_forced, expand_shift, the two
 -- reflection lemmas) is in Solutions.lean.
@@ -794,6 +805,14 @@ def unifySpineMF {B : Type} [DecidableEq B] :
       -- `projClash` is a SOUND no-unifier test (projClash_no_unifier) and owes
       -- nothing to the expansion arms it used to be ordered in front of.
       if projClash s₁ s₂ then .clash else
+      -- U-key-pin: a forced key binding, then the same spines again (where
+      -- U-key / U-field now fire). The first stage always binds, so the
+      -- residual has lost a variable (Termination).
+      match keyPin s₁ s₂ with
+      | some (α, k) =>
+          (unifyTyF S fuel (.lab (.var α)) (.lab k)).seq fun θ S' =>
+            unifySpineMF S' fuel (sApplySubst θ s₁) (sApplySubst θ s₂)
+      | none =>
       -- U-HOST, last: a leading field against a SOLE host on the other side
       -- (`hostL`). It is the only arm that invents a name, and the sole-
       -- occurrence guard is what keeps that invention harmless — see `soleHost`.
@@ -870,6 +889,7 @@ structure Terminal {B : Type} (S : Supply)
   hgroundL : groundMatch s₁ s₂ = none
   hgroundR : groundMatch s₂ s₁ = none
   hnoClash  : projClash s₁ s₂ = false
+  hkeyPin   : keyPin s₁ s₂ = none
 
 /-- The candidate fourth leg — **REFUTED** (`Refutations.terminalNoMgu_false`).
 

@@ -567,8 +567,11 @@ def inferF (constTy : C → B) (n : Nat) :
   | Γ, S, .rcdDyn e₁ e₂ => do
       let r₁ ← inferF constTy n Γ S e₁
       let r₂ ← inferF constTy n Γ r₁.2 e₂
-      let S₃ ← solveTySatF n (r₂.2.draw .lab).2 r₁.1 (.lab (.var (r₂.2.draw .lab).1))
-      pure (.rcd (.dsing (.var (r₂.2.draw .lab).1) r₂.1), S₃)
+      match (r₁.1.applySubst r₂.2.subst).asBase with
+      | some _ => pure (.unk, r₂.2.flag Key.baseName)
+      | none => do
+        let S₃ ← solveTySatF n (r₂.2.draw .lab).2 r₁.1 (.lab (.var (r₂.2.draw .lab).1))
+        pure (.rcd (.dsing (.var (r₂.2.draw .lab).1) r₂.1), S₃)
   | Γ, S, .cat e₁ e₂ => do
       let r₁ ← inferF constTy n Γ S e₁
       let r₂ ← inferF constTy n Γ r₁.2 e₂
@@ -592,14 +595,17 @@ def inferF (constTy : C → B) (n : Nat) :
       let rv := (r₁.2.draw .row).1
       let S₂ ← solveTySatF n (r₁.2.draw .row).2 r₁.1 (.rcd (.var rv))
       let r₂ ← inferF constTy n Γ S₂ e₂
-      let κ := (r₂.2.draw .lab).1
-      let S₄ ← solveTySatF n (r₂.2.draw .lab).2 r₂.1 (.lab (.var κ))
-      match ← lookupQF ((Row.var rv).applySubst S₄.subst) ((Key.var κ).applySubst S₄.subst) with
-      | .found τ' => pure (τ', S₄)
-      | .absent   => pure (.unk, S₄.flag ((Key.var κ).applySubst S₄.subst).keyName)
-      | .blocked α =>
-          pure (.var (S₄.draw .ty).1,
-            (S₄.draw .ty).2.park ⟨α, ⟨.var rv, .var κ, .var (S₄.draw .ty).1⟩⟩)
+      match (r₂.1.applySubst r₂.2.subst).asBase with
+      | some _ => pure (.unk, r₂.2.flag Key.baseName)
+      | none => do
+        let κ := (r₂.2.draw .lab).1
+        let S₄ ← solveTySatF n (r₂.2.draw .lab).2 r₂.1 (.lab (.var κ))
+        match ← lookupQF ((Row.var rv).applySubst S₄.subst) ((Key.var κ).applySubst S₄.subst) with
+        | .found τ' => pure (τ', S₄)
+        | .absent   => pure (.unk, S₄.flag ((Key.var κ).applySubst S₄.subst).keyName)
+        | .blocked α =>
+            pure (.var (S₄.draw .ty).1,
+              (S₄.draw .ty).2.park ⟨α, ⟨.var rv, .var κ, .var (S₄.draw .ty).1⟩⟩)
   | Γ, S, .rcd ξ => do
       let r ← inferRecF constTy n Γ S ξ
       pure (.rcd r.1, r.2)
@@ -645,9 +651,16 @@ theorem inferF_sound {constTy : C → B} {n : Nat} :
       obtain ⟨⟨τ₁, S₁⟩, h₁, ⟨τ₂, S₂⟩, h₂, S₃, h₃, rfl, rfl⟩ := h
       exact .app (inferF_sound h₁) (inferF_sound h₂) rfl (solveTySatF_sound h₃)
   | Γ, S, S', .rcdDyn e₁ e₂, τ, h => by
-      simp only [inferF, IRes.bind_eq_ok, IRes.pure_eq_ok, Prod.mk.injEq] at h
-      obtain ⟨⟨τ₁, S₁⟩, h₁, ⟨τ₂, S₂⟩, h₂, S₃, h₃, rfl, rfl⟩ := h
-      exact .rcdDyn (inferF_sound h₁) (inferF_sound h₂) rfl (solveTySatF_sound h₃)
+      simp only [inferF, IRes.bind_eq_ok] at h
+      obtain ⟨⟨τ₁, S₁⟩, h₁, ⟨τ₂, S₂⟩, h₂, h⟩ := h
+      split at h
+      · rename_i b hb
+        simp only [IRes.pure_eq_ok, Prod.mk.injEq] at h
+        obtain ⟨rfl, rfl⟩ := h
+        exact .rcdDynBase (inferF_sound h₁) (inferF_sound h₂) (Ty.asBase_eq_some hb)
+      · simp only [IRes.bind_eq_ok, IRes.pure_eq_ok, Prod.mk.injEq] at h
+        obtain ⟨S₃, h₃, rfl, rfl⟩ := h
+        exact .rcdDyn (inferF_sound h₁) (inferF_sound h₂) rfl (solveTySatF_sound h₃)
   | Γ, S, S', .cat e₁ e₂, τ, h => by
       simp only [inferF, IRes.bind_eq_ok, IRes.pure_eq_ok, Prod.mk.injEq] at h
       obtain ⟨⟨τ₁, S₁⟩, h₁, ⟨τ₂, S₂⟩, h₂, S₃, h₃, S₄, h₄, rfl, rfl⟩ := h
@@ -676,7 +689,15 @@ theorem inferF_sound {constTy : C → B} {n : Nat} :
       obtain ⟨rfl, rfl⟩ := h; exact .lab
   | Γ, S, S', .selDyn e₁ e₂, τ, h => by
       simp only [inferF, IRes.bind_eq_ok] at h
-      obtain ⟨⟨τ₁, S₁⟩, h₁, S₂, h₂, ⟨τ₂, S₃⟩, h₃, S₄, h₄, o, ho, h⟩ := h
+      obtain ⟨⟨τ₁, S₁⟩, h₁, S₂, h₂, ⟨τ₂, S₃⟩, h₃, h⟩ := h
+      split at h
+      · rename_i b hb
+        simp only [IRes.pure_eq_ok, Prod.mk.injEq] at h
+        obtain ⟨rfl, rfl⟩ := h
+        exact .selDynBase (inferF_sound h₁) rfl (solveTySatF_sound h₂) (inferF_sound h₃)
+          (Ty.asBase_eq_some hb)
+      simp only [IRes.bind_eq_ok] at h
+      obtain ⟨S₄, h₄, o, ho, h⟩ := h
       have hH := lookupQF_sound ho
       cases o with
       | found τ' =>

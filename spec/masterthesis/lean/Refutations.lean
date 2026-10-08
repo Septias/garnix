@@ -242,10 +242,10 @@ theorem stuck_masks_mgu : HasMgu mρ₁ mρ₂ := by
 private def tρ₁ : Row Unit := .sing "l" (.rcd (.var "w"))
 private def tρ₂ : Row Unit := .cat (.var "w") (.var "v")
 
--- ⊢  every move is dead — all eleven components by `rfl`
+-- ⊢  every move is dead — all twelve components by `rfl`
 theorem terminal_masks_mgu_terminal :
     Terminal (B := Unit) ⟨9⟩ tρ₁.toSpine tρ₂.toSpine :=
-  ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+  ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
 
 -- ⊢  … and the DRIVER is `.stuck`, so this is a CONSERVATIVITY witness: a
 --    problem with a most general unifier that the algorithm declines to solve.

@@ -1325,7 +1325,7 @@ NixLang computes labels at run time. A field is selected by an arbitrary string 
 @fc-syntax gives the syntax extension. A label becomes a value $\"l\"$, written as a string literal as in NixLang, and it is typed by the singleton type $⌊l⌋$. Dynamic selection $e₁.\${e₂}$ selects the field named by the value of e₂, and the dynamic record ${ \${e₁} = e₂ }$ binds the field named by the value of e₁. At the type level, a _key_ k is either a label l or a label variable α, which has the new sort `Label`. Keys occur in two places: in the singleton type $⌊k⌋$ and in the _keyed field_ $\${k}: τ$ of a row, whose label is not yet known. Stumps are keyed as well, $⟨ρ.k ↓ δ⟩$, so that a scheme can defer a lookup under a key it abstracts over.
 
 
-_Keys are a sort of their own._ The obvious design lets a key be an arbitrary type and types a selection under a non-label key at ★. It does not preserve types: ${ \${e₁} = e₂ }$ with $e₁ : ★$ steps to a literal record ${ l = e₂ }$, whose type is not equivalent to a field keyed by ★, and treating ★ as equal to itself makes lookup unsound at run time. Keys therefore form a sort of their own. A substitution acquires a third component, which sends a label variable to a key again, so a key is never ★, a base type or any other type, and no operation of MiniNix, whether unification, instantiation or finalization, can make it one. The price of the separate sort is that a non-label key is a type error. It is the one place where the extension rejects rather than records uncertainty (@sec-goals).
+_Keys are a sort of their own._ The obvious design lets a key be an arbitrary type and types a selection under a non-label key at ★. It does not preserve types: ${ \${e₁} = e₂ }$ with $e₁ : ★$ steps to a literal record ${ l = e₂ }$, whose type is not equivalent to a field keyed by ★, and treating ★ as equal to itself makes lookup unsound at run time. Keys therefore form a sort of their own. A substitution acquires a third component, which sends a label variable to a key again, so a key is never ★, a base type or any other type, and no operation of MiniNix, whether unification, instantiation or finalization, can make it one. The separate sort does not force the rejection of other keys, however. A computed key such as `toString t` is a string and has a base type 𝓫. The rules T-sel-dyn-𝓫 and T-rcd-dyn-𝓫 of @fc-typing type a selection and a record under such a key at ★, and since neither rule mentions the key in a type, the sort stays free of ★.
 
 
 === Keyed Lookup
@@ -1394,6 +1394,16 @@ A keyed field is congruent only under the same key, and a keyed field with a lit
           ($Γ ⊢ e₁: ⌊k⌋$, $Γ ⊢ e₂: τ$),
           $Γ ⊢ { \${e₁} = e₂ }: { \${k}: τ }$,
         ),
+        derive(
+          "T-sel-dyn-𝓫",
+          ($Γ ⊢ e₁: {ρ}$, $Γ ⊢ e₂: 𝓫$),
+          $Γ ⊢ e₁.\${e₂}: ★$,
+        ),
+        derive(
+          "T-rcd-dyn-𝓫",
+          ($Γ ⊢ e₁: 𝓫$, $Γ ⊢ e₂: τ$),
+          $Γ ⊢ { \${e₁} = e₂ }: ★$,
+        ),
       )
     ],
     subbox(caption: "Reduction")[
@@ -1416,7 +1426,7 @@ A keyed field is congruent only under the same key, and a keyed field with a lit
 )
 #fc_typing <fc-typing>
 
-@fc-typing gives the typing rules and the reduction. The three rules for dynamic selection are those of static selection with the label replaced by the key of e₂'s type, and T-rcd-dyn records the key of e₁ in a keyed field. Discharge (@instantiation) replays a keyed stump with the keyed lookup: θ is applied to both the row and the key, $(θ ρ).(θ k) ↓ r$, and the verdict pins δ exactly as for a static stump. At run time, the evaluation contexts evaluate the record before the key, and E-sel-dyn then selects the leftmost binding of the label, as E-sel of @semantics does for a static one. A dynamic record evaluates its key but leaves the field unevaluated, as a record literal does. A missing label and a key that is not a label are both lookup errors. Progress up to ↯ and preservation hold for MiniNix with first-class labels. The only new case of preservation is E-rcd-dyn. Before the step, T-rcd-dyn types ${ \${\"l\"} = e }$ at ${\${l}: τ}$, since the key $\"l\"$ has type $⌊l⌋$. After the step, the literal record ${ l = e }$ has type ${l: τ}$, and ≈-dlab with T-eq identifies the two types.
+@fc-typing gives the typing rules and the reduction. The three rules for dynamic selection are those of static selection with the label replaced by the key of e₂'s type, and T-rcd-dyn records the key of e₁ in a keyed field. T-sel-dyn-𝓫 and T-rcd-dyn-𝓫 answer a key of base type with ★. The record form is coarse, since ★ has no elimination form and the record cannot be selected from, but it records the uncertainty instead of rejecting the program. Discharge (@instantiation) replays a keyed stump with the keyed lookup: θ is applied to both the row and the key, $(θ ρ).(θ k) ↓ r$, and the verdict pins δ exactly as for a static stump. At run time, the evaluation contexts evaluate the record before the key, and E-sel-dyn then selects the leftmost binding of the label, as E-sel of @semantics does for a static one. A dynamic record evaluates its key but leaves the field unevaluated, as a record literal does. A missing label and a key that is not a label are both lookup errors. Progress up to ↯ and preservation hold for MiniNix with first-class labels. Under T-rcd-dyn, the new case of preservation is E-rcd-dyn. Before the step, T-rcd-dyn types ${ \${\"l\"} = e }$ at ${\${l}: τ}$, since the key $\"l\"$ has type $⌊l⌋$. After the step, the literal record ${ l = e }$ has type ${l: τ}$, and ≈-dlab with T-eq identifies the two types. Under the two 𝓫-rules the redex has type ★, and the field value or the literal record it steps to has some type, which T-★-intro weakens to ★. These two cases rely on T-★-intro being unrestricted.
 
 Qualified schemes abstract over keys as they do over rows. The dynamic selector and the dynamic record constructor have the schemes
 
@@ -1452,7 +1462,7 @@ and both are instance-closed (`selDynQ_instance_closed`, `rcdDynQ_instance_close
 
 A singleton type is rigid and nullary, like a base type, and the key pass of @fc-unification is flat: two labels unify when they are equal and clash otherwise, and a label variable is bound to the other key. A key is atomic, so U-key-bind needs no occurs check. $⌊k⌋$ against any other head clashes by U-clash.
 
-On rows, the moves of @unification-cascade treat a keyed field as a barrier. U-ε-clash fires on a keyed field as on any field, since the empty spine has no field of any key. U-clash and U-ground count only literal fields and require the other side to be barrier-free, so that $(l: τ) scripts(≐)_r (\${α}: τ′)$ is stuck rather than a clash: $[α ≔ l]$ solves it. An occurrence of a variable next to a keyed field is reported as stuck rather than as an occurs failure. U-host does not fire on a side with a keyed field, since its key may become the label of the field to be hosted. The only new move pairs keyed fields. U-key-L and U-key-R cancel two keyed fields under the same variable key at the front or the back of both spines and unify their types. They are restricted to the ends of the spines, since a literal field in front of $\${α}: τ$ may carry the label that α becomes. Both moves are forced: by cancellativity, the two sides share the barrier α and their keyed projections begin with τ and τ′ respectively. Keyed fields under different unknown keys stay stuck. $(\${α}: τ) scripts(≐)_r (\${β}: τ′)$ is solved by $[α ≔ β]$ and by $[α ≔ l, β ≔ l]$ for every label l, and the unifiers that identify the keys have no common generalization with those that choose labels. The metatheory of @unification-metatheory holds as stated: success is most general, clash and occurs are sound, and the algorithm terminates.
+On rows, the moves of @unification-cascade treat a keyed field as a barrier. U-ε-clash fires on a keyed field as on any field, since the empty spine has no field of any key. U-clash and U-ground count only literal fields and require the other side to be barrier-free, so that $(l: τ) scripts(≐)_r (\${α}: τ′)$ is not a clash: $[α ≔ l]$ solves it. An occurrence of a variable next to a keyed field is reported as stuck rather than as an occurs failure. U-host does not fire on a side with a keyed field, since its key may become the label of the field to be hosted. Two new moves handle keyed fields. U-key-L and U-key-R cancel two keyed fields under the same variable key at the front or the back of both spines and unify their types. They are restricted to the ends of the spines, since a literal field in front of $\${α}: τ$ may carry the label that α becomes. Both moves are forced: by cancellativity, the two sides share the barrier α and their keyed projections begin with τ and τ′ respectively. U-key-pin applies when each side consists of a single field, at least one of them keyed, under different keys. A one-field row is equivalent to another only under the same key, so every unifier identifies the two keys, and the move binds the variable key to the other key and runs the problem again, where U-key or U-field then pairs the fields. It solves $(l: τ) scripts(≐)_r (\${α}: τ′)$ with $[α ≔ l]$ and $(\${α}: τ) scripts(≐)_r (\${β}: τ′)$ with $[α ≔ β]$, which is most general since $[α ≔ l, β ≔ l] = [β ≔ l] ∘ [α ≔ β]$. Beyond a single field the binding is no longer forced, and keyed fields under different unknown keys stay stuck. $(\${α}: 𝓫 | m: 𝓫) scripts(≐)_r (m: 𝓫 | \${β}: 𝓫)$ is solved by $[α ≔ l, β ≔ l]$ for every label l, but not by $[α ≔ β]$, since m cannot cross the barrier, and these unifiers have no common generalization. The metatheory of @unification-metatheory holds as stated: success is most general, clash and occurs are sound, and the algorithm terminates. U-key-pin does not shrink the problem, but it always binds a variable, so the residual has fewer variables.
 
 === Inference
 
@@ -1488,11 +1498,25 @@ On rows, the moves of @unification-cascade treat a keyed field as a barrier. U-�
       ),
       $Γ; S ⊢ { \${e₁} = e₂ } ⇒ { \${ℓ}: τ₂ }; S₃$,
     ),
+    derive(
+      "A-sel-dyn-𝓫",
+      stack(
+        spacing: 8pt,
+        $Γ; S ⊢ e₁ ⇒ τ₁; S₁ #h(2em) "fresh" ρ: "Row" #h(2em) S₁ ⊢ τ₁ ≐ {ρ} #st_solve S₂$,
+        $Γ; S₂ ⊢ e₂ ⇒ τ₂; S₃ #h(2em) ⟦S₃⟧τ₂ = 𝓫$,
+      ),
+      $Γ; S ⊢ e₁.\${e₂} ⇒ ★; S₃ "+W"$,
+    ),
+    derive(
+      "A-rcd-dyn-𝓫",
+      ($Γ; S ⊢ e₁ ⇒ τ₁; S₁$, $Γ; S₁ ⊢ e₂ ⇒ τ₂; S₂$, $⟦S₂⟧τ₁ = 𝓫$),
+      $Γ; S ⊢ { \${e₁} = e₂ } ⇒ ★; S₂ "+W"$,
+    ),
   ),
 )
 #fc_infer <fc-inference>
 
-@fc-inference gives the algorithmic rules. Dynamic selection follows A-sel, A-sel-⊥ and A-sel-\? of @inference-rules. The key is unified with the singleton type of a fresh label variable ℓ, and the keyed lookup is asked about the row and the key as solved so far. When it answers $?$, the stump is parked on its blocker, which may now be a label variable: in `a: {l = c; m = {}}.${a}` the stump waits on the key and not on a row. A-rcd-dyn performs no lookup and parks nothing. It is shaped like A-app: the key is unified with $⌊ℓ⌋$ for a fresh ℓ, and the keyed field records ℓ. Wake-up and saturation are unchanged over keyed lookups, so solving a key wakes the stumps blocked on it: applying the selector above to $\"l\"$ solves ℓ, and the stump hits.
+@fc-inference gives the algorithmic rules. Dynamic selection follows A-sel, A-sel-⊥ and A-sel-\? of @inference-rules. The key is unified with the singleton type of a fresh label variable ℓ, and the keyed lookup is asked about the row and the key as solved so far. When it answers $?$, the stump is parked on its blocker, which may now be a label variable: in `a: {l = c; m = {}}.${a}` the stump waits on the key and not on a row. A-rcd-dyn performs no lookup and parks nothing. It is shaped like A-app: the key is unified with $⌊ℓ⌋$ for a fresh ℓ, and the keyed field records ℓ. Wake-up and saturation are unchanged over keyed lookups, so solving a key wakes the stumps blocked on it: applying the selector above to $\"l\"$ solves ℓ, and the stump hits. A-sel-dyn-𝓫 and A-rcd-dyn-𝓫 apply when the key's type is already a base type under the current solution. They answer ★ and raise a warning instead of unifying 𝓫 with $⌊ℓ⌋$. The test is deliberately restricted to a definite base type. A key whose type is still a variable is unified with $⌊ℓ⌋$ as before, so in `(a: {l = c}.${a}) c` the key becomes a label at the selection and the application clashes. Answering ★ for every lookup keyed by such a variable once the conflict appears would be sound by the same rules, but the result would depend on the order in which the two uses of the key are met.
 
 Finalization needs no new premise. F-★ solves the promised δ with ★ and never binds a label variable, so the blockers of other stumps survive it untouched and no key ever becomes ★. A-let generalizes keyed stumps under the side conditions of @generalization, read over rows, keys and results. A spent promise is materialized only when its key is a literal label and it is blocked on its row. A spent promise blocked on its key has no row to extend, and it remains unanswered (@incompleteness-inference).
 
@@ -1500,7 +1524,7 @@ Concatenation and computed labels interact as NixLang programmers expect. In `((
 
 === Costs
 
-The extension has three costs. A non-label key is a type error: ${l = c}.\${c}$ and ${ \${c} = c }$ are rejected by U-clash, where MiniNix records every uncertainty as ★. Keyed fields are barriers, so a keyed field against a literal field and two keyed fields under different unknown keys are stuck. On randomly generated row problems with keys, about two thirds are stuck. And a spent promise blocked on its key is not materialized, which leaves inference incomplete on programs the declarative system types. The first cost follows from giving keys their own sort, the second from the absence of negative information about keys, and the third from the absence of top-level qualified types.
+The extension has three costs. Labels and strings are separate: a label literal has the rigid type $⌊l⌋$ and cannot be used as a string, and a value used both as a key and as a string clashes. A key of base type is typed at ★ only when its type is known at the selection; a key that becomes a string later, as in `(a: {l = c}.${a}) c`, is rejected by U-clash. Keyed fields are barriers, so beyond the single-field case of U-key-pin a keyed field against a literal field and two keyed fields under different unknown keys are stuck. On randomly generated row problems with keys, about two thirds are stuck. And a spent promise blocked on its key is not materialized, which leaves inference incomplete on programs the declarative system types. The first cost follows from giving labels singleton types, the second from the absence of negative information about keys, and the third from the absence of top-level qualified types.
 
 == Lacks-Predicates
 todo
@@ -1558,7 +1582,7 @@ _G3 (Totality)._ This goal is met in part. Uncertainty that originates in a look
 { "1759190400" = { m = 1; }; }.${toString builtins.currentTime}.m
 ```
 
-receives no type, since the dynamic selection yields ★ and ★ cannot be selected from. Second, inference reports a clash on some programs that the declarative system types (@incompleteness-inference), since a clash certifies the absence of a unifier, not the absence of a typing. Third, a non-label key is a type error (@sec-fc-labels). A stuck verdict is not a rejection: the analysis reports it, as G3 demands.
+receives no type, since the dynamic selection under a string key yields ★ by T-sel-dyn-𝓫 (@fc-typing) and ★ cannot be selected from. Second, inference reports a clash on some programs that the declarative system types (@incompleteness-inference), since a clash certifies the absence of a unifier, not the absence of a typing. Third, a key that is used as a label before it is known to be a string is a type error (@sec-fc-labels). A stuck verdict is not a rejection: the analysis reports it, as G3 demands.
 
 _G4 (Effective inference)._ The algorithm is designed for this goal but not yet measured against it. Inference is syntactic first-order unification: there is no constraint solver, no unification modulo associativity and commutativity, and no backtracking over alternative typings. Every move of the row pass is forced, and a parked stump is re-examined only when its blocker is solved. These are structural reasons to expect the analysis to scale. Termination is proved, but no complexity bound, and the analysis has not yet been run on nixpkgs.
 

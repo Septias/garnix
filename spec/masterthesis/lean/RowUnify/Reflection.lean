@@ -481,6 +481,95 @@ theorem matchR_reflect_fwd {B : Type} {θ : TySubst B} {s₁ s₂ t₁ t₂ : Li
       simp only [Row.applySubst] at e₁ e₂
       exact (e₁.symm.trans (hu.trans e₂)).dsing_cancel_right
 
+-- ## U-key-pin: two one-field rows are ≈ only under the same key
+-- ⊢  (${k₁}: τ₁ | ε) ≈ᵣ (${k₂}: τ₂ | ε)   ⟹   k₁ = k₂
+theorem RowEquiv.dsing_single_key {B : Type} {k₁ k₂ : Key} {τ₁ τ₂ : Ty B}
+    (h : RowEquiv (.cat (.dsing k₁ τ₁) .empty) (.cat (.dsing k₂ τ₂) .empty)) :
+    k₁ = k₂ := by
+  obtain ⟨hv, hp, -⟩ := h.char
+  cases k₁ with
+  | lit l =>
+      cases k₂ with
+      | lit l' =>
+          have h' := hp l
+          by_cases e : l' = l
+          · rw [e]
+          · simp [Row.toSpine, Atom.ofKey, sProj, e] at h'
+            cases h'
+      | var β => simp [Row.toSpine, Atom.ofKey, sBarSeq] at hv
+  | var α =>
+      cases k₂ with
+      | lit l' => simp [Row.toSpine, Atom.ofKey, sBarSeq] at hv
+      | var β =>
+          simp only [Row.toSpine, Atom.ofKey, sBarSeq, List.append_nil,
+            List.cons.injEq, Barrier.key.injEq, and_true] at hv
+          rw [hv]
+
+-- ⊢  keyPin s₁ s₂ = some (α, k),  θ ⊨ ofSpine s₁ ≐ᵣ ofSpine s₂   ⟹   θα = θk
+--    Every unifier binds the key: the move is forced.
+theorem keyPin_forced {B : Type} {θ : TySubst B} {s₁ s₂ : List (Atom B)}
+    {α : TyVar} {k : Key} (hk : keyPin s₁ s₂ = some (α, k))
+    (hu : RowEquiv ((ofSpine s₁).applySubst θ) ((ofSpine s₂).applySubst θ)) :
+    TyUnifies θ (.lab (.var α)) (.lab k) := by
+  have key : θ.lab α = k.applySubst θ := by
+    unfold keyPin at hk
+    split at hk
+    next a τ b τ' =>
+      split at hk
+      · cases hk
+      · simp only [Option.some.injEq, Prod.mk.injEq] at hk
+        obtain ⟨rfl, rfl⟩ := hk
+        simp only [ofSpine, Row.applySubst] at hu
+        exact RowEquiv.dsing_single_key hu
+    next a τ l τ' =>
+      simp only [Option.some.injEq, Prod.mk.injEq] at hk
+      obtain ⟨rfl, rfl⟩ := hk
+      simp only [ofSpine, Row.applySubst] at hu
+      exact RowEquiv.dsing_single_key
+        (hu.trans (RowEquiv.cat RowEquiv.dsingLab.symm (.refl _)))
+    next l τ a τ' =>
+      simp only [Option.some.injEq, Prod.mk.injEq] at hk
+      obtain ⟨rfl, rfl⟩ := hk
+      simp only [ofSpine, Row.applySubst] at hu
+      exact (RowEquiv.dsing_single_key
+        ((RowEquiv.cat RowEquiv.dsingLab (.refl _)).trans hu)).symm
+    next => cases hk
+  unfold TyUnifies
+  simp only [Ty.applySubst, Key.applySubst_var, key]
+  exact TyEquiv.refl _
+
+-- ⊢  keyPin s₁ s₂ = some (α, k)   ⟹   ftv(⌊α⌋, ⌊k⌋) ⊆ ftv(s₁, s₂)
+theorem keyPin_ftv {B : Type} {s₁ s₂ : List (Atom B)} {α : TyVar} {k : Key}
+    (h : keyPin s₁ s₂ = some (α, k)) :
+    ((Ty.lab (B := B) (.var α)).ftv ++ (Ty.lab (B := B) k).ftv) ⊆ sFtv s₁ ++ sFtv s₂ := by
+  unfold keyPin at h
+  split at h
+  next a τ b τ' =>
+    split at h
+    · cases h
+    · simp only [Option.some.injEq, Prod.mk.injEq] at h
+      obtain ⟨rfl, rfl⟩ := h
+      intro x hx
+      simp only [Ty.ftv, Key.ftv, List.mem_append, List.mem_singleton] at hx
+      rcases hx with rfl | rfl <;> simp [sFtv]
+  next a τ l τ' =>
+    simp only [Option.some.injEq, Prod.mk.injEq] at h
+    obtain ⟨rfl, rfl⟩ := h
+    intro x hx
+    simp only [Ty.ftv, Key.ftv, List.mem_append, List.mem_singleton] at hx
+    rcases hx with rfl | hx
+    · simp [sFtv]
+    · simp at hx
+  next l τ a τ' =>
+    simp only [Option.some.injEq, Prod.mk.injEq] at h
+    obtain ⟨rfl, rfl⟩ := h
+    intro x hx
+    simp only [Ty.ftv, Key.ftv, List.mem_append, List.mem_singleton] at hx
+    rcases hx with rfl | hx
+    · simp [sFtv]
+    · simp at hx
+  next => cases h
+
 -- ## U-ground: the reusable algebraic core
 -- A field ≈-commutes past a row that is BOTH barrier-free and l-free. (Past a
 -- var or a keyed field it would NOT commute — shadowing — so both hypotheses

@@ -612,6 +612,13 @@ mutual
     -- a dynamic construction: a LABEL-typed key ⌊q⌋ keys the field `${q}: τ`
     | qRcdDyn : QTyped constTy Γ e₁ (.lab q) → QTyped constTy Γ e₂ τ →
                 QTyped constTy Γ (.rcdDyn e₁ e₂) (.rcd (.dsing q τ))
+    -- T-sel-dyn-𝓫 / T-rcd-dyn-𝓫: a key of BASE type (a computed string, in
+    -- NixLang) is not rejected but answered at ★. No keyed field mentions the
+    -- key, so the sort stays clean; preservation leans on unrestricted qUnk
+    | qSelDynBase : QTyped constTy Γ e₁ (.rcd ρ) → QTyped constTy Γ e₂ (.base b) →
+                    QTyped constTy Γ (.selDyn e₁ e₂) .unk
+    | qRcdDynBase : QTyped constTy Γ e₁ (.base b) → QTyped constTy Γ e₂ τ →
+                    QTyped constTy Γ (.rcdDyn e₁ e₂) .unk
 
   inductive QTypedBody {B C : Type} (constTy : C → B) :
       QCtx B → RecBody (Expr C) → Row B → Prop where
@@ -686,6 +693,10 @@ private theorem qtyped_inv_aux {B C : Type} {constTy : C → B} :
   | _, _, _, .qSelDynAbs _ _ _ =>
       ⟨(fun h => nomatch h), (fun h => nomatch h), (fun h => nomatch h)⟩
   | _, _, _, .qRcdDyn _ _ =>
+      ⟨(fun h => nomatch h), (fun h => nomatch h), (fun h => nomatch h)⟩
+  | _, _, _, .qSelDynBase _ _ =>
+      ⟨(fun h => nomatch h), (fun h => nomatch h), (fun h => nomatch h)⟩
+  | _, _, _, .qRcdDynBase _ _ =>
       ⟨(fun h => nomatch h), (fun h => nomatch h), (fun h => nomatch h)⟩
   | _, _, _, .qRcd h =>
       ⟨(fun hc => nomatch hc), (fun hl => nomatch hl),
@@ -971,6 +982,10 @@ theorem qtyped_sub {B C : Type} {constTy : C → B} :
       .qSelDynAbs (qtyped_sub hs h₁) (qtyped_sub hs h₂) hl
   | _, _, _, _, hs, .qRcdDyn h₁ h₂ =>
       .qRcdDyn (qtyped_sub hs h₁) (qtyped_sub hs h₂)
+  | _, _, _, _, hs, .qSelDynBase h₁ h₂ =>
+      .qSelDynBase (qtyped_sub hs h₁) (qtyped_sub hs h₂)
+  | _, _, _, _, hs, .qRcdDynBase h₁ h₂ =>
+      .qRcdDynBase (qtyped_sub hs h₁) (qtyped_sub hs h₂)
 
 theorem qtypedBody_sub {B C : Type} {constTy : C → B} :
     {Γ₁ Γ₂ : QCtx B} → {b : RecBody (Expr C)} → {ρ : Row B} → QCtx.Sub Γ₁ Γ₂ →
@@ -1039,6 +1054,10 @@ private theorem qsubst_aux {B C : Type} {constTy : C → B} :
         hl
   | _, _, _, .qRcdDyn h₁ h₂, _, _, _, _, hsub, hv =>
       .qRcdDyn (qsubst_aux h₁ hsub hv) (qsubst_aux h₂ hsub hv)
+  | _, _, _, .qSelDynBase h₁ h₂, _, _, _, _, hsub, hv =>
+      .qSelDynBase (qsubst_aux h₁ hsub hv) (qsubst_aux h₂ hsub hv)
+  | _, _, _, .qRcdDynBase h₁ h₂, _, _, _, _, hsub, hv =>
+      .qRcdDynBase (qsubst_aux h₁ hsub hv) (qsubst_aux h₂ hsub hv)
   | _, .letE y e₁ e₂, _, .qLet hwf h₁ hne h₂, _, x, _, _, hsub, hv => by
       simp only [subst]
       cases hxy : (x == y)
@@ -1282,6 +1301,20 @@ private theorem qpreservation_aux {B C : Type} {constTy : C → B} :
           case inr => cases hu
           cases he.lab_inv
           exact .qEq (.qRcd (.field h₂)) (.rcd (RowEquiv.symm .dsingLab))
+  -- a base-typed key: the selection lands on a field value or ↯, the
+  -- construction on `{l = e₂}`; either way typed at something, then blurred
+  | _, _, _, .qSelDynBase h₁ h₂, hΓ, _ => fun hs => by
+      cases hs with
+      | selDynL s => exact .qSelDynBase (qpreservation_aux h₁ hΓ s) h₂
+      | selDynR _ s => exact .qSelDynBase h₁ (qpreservation_aux h₂ hΓ s)
+      | @selDynVal b l _ hbl =>
+          obtain ⟨ρ', -, hb⟩ := qtyped_rcd_inv h₁
+          obtain ⟨_, _, hte⟩ := QTypedBody.lookup_some hb hbl
+          exact .qUnk hte
+  | _, _, _, .qRcdDynBase h₁ h₂, hΓ, _ => fun hs => by
+      cases hs with
+      | rcdDynKey s => exact .qRcdDynBase (qpreservation_aux h₁ hΓ s) h₂
+      | rcdDynVal => exact .qUnk (.qRcd (.field h₂))
   | _, _, _, .qLet hwf h₁ hne h₂, hΓ, _ => fun hs => by
       cases hs with
       | letCong s =>
@@ -1424,6 +1457,9 @@ def qprogress {B C : Type} {constTy : C → B} {Γ : QCtx B} {e : Expr C} {τ : 
   | .qSelDynAbs h₁ h₂ _ => qselDyn_progress (qprogress hΓ h₁) (qprogress hΓ h₂)
       (fun v => let ⟨b, _, he, _⟩ := qcanonical_rcd v h₁; ⟨b, he⟩)
   | .qRcdDyn h₁ _ => qrcdDyn_progress (qprogress hΓ h₁)
+  | .qSelDynBase h₁ h₂ => qselDyn_progress (qprogress hΓ h₁) (qprogress hΓ h₂)
+      (fun v => let ⟨b, _, he, _⟩ := qcanonical_rcd v h₁; ⟨b, he⟩)
+  | .qRcdDynBase h₁ _ => qrcdDyn_progress (qprogress hΓ h₁)
 
 -- ⊢  ⊢_Q e : τ   ⟹   e is a value, steps, or is a lookup-error
 theorem qProgress {B C : Type} (constTy : C → B) (e : Expr C) (τ : Ty B)
@@ -1583,6 +1619,10 @@ theorem qtyped_cov {B C : Type} {constTy : C → B} :
       .qSelDynAbs (qtyped_cov hs h₁) (qtyped_cov hs h₂) hl
   | _, _, _, _, hs, .qRcdDyn h₁ h₂ =>
       .qRcdDyn (qtyped_cov hs h₁) (qtyped_cov hs h₂)
+  | _, _, _, _, hs, .qSelDynBase h₁ h₂ =>
+      .qSelDynBase (qtyped_cov hs h₁) (qtyped_cov hs h₂)
+  | _, _, _, _, hs, .qRcdDynBase h₁ h₂ =>
+      .qRcdDynBase (qtyped_cov hs h₁) (qtyped_cov hs h₂)
 
 theorem qtypedBody_cov {B C : Type} {constTy : C → B} :
     {Γ₁ Γ₂ : QCtx B} → {b : RecBody (Expr C)} → {ρ : Row B} →
@@ -1973,6 +2013,8 @@ private theorem qvar_inst_inv {B C : Type} {constTy : C → B} :
   | _, _, _, .qSelDynUnk _ _ _ => fun he _ => nomatch he
   | _, _, _, .qSelDynAbs _ _ _ => fun he _ => nomatch he
   | _, _, _, .qRcdDyn _ _ => fun he _ => nomatch he
+  | _, _, _, .qSelDynBase _ _ => fun he _ => nomatch he
+  | _, _, _, .qRcdDynBase _ _ => fun he _ => nomatch he
 
 -- L2 counterpart of `sel_var_unk`, but full: every typing of `x.l` on a
 -- monotype-bound x factors through ONE lookup, and the typing sits ≼-above
@@ -2015,6 +2057,8 @@ theorem qsel_var_inv {B C : Type} {constTy : C → B} :
   | _, _, _, .qSelDynUnk _ _ _ => fun he _ => nomatch he
   | _, _, _, .qSelDynAbs _ _ _ => fun he _ => nomatch he
   | _, _, _, .qRcdDyn _ _ => fun he _ => nomatch he
+  | _, _, _, .qSelDynBase _ _ => fun he _ => nomatch he
+  | _, _, _, .qRcdDynBase _ _ => fun he _ => nomatch he
 
 -- CONJUNCT 3, in the ≼ form.
 theorem selQ_covers_typings {B C : Type} (constTy : C → B) :

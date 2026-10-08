@@ -88,6 +88,12 @@ theorem Infer.clean {C : Type} {constTy : C → B} :
   | _, _, _, _, _, .selDynUnk h₁ hd hs h₂ hdk hsk _ hd₂, hc =>
       (draw_sol' hd₂) ▸ hsk.clean ((draw_sol' hdk) ▸
         Infer.clean h₂ (hs.clean ((draw_sol' hd) ▸ Infer.clean h₁ hc)))
+  | _, _, _, _, _, .selDynBase h₁ hd hs h₂ _, hc => by
+      have := Infer.clean h₂ (hs.clean ((draw_sol' hd) ▸ Infer.clean h₁ hc))
+      exact this
+  | _, _, _, _, _, .rcdDynBase h₁ h₂ _, hc => by
+      have := Infer.clean h₂ (Infer.clean h₁ hc)
+      exact this
   | _, _, _, _, _, .rcd hb, hc => InferRec.clean hb hc
   | _, _, _, _, _, .letE h₁ _ h₂, hc => by
       have := Infer.clean h₁ hc
@@ -247,6 +253,11 @@ theorem Infer.ext {C : Type} {constTy : C → B} :
       (Infer.ext h₁).trans ((draw_ext hd).trans (hs.ext.trans
         ((Infer.ext h₂).trans ((draw_ext hdk).trans (hsk.ext.trans
           ((draw_ext hd₂).trans (.of_sol_eq rfl)))))))
+  | _, _, _, _, _, .selDynBase h₁ hd hs h₂ _ =>
+      (Infer.ext h₁).trans ((draw_ext hd).trans (hs.ext.trans
+        ((Infer.ext h₂).trans (.of_sol_eq rfl))))
+  | _, _, _, _, _, .rcdDynBase h₁ h₂ _ =>
+      ((Infer.ext h₁).trans (Infer.ext h₂)).trans (.of_sol_eq rfl)
   | _, _, _, _, _, .rcd hb => InferRec.ext hb
   | _, _, _, _, _, .letE (S₁ := S₁) (ᾱ := ᾱ) h₁ _ h₂ =>
       (Infer.ext h₁).trans ((SolverState.Ext.of_sol_eq (S := S₁)
