@@ -193,7 +193,7 @@ The consequence is that a field demand is never a constraint to be solved. A dem
 )
 #syntax <syntax>
 
-@syntax shows the term- and type-syntax of a standard λ-calculus extended with records, record concatenation and let-polymorphism. Functions use the unusual syntax (x: e) where x is the variable to be replaced in the function body e. This NixLang's syntax for functions. We admit a finite set 𝓒 of constants $c ∈ 𝓒$ that can be typed by base types 𝓫 from the finite set of base types 𝓑 and require that 𝓑 has at least the types needed to type every constant such that $c ↦ 𝓫_c$ is a complete mapping. We admit an "unknown" ★ type for our soft-typing[-inspired](?) system that can be used to type expressions the type system cannot reason about. Term-rows ${ξ}$ and row-types ${ρ}$ are both trees, which shows their similarity. As in Hindley-Milner, polymorphism is stratified: a scheme σ quantifies over monotypes and rows only, which keeps instantiation predicative and inference decidable. Unlike Hindley-Milner schemes, ours are _qualified_: a scheme carries a list Q of pending lookups ⟨ρ.l ↓ δ⟩, called _stumps_, whose result δ is a type over the scheme's own quantified variables, usually a single one. A plain scheme is the special case Q = ε. @principality shows the addition of qualification is forced by the language constraints.
+@syntax gives the syntax of terms and types: a λ-calculus extended with records, record concatenation and let-polymorphism. Functions are written $(x: e)$, as in NixLang. We assume a finite set 𝓒 of constants and a finite set 𝓑 of base types, together with a total map $c ↦ 𝓫_c$ that assigns each constant its base type. The unknown type ★ types the expressions the analysis cannot decide (@sec-motivation). Record literals ${ξ}$ and record types ${ρ}$ share one tree structure of fields and concatenations. As in Hindley-Milner, polymorphism is stratified: a scheme σ quantifies over monotypes and rows only, which keeps instantiation predicative and inference decidable. Unlike Hindley-Milner schemes, ours are _qualified_: a scheme carries a list Q of pending lookups ⟨ρ.l ↓ δ⟩, called _stumps_, whose result δ is a type over the scheme's own quantified variables, usually a single one. A plain scheme is the special case Q = ε. @principality shows the addition of qualification is forced by the language constraints.
 
 
 == Row Lookup
@@ -233,8 +233,7 @@ Solving $α ≔ ρ'$ replaces α by ρ' in the row, and looking the label up aga
 
 #proof[By induction on ρ: every row shape matches exactly one rule.]
 
-[Determinism makes ★ a verdict rather than a choice](wording).
-// meta: remove the mention of a possible side condition which is not clear what it is.
+Since the result is unique, whether a selection is typed at ★ is determined by the row alone, and no typing rule chooses it.
 
 
 #lemma(name: [Stability under substitution], lean: "lookup_applySubst")[
@@ -268,7 +267,8 @@ Only $?$ may change, to whatever the substituted row yields. This makes deferral
 @row-equivalence gives the row-equivalence rules of MiniNix. The relation is an equivalence and a congruence, admits associativity and the units ε, and lets two fields commute only when their labels are distinct. Adjacent fields with the same label keep their order, and so does every field next to a row-variable, since a variable may stand for a row that contains the label and shadowing must be preserved. For concrete labels the premise $l₁ ≠ l₂$ of ≈-comm is decidable, so ≈ needs no separate constraint on labels. ≈-rcd and ≈-fn lift ≈ to types: base types, ★ and type variables are equivalent only to themselves, and ≈ is a congruence below records and arrows, with fields handled by ≈-ext.
 
 === Row Equivalence Is a Trace Monoid <trace-monoid>
-//meta: this section could use some more life
+Calculi with unique labels decide row equality by sorting both rows by label. Under scoped labels this is unsound. Sorting identifies $(l: 𝓫 | α)$ with $(α | l: 𝓫)$, but the substitution $α ≔ (l: 𝓫′)$ makes the lookup of l answer 𝓫 in the first row and 𝓫′ in the second. A row-variable therefore cuts a row into segments, and fields may be reordered only within a segment. This is the structure of a trace monoid.
+
 Read a row as a word over an alphabet of fields $(l: τ)$ and row-variables α. Two letters may swap when they are fields with distinct labels; a row-variable commutes with nothing, and neither do two fields with the same label. Rows modulo ≈ are then the free partially commutative monoid, a _trace monoid_, on this independence relation, with ε as unit.
 
 This has two consequences. First, ≈ is decidable and has a normal form.
@@ -286,7 +286,7 @@ Equivalently, the projections of the two rows onto every pair of dependent lette
   If $(ρ | ρ₁) ≈ (ρ | ρ₂)$ or $(ρ₁ | ρ) ≈ (ρ₂ | ρ)$, then $ρ₁ ≈ ρ₂$.
 ] <lem-cancel>
 
-Unification uses both. [to…](todo) It processes a row as a _spine_ from either end and cancels a common prefix or suffix without guessing.
+Unification uses both. The normal form lets it process a row as a _spine_ from either end, and cancellativity lets it cancel a common prefix or suffix of two spines without guessing (@unification).
 
 
 == Sorts
@@ -324,8 +324,7 @@ Unification uses both. [to…](todo) It processes a row as a _spine_ from either
 
 @sorting, in @app-sorting, classifies every type-level phrase as a `Type` or a `Row`. Since τ and ρ are disjoint syntactic categories, the only rules with content are S-var and S-ρ-var, which read the sort of a variable off Γ. The sorts are deliberately fewer than the kinds of Paszke and Xie @extensible_tabular, $κ ::= ★ | κ₁ → κ₂ | "Label" | "Row"$: the arrow kind serves type application, first-class rows and label singletons, none of which MiniNix has, and we name the sorts because ★ is the unknown type here. First-class labels add a `Label` sort and change nothing else about the discipline (@sec-fc-labels).
 
-// meta: remove conjure
-[Two typing rules of @declarative-rules acquire a premise](why not mention them??). T-λ-I is the only rule that conjures a type from nothing, so it checks $Γ ⊢ τ₁: "Type"$, and T-let is the only one that conjures a scheme, so it checks $Γ ⊢ σ "ok"$: the body is well-sorted, every stump looks up in a row, and every stump's result is a type over the quantified variables of σ itself. The result is usually a single variable; inference also produces stumps whose result has already been used at a compound type, such as $𝓫 → β$ (@inference). Every other rule's types are fixed by its premises and are well-sorted whenever they are.
+T-λ-I and T-let are the only typing rules of @declarative-rules with a sorting premise, since they are the only ones that choose a type their other premises do not determine. T-λ-I chooses the parameter type and checks $Γ ⊢ τ₁: "Type"$. T-let chooses a scheme and checks $Γ ⊢ σ "ok"$: the body is well-sorted, every stump looks up in a row, and every stump's result is a type over the quantified variables of σ itself. The result is usually a single variable; inference also produces stumps whose result has already been used at a compound type, such as $𝓫 → β$ (@inference). Every other rule's types are fixed by its premises and are well-sorted whenever they are.
 
 
 == Typing Rules
@@ -372,10 +371,9 @@ Unification uses both. [to…](todo) It processes a row as a _spine_ from either
 )
 #declarative <declarative-rules>
 
-[The declarative system's typing rules follow the standard λ-calculus rules](wording). T-cons is used to type the set of constants of the language with their respective type $𝓫_c$. T-var not only looks up variables in the context Γ, but also instantiates polymorphic types using the instantiation rules from @instantiation discussed in the following section. T-let binds x to any well-sorted scheme σ that is _instance-closed_ for e₁ — every instance of σ is a typing of e₁ — and _inhabited_. The inhabitation premise is necessary: a plain scheme always has its own body as an instance, but a qualified one can have none, and then instance-closure says nothing about e₁ at all. Without it, `let x = (3 4) in 5` would type while being stuck. T-eq equates types equal up to the row-equivalence relation from @row-equivalence. T-conc concatenates two row types by concatenating their type representation, with the right operand first: lookup prefers the left of a row, so left-precedence on rows realizes the right-precedence of ‖. T-sel types a selection by delegating to the row-lookup relation of @row-lookup.
+The typing rules extend those of the λ-calculus with let-polymorphism. T-cons types each constant c at its base type $𝓫_c$. T-var looks up x in Γ and instantiates its scheme by the instance relation of @instantiation. T-let binds x to any well-sorted scheme σ that is _instance-closed_ for e₁ — every instance of σ is a typing of e₁ — and _inhabited_. The inhabitation premise is necessary: a plain scheme always has its own body as an instance, but a qualified one can have none, and then instance-closure says nothing about e₁ at all. Without it, `let x = (3 4) in 5` would type while being stuck. T-eq equates types equal up to the row-equivalence relation from @row-equivalence. T-conc concatenates two row types by concatenating their type representation, with the right operand first: lookup prefers the left of a row, so left-precedence on rows realizes the right-precedence of ‖. T-sel types a selection by delegating to the row-lookup relation of @row-lookup.
 
-// meta: the reader already read something similar before
-Schemes are qualified because a `let`-bound selector must answer differently at different uses. In `let f = x: x.l in …`, the lookup in the body of f reaches the row-variable of x and can only answer $?$. A plain scheme has to fix that answer once, at generalization: either as ★ for every use, or as a variable that some instance sends to a type the lookup never produces. A qualified scheme keeps the lookup as a stump $⟨β.l ↓ δ⟩$ and replays it at every instance, so that δ becomes the found type where the argument has l and ★ where it does not (@instantiation). @principality shows that no plain scheme is principal for `x: x.l`, so the qualification is forced rather than chosen.
+Schemes are qualified because a `let`-bound selector must answer differently at different uses (@sec-overview). The instance relation of @instantiation replays the stumps of a scheme at every use, and @principality shows that the qualification is forced rather than chosen.
 
 // meta: expand this section bescause these two rules are non-standart
 T-sel-★ and T-sel-⊥ have no counterpart in standard row calculi. There, a selection whose label is absent is a type error, and a selection on an open row adds a field to the row-variable, so the row type answers every selection with a definite type. MiniNix admits neither move. An absent label is not rejected, because NixLang programs routinely carry fields that are never selected on every path; T-sel-⊥ types such a selection at ★ and leaves the failure to the lookup error of @semantics. A blocked lookup is not resolved by extending the row-variable, because under scoped labels the variable may itself shadow l, and any field placed into it would be a guess about shadowing. T-sel-★ types the selection at ★ instead. Both rules read their verdict off the lookup relation, which is deterministic (@lem-lookup-det), so for a given row exactly one of T-sel, T-sel-★ and T-sel-⊥ applies. T-★-intro, finally, blurs any type into the unknown. The rules T-rec, T-ξ-empty, T-ξ-field and T-ξ-conc type record literals.
@@ -414,9 +412,7 @@ T-★-intro realizes the top element at the level of whole typings: every typing
 )
 #instantiation <instantiation>
 
-// meta: too verbose
-@instantiation defines the instance relation $σ ≥ τ$, read "τ is an instance of σ". It is used only by T-var and discharges every quantifier at once: $Γ ⊢ θ: (macron(α): macron(κ))$ says that θ sends each $α: κ$ to a phrase of sort κ and is the identity elsewhere. The witnesses are monotypes and rows, never schemes, so instantiation stays predicative.
-The second premise, _discharge_ $θ ⊨ q$, replays every stump per instance. The lookup is performed on θρ, and θδ is pinned to the verdict: to the found type up to ≈ by D-hit, and to ★ by D-⊥ and D-?. These are T-sel, T-sel-⊥ and T-sel-★ once more, evaluated at instantiation instead of generalization, which is how one `let`-bound selector answers a definite type at one use and ★ at another. Requiring ≈ rather than equality in D-hit loses nothing, since T-eq closes every set of instances under ≈, and it is all that inference can guarantee when the stumps of one instance are discharged in turn.
+@instantiation defines the instance relation $σ ≥ τ$, which only T-var uses. The first premise of I-inst requires θ to respect the sorts of the quantified variables. The second, _discharge_ $θ ⊨ q$, replays every stump at the instance: the lookup is performed on θρ, and θδ is pinned to its verdict, to the found type up to ≈ by D-hit and to ★ by D-⊥ and D-?. These are T-sel, T-sel-⊥ and T-sel-★ once more, evaluated at every use instead of once at the binding. Requiring ≈ rather than equality in D-hit loses nothing, since T-eq closes every set of instances under ≈, and it is all that inference can guarantee when it discharges the stumps of one instance in turn.
 
 #example(name: [Instances of selQ])[
   Consider $"selQ" = ∀(β: "Row", δ: "Type"). ⟨β.l ↓ δ⟩ ⇒ {β} → δ$ of @principality.
@@ -433,7 +429,6 @@ With Q = ε the discharge premise is vacuous, so on plain schemes ≥ is the Hin
 
 
 == Operational Semantics
-// meta: add small comparison to the work of Broekhoff&Krebbers
 #let semantics = figure(
   caption: "Operational semantics.",
   box(width: 100%, stack(
@@ -464,6 +459,8 @@ With Q = ε the discharge premise is vacuous, so on plain schemes ≥ is the Hin
 #semantics <semantics>
 
 @semantics gives the small-step reduction → of the mechanization. Application and `let` are call-by-value, but a record literal is a value as it stands: its fields are evaluated only when they are selected, as in NixLang. $ξ(l)$ denotes the leftmost binding of l in ξ, so selection agrees with ↓, and E-conc places the right operand first, as T-conc does. The judgement $e ↯$ is a _lookup error_: a selection reaches a record literal that lacks the selected label. With the first-class labels of @sec-extensions, a dynamic selection whose key does not evaluate to a label is a lookup error as well.
+
+The semantics is deliberately smaller than that of Broekhoff and Krebbers @verified, who give a mechanized semantics of the full Nix expression language, including recursive attribute sets, `with` and the edge cases of evaluation. Their semantics is the reference for what NixLang programs mean, while ours models only what the type system needs. MiniNix has no recursion, and its laziness is restricted to record fields, since application and `let` are call-by-value. Type safety is established for this fragment; recursion and full laziness are left to the extensions of @sec-extensions.
 
 
 = Metatheory <metatheory>
@@ -920,7 +917,7 @@ Stuck is conservative. Every move preserves the solution set, but not every solv
 
 = Inference <inference>
 
-The inference algorithm is a judgement $Γ; S ⊢ e ⇒ τ; S′$ [that threads a _solver state_ S through the term](threading is weird here). It differs from algorithm W in one respect: a selection whose lookup answers $?$ is not turned into a row constraint but parked as a stump, and the state carries these stumps until a later substitution lets them advance or the end of inference forces them to ★. Unification, as developed in @unification, is only ever called on equations between types; it never sees a field demand.
+The inference algorithm is a judgement $Γ; S ⊢ e ⇒ τ; S′$ that takes a _solver state_ S and returns the updated state S′, which the next premise receives in turn. It differs from algorithm W in one respect: a selection whose lookup answers $?$ is not turned into a row constraint but parked as a stump, and the state carries these stumps until a later substitution lets them advance or the end of inference forces them to ★. Unification, as developed in @unification, is only ever called on equations between types; it never sees a field demand.
 
 #let st_park = $⊎$
 #let st_drop = $∖$
@@ -1256,8 +1253,7 @@ In the wand-ambiguity, every variable may carry the field, and no choice subsume
   - The shift $(α | l: 𝓫) scripts(≐)_r (l: 𝓫 | α)$ is unified by $[α ≔ (l: 𝓫)^n]$ for every $n ≥ 0$, where $(l: 𝓫)^n$ is the row of n copies of the field. Each unifier in a finite set fixes the number of l-fields in α, so no finite set covers all of them.
 ] <ex-irreducible>
 
-// meta: re-check
-All three are stuck in the algorithm because there is nothing else it could report. The wand-ambiguity and the two-sided problem become solvable with negative information, that is, lacks-predicates on row-variables (@sec-extensions). The shift survives it; only row equations as scheme qualifiers would cover it.
+All three are reported as #u_stuck: no move applies, and any move would prefer one unifier to another. Negative information narrows the choice. If a lacks-predicate states that β has no l-field, the wand-ambiguity $(α | β) scripts(≐)_r (l: 𝓫)$ has the single unifier $[α ≔ (l: 𝓫), β ≔ ε]$. For the two-sided problem and the shift, a lacks-predicate on α excludes the unifiers that give α an l-field, but it leaves those that give α fields of other labels, such as $α ≔ (m: 𝓫)$ next to $α ≔ ε$. These remain incomparable as long as no field crosses a row-variable, so lacks-predicates resolve the two problems only together with a row equivalence in which a variable commutes with the fields of the labels it lacks (@sec-extensions).
 
 What is shown is a limit of principal solutions over scoped rows, not of typing: a program whose inference is stuck may still be typed by placing ★ where the problem sits.
 
@@ -1276,10 +1272,21 @@ Stuck is therefore conservative: it does not imply that no most general unifier 
 
 == Limits of Inference <incompleteness-inference>
 
-// meta: this is just a huge block
-- Partially generalized lets. A-let generalizes the greatest admissible $macron(α)$, and a variable that violates a condition stays monomorphic together with whatever it drags along; a second use at another record may then clash. Freshness for Γ and for the stumps that stay parked is the side condition of Hindley-Milner and HM(X), and a stump of an outer binding may not be captured, since it would never be finalized. These losses are inherent to let-polymorphism. The fillability test for spent results is not: it is a syntactic approximation of inhabitation and rejects a spent stump blocked on its key, as in `let f = r: a: r.(a) c`, together with spent results that differ in more than their type variables. Nested selection such as `let g = x: (x.l).m`, record literals in a spent result and the same field spent twice on one row are generalized.
-- Spent promises. With first-class labels (@sec-fc-labels), a lookup whose answer was already consumed can be blocked on its key rather than on a row, so there is no row to extend and nothing to wake. Such a stump is never answered unless the key is supplied. _The declarative system types the program, so this is incompleteness and not rejection_. Two remedies are possible: guessing the key, which answers non-principally with an invented label, or reporting a qualified type at the top level, which is principal but changes what a run returns.
-- Unrestricted T-★-intro. The declarative system may replace any type by ★, so it types programs the algorithm clashes on: `g: { a = g {l = c}; b = g {m = c} }` has type $(★ → 𝓫) → {a: 𝓫 | b: 𝓫}$, while inference unifies the two argument records and clashes. Every stuck witness above becomes typable in the same way. A clash therefore certifies the absence of a unifier, but not the absence of a typing. T-★-intro acts as subsumption into a top type, and ★ is the join of any two distinct types, whereas unification only computes common instances. Closing the gap therefore requires either inference that joins incompatible lower bounds at ★ or a completeness statement restricted to typings without T-★-intro.
+The remaining limits lie in the inference algorithm rather than in unification.
+
+=== Partially Generalized Lets
+
+A-let generalizes the greatest admissible $macron(α)$. A variable that violates one of the conditions stays monomorphic, together with everything it drags along, and a second use at another record may then clash. Two of the conditions are inherent to let-polymorphism. Freshness for Γ and for the stumps that stay parked is the side condition of Hindley-Milner and HM(X), and a stump of an outer binding may not be captured, since it would never be finalized. The fillability test is not inherent. It is a syntactic approximation of inhabitation and rejects two kinds of spent stumps: those blocked on their key, as in `let f = r: a: r.${a} c`, and spent results that differ in more than their type variables. Nested selection such as `let g = x: (x.l).m`, record literals in a spent result and the same field spent twice on one row pass the test and are generalized.
+
+=== Spent Promises Blocked on a Key
+
+With first-class labels (@sec-fc-labels), a lookup whose answer was already consumed can be blocked on its key rather than on a row. There is then no row to extend and nothing to wake, and the stump is never answered unless the key is supplied. The declarative system types such programs, so this is incompleteness rather than rejection. Two remedies are possible: guessing the key, which answers non-principally with an invented label, or reporting a qualified type at the top level, which is principal but changes what a run returns.
+
+=== Unrestricted T-★-intro
+
+The declarative system may replace any type by ★, so it types programs on which the algorithm clashes. The program
+$ #raw("g: { a = g {l = c}; b = g {m = c}; }") quad : quad (★ → 𝓫) → {a: 𝓫 | b: 𝓫} $
+is typed by sending the parameter type of g to ★, while inference unifies the two argument records and clashes. Every stuck witness above becomes typable in the same way. A clash therefore certifies the absence of a unifier, but not the absence of a typing. T-★-intro acts as subsumption into a top type, and ★ is the join of any two distinct types, whereas unification only computes common instances. Closing the gap requires either inference that joins incompatible lower bounds at ★ or a completeness statement restricted to typings without T-★-intro.
 
 
 = Mechanization <sec-mechanization>
@@ -1291,10 +1298,7 @@ The development covers MiniNix extended with the first-class labels of @sec-fc-l
 = Extensions Towards NixLang <sec-extensions>
 
 == First-Class Labels <sec-fc-labels>
-//meta: note that ★ nicely carries over to this development
-
-
-NixLang computes labels at run time. A field is selected by an arbitrary string expression, `x.${name}`, and a record literal may bind a computed label, `{ ${name} = v; }`. The introductory example of @sec-motivation is of the first kind, and the second is how the builtins and the module system construct records from lists of names. This section extends MiniNix by both forms. type safety, the soundness of unification and inference and the termination of both carry over.
+NixLang computes labels at run time. A field is selected by an arbitrary string expression, `x.${name}`, and a record literal may bind a computed label, `{ ${name} = v; }`. The introductory example of @sec-motivation is of the first kind, and the second is how the builtins and the module system construct records from lists of names. This section extends MiniNix by both forms. Type safety, the soundness of unification and inference and the termination of both carry over, and so does ★: a dynamic selection that is never decided becomes ★, exactly as a static one does.
 
 #let fc_syntax = figure(
   caption: [Syntax of first-class labels, as an extension of @syntax.],
@@ -1318,11 +1322,10 @@ NixLang computes labels at run time. A field is selected by an arbitrary string 
 )
 #fc_syntax <fc-syntax>
 
-@fc-syntax gives the syntax extension. A label becomes a value $\"l\"$, written as a string literal as in NixLang, and it is typed by the singleton type $⌊l⌋$. Dynamic selection $e₁.\${e₂}$ selects the field named by the value of e₂, and the dynamic record ${ \${e₁} = e₂ }$ binds the field named by the value of e₁. At the type level, a _key_ k is either a label or a variable [of the new sort `Label`](wording). Keys occur in two places: in the singleton type $⌊k⌋$ and in the _keyed field_ $\${k}: τ$ of a row, whose label is not yet known. Stumps are keyed as well, $⟨ρ.k ↓ δ⟩$, so that a scheme can defer a lookup under a key it abstracts over.
+@fc-syntax gives the syntax extension. A label becomes a value $\"l\"$, written as a string literal as in NixLang, and it is typed by the singleton type $⌊l⌋$. Dynamic selection $e₁.\${e₂}$ selects the field named by the value of e₂, and the dynamic record ${ \${e₁} = e₂ }$ binds the field named by the value of e₁. At the type level, a _key_ k is either a label l or a label variable α, which has the new sort `Label`. Keys occur in two places: in the singleton type $⌊k⌋$ and in the _keyed field_ $\${k}: τ$ of a row, whose label is not yet known. Stumps are keyed as well, $⟨ρ.k ↓ δ⟩$, so that a scheme can defer a lookup under a key it abstracts over.
 
 
-// meta: revert the order
-_Keys are a sort of their own._ A substitution acquires a third component, and it sends a label variable to a key again. A key is therefore never ★, a base type or any other type, and no operation of MiniNix, whether unification, instantiation or finalization, can make it one. The alternative, in which a key is an arbitrary type and a non-label key yields ★, does not preserve types: ${ \${e₁} = e₂ }$ with $e₁ : ★$ steps to a literal record ${ l = e₂ }$ whose type is not equivalent to a field keyed by ★, and treating ★ as equal to itself makes lookup unsound at run time. The price of the separate sort is that a non-label key is a type error. It is the one place where the extension rejects rather than records uncertainty (@sec-goals).
+_Keys are a sort of their own._ The obvious design lets a key be an arbitrary type and types a selection under a non-label key at ★. It does not preserve types: ${ \${e₁} = e₂ }$ with $e₁ : ★$ steps to a literal record ${ l = e₂ }$, whose type is not equivalent to a field keyed by ★, and treating ★ as equal to itself makes lookup unsound at run time. Keys therefore form a sort of their own. A substitution acquires a third component, which sends a label variable to a key again, so a key is never ★, a base type or any other type, and no operation of MiniNix, whether unification, instantiation or finalization, can make it one. The price of the separate sort is that a non-label key is a type error. It is the one place where the extension rejects rather than records uncertainty (@sec-goals).
 
 
 === Keyed Lookup
@@ -1543,22 +1546,21 @@ Applied to concrete package sets, the overlay shows both sides of G3. Applied to
 
 == Design Goals Revisited <sec-goals>
 
-[@sec-motivation stated four goals for a type system for NixLang. MiniNix meets one of them by construction, and the other three in part. This section records the distance that remains.](wording)
+@sec-motivation stated four design goals for a type system for NixLang. MiniNix meets G2 by construction and the other three in part. This section records how far it reaches each of them.
 
-_G1 (No source changes)._ Inference requires no annotations. Every construct of MiniNix is typed without input from the programmer, and uncertainty is recorded as ★ rather than demanded as a lacks-predicate or a disjointness witness. The goal is thus met for MiniNix, but not yet for NixLang: patterns, `with`, `inherit`, recursive records and the builtins lie outside MiniNix (@sec-extensions), [and today's nixpkgs cannot be analysed verbatim until they are covered](wording).
+_G1 (No source changes)._ Inference requires no annotations. Every construct of MiniNix is typed without input from the programmer, and uncertainty is recorded as ★ rather than demanded as a lacks-predicate or a disjointness witness. The goal is thus met for MiniNix, but not yet for NixLang: patterns, `with`, `inherit`, recursive records and the builtins lie outside MiniNix (@sec-extensions), and nixpkgs can be analysed verbatim only once they are covered.
 
 _G2 (No semantic change)._ The analysis is purely static. It inserts no casts and does not instrument the program, so evaluation is unchanged, and the goal is met by construction. The price is carried by the metatheory: progress holds only up to lookup errors ↯ (@type-safety), which the analysis reports as warnings but cannot prevent. [](note our further goals?)
 
-_G3 (Totality)._ This goal is met in part. Uncertainty that originates in a lookup is absorbed: a selection that cannot be answered is typed at ★, and inference parks it rather than failing. Two sources of rejection remain. First, ★ is rigid and has no elimination form, so a ★ that is applied, selected from or concatenated leaves a program untypable even in the declarative system. The motivating example, extended by one selection,
+_G3 (Totality)._ This goal is met in part. Uncertainty that originates in a lookup is absorbed: a selection that cannot be answered is typed at ★, and inference defers it rather than failing. A program that runs is nevertheless rejected in two situations, and in a third with first-class labels. First, ★ is rigid and has no elimination form, so a program that applies ★, selects from it or concatenates it has no typing, even in the declarative system. The motivating example, extended by one selection,
 
 ```nix
 { "1759190400" = { m = 1; }; }.${toString builtins.currentTime}.m
 ```
 
-receives no type, since the dynamic selection yields ★ and ★ cannot be selected from. Second, unification reports a clash on programs that the declarative system types, such as the example of @incompleteness-inference: a clash certifies the absence of a unifier, not the absence of a typing. Stuck verdicts, in contrast, are reported as the goal permits.
-// meta: This is just a very weak thing lule
+receives no type, since the dynamic selection yields ★ and ★ cannot be selected from. Second, inference reports a clash on some programs that the declarative system types (@incompleteness-inference), since a clash certifies the absence of a unifier, not the absence of a typing. Third, a non-label key is a type error (@sec-fc-labels). A stuck verdict is not a rejection: the analysis reports it, as G3 demands.
 
-_G4 (Effective inference)._ The algorithm is designed for this goal but not yet measured against it. Inference is syntactic first-order unification: there is no constraint solver, no unification modulo associativity and commutativity, and no backtracking over alternative typings. Every move of the row pass is forced, and a parked stump is re-examined only when its blocker is solved. These are structural reasons to expect the analysis to scale. [The thesis, however, proves termination rather than a complexity bound, and the analysis has not been run on nixpkgs](wording).
+_G4 (Effective inference)._ The algorithm is designed for this goal but not yet measured against it. Inference is syntactic first-order unification: there is no constraint solver, no unification modulo associativity and commutativity, and no backtracking over alternative typings. Every move of the row pass is forced, and a parked stump is re-examined only when its blocker is solved. These are structural reasons to expect the analysis to scale. Termination is proved, but no complexity bound, and the analysis has not yet been run on nixpkgs.
 
 == Outlook: Towards Gradual Typing <sec-gradual>
 
@@ -1583,9 +1585,9 @@ _Typing NixLang._ Work on NixLang itself is scarce. Broekhoff and Krebbers @veri
 
 
 = Conclusion
-This thesis [set out to](wording) type asymmetric record concatenation, the operation at the centre of NixLang, without annotations and without changing the meaning of a single program. Its canonical obstacle, `a: b: (a ‖ b).l`, admits no principal typing in a row calculus that must decide where the field comes from. We have taken the decision out of the calculus. Scoped rows make concatenation a total juxtaposition of rows, a lookup relation answers a field demand with a type, with definite absence or with _don't know_, a pending answer is kept as a qualifier that is decided by evaluating the lookup at each use, and an answer that never arrives is recorded as the unknown type ★.
+The aim of this thesis was to type asymmetric record concatenation, the operation at the centre of NixLang, without annotations and without changing the meaning of a single program. Its canonical obstacle, `a: b: (a ‖ b).l`, admits no principal typing in a row calculus that must decide where the field comes from. We have taken the decision out of the calculus. Scoped rows make concatenation a total juxtaposition of rows, a lookup relation answers a field demand with a type, with definite absence or with _don't know_, a pending answer is kept as a qualifier that is decided by evaluating the lookup at each use, and an answer that never arrives is recorded as the unknown type ★.
 
-The resulting calculus, MiniNix, is type-safe up to lookup errors, and progress and preservation are mechanized in Lean. Principality forces its schemes to carry their pending lookups: no plain scheme is principal for `x: x.l`, while a qualified one is, and one binding then serves uses that no plain scheme can serve together. Row unification operates on spines, makes only forced moves and returns most general unifiers; the inference algorithm built on it parks unanswered lookups as stumps, terminates and produces declarative typings. Where the algorithm gives up, the reason is delimited: [some](wording) row equations have no most general unifier at all, some are the price of forced moves, and some are limits of inference itself.
+The resulting calculus, MiniNix, is type-safe up to lookup errors, and progress and preservation are mechanized in Lean. Principality forces its schemes to carry their pending lookups: no plain scheme is principal for `x: x.l`, while a qualified one is, and one binding then serves uses that no plain scheme can serve together. Row unification operates on spines, makes only forced moves and returns most general unifiers; the inference algorithm built on it parks unanswered lookups as stumps, terminates and produces declarative typings. Where the algorithm gives up, the reason is delimited: the row equation has no most general unifier at all, the stop is the price of forced moves, or it is a limit of inference itself.
 
 Measured against the design goals of @sec-motivation, MiniNix requires no source changes and leaves evaluation untouched, but it reaches totality only in part and has not yet been measured on nixpkgs (@sec-goals). The path towards NixLang is correspondingly twofold. The remaining constructs of the language — patterns, `with`, `inherit` and the builtins — must be covered, with lacks-predicates as the most promising source of the negative information that scoped rows lack (@sec-extensions). And ★ must become usable rather than merely recorded, for which a gradual reading of the unknown type, without casts, is the natural next step.
 

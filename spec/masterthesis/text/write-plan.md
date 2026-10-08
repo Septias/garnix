@@ -11,29 +11,10 @@ The style should be similar to the motivation and abstract so I feel comfortable
 - Mechanization
 
 
-## Missing
-- Closed type families. A stump is essentially a stuck application Lookup ρ l ~ δ. L-var returning ? is GHC's apartness check failing, and waking a stump is the solver re-trying a stuck family application. Eisenberg et al. (POPL 2014, closed type families) is missing from related work, and so are PureScript's Row.Lacks/Union and Morris's instance chains. A reviewer who knows GHC will raise this first. Positioning against it helps you: your "family" is total, and it's resolved at instantiation under let-polymorphism with no annotations.
-- A section about U-expand
-
-
 ## Sessions
 - Split & clear up motivation section
-- Add examples in various places
-- Add P&X comparison & introduction
-- Actual Evaluation
 - Give a nicer introduction to qualified schemes
 - Note the limmitation of the semantic (lazyness and recursiveness)
-
-
-## Quick Fixes
-- Sefaty theorem doent mention ↯
-- Fix the usage of the letters in unfity (s)
-- Do proper math prose (theorem and lemma blocks, numbering, )
-- Remove every mention of minimal calculus
-
-
-## Keller
-- Prove: "a typing that uses neither T-sel-⊥ nor T-sel-★ (or an inference run with no warnings) never reaches ↯"
 
 
 # Section Content
@@ -50,21 +31,8 @@ The style should be similar to the motivation and abstract so I feel comfortable
 
 # Section Fixes
 - Declarative
-  - [ ] Stump result δ a variable in Q — Lean now `Stump.res : Ty B`
-  - [ ] T-sel-★ / T-sel-⊥: expand, non-standard
-  - [ ] Instantiation: too verbose; sorting para removable
-  - Row lookup:
-- Refinement
-  - [ ] ⊑ defined inline — move to declarative
-- Unification
-  - [ ] Fuel sentence: reword or drop
-  - [ ] Rules not tangible — examples
-- Inference
-  - [ ] F-hit / materialization only in prose, no rule
-  - [ ] Quiescence: example why it matters
-  - [ ] Finalization: explain phases and their order
+  - [ ] Instantiation: sorting para removable
 - Incompleteness
-  - [ ] Irreducible: say why α = β = ε fails (wand) / is not most general (two-sided)
   - [ ] Irreducible: re-check last paragraph
 - Extensions
   - [ ] Stub subsections only
