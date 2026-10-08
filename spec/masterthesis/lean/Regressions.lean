@@ -164,13 +164,13 @@ theorem sFtv_computes :
 -- The four expansion arms are gone (plans/drop-expand.md). What used to be
 -- pinned here — `expandL_crossfield`, `expandL_wand_refuses`,
 -- `expandL_lfield_refuses`, `expandR_crossfield_mirror`, and the two driver
--- verdicts they produced — went with them. The COST of that is pinned instead,
--- at `crossfield_stuck` (RowUnify/Driver.lean): the crossfield problem has a
--- unifier, and the driver no longer finds it.
+-- verdicts they produced — went with them. U-host has since recovered the
+-- leading end as an applied binding (`crossfield_success`,
+-- RowUnify/Driver.lean); the trailing end is still pinned here.
 --
--- ⊢  the right-end mirror of crossfield, likewise `.stuck` now. `expandR` was
---    added precisely because this problem was stuck without it; removing the
---    arm returns it to that state, which is the trade taken knowingly.
+-- ⊢  the right-end mirror of crossfield, still `.stuck`: U-host fires at the
+--    leading end only. `expandR` was added precisely because this problem was
+--    stuck without it.
 theorem unify_crossfield_mirror_stuck :
     unifyRowM (B := Unit) 20 (.cat (.var "a") (.sing "l" uB))
                              (.cat (.var "b") (.sing "m" uB)) = .stuck := rfl

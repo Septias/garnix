@@ -10,8 +10,8 @@ types the program. A `stuck` from `≐ / ≐ᵣ` is a run failure, not a ★.
 | 2  | Levi / two-sided          | `(α \| l:𝓫) ≐ᵣ (l:𝓫 \| β)`                   | no (infinitely many)       | stuck   | negative info only with Γ-relative ≈   |
 | 3  | Swap                      | `(α \| β) ≐ᵣ (β \| α)`                       | no                         | stuck   | row equations as qualifiers            |
 | 4  | Shift                     | `(α \| l:𝓫) ≐ᵣ (l:𝓫 \| α)`                   | no finite CSU              | stuck   | row equations as qualifiers            |
-| 5  | Crossfield                | `(l:𝓫 \| α) ≐ᵣ (m:𝓫 \| β)`                   | yes                        | stuck   | unique-host expansion                  |
-| 6  | Self-referential host     | `(l:{w}) ≐ᵣ (w \| v)`, `(l:{w}) ≐ᵣ (v \| w)` | yes                        | stuck   | unique-host expansion + depth filter   |
+| 5  | Crossfield                | `(l:𝓫 \| α) ≐ᵣ (m:𝓫 \| β)`                   | yes                        | success | U-host (done); mirror end still stuck  |
+| 6  | Self-referential host     | `(l:{w}) ≐ᵣ (w \| v)`, `(l:{w}) ≐ᵣ (v \| w)` | yes                        | mixed   | U-host solves `(v \| w)`; `(w \| v)` stuck |
 | 7  | Masked by sequencing      | `(k:{β\|α} \| β) ≐ᵣ (k:{l:𝓫} \| l:𝓫)`        | yes                        | stuck   | defer stuck sub-equations              |
 | 8  | Keyed barriers            | `(foo:𝓫) ≐ᵣ (${α}:𝓫)`, `${α}:𝓫 ≐ᵣ ${β}:𝓫`    | yes (both)                 | stuck   | key-binding move at singleton/ends     |
 | 9  | Key-blocked spent promise | `λr. λa. r.(a) c`                            | n/a (inference)            | no run  | guess key / qualified top level        |
@@ -23,8 +23,8 @@ Grouping, by how inevitable they are:
 - **Irreducible** (1-4): no mgu exists. No algorithm returning one unifier can
   do better. A limit of principal types over scoped rows.
 - **Forced-move cost** (5-8): an mgu exists, the algorithm does not take the
-  step that finds it. A design choice (no move invents structure), each fixable
-  in isolation.
+  step that finds it. Each fixable in isolation. U-host now takes the step for
+  5 and 6 at the leading end; the trailing end and 7-8 remain.
 - **Inference-level** (9-11): unification is not the culprit. Either a stump
   is never answered, a binding is not generalized, or the declarative system
   uses a rule (T-★-intro) with no algorithmic counterpart.
@@ -139,17 +139,19 @@ a *count*. Counting is what kills finite complete sets.
 puts an l-field at the front of β (`crossfield_host_forced`,
 Solutions.lean:936), and symmetrically for α.
 
-**Why stuck.** The step is forced but it *invents* γ, and no move invents
-structure since U-expand was dropped (`plans/archive/drop-expand.md`). The
-drop was a deliberate trade: U-expand was the only arm that renamed instead of
-substituting, and it was behind both vacuous-success witnesses, the triangular
-`Sol`, and the `depReach` disjunct blocking `occurs ⟹ ¬∃θ`.
+**Solved, at the leading end.** U-host takes the forced step: a leading
+field `l:τ` against a host β that occurs nowhere else in the problem binds
+`β ≔ (l:τ | β′)` and drops the field. Sole occurrence makes the rename an
+applied binding, so none of the old U-expand costs return (no δ, no
+triangular `Sol`, `occurs ⟹ ¬∃θ` intact). Termination: a success draws fewer
+names than it binds keys (`unifyM_draws`, Draws.lean).
 
 **Lean.**
-- `crossfield_stuck` (Driver.lean:71): the single most important regression
-  for "no expansion arm crept back in"
-- `unify_crossfield_mirror_stuck` (Regressions.lean:174)
-- `nix_callback_crossfield_stuck` (Regressions.lean:330): the Nix shape
+- `crossfield_success` (Driver.lean): emits exactly the mgu above
+- `crossfield_mirror_stuck`, `unify_crossfield_mirror_stuck` (Regressions.lean):
+  the trailing end is still stuck
+- `nix_callback_crossfield_stuck` (Regressions.lean): the Nix shape, still
+  stuck (its fields sit at the trailing end)
 
 **Program.** The realistic one, a λ-bound callback used on two records
 extended by different fields:
@@ -161,11 +163,9 @@ With a *shared* tail (`p` twice) there is no unifier at all
 ours. Crossfield is the one of the eleven kinds most likely to show up in
 nixpkgs.
 
-**Fix.** Unique-host expansion, but as an *applied* binding (`β ≔ (l:𝓫 | γ)`
-substituted everywhere) rather than a spine-only rename. That avoids the
-stale-payload problem that made the old U-expand expensive. Termination
-measure has to absorb the invented γ; the stage-0 fuzz in drop-expand.md says
-`Sol.Applied ⟺ no expansion fired`, so the applied variant is the one to try.
+**Remaining fix.** The same move at the trailing end. Fuzz: both ends would
+recover 67-77% of the old U-expand's coverage, the leading end alone about
+45% (proof-state.md).
 
 
 # 6. Self-referential host  `(l:{w}) ≐ᵣ (w | v)` and mirror
@@ -179,9 +179,10 @@ visible to record depth (`Ty.rcdDepth`, ≈-invariant). So v is the forced host:
 - `terminal_masks_mgu_terminal`, `terminal_masks_mgu_stuck`,
   `terminal_masks_mgu` (Refutations.lean:246-260): terminal, stuck, has mgu
 - `terminalNoMgu_false`: so "terminal ⟹ no mgu" is false
-- `selfref_filter_stuck` (Refutations.lean:445): the mirror `(v | w)`
+- `selfref_filter_success` (Refutations.lean): the mirror `(v | w)`, now
+  solved by U-host
 - `selfref_lone_host_no_unifier`: the variant `(l:{w} | a) ≐ᵣ (m:𝓫 | w)` has
-  NO unifier and is also reported stuck; correct, only less precise than occurs
+  NO unifier and is reported occurs (`selfref_lone_host_reported`)
 
 **Why it matters.** It is the witness that kills the converse at the level of
 configurations, not just of verdicts. Without it, one could hope "terminal ⟹

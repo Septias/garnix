@@ -1993,10 +1993,9 @@ theorem solveVarM_occurs_no_unifier {B : Type} {S : Supply}
 -- was the only shape in which the occurs verdict was known sound. It IS the
 -- general theorem now, so the special case has nothing left to say.
 
--- ## A stuck verdict that masks an mgu: crossfield
--- (l:𝓫 | α) ≐ᵣ (m:𝓫 | β), l ≠ m, is reported STUCK (`crossfield_stuck`,
--- RowUnify/Driver.lean), yet it is not merely unifiable (so is Wand): its
--- unifier is FORCED, i.e. the algorithm is INCOMPLETE here, not just
+-- ## Crossfield: a forced unifier, found by U-host
+-- (l:𝓫 | α) ≐ᵣ (m:𝓫 | β), l ≠ m, is not merely unifiable (so is Wand): its
+-- unifier is FORCED, so a stuck verdict here would be INCOMPLETE, not just
 -- non-principal. Reading the ≈-characterization on a
 -- unifier θ (writing A = θα, B = θβ):
 --   proj_m A = (0,𝓫) :: proj_m B      (the left has no m outside A…)
@@ -2008,10 +2007,11 @@ theorem solveVarM_occurs_no_unifier {B : Type} {S : Supply}
 -- which is therefore an mgu. host_forced mechanizes the "segment index 0 ⟹
 -- the field sits at the front of the host" step (crossfield_host_forced).
 -- The maximality half (every unifier factors through it) is argued by hand in
--- proof-state.md, not mechanized. A U-expand move would take exactly this step
--- (β is the unique variable of the right side and the right side has no l-field,
--- so β is FORCED to host), but the algorithm has NO expansion move: expansion
--- places a field into a row-variable, so crossfield stays stuck.
+-- proof-state.md, not mechanized. U-host takes exactly this step (β is the
+-- unique variable of the right side, the right side has no l-field, and β occurs
+-- nowhere else, so β is FORCED to host) and emits the mgu above with X = β′:
+-- `crossfield_success` (RowUnify/Driver.lean). It fires at the leading end only;
+-- the mirror stays stuck (`crossfield_mirror_stuck`).
 
 -- … and the candidate mgu is a unifier.
 -- ⊢  θ ⊨ (l:𝓫 | α) ≐ᵣ (m:𝓫 | β)   for  α ↦ (m:𝓫 | X),  β ↦ (l:𝓫 | X)

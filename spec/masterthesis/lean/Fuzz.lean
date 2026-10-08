@@ -809,9 +809,9 @@ def landmarkReport (cap : Nat) : IO Unit := do
 -- a reader could mistake that for evidence.
 --
 -- The numbers it produced are in typesystems/proof-state.md (2026-09-22). The
--- tripwire it used to be is now `Refutations.crossfield_stuck` and
--- `Regressions.unify_crossfield_mirror_stuck` — kernel-checked, one line each,
--- and they fire the moment an arm that invents variables comes back.
+-- tripwire it used to be became `crossfield_stuck` (now `crossfield_success`,
+-- U-host) and `Regressions.unify_crossfield_mirror_stuck`, which still fires the
+-- moment an arm that invents variables at the trailing end comes back.
 
 ------------------ U-HOST — CAN A SOLE-OCCURRENCE EXPANSION COME BACK? ----------
 -- A clone of the driver with ONE new arm, last in dispatch order: the old
