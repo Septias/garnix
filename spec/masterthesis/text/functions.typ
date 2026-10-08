@@ -1,6 +1,18 @@
 #import "@preview/biceps:0.0.1": flexwrap
 
+// ------------- Colors
+#let red_700 = rgb(185, 28, 28)
+#let red_700 = rgb(185, 28, 28)
+#let orange_500 = rgb(249, 115, 22)
+#let red = oklch(42.1%, 0.095, 57.708deg);
+#let zink_700 = oklch(44.2%, 0.017, 285.786deg)
+#let zink_900 = oklch(21%, 0.006, 285.885deg)
+
+
 // ------------ Template
+#let thm_kind = "thm"
+#let thm_chapter_numbering = state("thm-chapter-numbering", "1")
+
 #let template(doc) = [
   #set heading(numbering: "1.")
   #show ref: set text(fill: rgb("#781C7D"))
@@ -10,17 +22,47 @@
   #set text(12pt)
   #set page(margin: (x: 2cm, y: 2cm))
   // #show figure: set block(breakable: true)
+  #show heading.where(level: 1): it => {
+    counter(figure.where(kind: thm_kind)).update(0)
+    it
+  }
+  #show figure.where(kind: thm_kind): it => block(width: 100%, breakable: true, align(left)[
+    *#it.supplement #it.counter.display(it.numbering)*#if it.caption != none [ (#it.caption.body)]. #h(0.3em)#it.body
+  ])
   #doc
 ]
 
-// ------------- Colors
-#let red_700 = rgb(185, 28, 28)
-#let red_700 = rgb(185, 28, 28)
-#let orange_500 = rgb(249, 115, 22)
-#let red = oklch(42.1%, 0.095, 57.708deg);
-#let zink_700 = oklch(44.2%, 0.017, 285.786deg)
-#let zink_900 = oklch(21%, 0.006, 285.885deg)
+// ------------ Math environments
+// Theorem-like blocks are figures of one shared kind, numbered per chapter
+// (Definition 4.1, Theorem 4.2, …) and referenceable with @label.
 
+#let mathenv(supplement, italic: true) = (name: none, lean: none, body) => figure(
+  kind: thm_kind,
+  supplement: supplement,
+  placement: none,
+  outlined: false,
+  numbering: n => numbering(
+    thm_chapter_numbering.get() + ".1",
+    counter(heading).get().first(),
+    n,
+  ),
+  caption: name,
+  {
+    if italic { text(style: "italic", body) } else { body }
+    if lean != none {
+      v(0.4em, weak: true)
+      block(text(size: 9pt, fill: zink_700)[Lean: #raw(lean)])
+    }
+  },
+)
+
+#let theorem = mathenv([Theorem])
+#let lemma = mathenv([Lemma])
+#let proposition = mathenv([Proposition])
+#let corollary = mathenv([Corollary])
+#let definition = mathenv([Definition], italic: false)
+#let example = mathenv([Example], italic: false)
+#let proof(body) = block(breakable: true)[_Proof._ #body #h(1fr) $square$]
 
 // ------------- Shorthands
 #let oi(body) = $overline(body)^i$
@@ -124,6 +166,7 @@
 #let appendix(body) = {
   set heading(numbering: "A", supplement: [Appendix])
   counter(heading).update(0)
+  thm_chapter_numbering.update("A")
   body
 }
 
