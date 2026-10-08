@@ -2,9 +2,8 @@
 ## Depth
 - [ ] Still only on *closed terms*
 - [x] Remove L-α-lookup
-- [ ] Instance closed Let
+- [~] Instance-closed Let
 - [ ] U-expand removed
-- [ ] Efficiency results
 
 Order of new features: Inherit -> With -> negative info -> occurrence typing -> patterns -> recursive types 
 
@@ -18,4 +17,8 @@ Order of new features: Inherit -> With -> negative info -> occurrence typing -> 
 ## Fortführende Ideen
 - Kann man die Providenz von ★ besser tracken?
 - Automatische Instrumentation?
-- Verbingdung von ★ und bi-unification?
+- Verbindung von ★ und bi-unification?
+
+
+## Misc
+- Prove: "a typing that uses neither T-sel-⊥ nor T-sel-★ (or an inference run with no warnings) never reaches ↯"

@@ -2,16 +2,16 @@
 ## Big Todos
 - [ ] Algorithmisch
   - [x] Soundness / Incompleteness
-  - [ ] Termination
-  - [ ] Principality
+  - [x] Termination
+  - [~] Principality
 
 - [ ] Schreiben
-  - [~] Einleitung
-    - [~] Motivation
-    - [~] Vergleichsteil
+  - [x] Einleitung
+    - [x] Motivation
+    - [x] Vergleichsteil
   - [ ] Das Typsystem
-    - [ ] In Words
-      - [ ] Tücken und Extraregeln schon motivieren?
+    - [x] In Words
+      - [x] Tücken und Extraregeln schon motivieren?
     - [x] Declarative
       - [x] Syntax
       - [x] Types
@@ -23,17 +23,17 @@
       - [x] Inference
       - [x] ⊑-relation
       - [x] ≈-relation
-    - [~] Unification
+    - [x] Unification
       - [x] Spines
       - [x] Types ≐
       - [x] Rows ≐ᵣ
-      - [ ] State
-      - [ ] Generalization
-      - [ ] Inference
-    - [ ] Formal
-      - [~] Syntax
-      - [~] Types
-      - [~] Unification
-  - [~] Metatheory
-  - [~] Towards Nix
-  - [ ] Related Work
+      - [x] State
+      - [x] Generalization
+      - [x] Inference
+    - [x] Formal
+      - [x] Syntax
+      - [x] Types
+      - [x] Unification
+  - [x] Metatheory
+  - [x] Towards Nix
+  - [x] Related Work
