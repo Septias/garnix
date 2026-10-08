@@ -206,6 +206,18 @@ def sFtv {B : Type} : List (Atom B) → List TyVar
 def localSupply {B : Type} (s₁ s₂ : List (Atom B)) : Supply :=
   ⟨lenBound (sFtv s₁ ++ sFtv s₂) + 1⟩
 
+/-- A bound on the names of `V`, by bytes: `String.length` depends on
+`Classical.choice` in core, `utf8ByteSize` on nothing, and the inference rules
+that use `Supply.above` stay choice-free. -/
+def byteBound (V : List (Srt × TyVar)) : Nat := V.foldr (fun x m => max x.2.utf8ByteSize m) 0
+
+/-- `S`, advanced past every name of `V`. -/
+def Supply.above (S : Supply) (V : List (Srt × TyVar)) : Supply :=
+  ⟨max S.next (byteBound V + 1)⟩
+
+theorem Supply.le_above (S : Supply) (V : List (Srt × TyVar)) : S.next ≤ (S.above V).next :=
+  Nat.le_max_left _ _
+
 
 def renameVar {B : Type} (β β' : TyVar) : List (Atom B) → List (Atom B)
   | [] => []

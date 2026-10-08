@@ -817,6 +817,34 @@ theorem Sol.good_unifyKey {B : Type} {S : Supply} {k₁ k₂ : Key} {s : Sol B}
 /-- Every variable of `V` is shorter than the supply's next name. -/
 def Below (S : Supply) (V : List (Srt × TyVar)) : Prop := ∀ x ∈ V, x.2.length < S.next
 
+private theorem length_le_utf8ByteSize_ofList :
+    (l : List Char) → (String.ofList l).length ≤ (String.ofList l).utf8ByteSize
+  | [] => by simp
+  | c :: l => by
+      have h := length_le_utf8ByteSize_ofList l
+      have e : String.ofList (c :: l) = String.singleton c ++ String.ofList l := by
+        apply String.toList_inj.mp; simp
+      rw [e, String.length_append, String.utf8ByteSize_append, String.length_singleton,
+        String.utf8ByteSize_singleton]
+      have := Char.utf8Size_pos c
+      omega
+
+theorem String.length_le_utf8ByteSize (s : String) : s.length ≤ s.utf8ByteSize := by
+  have := length_le_utf8ByteSize_ofList s.toList
+  rwa [String.ofList_toList] at this
+
+theorem le_byteBound {x : Srt × TyVar} : {V : List (Srt × TyVar)} → x ∈ V →
+    x.2.utf8ByteSize ≤ byteBound V
+  | _ :: V, h => by
+      simp only [byteBound, List.foldr_cons] at *
+      rcases List.mem_cons.mp h with rfl | h
+      · exact Nat.le_max_left _ _
+      · exact Nat.le_trans (le_byteBound h) (Nat.le_max_right _ _)
+
+theorem below_above (S : Supply) (V : List (Srt × TyVar)) : Below (S.above V) V :=
+  fun x hx => Nat.lt_of_lt_of_le (Nat.lt_succ_of_le
+    (Nat.le_trans (String.length_le_utf8ByteSize _) (le_byteBound hx))) (Nat.le_max_right _ _)
+
 /-- Every name of `R` was drawn between `S` and `S′`: a row variable named by
 the supply, so `R` has at most as many distinct names as there were draws. -/
 def FreshIn (S S' : Supply) (R : List (Srt × TyVar)) : Prop :=
@@ -1096,6 +1124,80 @@ theorem host_good {B : Type} [DecidableEq B] {fuel : Nat}
     (Sol.good_hostBind hβV hτV hnot hne) g₀ hR'
   exact ⟨_, hf, g⟩
 
+-- ⊢  the type-sort arms that do not recurse, at any fuel and any supply:
+--    good over the problem alone, with no drawn names
+theorem unifyTyF_flat_good {B : Type} [DecidableEq B] (fuel : Nat) (S : Supply)
+    (τ τ' : Ty B) {s : Sol B} {S' : Supply} (hrec : tyRec τ τ' = false)
+    (h : unifyTyF S fuel τ τ' = .success s S') : s.Good (Ty.sortedFtv τ ++ Ty.sortedFtv τ') := by
+  have hbL : ∀ (S : Supply) (α : TyVar) (τ : Ty B) {s : Sol B} {S' : Supply},
+      bindTy S α τ = .success s S' → s.Good (Ty.sortedFtv (Ty.var (B := B) α) ++ Ty.sortedFtv τ) :=
+    fun S α τ s S' h => Sol.good_bindTy h
+      (List.mem_append_left _ (by simp [Ty.sortedFtv])) (fun _ hx => List.mem_append_right _ hx)
+  have hbR : ∀ (S : Supply) (α : TyVar) (τ : Ty B) {s : Sol B} {S' : Supply},
+      bindTy S α τ = .success s S' → s.Good (Ty.sortedFtv τ ++ Ty.sortedFtv (Ty.var (B := B) α)) :=
+    fun S α τ s S' h => Sol.good_bindTy h
+      (List.mem_append_right _ (by simp [Ty.sortedFtv])) (fun _ hx => List.mem_append_left _ hx)
+  cases τ with
+  | var α => cases fuel <;> exact hbL S α τ' h
+  | base b =>
+      cases τ' with
+      | var α => cases fuel <;> exact hbR S α _ h
+      | base b' =>
+          by_cases hb : b = b'
+          · subst hb
+            have hred : unifyTyF S fuel (Ty.base b) (Ty.base b)
+                = .success (Sol.nil (B := B)) S := by
+              cases fuel <;> simp [unifyTyF]
+            rw [hred] at h
+            simp only [UResM.success.injEq] at h
+            obtain ⟨rfl, rfl⟩ := h
+            exact Sol.good_nil _
+          · cases fuel <;> simp [unifyTyF, hb] at h
+      | lab _ => cases fuel <;> cases h
+      | unk => cases fuel <;> cases h
+      | fn _ _ => cases fuel <;> cases h
+      | rcd _ => cases fuel <;> cases h
+  | lab b =>
+      cases τ' with
+      | var α => cases fuel <;> exact hbR S α _ h
+      | base _ => cases fuel <;> cases h
+      | lab b' =>
+          have h' : unifyKey S b b' = .success s S' := by cases fuel <;> exact h
+          exact Sol.good_unifyKey h'
+      | unk => cases fuel <;> cases h
+      | fn _ _ => cases fuel <;> cases h
+      | rcd _ => cases fuel <;> cases h
+  | unk =>
+      cases τ' with
+      | var α => cases fuel <;> exact hbR S α _ h
+      | base _ => cases fuel <;> cases h
+      | lab _ => cases fuel <;> cases h
+      | unk =>
+          have hred : unifyTyF S fuel (Ty.unk : Ty B) Ty.unk
+              = .success (Sol.nil (B := B)) S := by cases fuel <;> simp [unifyTyF]
+          rw [hred] at h
+          simp only [UResM.success.injEq] at h
+          obtain ⟨rfl, rfl⟩ := h
+          exact Sol.good_nil _
+      | fn _ _ => cases fuel <;> cases h
+      | rcd _ => cases fuel <;> cases h
+  | fn a₁ b₁ =>
+      cases τ' with
+      | var α => cases fuel <;> exact hbR S α _ h
+      | base _ => cases fuel <;> cases h
+      | lab _ => cases fuel <;> cases h
+      | unk => cases fuel <;> cases h
+      | fn a₂ b₂ => simp [tyRec] at hrec
+      | rcd _ => cases fuel <;> cases h
+  | rcd ρ₁ =>
+      cases τ' with
+      | var α => cases fuel <;> exact hbR S α _ h
+      | base _ => cases fuel <;> cases h
+      | lab _ => cases fuel <;> cases h
+      | unk => cases fuel <;> cases h
+      | fn _ _ => cases fuel <;> cases h
+      | rcd ρ₂ => simp [tyRec] at hrec
+
 -- ⊢  EVERY SUCCESS IS GOOD, over the problem's own tagged variables plus the
 --    names the run drew, at both sorts — PROVIDED the supply starts above the
 --    problem (`Below`). The proviso is not bookkeeping: a problem variable named
@@ -1110,14 +1212,6 @@ theorem unifyM_good {B : Type} [DecidableEq B] (fuel : Nat) :
         Below S (sSorted s₁ ++ sSorted s₂) →
         unifySpineMF S fuel s₁ s₂ = .success s S' →
         ∃ R, FreshIn S S' R ∧ s.Good (sSorted s₁ ++ sSorted s₂ ++ R)) := by
-  have hbL : ∀ (S : Supply) (α : TyVar) (τ : Ty B) {s : Sol B} {S' : Supply},
-      bindTy S α τ = .success s S' → s.Good (Ty.sortedFtv (Ty.var (B := B) α) ++ Ty.sortedFtv τ) :=
-    fun S α τ s S' h => Sol.good_bindTy h
-      (List.mem_append_left _ (by simp [Ty.sortedFtv])) (fun _ hx => List.mem_append_right _ hx)
-  have hbR : ∀ (S : Supply) (α : TyVar) (τ : Ty B) {s : Sol B} {S' : Supply},
-      bindTy S α τ = .success s S' → s.Good (Ty.sortedFtv τ ++ Ty.sortedFtv (Ty.var (B := B) α)) :=
-    fun S α τ s S' h => Sol.good_bindTy h
-      (List.mem_append_right _ (by simp [Ty.sortedFtv])) (fun _ hx => List.mem_append_left _ hx)
   have hnilL : ∀ (S : Supply) (s₂ : List (Atom B)) (fuel : Nat) {s : Sol B} {S' : Supply},
       unifySpineMF S fuel [] s₂ = .success s S' → s.Good (sSorted (B := B) [] ++ sSorted s₂) := by
     intro S s₂ fuel s S' h
@@ -1143,77 +1237,11 @@ theorem unifyM_good {B : Type} [DecidableEq B] (fuel : Nat) :
         exact Sol.good_ofRow_eps (fun p hp =>
           ⟨List.mem_append_left _ (allVarsEmpty_sorted (a :: s₁) hae p hp).1,
            (allVarsEmpty_sorted (a :: s₁) hae p hp).2⟩)
-  -- the type-sort arms that do not recurse, at any fuel
-  have hflat : ∀ (fuel : Nat) (S : Supply) (τ τ' : Ty B) {s : Sol B} {S' : Supply},
-      tyRec τ τ' = false →
-      unifyTyF S fuel τ τ' = .success s S' →
-      s.Good (Ty.sortedFtv τ ++ Ty.sortedFtv τ') := by
-    intro fuel S τ τ' s S' hrec h
-    cases τ with
-    | var α => cases fuel <;> exact hbL S α τ' h
-    | base b =>
-        cases τ' with
-        | var α => cases fuel <;> exact hbR S α _ h
-        | base b' =>
-            by_cases hb : b = b'
-            · subst hb
-              have hred : unifyTyF S fuel (Ty.base b) (Ty.base b)
-                  = .success (Sol.nil (B := B)) S := by
-                cases fuel <;> simp [unifyTyF]
-              rw [hred] at h
-              simp only [UResM.success.injEq] at h
-              obtain ⟨rfl, rfl⟩ := h
-              exact Sol.good_nil _
-            · cases fuel <;> simp [unifyTyF, hb] at h
-        | lab _ => cases fuel <;> cases h
-        | unk => cases fuel <;> cases h
-        | fn _ _ => cases fuel <;> cases h
-        | rcd _ => cases fuel <;> cases h
-    | lab b =>
-        cases τ' with
-        | var α => cases fuel <;> exact hbR S α _ h
-        | base _ => cases fuel <;> cases h
-        | lab b' =>
-            have h' : unifyKey S b b' = .success s S' := by cases fuel <;> exact h
-            exact Sol.good_unifyKey h'
-        | unk => cases fuel <;> cases h
-        | fn _ _ => cases fuel <;> cases h
-        | rcd _ => cases fuel <;> cases h
-    | unk =>
-        cases τ' with
-        | var α => cases fuel <;> exact hbR S α _ h
-        | base _ => cases fuel <;> cases h
-        | lab _ => cases fuel <;> cases h
-        | unk =>
-            have hred : unifyTyF S fuel (Ty.unk : Ty B) Ty.unk
-                = .success (Sol.nil (B := B)) S := by cases fuel <;> simp [unifyTyF]
-            rw [hred] at h
-            simp only [UResM.success.injEq] at h
-            obtain ⟨rfl, rfl⟩ := h
-            exact Sol.good_nil _
-        | fn _ _ => cases fuel <;> cases h
-        | rcd _ => cases fuel <;> cases h
-    | fn a₁ b₁ =>
-        cases τ' with
-        | var α => cases fuel <;> exact hbR S α _ h
-        | base _ => cases fuel <;> cases h
-        | lab _ => cases fuel <;> cases h
-        | unk => cases fuel <;> cases h
-        | fn a₂ b₂ => simp [tyRec] at hrec
-        | rcd _ => cases fuel <;> cases h
-    | rcd ρ₁ =>
-        cases τ' with
-        | var α => cases fuel <;> exact hbR S α _ h
-        | base _ => cases fuel <;> cases h
-        | lab _ => cases fuel <;> cases h
-        | unk => cases fuel <;> cases h
-        | fn _ _ => cases fuel <;> cases h
-        | rcd ρ₂ => simp [tyRec] at hrec
   induction fuel with
   | zero =>
       refine ⟨fun S τ τ' s S' _ h => ?_, fun S s₁ s₂ s S' _ h => ?_⟩
       · cases hrec : tyRec τ τ' with
-        | false => exact (hflat 0 S τ τ' hrec h).noFresh S S'
+        | false => exact (unifyTyF_flat_good 0 S τ τ' hrec h).noFresh S S'
         | true =>
           rcases tyRec_true hrec with ⟨a₁, b₁, a₂, b₂, rfl, rfl⟩ | ⟨ρ₁, ρ₂, rfl, rfl⟩
           · cases h
@@ -1262,7 +1290,7 @@ theorem unifyM_good {B : Type} [DecidableEq B] (fuel : Nat) :
             (Below.residual hB ((unifyM_supply_mono fuel).1 _ _ _ hty) hf₁ hR) hrow)
       refine ⟨fun S τ τ' s S' hB h => ?_, fun S s₁ s₂ s S' hB h => ?_⟩
       · cases hrec : tyRec τ τ' with
-        | false => exact (hflat (fuel + 1) S τ τ' hrec h).noFresh S S'
+        | false => exact (unifyTyF_flat_good (fuel + 1) S τ τ' hrec h).noFresh S S'
         | true =>
         rcases tyRec_true hrec with ⟨a₁, b₁, a₂, b₂, rfl, rfl⟩ | ⟨ρ₁, ρ₂, rfl, rfl⟩
         · replace h : ((unifyTyF S fuel a₁ a₂).seq fun θ' S'' =>

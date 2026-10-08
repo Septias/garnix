@@ -36,7 +36,8 @@ private theorem solve_star_row_free {S S₀ : SolverState B} {τ : Ty B}
     (hs : SolveTy S τ .unk S₀) {β : TyVar} (hβ : S.subst.row β = .var β) :
     S₀.subst.row β = .var β := by
   obtain ⟨fuel, s, Sup, hu, rfl⟩ := hs
-  have hg := (unifyM_good fuel).1 S.supply _ _ hu
+  have hg := unifyTyF_flat_good fuel _ _ _
+    (by generalize τ.applySubst S.subst = t; cases t <;> rfl) hu
   have hkey : β ∉ s.row.map Prod.fst := by
     intro hm
     obtain ⟨p, hp, hpe⟩ := List.mem_map.mp hm

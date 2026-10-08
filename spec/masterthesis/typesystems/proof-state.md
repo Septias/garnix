@@ -130,7 +130,9 @@ We use a custom lookup relation ⟨ρ.l ↓ r⟩ with return values ⟨τ | ⊥ 
   - Host tie broken by `keyless_vars`: U-host's residual never succeeds keyless, since β′ is on one side only
   - `unifyTyF_terminates` / `unifySpineMF_terminates` now need `Below S`; entry points discharge it
   - Regressions moved: `selfref_filter_success` (was stuck), `selfref_lone_host_reported` = occurs (was stuck)
-  - Open: inference side. `InferSound` (`SolveTy.clean`, `SolveRow.clean`) and `InferFnTerm` (`solveTyF_settles`) call the unifier from `S.supply`, with no `Below`
+  - Inference side done: `SolveTy`/`SolveRow`/`solveTyF` solve from `S.supplyTy`/`supplyRow` = `S.supply` advanced past the substituted problem and dom ⟦S⟧ (`Supply.above`)
+  - Past the problem: `Below` for `unifyM_good`, termination. Past dom ⟦S⟧: drawn names cannot rebind a state key in `Sol.Clean.extend`
+  - No supply invariant; whole lake build green, axiom guards unchanged (`Supply.above` bounds by `utf8ByteSize`, since `String.length` uses choice)
 - `stuck_masks_mgu`: stuck payload equation propagates before the residual pins β
   - Fix: defer the stuck equation, retry after the residual
 

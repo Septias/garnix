@@ -166,7 +166,8 @@ theorem LOut.not_blockedQ {ρ : Row B} {q : Key} {r : LOut B} {β : TyVar}
 
 /-- `S ⊢ τ ≐ τ′ ⇝ S′`, computed -/
 def solveTyF (n : Nat) (S : SolverState B) (τ τ' : Ty B) : IRes (SolverState B) :=
-  match unifyTyF S.supply n (τ.applySubst S.subst) (τ'.applySubst S.subst) with
+  match unifyTyF (S.supplyTy (τ.applySubst S.subst) (τ'.applySubst S.subst)) n
+      (τ.applySubst S.subst) (τ'.applySubst S.subst) with
   | .success s Sup => .ok (S.extend s Sup)
   | .clash         => .fail "clash"
   | .occurs        => .fail "occurs"
