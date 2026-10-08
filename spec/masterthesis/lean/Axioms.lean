@@ -499,9 +499,9 @@ info: 'MinimalCalculus.unrestricted_filter_refused' depends on axioms: [propext,
 
 -- What the filter used to buy, now `.stuck` on both counts.
 /--
-info: 'MinimalCalculus.selfref_filter_stuck' depends on axioms: [propext, Classical.choice, Quot.sound]
+info: 'MinimalCalculus.selfref_filter_success' depends on axioms: [propext, Classical.choice, Quot.sound]
 -/
-#guard_msgs in #print axioms selfref_filter_stuck
+#guard_msgs in #print axioms selfref_filter_success
 
 /--
 info: 'MinimalCalculus.selfref_lone_host_reported' depends on axioms: [propext, Classical.choice, Quot.sound]

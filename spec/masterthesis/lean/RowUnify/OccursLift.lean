@@ -58,6 +58,35 @@ theorem bindTy_occurs_no_unifier' {B : Type} {S : Supply} {α : TyVar} {τ : Ty 
     (h : bindTy S α τ = .occurs) : ¬ ∃ θ : TySubst B, TyUnifies θ τ (.var α) :=
   fun ⟨θ, hu⟩ => bindTy_occurs_no_unifier h ⟨θ, hu.symm⟩
 
+-- ⊢  THE U-HOST ARM: `.occurs` on the residual refutes the problem. Any
+--    unifier extends, at the fresh β′ only, to one of the residual.
+theorem host_occurs {B : Type} [DecidableEq B] {fuel : Nat}
+    (ih : ∀ (S : Supply) (u₁ u₂ : List (Atom B)) (V : List TyVar),
+      S.Avoids V → (sFtv u₁ ++ sFtv u₂) ⊆ V →
+      unifySpineMF S fuel u₁ u₂ = .occurs →
+      ¬ ∃ θ : TySubst B, RowEquiv ((ofSpine u₁).applySubst θ) ((ofSpine u₂).applySubst θ))
+    {S : Supply} {u₁ u₂ : List (Atom B)} {V : List TyVar} {θ : TySubst B}
+    {β : TyVar} {l : Label} {τ : Ty B} {t₁ t₂ x y : List (Atom B)}
+    (hS : S.Avoids V) (hV : (sFtv u₁ ++ sFtv u₂) ⊆ V)
+    (he : hostL S u₁ u₂ = some (β, l, τ, t₁, t₂))
+    (hxy : (x = t₁ ∧ y = t₂) ∨ (x = t₂ ∧ y = t₁))
+    (h : hostResM S β l τ (unifySpineMF S.fresh.2 fuel x y) = .occurs)
+    (hu : RowEquiv ((ofSpine u₁).applySubst θ) ((ofSpine u₂).applySubst θ)) : False := by
+  have hr : unifySpineMF S.fresh.2 fuel x y = .occurs := by
+    revert h; cases unifySpineMF S.fresh.2 fuel x y <;> simp [hostResM]
+  have hbV := Supply.fresh_not_mem hS
+  obtain ⟨θ₀, -, hrec0, -⟩ := hostL_reflect_fwd he
+    (fun hm => hbV (sFtv_sub_left hV hm)) (fun hm => hbV (sFtv_sub_right hV hm)) hu
+  have hsub := hostL_residual_sub hV he
+  have hsub' : (sFtv x ++ sFtv y) ⊆ (S.fresh.1 :: V) := by
+    rcases hxy with ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩
+    · exact hsub
+    · exact append_sub_swap hsub
+  refine ih S.fresh.2 x y _ hS.cons_fresh hsub' hr ⟨θ₀, ?_⟩
+  rcases hxy with ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩
+  · exact hrec0
+  · exact hrec0.symm
+
 -- ⊢  THE LIFT, at both sorts. The `V`/`Avoids` hypotheses are success
 --    completeness's, which the eq-emitting arms call on their first stage.
 theorem unifyM_occurs_no_unifier {B : Type} [DecidableEq B] (fuel : Nat) :
@@ -338,7 +367,22 @@ theorem unifyM_occurs_no_unifier {B : Type} [DecidableEq B] (fuel : Nat) :
               simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, hpc] at h
               cases h
             | false =>
-              simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, hpc] at h
+            cases hh1 : hostL S (a :: s₁) (b :: s₂) with
+            | some p =>
+              obtain ⟨β0, l0, τ0, t₁, t₂⟩ := p
+              simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, hpc, hh1,
+                Bool.false_eq_true, ite_false] at h
+              exact host_occurs ih.2 hS hV hh1 (.inl ⟨rfl, rfl⟩) h hu
+            | none =>
+            cases hh2 : hostL S (b :: s₂) (a :: s₁) with
+            | some p =>
+              obtain ⟨β0, l0, τ0, t₂, t₁⟩ := p
+              simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, hpc, hh1, hh2,
+                Bool.false_eq_true, ite_false] at h
+              exact host_occurs ih.2 hS (append_sub_swap hV) hh2 (.inr ⟨rfl, rfl⟩) h hu.symm
+            | none =>
+              simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, hpc, hh1, hh2,
+                Bool.false_eq_true, ite_false] at h
               cases h
 
 -- ⊢  …at the entry points: an `.occurs` verdict means NO unifier exists

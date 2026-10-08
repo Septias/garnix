@@ -54,24 +54,26 @@ theorem allVar_collapse_reported_k2 {B : Type} [DecidableEq B] :
         (.cat (.var "b") (.cat (.var "a") (.cat (.var "a") (.var "c"))))
       = .success ⟨[], [("b", .empty), ("a", .empty), ("a", .empty), ("c", .empty)], []⟩ ⟨2⟩ := rfl
 
--- WHAT DROPPING U-EXPAND COSTS, computed. This is the crossfield shape, and it
--- is the price of the removal made concrete: a unifier EXISTS — the prose at
--- :1006 derives it by hand, and U-expand used to find exactly it, binding
--- β ≔ (l:δ | β′), α ≔ (m:𝓫 | β′ | ε) with 𝓫 ≐ δ solved rather than parked — and
--- the driver no longer finds it.
+-- CROSSFIELD, SOLVED BY U-HOST. A unifier exists — the prose at :1006
+-- derives it by hand — and U-host finds exactly it: the leading l-field of the
+-- left side against the sole host `b` of the right, β ≔ (l:𝓫 | β′), then
+-- U-var-solve on the residual α ≐ᵣ (m:𝓫 | β′). Without the arm this was
+-- `.stuck`, which fails the run (InferFn.lean, `.stuck => .fail`).
 --
--- `.stuck` is the CONSERVATIVE verdict, not a wrong one: it claims nothing, and
--- downstream it fails the run (InferFn.lean, `.stuck => .fail`); the degrade
--- rules that once turned it into `★` are gone (`1781909`). The soundness contract
--- ("success ⟹ the solution unifies") is untouched; only coverage shrinks. Cf.
--- `stuck_masks_mgu`, which has always been this shape.
---
--- This is the single most important regression on this branch: if it ever goes
--- back to `.success`, an expansion arm has been reintroduced somewhere.
--- ⊢  unifyRowM (l:𝓫 | α) (m:𝓫 | β)  =  stuck
-theorem crossfield_stuck {B : Type} [DecidableEq B] (b : B) :
+-- The solution is APPLIED: `b`'s binding mentions only the fresh `aa`, which
+-- nothing binds, and `a`'s mentions the same. No δ, no triangularity.
+-- ⊢  unifyRowM (l:𝓫 | α) (m:𝓫 | β)  =  β ≔ (l:𝓫 | β′), α ≔ (m:𝓫 | β′)
+theorem crossfield_success {B : Type} [DecidableEq B] (b : B) :
     unifyRowM (B := B) 20 (.cat (.sing "l" (.base b)) (.var "a"))
-                          (.cat (.sing "m" (.base b)) (.var "b")) = .stuck := rfl
+                          (.cat (.sing "m" (.base b)) (.var "b")) =
+      .success ⟨[], [("b", .cat (.sing "l" (.base b)) (.var "aa")),
+                     ("a", .cat (.sing "m" (.base b)) (.cat (.var "aa") .empty))], []⟩ ⟨3⟩ :=
+  rfl
+
+-- …and its mirror stays `.stuck`: U-host fires at the LEADING end only.
+theorem crossfield_mirror_stuck {B : Type} [DecidableEq B] (b : B) :
+    unifyRowM (B := B) 20 (.cat (.var "a") (.sing "l" (.base b)))
+                          (.cat (.var "b") (.sing "m" (.base b))) = .stuck := rfl
 
 -- ## Fuel monotonicity
 -- Termination itself is proved in RowUnify/Termination.lean
@@ -89,6 +91,14 @@ theorem crossfield_stuck {B : Type} [DecidableEq B] (b : B) :
 
 -- ## Fuel monotonicity  (`UResM.Mono`, Defs.lean)
 theorem UResM.Mono.rfl' {B : Type} (r : UResM B) : UResM.Mono r r := .inr rfl
+
+-- ⊢  … and with the U-host wrapper, which only rewrites a success
+theorem UResM.Mono.hostRes {B : Type} (S : Supply) (β : TyVar) (l : Label) (τ : Ty B)
+    {r r' : UResM B} (h : UResM.Mono r r') :
+    UResM.Mono (hostResM S β l τ r) (hostResM S β l τ r') := by
+  rcases h with h | h
+  · subst h; exact .inl rfl
+  · subst h; exact .inr rfl
 
 -- ⊢  Mono is compatible with sequencing, ARM-WISE: no side condition survives
 theorem UResM.Mono.seq {B : Type} {r r' : UResM B}
@@ -207,12 +217,19 @@ theorem unifyM_fuel_mono {B : Type} [DecidableEq B] (N : Nat) :
                     obtain ⟨τ0', τ0, t₂, t₁⟩ := p
                     exact UResM.Mono.seq (IH'.1 S τ0 τ0') (fun θ S' => IH'.2 S' _ _)
                 | none =>
-                -- Past the last recursive arm both remaining outcomes are fuel-
-                -- independent constants. With U-expand gone there is no longer
-                -- an expansion case carrying an induction hypothesis here.
                 cases hpc : projClash (a :: s₁) (b :: s₂) with
                 | true  => exact .inr rfl
-                | false => exact .inr rfl
+                | false =>
+                cases hh1 : hostL S (a :: s₁) (b :: s₂) with
+                | some p =>
+                    obtain ⟨β0, l0, τ0, t₁, t₂⟩ := p
+                    exact UResM.Mono.hostRes S β0 l0 τ0 (IH'.2 S.fresh.2 t₁ t₂)
+                | none =>
+                cases hh2 : hostL S (b :: s₂) (a :: s₁) with
+                | some p =>
+                    obtain ⟨β0, l0, τ0, t₂, t₁⟩ := p
+                    exact UResM.Mono.hostRes S β0 l0 τ0 (IH'.2 S.fresh.2 t₁ t₂)
+                | none => exact .inr rfl
 
 -- ⊢  a REACHED row verdict is fuel-independent
 theorem unifySpineMF_fuel_mono {B : Type} [DecidableEq B] {S : Supply}

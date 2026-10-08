@@ -8,17 +8,20 @@
 --  * a FORCED move (strip, match, ground-match, the first stage of an arm)
 --    returns sub-spines and payloads of its input — no new variable, strictly
 --    smaller size;
---  * a SOLVED first stage with at least one binding removes that key from the
---    residual, and adds none: `Sol.Good.clears` (Applied.lean) says every
---    residual variable is a problem variable that is not a key. So the first
---    component drops, however much `sApplySubst` grows the spine;
+--  * a SOLVED first stage with at least one binding drops its keys from the
+--    residual: `Sol.Good.clears` (Applied.lean) says every residual variable
+--    is a problem variable or a drawn name, and not a key. A nested U-host may
+--    have drawn names, but fewer than it bound keys (`unifyM_draws`,
+--    Draws.lean), so the first component drops (`nv_residual`), however much
+--    `sApplySubst` grows the spine;
 --  * a solved first stage with NO binding is the identity, so the residual is
---    the unsubstituted one, which is strictly smaller.
+--    the unsubstituted one, which is strictly smaller;
+--  * U-HOST trades its host β for the draw β′ and drops the leading field: the
+--    count stays, the size drops.
 --
--- Variables are counted inside a fixed universe `U` (the original problem's
--- tagged variables), which every subproblem stays inside. Rémy's measure used
--- to fail on U-expand — renaming the host adds a variable and no field — and
--- that arm is gone (plans/drop-expand.md).
+-- Variables are counted on the problem itself (`nv`, distinct tagged names),
+-- from a supply above it (`Below`): the draws are then new names, and the
+-- count of a residual can be compared with its problem's.
 --
 -- ## The statement
 -- `outOfFuel` is the driver's only non-answer, and the fuel lemma
@@ -26,7 +29,7 @@
 -- termination is `∃ fuel, … ≠ .outOfFuel`, and it turns ≐ᵣ into a total
 -- function (`unifyRow`, below) whose verdict is THE verdict.
 
-import RowUnify.OccursLift
+import RowUnify.Draws
 
 namespace MinimalCalculus
 
@@ -249,36 +252,7 @@ theorem groundMatch_size {B : Type} {s₁ s₂ : List (Atom B)} {τ τ' : Ty B}
   · rw [if_pos hv] at h; cases h
   · rw [if_neg hv] at h; exact groundMatchAux_size _ h
 
-------------------------- COUNTING VARIABLES INSIDE A UNIVERSE -----------------
-
-/-- How many members of the universe `U` occur in `P`. -/
-def cntIn (U P : List (Srt × TyVar)) : Nat := U.countP (fun x => decide (x ∈ P))
-
-theorem cntIn_mono {U P P' : List (Srt × TyVar)} (h : P' ⊆ P) : cntIn U P' ≤ cntIn U P :=
-  List.countP_mono_left (fun x _ hx => by simp only [decide_eq_true_eq] at hx ⊢; exact h hx)
-
--- ⊢  losing a member of the universe strictly lowers the count
-theorem cntIn_lt {U P P' : List (Srt × TyVar)} (hsub : P' ⊆ P) {x : Srt × TyVar}
-    (hxU : x ∈ U) (hxP : x ∈ P) (hxP' : x ∉ P') : cntIn U P' < cntIn U P := by
-  induction U with
-  | nil => cases hxU
-  | cons u U ih =>
-      unfold cntIn at *
-      rw [List.countP_cons, List.countP_cons]
-      have hm : List.countP (fun x => decide (x ∈ P')) U ≤
-          List.countP (fun x => decide (x ∈ P)) U :=
-        List.countP_mono_left (fun y _ hy => by
-          simp only [decide_eq_true_eq] at hy ⊢; exact hsub hy)
-      rcases List.mem_cons.mp hxU with rfl | hU
-      · simp only [hxP, hxP', decide_true, decide_false, if_true]
-        simp; omega
-      · have hlt := ih hU
-        have hu : (if decide (u ∈ P') = true then 1 else 0) ≤
-            (if decide (u ∈ P) = true then 1 else 0) := by
-          by_cases h' : u ∈ P'
-          · simp [h', hsub h']
-          · simp [h']
-        omega
+------------------------- THE PROBLEM'S VARIABLES -------------------------------
 
 def TyP {B : Type} (τ τ' : Ty B) : List (Srt × TyVar) := Ty.sortedFtv τ ++ Ty.sortedFtv τ'
 def SpP {B : Type} (s₁ s₂ : List (Atom B)) : List (Srt × TyVar) := sSorted s₁ ++ sSorted s₂
@@ -358,49 +332,64 @@ theorem mono_sp_eq {B : Type} [DecidableEq B] {S : Supply} {f F : Nat}
 
 ------------------------- THE INDUCTION ----------------------------------------
 
-/-- Every problem inside `U` with at most `n` of its variables and size at most
-`m` has a fuel at which the driver answers — at both sorts. -/
-def TermR (B : Type) [DecidableEq B] (U : List (Srt × TyVar)) (n m : Nat) : Prop :=
-  (∀ (S : Supply) (τ τ' : Ty B), TyP τ τ' ⊆ U → cntIn U (TyP τ τ') ≤ n →
+/-- Every problem below the supply with at most `n` distinct variables and size
+at most `m` has a fuel at which the driver answers — at both sorts. -/
+def TermR (B : Type) [DecidableEq B] (n m : Nat) : Prop :=
+  (∀ (S : Supply) (τ τ' : Ty B), Below S (TyP τ τ') → nv (TyP τ τ') ≤ n →
       τ.usize + τ'.usize ≤ m → ∃ f, unifyTyF S f τ τ' ≠ .outOfFuel) ∧
-  (∀ (S : Supply) (s₁ s₂ : List (Atom B)), SpP s₁ s₂ ⊆ U → cntIn U (SpP s₁ s₂) ≤ n →
+  (∀ (S : Supply) (s₁ s₂ : List (Atom B)), Below S (SpP s₁ s₂) → nv (SpP s₁ s₂) ≤ n →
       spineSize s₁ + spineSize s₂ ≤ m → ∃ f, unifySpineMF S f s₁ s₂ ≠ .outOfFuel)
+
+-- ⊢  A SOLVED STAGE WITH A KEY leaves a residual with fewer variables than the
+--    stage's problem `Pv`: residual and keys lie in `Pv` plus the draws, and
+--    there are fewer draws than keys
+theorem stage_count {B : Type} {S S₁ : Supply} {Pv Res R₁ : List (Srt × TyVar)} {s₁ : Sol B}
+    (hf₁ : FreshIn S S₁ R₁) (g₁ : s₁.Good (Pv ++ R₁))
+    (hRes : ∀ x ∈ Res, x ∈ Pv ++ R₁ ∧ x ∉ s₁.domS) (hS₁ : S.next ≤ S₁.next)
+    (hdr : S₁.next < S.next + nv s₁.domS) : nv Res < nv Pv := by
+  have h := nv_residual (Q := Pv) (D := drawn S S₁) (K := s₁.domS) (Res := Res)
+    (fun x hx => (List.mem_append.mp (g₁.dom x hx)).imp id hf₁.mem_drawn)
+    (fun x hx => ⟨(List.mem_append.mp (hRes x hx).1).imp id hf₁.mem_drawn, (hRes x hx).2⟩)
+  rw [drawn_length] at h
+  omega
 
 -- ⊢  AN EQ-EMITTING ARM whose residual is a spine pair. The first stage is a
 --    strictly smaller problem over no new variables; the second is either the
---    unsubstituted residual (no key: strictly smaller) or has lost a key.
-theorem arm_sp_terminates {B : Type} [DecidableEq B] {U Pv : List (Srt × TyVar)} {n m : Nat}
-    (ihn : ∀ n' < n, ∀ m', TermR B U n' m') (ihm : ∀ m' < m, TermR B U n m')
-    (hPU : Pv ⊆ U) (hPn : cntIn U Pv ≤ n) (S : Supply) (τ τ' : Ty B)
+--    unsubstituted residual (no key: strictly smaller) or has fewer variables.
+theorem arm_sp_terminates {B : Type} [DecidableEq B] {Pv : List (Srt × TyVar)} {n m : Nat}
+    (ihn : ∀ n' < n, ∀ m', TermR B n' m') (ihm : ∀ m' < m, TermR B n m')
+    {S : Supply} (hB : Below S Pv) (hPn : nv Pv ≤ n) (τ τ' : Ty B)
     (t₁ t₂ : List (Atom B)) (hT : TyP τ τ' ⊆ Pv) (hR : SpP t₁ t₂ ⊆ Pv)
     (hsT : τ.usize + τ'.usize < m) (hsR : spineSize t₁ + spineSize t₂ < m) :
     ∃ F, ((unifyTyF S F τ τ').seq fun θ S'' =>
         unifySpineMF S'' F (sApplySubst θ t₁) (sApplySubst θ t₂)) ≠ .outOfFuel := by
-  obtain ⟨f₁, h₁⟩ := (ihm _ hsT).1 S τ τ' (fun _ hx => hPU (hT hx))
-    (Nat.le_trans (cntIn_mono hT) hPn) (Nat.le_refl _)
+  have hBT : Below S (TyP τ τ') := fun x hx => hB x (hT hx)
+  obtain ⟨f₁, h₁⟩ := (ihm _ hsT).1 S τ τ' hBT (Nat.le_trans (nv_mono hT) hPn) (Nat.le_refl _)
   cases hr : unifyTyF S f₁ τ τ' with
   | success s₁ S₁ =>
-      have g₁ := ((unifyM_good f₁).1 S τ τ' hr).mono hT
+      have hS₁ := (unifyM_supply_mono f₁).1 _ _ _ hr
+      obtain ⟨R₁, hf₁, g₁⟩ := (unifyM_good f₁).1 S τ τ' hBT hr
+      have g₁' := g₁.freshMono hT
       have hRes : ∀ x ∈ SpP (sApplySubst s₁.toSubst t₁) (sApplySubst s₁.toSubst t₂),
-          x ∈ Pv ∧ x ∉ s₁.domS := by
+          x ∈ Pv ++ R₁ ∧ x ∉ s₁.domS := by
         intro x hx
         rcases List.mem_append.mp hx with hx | hx
-        · exact g₁.clears_spine (fun _ hy => hR (List.mem_append_left _ hy)) hx
-        · exact g₁.clears_spine (fun _ hy => hR (List.mem_append_right _ hy)) hx
+        · exact g₁'.clears_spine (fun _ hy => List.mem_append_left _
+            (hR (List.mem_append_left _ hy))) hx
+        · exact g₁'.clears_spine (fun _ hy => List.mem_append_left _
+            (hR (List.mem_append_right _ hy))) hx
       obtain ⟨f₂, h₂⟩ : ∃ f₂, unifySpineMF S₁ f₂ (sApplySubst s₁.toSubst t₁)
           (sApplySubst s₁.toSubst t₂) ≠ .outOfFuel := by
-        cases hd : s₁.domS with
-        | nil =>
-            obtain ⟨ht, hrw, hlb⟩ := Sol.toSubst_of_domS_nil hd
-            rw [sApplySubst_fixed ht hrw hlb, sApplySubst_fixed ht hrw hlb]
-            exact (ihm _ hsR).2 S₁ t₁ t₂ (fun _ hx => hPU (hR hx))
-              (Nat.le_trans (cntIn_mono hR) hPn) (Nat.le_refl _)
-        | cons x xs =>
-            have hx : x ∈ s₁.domS := by rw [hd]; exact List.mem_cons_self
-            have hlt := cntIn_lt (U := U) (fun y hy => (hRes y hy).1)
-              (hPU (g₁.dom x hx)) (g₁.dom x hx) (fun hxR => (hRes x hxR).2 hx)
-            exact (ihn _ (Nat.lt_of_lt_of_le hlt hPn) _).2 S₁ _ _
-              (fun y hy => hPU (hRes y hy).1) (Nat.le_refl _) (Nat.le_refl _)
+        by_cases hd : s₁.domS = []
+        · obtain ⟨ht, hrw, hlb⟩ := Sol.toSubst_of_domS_nil hd
+          rw [sApplySubst_fixed ht hrw hlb, sApplySubst_fixed ht hrw hlb]
+          exact (ihm _ hsR).2 S₁ t₁ t₂
+            (Below.residual hB hS₁ hf₁ (fun x hx => List.mem_append_left _ (hR hx)))
+            (Nat.le_trans (nv_mono hR) hPn) (Nat.le_refl _)
+        · have hdr := ((unifyM_draws f₁).1 S τ τ' hBT hr).resolve_right (fun h => hd h.1)
+          exact (ihn _ (Nat.lt_of_lt_of_le (stage_count hf₁ g₁' hRes hS₁ hdr) hPn) _).2 S₁ _ _
+            (Below.residual hB hS₁ hf₁ (fun x hx => (hRes x hx).1)) (Nat.le_refl _)
+            (Nat.le_refl _)
       refine ⟨max f₁ f₂, ?_⟩
       have e₁ : unifyTyF S (max f₁ f₂) τ τ' = .success s₁ S₁ := by
         rw [mono_ty_eq (Nat.le_max_left _ _) h₁, hr]
@@ -416,39 +405,41 @@ theorem arm_sp_terminates {B : Type} [DecidableEq B] {U Pv : List (Srt × TyVar)
   | outOfFuel => exact absurd hr h₁
 
 -- ⊢  …and the arrow arm, whose residual is a type pair
-theorem arm_ty_terminates {B : Type} [DecidableEq B] {U Pv : List (Srt × TyVar)} {n m : Nat}
-    (ihn : ∀ n' < n, ∀ m', TermR B U n' m') (ihm : ∀ m' < m, TermR B U n m')
-    (hPU : Pv ⊆ U) (hPn : cntIn U Pv ≤ n) (S : Supply) (a₁ a₂ b₁ b₂ : Ty B)
+theorem arm_ty_terminates {B : Type} [DecidableEq B] {Pv : List (Srt × TyVar)} {n m : Nat}
+    (ihn : ∀ n' < n, ∀ m', TermR B n' m') (ihm : ∀ m' < m, TermR B n m')
+    {S : Supply} (hB : Below S Pv) (hPn : nv Pv ≤ n) (a₁ a₂ b₁ b₂ : Ty B)
     (hT : TyP a₁ a₂ ⊆ Pv) (hR : TyP b₁ b₂ ⊆ Pv)
     (hsT : a₁.usize + a₂.usize < m) (hsR : b₁.usize + b₂.usize < m) :
     ∃ F, ((unifyTyF S F a₁ a₂).seq fun θ S'' =>
         unifyTyF S'' F (b₁.applySubst θ) (b₂.applySubst θ)) ≠ .outOfFuel := by
-  obtain ⟨f₁, h₁⟩ := (ihm _ hsT).1 S a₁ a₂ (fun _ hx => hPU (hT hx))
-    (Nat.le_trans (cntIn_mono hT) hPn) (Nat.le_refl _)
+  have hBT : Below S (TyP a₁ a₂) := fun x hx => hB x (hT hx)
+  obtain ⟨f₁, h₁⟩ := (ihm _ hsT).1 S a₁ a₂ hBT (Nat.le_trans (nv_mono hT) hPn) (Nat.le_refl _)
   cases hr : unifyTyF S f₁ a₁ a₂ with
   | success s₁ S₁ =>
-      have g₁ := ((unifyM_good f₁).1 S a₁ a₂ hr).mono hT
+      have hS₁ := (unifyM_supply_mono f₁).1 _ _ _ hr
+      obtain ⟨R₁, hf₁, g₁⟩ := (unifyM_good f₁).1 S a₁ a₂ hBT hr
+      have g₁' := g₁.freshMono hT
       have hRes : ∀ x ∈ TyP (b₁.applySubst s₁.toSubst) (b₂.applySubst s₁.toSubst),
-          x ∈ Pv ∧ x ∉ s₁.domS := by
+          x ∈ Pv ++ R₁ ∧ x ∉ s₁.domS := by
         intro x hx
         rcases List.mem_append.mp hx with hx | hx
-        · exact g₁.clears_ty (fun _ hy => hR (List.mem_append_left _ hy)) hx
-        · exact g₁.clears_ty (fun _ hy => hR (List.mem_append_right _ hy)) hx
+        · exact g₁'.clears_ty (fun _ hy => List.mem_append_left _
+            (hR (List.mem_append_left _ hy))) hx
+        · exact g₁'.clears_ty (fun _ hy => List.mem_append_left _
+            (hR (List.mem_append_right _ hy))) hx
       obtain ⟨f₂, h₂⟩ : ∃ f₂, unifyTyF S₁ f₂ (b₁.applySubst s₁.toSubst)
           (b₂.applySubst s₁.toSubst) ≠ .outOfFuel := by
-        cases hd : s₁.domS with
-        | nil =>
-            obtain ⟨ht, hrw, hlb⟩ := Sol.toSubst_of_domS_nil hd
-            rw [Ty.applySubst_fixed_sorted b₁ (fun α _ => ht α) (fun α _ => hrw α) (fun α _ => hlb α),
-                Ty.applySubst_fixed_sorted b₂ (fun α _ => ht α) (fun α _ => hrw α) (fun α _ => hlb α)]
-            exact (ihm _ hsR).1 S₁ b₁ b₂ (fun _ hx => hPU (hR hx))
-              (Nat.le_trans (cntIn_mono hR) hPn) (Nat.le_refl _)
-        | cons x xs =>
-            have hx : x ∈ s₁.domS := by rw [hd]; exact List.mem_cons_self
-            have hlt := cntIn_lt (U := U) (fun y hy => (hRes y hy).1)
-              (hPU (g₁.dom x hx)) (g₁.dom x hx) (fun hxR => (hRes x hxR).2 hx)
-            exact (ihn _ (Nat.lt_of_lt_of_le hlt hPn) _).1 S₁ _ _
-              (fun y hy => hPU (hRes y hy).1) (Nat.le_refl _) (Nat.le_refl _)
+        by_cases hd : s₁.domS = []
+        · obtain ⟨ht, hrw, hlb⟩ := Sol.toSubst_of_domS_nil hd
+          rw [Ty.applySubst_fixed_sorted b₁ (fun α _ => ht α) (fun α _ => hrw α) (fun α _ => hlb α),
+              Ty.applySubst_fixed_sorted b₂ (fun α _ => ht α) (fun α _ => hrw α) (fun α _ => hlb α)]
+          exact (ihm _ hsR).1 S₁ b₁ b₂
+            (Below.residual hB hS₁ hf₁ (fun x hx => List.mem_append_left _ (hR hx)))
+            (Nat.le_trans (nv_mono hR) hPn) (Nat.le_refl _)
+        · have hdr := ((unifyM_draws f₁).1 S a₁ a₂ hBT hr).resolve_right (fun h => hd h.1)
+          exact (ihn _ (Nat.lt_of_lt_of_le (stage_count hf₁ g₁' hRes hS₁ hdr) hPn) _).1 S₁ _ _
+            (Below.residual hB hS₁ hf₁ (fun x hx => (hRes x hx).1)) (Nat.le_refl _)
+            (Nat.le_refl _)
       refine ⟨max f₁ f₂, ?_⟩
       have e₁ : unifyTyF S (max f₁ f₂) a₁ a₂ = .success s₁ S₁ := by
         rw [mono_ty_eq (Nat.le_max_left _ _) h₁, hr]
@@ -462,6 +453,48 @@ theorem arm_ty_terminates {B : Type} [DecidableEq B] {U Pv : List (Srt × TyVar)
   | occurs => exact ⟨f₁, by rw [hr]; simp [UResM.seq]⟩
   | stuck => exact ⟨f₁, by rw [hr]; simp [UResM.seq]⟩
   | outOfFuel => exact absurd hr h₁
+
+------------------------- U-HOST SHRINKS THE PROBLEM ----------------------------
+
+theorem spineSize_renameVar {B : Type} (β β' : TyVar) :
+    (s : List (Atom B)) → spineSize (renameVar β β' s) = spineSize s
+  | [] => rfl
+  | .var γ :: s => by
+      simp only [renameVar]
+      split <;> simp only [spineSize, spineSize_renameVar β β' s]
+  | .field _ _ :: s => by simp only [renameVar, spineSize, spineSize_renameVar β β' s]
+  | .dfield _ _ :: s => by simp only [renameVar, spineSize, spineSize_renameVar β β' s]
+
+-- ⊢  U-HOST'S RESIDUAL: below the advanced supply, no more variables (β′ for
+--    β), and a field fewer
+theorem host_step {B : Type} {S : Supply} {u₁ u₂ : List (Atom B)} {β : TyVar} {l : Label}
+    {τ : Ty B} {t₁ t₂ : List (Atom B)}
+    (hB : Below S (SpP u₁ u₂)) (he : hostL S u₁ u₂ = some (β, l, τ, t₁, t₂)) :
+    Below S.fresh.2 (SpP t₁ t₂) ∧ nv (SpP t₁ t₂) ≤ nv (SpP u₁ u₂) ∧
+      spineSize t₁ + spineSize t₂ < spineSize u₁ + spineSize u₂ := by
+  obtain ⟨hs1, -, -, -, hren⟩ := hostL_spec he
+  obtain ⟨hβV, -, hres⟩ := host_residual hB he
+  have hf₁ : FreshIn S S.fresh.2 [(.row, S.fresh.1)] := by
+    intro z hz
+    obtain rfl := List.mem_singleton.mp hz
+    simp only [Supply.fresh, natName_length]
+    exact ⟨Nat.le_refl _, Nat.lt_succ_self _, trivial⟩
+  refine ⟨Below.residual hB (Nat.le_succ _) hf₁ (fun z hz => (hres z hz).1), ?_, ?_⟩
+  · have h := nv_residual (Q := SpP u₁ u₂) (D := [(.row, S.fresh.1)]) (K := [(.row, β)])
+      (Res := SpP t₁ t₂)
+      (fun x hx => .inl (by rw [List.mem_singleton.mp hx]; exact hβV))
+      (fun x hx => ⟨List.mem_append.mp (hres x hx).1,
+        fun hk => (hres x hx).2 (List.mem_singleton.mp hk)⟩)
+    have h1 : nv [((.row : Srt), β)] = 1 := by simp [nv, dd]
+    simp only [List.length_singleton] at h
+    omega
+  · rw [hs1, hren, spineSize_renameVar]
+    simp only [spineSize]
+    omega
+
+theorem hostResM_ne_oof {B : Type} {S : Supply} {β : TyVar} {l : Label} {τ : Ty B}
+    {r : UResM B} (h : r ≠ .outOfFuel) : hostResM S β l τ r ≠ .outOfFuel := by
+  cases r <;> simp_all [hostResM]
 
 -- the arms that do not recurse answer at fuel 0
 theorem unifyTyF_flat_ne_oof {B : Type} [DecidableEq B] (S : Supply) (τ τ' : Ty B)
@@ -511,22 +544,21 @@ theorem unifySpineMF_cons_nil_ne_oof {B : Type} [DecidableEq B] (S : Supply) (f 
   simp only [unifySpineMF]
   cases allVarsEmpty (a :: s₁) <;> simp
 
-theorem termR_all {B : Type} [DecidableEq B] (U : List (Srt × TyVar)) :
-    ∀ n m, TermR B U n m := by
+theorem termR_all {B : Type} [DecidableEq B] : ∀ n m, TermR B n m := by
   intro n
   induction n using Nat.strongRecOn with
   | ind n ihn =>
   intro m
   induction m using Nat.strongRecOn with
   | ind m ihm =>
-  refine ⟨fun S τ τ' hU hn hm => ?_, fun S s₁ s₂ hU hn hm => ?_⟩
+  refine ⟨fun S τ τ' hB hn hm => ?_, fun S s₁ s₂ hB hn hm => ?_⟩
   · cases hrec : tyRec τ τ' with
     | false => exact ⟨0, unifyTyF_flat_ne_oof S τ τ' hrec⟩
     | true =>
       rcases tyRec_true hrec with ⟨a₁, b₁, a₂, b₂, rfl, rfl⟩ | ⟨ρ₁, ρ₂, rfl, rfl⟩
       · have hsz : (Ty.fn a₁ b₁).usize + (Ty.fn a₂ b₂).usize =
             1 + a₁.usize + b₁.usize + (1 + a₂.usize + b₂.usize) := rfl
-        obtain ⟨F, hF⟩ := arm_ty_terminates ihn ihm hU hn S a₁ a₂ b₁ b₂
+        obtain ⟨F, hF⟩ := arm_ty_terminates ihn ihm hB hn a₁ a₂ b₁ b₂
           (fun x hx => by
             simp only [TyP, Ty.sortedFtv, List.mem_append] at hx ⊢
             rcases hx with hx | hx
@@ -547,7 +579,7 @@ theorem termR_all {B : Type} [DecidableEq B] (U : List (Srt × TyVar)) :
           · exact .inl (sSorted_toSpine _ _ hx)
           · exact .inr (sSorted_toSpine _ _ hx)
         obtain ⟨f, hf⟩ := (ihm (ρ₁.usize + ρ₂.usize) (by omega)).2 S ρ₁.toSpine ρ₂.toSpine
-          (fun x hx => hU (hP hx)) (Nat.le_trans (cntIn_mono hP) hn)
+          (fun x hx => hB x (hP hx)) (Nat.le_trans (nv_mono hP) hn)
           (by rw [spineSize_toSpine, spineSize_toSpine]; exact Nat.le_refl _)
         exact ⟨f + 1, hf⟩
   · cases s₁ with
@@ -561,14 +593,14 @@ theorem termR_all {B : Type} [DecidableEq B] (U : List (Srt × TyVar)) :
             (∀ x ∈ t₂, x ∈ b :: s₂) →
             spineSize t₁ + spineSize t₂ < m → ∃ f, unifySpineMF S f t₁ t₂ ≠ .outOfFuel :=
           fun t₁ t₂ h₁ h₂ hs =>
-            (ihm _ hs).2 S t₁ t₂ (fun _ hx => hU (sSorted_sub_pair h₁ h₂ hx))
-              (Nat.le_trans (cntIn_mono (sSorted_sub_pair h₁ h₂)) hn) (Nat.le_refl _)
+            (ihm _ hs).2 S t₁ t₂ (fun x hx => hB x (sSorted_sub_pair h₁ h₂ hx))
+              (Nat.le_trans (nv_mono (sSorted_sub_pair h₁ h₂)) hn) (Nat.le_refl _)
         have arm : ∀ τ τ' t₁ t₂, EqEmit (a :: s₁) (b :: s₂) τ τ' t₁ t₂ →
             EqSize (a :: s₁) (b :: s₂) τ τ' t₁ t₂ →
             ∃ F, ((unifyTyF S F τ τ').seq fun θ S'' =>
               unifySpineMF S'' F (sApplySubst θ t₁) (sApplySubst θ t₂)) ≠ .outOfFuel :=
           fun τ τ' t₁ t₂ he hs =>
-            arm_sp_terminates ihn ihm hU hn S τ τ' t₁ t₂ he.ty_sub he.res_sub
+            arm_sp_terminates ihn ihm hB hn τ τ' t₁ t₂ he.ty_sub he.res_sub
               (by have := hs.1; have := hs.2; omega)
               (by have := hs.1; have := hs.2; omega)
         cases hsl : stripL (a :: s₁) (b :: s₂) with
@@ -641,30 +673,79 @@ theorem termR_all {B : Type} [DecidableEq B] (U : List (Srt × TyVar)) :
             simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2]
             exact hF⟩
         | none =>
-          refine ⟨0 + 1, ?_⟩
-          unfold unifySpineMF
-          simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2]
-          split <;> simp
+        cases hpc : projClash (a :: s₁) (b :: s₂) with
+        | true =>
+          exact ⟨0 + 1, by
+            unfold unifySpineMF
+            simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, hpc]
+            simp⟩
+        | false =>
+        cases hh1 : hostL S (a :: s₁) (b :: s₂) with
+        | some p =>
+          obtain ⟨β0, l0, τ0, t₁, t₂⟩ := p
+          obtain ⟨hB', hn', hs'⟩ := host_step hB hh1
+          obtain ⟨f, hf⟩ := (ihm _ (by omega)).2 S.fresh.2 t₁ t₂ hB'
+            (Nat.le_trans hn' hn) (Nat.le_refl _)
+          exact ⟨f + 1, by
+            unfold unifySpineMF
+            simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, hpc, hh1,
+              Bool.false_eq_true, ite_false]
+            exact hostResM_ne_oof hf⟩
+        | none =>
+        cases hh2 : hostL S (b :: s₂) (a :: s₁) with
+        | some p =>
+          obtain ⟨β0, l0, τ0, t₂, t₁⟩ := p
+          have hsw : ∀ {u v : List (Atom B)} {x}, x ∈ SpP u v → x ∈ SpP v u :=
+            fun hx => append_sub_swap (fun _ h => h) hx
+          obtain ⟨hB', hn', hs'⟩ := host_step (fun x hx => hB x (hsw hx)) hh2
+          obtain ⟨f, hf⟩ := (ihm _ (by omega)).2 S.fresh.2 t₁ t₂
+            (fun x hx => hB' x (hsw hx))
+            (Nat.le_trans (nv_mono fun _ hx => hsw hx)
+              (Nat.le_trans hn' (Nat.le_trans (nv_mono fun _ hx => hsw hx) hn)))
+            (Nat.le_refl _)
+          exact ⟨f + 1, by
+            unfold unifySpineMF
+            simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, hpc, hh1, hh2,
+              Bool.false_eq_true, ite_false]
+            exact hostResM_ne_oof hf⟩
+        | none =>
+          exact ⟨0 + 1, by
+            unfold unifySpineMF
+            simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, hpc, hh1, hh2,
+              Bool.false_eq_true, ite_false]
+            simp⟩
 
 ------------------------- TERMINATION ------------------------------------------
 
--- ⊢  EVERY PROBLEM HAS A FUEL AT WHICH THE DRIVER ANSWERS, at both sorts and
---    from any supply
-theorem unifyTyF_terminates {B : Type} [DecidableEq B] (S : Supply) (τ τ' : Ty B) :
-    ∃ fuel, unifyTyF S fuel τ τ' ≠ .outOfFuel :=
-  (termR_all (TyP τ τ') _ _).1 S τ τ' (fun _ hx => hx) (Nat.le_refl _) (Nat.le_refl _)
+-- ⊢  EVERY PROBLEM HAS A FUEL AT WHICH THE DRIVER ANSWERS, at both sorts,
+--    from any supply above the problem. The proviso is U-host's: a draw that
+--    collides with a problem variable is not a new name, and the count of a
+--    residual is no longer bounded by its keys.
+theorem unifyTyF_terminates {B : Type} [DecidableEq B] {S : Supply} {τ τ' : Ty B}
+    (hB : Below S (TyP τ τ')) : ∃ fuel, unifyTyF S fuel τ τ' ≠ .outOfFuel :=
+  (termR_all _ _).1 S τ τ' hB (Nat.le_refl _) (Nat.le_refl _)
 
-theorem unifySpineMF_terminates {B : Type} [DecidableEq B] (S : Supply)
-    (s₁ s₂ : List (Atom B)) : ∃ fuel, unifySpineMF S fuel s₁ s₂ ≠ .outOfFuel :=
-  (termR_all (SpP s₁ s₂) _ _).2 S s₁ s₂ (fun _ hx => hx) (Nat.le_refl _) (Nat.le_refl _)
+theorem unifySpineMF_terminates {B : Type} [DecidableEq B] {S : Supply}
+    {s₁ s₂ : List (Atom B)} (hB : Below S (SpP s₁ s₂)) :
+    ∃ fuel, unifySpineMF S fuel s₁ s₂ ≠ .outOfFuel :=
+  (termR_all _ _).2 S s₁ s₂ hB (Nat.le_refl _) (Nat.le_refl _)
+
+-- ⊢  the type entry point's supply is above its problem
+theorem below_tySupply {B : Type} (τ τ' : Ty B) :
+    Below ⟨lenBound (τ.ftv ++ τ'.ftv) + 1⟩ (TyP τ τ') := fun x hx => by
+  show x.2.length < lenBound (τ.ftv ++ τ'.ftv) + 1
+  refine Nat.lt_succ_of_le (length_le_lenBound ?_)
+  rcases List.mem_append.mp hx with hx | hx
+  · exact List.mem_append_left _ (Ty.mem_ftv_of_mem_sortedFtv _ hx)
+  · exact List.mem_append_right _ (Ty.mem_ftv_of_mem_sortedFtv _ hx)
 
 theorem unifyRowM_terminates {B : Type} [DecidableEq B] (ρ₁ ρ₂ : Row B) :
     ∃ fuel, unifyRowM fuel ρ₁ ρ₂ ≠ .outOfFuel :=
-  unifySpineMF_terminates _ _ _
+  unifySpineMF_terminates (below_localSupply _ _)
 
 theorem unifyTyM_terminates {B : Type} [DecidableEq B] (τ τ' : Ty B) :
     ∃ fuel, unifyTyM fuel τ τ' ≠ .outOfFuel :=
-  unifyTyF_terminates _ _ _
+  unifyTyF_terminates (below_tySupply τ τ')
 
 -- ⊢  …and from there on the verdict is FIXED: every larger fuel gives the
 --    same answer (`unifyM_fuel_mono`). So `≐ᵣ` is a function.

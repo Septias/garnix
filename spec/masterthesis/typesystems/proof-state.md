@@ -118,6 +118,19 @@ We use a custom lookup relation ⟨ρ.l ↓ r⟩ with return values ⟨τ | ⊥ 
 **Stuck with an mgu**
 - Crossfield `(l:𝓫|α) ≐ᵣ (m:𝓫|β)`: cost of dropping U-expand
   - Fix: unique-host expansion as an *applied* binding, not a rename
+  - U-host (branch `u-expand`, `lake exe fuzz host`): HostShape + host occurs once in the whole problem ⇒ rename = apply, emits `β ≔ (l:τ|β′)`, no δ, no Θ
+  - Recovered vs old U-expand's losses (wide/nest/deep): leading end only 492/1036, 144/348, 18368/38808 (~45%); both ends 696, 240, 29956 (67-77%)
+  - 0 non-stuck verdict moved, 0 ¬Applied, 0 unsound (≈ decided via `Row.Char`), 0 fuel; stuck ⇝ occurs/clash is the only other move (correct, e.g. `(l:𝓫|a) ≐ᵣ (m:{a}|b)`)
+  - crossfield-n succeeds for all n; `terminal_masks_mgu` needs the right end
+  - Inference side: start `SolveTy`/`SolveRow` at a supply above dom ⟦S⟧ ⇒ β′ fresh by construction, no global supply invariant
+  - Lean (branch `u-expand`, leading end): driver arm + soundness, completeness, clash, occurs, `unifyM_good` proved
+  - `unifyM_good` now needs `Below S` (problem shorter than the supply) and returns `Good (vars ++ R)`, R = drawn names; refuted without `Below`: a problem var named like β′ gets bound early, then mentioned
+  - Termination proved (`RowUnify/Draws.lean`, `Termination.lean`): measure (distinct vars, size), counted on the problem itself, from a supply above it
+  - Key invariant `unifyM_draws`: a success draws fewer names than it binds keys, or binds and draws nothing (fuzz: 0 violations)
+  - Host tie broken by `keyless_vars`: U-host's residual never succeeds keyless, since β′ is on one side only
+  - `unifyTyF_terminates` / `unifySpineMF_terminates` now need `Below S`; entry points discharge it
+  - Regressions moved: `selfref_filter_success` (was stuck), `selfref_lone_host_reported` = occurs (was stuck)
+  - Open: inference side. `InferSound` (`SolveTy.clean`, `SolveRow.clean`) and `InferFnTerm` (`solveTyF_settles`) call the unifier from `S.supply`, with no `Below`
 - `stuck_masks_mgu`: stuck payload equation propagates before the residual pins β
   - Fix: defer the stuck equation, retry after the residual
 

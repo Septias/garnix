@@ -12,4 +12,5 @@ import RowUnify.Trichotomy    -- the mgu statement and the stuck leg
 import RowUnify.State         -- ⟦S⟧ as a substitution: closure, acyclicity, ranking
 import RowUnify.Applied       -- every success is applied: UnifyWF, non-vacuity
 import RowUnify.OccursLift    -- occurs ⟹ no unifier, for the whole driver
+import RowUnify.Draws         -- a success draws fewer names than it binds keys
 import RowUnify.Termination   -- every problem has a fuel that suffices; ≐ᵣ total

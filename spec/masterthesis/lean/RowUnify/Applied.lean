@@ -806,6 +806,203 @@ theorem Sol.good_unifyKey {B : Type} {S : Supply} {k₁ k₂ : Key} {s : Sol B}
             exact Sol.good_nil _
           · cases h
 
+------------------------- FRESH NAMES ------------------------------------------
+-- U-host is the one arm that invents a name: β′, the supply's next. So a
+-- success is good over the problem's variables PLUS a list `R` of names the run
+-- drew. All the disjointness this needs is read off name LENGTH: the supply
+-- hands out `natName k`, of length k, so "every problem variable is shorter
+-- than the supply" (`Below`) and "drawn between S and S′" (`FreshIn`) separate
+-- the problem from the drawn names, and two runs' draws from each other.
+
+/-- Every variable of `V` is shorter than the supply's next name. -/
+def Below (S : Supply) (V : List (Srt × TyVar)) : Prop := ∀ x ∈ V, x.2.length < S.next
+
+/-- Every name of `R` was drawn between `S` and `S′`: a row variable named by
+the supply, so `R` has at most as many distinct names as there were draws. -/
+def FreshIn (S S' : Supply) (R : List (Srt × TyVar)) : Prop :=
+  ∀ x ∈ R, S.next ≤ x.2.length ∧ x.2.length < S'.next ∧ x = (.row, natName x.2.length)
+
+theorem FreshIn.nil (S S' : Supply) : FreshIn S S' [] := fun _ hx => nomatch hx
+
+-- ⊢  a good solution with no drawn names
+theorem Sol.Good.noFresh {B : Type} {V : List (Srt × TyVar)} {s : Sol B} (S S' : Supply)
+    (g : s.Good V) : ∃ R, FreshIn S S' R ∧ s.Good (V ++ R) :=
+  ⟨[], FreshIn.nil S S', g.mono (fun _ hx => List.mem_append_left _ hx)⟩
+
+-- ⊢  …moved to a larger problem
+theorem Sol.Good.freshMono {B : Type} {V W R : List (Srt × TyVar)} {s : Sol B}
+    (g : s.Good (V ++ R)) (h : V ⊆ W) : s.Good (W ++ R) :=
+  g.mono (fun x hx => by
+    rcases List.mem_append.mp hx with hx | hx
+    · exact List.mem_append_left _ (h hx)
+    · exact List.mem_append_right _ hx)
+
+-- ⊢  STAGED COMPOSITION with drawn names. The first stage is good over the
+--    problem plus `R₁`; the residual lives inside that and avoids the first
+--    stage's keys (`hR`, from `clears` or from sole occurrence); the second
+--    stage is good over the residual plus `R₂`, drawn LATER, so `R₂` is longer
+--    than everything the first stage could have bound.
+theorem Sol.good_comp_fresh {B : Type} {S S₁ S' : Supply} {Q Res R₁ R₂ : List (Srt × TyVar)}
+    {s₁ s₂ : Sol B}
+    (hB : Below S Q) (hS₁ : S.next ≤ S₁.next) (hS' : S₁.next ≤ S'.next)
+    (hf₁ : FreshIn S S₁ R₁) (hf₂ : FreshIn S₁ S' R₂)
+    (g₁ : s₁.Good (Q ++ R₁)) (g₂ : s₂.Good (Res ++ R₂))
+    (hR : ∀ x ∈ Res, x ∈ Q ++ R₁ ∧ x ∉ s₁.domS) :
+    FreshIn S S' (R₁ ++ R₂) ∧ (s₂.comp s₁).Good (Q ++ (R₁ ++ R₂)) := by
+  have lt₁ : ∀ x ∈ Q ++ R₁, x.2.length < S₁.next := fun x hx => by
+    rcases List.mem_append.mp hx with hx | hx
+    · exact Nat.lt_of_lt_of_le (hB x hx) hS₁
+    · exact (hf₁ x hx).2.1
+  have hsep : ∀ x ∈ Res ++ R₂, x ∉ s₁.domS := fun x hx hd => by
+    rcases List.mem_append.mp hx with hx | hx
+    · exact (hR x hx).2 hd
+    · exact absurd (lt₁ x (g₁.dom x hd)) (Nat.not_lt.mpr (hf₂ x hx).1)
+  refine ⟨fun x hx => ?_, ?_⟩
+  · rcases List.mem_append.mp hx with hx | hx
+    · exact ⟨(hf₁ x hx).1, Nat.lt_of_lt_of_le (hf₁ x hx).2.1 hS', (hf₁ x hx).2.2⟩
+    · exact ⟨Nat.le_trans hS₁ (hf₂ x hx).1, (hf₂ x hx).2⟩
+  · refine (g₁.mono fun x hx => ?_).comp (g₂.mono fun x hx => ?_)
+      (fun x hx => hsep x (g₂.dom x hx)) (fun x hx => hsep x (g₂.rng x hx).1)
+    · rcases List.mem_append.mp hx with hx | hx
+      · exact List.mem_append_left _ hx
+      · exact List.mem_append_right _ (List.mem_append_left _ hx)
+    · rcases List.mem_append.mp hx with hx | hx
+      · rcases List.mem_append.mp (hR x hx).1 with hq | hq
+        · exact List.mem_append_left _ hq
+        · exact List.mem_append_right _ (List.mem_append_left _ hq)
+      · exact List.mem_append_right _ (List.mem_append_right _ hx)
+
+-- ⊢  the residual is again below the advanced supply
+theorem Below.residual {S S₁ : Supply} {Q Res R₁ : List (Srt × TyVar)}
+    (hB : Below S Q) (hS₁ : S.next ≤ S₁.next) (hf₁ : FreshIn S S₁ R₁)
+    (hR : ∀ x ∈ Res, x ∈ Q ++ R₁) : Below S₁ Res := fun x hx => by
+  rcases List.mem_append.mp (hR x hx) with h | h
+  · exact Nat.lt_of_lt_of_le (hB x h) hS₁
+  · exact (hf₁ x h).2.1
+
+------------------------- U-HOST, TAGGED ---------------------------------------
+
+-- ⊢  renaming the host introduces exactly β′
+theorem sSorted_renameVar {B : Type} (β β' : TyVar) {x : Srt × TyVar} :
+    (s : List (Atom B)) → x ∈ sSorted (renameVar β β' s) → x = (.row, β') ∨ x ∈ sSorted s
+  | [], h => nomatch h
+  | .var γ :: s, h => by
+      simp only [renameVar] at h
+      by_cases hg : γ = β
+      · rw [if_pos hg] at h
+        simp only [sSorted, List.mem_cons] at h ⊢
+        rcases h with rfl | h
+        · exact .inl rfl
+        · rcases sSorted_renameVar β β' s h with h' | h'
+          · exact .inl h'
+          · exact .inr (.inr h')
+      · rw [if_neg hg] at h
+        simp only [sSorted, List.mem_cons] at h ⊢
+        rcases h with rfl | h
+        · exact .inr (.inl rfl)
+        · rcases sSorted_renameVar β β' s h with h' | h'
+          · exact .inl h'
+          · exact .inr (.inr h')
+  | .field _ τ :: s, h => by
+      simp only [renameVar, sSorted, List.mem_append] at h ⊢
+      rcases h with h | h
+      · exact .inr (.inl h)
+      · rcases sSorted_renameVar β β' s h with h' | h'
+        · exact .inl h'
+        · exact .inr (.inr h')
+  | .dfield o τ :: s, h => by
+      simp only [renameVar, sSorted, List.mem_append] at h ⊢
+      rcases h with h | h
+      · exact .inr (.inl h)
+      · rcases sSorted_renameVar β β' s h with h' | h'
+        · exact .inl h'
+        · exact .inr (.inr h')
+
+theorem mem_allRowVars_of_sSorted {B : Type} {α : TyVar} {s : List (Atom B)}
+    (h : (.row, α) ∈ sSorted s) : α ∈ Row.allRowVars (ofSpine s) :=
+  Row.mem_allRowVars_of_sortedFtv _ (by rw [sortedFtv_ofSpine]; exact h)
+
+-- ⊢  SOLE OCCURRENCE, tagged: once β is renamed on the spine, it is gone
+theorem renameVar_sole {B : Type} {β β' : TyVar} (hne : β ≠ β') :
+    (s : List (Atom B)) → β ∈ sVarSeq s → (Row.allRowVars (ofSpine s)).count β = 1 →
+    (.row, β) ∉ sSorted (renameVar β β' s)
+  | [], hm, _, _ => nomatch hm
+  | .var γ :: s, hm, hc, h => by
+      simp only [ofSpine, Row.allRowVars, List.count_append] at hc
+      by_cases hg : γ = β
+      · subst hg
+        have h0 : (Row.allRowVars (ofSpine s)).count γ = 0 := by
+          simp only [List.count_singleton_self] at hc; omega
+        have h1 : (Atom.var β' :: renameVar γ β' s : List (Atom B)) = renameVar γ β' (.var γ :: s) := by
+          simp [renameVar]
+        rw [← h1] at h
+        rcases List.mem_cons.mp h with h | h
+        · exact hne (by simpa using h)
+        · rcases sSorted_renameVar γ β' s h with h' | h'
+          · exact hne (by simpa using h')
+          · exact (List.count_eq_zero.mp h0) (mem_allRowVars_of_sSorted h')
+      · simp only [renameVar, if_neg hg, sSorted, List.mem_cons] at h
+        have hm' : β ∈ sVarSeq s := by
+          simp only [sVarSeq, List.mem_cons] at hm
+          rcases hm with hm | hm
+          · exact absurd hm.symm hg
+          · exact hm
+        have hc' : (Row.allRowVars (ofSpine s)).count β = 1 := by
+          simp only [List.count_singleton, beq_iff_eq, hg, if_false] at hc
+          have : ¬ (γ == β) = true := by simpa using hg
+          simp [this] at hc; omega
+        rcases h with h | h
+        · exact hg (Prod.mk.inj h).2.symm
+        · exact renameVar_sole hne s hm' hc' h
+  | .field _ τ :: s, hm, hc, h => by
+      simp only [ofSpine, Row.allRowVars, List.count_append] at hc
+      simp only [sVarSeq] at hm
+      have hpos : 0 < (Row.allRowVars (ofSpine s)).count β :=
+        List.count_pos_iff.mpr (mem_allRowVars_of_sSorted (sVarSeq_mem_sSorted s hm))
+      simp only [renameVar, sSorted, List.mem_append] at h
+      rcases h with h | h
+      · have : 0 < (Ty.allRowVars τ).count β :=
+          List.count_pos_iff.mpr (Ty.mem_allRowVars_of_sortedFtv τ h)
+        omega
+      · exact renameVar_sole hne s hm (by omega) h
+  | .dfield _ τ :: s, hm, hc, h => by
+      simp only [ofSpine, Row.allRowVars, List.count_append] at hc
+      simp only [sVarSeq] at hm
+      have hpos : 0 < (Row.allRowVars (ofSpine s)).count β :=
+        List.count_pos_iff.mpr (mem_allRowVars_of_sSorted (sVarSeq_mem_sSorted s hm))
+      simp only [renameVar, sSorted, List.mem_append, List.mem_cons, List.mem_nil_iff,
+        or_false] at h
+      rcases h with (h | h) | h
+      · cases h
+      · have : 0 < (Ty.allRowVars τ).count β :=
+          List.count_pos_iff.mpr (Ty.mem_allRowVars_of_sortedFtv τ h)
+        omega
+      · exact renameVar_sole hne s hm (by omega) h
+
+-- ⊢  the host's own binding β ≔ (l:τ | β′) is good over the problem plus β′
+theorem Sol.good_hostBind {B : Type} {V : List (Srt × TyVar)} {β β' : TyVar} {l : Label}
+    {τ : Ty B} (hβ : (.row, β) ∈ V) (hτ : Ty.sortedFtv τ ⊆ V)
+    (hnot : β ∉ Ty.allRowVars τ) (hne : β ≠ β') :
+    (⟨[], [(β, .cat (.sing l τ) (.var β'))], []⟩ : Sol B).Good (V ++ [(.row, β')]) := by
+  have hdom : ∀ x, x ∈ Sol.domS (⟨[], [(β, .cat (.sing l τ) (.var β'))], []⟩ : Sol B) →
+      x = (.row, β) := by
+    intro x hx; simpa [Sol.domS] using hx
+  refine ⟨fun x hx => by rw [hdom x hx]; exact List.mem_append_left _ hβ,
+          fun x hx => ?_, fun p hp => by simp at hp,
+          fun p hp q hq _ => by rw [List.mem_singleton.mp hp, List.mem_singleton.mp hq],
+          fun p hp => by simp at hp⟩
+  rcases hx with ⟨p, hp, -⟩ | ⟨p, hp, hx⟩ | ⟨p, hp, -⟩
+  · simp at hp
+  · obtain rfl := List.mem_singleton.mp hp
+    simp only [Row.sortedFtv, List.mem_append, List.mem_singleton] at hx
+    rcases hx with hx | rfl
+    · refine ⟨List.mem_append_left _ (hτ hx), fun hd => ?_⟩
+      rw [hdom x hd] at hx
+      exact hnot (Ty.mem_allRowVars_of_sortedFtv τ hx)
+    · refine ⟨List.mem_append_right _ List.mem_cons_self, fun hd => ?_⟩
+      exact hne (Prod.mk.inj (hdom _ hd)).2.symm
+  · simp at hp
+
 ------------------------- THE INDUCTION ----------------------------------------
 
 -- The two type-sort shapes on which `unifyTyF` recurses, as a Bool, so the
@@ -822,17 +1019,97 @@ theorem tyRec_true {B : Type} {τ τ' : Ty B} (h : tyRec τ τ' = true) :
   · exact .inl ⟨_, _, _, _, rfl, rfl⟩
   · exact .inr ⟨_, _, rfl, rfl⟩
 
--- ⊢  EVERY SUCCESS IS GOOD, over the problem's own tagged variables, at both
---    sorts. The shape is `unifyM_bounded`'s (Completeness.lean); what is new is
---    the arm, where `clears` shows the residual avoids the first stage's keys,
---    which is exactly the side condition `Sol.Good.comp` needs.
+-- ⊢  U-HOST'S RESIDUAL: inside the problem plus β′, and clear of β — `t₁`
+--    never mentions it, and on the host side SOLE OCCURRENCE leaves nothing for
+--    the rename to miss. β itself is a problem variable, so not the draw β′.
+theorem host_residual {B : Type} {S : Supply} {u₁ u₂ : List (Atom B)} {β : TyVar}
+    {l : Label} {τ : Ty B} {t₁ t₂ : List (Atom B)}
+    (hB : Below S (sSorted u₁ ++ sSorted u₂))
+    (he : hostL S u₁ u₂ = some (β, l, τ, t₁, t₂)) :
+    (.row, β) ∈ sSorted u₁ ++ sSorted u₂ ∧ β ≠ S.fresh.1 ∧
+    ∀ z ∈ sSorted t₁ ++ sSorted t₂,
+      z ∈ (sSorted u₁ ++ sSorted u₂) ++ [(.row, S.fresh.1)] ∧ z ≠ (.row, β) := by
+  obtain ⟨hs1, ⟨⟨rest, hvv, -⟩, -⟩, ht₁, hcnt, hren⟩ := hostL_spec he
+  have hβm : β ∈ sVarSeq u₂ := by rw [hvv]; exact List.mem_cons_self
+  have hβV : (.row, β) ∈ sSorted u₁ ++ sSorted u₂ :=
+    List.mem_append_right _ (sVarSeq_mem_sSorted u₂ hβm)
+  have hne : β ≠ S.fresh.1 := fun hh => by
+    have := hB _ hβV
+    simp only [hh, Supply.fresh, natName_length] at this
+    exact Nat.lt_irrefl _ this
+  refine ⟨hβV, hne, fun z hz => ?_⟩
+  rcases List.mem_append.mp hz with hz | hz
+  · refine ⟨List.mem_append_left _ (List.mem_append_left _
+      (by rw [hs1]; exact List.mem_append_right _ hz)), fun hd => ?_⟩
+    rw [hd] at hz
+    exact ht₁ (mem_allRowVars_of_sSorted hz)
+  · rw [hren] at hz
+    refine ⟨?_, fun hd => ?_⟩
+    · rcases sSorted_renameVar β S.fresh.1 u₂ hz with rfl | hz'
+      · exact List.mem_append_right _ List.mem_cons_self
+      · exact List.mem_append_left _ (List.mem_append_right _ hz')
+    · rw [hd] at hz
+      exact renameVar_sole hne u₂ hβm hcnt hz
+
+-- ⊢  U-HOST'S CASE, either orientation (the residual call is on (x, y)).
+--    The host's binding is good over the problem plus β′; the residual avoids
+--    β (`host_residual`), so `good_comp_fresh` composes.
+theorem host_good {B : Type} [DecidableEq B] {fuel : Nat}
+    (ih : ∀ (S : Supply) (u₁ u₂ : List (Atom B)) {s : Sol B} {S' : Supply},
+      Below S (sSorted u₁ ++ sSorted u₂) → unifySpineMF S fuel u₁ u₂ = .success s S' →
+      ∃ R, FreshIn S S' R ∧ s.Good (sSorted u₁ ++ sSorted u₂ ++ R))
+    {S : Supply} {u₁ u₂ : List (Atom B)} {β : TyVar} {l : Label} {τ : Ty B}
+    {t₁ t₂ x y : List (Atom B)} {s : Sol B} {S' : Supply}
+    (hB : Below S (sSorted u₁ ++ sSorted u₂))
+    (he : hostL S u₁ u₂ = some (β, l, τ, t₁, t₂))
+    (hxy : (x = t₁ ∧ y = t₂) ∨ (x = t₂ ∧ y = t₁))
+    (h : hostResM S β l τ (unifySpineMF S.fresh.2 fuel x y) = .success s S') :
+    ∃ R, FreshIn S S' R ∧ s.Good (sSorted u₁ ++ sSorted u₂ ++ R) := by
+  obtain ⟨s₀, hr, rfl⟩ := hostResM_success h
+  obtain ⟨hs1, ⟨-, -, hnot, -⟩, -⟩ := hostL_spec he
+  obtain ⟨hβV, hne, hres⟩ := host_residual hB he
+  have hτV : Ty.sortedFtv τ ⊆ sSorted u₁ ++ sSorted u₂ := fun z hz =>
+    List.mem_append_left _ (by rw [hs1]; exact List.mem_append_left _ hz)
+  have hdom : ∀ z, z ∈ (⟨[], [(β, .cat (.sing l τ) (.var S.fresh.1))], []⟩ : Sol B).domS →
+      z = (.row, β) := by
+    intro z hz; simpa [Sol.domS] using hz
+  have hR' : ∀ z ∈ sSorted x ++ sSorted y,
+      z ∈ (sSorted u₁ ++ sSorted u₂) ++ [(.row, S.fresh.1)] ∧
+      z ∉ (⟨[], [(β, .cat (.sing l τ) (.var S.fresh.1))], []⟩ : Sol B).domS := by
+    have hR : ∀ z ∈ sSorted t₁ ++ sSorted t₂,
+        z ∈ (sSorted u₁ ++ sSorted u₂) ++ [(.row, S.fresh.1)] ∧
+        z ∉ (⟨[], [(β, .cat (.sing l τ) (.var S.fresh.1))], []⟩ : Sol B).domS :=
+      fun z hz => ⟨(hres z hz).1, fun hd => (hres z hz).2 (hdom z hd)⟩
+    rcases hxy with ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩
+    · exact hR
+    · exact fun z hz => hR z (append_sub_swap (fun _ h => h) hz)
+  have hS₁ : S.next ≤ S.fresh.2.next := Nat.le_succ _
+  have hS' : S.fresh.2.next ≤ S'.next := (unifyM_supply_mono fuel).2 _ _ _ hr
+  have hf₁ : FreshIn S S.fresh.2 [(.row, S.fresh.1)] := by
+    intro z hz
+    obtain rfl := List.mem_singleton.mp hz
+    simp only [Supply.fresh, natName_length]
+    exact ⟨Nat.le_refl _, Nat.lt_succ_self _, trivial⟩
+  obtain ⟨R₀, hf₀, g₀⟩ :=
+    ih S.fresh.2 x y (Below.residual hB hS₁ hf₁ (fun z hz => (hR' z hz).1)) hr
+  obtain ⟨hf, g⟩ := Sol.good_comp_fresh hB hS₁ hS' hf₁ hf₀
+    (Sol.good_hostBind hβV hτV hnot hne) g₀ hR'
+  exact ⟨_, hf, g⟩
+
+-- ⊢  EVERY SUCCESS IS GOOD, over the problem's own tagged variables plus the
+--    names the run drew, at both sorts — PROVIDED the supply starts above the
+--    problem (`Below`). The proviso is not bookkeeping: a problem variable named
+--    like the next draw could be bound by an early stage and then mentioned by
+--    U-host's β′, and the solution would not be applied.
 theorem unifyM_good {B : Type} [DecidableEq B] (fuel : Nat) :
     (∀ (S : Supply) (τ τ' : Ty B) {s : Sol B} {S' : Supply},
+        Below S (Ty.sortedFtv τ ++ Ty.sortedFtv τ') →
         unifyTyF S fuel τ τ' = .success s S' →
-        s.Good (Ty.sortedFtv τ ++ Ty.sortedFtv τ')) ∧
+        ∃ R, FreshIn S S' R ∧ s.Good (Ty.sortedFtv τ ++ Ty.sortedFtv τ' ++ R)) ∧
     (∀ (S : Supply) (s₁ s₂ : List (Atom B)) {s : Sol B} {S' : Supply},
+        Below S (sSorted s₁ ++ sSorted s₂) →
         unifySpineMF S fuel s₁ s₂ = .success s S' →
-        s.Good (sSorted s₁ ++ sSorted s₂)) := by
+        ∃ R, FreshIn S S' R ∧ s.Good (sSorted s₁ ++ sSorted s₂ ++ R)) := by
   have hbL : ∀ (S : Supply) (α : TyVar) (τ : Ty B) {s : Sol B} {S' : Supply},
       bindTy S α τ = .success s S' → s.Good (Ty.sortedFtv (Ty.var (B := B) α) ++ Ty.sortedFtv τ) :=
     fun S α τ s S' h => Sol.good_bindTy h
@@ -934,41 +1211,58 @@ theorem unifyM_good {B : Type} [DecidableEq B] (fuel : Nat) :
         | rcd ρ₂ => simp [tyRec] at hrec
   induction fuel with
   | zero =>
-      refine ⟨fun S τ τ' s S' h => ?_, fun S s₁ s₂ s S' h => ?_⟩
+      refine ⟨fun S τ τ' s S' _ h => ?_, fun S s₁ s₂ s S' _ h => ?_⟩
       · cases hrec : tyRec τ τ' with
-        | false => exact hflat 0 S τ τ' hrec h
+        | false => exact (hflat 0 S τ τ' hrec h).noFresh S S'
         | true =>
           rcases tyRec_true hrec with ⟨a₁, b₁, a₂, b₂, rfl, rfl⟩ | ⟨ρ₁, ρ₂, rfl, rfl⟩
           · cases h
           · cases h
       · cases s₁ with
-        | nil => exact hnilL S s₂ 0 h
+        | nil => exact (hnilL S s₂ 0 h).noFresh S S'
         | cons a s₁ =>
           cases s₂ with
-          | nil => exact hnilR S a s₁ 0 h
+          | nil => exact (hnilR S a s₁ 0 h).noFresh S S'
           | cons b s₂ => cases h
   | succ fuel ih =>
+      -- a STAGED composite: the first stage under `Q`, the residual under the
+      -- first stage's solution. Shared by the eq-emitting arms and `fn`.
+      have stage : ∀ (S S₁ S' : Supply) (Q Q₁ Res : List (Srt × TyVar)) (s₁ s₂ : Sol B),
+          Below S Q → Q₁ ⊆ Q → S.next ≤ S₁.next → S₁.next ≤ S'.next →
+          (∃ R, FreshIn S S₁ R ∧ s₁.Good (Q₁ ++ R)) →
+          (∀ R, s₁.Good (Q ++ R) → ∀ x ∈ Res, x ∈ Q ++ R ∧ x ∉ s₁.domS) →
+          (∀ R, FreshIn S S₁ R → (∀ x ∈ Res, x ∈ Q ++ R) →
+            ∃ R', FreshIn S₁ S' R' ∧ s₂.Good (Res ++ R')) →
+          ∃ R, FreshIn S S' R ∧ (s₂.comp s₁).Good (Q ++ R) := by
+        intro S S₁ S' Q Q₁ Res s₁ s₂ hB hQ hS₁ hS' ⟨R₁, hf₁, g₁⟩ hclr hrec
+        have g₁' := g₁.freshMono hQ
+        have hR := hclr R₁ g₁'
+        obtain ⟨R₂, hf₂, g₂⟩ := hrec R₁ hf₁ (fun x hx => (hR x hx).1)
+        obtain ⟨hf, g⟩ := Sol.good_comp_fresh hB hS₁ hS' hf₁ hf₂ g₁' g₂ hR
+        exact ⟨_, hf, g⟩
       have arm : ∀ (S : Supply) (τ τ' : Ty B) (t₁ t₂ : List (Atom B))
           (Q : List (Srt × TyVar)) {s : Sol B} {S' : Supply},
           Ty.sortedFtv τ ++ Ty.sortedFtv τ' ⊆ Q → sSorted t₁ ++ sSorted t₂ ⊆ Q →
+          Below S Q →
           ((unifyTyF S fuel τ τ').seq fun θ' S'' =>
               unifySpineMF S'' fuel (sApplySubst θ' t₁) (sApplySubst θ' t₂))
-            = .success s S' → s.Good Q := by
-        intro S τ τ' t₁ t₂ Q s S' hQt hQr h
+            = .success s S' → ∃ R, FreshIn S S' R ∧ s.Good (Q ++ R) := by
+        intro S τ τ' t₁ t₂ Q s S' hQt hQr hB h
         obtain ⟨s₁, S₁, s₂, hty, hrow, rfl⟩ := UResM.seq_success h
-        have g₁ := (ih.1 S τ τ' hty).mono hQt
-        have hR : ∀ x ∈ sSorted (sApplySubst s₁.toSubst t₁) ++
-            sSorted (sApplySubst s₁.toSubst t₂), x ∈ Q ∧ x ∉ s₁.domS := by
-          intro x hx
-          rcases List.mem_append.mp hx with hx | hx
-          · exact g₁.clears_spine (fun _ hy => hQr (List.mem_append_left _ hy)) hx
-          · exact g₁.clears_spine (fun _ hy => hQr (List.mem_append_right _ hy)) hx
-        have g₂ := ih.2 S₁ _ _ hrow
-        exact g₁.comp (g₂.mono fun x hx => (hR x hx).1)
-          (fun x hx => (hR x (g₂.dom x hx)).2) (fun x hx => (hR x (g₂.rng x hx).1).2)
-      refine ⟨fun S τ τ' s S' h => ?_, fun S s₁ s₂ s S' h => ?_⟩
+        exact stage S S₁ S' Q _ _ s₁ s₂ hB hQt
+          ((unifyM_supply_mono fuel).1 _ _ _ hty) ((unifyM_supply_mono fuel).2 _ _ _ hrow)
+          (ih.1 S τ τ' (fun x hx => hB x (hQt hx)) hty)
+          (fun R g₁ x hx => by
+            rcases List.mem_append.mp hx with hx | hx
+            · exact g₁.clears_spine (fun _ hy => List.mem_append_left _
+                (hQr (List.mem_append_left _ hy))) hx
+            · exact g₁.clears_spine (fun _ hy => List.mem_append_left _
+                (hQr (List.mem_append_right _ hy))) hx)
+          (fun R hf₁ hR => ih.2 S₁ _ _
+            (Below.residual hB ((unifyM_supply_mono fuel).1 _ _ _ hty) hf₁ hR) hrow)
+      refine ⟨fun S τ τ' s S' hB h => ?_, fun S s₁ s₂ s S' hB h => ?_⟩
       · cases hrec : tyRec τ τ' with
-        | false => exact hflat (fuel + 1) S τ τ' hrec h
+        | false => exact (hflat (fuel + 1) S τ τ' hrec h).noFresh S S'
         | true =>
         rcases tyRec_true hrec with ⟨a₁, b₁, a₂, b₂, rfl, rfl⟩ | ⟨ρ₁, ρ₂, rfl, rfl⟩
         · replace h : ((unifyTyF S fuel a₁ a₂).seq fun θ' S'' =>
@@ -981,146 +1275,181 @@ theorem unifyM_good {B : Type} [DecidableEq B] (fuel : Nat) :
             rcases hx with hx | hx
             · exact .inl (.inl hx)
             · exact .inr (.inl hx)
-          have g₁ := (ih.1 S a₁ a₂ hty).mono hQ
-          have hR : ∀ x ∈ Ty.sortedFtv (b₁.applySubst s₁.toSubst) ++
-              Ty.sortedFtv (b₂.applySubst s₁.toSubst),
-              x ∈ Ty.sortedFtv (.fn a₁ b₁) ++ Ty.sortedFtv (.fn a₂ b₂) ∧
-              x ∉ s₁.domS := by
-            intro x hx
-            rcases List.mem_append.mp hx with hx | hx
-            · exact g₁.clears_ty (fun y hy => by
-                simp only [Ty.sortedFtv, List.mem_append]; exact .inl (.inr hy)) hx
-            · exact g₁.clears_ty (fun y hy => by
-                simp only [Ty.sortedFtv, List.mem_append]; exact .inr (.inr hy)) hx
-          have g₂ := ih.1 S₁ _ _ hrow
-          exact g₁.comp (g₂.mono fun x hx => (hR x hx).1)
-            (fun x hx => (hR x (g₂.dom x hx)).2) (fun x hx => (hR x (g₂.rng x hx).1).2)
+          exact stage S S₁ S' _ _ _ s₁ s₂ hB hQ
+            ((unifyM_supply_mono fuel).1 _ _ _ hty) ((unifyM_supply_mono fuel).1 _ _ _ hrow)
+            (ih.1 S a₁ a₂ (fun x hx => hB x (hQ hx)) hty)
+            (fun R g₁ x hx => by
+              rcases List.mem_append.mp hx with hx | hx
+              · exact g₁.clears_ty (fun y hy => List.mem_append_left _ (by
+                  simp only [Ty.sortedFtv, List.mem_append]; exact .inl (.inr hy))) hx
+              · exact g₁.clears_ty (fun y hy => List.mem_append_left _ (by
+                  simp only [Ty.sortedFtv, List.mem_append]; exact .inr (.inr hy))) hx)
+            (fun R hf₁ hR => ih.1 S₁ _ _
+              (Below.residual hB ((unifyM_supply_mono fuel).1 _ _ _ hty) hf₁ hR) hrow)
         · replace h : unifySpineMF S fuel ρ₁.toSpine ρ₂.toSpine = .success s S' := h
-          have g := ih.2 S _ _ h
-          exact g.mono (fun x hx => by
+          have hsub : sSorted ρ₁.toSpine ++ sSorted ρ₂.toSpine ⊆
+              Ty.sortedFtv (.rcd ρ₁) ++ Ty.sortedFtv (.rcd ρ₂) := fun x hx => by
             rcases List.mem_append.mp hx with hx | hx
             · exact List.mem_append_left _ (sSorted_toSpine _ _ hx)
-            · exact List.mem_append_right _ (sSorted_toSpine _ _ hx))
+            · exact List.mem_append_right _ (sSorted_toSpine _ _ hx)
+          obtain ⟨R, hf, g⟩ := ih.2 S _ _ (fun x hx => hB x (hsub hx)) h
+          exact ⟨R, hf, g.freshMono hsub⟩
       · cases s₁ with
-        | nil => exact hnilL S s₂ _ h
+        | nil => exact (hnilL S s₂ _ h).noFresh S S'
         | cons a s₁ =>
           cases s₂ with
-          | nil => exact hnilR S a s₁ _ h
+          | nil => exact (hnilR S a s₁ _ h).noFresh S S'
           | cons b s₂ =>
             unfold unifySpineMF at h
             cases hsl : stripL (a :: s₁) (b :: s₂) with
             | some p =>
               obtain ⟨t₁, t₂⟩ := p; simp only [hsl] at h
-              exact (ih.2 S t₁ t₂ h).mono
-                (sSorted_sub_pair (stripL_atoms hsl).1 (stripL_atoms hsl).2)
+              have hsub := sSorted_sub_pair (stripL_atoms hsl).1 (stripL_atoms hsl).2
+              obtain ⟨R, hf, g⟩ := ih.2 S t₁ t₂ (fun x hx => hB x (hsub hx)) h
+              exact ⟨R, hf, g.freshMono hsub⟩
             | none =>
             cases hsr : stripR (a :: s₁) (b :: s₂) with
             | some p =>
               obtain ⟨t₁, t₂⟩ := p; simp only [hsl, hsr] at h
-              exact (ih.2 S t₁ t₂ h).mono
-                (sSorted_sub_pair (stripR_atoms hsr).1 (stripR_atoms hsr).2)
+              have hsub := sSorted_sub_pair (stripR_atoms hsr).1 (stripR_atoms hsr).2
+              obtain ⟨R, hf, g⟩ := ih.2 S t₁ t₂ (fun x hx => hB x (hsub hx)) h
+              exact ⟨R, hf, g.freshMono hsub⟩
             | none =>
             cases hv1 : solveVarM S (a :: s₁) (b :: s₂) with
             | some r =>
               simp only [hsl, hsr, hv1] at h
-              exact Sol.good_solveVarM (hv1.trans (congrArg some h))
+              exact (Sol.good_solveVarM (hv1.trans (congrArg some h))).noFresh S S'
             | none =>
             cases hv2 : solveVarM S (b :: s₂) (a :: s₁) with
             | some r =>
               simp only [hsl, hsr, hv1, hv2] at h
-              exact (Sol.good_solveVarM (hv2.trans (congrArg some h))).mono
+              exact ((Sol.good_solveVarM (hv2.trans (congrArg some h))).mono
                 (fun x hx => by
                   rcases List.mem_append.mp hx with hx | hx
                   · exact List.mem_append_right _ hx
-                  · exact List.mem_append_left _ hx)
+                  · exact List.mem_append_left _ hx)).noFresh S S'
             | none =>
             cases hml : matchL (a :: s₁) (b :: s₂) with
             | some p =>
               obtain ⟨τ0, τ0', t₁, t₂⟩ := p; simp only [hsl, hsr, hv1, hv2, hml] at h
               exact arm S τ0 τ0' t₁ t₂ _ (matchL_atoms hml).ty_sub
-                (matchL_atoms hml).res_sub h
+                (matchL_atoms hml).res_sub hB h
             | none =>
             cases hml2 : matchL (b :: s₂) (a :: s₁) with
             | some p =>
               obtain ⟨τ0', τ0, t₂, t₁⟩ := p; simp only [hsl, hsr, hv1, hv2, hml, hml2] at h
               exact arm S τ0 τ0' t₁ t₂ _ (matchL_atoms hml2).swap.ty_sub
-                (matchL_atoms hml2).swap.res_sub h
+                (matchL_atoms hml2).swap.res_sub hB h
             | none =>
             cases hmr : matchR (a :: s₁) (b :: s₂) with
             | some p =>
               obtain ⟨τ0, τ0', t₁, t₂⟩ := p
               simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr] at h
               exact arm S τ0 τ0' t₁ t₂ _ (matchR_atoms hmr).ty_sub
-                (matchR_atoms hmr).res_sub h
+                (matchR_atoms hmr).res_sub hB h
             | none =>
             cases hmr2 : matchR (b :: s₂) (a :: s₁) with
             | some p =>
               obtain ⟨τ0', τ0, t₂, t₁⟩ := p
               simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2] at h
               exact arm S τ0 τ0' t₁ t₂ _ (matchR_atoms hmr2).swap.ty_sub
-                (matchR_atoms hmr2).swap.res_sub h
+                (matchR_atoms hmr2).swap.res_sub hB h
             | none =>
             cases hg : groundMatch (a :: s₁) (b :: s₂) with
             | some p =>
               obtain ⟨τ0, τ0', t₁, t₂⟩ := p
               simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg] at h
               exact arm S τ0 τ0' t₁ t₂ _ (groundMatch_atoms hg).ty_sub
-                (groundMatch_atoms hg).res_sub h
+                (groundMatch_atoms hg).res_sub hB h
             | none =>
             cases hg2 : groundMatch (b :: s₂) (a :: s₁) with
             | some p =>
               obtain ⟨τ0', τ0, t₂, t₁⟩ := p
               simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2] at h
               exact arm S τ0 τ0' t₁ t₂ _ (groundMatch_atoms hg2).swap.ty_sub
-                (groundMatch_atoms hg2).swap.res_sub h
+                (groundMatch_atoms hg2).swap.res_sub hB h
             | none =>
             cases hpc : projClash (a :: s₁) (b :: s₂) with
             | true =>
               simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, hpc] at h
               cases h
             | false =>
-              simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, hpc] at h
+            cases hh1 : hostL S (a :: s₁) (b :: s₂) with
+            | some p =>
+              obtain ⟨β0, l0, τ0, t₁, t₂⟩ := p
+              simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, hpc, hh1,
+                Bool.false_eq_true, ite_false] at h
+              exact host_good ih.2 hB hh1 (.inl ⟨rfl, rfl⟩) h
+            | none =>
+            cases hh2 : hostL S (b :: s₂) (a :: s₁) with
+            | some p =>
+              obtain ⟨β0, l0, τ0, t₂, t₁⟩ := p
+              simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, hpc, hh1, hh2,
+                Bool.false_eq_true, ite_false] at h
+              obtain ⟨R, hf, g⟩ := host_good ih.2
+                (fun x hx => hB x (append_sub_swap (fun _ h => h) hx)) hh2 (.inr ⟨rfl, rfl⟩) h
+              exact ⟨R, hf, g.freshMono (append_sub_swap (fun _ h => h))⟩
+            | none =>
+              simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, hpc, hh1, hh2,
+                Bool.false_eq_true, ite_false] at h
               cases h
 
 ------------------------- AT THE ENTRY POINTS ----------------------------------
 
+-- ⊢  a problem's own variables are below its local supply
+theorem mem_sFtv_of_sSorted {B : Type} {x : Srt × TyVar} {s : List (Atom B)}
+    (h : x ∈ sSorted s) : x.2 ∈ sFtv s := by
+  rw [sFtv_ofSpine]
+  exact Row.mem_ftv_of_mem_sortedFtv _ (by rw [sortedFtv_ofSpine]; exact h)
+
+theorem below_localSupply {B : Type} (s₁ s₂ : List (Atom B)) :
+    Below (localSupply s₁ s₂) (sSorted s₁ ++ sSorted s₂) := fun x hx => by
+  show x.2.length < lenBound (sFtv s₁ ++ sFtv s₂) + 1
+  refine Nat.lt_succ_of_le (length_le_lenBound ?_)
+  rcases List.mem_append.mp hx with hx | hx
+  · exact List.mem_append_left _ (mem_sFtv_of_sSorted hx)
+  · exact List.mem_append_right _ (mem_sFtv_of_sSorted hx)
+
 theorem unifyRowM_good {B : Type} [DecidableEq B] {fuel : Nat} {ρ₁ ρ₂ : Row B}
     {s : Sol B} {S' : Supply} (h : unifyRowM fuel ρ₁ ρ₂ = .success s S') :
-    s.Good (Row.sortedFtv ρ₁ ++ Row.sortedFtv ρ₂) := by
+    ∃ R, FreshIn (localSupply ρ₁.toSpine ρ₂.toSpine) S' R ∧
+      s.Good (Row.sortedFtv ρ₁ ++ Row.sortedFtv ρ₂ ++ R) := by
   unfold unifyRowM unifySpineM at h
-  have g := (unifyM_good fuel).2 _ _ _ h
-  exact g.mono (fun x hx => by
+  obtain ⟨R, hf, g⟩ := (unifyM_good fuel).2 _ _ _ (below_localSupply _ _) h
+  exact ⟨R, hf, g.freshMono (fun x hx => by
     rcases List.mem_append.mp hx with hx | hx
     · exact List.mem_append_left _ (sSorted_toSpine _ _ hx)
-    · exact List.mem_append_right _ (sSorted_toSpine _ _ hx))
+    · exact List.mem_append_right _ (sSorted_toSpine _ _ hx))⟩
 
 -- ⊢  `UnifyWF` and `UnifyAcyclic` (State.lean), no longer open
 theorem unifyWF (B : Type) [DecidableEq B] : UnifyWF B :=
-  fun _ _ _ _ _ h => (unifyRowM_good h).wf
+  fun _ _ _ _ _ h => (unifyRowM_good h).elim fun _ ⟨_, g⟩ => g.wf
 
 theorem unifyAcyclic (B : Type) [DecidableEq B] : UnifyAcyclic B :=
-  fun _ _ _ _ _ h => (unifyRowM_good h).wf.acyclic
+  fun _ _ _ _ _ h => (unifyRowM_good h).elim fun _ ⟨_, g⟩ => g.wf.acyclic
 
 -- ⊢  the returned solution is fully applied, at both entry points the
 --    inference layer uses (`SolveTy` / `SolveRow` call `unifyTyF` /
---    `unifySpineMF` on the state's supply)
+--    `unifySpineMF` on a supply above the problem)
 theorem unifyTyF_success_applied {B : Type} [DecidableEq B] {S : Supply} {fuel : Nat}
-    {τ τ' : Ty B} {s : Sol B} {S' : Supply} (h : unifyTyF S fuel τ τ' = .success s S') :
-    s.Applied := ((unifyM_good fuel).1 _ _ _ h).applied
+    {τ τ' : Ty B} {s : Sol B} {S' : Supply} (hB : Below S (Ty.sortedFtv τ ++ Ty.sortedFtv τ'))
+    (h : unifyTyF S fuel τ τ' = .success s S') : s.Applied :=
+  ((unifyM_good fuel).1 _ _ _ hB h).elim fun _ ⟨_, g⟩ => g.applied
 
 theorem unifySpineMF_success_applied {B : Type} [DecidableEq B] {S : Supply} {fuel : Nat}
-    {s₁ s₂ : List (Atom B)} {s : Sol B} {S' : Supply}
+    {s₁ s₂ : List (Atom B)} {s : Sol B} {S' : Supply} (hB : Below S (sSorted s₁ ++ sSorted s₂))
     (h : unifySpineMF S fuel s₁ s₂ = .success s S') : s.Applied :=
-  ((unifyM_good fuel).2 _ _ _ h).applied
+  ((unifyM_good fuel).2 _ _ _ hB h).elim fun _ ⟨_, g⟩ => g.applied
 
 theorem unifyTyF_success_wf {B : Type} [DecidableEq B] {S : Supply} {fuel : Nat}
-    {τ τ' : Ty B} {s : Sol B} {S' : Supply} (h : unifyTyF S fuel τ τ' = .success s S') :
-    s.WF := ((unifyM_good fuel).1 _ _ _ h).wf
+    {τ τ' : Ty B} {s : Sol B} {S' : Supply} (hB : Below S (Ty.sortedFtv τ ++ Ty.sortedFtv τ'))
+    (h : unifyTyF S fuel τ τ' = .success s S') : s.WF :=
+  ((unifyM_good fuel).1 _ _ _ hB h).elim fun _ ⟨_, g⟩ => g.wf
 
 theorem unifySpineMF_success_wf {B : Type} [DecidableEq B] {S : Supply} {fuel : Nat}
-    {s₁ s₂ : List (Atom B)} {s : Sol B} {S' : Supply}
+    {s₁ s₂ : List (Atom B)} {s : Sol B} {S' : Supply} (hB : Below S (sSorted s₁ ++ sSorted s₂))
     (h : unifySpineMF S fuel s₁ s₂ = .success s S') : s.WF :=
-  ((unifyM_good fuel).2 _ _ _ h).wf
+  ((unifyM_good fuel).2 _ _ _ hB h).elim fun _ ⟨_, g⟩ => g.wf
 
 -- ⊢  NON-VACUITY: a success is never an unsatisfiable solution. Its own
 --    substitution satisfies it — and therefore UNIFIES the problem, by
@@ -1128,16 +1457,17 @@ theorem unifySpineMF_success_wf {B : Type} [DecidableEq B] {S : Supply} {fuel : 
 --    success on an unsolvable input.
 theorem unifyRowM_success_sat {B : Type} [DecidableEq B] {fuel : Nat} {ρ₁ ρ₂ : Row B}
     {s : Sol B} {S' : Supply} (h : unifyRowM fuel ρ₁ ρ₂ = .success s S') :
-    Sol.Sat s.toSubst s := (unifyRowM_good h).sat
+    Sol.Sat s.toSubst s := (unifyRowM_good h).elim fun _ ⟨_, g⟩ => g.sat
 
 theorem unifyRowM_success_unifies {B : Type} [DecidableEq B] {fuel : Nat}
     {ρ₁ ρ₂ : Row B} {s : Sol B} {S' : Supply} (h : unifyRowM fuel ρ₁ ρ₂ = .success s S') :
     Unifies s.toSubst ρ₁ ρ₂ := unifyRowM_success_sound h (unifyRowM_success_sat h)
 
 theorem unifyTyF_success_unifies {B : Type} [DecidableEq B] {S : Supply} {fuel : Nat}
-    {τ τ' : Ty B} {s : Sol B} {S' : Supply} (h : unifyTyF S fuel τ τ' = .success s S') :
-    TyUnifies s.toSubst τ τ' :=
-  (unifyM_success_sound fuel).1 _ _ _ h ((unifyM_good fuel).1 _ _ _ h).sat
+    {τ τ' : Ty B} {s : Sol B} {S' : Supply} (hB : Below S (Ty.sortedFtv τ ++ Ty.sortedFtv τ'))
+    (h : unifyTyF S fuel τ τ' = .success s S') : TyUnifies s.toSubst τ τ' :=
+  (unifyM_success_sound fuel).1 _ _ _ h
+    (((unifyM_good fuel).1 _ _ _ hB h).elim fun _ ⟨_, g⟩ => g.sat)
 
 -- ⊢  …so a success MEANS the problem is solvable, and `s.toSubst` is an mgu of
 --    it: a unifier, and every unifier extends one that meets `s`.

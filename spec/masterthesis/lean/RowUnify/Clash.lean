@@ -124,6 +124,35 @@ theorem tyClash_dispatch {B : Type} [DecidableEq B] {S : Supply} {fuel : Nat}
       | fn _ _ => obtain ⟨_, he, -⟩ := hb; simp only [Ty.applySubst] at he; cases he
       | rcd ρ₂ => exact hrcd ρ₁ ρ₂ rfl rfl
 
+-- THE U-HOST ARM: a clash of the residual is a clash of the problem. Any
+-- unifier extends, at the fresh β′ only, to a unifier of the residual
+-- (`hostL_reflect_fwd`), which the residual's clash rules out.
+theorem host_clash {B : Type} [DecidableEq B] {fuel : Nat}
+    (ih : ∀ (S : Supply) (u₁ u₂ : List (Atom B)),
+      S.Avoids (sFtv u₁ ++ sFtv u₂) → unifySpineMF S fuel u₁ u₂ = .clash →
+      ¬ ∃ θ : TySubst B, Unifies θ (ofSpine u₁) (ofSpine u₂))
+    {S : Supply} {u₁ u₂ : List (Atom B)} {θ : TySubst B}
+    {β : TyVar} {l : Label} {τ : Ty B} {t₁ t₂ x y : List (Atom B)}
+    (hS : S.Avoids (sFtv u₁ ++ sFtv u₂))
+    (he : hostL S u₁ u₂ = some (β, l, τ, t₁, t₂))
+    (hxy : (x = t₁ ∧ y = t₂) ∨ (x = t₂ ∧ y = t₁))
+    (h : hostResM S β l τ (unifySpineMF S.fresh.2 fuel x y) = .clash)
+    (hu : Unifies θ (ofSpine u₁) (ofSpine u₂)) : False := by
+  have hr : unifySpineMF S.fresh.2 fuel x y = .clash := by
+    revert h; cases unifySpineMF S.fresh.2 fuel x y <;> simp [hostResM]
+  have hbV := Supply.fresh_not_mem hS
+  obtain ⟨θ₀, -, hrec0, -⟩ := hostL_reflect_fwd he
+    (fun hm => hbV (List.mem_append_left _ hm)) (fun hm => hbV (List.mem_append_right _ hm)) hu
+  have hsub := hostL_residual_sub (fun _ hx => hx) he
+  have hsub' : (sFtv x ++ sFtv y) ⊆ (S.fresh.1 :: (sFtv u₁ ++ sFtv u₂)) := by
+    rcases hxy with ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩
+    · exact hsub
+    · exact append_sub_swap hsub
+  refine ih S.fresh.2 x y (hS.cons_fresh.mono hsub') hr ⟨θ₀, ?_⟩
+  rcases hxy with ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩
+  · exact hrec0
+  · exact hrec0.symm
+
 -- THE CLASH LEG, both sorts at once. `V` is the problem's own variables at every
 -- call, so the statement stays free of a set parameter; the arms below hand the
 -- enlarged set W to the sub-calls internally.
@@ -368,7 +397,23 @@ theorem unifyM_clash_no_unifier {B : Type} [DecidableEq B] (fuel : Nat) :
             cases hpc : projClash (a :: s₁) (b :: s₂) with
             | true => exact projClash_no_unifier hpc ⟨θ, hu⟩
             | false =>
-              simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, hpc] at h
+            cases hh1 : hostL S (a :: s₁) (b :: s₂) with
+            | some p =>
+              obtain ⟨β0, l0, τ0, t₁, t₂⟩ := p
+              simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, hpc, hh1,
+                Bool.false_eq_true, ite_false] at h
+              exact host_clash ih.2 hS hh1 (.inl ⟨rfl, rfl⟩) h hu
+            | none =>
+            cases hh2 : hostL S (b :: s₂) (a :: s₁) with
+            | some p =>
+              obtain ⟨β0, l0, τ0, t₂, t₁⟩ := p
+              simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, hpc, hh1, hh2,
+                Bool.false_eq_true, ite_false] at h
+              exact host_clash ih.2 (append_sub_swap (fun _ hx => hx) |> hS.mono) hh2
+                (.inr ⟨rfl, rfl⟩) h hu.symm
+            | none =>
+              simp only [hsl, hsr, hv1, hv2, hml, hml2, hmr, hmr2, hg, hg2, hpc, hh1, hh2,
+                Bool.false_eq_true, ite_false] at h
               cases h
 
 -- ≐ᵣ CLASH is SOUND under the mutual driver: a clash verdict means the two rows
