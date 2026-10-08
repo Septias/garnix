@@ -5,7 +5,7 @@ Things to do for algebraic subtyping:
 - Every type needs to be in the _lattice_
 - There needs to be a top and bottom type (such that every element has glb an lup)
 - Distributivity rules τ₁ ∧ (τ₂ ∨ τ₃) == τ₁ ∧ τ₂ ∧ τ₁ ∧ τ₃
-- Meet and Join for every two types τ₁, τ₂
+- Meet and join for every two types τ₁, τ₂
 - Every τ has a complement ¬τ where τ ∧ ¬τ === T and τ ∨ ¬τ === ⊥
 
 == Define Contexts
@@ -17,7 +17,7 @@ Things to do for algebraic subtyping:
 - Simple type rules but they need to be sound
 
 == Define algorithmic typing rules
-- Actually think type vars and constraints
+- Actually, think type vars and constraints
 
 === Bounds
 - Bounds are of the form τ ≤ τ
