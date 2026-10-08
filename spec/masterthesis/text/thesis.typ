@@ -606,13 +606,14 @@ U-bind and U-occurs are stated for a variable on the left and are tried on both 
 
 == Row Unification
 // meta: the rules are not really tanglible for me
-The row pass is a deterministic cascade. Every move it makes is _forced_ — it preserves the solution set of the problem rather than choosing among alternatives — and no move invents structure. @unification-cascade gives the order in which the moves are attempted; the first one whose trigger fires decides the step, and if none fires the configuration is terminal.
+The row pass is a deterministic cascade. Every move it makes is _forced_ — it preserves the solution set of the problem rather than choosing among alternatives. One move, U-host, introduces a fresh variable, and only where the placement of a field is itself forced. @unification-cascade gives the order in which the moves are attempted; the first one whose trigger fires decides the step, and if none fires the configuration is terminal.
 
 #let u_band = (
   exhaust: oklch(95%, 0.025, 250deg),
   cancel: oklch(95%, 0.028, 195deg),
   solve: oklch(95%, 0.03, 155deg),
   matchp: oklch(95%, 0.035, 95deg),
+  host: oklch(95%, 0.03, 330deg),
   give: oklch(94%, 0.012, 285deg),
 )
 #let u_ok = text(fill: oklch(48%, 0.11, 155deg), weight: "bold", "✓")
@@ -728,13 +729,24 @@ The row pass is a deterministic cascade. Every move it makes is _forced_ — it 
         u_go,
       ),
 
-      u_phase("give up", u_band.give, 2),
+      u_phase("clash", u_band.give, 1),
       ..u_step(
         "U-clash",
         [some $l$ with $|s₁|_l > |s₂|_l$ and $s₂$ var-free],
         u_clash,
         u_no,
       ),
+
+      u_phase("host", u_band.host, 1),
+      ..u_step(
+        "U-host",
+        both: true,
+        [leading $l: τ$, the other side has a sole host β],
+        [$[β ≔ (l: τ | β′)]$, recurse],
+        u_go,
+      ),
+
+      u_phase("stuck", u_band.give, 1),
       ..u_step(
         "U-stuck",
         [no move above fires],
@@ -758,7 +770,7 @@ The three matching moves differ in how far they may look for a partner. A _windo
 
 // what does global do here?
 // explain the F-★ step somewhere?
-[No move places a field into a row-variable](this sentenc appears way too often). A field facing only variables on the other side is left where it is, even when a single variable is its only possible host: that placement would be forced, but it is not made, and the configuration is reported as stuck (@incompleteness-forced). The only place where a field is placed into a row-variable is the materialization of spent promises at finalization (@inference), after unification has run. Finally U-clash is a global projection check rather than a per-window one, and U-stuck reports a terminal configuration.
+A field facing only variables on the other side has no partner, but it may have a host. U-host fires on a leading field $l: τ$ when the other side has a _sole host_ β for it: β is the first variable of that side, the side has no l-field and no keyed field, every other variable of the side occurs in τ and so cannot carry the field without containing itself, and β occurs nowhere else in the problem, neither in τ, nor in the rest of the first side, nor in a payload of its own side. Every unifier then places the field at the front of β, so the move is forced. It binds $β ≔ (l: τ | β′)$ for a fresh β′ and continues with the rest of both sides. Since β occurs once, renaming it to β′ on the spine is the same as applying the binding to the whole problem, and the solution stays applied. U-host is stated for the leading end only; its mirror at the trailing end is reported as stuck (@incompleteness-forced). A field demand of a lookup still never enters a row-variable during unification. The only place where it does is the materialization of spent promises at finalization (@inference), after unification has run. Finally U-clash is a global projection check rather than a per-window one, and U-stuck reports a terminal configuration.
 
 #let unification_row = figure(
   caption: "Unification of rows, on spines.",
@@ -768,6 +780,7 @@ The three matching moves differ in how far they may look for a partner. A _windo
       $#type_name("Leading window") "win"_l (s) = (τ, s′)$,
       $#type_name("Trailing window") "win"^R_l (s) = (τ, s′)$,
       $#type_name("Anywhere") "rem"_l (s) = (τ, s′)$,
+      $#type_name("Sole host") "host"_l (τ, t, s) = β$,
     )),
     flexbox(
       derive(
@@ -827,6 +840,15 @@ The three matching moves differ in how far they may look for a partner. A _windo
         $s₁ scripts(≐)_r s₂ ⇝ #u_clash$,
       ),
       derive(
+        "U-host",
+        (
+          $"host"_l (τ, t₁, s₂) = β$,
+          $β′ "fresh"$,
+          $t₁ scripts(≐)_r s₂[β′\/β] ⇝ θ$,
+        ),
+        $(l: τ) · t₁ scripts(≐)_r s₂ ⇝ θ ∘ [β ≔ (l: τ | β′)]$,
+      ),
+      derive(
         "U-stuck",
         ([no rule above applies],),
         $s₁ scripts(≐)_r s₂ ⇝ #u_stuck$,
@@ -837,7 +859,7 @@ The three matching moves differ in how far they may look for a partner. A _windo
 #unification_row <unification-row>
 
 // meta: expand this a bit with interesting explanation of the extra rules
-@unification-row states the moves as rules. They are to be read in the order of @unification-cascade, and U-var-solve, U-var-occurs, U-field-L, U-field-R and U-ground are additionally tried with the two sides exchanged; U-ε-var, U-ε-clash and U-clash are symmetric as stated. Note that no rule ever pushes a field demand into a row-variable: field lookups do not travel through $scripts(≐)_r$, they park as stumps, so row unification never guesses a field into a variable.
+@unification-row states the moves as rules. They are to be read in the order of @unification-cascade, and U-var-solve, U-var-occurs, U-field-L, U-field-R, U-ground and U-host are additionally tried with the two sides exchanged; U-ε-var, U-ε-clash and U-clash are symmetric as stated. Field lookups do not travel through $scripts(≐)_r$, they park as stumps, so row unification never guesses a field into a variable: the field U-host places comes from the other side of the equation, and its host is forced.
 
 #example(name: [Matching, then solving])[
   In $⟨l: γ, α⟩ scripts(≐)_r ⟨l: 𝓫, m: 𝓫⟩$ no side is empty, no variable is shared at an end, and neither side is a lone variable. The leading $l: γ$ finds the partner $l: 𝓫$ in the leading window of the right side, so U-field-L emits $γ ≐ 𝓫 ⇝ [γ ≔ 𝓫]$ and continues with $⟨α⟩ scripts(≐)_r ⟨m: 𝓫⟩$. Now α is a lone variable, and U-var-solve returns $[α ≔ ⟨m: 𝓫⟩]$. The solution is $[γ ≔ 𝓫, α ≔ (m: 𝓫)]$.
@@ -855,13 +877,19 @@ The three matching moves differ in how far they may look for a partner. A _windo
   In $⟨α, β⟩ scripts(≐)_r ⟨l: 𝓫⟩$ no move fires. The left side has no field and no lone variable, the field $l: 𝓫$ has no partner in the empty windows of the left side, U-ground needs a positive count on both sides, and U-clash needs the side with fewer l-fields to be var-free. The verdict is #u_stuck. This is the wand-ambiguity, which has no most general unifier (@prop-irreducible).
 ] <ex-unif-stuck>
 
+#example(name: [A forced host])[
+  In $(l: 𝓫 | α) scripts(≐)_r (m: 𝓫 | β)$ with $l ≠ m$, the spines are $⟨l: 𝓫, α⟩$ and $⟨m: 𝓫, β⟩$. Neither leading field has a partner in the other side's leading window, both sides have variables, and neither side is a lone variable. The right side, however, has no l-field and the single variable β, which occurs nowhere else: β is the sole host of $l: 𝓫$. U-host binds $β ≔ (l: 𝓫 | β′)$ and continues with $⟨α⟩ scripts(≐)_r ⟨m: 𝓫, β′⟩$, which U-var-solve closes with $α ≔ (m: 𝓫 | β′)$. The solution $[β ≔ (l: 𝓫 | β′), α ≔ (m: 𝓫 | β′)]$ is a most general unifier.
+] <ex-unif-host>
+
 The two passes recurse into each other — U-rcd hands a row problem to $scripts(≐)_r$, and U-field-L, U-field-R, U-ground hand a type problem back to $≐$ — [and each cross-call consumes one unit of an explicit budget](no one cares). This makes the definition structurally recursive, [which is what lets the mechanization compute verdicts by `rfl` and check worked examples in the kernel](no one cares again); exhausting the budget is the separate verdict #u_fuel, so the four real verdicts are never an artefact of the bound. Crucially, the type equations a matching move emits are solved on the spot and their solution applied to the residual before the row pass continues. Deferring them instead would make #u_stuck meaningless: an equation must be discharged, or fatal, or itself stuck, never merely postponed.
 
 == Unification Metatheory <unification-metatheory>
 
-#theorem(name: [Termination], lean: "unifyRowM_terminates, unifyM_fuel_mono")[
+#theorem(name: [Termination], lean: "unifyRowM_terminates, unifyM_fuel_mono, unifyM_draws")[
   For all rows ρ₁ and ρ₂ there is a budget at which $⌈ρ₁⌉ scripts(≐)_r ⌈ρ₂⌉$ returns a verdict other than #u_fuel, and every larger budget returns the same verdict.
 ] <thm-unif-term>
+
+The measure is lexicographic in the number of distinct variables of the problem and its size. A cancellation or a pairing returns parts of its input. A move that first solves a type equation and applies the solution to the residual may enlarge the residual, but it removes the variables it bound, and it draws fewer fresh names than it binds variables, so the residual has fewer distinct variables. U-host trades β for β′ and drops a field, which keeps the count and lowers the size. On its own, U-host draws one name for one bound variable; the bound is strict nevertheless, because its residual is never solved without binding a variable, as β′ occurs on one side of it only. The argument requires the drawn names to be new, which holds since the supply starts above the variables of the problem.
 
 A substitution θ _unifies_ ρ₁ and ρ₂ if $θ ρ₁ ≈ θ ρ₂$, and it _satisfies_ a solution Θ if $θ α ≈ θ(Θ α)$ for every binding of Θ.
 
@@ -869,7 +897,7 @@ A substitution θ _unifies_ ρ₁ and ρ₂ if $θ ρ₁ ≈ θ ρ₂$, and it _
   Let $⌈ρ₁⌉ scripts(≐)_r ⌈ρ₂⌉ ⇝ Θ$ and let V be the variables of ρ₁ and ρ₂. Then Θ unifies ρ₁ and ρ₂, and for every unifier θ of ρ₁ and ρ₂ there is a θ′ that agrees with θ on V and satisfies Θ.
 ] <thm-unif-mgu>
 
-The restriction to V is necessary: Θ may introduce fresh variables, on which an arbitrary unifier θ need not agree with any extension of Θ.
+The restriction to V is necessary: Θ may introduce fresh variables, such as the β′ of U-host, on which an arbitrary unifier θ need not agree with any extension of Θ.
 
 #theorem(name: [Failure is sound], lean: "unifyRowM_clash_no_unifier, unifyM_occurs_no_unifier")[
   If $⌈ρ₁⌉ scripts(≐)_r ⌈ρ₂⌉ ⇝ #u_clash$ or $⌈ρ₁⌉ scripts(≐)_r ⌈ρ₂⌉ ⇝ #u_occurs$, then no substitution unifies ρ₁ and ρ₂.
@@ -927,7 +955,7 @@ The inference algorithm is a judgement $Γ; S ⊢ e ⇒ τ; S′$ [that threads 
 @solver-state [fixes the vocabulary](weird wording, again). The state is a quadruple of a sort-respecting substitution θ, a list Δ of parked stumps, a list W of warnings and a record $macron(κ)$ of the sort at which each name was drawn. ⟦S⟧τ applies S's substitution to τ, $S(α)$ reads the sort of α off $macron(κ)$, and $Δ_i$ denotes the parked stumps of $S_i$. A parked stump $⟨α ▷ ρ.l ↓ δ⟩$ is a lookup of l in ρ whose result has been promised to the fresh variable δ, annotated with the row-variable α that blocks it — the variable at which L-var stopped the search. The blocker is what lets the algorithm tell, after a solution has been written, which stumps might now advance. Stumps are ordered by the time they were parked, and warnings record every place a ★ was committed, so that the user learns where the analysis gave up.
 
 //meta: an example for why quiescence is important might be nice
-The state is kept under one invariant, _quiescence_: every stump in Δ is genuinely blocked on the variable it records, $(⟦S⟧ρ).l ↓ #h(0.2em) ? "on" α$. Every solution write can break it — it may solve the very blocker a stump is waiting on — so outside of saturation no equation is solved on its own. The judgement $S ⊢ τ ≐ τ′ ⇝ S′$ runs the unifier of @unification and writes its solution into the state, and $S ⊢ τ ≐ τ′ #st_solve S′$ does so and then _saturates_: it re-examines the stumps the solution made stale until the state is quiescent again.
+The state is kept under one invariant, _quiescence_: every stump in Δ is genuinely blocked on the variable it records, $(⟦S⟧ρ).l ↓ #h(0.2em) ? "on" α$. Every solution write can break it — it may solve the very blocker a stump is waiting on — so outside of saturation no equation is solved on its own. The judgement $S ⊢ τ ≐ τ′ ⇝ S′$ runs the unifier of @unification and writes its solution into the state. The unifier draws its fresh names from the state's supply, advanced past the variables of the problem and those θ binds, so a name drawn by U-host is new to both and θ stays applied. The judgement $S ⊢ τ ≐ τ′ #st_solve S′$ does so and then _saturates_: it re-examines the stumps the solution made stale until the state is quiescent again.
 
 == Inference Rules
 
@@ -1197,7 +1225,7 @@ What is shown is a limit of principal solutions over scoped rows, not of typing:
 
 Two stuck problems do have a most general unifier.
 
-- The _crossfield_ problem $(l: 𝓫 | α) scripts(≐)_r (m: 𝓫 | β)$ is solved by extending each variable with the other side's field, but that is an expansion of a variable and not a forced pairing. The algorithm has no expansion move, since expansion is not forced, and crossfield is therefore stuck. It could be solved by expanding a variable only when it is the unique possible host of the field.
+- The _mirrored crossfield_ problem $(α | l: 𝓫) scripts(≐)_r (β | m: 𝓫)$ has the most general unifier $[β ≔ (β′ | l: 𝓫), α ≔ (β′ | m: 𝓫)]$, the trailing-end image of @ex-unif-host. U-host is stated for the leading end only, so the problem is stuck. The same move at the trailing end would solve it.
 - A stuck equation between the types of two paired fields is reported before the remaining row equation solves the variable it depends on, which masks an existing solution (@prop-masks). Deferring the stuck equation and letting the residual run first would solve this instance, but it abandons the discipline of @unification that every emitted equation is discharged, fatal or stuck on the spot. Whether the resulting algorithm is confluent, that is, whether its verdict is independent of the order in which deferred equations are retried, is open.
 
 #proposition(name: [Stuck masks an mgu], lean: "stuck_masks_mgu")[
@@ -1256,7 +1284,7 @@ The metatheory of this thesis is mechanized in Lean 4. [The development comprise
       ),
       ..lean_row(
         [Unification terminates],
-        "unifyRowM_terminates",
+        "unifyRowM_terminates, unifyM_draws",
         [@unification-metatheory],
       ),
       ..lean_row(
@@ -1278,6 +1306,11 @@ The metatheory of this thesis is mechanized in Lean 4. [The development comprise
         [Occurs is sound],
         "unifyM_occurs_no_unifier",
         [@unification-metatheory],
+      ),
+      ..lean_row(
+        [A sole host is forced],
+        "host_forced, crossfield_success",
+        [@ex-unif-host],
       ),
       ..lean_row(
         [Irreducible problems have no mgu],
@@ -1471,7 +1504,7 @@ and both are instance-closed (`selDynQ_instance_closed`, `rcdDynQ_instance_close
 
 A singleton type is rigid and nullary, like a base type, and the key pass of @fc-unification is flat: two labels unify when they are equal and clash otherwise, and a label variable is bound to the other key. A key is atomic, so U-key-bind needs no occurs check. $⌊k⌋$ against any other head clashes by U-clash.
 
-On rows, the moves of @unification-cascade treat a keyed field as a barrier. U-ε-clash fires on a keyed field as on any field, since the empty spine has no field of any key. U-clash and U-ground count only literal fields and require the other side to be barrier-free, so that $(l: τ) scripts(≐)_r (\${α}: τ′)$ is stuck rather than a clash: $[α ≔ l]$ solves it. An occurrence of a variable next to a keyed field is reported as stuck rather than as an occurs failure, since the [counting argument](not shown, no?) behind U-var-occurs does not account for keys. The only new move pairs keyed fields. U-key-L and U-key-R cancel two keyed fields under the same variable key at the front or the back of both spines and unify their types. They are restricted to the ends of the spines, since a literal field in front of $\${α}: τ$ may carry the label that α becomes. Both moves are forced: by cancellativity, the two sides share the barrier α and their keyed projections begin with τ and τ′ respectively. Keyed fields under different unknown keys stay stuck. $(\${α}: τ) scripts(≐)_r (\${β}: τ′)$ is solved by $[α ≔ β]$ and by $[α ≔ l, β ≔ l]$ for every label l, and the unifiers that identify the keys have no common generalization with those that choose labels. The metatheory of @unification-metatheory holds as stated: success is most general, clash and occurs are sound, and the algorithm terminates.
+On rows, the moves of @unification-cascade treat a keyed field as a barrier. U-ε-clash fires on a keyed field as on any field, since the empty spine has no field of any key. U-clash and U-ground count only literal fields and require the other side to be barrier-free, so that $(l: τ) scripts(≐)_r (\${α}: τ′)$ is stuck rather than a clash: $[α ≔ l]$ solves it. An occurrence of a variable next to a keyed field is reported as stuck rather than as an occurs failure, since the [counting argument](not shown, no?) behind U-var-occurs does not account for keys. U-host does not fire on a side with a keyed field, since its key may become the label of the field to be hosted. The only new move pairs keyed fields. U-key-L and U-key-R cancel two keyed fields under the same variable key at the front or the back of both spines and unify their types. They are restricted to the ends of the spines, since a literal field in front of $\${α}: τ$ may carry the label that α becomes. Both moves are forced: by cancellativity, the two sides share the barrier α and their keyed projections begin with τ and τ′ respectively. Keyed fields under different unknown keys stay stuck. $(\${α}: τ) scripts(≐)_r (\${β}: τ′)$ is solved by $[α ≔ β]$ and by $[α ≔ l, β ≔ l]$ for every label l, and the unifiers that identify the keys have no common generalization with those that choose labels. The metatheory of @unification-metatheory holds as stated: success is most general, clash and occurs are sound, and the algorithm terminates.
 
 === Inference
 

@@ -357,9 +357,11 @@ head(τ₁) ≠ head(τ₂)
 === Row unification  s₁ ≐ᵣ s₂ ⇝ v
 - Every move is forced (solution-set preserving).
 - Tried top-to-bottom
-- No rule pushes a field demand into a var: lookups park as stumps, so *during
-  inference the algorithm never guesses a field into a variable*. Only F-hit
-  does, at finalization, and only for a spent promise
+- No rule pushes a lookup's field demand into a var: lookups park as stumps,
+  so *during inference the algorithm never guesses a field into a variable*.
+  U-host places a field from the other side of the equation, and only into a
+  sole, forced host. F-hit places a lookup's field, at finalization, and only
+  for a spent promise
 
 
 s field-free   vars(s) = β̄
@@ -419,6 +421,16 @@ s₁ ≐ᵣ s₂ ⇝ θ′ ∘ θ
 s₁ ≐ᵣ s₂ ⇝ clash
 
 
+host\_l(τ, t₁, s₂) = β   β′ fresh   t₁ ≐ᵣ s₂[β′/β] ⇝ θ
+------------------------------------------------------- U-host
+(l: τ)·t₁ ≐ᵣ s₂ ⇝ θ ∘ [β ≔ (l: τ | β′)]
+// host\_l(τ, t₁, s₂) = β: β first var of s₂, |s₂|\_l = 0, no keyed field in s₂,
+// every other var of s₂ occurs in τ, β ∉ τ, β ∉ t₁, β occurs once in s₂.
+// Sole occurrence: renaming β ↦ β′ on the spine IS applying the binding, so
+// the solution stays applied. Forced: every unifier puts l: τ at the front of
+// β (host_forced). Leading end only; tried with the sides exchanged.
+
+
 no rule above applies
 ----------------------- U-stuck
 s₁ ≐ᵣ s₂ ⇝ stuck
@@ -442,6 +454,8 @@ fresh α: κ     draw a name at sort κ from the threaded supply
 - Every equation in the A-rules below has to be  *solve-then-saturate*
 
 S ⊢ τ ≐ τ′ ⇝! S′    solve, then re-run wake-up on what the solution staled
+- The unifier starts from the supply advanced past the (substituted) problem
+  and dom θ (`supplyTy`), so U-host's β′ is new to both
 S ⊢ Δ ↝! S′         saturation itself: step on stale stumps until quiescent
 S ⊢ Q ↝\*! S′       A-var's closure, then saturation
 
