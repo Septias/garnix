@@ -151,3 +151,11 @@ We use a custom lookup relation ⟨ρ.l ↓ r⟩ with return values ⟨τ | ⊥ 
 - D-hit up to ≈ (branch `discharge-equiv`, let-review §4.4): χ-correction gone; A-let drops linear-pattern, nodup, independence, disjoint results (P8d needed a fix in LetCase's inhabitation witness: fill with the ★-substituted result). Nested selection, record literal in a spent result, spent result over an unspent one now generalize.
 - A-let in §6 shape: P2 (sorts) and P10 (unsolved) were unused by every proof, dropped; P3-P5 are the filters `letQ`/`letG`; P6 + P9 merged into `LetAdmissible.fresh`; `greatestAlpha` chooses from ftv(⟦S₁⟧τ₁, ⟦S₁⟧Δ₁) (`letCand`)
 - `LetSpent` same-key clause: `q.stump = p.stump` → `Parked.spentAlike` (q spent, results equal after all type vars ↦ ★); witness sends generalized type vars to ★. `λx.{p=(x.l) c; q=(x.l) c}` now generalizes
+## Real-world Nix (`lean/NixSuite.lean`)
+- 14 `testdata/eval-okay-*` hand-translated, run through `runF`; every typed result agrees with `.exp`
+- Works: `//` chains, nested attrpaths, `inherit (e)`, non-recursive `rec`, shadowing, `or` chains (also a missing intermediate), first-class keys
+- Pattern defaults `{y ? d}@s` ↦ `(s ‖ {y = d}).y`; `patterns.nix` generalizes `h` over two row shapes
+- Opaque operators (`+`, `if`, `?`, lists, interpolation) as TUPLE records, not λ-holes: a λ-hole enters Γ and blocks let-generalization (`patterns.nix` would clash)
+- Interpolated key `"${b}c"` needs a λ-hole (tuple has no label type): open ⇒ field at ★, hole := `bc` ⇒ `bool` (refinement as intended)
+- Mismatch: `(123).bla or "xyzzy"` = clash, Nix = `"xyzzy"`; Nix's `or` also catches selection on a non-record. Encoding limit of `or` or missing rule
+- Skipped: mutually recursive pattern defaults (scope-4/6), `__functor`, `__overrides`, `with`

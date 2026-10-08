@@ -1993,10 +1993,11 @@ theorem solveVarM_occurs_no_unifier {B : Type} {S : Supply}
 -- was the only shape in which the occurs verdict was known sound. It IS the
 -- general theorem now, so the special case has nothing left to say.
 
--- ## The stuck verdict that WAS wrong — now fixed by U-expand
--- (l:𝓫 | α) ≐ᵣ (m:𝓫 | β), l ≠ m, used to be reported STUCK, yet it is not
--- merely unifiable (so is Wand): its unifier is FORCED, i.e. the algorithm was
--- INCOMPLETE here, not just non-principal. Reading the ≈-characterization on a
+-- ## A stuck verdict that masks an mgu: crossfield
+-- (l:𝓫 | α) ≐ᵣ (m:𝓫 | β), l ≠ m, is reported STUCK (`crossfield_stuck`,
+-- RowUnify/Driver.lean), yet it is not merely unifiable (so is Wand): its
+-- unifier is FORCED, i.e. the algorithm is INCOMPLETE here, not just
+-- non-principal. Reading the ≈-characterization on a
 -- unifier θ (writing A = θα, B = θβ):
 --   proj_m A = (0,𝓫) :: proj_m B      (the left has no m outside A…)
 --   proj_l B = (0,𝓫) :: proj_l A      (…and the right none outside B)
@@ -2006,13 +2007,13 @@ theorem solveVarM_occurs_no_unifier {B : Type} {S : Supply}
 --   α ↦ (m:𝓫 | X),  β ↦ (l:𝓫 | X)      (X fresh)
 -- which is therefore an mgu. host_forced mechanizes the "segment index 0 ⟹
 -- the field sits at the front of the host" step (crossfield_host_forced).
--- U-expand is exactly this move, and the algorithm now takes it: β is the unique
--- variable of the right side and the right side has no l-field at all, so β is
--- FORCED to host, and the emitted binding is the mgu above with X = β′.
--- The computed verdict is `crossfield_success`, with the driver below.
+-- The maximality half (every unifier factors through it) is argued by hand in
+-- proof-state.md, not mechanized. A U-expand move would take exactly this step
+-- (β is the unique variable of the right side and the right side has no l-field,
+-- so β is FORCED to host), but the algorithm has NO expansion move: expansion
+-- places a field into a row-variable, so crossfield stays stuck.
 
--- … and the candidate mgu is still a unifier (it is the emitted one, with the
--- type equation 𝓫 ≐ δ solved and β′ instantiated to X).
+-- … and the candidate mgu is a unifier.
 -- ⊢  θ ⊨ (l:𝓫 | α) ≐ᵣ (m:𝓫 | β)   for  α ↦ (m:𝓫 | X),  β ↦ (l:𝓫 | X)
 theorem crossfield_unifiable {B : Type} (b : B) :
     Unifies
