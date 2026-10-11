@@ -30,4 +30,3 @@
 - [x] Create a new branch for the gradual work
 - [x] Create a plan on how to test our typesystem vs. actual nix code
 - [x] Create a plan on how to design macro-nix, our calculus extended with trivial nix adittions. It should be developed in another branch
-- [ ] Go over the list of inconsistencies and create discuss which we can fix still. Create a plan
