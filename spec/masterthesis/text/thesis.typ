@@ -47,15 +47,16 @@
 #set raw(lang: "nix")
 
 = Introduction <sec-motivation>
-The Nix programming language @nix-language-2-28 @dolstra_phd (NixLang) is a lazy, untyped functional language for the configuration of software. Its foundational data structure is the _attribute set_, a record of named fields, and the language provides a wide range of constructs and builtin functions to create, extend, deconstruct and inspect them. Attribute sets are what makes NixLang a configuration language: a package, a service and an entire operating system are each described by an attribute set that collects their settings. The largest body of NixLang code is nixpkgs, a single repository of more than four million lines of code#footnote[Counted over the `.nix` files of nixpkgs 26.05, as are all figures about nixpkgs in this chapter.] that defines more than 100,000 packages @repology and is one of the ten GitHub projects with the most contributors @octoverse2024. The same repository carries the Nix standard library, the NixOS module system and the definition of the NixOS distribution itself @nixos_short @nixos_long, and every one of these artefacts is an attribute set assembled out of other attribute sets.
+// meta: feels like a wild concatenation of sentences
+The Nix programming language @nix-language-2-28 @dolstra_phd (NixLang) is a lazy, untyped functional language for the configuration of software. […](sentence about usage?). Its foundational data structure is the _attribute set_, a record of named fields, and the language provides a wide range of language constructs and builtin functions to create, extend, deconstruct and inspect them. These attribute sets make NixLang a configuration language: a package, a service and an entire operating system are each described by an attribute set that collects their settings. The largest body of NixLang code is nixpkgs, a single repository of more than four million lines of code#footnote[Counted over the `.nix` files of nixpkgs 26.05, as are all figures about nixpkgs in this chapter.] that defines more than 100,000 packages @repology and is one of the ten GitHub projects with the most contributors @octoverse2024. The same repository carries the Nix standard library, the NixOS module system and the definition of the NixOS distribution itself @nixos_short @nixos_long, and every one of these artefacts is an attribute set assembled out of other attribute sets.
 
-None of this code is typed. A missing field, or a field of an unexpected shape, is noticed only when the evaluator reaches it, possibly long after the change that caused it. The demand for a type system is long-standing @nix-ts-issue, and so is the difficulty of providing one: an earlier system by the author @simplenix applies off-the-shelf Hindley-Milner inference to a fragment of NixLang and fails precisely on the operations that combine attribute sets. A type system for NixLang therefore has to be built around these operations rather than added to them afterwards.
+[None of this code is typed. A missing field, or a field of an unexpected shape, is noticed only when the evaluator reaches it, possibly long after the change that caused it](wording). The demand for a type system is long-standing @nix-ts-issue, and so is the difficulty of providing one: an earlier system by the author @simplenix applies off-the-shelf Hindley-Milner inference to a fragment of NixLang and fails precisely on the operations that combine attribute sets. A type system for NixLang therefore has to be built around these operations rather than added to them afterwards. [ ](what is this conclusion lol)
 
-Our aim is a type system that applies to this existing body of code as it is and helps its programmers write safer code. We state this aim as four design goals, and @sec-goals assesses how far our system reaches each of them.
+Our aim is a type system that applies to this existing body of code as it is and helps its programmers write safer code. We state this aim as four design goals, and @sec-goals assesses how far our system reaches each of them. [](maybe only note this later?)
 
 / G1 (No source changes): The analysis should run on today's nixpkgs verbatim. A repository of this size cannot be rewritten to become analysable.
-/ G2 (No semantic change): Evaluation should produce exactly what it produced before, down to derivation hashes. The analysis may report on a program, but it may not instrument it.
-/ G3 (Totality): Every program that runs should receive a type. A tool that rejects working code is not used, so where the analysis cannot decide, it should say so rather than reject.
+/ G2 (No semantic change): Evaluation should produce exactly what it produced before, [down to derivation hashes](wording). The analysis may report on a program, but it may not instrument it.
+/ G3 (Totality): Every program that runs should receive a type. [A tool that rejects working code is not used, so where the analysis cannot decide, it should say so rather than reject.](wording)
 / G4 (Effective inference): The analysis should scale to nixpkgs, more than 100,000 packages evaluated as one program.
 
 G3 cannot be met by a type system that accepts only what it can decide. Using only the builtin functions, it is possible to write code that no static analysis can type completely:
@@ -64,7 +65,7 @@ G3 cannot be met by a type system that accepts only what it can decide. Using on
 { "1759190400" = 1; }.${toString builtins.currentTime}
 ```
 
-The program combines a record, an impure builtin and a computed label to select a field by the system time at evaluation. It succeeds in exactly one second and fails in every other, so deciding it statically would mean predicting when it is run. A type system that rejects the program violates G3, and one that assigns it a definite type is unsound. What remains is to admit that the analysis does not know. Our type system therefore includes an _unknown type_ ★, which marks a place the analysis cannot decide. ★ is not an error: the program is accepted, and ★ records where its type is unknown. It plays the role of `any` in TypeScript @typescript, with the difference that it is never written by the programmer and is introduced only by the analysis itself. ★ absorbs uncertainty of two kinds: behaviour that is dynamic by nature, as in the example, and constructs that a stronger type system could type in the future.
+The program combines a record, an impure builtin and a computed label to select a field by the system time at evaluation. [It succeeds in exactly one second](wtf seconds) and fails in every other, so deciding it statically would mean predicting when it is run. A type system that rejects the program violates G3, and one that assigns it a definite type is unsound. What remains is to admit that the analysis does not know. Our type system therefore includes an _unknown type_ ★, which marks a place the analysis cannot decide. ★ is not an error: the program is accepted, and ★ records where its type is unknown. It plays the role of `any` in TypeScript @typescript, with the difference that it is never written by the programmer and is introduced only by the analysis itself. ★ absorbs uncertainty of two kinds: behaviour that is dynamic by nature, as in the example, and constructs that a stronger type system could type in the future.
 
 == The Problem: Asymmetric Concatenation
 #figure(
@@ -1285,7 +1286,9 @@ With first-class labels (@sec-fc-labels), a lookup whose answer was already cons
 === Unrestricted T-★-intro
 
 The declarative system may replace any type by ★, so it types programs on which the algorithm clashes. The program
-$ #raw("g: { a = g {l = c}; b = g {m = c}; }") quad : quad (★ → 𝓫) → {a: 𝓫 | b: 𝓫} $
+$
+  #raw("g: { a = g {l = c}; b = g {m = c}; }") quad : quad (★ → 𝓫) → {a: 𝓫 | b: 𝓫}
+$
 is typed by sending the parameter type of g to ★, while inference unifies the two argument records and clashes. Every stuck witness above becomes typable in the same way. A clash therefore certifies the absence of a unifier, but not the absence of a typing. T-★-intro acts as subsumption into a top type, and ★ is the join of any two distinct types, whereas unification only computes common instances. Closing the gap requires either inference that joins incompatible lower bounds at ★ or a completeness statement restricted to typings without T-★-intro.
 
 
