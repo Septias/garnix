@@ -16,5 +16,5 @@ If you work alongside a specification file in typesystems/ write to this file di
 
 
 ## Development
-First of all, the best source of truth is the Lean formalization. Use the current approach with axiom guards, no sorries and a green lake build. Do not simplify your goals, come back to me if you see dead ends or try at most three times. When reporting back to me, try to stay concise, I will ask back if I don't understand all of it. You are competent, maybe more than I am, so be confident to achieve it. Success will be a big accomplishment. 
+First of all, the best source of truth is the Lean formalization. Use the current approach with axiom guards, no sorries and a green lake build. Do not simplify your goals, come back to me if you see dead ends. Try at most three times. When reporting back to me, try to stay concise, I will ask back if I don't understand all of it. You are competent, maybe more than I am, so be confident to achieve it. Success will be a big accomplishment. 
 Make sure to not invalidate the current codebase. The L2 system is (mostly) fixed because it is part of my thesis. 
