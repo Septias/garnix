@@ -31,10 +31,6 @@ NixLang computes labels at run time. A field is selected by an arbitrary string 
 
 @fc-syntax gives the syntax extension. A label becomes a value $\"l\"$, written as a string literal as in NixLang, and it is typed by the singleton type $⌊l⌋$. Dynamic selection $e₁.\${e₂}$ selects the field named by the value of e₂, and the dynamic record ${ \${e₁} = e₂ }$ binds the field named by the value of e₁. At the type level, a _key_ k is either a label l or a label variable α, which has the new sort `Label`. Keys occur in two places: in the singleton type $⌊k⌋$ and in the _keyed field_ $\${k}: τ$ of a row, whose label is not yet known. Stumps are keyed as well, $⟨ρ.k ↓ δ⟩$, so that a scheme can defer a lookup under a key it abstracts over.
 
-
-_Keys are a sort of their own._ The obvious design lets a key be an arbitrary type and types a selection under a non-label key at ★. It does not preserve types: ${ \${e₁} = e₂ }$ with $e₁ : ★$ steps to a literal record ${ l = e₂ }$, whose type is not equivalent to a field keyed by ★, and treating ★ as equal to itself makes lookup unsound at run time. Keys therefore form a sort of their own. A substitution acquires a third component, which sends a label variable to a key again, so a key is never ★, a base type or any other type, and no operation of MiniNix, whether unification, instantiation or finalization, can make it one. The separate sort does not force the rejection of other keys, however. A computed key such as `toString t` is a string and has a base type 𝓫. The rules T-sel-dyn-𝓫 and T-rcd-dyn-𝓫 of @fc-typing type a selection and a record under such a key at ★, and since neither rule mentions the key in a type, the sort stays free of ★.
-
-
 === Keyed Lookup
 
 #let fc_lookup = figure(
