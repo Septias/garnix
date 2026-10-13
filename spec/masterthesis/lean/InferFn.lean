@@ -517,7 +517,7 @@ def varF (n : Nat) (Γ : QCtx B) (S : SolverState B) (σ : QScheme B) :
     else .fail "A-var: a binder has no recorded kind"
   else .fail "A-var: renaming not fresh"
 
-theorem varF_sound {C : Type} {constTy : C → B} {n : Nat} {Γ : QCtx B}
+theorem varF_sound {C : Type} {constTy : Sig B C} {n : Nat} {Γ : QCtx B}
     {S S' : SolverState B} {x : Var} {σ : QScheme B} {τ : Ty B}
     (hl : Γ.lookup x = some σ) (h : varF n Γ S σ = .ok (τ, S')) :
     Infer constTy Γ S (.var x) τ S' := by
@@ -549,7 +549,7 @@ variable {C : Type}
 mutual
 
 /-- `Γ; S ⊢ e ⇒ τ; S′`, computed -/
-def inferF (constTy : C → B) (n : Nat) :
+def inferF (constTy : Sig B C) (n : Nat) :
     QCtx B → SolverState B → Expr C → IRes (Ty B × SolverState B)
   | _, S, .con c => .ok (.base (constTy c), S)
   | Γ, S, .var x =>
@@ -615,10 +615,10 @@ def inferF (constTy : C → B) (n : Nat) :
       inferF constTy n (Γ.bindScheme x (letScheme r₁.2 ᾱ (letQ r₁.2 ᾱ) r₁.1))
         { r₁.2 with parked := letG r₁.2 ᾱ } e₂
   -- MacroNix forms: no inference rules yet (M3)
-  | _, _, .prim _ | _, _, .ite _ _ _ | _, _, .asrt _ _ | _, _, .nil | _, _, .cons _ _
+  | _, _, .prim _ _ | _, _, .bool _ | _, _, .ite _ _ _ | _, _, .asrt _ _ | _, _, .nil | _, _, .cons _ _
   | _, _, .has _ _ => .fail "macronix: unsupported"
 
-def inferRecF (constTy : C → B) (n : Nat) :
+def inferRecF (constTy : Sig B C) (n : Nat) :
     QCtx B → SolverState B → RecBody (Expr C) → IRes (Row B × SolverState B)
   | _, S, .empty => .ok (.empty, S)
   | Γ, S, .field l e => do
@@ -634,7 +634,7 @@ end
 mutual
 
 /-- ⊢  **every answer of `inferF` is a derivation of `Infer`.** -/
-theorem inferF_sound {constTy : C → B} {n : Nat} :
+theorem inferF_sound {constTy : Sig B C} {n : Nat} :
     ∀ {Γ : QCtx B} {S S' : SolverState B} {e : Expr C} {τ : Ty B},
       inferF constTy n Γ S e = .ok (τ, S') → Infer constTy Γ S e τ S'
   | _, S, S', .con c, τ, h => by
@@ -726,11 +726,11 @@ theorem inferF_sound {constTy : C → B} {n : Nat} :
       simp only [inferF, IRes.bind_eq_ok] at h
       obtain ⟨⟨τ₁, S₁⟩, h₁, h₂⟩ := h
       exact .letE (inferF_sound h₁) (greatestAlpha_spec Γ S S₁ τ₁).1 (inferF_sound h₂)
-  | _, _, _, .prim _, _, h | _, _, _, .ite _ _ _, _, h | _, _, _, .asrt _ _, _, h
+  | _, _, _, .prim _ _, _, h | _, _, _, .bool _, _, h | _, _, _, .ite _ _ _, _, h | _, _, _, .asrt _ _, _, h
   | _, _, _, .nil, _, h | _, _, _, .cons _ _, _, h | _, _, _, .has _ _, _, h => by
       simp [inferF] at h
 
-theorem inferRecF_sound {constTy : C → B} {n : Nat} :
+theorem inferRecF_sound {constTy : Sig B C} {n : Nat} :
     ∀ {Γ : QCtx B} {S S' : SolverState B} {ξ : RecBody (Expr C)} {ρ : Row B},
       inferRecF constTy n Γ S ξ = .ok (ρ, S') → InferRec constTy Γ S ξ ρ S'
   | _, S, S', .empty, ρ, h => by
@@ -754,14 +754,14 @@ def runStart : SolverState B := ⟨Sol.nil, [], [], ⟨1⟩, []⟩
 
 /-- a run, computed: infer from nothing, materialize the spent promises, then
 finalize every stump still parked -/
-def runF (constTy : C → B) (n : Nat) (e : Expr C) : IRes (Ty B × SolverState B) := do
+def runF (constTy : Sig B C) (n : Nat) (e : Expr C) : IRes (Ty B × SolverState B) := do
   let r ← inferF constTy n QCtx.empty runStart e
   let S₂ ← materializesF n r.2 r.2.parked
   let S' ← finalizesF n S₂ S₂.parked
   pure (r.1, S')
 
 /-- ⊢  every answer of `runF` is a `Run`. -/
-theorem runF_sound {constTy : C → B} {n : Nat} {e : Expr C} {τ : Ty B}
+theorem runF_sound {constTy : Sig B C} {n : Nat} {e : Expr C} {τ : Ty B}
     {S' : SolverState B} (h : runF constTy n e = .ok (τ, S')) : Run constTy e τ S' := by
   simp only [runF, IRes.bind_eq_ok, IRes.pure_eq_ok, Prod.mk.injEq] at h
   obtain ⟨⟨τ₁, S₁⟩, h₁, S₂, h₂, S₃, h₃, rfl, rfl⟩ := h
@@ -769,7 +769,7 @@ theorem runF_sound {constTy : C → B} {n : Nat} {e : Expr C} {τ : Ty B}
 
 /-- ⊢  **what `runF` answers is declaratively typed**, at the type it reports
 read under its own final substitution. -/
-theorem runF_typed {constTy : C → B} {n : Nat} {e : Expr C} {τ : Ty B}
+theorem runF_typed {constTy : Sig B C} {n : Nat} {e : Expr C} {τ : Ty B}
     {S' : SolverState B} (h : runF constTy n e = .ok (τ, S')) :
     QTyped constTy QCtx.empty e (τ.applySubst S'.subst) :=
   runSound e τ S' (runF_sound h)

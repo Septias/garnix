@@ -77,7 +77,7 @@ def verdict : IRes (Ty String × SolverState String) → String
   | .oof       => "out of fuel"
 
 abbrev E := Expr String
-def run (e : E) : String := verdict (runF id 1000 e)
+def run (e : E) : String := verdict (runF (Sig.plain id) 1000 e)
 
 def v (x : String) : E := .var x
 def int : E := .con "int"

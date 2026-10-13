@@ -305,7 +305,7 @@ theorem selQ_no_mixed {B : Type} :
 -- T-sel / T-sel-⊥ / T-sel-★; the Lean regression proof of minimal.lean was
 -- already this case split, per instance.
 -- ⊢  ∀ τ. selQ ≥ τ   ⟹   Γ ⊢ (λx. x.l) : τ
-theorem selQ_instance_closed {B C : Type} (constTy : C → B) (Γ : Ctx B) :
+theorem selQ_instance_closed {B C : Type} (constTy : Sig B C) (Γ : Ctx B) :
     ∀ τ, QScheme.Inst (selQ B) τ → Typed constTy Γ (selEx C) τ := by
   rintro τ ⟨θ, -, hQ, hbody⟩
   simp only [selQ, Ty.applySubst, Row.applySubst] at hbody
@@ -336,7 +336,7 @@ theorem selQ_instance_closed {B C : Type} (constTy : C → B) (Γ : Ctx B) :
 -- lookup-stumps.
 -- ⊢  ∃ σ.  (∀ τ. σ ≥_∅ τ ⟹ ∅ ⊢ λx.x.l : τ)
 --              ∧ σ ≥_∅ ({l: {}} → {}) ∧ σ ≥_∅ ({} → ★)
-theorem qualified_principal_scheme {B C : Type} (constTy : C → B) :
+theorem qualified_principal_scheme {B C : Type} (constTy : Sig B C) :
     ∃ σ : QScheme B,
       (∀ τ, QScheme.Inst σ τ →
         Typed constTy Ctx.empty (selEx C) τ) ∧
@@ -566,7 +566,7 @@ theorem QCtx.ftv_bindScheme {B : Type} (Γ : QCtx B) (x : Var) (σ : QScheme B) 
   exact .inr hα
 
 mutual
-  inductive QTyped {B C : Type} (constTy : C → B) :
+  inductive QTyped {B C : Type} (constTy : Sig B C) :
       QCtx B → Expr C → Ty B → Prop where
     | qCon : QTyped constTy Γ (.con c) (.base (constTy c))
     -- x : σ ∈ Γ   σ ≥ τ           (instantiation-with-discharge)
@@ -619,14 +619,38 @@ mutual
                     QTyped constTy Γ (.selDyn e₁ e₂) .unk
     | qRcdDynBase : QTyped constTy Γ e₁ (.base b) → QTyped constTy Γ e₂ τ →
                     QTyped constTy Γ (.rcdDyn e₁ e₂) .unk
+    -- MacroNix. A builtin is used at an instance of its type (all of whose
+    -- variables are generic), saturated.
+    | qPrim : constTy.prim p = some τp → τp.applySubst θ = Ty.arrows τs τ →
+              QTypedArgs constTy Γ es τs → QTyped constTy Γ (.prim p es) τ
+    | qBool : constTy.boolB = some bb → QTyped constTy Γ (.bool b) (.base bb)
+    | qIte : constTy.boolB = some bb → QTyped constTy Γ e (.base bb) →
+             QTyped constTy Γ e₁ τ → QTyped constTy Γ e₂ τ →
+             QTyped constTy Γ (.ite e e₁ e₂) τ
+    | qAsrt : constTy.boolB = some bb → QTyped constTy Γ e (.base bb) →
+              QTyped constTy Γ e₂ τ → QTyped constTy Γ (.asrt e e₂) τ
+    | qNil : QTyped constTy Γ .nil (.list τ)
+    | qCons : QTyped constTy Γ e₁ τ → QTyped constTy Γ e₂ (.list τ) →
+              QTyped constTy Γ (.cons e₁ e₂) (.list τ)
+    -- `e ? l` asks a RECORD; the answer refines nothing (occurrence typing is
+    -- Negative Information's business)
+    | qHas : constTy.boolB = some bb → QTyped constTy Γ e (.rcd ρ) →
+             QTyped constTy Γ (.has e l) (.base bb)
 
-  inductive QTypedBody {B C : Type} (constTy : C → B) :
+  inductive QTypedBody {B C : Type} (constTy : Sig B C) :
       QCtx B → RecBody (Expr C) → Row B → Prop where
     | empty : QTypedBody constTy Γ .empty .empty
     | field : QTyped constTy Γ e τ →
               QTypedBody constTy Γ (.field l e) (.sing l τ)
     | cat : QTypedBody constTy Γ b₁ ρ₁ → QTypedBody constTy Γ b₂ ρ₂ →
             QTypedBody constTy Γ (.cat b₁ b₂) (.cat ρ₁ ρ₂)
+
+  -- the arguments of a builtin, pointwise
+  inductive QTypedArgs {B C : Type} (constTy : Sig B C) :
+      QCtx B → List (Expr C) → List (Ty B) → Prop where
+    | nil  : QTypedArgs constTy Γ [] []
+    | cons : QTyped constTy Γ e τ → QTypedArgs constTy Γ es τs →
+             QTypedArgs constTy Γ (e :: es) (τ :: τs)
 end
 
 --------------------------- L2 TYPING INVERSION (mod ≈) ------------------------
@@ -636,7 +660,7 @@ end
 -- returns its QTypedBody witness without recursing into it — so this is a plain
 -- structural recursion over one half of the mutual pair, exactly as
 -- typed_inv_aux is over Typed.
-private theorem qtyped_inv_aux {B C : Type} {constTy : C → B} :
+private theorem qtyped_inv_aux {B C : Type} {constTy : Sig B C} :
     {Γ : QCtx B} → {e : Expr C} → {τ : Ty B} → QTyped constTy Γ e τ →
     (∀ {c : C}, e = .con c →
       TyEquiv (.base (constTy c)) τ ∨ τ = .unk) ∧
@@ -701,28 +725,42 @@ private theorem qtyped_inv_aux {B C : Type} {constTy : C → B} :
   | _, _, _, .qRcd h =>
       ⟨(fun hc => nomatch hc), (fun hl => nomatch hl),
        (fun hr => by cases hr; exact ⟨_, .inl (.refl _), h⟩)⟩
+  | _, _, _, .qPrim _ _ _ =>
+      ⟨(fun h => nomatch h), (fun h => nomatch h), (fun h => nomatch h)⟩
+  | _, _, _, .qBool _ =>
+      ⟨(fun h => nomatch h), (fun h => nomatch h), (fun h => nomatch h)⟩
+  | _, _, _, .qIte _ _ _ _ =>
+      ⟨(fun h => nomatch h), (fun h => nomatch h), (fun h => nomatch h)⟩
+  | _, _, _, .qAsrt _ _ _ =>
+      ⟨(fun h => nomatch h), (fun h => nomatch h), (fun h => nomatch h)⟩
+  | _, _, _, .qNil =>
+      ⟨(fun h => nomatch h), (fun h => nomatch h), (fun h => nomatch h)⟩
+  | _, _, _, .qCons _ _ =>
+      ⟨(fun h => nomatch h), (fun h => nomatch h), (fun h => nomatch h)⟩
+  | _, _, _, .qHas _ _ =>
+      ⟨(fun h => nomatch h), (fun h => nomatch h), (fun h => nomatch h)⟩
 
-theorem qtyped_con_inv {B C : Type} {constTy : C → B} {Γ : QCtx B} {c : C}
+theorem qtyped_con_inv {B C : Type} {constTy : Sig B C} {Γ : QCtx B} {c : C}
     {τ : Ty B}
     (h : QTyped constTy Γ (.con c) τ) :
     TyEquiv (.base (constTy c)) τ ∨ τ = .unk :=
   (qtyped_inv_aux h).1 rfl
 
-theorem qtyped_lam_inv {B C : Type} {constTy : C → B} {Γ : QCtx B} {x : Var}
+theorem qtyped_lam_inv {B C : Type} {constTy : Sig B C} {Γ : QCtx B} {x : Var}
     {e : Expr C} {τ : Ty B}
     (h : QTyped constTy Γ (.lam x e) τ) :
     ∃ τ₁ τ₂, (TyEquiv (.fn τ₁ τ₂) τ ∨ τ = .unk) ∧
       QTyped constTy (Γ.bindTy x τ₁) e τ₂ :=
   (qtyped_inv_aux h).2.1 rfl
 
-theorem qtyped_rcd_inv {B C : Type} {constTy : C → B} {Γ : QCtx B}
+theorem qtyped_rcd_inv {B C : Type} {constTy : Sig B C} {Γ : QCtx B}
     {b : RecBody (Expr C)} {τ : Ty B}
     (h : QTyped constTy Γ (.rcd b) τ) :
     ∃ ρ, (TyEquiv (.rcd ρ) τ ∨ τ = .unk) ∧ QTypedBody constTy Γ b ρ :=
   (qtyped_inv_aux h).2.2 rfl
 
 -- a label literal types at its singleton, up to ≈ and blur
-private theorem qtyped_lab_inv_aux {B C : Type} {constTy : C → B} {l : Label} :
+private theorem qtyped_lab_inv_aux {B C : Type} {constTy : Sig B C} {l : Label} :
     ∀ {Γ : QCtx B} {e : Expr C} {τ : Ty B}, QTyped constTy Γ e τ → e = .lab l →
       TyEquiv (.lab (.lit l)) τ ∨ τ = .unk
   | _, _, _, .qLab, he => by cases he; exact .inl (.refl _)
@@ -745,17 +783,137 @@ private theorem qtyped_lab_inv_aux {B C : Type} {constTy : C → B} {l : Label} 
   | _, _, _, .qSelDynUnk _ _ _, he => nomatch he
   | _, _, _, .qSelDynAbs _ _ _, he => nomatch he
 
-theorem qtyped_lab_inv {B C : Type} {constTy : C → B} {Γ : QCtx B} {l : Label}
+theorem qtyped_lab_inv {B C : Type} {constTy : Sig B C} {Γ : QCtx B} {l : Label}
     {τ : Ty B} (h : QTyped constTy Γ (.lab l : Expr C) τ) :
     TyEquiv (.lab (.lit l)) τ ∨ τ = .unk :=
   qtyped_lab_inv_aux h rfl
+
+
+-- the MacroNix values, up to ≈ and blur
+private theorem qtyped_bool_inv_aux {B C : Type} {constTy : Sig B C} {b : Bool} :
+    ∀ {Γ : QCtx B} {e : Expr C} {τ : Ty B}, QTyped constTy Γ e τ → e = .bool b →
+      (∃ bb, constTy.boolB = some bb ∧ TyEquiv (.base bb) τ) ∨ τ = .unk
+  | _, _, _, .qBool hb, he => by cases he; exact .inl ⟨_, hb, .refl _⟩
+  | _, _, _, .qEq h heq, he =>
+      match qtyped_bool_inv_aux h he with
+      | .inl ⟨bb, hb, h'⟩ => .inl ⟨bb, hb, h'.trans heq⟩
+      | .inr hu => by subst hu; exact .inr (TyEquiv.unk_inv heq)
+  | _, _, _, .qUnk _, _ => .inr rfl
+  | _, _, _, .qCon, he => nomatch he
+  | _, _, _, .qVar _ _, he => nomatch he
+  | _, _, _, .qLam _, he => nomatch he
+  | _, _, _, .qApp _ _, he => nomatch he
+  | _, _, _, .qLet _ _ _ _, he => nomatch he
+  | _, _, _, .qCat _ _, he => nomatch he
+  | _, _, _, .qSel _ _, he => nomatch he
+  | _, _, _, .qSelUnk _ _, he => nomatch he
+  | _, _, _, .qSelAbs _ _, he => nomatch he
+  | _, _, _, .qRcd _, he => nomatch he
+  | _, _, _, .qLab, he => nomatch he
+  | _, _, _, .qSelDyn _ _ _, he => nomatch he
+  | _, _, _, .qSelDynUnk _ _ _, he => nomatch he
+  | _, _, _, .qSelDynAbs _ _ _, he => nomatch he
+  | _, _, _, .qRcdDyn _ _, he => nomatch he
+  | _, _, _, .qSelDynBase _ _, he => nomatch he
+  | _, _, _, .qRcdDynBase _ _, he => nomatch he
+  | _, _, _, .qPrim _ _ _, he => nomatch he
+  | _, _, _, .qIte _ _ _ _, he => nomatch he
+  | _, _, _, .qAsrt _ _ _, he => nomatch he
+  | _, _, _, .qNil, he => nomatch he
+  | _, _, _, .qCons _ _, he => nomatch he
+  | _, _, _, .qHas _ _, he => nomatch he
+
+theorem qtyped_bool_inv {B C : Type} {constTy : Sig B C} {Γ : QCtx B} {b : Bool}
+    {τ : Ty B} (h : QTyped constTy Γ (.bool b : Expr C) τ) :
+    (∃ bb, constTy.boolB = some bb ∧ TyEquiv (.base bb) τ) ∨ τ = .unk :=
+  qtyped_bool_inv_aux h rfl
+
+private theorem qtyped_nil_inv_aux {B C : Type} {constTy : Sig B C} :
+    ∀ {Γ : QCtx B} {e : Expr C} {τ : Ty B}, QTyped constTy Γ e τ → e = .nil →
+      (∃ τ₀, TyEquiv (.list τ₀) τ) ∨ τ = .unk
+  | _, _, _, .qNil, _ => .inl ⟨_, .refl _⟩
+  | _, _, _, .qEq h heq, he =>
+      match qtyped_nil_inv_aux h he with
+      | .inl ⟨τ₀, h'⟩ => .inl ⟨τ₀, h'.trans heq⟩
+      | .inr hu => by subst hu; exact .inr (TyEquiv.unk_inv heq)
+  | _, _, _, .qUnk _, _ => .inr rfl
+  | _, _, _, .qCon, he => nomatch he
+  | _, _, _, .qVar _ _, he => nomatch he
+  | _, _, _, .qLam _, he => nomatch he
+  | _, _, _, .qApp _ _, he => nomatch he
+  | _, _, _, .qLet _ _ _ _, he => nomatch he
+  | _, _, _, .qCat _ _, he => nomatch he
+  | _, _, _, .qSel _ _, he => nomatch he
+  | _, _, _, .qSelUnk _ _, he => nomatch he
+  | _, _, _, .qSelAbs _ _, he => nomatch he
+  | _, _, _, .qRcd _, he => nomatch he
+  | _, _, _, .qLab, he => nomatch he
+  | _, _, _, .qSelDyn _ _ _, he => nomatch he
+  | _, _, _, .qSelDynUnk _ _ _, he => nomatch he
+  | _, _, _, .qSelDynAbs _ _ _, he => nomatch he
+  | _, _, _, .qRcdDyn _ _, he => nomatch he
+  | _, _, _, .qSelDynBase _ _, he => nomatch he
+  | _, _, _, .qRcdDynBase _ _, he => nomatch he
+  | _, _, _, .qPrim _ _ _, he => nomatch he
+  | _, _, _, .qBool _, he => nomatch he
+  | _, _, _, .qIte _ _ _ _, he => nomatch he
+  | _, _, _, .qAsrt _ _ _, he => nomatch he
+  | _, _, _, .qCons _ _, he => nomatch he
+  | _, _, _, .qHas _ _, he => nomatch he
+
+theorem qtyped_nil_inv {B C : Type} {constTy : Sig B C} {Γ : QCtx B}
+    {τ : Ty B} (h : QTyped constTy Γ (.nil : Expr C) τ) :
+    (∃ τ₀, TyEquiv (.list τ₀) τ) ∨ τ = .unk :=
+  qtyped_nil_inv_aux h rfl
+
+private theorem qtyped_cons_inv_aux {B C : Type} {constTy : Sig B C} {e₁ e₂ : Expr C} :
+    ∀ {Γ : QCtx B} {e : Expr C} {τ : Ty B}, QTyped constTy Γ e τ → e = .cons e₁ e₂ →
+      ∃ τ₀, (TyEquiv (.list τ₀) τ ∨ τ = .unk) ∧
+        QTyped constTy Γ e₁ τ₀ ∧ QTyped constTy Γ e₂ (.list τ₀)
+  | _, _, _, .qCons h₁ h₂, he => by cases he; exact ⟨_, .inl (.refl _), h₁, h₂⟩
+  | _, _, _, .qEq h heq, he =>
+      match qtyped_cons_inv_aux h he with
+      | ⟨τ₀, .inl h', h₁, h₂⟩ => ⟨τ₀, .inl (h'.trans heq), h₁, h₂⟩
+      | ⟨τ₀, .inr hu, h₁, h₂⟩ => ⟨τ₀, .inr (by subst hu; exact TyEquiv.unk_inv heq), h₁, h₂⟩
+  | _, _, _, .qUnk h, he =>
+      match qtyped_cons_inv_aux h he with
+      | ⟨τ₀, _, h₁, h₂⟩ => ⟨τ₀, .inr rfl, h₁, h₂⟩
+  | _, _, _, .qCon, he => nomatch he
+  | _, _, _, .qVar _ _, he => nomatch he
+  | _, _, _, .qLam _, he => nomatch he
+  | _, _, _, .qApp _ _, he => nomatch he
+  | _, _, _, .qLet _ _ _ _, he => nomatch he
+  | _, _, _, .qCat _ _, he => nomatch he
+  | _, _, _, .qSel _ _, he => nomatch he
+  | _, _, _, .qSelUnk _ _, he => nomatch he
+  | _, _, _, .qSelAbs _ _, he => nomatch he
+  | _, _, _, .qRcd _, he => nomatch he
+  | _, _, _, .qLab, he => nomatch he
+  | _, _, _, .qSelDyn _ _ _, he => nomatch he
+  | _, _, _, .qSelDynUnk _ _ _, he => nomatch he
+  | _, _, _, .qSelDynAbs _ _ _, he => nomatch he
+  | _, _, _, .qRcdDyn _ _, he => nomatch he
+  | _, _, _, .qSelDynBase _ _, he => nomatch he
+  | _, _, _, .qRcdDynBase _ _, he => nomatch he
+  | _, _, _, .qPrim _ _ _, he => nomatch he
+  | _, _, _, .qBool _, he => nomatch he
+  | _, _, _, .qIte _ _ _ _, he => nomatch he
+  | _, _, _, .qAsrt _ _ _, he => nomatch he
+  | _, _, _, .qNil, he => nomatch he
+  | _, _, _, .qHas _ _, he => nomatch he
+
+theorem qtyped_cons_inv {B C : Type} {constTy : Sig B C} {Γ : QCtx B} {e₁ e₂ : Expr C}
+    {τ : Ty B} (h : QTyped constTy Γ (.cons e₁ e₂) τ) :
+    ∃ τ₀, (TyEquiv (.list τ₀) τ ∨ τ = .unk) ∧
+      QTyped constTy Γ e₁ τ₀ ∧ QTyped constTy Γ e₂ (.list τ₀) :=
+  qtyped_cons_inv_aux h rfl
 
 ------------------------------ L2 CANONICAL FORMS ------------------------------
 -- A value's shape is fixed by the head of its (L2) type, tEq/tUnk notwithstanding.
 -- Value/RowEquiv are reused verbatim from minimal — only the typing relation
 -- changed, so these track canonical_fn/canonical_rcd rule-for-rule.
 
-theorem qcanonical_fn {B C : Type} {constTy : C → B} {Γ : QCtx B} {v : Expr C}
+theorem qcanonical_fn {B C : Type} {constTy : Sig B C} {Γ : QCtx B} {v : Expr C}
     {τ₁ τ₂ : Ty B}
     (hv : Value v) (ht : QTyped constTy Γ v (.fn τ₁ τ₂)) :
     ∃ x e, v = .lam x e := by
@@ -774,8 +932,20 @@ theorem qcanonical_fn {B C : Type} {constTy : C → B} {Γ : QCtx B} {v : Expr C
       rcases qtyped_lab_inv ht with he | hu
       · cases he.lab_inv
       · cases hu
+  | bool =>
+      rcases qtyped_bool_inv ht with ⟨_, -, he⟩ | hu
+      · cases he.base_inv
+      · cases hu
+  | nil =>
+      rcases qtyped_nil_inv ht with ⟨_, he⟩ | hu
+      · obtain ⟨_, hσ, -⟩ := he.list_inv; cases hσ
+      · cases hu
+  | cons =>
+      obtain ⟨_, he | hu, -, -⟩ := qtyped_cons_inv ht
+      · obtain ⟨_, hσ, -⟩ := he.list_inv; cases hσ
+      · cases hu
 
-theorem qcanonical_rcd {B C : Type} {constTy : C → B} {Γ : QCtx B} {v : Expr C}
+theorem qcanonical_rcd {B C : Type} {constTy : Sig B C} {Γ : QCtx B} {v : Expr C}
     {ρ : Row B}
     (hv : Value v) (ht : QTyped constTy Γ v (.rcd ρ)) :
     ∃ b ρ', v = .rcd b ∧ RowEquiv ρ' ρ ∧ QTypedBody constTy Γ b ρ' := by
@@ -799,6 +969,18 @@ theorem qcanonical_rcd {B C : Type} {constTy : C → B} {Γ : QCtx B} {v : Expr 
       rcases qtyped_lab_inv ht with he | hu
       · cases he.lab_inv
       · cases hu
+  | bool =>
+      rcases qtyped_bool_inv ht with ⟨_, -, he⟩ | hu
+      · cases he.base_inv
+      · cases hu
+  | nil =>
+      rcases qtyped_nil_inv ht with ⟨_, he⟩ | hu
+      · obtain ⟨_, hσ, -⟩ := he.list_inv; cases hσ
+      · cases hu
+  | cons =>
+      obtain ⟨_, he | hu, -, -⟩ := qtyped_cons_inv ht
+      · obtain ⟨_, hσ, -⟩ := he.list_inv; cases hσ
+      · cases hu
 
 -- Embedding: every declarative typing is an L2 typing
 -- Plain contexts embed by Q = ∅ everywhere; discharge is vacuous, and lookups
@@ -815,7 +997,7 @@ theorem Ctx.toQ_lookup {B : Type} (Γ : Ctx B) (x : Var) :
 
 -- ⊢  Γ ⊢ e : τ   ⟹   Γ.toQ ⊢_Q e : τ      (declarative embeds into L2)
 mutual
-theorem Typed.toQ {B C : Type} {constTy : C → B} :
+theorem Typed.toQ {B C : Type} {constTy : Sig B C} :
     {Γ : Ctx B} → {e : Expr C} → {τ : Ty B} →
     Typed constTy Γ e τ → QTyped constTy Γ.toQ e τ
   | _, _, _, .tCon => .qCon
@@ -843,7 +1025,7 @@ theorem Typed.toQ {B C : Type} {constTy : C → B} :
   | _, _, _, .tRcd h => .qRcd (TypedBody.toQ h)
 
 -- ⊢  Γ ⊢ b : ρ   ⟹   Γ.toQ ⊢_Q b : ρ      (record-body version)
-theorem TypedBody.toQ {B C : Type} {constTy : C → B} :
+theorem TypedBody.toQ {B C : Type} {constTy : Sig B C} :
     {Γ : Ctx B} → {b : RecBody (Expr C)} → {ρ : Row B} →
     TypedBody constTy Γ b ρ → QTypedBody constTy Γ.toQ b ρ
   | _, _, _, .empty => .empty
@@ -862,7 +1044,7 @@ end
 -- makes the L1 ⊆ L2 inclusion STRICT.
 -- ⊢  ∅ ⊢_Q  let f = (λx. x.l) in { a = f {l = c} | b = f {} }
 --            :  { a: 𝓫_c | b: ★ }
-theorem qtyped_two_use {B C : Type} (constTy : C → B) (c : C) :
+theorem qtyped_two_use {B C : Type} (constTy : Sig B C) (c : C) :
     QTyped constTy QCtx.empty
       (.letE "f" (selEx C)
         (.rcd (.cat
@@ -951,7 +1133,7 @@ theorem QCtx.Sub.ofEmptyTyEnv {B : Type} (Γ : QCtx B) :
 -- Every case is now a plain constructor rebuild: the qVar/qLet Inst premises
 -- and the qSel lookups mention no context, so they ride across untouched.
 mutual
-theorem qtyped_sub {B C : Type} {constTy : C → B} :
+theorem qtyped_sub {B C : Type} {constTy : Sig B C} :
     {Γ₁ Γ₂ : QCtx B} → {e : Expr C} → {τ : Ty B} → QCtx.Sub Γ₁ Γ₂ →
     QTyped constTy Γ₁ e τ → QTyped constTy Γ₂ e τ
   | _, _, _, _, _,  .qCon         => .qCon
@@ -986,14 +1168,28 @@ theorem qtyped_sub {B C : Type} {constTy : C → B} :
       .qSelDynBase (qtyped_sub hs h₁) (qtyped_sub hs h₂)
   | _, _, _, _, hs, .qRcdDynBase h₁ h₂ =>
       .qRcdDynBase (qtyped_sub hs h₁) (qtyped_sub hs h₂)
+  | _, _, _, _, hs, .qPrim hp hi ha => .qPrim hp hi (qtypedArgs_sub hs ha)
+  | _, _, _, _, _,  .qBool hb      => .qBool hb
+  | _, _, _, _, hs, .qIte hb h h₁ h₂ =>
+      .qIte hb (qtyped_sub hs h) (qtyped_sub hs h₁) (qtyped_sub hs h₂)
+  | _, _, _, _, hs, .qAsrt hb h h₂ => .qAsrt hb (qtyped_sub hs h) (qtyped_sub hs h₂)
+  | _, _, _, _, _,  .qNil          => .qNil
+  | _, _, _, _, hs, .qCons h₁ h₂   => .qCons (qtyped_sub hs h₁) (qtyped_sub hs h₂)
+  | _, _, _, _, hs, .qHas hb h     => .qHas hb (qtyped_sub hs h)
 
-theorem qtypedBody_sub {B C : Type} {constTy : C → B} :
+theorem qtypedBody_sub {B C : Type} {constTy : Sig B C} :
     {Γ₁ Γ₂ : QCtx B} → {b : RecBody (Expr C)} → {ρ : Row B} → QCtx.Sub Γ₁ Γ₂ →
     QTypedBody constTy Γ₁ b ρ → QTypedBody constTy Γ₂ b ρ
   | _, _, _, _, _,  .empty     => .empty
   | _, _, _, _, hs, .field h   => .field (qtyped_sub hs h)
   | _, _, _, _, hs, .cat h₁ h₂ =>
       .cat (qtypedBody_sub hs h₁) (qtypedBody_sub hs h₂)
+
+theorem qtypedArgs_sub {B C : Type} {constTy : Sig B C} :
+    {Γ₁ Γ₂ : QCtx B} → {es : List (Expr C)} → {τs : List (Ty B)} → QCtx.Sub Γ₁ Γ₂ →
+    QTypedArgs constTy Γ₁ es τs → QTypedArgs constTy Γ₂ es τs
+  | _, _, _, _, _,  .nil        => .nil
+  | _, _, _, _, hs, .cons h hs' => .cons (qtyped_sub hs h) (qtypedArgs_sub hs hs')
 end
 
 -- ## Substitution  e[x := v]  (mutual over QTyped/QTypedBody)
@@ -1002,7 +1198,7 @@ end
 -- and qLet-premise cases used to add a row-view congruence to move Inst between
 -- Δ's and Γ's row environments; with Inst context-free they pass it through.
 mutual
-private theorem qsubst_aux {B C : Type} {constTy : C → B} :
+private theorem qsubst_aux {B C : Type} {constTy : Sig B C} :
     {Δ : QCtx B} → {e : Expr C} → {τ : Ty B} → QTyped constTy Δ e τ →
     ∀ {Γ : QCtx B} {x : Var} {v : Expr C} {σ : QScheme B},
       QCtx.Sub Δ (Γ.bindScheme x σ) →
@@ -1058,6 +1254,18 @@ private theorem qsubst_aux {B C : Type} {constTy : C → B} :
       .qSelDynBase (qsubst_aux h₁ hsub hv) (qsubst_aux h₂ hsub hv)
   | _, _, _, .qRcdDynBase h₁ h₂, _, _, _, _, hsub, hv =>
       .qRcdDynBase (qsubst_aux h₁ hsub hv) (qsubst_aux h₂ hsub hv)
+  | _, _, _, .qPrim hp hi ha, _, _, _, _, hsub, hv =>
+      .qPrim hp hi (qsubstArgs_aux ha hsub hv)
+  | _, _, _, .qBool hb, _, _, _, _, _, _ => .qBool hb
+  | _, _, _, .qIte hb h h₁ h₂, _, _, _, _, hsub, hv =>
+      .qIte hb (qsubst_aux h hsub hv) (qsubst_aux h₁ hsub hv) (qsubst_aux h₂ hsub hv)
+  | _, _, _, .qAsrt hb h h₂, _, _, _, _, hsub, hv =>
+      .qAsrt hb (qsubst_aux h hsub hv) (qsubst_aux h₂ hsub hv)
+  | _, _, _, .qNil, _, _, _, _, _, _ => .qNil
+  | _, _, _, .qCons h₁ h₂, _, _, _, _, hsub, hv =>
+      .qCons (qsubst_aux h₁ hsub hv) (qsubst_aux h₂ hsub hv)
+  | _, _, _, .qHas hb h, _, _, _, _, hsub, hv =>
+      .qHas hb (qsubst_aux h hsub hv)
   | _, .letE y e₁ e₂, _, .qLet hwf h₁ hne h₂, _, x, _, _, hsub, hv => by
       simp only [subst]
       cases hxy : (x == y)
@@ -1078,7 +1286,7 @@ private theorem qsubst_aux {B C : Type} {constTy : C → B} :
   | _, _, _, .qRcd h, _, _, _, _, hsub, hv =>
       .qRcd (qsubstBody_aux h hsub hv)
 
-private theorem qsubstBody_aux {B C : Type} {constTy : C → B} :
+private theorem qsubstBody_aux {B C : Type} {constTy : Sig B C} :
     {Δ : QCtx B} → {b : RecBody (Expr C)} → {ρ : Row B} →
     QTypedBody constTy Δ b ρ →
     ∀ {Γ : QCtx B} {x : Var} {v : Expr C} {σ : QScheme B},
@@ -1089,11 +1297,22 @@ private theorem qsubstBody_aux {B C : Type} {constTy : C → B} :
   | _, _, _, .field h, _, _, _, _, hsub, hv => .field (qsubst_aux h hsub hv)
   | _, _, _, .cat h₁ h₂, _, _, _, _, hsub, hv =>
       .cat (qsubstBody_aux h₁ hsub hv) (qsubstBody_aux h₂ hsub hv)
+
+private theorem qsubstArgs_aux {B C : Type} {constTy : Sig B C} :
+    {Δ : QCtx B} → {es : List (Expr C)} → {τs : List (Ty B)} →
+    QTypedArgs constTy Δ es τs →
+    ∀ {Γ : QCtx B} {x : Var} {v : Expr C} {σ : QScheme B},
+      QCtx.Sub Δ (Γ.bindScheme x σ) →
+      (∀ τ', QScheme.Inst σ τ' → QTyped constTy QCtx.empty v τ') →
+      QTypedArgs constTy Γ (substArgs x v es) τs
+  | _, _, _, .nil, _, _, _, _, _, _ => .nil
+  | _, _, _, .cons h hs, _, _, _, _, hsub, hv =>
+      .cons (qsubst_aux h hsub hv) (qsubstArgs_aux hs hsub hv)
 end
 
 -- Scheme-bound variables: v typeable at every discharged instance (let-β).
 theorem qsubst_scheme_preserves_typing
-    {B C : Type} (constTy : C → B)
+    {B C : Type} (constTy : Sig B C)
     (Γ : QCtx B) (x : Var) (v : Expr C) (σ : QScheme B) (τ₂ : Ty B) (e : Expr C)
     (hv : ∀ τ', QScheme.Inst σ τ' → QTyped constTy QCtx.empty v τ')
     (he : QTyped constTy (Γ.bindScheme x σ) e τ₂) :
@@ -1102,7 +1321,7 @@ theorem qsubst_scheme_preserves_typing
 
 -- Monotype-bound variables (λ): the singleton case.
 theorem qsubst_preserves_typing
-    {B C : Type} (constTy : C → B)
+    {B C : Type} (constTy : Sig B C)
     (Γ : QCtx B) (x : Var) (v : Expr C) (τ₁ τ₂ : Ty B) (e : Expr C)
     (hv : QTyped constTy QCtx.empty v τ₁)
     (he : QTyped constTy (Γ.bindTy x τ₁) e τ₂) :
@@ -1115,7 +1334,7 @@ theorem qsubst_preserves_typing
 -- Term/type lookup agreement on a typed record body, one level up. Bodies have
 -- spine-var-free rows, so their lookups are never ? (mirrors the minimal twins).
 
-theorem QTypedBody.spineVarFree {B C : Type} {constTy : C → B} {Γ : QCtx B} :
+theorem QTypedBody.spineVarFree {B C : Type} {constTy : Sig B C} {Γ : QCtx B} :
     {b : RecBody (Expr C)} → {ρ : Row B} → QTypedBody constTy Γ b ρ →
     ρ.SpineVarFree
   | _, _, .empty     => .empty
@@ -1123,7 +1342,7 @@ theorem QTypedBody.spineVarFree {B C : Type} {constTy : C → B} {Γ : QCtx B} :
   | _, _, .cat h₁ h₂ => .cat (QTypedBody.spineVarFree h₁)
                              (QTypedBody.spineVarFree h₂)
 
-theorem QTypedBody.lookup_absent {B C : Type} {constTy : C → B} {Γ : QCtx B} :
+theorem QTypedBody.lookup_absent {B C : Type} {constTy : Sig B C} {Γ : QCtx B} :
     {b : RecBody (Expr C)} → {ρ : Row B} → QTypedBody constTy Γ b ρ →
     ∀ {l : Label}, Lookup ρ l .absent → RecBody.lookup l b = none
   | _, _, .empty => fun _ => rfl
@@ -1136,7 +1355,7 @@ theorem QTypedBody.lookup_absent {B C : Type} {constTy : C → B} {Γ : QCtx B} 
           simp [RecBody.lookup, QTypedBody.lookup_absent h₁ ha,
                 QTypedBody.lookup_absent h₂ hr]
 
-theorem QTypedBody.lookup_found {B C : Type} {constTy : C → B} {Γ : QCtx B} :
+theorem QTypedBody.lookup_found {B C : Type} {constTy : Sig B C} {Γ : QCtx B} :
     {b : RecBody (Expr C)} → {ρ : Row B} → QTypedBody constTy Γ b ρ →
     ∀ {l : Label} {τ : Ty B}, Lookup ρ l (.found τ) →
     ∃ e, RecBody.lookup l b = some e ∧ QTyped constTy Γ e τ
@@ -1156,7 +1375,7 @@ theorem QTypedBody.lookup_found {B C : Type} {constTy : C → B} {Γ : QCtx B} :
 
 -- a field the body holds is typeable at some type (dynamic selection at ★ needs
 -- no more than this)
-theorem QTypedBody.lookup_some {B C : Type} {constTy : C → B} {Γ : QCtx B} :
+theorem QTypedBody.lookup_some {B C : Type} {constTy : Sig B C} {Γ : QCtx B} :
     {b : RecBody (Expr C)} → {ρ : Row B} → QTypedBody constTy Γ b ρ →
     ∀ {l : Label} {e : Expr C}, RecBody.lookup l b = some e →
       ∃ τ, True ∧ QTyped constTy Γ e τ
@@ -1177,19 +1396,35 @@ theorem QTypedBody.lookup_some {B C : Type} {constTy : C → B} {Γ : QCtx B} :
 -- Stated at the empty QCtx so the substitution lemmas' closed-value premise
 -- lines up (β needs a closed argument). qApp/qLet-β route through Phase 2;
 -- the qSel* cases reuse minimal's lookup-across-≈ᵣ helpers unchanged.
-private theorem qpreservation_aux {B C : Type} {constTy : C → B} :
+-- ## The laws a signature owes typing (MacroNix)
+-- δ preserves types at every instance of the builtin's scheme, and no constant
+-- inhabits the boolean type (so a boolean VALUE is a literal). `Sig.plain`
+-- satisfies both vacuously (`SigOK.plain`).
+structure SigOK {B C : Type} (sig : Sig B C) : Prop where
+  con_ne_bool : ∀ c bb, sig.boolB = some bb → sig.con c ≠ bb
+  delta_pres : ∀ {p : C} {τp : Ty B} {θ : TySubst B} {τs : List (Ty B)} {τ : Ty B}
+      {vs : List (Expr C)} {e : Expr C},
+      sig.prim p = some τp → τp.applySubst θ = Ty.arrows τs τ → (∀ v ∈ vs, Value v) →
+      QTypedArgs sig QCtx.empty vs τs → sig.delta p vs = some e →
+      QTyped sig QCtx.empty e τ
+
+theorem SigOK.plain {B C : Type} (con : C → B) : SigOK (Sig.plain con) :=
+  ⟨fun _ _ h => (nomatch h), fun h => (nomatch h)⟩
+
+mutual
+private theorem qpreservation_aux {B C : Type} {constTy : Sig B C} (hok : SigOK constTy) :
     {Γ : QCtx B} → {e : Expr C} → {τ : Ty B} → QTyped constTy Γ e τ →
-    Γ = QCtx.empty → ∀ {e' : Expr C}, Step e e' → QTyped constTy Γ e' τ
+    Γ = QCtx.empty → ∀ {e' : Expr C}, Step constTy.delta e e' → QTyped constTy Γ e' τ
   | _, _, _, .qCon,   _, _ => (nomatch ·)
   | _, _, _, .qVar _ _, _, _ => (nomatch ·)
   | _, _, _, .qLam _, _, _ => (nomatch ·)
   | _, _, _, .qRcd _, _, _ => (nomatch ·)
   | _, _, _, .qEq h heq, hΓ, _ => fun hs =>
-      .qEq (qpreservation_aux h hΓ hs) heq
+      .qEq (qpreservation_aux hok h hΓ hs) heq
   | _, _, _, .qApp h₁ h₂, hΓ, _ => fun hs => by
       cases hs with
-      | appFun s     => exact .qApp (qpreservation_aux h₁ hΓ s) h₂
-      | appArg v s   => exact .qApp h₁ (qpreservation_aux h₂ hΓ s)
+      | appFun s     => exact .qApp (qpreservation_aux hok h₁ hΓ s) h₂
+      | appArg v s   => exact .qApp h₁ (qpreservation_aux hok h₂ hΓ s)
       | beta hval =>
           subst hΓ
           obtain ⟨σ₁, σ₂, heq | hu, hbody⟩ := qtyped_lam_inv h₁
@@ -1202,8 +1437,8 @@ private theorem qpreservation_aux {B C : Type} {constTy : C → B} :
           · cases hu
   | _, _, _, .qCat h₁ h₂, hΓ, _ => fun hs => by
       cases hs with
-      | catLeft s    => exact .qCat (qpreservation_aux h₁ hΓ s) h₂
-      | catRight v s => exact .qCat h₁ (qpreservation_aux h₂ hΓ s)
+      | catLeft s    => exact .qCat (qpreservation_aux hok h₁ hΓ s) h₂
+      | catRight v s => exact .qCat h₁ (qpreservation_aux hok h₂ hΓ s)
       | catVal =>
           obtain ⟨ρ₁', he₁ | hu₁, hb₁⟩ := qtyped_rcd_inv h₁
           · obtain ⟨ρ₂', he₂ | hu₂, hb₂⟩ := qtyped_rcd_inv h₂
@@ -1215,7 +1450,7 @@ private theorem qpreservation_aux {B C : Type} {constTy : C → B} :
           · cases hu₁
   | _, _, _, .qSel h hl, hΓ, _ => fun hs => by
       cases hs with
-      | selStep s => exact .qSel (qpreservation_aux h hΓ s) hl
+      | selStep s => exact .qSel (qpreservation_aux hok h hΓ s) hl
       | selVal hbl =>
           obtain ⟨ρ', he | hu, hb⟩ := qtyped_rcd_inv h
           · obtain ⟨_, hσ, hr⟩ := he.rcd_inv
@@ -1229,7 +1464,7 @@ private theorem qpreservation_aux {B C : Type} {constTy : C → B} :
           · cases hu
   | _, _, _, .qSelUnk h hl, hΓ, _ => fun hs => by
       cases hs with
-      | selStep s => exact .qSelUnk (qpreservation_aux h hΓ s) hl
+      | selStep s => exact .qSelUnk (qpreservation_aux hok h hΓ s) hl
       | selVal hbl =>
           obtain ⟨ρ', he | hu, hb⟩ := qtyped_rcd_inv h
           · obtain ⟨_, hσ, hr⟩ := he.rcd_inv
@@ -1240,7 +1475,7 @@ private theorem qpreservation_aux {B C : Type} {constTy : C → B} :
           · cases hu
   | _, _, _, .qSelAbs h hl, hΓ, _ => fun hs => by
       cases hs with
-      | selStep s => exact .qSelAbs (qpreservation_aux h hΓ s) hl
+      | selStep s => exact .qSelAbs (qpreservation_aux hok h hΓ s) hl
       | selVal hbl =>
           obtain ⟨ρ', he | hu, hb⟩ := qtyped_rcd_inv h
           · obtain ⟨_, hσ, hr⟩ := he.rcd_inv
@@ -1251,14 +1486,14 @@ private theorem qpreservation_aux {B C : Type} {constTy : C → B} :
             cases hbl
           · cases hu
   | _, _, _, .qUnk h, hΓ, _ => fun hs =>
-      .qUnk (qpreservation_aux h hΓ hs)
+      .qUnk (qpreservation_aux hok h hΓ hs)
   | _, _, _, .qLab, _, _ => (nomatch ·)
   -- a FOUND dynamic lookup had a literal key: a label value types only at its
   -- own singleton (or ★, which finds nothing), so this is the static case
   | _, _, _, .qSelDyn h₁ h₂ hl, hΓ, _ => fun hs => by
       cases hs with
-      | selDynL s => exact .qSelDyn (qpreservation_aux h₁ hΓ s) h₂ hl
-      | selDynR _ s => exact .qSelDyn h₁ (qpreservation_aux h₂ hΓ s) hl
+      | selDynL s => exact .qSelDyn (qpreservation_aux hok h₁ hΓ s) h₂ hl
+      | selDynR _ s => exact .qSelDyn h₁ (qpreservation_aux hok h₂ hΓ s) hl
       | @selDynVal b l _ hbl =>
           rcases qtyped_lab_inv h₂ with he | hu
           case inr => cases hu
@@ -1277,16 +1512,16 @@ private theorem qpreservation_aux {B C : Type} {constTy : C → B} :
   -- a blurred one lands at ★: the field is typeable at SOMETHING, then blurred
   | _, _, _, .qSelDynUnk h₁ h₂ hl, hΓ, _ => fun hs => by
       cases hs with
-      | selDynL s => exact .qSelDynUnk (qpreservation_aux h₁ hΓ s) h₂ hl
-      | selDynR _ s => exact .qSelDynUnk h₁ (qpreservation_aux h₂ hΓ s) hl
+      | selDynL s => exact .qSelDynUnk (qpreservation_aux hok h₁ hΓ s) h₂ hl
+      | selDynR _ s => exact .qSelDynUnk h₁ (qpreservation_aux hok h₂ hΓ s) hl
       | @selDynVal b l _ hbl =>
           obtain ⟨ρ', -, hb⟩ := qtyped_rcd_inv h₁
           obtain ⟨_, _, hte⟩ := QTypedBody.lookup_some hb hbl
           exact .qUnk hte
   | _, _, _, .qSelDynAbs h₁ h₂ hl, hΓ, _ => fun hs => by
       cases hs with
-      | selDynL s => exact .qSelDynAbs (qpreservation_aux h₁ hΓ s) h₂ hl
-      | selDynR _ s => exact .qSelDynAbs h₁ (qpreservation_aux h₂ hΓ s) hl
+      | selDynL s => exact .qSelDynAbs (qpreservation_aux hok h₁ hΓ s) h₂ hl
+      | selDynR _ s => exact .qSelDynAbs h₁ (qpreservation_aux hok h₂ hΓ s) hl
       | @selDynVal b l _ hbl =>
           obtain ⟨ρ', -, hb⟩ := qtyped_rcd_inv h₁
           obtain ⟨_, _, hte⟩ := QTypedBody.lookup_some hb hbl
@@ -1295,7 +1530,7 @@ private theorem qpreservation_aux {B C : Type} {constTy : C → B} :
   -- singleton, so `${l}: τ` is the literal field (`dsingLab`)
   | _, _, _, .qRcdDyn h₁ h₂, hΓ, _ => fun hs => by
       cases hs with
-      | rcdDynKey s => exact .qRcdDyn (qpreservation_aux h₁ hΓ s) h₂
+      | rcdDynKey s => exact .qRcdDyn (qpreservation_aux hok h₁ hΓ s) h₂
       | rcdDynVal =>
           rcases qtyped_lab_inv h₁ with he | hu
           case inr => cases hu
@@ -1305,24 +1540,69 @@ private theorem qpreservation_aux {B C : Type} {constTy : C → B} :
   -- construction on `{l = e₂}`; either way typed at something, then blurred
   | _, _, _, .qSelDynBase h₁ h₂, hΓ, _ => fun hs => by
       cases hs with
-      | selDynL s => exact .qSelDynBase (qpreservation_aux h₁ hΓ s) h₂
-      | selDynR _ s => exact .qSelDynBase h₁ (qpreservation_aux h₂ hΓ s)
+      | selDynL s => exact .qSelDynBase (qpreservation_aux hok h₁ hΓ s) h₂
+      | selDynR _ s => exact .qSelDynBase h₁ (qpreservation_aux hok h₂ hΓ s)
       | @selDynVal b l _ hbl =>
           obtain ⟨ρ', -, hb⟩ := qtyped_rcd_inv h₁
           obtain ⟨_, _, hte⟩ := QTypedBody.lookup_some hb hbl
           exact .qUnk hte
   | _, _, _, .qRcdDynBase h₁ h₂, hΓ, _ => fun hs => by
       cases hs with
-      | rcdDynKey s => exact .qRcdDynBase (qpreservation_aux h₁ hΓ s) h₂
+      | rcdDynKey s => exact .qRcdDynBase (qpreservation_aux hok h₁ hΓ s) h₂
       | rcdDynVal => exact .qUnk (.qRcd (.field h₂))
   | _, _, _, .qLet hwf h₁ hne h₂, hΓ, _ => fun hs => by
       cases hs with
       | letCong s =>
-          exact .qLet hwf (fun τ' hi => qpreservation_aux (h₁ τ' hi) hΓ s) hne h₂
+          exact .qLet hwf (fun τ' hi => qpreservation_aux hok (h₁ τ' hi) hΓ s) hne h₂
       | letBeta hval =>
           subst hΓ
           exact qsubst_scheme_preserves_typing _ _ _ _ _ _ _
             (fun τ' hi => h₁ τ' hi) h₂
+  -- MacroNix
+  | _, _, _, .qBool _, _, _ => (nomatch ·)
+  | _, _, _, .qNil, _, _ => (nomatch ·)
+  | _, _, _, .qCons _ _, _, _ => (nomatch ·)
+  | _, _, _, .qIte hb h h₁ h₂, hΓ, _ => fun hs => by
+      cases hs with
+      | iteC s => exact .qIte hb (qpreservation_aux hok h hΓ s) h₁ h₂
+      | iteT => exact h₁
+      | iteF => exact h₂
+  | _, _, _, .qAsrt hb h h₂, hΓ, _ => fun hs => by
+      cases hs with
+      | asrtC s => exact .qAsrt hb (qpreservation_aux hok h hΓ s) h₂
+      | asrtT => exact h₂
+  | _, _, _, .qHas hb h, hΓ, _ => fun hs => by
+      cases hs with
+      | hasStep s => exact .qHas hb (qpreservation_aux hok h hΓ s)
+      | hasVal => exact .qBool hb
+  | _, _, _, .qPrim hp hi ha, hΓ, _ => fun hs =>
+      have ih := fun {vs es'} {e e'} (he : _ = vs ++ e :: es') hv (s : Step _ e e') =>
+        qpreservationArgs_aux hok ha hΓ he hv s
+      by
+      cases hs with
+      | primArg hv s => exact .qPrim hp hi (ih rfl hv s)
+      | primDelta hv hδ => subst hΓ; exact hok.delta_pres hp hi hv ha hδ
+
+-- one argument of a builtin steps, the others are values or untouched
+private theorem qpreservationArgs_aux {B C : Type} {constTy : Sig B C} (hok : SigOK constTy) :
+    {Γ : QCtx B} → {es : List (Expr C)} → {τs : List (Ty B)} → QTypedArgs constTy Γ es τs →
+    Γ = QCtx.empty → ∀ {vs es' : List (Expr C)} {e e' : Expr C}, es = vs ++ e :: es' →
+    (∀ v ∈ vs, Value v) → Step constTy.delta e e' →
+    QTypedArgs constTy Γ (vs ++ e' :: es') τs
+  | _, _, _, .nil, _, vs, _, _, _, he, _, _ => by cases vs <;> cases he
+  | _, _, _, .cons h ha, hΓ, vs, _, _, _, he, hv, s =>
+      have ih₁ := fun {e'} (s : Step _ _ e') => qpreservation_aux hok h hΓ s
+      have ih₂ := fun {vs es'} {e e'} (he : _ = vs ++ e :: es') hv (s : Step _ e e') =>
+        qpreservationArgs_aux hok ha hΓ he hv s
+      by
+      cases vs with
+      | nil =>
+          cases he
+          exact .cons (ih₁ s) ha
+      | cons v vs =>
+          cases he
+          exact .cons h (ih₂ rfl (fun w hw => hv w (List.mem_cons_of_mem _ hw)) s)
+end
 
 --========================= L2 METATHEORY: PROGRESS ==========================--
 --   If ⊢_Q e : τ  then  e ∈ Value  ∨  (∃ e', e → e')  ∨  e ↯
@@ -1340,16 +1620,16 @@ private theorem qpreservation_aux {B C : Type} {constTy : C → B} :
 
 -- Selecting on a record literal always progresses: hit steps, miss errors.
 -- (minimal's twin is private; the L2 development needs its own copy.)
-private theorem qsel_rcd_progress {C : Type} (b : RecBody (Expr C)) (l : Label) :
-    Progress (.sel (.rcd b) l) := by
+private theorem qsel_rcd_progress {C : Type} {δ : Delta C} (b : RecBody (Expr C)) (l : Label) :
+    Progress δ (.sel (.rcd b) l) := by
   cases hbl : RecBody.lookup l b with
   | some e' => exact .step (.selVal hbl)
   | none    => exact .err (.selAbsent hbl)
 
 -- …and so does a dynamic one on a record literal and a VALUE key, whatever its
 -- type: a label steps or misses, anything else is not a label and errs.
-private theorem qselDyn_rcd_progress {C : Type} (b : RecBody (Expr C)) {v : Expr C}
-    (hv : Value v) : Progress (.selDyn (.rcd b) v) := by
+private theorem qselDyn_rcd_progress {C : Type} {δ : Delta C} (b : RecBody (Expr C)) {v : Expr C}
+    (hv : Value v) : Progress δ (.selDyn (.rcd b) v) := by
   by_cases hl : ∃ l, v = .lab l
   · obtain ⟨l, rfl⟩ := hl
     cases hbl : RecBody.lookup l b with
@@ -1357,9 +1637,9 @@ private theorem qselDyn_rcd_progress {C : Type} (b : RecBody (Expr C)) {v : Expr
     | none    => exact .err (.selDynAbsent hbl)
   · exact .err (.selDynKey hv (fun l he => hl ⟨l, he⟩))
 
-private def qselDyn_progress {C : Type} {e₁ e₂ : Expr C}
-    (p₁ : Progress e₁) (p₂ : Progress e₂)
-    (hrcd : Value e₁ → ∃ b, e₁ = .rcd b) : Progress (.selDyn e₁ e₂) :=
+private def qselDyn_progress {C : Type} {δ : Delta C} {e₁ e₂ : Expr C}
+    (p₁ : Progress δ e₁) (p₂ : Progress δ e₂)
+    (hrcd : Value e₁ → ∃ b, e₁ = .rcd b) : Progress δ (.selDyn e₁ e₂) :=
   match p₁ with
   | .step s => .step (.selDynL s)
   | .err er => .err (.selDynL er)
@@ -1373,8 +1653,8 @@ private def qselDyn_progress {C : Type} {e₁ e₂ : Expr C}
 
 -- a dynamic construction steps its key, then builds the record or errs on a
 -- key that is not a label
-private def qrcdDyn_progress {C : Type} {e₁ e₂ : Expr C} (p₁ : Progress e₁) :
-    Progress (.rcdDyn e₁ e₂) :=
+private def qrcdDyn_progress {C : Type} {δ : Delta C} {e₁ e₂ : Expr C} (p₁ : Progress δ e₁) :
+    Progress δ (.rcdDyn e₁ e₂) :=
   match p₁ with
   | .step s => .step (.rcdDynKey s)
   | .err er => .err (.rcdDynKey er)
@@ -1383,32 +1663,98 @@ private def qrcdDyn_progress {C : Type} {e₁ e₂ : Expr C} (p₁ : Progress e�
       · obtain ⟨l, rfl⟩ := hl; exact .step .rcdDynVal
       · exact .err (.rcdDynKeyBad v₁ (fun l he => hl ⟨l, he⟩))
 
-def qprogress {B C : Type} {constTy : C → B} {Γ : QCtx B} {e : Expr C} {τ : Ty B}
-    (hΓ : Γ.tyEnv = []) (ht : QTyped constTy Γ e τ) : Progress e :=
+-- a boolean VALUE is a literal: constants never inhabit the boolean type
+theorem qcanonical_bool {B C : Type} {constTy : Sig B C} (hok : SigOK constTy) {Γ : QCtx B}
+    {v : Expr C} {bb : B} (hbb : constTy.boolB = some bb)
+    (hv : Value v) (ht : QTyped constTy Γ v (.base bb)) : ∃ b, v = .bool b := by
+  cases hv with
+  | con =>
+      rcases qtyped_con_inv ht with he | hu
+      · exact (hok.con_ne_bool _ _ hbb (by cases he.base_inv; rfl)).elim
+      · cases hu
+  | lam =>
+      obtain ⟨τ₁, τ₂, he | hu, -⟩ := qtyped_lam_inv ht
+      · obtain ⟨_, _, hσ, -⟩ := he.fn_inv; cases hσ
+      · cases hu
+  | rcd =>
+      obtain ⟨ρ, he | hu, -⟩ := qtyped_rcd_inv ht
+      · obtain ⟨_, hσ, -⟩ := he.rcd_inv; cases hσ
+      · cases hu
+  | lab =>
+      rcases qtyped_lab_inv ht with he | hu
+      · cases he.lab_inv
+      · cases hu
+  | bool => exact ⟨_, rfl⟩
+  | nil =>
+      rcases qtyped_nil_inv ht with ⟨_, he⟩ | hu
+      · obtain ⟨_, hσ, -⟩ := he.list_inv; cases hσ
+      · cases hu
+  | cons =>
+      obtain ⟨_, he | hu, -, -⟩ := qtyped_cons_inv ht
+      · obtain ⟨_, hσ, -⟩ := he.list_inv; cases hσ
+      · cases hu
+
+/-- the arguments of a builtin: all values, or a first non-value that steps or errs -/
+inductive ArgsProgress {C : Type} (δ : Delta C) : List (Expr C) → Prop where
+  | vals : (∀ v ∈ es, Value v) → ArgsProgress δ es
+  | step : (∀ v ∈ vs, Value v) → Step δ e e' → ArgsProgress δ (vs ++ e :: es)
+  | err  : (∀ v ∈ vs, Value v) → Err δ e → ArgsProgress δ (vs ++ e :: es)
+
+theorem ArgsProgress.cons_val {C : Type} {δ : Delta C} {v : Expr C} {es : List (Expr C)}
+    (hv : Value v) : ArgsProgress δ es → ArgsProgress δ (v :: es)
+  | .vals h => .vals (by
+      intro w hw
+      rcases List.mem_cons.mp hw with rfl | hw
+      · exact hv
+      · exact h w hw)
+  | @ArgsProgress.step _ _ vs _ _ _ h s =>
+      .step (vs := v :: vs) (fun w hw => by
+        rcases List.mem_cons.mp hw with rfl | hw
+        · exact hv
+        · exact h w hw) s
+  | @ArgsProgress.err _ _ vs _ _ h er =>
+      .err (vs := v :: vs) (fun w hw => by
+        rcases List.mem_cons.mp hw with rfl | hw
+        · exact hv
+        · exact h w hw) er
+
+-- a builtin application: its arguments drive it, then δ fires or fails
+private theorem qprim_progress {C : Type} {δ : Delta C} {p : C} {es : List (Expr C)} :
+    ArgsProgress δ es → Progress δ (.prim p es)
+  | .vals hv =>
+      match hδ : δ p es with
+      | some _ => .step (.primDelta hv hδ)
+      | none   => .err (.primFail hv hδ)
+  | .step hv s => .step (.primArg hv s)
+  | .err hv er => .err (.primArg hv er)
+
+mutual
+def qprogress {B C : Type} {constTy : Sig B C} (hok : SigOK constTy) {Γ : QCtx B} {e : Expr C}
+    {τ : Ty B} (hΓ : Γ.tyEnv = []) (ht : QTyped constTy Γ e τ) : Progress constTy.delta e :=
   match ht with
   | .qCon         => .done .con
   | .qVar h _     => by simp [QCtx.lookup, hΓ] at h
-  | .qEq h _      => qprogress hΓ h
+  | .qEq h _      => qprogress hok hΓ h
   | .qLam _       => .done .lam
   | .qRcd _       => .done .rcd
-  | .qUnk h       => qprogress hΓ h
+  | .qUnk h       => qprogress hok hΓ h
   | .qApp h₁ h₂   =>
-      match qprogress hΓ h₁ with
+      match qprogress hok hΓ h₁ with
       | .step s  => .step (.appFun s)
       | .err er  => .err (.appFun er)
       | .done v₁ =>
-          match qprogress hΓ h₂ with
+          match qprogress hok hΓ h₂ with
           | .step s  => .step (.appArg v₁ s)
           | .err er  => .err (.appArg v₁ er)
           | .done v₂ => by
               obtain ⟨x, e₀, rfl⟩ := qcanonical_fn v₁ h₁
               exact .step (.beta v₂)
   | .qCat h₁ h₂   =>
-      match qprogress hΓ h₁ with
+      match qprogress hok hΓ h₁ with
       | .step s  => .step (.catLeft s)
       | .err er  => .err (.catLeft er)
       | .done v₁ =>
-          match qprogress hΓ h₂ with
+          match qprogress hok hΓ h₂ with
           | .step s  => .step (.catRight v₁ s)
           | .err er  => .err (.catRight v₁ er)
           | .done v₂ => by
@@ -1416,7 +1762,7 @@ def qprogress {B C : Type} {constTy : C → B} {Γ : QCtx B} {e : Expr C} {τ : 
               obtain ⟨b₂, ρ₂', rfl, -, -⟩ := qcanonical_rcd v₂ h₂
               exact .step .catVal
   | .qSel he hl   =>
-      match qprogress hΓ he with
+      match qprogress hok hΓ he with
       | .step s => .step (.selStep s)
       | .err er => .err (.sel er)
       | .done v => by
@@ -1428,7 +1774,7 @@ def qprogress {B C : Type} {constTy : C → B} {Γ : QCtx B} {e : Expr C} {τ : 
           obtain ⟨e', hbl, -⟩ := QTypedBody.lookup_found hb hl'
           exact .step (.selVal hbl)
   | .qSelUnk he _ =>
-      match qprogress hΓ he with
+      match qprogress hok hΓ he with
       | .step s => .step (.selStep s)
       | .err er => .err (.sel er)
       | .done v => by
@@ -1436,7 +1782,7 @@ def qprogress {B C : Type} {constTy : C → B} {Γ : QCtx B} {e : Expr C} {τ : 
           exact qsel_rcd_progress b _
   -- T-sel-⊥ one level up: the ↯-disjunct at work — typed (at ★) and errs.
   | .qSelAbs he _ =>
-      match qprogress hΓ he with
+      match qprogress hok hΓ he with
       | .step s => .step (.selStep s)
       | .err er => .err (.sel er)
       | .done v => by
@@ -1445,42 +1791,84 @@ def qprogress {B C : Type} {constTy : C → B} {Γ : QCtx B} {e : Expr C} {τ : 
   -- the inhabitation premise picks ONE discharged instance; the binding types
   -- there, which is all progress needs to drive it to a value, error or step
   | .qLet hwf h₁ hne h₂ =>
-      match qprogress hΓ (h₁ _ hne.choose_spec) with
+      match qprogress hok hΓ (h₁ _ hne.choose_spec) with
       | .step s  => .step (.letCong s)
       | .err er  => .err (.letBind er)
       | .done v₁ => .step (.letBeta v₁)
   | .qLab => .done .lab
-  | .qSelDyn h₁ h₂ _ => qselDyn_progress (qprogress hΓ h₁) (qprogress hΓ h₂)
+  | .qSelDyn h₁ h₂ _ => qselDyn_progress (qprogress hok hΓ h₁) (qprogress hok hΓ h₂)
       (fun v => let ⟨b, _, he, _⟩ := qcanonical_rcd v h₁; ⟨b, he⟩)
-  | .qSelDynUnk h₁ h₂ _ => qselDyn_progress (qprogress hΓ h₁) (qprogress hΓ h₂)
+  | .qSelDynUnk h₁ h₂ _ => qselDyn_progress (qprogress hok hΓ h₁) (qprogress hok hΓ h₂)
       (fun v => let ⟨b, _, he, _⟩ := qcanonical_rcd v h₁; ⟨b, he⟩)
-  | .qSelDynAbs h₁ h₂ _ => qselDyn_progress (qprogress hΓ h₁) (qprogress hΓ h₂)
+  | .qSelDynAbs h₁ h₂ _ => qselDyn_progress (qprogress hok hΓ h₁) (qprogress hok hΓ h₂)
       (fun v => let ⟨b, _, he, _⟩ := qcanonical_rcd v h₁; ⟨b, he⟩)
-  | .qRcdDyn h₁ _ => qrcdDyn_progress (qprogress hΓ h₁)
-  | .qSelDynBase h₁ h₂ => qselDyn_progress (qprogress hΓ h₁) (qprogress hΓ h₂)
+  | .qRcdDyn h₁ _ => qrcdDyn_progress (qprogress hok hΓ h₁)
+  | .qSelDynBase h₁ h₂ => qselDyn_progress (qprogress hok hΓ h₁) (qprogress hok hΓ h₂)
       (fun v => let ⟨b, _, he, _⟩ := qcanonical_rcd v h₁; ⟨b, he⟩)
-  | .qRcdDynBase h₁ _ => qrcdDyn_progress (qprogress hΓ h₁)
+  | .qRcdDynBase h₁ _ => qrcdDyn_progress (qprogress hok hΓ h₁)
+  -- MacroNix
+  | .qBool _ => .done .bool
+  | .qNil => .done .nil
+  | .qCons _ _ => .done .cons
+  | .qPrim _ _ ha => qprim_progress (qprogressArgs hok hΓ ha)
+  | .qIte hb h _ _ =>
+      match qprogress hok hΓ h with
+      | .step s => .step (.iteC s)
+      | .err er => .err (.iteC er)
+      | .done v => by
+          obtain ⟨b, rfl⟩ := qcanonical_bool hok hb v h
+          cases b
+          · exact .step .iteF
+          · exact .step .iteT
+  | .qAsrt hb h _ =>
+      match qprogress hok hΓ h with
+      | .step s => .step (.asrtC s)
+      | .err er => .err (.asrtC er)
+      | .done v => by
+          obtain ⟨b, rfl⟩ := qcanonical_bool hok hb v h
+          cases b
+          · exact .err .asrtFail
+          · exact .step .asrtT
+  | .qHas _ h =>
+      match qprogress hok hΓ h with
+      | .step s => .step (.hasStep s)
+      | .err er => .err (.hasC er)
+      | .done v => by
+          obtain ⟨b, ρ', rfl, -, -⟩ := qcanonical_rcd v h
+          exact .step .hasVal
+
+def qprogressArgs {B C : Type} {constTy : Sig B C} (hok : SigOK constTy) {Γ : QCtx B}
+    {es : List (Expr C)} {τs : List (Ty B)} (hΓ : Γ.tyEnv = [])
+    (ha : QTypedArgs constTy Γ es τs) : ArgsProgress constTy.delta es :=
+  match ha with
+  | .nil => .vals (fun _ h => nomatch h)
+  | .cons h ha =>
+      match qprogress hok hΓ h with
+      | .step s => .step (vs := []) (fun _ h => nomatch h) s
+      | .err er => .err (vs := []) (fun _ h => nomatch h) er
+      | .done v => (qprogressArgs hok hΓ ha).cons_val v
+end
 
 -- ⊢  ⊢_Q e : τ   ⟹   e is a value, steps, or is a lookup-error
-theorem qProgress {B C : Type} (constTy : C → B) (e : Expr C) (τ : Ty B)
-    (ht : QTyped constTy QCtx.empty e τ) : Progress e :=
-  qprogress rfl ht
+theorem qProgress {B C : Type} (constTy : Sig B C) (hok : SigOK constTy) (e : Expr C)
+    (τ : Ty B) (ht : QTyped constTy QCtx.empty e τ) : Progress constTy.delta e :=
+  qprogress hok rfl ht
 
 
 theorem qPreservation
-    {B C : Type} (constTy : C → B)
+    {B C : Type} (constTy : Sig B C) (hok : SigOK constTy)
     (e e' : Expr C) (τ : Ty B)
     (ht : QTyped constTy QCtx.empty e τ)
-    (hs : Step e e') :
+    (hs : Step constTy.delta e e') :
     QTyped constTy QCtx.empty e' τ :=
-  qpreservation_aux ht rfl hs
+  qpreservation_aux hok ht rfl hs
 
 --====================== PRINCIPALITY IN THE ⊴⊑ ORDER ========================--
 -- The other half of selQ_no_blurred_inst: the type it refuses IS a typing.
 -- T-★-intro blurs the found-selection, so the typing set of λx.x.l contains
 -- {(l: 𝓫)} → ★ while the instance set of selQ does not.
 -- ⊢  ∅ ⊢_Q λx.x.l : {(l: 𝓫_c)} → ★
-theorem selEx_blurred_typing {B C : Type} (constTy : C → B) (c : C) :
+theorem selEx_blurred_typing {B C : Type} (constTy : Sig B C) (c : C) :
     QTyped constTy QCtx.empty (selEx C)
       (.fn (.rcd (.sing "l" (.base (constTy c)))) .unk) :=
   by
@@ -1493,7 +1881,7 @@ theorem selEx_blurred_typing {B C : Type} (constTy : C → B) (c : C) :
 -- escapes its instance set. "Instances = typings" is therefore unreachable for
 -- this scheme, and principality MUST be stated up to precision.
 -- ⊢  (∅ ⊢_Q λx.x.l : {(l: 𝓫_c)} → ★)  ∧  ¬ (selQ ≥_∅ {(l: 𝓫_c)} → ★)
-theorem selQ_misses_a_typing {B C : Type} (constTy : C → B) (c : C) :
+theorem selQ_misses_a_typing {B C : Type} (constTy : Sig B C) (c : C) :
     QTyped constTy QCtx.empty (selEx C)
         (.fn (.rcd (.sing "l" (.base (constTy c)))) .unk) ∧
     ¬ QScheme.Inst (selQ B)
@@ -1514,7 +1902,7 @@ theorem selQ_misses_a_typing {B C : Type} (constTy : C → B) (c : C) :
 -- the refuting witness is an instance (selQ_inst_equiv); whether ⊑-only
 -- covering now holds is OPEN. Principal (below, with ≼) is the statement
 -- carried forward.
-def QScheme.PrincipalStrict {B C : Type} (constTy : C → B) (Γ : QCtx B)
+def QScheme.PrincipalStrict {B C : Type} (constTy : Sig B C) (Γ : QCtx B)
     (e : Expr C) (σ : QScheme B) : Prop :=
   (∀ τ, QScheme.Inst σ τ → QTyped constTy Γ e τ) ∧
   (∃ τ, QScheme.Inst σ τ) ∧
@@ -1524,7 +1912,7 @@ def QScheme.PrincipalStrict {B C : Type} (constTy : C → B) (Γ : QCtx B)
 -- whose instances are all typings sits below it. This is what makes the
 -- definition an order-theoretic one rather than three unrelated clauses.
 -- ⊢  σ principal for e,  every σ''-instance a typing  ⟹  σ'' ⊴⊑ σ
-theorem QScheme.PrincipalStrict.greatest {B C : Type} {constTy : C → B}
+theorem QScheme.PrincipalStrict.greatest {B C : Type} {constTy : Sig B C}
     {Γ : QCtx B} {e : Expr C} {σ σ'' : QScheme B}
     (hp : QScheme.PrincipalStrict constTy Γ e σ)
     (hcl : ∀ τ, QScheme.Inst σ'' τ → QTyped constTy Γ e τ) :
@@ -1535,7 +1923,7 @@ theorem QScheme.PrincipalStrict.greatest {B C : Type} {constTy : C → B}
 -- OPEN, in the ⊑-only and the ≼ form alike, where it needs an L2 inversion for λx.x.l the way
 -- minimal.lean's sel_var_unk is the L1 one.
 -- ⊢  (∀ τ. selQ ≥_∅ τ ⟹ ∅ ⊢_Q λx.x.l : τ)  ∧  ∃ τ. selQ ≥_∅ τ
-theorem selQ_sound_and_inhabited {B C : Type} (constTy : C → B) :
+theorem selQ_sound_and_inhabited {B C : Type} (constTy : Sig B C) :
     (∀ τ, QScheme.Inst (selQ B) τ →
       QTyped constTy (QCtx.empty : QCtx B) (selEx C) τ) ∧
     (∃ τ, QScheme.Inst (selQ B) τ) :=
@@ -1586,7 +1974,7 @@ theorem QCtx.SubCov.bindTy {B : Type} {Γ₁ Γ₂ : QCtx B} (h : QCtx.SubCov Γ
 
 -- ⊢  Γ₁ ⊴-sub Γ₂,  Γ₁ ⊢_Q e : τ   ⟹   Γ₂ ⊢_Q e : τ
 mutual
-theorem qtyped_cov {B C : Type} {constTy : C → B} :
+theorem qtyped_cov {B C : Type} {constTy : Sig B C} :
     {Γ₁ Γ₂ : QCtx B} → {e : Expr C} → {τ : Ty B} → QCtx.SubCov Γ₁ Γ₂ →
     QTyped constTy Γ₁ e τ → QTyped constTy Γ₂ e τ
   | _, _, _, _, _,  .qCon         => .qCon
@@ -1623,19 +2011,32 @@ theorem qtyped_cov {B C : Type} {constTy : C → B} :
       .qSelDynBase (qtyped_cov hs h₁) (qtyped_cov hs h₂)
   | _, _, _, _, hs, .qRcdDynBase h₁ h₂ =>
       .qRcdDynBase (qtyped_cov hs h₁) (qtyped_cov hs h₂)
+  | _, _, _, _, hs, .qPrim hp hi ha => .qPrim hp hi (qtypedArgs_cov hs ha)
+  | _, _, _, _, hs, .qBool hb => .qBool hb
+  | _, _, _, _, hs, .qIte hb h h₁ h₂ => .qIte hb (qtyped_cov hs h) (qtyped_cov hs h₁) (qtyped_cov hs h₂)
+  | _, _, _, _, hs, .qAsrt hb h h₂ => .qAsrt hb (qtyped_cov hs h) (qtyped_cov hs h₂)
+  | _, _, _, _, hs, .qNil => .qNil
+  | _, _, _, _, hs, .qCons h₁ h₂ => .qCons (qtyped_cov hs h₁) (qtyped_cov hs h₂)
+  | _, _, _, _, hs, .qHas hb h => .qHas hb (qtyped_cov hs h)
 
-theorem qtypedBody_cov {B C : Type} {constTy : C → B} :
+theorem qtypedBody_cov {B C : Type} {constTy : Sig B C} :
     {Γ₁ Γ₂ : QCtx B} → {b : RecBody (Expr C)} → {ρ : Row B} →
     QCtx.SubCov Γ₁ Γ₂ → QTypedBody constTy Γ₁ b ρ → QTypedBody constTy Γ₂ b ρ
   | _, _, _, _, _,  .empty     => .empty
   | _, _, _, _, hs, .field h   => .field (qtyped_cov hs h)
   | _, _, _, _, hs, .cat h₁ h₂ =>
       .cat (qtypedBody_cov hs h₁) (qtypedBody_cov hs h₂)
+
+theorem qtypedArgs_cov {B C : Type} {constTy : Sig B C} :
+    {Γ₁ Γ₂ : QCtx B} → {es : List (Expr C)} → {τs : List (Ty B)} →
+    QCtx.SubCov Γ₁ Γ₂ → QTypedArgs constTy Γ₁ es τs → QTypedArgs constTy Γ₂ es τs
+  | _, _, _, _, _,  .nil       => .nil
+  | _, _, _, _, hs, .cons h ha => .cons (qtyped_cov hs h) (qtypedArgs_cov hs ha)
 end
 
 -- The headline corollary: swap ONE binding for a ⊴-larger scheme.
 -- ⊢  Γ, x:σ ⊢_Q e : τ,  σ ⊴ σ'   ⟹   Γ, x:σ' ⊢_Q e : τ
-theorem qtyped_bind_cov {B C : Type} {constTy : C → B} {Γ : QCtx B} {x : Var}
+theorem qtyped_bind_cov {B C : Type} {constTy : Sig B C} {Γ : QCtx B} {x : Var}
     {e : Expr C} {τ : Ty B} {σ σ' : QScheme B}
     (h : QTyped constTy (Γ.bindScheme x σ) e τ)
     (hcov : σ ⊴ σ') :
@@ -1880,7 +2281,7 @@ private def blurB {B : Type} (b : B) : Ty B :=
   .rcd (.sing "m" (.base b))
 
 -- ⊢  ∅ ⊢_Q λx.x.l : {(l: {ε | m: 𝓫})} → {m: 𝓫}
-theorem selEx_equiv_typing {B C : Type} (constTy : C → B) (c : C) :
+theorem selEx_equiv_typing {B C : Type} (constTy : Sig B C) (c : C) :
     QTyped constTy QCtx.empty (selEx C)
       (.fn (.rcd (.sing "l" (blurA (constTy c)))) (blurB (constTy c))) := by
   refine .qLam (.qEq (τ₁ := blurA (constTy c)) (.qSel
@@ -1959,14 +2360,14 @@ theorem QScheme.BelowCovered.trans {B : Type}
 
 -- PRINCIPALITY, CORRECTED. Same three conjuncts; the covering one now reads
 -- the typing set's OTHER closure property as well.
-def QScheme.Principal {B C : Type} (constTy : C → B) (Γ : QCtx B) (e : Expr C)
+def QScheme.Principal {B C : Type} (constTy : Sig B C) (Γ : QCtx B) (e : Expr C)
     (σ : QScheme B) : Prop :=
   (∀ τ, QScheme.Inst σ τ → QTyped constTy Γ e τ) ∧
   (∃ τ, QScheme.Inst σ τ) ∧
   (∀ τ, QTyped constTy Γ e τ → ∃ τ', QScheme.Inst σ τ' ∧ τ' ≼ₜ τ)
 
 -- ⊢  σ principal for e,  every σ''-instance a typing  ⟹  σ'' ⊴≼ σ
-theorem QScheme.Principal.greatest {B C : Type} {constTy : C → B} {Γ : QCtx B}
+theorem QScheme.Principal.greatest {B C : Type} {constTy : Sig B C} {Γ : QCtx B}
     {e : Expr C} {σ σ'' : QScheme B} (hp : QScheme.Principal constTy Γ e σ)
     (hcl : ∀ τ, QScheme.Inst σ'' τ → QTyped constTy Γ e τ) :
     σ'' ⊴≼ σ :=
@@ -1984,7 +2385,7 @@ theorem QScheme.Principal.greatest {B C : Type} {constTy : C → B} {Γ : QCtx B
 -- instance for exactly that lookup.
 
 -- L2 counterpart of minimal.lean's `var_inst_inv`.
-private theorem qvar_inst_inv {B C : Type} {constTy : C → B} :
+private theorem qvar_inst_inv {B C : Type} {constTy : Sig B C} :
     {Γ : QCtx B} → {e : Expr C} → {τ : Ty B} → QTyped constTy Γ e τ →
     ∀ {x : Var} {τx : Ty B}, e = .var x → Γ.lookup x = some ⟨[], [], τx⟩ →
     τ = .unk ∨ TyEquiv τx τ
@@ -2015,11 +2416,18 @@ private theorem qvar_inst_inv {B C : Type} {constTy : C → B} :
   | _, _, _, .qRcdDyn _ _ => fun he _ => nomatch he
   | _, _, _, .qSelDynBase _ _ => fun he _ => nomatch he
   | _, _, _, .qRcdDynBase _ _ => fun he _ => nomatch he
+  | _, _, _, .qPrim _ _ _ => fun he _ => nomatch he
+  | _, _, _, .qBool _ => fun he _ => nomatch he
+  | _, _, _, .qIte _ _ _ _ => fun he _ => nomatch he
+  | _, _, _, .qAsrt _ _ _ => fun he _ => nomatch he
+  | _, _, _, .qNil => fun he _ => nomatch he
+  | _, _, _, .qCons _ _ => fun he _ => nomatch he
+  | _, _, _, .qHas _ _ => fun he _ => nomatch he
 
 -- L2 counterpart of `sel_var_unk`, but full: every typing of `x.l` on a
 -- monotype-bound x factors through ONE lookup, and the typing sits ≼-above
 -- that lookup's collapse.
-theorem qsel_var_inv {B C : Type} {constTy : C → B} :
+theorem qsel_var_inv {B C : Type} {constTy : Sig B C} :
     {Γ : QCtx B} → {e : Expr C} → {τ : Ty B} → QTyped constTy Γ e τ →
     ∀ {x : Var} {l : Label} {τx : Ty B}, e = .sel (.var x) l →
     Γ.lookup x = some ⟨[], [], τx⟩ →
@@ -2059,9 +2467,16 @@ theorem qsel_var_inv {B C : Type} {constTy : C → B} :
   | _, _, _, .qRcdDyn _ _ => fun he _ => nomatch he
   | _, _, _, .qSelDynBase _ _ => fun he _ => nomatch he
   | _, _, _, .qRcdDynBase _ _ => fun he _ => nomatch he
+  | _, _, _, .qPrim _ _ _ => fun he _ => nomatch he
+  | _, _, _, .qBool _ => fun he _ => nomatch he
+  | _, _, _, .qIte _ _ _ _ => fun he _ => nomatch he
+  | _, _, _, .qAsrt _ _ _ => fun he _ => nomatch he
+  | _, _, _, .qNil => fun he _ => nomatch he
+  | _, _, _, .qCons _ _ => fun he _ => nomatch he
+  | _, _, _, .qHas _ _ => fun he _ => nomatch he
 
 -- CONJUNCT 3, in the ≼ form.
-theorem selQ_covers_typings {B C : Type} (constTy : C → B) :
+theorem selQ_covers_typings {B C : Type} (constTy : Sig B C) :
     ∀ τ, QTyped constTy (QCtx.empty : QCtx B) (selEx C) τ →
       ∃ τ', QScheme.Inst (selQ B) τ' ∧ τ' ≼ₜ τ := by
   intro τ h
@@ -2077,14 +2492,14 @@ theorem selQ_covers_typings {B C : Type} (constTy : C → B) :
     exact ⟨_, selQ_inst_absent, TyBelow.of_prec (.unk _)⟩
 
 -- λx.x.l HAS a principal qualified scheme.
-theorem selQ_principal {B C : Type} (constTy : C → B) :
+theorem selQ_principal {B C : Type} (constTy : Sig B C) :
     QScheme.Principal constTy (QCtx.empty : QCtx B) (selEx C) (selQ B) :=
   ⟨(selQ_sound_and_inhabited constTy).1, (selQ_sound_and_inhabited constTy).2,
    selQ_covers_typings constTy⟩
 
 -- ... and therefore ⊴≼-greatest among every scheme that is sound for λx.x.l.
 -- ⊢  (∀τ. σ ≥_∅ τ ⟹ ∅ ⊢_Q λx.x.l : τ)  ⟹  σ ⊴≼ selQ
-theorem selQ_greatest {B C : Type} (constTy : C → B) {σ : QScheme B}
+theorem selQ_greatest {B C : Type} (constTy : Sig B C) {σ : QScheme B}
     (hcl : ∀ τ, QScheme.Inst σ τ →
       QTyped constTy (QCtx.empty : QCtx B) (selEx C) τ) :
     σ ⊴≼ selQ B :=
@@ -2152,7 +2567,7 @@ theorem applySubst_rowOnly {B : Type} {θ₁ θ₂ : TySubst B} (hr : θ₁.row 
 -- `typed_inv_aux` (minimal.lean) covers con/lam/rcd. Refuting the two-use
 -- program needs the other three formers, in the same mod-≈/mod-★ shape.
 
-private theorem typed_let_inv' {B C : Type} {constTy : C → B} :
+private theorem typed_let_inv' {B C : Type} {constTy : Sig B C} :
     {Γ : Ctx B} → {e : Expr C} → {τ : Ty B} → Typed constTy Γ e τ →
     ∀ {x : Var} {e₁ e₂ : Expr C}, e = .letE x e₁ e₂ →
     ∃ (σ : Scheme B) (τ₂ : Ty B), (TyEquiv τ₂ τ ∨ τ = .unk) ∧
@@ -2176,7 +2591,7 @@ private theorem typed_let_inv' {B C : Type} {constTy : C → B} :
   | _, _, _, .tSelAbs _ _ => fun he => nomatch he
   | _, _, _, .tRcd _ => fun he => nomatch he
 
-private theorem typed_app_inv' {B C : Type} {constTy : C → B} :
+private theorem typed_app_inv' {B C : Type} {constTy : Sig B C} :
     {Γ : Ctx B} → {e : Expr C} → {τ : Ty B} → Typed constTy Γ e τ →
     ∀ {e₁ e₂ : Expr C}, e = .app e₁ e₂ →
     ∃ τ₁ τ₂, (TyEquiv τ₂ τ ∨ τ = .unk) ∧
@@ -2202,7 +2617,7 @@ private theorem typed_app_inv' {B C : Type} {constTy : C → B} :
 
 -- `var_inst_inv` at a GENERAL scheme: a use of x reads some instance of the
 -- scheme Γ binds it to, up to ≈ (and ★ from tUnk).
-private theorem tvar_inv {B C : Type} {constTy : C → B} :
+private theorem tvar_inv {B C : Type} {constTy : Sig B C} :
     {Γ : Ctx B} → {e : Expr C} → {τ : Ty B} → Typed constTy Γ e τ →
     ∀ {x : Var} {σ : Scheme B}, e = .var x → Γ.lookup x = some σ →
     τ = .unk ∨ ∃ τ', σ.Inst τ' ∧ TyEquiv τ' τ
@@ -2228,7 +2643,7 @@ private theorem tvar_inv {B C : Type} {constTy : C → B} :
 
 -- A selection on a ★-bound variable has NO typing at all: every selection rule
 -- demands the scrutinee at a record type, and ★ is ≈-rigid.
-private theorem sel_var_of_unk {B C : Type} {constTy : C → B} :
+private theorem sel_var_of_unk {B C : Type} {constTy : Sig B C} :
     {Γ : Ctx B} → {e : Expr C} → {τ : Ty B} → Typed constTy Γ e τ →
     ∀ {x : Var} {l : Label}, e = .sel (.var x) l →
     Γ.lookup x = some ⟨[], .unk⟩ → False
@@ -2261,7 +2676,7 @@ private theorem sel_var_of_unk {B C : Type} {constTy : C → B} :
 ------------- WHAT INSTANCE-CLOSEDNESS FORCES ON A SCHEME FOR λx.x.l ----------
 
 -- A ★ domain admits NO typing: the body would be a selection on a ★-bound x.
-private theorem selEx_dom_unk {B C : Type} (constTy : C → B) (R : Ty B) :
+private theorem selEx_dom_unk {B C : Type} (constTy : Sig B C) (R : Ty B) :
     ¬ Typed constTy Ctx.empty (selEx C) (.fn .unk R) := by
   intro h
   obtain ⟨τ₁, τ₂, hd, hbody⟩ := typed_lam_inv h
@@ -2274,7 +2689,7 @@ private theorem selEx_dom_unk {B C : Type} (constTy : C → B) (R : Ty B) :
 
 -- An ε domain forces a ★ result — `sel_var_unk` read through the λ.
 -- ⊢  D ≈ₜ {ε},  ∅ ⊢ λx.x.l : D → R   ⟹   R = ★
-private theorem selEx_dom_empty_res {B C : Type} {constTy : C → B} {D R : Ty B}
+private theorem selEx_dom_empty_res {B C : Type} {constTy : Sig B C} {D R : Ty B}
     (hD : TyEquiv (.rcd .empty) D)
     (h : Typed constTy Ctx.empty (selEx C) (.fn D R)) : R = .unk := by
   obtain ⟨τ₁, τ₂, hd, hbody⟩ := typed_lam_inv h
@@ -2289,7 +2704,7 @@ private theorem selEx_dom_empty_res {B C : Type} {constTy : C → B} {D R : Ty B
 
 -- {ε} is not a typing of λx.x.l either (the head is wrong) — what a fully
 -- quantified body would have to accept.
-private theorem selEx_not_rcd_empty {B C : Type} (constTy : C → B) :
+private theorem selEx_not_rcd_empty {B C : Type} (constTy : Sig B C) :
     ¬ Typed constTy Ctx.empty (selEx C) (.rcd (.empty : Row B)) := by
   intro h
   obtain ⟨τ₁, τ₂, hd, -⟩ := typed_lam_inv h
@@ -2306,7 +2721,7 @@ private theorem selEx_not_rcd_empty {B C : Type} (constTy : C → B) :
 -- then the domain cannot depend on it — re-pointing that variable inside the
 -- ⊥-use's substitution yields the underivable instance {ε} → 𝓫_c.
 
-private theorem typedBody_two_fields {B C : Type} {constTy : C → B} {Γ : Ctx B}
+private theorem typedBody_two_fields {B C : Type} {constTy : Sig B C} {Γ : Ctx B}
     {la lb : Label} {ea eb : Expr C} {ρ : Row B}
     (h : TypedBody constTy Γ (.cat (.field la ea) (.field lb eb)) ρ) :
     ∃ τa τb, ρ = .cat (.sing la τa) (.sing lb τb) ∧
@@ -2320,7 +2735,7 @@ private theorem typedBody_two_fields {B C : Type} {constTy : C → B} {Γ : Ctx 
 
 -- ⊢  ¬ ( ∅ ⊢ let f = λx.x.l in { a = f {l = c} | b = f {} }
 --              : { a: 𝓫_c | b: ★ } )
-theorem l1_rejects_two_use {B C : Type} (constTy : C → B) (c : C) :
+theorem l1_rejects_two_use {B C : Type} (constTy : Sig B C) (c : C) :
     ¬ Typed constTy Ctx.empty
       (.letE "f" (selEx C)
         (.rcd (.cat
@@ -2469,7 +2884,7 @@ theorem l1_rejects_two_use {B C : Type} (constTy : C → B) (c : C) :
           cases this
 
 -- L1 ⊊ L2, mechanized: the two-use program is in L2 and not in L1.
-theorem l1_strictly_weaker {B C : Type} (constTy : C → B) (c : C) :
+theorem l1_strictly_weaker {B C : Type} (constTy : Sig B C) (c : C) :
     ∃ (e : Expr C) (τ : Ty B),
       QTyped constTy QCtx.empty e τ ∧ ¬ Typed constTy Ctx.empty e τ :=
   ⟨_, _, qtyped_two_use constTy c, l1_rejects_two_use constTy c⟩
@@ -2491,7 +2906,7 @@ def selDynQ (B : Type) : QScheme B :=
    .fn (.lab (.var "α")) (.fn (.rcd (.var "β")) (.var "δ"))⟩
 
 /-- ⊢  **every instance of `selDynQ` types λa. λx. x.(a)**, in any context. -/
-theorem selDynQ_instance_closed {B C : Type} (constTy : C → B) (Γ : QCtx B) :
+theorem selDynQ_instance_closed {B C : Type} (constTy : Sig B C) (Γ : QCtx B) :
     ∀ τ, QScheme.Inst (selDynQ B) τ → QTyped constTy Γ (selDynEx C) τ := by
   rintro τ ⟨θ, -, hQ, hbody⟩
   simp only [selDynQ, Ty.applySubst, Key.applySubst_var] at hbody
@@ -2528,7 +2943,7 @@ def rcdDynQ (B : Type) : QScheme B :=
   ⟨["α", "δ"], [], .fn (.lab (.var "α")) (.fn (.var "δ") (.rcd (.dsing (.var "α") (.var "δ"))))⟩
 
 /-- ⊢  **every instance of `rcdDynQ` types λa. λv. {${a} = v}**, in any context. -/
-theorem rcdDynQ_instance_closed {B C : Type} (constTy : C → B) (Γ : QCtx B) :
+theorem rcdDynQ_instance_closed {B C : Type} (constTy : Sig B C) (Γ : QCtx B) :
     ∀ τ, QScheme.Inst (rcdDynQ B) τ → QTyped constTy Γ (rcdDynEx C) τ := by
   rintro τ ⟨θ, -, -, hbody⟩
   simp only [rcdDynQ, Ty.applySubst, Row.applySubst, Key.applySubst_var] at hbody

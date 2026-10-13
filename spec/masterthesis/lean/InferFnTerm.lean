@@ -609,7 +609,7 @@ variable {C : Type}
 
 mutual
 
-theorem inferF_stable (constTy : C → B) :
+theorem inferF_stable (constTy : Sig B C) :
     ∀ (Γ : QCtx B) (S : SolverState B) (e : Expr C), Stable (fun m => inferF constTy m Γ S e)
   | _, S, .con c => by simp only [inferF]; exact Stable.const _
   | Γ, S, .var x => by
@@ -668,10 +668,10 @@ theorem inferF_stable (constTy : C → B) :
   | Γ, S, .letE x e₁ e₂ => by
       simp only [inferF]
       exact Stable.bind (inferF_stable constTy _ _ e₁) (fun r₁ => inferF_stable constTy _ _ e₂)
-  | _, _, .prim _ | _, _, .ite _ _ _ | _, _, .asrt _ _ | _, _, .nil | _, _, .cons _ _
+  | _, _, .prim _ _ | _, _, .bool _ | _, _, .ite _ _ _ | _, _, .asrt _ _ | _, _, .nil | _, _, .cons _ _
   | _, _, .has _ _ => by simp only [inferF]; exact Stable.const _
 
-theorem inferRecF_stable (constTy : C → B) :
+theorem inferRecF_stable (constTy : Sig B C) :
     ∀ (Γ : QCtx B) (S : SolverState B) (ξ : RecBody (Expr C)),
       Stable (fun m => inferRecF constTy m Γ S ξ)
   | _, S, .empty => by simp only [inferRecF]; exact Stable.const _
@@ -687,7 +687,7 @@ end
 
 mutual
 
-theorem inferF_settles (constTy : C → B) :
+theorem inferF_settles (constTy : Sig B C) :
     ∀ (Γ : QCtx B) (S : SolverState B) (e : Expr C), S.sol.Clean →
       Settles (fun m => inferF constTy m Γ S e)
   | _, S, .con c, _ => by simp only [inferF]; exact ⟨0, fun h => nomatch h⟩
@@ -858,10 +858,10 @@ theorem inferF_settles (constTy : C → B) :
         (fun r₁ _ h₁ => by
           have c₁ : r₁.2.sol.Clean := Infer.clean (inferF_sound h₁) hc
           exact inferF_settles constTy _ _ e₂ c₁)
-  | _, _, .prim _, _ | _, _, .ite _ _ _, _ | _, _, .asrt _ _, _ | _, _, .nil, _
+  | _, _, .prim _ _, _ | _, _, .bool _, _ | _, _, .ite _ _ _, _ | _, _, .asrt _ _, _ | _, _, .nil, _
   | _, _, .cons _ _, _ | _, _, .has _ _, _ => by simp only [inferF]; exact Settles.fail _
 
-theorem inferRecF_settles (constTy : C → B) :
+theorem inferRecF_settles (constTy : Sig B C) :
     ∀ (Γ : QCtx B) (S : SolverState B) (ξ : RecBody (Expr C)), S.sol.Clean →
       Settles (fun m => inferRecF constTy m Γ S ξ)
   | _, S, .empty, _ => by simp only [inferRecF]; exact ⟨0, fun h => nomatch h⟩
@@ -880,18 +880,18 @@ theorem inferRecF_settles (constTy : C → B) :
 end
 
 /-- ⊢  **INFERENCE TERMINATES**: from a clean state, some fuel gives a verdict. -/
-theorem inferF_terminates {constTy : C → B} {Γ : QCtx B} {S : SolverState B} (e : Expr C)
+theorem inferF_terminates {constTy : Sig B C} {Γ : QCtx B} {S : SolverState B} (e : Expr C)
     (hc : S.sol.Clean) : ∃ n, inferF constTy n Γ S e ≠ .oof :=
   inferF_settles constTy Γ S e hc
 
-theorem runF_stable (constTy : C → B) (e : Expr C) : Stable (fun m => runF constTy m e) := by
+theorem runF_stable (constTy : Sig B C) (e : Expr C) : Stable (fun m => runF constTy m e) := by
   unfold runF
   exact Stable.bind (inferF_stable constTy _ _ e) (fun r =>
     Stable.bind (materializesF_stable _ _) (fun _ =>
       Stable.bind (finalizesF_stable _ _) (fun _ => Stable.const _)))
 
 /-- ⊢  **A RUN TERMINATES**: every program gets a verdict at some fuel. -/
-theorem runF_terminates (constTy : C → B) (e : Expr C) : ∃ n, runF constTy n e ≠ .oof := by
+theorem runF_terminates (constTy : Sig B C) (e : Expr C) : ∃ n, runF constTy n e ≠ .oof := by
   unfold runF
   exact Settles.bind (inferF_stable constTy _ _ e) (inferF_settles constTy _ _ e Sol.clean_nil)
     (fun r => Stable.bind (materializesF_stable _ _) (fun _ =>
@@ -908,14 +908,14 @@ theorem runF_terminates (constTy : C → B) (e : Expr C) : ∃ n, runF constTy n
 
 /-- **inference as a total function**: the verdict at any fuel that suffices.
 As with `unifyRow`, the fuel is chosen, not computed. -/
-noncomputable def run (constTy : C → B) (e : Expr C) : IRes (Ty B × SolverState B) :=
+noncomputable def run (constTy : Sig B C) (e : Expr C) : IRes (Ty B × SolverState B) :=
   runF constTy (Classical.choose (runF_terminates constTy e)) e
 
-theorem run_ne_oof (constTy : C → B) (e : Expr C) : run constTy e ≠ .oof :=
+theorem run_ne_oof (constTy : Sig B C) (e : Expr C) : run constTy e ≠ .oof :=
   Classical.choose_spec (runF_terminates constTy e)
 
 /-- ⊢  every fuelled run that answers, answers `run` -/
-theorem runF_eq_run {constTy : C → B} {e : Expr C} {n : Nat} (h : runF constTy n e ≠ .oof) :
+theorem runF_eq_run {constTy : Sig B C} {e : Expr C} {n : Nat} (h : runF constTy n e ≠ .oof) :
     runF constTy n e = run constTy e := by
   unfold run
   have hc := Classical.choose_spec (runF_terminates constTy e)
@@ -924,7 +924,7 @@ theorem runF_eq_run {constTy : C → B} {e : Expr C} {n : Nat} (h : runF constTy
   · exact runF_stable constTy e _ _ hle hc
 
 /-- ⊢  **`run` is sound**: what it answers types declaratively. -/
-theorem run_typed {constTy : C → B} {e : Expr C} {τ : Ty B} {S' : SolverState B}
+theorem run_typed {constTy : Sig B C} {e : Expr C} {τ : Ty B} {S' : SolverState B}
     (h : run constTy e = .ok (τ, S')) :
     QTyped constTy QCtx.empty e (τ.applySubst S'.subst) :=
   runF_typed h

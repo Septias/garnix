@@ -59,7 +59,7 @@ private theorem draw_sol' {S S₀ : SolverState B} {α : TyVar} {κ : Kind}
 mutual
 
 /-- ⊢  **inference keeps ⟦S⟧ idempotent.** -/
-theorem Infer.clean {C : Type} {constTy : C → B} :
+theorem Infer.clean {C : Type} {constTy : Sig B C} :
     {Γ : QCtx B} → {S S' : SolverState B} → {e : Expr C} → {τ : Ty B} →
     Infer constTy Γ S e τ S' → S.sol.Clean → S'.sol.Clean
   | _, _, _, _, _, .con, hc => hc
@@ -99,7 +99,7 @@ theorem Infer.clean {C : Type} {constTy : C → B} :
       have := Infer.clean h₁ hc
       exact Infer.clean h₂ this
 
-theorem InferRec.clean {C : Type} {constTy : C → B} :
+theorem InferRec.clean {C : Type} {constTy : Sig B C} :
     {Γ : QCtx B} → {S S' : SolverState B} → {ξ : RecBody (Expr C)} → {ρ : Row B} →
     InferRec constTy Γ S ξ ρ S' → S.sol.Clean → S'.sol.Clean
   | _, _, _, _, _, .empty, hc => hc
@@ -222,7 +222,7 @@ theorem draw_ext {S S₀ : SolverState B} {α : TyVar} {κ : Kind}
 mutual
 
 /-- ⊢  **every derivation extends its start state.** -/
-theorem Infer.ext {C : Type} {constTy : C → B} :
+theorem Infer.ext {C : Type} {constTy : Sig B C} :
     {Γ : QCtx B} → {S S' : SolverState B} → {e : Expr C} → {τ : Ty B} →
     Infer constTy Γ S e τ S' → S.Ext S'
   | _, _, _, _, _, .con => .refl _
@@ -263,7 +263,7 @@ theorem Infer.ext {C : Type} {constTy : C → B} :
       (Infer.ext h₁).trans ((SolverState.Ext.of_sol_eq (S := S₁)
         (S' := { S₁ with parked := letG S₁ ᾱ }) rfl).trans (Infer.ext h₂))
 
-theorem InferRec.ext {C : Type} {constTy : C → B} :
+theorem InferRec.ext {C : Type} {constTy : Sig B C} :
     {Γ : QCtx B} → {S S' : SolverState B} → {ξ : RecBody (Expr C)} → {ρ : Row B} →
     InferRec constTy Γ S ξ ρ S' → S.Ext S'
   | _, _, _, _, _, .empty => .refl _

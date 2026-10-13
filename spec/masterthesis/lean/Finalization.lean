@@ -315,7 +315,7 @@ the empty context.
 A stump parked at the end of inference either survives materialization — and
 F-★ discharges it (`Finalizes.holds`) — or materialization's saturation
 discharged it already (`KeepsS`). -/
-theorem runSound {C : Type} {constTy : C → B} : RunSound B C constTy := by
+theorem runSound {C : Type} {constTy : Sig B C} : RunSound B C constTy := by
   rintro e τ S' ⟨S₁, S₂, hinf, hmat, hfins⟩
   have c₁ := Infer.clean hinf Sol.clean_nil
   obtain ⟨k₁₂, c₂, x₁₂, -⟩ := hmat.keeps c₁

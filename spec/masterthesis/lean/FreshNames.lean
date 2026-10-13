@@ -90,7 +90,7 @@ private theorem nr_quiescent_d : nrSd.Quiescent := by
   subst hp; exact .varFree
 
 /-- A-var as it stood: the renaming is fresh for the state but not drawn. -/
-def UnguardedVar (B C : Type) [DecidableEq B] (constTy : C → B) : Prop :=
+def UnguardedVar (B C : Type) [DecidableEq B] (constTy : Sig B C) : Prop :=
   ∀ {Γ : QCtx B} {S S' : SolverState B} {x : Var} {σ : QScheme B}
     {θ : TySubst B} {f : TyVar → TyVar} {ps : List (Parked B)},
     Γ.lookup x = some σ →
@@ -99,8 +99,8 @@ def UnguardedVar (B C : Type) [DecidableEq B] (constTy : C → B) : Prop :=
     WakesSat S ps S' →
     Infer constTy Γ S (.var x) (σ.body.applySubst θ) S'
 
-private theorem nr_var_g (hu : UnguardedVar Unit Unit (fun _ => ())) :
-    Infer (B := Unit) (C := Unit) (fun _ => ()) nrΓg nrB0 (.var "g")
+private theorem nr_var_g (hu : UnguardedVar Unit Unit (Sig.plain fun _ => ())) :
+    Infer (B := Unit) (C := Unit) (Sig.plain fun _ => ()) nrΓg nrB0 (.var "g")
       (.fn (.rcd (.var (n 8))) (.var (n 6))) nrSa := by
   have hren : IsRenaming nrθ nrSc.vars nrF := by
     refine ⟨⟨fun α h => ?_, fun α h => ?_, fun α h => ?_⟩, fun α h => ?_⟩
@@ -140,7 +140,7 @@ private theorem nr_var_g (hu : UnguardedVar Unit Unit (fun _ => ())) :
       subst hp; exact .varFree)⟩
 
 private theorem nr_lam :
-    Infer (B := Unit) (C := Unit) (fun _ => ()) nrΓg nrSa
+    Infer (B := Unit) (C := Unit) (Sig.plain fun _ => ()) nrΓg nrSa
       (.lam "z" (.sel (.var "z") "m")) (.fn (.var (n 4)) (.var (n 6)))
       nrFinal := by
   refine Infer.lam (S₀ := nrSb) rfl ?_
@@ -153,8 +153,8 @@ private theorem nr_lam :
   · exact .varFree
 
 /-- ⊢  **the run goes through** against the unguarded A-var. -/
-theorem nameReuse_infers_unguarded (hu : UnguardedVar Unit Unit (fun _ => ())) :
-    Infer (B := Unit) (C := Unit) (fun _ => ()) QCtx.empty ⟨Sol.nil, [], [], ⟨1⟩, []⟩
+theorem nameReuse_infers_unguarded (hu : UnguardedVar Unit Unit (Sig.plain fun _ => ())) :
+    Infer (B := Unit) (C := Unit) (Sig.plain fun _ => ()) QCtx.empty ⟨Sol.nil, [], [], ⟨1⟩, []⟩
       nrE nrTy nrFinal := by
   refine Infer.letE (τ₁ := .fn (.var (n 1)) (.var (n 3))) (S₁ := nrS1)
     (ᾱ := [n 2, n 3]) selEx_infers ⟨?_, fun _ _ _ h => (nomatch h), fun p hp => ?_,

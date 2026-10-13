@@ -133,7 +133,7 @@ mutual
 /-- ⊢  **every parked stump is kept**: at the end of a derivation it is still
 parked, the same stump, or it discharges under any σ that satisfies the final
 state. -/
-theorem Infer.keeps {C : Type} {constTy : C → B} :
+theorem Infer.keeps {C : Type} {constTy : Sig B C} :
     {Γ : QCtx B} → {S S' : SolverState B} → {e : Expr C} → {τ : Ty B} →
     Infer constTy Γ S e τ S' → S.KeepsS S'
   | _, _, _, _, _, .con => .refl _
@@ -227,7 +227,7 @@ theorem Infer.keeps {C : Type} {constTy : C → B} :
           · exact .inr (hqs ▸ hd')
       · exact .inr hd
 
-theorem InferRec.keeps {C : Type} {constTy : C → B} :
+theorem InferRec.keeps {C : Type} {constTy : Sig B C} :
     {Γ : QCtx B} → {S S' : SolverState B} → {ξ : RecBody (Expr C)} → {ρ : Row B} →
     InferRec constTy Γ S ξ ρ S' → S.KeepsS S'
   | _, _, _, _, _, .empty => .refl _

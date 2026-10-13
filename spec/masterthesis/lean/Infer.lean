@@ -966,7 +966,7 @@ theorem SolverState.resVar_of_var {B : Type} {S : SolverState B} {δ β : TyVar}
 
 mutual
 
-inductive Infer {B C : Type} [DecidableEq B] (constTy : C → B) :
+inductive Infer {B C : Type} [DecidableEq B] (constTy : Sig B C) :
     QCtx B → SolverState B → Expr C → Ty B → SolverState B → Prop where
   -- A-cons
   | con {Γ : QCtx B} {S : SolverState B} {c : C} :
@@ -1127,7 +1127,7 @@ inductive Infer {B C : Type} [DecidableEq B] (constTy : C → B) :
         { S₁ with parked := letG S₁ ᾱ } e₂ τ₂ S₂ →
       Infer constTy Γ S (.letE x e₁ e₂) τ₂ S₂
 
-inductive InferRec {B C : Type} [DecidableEq B] (constTy : C → B) :
+inductive InferRec {B C : Type} [DecidableEq B] (constTy : Sig B C) :
     QCtx B → SolverState B → RecBody (Expr C) → Row B → SolverState B → Prop where
   -- A-ξ-empty
   | empty {Γ : QCtx B} {S : SolverState B} :
@@ -1147,7 +1147,7 @@ end
 
 /-- ⊢  A-var at a MONOTYPE: no binders, so nothing is drawn and the instance is
 the body itself. Every example derivation's variable use is this one. -/
-theorem Infer.var_mono {B C : Type} [DecidableEq B] {constTy : C → B}
+theorem Infer.var_mono {B C : Type} [DecidableEq B] {constTy : Sig B C}
     {Γ : QCtx B} {S S' : SolverState B} {x : Var} {τ : Ty B}
     (hl : Γ.lookup x = some ⟨[], [], τ⟩) (hw : WakesSat S [] S') :
     Infer constTy Γ S (.var x) τ S' := by
@@ -1185,7 +1185,7 @@ private def selExKinds : KEnv :=
   [(natName 3, .ty), (natName 2, .row), (natName 1, .ty)]
 
 theorem selEx_infers :
-    Infer (B := Unit) (C := Unit) (fun _ => ()) QCtx.empty
+    Infer (B := Unit) (C := Unit) (Sig.plain fun _ => ()) QCtx.empty
       ⟨Sol.nil, [], [], ⟨1⟩, []⟩ (selEx Unit)
       (.fn (.var (natName 1)) (.var (natName 3)))
       ⟨⟨[(natName 1, .rcd (.var (natName 2)))], [], []⟩,
@@ -1232,7 +1232,7 @@ theorem selEx_infers :
 
 /-- `⊢ e ⇒ τ; S′` — inference, then materialization of spent promises, then
 F-★ on what is still parked, from nothing. -/
-def Run {B C : Type} [DecidableEq B] (constTy : C → B) (e : Expr C) (τ : Ty B)
+def Run {B C : Type} [DecidableEq B] (constTy : Sig B C) (e : Expr C) (τ : Ty B)
     (S' : SolverState B) : Prop :=
   ∃ S₁ S₂ : SolverState B,
     Infer constTy QCtx.empty ⟨Sol.nil, [], [], ⟨1⟩, []⟩ e τ S₁ ∧
@@ -1253,7 +1253,7 @@ closed, and ⟦S′⟧ is already pushed into τ, so there is no row environment
 consult. (It used to read `S′.applyCtx ⟨[], []⟩`, whose row environment is
 ⟦S′⟧'s row solutions; the refutations below never depended on that.)
 PROVED: `runSound` (Finalization.lean). -/
-def RunSound (B C : Type) [DecidableEq B] (constTy : C → B) : Prop :=
+def RunSound (B C : Type) [DecidableEq B] (constTy : Sig B C) : Prop :=
   ∀ (e : Expr C) (τ : Ty B) (S' : SolverState B), Run constTy e τ S' →
     QTyped constTy QCtx.empty e (τ.applySubst S'.subst)
 
@@ -1278,7 +1278,7 @@ end to end: A-sel-? parks the stump, nothing ever resolves it — the lookup is
 still blocked on the record's row variable at the end — so finalization commits it
 to ★ and records the label in W. -/
 theorem selEx_runs :
-    Run (B := Unit) (C := Unit) (fun _ => ()) (selEx Unit)
+    Run (B := Unit) (C := Unit) (Sig.plain fun _ => ()) (selEx Unit)
       (.fn (.var (natName 1)) (.var (natName 3))) selExFinal :=
   ⟨selExS1, selExS1, selEx_infers, .skip .nil,
    .cons (Finalize.star (by simp [selExS1]) .varFree
@@ -1414,7 +1414,7 @@ private theorem draw_kind_eq {B : Type} {S S₀ : SolverState B} {α : TyVar}
 mutual
 
 /-- ⊢  inference never drops or rewrites a recorded kind. -/
-theorem Infer.kinds_mono {B C : Type} [DecidableEq B] {constTy : C → B}
+theorem Infer.kinds_mono {B C : Type} [DecidableEq B] {constTy : Sig B C}
     {Γ : QCtx B} {S S' : SolverState B} {e : Expr C} {τ : Ty B} :
     Infer constTy Γ S e τ S' → S.kinds <:+ S'.kinds
   | .con => List.suffix_refl _
@@ -1491,7 +1491,7 @@ theorem Infer.kinds_mono {B C : Type} [DecidableEq B] {constTy : C → B}
       have i₂ := Infer.kinds_mono h₂
       exact List.IsSuffix.trans i₁ i₂
 
-theorem InferRec.kinds_mono {B C : Type} [DecidableEq B] {constTy : C → B}
+theorem InferRec.kinds_mono {B C : Type} [DecidableEq B] {constTy : Sig B C}
     {Γ : QCtx B} {S S' : SolverState B} {ξ : RecBody (Expr C)} {ρ : Row B} :
     InferRec constTy Γ S ξ ρ S' → S.kinds <:+ S'.kinds
   | .empty      => List.suffix_refl _
@@ -1514,7 +1514,7 @@ variables, and this says inference never confuses the two.
 Named, not proved, so the target has a name.
 It needs the Γ-freshness invariant (`FreshRenaming`, still not an invariant) to
 rule out a drawn name colliding with one already live at the other sort. -/
-def KindsSound (B C : Type) [DecidableEq B] (constTy : C → B) : Prop :=
+def KindsSound (B C : Type) [DecidableEq B] (constTy : Sig B C) : Prop :=
   ∀ (Γ : QCtx B) (S S' : SolverState B) (e : Expr C) (τ : Ty B),
     Infer constTy Γ S e τ S' →
     ∀ α κ, S'.kinds.lookup α = some κ →
@@ -1529,7 +1529,7 @@ private theorem draw_eq {B : Type} {S S₀ : SolverState B} {α : TyVar} {κ : K
 mutual
 
 /-- ⊢  inference never re-issues a name: the supply only advances. -/
-theorem Infer.supply_mono {B C : Type} [DecidableEq B] {constTy : C → B}
+theorem Infer.supply_mono {B C : Type} [DecidableEq B] {constTy : Sig B C}
     {Γ : QCtx B} {S S' : SolverState B} {e : Expr C} {τ : Ty B} :
     Infer constTy Γ S e τ S' → S.supply.next ≤ S'.supply.next
   | .con => Nat.le_refl _
@@ -1628,7 +1628,7 @@ theorem Infer.supply_mono {B C : Type} [DecidableEq B] {constTy : C → B}
       have i₂ := Infer.supply_mono h₂
       exact Nat.le_trans i₁ i₂
 
-theorem InferRec.supply_mono {B C : Type} [DecidableEq B] {constTy : C → B}
+theorem InferRec.supply_mono {B C : Type} [DecidableEq B] {constTy : Sig B C}
     {Γ : QCtx B} {S S' : SolverState B} {ξ : RecBody (Expr C)} {ρ : Row B} :
     InferRec constTy Γ S ξ ρ S' → S.supply.next ≤ S'.supply.next
   | .empty => Nat.le_refl _
@@ -1714,7 +1714,7 @@ private theorem draw_sol {B : Type} {S S₀ : SolverState B} {α : TyVar} {κ : 
 mutual
 
 /-- ⊢  inference only refines the solution. -/
-theorem Infer.sat_mono {B C : Type} [DecidableEq B] {constTy : C → B}
+theorem Infer.sat_mono {B C : Type} [DecidableEq B] {constTy : Sig B C}
     {Γ : QCtx B} {S S' : SolverState B} {e : Expr C} {τ : Ty B} :
     Infer constTy Γ S e τ S' → S.SatMono S'
   | .con => SolverState.SatMono.refl _
@@ -1779,7 +1779,7 @@ theorem Infer.sat_mono {B C : Type} [DecidableEq B] {constTy : C → B}
       intro σ hσ
       exact Infer.sat_mono h₂ σ hσ
 
-theorem InferRec.sat_mono {B C : Type} [DecidableEq B] {constTy : C → B}
+theorem InferRec.sat_mono {B C : Type} [DecidableEq B] {constTy : Sig B C}
     {Γ : QCtx B} {S S' : SolverState B} {ξ : RecBody (Expr C)} {ρ : Row B} :
     InferRec constTy Γ S ξ ρ S' → S.SatMono S'
   | .empty      => SolverState.SatMono.refl _
@@ -1849,7 +1849,7 @@ mutual
 
 /-- ⊢  **inference maintains the state invariant.** Every parked stump in the
 state a run ends in is genuinely blocked on the blocker it records. -/
-theorem Infer.quiescent {B C : Type} [DecidableEq B] {constTy : C → B}
+theorem Infer.quiescent {B C : Type} [DecidableEq B] {constTy : Sig B C}
     {Γ : QCtx B} {S S' : SolverState B} {e : Expr C} {τ : Ty B} :
     Infer constTy Γ S e τ S' → S.Quiescent → S'.Quiescent
   | .con, hq => hq
@@ -1879,7 +1879,7 @@ theorem Infer.quiescent {B C : Type} [DecidableEq B] {constTy : C → B}
       refine Infer.quiescent h₂ ((Infer.quiescent h₁ hq).restrict ?_)
       intro p hp; exact (mem_letG.mp hp).1
 
-theorem InferRec.quiescent {B C : Type} [DecidableEq B] {constTy : C → B}
+theorem InferRec.quiescent {B C : Type} [DecidableEq B] {constTy : Sig B C}
     {Γ : QCtx B} {S S' : SolverState B} {ξ : RecBody (Expr C)} {ρ : Row B} :
     InferRec constTy Γ S ξ ρ S' → S.Quiescent → S'.Quiescent
   | .empty, hq     => hq
@@ -1889,7 +1889,7 @@ theorem InferRec.quiescent {B C : Type} [DecidableEq B] {constTy : C → B}
 end
 
 /-- ⊢  and a run starts with an empty Δ, so this is unconditional. -/
-theorem Infer.quiescent_of_nil {B C : Type} [DecidableEq B] {constTy : C → B}
+theorem Infer.quiescent_of_nil {B C : Type} [DecidableEq B] {constTy : Sig B C}
     {Γ : QCtx B} {S S' : SolverState B} {e : Expr C} {τ : Ty B}
     (h : Infer constTy Γ S e τ S') (hnil : S.parked = []) : S'.Quiescent :=
   h.quiescent (SolverState.Quiescent.nil hnil)

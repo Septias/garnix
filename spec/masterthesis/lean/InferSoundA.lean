@@ -40,7 +40,7 @@ def QScheme.InstA {B : Type} (Δ : List (Assume B)) (sc : QScheme B)
 mutual
   /-- `Δ; Γ ⊢ e : τ` — L2 typing under assumed lookups. Δ is an INDEX: qLet's
   premise extends it with the scheme's own constraints, read at the instance. -/
-  inductive QTypedA {B C : Type} (constTy : C → B) :
+  inductive QTypedA {B C : Type} (constTy : Sig B C) :
       List (Assume B) → QCtx B → Expr C → Ty B → Prop where
     | qCon : QTypedA constTy Δ Γ (.con c) (.base (constTy c))
     | qVar : Γ.lookup x = some σ → QScheme.InstA Δ σ τ →
@@ -92,7 +92,7 @@ mutual
              QTypedA constTy Δ Γ e₁ (.rcd ρ) → QTypedA constTy Δ Γ e₂ (.lab q) →
              (⟨ρ, q, τ⟩ : Assume B) ∈ Δ → QTypedA constTy Δ Γ (.selDyn e₁ e₂) τ
 
-  inductive QTypedABody {B C : Type} (constTy : C → B) :
+  inductive QTypedABody {B C : Type} (constTy : Sig B C) :
       List (Assume B) → QCtx B → RecBody (Expr C) → Row B → Prop where
     | empty : QTypedABody constTy Δ Γ .empty .empty
     | field : QTypedA constTy Δ Γ e τ →
@@ -102,7 +102,7 @@ mutual
 end
 
 -- a held keyed assumption, used at a dynamic selection, is one of T-sel-dyn's
-private theorem selDyn_of_holds {B C : Type} {constTy : C → B} {Δ : List (Assume B)}
+private theorem selDyn_of_holds {B C : Type} {constTy : Sig B C} {Δ : List (Assume B)}
     {Γ : QCtx B} {e₁ e₂ : Expr C} {ρ : Row B} {q : Key} {τ : Ty B}
     (h₁ : QTypedA constTy Δ Γ e₁ (.rcd ρ)) (h₂ : QTypedA constTy Δ Γ e₂ (.lab q))
     (hh : (⟨ρ, q, τ⟩ : Assume B).Holds) :
@@ -113,7 +113,7 @@ private theorem selDyn_of_holds {B C : Type} {constTy : C → B} {Δ : List (Ass
   | unk hl he => cases he; exact .qSelDynUnk h₁ h₂ hl
 
 -- a held assumption, used at a selection, is one of the three T-sel rules
-private theorem sel_of_holds {B C : Type} {constTy : C → B} {Δ : List (Assume B)}
+private theorem sel_of_holds {B C : Type} {constTy : Sig B C} {Δ : List (Assume B)}
     {Γ : QCtx B} {e : Expr C} {ρ : Row B} {l : Label} {τ : Ty B}
     (h : QTypedA constTy Δ Γ e (.rcd ρ)) (hh : (⟨ρ, .lit l, τ⟩ : Assume B).Holds) :
     QTypedA constTy Δ Γ (.sel e l) τ := by
@@ -126,7 +126,7 @@ mutual
   /-- ⊢  **held assumptions can be dropped.** Monotonicity for the induction —
   an assumption from an earlier state is either still parked or has been woken,
   and a woken one holds — and, at Δ₂ = [], the cash-in at the end of a run. -/
-  theorem QTypedA.weaken {B C : Type} {constTy : C → B} :
+  theorem QTypedA.weaken {B C : Type} {constTy : Sig B C} :
       {Δ₁ Δ₂ : List (Assume B)} → {Γ : QCtx B} → {e : Expr C} → {τ : Ty B} →
       QTypedA constTy Δ₁ Γ e τ →
       (∀ a ∈ Δ₁, a ∈ Δ₂ ∨ a.Holds) → QTypedA constTy Δ₂ Γ e τ
@@ -179,7 +179,7 @@ mutual
         | .inl hm' => .assumeDyn (QTypedA.weaken h₁ hΔ) (QTypedA.weaken h₂ hΔ) hm'
         | .inr hh  => selDyn_of_holds (QTypedA.weaken h₁ hΔ) (QTypedA.weaken h₂ hΔ) hh
 
-  theorem QTypedABody.weaken {B C : Type} {constTy : C → B} :
+  theorem QTypedABody.weaken {B C : Type} {constTy : Sig B C} :
       {Δ₁ Δ₂ : List (Assume B)} → {Γ : QCtx B} → {b : RecBody (Expr C)} →
       {ρ : Row B} → QTypedABody constTy Δ₁ Γ b ρ →
       (∀ a ∈ Δ₁, a ∈ Δ₂ ∨ a.Holds) → QTypedABody constTy Δ₂ Γ b ρ
@@ -190,7 +190,7 @@ mutual
 end
 
 -- ⊢  the special case the induction uses: a sublist, up to held entries
-theorem QTypedA.weaken_sub {B C : Type} {constTy : C → B} {Δ₁ Δ₂ : List (Assume B)}
+theorem QTypedA.weaken_sub {B C : Type} {constTy : Sig B C} {Δ₁ Δ₂ : List (Assume B)}
     {Γ : QCtx B} {e : Expr C} {τ : Ty B} (h : QTypedA constTy Δ₁ Γ e τ)
     (hs : ∀ a ∈ Δ₁, a ∈ Δ₂) : QTypedA constTy Δ₂ Γ e τ :=
   h.weaken (fun a ha => .inl (hs a ha))
@@ -204,7 +204,7 @@ theorem QTypedA.weaken_sub {B C : Type} {constTy : C → B} {Δ₁ Δ₂ : List 
 
 mutual
   /-- ⊢  **cash-in**: all assumptions held ⟹ a plain L2 typing. -/
-  theorem QTypedA.toQTyped {B C : Type} {constTy : C → B} :
+  theorem QTypedA.toQTyped {B C : Type} {constTy : Sig B C} :
       {Δ : List (Assume B)} → {Γ : QCtx B} → {e : Expr C} → {τ : Ty B} →
       QTypedA constTy Δ Γ e τ → (∀ a ∈ Δ, a.Holds) →
       QTyped constTy Γ e τ
@@ -261,7 +261,7 @@ mutual
         | abs hl he => cases he; exact .qSelDynAbs h₁' h₂' hl
         | unk hl he => cases he; exact .qSelDynUnk h₁' h₂' hl
 
-  theorem QTypedABody.toQTyped {B C : Type} {constTy : C → B} :
+  theorem QTypedABody.toQTyped {B C : Type} {constTy : Sig B C} :
       {Δ : List (Assume B)} → {Γ : QCtx B} → {b : RecBody (Expr C)} → {ρ : Row B} →
       QTypedABody constTy Δ Γ b ρ → (∀ a ∈ Δ, a.Holds) →
       QTypedBody constTy Γ b ρ
@@ -545,7 +545,7 @@ theorem SchemeRead.inst {B : Type} {σ θ : TySubst B} {sc sc' : QScheme B}
 
 /-- A-var, given what wake-up did with the instantiated constraints: each one
 either holds (it was discharged) or is assumed (it is still parked). -/
-theorem inferA_sound_var_step {B C : Type} {constTy : C → B} {σ θ : TySubst B}
+theorem inferA_sound_var_step {B C : Type} {constTy : Sig B C} {σ θ : TySubst B}
     {Γ Γ' : QCtx B} {x : Var} {sc : QScheme B} {g : TyVar → TyVar}
     {ps : List (Parked B)} {Δ : List (Assume B)}
     (hread : CtxRead σ Γ Γ') (hl : Γ.lookup x = some sc) (hwf : sc.WF)
@@ -566,12 +566,12 @@ theorem inferA_sound_var_step {B C : Type} {constTy : C → B} {σ θ : TySubst 
 -- Γ under σ, τ under σ, and the parked stumps read under σ as assumptions.
 
 /-- the conclusion the induction carries for one derivation ending in S′. -/
-def SoundAt {B C : Type} (constTy : C → B) (Γ : QCtx B) (e : Expr C) (τ : Ty B)
+def SoundAt {B C : Type} (constTy : Sig B C) (Γ : QCtx B) (e : Expr C) (τ : Ty B)
     (S' : SolverState B) : Prop :=
   ∀ σ : TySubst B, Absorbs σ S' → Sol.Sat σ S'.sol → ∀ Γ' : QCtx B, CtxRead σ Γ Γ' →
     QTypedA constTy (S'.parked.map (fun p => p.stump.at σ)) Γ' e (τ.applySubst σ)
 
-def SoundAtRec {B C : Type} (constTy : C → B) (Γ : QCtx B) (ξ : RecBody (Expr C))
+def SoundAtRec {B C : Type} (constTy : Sig B C) (Γ : QCtx B) (ξ : RecBody (Expr C))
     (ρ : Row B) (S' : SolverState B) : Prop :=
   ∀ σ : TySubst B, Absorbs σ S' → Sol.Sat σ S'.sol → ∀ Γ' : QCtx B, CtxRead σ Γ Γ' →
     QTypedABody constTy (S'.parked.map (fun p => p.stump.at σ)) Γ' ξ (ρ.applySubst σ)
@@ -582,7 +582,7 @@ final state AND absorbs it (σ ∘ ⟦S′⟧ = σ — `Absorbs`, Absorb.lean; A
 the exact form); what is still parked is assumed, read under σ as well. The
 start state is clean and quiescent, and Γ's
 schemes are well-formed — all trivially true of a run from nothing. -/
-def InferSound (B C : Type) [DecidableEq B] (constTy : C → B) : Prop :=
+def InferSound (B C : Type) [DecidableEq B] (constTy : Sig B C) : Prop :=
   ∀ (Γ : QCtx B) (S S' : SolverState B) (e : Expr C) (τ : Ty B),
     Infer constTy Γ S e τ S' → Γ.SchemesWF → S.sol.Clean → S.Quiescent →
     SoundAt constTy Γ e τ S'
@@ -592,7 +592,7 @@ def InferSound (B C : Type) [DecidableEq B] (constTy : C → B) : Prop :=
 -- parked or discharged. That is exactly what moves a typing from S's
 -- assumptions to S′'s.
 
-theorem SolverState.KeepsS.lift {B C : Type} [DecidableEq B] {constTy : C → B}
+theorem SolverState.KeepsS.lift {B C : Type} [DecidableEq B] {constTy : Sig B C}
     {S S' : SolverState B} (hk : S.KeepsS S') {σ : TySubst B} (hσ : Sol.Sat σ S'.sol)
     {Γ Γ' : QCtx B} (hr : CtxRead σ Γ Γ') {e : Expr C} {τ : Ty B}
     (h : QTypedA constTy (S.parked.map (fun p => p.stump.at σ)) Γ' e τ) :
@@ -603,7 +603,7 @@ theorem SolverState.KeepsS.lift {B C : Type} [DecidableEq B] {constTy : C → B}
     · exact .inl (List.mem_map.mpr ⟨q, hq, by rw [hqs]⟩)
     · exact .inr (Stump.dischargeEquiv_iff_holds.mp hd))
 
-theorem SolverState.KeepsS.liftBody {B C : Type} [DecidableEq B] {constTy : C → B}
+theorem SolverState.KeepsS.liftBody {B C : Type} [DecidableEq B] {constTy : Sig B C}
     {S S' : SolverState B} (hk : S.KeepsS S') {σ : TySubst B} (hσ : Sol.Sat σ S'.sol)
     {Γ Γ' : QCtx B} (hr : CtxRead σ Γ Γ') {ξ : RecBody (Expr C)} {ρ : Row B}
     (h : QTypedABody constTy (S.parked.map (fun p => p.stump.at σ)) Γ' ξ ρ) :
@@ -620,7 +620,7 @@ theorem SolverState.KeepsS.liftBody {B C : Type} [DecidableEq B] {constTy : C �
 -- longer one: `Infer.keeps` (ParkedInv.lean) proves it.
 
 /-- the A-var case. `inferA_sound_var_step` is its typing half. -/
-def VarCase (B C : Type) [DecidableEq B] (constTy : C → B) : Prop :=
+def VarCase (B C : Type) [DecidableEq B] (constTy : Sig B C) : Prop :=
   ∀ {Γ : QCtx B} {S S' : SolverState B} {x : Var} {sc : QScheme B}
     {θ : TySubst B} {f : TyVar → TyVar} {ps : List (Parked B)} {Sup : Supply} {K : KEnv},
     Γ.lookup x = some sc → IsRenaming θ sc.vars f → FreshRenaming f sc.vars Γ S →
@@ -631,7 +631,7 @@ def VarCase (B C : Type) [DecidableEq B] (constTy : C → B) : Prop :=
     SoundAt constTy Γ (.var x) (sc.body.applySubst θ) S'
 
 /-- the A-let case, given both induction hypotheses. -/
-def LetCase (B C : Type) [DecidableEq B] (constTy : C → B) : Prop :=
+def LetCase (B C : Type) [DecidableEq B] (constTy : Sig B C) : Prop :=
   ∀ {Γ : QCtx B} {S S₁ S₂ : SolverState B} {x : Var} {e₁ e₂ : Expr C}
     {τ₁ τ₂ : Ty B} {ᾱ : List TyVar},
     Infer constTy Γ S e₁ τ₁ S₁ →
@@ -662,7 +662,7 @@ private theorem draw_eqs {B : Type} {S S₀ : SolverState B} {α : TyVar} {κ : 
 /-- ⊢  **the A-var case, proved.** Wake-up either discharges an instantiated
 constraint or leaves it parked; saturation keeps it that way or discharges it
 later. Either way `inferA_sound_var_step`'s `hcov` holds at the final state. -/
-theorem varCase {B C : Type} [DecidableEq B] {constTy : C → B} :
+theorem varCase {B C : Type} [DecidableEq B] {constTy : Sig B C} :
     VarCase B C constTy := by
   intro Γ S S' x sc θ f ps Sup K hl hθ hfr hdr hle hps hw hΓ _ _ σ _ hσ Γ' hr
   obtain ⟨S₁, hws, hsat⟩ := hw
@@ -694,7 +694,7 @@ mutual
 /-- ⊢  **`InferSound` is inductive**: every rule but A-var and A-let, with those
 two as hypotheses. The parked-list bookkeeping is proved (`Infer.keeps`),
 and absorption is carried back to each premise's state (`Absorbs.back`). -/
-theorem inferSound_of {B C : Type} [DecidableEq B] {constTy : C → B}
+theorem inferSound_of {B C : Type} [DecidableEq B] {constTy : Sig B C}
     (hvar : VarCase B C constTy) (hlet : LetCase B C constTy) :
     {Γ : QCtx B} → {S S' : SolverState B} → {e : Expr C} → {τ : Ty B} →
     Infer constTy Γ S e τ S' → Γ.SchemesWF → S.sol.Clean → S.Quiescent →
@@ -1000,7 +1000,7 @@ theorem inferSound_of {B C : Type} [DecidableEq B] {constTy : C → B}
       exact hlet h₁ hA h₂ hΓ hc hq
         (inferSound_of hvar hlet h₁ hΓ hc hq) (inferSound_of hvar hlet h₂ hΓ' c₁ q₁)
 
-theorem inferRecSound_of {B C : Type} [DecidableEq B] {constTy : C → B}
+theorem inferRecSound_of {B C : Type} [DecidableEq B] {constTy : Sig B C}
     (hvar : VarCase B C constTy) (hlet : LetCase B C constTy) :
     {Γ : QCtx B} → {S S' : SolverState B} → {ξ : RecBody (Expr C)} → {ρ : Row B} →
     InferRec constTy Γ S ξ ρ S' → Γ.SchemesWF → S.sol.Clean → S.Quiescent →
@@ -1019,13 +1019,13 @@ theorem inferRecSound_of {B C : Type} [DecidableEq B] {constTy : C → B}
 end
 
 /-- ⊢  so `InferSound` itself follows from the two case obligations. -/
-theorem inferSound_of_cases {B C : Type} [DecidableEq B] {constTy : C → B}
+theorem inferSound_of_cases {B C : Type} [DecidableEq B] {constTy : Sig B C}
     (hvar : VarCase B C constTy) (hlet : LetCase B C constTy) :
     InferSound B C constTy :=
   fun _ _ _ _ _ h => inferSound_of hvar hlet h
 
 /-- ⊢  **…and A-var is discharged: `InferSound` rests on A-let alone.** -/
-theorem inferSound_of_let {B C : Type} [DecidableEq B] {constTy : C → B}
+theorem inferSound_of_let {B C : Type} [DecidableEq B] {constTy : Sig B C}
     (hlet : LetCase B C constTy) : InferSound B C constTy :=
   inferSound_of_cases varCase hlet
 
@@ -1034,7 +1034,7 @@ theorem inferSound_of_let {B C : Type} [DecidableEq B] {constTy : C → B}
 plain L2 typing at σ. The `hfin` premise is what finalization supplies (F-★ at
 ⟦S′⟧ — `Finalizes.holds`).
 No transport along χ is left: `QTypedA.weaken` did the cashing-in. -/
-theorem runSoundA_of {B C : Type} [DecidableEq B] {constTy : C → B}
+theorem runSoundA_of {B C : Type} [DecidableEq B] {constTy : Sig B C}
     (hs : InferSound B C constTy)
     {e : Expr C} {τ : Ty B} {S₁ : SolverState B}
     (h : Infer constTy QCtx.empty ⟨Sol.nil, [], [], ⟨1⟩, []⟩ e τ S₁)

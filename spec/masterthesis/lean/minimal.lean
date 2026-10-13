@@ -42,7 +42,8 @@ inductive Expr (Const : Type) : Type where
   | selDyn : Expr Const → Expr Const → Expr Const        -- e₁.(e₂)  (e₁.${e₂})
   | rcdDyn : Expr Const → Expr Const → Expr Const        -- { ${e₁} = e₂ }
   -- MacroNix (L2 only; L1 has no rule for these)
-  | prim : Const → Expr Const                            -- a primitive operator / builtin
+  | prim : Const → List (Expr Const) → Expr Const       -- p e₁ … eₙ, a SATURATED builtin
+  | bool : Bool → Expr Const                             -- true / false
   | ite  : Expr Const → Expr Const → Expr Const → Expr Const  -- if e then e₁ else e₂
   | asrt : Expr Const → Expr Const → Expr Const          -- assert e₁; e₂
   | nil  : Expr Const                                    -- [ ]
@@ -971,6 +972,37 @@ def TySubst.FixedOutside {B : Type} (θ : TySubst B) (ᾱ : List TyVar) : Prop :
 def Scheme.Inst {B : Type} (σ : Scheme B) (τ : Ty B) : Prop :=
   ∃ θ : TySubst B, θ.FixedOutside σ.vars ∧ σ.body.applySubst θ = τ
 
+-- ## The signature of constants and builtins (MacroNix)
+-- `con` is the old `constTy`: a constant's base type. `boolB` is the base type
+-- of the boolean literals, if the signature has one. `prim p` is the type of a
+-- builtin, EVERY free variable of it generic (an implicitly closed scheme
+-- ∀ftv. τ), and `delta p vs` its reduction on argument values;
+-- `none` is a run-time failure of the builtin (`head []`). The laws relating
+-- `delta` to typing live in `SigOK` (Qualified.lean), after typing.
+
+-- τ₁ → … → τₙ → τ
+def Ty.arrows {B : Type} : List (Ty B) → Ty B → Ty B
+  | [], τ      => τ
+  | a :: as, τ => .fn a (Ty.arrows as τ)
+
+theorem Ty.arrows_applySubst {B : Type} (θ : TySubst B) :
+    (τs : List (Ty B)) → (τ : Ty B) →
+    (Ty.arrows τs τ).applySubst θ = Ty.arrows (τs.map (·.applySubst θ)) (τ.applySubst θ)
+  | [], _ => rfl
+  | a :: as, τ => by
+      simp only [Ty.arrows, Ty.applySubst, List.map_cons, Ty.arrows_applySubst θ as τ]
+
+structure Sig (B C : Type) where
+  con   : C → B
+  boolB : Option B := none
+  prim  : C → Option (Ty B) := fun _ => none
+  delta : C → List (Expr C) → Option (Expr C) := fun _ _ => none
+
+/-- the signature of MiniNix: constants only, no booleans, no builtins -/
+def Sig.plain {B C : Type} (con : C → B) : Sig B C := { con }
+
+instance {B C : Type} : CoeFun (Sig B C) (fun _ => C → B) := ⟨Sig.con⟩
+
 -- A pointwise-identity substitution acts as the identity.
 theorem Key.applySubst_fixed {B : Type} {θ : TySubst B}
     (hl : ∀ α, θ.lab α = .var α) : (k : Key) → k.applySubst θ = k
@@ -1402,7 +1434,8 @@ mutual
     | .lab l      => .lab l
     | .selDyn e₁ e₂ => .selDyn (subst x v e₁) (subst x v e₂)
     | .rcdDyn e₁ e₂ => .rcdDyn (subst x v e₁) (subst x v e₂)
-    | .prim p     => .prim p
+    | .prim p es  => .prim p (substArgs x v es)
+    | .bool b     => .bool b
     | .ite e e₁ e₂ => .ite (subst x v e) (subst x v e₁) (subst x v e₂)
     | .asrt e₁ e₂ => .asrt (subst x v e₁) (subst x v e₂)
     | .nil        => .nil
@@ -1413,6 +1446,10 @@ mutual
     | .empty      => .empty
     | .field l e  => .field l (subst x v e)
     | .cat b₁ b₂  => .cat (substBody x v b₁) (substBody x v b₂)
+
+  def substArgs {C : Type} (x : Var) (v : Expr C) : List (Expr C) → List (Expr C)
+    | []      => []
+    | e :: es => subst x v e :: substArgs x v es
 end
 
 
@@ -1425,6 +1462,9 @@ inductive Value {C : Type} : Expr C → Prop where
   | lam {x : Var} {e : Expr C} : Value (.lam x e)
   | rcd {b : RecBody (Expr C)} : Value (.rcd b)
   | lab {l : Label}            : Value (.lab l)
+  | bool {b : Bool}            : Value (.bool b)
+  | nil                        : Value .nil
+  | cons {e₁ e₂ : Expr C}      : Value (.cons e₁ e₂)
 
 
 ------------------------------- CANONICAL FORMS --------------------------------
@@ -1448,6 +1488,39 @@ private theorem typed_lab_false_aux {B C : Type} {constTy : C → B} {l : Label}
   | _, _, _, .tSelAbs _ _, he => nomatch he
   | _, _, _, .tRcd _, he => nomatch he
 
+-- …nor for the MacroNix values: L1 types none of the new forms.
+/-- the MacroNix values; L1 has no rule for any of them -/
+def Expr.IsMacroVal {C : Type} : Expr C → Prop
+  | .bool _ | .nil | .cons _ _ => True
+  | _ => False
+
+private theorem typed_macro_false_aux {B C : Type} {constTy : C → B} :
+    ∀ {Γ : Ctx B} {e : Expr C} {τ : Ty B}, Typed constTy Γ e τ → e.IsMacroVal → False
+  | _, _, _, .tEq h _, he => typed_macro_false_aux h he
+  | _, _, _, .tUnk h, he => typed_macro_false_aux h he
+  | _, _, _, .tCon, he => he.elim
+  | _, _, _, .tVar _ _, he => he.elim
+  | _, _, _, .tLam _, he => he.elim
+  | _, _, _, .tApp _ _, he => he.elim
+  | _, _, _, .tLet _ _, he => he.elim
+  | _, _, _, .tCat _ _, he => he.elim
+  | _, _, _, .tSel _ _, he => he.elim
+  | _, _, _, .tSelUnk _ _, he => he.elim
+  | _, _, _, .tSelAbs _ _, he => he.elim
+  | _, _, _, .tRcd _, he => he.elim
+
+theorem typed_bool_false {B C : Type} {constTy : C → B} {b : Bool} {Γ : Ctx B}
+    {τ : Ty B} (h : Typed constTy Γ (.bool b : Expr C) τ) : False :=
+  typed_macro_false_aux h trivial
+
+theorem typed_nil_false {B C : Type} {constTy : C → B} {Γ : Ctx B}
+    {τ : Ty B} (h : Typed constTy Γ (.nil : Expr C) τ) : False :=
+  typed_macro_false_aux h trivial
+
+theorem typed_cons_false {B C : Type} {constTy : C → B} {e₁ e₂ : Expr C} {Γ : Ctx B}
+    {τ : Ty B} (h : Typed constTy Γ (.cons e₁ e₂) τ) : False :=
+  typed_macro_false_aux h trivial
+
 theorem typed_lab_false {B C : Type} {constTy : C → B} {l : Label} {Γ : Ctx B}
     {τ : Ty B} (h : Typed constTy Γ (.lab l : Expr C) τ) : False :=
   typed_lab_false_aux h rfl
@@ -1468,6 +1541,9 @@ theorem canonical_fn {B C : Type} {constTy : C → B} {Γ : Ctx B} {v : Expr C}
         cases hσ
       · cases hu
   | lab => exact (typed_lab_false ht).elim
+  | bool => exact (typed_bool_false ht).elim
+  | nil => exact (typed_nil_false ht).elim
+  | cons => exact (typed_cons_false ht).elim
 
 theorem canonical_rcd {B C : Type} {constTy : C → B} {Γ : Ctx B} {v : Expr C}
     {ρ : Row B}
@@ -1490,64 +1566,87 @@ theorem canonical_rcd {B C : Type} {constTy : C → B} {Γ : Ctx B} {v : Expr C}
         exact ⟨_, _, rfl, heq, hb⟩
       · cases hu
   | lab => exact (typed_lab_false ht).elim
+  | bool => exact (typed_bool_false ht).elim
+  | nil => exact (typed_nil_false ht).elim
+  | cons => exact (typed_cons_false ht).elim
 
 
 --------------------------------- REDUCTION ------------------------------------
 -- e ↦ e'
 
-inductive Step {C : Type} : Expr C → Expr C → Prop where
+abbrev Delta (C : Type) := C → List (Expr C) → Option (Expr C)
+
+inductive Step {C : Type} (δ : Delta C) : Expr C → Expr C → Prop where
   | beta {x : Var} {e v : Expr C} :
       Value v →
-      Step (.app (.lam x e) v) (subst x v e)
+      Step δ (.app (.lam x e) v) (subst x v e)
   | appFun {e₁ e₁' e₂ : Expr C} :
-      Step e₁ e₁' →
-      Step (.app e₁ e₂) (.app e₁' e₂)
+      Step δ e₁ e₁' →
+      Step δ (.app e₁ e₂) (.app e₁' e₂)
   | appArg {e₁ e₂ e₂' : Expr C} :
       Value e₁ →
-      Step e₂ e₂' →
-      Step (.app e₁ e₂) (.app e₁ e₂')
+      Step δ e₂ e₂' →
+      Step δ (.app e₁ e₂) (.app e₁ e₂')
   | selStep {e e' : Expr C} {l : Label} :
-      Step e e' →
-      Step (.sel e l) (.sel e' l)
+      Step δ e e' →
+      Step δ (.sel e l) (.sel e' l)
   -- Projection yields the (unevaluated) field term; leftmost occurrence wins.
   | selVal {b : RecBody (Expr C)} {l : Label} {e : Expr C} :
       RecBody.lookup l b = some e →
-      Step (.sel (.rcd b) l) e
+      Step δ (.sel (.rcd b) l) e
   | catLeft {a a' b : Expr C} :
-      Step a a' →
-      Step (.cat a b) (.cat a' b)
+      Step δ a a' →
+      Step δ (.cat a b) (.cat a' b)
   | catRight {a b b' : Expr C} :
       Value a →
-      Step b b' →
-      Step (.cat a b) (.cat a b')
+      Step δ b b' →
+      Step δ (.cat a b) (.cat a b')
   -- Right-preference: e₂'s fields go to the front (mirrors T-conc's {ρ₂ | ρ₁}).
   | catVal {b₁ b₂ : RecBody (Expr C)} :
-      Step (.cat (.rcd b₁) (.rcd b₂)) (.rcd (.cat b₂ b₁))
+      Step δ (.cat (.rcd b₁) (.rcd b₂)) (.rcd (.cat b₂ b₁))
   -- CBV let, mirroring beta: evaluate the binding, then substitute.
   | letCong {x : Var} {e₁ e₁' e₂ : Expr C} :
-      Step e₁ e₁' →
-      Step (.letE x e₁ e₂) (.letE x e₁' e₂)
+      Step δ e₁ e₁' →
+      Step δ (.letE x e₁ e₂) (.letE x e₁' e₂)
   | letBeta {x : Var} {v e : Expr C} :
       Value v →
-      Step (.letE x v e) (subst x v e)
+      Step δ (.letE x v e) (subst x v e)
   -- dynamic selection: the record first, then the key, then the lookup
   | selDynL {e₁ e₁' e₂ : Expr C} :
-      Step e₁ e₁' →
-      Step (.selDyn e₁ e₂) (.selDyn e₁' e₂)
+      Step δ e₁ e₁' →
+      Step δ (.selDyn e₁ e₂) (.selDyn e₁' e₂)
   | selDynR {e₁ e₂ e₂' : Expr C} :
       Value e₁ →
-      Step e₂ e₂' →
-      Step (.selDyn e₁ e₂) (.selDyn e₁ e₂')
+      Step δ e₂ e₂' →
+      Step δ (.selDyn e₁ e₂) (.selDyn e₁ e₂')
   | selDynVal {b : RecBody (Expr C)} {l : Label} {e : Expr C} :
       RecBody.lookup l b = some e →
-      Step (.selDyn (.rcd b) (.lab l)) e
+      Step δ (.selDyn (.rcd b) (.lab l)) e
   -- dynamic construction: the key is evaluated, the field stays a thunk (lazy,
   -- as in a record literal); a label key makes it the literal record
   | rcdDynKey {e₁ e₁' e₂ : Expr C} :
-      Step e₁ e₁' →
-      Step (.rcdDyn e₁ e₂) (.rcdDyn e₁' e₂)
+      Step δ e₁ e₁' →
+      Step δ (.rcdDyn e₁ e₂) (.rcdDyn e₁' e₂)
   | rcdDynVal {l : Label} {e : Expr C} :
-      Step (.rcdDyn (.lab l) e) (.rcd (.field l e))
+      Step δ (.rcdDyn (.lab l) e) (.rcd (.field l e))
+  -- MacroNix. `if`/`assert` force their condition; `?` forces its subject;
+  -- a builtin forces its arguments left to right, then δ fires.
+  | iteC {e e' e₁ e₂ : Expr C} :
+      Step δ e e' → Step δ (.ite e e₁ e₂) (.ite e' e₁ e₂)
+  | iteT {e₁ e₂ : Expr C} : Step δ (.ite (.bool true) e₁ e₂) e₁
+  | iteF {e₁ e₂ : Expr C} : Step δ (.ite (.bool false) e₁ e₂) e₂
+  | asrtC {e e' e₂ : Expr C} :
+      Step δ e e' → Step δ (.asrt e e₂) (.asrt e' e₂)
+  | asrtT {e₂ : Expr C} : Step δ (.asrt (.bool true) e₂) e₂
+  | hasStep {e e' : Expr C} {l : Label} :
+      Step δ e e' → Step δ (.has e l) (.has e' l)
+  | hasVal {b : RecBody (Expr C)} {l : Label} :
+      Step δ (.has (.rcd b) l) (.bool (RecBody.lookup l b).isSome)
+  | primArg {p : C} {vs es : List (Expr C)} {e e' : Expr C} :
+      (∀ v ∈ vs, Value v) → Step δ e e' →
+      Step δ (.prim p (vs ++ e :: es)) (.prim p (vs ++ e' :: es))
+  | primDelta {p : C} {vs : List (Expr C)} {e : Expr C} :
+      (∀ v ∈ vs, Value v) → δ p vs = some e → Step δ (.prim p vs) e
 
 
 ---------------------------------- PROGRESS ---------------------------------
@@ -1560,42 +1659,51 @@ inductive Step {C : Type} : Expr C → Expr C → Prop where
 
 -- e ↯ : a selection reached a record without the label, possibly under an
 -- evaluation context (mirrors the congruence rules of Step).
-inductive Err {C : Type} : Expr C → Prop where
+inductive Err {C : Type} (δ : Delta C) : Expr C → Prop where
   | selAbsent {b : RecBody (Expr C)} {l : Label} :
-      RecBody.lookup l b = none → Err (.sel (.rcd b) l)
-  | appFun   : Err e₁ → Err (.app e₁ e₂)
-  | appArg   : Value e₁ → Err e₂ → Err (.app e₁ e₂)
-  | sel      : Err e → Err (.sel e l)
-  | catLeft  : Err e₁ → Err (.cat e₁ e₂)
-  | catRight : Value e₁ → Err e₂ → Err (.cat e₁ e₂)
-  | letBind  : Err e₁ → Err (.letE x e₁ e₂)
+      RecBody.lookup l b = none → Err δ (.sel (.rcd b) l)
+  | appFun   : Err δ e₁ → Err δ (.app e₁ e₂)
+  | appArg   : Value e₁ → Err δ e₂ → Err δ (.app e₁ e₂)
+  | sel      : Err δ e → Err δ (.sel e l)
+  | catLeft  : Err δ e₁ → Err δ (.cat e₁ e₂)
+  | catRight : Value e₁ → Err δ e₂ → Err δ (.cat e₁ e₂)
+  | letBind  : Err δ e₁ → Err δ (.letE x e₁ e₂)
   -- a dynamic selection errs where a static one does, and also on a key that is
   -- not a label (L-junk's run-time face)
   | selDynAbsent {b : RecBody (Expr C)} {l : Label} :
-      RecBody.lookup l b = none → Err (.selDyn (.rcd b) (.lab l))
+      RecBody.lookup l b = none → Err δ (.selDyn (.rcd b) (.lab l))
   | selDynKey {b : RecBody (Expr C)} {v : Expr C} :
-      Value v → (∀ l, v ≠ .lab l) → Err (.selDyn (.rcd b) v)
-  | selDynL  : Err e₁ → Err (.selDyn e₁ e₂)
-  | selDynR  : Value e₁ → Err e₂ → Err (.selDyn e₁ e₂)
+      Value v → (∀ l, v ≠ .lab l) → Err δ (.selDyn (.rcd b) v)
+  | selDynL  : Err δ e₁ → Err δ (.selDyn e₁ e₂)
+  | selDynR  : Value e₁ → Err δ e₂ → Err δ (.selDyn e₁ e₂)
   -- a dynamic construction errs on a key that is not a label
   | rcdDynKeyBad {v : Expr C} :
-      Value v → (∀ l, v ≠ .lab l) → Err (.rcdDyn v e₂)
-  | rcdDynKey : Err e₁ → Err (.rcdDyn e₁ e₂)
+      Value v → (∀ l, v ≠ .lab l) → Err δ (.rcdDyn v e₂)
+  | rcdDynKey : Err δ e₁ → Err δ (.rcdDyn e₁ e₂)
+  -- MacroNix: a failed assertion, a builtin that fails (δ = none)
+  | asrtFail {e₂ : Expr C} : Err δ (.asrt (.bool false) e₂)
+  | iteC {e e₁ e₂ : Expr C} : Err δ e → Err δ (.ite e e₁ e₂)
+  | asrtC {e e₂ : Expr C} : Err δ e → Err δ (.asrt e e₂)
+  | hasC {e : Expr C} {l : Label} : Err δ e → Err δ (.has e l)
+  | primArg {p : C} {vs es : List (Expr C)} {e : Expr C} :
+      (∀ v ∈ vs, Value v) → Err δ e → Err δ (.prim p (vs ++ e :: es))
+  | primFail {p : C} {vs : List (Expr C)} :
+      (∀ v ∈ vs, Value v) → δ p vs = none → Err δ (.prim p vs)
 
-inductive Progress {C : Type} (e : Expr C) : Prop where
-  | step : Step e e' → Progress e
-  | done : Value e → Progress e
-  | err  : Err e → Progress e
+inductive Progress {C : Type} (δ : Delta C) (e : Expr C) : Prop where
+  | step : Step δ e e' → Progress δ e
+  | done : Value e → Progress δ e
+  | err  : Err δ e → Progress δ e
 
 -- Selecting on a record literal always progresses: hit steps, miss errors.
-private theorem sel_rcd_progress {C : Type} (b : RecBody (Expr C)) (l : Label) :
-    Progress (.sel (.rcd b) l) := by
+private theorem sel_rcd_progress {C : Type} {δ : Delta C} (b : RecBody (Expr C)) (l : Label) :
+    Progress δ (.sel (.rcd b) l) := by
   cases hbl : RecBody.lookup l b with
   | some e' => exact .step (.selVal hbl)
   | none    => exact .err (.selAbsent hbl)
 
-def progress {B C : Type} {constTy : C → B} {Γ : Ctx B} {e : Expr C} {τ : Ty B}
-    (hΓ : Γ = Ctx.empty) (ht : Typed constTy Γ e τ) : Progress e :=
+def progress {B C : Type} {constTy : C → B} {δ : Delta C} {Γ : Ctx B} {e : Expr C} {τ : Ty B}
+    (hΓ : Γ = Ctx.empty) (ht : Typed constTy Γ e τ) : Progress δ e :=
   match ht with
   | .tCon        => .done .con
   | .tVar h _    => by subst hΓ; simp [Ctx.lookup, Ctx.empty] at h
@@ -1784,9 +1892,9 @@ theorem subst_preserves_typing
 --   the tSelUnk/selVal case is vacuous — record literals have spine-var-free
 --   rows, so their lookups are never ?.
 
-private theorem preservation_aux {B C : Type} {constTy : C → B} :
+private theorem preservation_aux {B C : Type} {constTy : C → B} {δ : Delta C} :
     {Γ : Ctx B} → {e : Expr C} → {τ : Ty B} → Typed constTy Γ e τ →
-    Γ = Ctx.empty → ∀ {e' : Expr C}, Step e e' → Typed constTy Γ e' τ
+    Γ = Ctx.empty → ∀ {e' : Expr C}, Step δ e e' → Typed constTy Γ e' τ
   | _, _, _, .tCon,   _, _ => (nomatch ·)
   | _, _, _, .tVar _ _, _, _ => (nomatch ·)
   | _, _, _, .tLam _, _, _ => (nomatch ·)
@@ -1875,10 +1983,10 @@ private theorem preservation_aux {B C : Type} {constTy : C → B} :
             (fun τ' hi => h₁ τ' hi) h₂
 
 theorem preservation
-    {B C : Type} (constTy : C → B)
+    {B C : Type} (constTy : C → B) {δ : Delta C}
     (e e' : Expr C) (τ : Ty B)
     (ht : Typed constTy Ctx.empty e τ)
-    (hs : Step e e') :
+    (hs : Step δ e e') :
     Typed constTy Ctx.empty e' τ :=
   preservation_aux ht rfl hs
 
