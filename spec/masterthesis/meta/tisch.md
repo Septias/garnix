@@ -10,11 +10,6 @@
 - Port our testsuite from Mini to Macro-Nix
 
 
-## On Renaming
-- Do it to remove the closed terms and when adding recursiveness
-- Replacing natName by something structural is a quick, cleanup fix
-- *Still not really needed!*
-
 
 ## Fortführende Ideen
 - Kann man die Providenz von ★ besser tracken?
