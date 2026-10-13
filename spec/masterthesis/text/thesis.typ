@@ -49,8 +49,8 @@
 // -------------- Sections -------------------
 
 #include "sections/00_introduction.typ"
-#include "sections/01_overview.typ"
-#include "sections/02_background.typ"
+#include "sections/01_background.typ"
+#include "sections/02_overview.typ"
 #include "sections/03_declarative.typ"
 #include "sections/04_metatheory.typ"
 #include "sections/05_unification.typ"
@@ -70,8 +70,8 @@
 // -------------- Appendix --------------------
 
 #set figure(placement: none)
-#outline(target: heading.where(supplement: [Appendix]), title: [Appendix])
+// #outline(target: heading.where(supplement: [Appendix]), title: [Appendix])
 #show: appendix
 #show figure: set block(breakable: true)
 
-#include "sections/13_appendices.typ"
+// #include "sections/13_appendices.typ"
