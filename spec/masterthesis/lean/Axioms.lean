@@ -19,6 +19,7 @@ import FreshNames
 import LetChoice
 import InferFnTerm
 import MacroConservative
+import Builtins
 
 namespace MinimalCalculus
 
@@ -1174,5 +1175,20 @@ info: 'MinimalCalculus.RowEquiv.dsing_cancel_left' depends on axioms: [propext, 
 
 /-- info: 'MinimalCalculus.typed_bool_false' depends on axioms: [propext] -/
 #guard_msgs in #print axioms typed_bool_false
+
+/--
+info: 'MinimalCalculus.MacroNix.macroSig_ok' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms MacroNix.macroSig_ok
+
+/--
+info: 'MinimalCalculus.MacroNix.macro_progress' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms MacroNix.macro_progress
+
+/--
+info: 'MinimalCalculus.MacroNix.macro_preservation' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms MacroNix.macro_preservation
 
 end MinimalCalculus
