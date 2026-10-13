@@ -31,6 +31,8 @@ $
 $
 The first use needs the result of f to be a record, the second applies f to a record without l. No plain scheme covers both, and @principality [shows that this forces qualified schemes](wording).
 
+The selector also shows where MiniNix departs from Paszke and Xie @extensible_tabular. Their search rule turns the selection into the demand that the row of x contain l, and since that row is a variable, unification places the field into it: the selector types at ${(l: δ | ρ)} → δ$. Every use must then supply l, so `f {}` is rejected, and with it the program above. MiniNix answers the lookup with $?$ instead and keeps it in the scheme of f, whose instances include ${ε} → ★$. On `a: b: (a ‖ b).l` the search must decide whether the row of b contains l, which their tail-check cannot, while MiniNix again keeps the lookup pending.
+
 
 // meta: this seems out of place, it might be needed soon, but needs a better introduction then
 // == A Stump Wakes Up

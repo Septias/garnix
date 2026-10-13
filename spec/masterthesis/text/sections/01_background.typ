@@ -22,9 +22,6 @@ Scoped labels @extensible_recs avoid the conflict between overwriting and absenc
 == Paszke and Xie
 Paszke and Xie @extensible_tabular combine scoped labels with first-class labels into infix-extensible rows and give a unification-based inference algorithm over row- and label-variables. Their system is the direct basis of ours. Its field selection is handled by a search rule inside unification, and a conditional tail-check rejects programs whose shadowing behaviour is unresolved.
 
-// meta: second (quite verbally) use of the selector example
-The difference shows already on the selector `x: x.l`. The search rule turns the selection into the demand that the row of x contain l, and since that row is a variable, unification places the field into it: the selector types at ${(l: δ | ρ)} → δ$. Every use must then supply l, so `(x: x.l) {}` is rejected, and so is the program of @principality that applies one selector to a record with l and to one without. MiniNix answers the lookup with $?$ instead, keeps it as a stump, and types the selector with the qualified scheme selQ, whose instances include ${ε} → ★$. On the motivating example `a: b: (a ‖ b).l` the search must decide whether the row of b contains l, which the tail-check cannot, while MiniNix again keeps the lookup as a stump (@sec-overview).
-
 
 == Our Position: Two Judgements Instead of One <our-position>
 
