@@ -18,6 +18,7 @@ import Finalization
 import FreshNames
 import LetChoice
 import InferFnTerm
+import MacroConservative
 
 namespace MinimalCalculus
 
@@ -1151,5 +1152,27 @@ info: 'MinimalCalculus.RowEquiv.dsing_cancel_left' depends on axioms: [propext, 
 
 /-- info: 'MinimalCalculus.qtyped_lab_inv' does not depend on any axioms -/
 #guard_msgs in #print axioms qtyped_lab_inv
+
+-- ## MacroNix
+/-- info: 'MinimalCalculus.qcanonical_bool' does not depend on any axioms -/
+#guard_msgs in #print axioms qcanonical_bool
+
+/-- info: 'MinimalCalculus.SigOK.plain' does not depend on any axioms -/
+#guard_msgs in #print axioms SigOK.plain
+
+/-- info: 'MinimalCalculus.QTypedAArgs.retype_arrows' does not depend on any axioms -/
+#guard_msgs in #print axioms QTypedAArgs.retype_arrows
+
+/-- info: 'MinimalCalculus.qtyped_mini_iff' does not depend on any axioms -/
+#guard_msgs in #print axioms qtyped_mini_iff
+
+/-- info: 'MinimalCalculus.runF_mini' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in #print axioms runF_mini
+
+/-- info: 'MinimalCalculus.Step.mini' depends on axioms: [propext] -/
+#guard_msgs in #print axioms Step.mini
+
+/-- info: 'MinimalCalculus.typed_bool_false' depends on axioms: [propext] -/
+#guard_msgs in #print axioms typed_bool_false
 
 end MinimalCalculus
