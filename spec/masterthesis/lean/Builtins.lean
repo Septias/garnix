@@ -3,7 +3,8 @@
 -- and qPreservation hold for MacroNix programs.
 --
 -- Booleans are the literals `Expr.bool`; `&&`, `||`, `!=`, `>` and `>=` are
--- derived (`if`, `!`, `==`, `<` with swapped arguments). `==` compares ATOMIC
+-- derived (`if`, `!`, `==`, `<` with swapped arguments). `+` on strings and
+-- string interpolation are `strcat`. `==` compares ATOMIC
 -- values only (constants, booleans, labels, the empty list) and fails on
 -- records, functions and non-empty lists (plans/macronix.md Q3). A builtin's
 -- δ fires only at its exact arity; a partial application is an eta-expansion.
@@ -16,7 +17,7 @@ namespace MacroNix
 inductive Op where
   | add | sub | mul | div | lt | le | eq | not
   | concat | head | tail | elemAt | length | map | filter | foldl
-  | toString | isAttrs
+  | toString | isAttrs | strcat
   deriving DecidableEq, Repr
 
 inductive MConst where
@@ -51,6 +52,7 @@ def Op.ty : Op → T
   | .foldl                    => .fn (.fn tB (.fn tA tB)) (.fn tB (.fn (.list tA) tB))
   | .toString                 => .fn tInt tStr
   | .isAttrs                  => .fn tA tBool
+  | .strcat                   => .fn tStr (.fn tStr tStr)
 
 def int (n : Int) : E := .con (.int n)
 def call (o : Op) (es : List E) : E := .prim (.op o) es
@@ -110,6 +112,10 @@ def Op.delta : Op → List E → Option E
   | .isAttrs => fun
       | [.rcd _] => some (.bool true)
       | [_] => some (.bool false)
+      | _ => none
+  -- `+` on strings, and string interpolation
+  | .strcat => fun
+      | [.con (.str a), .con (.str b)] => some (.con (.str (a ++ b)))
       | _ => none
 
 def MConst.ty : MConst → String
@@ -392,13 +398,23 @@ theorem pres_isAttrs : Pres .isAttrs := by
     obtain ⟨-, rfl⟩ := hi
     exact qbool _
 
+theorem pres_strcat : Pres .strcat := by
+  intro θ τs τ vs e hi ha hδ
+  simp only [Op.delta] at hδ
+  split at hδ
+  · obtain ⟨τ₁, τ₂, rfl, -, -⟩ := args2 ha
+    simp only [Op.ty, tStr, Ty.applySubst, Ty.arrows, Ty.fn.injEq] at hi
+    obtain ⟨-, -, rfl⟩ := hi
+    cases hδ; exact .qCon
+  · cases hδ
+
 theorem Op.pres : (o : Op) → Pres o
   | .add => pres_add | .sub => pres_sub | .mul => pres_mul | .div => pres_div
   | .lt => pres_lt | .le => pres_le | .eq => pres_eq | .not => pres_not
   | .concat => pres_concat | .head => pres_head | .tail => pres_tail
   | .elemAt => pres_elemAt | .length => pres_length | .map => pres_map
   | .filter => pres_filter | .foldl => pres_foldl | .toString => pres_toString
-  | .isAttrs => pres_isAttrs
+  | .isAttrs => pres_isAttrs | .strcat => pres_strcat
 
 /-- ⊢  **the MacroNix signature is sound**: δ preserves types, and no constant
 inhabits `bool`. Hence `qProgress sig macroSig_ok` and `qPreservation sig

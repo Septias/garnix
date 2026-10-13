@@ -627,7 +627,7 @@ def report (U : Universe) (cap : Nat) : IO Unit := do
 -- (longest name in the problem) + 1. Keeping every variable one character long
 -- means the supply starts at "aa" and can never collide with a name below.
 
-/-- Rich payloads, short spines. Reaches ★, functions, and nested records —
+/-- Rich payloads, short spines. Reaches ★, functions, lists and nested records —
     `{l:{…}}` is the shape behind `terminal_masks_mgu`, whose occurs violation
     passes UNDER a record constructor. -/
 def wide : Universe :=
@@ -635,7 +635,8 @@ def wide : Universe :=
     vars   := ["a", "b"]
     labels := ["l", "m"]
     tys    := [.base (), .unk, .var "a", .var "b",
-               .rcd (.var "a"), .rcd (.sing "l" (.var "a")), .fn (.var "a") (.base ())]
+               .rcd (.var "a"), .rcd (.sing "l" (.var "a")), .fn (.var "a") (.base ()),
+               .list (.var "a"), .list (.rcd (.sing "l" (.var "a")))]
     maxLen := 2 }
 
 /-- Payloads that are themselves multi-atom ROWS. This is the shape the other
