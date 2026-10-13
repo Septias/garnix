@@ -1126,6 +1126,55 @@ inductive Infer {B C : Type} [DecidableEq B] (constTy : Sig B C) :
       Infer constTy (Γ.bindScheme x (letScheme S₁ ᾱ (letQ S₁ ᾱ) τ₁))
         { S₁ with parked := letG S₁ ᾱ } e₂ τ₂ S₂ →
       Infer constTy Γ S (.letE x e₁ e₂) τ₂ S₂
+  -- MacroNix.
+  -- A-prim: an instance of the builtin's type, the arguments left to right,
+  -- then τp θ ≐ τ₁ → … → τₙ → β. The instance θ is free here: soundness needs
+  -- no more. The function draws θ's names fresh, which is why the supply may
+  -- advance (to `Sup`) and kinds may be recorded (`K`) before the arguments.
+  | prim {Γ : QCtx B} {S S₁ S₁' S₂ : SolverState B} {p : C} {es : List (Expr C)}
+      {τp : Ty B} {θ : TySubst B} {τs : List (Ty B)} {β : TyVar} {Sup : Supply}
+      {K : KEnv} :
+      constTy.prim p = some τp →
+      S.supply.next ≤ Sup.next →
+      InferArgs constTy Γ { S with supply := Sup, kinds := K ++ S.kinds } es τs S₁ →
+      (β, S₁') = S₁.draw .ty →
+      SolveTySat S₁' (τp.applySubst θ) (Ty.arrows τs (.var β)) S₂ →
+      Infer constTy Γ S (.prim p es) (.var β) S₂
+  -- A-bool
+  | bool {Γ : QCtx B} {S : SolverState B} {b : Bool} {bb : B} :
+      constTy.boolB = some bb →
+      Infer constTy Γ S (.bool b) (.base bb) S
+  -- A-if: the condition is a boolean, the branches agree
+  | ite {Γ : QCtx B} {S S₁ S₂ S₃ S₄ S₅ : SolverState B} {e e₁ e₂ : Expr C}
+      {τ τ₁ τ₂ : Ty B} {bb : B} :
+      constTy.boolB = some bb →
+      Infer constTy Γ S e τ S₁ → SolveTySat S₁ τ (.base bb) S₂ →
+      Infer constTy Γ S₂ e₁ τ₁ S₃ → Infer constTy Γ S₃ e₂ τ₂ S₄ →
+      SolveTySat S₄ τ₁ τ₂ S₅ →
+      Infer constTy Γ S (.ite e e₁ e₂) τ₁ S₅
+  -- A-assert
+  | asrt {Γ : QCtx B} {S S₁ S₂ S₃ : SolverState B} {e e₂ : Expr C}
+      {τ τ₂ : Ty B} {bb : B} :
+      constTy.boolB = some bb →
+      Infer constTy Γ S e τ S₁ → SolveTySat S₁ τ (.base bb) S₂ →
+      Infer constTy Γ S₂ e₂ τ₂ S₃ →
+      Infer constTy Γ S (.asrt e e₂) τ₂ S₃
+  -- A-nil: a list of a fresh element type
+  | nil {Γ : QCtx B} {S S' : SolverState B} {α : TyVar} :
+      (α, S') = S.draw .ty →
+      Infer constTy Γ S .nil (.list (.var α)) S'
+  -- A-cons: the tail is a list of the head's type
+  | cons {Γ : QCtx B} {S S₁ S₂ S₃ : SolverState B} {e₁ e₂ : Expr C} {τ₁ τ₂ : Ty B} :
+      Infer constTy Γ S e₁ τ₁ S₁ → Infer constTy Γ S₁ e₂ τ₂ S₂ →
+      SolveTySat S₂ τ₂ (.list τ₁) S₃ →
+      Infer constTy Γ S (.cons e₁ e₂) (.list τ₁) S₃
+  -- A-has: the subject is a record, the answer a boolean
+  | has {Γ : QCtx B} {S S₁ S₁' S₂ : SolverState B} {e : Expr C} {τ : Ty B}
+      {l : Label} {r : TyVar} {bb : B} :
+      constTy.boolB = some bb →
+      Infer constTy Γ S e τ S₁ → (r, S₁') = S₁.draw .row →
+      SolveTySat S₁' τ (.rcd (.var r)) S₂ →
+      Infer constTy Γ S (.has e l) (.base bb) S₂
 
 inductive InferRec {B C : Type} [DecidableEq B] (constTy : Sig B C) :
     QCtx B → SolverState B → RecBody (Expr C) → Row B → SolverState B → Prop where
@@ -1141,6 +1190,15 @@ inductive InferRec {B C : Type} [DecidableEq B] (constTy : Sig B C) :
       {ρ₁ ρ₂ : Row B} :
       InferRec constTy Γ S ξ₁ ρ₁ S₁ → InferRec constTy Γ S₁ ξ₂ ρ₂ S₂ →
       InferRec constTy Γ S (.cat ξ₁ ξ₂) (.cat ρ₁ ρ₂) S₂
+
+-- the arguments of a builtin, left to right
+inductive InferArgs {B C : Type} [DecidableEq B] (constTy : Sig B C) :
+    QCtx B → SolverState B → List (Expr C) → List (Ty B) → SolverState B → Prop where
+  | nil {Γ : QCtx B} {S : SolverState B} : InferArgs constTy Γ S [] [] S
+  | cons {Γ : QCtx B} {S S₁ S₂ : SolverState B} {e : Expr C} {es : List (Expr C)}
+      {τ : Ty B} {τs : List (Ty B)} :
+      Infer constTy Γ S e τ S₁ → InferArgs constTy Γ S₁ es τs S₂ →
+      InferArgs constTy Γ S (e :: es) (τ :: τs) S₂
 
 end
 
@@ -1490,6 +1548,25 @@ theorem Infer.kinds_mono {B C : Type} [DecidableEq B] {constTy : Sig B C}
       have i₁ := Infer.kinds_mono h₁
       have i₂ := Infer.kinds_mono h₂
       exact List.IsSuffix.trans i₁ i₂
+  | .prim (K := K) _ _ ha hd hs => by
+      refine List.IsSuffix.trans (List.suffix_append K _) ?_
+      refine List.IsSuffix.trans (InferArgs.kinds_mono ha) ?_
+      rw [hs.kinds, draw_kind_eq hd]; exact List.suffix_cons _ _
+  | .bool _ => List.suffix_refl _
+  | .ite _ h hs₁ h₁ h₂ hs₂ => by
+      have a := Infer.kinds_mono h; have b := Infer.kinds_mono h₁
+      have c := Infer.kinds_mono h₂
+      rw [hs₂.kinds]; rw [hs₁.kinds] at b; exact a.trans (b.trans c)
+  | .asrt _ h hs h₂ => by
+      have a := Infer.kinds_mono h; have b := Infer.kinds_mono h₂
+      rw [hs.kinds] at b; exact a.trans b
+  | .nil hd => by rw [draw_kind_eq hd]; exact List.suffix_cons _ _
+  | .cons h₁ h₂ hs => by
+      have a := Infer.kinds_mono h₁; have b := Infer.kinds_mono h₂
+      rw [hs.kinds]; exact a.trans b
+  | .has _ h hd hs => by
+      refine List.IsSuffix.trans (Infer.kinds_mono h) ?_
+      rw [hs.kinds, draw_kind_eq hd]; exact List.suffix_cons _ _
 
 theorem InferRec.kinds_mono {B C : Type} [DecidableEq B] {constTy : Sig B C}
     {Γ : QCtx B} {S S' : SolverState B} {ξ : RecBody (Expr C)} {ρ : Row B} :
@@ -1500,6 +1577,12 @@ theorem InferRec.kinds_mono {B C : Type} [DecidableEq B] {constTy : Sig B C}
       have i₁ := InferRec.kinds_mono h₁
       have i₂ := InferRec.kinds_mono h₂
       exact List.IsSuffix.trans i₁ i₂
+
+theorem InferArgs.kinds_mono {B C : Type} [DecidableEq B] {constTy : Sig B C}
+    {Γ : QCtx B} {S S' : SolverState B} {es : List (Expr C)} {τs : List (Ty B)} :
+    InferArgs constTy Γ S es τs S' → S.kinds <:+ S'.kinds
+  | .nil       => List.suffix_refl _
+  | .cons h ha => (Infer.kinds_mono h).trans (InferArgs.kinds_mono ha)
 
 end
 
@@ -1627,6 +1710,31 @@ theorem Infer.supply_mono {B C : Type} [DecidableEq B] {constTy : Sig B C}
       have i₁ := Infer.supply_mono h₁
       have i₂ := Infer.supply_mono h₂
       exact Nat.le_trans i₁ i₂
+  | .prim _ hle ha hd hs => by
+      have i₁ := InferArgs.supply_mono ha
+      have hd' := draw_eq hd
+      have i₂ := hs.supply
+      simp only at i₁
+      omega
+  | .bool _ => Nat.le_refl _
+  | .ite _ h hs₁ h₁ h₂ hs₂ => by
+      have a := Infer.supply_mono h; have b := hs₁.supply
+      have c := Infer.supply_mono h₁; have d := Infer.supply_mono h₂
+      have e := hs₂.supply
+      omega
+  | .asrt _ h hs h₂ => by
+      have a := Infer.supply_mono h; have b := hs.supply
+      have c := Infer.supply_mono h₂
+      omega
+  | .nil hd => by have := draw_eq hd; omega
+  | .cons h₁ h₂ hs => by
+      have a := Infer.supply_mono h₁; have b := Infer.supply_mono h₂
+      have c := hs.supply
+      omega
+  | .has _ h hd hs => by
+      have a := Infer.supply_mono h; have hd' := draw_eq hd
+      have b := hs.supply
+      omega
 
 theorem InferRec.supply_mono {B C : Type} [DecidableEq B] {constTy : Sig B C}
     {Γ : QCtx B} {S S' : SolverState B} {ξ : RecBody (Expr C)} {ρ : Row B} :
@@ -1634,6 +1742,13 @@ theorem InferRec.supply_mono {B C : Type} [DecidableEq B] {constTy : Sig B C}
   | .empty => Nat.le_refl _
   | .field h => Infer.supply_mono h
   | .cat h₁ h₂ => Nat.le_trans (InferRec.supply_mono h₁) (InferRec.supply_mono h₂)
+
+
+theorem InferArgs.supply_mono {B C : Type} [DecidableEq B] {constTy : Sig B C}
+    {Γ : QCtx B} {S S' : SolverState B} {es : List (Expr C)} {τs : List (Ty B)} :
+    InferArgs constTy Γ S es τs S' → S.supply.next ≤ S'.supply.next
+  | .nil => Nat.le_refl _
+  | .cons h ha => Nat.le_trans (Infer.supply_mono h) (InferArgs.supply_mono ha)
 
 end
 
@@ -1778,6 +1893,21 @@ theorem Infer.sat_mono {B C : Type} [DecidableEq B] {constTy : Sig B C}
       refine (Infer.sat_mono h₁).trans ?_
       intro σ hσ
       exact Infer.sat_mono h₂ σ hσ
+  | .prim _ _ ha hd hs =>
+      (SolverState.SatMono.of_sol_eq rfl).trans ((InferArgs.sat_mono ha).trans
+        ((SolverState.SatMono.of_sol_eq (draw_sol hd)).trans hs.satMono))
+  | .bool _ => SolverState.SatMono.refl _
+  | .ite _ h hs₁ h₁ h₂ hs₂ =>
+      (Infer.sat_mono h).trans (hs₁.satMono.trans ((Infer.sat_mono h₁).trans
+        ((Infer.sat_mono h₂).trans hs₂.satMono)))
+  | .asrt _ h hs h₂ =>
+      (Infer.sat_mono h).trans (hs.satMono.trans (Infer.sat_mono h₂))
+  | .nil hd => SolverState.SatMono.of_sol_eq (draw_sol hd)
+  | .cons h₁ h₂ hs =>
+      (Infer.sat_mono h₁).trans ((Infer.sat_mono h₂).trans hs.satMono)
+  | .has _ h hd hs =>
+      (Infer.sat_mono h).trans
+        ((SolverState.SatMono.of_sol_eq (draw_sol hd)).trans hs.satMono)
 
 theorem InferRec.sat_mono {B C : Type} [DecidableEq B] {constTy : Sig B C}
     {Γ : QCtx B} {S S' : SolverState B} {ξ : RecBody (Expr C)} {ρ : Row B} :
@@ -1785,6 +1915,13 @@ theorem InferRec.sat_mono {B C : Type} [DecidableEq B] {constTy : Sig B C}
   | .empty      => SolverState.SatMono.refl _
   | .field h    => Infer.sat_mono h
   | .cat h₁ h₂  => (InferRec.sat_mono h₁).trans (InferRec.sat_mono h₂)
+
+
+theorem InferArgs.sat_mono {B C : Type} [DecidableEq B] {constTy : Sig B C}
+    {Γ : QCtx B} {S S' : SolverState B} {es : List (Expr C)} {τs : List (Ty B)} :
+    InferArgs constTy Γ S es τs S' → S.SatMono S'
+  | .nil => SolverState.SatMono.refl _
+  | .cons h ha => (Infer.sat_mono h).trans (InferArgs.sat_mono ha)
 
 end
 
@@ -1878,6 +2015,13 @@ theorem Infer.quiescent {B C : Type} [DecidableEq B] {constTy : Sig B C}
   | .letE h₁ _ h₂, hq => by
       refine Infer.quiescent h₂ ((Infer.quiescent h₁ hq).restrict ?_)
       intro p hp; exact (mem_letG.mp hp).1
+  | .prim _ _ _ _ hs, _ => hs.quiescent
+  | .bool _, hq => hq
+  | .ite _ _ _ _ _ hs₂, _ => hs₂.quiescent
+  | .asrt _ _ hs h₂, _ => Infer.quiescent h₂ hs.quiescent
+  | .nil hd, hq => hq.draw hd
+  | .cons _ _ hs, _ => hs.quiescent
+  | .has _ _ _ hs, _ => hs.quiescent
 
 theorem InferRec.quiescent {B C : Type} [DecidableEq B] {constTy : Sig B C}
     {Γ : QCtx B} {S S' : SolverState B} {ξ : RecBody (Expr C)} {ρ : Row B} :
@@ -1885,6 +2029,13 @@ theorem InferRec.quiescent {B C : Type} [DecidableEq B] {constTy : Sig B C}
   | .empty, hq     => hq
   | .field h, hq   => Infer.quiescent h hq
   | .cat h₁ h₂, hq => InferRec.quiescent h₂ (InferRec.quiescent h₁ hq)
+
+
+theorem InferArgs.quiescent {B C : Type} [DecidableEq B] {constTy : Sig B C}
+    {Γ : QCtx B} {S S' : SolverState B} {es : List (Expr C)} {τs : List (Ty B)} :
+    InferArgs constTy Γ S es τs S' → S.Quiescent → S'.Quiescent
+  | .nil, hq => hq
+  | .cons h ha, hq => InferArgs.quiescent ha (Infer.quiescent h hq)
 
 end
 

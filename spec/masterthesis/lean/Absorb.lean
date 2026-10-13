@@ -98,6 +98,14 @@ theorem Infer.clean {C : Type} {constTy : Sig B C} :
   | _, _, _, _, _, .letE h₁ _ h₂, hc => by
       have := Infer.clean h₁ hc
       exact Infer.clean h₂ this
+  | _, _, _, _, _, .prim _ _ ha hd hs, hc => hs.clean ((draw_sol' hd) ▸ InferArgs.clean ha hc)
+  | _, _, _, _, _, .bool _, hc => hc
+  | _, _, _, _, _, .ite _ h hs₁ h₁ h₂ hs₂, hc =>
+      hs₂.clean (Infer.clean h₂ (Infer.clean h₁ (hs₁.clean (Infer.clean h hc))))
+  | _, _, _, _, _, .asrt _ h hs h₂, hc => Infer.clean h₂ (hs.clean (Infer.clean h hc))
+  | _, _, _, _, _, .nil hd, hc => (draw_sol' hd) ▸ hc
+  | _, _, _, _, _, .cons h₁ h₂ hs, hc => hs.clean (Infer.clean h₂ (Infer.clean h₁ hc))
+  | _, _, _, _, _, .has _ h hd hs, hc => hs.clean ((draw_sol' hd) ▸ Infer.clean h hc)
 
 theorem InferRec.clean {C : Type} {constTy : Sig B C} :
     {Γ : QCtx B} → {S S' : SolverState B} → {ξ : RecBody (Expr C)} → {ρ : Row B} →
@@ -105,6 +113,13 @@ theorem InferRec.clean {C : Type} {constTy : Sig B C} :
   | _, _, _, _, _, .empty, hc => hc
   | _, _, _, _, _, .field h, hc => Infer.clean h hc
   | _, _, _, _, _, .cat h₁ h₂, hc => InferRec.clean h₂ (InferRec.clean h₁ hc)
+
+
+theorem InferArgs.clean {C : Type} {constTy : Sig B C} :
+    {Γ : QCtx B} → {S S' : SolverState B} → {es : List (Expr C)} → {τs : List (Ty B)} →
+    InferArgs constTy Γ S es τs S' → S.sol.Clean → S'.sol.Clean
+  | _, _, _, _, _, .nil, hc => hc
+  | _, _, _, _, _, .cons h ha, hc => InferArgs.clean ha (Infer.clean h hc)
 
 end
 
@@ -262,6 +277,15 @@ theorem Infer.ext {C : Type} {constTy : Sig B C} :
   | _, _, _, _, _, .letE (S₁ := S₁) (ᾱ := ᾱ) h₁ _ h₂ =>
       (Infer.ext h₁).trans ((SolverState.Ext.of_sol_eq (S := S₁)
         (S' := { S₁ with parked := letG S₁ ᾱ }) rfl).trans (Infer.ext h₂))
+  | _, _, _, _, _, .prim _ _ ha hd hs =>
+      (SolverState.Ext.of_sol_eq rfl).trans ((InferArgs.ext ha).trans ((draw_ext hd).trans hs.ext))
+  | _, _, _, _, _, .bool _ => .refl _
+  | _, _, _, _, _, .ite _ h hs₁ h₁ h₂ hs₂ =>
+      (Infer.ext h).trans (hs₁.ext.trans ((Infer.ext h₁).trans ((Infer.ext h₂).trans hs₂.ext)))
+  | _, _, _, _, _, .asrt _ h hs h₂ => (Infer.ext h).trans (hs.ext.trans (Infer.ext h₂))
+  | _, _, _, _, _, .nil hd => draw_ext hd
+  | _, _, _, _, _, .cons h₁ h₂ hs => (Infer.ext h₁).trans ((Infer.ext h₂).trans hs.ext)
+  | _, _, _, _, _, .has _ h hd hs => (Infer.ext h).trans ((draw_ext hd).trans hs.ext)
 
 theorem InferRec.ext {C : Type} {constTy : Sig B C} :
     {Γ : QCtx B} → {S S' : SolverState B} → {ξ : RecBody (Expr C)} → {ρ : Row B} →
@@ -269,6 +293,13 @@ theorem InferRec.ext {C : Type} {constTy : Sig B C} :
   | _, _, _, _, _, .empty => .refl _
   | _, _, _, _, _, .field h => Infer.ext h
   | _, _, _, _, _, .cat h₁ h₂ => (InferRec.ext h₁).trans (InferRec.ext h₂)
+
+
+theorem InferArgs.ext {C : Type} {constTy : Sig B C} :
+    {Γ : QCtx B} → {S S' : SolverState B} → {es : List (Expr C)} → {τs : List (Ty B)} →
+    InferArgs constTy Γ S es τs S' → S.Ext S'
+  | _, _, _, _, _, .nil => .refl _
+  | _, _, _, _, _, .cons h ha => (Infer.ext h).trans (InferArgs.ext ha)
 
 end
 
