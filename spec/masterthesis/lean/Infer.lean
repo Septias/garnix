@@ -654,6 +654,7 @@ theorem no_finalize_of_spent {B : Type} [DecidableEq B] {S : SolverState B}
       | lab b => intro _ hu; simp [unifyTyF] at hu
       | fn a b => intro _ hu; simp [unifyTyF] at hu
       | rcd ρ  => intro _ hu; simp [unifyTyF] at hu
+      | list _ => intro _ hu; simp [unifyTyF] at hu
 
 /-- `S ⊢ p ⇓ₘ S′` — F-hit, MATERIALIZATION of a spent promise. A-app can write a
 non-variable into a parked stump's result (`λx. λy. (x.l) y` writes

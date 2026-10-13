@@ -67,7 +67,8 @@ theorem tyClash_dispatch {B : Type} [DecidableEq B] {S : Supply} {fuel : Nat}
     {τ τ' : Ty B} {θ : TySubst B}
     (h : unifyTyF S fuel τ τ' = .clash) (hu : TyUnifies θ τ τ')
     (hfn : ∀ a₁ b₁ a₂ b₂ : Ty B, τ = .fn a₁ b₁ → τ' = .fn a₂ b₂ → False)
-    (hrcd : ∀ ρ₁ ρ₂ : Row B, τ = .rcd ρ₁ → τ' = .rcd ρ₂ → False) : False := by
+    (hrcd : ∀ ρ₁ ρ₂ : Row B, τ = .rcd ρ₁ → τ' = .rcd ρ₂ → False)
+    (hlist : ∀ τ₁ τ₂ : Ty B, τ = .list τ₁ → τ' = .list τ₂ → False) : False := by
   cases τ with
   | var α => cases fuel <;> exact bindTy_ne_clash (S := S) (α := α) (τ := τ') h
   | base b =>
@@ -81,6 +82,7 @@ theorem tyClash_dispatch {B : Type} [DecidableEq B] {S : Supply} {fuel : Nat}
       | unk => simp only [Ty.applySubst] at hb; cases hb
       | fn _ _ => simp only [Ty.applySubst] at hb; cases hb
       | rcd _ => simp only [Ty.applySubst] at hb; cases hb
+      | list _ => simp only [Ty.applySubst] at hb; cases hb
   | lab b =>
       have hb := TyEquiv.lab_inv (show TyEquiv (Ty.lab (b.applySubst θ)) _ from hu)
       cases τ' with
@@ -94,6 +96,7 @@ theorem tyClash_dispatch {B : Type} [DecidableEq B] {S : Supply} {fuel : Nat}
       | unk => simp only [Ty.applySubst] at hb; cases hb
       | fn _ _ => simp only [Ty.applySubst] at hb; cases hb
       | rcd _ => simp only [Ty.applySubst] at hb; cases hb
+      | list _ => simp only [Ty.applySubst] at hb; cases hb
   | unk =>
       have hb := TyEquiv.unk_inv (show TyEquiv (Ty.unk : Ty B) _ from hu)
       cases τ' with
@@ -104,6 +107,7 @@ theorem tyClash_dispatch {B : Type} [DecidableEq B] {S : Supply} {fuel : Nat}
       | unk => cases fuel <;> simp [unifyTyF] at h
       | fn _ _ => simp only [Ty.applySubst] at hb; cases hb
       | rcd _ => simp only [Ty.applySubst] at hb; cases hb
+      | list _ => simp only [Ty.applySubst] at hb; cases hb
   | fn a₁ b₁ =>
       have hb := TyEquiv.fn_inv
         (show TyEquiv (Ty.fn (a₁.applySubst θ) (b₁.applySubst θ)) _ from hu)
@@ -114,6 +118,7 @@ theorem tyClash_dispatch {B : Type} [DecidableEq B] {S : Supply} {fuel : Nat}
       | unk => obtain ⟨_, _, he, -, -⟩ := hb; simp only [Ty.applySubst] at he; cases he
       | fn a₂ b₂ => exact hfn a₁ b₁ a₂ b₂ rfl rfl
       | rcd _ => obtain ⟨_, _, he, -, -⟩ := hb; simp only [Ty.applySubst] at he; cases he
+      | list _ => obtain ⟨_, _, he, -, -⟩ := hb; simp only [Ty.applySubst] at he; cases he
   | rcd ρ₁ =>
       have hb := TyEquiv.rcd_inv (show TyEquiv (Ty.rcd (ρ₁.applySubst θ)) _ from hu)
       cases τ' with
@@ -123,6 +128,14 @@ theorem tyClash_dispatch {B : Type} [DecidableEq B] {S : Supply} {fuel : Nat}
       | unk => obtain ⟨_, he, -⟩ := hb; simp only [Ty.applySubst] at he; cases he
       | fn _ _ => obtain ⟨_, he, -⟩ := hb; simp only [Ty.applySubst] at he; cases he
       | rcd ρ₂ => exact hrcd ρ₁ ρ₂ rfl rfl
+      | list _ => obtain ⟨_, he, -⟩ := hb; simp only [Ty.applySubst] at he; cases he
+  | list τ₁ =>
+      have hb := TyEquiv.list_inv (show TyEquiv (Ty.list (τ₁.applySubst θ)) _ from hu)
+      cases τ' with
+      | var α => cases fuel <;> exact bindTy_ne_clash (S := S) (α := α) (τ := Ty.list τ₁) h
+      | base _ | lab _ | unk | fn _ _ | rcd _ =>
+          obtain ⟨_, he, -⟩ := hb; simp only [Ty.applySubst] at he; cases he
+      | list τ₂ => exact hlist τ₁ τ₂ rfl rfl
 
 -- THE U-HOST ARM: a clash of the residual is a clash of the problem. Any
 -- unifier extends, at the fresh β′ only, to a unifier of the residual
@@ -170,6 +183,7 @@ theorem unifyM_clash_no_unifier {B : Type} [DecidableEq B] (fuel : Nat) :
         exact tyClash_dispatch h hu
           (fun _ _ _ _ e₁ e₂ => by subst e₁; subst e₂; cases h)
           (fun _ _ e₁ e₂ => by subst e₁; subst e₂; cases h)
+          (fun _ _ e₁ e₂ => by subst e₁; subst e₂; cases h)
       · cases s₁ with
         | nil =>
             simp only [unifySpineMF] at h
@@ -212,7 +226,7 @@ theorem unifyM_clash_no_unifier {B : Type} [DecidableEq B] (fuel : Nat) :
       refine ⟨fun S τ τ' hS h => ?_, fun S s₁ s₂ hS h => ?_⟩
       · rintro ⟨θ, hu⟩
         refine tyClash_dispatch h hu (fun a₁ b₁ a₂ b₂ e₁ e₂ => ?_)
-          (fun ρ₁ ρ₂ e₁ e₂ => ?_)
+          (fun ρ₁ ρ₂ e₁ e₂ => ?_) (fun τ₁ τ₂ e₁ e₂ => ?_)
         · subst e₁; subst e₂
           replace h : ((unifyTyF S fuel a₁ a₂).seq fun θ' S'' =>
               unifyTyF S'' fuel (b₁.applySubst θ') (b₂.applySubst θ')) = .clash := h
@@ -256,6 +270,13 @@ theorem unifyM_clash_no_unifier {B : Type} [DecidableEq B] (fuel : Nat) :
           rcases List.mem_append.mp hx with hh | hh
           · exact List.mem_append_left _ (mem_sFtv_toSpine ρ₁ x hh)
           · exact List.mem_append_right _ (mem_sFtv_toSpine ρ₂ x hh)
+        · subst e₁; subst e₂
+          simp only [unifyTyF] at h
+          obtain ⟨σ₁, heq, hA⟩ := TyEquiv.list_inv
+            (show TyEquiv (Ty.list (τ₁.applySubst θ)) _ from hu)
+          simp only [Ty.applySubst, Ty.list.injEq] at heq
+          obtain rfl := heq
+          exact ih.1 S τ₁ τ₂ hS h ⟨θ, hA⟩
       · cases s₁ with
         | nil =>
             simp only [unifySpineMF] at h

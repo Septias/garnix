@@ -41,6 +41,13 @@ inductive Expr (Const : Type) : Type where
   | lab  : Label → Expr Const                            -- `l   (a label, as a value)
   | selDyn : Expr Const → Expr Const → Expr Const        -- e₁.(e₂)  (e₁.${e₂})
   | rcdDyn : Expr Const → Expr Const → Expr Const        -- { ${e₁} = e₂ }
+  -- MacroNix (L2 only; L1 has no rule for these)
+  | prim : Const → Expr Const                            -- a primitive operator / builtin
+  | ite  : Expr Const → Expr Const → Expr Const → Expr Const  -- if e then e₁ else e₂
+  | asrt : Expr Const → Expr Const → Expr Const          -- assert e₁; e₂
+  | nil  : Expr Const                                    -- [ ]
+  | cons : Expr Const → Expr Const → Expr Const          -- e₁ :: e₂  (lazy, like a record)
+  | has  : Expr Const → Label → Expr Const               -- e ? l
 
 
 ---------------------------------- TYPES ------------------------------------------
@@ -74,6 +81,7 @@ mutual
     | fn   : Ty B → Ty B → Ty B                   -- τ → τ
     | rcd  : Row B → Ty B                         -- { ρ }
     | lab  : Key → Ty B                           -- ⌊k⌋, a label's singleton type
+    | list : Ty B → Ty B                          -- [τ]  (MacroNix)
 
   inductive Row (B : Type) : Type where
     | empty : Row B                               -- ε
@@ -118,6 +126,7 @@ mutual
     | fn    : TyEquiv τ₁ τ₁' → TyEquiv τ₂ τ₂' →
               TyEquiv (.fn τ₁ τ₂) (.fn τ₁' τ₂')
     | rcd   : RowEquiv ρ₁ ρ₂ → TyEquiv (.rcd ρ₁) (.rcd ρ₂)
+    | list  : TyEquiv τ₁ τ₂ → TyEquiv (.list τ₁) (.list τ₂)
 
   inductive RowEquiv {B : Type} : Row B → Row B → Prop where
     | refl  (ρ : Row B) : RowEquiv ρ ρ
@@ -183,6 +192,8 @@ theorem TyEquiv.fn_inv_both {B : Type} :
        fun hσ => (by cases hσ; exact ⟨_, _, rfl, e₁, e₂⟩)⟩
   | _, _, .rcd _ =>
       ⟨(fun hτ => nomatch hτ), (fun hσ => nomatch hσ)⟩
+  | _, _, .list _ =>
+      ⟨(fun hτ => nomatch hτ), (fun hσ => nomatch hσ)⟩
 
 --   If  τ ≈ₜ σ,  then record shapes carry over in both directions:
 --
@@ -214,6 +225,38 @@ theorem TyEquiv.rcd_inv_both {B : Type} :
   | _, _, .rcd e =>
       ⟨fun hτ => (by cases hτ; exact ⟨_, rfl, e⟩),
        fun hσ => (by cases hσ; exact ⟨_, rfl, e⟩)⟩
+  | _, _, .list _ =>
+      ⟨(fun hτ => nomatch hτ), (fun hσ => nomatch hσ)⟩
+
+--   If  τ ≈ₜ σ,  then list shapes carry over in both directions (MacroNix)
+theorem TyEquiv.list_inv_both {B : Type} :
+    {τ σ : Ty B} → TyEquiv τ σ →
+    (∀ {τ₁ : Ty B}, τ = .list τ₁ → ∃ σ₁, σ = .list σ₁ ∧ TyEquiv τ₁ σ₁) ∧
+    (∀ {σ₁ : Ty B}, σ = .list σ₁ → ∃ τ₁, τ = .list τ₁ ∧ TyEquiv τ₁ σ₁)
+  | _, _, .refl _ =>
+      ⟨fun h => ⟨_, h, .refl _⟩, fun h => ⟨_, h, .refl _⟩⟩
+  | _, _, .symm h =>
+      have ih := TyEquiv.list_inv_both h
+      ⟨fun hτ => match ih.2 hτ with
+        | ⟨_, hσ, e⟩ => ⟨_, hσ, e.symm⟩,
+       fun hσ => match ih.1 hσ with
+        | ⟨_, hτ, e⟩ => ⟨_, hτ, e.symm⟩⟩
+  | _, _, .trans h₁ h₂ =>
+      have ih₁ := TyEquiv.list_inv_both h₁
+      have ih₂ := TyEquiv.list_inv_both h₂
+      ⟨fun hτ => match ih₁.1 hτ with
+        | ⟨_, hμ, e⟩ => match ih₂.1 hμ with
+          | ⟨_, hσ, f⟩ => ⟨_, hσ, e.trans f⟩,
+       fun hσ => match ih₂.2 hσ with
+        | ⟨_, hμ, f⟩ => match ih₁.2 hμ with
+          | ⟨_, hτ, e⟩ => ⟨_, hτ, e.trans f⟩⟩
+  | _, _, .fn _ _ =>
+      ⟨(fun hτ => nomatch hτ), (fun hσ => nomatch hσ)⟩
+  | _, _, .rcd _ =>
+      ⟨(fun hτ => nomatch hτ), (fun hσ => nomatch hσ)⟩
+  | _, _, .list e =>
+      ⟨fun hτ => (by cases hτ; exact ⟨_, rfl, e⟩),
+       fun hσ => (by cases hσ; exact ⟨_, rfl, e⟩)⟩
 
 --   If  τ ≈ₜ σ,  then base types are rigid in both directions:
 --
@@ -232,6 +275,7 @@ theorem TyEquiv.base_inv_both {B : Type} :
       ⟨fun hτ => ih₂.1 (ih₁.1 hτ), fun hσ => ih₁.2 (ih₂.2 hσ)⟩
   | _, _, .fn _ _  => ⟨(fun hτ => nomatch hτ), (fun hσ => nomatch hσ)⟩
   | _, _, .rcd _   => ⟨(fun hτ => nomatch hτ), (fun hσ => nomatch hσ)⟩
+  | _, _, .list _  => ⟨(fun hτ => nomatch hτ), (fun hσ => nomatch hσ)⟩
 
 --   …and so are label singletons, for the same reason:  τ = ⌊k⌋ ⟺ σ = ⌊k⌋
 theorem TyEquiv.lab_inv_both {B : Type} :
@@ -248,6 +292,7 @@ theorem TyEquiv.lab_inv_both {B : Type} :
       ⟨fun hτ => ih₂.1 (ih₁.1 hτ), fun hσ => ih₁.2 (ih₂.2 hσ)⟩
   | _, _, .fn _ _  => ⟨(fun hτ => nomatch hτ), (fun hσ => nomatch hσ)⟩
   | _, _, .rcd _   => ⟨(fun hτ => nomatch hτ), (fun hσ => nomatch hσ)⟩
+  | _, _, .list _  => ⟨(fun hτ => nomatch hτ), (fun hσ => nomatch hσ)⟩
 
 --   If  τ ≈ₜ σ,  then ★ is rigid in both directions (★ has no congruence
 --   rule in ≈, deliberately — T-★-intro lives in the typing relation instead):
@@ -266,6 +311,7 @@ theorem TyEquiv.unk_inv_both {B : Type} :
       ⟨fun hτ => ih₂.1 (ih₁.1 hτ), fun hσ => ih₁.2 (ih₂.2 hσ)⟩
   | _, _, .fn _ _  => ⟨(fun hτ => nomatch hτ), (fun hσ => nomatch hσ)⟩
   | _, _, .rcd _   => ⟨(fun hτ => nomatch hτ), (fun hσ => nomatch hσ)⟩
+  | _, _, .list _  => ⟨(fun hτ => nomatch hτ), (fun hσ => nomatch hσ)⟩
 
 -- The usable corollaries:
 theorem TyEquiv.fn_inv {B : Type} {τ₁ τ₂ : Ty B} {σ : Ty B}
@@ -276,6 +322,10 @@ theorem TyEquiv.fn_inv {B : Type} {τ₁ τ₂ : Ty B} {σ : Ty B}
 theorem TyEquiv.rcd_inv {B : Type} {ρ : Row B} {σ : Ty B}
     (h : TyEquiv (.rcd ρ) σ) : ∃ ρ', σ = .rcd ρ' ∧ RowEquiv ρ ρ' :=
   (TyEquiv.rcd_inv_both h).1 rfl
+
+theorem TyEquiv.list_inv {B : Type} {τ : Ty B} {σ : Ty B}
+    (h : TyEquiv (.list τ) σ) : ∃ σ₁, σ = .list σ₁ ∧ TyEquiv τ σ₁ :=
+  (TyEquiv.list_inv_both h).1 rfl
 
 theorem TyEquiv.base_inv {B : Type} {b : B} {σ : Ty B}
     (h : TyEquiv (.base b) σ) : σ = .base b :=
@@ -758,6 +808,7 @@ mutual
     | .unk      => .unk
     | .fn τ₁ τ₂ => .fn (τ₁.applySubst θ) (τ₂.applySubst θ)
     | .rcd ρ    => .rcd (ρ.applySubst θ)
+    | .list τ   => .list (τ.applySubst θ)
 
   def Row.applySubst {B : Type} (θ : TySubst B) : Row B → Row B
     | .empty     => .empty
@@ -783,6 +834,7 @@ mutual
     | .fn τ₁ τ₂ => by
         simp only [Ty.applySubst, Ty.applySubst_id τ₁, Ty.applySubst_id τ₂]
     | .rcd ρ    => by simp only [Ty.applySubst, Row.applySubst_id ρ]
+    | .list τ   => by simp only [Ty.applySubst, Ty.applySubst_id τ]
 
   theorem Row.applySubst_id {B : Type} :
       (ρ : Row B) → ρ.applySubst (TySubst.id B) = ρ
@@ -804,6 +856,7 @@ mutual
     | .unk      => []
     | .fn τ₁ τ₂ => τ₁.ftv ++ τ₂.ftv
     | .rcd ρ    => ρ.ftv
+    | .list τ   => τ.ftv
 
   def Row.ftv {B : Type} : Row B → List TyVar
     | .empty     => []
@@ -829,6 +882,9 @@ mutual
     | _, _, .rcd h       => by
         simp only [Ty.applySubst]
         exact .rcd (RowEquiv.applySubst θ h)
+    | _, _, .list h      => by
+        simp only [Ty.applySubst]
+        exact .list (TyEquiv.applySubst θ h)
 
   theorem RowEquiv.applySubst {B : Type} (θ : TySubst B) :
       {ρ₁ ρ₂ : Row B} → RowEquiv ρ₁ ρ₂ →
@@ -934,6 +990,7 @@ mutual
         simp only [Ty.applySubst, Ty.applySubst_fixed ht hr hl τ₁,
                    Ty.applySubst_fixed ht hr hl τ₂]
     | .rcd ρ    => by simp only [Ty.applySubst, Row.applySubst_fixed ht hr hl ρ]
+    | .list τ   => by simp only [Ty.applySubst, Ty.applySubst_fixed ht hr hl τ]
 
   theorem Row.applySubst_fixed {B : Type} {θ : TySubst B}
       (ht : ∀ α, θ.ty α = .var α) (hr : ∀ α, θ.row α = .var α)
@@ -1345,6 +1402,12 @@ mutual
     | .lab l      => .lab l
     | .selDyn e₁ e₂ => .selDyn (subst x v e₁) (subst x v e₂)
     | .rcdDyn e₁ e₂ => .rcdDyn (subst x v e₁) (subst x v e₂)
+    | .prim p     => .prim p
+    | .ite e e₁ e₂ => .ite (subst x v e) (subst x v e₁) (subst x v e₂)
+    | .asrt e₁ e₂ => .asrt (subst x v e₁) (subst x v e₂)
+    | .nil        => .nil
+    | .cons e₁ e₂ => .cons (subst x v e₁) (subst x v e₂)
+    | .has e l    => .has (subst x v e) l
 
   def substBody {C : Type} (x : Var) (v : Expr C) : RecBody (Expr C) → RecBody (Expr C)
     | .empty      => .empty
@@ -1889,6 +1952,8 @@ mutual
                    Ty.applySubst_applySubst θ₁ θ₂ τ₂]
     | .rcd ρ    => by
         simp only [Ty.applySubst, Row.applySubst_applySubst θ₁ θ₂ ρ]
+    | .list τ   => by
+        simp only [Ty.applySubst, Ty.applySubst_applySubst θ₁ θ₂ τ]
 
   theorem Row.applySubst_applySubst {B : Type} (θ₁ θ₂ : TySubst B) :
       (ρ : Row B) → (ρ.applySubst θ₁).applySubst θ₂ = ρ.applySubst (θ₂.comp θ₁)
@@ -1925,6 +1990,9 @@ mutual
     | .rcd ρ, h    => by
         simp only [Ty.applySubst]
         rw [Row.applySubst_congr ρ (fun α hα => h α (by simpa [Ty.ftv] using hα))]
+    | .list τ, h   => by
+        simp only [Ty.applySubst]
+        rw [Ty.applySubst_congr τ (fun α hα => h α (by simpa [Ty.ftv] using hα))]
 
   theorem Row.applySubst_congr {B : Type} {θ₁ θ₂ : TySubst B} :
       (ρ : Row B) →
@@ -2481,6 +2549,7 @@ mutual
     | fn   : TyPrec τ₁ τ₁' → TyPrec τ₂ τ₂' →
              TyPrec (.fn τ₁ τ₂) (.fn τ₁' τ₂')
     | rcd  : RowPrec ρ ρ' → TyPrec (.rcd ρ) (.rcd ρ')
+    | list : TyPrec τ τ' → TyPrec (.list τ) (.list τ')
 
   inductive RowPrec {B : Type} : Row B → Row B → Prop where
     | refl (ρ : Row B) : RowPrec ρ ρ
@@ -2509,6 +2578,13 @@ theorem TyPrec.rcd_inv {B : Type} {τ' : Ty B} {ρ : Row B}
   cases h with
   | refl _ => exact ⟨ρ, rfl, .refl ρ⟩
   | rcd hr => exact ⟨_, rfl, hr⟩
+
+theorem TyPrec.list_inv {B : Type} {τ' τ : Ty B}
+    (h : TyPrec τ' (.list τ)) :
+    ∃ τ₁, τ' = .list τ₁ ∧ TyPrec τ₁ τ := by
+  cases h with
+  | refl _ => exact ⟨τ, rfl, .refl τ⟩
+  | list h => exact ⟨_, rfl, h⟩
 
 -- ★ cannot masquerade as precise: nothing but ★ itself sits above it.
 theorem TyPrec.unk_below {B : Type} {τ : Ty B}
@@ -2555,6 +2631,9 @@ theorem TyPrec.trans {B : Type} : {τ₁ τ₂ τ₃ : Ty B} →
   | _, _, _, h₁, .rcd hr   => by
       obtain ⟨_, rfl, hρ⟩ := TyPrec.rcd_inv h₁
       exact .rcd (RowPrec.trans hρ hr)
+  | _, _, _, h₁, .list h   => by
+      obtain ⟨_, rfl, hτ⟩ := TyPrec.list_inv h₁
+      exact .list (TyPrec.trans hτ h)
 
 theorem RowPrec.trans {B : Type} : {ρ₁ ρ₂ ρ₃ : Row B} →
     RowPrec ρ₁ ρ₂ → RowPrec ρ₂ ρ₃ → RowPrec ρ₁ ρ₃
@@ -2627,6 +2706,16 @@ theorem TyPrec.comm_equiv {B : Type} : {τ₁ τ₂ : Ty B} → TyEquiv τ₁ τ
         obtain ⟨ρ, rfl, hρ⟩ := TyPrec.rcd_inv ha
         obtain ⟨ρ', he, hp⟩ := (RowPrec.comm_equiv hr).2 ρ hρ
         exact ⟨.rcd ρ', .rcd he, .rcd hp⟩
+  | _, _, .list h => by
+      constructor
+      · intro a ha
+        obtain ⟨p, rfl, hp⟩ := TyPrec.list_inv ha
+        obtain ⟨p', he, hpp⟩ := (TyPrec.comm_equiv h).1 p hp
+        exact ⟨.list p', .list he, .list hpp⟩
+      · intro a ha
+        obtain ⟨p, rfl, hp⟩ := TyPrec.list_inv ha
+        obtain ⟨p', he, hpp⟩ := (TyPrec.comm_equiv h).2 p hp
+        exact ⟨.list p', .list he, .list hpp⟩
 
 theorem RowPrec.comm_equiv {B : Type} : {ρ₁ ρ₂ : Row B} → RowEquiv ρ₁ ρ₂ →
     (∀ a, RowPrec a ρ₁ → ∃ a', RowEquiv a a' ∧ RowPrec a' ρ₂) ∧
@@ -3147,6 +3236,7 @@ theorem no_plain_principal_scheme {B C : Type} (constTy : C → B) :
   | lab b => rw [hbody] at hba; simp only [Ty.applySubst] at hba; cases hba
   | unk => rw [hbody] at hba; simp only [Ty.applySubst] at hba; cases hba
   | rcd ρ => rw [hbody] at hba; simp only [Ty.applySubst] at hba; cases hba
+  | list τ => rw [hbody] at hba; simp only [Ty.applySubst] at hba; cases hba
   | var α =>
       rw [hbody] at hbb
       simp only [Ty.applySubst] at hbb
@@ -3176,6 +3266,7 @@ theorem no_plain_principal_scheme {B C : Type} (constTy : C → B) :
       | unk => simp only [Ty.applySubst] at hra; cases hra
       | fn τa τb => simp only [Ty.applySubst] at hrb; cases hrb
       | rcd ρr => simp only [Ty.applySubst] at hrb; cases hrb
+      | list τr => simp only [Ty.applySubst] at hrb; cases hrb
       | var α =>
           simp only [Ty.applySubst] at hra hrb
           have hα : α ∈ σ.vars := by
@@ -3208,6 +3299,7 @@ theorem no_plain_principal_scheme {B C : Type} (constTy : C → B) :
                 | dsing q t => simp only [Row.applySubst] at hρ; cases hρ
             | base b => simp only [Ty.applySubst] at hdb; cases hdb
             | lab b => simp only [Ty.applySubst] at hdb; cases hdb
+            | list t => simp only [Ty.applySubst] at hdb; cases hdb
             | unk => simp only [Ty.applySubst] at hdb; cases hdb
             | fn τa τb => simp only [Ty.applySubst] at hdb; cases hdb
           have hinst : σ.Inst (.fn (.rcd .empty) (.rcd .empty)) := by

@@ -36,6 +36,7 @@ theorem TyEquiv.var_inv_both {B : Type} :
       ⟨fun hτ => ih₂.1 (ih₁.1 hτ), fun hσ => ih₁.2 (ih₂.2 hσ)⟩
   | _, _, .fn _ _  => ⟨(fun hτ => nomatch hτ), (fun hσ => nomatch hσ)⟩
   | _, _, .rcd _   => ⟨(fun hτ => nomatch hτ), (fun hσ => nomatch hσ)⟩
+  | _, _, .list _  => ⟨(fun hτ => nomatch hτ), (fun hσ => nomatch hσ)⟩
 
 theorem TyEquiv.var_inv {B : Type} {α : TyVar} {σ : Ty B}
     (h : TyEquiv (.var α) σ) : σ = .var α :=

@@ -168,6 +168,7 @@ theorem unifyM_fuel_mono {B : Type} [DecidableEq B] (N : Nat) :
                 | exact .inr rfl
                 | exact UResM.Mono.seq (IH'.1 S _ _) (fun θ S' => IH'.1 S' _ _)
                 | exact IH'.2 S _ _
+                | (simp only [unifyTyF]; exact IH'.1 S _ _)
           · cases s₁ with
             | nil => exact .inr rfl
             | cons a s₁ =>

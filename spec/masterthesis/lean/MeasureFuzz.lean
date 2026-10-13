@@ -21,6 +21,7 @@ partial def tyS : Ty Unit → String
   | .var a => a | .base _ => "𝓫" | .unk => "★" | .lab _ => "lab"
   | .fn a b => "(" ++ tyS a ++ "→" ++ tyS b ++ ")"
   | .rcd ρ => "{" ++ spineStr ρ.toSpine ++ "}"
+  | .list τ => "[" ++ tyS τ ++ "]"
 partial def spineStr (s : Spine) : String :=
   ", ".intercalate (s.map fun
     | .var a => a | .field l τ => l ++ ":" ++ tyS τ | .dfield _ τ => "$:" ++ tyS τ)

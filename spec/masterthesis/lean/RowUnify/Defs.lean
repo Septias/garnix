@@ -245,6 +245,7 @@ def Ty.allRowVars {B : Type} : Ty B → List TyVar
   | .unk     => []
   | .fn a b  => Ty.allRowVars a ++ Ty.allRowVars b
   | .rcd ρ   => Row.allRowVars ρ
+  | .list τ  => Ty.allRowVars τ
 
 def Row.allRowVars {B : Type} : Row B → List TyVar
   | .empty     => []
@@ -268,6 +269,7 @@ def Ty.tyFtv {B : Type} : Ty B → List TyVar
   | .unk     => []
   | .fn a b  => Ty.tyFtv a ++ Ty.tyFtv b
   | .rcd ρ   => Row.tyFtv ρ
+  | .list τ  => Ty.tyFtv τ
 
 def Row.tyFtv {B : Type} : Row B → List TyVar
   | .empty     => []
@@ -290,6 +292,7 @@ def Ty.keyFtv {B : Type} : Ty B → List TyVar
   | .unk     => []
   | .fn a b  => Ty.keyFtv a ++ Ty.keyFtv b
   | .rcd ρ   => Row.keyFtv ρ
+  | .list τ  => Ty.keyFtv τ
 
 def Row.keyFtv {B : Type} : Row B → List TyVar
   | .empty     => []
@@ -313,6 +316,8 @@ theorem Ty.mem_ftv_iff {B : Type} {α : TyVar} :
       simp only [or_assoc, or_left_comm, or_comm]
   | .rcd ρ   => by
       simp only [Ty.ftv, Ty.tyFtv, Ty.allRowVars, Ty.keyFtv, Row.mem_ftv_iff ρ]
+  | .list τ  => by
+      simp only [Ty.ftv, Ty.tyFtv, Ty.allRowVars, Ty.keyFtv, Ty.mem_ftv_iff τ]
 
 theorem Row.mem_ftv_iff {B : Type} {α : TyVar} :
     (ρ : Row B) → (α ∈ ρ.ftv ↔ α ∈ ρ.tyFtv ∨ α ∈ ρ.allRowVars ∨ α ∈ ρ.keyFtv)
@@ -356,6 +361,7 @@ def Ty.deepRowVars {B : Type} : Ty B → List TyVar
   | .unk     => []
   | .fn a b  => Ty.deepRowVars a ++ Ty.deepRowVars b
   | .rcd ρ   => Row.allRowVars ρ
+  | .list τ  => Ty.deepRowVars τ
 
 def Row.deepRowVars {B : Type} : Row B → List TyVar
   | .empty     => []
@@ -746,6 +752,11 @@ def unifyTyF {B : Type} [DecidableEq B] (S : Supply) (fuel : Nat) :
       match fuel with
       | 0 => .outOfFuel
       | f+1 => unifySpineMF S f ρ₁.toSpine ρ₂.toSpine
+  -- [τ₁] ≐ [τ₂]: decompose (MacroNix)
+  | .list τ₁, .list τ₂ =>
+      match fuel with
+      | 0 => .outOfFuel
+      | f+1 => unifyTyF S f τ₁ τ₂
   | _, _ => .clash
 
 def unifySpineMF {B : Type} [DecidableEq B] :

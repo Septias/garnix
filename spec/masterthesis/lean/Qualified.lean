@@ -2398,6 +2398,7 @@ theorem l1_rejects_two_use {B C : Type} (constTy : C → B) (c : C) :
   | lab b' => rw [hbodyσ] at hba; simp only [Ty.applySubst] at hba; cases hba
   | unk     => rw [hbodyσ] at hba; simp only [Ty.applySubst] at hba; cases hba
   | rcd ρd  => rw [hbodyσ] at hba; simp only [Ty.applySubst] at hba; cases hba
+  | list _  => rw [hbodyσ] at hba; simp only [Ty.applySubst] at hba; cases hba
   | var α   =>
       rw [hbodyσ] at hbb
       simp only [Ty.applySubst] at hbb
@@ -2420,6 +2421,7 @@ theorem l1_rejects_two_use {B C : Type} (constTy : C → B) (c : C) :
       | unk     => simp only [Ty.applySubst] at hra; cases hra
       | fn _ _  => simp only [Ty.applySubst] at hrb; cases hrb
       | rcd _   => simp only [Ty.applySubst] at hrb; cases hrb
+      | list _  => simp only [Ty.applySubst] at hrb; cases hrb
       | var α   =>
           simp only [Ty.applySubst] at hra hrb
           have hα : α ∈ σ.vars := by
@@ -2455,6 +2457,7 @@ theorem l1_rejects_two_use {B C : Type} (constTy : C → B) (c : C) :
             | lab b' => simp only [Ty.applySubst] at hdb; cases hdb
             | unk     => simp only [Ty.applySubst] at hdb; cases hdb
             | fn _ _  => simp only [Ty.applySubst] at hdb; cases hdb
+            | list _  => simp only [Ty.applySubst] at hdb; cases hdb
           have hmix : σ.Inst (.fn (.rcd ρ') (.base (constTy c))) := by
             refine ⟨⟨fun δ => if δ = α then .base (constTy c) else θb.ty δ, θb.row, θb.lab⟩,
               ⟨fun δ hδ => ?_, fun δ hδ => hfixb.2.1 δ hδ, fun δ hδ => hfixb.2.2 δ hδ⟩, ?_⟩

@@ -341,6 +341,7 @@ private theorem no_preimage (τ : Ty Unit) : τ.applySubst refuteSub ≠ .var "b
   | unk    => exact fun h => nomatch h
   | fn _ _ => exact fun h => nomatch h
   | rcd _  => exact fun h => nomatch h
+  | list _ => exact fun h => nomatch h
   | var c  =>
       show tyLookup c [("b", (.base () : Ty Unit))] ≠ _
       by_cases hc : ("b" : TyVar) = c

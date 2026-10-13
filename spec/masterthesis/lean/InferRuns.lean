@@ -19,6 +19,7 @@ def tyS : Ty Unit → String
   | .unk      => "★"
   | .fn τ₁ τ₂ => "(" ++ tyS τ₁ ++ " → " ++ tyS τ₂ ++ ")"
   | .rcd ρ    => "{" ++ rowS ρ ++ "}"
+  | .list τ   => "[" ++ tyS τ ++ "]"
 def rowS : Row Unit → String
   | .empty     => "ε"
   | .var α     => "r" ++ toString α.length

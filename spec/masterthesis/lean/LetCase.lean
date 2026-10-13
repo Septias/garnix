@@ -138,6 +138,8 @@ mutual
           Ty.ftv_rename b (fun α hα => h α (List.mem_append_right _ hα))]
     | .rcd ρ, h => by
         simp only [Ty.applySubst, Ty.ftv]; exact Row.ftv_rename ρ h
+    | .list τ, h => by
+        simp only [Ty.applySubst, Ty.ftv]; exact Ty.ftv_rename τ h
   theorem Row.ftv_rename {θ : TySubst B} {g : TyVar → TyVar} : (ρ : Row B) →
       (∀ α ∈ ρ.ftv, θ.ty α = .var (g α) ∧ θ.row α = .var (g α) ∧ θ.lab α = .var (g α)) →
       (ρ.applySubst θ).ftv = ρ.ftv.map g

@@ -345,6 +345,7 @@ theorem unifyM_supply_mono {B : Type} [DecidableEq B] (fuel : Nat) :
             | (obtain ⟨sa, Sa, sb, h₁, h₂, -⟩ := UResM.seq_success h
                exact Nat.le_trans (ih.1 S _ _ h₁) (ih.1 Sa _ _ h₂))
             | exact ih.2 S _ _ h
+            | (simp only [unifyTyF] at h; exact ih.1 S _ _ h)
       · exact unifySpine_supply ih S s₁ s₂ h
 
 -- Base cases: one side exhausted ⟹ allVarsEmpty forces the other's vars to ε.
@@ -417,6 +418,7 @@ theorem unifyM_success_sound {B : Type} [DecidableEq B] {θ : TySubst B} (fuel :
             | unk => cases h
             | fn _ _ => cases h
             | rcd _ => cases h
+            | list _ => cases h
         | lab b =>
             cases τ' with
             | var α => exact (bindTy_sound h hsat).symm
@@ -425,6 +427,7 @@ theorem unifyM_success_sound {B : Type} [DecidableEq B] {θ : TySubst B} (fuel :
             | unk => cases h
             | fn _ _ => cases h
             | rcd _ => cases h
+            | list _ => cases h
         | unk =>
             cases τ' with
             | var α => exact (bindTy_sound h hsat).symm
@@ -433,6 +436,7 @@ theorem unifyM_success_sound {B : Type} [DecidableEq B] {θ : TySubst B} (fuel :
             | unk => exact TyEquiv.refl _
             | fn _ _ => cases h
             | rcd _ => cases h
+            | list _ => cases h
         | fn a₁ b₁ =>
             cases τ' with
             | var α => exact (bindTy_sound h hsat).symm
@@ -441,6 +445,7 @@ theorem unifyM_success_sound {B : Type} [DecidableEq B] {θ : TySubst B} (fuel :
             | unk => cases h
             | fn _ _ => cases h
             | rcd _ => cases h
+            | list _ => cases h
         | rcd ρ₁ =>
             cases τ' with
             | var α => exact (bindTy_sound h hsat).symm
@@ -449,6 +454,16 @@ theorem unifyM_success_sound {B : Type} [DecidableEq B] {θ : TySubst B} (fuel :
             | unk => cases h
             | fn _ _ => cases h
             | rcd _ => cases h
+            | list _ => cases h
+        | list τ₁ =>
+            cases τ' with
+            | var α => exact (bindTy_sound h hsat).symm
+            | base _ => cases h
+            | lab _ => cases h
+            | unk => cases h
+            | fn _ _ => cases h
+            | rcd _ => cases h
+            | list _ => cases h
       · cases s₁ with
         | nil => exact unifySpineMF_nil_left_sound S 0 s₂ h hsat
         | cons a s₁ =>
@@ -481,6 +496,7 @@ theorem unifyM_success_sound {B : Type} [DecidableEq B] {θ : TySubst B} (fuel :
             | unk => cases h
             | fn _ _ => cases h
             | rcd _ => cases h
+            | list _ => cases h
         | lab b =>
             cases τ' with
             | var α => exact (bindTy_sound h hsat).symm
@@ -489,6 +505,7 @@ theorem unifyM_success_sound {B : Type} [DecidableEq B] {θ : TySubst B} (fuel :
             | unk => cases h
             | fn _ _ => cases h
             | rcd _ => cases h
+            | list _ => cases h
         | unk =>
             cases τ' with
             | var α => exact (bindTy_sound h hsat).symm
@@ -497,6 +514,7 @@ theorem unifyM_success_sound {B : Type} [DecidableEq B] {θ : TySubst B} (fuel :
             | unk => exact TyEquiv.refl _
             | fn _ _ => cases h
             | rcd _ => cases h
+            | list _ => cases h
         | fn a₁ b₁ =>
             cases τ' with
             | var α => exact (bindTy_sound h hsat).symm
@@ -512,6 +530,7 @@ theorem unifyM_success_sound {B : Type} [DecidableEq B] {θ : TySubst B} (fuel :
                 exact TyEquiv.fn (ih.1 S a₁ a₂ hty h₁)
                   ((tyUnifies_applySubst_of_sat h₁ b₁ b₂).mp (ih.1 S₁ _ _ hrow h₂))
             | rcd _ => cases h
+            | list _ => cases h
         | rcd ρ₁ =>
             cases τ' with
             | var α => exact (bindTy_sound h hsat).symm
@@ -525,6 +544,18 @@ theorem unifyM_success_sound {B : Type} [DecidableEq B] {θ : TySubst B} (fuel :
                   (((RowEquiv.applySubst θ (Row.toSpine_equiv ρ₁)).trans
                       (ih.2 S _ _ h hsat)).trans
                     (RowEquiv.applySubst θ (Row.toSpine_equiv ρ₂)).symm)
+            | list _ => cases h
+        | list τ₁ =>
+            cases τ' with
+            | var α => exact (bindTy_sound h hsat).symm
+            | base _ => cases h
+            | lab _ => cases h
+            | unk => cases h
+            | fn _ _ => cases h
+            | rcd _ => cases h
+            | list τ₂ =>
+                simp only [unifyTyF] at h
+                exact TyEquiv.list (ih.1 S τ₁ τ₂ h hsat)
       · cases s₁ with
         | nil => exact unifySpineMF_nil_left_sound S (fuel + 1) s₂ h hsat
         | cons a s₁ =>
@@ -691,6 +722,7 @@ theorem Ty.ftv_applySubst {B : Type} (θ : TySubst B) : (τ : Ty B) →
       · obtain ⟨α, hα, hγ⟩ := Ty.ftv_applySubst θ τ₁ γ h; exact ⟨α, .inl hα, hγ⟩
       · obtain ⟨α, hα, hγ⟩ := Ty.ftv_applySubst θ τ₂ γ h; exact ⟨α, .inr hα, hγ⟩
   | .rcd ρ => fun γ h => Row.ftv_applySubst θ ρ γ h
+  | .list τ => fun γ h => Ty.ftv_applySubst θ τ γ h
 
 theorem Row.ftv_applySubst {B : Type} (θ : TySubst B) : (ρ : Row B) →
     ∀ γ, γ ∈ (ρ.applySubst θ).ftv →

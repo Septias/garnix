@@ -53,6 +53,7 @@ private theorem solve_star_row_free {S S₀ : SolverState B} {τ : Ty B}
     | lab b => intro hu; simp [unifyTyF] at hu
     | fn a b => intro hu; simp [unifyTyF] at hu
     | rcd ρ => intro hu; simp [unifyTyF] at hu
+    | list _ => intro hu; simp [unifyTyF] at hu
   rw [SolverState.extend_subst_row, hβ]
   exact rowLookup_not_mem _ hkey
 
@@ -98,6 +99,7 @@ private theorem solve_star_sol {S S₀ : SolverState B} {τ : Ty B}
   | lab b => intro hu; cases fuel <;> simp [unifyTyF] at hu
   | fn a b => intro hu; cases fuel <;> simp [unifyTyF] at hu
   | rcd ρ => intro hu; cases fuel <;> simp [unifyTyF] at hu
+  | list _ => intro hu; cases fuel <;> simp [unifyTyF] at hu
 
 theorem Finalize.starOrVar {S S' : SolverState B} {p : Parked B} {β : TyVar}
     (hf : Finalize S p S') (hβ : (S.subst.ty β).StarOrVar) : (S'.subst.ty β).StarOrVar := by
@@ -147,6 +149,7 @@ private theorem solve_star_dom {S S₀ : SolverState B} {τ : Ty B}
   | lab b => intro hu; cases fuel <;> simp [unifyTyF] at hu
   | fn a b => intro hu; cases fuel <;> simp [unifyTyF] at hu
   | rcd ρ => intro hu; cases fuel <;> simp [unifyTyF] at hu
+  | list _ => intro hu; cases fuel <;> simp [unifyTyF] at hu
 
 theorem Finalize.lab_free {S S' : SolverState B} {p : Parked B} {β : TyVar}
     (hf : Finalize S p S') (hβ : S.subst.lab β = .var β) : S'.subst.lab β = .var β := by

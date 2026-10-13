@@ -614,6 +614,9 @@ def inferF (constTy : C → B) (n : Nat) :
       let ᾱ := greatestAlpha Γ S r₁.2 r₁.1
       inferF constTy n (Γ.bindScheme x (letScheme r₁.2 ᾱ (letQ r₁.2 ᾱ) r₁.1))
         { r₁.2 with parked := letG r₁.2 ᾱ } e₂
+  -- MacroNix forms: no inference rules yet (M3)
+  | _, _, .prim _ | _, _, .ite _ _ _ | _, _, .asrt _ _ | _, _, .nil | _, _, .cons _ _
+  | _, _, .has _ _ => .fail "macronix: unsupported"
 
 def inferRecF (constTy : C → B) (n : Nat) :
     QCtx B → SolverState B → RecBody (Expr C) → IRes (Row B × SolverState B)
@@ -723,6 +726,9 @@ theorem inferF_sound {constTy : C → B} {n : Nat} :
       simp only [inferF, IRes.bind_eq_ok] at h
       obtain ⟨⟨τ₁, S₁⟩, h₁, h₂⟩ := h
       exact .letE (inferF_sound h₁) (greatestAlpha_spec Γ S S₁ τ₁).1 (inferF_sound h₂)
+  | _, _, _, .prim _, _, h | _, _, _, .ite _ _ _, _, h | _, _, _, .asrt _ _, _, h
+  | _, _, _, .nil, _, h | _, _, _, .cons _ _, _, h | _, _, _, .has _ _, _, h => by
+      simp [inferF] at h
 
 theorem inferRecF_sound {constTy : C → B} {n : Nat} :
     ∀ {Γ : QCtx B} {S S' : SolverState B} {ξ : RecBody (Expr C)} {ρ : Row B},

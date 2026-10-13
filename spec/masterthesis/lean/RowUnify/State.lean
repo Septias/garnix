@@ -264,6 +264,7 @@ def Ty.sortedFtv {B : Type} : Ty B → List (Srt × TyVar)
   | .unk      => []
   | .fn a b   => Ty.sortedFtv a ++ Ty.sortedFtv b
   | .rcd ρ    => Row.sortedFtv ρ
+  | .list τ   => Ty.sortedFtv τ
 
 def Row.sortedFtv {B : Type} : Row B → List (Srt × TyVar)
   | .empty     => []
@@ -307,6 +308,10 @@ theorem Ty.mem_sortedFtv_applySubst {B : Type} {θ : TySubst B} {x : Srt × TyVa
   | .rcd ρ,  h => by
       simp only [Ty.applySubst, Ty.sortedFtv] at h
       obtain ⟨y, hy, hx⟩ := Row.mem_sortedFtv_applySubst ρ h
+      exact ⟨y, hy, hx⟩
+  | .list τ, h => by
+      simp only [Ty.applySubst, Ty.sortedFtv] at h
+      obtain ⟨y, hy, hx⟩ := Ty.mem_sortedFtv_applySubst τ h
       exact ⟨y, hy, hx⟩
 
 theorem Row.mem_sortedFtv_applySubst {B : Type} {θ : TySubst B} {x : Srt × TyVar} :
@@ -366,6 +371,8 @@ theorem Ty.applySubst_fixed_sorted {B : Type} {θ : TySubst B} :
           (fun α hα => hl α (R hα))]
   | .rcd ρ,  ht, hr, hl => by
       simp only [Ty.applySubst, Row.applySubst_fixed_sorted ρ ht hr hl]
+  | .list τ, ht, hr, hl => by
+      simp only [Ty.applySubst, Ty.applySubst_fixed_sorted τ ht hr hl]
 
 theorem Row.applySubst_fixed_sorted {B : Type} {θ : TySubst B} :
     (ρ : Row B) →
@@ -753,6 +760,7 @@ theorem Ty.mem_ftv_of_mem_sortedFtv {B : Type} {b : Srt} {α : TyVar} :
       · exact List.mem_append_left  _ (Ty.mem_ftv_of_mem_sortedFtv x h)
       · exact List.mem_append_right _ (Ty.mem_ftv_of_mem_sortedFtv y h)
   | .rcd ρ,  h => Row.mem_ftv_of_mem_sortedFtv ρ h
+  | .list τ, h => Ty.mem_ftv_of_mem_sortedFtv τ h
 
 theorem Row.mem_ftv_of_mem_sortedFtv {B : Type} {b : Srt} {α : TyVar} :
     (ρ : Row B) → (b, α) ∈ Row.sortedFtv ρ → α ∈ ρ.ftv
@@ -793,6 +801,7 @@ theorem Ty.mem_tyFtv_of_sortedFtv {B : Type} {α : TyVar} :
       · exact .inl (Ty.mem_tyFtv_of_sortedFtv a h)
       · exact .inr (Ty.mem_tyFtv_of_sortedFtv b h)
   | .rcd ρ,  h => Row.mem_tyFtv_of_sortedFtv ρ h
+  | .list τ, h => Ty.mem_tyFtv_of_sortedFtv τ h
 
 theorem Row.mem_tyFtv_of_sortedFtv {B : Type} {α : TyVar} :
     (ρ : Row B) → (.ty, α) ∈ Row.sortedFtv ρ → α ∈ ρ.tyFtv
@@ -827,6 +836,7 @@ theorem Ty.mem_allRowVars_of_sortedFtv {B : Type} {α : TyVar} :
       · exact .inl (Ty.mem_allRowVars_of_sortedFtv a h)
       · exact .inr (Ty.mem_allRowVars_of_sortedFtv b h)
   | .rcd ρ,  h => Row.mem_allRowVars_of_sortedFtv ρ h
+  | .list τ, h => Ty.mem_allRowVars_of_sortedFtv τ h
 
 theorem Row.mem_allRowVars_of_sortedFtv {B : Type} {α : TyVar} :
     (ρ : Row B) → (.row, α) ∈ Row.sortedFtv ρ → α ∈ ρ.allRowVars

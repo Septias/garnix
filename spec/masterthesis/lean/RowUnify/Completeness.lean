@@ -364,6 +364,7 @@ theorem unifyM_bounded {B : Type} [DecidableEq B] (fuel : Nat) :
             | unk => cases h
             | fn _ _ => cases h
             | rcd _ => cases h
+            | list _ => cases h
         | lab b =>
             cases τ' with
             | var α =>
@@ -377,6 +378,7 @@ theorem unifyM_bounded {B : Type} [DecidableEq B] (fuel : Nat) :
             | unk => cases h
             | fn _ _ => cases h
             | rcd _ => cases h
+            | list _ => cases h
         | unk =>
             cases τ' with
             | var α =>
@@ -391,6 +393,7 @@ theorem unifyM_bounded {B : Type} [DecidableEq B] (fuel : Nat) :
                 exact ⟨V, fun _ hx => hx, hS, SolBelow.nil V⟩
             | fn _ _ => cases h
             | rcd _ => cases h
+            | list _ => cases h
         | fn a₁ b₁ =>
             cases τ' with
             | var α =>
@@ -402,6 +405,7 @@ theorem unifyM_bounded {B : Type} [DecidableEq B] (fuel : Nat) :
             | unk => cases h
             | fn _ _ => cases h
             | rcd _ => cases h
+            | list _ => cases h
         | rcd ρ₁ =>
             cases τ' with
             | var α =>
@@ -413,6 +417,20 @@ theorem unifyM_bounded {B : Type} [DecidableEq B] (fuel : Nat) :
             | unk => cases h
             | fn _ _ => cases h
             | rcd _ => cases h
+            | list _ => cases h
+        | list τ₁ =>
+            cases τ' with
+            | var α =>
+                exact hbind S α (.list τ₁) V hS
+                  (hV (List.mem_append_right _ List.mem_cons_self))
+                  (fun _ hx => hV (List.mem_append_left _ hx)) h
+            | base _ => cases h
+            | lab _ => cases h
+            | unk => cases h
+            | fn _ _ => cases h
+            | rcd _ => cases h
+            | list τ₂ =>
+                cases h
       · cases s₁ with
         | nil =>
             simp only [unifySpineMF] at h
@@ -483,6 +501,7 @@ theorem unifyM_bounded {B : Type} [DecidableEq B] (fuel : Nat) :
             | unk => cases h
             | fn _ _ => cases h
             | rcd _ => cases h
+            | list _ => cases h
         | lab b =>
             cases τ' with
             | var α =>
@@ -496,6 +515,7 @@ theorem unifyM_bounded {B : Type} [DecidableEq B] (fuel : Nat) :
             | unk => cases h
             | fn _ _ => cases h
             | rcd _ => cases h
+            | list _ => cases h
         | unk =>
             cases τ' with
             | var α =>
@@ -510,6 +530,7 @@ theorem unifyM_bounded {B : Type} [DecidableEq B] (fuel : Nat) :
                 exact ⟨V, fun _ hx => hx, hS, SolBelow.nil V⟩
             | fn _ _ => cases h
             | rcd _ => cases h
+            | list _ => cases h
         | fn a₁ b₁ =>
             cases τ' with
             | var α =>
@@ -539,6 +560,7 @@ theorem unifyM_bounded {B : Type} [DecidableEq B] (fuel : Nat) :
                 obtain ⟨W₂, hW₁W₂, hS₂, hb₂⟩ := ih.1 S₁ _ _ W₁ hS₁ hres hrow
                 exact ⟨W₂, fun _ hx => hW₁W₂ (hVW₁ hx), hS₂, (hb₁.mono hW₁W₂).comp hb₂⟩
             | rcd _ => cases h
+            | list _ => cases h
         | rcd ρ₁ =>
             cases τ' with
             | var α =>
@@ -555,6 +577,21 @@ theorem unifyM_bounded {B : Type} [DecidableEq B] (fuel : Nat) :
                 rcases List.mem_append.mp hx with hh | hh
                 · exact hV (List.mem_append_left _ (mem_sFtv_toSpine ρ₁ x hh))
                 · exact hV (List.mem_append_right _ (mem_sFtv_toSpine ρ₂ x hh))
+            | list _ => cases h
+        | list τ₁ =>
+            cases τ' with
+            | var α =>
+                exact hbind S α (.list τ₁) V hS
+                  (hV (List.mem_append_right _ List.mem_cons_self))
+                  (fun _ hx => hV (List.mem_append_left _ hx)) h
+            | base _ => cases h
+            | lab _ => cases h
+            | unk => cases h
+            | fn _ _ => cases h
+            | rcd _ => cases h
+            | list τ₂ =>
+                simp only [unifyTyF] at h
+                exact ih.1 S τ₁ τ₂ V hS hV h
       · cases s₁ with
         | nil =>
             simp only [unifySpineMF] at h
@@ -995,6 +1032,7 @@ theorem unifyM_success_complete {B : Type} [DecidableEq B] (fuel : Nat) :
             | unk => cases h
             | fn _ _ => cases h
             | rcd _ => cases h
+            | list _ => cases h
         | lab b =>
             cases τ' with
             | var α => exact ⟨θ, AgreeOn.refl θ V, bindTy_complete h hu.symm⟩
@@ -1003,6 +1041,7 @@ theorem unifyM_success_complete {B : Type} [DecidableEq B] (fuel : Nat) :
             | unk => cases h
             | fn _ _ => cases h
             | rcd _ => cases h
+            | list _ => cases h
         | unk =>
             cases τ' with
             | var α => exact ⟨θ, AgreeOn.refl θ V, bindTy_complete h hu.symm⟩
@@ -1011,6 +1050,7 @@ theorem unifyM_success_complete {B : Type} [DecidableEq B] (fuel : Nat) :
             | unk => exact ⟨θ, AgreeOn.refl θ V, unk_arm_complete h⟩
             | fn _ _ => cases h
             | rcd _ => cases h
+            | list _ => cases h
         | fn a₁ b₁ =>
             cases τ' with
             | var α => exact ⟨θ, AgreeOn.refl θ V, bindTy_complete h hu.symm⟩
@@ -1019,6 +1059,7 @@ theorem unifyM_success_complete {B : Type} [DecidableEq B] (fuel : Nat) :
             | unk => cases h
             | fn _ _ => cases h
             | rcd _ => cases h
+            | list _ => cases h
         | rcd ρ₁ =>
             cases τ' with
             | var α => exact ⟨θ, AgreeOn.refl θ V, bindTy_complete h hu.symm⟩
@@ -1027,6 +1068,17 @@ theorem unifyM_success_complete {B : Type} [DecidableEq B] (fuel : Nat) :
             | unk => cases h
             | fn _ _ => cases h
             | rcd _ => cases h
+            | list _ => cases h
+        | list τ₁ =>
+            cases τ' with
+            | var α => exact ⟨θ, AgreeOn.refl θ V, bindTy_complete h hu.symm⟩
+            | base _ => cases h
+            | lab _ => cases h
+            | unk => cases h
+            | fn _ _ => cases h
+            | rcd _ => cases h
+            | list τ₂ =>
+                cases h
       · cases s₁ with
         | nil => exact ⟨θ, AgreeOn.refl θ V, unifySpineMF_nil_left_complete S 0 s₂ h hu⟩
         | cons a s₁ =>
@@ -1073,6 +1125,7 @@ theorem unifyM_success_complete {B : Type} [DecidableEq B] (fuel : Nat) :
             | unk => cases h
             | fn _ _ => cases h
             | rcd _ => cases h
+            | list _ => cases h
         | lab b =>
             cases τ' with
             | var α => exact ⟨θ, AgreeOn.refl θ V, bindTy_complete h hu.symm⟩
@@ -1081,6 +1134,7 @@ theorem unifyM_success_complete {B : Type} [DecidableEq B] (fuel : Nat) :
             | unk => cases h
             | fn _ _ => cases h
             | rcd _ => cases h
+            | list _ => cases h
         | unk =>
             cases τ' with
             | var α => exact ⟨θ, AgreeOn.refl θ V, bindTy_complete h hu.symm⟩
@@ -1089,6 +1143,7 @@ theorem unifyM_success_complete {B : Type} [DecidableEq B] (fuel : Nat) :
             | unk => exact ⟨θ, AgreeOn.refl θ V, unk_arm_complete h⟩
             | fn _ _ => cases h
             | rcd _ => cases h
+            | list _ => cases h
         | fn a₁ b₁ =>
             cases τ' with
             | var α => exact ⟨θ, AgreeOn.refl θ V, bindTy_complete h hu.symm⟩
@@ -1129,6 +1184,7 @@ theorem unifyM_success_complete {B : Type} [DecidableEq B] (fuel : Nat) :
                 exact ⟨θ₂, hag₁.trans' hag₂ hVW₁,
                        Sol.Sat.comp (hsat₁.congrAgree hag₂ hb₁) hsat₂⟩
             | rcd _ => cases h
+            | list _ => cases h
         | rcd ρ₁ =>
             cases τ' with
             | var α => exact ⟨θ, AgreeOn.refl θ V, bindTy_complete h hu.symm⟩
@@ -1149,6 +1205,22 @@ theorem unifyM_success_complete {B : Type} [DecidableEq B] (fuel : Nat) :
                 rcases List.mem_append.mp hx with hh | hh
                 · exact hV (List.mem_append_left _ (mem_sFtv_toSpine ρ₁ x hh))
                 · exact hV (List.mem_append_right _ (mem_sFtv_toSpine ρ₂ x hh))
+            | list _ => cases h
+        | list τ₁ =>
+            cases τ' with
+            | var α => exact ⟨θ, AgreeOn.refl θ V, bindTy_complete h hu.symm⟩
+            | base _ => cases h
+            | lab _ => cases h
+            | unk => cases h
+            | fn _ _ => cases h
+            | rcd _ => cases h
+            | list τ₂ =>
+                simp only [unifyTyF] at h
+                obtain ⟨σ₁, heq, hA⟩ := TyEquiv.list_inv (show TyEquiv (Ty.list (τ₁.applySubst θ))
+                  (Ty.list (τ₂.applySubst θ)) from hu)
+                simp only [Ty.list.injEq] at heq
+                subst heq
+                exact ih.1 S τ₁ τ₂ V hS hV h hA
       · cases s₁ with
         | nil =>
             exact ⟨θ, AgreeOn.refl θ V,

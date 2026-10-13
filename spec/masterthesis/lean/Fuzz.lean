@@ -86,6 +86,7 @@ def tyStr : Ty Unit → String
   | .unk      => "★"
   | .fn τ₁ τ₂ => "(" ++ tyStr τ₁ ++ "→" ++ tyStr τ₂ ++ ")"
   | .rcd ρ    => "{" ++ rowStr ρ ++ "}"
+  | .list τ   => "[" ++ tyStr τ ++ "]"
 
 def rowStr : Row Unit → String
   | .empty     => "ε"
@@ -373,6 +374,7 @@ def tySize : Ty Unit → Nat
   | .unk      => 1
   | .fn τ₁ τ₂ => 1 + tySize τ₁ + tySize τ₂
   | .rcd ρ    => 1 + rowSize ρ
+  | .list τ   => 1 + tySize τ
 
 def rowSize : Row Unit → Nat
   | .empty     => 1
@@ -879,6 +881,10 @@ partial def hxTyF (wr : Bool) (S : Supply) (fuel : Nat) : Ty Unit → Ty Unit �
       match fuel with
       | 0 => .outOfFuel
       | f+1 => hxSpineMF wr S f ρ₁.toSpine ρ₂.toSpine
+  | .list τ₁, .list τ₂ =>
+      match fuel with
+      | 0 => .outOfFuel
+      | f+1 => hxTyF wr S f τ₁ τ₂
   | _, _ => .clash
 
 partial def hxSpineMF (wr : Bool) : Supply → Nat → Spine → Spine → UResM Unit
@@ -999,6 +1005,7 @@ partial def canonTy : Ty Unit → String
   | .unk    => "★"
   | .fn a b => "(" ++ canonTy a ++ "→" ++ canonTy b ++ ")"
   | .rcd ρ  => "{" ++ canonRow ρ ++ "}"
+  | .list τ => "[" ++ canonTy τ ++ "]"
 
 partial def canonRow (ρ : Row Unit) : String :=
   let s := ρ.toSpine

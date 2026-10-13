@@ -43,6 +43,7 @@ def Ty.usize {B : Type} : Ty B → Nat
   | .unk     => 1
   | .fn a b  => 1 + Ty.usize a + Ty.usize b
   | .rcd ρ   => 1 + Row.usize ρ
+  | .list τ  => 1 + Ty.usize τ
 
 def Row.usize {B : Type} : Row B → Nat
   | .empty     => 0
@@ -555,6 +556,7 @@ theorem unifyTyF_flat_ne_oof {B : Type} [DecidableEq B] (S : Supply) (τ τ' : T
       | unk => simp [unifyTyF]
       | fn _ _ => simp [unifyTyF]
       | rcd _ => simp [unifyTyF]
+      | list _ => simp [unifyTyF]
   | lab b =>
       cases τ' with
       | var α => exact bindTy_ne_oof S α _
@@ -565,6 +567,7 @@ theorem unifyTyF_flat_ne_oof {B : Type} [DecidableEq B] (S : Supply) (τ τ' : T
       | unk => simp [unifyTyF]
       | fn _ _ => simp [unifyTyF]
       | rcd _ => simp [unifyTyF]
+      | list _ => simp [unifyTyF]
   | unk =>
       cases τ' with
       | var α => exact bindTy_ne_oof S α _
@@ -578,6 +581,11 @@ theorem unifyTyF_flat_ne_oof {B : Type} [DecidableEq B] (S : Supply) (τ τ' : T
       cases τ' with
       | var α => exact bindTy_ne_oof S α _
       | rcd _ => simp [tyRec] at hrec
+      | _ => simp [unifyTyF]
+  | list τ₁ =>
+      cases τ' with
+      | var α => exact bindTy_ne_oof S α _
+      | list _ => simp [tyRec] at hrec
       | _ => simp [unifyTyF]
 
 theorem unifySpineMF_nil_ne_oof {B : Type} [DecidableEq B] (S : Supply) (f : Nat)
@@ -601,7 +609,8 @@ theorem termR_all {B : Type} [DecidableEq B] : ∀ n m, TermR B n m := by
   · cases hrec : tyRec τ τ' with
     | false => exact ⟨0, unifyTyF_flat_ne_oof S τ τ' hrec⟩
     | true =>
-      rcases tyRec_true hrec with ⟨a₁, b₁, a₂, b₂, rfl, rfl⟩ | ⟨ρ₁, ρ₂, rfl, rfl⟩
+      rcases tyRec_true hrec with ⟨a₁, b₁, a₂, b₂, rfl, rfl⟩ | ⟨ρ₁, ρ₂, rfl, rfl⟩ |
+        ⟨τ₁, τ₂, rfl, rfl⟩
       · have hsz : (Ty.fn a₁ b₁).usize + (Ty.fn a₂ b₂).usize =
             1 + a₁.usize + b₁.usize + (1 + a₂.usize + b₂.usize) := rfl
         obtain ⟨F, hF⟩ := arm_ty_terminates ihn ihm hB hn a₁ a₂ b₁ b₂
@@ -628,6 +637,9 @@ theorem termR_all {B : Type} [DecidableEq B] : ∀ n m, TermR B n m := by
           (fun x hx => hB x (hP hx)) (Nat.le_trans (nv_mono hP) hn)
           (by rw [spineSize_toSpine, spineSize_toSpine]; exact Nat.le_refl _)
         exact ⟨f + 1, hf⟩
+      · have hsz : (Ty.list τ₁).usize + (Ty.list τ₂).usize = 1 + τ₁.usize + (1 + τ₂.usize) := rfl
+        obtain ⟨f, hf⟩ := (ihm (τ₁.usize + τ₂.usize) (by omega)).1 S τ₁ τ₂ hB hn (Nat.le_refl _)
+        exact ⟨f + 1, by simp only [unifyTyF]; exact hf⟩
   · cases s₁ with
     | nil => exact ⟨0, unifySpineMF_nil_ne_oof S 0 s₂⟩
     | cons a s₁ =>

@@ -668,6 +668,8 @@ theorem inferF_stable (constTy : C → B) :
   | Γ, S, .letE x e₁ e₂ => by
       simp only [inferF]
       exact Stable.bind (inferF_stable constTy _ _ e₁) (fun r₁ => inferF_stable constTy _ _ e₂)
+  | _, _, .prim _ | _, _, .ite _ _ _ | _, _, .asrt _ _ | _, _, .nil | _, _, .cons _ _
+  | _, _, .has _ _ => by simp only [inferF]; exact Stable.const _
 
 theorem inferRecF_stable (constTy : C → B) :
     ∀ (Γ : QCtx B) (S : SolverState B) (ξ : RecBody (Expr C)),
@@ -856,6 +858,8 @@ theorem inferF_settles (constTy : C → B) :
         (fun r₁ _ h₁ => by
           have c₁ : r₁.2.sol.Clean := Infer.clean (inferF_sound h₁) hc
           exact inferF_settles constTy _ _ e₂ c₁)
+  | _, _, .prim _, _ | _, _, .ite _ _ _, _ | _, _, .asrt _ _, _ | _, _, .nil, _
+  | _, _, .cons _ _, _ | _, _, .has _ _, _ => by simp only [inferF]; exact Settles.fail _
 
 theorem inferRecF_settles (constTy : C → B) :
     ∀ (Γ : QCtx B) (S : SolverState B) (ξ : RecBody (Expr C)), S.sol.Clean →

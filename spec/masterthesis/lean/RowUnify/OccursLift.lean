@@ -127,6 +127,7 @@ theorem unifyM_occurs_no_unifier {B : Type} [DecidableEq B] (fuel : Nat) :
         | unk => cases fuel <;> cases h
         | fn _ _ => cases fuel <;> cases h
         | rcd _ => cases fuel <;> cases h
+        | list _ => cases fuel <;> cases h
     | lab b =>
         cases τ' with
         | var α => cases fuel <;> exact bindTy_occurs_no_unifier' h
@@ -137,6 +138,7 @@ theorem unifyM_occurs_no_unifier {B : Type} [DecidableEq B] (fuel : Nat) :
         | unk => cases fuel <;> cases h
         | fn _ _ => cases fuel <;> cases h
         | rcd _ => cases fuel <;> cases h
+        | list _ => cases fuel <;> cases h
     | unk =>
         cases τ' with
         | var α => cases fuel <;> exact bindTy_occurs_no_unifier' h
@@ -145,6 +147,7 @@ theorem unifyM_occurs_no_unifier {B : Type} [DecidableEq B] (fuel : Nat) :
         | unk => cases fuel <;> simp [unifyTyF] at h
         | fn _ _ => cases fuel <;> cases h
         | rcd _ => cases fuel <;> cases h
+        | list _ => cases fuel <;> cases h
     | fn a₁ b₁ =>
         cases τ' with
         | var α => cases fuel <;> exact bindTy_occurs_no_unifier' h
@@ -153,6 +156,7 @@ theorem unifyM_occurs_no_unifier {B : Type} [DecidableEq B] (fuel : Nat) :
         | unk => cases fuel <;> cases h
         | fn _ _ => simp [tyRec] at hrec
         | rcd _ => cases fuel <;> cases h
+        | list _ => cases fuel <;> cases h
     | rcd ρ₁ =>
         cases τ' with
         | var α => cases fuel <;> exact bindTy_occurs_no_unifier' h
@@ -161,13 +165,26 @@ theorem unifyM_occurs_no_unifier {B : Type} [DecidableEq B] (fuel : Nat) :
         | unk => cases fuel <;> cases h
         | fn _ _ => cases fuel <;> cases h
         | rcd _ => simp [tyRec] at hrec
+        | list _ => cases fuel <;> cases h
+    | list τ₁ =>
+        cases τ' with
+        | var α => cases fuel <;> exact bindTy_occurs_no_unifier' h
+        | base _ => cases fuel <;> cases h
+        | lab _ => cases fuel <;> cases h
+        | unk => cases fuel <;> cases h
+        | fn _ _ => cases fuel <;> cases h
+        | rcd _ => cases fuel <;> cases h
+        | list τ₂ =>
+            simp [tyRec] at hrec
   induction fuel with
   | zero =>
       refine ⟨fun S τ τ' V _ _ h => ?_, fun S s₁ s₂ V _ _ h => ?_⟩
       · cases hrec : tyRec τ τ' with
         | false => exact hflat 0 S τ τ' hrec h
         | true =>
-          rcases tyRec_true hrec with ⟨a₁, b₁, a₂, b₂, rfl, rfl⟩ | ⟨ρ₁, ρ₂, rfl, rfl⟩
+          rcases tyRec_true hrec with ⟨a₁, b₁, a₂, b₂, rfl, rfl⟩ | ⟨ρ₁, ρ₂, rfl, rfl⟩ |
+            ⟨τ₁, τ₂, rfl, rfl⟩
+          · cases h
           · cases h
           · cases h
       · cases s₁ with
@@ -208,7 +225,8 @@ theorem unifyM_occurs_no_unifier {B : Type} [DecidableEq B] (fuel : Nat) :
       · cases hrec : tyRec τ τ' with
         | false => exact hflat (fuel + 1) S τ τ' hrec h
         | true =>
-        rcases tyRec_true hrec with ⟨a₁, b₁, a₂, b₂, rfl, rfl⟩ | ⟨ρ₁, ρ₂, rfl, rfl⟩
+        rcases tyRec_true hrec with ⟨a₁, b₁, a₂, b₂, rfl, rfl⟩ | ⟨ρ₁, ρ₂, rfl, rfl⟩ |
+          ⟨τ₁, τ₂, rfl, rfl⟩
         · replace h : ((unifyTyF S fuel a₁ a₂).seq fun θ' S'' =>
               unifyTyF S'' fuel (b₁.applySubst θ') (b₂.applySubst θ')) = .occurs := h
           rintro ⟨θ, hu⟩
@@ -253,6 +271,13 @@ theorem unifyM_occurs_no_unifier {B : Type} [DecidableEq B] (fuel : Nat) :
           rcases List.mem_append.mp hx with hh | hh
           · exact hV (List.mem_append_left _ (mem_sFtv_toSpine ρ₁ x hh))
           · exact hV (List.mem_append_right _ (mem_sFtv_toSpine ρ₂ x hh))
+        · simp only [unifyTyF] at h
+          rintro ⟨θ, hu⟩
+          obtain ⟨σ₁, heq, hA⟩ := TyEquiv.list_inv
+            (show TyEquiv (Ty.list (τ₁.applySubst θ)) (Ty.list (τ₂.applySubst θ)) from hu)
+          simp only [Ty.list.injEq] at heq
+          obtain rfl := heq
+          exact ih.1 S τ₁ τ₂ V hS hV h ⟨θ, hA⟩
       · cases s₁ with
         | nil => exact absurd h (hnilL S s₂ _)
         | cons a s₁ =>
