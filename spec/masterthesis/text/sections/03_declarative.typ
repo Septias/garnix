@@ -7,37 +7,6 @@
 
 ]
 
-#let sorting = figure(
-  caption: "Sorting.",
-  flexbox(
-    derive("S-var", ($α: "Type" ∈ Γ$,), $Γ ⊢ α: "Type"$),
-    derive("S-base", (), $Γ ⊢ 𝓫: "Type"$),
-    derive("S-★", (), $Γ ⊢ ★: "Type"$),
-    derive(
-      "S-fn",
-      ($Γ ⊢ τ₁: "Type"$, $Γ ⊢ τ₂: "Type"$),
-      $Γ ⊢ τ₁ -> τ₂: "Type"$,
-    ),
-    derive("S-rcd", ($Γ ⊢ ρ: "Row"$,), $Γ ⊢ {ρ}: "Type"$),
-    derive("S-ρ-var", ($α: "Row" ∈ Γ$,), $Γ ⊢ α: "Row"$),
-    derive("S-ε", (), $Γ ⊢ ε: "Row"$),
-    derive("S-field", ($Γ ⊢ τ: "Type"$,), $Γ ⊢ (l: τ): "Row"$),
-    derive(
-      "S-conc",
-      ($Γ ⊢ ρ₁: "Row"$, $Γ ⊢ ρ₂: "Row"$),
-      $Γ ⊢ (ρ₁ | ρ₂): "Row"$,
-    ),
-    derive(
-      "S-scheme",
-      (
-        $Γ · (macron(α): macron(κ)) ⊢ τ: "Type"$,
-        $∀⟨ρ.l ↓ δ⟩ ∈ Q. #h(0.3em) Γ · (macron(α): macron(κ)) ⊢ ρ: "Row" and (macron(α): macron(κ)) ⊢ δ: "Type"$,
-      ),
-      $Γ ⊢ (∀(macron(α): macron(κ)). Q ⇒ τ) #h(3pt) "ok"$,
-    ),
-  ),
-)
-
 = The Declarative Calculus <declarative>
 
 #let syntax = figure(
@@ -168,7 +137,39 @@ Unification uses both. The normal form lets it process a row as a _spine_ from e
 
 
 == Sorts
-@sorting, in @app-sorting, classifies every type-level phrase as a `Type` or a `Row`. Since τ and ρ are disjoint syntactic categories, the only rules with content are S-var and S-ρ-var, which read the sort of a variable off Γ. The sorts are deliberately fewer than the kinds of Paszke and Xie @extensible_tabular, $κ ::= ★ | κ₁ → κ₂ | "Label" | "Row"$: the arrow kind serves type application, first-class rows and label singletons, none of which MiniNix has, and we name the sorts because ★ is the unknown type here. First-class labels add a `Label` sort and change nothing else about the discipline (@sec-fc-labels).
+#let sorting = figure(
+  caption: "Sorting.",
+  flexbox(
+    derive("S-var", ($α: "Type" ∈ Γ$,), $Γ ⊢ α: "Type"$),
+    derive("S-base", (), $Γ ⊢ 𝓫: "Type"$),
+    derive("S-★", (), $Γ ⊢ ★: "Type"$),
+    derive(
+      "S-fn",
+      ($Γ ⊢ τ₁: "Type"$, $Γ ⊢ τ₂: "Type"$),
+      $Γ ⊢ τ₁ -> τ₂: "Type"$,
+    ),
+    derive("S-rcd", ($Γ ⊢ ρ: "Row"$,), $Γ ⊢ {ρ}: "Type"$),
+    derive("S-ρ-var", ($α: "Row" ∈ Γ$,), $Γ ⊢ α: "Row"$),
+    derive("S-ε", (), $Γ ⊢ ε: "Row"$),
+    derive("S-field", ($Γ ⊢ τ: "Type"$,), $Γ ⊢ (l: τ): "Row"$),
+    derive(
+      "S-conc",
+      ($Γ ⊢ ρ₁: "Row"$, $Γ ⊢ ρ₂: "Row"$),
+      $Γ ⊢ (ρ₁ | ρ₂): "Row"$,
+    ),
+    derive(
+      "S-scheme",
+      (
+        $Γ · (macron(α): macron(κ)) ⊢ τ: "Type"$,
+        $∀⟨ρ.l ↓ δ⟩ ∈ Q. #h(0.3em) Γ · (macron(α): macron(κ)) ⊢ ρ: "Row" and (macron(α): macron(κ)) ⊢ δ: "Type"$,
+      ),
+      $Γ ⊢ (∀(macron(α): macron(κ)). Q ⇒ τ) #h(3pt) "ok"$,
+    ),
+  ),
+)
+#sorting <sorting>
+
+@sorting classifies every type-level phrase as a `Type` or a `Row`. Since τ and ρ are disjoint syntactic categories, the only rules with content are S-var and S-ρ-var, which read the sort of a variable off Γ. The sorts are deliberately fewer than the kinds of Paszke and Xie @extensible_tabular, $κ ::= ★ | κ₁ → κ₂ | "Label" | "Row"$: the arrow kind serves type application, first-class rows and label singletons, none of which MiniNix has, and we name the sorts because ★ is the unknown type here. First-class labels add a `Label` sort and change nothing else about the discipline (@sec-fc-labels).
 
 T-λ-I and T-let are the only typing rules of @declarative-rules with a sorting premise, since they are the only ones that choose a type their other premises do not determine. T-λ-I chooses the parameter type and checks $Γ ⊢ τ₁: "Type"$. T-let chooses a scheme and checks $Γ ⊢ σ "ok"$: the body is well-sorted, every stump looks up in a row, and every stump's result is a type over the quantified variables of σ itself. The result is usually a single variable; inference also produces stumps whose result has already been used at a compound type, such as $𝓫 → β$ (@inference). Every other rule's types are fixed by its premises and are well-sorted whenever they are.
 

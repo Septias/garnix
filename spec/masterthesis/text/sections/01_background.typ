@@ -9,23 +9,13 @@
 
 = Background <sec-background>
 
-Our goals G1-G4 rule out a few systems by design (…)
+// Ur needs disjointness written out at polymorphic functions. I believe this holds for the uses that matter here, but Ur infers some of these constraints.
+// Deciding set-theoretic subtyping is exponential in the worst case.
+// Gaster-Jones only extends by a fresh field, so it rejects overwriting.
+// meta: I want to add some reasoning on why gradual is basically off the table
+The goals G1-G4 exclude most existing record calculi as a basis for NixLang, each for a specific reason. Calculi that restrict concatenation to records with disjoint labels @symm_concat @xie2020row, or that offer only extension by a fresh field and functional update @gaster_jones @ohori1995polymorphic, reject the overwriting uses of `//` and thereby violate totality (G3). Calculi that admit overwriting at polymorphic types require the programmer to state disjointness explicitly @ur, which violates G1 (syntax changes). Gradual systems for extensible rows @gradual_siek @gradual_extensible_rows insert casts at the boundary to untyped code; a cast changes evaluation and may force a value that lazy evaluation would leave untouched, which violates G2. Width-subtyping, as in algebraic subtyping @algebraic_subtyping @simplesub @mlstruct, is unsound together with asymmetric concatenation: a field forgotten by subsumption is no longer tracked, yet still overwrites a field of the other operand at run time @symm_concat. @simple_boolean admit record removal but need tagged records for it, a feature we can not add to nix which has anonymous records. The remaining systems are expressive enough but delegate the work to a solver. Wand's typings are disjunctions whose alternatives multiply with every concatenation @concat4multiinher, HM(X) leaves the constraint solver as a parameter @hmx, Rose decides row predicates by an entailment relation @rose, and set-theoretic types rest on a subtyping relation whose decision is exponential in the worst case @frisch_semantic @castagna2023programming. None of these is ruled out in principle, but none offers the structural reasons for scaling that G4 asks for.
 
-// meta: too many small headings
-// If I want to add leijen, find a better introduction
-// Anyways, this is not really interesting, readers of this section know the state of the art
-// maybe motivate again by asymmetric concat?
-// Name all record calculi with symmetric concat in a list?
-// Maybe just remove this whole section as it is part of related work?
-
-// In Hindley-Milner inference with rows @concat4multiinher @remy_typechecking, a record type ${ρ}$ is built from a row ρ of label-type pairs that may end in a row-variable. A function that selects l from its argument is [polymorphic in the rest of the row](interesting), and unification solves row-variables as it solves type variables. Most such calculi keep labels unique within a row, so that extension must demand the absence of the label it adds.
-
-// == Scoped Labels
-// Leijen's scoped labels @extensible_recs drop uniqueness. A row may contain a label several times, and lookup resolves duplicates with left-precedence. Extension is then total, and a shadowed field is kept rather than removed. [This is the row theory of MiniNix, extended from extension by a single field to the concatenation of two rows](this is actually inspired by @extensible_tabular).
-
-// == Why Not Symmetric Concatenation, Subtyping or Lacks-Predicates
-// The [ubiquity](wording) of overwriting rules out record calculi that restrict themselves to _symmetric concatenation_ @symm_concat, in which both operands have disjoint labels. It also rules out another feature commonly seen in record calculi. Using _width-subtyping_, one can remove or forget fields ${l: τ} <= {}$ in a record. This, in combination with asymmetric record concatenation, [leads to unsoundness, because previously forgotten and then untracked fields overwrite existing fields semantically but cannot be tracked by the record system](good). Lacks-predicates @gaster_jones @qualified_types can salvage this situation by denoting the absence of a field. They are absent from MiniNix not because they would burden the programmer — in a system without annotations, nobody writes them — [but because nothing in MiniNix generates them](recheck, nix has constructs that generate them). [Gaster and Jones need them because record extension is partial and its typing rule must demand absence. With scoped rows, concatenation is total, no rule demands anything, and a constraint form without an introduction site buys nothing](is this really an argument?). [The NixLang constructs that would generate them — closed function patterns, `removeAttrs` and `?`-guards under `if` — lie outside MiniNix, which is why @sec-extensions returns to them as the most promising extension](reduce this somehow, either drop entirely or…).
-// We therefore keep MiniNix subtyping-free; the only ordering it admits is the precision gained by instantiation and row equivalence (≈).
+Scoped labels @extensible_recs avoid the conflict between overwriting and absence altogether. A row may contain a label several times, and lookup resolves duplicates with left-precedence, so extension is total and demands no information about absent fields. Leijen applies this idea to extension by a single field; it remains to lift it to the concatenation of two rows.
 
 // meta: this is somewhat out of place. Put it in front mayebe?
 // meta: Maybe clear up the heritance right in the abstract?
