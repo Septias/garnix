@@ -7,7 +7,7 @@
 ]
 
 
-= Overview <sec-overview>
+= Our Position <sec-overview>
 This section introduces MiniNix informally through examples. The formal definitions follow in @declarative.
 
 == Two Judgements Instead of One <our-position>
@@ -16,18 +16,19 @@ In a row-based system, a field selection is ordinarily _elaborated into a row co
 We take selection out of unification altogether. Field demands and row equality are different judgements. Row unification $scripts(≐)_r$ only ever states structural _equality_ of two rows; it never receives a demand of the form "this row must contain $l$", and consequently never has to guess a field into a variable. Field demands are instead answered by a separate lookup relation.
 
 == Scoped Rows and Three-Valued Lookup
-With _scoped records_, concatenation of record types becomes juxtaposition of rows. MiniNix uses rows ρ that hold label-type bindings and row-variables. [Such a row ρ can be put into curly braces to form a record type {ρ}](too informal). For concatenation, the rows of both operands, {ρ} and {ρ'}, are joined to form {ρ | ρ'}, and no information is lost. We combine this with a lookup relation of the form $ρ.l ↓ r$ (@row-lookup) that traverses the natural structure of rows to look up a label l in the row ρ. The result r can be of the following three kinds:
+With _scoped records_, concatenation of record types becomes juxtaposition of rows. MiniNix uses rows ρ that hold label-type bindings and row-variables. A record type ${ρ}$ is formed from a row ρ. For concatenation, the rows of both operands, {ρ} and {ρ'}, are joined to form {ρ | ρ'}, and no information is lost. We combine this with a lookup relation on rows of the form $ρ.l ↓ r$ (@row-lookup) that traverses the natural structure of rows to look up a label l in the row ρ. The result r can be of the following three kinds:
 
-The first two results are a type τ, if the lookup finds the label, and a marker ⊥, if the label is definitely absent. A row can consist of fixed label-type bindings but also row-variables, and our lookup relation stops at these, returning a result ? because shadowing behaviour after this point is not clear. [](good!) Substitution then solves those row-variables and lets the lookup advance further into the record. After all substitution is done, a  $?$ that no substitution resolves is typed at the unknown type ★.
+The first two results are a type τ, if the lookup finds the label, and a marker ⊥, if the label is definitely absent. A row can consist of fixed label-type bindings but also row-variables, and our lookup relation stops at these, returning a result ? because shadowing behaviour after this point is not clear. Substitution then solves those row-variables and lets the lookup advance further into the record. After all substitution is done, a  $?$ that no substitution resolves is typed at the unknown type ★.
 
 == Selection
-The smallest [interesting](bad word) program is a selector, `x: x.l`. Its argument must be a record ${ρ}$, and the lookup $ρ.l$ decides the result. For $ρ = (l: τ₀)$ the lookup hits and the selector types at ${(l: τ₀)} → τ₀$; for $ρ = ε$ it reports definite absence, and the selector types at ${ε} → ★$, where ★ marks a selection that fails whenever it is run.[¡](this sounds bad if you don't know that ★ is usually only uncertainty) For a row-variable $ρ = β$ the lookup answers $?$, [and the result is ★ as well](only at finalization!).
+// this section creates more questions than it solves
+The smallest program that selects a field the selector, `x: x.l`. Its argument must be a record ${ρ}$, and the lookup $ρ.l$ decides the result. For $ρ = (l: τ₀)$ the lookup hits and the selector types at ${(l: τ₀)} → τ₀$. For $ρ = ε$ it reports definite absence, and the selector types at ${ε} → ★$. Here ★ marks a selection that fails whenever it is run, not uncertainty; [the program is still accepted](explain why), and the selection is reported. For a row-variable $ρ = β$ the lookup answers $?$, and the result stays pending until a substitution decides it. Only a $?$ that remains at the end of inference becomes ★.
 
 A `let`-bound selector keeps this pending lookup in its scheme and replays it at every use. This lets a single binding serve incompatible uses,
 $
   #b[let] f = (x: x.l) #b[in] { a = (f {l = {m = c}}).m; b = f {} } quad : quad {a: 𝓫_c | b: ★}
 $
-The first use needs the result of f to be a record, the second applies f to a record without l. No plain scheme covers both, and @principality [shows that this forces qualified schemes](wording).
+The first use needs the result of f to be a record, the second applies f to a record without l. No plain scheme covers both, and @principality shows that this forces qualified schemes.
 
 The selector also shows where MiniNix departs from Paszke and Xie @extensible_tabular. Their search rule turns the selection into the demand that the row of x contain l, and since that row is a variable, unification places the field into it: the selector types at ${(l: δ | ρ)} → δ$. Every use must then supply l, so `f {}` is rejected, and with it the program above. MiniNix answers the lookup with $?$ instead and keeps it in the scheme of f, whose instances include ${ε} → ★$.
 

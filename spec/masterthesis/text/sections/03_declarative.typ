@@ -27,9 +27,9 @@
     ],
     subbox(caption: "Types")[
       $
+               #type_name("Sort") κ & ::= "Type" | "Row" \
                #type_name("Type") τ & ::= α | 𝓫 | ★ | τ -> τ | { ρ } \
                 #type_name("Row") ρ & ::= ε | α | l: τ | (ρ₁ | ρ₂) \
-               #type_name("Sort") κ & ::= "Type" | "Row" \
         #type_name("Constraints") Q & ::= ε | Q, ⟨ρ.l ↓ δ⟩ \
         #type_name("Type Scheme") σ & ::= ∀(macron(α): macron(κ)). Q ⇒ τ | τ \
       $
@@ -38,7 +38,7 @@
 )
 #syntax <syntax>
 
-@syntax gives the syntax of terms and types: a λ-calculus extended with records, record concatenation and let-polymorphism. Functions are written $(x: e)$, as in NixLang. We assume a finite set 𝓒 of constants and a finite set 𝓑 of base types, together with a total map $c ↦ 𝓫_c$ that assigns each constant its base type. The unknown type ★ types the expressions the analysis cannot decide (@sec-motivation). Record literals ${ξ}$ and record types ${ρ}$ share one tree structure of fields and concatenations. As in Hindley-Milner, polymorphism is stratified: a scheme σ quantifies over monotypes and rows only, which keeps instantiation predicative and inference decidable. We depart from standart Hindley-Milner schemes using constraints: our schemes are _qualified_, meaning a scheme carries a list Q of pending lookups ⟨ρ.l ↓ δ⟩, called _stumps_, whose result δ is a type over the scheme's own quantified variables, usually a single one. A plain scheme is the special case Q = ε. This is a direct consequence of the constraints our goal language NixLang induces (@principality).
+@syntax gives the syntax of terms and types: a λ-calculus extended with records, record concatenation and let-polymorphism. Functions are written $(x: e)$, as in NixLang. We assume a finite set 𝓒 of constants and a finite set 𝓑 of base types, together with a total map $c ↦ 𝓫_c$ that assigns each constant its base type. The unknown type ★ types the expressions the analysis cannot decide (@sec-motivation). Record literals ${ξ}$ and record types ${ρ}$ share one tree structure of fields and concatenations. As in Hindley-Milner, polymorphism is stratified: a scheme σ quantifies over monotypes and rows only, which keeps instantiation predicative and inference decidable. We depart from standart Hindley-Milner schemes using constraints: our schemes are _qualified_, meaning a scheme carries a list Q of pending lookups ⟨ρ.l ↓ δ⟩, called _stumps_, whose result δ is a type over the scheme's own quantified variables, usually a single one. A plain scheme is the special case Q = ε. [This is a direct consequence of the constraints our goal language NixLang induces (@principality)](remove this?).
 
 == Row Lookup
 #let row_lookup = figure(
@@ -107,11 +107,12 @@ Only $?$ may change, to whatever the substituted row yields. This makes deferral
 )
 #row_equivalence <row-equivalence>
 
-// meta: show an example here, this helps the narrative
-
+// todo: use this as introduction for the following paragraph to tell a bit better story.
 Fields in records are allowed to commute, the row (a: τ| b: τ) should be similar to (b: τ | a: τ). This is what the row-equivalence establishes… They can not commute past row-variables due to shadowing…
 
 @row-equivalence gives the row-equivalence rules of MiniNix. The relation is an equivalence and a congruence, admits associativity and the units ε, and lets two fields commute only when their labels are distinct. Adjacent fields with the same label keep their order, and so does every field next to a row-variable, since a variable may stand for a row that contains the label and shadowing must be preserved. For concrete labels the premise $l₁ ≠ l₂$ of ≈-comm is decidable, so ≈ needs no separate constraint on labels. ≈-rcd and ≈-fn lift ≈ to types: base types, ★ and type variables are equivalent only to themselves, and ≈ is a congruence below records and arrows, with fields handled by ≈-ext.
+
+// todo: maybe add a section why this is not subtyping etc. here?
 
 === Row Equivalence Is a Trace Monoid <trace-monoid>
 Calculi with unique labels decide row equality by sorting both rows by label. Under scoped labels this is unsound. Sorting identifies $(l: 𝓫 | α)$ with $(α | l: 𝓫)$, but the substitution $α ≔ (l: 𝓫′)$ makes the lookup of l answer 𝓫 in the first row and 𝓫′ in the second. A row-variable therefore cuts a row into segments, and fields may be reordered only within a segment. This is the structure of a trace monoid.
@@ -219,7 +220,8 @@ T-λ-I and T-let are the only typing rules of @declarative-rules with a sorting 
 #declarative <declarative-rules>
 
 // meta: maybe explain the trivil rules first and then the special ones?
-// todo: explain the `Γ ⊢ σ ok` premise on T-let. Maybe go premise-for premise and show them in the explanation
+// todo: explain the `Γ ⊢ σ ok` premise on T-let.
+// Go premise-for premise and show them in the explanation
 [The typing rules extend those of the λ-calculus with let-polymorphism](there should be a name for this feature-combination already). T-cons types each constant c at its base type $𝓫_c$. T-var looks up x in Γ and instantiates its scheme by the instance relation of @instantiation. T-let binds x to any well-sorted scheme σ that is _instance-closed_ for e₁ — every instance of σ is a typing of e₁ — and _inhabited_. The inhabitation premise is necessary: a plain scheme always has its own body as an instance, but a qualified one can have none, and then instance-closure says nothing about e₁ at all. Without it, `let x = (3 4) in 5` would type while being stuck. T-eq equates types equal up to the row-equivalence relation from @row-equivalence. T-conc concatenates two row types by concatenating their type representation, with the right operand first: lookup prefers the left of a row, so left-precedence on rows realizes the right-precedence of ‖ that NixLang admits. T-sel types a selection by delegating to the row-lookup relation of @row-lookup.
 
 Schemes are qualified because a `let`-bound selector must answer differently at different uses (@sec-overview). The instance relation of @instantiation replays the stumps of a scheme at every use, [and @principality shows that qualification is a forced decision](was already said, no?).
