@@ -1071,14 +1071,17 @@ theorem Sol.good_hostBind {B : Type} {V : List (Srt × TyVar)} {β β' : TyVar} 
 def tyRec {B : Type} : Ty B → Ty B → Bool
   | .fn _ _, .fn _ _ => true
   | .rcd _, .rcd _   => true
+  | .list _, .list _ => true
   | _, _             => false
 
 theorem tyRec_true {B : Type} {τ τ' : Ty B} (h : tyRec τ τ' = true) :
     (∃ a₁ b₁ a₂ b₂, τ = .fn a₁ b₁ ∧ τ' = .fn a₂ b₂) ∨
-    (∃ ρ₁ ρ₂, τ = .rcd ρ₁ ∧ τ' = .rcd ρ₂) := by
+    (∃ ρ₁ ρ₂, τ = .rcd ρ₁ ∧ τ' = .rcd ρ₂) ∨
+    (∃ τ₁ τ₂, τ = .list τ₁ ∧ τ' = .list τ₂) := by
   cases τ <;> cases τ' <;> simp [tyRec] at h
   · exact .inl ⟨_, _, _, _, rfl, rfl⟩
-  · exact .inr ⟨_, _, rfl, rfl⟩
+  · exact .inr (.inl ⟨_, _, rfl, rfl⟩)
+  · exact .inr (.inr ⟨_, _, rfl, rfl⟩)
 
 -- ⊢  U-HOST'S RESIDUAL: inside the problem plus β′, and clear of β — `t₁`
 --    never mentions it, and on the host side SOLE OCCURRENCE leaves nothing for
@@ -1190,6 +1193,7 @@ theorem unifyTyF_flat_good {B : Type} [DecidableEq B] (fuel : Nat) (S : Supply)
       | unk => cases fuel <;> cases h
       | fn _ _ => cases fuel <;> cases h
       | rcd _ => cases fuel <;> cases h
+      | list _ => cases fuel <;> cases h
   | lab b =>
       cases τ' with
       | var α => cases fuel <;> exact hbR S α _ h
@@ -1200,6 +1204,7 @@ theorem unifyTyF_flat_good {B : Type} [DecidableEq B] (fuel : Nat) (S : Supply)
       | unk => cases fuel <;> cases h
       | fn _ _ => cases fuel <;> cases h
       | rcd _ => cases fuel <;> cases h
+      | list _ => cases fuel <;> cases h
   | unk =>
       cases τ' with
       | var α => cases fuel <;> exact hbR S α _ h
@@ -1214,6 +1219,7 @@ theorem unifyTyF_flat_good {B : Type} [DecidableEq B] (fuel : Nat) (S : Supply)
           exact Sol.good_nil _
       | fn _ _ => cases fuel <;> cases h
       | rcd _ => cases fuel <;> cases h
+      | list _ => cases fuel <;> cases h
   | fn a₁ b₁ =>
       cases τ' with
       | var α => cases fuel <;> exact hbR S α _ h
@@ -1222,6 +1228,7 @@ theorem unifyTyF_flat_good {B : Type} [DecidableEq B] (fuel : Nat) (S : Supply)
       | unk => cases fuel <;> cases h
       | fn a₂ b₂ => simp [tyRec] at hrec
       | rcd _ => cases fuel <;> cases h
+      | list _ => cases fuel <;> cases h
   | rcd ρ₁ =>
       cases τ' with
       | var α => cases fuel <;> exact hbR S α _ h
@@ -1230,6 +1237,17 @@ theorem unifyTyF_flat_good {B : Type} [DecidableEq B] (fuel : Nat) (S : Supply)
       | unk => cases fuel <;> cases h
       | fn _ _ => cases fuel <;> cases h
       | rcd ρ₂ => simp [tyRec] at hrec
+      | list _ => cases fuel <;> cases h
+  | list τ₁ =>
+      cases τ' with
+      | var α => cases fuel <;> exact hbR S α _ h
+      | base _ => cases fuel <;> cases h
+      | lab _ => cases fuel <;> cases h
+      | unk => cases fuel <;> cases h
+      | fn _ _ => cases fuel <;> cases h
+      | rcd _ => cases fuel <;> cases h
+      | list τ₂ =>
+          simp [tyRec] at hrec
 
 -- ⊢  EVERY SUCCESS IS GOOD, over the problem's own tagged variables plus the
 --    names the run drew, at both sorts — PROVIDED the supply starts above the
@@ -1276,7 +1294,9 @@ theorem unifyM_good {B : Type} [DecidableEq B] (fuel : Nat) :
       · cases hrec : tyRec τ τ' with
         | false => exact (unifyTyF_flat_good 0 S τ τ' hrec h).noFresh S S'
         | true =>
-          rcases tyRec_true hrec with ⟨a₁, b₁, a₂, b₂, rfl, rfl⟩ | ⟨ρ₁, ρ₂, rfl, rfl⟩
+          rcases tyRec_true hrec with ⟨a₁, b₁, a₂, b₂, rfl, rfl⟩ | ⟨ρ₁, ρ₂, rfl, rfl⟩ |
+            ⟨τ₁, τ₂, rfl, rfl⟩
+          · cases h
           · cases h
           · cases h
       · cases s₁ with
@@ -1325,7 +1345,8 @@ theorem unifyM_good {B : Type} [DecidableEq B] (fuel : Nat) :
       · cases hrec : tyRec τ τ' with
         | false => exact (unifyTyF_flat_good (fuel + 1) S τ τ' hrec h).noFresh S S'
         | true =>
-        rcases tyRec_true hrec with ⟨a₁, b₁, a₂, b₂, rfl, rfl⟩ | ⟨ρ₁, ρ₂, rfl, rfl⟩
+        rcases tyRec_true hrec with ⟨a₁, b₁, a₂, b₂, rfl, rfl⟩ | ⟨ρ₁, ρ₂, rfl, rfl⟩ |
+          ⟨τ₁, τ₂, rfl, rfl⟩
         · replace h : ((unifyTyF S fuel a₁ a₂).seq fun θ' S'' =>
               unifyTyF S'' fuel (b₁.applySubst θ') (b₂.applySubst θ'))
             = .success s S' := h
@@ -1355,6 +1376,8 @@ theorem unifyM_good {B : Type} [DecidableEq B] (fuel : Nat) :
             · exact List.mem_append_right _ (sSorted_toSpine _ _ hx)
           obtain ⟨R, hf, g⟩ := ih.2 S _ _ (fun x hx => hB x (hsub hx)) h
           exact ⟨R, hf, g.freshMono hsub⟩
+        · simp only [unifyTyF] at h
+          exact ih.1 S τ₁ τ₂ hB h
       · cases s₁ with
         | nil => exact (hnilL S s₂ _ h).noFresh S S'
         | cons a s₁ =>

@@ -381,7 +381,9 @@ theorem unifyM_draws {B : Type} [DecidableEq B] (fuel : Nat) :
       · cases hrec : tyRec τ τ' with
         | false => rw [unifyTyF_flat_supply 0 S τ τ' hrec h]; exact Sol.Draws.same _ _
         | true =>
-          rcases tyRec_true hrec with ⟨a₁, b₁, a₂, b₂, rfl, rfl⟩ | ⟨ρ₁, ρ₂, rfl, rfl⟩
+          rcases tyRec_true hrec with ⟨a₁, b₁, a₂, b₂, rfl, rfl⟩ | ⟨ρ₁, ρ₂, rfl, rfl⟩ |
+            ⟨τ₁, τ₂, rfl, rfl⟩
+          · cases h
           · cases h
           · cases h
       · cases s₁ with
@@ -421,7 +423,8 @@ theorem unifyM_draws {B : Type} [DecidableEq B] (fuel : Nat) :
       · cases hrec : tyRec τ τ' with
         | false => rw [unifyTyF_flat_supply (fuel + 1) S τ τ' hrec h]; exact Sol.Draws.same _ _
         | true =>
-        rcases tyRec_true hrec with ⟨a₁, b₁, a₂, b₂, rfl, rfl⟩ | ⟨ρ₁, ρ₂, rfl, rfl⟩
+        rcases tyRec_true hrec with ⟨a₁, b₁, a₂, b₂, rfl, rfl⟩ | ⟨ρ₁, ρ₂, rfl, rfl⟩ |
+          ⟨τ₁, τ₂, rfl, rfl⟩
         · replace h : ((unifyTyF S fuel a₁ a₂).seq fun θ' S'' =>
               unifyTyF S'' fuel (b₁.applySubst θ') (b₂.applySubst θ'))
             = .success s S' := h
@@ -456,6 +459,8 @@ theorem unifyM_draws {B : Type} [DecidableEq B] (fuel : Nat) :
             · exact List.mem_append_left _ (sSorted_toSpine _ _ hx)
             · exact List.mem_append_right _ (sSorted_toSpine _ _ hx)
           exact ih.2 S _ _ (fun x hx => hB x (hsub hx)) h
+        · simp only [unifyTyF] at h
+          exact ih.1 S τ₁ τ₂ hB h
       · cases s₁ with
         | nil => exact hnilL S s₂ _ h
         | cons a s₁ =>

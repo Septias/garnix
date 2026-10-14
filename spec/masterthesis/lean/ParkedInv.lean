@@ -133,7 +133,7 @@ mutual
 /-- ⊢  **every parked stump is kept**: at the end of a derivation it is still
 parked, the same stump, or it discharges under any σ that satisfies the final
 state. -/
-theorem Infer.keeps {C : Type} {constTy : C → B} :
+theorem Infer.keeps {C : Type} {constTy : Sig B C} :
     {Γ : QCtx B} → {S S' : SolverState B} → {e : Expr C} → {τ : Ty B} →
     Infer constTy Γ S e τ S' → S.KeepsS S'
   | _, _, _, _, _, .con => .refl _
@@ -226,13 +226,44 @@ theorem Infer.keeps {C : Type} {constTy : C → B} :
           · exact .inl ⟨q', hq', hq's.trans hqs⟩
           · exact .inr (hqs ▸ hd')
       · exact .inr hd
+  | _, _, _, _, _, .prim _ _ ha hd hs => by
+      obtain ⟨kb, mb, -⟩ := draw_keeps hd
+      have m := mb.trans hs.satMono
+      exact (SolverState.KeepsS.of_sub (fun p hp => hp)).trans
+        ((InferArgs.keeps ha).trans (kb.trans hs.keeps hs.satMono) m)
+        ((InferArgs.sat_mono ha).trans m)
+  | _, _, _, _, _, .bool _ => .refl _
+  | _, _, _, _, _, .ite _ h hs₁ h₁ h₂ hs₂ => by
+      have m₅ := hs₂.satMono
+      have m₄ := (Infer.sat_mono h₂).trans m₅
+      have m₃ := (Infer.sat_mono h₁).trans m₄
+      have m₂ := hs₁.satMono.trans m₃
+      exact (Infer.keeps h).trans (hs₁.keeps.trans ((Infer.keeps h₁).trans
+        ((Infer.keeps h₂).trans hs₂.keeps m₅) m₄) m₃) m₂
+  | _, _, _, _, _, .asrt _ h hs h₂ => by
+      have m₃ := Infer.sat_mono h₂
+      exact (Infer.keeps h).trans (hs.keeps.trans (Infer.keeps h₂) m₃) (hs.satMono.trans m₃)
+  | _, _, _, _, _, .nil hd => (draw_keeps hd).1
+  | _, _, _, _, _, .cons h₁ h₂ hs =>
+      (Infer.keeps h₁).trans ((Infer.keeps h₂).trans hs.keeps hs.satMono)
+        ((Infer.sat_mono h₂).trans hs.satMono)
+  | _, _, _, _, _, .has _ h hd hs => by
+      obtain ⟨ka, ma, -⟩ := draw_keeps hd
+      exact (Infer.keeps h).trans (ka.trans hs.keeps hs.satMono) (ma.trans hs.satMono)
 
-theorem InferRec.keeps {C : Type} {constTy : C → B} :
+theorem InferRec.keeps {C : Type} {constTy : Sig B C} :
     {Γ : QCtx B} → {S S' : SolverState B} → {ξ : RecBody (Expr C)} → {ρ : Row B} →
     InferRec constTy Γ S ξ ρ S' → S.KeepsS S'
   | _, _, _, _, _, .empty => .refl _
   | _, _, _, _, _, .field h₁ => Infer.keeps h₁
   | _, _, _, _, _, .cat h₁ h₂ => (InferRec.keeps h₁).trans (InferRec.keeps h₂) (InferRec.sat_mono h₂)
+
+
+theorem InferArgs.keeps {C : Type} {constTy : Sig B C} :
+    {Γ : QCtx B} → {S S' : SolverState B} → {es : List (Expr C)} → {τs : List (Ty B)} →
+    InferArgs constTy Γ S es τs S' → S.KeepsS S'
+  | _, _, _, _, _, .nil => .refl _
+  | _, _, _, _, _, .cons h ha => (Infer.keeps h).trans (InferArgs.keeps ha) (InferArgs.sat_mono ha)
 
 end
 

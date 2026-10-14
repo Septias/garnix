@@ -80,6 +80,7 @@ mutual
     | .fn τ₁ τ₂ =>
         .fn (Ty.applySubst_substEquiv h τ₁) (Ty.applySubst_substEquiv h τ₂)
     | .rcd ρ    => .rcd (Row.applySubst_substEquiv h ρ)
+    | .list τ   => .list (Ty.applySubst_substEquiv h τ)
 
   theorem Row.applySubst_substEquiv {B : Type} {θ₁ θ₂ : TySubst B} (h : θ₁ ≗ θ₂) :
       (ρ : Row B) → RowEquiv (ρ.applySubst θ₁) (ρ.applySubst θ₂)

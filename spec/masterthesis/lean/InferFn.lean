@@ -517,7 +517,7 @@ def varF (n : Nat) (Γ : QCtx B) (S : SolverState B) (σ : QScheme B) :
     else .fail "A-var: a binder has no recorded kind"
   else .fail "A-var: renaming not fresh"
 
-theorem varF_sound {C : Type} {constTy : C → B} {n : Nat} {Γ : QCtx B}
+theorem varF_sound {C : Type} {constTy : Sig B C} {n : Nat} {Γ : QCtx B}
     {S S' : SolverState B} {x : Var} {σ : QScheme B} {τ : Ty B}
     (hl : Γ.lookup x = some σ) (h : varF n Γ S σ = .ok (τ, S')) :
     Infer constTy Γ S (.var x) τ S' := by
@@ -546,10 +546,26 @@ theorem varF_sound {C : Type} {constTy : C → B} {n : Nat} {Γ : QCtx B}
 
 variable {C : Type}
 
+/-- the sort a tag names -/
+def Srt.toKind : Srt → Kind
+  | .ty => .ty | .row => .row | .lab => .lab
+
+/-- A-prim's instance: every variable of the builtin's type renamed to a fresh
+name, drawn at the sort it occurs at. The state is the one the relation asks
+for: supply advanced past the block, the kinds recorded. -/
+def primInst (S : SolverState B) (τp : Ty B) : TySubst B × SolverState B :=
+  let vs := ((Ty.sortedFtv τp).map Prod.snd).eraseDups
+  let f := varRen S.supply.next vs
+  let κ : TyVar → Kind := fun α =>
+    (((Ty.sortedFtv τp).find? (·.2 == α)).map (·.1.toKind)).getD .ty
+  (renSubst vs f,
+   { S with supply := ⟨S.supply.next + vs.length⟩,
+            kinds := vs.map (fun α => (f α, κ α)) ++ S.kinds })
+
 mutual
 
 /-- `Γ; S ⊢ e ⇒ τ; S′`, computed -/
-def inferF (constTy : C → B) (n : Nat) :
+def inferF (constTy : Sig B C) (n : Nat) :
     QCtx B → SolverState B → Expr C → IRes (Ty B × SolverState B)
   | _, S, .con c => .ok (.base (constTy c), S)
   | Γ, S, .var x =>
@@ -614,8 +630,51 @@ def inferF (constTy : C → B) (n : Nat) :
       let ᾱ := greatestAlpha Γ S r₁.2 r₁.1
       inferF constTy n (Γ.bindScheme x (letScheme r₁.2 ᾱ (letQ r₁.2 ᾱ) r₁.1))
         { r₁.2 with parked := letG r₁.2 ᾱ } e₂
+  -- MacroNix
+  | Γ, S, .prim p es =>
+      match constTy.prim p with
+      | none => .fail "A-prim: unknown builtin"
+      | some τp => do
+          let ra ← inferArgsF constTy n Γ (primInst S τp).2 es
+          let S₂ ← solveTySatF n (ra.2.draw .ty).2 (τp.applySubst (primInst S τp).1)
+            (Ty.arrows ra.1 (.var (ra.2.draw .ty).1))
+          pure (.var (ra.2.draw .ty).1, S₂)
+  | _, S, .bool _ =>
+      match constTy.boolB with
+      | none => .fail "no booleans"
+      | some bb => .ok (.base bb, S)
+  | Γ, S, .ite e e₁ e₂ =>
+      match constTy.boolB with
+      | none => .fail "no booleans"
+      | some bb => do
+          let r ← inferF constTy n Γ S e
+          let S₂ ← solveTySatF n r.2 r.1 (.base bb)
+          let r₁ ← inferF constTy n Γ S₂ e₁
+          let r₂ ← inferF constTy n Γ r₁.2 e₂
+          let S₅ ← solveTySatF n r₂.2 r₁.1 r₂.1
+          pure (r₁.1, S₅)
+  | Γ, S, .asrt e e₂ =>
+      match constTy.boolB with
+      | none => .fail "no booleans"
+      | some bb => do
+          let r ← inferF constTy n Γ S e
+          let S₂ ← solveTySatF n r.2 r.1 (.base bb)
+          inferF constTy n Γ S₂ e₂
+  | _, S, .nil => .ok (.list (.var (S.draw .ty).1), (S.draw .ty).2)
+  | Γ, S, .cons e₁ e₂ => do
+      let r₁ ← inferF constTy n Γ S e₁
+      let r₂ ← inferF constTy n Γ r₁.2 e₂
+      let S₃ ← solveTySatF n r₂.2 r₂.1 (.list r₁.1)
+      pure (.list r₁.1, S₃)
+  | Γ, S, .has e _ =>
+      match constTy.boolB with
+      | none => .fail "no booleans"
+      | some bb => do
+          let r ← inferF constTy n Γ S e
+          let S₂ ← solveTySatF n (r.2.draw .row).2 r.1 (.rcd (.var (r.2.draw .row).1))
+          pure (.base bb, S₂)
 
-def inferRecF (constTy : C → B) (n : Nat) :
+def inferRecF (constTy : Sig B C) (n : Nat) :
     QCtx B → SolverState B → RecBody (Expr C) → IRes (Row B × SolverState B)
   | _, S, .empty => .ok (.empty, S)
   | Γ, S, .field l e => do
@@ -626,12 +685,20 @@ def inferRecF (constTy : C → B) (n : Nat) :
       let r₂ ← inferRecF constTy n Γ r₁.2 ξ₂
       pure (.cat r₁.1 r₂.1, r₂.2)
 
+def inferArgsF (constTy : Sig B C) (n : Nat) :
+    QCtx B → SolverState B → List (Expr C) → IRes (List (Ty B) × SolverState B)
+  | _, S, [] => .ok ([], S)
+  | Γ, S, e :: es => do
+      let r ← inferF constTy n Γ S e
+      let rs ← inferArgsF constTy n Γ r.2 es
+      pure (r.1 :: rs.1, rs.2)
+
 end
 
 mutual
 
 /-- ⊢  **every answer of `inferF` is a derivation of `Infer`.** -/
-theorem inferF_sound {constTy : C → B} {n : Nat} :
+theorem inferF_sound {constTy : Sig B C} {n : Nat} :
     ∀ {Γ : QCtx B} {S S' : SolverState B} {e : Expr C} {τ : Ty B},
       inferF constTy n Γ S e = .ok (τ, S') → Infer constTy Γ S e τ S'
   | _, S, S', .con c, τ, h => by
@@ -723,8 +790,55 @@ theorem inferF_sound {constTy : C → B} {n : Nat} :
       simp only [inferF, IRes.bind_eq_ok] at h
       obtain ⟨⟨τ₁, S₁⟩, h₁, h₂⟩ := h
       exact .letE (inferF_sound h₁) (greatestAlpha_spec Γ S S₁ τ₁).1 (inferF_sound h₂)
+  | Γ, S, S', .prim p es, τ, h => by
+      simp only [inferF] at h
+      split at h
+      · cases h
+      · rename_i τp hp
+        simp only [IRes.bind_eq_ok, IRes.pure_eq_ok, Prod.mk.injEq] at h
+        obtain ⟨⟨τs, S₁⟩, ha, S₂, hs, rfl, rfl⟩ := h
+        exact .prim hp (Nat.le_add_right _ _) (inferArgsF_sound ha) rfl (solveTySatF_sound hs)
+  | _, S, S', .bool b, τ, h => by
+      simp only [inferF] at h
+      split at h
+      · cases h
+      · rename_i bb hb
+        simp only [IRes.ok.injEq, Prod.mk.injEq] at h
+        obtain ⟨rfl, rfl⟩ := h; exact .bool hb
+  | Γ, S, S', .ite e e₁ e₂, τ, h => by
+      simp only [inferF] at h
+      split at h
+      · cases h
+      · rename_i bb hb
+        simp only [IRes.bind_eq_ok, IRes.pure_eq_ok, Prod.mk.injEq] at h
+        obtain ⟨⟨τ₀, S₁⟩, h₀, S₂, hs₁, ⟨τ₁, S₃⟩, h₁, ⟨τ₂, S₄⟩, h₂, S₅, hs₂, rfl, rfl⟩ := h
+        exact .ite hb (inferF_sound h₀) (solveTySatF_sound hs₁) (inferF_sound h₁)
+          (inferF_sound h₂) (solveTySatF_sound hs₂)
+  | Γ, S, S', .asrt e e₂, τ, h => by
+      simp only [inferF] at h
+      split at h
+      · cases h
+      · rename_i bb hb
+        simp only [IRes.bind_eq_ok] at h
+        obtain ⟨⟨τ₀, S₁⟩, h₀, S₂, hs, h₂⟩ := h
+        exact .asrt hb (inferF_sound h₀) (solveTySatF_sound hs) (inferF_sound h₂)
+  | _, S, S', .nil, τ, h => by
+      simp only [inferF, IRes.ok.injEq, Prod.mk.injEq] at h
+      obtain ⟨rfl, rfl⟩ := h; exact .nil rfl
+  | Γ, S, S', .cons e₁ e₂, τ, h => by
+      simp only [inferF, IRes.bind_eq_ok, IRes.pure_eq_ok, Prod.mk.injEq] at h
+      obtain ⟨⟨τ₁, S₁⟩, h₁, ⟨τ₂, S₂⟩, h₂, S₃, hs, rfl, rfl⟩ := h
+      exact .cons (inferF_sound h₁) (inferF_sound h₂) (solveTySatF_sound hs)
+  | Γ, S, S', .has e l, τ, h => by
+      simp only [inferF] at h
+      split at h
+      · cases h
+      · rename_i bb hb
+        simp only [IRes.bind_eq_ok, IRes.pure_eq_ok, Prod.mk.injEq] at h
+        obtain ⟨⟨τ₀, S₁⟩, h₀, S₂, hs, rfl, rfl⟩ := h
+        exact .has hb (inferF_sound h₀) rfl (solveTySatF_sound hs)
 
-theorem inferRecF_sound {constTy : C → B} {n : Nat} :
+theorem inferRecF_sound {constTy : Sig B C} {n : Nat} :
     ∀ {Γ : QCtx B} {S S' : SolverState B} {ξ : RecBody (Expr C)} {ρ : Row B},
       inferRecF constTy n Γ S ξ = .ok (ρ, S') → InferRec constTy Γ S ξ ρ S'
   | _, S, S', .empty, ρ, h => by
@@ -739,6 +853,17 @@ theorem inferRecF_sound {constTy : C → B} {n : Nat} :
       obtain ⟨⟨ρ₁, S₁⟩, h₁, ⟨ρ₂, S₂⟩, h₂, rfl, rfl⟩ := h
       exact .cat (inferRecF_sound h₁) (inferRecF_sound h₂)
 
+theorem inferArgsF_sound {constTy : Sig B C} {n : Nat} :
+    ∀ {Γ : QCtx B} {S S' : SolverState B} {es : List (Expr C)} {τs : List (Ty B)},
+      inferArgsF constTy n Γ S es = .ok (τs, S') → InferArgs constTy Γ S es τs S'
+  | _, S, S', [], τs, h => by
+      simp only [inferArgsF, IRes.ok.injEq, Prod.mk.injEq] at h
+      obtain ⟨rfl, rfl⟩ := h; exact .nil
+  | Γ, S, S', e :: es, τs, h => by
+      simp only [inferArgsF, IRes.bind_eq_ok, IRes.pure_eq_ok, Prod.mk.injEq] at h
+      obtain ⟨⟨τ, S₁⟩, h₁, ⟨τs', S₂⟩, h₂, rfl, rfl⟩ := h
+      exact .cons (inferF_sound h₁) (inferArgsF_sound h₂)
+
 end
 
 --------------------- A RUN ----------------------------------------------------
@@ -748,14 +873,14 @@ def runStart : SolverState B := ⟨Sol.nil, [], [], ⟨1⟩, []⟩
 
 /-- a run, computed: infer from nothing, materialize the spent promises, then
 finalize every stump still parked -/
-def runF (constTy : C → B) (n : Nat) (e : Expr C) : IRes (Ty B × SolverState B) := do
+def runF (constTy : Sig B C) (n : Nat) (e : Expr C) : IRes (Ty B × SolverState B) := do
   let r ← inferF constTy n QCtx.empty runStart e
   let S₂ ← materializesF n r.2 r.2.parked
   let S' ← finalizesF n S₂ S₂.parked
   pure (r.1, S')
 
 /-- ⊢  every answer of `runF` is a `Run`. -/
-theorem runF_sound {constTy : C → B} {n : Nat} {e : Expr C} {τ : Ty B}
+theorem runF_sound {constTy : Sig B C} {n : Nat} {e : Expr C} {τ : Ty B}
     {S' : SolverState B} (h : runF constTy n e = .ok (τ, S')) : Run constTy e τ S' := by
   simp only [runF, IRes.bind_eq_ok, IRes.pure_eq_ok, Prod.mk.injEq] at h
   obtain ⟨⟨τ₁, S₁⟩, h₁, S₂, h₂, S₃, h₃, rfl, rfl⟩ := h
@@ -763,7 +888,7 @@ theorem runF_sound {constTy : C → B} {n : Nat} {e : Expr C} {τ : Ty B}
 
 /-- ⊢  **what `runF` answers is declaratively typed**, at the type it reports
 read under its own final substitution. -/
-theorem runF_typed {constTy : C → B} {n : Nat} {e : Expr C} {τ : Ty B}
+theorem runF_typed {constTy : Sig B C} {n : Nat} {e : Expr C} {τ : Ty B}
     {S' : SolverState B} (h : runF constTy n e = .ok (τ, S')) :
     QTyped constTy QCtx.empty e (τ.applySubst S'.subst) :=
   runSound e τ S' (runF_sound h)

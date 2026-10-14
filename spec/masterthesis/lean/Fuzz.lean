@@ -86,6 +86,7 @@ def tyStr : Ty Unit → String
   | .unk      => "★"
   | .fn τ₁ τ₂ => "(" ++ tyStr τ₁ ++ "→" ++ tyStr τ₂ ++ ")"
   | .rcd ρ    => "{" ++ rowStr ρ ++ "}"
+  | .list τ   => "[" ++ tyStr τ ++ "]"
 
 def rowStr : Row Unit → String
   | .empty     => "ε"
@@ -373,6 +374,7 @@ def tySize : Ty Unit → Nat
   | .unk      => 1
   | .fn τ₁ τ₂ => 1 + tySize τ₁ + tySize τ₂
   | .rcd ρ    => 1 + rowSize ρ
+  | .list τ   => 1 + tySize τ
 
 def rowSize : Row Unit → Nat
   | .empty     => 1
@@ -625,7 +627,7 @@ def report (U : Universe) (cap : Nat) : IO Unit := do
 -- (longest name in the problem) + 1. Keeping every variable one character long
 -- means the supply starts at "aa" and can never collide with a name below.
 
-/-- Rich payloads, short spines. Reaches ★, functions, and nested records —
+/-- Rich payloads, short spines. Reaches ★, functions, lists and nested records —
     `{l:{…}}` is the shape behind `terminal_masks_mgu`, whose occurs violation
     passes UNDER a record constructor. -/
 def wide : Universe :=
@@ -633,7 +635,8 @@ def wide : Universe :=
     vars   := ["a", "b"]
     labels := ["l", "m"]
     tys    := [.base (), .unk, .var "a", .var "b",
-               .rcd (.var "a"), .rcd (.sing "l" (.var "a")), .fn (.var "a") (.base ())]
+               .rcd (.var "a"), .rcd (.sing "l" (.var "a")), .fn (.var "a") (.base ()),
+               .list (.var "a"), .list (.rcd (.sing "l" (.var "a")))]
     maxLen := 2 }
 
 /-- Payloads that are themselves multi-atom ROWS. This is the shape the other
@@ -879,6 +882,10 @@ partial def hxTyF (wr : Bool) (S : Supply) (fuel : Nat) : Ty Unit → Ty Unit �
       match fuel with
       | 0 => .outOfFuel
       | f+1 => hxSpineMF wr S f ρ₁.toSpine ρ₂.toSpine
+  | .list τ₁, .list τ₂ =>
+      match fuel with
+      | 0 => .outOfFuel
+      | f+1 => hxTyF wr S f τ₁ τ₂
   | _, _ => .clash
 
 partial def hxSpineMF (wr : Bool) : Supply → Nat → Spine → Spine → UResM Unit
@@ -999,6 +1006,7 @@ partial def canonTy : Ty Unit → String
   | .unk    => "★"
   | .fn a b => "(" ++ canonTy a ++ "→" ++ canonTy b ++ ")"
   | .rcd ρ  => "{" ++ canonRow ρ ++ "}"
+  | .list τ => "[" ++ canonTy τ ++ "]"
 
 partial def canonRow (ρ : Row Unit) : String :=
   let s := ρ.toSpine

@@ -406,4 +406,28 @@ theorem unify_diff_key_ctx_stuck :
     unifyRowM (B := Unit) 20 (.cat (.dsing (.var "α") uB) (.sing "m" uB))
       (.cat (.sing "m" uB) (.dsing (.var "β") uB)) = .stuck := rfl
 
+-- MacroNix lists. [a] ≐ [𝓫] decomposes to a ≐ 𝓫.
+-- ⊢  unifyTyM [a] [𝓫]  =  success a ↦ 𝓫
+theorem unify_list :
+    unifyTyM (B := Unit) 20 (.list (.var "a")) (.list uB)
+      = .success ⟨[("a", uB)], [], []⟩ ⟨2⟩ := rfl
+
+-- …a list is not a function
+-- ⊢  unifyTyM [a] (𝓫 → 𝓫)  =  clash
+theorem unify_list_fn_clash :
+    unifyTyM (B := Unit) 20 (.list (.var "a")) (.fn uB uB) = .clash := rfl
+
+-- …nor its own element type
+-- ⊢  unifyTyM a [a]  =  occurs
+theorem unify_list_occurs :
+    unifyTyM (B := Unit) 20 (.var "a") (.list (.var "a")) = .occurs := rfl
+
+-- …and the element type of a list of records unifies as a row
+-- ⊢  unifyTyM [{l: 𝓫 | a}] [{l: 𝓫}]  =  success a ↦ ε
+theorem unify_list_rows :
+    (match unifyTyM (B := Unit) 20 (.list (.rcd (.cat (.sing "l" uB) (.var "a"))))
+        (.list (.rcd (.sing "l" uB))) with
+      | .success s _ => s.row.map Prod.fst
+      | _ => []) = ["a"] := rfl
+
 end MinimalCalculus

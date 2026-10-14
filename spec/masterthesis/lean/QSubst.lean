@@ -341,6 +341,7 @@ private theorem no_preimage (τ : Ty Unit) : τ.applySubst refuteSub ≠ .var "b
   | unk    => exact fun h => nomatch h
   | fn _ _ => exact fun h => nomatch h
   | rcd _  => exact fun h => nomatch h
+  | list _ => exact fun h => nomatch h
   | var c  =>
       show tyLookup c [("b", (.base () : Ty Unit))] ≠ _
       by_cases hc : ("b" : TyVar) = c
@@ -402,7 +403,7 @@ exactly as L1's `typed_applySubst_aux` does), and neither knows about a
 solution. So `Closes` has left this statement entirely; what survives of it is
 the `ParkStable` premise inside `QCovers.forward_of_avoiding`, i.e. inside
 `SchemeImage`, which is where the obligation always belonged. -/
-theorem qtyped_applySubst {B C : Type} {constTy : C → B}
+theorem qtyped_applySubst {B C : Type} {constTy : Sig B C}
     {σ : TySubst B} (him : SchemeImage σ) :
     {Γ Γ' : QCtx B} → {e : Expr C} → {τ : Ty B} →
     QTyped constTy Γ e τ → QInstMap σ Γ Γ' →
@@ -471,8 +472,21 @@ theorem qtyped_applySubst {B C : Type} {constTy : C → B}
       .qSelDynBase (qtyped_applySubst him h₁ hm) (qtyped_applySubst him h₂ hm)
   | _, _, _, _, .qRcdDynBase h₁ h₂, hm =>
       .qRcdDynBase (qtyped_applySubst him h₁ hm) (qtyped_applySubst him h₂ hm)
+  | _, _, _, _, .qPrim hp hi ha, hm =>
+      .qPrim hp (by rw [← Ty.applySubst_applySubst, hi, Ty.arrows_applySubst])
+        (qtypedArgs_applySubst him ha hm)
+  | _, _, _, _, .qBool hb, _ => .qBool hb
+  | _, _, _, _, .qIte hb h h₁ h₂, hm =>
+      .qIte hb (qtyped_applySubst him h hm) (qtyped_applySubst him h₁ hm)
+        (qtyped_applySubst him h₂ hm)
+  | _, _, _, _, .qAsrt hb h h₂, hm =>
+      .qAsrt hb (qtyped_applySubst him h hm) (qtyped_applySubst him h₂ hm)
+  | _, _, _, _, .qNil, _ => .qNil
+  | _, _, _, _, .qCons h₁ h₂, hm =>
+      .qCons (qtyped_applySubst him h₁ hm) (qtyped_applySubst him h₂ hm)
+  | _, _, _, _, .qHas hb h, hm => .qHas hb (qtyped_applySubst him h hm)
 
-theorem qtypedBody_applySubst {B C : Type} {constTy : C → B}
+theorem qtypedBody_applySubst {B C : Type} {constTy : Sig B C}
     {σ : TySubst B} (him : SchemeImage σ) :
     {Γ Γ' : QCtx B} → {ξ : RecBody (Expr C)} → {ρ : Row B} →
     QTypedBody constTy Γ ξ ρ → QInstMap σ Γ Γ' →
@@ -481,6 +495,15 @@ theorem qtypedBody_applySubst {B C : Type} {constTy : C → B}
   | _, _, _, _, .field h, hm => .field (qtyped_applySubst him h hm)
   | _, _, _, _, .cat h₁ h₂, hm =>
       .cat (qtypedBody_applySubst him h₁ hm) (qtypedBody_applySubst him h₂ hm)
+
+theorem qtypedArgs_applySubst {B C : Type} {constTy : Sig B C}
+    {σ : TySubst B} (him : SchemeImage σ) :
+    {Γ Γ' : QCtx B} → {es : List (Expr C)} → {τs : List (Ty B)} →
+    QTypedArgs constTy Γ es τs → QInstMap σ Γ Γ' →
+    QTypedArgs constTy Γ' es (τs.map (·.applySubst σ))
+  | _, _, _, _, .nil, _ => .nil
+  | _, _, _, _, .cons h ha, hm =>
+      .cons (qtyped_applySubst him h hm) (qtypedArgs_applySubst him ha hm)
 
 end
 

@@ -574,6 +574,7 @@ def Ty.rcdDepth {B : Type} : Ty B → Nat
   | .unk     => 0
   | .fn a b  => max (Ty.rcdDepth a) (Ty.rcdDepth b)
   | .rcd ρ   => 1 + Row.rcdDepth ρ
+  | .list τ  => Ty.rcdDepth τ
 
 def Row.rcdDepth {B : Type} : Row B → Nat
   | .empty      => 0
@@ -594,6 +595,8 @@ theorem TyEquiv.rcdDepth_eq {B : Type} :
       simp only [Ty.rcdDepth, TyEquiv.rcdDepth_eq h₁, TyEquiv.rcdDepth_eq h₂]
   | _, _, .rcd h       => by
       simp only [Ty.rcdDepth, RowEquiv.rcdDepth_eq h]
+  | _, _, .list h      => by
+      simp only [Ty.rcdDepth, TyEquiv.rcdDepth_eq h]
 
 -- ⊢  ρ₁ ≈ᵣ ρ₂   ⟹   depth ρ₁ = depth ρ₂
 theorem RowEquiv.rcdDepth_eq {B : Type} :
@@ -683,6 +686,10 @@ theorem Ty.rcdDepth_applySubst_ge {B : Type} {θ : TySubst B} {α : TyVar} :
       simp only [Ty.applySubst, Ty.rcdDepth]
       have := Row.rcdDepth_applySubst_ge (θ := θ) (α := α) ρ h
       omega
+  | .list τ, h => by
+      simp only [Ty.allRowVars] at h
+      simp only [Ty.applySubst, Ty.rcdDepth]
+      exact Ty.rcdDepth_applySubst_ge τ h
 
 theorem Row.rcdDepth_applySubst_ge {B : Type} {θ : TySubst B} {α : TyVar} :
     (ρ : Row B) → α ∈ Row.allRowVars ρ →
@@ -728,6 +735,10 @@ theorem Ty.rcdDepth_applySubst_gt {B : Type} {θ : TySubst B} {α : TyVar} :
       simp only [Ty.applySubst, Ty.rcdDepth]
       have := Row.rcdDepth_applySubst_ge (θ := θ) (α := α) ρ h
       omega
+  | .list τ, h => by
+      simp only [Ty.deepRowVars] at h
+      simp only [Ty.applySubst, Ty.rcdDepth]
+      exact Ty.rcdDepth_applySubst_gt τ h
 
 theorem Row.rcdDepth_applySubst_gt {B : Type} {θ : TySubst B} {α : TyVar} :
     (ρ : Row B) → α ∈ Row.deepRowVars ρ →
@@ -1743,6 +1754,7 @@ def Ty.tyDepth {B : Type} : Ty B → Nat
   | .unk     => 0
   | .fn a b  => 1 + max (Ty.tyDepth a) (Ty.tyDepth b)
   | .rcd ρ   => 1 + Row.tyDepth ρ
+  | .list τ  => 1 + Ty.tyDepth τ
 
 def Row.tyDepth {B : Type} : Row B → Nat
   | .empty      => 0
@@ -1762,6 +1774,8 @@ theorem TyEquiv.tyDepth_eq {B : Type} :
       simp only [Ty.tyDepth, TyEquiv.tyDepth_eq h₁, TyEquiv.tyDepth_eq h₂]
   | _, _, .rcd h       => by
       simp only [Ty.tyDepth, RowEquiv.tyDepth_eq h]
+  | _, _, .list h      => by
+      simp only [Ty.tyDepth, TyEquiv.tyDepth_eq h]
 
 theorem RowEquiv.tyDepth_eq {B : Type} :
     {ρ₁ ρ₂ : Row B} → RowEquiv ρ₁ ρ₂ → Row.tyDepth ρ₁ = Row.tyDepth ρ₂
@@ -1788,6 +1802,7 @@ def Ty.tyFtvUnder {B : Type} : Ty B → List TyVar
   | .unk     => []
   | .fn a b  => Ty.tyFtv a ++ Ty.tyFtv b
   | .rcd ρ   => Row.tyFtv ρ
+  | .list τ  => Ty.tyFtv τ
 
 def Row.tyFtvUnder {B : Type} : Row B → List TyVar
   | .empty     => []
@@ -1815,6 +1830,10 @@ theorem Ty.tyDepth_applySubst_ge {B : Type} {θ : TySubst B} {α : TyVar} :
       simp only [Ty.tyFtv] at h
       simp only [Ty.applySubst, Ty.tyDepth]
       have := Row.tyDepth_applySubst_ge (θ := θ) (α := α) ρ h; omega
+  | .list τ, h => by
+      simp only [Ty.tyFtv] at h
+      simp only [Ty.applySubst, Ty.tyDepth]
+      have := Ty.tyDepth_applySubst_ge (θ := θ) (α := α) τ h; omega
 
 theorem Row.tyDepth_applySubst_ge {B : Type} {θ : TySubst B} {α : TyVar} :
     (ρ : Row B) → α ∈ Row.tyFtv ρ → Ty.tyDepth (θ.ty α) ≤ Row.tyDepth (ρ.applySubst θ)
@@ -1853,6 +1872,10 @@ theorem Ty.tyDepth_applySubst_gt {B : Type} {θ : TySubst B} {α : TyVar} :
       simp only [Ty.tyFtvUnder] at h
       simp only [Ty.applySubst, Ty.tyDepth]
       have := Row.tyDepth_applySubst_ge (θ := θ) (α := α) ρ h; omega
+  | .list τ, h => by
+      simp only [Ty.tyFtvUnder] at h
+      simp only [Ty.applySubst, Ty.tyDepth]
+      have := Ty.tyDepth_applySubst_ge (θ := θ) (α := α) τ h; omega
 
 -- ⊢  THE OCCURS CHECK AT THE TYPE SORT
 theorem ty_occurs_no_unifier {B : Type} {α : TyVar} {τ : Ty B}
@@ -1874,6 +1897,7 @@ theorem Ty.allRowVars_eq_deep {B : Type} :
   | .fn a b => by
       simp only [Ty.allRowVars, Ty.deepRowVars, Ty.allRowVars_eq_deep a, Ty.allRowVars_eq_deep b]
   | .rcd _ => rfl
+  | .list τ => by simp only [Ty.allRowVars, Ty.deepRowVars, Ty.allRowVars_eq_deep τ]
 
 -- ⊢  a row variable of ρ is either ON the spine or UNDER a record constructor
 theorem allRowVars_split {B : Type} {α : TyVar} :
@@ -1936,6 +1960,7 @@ theorem bindTy_occurs_no_unifier {B : Type} {S : Supply} {α : TyVar} {τ : Ty B
       | unk    => exact absurd hm (by simp [Ty.tyFtv])
       | fn a b => exact hm
       | rcd ρ  => exact hm
+      | list _ => exact hm
     · exact absurd h (by simp)
 
 -- ⊢  what an `.occurs` from U-var-solve says: the collapse rule declined AND α
@@ -2105,6 +2130,8 @@ theorem Ty.deepRowVars_eq_allRowVars {B : Type} :
       simp only [Ty.deepRowVars, Ty.allRowVars,
         Ty.deepRowVars_eq_allRowVars a, Ty.deepRowVars_eq_allRowVars b]
   | .rcd _  => rfl
+  | .list τ => by
+      simp only [Ty.deepRowVars, Ty.allRowVars, Ty.deepRowVars_eq_allRowVars τ]
 
 -- ⊢  γ occurs in τ,  θγ hosts an l-field whose payload is θτ   ⟹   ⊥
 -- The self-reference filter's soundness, in one line of arithmetic: `≈` pins

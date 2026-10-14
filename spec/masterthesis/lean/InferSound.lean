@@ -171,7 +171,7 @@ theorem Sol.lookupQ_sat {B : Type} {s : Sol B} {σ : TySubst B}
 -- on it.
 
 /-- ⊢  `Γ′ ⊢ e : {ρ}` ⟹ `Γ′ ⊢ e.l : ★`. -/
-theorem qtyped_sel_star {B C : Type} {constTy : C → B} {Γ' : QCtx B}
+theorem qtyped_sel_star {B C : Type} {constTy : Sig B C} {Γ' : QCtx B}
     {e : Expr C} {ρ : Row B} {l : Label}
     (h : QTyped constTy Γ' e (.rcd ρ)) : QTyped constTy Γ' (.sel e l) .unk := by
   obtain ⟨r, hr⟩ := lookup_total ρ l
@@ -187,36 +187,36 @@ theorem qtyped_sel_star {B C : Type} {constTy : C → B} {Γ' : QCtx B}
 -- complete and every A-rule has a name to point at.
 
 /-- A-cons. -/
-theorem infer_sound_con_step {B C : Type} {constTy : C → B} {Γ' : QCtx B}
+theorem infer_sound_con_step {B C : Type} {constTy : Sig B C} {Γ' : QCtx B}
     {σ : TySubst B} {c : C} :
     QTyped constTy Γ' (.con c) ((Ty.base (constTy c)).applySubst σ) := .qCon
 
 /-- A-lam. The binder's fresh α is read under σ on both sides. -/
-theorem infer_sound_lam_step {B C : Type} {constTy : C → B} {Γ' : QCtx B}
+theorem infer_sound_lam_step {B C : Type} {constTy : Sig B C} {Γ' : QCtx B}
     {σ : TySubst B} {x : Var} {e : Expr C} {α : TyVar} {τ : Ty B}
     (h : QTyped constTy (Γ'.bindTy x (σ.ty α)) e (τ.applySubst σ)) :
     QTyped constTy Γ' (.lam x e) ((Ty.fn (.var α) τ).applySubst σ) := .qLam h
 
 /-- A-rec. -/
-theorem infer_sound_rcd_step {B C : Type} {constTy : C → B} {Γ' : QCtx B}
+theorem infer_sound_rcd_step {B C : Type} {constTy : Sig B C} {Γ' : QCtx B}
     {σ : TySubst B} {ξ : RecBody (Expr C)} {ρ : Row B}
     (h : QTypedBody constTy Γ' ξ (ρ.applySubst σ)) :
     QTyped constTy Γ' (.rcd ξ) ((Ty.rcd ρ).applySubst σ) := .qRcd h
 
 /-- A-ξ-empty. -/
-theorem inferRec_sound_empty_step {B C : Type} {constTy : C → B} {Γ' : QCtx B}
+theorem inferRec_sound_empty_step {B C : Type} {constTy : Sig B C} {Γ' : QCtx B}
     {σ : TySubst B} :
     QTypedBody constTy Γ' (.empty : RecBody (Expr C)) ((Row.empty : Row B).applySubst σ) :=
   .empty
 
 /-- A-ξ-field. -/
-theorem inferRec_sound_field_step {B C : Type} {constTy : C → B} {Γ' : QCtx B}
+theorem inferRec_sound_field_step {B C : Type} {constTy : Sig B C} {Γ' : QCtx B}
     {σ : TySubst B} {l : Label} {e : Expr C} {τ : Ty B}
     (h : QTyped constTy Γ' e (τ.applySubst σ)) :
     QTypedBody constTy Γ' (.field l e) ((Row.sing l τ).applySubst σ) := .field h
 
 /-- A-ξ-conc. -/
-theorem inferRec_sound_cat_step {B C : Type} {constTy : C → B} {Γ' : QCtx B}
+theorem inferRec_sound_cat_step {B C : Type} {constTy : Sig B C} {Γ' : QCtx B}
     {σ : TySubst B} {ξ₁ ξ₂ : RecBody (Expr C)} {ρ₁ ρ₂ : Row B}
     (h₁ : QTypedBody constTy Γ' ξ₁ (ρ₁.applySubst σ))
     (h₂ : QTypedBody constTy Γ' ξ₂ (ρ₂.applySubst σ)) :
@@ -229,7 +229,7 @@ theorem inferRec_sound_cat_step {B C : Type} {constTy : C → B} {Γ' : QCtx B}
 -- sequence and the first one is discharged at the earlier state.
 
 /-- A-app. The premises are the induction hypotheses for `e₁` and `e₂`. -/
-theorem infer_sound_app_step {B C : Type} [DecidableEq B] {constTy : C → B}
+theorem infer_sound_app_step {B C : Type} [DecidableEq B] {constTy : Sig B C}
     {Γ' : QCtx B} {σ : TySubst B} {S S' : SolverState B}
     {e₁ e₂ : Expr C} {τ₁ τ₂ : Ty B} {β : TyVar}
     (h₁ : QTyped constTy Γ' e₁ (τ₁.applySubst σ))
@@ -242,7 +242,7 @@ theorem infer_sound_app_step {B C : Type} [DecidableEq B] {constTy : C → B}
 /-- A-conc. `{r₁}` and `{r₂}` are the two fresh record rows the rule draws, and
 the inferred type is their concatenation IN THE OTHER ORDER — which is exactly
 the order `qCat` builds, so the two land on the nose with no ≈ in between. -/
-theorem infer_sound_conc_step {B C : Type} [DecidableEq B] {constTy : C → B}
+theorem infer_sound_conc_step {B C : Type} [DecidableEq B] {constTy : Sig B C}
     {Γ' : QCtx B} {σ : TySubst B} {Sb S₃ S₄ : SolverState B}
     {e₁ e₂ : Expr C} {τ₁ τ₂ : Ty B} {r₁ r₂ : TyVar}
     (h₁ : QTyped constTy Γ' e₁ (τ₁.applySubst σ))
@@ -264,7 +264,7 @@ theorem infer_sound_conc_step {B C : Type} [DecidableEq B] {constTy : C → B}
 -- ⟦S₂⟧-as-a-context, which a context-free ↓ has no way to interpret.
 
 /-- A-sel. -/
-theorem infer_sound_sel_step {B C : Type} [DecidableEq B] {constTy : C → B}
+theorem infer_sound_sel_step {B C : Type} [DecidableEq B] {constTy : Sig B C}
     {Γ' : QCtx B} {σ : TySubst B} {S₁' S₂ : SolverState B}
     {e : Expr C} {τ τ' : Ty B} {l : Label} {r : TyVar}
     (h : QTyped constTy Γ' e (τ.applySubst σ))
@@ -279,7 +279,7 @@ theorem infer_sound_sel_step {B C : Type} [DecidableEq B] {constTy : C → B}
   | found hty => exact .qEq (.qSel hrcd hl'') hty.symm
 
 /-- A-sel-⊥ — T-sel-⊥'s algorithmic moment. -/
-theorem infer_sound_selAbs_step {B C : Type} [DecidableEq B] {constTy : C → B}
+theorem infer_sound_selAbs_step {B C : Type} [DecidableEq B] {constTy : Sig B C}
     {Γ' : QCtx B} {σ : TySubst B} {S₁' S₂ : SolverState B}
     {e : Expr C} {τ : Ty B} {l : Label} {r : TyVar}
     (h : QTyped constTy Γ' e (τ.applySubst σ))
@@ -312,7 +312,7 @@ theorem infer_sound_selAbs_step {B C : Type} [DecidableEq B] {constTy : C → B}
 
 /-- A-sel-?, given the promise is kept. All three discharge cases land: D-hit
 reads off as T-sel with the ≈ absorbed by T-eq, D-⊥ as T-sel-⊥, D-? as T-sel-★. -/
-theorem infer_sound_selUnk_step {B C : Type} [DecidableEq B] {constTy : C → B}
+theorem infer_sound_selUnk_step {B C : Type} [DecidableEq B] {constTy : Sig B C}
     {Γ' : QCtx B} {σ : TySubst B} {S₁' S₂ : SolverState B}
     {e : Expr C} {τ : Ty B} {l : Label} {r δ : TyVar}
     (h : QTyped constTy Γ' e (τ.applySubst σ))
@@ -448,7 +448,7 @@ theorem Wakes.dischargeEquiv {B : Type} [DecidableEq B] {S S' : SolverState B}
 -- apart.
 
 /-- A-var. -/
-theorem infer_sound_var_step {B C : Type} {constTy : C → B} {Γ' : QCtx B}
+theorem infer_sound_var_step {B C : Type} {constTy : Sig B C} {Γ' : QCtx B}
     {x : Var} {sc' : QScheme B} {χ : TySubst B} {τ : Ty B}
     (hl : Γ'.lookup x = some sc')
     (hfix : χ.FixedOutside sc'.vars)
@@ -673,7 +673,7 @@ through `Infer`, and A-app's equation no longer leaves a stale stump behind: the
 `Saturate` step the rule now carries wakes it with K-hit, on the strength of
 `fStarEx_not_blocked`. -/
 theorem fStarEx_infers :
-    Infer (B := Unit) (C := Unit) (fun _ => ()) QCtx.empty fsS0 fStarEx (.var fsB)
+    Infer (B := Unit) (C := Unit) (Sig.plain fun _ => ()) QCtx.empty fsS0 fStarEx (.var fsB)
       fsSfix := by
   refine Infer.app (S₁ := fsSp) (S₂ := fsSp) (S₂' := fsSb)
     (τ₁ := .fn (.var fsA) (.rcd (.sing "a" (.var fsD))))
@@ -779,7 +779,7 @@ refinement example runs to an EMPTY Δ — saturation discharged the stump at �
 where it does fire: the difference is whether anything ever resolved the blocker,
 which is the whole content of A-sel-?'s promise. -/
 theorem fStarEx_runs :
-    Run (B := Unit) (C := Unit) (fun _ => ()) fStarEx (.var fsB) fsSfix :=
+    Run (B := Unit) (C := Unit) (Sig.plain fun _ => ()) fStarEx (.var fsB) fsSfix :=
   ⟨fsSfix, fsSfix, fStarEx_infers, .nil, .nil⟩
 
 /-- ⊢  **the refinement, in types.** The declarative system gives the closed
@@ -788,7 +788,7 @@ and by `finalized_no_blur` (minimal.lean) such a ★ is never sharpened back, so
 is the answer and not a recoverable imprecision. `fStarEx_recovers` is the same
 program under the saturating rules, landing on the first of these. -/
 theorem fStarEx_refinement_lost :
-    QTyped (B := Unit) (C := Unit) (fun _ => ()) QCtx.empty fStarEx
+    QTyped (B := Unit) (C := Unit) (Sig.plain fun _ => ()) QCtx.empty fStarEx
         (.rcd (.sing "a" (.base ()))) ∧
       (Ty.var fsB).applySubst fsS'.subst = .rcd (.sing "a" .unk) ∧
       TyPrec (.rcd (.sing "a" (.base ()))) (.rcd (.sing "a" (.unk : Ty Unit))) ∧
@@ -886,7 +886,7 @@ theorem spentEx_quiescent_parked : spSp.Quiescent := by
 
 /-- ⊢  `λx. λy. (x.l) y` infers, with the stump still parked. -/
 theorem spentEx_infers :
-    Infer (B := Unit) (C := Unit) (fun _ => ()) QCtx.empty spS0 spentEx
+    Infer (B := Unit) (C := Unit) (Sig.plain fun _ => ()) QCtx.empty spS0 spentEx
       (.fn (.var spX) (.fn (.var spY) (.var spB))) spS := by
   refine Infer.lam (S₀ := spLx) rfl (Infer.lam (S₀ := spLy) rfl ?_)
   refine Infer.app (S₁ := spSp) (S₂ := spSp) (S₂' := spSb)
@@ -916,7 +916,7 @@ So the hard error above is the algorithm's incompleteness, not the declarative
 system's rejection — the gap is that a stump's result position holds a VARIABLE,
 so the constraint the answer would need (`⟨r.l ↓ (α → β)⟩`) cannot be written. -/
 theorem spentEx_declarative :
-    QTyped (B := Unit) (C := Unit) (fun _ => ()) QCtx.empty spentEx
+    QTyped (B := Unit) (C := Unit) (Sig.plain fun _ => ()) QCtx.empty spentEx
       (.fn (.rcd (.sing "l" (.fn (.base ()) (.base ()))))
         (.fn (.base ()) (.base ()))) := by
   refine QTyped.qLam (QTyped.qLam (QTyped.qApp (τ₁ := .base ()) ?_ ?_))
@@ -956,7 +956,7 @@ theorem spentEx_declarative :
 mutual
   /-- `Γ; Δ ⊢ e : τ` — typing under stump ASSUMPTIONS. Δ is a parameter: every
   rule passes it along untouched, so the only way it is ever used is `stump`. -/
-  inductive QTypedC {B C : Type} (constTy : C → B) (Δ : List (Stump B)) :
+  inductive QTypedC {B C : Type} (constTy : Sig B C) (Δ : List (Stump B)) :
       QCtx B → Expr C → Ty B → Prop where
     | qCon : QTypedC constTy Δ Γ (.con c) (.base (constTy c))
     | qVar : Γ.lookup x = some σ → QScheme.Inst σ τ →
@@ -994,24 +994,40 @@ mutual
                     QTypedC constTy Δ Γ (.selDyn e₁ e₂) .unk
     | qRcdDynBase : QTypedC constTy Δ Γ e₁ (.base b) → QTypedC constTy Δ Γ e₂ τ →
                     QTypedC constTy Δ Γ (.rcdDyn e₁ e₂) .unk
+    -- MacroNix
+    | qPrim : constTy.prim p = some τp → τp.applySubst θ = Ty.arrows τs τ →
+              QTypedCArgs constTy Δ Γ es τs → QTypedC constTy Δ Γ (.prim p es) τ
+    | qBool : constTy.boolB = some bb → QTypedC constTy Δ Γ (.bool b) (.base bb)
+    | qIte : constTy.boolB = some bb → QTypedC constTy Δ Γ e (.base bb) →
+             QTypedC constTy Δ Γ e₁ τ → QTypedC constTy Δ Γ e₂ τ → QTypedC constTy Δ Γ (.ite e e₁ e₂) τ
+    | qAsrt : constTy.boolB = some bb → QTypedC constTy Δ Γ e (.base bb) →
+              QTypedC constTy Δ Γ e₂ τ → QTypedC constTy Δ Γ (.asrt e e₂) τ
+    | qNil : QTypedC constTy Δ Γ .nil (.list τ)
+    | qCons : QTypedC constTy Δ Γ e₁ τ → QTypedC constTy Δ Γ e₂ (.list τ) → QTypedC constTy Δ Γ (.cons e₁ e₂) (.list τ)
+    | qHas : constTy.boolB = some bb → QTypedC constTy Δ Γ e (.rcd ρ) → QTypedC constTy Δ Γ (.has e l) (.base bb)
     -- THE ONE NEW RULE: a selection whose lookup is ASSUMED, answering at the
     -- stump's own result variable. This is A-sel-? read declaratively.
     | stump {ρ : Row B} {l : Label} {δ : TyVar} :
              QTypedC constTy Δ Γ e (.rcd ρ) → (⟨ρ, .lit l, .var δ⟩ : Stump B) ∈ Δ →
              QTypedC constTy Δ Γ (.sel e l) (.var δ)
 
-  inductive QTypedCBody {B C : Type} (constTy : C → B) (Δ : List (Stump B)) :
+  inductive QTypedCBody {B C : Type} (constTy : Sig B C) (Δ : List (Stump B)) :
       QCtx B → RecBody (Expr C) → Row B → Prop where
     | empty : QTypedCBody constTy Δ Γ .empty .empty
     | field : QTypedC constTy Δ Γ e τ →
               QTypedCBody constTy Δ Γ (.field l e) (.sing l τ)
     | cat : QTypedCBody constTy Δ Γ b₁ ρ₁ → QTypedCBody constTy Δ Γ b₂ ρ₂ →
             QTypedCBody constTy Δ Γ (.cat b₁ b₂) (.cat ρ₁ ρ₂)
+
+  inductive QTypedCArgs {B C : Type} (constTy : Sig B C) (Δ : List (Stump B)) :
+      QCtx B → List (Expr C) → List (Ty B) → Prop where
+    | nil  : QTypedCArgs constTy Δ Γ [] []
+    | cons : QTypedC constTy Δ Γ e τ → QTypedCArgs constTy Δ Γ es τs → QTypedCArgs constTy Δ Γ (e :: es) (τ :: τs)
 end
 
 mutual
   /-- ⊢  a plain typing is a constrained one, under ANY assumptions: weakening. -/
-  theorem QTyped.toC {B C : Type} {constTy : C → B} {Δ : List (Stump B)}
+  theorem QTyped.toC {B C : Type} {constTy : Sig B C} {Δ : List (Stump B)}
       {Γ : QCtx B} {e : Expr C} {τ : Ty B} :
       QTyped constTy Γ e τ → QTypedC constTy Δ Γ e τ
     | .qCon           => .qCon
@@ -1033,19 +1049,32 @@ mutual
     | .qRcdDyn h₁ h₂       => .qRcdDyn h₁.toC h₂.toC
     | .qSelDynBase h₁ h₂   => .qSelDynBase h₁.toC h₂.toC
     | .qRcdDynBase h₁ h₂   => .qRcdDynBase h₁.toC h₂.toC
+    | .qPrim hp hi ha => .qPrim hp hi ha.toC
+    | .qBool hb => .qBool hb
+    | .qIte hb h h₁ h₂ => .qIte hb h.toC h₁.toC h₂.toC
+    | .qAsrt hb h h₂ => .qAsrt hb h.toC h₂.toC
+    | .qNil => .qNil
+    | .qCons h₁ h₂ => .qCons h₁.toC h₂.toC
+    | .qHas hb h => .qHas hb h.toC
 
-  theorem QTypedBody.toC {B C : Type} {constTy : C → B} {Δ : List (Stump B)}
+  theorem QTypedBody.toC {B C : Type} {constTy : Sig B C} {Δ : List (Stump B)}
       {Γ : QCtx B} {b : RecBody (Expr C)} {ρ : Row B} :
       QTypedBody constTy Γ b ρ → QTypedCBody constTy Δ Γ b ρ
     | .empty      => .empty
     | .field h    => .field h.toC
     | .cat h₁ h₂  => .cat h₁.toC h₂.toC
+
+  theorem QTypedArgs.toC {B C : Type} {constTy : Sig B C} {Δ : List (Stump B)}
+      {Γ : QCtx B} {es : List (Expr C)} {τs : List (Ty B)} :
+      QTypedArgs constTy Γ es τs → QTypedCArgs constTy Δ Γ es τs
+    | .nil       => .nil
+    | .cons h ha => .cons h.toC ha.toC
 end
 
 mutual
   /-- ⊢  …and with NO assumptions the two coincide: `stump` cannot fire, so the
   constrained judgement adds exactly the promises it is given and nothing else. -/
-  theorem QTypedC.toQTyped {B C : Type} {constTy : C → B} {Γ : QCtx B}
+  theorem QTypedC.toQTyped {B C : Type} {constTy : Sig B C} {Γ : QCtx B}
       {e : Expr C} {τ : Ty B} :
       QTypedC constTy [] Γ e τ → QTyped constTy Γ e τ
     | .qCon           => .qCon
@@ -1067,14 +1096,27 @@ mutual
     | .qRcdDyn h₁ h₂       => .qRcdDyn h₁.toQTyped h₂.toQTyped
     | .qSelDynBase h₁ h₂   => .qSelDynBase h₁.toQTyped h₂.toQTyped
     | .qRcdDynBase h₁ h₂   => .qRcdDynBase h₁.toQTyped h₂.toQTyped
+    | .qPrim hp hi ha => .qPrim hp hi ha.toQTyped
+    | .qBool hb => .qBool hb
+    | .qIte hb h h₁ h₂ => .qIte hb h.toQTyped h₁.toQTyped h₂.toQTyped
+    | .qAsrt hb h h₂ => .qAsrt hb h.toQTyped h₂.toQTyped
+    | .qNil => .qNil
+    | .qCons h₁ h₂ => .qCons h₁.toQTyped h₂.toQTyped
+    | .qHas hb h => .qHas hb h.toQTyped
     | .stump _ hmem   => absurd hmem List.not_mem_nil
 
-  theorem QTypedCBody.toQTyped {B C : Type} {constTy : C → B} {Γ : QCtx B}
+  theorem QTypedCBody.toQTyped {B C : Type} {constTy : Sig B C} {Γ : QCtx B}
       {b : RecBody (Expr C)} {ρ : Row B} :
       QTypedCBody constTy [] Γ b ρ → QTypedBody constTy Γ b ρ
     | .empty      => .empty
     | .field h    => .field h.toQTyped
     | .cat h₁ h₂  => .cat h₁.toQTyped h₂.toQTyped
+
+  theorem QTypedCArgs.toQTyped {B C : Type} {constTy : Sig B C} {Γ : QCtx B}
+      {es : List (Expr C)} {τs : List (Ty B)} :
+      QTypedCArgs constTy [] Γ es τs → QTypedArgs constTy Γ es τs
+    | .nil       => .nil
+    | .cons h ha => .cons h.toQTyped ha.toQTyped
 end
 
 /-- the σ-image of a parked stump, ROW substituted and result variable RAW — the
@@ -1089,7 +1131,7 @@ the refutation is about. The restatement, PROVED, is `InferSound`
 (InferSoundA.lean, `inferSound` in LetCase.lean): Γ is read under the same σ as
 the type, and parked stumps are typed assumptions (`QTypedA`) rather than
 promises with a raw result variable. -/
-def InferSoundC (B C : Type) [DecidableEq B] (constTy : C → B) : Prop :=
+def InferSoundC (B C : Type) [DecidableEq B] (constTy : Sig B C) : Prop :=
   ∀ (Γ : QCtx B) (S S' : SolverState B) (e : Expr C) (τ : Ty B),
     Infer constTy Γ S e τ S' →
     ∀ σ : TySubst B, Sol.Sat σ S'.sol →

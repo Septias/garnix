@@ -609,7 +609,7 @@ variable {C : Type}
 
 mutual
 
-theorem inferF_stable (constTy : C → B) :
+theorem inferF_stable (constTy : Sig B C) :
     ∀ (Γ : QCtx B) (S : SolverState B) (e : Expr C), Stable (fun m => inferF constTy m Γ S e)
   | _, S, .con c => by simp only [inferF]; exact Stable.const _
   | Γ, S, .var x => by
@@ -668,8 +668,38 @@ theorem inferF_stable (constTy : C → B) :
   | Γ, S, .letE x e₁ e₂ => by
       simp only [inferF]
       exact Stable.bind (inferF_stable constTy _ _ e₁) (fun r₁ => inferF_stable constTy _ _ e₂)
+  | Γ, S, .prim p es => by
+      cases hp : constTy.prim p with
+      | none => simp only [inferF, hp]; exact Stable.const _
+      | some τp =>
+          simp only [inferF, hp]
+          exact Stable.bind (inferArgsF_stable constTy _ _ es) (fun _ => Stable.bind (solveTySatF_stable _ _ _) (fun _ => Stable.const _))
+  | _, S, .bool _ => by
+      cases hb : constTy.boolB <;> simp only [inferF, hb] <;> exact Stable.const _
+  | Γ, S, .ite e e₁ e₂ => by
+      cases hb : constTy.boolB with
+      | none => simp only [inferF, hb]; exact Stable.const _
+      | some bb =>
+          simp only [inferF, hb]
+          exact Stable.bind (inferF_stable constTy _ _ e) (fun _ => Stable.bind (solveTySatF_stable _ _ _) (fun _ => Stable.bind (inferF_stable constTy _ _ e₁) (fun _ => Stable.bind (inferF_stable constTy _ _ e₂) (fun _ => Stable.bind (solveTySatF_stable _ _ _) (fun _ => Stable.const _)))))
+  | Γ, S, .asrt e e₂ => by
+      cases hb : constTy.boolB with
+      | none => simp only [inferF, hb]; exact Stable.const _
+      | some bb =>
+          simp only [inferF, hb]
+          exact Stable.bind (inferF_stable constTy _ _ e) (fun _ => Stable.bind (solveTySatF_stable _ _ _) (fun _ => inferF_stable constTy _ _ e₂))
+  | _, S, .nil => by simp only [inferF]; exact Stable.const _
+  | Γ, S, .cons e₁ e₂ => by
+      simp only [inferF]
+      exact Stable.bind (inferF_stable constTy _ _ e₁) (fun _ => Stable.bind (inferF_stable constTy _ _ e₂) (fun _ => Stable.bind (solveTySatF_stable _ _ _) (fun _ => Stable.const _)))
+  | Γ, S, .has e _ => by
+      cases hb : constTy.boolB with
+      | none => simp only [inferF, hb]; exact Stable.const _
+      | some bb =>
+          simp only [inferF, hb]
+          exact Stable.bind (inferF_stable constTy _ _ e) (fun _ => Stable.bind (solveTySatF_stable _ _ _) (fun _ => Stable.const _))
 
-theorem inferRecF_stable (constTy : C → B) :
+theorem inferRecF_stable (constTy : Sig B C) :
     ∀ (Γ : QCtx B) (S : SolverState B) (ξ : RecBody (Expr C)),
       Stable (fun m => inferRecF constTy m Γ S ξ)
   | _, S, .empty => by simp only [inferRecF]; exact Stable.const _
@@ -681,11 +711,20 @@ theorem inferRecF_stable (constTy : C → B) :
       exact Stable.bind (inferRecF_stable constTy _ _ ξ₁) (fun r₁ =>
         Stable.bind (inferRecF_stable constTy _ _ ξ₂) (fun _ => Stable.const _))
 
+theorem inferArgsF_stable (constTy : Sig B C) :
+    ∀ (Γ : QCtx B) (S : SolverState B) (es : List (Expr C)),
+      Stable (fun m => inferArgsF constTy m Γ S es)
+  | _, S, [] => by simp only [inferArgsF]; exact Stable.const _
+  | Γ, S, e :: es => by
+      simp only [inferArgsF]
+      exact Stable.bind (inferF_stable constTy _ _ e) (fun _ =>
+        Stable.bind (inferArgsF_stable constTy _ _ es) (fun _ => Stable.const _))
+
 end
 
 mutual
 
-theorem inferF_settles (constTy : C → B) :
+theorem inferF_settles (constTy : Sig B C) :
     ∀ (Γ : QCtx B) (S : SolverState B) (e : Expr C), S.sol.Clean →
       Settles (fun m => inferF constTy m Γ S e)
   | _, S, .con c, _ => by simp only [inferF]; exact ⟨0, fun h => nomatch h⟩
@@ -856,8 +895,73 @@ theorem inferF_settles (constTy : C → B) :
         (fun r₁ _ h₁ => by
           have c₁ : r₁.2.sol.Clean := Infer.clean (inferF_sound h₁) hc
           exact inferF_settles constTy _ _ e₂ c₁)
+  | Γ, S, .prim p es, hc => by
+      cases hp : constTy.prim p with
+      | none => simp only [inferF, hp]; exact Settles.fail _
+      | some τp =>
+          simp only [inferF, hp]
+          refine Settles.bind (inferArgsF_stable constTy _ _ es)
+            (inferArgsF_settles constTy _ _ es hc) (fun _ => Stable.bind (solveTySatF_stable _ _ _) (fun _ => Stable.const _)) (fun ra _ ha => ?_)
+          have c₁ := InferArgs.clean (inferArgsF_sound ha) hc
+          exact Settles.bind (solveTySatF_stable _ _ _) (solveTySatF_settles (S := (ra.2.draw .ty).2) c₁ _ _)
+            (fun _ => Stable.const _) (fun _ _ _ => Settles.pure _)
+  | _, S, .bool _, _ => by
+      cases hb : constTy.boolB with
+      | none => simp only [inferF, hb]; exact Settles.fail _
+      | some bb => simp only [inferF, hb]; exact Settles.pure _
+  | Γ, S, .ite e e₁ e₂, hc => by
+      cases hb : constTy.boolB with
+      | none => simp only [inferF, hb]; exact Settles.fail _
+      | some bb =>
+          simp only [inferF, hb]
+          refine Settles.bind (inferF_stable constTy _ _ e) (inferF_settles constTy _ _ e hc)
+            (fun _ => Stable.bind (solveTySatF_stable _ _ _) (fun _ => Stable.bind (inferF_stable constTy _ _ e₁) (fun _ => Stable.bind (inferF_stable constTy _ _ e₂) (fun _ => Stable.bind (solveTySatF_stable _ _ _) (fun _ => Stable.const _))))) (fun r _ h => ?_)
+          have c₁ := Infer.clean (inferF_sound h) hc
+          refine Settles.bind (solveTySatF_stable _ _ _) (solveTySatF_settles c₁ _ _)
+            (fun _ => Stable.bind (inferF_stable constTy _ _ e₁) (fun _ => Stable.bind (inferF_stable constTy _ _ e₂) (fun _ => Stable.bind (solveTySatF_stable _ _ _) (fun _ => Stable.const _)))) (fun S₂ _ hs => ?_)
+          have c₂ := (solveTySatF_sound hs).clean c₁
+          refine Settles.bind (inferF_stable constTy _ _ e₁) (inferF_settles constTy _ _ e₁ c₂)
+            (fun _ => Stable.bind (inferF_stable constTy _ _ e₂) (fun _ => Stable.bind (solveTySatF_stable _ _ _) (fun _ => Stable.const _))) (fun r₁ _ h₁ => ?_)
+          have c₃ := Infer.clean (inferF_sound h₁) c₂
+          refine Settles.bind (inferF_stable constTy _ _ e₂) (inferF_settles constTy _ _ e₂ c₃)
+            (fun _ => Stable.bind (solveTySatF_stable _ _ _) (fun _ => Stable.const _)) (fun r₂ _ h₂ => ?_)
+          have c₄ := Infer.clean (inferF_sound h₂) c₃
+          exact Settles.bind (solveTySatF_stable _ _ _) (solveTySatF_settles c₄ _ _)
+            (fun _ => Stable.const _) (fun _ _ _ => Settles.pure _)
+  | Γ, S, .asrt e e₂, hc => by
+      cases hb : constTy.boolB with
+      | none => simp only [inferF, hb]; exact Settles.fail _
+      | some bb =>
+          simp only [inferF, hb]
+          refine Settles.bind (inferF_stable constTy _ _ e) (inferF_settles constTy _ _ e hc)
+            (fun _ => Stable.bind (solveTySatF_stable _ _ _) (fun _ => inferF_stable constTy _ _ e₂)) (fun r _ h => ?_)
+          have c₁ := Infer.clean (inferF_sound h) hc
+          refine Settles.bind (solveTySatF_stable _ _ _) (solveTySatF_settles c₁ _ _)
+            (fun _ => inferF_stable constTy _ _ e₂) (fun S₂ _ hs => ?_)
+          exact inferF_settles constTy _ _ e₂ ((solveTySatF_sound hs).clean c₁)
+  | _, S, .nil, _ => by simp only [inferF]; exact Settles.pure _
+  | Γ, S, .cons e₁ e₂, hc => by
+      simp only [inferF]
+      refine Settles.bind (inferF_stable constTy _ _ e₁) (inferF_settles constTy _ _ e₁ hc)
+        (fun _ => Stable.bind (inferF_stable constTy _ _ e₂) (fun _ => Stable.bind (solveTySatF_stable _ _ _) (fun _ => Stable.const _))) (fun r₁ _ h₁ => ?_)
+      have c₁ := Infer.clean (inferF_sound h₁) hc
+      refine Settles.bind (inferF_stable constTy _ _ e₂) (inferF_settles constTy _ _ e₂ c₁)
+        (fun _ => Stable.bind (solveTySatF_stable _ _ _) (fun _ => Stable.const _)) (fun r₂ _ h₂ => ?_)
+      have c₂ := Infer.clean (inferF_sound h₂) c₁
+      exact Settles.bind (solveTySatF_stable _ _ _) (solveTySatF_settles c₂ _ _)
+        (fun _ => Stable.const _) (fun _ _ _ => Settles.pure _)
+  | Γ, S, .has e _, hc => by
+      cases hb : constTy.boolB with
+      | none => simp only [inferF, hb]; exact Settles.fail _
+      | some bb =>
+          simp only [inferF, hb]
+          refine Settles.bind (inferF_stable constTy _ _ e) (inferF_settles constTy _ _ e hc)
+            (fun _ => Stable.bind (solveTySatF_stable _ _ _) (fun _ => Stable.const _)) (fun r _ h => ?_)
+          have c₁ := Infer.clean (inferF_sound h) hc
+          exact Settles.bind (solveTySatF_stable _ _ _) (solveTySatF_settles (S := (r.2.draw .row).2) c₁ _ _)
+            (fun _ => Stable.const _) (fun _ _ _ => Settles.pure _)
 
-theorem inferRecF_settles (constTy : C → B) :
+theorem inferRecF_settles (constTy : Sig B C) :
     ∀ (Γ : QCtx B) (S : SolverState B) (ξ : RecBody (Expr C)), S.sol.Clean →
       Settles (fun m => inferRecF constTy m Γ S ξ)
   | _, S, .empty, _ => by simp only [inferRecF]; exact ⟨0, fun h => nomatch h⟩
@@ -873,21 +977,33 @@ theorem inferRecF_settles (constTy : C → B) :
           (inferRecF_settles constTy _ _ ξ₂ (InferRec.clean (inferRecF_sound h₁) hc))
           (fun _ => Stable.const _) (fun _ _ _ => Settles.pure _))
 
+theorem inferArgsF_settles (constTy : Sig B C) :
+    ∀ (Γ : QCtx B) (S : SolverState B) (es : List (Expr C)), S.sol.Clean →
+      Settles (fun m => inferArgsF constTy m Γ S es)
+  | _, S, [], _ => by simp only [inferArgsF]; exact Settles.pure _
+  | Γ, S, e :: es, hc => by
+      simp only [inferArgsF]
+      exact Settles.bind (inferF_stable constTy _ _ e) (inferF_settles constTy _ _ e hc)
+        (fun _ => Stable.bind (inferArgsF_stable constTy _ _ es) (fun _ => Stable.const _))
+        (fun r _ h => Settles.bind (inferArgsF_stable constTy _ _ es)
+          (inferArgsF_settles constTy _ _ es (Infer.clean (inferF_sound h) hc))
+          (fun _ => Stable.const _) (fun _ _ _ => Settles.pure _))
+
 end
 
 /-- ⊢  **INFERENCE TERMINATES**: from a clean state, some fuel gives a verdict. -/
-theorem inferF_terminates {constTy : C → B} {Γ : QCtx B} {S : SolverState B} (e : Expr C)
+theorem inferF_terminates {constTy : Sig B C} {Γ : QCtx B} {S : SolverState B} (e : Expr C)
     (hc : S.sol.Clean) : ∃ n, inferF constTy n Γ S e ≠ .oof :=
   inferF_settles constTy Γ S e hc
 
-theorem runF_stable (constTy : C → B) (e : Expr C) : Stable (fun m => runF constTy m e) := by
+theorem runF_stable (constTy : Sig B C) (e : Expr C) : Stable (fun m => runF constTy m e) := by
   unfold runF
   exact Stable.bind (inferF_stable constTy _ _ e) (fun r =>
     Stable.bind (materializesF_stable _ _) (fun _ =>
       Stable.bind (finalizesF_stable _ _) (fun _ => Stable.const _)))
 
 /-- ⊢  **A RUN TERMINATES**: every program gets a verdict at some fuel. -/
-theorem runF_terminates (constTy : C → B) (e : Expr C) : ∃ n, runF constTy n e ≠ .oof := by
+theorem runF_terminates (constTy : Sig B C) (e : Expr C) : ∃ n, runF constTy n e ≠ .oof := by
   unfold runF
   exact Settles.bind (inferF_stable constTy _ _ e) (inferF_settles constTy _ _ e Sol.clean_nil)
     (fun r => Stable.bind (materializesF_stable _ _) (fun _ =>
@@ -904,14 +1020,14 @@ theorem runF_terminates (constTy : C → B) (e : Expr C) : ∃ n, runF constTy n
 
 /-- **inference as a total function**: the verdict at any fuel that suffices.
 As with `unifyRow`, the fuel is chosen, not computed. -/
-noncomputable def run (constTy : C → B) (e : Expr C) : IRes (Ty B × SolverState B) :=
+noncomputable def run (constTy : Sig B C) (e : Expr C) : IRes (Ty B × SolverState B) :=
   runF constTy (Classical.choose (runF_terminates constTy e)) e
 
-theorem run_ne_oof (constTy : C → B) (e : Expr C) : run constTy e ≠ .oof :=
+theorem run_ne_oof (constTy : Sig B C) (e : Expr C) : run constTy e ≠ .oof :=
   Classical.choose_spec (runF_terminates constTy e)
 
 /-- ⊢  every fuelled run that answers, answers `run` -/
-theorem runF_eq_run {constTy : C → B} {e : Expr C} {n : Nat} (h : runF constTy n e ≠ .oof) :
+theorem runF_eq_run {constTy : Sig B C} {e : Expr C} {n : Nat} (h : runF constTy n e ≠ .oof) :
     runF constTy n e = run constTy e := by
   unfold run
   have hc := Classical.choose_spec (runF_terminates constTy e)
@@ -920,7 +1036,7 @@ theorem runF_eq_run {constTy : C → B} {e : Expr C} {n : Nat} (h : runF constTy
   · exact runF_stable constTy e _ _ hle hc
 
 /-- ⊢  **`run` is sound**: what it answers types declaratively. -/
-theorem run_typed {constTy : C → B} {e : Expr C} {τ : Ty B} {S' : SolverState B}
+theorem run_typed {constTy : Sig B C} {e : Expr C} {τ : Ty B} {S' : SolverState B}
     (h : run constTy e = .ok (τ, S')) :
     QTyped constTy QCtx.empty e (τ.applySubst S'.subst) :=
   runF_typed h

@@ -138,6 +138,8 @@ mutual
           Ty.ftv_rename b (fun α hα => h α (List.mem_append_right _ hα))]
     | .rcd ρ, h => by
         simp only [Ty.applySubst, Ty.ftv]; exact Row.ftv_rename ρ h
+    | .list τ, h => by
+        simp only [Ty.applySubst, Ty.ftv]; exact Ty.ftv_rename τ h
   theorem Row.ftv_rename {θ : TySubst B} {g : TyVar → TyVar} : (ρ : Row B) →
       (∀ α ∈ ρ.ftv, θ.ty α = .var (g α) ∧ θ.row α = .var (g α) ∧ θ.lab α = .var (g α)) →
       (ρ.applySubst θ).ftv = ρ.ftv.map g
@@ -253,7 +255,7 @@ theorem Ty.exists_of_isVar {τ : Ty B} (h : τ.isVar = true) : ∃ δ, τ = .var
 --------------------- THE CASE -------------------------------------------------
 
 /-- ⊢  **the A-let case.** -/
-theorem letCase {C : Type} {constTy : C → B} : LetCase B C constTy := by
+theorem letCase {C : Type} {constTy : Sig B C} : LetCase B C constTy := by
   intro Γ S S₁ S₂ x e₁ e₂ τ₁ τ₂ ᾱ h₁ hA h₂ hΓ hc hq IH₁ IH₂ σ hab hσ Γ' hr
   -- Δ_q, Δ_Γ and the conditions on ᾱ, in the form the proof reads them
   generalize hQ : letQ S₁ ᾱ = Δq at h₂ IH₂
@@ -612,13 +614,13 @@ theorem letCase {C : Type} {constTy : C → B} : LetCase B C constTy := by
 clean, quiescent state, in a context of
 well-formed schemes, is a typing under the assumptions it leaves parked, at every
 σ that absorbs and satisfies its final state, in Γ read under σ. -/
-theorem inferSound {C : Type} {constTy : C → B} : InferSound B C constTy :=
+theorem inferSound {C : Type} {constTy : Sig B C} : InferSound B C constTy :=
   inferSound_of_let letCase
 
 /-- ⊢  a run from nothing, at any σ that absorbs and satisfies the state
 inference ends in, is a plain L2 typing — given that the stumps still parked
 hold at σ, which is finalization's job (`Finalizes.holds`). -/
-theorem runSoundA {C : Type} {constTy : C → B}
+theorem runSoundA {C : Type} {constTy : Sig B C}
     {e : Expr C} {τ : Ty B} {S₁ : SolverState B}
     (h : Infer constTy QCtx.empty ⟨Sol.nil, [], [], ⟨1⟩, []⟩ e τ S₁)
     {σ : TySubst B} (hab : Absorbs σ S₁) (hsat : Sol.Sat σ S₁.sol)

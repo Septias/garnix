@@ -36,13 +36,14 @@ theorem TyEquiv.var_inv_both {B : Type} :
       ⟨fun hτ => ih₂.1 (ih₁.1 hτ), fun hσ => ih₁.2 (ih₂.2 hσ)⟩
   | _, _, .fn _ _  => ⟨(fun hτ => nomatch hτ), (fun hσ => nomatch hσ)⟩
   | _, _, .rcd _   => ⟨(fun hτ => nomatch hτ), (fun hσ => nomatch hσ)⟩
+  | _, _, .list _  => ⟨(fun hτ => nomatch hτ), (fun hσ => nomatch hσ)⟩
 
 theorem TyEquiv.var_inv {B : Type} {α : TyVar} {σ : Ty B}
     (h : TyEquiv (.var α) σ) : σ = .var α :=
   (TyEquiv.var_inv_both h).1 rfl
 
 -- ⊢  a use of x reads an instance of x's scheme, up to ≈, or is ★
-theorem qtyped_var_inv {B C : Type} {constTy : C → B} :
+theorem qtyped_var_inv {B C : Type} {constTy : Sig B C} :
     {Γ : QCtx B} → {e : Expr C} → {τ : Ty B} → QTyped constTy Γ e τ →
     ∀ {x : Var} {σ : QScheme B}, e = .var x → Γ.lookup x = some σ →
     τ = .unk ∨ ∃ τ', QScheme.Inst σ τ' ∧ TyEquiv τ' τ
@@ -72,9 +73,16 @@ theorem qtyped_var_inv {B C : Type} {constTy : C → B} :
   | _, _, _, .qRcdDyn _ _ => fun he _ => nomatch he
   | _, _, _, .qSelDynBase _ _ => fun he _ => nomatch he
   | _, _, _, .qRcdDynBase _ _ => fun he _ => nomatch he
+  | _, _, _, .qPrim _ _ _ => fun he _ => nomatch he
+  | _, _, _, .qBool _ => fun he _ => nomatch he
+  | _, _, _, .qIte _ _ _ _ => fun he _ => nomatch he
+  | _, _, _, .qAsrt _ _ _ => fun he _ => nomatch he
+  | _, _, _, .qNil => fun he _ => nomatch he
+  | _, _, _, .qCons _ _ => fun he _ => nomatch he
+  | _, _, _, .qHas _ _ => fun he _ => nomatch he
 
 -- ⊢  …at a MONOTYPE binding that instance is the binding itself
-theorem qtyped_var_mono_inv {B C : Type} {constTy : C → B} {Γ : QCtx B}
+theorem qtyped_var_mono_inv {B C : Type} {constTy : Sig B C} {Γ : QCtx B}
     {x : Var} {τ₀ τ : Ty B} (h : QTyped constTy Γ (.var x) τ)
     (hx : Γ.lookup x = some ⟨[], [], τ₀⟩) : τ = .unk ∨ TyEquiv τ₀ τ :=
   match qtyped_var_inv h rfl hx with
@@ -83,7 +91,7 @@ theorem qtyped_var_mono_inv {B C : Type} {constTy : C → B} {Γ : QCtx B}
 
 -- ⊢  `let z = y in z` at a monotype y is typed exactly like y: whatever scheme
 --    qLet picks, the body's instance of it is one the premise had to type y at
-theorem qtyped_let_alias_inv {B C : Type} {constTy : C → B} :
+theorem qtyped_let_alias_inv {B C : Type} {constTy : Sig B C} :
     {Γ : QCtx B} → {e : Expr C} → {τ : Ty B} → QTyped constTy Γ e τ →
     ∀ {y z : Var} {τ₀ : Ty B}, e = .letE z (.var y) (.var z) →
     Γ.lookup y = some ⟨[], [], τ₀⟩ → τ = .unk ∨ TyEquiv τ₀ τ
@@ -117,6 +125,13 @@ theorem qtyped_let_alias_inv {B C : Type} {constTy : C → B} :
   | _, _, _, .qRcdDyn _ _ => fun he _ => nomatch he
   | _, _, _, .qSelDynBase _ _ => fun he _ => nomatch he
   | _, _, _, .qRcdDynBase _ _ => fun he _ => nomatch he
+  | _, _, _, .qPrim _ _ _ => fun he _ => nomatch he
+  | _, _, _, .qBool _ => fun he _ => nomatch he
+  | _, _, _, .qIte _ _ _ _ => fun he _ => nomatch he
+  | _, _, _, .qAsrt _ _ _ => fun he _ => nomatch he
+  | _, _, _, .qNil => fun he _ => nomatch he
+  | _, _, _, .qCons _ _ => fun he _ => nomatch he
+  | _, _, _, .qHas _ _ => fun he _ => nomatch he
 
 
 --------------------- 1. GENERALIZING A VARIABLE Γ STILL MENTIONS -------------
@@ -147,7 +162,7 @@ private theorem laA_ne_laB : laA ≠ laB := fun h => by
 /-- ⊢  **the declarative side refuses the witness.** No derivation gives
 `λy. let z = y in z` two unrelated type variables — nor any ★-free pair. -/
 theorem letAlias_not_typed {α β : TyVar} (hne : α ≠ β) :
-    ¬ QTyped (B := Unit) (C := Unit) (fun _ => ()) QCtx.empty laE
+    ¬ QTyped (B := Unit) (C := Unit) (Sig.plain fun _ => ()) QCtx.empty laE
         (.fn (.var α) (.var β)) := by
   intro h
   obtain ⟨τ₁, τ₂, hfn | hu, hb⟩ := qtyped_lam_inv h
@@ -164,7 +179,7 @@ theorem letAlias_not_typed {α β : TyVar} (hne : α ≠ β) :
 /-- A-let as it stood: `Infer.letE` without its generalization premise. Stated as
 a closure property of `Infer` rather than as a second inductive, because that is
 all the witness uses — one application of the rule. -/
-def UnguardedLet (B C : Type) [DecidableEq B] (constTy : C → B) : Prop :=
+def UnguardedLet (B C : Type) [DecidableEq B] (constTy : Sig B C) : Prop :=
   ∀ {Γ : QCtx B} {S S₁ S₂ : SolverState B} {x : Var} {e₁ e₂ : Expr C}
     {τ₁ τ₂ : Ty B} {Δq Δγ : List (Parked B)} {ᾱ : List TyVar} {κs : List Kind},
     Infer constTy Γ S e₁ τ₁ S₁ →
@@ -178,7 +193,7 @@ def UnguardedLet (B C : Type) [DecidableEq B] (constTy : C → B) : Prop :=
 
 -- the two A-var steps the witness makes, each an ordinary derivation
 private theorem la_var_y :
-    Infer (B := Unit) (C := Unit) (fun _ => ()) laΓ laS (.var "y") (.var laA) laS :=
+    Infer (B := Unit) (C := Unit) (Sig.plain fun _ => ()) laΓ laS (.var "y") (.var laA) laS :=
   Infer.var_mono rfl
     ⟨_, .nil, .done (SolverState.Quiescent.nil rfl)⟩
 
@@ -187,7 +202,7 @@ private def laS3 : SolverState Unit :=
   { laS with supply := ⟨3⟩, kinds := [(laB, .ty), (laA, .ty)] }
 
 private theorem la_var_z :
-    Infer (B := Unit) (C := Unit) (fun _ => ()) (laΓ.bindScheme "z" laSc)
+    Infer (B := Unit) (C := Unit) (Sig.plain fun _ => ()) (laΓ.bindScheme "z" laSc)
       { laS with parked := [] } (.var "z") (.var laB) laS3 := by
   have hren : IsRenaming laRen laSc.vars (fun _ => laB) := by
     refine ⟨⟨fun α h => ?_, fun α h => ?_, fun α h => ?_⟩, fun α h => ?_⟩
@@ -212,7 +227,7 @@ private theorem la_var_z :
       rw [hl] at hm
       simp only [List.mem_cons, List.mem_nil_iff, or_false, or_self] at hm
       exact hne hm.symm
-  exact Infer.var (constTy := fun (_ : Unit) => ())
+  exact Infer.var (constTy := Sig.plain fun (_ : Unit) => ())
     (S := { laS with parked := [] }) (x := "z") (σ := laSc) (θ := laRen)
     (f := fun _ => laB) (ps := []) (Sup := ⟨3⟩)
     (by rw [QCtx.lookup_bindScheme]; simp) hren hfr
@@ -222,10 +237,10 @@ private theorem la_var_z :
 /-- ⊢  **`RunSound` fails against the unguarded A-let.** Any inference relation
 closed under A-let without the Γ-freshness premise runs `λy. let z = y in z` to
 `a → b`, and `letAlias_not_typed` says no declarative derivation agrees. -/
-theorem runSound_false_unguarded_let (hu : UnguardedLet Unit Unit (fun _ => ())) :
-    ¬ RunSound Unit Unit (fun _ => ()) := by
+theorem runSound_false_unguarded_let (hu : UnguardedLet Unit Unit (Sig.plain fun _ => ())) :
+    ¬ RunSound Unit Unit (Sig.plain fun _ => ()) := by
   intro h
-  have hinf : Infer (B := Unit) (C := Unit) (fun _ => ()) QCtx.empty
+  have hinf : Infer (B := Unit) (C := Unit) (Sig.plain fun _ => ()) QCtx.empty
       ⟨Sol.nil, [], [], ⟨1⟩, []⟩ laE (.fn (.var laA) (.var laB)) laS3 := by
     refine Infer.lam (S₀ := laS) rfl ?_
     exact hu (Δq := []) (Δγ := []) (ᾱ := [laA]) (κs := [.ty]) la_var_y
@@ -242,7 +257,7 @@ theorem letAlias_premise_fails :
 /-- ⊢  the guarded rule still runs the program — generalizing nothing, at the
 declaratively right `a → a`. -/
 theorem letAlias_infers_guarded :
-    Infer (B := Unit) (C := Unit) (fun _ => ()) QCtx.empty
+    Infer (B := Unit) (C := Unit) (Sig.plain fun _ => ()) QCtx.empty
       ⟨Sol.nil, [], [], ⟨1⟩, []⟩ laE (.fn (.var laA) (.var laA)) laS := by
   refine Infer.lam (S₀ := laS) rfl ?_
   refine Infer.letE (ᾱ := []) la_var_y
@@ -268,7 +283,7 @@ private def laSub : TySubst Unit :=
   ⟨fun x => if x = laA then .base () else .var x, fun x => .var x, fun x => .var x⟩
 
 /-- ⊢  **`InferSoundC` is false as stated.** -/
-theorem inferSoundC_false : ¬ InferSoundC Unit Unit (fun _ => ()) := by
+theorem inferSoundC_false : ¬ InferSoundC Unit Unit (Sig.plain fun _ => ()) := by
   intro h
   have hsat : Sol.Sat laSub laS.sol :=
     ⟨fun _ h => (nomatch h), fun _ h => (nomatch h), fun _ h => (nomatch h)⟩
@@ -310,7 +325,7 @@ private def lcE : Expr Unit :=
 -- ⊢  a selection at a free row has only the ★ typing, so `λx. x.l` is never
 --    `{r} → d` for a variable d
 private theorem selEx_not_var_result {r d : TyVar} {τa : Ty Unit}
-    (h : QTyped (B := Unit) (C := Unit) (fun _ => ()) QCtx.empty (selEx Unit) τa)
+    (h : QTyped (B := Unit) (C := Unit) (Sig.plain fun _ => ()) QCtx.empty (selEx Unit) τa)
     (he : TyEquiv τa (.fn (.rcd (.var r)) (.var d))) : False := by
   obtain ⟨τ₁, τ₂, hfn | hu, hb⟩ := qtyped_lam_inv h
   · obtain ⟨σ₁, σ₂, heq, h₁, h₂⟩ := (hfn.trans he).fn_inv
@@ -334,7 +349,7 @@ private theorem selEx_not_var_result {r d : TyVar} {τa : Ty Unit}
 
 /-- ⊢  **the declarative side refuses the witness's type.** -/
 theorem letCapture_not_typed :
-    ¬ QTyped (B := Unit) (C := Unit) (fun _ => ()) QCtx.empty lcE
+    ¬ QTyped (B := Unit) (C := Unit) (Sig.plain fun _ => ()) QCtx.empty lcE
         (.rcd (.cat (.sing "a" (.fn (.rcd (.var (natName 2))) (.var (natName 3))))
                     (.sing "b" (.base ())))) := by
   intro h
@@ -354,8 +369,8 @@ theorem letCapture_not_typed :
   · exact nomatch hu
 
 /-- ⊢  **…and inference, as A-let stood, runs to it.** -/
-theorem letCapture_infers_unguarded (hu : UnguardedLet Unit Unit (fun _ => ())) :
-    Infer (B := Unit) (C := Unit) (fun _ => ()) QCtx.empty ⟨Sol.nil, [], [], ⟨1⟩, []⟩
+theorem letCapture_infers_unguarded (hu : UnguardedLet Unit Unit (Sig.plain fun _ => ())) :
+    Infer (B := Unit) (C := Unit) (Sig.plain fun _ => ()) QCtx.empty ⟨Sol.nil, [], [], ⟨1⟩, []⟩
       lcE (.rcd (.cat (.sing "a" (.fn (.var (natName 1)) (.var (natName 3))))
                       (.sing "b" (.base ())))) lcS2 := by
   refine Infer.rcd (.cat (.field selEx_infers) (.field ?_))
@@ -368,14 +383,14 @@ theorem letCapture_infers_unguarded (hu : UnguardedLet Unit Unit (fun _ => ())) 
 
 /-- ⊢  **`RunSound` fails against it.** Field a's stump was generalized into a
 scheme nobody instantiates, so no finalization ever commits its answer. -/
-theorem runSound_false_let_captures (hu : UnguardedLet Unit Unit (fun _ => ())) :
-    ¬ RunSound Unit Unit (fun _ => ()) := fun h =>
+theorem runSound_false_let_captures (hu : UnguardedLet Unit Unit (Sig.plain fun _ => ())) :
+    ¬ RunSound Unit Unit (Sig.plain fun _ => ()) := fun h =>
   letCapture_not_typed (h _ _ _ ⟨lcS2, lcS2, letCapture_infers_unguarded hu, Materializes.refl _ _, .nil⟩)
 
 /-- A-let without its ownership premise, but with the other three conditions of
 `LetAdmissible`: freshness for Γ and Δ_Γ, results generalized, spent results
 fillable. -/
-def UnownedLet (B C : Type) [DecidableEq B] (constTy : C → B) : Prop :=
+def UnownedLet (B C : Type) [DecidableEq B] (constTy : Sig B C) : Prop :=
   ∀ {Γ : QCtx B} {S S₁ S₂ : SolverState B} {x : Var} {e₁ e₂ : Expr C}
     {τ₁ τ₂ : Ty B} {ᾱ : List TyVar},
     Infer constTy Γ S e₁ τ₁ S₁ →
@@ -390,10 +405,10 @@ def UnownedLet (B C : Type) [DecidableEq B] (constTy : C → B) : Prop :=
 generalizes ᾱ = {2, 3}, the variables of field a's stump — the candidates
 ftv(⟦S₁⟧τ₁, ⟦S₁⟧Δ₁) minus nothing: Γ is empty, Δ_Γ is empty, the result 3 is
 generalized and is a variable. The run ends at the untypable `a : {2} → 3`. -/
-theorem runSound_false_unowned_let (hu : UnownedLet Unit Unit (fun _ => ())) :
-    ¬ RunSound Unit Unit (fun _ => ()) := by
+theorem runSound_false_unowned_let (hu : UnownedLet Unit Unit (Sig.plain fun _ => ())) :
+    ¬ RunSound Unit Unit (Sig.plain fun _ => ()) := by
   intro h
-  have hinf : Infer (B := Unit) (C := Unit) (fun _ => ()) QCtx.empty
+  have hinf : Infer (B := Unit) (C := Unit) (Sig.plain fun _ => ()) QCtx.empty
       ⟨Sol.nil, [], [], ⟨1⟩, []⟩ lcE
       (.rcd (.cat (.sing "a" (.fn (.var (natName 1)) (.var (natName 3))))
                   (.sing "b" (.base ())))) lcS2 := by

@@ -19,6 +19,7 @@ def tyS : Ty Unit → String
   | .unk      => "★"
   | .fn τ₁ τ₂ => "(" ++ tyS τ₁ ++ " → " ++ tyS τ₂ ++ ")"
   | .rcd ρ    => "{" ++ rowS ρ ++ "}"
+  | .list τ   => "[" ++ tyS τ ++ "]"
 def rowS : Row Unit → String
   | .empty     => "ε"
   | .var α     => "r" ++ toString α.length
@@ -39,7 +40,7 @@ def rec1 (l : String) (e : E) : E := .rcd (.field l e)
 def rec2 (l₁ : String) (e₁ : E) (l₂ : String) (e₂ : E) : E :=
   .rcd (.cat (.field l₁ e₁) (.field l₂ e₂))
 
-def run (e : E) : String := verdict (runF (fun _ => ()) 50 e)
+def run (e : E) : String := verdict (runF (Sig.plain fun _ => ()) 50 e)
 
 -- λx. x.l — the stump finalizes: the lookup stays `?`, the result is ★
 #guard run (.lam "x" (.sel (v "x") "l")) = "({r2} → ★)"
