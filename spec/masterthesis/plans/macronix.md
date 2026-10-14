@@ -70,7 +70,7 @@ Spec: `typesystems/macronix.typ` (main). Draft: `drafts/macronix.typ` (main).
 - Discharge D1 laws per prim
 
 # Milestones
-Status: M0-M6 done on feat/macronix (cde1aa9 … 3e738b0), M7 spec done, thesis text waits on Q1
+Status: M0-M7 done, merged into main (692e664); thesis: appendix + note in §8 (Q1: appendix)
 - M0 syntax: D2 constructors + `Ty.list` through every match, all existing headliners green, `Axioms.lean` guards
 - M1 `Sig`, semantics D3, `qProgress`/`qPreservation` extended
 - M2 unification D5, all legs
