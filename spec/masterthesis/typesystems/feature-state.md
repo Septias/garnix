@@ -1,3 +1,5 @@
+## Todo
+- Fix T-let
 
 
 # Feat: Negative information
@@ -7,6 +9,57 @@
 
 
 # Feat: Macro-Nix
+Plan: plans/macronix.md. Branch feat/macronix.
+
+## Fragen
+- Was sind die Delta-regeln?
+- Wie sind builtins implementiert?
+- Warum sind fails in Err gewandert?
+  - Ist das um Progress zu cheaten?
+- `==` on atomic values only!!
+- Bool als tt und ff?
+- What is prim?
+- How do builtins work if I rebind-them?
+
+## Problems
+### `Err.primFail` weakens progress (open)
+- `primFail`: every saturated call with `δ = none` counts as ↯
+- `SigOK` has no δ-progress law: δ need not be defined on well-typed arguments
+- So a wrong δ (e.g. `add 1 2 = none`) is hidden as an error; `qProgress` still holds
+- Plan D1 had the law ("δ defined, or a declared failure"); dropped during M1, not flagged
+- Fix: declared failures in `Sig` (`fails : C → List (Expr C) → Prop`), `primFail` only on them, `SigOK.delta_prog`: well-typed values ⇒ δ defined ∨ declared failure
+- MacroNix failures: `head`/`tail []`, `elemAt` out of range, div by 0, non-atomic `==`
+
+### `==` on atomic values only (open)
+- Nix compares records and lists structurally; here `==` fails on them (counts as ↯)
+- Fix without new machinery: δ returns a term (as `map` does)
+  - records with equal label sets: `&&` of field-wise `==`, else `false`
+  - lists: `==` on heads `&&` `==` on tails, `[]` against `::` is `false`
+  - functions: fail (as Nix)
+- Fields stay lazy, forced only by the comparison
+
+### Q4: differing `if` branches (open)
+- A-if unifies the branches (`τ₁ ≐ τ₂`), A-cons the list elements: HM rule, fails without a common instance
+- Incompleteness (declaratively typable, inference clashes):
+  - `if as ? a then as.a else as.z`: ★ (definite miss) vs `int`; declaratively at ★
+  - `[1 {}]`: `int` vs `{}`; declaratively at `[★]`
+  - same root as Unrestricted T-★-intro: ★ joins any two types, ≐ only finds common instances
+- Inexpressible (rejected declaratively too):
+  - `{pname = "p";} // (if c then {a = 1;} else {})`, the conditional-extension idiom
+  - only common type of `{a = 1;}` and `{}` is ★, and ★ cannot be concatenated
+  - rows cannot say "a may be there"
+- Options:
+  - (a) keep the clash: sound, simple, documented. Current, recommended
+  - (b) join at ★ in A-if / A-cons (+ warning): completes `as ? a` and `[1 {}]`, not the idiom; changes L2 inference
+  - (c) ★ᵣ in Gradual: `{a: int} ⊔ {} = {★ᵣ}`, idiom types at `{★ᵣ | pname: string}`; only option that recovers it
+  - (d) occurrence typing on `e ? l` (Negative Information S3): `as ? a` only (then-branch dead)
+
+
+## Claude Prompts
+- [x] Create an overview for feature parity with real nix → figures/nix-parity.typ, in the MacroNix appendix
+  - Sections: language features, builtins
+  - Section for things not yet in place (because of implementation or whatever)
+
 
 
 # Feat: Recursive Types
