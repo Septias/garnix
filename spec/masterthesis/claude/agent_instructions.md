@@ -1,8 +1,8 @@
 
 ## Entries
-- typesystems/feature-state.md
-- typesystems/<your-task>
-- drafts/<your-task>
+- ../typesystems/feature-state.md
+- ../typesystems/<your-task>
+- ../drafts/<your-task>
 
 
 ## Task
