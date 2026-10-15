@@ -35,7 +35,7 @@ We present our unification algorithm, which is sound and terminating but incompl
 
 Rows are not unified as trees but as _spines_ — the lists of atoms $a ::= l: τ | α$ obtained by flattening the concatenation tree — because associativity and the units of @row-equivalence are then quotiented away by construction, and the only residue of ≈ is that distinct labels commute within a var-free segment while nothing crosses a row-variable. For example, $((l: 𝓫 | ε) | (α | m: 𝓫))$ and $(l: 𝓫 | (α | (m: 𝓫 | ε)))$ both have the spine $⟨l: 𝓫, α, m: 𝓫⟩$.
 
-A verdict is either a solution θ or one of four refusals. #u_clash and #u_occurs are the familiar ones, and #u_stuck carries the wand-ambiguity: it is reported when no move applies but nothing is provably wrong. #u_fuel reports an exhausted recursion bound, not a property of the problem: a large enough budget always decides it (@thm-unif-term).
+A verdict is either a solution θ or one of four refusals. #u_clash and #u_occurs are the familiar ones, and #u_stuck carries the Wand ambiguity: it is reported when no move applies but nothing is provably wrong. #u_fuel reports an exhausted recursion bound, not a property of the problem: a large enough budget always decides it (@thm-unif-term).
 
 == Type Unification
 #let unification_ty = figure(
@@ -209,7 +209,7 @@ The row pass is a deterministic cascade. Every move it makes is _forced_ — it 
       ..u_step(
         "U-stuck",
         [no move above fires],
-        u_stuck + [ — wand-ambiguity],
+        u_stuck + [ — Wand ambiguity],
         u_no,
       ),
     ),
@@ -331,7 +331,7 @@ A field facing only variables on the other side has no partner, but it may have 
 ] <ex-unif-cancel>
 
 #example(name: [A stuck problem])[
-  In $⟨α, β⟩ scripts(≐)_r ⟨l: 𝓫⟩$ no move fires. The left side has no field and no lone variable, the field $l: 𝓫$ has no partner in the empty windows of the left side, U-ground needs a positive count on both sides, and U-clash needs the side with fewer l-fields to be var-free. The verdict is #u_stuck. This is the wand-ambiguity, which has no most general unifier (@prop-irreducible).
+  In $⟨α, β⟩ scripts(≐)_r ⟨l: 𝓫⟩$ no move fires. The left side has no field and no lone variable, the field $l: 𝓫$ has no partner in the empty windows of the left side, U-ground needs a positive count on both sides, and U-clash needs the side with fewer l-fields to be var-free. The verdict is #u_stuck. This is the Wand ambiguity, which has no most general unifier (@prop-irreducible).
 ] <ex-unif-stuck>
 
 #example(name: [A forced host], lean: "host_forced, crossfield_success")[

@@ -1,6 +1,6 @@
 #import "../functions.typ": *
-#import "05_unification.typ": u_clash
-#import "06_inference.typ": st_park, st_solve
+#import "04_unification.typ": u_clash
+#import "05_inference.typ": st_park, st_solve
 
 = Extensions Towards NixLang <sec-extensions>
 

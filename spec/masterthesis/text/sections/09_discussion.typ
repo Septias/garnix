@@ -27,7 +27,7 @@ We return to the three idioms of @nix-idioms. MiniNix has no lists, booleans or 
     #raw("opt: cond: { pname = c; } // opt cond { NIX_LDFLAGS = c; }") \
     quad : quad (α → {"NIX_LDFLAGS": 𝓫} → {ρ}) → α → {ρ | "pname": 𝓫}
   $
-  The result keeps pname behind the row ρ returned by opt, since that row may carry a pname of its own. A later lookup of pname answers $?$ until opt is known, which is exactly the wand-ambiguity of @sec-motivation.
+  The result keeps pname behind the row ρ returned by opt, since that row may carry a pname of its own. A later lookup of pname answers $?$ until opt is known, which is exactly the Wand ambiguity of @sec-motivation.
 ] <ex-idiom-cond>
 
 Applied to concrete package sets, the overlay shows both sides of G3. Applied to `{}` and `{ hello = { pname = c; }; }`, it types at ${"hello": {"meta": {"broken": 𝓫} | "pname": 𝓫}}$. Applied to `{}` and `{}`, inference reports a clash: the lookup of hello misses, so the promised result is pinned to ★, but the concatenation has already used it as a record. The declarative system rejects the program as well, since ★ cannot be concatenated (@sec-goals). The program nevertheless evaluates without error, because the field hello is never selected.

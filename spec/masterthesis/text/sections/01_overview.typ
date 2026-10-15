@@ -3,12 +3,20 @@
 #let meta = [
   - Show the approach we are taking
   - Motivate our own design decisions
-  - Should this be after the background discussion?
+  - Show the background and motivate our design decisions against existing calculi
 ]
 
 
 = Our Position <sec-overview>
-This section introduces MiniNix informally through examples. The formal definitions follow in @declarative.
+This section positions MiniNix against existing record calculi and then introduces it informally through examples. The formal definitions follow in @declarative.
+
+== Background <sec-background>
+The goals G1-G4 exclude most existing record calculi as a basis for NixLang. Calculi that restrict concatenation to records with disjoint labels @symm_concat @xie2020row, or that have no concatenation and offer only extension by a fresh field or functional update @gaster_jones @ohori1995polymorphic, reject the overwriting uses of `//` and thereby violate totality (G3). Ur @ur expresses overwriting as field removal followed by disjoint concatenation, and a polymorphic function must state the disjointness constraints in its signature, which violates G1 (no source changes). Gradual systems for extensible rows @gradual_siek @gradual_extensible_rows insert casts at the boundary to untyped code; a cast changes evaluation and may force a value that lazy evaluation would leave untouched, which violates G2. Without casts, a gradual system loses the safety theorem and the gradual guarantee that rest on them (@sec-discussion). Width-subtyping, as in algebraic subtyping @algebraic_subtyping @simplesub @mlstruct, does not combine with asymmetric concatenation of records of unknown shape: a field forgotten by subsumption is no longer tracked, yet still overwrites a field of the other operand at run time @symm_concat. A sound rule must therefore forget every field of the left operand that the right one might carry, which under width-subtyping is all of them. Chau and Parreaux @simple_boolean encode field removal in Boolean-algebraic subtyping and support extension by a single, statically known field, but not the concatenation of two records. The remaining systems are expressive enough but delegate the work to a solver. Wand's typings are disjunctions whose alternatives multiply with every concatenation @concat4multiinher, HM(X) leaves the constraint solver as a parameter @hmx, Rose decides row predicates by an entailment relation @rose, and set-theoretic types rest on a subtyping relation whose decision is exponential in the worst case @frisch_semantic @castagna2023programming. None of these is ruled out in principle, but none offers the structural reasons for scaling that G4 asks for.
+
+Scoped labels @extensible_recs avoid the conflict between overwriting and absence altogether. A row may contain a label several times, and lookup resolves duplicates with left-precedence, so extension is total and demands no information about absent fields. Leijen applies this idea to extension by a single field; it remains to lift it to the concatenation of two rows.
+
+=== Paszke and Xie
+Paszke and Xie @extensible_tabular combine scoped labels with first-class labels into infix-extensible rows and give a unification-based inference algorithm over row- and label-variables. Their system is the direct basis of ours. Its field selection is handled by a search rule inside unification, and a conditional tail-check rejects programs whose shadowing behaviour is unresolved. The search rule is one of the two points where MiniNix departs from their system: it decides how a selection on a row whose tail is a variable is answered, and @sec-overview gives our answer. The second is the admission of the unknown type ★ so that uncertainty is recorded rather than rejected (G3).
 
 == Two Judgements Instead of One <our-position>
 In a row-based system, a field selection is ordinarily _elaborated into a row constraint_ and handed to unification: `e.l` demands that `e`'s row contain $l$, and unification must discharge that demand, which, when the row ends in a variable, means guessing that the variable contains the field. Paszke and Xie's search rule @extensible_tabular does exactly this, and it is the point at which the systems discussed in @related-work either backtrack, solve modulo associativity and commutativity, or defer to an unspecified entailment relation.
@@ -32,8 +40,8 @@ The first use needs the result of f to be a record, the second applies f to a re
 
 The selector also shows where MiniNix departs from Paszke and Xie @extensible_tabular. Their search rule turns the selection into the demand that the row of x contain l, and since that row is a variable, unification places the field into it: the selector types at ${(l: δ | ρ)} → δ$. Every use must then supply l, so `f {}` is rejected, and with it the program above. MiniNix answers the lookup with $?$ instead and keeps it in the scheme of f, whose instances include ${ε} → ★$.
 
-== The Wand-Ambiguity, Resolved
-The wand-ambiguity of @sec-motivation is resolved by the same mechanism. The motivating example concatenates two unknown records and selects from the result:
+== The Wand Ambiguity, Resolved
+The Wand ambiguity of @sec-motivation is resolved by the same mechanism. The motivating example concatenates two unknown records and selects from the result:
 $ #b[let] f = (a: b: (a ‖ b).l) #b[in] … $
 With $a : {α}$ and $b : {β}$, concatenation yields ${β | α}$ — the right operand first, since lookup prefers the left of a row. The lookup $(β | α).l$ stops at β with $?$: whether the field comes from b or from a depends on whether β contains l. A plain type can only record this as ${α} → {β} → ★$. MiniNix instead keeps the pending lookup in the scheme of f,
 $ f : ∀(α, β: "Row", δ: "Type"). #h(0.3em) ⟨(β | α).l ↓ δ⟩ ⇒ {α} → {β} → δ $

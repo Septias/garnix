@@ -1,5 +1,5 @@
 #import "../functions.typ": *
-#import "05_unification.typ": u_stuck
+#import "04_unification.typ": u_stuck
 
 = Incompleteness <incompleteness>
 
@@ -13,20 +13,20 @@ Some row equations have no most general unifier, and no algorithm that returns a
   name: [Irreducible problems],
   lean: "vars_vs_field_no_mgu_on, two_sided_no_mgu_on, shift_no_finite_complete_set",
 )[
-  + (_Wand-ambiguity._) For pairwise distinct $α₁, …, α_n$ with $n ≥ 2$, $(α₁ | … | α_n) scripts(≐)_r (l: 𝓫)$ has no most general unifier.
+  + (_Wand ambiguity._) For pairwise distinct $α₁, …, α_n$ with $n ≥ 2$, $(α₁ | … | α_n) scripts(≐)_r (l: 𝓫)$ has no most general unifier.
   + (_Two-sided._) $(α | l: 𝓫) scripts(≐)_r (l: 𝓫 | β)$ has no most general unifier.
   + (_Shift._) $(α | l: 𝓫) scripts(≐)_r (l: 𝓫 | α)$ has no finite complete set of unifiers.
 ] <prop-irreducible>
 
-In the wand-ambiguity, every variable may carry the field, and no choice subsumes the others. The two-sided problem is the same deadlock at both ends of the spine. The shift has a unifier for every number of l-fields in α, so returning several answers does not help either.
+In the Wand ambiguity, every variable may carry the field, and no choice subsumes the others. The two-sided problem is the same deadlock at both ends of the spine. The shift has a unifier for every number of l-fields in α, so returning several answers does not help either.
 
 #example(name: [Unifiers of the irreducible problems])[
-  - The wand-ambiguity $(α | β) scripts(≐)_r (l: 𝓫)$ has the unifiers $[α ≔ (l: 𝓫), β ≔ ε]$ and $[α ≔ ε, β ≔ (l: 𝓫)]$. Both are ground and they differ, so neither is an instance of the other. A most general unifier would have to be more general than both, but it cannot leave α and β open: $[α ≔ γ, β ≔ γ′]$ and every other substitution that maps α or β to a row containing a variable is no unifier, since a variable on the left would have to face a variable on the right. Nor can it send both to ε, since $(ε | ε) ≈ ε$ and ε lacks the field. So it places the single field in one of the two variables and is no more general than the unifier that places it in the other.
-  - The two-sided problem $(α | l: 𝓫) scripts(≐)_r (l: 𝓫 | β)$ has the unifiers $[α ≔ ε, β ≔ ε]$ and $[α ≔ (l: 𝓫), β ≔ (l: 𝓫)]$, which disagree on the number of l-fields in α. Unlike in the wand-ambiguity, $[α ≔ ε, β ≔ ε]$ is a unifier, but it is not most general: it is ground, its only instance is itself, and so it does not cover the second unifier. Conversely, every instance of a unifier that gives α at least one l-field, such as $[α ≔ (l: 𝓫 | γ), β ≔ (γ | l: 𝓫)]$, gives α at least one, so none covers $[α ≔ ε, β ≔ ε]$.
+  - The Wand ambiguity $(α | β) scripts(≐)_r (l: 𝓫)$ has the unifiers $[α ≔ (l: 𝓫), β ≔ ε]$ and $[α ≔ ε, β ≔ (l: 𝓫)]$. Both are ground and they differ, so neither is an instance of the other. A most general unifier would have to be more general than both, but it cannot leave α and β open: $[α ≔ γ, β ≔ γ′]$ and every other substitution that maps α or β to a row containing a variable is no unifier, since a variable on the left would have to face a variable on the right. Nor can it send both to ε, since $(ε | ε) ≈ ε$ and ε lacks the field. So it places the single field in one of the two variables and is no more general than the unifier that places it in the other.
+  - The two-sided problem $(α | l: 𝓫) scripts(≐)_r (l: 𝓫 | β)$ has the unifiers $[α ≔ ε, β ≔ ε]$ and $[α ≔ (l: 𝓫), β ≔ (l: 𝓫)]$, which disagree on the number of l-fields in α. Unlike in the Wand ambiguity, $[α ≔ ε, β ≔ ε]$ is a unifier, but it is not most general: it is ground, its only instance is itself, and so it does not cover the second unifier. Conversely, every instance of a unifier that gives α at least one l-field, such as $[α ≔ (l: 𝓫 | γ), β ≔ (γ | l: 𝓫)]$, gives α at least one, so none covers $[α ≔ ε, β ≔ ε]$.
   - The shift $(α | l: 𝓫) scripts(≐)_r (l: 𝓫 | α)$ is unified by $[α ≔ (l: 𝓫)^n]$ for every $n ≥ 0$, where $(l: 𝓫)^n$ is the row of n copies of the field. Each unifier in a finite set fixes the number of l-fields in α, so no finite set covers all of them.
 ] <ex-irreducible>
 
-All three are reported as #u_stuck: no move applies, and any move would prefer one unifier to another. Negative information narrows the choice. If a lacks-predicate states that β has no l-field, the wand-ambiguity $(α | β) scripts(≐)_r (l: 𝓫)$ has the single unifier $[α ≔ (l: 𝓫), β ≔ ε]$. For the two-sided problem and the shift, a lacks-predicate on α excludes the unifiers that give α an l-field, but it leaves those that give α fields of other labels, such as $α ≔ (m: 𝓫)$ next to $α ≔ ε$. These remain incomparable as long as no field crosses a row-variable, so lacks-predicates resolve the two problems only together with a row equivalence in which a variable commutes with the fields of the labels it lacks (@sec-extensions).
+All three are reported as #u_stuck: no move applies, and any move would prefer one unifier to another. Negative information narrows the choice. If a lacks-predicate states that β has no l-field, the Wand ambiguity $(α | β) scripts(≐)_r (l: 𝓫)$ has the single unifier $[α ≔ (l: 𝓫), β ≔ ε]$. For the two-sided problem and the shift, a lacks-predicate on α excludes the unifiers that give α an l-field, but it leaves those that give α fields of other labels, such as $α ≔ (m: 𝓫)$ next to $α ≔ ε$. These remain incomparable as long as no field crosses a row-variable, so lacks-predicates resolve the two problems only together with a row equivalence in which a variable commutes with the fields of the labels it lacks (@sec-extensions).
 
 What is shown is a limit of principal solutions over scoped rows, not of typing: a program whose inference is stuck may still be typed by placing ★ where the problem sits.
 
