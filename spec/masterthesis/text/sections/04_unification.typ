@@ -1,9 +1,9 @@
 #import "../functions.typ": *
 
-#let u_clash = smallcaps("Clash")
-#let u_occurs = smallcaps("Occurs")
-#let u_stuck = smallcaps("Stuck")
-#let u_fuel = smallcaps("No fuel")
+#let u_clash = text(font: "Libertinus Serif", smallcaps("Clash"))
+#let u_occurs = text(font: "Libertinus Serif", smallcaps("Occurs"))
+#let u_stuck = text(font: "Libertinus Serif", smallcaps("Stuck"))
+#let u_fuel = text(font: "Libertinus Serif", smallcaps("No fuel"))
 
 = Unification <unification>
 
@@ -64,7 +64,7 @@ U-bind and U-occurs are stated for a variable on the left and are tried on both 
 
 == Row Unification
 // meta: the rules are not really tanglible for me
-The row pass is a deterministic cascade. Every move it makes is _forced_ — it preserves the solution set of the problem rather than choosing among alternatives. One move, U-host, introduces a fresh variable, and only where the placement of a field is itself forced. @unification-cascade gives the order in which the moves are attempted; the first one whose trigger fires decides the step, and if none fires the configuration is terminal.
+The row pass is a deterministic cascade. Every move it makes is _forced_ — it preserves the solution set of the problem rather than choosing among alternatives. [One move, U-host, introduces a fresh variable, and only where the placement of a field is itself forced.](does the reader understand this yet? or is it an artifact?) @unification-cascade gives the order in which the moves are attempted; the first one whose trigger fires decides the step, and if none fires the configuration is terminal.
 
 #let u_band = (
   exhaust: oklch(95%, 0.025, 250deg),
@@ -101,7 +101,7 @@ The row pass is a deterministic cascade. Every move it makes is _forced_ — it 
   table.cell(align: center + horizon)[#mark],
 )
 
-// todo: check
+// todo: are the reverse arrows correct everywhere?
 #let unification_cascade = figure(
   kind: image,
   caption: "The order in which the row-moves are tried.",

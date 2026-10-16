@@ -1,12 +1,5 @@
 #import "../functions.typ": *
 
-#let meta = [
-  - Show the approach we are taking
-  - Motivate our own design decisions
-  - Show the background and motivate our design decisions against existing calculi
-]
-
-
 = Our Position <sec-overview>
 This section positions MiniNix against existing record calculi and then introduces it informally through examples. The formal definitions follow in @declarative.
 

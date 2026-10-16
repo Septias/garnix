@@ -61,7 +61,7 @@ The three conjuncts are instance-closure, inhabitation and coverage: every insta
   Both instances are typings, so a scheme covering them must have a quantified variable as its result, since ${ε}$ and ★ are rigid. Sending that variable to ${ε}$ in the substitution of the second instance leaves the argument at ${ε}$ and yields the instance ${ε} → {ε}$, which is not a typing. Choosing ★ as result does not help, by @lem-rigid.
 ]
 
-A qualified scheme is principal. Let
+A qualified scheme is principal. Let selQ be the same definition as above:
 
 $ "selQ" quad = quad ∀(β: "Row", δ: "Type"). #h(0.3em) ⟨β.l ↓ δ⟩ ⇒ {β} → δ. $
 
