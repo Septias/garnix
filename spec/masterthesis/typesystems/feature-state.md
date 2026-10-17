@@ -3,13 +3,22 @@
 
 
 # Feat: Negative information
+Plan: plans/negative-information.md. Branch feat/negative-info.
+
+## Open (for you)
+- Q3 Phase C (keyed commuting under `κ ≠ m`) before or after occurrence typing?
 
 
 # Feat: Gradual Typing
+Plan: plans/gradual.md. Branch feat/gradual.
 
 
 # Feat: Macro-Nix
 Plan: plans/macronix.md. Branch feat/macronix.
+
+## Todo
+- Check Nix examples against MacroNix
+
 
 ## Fragen
 - Was sind die Delta-regeln?
@@ -20,6 +29,7 @@ Plan: plans/macronix.md. Branch feat/macronix.
 - Bool als tt und ff?
 - What is prim?
 - How do builtins work if I rebind-them?
+
 
 ## Problems
 ### `Err.primFail` weakens progress (open)
@@ -56,14 +66,13 @@ Plan: plans/macronix.md. Branch feat/macronix.
 
 
 ## Claude Prompts
-- [x] Create an overview for feature parity with real nix → figures/nix-parity.typ, in the MacroNix appendix
+- [x] Create an overview for feature parity with real nix → text/figures/nix-parity.typ, in the MacroNix appendix
   - Sections: language features, builtins
   - Section for things not yet in place (because of implementation or whatever)
 
 
-
 # Feat: Recursive Types
-
+TODO
 
 # Base-System
 ## Related Files
@@ -162,3 +171,13 @@ Plan: plans/macronix.md. Branch feat/macronix.
 
 ## Findings
 - Eliminators for ★ can not be added without _gradual typing_ because otherwise progress and preservation die
+- ≈ is intensional: counts include shadowed l-fields (2026-10-16)
+  - `Row.Char` compares the full `sProj l` (every l-field, shadowed or not), so `sFieldCount` over all fields is right for U-clash / U-ground
+  - Leading-only counting is unsound: `⟨α, l:𝓫, β⟩ ≐ᵣ ⟨l:Int, l:𝓫⟩` would clash, but `α ≔ (l:Int), β ≔ ε` unifies (real verdict: stuck)
+  - Dead fields (any l right of an earlier l, across vars) are unobservable: no restriction, E-conc only appends; observational ≅ ⊋ ≈
+  - Cost: `[ base (base // {name = "y";}) ]` clashes ((name:S) vs (name:S | name:S)); `defaults // overrides` is the common Nix idiom
+  - Shift witness `(l:𝓫)^k` (06_incompleteness.typ:21,26, UnifType.lean) is an artefact of ≈; under ≅ all k ≥ 1 collapse. Non-finitary likely survives via other labels (`offSub`), unproven
+  - ≅ is not cancellative: `(l:Int | α) ≐ (l:Int)` has unifiers ε and (l:τ) for every τ, so no mgu; U-field / U-ground / lem-cancel need cancellation → keep ≈
+  - Conjecture: ≈ is the coarsest lookup-respecting cancellative congruence (unproven)
+  - Todo text: say in 02 (~l.104) that ≈ keeps shadowed fields and why; fix shift prose; fill "(explain this)" at 04_unification.typ:228
+  - Idea (untested, not in Lean): drop dead fields at T-conc; needs ≅ in declarative T-eq, recheck preservation
