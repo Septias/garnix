@@ -1,4 +1,4 @@
-#import "../text/functions.typ": *
+#import "../functions.typ": *
 
 // Feature parity of MacroNix (lean/, Builtins.lean) with NixLang.
 // Legend:  ● typed and mechanized   ◐ restricted, encoded or derived   · missing

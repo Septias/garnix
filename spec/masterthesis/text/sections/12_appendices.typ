@@ -1,5 +1,5 @@
 #import "../functions.typ": *
-#import "../../figures/nix-parity.typ": nix-parity
+#import "../figures/nix-parity.typ": nix-parity
 
 = MacroNix <app-macronix>
 
