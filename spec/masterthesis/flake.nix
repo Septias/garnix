@@ -18,6 +18,8 @@
               tinymist
               elan
             ];
+            # nixpkgs' google-fonts Libertinus Serif lacks small caps; use typst's embedded copy
+            TYPST_IGNORE_SYSTEM_FONTS = "true";
           };
         }
       );
