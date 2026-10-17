@@ -10,7 +10,6 @@
 - Port our testsuite from Mini to Macro-Nix
 
 
-
 ## Fortführende Ideen
 - Kann man die Providenz von ★ besser tracken?
 - Automatische Instrumentation?
@@ -19,3 +18,4 @@
 
 ## Misc
 - Prove: "a typing that uses neither T-sel-⊥ nor T-sel-★ (or an inference run with no warnings) never reaches ↯"
+- Is it a problem, that preservation holds directly?
