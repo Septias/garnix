@@ -4,11 +4,6 @@ Branch `feat/macronix`, worktree `~/coding/garnix-wt/macronix`.
 State reports: `typesystems/feature-state.md` § Feat: Macro-Nix (main).
 Spec: `typesystems/macronix.typ` (main). Draft: `drafts/macronix.typ` (main).
 
-# Motivation
-- NixSuite encodes `+`, `if`, `?`, lists, `toString` as tuple records: every operand typed, result type says nothing
-- §10 idioms abstract `false`, `++ [extra]`, `optionalAttrs` into parameters
-- Goal: real Nix in both, same core metatheory
-
 # Goal
 - Syntax: `if`, `assert`, `e ? l`, list literals, primitive operators/builtins; `e.l or d` derived
 - Types: `[τ]`, designated base types `bool`, `int`, `string`, `null`
