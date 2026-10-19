@@ -74,3 +74,43 @@
 #show figure: set block(breakable: true)
 
 #include "sections/12_appendices.typ"
+
+#page[
+  #text(size: 15pt)[*Declaration*]
+
+  I hereby declare that I am the sole author and composer of my thesis and
+  that no other sources or learning aids other than those listed have been used.
+  Furthermore, I declare that I have acknowledged the work of others by providing
+  detailed references of said work.
+  I also hereby declare that my thesis has not been prepared for another examination or assignment, either in its entirety or excerpts thereof.
+
+  \
+  \
+
+  #grid(
+    columns: (1fr, 1fr),
+    gutter: 2cm,
+    grid(
+      rows: 0.3cm,
+      columns: 1fr,
+      gutter: 7pt,
+      "Freiburg den 11.11.2026",
+      grid.hline(),
+      [
+        #v(7pt)
+        Place, Date
+      ]
+    ),
+    grid(
+      rows: 0.3cm,
+      columns: 1fr,
+      gutter: 7pt,
+      "",
+      grid.hline(),
+      [
+        #v(7pt)
+        Signature
+      ],
+    ),
+  )
+]
