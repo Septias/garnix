@@ -170,7 +170,7 @@ On rows, the moves of @unification-cascade treat a keyed field as a barrier. U-�
 === Inference
 
 #let fc_infer = figure(
-  caption: [Algorithmic rules for first-class labels, extending @inference-rules. A-sel-dyn-⊥ and A-sel-dyn-\? share the premises of A-sel-dyn.],
+  caption: [Algorithmic rules for first-class labels, extending @inference-rules. A-sel-dyn-⊥ and A-sel-dyn-★ share the premises of A-sel-dyn.],
   flexbox(
     derive("A-lab", (), $Γ; S ⊢ \"l\" ⇒ ⌊l⌋; S$),
     derive(
@@ -188,7 +188,7 @@ On rows, the moves of @unification-cascade treat a keyed field as a barrier. U-�
       $Γ; S ⊢ e₁.\${e₂} ⇒ ★; S₄ "+W"$,
     ),
     derive(
-      "A-sel-dyn-?",
+      "A-sel-dyn-★",
       ($…$, $(⟦S₄⟧ρ).(⟦S₄⟧ℓ) ↓ #h(0.2em) ? "on" α$, $"fresh" δ: "Type"$),
       $Γ; S ⊢ e₁.\${e₂} ⇒ δ; S₄ #st_park ⟨α ▷ ρ.ℓ ↓ δ⟩$,
     ),
@@ -219,7 +219,7 @@ On rows, the moves of @unification-cascade treat a keyed field as a barrier. U-�
 )
 #fc_infer <fc-inference>
 
-@fc-inference gives the algorithmic rules. Dynamic selection follows A-sel, A-sel-⊥ and A-sel-\? of @inference-rules. The key is unified with the singleton type of a fresh label variable ℓ, and the keyed lookup is asked about the row and the key as solved so far. When it answers $?$, the stump is parked on its blocker, which may now be a label variable: in `a: {l = c; m = {}}.${a}` the stump waits on the key and not on a row. A-rcd-dyn performs no lookup and parks nothing. It is shaped like A-app: the key is unified with $⌊ℓ⌋$ for a fresh ℓ, and the keyed field records ℓ. Wake-up and saturation are unchanged over keyed lookups, so solving a key wakes the stumps blocked on it: applying the selector above to $\"l\"$ solves ℓ, and the stump hits. A-sel-dyn-𝓫 and A-rcd-dyn-𝓫 apply when the key's type is already a base type under the current solution. They answer ★ and raise a warning instead of unifying 𝓫 with $⌊ℓ⌋$. The test is deliberately restricted to a definite base type. A key whose type is still a variable is unified with $⌊ℓ⌋$ as before, so in `(a: {l = c}.${a}) c` the key becomes a label at the selection and the application clashes. Answering ★ for every lookup keyed by such a variable once the conflict appears would be sound by the same rules, but the result would depend on the order in which the two uses of the key are met.
+@fc-inference gives the algorithmic rules. Dynamic selection follows A-sel, A-sel-⊥ and A-sel-★ of @inference-rules. The key is unified with the singleton type of a fresh label variable ℓ, and the keyed lookup is asked about the row and the key as solved so far. When it answers $?$, the stump is parked on its blocker, which may now be a label variable: in `a: {l = c; m = {}}.${a}` the stump waits on the key and not on a row. A-rcd-dyn performs no lookup and parks nothing. It is shaped like A-λ-E: the key is unified with $⌊ℓ⌋$ for a fresh ℓ, and the keyed field records ℓ. Wake-up and saturation are unchanged over keyed lookups, so solving a key wakes the stumps blocked on it: applying the selector above to $\"l\"$ solves ℓ, and the stump hits. A-sel-dyn-𝓫 and A-rcd-dyn-𝓫 apply when the key's type is already a base type under the current solution. They answer ★ and raise a warning instead of unifying 𝓫 with $⌊ℓ⌋$. The test is deliberately restricted to a definite base type. A key whose type is still a variable is unified with $⌊ℓ⌋$ as before, so in `(a: {l = c}.${a}) c` the key becomes a label at the selection and the application clashes. Answering ★ for every lookup keyed by such a variable once the conflict appears would be sound by the same rules, but the result would depend on the order in which the two uses of the key are met.
 
 Finalization needs no new premise. F-★ solves the promised δ with ★ and never binds a label variable, so the blockers of other stumps survive it untouched and no key ever becomes ★. A-let generalizes keyed stumps under the side conditions of @generalization, read over rows, keys and results. A spent promise is materialized only when its key is a literal label and it is blocked on its row. A spent promise blocked on its key has no row to extend, and it remains unanswered (@incompleteness-inference).
 

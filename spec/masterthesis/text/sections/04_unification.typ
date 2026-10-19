@@ -26,6 +26,7 @@ We present our unification algorithm, which is sound and terminating but incompl
         $#type_name("Spine of a row") ⌈ρ⌉$,
         $#type_name("Field count") |s|_l$,
         $#type_name("Var sequence") "vars"(s)$,
+        $#type_name("Row vars, at any depth") "rv"(s)$,
         $#type_name("Type equation") τ₁ ≐ τ₂ ⇝ v$,
         $#type_name("Row equation") s₁ scripts(≐)_r s₂ ⇝ v$,
       )
@@ -149,18 +150,25 @@ The row pass is a deterministic cascade. Every move it makes is _forced_ — it 
         u_go,
       ),
 
-      u_phase("solve", u_band.solve, 2),
+      u_phase("solve", u_band.solve, 3),
+      ..u_step(
+        "U-var-collapse",
+        both: true,
+        $α scripts(≐)_r s$ + [, ] + $α ∈ "vars"(s)$ + [, $s$ field-free],
+        $[overline(β) ≔ ε]$,
+        u_ok,
+      ),
       ..u_step(
         "U-var-solve",
         both: true,
-        $α scripts(≐)_r s$ + [, ] + $α ∉ "vars"(s)$,
+        $α scripts(≐)_r s$ + [, ] + $α ∉ "rv"(s)$,
         $[α ≔ s]$,
         u_ok,
       ),
       ..u_step(
         "U-var-occurs",
         both: true,
-        $α scripts(≐)_r s$ + [, ] + $α ∈ "vars"(s)$,
+        $α scripts(≐)_r s$ + [, ] + $α ∈ "rv"(s)$,
         u_occurs,
         u_no,
       ),
@@ -223,7 +231,7 @@ The row pass is a deterministic cascade. Every move it makes is _forced_ — it 
 )
 #unification_cascade <unification-cascade>
 
-The two exhaustion rules are checked at every depth and before the budget: once a side is empty, its counterpart's variables are forced to ε and a surviving field has nowhere to come from. The cancellation rules exploit that spines cancel at both ends, which is exactly the trace-monoid property of @trace-monoid. U-var-solve fires only when one side is a lone variable, and its occurs check ensures that the binding eliminates that variable.
+The two exhaustion rules are checked at every depth and before the budget: once a side is empty, its counterpart's variables are forced to ε and a surviving field has nowhere to come from. The cancellation rules exploit that spines cancel at both ends, which is exactly the trace-monoid property of @trace-monoid. The three solving rules fire only when one side is a lone variable α. If α occurs on the other side s only among variables, U-var-collapse solves the problem without binding α to a row that contains it: the variable sequences of both sides must agree under every unifier, so a single occurrence of α forces every other variable of s to ε and leaves α free, and a repeated occurrence forces α to ε as well. This solution is unique and hence most general (`allvar_occurs_mgu` in Lean). Otherwise U-var-solve binds α if it occurs nowhere in s, at any depth, and U-var-occurs reports the cycle if it does; the occurs check ensures that the binding eliminates the variable.
 
 The three matching moves differ in how far they may look for a partner. A _window_ is a maximal var-free segment at one end of a spine: U-field-L and U-field-R may pair a field only inside it, because a row-variable in between could be instantiated to a colliding field and the pairing would be a guess about shadowing. In $⟨m: 𝓫, l: 𝓫, α, l: 𝓫′⟩$ the leading window is $⟨m: 𝓫, l: 𝓫⟩$ and the trailing window is $⟨l: 𝓫′⟩$. A leading $l: τ$ on the other side is paired with $l: 𝓫$. Against $⟨m: 𝓫, α, l: 𝓫′⟩$ it has no partner in the leading window, and pairing it with $l: 𝓫′$ would assume that α carries no l. U-ground lifts that restriction by counting: if one side [has no variables at all and some label occurs equally often and positively on both sides](explain this), then the other side's variables cannot carry that label, the pairing is positional, and it is again forced.
 
@@ -256,10 +264,19 @@ A field facing only variables on the other side has no partner, but it may have 
         ($t₁ scripts(≐)_r t₂ ⇝ θ$,),
         $t₁ · α scripts(≐)_r t₂ · α ⇝ θ$,
       ),
-      derive("U-var-solve", ($α ∉ "vars"(s)$,), $α scripts(≐)_r s ⇝ [α ≔ s]$),
+      derive(
+        "U-var-collapse",
+        (
+          $s$ + [ field-free],
+          $α ∈ "vars"(s)$,
+          $overline(β) = cases("vars"(s) ∖ α & "if" α "occurs once in" s, "vars"(s) & "otherwise")$,
+        ),
+        $α scripts(≐)_r s ⇝ [overline(β) ≔ ε]$,
+      ),
+      derive("U-var-solve", ($α ∉ "rv"(s)$,), $α scripts(≐)_r s ⇝ [α ≔ s]$),
       derive(
         "U-var-occurs",
-        ($α ∈ "vars"(s)$,),
+        ($α ∈ "rv"(s)$,),
         $α scripts(≐)_r s ⇝ #u_occurs$,
       ),
       derive(
@@ -315,7 +332,7 @@ A field facing only variables on the other side has no partner, but it may have 
 )
 #unification_row <unification-row>
 
-@unification-row states the moves as rules. They are to be read in the order of @unification-cascade, and U-var-solve, U-var-occurs, U-field-L, U-field-R, U-ground and U-host are additionally tried with the two sides exchanged; U-ε-var, U-ε-clash and U-clash are symmetric as stated. Field lookups do not travel through $scripts(≐)_r$, they are deferred as stumps, so row unification never guesses a field into a variable: the field U-host places comes from the other side of the equation, and its host is forced.
+@unification-row states the moves as rules. They are to be read in the order of @unification-cascade, and U-var-collapse, U-var-solve, U-var-occurs, U-field-L, U-field-R, U-ground and U-host are additionally tried with the two sides exchanged; U-ε-var, U-ε-clash and U-clash are symmetric as stated. Field lookups do not travel through $scripts(≐)_r$, they are deferred as stumps, so row unification never guesses a field into a variable: the field U-host places comes from the other side of the equation, and its host is forced.
 
 #example(name: [Matching, then solving])[
   In $⟨l: γ, α⟩ scripts(≐)_r ⟨l: 𝓫, m: 𝓫⟩$ no side is empty, no variable is shared at an end, and neither side is a lone variable. The leading $l: γ$ finds the partner $l: 𝓫$ in the leading window of the right side, so U-field-L emits $γ ≐ 𝓫 ⇝ [γ ≔ 𝓫]$ and continues with $⟨α⟩ scripts(≐)_r ⟨m: 𝓫⟩$. Now α is a lone variable, and U-var-solve returns $[α ≔ ⟨m: 𝓫⟩]$. The solution is $[γ ≔ 𝓫, α ≔ (m: 𝓫)]$.

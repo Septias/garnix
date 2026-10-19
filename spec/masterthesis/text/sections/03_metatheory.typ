@@ -77,7 +77,7 @@ Discharge pins δ to the lookup's verdict, so ${ε} → {ε}$ is excluded. One b
 )[
   Let L₁ be the system with plain schemes and L₂ the qualified one. There are e and τ with $∅ ⊢ e : τ$ in L₂ but not in L₁, for instance
   $
-    ∅ ⊢ #h(0.3em) bold("let") f = (x: x.l) bold("in") { a = (f {l = {m = c}}).m; b = f {} } quad : quad {a: 𝓫_c | b: ★}.
+    ∅ ⊢ #h(0.3em) bold("let") f = (x: x.l) bold("in") { a = f {l = c}; b = f {} } quad : quad {a: 𝓫_c | b: ★}.
   $
 ] <cor-strict>
 
