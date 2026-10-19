@@ -1,8 +1,6 @@
 #import "../functions.typ": *
 
 #let meta = [
-  - Section goal: *The language forces our design decisions*
-
   1. Motivate thesis by nix usage
   2. Into: State our goals
   3. Motivation of the ★-type
@@ -12,50 +10,58 @@
 ]
 
 = Introduction <sec-motivation>
-The Nix programming language @nix-language-2-28 @dolstra_phd (NixLang) is a lazy, pure and untyped functional language for the configuration of software. It is the expression language of the Nix package manager and NixOS, where it describes how software is built and how systems are configured. Both projects see growing adoption: the package manager hosts the most up-to-date package repository @repology, and NixOS provides strong guarantees such as reproducibility and reliability @dolstra_phd @nixos_long. The largest body of NixLang code is nixpkgs, a single repository of more than four million lines of code#footnote[Counted over the `.nix` files of nixpkgs 26.05, as are all figures about nixpkgs in this chapter.] that defines more than 100,000 packages @repology and is one of the ten GitHub projects with the most contributors @octoverse2024. The same repository carries the Nix standard library, the NixOS module system and the definition of the NixOS distribution itself @nixos_short @nixos_long. Despite its popularity, NixLang has gone more than twenty years without a type system @nix-ts-issue, and its formal treatment is limited to a recent operational semantics @verified. The goal of this thesis is to close this gap.
+The Nix programming language @nix-language-2-28 @dolstra_phd, we dub NixLang, is a pure, functional, and untyped language for the configuration of software. It is the expression language for the Nix package manager and operating system, where attribute sets, or records in programming language literature, are used to configure packages and programs using key-value pairs. The Nix package manager hosts the most up-to-date package repository @repology, with over 100.000 packages, and the operating system's guarantees of reproducibility and reliability @dolstra_phd @nixos_long are the reason for its [growing user base](source?). All packages, and the entire operating system, live in the public nixpkgs repositories, spanning over four million lines of code#footnote[Counted over the nix-files of nixpkgs 26.05], which sees daily changes to packages and configurations, making it one of the ten busiest repositories on GitHub @octoverse2024. Despite its age and popularity, NixLang has gone without a type system for over twenty years @nix-ts-issue, and its formal treatment is limited to a recent semantic of Krebbers&Broekhoff @verified and work by this author @simplenix. In this thesis, we turn to the issue of type inference again.
 
-In NixLang, packages, services and entire operating systems are described by _attribute sets_, sets of key-value bindings that collect, overwrite and merge configuration values. Attribute sets are central to configuration, which is why NixLang provides a rich record calculus with language constructs and builtin functions to create, extend, deconstruct and inspect them. Two of these features, _asymmetric concatenation_ and _first-class labels_, have proven tricky to type on their own, with only a small body of work on each @concat4multiinher @concat4free @fc_labels, and we know of no system that infers types for their combination. Since NixLang code relies on both, this thesis integrates them into a single sound calculus.
+The attribute set in Nix, or record in programming language theory, forms the basis for configurations as a natural combination of keys and values that declaratively describe the shape of a package or operating system. For example, the name and version of a package or the allowed list of IPs for a firewall. At build time, the  configuration files constituted of these attribute sets are collected, overwritten, and merged using Nix' language constructs and the built-in functions. Of the features needed to do so, asymmetric concatenation and first-class labels have proven hard to faithfully type on their own and in combination, with only a small body of work on each @concat4multiinher @concat4free @fc_labels, and only [P&X] that combines both in a sound calculus.
 
-Without types, a missing field, or one of unexpected shape, surfaces only when evaluation reaches it, possibly long after the change that introduced it. Providing a type system is difficult for exactly these features: an earlier system by the author @simplenix applies algebraic subtyping @algebraic_subtyping @simplesub to a fragment of NixLang and fails precisely on the operations that combine attribute sets.
+The goal of our work is to aid programmers and tools in writing safe and reliable code for the existing body of code today. In scope, we do not try to only infer package information or create a new, simplified configuration language that compiles to nix @nickel. From this real-world requirement, we derive the following four design goals:
 
-To support real-world development, our aim is a type system that applies to the existing body of code as it is and helps programmers write safer code. From this requirement, we derive four design goals that a satisfactory type system has to meet:
+/ G1 (No source changes): Type inference should run on today's nixpkgs without source changes because a repository of nixpkgs' size is impractical to annotate or restructure for the sake of an analysis.
+/ G2 (No semantic change): Nix depends heavily on laziness to keep its performance. Any change to evaluation order, for instance through casts or dynamic checks, can change the output hashes of packages and their build results, and is therefore costly.
+/ G3 (Totality): To run on today's nixpkgs, the analysis must give a type to every valid piece of syntax. In cases where type inference is ambiguous, the algorithm should report uncertainty instead of failing.
+/ G4 (Effective inference): All packages and the operating system root in a single file that is the root of type inference. To be applicable, type inference has to be efficient and not explode due to exponential decision procedures or backtracking.
 
-/ G1 (No source changes): The analysis should run on today's nixpkgs verbatim. A repository of this size is impractical to annotate or restructure for the sake of an analysis.
-/ G2 (No semantic change): Evaluation should produce exactly what it produced before. In particular, no check may force a value that lazy evaluation would leave untouched. The analysis may report on a program, but it may not change its behaviour, so that every package keeps its identifying hash and previously built binaries can still be reused.
-/ G3 (Totality): To run on nixpkgs verbatim, every program that runs should receive a type. Where the analysis cannot decide, it should report uncertainty rather than reject.
-/ G4 (Effective inference): The analysis should scale to nixpkgs with more than 100,000 packages, evaluated as one program.
-
-Our subgoal G3 directy motivates the addition of uncertainty into the calculus: using only the builtin functions, it is possible to write code that no static analysis can type completely:
+Using only the built-in functions of Nix, one can construct code that admits no static type:
 
 ```nix
+
 { "1759190400" = 1; }.${toString builtins.currentTime}
+
 ```
 
-The program combines a record, an _impure builtin_ and a computed label to select a field by the system time at evaluation. It succeeds in exactly one second and fails in every other, so deciding it statically would mean predicting when it is run. A type system that rejects the program violates G3, and one that assigns it a definite type is unsound. What remains is to admit that the analysis does not know. Our type system therefore admits an _unknown type_ ★, which marks places the analysis cannot decide. ★ is not an error: the program is accepted, and ★ records where its type is unknown. It plays the role of `any` in TypeScript @typescript, with the difference that it is never written by the programmer and is introduced only by the analysis itself. Our type ★ absorbs uncertainty of two kinds: behaviour that is undecidable by nature (see the example), and limitations of our implementation that could be solved in the future.
-
+This program uses dynamic lookups and the impure builtins.currentTime function to access a field based on the system time at evaluation. Telling whether this program will error or not predicts when the program will be run and hence the future. Rejecting this program violates goal G3, but assigning it a definite type is unsound. A similar example is the built-in function that converts arbitrary JSON in string form to valid Nix structure. Both of these examples have to be typed at an unknown type ★ that denotes syntax where no precise type can be found. The role is similar to TypeScript any , with the difference that it can not be written and is only produced by the inference itself. Our type system uses it for this kind of uncertainty that can not be solved but also for incompleteness of the unification algorithm. See [](todo: ref).
 
 == The Problem: Asymmetric Concatenation
-#figure(
-  caption: [The three idioms that make asymmetric concatenation unavoidable.],
-  box(width: 100%, align(left, ```nix
-  # 1. an overlay: extend or replace fields of a package set given to us
-  self: super: { hello = super.hello // { meta = { broken = false; }; }; }
 
-  # 2. an override: replace parts of an argument set we did not build
+#figure(
+  caption: [Three examples of Nix code that needs asymmetric concatenation.],
+
+  box(width: 100%, align(left, ```nix
+
+  # 1. An overlay extends and overrides existing fields of a package
+
+  self: super: { fields = super.foo // { meta = { broken = false; }; }; }
+
+  # 2. In a derivation, fields are overridden with extra fields
+
   mkDerivation (args // { buildInputs = args.buildInputs ++ [ extra ]; })
 
-  # 3. a conditional extension: add fields only on some platforms
+  # 3. A conditional build based on the host-platform
+
   { pname = "hello"; } // lib.optionalAttrs stdenv.isDarwin { NIX_LDFLAGS = "-liconv"; }
+
   ```)),
 )<nix-idioms>
 
-[Overwriting fields with `//` is among the most frequent operations on attribute sets](source?). @nix-idioms shows the three idioms that rely on it. An overlay extends or replaces the packages of a package set it is given, an override replaces parts of an argument set it did not build, and a conditional extension adds fields only on some platforms. In all three, the fields of one operand are fixed elsewhere: by the caller for overlays and overrides, by the platform for the conditional extension.
+The override operation `//` is used in Nix code to override existing configuration, mostly to adapt to a particular machine, a new version of a package, or the host environment. @nix-idioms shows three such usages. (1) Shows the usage of `//` to customize the build process of a package to patch dependencies or set meta-fields. (2) Shows a dual case: A package is defined and makes room for extra arguments, and (3) shows its usage to adapt to different machines.
 
-The operator `//` is _asymmetric record concatenation_, written $‖$ in this thesis: $a ‖ b$ contains every field of b and every field of a that b does not overwrite. This is a total operation, since overwriting is not an error but the intended behaviour. Few record calculi support it on records of unknown shape (@sec-background).
+The operator `//` is asymmetric record concatenation, a set-or-replace operation working on two operands. In this thesis we write $‖$ for this operation and $a ‖ b$ is its trivial example. The result of the operation contains every field of b and every field of a that b does not overwrite. Only a few record calculi support this operation (@sec-background).
 
-The difficulty already shows in the smallest program that concatenates and then selects, `a: b: (a ‖ b).l`. Whether the field l comes from b or from a depends on whether b has a field l at all. If it has, b's field shadows a's; if it definitely has not, the field is a's. For abstract a and b neither is known, and no amount of positive information about the fields of b settles which fields it lacks. Wand @concat4multiinher used this program to show that concatenation has no principal type. We call this the _Wand ambiguity_. It leaves the program without a principal type in any row calculus that must decide where a field comes from. Unlike the time example, this second source of uncertainty arises inside the type system itself, and in one of the most frequent operations of the language.
+The principal example that demonstrates the difficulty of typing open record concatenation is a: b: (a ‖ b).l, a concatenation of two unknown arguments a and b of which the result a label l is taken. Whether the field l [comes from](wording) a or b depends on whether b defines it or not. If b has a label l, it shadows the field of a and is taken; otherwise the field of a is returned. If both a and b are unknown (because they are type variables of a function), no amount of positive information can reveal the type of the returned value. We call this the Wand ambiguity since it was first discovered by Wand @cnocat4multiinher. This function is another example of unsolvable uncertainty that must receive a type in a total algorithm. Unlike the time-example, the ambiguity arises naturally in one of the most frequent operations of the language.
 
-Our answer is to let the type system not know in a disciplined way. Our calculus, MiniNix, rests on two ingredients. _Scoped records_ keep every field of both operands, so that concatenation is a total juxtaposition of rows and never loses information. A three-valued _lookup relation_, separate from the equality of rows, answers a field demand with a type, with definite absence, or with _don't know_. A _don't know_ is not resolved by a guess. It is kept in the type scheme of the binding and asked again at every use, where the arguments may decide it, and it is recorded as ★ only when it is never decided. The ★ of the Wand ambiguity is thus the same marker as the ★ of the time example. MiniNix covers functions, records, concatenation and let-polymorphism. The computed labels of the time example, are added in @sec-fc-labels. @sec-background positions both ingredients against existing record calculi, and @sec-overview shows our approach by examples.
+MiniNix therefore admits uncertainty in a constrained way: The result of lookups might be typed at ★, denoting that the type system makes no guarantees for this value. It might error, or it might run successfully.  MiniNix rests on two ingredients: Scoped records combine two records without fixing field-precedence on the spot. It loses no information about fields, and a tree-valued lookup relation traverses these total records and returns a type, definite absence, or a don't know value. Such a value is not resolved by a guess, but kept in the type-scheme of a binding and is reevaluated at every instantiation until it is decided by type-variable substitution. If no substitution ever resolves the usage, it is typed at ★, denoting that the algorithm can not decide its lookup.
+
+MiniNix covers functions, records, concatenation, and let-polymorphism. The computed labels of the time example are added in @sec-fc-labels. @sec-background positions both ingredients against existing record calculi, and @sec-overview shows our approach by examples.
 
 *Contributions* <contributions>
 Our contributions are fourfold:
@@ -66,4 +72,4 @@ Our contributions are fourfold:
 + We test it against some real-word code (…)
 
 *Overview*
-@sec-overview positions MiniNix against the record calculi it builds on and introduces it through examples. The calculus itself is the subject of @declarative, which defines its typing rules and semantics, and of @metatheory, which establishes type safety and shows that principality forces qualified schemes. The algorithmic implementation follows: @unification develops row unification on spines, @inference the inference algorithm built on it, and @incompleteness delineates the places where both give up. @sec-mechanization relates the results to the Lean development and we continue by showing one extension to nix: @sec-extensions extends MiniNix with first-class labels and sows the path towards full NixLang coverage. Finally, @sec-discussion measures our algorithm against the design goals, and @related-work places it in the literature.
+@sec-overview positions MiniNix against the record calculi it builds on and introduces it through examples. The calculus itself is the subject of @declarative, which defines its typing rules and semantics, and of @metatheory, which establishes type safety and shows that principality forces qualified schemes. The algorithmic implementation follows: @unification develops row unification on spines, @inference the inference algorithm built on it, and @incompleteness delineates the places where both give up. @sec-mechanization relates the results to the Lean development and we continue by showing one extension to nix: @sec-extensions extends MiniNix with first-class labels and outlines the path towards full NixLang coverage. Finally, @sec-discussion measures our algorithm against the design goals, and @related-work places it in the literature.
