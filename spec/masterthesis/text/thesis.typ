@@ -27,7 +27,7 @@
     \
 
     #text(tracking: 0.5pt)[*Examiner*]: #h(2pt) Prof. Dr. Peter Thiemann \
-    #text(tracking: 0.5pt)[*Second Examiner*]: #h(2pt) TBD \
+    #text(tracking: 0.5pt)[*Second Examiner*]: #h(2pt) Prof. Podelski \
     #text(tracking: 0.5pt)[*Advisor*]: #h(2pt) Prof. Dr. Peter Thiemann
 
     \
