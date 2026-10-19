@@ -20,6 +20,7 @@ import LetChoice
 import InferFnTerm
 import MacroConservative
 import Builtins
+import RowUnify.UnifType
 
 namespace MinimalCalculus
 
@@ -1190,5 +1191,31 @@ info: 'MinimalCalculus.MacroNix.macro_progress' depends on axioms: [propext, Cla
 info: 'MinimalCalculus.MacroNix.macro_preservation' depends on axioms: [propext, Classical.choice, Quot.sound]
 -/
 #guard_msgs in #print axioms MacroNix.macro_preservation
+
+-- Cited by the thesis text, guarded with the other headliners.
+
+/-- info: 'MinimalCalculus.crossfield_success' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in #print axioms crossfield_success
+
+/-- info: 'MinimalCalculus.finalized_no_blur' does not depend on any axioms -/
+#guard_msgs in #print axioms finalized_no_blur
+
+/-- info: 'MinimalCalculus.lookup_equiv' depends on axioms: [propext] -/
+#guard_msgs in #print axioms lookup_equiv
+
+/-- info: 'MinimalCalculus.no_plain_principal_scheme' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in #print axioms no_plain_principal_scheme
+
+/-- info: 'MinimalCalculus.RowEquiv.cancel_cat_left' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in #print axioms RowEquiv.cancel_cat_left
+
+/-- info: 'MinimalCalculus.RowEquiv.cancel_cat_right' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in #print axioms RowEquiv.cancel_cat_right
+
+/-- info: 'MinimalCalculus.shift_no_finite_complete_set' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in #print axioms shift_no_finite_complete_set
+
+/-- info: 'MinimalCalculus.unifyM_draws' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in #print axioms unifyM_draws
 
 end MinimalCalculus

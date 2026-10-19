@@ -93,13 +93,17 @@ def traceRow {B : Type} [DecidableEq B] :
       match stripR s₁ s₂ with
       | some (t₁, t₂) => let r := traceRow S fuel t₁ t₂; ("U-var-refl-R" :: r.1, r.2)
       | none =>
-      let solveName (r : UResM B) : String :=
-        match r with | .occurs => "U-var-occurs" | .stuck => "U-var-stuck" | _ => "U-var-solve"
+      let solveName (s₁ s₂ : List (Atom B)) (r : UResM B) : String :=
+        match r, s₁ with
+        | .occurs, _ => "U-var-occurs"
+        | .stuck, _ => "U-var-stuck"
+        | _, [.var α] => if (collapseSol α s₂).isSome then "U-var-collapse" else "U-var-solve"
+        | _, _ => "U-var-solve"
       match solveVarM S s₁ s₂ with
-      | some r => ([solveName r], r)
+      | some r => ([solveName s₁ s₂ r], r)
       | none =>
       match solveVarM S s₂ s₁ with
-      | some r => ([solveName r ++ " ⇄"], r)
+      | some r => ([solveName s₂ s₁ r ++ " ⇄"], r)
       | none =>
       match matchL s₁ s₂ with
       | some (τ, τ', t₁, t₂) => emit "U-field-L" τ τ' t₁ t₂
@@ -586,10 +590,12 @@ example (θ : TySubst Unit) : ¬ TyPrec ((Ty.fn (.rcd (rv "β")) .unk).applySubs
     (.fn (.rcd (.sing "l" b)) b) := finalized_no_blur θ (by decide)
 example := no_plain_principal_scheme (B := Unit) (C := Unit) (fun _ => ())
 example := selQ_principal (B := Unit) σ0
--- NOTE: `l1_strictly_weaker`'s witness is `{a = f {l = c}; b = f {}}`, not the
--- thesis's `{a = (f {l = {m = c}}).m; b = f {}}`. The latter's L2 typing is
--- `twoUse_typed` above; its L1 rejection is not mechanized.
+-- The Corollary's program `let f = (x: x.l) in {a = f {l = c}; b = f {}}`
+-- is `l1_strictly_weaker`'s witness. (§2's nested variant is `twoUse` above;
+-- that no plain scheme covers its two uses is `no_plain_principal_scheme`.)
 example := l1_strictly_weaker σ0 ()
+#guard run (.letE "f" (lam "x" (sel (v "x") "l")) (rec2 "a" (app (v "f") (rec1 "l" c)) "b" (app (v "f") emp)))
+  = ("{a: 𝓫 | b: ★}", ["l"])
 
 ------------------------------------------------------------------------------
 -- # §5 Unification
@@ -608,10 +614,13 @@ example : windowExtract "l" [.field "m" b, .field "l" b, .var "α", .field "l" b
 -- … and in ⟨m: 𝓫, α, l: 𝓫′⟩ it has no partner
 example : windowExtract "l" [.field "m" b, .var "α", .field "l" b'] = none := rfl
 
--- DIVERGENCE from the thesis's U-var-occurs (α ∈ vars(s) ⟹ Occurs): when α
--- occurs on s only as a variable, the driver solves by ε-collapse
--- (`collapseSol`, `allvar_occurs_mgu`); Occurs needs a field on s
-#guard tr (rv "α") (row [rv "β", rv "α", rv "γ"]) = (["U-var-solve"], "[β ≔ ε, γ ≔ ε]")
+-- U-var-collapse: α occurs on s only among variables. Once: the others go to
+-- ε and α stays free; twice: α goes to ε as well. With a field on s it is
+-- U-var-occurs.
+#guard tr (rv "α") (row [rv "β", rv "α", rv "γ"]) = (["U-var-collapse"], "[β ≔ ε, γ ≔ ε]")
+-- (the driver records α ≔ ε once per occurrence; the duplicates agree)
+#guard tr (rv "α") (row [rv "β", rv "α", rv "α", rv "γ"]) =
+  (["U-var-collapse"], "[β ≔ ε, α ≔ ε, α ≔ ε, γ ≔ ε]")
 #guard tr (rv "α") (row [rv "β", rv "α", f "l" b, rv "γ"]) = (["U-var-occurs"], "Occurs")
 
 -- Example "Matching, then solving": ⟨l: γ, α⟩ ≐ᵣ ⟨l: 𝓫, m: 𝓫⟩
