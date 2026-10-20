@@ -48,7 +48,7 @@ _G3 (Totality)._ This goal is met in part. Uncertainty that originates in a look
 
 receives no type, since the dynamic selection under a string key yields ★ by T-sel-dyn-𝓫 (@fc-typing) and ★ cannot be selected from. Second, inference reports a clash on some programs that the declarative system types (@incompleteness-inference), since a clash certifies the absence of a unifier, not the absence of a typing. Third, a key that is used as a label before it is known to be a string is a type error (@sec-fc-labels). A stuck verdict is not a rejection: the analysis reports it, as G3 demands.
 
-_G4 (Effective inference)._ The algorithm is designed for this goal but not yet measured against it. Inference is syntactic first-order unification: there is no constraint solver, no unification modulo associativity and commutativity, and no backtracking over alternative typings. Every move of the row pass is forced, and a parked stump is re-examined only when its blocker is solved. These are structural reasons to expect the analysis to scale. Termination is proved, but no complexity bound, and the analysis has not yet been run on nixpkgs.
+_G4 (Efficient inference)._ The algorithm is designed for this goal but not yet measured against it. Inference is syntactic first-order unification: there is no constraint solver, no unification modulo associativity and commutativity, and no backtracking over alternative typings. Every move of the row pass is forced, and a parked stump is re-examined only when its blocker is solved. These are structural reasons to expect the analysis to scale. Termination is proved, but no complexity bound, and the analysis has not yet been run on nixpkgs.
 
 == Outlook: Towards Gradual Typing <sec-gradual>
 
