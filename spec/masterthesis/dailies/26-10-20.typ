@@ -7,9 +7,10 @@
 == Fäden
 - Thesis auf-und-ab lesen
 - Incompleteness reduzieren
-- Features ausweiten
 
 
-== Vorgehen
-1. Alle Claims sicherstellen
-2. Den Tonus anpassen
+== Check
+- Let-conditions
+- Incompleteness of FC-labels
+
+

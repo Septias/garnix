@@ -15,11 +15,8 @@
 
 
 == Depth
-- Understand the reasoning behind u-host
-- Explain the usage of Err and ★
 - Was passiert wenn beide Seiten mehrmals das selbe Label haben?
 - [x] Read the plan files
-- [ ] Read the typesystem files
 
 
 == Claude Fragen

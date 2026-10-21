@@ -11,5 +11,5 @@
 
 
 == Claude Prompts
-- [ ] Go over the list of inconsistencies and create discuss which we can fix still. Create a plan
+- [x] Go over the list of inconsistencies and create discuss which we can fix still. Create a plan
 
