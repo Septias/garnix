@@ -1,0 +1,1685 @@
+Row and Bounded Polymorphism via Disjoint
+Polymorphism
+Ningning Xie
+The University of Hong Kong, China
+nnxie@cs.hku.hk
+Bruno C. d. S. Oliveira
+The University of Hong Kong, China
+bruno@cs.hku.hk
+Xuan Bi
+The University of Hong Kong, China
+xbi@cs.hku.hk
+Tom Schrijvers
+KU Leuven, Belgium
+https://people.cs.kuleuven.be/~tom.schrijvers/
+tom.schrijvers@cs.kuleuven.be
+
+      Abstract
+Polymorphism and subtyping are important features in mainstream OO languages. The most common
+way to integrate the two is via F<: style bounded quantification. A closely related mechanism is
+row polymorphism, which provides an alternative to subtyping, while still enabling many of the
+same applications. Yet another approach is to have type systems with intersection types and
+polymorphism. A recent addition to this design space are calculi with disjoint intersection types and
+disjoint polymorphism. With all these alternatives it is natural to wonder how they are related.
+    This paper provides an answer to this question. We show that disjoint polymorphism can
+recover forms of both row polymorphism and bounded polymorphism, while retaining key desirable
+properties, such as type-safety and decidability. Furthermore, we identify the extra power of disjoint
+polymorphism which enables additional features that cannot be easily encoded in calculi with row
+polymorphism or bounded quantification alone. Ultimately we expect that our work is useful to
+inform language designers about the expressive power of those common features, and to simplify
+implementations and metatheory of feature-rich languages with polymorphism and subtyping.
+
+2012 ACM Subject Classification Theory of computation → Type theory; Software and its engi-
+neering → Object oriented languages; Software and its engineering → Polymorphism
+
+Keywords and phrases Intersection types, bounded polymorphism, row polymorphism
+
+Digital Object Identifier 10.4230/LIPIcs.ECOOP.2020.27
+
+Supplementary Material https://github.com/xnning/Row-and-Bounded-via-Disjoint
+
+Funding This work has been sponsored by Hong Kong Research Grant Council projects number
+17210617 and 17209519, and by the Research Foundation - Flanders.
+
+Acknowledgements We thank the anonymous reviewers for their helpful comments.
+
+
+ 1      Introduction
+Intersection types [51, 22, 59] and parametric polymorphism are common features in many
+newer mainstream Object-Oriented (OO) languages. Among others intersection types are
+useful to express multiple interface inheritance [21]. They feature in programming languages
+like Scala [44], TypeScript [40], Ceylon [52] and Flow [31]. These languages also incorporate
+a form of parametric polymorphism, typically generalized to account for subtyping and
+supporting bounded quantification [12]. As programmers get more experienced with the
+            © Ningning Xie, Bruno C. d. S. Oliveira, Xuan Bi, and Tom Schrijvers;
+            licensed under Creative Commons License CC-BY
+34th European Conference on Object-Oriented Programming (ECOOP 2020).
+Editors: Robert Hirschfeld and Tobias Pape; Article No. 27; pp. 27:1–27:30
+                   Leibniz International Proceedings in Informatics
+                   Schloss Dagstuhl – Leibniz-Zentrum für Informatik, Dagstuhl Publishing, Germany
+27:2   Row and Bounded Polymorphism via Disjoint Polymorphism
+
+
+       combination of intersection types and polymorphism, they discover new applications. For
+       example, the documentation of TypeScript [41] shows how the two features can express a
+       composition operator for objects that enables an expressive form of statically typed dynamic
+       inheritance [20, 32] and mixin composition [8]:
+
+       function extend<A, B>(first: A, second: B): A & B
+
+       The polymorphic function extend takes two objects and produces a result whose type is the
+       intersection of the types of the original objects. The implementation of extend relies on low
+       level features of JavaScript and is right-biased: the fields or properties of second are chosen
+       in favor of the ones in first. For example, we can create a new object jim as follows:
+
+       var jim = extend(new Person(’Jim’), new ConsoleLogger());
+
+       The jim object has type Person & ConsoleLogger, and acts both as a person and as a
+       console logger. Using extend to compose objects is much more flexible than the static
+       inheritance mechanisms of common OO languages like Java or Scala. It can type-check
+       flexible OO patterns that have been used for many years in many dynamically-typed languages.
+       Functions similar to extend have also been encoded in Scala [47, 54].
+           Unfortunately, the extend function in TypeScript suffers from ambiguity issues, and
+       worse, it is not type-safe [2]. Indeed, given two objects with the same field or method names,
+       extend does not detect potential conflicts. Instead it silently composes the two objects,
+       using the implementation based on a biased choice. This does implement a mixin semantics,
+       but it has the drawback that it can unintentionally override methods, without any warnings
+       or errors. Additionally, the extend function is not type-safe: if two objects have the same
+       property name with different types, extend may lookup the property of the wrong type.
+           In the literature of intersection types, extend is essentially what has been identified as
+       the merge operator [55]. As illustrated by Dunfield [28], the expressive power of the merge
+       operator can encode diverse programming language features, promising an economy of theory
+       and implementation. Calculi with disjoint intersection types [46, 7, 2] incorporate a coherent
+       merge operator. In such calculi the merge operator can merge two terms with arbitrary types
+       as long as their types are disjoint; disjointness conflicts are reported as type-errors. Some
+       calculi with disjoint intersection types, such as F+
+                                                          i [7], also support disjoint polymorphism [2],
+       which extends System F style universal quantification with a disjointness constraint. With
+       disjoint polymorphism we can model extend as:
+
+       let extend A (B * A) (first : A, second : B) : A & B = first ,, second
+
+       Unlike the TypeScript definition, which relies on type-unsafe features, the definition above
+       includes the full implementation. The definition of extend uses the merge operator (,,) to
+       compose the two objects. The type variable B has a disjointness constraint (B * A) which
+       states that B must be disjoint from A. Disjointness retains the flexibility to encode highly
+       dynamic forms of inheritance, while ensuring both type-safety and the absence of conflicts.
+
+       Row polymorphism and disjoint polymorphism. Disjoint polymorphism looks quite close to
+       certain forms of row polymorphism. Indeed, when restricted to record types, row polymorphism
+       with constrained quantification [34] provides an approach to recovering an unambiguous
+       semantics for extend as well. Constrained quantification extends System F style universal
+       quantification with a compatibility constraint. By requiring B to be compatible with A, we
+       can encode a row polymorphic variant of extend as:
+N. Xie, B. C. d. S. Oliveira, X. Bi, and T. Schrijvers                                              27:3
+
+
+let extend A (B # A) (first : A, second : B) : A || B = first || second
+
+Here A and B are row variables standing for record types, and B is compatible with A (B # A),
+which ensures the absence of conflicts. The || operator concatenates two records at both the
+term level and the type level. The key difference between the two implementations of extend
+is that in the version with row variables, A and B only stand for record types. In contrast
+in the version with disjoint polymorphism, A and B are arbitrary types. In languages with
+nominal type systems, allowing arbitrary types is important to deal with nominal types of
+classes, for instance. The encoding of extend suggests that at least some functionality of row
+polymorphism can be captured with disjoint polymorphism. Indeed, there are clear analogies
+between the two mechanisms: the merge operators (,, and ||) are similar; compatibility plays
+a similar role to disjointness; and intersection types generalize record type concatenation.
+
+Bounded quantification and disjoint polymorphism. Polymorphic object-oriented lan-
+guages also typically feature bounded quantification, which addresses the interaction between
+polymorphism and subtyping. Bounded quantification generalizes universal quantification by
+allowing programmers to specify upper bounds on type variables. For example:
+
+let getName (A <: Person) (o : A) : (String,A) = (o.name,o)
+
+expresses a function getName that takes an object o whose type is a subtype of Person,
+extracts its name and returns a copy of the object. Note that bounded quantification is
+useful to avoid the loss of information problem of subtyping [11]. Using the simpler type:
+
+let getName_bad (o : Person) : (String,Person) = (o.name,o)
+
+would lose static type information when given a subtype of Person as an argument.
+   An alternative version of getName that also does not lose type information is:
+
+let getName A (o : A & Person) : (String,A & Person) = (o.name,o)
+
+Here, the type variable A is unrestricted and represents the statically unknown part of
+the type of the object. The intersection type A & Person ensures that the object must at
+least contain all properties of Person, but does not forget about the statically unknown
+components. The two versions of getName show a common use case in OOP, but they use
+different features: the first uses bounded quantification, while the second uses a combination
+of intersection types and polymorphism. The connection between bounded quantification
+and polymorphic intersection types has been informally observed by Pierce [48].
+    Disjoint polymorphism, row polymorphism and bounded quantification provide a range
+of functionalities for OOP languages. Thus a language designer may be tempted to design
+a core language that combines all of these concepts. However, supporting all of them
+would lead to a significant implementation effort and a complex metatheory with non-trivial
+interactions between features. Furthermore, a common principle for (core) languages is to
+avoid overlapping features, which provide different ways to solve the same problem. Yet there
+seems to be a significant overlap between these features, which goes against that principle.
+    This paper builds on the similarities between the mechanisms, and shows that forms of both
+row polymorphism and bounded polymorphism can be recovered by type-safe elaborations
+into languages with disjoint polymorphism. Theoretically, it is important to formally establish
+the comparison among different type features, to allow a deep understanding and a precise
+discussion of the relative expressiveness of each feature. In practice, this result suggests
+
+
+
+                                                                                                  ECOOP 2020
+27:4   Row and Bounded Polymorphism via Disjoint Polymorphism
+
+
+       that core languages wishing to support all those features only need to support disjoint
+       polymorphism natively, promising an economy of the implementation of those languages. To
+       establish the relationship between row, bounded and disjoint polymorphism in a rigorous
+       and precise manner, we formalize elaborations from λ|| [34], a System F like calculus with
+       row polymorphism, and from kernel F<: [12], into F+       i . Our work serves as a guideline for
+       language designers wishing to combine disjoint polymorphism, with bounded quantification
+       and/or row polymorphism. The elaborations are useful to understand exactly what can and
+       cannot be encoded, and to uncover and overcome difficulties. To our surprise, a full encoding
+       of λ|| is quite subtle: there are subtle differences between compatibility and disjointness.
+       Moreover, certain general forms of bounded quantification are problematic, but all programs
+       in kernel F<: (the most widely used and decidable fragment of F<: ) are encodable.
+           We make the following specific contributions:
+           A formal elaboration from row to disjoint polymorphism: We present a formal
+           elaboration from λ|| to F+  i (Section 4). We first identify an intuitive elaboration (Sec-
+           tion 4.3). Due to discrepancies between compatibility and disjointness this elaboration
+           does not work for all λ|| programs. However it is possible to find a simple restriction on
+           λ|| that allows for the intuitive elaboration to work. We then present a complete, but non-
+           trivial elaboration that targets the original λ|| without restrictions (Section 4.4). While the
+           design space of row polymorphic calculi is very diverse, features in λ|| are representative
+           of most other calculi. We discuss elaborating other row calculi in Section 6.1.
+           A formal elaboration from bounded to disjoint polymorphism: We identify a
+           fragment of F<: that is encodable in terms of polymorphic intersection type systems, by
+           providing an elaboration from kernel F<: to F+    i (Section 5). Our elaboration, for the first
+           time, validates the informal observation between polymorphic intersection systems and
+           bounded quantification. We discuss other variants of F<: in Section 6.2.
+           A discussion of the extra expressive power of disjoint polymorphism: We
+           identify and discuss specific features of disjoint polymorphism that cannot be easily
+           encoded in F<: and λ|| (Section 2.4), including distributivity of intersections over other
+           constructs, and the combination of subtyping and row polymorphism. We discuss other
+           variants of intersection type systems in Section 6.3.
+           Coq formalization: All elaborations and metatheory of this paper, except for some
+           manual proof for simulation, has been mechanically formalized in the Coq proof assistant,
+           including type-safety and coherence. The Coq formalization amounts to 18,855 lines of
+           proofs and code (not including blank lines, comments and existing metatheory for F+        i ).
+
+
+        2     Overview
+       This section introduces the key ideas of the encodings for bounded quantification and row
+       polymorphism. We also discuss the added extra power of disjoint polymorphism over bounded
+       quantification and row polymorphism.
+
+       2.1    Background: Disjoint Polymorphism
+       Disjoint polymorphism [2, 7] combines disjoint intersection types with parametric polymor-
+       phism. In particular, F+ i [7] supports intersection types A & B for terms that are both of type
+       A and of type B. With the merge operator we can construct terms of an intersection type, like
+       1 , , True of type Int & Bool. Thanks to subtyping, a term of type Int & Bool can also be used
+       as if it had type Int, or as if it had type Bool. F+  i requires the two components of a merge to
+       have disjoint types, e.g., 1 , , 2 : Int & Int is not allowed, because it is ambiguous which value
+N. Xie, B. C. d. S. Oliveira, X. Bi, and T. Schrijvers                                                  27:5
+
+
+should be used at type Int. With disjoint quantification, it is possible to merge components
+whose type contains type variables. For instance, the term Λ(α ∗ Int). λ(x : α). x , , 1 has type
+∀(α ∗ Int). α → α & Int. The disjointness annotation α ∗ Int allows α to be instantiated only to
+types that are disjoint from Int. Without a disjointness constraint, the term Λα. λ(x : α). x , , 1
+is rejected. Otherwise such a term would allow α to be instantiated to Int, and thus the
+function could be applied to numbers, e.g., 2, leading to the ambiguous merge 2 , , 1.
+
+2.2    Row Polymorphism through Disjoint Polymorphism
+Row types, originally introduced by Wand [63] to model inheritance, provide an approach
+to typing extensible records. Row types have been studied extensively [35, 11, 53, 42] and
+have been applied to provide extensibility in various type systems [37, 36, 38]. According to
+Rémy [53], record calculi can be divided into those that support free extension, and those
+that support strict extension. The former allows extension with fields that already exist,
+whereas the latter does not. In this paper we focus on λ|| , a calculus proposed by Harper
+and Pierce [34] that extends System F with row polymorphism. λ|| belongs to the strict
+camp and avoids concatenating records with a field label in common by means of constrained
+quantification. A constrained quantifier attaches a constraint list to a type variable, which
+restricts the instantiations of that type variable to be record types with field labels that are
+distinct from all the record types in the constraint list. What sets λ|| apart from other strict
+record calculi is its ability to merge records with statically unknown fields, and a mechanism
+to ensure that the resulting record is conflict-free (i.e., no duplicate labels). The following
+function concatenates two records by the merge operator ||:
+
+   mergeRcd = Λ(α1 # Empty). Λ(α2 # α1 ). λ(x1 : α1 ). λ(x2 : α2 ). x1 || x2
+
+which takes two type variables, each of which lacks (#) the appropriate fields (Empty means
+no constraints at all). The function above can take any record type as its first argument, but
+the second type must be compatible with the first (α2 #α1 ), i.e., the second record cannot
+have any labels that also occur in the first. These constraints ensure that the resulting record
+x1 || x2 has no duplicate labels. If later we want to say that the first record x1 has at least a
+field l1 of type Int, we can refine the constraint list of α1 , α2 and the type of x1 accordingly:
+
+   Λ(α1 # {l1 : Int}). Λ(α2 # (α1 , {l1 : Int})). λ(x1 : α1 || {l1 : Int}). λ(x2 : α2 ). x1 || x2
+
+Encoding with disjoint polymorphism. Our encoding of λ|| into F+       i is based on the simi-
+larities between the two calculi that the astute reader may have already observed. Indeed,
+the constrained quantification of record type variables Λ(α # R). ε is quite similar to the
+disjoint quantification Λ(α ∗ A). E. They both constrain the use of respectively the record
+concatenation operator x1 || x2 and the merge operator x1 , , x2 . Exploiting these similarities,
+we can encode mergeRcd as follows in F+ i :
+
+   mergeAny = Λ(α1 ∗ >). Λ(α2 ∗ α1 ). λ(x1 : α1 ). λ(x2 : α2 ). x1 , , x2
+
+An important difference is that in mergeRcd, α1 and α2 are row variables: they can only be
+instantiated with record types. In contrast in mergeAny, α1 and α2 are type variables and
+they can be instantiated with any types, including types which are not records (such as Int).
+
+Formal elaboration. To establish the validity of the encoding, we have formalized two
+different elaborations of λ|| into F+
+                                    i . The first elaboration exploits the obvious similarity
+between the two mechanisms. While it clearly works for many example programs, the
+
+
+                                                                                                      ECOOP 2020
+27:6   Row and Bounded Polymorphism via Disjoint Polymorphism
+
+
+       formalization of the metatheory reveals that the straightforward elaboration does not work
+       for all programs. Indeed, it turns out that there is a subtle difference in the interpretation
+       of the constrained quantification and the disjoint quantification that makes the elaboration
+       break down in some cases. For instance, the λ|| binder Λα#{l : Int} expresses that α cannot
+       have the label l at all. In contrast, the F+
+                                                  i binder Λβ ∗ {l : Int} expresses that β cannot have
+       a field l of type Int, but it can have a field l of some other disjoint type, say Bool. In what
+       we consider to be contrived programs, this subtle difference invalidates the elaboration. We
+       can eliminate this source of semantic difference by slightly restricting λ|| , which is what we
+       do in the first elaboration. However, in order to handle those contrived (but well-typed)
+       unrestricted λ|| programs as well, we also present a more complex elaboration that faithfully
+       captures the semantics of constrained quantification in unrestricted λ|| .
+
+       2.3    Bounded Quantification through Disjoint Polymorphism
+       Bounded quantification is a language feature that integrates parametric polymorphism with
+       subtyping. It was first introduced in the language Fun [12] as a means of typing functions
+       that operate uniformly over all subtypes of a given type, and has been the subject of much
+       theoretical and practical effort [9, 48, 49, 39, 13, 11, 18, 25, 50]. In this paper, we focus on
+       System F<: , which is a calculus with bounded quantification that extends System F.
+          As an illustration of bounded quantification, consider the following definition:
+
+          f = λ(x : {val : Int}). {orig = x, val = x.val + 1}
+
+       The function f has type {val : Int} → {orig : {val : Int}, val : Int}, but it actually works for all
+       records that have a val field of type Int. Thanks to bounded quantification we can formulate
+       a variant of f that admits this:
+
+          fpoly = Λ(α <: {val : Int}). λ(x : α). {orig = x, val = x.val + 1}
+
+       The term fpoly has type ∀(α <: {val : Int}). α → {orig : α, val : Int}. Here the (upper-)bound
+       {val : Int} restricts the instantiation of the quantified type variable α to subtypes of {val : Int}.
+
+       Encoding with disjoint polymorphism. Pierce [48] informally discussed an encoding of
+       bounded quantification in terms of intersection types. To illustrate the encoding, let us
+       consider a function of type ∀(α <: Int). α → α, which requires the type of the argument to
+       be a subtype of Int. With intersection types, we know that α & Int is always a subtype of Int.
+       Therefore, the type ∀α. (α & Int) → (α & Int) expresses a similar subtype requirement. This
+       leads to the following encoding of bounded quantification, by reading a bounded quantifier
+       as an abbreviation for an unbounded one with a slightly modified body:
+
+          ∀(α <: A). B , ∀β. ([β & A/α]B)
+
+       For the fpoly example, we have its encoded type
+
+          ∀β. β & {val : Int} → {orig : β & {val : Int}, val : Int}
+
+           However, there is no formalization of this encoding, and it is not clear at all what fragment
+       of programs can be encoded. Pierce showed that this is not an encoding for full F<: as it
+       does not respect the subtyping rule for universal quantification. Nevertheless, after some
+       experimentation, where the encoding was manually applied to complex examples, he came to
+       the conclusion that “the encoding trick works better than might be expected”. Castagna and
+N. Xie, B. C. d. S. Oliveira, X. Bi, and T. Schrijvers                                                    27:7
+
+
+Xu [19] even claim that “bounded quantification does not require any modification” in their
+intersection type system due to this encoding. However, due to Pierce’s counterexamples,
+without further qualification, this statement cannot be fully justified.
+    What is missing is to clarify precisely the expressiveness of this encoding with a type-
+theoretic formalization. Our work serves as a basis to fill the gaps, by identifying an encodable
+fragment of F<: , i.e., kernel F<: , and thus, for the first time, validates the informal observation
+of this encoding.
+
+Formal elaboration. We formalize Pierce’s informal encoding idea and turn it into a
+structurally recursive procedure that systematically and simultaneously replaces all bounded
+quantifiers in a term. While doing this we faced several technical challenges. The first one
+was the misalignment between the F<: and F+    i type systems: the former is undirected and the
+latter is bidirectional. This is a source of complication. In particular, we need to add explicit
+type annotations for all terms whose type cannot be synthesized, but only checked. Another
+challenge was the implicit use of subsumption in the typing of F<: terms. We shift around
+the position in the term where subsumption happens and still arrive at the same type for
+the whole term. While the different typing derivations may lead to different F+   i elaborations,
+we do not want those different elaborations to have a different meaning. Hence, we must
+show that the elaboration is coherent. Finally we had to identify the class of F<: programs
+for which the encoding actually works. This was not clear from the individual examples that
+Pierce gave, but it was necessary to make a formal statement that characterizes the extent
+and thus the usefulness of the encoding. Our translation shows that all well-typed kernel F<:
+programs are encodable as well-typed F+     i programs. We believe that this justifies Pierce’s
+claim that the encoding might work better than expected, as kernel F<: is the most common
+decidable fragment of F<: and widely used to model key aspects of OO programs.
+
+
+2.4    The Extra Power of Disjoint Polymorphism
+This section identifies some of the additional expressive power of F+               ||
+                                                                    i over F<: and λ alone.
+
+
+Distributivity, Nested Composition and Family Polymorphism. F+        i is based on BCD
+subtyping [4], which features distributive subtyping rules, and enables nested composition
+of merges. Nested composition has several applications. In particular it is a key feature to
+enable family polymorphism [29].
+    With nested composition we can model a combinator that is useful to compose interpre-
+tations of embedded DSLs. A minimal example [7] is:
+ type R[e] = {lit : Int → e, neg : e → e} -- literal and negative expressions
+ compose = Λ(a * >). Λ(b * a). λ(r1 : R[a]). λ(r2 : R[b]). (r1 ,, r2) : R[a & b]
+
+Here R[e] stands for the abstract syntax of a tiny form of arithmetic expressions. The
+combinator compose allows the composition of two arbitrary interpretations (such as evaluation
+and pretty printing), into a single interpretation that runs both interpretations at once. In
+F+i this functionality is achieved by simply merging r1 and r2. Nested composition takes care
+of the details, by implicitly using a form of type-directed code generation, which is triggered
+by the upcast: R[a] & R[b] <: R[a & b] in expression r1 ,, r2. The type of r1 ,, r2 is
+R[a] & R[b]. In F+  i , due to the distributivity properties of intersections, such a type is a
+subtype of R[a & b]. Importantly, the fact that records are not treated specially in the type
+language is a key to allowing distributivity, which in turn enables nested composition.
+
+
+
+                                                                                                        ECOOP 2020
+27:8   Row and Bounded Polymorphism via Disjoint Polymorphism
+
+
+          The interested reader can see the work by Bi et al. [6, 7] for more complete examples.
+       These examples illustrate how nested composition provides a simple and elegant solution to
+       the Expression Problem (EP) [62]. In essence the approach mimics Ernst’s solution to the
+       EP with family polymorphism [30] (which also relies on a form of nested composition).
+          With bounded quantification alone, compose is essentially not expressible. A solution
+       with row polymorphism can be simulated only at the cost of more work:
+        Λ(a # Empty). Λ(b # a). λ(r1 : R[a]). λ(r2 : R[b]).
+          { lit = λ(i : Int)   . (r1.lit i      , r2.lit i)
+          , neg = λ(e : (a, b)). (r1.neg (fst e), r2.neg (snd e)) }
+
+       Since row polymorphism does not support nested composition of merges, the code for
+       executing the two interpretations at once has to be explicitly modeled with some tedious
+       boilerplate code. Moreover, the results of the two interpretations have to be stored in a pair,
+       and explicit projections are necessary to access the values.
+           In essence the manual composition approach employed with row polymorphism is akin
+       to some existing solutions to the EP which need to tediously compose classes in different
+       families manually. For instance, it is well-known that Scala enables solutions to the EP [65].
+       However, without nested composition those solutions are cluttered with manual composition
+       code. In contrast, solutions based on nested composition are much more concise and elegant
+       thanks to the automatic composition [30, 6, 7].
+
+       Subtyping and row typing. F+  i combines both subtyping and row polymorphism under one
+       roof. The majority of systems with row polymorphism have been employed as an alternative
+       to subtyping (although some row calculi also have subtyping, e.g., [11]). λ|| , in particular,
+       has no subtyping. One argument for row polymorphism is that it also eliminates the loss of
+       information problem of subtyping [11]. For example, with subtyping, an identity function:
+
+          λ(x : {l : Int}). x
+
+       with type {l : Int} → {l : Int} may, inadvertently, lose some precision on the output type.
+       For instance, the function can be applied to the record {l = 1, l 0 = True}, but the result type
+       of such an application is {l : Int} and not {l : Int, l 0 : Bool}.
+           λ|| solves the loss of information problem by formulating the function in a different way:
+
+          Λ(α # {l : Int}). λ(x : {l : Int} || α). x
+
+       In this function the row variable α stands for any record without a label l. The type of x
+       expresses that x includes a label l, as well as any labels in α. In this function the output
+       type is {l : Int} || α as well. Therefore the application of the function to {l = 1, l 0 = True}
+       has the type {l : Int, l 0 : Bool}, which does not lose precision.
+           In F+                                  ||
+               i we can easily translate the λ approach and reap its benefits too:
+
+          Λ(α ∗ {l : Int}). λ(x : {l : Int} & α). x
+
+       This function, like the row polymorphic version, preserves the precision of the output type.
+          Nevertheless, for many functions subtyping does not lose precision. For example:
+
+          λ(x : {l : Int}). x.l + 1
+
+       The function has type {l : Int} → Int. In this case no matter which record is passed as an
+       argument the output type is as precise as it can be. Note that this function is valid in F+i
+       and, because of subtyping, the record {l = 1, l 0 = True} is a valid argument. However in λ|| ,
+       the only way to allow records with more labels, is to generalize the function to:
+N. Xie, B. C. d. S. Oliveira, X. Bi, and T. Schrijvers                                                27:9
+
+
+
+
+     Λ(α # {l : Int}). λ(x : {l : Int} || α). x.l + 1
+
+In this case the generalization does not gain any precision, and in fact it requires a more
+complex type than the version with subtyping.
+    In summary, unlike λ|| , many functions in F+ i can have a simpler non-polymorphic type
+and still allow for larger records to be used as inputs.
+
+ 3      Disjoint Polymorphism
+This section reviews F+i , which serves as target of our elaborations of row and bounded
+                     +
+polymorphism. The Fi calculus and its metatheory have been studied already in Bi et al. [7].
+We refer to prior work on for further details regarding F+
+                                                         i ’s formalization and metatheory.
+
+
+3.1     Syntax and Semantics
+Syntax. The syntax of F+   i is given at the top of Figure 1. Types A, B, C include integers
+Int, the top type >, the bottom type ⊥, arrows A → B, intersection types A & B, singleton
+record types {l : A}, type variables α and disjoint quantification ∀(α ∗ A). B. Expressions
+E include term variables x, integers i, the top value >, abstractions λx. E, applications
+E1 E2 , merge expressions E1 , , E2 , annotated terms E : A, singleton records {l = E}, record
+projections E.l, type abstractions Λ(α ∗ A). E and type applications E A. Term contexts Γ
+record types of term variables, and type contexts ∆ record disjointness constraints of type
+variables. Well-formedness of a type or a context are standard and omitted here.
+
+Subtyping. The subtyping relation of F+     i is presented in the middle of Figure 1. Most
+rules are standard. For functions (rule S-arr) and disjoint quantifications (rule S-forall),
+subtyping is covariant in positive positions, and contravariant in negative positions. Rules S-
+andl, S-andr, and S-and for intersection types axiomatize that A & B is the greatest lower
+bound of A and B. Moreover, F+     i features BCD-style subtyping [4], where intersections
+are distributive over other type constructs. Concretely, intersections distribute over arrows
+(rule S-distArr), records (rule S-distRcd) and disjoint quantifications (rule S-distAll).
+Rules S-topArr, S-topRcd, and S-topAll are special cases of the distributivity rules,
+when viewing > as a 0-ary intersection.
+
+Typing. The bidirectional typing rules for F+  i are given at the bottom of Figure 1. The
+inference judgment ∆; Γ ` E ⇒ A says that under the type context ∆ and the term context
+Γ, we can synthesize the type A for the expression E. The checking judgment ∆; Γ ` E ⇐ A
+checks E against the type A under the contexts ∆ and Γ. Most of the typing rules are
+standard. Rule T-merge says that the merge expression E1 , , E2 is well-typed if both
+sub-expressions are well-typed, and their types are disjoint. The disjointness judgment
+∆ ` A1 ∗ A2 is important to rule out invalid merges, such as 1 , , 2. Rule T-tabs says that,
+when typing a type abstraction, we put the disjointness constraint into the type context and
+then type-check the body. Conversely, rule T-tapp checks that the type argument should
+satisfy the disjointness constraint.
+
+Disjointness. Figure 2 presents the rules of the disjointness relation. Essentially, disjointness
+checks whether the merge of two expressions preserves coherence. Rules D-topL and D-
+topR say that top-like types are disjoint with any type. The top-like predicate eAd, given at
+
+
+
+                                                                                                    ECOOP 2020
+27:10   Row and Bounded Polymorphism via Disjoint Polymorphism
+
+
+
+            Types              A, B, C     ::=     Int | > | ⊥ | A → B | A & B | {l : A} | α | ∀(α ∗ A). B
+            Expressions        E           ::=     x | i | > | λx. E | E1 E2 | E1 , , E2 | E : A | {l = E} | E.l
+                                           |       Λ(α ∗ A). E | E A
+            Term contexts      Γ           ::=     • | Γ, x : A
+            Type contexts      ∆           ::=     • | ∆, α ∗ A
+
+        A <: B                                                                              (Declarative subtyping)
+
+                          S-trans                                                             S-rcd
+         S-refl           A2 <: A3        A1 <: A2           S-top            S-bot               A <: B
+          A <: A                   A1 <: A3                    A <: >         ⊥ <: A           {l : A} <: {l : B}
+
+          S-arr                            S-forall                                    S-and
+          B1 <: A1       A2 <: B2             B1 <: B2           A2 <: A1              A1 <: A2        A1 <: A3
+          A1 → A2 <: B1 → B2                  ∀(α ∗ A1 ). B1 <: ∀(α ∗ A2 ). B2              A1 <: A2 & A3
+
+           S-andl                    S-andr                     S-distArr
+
+           A1 & A2 <: A1             A1 & A2 <: A2               (A1 → A2 ) & (A1 → A3 ) <: A1 → A2 & A3
+
+          S-distRcd                                    S-distAll
+
+           {l : A} & {l : B} <: {l : A & B}            (∀(α ∗ A). B1 ) & (∀(α ∗ A). B2 ) <: ∀(α ∗ A). B1 & B2
+
+                     S-topArr                        S-topRcd                      S-topAll
+
+                      > <: > → >                     > <: {l : >}                  > <: ∀(α ∗ >). >
+
+
+        ∆; Γ ` E ⇒ A                                                                                      (Inference)
+
+                 T-top                     T-nat                          T-var
+                 `∆       ∆`Γ              `∆          ∆`Γ                `∆        ∆`Γ         (x : A) ∈ Γ
+                 ∆; Γ ` > ⇒ >                 ∆; Γ ` i ⇒ Int                       ∆; Γ ` x ⇒ A
+
+             T-app                                                        T-tabs
+             ∆; Γ ` E1 ⇒ A1 → A2           ∆; Γ ` E2 ⇐ A1                  ∆`A        ∆, α ∗ A; Γ ` E ⇒ B
+                          ∆; Γ ` E1 E2 ⇒ A2                               ∆; Γ ` Λ(α ∗ A). E ⇒ ∀(α ∗ A). B
+
+            T-merge                                                                T-rcd
+            ∆; Γ ` E1 ⇒ A1         ∆; Γ ` E2 ⇒ A2          ∆ ` A1 ∗ A2                 ∆; Γ ` E ⇒ A
+                          ∆; Γ ` E1 , , E2 ⇒ A1 & A2                               ∆; Γ ` {l = E} ⇒ {l : A}
+
+          T-proj                         T-anno                         T-tapp
+          ∆; Γ ` E ⇒ {l : A}              ∆; Γ ` E ⇐ A                  ∆; Γ ` E ⇒ ∀(α ∗ B). C         ∆`A∗B
+            ∆; Γ ` E.l ⇒ A               ∆; Γ ` E : A ⇒ A                        ∆; Γ ` E A ⇒ [A/α]C
+
+
+        ∆; Γ ` E ⇐ A                                                                                      (Checking)
+
+                     T-abs                                               T-sub
+                     ∆`A           ∆; Γ, x : A ` E ⇐ B                   ∆; Γ ` E ⇒ B         B <: A
+                          ∆; Γ ` λx. E ⇐ A → B                                   ∆; Γ ` E ⇐ A
+
+
+
+          Figure 1 Syntax, declarative subtyping, and bidirectional type system of F+
+                                                                                    i .
+N. Xie, B. C. d. S. Oliveira, X. Bi, and T. Schrijvers                                                       27:11
+
+
+eAd                                                                                    (Top-like types)
+
+                       TL-and                  TL-arr            TL-rcd            TL-all
+      TL-top           eAd    eBd                eBd               eAd                 eBd
+      e>d                eA & Bd               eA → Bd           e{l : A}d         e∀(α ∗ A). Bd
+
+
+∆`A∗B                                                                                      (Disjointness)
+
+       D-topL                 D-topR             D-ax                   D-arr
+          eAd                    eBd              A ∗ax B                    ∆ ` A2 ∗ B2
+       ∆`A∗B                  ∆`A∗B              ∆`A∗B                  ∆ ` A1 → A2 ∗ B1 → B2
+
+   D-andL                                D-andR                              D-rcdNeq
+   ∆ ` A1 ∗ B      ∆ ` A2 ∗ B            ∆ ` A ∗ B1      ∆ ` A ∗ B2                l1 6= l2
+        ∆ ` A1 & A2 ∗ B                        ∆ ` A ∗ B1 & B2               ∆ ` {l1 : A} ∗ {l2 : B}
+
+      D-rcdEq                          D-tvarL                           D-tvarR
+          ∆`A∗B                        (α ∗ A) ∈ ∆      A <: B           (α ∗ A) ∈ ∆       A <: B
+      ∆ ` {l : A} ∗ {l : B}                  ∆`α∗B                             ∆`B∗α
+
+                                  D-forall
+                                     ∆, α ∗ A1 & A2 ` B1 ∗ B2
+                                  ∆ ` ∀(α ∗ A1 ). B1 ∗ ∀(α ∗ A2 ). B2
+
+
+
+   Figure 2 Selected rules for disjointness.
+
+
+the top of Figure 2, captures the set of types that are isomorphic to >. Disjointness axioms
+A ∗ax B (appearing in rule D-ax) take care of two types with different type constructors (e.g.,
+Int and records). The axiom rules can be found in Appendix A.2. The other disjointness
+rules are standard and explained in detail in previous work [46, 2]. Finally, we note that
+subtyping preserves disjointness.
+I Lemma 1 (Subtyping preserves disjointness). If ∆ ` A ∗ B and B <: C , then ∆ ` A ∗ C .
+
+3.2    Elaboration and Coherence
+The dynamic semantics of F+       i is given by a type-directed elaboration (     e ) into another
+calculus, Fco , a variant of System F with explicit coercions. The full definition of Fco and
+the elaboration process can be found in Appendix B. The main challenge of the elaboration
+is that, due to the non-deterministic nature of the declarative type system, an F+    i expression
+can elaborate to different Fco expressions. For example, the subtyping rules S-and, S-andl,
+and S-andr overlap with each other when both sides are intersections, leading to different
+coercions depending on the order in which these rules are applied. To establish coherence for
+F+i , Bi et al. [7] resort to contextual equivalence, and they prove that different elaborations of
+the same F+  i expression are contextually equivalent. More formally, ∆; Γ ` e1 wctx e2 means
+that two Fco expressions are contextually equivalent under the corresponding elaboration
+contexts of ∆ and Γ. We state the central coherence theorem below.
+I Theorem 2 (Coherence of F+
+                           i ). We have that
+   If ∆; Γ ` E ⇒ A  e1 , and ∆; Γ ` E ⇒ A                e2 , then ∆; Γ ` e1 wctx e2 .
+   If ∆; Γ ` E ⇐ A  e1 , and ∆; Γ ` E ⇐ A                e2 , then ∆; Γ ` e1 wctx e2 .
+
+
+
+                                                                                                            ECOOP 2020
+27:12   Row and Bounded Polymorphism via Disjoint Polymorphism
+
+
+            4    Encoding Row Polymorphism
+        This section shows how to systematically elaborate λ|| [34] – a polymorphic record calculus
+        with constrained quantification – into F+ i . We first identify a simple and direct elaboration
+        for a fragment of λ|| , and then present a carefully crafted elaboration of full λ|| using a more
+        sophisticated elaboration.
+
+        4.1      Syntax of λ||
+        We start by briefly reviewing the syntax of λ|| , shown at the top of Figure 3. Metavariable t
+        ranges over types, which include the integer type Int, function types t1 → t2 , constrained
+        quantifications ∀α # R. t and record types r. Record types are built from record type variables
+        α, the empty record type Empty, single-field records {l : t} and record merges r1 || r2 .1 A
+        constraint list R of record types is used to constrain instantiations of record type variables.
+            Metavariable ε ranges over terms, including term variables x, integers i, lambda abstrac-
+        tions λ(x : t). ε, function applications ε1 ε2 , the empty record empty, single-field records
+        {l = ε}, record merges ε1 || ε2 , record restrictions ε\l, record projections ε.l, type abstractions
+        Λ(α # R). ε and type applications ε [r]. As a side note, from the syntax of type applications
+        ε [r], it can already be seen that λ|| only supports quantification over record types.
+
+        4.2      Typing Rules of λ||
+        The type system of λ|| consists of several conventional judgments. The complete set of rules
+        appears in Appendix C.2. Figure 3 presents selected well-formedness rules for record types.
+        A merge r1 || r2 is well-formed in context T if r1 and r2 are well-formed, and moreover, r1
+        and r2 are compatible in T (rule wfr-Merge) – the most important judgment in λ|| , as we
+        will explain next.
+
+        Compatibility. The compatibility relation in the middle of Figure 3 plays a central role in λ|| .
+        It is the underlying mechanism for deciding when merging two records is “sensible”. Informally,
+        T ` r1 # r2 holds if r1 lacks every field contained in r2 and vice versa. Compatibility is
+        symmetric (rule cmp-Symm) and respects type equivalence (rule cmp-Eq). Rule cmp-Base
+        says that if a record is compatible with {l : t}, it is also compatible with every record
+        {l : t 0 } with the same label l. A type variable is compatible with the records in its constraint
+        list (rule cmp-Tvar). Two single-field records are compatible if they have different labels
+        (rule cmp-BaseBase). The remaining rules are self-explanatory; we refer the reader to [34]
+        for further explanation. The judgment of constraint list satisfaction T ` r # R ensures that
+        r is compatible with every record in the constraint list R.
+
+        Type equivalence. Unlike F+        ||                                   ||
+                                      i , λ does not have subtyping. Instead, λ uses type equivalence
+        to convert terms of one type to another. A selection of the rules defining equivalence of types
+        and constraint lists appears at the bottom of Figure 3. The relation t1 ∼ t2 is an equivalence
+        relation, and is a congruence with respect to the type constructors. Merge is associative
+        (rule teq-MergeAssoc), commutative (rule teq-MergeComm), and has Empty as its unit
+        (rule teq-MergeUnit). As a consequence, records are identified up to permutations. The
+        equivalence of constrained quantification (rule teq-CongAll) relies on the equivalence of
+
+
+        1
+            The original λ|| also includes record type restrictions r \ l, which can be systematically erased using
+            type equivalence, thus we omit type-level restrictions but keep term-level restrictions.
+N. Xie, B. C. d. S. Oliveira, X. Bi, and T. Schrijvers                                                                          27:13
+
+
+
+              Types                    t     ::=     Int | t1 → t2 | ∀α # R. t | r
+              Records                  r     ::=     α | Empty | {l : t} | r1 || r2
+              Constraint lists         R     ::=      | r, R
+              Terms                    ε     ::=     x | i | λ(x : t). ε | ε1 ε2 | empty | {l = ε} | ε1 || ε2
+                                             |       ε \ l | ε.l | Λ(α # R). ε | ε [r]
+              Term contexts            G     ::=      | G, x : t
+              Type contexts            T     ::=      | T, α # R
+
+T ` r record                                                                                  (Well-formed record types)
+
+                wfr-Var                            wfr-Merge
+                (α # R) ∈ T                        T ` r1 record          T ` r2 record         T ` r1 # r2
+                T ` α record                                          T ` r1 || r2 record
+
+
+T ` r1 # r2                                                                                                (Compatibility)
+
+    cmp-Eq                                               cmp-Symm                 cmp-Base
+    T ` r #s           r ∼ r0          s ∼ s0            T ` r #s                 T ` r # {l : t}         T ` t0 type
+                         0      0
+                    T ` r #s                             T ` s#r                             T ` r # {l : t0 }
+
+        cmp-Tvar                                                     cmp-MergeE                    cmp-Empty
+        (α # R) ∈ T           T ` R ok          r ∈R                 T ` r # (s1 || s2 )            T ` r record
+                        T ` α#r                                          T ` r # si                 T ` r # Empty
+
+        cmp-MergeI                                                        cmp-BaseBase
+        T ` s1 # s2          T ` r # s1         T ` r # s2                l 6= l 0 T ` t type           T ` t0 type
+                      T ` r # (s1 || s2 )                                          T ` {l : t} # {l 0 : t0 }
+
+
+T ` r #R                                                                                   (Constraint list satisfaction)
+
+                             cmpList-Nil                             cmpList-Cons
+                             T ` r record                            T ` r # r0  T ` r #R
+                              T ` r #                                      T ` r # r 0, R
+
+
+t1 ∼ t2                                                                                                (Type equivalence)
+
+        teq-MergeAssoc                                     teq-MergeComm                        teq-MergeUnit
+
+        r1 || (r2 || r3 ) ∼ (r1 || r2 ) || r3              r1 || r2 ∼ r2 || r1                  r || Empty ∼ r
+
+                                                   teq-CongAll
+                                                     R ∼ R0   t ∼ t0
+                                                   ∀α # R. t ∼ ∀α # R0 . t0
+
+
+R1 ∼ R2                                                                                      (Constraint list equivalence)
+
+ceq-Swap                            ceq-Merge                              ceq-Empty               ceq-Base
+    0           0
+r, (r , R) ∼ r , (r, R)             (r1 || r2 ), R ∼ r1 , (r2 , R)         Empty, R ∼ R            {l : t}, R ∼ {l : t0 }, R
+
+
+
+   Figure 3 Syntax, and selected rules of λ|| .
+
+
+
+
+                                                                                                                               ECOOP 2020
+27:14   Row and Bounded Polymorphism via Disjoint Polymorphism
+
+
+         T;G ` ε : t      E                                                                         (Type-directed elaboration)
+
+              wtt-Eq                                                               wtt-Base
+              T;G ` ε : t          E           T ` t0 type      t ∼ t0                   T;G ` ε : t            E
+                                           0            0
+                          T;G ` ε : t             E : Jt K                         T ; G ` {l = ε} : {l : t}        {l = E}
+
+        wtt-Restr                                  wtt-Select                                    wtt-Empty
+        T ; G ` ε : {l : t} || r       E             T ; G ` ε : {l : t} || r        E              T ok   T ` G ok
+        T;G ` ε \ l : r       E : JrK               T ; G ` ε.l : t      (E : {l : JtK}).l       T ; G ` empty : Empty        >
+
+               wtt-Merge
+                        T ; G ` ε1 : r1           E1                        wtt-AllE
+               T ; G ` ε2 : r2    E2              T ` r1 # r2               T ; G ` ε : ∀α # R. t        E      T ` r #R
+                T ; G ` ε1 || ε2 : r1 || r2         E1 , , E2                   T ; G ` ε [r] : [r/α]t       E JrK JrK⊥
+
+                              wtt-AllI
+                                                 T ` R ok        T, α # R; G ` ε : t         E
+                              T ; G ` Λ(α # R). ε : ∀α # R. t               Λ(α ∗ JRK). Λ(α⊥ ∗ JRK). E
+
+
+
+            Figure 4 Selected typing rules of λ|| with elaboration.
+
+
+        constraint lists R1 ∼ R2 . Again, it is an equivalence relation, and it respects type equivalence.
+        Constraint lists are essentially finite sets, so order is irrelevant (rule ceq-Swap). Merges
+        of constraints can be “flattened” (rule ceq-Merge), and occurrences of Empty may be
+        eliminated (rule ceq-Empty). The last rule ceq-Base is quite interesting: it implies that
+        the types of single-field records are ignored. The reason is that, as far as compatibility is
+        concerned, only labels matter, thus changing the types of records in constraint lists will not
+        affect their compatibility relation. We will have more to say about this in Section 4.3.
+
+        Typing rules. A selection of typing rules is shown in Figure 4. In a first reading, the gray
+        parts can be ignored. Most of the typing rules are quite standard. Typing is invariant under
+        type equivalence (rule wtt-Eq). Two terms can be merged if their types are compatible
+        (rule wtt-Merge). Type application ε [r] is well-typed if the type argument r satisfies the
+        constraints R (rule wtt-AllE).
+        I Remark 3. We have made a few simplifications compared to the original λ|| , notably the
+        typing of record selection (rule wtt-Select) and restriction (rule wtt-Restr). In the
+        original formulation, both typing rules use a partial function r_l that denotes the type
+        associated with label l in r. Instead of using partial functions, here we explicitly expose the
+        expected label in a record. It can be shown that if label l is present in record type r, then
+        the fields in r can be rearranged so that l comes first by type equivalence. This formulation
+        was also adopted by Leijen [35].
+
+
+        4.3     A Simple yet Incomplete Encoding
+        The similarities between λ|| and F+ i , which the astute reader may have already observed,
+        suggest an intuitive elaboration scheme. On the syntactic level, it is easy to see a one-to-one
+        correspondence between λ|| types and F+    i types. We use JtK to denote the elaboration
+N. Xie, B. C. d. S. Oliveira, X. Bi, and T. Schrijvers                                                                 27:15
+
+
+
+          JtK                JIntK     =    Int                JRK               JK    =    >
+                      Jt1 → t2 K       =    Jt1 K → Jt2 K                     Jr, RK    =    JrK & JRK
+                 J∀α # R. tK           =    ∀(α ∗ JRK). JtK    JT K              JK    =    •
+                              JαK      =    α                           JT, α # RK      =    JT K, α ∗ JRK
+                       JEmptyK         =    >                  JGK               JK    =    •
+                       J{l : t}K       =    {l : JtK}                     JG, x : tK    =    JGK, x : JtK
+                      Jr1 || r2 K      =    Jr1 K & Jr2 K
+
+
+ T;G ` ε : t    i E                                                                    (Type-directed elaboration)
+
+     wtti-Eq                                                          wtti-Base
+     T;G ` ε : t       i E           T ` t0 type      t ∼ t0                 T;G ` ε : t          i E
+                                0               0
+                T;G ` ε : t           i E : Jt K                      T ; G ` {l = ε} : {l : t}     i {l = E}
+
+
+ wtti-AllI                                                        wtti-AllE
+     T ` R ok           T, α # R; G ` ε : t         i E           T ; G ` ε : ∀α # R. t      i E           T ` r #R
+ T ; G ` Λ(α # R). ε : ∀α # R. t           i Λ(α ∗ JRK). E                T ; G ` ε [r] : [r/α]t        i E JrK
+
+
+
+
+   Figure 5 Intuitive elaboration functions, and selected type-directed elaboration from λ|| to F+
+                                                                                                 i .
+
+
+
+
+function from λ|| types to F+ i types, whose formal definition is given at the top of Figure 5.
+Elaboration of expressions is also easy. Constrained type abstractions Λ(α # R). ε correspond
+to Λ(α ∗ A). E; record merges can be simulated by the more general merge operator of
+F+i ; record restriction can be modeled as annotated terms, and so on. On the semantic
+level, well-formedness judgments of λ|| match with well-formedness judgments of F+     i . The
+compatibility relation corresponds to the disjointness relation. What might not be so obvious
+is that type equivalence is expressible via subtyping. More specifically, t1 ∼ t2 induces two
+subtyping relations: Jt1 K <: Jt2 K and Jt2 K <: Jt1 K. Under this elaboration scheme, the full
+definition of type-directed elaboration, denoted as T ; G ` ε : t i E , where i stands for
+“intuitive”, is simple (selected rules are given at the bottom of Figure 5). With all these in
+mind, let us consider two examples.
+
+I Example 4. Consider the term Λ(α # {l : Int}). λ(x : α). x. This term can be assigned the
+type (among others) ∀α # {l : Int}. α → α, and its F+ i counterpart Λ(α ∗ {l : Int}). λ(x : α). x
+has type ∀(α ∗ {l : Int}). α → α, which corresponds directly to ∀α # {l : Int}. α → α. In
+λ|| , the same term could also be assigned type ∀α # {l : Bool}. α → α (rule wtt-Eq), since
+∀α # {l : Bool}. α → α is equivalent to ∀α # {l : Int}. α → α by rules teq-CongAll and
+ceq-Base. However, in F+  i , these two types have no relationship at all – ∀(α∗{l : Int}). α → α
+is not the same as ∀(α ∗ {l : Bool}). α → α, and indeed it should not be, as these two types
+have completely different meanings!
+
+I Example 5. Consider the term ε = Λ(α # {l : Bool}). λ(x : α). λ(y : {l : Int}). x || y. This
+term has type ∀α # {l : Bool}. α → {l : Int} → α || {l : Int}, and its “obvious” elaboration is
+E = Λ(α ∗ {l : Bool}). λ(x : α). λ(y : {l : Int}). x , , y. However, expression E is ill-typed in F+
+                                                                                                   i :
+we cannot merge x with y because their types (α and {l : Int} respectively) are not disjoint.
+Allowing it to type-check causes incoherence: evaluating (E {l : Int} {l = 1} {l = 2}).l could
+result in 1 or 2!
+
+
+
+                                                                                                                      ECOOP 2020
+27:16   Row and Bounded Polymorphism via Disjoint Polymorphism
+
+
+            These examples underline a crucial observation: disjointness is more fine-grained than
+        compatibility. Unlike F+                               ||
+                                  i , the existence of ε in λ will not cause incoherence because
+        compatibility can only relate records with different labels, and thus ε can only be applied to
+        records without label l at all. So λ|| rejects type application ε [{l : Int}] in the first place.
+        However, disjointness also relates records with the same label as long as their types are
+        disjoint, i.e., rule D-rcdEq. Section 2.4 illustrates the importance of rule D-rcdEq for
+        distributivity, which is not supported by λ|| . A careful comparison between the two calculi
+        reveals that two rules are “to blame”: rule ceq-Base and rule cmp-Base, which are the
+        cause for the problem in Example 4 and Example 5 respectively.
+
+                                                               T ` r # {l : t}         T ` t0 type
+                                        ceq-Base                                                     cmp-Base
+           {l : t}, R ∼ {l : t0 }, R                                    T ` r # {l : t0 }
+
+            Yet, both Example 4 and Example 5 seem contrived. From the expression Λ(α # {l :
+        Int}). λ(x : α). x, the user can reasonably expect the type to be ∀α # {l : Int}. α → α. For
+        ε, an equivalent definition with more sensible and readable annotation is ε0 = Λ(α # {l :
+        Int}). λ(x : α). λ(y : {l : Int}). x || y, whose corresponding elaboration type-checks successfully.
+        We believe that programs with the same issue always have some equivalent accepted programs
+        by changing some type annotations.
+            We propose a restricted λ|| by: (1) replacing rule ceq-Base with rule ceq-BaseAlt; and
+        (2) removing rule cmp-Base. We conjecture that this change has no practical consequences
+        and no expressiveness is lost. Moreover, the restrictions coincide with the observation in
+        Harper and Pierce [34]: we may normalize constraint lists into the form l1 , . . . , ln , α1 , . . . , αm
+        where the li ’s are labels and the αi ’s are record type variables. The normalization then
+        validates the change of rules.
+
+                     t ∼ t0
+                                        ceq-BaseAlt
+            {l : t}, R ∼ {l : t0 }, R
+
+            In return, we can prove the intuitive elaboration for restricted λ|| is, indeed, sound:
+
+        I Theorem 6 (Type-safety of          i elaboration). If T ; G ` ε : t    i E   then JT K; JGK ` E ⇒ JtK.
+
+
+        4.4     A Complete Encoding of λ|| and its Challenges
+        One criticism to the intuitive encoding is that it does not fully model λ|| : fewer expressions
+        type-check in the modified λ|| . Thus, we present a carefully designed encoding that is able
+        to elaborate the original λ|| to F+ i without any restrictions at all. It is highly non-trivial and
+        reveals the essence of constrained quantification from the point of view of disjointness.
+            First, let us take a step back and have another look at Example 5. As we have discussed,
+        the root cause is rule cmp-Base, which says that if a record is compatible with a single-field
+        record {l : t}, then it is compatible with every single-field record {l : t 0 }. To express the
+        essence of rule cmp-Base in F+                                           +
+                                         i , we utilize the bottom type ⊥. In Fi , according to Lemma 1,
+        if some type A is disjoint to {l : ⊥}, then, because {l : ⊥} <: {l : B} (by rules S-rcd and
+        S-bot) for any B, we have that A is disjoint to {l : B}. In other words, in F+     i , if a record is
+        disjoint to {l : ⊥}, then it is disjoint to every single-field record {l : A}.
+
+        I Lemma 7 (Disjointness to records with bottom). If ∆ ` A ∗ {l : ⊥}, then ∆ ` A ∗ {l : B}
+        for all B.
+N. Xie, B. C. d. S. Oliveira, X. Bi, and T. Schrijvers                                                      27:17
+
+
+Essentially, a compatibility constraint with {l : t} in λ|| corresponds to a disjointness
+constraint to {l : ⊥} in F+  i . Thus, we bottom-elaborate the record types that appear in a
+constraint list: if a record {l : t} appears in a constraint list, then it is bottom-elaborated to
+{l : ⊥}. For Example 4, both ∀α # {l : Int}. α → α and ∀α # {l : Bool}. α → α elaborate to
+∀(α ∗ {l : ⊥}). α → α. For Example 5, ε elaborates to E 0 = Λ(α ∗ {l : ⊥}). λ(x : α). λ(y : {l :
+Int}). x , , y, which type-checks in F+i .
+
+I Example 8. Now consider the λ|| term
+
+   ε1 = (Λ(α # Empty). λ(x : (∀β # α. Int)). 1) [{l : Int}] (Λ(β # {l : Int}). 2)
+
+The term type-checks in λ|| and has type Int. During elaboration, we treat records differently
+according to where they occur. For the type argument {l : Int}, since it is not in a constraint
+list, we elaborate it normally to {l : Int}. For the term argument (Λ(β # {l : Int}). 2),
+since the record {l : Int} appears in a constraint list, we elaborate the term argument to
+(Λ(β ∗ {l : ⊥}). 2). The whole term is then elaborated to
+
+   E1 = (Λ(α ∗ >). ((λx. 1) : (∀(β ∗ α). Int) → Int)) {l : Int} (Λ(β ∗ {l : ⊥}). 2)
+
+However, E1 fails to type-check in F+i : after type application, we substitute α with the type
+argument {l : Int} in x’s type (∀(β ∗ α). Int), yielding (∀(β ∗ {l : Int}). Int), whereas the term
+argument has type (∀(β ∗ {l : ⊥}). Int), which does not match (and is not a subtype of) the
+expected parameter type!
+    The tricky part here is that, for type variables that appear in the constraint list, after
+type application, the elaborated disjointness constraint contains the original type argument
+instead of the bottom-elaborated type. In this case, the result type of type application, i.e.,
+((∀(β ∗ {l : Int}). Int) → Int), has {l : Int} instead of {l : ⊥} in the disjointness constraint.
+    Apparently we cannot bottom-elaborate every type argument, or otherwise we would lose
+type information for records. For example, ((Λ(α # Empty). λ(x : α). x) [{l : Int}] {l = 1}).l +1
+should not elaborate to ((Λ(α ∗ >). (λx. x) : α → α) {l : ⊥} {l = 1}).l + 1, which is ill-typed.
+    Therefore, we bottom-elaborate record variables that appear in a constraint list. To this
+end, we map a record type variable α to a pair of type variables α and α⊥ , where α⊥ is
+used in the disjointness constraint. Note that, α⊥ is not a new sort of type variable–we can
+use α1 or α2 as well – the subscript ⊥ here is only for readability. The bottom-elaborated
+type variable α⊥ is introduced by an extra type abstraction. While α takes the normal
+type argument, α⊥ takes an extra bottom-elaborated type argument. As an example, the
+expression ε1 in Example 8 is elaborated to E10 , which type-checks successfully in F+    i , where
+the differences from E1 are highlighted in gray.
+   E10 = (Λ(α ∗ >). Λ(α⊥ ∗ >) . (λx. 1) : (∀(β ∗ α⊥ ). Int) → Int) {l : Int} {l : ⊥} (Λ(β ∗ {l : ⊥}). 2)
+
+
+   Intentionally, α⊥ is a subtype of α, as it always takes bottom-elaborated type arguments
+that are subtype of the original type arguments. For example, {l : ⊥} is a subtype of {l : Int}.
+However, the type system is unaware of this observation.
+I Example 9. Consider the term
+
+   ε2 = Λ(α # Empty). Λ(β # α). λ(x : α). λ(y : β). x || y.
+
+Under the current approach, it elaborates to
+
+   E2 = Λ(α ∗ >). Λ(α⊥ ∗ >). Λ(β ∗ α⊥ ). Λ(β⊥ ∗ α⊥ ). λ(x : α). λ(y : β). x , , y
+
+
+
+                                                                                                           ECOOP 2020
+27:18   Row and Bounded Polymorphism via Disjoint Polymorphism
+
+
+
+          JtK        JIntK    =   Int                            JrK⊥    JαK⊥     =   α⊥
+                Jt1 → t2 K    =   Jt1 K → Jt2 K                     JEmptyK⊥      =   >
+              J∀α # R. tK     =   ∀(α ∗ JRK). ∀(α⊥ ∗ JRK). JtK      J{l : t}K⊥    =   {l : ⊥}
+                      JαK     =   α                                Jr1 || r2 K⊥   =   Jr1 K⊥ & Jr2 K⊥
+                 JEmptyK      =   >                              JRK       JK    =   >
+                 J{l : t}K    =   {l : JtK}                             Jr, RK    =   JrK & JrK⊥ & JRK
+                Jr1 || r2 K   =   Jr1 K & Jr2 K                  JT K      JK    =   •
+          JGK          JK    =   •                                JT, α # RK     =   JT K, α ∗ JRK, α⊥ ∗ JRK
+                JG, x : tK    =   JGK, x : JtK
+
+           Figure 6 Elaboration functions from λ|| to F+
+                                                       i .
+
+
+
+
+        However, the merge x , , y fails to type-check, as we do not have the information that α ∗ β.
+        We only have β ∗ α⊥ in the context. If the system could know that α⊥ <: α, then by Lemma 1
+        we could derive β ∗ α.
+
+            Twisting F+
+                      i by adding the axiom α⊥ <: α is unsatisfactory, as it complicates the subtyping
+        relation and also significantly affects the metatheory. Our solution is to include both the
+        regularly elaborated types as well as the bottom-elaborated types into the disjointness
+        constraint. In other words, β is disjoint with both α and α⊥ . Now ε2 elaborates to E20 , which
+        type-checks successfully in F+
+                                     i . Note we have also elaborated and bottom-elaborated Empty.
+
+           E20 = Λ(α ∗ > & > ). Λ(α⊥ ∗ > & > ). Λ(β ∗ α & α⊥ ). Λ(β⊥ ∗ α & α⊥ ). λx : α. λy : β. x , , y
+
+
+
+
+        4.5      Formal Elaboration
+        With all the above ideas and observations in mind, we are ready to give a formal account of
+        the elaboration. The elaboration of types is given in Figure 6. We highlight the differences
+        from Figure 5 in grey. There are two ways of elaborating records: JrK (contained in JtK) for
+        regular elaboration and JrK⊥ for bottom elaboration. In regular elaboration JtK, α elaborates
+        to α. Of particular interest is the case of elaborating quantifiers: each quantifier ∀α # R. t is
+        split into two quantifiers ∀(α ∗ JRK). ∀(α⊥ ∗ JRK). JtK in F+
+                                                                    i . The relative order of α and α⊥ is
+        not important, as long as we respect the order when elaborating type applications. Bottom
+        elaboration JrK⊥ elaborates α to α⊥ , and {l : t} to {l : ⊥}.
+            When elaborating constraint lists (JRK), a record r is elaborated to the intersection of
+        both its regular elaboration and bottom elaboration. Thus if β is compatible with α, then
+        its elaboration β is disjoint with both α and α⊥ .
+            Now let us go back to the gray parts in Figure 4. The major difference from Figure 5
+        is rule wtt-AllI and rule wtt-AllE. In rule wtt-AllI, we elaborate constrained type
+        abstractions to disjoint type abstractions with two quantifiers, matching the elaboration of
+        constrained quantification. Note that the relative order of α and α⊥ should match the order of
+        α and α⊥ in elaborating quantifiers. Similarly, in the type application ε [r] (rule wtt-AllE),
+        we first elaborate e to E. The elaboration E is then applied to two types JrK and JrK⊥ , as E
+        has two quantifiers resulting from the elaboration. It is of great importance that the relative
+        order of JrK and JrK⊥ should match the order of α and α⊥ in elaborating quantifiers. There
+        is a protocol that we must follow during elaboration: if α is substituted by JrK, then α⊥ is
+        substituted by JrK⊥ .
+N. Xie, B. C. d. S. Oliveira, X. Bi, and T. Schrijvers                                                    27:19
+
+
+4.6        Metatheory
+Our elaboration enjoys desirable properties. The following lemma states that our elaboration
+function commutes with substitution, in a slightly involved way:
+I Lemma 10 (Elaboration commutes with substitution). We have (1) J[r/α]tK =
+[JrK⊥ /α⊥ ][JrK/α]JtK; (2) J[r/α]r1 K⊥ = [JrK⊥ /α⊥ ][JrK/α]Jr1 K⊥ ; and (3) J[r/α]RK =
+[JrK⊥ /α⊥ ][JrK/α]JRK.
+        We show key lemmas that bridge the gap between row and disjoint polymorphism.
+I Lemma 11 (Type equivalence implies subtyping). If t1 ∼ t2 , then we have Jt1 K <: Jt2 K and
+Jt2 K <: Jt1 K.
+
+I Lemma 12 (Compatibility implies disjointness). If T ` r1 # r2 , then we have: (1) JT K `
+Jr1 K ∗ Jr2 K; (2) JT K ` Jr1 K ∗ Jr2 K⊥ ; (3) JT K ` Jr1 K⊥ ∗ Jr2 K; and (4) JT K ` Jr1 K⊥ ∗ Jr2 K⊥ .
+
+I Lemma 13 (Essence of compatibility). If T ` r # {l : t}, then for all A, we have (1)
+JT K ` JrK ∗ {l : A}; and (2) JT K ` JrK⊥ ∗ {l : A}.
+   With everything in place, we prove that our elaboration in Figure 4 is type-safe. The
+reader can refer to our Coq formalization for details.
+I Theorem 14 (Type-safety of elaboration). If T ; G ` ε : t             E , then JT K; JGK ` E ⇒ JtK.
+
+Coherence. Because of rule wtt-Eq, a λ|| expression can possibly elaborate to many
+different F+
+           i expressions. For example, the term Λ(α # {l : Int}). λ(x : α). x has the following
+two elaborations E1 and E2 (among others). This is the problem of coherence [56]: the
+meaning of a target program depends on the choice of a particular elaboration typing.
+1. E1 = Λ(α ∗ ({l : Int} & {l : ⊥})). Λ(α⊥ ∗ ({l : Int} & {l : ⊥})). λ(x : α). x;
+2. E2 = (E1 : J∀α # {l : Bool}. α → αK) : J∀α # {l : Int}. α → αK
+    To prove that different elaborations are equivalent, we utilize the definition of contextual
+equivalence. In particular, we prove that if a λ|| expression ε with type t elaborates to two
+F+                               +
+  i expressions, and these two Fi expressions further elaborate to two Fco expressions, then
+the Fco expressions are contextually equivalent.
+I Theorem 15 (Coherence of elaboration). If ;  ` ε : t   E1 , and ;  ` ε : t            E2 , and
+•; • ` E1 ⇒ JtK e1 , and •; • ` E2 ⇒ JtK   e2 , then •; • ` e1 wctx e2 .
+
+
+    5      Encoding Bounded Quantification
+This section presents a type-safe and coherent encoding of kernel F<: [12] into F+
+                                                                                 i . This
+encoding validates the informal observation about the relationship between polymorphic
+intersection systems and bounded quantification.
+
+5.1        Syntax and Semantics of kernel F<:
+We start by reviewing the syntax and semantics of kernel F<: , a polymorphic calculus with
+bounded quantification. The syntax of F<: is given at the top of Figure 7. It is a version of
+F<: extended with records2 [10]. In addition to standard System F constructs, types σ include
+
+
+2
+    We could also encode record types in F<: , which however is a bit involved.
+
+
+
+                                                                                                         ECOOP 2020
+27:20   Row and Bounded Polymorphism via Disjoint Polymorphism
+
+
+        bounded quantifications ∀(α <: τ ). σ, which give a bound for the type variable; and record
+        types {l1 : σ1 , .. , ln : σn }, for which we assume all labels are distinct. In addition to standard
+        System F terms, terms  include type abstractions Λ(α <: σ). , records {l1 = 1 , .. , ln = n },
+        and projections .l. Contexts Σ record both the types of term variables, and the bounds of
+        type variables. We use Σ ` σ to mean that a type is well-formed under a context.
+
+        Subtyping. The subtyping relation is presented in the middle of Figure 7. Most rules are
+        quite standard. Rule f-sub-tvar-binds says that a type variable α is a subtype of its
+        bound σ. Rule f-sub-forall, first introduced in Fun [12], requires that the bounds of
+        two quantified types must be identical in order for one to be a subtype of the other. Full
+        F<: relaxes this restriction and includes a more powerful formulation where subtyping of
+        quantified types is contravariant in their bounds and covariant in their bodies. We will discuss
+        full F<: in Section 6.2. Rules f-sub-rcdDepth, f-sub-rcdWidth, and f-sub-rcdPerm
+        together form the usual record subtyping.
+
+        Typing. The typing rules of F<: are shown below the subtyping relation. The reader is
+        advised to ignore the gray parts for now. Most rules are straightforward. Unlike F+   i , F<:
+        has a subsumption rule (rule f-sub) for implicit upcasting that can be triggered anywhere
+        during type-checking. Type abstractions are checked by moving their bounds into the context
+        (rule f-tabs), and type applications check that the type being passed satisfies the bound of
+        the corresponding quantifier (rule f-tapp).
+
+
+        5.2    Elaboration Function
+        Adapting the encoding from Pierce [48] to our setting, we have
+
+           ∀(α <: σ). τ , ∀(α ∗ >). [α & σ/α]τ
+
+        We turn the encoding into an elaboration function. Instead of immediately substituting α
+        with α & σ, we collect the bounds α <: σ as we traverse the quantifiers, and only substitute
+        when we encounter a type variable α. This strategy is consistent with elaborating types with
+        free type variables. For example, consider the expression α <: Int ` (λ(x : α). x + 1) : α → Int.
+        This expression type-checks because we have the information α <: Int in the context so that
+        we can upcast (by rule f-sub) the type of x to Int when checking x + 1. Here it is important
+        to propagate the context information to the type being elaborated. In a fairly standard
+        way, we regard the context as a big binder. Intuitively, if we elaborate α under the context
+        α <: Int, it should give us the same result as if elaborating α inside ∀(α <: Int). α. Therefore,
+        in this case, we substitute α by α & Int, which yields x : α & Int, and thus validates x + 1.
+            Formally, type elaboration is denoted as JσKΣ = A, which reads: under context Σ, type σ
+        elaborates to type A. Elaboration of a closed type is just a special case where the context is
+        empty, i.e., JσK . The full definition is given on the lower left of Figure 7. Most rules are
+        self-explanatory. In particular, bounded quantification elaborates into disjoint quantification
+        by moving the bound information into the context. When elaborating a type variable α, we
+        traverse the context until we find its subtyping constraint α <: σ, and then we substitute it
+        with an intersection type α & JσKΣ .
+
+        I Lemma 16 ( JσKΣ is total). If Σ ` σ, then there exists a unique type A such that JσKΣ = A.
+N. Xie, B. C. d. S. Oliveira, X. Bi, and T. Schrijvers                                                                                27:21
+
+
+  Types          σ, τ     ::=     Int | > | α | σ → τ | ∀(α <: τ ). σ | {l1 : σ1 , .. , ln : σn }
+  Terms                  ::=     i | > | x | λ(x : σ).  | 1 2 | Λ(α <: τ ).  |  σ | {l1 = 1 , .. , ln = n } | .l
+  Value          υ        ::=     i | > | λ(x : σ).  | Λ(α <: σ).  | {l1 = υ1 , .. , ln = υn }
+  Context        Σ        ::=      | Σ, x : σ | Σ, α <: σ
+
+Σ ` σ <: τ                                                                                                             (Subtyping)
+f-sub-refl                 f-sub-trans                                        f-sub-top                  f-sub-tvar-binds
+Σ ok    Σ`σ                Σ ` σ1 <: σ2               Σ ` σ2 <: σ3            Σ ok    Σ`σ                (α <: σ) ∈ Σ
+  Σ ` σ <: σ                            Σ ` σ1 <: σ3                             Σ ` σ <: >                Σ ` α <: σ
+
+f-sub-arrow                               f-sub-forall                                          f-sub-rcdDepth
+Σ ` τ1 <: σ1 Σ ` σ2 <: τ2                       Σ, α <: τ ` σ1 <: σ2                            for each i Σ ` σi <: τi
+ Σ ` σ1 → σ2 <: τ1 → τ2                      Σ ` ∀(α <: τ ). σ1 <: ∀(α <: τ ). σ2                 Σ ` {li : σi } <: {li : τi }
+
+                                                                f-sub-rcdPerm
+    f-sub-rcdWidth
+                                                                {lj0 : τjj∈1..n } is a permutation of {li : σii∈1..n }
+    Σ ` {li : σii∈1..n+k } <: {li : σii∈1..n }                             Σ ` {lj0 : τjj∈1..n } <: {li : σii∈1..n }
+
+
+Σ`:σ           E                                                                                                        (Typing)
+
+             f-top                                    f-nat                              f-var
+                  Σ ok                                     Σ ok                          Σ ok        (x : σ) ∈ Σ
+              Σ`>:>              >                    Σ ` i : Int      i                     Σ`x:σ            x
+
+    f-arrow                                                                          f-sub
+                         Σ, x : σ `  : τ         E                                  Σ`:σ           E        Σ ` σ <: τ
+    Σ ` λ(x : σ).  : σ → τ             (λx. E) : (JσKΣ → Jτ KΣ )                           Σ`:τ          E : Jτ KΣ
+
+f-app                                                               f-tabs
+Σ ` 1 : σ → τ           E1          Σ ` 2 : σ        E2                            Σ, α <: σ `  : τ        E
+              Σ ` 1 2 : τ          E1 E2                          Σ ` Λ(α <: σ).  : ∀(α <: σ). τ                Λ(α ∗ >). E
+
+             f-rcd
+                                        Σ ` 1 : σ1         E1 .. Σ ` n : σn          En
+              Σ ` {l1 = 1 , .. , ln = n } : {l1 : σ1 , .. , ln : σn }           {l1 = E1 }, , .. , , {ln = En }
+
+ f-proj                                                             f-tapp
+ Σ `  : {l1 : σ1 , .. , l : σ, .. , ln : σn }         E             Σ `  : ∀(α <: τ1 ). τ2         E            Σ ` σ <: τ1
+         Σ ` .l : σ       (E : J{l : σ}KΣ ).l                      Σ `  σ : [σ/α]τ2         (E JσKΣ ) : (J([σ/α]τ2 )KΣ )
+
+
+
+  JσKΣ                        JIntKΣ    =       Int                                  TΣU          TU     =        •
+                             J>KΣ       =       >                                 TΣ, α <: σU             =        TΣU, α ∗ >
+                    J(σ → τ )KΣ         =       JσKΣ → Jτ KΣ                         TΣ, x : σU           =        TΣU
+    J({l1 : σ1 , .. , ln : σn })KΣ      =       {l1 : Jσ1 KΣ } & .. & {ln : Jσn KΣ }
+                        JαK(Σ,x:σ)      =       JαKΣ
+                       JαK(Σ,β<:σ)      =       JαKΣ                                 VΣW          VW     =        •
+                   JαK(Σ,α<:σ)          =       α & JσKΣ                                VΣ, α <: σW       =        VΣW
+               J∀(α <: σ). τ KΣ         =       ∀(α ∗ >). Jτ KΣ,α<:σ                     VΣ, x : σW       =        VΣW, x : JσKΣ
+
+   Figure 7 Syntax, subtyping, typing and elaboration of kernel F<: .
+
+
+
+
+                                                                                                                                     ECOOP 2020
+27:22   Row and Bounded Polymorphism via Disjoint Polymorphism
+
+
+            We now lift the elaboration function to contexts, given on the lower right of Figure 7.
+        TΣU elaborates a F<: context to a F+ i type context, in which subtyping constraints α <: σ
+        of type variables are elaborated to disjointness constraints α ∗ > and all term variables are
+        ignored. VΣW elaborates a F<: context to a F+ i term context, in which all type variables are
+        ignored and the types of term variables are elaborated under the prefix context.
+
+        5.3    Type-directed Elaboration
+        An intuitive elaboration scheme of expressions is to simply apply the elaboration function
+        to types. For example, under context Σ, if  elaborates to E, then type applications  σ
+        elaborates to E JσKΣ . Now let us consider an example.
+
+        I Example 17. Consider a F<: judgment
+
+           β <: Int ` (Λ(α <: >). λ(x : α). x) β : β → β
+
+        Here the type application type-checks because by rule f-sub-top we have β <: >. If we
+        elaborate  σ to E JσKΣ directly, the resulting expression is
+
+           (Λ(α ∗ >). (λx. x) : (α & >) → (α & >)) (β & Int)
+
+        Note that as F+
+                      i does not have annotated abstractions, we put the elaborated arrow type as
+        the type annotation. Following the typing rule of F+
+                                                           i , we can infer the type of this expression:
+
+           β ∗ >; • ` (Λ(α ∗ >). ((λx. x) : (α & >) → (α & >)) (β & Int)) ⇒ (β & Int & >) → (β & Int & >)
+
+         However, the expected result type β → β elaborates to
+
+           (β & Int) → (β & Int)
+
+        Now we get a mismatch between the actual type ((β & Int & >) → (β & Int & >)) and the
+        expected type ((β & Int) → (β & Int)) of the expression!
+
+            Fortunately, in this particular example, we can prove that the actual type and the
+        expected type are subtypes of each other, i.e., they are isomorphic. Why is that true? Recall
+        that we have β <: >, which after elaboration gives us (β & Int) <: >. Therefore we can show
+        that the following two subtyping instances are valid: (1) (β & Int & >) → (β & Int & >) <:
+        (β & Int) → (β & Int); and (2) (β & Int) → (β & Int) <: (β & Int & >) → (β & Int & >).
+            More generally, we prove that elaboration commutes with substitution, yielding isomorphic
+        types. Consider that under the context Σ, we have a type application  σ, where  has type
+        ∀(α <: τ1 ). τ2 , and in order for it to type-check, we have σ <: τ1 . The expected type we want
+        of the expression is the elaboration of the F<: typing result, i.e., J([σ/α]τ2 )KΣ . The actual
+        type is the result of feeding the elaborated argument JσKΣ to the elaborated quantification
+        J∀(α <: τ1 ). τ2 KΣ , i.e., [JσKΣ /α](Jτ2 K(Σ,α<:τ1 ) ).
+
+        I Lemma 18 (Elaboration commutes with substitution). Given Σ ` σ <: τ1 , we have (1)
+        J[σ/α]τ2 KΣ <: [JσKΣ /α](Jτ2 K(Σ,α<:τ1 ) ); and (2) [JσKΣ /α](Jτ2 K(Σ,α<:τ1 ) ) <: J([σ/α]τ2 )KΣ .
+
+            Note that the elaboration scheme slightly varies depending on the type semantics of the
+        target intersection type calculi. It is a desirable property that typing should be preserved
+        after elaboration, i.e., the elaborated expression should have the corresponding elaborated
+        type. For languages with an implicit subsumption rule (e.g., rule f-sub in kernel F<: ),
+        Lemma 18 can implicitly upcast the actual type to the expected type, and thus validates the
+N. Xie, B. C. d. S. Oliveira, X. Bi, and T. Schrijvers                                                             27:23
+
+
+kernel F<:        (Λ(α <: Int). λ(x : α). 1) Int                  −→                        λ(x : Int). 1
+
+
+F+
+ i
+                  ((Λ(α ∗ >). ((λx. 1) : α & Int → Int)) Int) : Int → Int                   (λx. 1) : Int → Int
+
+
+Fco               (hid, idi → id) ((Λα. λx. 1) Int)   −→ (hid, idi → id) (λx. 1)     wctx   λx. 1
+
+      Figure 8 Key idea of simulation illustrated with an example.
+
+
+intuitive elaboration of the type applications. For languages with explicit subsumption rules
+(e.g., rule T-sub in F+
+                      i ), to remedy this situation, we need to annotate the expression with
+the expected type to explicitly upcast the type. Concretely, in this example, the elaborated
+expression, with the added annotation highlighted in grey, will be:
+
+      ((Λ(α ∗ >). (λx. x) : (α & >) → (α & >)) (β & Int)) : (β & Int) → (β & Int)
+
+   Finally, we can go back and consider the elaboration of expressions in the grey part of
+Figure 7. Most of the elaboration rules are self-explanatory. In particular, in rule f-tapp,
+type applications  σ elaborates to (E JσKΣ ) : J([σ/α]τ2 )KΣ .
+
+5.4      Metatheory
+Now that we have everything in place, we are ready to prove that our elaboration is sound.
+
+I Theorem 19 (Type-safety of elaboration). If Σ `  : σ                     E , then TΣU; VΣW ` E ⇒ JσKΣ .
+
+    However, due to the implicit upcasting (rule f-sub), a F<: expression can possibly
+elaborate to many different ones in F+
+                                     i . For example, consider (λ(x : >). 2) 1. Two elaborations
+(among others) are (1) ((λx. 2) : > → Int) (1 : >); and (2) (((λx. 2) : > → Int) : Int → Int) 1.
+Therefore, we prove that different elaborations lead to contextually equivalent results.3
+
+I Theorem 20 (Coherence of elaboration). If  `  : σ    E1 , and  `  : σ                          E2 , and
+•; • ` E1 ⇒ JσK e1 , and •; • ` E2 ⇒ JσK   e2 , then •; • ` e1 wctx e2 .
+
+     We also prove a weaker simulation result4 : if the standard direct operational semantics of
+kernel F<: produces 1 −→ 2 , and 2 elaborates to E2 in F+  i , which in turn elaborates to e2
+                                      +
+in Fco , then 1 elaborates to E1 in Fi , which in turn elaborates to e1 in Fco , and e1 −→ e10 ,
+where e10 and e2 are contextually equivalent. The lemma is weaker in the sense that e10 and e2
+are not syntactically equivalent. Given the coherence lemmas of F+    i and of the elaboration,
+it is no surprise that here contextual equivalence takes the place of the syntactic equivalence,
+as explicit upcasting generates coercions, which may break syntactic equivalence. As an
+example, consider Figure 8, where e1 steps to an expression e10 = (hid, idi → id) (λx. 1) that
+is contextually equivalent to e2 = λx. 1.
+
+
+3
+  One restriction in Bi et al. [7] is that due to the well-foundedness issue, the logical relation of F+i is
+  defined only for its predicative subset, where type arguments in type applications can only be monotypes.
+  Since our proof is built upon the logical relation of F+i , Theorem 20 is restricted to predicative subset
+  of kernel F<: as well. If the well-foundedness of impredicative F+    i is recovered, e.g., by employing
+  step-indexing logical relations [1], we expect that our proof remains valid.
+4
+  Note that λ|| does not provide a semantics [34], so we did not discuss the operational semantics in
+  Section 4. If λ|| had a operational semantics, we believe a similar theorem would apply.
+
+
+
+
+                                                                                                                  ECOOP 2020
+27:24   Row and Bounded Polymorphism via Disjoint Polymorphism
+
+
+        I Theorem 21 (Simulation). If 1 −→ 2 , and  ` 2 : σ              E2 , and •; • ` E2 ⇒ JσK    e2 ,
+        then there exist E1 , e1 , e10 such that  ` 1 : σ          E1 , and •; • ` E1 ⇒ JσK        e1 , and
+        e1 −→ e10 , where •; • ` e10 wctx e2 .
+
+           The detailed paper proof of this lemma is given in Appendix D. This lemma requires
+        a generalized logical equivalence for F+
+                                               i , which is not yet supported in the current Coq
+        framework. Therefore we only present the paper proof. If the Coq framework of F+     i is
+        generalized, we expect that the lemma can be proved in Coq.
+
+         6      Discussion
+        In this section we discuss some possible paths for further exploration.
+
+        6.1     Variants of Row Polymorphism
+        According to Rémy [53], record calculi can typically be categorized into two groups based on
+        how they support the extension operation: the strict group does not allow duplicate labels,
+        while the free group does. We have already shown that F+                    ||
+                                                                      i supports λ , a calculus in the
+        strict group, with a more fine-grained control as disjointness allows duplicate labels as long as
+        their types are disjoint. λTIR [60] is another calculus from the strict group, which introduces
+        type-indexed rather than label-indexed rows, and uses membership constraints to avoid
+        conflicts. To distinguish types and row, λTIR incorporates a kind system that distinguishes
+        rows from types. We believe that F+    i could also serve as a target for λ
+                                                                                   TIR
+                                                                                       , as type-indexed
+        rows are closely related to disjoint intersections. Thus an elaboration from λTIR to F+      i is
+        interesting future work.
+            For the free group, there are two different approaches for extension: previous fields are
+        always retained, and record projections always select the first matching label [35]; or the
+        extension overwrites the field if it is already present [5, 53, 11]. The former system suffers
+        from the similar issue of ambiguity, as records can be extended with the same label even
+        when types are overlapping, which violates the essence of disjointness. For the latter system,
+        essentially F+i is capable to encode the extension operation in a different form. Consider a
+        function that overwrites (←) the label l in a record by incrementing the original value [11]:
+
+             inc = Λα <: {l : Int}.λ(x : α). x ← {l = x.l + 1}
+
+        In F+
+            i , we can define
+
+             inc0 = Λ(α ∗ {l : Int}). λ(x : α & {l : Int}). (x : α , , {l = (x : {l : Int}).l + 1})
+
+        There are two differences. Firstly, the type arguments to the two functions are different: inc
+        expects a type argument which includes {l : Int}, while inc0 expects a type argument which
+        excludes {l : Int}, and {l : Int} is later recovered in x’s type by an intersection type. This
+        explains a more involved encoding. Secondly, the term arguments to the two functions are
+        also different: inc accepts arguments that have exactly one l label with type Int, while inc0
+        can accept arguments of type {l : Int} & {l : Bool}. This again manifests the fine-grained
+        control of disjointness. That being said, we have not studied nor formalized the encoding.
+
+        Type-inference. The focus of our work is languages that have more modest goals in terms
+        of type-inference. Note that neither λ|| or F+
+                                                     i address sophisticated type-inference. We focus
+        on languages with subtyping, including TypeScript, Ceylon, Scala or Flow. Languages like
+N. Xie, B. C. d. S. Oliveira, X. Bi, and T. Schrijvers                                                27:25
+
+
+Racket also include a variant of row polymorphism, without full-type inference to model
+powerful OOP features [61]. Many other row type systems [53, 64, 63, 35] support type
+inference. For the future, we wish to investigate whether a disjoint polymorphic calculus
+offering similar type inference can model calculi with row polymorphism and type inference.
+We believe that several ideas employed in work on type inference for row polymorphism can
+be adapted to a setting with disjoint polymorphism.
+
+6.2     Variants of Bounded Quantification
+Full F<: [23] includes a more powerful formulation of subtyping for universal quantification
+(rule f-sub-forallAlt), which is contravariant in the bound types and covariant in the
+body types. However, this subtyping rule renders subtyping in full F<: undecidable [49].
+
+    Σ ` τ2 <: τ1      Σ, α <: τ2 ` σ1 <: σ2
+                                               f-sub-forallAlt
+      Σ ` ∀(α <: τ1 ). σ1 <: ∀(α <: τ2 ). σ2
+
+Moreover, this rule breaks the encoding. Consider the example [48]:
+
+    ` ∀(α <: >). α <: ∀(α <: Int). α
+
+which elaborates to a non-derivable F+
+                                     i judgment
+
+   • ` ∀(α ∗ >). α & > <: ∀(α ∗ >). α & Int
+
+since α ∗ > ` α & > <: α & Int is not true.
+    One possible solution is to adopt a more powerful subtyping relation in the target calculus,
+where a polymorphic type is a subtype of one type if the first has more instances [45]. For
+example, the following judgment holds true, as α can be instantiated to Int to get Int → Int:
+
+   ∀α. α → α <: Int → Int
+
+Then the judgment • ` ∀(α ∗ >). α & > <: ∀(α ∗ >). α & Int is derivable. After we skolemise
+the type variable α in the right hand side, we can instantiate α in the left hand side by
+α & Int to get α ∗ > ` α & Int & > <: α & Int.
+    Interestingly, such subtyping is usually predicative, i.e., universal quantifications can only
+be instantiated with monotypes; or otherwise it is undecidable. Thus if the bounds can only
+be monotypes, it may be the case that a target calculus with the more powerful subtyping
+rule can encode the predicative version of full F<: .
+
+6.3     Variants of Intersection Type Systems
+λ|| is encodable into intersection type systems that feature the merge operator, unrestricted
+intersection types, polymorphism and guarantee coherence through constraints similar to
+compatibility or disjointness. This currently only applies to F+    i . Some intersection type
+systems [28, 6, 46] only support simple record types. While Alpuim and Oliveira [2] do
+support polymorphism, they only allow intersection types between disjoint types. Hence, our
+elaboration of constraint lists to JrK & JrK⊥ is rejected as JrK and JrK⊥ may not be disjoint.
+    Kernel F<: is encodable for intersection type systems that feature polymorphism and
+unrestricted intersection types. For example, a similar encoding might be applicable to other
+intersection type systems [17, 19]. Interestingly, the behavior of elaborated expressions varies
+according to the type semantics of the target. Consider a function f of type ∀(α <: Int). α → α,
+which, based on the encoding, elaborates to ∀α. α & Int → α & Int. The original type expects a
+type argument which is a subtype of Int; while in the intersection type system, the elaborated
+
+                                                                                                     ECOOP 2020
+27:26   Row and Bounded Polymorphism via Disjoint Polymorphism
+
+
+        type can take any type argument, e.g., Bool, and then expect a term argument of type
+        Int & Bool. In intersection type systems (e.g., [43]) where Int & Bool is uninhabited (equivalent
+        to the bottom type), f Bool can take nothing. Yet, in calculi with the merge operator, we
+        can have, e.g., f Bool (1 , , True).
+
+
+         7     Related Work
+        Bounded quantification and intersection types. The language Fun [12] introduced bounded
+        quantification. Bounded quantification is later extended with extensible records [10, 11],
+        recursively defined types [9] and session types [25, 33] among other extensions. The full
+        variant of F<: [23] (see also Section 6.2) is proved to be undecidable [49]. The kernel Fun
+        variant [12], which restricts the subtyping of bounds to be invariant, is decidable.
+            Pierce [48] proposed the encoding of bounded quantification in terms of intersection
+        types in an informal discussion, which is the main inspiration of our Section 5. Castagna
+        and Xu [19] mentioned in a footnote that a type variable α bounded by a type σ can be
+        encoded by replacing every occurrence of α by β ∧ σ where β is a fresh unbounded variable.
+        Castagna et al. [17] further mentioned that the possible instantiation of a type variable α
+        with a upper bound σ and a lower bound τ is equivalent to the possible instantiation of
+        (τ ∨ β) ∧ σ. Dolan and Mycroft [26] used a similar encoding as one of the main ingredients of
+        the biunification algorithm: α <: σ − (where types have polarity) implies the bisubstitution
+        θ = [(µ− β.α u [β/α− ](σ − ))/α− ], which by unrolling implies that θ(α− ) = α u θ(σ − ). The
+        idea of encoding bounded quantification using intersection types is not new. However, as
+        far as we know, we are the first to formalize an elaboration and study the metatheory
+        from a calculus with bounded quantification into a calculus with intersection types and
+        polymorphism. This contrasts with the previous informal discussions, which have only shown
+        a few concrete examples of programs that could be manually translated (or not).
+
+        Row calculi and intersection types. Along the way we have mentioned many row calculi [35,
+        5, 53, 11, 64, 63]. Reynolds [57] developed an encoding of simple records in terms of
+        intersection types and his merge construct. Similar ideas had been applied by more recent
+        work on intersection types with a merge operator [28, 6, 2]. Alpuim and Oliveira [2]
+        showed informally that many features of row polymorphism can be simulated with disjoint
+        polymorphism. However, their system is limiting for the encoding in Section 4.4.
+
+        Intersection types and the merge operator. The F+       i calculus follows from a line of work
+        on intersection types with a merge operator. The programming language Forsythe [57, 55]
+        includes a merge operator. However, several restrictions were imposed to make the merge
+        operator coherent [56]. For example, merging two functions is forbidden. Castagna et al. [14]
+        studied a special merge operator that only works on functions. Dunfield [28] proposed a
+        calculus with unrestricted intersection types and unrestricted merges. However his calculus
+        loses coherence. For example, 1, , 2 could elaborate to 1 or 2. Pierce [48] proposed a
+        primitive function glue, similar to unrestricted merges. Oliveira et al. [46] proposed disjoint
+        intersection types and disjoint merges to recover syntactic coherence. Later this approach was
+        extended with disjoint polymorphism [2]. Bi et al. [6] support unrestricted intersection types
+        and disjoint merges, based on a novel semantic coherence approach in terms of contextual
+        equivalence, which is later extended to support polymorphic types [7].
+            Other work on intersection types includes refinement intersections [24, 27]; set theoretical
+        foundation for type connectives including intersections, unions and negations [16, 15, 17, 19];
+        and the DOT calculus, which aims at providing a foundational calculus for Scala that
+N. Xie, B. C. d. S. Oliveira, X. Bi, and T. Schrijvers                                                27:27
+
+
+incorporates features including intersection types [3, 58]. In those calculi, intersection types
+only increase the expressiveness of types, but not the expressiveness of terms. For example,
+the intersection type Int & Bool is uninhabited. The type system of Ceylon [43] exploits this
+fact and considers any intersection of such disjoint types equivalent to the bottom type (⊥).
+
+
+ 8     Conclusion and Future Work
+We have presented the elaboration from kernel F<: and λ|| to F+  i , and showed that disjoint
+polymorphism is powerful enough to encode essential aspects of bounded quantification
+and row polymorphism, which is useful for economy of theory and implementation. The
+elaboration from kernel F<: identifies one encodable fragment of F<: , and thus validates the
+previous informal observation by Pierce. The elaboration from λ|| to F+ i reveals the essence
+of constrained quantification from the point of view of disjointness. As for future work, we
+plan to study the encoding of other variants of F<: , as well as other row calculi. We also
+plan to study type inference of F+
+                                 i .
+
+
+
+     References
+ 1   Amal Ahmed. Step-indexed syntactic logical relations for recursive and quantified types. In
+     European Symposium on Programming (ESOP), 2006.
+ 2   João Alpuim, Bruno C. d. S. Oliveira, and Zhiyuan Shi. Disjoint polymorphism. In European
+     Symposium on Programming (ESOP), 2017.
+ 3   Nada Amin, Adriaan Moors, and Martin Odersky. Dependent object types. In Workshop on
+     Foundations of Object-Oriented Languages, 2012.
+ 4   Henk Barendregt, Mario Coppo, and Mariangiola Dezani-Ciancaglini. A filter lambda model
+     and the completeness of type assignment. The journal of symbolic logic, 48(04):931–940, 1983.
+ 5   Bernard Berthomieu and Camille Le Monies De Sagazan. A calculus of tagged types, with
+     applications to process languages. Types for Program Analysis, page 1, 1995.
+ 6   Xuan Bi, Bruno C. d. S. Oliveira, and Tom Schrijvers. The essence of nested composition. In
+     European Conference on Object-Oriented Programming (ECOOP), 2018.
+ 7   Xuan Bi, Ningning Xie, Bruno C. d. S. Oliveira, and Tom Schrijvers. Distributive disjoint
+     polymorphism for compositional programming. In European Symposium on Programming
+     (ESOP), 2019.
+ 8   Gilad Bracha. The programming language jigsaw: mixins, modularity and multiple inheritance.
+     PhD thesis, Dept. of Computer Science, University of Utah, 1992.
+ 9   Peter Canning, William Cook, Walter Hill, Walter Olthoff, and John C Mitchell. F-bounded
+     polymorphism for object-oriented programming. In FPCA, volume 89, pages 273–280, 1989.
+10   Luca Cardelli. Extensible records in a pure calculus of subtyping. Digital. Systems Research
+     Center, 1992.
+11   Luca Cardelli and John C Mitchell. Operations on records. In International Conference on
+     Mathematical Foundations of Programming Semantics, 1989.
+12   Luca Cardelli and Peter Wegner. On understanding types, data abstraction, and polymorphism.
+     ACM Computing Surveys, 17(4):471–523, 1985.
+13   Felice Cardone. Relational semantics for recursive types and bounded quantification. In
+     International Colloquium on Automata, Languages, and Programming, pages 164–178. Springer,
+     1989.
+14   Giuseppe Castagna, Giorgio Ghelli, and Giuseppe Longo. A calculus for overloaded functions
+     with subtyping. In Conference on LISP and Functional Programming, 1992.
+15   Giuseppe Castagna, Kim Nguyen, Zhiwu Xu, and Pietro Abate. Polymorphic functions with
+     set-theoretic types: part 2: local type inference and type reconstruction. In Principles of
+     Programming Languages (POPL), 2015.
+
+
+
+
+                                                                                                     ECOOP 2020
+27:28   Row and Bounded Polymorphism via Disjoint Polymorphism
+
+
+        16   Giuseppe Castagna, Kim Nguyen, Zhiwu Xu, Hyeonseung Im, Sergueï Lenglet, and Luca
+             Padovani. Polymorphic functions with set-theoretic types: part 1: syntax, semantics, and
+             evaluation. In Principles of Programming Languages (POPL), 2014.
+        17   Giuseppe Castagna, Tommaso Petrucciani, and Kim Nguyen. Set-theoretic types for polymor-
+             phic variants. In International Conference on Functional Programming (ICFP), 2016.
+        18   Giuseppe Castagna and Benjamin C Pierce. Decidable bounded quantification. In Principles
+             of Programming Languages (POPL), 1994.
+        19   Giuseppe Castagna and Zhiwu Xu. Set-theoretic foundation of parametric polymorphism and
+             subtyping. In International Conference on Functional Programming (ICFP), 2011.
+        20   C. Chambers, D. Ungar, B.W. Chang, and U. Hölzle. Parents are shared parts of objects:
+             Inheritance and encapsulation in SELF. Lisp and Symbolic Computation, 4(3):207–222, 1991.
+        21   Adriana B Compagnoni and Benjamin C Pierce. Higher-order intersection types and multiple
+             inheritance. Mathematical Structures in Computer Science (MSCS), 6(5):469–501, 1996.
+        22   Mario Coppo, Mariangiola Dezani-Ciancaglini, and Patrick Sallé. Functional characterization
+             of some semantic equalities inside λ-calculus. In International Colloquium on Automata,
+             Languages, and Programming, pages 133–146. Springer, 1979.
+        23   Pierre-Louis Curien and Giorgio Ghelli. Coherence of subsumption, minimum typing and
+             type-checking in f≤. Mathematical structures in computer science, 2(1):55–91, 1992.
+        24   Rowan Davies. Practical refinement-type checking. PhD thesis, School of Computer Science,
+             Carnegie Mellon University, 2005.
+        25   Mariangiola Dezani-Ciancaglini, Elena Giachino, Sophia Drossopoulou, and Nobuko Yoshida.
+             Bounded session types for object oriented languages. In Formal Methods for Components and
+             Objects, pages 207–245. Springer, 2007.
+        26   Stephen Dolan and Alan Mycroft. Polymorphism, subtyping, and type inference in mlsub. In
+             Proceedings of the 44th ACM SIGPLAN Symposium on Principles of Programming Languages,
+             POPL 2017, pages 60–72, New York, NY, USA, 2017. ACM. doi:10.1145/3009837.3009882.
+        27   Joshua Dunfield. Refined typechecking with stardust. In PLPV, 2007.
+        28   Joshua Dunfield. Elaborating intersection and union types. Journal of Functional Programming
+             (JFP), 24(2-3):133–165, 2014.
+        29   Erik Ernst. Family polymorphism. In European Conference on Object-Oriented Programming
+             (ECOOP), 2001.
+        30   Erik Ernst. The expression problem, scandinavian style. On Mechanisms For Specialization,
+             page 27, 2004.
+        31   Facebook. Flow. https://flow.org/, 2014.
+        32   Matthew Flatt, Robert Bruce Findler, and Matthias Felleisen. Scheme with classes, mixins,
+             and traits. In Programming Languages and Systems (APLAS), 2006.
+        33   Simon J Gay. Bounded polymorphism in session types. Mathematical Structures in Computer
+             Science, 18(5):895–930, 2008.
+        34   Robert Harper and Benjamin Pierce. A record calculus based on symmetric concatenation. In
+             Principles of Programming Languages (POPL), 1991.
+        35   Daan Leijen. Extensible records with scoped labels. Trends in Functional Programming,
+             5:297–312, 2005.
+        36   Daan Leijen. Type directed compilation of row-typed algebraic effects. In Principles of
+             Programming Languages (POPL), 2017.
+        37   Sam Lindley and James Cheney. Row-based effect types for database integration. In Proceedings
+             of the 8th ACM SIGPLAN workshop on Types in language design and implementation, pages
+             91–102. ACM, 2012.
+        38   Sam Lindley and J Garrett Morris. Lightweight functional session types. Behavioural Types:
+             from Theory to Tools. River Publishers, pages 265–286, 2017.
+        39   Simon Martini. Bounded quantifiers have interval models. In Proceedings of the 1988 ACM
+             conference on LISP and functional programming, pages 164–173. ACM, 1988.
+        40   Microsoft. Typescript. https://www.typescriptlang.org/, 2012.
+N. Xie, B. C. d. S. Oliveira, X. Bi, and T. Schrijvers                                               27:29
+
+
+41   Microsoft. https://www.typescriptlang.org/docs/handbook/advanced-types.html, 2019.
+     Online; accessed 16 June 2019.
+42   J. Garrett Morris and James McKinna. Abstracting extensible data types: or, rows by any
+     other name. In Principles of Programming Languages (POPL), 2019.
+43   Fabian Muehlboeck and Ross Tate. Empowering union and intersection types with integrated
+     subtyping. In Object-Oriented Programming, Systems, Languages, and Applications (OOPSLA),
+     2018.
+44   Martin Odersky, Philippe Altherr, Vincent Cremet, Burak Emir, Sebastian Maneth, Stéphane
+     Micheloud, Nikolay Mihaylov, Michel Schinz, Erik Stenman, and Matthias Zenger. An overview
+     of the scala programming language. Technical report, EPFL, 2004.
+45   Martin Odersky and Konstantin Läufer. Putting type annotations to work. In Symposium on
+     Principles of Programming Languages (POPL), 1996.
+46   Bruno C. d. S. Oliveira, Zhiyuan Shi, and João Alpuim. Disjoint intersection types. In
+     International Conference on Functional Programming (ICFP), 2016.
+47   Bruno C. d. S. Oliveira, Tijs Van Der Storm, Alex Loh, and William R Cook. Feature-oriented
+     programming with object algebras. In European Conference on Object-Oriented Programming
+     (ECOOP), 2013.
+48   Benjamin C Pierce. Programming with intersection types and bounded polymorphism. PhD
+     thesis, University of Pennsylvania, 1991.
+49   Benjamin C Pierce. Bounded quantification is undecidable. Information and Computation,
+     112(1):131–165, 1994.
+50   Benjamin C Pierce and David N Turner. Local type argument synthesis with bounded
+     quantification. Technical report, Technical Report 495, Computer Science Department, Indiana
+     University, 1997.
+51   Garrel Pottinger. A type assignment for the strongly normalizable λ-terms. To HB Curry:
+     essays on combinatory logic, lambda calculus and formalism, pages 561–577, 1980.
+52   Redhat. Ceylon. https://ceylon-lang.org/, 2011.
+53   Didier Rémy. Type inference for records in a natural extension of ML. Theoretical Aspects Of
+     Object-Oriented Programming. Types, Semantics and . . . , 1993.
+54   Tillmann Rendel, Jonathan Immanuel Brachthäuser, and Klaus Ostermann. From object
+     algebras to attribute grammars. In Proceedings of the 2014 ACM International Conference
+     on Object Oriented Programming Systems Languages and Applications, OOPSLA ’14, page
+     377–395, New York, NY, USA, 2014. Association for Computing Machinery. doi:10.1145/
+     2660193.2660237.
+55   John C Reynolds. Preliminary design of the programming language forsythe. Technical report,
+     Carnegie Mellon University, 1988.
+56   John C. Reynolds. The coherence of languages with intersection types. In Lecture Notes in
+     Computer Science (LNCS), pages 675–700. Springer Berlin Heidelberg, 1991.
+57   John C Reynolds. Design of the programming language forsythe. In ALGOL-like languages,
+     pages 173–233. Birkhauser Boston Inc., 1997.
+58   Tiark Rompf and Nada Amin. Type soundness for dependent object types (DOT). In
+     Object-Oriented Programming, Systems, Languages, and Applications (OOPSLA), 2016.
+59   Patrick Salle. Une extension de la theorie des types en lambda-calcul. In Proceedings of the
+     Fifth Colloquium on Automata, Languages and Programming, pages 398–410, London, UK,
+     UK, 1978. Springer-Verlag.
+60   Mark Shields and Erik Meijer. Type-indexed rows. In Proceedings of the 28th ACM SIGPLAN-
+     SIGACT Symposium on Principles of Programming Languages, POPL ’01, pages 261–275,
+     New York, NY, USA, 2001. ACM. doi:10.1145/360204.360230.
+61   Asumu Takikawa, T. Stephen Strickland, Christos Dimoulas, Sam Tobin-Hochstadt, and
+     Matthias Felleisen. Gradual typing for first-class classes. In Object-oriented Programming:
+     Systems, Languages and Applications (OOPSLA), 2012.
+62   Philip Wadler. The expression problem. Java-genericity mailing list, 1998.
+
+
+
+
+                                                                                                    ECOOP 2020
+27:30   Row and Bounded Polymorphism via Disjoint Polymorphism
+
+
+        63   Mitchell Wand. Complete type inference for simple objects. In Symposium on Logic in
+             Computer Science (LICS), 1987.
+        64   Mitchell Wand. Type inference for record concatenation and multiple inheritance. In Symposium
+             on Logic in Computer Science (LICS), 1989.
+        65   Mathhias Zenger and Martin Odersky. Independently extensible solutions to the expression
+             problem. In Foundations of Object-Oriented Languages, 2005.
+

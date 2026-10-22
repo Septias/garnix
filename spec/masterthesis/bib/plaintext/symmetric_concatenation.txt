@@ -1,0 +1,2303 @@
+                                     A Record Calculus
+                             Based on Symmetric Concatenation
+                                 Robert Harper       Benjamin Pierce
+                                         Revised July 2, 1991
+                                              CMU-CS-90-157R
+
+
+
+
+                                          School of Computer Science
+                                          Carnegie Mellon University
+                                             Pittsburgh, PA 15213
+
+
+
+
+                                                   Abstract
+Type systems for operations on extensible records form a foundation for statically typed languages addressing
+some aspects of object oriented programming and database applications. A number of primitive operations
+have been proposed: extending a record with a new eld, overwriting an existing eld, removing a eld, and
+various kinds of concatenation. We show here that a record calculus based on a symmetric concatenation
+operator, where two records may be concatenated only if they have no overlapping elds, also captures the
+types of many other useful primitive record operations. \Mergeability constraints" are expressed directly
+using explicit annotations on type variables and constrained second-order type quanti cation instead of a
+rule of subsumption; we argue that the resulting system is more straightforward than subsumption-based
+alternatives.
+
+
+
+
+    This research was supported in part by the Oce of Naval Research and in part by the Defense Advanced
+Research Projects Agency (DOD), monitored by the Oce of Naval Research under Contract N00014-84-K-0415,
+ARPA Order No. 5404.
+    The views and conclusions contained in this document are those of the authors and should not be interpreted as
+representing the ocial policies, either expressed or implied, of ONR, DARPA or the U.S. government.
+   Keywords: Lambda calculus and related systems, Language theory, Programming, Type structure,
+Data types and structures, Records.
+1 Introduction
+Cardelli [2, 3] observed that certain aspects of inheritance in object-oriented languages can be understood in
+terms of inclusion relations among record types in a typed -calculus. These inclusions are de ned formally
+as a subtype relation: a type t is a subtype of t0 , written t t0, if any member of t may safely be used in a
+                                                                 
+
+context where a member of t0 is expected. The fact that the type of an expression may always be promoted
+to a supertype is captured by the rule of subsumption :
+                                                    G ` e2t
+                                                    G ` t  t0
+                                                    G ` e 2 t0
+                                                                                                     (Subsumption)
+    Cardelli and Wegner [6] extended this idea to a powerful second-order type system combining Cardelli's
+ordering on record types with type quanti cation [9, 23] using techniques developed by Mitchell [17].
+Wand [25, 26] analyzed the concept of record polymorphism in the context of ML type inference and in-
+troduced the notion of \row variables," which allow types to be given to terms involving a natural record
+extension operator. This work was re ned by Jategaonkar and Mitchell [12, 13] and Stansifer [24].
+    Remy [20] introduced the notion of positive and negative information about record elds and the intuition
+that increasing either positive or negative information | specifying that elds are either de nitely present
+or de nitely absent | gives more re ned types. This intuition, formalized as an appropriate extension to the
+kind system, plus the restriction that the set of eld labels is nite, enabled him to use ordinary uni cation as
+in ML [8] to do type inference for programs involving extensible records. Both Wand [28] and Remy [21, 22]
+later extended this system to in nite label sets.
+    More recently, Cardelli and Mitchell [4, 5] discovered an elegant calculus of primitive record opera-
+tions combining bounded quanti cation with positive and negative information about elds and generalizing
+Cardelli's original subtype ordering on xed-length records. In this system, the preorder on types is used
+to encode both positive and negative information. For example, record extensions like e l=e0 (\e extended
+                                                                                                 j
+
+with value e0 at label l") are only well formed when the eld being added is not already present; to prevent
+run time type errors, the typing rule for extension must ensure that this is the case. Cardelli and Mitchell
+express this constraint in terms of the preorder by requiring that \e has some type r that is a subtype of a
+type lacking l." The restriction operator is used to increase negative information; for example, if r is the
+                                            n
+
+record type l1 :t1 , then r l2 is a subtype of r.
+            f      g        n
+
+    In an earlier report [10], we set out to represent positive and negative information as directly as possible,
+using explicit constraints on record type variables rather than encoding constraints in a preorder structure
+on types. For example, this system expresses the well-typedness constraint on e l=e0 as \e has type r and
+                                                                                    j
+
+r lacks l," where the judgement form \r lacks l" is axiomatized explicitly. The result is a somewhat simpler
+but more verbose system with no rule of subsumption, where genericity over record types arises solely from
+constrained quanti cation of type variables: a quanti ed type \ a lacks L has L+ :T+ : t" can be instantiated
+                                                                     8
+
+with any record type r such that r's set of elds is disjoint from L and includes each li :ti in L+ :T+ . This
+line of development essentially amounts to reverse-engineering Cardelli and Mitchell's system back toward
+Remy's. In fact, during the early stages of their work Cardelli and Mitchell independently developed a
+similar system by extending the kind system of the polymorphic -calculus along the lines suggested by
+Remy.
+    Other useful ways of manipulating records are provided by the merge or concatenate operator , which    jj
+
+combines the elds of two existing records. There are several alternative forms of the merge operator,
+distinguished by what happens when the records e1 and e2 in a merge expression e1 e2 have one or more
+                                                                                           jj
+
+  elds in common. The asymmetric merge operator gives preference to the values from e2. The symmetric
+merge operator disallows merge expressions where the elds of e1 and e2 are not guaranteed to be disjoint.
+The recursive merge computes the values of common elds by recursively merging their values in e1 and e2.
+Of these, the symmetric variant seems to us to be the most useful, since it makes the nest distinctions.
+This is the version we assume in the present paper, except where explicitly indicated.
+    A restricted form of merging can be de ned directly. For example, l1:t1; l2:t2 l3:t3; l4 :t4 can be
+                                                                         f              g jj f             g
+
+rewritten simply as l1:t1; l2 :t2 ; l3 :t3; l4:t4 . But in general | when the types of e1 and e2 may involve
+                       f                        g
+
+variables | typechecking with requires a substantial increase in the complexity of the type system. To
+                                 jj
+
+
+
+                                                        1
+ensure that x:a: y:b: (x y) is well typed, we need to guarantee that the type variables a and b are never
+                            jj
+
+instantiated to types with overlapping elds. This condition cannot be stated in terms of the previous forms
+of positive and negative information (\has" and \lacks" constraints), but must be provided explicitly by
+annotating type variables and quanti ers with compatibility constraints . Once this information is provided
+for type variables, we can de ne what it means for two arbitrary types r1 and r2 to be compatible, written
+r1 # r2 . The merge expression e1 e2 is then well typed when e1 2 r1, e2 2 r2 , and r1 # r2. The type of
+                                       jj
+
+this expression is the merge type r1 r2 .
+                                        jj
+
+    Wand [28] studied type inference for an extension of ML with an asymmetric merge operator and showed
+how to encode class de nitions similar to those found in object-oriented programming languages in this cal-
+culus. The asymmetric merge operation has the advantage that compatibility constraints are not necessary:
+any two records may be merged, with the rightmost one overriding. On the other hand, the use of symmetric
+merge allows the type checker to detect inadvertent clashes of labels, which can be useful in practice. Both
+systems have the property that the type checker must keep track of which component of a merge has a given
+  eld, leading to problems in type reconstruction.
+    Ohori and Buneman studied type inference for object-oriented programming [18] and for database pro-
+gramming languages [19] | another promising application area for record type systems. In their work on
+database programming languages they consider a type system including records and sets, with operations
+such as \relational join" chosen to support database applications. To perform ML-like type inference for this
+language, they introduce the notion of a conditional type scheme, in which a type variable may be constrained
+to range over records possessing certain components. These constraints are similar to the \has" constraints
+discussed above. (They also used another form of constraint pertinant to the relational join and projection
+operations.) In their work on object-oriented programming, they consider a form of record update operation
+in which a value of a given eld may be overridden. Once again, their notion of conditional type scheme plays
+a central role. They also consider extensions to support object-oriented programming constructs similar to
+those suggested by Wand. In order to support inheritance, they introduce an ad hoc form of subsumption
+in connection with \self" and an additional form of condition on conditional type schemes.
+    Cardelli and Mitchell sketched several increasingly ambitious formulations of recursive record concate-
+nation as extensions to their calculus of operations on records [5]. The most powerful of these requires
+the notion of \constrained, multiply-bounded quanti cation," where a nite set of type variables is bound
+simultaneously, with each constrained to be a subtype of some given type and certain subsets constrained to
+be compatible. For example, a function that takes two compatible records x1 and x2, where x1 has at least
+a eld l1 of type Int and x2 has at least a eld l2 of type Int, and returns the result of merging x1 and x2,
+can be written
+         (a1 l1 : Int ; a2 l2 : Int ; a1#a2): x1 :a1 : x2 :a2 : x1 x2:
+             f         g         f         g                           jj
+
+ (altering their concrete syntax slightly).
+    In the present paper, we study a record calculus jj based on a more straightforward formulation of con-
+strained quanti cation. In jj, each record type variable in a context G has a list of compatibility assumptions
+R, where the elements of R are record types and a#R asserts that a#ri for each ri 2 R. The constrained
+type abstraction operator a#R: e adds the assumption a#R to the context used to typecheck e. A type
+application e[r] must check that r satis es all of the constraints on the quanti er. For example, the function
+mentioned above can be de ned in jj as follows:
+         a1#l1:Int; l2 :Int: a2#a1; l1 :Int; l2 :Int:
+           x1 :a1 l1:Int: x2 :a2 l2:Int: x1 x2 :
+                jj                jj             jj
+
+
+    This example underscores an important point: the form of constraint used in jj can only be used to
+express negative information about record type variables. The function above takes two type variables, each
+of which lacks the appropriate eld. To form the types expected for the records x1 and x2 on the two
+-abstractions, the missing elds are merged back into a1 and a2. This kind of transformation from mixed
+positive and negative constraints on quanti ers to pure negative constraints can be carried out mechanically.
+    The use of constrained type variables here has a very similar avor to Wand's treatment of merging
+with row variables [28]. In fact, we adopt the same point of view as Wand with regard to subsumption:
+rather than introduce a preorder on types that includes record extension as a special case, we prefer to
+use a form of quanti cation to capture the possible extensions of a record type and use type application to
+                                                       2
+choose the appropriate extension for a given context. However, in contrast to Wand, we are dealing with
+an explicitly-typed, second-order calculus with a symmetric, rather than asymmetric, merge operator. This
+leads to a somewhat di erent overall avor, as we shall illustrate below.
+     Our central claim is that the straightforward formulation of constrained quanti cation embodied in jj
+may be viewed as primary , in the sense that most of the examples motivating row variables, bounded
+quanti cation, and Cardelli and Mitchell's bounded quanti cation with positive and negative information
+can be expressed in a calculus based on this form of constrained quanti er, with no need for additional
+mechanisms like subsumption.
+     In Section 2 we de ne the syntax and typing rules of jj and sketch a proof of the decidability of
+typechecking. Section 3 illustrates the expressiveness of the system through a number of examples. Section 4
+describes some promising avenues for further research. Section 5 o ers concluding remarks. A complete
+listing of the typing rules for jj appears in Appendix A; complete rules for the algorithmic formulation used
+to prove decidability are given in Appendix B.
+
+2 De nition and Properties of jj
+2.1 Syntax
+This section introduces some notational conventions and de nes the concrete syntax of jj.
+    The metavariable t and u range over types; r, and s range over record types; p ranges over primitive
+types; a and b range over record type variables; R and S range over nite sequences of record types; e and f
+range over terms; x ranges over variables; l ranges over eld labels.
+Types:
+     t     ::= p             primitive
+             j   t1   t2 !   function space
+             j   8 a#R: t    constrained quanti cation
+             j   r           record type
+Record types:
+     r     ::= a          record type variable
+             j   Empty    empty record
+             j   l:t      single- eld record
+             j   r l n    restriction
+             j   r1 r2 merge
+                         jj
+
+The record types are those built up from record type variables, Empty, and single- eld records by applications
+of merge and restriction. Ordinary type quanti cation is omitted from this presentation, but could be added
+by considering general type variables and an associated quanti er.
+Constraint lists:
+     R     ::=                                                   empty constraint list
+             j   r; R                                             nonempty constraint list
+    Note that we make no provision here for including \bare labels" in constraint lists. Formally, expressions
+like a#l: t are taken as abbreviations for a#(l:s): t, where s is some dummy type. (See Section 3 for
+    8                                        8
+
+examples of this idiom.)
+    It is sometimes convenient to consider a list as a nite set and write, for example, r 2 R.
+
+
+
+
+                                                      3
+Terms:
+    e         ::=       x     variable
+                    j    x:t: e
+                              abstraction
+                  e1 e2
+                    j         application
+                  empty
+                    j         empty record
+                  l=e
+                    j         single- eld record
+                  e l
+                    j    n    restriction
+                  e1 e2
+                    j         merge
+                             jj
+
+                  e:l
+                    j         selection
+                  a#R: e constrained type abstraction
+                    j
+
+                  e[r]
+                    j         constrained type application
+    Free and bound variables are de ned in the usual way; in the case of type quanti cation and abstraction,
+the variable a is not considered bound in the constraint list R. Terms and types are identi ed up to renaming
+of bound variables. The notation [t=a]t0 denotes capture-avoiding substitution of t for free occurrences of
+a in t0; similarly, [e=x]e0 denotes capture-avoiding substitution of e for free occurrences of x in e0.
+    The metavariable T ranges over type contexts | nite sequences of declarations of the form a#R with no
+type variable declared twice. The metavariable G ranges over term contexts | nite sequences of declarations
+of the form x:t with no variable mentioned twice.
+    If l is a label and r is a well-formed record type, then r l is de ned to be the type associated with
+label l in r, if any. More precisely, the partial function r l is de ned by induction on the structure of r as
+follows. (We write r l for \r l is unde ned" and r l for \r l is de ned.")
+                                   "                         #
+
+     (l:t) l         = t
+     (r l0) l = r l when l = l0
+        n                              6
+
+     (r1 r2) l = r1 l if r1 l and r2 l
+         jj                            #             "
+
+     (r1 r2) l = r2 l if r2 l and r1 l
+         jj                            #             "
+
+     r l    "                    otherwise.
+2.2 Typing Rules
+jj is a formal system for deriving judgements of the following forms:
+             Well-formed type context: T ok
+             Well-formed term context: T G ok
+                                            `
+
+             Well-formed type:              T
+                                            `    t type
+             Well-formed record type: T r record
+                                            `
+
+             Well-formed constraint list: T R ok
+                                            `
+
+             Constraint list satisfaction: T r # R
+                                            `
+
+             Compatible types:              T
+                                            `    r1 # r2
+             Equivalent types:              t1
+                                                t2
+             Equivalent constraint sets: R1 R2
+                                             
+
+             Well-formed term:              T;G  `   e 2 t
+                                     jj
+    The complete set of rules for  appears in Appendix A. We summarize these rules in the remainder of
+this section.
+    The rules for context formation are the expected ones (rules Wftc-* and Wfc-*; see Appendix A). A
+type context T; a#R is well-formed if a is not already declared in T and R is well-formed in T. A term context
+G; x:t is well-formed in T if x is not already declared in G and if t is a well-formed type in T.
+    A constraint list R is well formed in T i each component type expression r in R is a well-formed record
+type in T (rule Wfcl).
+    The rules for formation of primitive types (Wft-Prim) and function types (Wft-Arrow) are as usual.
+A quanti ed type a#R: t is well-formed in T if R is a well-formed constraint list in T, and t is a well-formed
+                            8
+
+type in T; r#R (rule Wft-All). Every record type is a type(rule Wft-Rec).
+    The formation rules for record types are summarized in Figure 1. A record type variable is a record type
+in T provided that it is declared in T (rule Wfr-Var). The empty record is always well-formed (rule Wfr-
+Empty). The single- eld record l:t is well-formed in T if t is a well-formed type in T (rule Wfr-Base).
+
+                                                         4
+                                  ok
+                            T1 ; a R; T2#
+               T1 ; a#R; T2      a record       `
+                                                                       (Wfr-Var)
+                       T     t type
+                                                                      (Wfr-Base)
+                                     `
+
+                     T     l:t record
+                                 `
+
+
+               T      r record      r l
+                                                                     (Wfr-Restr)
+                    `                                            #
+
+                    T      r l record
+                                `        n
+
+
+                           T ok
+                  T      Empty record
+                            `
+                                                                     (Wfr-Empty)
+                      T     r1 # r2
+                 T
+                                    `
+
+                         r1 r2 record
+                            `            jj
+                                                                     (Wfr-Merge)
+
+Figure 1: Selected formation rules for record types
+
+
+
+
+                             ;
+                        T G ` e 2 t
+                                                                      (Wtt-Base)
+                        ;
+                   T G ` l e 2 lt         =                  :
+               ;
+            T G ` e 2 r                                      r l#
+                        ;
+                    T G ` enl 2 rnl
+                                                                     (Wtt-Restr)
+                                 T ` G              ok
+                ;
+            T G ` empty 2 Empty
+                                                                     (Wtt-Empty)
+                            ;
+                        T G ` e1 2 r1
+                            ;
+                        T G ` e2 2 r2
+                         T ` r1   r2            #
+                    ;
+               T G ` e1 jje2 2 r1jjr2
+                                                                     (Wtt-Merge)
+               ;
+            T G ` e 2 r                                      r l#
+                                                                     (Wtt-Select)
+                        ;
+                    T G ` e:l 2 r l
+
+                # ;
+                T; a R G ` e 2 t
+          T;G    a #R : e 2 a #R : t
+                        `                                8
+                                                                      (Wtt-All-I)
+      T;G   e 2 a #R : t      T     r#R
+           `
+
+            T;G
+                            8
+
+                    e[r] 2 [r=a]t
+                             `
+                                                                 `
+                                                                     (Wtt-All-E)
+
+          Figure 2: Selected typing rules
+
+
+
+                                            5
+           T ` r   #s               r  r0          s  s0
+                          T ` r0     # s0                            (Cmp-Eq)
+                          T `       r#s
+                          T `       s#r
+                                                                   (Cmp-Symm)
+            T ` r    # l:t              T ` t0      type
+                          T ` r # l:t0
+                                                                   (Cmp-Base)
+                     #
+              T1; a R; T2          ok      ri 2 R
+                          #    # ri
+                 T1 ; a R; T2 ` a
+                                                                   (Cmp-Tvar)
+              T     r # (s1 s2 )
+                                                                (Cmp-Merge-E)
+                          `               jj
+
+                 T     r # si  `
+
+
+ T    s1 # s2     T    r # s1       T      r # s2
+                                                                (Cmp-Merge-I)
+     `                         `                         `
+
+              T     r # (s1 s2 )
+                          `               jj
+
+
+l = l0    T    l:t record       T    l0 :t0 record
+                                                              (Cmp-Base/Base)
+ 6               `                                `
+
+               T     l:t # l0 :t0
+                           `
+
+
+                T     r record
+              T     r # Empty
+                          `
+                              `
+                                                                  (Cmp-Empty)
+
+         Figure 3: Selected compatibility rules
+
+
+
+                          rjjEmpty  r                        (Eq-Merge-Unit)
+
+                   (
+              r1 jj r2jjr3         ) (r1 r2)
+                                          jj     jj r   3   (Eq-Merge-Assoc)
+
+                     r1 jj r2  r2 jj r1                     (Eq-Merge-Comm)
+
+                     rnlnl0  rnl0nl                         (Eq-Restr/Restr')
+
+                     (l:t) l   n     Empty                   (Eq-Base/Restr)
+                               r1 l #
+                (r1 r2) l (r1 l r2 )
+                     jj        n          n jj
+                                                             (Eq-Merge/Restr)
+                     R  R0             t  t0
+                 8a    #R: t        8a   #R0: t0               (Eq-Cong-All)
+
+     Figure 4: Selected type equivalence rules
+
+
+                                    6
+                                                r; r0 ; R
+                                                   (           )    r
+                                                                            0 ; (r; R)            (Ceq-Swap)
+
+                                                   Empty; R  R                                  (Ceq-Empty)
+
+                                               (r1 r2 ); R
+                                                  jj                r      1 ; (r2 ; R)         (Ceq-Merge)
+
+                                                   r; r; R (       )    r    ;R                  (Ceq-Dupl)
+
+                                                  l t; R  l t0 ; R
+                                                       :                :                         (Ceq-Base)
+                             Figure 5: Selected constraint list equivalence rules
+
+The restriction r l is well formed in T if r is well formed in T and r l is de ned (rule Wfr-Restr). In
+                 n
+
+particular, no expression of the form a l, where a is a variable, is ever well formed, since a l is never
+                                           n
+
+de ned. This re ects the fact that compatibility constraints on a variable a are negative in character and
+cannot be used to postulate that all instances of a have any particular elds, only that they lack certain
+  elds. It also implies that if r l is a well-formed record expression, then the restriction may be eliminated
+                               n
+
+(see the discussion of type equivalence below). A merge r1 r2 is well-formed in T if r1 and r2 are well-formed
+                                                                             jj
+
+in T, and, morover, r1 and r2 are compatible in T (see below).
+    The typing rules for jj terms are organized along standard lines. Typing is invariant under type equality
+(rule Wtt-Eq). The rules for variables, lambda abstractions, and application are standard (rules Wtt-Var,
+Wtt-Arrow-I, Wtt-Arrow-E).
+    The abstraction a#R: e has type a#R: t provided that e has type t in T; a#R, which also entails that
+                                       8
+
+R is a well-formed constraint set in T (rule Wtt-All-I). It is important to realize that the constraint list
+R cannot be replaced by a single record type r, for two related reasons. First, it is necessary to postulate
+that a variable be compatible with a number of di erent record types. For example, if we are to merge a
+variable a with the base records l:t and l0 :t0, then a must be constrained to be compatible with both of
+these records, which is to say that all instances of a must not contain l or l0 elds. Second, the constraint
+list R cannot be collapsed into a single record type consisting of the merge of the component record types ri
+of R because the records in R need not themselves be mutually compatible. In particular, we may wish to
+postulate that a variable a is compatible with two other variables b and c so that the merges a b and a c
+                                                                                                   jj        jj
+
+are both well-formed. This in no way entails that b and c must be compatible, and it would be a serious
+restriction to require that they be so.
+    The type application e[r] is well formed in T if e has type a#R: t in T, r is a record in T, and r is
+                                                                                         8
+
+compatible with each element of R (relative to T). In other words, r must satisfy the constraints associated
+with the quanti er in order for the type application to be sensible. When this is the case, the type of e[r]
+is [r=a]t, as usual (rule Wtt-All-E). It will turn out that the formulation of the system ensures that if
+r satis es the constraints in R relative to T, then r is a record type in T. To support general parametric
+polymorphism, we would have to extend the system with a separate form of quanti er that quanti es over
+all types. We omit this extension for the sake of simplicity.
+    The compatibility relation plays a central role in jj. Informally, T         r # s holds i r and s are
+                                                                                             `
+
+mergeable, that is, i r lacks every eld possessed by s and s lacks every eld possessed by r. The de nition
+is made relative to a context T since the compatibility for a type variable a is determined by the constraint
+set associated with a in T. It follows from this informal description that compatibility is symmetric, respects
+type equivalence, and is insensitive to the types ascribed to elds of a record. In particular, l:t is compatible
+with l0:t0 i l is di erent from l0.
+    A selection of the rules de ning the compatiblity relation appear in Figure 3. Compatibility is symmetric
+(rule Cmp-Symm) and respects type equivalence (rule Cmp-Eq). If a record is compatible with a single- eld
+record l:t, then it is compatible with every single- eld record l:t0 (rule Cmp-Base). A type variable is
+                                                                   7
+compatible with the records in its constraint list (rule Cmp-Tvar). A record is compatible with a merge
+i it is compatible with each of the components of the merge (rules Cmp-Merge-I and Cmp-Merge-E).
+Two single- eld records are compatible if they have di erent labels (rule Cmp-Base/Base). Every record
+is compatible with the empty record (rule Cmp-Empty). It is worth noting that there are no rules for
+compatibility of records of the form r l. It will be possible to prove that every well-formed record is
+                                            n
+
+equivalent to a unique restriction-free record; hence compatibility of restrictions is covered by the general
+rule of invariance of compatibility under equivalence.
+    A selection of the rules de ning equivalence of types and constraint sets appears in Figures 4 and 5). The
+relation t t0 is an equivalence relation (rules Eq-Refl, Eq-Symm, and Eq-Trans) and is a congruence
+               
+
+with respect to the type-forming operations (rules Eq-Cong-*). The axioms for record type equivalence are
+as follows. Restrictions commute with one another (rule Eq-Restr/Restr') (in a well-formed expression l
+will be distinct from l0 , but there is no reason to insist on that in the rule.) Restriction of a singleton l:t on
+l results in the empty record type (rule Eq-Base-Restr). Restriction distributes to the appropriate (given
+Eq-Symm and Eq-Cong-Restr) component of a merge (rule Eq-Merge-Restr). Merge is associative
+(rule Eq-Merge-Assoc), Empty is a unit of merge (rule Eq-Merge-Unit), and merge is commutative
+(rule Eq-Merge-Comm).
+    Since the quanti er of jj is constrained, the equivalence on constraint lists e ects type equivalence,
+and hence the collection of well-typed terms. There is some exibility in the choice of equivalence for
+constraint sets; the guiding principle is that equivalent constraint sets should be satis ed by the same record
+types. Order and multiplicity of constraints are irrelevant (rules Ceq-Swap and Ceq-Dupl); constraint
+lists are essentially nite sets. Merge types in a constraint list may be \ attened", occurrences of Empty
+may be eliminated, and the types of single- eld records are ignored (rules Ceq-Merge, Ceq-Empty, and
+Ceq-Base). As we will see below, these equivalences are sucient to ensure that constraint sets may be
+normalized into the form l1 ; :::; ln ; a1 ; :::; ak where the l0is are labels and the ai's are record type variables.
+This is consistent with the intuition that the relevant properties of a record, for the purposes of consistency
+checking, are its atomic components. Note that it will not do to simply de ne constraint sets this way due
+to the possibility of substituting record types for type variables.
+2.3 Properties
+In this section we establish the decidability of type checking for jj .
+    The proof proceeds largely along standard lines: type checking is reduced to checking equivalence and
+compatibility of types by way of a syntax-directed set of type synthesis rules. Equivalence of well-formed
+types is established using Huet's method of con uence modulo an equivalence relation [11]. The main idea
+is to handle the associative and commutative rules for merge types and the permutation and idempotency
+equations for constraints lists by segregating the \proper reductions" from the \pure equations," so that
+the equivalence problem is reduced to checking a simple form of equivalence of normal forms. Compatiblity
+checking is based on a simple characterization of normal forms of record types and constraint lists, with the
+main complications stemming from the need to take account of all of the consequences of assuming that a
+variable is compatible with a complex record type.
+2.3.1 Technical Lemmas
+Lemma 2.3.1.1:        A derivation of the well-formedness of a type, record type, or constraint list includes
+subderivations of the well-formedness of all of its subphrases.
+Lemma 2.3.1.2:
+   1. a l is never well formed for any variable a, regardless of context.
+       n
+
+
+   2. Empty l is never well-formed.
+               n
+
+
+   3. r l l0 is well-formed only if l = l0 and r is not a single- eld record.
+       n n                              6
+
+
+   4. l:t l0 is well-formed only if l = l0.
+           n
+
+
+
+
+                                                          8
+Lemma 2.3.1.3: If r l is de ned and r s, then s l is de ned and r l s l.
+                                                                                                                         
+
+
+Lemma 2.3.1.4: Assume that T r # s. Then it is not the case that both r l and s l are de ned.
+                                                 `
+
+
+Corollary 2.3.1.5: If r s is well formed, then r l de ned implies s l unde ned, and vice versa.
+                                   jj
+
+
+Lemma 2.3.1.6:      T1; a#R; T2 ok implies T1
+                          `                      R ok as a subderivation.
+                                                                        `
+
+
+Lemma 2.3.1.7: T r # s implies T r record and T s record.
+                              `                              `                            `
+
+
+Lemma 2.3.1.8: If T r # R and r r0 and R R0, then T r0 # R0 .
+                                  `                                                             `
+
+
+Lemma 2.3.1.9: Let J stand for an arbitrary judgement. If T1; a#R; T2 J, and T1 r#R, then                                 `                       `
+
+    [   ]        [
+T1; r=a T2 ` r=a J   ].
+2.3.2 Con uence of reduction modulo an equivalence relation
+Our proof of the con uence of type and constraint list normalization uses a technique due to Huet [11]. In
+this section we brie y recapitulate Huet's main theorem.
+De nition 2.3.2.1: The metavariables M, N, P, Q, and U here range over an unspeci ed set of phrases (in
+the next section they will be either types or constraint lists).
+De nition 2.3.2.2: (M) is the set of variables appearing free in a phrase M.
+                              V
+
+
+De nition 2.3.2.3: A phrase M is linear i all of its variable occurrences are distinct.
+De nition 2.3.2.4: A rewrite rule is a pair of terms.
+De nition 2.3.2.5: A critical pair P; Q for two rewriting rules M1; N1 and M2; N2 is a most general
+                                                         h        i                                       h           i           h       i
+
+common instance of the two rules, found by superposing M2 on a non-variable subphrase U of M1 . P is the
+result of rewriting the subphrase U of the common instance according to the rule M2 ; N2 . Q is the result of                     h       i
+
+rewriting the whole common instance according to the rule M1; N1 .                    h           i
+
+
+De nition 2.3.2.6:         An equational theory                          ;
+                                                                      hR E i     consists of two sets of rewriting rules: a \reduction
+part"   R   and an \equivalence part" .          E
+
+
+De nition 2.3.2.7: Let ; be an equational theory. The one-step reduction relation induced by is
+denoted by 1R, and the one-step reduction relation induced by is denoted by 1E . The re exive, transitive
+                                       hR E i                                                                                                         R
+
+
+
+closure of 1R is denoted by R, and the re exive, symmetric, and transitive closure of 1E is denoted by
+                                                                                              E                               
+
+                                                                                                                                              
+
+ E.
+    The subscripts are omitted when they are clear from context.
+De nition 2.3.2.8: The set of critical pairs of a reduction relation is                                       R
+
+
+                           P; Q  P; Q is a critical pair for M1 ; M2 , N1 ; N2 2
+                                  fh     i j h       i                           :   h            i   h           i       Rg
+
+
+
+
+De nition 2.3.2.9: Let ; be an equational theory. The set of critical pairs of = is
+                                       hR E i                                                                                         E       R
+
+
+                     fhP; Qi j hP; Qi is a critical pair for hM1; M2i 2 R and hN1 ; N2 i 2 (E [ E 1 )g
+                 [   fhP; Qi j hP; Qi is a critical pair for hM1 ; M2 i 2 (E [ E
+                                                                                 1 ) and hN1 ; N2 i 2 Rg;
+where
+                                                         E
+                                                                 1 = fhN; Mi j hM; Ni 2 E g:
+
+
+
+                                                                             9
+De nition 2.3.2.10: The set of critical pairs of a theory ; is the union of the set of critical pairs of
+                                                                                      hR E i
+
+R   and the set of critical pairs of = .        E    R
+
+
+
+De nition 2.3.2.11: M denotes an arbitrary -normal form of M.       R
+
+
+
+Proposition 2.3.2.12: (Huet's Theorem 3.3) Let ; be an equational theory such that
+                                                                         hR E i
+
+
+   1. for all M ; N 2 , (N) (M) and M is linear;
+                  h        i   R   V            V
+
+
+   2. for all M ; N 2 , (M) = (N);
+                  h        i   E   V            V
+
+
+   3.   R   is noetherian, where is the re exive, symmetric, transitive closure of .
+                                                                                                      E
+
+
+The theory ; is con uent i for all its critical pairs P; Q we have P Q . When ; is con uent,
+                  hR E i                                                          h    i                  hR E i
+
+we say that \ is con uent modulo ." Then M =R[E N i M N, where =R[E is the equivalence relation
+                   R                                 E                                     
+
+induced by and .
+              R            E
+
+
+
+2.3.3 Type and Constraint List Equivalence
+We now apply Huet's theory to the con uence of a type normalization procedure for jj.
+De nition 2.3.3.1: For the algorithmic version of the system, constraint lists are extended with \bare
+labels":
+     R    ::=                                              empty constraint list
+                r; R
+                   j                                        constraint list beginning with a type
+                l; R
+                   j                                        constraint list beginning with a bare label
+    We extend the relation T r # R to constraint lists by de ning T r # l; R to mean T r # R and
+                                           `                                                   `                    `
+
+T   `r # l:t for any well-formed type t.
+
+De nition 2.3.3.2: In this section, it is convenient to be able to refer to phrases from certain related
+syntactic categories uniformly:
+   1. The metavariable ranges over atoms: variables, base records, and bare labels.
+   2. The metavariables , , and  range over types and bare labels.
+   3. The metavariable  ranges over type variables and bare labels.
+   4. The metavariable C ranges over types and constraint lists.
+
+De nition 2.3.3.3: Let 1 denote the compatible extension to types and constraint lists of the reduction
+relation given in Figure 8.
+De nition 2.3.3.4: Let                 
+                                           1 denote the compatible extension to types and constraint lists of the relation
+given in Figure 9.
+    Let denote the equivalence relation generated by 1 . Let denote the equivalence relation generated
+by 1 and 1.
+                                                                                         
+
+              
+
+
+
+Theorem 2.3.3.5:
+    1. If T   `    r record and r 1 r0, then T r0 record.       `
+
+
+    2. If T   `    t type and t 1 t0 , then T  t0 type.     `
+
+
+    3. If T   `    R ok, and R 1 R0, then T   R0 ok.    `
+
+
+Proof: By induction on derivations, making use of the technical lemmas in Section 2.3.1.                                2
+
+                                                                         10
+De nition 2.3.3.6: The \outer size" of a type r is de ned as follows:
+                                   outer-size(a)       = 1
+                                   outer-size(Empty) = 1
+                                   outer-size(l:t)     = 1
+                                   outer-size(r l)
+                                                 n     = outer-size(r) + 1
+                                   outer-size(r1 r2) = outer-size(r1 ) + outer-size(r2 ) + 1
+                                                     jj
+
+                                   outer-size(p)       = 0
+                                   outer-size(t1 t2) = 0
+                                                     !
+
+                                   outer-size( a#R: t) = 0:
+                                                8
+
+
+
+
+De nition 2.3.3.7: The rank of a constraint list is de ned as follows:
+                                                     rank( ) = 0  
+
+                                                     rank(l; R) = rank(R)
+                                                     rank(r; R) = rank(r) + rank(R):
+The rank of a type is the sum
+                 rank(t) = restr-count(t) + base-count(t) + empty-count(t) + merge-count(t);
+where
+    restr-count(t) is the sum, over all occurrences of the form s l in t, of outer-size(s),               n
+
+
+    base-count(t) is the number of base record phrases l:t0 in t,
+    empty-count(t) is the number of occurrences of Empty in t, and
+    merge-count(t) is the number of occurrences of in t.                                jj
+
+
+
+
+Lemma 2.3.3.8: The relation 1               is Noetherian when restricted to well-formed expressions. That
+                                                             
+
+is, there are no in nite reduction sequences of the form
+                                                                 1             1            1   
+
+
+where each of the terms in the sequence is well-formed.
+Proof: Applying any of the 1 rules to a type or constraint list strictly reduces its rank, while applying
+any of the 1 rules in either direction leaves the rank unchanged.
+                                                                                                        2
+Lemma 2.3.3.9:
+  1. If T   `   (r l s) l0 record and T (r s) l l0 record, then ((r l s) l0) ((r s) l0 l) .
+                 n   jj        n                          `            jj     n n                               n    jj   n            jj   n   n
+
+
+  2. If T   `   a; b; (a b); R ok and T
+                          jj                (a b); R ok, then (a; b; (a b); R) ((a b); R) .
+                                                     `            jj                                       jj                 jj
+
+
+  3. If T   `   a; b; R ok and T    (a b); (a b); R ok, then (a; b; R) ((a b); (a b); R) .
+                                        `       jj            jj                                               jj        jj
+
+
+  4. If T   `   ; ; ; R ok and T ( ); ; R ok, then (; ; ; R) (( ); ; R) .
+                                            `        jj                                                        jj
+
+
+
+
+Lemma 2.3.3.10: For every critical pair C1; C2 of 1 ; 1 , we have C1  C2  .
+                                                                       h            i         h       i                   
+
+Proof: By a tedious veri cation, using Lemma 2.3.3.9 for the interesting cases.                                                                      2
+Theorem 2.3.3.11: The restriction of 1 to well-typed terms is con uent modulo .                                                        
+
+
+
+
+                                                                                        11
+Corollary 2.3.3.12:
+  1. If r and s are well-formed records, then r s i there exist r0 and s0 in normal form such that r  r0
+     and s  s0 and r0 s0.
+                                                   
+
+                         
+
+
+  2. If t and u are well-formed types, then t u i there exist t0 and u0 such that t  t0 and u  u0 and
+                                                 
+
+     t0   u0.
+
+  3. If R and S are well-formed constraint lists, then R S i there exist R0 and S0 such that R  R0 and
+     S  S0 and R0
+                                                                  
+
+                     S0 .
+
+
+Corollary 2.3.3.13: Normal forms are unique up to .              
+
+   If r is a well-formed record, let r denote one of its normal forms computed by applying the      rules in
+some canonical order; similarly for types and constraint lists.
+Theorem 2.3.3.14:
+  1. Let r be a well-formed record type. Then r has the form
+                                                                      :            :
+                                       a1 jj a2 jj ::: jj an jj l1 t1 jj ::: jj lk tk
+
+     up to associativity and commutativity of , where the ai 's are distinct variables, the lj 's are distinct
+                                                   jj
+
+     labels, the tj 's are in normal form, and n and k are greater than or equal to 0 (when both are 0, the
+     normal form is Empty).
+  2. Let R be a well-formed constraint list. Then R has the form
+                                                 a1 ;   .. . ; an; l1; . .. ; lk
+     where the ai's are all distinct, the lj 's are all distinct, and n and k are greater than or equal to 0.
+     (That is, R is a list of variables and labels in some order.)
+   Note that as a consequence, a well-formed normal form is restriction-free. This implies that every well-
+formed record expression reduces to a well-formed restriction-free record expression.
+Lemma 2.3.3.15: The rule
+                                                 r; r; R  r; R                             (A-Ceq-Full-Dupl)
+is admissible when r; r; R and r; R are well formed.
+Proof sketch: By construction. Consider a reduction of r; R to normal form. By Theorem 2.3.3.14, (r; R)
+consists only of type variables and labels. We may therefore use rules A-Ceq-Dupl and A-Ceq-Merge to
+duplicate the sublist of type variables and labels that come from r. By replaying the reduction from r; R to
+(r; R) twice in reverse, we obtain r; r; R (r; R) . The result follows by transitivity of .
+                                                                                                        2
+Theorem 2.3.3.16: The relations and coincide on well-typed terms.
+                                              
+
+Proof: It is easy to see that every 1 and 1 axiom is a valid equivalence, and conversely (using
+                                                        
+
+Lemma 2.3.3.15 in the case of Eq-Dupl), that every equivalence axiom holds in .                            2
+Corollary 2.3.3.17: The relation is decidable for well-formed expressions.
+                                      
+
+Proof: To decide whether or not r s, given that r and s are well-formed, reduce each to their normal
+                                      
+
+forms and test whether or not r s . Given the characterization of normal forms given above, this reduces
+                                  
+
+to re-grouping the atomic record types in some standard order. Similar methods apply to constraint sets
+and types.                                                                                              2
+
+
+                                                            12
+                                                         T ` r     #) Empty                            (A-Cmp-Empty-1)
+
+                                                         T ` Empty          #) r                       (A-Cmp-Empty-2)
+                                              T ` s1   #) r      T    s2 #) r
+                                                                                                      (A-Cmp-Merge-I-1)
+                                                                             `
+
+                                                     T   (s1 s2) #) r
+                                                         `         jj
+
+
+                                               T `   r #) s1     T    r #) s2
+                                                                                                      (A-Cmp-Merge-I-2)
+                                                                             `
+
+                                                     T    r #) (s1 s2)
+                                                          `                  jj
+
+
+                                                            l = l0
+                                                                                                     (A-Cmp-Base/Base)
+                                                                   6
+
+                                                       T   l:t #) l0 :t0
+                                                             `
+
+
+                                                                  a 2 S
+                                                     #            #
+                                               T1; a R; T2 ; b S; T3 ` a           #) b         (A-Cmp-Tvar/Tvar-1)
+                                                                  a 2 S
+                                                     #            #
+                                               T1; a R; T2 ; b S; T3 ` b           #) a         (A-Cmp-Tvar/Tvar-2)
+                                                                  l 2 R
+                                                         #
+                                                   T1; a R; T2 ` a           #) l : t               (A-Cmp-Base/Tvar-1)
+                                                                  l 2 R
+                                                         #
+                                                   T1; a R; T2 ` l t        : #) a                  (A-Cmp-Base/Tvar-2)
+
+                                           Figure 6: Algorithmic compatibility rules
+
+2.3.4 Compatibility Checking
+The compatibility checking algorithm is presented as a collection of inference rules for deriving judgements
+of the form T r #) s where r and s are restriction-free, well-formed record types. The rules appear in
+                    `
+
+Figure 6. To prove that these rules de ne an algorithm for compatibility checking, we show that they are
+sound and complete with respect to the declarative formulation, and that we may e ectively decide whether
+or not a derivation exists in accordance with these rules.
+    The soundness of the algorithm is stated by the following theorem:
+Theorem 2.3.4.1:
+  1. If T r record and T r0 record and T r #) r0 , then T r # r0 .
+            `                     `                           `                         `
+
+
+  2. If T r record and T R ok and T r #) R, then T r # R.
+            `                     `                  `                             `
+
+
+   The proof relies on the following facts:
+Lemma 2.3.4.2: If T R ok and R 1 R0 and T r # R0 , then T r # R.
+                              `                                        `                    `
+
+
+Lemma 2.3.4.3: If T ok and T = T1; a#R; T2; b#S; T3 and a 2 S, then T a # b.
+                          `                                                                     `
+
+
+Lemma 2.3.4.4: If T ok and T = T1; a#R; T2 and l 2 R and T l:t record, then T
+                          `                                                                 `              `   a   # l:t.
+   The completeness of the algorithm is stated by the following theorem:
+Theorem 2.3.4.5:
+  1. If T   `   r # s, then T     `   r #) s .
+  2. If T   `   r # R, then T     `   r #) R .
+
+
+                                                                       13
+   The proof relies on a number of preliminary results.
+Lemma 2.3.4.6: The relation computed by the algorithm is symmetric on normal forms:
+  1. Suppose that r and s are well-formed record types in normal form and that r r0 and s
+                                                                                                               s
+                                                                                                                     0. Then
+     T   r #) s i T
+         `              ` r 0 #) s 0 .
+
+  2. Suppose that r and s are well-formed record types in normal form. If T r #) s, then T
+                                                                                `                              `   s   #) r.
+Proof:
+  1. Since r and s are in normal form, r0 and s0 must also be, and r0 and s0 must be a commutative,
+     associative re-grouping of r and s.
+  2. A simple induction on derivations.                                                        Box
+
+
+Lemma 2.3.4.7:        Suppose that r and t are well-formed normal forms. Then T            `       r   #) l:t implies
+T ` r # l:t0 for any well-formed type t0 .
+Proof: Consider the form of r, and note that the property holds for atomic record types. 2
+Lemma 2.3.4.8: If T s1 s2 record and T r #) s1 and T r #) s2, then T r #) (s1 s2) .
+                         `      jj               `                   `                         `                       jj
+
+
+
+Proof: By a straightforward induction on a reduction sequence from s1 s2 to (s1 s2).
+                                                                           jj         jj                                    2
+De nition 2.3.4.9: Let atoms(r ) be
+  1. the empty set if r is Empty,
+  2. otherwise, the result of replacing each atom of the form l:t by the bare label l in the set of atoms of
+     the normal form of r.
+
+Lemma 2.3.4.10: If T R ok and r 2 R, then atoms(r ) R.
+                            `                                 
+
+Proof: If r is Empty, the result is immediate. So assume r is not Empty. Since0 the relation 0 is con uent
+modulo , we may focus on any reduction path from R to a -normal form R such that R R . Begin
+                                                                                                              
+
+by reducing r to r in R, giving R0. Then atten r in R0 to its constituent atoms, giving R00, and perform all
+the base reductions l:t  l in the residuals of r in R00, giving R 0 . Observe that atoms(r ) R 0 . Finally,
+                                                                                                           
+
+rewrite R 0 to R using the axioms for , noting that no bare label or type variable is dropped from R 0
+                                         
+
+(considered as a set) during any of these reductions.                                                        2
+Lemma 2.3.4.11: Let T = T1; a#R; T2, and suppose that          ` T ok and r 2 R (so that T     a # r.) Then
+                                                                                                       `
+
+T ` a   #) r .
+Proof: By induction on the form of r , using Lemma 2.3.4.10.                                               2
+    It remains to show that the relation axiomatized by the rules of Figure 6 is decidable. This follows from
+two observations. First, the rules are \almost syntax-directed" in the sense that there is a pair of rules
+for each form of restriction-free record type, one the symmetric version of the other. Second, in the cases
+where two rules apply to a given pair of types, it is immaterial which rule is applied. To see this we have
+to consider four combinations. If both r and s are Empty, either rule yields the same result (success). If
+one of r and s is Empty and the other is a merge, then no matter how we proceed the result is the same
+(success). In the case that both r and s are merges, we have no choice but to apply A-Cmp-Merge-I-1
+and A-Cmp-Merge-I-2 to break down both merges into their components; the order in which we do this
+has no e ect on the result. We may therefore check compatibility by decomposing merges in an arbitrary
+order until we reach atoms, then apply the appropriate rules. If any derivation exists, this procedure will
+construct it, and we can e ectively decide whether any rule applies.
+                                                      14
+                                                               #
+                                                  T1 ; a R; T2 ` a                      )   record                  (A-Wfr-Var)
+                                                               T ` r1 )             record
+                                                               T ` r2 )             record
+                                                                 T ` r1 ) r2    #
+                                                       T ` r1 jj r2                 )   record                    (A-Wfr-Merge)
+                                                                   ;
+                                                               T G ` e1 ) r1
+                                                                   ;
+                                                               T G ` e2 ) r2
+                                                                T ` r1 ) r2   #
+                                                       ;
+                                                  T G ` e1 jj e2 ) r1 jj r2
+                                                                                                              (A-Wtt-Merge)
+                                                               ;
+                                                       T G ` e ) 8a R: t            #
+                                                         T ` r )                 record
+                                                          T ` r ) R           #
+                                                    T G `  ;               e[r]    [r=a]t
+                                                                                    )
+                                                                                                                  (A-Wtt-All-E)
+
+                                             Figure 7: Selected type synthesis rules
+
+2.3.5 Type Synthesis
+The type checking algorithm for jj is given in terms of a type synthesis procedure that constructs a \canon-
+ical" type for a given expression in a given context. This procedure is described by a formal system for
+deriving judgements of the form T ; G        e     `t, together with a number of auxiliary judgements of a
+                                                                   )
+
+similar form. As with the compatibility checker, we show that this formal system de nes a type checking
+algorithm by proving that it is sound and complete with respect to the de nition of jj and that we may
+e ectively decide whether or not a derivation exists. A representative set of rules from the de nition of the
+type synthesis algorithm is given in Figure 7. The complete set of rules appears in Appendix B.
+    The judgements derived by the algorithm are:
+               T    `R   ) ok T t             `type T r
+                                                   )               record T ; G e t:`       )             `   )
+
+
+    Note that in rules A-Wtt-Merge and A-Wtt-All-E, the record types and constraint lists are nor-
+malized before checking compatibility.
+    The soundness and completness of the algorithm are stated by the following theorems:
+Theorem 2.3.5.1: (Soundness)
+   1. If T ok and T r
+        `                `       record, then T r record.
+                                 )                                     `
+
+
+   2. If T ok and T t
+        `                `       type, then T t type.
+                                 )                                 `
+
+
+   3. If T ok and T R
+        `                `       ok, then T R ok.
+                                 )                         `
+
+
+   4. If T G ok and T ; G e t, then T ; G e 2 t.
+            `                    `       )                                 `
+
+
+
+
+Theorem 2.3.5.2: (Completeness)
+  1. If T   `   r record, then T r   `  record.
+                                              )
+
+
+  2. If T   `   t type, then T   `t   type.
+                                         )
+
+
+  3. If T   `   R ok, then T `  R   ok.  )
+
+
+  4. If T   `   e 2 t, then T    `e  t0 for some t0 such that t0
+                                         )                                                       t   .
+
+                                                                               15
+    Both may be proved by induction on derivations.
+    For decidability, we have only to note that the relevant instances of compatibility and conversion checking
+are decidable, and that the rules are syntax-directed.
+
+3 Examples
+In this section we develop some examples illustrating the expressiveness of jj. Section 3.1 presents some
+short examples and compares them to their formulations in related record calculi. Section 3.2 shows how
+Wand's model of a simple object-oriented programming language with method inheritance and a notion of
+self may be emulated in jj. Section 3.3 shows that in the presence of recursive types, quanti ers carrying
+negative constraints are sucient to satisfactorily express the examples motivating the extension of bounded
+quanti cation to F-bounded quanti cation. Section 3.4 shows how some other primitive record operations
+may be added to the language.
+3.1 Simple Record Manipulation
+A function that accepts any record not already possessing an l eld and adds the eld l=5 can be written
+in jj as:
+        a#l:
+            x:a:
+              x l=5
+             jj
+        2 a#l: a (a l:Int)
+         8                !          jj
+
+A similar function that accepts any record with an l eld and overrides it with the eld l=5 can also be
+expressed:
+        b: a#l:
+           x:(a l:b):
+                 jj
+
+              (x l) l=5
+              n           jj
+        2 b: a#l: (a l:b) (a l:Int)
+         8   8                  jj         !   jj
+
+(Strictly speaking, this function can only accept a record whose l eld has some record type, because for
+simplicity we have omitted ordinary type quanti cation. The empty constraint list on the rst quanti er
+is dropped, by convention, to reduce clutter, but it should not be confused with the usual unconstrained
+quanti er.)
+    Unlike the calculi of Remy, Wand, and Cardelli and Mitchell, jj is unable to express the function that
+takes any record whatsoever and gives it an l eld with value 5.
+    Functions that perform \deep updates" of elds within elds of records, preserving all the type informa-
+tion about the unmodi ed elds, can be expressed in jj . For example:
+        a#la:
+           b#lb:
+              x:(b lb :(a la :Bool)):
+                          jj          jj
+
+                (x lb) lb = ((x:lb) la la = (not x:lb:la))
+                      n        jj                   n   jj
+
+Cardelli and Mitchell's formulation of this function, which relies on extraction types like a:l, is somewhat
+shorter.
+3.2 Object-Oriented Programming
+Wand [25, 26, 27, 28] has shown how a simple form of object-oriented programming may be modeled in an
+extension of ML [14, 16] with record concatenation and recursive types. An analogous construction can be
+made in an extension of jj with polymorphism (quanti cation over arbitrary types), xed point operators at
+the term level, base types such as int and bool, and recursive types. Recursive types are denoted  a: t(a),
+where t(a) is an arbitrary type expression, possibly involving the variable a. Let jj stand for the extension
+of jj with recursive types. Type equivalence for jj is de ned by considering recursive types to denote
+                                                             16
+the in nite, regular tree obtained by unrolling all occurrences of  a: t(a), and applying the equivalences
+on type expressions given in Appendix A. Although this description of type equivalence is sucient for the
+examples to follow, it should be emphasized that we have not studied the decidability of type equivalence,
+and hence the decidability of type checking for jj remains open.
+   Following Wand, we consider rst a very simple notion of class that does not include a notion of self or
+provide for inheritance. In this setting classes are functions from a parameter type, representing instance-
+speci c values, to some record type, representing the methods. Speci cally,
+       class x:t methods l1=e1 ; .. . ; ln=en
+stands for the expression
+       x:t: (l1 =e1 .. . ln = en)
+                            jj        jj
+
+which has type
+       t   !(l1:t1 ... ln:tn)
+                       jj        jj
+
+provided that t is a type, x:t ei 2 ti , and all the li 's are distinct. Let C be such a class. If e is a term of
+                                               `
+
+type t, then C(e) is a record of type l1 :t1 . .. ln :tn, so that C(e):li selects the method associated with
+                                                                       jj        jj
+
+the instance of C determined by e. Following Wand we write
+       new C e
+for the application C(e).
+    Wand's list-processing example may be readily translated into this setting as follows. First, we introduce
+some abbreviations:
+       cellPlus[r; s; t] = r null:Bool car:s cdr:t   jj                     jj              jj
+
+       cell[s; t]          = cellPlus[Empty; s; t]
+       listPlus[r; s]      =  a: cellPlus[r; s; a]
+       list[s]             = listPlus[Empty; s]:
+Note that
+       listPlus[r; s]       cellPlus[r; s; listPlus[s]]
+                                 
+
+                            r null:Bool car:s cdr:listPlus[r; s]
+                                          jj                      jj                 jj
+
+and that
+       list[s]      cell[s; list[s]]
+                    null:Bool car:s cdr:list[s]:
+                                                jj            jj
+
+These equations will be important for type checking the examples below.
+    De ne
+       nil = s; t: x:1: (null=true car=error[s] cdr =error[t])   jj                             jj
+             2 s; t: 1 cell[s; t]:
+                   8              !
+
+Note that nil is parameterized by the types of the cells. We assume a special constant error 2 t: t              8
+
+assigning an \error element" to each type. (In a richer calculus one may wish to arrange that selecting the
+car or the cdr eld raise an exception.)
+    De ne
+       cons = s; t: (h; t):s t: (null=false car=h cdr=t)
+                                                                                      jj              jj
+              2 s; t: (s t) cell[s; t]:
+                   8                          !
+
+    Now consider
+       map = s; t: r#null; car; cdr: f:s t:                                !
+
+                     fixu map0:u: l:listPlus[r; s]:
+                                 if l:null
+                                     then new nil t; list t        [              [ ]]()
+                                     else new cons t list t            [ ][         [ ]](f l:car)(map0 l:cdr)
+where u = listPlus[r; s] list[t].          !
+
+  It is easy to see that map has type
+       8s; t: r#null; car; cdr: (s t)
+               8                                          !   ! listPlus r s ! list s      [; ]             []
+
+                                                                                           17
+under some obvious assumptions about typing conditionals and taking account of the equations between
+recursive types noted above.
+      Extending the example to a simple, self-less form of multiple inheritance presents no particular diculties:
+         class x:t inherits f1 ; . .. ; fk methods l1=e1 ; . .. ; ln=en end
+stands for
+         x:t: (f1 .. . fk l1=e1 .. . ln=en )
+                  jj    jj        jj                  jj             jj
+
+which has type
+         t
+         !      (F1 ... Fk l1 :t1 .. . ln:tn )
+                 jj    jj        jj              jj             jj
+
+provided that t is well formed, x:t fj 2 Fj , x:t ei 2 ti, and the following compatibility conditions are
+                                                       `                             `
+
+satis ed:
+     1. all li 's are distinct,
+     2. Fi # Fj whenever i = j ,
+                             6
+
+
+     3. Fi # lj for each Fi and each label lj .
+      These conditions are not enforced in Wand's system since he prefers the asymmetric form of merge in
+which the rightmost occurrence of a eld in a record type determines the value assigned to that eld. We
+prefer instead that the type checker ensure that no clashes are possible, and insist that the programmer
+explicitly use the restriction operation to eliminate the eld that he or she wishes to override.
+      The extension to model \self" presents some interesting problems for typing. We begin by considering a
+form of self that does not behave correctly in the presence of inheritance and then consider how to combine
+self and inheritance. The simple-minded approach to self proceeds by de ning
+         class x:s methods l1=e1 ; . .. ; ln=en end
+to be
+         x:s: self:t: (l1 =e1 .. . ln =en)
+                                       jj             jj
+
+which has type s t t, where t = (l1 :t1 ... ln :tn), provided that t is a type and x:t; self:t
+                      ! !                                                 jj    jj                         `  ei :
+ti .
+      Class instantiation is performed by taking a xed point, as described in Wand's paper. If C is a class of
+the form just described, then
+       new C e
+is de ned to be
+       fixt (C(e));
+where C has type s t t and e has type s.
+                       ! !
+
+    This simple-minded approach interacts badly with inheritance in two ways. First, the type assigned to
+self is required to coincide with the type of the body of the class de nition. This forces us to de ne at
+class de nition time all methods that are used by any method of the class. This precludes the possibility
+of \mixing in" the missing methods at a later stage, a signi cant feature of object-oriented programming.
+Second, the type assigned to self does not take account of the fact that the class may occur as the superclass
+of some subclass which may de ne not only the \missing" methods, but also some additional methods not
+relevant to the de nition of the superclass. In short, self should refer to the entire subclass, and not just
+the superclass or even just the subclass of the superclass required to achieve \closure."
+    This means that a class de nition must have a \ oating" notion of self that can be instantiated at any
+subclass consistent with the requirements imposed on self and with the methods that are given for self
+as part of the class de nition. Following Wand, we take
+       class x:t inherits f1 ; . .. ; fk methods l1=e1 ; . .. ; ln=en end
+to stand for (roughly)
+       x:t: fixv (s:v: (f1 (s) .. . f2 (s) l1 =e1 . .. ln=en))
+                                            jj             jj              jj            jj   jj
+
+
+
+
+                                                                                         18
+where v is a suitable type expression. This ensures that the fi 's and the new class share a common sense of
+self.
+    Since our system is explicitly-typed, we must take explicit account of the variability of the type of self
+by introducing suitable constrained type abstractions. The main idea is to abstract with respect to a record
+type variable a representing an arbitrary \extension" to the type of record comprising the object, and to
+assign to self a type of the form a l1 :t1 .. . ln :tn , where the li :ti's include both the types of the
+                                                                   jj              jj             jj
+
+methods actually de ned by the class and the types of the methods assumed by the new methods. By
+choosing the type a appropriately we may instantiate self to be any superclass of the class, as required for
+inheritance.
+    A class de nition of the form
+        class x:t methods l1=e1 ; . .. ; ln=en end
+is represented by a -term of the form
+        x:t:
+          a#l1; . .. ; ln:
+             s:(a l1 :t1 .. . ln :tn):
+                       jj                jj             jj
+
+                (li1 =ei1 . .. lir =eir );
+                                   jj          jj
+
+where i1 ; . .. ; ir 1 .. . n. This expression has type
+       f               g 
+
+        t  ! 8 a#l1; . .. ; ln:
+          (a l1 :t1 ... ln :tn)
+             jj              jj          jj
+
+            !     (li1 :ti1 .. . lir :tir )
+                                   jj          jj
+
+provided that t type and x:t; a#l1; . .. ; ln and s:a l1 : t1 ... ln : tn ej 2 tj .                jj             jj        jj        `
+
+    To build a subclass of such a class C, we proceed as follows. Let us suppose that we intend to build a
+class D, and instantiate it at some value v. Therefore we must at least de ne the methods assumed in the
+de nition of C, and perhaps some additional methods particular to D. Thus we will want to use a de nition
+of the form
+        class x:t inherits new C e methods lj1 =ej1 .. . ljq =ejq k1=d1 .. . kp =dp end                      jj        jj        jj       jj   jj
+
+where li1 ; ... ; lir ; lj1 ; . .. ; ljq = l1 . .. ln (so that the lj 's supply the missing methods and the ki 's are new
+methods associated with D). This corresponds to the following lambda term:
+        x:t: a#l1; . .. ; ln; k1; .. . ; kp :
+          self:(a l1:t1 . .. ln:tn k1:s1 . .. kp:sp ):
+                        jj              jj          jj            jj          jj        jj
+
+             C(e)[a k1:s1 .. . kp :sp ](self)
+                       jj               jj         jj
+
+                   lj1 =ej1 .. . ljq =ejq k1=d1 .. . kp =dp
+                  jj                    jj          jj                   jj              jj             jj
+
+which has type
+        t  ! 8 a#l1; . .. ; ln; k1; ... ; kp :
+                       (a l1 :t1 . .. ln:tn k1:s1 . .. kp :sp )
+                              jj              jj         jj            jj          jj        jj
+
+                        !  (l1 :t1 .. . ln:tn k1 :s1 ... kp :sp )
+                                              jj             jj         jj         jj         jj
+
+so that x:t: fix(D(x)[Empty]) 2 t l1:t1 . .. kp :sp (assuming that the lj 's supplied the missing
+                                                                       !                jj              jj
+
+methods).
+    Here is a concrete example using self, taken from Wand.
+    De ne the \class" A to be
+        x:int:
+          a#sum; n:
+             self:(a sum:int n:int):
+                              jj                    jj
+
+                sum=(x + self:n)
+with type
+        int ! 8    a#sum; n:
+                    (a sum:int n:int) (sum:int):
+                        jj                    jj                  !
+
+Here x is a parameter of the \class instantiation" operation: when A is instantiated, the value supplied for
+x becomes a hidden component of the new object. The row variable a is a placeholder for any elds that
+
+
+                                                                                                       19
+may be added by subclasses of A. The parameter self provides a name within the new instance of A for the
+instance itself, which is supplied at instantiation time using the xed point operator.
+    As it stands, the class A cannot actually be instantiated since it lacks a method for n. De ne the class B
+to be a subclass of A with a method for n:
+        y:int:
+           a#sum; n:
+             self:(a sum:int n:int):
+                       jj        jj
+
+               A(5)[a](self) n=y
+                            jj
+
+with type
+        int! 8   a#sum; n:
+                  (a sum:int n:int) (sum:int n:int):
+                  jj        jj         !             jj
+
+We may now instantiate B by writing, for example, B(3)[Empty] 2 sum:int n:int sum:int n:int, so that
+                                                                            jj           !    jj
+
+(fix(B(3)[Empty])):sum = 8.
+    We may also de ne a class C that extends A with a method for n and a method for m:
+        y:int:
+           a#sum; n; m:
+             self:(a sum:int n:int m:int):
+                       jj        jj        jj
+
+               A(5)[a m:int](self) n=y m=10:
+                       jj             jj        jj
+
+The instantiation expression fix(C(3)[Empty]) results in an object with sum and n elds agreeing with B and
+with an additional m eld whose value is 10.
+    It is worth noting that the translations of the object-oriented programming idioms into our calculus are
+to be understood only informally since the target expression involves information not apparent in the source
+expression. Moreover, it seems reasonable to impose additional typing constraints on classes beyond those
+that would arise out of their representation in jj . For example, it seems sensible to insist that the type
+ascribed to self be consistent with the type of the body of the class. This suggests that in a more complete
+development of these ideas, special syntax for class operations would be needed.
+    One major di erence between this model of object-oriented programming and Wand's is that Wand's
+record concatenation operator is asymmetric while that of jj is symmetric. This di erence represents an
+important methodological committment in the models of object oriented programming that arise from the
+two type systems.
+    Any language with multiple inheritance must address the issue of what happens when a class de nition
+inherits the same method from two or more superclasses. One solution, adopted in many existing languages,
+is to choose one of the superclasses | say, the one mentioned furthest to the right in the subclass' de nition
+| as the \principal superclass," resolving all con icts in favor of this one. Wand's model implements this
+kind of con ict resolution scheme.
+    Another possibility, preferred by some designers of strongly typed object-oriented languages, is simply to
+disallow class de nitions where the same method is inherited ambiguously from more than one superclass.
+When describing a class whose superclasses have overlapping sets of method names, the programmer must
+explicitly specify which superclass each ambigous method comes from. Our model can be used to implement
+this kind of con ict resolution strategy: the typing rules for the merge operator ensure that each method
+comes from exactly one superclass; the restriction operator is used to hide all but one of the inherited
+instances of a method.
+3.3 F-Bounded Quanti cation
+Members of the ABEL group have argued persuasively that \bounded quanti cation does not provide the
+same degree of exibility in the presence of recursive types as it does for non-recursive types" [1, 7]. They
+consider two classes of situations in which problems arise, one when the recursion variable occurs negatively,
+the other when it occurs positively. To deal with these problems, they propose an extended notion, called
+F-bounded quanti cation, where the pure bounded quanti er of the form a r: t is generalized to the
+                                                                                 8   
+
+
+
+
+                                                          20
+form a F(a): t, where F is a function from types to types. In this section we show that the motivating
+     8    
+
+examples of F-bounded quanti cation may be encoded directly in jj .
+   In the class of situations where the recursion variable appears in negative positions, Canning et al. show
+that the pure type system of Cardelli and Wegner [6] does not allow functions to be applied to a variety of
+values for which they make semantic sense. Consider the type
+       PartialOrder =  po: leq : po Boolf                !        g
+
+and assume we are given a function for computing the minimum of two values of any \subclass" of
+PartialOrder:
+         min 2 8a  PartialOrder: a!a!a:
+One of the types that we would like to be able to pass to min is
+      Number =  num: leq : num Bool; other : t :
+                                f                !                     g
+
+But by the usual rule for subtyping on recursive types,
+                                                         a free only in s
+                                 G; a   b    s   t       b free only in t
+                                                                                                 (LEQ-REC)
+                                                          `       
+
+                                                              G `  a: s   b: t
+
+it is not the case that Number PartialOrder.
+                                     
+
+     F-bounded quanti cation can be used to rede ne min so that it can be applied to elements of Number as
+well as PartialOrder. De ne a type function
+        FPartialOrder(t) = leq : t Bool
+                                     f                !        g
+
+and check that Number FPartialOrder(Number). Now write
+                                
+
+        min = a        FPartialOrder(a):
+                     x:a: y:a:
+                       if x:leq(y) then x else y
+              2 a FPartialOrder(a): a a a:
+                    8                                         ! !
+
+    The same intention | to express min so that it can be applied generically to members of any class
+possessing at least an leq operation mapping another member of the same class to a truth value | can be
+realized directly in jj . We write:
+        min 2 a#leq:  b: (a leq:b Bool)
+                8                        jj           !
+
+                            b: (a leq:b Bool)
+                            !        jj               !
+
+                            b: (a leq:b Bool)
+                            !        jj               !
+
+        Number =  num: (leq:num Bool other:t)!           jj
+
+         five 2 Number:
+To type the application
+         min five five
+we need to restrict away the leq eld from Number:
+       min [Number leq] five five:
+                        n
+
+The type application is well formed because Number leq lacks an leq eld. To apply this term to five, we
+                                                                       n
+
+need to know that
+       Number  b: (Number leq) leq:b Bool:
+                                    n           jj            !
+
+Unrolling the de nition of Number and applying the rule for elimination of restriction operations, this reduces
+to showing
+       Number  b: (other:[Number=num]t)
+               
+
+                            leq:b Bool:
+                                jj           !
+
+But these type expressions have the same in nite unrolling and hence are equal under our interpretation of
+recursive types. This argument may be made precise by considering a de nition of type equivalence similar
+to the de nition of bisimulation equivalence in CCS [15]. To establish the above equivalence, it suces to
+
+                                                                       21
+show that it is consistent to assume that it holds, where the consistency constraints ensure, for example,
+that two records are equal only if they have the same elds and corresponding elds are equal.
+   The other class of situations where bounded quanti cation appears to be inadequate are those involving
+positive occurrences of the recursion variable in a recursively de ned record type. Here again, pure bounded
+quanti cation prevents functions from being applied to a variety of values for which they make sense.
+   For example, de ne a recursive record type
+       Movable = mv: move : Real Real mv
+                           f               !             !       g
+
+and a function
+       translate = x:Movable: x:move 1:0 1:0:
+Since translate is intended to operate on values possessing any \subsclass" of \class" Movable, we want to
+show that it has type a Movable: a a. But it does not; the best that can be said for it is that it has
+                       8                       !
+
+type a Movable: a Movable, which is no better than Movable Movable. So if
+     8                !                                                                      !
+
+       Point =  pnt: x:void Real; y:void Real; move:Real Real pnt
+                           f           !                     !                            !       !       g
+
+and
+         mypoint 2 Point;
+then the application
+         translate mypoint
+will have type Movable, not Point.
+    Using F-bounded quanti cation, a translate function that will map elements of Point back into Point
+can be written as follows. De ne the type function
+        FMovable(t) = move : Real
+                           f             Real
+                                           !     t :     !           g
+
+and write
+        translate = a         FMovable(a):
+                                   
+
+                            x:a:
+                              x:move 1:0 1:0:
+Then since Point FMovable(Point), the application translate [Point] mypoint is well typed and has
+                  
+
+result type Point.
+    To express translate in jj so that it can be applied to mypoint, we write:
+        translate    = a#move:
+                            x:( b: a (move : Real Real b)):
+                                           jj                        !        !
+
+                               x:move 1:01:0
+                     2 a#move: ( b: a (move : Real Real b)) ( b: a (move : Real Real b)):
+                               8                    jj                        !       !       !           jj   !    !
+
+    Again, we apply translate to mypoint by rst restricting away the move eld of its type:
+        translate [Point move] mypoint:
+                               n
+
+
+
+
+3.4 Language Extensions
+This section shows how some other primitive record operations may be added to jj.
+   The \consistent update" operator e upd l=e0 takes a record e with an l and replaces the value of this
+ eld with e0, which must have exactly the same type as the present contents of the eld. This operation
+cannot be expressed directly in jj , but it can be provided easily by adding a new typing rule:
+                       T;G      e 2 r         r l       T;G     e0 2 t      t    r l
+                                   `
+
+                                           T;G     e upd l=e0 2 r
+                                                             `
+                                                                 #                `
+                                                                                                 (Wtt-Upd)
+                                                                                                      
+
+
+
+
+   Similarly, eld renaming can be provided by adding two new rules:
+                                  T    r record     r l1       r l2
+                                                                                                               (Wft-Rename)
+                                                `                                 #           "
+
+                                       T;G      r[l1 l2 ] record
+                                                             `            !
+
+
+
+
+                                                                         22
+                                                r l1 #        r l2 "
+                                      ;      [       ] ( ) l2:r l
+                                    T G ` r l1!l2  rnl1               jj
+                                                                                               (Eq-Rename)
+   At the level of values, syntactic sugar suces for the eld renaming operation:
+                                         [
+                                       e l1!l2    ] = e l1
+                                                         n       1 =(e:l1):
+                                                              jj l
+
+
+
+   The identity function on all records with only an l eld requires ordinary type quanti cation:
+                                             a: b#(l:a): x:b: x:l:
+
+4 Future Work
+The research described here suggests a number of intriguing paths for future work. Among those that we
+would like to pursue are:
+Record kinds: At one stage in the development of jj, we attempted to classify record types into kinds
+     according to the record types with which they can safely be merged. Rather than \r # R," we wrote
+     \r : rec#R," meaning \r has the kind describing records compatible with the types in R."
+     This reorganization has the advantage of allowing record type quanti cation to be uni ed cleanly with
+     ordinary type quanti cation. Also, a form of subsumption | already implicit in jj in the fact that
+     a record type abstraction may be applied to a record type that happens to satisfy more constraints
+     than those required by the quanti er | can be made explicit in this reformulation by introducing a
+     \weaker than" ordering on record kinds.
+     In the end, the formulation used in this paper appeared to have a more more tractable proof theory,
+     so we chose to stick with it for this stage of our investigation. But the elegance of the formulation in
+     terms of kinds remains attractive.
+Alternative primitives: The de nition of jj is strongly committed to a particular choice of primitives:
+     symmetric merge and \checked" restriction, where a record can only be restricted at a eld that it
+     de nitely possesses. Substituting a di erent formulation of either of these operators would require
+     making some changes to the de nition of the system, and probably major changes to the algorithms
+     for typechecking. Nevertheless, we believe that the methodology used to develop jj could be e ectively
+     applied to similar systems with di erent | perhaps more useful | sets of primitives.
+Type reconstruction: The prenex fragment of jj , in which quanti ers are restricted to appear only out-
+     ermost in type phrases, can be viewed as an explicitly typed version of Wand's calculus with row
+     variables, with the di erence that the merge operator is symmetric and the restriction operator is
+     checked. From this analogy, we believe that the problem of nding a well-typed term whose era-
+     sure is the same as a given untyped term in this fragment (type reconstruction) may be decidable,
+     though a type reconstruction algorithm would almost certainly have exponential complexity because,
+     like Wand's, it would be inferring not principal types but nite sets of principal types.
+Recursive types: In order to fully justify the examples inspired by F-bounded quanti cation in Section 3.3,
+     the decidability of typechecking for jj needs to be established. Typechecking for polymorphic -calculi
+     in the presence of -types is beginning to be understood, but the complex equivalence relation already
+     de ned on types appears to complicate matters substantially.
+Notation for object-oriented programming: From the examples inspired by Wand in Section 3.2, it
+     appears that a type system like this one could be used as the basis of a fairly expressive object-oriented
+     programming language. It would be interesting to try to formalize the informal \class" notation used
+     in these examples and describe a rigorous translation into jj .
+
+
+                                                         23
+5 Conclusions
+The decision to annotate quanti ers with purely positive information, with purely negative information, or
+with a mixture of positive and negative information is an important point of variation among calculi of
+record operations. Ordinary bounded quanti cation [6], F-bounded quanti cation [1], and the systems of
+Ohori and Buneman [18, 19] are positive-information systems. Cardelli and Mitchell's calculus [4, 5] and
+our earlier \symmetric system" [10] are mixed positive and negative. Wand's system of row variables [28]
+and jj are pure negative-information systems.
+    The di erences among these classes of systems are particularly clear in the presence of recursive types. In
+positive-information systems, something like F-bounded quanti cation seems to be required. In the negative
+setting we do not need an analogue of F-bounded quanti cation, since we can explicitly quantify over the
+\rest" of the elds in a record type. This leads to the observation that, in mixed systems like Cardelli
+and Mitchell's, the negative-information fragment can be used to directly express the examples motivating
+F-bounded quanti cation. Indeed, the construction given in Section 3.3 can be carried out almost verbatim
+in Cardelli and Mitchell's calculus.
+
+6 Acknowledgements
+We are grateful for productive discussions with Val Breazu-Tannen, Peter Buneman, Luca Cardelli, Carl
+Gunter, Frank Pfenning, Didier Remy, and John Reynolds.
+
+A Complete Typing Rules
+A.1 Judgement Forms
+        Well-formed type context: T ok
+        Well-formed term context: T G ok `
+
+        Well-formed type:             T  `t type
+        Well-formed record type: T r record
+                                         `
+
+        Well-formed constraint list: T R ok
+                                         `
+
+        Constraint list satisfaction: T r # R
+                                         `
+
+        Compatible types:             T  `r1 # r2
+        Equivalent types:             t1 t2
+        Equivalent constraint sets: R1 R2
+
+        Well-formed term:             T;G    e 2 t
+                                             `
+
+
+
+A.2 Well-formed type contexts
+                                                         ok                                 (Wftc-Empty)
+                                                  T ` R ok                                     (Wftc-Tvar)
+                                                      # ok
+                                                  T; a R
+
+A.3 Well-formed constraint lists
+                                                     T    ok
+                                                  T `         ok                                (Wfcl-Nil)
+                                         T ` r   record         T ` R   ok
+                                                 T ` r; R      ok                              (Wfcl-Cons)
+
+
+
+                                                      24
+A.4 Well-formed term contexts
+                                                   T     ok
+                                           T `               ok                (Wfc-Empty)
+                              T ` G        ok             T ` t     type
+                                       T ` G; x t            : ok                  (Wfc-Var)
+
+A.5 Well-formed types
+                                                   T   ok
+                                        T `            p type
+                                                                                  (Wft-Prim)
+                            T ` t1     type                   T ` t2   type
+                                    T ` t1 !t2   type                           (Wft-Arrow)
+                                    T; a#R     t type
+                                                                                   (Wft-All)
+                                                         `
+
+                                   T   ` 8a#R: t type
+
+                                       T   r record
+                                                                                   (Wft-Rec)
+                                            `
+
+                                        T   r type
+                                                `
+
+
+
+A.6 Well-formed record types
+                                                ok
+                                       T1 ; a R; T2#
+                                       #
+                               T1 ; a R; T2 ` a  record                            (Wfr-Var)
+                                     T     t type
+                                  T
+                                                `
+
+                                         l:t record
+                                           `
+                                                                                  (Wfr-Base)
+                              T     r record      r l
+                                                                                 (Wfr-Restr)
+                                   `                                   #
+
+                                  T      r l record
+                                           `        n
+
+
+                                         T ok
+                                T      Empty record
+                                       `
+                                                                                (Wfr-Empty)
+                                    T     r1 # r2
+                                                                                (Wfr-Merge)
+                                               `
+
+                                T      r1 r2 record
+                                       `            jj
+
+
+
+A.7 Constraint list satisfaction
+                                       T ` r             record
+                                           T `           r#    
+                                                                               (Cmp-List-Nil)
+                             T ` r     # ri                  T ` r   #R
+                                       T ` r            # ri ; R              (Cmp-List-Cons)
+
+
+
+
+                                                    25
+A.8 Compatibility
+                              T ` r   #s                    r  r0                s  s0
+                                            T ` r0           # s0                                (Cmp-Eq)
+                                            T `             r#s
+                                            T `             s#r
+                                                                                               (Cmp-Symm)
+                               T ` r   # l:t                         T ` t0       type
+                                            T ` r # l:t0
+                                                                                                (Cmp-Base)
+                                       #
+                                 T1; a R; T2                ok              ri 2 R
+                                            #
+                                   T1 ; a R; T2 ` a # ri                                       (Cmp-Tvar)
+                                   T     r # (s1 s2 )
+                                      T
+                                            `
+
+                                            r # si  `
+                                                                       jj
+                                                                                            (Cmp-Merge-E)
+                      T    s1 # s2     T    r # s1       T      r # s2
+                                                                                             (Cmp-Merge-I)
+                          `                         `                                `
+
+                                   T     r # (s1 s2 )
+                                            `                          jj
+
+
+                     l = l0    T    l:t record       T    l0 :t0 record
+                                                                                           (Cmp-Base/Base)
+                      6            `                                           `
+
+                                    T     l:t # l0 :t0
+                                                `
+
+
+                                     T     r record
+                                                                                              (Cmp-Empty)
+                                                    `
+
+                                   T     r # Empty
+                                            `
+
+
+
+A.9 Constraint list equivalence
+                                                    RR                                         (Ceq-Refl)
+                                                    R  R0
+                                                    R0  R
+                                                                                               (Ceq-Symm)
+                                      R  R0                     R0  R00
+                                                    R  R00
+                                                                                               (Ceq-Trans)
+                                       R  R0                    r  r0
+                                            r; R             r
+                                                                     0; R0                     (Ceq-Inner)
+
+                                      r; r0 ; R
+                                        (               )    r
+                                                                     0 ; (r; R)                 (Ceq-Swap)
+
+                                         Empty; R  R                                         (Ceq-Empty)
+
+                                  (r1 r2 ); R
+                                       jj                    r      1 ; (r2 ; R)             (Ceq-Merge)
+
+                                        r; r; R (           )    r    ;R                       (Ceq-Dupl)
+
+                                        l t; R  l t0 ; R
+                                            :                    :                              (Ceq-Base)
+
+
+
+
+                                                            26
+A.10 Type equivalence
+                                               rjjEmpty  r                                             (Eq-Merge-Unit)
+
+                                       (
+                                r1 jj r2jjr3                ) (r1 r2)
+                                                                        jj        jj r   3            (Eq-Merge-Assoc)
+
+                                       r1 jj r2  r2 jj r1                                             (Eq-Merge-Comm)
+
+                                       rnlnl0  rnl0nl                                                 (Eq-Restr/Restr')
+
+                                       (l:t) l       n        Empty                                    (Eq-Base/Restr)
+                                                        r1 l #
+                                  (r1 r2) l (r1 l r2 )
+                                        jj           n                  n jj
+                                                                                                       (Eq-Merge/Restr)
+
+A.11 Type equivalence (congruence)
+                                                        tt                                                    (Eq-Refl)
+                                                        t0  t
+                                                        t  t0
+                                                                                                              (Eq-Symm)
+                                       t  t0                       t0  t00
+                                                        t  t00
+                                                                                                             (Eq-Trans)
+                                    t1  t01                        t2  t02
+                                        t1 !t2  t01 !t02
+                                                                                                       (Eq-Cong-Arrow)
+                                       R  R0                       t  t0
+                                   8a      #R: t             8a        #R0: t0                           (Eq-Cong-All)
+                                                        t  t0
+                                                    l t  l t0
+                                                     :              :                                    (Eq-Cong-Base)
+                                                        rr
+                                               rnl  r0nl
+                                                                                                        (Eq-Cong-Restr)
+                                    r1  r01                        r2  r02
+                                       r1 jj r2  r01 jj r02
+                                                                                                       (Eq-Cong-Merge)
+
+A.12 Well-typed terms
+                        ;
+                     T G ` e 2 t                            T ` t0            type            t  t0
+                                            T G ` e 2 t0
+                                                ;                                                              (Wtt-Eq)
+                                       T ` G1 ; x t; G2         :             ok                              (Wtt-Var)
+                                   ;                :
+                                  T G1 ; x t; G2 ` x 2 t
+
+                                        ;
+                                   T G; x t             :               e 2 t0
+                                                                                                          (Wtt-Arrow-I)
+                                                                `
+
+                                 T G ` x t: e 2 t!t0
+                                   ;                        :
+                        T G ` e1 2 t!t0
+                            ;                                             ;
+                                                                        T G ` e2 2 t
+                                       T G ` e1 e2 2 t0
+                                           ;                                                             (Wtt-Arrow-E)
+
+                                                             27
+                                                      ;
+                                                  T G ` e 2 t
+                                                                                                        (Wtt-Base)
+                                                  ;
+                                              T G ` l e 2 lt  =              :
+                                          ;
+                                      T G ` e 2 r                            r l#
+                                                  ;
+                                              T G ` enl 2 rnl
+                                                                                                       (Wtt-Restr)
+                                                          T ` G    ok
+                                          ;
+                                      T G ` empty 2 Empty
+                                                                                                       (Wtt-Empty)
+                        ;
+                      T G ` e1 2 r1                       ;
+                                                      T G ` e 2 2 r2                 T ` r1   # r2
+                                              ;
+                                          T G ` e1 jje2 2 r1jjr2
+                                                                                                       (Wtt-Merge)
+                                          ;
+                                      T G ` e 2 r                            r l#
+                                                  ;
+                                              T G ` e:l 2 r l
+                                                                                                      (Wtt-Select)
+                                        # ;T; a R G ` e 2 t
+                                                                                                        (Wtt-All-I)
+                                  T;G    a #R : e 2 a #R : t
+                                                  `                     8
+
+
+                              T;G   e 2 a #R : t      T     r#R
+                                                                                                       (Wtt-All-E)
+                                    `                 8                          `
+
+                                    T;G     e[r] 2 [r=a]t
+                                                      `
+
+
+
+
+B Complete Typechecking Rules (Algorithmic Version)
+B.1 Judgement forms
+     Well-formed type:             T  `t    type  )
+
+     Well-formed record type: T r     `     record)
+
+     Well-formed constraint list: T R `     ok    )
+
+     Constraint list satisfaction: T r #) R
+                                      `
+
+     Compatible types:             T  `r1 #) r2
+     Well-formed term:             T;G    e`   t       )
+
+
+
+B.2 Type and constraint list normalization
+B.3 Well-formed constraint lists
+                                                          T )      ok
+                                                      T `  )           ok                             (A-Wfcl-Nil)
+                               T ` r )                record        T ` R )          ok              (A-Wfcl-Cons)
+                                                  T ` r; R )            ok
+B.4 Well-formed types
+                                                  T ` p )           type                              (A-Wft-Prim)
+                              T ` t1                  type         T ` t2            type
+                                                                                                     (A-Wft-Arrow)
+                                           )                                     )
+
+                                           T ` t1 !t2              )     type
+                                #
+                             T; a R               t )       type         T ` R )       ok
+                                                                                                       (A-Wft-All)
+                                          `
+
+                                          T ` 8           a#R: t    )   type
+                                                  T ` r            record
+                                                                                                       (A-Wft-Rec)
+                                                              )
+
+                                                  T ` r )           type
+                                                              28
+                1 r
+           Empty jj r                                       (A-Red-Empty-1)
+
+       r Empty 1 r
+             jj                                             (A-Red-Empty-2)
+
+       l:t l 1 Empty
+              n                                          (A-Red-Restr/Base)
+
+(r s) l 1 (r l) s if r l
+  jj   n             n     jj                     #   (A-Red-Restr/Merge-1)
+
+ (r s) l 1 r (s l) if s l
+  jj   n             jj    n                      #   (A-Red-Restr/Merge-2)
+
+           jj; R 1 ; ; R                               (A-Cred-Merge)
+
+            Empty; R      1 R                              (A-Cred-Empty)
+
+             :
+            l t; R   1 l; R                                  (A-Cred-Base)
+Figure 8: Proper reduction rules
+
+
+
+
+       rnlnl0 1 rnl0nl                                 (A-Eq-Restr/Restr')
+
+            r jj s 1 s jj r                                   (A-Eq-Comm)
+
+       (
+   r jj s jj t    ) 1 (r
+                               jj s   )   jj t                (A-Eq-Assoc)
+
+            ; ; R 1 ; R                                    (A-Ceq-Dupl)
+
+           ; ; R 1 ; ; R                                 (A-Ceq-Comm)
+   Figure 9: Pure equivalences
+
+
+
+
+                     29
+B.5 Well-formed record types
+                                           #
+                                  T1 ; a R; T2 ` a               )       record                          (A-Wfr-Var)
+                                           T ` t )      type
+                                        T ` lt )   :    record                                          (A-Wfr-Base)
+                                  T ` r )         record r l                   #
+                                                                                                       (A-Wfr-Restr)
+                                        T `     r ln    record
+                                                            )
+
+
+                                       T ` Empty )                  record                             (A-Wfr-Empty)
+                 T ` r1       record        T ` r2                   record        T ` r1   #) r2
+                                                                                                       (A-Wfr-Merge)
+                          )                                     )
+
+                                       T ` r1 jj r2             )    record
+B.6 Constraint list satisfaction
+                                           T ` r              record
+                                                                                                      (A-Cmp-List-Nil)
+                                                           )
+
+                                               T `         r #)     
+
+
+                                T ` r      #) ri                T ` r     #) R                      (A-Cmp-List-Cons)
+                                           T ` r           #) ri; R
+B.7 Compatibility
+                                           T ` r       #) Empty                                       (A-Cmp-Empty-1)
+
+                                           T ` Empty            #) r                                  (A-Cmp-Empty-2)
+                               T ` s1     #) r      T    s2 #) r
+                                                                                                    (A-Cmp-Merge-I-1)
+                                                                    `
+
+                                        T  `(s1 s2) #) r
+                                                       jj
+
+
+                                T `     r #) s1     T    r #) s2
+                                                                                                    (A-Cmp-Merge-I-2)
+                                                                    `
+
+                                        T   `    )
+                                             r # (s1 s2)            jj
+
+
+                                               l = l0
+                                                                                                    (A-Cmp-Base/Base)
+                                                       6
+
+                                          T   l:t #) l0 :t0
+                                               `
+
+
+                                                   a 2 S
+                                       #           #
+                                T1; a R; T2 ; b S; T3 ` a                 #) b                 (A-Cmp-Tvar/Tvar-1)
+                                                   a 2 S
+                                       #           #
+                                T1; a R; T2 ; b S; T3 ` b                 #) a                 (A-Cmp-Tvar/Tvar-2)
+                                                   l 2 R
+                                           #
+                                   T1; a R; T2 ` a                  #) l : t                   (A-Cmp-Base/Tvar-1)
+                                                   l 2 R
+                                           #
+                                   T1; a R; T2 ` l t             : #) a                        (A-Cmp-Base/Tvar-2)
+
+
+
+
+                                                           30
+B.8 Well-typed terms
+                                   ;                :
+                                  T G1 ; x t; G2 ` x ) t                                                     (A-Wtt-Var)
+                            T ` t )     type                     T G; x t ` e ) t0
+                                                                  ;       :
+                                 T G ` x t: e ) t!t0
+                                   ;                     :                                               (A-Wtt-Arrow-I)
+                   T G ` e1 ) t!t0
+                        ;                               T G ` e2 ) t00
+                                                             ;                           t00  t
+                                       T G ` e 1 e2 ) t0
+                                        ;                                                                (A-Wtt-Arrow-E)
+                                            ;
+                                        T G ` e ) t
+                                                                                                            (A-Wtt-Base)
+                                        ;
+                                   T G ` l e ) lt            =                :
+                                   ;
+                                 T G ` e ) r                              r l#
+                                        ;
+                                   T G ` enl ) rnl
+                                                                                                           (A-Wtt-Restr)
+
+                                   ;
+                                 T G ` empty ) Empty                                                       (A-Wtt-Empty)
+                    ;
+                   T G ` e1 ) r1                ;
+                                            T G ` e2 ) r2                            T ` r1   #) r2
+                                  ;
+                                 T G ` e1 jj e2 ) r1 jj r2
+                                                                                                          (A-Wtt-Merge)
+                                 T;G            e ) r                         r l#
+                                        ;
+                                            `
+
+                                   T G ` e:l ) r l
+                                                                                                          (A-Wtt-Select)
+                             T ` R ok                            # ;
+                                                        T; a R G ` e ) t
+                                                                                                            (A-Wtt-All-I)
+                                ;
+                               T G `  a#R: e                         ) 8a #R : t
+               ;
+             T G ` e ) 8      a#R: t    T     r                          record        T ` r    #) R
+                                                                                                           (A-Wtt-All-E)
+                                                        `             )
+
+                                  T;G    e[r]   `                 )    [r=a]t
+
+
+
+
+                                                             31
+References
+ [1] Peter Canning, William Cook, Walter Hill, Walter Oltho , and John Mitchell. F-bounded quanti ca-
+     tion for object-oriented programming. In Fourth International Conference on Functional Programming
+     Languages and Computer Architecture, pages 273{280, September 1989.
+ [2] Luca Cardelli. A semantics of multiple inheritance. In G. Kahn, D. MacQueen, and G. Plotkin, editors,
+     Semantics of Data Types, volume 173 of Lecture Notes in Computer Science, pages 51{67. Springer-
+     Verlag, 1984.
+ [3] Luca Cardelli. A semantics of multiple inheritance. Information and Computation, 76:138{164, 1988.
+ [4] Luca Cardelli and John Mitchell. Operations on records (summary). In M. Main, A. Melton, M. Mislove,
+     and D. Schmidt, editors, Proceedings of Fifth International Conference on Mathematical Foundations
+     of Programming Language Semantics, volume 442 of Lecture Notes in Computer Science, pages 22{52,
+     Tulane University, New Orleans, March 1989. Springer Verlag. To appear in Mathematical Structures
+     in Computer Science.
+ [5] Luca Cardelli and John C. Mitchell. Operations on records. Research Report 48, Digital Equipment
+     Corporation, Systems Research Center, August 1989.
+ [6] Luca Cardelli and Peter Wegner. On understanding types, data abstraction, and polymorphism. Com-
+     puting Surveys, 17(4), December 1985.
+ [7] William R. Cook, Walter L. Hill, and Peter S. Canning. Inheritance is not subtyping. In Seventeenth
+     Annual ACM Symposium on Principles of Programming Languages, pages 125{135, San Francisco, CA,
+     January 1990.
+ [8] Luis Damas and Robin Milner. Principal type schemes for functional programs. In Proceedings of the
+     9th ACM Symposium on Principles of Programming Languages, pages 207{212, 1982.
+ [9] Jean-Yves Girard. Interpretation fonctionelle et elimination des coupures de l'arithmetique d'ordre
+     superieur. PhD thesis, Universite Paris VII, 1972.
+[10] Robert W. Harper and Benjamin C. Pierce. Extensible records without subsumption. Technical Report
+     CMU-CS-90-102, School of Computer Science, Carnegie Mellon University, Feburary 1990.
+[11] Gerard Huet. Con uent reductions: Abstract properties and applications to term rewriting systems.
+     Journal of the Association for Computing Machinery, 27(4):797{821, October 1980.
+[12] Lalita A. Jategaonkar. ML with extended pattern matching and subtypes. Master's thesis, MIT, August
+     1989.
+[13] Lalita A. Jategaonkar and John C. Mitchell. ML with extended pattern matching and subtypes (pre-
+     liminary version). In Proceedings of the ACM Conference on Lisp and Functional Programming, pages
+     198{211, Snowbird, Utah, July 1988.
+[14] Robin Milner. A theory of type polymorphism in programming. Journal of Computer and System
+     Sciences, 17:348{375, August 1978.
+[15] Robin Milner. A Calculus of Communicating Systems. Springer-Verlag, LNCS 92, 1980.
+[16] Robin Milner, Mads Tofte, and Robert Harper. The De nition of Standard ML. The MIT Press, 1990.
+[17] John C. Mitchell. Coercion and type inference (summary). In Proc. 11th ACM Symp. on Principles of
+     Programming Languages, pages 175{185, January 1984.
+[18] Atsushi Ohori and Peter Buneman. Static type inference for parametric classes. In OOPSLA '89:
+     Object-Oriented Programming Systems, Languages, and Applications, Conference Proceedings, pages
+     445{456, October 1989.
+                                                    32
+[19] Atsushi Ohori and Peter Buneman. Type inference in a database programming language. In 1988 ACM
+     Conference on Lisp and Functional Programming, pages 174{183, Snowbird, Utah, July 1989. Revised
+     manuscript, September, 1988.
+[20] Didier Remy. Typechecking records and variants in a natural extension of ML. In Proceedings of the
+     Sixteenth Annual ACM Symposium on Principles of Programming Languages, Austin, pages 242{249.
+     ACM, January 1989.
+[21] Didier Remy. Algebres Tou ues. Application au Typage Polymorphe des Objets Enregistrements dans
+     les Langages Fonctionnels. PhD thesis, Universite Paris VII, 1990.
+[22] Didier Remy. Typechecking records in a natural extension of ML. Submitted to TOPLAS, June 1990.
+[23] John Reynolds. Towards a theory of type structure. In Proc. Colloque sur la Programmation, pages
+     408{425, New York, 1974. Springer-Verlag LNCS 19.
+[24] Ryan Stansifer. Type inference with subtypes. In Proceedings of the Fifteenth ACM Symposium on
+     Principles of Programming Languages, pages 88{97, San Diego, CA, January 1988.
+[25] Mitchell Wand. Complete type inference for simple objects. In Proceedings of the IEEE Symposium on
+     Logic in Computer Science, Ithaca, NY, June 1987.
+[26] Mitchell Wand. Corrigendum: Complete type inference for simple objects. In Proceedings of the IEEE
+     Symposium on Logic in Computer Science, 1988.
+[27] Mitchell Wand. Type inference for objects with instance variables and inheritance. Technical Report
+     NU-CCS-89-2, College of Computer Science, Northeastern University, 1989.
+[28] Mitchell Wand. Type inference for record concatenation and multiple inheritance. In Fourth Annual
+     IEEE Symposium on Logic in Computer Science, pages 92{97, Paci c Grove, CA, June 1989.
+
+
+
+
+                                                  33
+

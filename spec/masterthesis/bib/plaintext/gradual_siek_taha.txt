@@ -1,0 +1,886 @@
+                          Gradual Typing for Functional Languages
+                            Jeremy G. Siek                                                      Walid Taha
+                          University of Colorado                                               Rice University
+                          siek@cs.colorado.edu                                                 taha@rice.edu
+
+
+
+
+Abstract                                                                 ling the degree of static checking by annotating function parameters
+                                                                         with types, or not. We use the term gradual typing for type systems
+Static and dynamic type systems have well-known strengths and            that provide this capability. Languages that support gradual typing
+weaknesses, and each is better suited for different programming          to a large degree include Cecil [8], Boo [10], extensions to Visual
+tasks. There have been many efforts to integrate static and dynamic      Basic.NET and C# proposed by Meijer and Drayton [26], and ex-
+typing and thereby combine the benefits of both typing disciplines       tensions to Java proposed by Gray et al. [17], and the Bigloo [6, 36]
+in the same language. The flexibility of static typing can be im-        dialect of Scheme [24]. The purpose of this paper is to provide a
+proved by adding a type Dynamic and a typecase form. The safety          type-theoretic foundation for languages such as these with gradual
+and performance of dynamic typing can be improved by adding              typing.
+optional type annotations or by performing type inference (as in
+soft typing). However, there has been little formal work on type         There are numerous other ways to combine static and dynamic typ-
+systems that allow a programmer-controlled migration between dy-         ing that fall outside the scope of gradual typing. Many dynamically
+namic and static typing. Thatte proposed Quasi-Static Typing, but        typed languages have optional type annotations that are used to im-
+it does not statically catch all type errors in completely annotated     prove run-time performance but not to increase the amount of static
+programs. Anderson and Drossopoulou defined a nominal type sys-          checking. Common LISP [23] and Dylan [12, 37] are examples of
+tem for an object-oriented language with optional type annotations.      such languages. Similarly, the Soft Typing of Cartwright and Fa-
+However, developing a sound, gradual type system for functional          gan [7] improves the performance of dynamically typed languages
+languages with structural types is an open problem.                      but it does not statically catch type errors. At the other end of the
+                                                                         spectrum, statically typed languages can be made more flexible by
+In this paper we present a solution based on the intuition that the      adding a Dynamic type and typecase form, as in the work by Abadi
+structure of a type may be partially known/unknown at compile-           et al. [1]. However, such languages do not allow for programming
+time and the job of the type system is to catch incompatibilities        in a dynamically typed style because the programmer is required to
+between the known parts of types. We define the static and dynamic       insert coercions to and from type Dynamic.
+semantics of a λ-calculus with optional type annotations and we
+prove that its type system is sound with respect to the simply-typed     A short example serves to demonstrate the idea of gradual typing.
+λ-calculus for fully-annotated terms. We prove that this calculus is     Figure 1 shows a call-by-value interpreter for an applied λ-calculus
+type safe and that the cost of dynamism is “pay-as-you-go”.              written in Scheme extended with gradual typing and algebraic data
+                                                                         types. The version on the left does not have type annotations, and
+Categories and Subject Descriptors D.3.1 [Programming Lan-               so the type system performs little type checking and instead many
+guages]: Formal Definitions and Theory; F.3.3 [Logics and Mean-          tag-tests occur at run time.
+ings of Programs]: Studies of Program Constructs— Type structure         As development progresses, the programmer adds type annotations
+                                                                         to the parameters of interp, as shown on the right side of Figure 1,
+General Terms     Languages, Performance, Theory                         and the type system provides more aid in detecting errors. We use
+Keywords     static and dynamic typing, optional type annotations        the notation ? for the dynamic type. The type system checks that
+                                                                         the uses of env and e are appropriate: the case analysis on e is
+                                                                         fine and so is the application of assq to x and env. The recursive
+1.   Introduction                                                        calls to interp also type check and the call to apply type checks
+Static and dynamic typing have different strengths, making them          trivially because the parameters of apply are dynamic. Note that
+better suited for different tasks. Static typing provides early error    we are still using dynamic typing for the value domain of the object
+detection, more efficient program execution, and better documen-         language. To obtain a program with complete static checking, we
+tation, whereas dynamic typing enables rapid development and fast        would introduce a datatype for the value domain and use that as the
+adaptation to changing requirements.                                     return type of interp.
+The focus of this paper is languages that literally provide static and   Contributions We present a formal type system that supports
+dynamic typing in the same program, with the programmer control-         gradual typing for functional languages, providing the flexibility
+                                                                         of dynamically typed languages when type annotations are omitted
+                                                                         by the programmer and providing the benefits of static checking
+                                                                         when function parameters are annotated. These benefits include
+                                                                         both safety and performance: type errors are caught at compile-time
+                                                                         and values may be stored in unboxed form. That is, for statically
+                                                                         typed portions of the program there is no need for run-time tags
+                                                                         and tag checking.
+Proceedings of the 2006 Scheme and Functional Programming Workshop       We introduce a calculus named λ?→ and define its type system (Sec-
+University of Chicago Technical Report TR-2006-06                        tion 2). We show that this type system, when applied to fully an-
+
+
+                                                                                                                                           81
+                                                                               (type expr (datatype (Var ,symbol)
+                                                                                                     (Int ,int)
+                                                                                                     (App ,expr ,expr)
+                                                                                                     (Lam ,symbol ,expr)
+                                                                                                     (Succ ,expr)))
+                                                                               (type envty (listof (pair symbol ?)))
+  (define interp
+                                                                               (define interp
+    (λ (env e)
+                                                                                 (λ ((env : envty) (e : expr))
+       (case e
+                                                                                    (case e
+         [(Var ,x) (cdr (assq x env))]
+                                                                                      [(Var ,x) (cdr (assq x env))]
+         [(Int ,n) n]
+                                                                                      [(Int ,n) n]
+         [(App ,f ,arg) (apply (interp env f) (interp env arg))]
+                                                                                      [(App ,f ,arg) (apply (interp env f) (interp env arg))]
+         [(Lam ,x ,e) (list x e env)]
+                                                                                      [(Lam ,x ,e) (list x e env)]
+         [(Succ ,e) (succ (interp env e))])))
+                                                                                      [(Succ ,e) (succ (interp env e))])))
+  (define apply
+                                                                               (define apply
+    (λ (f arg)
+                                                                                 (λ (f arg)
+       (case f
+                                                                                    (case f
+         [(,x ,body ,env)
+                                                                                      [(,x ,body ,env)
+           (interp (cons (cons x arg) env) body)]
+                                                                                        (interp (cons (cons x arg) env) body)]
+         [,other (error ”in application, expected a closure”)])))
+                                                                                      [,other (error ”in application, expected a closure”)])))
+                      Figure 1. An example of gradual typing: an interpreter with varying amounts of type annotations.
+
+
+notated terms, is equivalent to that of the simply-typed lambda cal-      typing interacts with other common language features, and as a first
+culus (Theorem 1). This property ensures that for fully-annotated         step combine gradual typing with ML-style references in Section 4.
+programs all type errors are caught at compile-time. Our type sys-
+tem is the first gradual type system for structural types to have this    Syntax of the Gradually-Typed Lambda Calculus                 e ∈ λ?→
+property. To show that our approach to gradual typing is suitable
+for imperative languages, we extend λ?→ with ML-style references
+and assignment (Section 4).
+                                                                                 Variables         x∈X
+We define the run-time semantics of λ?→ via a translation to a                   Ground Types      γ∈G
+simply-typed calculus with explicit casts, λhτ   i
+                                                → , for which we de-             Constants         c∈C
+fine a call-by-value operational semantics (Section 5). When ap-                 Types             τ        ::=    γ|?|τ →τ
+plied to fully-annotated terms, the translation does not insert casts            Expressions       e        ::=    c | x | λx : τ. e | e e
+(Lemma 4), so the semantics exactly matches that of the simply-                                                    λx. e ≡ λx :?. e
+typed λ-calculus. The translation preserves typing (Lemma 3) and
+  hτ i
+λ→     is type safe (Lemma 8), and therefore λ?→ is type safe: if eval-
+uation terminates, the result is either a value of the expected type      A procedure without a parameter type annotation is syntactic sugar
+or a cast error, but never a type error (Theorem 2).                      for a procedure with parameter type ?.
+On the way to proving type safety, we prove Lemma 5 (Canonical            The main idea of our approach is the notion of a type whose struc-
+Forms), which is of particular interest because it shows that the         ture may be partially known and partially unknown. The unknown
+run-time cost of dynamism in λ?→ can “pay-as-you-go”. Run-time            portions of a type are indicated by ?. So, for example, the type
+polymorphism is restricted to values of type ?, so for example,           number ∗ ? is the type of a pair whose first element is of type
+a value of type int must actually be an integer, whereas a value          number and whose second element has an unknown type. To pro-
+of type ? may contain an integer or a Boolean or anything at all.         gram in a dynamically typed style, omit type annotations on pa-
+Compilers for λ?→ may use efficient, unboxed, representations for         rameters; they are by default assigned the type ?. To enlist more
+values of ground and function type, achieving the performance             help from the type checker, add type annotations, possibly with ?
+benefits of static typing for the parts of programs that are statically   occurring inside the types to retain some flexibility.
+typed.                                                                    The job of the static type system is to reject programs that have
+The proofs of the lemmas and theorems in this paper were writ-            inconsistencies in the known parts of types. For example, the pro-
+ten in the Isar proof language [28, 42] and verified by the Isabelle      gram
+proof assistant [29]. We provide proof sketches in this paper and
+the full proofs are available in the companion technical report [39].        ((λ (x : number) (succ x)) #t) ;; reject
+The statements of the definitions (including type systems and se-
+mantics), lemmas, propositions, and theorems in this paper were           should be rejected because the type of #t is not consistent with
+automatically generated from the Isabelle files. Free variables that      the type of the parameter x, that is, boolean is not consistent with
+appear in these statements are universally quantified.                    number. On the other hand, the program
+
+                                                                             ((λ (x) (succ x)) #t) ;; accept
+2.   Introduction to Gradual Typing
+                                                                          should be accepted by the type system because the type of x is
+The gradually-typed λ-calculus, λ?→ , is the simply-typed λ-calculus      considered unknown (there is no type annotation) and therefore not
+extended with a type ? to represent dynamic types. We present grad-       within the realm of static checking. Instead, the type error will be
+ual typing in the setting of the simply-typed λ-calculus to reduce        caught at run-time (as is typical of dynamically typed languages),
+unnecessary distractions. However, we intend to show how gradual          which we describe in Section 5.
+
+
+82                                                                                                 Scheme and Functional Programming, 2006
+As usual things become more interesting with first class proce-                               Figure 2. A Gradual Type System
+dures. Consider the following example of mapping a procedure
+over a list.
+                                                                                                                                         Γ `G e : τ
+      map : (number → number) ∗ number list → number list                                                           Γ x = bτ c
+      (map (λ (x) (succ x)) (list 1 2 3)) ;; accept                           (GVAR )
+                                                                                                                    Γ `G x : τ
+The map procedure is expecting a first argument whose type
+is number → number but the argument (λ(x) (succ x)) has type                                                         ∆c=τ
+? → number. We would like the type system to accept this pro-                 (GC ONST )
+                                                                                                                    Γ `G c : τ
+gram, so how should we define consistency for procedure types?
+The intuition is that we should require the known portions of the                                             Γ(x 7→ σ) `G e : τ
+two types to be equal and ignore the unknown parts. There is a use-           (GL AM )
+ful analogy with the mathematics of partial functions: two partial                                           Γ `G λ x:σ. e : σ → τ
+functions are consistent when every elements that is in the domain
+of both functions is mapped to the same result. This analogy can be                                      Γ ` G e1 : ?     Γ ` G e2 : τ 2
+                                                                              (GA PP 1)
+made formal by considering types as trees [32].                                                                  Γ ` G e1 e2 : ?
+     →L                               →G
+          LLL                                    GG                                                            Γ ` G e1 : τ → τ 0
+             LLcod                                 GGcod
+dom             LLL                   dom            GG                                                     Γ ` G e2 : τ 2     τ2 ∼ τ
+                  L&                                  GG                    (GA PP 2)
+                                                          #                                                      Γ ` G e1 e2 : τ 0
+  number           number          number           ?
+Trees can be represented as partial functions from paths to node
+labels, where a path is a sequence of edge labels: [l1 , . . . , ln ]. The
+above two trees are the following two partial functions f and g. We          the function type is known and allows an argument whose type is
+interpret unknown portions of a type simply as places where the              consistent with the function’s parameter type.
+partial function is undefined. So, for example, g is undefined for
+the path [cod].                                                              Relation to the untyped λ-calculus We would like our gradual
+                               f ([]) = →                                    type system to accept all terms of the untyped λ-calculus (all unan-
+                                                                             notated terms), but it is not possible to simultaneously achieve this
+                         f ([dom]) = number                                  and provide type safety for fully-annotated terms. For example,
+                            f ([cod]) = number                               suppose there is a constant succ with type number → number. The
+                                                                             term (succ ”hi”) has no type annotations but it is also fully anno-
+                                                                             tated because there are no function parameters to annotate. The type
+                             g([]) = →                                       system must either accept or reject this program. We choose to re-
+                         g([dom]) = number                                   ject. Of course, if succ were given the type ? → ? then (succ ”hi”)
+                                                                             would be accepted. In any event, our gradual type system provides
+The partial functions f and g are consistent because they produce            the same expressiveness as the untyped λ-calculus. The following
+the same output for the inputs [] and [dom].                                 translation converts any λ-term into an observationally equivalent
+We axiomatize the consistency relation ∼ on types with the follow-           well-typed term of λ?→ .
+ing definition.
+                                                                                                      JcK = c
+Type Consistency                                                   τ ∼τ
+                                                                                                      JxK = x
+                                           σ1 ∼ τ 1   σ2 ∼ τ 2
+          (CR EFL ) τ ∼ τ       (CF UN )                                                          Jλx.eK = λx.JeK
+                                           σ1 → σ2 ∼ τ 1 → τ 2
+                                                                                                 Je1 e2 K = ((λx.x)Je1 K)Je2 K
+                   (CU N R) τ ∼ ?          (CU N L) ? ∼ τ
+
+                                                                             Relation to the simply-typed λ-calculus Let λ→ denote the terms
+                                                                             of the simply-typed λ-calculus and let Γ `→ e : τ stand for the
+The type consistency relation is reflexive and symmetric but not
+                                                                             standard typing judgment of the simply-typed λ-calculus. For terms
+transitive (just like consistency of partial functions).
+                                                                             in λ→ our gradual type system is equivalent to simple typing.
+Proposition 1.
+                                                                             Theorem 1 (Equivalence to simple typing for fully-annotated
+ • τ ∼τ                                                                      terms). If e ∈ λ→ then ∅ `G e : τ = ∅ `→ e : τ .
+ • If σ ∼ τ then τ ∼ σ.
+                                                                             Proof Sketch. The rules for our gradual type system are the same
+ • ¬ (∀ τ 1 τ 2 τ 3 . τ 1 ∼ τ 2 ∧ τ 2 ∼ τ 3 −→ τ 1 ∼ τ 3 )                   as for the STLC if one removes the rules that mention ?. The
+                                                                             type compatibility relation collapses to type equality once all rules
+Our gradual type system is shown in Figure 2. The environment
+                                                                             involving ? are removed.
+Γ is a function from variables to optional types (bτ c or ⊥). The
+type system is parameterized on a signature ∆ that assigns types
+                                                                             A direct consequence of this equivalence is that our gradual type
+to constants. The rules for variables, constants, and functions are
+                                                                             system catches the same static errors as the type system for λ→ .
+standard. The first rule for function application (GA PP 1) handles
+the case when the function type is unknown. The argument may                 Corollary 1 (Full static error detection for fully-annotated terms).
+have any type and the resulting type of the application is unknown.          If e ∈ λ→ and @ τ . ∅ `→ e : τ then @ τ 0. ∅ `G e : τ 0. (This is just the
+The second rule for function application (GA PP 2) handles when              contrapositive of soundness.)
+
+
+Scheme and Functional Programming, 2006                                                                                                             83
+Before describing the run-time semantics of λ?→ we compare our                           Figure 3. Thatte’s Quasi-Static Typing.
+type system for λ?→ with an alternative design based on subtyping.
+                                                                                                                                      Γ ` e ⇒ e0 : τ
+3.    Comparison with Quasi-Static Typing                                                      Γ x = bτ c
+                                                                          (QVAR)
+Our first attempt to define a gradual type system was based on                                Γ`x⇒x:τ
+Thatte’s quasi-static types [40]. Thatte uses a standard subtyping                             ∆c=τ
+                                                                          (QC ONST)
+relation <: with a top type Ω to represent the dynamic type. As be-                           Γ`c⇒c:τ
+fore, the meta-variable γ ranges over ground types such as number
+and boolean.                                                                                         Γ, x : τ ` e ⇒ e0 : σ
+                                                                          (QL AM)
+                                                                                              Γ ` (λx : τ. e) ⇒ (λx : τ. e0 ) : τ → σ
+Subtyping rules.                                             τ <: τ 0
+                                                                                              Γ ` e ⇒ e0 : τ  τ <: σ
+                                      σ1 <: τ1   τ2 <: σ2                 (QS UB)
+                                                                                                 Γ ` e ⇒ e0 ↑σ
+                                                                                                             τ: σ
+         γ <: γ           τ <: Ω      τ1 → τ2 <: σ1 → σ2
+                                                                                                        Γ ` e1 ⇒ e01 : Ω
+                                                                                                        Γ ` e2 ⇒ e02 : τ
+The quasi-static type system includes the usual subsumption rule.         (QA PP 1)
+                                                                                              Γ ` (e1 e2 ) ⇒ ((e01 ↓Ω       0
+                                                                                                                    τ →Ω ) e2 ) : Ω
+                            Γ`e:τ       τ <: σ
+                    QS UB
+                                Γ`e:σ
+                                                                                                    Γ ` e1 ⇒ e01 : σ → σ 0
+Subsumption allows programs such as the following to type check
+                                                                                                  Γ ` e2 ⇒ e02 : τ   σ <: τ
+by allowing implicit up-casts. The value #t of type boolean is up-        (QA PP 2)
+cast to Ω, the type of the parameter x.                                                       Γ ` (e1 e2 ) ⇒ (e01 (e02 ↓τσ )) : σ 0
+
+       ((λ (x) ...) #t) ;; ok, boolean <: Ω
+                                                                                                                                             e    e0
+However, the subsumption rule will not allow the following pro-                  e ↓ττ    e                    e ↑ττ    e
+gram to type check. The addition operator expects type number but
+gets an argument of type Ω.                                                   e ↓τσ ↓σ
+                                                                                     µ    e ↓τµ             e ↑σ  τ
+                                                                                                               µ ↑σ    e ↑τµ
+       (λ (x) (succ x))
+                                                                                µ=τ uν                      6 ∃µ.µ = τ u ν
+Thatte’s solution for this is to also allow an implicit down-cast in        e ↑σ  σ
+                                                                               τ ↓ν e ↓τµ ↑νµ              e ↑σ   σ
+                                                                                                               τ ↓ν  wrong
+the (QA PP 2) rule for function application.
+
+                 Γ ` e1 : σ → σ 0    Γ ` e2 : τ    σ <: τ
+       (QA PP 2)
+                             Γ ` (e1 e2 ) : σ 0
+                                                                         lower bound of number → number and Ω → Ω, which is Ω →
+Unfortunately, the subsumption rule combined with (QA PP 2) al-          number. So the quasi-static system fails to statically catch the type
+lows too many programs to type check for our taste. For example,         error.
+we can build a typing derivation for the following program, even
+                                                                         As noted by Oliart [30], Thatte’s quasi-static type system does not
+though it was rejected by our gradual type system.
+                                                                         correspond to his type checking algorithm (Theorem 7 of [40] is in-
+     ((λ (x : number) (succ x)) #t)                                      correct). Thatte’s type checking algorithm does not suffer from the
+                                                                         above problems because the algorithm does not use the subsump-
+The subsumption rule allows #t to be implicitly cast to Ω and then       tion rule and instead performs all casting at the application rule,
+the above rule for application implicitly casts Ω down to number.        disallowing up-casts to Ω followed by arbitrary down-casts. Oliart
+To catch errors such as these, Thatte added a second phase to the        defined a simple syntax-directed type system that is equivalent to
+type system called plausibility checking. This phase rewrites the        Thatte’s algorithm, but did not state or prove any of its properties.
+program by collapsing sequences of up-casts and down-casts and           We initially set out to prove type safety for Oliart’s subtype-based
+signals an error if it encounters a pair of casts that together amount   type system, but then realized that the consistency relation provides
+to a “stupid cast”[22], that is, casts that always fail because the      a much simpler characterization of when implicit casts should be
+target is incompatible with the subject.                                 allowed.
+Figure 3 shows Thatte’s Quasi-Static type system. The judgment           At first glance it may seem odd to use a symmetric relation such
+Γ ` e ⇒ e0 : τ inserts up-casts and down-casts and the judgment          as consistency instead of an anti-symmetric relation such as sub-
+e       e0 collapses sequences of casts and performs plausibility        typing. There is an anti-symmetric relation that is closely related to
+checking. The type system is parameterized on the function ∆             consistency, the usual partial ordering relation for partial functions:
+mapping constants to types. The environment Γ is a function from         f v g if the graph of f is a subset of the graph of g. (Note that the
+variables to optional types (bτ c or ⊥).                                 direction is flipped from that of the subtyping relation <:, where
+Subsumption rules are slippery, and even with the plausibility           greater means less information.) A cast from τ to σ, where σ v τ ,
+checks the type system fails to catch many errors. For example,          always succeeds at run-time as we are just hiding type information
+there is still a derivation for the program                              by replacing parts of a type with ?. On the other hand, a cast from
+                                                                         σ to τ may fail because the run-time type of the value may not be
+     ((λ (x : number) (succ x)) #t)
+                                                                         consistent with τ . The main difference between v and <: is that
+The reason is that both the operator and operand may be implicitly       v is covariant for the domain of a procedure type, whereas <: is
+up-cast to Ω. The rule (QA PP 1) then down-casts the operator to         contra-variant for the domain of a procedure type.
+Ω → Ω. Plausibility checking succeeds because there is a greatest
+
+
+84                                                                                                    Scheme and Functional Programming, 2006
+                 Figure 4. Type Rules for References                      5.    Run-time semantics
+                                                                          We define the semantics for λ?→ in two steps. We first define a cast
+                                                             Γ `G e : τ   insertion translation from λ?→ to an intermediate language with
+                                         Γ `G e : τ                       explicit casts which we call λhτ    i
+                                                                                                             → . We then define a call-by-value
+ (GR EF )                                                                 operational semantics for λhτ  i
+                                                                                                           . The explicit casts have the syntactic
+                                      Γ `G ref e : ref τ                                               →
+                                                                          form hτ ie where τ is the target type. When e evaluates to v, the cast
+                                         Γ `G e : ?                       will check that the type of v is consistent with τ and then produce a
+ (GD EREF 1)                                                              value based on v that has the type τ . If the type of v is inconsistent
+                                         Γ `G !e : ?
+                                                                          with τ , the cast produces a CastError. The intuition behind this
+                                                                          kind of cast is that it reinterprets a value to have a different type
+                                       Γ `G e : ref τ
+ (GD EREF 2)                                                              either by adding or removing type information.
+                                        Γ `G !e : τ
+                                                                          The syntax of λhτ  i                   ?
+                                                                                           → extends that of λ→ by adding a cast expression.
+
+                                Γ ` G e1 : ?  Γ ` G e2 : τ
+ (GA SSIGN 1)                                                             Syntax of the intermediate language.                             e ∈ λhτ i
+                                   Γ `G e1 ← e2 : ref τ                                                                                         →
+
+
+                      Γ `G e1 : ref τ    Γ ` G e2 : σ               σ∼τ
+ (GA SSIGN 2)                                                                              Expressions      e   ::=     . . . | hτ ie
+                                 Γ `G e1 ← e2 : ref τ
+
+
+
+4.     Gradual Typing and References
+It is often challenging to integrate type system extensions with          5.1   Translation to λhτ
+                                                                                                → .
+                                                                                                   i
+
+imperative features such as references with assignment. In this           The cast insertion judgment, defined in Figure 5, has the form Γ `
+section we extend the calculus to include ML-style references. The        e ⇒ e0 : τ and mimics the structure of our gradual typing judgment
+following grammar shows the additions to the syntax.                      of Figure 2. It is trivial to show that these two judgments accept
+                                                                          the same set of terms. We presented the gradual typing judgment
+Adding references to λ?→                                                  separately to provide an uncluttered specification of well-typed
+                                                                          terms. In Figure 5, the rules for variables, constants, and functions
+                                                                          are straightforward. The first rule for application (CA PP 1) handles
+           Types           τ    ::=    . . . | ref τ                      the case when the function has type ? and inserts a cast to τ2 → ?
+           Expressions     e    ::=    . . . | ref e | !e | e ← e         where τ2 is the argument’s type. The second rule for application
+                                                                          (CA PP 2) handles the case when the function’s type is known and
+                                                                          the argument type differs from the parameter type, but is consistent.
+The form ref e creates a reference cell and initializes it with           In this case the argument is cast to the parameter type τ . We could
+the value that results from evaluating expression e. The derefer-         have instead cast the function; the choice was arbitrary. The third
+ence form !e evaluates e to the address of a location in memory           rule for application (CA PP 3) handles the case when the function
+(hopefully) and returns the value stored there. The assignment form       type is known and the argument’s type is identical to the parameter
+e ← e stores the value form the right-hand side expression in the         type. No casts are needed in this case. The rules for reference
+location given by the left-hand side expression.                          assignment are similar to the rules for application. However, for
+Figure 4 shows the gradual typing rules for these three new con-          CA SSIGN 2 the choice to cast the argument and not the reference
+structs. In the (GA SSIGN 2) we allow the type of the right-hand          is because we need references to be invariant to preserve type
+side to differ from the type in the left-hand’s reference, but require    soundness.
+the types to be compatible. This is similar to the (GA PP 2) rule for     Next we define a type system for the intermediate language λhτ     i
+                                                                                                                                            → .
+function application.                                                     The typing judgment has the form Γ|Σ ` e : τ . The Σ is a store
+We do not change the definition of the consistency relation, which        typing: it assigns types to memory locations. The type system,
+means that references types are invariant with respect to consis-         defined in Figure 6, extends the STLC with a rule for explicit
+tency. The reflexive axiom τ ∼ τ implies that ref τ ∼ ref τ .             casts. The rule (TC AST) requires the expression e to have a type
+The situation is analogous to that of the combination of references       consistent with the target type τ .
+with subtyping [32]: allowing variance under reference types com-         The inversion lemmas for λhτ    i
+                                                                                                        → are straightforward.
+promises type safety. The following program demonstrates how a
+covariant rule for reference types would allow type errors to go un-      Lemma 1 (Inversion on typing rules.).
+caught by the type system.
+     let r1 = ref (λ y. y) in                                             1. If Γ | Σ ` x : τ then Γ x = bτ c.
+     let r2 : ref ? = r1 in                                               2. If Γ | Σ ` c : τ then ∆ c = τ .
+       r2 ← 1;
+       !r1 2                                                              3. If Γ | Σ ` λ x:σ. e : τ then ∃ τ 0. τ = σ → τ 0.
+                                                                          4. If Γ | Σ ` e1 e2 : τ 0 then ∃ τ . Γ | Σ ` e1 : τ → τ 0 ∧ Γ | Σ ` e2 : τ .
+The reference r1 is initialized with a function, and then r2 is aliased
+                                                                          5. If Γ | Σ ` hσi e : τ then ∃ τ 0. Γ | Σ ` e : τ 0 ∧ σ = τ ∧ τ 0 ∼ σ.
+to r1, using the covariance to allow the change in type to ref ?. We
+can then write an integer into the cell pointed to by r2 (and by r1).     6. If Γ | Σ ` ref e : ref τ then Γ | Σ ` e : τ .
+The subsequent attempt to apply the contents of r1 as if it were a        7. If Γ | Σ ` !e : τ then Γ | Σ ` e : ref τ .
+function fails at runtime.                                                8. If Γ | Σ ` e1 ← e2 : ref τ then Γ | Σ ` e1 : ref τ ∧ Γ | Σ ` e2 : τ .
+
+
+Scheme and Functional Programming, 2006                                                                                                            85
+                      Figure 5. Cast Insertion                                Figure 6. Type system for the intermediate language λhτ
+                                                                                                                                   →
+                                                                                                                                      i
+
+
+
+                                                      Γ ` e ⇒ e0 : τ                                                              Γ|Σ ` e : τ
+
+                                      Γ x = bτ c                                                              Γ x = bτ c
+ (CVAR )                                                                 (TVAR )
+                                     Γ`x⇒x:τ                                                                 Γ|Σ`x:τ
+                                      ∆c=τ                                                                    ∆c=τ
+ (CC ONST )                                                              (TC ONST )
+                                     Γ`c⇒c:τ                                                                 Γ|Σ`c:τ
+                               Γ(x 7→ σ) ` e ⇒ e 0 : τ                                                 Γ(x 7→ σ) | Σ ` e : τ
+ (CL AM )                                                                (TL AM )
+                          Γ ` λ x:σ. e ⇒ λ x:σ. e 0 : σ → τ                                           Γ | Σ ` λ x:σ. e : σ → τ
+
+                       Γ ` e1 ⇒ e 01 : ?    Γ ` e2 ⇒ e 02 : τ 2                               Γ | Σ ` e1 : τ → τ 0      Γ | Σ ` e2 : τ
+ (CA PP 1)                                                               (TA PP )
+                         Γ ` e1 e2 ⇒ (hτ 2 → ?i e 01 ) e 02 : ?                                          Γ | Σ ` e1 e2 : τ 0
+
+                              Γ ` e1 ⇒ e 01 : τ → τ 0                                                 Γ|Σ`e:σ           σ∼τ
+                     Γ ` e2 ⇒ e 02 : τ 2   τ 2 6= τ         τ2 ∼ τ       (TC AST )
+                                                                                                        Γ | Σ ` hτ i e : τ
+ (CA PP 2)                               0        0        0
+                           Γ ` e1 e2 ⇒ e 1 (hτ i e 2 ) : τ
+                                                                                                             Γ|Σ`e:τ
+                               Γ ` e1 ⇒ e 01 : τ → τ 0                   (TR EF )
+                                                                                                         Γ | Σ ` ref e : ref τ
+                                  Γ ` e2 ⇒ e 02 : τ
+ (CA PP 3)
+                               Γ ` e1 e2 ⇒ e 01 e 02 : τ 0                                                 Γ | Σ ` e : ref τ
+                                                                         (TD EREF )
+                                                                                                            Γ | Σ ` !e : τ
+                                    Γ ` e ⇒ e0 : τ
+ (CR EF )                                                                                       Γ | Σ ` e1 : ref τ   Γ | Σ ` e2 : τ
+                               Γ ` ref e ⇒ ref e 0 : ref τ               (TA SSIGN )
+                                                                                                      Γ | Σ ` e1 ← e2 : ref τ
+                                    Γ ` e ⇒ e0 : ?
+ (CD EREF 1)                                                                                                  Σ l = bτ c
+                               Γ ` !e ⇒ !(href ?i e 0) : ?               (TL OC )
+                                                                                                           Γ | Σ ` l : ref τ
+                                  Γ ` e ⇒ e 0 : ref τ
+ (CD EREF 2)
+                                   Γ ` !e ⇒ !e 0 : τ
+
+                      Γ ` e1 ⇒ e 01 : ?     Γ ` e2 ⇒ e 02 : τ 2         Proof Sketch. The proof is by induction on the cast insertion deriva-
+ (CA SSIGN 1)                                                           tion.
+                    Γ ` e1 ← e2 ⇒ (href τ 2 i e 01 ) ← e 02 : ref τ 2
+
+                               Γ ` e1 ⇒ e 01 : ref τ                    When applied to terms of λ→ , the translation is the identity func-
+                       Γ ` e2 ⇒ e 02 : σ    σ 6= τ         σ∼τ          tion, i.e., no casts are inserted. 1
+ (CA SSIGN 2)
+                       Γ ` e1 ← e2 ⇒ e 01 ← (hτ i e 02 ) : ref τ        Lemma 4. If ∅ ` e ⇒ e 0 : τ and e ∈ λ→ then e = e 0.
+                     Γ ` e1 ⇒ e 01 : ref τ   Γ ` e2 ⇒ e 02 : τ
+ (CA SSIGN 3)
+                         Γ ` e1 ← e2 ⇒ e 1 ← e 02 : ref τ
+                                           0                            Proof Sketch. The proof is by induction on the cast insertion deriva-
+                                                                        tion.
+
+
+                                                                        When applied to terms of the untyped λ-calculus, the translation in-
+Proof Sketch. They are proved by case analysis on the type rules.       serts just those casts necessary to prevent type errors from occuring
+                                                                        at run-time, such as applying a non-function.
+The type system for λhτ  i
+                      → is deterministic: it assigns a unique type
+to an expression given a fixed environment.                             5.2    Run-time semantics of λhτ
+                                                                                                      → .
+                                                                                                         i
+
+
+Lemma 2 (Unique typing). If Γ | Σ ` e : τ and Γ | Σ ` e : τ 0 then      The following grammar describes the results of evaluation: the re-
+τ = τ 0.                                                                sult is either a value or an error, where values are either a simple
+                                                                        value (variables, constants, functions, and locations) or a simple
+Proof Sketch. The proof is by induction on the typing derivation        value enclosed in a single cast, which serves as a syntacical repre-
+and uses the inversion lemmas.                                          sentation of boxed values.
+                                                                        1 This lemma is for closed terms (this missing Γ means an empty envi-
+The cast insertion translation, if successful, produces well-typed
+terms of λhτ i                                                          ronment). A similar lemma is true of open terms, but we do not need the
+          → .
+                                                                        lemma for open terms and the statement is more complicated because there
+Lemma 3. If Γ ` e ⇒ e 0 : τ then Γ | ∅ ` e 0 : τ .                      are conditions on the environment.
+
+
+86                                                                                               Scheme and Functional Programming, 2006
+                                                                                                       unbox s        = s
+                                                                                                       unbox (hτ i s) = s
+Values, Errors, and Results
+ Locations          l∈L                                                  The evaluation rules treat the cast expression like a boxed, or
+ Simple Values      s∈S       ::=    x | c | λx : τ.e | l                tagged, value. It is straightforward to define a lower-level semantics
+ Values             v∈V       ::=    s | h?is                            that explicitly tags every value with its type (the full type, not just
+ Errors             ε         ::=    CastError | TypeError | KillError   the top level constructor) and then uses these type representations
+ Results            r         ::=    v|ε                                 instead of the typing judgment ∅ | ∅ ` unbox v : τ , as in the rule
+                                                                         (EC ST G).
+                                                                         There is a separate cast rule for each kind of target type. The
+It is useful to distinguish two different kinds of run-time type         rule (EC ST G) handles the case of casting to a ground type. The
+errors. In weakly typed languages, type errors result in undefined       cast is removed provided the run-time type exactly matches the
+behavior, such as causing a segmentation fault or allowing a hacker      target type. The rule (EC ST F) handles the case of casting to a
+to create a buffer overflow. We model this kind of type error with       function type. If the run-time type is consistent with the target
+TypeError. In strongly-typed dynamic languages, there may still          type, the cast is removed and the inner value is wrapped inside a
+be type errors, but they are caught by the run-time system and do        new function that inserts casts to produce a well-typed value of
+not cause undefined behavior. They typically cause the program to        the appropriate type. This rule is inspired by the work on semantic
+terminate or else raise an exception. We model this kind of type         casts [13, 14, 15], though the rule may look slightly different
+error with CastError. The KillError is a technicality pertaining to      because the casts used in this paper are annotated with the target
+the type safety proof that allows us to prove a form of “progress”       type only and not also with the source type. The rule (EC ST R)
+in the setting of a big-step semantics.                                  handles the case of casting to a reference type. The run-time type
+We define simple function values (SimpleFunVal) to contain lambda        must exactly match the target type. The rule (EC ST U) handles the
+abstractions and functional constants (such as succ), and function       case of casting to ? and ensures that nested casts are collapsed to a
+values (FunVal) include simple function values and simple function       single cast. The rule (EC ST E) handles the case when the run-time
+values cast to ?.                                                        type is not consistent with the target type and produces a CastError.
+                                                                         Because the target types of casts are static, the cast form could be
+As mentioned in Section 1, the Canonical Forms Lemma is of               replaced by a cast for each type, acting as injection to ? and projec-
+particular interest due to its implications for performance. When        tion to ground and function types. However, this would complicate
+an expression has either ground or function type (not ?) the kind        the rules, especially the rule for casting to a function type.
+of resulting value is fixed, and a compiler may use an efficient
+unboxed representation. For example, if an expression has type           The rule (EK ILL) terminates evaluation when the derivation depth
+int, then it will evaluate to a value of type int (by the forthcoming    counter reaches zero.
+Soundness Lemma 8) and then the Canonical Forms Lemma tells
+us that the value must be an integer.                                    5.3     Examples
+Lemma 5 (Canonical Forms).                                               Consider once again the following program and assume the succ
+ • If ∅ | Σ ` v : int and v ∈ V then ∃ n. v = n.
+                                                                         constant has the type number → number.
+ • If ∅ | Σ ` v : bool and v ∈ V then ∃ b. v = b.                              ((λ (x) (succ x)) #t)
+ • If ∅ | Σ ` v : ? and v ∈ V then ∃ v 0. v = h?i v 0 ∧ v 0 ∈ S.         The cast insertion judgement transforms this term into the follow-
+ • If ∅ | Σ ` v : τ → τ 0 and v ∈ V then v ∈ SimpleFunVal.               ing term.
+ • If ∅ | Σ ` v : ref τ and v ∈ V then ∃ l. v = l ∧ Σ l = bτ c.                ((λ (x : ?) (succ hnumberix)) h?i#t)
+
+                                                                         Evaluation then proceeds, applying the function to its argument,
+Proof Sketch. They are proved using the inversion lemmas and case
+                                                                         substituting h?i#t for x.
+analysis on values.
+                                                                               (succ hnumberih?i#t)
+We define the run-time semantics for λhτ i
+                                      → in big-step style with           The type of #t is boolean, which is not consistent with number, so
+substitution and not environments. Substitution, written [x := e]e,      the rule (EC ST E) applies and the result is a cast error.
+is formalized in the style of Curry [3], where bound variables are α-
+renamed during substitution to avoid the capture of free variables.            CastError
+The evaluation judgment has the form e ,→n r, where e evaluates          Next, we look at an example that uses first-class functions.
+to the result r with a derivation depth of n. The derivation depth is
+used to force termination so that derivations can be constructed for           ((λ (f : ? → number) (f 1))
+otherwise non-terminating programs [11]. The n-depth evaluation                 (λ (x : number) (succ x)))
+allows Lemma 8 (Soundness) to distinguish between terminating
+and non-terminating programs. We will say more about this when           Cast insertion results in the following program.
+we get to Lemma 8.                                                             ((λ (f : ? → number) (f h?i1))
+                                                                                h? → numberi(λ (x : number) (succ x)))
+The evaluation rules, shown in Figures 7 and 8, are the standard
+call-by-value rules for the λ-calculus [33] with additional rules for    We apply the cast to the function, creating a wrapper function.
+casts and a special termination rule. We parameterize the seman-               ((λ (f : ? → number) (f h?i1))
+tics over the function δ which defines the behavior of functional               (λ (z : ?) hnumberi((λ (x : number) (succ x)) hnumberiz)))
+constants and is used in rule (ED ELTA). The helper function unbox
+removes an enclosing cast from a value, if there is one.                 Function application results in the following
+
+
+Scheme and Functional Programming, 2006                                                                                                      87
+                      Figure 7. Evaluation                                                 Figure 8. Evaluation (Errors)
+
+                                                       e|µ ,→n r|µ                                           e | µ ,→n v | µ 0
+Casting                                                                                        ∅ | Σ ` unbox v : σ         (σ, τ ) ∈
+                                                                                                                                   / op ∼
+                                                                           (EC ST E)
+                                                                                                   hτ i e | µ ,→n+1 CastError | µ 0
+                                   0
+                   e | µ ,→n v | µ      ∅ | Σ ` unbox v : γ
+ (EC ST G)                                                                                             e | µ ,→0 KillError | µ
+                          hγi e | µ ,→n+1 unbox v | µ 0                    (EK ILL )
+
+                     e | µ ,→n v | µ 0        ∅ | Σ ` unbox v : τ → τ 0                                        0<n
+                                                                            (EVART)
+                         τ → τ ∼ σ → σ0
+                                  0
+                                                     z = maxv v + 1                                   x | µ ,→n TypeError | µ
+ (EC ST F)
+              hσ → σ 0i e | µ ,→n+1 λ z:σ. (hσ 0i (unbox v (hτ i z))) | µ 0
+                                                                                                 e1 | µ ,→n v1 | µ 0  v1 ∈
+                                                                                                                         / FunVal
+                                                                            (EA PP T)
+                 e | µ ,→n v | µ 0        ∅ | Σ ` unbox v : ref τ                                  e1 e2 | µ ,→n+1 TypeError | µ 0
+ (EC ST R)
+                        href τ i e | µ ,→n+1 unbox v | µ 0
+                                                                                                           e | µ ,→n ε | µ 0
+                                                                            (EC ST P)
+                                   e | µ ,→n v | µ 0                                                   hτ i e | µ ,→n+1 ε | µ 0
+ (EC ST U)
+                        h?i e | µ ,→n+1 h?i unbox v | µ 0
+Functions and constants                                                                                   e1 | µ ,→n ε | µ 0
+                                                                            (EA PP P1)
+                                                                                                       e1 e2 | µ ,→n+1 ε | µ 0
+                                       0<n
+ (EL AM )                                                                                               e1 | µ1 ,→n v1 | µ2
+                          λ x:τ . e | µ ,→n λ x:τ . e | µ
+                                                                                                 v1 ∈ FunVal       e2 | µ2 ,→n ε | µ3
+                                                                           (EA PP P2)
+                           e1 | µ1 ,→n λ x:τ . e3 | µ2                                                e1 e2 | µ1 ,→n+1 ε | µ3
+                               e2 | µ2 ,→n v2 | µ3
+                           [x:=v2 ]e3 | µ3 ,→n v3 | µ4                                               e1 | µ1 ,→n λ x:τ . e3 | µ2
+ (EA PP )
+                            e1 e2 | µ1 ,→n+1 v3 | µ4                                                     e2 | µ2 ,→n v2 | µ3
+                                                                                                     [x:=v2 ]e3 | µ3 ,→n ε | µ4
+                                                                           (EA PP P3)
+                                      0<n                                                             e1 e2 | µ1 ,→n+1 ε | µ4
+ (EC ONST )
+                                 c | µ ,→n c | µ
+                                                                                                            e | µ ,→n ε | µ 0
+                  e1 | µ1 ,→n c1 | µ2    e2 | µ2 ,→n c2 | µ3               (ER EF P)
+ (ED ELTA )                                                                                             ref e | µ ,→n+1 ε | µ 0
+                         e1 e2 | µ1 ,→n+1 δ c1 c2 | µ3
+                                                                                                           e | µ ,→n ε | µ 0
+References                                                                 (ED EREF P)
+                                                                                                         !e | µ ,→n+1 ε | µ 0
+                         e | µ ,→n v | µ 0     l∈ / dom µ 0
+ (ER EF )                                                                                                e1 | µ ,→n ε | µ 0
+                           ref e | µ ,→n+1 l | µ 0(l 7→ v)                 (EA SSIGN P1)
+                                                                                                     e1 ← e2 | µ ,→n+1 ε | µ 0
+                         e | µ ,→n l | µ 0    µ 0 l = bvc
+ (ED EREF )                                                                                   e1 | µ1 ,→n l | µ2    e2 | µ2 ,→n ε | µ3
+                                !e | µ ,→n+1 v | µ 0                       (EA SSIGN P2)
+                                                                                                     e1 ← e2 | µ1 ,→n+1 ε | µ3
+                    e1 | µ1 ,→n l | µ2   e2 | µ2 ,→n v | µ3
+ (EA SSIGN )                                                                                       e | µ ,→n v | µ 0 @ l. v = l
+                        e1 ← e2 | µ1 ,→n+1 l | µ3 (l 7→ v)                 (ED EREF T)
+                                                                                                   !e | µ ,→n+1 TypeError | µ 0
+                                       0<n
+ (EL OC )                                                                                          e1 | µ ,→n v | µ 0 @ l. v = l
+                                  l | µ ,→n l | µ                          (EA SSIGN T)
+                                                                                                 e1 ← e2 | µ ,→n+1 TypeError | µ 0
+
+
+
+
+88                                                                                              Scheme and Functional Programming, 2006
+      ((λ (z : ?) hnumberi((λ (x : number) (succ x)) hnumberiz)) h?i1)   non-terminating program, as we intend. We learned of this tech-
+                                                                         nique from Ernst, Ostermann, and Cook [11], but its origins go
+and then another function application gives us                           back at least to Volpano and Smith [41].
+      hnumberi((λ (x : number) (succ x)) hnumberih?i1)                   Lemma 8 (Soundness of evaluation). If ∅ | Σ ` e : τ ∧ ∅ | Σ |= µ
+                                                                         then ∃ r µ 0 Σ 0. e | µ ,→n r | µ 0 ∧ ∅ | Σ 0 |= µ 0 ∧ (∀ l. l ∈ dom Σ −→ Σ 0
+We then apply the cast rule for ground types (EC ST G).                  l = Σ l) ∧ ((∃ v. r = v ∧ v ∈ V ∧ ∅ | Σ 0 ` v : τ ) ∨ r = CastError ∨ r =
+      hnumberi((λ (x : number) (succ x)) 1)                              KillError ).
+
+followed by another function application:                                Proof. The proof is by strong induction on the evaluation depth.
+      hnumberi(succ 1)                                                   We then perform case analysis on the final step of the typing
+                                                                         judgment. The case for function application uses the substitution
+Then by (ED ELTA) we have                                                lemma and the case for casts uses environment expansion. The
+      hnumberi2
+                                                                         cases for references and assign use the lemma for changing the
+                                                                         store typing. The inversion lemmas are used throughout.
+and by (EC ST G) we finally have the result
+                                                                         Theorem 2 (Type safety). If ∅ ` e ⇒ e 0 : τ then ∃ r µ Σ. e 0 | ∅ ,→n
+      2                                                                  r | µ ∧ ((∃ v. r = v ∧ v ∈ V ∧ ∅ | Σ ` v : τ ) ∨ r = CastError ∨ r =
+                                                                         KillError ).
+5.4       Type Safety
+                                                                         Proof. Apply Lemma 3 and then Lemma 8.
+Towards proving type safety we prove the usual lemmas. First,
+environment expansion and contraction does not change typing
+derivations. Also, changing the store typing environment does not
+change the typing derivations as long as the new store typing agrees
+with the old one. The function Vars returns the free and bound           6.    Relation to Dynamic of Abadi et al.
+variables of an expression.                                              We defined the semantics for λ?→ with a translation to λhτ i
+                                                                                                                                   → , a lan-
+Lemma 6 (Environment Expansion and Contraction).                         guage with explicit casts. Perhaps a more obvious choice for in-
+                                                                         termediate language would be the pre-existing language of explicit
+ • If Γ | Σ ` e : τ and x ∈
+                          / Vars e then Γ(x 7→ σ) | Σ ` e : τ .          casts of Abadi et. all [1]. However, there does not seem to be a
+ • If Γ(y 7→ ν) | Σ ` e : τ and y ∈
+                                  / Vars e then Γ | Σ ` e : τ .          straightforward translation from λhτ  i
+                                                                                                             → to their language. Consider
+
+ • If Γ | Σ ` e : τ and l. If l ∈ dom Σ then Σ 0 l = Σ l. then Γ | Σ 0
+                        V                                                the evaluation rule (EC ST F) and how that functionality might be
+                                                                         implemented in terms of typecase. The parameter z must be cast
+   ` e : τ.
+                                                                         to τ , which is not known statically but only dynamically. To im-
+                                                                         plement this cast we would need to dispatch based on τ , perhaps
+Proof Sketch. These properties are proved by induction on the typ-
+                                                                         with a typecase. However, typecase must be applied to a value,
+ing derivation.
+                                                                         and there is no way for us to obtain a value of type τ from a value
+                                                                         of type τ → τ 0 . Quoting from [1]:
+Also, substitution does not change the type of an expression.
+Lemma 7 (Substitution preserves typing). If Γ(x 7→ σ) | Σ ` e : τ             Neither tostring nor typetostring quite does its job: for
+and Γ | Σ ` e 0 : σ then Γ | Σ ` [x:=e 0]e : τ .                              example, when tostring gets to a function, it stops without
+                                                                              giving any more information about the function. It can do
+Proof Sketch. The proof is by strong induction on the size of the             no better, given the mechanisms we have described, since
+expression e, using the inversion and environment expansion lem-              there is no effective way to get from a function value to an
+mas.                                                                          element of its domain or codomain.
+Definition 1. The store typing judgment, written Γ|Σ |= µ, holds         Of course, if their language were to be extended with a construct for
+when the domains of Σ and µ are equal and when for every location        performing case analysis on types, such as the typerec of Harper
+l in the domain of Σ there exists a type τ such that Γ|Σ ` µ(l) : τ .    and Morrisett [19], it would be straightforward to implement the
+                                                                         appropriate casting behavior.
+Next we prove that n-depth evaluation for the intermediate lan-
+guage λhτ  i
+         → is sound. Informally, this lemma says that evaluation
+produces either a value of the appropriate type, a cast error, or        7.    Related Work
+KillError (because evaluation is cut short), but never a type er-
+ror. The placement of e | µ ,→n r | µ 0 in the conclusion of the         Several programming languages provide gradual typing to some
+lemma proves that our evaluation rules are complete, analogous to        degree, such as Cecil [8], Boo [10], extensions to Visual Basic.NET
+a progress lemma for small-step semantics. This placement would          and C# proposed by Meijer and Drayton [26], extensions to Java
+normally be a naive mistake because not all programs terminate.          proposed by Gray et al. [17], and the Bigloo [6, 36] dialect of
+However, by using n-depth evaluation, we can construct a judg-           Scheme [24]. This paper formalizes a type system that provides
+ment regardless of whether the program is non-terminating because        a theoretical foundation for these languages.
+evaluation is always cut short if the derivation depth exceeds n.        Common LISP [23] and Dylan [12, 37] include optional type an-
+But does this lemma handle all terminating programs? The lemma           notations, but the annotations are not used for type checking, they
+is (implicitly) universally quantified over the evaluation depth n.      are used to improve performance.
+For every program that terminates there is a depth that will allow       Cartwright and Fagan’s Soft Typing [7] improves the performance
+it to terminate, and this lemma will hold for that depth. Thus, this     of dynamically typed languages by inferring types and removing
+lemma applies to all terminating programs and does not apply to          the associated run-time dispatching. They do not focus on statically
+
+
+Scheme and Functional Programming, 2006                                                                                                            89
+catching type errors, as we do here, and do not study a source           port [18] does not include a result such as Theorem 1 of this paper
+language with optional type annotations.                                 to show that the type system catches all type errors for fully anno-
+Anderson and Drossopoulou formalize BabyJ [2], an object-                tated programs, which is a tricky property to achieve in the presence
+oriented language inspired by JavaScript. BabyJ has a nominal            of a Dynamic type with implicit down-casts.
+type system, so types are class names and the permissive type ∗.         There are many interesting issues regarding efficient representa-
+In the type rules for BabyJ, whenever equality on types would nor-       tions for values in a language that mixes static and dynamic typing.
+mally be used, they instead use the relation τ1 ≈ τ2 which holds         The issues are the same as for parametric polymorphism (dynamic
+whenever τ1 and τ2 are the same name, or when at least one of            typing is just a different kind of polymorphism). Leroy [25] dis-
+them is the permissive type ∗. Our unknown type ? is similar to          cusses the use of mixing boxed and unboxed representations and
+the permissive type ∗, however, the setting of our work is a struc-      such an approach is also possible for our gradual type system.
+tural type system and our type compatibility relation ∼ takes into       Shao [38] further improves on Leroy’s mixed approach by showing
+account function types.                                                  how it can be combined with the type-passing approach of Harper
+Riely and Hennessy [35] define a partial type system for Dπ,             and Morrisett [19] and thereby provide support for recursive and
+a distributed π-calculus. Their system allows some locations to          mutable types.
+be untyped and assigns such locations the type lbad. Their type
+system, like Quasi-Static Typing, relies on subtyping, however they
+treat lbad as “bottom”, which allows objects of type lbad to be          8.   Conclusion
+implicitly coercible to any other type.                                  The debate between dynamic and static typing has continued for
+Gradual typing is syntactically similar to type inferencing [9, 21,      several decades, with good reason. There are convincing arguments
+27]: both approaches allow type annotations to be omitted. How-          for both sides. Dynamic typing is better suited than static for proto-
+ever, with type inference, the type system tries to reconstruct what     typing, scripting, and gluing components, whereas static typing is
+the type annotations should be, and if it cannot, rejects the program.   better suited for algorithms, data-structures, and systems program-
+In contrast, a gradual type system accepts that it does not know cer-    ming. It is common practice for programmers to start development
+tain types and inserts run-time casts.                                   of a program in a dynamic language and then translate to a static
+Henglein [20] presents a translation from untyped λ-terms to a co-       language midway through development. However, static and dy-
+ercion calculus with explicit casts. These casts make explicit the       namic languages are often radically different, making this transla-
+tagging, untagging, and tag-checking operations that occur during        tion difficult and error prone. Ideally, migrating between dynamic
+the execution of a language with latent (dynamic) typing. Hen-           to static could take place gradually and while staying within the
+glein’s coercion calculus seems to be closely related to our λhτ  i      same language.
+                                                                → but
+we have not yet formalized the relation. Henglein does not study a       In this paper we present the formal definition of the language λ?→ ,
+source language with partially typed terms with a static type sys-       including its static and dynamic semantics. This language captures
+tem, as we do here. Instead, his source language is a dynamically        the key ingredients for implementing gradual typing in functional
+typed language.                                                          languages. The language λ?→ provides the flexibility of dynami-
+Bracha [4] defines optional type systems as type systems that do not     cally typed languages when type annotations are omitted by the
+affect the semantics of the language and where type annotations are      programmer and provides the benefits of static checking when all
+optional. Bracha cites Strongtalk [5] as an example of an optional       function parameters are annotated, including the safety guarantees
+type system, however, that work does not define a formal type            (Theorem 1) and the time and space efficiency (Lemma 5). Further-
+system or describe how omitted type annotations are treated.             more, the cost of dynamism is “pay-as-you-go”, so partially anno-
+Ou et. all. [31] define a language that combines standard static         tated programs enjoy the benefits of static typing to the degree that
+typing with more powerful dependent typing. Implicit coercions           they are annotated. We prove type safety for λ?→ (Theorem 2); the
+are allowed to and from dependent types and run-time checks are          type system prevents type violations from occurring at run-time,
+inserted. This combination of a weaker and a stronger type system        either by catching the errors statically or by catching them dynam-
+is analogous to the combination of dynamic typing and static typing      ically with a cast exception. The type system and run-time seman-
+presented in this paper.                                                 tics of λ?→ is relatively straightforward, so it is suitable for practical
+                                                                         languages.
+Flanagan [15] introduces Hybrid Type Checking, which combines
+standard static typing with refinement types, where the refinements      As future work, we intend to investigate the interaction between our
+may express arbitrary predicates. The type system tries to satisfy       gradual type system and types such as lists, arrays, algebraic data
+the predicates using automated theorem proving, but when no con-         types, and implicit coercions between types, such as the types in
+clusive answer is given, the system inserts run-time checks. This        Scheme’s numerical tower. We also plan to investigate the interac-
+work is also analogous to ours in that it combines a weaker and          tion between gradual typing and parametric polymorphism [16, 34]
+stronger type system, allowing implicit coercions between the two        and Hindley-Milner inference [9, 21, 27]. We have implemented
+systems and inserting run-time checks. One notable difference be-        and tested an interpreter for the λ?→ calculus. As future work
+tween our system and Flanagan’s is that his is based on subtyping        we intend to incorporate gradual typing as presented here into a
+whereas ours is based on the consistency relation.                       mainstream dynamically typed programming language and per-
+                                                                         form studies to evaluate whether gradual typing can benefit pro-
+Gronski, Knowles, Tomb, Freund, and Flanagan [18] developed the
+                                                                         grammer productivity.
+Sage language which provides Hybrid Type Checking and also a
+Dynamic type with implicit (run-time checked) down-casts. Sur-
+prisingly, the Sage type system does not allow implicit down-casts       Acknowledgments
+from Dynamic, whereas the Sage type checking (and compilation)
+algorithm does allow implicit down-casts. It may be that the given       We thank the anonymous reviewers for their suggestions. We thank
+type system was intended to characterize the output of compilation       Emir Pasalic the members of the Resource Aware Programming
+(though it is missing a rule for cast), but then a type system for       Laboratory for reading drafts and suggesting improvements. This
+the source language remains to be defined. The Sage technical re-        work was supported by NSF ITR-0113569 Putting Multi-Stage
+                                                                         Annotations to Work, Texas ATP 003604-0032-2003 Advanced
+
+
+90                                                                                                 Scheme and Functional Programming, 2006
+Languages Techniques for Device Drivers, and NSF SOD-0439017           [16] J.-Y. Girard. Interprétation Fonctionnelle et Élimination des
+Synthesizing Device Drivers.                                                Coupures de l’Arithmétique d’Ordre Supérieur. Thèse de
+                                                                            doctorat d’état, Université Paris VII, Paris, France, 1972.
+                                                                       [17] K. E. Gray, R. B. Findler, and M. Flatt. Fine-grained inter-
+References                                                                  operability through mirrors and contracts. In OOPSLA ’05:
+                                                                            Proceedings of the 20th annual ACM SIGPLAN conference
+ [1] M. Abadi, L. Cardelli, B. Pierce, and G. Plotkin. Dynamic              on Object oriented programming systems languages and ap-
+     typing in a statically typed language. ACM Transactions on             plications, pages 231–245, New York, NY, USA, 2005. ACM
+     Programming Languages and Systems, 13(2):237–268, April                Press.
+     1991.
+                                                                       [18] J. Gronski, K. Knowles, A. Tomb, S. N. Freund, and C. Flana-
+ [2] C. Anderson and S. Drossopoulou. BabyJ - from object                   gan. Sage: Hybrid checking for flexible specifications. Tech-
+     based to class based programming via types. In WOOD ’03,               nical report, University of California, Santa Cruz, 2006.
+     volume 82. Elsevier, 2003.
+                                                                       [19] R. Harper and G. Morrisett. Compiling polymorphism us-
+ [3] H. Barendregt. The Lambda Calculus, volume 103 of Studies              ing intensional type analysis. In POPL ’95: Proceedings of
+     in Logic. Elsevier, 1984.                                              the 22nd ACM SIGPLAN-SIGACT symposium on Principles
+ [4] G. Bracha. Pluggable type systems. In OOPSLA’04 Workshop               of programming languages, pages 130–141, New York, NY,
+     on Revival of Dynamic Languages, 2004.                                 USA, 1995. ACM Press.
+ [5] G. Bracha and D. Griswold.        Strongtalk: typechecking        [20] F. Henglein. Dynamic typing: syntax and proof theory. Sci-
+     smalltalk in a production environment. In OOPSLA ’93: Pro-             ence of Computer Programming, 22(3):197–230, June 1994.
+     ceedings of the eighth annual conference on Object-oriented       [21] R. Hindley. The principal type-scheme of an object in combi-
+     programming systems, languages, and applications, pages                natory logic. Trans AMS, 146:29–60, 1969.
+     215–230, New York, NY, USA, 1993. ACM Press.
+                                                                       [22] A. Igarashi, B. C. Pierce, and P. Wadler. Featherweight java:
+ [6] Y. Bres, B. P. Serpette, and M. Serrano. Compiling scheme              a minimal core calculus for java and gj. ACM Transactions on
+     programs to .NET common intermediate language. In 2nd                  Programming Languages and Systems, 23(3):396–450, 2001.
+     International Workshop on .NET Technologies, Pilzen, Czech
+     Republic, May 2004.                                               [23] G. L. S. Jr. An overview of COMMON LISP. In LFP
+                                                                            ’82: Proceedings of the 1982 ACM symposium on LISP and
+ [7] R. Cartwright and M. Fagan. Soft typing. In PLDI ’91: Pro-             functional programming, pages 98–107, New York, NY, USA,
+     ceedings of the ACM SIGPLAN 1991 conference on Program-                1982. ACM Press.
+     ming language design and implementation, pages 278–292,
+     New York, NY, USA, 1991. ACM Press.                               [24] R. Kelsey, W. Clinger, and J. R. (eds.). Revised5 report on the
+                                                                            algorithmic language scheme. Higher-Order and Symbolic
+ [8] C. Chambers and the Cecil Group. The Cecil language: Spec-             Computation, 11(1), August 1998.
+     ification and rationale. Technical report, Department of Com-
+     puter Science and Engineering, University of Washington,          [25] X. Leroy. Unboxed objects and polymorphic typing. In
+     Seattle, Washington, 2004.                                             POPL ’92: Proceedings of the 19th ACM SIGPLAN-SIGACT
+                                                                            symposium on Principles of programming languages, pages
+ [9] L. Damas and R. Milner. Principal type-schemes for func-               177–188, New York, NY, USA, 1992. ACM Press.
+     tional programs. In POPL ’82: Proceedings of the 9th ACM
+     SIGPLAN-SIGACT symposium on Principles of programming             [26] E. Meijer and P. Drayton. Static typing where possible, dy-
+     languages, pages 207–212, New York, NY, USA, 1982. ACM                 namic typing when needed: The end of the cold war between
+     Press.                                                                 programming languages. In OOPSLA’04 Workshop on Re-
+                                                                            vival of Dynamic Languages, 2004.
+[10] R. B. de Oliveira.       The Boo programming language.
+     http://boo.codehaus.org, 2005.                                    [27] R. Milner. A theory of type polymorphism in programming.
+                                                                            Journal of Computer and System Sciences, 17(3):348–375,
+[11] E. Ernst, K. Ostermann, and W. R. Cook. A virtual class                1978.
+     calculus. In POPL’06: Conference record of the 33rd ACM
+     SIGPLAN-SIGACT symposium on Principles of programming             [28] T. Nipkow. Structured proofs in Isar/HOL. In TYPES, number
+     languages, pages 270–282, New York, NY, USA, 2006. ACM                 2646 in LNCS, 2002.
+     Press.                                                            [29] T. Nipkow, L. C. Paulson, and M. Wenzel. Isabelle/HOL —
+[12] N. Feinberg, S. E. Keene, R. O. Mathews, and P. T. Withing-            A Proof Assistant for Higher-Order Logic, volume 2283 of
+     ton. Dylan programming: an object-oriented and dynamic                 LNCS. Springer, 2002.
+     language. Addison Wesley Longman Publishing Co., Inc.,            [30] A. Oliart. An algorithm for inferring quasi-static types. Tech-
+     Redwood City, CA, USA, 1997.                                           nical Report 1994-013, Boston University, 1994.
+[13] R. B. Findler and M. Felleisen. Contracts for higher-order        [31] X. Ou, G. Tan, Y. Mandelbaum, and D. Walker. Dynamic
+     functions. In ACM International Conference on Functional               typing with dependent types (extended abstract). In 3rd IFIP
+     Programming, October 2002.                                             International Conference on Theoretical Computer Science,
+[14] R. B. Findler, M. Flatt, and M. Felleisen. Semantic casts: Con-        August 2004.
+     tracts and structural subtyping in a nominal world. In Euro-      [32] B. C. Pierce. Types and programming languages. MIT Press,
+     pean Conference on Object-Oriented Programming, 2004.                  Cambridge, MA, USA, 2002.
+[15] C. Flanagan. Hybrid type checking. In POPL 2006: The              [33] G. D. Plotkin. Call-by-name, call-by-value and the lambda-
+     33rd ACM SIGPLAN-SIGACT Symposium on Principles of                     calculus. Theoretical Computer Science, 1(2):125–159, De-
+     Programming Languages, pages 245–256, Charleston, South                cember 1975.
+     Carolina, January 2006.
+
+
+Scheme and Functional Programming, 2006                                                                                                 91
+[34] J. C. Reynolds. Types, abstraction and parametric polymor-
+     phism. In R. E. A. Mason, editor, Information Processing 83,
+     pages 513–523, Amsterdam, 1983. Elsevier Science Publish-
+     ers B. V. (North-Holland).
+[35] J. Riely and M. Hennessy. Trust and partial typing in open
+     systems of mobile agents. In POPL ’99: Proceedings of the
+     26th ACM SIGPLAN-SIGACT symposium on Principles of
+     programming languages, pages 93–104, New York, NY, USA,
+     1999. ACM Press.
+[36] M. Serrano. Bigloo: a practical Scheme compiler. Inria-
+     Rocquencourt, April 2002.
+[37] A. Shalit. The Dylan reference manual: the definitive guide
+     to the new object-oriented dynamic language. Addison Wes-
+     ley Longman Publishing Co., Inc., Redwood City, CA, USA,
+     1996.
+[38] Z. Shao. Flexible representation analysis. In ICFP ’97: Pro-
+     ceedings of the second ACM SIGPLAN international confer-
+     ence on Functional programming, pages 85–98, New York,
+     NY, USA, 1997. ACM Press.
+[39] J. Siek and W. Taha. Gradual typing: Isabelle/isar formaliza-
+     tion. Technical Report TR06-874, Rice University, Houston,
+     Texas, 2006.
+[40] S. Thatte. Quasi-static typing. In POPL ’90: Proceedings of
+     the 17th ACM SIGPLAN-SIGACT symposium on Principles
+     of programming languages, pages 367–381, New York, NY,
+     USA, 1990. ACM Press.
+[41] D. Volpano and G. Smith. Eliminating covert flows with
+     minimum typings. In CSFW’97: 10th Computer Security
+     Foundations Workshop, volume 00, page 156, Los Alamitos,
+     CA, USA, 1997. IEEE Computer Society.
+[42] M. Wenzel. The Isabelle/Isar Reference Manual.           TU
+     München, April 2004.
+
+
+
+
+92                                                                   Scheme and Functional Programming, 2006
+
