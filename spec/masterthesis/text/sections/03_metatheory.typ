@@ -1,9 +1,7 @@
 #import "../functions.typ": *
 
 = Metatheory <metatheory>
-
-This section gives the metatheoretic results about the declarative system as a whole. The results of this thesis are mechanized in Lean 4; each mechanized result names its Lean counterpart, and @sec-mechanization lists the points where the development encodes the presentation differently.
-
+This section gives the metatheoretic results of the declarative system.
 
 == Type Safety <type-safety>
 We prove type safety up to lookup errors for the declarative system in the syntactic style of Wright and Felleisen @wright_felleisen, by progress and preservation over the reduction of @semantics.
@@ -16,7 +14,7 @@ We prove type safety up to lookup errors for the declarative system in the synta
   If $∅ ⊢ e : τ$ and $e → e′$, then $∅ ⊢ e′ : τ$.
 ] <thm-preservation>
 
-Progress holds only up to lookup errors: the ↯-disjunct is the price of typing an absent field at ★ by T-sel-⊥. Lookup errors arise only at such a selection and are otherwise only propagated. Preservation holds exactly: the type is unchanged, not merely refined. Its central lemma is substitution for `let`: a value that types at every instance of a scheme may replace a variable bound to that scheme, which is exactly what the instance-closure premise of T-let provides.
+Progress holds only up to lookup errors because some lookups might be typed as ★ and we can not guarantee non-failure over this fragment. We only admit uncertainty in lookups and propagate it through the typesystem, so ★ is not an arbitrary failure type and its origin can always be explained.
 
 
 == Refinement and the Rigidity of ★ <refinement>
@@ -47,8 +45,7 @@ For `x: ({l = c} ‖ x).l` with $x : {β}$, the typing ${β} → ★$ is carried
   $
 ] <def-principal>
 
-// meta: extend here a bit
-The three conjuncts are instance-closure, inhabitation and coverage: every instance of σ is a typing of e, σ has an instance, and every typing of e is matched by an instance at least as precise. Coverage is stated up to ≼ rather than equality, since typings are closed under T-eq and T-★-intro while instance sets are not.
+The three conjuncts are instance-closure, inhabitation and coverage: every instance of σ is a typing of e, σ has an instance, and every typing of e is matched by an instance at least as precise. [Coverage is stated up to ≼ rather than equality, since typings are closed under T-eq and T-★-intro while instance sets are not.](explain this better)
 
 #theorem(
   name: [No plain scheme is principal],
@@ -61,7 +58,7 @@ The three conjuncts are instance-closure, inhabitation and coverage: every insta
   Both instances are typings, so a scheme covering them must have a quantified variable as its result, since ${ε}$ and ★ are rigid. Sending that variable to ${ε}$ in the substitution of the second instance leaves the argument at ${ε}$ and yields the instance ${ε} → {ε}$, which is not a typing. Choosing ★ as result does not help, by @lem-rigid.
 ]
 
-A qualified scheme is principal. Let selQ be the same definition as above:
+A qualified scheme is principal. Let
 
 $ "selQ" quad = quad ∀(β: "Row", δ: "Type"). #h(0.3em) ⟨β.l ↓ δ⟩ ⇒ {β} → δ. $
 
