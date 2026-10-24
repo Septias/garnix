@@ -298,7 +298,7 @@ theorem inferSoundC_false : ¬ InferSoundC Unit Unit (Sig.plain fun _ => ()) := 
 --
 --     { a = λx. x.l,  b = let y = c in c }
 --
--- Field a parks `⟨2 ▷ 2.l ↓ 3⟩` — x's record row is 2, the answer 3. Field b's
+-- Field a parks `⟨2 ⊳ 2.l ↓ 3⟩` — x's record row is 2, the answer 3. Field b's
 -- let may generalize ANY variable ⟦S₁⟧Γ does not mention, and Γ is empty there,
 -- so ᾱ = [2] passes the Γ-freshness premise. A-let then files every stump
 -- blocked in ᾱ under the scheme of y — including field a's, which has nothing to

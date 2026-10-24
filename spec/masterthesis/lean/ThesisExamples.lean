@@ -273,7 +273,7 @@ def parkedOf (e : InferRuns.E) : String × List String :=
       (tyC L τ', ps.map fun q =>
         (if (Ty.rcd (.var q.1) : T).ftv.isEmpty then "" else
           match q.2.row.ftv.contains q.1, q.2.label.ftv.contains q.1 with
-          | _, true => "κ" | _, _ => "ρ") ++ toString (L.idxOf q.1 + 1) ++ " ▷ " ++ stumpC L q.2)
+          | _, true => "κ" | _, _ => "ρ") ++ toString (L.idxOf q.1 + 1) ++ " ⊳ " ++ stumpC L q.2)
   | _ => ("fail", [])
 
 ------------------------------------------------------------------------------
@@ -673,7 +673,7 @@ example : Unifies (sub [("β", row [f "l" b, rv "β'"]), ("α", row [f "m" b, rv
 -- Example "Waking, re-parking and finalizing": `r: (x: x.l) (r ‖ {m = c})`.
 -- After inference the stump is filed under ρ_r, the row of r (K-repark) …
 def reparkEx : E := lam "r" (app (lam "x" (sel (v "x") "l")) (cat (v "r") (rec1 "m" c)))
-#guard parkedOf reparkEx = ("({ρ1} → α2)", ["ρ1 ▷ ⟨m: 𝓫 | ρ1 | ε.l ↓ α2⟩"])
+#guard parkedOf reparkEx = ("({ρ1} → α2)", ["ρ1 ⊳ ⟨m: 𝓫 | ρ1 | ε.l ↓ α2⟩"])
 -- … and finalization pins δ to ★ by F-★, with a warning
 #guard run reparkEx = ("({ρ1} → ★)", ["l"])
 
@@ -686,7 +686,7 @@ def reparkEx : E := lam "r" (app (lam "x" (sel (v "x") "l")) (cat (v "r") (rec1 
 -- Example "A spent promise": `x: (x.l) c`. A-sel-? parks the stump on x's row
 -- and A-app spends its promise on 𝓫_c → γ …
 def spentEx' : E := lam "x" (app (sel (v "x") "l") c)
-#guard parkedOf spentEx' = ("({ρ1} → α2)", ["ρ1 ▷ ⟨ρ1.l ↓ (𝓫 → α2)⟩"])
+#guard parkedOf spentEx' = ("({ρ1} → α2)", ["ρ1 ⊳ ⟨ρ1.l ↓ (𝓫 → α2)⟩"])
 -- … F-hit materializes it: {l: 𝓫_c → γ | ρ′} → γ, without a warning
 #guard run spentEx' = ("({l: (𝓫 → α1) | ρ2 | ε} → α1)", [])
 
@@ -775,7 +775,7 @@ example : QTyped σ0 QCtx.empty starIntroEx
 
 -- `a: {l = c; m = {}}.${a}`: the stump waits on the key, not on a row …
 #guard parkedOf (lam "a" (sd (rec2 "l" c "m" emp) (v "a"))) =
-  ("(⌊κ1⌋ → α2)", ["κ1 ▷ ⟨l: 𝓫 | m: {ε} | ε.κ1 ↓ α2⟩"])
+  ("(⌊κ1⌋ → α2)", ["κ1 ⊳ ⟨l: 𝓫 | m: {ε} | ε.κ1 ↓ α2⟩"])
 -- … and applying the selector to "l" solves the key, and the stump hits
 #guard run (app (lam "a" (sd (rec2 "l" c "m" emp) (v "a"))) (L "l")) = ("𝓫", [])
 

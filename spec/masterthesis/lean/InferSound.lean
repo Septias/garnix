@@ -296,7 +296,7 @@ theorem infer_sound_selAbs_step {B C : Type} [DecidableEq B] {constTy : Sig B C}
 --------------------- WHAT A PARKED STUMP HAS TO MEAN -------------------------
 -- A-sel-? is the case `proof-state.md` calls a DESIGN question rather than a
 -- proof-effort one: the rule returns a stump-variable δ and parks
--- `⟨α ▷ ρ.l ↓ δ⟩`, and δ is a PROMISE, not yet a type, so an inner A-sel-? has
+-- `⟨α ⊳ ρ.l ↓ δ⟩`, and δ is a PROMISE, not yet a type, so an inner A-sel-? has
 -- no plain declarative reading. The answer is that the promise is worth exactly
 -- a DISCHARGE — the declarative side's `Stump.Discharge`, read at the σ the
 -- conclusion is stated under. That is the
@@ -468,7 +468,7 @@ theorem infer_sound_var_step {B C : Type} {constTy : Sig B C} {Γ' : QCtx B}
 --
 --     S ⊢ δ ≐ ★ ⇝ S′
 --     ─────────────────────────
---     S ⊢ ⟨α ▷ ρ.l ↓ δ⟩ ⇓ S′[δ]
+--     S ⊢ ⟨α ⊳ ρ.l ↓ δ⟩ ⇓ S′[δ]
 --
 -- with NO premise about the lookup. `Stump.Discharge` offers ★ only under
 -- `D-⊥` (the lookup is `⊥`) or `D-?` (it is still `?`); there is no rule
@@ -575,7 +575,7 @@ theorem finalize_star_guarded_cannot_fire :
 --     (λx. {a = x.l}) {l = c}
 --
 -- Inside the λ this is `selEx_infers` verbatim — `α ≐ {r}` binds α at the TYPE
--- sort, `r` stays unsolved at the ROW sort, A-sel-? parks `⟨r ▷ r.l ↓ δ⟩`. The
+-- sort, `r` stays unsolved at the ROW sort, A-sel-? parks `⟨r ⊳ r.l ↓ δ⟩`. The
 -- application then solves `r ≔ (l: 𝓫)` through the arrow equation. That state is
 -- `fsS` below, and at it the lookup LANDS while the stump still says "blocked":
 -- K-hit and F-★ both fire and commit δ to different types, F-★'s answer
@@ -809,7 +809,7 @@ theorem fStarEx_refinement_lost :
 --
 --     λx. λy. (x.l) y
 --
--- A-sel-? parks ⟨r ▷ r.l ↓ δ⟩ and answers δ; A-app then emits `δ ≐ (α_y → β)`,
+-- A-sel-? parks ⟨r ⊳ r.l ↓ δ⟩ and answers δ; A-app then emits `δ ≐ (α_y → β)`,
 -- which SUCCEEDS — δ is an unsolved variable, which is exactly what A-sel-?
 -- returned it for. The state is perfectly well formed at the end: quiescent, the
 -- stump still blocked on an unsolved row variable, nothing stale. And it cannot

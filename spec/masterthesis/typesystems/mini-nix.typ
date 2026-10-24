@@ -443,14 +443,14 @@ s₁ ≐ᵣ s₂ ⇝ stuck
 - S: Solvest state
 
 S := (θ, Δ, W)
-Δ := ∅ | ⟨α ▷ ρ.l ↓ δ⟩, Δ
+Δ := ∅ | ⟨α ⊳ ρ.l ↓ δ⟩, Δ
 
 S ⊎ q          park a stump
 S ∖ q          drop every entry carrying the stump q (equal stumps discharge alike)
 fresh α: κ     draw a name at sort κ from the threaded supply
 
 - *Quiescence*, the state invariant: every stump in Δ is genuinely blocked on the
-  blocker it records, `(⟦S⟧ρ).l ↓ ? on α` for each `⟨α ▷ ρ.l ↓ δ⟩ ∈ Δ`.
+  blocker it records, `(⟦S⟧ρ).l ↓ ? on α` for each `⟨α ⊳ ρ.l ↓ δ⟩ ∈ Δ`.
 - Every equation in the A-rules below has to be  *solve-then-saturate*
 
 S ⊢ τ ≐ τ′ ⇝! S′    solve, then re-run wake-up on what the solution staled
@@ -501,7 +501,7 @@ fresh α: Type   Γ·(x: α); S ⊢ e ⇒ τ; S′
 
 Γ; S ⊢ e ⇒ τ; S₁   fresh ρ: Row   S₁ ⊢ τ ≐ {ρ} ⇝! S₂   (⟦S₂⟧ρ).l ↓ ? on α   fresh δ: Type
 -------------------------------------------------------------------------------------------- A-sel-?
-Γ; S ⊢ e.l ⇒ δ; S₂ ⊎ ⟨α ▷ ρ.l ↓ δ⟩
+Γ; S ⊢ e.l ⇒ δ; S₂ ⊎ ⟨α ⊳ ρ.l ↓ δ⟩
 
 
 Γ; S ⊢ ξ ⇒ ρ; S′
@@ -575,31 +575,31 @@ fresh α: Type   Γ·(x: α); S ⊢ e ⇒ τ; S′
 
 (⟦S⟧ρ).l ↓ τ′   S ⊢ δ ≐ τ′ ⇝ S′
 ------------------------------------ K-hit
-S ⊢ ⟨α ▷ ρ.l ↓ δ⟩ ↝ S′ ∖ ⟨ρ.l ↓ δ⟩
+S ⊢ ⟨α ⊳ ρ.l ↓ δ⟩ ↝ S′ ∖ ⟨ρ.l ↓ δ⟩
 
 
 (⟦S⟧ρ).l ↓ ⊥   S ⊢ δ ≐ ★ ⇝ S′
 ----------------------------------------- K-⊥
-S ⊢ ⟨α ▷ ρ.l ↓ δ⟩ ↝ (S′ ∖ ⟨ρ.l ↓ δ⟩) +W
+S ⊢ ⟨α ⊳ ρ.l ↓ δ⟩ ↝ (S′ ∖ ⟨ρ.l ↓ δ⟩) +W
 
 
 (⟦S⟧ρ).l ↓ ? on α′
 ------------------------------------------------------ K-repark
-S ⊢ ⟨α ▷ ρ.l ↓ δ⟩ ↝ (S ∖ ⟨ρ.l ↓ δ⟩) ⊎ ⟨α′ ▷ ρ.l ↓ δ⟩
+S ⊢ ⟨α ⊳ ρ.l ↓ δ⟩ ↝ (S ∖ ⟨ρ.l ↓ δ⟩) ⊎ ⟨α′ ⊳ ρ.l ↓ δ⟩
 
 
 ----------- K-nil
 S ⊢ ∅ ↝\* S
 
 
-S ⊢ ⟨α ▷ ρ.l ↓ δ⟩ ↝ S₁   S₁ ⊢ Δ′ ↝\* S′
+S ⊢ ⟨α ⊳ ρ.l ↓ δ⟩ ↝ S₁   S₁ ⊢ Δ′ ↝\* S′
 ----------------------------------------- K-cons
-S ⊢ (⟨α ▷ ρ.l ↓ δ⟩, Δ′) ↝\* S′
+S ⊢ (⟨α ⊳ ρ.l ↓ δ⟩, Δ′) ↝\* S′
 
 
-(⟦S⟧ρ).l ↓ ? on α   (S ⊎ ⟨α ▷ ρ.l ↓ δ⟩) ⊢ Δ′ ↝\* S′
+(⟦S⟧ρ).l ↓ ? on α   (S ⊎ ⟨α ⊳ ρ.l ↓ δ⟩) ⊢ Δ′ ↝\* S′
 ----------------------------------------------------------- K-park
-S ⊢ (⟨α ▷ ρ.l ↓ δ⟩, Δ′) ↝\* S′
+S ⊢ (⟨α ⊳ ρ.l ↓ δ⟩, Δ′) ↝\* S′
 
 
 S quiescent
@@ -607,7 +607,7 @@ S quiescent
 S ⊢ Δ ↝! S
 
 
-⟨α ▷ ρ.l ↓ δ⟩ ∈ Δ   ¬ (⟦S⟧ρ).l ↓ ? on α   S ⊢ ⟨α ▷ ρ.l ↓ δ⟩ ↝ S₁   S₁ ⊢ Δ₁ ↝! S′
+⟨α ⊳ ρ.l ↓ δ⟩ ∈ Δ   ¬ (⟦S⟧ρ).l ↓ ? on α   S ⊢ ⟨α ⊳ ρ.l ↓ δ⟩ ↝ S₁   S₁ ⊢ Δ₁ ↝! S′
 -------------------------------------------------------------------------------------- K!-step
 S ⊢ Δ ↝! S′
 // A step only on a STALE stump — one whose recorded blocker no longer blocks its
@@ -616,9 +616,9 @@ S ⊢ Δ ↝! S′
 // after ≐ and ↝\* respectively.
 
 
-⟨α ▷ ρ.l ↓ δ⟩ ∈ Δ   ⟦S⟧δ spent   (⟦S⟧ρ).l ↓ ? on α   fresh ρ′: Row   S ⊢ {α} ≐ {l: δ | ρ′} ⇝! S′
+⟨α ⊳ ρ.l ↓ δ⟩ ∈ Δ   ⟦S⟧δ spent   (⟦S⟧ρ).l ↓ ? on α   fresh ρ′: Row   S ⊢ {α} ≐ {l: δ | ρ′} ⇝! S′
 ------------------------------------------------------------------------------------------------ F-hit
-S ⊢ ⟨α ▷ ρ.l ↓ δ⟩ ⇓ₘ S′
+S ⊢ ⟨α ⊳ ρ.l ↓ δ⟩ ⇓ₘ S′
 // ⟦S⟧δ is SPENT when it is neither a variable nor ★: F-★'s δ ≐ ★ would clash.
 // `λx y. (x.l) y` spends δ ≔ α_y -> β, yet it IS typeable, at
 // {(l: 𝓫 -> 𝓫)} -> 𝓫 -> 𝓫. The lookup waits on α, which nothing has committed,
@@ -643,18 +643,18 @@ S ⊢ (q, Δ′) ⇓ₘ\* S′
 // q is not spent, or an earlier step's saturation already discharged it
 
 
-⟨α ▷ ρ.l ↓ δ⟩ ∈ Δ   (⟦S⟧ρ).l ↓ ? on α   S ⊢ δ ≐ ★ ⇝ S′
+⟨α ⊳ ρ.l ↓ δ⟩ ∈ Δ   (⟦S⟧ρ).l ↓ ? on α   S ⊢ δ ≐ ★ ⇝ S′
 -------------------------------------------------------- F-★
-S ⊢ ⟨α ▷ ρ.l ↓ δ⟩ ⇓ (S′ ∖ ⟨ρ.l ↓ δ⟩) +W
+S ⊢ ⟨α ⊳ ρ.l ↓ δ⟩ ⇓ (S′ ∖ ⟨ρ.l ↓ δ⟩) +W
 
 
 ----------- F-nil
 S ⊢ ∅ ⇓\* S
 
 
-S ⊢ ⟨α ▷ ρ.l ↓ δ⟩ ⇓ S₁   S₁ ⊢ Δ′ ⇓\* S′
+S ⊢ ⟨α ⊳ ρ.l ↓ δ⟩ ⇓ S₁   S₁ ⊢ Δ′ ⇓\* S′
 --------------------------------------- F-cons
-S ⊢ (⟨α ▷ ρ.l ↓ δ⟩, Δ′) ⇓\* S′
+S ⊢ (⟨α ⊳ ρ.l ↓ δ⟩, Δ′) ⇓\* S′
 
 
 == Entry
@@ -994,7 +994,7 @@ fresh κ: Label   S₃ ⊢ τ₂ ≐ ⌊κ⌋ ⇝! S₄   (⟦S₄⟧r).(⟦S₄
 
 …   (⟦S₄⟧r).(⟦S₄⟧κ) ↓ ? on α   fresh δ: Type
 ------------------------------------------------ A-sel-dyn-?
-Γ; S ⊢ e₁.(e₂) ⇒ δ; S₄ ⊎ ⟨α ▷ r.κ ↓ δ⟩
+Γ; S ⊢ e₁.(e₂) ⇒ δ; S₄ ⊎ ⟨α ⊳ r.κ ↓ δ⟩
 // α may be a label variable: the stump waits on the KEY
 
 

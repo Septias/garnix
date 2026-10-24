@@ -287,7 +287,7 @@ def KEnv.Assigns (K : KEnv) (vs : List TyVar) (ks : List Kind) : Prop :=
   vs.map K.lookup = ks.map some
 
 
-/-- A parked selection `⟨α ▷ ρ.l ↓ δ⟩`: `Stump` carries `ρ.l ↓ δ`, and the
+/-- A parked selection `⟨α ⊳ ρ.l ↓ δ⟩`: `Stump` carries `ρ.l ↓ δ`, and the
 blocker `α` is what wake-up watches. -/
 structure Parked (B : Type) where
   blocker : TyVar
@@ -405,7 +405,7 @@ theorem SolveTy.unifies {B : Type} [DecidableEq B] {S S' : SolverState B}
 -- K-repark has no declarative counterpart: declaratively D-? commits to ★ at
 -- once, algorithmically the lookup has merely progressed to the next variable.
 
-/-- `S ⊢ ⟨α ▷ ρ.l ↓ δ⟩ ↝ S′` — one wake-up step. -/
+/-- `S ⊢ ⟨α ⊳ ρ.l ↓ δ⟩ ↝ S′` — one wake-up step. -/
 inductive Wake {B : Type} [DecidableEq B] :
     SolverState B → Parked B → SolverState B → Prop where
   -- K-hit: the lookup now lands, so δ is pinned to what it found

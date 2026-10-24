@@ -120,7 +120,7 @@ The state is kept under one invariant, _quiscence_. Quiescence demands that ever
         $Γ; S ⊢ e ⇒ τ; S₁ #h(2em) "fresh" ρ: "Row" #h(2em) S₁ ⊢ τ ≐ {ρ} #st_solve S₂$,
         $(⟦S₂⟧ρ).l ↓ #h(0.2em) ? "on" α #h(2em) "fresh" δ: "Type"$,
       ),
-      $Γ; S ⊢ e.l ⇒ δ; S₂ #st_park ⟨α ▷ ρ.l ↓ δ⟩$,
+      $Γ; S ⊢ e.l ⇒ δ; S₂ #st_park ⟨α ⊳ ρ.l ↓ δ⟩$,
     ),
     derive("A-rec", ($Γ; S ⊢ ξ ⇒ ρ; S′$,), $Γ; S ⊢ {ξ} ⇒ {ρ}; S′$),
     derive("A-ξ-empty", (), $Γ; S ⊢ ε ⇒ ε; S$),
@@ -176,7 +176,7 @@ Four conditions make a choice admissible. The generalized variables must be fres
 
 Every variable in a generalized stump's result must itself be generalized, since otherwise each instance would pin a variable of the environment. Finally, the scheme must be inhabited, as the declarative T-let requires through $∃ τ₁. σ ≥ τ₁$. A stump whose result is still a variable is harmless, since its result can be sent to ★ while its lookup stays blocked. A stump whose result has been spent on a non-variable type must instead hit at some instance. The algorithm does not decide this property but checks a sufficient syntactic condition, written $Δ_q$ fillable at $S₁$: every spent stump has a literal label, all stumps on its blocker have literal labels, a stump that shares its label is [spent](not yet introduced) as well and its result agrees with the first once every type variable is replaced by ★, and no spent blocker occurs in a spent result. Under this condition the instance that sends the generalized type variables to ★ and extends each blocker by the fields its spent stumps demand discharges every stump of $Δ_q$. The admissible choices are closed under union, so a greatest one exists (`greatestAlpha_spec` in Lean) and is computed by deleting variables until nothing more is deleted. A failing condition therefore does not make the binding monomorphic; it removes the offending variables and whatever they drag along.
 
-As an example, consider `let f = x: x.l in f {l = c}`. For the bound term, A-λ-I gives x a fresh α, and A-sel-★ unifies α with ${ρ}$ for a fresh ρ, finds that $ρ.l$ answers $?$ on ρ, and parks $⟨ρ ▷ ρ.l ↓ δ⟩$ with a fresh δ. The result is $⟦S₁⟧(α → δ) = {ρ} → δ$. Since α is solved, $macron(α) = ρ, δ$; the single stump has its result in $macron(α)$ and moves into the scheme, and nothing stays parked. f is bound to $∀(ρ: "Row", δ: "Type"). ⟨ρ.l ↓ δ⟩ ⇒ {ρ} → δ$, which is selQ of @principality. At the use, A-var instantiates the scheme with fresh ρ′ and δ′ and replays the stump, which is still blocked and is parked on ρ′. A-λ-E then solves $ρ′ ≔ (l: 𝓫_c)$ and identifies δ′ with the result variable. Saturation finds the stump stale, K-hit re-asks the lookup, which now hits, and the result is unified with $𝓫_c$.
+As an example, consider `let f = x: x.l in f {l = c}`. For the bound term, A-λ-I gives x a fresh α, and A-sel-★ unifies α with ${ρ}$ for a fresh ρ, finds that $ρ.l$ answers $?$ on ρ, and parks $⟨ρ ⊳ ρ.l ↓ δ⟩$ with a fresh δ. The result is $⟦S₁⟧(α → δ) = {ρ} → δ$. Since α is solved, $macron(α) = ρ, δ$; the single stump has its result in $macron(α)$ and moves into the scheme, and nothing stays parked. f is bound to $∀(ρ: "Row", δ: "Type"). ⟨ρ.l ↓ δ⟩ ⇒ {ρ} → δ$, which is selQ of @principality. At the use, A-var instantiates the scheme with fresh ρ′ and δ′ and replays the stump, which is still blocked and is parked on ρ′. A-λ-E then solves $ρ′ ≔ (l: 𝓫_c)$ and identifies δ′ with the result variable. Saturation finds the stump stale, K-hit re-asks the lookup, which now hits, and the result is unified with $𝓫_c$.
 
 == Wake-Up and Finalization
 
@@ -189,17 +189,17 @@ As an example, consider `let f = x: x.l in f {l = c}`. For the bound term, A-λ-
         derive(
           "K-hit",
           ($(⟦S⟧ρ).l ↓ τ′$, $S ⊢ δ ≐ τ′ ⇝ S′$),
-          $S ⊢ ⟨α ▷ ρ.l ↓ δ⟩ #st_wake S′ #st_drop ⟨α ▷ ρ.l ↓ δ⟩$,
+          $S ⊢ ⟨α ⊳ ρ.l ↓ δ⟩ #st_wake S′ #st_drop ⟨α ⊳ ρ.l ↓ δ⟩$,
         ),
         derive(
           "K-⊥",
           ($(⟦S⟧ρ).l ↓ ⊥$, $S ⊢ δ ≐ ★ ⇝ S′$),
-          $S ⊢ ⟨α ▷ ρ.l ↓ δ⟩ #st_wake (S′ #st_drop ⟨α ▷ ρ.l ↓ δ⟩) "+W"$,
+          $S ⊢ ⟨α ⊳ ρ.l ↓ δ⟩ #st_wake (S′ #st_drop ⟨α ⊳ ρ.l ↓ δ⟩) "+W"$,
         ),
         derive(
           "K-repark",
           ($(⟦S⟧ρ).l ↓ #h(0.2em) ? "on" α′$,),
-          $S ⊢ ⟨α ▷ ρ.l ↓ δ⟩ #st_wake (S #st_drop ⟨α ▷ ρ.l ↓ δ⟩) #st_park ⟨α′ ▷ ρ.l ↓ δ⟩$,
+          $S ⊢ ⟨α ⊳ ρ.l ↓ δ⟩ #st_wake (S #st_drop ⟨α ⊳ ρ.l ↓ δ⟩) #st_park ⟨α′ ⊳ ρ.l ↓ δ⟩$,
         ),
       )
     ],
@@ -208,16 +208,16 @@ As an example, consider `let f = x: x.l in f {l = c}`. For the bound term, A-λ-
         derive("K-nil", (), $S ⊢ ∅ scripts(↝)^* S$),
         derive(
           "K-cons",
-          ($S ⊢ ⟨α ▷ ρ.l ↓ δ⟩ #st_wake S₁$, $S₁ ⊢ Δ′ scripts(↝)^* S′$),
-          $S ⊢ (⟨α ▷ ρ.l ↓ δ⟩, Δ′) scripts(↝)^* S′$,
+          ($S ⊢ ⟨α ⊳ ρ.l ↓ δ⟩ #st_wake S₁$, $S₁ ⊢ Δ′ scripts(↝)^* S′$),
+          $S ⊢ (⟨α ⊳ ρ.l ↓ δ⟩, Δ′) scripts(↝)^* S′$,
         ),
         derive(
           "K-park",
           (
             $(⟦S⟧ρ).l ↓ #h(0.2em) ? "on" α$,
-            $(S #st_park ⟨α ▷ ρ.l ↓ δ⟩) ⊢ Δ′ scripts(↝)^* S′$,
+            $(S #st_park ⟨α ⊳ ρ.l ↓ δ⟩) ⊢ Δ′ scripts(↝)^* S′$,
           ),
-          $S ⊢ (⟨α ▷ ρ.l ↓ δ⟩, Δ′) scripts(↝)^* S′$,
+          $S ⊢ (⟨α ⊳ ρ.l ↓ δ⟩, Δ′) scripts(↝)^* S′$,
         ),
       )
     ],
@@ -227,9 +227,9 @@ As an example, consider `let f = x: x.l in f {l = c}`. For the bound term, A-λ-
         derive(
           "K!-step",
           (
-            $⟨α ▷ ρ.l ↓ δ⟩ ∈ Δ$,
+            $⟨α ⊳ ρ.l ↓ δ⟩ ∈ Δ$,
             $¬(⟦S⟧ρ).l ↓ #h(0.2em) ? "on" α$,
-            $S ⊢ ⟨α ▷ ρ.l ↓ δ⟩ #st_wake S₁$,
+            $S ⊢ ⟨α ⊳ ρ.l ↓ δ⟩ #st_wake S₁$,
             $S₁ ⊢ Δ₁ #st_sat S′$,
           ),
           $S ⊢ Δ #st_sat S′$,
@@ -246,28 +246,28 @@ As an example, consider `let f = x: x.l in f {l = c}`. For the bound term, A-λ-
     derive(
       "F-hit",
       (
-        $⟨α ▷ ρ.l ↓ δ⟩ ∈ Δ$,
+        $⟨α ⊳ ρ.l ↓ δ⟩ ∈ Δ$,
         $(⟦S⟧ρ).l ↓ #h(0.2em) ? "on" α$,
         $⟦S⟧δ$ + [ spent],
         $"fresh" α′: "Row"$,
         $S ⊢ {α} ≐ {l: δ | α′} #st_solve S′$,
       ),
-      $S ⊢ ⟨α ▷ ρ.l ↓ δ⟩ #st_mat S′$,
+      $S ⊢ ⟨α ⊳ ρ.l ↓ δ⟩ #st_mat S′$,
     ),
     derive(
       "F-★",
       (
-        $⟨α ▷ ρ.l ↓ δ⟩ ∈ Δ$,
+        $⟨α ⊳ ρ.l ↓ δ⟩ ∈ Δ$,
         $(⟦S⟧ρ).l ↓ #h(0.2em) ? "on" α$,
         $S ⊢ δ ≐ ★ ⇝ S′$,
       ),
-      $S ⊢ ⟨α ▷ ρ.l ↓ δ⟩ #st_fin (S′ #st_drop ⟨α ▷ ρ.l ↓ δ⟩) "+W"$,
+      $S ⊢ ⟨α ⊳ ρ.l ↓ δ⟩ #st_fin (S′ #st_drop ⟨α ⊳ ρ.l ↓ δ⟩) "+W"$,
     ),
     derive("F-nil", (), $S ⊢ ∅ scripts(#st_fin)^* S$),
     derive(
       "F-cons",
-      ($S ⊢ ⟨α ▷ ρ.l ↓ δ⟩ #st_fin S₁$, $S₁ ⊢ Δ′ scripts(#st_fin)^* S′$),
-      $S ⊢ (⟨α ▷ ρ.l ↓ δ⟩, Δ′) scripts(#st_fin)^* S′$,
+      ($S ⊢ ⟨α ⊳ ρ.l ↓ δ⟩ #st_fin S₁$, $S₁ ⊢ Δ′ scripts(#st_fin)^* S′$),
+      $S ⊢ (⟨α ⊳ ρ.l ↓ δ⟩, Δ′) scripts(#st_fin)^* S′$,
     ),
     derive(
       "Entry",
@@ -294,7 +294,7 @@ The order of the phases is forced. F-★ cannot finalize a spent stump: its equa
 Materialization is the one step of the algorithm that places a field into a row-variable. It is not a forced move: the field could as well be supplied further along the row, and the typing it produces is one of several. It is sound, since the result is a declarative typing, and it happens after inference proper, where no further equation depends on the choice. Neither phase runs at a `let` boundary. Stumps that were generalized by A-let live in their scheme and are discharged per use, and a stump blocked on a variable of Γ may still be answered by an application further out. The remaining $?$ of @sec-motivation become ★ here and nowhere else.
 
 #example(name: [Waking, re-parking and finalizing])[
-  In `r: (x: x.l) (r ‖ {m = c})`, A-sel-★ parks the stump $⟨ρ ▷ ρ.l ↓ δ⟩$, where ρ is the fresh row of x. The argument has type ${m: 𝓫_c | ρ_r}$ by A-conc, where $ρ_r$ is the row of r, and A-λ-E solves $ρ ≔ (m: 𝓫_c | ρ_r)$. This write makes the stump stale, since its recorded blocker ρ is solved. Saturation re-asks the lookup, which skips m by L-miss and stops at $ρ_r$, and K-repark files the stump under $ρ_r$. Nothing solves $ρ_r$ afterwards, so finalization pins δ to ★ by F-★ and records a warning. The program has type ${ρ_r} → ★$.
+  In `r: (x: x.l) (r ‖ {m = c})`, A-sel-★ parks the stump $⟨ρ ⊳ ρ.l ↓ δ⟩$, where ρ is the fresh row of x. The argument has type ${m: 𝓫_c | ρ_r}$ by A-conc, where $ρ_r$ is the row of r, and A-λ-E solves $ρ ≔ (m: 𝓫_c | ρ_r)$. This write makes the stump stale, since its recorded blocker ρ is solved. Saturation re-asks the lookup, which skips m by L-miss and stops at $ρ_r$, and K-repark files the stump under $ρ_r$. Nothing solves $ρ_r$ afterwards, so finalization pins δ to ★ by F-★ and records a warning. The program has type ${ρ_r} → ★$.
 ] <ex-repark>
 
 #example(name: [Why quiescence matters])[
@@ -302,7 +302,7 @@ Materialization is the one step of the algorithm that places a field into a row-
 ] <ex-quiescence>
 
 #example(name: [A spent promise])[
-  In `x: (x.l) c`, A-sel-★ parks $⟨ρ ▷ ρ.l ↓ δ⟩$, and A-λ-E unifies δ with $𝓫_c → γ$ for a fresh γ. The promise is spent: F-★ would have to unify $𝓫_c → γ$ with ★, which clashes because ★ is rigid. F-hit instead solves $ρ ≔ (l: 𝓫_c → γ | ρ′)$ for a fresh ρ′. Saturation wakes the stump, the lookup now hits, and K-hit unifies the found type with the promised one. The program has type ${l: 𝓫_c → γ | ρ′} → γ$, without a warning.
+  In `x: (x.l) c`, A-sel-★ parks $⟨ρ ⊳ ρ.l ↓ δ⟩$, and A-λ-E unifies δ with $𝓫_c → γ$ for a fresh γ. The promise is spent: F-★ would have to unify $𝓫_c → γ$ with ★, which clashes because ★ is rigid. F-hit instead solves $ρ ≔ (l: 𝓫_c → γ | ρ′)$ for a fresh ρ′. Saturation wakes the stump, the lookup now hits, and K-hit unifies the found type with the promised one. The program has type ${l: 𝓫_c → γ | ρ′} → γ$, without a warning.
 ] <ex-spent>
 
 == Inference Metatheory <inference-metatheory>

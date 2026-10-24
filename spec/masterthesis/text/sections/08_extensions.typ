@@ -190,7 +190,7 @@ On rows, the moves of @unification-cascade treat a keyed field as a barrier. U-�
     derive(
       "A-sel-dyn-★",
       ($…$, $(⟦S₄⟧ρ).(⟦S₄⟧ℓ) ↓ #h(0.2em) ? "on" α$, $"fresh" δ: "Type"$),
-      $Γ; S ⊢ e₁.\${e₂} ⇒ δ; S₄ #st_park ⟨α ▷ ρ.ℓ ↓ δ⟩$,
+      $Γ; S ⊢ e₁.\${e₂} ⇒ δ; S₄ #st_park ⟨α ⊳ ρ.ℓ ↓ δ⟩$,
     ),
     derive(
       "A-rcd-dyn",
