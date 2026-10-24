@@ -16,7 +16,10 @@ A builtin p is applied to all of its arguments; a partial application is written
 
 *Rules.* The typing rules are the standard ones. A builtin is typed at an instance of its type, a conditional and an assertion require a condition of type `bool`, a conditional types both branches at a common type, and `e ? l` requires a record and has type `bool`. It refines nothing; refining by such a test is occurrence typing. Unification decomposes $[τ_1] ≐ [τ_2]$ to $τ_1 ≐ τ_2$, and the inference rules are those of algorithm W, with the condition unified with `bool` and the branches with each other.
 
-#theorem(name: [MacroNix metatheory], lean: "qProgress, qPreservation, inferSound, runF_terminates")[
+#theorem(
+  name: [MacroNix metatheory],
+  lean: "qProgress, qPreservation, inferSound, runF_terminates",
+)[
   For every sound signature, progress up to errors and preservation hold, where an error is now also a failed assertion or a failing builtin. Inference is sound and terminates, and every leg of the unification trichotomy carries the list case.
 ]
 
