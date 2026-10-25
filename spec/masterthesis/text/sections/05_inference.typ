@@ -19,7 +19,7 @@ The inference algorithm is a judgement $Γ; S ⊢ e ⇒ τ; S′$ that takes a _
     spacing: 18pt,
     subbox(caption: "State")[
       $
-         #type_name("Solver state") S & ::= (θ, Δ, W, macron(κ)) \
+         #type_name("Solver state") S & ::= (θ, Δ, macron(κ)) \
         #type_name("Parked stumps") Δ & ::= ∅ | ⟨α ⊳ ρ.l ↓ δ⟩, Δ \
          #type_name("Blocked lookup") & (⟦S⟧ρ).l ↓ #h(0.2em) ? "on" α \
       $
@@ -28,7 +28,6 @@ The inference algorithm is a judgement $Γ; S ⊢ e ⇒ τ; S′$ that takes a _
       #flexbox(
         $#type_name("Park a stump") S #st_park q$,
         $#type_name("Drop stumps") S #st_drop Δ′$,
-        $#type_name("Add a warning") S "+W"$,
         $#type_name("Draw a name") "fresh" α: κ$,
         $#type_name("Sort of a name") S(α)$,
         $#type_name("Stumps of") S_i #h(0.3em) Δ_i$,
@@ -49,7 +48,7 @@ The inference algorithm is a judgement $Γ; S ⊢ e ⇒ τ; S′$ that takes a _
 )
 #solver_state <solver-state>
 
-The solver state @solver-state consists of four parts: A sort respecting substition θ, a list Δ of parked stumps, a list W of warnings and a record $macron(κ)$ of the sorts at which each name was drawn. ⟦S⟧τ applies S.s substition to τ, $S(α)$ reads the sort of α from $macron(κ)$, and [$Δ_i$ denotes the parked stumps of $S_i$](isn't this syntax weird?). A parked stump $⟨α ⊳ ρ.l ↓ δ⟩$ is a lookup of l in ρ whose result is represented by the fresh variable δ, annotated with a row-variable α that blocks it. When a new row variable is written, the algorithm checks every stump that is blocked on it and tries to solve it again, writing the result into δ. //Stumps are ordered by the time they were parked, and warnings record every place a ★ was committed, so that the user learns where the analysis gave up.
+The solver state @solver-state consists of three parts: A sort respecting substition θ, a list Δ of parked stumps and a record $macron(κ)$ of the sorts at which each name was drawn. ⟦S⟧τ applies S.s substition to τ, $S(α)$ reads the sort of α from $macron(κ)$, and [$Δ_i$ denotes the parked stumps of $S_i$](isn't this syntax weird?). A parked stump $⟨α ⊳ ρ.l ↓ δ⟩$ is a lookup of l in ρ whose result is represented by the fresh variable δ, annotated with a row-variable α that blocks it. When a new row variable is written, the algorithm checks every stump that is blocked on it and tries to solve it again, writing the result into δ. The implementation additionally reports a warning for every ★ that inference commits; we omit this bookkeeping from the rules.
 
 // The unifier draws its fresh names from the state's supply, advanced past the variables of the problem and those θ binds, so a name drawn by U-host is new to both and θ stays applied.
 The state is kept under one invariant, _quiscence_. Quiescence demands that every stump in Δ is genuinely blocked on it's recorded variable α. Every written solution can break this condition so a new judgement is needed that rolls all stumps to completion or blockage after every move. The judgement $S ⊢ τ ≐ τ' ⇝ S'$ runs the unifier of @unification and writes its solution into the state and the judgement $S ⊢ τ ≐ τ′ #st_solve S′$ does so and _saturates_ afterwards. Saturation is the process of re-examining all unblocked stumps until the state is quiscent again.
@@ -111,7 +110,7 @@ The state is kept under one invariant, _quiscence_. Quiescence demands that ever
         $S₁ ⊢ τ ≐ {ρ} #st_solve S₂$,
         $(⟦S₂⟧ρ).l ↓ ⊥$,
       ),
-      $Γ; S ⊢ e.l ⇒ ★; S₂ "+W"$,
+      $Γ; S ⊢ e.l ⇒ ★; S₂$,
     ),
     derive(
       "A-sel-★",
@@ -194,7 +193,7 @@ As an example, consider `let f = x: x.l in f {l = c}`. For the bound term, A-λ-
         derive(
           "K-⊥",
           ($(⟦S⟧ρ).l ↓ ⊥$, $S ⊢ δ ≐ ★ ⇝ S′$),
-          $S ⊢ ⟨α ⊳ ρ.l ↓ δ⟩ #st_wake (S′ #st_drop ⟨α ⊳ ρ.l ↓ δ⟩) "+W"$,
+          $S ⊢ ⟨α ⊳ ρ.l ↓ δ⟩ #st_wake S′ #st_drop ⟨α ⊳ ρ.l ↓ δ⟩$,
         ),
         derive(
           "K-repark",
@@ -261,7 +260,7 @@ As an example, consider `let f = x: x.l in f {l = c}`. For the bound term, A-λ-
         $(⟦S⟧ρ).l ↓ #h(0.2em) ? "on" α$,
         $S ⊢ δ ≐ ★ ⇝ S′$,
       ),
-      $S ⊢ ⟨α ⊳ ρ.l ↓ δ⟩ #st_fin (S′ #st_drop ⟨α ⊳ ρ.l ↓ δ⟩) "+W"$,
+      $S ⊢ ⟨α ⊳ ρ.l ↓ δ⟩ #st_fin S′ #st_drop ⟨α ⊳ ρ.l ↓ δ⟩$,
     ),
     derive("F-nil", (), $S ⊢ ∅ scripts(#st_fin)^* S$),
     derive(
@@ -282,19 +281,19 @@ As an example, consider `let f = x: x.l in f {l = c}`. For the bound term, A-λ-
 )
 #finalization <finalization>
 
-@wakeup gives the judgements that wake stumps. Waking a stump retries the lookup against the current state and has the verdicts a lookup can produce. K-hit is the case when the lookup hits a definite type so the stump can be dropped and the type of δ is set by unifying it against the found type. K-⊥ pins it to ★ and warns and K-repark moves the stump to the new blocker α'. This is the case when substitution let the search advance but not finish. The stability lemma of @lookup-metatheory makes this sound becasue a definite lookup never changes, even after further substitions.
+@wakeup gives the judgements that wake stumps. Waking a stump retries the lookup against the current state and has the verdicts a lookup can produce. K-hit is the case when the lookup hits a definite type so the stump can be dropped and the type of δ is set by unifying it against the found type. K-⊥ pins it to ★ and K-repark moves the stump to the new blocker α'. This is the case when substitution let the search advance but not finish. The stability lemma of @lookup-metatheory makes this sound becasue a definite lookup never changes, even after further substitions.
 
 // meta: explain the phases and why they need to be done this way
-$scripts(↝)^*$ replayes a whole list of stumps. K-park parks a stump that is still blocked. [An instantiated stump cannot be filed under a variable that does not actually block it](from old text). Saturation $#sa_sat$ steps only on _stale_ stumps whose recorded blocker no longer blocks. It stopps as soons as the state is quiescent.
+$scripts(↝)^*$ replayes a whole list of stumps. K-park parks a stump that is still blocked. [An instantiated stump cannot be filed under a variable that does not actually block it](from old text). Saturation $#st_sat$ steps only on _stale_ stumps whose recorded blocker no longer blocks. It stopps as soons as the state is quiescent.
 
-Finalization resolves any open ? in two phases after inference. A parked stump is _spent_ if its result has already been used at a type that is neither a variable nor ★, as in @ex-spent. The first phase, $scripts(#st_mat)^*$, materializes every spent stump by F-hit; it skips the stumps that are not spent and those that the saturation of an earlier step has already discharged. The second phase, $scripts(#st_fin)^*$, forces every stump still parked to ★ by F-★ and records a warning for each.
+Finalization resolves any open ? in two phases after inference. A parked stump is _spent_ if its result has already been used at a type that is neither a variable nor ★, as in @ex-spent. The first phase, $scripts(#st_mat)^*$, materializes every spent stump by F-hit; it skips the stumps that are not spent and those that the saturation of an earlier step has already discharged. The second phase, $scripts(#st_fin)^*$, forces every stump still parked to ★ by F-★.
 
 The order of the phases is forced. F-★ cannot finalize a spent stump: its equation $δ ≐ ★$ clashes, since ★ is rigid. F-hit instead extends the blocking row-variable [with the demanded field](is this the only thing that can be forced? No ordinary types?), $α ≔ (l: δ | α′)$, and the saturation of $#st_solve$ wakes the stump, whose lookup now hits, together with every other stump that waited on α. These may hit as well, advance to α′, or stay blocked further along, so the set of stumps that F-★ must handle is known only after materialization. Running F-★ first would be unsound: a stump with label l forced to ★ on α would afterwards hit, once a spent stump on the same α and the same l is materialized, while its selection keeps the type ★.
 
 Materialization is the one step of the algorithm that places a field into a row-variable. It is not a forced move: the field could as well be supplied further along the row, and the typing it produces is one of several. It is sound, since the result is a declarative typing, and it happens after inference proper, where no further equation depends on the choice. Neither phase runs at a `let` boundary. Stumps that were generalized by A-let live in their scheme and are discharged per use, and a stump blocked on a variable of Γ may still be answered by an application further out. The remaining $?$ of @sec-motivation become ★ here and nowhere else.
 
 #example(name: [Waking, re-parking and finalizing])[
-  In `r: (x: x.l) (r ‖ {m = c})`, A-sel-★ parks the stump $⟨ρ ⊳ ρ.l ↓ δ⟩$, where ρ is the fresh row of x. The argument has type ${m: 𝓫_c | ρ_r}$ by A-conc, where $ρ_r$ is the row of r, and A-λ-E solves $ρ ≔ (m: 𝓫_c | ρ_r)$. This write makes the stump stale, since its recorded blocker ρ is solved. Saturation re-asks the lookup, which skips m by L-miss and stops at $ρ_r$, and K-repark files the stump under $ρ_r$. Nothing solves $ρ_r$ afterwards, so finalization pins δ to ★ by F-★ and records a warning. The program has type ${ρ_r} → ★$.
+  In `r: (x: x.l) (r ‖ {m = c})`, A-sel-★ parks the stump $⟨ρ ⊳ ρ.l ↓ δ⟩$, where ρ is the fresh row of x. The argument has type ${m: 𝓫_c | ρ_r}$ by A-conc, where $ρ_r$ is the row of r, and A-λ-E solves $ρ ≔ (m: 𝓫_c | ρ_r)$. This write makes the stump stale, since its recorded blocker ρ is solved. Saturation re-asks the lookup, which skips m by L-miss and stops at $ρ_r$, and K-repark files the stump under $ρ_r$. Nothing solves $ρ_r$ afterwards, so finalization pins δ to ★ by F-★. The program has type ${ρ_r} → ★$.
 ] <ex-repark>
 
 #example(name: [Why quiescence matters])[
@@ -302,7 +301,7 @@ Materialization is the one step of the algorithm that places a field into a row-
 ] <ex-quiescence>
 
 #example(name: [A spent promise])[
-  In `x: (x.l) c`, A-sel-★ parks $⟨ρ ⊳ ρ.l ↓ δ⟩$, and A-λ-E unifies δ with $𝓫_c → γ$ for a fresh γ. The promise is spent: F-★ would have to unify $𝓫_c → γ$ with ★, which clashes because ★ is rigid. F-hit instead solves $ρ ≔ (l: 𝓫_c → γ | ρ′)$ for a fresh ρ′. Saturation wakes the stump, the lookup now hits, and K-hit unifies the found type with the promised one. The program has type ${l: 𝓫_c → γ | ρ′} → γ$, without a warning.
+  In `x: (x.l) c`, A-sel-★ parks $⟨ρ ⊳ ρ.l ↓ δ⟩$, and A-λ-E unifies δ with $𝓫_c → γ$ for a fresh γ. The promise is spent: F-★ would have to unify $𝓫_c → γ$ with ★, which clashes because ★ is rigid. F-hit instead solves $ρ ≔ (l: 𝓫_c → γ | ρ′)$ for a fresh ρ′. Saturation wakes the stump, the lookup now hits, and K-hit unifies the found type with the promised one. The program has type ${l: 𝓫_c → γ | ρ′} → γ$.
 ] <ex-spent>
 
 == Inference Metatheory <inference-metatheory>

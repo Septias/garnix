@@ -19,7 +19,7 @@ We return to the three idioms of @nix-idioms. MiniNix has no lists, booleans or 
     #raw("mk: app: args: mk (args // { buildInputs = app args.buildInputs; })") \
     quad : quad ({"buildInputs": β | ρ} → γ) → (★ → β) → {ρ} → γ
   $
-  The argument handed to mk carries the new buildInputs in front of the row of args, so it shadows the old one. The selection `args.buildInputs` cannot be answered, since the row of args is open, and it is unspent, since app accepts any argument. Finalization therefore pins it to ★ with a warning, and the domain of app becomes ★. Under a `let` the stump would instead travel into the scheme and be answered at each use, as in @principality.
+  The argument handed to mk carries the new buildInputs in front of the row of args, so it shadows the old one. The selection `args.buildInputs` cannot be answered, since the row of args is open, and it is unspent, since app accepts any argument. Finalization therefore pins it to ★, and the domain of app becomes ★. Under a `let` the stump would instead travel into the scheme and be answered at each use, as in @principality.
 ] <ex-idiom-override>
 
 #example(name: [Conditional extension])[
@@ -38,7 +38,7 @@ Applied to concrete package sets, the overlay shows both sides of G3. Applied to
 
 _G1 (No source changes)._ Inference requires no annotations. Every construct of MiniNix is typed without input from the programmer, and uncertainty is recorded as ★ rather than demanded as a lacks-predicate or a disjointness witness. The goal is thus met for MiniNix, but not yet for NixLang: patterns, `with`, `inherit`, recursive records and the builtins lie outside MiniNix (@sec-extensions), and nixpkgs can be analysed verbatim only once they are covered.
 
-_G2 (No semantic change)._ The analysis is purely static. It inserts no casts and does not instrument the program, so evaluation is unchanged, and the goal is met by construction. The price is carried by the metatheory: progress holds only up to lookup errors ↯ (@type-safety), which the analysis reports as warnings but cannot prevent. [](note our further goals?)
+_G2 (No semantic change)._ The analysis is purely static. It inserts no casts and does not instrument the program, so evaluation is unchanged, and the goal is met by construction. The price is carried by the metatheory: progress holds only up to lookup errors ↯ (@type-safety), which the analysis cannot prevent. [](note our further goals?)
 
 _G3 (Totality)._ This goal is met in part. Uncertainty that originates in a lookup is absorbed: a selection that cannot be answered is typed at ★, and inference defers it rather than failing. A program that runs is nevertheless rejected in two situations, and in a third with first-class labels. First, ★ is rigid and has no elimination form, so a program that applies ★, selects from it or concatenates it has no typing, even in the declarative system. The motivating example, extended by one selection,
 
