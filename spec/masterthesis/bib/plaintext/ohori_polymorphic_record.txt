@@ -1,0 +1,19001 @@
+A Polymorphic
+ATSUSHI
+
+Record Calculus and Its Compilation
+
+OHORI
+
+Kyoto University
+
+The
+
+motivation
+
+morphic
+both
+
+of this
+
+programming
+
+a polymorphic
+
+labeled
+
+data
+
+type
+
+structures.
+
+of Girard-Reynolds
+algorithm
+
+work
+
+is to provide
+
+language
+
+with
+
+a type-theoretical
+
+labeled
+
+records
+
+basis for developing
+
+and labeled
+
+variants.
+
+discipline
+
+and an efficient
+
+compilation
+
+method
+
+We define
+
+a second-order,
+
+polymorphic
+
+record
+
+polymorphic
+
+for a predicative
+
+lambda
+
+subset
+
+calculus.
+
+a practical
+
+Our
+
+for a calculus
+calculus
+
+We then
+
+develop
+
+an ML-style
+
+record
+
+calculus.
+
+The
+
+of the second-order
+
+poly-
+
+goal is to establish
+with
+
+those
+
+as an extension
+type
+
+soundness
+
+inference
+of the type
+
+and the completeness
+of the type inference
+algorithm
+are shown.
+These results extend
+Milner’s type inference algorithm,
+Damas and Milner’s account of ML’s let polymorphism,
+and
+Harper and Mitchell’s
+analysis on XML
+To establish an efficient compilation
+method for the
+polymorphic
+record calculus, we first define an implementation
+calculus, where records are represented as vectors whose elements are accessed by direct indexing, and variants are represented as
+values tagged with a natural number indicating the position in the vector of functions m a switch
+statement.
+We then develop an algorithm to translate the polymorphic
+record calculus into the
+implementation
+calculus using type reformation
+obtained by the type inference algorithm.
+The
+correctness of the compilation
+algorithm is proved, that is, the compdation algorithm is shown to
+preserve both typing and the operational behavior of a program. Based on these results, Standard
+ML has been extended with labeled records, and its compiler has been implemented.
+
+system
+
+Categories and Subject Descriptors: D.3.1 [Programming
+Languages]:
+Formal Definitions
+and
+licative
+lan9Wa9es;
+Theory, D.3.2 [Programming
+Languages]:
+Language Classifications-app
+D.3.3 [Programming
+Languages]:
+Language Constructs and Features—data
+types and structures
+
+General
+
+Terms.
+
+Languages
+
+Additional
+Key Words and Phrases
+type theory
+
+Compilation,
+
+polymorphism,
+
+record calculus,
+
+type inference,
+
+1. INTRODUCTION
+Labeled records and labeled variants are widely used data structures
+and are essential building
+blocks in various data-intensive
+applications
+such as database programming.
+Despite their practical importance,
+however, existing polymorphic
+programming
+
+languages
+
+do not properly
+
+support
+
+these data structures.
+
+Standard
+
+ML
+
+A preliminary
+summary of some of the results of this article appeared in Proceedings of ACM Symposium on Principles of Programming
+Languages, 1992, under the title “A compilation
+method
+for ML-style polymorphic
+record calculi.”
+Thifi
+
+work
+
+grant
+
+no. 06680319.
+
+Author’s
+Kyoto
+
+was par~ly
+address.
+
+606-01,
+
+Permission
+provided
+
+the
+
+ACM
+
+copyright/server
+
+that
+
+copying
+
+otherwise,
+
+Research
+
+JAPAN;
+
+to make
+that
+
+supported
+
+are
+
+notice,
+to
+
+Japanese
+for
+
+Ministry
+
+not
+
+copy
+
+of all
+
+or distributed
+
+on
+
+permission
+and/or
+a fee
+@ 1995 ACM 0164-0925 /95/’1100-0844
+
+or part
+
+of the publication,
+
+of the Association
+post
+
+Sciences,
+
+servers,
+
+under
+
+Kyoto
+
+scientific
+
+research
+
+University,
+
+Sakyo-ku,
+
+ac.~p
+
+made
+
+the title
+
+of Education
+
+Mathematical
+
+ohoriQkurims.kyoto-u.
+
+di@al/hard
+
+copies
+
+republish,
+
+Institute
+
+email:
+
+is by permission
+to
+
+by the
+
+of this
+for
+
+profit
+
+material
+
+and Its date
+
+for Computmg
+or to redistribute
+
+without
+
+or commercial
+appear,
+
+fee
+
+is granted
+
+advantage,
+and notice
+
+the
+
+is given
+
+Machinery,
+
+Inc.
+
+(ACM).
+
+To copy
+
+to lists
+
+requires
+
+prior
+
+specific
+
+$03.50
+
+ACM Transactions on Programmmg Language. and Systems, Vol 17, No 6, November 1995, Pages 844-895
+
+A Polymorphic
+[Milner
+
+et al. 1990] contains
+
+allowable
+
+operations
+
+following
+
+simple
+
+Record Calculus and Its Comp!latlon
+
+labeled records and a form of labeled variants,
+
+are restricted
+
+function
+
+.
+
+name
+
+to monomorphic
+
+ones. For example,
+
+845
+
+but their
+
+consider
+
+the
+
+on records:
+name ~ Ax.x. Name
+
+where x. Na me is our syntax for selecting the Name field from record x. This function
+is polymorphic
+in the sense that it can be applied to terms of any record type containing a Name field, such as {Name : string, Age : int} or {Name : string, O@ce :
+int}.
+One way of writing this function in ML is
+fun
+
+name (x)
+
+= #Name x
+
+where #Name is an ML’s syntax for ~x, x.N ame. This program is rejected by the
+current ML compiler, unless the programmer
+explicitly
+specifies the type of x that
+restricts the possible argument values to be those records that have a fixed set of
+labels, as in:
+fun
+
+name (x: {Name: string,
+
+Age: int})
+
+= #Name x
+
+Unfortunately,
+writing
+such a type specification
+is not only cumbersome
+but also
+eliminates most of the flexibility
+of functions operating on records like name above.
+An analogous situation
+exists for labeled variants. We use variant types (disjoint
+union types) when we want to treat values of different
+advantage
+
+of labeled
+
+flexible
+
+programming
+
+example,
+
+consider
+
+variants
+
+over simple
+
+by designating
+
+a variant
+
+disjoint
+
+types is that
+
+A significant
+they support
+
+the kind of a value by a symbolic
+
+value payment
+payment
+
+types uniformly.
+
+union
+
+-
+
+defined
+
+label.
+
+For
+
+as:
+
+(Pound= 100,0)
+
+where value 100.0 is tagged with variant label Pound. payment
+can be treated as
+a value of various different variant types such as (Pound : real, Dollar
+: real) or
+(Pound
+: real, Yen : int) or any other variant types containing
+a Pound : real
+field. Unfortunately,
+this form of flexible programming
+is unavailable
+in existing
+polymorphic
+languages since they restrict variant values to be monomorphic.
+In
+Standard ML, for example, a variant type may be defined as:
+datatype
+
+PoundOrYen
+
+= Pound
+
+of
+
+real
+
+I Yen of
+
+int
+
+But this definition
+ties the variant labels Pound and Yen to this particular
+type
+PoundOrYen.
+As a consequence, if a value such as payment is defined for this type,
+it cannot
+
+be used as a value of other variant
+
+a commonly
+variant
+when
+
+adopted
+
+ad hoc strategy
+
+types.
+
+In Standard
+
+used to get around
+
+ML programming,
+
+this problem
+
+is to define a
+
+type containing
+manipulating
+
+all the possible components and to omit some of the cases
+runtime
+variant values. This approach, however, introduces
+
+exceptions of “match failure,”
+have been caught at compile
+It is highly
+
+desirable
+
+many of which are essentially
+time.
+
+to extend
+
+a polymorphic
+
+type errors that
+
+programming
+
+language
+
+should
+to allow
+
+polymorphic
+manipulation
+of labeled records and labeled variants.
+In this article,
+we use the term record polymorphism
+to refer to the form of polymorphism
+required
+for polymorphic
+manipulation
+of both labeled records and labeled variants.
+Our
+a basis to develop a polymorphic
+programming
+language that
+goal is to provide
+There are two technical challenges in achieving
+supports record polymorphism.
+this goal.
+
+The first
+
+is the development
+
+ACM Transactions
+
+on Programmmg
+
+of a static
+Languages
+
+type system
+
+and Systems,
+
+that
+
+can represent
+
+Vol. 17, No 6, November
+
+1995
+
+Atsushl Ohori
+
+846
+
+.
+
+record
+
+polymorphism.
+
+The second is the development
+
+method
+
+for polymorphic
+
+provide
+
+solutions
+
+the problems
+
+on records
+
+to the two problems.
+
+and outline
+
+based on a preliminary
+compilation
+
+operations
+
+[Ohori
+
+the solutions
+presentation
+
+of an efficient
+
+and variants.
+
+In the rest of this section,
+presented
+
+of kinded
+
+in this article.
+
+abstraction
+
+compilation
+
+In this
+
+article,
+
+we
+
+we shall explain
+
+Part of this article
+
+is
+
+and type-inference-based
+
+1992].
+
+1,1 Static Type System for Record Polymorphism
+Record polymorphism
+is based on the property
+that labeled-field
+morphic and can therefore be applied to any labeled data structure
+specified
+
+field.
+
+in a record,
+statement,
+
+However,
+
+For example,
+
+the function
+
+and the value payment,
+
+name,
+
+which
+
+which
+
+access is polycontaining
+the
+
+accesses the
+
+Name field
+
+accesses the Pound branch
+
+in a case
+
+have all the types of the forms:
+
+conventional
+
+name
+
+: {Name
+
+: 2-,. }
+
+-7,
+
+payment
+
+: (Pound
+
+: real,.
+
+. ~)
+
+polymorphic
+
+type systems cannot
+
+sible types of those shapes and therefore
+
+cannot
+
+represent
+
+represent
+
+the set of all pos-
+
+the polymorphic
+
+nature
+
+of programs containing
+those terms.
+Cardelli
+[1988] observed that this form of polymorphism
+can be captured
+by
+detining a subtyping relation and allowing a value to have all its supertypes.
+This
+approach also supports certain aspects of method inheritance
+and provides a typetheoretical
+basis for object-oriented
+programming.
+Cardelli and Wegner [1985] extended this approach to a second-order type system. Type inference systems with
+subtyping
+have also been developed [Fuh and Mishra 1988; Mitchell
+1984; Stansifer
+1988]. It is, however, not clear whether or not the mechanism for record polymorphism should be coupled with a strong mechanism of subtyping.
+In the presence of
+subtyping,
+a static type no longer represents the exact record structure of a runtime
+value. For example, a term
+if true then {A = 1, B = true} else {B= false, C=” Cat”}
+has a type {B : bool}, but its runtime value would
+This property
+may be problematic
+when we want
+such as equality
+
+test,
+
+that
+
+depend
+
+on the exact
+
+presumably
+be {A=l, B=true}.
+to deal with those operations,
+
+structure
+
+of values.
+
+As we shall
+
+discuss in Section 6, subtyping
+also complicates implementation.
+An alternative
+approach, initiated
+by Wand [1987; 1988], is to extend
+
+ML-style
+
+polymorphic
+typing directly to record polymorphism.
+This idea was further developed in a number of type inference systems [Jategaonkar and Mitchell
+1993; Ohori
+and Buneman 1988; 1989; R6my1989; 1992; 1994b; Wand 1989].
+In these type systems, a most general polymorphic
+type scheme can be inferred
+for any typable untyped term containing
+operations
+on records.
+By appropriate
+instantiation
+
+of the inferred
+
+type scheme, an untyped
+
+term
+
+can safely be used as a
+
+value of various different types. This approach not only captures the polymorphic
+nature of functions
+on records but also integrates record polymorphism
+and MLstyle type inference, which relieves the programmer
+from writing complicated
+type
+declarations
+required in explicit second-order calculi.
+Most of the proposed type inference systems have been based on the mechanism of
+row variables [Wand 1987], which are variables ranging over finite sets of field types.
+ACM
+
+Transact~ons
+
+on Programmmg
+
+Languages
+
+and Systems,
+
+Vol
+
+17, No, 6, November
+
+1995,
+
+A Polymorphic
+
+Record Calculus and Its Compilation
+
+fun move p = modify (p, X, p,X + 1) : Vt::{{X : int}}.t ~ t
+move({X=lO, Y=O, Color=” Red”}) : {X : int, Y : int, Color
+fun transpose
+
+p = modify (modify (p, X, p.Y),
+
+.
+
+847
+
+: string}
+
+Y, p,X)
+
+: tl, Y : tl).t2 + t2
+: vtl:lJ.vt2::{x
+transpose({X=l.O,
+Y=1O.O, Direction= {Speed=30.0, Theta= l.0}})
+: {Speed
+: real,
+Theta
+: real}}
+: {X: real, Y : real, Direction
+fun dist p = case p of (Cartesian=Ac.sqroot(square(c.X)
++ square(c.Y)), Polar= Ap.R)
+: real) .( Cartesian : tl,
+Polar : tz)+ real
+: Vtl::~X
+: real, Y : real}} .Vtz::~R
+dist((Cartesian= {X=O.O, Y=1O.O, Color=” Green” })) : real
+
+Fig. 1.
+
+Here, instead
+in Ohori
+
+Example
+
+of programs
+
+of using row variables,
+
+and Buneman
+
+with their inferred
+
+types,
+
+we base our development
+
+[1988] of placing
+
+restrictions
+
+type variables.
+We formalize
+this idea as a kind
+ordinary type quantification
+to kinded quantification
+
+on the idea presented
+
+on possible
+
+instantiations
+
+of
+
+system of types and refine the
+of the form W: :k.r where type
+
+to range only over the set of types denoted by a kind k.
+variable t is constrained
+This mechanism is analogous to bounded quantification
+[Cardelli and Wegner 1985].
+A kind
+
+k is either
+
+of the form
+the specified
+
+kind
+
+U denoting
+
+the set of all types, a record
+
+kind
+
+: -rl, . . . , tn : ~n} denoting the set of all record types that contain
+fields, or a variant kind of the form ((11 :7-1, c. . . tn :Tn))denoting the
+
+set of all variant
+This
+
+the universal
+
+{/1
+
+types that
+
+mechanism
+
+contain
+
+the specified
+
+allows us to represent
+
+erations.
+
+For example,
+
+following
+
+types:
+
+the function
+
+name
+payment
+
+fields.
+
+polymorphic
+
+name
+
+types of various
+
+and the value payment
+
+: Vtl::U.W2::~Name
+: W:: ((Pound
+
+: tl~.t2
+
+record
+
+op-
+
+are given
+
+the
+
++ tl
+
+: real)) .t
+
+indicating
+that name is a function that takes a value of any record type containing
+a Name : tl field and returns a value of type tl where tl may be any type, and
+payment
+
+is a polymorphic
+
+component.
+addition
+
+By this
+
+value having
+
+mechanism,
+
+to labeled-field
+
+access, kinded
+
+polymorphic
+
+record modification
+
+a new record
+
+from
+
+a Pound
+
+: real
+
+can be used polymorphically.
+
+type containing
+
+In
+
+abstraction
+
+(update)
+
+el by modifying
+
+other fields unchanged.
+
+any variant
+
+these terms
+
+can also be used to represent
+
+operations
+
+modify(el
+
+the value of the 1 field
+
+The following
+
+typing
+
+,l,e2 ), which creates
+to ez, leaving
+
+shows the polymorphic
+
+nature
+
+all the
+of this
+
+construct.
+Ax. Ay.modify(y,l,x)
+
+: vtl::u.vt2::{l
+
+: tl].tl
+
+-+ ih -+ t2
+
+Combination
+of these features allows flexible programming
+without
+sacrificing the
+advantage of static typing and the existence of an ML-style,
+complete, type inference algorithm.
+Figure 1 shows examples of typings involving
+labeled records and
+variants using ML-style
+polymorphic
+function declaration.
+This form of programming
+is also possible in the other proposals for ML-style
+polymorphic
+record calculi based on row variables mentioned
+earlier.
+One advantage of our formulation
+is that it yields a uniform
+treatment
+for both explicitly
+typed
+
+calculi
+ACM
+
+and ML-style
+Transactions
+
+type inference
+
+on Programmmg
+
+systems.
+
+Languages
+
+Most of the type inference
+
+and Systems,
+
+Vol. 17, No. 6, November
+
+algo1995.
+
+848
+
+.
+
+Atsushi
+
+Ohor!
+
+rithms
+
+are defined
+
+without
+
+binding.
+
+R6my
+
+second-order
+
+[1994b] formally
+
+treats
+
+types and do not explicitly
+ML’s
+
+let binding.
+
+However,
+
+treat
+
+ML’s
+
+to an explicitly
+typed second-order system have not been well investigated.
+kinded abstraction,
+we extend the second-order
+lambda calculus of Girard
+and Reynolds
+
+[1974] to record polymorphism
+
+basic properties
+
+of the second-order
+
+lambda
+
+and show that the extension
+calculus.
+
+let
+
+its relationships
+
+We then develop
+
+Using
+[1971]
+
+preserves
+
+an ML-style
+
+type inference system for a predicative
+subset of the second-order lambda calculus.
+These results extend the type inference algorithm
+of Milner [1978], the type system
+for ML let polymorphism
+by Damas and Milner
+[1982], and the analysis on the
+relationship
+Harper
+
+between
+
+ML polymorphism
+
+and Mitchell
+
+[1993].
+
+These
+
+and a predicative
+connections
+
+will
+
+second-order
+
+allow
+
+system
+
+by
+
+us to transfer
+
+various
+
+known results of polymorphic
+type discipline to record polymorphism.
+It should be mentioned,
+however, that row variables appear to be better
+
+suited to
+
+represent various powerful operations on records. Among the type systems based on
+row variables, perhaps the most flexible is that of R4my [1994 b], which uses sorted
+For polymorphic
+record field access, record
+equational
+theory on row variables.
+modification
+
+and polymorphic
+
+ings equivalent
+typing
+
+to ours.
+
+variants,
+
+For example,
+
+his type system provides
+the function
+
+name
+
+polymorphic
+
+is given
+
+typ-
+
+the following
+
+in his system:
+Ax.x.Name
+
+where
+
+pi ~~mel
+
+is a sorted
+
+: (p{ N”me}; Name : p~e(t))
+
+row variable
+
+representing
+
+~
+
+t
+
+possible
+
+rows
+
+(finite
+
+sets of
+
+record fields) that do not contain a Name field, and pre(t) indicates the existence
+of Name field of type t.This typing is equivalent to the typing in our calculus in the
+sense that the two denote the same set of ground instances.
+However, his system
+is more powerful in that it can also represent an operation
+that extends a record
+with
+
+a new field and one that
+
+representable
+
+removes an existing
+
+in our type system.
+
+A restricted
+
+field from a record,
+
+which are not
+
+form of record extension
+
+operation
+
+supported in Jategaonkar and Mitchell
+[1993]. Explicitly
+for extensible records have also been proposed [Cardelli
+
+is
+
+typed second-order calculi
+and Mitchell
+1989; Harper
+
+and Pierce 1991]. Unavailability
+of these extension operations
+is a limitation
+of
+our type system. However, those record calculi based on row variables appear to
+be difficult
+to compile.
+To the author’s knowledge, there is no known systematic
+compilation
+method
+type system is that
+always
+
+compile
+
+for any of these record calculi. A significant
+advantage of our
+it allows us to develop an efficient compilation
+method that
+
+out labeled-field
+
+access into
+
+a direct
+
+index
+
+operation,
+
+as we shall
+
+explain in the next subsection.
+In addition to record extension operations, various forms of record concatenation
+operations
+have also been proposed [Harper and Pierce 1991; R6my 1992; Wand
+1989]. Inclusion of any of these operations
+significantly
+complicates
+both the type
+theoretical
+analysis and compilation.
+Also, it is not obvious which of these powerful
+operations
+is really needed. For example, in database programming
+— a typical
+application
+area where labeled records play an important
+role — the form of recordmerging operations
+commonly considered is not record concatenations
+but natural
+join for which row variables may not be a suitable mechanism.
+generalize the relational
+natural join operation
+to general record
+man et al.
+ACM
+
+1991; Ohori
+
+TransactIons
+
+1990] and to extend
+
+on Programmmg
+
+Languages
+
+a polymorphic
+
+and Systems,
+
+Vol. 17, No
+
+It is possible to
+structures
+[Bune-
+
+type system
+6, November
+
+with
+
+1995,
+
+the
+
+A Polymorphic
+generalized
+However,
+
+natural
+
+join
+
+Record Calculus and Its Compilation
+
+[Buneman
+
+and Ohori
+
+1995; Ohori
+
+we are not sure that such an operation
+
+of programming
+
+849
+
+and Buneman
+
+1988].
+
+should be in the polymorphic
+
+core
+
+languages.
+
+The operations
+
+considered
+
+in this article
+
+with records while maintaining
+therefore
+
+.
+
+claim
+
+that
+
+support
+
+a wide range of programming
+
+the existence of an efficient
+
+the calculus
+
+proposed
+
+compilation
+
+in the present
+
+article
+
+method.
+
+We
+
+serves as a basis
+
+for developing
+a practical
+polymorphic
+language with record polymorphism.
+further believe that when our type system is extended with recursive types,
+
+We
+it will
+
+support various features of object-oriented
+programming
+as discussed in Cardelli
+[1988] and Cardelli and Wegner [1985]. This issue is outside of the scope of the
+present
+
+article,
+
+and the author
+
+1.2 Compilation
+The
+
+Method
+
+second technical
+
+would
+
+like to investigate
+
+it elsewhere.
+
+for Record Polymorphism
+challenge
+
+in developing
+
+a practical
+
+programming
+
+language
+
+with record polymorphism
+is compilation.
+An important
+property of labeled records
+is the ability to access an element in a record not by position but by label, i.e., symbolic
+
+name.
+
+difficulty
+
+In a statically
+
+in compilation.
+
+typed
+
+monomorphic
+
+Since the actual
+
+language,
+
+position
+
+this does not cause any
+
+of each labeled
+
+field is statically
+
+determined
+from the type of a record, labeled-field
+access is easily compiled into an
+index operation,
+which is usually implemented
+by a single machine instruction.
+In
+a language
+Consider
+tion
+
+with
+
+record polymorphism,
+
+the function
+
+of the Name field,
+
+function
+
+that
+
+however,
+
+Ax.x.Na me again.
+
+performs
+
+it appears
+
+compilation
+
+Since actual
+
+to be impossible
+
+is a difficult
+
+arguments
+
+to compile
+
+differ
+
+problem.
+in the posi-
+
+this function
+
+into
+
+a
+
+an index operation.
+
+One straightforward
+approach might be to predetermine
+the offsets of all possible
+labels and to represent a record as a potentially
+very large structure
+with many
+empty
+
+slots.
+
+Cardelli
+
+of subtyping.
+
+[1994] took this strategy
+
+Although
+
+this approach
+
+to represent
+
+records in a pure calculus
+
+would be useful for studying
+
+formal
+
+properties
+
+of record polymorphism,
+it is unrealistic
+in practice. Another naive approach is to
+directly implement
+the intended semantics of the labeled-field
+access by dynamically
+searching for the specified label in a record represented as an association list of labels
+and values.
+execution.
+
+An obvious
+
+drawback
+
+to such an approach
+
+Since field access is the basic operation
+
+that
+
+is inefficiency
+is frequently
+
+in runtime
+invoked,
+
+a method is unacceptable
+for serious application
+development.
+A more-realistic
+approach for dynamic field lookup is to use a form
+R6my
+
+[1994a] presented
+
+an efficient,
+
+dynamic,
+
+field
+
+lookup
+
+method
+
+such
+
+of hashing.
+
+using
+
+a form
+
+of hashing similar to extendible
+hashing [Fagin et al. 1979] and showed that field
+selection can be implemented
+with relatively
+small runtime overhead both in execution time and in extra memory usage. This can be a reasonable implementation
+technique for various record calculi where static determination
+of the position of
+labeled
+
+fields
+
+cess always
+
+is impossible.
+
+incurs
+
+extra
+
+A drawback
+
+runtime
+
+overhead,
+
+of this method
+
+is that
+
+labeled-field
+
+even when the program
+
+ac-
+
+is completely
+
+monomorphic,
+and therefore the positions of labels can be statically
+determined.
+It would be unfortunate
+if we were forced to pay extra penalty for monomorphic
+labeled-field
+access when we move to a supposedly more advanced language with a
+polymorphic
+type system. Another drawback of hashing is that there is no guarantees to work for arbitrary
+records. Remy’s technique, for example, does not work
+ACM Transactions
+
+on Programming
+
+Languages
+
+and Systems,
+
+Vol
+
+17, No. 6, November
+
+1995.
+
+850
+
+Atsushi
+
+.
+
+Ohori
+
+well for large records such as those with 50 or 100 fields,
+For a polymorphic
+record calculus to become a basis of practical
+
+programming
+
+languages, we must develop a compilation
+method that always achieves both compactness in the representation
+of records and efficiency in the execution of labeledfield
+
+access.
+
+explicitly
+egy.
+
+Connor
+
+typed
+
+However,
+
+expressions,
+article
+
+et al.
+
+language
+they
+
+[1989] considered
+
+with
+
+subtyping
+
+did not provide
+
+nor did they consider
+
+is to develop
+
+this
+
+a systematic
+
+a type inference
+
+such a compilation
+
+problem
+
+and suggested
+
+method
+
+in the context
+
+an implementation
+
+of an
+strat-
+
+method
+
+to deal with
+
+system.
+
+The second goal of this
+
+and to establish
+
+that
+
+arbitrary
+
+compilation
+
+achieves the intended operational
+behavior of a polymorphic
+record calculus.
+Our strategy is to translate a polymorphic
+record calculus into an implementation
+calculus. In the implementation
+calculus, a labeled record is represented as a vector
+of values ordered by a canonical ordering of the set of labels, and fields are accessed
+by direct indexing.
+A variant value is represented as a value tagged with a natural
+number indicating
+the position in the vector of functions in a switch statement.
+To
+deal with polymorphic
+field selection and polymorphic
+variants, the implementation
+calculus contains indez variables and index abstraction.
+For example,
+from an
+untyped term
+let name = Ax. x.Name
+
+in (name
+
+{Name
+
+= “Joe”,
+
+name {Name=”
+
+the translation
+
+algorithm
+
+produces
+
+let name = AlAx. XII] in ((name
+
+the following
+
+1) {“Joe”
+
+0ffice=403},
+
+Hanako”
+
+, Age=21,
+
+Phone= 7222})
+
+implementation
+
+,403},
+
+(name
+
+code:
+
+2) {21,” Hanako”
+
+,7222})
+
+where I is an index variable;
+A 1. M is index abstraction;
+xII] is an index expresof the records
+sion; {“Joe” ,403} and {21,” Hanako” ,7222} are vector representations
+whose fields are ordered by the lexicographical
+ordering on labels; and (name 1)
+and (name 2) are index apphcation supplying appropriate
+index values to the index
+variable 1. Similarly,
+an untyped term
+let payment
+
+= (Pound=
+
+100 O)
+
+in (case payment
+
+of (Pound=
+
+Ax.x, Dollar=Ax.x
+
+case payment
+
+of (Pound=
+
+Ax. real.to.int(x
+
+is translated
+
+let payment
+
+into the following
+=
+
+* 0.68),
+* 150 O), Yen = Ax,x))
+
+code in the implementation
+
+calculus:
+
+Al (I=1OO O)
+
+in (switch
+
+(payment
+
+2) of (Ax.x * 0.68, Ax,x)),
+
+switch
+
+(payment
+
+1) of (Ax. real-to-int(x
+
+* 150.0),
+
+Ax,x))
+
+where a polymorphic
+variant payment is represented as a term containing
+index abst raction whose index value is supplied through index applications
+— (payment 1),
+(payment 2) — and is used to select the corresponding
+function in the function vector in a switch statement whose elements are sorted by the lexicographical
+ordering
+on the variant labels.
+Our compilation
+method works for arbitrary
+records and variants and does not introduce any runtime overhead for monomorphic
+programs.
+For polymorphic
+record
+functions and variants, it requires extra function applications
+to pass index values
+before applying
+them.
+extra index applications
+
+However, as we shall show in the following
+development,
+are done only when polymorphic
+terms are instantiated.
+
+So we believe
+
+cost is negligible.
+
+ACM Transactions
+
+that
+
+their
+
+on Programming
+
+Languages
+
+and Systems,
+
+Vol
+
+17, No 6, November
+
+1995
+
+A Polymorphic
+The general
+
+idea of passing index
+
+One of our original
+
+contributions
+
+rithm
+
+constructs
+
+that
+
+always
+
+raw term
+mally.
+
+Record Calculus and Its Compilation
+
+of a polymorphic
+
+values was suggested
+
+is (1) to establish
+a correct
+
+implementation
+
+record calculus
+
+1.3 Outline
+
+of the Development
+
+To establish
+
+a rigorous
+
+typing
+
+discipline
+
+in Connor
+
+a systematic
+term
+
+851
+
+et al.
+
+[1989].
+
+compilation
+
+algo-
+
+for any type
+
+correct
+
+and (2) to establish
+
+for record
+
+.
+
+polymorphism,
+
+its correctness
+
+for-
+
+in Section
+
+2 we
+
+define a second-order
+lambda calculus with record polymorphism,
+which we call
+Av’”, and show the subject reduction property.
+We then define in Section 3 an MLstyle
+
+polymorphic
+
+semantics.
+
+record
+
+Typing
+
+calculus,
+
+derivations
+
+CUIUS A1e~~mof AVI-, which
+and Mitchell
+
+1993] with
+
+serves as a canonical
+
+~~ei~”, and define
+
+of ~~et’o correspond
+
+can be regarded
+
+record
+
+as an extension
+
+polymorphism.
+
+model for evaluating
+
+its call-by-value
+
+operational
+
+to terms of a predicative
+
+subcal-
+
+of Core XML
+
+The operational
+
+a record calculus.
+
+[Harper
+
+semantics
+
+of ~~et”
+
+A Damas-Milner-style
+
+polymorphic
+type discipline is shown to be sound with respect to this semantics.
+We next refine Robinson’s unification
+algorithm
+by incorporating
+kind constraints
+on type variables, and using this unification
+we (1) give an algorithm
+to infer, for
+any typable
+explicitly
+
+raw term
+
+typed
+
+constructed
+Next,
+
+of ~Let’”, both
+
+term
+
+of Alet~”and
+
+A~et~- term
+
+in Section
+
+contains
+
+its principal
+
+4, we develop
+
+a compilation
+
+We first define an implementation
+
+operational
+
+semant its.
+
+calculi.
+
+formed
+
+by direct
+
+This
+
+In particular,
+indexing.
+
+and the corresponding
+and completeness.
+
+the necessary type information
+
+correctness.
+record
+
+typing
+
+(2) prove its soundness
+
+calculus
+
+algorithm
+calculus
+
+for Atet’” and prove its
+A~etJ1 and its call-by-value
+
+serves as an efficient
+
+abstract
+
+record field access and case branch
+In order to establish
+
+The
+
+for compilation.
+
+the correctness
+
+machine
+
+selection
+
+for
+
+are per-
+
+of the compilation
+
+algorithm,
+we present the calculus as a polymorphically
+typed functional
+calculus.
+typed
+We then develop an algorithm
+to compile ~~et>”into )~e~,[1 using the explicitly
+calculus A~eL~-as an intermediate
+language.
+language for compiling
+There is one subtlety in using A1et” as an intermediate
+~tet’”.
+
+As shown in Ohori
+
+cannot
+
+be coherent,
+
+term
+
+from
+
+a ~~et’” term.
+
+type variables
+
+that
+
+[1989], a translation
+
+and the same phenomenon
+
+of ML typings
+
+One of the sources of failure
+
+do not appear
+
+variables
+
+by selecting
+
+an appropriate
+
+a correct
+
+compilation
+
+algorithm.
+
+The compilation
+algorithm
+establish that the compilation
+
+in the typing.
+canonical
+
+to Core XML
+
+occurs in construction
+of coherence
+
+Eliminating
+
+is the free
+
+these “vacuous”
+
+term of A~eLIsis crucial
+
+terms
+
+of a Al’t’m
+type
+
+for obtaining
+
+is shown to preserve typing.
+Furthermore,
+we also
+preserves the operational
+behavior of a program by
+
+applying the idea of logical relations to set up an appropriate
+relationship
+between
+semantics of Atet’[ 1. (See
+the operational
+semantics of Atet’” and the operational
+Mitchell
+[1990] for a survey on logical relations and their applications.)
+Figure 2
+shows the relationship
+among the four calculi defined in this article.
+Based on the type system and the compilation
+method presented in this article,
+Standard ML has been extended with polymorphic
+record operations,
+and its compiler, SMLU, has been implemented
+by modifying
+the Standard ML of New Jersey
+system [Appel and MacQueen 1991]. The following shows two ways of writing
+the
+function name in SML[:
+ACM Transactions
+
+on Programmmg
+
+Languages
+
+and Systems,
+
+Vol
+
+17, No 6, November
+
+1995.
+
+852
+
+Atsushl Ohorl
+
+.
+
+(compile)
+
+~let![l
+The
+
+(restrict)
+
+Al’t”
+
+implementation
+
+The
+
+explicit
+
+Av>The second-order
+calculus
+
+calculus
+
+calculus
+
+I
+
+inference)
+
+ML-style
+
+calculus
+
+(type
+
+~let,.
+
+The
+
+Fig.
+
+- val
+val
+-
+
+Relationship
+
+among
+
+the calculi,
+
+name = #Name;
+name = fn
+
+fun
+
+val
+
+2.
+
+name
+name
+
+‘b#{Name:
+
+:
+
+= fn
+
+‘b#{Name:
+
+:
+
+that
+
+matches
+
+}->>a
+
+= x;
+
+where the second definition
+This is part of an interactive
+a pattern
+
+‘a ,...
+
+{Name= x,.,.}
+
+’a,.,.}
+
+->
+
+‘a
+
+uses Standard
+ML’s pattern
+machining
+mechanism.
+session in the implemented
+system. {Name=x, . ..} is
+
+any record
+
+containing
+
+Name field,
+
+and ‘ b#{Name:
+
+‘a, . . . }
+
+–> ‘ a represents kinded quantification
+Ya::U.Yb::~Name
+: a].b + a. The notation
+11. . .
+“ used in SML~ signifies that there may be more fields and should not be confused with
+below.
+
+usefulness
+2.
+
+the metanotation
+
+Section
+
+“ we shall use in describing
+
+the outline
+
+of the implementation
+
+various formal
+
+systems
+
+and demonstrates
+
+its
+
+by examples.
+
+POLYMORPHIC
+
+This
+
+“.
+
+5 describes
+
+section
+
+TYPE DISCIPLINE FOR RECORDS AND VARIANTS
+
+defines a second-order
+
+its basic syntactic
+
+polymorphic
+
+record
+
+calculus,
+
+Av-,
+
+and proves
+
+properties.
+
+2.1 Types, Kinds, and Kinded Substitutions
+The sets of types (ranged
+following
+
+over by a) and kinds (ranged
+
+over by k) are given by the
+
+syntax:
+(7 ::=
+
+bltla+a
+
+k::=
+
+u[{l:o,...,l:
+
+l{l:a,...,l:
+
+a}l(l:a,1..,l
+
+a]l((l:a,1:.,l:
+
+:a)lv’t::k.a
+0))
+
+where b stands for a given set of base types, t for a given countably
+infinite
+set
+of type variables, 1 for a given set of labels, {11 : al, . . . . in : CTn} for record types,
+(ll:crl,..
+
+, in : an) for variant
+
+types, and W: :k.cr for second-order
+
+types where t ype
+
+variable t is quantified
+over the set of types denoted by kind k. U is the universal
+kind denoting the set of all types. {11 : al,. ~., in : on} and ((/1 : crl, . . . . in : an))
+are a record kind and a variant kind, respectively.
+The labels 11, . . . . 1. appearing
+in a type or a kind must be pairwise distinct,
+and the order of their occurrence is
+insignificant.
+The construct Vt::k.o binds type variable t in CTbut not in k. The set of free type
+variables of a type ~ or a kind k are denoted by FTV(a)
+and FTV(k),
+respectively.
+U (FTV(CT))
+\ {t}).
+For second-order types, it is defined as FTV(Vt::k.cr)
+= FTV(k)
+FTV
+for other types and kinds are defined as usual.
+We say that a type ~ is
+closed if FTV(a)
+= 0. We identify types that differ only in the names of bound
+type variables and further adopt the usual “bound variable convention”
+on type
+ACM
+
+TransactIons
+
+on Programmmg
+
+Languages
+
+and Systems,
+
+Vol
+
+17, No. 6, November
+
+1995
+
+A Polymorphic
+
+K E a:: U
+
+for any u that
+
+Kbt::{tl:ul,..
+
+if {11 : al,...,l~
+
+if K(t)
+
+Kt-(ll:
+
+ul,...,l~:
+
+if(ll
+
+:al,...,l~
+
+is well
+
+ln:un))
+
+if K(t)
+
+i.e., we assume that
+
+type variables
+
+are distinct
+
+and
+
+this property
+
+is preserved
+
+by
+
+K
+
+={tl:ul,...,ln:
+
+an,}
+
+.,ln:
+
+formed
+
+on]
+
+under
+
+K
+
+=(ll:al,...,ln:
+
+a~, )::((ll:ul,
+
+:u~,)
+
+Kinding
+
+853
+
+under
+
+al,..
+
+: u~,.}
+
+al,,..,
+
+Fig. 3.
+
+are different
+
+formed
+
+.,l~:an}::{11:l:
+
+Kkt::((ll:
+
+variables,
+
+is well
+
+., Zn:un}
+
+Kh{ll:al,..
+
+.
+
+Record Calculus and Its Compilation
+
+c7n). )
+
+...,l~:a~))
+
+iswellformedunder
+
+K
+
+rules for the second-order
+
+the set of all bound
+
+from
+
+any free type
+
+variables
+
+and that
+
+In our calculus,
+
+any free type
+
+variables
+
+must
+
+calculus Av, ”.
+
+substitution.
+K, which
+
+is a mapping
+
+from
+
+a finite
+
+be kinded
+
+set of type variables
+
+by a kind
+
+to kinds.
+
+assignment
+
+We sometimes
+
+regard a kind assignment as a set of pairs of a type variable and a kind and write
+Any type variables appearing
+in K must also
+0 for the empty kind assignment.
+be properly
+klnded by K itself.
+This is expressed by the following
+condition.
+A
+kind assignment
+K is well formed if for all t c dom(K),
+FTV(K(t))
+~ dorn(K),
+where
+
+dorn(~)
+
+erwise,
+
+we implicitly
+
+denotes
+
+the development
+formed,
+
+is well formed.
+
+t @ dom(K),
+
+for (( K{tl::kl
+ti f! FTV(kj)
+
+the domain
+
+under
+
+extended
+
+Unless we explicitly
+
+assignment
+
+We write
+
+K{t::k}
+
+appearing
+
+We also write
+
+Note
+
+K{tl::kl,...,
+
+that
+
+a kind assignment
+
+to other syntactic
+
+K{tl
+
+containing
+
+if K is well
+
+::kl, . . ., tn::km}
+
+t~::k~}
+
+K if FTV(U)
+
+objects
+
+say oth-
+
+in the rest of
+
+for K U {(t, k)}
+
+S dom(K).
+
+}){t2::k2}..
+.){tn::k~}.
+for any 1 <j<i
+<n.
+
+is naturally
+
+f.
+
+any kind
+
+and FTV(k)
+
+A type ~ is well formed
+notion
+
+of a function
+
+assume that
+
+implies
+
+that
+
+C dom(K).
+
+This
+
+types, except for
+
+substitutions
+whose well- formedness condition
+is defined separately.
+A type u has a kind k under K, denoted by K E u:: k, if it is derivable
+set of kinding
+well formed
+
+rules given in Figure
+
+by the
+
+k and u are
+
+under K.
+
+A type substitution,
+variables
+
+3. Note that if K 1- u:: k then both
+
+to types.
+
+or simply
+
+We write
+
+to a,. A substitution
+for all t $!dom(S),
+and function
+
+substitution,
+
+S is extended
+
+from a finite set of type
+that maps each t,
+
+to the set of all type variables
+
+and it in turn is extended
+
+types.
+
+is a function
+
+[al /tl,...,an/tn]for the substitution
+
+The result
+
+of applying
+
+uniquely
+
+by letting
+
+S(t)
+
+to record types, variant
+
+a substitution
+
+= t
+
+types,
+
+S to a second-order
+
+type
+
+Vt::k.u is the type obtained by applying S to its all free type variables. Under the
+bound type variable convention,
+we can simply take S(Vt::k.a)
+= Vt::S(k).S(a).
+In what follows, we identify
+a substitution
+with its extension to types and write
+S = S’ if they
+domain
+function
+
+are equal
+
+as functions
+
+on types.
+
+However,
+
+we maintain
+
+that
+
+S such that
+
+if t 6 dom(S2);
+
+S(t)
+
+that
+
+dom(S) = dom(Sl)
+U dom(Sz);
+S(t) = Sl(S2(t))
+We further
+assume
+= S1 (t) if t G o!om(Sl) \ dorn(Sz).
+
+associates
+Since
+
+the
+
+dom(S) of a substitution
+S always means the domain of the original finite
+S. If S’l and S2 are substitutions,
+we write S1 o S2 for the substitution
+
+to the
+in
+
+our
+
+right
+
+so that
+
+type
+
+discipline
+
+ACM Transactions
+
+S1 o S2 o S3 means
+
+this
+
+or
+
+operation
+
+S1 o (S2 o S3 ).
+
+kinded
+
+type
+
+variables
+
+are
+
+on Programming
+
+Languages
+
+and Systems,
+
+by a kind
+
+assignment,
+
+Vol. 17, No 6, November
+
+1995
+
+854
+
+Ohori
+
+Atsushl
+
+.
+
+the conventional
+
+notion
+
+of substitutions
+
+constraints.
+
+A substitution
+
+t E dorn(S),
+
+S(t)
+
+a kind
+
+assignment
+A kinded
+kinded
+
+is well formed
+
+assignment
+
+under
+
+K in (K, S) specifies kind
+
+constraints
+
+of the result
+
+(K, S) is ground
+
+K1 b S(t)::
+
+(KI, S)
+S(K2(t)).
+
+As a simple
+
+a kind
+
+is a pair
+under
+
+K.
+
+(K, S) of
+The kind
+
+of the substitution.
+write
+
+notion
+
+specifies
+
+a type S(o)
+
+kinded
+
+If K + u:: k, and a kinded
+
+corollary
+
+of this, if (Kl,
+
+S for a ground
+
+our well-formedness
+
+condition
+
+assignments
+
+if for
+
+the condition
+
+by xl.
+
+any t E
+
+under
+
+The following
+
+(Kl,
+
+to
+is
+
+S) respects K, then
+
+is regarded
+
+i.e., those that
+
+of kind assignments
+
+which
+
+lemma
+
+K and (Kz, SZ) respects
+
+a kind assignment
+
+of type variables,
+
+Kz
+
+K then it can be applied
+
+substitution
+
+S1) respects
+
+(Kz, Sz o S1) respects K.
+As seen from the above definitions,
+substitutions
+
+assignment
+
+i.e., if (KI, S) respects
+
+by K, yielding
+
+LEMMA 2.1.1.
+K~ H s(a):: s(k).
+
+respects
+This
+
+can be applied,
+
+a type a kinded
+easily proved.
+
+if E = 0. We usually
+
+kind
+
+K if for any
+
+(0, S).
+
+substitution
+
+a substitution
+
+kind
+
+K. A kinded substitution
+is well formed
+
+A kinded
+
+cyclic
+
+by incorporating
+
+a kind assignment
+
+S that
+
+substitution
+
+on possible
+
+be refined
+
+under
+
+K and a substitution
+
+substitution
+
+do7rL(Kz),
+
+must
+
+S is well formed
+
+respect
+
+K1 then
+
+as a constraint
+it. In this view,
+
+is weak in the sense that it allows
+
+: tl}}, which
+like {tl::{11: tz],tz::flz
+
+is in some sense
+
+useless since there is no ground substitution
+that respects it. In fact, we could have
+adopted a stronger well-formedness
+condition
+on kind assignments requiring that a
+such that for any 1< i < n,
+kind assignment must be of the form {tl ::kl, . . . ,tn::kn}
+}. The reason why we have not taken
+..,t,_l::kl–l
+k, is well formed under {tl::kI,.
+this approach
+inference
+assignment
+
+is because under
+
+algorithm
+
+would
+
+every time
+
+this stronger
+
+increase
+
+condition
+
+the complexity
+
+due to the well-formedness
+
+types are unified.
+
+The current
+
+definition
+
+of a kind
+
+of well-formedness
+
+of kind assignments allows us to delay the check of circularity
+until
+is abstracted.
+The notation
+K{t: :k} is int reduced for this purpose
+not appear in k. This will be used for specifying
+
+of the type
+
+checking
+
+a type variable
+where t should
+
+the rule for type abstraction.
+
+Since
+
+this approach does not change the set of derivable closed typings, it still yields a
+sound type system that detects all the type errors of a program.
+We will comment
+on this issue again when we define a unification
+algorithm
+in Section 3.4.
+2.2 Terms,
+
+Reduction,
+
+The set of terms
+
+and Typing
+
+Rules
+
+of Av’- is given by the grammar:
+fif::=x
+
+]cb]Ax:
+
+a. MI
+
+/ {l= A!T,.., Z= AI}
+I ((l= Al):a)
+
+MM]
+
+At::k.fif
+
+Iivfcr
+
+I M.1 [ modify(Al,l,AZ)
+
+/ case A4 of (l=M,
+
+~.,z=M)
+
+Cb is a constant of base type b. >t: :k A!l is kinded type abstraction.
+In a variant
+term ( (l= AK) :cr), type specification
+is necessary to preserve the explicit
+typing of
+the calculus. In a record expression or a case expression, the order of the fields is
+insignificant.
+We identify the terms that differ only in the names of bound variables
+and assume the bound variable convention for term variables.
+We write [L+f/z]N
+for the term obtained
+from N by substituting
+Al for all the free occurrences of
+ACM
+
+TransactIons
+
+on Programmmg
+
+Languages
+
+and Systems,
+
+VOI 17, No
+
+6, November
+
+199,5
+
+A Polymorphic
+(k:
+
+(P)
+
+N s
+
+u.M)
+
+.
+
+855
+
+[N/z]M
+
+(At::
+!dbf)
+0 ==+[rT/t]A’f
+
+(type-~)
+{t,=
+
+(dot)
+
+M,,..
+
+modify({ll=~l,.
+
+(modify)
+
+(case)
+
+z in N.
+
+We write
+
+abstraction,
+
+The definitions
+syntactic
+
+.,ln=il’fn}olt
+
+==+’ M,
+
+.,ln=Nf~},l~,N)
+
+The reduction
+
+FTV(M)
+
+for other
+
+terms
+
+on terms
+
+equational
+proof system,
+In the above definition
+
+<n)
+
+.,l, =N,. ~,l~=ilf~}
+
+.,ln=kfn)
+
+=+ AI, Al
+
+rules for the second-order
+
+for the set of free type
+
+it is defined
+
+equality
+
+(1 <‘i
+
+=+ {ll=iMI,.
+
+case ((12=Al):o) of (ll=AZ1,.
+Fig. 4.
+
+type
+
+Record Calculus and Its Compilation
+
+system Av, ”
+
+variables
+
+of a term
+
+as FTV(M:k.M)
+
+= W/W(k)
+
+are as usual.
+
+We use the equality
+
+and types.
+
+Since this
+
+article
+
+ill.
+
+U (l?Z’V(M)
+
+For
+
+\ {t}).
+“=”
+
+for
+
+does not deal with
+
+symbol
+
+an
+
+this does not cause any confusion.
+of the terms, we have only included
+
+constants
+
+of base
+
+types. Inclusion of constants of general types will not complicate
+the type system.
+A constant having a polymorphic
+type, however, requires a special treatment
+in
+both operational
+to extend them
+
+semantics
+for general
+
+and compilation
+we shall develop later. It is not hard
+constants by assuming that, for each constant, its op-
+
+erational
+behavior and its compilation
+scheme are given. But the extension would
+significantly
+complicate
+the presentation
+of our framework
+without
+giving much
+additional
+
+insight.
+
+The reduction
+
+For this reason, we only consider
+axioms
+
+for this calculus
+
+reduces to N in one step, written
+one of the reduction
+definition.
+closure
+
+of -+.
+
+following
+(dot),
+
+axioms
+
+The reduction
+This
+
+observation.
+(modify),
+
+M +
+
+reduction
+
+M
+
+++
+
+system
+
+of base types.
+4.
+
+N, if N is obtained
+
+to some subterm
+
+relation
+
+constants
+
+are given in Figure
+of M.
+
+We omit
+
+N is defined
+that
+
+its routine
+
+This
+
+is seen from
+
+type
+
+there
+
+abstraction,
+
+system,
+
+we can also include
+
+q rule
+
+seems to be no easy way to include
+records,
+
+and variants.
+
+the
+
+the reduction
+relation induced by
+It is also easily verified that this
+
+and (case) is Church-Rosser.
+
+For the reduction
+
+formal
+
+transitive
+
+relation commutes with the reduction relation generated by /3 and type-~.
+latter reduction is well known to be Church-Rosser,
+by the Hindley-Roger
+[Barendregt
+1984, ch.3], the entire relation is Church-Rosser.
+However,
+
+M
+
+M by applying
+
+as the reflexive
+
+is Church-Rosser.
+
+It is easily verified
+
+We say that
+
+from
+
+for lambda
+
+other
+
+abstraction.
+
+extensionality
+
+In the presence of record
+
+Since the
+theorem
+
+rules for
+
+polymorphism,
+
+a straightforward
+
+inclusion
+
+of any of these rules causes both
+
+the confluence
+
+and
+
+subject
+
+property
+
+to fail.
+
+have included
+
+type-
+
+reduction
+
+For example,
+
+if we would
+
+q rule, then terms like At::{a : int, b : int].(As::{a
+different normal forms having different types.
+
+: znt].Ax:s.x)
+
+t would
+
+have two
+
+Since in our system types may depend on type variables other than
+free type variables, we need to extend the notion of free type variables
+
+their own
+of a type.
+
+For a type u well formed under K, the set of essentially free type variables
+under K, denoted by EFTV(K,
+a), is the smallest set satisfying:
+—Erv(a)
+
+g EF7’V(K,
+
+—if t c EF’TV(K,
+Intuitively,
+
+a).
+
+a) then F’TV(K(t))
+
+t E EFTV
+ACM Transactions
+
+of u
+
+~ EF’TV(K,
+
+(K, a) if a cent ains t either
+on Programming
+
+Languages
+
+a).
+directly
+
+and Systems.
+
+kind
+
+con-
+
+Vol. 17, No 6, November
+
+or through
+
+1995
+
+.
+
+Atsushi
+
+VAR
+
+K, ’T Dz:o
+
+if T is well formed
+
+under
+
+K and 7(z)
+
+K, ~
+
+if 7 is well formed
+
+under
+
+K
+
+856
+
+CONST
+
+Ohori
+
+b Cb : b
+K, T{z:crl}
+
+ABS
+
+K,T
+
+D~I
+
+D~X:UI,
+
+: fJl+17z
+
+-+02
+
+K, TDM2
+
+K{t::k},
+
+TAPP
+
+b M
+
+T
+
+: a
+
+if t# FTV(T)
+
+: Vt; k.u
+
+K,T
+
+D At::k.M
+
+K,’l_
+
+P M
+
+: W::k.~l
+
+K,T
+
+DM
+
+KFu2::k
+
+uz
+
+: [u~/t](ul)
+
+(l<z <n)
+
+K, TbMz:uz
+
+RECORD
+
+K,T
+
+b{ll=M1,.
+
+,l~=M~}
+
+K, TbM:ul
+
+DOT
+
+K,T
+
+: {tl
+
+DMI
+
+K,TDMz:az
+
+KFcT1::{l:az~
+
+K,’T
+
+b modify (M1,1,M2)
+
+: al
+
+Kko2::((l:
+b ((J=M)
+
+K, TbM:(ll:
+
+al,.
+
+Fig. 5.
+
+al))
+
+UZ) : c72
+..,ln:
+
+K,7b
+
+on)
+
+b case M of (ll=Ml,.,
+
+K,’.T
+
+specified
+
+:Un}
+
+: q
+
+K,T
+
+CASE
+
+,tn
+
+:02
+
+K, TDM:o1
+
+VARIANT
+
+:al,.
+
+KEc1::{1:u2}
+K, TDM.l
+
+MODIFY
+
+:01
+
+: ox
+
+K, TDM1M2
+
+TABS
+
+strains
+
+: 02
+
+&fI
+
+K, TDMl:ol
+
+APP
+
+= u
+
+M,:a,
+
+l~=M~)
+
+Type system of the second-order
+
+by K. For example,
+
++a(l<z
+
+<n)
+
+: a
+
+calculus Av, ”,
+
+t1 is essentially
+
+free in t2 under
+
+{tl: :U, t2:: {1 :
+
+tl ]}. This notion naturally
+extends to other synt attic structures cent aining types.
+A type assignment
+T is a mapping from a finite set of variables to types. We
+write{zl
+
+:01, . . ..Zn
+
+We also write
+
+T{x
+
+: o-n} for the type assignment
+
+: a} for ~U {z : a} provided
+
+that
+
+that
+
+binds z~ to a; (1 < z < n).
+
+x @ dorn(~).
+
+The type system
+
+is defined as a proof system to derive a typing of the form K, 7 D M : a. The set
+t $4FTV(’Z_) is
+of typing rules is given in Figure 5. In the rule TABS, the condition
+equivalent
+to t @ EF’TV(K{t::k},
+T) under our assumption
+on K{t::k}.We write
+Av’- t- K, T D Ill : u if K, T D ill : ~ is derivable in this proof system.
+Unlike
+system
+
+the polymorphic
+has the following
+
+PROPOSITION
+
+K, T
+
+b M
+
+PROOF.
+
+2.2.1.
+
+: u. Moreover,
+
+type discipline
+
+for records based on subtyping,
+
+this type
+
+property.
+For any K,?,
+a derivation
+
+We proceed by induction
+
+M there is at most one ~ such that Av”
+of Av” t K, T b M : ~ is unique.
+
+on the structure
+
+of M.
+
+h
+
+The case of M.1 follows
+
+from the induction
+hypothesis and the fact that for given K, al, and 1 there is at
+❑
+most one 0-2 such that K t- al :: {1 : 02}}. Other cases are straightforward.
+The following
+LEMMA
+
+basic properties
+
+hold, which
+
+are proved
+
+by routine
+
+induction.
+
+2.2.2.
+
+(1)
+
+If AVB h K, T b M
+
+ACM
+
+Transactions
+
+: ~ then T, M,
+
+on Programming
+
+Languages
+
+and o are well formed
+and Systems,
+
+Vol
+
+under
+
+17, No 6, November
+
+K.
+1995,
+
+A Polymorphic
+(2)
+
+If Av-
+
+R K{t::k},
+
+AV’” IK,
+
+TDM
+
+(~) lfAv(4)
+
+T
+
+P M
+
+~ K,T
+
+lfAvm
+
+(6)
+
+ljAv’cl-K,
+ao}DM:u.
+
+D M
+
+1- K,T{z
+
+U FTV(M)
+
+AVII& )({t::~},
+T D M
+: a then,
+: a then FV(M)
+
+:aO}
+
+T
+
+857
+
+U F’TV(a))
+
+then
+
+DM
+
+lemma
+lemma
+
+: a andx
+
+@FV(M)
+
+then Av’- I-K,
+under
+
+holds for all the calculi
+
+shows that
+
+, ~.
+
+~ dorn(T).
+
+: 0 and U. is well formed
+
+DM
+
+The corresponding
+The following
+
+: a and t $! (f’TV(T)
+
+.
+
+: P.
+
+lf Avw \ K, ‘T D M
+
+(5)
+
+Record Calculus and Its Compilation
+
+typings
+
+T DM
+
+: a.
+
+K then AV*- E K, T{x
+
+:
+
+we shall define in this article.
+
+are closed under kind respecting
+
+kinded
+
+substitutions.
+LEMMA
+
+2.2.3.
+
+K,, S(7)
+
+1~ Av-
+
+p S(M)
+
+)C1, T
+
+D
+
+M
+
+: a and (Kz, S) respects KI
+
+then Av’-
+
+: a and (Kz, S) respects
+
+Proof
+
+Av’o t- K1, T
+
+on the structure
+
+D M
+
+Case M::k.Ml
+can assume
+
+that
+
+is by
+
+KI and (Kz, S) respects KI, S(T) is well
+Therefore A ‘)” E K2, S(T) D z : S(a).
+T
+
+D Ml
+
+and t # FTV(T).
+
+By the bound
+
+type
+
+t does not
+
+in S or K2.
+
+Since k is well
+
+. We must
+
+~ = Vt::k.vl
+
+KI.
+
+of M.
+
+Case x. Since ‘T is well formed under
+formed under K2. Also S(T)(Z)
+= S(a).
+
+that
+
+t
+
+: s(a).
+
+Suppose
+
+PROOF.
+
+induction
+
+F
+
+have AVIS t- Kl{t::k},
+appear
+
+: al for some al such
+variable
+
+convention,
+formed
+
+we
+
+under
+
+K1 and (K2, S) respects K1, S(k) is well formed under K2. Then K2{t::S(k)}
+is
+well formed, and (K2{t::S(k)},
+S) respects Kl{t::k}.
+By the induction
+hypothesis
+Avs
+
+t- K2{t::S(k)},
+
+S(T)
+
+TABS Av~- 1- K2, S(T)
+
+D S(MI)
+
+: S(OI).
+
+b M:: S(k). S(M1)
+
+Since t @ FTV(S(7)),
+
+: Vt::S(k).
+
+by the rule
+
+S(al).
+
+: Vt::k.ff2,
+KI t- al :: k and
+Case MI aI.
+We must have Av” 1- KI, T D Ml
+for some 02, t,k. By the induction
+hypothesis and the bound type
+a = [crl/t](a2)
+variable
+
+convention,
+
+Kz F S(al)
+
+:: S(k).
+
+[S(al)/t](S(a2)).
+as desired.
+Case Ml.
+al::
+
+{1 : a}.
+
+Lemma
+
+Av’- l-- K2, S(T)
+
+D S(M1)
+
+By the typing
+But
+
+rule
+
+: Vt::S(k).
+
+TAPP,
+
+since t @ dorn(S),
+
+Av’m
+
+S(a2).
+
+By Lemma
+
+s(~)
+
+b
+
+1- K2,
+
+We must have Avn \ KI, T D M
+
+: al,
+
+By the induction
+
+& K2, S(T)
+
+2.1.1, K2 + S(al)
+
+hypothesis,
+
+:: {1 : S(a)}.
+
+Av-
+
+s(M1)
+
+S(O1)
+
+= S([al/t](02))
+
+[S(al)/t](S(a2))
+
+KI
+
+: S(al).
+
+By the rule DOT, AvIo \ K2, S(T)
+
+:
+
+= S(a),
+
+for some al such that
+D S(M)
+
+2,1.1,
+
+k
+By
+
+bS(iW).1
+
+:
+
+s(u).
+The cases for modify (Ml ,1,M2) and ((l= M):a)
+cases easily follow
+
+from the induction
+
+are similar
+
+hypotheses,
+
+to that
+
+of M1.l.
+
+Other
+
+❑
+
+This lemma holds for all the calculi we shall define in this article,
+We also have the following substitution
+lemma,
+LEMMA
+
+2.2.4.
+
+AVI- !- K,7
+PROOF.
+
+Proof
+
+If Av’- 1- K,T{x
+
+D [N/z]M
+Suppose
+
+: al}
+
+D M
+
+: LT2 and Av”
+
+1- K,T
+
+b N
+
+: al
+
+then
+
+: U2.
+Av’o
+
+is by induction
+ACM TransactIons
+
+h K, 7{z
+
+: Ul}
+
+b M
+
+on the structure
+
+of M.
+
+on Programmmg
+
+Languages
+
+: LT2and Av*’ kK,
+
+and Systems,
+
+T
+
+DN
+
+Vol. 17, No 6, November
+
+: al.
+
+1995,
+
+858
+
+Atsushi Ohori
+
+.
+
+Case N::k.ilfl.
+C73such that
+
+have A ‘m 1- K{t::k},
+
+We must
+
+and t @ FTV(7{Z
+
+U2 = ift::k.a3
+
+T{z
+
+: al}
+
+D Ml
+
+K,7
+P N : al implies AVI- h K{t::k},7
+D N
+Avo + K{t::k},
+‘T D [lV/Z]M
+: 03. Since t $4FTV(7)
+
+C FTV(7{Z
+
+typing
+
+: W:;k.v3.
+
+rule TABS we have Avs t- K, 7
+
+Case A1l.i.
+
+D M::k. [N/x]M
+
+We must have AVIS E K,T{z
+
+for some U3. By the induction
+hypothesis,
+typing rule DOT, Av’a E K, 7 D [N/x] l!ll.l
+Cases for modify (llll
+cases are proved
+❑
+lus.
+
+,1,A12) and ((l=lkf)
+
+using Lemma
+
+Using these properties,
+
+(type-~):
+
+\ K,T
+
+that
+
+: C73 and
+
+D All
+
+: o-I}),
+
+by the
+
+K F as :: {1 : Cr2}}
+
+AVI 1- K, 7
+: a2.
+
+D [N/x]Afl
+
+: as.
+
+By the
+
+:a) are shown
+
+similarly
+
+to Af.1.
+
+Other
+
+to the second-order
+
+lambda
+
+calcu-
+
+2.2.2, similarly
+
+by showing
+
+A ““
+
+Suppose
+
+: al}
+
+we can prove the following
+
+This is proved
+
+PROOF.
+
+: C73for some
+
+: al}).
+By Lemma 2.2.2, Avr R
+: al. By the induction
+hypothesis,
+
+subject
+
+each reduction
+
+D (Jt::k.M1)
+
+al
+
+: a.
+
+reduction
+
+theorem.
+
+axiom
+
+preserves
+
+typing.
+
+Then
+
+a = [ol/t](a2)
+
+for
+
+some U2 such that Av’- + K{t::k},
+7 D All : 02 and K t al ::k. By the bound
+t does not appear free elsewhere other than 02 and Ml.
+type variable convention,
+Then the kinded substitution
+(K, [al/t])
+respects K{t::k},
+and by Lemma 2.2.3,
+Avo R K, [oI/t](T)
+(dot):
+
+Suppose
+
+(02),i.e., AVIS h K, T
+D [ol/t](M1): [al/t]
+
+D [al/t]
+
+Av”
+
+a.
+
+al, . . ..ansuchthat
+
+f
+
+K, T
+
+K.7p
+
+Mj
+
+an} :: {1% : CT]. By the definition
+(modify):
+
+Suppose
+
+A ‘>” h- K,l_
+
+D
+
+{ll=All,
+
+~ .,ln=Mn}.l,
+
+:
+
+: Oj(l<j
+
+<n),
+
+and K\{zl
+
+of kinding,
+
+c = cr, and K, T
+
+D modify ({ll=Ml,.
+
+D
+
+(jP1l)
+
+Then
+
+there
+
+:01,
+M,
+
+: m.
+
+are
+
+... 1
+>77:
+
+: u.
+
+. .,ln=Mn},lt,jV)
+
+: ~.
+
+Then
+
+there are some al, . . . ,an, u’suchthata={ll
+:al, . . ..ln.
+an}, Av, I&K,
+~DMJ
+:
+03(l<j<n),
+A “-f K,TDN
+: a’, and Kt-{ll:crl,
+... ln:
+an}:: {n:
+a’}.
+By the definition
+of kinding,
+CT,= a’. Then by the typing rule RECORD, Avm tK,~D{ll
+
+=~1,
+
+(case):
+Then
+
+there
+
+. . ..li=N.ln=,ln=
+
+Suppose
+
+Av-
+
+~n]:a.
+
+k K,T
+
+D case ((l,= M):aO)
+
+are al, , . . . an such that
+
+and AvmEK,7D((l,=i
+that Avm \ K,T
+D M
+a’. By the definition
+Av’-t-K,
+TDibf%M
+
+kK,
+
+T
+
+of (lI=Ml,.
+
+o’ = u%. Then
+
+DMj
+
+: aj
+
+. .,lm=Mn)
+
+by the typing
+
++
+
+: cr.
+
+<
+— n),
+Uf) :Uo) : (ll:ul,
+. . . , 1~ : crn). The last typing implies
+: & and K E (11 : O1,..,,tm
+: an) :: ((1, : a’)) for some
+
+of kindings,
+: U. ❑
+
+Av’
+
+o (1 <j
+
+rule
+
+APP,
+
+we
+
+have
+
+Let us show simple examples of terms in this calculus. The field selection function
+name and variant term payment given in Section 1 are represented as the terms
+NAME
+PAYMENT
+ACM
+
+TransactIons
+
+on Programmmg
+
+= Atl::U.At2::{Name
+= At::((Pound
+Languages
+
+: real))
+
+and Systems.
+
+: tl}.
+
+Ax:t2.x. Name
+
+(( Pound= 100,0): t)
+VOI 17, No
+
+6, November
+
+1995
+
+A Polymorphic
+and are given the following
+
+Record Calculus and Its Compilation
+
+.
+
+859
+
+typings:
+
+0,0 D NAME
+
+: Vtl::U.VtZ::{Name
+
+0,@ D PAYMENT
+
+: tl].tz-+ tl
+
+: Vt::((Pound
+
+: real)).t
+
+With appropriate
+type applications,
+these terms can be used polymorphically.
+The
+given in Section 1.2 are represented as
+expressions containing
+name and payment
+the following terms.
+(Aname:Vtl::U.Vtz::
+(name
+
+: tl}.tz
++
+
+{Nume
+
+tl.
+
+{Name : string,
+O&ce
+: tnt}
+{Name=” Joe”, 0fhce=403},
+{Name : string, Age : mt, Phone : int}
+{Name=” Hanako” , Age=21, Phone= 7222})) NAME
+
+string
+
+name string
+
+(Apayment:Vt::(( F’ound : real)).t
+: real)
+(payment (Pound : real, Dollar
+: real,
+Yen : int)
+payment (Pound
+(Pound=
+
+(Pound=
+
+Ax:real.x,
+
+* 150.0),
+
+Yen= Axint
+
+system
+
+can be defined.
+
+Jxreal.real-to-int(x
+
+Dollar=
+
+Ax:real.x
+
+* 0.68),
+
+x )))
+
+PAYMENT
+
+For this calculus,
+that
+
+a semantic
+
+the equational
+
+framework
+
+proof
+
+of the second-order
+
+[1990] and Breazu-Tannen
+
+and Coquand
+
+lambda
+
+calculus
+
+We also believe
+
+such as Bruce et al.
+
+[1988] can be extended
+
+to this calculus
+
+and that the soundness and completeness of the equational
+proof system can be
+proved.
+A detailed studies of semantic properties
+of the calculus is beyond the
+scope of the present
+and compilation.
+3. ML-STYLE
+
+article.
+
+Our main focus is an ML-style
+
+We now turn
+TYPE
+
+type inference
+
+system
+
+to the first of the two.
+
+INFERENCE
+
+SYSTEM
+
+In this section, we define an ML-style, implicitly
+typed, polymorphic
+)let’q, show that typing derivations
+of ~l’t’” correspond to terms
+
+record calculus
+of a predicative
+
+subcalculus
+A~etI- of Av’o, give a type inference algorithm
+for ~~’t’o, and prove its
+soundness and completeness.
+We also give a call-by-value
+operational
+semantics
+and prove the soundness
+3.1 An ML-Style
+
+of the type system of Alet’”.
+
+Polymorphic
+
+The set of raw terms
+
+Record Calculus : Atet’m
+over by e) of ~~et>’ is given by the following
+
+(ranged
+e ::=zlcb
+
+Following
+monotypes
+
+[kz.e[eelletz=e
+
+/ {l=e,
+
+~,l=e}
+
+I case e of (l=e,
+
+\ e.1 I modify(e,l,e)
+
+presentation
+
+over by ~) and polytypes
+
+T ::=t\bl
+ff ::=
+
+T+
+
+T1’dt::k.
+
+In what follows, we indicate
+our usage of a metavariable
+k::=
+
+ACM Transactions
+
+ine
+
+I (l=e)
+Damas and Milner’s
+(ranged
+
+T1{l:T,..,l:
+
+syntax:
+
+~,l=e)
+
+of ML, we divide
+
+the set of types into
+
+(ranged
+
+over by o) as follows:
+
+T}l(l:
+
+T,’
+
+““,l:T)
+
+0
+
+the fact that a type is restricted to be a monotype by
+T. The set of kinds is given by the following grammar.
+Ul{l:T,..,l:
+
+on Programming
+
+T}l((l:T,..
+
+”,l:
+
+7))
+
+Languages and Systems. Vol. 17, No. 6, November 1995.
+
+860
+
+Atsushi
+
+Ohori
+
+Fig. 6.
+
+Kinding
+
+.
+
+rules for the ML-style
+
+type inference system ~~et,”,
+
+As in Av’-, a kind assignment is a mapping from a finite set of type variables to
+kinds. The set of kinding rules is given in Figure 6. Note that unlike the secondand a type variable
+order calculus Av’m, a kind denotes a subset of monotypes,
+ranges only over monotypes.
+Let
+
+al
+
+stance
+
+be a polytype
+
+of al
+
+‘v’t~::k~ .
+
+under
+
+well formed
+
+K, written
+
+b’t~::k&.r2,
+
+under
+
+K.
+
+and there is a substitution
+
+“.k&},
+(K{t;::q,..,t2~..
+
+We say that
+
+K t- ml > U2, if al
+
+S) respects K{t~::k+,
+
+0-2 is a generic
+
+= Qt~::k~ . . . Qt~::k~.rl,
+
+in-
+
+C72=
+
+S such that dom(S) = {t~, ~., t~},
+tl““kl
+~..
+~ } and TZ = S(~l). It is easily
+
+...,
+
+checked that if K \ al ~ CT2then cr2 is well formed under K. This is a refinement of
+the usual definition
+of generic instance. We have the following
+expected property,
+which
+
+can be proved
+3.1.1.
+
+LEMMA
+
+Let T and
+Cls(K,
+
+T,~),
+
+and {tl,
+T
+
+T
+
+If Ktal
+
+be well formed
+
+. . . . tn}
+
+under
+
+= EFTV(K,
+
+T, r)
+
+=
+
+2.1.1.
+
+>L72 and K1-a2
+
+is a pair (K’, Vtl::kl
+
+and CIS(K,
+
+assignment
+
+using Lemma
+
+~) \ EF’2VT(K,
+
+from
+
+then KRul
+
+K. The closure
+
+. bln::kn.~)
+
+(K’, u) then
+
+is a mapping
+
+>a3
+
+>CJ3
+
+of r under
+
+T).
+
+Note
+
+that
+
+by
+
+,tn::kn}
+
+= K
+
+if ~~et,” E K, IT D e :
+
+T and cr are well formed
+
+a finite
+
+‘T, K, denoted
+
+such that K’{tl::kl,.
+
+set of variables
+
+under
+
+K’.
+
+to polytypes.
+
+A type
+
+The
+
+set of
+
+typing rules for ~~et’- is given in Figure 7.
+In this type system, polymorphic
+generalization
+and let abstraction
+are separated
+into two rules: GEN and LET. It is possible to combine these two into a single rule.
+The
+
+presentation
+
+various
+
+adopted
+
+properties
+
+The following
+by routine
+LEMMA
+
+here has the
+
+by induction
+
+on typing
+
+advantage
+
+lemma allows us to strengthen
+
+induction
+
+on typing
+If K, T{z:
+
+3.1.2.
+
+derivation
+al}
+
+be
+
+and
+
+payment
+
+of making
+
+it easier
+
+to prove
+
+derivations.
+the t ype assignment,
+
+which is proved
+
+of e.
+
+: ~ and Kho2
+
+>01
+
+then K, T{z:a2}
+
+be
+
+T.
+
+The
+typings
+
+example
+
+terms
+
+name
+
+given in Section
+
+1 have the following
+
+in ~~e~m.
+At’t’” \ d, o b Ax.x. Name : Vtl::U.’dt2::~Name
+~~et”
+
+E 0,@
+
+b (Pound=
+
+100.0)
+
+: tl}.t2
+
+: Vt::((F’oUnd
+
+~
+
+: real)).t
+
+Moreover, they are principal
+typings and are automatically
+ference algorithm,
+as we shall show later.
+
+inferred
+
+ACM
+
+6, November
+
+Transactions
+
+on Programmmg
+
+Languages
+
+and Systems,
+
+Vol
+
+tl
+
+17, No
+
+by a type in-
+
+1995
+
+:
+
+A Polymorphic
+VAR
+CONST
+
+K, TDx:T
+
+if T is well formed
+
+K,T
+
+if T is well formed under
+
+APP
+
+ABS
+
+RECORD
+
+DOT
+
+~oDIFy
+
+b Cb : b
+
+K,~Del:rl+r2
+
+K, T{z:
+
+Del
+
+71}
+
+VARIANT
+
+K,T
+
+p{il=e~,..,~n=en}
+
+: T1 -
+
+GEN
+
+LET
+
+K,Tbe:T~
+
+As a model
+
+:7,
+
+(l<z
+
+<n)
+
+: {iI
+
+:Tl,..,~~
+
+Ded
+
+b el : T1
+
+De
+
+: ‘rI
+
+: T2
+
+K,~De~:r.2
+
+K1-~1::{1:~2~
+
+D modify (el,l,ez)
+
+: -rI
+
+K b 72,:: ((~ : T1))
+
+D (l=e)
+
+: 1-2
+
+K,TDe:(ll:rl,.,ln:~n)
+
+K,7De,
+
+:T,
+
+b case e of (ll=el,..,i~=e~)
+
+K,T
+K, TDe:r
+
++T(l<i
+
+<n)
+
+: T
+
+if CJS(K, ‘T, ~) = (K’, a)
+
+K’,’TDe:u
+
+K, Tbel:u
+
+K, T{z:a}be2
+
+K,T
+
+b let Z=el
+
+Fig. 7.
+
+Typing
+
+Semantics
+
+:-r
+
+in ez : T
+
+rules for ML-style
+
+record calculus A~et,”.
+
+of Atets
+
+of an ML-style
+
+property
+
+:Tn}
+
+KtT~::{l:T2]
+K,T
+
+3.2 Operational
+
+K
+
+T.2
+
+K, Tbe,
+
+K,7
+
+CASE
+
+~ ~
+
+: 72
+
+D ~x.el
+
+K,T
+
+861
+
+e2 : 72
+
+Del
+
+K,T
+
+K,’T
+
+K and K E T(z)
+
+under
+
+.
+
+K,7_De2:rl
+K,T
+
+K,T
+
+stronger
+
+Record Calculus and Its Compilation
+
+programming
+
+of type soundness
+
+than
+
+language,
+
+we require
+
+~iet’-
+
+to have a
+
+the subject
+
+reduction
+
+property,
+
+i.e., the
+
+property being that evaluation of a closed term of some type always yields a value of
+that type. To establish this property, we define a call-by-value
+operational
+semantics
+using evaluation
+theorem
+model
+
+with
+
+contexts
+respect
+
+of a polymorphic
+
+Figure
+
+evaluation
+
+et al.
+
+programming
+
+8 gives the definitions
+
+call-by-value
+rewriting
+obtained
+
+of Felleisen
+
+to this semantics.
+
+[1987] and prove the type
+
+This
+
+language
+
+semantics
+with
+
+records
+
+of the set of values (ranged
+
+contezts
+
+(ranged
+
+soundness
+
+serves as an evaluation
+and variants.
+over by v), the set of
+
+over by ev [ ] ), and call-by-value
+
+context-
+
+axioms, where [.] denotes the empty context and where ev [e] is the term
+by placing e in the hole of the context ev [ ]. A one-step evaluation relation
+
+e ~ e’ is then defined
+
+as: there exist ev[]l,
+
+ev [e2] 1, and e’ = ev[e2] 1. We write
+and we write
+
+e J e’ if e --%
+
+%
+
+el, ez such that
+
+for the reflexive
+
+e = ev[el]l,
+transitive
+
+e’ and if there is no e“ such that
+
+To show the type soundness
+
+with
+
+respect to this operational
+
+e’ %
+
+ev[el]l
+
++
+
+closure of -%,
+e“.
+
+semantics,
+
+we first
+
+define a type-indexed
+family of predicates on closed values. For a closed type g, let
+on
+valuea be the set {vl~~’t”
+1-0, @ D v : a} and define p“ ~ value” by induction
+a as follows:
+—v G pb iff v = Cb for some constant
+ACM Transactions
+
+on Programmmg
+
+Cb.
+Languages
+
+and Systems,
+
+Vol
+
+17, No 6. November
+
+1995,
+
+862
+
+Atsushi Ohori
+
+.
+
+ew[]
+
+::=
+
+[]lev[]
+
+el u ev[]
+
+I ev[].1
+
+I modify(ew[],l,e)
+
+I let z=ev[]
+
+in el {lI=WI,.
+
+I modify(v,l,ev[])
+ev[(kz.e)
+
+ev[{ll=tq,
+ev[modify({ll=vl,
+ev[case
+
+v]
+
+.,ln=vn}.l~]
+.,l~=wn},l,,u)]
+
+(1, =7J) of (ll=el,.
+
+.,ln=en)]
+
+ew[let z = v in e]
+
+Fig. 8.
+
+e p“ “2
+~ P{ll:T1,
+
+—V
+
+_v
+
+Call-by-value
+
+.,ll-I=Vz-I,
+I (l=ev[])
+
++
+
+eo[[v/z]e]
+
+—+
+
+ew[v, ]
+
++
+
+{l I=vI,
+
++
+
+ev[e,
+
++
+
+ev[[v/z]e]
+
+operational
+
+Lz=ev[],.
+
+of (l=e,
+
+,l,=v,.
+
+Jn=vn}
+
+semantics of A~eL,-
+
+for any V. 6 p~l, if (v Vo) ~ e then e E pTz.
+
+iff
+
+. ,l.,T~}ifi~={ll=Ol,’.
+
+. ,ln
+
+= v~} such that
+
+) iff v = (i, = v’) for some z (1 < z <n)
+
+_v
+
+::~nr
+
+~ Pvtl ::kltn
+,tn}
+
+Let
+
+iff for
+
+and it satisfies
+
+T be a closed type
+
+groundsubstitution
+
+any
+
+{tl::kl.
+
+. tn::kn},
+
+such that
+
+occurrence of z in e. For a function
+the extension ~’ of ~ to z such that
+3.2.1.
+
+respects K, and for
+PROOF.
+
+This
+
+is by definition.
+S(7)
+
+dom(S)
+
+=
+
+v c ps(Tj.
+is a function
+
+++ v} for
+
+If AZet” k K, T D e : g then for any ground
+substitution
+any S(T) -environment
+~, if ~(e) J. e’ then e’ 6 pstu).
+
+S that
+
+of the
+Let
+
+~, if z @ dom(~)
+~’(x) = v.
+
+~ such that
+
+If q is an environq(x) for each free
+~{z
+
+is proved
+
+by cases in terms
+
+v’ 6P’L.
+
+that
+
+S such
+
+A T-environment
+
+assignment.
+
+v, c p“L (1 < z < n)
+
+dom(q) = dom(T)
+and for any z ~ dom(7_), q(z) E value~(’).
+ment, we write q(e) for the term obtained from e by substituting
+
+THEOREM
+
+,l=e)
+
+v]
+
+_v ~ P(l,T,,.,t,.:Tn
+
+{t,,...
+
+.}
+
+I case ev[]
+
+by induction
+last
+
+rule
+
+S be any
+
+on typing
+
+used
+
+ground
+
+in the
+
+then we write
+
+derivation.
+
+derivation.
+
+substitution
+
+The
+
+Case
+
+respecting
+
+proof
+
+proceeds
+
+for
+
+the
+
+rules
+
+X,
+
+and
+
+let
+
+CONST
+
+rj be any
+
+-environment.
+
+=
+case VAR. Suppose K, ~ D x : 7-. Then K E T(x) z ~. Let Vtl::kl . . . tn::kn.~o
+dorn(SO) = {tl, . ~ , tn}, ~ = S.(7-0), and
+
+7(z). Then there is some So such that
+K k So(t,) :: So(ki).
+variable convention,
+
+By Lemma 2.1.1, 0 + S(So(t, )) :: S(So(k~)).
+S(S. (7-0)) = (S o So)(S(~o)) and S(So(kl))
+
+So, S o So is a ground
+
+substitution
+
+pose q(x)
+
+j. e’.
+
+Then
+
+by the assumption,
+
+definition
+
+of the
+
+predicate
+
+Case
+
+ABS.
+
+P,
+
+Suppose K,T
+
+respecting
+
+{tl ::S(kl ), . . ~, tn::S(kn)}.
+
+e’ c P Vtl::S(k*
+
+e’ c Pfs0s0JLS(701J,
+D
+
+Ax.el
+
+By the bound type
+= (S o So)(S(kZ)).
+
+i.e.,
+
+).t~::S(k~)
+
+Now sup-
+
+S(70),
+
+By
+
+the
+
+e’ E l’s~~).
+
+: ~1 + ~z is derived
+
+from
+
+K, T{z
+
+: rl}
+
+p el
+
+:
+
+7-2. q(k.el)
+= kz.q(el)
+J Xr.v(el).
+Let v be any element in ps(”)
+and suppose
+((kz.q(el))
+v) J, e’. By the definition
+of evaluation
+contexts, [v/x] (q(el))
+~ e’, i.e.,
+q{x w v}(el ) ~ e’. Since q{x w v} is a S(T{X : ~1})-environment,
+by the induction
+hypothesis,
+e’ E Pstrz). This proves Xr.q(el)
+< ps(”’j+s(”).
+Suppose K, T b el e2 :
+Case APP.
+De2
+: T2. Also suppose q(el
+and K,T
+ACM
+
+Transactions
+
+on Programmmg
+
+Languages
+
+is derived
+from K, T b el : mj + TI
+e2) ~ e’. By the definition
+of evaluation
+
+TI
+
+and Systems,
+
+Vol
+
+17, No
+
+6, JNuvember
+
+1995,
+
+A Polymorphic
+contexts,
+
+q(el)
+
+Record Calculus and Its Compilation
+
+J ej and (ej q(e2, )) 1 e’. By the induction
+
+hypothesis
+
+VI = pst T2J-S(T1 ) for some value V1, Then by the definition
+q(e2) J e~ and (v1 ej) J e’. By the induction
+some value V2. Then
+
+by the definition
+
+By the induction
+
+contexts,
+
+for ez, e~ = V2 E Ps(”)
+
+of the predicate
+
+p, we have e’ c PS(’I ).
+
+hypothesis,
+
+863
+
+for el, e~ =
+
+of evaluation
+
+hypothesis
+
+Case DOT. Suppose K, T D el.1 : T is derived
+rl :: {{1 : ~]. Suppose q(el.1) ~ e’. By the definition
+e; and ej.1 J e’.
+
+.
+
+for
+
+from K, T D el : Tl and K }
+of evaluation
+contexts, q(el) J
+
+e~ = v c Ps(” J for value v.
+
+Since
+
+S is a ground substitution
+respecting K, by Lemma 2.1.1, 0 R S(~l) :: {1 : S(~)}.
+This implies that S(~l) is a ground record type of the form {..,1
+: S(r),..
+.}. By
+the definition
+
+of p, v = {. .,1
+
+= v’,. . .}, V’ ~@7).
+
+But
+
+{...,1=
+
+from
+
+K’, T
+
+Case GEN.
+
+Suppose
+
+K, T
+
+D e : 0 is derived
+
+7,7)
+
+= (K, cr).
+
+Then
+
+there
+
+K’ = K{tl::kl,..
+
+,tn::kn}
+
+CIS(K’,
+
+are some tl, ~” ”,%
+
+and a = Wl::kl
+
+V’,..
+D e
+
+}.l
+
+~ V’.
+
+T
+
+such that
+
+:
+
+and kl, ”””, k~ such that
+
+. . . W. ::kn.r.
+By the bound
+
+type variable
+
+convention,
+
+we can assume that any of {tl, ..., t~} do not appear in S’. Then
+Let S’ be any ground substitution
+such that
+= Wl::s(kl)
++~. tn :: S(kn).S(T).
+
+s(o)
+
+dom(S’)
+a
+
+= {tl,.
+
+ground
+
+~. ,tn} and S’ respects
+
+substitution
+
+environment.
+
+that
+
+respects
+
+By the induction
+
+proves that
+
+e’ E Ps(”)
+
+{tl::S(kl),
+
+K{tl
+
+hypothesis,
+
+by the definition
+
+~“t~::S(k~)}.
+
+Then
+
+S’ o S
+
+k
+
+and q is a JS’ o S)(7)-
+
+::kl, .” ~, t~::k~},
+
+if q(e) j e’ then
+
+e’ 6 Ps (s(’)).
+
+This
+
+of p.
+
+Cases for MODIFY and VARIANT are similar to that of DOT. The case for CASE is
+similar to that of APP. Cases for RECORD and LET follow from the corresponding
+induction
+
+❑
+
+hypotheses.
+
+From this theorem,
+
+we have the following
+
+COROLLARY
+
+l~A1et”
+
+This
+
+says that
+
+3.2.2.
+
+a well-typed
+
+t- 0,0 De
+
+program
+
+of type o-, and in particular,
+
+corollary.
+
+: u and e J. e’ then e’ is a value of type cr.
+
+(closed term)
+
+a well-typed
+
+program
+
+of type o evaluates
+will not produce
+
+to a value
+
+a runtime
+
+type
+
+error.
+3.3 Explicitly
+
+Typed Calculus A1e~mCorresponding
+
+We define an explicitly
+will
+
+typed
+
+calculus,
+
+be used as an intermediate
+
+to ~let>-
+
+A1’~Im, corresponding
+
+language
+
+for compilation
+
+to ~Let-. This calculus
+of ~~et)”.
+
+The set of types, kinds, and kinding rules are the same as those of ~letI”. The set
+of terms of AZeL’r (ranged over by M) is given by the syntax:
+Al ::= (z ~...~)
+I {~=?vf,
+
+(x ~...
+
+I Cb \ kE:r.A4
+,~=~}
+
+I ~:r.z
+
+I Al M ] Poly(JW:f7) I let Z:C7 = Al in Al
+I modify(A4.~,l,AI)
+
+I ((l= M):T)
+
+I case A4 of (l=kf,.
+
+.J=kf)
+
+r) is polymorphic
+
+instantiation,
+
+and Poly(lhf:a)
+
+tion. To make the development
+specification
+in a field selection
+
+is polymorphic
+
+generaliza-
+
+of the compilation
+algorithm
+easier, we require type
+term and in a field modification
+term. The set of free
+
+type variables of a term is written as FTV(M).
+For a polymorphic
+generalization
+term, it is defined as F’Tl’(Poly(Lf:VtI::kl
+k::k~.r))
+= ~T17(~)
+\ {tl,
+, t~}.
+The definitions
+for other terms are as usual. The set of typing rules is given in
+Figure
+
+9.
+ACM Transactions
+
+on Programmmg
+
+Languages
+
+and Systems,
+
+Vol. 17. No. 6, November
+
+1995.
+
+864
+
+Atsushi
+
+.
+VAR
+
+K,T{z
+
+Ohori
+: Vtl:kI
+
+if 7{z
+and
+
+Vtn::kn.To}
+
+(K, [T1/tl,
+
+CONST K, ~ b Cb
+
+DMI
+
+P AX,T1.M1
+
+K,’l_
+
+K,T
+
+D ~f:TI.1
+
+DMI
+
+: TZ
+
+K>
+
+T2) : TZ
+
+bM
+
+: (~ITI,
+
+,l~:Tn)
+
+K,7DLf,
+
+M of (ll=M1,..
+
+K,~PM:T
+
+LET
+
+D Poly(hf
+
+K,7bAfl
+
+o
+
+Fig
+
+By regarding
+application
+
+if CIS(K,
+
+K’, T
+
+: a)
+
+K,l_{x:LT}
+
+Dhfz
+
+<n)
+
+T
+
+T, T) = (K’,
+
+u)
+
+M2
+
+:T
+
+xcr=hflin
+
+9.
+
+rules for the exphcitly
+
+let Za=kfl
+
+:TL+T(l<Z
+
+,t~=M~)
+
+: u
+
+K,’TDlet
+
+Typing
+
+‘rI
+
+T2:((1:T 1))
+
+D ((t=M)
+
+K) ’Z_ Dcase
+
+GEN
+
+KtT~.{l,Tj}
+
+T1,l,Mz)
+
+K,T
+
+K,7
+
+k~}
+
+T2
+
+b modify(M1
+
+K,7DM:TI
+
+CASE
+
+~. ,k:.
+
+under K
+
+K, TDM2T2
+
+: T1
+
+K,T
+
+VARIANT
+
+.,, Tn/tn](To)
+K
+
+KET1:{1:T2%
+
+K,T
+
+MODIFY
+
+[T1/tl,
+under
+
+: TZ
+
+: T1 +
+
+K, TDM:rI
+
+DOT
+
+formed
+
+respects K{tl::h,
+
+,T~/&])
+
+if T is well formed
+
+b
+
+~,~{$:TI}
+
+ABS
+
+D ($ TI . ..Tn)
+
+Wn::kn.To}
+is well
+
+: VtI::kl
+
+T
+
+typed record calculus
+
+in A12 as (kz:a.f112)
+
+All,
+
+A~et,-
+
+(z 7-. . . ~) as the nested type
+
+.(z ~). . . ~), and Poly(Al:a)
+as the nested type abstraction
+detercan be regarded as a subcalculus
+of Avs. Each of the typing
+by u, A“t-
+
+mined
+
+(.
+
+rules of A1etm is derivable in Av’” under the above correspondence
+of the terms.
+As ML corresponds to Core XML [Harper and Mitchell
+1993], Atet” corresponds
+to Atetm in the following
+proof
+
+in Harper
+
+PROPOSITION
+Alet”
+
+3.3.1.
+
+and the typing
+
+3.4 Kinded
+In order
+
+sense, which
+
+and Mitchell
+
+can be proved
+
+similarly
+
+to the corresponding
+
+correspondence
+
+between the terms
+
+[1993].
+
+There
+
+is a one-to-one
+
+derivations
+
+of
+
+of ALei’-.
+
+Unification
+
+to develop
+
+a type inference
+
+algorithm,
+
+we need to refine Robinson’s
+
+[1965]
+
+unification
+algorithm
+to incorporate
+kind constraints
+on type variables.
+A kinded set of equations is a pair (K, E) consisting of a kind assignment
+
+K
+
+and a set E of pairs of types such that E is well formed under K. We say that a
+substitution
+S satisfies E if S(7-1) = S(72) for all (TI, ~2) ~ E. A kinded substitution
+(KI, S) is a unifier of a kinded set of equations
+(K, E) if it respects K and if S
+satisfies E. (Kl, S) is a most general unifier of (K2, E) if it is a unifier of (Kz, E)
+and if for any unifier (K3, S2) of (K2, E) there is some substitution
+S3 such that
+ACM
+
+TransactIons
+
+on Programmmg
+
+Languages
+
+and Systems.
+
+Vol
+
+17, No 6, Novsmber
+
+1995
+
+A Polymorphic
+(K,,
+
+S3) respects
+
+We define
+[1989]
+form
+
+Record Calculus and Its Compilation
+
+865
+
+.
+
+K, and S, = S3 o S.
+
+a kinded
+
+unification
+
+algorithm
+
+U in the style
+
+of Gallier
+
+and Snyder
+
+by transformation.
+
+In our system each rule transforms
+a 4-tuple of the
+consisting of a set E of type equations, a kind assignment K, a
+
+(E, K, S, SK)
+
+substitution
+S, and a (not necessarily well-formed)
+kind assignment SK. Intended
+roles of these components are: E keeps the set of equations to be unified; K specifies
+kind constrains
+
+to be verified;
+
+S records “solved”
+
+and SK records “solved” kind constraints
+In specifying
+rules, we treat functions
+use the following
+
+notations.
+
+to types.
+
+We write
+
+the record
+
+kind identified
+
+types
+
+and variant
+
+{F}
+
+Let I’ range over functions
+
+and {F}
+
+following
+
+The careful
+
+F(l)
+
+II, we could
+
+have required
+
+U first
+
+transforms
+
+no more rules can apply.
+it reports
+
+failure.
+
+It then
+
+We then
+
+have the
+
+set of equations,
+
+computes
+
+to the Appendix.
+any
+
+kinded
+
+otherwise.
+
+a type variable.
+
+t # EFTV(K
+
+by F and
+
+F1 + F2 for the
+
+that we could have required
+
+when eliminating
+
+set of labels
+
+are used for variant
+
+The algorithm
+
+until
+
+U takes
+
+reader may have noticed
+
+condition
+
+U)}, ‘r) instead
+
+U {(t,
+
+a stronger
+
+For example,
+
+behind
+
+increase the complexity
+
+not taking
+
+this approach
+
+of the unification
+
+of t $! FTV(-r).
+
+is that the stronger
+
+algorithm
+
+acyclicity every time a substitution
+is generated.
+formed, this would slow down the type inference
+
+Also, if we extend
+
+[Courcelle
+
+1983], allowing
+
+Buneman
+
+and Ohori
+
+Rehaving
+in Sec-
+
+condition
+
+due to the extra check of
+
+Since unification
+is repeatedly peralgorithm.
+Although
+our approach
+
+allows some useless open terms, such as {tl ::{1 : tl -+ int}}{x
+the typability
+on closed terms does not change and therefore
+problems.
+
+“oc-
+
+in the rule
+
+this stronger condition
+corresponds to disallowing
+kind assignments
+dependencies”
+such as {tl: :{1 : t2 }, t2:: {1’ : tl }} we have mentioned
+
+tion 2. The rationale
+would
+
+notations
+
+if one exists, and reports failure
+
+cur check”
+
+identified
+
+and such that for 1 E dorn(F),
+= F2(1). Figure 10 gives the set of
+
+set of equations.
+
+The algorithm
+
+unifier
+
+a finite
+
+type
+
+FI and Fz we write
+
+whose proof is deferred
+
+3.4.1.
+
+from
+
+U ciom(Fz)
+
+= ciom(FI)
+otherwise
+
+(K’, S) if E’ = 0; otherwise
+
+theorem,
+
+THEOREM
+
+the record
+
+For two functions
+
+kinds.
+
+(E, K, 0, 0) to (E’, K’, S, SK)
+
+a most general
+
+quiring
+“cyclic
+
+to denote
+
+Similar
+
+transformation
+rules.
+Let (K, E) be a given kinded
+ret urns the pair
+
+as a form of substitution;
+
+by F, respectively,
+
+function F such that dorn(F)
+F(l) = F1 (1) if 1 c dom(FI);
+
+the system
+
+equations
+
+that has already been verified for S.
+K, SK, and S as sets of pairs. We also
+
+: tl} D (z.1) z : znt,
+does not create any
+
+the type system to recursive types using regular trees
+kind assignments would become essential.
+
+those “cyclic”
+
+[1995] discusse possible
+
+with record polymorphism,
+tends our kinded unification
+
+usefulness
+
+and Vasconcelos’ recent
+to infinite regular trees.
+
+of recursive
+
+work
+
+programming
+
+[Vasconcelos
+
+1994] ex-
+
+3.5 The Type Inference Algorithm
+Using the kinded unification,
+with record polymorphism.
+
+Milner’s
+[1978] type inference algorithm
+is extended
+Figure 11 gives the algorithm,
+WK, which simultanetyping (in the sense
+ously infers, for a given typable raw term in ~~et’-, its principal
+explicitly
+typed term of A1et~-. In this
+of the theorem below) and the corresponding
+definition,
+the
+
+it is implicitly
+
+recursive
+
+calls
+
+assumed
+
+on subterms
+
+ACM Transactions
+
+that
+
+the
+
+algorithm
+
+fails
+
+if unification
+
+or any
+
+of
+
+fail.
+
+on Programmmg
+
+Languages and Systems, Vol. 17, No 6, November 1995.
+
+866
+
+.
+
+Atsushi Ohori
+
+(I)
+
+@u {( T,T)}, K, s, SK)=+
+
+(n)
+
+@u {(t,’T)}, Ku{(t, u)}, s, SK) ==+’
+([T/t] (@, [T/t](~), [T/t](S) U {(t, T)}, [T/t](SK) U {(t, U)})
+
+(111)
+
+(Eu
+
+{(tl,
+
+tz)},
+
+{Fl}),
+
+if t@ F7W’(T)
+
+s, SK) ==5’
+
+(t2, {F2})},
+
+u {(F,(1), Fz(t))ll e dom(Fl) n doTTJ(FIz)}),
+
+([tz\tl](E
+
+(IV)
+
+Ku{(tl,
+
+(E, K, s, SK)
+
+[t2/tl](K)
+
+u {(t2,
+
+[t,/t,](s)
+
+u {(t,,
+t,)},
+[t?,/t,](SK)
+
+(Eu
+
+{lJz})},
+
+{(tI,
+
+0{~2.}ltll(E
+[{ F,}/t,](s)
+
+[t2/tl]({l?l
+
+KU
+
++ Fz]))},
+
+u {(t,,
+{1?,})})
+
+{(t,,{~l}]},
+
+S, SK)
+
+=+
+
+u {(~l(O,~Z(~))l~ ~ ~0~(~1)}), [{~z}lt,](~),
+{F,})})
+u {(t,, {F2})}, [{ F,}/t,](SK)
+u {(t,,
+
+if dorn(F1)
+
+~ doTn(F2)
+
+and t .@FTV({FZ})
+
+(v)
+
+LS,5K)
+(Eu {({ F1}, {F2})},
+if dom(FI) = dom(Fz)
+
+(VI)
+
+(Eu {(tl,
+([t2/tll(E
+
+==+’ (ELJ {( F’1(l),
+
+F2(1))11
+
+G dorn(Fl)},
+
+K,s,
+
+sK)
+
+t2)}, Ku{(tl,
+((Fl))))(t2,
+((F2)))}, s, SK) ==+
+u {( F1(J), F2(1))ll c dom(Fl) n dom(F,)}),
+
+[t2/t,](K)
+u {(tz,
+[t2/t,](((F,
++ F’2))))},
+[t,/t,](s)
+u {(t,,
+t,)},
+[t,/t,](sK)
+u {(t,,
+((F,)))})
+(VII)
+
+(ELJ{(to,)}, Ku {(tl, ((Fl)))}, s, SK)=+
+([(~2)/~11(~ u {(~1(1)) ~z(~))ll E dom(l? l)}), [(F,)/t,](K),
+[( F2)/tll(s)
+
+LJ{(tl,
+
+[(F2)/tll(sK)
+
+(F’2))},
+and
+
+if dorn(~l) ~ do7n(F2)
+(VII1)
+
+@U {((~1),
+(~2))},
+K,
+if dorn(FI)
+= dom(F~)
+
+(IX)
+
+(E U {(7;
+
++
+
+s,
+
+sK)
+
+==+
+
+T:, T; + T;)},
+
+K,
+
+S, SK)=+
+
+(Eu
+
+For a notation of the form X U Y appeared
+and Y are disjoint.
+Fig. 10.
+
+u {(h, ((F1)))})
+
+tl@ FTV((F2))
+{(~1(1),
+
+F’2(~))lt
+
+E ciom(~l)},
+
+(J?3U {( T~, T~), (T~, T~)},
+
+K,
+
+K,
+
+S, SK)
+
+S, SK)
+
+in the left hand side of each rule, we assume that X
+
+Transformation
+
+rules for kmded unification,
+
+For a term Al of AL’L-, the type erasure of M, denoted by erase(M),
+is the
+term of ~~et’ obtained from M by erasing all type information.
+The definition
+of
+erase(M)
+is obtained
+by extending
+the following
+clauses inductively
+according to
+the other term constructors.
+erase((x
+
+~1 . .~n))
+
+erase(k
+
+: -r.Ml)
+
+erase(M1
+erase(modify(Ml:
+
+TransactIons
+
+= Xz.erase(Ml)
+
+: ~.1) = erase(Ml).l
+=
+
+modify
+
+erase(((l=Ml):~))
+
+~,~,M2))
+
+=
+
+(l=erase(Ml))
+
+(erase(M1),l,erase(
+
+erase(Poly(Ml:a))
+
+= erase(Ml)
+
+X:O = Ml
+
+in M2)
+
+=
+
+on Pr-ogrammmg
+
+Languages
+
+and Systems,
+
+erase(let
+ACM
+
+= z
+
+let z=erase(M1)
+
+M2))
+
+in erase(M2)
+
+Vol. 17, No
+
+6, November
+
+1995
+
+A Polymorphic
+
+WK(K,
+
+WK(K,
+
+Record
+
+Calculus
+
+and
+
+s~
+
+are fresh)
+
+‘T, z) =if z f! dom(T) then failure
+else let vtl ::kl
+b%~::k~.~ = T(z),
+,s~/t~]
+(sl,.,
+S = [sl/tI,
+in (K{sI::S(kI),
+~ , Sn::s’(kn)},
+T, )m.el)
+
+WK(K, T,el
+
+0, (x 51 . %),
+
+T{z
+= let (KI, SI, NfI, rI) = WK(K{t::U},
+in (Kl, Sl, Xr : Sl(t). Ml, Sl(t) -+ ~1).
+
+e2) = let (KI,
+
+S1, fVfI,71) = WK(K,
+
+Sl(~),
+
+(K3, S3) = U(K2,
+
+TZ +
+
+WK(K, T, {ll=el,
+
+{( SZ(TI),
+
+S3 OSZ OSI,
+
+~Jn=en})
+
+.
+
+867
+
+S(T))
+(t fresh)
+
+: t}, el)
+
+T,el)
+
+(K2, S2, M2, T2) = WK(K1,
+
+in (K3,
+
+Its Compilation
+
+e2)
+(t fresh)
+
+~)})
+
+(S3 0S2(fVfI)
+
+S3(M2)),
+
+S3(t)).
+
+=
+
+let (KI,
+
+S1, A41, TI) = WK(K,7,
+
+el)
+
+(K,,
+
+S,, M,, T,) = WK(K,_I,
+
+S,-I
+
+o ~~~ OSl(T),
+
+e,) (2 < t < n)
+
+in (Km, S~O. .. OS2OS1,
+
+{tl=sn o ~~0S2(A41),.., lt=sn 0 ~~~Ost+l(M,),...,
+La%},
+{ll:snO...
+s2(71),l t:snOsOst+l(T t),,ln:Tn}):T n})
+WK(K,7,
+
+eld)
+
+= let (KI,
+
+SI, M1, TI) = WK(K,
+S2) =U(Kl{tl::U,
+
+(Kz,
+
+in (Kz,
+WK(K,
+
+S2 oSI,
+
+T, modify (el,l,ea))
+
+let (KI, SI, MI,71)
+(K2, s2, M,,
+
+S2(M1)
+
+T,case
+
+el)
+
+T2) = WK(Kl,
+
+Sl(r),
+
+eo of (ll=el,.
+
+SZ, M,, T,) = WK(K1_I,
+
+e2)
+
+in (Kn+l,
+Sn+I o ... 0S0,
+(case Sn+I 00
+SI(MO)
+
+14JK(K,
+
+~, let z=el
+
+S,_ I o ~~~o So(7),
+
+,tn::u],
+ti
+
++ to)ll
+
+of (,li=Sn+l
+
+in e2) = let (KI,
+(K\,
+
+< z < n})
+
+0 ~~~0S8+l(~Z)l
+
+SI, MI,
+uI)
+
+TI) = WK(K,7,
+
+= Ck(K1,
+
+SI(7),
+
+Fig.
+
+)),
+
+Type
+
+on Programmmg
+
+inference
+
+languages
+
+k))}
+fresh)
+
+%+l(to))
+
+el)
+TI)
+(SI(7)){z
+
+: ul},ez)
+
+Sz o S1, let x. SZ(171) = PoIY(SZ(M1
+
+11.
+
+tn
+
+(to,. .)tn
+
+t) (t fresh)
+
+: t),
+
+(K2, S2, Mc2, T2) = WK(K\,
+
+in (Kz,
+
+(1< i< n)
+
+e,)
+
+{(sn 0 .. S1(’TO), (11: tl,...,
+
+= let (KI, S1, MI, TI) = WJK(K, T,el)
+in (Kl{t::((l
+: Tl))},
+SI, ((1 = Ml)
+
+ACM Transactions
+
+fresh)
+
+(tl,tz
+S3(t2)).
+
+=
+
+u{(sn 0 ..sz+l(T,),
+
+T, (l=el))
+
+fresh)
+
+eo)
+
+(Kn+l, sn+l) =u(Kn{to::u,
+
+wK(K,
+
+(tl,tz
+
+Sz(tl)).
+
+hlj},
+{(ti, n), (tz, Sz(Tl))})
+0 5’z(~I)
+: S3(~2),~,S3(~2)),
+
+,l~=e~))
+
+let (Ko, SO, MO, TO) = WK(K,7,
+(K,,
+
+: tl}},{(tz,~l)})
+
+: S2(t2).1,
+
+=
+
+= WK(K,7,
+
+(K3, S3) = U(K2{h::f7,
+h::{l:
+in (K3, S3 0 SZ 0 S1, modify(S3
+WK(K,
+
+T,el)
+
+t2::{l
+
+: aI))
+
+in Mz,
+
+-m)
+
+algorithm.
+
+and Systems,
+
+Vol. 17, No 6, November
+
+1995
+
+868
+
+Atsushl Ohorl
+
+.
+
+This algorithm
+
+is sound andcomplete
+
+THEOREM
+
+If WK(K,
+
+3.5.1.
+
+inthe
+
+following
+
+T, e) = (K’, S, M, r)
+
+sense.
+then
+
+the following
+
+properties
+
+hold:
+
+(1)
+
+(K’, S) respects K and At””
+
+(2)
+
+erase(M)
+
+(3)
+
+if
+
+~let,.
+
+= e and A’e’+
+
+KO, SO(T)
+
+1- K’, S(T)
+
+t- K’, S(T)
+
+D e : ~,
+
+D M
+
+b e : I-. for
+
+: -r,
+
+some (Ko, So) and To such
+
+S.(7)
+
+that
+
+(Ko, So)
+
+(Ko, S’) respects K’, r. = S’(T),
+
+respects K then there is some S’ such that
+
+and
+
+= S’(S(7)).
+
+If WK(K,
+
+T, e) fails
+
+then
+
+K and A1et’@ F Ko, SO(T)
+The proof
+
+is deferred
+
+is no (Ko, So) and -rO such that
+
+there
+
+(Ko, So) respects
+
+D e : To.
+
+to the Appendix.
+
+We end this section by showing some examples. For the example
+given before, the algorithm
+function name and variant term payment
+following
+
+field selection
+computes the
+
+data:
+
+WK(O,
+
+O, Ax.x. Name) = ({t2::U,
+
+WK(O, O, (Pound=
+
+t~::{Name
+
+: tz~},
+
+[t3/tl],
+
+Ax:t3.x. Name, t3 + t2)
+
+: real)) },@) (( Pound= 100.O):t),
+
+100.0)) = ({t:: ((Pound
+
+t)
+
+where tl in the first example is a type variable introduced
+during the type inference
+process and is irrelevant
+to the final result. We indeed have the following
+t ypings.
+~let’”
+
+h {t2::~,t3::f~ame
+
+: ~2~},@
+
+D
+
+AZeim{t2::U,t 3::{iVame
+
+: t2}},0
+
+D Jx:t3.x.Name
+
+~L’t)”{t::((Pound
+
+: real))
+
+A1et’-{t::((F’ound
+
+: real)) },@
+
+},@
+
+Jx,x.
+
+Name
+
+(Pound=
+
+D
+
+: t~ +
+
+t2
+
+: t3 --+ t2
+
+100 O) : t
+
+D (( Pound= 100,0):t)
+
+: t
+
+When these terms are let bound, the type variables are abstracted.
+The following
+given
+are results of type inference for the expression containing name and payment
+in Section
+
+1.2.
+
+WK(@,
+
+@,let name=Ax
+
+x.Name
+
+(name
+
+{Name=
+
+name
+
+{Name=”
+
+in
+
+’’Joe”
+
+,0fFice=403},
+
+Hanako”
+
+,Age=21,
+
+Phone=
+
+7222}))
+
+=
+
+(0, S, let name.Vtl::U.Vt2::{lVame
+: tl].t2 - tI =
++ tl)
+Poly(Jxtz x.Name Vtl::U.Vtz::{Name
+: tl}.tz
+in ((name
+
+string
+
+{Name
+
+: string,
+
+O&ce
+
+: string})
+
+{Name=”
+
+(name
+
+string
+
+{Name
+
+: string,
+
+Age:
+
+int,
+
+: tnt})
+
+Hanako”
+
+{Name=”
+
+string
+
+WK(@,
+
+(0,
+
+Phone
+
+,Age=21,Phone=7222
+
+Joe”
+
+,0 fflce=403},
+
+}),
+
+x string))
+
+O,let
+
+S, let
+
+payment=
+
+(Pound=
+
+in
+
+payment
+
+of (Pound=Ax
+
+x, DoIlar=Ax.x
+
+* O 68),
+
+case
+
+payment
+
+of (Pound=Jx
+
+real_to_int(x
+
+* 150 O), Yen
+
+paymentVt::((Pound
+
+: real)).t
+
+Poly(((Pound=100
+in (case
+
+(payment
+(Pound=
+
+ACM Transactmns
+
+100.0)
+
+(case
+
+on Programmmg
+
+O)
+(Pound
+Ax:real
+
+t) Vt::((Pound
+: real,
+
+Dollar
+
+x, Dollar=Ax
+
+Languages
+
+=
+
+AX x)))
+
+=
+
+: real)).t)
+: real))
+
+real
+
+and Systems,
+
+of
+
+x * 0.68),
+Vol
+
+17, No 6, November
+
+1995
+
+=
+
+A Polymorphic
+case
+
+Record Calculus and Its Compilahon
+
+.
+
+(payment
+(Pound : real, Yen : int)) of
+(Pound= Jx:real,real-to_int(x
+* 150.0), Yen= Ax:int.x)))),
+
+869
+
+real
+
+x int))
+
+4. COMPILATION
+This
+
+section
+
+calculus
+
+an algorithm
+
+to compile
+
+the ML-style
+
+~~et’” into an implementation
+
+develops
+
+calculus
+
+~~et’[ 1, defined
+
+4.1 Implementation
+We define
+statements
+
+polymorphic
+
+record
+
+below.
+
+Calculus : Atet[l
+
+an implementation
+calculus with directly indexable vectors and switch
+on integer tags as an efficient abstract machine for polymorphic
+record
+
+calculi.
+As we shall see later,
+pilation
+
+algorithm
+
+values.
+
+So we introduce
+
+index
+
+defined
+
+over by Z) and treat
+
+values are always computed
+
+later,
+
+and there
+
+the following
+
+statically
+
+is no need to treat
+
+new syntactic
+
+by our com-
+
+them
+
+category
+
+as first-class
+
+of indexes
+
+(ranged
+
+them specially:
+1::=1]2
+
+where I stands for a given set of index variables and i for natural numbers.
+set of raw terms of ~~etj[ I (ranged over by C) is given by the syntax:
+C ::=
+
+z [ Cb IAz.C
+
+I C C ] let x=C
+
+I modify (C,Z,C)
+where {Cl,.
+retrieving
+
+tag of a variant
+
+the value of C; AI.C
+As in ~l’t’,
+
+C’
+
+C and applies
+
+operational
+
+the corresponding
+
+and C 1 is index
+semantics
+
+axioms of the form
+
+in one step, written
+
+C = EV[C1]1,13V[C1]1
+transitive
+
++
+
+EV [Cl]
+
+C Z
+
+Cl,
+
+-EV[C2]1,
+
+closure of %;
+
+-
+
+using
+
+evaluation
+
+We say that
+
+are EV[]l,
+
+and C’ = EVICZ]I.
+
+we write
+
+axioms
+
+con-
+
+C J C’ if C %
+
+C evalu-
+
+Cl, C2 such that
+
+We write
+
+%
+
+for the
+
+C’ and if there is no
+
+C“ such that C’ ~
+C“; and we write C J. if C ~ C’ for some C’. Figure
+mutual recursive definitions
+of the set of values, call-by-value
+evaluation
+and the set of context-rewriting
+
+C, to
+
+over by V), and call-by-value
+
+EV[C2,].
+
+if there
+
+function
+
+application.
+
+is defined
+
+over by JW[ ] ), the set of values (ranged
+
+context-rewriting
+
+reflexive
+
+I switch C of C,. . .,C I A1.C I C Z
+
+is index abstraction;
+
+call-by-value
+
+texts (ranged
+
+to
+
+I CIZI
+
+. .,Cn} is a vector representation
+of a record; C [11 is index expression
+the element of index value Z from vector C; switch C of Cl,. . .,C~ ana-
+
+lyzes the integer
+
+ates
+
+I (Z=C)
+
+in C I {C,...,C}
+
+The
+
+1.2 gives a
+contexts,
+
+of }~et’t 1.
+
+4.2 The Type System of At’t)[l
+To establish
+
+the correctness
+
+subsection,
+
+we define a type system for the implementation
+
+To represent
+
+labeled
+
+of the compilation
+
+records and labeled
+
+algorithm
+
+variants
+
+defined
+
+in the following
+
+calculus.
+
+in the implementation
+
+calculus,
+
+we assume a total order << on the set of labels and restrict that a record type
+{1, :7,,...
+,/n :rn} or a variant type (11 :~1,...,
+1~ .“ Tn) must satisfy the condition
+11 <...
+<< 1~. The usual choice for << is the lexicographical
+ordering on the string
+representations
+of labels,
+If r is one of the above forms, we define the index of
+to be i.
+
+a label 1%in
+
+T
+
+ith
+
+is 1, field.
+
+element
+
+ACM Transactions
+
+A record
+
+of the above record
+
+type is a vector
+
+An 1, variant
+
+term
+
+of the above variant
+
+type
+
+whose
+
+on Programming
+
+Languages and Systems, Vol. 17, No. 6, November 1995
+
+is a value tagged
+
+870
+
+Atsushi Ohori
+
+.
+
+V
+
+= Cb I h
+
+EV[]
+
+::=
+
+C I {V,
+
+[] IEV[]
+
+,V}
+
+I (Z=V)
+
+CIV
+
+I EV[]
+
+I let Z=EV[]
+
+EV[]
+
+I modify(EV[],Z,C)
+
+C’ (for some C’ such that
+
+I M
+
+I modlfy(V,Z,Etz[])
+
+EV[{VI,
+
+EV[modify({Vl,.
+
+,LL–l,V,,V,+l,.
+
+EV[switch
+
+I (Z= EJr[])
+
+} I EV[]E~l
+
+I switch
+
+Fig. I’i?.
+
+EV[]
+
+of C,
+
+,C
+
+Ev[[v/z]c]
+
+, V~}[il]
+
++
+
+Ev[v,]
+
+,II ~ } ,z, v)]
+
++
+
+EV[{vl,
+
+..,vL_],v,v,+l,
+
+,C~]
+
++
+
+Etz[Cz V]
+
+EV[(M.C’)
+
+Z]
+
+—
+
+EV[[T/I]C]
+
+z = V in C]
+
++
+
+EV[[V/z]C]
+
+Call-by-value
+
+i manipulated
+
+v] 4
+
+of CI,
+
+(z=V)
+
+EV[let
+
+integer
+
+,T’,~J’[],
+
+ZI MEV[]
+
+Ev[(k.c)
+
+with
+
+in C’ {v,
+
+C’ ~ C’).
+
+evaluation
+
+by a switch
+
+operational
+
+statement
+
+,vn}]
+
+if C’ J C’
+
+semantics
+
+of ~~et,[ I
+
+containing
+
+a vector
+
+of functions
+
+whose jth element corresponds to the function
+for 13 variant.
+For example, if a
+record type consists of an Age field of type ant and a Name field of type string,
+and thus the index of
+then it must be of the form {Age : ant, Name : string},
+Name
+
+in this record
+
+type
+
+is 2. A possible
+
+term
+
+of this type includes
+
+{21,” Joe”},
+
+which corresponds to {Name=” Joe”, Age=21}
+in ~~et’”. Similarly,
+with Pound variant of type real and Dollar variant of type real
+
+a variant type
+must be of the
+
+form
+
+of Pound
+
+in the type
+
+is 2.
+
+of functions
+
+for Dollar
+
+and
+
+(Dollar
+
+A switch
+Pound
+
+: real, Pound
+
+: real),
+
+and thus the index
+
+statement
+
+for this type
+
+consists
+
+in this order,
+
+and a Pound
+
+variant
+
+(2=100.0),
+
+which
+
+corresponds
+
+above type in Alet’o.
+To account for polymorphic
+
+of a vector
+
+of 100.0 of this type is represented
+
+to a (monomorphic)
+operations,
+
+term
+
+we introduce
+
+of (Pound=
+
+as
+
+100.0) of the
+
+a new form of types idz(l,
+
+r)
+
+for index values. When T is a record type or a variant type, this type denotes the
+index of 1 in 7-. We write Iidx(l, ~)1 for the index value denoted by idz(l, ~). For
+example,
+
+lidz(Name,
+
+{Age
+
+: string})l
+
+: int, Name
+
+= 2. When
+
+t,then idx(l, t)denotes possible index values depending
+Iidx(l, t)l is undefined.
+The set of types of the implementation
+
+where
+
+idx (1, rl ) 5
+
+rz denotes
+
+calculus
+
+functions
+
+that
+
+~ is a type variable
+
+on instantiation
+
+of t,and
+
+is given by the following
+
+syntax:
+
+denoted
+
+by
+
+idx(l, T1) and yield a value of type TZ. Since index values are not first-class
+jects, it is not necessary to included index types idx (1, r) as separate types.
+
+take
+
+an index
+
+obThe
+
+set of kinds and the kinding rules are the same as those of )Let’”.
+The type system of this calculus is defined as a proof system
+forms of judgments:
+
+ACM TransactIons
+
+K, L, T D C : T
+
+typing
+
+L + X : idx(l,
+
+index judgment
+
+on Programmmg
+
+Languages
+
+r)
+
+and Systems,
+
+value
+
+for the following
+
+judgment
+
+Vol. 17, No. 6, November
+
+1995
+
+A Polymorphic
+where K is a kind
+
+assignment
+
+L is an index assignment,
+types of the form
+
+idz(l,
+
+and if for any type
+variant
+
+kind
+
+and T a type assignment
+
+which is a mapping
+
+containing
+
+1 field
+
+calculi.
+to index
+
+under K if FTV(~)
+
+T’)
+
+appearing
+
+under
+
+K.
+
+A type Vtl ::kl
+
+K{tl
+
+under
+
+G dorn(K)
+
+in ~, ~’ has a record
+
+::kl ~. . tn::kn}.
+
+. . . tn::kn.r
+
+C is well formed
+
+K. A type assignment
+
+slightly
+
+easier.
+
+We write
+
+in this poof system.
+
+A1eflIl k K, L, T
+
+It is easily verified
+
+K if
+
+under
+
+under
+
+with type
+
+rule for GEN than
+reduction
+property
+
+: u if K, L, T
+
+D C
+
+that
+
+or
+
+formed
+
+T is well formed
+
+inference of ~~e~~[
+1, we adopt a more-general
+and more-natural
+the one we used for ~ie~a. This makes the proof of the subject
+below
+
+kind
+
+is well
+
+K if each type in 7 is well formed under K.
+The set of typing rules is given in Figure 13. Since we are not concerned
+
+derived
+
+871
+
+as in the previous
+
+idz(l,
+
+under
+
+each type in L is well formed
+
+.
+
+from a set of index variables
+
+7). A type ~ is well formed
+
+of the form
+
+K if r is well formed
+
+under
+
+Record Calculus and Its Compilation
+
+D C’ : u is
+
+if Atet’[ 1 1- K, L, ‘T D C : a
+
+then o is well formed under K.
+For this type system, we show the subject
+
+reduction
+
+property,
+
+useful later in establishing
+
+algorithm
+
+preserves the operational
+
+behavior
+~~et’,
+
+that our compilation
+
+of Atets. Since our usage of ~~etIII is as an abstract
+
+we do not need a stronger
+
+type soundness
+
+of Jlet’o with
+
+property
+
+respect
+
+term of ~~et[ 1 will follow from the correctness
+The reduction
+axioms for J letj[ 1 are given
+one step,
+
+to (72 in
+
+the reduction
+
+written
+
+axioms
+
+Cl +
+
+defined as the reflexive transitive
+are useful in proving the subject
+LEMMA
+
+PROOF.
+
+Suppose
+Suppose
+
+proof
+
+is by
+
+: al}
+
+DC1
+
+induction
+
+on
+
+typing
+
+D y : r2 is a VAR axiom.
+
+: al}
+
+Other
+
+the
+
+K, Z, T{x
+Let
+
+Cl by applying
+relation
+
+Cz is
+
+substitution
+
+derivation
+
+cases are similar
+
+. . . tn::kn.rl.
+
+ml = Vtl::kl
+
+one of
+
+Cl -
+
+lemmas
+
+T D C2 :
+
+: uz and A1et’[l E K,L,
+
+axiom.
+
+y.
+
+later.
+
+(71 reduces
+
+: cr2.
+
+case is variable
+
+x =
+
+from
+
+closure of +. The following
+reduction theorem.
+
+t- K, .C, ‘T D [C2/Z]C1
+
+The
+
+interesting
+
+we shall establish
+We say that
+
+The reduction
+
+The
+
+of the compiled
+
+of compilation
+14.
+
+be
+
+to implement
+
+in Figure
+
+of Cl.
+
+If ~~et[l F K, C,T{Z
+
+4.2.1.
+
+al then A1et[l
+
+will
+
+of At’t[ 1 itself.
+
+semantics
+
+C2, if C2 is obtained
+
+to some subterm
+
+machine
+
+of type soundness
+
+to the operational
+
+which
+
+of Cl.
+
+to Lemma
+
+The
+
+case for
+
+K l-- Wl::kl
+
+Then
+
+The
+
+only
+
+2.2.4.
+x # y is trivial.
+
+. .t~::kn.rl
+
+> 72
+
+and therefore there must be some S such that dom(S) = {tl,....tn},(K, S) respects
+and S(~l) = T2. If n = O, i.e ., al is a monotype,
+then al = 72,
+K{tl::kl
+. . .tn::kn}
+ancl therefore
+~~’t~[l t- K, ~, T D C2 : T2. Otherwise K, C,?_ D C2 : al must be
+} K{tl::kl
+. . .tn::kn},
+~,~ D (72 : TI such
+derived by GEN, and therefore AW]
+that
+
+{tl,...,tn} does not appear
+D (72 : 7-2.
+❑
+
+in T or L.
+
+By Lemma
+
+2.2.3 for Jlef)”, we have
+
+~zet>[l t- K,,C, T
+
+PROOF.
+show
+shown
+
+the
+
+This
+
+is provde
+
+case for
+
+rule
+
+similarly.
+
+All
+
+the
+
+by
+
+INDEX.
+other
+
+induction
+The
+
+on
+
+the
+
+cases for
+
+cases follow
+
+typing
+
+IAPP,
+
+directly
+
+derivation
+
+of C.
+
+MODIFY,
+
+and
+
+from
+
+induction
+
+the
+
+VARIANT
+
+We
+
+only
+
+can
+
+be
+
+hypothesis.
+
+Suppose
+K, L{ I : ictz(l, 71)}, T D Cl [Zl J : r is derived by rule INDEX from
+: 7-2, from K t- r2 :: {1’ : t-}, and from Z{l
+: idz(l, ~l)} k
+K,Z{I
+: Zdz(l, ~l)},7_ bcl
+: 72. There
+II : idx(l’, rz ). By the induction
+hypothesis, A ~e~,[l F K, L, 7 DIz/l]C1
+ACM Transactions
+
+on Programmmg
+
+Languages
+
+and Systems,
+
+Vol. 17, No 6, November
+
+1995
+
+872
+
+0
+
+Atsushl Ohorl
+
+IVAR
+
+~{~
+
+lCONST1
+
+Ltz
+
+: !dz(tt,{tl:~l,
+
+ICONST2 Ztz
+
+: !dz(~~,(tI
+
+VAR
+CONST
+
+APP
+
+ABS
+
+IABS
+
+IAPP
+
+: ZdZ(~, T)}
+
+* I
+
+: ld$(~,~)
+... ~n:Tn})
+
+l~2<n
+
+‘Tn))
+
+I<z<n
+
+:Tl,...,ln
+
+if T{z
+
+:T
+
+K,C,
+
+if ‘T and L are well formed
+
+T
+
+K,L,
+
+P Cb : b
+T
+
+DCI
+
+TI+T2
+
+K, L, TDC2
+
+T
+
+C2 : T2
+
+K,L,
+
+DCI
+
+K) L,7{Z:TI}
+
+DCI
+
+K,L,
+
+: TI
+
+T
+
+D ~x.cI
+
+KJ{I
+
+zdz(~,TI)},7
+
+K,Z,7
+
+D MCI
+
+K, L,’l_
+
+DC
+
+idZ(~,
+
+K,Z,7
+
+D Cl
+
+Tl)
+
+SWITCH
+
+GEN
+
+LET
+
+Cl
+
+(l<t
+
+:Tl
+
+2dLZ(~,TI)
+
+K, L,’Tb
+
+Cl
+
+:T1
+
+{1:72}
+bCl
+
+bc
+
+bc
+
+:
+
+(~I:TI)
+
+K,L,
+
+t~.:k~})L,
+T
+
+bc
+
+K, L, Z_b
+
+: u
+T
+
+K,~,
+
+Dswitch
+DC
+
+K,~,
+
+Typing
+
+T
+
+modify ({C1,.
+
+(switch)
+
+switch
+
+DC2
+
+TransactIons
+
+The reduction
+
+on Programmmg
+
+<n)
+
+U7)(l<i
+
+<n)
+
+:T
+
+c, ==+ [c,/fc]c,
+=+-c,
+{Cl,.
+
+,C,-l,
+
+C, C,+l,.
+
+,Cn}(l
+
+C, C(I
+
+< z < n)
+
+.,C~
+
+(M.c)
+
+z ==+ [T/I]c
+in C2 =+
+
+=+
+
+calculus
+
+~ z < n)
+
+[CI/x]C2
+
+rules for the implementation
+
+Languages
+
+A1et,I1.
+
+(1 SZ<n)
+
+of CI,.
+
+let X=CI
+
+14.
+
++T(l<i
+: T
+
+iftl@FTV(L
+
+(kc,)
+
+(iapp)
+
+Fig.
+
+TbC~:T,
+
+for the implementation
+
+(z=C)
+
+(let)
+
+2dZ(l, T2)
+
+rules
+
+,Cn}, Z,C) =+
+
+C2 :T.2
+
+in C2 : T
+
+{C,,, cn}[tl
+
+(index)
+
+K,,C,7b
+
+TI)
+
+TI
+
+C of Cl,,C~
+
+T{z’u}
+
+b let x=C1
+
+zdz(~,
+
+LI-T:
+
+: ~tl:’k~..t~::km.-r
+Cl
+
+K,L,
+
+~k~:
+
+T1)
+
+: T2
+
+,~TZ:TTZ)
+
+Z_
+
+ZdZ(l,
+
+b modify (C1,Z,C2)
+
+D (Z=C)
+
+K,.C, T
+K{tl::kl
+
+T
+
+LET:
+: T2
+
+KET2::((1:TI))
+
+TI
+
+K,L,7
+K,L,7
+
+[T]
+
+~kTI::{~:T2]
+
+K)L,
+K,.C,’T
+
+<n)
+TI, .,~n,Tn}
+
+KFT1::
+
+(b)
+
+ACM
+
+T2
+~+~
+
+: {~ I:
+
+K,.C,7
+
+Fig. 13.
+
+(modify)
+
+TI
+
+: T2
++
+
++-’72
+
+,Cn}
+
+D{CI,
+
+K, L, Z_b
+
+VARIANT
+
+under K
+
+K, L, TbCT:rz
+
+INDEX
+
+MODIFY
+
+K and K E CT~ 7
+
+T2
+
+: idx(l,Tl)
+
+:
+
+under
+
+: TZ
+-
+
+K,L,~bCZ:T,
+RECORD
+
+: u} and L are well formed
+
+K,~,7{z:a}Dz
+
+and Systems.
+
+Vol
+
+calculus
+
+17, No
+
+At’t, I I,
+
+6, November
+
+1995
+
+A Polymorphic
+are two cases to be considered.
+1 =
+
+1’, and therefore
+
+Record Calculus and Its Compilation
+
+First,
+
+suppose 11 = I.
+
+Then
+
+.
+
+873
+
+we have T1 = r2 and
+
+and L F Z : idx(l, T2). By the typing
+[~])
+: ~.
+rule ~~et’[l + K, T D ([z/l]C’1)
+[21 : r, i.e., A ~et,[l F K, T D [~/~](Cl
+Sec&d,
+suppose II # 1. Then either Iidz(l’, ~z)l is defined and II = Iidz(l’, ~z)l
+or 11 ~ dom(.L’).
+In either case, L + Xl : idx(l’, 72) and by the typing rule,
+A1e~Jl b K,7_
+
+4.2.3.
+
+PC2
+
+PROOF.
+
+[III
+
+D ([Z/I]C’l)
+
+THEOREM
+K, T,.Z
+
+K F 72:: ~1 : r}
+
+: T. But
+
+[3/1]((71
+
+If J~etJl & K, T, ,C D Cl
+
+[11])
+
+= ([~/~]Cl)
+
+: a and Cl
+
++
+
+[Zl]
+
+❑
+
+.
+
+C2 then )~’t[l
+
+t-
+
+: rs.
+
+It is sufficient
+
+to Theorem
+
+2.2.5
+
+4.3 Compilation
+We develop
+
+to show
+
+using
+
+the
+
+the
+
+theorem
+
+two
+
+substitution
+
+above
+
+for
+
+monotypes.
+
+The
+
+lemmas.
+
+proof
+
+is similar
+
+•l
+
+Algorithm
+
+a compilation
+
+for AZe~- using type information
+
+algorithm
+
+type inference.
+The type inference algorithm
+has already
+term into an explicitly
+typed term of AZet~a,which contains
+necessary for compilation.
+
+So we present the compilation
+
+to compile A~eL- terms into Atet[l terms.
+As explained in the introduction,
+our strategy
+
+obtained
+
+by
+
+converted a given )l’LO
+all the type information
+algorithm
+
+for compiling
+
+as an algorithm
+
+polymorphic
+
+func-
+
+tions containing
+polymorphic
+record operations
+is to insert appropriate
+index abstractions.
+Under this strategy, a polymorphic
+function oft ype a in ~tet~- is compiled
+into
+
+a term
+
+having
+
+the type that
+
+is obtained
+
+from
+
+CTby inserting
+
+necessary
+
+index
+
+abstractions
+indicated
+by the kinded type quantifiers
+of a. To establish the relationship formally
+between the type of a source code and the type of the compiled
+code, we first define the following
+The set of index types contained
+as the following
+
+auxiliary
+notions.
+in t of kind k, denoted
+
+IdxSet(t::U)
+
+This definition
+
+=
+
+@
+
+IdzSet(t::{F})
+
+=
+
+{idx(l,
+
+t)ll
+
+c dom(F)}
+
+IdxSet(t::((F)))
+
+=
+
+{idx(l,
+
+t)ll
+
+g dom(F)}
+
+is extended
+
+ldxSet(Vtl::kl
+
+to polytypes
+
+and kind assignments
+
+. . .tn::kn.~)
+
+= IdxSet(tl::kl)
+
+IdzSet(K)
+
+=
+
+idz(ll,
+
+t;), . . . . idz(lm,
+
+t~)
+
+is the set of index
+
+t,)precedes idz(l’,
+
+ordered
+
+1<<1’.
+
+(~)* = 7- for any monotype
+
+In particular,
+
+Vt2::~a
+
+: bool, b : int].Vt3::{a
+
+is extended
+
+Transactions
+
+G K}
+of ~~et‘i 1 is defined
+
+as
+
+types
+
+::kl)
+
+in IdxSet(tl
+
+U
+
+t~) iff i < j or i = j and
+
+T. The following
+
+: t2}. idx(a, t2) ~
+
+idx(b, t2) ~
+
+to type assignments
+
+as follows:
+
+= {X : (T(x))”]z
+
+e dom(7)}
+
+(~)”
+ACM
+
+as follows:
+
+is an example.
+
+: t2}.t2+ t3)*=
+
+: bool, b : znt~.Vt3::{a
+
+This definition
+
+type (o)’
+
+as: idx(l,
+
+. . . U ldxSet(tn::kn)
+
+(Vtz::{a
+
+:k), is defined
+
+U . . . U IdxSet(tn::kn)
+
+U{ IdxSet(t::k)/(t::k)
+
+For a given type o of AZ’i’s, the corresponding
+
+such that
+
+by IdxSet(t:
+
+set.
+
+on Programming
+
+Languages
+
+and Systems,
+
+Vol
+
+idx(a, t3)+ t2-i t3
+
+17, No 6, November
+
+1995.
+
+874
+
+Atsushl
+
+.
+
+For a kind
+
+Ohorl
+
+assignment
+
+K,
+
+define
+
+the index
+
+~K = {I : zdz(l, t)lidz(l,
+t) G IdzSet(K),
+The compilation
+algorithm
+is given
+~K, (T)* and ~
+has the property
+
+in the algorithm
+
+algorithm.
+The compilation
+
+preserves
+
+4.3.1.
+
+C such that
+
+This
+
+expressions
+
+F K, ~
+
+(T)’
+
+is provded
+
+cases for variables,
+easilily
+
+from the corresponding
+
+(xl-,.
+
+I-n): Suppose A~ct”
+(T)*(z)
+
+mentioned
+
+able t then
+
+: ~, then
+
+on the
+
+induction
+E
+
+C(,CK,
+
+by K as
+
+C that
+
+takes
+
+C is a deterministic
+theorem.
+
+(~)”,
+
+of M.
+
+structure
+
+M)
+
+succeeds
+
+with
+
+K,T
+
+Here we show the
+
+Cases for variants
+
+to that of field selection.
+
+and modify
+
+All the other cases follow
+
+hypotheses.
+
+D (z -rl , . .Tn)
+
+: T. Let S = [T1/tl,
+
+. . . ,Tn/tn].
+
+K F S(t,) :: S(k,)
+. ~Vtn::kn. zdz(ll, tj)
+
+= Vtl::kl
+idz(l~,
+
+and therefore
+
+and generalization.
+
+. .Vtn::kn.TO,
+
+tj)) ...
+that {idz(ll,
+~~et,[l l-- K,CK, (7)”
+
+those
+
+determined
+
+: (a)’.
+
+by induction
+
+field selection,
+
+Vtl::kl
+
+P M
+
+DC’
+
+can be shown similar
+
+Then T(x) =
+nition of (’T)’,
+
+is unique,
+
+types as shown in the following
+
+~~ A1ett- K,LK,
+
+Ate’[l
+
+PROOF.
+
+LK
+
+and computes a term of the implementation
+CalCuluS. Since ~K
+that there is at most one (~, idz(~, t)) E ~K for any pair (~, t),
+
+each Z mentioned
+
+THEOREM
+
+assignment
+
+each 1 fresh}.
+in Figure 15 as an algorithm
+
+t’~)}
+
+= Idz
+
+D Z : idz(ll,
+
+in the algorithm.
+
+and r = S(rO). By the defi+ . . . idz(l~, t~) ~ To such
+. . .t’tn::kn.To).
+By the rule VAR,
+
+Set(Ytl::kl
+
+S(t~))
+
++
+
+. . idz(ln,
+
+For each idz(l,
+
+S(t~))
+
+S(t~)),
+
+% S(~o).
+
+Let T., be
+
+if S(t~) is a type
+
+vari-
+
+and therefore by the property
+of ~K, there is It such
+that (11 : idz(l, S(t~))) c ~K, and ~, = 1,. If S(t~) is not a type variable then
+1.Therefore in either case ~K t- T, : idz(l, S’(t;)).
+Therefore the
+Z, = Iidz(l,, s(t~))
+: T.
+algorithm
+succeeds with (x Z1 . . .Zn) and )~et’[l \ K,ZK, (T)* D (x ~1 ~ ~ ~m)
+Ml
+
+t < dom(K),
+
+: rl.l:
+
+Suppose
+
+A ‘et,- F K,T
+
+D Ml
+
+: Tl,l: T2. Then
+
+A let>. k K,r
+
+D MI
+
+: ~1
+
+and K t- ~1 :: {1 : ~z}. By the induction
+hypothesis,
+c(~K, (T)’, Ml) = Cl such
+that Atet[l + K, ~K, (T)’
+D Cl : -rl. Let Z be the one mentioned in the algorithm.
+Since K + t:: {1 : ~z}, K(t) = {F}
+If ~1 is a type variable t,then t G dom(K).
+such that F contains 1: r?. Then by the property of ~K, there is some I such that
+(1 : idz(l, t)) G ~K and Z = 1. If ~1 is not a type variable then Iidz(l, 7-1)1 = z
+for some integer z and Z = Z. Therefore in either case ~K 1- Z : idz(l, ~l). Then
+C(LK,
+
+(T)*,
+
+Ml
+
+Poly(Al:a):
+such that
+
+: ~l.l)
+
+succeeds with
+
+Suppose A ~e~’m\ K,’T
+
+A1’ts
+
++ K’,’T
+
+D
+
+M
+
+Cl [Z]
+
+and ~~et[l 1- K, ~K, (T)’
+
+DPoly(M:a)
+
+: ~, Cls(K’,
+
+T,r)
+
+b Cl [2]
+
+: a. Then a = ‘dtl::kl
+= (K, W1::kl
+
+: ~z.
+
+. . .~tn::kn.T
+
+. . .Wm::kn.~).
+
+Let
+
+‘dtl::kl . . .Wn::kn.idz(ll,
+t~) *
+... *
+idz(lm, t~) ~ T1 = (o)*.
+Then ~Kl =
+LK{I1
+: idz(ll, tj), . . ..Im : idz(lm, t~)}
+(11, ,.. , lm fresh). By the induction
+hypothesis, C(,CK,, (T’)*, M) = C such that AZeLIl ~ K’, LKJ, (T)*
+D C : T. Then
+C(.LK, (T)*, Poly(M:o))
+succeeds with ,U1 . ~. Mm.C.
+By applying
+the rule IABS
+to A1”II
+F K’, ~K,, (~)’
+D C : ~ repeatedly,
+we have ~~e’[l k K’, LK, T D
+: idx(ll, t~) * . idx(lm, t~) s r. since ~K is well formed under K,
+MI . . . Mm.C
+(T)*
+D C :
+U (T)*)
+(1 < z ~ n). Therefore we have A let,[] + K“JK,
+t, @ FTV(,CK
+(’v’tl::kl
+
+. . ‘vln::kn.~)”,
+
+Combining
+ACM
+
+TransactIons
+
+this result
+
+as desired.
+
+❑
+
+wit h Theorem
+
+on Programmmg
+
+Languages
+
+3.5.1, we have the following.
+and Systems,
+
+Vol
+
+17, No 6, November
+
+1995
+
+A Polymorphic
+
+C(L,7,
+
+(Z 7_I
+
+,Tn))
+
+Record Calculus and Its Compilation
+
+(VtI::kI
+tn::kn.uiz(ll,t~)
+s = [T1/tl, . ,Tn/tn]
+
+=let
+
+‘z =
+
+{
+
+in(z~l
+
+=+-.dx(lm,t~)
+
+z
+
+lf /tdz(l,
+
+S(t:))[ = i
+
+I
+
+if Itdz(l,
+
+S(tj))l
+
+is undefined
+
+.
+
+875
+
++- T) = T(z)
+
+and (1 : zdz(l, S(t~)))
+
+c L
+
+..Zm)
+
+C(L,7, C6)= Cb
+/b : 7-.M) = kLc(,c,T{z
+
+c(L,7,
+
+C(,C, Z_, Ml
+
+M2)
+
+: T}, hf)
+
+= C(C, T, Ml)
+
+C(,C, T, Mz)
+
+{11 = Ml, ~. . ,ln = A&})
+
+C(L,7,
+
+= {C(-C, T, MI),...,
+
+: ~.1) = let C = C(L, T, M)
+
+C(.C, T,M
+
+2 if
+
+z=
+
+and
+
+lz’dz(l,
+
+T)]
+
+if Iidr(l,
+
+I
+
+{
+
+C(L, T, Mn)}
+
+=
+
+z
+
+T)l is undefined
+
+and (1 : ido(l, T)) c L
+
+in C [ZJ
+C(L,7,
+
+modify (M1:~,l,M2))
+
+= let Cl
+
+= C(L, T, M1))
+
+C2 = C(L, Z_, M2),
+
+and
+
+z if IMz(l,T)I = z
+I if \zdz(l, T)l is undefined
+
+T=
+
+{
+in modify (Cl ,Z, CZ )
+C(L, ‘T, ((l=
+
+IM):T))
+
+= let C = C(L, T, M)
+T=
+{
+
+and (1 : idz(l, ~)) c L
+
+and
+
+i
+
+if /idZ(l)T)l
+
+I
+
+if Itdz(l, T) I is undefined and (1 : idz(l, -r)) c Z
+
+= i
+
+in (T=C)
+C(C, T,case
+switch
+
+M of (t~=kf~,.
+
+C(L, ‘T, M)
+
+C(Z, T, Poly(M1
+let Vtl::kl
+
+. .,ln=Mn))
+
+of C(L, T, Ml),.
+
+: Vtl::kl
+.Vtn::kn.
+
+=
+. ., C(.C, T, M~j
+
+. . . Vtn::kn.T1))
+idz(ll,
+
+t~) *
+
+(Vt,::k,
+.Vtn::kn.’n)’
+CI = C(L{II : kh(ll, t~),
+
+=
+idz(lm,
+
+t~)
+
+*
+
+~1
+
+=
+
+in All
+
+. . . M~.C1
+
+C(L, T,let
+
+z:a=kfl
+
+,In
+
+: idz(l~,
+
+t~)},
+
+T, Ml)
+
+in Mz) = let Cl =C(,C, T, MI)
+C2 = C(C, T{Z : (a)*},
+in C2
+in let Z=CI
+
+Fig. 15.
+
+ACM TransactIons
+
+on Programming
+
+Compilation
+
+Languages
+
+(11, ~. . ,1~
+
+fresh)
+
+Mz)
+
+algorithm.
+
+and Systems,
+
+Vol. 17, No. 6, November
+
+1995
+
+876
+
+.
+
+Atsushi Ohori
+
+COROLLARY
+and
+
+4.3.2.
+
+(S(T))*,
+
+C(LK/,
+
+‘T, e) = (K’, S, M, O) then }~ei’” b K’, S(T)
+succeeds with C such that ~~et’ll k K’, ~Kl, (S(T))*
+
+ljW)C(lC,
+
+M)
+
+De : a
+D C
+
+:
+
+(a)”.
+
+The above result shows that the compilation
+algorithm
+maps a term of type a to
+a term of type (a)”. Since (~)* = ~, the compilation
+preserves all the monotypes.
+Vacuous Type Variables from A ~et,. Typing
+
+4,4 Eliminating
+The
+
+above algorithm
+
+translates
+
+a kinded
+
+~~ei[ 1. For this t o serve as a compilation
+to be taken
+
+care of.
+
+This
+
+is related
+
+et al. 1991]. As shown in Ohori
+with
+
+respect to Core XML,
+
+of A ‘et’
+
+typing
+
+into
+
+a kinded
+
+typing
+
+of
+
+algorit hm for A1’Ld, there is one subtle point
+to the problem
+
+[1989], Damas-Milner
+
+of coherence
+
+[Breazu-Tannen
+
+system of ML is not coherent
+
+and the same is true for the relationship
+
+between
+
+Atet’m
+
+and Alet’-.
+The
+
+(See also Harper and Mitchell
+[1993] for a related discussion.)
+source of the failure of coherence is free type variables used in a typing
+
+derivation
+
+that
+
+typing.
+
+Those
+
+algorithm
+
+do not
+type
+
+developed
+
+(Ax.cb) (~x.(x.1)
+in ~~et”,
+
+: tnt}},
+
+to the following
+
+or the type
+
+subsection.
+
++ 1). The type inference
+
+algorithm
+
+produces
+
+in the result
+
+the compilation
+
+To see this, consider
+
+@ D (~X.C’) (~x.(x.1)
+typing
+
+assignment
+
+in applying
+
+the raw term
+
+the following
+
+typing
+
++ 1) : b
+
+in ALet’m:
+
+: znt]}, @D (~X:~ ~ 2TkCb) (~X:~.(X.l) + 1) : b
+
+{t::{i
+The kinded
+
+in the type
+
+also cause a problem
+
+in the previous
+
+{t::{i
+corresponding
+
+appear
+
+variables
+
+type variable
+
+t is introduced
+
+to typecheck
+
+polymorphic
+
+field selection
+
+x.1,
+
+but it does not appear in the type assignment or the result type and therefore will
+never be further instantiated.
+As a consequence, the given closed term is translated
+to an open term in A1eLmcontaining
+which will not be determined.
+
+a free index variable
+
+denoting
+
+the position
+
+of 1
+
+Our solution to this problem is to refine the Milner-style
+type inference algorithm
+given in Section 3 to eliminate
+these “redundant”
+or vacuous type variables.
+We
+and t @
+say that a type variable t in ~, ~ D e : T is vacuous if t ~ dom(K)
+Elm’’’(x,
+
+T) u .EFTV(K,
+
+We assume that
+portant.
+
+the typing
+canonical
+
+Let
+
+there
+
+D e : 7- be a typing,
+
+~, T
+
+such that
+instance
+
+We can eliminate
+
+7).
+is a predefine
+
+t ~ FTV(K(t)).
+
+base type b.. The choice of b. is unimof
+and let t be a vacuous type variable
+Then K is written
+as K’{t::k}.Define the
+
+ri of t in K as follows:
+
+t from the typing
+
+by applying
+
+kinded
+
+substitution
+
+(K’, [Tt /t]
+).If
+
+the set of vacuous type variables has no mutual cyclic dependency in K, then it
+has a sequence tl,...,t~ such that t~@ FTV(K(tj))
+if 1 s i s j s n. Then by
+repeating the above process for tl, . . . , tn, we obtain a sequence of kinded substitution (K,, [Tt, /tZ]). We define a canonical instantiation
+for K, T D e : T as a kinded
+ACM
+
+Transactions
+
+on Programmmg
+
+Languages
+
+and Systems,
+
+Vol. 17, No
+
+6, November
+
+1995
+
+A Polymorphic
+
+substitution
+
+(Kn, [rn/tn]
+
+Record Calculus and Its Compilation
+
+0 . . . 0 [7Z/tl] ). From
+
+this definition,
+
+.
+
+877
+
+the following
+
+results
+
+can be easily proved.
+LEMMA
+
+If (Ko, SO) is a canonical
+
+4.4.1.
+
+instantiation
+
+of a typing
+
+K, T P e : r,
+
+then (Ko, So) respects K.
+By Lemma
+
+2.2.3, we have the following.
+
+COROLLARY
+
+ation
+
+If ~Let’” h K, ‘T D e : r and (Ko, So) is a canonical
+
+4.4.2.
+
+of K,T
+
+D e : T then
+
+A ‘et~- I- KO, L? pe
+
+instanti-
+
+: ~.
+
+This shows that
+
+if the set of vacuous type variables
+
+has no cyclic dependency
+
+we can eliminate
+
+them
+
+property
+
+without
+
+affecting
+
+the typing
+
+of the term.
+
+then
+
+We call
+
+T the canonical instance of ~let~- 1- K, T D e : r.
+Ko,7_ De:
+We identify a program in A1etI- as a closed typing of the form:
+
+We refine the type inference
+
+algorithm
+
+defined
+
+in the previous
+
+section
+
+so that just
+
+before the type abstraction
+at the top level it takes a canonical instance of the
+inferred typing if one exists; otherwise it reports type error. Since a program must
+have a closed typing,
+with
+
+cyclic
+
+From
+
+a program
+
+produces
+
+and therefore
+
+dependency,
+
+its derivation
+
+of the above form
+
+the following
+
+closed typing
+
+of Atets
+
+serves as a compilation
+
+algorithm
+
+the refined
+
+algorithm
+
+of separate compilation.
+algorithm
+given in the previous
+
+subsection
+
+typed
+
+Let
+
+succeeds
+
+us show examples
+
+inference
+
+of compilation.
+
+From
+
+the following
+
+program
+
+process produces
+
+A~et” t- 0,0
+
+For this program,
+
+: Wl::U.W2::{Name
+
+:
+
+W1::U.’dtz::~Name
+
+: tl~.t2
+
+has the following
+
+A1eiJl t- 0,0,0
+
+a ~tet’” term
+
+Poly(Ax:t2.x,Name
+
+the compilation
+
+algorithm
+
+WK(O,
+
+0, e) succeeds
+
+1- 0,0, @ D C : (o)*.
+
+D
+
+C(O, 0, Poly(Ax:tz.x,Name
+which
+
+then
+
+E 0, (?JD e : a, ALetI” R 0, @ D M
+
+C such that Alet’[l
+
+with
+
+4.3.2 becomes the following.
+
+Aletm program,
+
+with (0, S, M, a) for some S, M, a such that )Lei’
+a, and C(O, 0, Al)
+
+type
+
+of programs.
+
+inference
+
+for ~Zet~’. Corollary
+
+If e is a well
+
+4.4.3.
+
+a kind assignment
+
+of A1et~-
+
+We regard these closed typings as units
+With this refinement,
+the compilation
+
+COROLLARY
+
+does not contain
+
+this process does not change the typability
+
+Jx.x.Na me, the type
+
+: tl}.tz
+
++ tl)
+
++ tl
+
+produces
+
+the following
+
+: Wl::U.’dt2::{Name
+
+: tl}.t2
+
+--+ tl))
+
+: Wl::U.W2::{Name
+
+: tl}.idz(Name,
+
+result
+= AI. Ax.xII]
+
+typing:
+
+D AI. Ax.x III
+
+tz) *
+
+tz+ tI
+
+A program
+let name=
+
+is converted
+
+Ax.x.Name
+
+{Name= ’’Joe” ,0 fflce=403},
+name {Name=”
+Hanako” ,Age=21,
+
+in (name
+
+to the following
+
+ACM Transactions
+
+program
+
+on Programmmg
+
+Phone= 7222})
+
+in Atet~- as seen in the previous
+Languages
+
+and Systems,
+
+section:
+
+Vol. 17, No. 6, November
+
+1995,
+
+:
+
+878
+
+E z
+
+Ohorl
+
+Atsush!
+
+.
+
+let name Vtl::U.Vt2::{lVane
+
+= Poly(Axtz
+in ((name
+
+strtng
+
+{Name=’’
+(name
+
+{Nume
+
+{Name
+Hanako”
+
+and the compilation
+
+tl
++ t,)
+
+: string,
+
+Age,
+
+znt,
+
+Phone
+
+: int})
+
+,Age=21,Phone=7222})
+
+algorithm
+
+let name=~l
+
+=
+
++
+
+Joe’’, OfFlce=4O3},
+
+string
+
+{Name=”
+
+C(0, O, E)
+
+: tl].tz
+
+Vtl::U.Vt2::{Name
+: tl].t2
+: string,
+Office : string})
+
+x.Name
+
+produces
+
+Ax xIII
+
+the following
+
+result
+
+in (name
+
+1 {“Joe”
+
+,403},
+
+name
+
+2 {21,”
+
+Hanako”
+
+,7222})
+
+which has the expected typing and evaluates to (“ Joe” ,“ Hanako” ).
+The next is an example of a program involving polymorphic
+variant
+type variable elimination.
+The following program of J1eLIs
+let point
+
+=
+
+(Cartesian={
+
+case point
+
+is converted
+
+X=2
+
+of (Cartesian=
+
+0,Y=3
+
+program
+
+F = let point.Vt::((Cartesian
+
+: {X
+
+= Poly(((Cartesian=
+(Cartesian
+
+(Cartesian=
+Polar=Ap
+
+Ac {X
+{R:
+
+= let point=
+in switch
+
+Note that
+expression
+
+: real, Y : ~eul})).t
+
+: {X
+
+O}) t)
+
+: real,
+
+Y : real}
+
+algorithm
+A1.(1={2
+(point
+
+Y : real},
+
+Polar
+
+sqroot(square(c,
+
+produces
+
+: {1? : be}))
+
+of
+
+X)+square(c.Y)),
+
+the following
+
+code:
+
+0,3 O})
+
+1) of (Ac.sqroot(square(
+
+elimination
+
+and the unused
+
+wit h the default
+
+4.5 Correctness
+
+Polar= Jp. R)
+
+: {X : real, Y : real} )).t)
+
+: real,
+
+vacuous type variable
+
+of the case statement,
+
++ square(c.Y)),
+
+bo}.x.R)
+
+From this, the compilation
+C(O, O,F)
+
+c.X)
+
+in A~efs.
+
+{X=2.0,Y=3
+
+Vt::((Ca7-tesian
+in case (point
+
+in
+
+O})
+
+Ac.sqroot(square(
+
+into the following
+
+and vacuous
+
+field
+
+c[ll)
+
++ square(c [21 )), Ax x[l]
+
+is properly
+
+performed
+
+extension
+
+x. R is compiled
+
+)
+
+for Polar branch
+into
+
+index
+
+index value 1.
+
+of Compilation
+
+In Section 4, we have shown that the compilation
+algorithm
+preserves typing. This
+section shows that the compilation
+algorithm
+also preserves the operational
+behavior of a program.
+Since we have shown that the type system of ~Let,mis sound with
+respect to its operational
+semantics, the preservation
+of operational
+behavior will
+also establish
+
+that
+
+the type system of ~~ct,” is sound with
+
+respect to the operational
+
+semantics of the compiled code in ~tc~’[ 1.
+For terms of base types, the desired property
+is simply being that the original
+term and the compiled
+term evaluate to the same constant value.
+We need to
+generalize this to arbitrary
+types including
+polytypes.
+Our strategy is to apply the
+idea of logical relations to lift the above relationship
+to arbitrary
+types.
+Let a be a closed type of ~~et,m. Let term” be the set {el~~et,- E 0,0 De ; ~}, and
+let Terma
+be the set {A~l~letIl
++ 0,0, @ D M : (cT)*}. We define a type-indexed
+family
+
+of relations
+(e, C)c
+
+{Rc
+R”
+
+C term”
+~
+
+x Term”}
+
+(l)eliff
+
+CJ
+
+by induction
+and
+
+(2) one of the following
+ACM
+
+Transactions
+
+on Programmmg
+
+Languages
+
+on a as follows.
+
+and Systems,
+
+conditions
+
+Vol. 17, No
+
+holds
+
+6, November
+
+1995
+
+A Polymorphic
+
+Record Calculus and Its Compilahon
+
+87’-+
+
+.
+
+—if a = b then if e ~ e’ and C J. C’ then e’ = C’.
+—if a = ~1 -+ r2 then for any eo, Co such that
+
+(co, Co) ~ R“,
+
+—ifo={ll:~l,
+en}, C’=
+
+CJC’
+
+. . . ,ln:-rn}
+{Cl,..,
+
+—ifa=(ll:~l,
+
+then ife~e’and
+
+Cn} such that
+
+(e eo, C Co) e R“.
+
+then e’={ll=el,
+
+(e,, Cl) ~ R’L for all 1<
+
+. . ..ln=
+
+z s n.
+
+. . . , in : rn) then if e j e’ and C J. C’ then there is some i such that
+= (i = C“) and (e’’, C”) ~ Rr’.
+
+e’ = (11 = e“), C’
+—if a=
+
+Vtl::kl.
+
+,. ~tn::kn.r
+
+then for any ground
+
+such that
+
+substitution
+
+S satisfying
+
+Note that
+
+by the type soundness theorem
+
+reduction
+
+theorem
+
+C ~ C’ then
+
+(Theorem
+
+e’ E term”,
+
+{tl ::kl. . . . tn::kn},
+
+(Theorem
+
+3.2.1) of ~tet” and the subject
+
+4.2.3) of ~~et~[l, if e < term”,
+
+C’ E TermU.
+
+(e, C) c R“ then (e’, C’) E R“.
+Let T be a closed type assignment
+
+Furthermore,
+
+C E Terma,
+
+e J e’, and
+
+by the definition
+
+of R“,
+
+of ~~eta. A T-environment
+
+if
+
+in ~~e~mis a function
+
+ql such that dom(ql)
+= dom(7)
+and for any z ~ dom(ql),
+ql (z) ~ term~(”).
+A
+qz such that dom(qz) = dom(7_) and for
+(’T)* -environment
+in ~ ~’t~[l is a function
+Let .C be a well-formed,
+closed, index
+any z ~ dom(q2),
+qz(z) 6 Term(r)”(’).
+assignment.
+A (T)”-environment
+q2 in ~ ‘et~[1 is uniquely extended to the function
+defined on dom(T)Udom(L)
+
+by setting
+
+its value of J to be IL(1) I for all 1 c dom(.L).
+
+We write q: for the extension of q2 to dom(l).
+The relation
+R is extended to environments.
+environments
+
+in Atet’” and (T)”-environments
+
+for any z E dom(T),
+
+(ql(z),
+
+We now have the following
+THEOREM
+
+4.5.1.
+
+q2(x))
+
+RT is the relation
+between Tin A ~e~,[l such that (ql, q2) ~ R~ iff
+
+c R7(ZJ.
+
+theorem,
+
+Let Aletm t- K,T
+
+whose proof is deferred
+b A4 : a be any typing.
+
+S that respects K, and for
+C then for any ground substitution
+ments (ql, q2) & Rs(~), (~l(erase(M)),
+r&(z~)(C))
+6 Rs(o).
+For a program,
+COROLLARY
+
+to the Appendix.
+If C(L~,
+
+(T)*,
+
+any pair
+
+of environ-
+
+M)
+
+=
+
+we have the following.
+If e is a well-typed
+
+4.5.2.
+
+Alet’
+
+program,
+
+with (0, S, M, a) for some S, M, u and C(O, 0, Al)
+that (e, C) E RU.
+If we define the set of observable
+
+succeeds with C for some C such
+
+types by the following
+
+w ::= bl{l:w,...,l:
+
+then WK(@i, 0, e) succeeds
+
+syntax
+
+w}l(l:ti,l:w)l:w)
+
+then the relation Itti is essentially the identity (modulo representation
+of records and
+variants),
+and therefore a program of an observable type in ~~et’” and its compiled
+term evaluates to the essentially same value.
+ACM Transactions
+
+on Programming
+
+Languages
+
+and Systems,
+
+Vol. 17, No. 6, November
+
+1995
+
+880
+
+Ohorl
+
+Atsushl
+
+~
+
+5. IMPLEMENTATION
+Using
+
+the polymorphic
+
+typing
+
+cle we have extended
+
+Standard
+
+have implemented
+
+and the compilation
+ML
+
+with
+
+method
+
+polymorphic
+
+its compiler,
+
+called
+
+SMLfl.
+
+dard ML of New Jersey compiler
+
+[Appel
+
+and MacQueen
+
+The
+
+extended
+
+language
+
+deals with
+
+SMLfl
+
+the features
+
+presented
+
+record
+
+in this arti-
+
+operations,
+
+is an extension
+
+and we
+
+of the Stan-
+
+1991] on which it is based.
+
+of Standard
+
+ML
+
+including
+
+tern matching,
+weak type variables, and explicit type declarations,
+which
+freely mixed with polymorphic
+record operations.
+Moreover,
+it preserves
+ficiency
+records.
+
+of the original
+compiler
+and extends it to polymorphic
+manipulation
+SML~ produces the same code for monomorphic
+record operations.
+
+polymorphic
+plication
+record
+
+patcan be
+the ef-
+
+manipulation
+
+of records,
+
+to pass necessary
+functions
+
+index
+
+of
+For
+
+it is necessary to perform extra function apBut they occur only when polymorphic
+
+values.
+
+are instantiated.
+
+So we believe
+
+applications
+is in most cases negligible.
+function name does not show meaningful
+
+that
+
+the overhead
+
+due to index
+
+Indeed, a simple iteration
+of the example
+difference in execution speed compared to
+
+the corresponding
+monomorphic
+function
+written
+in Standard ML of New Jersey.
+(1,000,000 calls of #Name in SMLti take 20.74 seconds while the same number of calls
+of (#Name: {Name: string,
+Age: int}
+–> string)
+in Standard ML of New Jersey
+takes 20.50 seconds. ) This implementation
+substantiates
+this article’s claim that
+the method
+extending
+
+presented
+ML with
+
+here provides
+
+record
+
+SML~ does not include
+ML
+
+couples
+
+other
+
+polymorphic
+variants
+
+monomorphic
+
+language
+
+features
+
+a theoretically
+
+sound and practical
+
+basis for
+
+polymorphism.
+
+including
+
+variants.
+(defined
+
+The current
+
+through
+
+user-defined
+
+definition
+
+datatype
+
+recursive
+
+types,
+
+of Standard
+
+declarations)
+pattern
+
+with
+
+matching,
+
+and constructor
+binding.
+As a consequence, the introduction
+of polymorphic
+variants requires either substantial
+language changes or the introduction
+of a new class
+of syntactic objects whose role largely overlaps with ML’s datatypes.
+To include
+them,
+current
+
+it is therefore
+
+essential
+
+to redesign
+
+version of SML~ is that
+
+and therefore
+
+Standard
+
+it does not evaluate
+
+ML.
+
+Another
+
+limitation
+
+of the
+
+the inside of index abstraction,
+
+it does not necessary preserve the order of evaluation.
+
+In the current
+
+version of SMLH, the author adopted the strategy to implement
+index abstraction
+using the ordinary closure creation mechanism of the New Jersey system. To implement completely
+the operational
+semantics defined in this article, it is necessary to
+develop
+
+a new evaluation
+
+scheme for index
+
+abstraction
+
+and index
+
+application.
+
+We
+
+shall discuss possible strategies to overcome these limitations
+in the conclusions.
+The rest of this section outlines the extension of Standard
+ML and the implementation
+5.1
+
+of the SMLU compiler.
+
+Extension
+
+to
+
+Standard
+
+ML
+
+Standard
+ML’s type expressions are extended with kind constraints.
+This is done
+by introducing
+the following syntax for type variables having a record kind:
+
+‘a#{ll:
+“b#{ll:
+which
+
+represent
+
+a type variable
+
+tyl, . . ..ln. tyn ,. ..}
+ty~, ... ln:ty~,..
+.}
+a and an equality
+
+type variable
+
+b under
+
+the kind
+
+assignment
+of the form {a::{/l
+: tyl, . . . in : tyn], . . .} and {b::{il
+: ty[, . . .~n :
+ty~}, . . .}, respectively, where ty~, . ~, ty~ are restricted to equality types. In SML~
+ACM TransactIons
+
+on Programmmg
+
+Languages
+
+and Systems,
+
+Vol
+
+17, No
+
+6, November
+
+1995
+
+A Polymorphic
+both
+
+appear
+
+wherever
+
+‘ a or ‘ >b are allowed.
+
+ML already
+
+contains
+
+records and field selection.
+
+syntax
+
+can
+
+Standard
+
+Record Calculus and Its Compilahon
+
+formation
+
+is identical
+
+following
+
+pattern
+
+to the one used in this article.
+
+,1 = pat}
+
+I {1 = pat,...,l
+
+where the last ‘C. . . “ is a part of ML syntax
+following
+
+for field selection
+
+as explained
+used without
+fun
+
+val
+which
+“-”
+
+for record
+
+ML provides
+
+the
+
+with
+
+for “flexible
+
+the metanotation
+
+= pat,...}
+records”
+
+in ML parlance
+
+we have used. There
+
+is also the
+
+In SMLti, these patterns and expressions
+as shown in the following example:
+
+are freely
+
+syntax
+
+#l
+
+-
+
+be confused
+
+not
+
+The syntax
+
+In addition,
+
+881
+
+for record operations:
+
+pat ::= . . . I {1 = pat,..
+
+and should
+
+.
+
+in the introduction.
+type specifications,
+
+FirstName
+
+{Name=x,
+
+First
+
+Name = fn
+
+shows
+
+an interactive
+
+and where
+
+In addition,
+
+:
+
+the system’s
+
+field
+
+Ax.x.l
+
+. ..}
+
+= #First
+
+‘c#{Name:
+
+x;
+
+’b#{First:
+
+’a,...},.
+
+..}
+
+->
+
+the
+
+user’s
+
+input
+
+session
+
+of SMLfl
+
+where
+
+output
+
+is printed
+
+in the format
+
+SML~ introduces
+
+#> e => {ll=el,.
+for nested
+
+function
+
+the following
+
+term
+
+“val
+
+x
+
+‘a
+is prompted
+= value
+
+by
+
+: type. ”
+
+constructor:
+
+..,l~=en}
+
+modification
+
+modify(.
+
+~.(modify(e,ll
+
+,el). . .),ln,en)
+
+whose
+
+syntax
+
+with the rest of the language definition.
+chosen to make it compatible
+Figure 16 shows programming
+examples. The second half of the example
+
+is
+
+demon-
+
+strates the usefulness of record polymorphism
+for data-intensive
+applications
+such
+as database programming.
+In particular,
+the last function
+demonstrates
+that an
+SQL-style database query language can be cleanly integrated
+record calculus. (The interested reader is referred to Buneman
+more discussion
+
+on polymorphism
+
+5.2 Implementation
+The implementation
+compiler
+
+(version
+
+and type inference
+
+into a polymorphic
+and Ohori [1995] for
+
+in database
+
+programming.)
+
+Strategies
+has been done by modifying
+0.75).
+
+The main
+
+modification
+
+the Standard
+consists
+
+ML of New Jersey
+
+of (1) the replacement
+
+of
+
+the type inference module with a new one which incorporates
+the kinded unification
+and the compilation
+algorithm
+and (2) a refinement of pattern match compilation
+and value binding.
+The new type inference module closely follows the algorithm
+presented in this
+article with additional
+refinements
+for Standard
+ML’s equality
+types and weak
+polymorphism.
+To integrate
+these features, the actual kind of a type variable in
+SMLti consists of the product of record/variant
+kind, equality flag, and weakness
+measure. With this refinement,
+our record polymorphism
+can be freely mixed with
+these features.
+Some work was needed to refine the compilation
+for pattern
+binding.
+Consider, for example, the following simple binding:
+val
+
+(x,
+
+y)
+
+=
+
+matching
+
+and value
+
+<tiA,tiB)
+
+Since x and y will be used independently,
+of the following types:
+
+the compiler
+
+should
+
+produce
+
+the binding
+
+ACM Transactions on Programming Languages and Systems,Vol. 17, No. 6, November 1995,
+
+882
+
+Atsushi
+
+.
+
+(*
+
+simple
+
+-
+
+fun
+
+val
+
+examples
+
+*)
+
+point
+
+= #>
+
+moveX
+moveX
+
+= fn
+
+:
+
+‘a#{x:int
+
+y=2,
+
+2=3,
+
+-
+
+moveX
+
+{x=l,y=2};
+
+val
+
+it
+
+= {x=2,y=2}
+
+-
+
+moveX
+
+Val
+
+it
+
+(*
+-
+
+-
+
+-
+
+wealthy
+
+wealthy
+fun
+
+young
+
+:
+
+= fn
+
+:
+
+select
+select
+
+fun
+
+:
+
+. . .}
+
+display
+:
+
+...}
+:
+
+1 pred
+
+=
+
+=> if
+
+pred
+
+(’a
+
+->
+
+‘b)
+
+‘b#{Age:int,Name:
+
+x:
+
+‘a#{A:
+
+’b}
+
+->
+
+‘b
+
+Y:
+
+‘a#{B:
+
+’b}
+
+->
+
+‘b
+
+index abstraction
+
+for x and y separately
+
+where
+
+pat
+
+pat
+val
+
+young
+
+x;
+
+:int,Salary:int,
+
+. . .}
+
+x then
+
+(display
+
+x)::y
+
+‘a
+
+->
+
+->
+
+list
+
+1 = select
+
+(’a
+
+->
+
+bool
+
+else
+
+y)
+
+1 nil;
+
+->
+
+‘b
+
+list
+
+bool)
+
+#Name 1 youngAndWealthy;
+
+= fn
+. . .}
+
+list
+
+Interactive
+
+programming
+
+insertion
+
+andpolymorphic
+
+according
+
+->
+
+‘a
+
+list
+
+session in SML~
+
+generalization
+
+to the corresponding
+
+the SMLti compiler
+
+achieve this effect,
+
+bool
+
+bool
+
+‘a,Salary:int,
+
+Fig. 16.
+
+val
+
+->
+
+->
+
+youngAndWealthyEmployees
+
+Therefore,
+
+->
+
+x andalso
+
+‘a#~Age
+
+youngAndWealthyEmployees
+:
+
+int,z:intl
+
+x < 24;
+
+= fn
+
+(x)y)
+
+1};
+
+{color:string,x:int,y:
+
+= s > 100000;
+
+x = wealthy
+
+(fn
+
++
+...}
+
+*)
+
+‘a#{Age:int,
+
+= fn
+
+point
+
+‘a#{Salary:int,
+
+x = #Age
+
+fold
+-
+
+= #x
+‘a#{x:int,
+
+=s,...}
+
+youngAndWealthy
+
+fun
+
+val
+
+{x
+->
+
+color=’’Greenl’};
+
+examples
+
+youngAndWealthy
+
+val
+
+=>
+,...}
+
+{x:int,y:int}
+
+{Salary
+= fn
+
+young
+
+fun
+
+val
+
+:
+
+like
+
+database
+
+val
+-
+
+{x=1,
+
+point
+
+= {color=f!Green!’,x=2,y=2,z=3}
+
+fun
+
+val
+
+Ohori
+
+transforms
+
+portion
+
+must bedone
+
+of the code.
+
+ML’s
+
+value
+
+binding
+
+. . ..Xn}
+
+into
+
+the
+
+of the
+
+To
+
+form
+
+= expr
+
+is a pattern
+
+containing
+
+(Zl,.
+
+= let
+
+..,zn)
+
+variables
+~
+
+= ezpr
+
+{Zl,
+in
+
+((fnpat
+
+(fn
+
+=>
+
+pat
+
+following
+
+ZI)
+
+f,
+
+=> Zn)
+
+j)
+
+form
+
+The inner binding is the ordinary
+let binding and is transformed
+by the method
+described in this article.
+Thecompiler
+then transforms
+theouterval
+binding by
+eliminating
+vacuous type variables separately from the typing of each variable Zl,
+performing
+index abstraction
+and polymorphic
+type generalization
+for each component corresponding
+tox,
+separately, and finally translating
+to a binding of the
+implementation
+calculus. In the actual implementation,
+all of these steps are done
+in one step using the type information
+ofthe original term. For example, the above
+example is transformed
+into the following
+binding
+val
+
+(x,y)
+
+= let
+in
+
+where
+
+1 is the
+
+able
+
+elimination
+
+ACM
+
+Transactions
+
+default
+
+F = JIl~12.
+(Xi3.(F
+index
+
+explained
+on Programming
+
+13
+value
+earlier.
+
+(Jx,xIIll,
+1),~14.
+
+~y.y[12])
+(F
+
+1 14))
+
+introduced
+
+in
+
+A
+
+treatment
+
+Languages
+
+similar
+
+and Systems,
+
+the
+
+Vol
+
+process
+is
+17, No
+
+of
+
+vacuous
+
+necessary
+6, November
+
+type
+for
+
+vari-
+
+mutually
+
+1995
+
+A Polymorphic
+recursive
+
+function
+
+definitions
+
+fun
+
+fl
+
+patl
+
+= expt-l
+
+and
+
+f~ pat~
+
+= expr~
+
+This is transformed
+
+Record Calculus and Its Compilation
+
+into the following
+
+code
+
+and
+
+f
+
+pat
+
+sive functions
+into
+
+a term
+
+complex
+
+= expr
+
+without
+in the
+
+value
+
+(F,l,.
+. . . and
+
+ally
+
+recursive
+
+function
+
+A
+
+prototype
+
+directory
+http:
+
+copy
+
+= expr
+
+calculus
+above.
+
+mixed
+
+with
+
+system
+the
+
+is the
+
+construct
+
+for
+
+mutually
+
+The
+
+binding
+
+is then
+
+in a similar
+
+way
+
+as in the
+
+By
+
+this
+
+treatment,
+
+arbitrary
+
+is available
+
+~EADME
+
+complex
+
+value
+
+recur-
+
+transformed
+
+SMLfl
+
+case of the
+
+allows
+
+record
+
+and
+
+mutu-
+
+binding
+
+kurims.
+
+kyoto-u.
+
+from
+
+Kyoto
+
+University.
+
+The
+
+file
+
+from
+
+f tp.
+
+kurims.
+
+kyoto-u.
+
+by
+
+anonymous
+
+FTP
+
+or consult
+
+pub/paper/member/ohori
+
+//www.
+
+= exprn
+
+definitions.
+
+SMLB
+
+should
+
+patn
+
+generalization.
+
+explained
+
+to be freely
+
+reader
+
+pat
+
+implementation
+
+polymorphism
+
+tn
+
+... n)n)
+
+polymorphic
+
+binding
+
+883
+
+of the form:
+
+in
+
+where rec
+
+.
+
+ac. jp/-ohori/smlsharp
+
+interested
+
+ac. j p at
+the
+
+web
+
+the
+page
+
+.html.
+
+6. CONCLUSIONS
+We have given a polymorphic
+of the
+
+Girard-l%eynolds
+
+polymorphic
+
+record
+
+calculus
+
+second-order
+
+system.
+
+The
+
+be sound
+
+with
+
+respect
+
+a type
+
+inference
+
+to its
+
+polymorphic
+
+method
+
+for
+
+the
+any
+
+a calculus
+
+where
+
+variants
+the
+
+are
+
+index
+
+lus and
+
+that
+
+compiler
+There
+mention
+
+proved
+We
+
+(1)
+
+vector
+
+as values
+
+extended
+
+with
+
+has been
+
+implemented.
+
+a number
+
+some
+
+of them.
+
+then
+
+record
+
+tagged
+
+of further
+
+calculus
+
+calculus,
+
+The
+
+record
+
+of the
+
+is shown
+we have
+with
+
+an efficient
+
+calculus.
+
+as directly
+
+an ML-style
+
+completeness
+
+developed
+
+polymorphic
+
+respect
+
+compilation
+
+calculus
+
+indexable
+
+method
+
+into
+
+a term
+
+in
+
+vectors
+
+and
+
+(2)
+
+is used
+
+as
+
+with
+
+a natural
+
+number
+
+that
+
+statement.
+
+The
+
+correctness
+
+the
+
+idea
+
+behavior
+
+calculus.
+record
+
+issues
+
+to
+
+of logical
+
+of the
+
+Based
+
+operations,
+
+be
+
+relation
+
+and
+
+considered.
+
+results,
+
+record
+Standard
+
+a full-scale
+
+Here
+
+of the
+
+to set up a
+
+polymorphic
+
+on these
+
+to
+
+given
+
+compilation
+
+in a switch
+
+by applying
+
+polymorphic
+
+and
+
+as an extension
+
+defined
+
+subcalculus
+
+record
+
+For this
+
+its soundness
+have
+
+operational
+
+implementation
+
+are
+
+semantics.
+
+in the
+
+of functions
+the
+
+ML-style
+
+are represented
+
+is shown
+
+between
+of the
+
+term
+
+and have
+
+to a predicative
+
+of the
+
+polymorphic
+
+records
+
+algorithm
+
+relation
+
+has been
+
+and
+system.
+
+represented
+
+desired
+
+system
+
+type
+
+type-correct
+
+calculus
+
+corresponds
+
+algorithm
+
+to the
+
+compilation
+
+that
+type
+
+for records and variants
+
+lambda
+
+to its operational
+
+ML-style
+
+translates
+
+type discipline
+
+second-order
+
+we
+
+calcuML
+
+prototype
+
+only
+
+briefly
+
+A More Complete Implementation.
+As mentioned in the previous section, there
+are two major limitations
+of the current SMLti implementation:
+it lacks polymorphic
+variants and is not faithful
+to the operational
+semantics defined in this article
+because it does not evaluate
+ACM
+
+Transactions
+
+inside of index abstraction.
+
+on Programming
+
+Languages
+
+and Systems,
+
+Vol
+
+17, No 6, November
+
+1995.
+
+884
+
+Atsushi
+
+.
+
+Ohori
+
+Since the basic techniques
+those
+
+required
+
+ing them.
+type
+
+for
+
+In fact,
+
+variant
+
+and
+
+can be encoded
+
+type
+
+in
+
+works
+
+well
+
+polymorphic
+
+labeled
+
+we need
+
+to redesign
+
+the
+
+user-defined
+
+the
+
+corresponding
+
+and
+
+in
+
+to refine
+
+this
+
+technique,
+that
+
+straction
+
+and
+the
+
+above
+
+observation
+
+our
+
+attention
+
+property
+occurs
+
+the
+
+not
+
+and
+
+updating
+
+a method
+
+Let
+
+us briefly
+
+on implementation
+
+evaluates
+
+record
+
+Standard
+
+of la-
+
+with
+
+of 1. The
+
+evaluation
+
+first
+
+C.
+
+This
+
+should
+
+as a template.
+
+i can
+
+be implemented
+
+the
+
+1 entry
+
+to propagate
+The
+
+1...
+
+semantics,
+
+specialization
+
+in
+
+this
+author
+
+will
+
+discussed
+
+also
+
+index
+
+a possible
+
+strategy.
+
+term
+
+of the form
+therefore
+
+of A1.c
+
+can then
+
+yield
+
+a closure
+
+application
+
+by making
+for
+
+a dummy
+
+to
+
+nested
+
+then
+
+be done
+
+entry
+
+whose
+
+a copy
+i.
+
+It
+
+of the
+
+M.C
+
+template
+
+is still
+
+needed
+
+abstraction
+
+various
+
+as
+
+for 1 in
+
+environment
+
+a systematic
+for
+
+M.C
+
+evaluation
+
+of the function
+
+index
+
+to develop
+be useful
+
+we can
+algorithm
+
+and
+
+allocates
+
+The
+
+variants,
+
+ab-
+
+to
+
+of the
+
+method
+
+to
+
+type-inference-
+
+below.
+
+Specialization.
+
+can be characterized
+
+a reasonably
+
+treating
+
+compilation
+
+environment
+
+intends
+
+which
+
+Program
+
+the
+
+technique
+
+develop
+by
+
+The
+
+abstraction,
+
+se-
+
+a complete
+
+of polymorphic
+
+the system
+
+operational
+
+developed
+
+explain
+
+operations.
+
+is saved
+
+value
+
+Type-Inference-Based
+in this article
+
+to
+
+abstractions
+
+specially.
+
+M.C,
+
+closure
+
+and
+
+program
+
+mechanism
+
+to the
+
+is possible
+
+evaluation
+
+evaluating
+
+closure
+
+based
+
+into
+
+ML
+
+it
+
+involve
+
+desired
+
+of
+
+variants
+
+of the
+
+of index
+
+lambda
+
+. . (A1’.C)
+
+is incom-
+
+possibility
+
+considering
+
+yet
+
+an implementation
+
+develop
+
+the
+
+but
+
+We are currently
+
+it faithful
+
+if it produces
+
+index
+
+M..
+
+variant
+coupling
+
+polymorphic
+
+not
+
+that
+
+inside
+
+to polymorphic
+
+to an actual
+
+achieve
+
+make
+
+we have
+
+of an ordinary
+
+1. This
+
+the
+
+This
+
+the
+
+the
+
+of
+
+by
+
+a labeled
+
+since
+
+definition
+
+that
+
+environment
+
+encoding
+
+types.
+
+to separate
+
+inside
+
+When
+
+contains
+
+form
+
+we believe
+
+application
+
+to
+
+Although
+
+evaluates
+
+index
+
+follows.
+
+However,
+
+types.
+
+formal
+
+SMLfl
+
+article.
+
+system
+
+has the
+
+standard
+
+variants
+
+language
+
+a variant
+
+be implemented
+
+recursive
+
+as
+
+t and by encoding
+
+to be monomorphic,
+
+recursive
+
+same
+
+in introduc-
+
+variants.
+
+challenging
+
+I in c
+
+the
+
+the
+
+can
+
+records.
+
+user-defined
+
+are restricted
+
+from
+
+efficient
+
+of C’ does
+
+with
+
+to
+
+they
+
+To incorporate
+
+implementation
+
+From
+
+analogous
+
+is eliminated.
+
+defined
+
+restrict
+
++
+
+manipulation
+
+labeled
+
+is more
+
+by regarding
+
+Therefore
+
+polymorphic
+
+variants
+
+records
+: rn -+ t}
+
+of labeled
+
+syntax
+
+mantics
+
+for
+
+is coupled
+
+using
+
+t,. ..,ln
+
+statements
+
+are the
+
+difficulty
+
+manipulation
+
+ML,
+
+a proper
+
+: T1 ~
+
+variants
+
+is no technical
+
+polymorphic
+
+variants
+
+polymorphic
+
+there
+
+statements.
+
+ML
+
+when
+
+Standard
+
+case
+
+mechanism
+
+with
+
+beled
+
+and
+
+Standard
+
+patible
+
+variants
+
+: Tn) as ~t::u.{ll
+
+conditional
+
+implementation
+
+It
+
+pure
+
+constructors
+
+booleans
+
+polymorphic
+
+records,
+
+. . . ,ln
+
+(11:~1,
+
+of implementing
+
+polymorphic
+
+The compilation
+
+as specialization
+
+method
+
+of polymorphic
+
+presented
+
+functions
+
+us-
+
+ing type information.
+In this respect, our work shares the same motivation
+as the
+paradigm of “intentional
+type analysis” [Harper and Morrisett
+1995]. Their framework is based on runtime type analysis and is therefore more general. For example,
+certain features of overloading
+can comfortably
+be represented in their framework.
+It is an interesting
+issue whether or not our method can be combined with their
+framework.
+There are also several recent papers on the efficient implementation
+of
+polymorphic
+languages using explicit type information.
+Examples include a polymorphic unboxed calculus [Ohori and Takamizawa
+1995] which specialize polymorphic functions according to the size information
+obtained by type inference, mixed
+representation
+
+optimization
+
+[Leroy
+
+ACM
+
+on Programming
+
+Languages
+
+TransactIons
+
+1992] by inserting
+and Systems,
+
+appropriate
+
+box-unbox
+
+Vol. 17, No. 6. November
+
+1995.
+
+co-
+
+A Polymorphic
+ercions
+
+guided
+
+translating
+Haskell
+
+Record Calculus and Its Compilation
+
+.
+
+tag-free
+
+1994] by
+
+by type information,
+
+a raw term
+
+type
+
+to an explicitly
+
+classes [Wadler
+
+1994; Peterson
+
+garbage
+
+typed
+
+and Blott
+
+collection
+
+second-order
+
+1989] using type
+
+and Jones 1993], and list representation
+
+[Tolmach
+
+term,
+
+885
+
+specialization
+
+of
+
+information
+
+[Hall
+
+et al.
+
+optimization
+
+[Hall
+
+1994;
+
+Shao et al. 1994]. Since program translations
+in all of these approaches and ours
+appear to share some general structure,
+a detailed comparison
+among them may
+shed some light
+
+on the general
+
+property
+
+of a type-inference-based
+
+approach
+
+to pro-
+
+gram specialization.
+Our compilation
+of Cartwright
+system,
+
+may also be applied
+
+types are implicitly
+
+tag at runtime,
+static
+
+method
+
+and Fagan [1991] and Wright
+this
+
+typing.
+
+treated
+
+technique
+
+important
+
+Our compilation
+
+method
+
+for polymorphic
+
+with
+
+to a polymorphic
+for flexible
+
+There seems to be an inherent
+To see the difficulty,
+consider
+
+treatment
+
+with
+
+of labeled
+
+subsumption
+
+e:rl
+
+the conventional
+might
+
+be used to
+
+like to extend
+
+our compi-
+
+records
+
+which
+
+is another
+
+and labeled
+
+variants.
+
+containing
+
+this rule.
+
+rule:
+
+71 < T2
+
+difficulty
+in compiling
+the expression:
+
+With
+: bool},
+
+{B
+
+a calculus
+
+else {B = true,
+
+expression.
+
+has the type
+
+subtyping,
+
+C = “abc”}
+
+the existence of the subsumption
+rule,
+However, the actual set of labels of
+
+the value denoted by this expression depends on the value denoted
+therefore the offset of the label B cannot be statically
+determined.
+fore impossible
+
+type
+
+e:r2
+
+e s if el then {A = “abc” , B = true}
+
+expression
+
+BY checking
+
+than
+
+variants
+
+We would
+
+Subtyping.
+
+type discipline
+
+is based on the following
+
+where el is some boolean
+
+type.
+
+typing
+
+check.
+
+SUB
+
+this
+
+of a variant
+
+more-flexible
+
+paradigm
+
+Its flexibility
+
+as elements
+
+allows
+
+oj a Calculus
+
+Compilation
+
+the “soft type system”
+[1994]. In the soft type
+
+approach
+
+reduce the cost of a runtime
+
+lation
+
+to optimizing
+
+and Cartwright
+
+to determine
+
+statically
+
+the necessary
+
+index
+
+value
+
+by el, and
+It is there-
+
+in a program
+
+such as (k. z.13) e. With the subsumption
+rule, a typing judgment
+of the form
+, in : Tn } no longer implies that e denotes a record value having
+@De:{ll:~l,”
+the exact type {11 : ~1, . . . , in : 7-n}. A similar problem arises in compiling
+a calculus
+that
+
+allows heterogeneous
+
+collections
+
+[Buneman
+
+suggests that
+
+compilation
+
+should
+
+at runtime.
+
+One approach
+
+might
+
+type analysis
+
+of Harper
+
+and Morrisett
+
+[1995].
+
+Application
+
+to Other
+
+Labeled Data
+polymorphism
+
+lation
+
+method
+
+systems
+In
+
+for
+
+record
+
+where
+
+labels
+
+Common
+
+Lisp
+
+straightforward
+
+to
+
+play
+[Steele
+model
+
+incorporate
+
+be to combine
+
+1984],
+
+1995]. This observation
+type testing
+
+our method
+
+and the intentional
+
+Structures.
+
+Our flexible
+
+typing
+
+and
+
+compi-
+
+may
+
+be applicable
+
+to
+
+several
+
+other
+
+an important
+simple
+
+and Ohori
+
+some degree of dynamic
+
+also
+
+role.
+
+parameters
+labeled
+
+to
+
+a function
+
+parameters
+
+using
+
+may
+
+be labeled.
+
+It
+
+labeled
+
+records.
+
+How-
+
+is
+
+with default values. This feature
+ever, Common
+Lisp also allows optional
+arguments
+cannot easily be modeled in a simple type discipline.
+One approach to represent
+these features in a record calculus is to extend it with an “optional-field
+selection”
+operation
+(e.1 ? d) which behaves like e.1 if e is a record containing
+an 1 field;
+ACM TransactIons
+
+on Programmmg
+
+Languages
+
+and Systems,
+
+Vol. 17, No. 6. November
+
+1995
+
+886
+
+Atsushi Ohori
+
+.
+
+otherwise
+
+it evaluates
+
+to the default
+
+value d. Our polymorphic
+
+type discipline
+
+the compilation
+method can be extended to support this construct.
+rigue and Ait-Kaci
+[1994] developed a lambda calculus that supports
+labeled
+
+parameter
+
+application
+
+passing
+
+are allowed.
+
+guments
+
+and developed
+
+to investigate
+
+mechanism
+
+Furuse
+
+a compilation
+
+the possibility
+
+where labeled
+
+and Garrigue
+method.
+
+of combining
+
+currying
+
+[1995] extended
+
+their
+
+approach
+
+Recently, Gara more-flexible
+
+and labeled
+it with
+
+It is an interesting
+
+and
+
+partial
+
+optional
+
+further
+
+ar-
+
+research
+
+and ours.
+
+Our approach may also be applicable to object-oriented
+lus with record subtyping
+is often considered as a formal
+
+programming.
+A calcumodel for object-oriented
+
+programming,
+
+type and where
+
+ject”
+
+where a “class”
+
+is represented
+
+by field
+
+selection.
+
+through
+
+flexible
+
+ble typing
+
+typing
+
+as a record
+
+with
+
+Since kinded
+
+of field selection.
+
+of field selection,
+
+when extended
+
+is represented
+
+an “ob-
+
+as a record containing
+methods;
+method invocation
+is done
+In this model, the feature of “method inheritance”
+is achieved
+we believe
+
+recursive
+
+that
+
+typing
+
+allows
+
+similar
+
+flexi-
+
+our second-order
+
+record
+
+calculus
+
+Av’m,
+
+types and other features,
+
+can serve as an appropriate
+
+basis for type systems for object-oriented
+programming.
+Since kinded typing does
+not have complicated
+interaction
+with function type and since there is an efficient
+compilation
+algorithm
+for the calculus, we further believe that our record calculus,
+when properly
+extended, can be a simpler and practical
+alternative
+to a calculus
+with
+
+subtyping.
+
+APPENDIX
+PROOFS
+
+OF MAJOR
+
+THEOREM
+
+THEOREMS
+The algorithm
+
+3.4.1.
+
+putes its most general
+
+unifier
+
+U takes any kinded
+
+set of equations
+
+if one exists and reports failure
+
+PROOF. We first show that if the algorithm
+returns a kinded
+it is a most general unifier of a given kinded set of equations.
+It is easily verified
+on 4-tuple
+
+that each transformation
+
+and com-
+
+otherwise.
+substitution
+
+rule preserves the following
+
+then
+
+property
+
+(E, K, S, SK).
+
+(1) K and K U SK are well-formed
+kind assignments; E is well-formed
+under X; S is
+a well-formed
+substitution
+under K; dom(K) m dom(SX)
+= 0; and dom(SK)
+=
+dom(S).
+We establish that if the above property holds for the 4-tuple
+tion rule also preserves the following
+properties on 4-tuples.
+(2) For any kinded substitution
+then (KO, So) respect SK.
+(3) The set of unifiers
+
+then each transforma-
+
+(KO, SO), if (KO, SO) respect K and SO satisfies EuS
+
+of (K U SK, E U S).
+
+The case for Rule (I) is trivial, and those for (v) and (IX) follow from the assumptions.
+Since the rules (VI) - (VIII) have the same shape as the rules (II) - (IV)
+respectively,
+their proofs are the same as the corresponding
+proofs. Below, we show
+Properties
+2 and 3 for the rules (II) - (IV).
+Rule
+
+(II).
+
+(ELJ {(t,
+T)}, Ku {(t, u)}, s, SK)=+
+([-r/t](E),
+[~/t](K),
+[1-/t](S) U {(t, T)},
+ACM
+
+TransactIons
+
+on Programming
+
+Languages
+
+[T/~](~K)
+and Systems,
+
+U {(t,
+Vol
+
+~)})
+
+if t @ FTV(~)
+
+17, No 6, November
+
+1995
+
+A Polymorphic
+Property
+
+2.
+
+[~/t](K).
+
+Let
+
+Then
+
+formed
+
+under
+
+SO satisfy
+
+Record Calculus and Its Compilation
+
+[~/t](E)
+
+U {(t, T)}
+
+U [T/t](S)
+
+and SO satisfies
+
+SO = SO o [T/t],
+
+K, So(T) is well formed
+
+under
+
+and
+
+and K.
+
+887
+
+(Ko, SO) respect
+
+E U {(T, t)} U S.
+
+K.,
+
+.
+
+Since T is well
+
+} So(~) :: U.
+
+Therefore
+
+(Ko, So) respects K U {(t, U)}.
+Then by Property
+2 of the premise of the rule,
+(Ko, So) respects SK, and therefore (Ko, SO) respects [~/t](SK)
+U {(t, U)}.
+Property
+satisfies
+
+3.
+
+Let
+
+[1-/t](E)
+
+So be any substitution.
+
+U [~/t](S)
+
+(Ko, So) is a kinded
+
+Let
+
+T)}.
+U {(t,
+
+substitution.
+
+So satisfies
+
+E U {(t, T)}
+
+be any kind
+
+assignment
+
+KO
+
+Suppose
+
+So satisfies
+
+E
+
+U {(~,
+
+T)}
+
+U S iff So
+such that
+U S.
+
+Then
+
+(Ko, SO) respects K iff (Ko, SO) respects
+since So = So o [T/t]and t @ dorn(K),
+[~/t](K).
+Similarly,
+(Ko, SO) respects SK iff (Ko, So) respects [r/t] (SK). Therefore
+
+(Ko, So) is a unifier
+
+of (KU
+
+([T/t](K)
+
+U {(t, ~)},
+
+[r/t](~)
+
+{(tl,
+
+(t2, {F2])},
+
+U [T/t](SK)
+
+{(t, U)}
+
+~)} U S) iff it is a unifier
+E U {(t,
+
+U SK,
+
+U [~/t](S)
+
+of
+
+T)}).
+U {(t,
+
+Rule (III).
+(Eu
+
+{(tl,
+
+t,)},
+
+~U
+
+{F1]),
+
+u {(F,(1), Fz(l))ll e dom(Fl)
+
+([t2/tl](E
+[t,/t,](K)
+
+u {(t,,
+
+[t,/t,]({F,
+
+[t,/t,](s)
+
+u {(t,,
+
+t,)},
+
+Property
+
+U {(t,,
+
+t,)}
+
+So = So o [t2/tl];
+
+{(tl,
+
+{F’l~),
+
+respects
+
+Property
+
+Let
+
+{F,})})
+
+U {(FI (1), I’2(l))\l
+
+(Ko, So) respects
+
+(Ko, So) is a kinded
+
+U {(t,,
+
+[t2/tl]({F’l
+
+2 of the premise
+
+[t2/tl](SK)
+
+U {(tl,
+
+Let K.
+
+of the rule,
+
+be any kind
+
+Similarly,
+(Ko, So) respects K iff (Ko, So) respects [t2/tl](K).
+iff (K., So) respects [tz /tl] (SK). We also have the following:
+( So satisfies
+
+iff
+
+{( F,(l),
+
+Fz(l))]l
+
+E dom(l?l)
+
+such
+
+@ dom(K),
+
+(Ko, SO) respects SK
+
+n dom(~z)}
+
+and
+
+KO E So(tl)::
+
+SO({.FI})
+
+and KO R So(t2) :: So([t,/tl]({.Fl
+
+( K. t- So(tl)
+
+:: SO({F1})
+
+and K. t- So(t2) :: SO({F2})
+
+This proves Property
+
+SO)
+
+So satisfies
+
+assignment
+
+and tl
+Since SO = SO o [t2/tl]
+
+substitution.
+
+K U
+
+(Ko,
+
+{F’l l))}.
+
+{ (tl, t2)}. Then
+
+satisfying
+
+U [t2/tl](S).
+
+U
+
+* Fz]))}.
+
+E U {(tl,
+t2)}U S; and (Ko, So) respects
+
+by Property
+
+[t2/tl](E)
+
+E dom(F’1 ) fl dom(~~)}))
+
+[t2/tl](K)
+
+So be any substitution
+
+E U S iff So satisfies
+that
+
+Then
+
+Therefore
+3.
+
+[t2/tl](E
+
+So satisfies
+
+(tz, {Fz])}.
+
+SK.
+
+u {(t,,
+
+and (Ko, So) respect
+
+Then
+
+-
+
++ F,}))},
+
+[t,/t,](sK)
+
+2. Let So satisfy
+
+[t2/tl](S)
+
+S, SK)
+
+n darn}),
+
+* Fz~))
+
+)
+
+).
+
+3.
+
+Rule (IV).
+(Z3u{(t1,
+
+{F,})},
+
+Ku
+
+{(tl,
+
+{F1})},
+
+S, SK)
+
+E ~o~(~I)}),
+[{F2}/tl](S)
+U {(tl,
+{F2})}, [{ Fz}/tl](SK)
+if dom(F’l)
+G dorn(172) and t $!!F’TV({172})
+([{ F2}/td(E
+
+Property
+{(17’1(l),
+
+2.
+
+&’2(l))\l
+
+So satisfies
+clorn(.Z72)
+
+Then
+
+~2(0)[1
+
+u {(~~(1),
+
+and
+
+E
+
+==+
+
+[{~2}/h](K),
+U {(tl,
+{F,})})
+
+Let (Ko, So) respect [{ F2}/tl](K)
+clom(Fl)})u[{Fz}
+/tl](S)u{(tl,
+
+c
+
+U {(tl,
+
+{F’2})}
+
+So satisfies
+
+U S,
+
+{( FI(l),
+
+(Ko, So) respects K U {(tl,
+ACM Transactions
+
+and
+FZ(l))I1
+
+{~1
+
+on Programming
+
+})}.
+
+(Ko,
+
+So)
+
+and
+{Fz})}.
+respects
+
+G dom(F’1)},
+
+By Property
+
+Languages
+
+So satisfy [{ F2}/tl](E
+Then SO = SOO[{F2}/tl],
+K.
+
+Since
+
+So(tl)::
+2 of the premise
+
+and Systems,
+
+)Co t-
+
+ctonz(F’l)
+
+U
+
+<
+
+SO({FI}).
+of the rule,
+
+Vol. 17, No 6, November
+
+1995
+
+888
+
+Atsushi Ohori
+
+.
+
+(Ko, SO) respects
+Property
+2.
+
+SK,
+
+3. Let
+
+Property
+
+and therefore
+
+(KO, So) respects
+
+SO be any substitution
+
+EuS iff So satisfies [{ F2}/tl](E)u[{F’2
+that (Ko, SO) is a kinded substitution.
+
+satisfying
+
+[{ F2}/tl](SK).
+
+{ (tl, {J’2 }) }. Then
+
+We now conclude
+Suppose
+that
+
+the proof
+
+So satisfies
+
+of the correctness
+
+(KO, SO) respects
+
+of the algorithm.
+
+Let (K, E) be a
+
+set of equations.
+the algorithm
+
+terminates
+
+(E, K, 0, 0) is transformed
+
+formation
+
+proves
+
+}/tl](S).
+Let K. be any kind assignment such
+Since So = SO o [{ F2}/~] and t # dom(K),
+
+(Ko, SO) respects K if (Ko, SO) respects [{F2}/t](K).Similarly,
+3.
+SK iff (KO, So) respects [{F2}/t](SK).This proves Property
+
+given kinded
+
+This
+
+rules.
+
+Property
+
+with
+
+(K’, S).
+
+to (0, K’, S, SK)
+
+1 trivially
+
+Then
+
+there
+
+by repeated
+
+is some SK
+
+applications
+
+holds for (E, K, @,0). Then
+
+(K’, S) is a kinded
+
+substitution;
+dom(S) n dom(K’)
+= 0, and therefore
+(K’, S) respects K’,
+trivially
+satisfies S U O. Then by Property
+2, (K’, S) also respects SK.
+fore (K’, S) is a unifier
+
+U SK,
+
+of (K’
+
+0 U S).
+
+By Property
+
+such
+
+of transS also
+There-
+
+3, it is also a unifier
+
+of
+
+(K, E). Let (Ko, SO) be any unifier of (K, E). By Property
+3, it is also a unifier of
+@U S). But (K’, S) is also a unifier of (K’ uSK, @U S), and SO = So o S.
+(K’ uSK,
+Thus (K’, S) is more general than (Ko, So).
+Then (E, K, 0, 0) is transformed
+to
+Conversely,
+suppose the algorithm
+fails.
+(E’, K’, S’, SK’)
+for some E’, K’, S, SK such that E’ # 0, and no rule applies to
+(E’, K’, S’, SK’).
+has no unifier,
+The
+creases
+
+It is clear from the definition
+and therefore
+
+termination
+the
+
+can
+
+complexity
+
+the set dom(K)
+
+by Property
+
+be proved
+measure
+
+and the total
+
+by
+
+showing
+
+of the
+
+number
+
+of each rule that
+
+(K’
+
+U SK’,
+
+E’ U S’)
+
+3, (K, E) has no unifier.
+that
+
+each
+
+transformation
+
+pair
+
+consisting
+
+lexicographical
+
+of occurrences
+
+rule
+of the
+
+de-
+
+size of
+
+of type constructors
+
+(including
+
+then the following
+
+properties
+
+❑
+
+base types)
+
+in E.
+
+THEOREM
+
+3.5.1.
+
+If WK(K,
+
+T, e) = (K’, S, M, r)
+
+hold:
+
+(1)
+
+(K’, S) respects K and A1’L- 1- K’, S(T)
+
+(2)
+
+erase(M)
+
+(3)
+
+if
+
+ALet’”
+
+~
+
+Atef.
+
+Ko, SO(T)
+
+F K’,
+
+b e
+
+:
+
+S(T)
+
+~ M
+
+: ~,
+
+To for
+
+some
+
+(Ko,
+
+So)
+
+and
+
+such that
+
+(Ko,
+
+So)
+
+respects K then there is some S’ such that (Ko, S’) respects K’, -rO= S’(T),
+
+and
+
+SO(7)
+If
+
+e and
+
+=
+
+b e : T,
+
+TO
+
+= s’ o s(r).
+
+WK(K, T, e) = failure
+then there is no (Ko, SO) and
+K and )~et- t- Ko, SO(T) b e : To.
+
+TO
+
+such that
+
+(Ko,
+
+So)
+
+respects
+
+PROOF. Property 2 of the first statement follows directly from the proof of Property 1 and the relationship
+between the two type systems. It is also a routine matter
+to show that if the algorithm
+fails for some term then there is no typing for that
+term.
+In what follows, we show Properties
+1 and 3 of the first statement.
+Proof
+is by induction
+on the structure
+of e. Here we only show the cases for x, el.l, and
+let z=el in ea. The cases for modify(el ,l,ez) and (l=el)
+are similar to the case for
+el ,1. Other cases are essentially the same as the corresponding
+proof for ML [Damas
+and Milner
+ACM
+
+1982].
+
+TransactIons
+
+on Programmmg
+
+Languages
+
+and Systems,
+
+Vol. 17, No, 6. November
+
+1995
+
+A Polymorphic
+Case x. Suppose
+
+WK(K,
+
+Record Calculus and Its Compilation
+
+‘T, x) = (K’, S, JW,7).
+
+Then
+
+T(x)
+
+.
+
+= Vtl::kl
+
+889
+
+. . . tn::kn.7’
+
+. . . ,sn/tn](T’)
+and K’ = K{sl::k{,
+..., Sn::k:}, s = O, fl!f = (z S1 . . .sn),7- = [sl/tl,
+where sl, ..., s~ are fresh and k[ = [sl/tl,
+. . . ,sn/tn](k,
+) (1 s z s n).
+Property
+
+1.
+
+variable
+
+dom(So)}.
+
+that
+
+K.
+
+Since (K’, [sl/tl,
+
+. ~.tn::lcn.r’
+
+and the assumption
+
+being
+
+(SO(T))(Z)
+
+= Vtl::So(kl)
+
+respects
+
+D z : To. By the bound
+
+that
+
+none of tl, . . . . tn, S1, . . . , Sn appears
+
+Then
+
+. . . . sn/tn])
+
+> T. Then K’, T D x : T.
+
+(Ko, So) respects K and KO, SO(T)
+
+convention
+
+can assume
+
+respects
+
+K’ t- vtl::kl
+
+3. Suppose
+
+Property
+
+type
+
+(K’, 0) trivially
+
+.$. ,tn::kn},
+
+K’{tl::kl,
+
+S1,. . . . sn are fresh,
+
+in dom(So)
+
+. . .Vtm::So(kn).So
+
+we
+
+or {So(t)[t
+
+c
+
+(~’), and there is some
+
+,tn}, SI(SO(T’)) = ?-o, Ko 1- s~(tt) ::s~(so(k~))
+(1 <
+S1 such that dom(Sl)
+= {tl,...
+i s n).
+Let Sz = S1 OSO o [tl/sl,.
+, h/s~].
+Then (Ko, S2) respects K, and
+S2(s,) = Sl(ti)
+and S2(k~) = Sl(So(kZ)).
+Therefore K. 1- S2(s,) :: S2(k~). Thus
+sn::k~}.
+Also, we have TO = Sl(So(d))
+= S2(S(~)),
+(Ko, S2) respects K{sl::k~,...,
+and So(T)
+
+= S2 (S(T)).
+
+Case el .1.
+following.
+
+This proves Property
+
+Suppose
+
+WK(K,7,
+
+the algorithm
+
+1.
+
+succeeds for el .1. Then
+
+el) = (K1, S1, M1, T1), Z4(Kl{tl::U,
+
+(K2, S2) (t~,tz fresh), and WK(K,
+Property
+
+3.
+
+By
+
+Theorem
+
+T,e~.1)
+
+3.4.1,
+
+we must
+
+t2::Kl
+
+: tl}},
+
+have the
+
+{(t2, ~1)})
+
+=
+
+= (Kz, S2 o S,, S2(M1).1, S2(t1)).
+
+(Kz, S2) respects
+
+KI
+
+and Kz
+
+t- Sz(rl)
+
+:: {1
+
+:
+
+S2(t1 )}. By the induction
+hypothesis, (Kl, S1) respects K and KI, S1 (T) Del : ~1.
+By Lemma 2.1.1, (Kz, S2 o S1) respects K. By Lemma 2.2.3, K2, S2 o SI(7)
+P el :
+S2(71).
+
+By the rule DOT, we have K2, S2 o Sl(’_T) D el.l
+
+Property
+
+: S2(tl).
+
+3. Suppose (KO, SO) respects K and Ko, SO(T) Del.l
+
+: ~~. Then we must
+
+hypothesis, there
+have Ko, SO(T) Del : r; and X. 1- r; :: {1 : r; ~. By the induction
+is some S~ such that (Ko, S~) respects KI; t-~ = S; (rl ); and SO(T) = S~ o S1 (T).
+Then K. \ S~ (-rl) :: {{1 : r;}.
+we have K.
+
+So (Ko, S~) respects
+a unifier
+
+of (Kl{tl
+
+is some S;
+r;
+
+Consider
+
+\ S~(tZ) :: {1 : Sj(tl)))
+Kl{tl::U,
+
+::U, t2::{t
+
+such that
+
+= S: o S2(t1),
+
+S; = [~~/tl,
+and K.
+
+t2::{l
+
+Case (1 = cl).
+
+(K., S:)
+
+Suppose
+
+: tl]}. Also S~(t2)
+
+respects
+
+1.
+
+the algorithm
+
+By induction
+
+Property
+
+3. Suppose
+rules,
+
+hypothesis,
+
+there
+
+S; (Sl (T))
+
+= SO(T).
+
+D el
+
+Case let z=el in ex.
+we must have: WK(K,
+
+=
+
+S; o S2.
+
+3.4.1, there
+
+Then
+
+(1 = cl).
+
+T, (1 =
+
+D el
+
+Then
+
+cl))
+
+: ~1,
+
+we have
+
+as desired.
+
+=
+
+we must
+
+(Kl{t::((l
+
+:
+
+((l:
+Since K1 {t::
+
+: ~1))}, S1(T)
+
+D (i = el)
+
+: t,
+
+K and K, SO(T)
+
+D (1 = el)
+
+: To, Then
+
+1- To :: ((1 : -r~)).
+
+(Ko, S: ) respects
+
+Let S~ = [~o/t] o S~. Then
+
+S~(71))). Therefore
+(Ko, S;) respects
+SO(T). S?(t) = To, as desired.
+
+ACM Transactions
+
+WK(K,
+
+: ~~ and K.
+
+is some S; such that
+
+So (Ko, S~) is
+
+= S! o S2 o S1(7)
+
+KI, S’l (T)
+
+rule Kl{t::((l
+
+(KO, So) respects
+
+K., So (T)
+
+S;
+
+for t 6 dom(K1).
+
+= S~(rl).
+by Theorem
+
+succeeds for
+and
+
+hypothesis,
+
+by the typing
+7-1))}
+R t::((l:Tl)),
+
+by the typing
+
+X2 and
+
+= S: o S1(7)
+
+have: WK(K, T,e~)
+= (K~,Sl,i141,~l)
+~1))}, S1, M2, t)where t fresh.
+Property
+
+:: S~(K1(t))
+
+Tl)}).Therefore
+: tl]},{(tz,
+
+SO(T) = S; o S1(T)
+
+Since tl,t2are fresh,
+
+r~/t2]oSj.
+
+& S:(t)
+
+K1;
+
+S; (71) = ~~; and
+
+since t is fresh, K.
+
+KI {t:: ((l : Tl))},
+
+By induction
+
+S~(Sl (’T))
+
+F Sj(t)
+
+:: ((1 :
+
+= S; (Sl (T))
+
+=
+
+Suppose WK(K, T, let z=el in e2) = (X’, S, A4, ~). Then
+T, el) = (Kl, S1, MI, Tl), CZS(K1, S1(7), 71) = (Kj, al),
+on Programmmg
+
+Languages
+
+and Systems,
+
+Vol
+
+17, No 6, November
+
+1995.
+
+890
+
+Atsushi Ohori
+
+.
+
+WK(K~,
+(SI(7)){z
+: ol},ez)
+= (K2,S2,A4z,~z),
+and K’ = KZ, S = S2 o Sl, Jl
+let z: SZ(al) = Poly(SZ(All
+: 01)) in M2, T = 7_2.
+Property
+el
+
+1. By the induction
+By the rule
+
+: T1.
+
+on ez, (Kz, S2) respects
+that
+
+for
+
+inference
+
+t c EFTV(K,
+
+T).
+
+shown that
+
+FTV(S(t))
+
+is well
+
+Property
+
+~ EFTV(KI,
+
+3. Suppose
+
+under
+
+K!.
+
+K. By Lemma
+
+rule LET, K2, 5’20 S1 (7)
+
+: a;}
+
+K1; ~~ = S&(~l);
+
+K1 and U1 can also be written
+
+{t,,...
+
+,t~} = ~~~v(KI,TI)
+bound type variable
+
+(K:,
+
+S;)
+
+respects
+
+Suppose
+
+c EFTV(K,
+
+T), it is
+
+~ dom(Kj
+
+).
+
+(K!, S1 ) respects
+
+K, and
+
+2.2.3, K2, S2 o SI(T)
+
+D el :
+
+D let x=el
+
+in e2 : Tz
+
+(Ko, SO) respects
+
+of L’ls,
+the
+
+~ clorn(K~).
+FTV(S(t))
+
+Then
+
+of
+T),
+
+K~, So(T)
+
+(K~, S;) respects
+
+By
+
+oft
+
+and therefore
+
+the definition
+
+if t @ E&’l’V(K,
+
+FTV(S(t))
+
+D
+
+e2 : 72. We show
+
+D
+
+By
+
+algorithm,
+
+Ko{t~::k~, . . ..t~.:k~}
+and o; = Vt~::k~.0t~::k~.T~.By the induction
+that
+
+Kj.
+
+S1 (T)
+hypothesis
+
+K, and Ko, SO(T) D let z=el in e2 : To.
+P el : ~~, (Ko, a~) = Cls(K~, SO(T), T;) and
+x;
+=
+of Cls, we can write
+D ez : To. By the definition
+to
+~J)\EFTV(KL,
+SO(T)),
+such that {t~,...,
+~ } = EFTV(Kj,
+
+have:
+
+Ko, (So(~)){Z
+
+: S2(a1)}
+
+on the derivation
+
+S(T)),
+
+K and xl,
+
+By the induction
+
+under
+
+in r or S, and therefore
+
+By a simple induction
+
+by the typing
+
+we must
+
+: al.
+
+and the unification
+
+2.1.1, (K2, S2 o S1) respects
+
+Sz(al ). Then
+
+(Kl, S1) respects
+el
+
+formed
+
+case S1 (t)is well formed
+
+Thus in either
+by Lemma
+
+D
+
+and K2, S2 o S1(T){Z
+S(t)
+
+algorithm
+
+then t does not appear
+
+Then
+
+K!,
+
+any t E dorn(K),
+
+the type
+
+hypothesis,
+
+GEN, K!, S1 (7)
+
+=
+
+Kl,
+
+there is some S; such
+
+as: K1 = K~{tl::kl,
+
+\ ~~Tv(KI,
+convention,
+
+By the definition
+
+c.0, tn::kn}
+
+such that
+
+...tn::kn.~l.
+SI(7)),
+and o-l = ‘v’tl::kl
+{tl,...tn} n {ty, ~. ~, tg} = 0. since
+
+~. ,t~::k~}
+
+Ko{t~::k~,.
+
+hypothesis,
+
+and SO(T) = S; o S1 (T).
+
+& S~(t,)
+
+:: Sj(kJ
+
+(1 < i < n).
+
+Let
+
+S? be the restriction
+of S: on dorn(S~ ) \ {tl, ~. . . t~}, and let S: be the substiWe show that, for each 1 < z < n, S~(kZ) is
+tution
+[S; (tl)/tl,
+. . . , S~(tn)/tn].
+well formed
+
+Since S~(k,)
+
+is well formed
+
+under K~, it is enough to show that FTV(S~(k,
+)) n {t~, ~. . . t~}
+t E FZ’V(S~(kZ)).
+Then there is some t’such that t 6 l?TV(S~(t’)),
+
+under
+
+Ko{tl
+
+= 0. suppose
+
+Since t,c EFTV(KI,
+
+::S~(kl ), ~~. , t~_l::S~(k,-1)}.
+
+Tl), by the definition
+
+on K1, for any j > i, tj@ FTV(kz).
+
+assumption
+
+or t e S~(El?TV(K1,
+tion of EFTV(K1,
+
+S1 (T))).
+
+S1 (T))
+
+But
+
+it is shown that S~(~l)
+
+Then (Ko{t~::k~,.
+
+.,
+
+is well formed
+
+to~:: k“~ },S~)
+
+either
+
+Tl),
+
+By our
+
+t E {tl,..~,tt—l}>
+
+by induction
+
+S1 (T)))
+
+. . , tn::S~(kn)}
+
+t’ G l?TV(kZ).
+
+t’ @ EFTV(KI,
+
+Therefore
+
+it is shown
+
+that S~(EFTV(Kl,
+
+t< {t:,...
+,t~},and Ko{tl::S~(kl),
+gument,
+
+of EFTV,
+
+on the
+
+G EFTT~(K~,
+is well formed.
+
+construcThus
+
+SO(T)).
+
+By similar
+
+ar-
+
+under K. {tl :: S~(kl ), . . . . tn::S~(kn)}.
+
+respects KO{tl::S~(kl),
+
+. . . ,t~::S~(k~)},
+
+and r;
+
+=
+
+S~(S:(7-1)).
+Thus K. + b’tl::S~(kl)
+~. .V~n::S; (kn).S; (Tl) > V$::k; . . WL::J$.7-;.
+Then by Lemma 3.1.2, KO, (SO(T)){Z
+: Vtl::S~(kl)
+. . .Vtn::S’~(kn),S~
+(T1)}))D e2 :
+
+TO. Since
+
+S~(al)
+
+=
+
+b’t,::S~(kl)
+
+~.Vtn::S~(k~).S~(~,)
+
+and
+
+SO(T)
+
+=
+
+S~(Sl
+
+(T)),
+
+Ko, S~((Sl(T)){z
+: al})
+D e2 : To. Since (Ko, S;) respects KI, (K., S;) respects
+K;.
+We can then apply the induction
+hypothesis
+to e2 and conclude that there
+is some S~ such that (Ko, S$) respects Kz and TO = S$(I-Z) and Sjf(S2(S1 (T))) =
+S?(S1 (T))
+
+= S} (Sl (T))
+
+THEOREM
+
+4.5.1.
+
+Let A1’”
+
+(7 then for
+
+any ground
+
+ments
+
+q2)
+
+ACM
+
+(/,
+
+= SO(T).
+
+This
+
+proves Property
+
+3 for the case of the let
+
+❑
+
+expression.
+
+TransactIons
+
+c RS(T),
+
+E K,T
+
+D M
+
+:0
+
+be any typing.
+
+substitution
+S that respects K, and for
+(ql(ero,se(M)),
+q~(C~)(C))
+G Rs[’).
+
+on Programming
+
+Languages
+
+and Systems,
+
+If C(,CK,
+
+(7)*,
+
+any pair
+
+of environ-
+
+Vol. 17, No. 6, November
+
+1995.
+
+M)
+
+=
+
+A Polymorphic
+PROOF.
+Case
+
+By
+(Z
+
+induction
+
+~1 . . .Tn).
+
+on the
+
+Record Calculus and Its Compilation
+
+structure
+
+Suppose
+
+A1et’-
+
+.
+
+891
+
+of Wf.
+
+K,T
+
++
+
+D (z T1 . . .Tn)
+
+: T.
+
+Then
+
+by the
+
+type system, there are some kl, . . . . kn, TO such that T(z) = Vtl ::kl . . . t~::k~.To,
+‘T= [T1/tl, . . . ,~n/tn](~o),
+and (K, [T1/tl, . . . ,Tn/t~])
+respects K{tl::kl,
+. . . ,tn::kn}.
+Let
+
+Vtl::kl
+
+., .tn::kn.
+
+Zj(l
+
+< j
+
+<
+
+pOSe c(~~,
+tion
+
+idz(il,
+
+t~)
+
+n) such that
+
+Lx
+
+on ql,q~,
+
+(ql(z),
+
+ground
+
+(&@
+
+q2(~))
+
+bound
+~x.ql(el)
+
+(T)”(x).
+
+There
+
+are
+
+. . ,~fl,/tn](t~)).
+
+Now
+
+sup-
+
+A4 = x Z1 . . .Zm.
+
+S(T~)/t~](t~)))[.
+}
+:: ;I, o.., tn..k
+““n>
+c Rsf~),
+
+By the assump-
+
+By
+
+the definition
+
+of
+
+Since S respects K and
+[S(7_l)/tl,
+”””, S(Tn)/tn]
+‘s a
+
+. , tn::S(kn)},
+as desired.
+
+Then by the definition
+
+of
+
+suppose AZet’m ~ K, T D Ax : TI.MI
+: TI -+ ‘m.
+Then
+D Ml
+: rz. Suppose C(LK, (T)*, Ax : T1.Afl) = C. Then
+Cl = c(~x, (T{x : Tl})”, Ml).
+Let el = erase(~l).
+By the
+
+convention
+
+c Rs(”)
+
+TO =
+
+[T1/tl,.
+
+c Rv~l::sf~lJvt~::S (~~JSt70).
+
+{tl :: S(kI),..
+
+1 ~z.ql(el),
+
+(eO, Co)
+
+Then
+
+M.
+
+Xl ~. Z&)))
+
+such that
+
+variable
+
+a
+
+: idx(~j,
+
+respecting
+
+Case Ax : T1.M.
+A1et’ \ K,7{x
+: Tl}
+C = kr.Cl
+
+=
+
+~~/!~~(&~~$s)!~t~”
+
+substitution
+
+R, (vI(z),
+
+. . . ia?x(ln,t~)
+R ~y
+
+(Z T1. . .Tn))
+
+(7)”,
+
+“(~,[TI/~l,..,
+‘2(L~)(ZJ)
+
+*
+
+and the definition
+
+and q~(c~)(~z.Cl)
+
+be any pair
+
+of evaluation
+
+contexts,
+
+VI (Ax.el ) =
+
+= ~Z.q2(c~)(Cl)
+
+~ ~X.~!(Cx)(Cl).
+
+Let
+
+elements.
+
+eo L iff CO ~.
+
+Sup-
+
+of related
+
+Then
+
+pose e. J e~ and CO 1 C:.
+}~et” and the subject
+terms
+
+By the type soundness theorem (Theorem
+3.2.1) of
+reduction
+theorem (Theorem 4.2.3) of Atet’[ 1, e~, C& are also
+
+of the same types of eo, CO respectively,
+
+the definition
+
+of evaluation
+
+and ((kz.q~(L~)(Cl))
+V1{Z I+ e~}(el),
+Rs(”),
+
+(ql {x
+
+(((~~.~l(el))
+
+H
+
+and [CL/Xl&(
+
+c~)(Cl)
+
+e~}, ~2{z
+
+C;})
+
+(vl(erase(Ml
+
+q~(c)(C~))
+
+: TI,...,Zn
+
+definitions
+for all i,
+
+1 C’.
+
+But
+
+++ ci}s(c~)(cl).
+
+G RS(T{Z’’l}).
+
+CO)) c RS(T2). Thus (kz.cl),
+
+J. By
+
+(el )) 1 e’,
+
+[eL/$]ql(el)
+
+=
+
+SinCe (e&) c:)
+
+~
+
+By the induction
+
+and Mz, (ql (erase(Ml)),
+Then
+
+G Rs(”).
+
+. .,ln=Mn}.
+: Tn}.
+Then
+
+C(LK, (T)”, {lI=M1,.
+C(K, T DAf,
+: T,)
+
+= ~2{z
+
+(e~, CA) E Rs(”
+
+eo) 1 e’ ifi [eb/x](ql
+
+hypothesis,
+
+C) ~ RS(’1)+S(T2).
+
+Cl = C(LjC, T, AZl) and Cl = C(L,C, T, Afz).
+
+for MI
+
+M2)), &[71)(Cl
+
+Case {ll=MI,.
+
+(cl))
+
+D A!ll :
+Aleta \ K, T D MI Mz : T1. Then Alet’- t- K,7
+D Af2 : T2 for some 72. Suppose c(~~, (7)’, M) = C,
+
+Cz) such that
+
+hypotheses
+
+(v1(erase(M2)),
+
+{z,
+
+H
+
+co), ((~X.T&(c~)(CI))
+
+C = (Cl
+
+induction
+
+and therefore
+
+((~x.ql
+
+CO) 1 C’ iff [C~/Z](q~[c~)(Cl))
+
+Case Ml Mz. Suppose
+T2 -+ ~1 and A1et,’ K K,7
+Then
+
+contexts,
+
+. .,tn=Mn})
+
+By the
+
+q~(L)(C1 )) 6 RS(T2+T1) and
+
+by the definition
+
+of the relations
+
+R,
+
+C2)) e Rs(”).
+““,
+Suppose A lef,o~K,7b{z1=~l,.
+Zn =M.}:
+Atet’B & K,T
+D M% : T% (1 < z < n).
+Suppose
+
+= C.
+
+Then
+
+C = {Cl,...
+
+(1 < z < n). Let et = erase(M,)
+
+,C~}
+
+such that
+
+(1 < z < n).
+
+C, =
+By
+
+the
+
+of the reduction
+systems, ql ({Z1 = el, ..., 1~ = en}) L iff ql (e,)
+and r&(c) ({ C’l,. ~”, Cn})
+1 iff q~(c)(C,)
+4 for all i.
+Furthermore,
+
+j
+if
+
+ql({ll=el,..
+
+,ln = en}) ~ e’ then e’ = {11 = ej, ~~. ,1~ = e~} such that ql(e,) 1 e;
+for (1 < z < n). Similarly
+for &(c) ({Cl, . . . . Cn}).
+By the induction
+hypotheses, (ql(e~),q~(c)(Cz))
+en}), ~~(c)({C1,
+
+c RS(T’) for each i.
+
+. . . ,Cn}))
+
+ACM TransactIons
+
+c RS({ll:T1,.
+
+on Programming
+
+Thus
+
+we have (ql({ll
+
+= el, . . . . 1~ =
+
+!~~trm}).
+Languages
+
+and Systems,
+
+Vol. 17, No 6, November
+
+1995
+
+892
+
+Atsush! Ohorl
+
+.
+
+Case
+
+Suppose A let8 + X,7
+
+Ml:rl,l.
+
+t-l, K E ~1 :: {1 : 72].
+that
+
+Suppose
+
+Cl = C(LX, (T)*,
+
+induction
+and
+
+MI)
+(ql(el),
+
+(Cl)
+
+~~(c~)
+
+q~(~x)
+
+J iff
+
+L ej and T&(c~)(Cl)
+
+record
+
+type
+
+of the form
+
+: T1.l : Tz. Then Aief,s 1- K,T
+
+(T) ’, fifl:~l.l)
+
+and CK & Z : idc(l,
+
+hypothesis,
+
+ql(el)
+
+p Ml
+
+C(l~,
+
+q~(C~)(C1))
+
+~l).
+
+(Cl[~])
+
+J, we have
+
+Since 0 + S(~l)
+: S(~2), . . .}.
+
+ql(e)
+
+:: {l
+
+Then
+
+Then
+
+D All
+
+C’ = Cl [Z]
+
+Let el = erase(M1).
+
+c RS(T1).
+
+J. cl.
+{. ..,1
+
+= C.
+Since
+
+ql(el)
+
+1 iff
+
+q~(z~)(C)
+
+: S(~2)},
+
+J iff
+
+:
+
+such
+
+By the
+~l(el.l)
+
+J.
+
+J,
+
+Suppose
+
+S(7-1) is a ground
+
+by the definition
+
+{,1
+
+= e’,”},
+C{ = {, C’,}
+such that C’ is at the index
+r&(L~)(C))
+~ Rs(”).
+(e’, C’) @ RS(72). This proves (q’(el.l),
+
+of R, ej =
+
+lzdz(l, S(~,))]
+
+and
+
+Case Poly(Ml:a).
+Let Vtl::kl
+~. tn::kn.~l
+= o, and Vtl::kl
+. . .tm::kn.2dz(zl)tj)
+~
+: a. Then A~ct’q k
+. . . idz(l~, t~) * 7-1= (a)”. Suppose A let,, b K T D poly(M1:a)
+K{tl::kl
+
+. ..tn.:kn},
+
+C=M1.
+Let e =
+
+~
+
+Mm.Cl
+
+D Ml
+
+: ~l.
+
+such that
+
+Cl
+
+erase(Ml).
+
+Let
+
+suppose
+=
+
+C’(LK, (~)”,
+
+Poly(Mo))
+
+S’ be any ground
+
+substitution
+
+,tn} and such that it respects {tl ::S(kI ) ~. . tn::S(kn)}.
+{t,,...
+K{tl::kl,
+
+and (ql, qz) E R “oS(T).
+
+,tn::kn}
+
+.
+
+(vl(e),q~.s{~~~tl::.l,
+But
+
+= &{Il
+GC{tl::k,,
+,tn::kn}
+V:’os(cK{,,::kl,
+
+lzdz(lj,
+
+S’(tj))l
+
+,t,,::kn})
+
+the definition
+
+variable,
+
+~:(cK){I1:tdz(ll,
+
+MI
+
+l~.v~(z~)
+type
+
+l~.q;(c-)(Cl)
+
+iff
+
+[21/11, ...,
+
+~
+
+hypothesis
+
+Case let X:O = All
+Then A~ei- !- K,T{z
+such that
+
+el
+
+4 iff q~(c~) (Cl)
+
+1.
+
+Since
+
+in q~(zx ~(Cl ) does not
+
+the subject
+Thus:
+
+ap-
+
+. .,cn},~,,co),
+.l~.Cj,
+then
+
+reduction
+
+property
+
+of
+
+J,[21/11, >&/~7nl(q)
+tn::kfl.
+
+of the relation
+
+R implies
+
+that
+
+n).
+
+infkfz
+:~.
+in M2. Suppose A ~et,.kK,~Dlet~:~=Ml
+: a} D Mz : ~, A1et’- t K,7_ D Ml : ~, e = let z = el in ez
+
+= erase(M1)
+
+The cases for modify(M1
+TransactIons
+
+It
+
+and the definition
+< @(vtl::kl
+
+and e2 = erase(M2),
+
+Cl = C(L~, T, fl~l), C2 = C(,C~, T{x
+induction
+hypotheses.
+
+ACM
+
+~~ =
+
+21. . .Zm) ~ [21/11, . . . ,Zm/lm](C~)
+
+2~ /LJ(&K)(cl))
+
+.~~m.cl))
+
+Let
+
+J AI1 ~“ Inz.C;
+
+((A1l . . . A1m.q~(LE1(Cl))
+
+the induction
+
+(Cl)
+
+system,
+
+{Cl,. . . ,Cm}[l,],
+modify ({cl,.
+if Ml . . .l~.v~(L~)(Cl)
+j. ~11
+
+iff
+
+(q’(e),q~[~)(~~l
+
+there-
+
+~. . ,im/Im](&)(cl)),
+
+the same property holds for 1, and C:, otherwise
+~Ze~Ill (Theorem 4.2.3) would have been violated.
+
+Then
+
+S’OS(T1)
+
+s'(ti)),,I"7L:td z(l,,t>s'(tk))}'
+
+= [il/11,
+
+by the
+
+pear in any subterm of the forms
+switch (l, =CO) of Cl,. . .,Cn.
+Now
+
+AI1..
+
+E R
+
+hypothesis,
+
+Then we have
+
+of evaluation,
+
+each t; is a type
+
+Then
+
+t~ )}, and
+: ‘idz(ll,
+tj),. ,Im : Zdz(lm,
+
+,tn::k. })(cl)
+
+%OS(LK{,l::.,,
+By
+
+=
+
+(1 < j < m).
+
+C.
+
+such that dorn(S’)
+=
+Then S’ o S respects
+
+By the induction
+
+,,n::kn })(G))
+
+fore
+
+=
+
+C(LK{I1,,~~(L,:tjJ,.
+,1,,.,t~~tL,,,,t;,,)},
+(7)”,Ml).
+
+on Programmmg
+
+: a}, Mz).
+
+,l,AYz) and ((l= M)cJ)
+Languages
+
+and Systems,
+
+C = let X=C1
+
+in C2 such that
+
+The desired
+
+result
+
+follows
+
+are similar
+
+to that
+
+of M :7-,1.
+
+Vol
+
+17, No 6, November
+
+1995
+
+by the
+
+❑
+
+A Polymorphic
+
+Record Calculus and Its Compilation
+
+.
+
+893
+
+ACKNOWLEDGMENTS
+The author
+
+would
+
+this
+
+and
+
+article
+
+discussions.
+for
+
+The
+
+improving
+
+like to thank
+
+providing
+author
+
+the
+
+Yasuhiko
+
+many
+also
+
+useful
+
+thanks
+
+presentation
+
+Minamide
+
+for careful
+
+comments,
+the
+
+of the
+
+and
+
+reading
+
+Jacques
+
+anonymous
+
+of a draft
+
+Garrigue
+
+referees
+
+for
+
+for
+
+helpful
+
+of
+
+helpful
+
+comments
+
+article.
+
+REFERENCES
+APPEL,
+
+A.
+
+W.
+
+the
+
+3rd
+
+International
+
+Lecture
+
+AND MACQUEEN,
+
+Notes
+
+BARENDREGT,
+Logic
+
+D.
+
+in Computer
+
+H.
+
+1984.
+
+put.
+
+Standard
+
+1991.
+
+ML of New Jersey. In Proceedings
+
+on Programming
+
+Science,
+
+The
+
+vol.
+
+Languages
+
+528. Springer-Verlag,
+
+and
+
+Logic
+
+Berlin,
+
+1-13.
+
+Calculus:
+
+Its
+
+Syntax and Semantics,
+
+of Mathematics,
+
+vol.
+
+103. North-Holland,
+
+Lambda
+
+and the Foundations
+
+BREAZU-TANNEN,
+
+B.
+
+Symposium
+
+V. AND COQUAND,
+
+C. 1988. Extensional
+
+models
+
+of
+
+Programming.
+
+rev.
+
+ed. Studies
+
+in
+
+Amsterdam.
+
+for polymorphism.
+
+Inf.
+
+Com-
+
+59, 85–114.
+
+BREAZU-TANNEN,
+plicit
+
+V.,
+
+coercion.
+
+BRUCE,
+
+K.
+
+B.,
+
+MEYER,
+
+A.
+
+T.,
+
+R.,
+
+AND MITGHELL,
+
+Comput.
+
+85, 76-134.
+
+P.,
+
+JUNG,
+
+A.,
+
+AND OHORI,
+
+Theor.
+
+Comput.
+
+Trans.
+
+Database
+
+A.
+
+J.
+
+1991.
+
+to appear.
+
+1988. A semantics
+
+of multiple
+
+L
+
+CARDELLI,
+
+L. 1994. Extensible
+
+Object-Oriented
+Mass.,
+
+A.
+
+1991.
+
+Inheritance
+
+as ex-
+
+C.
+
+1990,
+
+Using
+
+The
+
+semantics
+
+powerdomains
+
+of second-order
+
+to generalize
+
+relational
+
+Set. 91, 1, 23-56.
+
+Syst.
+
+CARDELLI,
+
+records
+
+Programming,
+
+and type
+
+inheritance.
+
+in a pure
+
+inference
+
+Inf.
+
+calculus
+
+in database
+
+Comput.
+
+76, 138-164.
+
+of subtyping.
+
+C. GUNTER AND J. MITCHELL,
+
+programming.
+
+In Theoretical
+
+Eds. MIT
+
+Aspects
+
+Press,
+
+of
+
+Cambridge,
+
+373–426.
+
+CARDELLI,
+
+L. AND MITCHELL,
+
+J. 1989.
+
+cal Foundation
+
+of Programmmg
+
+Springer-Verlag,
+
+Berlin,
+
+CARDELLI,
+
+ACM
+
+CARTWRIGHT,
+
+CONNOR,
+nism
+
+SUTV. 17, 4 (Dec.),
+
+R. AND FAGAN,
+
+M.
+
+Language
+
+Deszgn
+
+R., DEARLE,
+
+A.,
+
+for statically
+
+typed
+
+OOPSLA
+
+of the ACM
+
+PToceedmgs
+
+in Computer
+
+types,
+
+data
+
+(New
+
+R., AND BROWN,
+with
+
+Orleans,
+
+multlple
+
+La.).
+
+of Mathemati-
+
+Science,
+
+vol.
+
+442.
+
+Principal
+
+Symposium
+
+abstraction,
+
+and polymor-
+
+of the ACM
+
+Conference
+
+ACM,
+
+New York,
+
+278-292.
+
+F. 1989.
+
+An object
+
+addressing
+
+inheritance.
+
+ACM,
+
+properties
+
+R. 1982.
+
+In Proceedings
+
+and Implementation.
+
+languages
+
+B. 1983. Fundamental
+
+L. AND MILNER,
+
+In
+
+Notes
+
+471-522.
+
+1991. Soft typing.
+
+MORRISON,
+
+Conference
+
+COURCELLE)
+
+on records.
+Lecture
+
+P. 1985. On understanding
+
+Comput
+
+Programmmg
+
+Operations
+
+Semant%cs.
+
+22-52.
+
+L. AND WEGNER,
+
+phism.
+
+ings
+
+C., AND SCEDROV,
+
+P. AND OHORI, A. 1995. Polymorphism
+
+ACM
+
+DAMAS,
+
+GUNTER,
+
+93, 172–221.
+
+Inf.
+
+databases.
+BUNEMAN,
+
+Comput.
+
+calculus.
+
+lambda
+BUNEMAN,
+
+COQUAND,
+
+lnf.
+
+New
+
+of infinite
+type-schemes
+
+on Principles
+
+mecha-
+
+of the ACM
+
+In Proceedings
+
+York,
+
+trees.
+
+on
+
+279-285.
+
+Theor.
+
+Comput.
+
+for functional
+
+of Programming
+
+Sci. 25, 95-169.
+
+programs.
+
+Languages.
+
+In Proceed-
+
+ACM,
+
+New
+
+York,
+
+207–212.
+FAGIN,
+
+R.,
+
+fast
+
+NIEVERGELT)
+
+access method
+
+FELLEISEN,
+
+M.,
+
+FRIEDMAN,
+
+D.
+
+control,
+
+Theor.
+
+of sequential
+FUH, Y.-C.
+Lecture
+FURUSE,
+
+J., PIPPENGER,
+for dynamic
+
+AND MISHRA,
+Notes
+
+files,
+
+P.,
+
+N.,
+
+Theor.
+
+Trans.
+
+KOHLBECKER,
+
+Comput.
+
+P. 1988. Type
+
+inference
+
+in Computer
+
+Science,
+
+vol.
+
+J .P. AND GARRIGUE,
+
+J. 1995.
+
+A label
+
+J. AND SNYDER, W.
+Comput.
+
+Sci.
+
+ACM TransactIons
+
+E.,
+
+H.
+
+1979.
+
+Extendible
+
+Database
+
+Syst.
+
+4, 3, 315-344.
+
+AND DUB A, B.
+
+1987.
+
+hashing
+
+A syntactic
+
+— a
+theory
+
+SCZ. 52, 205–237.
+
+ment and its compilation
+method.
+RIMS
+Sciences, Kyoto
+Univ., Kyoto,
+Japan.
+GALLIER,
+
+AND STRONG,
+
+ACM
+
+1989. Complete
+
+with
+
+subtypes.
+
+300. Springer-Verlag,
+selective
+
+Preprint
+
+lambda
+
+In Proceedings
+94-114.
+
+calculus
+
+with
+
+1041, Research
+
+sets of transformations
+
+of ESOP
+
+Berlin,
+
+Instit.
+
+optional
+
+’88.
+
+argu-
+
+for Mathematical
+
+for general
+
+E-unification.
+
+67, 2, 203-260.
+on Programmmg
+
+Languages
+
+and Systems,
+
+Vol. 17, No 6, November
+
+1995
+
+894
+
+Atsushr Ohori
+
+.
+
+J. AND XiT-KACI,
+
+GARRIGUE,
+
+Proceedings
+York,
+
+J.-Y
+
+1971
+
+a l’61imination
+Logic
+
+Une extension
+des coupures
+
+Symposwm.
+
+C. 1994. Using
+
+ings
+HALL,
+
+The
+
+typed
+
+polymorphic
+
+on Pmnciples
+
+label-selective
+
+of Programming
+
+Amsterdam
+
+Hindley-Milner
+
+type
+
+rep,,
+R
+
+Univ.
+
+PEYTON
+
+of Glasgow,
+
+A calculus,
+
+Languages,
+
+ACM,
+
+Lang.
+
+In
+New
+
+R. AND MORRISETT,
+
+New
+
+York,
+
+HARPER,
+
+list representation,
+
+Programming.
+
+JONES) S., AND WADLER,
+
+Glasgow,
+
+,%d Scandinavian
+
+P.
+
+In ProceerZ-
+
+ACM,
+
+1994.
+
+New
+
+Type
+
+York,
+
+class in Haskell
+
+Scotland,
+ACM
+
+Trans.
+
+G
+
+1995. Compiling
+
+of the ACM
+
+Sympostum
+
+polymorphism
+
+on Prznczples
+
+using
+
+intensional
+
+of Progr-ammmg
+
+type
+
+analysis.
+
+Lanquages.
+
+ACM,
+
+130–141.
+
+R. AND PIERCE,
+
+Proceedings
+York,
+
+to optimize
+
+and Functional
+
+et son apphcatlon
+
+In the
+
+15, 2, 211-252,
+
+Syst.
+
+Proceedings
+
+inference
+
+a l’analyse,
+
+des types.
+
+J. C 1993. On the type structure of Standard ML
+
+AND MITCHELL,
+
+PTogTam.
+HARPER,
+
+K.,
+
+de godel
+
+et thriorle
+
+North-Holland,
+
+C , HAMMOND,
+
+Tech.
+
+de I’interpretation
+
+clans l’analyse
+
+Conference on Lzsp
+
+of the ACM
+
+HARPER,
+
+In
+
+1994.
+
+Sympostum
+
+35-47
+
+GIRARD,
+
+HALL,
+
+H.
+
+of the ACM
+
+B.
+
+of the ACM
+
+1991.
+
+A record
+
+Symposzum
+
+calculus
+
+based
+
+on Prvnezples
+
+on symmetric
+
+of Programming
+
+concatenation,
+
+Languages.
+
+In
+
+ACLf,
+
+New
+
+131-142.
+
+JATEGAONKAR,
+
+L. A. AND MITCHELL)
+
+and subtypes
+
+Fundam.
+
+X. 1992. Unboxed
+
+LEROY,
+
+posium
+MILNER,
+
+on Principles
+
+R. 1978
+
+J. 1993.
+
+Type
+
+Inform,
+
+19, 127–165.
+
+objects
+
+and polymorphic
+
+of Programmmg
+
+A theory
+
+of type
+
+inference
+
+typing,
+
+Languages.
+
+polymorphism
+
+with
+
+extended
+
+pattern
+
+In Procceedtngs
+
+ACM,
+
+New
+
+York,
+
+m programming.
+
+matching
+
+of the ACM
+
+Sym-
+
+177-188
+
+J. Comput.
+
+Syst.
+
+SCZ 17,
+
+MIT
+
+Press,
+
+348-375.
+MILNER,
+
+R.,
+
+TOFTE,
+
+Cambridge,
+MITCHELL,
+
+AND HARPER,
+
+J. 1984. Type
+
+Notes
+
+in Computer
+
+MITCHELL,
+
+J.
+
+A.
+
+Type
+
+R
+
+1990
+
+1989.
+
+The Definition
+
+A simple
+
+ACM,
+1990.
+
+of Standard
+
+York,
+
+Semantics
+
+Ed.
+
+for ML
+
+ML.
+
+A. 1992. A compilation
+
+Press,
+
+In
+
+of
+
+Mass.,
+
+365-458
+
+In Proceedings
+and
+
+Types. Lecture
+
+Handbook
+
+Cambridge,
+
+polymorphism.
+Languages
+
+of Data
+
+257-277.
+
+languages.
+
+MIT
+
+for database
+
+method
+
+Symposium
+
+Berlin,
+
+Computer
+
+Theoretzcat
+
+of the A CM\IFIP
+
+Architecture
+
+(London,
+
+281–292
+
+of types
+
+A.
+
+OHORI,
+
+In Semanttcs
+
+programming
+
+Programming
+
+OHORI,
+
+of the ACM
+
+for
+
+semantics
+
+New
+
+containment.
+
+173. Springer-Verlag,
+
+systems
+
+on Functional
+
+England),
+
+and type
+vol.
+
+J. VAN LEEUWEN,
+
+Science,
+
+Conference
+
+inference
+Science,
+
+1990
+
+Computer
+OHORI,
+
+M.,
+
+Mass.
+
+objects.
+
+for ML-styIe
+
+on Prtnczples
+
+Theor
+
+Comput.
+
+polymorphic
+
+of Programmmg
+
+Sci.
+
+record
+
+76, 53-91.
+
+calcuh.
+
+Languages.
+
+ACM,
+
+In Proceedings
+New
+
+York,
+
+154–
+
+165.
+OHORI,
+
+A.
+
+AND BUNEMAN)
+
+Proceedings
+Utah).
+OHORI,
+ings
+
+ACM
+
+New
+
+York,
+
+ACM,
+
+A.
+
+AND BUNEMAN,
+
+of the
+
+Extended
+
+ACM
+
+A.
+
+chine
+
+MIT
+
+Conference
+
+1989.
+
+Univ.,
+
+in a database
+and
+
+Functional
+
+inference
+
+for
+
+Static
+
+type
+
+Conference
+
+T
+
+Kyoto,
+M
+
+1995
+
+Orleans,
+
+programming
+
+language,
+
+Programming
+
+parametric
+
+La.).
+
+of Object-Oriented
+
+Cambridge,
+
+In
+
+(Snowbird,
+
+Prepr]nt
+
+New
+
+In
+
+York,
+C
+
+Proceed445–456
+
+GUNTER
+
+AND
+
+1994.
+
+unboxed
+1031,
+
+classes.
+
+ACM,
+
+Programming,
+
+Mass , 121–148,
+
+A polymorphic
+
+RIMS
+
+calculus
+
+Research
+
+as an abstract
+
+Instit.
+
+for
+
+ma-
+
+Mathematical
+
+Japan,
+
+1993.
+
+on Programming
+
+(New
+
+Aspects
+
+Press,
+languages,
+
+J. AND JONES,
+
+reference
+on LISP
+
+174-183
+P.
+
+AND TAKAMIZAWA)
+Kyoto
+
+Type
+
+in Theoretical
+
+Eds
+
+for polymorphic
+
+Sciences,
+PETERSON)
+
+1988.
+
+Conference
+
+00PSLA
+
+version
+
+J. MITCHELL,
+OHORI,
+
+P.
+
+of the
+
+Implementing
+
+Language
+
+Design
+
+type
+
+classes.
+
+In
+
+Proceedings
+
+and Implementation,
+
+ACM,
+
+of the ACM
+New York,
+
+227–
+
+236
+REMY,
+
+D
+
+1989. Typechecking
+
+of the ACM
+REMY,
+
+D.
+
+1992.
+
+on Principles
+ACM
+
+Transactions
+
+Symposium
+Typing
+
+records
+
+and variants
+
+on Prmctples
+
+record
+
+of Programming
+on Programming
+
+concatenation
+
+extension
+
+Languages.
+
+for free. In Proceedings
+
+Languages.
+Languages
+
+in a natural
+
+of Programming
+ACM,
+
+New
+
+and Systems,
+
+York,
+
+Vol
+
+of ML.
+ACM,
+
+In Proceedings
+
+New York,
+
+of the ACM
+
+167–176.
+
+17, N.
+
+6, November
+
+77–87
+
+Symposzum
+
+1995
+
+A Polymorphic
+
+R6MY,
+
+D.
+
+1994a.
+
+SIGPLAN
+REMY,
+
+D.
+
+Efficient
+
+representation
+
+Workshop
+1994b.
+
+Aspects
+
+on ML
+
+Type
+
+of extensible
+
+records,
+
+for
+
+records
+
+in
+
+Programmmg,
+
+a natural
+
+C. GUNTER
+
+ROBINSON, J. A. 1965. A machine-oriented
+23-41.
+
+extension
+
+Conference
+
+on Lisp
+
+and Functional
+
+R. 1988. Type
+
+Principles
+STEELE,
+
+inference
+
+of Programming
+
+Collo@rn
+
+logic based on the resolution
+
+principle.
+
+subtypes.
+
+In Proceedings
+
+with
+
+Languages.
+
+Common
+
+LISP:
+
+The Language.
+
+garbage
+
+collection
+
+Conference
+
+on Lisp
+
+and Functional
+
+Dept.
+
+Science,
+
+of Computer
+P. AND BLOTT,
+
+of the ACM
+
+M.
+
+Keio
+
+Univ.,
+
+Press,
+
+type
+
+for simple
+
+inference
+
+in Computer
+
+Science
+
+Corrigendum
+
+: Complete
+
+Symposium
+
+on Logic
+
+Type
+
+IEEE
+
+inference
+
+Symposium
+
+A. AND CARTWRIGHT,
+
+of the ACM
+
+Conference
+
+April
+
+1995;
+
+revised
+
+ACM
+
+Transactions
+
+type
+
+for records
+on Logic
+
+(Ithaca,
+
+Ma.
+
+on Lisp
+
+September
+
+In Proceedings
+
+ACM,
+
+York,
+
+concurrent
+
+objects.
+
+1–11.
+
+Ph.D.
+
+thesis,
+
+less ad hoc. In Proceedings
+ACM,
+
+New York,
+of the %d
+
+IEEE,
+
+for simple
+
+Science.
+
+New
+
+object.
+
+IEEE,
+
+New
+
+and
+
+simple
+
+objects.
+
+IEEE,
+
+New
+
+soft type
+
+system
+
+1995; accepted
+
+October
+
+York,
+
+60–76.
+
+IEEE
+
+37-44.
+
+of
+
+In Proceedings
+York,
+
+Science.
+
+Programming.
+
+Languages
+
+New
+
+In Proceedings
+
+and Functional
+
+on Programming
+
+on
+
+parameters.
+
+Languages.
+
+concatenation
+
+R. 1994. A practical
+
+ACM
+
+Burlington,
+
+New York).
+
+inference
+
+m Computer
+
+of the
+Symposium
+
+type
+
+objects.
+
+m Computer
+
+12,
+
+J. ACM
+
+Japan.
+
+Complete
+
+1989.
+
+Press,
+
+to typed
+
+Yokohama,
+
+on Program-
+
+of the ACM
+
+Programmwsg
+
+of Programming
+
+1988.
+
+Received
+
+Theoretical
+
+88-97.
+
+explicit
+
+on Principles
+
+the 3’rd IEEE
+M.
+
+ACM
+
+York.
+
+S. 1989. How to make ad hoc polymorphism
+
+on Logic
+
+of the dth
+
+Digital
+
+using
+
+approach
+
+New
+
+York,
+
+Symposium
+
+1987.
+
+Symposium
+
+WRIGHT,
+
+New
+
+Tag-free
+
+V. 1994. A process-calculus
+
+WAND,
+
+ACM,
+
+1994.
+
+VASCONCELOS,
+
+WAND,
+
+ACM,
+
+1984.
+
+M.
+
+0$ the
+
+MIT
+
+lists. In Proceedings
+
+Programmmg.
+
+A.
+
+of the ACM
+
+WAND,
+
+In
+Eds.
+
+In the Paris
+
+G.L.
+
+WADLER)
+
+of ML.
+
+AND J. MITCHELL,
+
+SHAO, Z., REPPY, J., AND APPLE, A. W. 1994. Unrolling
+
+TOLMACH,
+
+Proceedings
+
+895
+
+Mass., 67-96.
+
+REYNOLDS, J. 1974. Towards a theory of type structure.
+ming. Springer-Verlag,
+Berlin, 408–425.
+
+STANSIFER,
+
+In
+
+.
+
+ACM, New York, 12-16.
+
+and Its Applications.
+
+inference
+
+of Ob~ect-Oriented
+
+Cambridge,
+
+Record Calculus and Its Compilation
+
+132.
+In
+
+York,
+
+Proceedings
+92–97.
+
+for scheme.
+
+In Proceedings
+
+ACM,
+
+York,
+
+New
+
+250–262.
+
+1995
+
+and Systems,
+
+VO1 17, No 6, November
+
+1995
+
+

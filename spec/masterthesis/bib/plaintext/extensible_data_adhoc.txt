@@ -1,0 +1,3735 @@
+Extensible Data Types with Ad-Hoc Polymorphism (Extended)
+MATTHEW TOOHEY, University of Toronto, Canada
+YANNING CHEN, University of Toronto, Canada
+ARA JAMALZADEH, University of Toronto, Canada
+NINGNING XIE, University of Toronto, Canada
+This paper proposes a novel language design that combines extensible data types, implemented through row
+types and row polymorphism, with ad-hoc polymorphism, implemented through type classes. Our design
+introduces several new constructs and constraints useful for generic operations over rows. We formalize our
+design in a source calculus 𝜆𝜌⇒ , which elaborates into a target calculus F𝜔⊗⊕ . We prove that the target calculus is
+type-safe and that the elaboration is sound, thus establishing the soundness of 𝜆𝜌⇒ . All proofs are mechanized
+in the Lean 4 proof assistant. Furthermore, we evaluate our type system using the Brown Benchmark for Table
+Types, demonstrating the utility of extensible rows with type classes for table types.
+CCS Concepts: • Theory of computation → Type theory; Type structures; • Software and its engineering → Data types and structures; Constraints; Polymorphism; Functional languages.
+Additional Key Words and Phrases: Row polymorphism, Row constraints, Type classes, Elaboration
+ACM Reference Format:
+Matthew Toohey, Yanning Chen, Ara Jamalzadeh, and Ningning Xie. 2026. Extensible Data Types with AdHoc Polymorphism (Extended). Proc. ACM Program. Lang. 10, POPL, Article 20 (January 2026), 38 pages.
+https://doi.org/10.1145/3776662
+
+1
+
+Introduction
+
+Modularity stands as a fundamental property in software development, making systems easier to
+understand, maintain, and evolve. One significant challenge in achieving modularity in data types
+has traditionally been the difficulty of extending them in a type-safe manner without breaking
+existing code. This is where row types [Wand 1987] offer a compelling approach, which facilitates
+the creation of extensible data types by allowing developers to add new fields to a data type without
+compromising type safety or requiring widespread modifications across the codebase.
+Rows are, at their core, a mapping from labels to types, effectively capturing the structure of
+records and variants. Row types have been extensively studied in the literature [Cardelli and
+Mitchell 1990; Harper and Pierce 1991; Leijen 2005; Rémy 1989, 1992; Shields and Meijer 2001;
+Wand 1991], and have found various applications, particularly through row polymorphism, a form of
+parametric polymorphism that enables abstraction over possible row extensions. Row types form the
+basis for the object-oriented features [Rémy and Vouillon 1998] and polymorphic variants [Garrigue
+1998] in OCaml, and are employed to express effect types [Hillerström and Lindley 2016; Leijen
+2017; Lindley and Cheney 2012] and extensible choices in session types [Lindley and Morris 2017].
+Authors’ Contact Information: Matthew Toohey, University of Toronto, Toronto, Canada, mtoohey@cs.toronto.edu; Yanning
+Chen, University of Toronto, Toronto, Canada, yanning@cs.toronto.edu; Ara Jamalzadeh, University of Toronto, Toronto,
+Canada, a.jamalzadeh@mail.utoronto.ca; Ningning Xie, University of Toronto, Toronto, Canada, ningningxie@cs.toronto.
+edu.
+
+This work is licensed under a Creative Commons Attribution 4.0 International License.
+© 2026 Copyright held by the owner/author(s).
+ACM 2475-1421/2026/1-ART20
+https://doi.org/10.1145/3776662
+
+Proc. ACM Program. Lang., Vol. 10, No. POPL, Article 20. Publication date: January 2026.
+
+20:2
+
+Matthew Toohey, Yanning Chen, Ara Jamalzadeh, and Ningning Xie
+
+While parametrically polymorphic functions are useful for functions whose behaviours are
+entirely uniform in its type argument, there often arises a need to leverage specific knowledge
+about that type. Consider, for instance, defining an equality function that compares two values.
+Such a function is not universally definable; more crucially, its behaviour may differ fundamentally
+depending on the type. To address this, type classes [Wadler and Blott 1989] offer a powerful
+approach for achieving ad-hoc polymorphism by allowing functions to be overloaded, with qualified
+types [Jones 2003a] expressing type class constraints. For example, Haskell’s equality function (==)
+has type ∀a. Eq a ⇒ a → a → Bool, indicating that any instantiation of a must be an instance
+of the Eq type class. Type classes have been widely adopted in numerous languages including
+Haskell [Jones 2003b], Rocq [Sozeau and Oury 2008], and Idris [Brady 2013], among others.
+Now, let us consider defining an equality function for a record type. In scenarios where all
+types within the record are fully specified and known to be comparable, the record’s equality
+function (==) can be implemented by a pairwise comparison of corresponding fields. However,
+explicitly defining such a type class instance for records can quickly become tedious. Moreover,
+more significant challenges arise when defining such an equality function for extensible record
+types. First, extending a record with additional fields requires programmers to re-provide a type
+class instance (e.g. Eq) for the extended record, imposing an unnecessary and burdensome overhead.
+Moreover, and more fundamentally, the inherent nature of row polymorphism prevents us from
+fully specifying all types within a record. Consequently, we are unable to formally express that
+all fields in the extended row must support the necessary type class constraint. This restricts the
+practical extensibility of row types in the presence of ad-hoc polymorphism, as the inability to
+express type class constraints on extended rows prevents the application of ad-hoc polymorphic
+functions to these extensible data types. As a result, programmers are now forced to write significant
+boilerplate code for functions operating on each record extension, and, as the record schemas
+evolve, maintaining and updating the code becomes increasingly complex and error-prone.
+This paper aims to address these challenges by providing a novel combination of extensible
+data types, implemented through row types, with ad-hoc polymorphism, through type classes.
+Specifically, we offer the following contributions:
+• We contribute a novel design for a type system that features row polymorphism, records, variants,
+and type classes, which allows us to express type class constraints over polymorphic rows (§2):
+– We contribute a new form of All constraints, where a specific property holds across all fields.
+– We propose ind, a new language construct for folding over rows.
+– We introduce row commutativity annotations, allowing for strict row ordering when necessary.
+Our system also supports commutativity-polymorphic functions, and we further establish a
+commutativity hierarchy by treating non-commutativity as a subtype of commutativity.
+– We support Lift, a type-level mapping of rows, which is particularly useful in systems where
+rows can be higher-kinded [Hubers and Morris 2023].
+– Additionally, we introduce a novel unlifting constraint, Split, which is useful for splitting
+rows based on their type information.
+• We formalize our design in 𝜆𝜌⇒ , a source calculus featuring row constraints (following abstracting
+extensible data types [Morris and McKinna 2019]), first-class labels [Leijen 2004], the row folding
+construct ind, and type classes, along with all the aforementioned features (§3).
+• We present F𝜔⊗⊕ , a target calculus extending System F𝜔 with type-level lists and mappings (§4),
+and prove its syntactic type soundness (Thms. 4.4 and 4.5). We then present a type-directed
+elaboration of 𝜆𝜌⇒ into the target calculus F𝜔⊗⊕ , through dictionary-passing elaboration of type
+classes, interpretations of row constraints, and a constraint-based strategy for elaborating ind
+(§5). We prove elaboration soundness (Thms. 5.1 and 5.2).
+Proc. ACM Program. Lang., Vol. 10, No. POPL, Article 20. Publication date: January 2026.
+
+Extensible Data Types with Ad-Hoc Polymorphism (Extended)
+
+20:3
+
+• We have mechanized all lemmas and proofs in the Lean 4 proof assistant (§6).
+• We evaluate our type system using the benchmark for table types [Lu et al. 2021], demonstrating
+that constraints over records can effectively express types for operations over table data (§7).
+Our formalism is detailed, and some rules are elided for space reasons. The complete set of rules is
+included in the appendix, which can be found in the artifact [Toohey et al. 2025] along with the
+Lean 4 proofs.
+2
+
+Overview
+
+This section introduces the features of our calculi: §2.1 explores row types that capture the structures
+of records and variants, highlighting their utility in defining extensible data types; and §2.2 provides
+background on type classes, and details our design that integrates them with extensible rows. For
+clarity, we use Haskell-like syntax for examples throughout this section.
+2.1
+
+Extensible Rows, Records, and Variants
+
+Row types, originally introduced by Wand [1987] to model inheritance, provide an approach to
+typing extensible records and variants. Intuitively, rows define a mapping from labels to types. As
+an example, consider the following row:
+pet ≜ ⟨name ⊲ String, age ⊲ Int, weight ⊲ Float⟩
+This pet row specifies three fields: name of type String, age of type Int, and weight of type Float.
+Records. Row types are fundamental to representing the structure of records. Writing { l ⊲ e } for
+record expressions, and Π for record types constructed from rows, we can define an expression:
+alice = { name ⊲ “alice”, age ⊲ 2, weight ⊲ 2.4 } : Π pet
+Here, alice is a record of type Π pet. The Π acts as a type constructor that takes a row (in this case,
+pet) and denotes a record type.
+We use (++) for record concatenation, which comes in handy for extending records with new
+fields. For example, we can extend alice with an additional favourite_food field:
+alice ++ { favourite_food ⊲ “fish” } : Π⟨name ⊲ String, age ⊲ Int, weight ⊲ Float, favourite_food ⊲ String⟩
+We leave the details of which labels can appear together in a row abstract for now, as different row
+theories exist [Morris and McKinna 2019].
+To access a field within a record, we use the r/l operator, which projects field l out of record r.1
+For instance, the function:
+getName = 𝜆x. x/name
+takes a record and returns the value of its name field. Thus, (getName alice) would return “alice”.
+Variants. Similarly, the Σ type constructor builds variant types from rows. Writing [ l ⊲ e ] for
+variant expressions, we can define:
+shape ≜ ⟨rectangle ⊲ Π⟨length ⊲ Float, width ⊲ Float⟩, circle ⊲ Π⟨radius ⊲ Float⟩⟩
+r = [ rectangle ⊲{ length ⊲ 2.0, width ⊲ 3.0 } ] : Σ shape
+Here, r is a rectangle with a length and a width, which is then injected into a variant type Σ shape.
+A Σ shape variant can be either a rectangle or a circle.
+To calculate the area of such a variant type, we define the area function:
+1 For clarity, we use r/l to project a field from a record that may contain multiple fields. In the formalism (§3), we require
+
+explicit projections (prj), and r/l is always used to project from singleton records. Similarly for variants, [ l ⊲ e ] can have a
+type with multiple entries here, but the formalism requires explicit injections (inj) for creating non-singleton variants.
+
+Proc. ACM Program. Lang., Vol. 10, No. POPL, Article 20. Publication date: January 2026.
+
+20:4
+
+Matthew Toohey, Yanning Chen, Ara Jamalzadeh, and Ningning Xie
+
+area : Σ shape → Float
+area = (𝜆x. (x/rectangle/length) ∗ (x/rectangle/width)) ▽ (𝜆y. 3.14 ∗ (y/circle/radius) ∗∗ 2)
+The area function effectively matches the actual value of its input. It does so by combining (▽)
+two functions: one for rectangle values (Σ⟨rectangle ⊲ Π⟨length ⊲ Float, width ⊲ Float⟩⟩ → Float) and
+another for circle values (Σ⟨circle ⊲ Π⟨radius ⊲ Float⟩⟩ → Float). We again use the (/) operator to
+access a field from a variant. Therefore, we have (area r) return 6.0.
+Row polymorphism. Now, consider: what type should we give to getName? A simple choice
+like Π pet → String would correctly type (getName alice). However, getName fundamentally only
+requires its argument to have a name field, regardless of any other fields the argument may contain.
+Row polymorphism offers a more explicit and powerful approach to typing such polymorphic
+functions. Following Morris and McKinna [2019], we express two key relations on rows, containment
+and combination, as predicates in qualified types [Jones 2003a].
+Specifically, since the argument to getName must contain a name field of some type a, we
+represent the input row as a variable r and impose a constraint on it:
+getName : ∀(a : ★) (r : 𝑅). ⟨name ⊲ a⟩ <
+∼ r ⇒ Πr → a
+Here, getName is polymorphic over two type variables a and r with different kinds: ★ is the base
+kind for types, while 𝑅 is the kind for rows; we say r is a row variable. Moreover, ⟨name ⊲ a⟩ <
+∼ r is a
+row containment constraint, signifying that the row r must contain ⟨name ⊲ a⟩. The function can
+thus take any record Π r with a name field, and return a value of type a.
+Row polymorphism is useful for preserving information about the original argument. For example,
+consider a function that returns both the argument’s name field and the original record itself:
+getNameAndRecord : ∀(a : ★) (r : 𝑅). ⟨name ⊲ a⟩ <
+∼ r ⇒ Π r → (a, Π r)
+getNameAndRecord = 𝜆x. (x/name, x)
+In this case, getNameAndRecord’s return type accurately preserves the full type of the argument x. If
+we were to solely rely on structural subtyping with a type like ∀a. Π⟨name ⊲ a⟩ → (a, Π⟨name ⊲ a⟩)
+for the function, we would lose information about any additional fields in the record.
+Now we turn to the row combination constraint.2 We have seen how the (++) operator is useful for
+concatenating records for extension, but this operation can also introduce complexities. Consider
+the following function adapted from Wand [1991]:
+𝜆x y. (x ++ y)/name
+This function first concatenates two records, x and y, and then accesses the name field from the
+resulting concatenated record. The challenge lies in determining its type: specifically, we know
+that either x or y must contain a name field, but we do not know which one.
+A row combination constraint (r1 ⊙ r2 ∼ r3) states that concatenating two rows, r1 and r2,
+yields r3. Expressing row combination this way allows for various distinct interpretations of record
+extensions, such as how duplicate labels are handled, which can be implemented as different
+constraint resolution approaches. With this, we can precisely express the function’s type as:3
+∀(a : ★) (r1 r2 r3 : 𝑅). (r1 ⊙ r2 ∼ r3, ⟨name ⊲ a⟩ <
+∼ r3) ⇒ Π r1 → Π r2 → a
+2While r1 < r is often only satisfiable when there exists a r2 such that r1 ⊙ r2 ∼ r, r1 < r more closely reflects the term structure
+
+∼
+∼
+and thus the constraint elaboration (§5) [Morris and McKinna 2019]. Moreover, as we will see in §2.2, non-commutative row
+containment does not straightforwardly correspond to row combination.
+3We often write (a b c : k ) as a shorthand for (a : k ) (b : k ) (c : k ).
+Proc. ACM Program. Lang., Vol. 10, No. POPL, Article 20. Publication date: January 2026.
+
+Extensible Data Types with Ad-Hoc Polymorphism (Extended)
+
+20:5
+
+This type incorporates two key constraints: (r1 ⊙ r2 ∼ r3) expresses that r3 is the result of concatenating rows r1 and r2, and (⟨name ⊲ a⟩ <
+∼ r3) expresses that the combined row r3 must have a name
+field of type a. The function then takes two records Π r1 and Π r2, and produces a value of a.
+First-class labels. So far we have been working with concrete labels; e.g. getName always gets
+the name field. Our system supports first-class labels [Leijen 2004], thus allowing labels to be passed
+as arguments to functions or returned as results, just like any other value.
+First-class labels are useful for defining functions that are generic over labels. For example, it
+lets us assign the following type to the record field access operator (/):
+(/) : ∀(l : 𝐿) (a : ★) (r : 𝑅). ⟨l ⊲ a⟩ <
+∼ r ⇒ Π r → ⌊l⌋ → a
+Here, the function is polymorphic over three type variables: a label variable l of kind 𝐿, a row
+variable r of kind 𝑅, and a type variable a of kind ★. The constraint ⟨l ⊲ a⟩ <
+∼ r indicates that the row
+r must contain a field l with type a. The function then accepts a record of type Π r, a label of type
+⌊l⌋, and returns a value of type a. Note that ⌊l⌋ is the singleton type for label l.4 Thus if l : 𝐿, then
+⌊l⌋ : ★. For instance, we have name : ⌊name⌋. From this, we can derive the type we have seen for
+getName : ∀(a : ★) (r : 𝑅). ⟨name ⊲ a⟩ <
+∼ r ⇒ Π r → a.
+We can extend first-class labels to first-class rows [Paszke and Xie 2023], denoting singleton
+row types by ⌊r⌋. Often, though, we only need the label information from these rows, as the type
+information can typically be retrieved from the records or variants where the row is used, much
+like how a label l is used in the (/) operator. Therefore, in our system, we model first-class rows
+simply by records whose fields always map to the unit type. For example, ⌊⟨name ⊲ String, age ⊲ Int⟩⌋
+denotes Π⟨name ⊲ Unit, age ⊲ Unit⟩. Thus, if r :𝑅, then ⌊r⌋ :★. On the term level, correspondingly, we
+write { name, age } to denote { name ⊲(), age ⊲() }. Instead of treating these as primitive constructs,
+we will see how they can be defined in §2.2.
+2.2
+
+Extensible Rows with Ad-hoc Polymorphism
+
+Having discussed extensible rows, we now turn to ad-hoc polymorphism via type classes, exploring
+their various forms of combination with row polymorphism.
+Ad-hoc polymorphism à la type classes. Consider defining a function that compares whether
+one value is greater than another. Using type classes [Wadler and Blott 1989], we can write:
+compare : ∀(a : ★). Ord a ⇒ a → a → Bool
+compare = 𝜆x y. (x > y)
+Here, (Ord a) is a type class constraint which requires that any instantiation of a must be an
+instance of the Ord type class, which provides the (>) method. For example, we expect Int and
+String to be instances of Ord, but not functions, as directly comparing two functions is generally
+challenging. For illustration purposes, we will use common type classes in our examples, including
+Ord, Eq, etc. Type classes are typically implemented via dictionary-passing elaboration, where
+evidence (called dictionaries) for type classes is explicitly propagated during a program elaboration
+process which translates the source into a simpler target language without type classes.
+Putting row and type class constraints together. By combining row polymorphism and ad-hoc
+polymorphism, we can define useful ad-hoc polymorphic functions over row types such as:
+compare_at : ∀(l : 𝐿) (a : ★) (r : 𝑅). (Ord a, ⟨l ⊲ a⟩ <
+∼ r) ⇒ ⌊l⌋ → Π r → Π r → Bool
+compare_at = 𝜆l x y. (x/l) > (y/l)
+4 Avoid confusing singleton types, i.e. types with a single inhabitant, with singleton rows, i.e. rows with a single field.
+
+Proc. ACM Program. Lang., Vol. 10, No. POPL, Article 20. Publication date: January 2026.
+
+20:6
+
+Matthew Toohey, Yanning Chen, Ara Jamalzadeh, and Ningning Xie
+
+Notably, the function incorporates both row constraints and type class constraints: the (Ord a)
+constraint requires a to be an instance of Ord, while (⟨l ⊲ a⟩ <
+∼ r) requires r to contain ⟨l ⊲ a⟩. The
+function then takes a first-class label l of type ⌊l⌋, and two records x and y of type Π r, and returns
+a Bool indicating whether x’s l field is greater than y’s.
+As an example, recall that alice has type Π⟨name ⊲ String, age ⊲ Int, weight ⊲ Float⟩ (§2.1). Supposing Float is an instance of Ord, and bob is another record of the same type as alice, we can compare
+alice and bob by their weights using:
+compare_at weight alice bob
+Combining type class constraints and row polymorphism. Now, let’s consider how we
+may compare pets for equivalence. A straightforward approach involves defining a function that
+compares two pets field by field:
+eq_pet : Π pet → Π pet → Bool
+eq_pet = 𝜆x y. (x/name) ==(y/name) && (x/age) ==(y/age) && (x/weight) ==(y/weight)
+However, defining such a function for every record type can quickly become cumbersome. Instead,
+we would prefer a general eq function that can compare fields within any given record type. This
+presents challenges, especially with row polymorphism, where the exact fields within a row may
+not be known. Moreover, we may expect some fields in a row to be comparable, but not others.
+Our system supports ad-hoc polymorphism over row polymorphism. Specifically, assuming Eq is
+a type class that provides the equality operator (==), we can define a generalized equality function
+for row polymorphism with the following type:
+eq Π : ∀(r1 r : 𝑅). (r1 <
+∼ r, All Eq r1) ⇒ ⌊r1⌋ → Π r → Π r → Bool
+Here, the constraint (r1 <
+∼ r) indicates that r contains r1. Additionally, the constraint (All Eq r1)
+requires all fields within r1 to be instances of Eq. The function then receives an argument of type
+⌊r1⌋, two records of type Π r, and returns a Bool. As an example:
+eq Π { name, age } alice bob
+compares alice and bob based on their names and ages, but not their weights.
+This form of constraint, (All Eq r1), is novel in our system, allowing us to express type class constraints over a polymorphic row. This constraint is satisfiable when all fields within r1 individually
+satisfy Eq, thus allowing us to define functions polymorphic over rows where a specific property
+holds across all fields, as exemplified by eq Π . It is crucial to distinguish between a constraint like
+(All C r) and a constraint like C (Π r). The former is derived automatically from individual
+C instances for each field in r, a process that becomes evident during program elaboration. In
+contrast, the latter represents a single type class instance for the type Π r. For instance, if Ord is
+defined across r using (All Ord r), many different ordering functions can be implemented—such as
+component-wise, lexicographical, or those based on specific distance metrics. Conversely, Ord (Π r)
+would provide only a single, monolithic ordering definition.
+Row constraints and commutativity. We have provided the type signature of eq; now, let’s
+try to define it. As a first step, we can introduce a primitive that lifts a function (e.g. (==)) from
+operating on a type to operating on all fields within a row (e.g. r1), accumulating the results.
+However, before we introduce the primitive, a question is immediately raised: for a given row r,
+what order should we use to apply the function to its fields? While in the case of Eq, the order may
+not matter, since equivalence comparisons are order-independent, consider a print function below:
+print : ∀(r : 𝑅). (All Show r) ⇒ Π r → String
+Proc. ACM Program. Lang., Vol. 10, No. POPL, Article 20. Publication date: January 2026.
+
+Extensible Data Types with Ad-Hoc Polymorphism (Extended)
+
+20:7
+
+This function prints a record, where all fields in row r are instances of the Show type class. For
+printing records, establishing a fixed order and thus deterministic behaviour would be valuable.
+To this end, our system supports explicit commutativity annotations. Specifically, the type system
+incorporates commutativity c and non-commutativity n as types with a kind 𝑈 . While rows are
+easier to work with when handled commutatively, since they are considered equivalent up to
+reordering, rows explicitly carry ordering information when treated as non-commutative.5
+We then generalize row constraints by incorporating these commutativity annotations. For
+example, the following holds, where row combination is commutative:
+⟨name ⊲ String⟩ ⊙𝑐 ⟨age ⊲ Int, weight ⊲ Float⟩ ∼ ⟨weight ⊲ Float, name ⊲ String, age ⊲ Int⟩
+while the following does not, as non-commutative combination requires name to appear before
+both age and weight, and age to appear before weight:
+⟨name ⊲ String⟩ ⊙𝑛 ⟨age ⊲ Int, weight ⊲ Float⟩ ∼ ⟨weight ⊲ Float, name ⊲ String, age ⊲ Int⟩
+Notably, non-commutative containment does not require the contained row to be a continuous
+subset of the larger one, meaning some non-commutative containments cannot be expressed with
+a single non-commutative concatenation. For example, the following holds:
+⟨name ⊲ String, weight ⊲ Float⟩ <
+∼𝑛 ⟨name ⊲ String, age ⊲ Int, weight ⊲ Float⟩
+while the following does not, since the entries in the contained row must appear in the same order
+as they do in the larger one:
+⟨age ⊲ Int, name ⊲ String⟩ <
+∼𝑛 ⟨name ⊲ String, age ⊲ Int, weight ⊲ Float⟩
+Moreover, records, as well as variants, can also carry explicit commutativity annotations. Since we
+incorporate commutativities as types, we can express a commutativity-polymorphic function:
+splitName : ∀(a : ★) (r r1 : 𝑅) (𝜇 : 𝑈 ). (⟨name ⊲ a⟩ ⊙𝑛 r1 ∼ r) ⇒ Π 𝜇 r → (a, Π 𝜇 r1)
+This function requires that concatenating ⟨name ⊲ a⟩ and r1, as non-commutative rows, yields r.
+Therefore, if 𝜇 is instantiated to c (commutative), commutativity can automatically rearrange the
+record to bring name to the front. On the other hand, if 𝜇 is instantiated to n (non-commutative),
+this function only applies when name is precisely the first field in the record.
+Furthermore, we consider non-commutative records (or variants, respectively) as subtypes of
+commutative ones. Intuitively, non-commutative records carry more information due to the inherent
+ordering between fields, and this additional information can be “forgotten” through subtyping. To
+our knowledge, our system is the first extensible row type system to feature both the commutativity
+hierarchy and polymorphism over commutativity.
+Lastly, we note that first-class rows always have their orders fixed. For instance, ⌊⟨name ⊲ String,
+age ⊲ Int⟩⌋ denotes Π𝑛 ⟨name ⊲ Unit, age ⊲ Unit⟩. This fixed ordering often aligns with the intended
+use of first-class rows, which can also be made commutative through subtyping.
+Folding over rows. We are now ready to introduce our operator ind (short for “induction”),
+which intuitively takes a base value and folds over a row’s entries. Using ind, we define eq Π as
+follows:
+eq Π : ∀(r1 r : 𝑅). (r1 <
+∼𝑐 r, All Eq r1) ⇒ ⌊r1⌋ → Π𝑐 r → Π𝑐 r → Bool
+eq Π = 𝜆(w : ⌊r1⌋) x y. ind (𝜆a : 𝑅. Bool) r1 (𝜆l acc. acc && (x/l == y/l)) True
+5 Alternatively, instead of using annotations on the type level, we may track commutativity in the kind of the row, which
+
+would allow folding to be limited to non-commutative rows. However, that would then require a non-commutative row
+even when the ordering does not matter. Also, commutativity polymorphism would likely require kind polymorphism, as
+the row kind would depend on commutativity.
+
+Proc. ACM Program. Lang., Vol. 10, No. POPL, Article 20. Publication date: January 2026.
+
+20:8
+
+Matthew Toohey, Yanning Chen, Ara Jamalzadeh, and Ningning Xie
+
+Note that the function takes a w of type ⌊r1⌋ and two records of type Π𝑐 r, returning a Bool.
+Commutativity polymorphism is unnecessary here since row types do not appear in the output,
+so the function can still be used with non-commutative inputs via subtyping. The heavy lifting is
+performed by ind, which takes four arguments in the form ind (𝜆a : 𝑅. t) r e1 e2. Here, (𝜆a : 𝑅. t) is
+a type-level function, r is a row type of kind 𝑅, e1 is the folding function, and e2 is the initial value,
+with the following types:6
+e1 : ∀(r1 r2 r3 : 𝑅) (l : 𝐿) (b : ★). (r1 ⊙𝑛 ⟨l ⊲ b⟩ ∼ r2, r2 ⊙𝑛 r3 ∼ r) ⇒ ⌊l⌋ → t [ r1/a] → t [ r2/a]
+e2 : t [ ⟨⟩/a]
+At each step, e1 receives a label ⌊l⌋, as well as the accumulated value of type t [ r1/a] (where [ r1/a]
+denotes type substitution). It then returns a new value of type t [ r2/a], where r2 is the result of
+concatenating r1 and ⟨l ⊲ b⟩. The second constraint states that r2 and r3 concatenate to r, so r3
+contains the entries in r which have not yet been processed. Notably, we allow the type t to depend
+on the type of the row that has been folded. In the case of eq, t is simply Bool; we will explore
+examples where this substitution proves useful later. Thus, e2 as the initial value has type t [ ⟨⟩/a],
+where a is substituted by the empty row. Moreover, the row constraints in e1 are non-commutative.
+This means that once r is fixed, ind will fold over rows in a predetermined order. Lastly, we remark
+that the argument w is not used, as its primary purpose is to provide the singleton type ⌊r1⌋, which
+is a common pattern with singleton types. Note that w is explicitly annotated to allow the type
+variable r1 to be passed as an argument to ind. For the remainder of this section, we will often
+omit type annotations and assume type variables from the signature are automatically brought
+into scope; this behaviour is consistent with our formalism.
+As another example, we define print as follows:
+print : ∀(r : 𝑅). (All Show r) ⇒ Π𝑛 r → String
+print = 𝜆x. ind (𝜆r : 𝑅. String) r
+(𝜆l acc. if acc == "" then show (x/l) else acc ++ ", " ++ show (x/l)) ""
+Here, print takes a non-commutative record Π𝑛 r, and provides ind with the order of r, a function
+that accumulates the strings, and an empty string as the initial value.
+The ind construct is highly expressive, allowing us to fold over not just records, but also variants.
+For instance, we can define a general equality function eq Σ for variants as follows:
+eq Σ : ∀(r : 𝑅). All Eq r ⇒ Σ𝑐 r → Σ𝑐 r → Bool
+eq Σ = ind (𝜆a : 𝑅. Σ𝑐 a → Σ𝑐 r → Bool) r
+(𝜆l acc. acc ▽ (𝜆x. (𝜆y. False) ▽ (𝜆y. x/l == y/l) ▽ (𝜆y. False))) (𝜆x y. True)
+Here, we construct a function that compares x with y by folding over all possible cases of x. At
+each step, (𝜆a : 𝑅. Σ𝑐 a → Σ𝑐 r → Bool) constructs a function. This function takes cases of x
+corresponding to the subrow Σ𝑐 a, along with y of type Σ𝑐 r, and returns a Bool. The initial value
+corresponds to when x is an empty variant, which should never occur, so it simply returns True.
+The folding function, at each step, takes a label l and the accumulated function acc, and extends
+the function to handle the case when x is l. The body is another function of type Σ𝑐 r → Bool.
+The inner function is also composed using (▽): it returns (x/l == y/l) when y is also l, and False
+otherwise. Intuitively, the final result is a function with nested matches: first on x, and then on y.
+The function returns True only if x and y have the same label, and that label maps to equivalent
+values.
+Lastly, we note that commutative records or variants can be made non-commutative using ind.
+In particular, we define order r which simply expands to the following definitions:
+6With higher kinds, r1, r2, r3 will all be of kind 𝑅𝑘 for some k; see §3 for the complete typing rules.
+
+Proc. ACM Program. Lang., Vol. 10, No. POPL, Article 20. Publication date: January 2026.
+
+Extensible Data Types with Ad-Hoc Polymorphism (Extended)
+
+20:9
+
+(order Π r) :: Π𝑐 r → Π𝑛 r ≜ 𝜆x. ind (𝜆a : 𝑅. Π𝑛 a) r (𝜆l acc. acc ++{ l ⊲ x/l }) { }
+(order Σ r) :: Σ𝑐 r → Σ𝑛 r ≜ ind (𝜆a : 𝑅. Σ𝑛 a) r (𝜆l acc. acc ▽ (𝜆x. [ l ⊲ x/l ])) (𝜆x. x)
+Notably, these functions must be used with care: the r parameter should be fixed, e.g. through its
+occurrence in a non-commutative record, to ensure that it can be instantiated deterministically.
+Now that we have covered type classes over simple types, we turn our focus to type classes over
+type constructors. Before that, we need type-level lifting.
+Mapping, lifting, and higher kinds. Consider a row ⟨name ⊲ String, age ⊲ Int⟩. Suppose we
+would like to apply Maybe to each field, effectively turning each field into a maybe value: name
+maps to type Maybe String, and age maps to type Maybe Int.
+We provide an explicit constructor, called Lift, which acts as a type-level mapping [Chlipala 2010;
+Hubers and Morris 2023]. For example, Lift Maybe ⟨name ⊲ String, age ⊲ Int⟩ 7 returns ⟨name ⊲ Maybe
+String, age ⊲ Maybe Int⟩. We can implement a function with such a type as:
+lift_maybe : ∀(r : 𝑅) (𝜇 : 𝑈 ). Π 𝜇 r → Π 𝜇 (Lift Maybe r)
+lift_maybe = 𝜆x. ind (𝜆a : 𝑅. Π 𝜇 (Lift Maybe a)) r (𝜆l acc. acc ++{ l ⊲ Just (x/l) }) { }
+lift_maybe { name ⊲ “alice”, age ⊲ 2 }
+
+-- { name ⊲ Just“alice”, age ⊲ Just 2 }
+
+While we have primarily discussed rows with fields of kind ★ so far, the Lift operator also makes
+it useful to support higher-kinded rows. Specifically, given an Int and a higher-kinded row:
+⟨stack ⊲ List, optional ⊲ Maybe⟩ : 𝑅★→★
+applying Lift (𝜆a. a Int)⟨stack ⊲ List, optional ⊲ Maybe⟩ yields ⟨stack ⊲ List Int, optional ⊲ Maybe Int⟩.
+There are two notable things. First, the row’s fields are of kind ★ → ★. We denote the kind of
+such a row as 𝑅★→★. In other words, the kind 𝑅 now explicitly carries a kind annotation; we often
+omit this annotation when it can be inferred from the context. Second, (𝜆a. a Int) is a type-level
+function8 , which can be fully annotated as (𝜆a : ★ → ★. a Int). More generally, Lift takes a type
+function of kind k 1 → k 2 , a row of kind 𝑅 k 1 , and returns a row of kind 𝑅 k 2 .
+We are now ready to define the first-class row operator ⌊r⌋ (§2.1). The type-level operator ⌊r⌋
+can be expressed as Π𝑛 (Lift (𝜆a. Unit) r). Similarly, we can define a corresponding term-level
+operator that applies to non-commutative records and turns each field into a ().9
+Functors and monads. We now present the definition of fmap, which maps a function f over a
+record whose fields are types where the type constructors are functors:
+fmapΠ : ∀(r : 𝑅★→★) (a b : ★) (𝜇 : 𝑈 ). (All Functor r)
+⇒ (a → b) → Π 𝜇 (Lift (𝜆c. c a) r) → Π 𝜇 (Lift (𝜆c. c b) r)
+fmapΠ = 𝜆f x. ind (𝜆a. Π 𝜇 (Lift (𝜆c. c b) a)) r (𝜆l acc. acc ++{ l ⊲ fmap f (x/l) }) { }
+Here, r is a row of kind ★ → ★. The input record x has type Π 𝜇 (Lift (𝜆c. c a) r), meaning each
+field’s type is a field from r applied to a. The resulting record’s fields are then the corresponding
+fields from r applied to b. The definition simply uses ind to apply fmap f to each field.
+Similarly, we can define fmapΣ that maps over a variant:
+fmapΣ : ∀(r : 𝑅★→★) (a b : ★) (𝜇 : 𝑈 ). (All Functor r)
+⇒ (a → b) → Σ𝜇 (Lift (𝜆c. c a) r) → Σ𝜇 (Lift (𝜆c. c b) r)
+7We could make the lifting operation implicit, writing Maybe ⟨name ⊲ String, age ⊲ Int ⟩ directly [Hubers and Morris 2023].
+
+However, we choose to keep lifting explicit for clarity as well as consistency with other constructs like ind.
+8 Similarly, Maybe can be eta-expanded to 𝜆a. Maybe a.
+9We can define the term-level operator 𝜆 (x : Π r ). ind (Π (Lift (𝜆a. Unit ) ) ) r (𝜆l acc. acc ++{ l ⊲( ) } ) { }.
+𝑛
+𝑛
+Proc. ACM Program. Lang., Vol. 10, No. POPL, Article 20. Publication date: January 2026.
+
+20:10
+
+Matthew Toohey, Yanning Chen, Ara Jamalzadeh, and Ningning Xie
+
+fmapΣ = 𝜆f x. ind (𝜆d. Σ𝜇 (Lift (𝜆c. c a) d) → Σ𝜇 (Lift (𝜆c. c b) d))
+r (𝜆l acc. acc ▽ (𝜆y. [ l ⊲ fmap f (y/l) ])) (𝜆y. y) x
+Lastly, let us consider monads as another example, here focusing on their definitions for records.
+returnΠ : ∀(r : 𝑅★→★) (a : ★). (All Monad r) ⇒ a → Π𝑐 (Lift (𝜆b. b a) r)
+returnΠ = 𝜆x. ind (𝜆c. Π𝑐 (Lift (𝜆b. b a) c)) r (𝜆l acc. acc ++{ l ⊲ return x }) { }
+The returnΠ function takes a value x of type a, and constructs a record where each field maps to
+(return x), where r : 𝑅★→★ and all its fields are Monad instances. As examples, we have:
+r ≜ returnΠ 2 : Π𝑐 ⟨maybe ⊲ Maybe Int, list ⊲ List Int⟩
+fmapΠ (+1) r
+
+-- { maybe ⊲ Just 2, list ⊲[ 2] }
+
+-- { maybe ⊲ Just 3, list ⊲[ 3] }
+
+The definition of bind Π is given as follows, where (>>=) is the bind operator of Monad:
+bind Π : ∀(r : 𝑅★→★) (a b : ★) (𝜇 : 𝑈 ). (All Monad r)
+⇒ Π 𝜇 (Lift (𝜆c. c a) r) → Π 𝜇 (Lift (𝜆c. a → c b) r) → Π 𝜇 (Lift (𝜆c. c b) r)
+bind Π = 𝜆x f . ind (𝜆a. Π 𝜇 (Lift (𝜆c. c b) a)) r (𝜆l acc. acc ++{ l ⊲ ((x/l) >>= (f /l)) }) { }
+Unlifting row types. We have seen how lift_maybe converts a record of values into a record of
+Maybe values. Now, consider a reverse operator that converts a record of Maybe values back into a
+record of concrete values. This is not always possible though, since if a field maps to Nothing, we
+simply cannot recover a value of its original type. Therefore, we instead consider a function that
+takes a list of records with Maybe values, filters out entries that contain Nothing in one of their
+fields, and then returns a list containing only the remaining records with unwrapped values:
+unlift_maybe : ∀(r : 𝑅) (𝜇 : 𝑈 ). List (Π 𝜇 (Lift Maybe r)) → List (Π 𝜇 r)
+unlift_maybe = 𝜆x. map (𝜆y. ind
+(𝜆l acc. acc ++{ l ⊲ fromJust y/l }) { }) $ filter complete x
+complete : ∀(r : 𝑅) (𝜇 : 𝑈 ). (Π 𝜇 (Lift Maybe r)) → Bool
+complete = 𝜆y. ind (𝜆a. Bool) r (𝜆l acc. acc && isJust (y/l)) True
+Here, complete checks if a record contains Nothing in any of its fields. After filtering out these
+records, unlift_maybe maps over the list, applying ind to extract the field values from their Just wrapper.
+However, unlift_maybe requires a record to contain Maybe values in all of its fields. More
+commonly, only some fields may have missing data, while others are guaranteed to be present. For
+example, we may always expect a pet to have a name, but its weight information could be missing.
+Therefore, it can be useful to split rows into two parts: those with Maybe fields and those without.
+This way, unlift_maybe can be applied specifically to the fields containing Maybe values.
+To this end, our system introduces an additional constraint of the form Split (𝜆a : k. t) r1 r2 r.
+Specifically, a Split (𝜆a:k. t) r1 r2 r constraint looks at the types of r’s fields. If a field’s type matches
+t after substituting a with some type t’, then the field mapping to t’ is placed in r1. Otherwise the
+original field is placed in r2. As an example, we have:
+Split Maybe ⟨weight ⊲ Float⟩ ⟨name ⊲ String⟩ ⟨name ⊲ String, weight ⊲ Maybe Float⟩
+Notice that first row contains ⟨weight ⊲ Float⟩, instead of ⟨weight ⊲ Maybe Float⟩. In other words,
+Split (𝜆a : k. t) r1 r2 r implies ((Lift (𝜆a : k. t) r1) ⊙ r2 ∼ r), rather than (r1 ⊙ r2 ∼ r).
+This allows us to define a generalized version of unlift_maybe:
+unlift_maybe’ : ∀(r r1 r2 r’ : 𝑅) (𝜇 : 𝑈 ). (Split Maybe r1 r2 r, r1 ⊙𝑐 r2 ∼ r’)
+⇒ List (Π 𝜇 r) → List (Π 𝜇 r’)
+Proc. ACM Program. Lang., Vol. 10, No. POPL, Article 20. Publication date: January 2026.
+
+Extensible Data Types with Ad-Hoc Polymorphism (Extended)
+
+20:11
+
+The constraint Split Maybe r1 r2 r splits r, according to whether the field’s type matches Maybe,
+into r1 and r2. The function then takes a list of the original record type Π 𝜇 r, and produces a list of
+type Π 𝜇 r’. For example:
+pets = [ { name ⊲ “alice”, weight ⊲ Just 2.4 }, { name ⊲ “bob”, weight ⊲ Nothing }
+, { name ⊲ “carol”, weight ⊲ Just 3.6 } ]
+unlift_maybe’ pets
+
+-- [ { name ⊲ “alice”, weight ⊲ 2.4 }, { name ⊲ “carol”, weight ⊲ 3.6 } ]
+
+The Split constraint differs from the All constraint in a few key ways. All C r takes a constraint
+C and requires all fields in r to satisfy it. In contrast, Split (𝜆a : k. t) r1 r2 r takes a type abstraction,
+and splits r based on its type information. In languages with expressive type systems, where type
+equivalence can be expressed as constraints, we could potentially express Split (𝜆a : k. t) r1 r2 r
+as (Lift (𝜆a : k. t) r1 ⊙𝑐 r2 ∼ r), (All (𝜆c. ∄ t’. subst a t’ t == c) r2), assuming (subst a t’ t)
+substitutes a for t’ in t, and (==) denotes type-level equivalence. Notably, Split also conveys
+negative information, since r2 must not match t.
+We can define the corresponding split operator, with which we define unlift_maybe’:
+split Π 𝜙 : ∀(r r1 r2 : 𝑅). Split 𝜙 r1 r2 r ⇒ Π𝑐 r → { match ⊲ Π𝑐 (Lift 𝜙 r1), rest ⊲ Π𝑐 r2 }
+≜ (𝜆r. { match ⊲(r : Π𝑐 (Lift 𝜙 r1)), rest ⊲(r : Π𝑐 r2) })
+unlift_maybe’ r = let r’ = split Π Maybe r in (unlift_maybe (r’/match)) ++(r’/rest)
+3
+
+Declarative Type System
+
+This section presents the type system of the source calculus 𝜆𝜌⇒ , which incorporates row polymorphism and type classes. The dynamic semantics will be defined later in §5.
+3.1
+
+Syntax
+
+Fig. 1 presents the syntax of 𝜆𝜌⇒ . A program 𝑝𝑔𝑚 consists of a sequence of class and instance
+declarations, followed by a term. A type class declaration defines a type class for types of kind 𝜅,
+with the overline notation denoting that any number of superclasses 𝑇𝐶𝑖′ are allowed. For simplicity,
+we assume each type class has a single method 𝑚, though the system could easily be extended.
+Instances can be qualified with any number of prerequisite constraints 𝜓𝑖 .
+Terms 𝑀 include term variables 𝑥, type class methods 𝑚, lambdas 𝜆 𝑥 . 𝑀, applications 𝑀 𝑁 , let
+expressions let 𝑥 : 𝜎 = 𝑀 in 𝑁 , expressions with type annotations 𝑀 : 𝜎, first-class labels ℓ, singleton
+products {𝑀 ⊲ 𝑁 } and sums [𝑀 ⊲ 𝑁 ], unlabel operations 𝑀/𝑁 , projection prj 𝑀 10 , concatenation
+𝑀++𝑁 , injection inj 𝑀, elimination 𝑀 ▽ 𝑁 , and ind expressions.
+Types are stratified: type schemes 𝜎 include polymorphic types ∀ 𝑎 : 𝜅. 𝜎 and qualified types 𝛾.
+Qualified types 𝛾 include types 𝜓 ⇒ 𝛾 with a constraint 𝜓 , and monotypes 𝜏.
+Monotypes 𝜏 represent types across various kinds. For clarity, we often use specific symbols
+to informally refer to types of particular kinds: we write 𝜙 for type-level functions, 𝜌 for rows, 𝜓
+for constraints, 𝜉 for labels, and 𝜇 for commutativities. Monotypes include type variables 𝑎, type
+applications 𝜙 𝜏, function types 𝜏0 → 𝜏1 , labels ℓ, singleton label types ⌊𝜉⌋, commutativities 𝑢, and
+rows ⟨𝜉𝑖 ⊲ 𝜏𝑖 ⟩. Records or variants are denoted by Ξ𝜇 𝜌, using Π or Σ, respectively. The Ξ notation is
+associated with commutativity information 𝜇, which can be polymorphic. A concrete commutativity
+𝑢 is either 𝔠 for commutative or 𝔫 for non-commutative. The Lift operation applies a type-level
+function over rows. For simplicity, we do not include general type-level lambdas, avoiding the
+10 The formalism includes explicit projection and injection, following Morris and McKinna [2019].
+
+Proc. ACM Program. Lang., Vol. 10, No. POPL, Article 20. Publication date: January 2026.
+
+20:12
+
+Matthew Toohey, Yanning Chen, Ara Jamalzadeh, and Ningning Xie
+
+class𝑇𝐶𝑖′ 𝑎𝑖 ⇒𝑇𝐶 𝑎 : 𝜅 where {𝑚 : 𝜎 }; 𝑝𝑔𝑚 |
+instance𝜓𝑖 ⇒𝑇𝐶 𝜏 where {𝑚 = 𝑀 }; 𝑝𝑔𝑚 | 𝑀
+𝑥 | 𝑚 | 𝜆 𝑥 . 𝑀 | 𝑀 𝑁 | let 𝑥 : 𝜎 = 𝑀 in 𝑁 | 𝑀 : 𝜎 | ℓ |
+{𝑀 ⊲ 𝑁 } | [𝑀 ⊲ 𝑁 ] | 𝑀/𝑁 | prj 𝑀 | 𝑀++𝑁 | inj 𝑀 | 𝑀 ▽ 𝑁 |
+ind (𝜆 𝑎 : 𝜅. 𝜏) 𝜌 𝑀 𝑁
+
+𝑝𝑔𝑚
+
+F
+
+𝑀, 𝑁
+
+F
+
+𝜎
+𝛾
+𝜏, 𝜙, 𝜌,𝜓, 𝜉, 𝜇
+
+F
+F
+F
+
+𝑢
+Ξ
+
+F
+F
+
+∀ 𝑎 : 𝜅. 𝜎 | 𝛾
+𝜓 ⇒𝛾 | 𝜏
+𝑎 | 𝜙 𝜏 | 𝜏0 → 𝜏1 | ℓ | ⌊𝜉⌋ | 𝑢 | ⟨𝜉𝑖 ⊲ 𝜏𝑖 ⟩ | Ξ𝜇 𝜌 |
+Lift (𝜆 𝑎 : 𝜅. 𝜏) 𝜌 | 𝜌 0 <
+∼ 𝜇 𝜌 1 | 𝜌 0 ⊙ 𝜇 𝜌 1 ∼ 𝜌 2 | 𝑇𝐶 𝜏 |
+All (𝜆 𝑎 : 𝜅. 𝜏) 𝜌 | Split (𝜆 𝑎 : 𝜅. 𝜏) 𝜌 0 𝜌 1 𝜌 2
+𝔠|𝔫
+Π|Σ
+
+Γ
+Γ𝐶
+Γ𝐼
+
+F
+F
+F
+
+𝜖 | Γ, 𝑎 : 𝜅 | Γ, 𝑥 : 𝜎 | Γ,𝜓
+𝜖 | Γ𝐶 , (𝑇𝐶𝑖′ 𝑎𝑖 ⇒𝑇𝐶 𝑎 : 𝜅) ↦→ 𝑚 : 𝜎
+𝜖 | Γ𝐼 , (∀ 𝑎𝑖 : 𝜅𝑖 . 𝜓𝑖 ⇒𝑇𝐶 𝜏)
+
+𝜅
+
+F
+
+★ | 𝜅 0 ↦→ 𝜅 1 | R𝜅 | C | L | U
+Fig. 1. Syntax
+
+program
+term
+
+type scheme
+qualified type
+monotype
+
+commutativity
+prod or sum
+type environment
+class environment
+instance environment
+kind
+
+Γ𝐶 ; Γ ⊢ 𝜎 : 𝜅
+label
+
+(Kinding)
+floor
+Γ𝐶 ; Γ ⊢ 𝜉 : L
+
+Γ𝐶 ; Γ ⊢ ℓ : L
+Γ𝐶 ; Γ ⊢ ⌊𝜉⌋ : ★
+prodOrSum
+Γ𝐶 ; Γ ⊢ 𝜇 : U
+Γ𝐶 ; Γ ⊢ 𝜌 : R★
+
+Γ𝐶 ; Γ ⊢ 𝑢 : U
+
+Γ𝐶 ; Γ ⊢ 𝜇 : U
+Γ𝐶 ; Γ ⊢ 𝜌 0 : R𝜅
+Γ𝐶 ; Γ ⊢ 𝜌 1 : R𝜅
+Γ𝐶 ; Γ ⊢ 𝜌 0 <
+∼𝜇 𝜌 1 : C
+all
+Γ𝐶 ; Γ, 𝑎 : 𝜅 ⊢𝜓 : C
+
+concat
+Γ𝐶 ; Γ ⊢ 𝜇 : U
+Γ𝐶 ; Γ ⊢ 𝜌 1 : R𝜅
+
+⊢ T 𝜉𝑖
+
+Γ𝐶 ; Γ ⊢ 𝜏𝑖 : 𝜅
+
+Γ𝐶 ; Γ ⊢ ⟨𝜉𝑖 ⊲ 𝜏𝑖 ⟩ : R𝜅
+lift
+Γ𝐶 ; Γ, 𝑎 : 𝜅 0 ⊢ 𝜏 : 𝜅 1
+
+Γ𝐶 ; Γ ⊢ Ξ𝜇 𝜌 : ★
+contain
+
+row
+Γ𝐶 ; Γ ⊢ 𝜉𝑖 : L
+
+comm
+
+Γ𝐶 ; Γ ⊢ 𝜌 : R𝜅0
+
+Γ𝐶 ; Γ ⊢ Lift (𝜆 𝑎 : 𝜅 0 . 𝜏) 𝜌 : R𝜅1
+tc
+(𝑇𝐶𝑖′ 𝑎 ⇒𝑇𝐶 𝑎 : 𝜅) ↦→ 𝑚 : 𝜎 ∈ Γ𝐶
+Γ𝐶 ; Γ ⊢ 𝜌 0 : R𝜅
+Γ𝐶 ; Γ ⊢ 𝜌 2 : R𝜅
+Γ𝐶 ; Γ ⊢ 𝜏 : 𝜅
+
+Γ𝐶 ; Γ ⊢ 𝜌 0 ⊙ 𝜇 𝜌 1 ∼ 𝜌 2 : C
+Γ𝐶 ; Γ ⊢𝑇𝐶 𝜏 : C
+split
+Γ𝐶 ; Γ ⊢ (Lift (𝜆 𝑎 : 𝜅. 𝜏) 𝜌 0 ) ⊙𝔠 𝜌 1 ∼ 𝜌 2 : C
+Γ𝐶 ; Γ ⊢ 𝜌 : R𝜅
+
+Γ𝐶 ; Γ ⊢ All (𝜆 𝑎 : 𝜅. 𝜓 ) 𝜌 : C
+
+Γ𝐶 ; Γ ⊢ Split (𝜆 𝑎 : 𝜅. 𝜏) 𝜌 0 𝜌 1 𝜌 2 : C
+Fig. 2. Kinding
+
+need to handle them in arbitrary positions.11 Monotypes also include several forms of constraints:
+containment <
+∼ and concatenation ⊙ constraints which are also associated with commutativities,
+type class constraints 𝑇𝐶 𝜏, All constraints, and Split constraints.
+Moreover, we have three environments: a type environment Γ maps type variables to their kinds
+and term variables to their types, as well as keeping track of constraints. A class environment Γ𝐶
+stores type class declarations, and an instance environment Γ𝐼 stores type class instance declarations.
+Lastly, we employ a kind system to distinguish between types: kinds 𝜅 include ★ for the base kind,
+𝜅 0 ↦→ 𝜅 1 for type-level functions and type constructors, R𝜅 for rows, C for constraints, L for labels,
+and U for commutativities. Fig. 2 presents selected kinding rules related to rows and constraints;
+most of them are straightforward. Rule row checks the labels and their types. Here, T represents
+11 Type inference for type-level lambdas is known to be generally undecidable; we leave type inference for future work. We
+
+also believe solving Split constraints in the presence of type-level lambdas would introduce similar challenges.
+Proc. ACM Program. Lang., Vol. 10, No. POPL, Article 20. Publication date: January 2026.
+
+Extensible Data Types with Ad-Hoc Polymorphism (Extended)
+
+20:13
+
+a row theory [Morris and McKinna 2019] which allows a language to be defined generically with
+respect to various aspects of rows. More concretely, we rely on the row theory to specify:
+(1) a validity check for labels within a row (e.g. row in Fig. 2);
+(2) a predicate which can restrict reordering for commutative rows (e.g. comm in Fig. 4); and
+(3) a constraint solver (e.g. qalE in Fig. 3), allowing for varied interpretations of row constraints.
+For rule prodOrSum, the row must have kind R★ since its entries describe terms within products
+or variants. In contrast, contain and concat allow rows of any kind. Lastly, rule split checks
+Split simply by checking a concatenation constraint, as they share the same kinding requirements.
+3.2
+
+Typing
+
+Fig. 3 presents the term typing rules. Program typing rules (along with their elaborations) are
+omitted; these rules are standard, simply extending the class and instance environments, and can
+be found in the appendix. The judgement Γ𝐼 ; Γ𝐶 ; Γ ⊢ 𝑀 : 𝜎 reads that under contexts Γ𝐼 , Γ𝐶 and Γ,
+term 𝑀 has type 𝜎. Readers are advised to disregard any ⇝ blue and highlighted parts, as these
+are relevant to the elaboration process that will be explained in §5. The first six rules are standard.
+Rule method states that a type class method can be invoked whenever the corresponding class
+constraint can be solved (§3.3).
+Rule qalI adds qualifiers to types by putting the constraint in the environment (with the ⇝ 𝑥
+part needed for elaboration) to type-check the term, while qalE eliminates them by invoking
+the row theory’s constraint solving relation. Similarly, schemeI generalizes the term’s type, while
+schemeE instantiates polymorphic types.
+In label, first-class labels are assigned a singleton type of the same label. Rules prod and sum
+create singletons of their respective row types, requiring the label term to have a singleton label
+type. unlabel applies to both singleton products and sums, when the label in the type of 𝑁 matches
+the label in the row of 𝑀’s type. Rules prj, concat, inj, and elim all require the corresponding row
+constraints to hold. Rule sub allows terms to be implicitly cast to a supertype, using the subtyping
+judgement. Finally, ind precisely specifies the ind primitive, as described in §2.2.
+Subtyping. Fig. 4 presents selected subtyping rules. The subtyping judgement Γ𝐶 ; Γ ⊢ 𝜎0 <: 𝜎1
+reads that under the contexts Γ𝐶 and Γ, the type 𝜎0 is a subtype of 𝜎1 . For clarity, we also informally
+write Γ𝐶 ; Γ;𝜓 0 ⊨𝜓 1 for subtyping between constraints. The subtyping relation supports a partial
+ordering between commutativity annotations, type equivalence between commutative rows, and
+type equivalence for Lift types and their applied forms. Relations between rows, however, are
+handled by constraint solving, as their interpretation can vary depending on the specific row theory.
+Subtyping is reflexive and transitive, and is co-variant over both product and sum constructors.
+Thus, rule prodOrSum simply checks the subtyping relation between the components. Rules
+prodOrSumRow, contain, and all relate equivalent rows inside constructors. Row equivalence
+Γ𝐶 ; Γ ⊢ 𝜌 0 ≡𝜇 𝜌 1 is reflexive, symmetrical, and transitive. It is parameterized by the commutativity
+𝜇, which is passed in from subtyping. Row equivalence relates commutative rows, as in rule
+comm (where the row permutation is parameterized by the row theory, and [:𝑛] denotes the natural
+numbers up to, but not including 𝑛), as well as lifts of concrete rows regardless of the commutativity,
+as in rules liftL and liftR.
+Rule decay allows a record or variant with commutativity 𝜇0 to be used as one with commutativity
+𝜇1 , provided 𝜇0 ⩽ 𝜇1 . Rule never converts an empty sum, which has no inhabitants, to any other
+well-formed type, which is especially handy for writing initial values when using ind with sums.
+As previously discussed, commutativity has a partial ordering, denoted as 𝜇0 ⩽ 𝜇1 , which is
+reflexive. Non-commutativity 𝔫 is the strongest form, as it retains row order information. This
+Proc. ACM Program. Lang., Vol. 10, No. POPL, Article 20. Publication date: January 2026.
+
+20:14
+
+Matthew Toohey, Yanning Chen, Ara Jamalzadeh, and Ningning Xie
+
+Γ𝐼 ; Γ𝐶 ; Γ ⊢ 𝑀 : 𝜎 ⇝ 𝐸
+
+(Typing And Elaboration)
+method
+(𝑇𝐶𝑖′ 𝑎 ⇝ 𝐴𝑖′ ⇒𝑇𝐶 𝑎 : 𝜅) ↦→ 𝑚 : 𝜎 ⇝ 𝐴 ∈ Γ𝐶
+
+var
+𝑥 :𝜎 ∈ Γ
+Γ𝐼 ; Γ𝐶 ; Γ ⊢ 𝑥 : 𝜎 ⇝ 𝑥
+lam
+Γ𝐼 ; Γ𝐶 ; Γ, 𝑥 : 𝜏0 ⊢ 𝑀 : 𝜏1 ⇝ 𝐸
+
+Γ𝐶 ; Γ ⊢ 𝜏0 : ★ ⇝ 𝐴
+
+Γ𝐼 ; Γ𝐶 ; Γ ⊢ 𝜆 𝑥 . 𝑀 : 𝜏0 → 𝜏1 ⇝ 𝜆 𝑥 : 𝐴. 𝐸
+let
+Γ𝐶 ; Γ ⊢ 𝜎0 : ★ ⇝ 𝐴
+Γ𝐼 ; Γ𝐶 ; Γ ⊢ 𝑀 : 𝜎0 ⇝ 𝐸
+
+Γ𝐼 ; Γ𝐶 ; Γ ⊢ 𝑁 : 𝜏0 ⇝ 𝐸
+
+Γ𝐼 ; Γ𝐶 ; Γ ⊢ 𝑀 𝑁 : 𝜏1 ⇝ 𝐹 𝐸
+annot
+Γ𝐼 ; Γ𝐶 ; Γ, 𝑥 : 𝜎0 ⊢ 𝑁 : 𝜎1 ⇝ 𝐹
+Γ𝐼 ; Γ𝐶 ; Γ ⊢ 𝑀 : 𝜎 ⇝ 𝐸
+
+Γ𝐼 ; Γ𝐶 ; Γ ⊢ let 𝑥 : 𝜎0 = 𝑀 in 𝑁 : 𝜎1 ⇝ (𝜆 𝑥 : 𝐴. 𝐹 ) 𝐸
+qalE
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ T 𝜓 ⇝ 𝐸
+Γ𝐶 ; Γ ⊢𝜓 : C ⇝ 𝐴
+Γ𝐼 ; Γ𝐶 ; Γ ⊢ 𝑀 :𝜓 ⇒ 𝛾 ⇝ 𝐹
+Γ𝐼 ; Γ𝐶 ; Γ,𝜓 ⇝ 𝑥 ⊢ 𝑀 : 𝛾 ⇝ 𝐸
+
+Γ𝐼 ; Γ𝐶 ; Γ ⊢ 𝑀 : 𝜎 : 𝜎 ⇝ 𝐸
+schemeI
+Γ𝐼 ; Γ𝐶 ; Γ, 𝑎 : 𝜅 ⊢ 𝑀 : 𝜎 ⇝ 𝐸
+⊢𝜅 ⇝𝐾
+
+qalI
+
+Γ𝐼 ; Γ𝐶 ; Γ ⊢ 𝑀 :𝜓 ⇒ 𝛾 ⇝ 𝜆 𝑥 : 𝐴. 𝐸
+schemeE
+Γ𝐼 ; Γ𝐶 ; Γ ⊢ 𝑀 : ∀ 𝑎 : 𝜅. 𝜎 ⇝ 𝐸
+Γ𝐶 ; Γ ⊢ 𝜏 : 𝜅 ⇝ 𝐴
+
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ T 𝑇𝐶 𝜏 ⇝ 𝐸
+
+Γ𝐼 ; Γ𝐶 ; Γ ⊢ 𝑚 : 𝜎 [𝜏/𝑎] ⇝ 𝜋0 𝐸
+app
+Γ𝐼 ; Γ𝐶 ; Γ ⊢ 𝑀 : 𝜏0 → 𝜏1 ⇝ 𝐹
+
+Γ𝐼 ; Γ𝐶 ; Γ ⊢ 𝑀 : 𝛾 ⇝ 𝐹 𝐸
+
+Γ𝐼 ; Γ𝐶 ; Γ ⊢ 𝑀 : ∀ 𝑎 : 𝜅. 𝜎 ⇝ Λ 𝑎 : 𝐾 . 𝐸
+prod
+Γ𝐼 ; Γ𝐶 ; Γ ⊢ 𝑀 : ⌊𝜉⌋
+
+label
+
+Γ𝐼 ; Γ𝐶 ; Γ ⊢ 𝑁 : 𝜏 ⇝ 𝐸
+
+Γ𝐼 ; Γ𝐶 ; Γ ⊢ 𝑀 : 𝜎 [𝜏/𝑎] ⇝ 𝐸 [𝐴]
+
+sum
+Γ𝐼 ; Γ𝐶 ; Γ ⊢ 𝑀 : ⌊𝜉⌋
+
+Γ𝐼 ; Γ𝐶 ; Γ ⊢ ℓ : ⌊ℓ⌋ ⇝ ()
+Γ𝐼 ; Γ𝐶 ; Γ ⊢ {𝑀 ⊲ 𝑁 } : Π𝔫 ⟨𝜉 ⊲ 𝜏⟩ ⇝ (𝐸)
+unlabel
+Γ𝐼 ; Γ𝐶 ; Γ ⊢ 𝑀 : Ξ𝔠 ⟨𝜉 ⊲ 𝜏⟩ ⇝ 𝐸
+Γ𝐼 ; Γ𝐶 ; Γ ⊢ 𝑁 : ⌊𝜉⌋
+(
+𝜋0 𝐸
+Ξ=Π
+Γ𝐶 ; Γ ⊢ 𝜏 : ★ ⇝ 𝐴
+𝐹=
+case
+𝐸
+{𝜆
+𝑥
+:
+𝐴.
+𝑥
+}
+Ξ
+=Σ
+Γ ; Γ ; Γ ⊢ 𝑁 :𝜏 ⇝𝐸
+𝐼
+
+𝐶
+
+Γ𝐼 ; Γ𝐶 ; Γ ⊢ [𝑀 ⊲ 𝑁 ] : Σ𝔫 ⟨𝜉 ⊲ 𝜏⟩ ⇝ 𝜄 0 𝐸
+
+Γ𝐼 ; Γ𝐶 ; Γ ⊢ 𝑀/𝑁 : 𝜏 ⇝ 𝐹
+concat
+Γ𝐼 ; Γ𝐶 ; Γ ⊢ 𝑀 : Π 𝜇 𝜌 0 ⇝ 𝐸 0
+Γ𝐼 ; Γ𝐶 ; Γ ⊢ 𝑁 : Π 𝜇 𝜌 1 ⇝ 𝐸 1
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ T 𝜌 0 ⊙ 𝜇 𝜌 1 ∼ 𝜌 2 ⇝ 𝐹
+
+prj
+Γ𝐼 ; Γ𝐶 ; Γ ⊢ 𝑀 : Π 𝜇 𝜌 0 ⇝ 𝐸
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ T 𝜌 1 <
+∼𝜇 𝜌 0 ⇝ 𝐹
+Γ𝐼 ; Γ𝐶 ; Γ ⊢ prj 𝑀 : Π 𝜇 𝜌 1 ⇝ (𝜋0 𝐹 ) [𝜆 𝑎 : ★. 𝑎] 𝐸
+inj
+Γ𝐼 ; Γ𝐶 ; Γ ⊢ 𝑀 : Σ 𝜇 𝜌 0 ⇝ 𝐸
+
+Γ𝐼 ; Γ𝐶 ; Γ ⊢ 𝑀++𝑁 : Π 𝜇 𝜌 2 ⇝ ((𝜋0 𝐹 ) [𝜆 𝑎 : ★. 𝑎] 𝐸 0 ) 𝐸 1
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ T 𝜌 0 <
+∼𝜇 𝜌 1 ⇝ 𝐹
+
+Γ𝐼 ; Γ𝐶 ; Γ ⊢ inj 𝑀 : Σ 𝜇 𝜌 1 ⇝ (𝜋1 𝐹 ) [𝜆 𝑎 : ★. 𝑎] 𝐸
+elim
+Γ𝐼 ; Γ𝐶 ; Γ ⊢ 𝑀 : (Σ 𝜇 𝜌 0 ) → 𝜏 ⇝ 𝐸 0
+Γ𝐼 ; Γ𝐶 ; Γ ⊢ 𝑁 : (Σ 𝜇 𝜌 1 ) → 𝜏 ⇝ 𝐸 1
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ T 𝜌 0 ⊙ 𝜇 𝜌 1 ∼ 𝜌 2 ⇝ 𝐹
+Γ𝐶 ; Γ ⊢ 𝜏 : ★ ⇝ 𝐴
+
+sub
+Γ𝐼 ; Γ𝐶 ; Γ ⊢ 𝑀 : 𝜎0 ⇝ 𝐸
+Γ𝐶 ; Γ ⊢ 𝜎0 <: 𝜎1 ⇝ 𝐹
+
+Γ𝐼 ; Γ𝐶 ; Γ ⊢ 𝑀 ▽ 𝑁 : (Σ 𝜇 𝜌 2 ) → 𝜏 ⇝ ((𝜋1 𝐹 ) [𝜆 𝑎 : ★. 𝑎] [𝐴] 𝐸 0 ) 𝐸 1
+
+Γ𝐼 ; Γ𝐶 ; Γ ⊢ 𝑀 : 𝜎1 ⇝ 𝐹 𝐸
+
+ind
+Γ𝐶 ; Γ ⊢ 𝜌 : R
+Γ𝐶 ; Γ, 𝑎 : R ⊢ 𝜏 : ★ ⇝ 𝐴
+
+
+Γ𝐼 ; Γ𝐶 ; Γ, 𝑎𝑙 : L, 𝑎𝑡 : 𝜅, 𝑎𝑝 𝑎𝑖 𝑎𝑛 : R𝜅 ⊢ 𝑀 : 𝑎𝑝 ⊙ 𝔫 ⟨𝑎𝑙 ⊲ 𝑎𝑡 ⟩ ∼ 𝑎𝑖 , 𝑎𝑖 ⊙𝔫 𝑎𝑛 ∼ 𝜌 ⇒ ⌊𝑎𝑙 ⌋ → 𝜏 𝑎𝑝 /𝑎 → 𝜏 [𝑎𝑖 /𝑎] ⇝ 𝐸 0
+Γ𝐼 ; Γ𝐶 ; Γ ⊢ 𝑁 : 𝜏 [⟨⟩/𝑎] ⇝ 𝐸 1
+𝜅
+
+⊢𝜅 ⇝𝐾
+
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ T Ind 𝜌 ⇝ 𝐹
+
+𝜅
+
+𝐸 = (𝐹 [𝜆 𝑎 : L𝐾 . 𝐴] (Λ 𝑎𝑙 : ★, 𝑎𝑡 : 𝐾, 𝑎𝑝 𝑎𝑖 𝑎𝑛 : L𝐾 . 𝐸 0 )) 𝐸 1
+
+Γ𝐼 ; Γ𝐶 ; Γ ⊢ ind (𝜆 𝑎 : R𝜅 . 𝜏) 𝜌 𝑀 𝑁 : 𝜏 [𝜌/𝑎] ⇝ 𝐸
+Fig. 3. Term typing (with elaboration detailed in §5)
+
+information can be discarded, allowing it to “decay” into any other commutativity type. Conversely,
+commutativity 𝔠 is the weakest form, as it carries no additional information. This ordering is partial
+because there is no relationship between distinct polymorphic commutativity type variables. Recall
+that the typing rules prod, sum, and unlabel (Fig. 3) use concrete commutativities. This partial
+ordering allows us to apply those rules to values with other forms of commutativity without any
+loss of expressiveness.
+Proc. ACM Program. Lang., Vol. 10, No. POPL, Article 20. Publication date: January 2026.
+
+Extensible Data Types with Ad-Hoc Polymorphism (Extended)
+
+20:15
+
+Γ𝐶 ; Γ ⊢ 𝜎0 <: 𝜎1 ≜ Γ𝐶 ; Γ;𝜓 0 ⊨𝜓 1
+prodOrSum
+Γ𝐶 ; Γ ⊢ 𝜏𝑖 <: 𝜏𝑖′
+Γ𝐶 ; Γ ⊢ Ξ𝜇 ⟨𝜉𝑖 ⊲ 𝜏𝑖 ⟩ : ★
+
+(Subtyping)
+prodOrSumRow
+Γ𝐶 ; Γ ⊢ 𝜌 0 ≡𝜇 𝜌 1
+Γ𝐶 ; Γ ⊢ Π 𝜇 𝜌 0 : ★
+
+decay
+Γ𝐶 ; Γ ⊢ Ξ𝜇0 𝜌 : ★
+Γ𝐶 ; Γ ⊢ 𝜇1 : U
+𝜇0 ⩽ 𝜇1
+
+Γ𝐶 ; Γ ⊢ Ξ𝜇 ⟨𝜉𝑖 ⊲ 𝜏𝑖 ⟩ <: Ξ𝜇 ⟨𝜉𝑖 ⊲ 𝜏𝑖′ ⟩
+Γ𝐶 ; Γ ⊢ Π 𝜇 𝜌 0 <: Ξ𝜇 𝜌 1
+contain
+all
+Γ𝐶 ; Γ ⊢ 𝜌 0 ≡𝜇 𝜌 2
+Γ𝐶 ; Γ ⊢ 𝜌 1 ≡𝜇 𝜌 3
+never
+Γ𝐶 ; Γ ⊢ 𝜌 0 <
+∼𝜇 𝜌 1 : C
+Γ ; Γ ⊢𝜎 :★
+𝐶
+
+Γ𝐶 ; Γ ⊢ Σ𝔠 ⟨⟩ <: 𝜎
+
+Γ𝐶 ; Γ; 𝜌 0 <
+∼𝜇 𝜌 1 ⊨ 𝜌 2 <
+∼𝜇 𝜌 3
+
+Γ𝐶 ; Γ ⊢ Ξ𝜇0 𝜌 <: Ξ𝜇1 𝜌
+Γ𝐶 ; Γ ⊢ 𝜌 0 ≡𝔠 𝜌 1
+Γ𝐶 ; Γ ⊢ All (𝜆 𝑎 : 𝜅. 𝜓 ) 𝜌 0 : C
+
+Γ𝐶 ; Γ; All (𝜆 𝑎 : 𝜅. 𝜓 ) 𝜌 0 ⊨ All (𝜆 𝑎 : 𝜅. 𝜓 ) 𝜌 1
+
+Γ𝐶 ; Γ ⊢ 𝜌 0 ≡𝜇 𝜌 1
+
+(Row Equivalence)
+trans
+Γ𝐶 ; Γ ⊢ 𝜌 0 : R
+Γ𝐶 ; Γ ⊢ 𝜌 0 ≡𝜇 𝜌 1
+Γ𝐶 ; Γ ⊢ 𝜌 1 ≡𝜇 𝜌 2
+𝜅
+
+refl
+Γ𝐶 ; Γ ⊢ 𝜌 : R𝜅
+
+comm
+⊢ T 𝑝 permutes [:𝑛] for 𝜉
+Γ𝐶 ; Γ ⊢ ⟨𝜉𝑖 ⊲ 𝜏𝑖
+Γ𝐶 ; Γ ⊢ ⟨𝜉𝑖 ⊲ 𝜏𝑖
+
+𝑖 ∈ [:𝑛]
+
+𝑖 ∈ [:𝑛]
+
+⟩ : R𝜅
+𝑖 ∈𝑝
+
+Γ𝐶 ; Γ ⊢ 𝜌 ≡𝜇 𝜌
+Γ𝐶 ; Γ ⊢ 𝜌 0 ≡𝜇 𝜌 2
+liftL
+Γ𝐶 ; Γ ⊢ Lift (𝜆 𝑎 : 𝜅 0 . 𝜏 ′ ) ⟨𝜉𝑖 ⊲ 𝜏𝑖 ⟩ : R𝜅1
+
+liftR
+
+Γ𝐶 ; Γ ⊢ Lift (𝜆 𝑎 : 𝜅 0 . 𝜏 ′ ) ⟨𝜉𝑖 ⊲ 𝜏𝑖 ⟩ ≡𝜇 ⟨𝜉𝑖 ⊲ 𝜏 ′ [𝜏𝑖 /𝑎]⟩
+
+Γ𝐶 ; Γ ⊢ ⟨𝜉𝑖 ⊲ 𝜏 ′ [𝜏𝑖 /𝑎]⟩ ≡𝜇 Lift (𝜆 𝑎 : 𝜅 0 . 𝜏 ′ ) ⟨𝜉𝑖 ⊲ 𝜏𝑖 ⟩
+
+⟩ ≡𝔠 ⟨𝜉𝑖 ⊲ 𝜏𝑖
+
+⟩
+
+Γ𝐶 ; Γ ⊢ Lift (𝜆 𝑎 : 𝜅 0 . 𝜏 ′ ) ⟨𝜉𝑖 ⊲ 𝜏𝑖 ⟩ : R𝜅1
+
+(Commutativity Partial Ordering)
+
+𝜇0 ⩽ 𝜇1
+𝜇⩽𝜇
+
+𝔫⩽𝜇
+
+𝜇 ⩽𝔠
+
+Fig. 4. Subtyping
+
+3.3
+
+Constraint Solving
+
+Up to this point, we have left the row theory abstract (§3.1). To illustrate constraint solving (and
+subsequent elaboration in §5.2), we provide an example interpretation Ts of simple rows, similar to
+those from Morris and McKinna [2019]. For this row theory, the label check in the row kinding
+rule is instantiated as a uniqueness check, and row permutations in the comm row equivalence rule
+are unrestricted.12 Fig. 5 presents selected rules for the constraint solving relation of Ts . The first
+rule local simply solves constraints by using those already available in the context.
+Row constraints. The next few rules are for rows. Rule containTrans states that row containment is transitive. Rule containDecay uses the commutativity partial ordering to solve row
+containment constraints, deriving weaker commutativities from stronger ones.
+Rule containConcat permits the combination of multiple contained (possibly non-adjacent)
+rows into a larger containment constraint. Rule concatConcrete is the only rule for solving
+concrete, non-commutative rows constraints; the constraint well-kindedness ensures the uniqueness
+of labels. The non-commutativity requires the combined row to be made up of all entries of the first
+row in order, followed by all entries of the second, meaning no “interleaving” is allowed. However,
+elements can be interleaved in containment constraints via containConcat.
+Rule concatSwap states that commutative row combination is symmetric. Rule concatDecay,
+similarly to rule containDecay, allows containment constraints with stronger commutativity to
+prove those with weaker commutativity. Lastly, containment can also be derived from concatenation
+using rules concatContainL and concatContainR.
+12 It is possible to instantiate T with other row theories, such as scoped rows [Berthomieu and De Sagazan 1995; Leijen 2005].
+
+In that case, rule row allows duplicate labels, and comm permits permutations between non-duplicate labels.
+
+Proc. ACM Program. Lang., Vol. 10, No. POPL, Article 20. Publication date: January 2026.
+
+20:16
+
+Matthew Toohey, Yanning Chen, Ara Jamalzadeh, and Ningning Xie
+
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts 𝜓
+
+(Constraint Solving)
+
+Local
+
+Row
+containDecay
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts 𝜌 0 <
+∼ 𝜇0 𝜌 1
+𝜇0 ⩽ 𝜇1
+Γ𝐶 ; Γ ⊢ 𝜇1 : U
+
+containTrans
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts 𝜌 0 <
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts 𝜌 1 <
+∼𝜇 𝜌 1
+∼𝜇 𝜌 2
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts 𝜌 0 <
+∼𝜇 𝜌 2
+
+local
+𝜓 ∈Γ
+
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts 𝜓
+containConcat
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts 𝜌 0 ⊙ 𝜇 𝜌 1 ∼ 𝜌 2
+
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts 𝜌 3 ⊙ 𝜇 𝜌 4 ∼ 𝜌 5
+
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts 𝜌 0 <
+∼𝜇 𝜌 1
+1
+
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts 𝜌 0 <
+∼𝜇 𝜌 3
+
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts 𝜌 2 <
+∼𝜇 𝜌 5
+concatConcrete
+𝑗 ∈ [:𝑛]
+𝑖 ∈ [:𝑚] ′
+Γ𝐶 ; Γ ⊢ ⟨𝜉𝑖 ⊲ 𝜏𝑖
+⟩ : R𝜅
+, 𝜉 𝑗 ⊲ 𝜏 𝑗′
+𝑖 ∈ [:𝑚]
+
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts ⟨𝜉𝑖 ⊲ 𝜏𝑖
+⟩ ⊙𝔫 ⟨𝜉 ′𝑗 ⊲ 𝜏 𝑗′
+concatDecay
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts 𝜌 0 ⊙ 𝜇0 𝜌 1 ∼ 𝜌 2
+𝜇0 ⩽ 𝜇1
+Γ𝐶 ; Γ ⊢ 𝜇1 : U
+
+𝑗 ∈ [:𝑛]
+
+⟩ ∼ ⟨𝜉𝑖 ⊲ 𝜏𝑖
+
+𝑖 ∈ [:𝑚]
+
+, 𝜉 ′𝑗 ⊲ 𝜏 𝑗′
+
+𝑗 ∈ [:𝑛]
+
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts 𝜌 1 <
+∼𝜇 𝜌 4
+
+concatSwap
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts 𝜌 0 ⊙𝔠 𝜌 1 ∼ 𝜌 2
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts 𝜌 1 ⊙𝔠 𝜌 0 ∼ 𝜌 2
+
+⟩
+
+concatContainL
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts 𝜌 0 ⊙ 𝜇 𝜌 1 ∼ 𝜌 2
+
+concatContainR
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts 𝜌 0 ⊙ 𝜇 𝜌 1 ∼ 𝜌 2
+
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts 𝜌 0 <
+∼𝜇 𝜌 2
+
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts 𝜌 1 <
+∼𝜇 𝜌 2
+
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts 𝜌 0 ⊙ 𝜇1 𝜌 1 ∼ 𝜌 2
+Lift
+liftContain
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts 𝜌 0 <
+∼𝜇 𝜌 1
+
+Γ𝐶 ; Γ ⊢ 𝜌 0 : R𝜅0
+
+Γ𝐶 ; Γ, 𝑎 : 𝜅 0 ⊢ 𝜏 : 𝜅 1
+
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts (Lift (𝜆 𝑎 : 𝜅 0 . 𝜏) 𝜌 0 ) <
+∼ 𝜇 (Lift (𝜆 𝑎 : 𝜅 0 . 𝜏) 𝜌 1 )
+liftConcat
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts 𝜌 0 ⊙ 𝜇 𝜌 1 ∼ 𝜌 2
+Γ𝐶 ; Γ ⊢ 𝜌 0 : R𝜅0
+Γ𝐶 ; Γ, 𝑎 : 𝜅 0 ⊢ 𝜏 : 𝜅 1
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts (Lift (𝜆 𝑎 : 𝜅 0 . 𝜏) 𝜌 0 ) ⊙ 𝜇 (Lift (𝜆 𝑎 : 𝜅 0 . 𝜏) 𝜌 1 ) ∼ (Lift (𝜆 𝑎 : 𝜅 0 . 𝜏) 𝜌 2 )
+Type classes
+TCInst
+TCSuper
+𝑗 ∈ [:𝑛]
+(∀ 𝑎𝑘 : 𝜅𝑘 . 𝜓 𝑗 ⇒𝑇𝐶 𝜏) ∈ Γ𝐼
+(𝑇𝐶 ′ 𝑎
+⇒𝑇𝐶 𝑎 : 𝜅) ↦→ 𝑚 : 𝜎 ∈ Γ
+Γ𝐶 ; Γ ⊢ 𝜏𝑘′ : 𝜅𝑘
+
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts 𝑇𝐶 𝜏
+
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts 𝑇𝐶 𝜏 [𝜏𝑘′ /𝑎𝑘 ]
+All
+allEmpty
+Γ𝐶 ; Γ, 𝑎 : 𝜅 ⊢𝜓 : C
+
+𝑖 ∈ [:𝑛]
+
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts 𝑇𝐶𝑖′ 𝜏
+
+allSingletonIntro
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts 𝜓 [𝜏/𝑎]
+
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts All (𝜆 𝑎 : 𝜅. 𝜓 ) ⟨⟩
+allSingletonElim
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts All (𝜆 𝑎 : 𝜅. 𝜓 ) ⟨𝜉 ⊲ 𝜏⟩
+
+𝐶
+
+𝑗
+
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts 𝜓 𝑗 [𝜏𝑘′ /𝑎𝑘 ]
+
+Γ𝐶 ; Γ, 𝑎 : 𝜅 ⊢𝜓 : C
+
+Γ𝐶 ; Γ ⊢ 𝜉 : L
+
+Γ𝐶 ; Γ ⊢ 𝜏 : 𝜅
+
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts All (𝜆 𝑎 : 𝜅. 𝜓 ) ⟨𝜉 ⊲ 𝜏⟩
+allContain
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts 𝜌 0 <
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts All (𝜆 𝑎 : 𝜅. 𝜓 ) 𝜌 1
+∼𝔠 𝜌 1
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts All (𝜆 𝑎 : 𝜅. 𝜓 ) 𝜌 0
+
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts 𝜓 [𝜏/𝑎]
+allConcat
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts 𝜌 0 ⊙𝔠 𝜌 1 ∼ 𝜌 2
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts All (𝜆 𝑎 : 𝜅. 𝜓 ) 𝜌 0
+
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts All (𝜆 𝑎 : 𝜅. 𝜓 ) 𝜌 1
+
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts All (𝜆 𝑎 : 𝜅. 𝜓 ) 𝜌 2
+Split
+splitEmpty
+Γ𝐶 ; Γ, 𝑎 : 𝜅 ⊢ 𝜏 : ★
+
+splitSingletonMatch
+Γ𝐶 ; Γ, 𝑎 : 𝜅 ⊢ 𝜏0 : ★
+Γ𝐶 ; Γ ⊢ 𝜏1 : 𝜅
+
+Γ𝐶 ; Γ ⊢ 𝜉 : L
+
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts Split (𝜆 𝑎 : 𝜅. 𝜏) ⟨⟩ ⟨⟩ ⟨⟩
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts Split (𝜆 𝑎 : 𝜅. 𝜏0 ) ⟨𝜉 ⊲ 𝜏1 ⟩ ⟨⟩ ⟨𝜉 ⊲ 𝜏0 [𝜏1 /𝑎] ⟩
+splitSingletonRest
+∄ 𝜏2, Γ𝐶 ; Γ ⊢ 𝜏1 <: 𝜏0 [𝜏2 /𝑎]
+splitConcat
+Γ𝐶 ; Γ, 𝑎 : 𝜅 ⊢ 𝜏0 : ★
+Γ𝐶 ; Γ ⊢ 𝜏1 : ★
+Γ𝐶 ; Γ ⊢ 𝜉 : L
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts Split (𝜆 𝑎 : 𝜅. 𝜏) 𝜌 0 𝜌 1 𝜌 2
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts Split (𝜆 𝑎 : 𝜅. 𝜏0 ) ⟨⟩ ⟨𝜉 ⊲ 𝜏1 ⟩ ⟨𝜉 ⊲ 𝜏1 ⟩
+
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts (Lift (𝜆 𝑎 : 𝜅. 𝜏) 𝜌 0 ) ⊙𝔠 𝜌 1 ∼ 𝜌 2
+
+Fig. 5. Constraint solving
+
+Proc. ACM Program. Lang., Vol. 10, No. POPL, Article 20. Publication date: January 2026.
+
+Extensible Data Types with Ad-Hoc Polymorphism (Extended)
+
+𝐸, 𝐹
+𝑉
+𝐴, 𝐵, 𝐶
+𝐾
+Δ
+
+F
+F
+F
+F
+F
+
+𝑥 | 𝜆 𝑥 : 𝐴. 𝐸 | 𝐸 𝐹 | Λ 𝑎 : 𝐾 . 𝐸 | 𝐸 [𝐴] | (𝐸𝑖 ) | 𝜋𝑛 𝐸 | 𝜄𝑛 𝐸 | case 𝐸 {𝐹𝑖 }
+𝜆 𝑥 : 𝐴. 𝐸 | Λ 𝑎 : 𝐾 . 𝐸 | (𝑉𝑖 ) | 𝜄𝑛𝑉
+𝑎 | 𝜆 𝑎 : 𝐾 . 𝐴 | 𝐴 𝐵 | ∀ 𝑎 : 𝐾 . 𝐴 | 𝐴 → 𝐵 | {𝐴𝑖 } | 𝐴 ⟦𝐵⟧ | ⊗ 𝐴 | ⊕ 𝐴
+★ | 𝐾1 ↦→ 𝐾2 | L𝐾
+𝜖 | Δ, 𝑎 : 𝐾 | Δ, 𝑥 : 𝐴
+Fig. 6. F𝜔⊗⊕ syntax
+
+20:17
+
+term
+value
+type
+kind
+environment
+
+Rules liftContain and liftConcat solve containment and concatenation constraints for lifted
+rows by solving their unlifted forms. This also highlights the utility of allowing row constraints
+over rows of arbitrary kinds.
+Type classes, All, and Split. There are two rules for type class constraints. Rule TCInst finds an
+instance in the context, instantiates its type variables, and solves the prerequisites. Rule TCSuper
+solves a superclass when a subclass constraint can be solved.
+We have five rules for the All constraint. Rule allEmpty states that All is always satisfied for
+empty rows. Rules allSingletonIntro and allSingletonElim convert between All applied to
+singleton rows and the corresponding constraint on the type itself. allSingletonElim is particularly
+useful within the step function of ind expressions. Rule allContain solves All over smaller rows
+using All over larger rows. Finally, rule allConcat solves All constraints over larger rows using
+those over smaller rows. This rule is often used at the top level when polymorphic functions are
+instantiated and we need to solve constraints for concrete rows.
+The remaining rules are for Split. Rule splitEmpty applies when the row being split is empty.
+Rules splitSingletonMatch and splitSingletonRest handle cases where an entry either matches
+or does not match the type lambda, respectively. While rule splitSingletonMatch is straightforward, rule splitSingletonRest incorporates subtyping to ensure deterministic Split solving:
+splitSingletonRest only applies when a type fails to match the type lambda, even through subtyping. Such a subtyping rule is not needed for splitSingletonMatch because such a check can be
+handled by the sub typing rule if necessary to solve the constraint. Larger split constraints are solved
+by combining smaller ones, with the corresponding rule provided in the appendix for space reasons.
+Finally, rule splitConcat states that Split implies the corresponding concatenation constraint.
+Lastly, we remark that while the system incorporates numerous rules, the complexity is a
+worthwhile tradeoff for the simplified type signatures it enables: many rules allows for the derivation
+of weaker constraints from stronger ones, meaning programmers can specify only the most powerful
+constraints in their type signatures, leading to significantly more readable types.
+4
+
+Target Calculus
+
+This section presents F𝜔⊗⊕ , our target calculus. We present its semantics (§4.1), and prove its type
+soundness (§4.2). F𝜔⊗⊕ builds upon the F⊗⊕ calculus [Morris and McKinna 2019], but extends it in
+several significant aspects. First, while F⊗⊕ is based on System F, F𝜔⊗⊕ is built on System F𝜔 by
+incorporating type lambdas, type applications, and higher kinds. Second, we introduce first-class
+type-level lists. This allows product and sum types to be constructed with type-level lists instead of
+embedded entries or variants. Unlike rows, type lists are considerably simpler: they lack labels,
+so there are no concerns about uniqueness, and they do not support containment, concatenation
+constraints, or commutativity. Finally, we introduce type-level mappings, which are similar to Lift
+in the source, and apply a type lambda over type-level lists.
+Syntax. The syntax of F𝜔⊗⊕ is presented in Fig. 6. Expressions 𝐸 include variables 𝑥, lambdas
+𝜆 𝑥 : 𝐴. 𝐸, applications 𝐸 𝐹 , type abstractions Λ 𝑎 : 𝐾 . 𝐸, type applications 𝐸 [𝐴], products (𝐸𝑖 ) written
+Proc. ACM Program. Lang., Vol. 10, No. POPL, Article 20. Publication date: January 2026.
+
+20:18
+
+Matthew Toohey, Yanning Chen, Ara Jamalzadeh, and Ningning Xie
+
+Δ ⊢𝐴 :𝐾
+list
+Δ ⊢ 𝐴𝑖 : 𝐾
+
+(Kinding)
+listApp
+Δ ⊢ 𝐴 : 𝐾1 ↦→ 𝐾2
+
+Δ ⊢ {𝐴𝑖 } : L𝐾
+
+Δ ⊢ 𝐵 : L𝐾1
+
+Δ ⊢ 𝐴 ⟦𝐵⟧ : L𝐾2
+
+prod
+Δ ⊢ 𝐴 : L★
+
+sum
+Δ ⊢ 𝐴 : L★
+
+Δ ⊢ ⊗ 𝐴 :★
+
+Δ ⊢ ⊕ 𝐴 :★
+
+Δ⊢𝐸 :𝐴
+
+(Typing)
+
+prodIntro
+⊢Δ
+Δ ⊢ 𝐸𝑖 : 𝐴𝑖
+
+prodElim
+𝑖 ∈ [:𝑛]
+Δ ⊢ 𝐸 : ⊗ {𝐴𝑖
+}
+𝑗 ∈ [:𝑛]
+
+Δ ⊢ (𝐸𝑖 ) : ⊗ {𝐴𝑖 }
+
+Δ ⊢ 𝜋𝑗 𝐸 : 𝐴𝑗
+
+sumIntro
+𝑗 ∈ [:𝑛]
+Δ ⊢ 𝐸 : 𝐴𝑗
+
+sumElim
+Δ ⊢ 𝐸 : ⊕ {𝐴𝑖 }
+Δ ⊢ 𝐹𝑖 : 𝐴𝑖 → 𝐵
+Δ ⊢𝐵 :★
+
+𝑖 ∈ [:𝑛]
+
+Δ ⊢ 𝐴𝑖 : ★
+
+Δ ⊢ 𝜄 𝑗 𝐸 : ⊕ {𝐴𝑖
+
+𝑖 ∈ [:𝑛]
+
+Δ ⊢ case 𝐸 {𝐹𝑖 } : 𝐵
+
+}
+
+Δ ⊢𝐴 ≡𝐵
+refl
+Δ ⊢𝐴 ≡𝐴
+listAppId
+Δ ⊢ 𝐴 : L𝐾
+
+symm
+Δ ⊢𝐴 ≡𝐵
+
+trans
+Δ ⊢𝐴 ≡𝐵
+
+(Type Equivalence)
+listAppList
+Δ ⊢ 𝐴 : 𝐾1 ↦→ 𝐾2
+
+Δ ⊢ 𝐵 ≡𝐶
+
+Δ⊢𝐵 ≡𝐴
+Δ ⊢𝐴 ≡𝐶
+listAppComp
+Δ ⊢ 𝐴1 : 𝐾1 ↦→ 𝐾2
+
+Δ ⊢ (𝜆 𝑎 : 𝐾 . 𝑎) ⟦𝐴⟧ ≡ 𝐴
+
+Δ ⊢ 𝐴 ⟦{𝐵𝑖 }⟧ ≡ {𝐴 𝐵𝑖 }
+listApp
+Δ ⊢ 𝐴1 ≡ 𝐴2
+Δ ⊢ 𝐵1 ≡ 𝐵2
+
+Δ ⊢ 𝐴0 ⟦𝐴1 ⟦𝐵⟧⟧ ≡ (𝜆 𝑎 : 𝐾1 . 𝐴0 (𝐴1 𝑎)) ⟦𝐵⟧
+
+Δ ⊢ 𝐴1 ⟦𝐵 1 ⟧ ≡ 𝐴2 ⟦𝐵 2 ⟧
+
+𝐸 −→ 𝐹
+
+(Operational Semantics)
+prodElimIntro
+𝑗 ∈ [:𝑛]
+
+prodIntro
+𝐸 −→ 𝐸 ′
+
+prodElim
+𝐸 −→ 𝐸 ′
+
+(𝑉𝑖 , 𝐸, 𝐹 𝑗 ) −→ (𝑉𝑖 , 𝐸 ′, 𝐹 𝑗 )
+sumElimL
+𝐸 −→ 𝐸 ′
+
+𝜋𝑖 𝐸 −→ 𝜋𝑖 𝐸 ′
+sumElimR
+𝐸 −→ 𝐸 ′
+
+case 𝐸 {𝐹𝑖 } −→ case 𝐸 ′ {𝐹𝑖 }
+
+case 𝑉 {𝑉𝑖′, 𝐸, 𝐹 𝑗 } −→ case 𝑉 {𝑉𝑖′, 𝐸 ′, 𝐹 𝑗 }
+
+𝜋 𝑗 (𝑉𝑖
+
+𝑖 ∈ [:𝑛]
+
+sumIntro
+𝐸 −→ 𝐸 ′
+
+) −→ 𝑉𝑗
+𝜄𝑖 𝐸 −→ 𝜄𝑖 𝐸 ′
+sumElimIntro
+𝑗 ∈ [:𝑛]
+case 𝜄 𝑗 𝑉 {𝑉𝑖′
+
+𝑖 ∈ [:𝑛]
+
+} −→ 𝑉𝑗′ 𝑉
+
+Fig. 7. F𝜔⊗⊕ semantics
+
+with the tuple syntax, product projection 𝜋𝑛 𝐸, sum introduction 𝜄𝑛 𝐸, and elimination case 𝐸 {𝐹𝑖 }.
+Values 𝑉 are a subset of expressions.
+Types 𝐴 include variables 𝑎, type lambdas 𝜆 𝑎 : 𝐾 . 𝐴, applications 𝐴 𝐵, polymorphic types ∀ 𝑎 : 𝐾 . 𝐴,
+function types 𝐴 → 𝐵, type-level lists {𝐴𝑖 } and mappings 𝐴 ⟦𝐵⟧, product types ⊗ 𝐴, and sum types
+⊕ 𝐴. Kinds 𝐾 include the base kind ★, 𝐾1 ↦→ 𝐾2 for mappings, and L𝐾 for type-level lists of kind 𝐾.
+A typing context Δ maps type variables to their kinds, and term variables to their types.
+4.1
+
+Typing and Operational Semantics
+
+Fig. 7 presents selected rules for F𝜔⊗⊕ , focusing on type-level lists, products, and sums; the complete
+rules can be found in the appendix. For kinding Δ ⊢ 𝐴 : 𝐾, rule list requires all entries in a list to be
+of kind 𝐾, and returns kind L𝐾 . In rule listApp, 𝐴 is a mapping from 𝐾1 ↦→ 𝐾2 , which takes 𝐵 of
+L𝐾1 and returns L𝐾2 . Both rules prod and sum require 𝐴 to be of kind L★.
+For typing Δ ⊢ 𝐸 : 𝐴, most rules are self-explanatory. The judgement ensures that Δ is well-formed
+(written ⊢ Δ), and the output type 𝐴 has kind ★. In rule prodIntro, the first hypothesis ensures the
+context is well-formed, even if the product is empty. Similarly, in rule sumIntro, the last hypothesis
+ensures that the other cases of the sum being created have the required kind. The last hypothesis
+for rule sumElim similarly ensures the output is well-kinded, even when 𝐸 is the empty sum.
+The judgement Δ ⊢ 𝐴 ≡ 𝐵 defines type equivalence, which is reflexive, symmetrical, and transitive.
+Rule listAppList gives mapping its intended semantics by applying the function to each element
+within a concrete list. Rules listAppId and listAppComp correspond to the identity and composition
+Proc. ACM Program. Lang., Vol. 10, No. POPL, Article 20. Publication date: January 2026.
+
+Extensible Data Types with Ad-Hoc Polymorphism (Extended)
+
+20:19
+
+laws for mappings. These two rules are particularly useful when the list is e.g. a type variable and
+thus rule listAppList does not apply. We will revisit these rules when discussing elaboration (§5).
+The operational semantics 𝐸 −→ 𝐸 ′ follow a call-by-value evaluation strategy. Rule prodIntro
+evaluates product components left-to-right until all are values. Rules sumElimL and sumElimR
+evaluate the scrutinee, then the handlers in a similar way. The computational rules prodElimIntro
+and sumElimIntro perform projection and case matching on values. All type-level constructs,
+including lists and mappings, are purely static and do not appear in the operational semantics.
+4.2
+
+Type Soundness
+
+We demonstrate that F𝜔⊗⊕ enjoys syntactic type soundness. The proofs are largely based on those
+for System F𝜔 [Pierce 2002], with the exception of the typing inversion and value cannonical form
+lemmas, which are significantly more complex than in standard System F𝜔. These lemmas rely on
+the property that it is impossible to establish equivalence between unrelated types. This is normally
+established by defining a reduction relation for types, proving that the equivalence closure of this
+relation corresponds to type equivalence, then proving confluence for the reduction relation.
+Typically, a single-step parallel reduction relation is used, with confluence following from the
+diamond property, but this turns out to be highly non-trivial in F𝜔⊗⊕ . As an example, consider parallel
+reduction on 𝐴 ⟦(𝜆 𝑎 : ★. 𝑎) ⟦{𝐵}⟧⟧. This type reduces to 𝐴 ⟦{(𝜆 𝑎 : ★. 𝑎) 𝐵}⟧ via listAppList. Alternatively, it reduces to (𝜆 𝑎 : ★. 𝐴 ((𝜆 𝑎 : ★. 𝑎) 𝑎)) ⟦{𝐵}⟧ via listAppComp. The diamond property
+claims that both reduction paths converge in one step, but this is not possible because the first
+type reduces to {𝐴 𝐵} (listAppList, 𝛽) or 𝐴 ⟦{𝐵}⟧ (listApp, 𝛽), while the second type reduces to
+{(𝜆 𝑎 : ★. 𝐴 𝑎) 𝐵} (listAppList, 𝛽) or (𝜆 𝑎 : ★. 𝐴 𝑎) ⟦{𝐵}⟧ (listApp, 𝛽).
+Therefore, instead of using the parallel reduction approach, we define non-deterministic smallstep reduction semantics for types (provided in the appendix). We then apply Newman’s lemma [Newman 1942] to conclude confluence from local confluence (Thm. 4.1) and strong normalization
+(Thm. 4.2). For more detailed explanations of our proofs, we refer the reader to §6, the appendix,
+and our artifact.
+We first establish local confluence by induction:
+Theorem 4.1 (Local Confluence). If Δ ⊢ 𝐴 −→ 𝐵 0 , Δ ⊢ 𝐴 −→ 𝐵 1 , Δ ⊢ 𝐴 : 𝐾, and ⊢ Δ, then there exists
+𝐶 such that Δ ⊢ 𝐵 0 −→∗ 𝐶 and Δ ⊢ 𝐵 1 −→∗ 𝐶.
+We then apply an argument based on logical relations [Skorstengaard 2019] to prove strong
+normalization. The logical relation for closed types is defined as follows:
+SN★ (𝐴) = 𝜖 ⊢ 𝐴 : ★ ∧ SN(𝐴)
+SN𝐾1 ↦→ 𝐾2 (𝐴) = 𝜖 ⊢ 𝐴 : 𝐾1 ↦→ 𝐾2 ∧ ∀ 𝐵, SN𝐾1 (𝐵) ⇒ SN𝐾2 (𝐴 𝐵)
+SNL𝐾 (𝐴) = 𝜖 ⊢ 𝐴 : L𝐾 ∧ SNLSN𝐾 (𝐴) ∧ ∀ 𝐴′ 𝐵 ′, 𝜖 ⊢ 𝐴 −→∗ 𝐴′ ⟦𝐵 ′ ⟧ ⇒ ∃ 𝐶, SN𝐾 (𝐴′ 𝐶)
+The first two cases are standard, as typically seen in logical relations for the lambda calculus [Girard
+et al. 1989, Chapter 6]. The SN predicate (which appears in the ★ case) is strong normalization;
+this means that there is no infinite reduction sequence for the type. The last case was the most
+challenging to define, due to complicated interactions with the listAppComp rule. Specifically, when
+this rule is applied, it is often difficult to preserve the required induction hypotheses since various
+useful properties (most importantly SN𝐾 ) cannot be inverted. The SN𝑃L relation, paramterized by a
+property 𝑃, states that all reduction paths of the type terminate, or encounter a concrete list whose
+entries satisfy 𝑃:
+Proc. ACM Program. Lang., Vol. 10, No. POPL, Article 20. Publication date: January 2026.
+
+20:20
+
+Matthew Toohey, Yanning Chen, Ara Jamalzadeh, and Ningning Xie
+
+refl
+
+𝑃 (𝐴𝑖 )
+SN𝑃L ({𝐴𝑖 })
+
+step
+
+∀ 𝐵, 𝜖 ⊢ 𝐴 −→ 𝐵 ⇒ SN𝑃L (𝐵)
+
+∀ 𝐵𝑖 , 𝐴 ≠ {𝐵𝑖 }
+
+SN𝑃L (𝐴)
+
+We establish that the logical relation implies strong normalization by induction on kinds:
+Theorem 4.2 (Strong Normalization). If SN𝐾 (𝐴) then SN(𝐴).
+We prove that well-kinded types are in the logical relation. We lift the logical relations to open
+terms, with 𝛿 being the standard substitution of contexts. The judgment 𝛿 ⊨ Δ means that 𝛿 provides
+a substitution for each type variable entry in the environment, and each substitution type satisfies
+the same SN𝐾 predicate:
+Theorem 4.3 (Fundamental Property). If 𝛿 ⊨ Δ and Δ ⊢ 𝐴 : 𝐾 then SN𝐾 (𝛿 𝐴).
+Combining Thm. 4.2 and Thm. 4.3 establishes strong normalization for all well-kinded types, which
+in turn allows us to prove confluence.
+With all these, we prove type soundness of F𝜔⊗⊕ :
+Theorem 4.4 (Progress). If 𝜖 ⊢ 𝐸 : 𝐴, then either 𝐸 is a value, or there exists 𝐸 ′ such that 𝐸 −→ 𝐸 ′ .
+Theorem 4.5 (Type Preservation). If Δ ⊢ 𝐸 : 𝐴 and 𝐸 −→ 𝐸 ′ , then Δ ⊢ 𝐸 ′ : 𝐴.
+5
+
+Elaboration
+
+This section presents the elaboration rules. Following elaboration of expressions, we cover four key
+aspects of elaboration: dictionary-passing elaboration of type classes (§5.1), interpretation of row
+constraints (§5.2), elaboration of ind (§5.3), and elaboration of subtyping and row equivalence (§5.4).
+Finally, we prove that elaboration is sound (§5.5). As before, we use blue to denote target terms.
+Type-directed elaboration of expressions. Fig. 3 has presented the type-directed elaboration of
+expressions. Rules var, lam, and app are straightforward, translating the source constructs into
+their corresponding target terms. Rule annot simply produces the elaboration of the expression,
+as the target is always fully annotated.
+Rules method, qalI, and qalE handle type class constraints, and will be discussed in detail in
+the next section (§5.1). Rules schemeI and schemeE introduce type abstractions and applications,
+respectively. Rule let translates let expressions into applied lambdas.
+Notably, elaboration erases first-class labels, as demonstrated in rule label, where a first-class
+label is translated to a unit term. While labels are important for records and variants in the source
+calculus, their corresponding information is replaced by constant indices for the target’s product
+and sum terms. As a result, row commutativity inserts explicit conversions to ensure that the order
+in elaborated product and sum terms consistently matches the order from the type (§5.4).
+Rules prod and sum convert singleton record and variant terms into unlabelled product and sum
+terms in the target. In rule unlabel, 𝑀 must already have a singleton row type, meaning only one
+element can be extracted. In these rules, the elaboration of the label is discarded.
+Lastly, we explain rules prj, concat, inj, and elim along with elaborations of constraint solving
+in §5.2; rule sub with the elaboration of subtyping in §5.4; and finally, rule ind in §5.3.
+Elaboration of types and constraints. Fig. 8, 9, and 10 present elaboration environments and
+selected rules for type and kind elaboration respectively. These elaboration rules will be explained
+throughout the remainder of this section as their corresponding parts are discussed.
+Fig. 11 presents selected constraint solving rules with their elaboration, which we discuss in §5.1
+through §5.3. The full set of elaboration rules is provided in the appendix.
+Proc. ACM Program. Lang., Vol. 10, No. POPL, Article 20. Publication date: January 2026.
+
+Extensible Data Types with Ad-Hoc Polymorphism (Extended)
+
+Γ
+Γ𝐶
+Γ𝐼
+
+F
+F
+F
+
+20:21
+
+𝜖 | Γ, 𝑎 : 𝜅 | Γ, 𝑥 : 𝜎 | Γ,𝜓 ⇝ 𝑥
+𝜖 | Γ𝐶 , (𝑇𝐶𝑖′ 𝑎𝑖 ⇝ 𝐴𝑖′ ⇒𝑇𝐶 𝑎 : 𝜅) ↦→ 𝑚 : 𝜎 ⇝ 𝐴
+𝜖 | Γ𝐼 , (∀ 𝑎𝑖 : 𝜅𝑖 . 𝜓𝑖 ⇝ 𝑥𝑖 ⇒𝑇𝐶 𝜏) ⇝ 𝐸; 𝐸𝑖′
+Fig. 8. Elaboration environments
+
+Γ𝐶 ; Γ ⊢ 𝜎 : 𝜅 ⇝ 𝐴
+
+type environment
+class environment
+instance environment
+(Kinding And Elaboration)
+
+tc
+(𝑇𝐶𝑖′ 𝑎 ⇝ 𝐴𝑖′ ⇒𝑇𝐶 𝑎 : 𝜅) ↦→ 𝑚 : 𝜎 ⇝ 𝐴 ∈ Γ𝐶
+Γ𝐶 ; Γ ⊢ 𝜏 : 𝜅 ⇝ 𝐵
+
+row
+Γ𝐶 ; Γ ⊢ 𝜉𝑖 : L
+⊢ T 𝜉𝑖
+Γ𝐶 ; Γ ⊢ 𝜏𝑖 : 𝜅 ⇝ 𝐴𝑖
+
+Γ𝐶 ; Γ ⊢𝑇𝐶 𝜏 : C ⇝ ⊗ {𝐴 [𝐵/𝑎] , 𝐴𝑖′ [𝐵/𝑎]}
+Γ𝐶 ; Γ ⊢ ⟨𝜉𝑖 ⊲ 𝜏𝑖 ⟩ : R𝜅 ⇝ {𝐴𝑖 }
+all
+comm
+Γ𝐶 ; Γ, 𝑎 : 𝜅 ⊢𝜓 : C ⇝ 𝐴
+⊢𝜅 ⇝𝐾
+Γ𝐶 ; Γ ⊢ 𝑢 : U ⇝ ⊗ {}
+
+prod
+Γ𝐶 ; Γ ⊢ 𝜇 : U
+Γ𝐶 ; Γ ⊢ 𝜌 : R★ ⇝ 𝐴
+Γ𝐶 ; Γ ⊢ Π 𝜇 𝜌 : ★ ⇝ ⊗ 𝐴
+Γ𝐶 ; Γ ⊢ 𝜌 : R𝜅 ⇝ 𝐵
+
+Γ𝐶 ; Γ ⊢ All (𝜆 𝑎 : 𝜅. 𝜓 ) 𝜌 : C ⇝ ⊗ ((𝜆 𝑎 : 𝐾 . 𝐴) ⟦𝐵⟧)
+
+contain
+Γ𝐶 ; Γ ⊢ 𝜇 : U
+
+Γ𝐶 ; Γ ⊢ 𝜌 0 : R𝜅 ⇝ 𝐴0
+
+Γ𝐶 ; Γ ⊢ 𝜌 1 : R𝜅 ⇝ 𝐴1
+
+⊢𝜅 ⇝𝐾
+
+Γ𝐶 ; Γ ⊢ 𝜌 0 <
+∼ 𝜇 𝜌 1 : C ⇝ ⊗ {∀ 𝑎 : 𝐾 ↦→ ★. (⊗ (𝑎 ⟦𝐴1 ⟧)) → ⊗ (𝑎 ⟦𝐴0 ⟧), ∀ 𝑎 : 𝐾 ↦→ ★. (⊕ (𝑎 ⟦𝐴0 ⟧)) → ⊕ (𝑎 ⟦𝐴1 ⟧)}
+ind
+Γ𝐶 ; Γ ⊢ 𝜌 : R𝜅 ⇝ 𝐴
+⊢𝜅 ⇝𝐾
+𝜅
+Γ𝐶 ; Γ, 𝑎𝑙 : L, 𝑎𝑡 : 𝜅, 𝑎𝑝 𝑎𝑖 : R ⊢ 𝑎𝑝 ⊙𝔫 ⟨𝑎𝑙 ⊲ 𝑎𝑡 ⟩ ∼ 𝑎𝑖 : C ⇝ 𝐵𝑙
+Γ𝐶 ; Γ, 𝑎𝑖 𝑎𝑛 : R𝜅 ⊢ 𝑎𝑖 ⊙ 𝔫 𝑎𝑛 ∼ 𝜌 : C ⇝ 𝐵𝑟
+𝐾
+𝐴𝑠 = ∀ 𝑎𝑙 : ★, 𝑎𝑡 : 𝐾, 𝑎𝑝 𝑎𝑖 𝑎𝑛 : L . 𝐵𝑙 → 𝐵𝑟 → (⊗ {}) → (𝑎𝑚 𝑎𝑝 ) → 𝑎𝑚 𝑎𝑖
+Γ𝐶 ; Γ ⊢ Ind 𝜌 : C ⇝ ∀ 𝑎𝑚 : (L𝐾 ↦→ ★). 𝐴𝑠 → (𝑎𝑚 {}) → 𝑎𝑚 𝐴
+Fig. 9. Type elaboration
+⊢𝜅 ⇝𝐾
+
+(Kind Elaboration)
+⊢ 𝜅 1 ⇝ 𝐾1
+
+⊢𝜅 ⇝𝐾
+
+⊢ 𝜅 0 ↦→ 𝜅 1 ⇝ 𝐾0 ↦→ 𝐾1
+
+⊢ R𝜅 ⇝ L𝐾
+
+⊢ 𝜅 0 ⇝ 𝐾0
+⊢★⇝★
+
+⊢ C⇝★
+
+⊢ L⇝★
+
+⊢ U⇝★
+
+Fig. 10. Kind elaboration
+
+5.1
+
+Dictionary-Passing Elaboration for Type Classes
+
+We implement type classes using the dictionary-passing elaboration [Wadler and Blott 1989]. Intuitively, each type class corresponds to a data type whose entries represent its methods. Type class
+instances then correspond to values of these data types (i.e. dictionaries), which are implemented
+using product types in our target calculus. Throughout this work, we refer to the elaboration result
+of constraint solving as evidence, since our constraint solver also handles row constraints.
+The type elaboration rule tc in Fig. 9 elaborates type classes to a tuple type. In the first hypothesis,
+𝐴 represents the elaboration of the type of the class’s method 𝜎, and 𝐴𝑖′ are the elaborated types of
+the superclasses. We substitute the type variable 𝑎 with the elaboration of 𝜏. Similarly, the constraint
+kind C is elaborated to the base kind ★ in the target (Fig. 10).
+As a result, in Fig. 3, terms with qualified types are elaborated into functions that take the
+corresponding evidence arguments (rule qalI). Evidence arguments are automatically inserted
+after they are resolved (rule qalE), and if a type class constraint can be resolved, the corresponding
+method can be accessed (rule method).
+Rule TCInst in Fig. 11 handles type classes. This rule applies when a corresponding entry for the
+required type class 𝑇𝐶 exists in the instance environment. In this rule, 𝐸 corresponds to 𝑇𝐶’s method,
+and 𝐸𝑖′ corresponds to the evidence for 𝑇𝐶’s superclasses. In the elaboration result, type variables are
+substituted with concrete types, and prerequisites are replaced with their corresponding evidence.
+The elaboration for constraint solving of superclasses (TCSuper) is not presented here, but it simply
+projects an element out of the subclass evidence to obtain the superclass evidence.
+Proc. ACM Program. Lang., Vol. 10, No. POPL, Article 20. Publication date: January 2026.
+
+20:22
+
+Matthew Toohey, Yanning Chen, Ara Jamalzadeh, and Ningning Xie
+
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts 𝜓 ⇝ 𝐸
+
+(Constraint Solving And Elaboration)
+
+TCInst
+(∀ 𝑎𝑘 : 𝜅𝑘 . 𝜓 𝑗 ⇝ 𝑥 𝑗 ⇒𝑇𝐶 𝜏) ⇝ 𝐸; 𝐸𝑖′ ∈ Γ𝐼
+concatContainL
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts 𝜓 𝑗 [𝜏 ′𝑘 /𝑎𝑘 ] ⇝ 𝐹 𝑗
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts 𝜌 0 ⊙ 𝜇 𝜌 1 ∼ 𝜌 2 ⇝ 𝐸
+
+ ′
+
+
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts 𝜌 0 <
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts 𝑇𝐶 𝜏 [𝜏 ′𝑘 /𝑎𝑘 ] ⇝ (𝐸 [𝐵𝑘 /𝑎𝑘 ] 𝐹 𝑗 /𝑥 𝑗 , 𝐸𝑖 [𝐵𝑘 /𝑎𝑘 ] 𝐹 𝑗 /𝑥 𝑗 )
+∼𝜇 𝜌 2 ⇝ 𝜋2 𝐸
+containDecay
+splitConcat
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts 𝜌 0 <
+𝜇0 ⩽ 𝜇1
+Γ𝐶 ; Γ ⊢ 𝜇1 : U
+∼ 𝜇0 𝜌 1 ⇝ 𝐸
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts Split (𝜆 𝑎 : 𝜅. 𝜏) 𝜌 0 𝜌 1 𝜌 2 ⇝ 𝐸
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts 𝜌 0 <
+𝜌
+⇝
+𝐸
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts (Lift (𝜆 𝑎 : 𝜅. 𝜏) 𝜌 0 ) ⊙𝔠 𝜌 1 ∼ 𝜌 2 ⇝ 𝐸
+∼ 𝜇1 1
+liftContain
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts 𝜌 0 <
+Γ𝐶 ; Γ ⊢ 𝜌 0 : R𝜅0
+Γ𝐶 ; Γ, 𝑎 : 𝜅 0 ⊢ 𝜏 : 𝜅 1 ⇝ 𝐴
+⊢ 𝜅 0 ⇝ 𝐾0
+∼𝜇 𝜌 1 ⇝ 𝐸
+′
+⊢ 𝜅 1 ⇝ 𝐾1
+𝐸𝑝 = Λ 𝑎 : 𝐾1 ↦→ ★. (𝜋 0 𝐸) [𝜆 𝑎 : 𝐾0 . 𝑎 ′ 𝐴]
+𝐸𝑖 = Λ 𝑎 ′ : 𝐾1 ↦→ ★. (𝜋 1 𝐸) [𝜆 𝑎 : 𝐾0 . 𝑎 ′ 𝐴]
+Γ𝐶 ; Γ ⊢ 𝜏𝑘′ : 𝜅𝑘 ⇝ 𝐵𝑘
+
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts (Lift (𝜆 𝑎 : 𝜅 0 . 𝜏) 𝜌 0 ) <
+∼ 𝜇 (Lift (𝜆 𝑎 : 𝜅 0 . 𝜏) 𝜌 1 ) ⇝ (𝐸𝑝 , 𝐸𝑖 )
+allContain
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts 𝜌 0 <
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts All (𝜆 𝑎 : 𝜅. 𝜓 ) 𝜌 1 ⇝ 𝐸
+Γ𝐶 ; Γ, 𝑎 : 𝜅 ⊢𝜓 : C ⇝ 𝐴
+∼𝔠 𝜌 1 ⇝ 𝐹
+
+⊢𝜅 ⇝𝐾
+
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts All (𝜆 𝑎 : 𝜅. 𝜓 ) 𝜌 0 ⇝ (𝜋0 𝐹 ) [𝜆 𝑎 : 𝐾 . 𝐴] 𝐸
+ind
+𝑖 ∈ [:𝑛]
+Γ𝐶 ; Γ ⊢ 𝜏𝑖 : 𝜅 ⇝ 𝐴𝑖
+
+⊢𝜅 ⇝𝐾
+Γ𝐶 ; Γ, 𝑎𝑙 : L, 𝑎𝑡 : 𝜅, 𝑎𝑝 𝑎𝑖 : R𝜅 ⊢ 𝑎𝑝 ⊙ 𝔫 ⟨𝑎𝑙 ⊲ 𝑎𝑡 ⟩ ∼ 𝑎𝑖 : C ⇝ 𝐵𝑙
+𝑖 ∈ [:𝑛]
+𝜅
+⟩ : C ⇝ 𝐵𝑟
+Γ𝐶 ; Γ, 𝑎𝑖 𝑎𝑛 : R ⊢ 𝑎𝑖 ⊙ 𝔫 𝑎𝑛 ∼ ⟨ℓ𝑖 ⊲ 𝜏𝑖
+𝐾
+𝐴𝑠 = ∀ 𝑎𝑙 : ★, 𝑎𝑡 : 𝐾, 𝑎𝑝 𝑎𝑖 𝑎𝑛 : L . 𝐵𝑙 → 𝐵𝑟 → (⊗ {}) → (𝑎𝑚 𝑎𝑝 ) → 𝑎𝑚 𝑎𝑖
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts ⟨ℓ 𝑗 ⊲ 𝜏 𝑗
+
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts ⟨ℓ 𝑗 ⊲ 𝜏 𝑗
+
+𝑗 ∈ [:𝑖 ]
+
+𝑗 ∈ [:𝑖+1]
+
+⟩ ⊙𝔫 ⟨ℓ𝑖 ⊲ 𝜏𝑖 ⟩ ∼ ⟨ℓ𝑘 ⊲ 𝜏𝑘
+
+⟩ ⊙𝔫 ⟨ℓ𝑘 ⊲ 𝜏𝑘
+
+𝑗 ∈ [:𝑖 ]
+
+𝑘 ∈ [𝑖+1:𝑛]
+
+𝑘 ∈ [:𝑖+1]
+
+⟩ ∼ ⟨ℓ𝑙 ⊲ 𝜏𝑙
+
+𝑘 ∈ [:𝑖+1]
+
+𝑖 ∈ [:𝑛]
+
+⟩ ⇝ 𝐸𝑖
+
+𝑙 ∈ [:𝑛]
+
+𝑖 ∈ [:𝑛]
+
+⟩ ⇝ 𝐸𝑖′
+
+𝑙 ∈ [𝑖+1:𝑛]
+
+}] [{𝐴𝑘
+}] [{𝐴𝑙
+}] 𝐸𝑖 ) 𝐸𝑖′ ) ()
+𝐸 ′′ = ((𝑥𝑠 [⊗ {}] [𝐴𝑖 ] [{𝐴 𝑗
+𝐹 = Λ 𝑎𝑚 : (L𝐾 ↦→ ★). 𝜆 𝑥𝑠 : 𝐴𝑠 . 𝜆 𝑥𝑖 : 𝑎𝑚 {}. 𝐸 ′′
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts Ind ⟨ℓ𝑖 ⊲ 𝜏𝑖
+
+𝑖 ∈ [:𝑛]
+
+𝑖 ∈ [:𝑛]
+
+𝑥𝑖
+
+⟩⇝𝐹
+
+Fig. 11. Selected elaboration rules for constraint solving
+
+5.2
+
+Interpretation of Row Constraints
+
+We first discuss the elaboration of rows. Rule row in Fig. 9 elaborates rows to type-level lists in the
+target. As previously mentioned, F𝜔⊗⊕ ’s type-level lists are much simpler than rows, with labels
+and commutativity erased. For example, rule prod discards the commutativity annotation 𝜇. If a
+function is polymorphic over labels or commutativity in the source, the elaboration turns them
+into type abstractions taking empty products (rule comm). The corresponding kind elaboration
+rules elaborate R𝜅 to L𝐾 , and both L and U to ★ in Fig. 10.
+Next, as row constraints are used primarily for records and variants, we follow Morris and
+McKinna [2019] and interpret row constraints as a collection of functions operating on products
+and sums. Therefore, the type elaboration rule contain in Fig. 9 elaborates row containment into a
+tuple. Compared to Morris and McKinna [2019], both components of our tuple are polymorphic
+over a type function. This function corresponds to the target’s type-level mappings, a crucial feature
+in our higher-kinded system that is essential for solving Lift and All constraints. Then, the first
+function takes a product of the larger row and produces a product of the smaller one, effectively
+performing a projection. Similarly, the second function takes a sum of the smaller row and produces
+a sum of the larger one, performing an injection. The elaboration rule for row concatenation
+(given in the appendix) is similar, producing a product of four elements: the first two manage
+Proc. ACM Program. Lang., Vol. 10, No. POPL, Article 20. Publication date: January 2026.
+
+Extensible Data Types with Ad-Hoc Polymorphism (Extended)
+
+20:23
+
+concatenation for products and elimination for sums respectively, while the latter two provide
+corresponding containment evidence.
+Fig. 11 presents two example rules for row constraints. Rule concatContainL simply selects the
+containment evidence from the combination evidence. Rule containDecay discards the commutativity information and produces the same evidence as its premise. Concrete evidence is generated
+in the elaboration of the constraint solving rule concatConcrete for concrete rows, which can be
+found in the appendix.
+Returning to the term elaboration rules in Fig. 3, we can now see that rules involving row
+constraints (prj, concat, inj, and elim) simply select the appropriate evidence entries for the
+operations being performed. In these cases, the type-level mapping is just the identity type lambda,
+as the rows of the products and sums already match those specified in the constraints.
+Lift and Split. Fig. 11 also includes constraint solving elaboration for Lift, where the type-level
+mappings in row constraints are crucial. Specifically, rule liftContain projects out the two entries
+from the original evidence. It then wraps them in type abstractions, applying these components to
+type lambdas that compose the outer mapping 𝑎 ′ with the current mapping 𝐴.
+The type elaboration for Split is identical to that of its associated concatenation constraint with
+the left side lifted. As a result, rule splitConcat simply produces the evidence from the premise.
+All. The all type elaboration rule in Fig. 9 elaborates All to a product type. Here, the typelevel mapping generates a type-level list, where each entry corresponds to evidence for 𝜓 with 𝑎
+substituted by the corresponding entry in the row 𝜌. The resulting product allows us to access the
+evidence for any specific entry. Our encoding makes the elaboration for All constraints mostly
+straightforward, primarily involving the creation and projection of products.
+As an example, rule allContain in Fig. 11 extracts the projection function from the containment
+evidence, applies it to the elaborated type lambda, and then to the All evidence for the larger row
+𝜌 1 , effectively projecting out the subset of fields for the smaller row 𝜌 0 .
+5.3
+
+Elaboration of ind
+
+We now consider the elaboration of ind, which performs a fold based on a row type. Elaborating
+this term is non-trivial, as the types of the row constraints and the accumulator depend on the
+portion of the row processed so far. One straightforward approach is to incorporate a similar
+construct directly into the target calculus, elaborating ind to this new construct. However, this
+would complicate the target calculus and make compilation to more standard target calculi more
+challenging.
+In this work, we explore an alternative compilation strategy for ind. Specifically, we introduce
+a new form of constraint, Ind 𝜌. When ind is used, the Ind constraint is required and can be
+passed around just like any other constraint, as specified in the ind typing rule in Fig. 3. During
+elaboration, when Ind 𝜌 is resolved, it produces an evidence term 𝐹 that performs the fold of 𝜌.
+The term elaboration then simply applies it to the type lambda, step function, and initial value.
+With this elaboration strategy for ind, it is worth noting that the examples from §2 where we
+used ind would now require the appropriate Ind constraints in their types. We are interested in
+potentially hiding these constraints in an actual implementation using the approach of total type
+classes [Weingart et al. 2024], but we leave this for future work.
+Rule ind in Fig. 9 specifies the type elaboration rule for Ind. The elaborated type is polymorphic
+over the type lambda 𝑎𝑚 . Like the ind term, it accepts a step function and an initial value, then
+produces a final result based on the type function and elaborated row. The step function 𝐴𝑠 is
+polymorphic over various components of the row and takes the left and right constraint evidence, in
+addition to a unit value as the elaborated label and the accumulator, producing the next accumulator.
+Proc. ACM Program. Lang., Vol. 10, No. POPL, Article 20. Publication date: January 2026.
+
+20:24
+
+Matthew Toohey, Yanning Chen, Ara Jamalzadeh, and Ningning Xie
+
+Γ𝐶 ; Γ ⊢ 𝜎0 <: 𝜎1 ⇝ 𝐹
+
+(Subtyping And Elaboration)
+decay
+
+Γ𝐶 ; Γ ⊢ Ξ𝜇0 𝜌 : ★ ⇝ 𝐴
+Γ𝐶 ; Γ ⊢ 𝜇1 : U
+𝜇0 ⩽ 𝜇1
+
+prodRow
+
+Γ𝐶 ; Γ ⊢ 𝜌 0 ≡𝜇 𝜌 1 ⇝ 𝐹𝑝 , 𝐹𝑠
+
+Γ𝐶 ; Γ ⊢ Π 𝜇 𝜌 0 : ★
+
+Γ𝐶 ; Γ ⊢ Π 𝜇 𝜌 0 <: Π 𝜇 𝜌 1 ⇝ 𝐹𝑝 [𝜆 𝑎 : ★. 𝑎]
+
+Γ𝐶 ; Γ ⊢ Ξ𝜇0 𝜌 <: Ξ𝜇1 𝜌 ⇝ 𝜆 𝑥 : 𝐴. 𝑥
+
+Fig. 12. Subtyping and elaboration
+Γ𝐶 ; Γ ⊢ 𝜌 0 ≡𝜇 𝜌 1 ⇝ 𝐹𝑝 , 𝐹𝑠
+
+(Row Equivalence And Elaboration)
+
+comm
+⊢ T 𝑝 permutes [:𝑛] for 𝜉
+𝑖 ∈ [:𝑛]
+𝑖 ∈ [:𝑛]
+Γ𝐶 ; Γ ⊢ ⟨𝜉𝑖 ⊲ 𝜏𝑖
+⟩ : R𝜅 ⇝ {𝐴𝑖
+}
+
+⊢ T 𝑝 ′ permutes [:𝑛] for 𝜉
+
+𝐹𝑝 = Λ 𝑎 : 𝐾 ↦→ ★. 𝜆 𝑥 : ⊗ (𝑎 ⟦{𝐴𝑖
+
+⊢𝜅 ⇝𝐾
+
+𝐹𝑠 = Λ 𝑎 : 𝐾 ↦→ ★. 𝜆 𝑥 : ⊕ (𝑎 ⟦{𝐴𝑖
+Γ𝐶 ; Γ ⊢ ⟨𝜉𝑖 ⊲ 𝜏𝑖
+
+𝑖 ∈ [:𝑛]
+
+𝑖 ∈ [:𝑛]
+
+𝑝 inverts 𝑝 ′ on [:𝑛]
+
+}⟧). case 𝑥 {𝜆 𝑥 ′ : 𝑎 𝐴𝑖 . 𝜄 𝑗 𝑥 ′
+
+⟩ ≡𝔠 ⟨𝜉𝑖 ⊲ 𝜏𝑖
+
+𝑖 ∈𝑝
+
+𝑖 ∈ [:𝑛]
+
+𝑖 ∈ [:𝑛],𝑗 ∈𝑝 ′
+
+}⟧). (𝜋𝑖 𝑥 𝑖 ∈𝑝 )
+
+}
+
+⟩ ⇝ 𝐹 𝑝 , 𝐹𝑠
+
+Fig. 13. Row equivalence and elaboration
+
+The constraint solving rule ind in Fig. 11 resolves Ind for concrete rows. The first five hypotheses
+collect types and kinds needed when describing the evidence. Since each step of the fold performed
+by ind is provided two concatenation constraints, the next two hypotheses collect the evidence for
+these. 𝐸 ′′ then assembles the body of the evidence function, in which the step function argument 𝑥𝑠
+(of type 𝐴𝑠 ) is applied once for each entry in the row, performing the fold. Each repetition within
+𝐸 ′′ ’s comprehension passes five type arguments: the unit type for the erased label type, the type of
+the current row entry, and the three sub-components of the larger row. It also passes the correct
+left and right concatenation constraint evidence, then a unit for the erased label term. Finally, 𝐹
+wraps the body 𝐸 ′′ in a type abstraction, as well as abstractions taking the step function and the
+initial value term respectively.
+5.4
+
+Subtyping and Row Equivalence
+
+Fig. 12 and 13 present selected elaborations for subtyping and row equivalence. Subtyping produces
+functions that convert a term from the elaborated subtype to the elaborated supertype, while row
+equivalence produces two functions for conversions involving products and sums, respectively.
+Rule prodRow uses the elaboration for products from the equivalence relation, and applies it to
+the identity type lambda. While the type-level mapping is not useful here, it is necessary for cases
+such as All. Rule decay simply produces an identity function, since commutativities are erased.
+The elaboration rule comm for commutative rows re-orders the entries within the elaboration to
+match the re-ordering of the entries in the source row.
+5.5
+
+Elaboration Soundness
+
+In this section, we prove that our elaboration is sound, specifically with row theory Ts , beginning
+with soundness of types and constraints:
+Theorem 5.1 (Elaboration Soundness of Types and Constraints).
+(Kinding) If Γ𝐶 ; Γ ⊢ 𝜎 : 𝜅 ⇝ 𝐴, and ⊢ 𝜅 ⇝ 𝐾, and Γ𝐶 ⊢ Γ ⇝ Δ, then Δ ⊢ 𝐴 : 𝐾.
+(Row Equivalence) If Γ𝐶 ; Γ ⊢ 𝜌 0 ≡𝜇 𝜌 1 ⇝ 𝐹𝑝 , 𝐹𝑠 , Γ𝐶 ; Γ ⊢ 𝜌 0 : R𝜅 ⇝ 𝐴, Γ𝐶 ; Γ ⊢ 𝜌 1 : R𝜅 ⇝ 𝐵, ⊢ 𝜅 ⇝ 𝐾,
+and Γ𝐶 ⊢ Γ ⇝ Δ, then Δ ⊢ 𝐹𝑝 : ∀ 𝑎 : 𝐾 ↦→ ★. (⊗ (𝑎 ⟦𝐴⟧)) → ⊗ (𝑎 ⟦𝐵⟧) and
+Δ ⊢ 𝐹𝑠 : ∀ 𝑎 : 𝐾 ↦→ ★. (⊕ (𝑎 ⟦𝐴⟧)) → ⊕ (𝑎 ⟦𝐵⟧).
+(Subtyping) If Γ𝐶 ; Γ ⊢ 𝜎0 <: 𝜎1 ⇝ 𝐹 , Γ𝐶 ; Γ ⊢ 𝜎0 : 𝜅 ⇝ 𝐴, Γ𝐶 ; Γ ⊢ 𝜎1 : 𝜅 ⇝ 𝐵, ⊢ 𝜅 ⇝ ★, and Γ𝐶 ⊢ Γ ⇝ Δ,
+then Δ ⊢ 𝐹 : 𝐴 → 𝐵.
+Proc. ACM Program. Lang., Vol. 10, No. POPL, Article 20. Publication date: January 2026.
+
+Extensible Data Types with Ad-Hoc Polymorphism (Extended)
+
+20:25
+
+Table 1. Code statistics for the Lean 4 mechanization
+Module
+
+Description
+
+LOC
+
+#Def
+
+#Thm
+
+157
+1 052
+3 665
+7 430
+
+21
+54
+4
+/
+
+/
+/
+121
+14
+
+175
+697
+4 042
+4 965
+566
+
+13
+59
+4
+8
+/
+
+/
+/
+277
+182
+17
+
+22 749
+
+163
+
+611
+
+Source Language (𝜆𝜌⇒ )
+Syntax
+Semantics
+Lemmas
+Theorems
+
+Kinds, types, terms, programs, and environments
+Kinding, typing, constraint solving, elaboration, etc.
+Auxiliary lemmas and properties
+Elaboration soundness
+
+⊗⊕ )
+Target Language (F𝜔
+Syntax
+Kinds, types, terms, and environments
+Semantics
+Kinding, typing, and operational semantics
+Lemmas
+Auxiliary lemmas and properties
+Type Reduction Strong normalization, confluence, correspondence to equivalence, etc.
+Theorems
+Syntactic type safety
+
+Total
+
+(Constraint Solving) If Γ𝐼 ; Γ𝐶 ; Γ ⊨ T 𝜓 ⇝ 𝐸, Γ𝐶 ; Γ ⊢𝜓 : C ⇝ 𝐴, and Γ𝐶 ⊢ Γ ⇝ Δ, then Δ ⊢ 𝐸 : 𝐴.
+This theorem has several parts for kinding, row equivalence, subtyping, and constraint solving,
+respectively. The judgement Γ𝐶 ⊢ Γ ⇝ Δ states that the environment Γ is well-formed under the class
+environment Γ𝐶 and elaborates to the target environment Δ; for clarity, we implicitly assume all
+class and instance environments are well-formed. The proof of the constraint solving part is notably
+lengthy, primarily due to the verbosity of the row elaboration rules. The target’s equivalence rules
+(listAppComp and listAppId) for type-level lists are essential in the proofs for Lift.
+Finally, we prove program and term elaboration is sound; we present the statement for terms:
+Theorem 5.2 (Elaboration Soundness of Terms).
+If Γ𝐼 ; Γ𝐶 ; Γ ⊢ 𝑀 : 𝜎 ⇝ 𝐸, and Γ𝐶 ; Γ ⊢ 𝜎 : ★ ⇝ 𝐴, and Γ𝐶 ⊢ Γ ⇝ Δ, then Δ ⊢ 𝐸 : 𝐴.
+6
+
+Mechanization
+
+We have formalized the metatheory of 𝜆𝜌⇒ and F𝜔⊗⊕ using the Lean 4 proof assistant [Moura and
+Ullrich 2021], and the proofs are available in the artifact [Toohey et al. 2025]. Table 1 summarizes
+the structure and statistics of our mechanization. Our formalization adopts the locally nameless
+representation [Charguéraud 2011] for handling binding and leverages the Aesop proof search
+tactic [Limperg and From 2023] for proof automation. The proof of strong normalization for F𝜔⊗⊕ ’s
+type reduction took inspiration from a strong normalization proof for the simply typed lambda
+calculus in Lean [Mameche 2019], and this was used to establish confluence by importing a prior
+proof of Newman’s lemma [van Kampen 2025].
+There were two notable obstacles we encountered and solved in the mechanization process.
+First, our formalization employs nested inductive types to define rows in 𝜆𝜌⇒ and type-level lists in
+F𝜔⊗⊕ . Unfortunately, the standard induction tactic in Lean 4 does not automatically handle nested
+inductive types. We addressed this by defining specialized induction principles for these constructs
+that explicitly deal with inductive reasoning on lists.
+Second, we define the type equivalence judgement as a proposition. To prove that type equivalence
+(Δ ⊢ 𝐴 ≡ 𝐵) implies the equivalence closure of type reduction (Δ ⊢ 𝐴 ↔∗ 𝐵), we needed to establish
+that any type equivalence proof could be transformed into a derivation where symmetry (symm)
+and transitivity (trans) rules are applied only at the top level. A natural approach would be to
+define a proposition indexed by such a derivation to capture this property. However, this does
+not work because Lean’s metatheory implies proof irrelevance, rendering multiple proofs of the
+same type equivalence judgement definitionally indistinguishable. To overcome this limitation, we
+Proc. ACM Program. Lang., Vol. 10, No. POPL, Article 20. Publication date: January 2026.
+
+20:26
+
+Matthew Toohey, Yanning Chen, Ara Jamalzadeh, and Ningning Xie
+
+Table 2. B2T2 table API functions
+Category
+Constructors
+Properties
+Access subcomponents
+Subtable
+Ordering∗
+Aggregate∗
+Missing values
+Data cleaning
+Utilities∗
+
+Supported
+9/9
+3/3
+3/4
+8/10
+3/3
+4/4
+3/3
+2/2
+11/11
+
+Description
+Creating, combining, and expanding tables.
+Querying table shape information.
+Extracting a row, value, or column.
+Extracting a subset of the table.
+Sorting. orderBy requires existential types.
+Reducing multiple rows into fewer summary rows.
+Handling for optional values.
+Pivoting longer or wider.
+Misc. renameColumns also needs more row operators.
+
+introduced a new judgement Δ ⊢ 𝐴 ≡𝑠 𝐵 that enforces the desired property by construction, and
+prove equivalence between Δ ⊢ 𝐴 ≡𝑠 𝐵 and Δ ⊢ 𝐴 ≡ 𝐵, complicating the metatheory development.
+7
+
+Evaluation
+
+The Brown Benchmark for Table Types (B2T2) [Lu et al. 2021] provides criteria for evaluating type
+systems designed for tabular data. Given that record types are a well-known encoding for table
+types, we evaluate our type system against the B2T2 set of table API functions. For the purposes of
+this evaluation we assume support for lists, though they were not included in our formalism.
+Table 2 lists the B2T2 benchmark’s table API functions. We represent table schemas (column
+names and their corresponding types) as rows, and tables as lists of products. Our system offers
+several benefits: First, extensible rows readily express table schemas, while type classes provide
+necessary methods for operations like equality and comparison, and All enables defining generic
+functions over rows whose fields all possess a certain property. Moreover, our commutativity
+hierarchy allows us to use commutativity for functions where ordering is irrelevant, and noncommutativity when table columns must be ordered and folded deterministically. Lastly, our Lift
+and Split enable type-level updates to rows (similar to the unlift example in §2.2).
+We discuss a few examples. The leftJoin constructor function takes two tables, t1 and t2. It merges
+fields from t2 into t1 based on the shared columns, creating a new table. Fields are filled with
+Nothing if no matches are found in t2. The function has type:
+leftJoin : ∀(rc rl’ rr’ rl rr r : 𝑅) (𝜇 : 𝑈 ).
+(All Eq rc, rc ⊙ 𝜇 rl’ ∼ rl, rc ⊙ 𝜇 rr’ ∼ rr, rl ⊙ 𝜇 Lift Option rr’ ∼ r)
+⇒ List (Π 𝜇 rl) → List (Π 𝜇 rr) → List (Π 𝜇 r)
+Here, All requires that the rc row in the join must implement Eq. The row constraints describe the
+relationships between different variables, with the last one specifying that the output table’s row r
+consists of the left row rl, concatenated with an Option-Lifted version of rr’ in the right row.
+As another example, the data cleaning function pivotWider converts a table containing a key
+column and a value column into to a wider table. The wider table will have a column for each
+distinct case of the key variant. The entries in these new columns are the corresponding entries
+from the original value column, if such an entry exists. We have the function’s type as:
+pivotWider : ∀(r rk rr r’ : 𝑅) (lk lv : 𝐿) (t : ★) (𝜇 : 𝑈 ).
+(All Eq rr, ⟨lk ⊲ Σ𝜇 (Lift (Const Unit) rk), lv ⊲ t ⟩ ⊙ 𝜇 rr ∼ r, rr ⊙ 𝜇 Lift (Const (Option t)) rk ∼ r’)
+⇒ List (Π 𝜇 r) → ⌊lk⌋ → ⌊lv⌋ → List (Π 𝜇 r’)
+Here, row r consists of lk for the key, lv for the value, and rr for the rest. All requires all entries
+in rr to satisfy Eq so that rows, identical except for their keys and values, can be combined in the
+Proc. ACM Program. Lang., Vol. 10, No. POPL, Article 20. Publication date: January 2026.
+
+Extensible Data Types with Ad-Hoc Polymorphism (Extended)
+
+20:27
+
+result. This example also demonstrates the utility of rows for both products and sums: the rk row
+is Lifted to units within the lk variant, while it is Lifted to Option t in the r’ product in the result.
+Lastly, we note that our system cannot implement three functions that access columns based
+on Int or Bool inputs, as they require types to depend on terms (i.e. dependent types). And our
+implementations for three other functions (their categories are marked with ∗ ) are slightly weaker
+than their specified requirements. For example, while two functions in the benchmark process
+multiple columns simultaneously, our system can only operate on a single column at a time. Despite
+lacking more advanced types for these cases, we believe that this evaluation effectively demonstrates
+the utility of extensible rows with type classes for table types.
+8
+
+Related Work
+
+Row types and polymorphism. Morris and McKinna [2019] propose Rose, a general framework
+for abstracting and unifying row theories, which Hubers and Morris [2023] later extend to support
+generic programming over rows. Our calculus builds upon Rose, but extends it in several ways.
+First, we support type classes, featuring a novel form of All constraints that allow us to express
+class constraints over polymorphic rows. In contrast, Hubers and Morris [2023] applies the same
+function uniformly across all fields of a row. As a result, it requires explicit passing, selection,
+and application of evidence, similar to our target calculus. Moreover, while their work supports
+three language primitives (called syn, ana, and fold) for generic operations on records and variants,
+our ind construct can be used in place of all three. Furthermore, we support row commutativity
+annotations over records, variants, and constraints, as well as commutativity polymorphism, and
+the ability to split rows according to type shapes using Split.
+Generic programming over algebraic data types (ADTs). Generic programming has a rich
+literature. Of particular relevance to our work, there are several attempts to support generic folding
+operations over products and ADTs. Chlipala [2010] introduces a folder type family for type-level
+records, enabling generic operations over record structures. However, their approach does not
+specify the actual implementation of the folder function and relies on field name ordering as hints
+for permutations. Other relevant works include the Typable type class by Lämmel and Jones [2003]
+for generic traversals over ADTs, and an All type family over ADTs by de Vries and Löh [2014] that
+is semantically similar to our All constraint. However, these approaches cannot easily extend or
+mutate field types or orders due to the inherent limitations of ADTs.
+Tabular types. Tabular type systems are an umbrella term for type systems supporting generic
+programming over tabular data. Lu et al. [2021] introduces the B2T2 benchmark suite for tabular
+type systems. It’s a well-known approach to use polymorphic records and variants to encode tabular
+data. Our evaluation (§7) shows that 𝜆𝜌⇒ can express a substantial portion of tabular operations
+in the benchmark. Another natural approach is to use dependent types, as demonstrated by an
+implementation of the benchmark in Idris2 by Wright et al. [2022], which leverages the prover’s
+proof search capabilities for evidence reconstruction.
+Acknowledgments
+This work is funded by the Natural Sciences and Engineering Research Council of Canada.
+Data Availability Statement
+The Lean 4 proofs of this paper are provided in the artifact [Toohey et al. 2025].
+Proc. ACM Program. Lang., Vol. 10, No. POPL, Article 20. Publication date: January 2026.
+
+20:28
+
+Matthew Toohey, Yanning Chen, Ara Jamalzadeh, and Ningning Xie
+
+References
+Bernard Berthomieu and Camille Le Monies De Sagazan. 1995. A Calculus of Tagged Types, with applications to process
+languages. Types for Program Analysis (1995), 1.
+Edwin Brady. 2013. Idris, a general-purpose dependently typed programming language: Design and implementation. Journal
+of Functional Programming 23, 5 (2013), 552–593. doi:10.1017/S095679681300018X
+Luca Cardelli and John C. Mitchell. 1990. Operations on records. In Mathematical Foundations of Programming Semantics,
+M. Main, A. Melton, M. Mislove, and D. Schmidt (Eds.). Springer, New York, NY, 22–52. doi:10.1007/BFb0040253
+Arthur Charguéraud. 2011. The Locally Nameless Representation. Journal of Automated Reasoning 49, 3 (May 2011), 363–408.
+doi:10.1007/s10817-011-9225-2
+Adam Chlipala. 2010. Ur: statically-typed metaprogramming with type-level record computation. In Proceedings of the 31st
+ACM SIGPLAN Conference on Programming Language Design and Implementation (Toronto, Ontario, Canada) (PLDI ’10).
+Association for Computing Machinery, New York, NY, USA, 122–133. doi:10.1145/1806596.1806612
+Edsko de Vries and Andres Löh. 2014. True sums of products. In Proceedings of the 10th ACM SIGPLAN Workshop on Generic
+Programming (Gothenburg, Sweden) (WGP ’14). Association for Computing Machinery, New York, NY, USA, 83–94.
+doi:10.1145/2633628.2633634
+Jacques Garrigue. 1998. Programming with Polymorphic Variants. In ML workshop, Vol. 13. Baltimore.
+Jean-Yves Girard, Paul Taylor, and Yves Lafont. 1989. Proofs and types. Cambridge University Press, USA.
+Robert Harper and Benjamin Pierce. 1991. A record calculus based on symmetric concatenation. In Proceedings of the
+18th ACM SIGPLAN-SIGACT Symposium on Principles of Programming Languages (Orlando, Florida, USA) (POPL ’91).
+Association for Computing Machinery, New York, NY, USA, 131–142. doi:10.1145/99583.99603
+Daniel Hillerström and Sam Lindley. 2016. Liberating effects with rows and handlers. In Proceedings of the 1st International
+Workshop on Type-Driven Development (Nara, Japan) (TyDe 2016). Association for Computing Machinery, New York, NY,
+USA, 15–27. doi:10.1145/2976022.2976033
+Alex Hubers and J. Garrett Morris. 2023. Generic Programming with Extensible Data Types: Or, Making Ad Hoc Extensible
+Data Types Less Ad Hoc. Proc. ACM Program. Lang. 7, ICFP, Article 201 (Aug. 2023), 29 pages. doi:10.1145/3607843
+Mark P. Jones. 2003a. Qualified types: theory and practice. Number 9. Cambridge University Press.
+Simon Peyton Jones. 2003b. Haskell 98 language and libraries: the revised report. Cambridge University Press.
+Ralf Lämmel and Simon Peyton Jones. 2003. Scrap your boilerplate: a practical design pattern for generic programming.
+SIGPLAN Not. 38, 3 (Jan. 2003), 26–37. doi:10.1145/640136.604179
+Daan Leijen. 2004. First-class labels for extensible rows (technical report uu-cs-2004-51 ed.). Technical Report UU-CS-2004-51.
+https://www.microsoft.com/en-us/research/publication/first-class-labels-for-extensible-rows/ UTCS Technical Report.
+Daan Leijen. 2005. Extensible records with scoped labels. In Proceedings of the 2005 Symposium on Trends in Functional
+Programming (TFP’05), Tallin, Estonia (proceedings of the 2005 symposium on trends in functional programming (tfp’05),
+tallin, estonia ed.). https://www.microsoft.com/en-us/research/publication/extensible-records-with-scoped-labels/
+Daan Leijen. 2017. Type directed compilation of row-typed algebraic effects. In Proceedings of the 44th ACM SIGPLAN
+Symposium on Principles of Programming Languages (Paris, France) (POPL ’17). Association for Computing Machinery,
+New York, NY, USA, 486–499. doi:10.1145/3009837.3009872
+Jannis Limperg and Asta Halkjær From. 2023. Aesop: White-Box Best-First Proof Search for Lean. In Proceedings of the 12th
+ACM SIGPLAN International Conference on Certified Programs and Proofs (Boston, MA, USA) (CPP 2023). Association for
+Computing Machinery, New York, NY, USA, 253–266. doi:10.1145/3573105.3575671
+Sam Lindley and James Cheney. 2012. Row-based effect types for database integration. In Proceedings of the 8th ACM
+SIGPLAN Workshop on Types in Language Design and Implementation (Philadelphia, Pennsylvania, USA) (TLDI ’12).
+Association for Computing Machinery, New York, NY, USA, 91–102. doi:10.1145/2103786.2103798
+Sam Lindley and J. Garrett Morris. 2017. Lightweight functional session types. Behavioural Types: from Theory to Tools.
+River Publishers (2017), 265–286.
+Kuang-Chen Lu, Ben Greenman, and Shriram Krishnamurthi. 2021. Types for Tables: A Language Design Benchmark. The
+Art, Science, and Engineering of Programming 6, 2 (Nov. 2021). doi:10.22152/programming-journal.org/2022/6/8
+Sarah Mameche. 2019. Strong Normalization of the λ-calculus in Lean.
+J. Garrett Morris and James McKinna. 2019. Abstracting extensible data types: or, rows by any other name. Proc. ACM
+Program. Lang. 3, POPL, Article 12 (Jan. 2019), 28 pages. doi:10.1145/3290325
+Leonardo de Moura and Sebastian Ullrich. 2021. The Lean 4 Theorem Prover and Programming Language. In Automated
+Deduction – CADE 28, André Platzer and Geoff Sutcliffe (Eds.). Springer International Publishing, Cham, 625–635.
+doi:10.1007/978-3-030-79876-5_37
+Maxwell Herman Alexander Newman. 1942. On Theories with a Combinatorial Definition of “Equivalence”. Annals of
+Mathematics 43, 2 (1942), 223–243. doi:10.2307/1968867
+Adam Paszke and Ningning Xie. 2023. Infix-Extensible Record Types for Tabular Data. In Proceedings of the 8th ACM
+SIGPLAN International Workshop on Type-Driven Development (Seattle, WA, USA) (TyDe 2023). Association for Computing
+Proc. ACM Program. Lang., Vol. 10, No. POPL, Article 20. Publication date: January 2026.
+
+Extensible Data Types with Ad-Hoc Polymorphism (Extended)
+
+20:29
+
+Machinery, New York, NY, USA, 29–43. doi:10.1145/3609027.3609406
+Benjamin C. Pierce. 2002. Types and Programming Languages (1st ed.). The MIT Press.
+D. Rémy. 1989. Type checking records and variants in a natural extension of ML. In Proceedings of the 16th ACM SIGPLANSIGACT Symposium on Principles of Programming Languages (Austin, Texas, USA) (POPL ’89). Association for Computing
+Machinery, New York, NY, USA, 77–88. doi:10.1145/75277.75284
+Didier Rémy. 1992. Typing record concatenation for free. In Proceedings of the 19th ACM SIGPLAN-SIGACT Symposium on
+Principles of Programming Languages (Albuquerque, New Mexico, USA) (POPL ’92). Association for Computing Machinery,
+New York, NY, USA, 166–176. doi:10.1145/143165.143202
+Didier Rémy and Jérôme Vouillon. 1998. Objective ML: An effective object-oriented extension to ML. Theory and Practice of
+Object Systems 4, 1 (1998), 27–50. doi:10.1002/(SICI)1096-9942(1998)4:1<27::AID-TAPO3>3.0.CO;2-4
+Mark Shields and Erik Meijer. 2001. Type-indexed rows. In Proceedings of the 28th ACM SIGPLAN-SIGACT Symposium on
+Principles of Programming Languages (London, United Kingdom) (POPL ’01). Association for Computing Machinery, New
+York, NY, USA, 261–275. doi:10.1145/360204.360230
+Lau Skorstengaard. 2019. An Introduction to Logical Relations. (2019). arXiv:1907.11133 [cs.PL] doi:10.48550/arXiv.1907.11133
+Matthieu Sozeau and Nicolas Oury. 2008. First-Class Type Classes. In Theorem Proving in Higher Order Logics, Otmane Ait
+Mohamed, César Muñoz, and Sofiène Tahar (Eds.). Springer Berlin Heidelberg, Berlin, Heidelberg, 278–293. doi:10.1007/
+978-3-540-71067-7_23
+Matthew Toohey, Yanning Chen, Ara Jamalzadeh, and Ningning Xie. 2025. Extensible Data Types with Ad-Hoc Polymorphism
+(Artifact). doi:10.5281/zenodo.17298033
+Sam van Kampen. 2025. Abstract Rewriting Formalized in Lean.
+P. Wadler and S. Blott. 1989. How to make ad-hoc polymorphism less ad hoc. In Proceedings of the 16th ACM SIGPLANSIGACT Symposium on Principles of Programming Languages (Austin, Texas, USA) (POPL ’89). Association for Computing
+Machinery, New York, NY, USA, 60–76. doi:10.1145/75277.75283
+Mitchell Wand. 1987. Type inference for simple objects. In Proc., IEEE Symposium on Logic in Computer Science. 37–44.
+Mitchell Wand. 1991. Type inference for record concatenation and multiple inheritance. Information and Computation 93, 1
+(1991), 1–15. doi:10.1016/0890-5401(91)90050-C Selections from 1989 IEEE Symposium on Logic in Computer Science.
+Robert Weingart, Nicolas Wu, and Cristian Cadar. 2024. Total Type Classes: Improving the ergonomics of type-level
+programming in Haskell. (2024).
+Robert Wright, Michel Steuwer, and Ohad Kammar. 2022. Idris2-Table: evaluating dependently-typed tables with the Brown
+Benchmark for Table Types.
+
+Proc. ACM Program. Lang., Vol. 10, No. POPL, Article 20. Publication date: January 2026.
+
+20:30
+
+A
+
+Matthew Toohey, Yanning Chen, Ara Jamalzadeh, and Ningning Xie
+
+Target Semantics
+
+Δ ⊢𝐴 :𝐾
+
+(Kinding)
+
+var
+𝑎 :𝐾 ∈ Δ
+
+lam
+Δ, 𝑎 : 𝐾1 ⊢ 𝐴 : 𝐾2
+
+app
+Δ ⊢ 𝐴 : 𝐾1 ↦→ 𝐾2
+
+scheme
+Δ, 𝑎 : 𝐾 ⊢ 𝐴 : ★
+
+Δ ⊢ 𝐵 : 𝐾1
+
+Δ ⊢𝑎 :𝐾
+Δ ⊢ 𝜆 𝑎 : 𝐾1 . 𝐴 : 𝐾1 ↦→ 𝐾2
+Δ ⊢ 𝐴 𝐵 : 𝐾2
+list
+listApp
+arr
+Δ ⊢ 𝐴𝑖 : 𝐾
+Δ ⊢ 𝐴 : 𝐾1 ↦→ 𝐾2
+Δ ⊢ 𝐵 : L𝐾1
+Δ ⊢𝐴 :★
+Δ ⊢𝐵 :★
+Δ ⊢𝐴 →𝐵 :★
+
+Δ ⊢ {𝐴𝑖 } : L𝐾
+
+Δ ⊢ ∀𝑎 : 𝐾. 𝐴 :★
+sum
+prod
+Δ ⊢ 𝐴 : L★
+Δ ⊢ 𝐴 : L★
+
+Δ ⊢ 𝐴 ⟦𝐵⟧ : L𝐾2
+
+Δ ⊢ ⊗ 𝐴 :★
+
+Δ ⊢ ⊕ 𝐴 :★
+
+Δ⊢𝐸 :𝐴
+var
+⊢Δ
+
+(Typing)
+𝑥 :𝐴 ∈ Δ
+
+Δ ⊢𝑥 :𝐴
+typeApp
+Δ ⊢ 𝐸 : ∀𝑎 : 𝐾. 𝐴
+
+lam
+Δ, 𝑥 : 𝐴 ⊢ 𝐸 : 𝐵
+
+app
+Δ⊢𝐸 :𝐴 →𝐵
+
+typeLam
+Δ, 𝑎 : 𝐾 ⊢ 𝐸 : 𝐴
+
+Δ⊢𝐹 :𝐴
+
+Δ ⊢ 𝜆 𝑥 : 𝐴. 𝐸 : 𝐴 → 𝐵
+Δ⊢𝐸 𝐹 :𝐵
+Δ ⊢ Λ𝑎 : 𝐾. 𝐸 : ∀𝑎 : 𝐾. 𝐴
+prodElim
+prodIntro
+𝑖 ∈ [:𝑛]
+⊢Δ
+Δ ⊢ 𝐸𝑖 : 𝐴𝑖
+Δ ⊢ 𝐸 : ⊗ {𝐴𝑖
+}
+𝑗 ∈ [:𝑛]
+Δ⊢𝐵 :𝐾
+
+Δ ⊢ 𝐸 [𝐵] : 𝐴 [𝐵/𝑎]
+sumIntro
+𝑗 ∈ [:𝑛]
+Δ ⊢ 𝐸 : 𝐴𝑗
+Δ ⊢ 𝜄 𝑗 𝐸 : ⊕ {𝐴𝑖
+
+𝑖 ∈ [:𝑛]
+
+Δ ⊢ 𝐴𝑖 : ★
+𝑖 ∈ [:𝑛]
+
+Δ ⊢ (𝐸𝑖 ) : ⊗ {𝐴𝑖 }
+sumElim
+Δ ⊢ 𝐸 : ⊕ {𝐴𝑖 }
+Δ ⊢ 𝐹𝑖 : 𝐴𝑖 → 𝐵
+Δ ⊢𝐵 :★
+
+Δ ⊢ 𝜋𝑗 𝐸 : 𝐴𝑗
+eqiv
+Δ⊢𝐸 :𝐴
+
+Δ ⊢ case 𝐸 {𝐹𝑖 } : 𝐵
+
+}
+
+Δ⊢𝐸 :𝐵
+
+Δ ⊢𝐴 ≡𝐵
+
+(Type Equivalence)
+symm
+Δ ⊢𝐴 ≡𝐵
+
+refl
+
+Δ ⊢𝐴 ≡𝐴
+Δ⊢𝐵 ≡𝐴
+lamApp
+Δ ⊢ 𝜆 𝑎 : 𝐾1 . 𝐴 : 𝐾1 ↦→ 𝐾2
+Δ ⊢ 𝐵 : 𝐾1
+Δ ⊢ (𝜆 𝑎 : 𝐾1 . 𝐴) 𝐵 ≡ 𝐴 [𝐵/𝑎]
+listAppComp
+Δ ⊢ 𝐴1 : 𝐾1 ↦→ 𝐾2
+
+trans
+Δ ⊢𝐴 ≡𝐵
+
+eta
+Δ ⊢ 𝐴 : 𝐾1 ↦→ 𝐾2
+
+Δ ⊢ 𝐵 ≡𝐶
+
+Δ ⊢𝐴 ≡𝐶
+listAppList
+Δ ⊢ 𝐴 : 𝐾1 ↦→ 𝐾2
+
+Δ ⊢ 𝜆 𝑎 : 𝐾1 . 𝐴 𝑎 ≡ 𝐴
+listAppId
+Δ ⊢ 𝐴 : L𝐾
+
+Δ ⊢ 𝐴 ⟦{𝐵𝑖 }⟧ ≡ {𝐴 𝐵𝑖 }
+lam
+Δ, 𝑎 : 𝐾 ⊢ 𝐴 ≡ 𝐵
+
+Δ ⊢ (𝜆 𝑎 : 𝐾 . 𝑎) ⟦𝐴⟧ ≡ 𝐴
+app
+Δ ⊢ 𝐴1 ≡ 𝐴2
+Δ ⊢ 𝐵1 ≡ 𝐵2
+
+Δ ⊢ 𝐴0 ⟦𝐴1 ⟦𝐵⟧⟧ ≡ (𝜆 𝑎 : 𝐾1 . 𝐴0 (𝐴1 𝑎)) ⟦𝐵⟧
+Δ ⊢ 𝜆 𝑎 : 𝐾. 𝐴 ≡ 𝜆 𝑎 : 𝐾. 𝐵
+scheme
+arr
+Δ ⊢ 𝐴1 ≡ 𝐴2
+Δ ⊢ 𝐵1 ≡ 𝐵2
+Δ, 𝑎 : 𝐾 ⊢ 𝐴 ≡ 𝐵
+Δ ⊢ ∀𝑎 : 𝐾. 𝐴 ≡ ∀𝑎 : 𝐾. 𝐵
+listApp
+Δ ⊢ 𝐴1 ≡ 𝐴2
+Δ ⊢ 𝐵1 ≡ 𝐵2
+Δ ⊢ 𝐴1 ⟦𝐵 1 ⟧ ≡ 𝐴2 ⟦𝐵 2 ⟧
+
+Δ ⊢ 𝐴1 → 𝐵 1 ≡ 𝐴2 → 𝐵 2
+prod
+Δ ⊢𝐴 ≡𝐵
+Δ⊢⊗𝐴≡⊗𝐵
+
+Δ ⊢ 𝐴1 𝐵 1 ≡ 𝐴2 𝐵 2
+list
+Δ ⊢ 𝐴𝑖 ≡ 𝐵𝑖
+Δ ⊢ {𝐴𝑖 } ≡ {𝐵𝑖 }
+sum
+Δ ⊢𝐴 ≡𝐵
+Δ⊢⊕𝐴≡⊕𝐵
+
+𝐸 −→ 𝐹
+
+(Operational Semantics)
+
+appL
+𝐸 −→ 𝐸 ′
+
+appR
+𝐹 −→ 𝐹 ′
+
+𝐸 𝐹 −→ 𝐸 ′ 𝐹
+
+𝑉 𝐹 −→ 𝑉 𝐹 ′
+(𝜆 𝑥 : 𝐴. 𝐸) 𝑉 −→ 𝐸 [𝑉 /𝑥]
+prodIntro
+prodElim
+𝐸 −→ 𝐸 ′
+𝐸 −→ 𝐸 ′
+
+typeLamApp
+
+Δ⊢𝐴 ≡𝐵
+
+(Λ 𝑎 : 𝐾 . 𝐸) [𝐴] −→ 𝐸 [𝐴/𝑎]
+
+typeApp
+𝐸 −→ 𝐸 ′
+
+lamApp
+
+(𝑉𝑖 , 𝐸, 𝐹 𝑗 ) −→ (𝑉𝑖 , 𝐸 ′, 𝐹 𝑗 )
+
+𝜋𝑖 𝐸 −→ 𝜋𝑖 𝐸 ′
+
+Proc. ACM Program. Lang., Vol. 10, No. POPL, Article 20. Publication date: January 2026.
+
+𝐸 [𝐴] −→ 𝐸 ′ [𝐴]
+prodElimIntro
+𝑗 ∈ [:𝑛]
+𝜋 𝑗 (𝑉𝑖
+
+𝑖 ∈ [:𝑛]
+
+) −→ 𝑉𝑗
+
+Extensible Data Types with Ad-Hoc Polymorphism (Extended)
+
+sumElimR
+
+sumElimL
+𝐸 −→ 𝐸 ′
+
+sumIntro
+𝐸 −→ 𝐸 ′
+𝜄𝑖 𝐸 −→ 𝜄𝑖 𝐸
+
+20:31
+
+′
+
+𝐸 −→ 𝐸 ′
+′
+
+case 𝑉 {𝑉𝑖′, 𝐸, 𝐹 𝑗 } −→ case 𝑉 {𝑉𝑖′, 𝐸 ′, 𝐹 𝑗 }
+
+case 𝐸 {𝐹𝑖 } −→ case 𝐸 {𝐹𝑖 }
+sumElimIntro
+𝑗 ∈ [:𝑛]
+case 𝜄 𝑗 𝑉 {𝑉𝑖′
+
+𝑖 ∈ [:𝑛]
+
+} −→ 𝑉𝑗′ 𝑉
+
+Δ ⊢ 𝐴 −→ 𝐵
+
+(Small Step)
+lamApp
+Δ ⊢ 𝜆 𝑎 : 𝐾1 . 𝐴 : 𝐾1 ↦→ 𝐾2
+
+eta
+Δ ⊢ 𝐴 : 𝐾1 ↦→ 𝐾2
+Δ ⊢ 𝜆 𝑎 : 𝐾1 . 𝐴 𝑎 −→ 𝐴
+listAppId
+Δ ⊢ 𝐴 : L𝐾
+
+listAppList
+Δ ⊢ 𝐴 : 𝐾1 ↦→ 𝐾2
+
+Δ ⊢ 𝐵 : 𝐾1
+
+Δ ⊢ (𝜆 𝑎 : 𝐾1 . 𝐴) 𝐵 −→ 𝐴 [𝐵/𝑎]
+listAppComp
+lc(𝐴0 )
+Δ ⊢ 𝐴1 : 𝐾1 ↦→ 𝐾2
+
+Δ ⊢ 𝐴 ⟦{𝐵𝑖 }⟧ −→ {𝐴 𝐵𝑖 }
+lam
+Δ, 𝑎 : 𝐾 ⊢ 𝐴 −→ 𝐴′
+
+Δ ⊢ (𝜆 𝑎 : 𝐾 . 𝑎) ⟦𝐴⟧ −→ 𝐴
+Δ ⊢ 𝐴0 ⟦𝐴1 ⟦𝐵⟧⟧ −→ (𝜆 𝑎 : 𝐾1 . 𝐴0 (𝐴1 𝑎)) ⟦𝐵⟧
+appr
+forall
+appl
+Δ ⊢ 𝐵 −→ 𝐵 ′
+Δ ⊢ 𝐴 −→ 𝐴′
+Δ, 𝑎 : 𝐾 ⊢ 𝐴 −→ 𝐴′
+Δ ⊢ 𝐴 𝐵 −→ 𝐴′ 𝐵
+Δ ⊢ 𝐴 𝐵 −→ 𝐴 𝐵 ′
+list
+arrr
+Δ ⊢ 𝐵 −→ 𝐵 ′
+
+Δ ⊢ ∀ 𝑎 : 𝐾 . 𝐴 −→ ∀ 𝑎 : 𝐾 . 𝐴′
+
+B
+
+Δ ⊢ 𝐴 → 𝐵 −→ 𝐴′ → 𝐵
+
+Δ ⊢ 𝐴1 −→ 𝐴1′
+
+Δ ⊢ 𝐴 → 𝐵 −→ 𝐴 → 𝐵 ′
+Δ ⊢ {𝐴0𝑖
+listAppr
+listAppl
+Δ ⊢ 𝐵 −→ 𝐵 ′
+Δ ⊢ 𝐴 −→ 𝐴′
+Δ ⊢ 𝐴 ⟦𝐵⟧ −→ 𝐴′ ⟦𝐵⟧
+
+Δ ⊢ 𝜆 𝑎 : 𝐾 . 𝐴 −→ 𝜆 𝑎 : 𝐾 . 𝐴′
+arrl
+Δ ⊢ 𝐴 −→ 𝐴′
+
+𝑖 ∈ [:𝑚]
+
+𝑗 ∈ [:𝑛]
+
+, 𝐴1, 𝐴2𝑗
+} −→ {𝐴0𝑖
+prod
+Δ ⊢ 𝐴 −→ 𝐴′
+
+Δ ⊢ 𝐴 ⟦𝐵⟧ −→ 𝐴 ⟦𝐵 ′ ⟧
+
+𝑖 ∈ [:𝑚]
+
+Δ ⊢ ⊗ 𝐴 −→ ⊗ 𝐴′
+
+𝑗 ∈ [:𝑛]
+
+, 𝐴1′ , 𝐴2𝑗
+}
+sum
+Δ ⊢ 𝐴 −→ 𝐴′
+Δ ⊢ ⊕ 𝐴 −→ ⊕ 𝐴′
+
+Source Semantics
+
+⊢𝜅 ⇝𝐾
+
+(Kind Elaboration)
+⊢ 𝜅 1 ⇝ 𝐾1
+
+row
+⊢𝜅 ⇝𝐾
+
+constr
+
+label
+
+comm
+
+⊢ 𝜅 0 ↦→ 𝜅 1 ⇝ 𝐾0 ↦→ 𝐾1
+
+⊢ R𝜅 ⇝ L𝐾
+
+⊢ C⇝★
+
+⊢ L⇝★
+
+⊢ U⇝★
+
+arr
+⊢ 𝜅 0 ⇝ 𝐾0
+
+star
+⊢★⇝★
+Γ𝐶 ; Γ ⊢ 𝜎 : 𝜅 ⇝ 𝐴
+
+(Kinding And Elaboration)
+arr
+
+var
+𝑎 :𝜅 ∈ Γ
+Γ𝐶 ; Γ ⊢ 𝑎 : 𝜅 ⇝ 𝑎
+qal
+Γ𝐶 ; Γ ⊢𝜓 : C ⇝ 𝐴
+
+app
+Γ𝐶 ; Γ ⊢ 𝜙 : 𝜅 0 ↦→ 𝜅 1 ⇝ 𝐴
+
+Γ𝐶 ; Γ ⊢ 𝜏0 : ★ ⇝ 𝐴
+Γ𝐶 ; Γ ⊢ 𝜏1 : ★ ⇝ 𝐵
+
+Γ𝐶 ; Γ ⊢ 𝜏 : 𝜅 0 ⇝ 𝐵
+
+Γ𝐶 ; Γ ⊢ 𝜙 𝜏 : 𝜅 1 ⇝ 𝐴 𝐵
+scheme
+Γ𝐶 ; Γ ⊢ 𝛾 : ★ ⇝ 𝐵
+Γ𝐶 ; Γ, 𝑎 : 𝜅 ⊢ 𝜎 : ★ ⇝ 𝐴
+
+Γ𝐶 ; Γ ⊢ 𝜏0 → 𝜏1 : ★ ⇝ 𝐴 → 𝐵
+⊢𝜅 ⇝𝐾
+
+label
+
+Γ𝐶 ; Γ ⊢𝜓 ⇒ 𝛾 : ★ ⇝ 𝐴 → 𝐵
+Γ𝐶 ; Γ ⊢ ∀ 𝑎 : 𝜅. 𝜎 : ★ ⇝ ∀ 𝑎 : 𝐾 . 𝐴
+Γ𝐶 ; Γ ⊢ ℓ : L ⇝ ⊗ {}
+row
+tc
+Γ𝐶 ; Γ ⊢ 𝜉𝑖 : L
+⊢ T 𝜉𝑖
+(𝑇𝐶𝑖′ 𝑎 ⇝ 𝐴𝑖′ ⇒𝑇𝐶 𝑎 : 𝜅) ↦→ 𝑚 : 𝜎 ⇝ 𝐴 ∈ Γ𝐶
+floor
+Γ𝐶 ; Γ ⊢ 𝜏 : 𝜅 ⇝ 𝐵
+Γ𝐶 ; Γ ⊢ 𝜏𝑖 : 𝜅 ⇝ 𝐴𝑖
+Γ𝐶 ; Γ ⊢ 𝜉 : L
+Γ𝐶 ; Γ ⊢ ⌊𝜉⌋ : ★ ⇝ ⊗ {}
+prod
+Γ𝐶 ; Γ ⊢ 𝜇 : U
+Γ𝐶 ; Γ ⊢ 𝜌 : R★ ⇝ 𝐴
+
+Γ𝐶 ; Γ ⊢𝑇𝐶 𝜏 : C ⇝ ⊗ {𝐴 [𝐵/𝑎] , 𝐴𝑖′ [𝐵/𝑎]}
+Γ𝐶 ; Γ ⊢ ⟨𝜉𝑖 ⊲ 𝜏𝑖 ⟩ : R𝜅 ⇝ {𝐴𝑖 }
+sum
+lift
+Γ𝐶 ; Γ ⊢ 𝜇 : U
+Γ𝐶 ; Γ, 𝑎 : 𝜅 0 ⊢ 𝜏 : 𝜅 1 ⇝ 𝐴
+Γ𝐶 ; Γ ⊢ 𝜌 : R★ ⇝ 𝐴
+⊢ 𝜅 0 ⇝ 𝐾0
+Γ𝐶 ; Γ ⊢ 𝜌 : R𝜅0 ⇝ 𝐵
+
+Γ𝐶 ; Γ ⊢ Π 𝜇 𝜌 : ★ ⇝ ⊗ 𝐴
+
+Γ𝐶 ; Γ ⊢ Σ 𝜇 𝜌 : ★ ⇝ ⊕ 𝐴
+Γ𝐶 ; Γ ⊢ Lift (𝜆 𝑎 : 𝜅 0 . 𝜏) 𝜌 : R𝜅1 ⇝ (𝜆 𝑎 : 𝐾0 . 𝐴) ⟦𝐵⟧
+all
+Γ𝐶 ; Γ, 𝑎 : 𝜅 ⊢𝜓 : C ⇝ 𝐴
+⊢𝜅 ⇝𝐾
+Γ𝐶 ; Γ ⊢ 𝜌 : R𝜅 ⇝ 𝐵
+
+comm
+Γ𝐶 ; Γ ⊢ 𝑢 : U ⇝ ⊗ {}
+
+Γ𝐶 ; Γ ⊢ All (𝜆 𝑎 : 𝜅. 𝜓 ) 𝜌 : C ⇝ ⊗ ((𝜆 𝑎 : 𝐾 . 𝐴) ⟦𝐵⟧)
+
+Proc. ACM Program. Lang., Vol. 10, No. POPL, Article 20. Publication date: January 2026.
+
+20:32
+
+Matthew Toohey, Yanning Chen, Ara Jamalzadeh, and Ningning Xie
+
+contain
+Γ𝐶 ; Γ ⊢ 𝜇 : U
+
+Γ𝐶 ; Γ ⊢ 𝜌 0 : R𝜅 ⇝ 𝐴0
+
+Γ𝐶 ; Γ ⊢ 𝜌 1 : R𝜅 ⇝ 𝐴1
+
+⊢𝜅 ⇝𝐾
+
+Γ𝐶 ; Γ ⊢ 𝜌 0 <
+∼ 𝜇 𝜌 1 : C ⇝ ⊗ {∀ 𝑎 : 𝐾 ↦→ ★. (⊗ (𝑎 ⟦𝐴1 ⟧)) → ⊗ (𝑎 ⟦𝐴0 ⟧), ∀ 𝑎 : 𝐾 ↦→ ★. (⊕ (𝑎 ⟦𝐴0 ⟧)) → ⊕ (𝑎 ⟦𝐴1 ⟧)}
+concat
+Γ𝐶 ; Γ ⊢ 𝜇 : U
+Γ𝐶 ; Γ ⊢ 𝜌 0 : R𝜅 ⇝ 𝐴0
+𝜅
+𝜅
+Γ𝐶 ; Γ ⊢ 𝜌 1 : R ⇝ 𝐴1
+Γ𝐶 ; Γ ⊢ 𝜌 2 : R ⇝ 𝐴2
+⊢𝜅 ⇝𝐾
+Γ𝐶 ; Γ ⊢ 𝜌 0 <
+∼ 𝜇 𝜌 2 : C ⇝ 𝐵𝑙
+Γ𝐶 ; Γ ⊢ 𝜌 1 <
+𝜌
+:
+C
+⇝
+𝐵
+𝐵
+=
+∀
+𝑎
+:
+𝐾
+→
+↦
+★.
+(⊗
+(𝑎
+⟦𝐴
+⟧))
+→
+(⊗
+(𝑎
+⟦𝐴
+⟧))
+→ ⊗ (𝑎 ⟦𝐴2 ⟧)
+2
+𝑟
+𝑛
+0
+1
+∼𝜇
+𝐵𝑒 = ∀ 𝑎 : 𝐾 ↦→ ★. ∀ 𝑎𝑡 : ★. ((⊕ (𝑎 ⟦𝐴0 ⟧)) → 𝑎𝑡 ) → ((⊕ (𝑎 ⟦𝐴1 ⟧)) → 𝑎𝑡 ) → (⊕ (𝑎 ⟦𝐴2 ⟧)) → 𝑎𝑡
+Γ𝐶 ; Γ ⊢ 𝜌 0 ⊙ 𝜇 𝜌 1 ∼ 𝜌 2 : C ⇝ ⊗ {𝐵𝑛 , 𝐵𝑒 , 𝐵𝑙 , 𝐵𝑟 }
+ind
+Γ𝐶 ; Γ ⊢ 𝜌 : R𝜅 ⇝ 𝐴
+⊢𝜅 ⇝𝐾
+Γ𝐶 ; Γ, 𝑎𝑙 : L, 𝑎𝑡 : 𝜅, 𝑎𝑝 𝑎𝑖 : R ⊢ 𝑎𝑝 ⊙𝔫 ⟨𝑎𝑙 ⊲ 𝑎𝑡 ⟩ ∼ 𝑎𝑖 : C ⇝ 𝐵𝑙
+Γ𝐶 ; Γ, 𝑎𝑖 𝑎𝑛 : R𝜅 ⊢ 𝑎𝑖 ⊙ 𝔫 𝑎𝑛 ∼ 𝜌 : C ⇝ 𝐵𝑟
+𝐾
+𝐴𝑠 = ∀ 𝑎𝑙 : ★, 𝑎𝑡 : 𝐾, 𝑎𝑝 𝑎𝑖 𝑎𝑛 : L . 𝐵𝑙 → 𝐵𝑟 → (⊗ {}) → (𝑎𝑚 𝑎𝑝 ) → 𝑎𝑚 𝑎𝑖
+𝜅
+
+Γ𝐶 ; Γ ⊢ Ind 𝜌 : C ⇝ ∀ 𝑎𝑚 : (L𝐾 ↦→ ★). 𝐴𝑠 → (𝑎𝑚 {}) → 𝑎𝑚 𝐴
+split
+Γ𝐶 ; Γ ⊢ (Lift (𝜆 𝑎 : 𝜅. 𝜏) 𝜌 0 ) ⊙𝔠 𝜌 1 ∼ 𝜌 2 : C ⇝ 𝐴
+Γ𝐶 ; Γ ⊢ Split (𝜆 𝑎 : 𝜅. 𝜏) 𝜌 0 𝜌 1 𝜌 2 : C ⇝ 𝐴
+Γ𝐼 ; Γ𝐶 ⊢ 𝑝𝑔𝑚 : 𝜎 ⇝ 𝐸
+
+(Program Typing And Elaboration)
+
+cls
+𝑇𝐶𝑖′ : 𝜅 ⇝ 𝐴𝑖′ ∈ Γ𝐶
+𝑇𝐶 ∉ dom(Γ𝐶 )
+Γ𝐶 ; 𝜖, 𝑎 : 𝜅 ⊢ 𝜎0 : ★ ⇝ 𝐴
+Γ𝐼 ; Γ𝐶 , (𝑇𝐶𝑖′ 𝑎 ⇝ 𝐴𝑖′ ⇒𝑇𝐶 𝑎 : 𝜅) ↦→ 𝑚 : 𝜎0 ⇝ 𝐴 ⊢ 𝑝𝑔𝑚 : 𝜎1 ⇝ 𝐸
+
+𝑚 ∉ dom(Γ𝐶 )
+
+Γ𝐼 ; Γ𝐶 ⊢ class𝑇𝐶𝑖′ 𝑎 ⇒𝑇𝐶 𝑎 : 𝜅 where {𝑚 : 𝜎0 }; 𝑝𝑔𝑚 : 𝜎1 ⇝ 𝐸
+inst
+(𝑇𝐶𝑖′ 𝑎 ′ ⇝ 𝐴𝑖′ ⇒𝑇𝐶 𝑎 ′ : 𝜅) ↦→ 𝑚 : 𝜎0 ⇝ 𝐴 ∈ Γ𝐶
+Γ𝐶 ; 𝜖, 𝑎𝑘 : 𝜅𝑘′ ⊢𝜓 𝑗 : C ⇝ 𝐵 𝑗
+Γ𝐼 ; Γ𝐶 ; 𝜖, 𝑎𝑘 : 𝜅𝑘′ ,𝜓 𝑗 ⇝ 𝑥 𝑗 ⊨ T 𝑇𝐶𝑖′ 𝜏 ⇝ 𝐸𝑖′
+′
+′
+Γ𝐼 ; Γ𝐶 ; 𝜖, 𝑎𝑘 : 𝜅𝑘′ ,𝜓 𝑗 ⇝ 𝑥 𝑗 ⊢ 𝑀 : 𝜎0 [𝜏/𝑎 ′ ] ⇝ 𝐸
+Γ𝐶 ; 𝜖, 𝑎𝑘 : 𝜅𝑘 ⊢ 𝜏 : 𝜅 ⇝ 𝐵
+′
+Γ𝐼 , (∀ 𝑎𝑘 : 𝜅𝑘 . 𝜓 𝑗 ⇝ 𝑥 𝑗 ⇒𝑇𝐶 𝜏) ⇝ 𝐸; 𝐸𝑖′ ; Γ𝐶 ⊢ 𝑝𝑔𝑚 : 𝜎1 ⇝ 𝐹
+
+term
+Γ𝐼 ; Γ𝐶 ; 𝜖 ⊢ 𝑀 : 𝜎 ⇝ 𝐸
+
+Γ𝐼 ; Γ𝐶 ⊢ instance𝜓 𝑗 ⇒𝑇𝐶 𝜏 where {𝑚 = 𝑀 }; 𝑝𝑔𝑚 : 𝜎1 ⇝ 𝐹
+
+Γ𝐼 ; Γ𝐶 ⊢ 𝑀 : 𝜎 ⇝ 𝐸
+
+Γ𝐼 ; Γ𝐶 ; Γ ⊢ 𝑀 : 𝜎 ⇝ 𝐸
+
+(Typing And Elaboration)
+method
+(𝑇𝐶𝑖′ 𝑎 ⇝ 𝐴𝑖′ ⇒𝑇𝐶 𝑎 : 𝜅) ↦→ 𝑚 : 𝜎 ⇝ 𝐴 ∈ Γ𝐶
+
+var
+𝑥 :𝜎 ∈ Γ
+Γ𝐼 ; Γ𝐶 ; Γ ⊢ 𝑥 : 𝜎 ⇝ 𝑥
+lam
+Γ𝐼 ; Γ𝐶 ; Γ, 𝑥 : 𝜏0 ⊢ 𝑀 : 𝜏1 ⇝ 𝐸
+
+Γ𝐶 ; Γ ⊢ 𝜏0 : ★ ⇝ 𝐴
+
+Γ𝐼 ; Γ𝐶 ; Γ ⊢ 𝜆 𝑥 . 𝑀 : 𝜏0 → 𝜏1 ⇝ 𝜆 𝑥 : 𝐴. 𝐸
+let
+Γ𝐼 ; Γ𝐶 ; Γ ⊢ 𝑀 : 𝜎0 ⇝ 𝐸
+
+Γ𝐶 ; Γ ⊢ 𝜎0 : ★ ⇝ 𝐴
+
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ T 𝑇𝐶 𝜏 ⇝ 𝐸
+
+Γ𝐼 ; Γ𝐶 ; Γ ⊢ 𝑚 : 𝜎 [𝜏/𝑎] ⇝ 𝜋0 𝐸
+app
+Γ𝐼 ; Γ𝐶 ; Γ ⊢ 𝑀 : 𝜏0 → 𝜏1 ⇝ 𝐹
+
+Γ𝐼 ; Γ𝐶 ; Γ ⊢ 𝑁 : 𝜏0 ⇝ 𝐸
+
+Γ𝐼 ; Γ𝐶 ; Γ ⊢ 𝑀 𝑁 : 𝜏1 ⇝ 𝐹 𝐸
+annot
+Γ𝐼 ; Γ𝐶 ; Γ, 𝑥 : 𝜎0 ⊢ 𝑁 : 𝜎1 ⇝ 𝐹
+Γ𝐼 ; Γ𝐶 ; Γ ⊢ 𝑀 : 𝜎 ⇝ 𝐸
+
+Γ𝐼 ; Γ𝐶 ; Γ ⊢ let 𝑥 : 𝜎0 = 𝑀 in 𝑁 : 𝜎1 ⇝ (𝜆 𝑥 : 𝐴. 𝐹 ) 𝐸
+qalI
+qalE
+Γ𝐶 ; Γ ⊢𝜓 : C ⇝ 𝐴
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ T 𝜓 ⇝ 𝐸
+Γ𝐼 ; Γ𝐶 ; Γ ⊢ 𝑀 :𝜓 ⇒ 𝛾 ⇝ 𝐹
+Γ𝐼 ; Γ𝐶 ; Γ,𝜓 ⇝ 𝑥 ⊢ 𝑀 : 𝛾 ⇝ 𝐸
+
+Γ𝐼 ; Γ𝐶 ; Γ ⊢ 𝑀 : 𝜎 : 𝜎 ⇝ 𝐸
+schemeI
+Γ𝐼 ; Γ𝐶 ; Γ, 𝑎 : 𝜅 ⊢ 𝑀 : 𝜎 ⇝ 𝐸
+⊢𝜅 ⇝𝐾
+
+Γ𝐼 ; Γ𝐶 ; Γ ⊢ 𝑀 :𝜓 ⇒ 𝛾 ⇝ 𝜆 𝑥 : 𝐴. 𝐸
+schemeE
+Γ𝐼 ; Γ𝐶 ; Γ ⊢ 𝑀 : ∀ 𝑎 : 𝜅. 𝜎 ⇝ 𝐸
+Γ𝐶 ; Γ ⊢ 𝜏 : 𝜅 ⇝ 𝐴
+
+Γ𝐼 ; Γ𝐶 ; Γ ⊢ 𝑀 : ∀ 𝑎 : 𝜅. 𝜎 ⇝ Λ 𝑎 : 𝐾 . 𝐸
+
+Γ𝐼 ; Γ𝐶 ; Γ ⊢ 𝑀 : 𝜎 [𝜏/𝑎] ⇝ 𝐸 [𝐴]
+
+Γ𝐼 ; Γ𝐶 ; Γ ⊢ 𝑀 : 𝛾 ⇝ 𝐹 𝐸
+label
+Γ𝐼 ; Γ𝐶 ; Γ ⊢ ℓ : ⌊ℓ⌋ ⇝ ()
+
+prod
+Γ𝐼 ; Γ𝐶 ; Γ ⊢ 𝑀 : ⌊𝜉⌋
+
+Γ𝐼 ; Γ𝐶 ; Γ ⊢ 𝑁 : 𝜏 ⇝ 𝐸
+
+Γ𝐼 ; Γ𝐶 ; Γ ⊢ {𝑀 ⊲ 𝑁 } : Π𝔫 ⟨𝜉 ⊲ 𝜏⟩ ⇝ (𝐸)
+
+Proc. ACM Program. Lang., Vol. 10, No. POPL, Article 20. Publication date: January 2026.
+
+Extensible Data Types with Ad-Hoc Polymorphism (Extended)
+
+sum
+Γ𝐼 ; Γ𝐶 ; Γ ⊢ 𝑀 : ⌊𝜉⌋
+
+20:33
+
+unlabel
+Γ𝐼 ; Γ𝐶 ; Γ ⊢ 𝑀 : Ξ𝔠 ⟨𝜉 ⊲ 𝜏⟩ ⇝
+Γ𝐼 ; Γ𝐶 ; Γ ⊢ 𝑁 : ⌊𝜉⌋
+( 𝐸
+𝜋0 𝐸
+Ξ=Π
+Γ𝐶 ; Γ ⊢ 𝜏 : ★ ⇝ 𝐴
+𝐹=
+case 𝐸 {𝜆 𝑥 : 𝐴. 𝑥 } Ξ = Σ
+
+Γ𝐼 ; Γ𝐶 ; Γ ⊢ 𝑁 : 𝜏 ⇝ 𝐸
+
+Γ𝐼 ; Γ𝐶 ; Γ ⊢ [𝑀 ⊲ 𝑁 ] : Σ𝔫 ⟨𝜉 ⊲ 𝜏⟩ ⇝ 𝜄 0 𝐸
+
+Γ𝐼 ; Γ𝐶 ; Γ ⊢ 𝑀/𝑁 : 𝜏 ⇝ 𝐹
+concat
+Γ𝐼 ; Γ𝐶 ; Γ ⊢ 𝑀 : Π 𝜇 𝜌 0 ⇝ 𝐸 0
+Γ𝐼 ; Γ𝐶 ; Γ ⊢ 𝑁 : Π 𝜇 𝜌 1 ⇝ 𝐸 1
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ T 𝜌 0 ⊙ 𝜇 𝜌 1 ∼ 𝜌 2 ⇝ 𝐹
+
+prj
+Γ𝐼 ; Γ𝐶 ; Γ ⊢ 𝑀 : Π 𝜇 𝜌 0 ⇝ 𝐸
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ T 𝜌 1 <
+∼𝜇 𝜌 0 ⇝ 𝐹
+Γ𝐼 ; Γ𝐶 ; Γ ⊢ prj 𝑀 : Π 𝜇 𝜌 1 ⇝ (𝜋0 𝐹 ) [𝜆 𝑎 : ★. 𝑎] 𝐸
+inj
+Γ𝐼 ; Γ𝐶 ; Γ ⊢ 𝑀 : Σ 𝜇 𝜌 0 ⇝ 𝐸
+
+Γ𝐼 ; Γ𝐶 ; Γ ⊢ 𝑀++𝑁 : Π 𝜇 𝜌 2 ⇝ ((𝜋0 𝐹 ) [𝜆 𝑎 : ★. 𝑎] 𝐸 0 ) 𝐸 1
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ T 𝜌 0 <
+∼𝜇 𝜌 1 ⇝ 𝐹
+
+Γ𝐼 ; Γ𝐶 ; Γ ⊢ inj 𝑀 : Σ 𝜇 𝜌 1 ⇝ (𝜋1 𝐹 ) [𝜆 𝑎 : ★. 𝑎] 𝐸
+elim
+Γ𝐼 ; Γ𝐶 ; Γ ⊢ 𝑀 : (Σ 𝜇 𝜌 0 ) → 𝜏 ⇝ 𝐸 0
+Γ𝐼 ; Γ𝐶 ; Γ ⊢ 𝑁 : (Σ 𝜇 𝜌 1 ) → 𝜏 ⇝ 𝐸 1
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ T 𝜌 0 ⊙ 𝜇 𝜌 1 ∼ 𝜌 2 ⇝ 𝐹
+Γ𝐶 ; Γ ⊢ 𝜏 : ★ ⇝ 𝐴
+Γ𝐼 ; Γ𝐶 ; Γ ⊢ 𝑀 ▽ 𝑁 : (Σ 𝜇 𝜌 2 ) → 𝜏 ⇝ ((𝜋1 𝐹 ) [𝜆 𝑎 : ★. 𝑎] [𝐴] 𝐸 0 ) 𝐸 1
+
+sub
+Γ𝐼 ; Γ𝐶 ; Γ ⊢ 𝑀 : 𝜎0 ⇝ 𝐸
+Γ𝐶 ; Γ ⊢ 𝜎0 <: 𝜎1 ⇝ 𝐹
+Γ𝐼 ; Γ𝐶 ; Γ ⊢ 𝑀 : 𝜎1 ⇝ 𝐹 𝐸
+
+ind
+Γ𝐶 ; Γ ⊢ 𝜌 : R
+Γ𝐶 ; Γ, 𝑎 : R ⊢ 𝜏 : ★ ⇝ 𝐴
+
+
+Γ𝐼 ; Γ𝐶 ; Γ, 𝑎𝑙 : L, 𝑎𝑡 : 𝜅, 𝑎𝑝 𝑎𝑖 𝑎𝑛 : R𝜅 ⊢ 𝑀 : 𝑎𝑝 ⊙ 𝔫 ⟨𝑎𝑙 ⊲ 𝑎𝑡 ⟩ ∼ 𝑎𝑖 , 𝑎𝑖 ⊙𝔫 𝑎𝑛 ∼ 𝜌 ⇒ ⌊𝑎𝑙 ⌋ → 𝜏 𝑎𝑝 /𝑎 → 𝜏 [𝑎𝑖 /𝑎] ⇝ 𝐸 0
+Γ𝐼 ; Γ𝐶 ; Γ ⊢ 𝑁 : 𝜏 [⟨⟩/𝑎] ⇝ 𝐸 1
+⊢𝜅 ⇝𝐾
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ T Ind 𝜌 ⇝ 𝐹
+𝐸 = (𝐹 [𝜆 𝑎 : L𝐾 . 𝐴] (Λ 𝑎𝑙 : ★, 𝑎𝑡 : 𝐾, 𝑎𝑝 𝑎𝑖 𝑎𝑛 : L𝐾 . 𝐸 0 )) 𝐸 1
+𝜅
+
+𝜅
+
+Γ𝐼 ; Γ𝐶 ; Γ ⊢ ind (𝜆 𝑎 : R𝜅 . 𝜏) 𝜌 𝑀 𝑁 : 𝜏 [𝜌/𝑎] ⇝ 𝐸
+Γ𝐶 ; Γ ⊢ 𝜎0 <: 𝜎1 ⇝ 𝐹 ≜ Γ𝐶 ; Γ;𝜓 0 ⊨𝜓 1 ⇝ 𝐹
+
+(Subtyping And Elaboration)
+
+trans
+Γ𝐶 ; Γ ⊢ 𝜎0 : 𝜅 ⇝ 𝐴
+
+refl
+Γ𝐶 ; Γ ⊢ 𝜎 : 𝜅 ⇝ 𝐴
+Γ𝐶 ; Γ ⊢ 𝜎 <: 𝜎 ⇝ 𝜆 𝑥 : 𝐴. 𝑥
+arr
+Γ𝐶 ; Γ ⊢ 𝜏2 <: 𝜏0 ⇝ 𝐸
+
+Γ𝐶 ; Γ ⊢ 𝜎0 <: 𝜎1 ⇝ 𝐸
+
+Γ𝐶 ; Γ ⊢ 𝜎1 <: 𝜎2 ⇝ 𝐹
+
+Γ𝐶 ; Γ ⊢ 𝜎0 <: 𝜎2 ⇝ 𝜆 𝑥 : 𝐴. 𝐹 (𝐸 𝑥)
+Γ𝐶 ; Γ ⊢ 𝜏1 <: 𝜏3 ⇝ 𝐹
+
+Γ𝐶 ; Γ ⊢ 𝜏0 → 𝜏1 : ★ ⇝ 𝐴
+
+Γ𝐶 ; Γ ⊢ 𝜏2 : ★ ⇝ 𝐵
+
+Γ𝐶 ; Γ ⊢ 𝜏0 → 𝜏1 <: 𝜏2 → 𝜏3 ⇝ 𝜆 𝑥 : 𝐴. 𝜆 𝑥𝑎 : 𝐵. 𝐹 (𝑥 (𝐸 𝑥𝑎 ))
+qal
+Γ𝐶 ; Γ;𝜓 1 ⊨𝜓 0 ⇝ 𝐸
+
+Γ𝐶 ; Γ ⊢ 𝛾 0 <: 𝛾 1 ⇝ 𝐹
+
+Γ𝐶 ; Γ ⊢𝜓 0 ⇒ 𝛾 0 : 𝜅 ⇝ 𝐴
+
+Γ𝐶 ; Γ ⊢𝜓 1 : C ⇝ 𝐵
+
+Γ𝐶 ; Γ ⊢𝜓 0 ⇒ 𝛾 0 <:𝜓 1 ⇒ 𝛾 1 ⇝ 𝜆 𝑥 : 𝐴. 𝜆 𝑥𝑎 : 𝐵. 𝐹 (𝑥 (𝐸 𝑥𝑎 ))
+scheme
+Γ𝐶 ; Γ, 𝑎 : 𝜅 0 ⊢ 𝜎0 <: 𝜎1 ⇝ 𝐹
+⊢ 𝜅 0 ⇝ 𝐾0
+Γ𝐶 ; Γ ⊢ ∀ 𝑎 : 𝜅 0 . 𝜎0 : 𝜅 1 ⇝ 𝐴
+Γ𝐶 ; Γ ⊢ ∀ 𝑎 : 𝜅 0 . 𝜎0 <: ∀ 𝑎 : 𝜅 0 . 𝜎1 ⇝ 𝜆 𝑥 : 𝐴. Λ 𝑎 : 𝐾0 . 𝐹 (𝑥 [𝑎])
+prod
+Γ𝐶 ; Γ ⊢ 𝜏𝑖 <: 𝜏𝑖′ ⇝ 𝐹𝑖
+Γ𝐶 ; Γ ⊢ Π 𝜇 ⟨𝜉𝑖 ⊲ 𝜏𝑖 ⟩ : ★ ⇝ 𝐴
+Γ𝐶 ; Γ ⊢ Π 𝜇 ⟨𝜉𝑖 ⊲ 𝜏𝑖 ⟩ <: Π 𝜇 ⟨𝜉𝑖 ⊲ 𝜏𝑖′ ⟩ ⇝ 𝜆 𝑥 : 𝐴. (𝐹𝑖 𝜋𝑖 𝑥)
+sum
+Γ𝐶 ; Γ ⊢ 𝜏𝑖 <: 𝜏𝑖′ ⇝ 𝐹𝑖
+Γ𝐶 ; Γ ⊢ Σ 𝜇 ⟨𝜉𝑖 ⊲ 𝜏𝑖 ⟩ : ★ ⇝ 𝐴
+Γ𝐶 ; Γ ⊢ 𝜏𝑖 : ★ ⇝ 𝐵𝑖
+Γ𝐶 ; Γ ⊢ Σ 𝜇 ⟨𝜉𝑖 ⊲ 𝜏𝑖 ⟩ <: Σ 𝜇 ⟨𝜉𝑖 ⊲ 𝜏𝑖′ ⟩ ⇝ 𝜆 𝑥 : 𝐴. case 𝑥 {𝜆 𝑥 ′ : 𝐵𝑖 . 𝜄𝑖 (𝐹𝑖 𝑥 ′ )}
+prodRow
+sumRow
+Γ𝐶 ; Γ ⊢ 𝜌 0 ≡𝜇 𝜌 1 ⇝ 𝐹𝑝 , 𝐹𝑠
+Γ𝐶 ; Γ ⊢ Π 𝜇 𝜌 0 : ★
+Γ𝐶 ; Γ ⊢ 𝜌 0 ≡𝜇 𝜌 1 ⇝ 𝐹𝑝 , 𝐹𝑠
+Γ𝐶 ; Γ ⊢ Σ 𝜇 𝜌 0 : ★
+Γ𝐶 ; Γ ⊢ Π 𝜇 𝜌 0 <: Π 𝜇 𝜌 1 ⇝ 𝐹𝑝 [𝜆 𝑎 : ★. 𝑎]
+decay
+Γ𝐶 ; Γ ⊢ 𝜇1 : U
+𝜇0 ⩽ 𝜇1
+Γ𝐶 ; Γ ⊢ Ξ𝜇0 𝜌 : ★ ⇝ 𝐴
+Γ𝐶 ; Γ ⊢ Ξ𝜇0 𝜌 <: Ξ𝜇1 𝜌 ⇝ 𝜆 𝑥 : 𝐴. 𝑥
+
+Γ𝐶 ; Γ ⊢ Σ 𝜇 𝜌 0 <: Σ 𝜇 𝜌 1 ⇝ 𝐹𝑠 [𝜆 𝑎 : ★. 𝑎]
+never
+Γ𝐶 ; Γ ⊢ 𝜎 : ★
+Γ𝐶 ; Γ ⊢ Σ𝔠 ⟨⟩ <: 𝜎 ⇝ 𝜆 𝑥 : ⊕ {}. case 𝑥 {}
+
+Proc. ACM Program. Lang., Vol. 10, No. POPL, Article 20. Publication date: January 2026.
+
+20:34
+
+Matthew Toohey, Yanning Chen, Ara Jamalzadeh, and Ningning Xie
+
+contain
+Γ𝐶 ; Γ ⊢ 𝜌 0 ≡𝜇 𝜌 2 ⇝ 𝐹 02𝑝 , 𝐹 02𝑠
+Γ𝐶 ; Γ ⊢ 𝜌 1 ≡𝜇 𝜌 3 ⇝ 𝐹 13𝑝 , 𝐹 13𝑠
+Γ𝐶 ; Γ ⊢ 𝜌 2 ≡𝜇 𝜌 0 ⇝ 𝐹 20𝑝 , 𝐹 20𝑠
+Γ𝐶 ; Γ ⊢ 𝜌 3 ≡𝜇 𝜌 1 ⇝ 𝐹 31𝑝 , 𝐹 31𝑠
+Γ𝐶 ; Γ ⊢ 𝜌 0 <
+Γ𝐶 ; Γ ⊢ 𝜌 0 : R𝜅 ⇝ 𝐴0
+Γ𝐶 ; Γ ⊢ 𝜌 1 : R𝜅 ⇝ 𝐴1
+Γ𝐶 ; Γ ⊢ 𝜌 2 : R𝜅 ⇝ 𝐴2
+∼𝜇 𝜌 1 : C ⇝ 𝐴
+𝜅
+Γ𝐶 ; Γ ⊢ 𝜌 3 : R ⇝ 𝐴3
+⊢𝜅 ⇝𝐾
+𝐹𝑝 = Λ 𝑎 : 𝐾 ↦→ ★. 𝜆 𝑥 : ⊗ (𝑎 ⟦𝐴3 ⟧). 𝐹 02𝑝 [𝑎] ((𝜋0 𝑥𝑒 ) [𝑎] (𝐹 31𝑝 [𝑎] 𝑥))
+𝐹𝑖 = Λ 𝑎 : 𝐾 ↦→ ★. 𝜆 𝑥 : ⊕ (𝑎 ⟦𝐴2 ⟧). 𝐹 13𝑠 [𝑎] ((𝜋1 𝑥𝑒 ) [𝑎] (𝐹 20𝑠 [𝑎] 𝑥))
+Γ𝐶 ; Γ; 𝜌 0 <
+∼𝜇 𝜌 1 ⊨ 𝜌 2 <
+∼ 𝜇 𝜌 3 ⇝ 𝜆 𝑥𝑒 : 𝐴. (𝐹𝑝 , 𝐹𝑖 )
+concat
+Γ𝐶 ; Γ ⊢ 𝜌 0 ≡𝜇 𝜌 3 ⇝ 𝐹 03𝑝 , 𝐹 03𝑠
+Γ𝐶 ; Γ ⊢ 𝜌 1 ≡𝜇 𝜌 4 ⇝ 𝐹 14𝑝 , 𝐹 14𝑠
+Γ𝐶 ; Γ ⊢ 𝜌 2 ≡𝜇 𝜌 5 ⇝ 𝐹 25𝑝 , 𝐹 25𝑠
+Γ𝐶 ; Γ ⊢ 𝜌 3 ≡𝜇 𝜌 0 ⇝ 𝐹 30𝑝 , 𝐹 30𝑠
+Γ𝐶 ; Γ ⊢ 𝜌 4 ≡𝜇 𝜌 1 ⇝ 𝐹 41𝑝 , 𝐹 41𝑠
+Γ𝐶 ; Γ ⊢ 𝜌 5 ≡𝜇 𝜌 2 ⇝ 𝐹 52𝑝 , 𝐹 52𝑠
+Γ𝐶 ; Γ ⊢ 𝜌 0 ⊙ 𝜇 𝜌 1 ∼ 𝜌 2 : C ⇝ 𝐴
+Γ𝐶 ; Γ ⊢ 𝜌 0 : R𝜅 ⇝ 𝐴0
+Γ𝐶 ; Γ ⊢ 𝜌 2 : R𝜅 ⇝ 𝐴2
+Γ𝐶 ; Γ ⊢ 𝜌 3 : R𝜅 ⇝ 𝐴3
+Γ𝐶 ; Γ ⊢ 𝜌 4 : R𝜅 ⇝ 𝐴4
+Γ𝐶 ; Γ ⊢ 𝜌 1 : R𝜅 ⇝ 𝐴1
+𝜅
+Γ𝐶 ; Γ ⊢ 𝜌 5 : R ⇝ 𝐴5
+⊢𝜅 ⇝𝐾
+Γ𝐶 ; Γ; 𝜌 0 <
+Γ𝐶 ; Γ; 𝜌 1 <
+∼𝜇 𝜌 2 ⊨ 𝜌 3 <
+∼ 𝜇 𝜌 5 ⇝ 𝐹 0235
+∼𝜇 𝜌 2 ⊨ 𝜌 4 <
+∼ 𝜇 𝜌 5 ⇝ 𝐹 1245
+𝐹𝑛 = Λ 𝑎 : 𝐾 ↦→ ★. 𝜆 𝑥𝑙 : ⊗ (𝑎 ⟦𝐴3 ⟧). 𝜆 𝑥𝑟 : ⊗ (𝑎 ⟦𝐴4 ⟧). 𝐹 25𝑝 [𝑎] (((𝜋0 𝑥𝑒 ) [𝑎] (𝐹 30𝑝 [𝑎] 𝑥𝑙 )) (𝐹 41𝑝 [𝑎] 𝑥𝑟 ))
+𝐹𝑒𝑖 = (((𝜋1 𝑥𝑒 ) [𝑎] [𝑎𝑡 ] (𝜆 𝑥𝑙′ : ⊕ (𝑎 ⟦𝐴0 ⟧). 𝑥𝑙 (𝐹 03𝑠 [𝑎] 𝑥𝑙′ ))) (𝜆 𝑥𝑟′ : ⊕ (𝑎 ⟦𝐴1 ⟧). 𝑥𝑟 (𝐹 14𝑠 [𝑎] 𝑥𝑟′ ))) (𝐹 52𝑠 [𝑎] 𝑥)
+𝐹𝑒 = Λ 𝑎 : 𝐾 ↦→ ★. Λ 𝑎𝑡 : ★. 𝜆 𝑥𝑙 : (⊕ (𝑎 ⟦𝐴3 ⟧)) → 𝑎𝑡 . 𝜆 𝑥𝑟 : (⊕ (𝑎 ⟦𝐴4 ⟧)) → 𝑎𝑡 . 𝜆 𝑥 : ⊕ (𝑎 ⟦𝐴5 ⟧). 𝐹𝑒𝑖
+Γ𝐶 ; Γ; 𝜌 0 ⊙ 𝜇 𝜌 1 ∼ 𝜌 2 ⊨ 𝜌 3 ⊙ 𝜇 𝜌 4 ∼ 𝜌 5 ⇝ 𝜆 𝑥𝑒 : 𝐴. (𝐹𝑛 , 𝐹𝑒 , 𝐹 0235 (𝜋2 𝑥𝑒 ), 𝐹 1245 (𝜋3 𝑥𝑒 ))
+all
+Γ𝐶 ; Γ ⊢ 𝜌 0 ≡𝔠 𝜌 1 ⇝ 𝐹𝑝 , 𝐹𝑠
+Γ𝐶 ; Γ ⊢ All (𝜆 𝑎 : 𝜅. 𝜓 ) 𝜌 0 : C
+Γ𝐶 ; Γ, 𝑎 : 𝜅 ⊢𝜓 : C ⇝ 𝐵
+⊢𝜅 ⇝𝐾
+Γ𝐶 ; Γ; All (𝜆 𝑎 : 𝜅. 𝜓 ) 𝜌 0 ⊨ All (𝜆 𝑎 : 𝜅. 𝜓 ) 𝜌 1 ⇝ 𝐹𝑝 [𝜆 𝑎 : 𝐾 . 𝐵]
+split
+Γ𝐶 ; Γ; (Lift (𝜆 𝑎 : 𝜅. 𝜏) 𝜌 0 ) ⊙𝔠 𝜌 1 ∼ 𝜌 2 ⊨ (Lift (𝜆 𝑎 : 𝜅. 𝜏) 𝜌 3 ) ⊙𝔠 𝜌 4 ∼ 𝜌 5 ⇝ 𝐹
+Γ𝐶 ; Γ; Split (𝜆 𝑎 : 𝜅. 𝜏) 𝜌 0 𝜌 1 𝜌 2 ⊨ Split (𝜆 𝑎 : 𝜅. 𝜏) 𝜌 3 𝜌 4 𝜌 5 ⇝ 𝐹
+Γ𝐶 ; Γ ⊢ 𝜌 0 ≡𝜇 𝜌 1 ⇝ 𝐹𝑝 , 𝐹𝑠
+
+(Row Equivalence And Elaboration)
+
+refl
+Γ𝐶 ; Γ ⊢ 𝜌 : R𝜅 ⇝ 𝐴
+
+⊢𝜅 ⇝𝐾
+
+Γ𝐶 ; Γ ⊢ 𝜌 ≡𝜇 𝜌 ⇝ Λ 𝑎 : 𝐾 ↦→ ★. 𝜆 𝑥 : ⊗ (𝑎 ⟦𝐴⟧). 𝑥, Λ 𝑎 : 𝐾 ↦→ ★. 𝜆 𝑥 : ⊕ (𝑎 ⟦𝐴⟧). 𝑥
+trans
+Γ𝐶 ; Γ ⊢ 𝜌 0 : R𝜅 ⇝ 𝐴0
+⊢𝜅 ⇝𝐾
+Γ𝐶 ; Γ ⊢ 𝜌 0 ≡𝜇 𝜌 1 ⇝ 𝐹𝑝01, 𝐹𝑠01
+Γ𝐶 ; Γ ⊢ 𝜌 1 ≡𝜇 𝜌 2 ⇝ 𝐹𝑝12, 𝐹𝑠12
+𝐹𝑝 = Λ 𝑎 : 𝐾 ↦→ ★. 𝜆 𝑥 : ⊗ (𝑎 ⟦𝐴0 ⟧). 𝐹𝑝12 [𝑎] (𝐹𝑝01 [𝑎] 𝑥)
+𝐹𝑠 = Λ 𝑎 : 𝐾 ↦→ ★. 𝜆 𝑥 : ⊕ (𝑎 ⟦𝐴0 ⟧). 𝐹𝑠12 [𝑎] (𝐹𝑠01 [𝑎] 𝑥)
+Γ𝐶 ; Γ ⊢ 𝜌 0 ≡𝜇 𝜌 2 ⇝ 𝐹𝑝 , 𝐹𝑠
+comm
+⊢ T 𝑝 permutes [:𝑛] for 𝜉
+𝑖 ∈ [:𝑛]
+𝑖 ∈ [:𝑛]
+Γ𝐶 ; Γ ⊢ ⟨𝜉𝑖 ⊲ 𝜏𝑖
+⟩ : R𝜅 ⇝ {𝐴𝑖
+}
+
+⊢ T 𝑝 ′ permutes [:𝑛] for 𝜉
+
+𝐹𝑝 = Λ 𝑎 : 𝐾 ↦→ ★. 𝜆 𝑥 : ⊗ (𝑎 ⟦{𝐴𝑖
+
+⊢𝜅 ⇝𝐾
+
+𝐹𝑠 = Λ 𝑎 : 𝐾 ↦→ ★. 𝜆 𝑥 : ⊕ (𝑎 ⟦{𝐴𝑖
+Γ𝐶 ; Γ ⊢ ⟨𝜉𝑖 ⊲ 𝜏𝑖
+
+𝑖 ∈ [:𝑛]
+
+𝑖 ∈ [:𝑛]
+
+𝑝 inverts 𝑝 ′ on [:𝑛]
+
+}⟧). case 𝑥 {𝜆 𝑥 ′ : 𝑎 𝐴𝑖 . 𝜄 𝑗 𝑥 ′
+
+⟩ ≡𝔠 ⟨𝜉𝑖 ⊲ 𝜏𝑖
+
+𝑖 ∈𝑝
+
+𝑖 ∈ [:𝑛]
+
+𝑖 ∈ [:𝑛],𝑗 ∈𝑝 ′
+
+}⟧). (𝜋𝑖 𝑥 𝑖 ∈𝑝 )
+
+}
+
+⟩ ⇝ 𝐹 𝑝 , 𝐹𝑠
+
+lift
+⊢ 𝜅 0 ⇝ 𝐾0
+
+Γ𝐶 ; Γ ⊢ 𝜌 0 ≡𝜇 𝜌 1 ⇝ 𝐹𝑝′ , 𝐹𝑠′
+Γ𝐶 ; Γ ⊢ 𝜌 0 : R𝜅0
+Γ𝐶 ; Γ, 𝑎 : 𝜅 0 ⊢ 𝜏 : 𝜅 1 ⇝ 𝐴
+′
+⊢ 𝜅 1 ⇝ 𝐾1
+𝐹𝑝 = Λ 𝑎 : 𝐾1 ↦→ ★. 𝐹𝑝′ [𝜆 𝑎 : 𝐾0 . 𝑎 ′ 𝐴]
+𝐹𝑠 = Λ 𝑎 ′ : 𝐾1 ↦→ ★. 𝐹𝑠′ [𝜆 𝑎 : 𝐾0 . 𝑎 ′ 𝐴]
+Γ𝐶 ; Γ ⊢ Lift (𝜆 𝑎 : 𝜅 0 . 𝜏) 𝜌 0 ≡𝜇 Lift (𝜆 𝑎 : 𝜅 0 . 𝜏) 𝜌 1 ⇝ 𝐹𝑝 , 𝐹𝑠
+
+liftL
+⊢ 𝜅1 ⇝ 𝐾
+
+Γ𝐶 ; Γ ⊢ Lift (𝜆 𝑎 : 𝜅 0 . 𝜏 ′ ) ⟨𝜉𝑖 ⊲ 𝜏𝑖 ⟩ : R𝜅1 ⇝ 𝐴
+𝐹𝑝 = Λ 𝑎 : 𝐾 ↦→ ★. 𝜆 𝑥 : ⊗ (𝑎 ′ ⟦𝐴⟧). 𝑥
+𝐹𝑠 = Λ 𝑎 ′ : 𝐾 ↦→ ★. 𝜆 𝑥 : ⊕ (𝑎 ′ ⟦𝐴⟧). 𝑥
+′
+
+Γ𝐶 ; Γ ⊢ Lift (𝜆 𝑎 : 𝜅 0 . 𝜏 ′ ) ⟨𝜉𝑖 ⊲ 𝜏𝑖 ⟩ ≡𝜇 ⟨𝜉𝑖 ⊲ 𝜏 ′ [𝜏𝑖 /𝑎]⟩ ⇝ 𝐹𝑝 , 𝐹𝑠
+liftR
+⊢ 𝜅1 ⇝ 𝐾
+
+Γ𝐶 ; Γ ⊢ Lift (𝜆 𝑎 : 𝜅 0 . 𝜏 ′ ) ⟨𝜉𝑖 ⊲ 𝜏𝑖 ⟩ : R𝜅1 ⇝ 𝐴
+𝐹𝑝 = Λ 𝑎 : 𝐾 ↦→ ★. 𝜆 𝑥 : ⊗ (𝑎 ′ ⟦𝐴⟧). 𝑥
+𝐹𝑠 = Λ 𝑎 ′ : 𝐾 ↦→ ★. 𝜆 𝑥 : ⊕ (𝑎 ′ ⟦𝐴⟧). 𝑥
+′
+
+Γ𝐶 ; Γ ⊢ ⟨𝜉𝑖 ⊲ 𝜏 ′ [𝜏𝑖 /𝑎]⟩ ≡𝜇 Lift (𝜆 𝑎 : 𝜅 0 . 𝜏 ′ ) ⟨𝜉𝑖 ⊲ 𝜏𝑖 ⟩ ⇝ 𝐹𝑝 , 𝐹𝑠
+Proc. ACM Program. Lang., Vol. 10, No. POPL, Article 20. Publication date: January 2026.
+
+Extensible Data Types with Ad-Hoc Polymorphism (Extended)
+
+20:35
+
+(Commutativity Partial Ordering)
+
+𝜇0 ⩽ 𝜇1
+refl
+
+N
+
+C
+
+𝜇⩽𝜇
+
+𝔫⩽𝜇
+
+𝜇 ⩽𝔠
+
+The final two judgements are specific to the simple row theory Ts . As mentioned in the paper, permutation
+is unconstrained for this row theory, so the trivial definition is omitted here.
+⊢ Ts 𝜉𝑖 ≜ unique(𝜉𝑖 )
+
+(Uniqueness)
+concrete
+𝑗 ∈ [𝑖+1:𝑛]
+
+ℓ𝑖 ≠ ℓ 𝑗
+
+unique(ℓ𝑖
+
+𝑖 ∈ [:𝑛]
+
+𝑖 ∈ [:𝑛]
+
+singleton
+)
+
+unique(𝜉)
+
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts 𝜓 ⇝ 𝐸
+
+(Constraint Solving And Elaboration)
+
+TCInst
+(∀ 𝑎𝑘 : 𝜅𝑘 . 𝜓 𝑗 ⇝ 𝑥 𝑗 ⇒𝑇𝐶 𝜏) ⇝ 𝐸; 𝐸𝑖′ ∈ Γ𝐼
+Γ𝐶 ; Γ ⊢ 𝜏𝑘′ : 𝜅𝑘 ⇝ 𝐵𝑘
+
+local
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts 𝜓 𝑗 [𝜏 ′𝑘 /𝑎𝑘 ] ⇝ 𝐹 𝑗
+𝜓 ⇝𝑥 ∈ Γ
+
+
+
+
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts 𝑇𝐶 𝜏 [𝜏 ′𝑘 /𝑎𝑘 ] ⇝ (𝐸 [𝐵𝑘 /𝑎𝑘 ] 𝐹 𝑗 /𝑥 𝑗 , 𝐸𝑖′ [𝐵𝑘 /𝑎𝑘 ] 𝐹 𝑗 /𝑥 𝑗 )
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts 𝜓 ⇝ 𝑥
+containTrans
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts 𝜌 0 <
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts 𝜌 1 <
+Γ𝐶 ; Γ ⊢ 𝜌 0 : R𝜅 ⇝ 𝐴0
+∼𝜇 𝜌 1 ⇝ 𝐸
+∼𝜇 𝜌 2 ⇝ 𝐹
+Γ𝐶 ; Γ ⊢ 𝜌 2 : R𝜅 ⇝ 𝐴2
+⊢𝜅 ⇝𝐾
+𝐸𝑝 = Λ 𝑎 : 𝐾 ↦→ ★. 𝜆 𝑥 : ⊗ (𝑎 ⟦𝐴2 ⟧). (𝜋0 𝐸) [𝑎] (𝜋 0 𝐹 ) [𝑎] 𝑥
+𝐸𝑖 = Λ 𝑎 : 𝐾 ↦→ ★. 𝜆 𝑥 : ⊕ (𝑎 ⟦𝐴0 ⟧). (𝜋1 𝐹 ) [𝑎] (𝜋 1 𝐸) [𝑎] 𝑥
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts 𝜌 0 <
+∼ 𝜇 𝜌 2 ⇝ (𝐸𝑝 , 𝐸𝑖 )
+containConcat
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts 𝜌 0 ⊙ 𝜇 𝜌 1 ∼ 𝜌 2 ⇝ 𝐸 2
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts 𝜌 3 ⊙ 𝜇 𝜌 4 ∼ 𝜌 5 ⇝ 𝐸 5
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts 𝜌 0 <
+∼ 𝜇 𝜌 3 ⇝ 𝐹𝑙
+𝜅
+𝜅
+𝜅
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts 𝜌 1 <
+𝜌
+⇝
+𝐹
+Γ
+;
+Γ
+⊢
+𝜌
+:
+R
+⇝
+𝐴
+Γ
+;
+Γ
+⊢
+𝜌
+:
+R
+⇝
+𝐴
+Γ
+;
+Γ
+⊢
+𝜌
+𝑟
+𝐶
+0
+0
+𝐶
+1
+1
+𝐶
+2 : R ⇝ 𝐴2
+∼𝜇 4
+𝜅
+′
+Γ𝐶 ; Γ ⊢ 𝜌 5 : R ⇝ 𝐴5
+⊢𝜅 ⇝𝐾
+𝐸𝑝 = ((𝜋0 𝐸 2 ) [𝑎] ((𝜋 0 𝐹𝑙 ) [𝑎] ((𝜋 0 𝜋2 𝐸 5 ) [𝑎] 𝑥)))
+𝐸𝑝 = Λ 𝑎 : 𝐾 ↦→ ★. 𝜆 𝑥 : ⊗ (𝑎 ⟦𝐴5 ⟧). 𝐸𝑝′ ((𝜋 0 𝐹𝑟 ) [𝑎] ((𝜋 0 𝜋3 𝐸 5 ) [𝑎] 𝑥))
+𝐸𝑖′ = ((𝜋1 𝐸 2 ) [𝑎] [⊕ (𝑎 ⟦𝐴5 ⟧)] (𝜆 𝑥 : ⊕ (𝑎 ⟦𝐴0 ⟧). (𝜋1 𝜋2 𝐸 5 ) [𝑎] ((𝜋 1 𝐹𝑙 ) [𝑎] 𝑥)))
+𝐸𝑖 = Λ 𝑎 : 𝐾 ↦→ ★. 𝐸𝑖′ (𝜆 𝑥 : ⊕ (𝑎 ⟦𝐴1 ⟧). (𝜋1 𝜋3 𝐸 5 ) [𝑎] ((𝜋 1 𝐹𝑟 ) [𝑎] 𝑥))
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts 𝜌 2 <
+∼ 𝜇 𝜌 5 ⇝ (𝐸𝑝 , 𝐸𝑖 )
+concatConcrete
+Γ𝐶 ; Γ ⊢ ⟨𝜉𝑖 ⊲ 𝜏𝑖
+Γ𝐶 ; Γ ⊢ ⟨𝜉𝑖 ⊲ 𝜏𝑖
+Γ𝐶 ; Γ ⊢ 𝜏 𝑗′ : 𝜅 ⇝ 𝐵 ′𝑗
+
+𝑖 ∈ [:𝑚]
+
+𝑗 ∈ [:𝑛]
+
+𝑖 ∈ [:𝑚]
+
+Γ𝐶 ; Γ ⊢ ⟨𝜉 ′𝑗 ⊲ 𝜏 𝑗′
+
+⟩ : R𝜅 ⇝ 𝐴0
+
+𝑗 ∈ [:𝑛]
+⟩ : R𝜅 ⇝ 𝐴2
+, 𝜉 ′𝑗 ⊲ 𝜏 𝑗′
+
+𝑗 ∈ [:𝑛]
+
+⊢𝜅 ⇝𝐾
+
+⟩ : R𝜅 ⇝ 𝐴1
+
+Γ𝐶 ; Γ ⊢ 𝜏𝑖 : 𝜅 ⇝ 𝐵𝑖
+
+𝑖 ∈ [:𝑚]
+
+𝐸𝑛 = Λ 𝑎 : 𝐾 ↦→ ★. 𝜆 𝑥𝑙 : ⊗ (𝑎 ⟦𝐴0 ⟧). 𝜆 𝑥𝑟 : ⊗ (𝑎 ⟦𝐴1 ⟧). (𝜋𝑖 𝑥𝑙 𝑖 ∈ [:𝑚] , 𝜋 𝑗 𝑥𝑟 𝑗 ∈ [:𝑛] )
+𝑖 ∈ [:𝑚]
+
+𝑗 ∈ [:𝑛]
+
+𝐸𝑒′ = case 𝑥 {𝜆 𝑥 : 𝑎 𝐵𝑖 . 𝑥𝑙 (𝜄𝑖 𝑥)
+, 𝜆 𝑥 : 𝑎 𝐵 ′𝑗 . 𝑥𝑟 (𝜄 𝑗 𝑥)
+}
+𝐸𝑒 = Λ 𝑎 : 𝐾 ↦→ ★. Λ 𝑎𝑡 : ★. 𝜆 𝑥𝑙 : (⊕ (𝑎 ⟦𝐴0 ⟧)) → 𝑎𝑡 . 𝜆 𝑥𝑟 : (⊕ (𝑎 ⟦𝐴1 ⟧)) → 𝑎𝑡 . 𝜆 𝑥 : ⊕ (𝑎 ⟦𝐴2 ⟧). 𝐸𝑒′
+𝐸𝑝𝑙 = Λ 𝑎 : 𝐾 ↦→ ★. 𝜆 𝑥 : ⊗ (𝑎 ⟦𝐴2 ⟧). (𝜋𝑖 𝑥 𝑖 ∈ [:𝑚] )
+𝑖 ∈ [:𝑚]
+
+𝐸𝑖𝑙 = Λ 𝑎 : 𝐾 ↦→ ★. 𝜆 𝑥 : ⊕ (𝑎 ⟦𝐴0 ⟧). case 𝑥 {𝜆 𝑥 : 𝑎 𝐵𝑖 . 𝜄𝑖 𝑥
+}
+𝐸𝑙 = (𝐸𝑝𝑙 , 𝐸𝑖𝑙 )
+𝐸𝑝𝑟 = Λ 𝑎 : 𝐾 ↦→ ★. 𝜆 𝑥 : ⊗ (𝑎 ⟦𝐴2 ⟧). (𝜋 (𝑚+𝑗 ) 𝑥 𝑗 ∈ [:𝑛] )
+𝐸𝑖𝑟 = Λ 𝑎 : 𝐾 ↦→ ★. 𝜆 𝑥 : ⊕ (𝑎 ⟦𝐴1 ⟧). case 𝑥 {𝜆 𝑥 : 𝑎 𝐵 ′𝑗 . 𝜄 (𝑚+𝑗 ) 𝑥
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts ⟨𝜉𝑖 ⊲ 𝜏𝑖
+
+𝑖 ∈ [:𝑚]
+
+𝑗 ∈ [:𝑛]
+
+}
+
+𝐸𝑟 = (𝐸𝑝𝑟 , 𝐸𝑖𝑟 )
+
+𝑗 ∈ [:𝑛]
+𝑖 ∈ [:𝑚] ′
+𝑗 ∈ [:𝑛]
+⟩ ⊙𝔫 ⟨𝜉 ′𝑗 ⊲ 𝜏 𝑗′
+⟩ ∼ ⟨𝜉𝑖 ⊲ 𝜏𝑖
+, 𝜉 𝑗 ⊲ 𝜏 𝑗′
+⟩ ⇝ (𝐸𝑛 , 𝐸𝑒 , 𝐸𝑙 , 𝐸𝑟 )
+
+Proc. ACM Program. Lang., Vol. 10, No. POPL, Article 20. Publication date: January 2026.
+
+20:36
+
+Matthew Toohey, Yanning Chen, Ara Jamalzadeh, and Ningning Xie
+
+concatEmptyL
+Γ𝐶 ; Γ ⊢ 𝜌 : R𝜅 ⇝ 𝐴
+⊢𝜅 ⇝𝐾
+𝐸𝑛 = Λ 𝑎 : 𝐾 ↦→ ★. 𝜆 𝑥𝑙 : ⊗ {}. 𝜆 𝑥𝑟 : ⊗ (𝑎 ⟦𝐴⟧). 𝑥𝑟
+𝐸𝑒 = Λ 𝑎 : 𝐾 ↦→ ★. Λ 𝑎𝑡 : ★. 𝜆 𝑥𝑙 : (⊕ {}) → 𝑎𝑡 . 𝜆 𝑥𝑟 : (⊕ (𝑎 ⟦𝐴⟧)) → 𝑎𝑡 . 𝑥𝑟
+𝐸𝑙 = (Λ 𝑎 : 𝐾 ↦→ ★. 𝜆 𝑥 : ⊗ (𝑎 ⟦𝐴⟧). (), Λ 𝑎 : 𝐾 ↦→ ★. 𝜆 𝑥 : ⊕ {}. case 𝑥 {})
+𝐸𝑟 = (Λ 𝑎 : 𝐾 ↦→ ★. 𝜆 𝑥 : ⊗ (𝑎 ⟦𝐴⟧). 𝑥, Λ 𝑎 : 𝐾 ↦→ ★. 𝜆 𝑥 : ⊕ (𝑎 ⟦𝐴⟧). 𝑥)
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts ⟨⟩ ⊙𝔫 𝜌 ∼ 𝜌 ⇝ (𝐸𝑛 , 𝐸𝑒 , 𝐸𝑙 , 𝐸𝑟 )
+concatEmptyR
+Γ𝐶 ; Γ ⊢ 𝜌 : R𝜅 ⇝ 𝐴
+⊢𝜅 ⇝𝐾
+𝐸𝑛 = Λ 𝑎 : 𝐾 ↦→ ★. 𝜆 𝑥𝑙 : ⊗ (𝑎 ⟦𝐴⟧). 𝜆 𝑥𝑟 : ⊗ {}. 𝑥𝑙
+𝐸𝑒 = Λ 𝑎 : 𝐾 ↦→ ★. Λ 𝑎𝑡 : ★. 𝜆 𝑥𝑙 : (⊕ (𝑎 ⟦𝐴⟧)) → 𝑎𝑡 . 𝜆 𝑥𝑟 : (⊕ {}) → 𝑎𝑡 . 𝑥𝑙
+𝐸𝑙 = (Λ 𝑎 : 𝐾 ↦→ ★. 𝜆 𝑥 : ⊗ (𝑎 ⟦𝐴⟧). 𝑥, Λ 𝑎 : 𝐾 ↦→ ★. 𝜆 𝑥 : ⊕ (𝑎 ⟦𝐴⟧). 𝑥)
+𝐸𝑟 = (Λ 𝑎 : 𝐾 ↦→ ★. 𝜆 𝑥 : ⊗ (𝑎 ⟦𝐴⟧). (), Λ 𝑎 : 𝐾 ↦→ ★. 𝜆 𝑥 : ⊕ {}. case 𝑥 {})
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts 𝜌 ⊙ 𝔫 ⟨⟩ ∼ 𝜌 ⇝ (𝐸𝑛 , 𝐸𝑒 , 𝐸𝑙 , 𝐸𝑟 )
+concatAssocL
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts 𝜌 0 ⊙ 𝜇 𝜌 1 ∼ 𝜌 3 ⇝ 𝐸 01
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts 𝜌 1 ⊙ 𝜇 𝜌 2 ∼ 𝜌 4 ⇝ 𝐸 12
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts 𝜌 0 ⊙ 𝜇 𝜌 4 ∼ 𝜌 5 ⇝ 𝐸 04
+Γ𝐶 ; Γ ⊢ 𝜌 0 : R𝜅 ⇝ 𝐴0
+Γ𝐶 ; Γ ⊢ 𝜌 1 : R𝜅 ⇝ 𝐴1
+Γ𝐶 ; Γ ⊢ 𝜌 2 : R𝜅 ⇝ 𝐴2
+Γ𝐶 ; Γ ⊢ 𝜌 3 : R𝜅 ⇝ 𝐴3
+Γ𝐶 ; Γ ⊢ 𝜌 5 : R𝜅 ⇝ 𝐴5
+⊢𝜅 ⇝𝐾
+𝐸𝑛𝑟 = ((𝜋0 𝐸 12 ) [𝑎] ((𝜋 0 𝜋 3 𝐸 01 ) [𝑎] 𝑥𝑙 )) 𝑥𝑟
+𝐸𝑛 = Λ 𝑎 : 𝐾 ↦→ ★. 𝜆 𝑥𝑙 : ⊗ (𝑎 ⟦𝐴3 ⟧). 𝜆 𝑥𝑟 : ⊗ (𝑎 ⟦𝐴2 ⟧). ((𝜋0 𝐸 04 ) [𝑎] ((𝜋 0 𝜋2 𝐸 01 ) [𝑎] 𝑥𝑙 )) 𝐸𝑛𝑟
+′
+𝐸𝑒𝑟
+= ((𝜋1 𝐸 12 ) [𝑎] [𝑎𝑡 ] (𝜆 𝑥 : ⊕ (𝑎 ⟦𝐴1 ⟧). 𝑥𝑙 ((𝜋 1 𝜋3 𝐸 01 ) [𝑎] 𝑥))) 𝑥𝑟
+′
+′
+𝐸𝑒 = ((𝜋1 𝐸 04 ) [𝑎] [𝑎𝑡 ] (𝜆 𝑥 : ⊕ (𝑎 ⟦𝐴0 ⟧). 𝑥𝑙 ((𝜋 1 𝜋2 𝐸 01 ) [𝑎] 𝑥))) 𝐸𝑒𝑟
+𝐸𝑒 = Λ 𝑎 : 𝐾 ↦→ ★. Λ 𝑎𝑡 : ★. 𝜆 𝑥𝑙 : (⊕ (𝑎 ⟦𝐴3 ⟧)) → 𝑎𝑡 . 𝜆 𝑥𝑟 : (⊕ (𝑎 ⟦𝐴2 ⟧)) → 𝑎𝑡 . 𝐸𝑒′
+𝐸𝑝𝑙 = Λ 𝑎 : 𝐾 ↦→ ★. 𝜆 𝑥 : ⊗ (𝑎 ⟦𝐴5 ⟧). ((𝜋0 𝐸 01 ) [𝑎] ((𝜋 0 𝜋2 𝐸 04 ) [𝑎] 𝑥)) ((𝜋 0 𝜋 2 𝐸 12 ) [𝑎] (𝜋 0 𝜋 3 𝐸 04 ) [𝑎] 𝑥)
+𝐸𝑖𝑙𝑟 = 𝜆 𝑥 ′ : ⊕ (𝑎 ⟦𝐴1 ⟧). (𝜋1 𝜋3 𝐸 04 ) [𝑎] ((𝜋 1 𝜋 2 𝐸 12 ) [𝑎] 𝑥 ′ )
+𝐸𝑖𝑙 = Λ 𝑎 : 𝐾 ↦→ ★. ((𝜋1 𝐸 01 ) [𝑎] [⊕ (𝑎 ⟦𝐴5 ⟧)] ((𝜋1 𝜋 2 𝐸 04 ) [𝑎])) 𝐸𝑖𝑙𝑟
+𝐸𝑙 = (𝐸𝑝𝑙 , 𝐸𝑖𝑙 )
+𝐸𝑝𝑟 = Λ 𝑎 : 𝐾 ↦→ ★. 𝜆 𝑥 : ⊗ (𝑎 ⟦𝐴5 ⟧). (𝜋0 𝜋 3 𝐸 12 ) [𝑎] (𝜋 0 𝜋 3 𝐸 04 ) [𝑎] 𝑥
+𝐸𝑖𝑟 = Λ 𝑎 : 𝐾 ↦→ ★. 𝜆 𝑥 : ⊕ (𝑎 ⟦𝐴2 ⟧). (𝜋1 𝜋 3 𝐸 04 ) [𝑎] (𝜋 1 𝜋3 𝐸 12 ) [𝑎] 𝑥
+𝐸𝑟 = (𝐸𝑝𝑟 , 𝐸𝑖𝑟 )
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts 𝜌 3 ⊙ 𝜇 𝜌 2 ∼ 𝜌 5 ⇝ (𝐸𝑛 , 𝐸𝑒 , 𝐸𝑙 , 𝐸𝑟 )
+concatAssocR
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts 𝜌 0 ⊙ 𝜇 𝜌 1 ∼ 𝜌 3 ⇝ 𝐸 01
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts 𝜌 1 ⊙ 𝜇 𝜌 2 ∼ 𝜌 4 ⇝ 𝐸 12
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts 𝜌 3 ⊙ 𝜇 𝜌 2 ∼ 𝜌 5 ⇝ 𝐸 32
+Γ𝐶 ; Γ ⊢ 𝜌 0 : R𝜅 ⇝ 𝐴0
+Γ𝐶 ; Γ ⊢ 𝜌 1 : R𝜅 ⇝ 𝐴1
+Γ𝐶 ; Γ ⊢ 𝜌 2 : R𝜅 ⇝ 𝐴2
+𝜅
+𝜅
+Γ𝐶 ; Γ ⊢ 𝜌 4 : R ⇝ 𝐴4
+Γ𝐶 ; Γ ⊢ 𝜌 5 : R ⇝ 𝐴5
+⊢𝜅 ⇝𝐾
+𝐸𝑛𝑙 = ((𝜋0 𝐸 01 ) [𝑎] 𝑥𝑙 ) ((𝜋0 𝜋2 𝐸 12 ) [𝑎] 𝑥𝑟 )
+𝐸𝑛 = Λ 𝑎 : 𝐾 ↦→ ★. 𝜆 𝑥𝑙 : ⊗ (𝑎 ⟦𝐴0 ⟧). 𝜆 𝑥𝑟 : ⊗ (𝑎 ⟦𝐴4 ⟧). ((𝜋0 𝐸 32 ) [𝑎] 𝐸𝑛𝑙 ) ((𝜋0 𝜋3 𝐸 12 ) [𝑎] 𝑥𝑟 )
+′
+𝐸𝑒𝑙
+= ((𝜋1 𝐸 01 ) [𝑎] [𝑎𝑡 ] 𝑥𝑙 ) (𝜆 𝑥 : ⊕ (𝑎 ⟦𝐴1 ⟧). 𝑥𝑟 ((𝜋 1 𝜋2 𝐸 12 ) [𝑎] 𝑥))
+′
+𝐸𝑒′ = ((𝜋1 𝐸 32 ) [𝑎] [𝑎𝑡 ] 𝐸𝑒𝑙
+) (𝜆 𝑥 : ⊕ (𝑎 ⟦𝐴2 ⟧). 𝑥𝑟 ((𝜋 1 𝜋 3 𝐸 12 ) [𝑎] 𝑥))
+𝐸𝑒 = Λ 𝑎 : 𝐾 ↦→ ★. Λ 𝑎𝑡 : ★. 𝜆 𝑥𝑙 : (⊕ (𝑎 ⟦𝐴0 ⟧)) → 𝑎𝑡 . 𝜆 𝑥𝑟 : (⊕ (𝑎 ⟦𝐴4 ⟧)) → 𝑎𝑡 . 𝐸𝑒′
+𝐸𝑙𝑝 = Λ 𝑎 : 𝐾 ↦→ ★. 𝜆 𝑥 : ⊗ (𝑎 ⟦𝐴5 ⟧). (𝜋0 𝜋 2 𝐸 01 ) [𝑎] (𝜋 0 𝜋 2 𝐸 32 ) [𝑎] 𝑥
+𝐸𝑙𝑖 = Λ 𝑎 : 𝐾 ↦→ ★. 𝜆 𝑥 : ⊕ (𝑎 ⟦𝐴0 ⟧). (𝜋1 𝜋2 𝐸 32 ) [𝑎] (𝜋 1 𝜋 2 𝐸 01 ) [𝑎] 𝑥
+𝐸𝑙 = (𝐸𝑙𝑝 , 𝐸𝑙𝑖 )
+𝐸𝑟𝑝 = Λ 𝑎 : 𝐾 ↦→ ★. 𝜆 𝑥 : ⊗ (𝑎 ⟦𝐴5 ⟧). ((𝜋0 𝐸 12 ) [𝑎] ((𝜋 0 𝜋3 𝐸 01 ) [𝑎] (𝜋 0 𝜋2 𝐸 32 ) [𝑎] 𝑥)) ((𝜋 0 𝜋 3 𝐸 32 ) [𝑎] 𝑥)
+𝐸𝑟𝑖𝑙 = 𝜆 𝑥 ′ : ⊕ (𝑎 ⟦𝐴1 ⟧). (𝜋1 𝜋2 𝐸 32 ) [𝑎] ((𝜋 1 𝜋3 𝐸 01 ) [𝑎] 𝑥 ′ )
+𝐸𝑟𝑖 = Λ 𝑎 : 𝐾 ↦→ ★. (((𝜋1 𝐸 12 ) [𝑎] [⊕ (𝑎 ⟦𝐴5 ⟧)] 𝐸𝑟𝑖𝑙 ) ((𝜋1 𝜋3 𝐸 32 ) [𝑎]))
+𝐸𝑟 = (𝐸𝑟𝑝 , 𝐸𝑟𝑖 )
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts 𝜌 0 ⊙ 𝜇 𝜌 4 ∼ 𝜌 5 ⇝ (𝐸𝑛 , 𝐸𝑒 , 𝐸𝑙 , 𝐸𝑟 )
+concatSwap
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts 𝜌 0 ⊙𝔠 𝜌 1 ∼ 𝜌 2 ⇝ 𝐸
+Γ𝐶 ; Γ ⊢ 𝜌 0 : R𝜅 ⇝ 𝐴0
+Γ𝐶 ; Γ ⊢ 𝜌 1 : R ⇝ 𝐴1
+⊢𝜅 ⇝𝐾
+𝐸𝑛 = Λ 𝑎 : 𝐾 ↦→ ★. 𝜆 𝑥𝑙 : ⊗ (𝑎 ⟦𝐴1 ⟧). 𝜆 𝑥𝑟 : ⊗ (𝑎 ⟦𝐴0 ⟧). ((𝜋0 𝐸) [𝑎] 𝑥𝑟 ) 𝑥𝑙
+𝐸𝑒 = Λ 𝑎 : 𝐾 ↦→ ★. Λ 𝑎𝑡 : ★. 𝜆 𝑥𝑙 : (⊕ (𝑎 ⟦𝐴1 ⟧)) → 𝑎𝑡 . 𝜆 𝑥𝑟 : (⊕ (𝑎 ⟦𝐴0 ⟧)) → 𝑎𝑡 . ((𝜋1 𝐸) [𝑎] [𝑎𝑡 ] 𝑥𝑟 ) 𝑥𝑙
+𝜅
+
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts 𝜌 1 ⊙𝔠 𝜌 0 ∼ 𝜌 2 ⇝ (𝐸𝑛 , 𝐸𝑒 , 𝜋3 𝐸, 𝜋2 𝐸)
+concatContainL
+concatContainR
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts 𝜌 0 ⊙ 𝜇 𝜌 1 ∼ 𝜌 2 ⇝ 𝐸
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts 𝜌 0 ⊙ 𝜇 𝜌 1 ∼ 𝜌 2 ⇝ 𝐸
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts 𝜌 0 <
+∼𝜇 𝜌 2 ⇝ 𝜋2 𝐸
+containDecay
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts 𝜌 0 <
+𝜇0 ⩽ 𝜇1
+Γ𝐶 ; Γ ⊢ 𝜇1 : U
+∼ 𝜇0 𝜌 1 ⇝ 𝐸
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts 𝜌 0 <
+∼𝜇 𝜌 1 ⇝ 𝐸
+1
+
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts 𝜌 1 <
+∼𝜇 𝜌 2 ⇝ 𝜋3 𝐸
+splitConcat
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts Split (𝜆 𝑎 : 𝜅. 𝜏) 𝜌 0 𝜌 1 𝜌 2 ⇝ 𝐸
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts (Lift (𝜆 𝑎 : 𝜅. 𝜏) 𝜌 0 ) ⊙𝔠 𝜌 1 ∼ 𝜌 2 ⇝ 𝐸
+
+Proc. ACM Program. Lang., Vol. 10, No. POPL, Article 20. Publication date: January 2026.
+
+Extensible Data Types with Ad-Hoc Polymorphism (Extended)
+
+concatDecay
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts 𝜌 0 ⊙ 𝜇0 𝜌 1 ∼ 𝜌 2 ⇝ 𝐸
+
+20:37
+
+Γ𝐶 ; Γ ⊢ 𝜇1 : U
+
+𝜇0 ⩽ 𝜇1
+
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts 𝜌 0 ⊙ 𝜇1 𝜌 1 ∼ 𝜌 2 ⇝ 𝐸
+liftContain
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts 𝜌 0 <
+Γ𝐶 ; Γ ⊢ 𝜌 0 : R𝜅0
+Γ𝐶 ; Γ, 𝑎 : 𝜅 0 ⊢ 𝜏 : 𝜅 1 ⇝ 𝐴
+⊢ 𝜅 0 ⇝ 𝐾0
+∼𝜇 𝜌 1 ⇝ 𝐸
+′
+⊢ 𝜅 1 ⇝ 𝐾1
+𝐸𝑝 = Λ 𝑎 : 𝐾1 ↦→ ★. (𝜋 0 𝐸) [𝜆 𝑎 : 𝐾0 . 𝑎 ′ 𝐴]
+𝐸𝑖 = Λ 𝑎 ′ : 𝐾1 ↦→ ★. (𝜋 1 𝐸) [𝜆 𝑎 : 𝐾0 . 𝑎 ′ 𝐴]
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts (Lift (𝜆 𝑎 : 𝜅 0 . 𝜏) 𝜌 0 ) <
+∼ 𝜇 (Lift (𝜆 𝑎 : 𝜅 0 . 𝜏) 𝜌 1 ) ⇝ (𝐸𝑝 , 𝐸𝑖 )
+liftConcat
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts 𝜌 0 ⊙ 𝜇 𝜌 1 ∼ 𝜌 2 ⇝ 𝐸
+Γ𝐶 ; Γ ⊢ 𝜌 0 : R𝜅0
+Γ𝐶 ; Γ, 𝑎 : 𝜅 0 ⊢ 𝜏 : 𝜅 1 ⇝ 𝐴
+⊢ 𝜅 0 ⇝ 𝐾0
+′
+⊢ 𝜅 1 ⇝ 𝐾1
+𝐸𝑛 = Λ 𝑎 : 𝐾1 ↦→ ★. (𝜋 0 𝐸) [𝜆 𝑎 : 𝐾0 . 𝑎 ′ 𝐴]
+𝐸𝑒 = Λ 𝑎 ′ : 𝐾1 ↦→ ★. (𝜋 1 𝐸) [𝜆 𝑎 : 𝐾0 . 𝑎 ′ 𝐴]
+𝐸𝑙 = (Λ 𝑎 ′ : 𝐾1 ↦→ ★. (𝜋 0 𝜋2 𝐸) [𝜆 𝑎 : 𝐾0 . 𝑎 ′ 𝐴], Λ 𝑎 ′ : 𝐾1 ↦→ ★. (𝜋 1 𝜋 2 𝐸) [𝜆 𝑎 : 𝐾0 . 𝑎 ′ 𝐴])
+𝐸𝑟 = (Λ 𝑎 ′ : 𝐾1 ↦→ ★. (𝜋 0 𝜋3 𝐸) [𝜆 𝑎 : 𝐾0 . 𝑎 ′ 𝐴], Λ 𝑎 ′ : 𝐾1 ↦→ ★. (𝜋 1 𝜋 3 𝐸) [𝜆 𝑎 : 𝐾0 . 𝑎 ′ 𝐴])
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts (Lift (𝜆 𝑎 : 𝜅 0 . 𝜏) 𝜌 0 ) ⊙ 𝜇 (Lift (𝜆 𝑎 : 𝜅 0 . 𝜏) 𝜌 1 ) ∼ (Lift (𝜆 𝑎 : 𝜅 0 . 𝜏) 𝜌 2 ) ⇝ (𝐸𝑛 , 𝐸𝑒 , 𝐸𝑙 , 𝐸𝑟 )
+TCSuper
+𝑗 ∈ [:𝑛]
+⇒𝑇𝐶 𝑎 : 𝜅) ↦→ 𝑚 : 𝜎 ⇝ 𝐴 ∈ Γ𝐶
+(𝑇𝐶 ′𝑗 𝑎 ⇝ 𝐴′𝑗
+allEmpty
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts 𝑇𝐶 𝜏 ⇝ 𝐸
+𝑖 ∈ [:𝑛]
+Γ𝐶 ; Γ, 𝑎 : 𝜅 ⊢𝜓 : C ⇝ 𝐴
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts 𝑇𝐶𝑖′ 𝜏 ⇝ 𝜋 (1+𝑖 ) 𝐸
+allSingletonIntro
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts 𝜓 [𝜏/𝑎] ⇝ 𝐸
+Γ𝐶 ; Γ, 𝑎 : 𝜅 ⊢𝜓 : C ⇝ 𝐴
+Γ𝐶 ; Γ ⊢ 𝜉 : L
+Γ𝐶 ; Γ ⊢ 𝜏 : 𝜅
+
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts All (𝜆 𝑎 : 𝜅. 𝜓 ) ⟨⟩ ⇝ ()
+allSingletonElim
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts All (𝜆 𝑎 : 𝜅. 𝜓 ) ⟨𝜉 ⊲ 𝜏⟩ ⇝ 𝐸
+
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts All (𝜆 𝑎 : 𝜅. 𝜓 ) ⟨𝜉 ⊲ 𝜏⟩ ⇝ (𝐸)
+allContain
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts 𝜌 0 <
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts All (𝜆 𝑎 : 𝜅. 𝜓 ) 𝜌 1 ⇝ 𝐸
+∼𝔠 𝜌 1 ⇝ 𝐹
+
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts 𝜓 [𝜏/𝑎] ⇝ 𝜋0 𝐸
+Γ𝐶 ; Γ, 𝑎 : 𝜅 ⊢𝜓 : C ⇝ 𝐴
+
+⊢𝜅 ⇝𝐾
+
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts All (𝜆 𝑎 : 𝜅. 𝜓 ) 𝜌 0 ⇝ (𝜋0 𝐹 ) [𝜆 𝑎 : 𝐾 . 𝐴] 𝐸
+allConcat
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts 𝜌 0 ⊙𝔠 𝜌 1 ∼ 𝜌 2 ⇝ 𝐹
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts All (𝜆 𝑎 : 𝜅. 𝜓 ) 𝜌 0 ⇝ 𝐸 0
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts All (𝜆 𝑎 : 𝜅. 𝜓 ) 𝜌 1 ⇝ 𝐸 1
+Γ𝐶 ; Γ, 𝑎 : 𝜅 ⊢𝜓 : C ⇝ 𝐴
+⊢𝜅 ⇝𝐾
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts All (𝜆 𝑎 : 𝜅. 𝜓 ) 𝜌 2 ⇝ ((𝜋0 𝐹 ) [𝜆 𝑎 : 𝐾 . 𝐴] 𝐸 0 ) 𝐸 1
+ind
+𝑖 ∈ [:𝑛]
+Γ𝐶 ; Γ ⊢ 𝜏𝑖 : 𝜅 ⇝ 𝐴𝑖
+⊢𝜅 ⇝𝐾
+Γ𝐶 ; Γ, 𝑎𝑙 : L, 𝑎𝑡 : 𝜅, 𝑎𝑝 𝑎𝑖 : R𝜅 ⊢ 𝑎𝑝 ⊙ 𝔫 ⟨𝑎𝑙 ⊲ 𝑎𝑡 ⟩ ∼ 𝑎𝑖 : C ⇝ 𝐵𝑙
+𝑖 ∈ [:𝑛]
+𝜅
+Γ𝐶 ; Γ, 𝑎𝑖 𝑎𝑛 : R ⊢ 𝑎𝑖 ⊙ 𝔫 𝑎𝑛 ∼ ⟨ℓ𝑖 ⊲ 𝜏𝑖
+⟩ : C ⇝ 𝐵𝑟
+𝐾
+𝐴𝑠 = ∀ 𝑎𝑙 : ★, 𝑎𝑡 : 𝐾, 𝑎𝑝 𝑎𝑖 𝑎𝑛 : L . 𝐵𝑙 → 𝐵𝑟 → (⊗ {}) → (𝑎𝑚 𝑎𝑝 ) → 𝑎𝑚 𝑎𝑖
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts ⟨ℓ 𝑗 ⊲ 𝜏 𝑗
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts ⟨ℓ 𝑗 ⊲ 𝜏 𝑗
+
+𝑗 ∈ [:𝑖 ]
+
+𝑗 ∈ [:𝑖+1]
+
+⟩ ⊙𝔫 ⟨ℓ𝑖 ⊲ 𝜏𝑖 ⟩ ∼ ⟨ℓ𝑘 ⊲ 𝜏𝑘
+
+⟩ ⊙𝔫 ⟨ℓ𝑘 ⊲ 𝜏𝑘
+
+𝑗 ∈ [:𝑖 ]
+
+𝑘 ∈ [𝑖+1:𝑛]
+
+𝑘 ∈ [:𝑖+1]
+
+⟩ ∼ ⟨ℓ𝑙 ⊲ 𝜏𝑙
+
+𝑘 ∈ [:𝑖+1]
+
+𝑖 ∈ [:𝑛]
+
+⟩ ⇝ 𝐸𝑖
+
+𝑙 ∈ [:𝑛]
+
+𝑖 ∈ [:𝑛]
+
+⟩ ⇝ 𝐸𝑖′
+
+𝑙 ∈ [𝑖+1:𝑛]
+
+𝑖 ∈ [:𝑛]
+
+𝐸 ′′ = ((𝑥𝑠 [⊗ {}] [𝐴𝑖 ] [{𝐴 𝑗
+}] [{𝐴𝑘
+}] [{𝐴𝑙
+}] 𝐸𝑖 ) 𝐸𝑖′ ) ()
+𝐹 = Λ 𝑎𝑚 : (L𝐾 ↦→ ★). 𝜆 𝑥𝑠 : 𝐴𝑠 . 𝜆 𝑥𝑖 : 𝑎𝑚 {}. 𝐸 ′′
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts Ind ⟨ℓ𝑖 ⊲ 𝜏𝑖
+
+𝑥𝑖
+
+𝑖 ∈ [:𝑛]
+
+⟩⇝𝐹
+splitEmpty
+′
+Γ𝐶 ; Γ, 𝑎 : 𝜅 ⊢ 𝜏 : ★ ⇝ 𝐴
+𝐸𝑛 = Λ 𝑎 : ★ ↦→ ★. 𝜆 𝑥𝑙 : ⊗ {}. 𝜆 𝑥𝑟 : ⊗ {}. ()
+𝐸𝑒 = Λ 𝑎 ′ : ★ ↦→ ★. Λ 𝑎𝑡 : ★. 𝜆 𝑥𝑙 : (⊕ {}) → 𝑎𝑡 . 𝜆 𝑥𝑟 : (⊕ {}) → 𝑎𝑡 . 𝑥𝑟
+𝐸𝑙𝑟 = (Λ 𝑎 ′ : ★ ↦→ ★. 𝜆 𝑥 : ⊗ {}. (), Λ 𝑎 ′ : ★ ↦→ ★. 𝜆 𝑥 : ⊕ {}. 𝑥)
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts Split (𝜆 𝑎 : 𝜅. 𝜏) ⟨⟩ ⟨⟩ ⟨⟩ ⇝ (𝐸𝑛 , 𝐸𝑒 , 𝐸𝑙𝑟 , 𝐸𝑙𝑟 )
+
+Proc. ACM Program. Lang., Vol. 10, No. POPL, Article 20. Publication date: January 2026.
+
+20:38
+
+Matthew Toohey, Yanning Chen, Ara Jamalzadeh, and Ningning Xie
+
+splitSingletonMatch
+Γ𝐶 ; Γ, 𝑎 : 𝜅 ⊢ 𝜏0 : ★ ⇝ 𝐴
+Γ𝐶 ; Γ ⊢ 𝜏1 : 𝜅 ⇝ 𝐵
+Γ𝐶 ; Γ ⊢ 𝜉 : L
+𝐸𝑛 = Λ 𝑎 ′ : ★ ↦→ ★. 𝜆 𝑥𝑙 : ⊗ {𝑎 ′ 𝐴 [𝐵/𝑎] }. 𝜆 𝑥𝑟 : ⊗ {}. 𝑥𝑙
+′
+𝐸𝑒 = Λ 𝑎 : ★ ↦→ ★. Λ 𝑎𝑡 : ★. 𝜆 𝑥𝑙 : (⊕ {𝑎 ′ 𝐴 [𝐵/𝑎] }) → 𝑎𝑡 . 𝜆 𝑥𝑟 : (⊕ {}) → 𝑎𝑡 . 𝑥𝑙
+𝐸𝑙 = (Λ 𝑎 ′ : ★ ↦→ ★. 𝜆 𝑥 : ⊗ {𝑎 ′ 𝐴 [𝐵/𝑎] }. 𝑥, Λ 𝑎 ′ : ★ ↦→ ★. 𝜆 𝑥 : ⊕ {𝑎 ′ 𝐴 [𝐵/𝑎] }. 𝑥)
+𝐸𝑟 = (Λ 𝑎 ′ : ★ ↦→ ★. 𝜆 𝑥 : ⊗ {𝑎 ′ 𝐴 [𝐵/𝑎] }. (), Λ 𝑎 ′ : ★ ↦→ ★. 𝜆 𝑥 : ⊕ {}. case 𝑥 {})
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts Split (𝜆 𝑎 : 𝜅. 𝜏0 ) ⟨𝜉 ⊲ 𝜏1 ⟩ ⟨⟩ ⟨𝜉 ⊲ 𝜏0 [𝜏1 /𝑎] ⟩ ⇝ (𝐸𝑛 , 𝐸𝑒 , 𝐸𝑙 , 𝐸𝑟 )
+splitSingletonRest
+∄ 𝜏2, 𝐹, Γ𝐶 ; Γ ⊢ 𝜏1 <: 𝜏0 [𝜏2 /𝑎] ⇝ 𝐹
+Γ𝐶 ; Γ, 𝑎 : 𝜅 ⊢ 𝜏0 : ★ ⇝ 𝐴
+Γ𝐶 ; Γ ⊢ 𝜏1 : ★ ⇝ 𝐵
+Γ𝐶 ; Γ ⊢ 𝜉 : L
+𝐸𝑛 = Λ 𝑎 ′ : ★ ↦→ ★. 𝜆 𝑥𝑙 : ⊗ {}. 𝜆 𝑥𝑟 : ⊗ {𝑎 ′ 𝐵}. 𝑥𝑟
+𝐸𝑒 = Λ 𝑎 ′ : ★ ↦→ ★. Λ 𝑎𝑡 : ★. 𝜆 𝑥𝑙 : (⊕ {}) → 𝑎𝑡 . 𝜆 𝑥𝑟 : (⊕ {𝑎 ′ 𝐵}) → 𝑎𝑡 . 𝑥𝑟
+𝐸𝑙 = (Λ 𝑎 ′ : ★ ↦→ ★. 𝜆 𝑥 : ⊗ {𝑎 ′ 𝐵}. (), Λ 𝑎 ′ : ★ ↦→ ★. 𝜆 𝑥 : ⊕ {}. case 𝑥 {})
+𝐸𝑟 = (Λ 𝑎 ′ : ★ ↦→ ★. 𝜆 𝑥 : ⊗ {𝑎 ′ 𝐵}. 𝑥, Λ 𝑎 ′ : ★ ↦→ ★. 𝜆 𝑥 : ⊕ {𝑎 ′ 𝐵}. 𝑥)
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts Split (𝜆 𝑎 : 𝜅. 𝜏0 ) ⟨⟩ ⟨𝜉 ⊲ 𝜏1 ⟩ ⟨𝜉 ⊲ 𝜏1 ⟩ ⇝ (𝐸𝑛 , 𝐸𝑒 , 𝐸𝑙 , 𝐸𝑟 )
+splitPiecewise
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts Split (𝜆 𝑎 : 𝜅. 𝜏) 𝜌 0 𝜌 1 𝜌 2
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts Split (𝜆 𝑎 : 𝜅. 𝜏) 𝜌 3 𝜌 4 𝜌 5
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts (Lift (𝜆 𝑎 : 𝜅. 𝜏) 𝜌 0 ) ⊙𝔠 (Lift (𝜆 𝑎 : 𝜅. 𝜏) 𝜌 3 ) ∼ (Lift (𝜆 𝑎 : 𝜅. 𝜏) 𝜌 6 )
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts 𝜌 1 ⊙𝔠 𝜌 4 ∼ 𝜌 7
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts 𝜌 2 ⊙𝔠 𝜌 5 ∼ 𝜌 8
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts (Lift (𝜆 𝑎 : 𝜅. 𝜏) 𝜌 6 ) ⊙𝔠 𝜌 7 ∼ 𝜌 8 ⇝ 𝐸
+Γ𝐼 ; Γ𝐶 ; Γ ⊨ Ts Split (𝜆 𝑎 : 𝜅. 𝜏) 𝜌 6 𝜌 7 𝜌 8 ⇝ 𝐸
+
+Received 2025-07-10; accepted 2025-11-06
+
+Proc. ACM Program. Lang., Vol. 10, No. POPL, Article 20. Publication date: January 2026.
+
+

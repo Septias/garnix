@@ -1,0 +1,1408 @@
+Refined Criteria for Gradual Typing∗
+Jeremy G. Siek1 , Michael M. Vitousek1 , Matteo Cimini1 , and
+John Tang Boyland2
+1
+
+Indiana University – Bloomington, School of Informatics and Computing
+150 S. Woodlawn Ave. Bloomington, IN 47405, USA
+jsiek@indiana.edu
+University of Wisconsin – Milwaukee, Department of EECS
+PO Box 784, Milwaukee WI 53201, USA
+boyland@cs.uwm.edu
+
+2
+
+Abstract
+Siek and Taha [2006] coined the term gradual typing to describe a theory for integrating static
+and dynamic typing within a single language that 1) puts the programmer in control of which
+regions of code are statically or dynamically typed and 2) enables the gradual evolution of code
+between the two typing disciplines. Since 2006, the term gradual typing has become quite popular
+but its meaning has become diluted to encompass anything related to the integration of static
+and dynamic typing. This dilution is partly the fault of the original paper, which provided an
+incomplete formal characterization of what it means to be gradually typed. In this paper we
+draw a crisp line in the sand that includes a new formal property, named the gradual guarantee,
+that relates the behavior of programs that differ only with respect to their type annotations. We
+argue that the gradual guarantee provides important guidance for designers of gradually typed
+languages. We survey the gradual typing literature, critiquing designs in light of the gradual
+guarantee. We also report on a mechanized proof that the gradual guarantee holds for the
+Gradually Typed Lambda Calculus.
+1998 ACM Subject Classification F.3.3 Studies of Program Constructs – Type structure
+Keywords and phrases gradual typing, type systems, semantics, dynamic languages
+Digital Object Identifier 10.4230/LIPIcs.SNAPL.2015.274
+
+1
+
+Introduction
+
+Statically and dynamically typed languages have complementary strengths. Static typing
+guarantees the absence of type errors, facilitates the generation of efficient code, and provides
+machine-checked documentation. On the other hand, dynamic typing enables rapid prototyping, flexible programming idioms, and fast adaptation to changing requirements. The theory
+of gradual typing provides both of these typing disciplines within a single language, puts the
+programmer in control of which discipline is used for each region of code, provides seamless
+interoperability, and enables the convenient evolution of code between the two disciplines.
+Gradual typing touches both the static type system and the dynamic semantics of a language.
+The key innovation in the static type system is the consistency relation on types, which
+allows implicit casts to and from the unknown type, here written ?, while still catching static
+type errors [5, 50, 27].1 The dynamic semantics for gradual typing is based on the semantics
+
+∗
+1
+
+This work was partially supported by NSF grant 1360694.
+The consistency relation is also known as compatibility.
+
+© Jeremy Siek, Michael Vitousek, Matteo Cimini, John Tang Boyland;
+licensed under Creative Commons License CC-BY
+1st Summit on Advances in Programming Languages (SNAPL’15).
+Eds.: Thomas Ball, Rastislav Bodík, Shriram Krishnamurthi, Benjamin S. Lerner, and Greg Morrisett; pp. 274–293
+Leibniz International Proceedings in Informatics
+Schloss Dagstuhl – Leibniz-Zentrum für Informatik, Dagstuhl Publishing, Germany
+
+J. G. Siek, M. M. Vitousek, M. Cimini, and J. T. Boyland
+
+275
+
+of contracts [19, 24], coercions [33], and interlanguage migration [62, 40]. Because of the
+shared mechanisms with these other lines of research, much of the ongoing research benefits
+the theory of gradual typing, and vice versa [28, 39, 26, 16, 56, 15, 17, 25].
+Gradual typing has a syntactic similarity to type inference [42], which also supports
+optional type annotations. However, type inference differs from gradual typing in that it
+requires static type checking for the whole program. However, there are many other lines of
+research that seek to integrate static and dynamic typing, listed below.
+1. Dynamic & Typecase extends statically typed languages with a type, often named Dynamic
+or Any, together with explicit forms for injecting and projecting values into and out of
+the Dynamic type [38, 1, 12].
+2. Object-Oriented Languages extend statically typed languages with a type, often called
+Object, with implicit conversions into Object and explicit conversions out of Object [23, 37].
+3. Soft Typing applies static analysis to dynamically typed programs for the purposes of
+optimization [13] and debugging [21].
+4. Type Hints in dynamically typed languages enable type specialization in optimizing
+compilers, such as in Lisp [55] and Dylan [47].
+5. Types for Dynamic Languages design static type systems for dynamically typed languages,
+such as StrongTalk [10] and Typed Racket [63].
+While these lines of research share the broad goal of integrating statically and dynamically
+typed languages, they address goals different from those associated with gradual typing.
+To a large degree, the practice of gradual typing preceded the theory. A number of
+languages provided a combination of static and dynamic type checking, with implicit casts
+to and from the unknown type. These languages included Cecil [14], Visual Basic.NET [41],
+Bigloo [46], and ProfessorJ [24]. The theory of gradual typing provides a foundation for
+these languages. Thatte’s earlier theory of Quasi-static Typing [60] almost meets the goals
+of gradual typing, but it does not statically catch all type errors in completely annotated
+programs. (See Siek and Taha [50] for an in-depth discussion.)
+Over the last decade there has been significant interest, both in academia and industry,
+in the integration of static and dynamic typing. On the industry side, there is Dart [59],
+TypeScript [32, 6], Hack [65], and the addition of Dynamic to C# [31]. On the academic side,
+there is a growing body of research [34, 51, 30, 40, 49, 67, 8, 54, 69, 68, 2, 18, 36, 44, 58, 3,
+66, 61, 57, 45, 4, 9, 6, 22, 53]. The term gradual typing is often used to describe language
+designs that integrate static and dynamic typing. However, some of these designs do not
+satisfy the original intent of gradual typing because they do not support the convenient
+evolution of code between the two typing disciplines. This goal was implicit in the original
+paper; it did not include a formal property that captures convenient evolution. To this end,
+we offer a new criterion in this paper, the gradual guarantee, that relates the behavior of
+programs that differ only with respect to the precision of their type annotations.
+In Section 2 we discuss several example programs that demonstrate gradual typing and
+motivate the need for the gradual guarantee. We review the semantics of the Gradually
+Typed Lambda Calculus (GTLC) (Section 3) and then state the formal criteria for gradually
+typed languages, including the gradual guarantee (Section 4). In Section 5 we survey some
+of the gradual typing literature, critiquing designs in light of the gradual guarantee. The
+last section before the conclusion reports on a mechanized proof that the GTLC satisfies the
+gradual guarantee (Section 6).
+
+SNAPL 2015
+
+276
+
+Refined Criteria for Gradual Typing
+
+2
+
+Examples of Gradual Typing
+
+In this section, we highlight the goals of gradual typing by way of several examples and
+motivate the need for the gradual guarantee. The examples are written in Reticulated Python,
+a gradually typed variant of Python [66] using the syntax for type annotations specified in
+PEP 484 [29]. For example, a function type T1 → T2 is written Callable[[T1 ],T2 ].
+
+2.1
+
+Gradual Typing Includes Both Fully Static and Fully Dynamic
+
+The first goal of gradual typing is to provide both fully static type checking and fully dynamic
+type checking. In other words, a gradually typed language can be thought of being a superset
+of two other languages, a fully static one and a fully dynamic one. For example, the GTLC
+is, roughly speaking, a superset of both the Simply Typed Lambda Calculus (STLC) and the
+(Dynamically Typed) Lambda Calculus (DTLC). We say that a program is fully annotated
+if all variables have type annotations and if the type ? does not occur in any of the type
+annotations. A fully annotated program of the GTLC should behave the same as in the
+STLC, and a program without type annotations should behave the same as in the DTLC.
+An important aspect of a program’s behavior that we take into account is the error cases, of
+which there are several varieties: 1) a program may fail to type check, 2) a program may
+encounter a runtime error and the language definition requires that the program halt or raise
+an exception, i.e., a trapped error [11]) and 3) a program may encounter a runtime error that
+the language definition says nothing about, i.e., an untrapped error. The STLC, GTLC, and
+even DTLC are all strongly typed so they are free of untrapped errors. Furthermore, the
+STLC is free of trapped errors and so is the GTLC on fully annotated programs.
+Consider the examples in Figure 1. The gcd1a and gcd1b functions at the top have
+no type annotations whereas gcd3a and gcd3b at the bottom are fully annotated. The
+un-annotated versions should behave just like they would in Python. Indeed, with gcd1a ,
+the call gcd(15, 9) returns (3,-1,2). Can you spot the error in gcd1b ? The second return
+statement is returning a pair instead of a 3-tuple. But that error is not caught statically
+because the programmer has asked for dynamic checking. Turning to the fully annotated
+versions gcd3a and gcd3b , they should behave just as they would in some hypothetical
+statically typed variant of Python. Indeed, with gcd3a , the call gcd(15, 9) returns (3,-1,2)
+and furthermore, the gradual type system guarantees that gcd3a is free of runtime type
+errors. On the other hand, with gcd3b , a static error is reported to indicate that returning a
+pair conflicts with the return type Tuple[int,int,int].
+
+2.2
+
+Gradual Typing Provides Sound Interoperability
+
+With gradual typing, fully static programs behave the same as if they were written in a
+statically typed programming language. As a result, they are guaranteed not to encounter
+type errors at runtime. But what about partially typed programs?
+Consider the following algorithm for computing the modular inverse. We have not
+annotated the parameters of modinv, so it is dynamically typed, but suppose it calls the
+statically typed gcd3b . What happens if someone forgets a conversion and passes a string as
+parameter m of modinv?
+def modinv(a, m):
+(g, x, y) = gcd(a, m)
+if g != 1: raise Exception()
+else: return x % m
+
+J. G. Siek, M. M. Vitousek, M. Cimini, and J. T. Boyland
+
+gcd1a
+def gcd(a, b):
+if a == 0:
+return (b, 0, 1)
+else:
+(g, y, x) = gcd(b % a, a)
+return (g, x - (b // a) * y, y)
+
+gcd3a
+def gcd(a:int, b:int)
+-> Tuple[int,int,int]:
+if a == 0:
+return (b, 0, 1)
+else:
+(g, y, x) = gcd(b % a, a)
+return (g, x - (b // a) * y, y)
+
+277
+
+gcd1b
+def gcd(a, b):
+if a == 0:
+return (b, 0, 1)
+else:
+(g, y, x) = gcd(b % a, a)
+return (g, x - (b // a) * y)
+
+gcd3b
+def gcd(a:int, b:int)
+-> Tuple[int,int,int]:
+if a == 0:
+return (b, 0, 1)
+else:
+(g, y, x) = gcd(b % a, a)
+return (g, x - (b // a) * y)
+
+Figure 1 Static and dynamic variants of the extended greatest-common divisor algorithm.
+
+Does the string flow into the gcd function and trigger a runtime error in the expression b % a?
+That would be unfortunate, because gcd is statically typed and one would hope that gcd is
+guaranteed to be free of runtime errors, of both the trapped and untrapped variety. Further,
+there would be a string masquerading as an integer and programmers would not be able to
+trust their type annotations. With gradual typing, the runtime system protects the static
+typing assumptions by casting values as they flow between statically and dynamically typed
+code. So in this example, there is a cast error in modinv just before the call to gcd. In fact,
+gradual typing ensures that statically typed regions of code are free of runtime type errors.
+Next let us consider the following fully annotated version of modinv with a call to the
+dynamically typed gcd1a . Because this function refers to a variable (gcd) that is dynamic,
+this function is only partially typed.
+def modinv(a : int, m : int):
+(g, x, y) = gcd(a, m)
+if g != 1: raise Exception()
+else: return x % m
+
+However, one would like to understand which parts of modinv are safe versus which parts
+might result in a runtime type error. We accomplish this by analyzing the implicit casts in
+modinv. In the call gcd(a,m), the arguments are cast from int to Any. In general, gradual
+typing guarantees that upcasts like these are safe. (We define upcast in terms of subtyping
+in Section 4.2.) On the other hand, the return type of gcd1a is unspecified, so it defaults to
+Any. Thus, the assignment to the tuple (g, x, y) requires a downcast, which is unsafe. One
+thing worth noting is that some partially typed code can be completely safe. For example, if
+we changed gcd1a to have return type Tuple[int,int,int] (but leave the parameter types
+unspecified), then the modinv function would be safe because the only implicit casts would be
+the upcasts on the arguments in the call to gcd. We envision that IDE’s for gradually typed
+languages will provide feedback to programmers, identifying the locations of unsafe casts.
+
+SNAPL 2015
+
+278
+
+Refined Criteria for Gradual Typing
+
+Next we consider the situation in which a dynamically typed function is used as a callback
+inside a statically typed function. In the following we compute the derivative of a function
+fun at two different points. However, there is an error during the second call to deriv because
+fun returns the None value when the input is not positive.
+def deriv(d: float, f: Callable[[float],float], x: float) -> float:
+return (f(x + d) - f(x - d)) / (2.0 * d)
+def fun(y):
+if y > 0: return y ** 3 - y - 1
+deriv(0.01, fun, 3.0)
+deriv(0.01, fun, -3.0)
+
+As described above, gradual typing performs runtime casts to ensure that values are consistent
+with their static types. Here the cast needs to check that fun has type Callable[[float],
+float]. However, determining the return type of an arbitrary dynamically typed function is
+undecidable. (The halting problem reduces to this problem.) Instead, gradual typing draws
+on research for contracts [19] and delays the checking until the function is called. Thus, a
+cast error occurs inside deriv when parameter f is applied to a negative number.
+If this were the end of the story, it would be unfortunate; as we stated above, statically
+typed code should be free of runtime type errors. In this example, the code that called
+deriv is at fault but the error occurs inside deriv. However, thanks to the blame tracking
+technique of Findler and Felleisen [19], the cast error can point back to the call to deriv
+and explain that fun violated the expected type of Callable[[float],float] returning None.
+Thus, in general, the soundness guarantee for gradual typing is stated in terms of blame:
+upcasts never result in blame, only downcasts or cross-casts.
+
+2.3
+
+Gradual Typing Enables Gradual Evolution
+
+So far we demonstrated how gradual typing subsumes static and dynamic typing and provides
+sound interoperability between the two, but we have not demonstrated the gradual part of
+gradual typing. That is, programmers should be able to add or remove type annotations
+without any unexpected impacts on their program, such as whether it still typechecks and
+whether its runtime behavior remains the same. In Figure 2 we show several points in the
+evolution of the gcd function with respect to dynamic versus static typing. These versions of
+the gcd function have bodies identical to gcd3a ; they only differ in their type annotations.
+One might naively want all of the versions in Figure 2 to have exactly the same behavior
+with respect to type checking and execution. However, gcd3c has the wrong annotation,
+with a return type of Tuple[int,int]. To ensure type soundness, a gradual type system
+must reject this program as ill typed. Thus, when a programmer adds annotations, they can
+sometimes trigger a static type error. Similarly, adding the wrong annotation can sometimes
+trigger a runtime error, which is good because it make sure that annotations stay consistent
+with the code. For example, when using gcd2a (whose second parameter has unknown type),
+adding str as the annotation for the m parameter of modinv, as shown below, does not trigger
+a static error, but it does trigger a cast error at the recursive call to gcd.
+def modinv(a, m : str):
+(g, x, y) = gcd(a, m)
+...
+modinv(3, ’hi %s’)
+
+J. G. Siek, M. M. Vitousek, M. Cimini, and J. T. Boyland
+
+279
+
+gcd1a
+def gcd(a, b): ...
+
+gcd2a
+def gcd(a:int, b): ...
+
+gcd3a
+def gcd(a:int, b:int)
+-> Tuple[int,int,int]:
+if a == 0: return (b, 0, 1)
+else:
+(g, y, x) = gcd(b % a, a)
+return (g, x - (b // a) * y, y)
+
+gcd2b
+def gcd(a, b:int): ...
+
+gcd3c
+def gcd(a:int, b:int)->Tuple[int,int]:
+...
+
+Figure 2 Evolutions of the extended greatest-common divisor algorithm.
+
+What about the reverse? What does removing type annotations do to the behavior of a
+gradually typed program? The gradual guarantee says that if a gradually typed program is
+well typed, then removing type annotations always produces a program that is still well typed.
+Further, if a gradually typed program evaluates to a value, then removing type annotations
+always produces a program that evaluates to an equivalent value.
+One of the primary use cases for gradual typing is to enable the evolution of programs
+from untyped to typed. Thus, one might be disappointed that the graduate guarantee is not
+as strong when moving in that direction. However, the gradual guarantee has more to say
+about this direction: a program remains well typed so long as only correct type annotations
+are added. We take correct to mean that the annotation agrees with the corresponding
+annotation in some fully annotated and well-typed version of the program. With this
+definition, one can apply the gradual guarantee to show that the program of interest remains
+well typed with the addition of correct type annotations.
+
+3
+
+The Gradually Typed Lambda Calculus
+
+Here we review the GTLC [50] (Figure 3), which extends the STLC with the unknown type
+? and un-annotated functions. The blame labels ` represent source position information
+from the parser, so blame labels are unique. The typing rules for constants, variables, and
+functions are the same as in the STLC. The two key aspects of the GTLC type system
+can be seen in the rule for application. First, the consistency relation, written T1 ∼ T2 , is
+used in GTLC where the STLC would check for type equality. The consistency relation
+is more liberal when it comes to the unknown type: it relates any type to the unknown
+type. For example, consistency is responsible for the the call gcd(15, 9), with version gcd1a ,
+being well typed. The argument types are int, the parameter types are ?, and int ∼ ?.
+The consistency relation is responsible for rejecting gcd(32, true), with gcd3a , because
+bool 6∼ int. In contrast to subtyping, consistency is symmetric but not transitive. Gradual
+typing can be added to object-oriented languages by combining subtyping and consistency in
+a principled fashion [51, 6]. Another important aspect of the GTLC is the metafunction fun.
+The GTLC allows a term in function position to be of type T1 → T2 or of type ?. The fun
+metafunction extracts the domain and codomain type, treating ? as if it were ? → ? [22].
+
+SNAPL 2015
+
+280
+
+Refined Criteria for Gradual Typing
+
+Blame labels `
+Base types B
+Types
+T
+
+::= int | bool
+::= B | T → T | ?
+
+Constants k
+Expressions e
+
+::=
+::=
+
+true | 0 | inc | · · ·
+k | x | λx:T. e | (e e)`
+λx. e ≡ λx: ? . e
+T ∼T
+
+Consistency
+?∼T
+
+T ∼?
+
+B∼B
+
+Γ`e:T
+
+Expression Typing
+
+...
+
+T1 ∼ T3
+T2 ∼ T4
+T1 → T2 ∼ T3 → T4
+
+Γ ` e1 : T1
+Γ ` e2 : T2
+fun(T1 ) = T11 →T12
+T2 ∼ T11
+Γ ` (e1 e2 )` : T12
+
+Dynamic Semantics: e ⇓ r ≡ ∅ ` e
+
+Function Matching
+
+fun(T ) = T → T
+
+fun(T11 → T12 ) = T11 → T12
+fun(?) = ? → ?
+
+f : T and f 7−→∗ r for some f and T.
+
+Figure 3 The Gradually Typed Lambda Calculus (GTLC).
+
+The dynamic semantics of the GTLC is defined by translation into an internal cast
+calculus much like the Blame Calculus [67]. The internal cast calculus extends the STLC
+with the unknown type ? but it replaces the implicit casts of the GTLC with explicit casts.
+The cast calculus and translation is defined in Figure 4. The cast expression has the form
+f : T ⇒` T , which enables a left-to-right reading. We abbreviate a sequence of two casts
+(e : T1 ⇒`1 T2 ) : T2 ⇒`2 T3 as follows to avoid repetition: e : T1 ⇒`1 T2 ⇒`2 T3 . The
+translation from the GTLC to the cast calculus is defined by the judgment Γ ` e
+f : T.
+Again, application is the interesting case. We insert a cast on the expression in function
+position to make sure it has type T1 → T2 and we insert a cast around the argument to make
+sure it has type T1 . Each inserted cast corresponds to the use of fun or ∼ in the type system.
+The dynamic semantics of the cast calculus is given in Figure 4. The first things to note
+are the two value forms specific to casts. A value enclosed in a cast between two function
+types is itself a value, which we call a wrapped function. A value that is cast from a ground
+type G to ? is also a value, which we call an injection. Ground types include only base types
+and the function type ? → ?.2
+Now we turn to the reduction rules for casts. Identity casts on base types and ? are
+discarded (rule IdBase and IdStar). When an injection (a cast from a ground type to ?)
+meets a projection (a cast from ? to a ground type) then either the ground types are equal
+and the casts are discarded (rule Succeed) or the ground types differ and the program
+halts and assigns blame (rule Fail). A cast to or from ? that involves a non-ground type is
+decomposed into two casts with a ground type in the middle (rules Ground and Expand).
+The Ground rule is necessary to ensure that injections are restricted to ground types. The
+Expand rule is not strictly necessary but allows Succeed and Fail to focus on ground type.
+Perhaps the most interesting rule concerns casts between function types (rule AppCast).
+Recall the example in Section 2.2 in which the function fun of type ? → ? is passed to deriv
+at type float → float and applied to 3.01. The cast from ? → ? to float → float applied
+to fun is a value. The application of a wrapped function breaks the cast into two parts: a
+
+2
+
+Restricting injections to ground types gives the UD semantics [49, 67]. To instead obtain the D semantics,
+this restriction can be lifted [49].
+
+J. G. Siek, M. M. Vitousek, M. Cimini, and J. T. Boyland
+
+Ground Types G
+Expressions
+f
+Values
+v
+Results
+r
+Frames
+F
+
+281
+
+::= B | ?→?
+::= k | x | λx:T. f | f f | f : T ⇒` T | blameT `
+::= k | λx:T. f | v : T1 →T2 ⇒` T3 →T4 | v : G ⇒` ?
+::= v | blameT `
+::=  f | v  |  : T1 ⇒` T2
+Γ `C f : T
+
+Expression Typing
+Γ `C f : T1
+T1 ∼ T2
+`
+Γ `C (f : T1 ⇒ T2 ) : T2
+
+...
+
+Γ `C blameT ` : T
+Γ`e
+
+Cast Insertion
+
+...
+
+f :T
+
+Γ ` e1
+f1 : T1
+Γ ` e2
+f2 : T2
+fun(T1 ) = T11 → T12
+T2 ∼ T11
+Γ ` (e1 e2 )`
+
+(f1 : T1 ⇒` T11 →T12 ) (f2 : T2 ⇒` T11 ) : T12
+f 7−→ f
+
+Dynamic Semantics
+(λx:T. f ) v 7−→ [x := v]f
+
+(Beta)
+
+`
+
+v : B ⇒ B 7−→ v
+
+(IdBase)
+
+`
+
+(IdStar)
+
+v : ? ⇒ ? 7−→ v
+`1
+
+?⇒
+
+`2
+
+`2
+
+v:G⇒
+v : G1 ⇒
+
+?⇒
+
+`2
+
+G 7−→ v
+
+(Succeed)
+
+G2 7−→ blameG2 `2
+
+if G1 6= G2
+
+`
+
+`
+
+`
+
+(v1 : T1 →T2 ⇒ T3 →T4 ) v2 7−→ v1 (v2 : T3 ⇒ T1 ) : T2 ⇒ T4
+
+(Fail)
+(AppCast)
+
+`
+
+`
+
+`
+
+if T 6= ?, T 6= G, T ∼ G
+
+(Ground)
+
+`
+
+`
+
+`
+
+if T 6= ?, T 6= G, T ∼ G
+
+(Expand)
+
+v : T ⇒ ? 7−→ v : T ⇒ G ⇒ ?
+v : ? ⇒ T 7−→ v : ? ⇒ G ⇒ T
+0
+
+F [f ] 7−→ F [f ]
+
+if f 7−→ f
+
+F [blameT1 `] 7−→ blameT2 ` if ` F : T1 ⇒ T2
+
+0
+
+(Cong)
+(Blame)
+
+Figure 4 Cast insertion and the internal cast calculus.
+
+cast on the argument and on the return value. The following shows the important steps.
+(fun : ? → ? ⇒` float → float) 3.01
+7−→ (fun (3.01 : float ⇒` ?)) : ? ⇒` float
+7−→∗ 5.02 : float ⇒` ? ⇒` float
+
+7−→
+
+5.02
+
+Recall that the second call to deriv resulted in a cast error. In that case fun is applied to
+−2.99. The result of the function is a None value, which cannot be cast to float. Thanks to
+the blame tracking, the error blamefloat ` includes the source information for the cast that
+arose from passing fun into deriv.
+(fun : ? → ? ⇒` float → float) −2.99
+7−→ (fun (−2.99 : float ⇒ ?)) : ? ⇒` float
+7−→∗ None : NoneType ⇒` ? ⇒` float
+
+7−→
+
+blamefloat `
+
+SNAPL 2015
+
+282
+
+Refined Criteria for Gradual Typing
+
+4
+
+Criteria for Gradual Typing
+
+We begin by reviewing the formal criteria for gradually typed languages that appear in the
+literature. These criteria cover the first three subsections of Section 2. We then develop a
+formal statement of our new criterion, the gradual guarantee. For the sake of precision, we
+state each criterion as a theorem about the GTLC. Our intent is that one would adapt these
+theorems to other gradually typed languages.
+
+4.1
+
+Gradual as a Superset of Static and Dynamic
+
+As discussed in Section 2.1, a gradually typed language is intended to include both an untyped
+language and a typed language. For example, GTLC should encompasses both DTLC and
+the STLC. Siek and Taha [50] prove that the GTLC type system is equivalent to the STLC
+on fully annotated programs. We extend this criterion to require the dynamic semantics of
+the GTLC to coincide with the STLC on fully annotated programs in the theorem below.
+Let `S and ⇓S denote the typing judgment and evaluation function of STLC, respectively.
+We say that a type is static if the unknown type does not occur in it.
+I Theorem 1 (Equivalence to the STLC for fully annotated terms).
+Suppose e is fully annotated and T is static.
+1. `S e : T if and only if ` e : T . (Siek and Taha [50]).
+2. e ⇓S v if and only if e ⇓ v.
+The relationship between the GTLC and DTLC is more nuanced by necessity because
+there exist terms that are both fully annotated and un-annotated. Suppose the constant inc
+has type int→int and the constant true has type bool. Then the application of inc to
+true is ill-typed in the GTLC even though it is a well-typed program in the DTLC (trivially,
+because programs are). Similar issues arise when extending the GTLC with other constructs,
+such as conditionals, where one must choose to lean towards either static typing or dynamic
+typing. Nevertheless, there is a simple encoding of the DTLC into the GTLC, here written
+as d·e, that casts constants to the unknown type. Let ⇓D denote evaluation of DTLC.
+I Theorem 2 (Embedding of DTLC). Suppose that e is a term of DTLC.
+1. ` dee : ? (Siek and Taha [50]).
+2. e ⇓D r if and only if dee ⇓ r.
+The two theorems of this section characterize programs at the two extremes: fully static
+and fully dynamic. However, these theorems say nothing about partially typed programs
+which is the norm for gradually typed languages. The next section describes notions of
+soundness that make sense for partially typed programs.
+
+4.2
+
+Soundness for Gradually Typed Languages
+
+Siek and Taha [50] prove that the GTLC is sound in the same way that many dynamically
+typed languages are sound: execution never encounters untrapped errors (but trapped errors
+could be ubiquitous). Let e ⇑ indicate that e diverges.
+I Theorem 3 (Type Safety of GTLC, Siek and Taha [50]). If ` e : T , then either e ⇓ v and
+` v : T for some v, or e ⇓ blameT ` for some `, or e ⇑.
+This theorem is unsatisfying because it does not tell us that statically typed regions are
+not to blame for trapped errors. Thankfully, blame tracking provides the right mechanism
+
+J. G. Siek, M. M. Vitousek, M. Cimini, and J. T. Boyland
+
+283
+
+(λy: ? . y) ((λx: ? . x) 42)
+(λy:int. y) ((λx: ? . x) 42)
+
+(λy: ? . y) ((λx:int. x) 42)
+
+(λy:int. y) ((λx:int. x) 42)
+
+(λy:bool. y) ((λx: ? . x) 42)
+(λy:bool. y) ((λx:bool. x) 42)
+
+Figure 5 A lattice of differently annotated versions of a gradually typed program.
+
+for formulating type soundness for gradually typed programs. The Blame Theorem [62, 67]
+characterizes the safe versus possibly unsafe casts. Adapting these results to gradual typing,
+we arrive at the Blame-Subtyping Theorem, which states that if the cast insertion procedure
+inserts a cast from a type to another and the former is a subtype of the latter, then the cast
+is guaranteed not to fail. To state this theorem, we give the following definition of subtyping.
+T <: T
+B <: B
+
+? <: ?
+
+T <: G
+T <: ?
+
+S1 <: T1
+T2 <: S2
+T1 → T2 <: S1 → S2
+
+I Theorem 4 (Blame-Subtyping Theorem). If ∅ ` e
+T1 <: T2 , and e ⇓ blameT l0 then l 6= l0 .
+
+f : T , f contains a cast f 0 : T1 ⇒` T2 ,
+
+The practical implication of this theorem is that a programmer (or automated tool) can
+easily analyze a region of code to tell whether they region is safe or whether it might trigger
+a cast error. Furthermore, the Blame-Subtyping Theorem guarantees that fully-static regions
+of code are never to blame for cast errors.
+
+4.3
+
+The Gradual Guarantee
+
+So far we have four theorems to characterize gradually typed languages, but none of them
+address the requirement of Section 2.3. Roughly speaking, changes to the annotations of a
+gradually typed program should not change the static or dynamic behavior of the program.
+For example, suppose we start with the un-annotated program at the top of the lattice in
+Figure 5. One would hope that adding type annotations would yield a program that still
+evaluates to 42. Indeed, in the GTLC, adding the type annotation int for parameters x and
+y does not change the outcome of the program. On the other hand, the programmer might
+insert the wrong annotation, say bool for parameter y, and trigger a trapped error. Even
+worse, the programmer might add bool for x and cause a static type error. So we cannot
+claim full contextual equivalence when going down in the lattice, but we can make a strong
+claim when going up in the lattice: the less precise program behaves the same as the more
+precise one except that it might have fewer trapped errors.
+The partial order at work in Figure 5 is the precision relation on types and terms, defined
+in Figure 6. Type precision [52] is also known as naive subtyping [67]. Term precision is the
+natural extension of type precision to terms. Here we write T v T 0 when type T is more
+precise than T 0 and e v e0 when term e is more precisely annotated than e0 .3 We give the
+definition of these relations in Section 6. We characterize the expected static and dynamic
+behavior of programs as we move up and down in precision as follows.
+3
+
+We apologize that the direction of increase in precision is to the left instead of to the right. We settled
+on this directionality to be consistent with subtyping.
+
+SNAPL 2015
+
+284
+
+Refined Criteria for Gradual Typing
+
+T vT
+
+Type Precision
+
+T v?
+
+T1 v T3
+T2 v T4
+T1 → T2 v T3 → T4
+
+BvB
+
+eve
+
+Term Precision for the GTLC
+
+kvk
+
+xvx
+
+T1 v T2
+e1 v e2
+λx:T1 . e1 v λx:T2 . e2
+
+e1 v e2
+
+e01 v e02
+
+(e1 e01 )` v (e2 e02 )`
+
+Figure 6 Type and Term Precision.
+
+I Theorem 5 (Gradual Guarantee). Suppose e v e0 and ` e : T .
+1. ` e0 : T 0 and T v T 0 .
+2. If e ⇓ v, then e0 ⇓ v 0 and v v v 0 .
+If e ⇑ then e0 ⇑.
+3. If e0 ⇓ v 0 , then e ⇓ v where v v v 0 , or e ⇓ blameT l.
+If e0 ⇑, then e ⇑ or e ⇓ blameT l.
+Now that we have stated the gradual guarantee, it is natural to wonder how important it is.
+Of course, there are many pressures at play during the design of any particular programming
+language, such as concerns for efficiency, safety, learning curve, and ease of implementation.
+However, if a language is intended to support gradual typing, that means the programmer
+should be able to conveniently evolve code from being statically typed to dynamically typed,
+and vice versa. With the gradual guarantee, the programmer can be confident that when
+removing type annotations, a well-typed program will continue to be well-typed (with no
+need to insert explicit casts) and a correctly running program will continue to do so. When
+adding type annotations, if the program remains well typed, the only possible change in
+behavior is a trapped error due to a mistaken annotation. Furthermore, it is natural to
+consider tool support (via static or dynamic analysis) for adding type annotations, and we
+would not want the addition of types to cause programs to misbehave in unpredictable ways.
+
+5
+
+Critiques of Language Designs in Light of the Gradual Guarantee
+
+Researchers have explored a large number of points in the design space for gradually typed
+languages. A comprehensive survey is beyond the scope of this paper, but we have selected a
+handful of them to discuss in light of the gradual guarantee.
+
+5.1
+
+GTLC
+
+As discussed above, the Gradually Typed Lambda Calculus [50] satisfies the gradual guarantee
+(the proof is in Section 6).
+
+5.2
+
+GTLC with Mutable References
+
+Siek and Taha [50] treat mutable references as invariant in their type system, disallowing
+implicit casts that change the pointed-to type. Consider that design in relation to the lattice
+of programs in Figure 7. The program at the top is well-typed because Ref int may be
+implicitly cast to ? (anything can). The program at the bottom is well-typed; it contains no
+
+J. G. Siek, M. M. Vitousek, M. Cimini, and J. T. Boyland
+
+(λy: ? . y) ((λx: ? . x) ref 42)
+
+(λf : ?. f true) (λx : ?. x)
+
+(λy:Ref int. y) ((λx:Ref ? . x) ref 42)
+
+(λf : bool→bool. f true) (λx : ?. x)
+
+(λy:Ref int. y) ((λx:Ref int. x) ref 42)
+
+(λf : bool→bool. f true) (λx : bool. x)
+
+Figure 7 A lattice of varying-precision for
+a program with mutable references.
+
+Figure 8 A lattice of varying-precision for
+a higher-order program.
+
+285
+
+implicit casts. However, the program in the middle is not well-typed because one cannot
+cast between Ref int and Ref ?. These programs are related by precision and the bottom
+program is well-typed, so part 1 of the gradual guarantee is violated.
+Herman et al. [34, 35] remedy the situation with a design for mutable references that
+allows implicit casts between reference types so long as the pointed-to types are consistent
+(in the technical sense of Siek and Taha [50]). We conjecture that their design satisfies the
+gradual guarantee. Likewise, we conjecture that the new monotonic approach [53] to mutable
+references satisfies the gradual guarantee.
+
+5.3
+
+TS?
+
+The TS? language [57] layers a static type system over JavaScript to provide protection
+from security vulnerabilities. TS? is billed as a gradually typed language, but it does not
+satisfy the gradual guarantee. For example, consider the program variations in Figure 8. The
+function with parameter f is representative of a software framework and the function with
+parameter x is representative of a client-provided callback.
+A typical scenario of gradual evolution would start with the untyped program at the top,
+proceed to the program in the middle, in which the framework interface has been statically
+typed (parameter f ) but not the client, then finally evolve to the program at the bottom
+which is fully typed. The top-most and bottom-most versions evaluate to true in TS? .
+However, the middle program produces a trapped error, as explained by the following quote.
+“Coercions based on setTag can be overly conservative, particularly on higher-order
+values. For example, trying to coerce the identity function id : ? → ? to the type
+bool → bool using setTag will fail, since ? 6<: bool.” [57]
+The example in Figure 8 is a counterexample to part 2 of the gradual guarantee; the
+bottom program evaluates to true, so the middle program should too, but it does not. The
+significance of not satisfying the gradual guarantee, as we can see in this example, is that
+programmers will encounter trapped errors in the process of refactoring type annotations, and
+will be forced to make several coordinated changes to get back to a well-behaved program.
+
+5.4
+
+Thorn and Like Types
+
+The Thorn language [69] is meant to support the evolution of (dynamically typed) scripts
+to (statically typed) programs. The language provides a dynamic type dyn, nominal class
+types, and like types.
+We revisit parts of Figure 5 under several scenarios. First, suppose we treat ? as dyn
+and int is a concrete type (i.e. a class type). Then we have the following counterexample to
+
+SNAPL 2015
+
+286
+
+Refined Criteria for Gradual Typing
+
+part 1 of the gradual guarantee; the bottom program is well-typed but not the top program.
+(λy:int. y) ((λx:dyn. x) 42)
+(λy:int. y) ((λx:int. x) 42)
+Second, suppose again that ? is dyn but that we replace bool with like bool and int with
+like int. Now every program in Figure 5 is well-typed, even the bottom-right program that
+should not be:
+(λy:like bool. y) ((λx:like bool. x) 42)
+So in this scenario the gradual guarantee is satisfied, but not the correspondence with a fully
+static language (Theorem 1). Finally, suppose we replace ? with like int and treat int as a
+concrete type. Similar to the first scenario, we get the following counterexample to part 1
+of the gradual guarantee; the bottom program is well-typed but not the top program. (It
+would need an explicit cast to be well-typed.)
+(λy:int. y) ((λx:like int. x) 42)
+(λy:int. y) ((λx:int. x) 42)
+We note that efficiency is an important design consideration for Thorn and that it is
+challenging to satisfy the gradual guarantee and efficiency at the same time. For example,
+only recently have we found a way to support mutable references without using wrappers [53].
+
+5.5
+
+Grace and Structural Type Tests
+
+The Grace language [7] is gradually typed and includes a facility for pattern matching on
+structural types. Boyland [9] observes that, depending on the semantics of the pattern
+matching, the gradual guarantee may not hold for Grace. Here we consider an example in an
+extension of the GTLC with a facility for testing the type of a value: the expression e is T
+returns true if e evaluates to a value of type T and false otherwise. Boyland [9] considers
+three possible interpretations what “a value of type T ” means: an optimistic semantics that
+checks whether the type of the value is consistent with the given type, a pessimistic semantics
+that checks whether the type of the value is equal to the given type, and a semantics similar
+in spirit to that of Ahmed et al. [2], which only checks the top-most type constructor.
+Consider the following example where g is a function that tests whether its input is a
+function of type int→int. On the right we show a lattice of several programs that apply g
+to the identity function.
+g ≡ (λf : ?. f is int→int)
+
+g (λx: ? . x)
+
+g (λx: ? . x)
+
+g (λx:int. x)
+
+g (λx:bool. x)
+
+Under the optimistic semantics, g (λx: ? . x) and g (λx:int. x) evaluate to true but
+g (λx:bool. x) evaluates to false. So part 2 of the gradual guarantee is violated.
+Under the pessimistic semantics, g (λx: ? . x) evaluates to false whereas g (λx:int. x)
+program evaluates to true, so this is a counterexample to part 2 of the gradual guarantee.
+Under the semantics of Ahmed et al. [2], this program is disallowed syntactically. We
+could instead have g ≡ (λf : ?. f is ?→?) and then all three programs would evaluate to
+true. We conjecture that this semantics does satisfy the gradual guarantee.
+
+J. G. Siek, M. M. Vitousek, M. Cimini, and J. T. Boyland
+
+5.6
+
+287
+
+Typed Racket and the Polymorphic Blame Calculus
+
+We continue our discussion of type tests, but expand the language under consideration to
+include parametric polymorphism, as found in Typed Racket [28, 63] and the Polymorphic
+Blame Calculus [2]. Consider the following programs in which a test-testing function is
+passed to another function, either simply as ? or at the universal type ∀α. α→α.
+(λf : ?. f [int] 5) (Λα. λx : ?. x is int)
+(λf : ∀α. α→α. f [int] 5) (Λα. λx : ?. x is int)
+In the bottom program, 5 is sealed when it is passed to the polymorphic function f . In Typed
+Racket, a sealed value is never an integer, so the type test returns false. The program on
+the top evaluates to true, so this is a counterexample to part 2 of the gradual guarantee.
+In the Polymorphic Blame Calculus, applying a type test to a sealed value always produces
+a trapped error, so this is not a counterexample under that design. We conjecture that
+one could extend the GTLC with polymorphism and compile it to the Polymorphic Blame
+Calculus to obtain a language that satisfies the gradual guarantee.
+
+5.7
+
+Reticulated Python and Object Identity
+
+During the evaluation of Reticulated Python, a gradually typed variant of Python, Vitousek
+et al. [66] encountered numerous problems when adding types to third-party Python libraries
+and applications. The root of these problems was a classic one: proxies interfere with object
+identity [20]. (The standard approach to ensuring soundness for gradually typed languages is
+to create proxies when casting higher-order entities like functions and objects.) Consider the
+GTLC extended with mutable references and an operator named alias? for testing whether
+two references are aliased to the same heap cell. Then in the following examples, the bottom
+program evaluates to true whereas the top program evaluates to false.
+let r : ref int = ref 0 in (λx : ref int. λy : ref ? . alias? x y) r r
+let r : ref int = ref 0 in (λx : ref int. λy : ref int. alias? x y) r r
+There are several approaches to mitigate this problem, such as changing alias? to see
+through proxies, use the membrane abstraction [64], or avoid proxies altogether [69, 66, 53].
+One particularly thorny issue for Reticulated Python is that the use of the foreign-function
+interface to C is common in Python programs and the foreign functions are privy to a rather
+exposed view of Python objects.
+
+6
+
+The Proof of the Gradual Guarantee for the GTLC
+
+Here we summarize the proof of the gradual guarantee for the GTLC. All of the definitions, the
+proof of the main lemma (Lemma 7), and its dependencies, have been verified in Isabelle [43].
+They are available at the following URL:
+https://dl.dropboxusercontent.com/u/10275252/gradual-guarantee-proof.zip
+Part 1 of the gradual guarantee is easy to prove by induction on e v e0 . The proof of part 2
+is interesting and will be the focus of our discussion. Part 3 is a corollary of part 2.
+Because the semantics of the GTLC is defined by translation to the cast calculus, our
+main lemma concerns a variant of part 2 that is adapted to the cast calculus. For this we
+
+SNAPL 2015
+
+288
+
+Refined Criteria for Gradual Typing
+
+Γ, Γ0 ` f v f 0
+
+Term Precision for the Cast Calculus
+...
+
+Γ, Γ0 ` f v f 0
+
+T1 v T10
+
+T2 v T20
+
+Γ, Γ0 ` (f : T1 ⇒`1 T2 ) v (f 0 : T10 ⇒`2 T20 )
+
+Γ, Γ0 ` f v f 0
+Γ0 ` f 0 : T 0
+T1 v T 0
+T2 v T 0
+Γ, Γ0 ` (f : T1 ⇒` T2 ) v f 0
+
+Γ, Γ0 ` f v f 0
+T v T10
+
+Γ0 ` f 0 : T 0
+T v T0
+Γ, Γ0 ` blameT ` v f 0
+Γ`f :T
+T v T20
+
+Γ, Γ0 ` f v (f 0 : T10 ⇒` T20 )
+
+Abbreviation: f v f 0 ≡ ∅, ∅ ` f v f 0
+Figure 9 Term Precision for the Cast Calculus.
+
+need a notion of precision for the cast calculus. Further, the translation to the cast calculus
+needs to preserve precision. Figure 9 defines precision for the cast calculus in a way that
+satisfies this need by adding rules that allow extra casts on both the left and right-hand side.
+I Lemma 6 (Cast Insertion Preserves Precision). Suppose Γ ` e
+Γ v Γ0 , and e v e0 . Then Γ, Γ0 ` f v f 0 and T v T 0 .
+
+f : T , Γ 0 ` e0
+
+f 0 : T 0,
+
+This lemma is interesting in that it was, in fact, not true for the original formulation of
+the GTLC [50]. In that version, there were two cast insertion rules for function application,
+one where the term in function position had an arrow type and one where it had type ?. The
+latter case used the following rule.
+Γ ` e1
+f1 : ?
+Γ ` e2
+f2 : T
+Γ ` (e1 e2 )
+((f1 : ? ⇒ T → ?) f2 ) : ?
+Using this rule, if we take e1 = (((λg:? → ?. g) (λx: ? . x)) 42) and e2 = (((λg: ? . g) (λx: ?
+. x)) 42), we have that e1 v e2 . However, when we obtain f1 , f2 by ∅ ` e1
+f1 : ? and
+∅ ` e2
+f2 : ?, we get
+f1 = (((λg:? → ?. g) (λx: ? . x)) (42 : Int ⇒ ?))
+f2 = ((((λg: ? . g)((λx: ? . x):? → ? ⇒ ?)):? ⇒ Int → ?) 42)
+and f1 6v f2 .
+The following is the statement of the main lemma, which establishes that less-precise
+programs simulate more precise programs.
+I Lemma 7 (Simulation of More Precise Programs). Suppose f1 v f10 , ` f1 : T , and ` f10 : T 0 .
+If f1 7−→ f2 , then f10 7−→∗ f20 and f2 v f20 for some f20 .
+The proof of the Lemma 7 is by induction on the derivation of f1 v f10 followed by case
+analysis on f1 7−→ f2 . The proof required four major lemmas (and numerous minor lemmas).
+Because the precision relation of the cast calculus allows extra casts on the right-hand
+side, we prove the following lemma by case analysis on T10 and T20 . The precision relation also
+allows extra casts on the left, but we handled those cases in-line in the proof of Lemma 7.
+I Lemma 8 (Extra Cast on the Right). Suppose `C v : T , `C v 0 : T10 , T v T10 , and T v T20 .
+If v v v 0 , then v 0 : T10 ⇒` T20 7−→∗ v 00 and v v v 00 for some v 00 .
+To handle cases where the more-precise program is already a value, we prove that the
+less-precise program can reduce to a related value. This proof is by induction on the derivation
+of v v f 0 .
+
+J. G. Siek, M. M. Vitousek, M. Cimini, and J. T. Boyland
+
+289
+
+I Lemma 9 (Catchup to Value on the Left). Suppose `C v : T , `C f 0 : T 0 , and v v f 0 . Then
+f 0 7−→∗ v 0 and v v v 0 .
+The most complex part of the proof involved application, as functions may be wrapped
+in a series of casts. We prove the following lemma by induction on the derivation of
+(λx : T1 . f ) v v10 .
+I Lemma 10 (Simulation of Function Application). Suppose `C (λx : T1 . f ) : T1 →T2 , `C v :
+T1 , `C v 0 : T1 , `C v10 : T10 →T20 , `C v20 : T10 , and T1 →T2 v T10 →T20 . If (λx : T1 . f ) v v10 and
+v v v20 , then v10 v20 7−→∗ f 0 , [x := v]f v f 0 , and `C f 0 : T20 .
+We prove the next lemma by induction on (v1 : T1 →T2 ⇒` T3 →T4 ) v v10 .
+I Lemma 11 (Simulation of Unwrapping). Suppose `C v1 : T1 →T2 , `C v2 : T1 , `C v10 :
+T10 →T20 , `C v20 : T10 , and T1 →T2 v T10 →T20 . If (v1 : T1 →T2 ⇒` T3 →T4 ) v v10 and v2 v v20 ,
+then v10 v20 7−→∗ f 0 and v1 (v2 : T3 ⇒` T1 ) : T2 ⇒` T4 v f 0 .
+With Lemma 7 in hand, we prove part 2 of the gradual guarantee by induction on the
+number of reduction steps. Part 3 is a corollary of part 2, as follows. Assume that e0 evaluates
+to v 0 . Because e is well typed, it may either evaluate to a value v, evaluate to a trapped error,
+or diverge. If it evaluates to some v, then we have v v v 0 by part 2 and because reduction is
+deterministic. If e results in a trapped error, we are done. If e diverges, then so does e0 by
+part 2, but that is a contradiction.
+
+7
+
+Conclusion
+
+Gradual typing should allow programmers to straightforwardly evolve their programs between
+the dynamic and static typing disciplines. However, this is only available to the programmer if
+the language designer formulates their language in a specific way. In this paper, we emphasize
+the need for formal criteria for gradually typed languages and offer a new criterion, the
+gradual guarantee. This formal property captures essential aspects of the evolution of code
+between typing disciplines. The current landscape of gradually typed languages reveals that
+this aspect has been either silently included or unfortunately overlooked, but never explicitly
+taken into consideration. That we could formally prove that GTLC obeys the gradual
+guarantee is a promising step and indicates that it is a realistic goal for researchers designing
+gradually typed systems. It remains to be investigated whether the gradual guarantee can
+be proven for a full-blown language with modern features (such as polymorphism, recursive
+types, type inference, etc.). We look forward to working with the research community to
+address this challenge.
+Acknowledgments. We thank Sam Tobin-Hochstadt, Philip Wadler, Andrew Kent, Ambrose Bonnaire-Sergeant, Andre Kuhlenschmidt, and Ronald Garcia for their input. The
+gradual guarantee was discovered independently by John Boyland and the Gradual Typing Group at Indiana University in 2014. The gradual guarantee is sketched in Boyland’s
+paper at the FOOL workshop [9] and in Siek’s presentation at the NII Shonan meeting on
+Contracts [48].
+References
+1
+
+Martin Abadi, Luca Cardelli, Benjamin Pierce, and Gordon Plotkin. Dynamic typing in
+a statically typed language. ACM Transactions on Programming Languages and Systems,
+13(2):237–268, April 1991.
+
+SNAPL 2015
+
+290
+
+Refined Criteria for Gradual Typing
+
+2
+3
+4
+
+5
+6
+
+7
+
+8
+
+9
+10
+
+11
+12
+13
+
+14
+
+15
+
+16
+
+17
+18
+19
+
+Amal Ahmed, Robert Bruce Findler, Jeremy G. Siek, and Philip Wadler. Blame for All.
+In Symposium on Principles of Programming Languages, January 2011.
+Esteban Allende, Oscar Callaú, Johan Fabry, Éric Tanter, and Marcus Denker. Gradual
+typing for Smalltalk. Science of Computer Programming, August 2013.
+Esteban Allende, Johan Fabry, Ronald Garcia, and Éric Tanter. Confined gradual typing.
+In Proceedings of the 2014 ACM International Conference on Object Oriented Programming
+Systems Languages & Applications, OOPSLA’14, pages 251–270, New York, NY, USA, 2014.
+ACM.
+Christopher Anderson and Sophia Drossopoulou. BabyJ – From Object Based to Class
+Based Programming via Types. ENTCS, 82(8), 2003.
+Gavin Bierman, Martín Abadi, and Mads Torgersen. Understanding typescript. In Richard
+Jones, editor, ECOOP 2014 – Object-Oriented Programming, volume 8586 of Lecture Notes
+in Computer Science, pages 257–281. Springer Berlin Heidelberg, 2014.
+Andrew P. Black, Kim B. Bruce, Michael Homer, and James Noble. Grace: The absence of
+(inessential) difficulty. In Proceedings of the ACM International Symposium on New Ideas,
+New Paradigms, and Reflections on Programming and Software, Onward! 2012, pages 85–
+98, New York, NY, USA, 2012. ACM.
+Bard Bloom, John Field, Nathaniel Nystrom, Johan Östlund, Gregor Richards, Rok Strniša,
+Jan Vitek, and Tobias Wrigstad. Thorn: Robust, concurrent, extensible scripting on the
+jvm. In ACM SIGPLAN Conference on Object Oriented Programming Systems Languages
+and Applications, pages 117–136, 2009.
+John Tang Boyland. The problem of structural type tests in a gradual-typed language. In
+Foundations of Object-Oriented Langauges, FOOL, 2014.
+Gilad Bracha and David Griswold. Strongtalk: typechecking Smalltalk in a production environment. In OOPSLA’93: Proceedings of the eighth annual conference on Object-oriented
+programming systems, languages, and applications, pages 215–230, New York, NY, USA,
+1993. ACM Press.
+Luca Cardelli. Handbook of Computer Science and Engineering, chapter Type Systems.
+CRC Press, 1997.
+Luca Cardelli, James Donahue, Lucille Glassman, Mick Jordan, Bill Kalsow, and Greg
+Nelson. Modula-3 language definition. SIGPLAN Not., 27(8):15–42, August 1992.
+Robert Cartwright and Mike Fagan. Soft typing. In PLDI’91: Proceedings of the ACM
+SIGPLAN 1991 conference on Programming language design and implementation, pages
+278–292, New York, NY, USA, 1991. ACM Press.
+Craig Chambers and the Cecil Group. The Cecil language: Specification and rationale.
+Technical report, Department of Computer Science and Engineering, University of Washington, Seattle, Washington, 2004.
+Olaf Chitil. Practical typed lazy contracts. In Proceedings of the 17th ACM SIGPLAN
+International Conference on Functional Programming, ICFP’12, pages 67–76, New York,
+NY, USA, 2012. ACM.
+Christos Dimoulas, Robert Bruce Findler, Cormac Flanagan, and Matthias Felleisen. Correct blame for contracts: no more scapegoating. In Proceedings of the 38th annual ACM
+SIGPLAN-SIGACT symposium on Principles of programming languages, POPL’11, pages
+215–226, New York, NY, USA, 2011. ACM.
+Christos Dimoulas, Sam Tobin-Hochstadt, and Matthias Felleisen. Complete monitors for
+behavioral contracts. In ESOP, 2012.
+Tim Disney and Cormac Flanagan. Gradual information flow typing. In Workshop on
+Script to Program Evolution, 2011.
+R. B. Findler and M. Felleisen. Contracts for higher-order functions. In International
+Conference on Functional Programming, ICFP, pages 48–59, October 2002.
+
+J. G. Siek, M. M. Vitousek, M. Cimini, and J. T. Boyland
+
+20
+21
+22
+23
+24
+
+25
+26
+27
+
+28
+29
+30
+31
+32
+33
+34
+35
+36
+
+37
+38
+
+39
+
+40
+
+41
+
+291
+
+R. B. Findler, M. Flatt, and M. Felleisen. Semantic casts: Contracts and structural subtyping in a nominal world. In European Conference on Object-Oriented Programming, 2004.
+Cormac Flanagan and Matthias Felleisen. Componential set-based analysis. ACM Trans.
+Program. Lang. Syst., 21(2):370–416, 1999.
+Ronald Garcia and Matteo Cimini. Principal type schemes for gradual programs. In
+Symposium on Principles of Programming Languages, POPL, pages 303–315, 2015.
+James Gosling, Bill Joy, and Guy Steele. The Java Language Specification. Sun Developer
+Network, 1996.
+Kathryn E. Gray, Robert Bruce Findler, and Matthew Flatt. Fine-grained interoperability
+through mirrors and contracts. In OOPSLA’05: Proceedings of the 20th annual ACM
+SIGPLAN conference on Object oriented programming systems languages and applications,
+pages 231–245, New York, NY, USA, 2005. ACM Press.
+Michael Greenberg. Space-efficient manifest contracts. In POPL, 2015.
+Michael Greenberg, Benjamin C. Pierce, and Stephanie Weirich. Contracts made manifest.
+In Principles of Programming Languages (POPL) 2010, 2010.
+Jessica Gronski, Kenneth Knowles, Aaron Tomb, Stephen N. Freund, and Cormac Flanagan.
+Sage: Hybrid checking for flexible specifications. In Scheme and Functional Programming
+Workshop, pages 93–104, 2006.
+Arjun Guha, Jacob Matthews, Robert Bruce Findler, and Shriram Krishnamurthi.
+Relationally-parametric polymorphic contracts. In Dynamic Languages Symposium, 2007.
+Łukasz Langa Guido van Rossum, Jukka Lehtosalo. Type hints. https://www.python.
+org/dev/peps/pep-0484/, September 2014. draft.
+Lars T. Hansen. Evolutionary programming and gradual typing in ECMAScript 4 (tutorial).
+Technical report, ECMA TG1 working group, November 2007.
+Anders Hejlsberg. C# 4.0 and beyond by anders hejlsberg. Microsoft Channel 9 Blog,
+April 2010.
+Anders Hejlsberg. Introducing TypeScript. Microsoft Channel 9 Blog, 2012.
+Fritz Henglein. Dynamic typing: syntax and proof theory. Science of Computer Programming, 22(3):197–230, June 1994.
+David Herman, Aaron Tomb, and Cormac Flanagan. Space-efficient gradual typing. In
+Trends in Functional Prog. (TFP), page XXVIII, April 2007.
+David Herman, Aaron Tomb, and Cormac Flanagan. Space-efficient gradual typing. HigherOrder and Symbolic Computation, 23(2):167–189, 2010.
+Lintaro Ina and Atsushi Igarashi. Gradual typing for generics. In Proceedings of the
+2011 ACM international conference on Object oriented programming systems languages
+and applications, OOPSLA’11, 2011.
+International Organization for Standardization. ISO/IEC 14882:1998: Programming languages — C++, September 1998.
+Barbara Liskov, Russ Atkinson, Toby Bloom, Eliot Moss, Craig Schaffert, Bob Scheifler,
+and Alan Snyder. CLU reference manual. Technical Report LCS-TR-225, MIT, October
+1979.
+Jacob Matthews and Amal Ahmed. Parametric polymorphism through run-time sealing,
+or, theorems for low, low prices! In Proceedings of the 17th European Symposium on
+Programming (ESOP’08), March 2008.
+Jacob Matthews and Robert Bruce Findler. Operational semantics for multi-language
+programs. In The 34th ACM SIGPLAN-SIGACT Symposium on Principles of Programming
+Languages, January 2007.
+Erik Meijer and Peter Drayton. Static typing where possible, dynamic typing when needed:
+The end of the cold war between programming languages. In OOPSLA’04 Workshop on
+Revival of Dynamic Languages, 2004.
+
+SNAPL 2015
+
+292
+
+Refined Criteria for Gradual Typing
+
+42
+43
+44
+
+45
+
+46
+47
+
+48
+49
+50
+51
+52
+53
+
+54
+55
+56
+
+57
+
+58
+
+59
+60
+61
+
+62
+
+Robin Milner. A theory of type polymorphism in programming. Journal of Computer and
+System Sciences, 17(3):348–375, 1978.
+Tobias Nipkow, Lawrence C. Paulson, and Markus Wenzel. Isabelle/HOL — A Proof
+Assistant for Higher-Order Logic, volume 2283 of LNCS. Springer, November 2007.
+Aseem Rastogi, Avik Chaudhuri, and Basil Hosmer. The ins and outs of gradual type
+inference. In Symposium on Principles of Programming Languages, POPL, pages 481–494,
+January 2012.
+Aseem Rastogi, Nikhil Swamy, Cédric Fournet, Gavin Bierman, and Panagiotis Vekris. Safe
+& efficient gradual typing for TypeScript. Technical Report MSR-TR-2014-99, Microsoft
+Research, 2014.
+Manuel Serrano. Bigloo: a practical Scheme compiler. Inria-Rocquencourt, April 2002.
+Andrew Shalit. The Dylan reference manual: the definitive guide to the new object-oriented
+dynamic language. Addison Wesley Longman Publishing Co., Inc., Redwood City, CA, USA,
+1996.
+Jeremy G. Siek. Design and evaluation of gradual typing for Python. https://dl.
+dropboxusercontent.com/u/10275252/shonan-slides-2014.pdf, May 2014.
+Jeremy G. Siek, Ronald Garcia, and Walid Taha. Exploring the design space of higher-order
+casts. In European Symposium on Programming, ESOP, pages 17–31, March 2009.
+Jeremy G. Siek and Walid Taha. Gradual typing for functional languages. In Scheme and
+Functional Programming Workshop, pages 81–92, September 2006.
+Jeremy G. Siek and Walid Taha. Gradual typing for objects. In European Conference on
+Object-Oriented Programming, volume 4609 of LCNS, pages 2–27, August 2007.
+Jeremy G. Siek and Manish Vachharajani. Gradual typing and unification-based inference.
+In DLS, 2008.
+Jeremy G. Siek, Michael M. Vitousek, Matteo Cimini, Sam Tobin-Hochstadt, and Ronald
+Garcia. Monotonic references for efficient gradual typing. In European Symposium on
+Programming, ESOP, April 2015.
+Jeremy G. Siek and Philip Wadler. Threesomes, with and without blame. In Symposium
+on Principles of Programming Languages, POPL, pages 365–376, January 2010.
+Guy L. Steele, Jr. Common LISP: the language (2nd ed.). Digital Press, Newton, MA,
+USA, 1990.
+T. Stephen Strickland, Sam Tobin-Hochstadt, Robert Bruce Findler, and Matthew Flatt.
+Chaperones and impersonators: run-time support for reasonable interposition. In Conference on Object Oriented Programming Systems Languages and Applications, OOPSLA’12,
+2012.
+Nikhil Swamy, Cédric Fournet, Aseem Rastogi, Karthikeyan Bhargavan, Juan Chen, PierreYves Strub, and Gavin Bierman. Gradual typing embedded securely in javascript. In ACM
+Conference on Principles of Programming Languages (POPL), January 2014.
+Asumu Takikawa, T. Stephen Strickland, Christos Dimoulas, Sam Tobin-Hochstadt, and
+Matthias Felleisen. Gradual typing for first-class classes. In Conference on Object Oriented
+Programming Systems Languages and Applications, OOPSLA’12, pages 793–810, 2012.
+The Dart Team. Dart Programming Language Specification. Google, 1.2 edition, March
+2014.
+Satish Thatte. Quasi-static typing. In POPL 1990, pages 367–381, New York, NY, USA,
+1990. ACM Press.
+Peter Thiemann and Luminous Fennell. Gradual typing for annotated type systems. In
+Zhong Shao, editor, Programming Languages and Systems, volume 8410 of Lecture Notes
+in Computer Science, pages 47–66. Springer Berlin Heidelberg, 2014.
+Sam Tobin-Hochstadt and Matthias Felleisen. Interlanguage migration: From scripts to
+programs. In Dynamic Languages Symposium, 2006.
+
+J. G. Siek, M. M. Vitousek, M. Cimini, and J. T. Boyland
+
+63
+64
+
+65
+66
+67
+68
+69
+
+293
+
+Sam Tobin-Hochstadt and Matthias Felleisen. The design and implementation of Typed
+Scheme. In Symposium on Principles of Programming Languages, January 2008.
+Tom Van Cutsem and Mark S. Miller. Proxies: Design principles for robust object-oriented
+intercession apis. In Proceedings of the 6th Symposium on Dynamic Languages, DLS’10,
+pages 59–72, New York, NY, USA, 2010. ACM.
+Julien Verlaguet. Facebook: Analyzing PHP statically. In Commercial Users of Functional
+Programming (CUFP), 2013.
+Michael M. Vitousek, Jeremy G. Siek, Andrew Kent, and Jim Baker. Design and evaluation
+of gradual typing for Python. In Dynamic Languages Symposium, 2014.
+Philip Wadler and Robert Bruce Findler. Well-typed programs can’t be blamed. In European Symposium on Programming, ESOP, pages 1–16, March 2009.
+Roger Wolff, Ronald Garcia, Éric Tanter, and Jonathan Aldrich. Gradual typestate. In
+European Conference on Object-Oriented Programming, ECOOP’11. Springer-Verlag, 2011.
+Tobias Wrigstad, Francesco Zappa Nardelli, Sylvain Lebresne, Johan Östlund, and Jan
+Vitek. Integrating typed and untyped code in a scripting language. In Symposium on
+Principles of Programming Languages, POPL, pages 377–388, 2010.
+
+SNAPL 2015
+
+

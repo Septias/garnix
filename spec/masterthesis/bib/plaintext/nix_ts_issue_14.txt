@@ -1,0 +1,99 @@
+GitHub issue NixOS/nix#14 "Static type system" (fetched 2026-10-25 via gh)
+opened 2012-05-07T17:51:06Z closed 2018-04-03T10:06:47Z
+
+Nix won't be complete until it has static typing.
+
+
+--- shlevy 2012-05-10T18:10:27Z:
+Can you expand on this a bit? I think some efforts toward a better type system can be valuable, I'm just not sure whether the static/dynamic distinction even makes sense for nix.
+
+
+--- tel 2015-01-06T19:56:03Z:
+It's interesting to think what kind of typing scheme would be needed for Nix. There's apparently a pretty heavy need for anonymous isorecursive records, something like
+
+```
+Mu self: { override: {rs} -> { self, rs } }
+```
+
+
+--- Ericson2314 2015-02-01T00:43:15Z:
+"Nix won't be complete until it has static typing." What a beautiful way to put it :).
+
+@tel row polymorphism works well with mu types for this. mu types + row polymorphism sometimes severely limit the ways the attribute set can be functionally extended / unioned / etc, but if that becomes an issue, I think/hope there are sound ways to "break" the mu types and gain more expressiveness.
+
+
+--- domenkozar 2016-12-06T08:06:28Z:
+http://www.haskellforall.com/2016/12/dhall-non-turing-complete-configuration.html?m=1
+
+--- thufschmitt 2017-01-12T17:14:57Z:
+In case someone follows this issue but not the mailing-list, I opened a funding campaign for this issue at https://www.gofundme.com/typing-nix. You are all welcome to donate :)
+
+--- alexeymuranov 2017-02-08T13:50:26Z:
+@regnat, weren't the any other way to sponsor Nix development without sponsoring GoFundMe with 7.9% + $.30 (at least $269 currently)?
+
+--- Wizek 2018-04-03T10:13:44Z:
+Huh? How come this is closed @edolstra?
+
+--- edolstra 2018-04-03T10:21:12Z:
+Because it's not realistically going to happen (and I'm cleaning up some backlog issues).
+
+--- Fuuzetsu 2018-04-03T16:32:58Z:
+🚫 dropped
+
+--- toraritte 2018-05-24T21:09:04Z:
+In case anyone finds this thread, and wondering what happened to @regnat 's project:
+https://github.com/regnat/ptyx
+
+(Although almost every blog/twitter etc. post mentions [Dhall](https://github.com/dhall-lang/dhall-lang), just as @domenkozar suggests above, and it also seems to be the most active.)
+
+---
+Gabriel Gonzalez on the limitations of Dhall: 
+https://github.com/Gabriel439/haskell-nix/issues/75
+
+HNix on the other hand "has some form of type checker": 
+https://github.com/haskell-nix/hnix/blob/master/src/Nix/Type/README.md
+
+
+--- SRGOM 2019-03-23T13:56:57Z:
+I don't want to add to noise here but I'm intrigued by Nix (os) and noticed this issue passing by- why not add a type system and deprecate unsound syntax if any found?
+
+--- Ericson2314 2019-03-24T02:11:02Z:
+Nix is one of the best chances for gradual typing, because only one code base matters (nixpkgs), and it can be refactored in tandem of developing the type checker.
+
+@SRGOM It's just a lot of work and no one has prioritized it, which makes sense as most of the extent RFCs are more bang for buck. I believe it will happen eventually, if nixpkgs isn't replaced by something else.
+
+The biggest technical impediment is probably that people are deathly scared of increasing eval times, so a lot of core functionality remains written in crazy bash deferred to build time. We need to find a way to move the goal posts so eval times aren't a problem at. Then we can easily get things into a state where many core infra changes don't always cause a mass rebuild, and static typing can penetrate deep enough to be worth it.
+
+--- louwers 2020-04-18T07:47:24Z:
+> Because it's not realistically going to happen.
+
+Then again, so many of the big innovations (including Nix) where not realistically going to happen at some point in the past, but requirered many people (including you) to push the boundries of what's possible (thank you for that).
+
+Leaving this here as a reference. :smile: 
+
+> **6.4  Types**
+>
+> The Nix expression language is dynamically typed. In contrast to the choice of evaluation strategy, the decision for dynamic typing was less conscious, and mainly motivated by keeping the language design simple.
+> 
+> The use of dynamic types has influenced the way Nix expressions are currently being written. By now, there are quite a few library functions that depend on run-time type analysis and meta-programming techniques, both of which are facilitated by the lack ofa static type system (and will also make adding such a system at a later stage harder): The Nix expression language has built-in functions for run-time type testing, and offers functions that can check for the presence of a particular attribute in an attribute set, or even turn an attribute set into a list of string-value pairs. One significant example where meta-programming is used is the NixOS module system: As explained in Section 5.1, all modules are composed in an intricate way that makes use of reflection. A benefit of dynamic types is that it becomes somewhat easier to support migration between library interfaces. If a library function changes behaviour, but a user-developed Nix function still makes use of an outdated interface, we can dynamically check for it, issue a deprecation warning, and then convert it automatically to the new interface, all without special built-in language support.
+> 
+> However, we are also investigating how to extend the Nix expression language with a type system. In the long term, we do not just want to check as much as possible of the current structural type system statically, but also introduce user-defined datatypes, such that for instance all variants of a single package such as GHC have the same type, and onecannot inadvertently pass a different package as a parameter where really GHC is expected. Currently, such a package fails at build time. Furthermore, we believe that a suitable typesystem can be an asset to end users, as (graphical) user interfaces for system configuration management could be derived from the types.
+
+--- domenkozar 2020-11-12T18:12:56Z:
+Note that there's a new effort: https://github.com/tweag/nickel
+
+--- klarkc 2022-12-28T20:53:18Z:
+It is worth mentioning: [purenix-org/purenix](https://github.com/purenix-org/purenix)
+
+--- Septias 2023-11-23T19:08:40Z:
+[What about  https://github.com/haskell-nix/hnix?](https://github.com/haskell-nix/hnix) now says it is: 
+> Parser, evaluator and type checker for the Nix language written in Haskell.
+
+so after some years we are here I guess :joy: 
+
+--- lambda-loop 2025-05-14T13:21:01Z:
+std version with static types when?
+
+--- keepitupkitty 2026-07-19T13:03:24Z:
+What a waste
+

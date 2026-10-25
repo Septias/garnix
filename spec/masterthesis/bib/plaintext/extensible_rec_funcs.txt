@@ -1,0 +1,2234 @@
+Abstracting Extensible Recursive Functions
+
+arXiv:2410.11742v2 [cs.PL] 21 Jul 2025
+
+ALEX HUBERS, The University of Iowa, USA
+APOORV INGLE, The University of Iowa, USA
+ANDREW MARMADUKE, The University of Iowa, USA
+J. GARRETT MORRIS, The University of Iowa, USA
+We explore recursive programming with extensible data types. Row types make the structure of data types
+first class, and can express a variety of type system features including record subtyping and combination of
+case branches. Our goal is the modular combination of recursive types and of recursive functions over them.
+The most significant challenge is in recursive function calls, which may need to account for new cases in a
+combined type. We introduce extensible histomorphisms, Mendler-style descriptions of recursive functions
+in which recursive calls can happen at larger types, and show that they provide expressive recursion over
+extensible data types. We formalize our approach in R𝜔𝜇, a row type theory with support for recursive terms
+and types.
+ACM Reference Format:
+Alex Hubers, Apoorv Ingle, Andrew Marmaduke, and J. Garrett Morris. 2025. Abstracting Extensible Recursive
+Functions. 1, 1 (July 2025), 30 pages. https://doi.org/10.1145/nnnnnnn.nnnnnnn
+
+1
+
+INTRODUCTION
+
+The expression problem [34] is (now) an old name for an older problem [30]: to extend the definition
+(by cases) of a recursive data type, both by adding new cases to the data type and by adding new
+operations over it, without compromising either type safety or separate compilation. This problem
+has motivated both dedicated language features for extensibility, such as row typing [6, 12, 28, 35],
+and encodings using features like type classes [33] and generic programming [34].
+This paper explores a natural extension of the expression problem. Our goals are, first, to
+decompose a recursive data type into modular (that is, independent) cases and define operations
+recursively over those cases, and second, to recover the original data type and the operations over
+it by combining the cases. To achieve this goal, we will define a new row type theory, R𝜔𝜇, which
+extends the row type theory R𝜔, with recursive types and more expressive row type constructors,
+and then define extensible histomorphisms, a new encoding of traversals, in R𝜔𝜇.
+An extended expression problem. Programming languages can frequently be decomposed into independent sublanguages. Even PCF [26] could be regarded as the combination of a language for
+functions (variables, abstractions, applications), a language for Booleans (constants, conditionals),
+a language for arithmetic, and a language of recursive definition. These sublanguages could be recombined in many different ways—indeed, one could see much research in programming languages
+Authors’ addresses: Alex Hubers, Department of Computer Science, The University of Iowa, 14 MacLean Hall, Iowa City,
+Iowa, USA, alexander-hubers@uiowa.edu; Apoorv Ingle, Department of Computer Science, The University of Iowa, 14
+MacLean Hall, Iowa City, Iowa, USA, garrett-morris@uiowa.edu; Andrew Marmaduke, Department of Computer Science,
+The University of Iowa, 14 MacLean Hall, Iowa City, Iowa, USA, garrett-morris@uiowa.edu; J. Garrett Morris, Department
+of Computer Science, The University of Iowa, 14 MacLean Hall, Iowa City, Iowa, USA, garrett-morris@uiowa.edu.
+Permission to make digital or hard copies of all or part of this work for personal or classroom use is granted without fee
+provided that copies are not made or distributed for profit or commercial advantage and that copies bear this notice and
+the full citation on the first page. Copyrights for components of this work owned by others than ACM must be honored.
+Abstracting with credit is permitted. To copy otherwise, or republish, to post on servers or to redistribute to lists, requires
+prior specific permission and/or a fee. Request permissions from permissions@acm.org.
+© 2025 Association for Computing Machinery.
+XXXX-XXXX/2025/7-ART $15.00
+https://doi.org/10.1145/nnnnnnn.nnnnnnn
+, Vol. 1, No. 1, Article . Publication date: July 2025.
+
+2
+
+Alex Hubers, Apoorv Ingle, Andrew Marmaduke, and J. Garrett Morris
+
+from exactly this perspective. We could add a sublanguage for explicit polymorphism, and remove
+the languages for arithmetic and Booleans. Or, we could add a language for data types—with or
+without explicit polymorphism. We might replace the arbitrary fixed point operator with structured
+recursion schemes, relying on either arithmetic or data types. And so forth.
+The challenge is to implement these languages in a way that is as modular as their informal
+description. There are several aspects to this challenge. We describe these informally now, but
+demonstrate them concretely later in the paper (§3).
+• Individual languages (that is to say, data types) should be defined independently and support
+arbitrary (recursive) combination. We should be able to define the languages of Boolean, arithmetic, and functional expressions independently, and define terms in each of their intersections.
+For example, in defining the negation function, we should not have to commit to the presence
+or absence of arithmetic expressions, nor in defining the successor function to the presence or
+absence of Boolean expressions. In contrast, most existing row type theories define rows only by
+extension, which would rule out at least one of the three possible intersections.
+• Computations, like evaluation, should also be defined independently, and support arbitrary
+combination. This problem has two aspects. First, we cannot just combine functions at the
+top level. In a combined language, functional expressions (for instance, an application) may
+have subexpression from other languages (for instance, a number). Similarly, recursive calls in
+the combined evaluator must be to the combined evaluator, not to its individual parts. Second,
+results types may vary. Evaluating arithmetic expressions might produce natural numbers,
+while evaluating Boolean expressions produces Boolean values, and the results of evaluating a
+function—that is to say, the body of a closure—may vary with the input language.
+• Transformations, such as substitution or desugaring, should be defined modularly and support
+generic extension. The arithmetic and Boolean languages, for example, do not contain variables,
+and so do not interact with substitution in an interesting way. It should be possible to extend
+substitution to these languages without manually enumerating and traversing each case.
+These challenges are difficult to meet with current approaches to extensible data types. The
+vast majority of row type systems [4, 9, 17, 27, 28, 35] express rows by extension, rather than
+concatenation. Thus, while they could express the extension of, say, FunE to include arithmetic
+expressions, they would not support the independent development of FunE and ArithE. There are
+several row type systems with concatenation [6, 12, 29], but they do not address combination of
+recursive functions. OCaml includes a flexible system of polymorphic variants with subtyping
+[10, 11]. While polymorphic variants are quite expressive, they can lose precision in typing, and
+still require some enumeration of cases to describe generic traversals. Finally, there are encodings
+of extensible recursive types with concatenation [33], including some that support combining
+functions over arbitrary rows [3, 21]. However, these systems rely on expressing recursion via
+folds, which limits their expressiveness.
+The R𝜔𝜇 type theory. We propose an approach to expressing extensible recursive types and recursive
+functions that meets all four of these challenges. We work in R𝜔𝜇, an extension of the row type
+system R𝜔 [15, 22]. R𝜔 differs from most other row type systems in three ways: rows are constructed
+by concatenating arbitrary rows, rather than by concrete extension; the structure of row types is
+captured using containment and concatenation relations rather than directly in the grammar of
+types; and, label-generic programming primitives support transformations of extensible data types
+regardless of their particular constructors or field labels. We extend R𝜔 in several ways. We add
+iso-recursive types and fixed point computations, in an entirely standard fashion. We introduce the
+relative complement of one row with respect to another, which is essential for typing our encodings
+and significantly simplifies typing several existing operators in R𝜔. Finally, we have simplified
+, Vol. 1, No. 1, Article . Publication date: July 2025.
+
+Abstracting Extensible Recursive Functions
+
+3
+
+and mechanized the metatheory of R𝜔𝜇, including showing type normalization (by evaluation),
+decidability of type equality, and type soundness.
+Extensible histomorphisms. An expressive type theory, in and of itself, does not constitute a solution
+to the extended expression problem. We must also be able to encode recursive traversals in a way
+that both supports extensibility and is expressive enough for practical programming. Our solution is
+to abstract recursive traversals as extensible histomorphisms. Extensible histomorphisms are Mendlerstyle [20] encodings of histomorphic recursive functions. By keeping recursive subdata abstract,
+we are able to guarantee that recursive calls will still make sense when combining extensible
+histomorphisms. Keeping recursive subdata completely abstract, however, would rule out many
+useful functions. Extensible histomorphisms use R𝜔𝜇 containment predicates to provided a lower
+bound for the structure of subdata. Finally, unlike other recursion schemes, we define the output of
+a extensible histomorphism as a function of its input. We will show that extensible histomorphisms
+can express interesting, extensible evaluation functions, addressing the sublanguage expression
+problem.
+Contributions. In summary, this paper contributes:
+• The R𝜔𝜇 type theory (§2), which extends existing concatenative row type theories with a
+novel row complement operator, recursion, and recursive types;
+• extensible histomorphisms (§3), an abstraction for extensible recursive functions, along with
+examples of their expressiveness; and
+• the metatheory of R𝜔𝜇 (§4), given by a type normalization algorithm, operational semantics,
+and the expected proofs of type preservation and progress.
+We conclude by discussing related (§5) and future (§6) work. We have mechanized the metatheory
+of R𝜔𝜇 and its essential properties using the Agda interactive theorem prover, and have built an
+experimental implementation of R𝜔𝜇 that typechecks and evaluates all the examples in this paper.
+2
+
+THE R𝜔𝜇 CALCULUS
+
+This section defines the R𝜔𝜇 calculus. We begin by formally describing its syntax (§2.2) and type
+system (§2.3). Operations on rows in R𝜔𝜇 are captured by predicates in types, which are given
+meaning by its entailment relation (§2.4). We then give a series of examples illustrating the features
+and expressiveness of R𝜔𝜇: its approach to extensible records and variants (§2.5), its support for
+first-class labels (§2.6), its label generic operators (§2.7), and finally the utility of relative row
+complements (§2.8).
+2.1
+
+Overview
+
+In a row type system [28, 35], rows are first-class representations of the structure of data, typically
+written as lists of label-type associations. Data types, such as records and variants, are built from
+rows. Extensibility arises from row polymorphism. For example, the function that selects label x
+with type Int from a record might have a type ∀r.Π{x ⊲ Int | r} → Int. Here, r can be instantiated
+with any row, so this function applies equally well to two-dimensional points Π{x ⊲ Int, y ⊲ Int}
+and function abstractions Π{x ⊲ Int, body ⊲ Expr}. Rows are typically required to have all distinct
+labels, enforced by kinding, and to be equivalent up to reordering.
+We build on the row type system Rose, initially proposed by Morris and McKinna [22], and
+extended as R𝜔 by Hubers and Morris [15]. Rose differs from most other row type systems in
+two ways. Most row type systems describe rows by extension: the row {x ⊲ Int | r} extends row
+r with the association x ⊲ Int. Rose, like the type systems of Harper and Pierce [12] and Chlipala
+[7], permits arbitrary concatenation of rows. Unlike those systems, Rose describes rows using
+qualified types. Rather than the concatenation of rows 𝜌 1 and 𝜌 2 being represented directly as a
+, Vol. 1, No. 1, Article . Publication date: July 2025.
+
+4
+
+Alex Hubers, Apoorv Ingle, Andrew Marmaduke, and J. Garrett Morris
+
+Term variables x ∈ X
+Type variables 𝛼 ∈ A
+Labels ℓ ∈ L
+
+Type environments Γ ::= 𝜀 | Γ, x : 𝜏
+Predicate environments Φ ::= 𝜀 | Φ, v : 𝜋
+Kind environments Δ ::= 𝜀 | Δ, 𝛼 : 𝜅
+
+Kinds
+𝜅 ::= ★ | L | R𝜅 | 𝜅 → 𝜅
+Predicates
+𝜋,𝜓 ::= 𝜌 ≲ 𝜌 | 𝜌 ⊙ 𝜌 ∼ 𝜌
+Types T ∋ 𝜙, 𝜏, 𝜐, 𝜌, 𝜉 ::= 𝛼 | T | 𝜋 ⇒ 𝜏 | ∀𝛼 : 𝜅.𝜏 | 𝜆𝛼 : 𝜅.𝜏 | 𝜏 𝜏
+| {𝜉 i ⊲ 𝜏i }i∈0...m | ℓ | #𝜏 | 𝜙 ★ | 𝜌 \ 𝜌
+Type constants
+T ::= (→) | Π (𝜅 ) | Σ (𝜅 ) | 𝜇
+Terms
+E ∋ M, N ::= x | K | 𝜆x : 𝜏 .M | M N | Λ𝛼 : 𝜅.M | M [𝜏] | Λv : 𝜋 .M | M [Q]
+| #𝜏 | M ⊲Ξ N | M/Ξ N
+Ξ ∈ {Π, Σ}
+Term constants
+K ::= prj | (++) | inj | (|) | syn (𝜅 ) | ana (𝜅 ) | in | out | fix
+Fig. 1. Syntax
+
+type 𝜌 1 ⊙ 𝜌 2 , it is treated as a three-place predicate on types 𝜌 1 ⊙ 𝜌 2 ∼ 𝜌 3 . Qualified type systems
+are proof relevant: the proof that 𝜌 1 ⊙ 𝜌 2 ∼ 𝜌 3 will determine the behavior of the primitive record
+and variant operators. Rose’s approach has several advantages. One is expressiveness: examples
+that are difficult to express in most row type systems can be simple to express in Rose. Another
+is flexibility: By adjusting the meaning of the predicates, Rose can capture a variety of different
+models of rows, such as those that allow duplicate labels. In this paper, we will limit ourselves to
+one model of rows, in which labels are required to be unique and entries in rows may be freely
+permuted.
+2.2
+
+Syntax
+
+Syntax for the types and terms of R𝜔𝜇 is given in Figure 1. Syntax for evidence variables v and
+terms Q will be given shortly (§2.4).
+Labels (i.e., record field and variant constructor names) live at the type level, and are classified
+by kind L. Rows of kind 𝜅 are classified by R𝜅 .
+When possible, we use 𝜙 for type functions, 𝜌 for row types, and 𝜉 for label types. Singleton types
+#𝜏 are used to make (otherwise implicit) type parameterization explicit. 𝜙 ★ maps type operator 𝜙
+across a row. In practice, we leave the map operator implicit, using kind information to infer the
+presence of maps. We define a families of Π and Σ constructors, describing record and variants at
+various kinds; in practice, we can determine the kind annotation from context. Finally, 𝜇 builds
+isorecursive types.
+The type 𝜋 ⇒ 𝜏 denotes a qualified type. In essence, the predicate 𝜋 restricts the instantiation of
+the type variables in 𝜏. Our predicates capture relationships among rows: 𝜌 1 ≲ 𝜌 2 means that 𝜌 1 is
+contained in 𝜌 2 , and 𝜌 1 ⊙ 𝜌 2 ∼ 𝜌 3 means that 𝜌 1 and 𝜌 2 can be combined to give 𝜌 3 .
+Row literals are sequences of labeled types 𝜉 i ⊲ 𝜏i . We write 0 . . . m to denote the set of naturals
+up to (but not including) m. We will frequently use 𝜀 to denote the empty row. Occasionally we
+will need to treat rows as lists; in that case, we will write {𝜉 ⊲ 𝜏, 𝜌 } for the row that begins with the
+labeled type 𝜉 ⊲ 𝜏 and continues with 𝜌. This is purely metatheoretic notation; we do not have row
+extension as a part of the concrete syntax of our language.
+Much of the interest in terms is deferred to the constants K. Type abstraction Λ𝛼 : 𝜅.M and
+application M [𝜏] are expected to be implicit in source programs, and evidence abstraction Λv : 𝜋 .M
+and application M [Q] are always implicit. We pun #𝜏 for the unique value of type #𝜏. The terms
+M ⊲Ξ N and M/Ξ N construct and deconstruct singleton records (with Ξ = Π) and variants (Ξ = Σ).
+, Vol. 1, No. 1, Article . Publication date: July 2025.
+
+Abstracting Extensible Recursive Functions
+
+5
+
+Δ⊢𝜏 :𝜅
+(k-var)
+
+(k-∀)
+
+𝛼 :𝜅 ∈ Δ
+Δ⊢𝛼 :𝜅
+
+Δ, 𝛼 : 𝜅 ⊢ 𝜏 : ★
+Δ ⊢ ∀𝛼 : 𝜅.𝜏 : ★
+
+(k-sing)
+
+Δ⊢𝜉 :𝜅
+Δ ⊢ #𝜉 : ★
+(k-compl)
+
+(k-T)
+(k-→I )
+
+(k-map)
+Δ ⊢ 𝜌 2 : R𝜅
+
+T :𝜅
+Δ⊢T :𝜅
+
+Δ⊢𝜋
+
+(k-lab)
+
+Δ, 𝛼 : 𝜅 1 ⊢ 𝜏 : 𝜅 2
+
+(k-→E)
+
+Δ ⊢ 𝜆𝛼 : 𝜅 1 .𝜏 : 𝜅 1 → 𝜅 2
+
+Δ ⊢ 𝜙 : 𝜅1 → 𝜅2
+Δ ⊢ 𝜙 ★ : R𝜅1 → R𝜅2
+Δ ⊢ 𝜌 1 : R𝜅
+
+Δ ⊢ 𝜌2 \ 𝜌1
+
+Δ⊢ℓ :L
+
+: R𝜅
+
+(k-≲)
+
+(k-row)
+
+Δ ⊢ 𝜏1 : 𝜅 1 → 𝜅 2 Δ ⊢ 𝜏2 : 𝜅 1
+Δ ⊢ 𝜏1 𝜏2 : 𝜅 2
+
+Δ ⊢ 𝜉i : L
+
+Δ ⊢ 𝜌 i : R𝜅
+Δ ⊢ 𝜌1 ≲ 𝜌2
+
+Δ⊢𝜋 Δ⊢𝜏 :★
+Δ⊢𝜋 ⇒𝜏 :★
+
+(k-⇒)
+
+Δ ⊢ 𝜏i : 𝜅
+
+∀i < j. 𝜉 i <L 𝜉 j
+
+Δ ⊢ {𝜉 i ⊲ 𝜏i }i∈0...n : R𝜅
+(k-⊙)
+
+Δ ⊢ 𝜌 i : R𝜅
+Δ ⊢ 𝜌1 ⊙ 𝜌2 ∼ 𝜌3
+
+T :𝜅
+Π (𝜅 ) : R𝜅 → 𝜅
+
+(→) : ★ → ★ → ★
+
+Σ (𝜅 ) : R𝜅 → 𝜅
+
+𝜇 : (★ → ★) → ★
+
+where 𝜅 ≠ L
+Fig. 2. Kinding (types and predicates)
+
+These forms are overloaded in R𝜔, and indeed in our implementation, but we make the distinction
+explicit in the formal account for clarity. We do not include kind polymorphism, as it is an orthogonal
+concern, and so treat syn (𝜅 ) and ana (𝜅 ) as kind-indexed families of terms.
+We track separate environments for type (Δ), evidence (Φ), and term (Γ) variables.
+2.3
+
+Typing
+
+Kinding. Kinding is shown in Figure 2. The majority of rules should be unsurprising. The environment formation judgments are given in Appendix A, included in the extended version, and are also
+unsurprising.
+In the kinding of row literals, we assume some strict ordering of label literals < ⊆ L × L, and
+lift this to a relation on types <L by defining
+ℓ <L ℓ ′ ⇐⇒ ℓ < ℓ ′
+𝜏 ≮L 𝜏 ′ otherwise
+We require that row literals be listed in ascending order. This has two consequences. First, because
+all types other than label literals are incomparable, a row literal containing a label variable must
+have exactly one entry. Second, we avoid spurious distinctions that might be introduced by having
+different literals represent the same row. Of course, the requirement that entries be listed in order
+can trivially be assured by type checking, and so need not be imposed upon a surface language.
+The relative complement 𝜌 2 \ 𝜌 1 is defined for arbitrary 𝜌 1 and 𝜌 2 ; however, it will only be
+useful when 𝜌 1 is contained in 𝜌 2 . Constraining 𝜌 2 \ 𝜌 1 to only be well-kinded when 𝜌 1 ≲ 𝜌 2
+would introduce unpleasant circularity in the kinding and entailment rules (described further in
+Section 2.8).
+We define families of Π and Σ constructors for arbitrary kinds 𝜅. At kind ★, they describe record
+and variant types. At higher kinds, they describe constructors of record and variant types. This
+is not strictly necessary. Given a row of type constructors 𝜌 : R★→★ , for example, we could write
+, Vol. 1, No. 1, Article . Publication date: July 2025.
+
+6
+
+Alex Hubers, Apoorv Ingle, Andrew Marmaduke, and J. Garrett Morris
+
+Δ⊢𝜏 =𝜏 :𝜅
+
+(e-𝛽)
+
+Δ ⊢ (𝜆𝛼 : 𝜅.𝜏) 𝜐 : 𝜅 ′
+Δ ⊢ (𝜆𝛼 : 𝜅.𝜏) 𝜐 = 𝜏 [𝜐/𝛼] : 𝜅 ′
+
+(e-\)
+
+(e-liftΞ )
+
+(e-map\ )
+
+′
+
+Δ⊢𝜏 :𝜅
+
+′
+′
+Δ ⊢ (Ξ (𝜅→𝜅 ) 𝜌) 𝜏 = Ξ (𝜅 ) (𝜌 $ 𝜏) : 𝜅 ′
+
+(e-map)
+
+Δ ⊢ 𝜌 2 \ 𝜌 1 = subtract 𝜌 2 𝜌 1 : R𝜅
+
+(e-mapid )
+
+Δ ⊢ 𝜌 : R𝜅→𝜅
+
+(Ξ ∈ {Π, Σ})
+
+where 𝜌 $ 𝜏 = (𝜆f .f 𝜏)★ 𝜌
+
+Δ ⊢ 𝜌 i : R𝜅
+
+Δ ⊢ 𝜌 : R𝜅
+
+Δ⊢𝜋 =𝜋
+
+(e-map◦ )
+
+Δ ⊢ 𝜙 : 𝜅1 → 𝜅2
+
+Δ ⊢ {𝜉 i ⊲ 𝜏i }i∈0...n : R𝜅1
+
+Δ ⊢ 𝜙 ★ {𝜉 i ⊲ 𝜏i }i∈0...n = {𝜉 i ⊲ 𝜙 𝜏i }i∈0...n : R𝜅2
+
+Δ ⊢ 𝜙1 : 𝜅2 → 𝜅3
+
+Δ ⊢ 𝜙2 : 𝜅1 → 𝜅2
+
+Δ ⊢ 𝜌 : R𝜅1
+
+Δ ⊢ (𝜆𝛼 .𝛼)★ 𝜌 = 𝜌 : R𝜅
+
+Δ ⊢ 𝜙 1★ (𝜙 2★ 𝜌) = (𝜙 1 ◦ 𝜙 2 )★ 𝜌 : 𝜅 3
+where 𝜙 1 ◦ 𝜙 2 = 𝜆𝛼 .𝜙 1 (𝜙 2 𝛼)
+
+Δ ⊢ 𝜙 : 𝜅1 → 𝜅2
+
+Δ ⊢ 𝜌 : RR
+
+Δ ⊢ 𝜌 i : R𝜅1
+
+𝜅
+
+(e-Ξ)
+
+Δ ⊢ 𝜙 ★ (𝜌 2 \ 𝜌 1 ) = 𝜙 ★ 𝜌 2 \ 𝜙 ★ 𝜌 1 : 𝜅 2
+
+★
+
+Δ ⊢ Ξ (R ) 𝜌 = Ξ (𝜅 ) 𝜌 : R𝜅
+𝜅
+
+(Ξ ∈ {Π, Σ})
+
+subtract 𝜌 𝜌
+subtract 𝜀 𝜌 = 𝜀
+subtract 𝜌 𝜀 = 𝜌
+
+
+subtract 𝜌 𝜌 ′
+
+
+
+subtract {ℓ ⊲ 𝜏, 𝜌 } {ℓ ⊲ 𝜏 , 𝜌 } = {ℓ ⊲ 𝜏, subtract 𝜌 {ℓ ′ ⊲ 𝜏 ′, 𝜌 ′ }}
+
+
+ subtract {ℓ ⊲ 𝜏, 𝜌 } 𝜌 ′
+
+′
+
+′
+
+′
+
+if ℓ = ℓ ′ and 𝜏 = 𝜏 ′
+if ℓ < ℓ ′
+if ℓ > ℓ ′
+
+Fig. 3. Type equivalence
+
+𝜆t.Σ((𝜆f .f t)★ 𝜌) instead of Σ𝜌 (indeed, the former is the latter’s normal form, which we describe
+in Section 4.1). We have found the cognitive load of overloading Π and Σ to be much less than the
+alternative syntactic overload. We disallow the formation of records and variants at label kind L,
+which introduces metatheoretic challenges without any redeeming practical applications.
+Type equivalence. The interesting cases of type equivalence are shown in Figure 3. The relative
+complement operator for row literals is implemented by the function subtract 𝜌 2 𝜌 1 , which in turn
+relies on the ordering of rows. Rule (e-map\ ) commutes mapping over row complements; this rule
+is derivable when 𝜌 2 and 𝜌 1 are literals. Rule (e-map) implements the map operator for row literals.
+Rules (e-mapid ) and (e-map◦ ) observe that −★ behaves as a functor map for rows. Of course, these
+rules follow from (e-map) in the case where 𝜌 is a row literal. Rules (e-liftΞ ) and (e-Ξ) implement
+the overloading of Π and Σ. The remaining rules (relegated to Appendix A, included in the extended
+version) implement congruences for the type constructors and ensure that Δ ⊢ 𝜏 = 𝜏 : 𝜅 is an
+equivalence relation.
+Typing. Typing rules are given in Figure 4. Much of the interest is deferred to the constants, discussed
+next. We make type abstraction and application and predicate abstraction and application explicit
+here. We assume that type abstraction and application would typically, and predicate abstraction
+and application would always, be implicit in a surface language. (− ⊲Π −) and (−/Π −) construct
+and deconstruct singleton records, and (− ⊲Σ −) and (−/Σ −) construct and deconstruct singleton
+, Vol. 1, No. 1, Article . Publication date: July 2025.
+
+Abstracting Extensible Recursive Functions
+
+7
+
+Δ; Φ; Γ ⊢ M : 𝜏
+(t-var)
+
+Δ⊢Φ
+
+Δ⊢Γ x :𝜏 ∈ Γ
+Δ; Φ; Γ ⊢ x : 𝜏
+
+(t-→I )
+
+Δ⊢𝜏 :★
+
+Δ; Φ; Γ, x : 𝜏 ⊢ M : 𝜐
+
+Δ ⊢ 𝜋 Δ; Φ, 𝜋; Γ ⊢ M : 𝜏
+Δ; Φ; Γ ⊢ Λv : 𝜋 .M : 𝜋 ⇒ 𝜏
+
+Δ, 𝛼 : 𝜅; Φ; Γ ⊢ M : 𝜏
+Δ; Φ; Γ ⊢ Λ𝛼 : 𝜅.M : ∀𝛼 : 𝜅.𝜏
+
+(t-ΞI)
+
+Δ⊢Φ Δ⊢Γ K :𝜎
+Δ; Φ; Γ ⊢ K : 𝜎
+(t-→E)
+
+Δ; Φ; Γ ⊢ 𝜆x : 𝜏 .M : 𝜏 → 𝜐
+
+(t-⇒I )
+
+(t-∀I )
+
+(t-k)
+
+(t-∀E)
+
+Δ ⊢ 𝜉 : L Δ; Φ; Γ ⊢ N : 𝜏
+Δ; Φ; Γ ⊢ M : #𝜉
+Δ; Φ; Γ ⊢ M ⊲Ξ N : Ξ{𝜉 ⊲ 𝜏 }
+
+(t-⇒E)
+
+(t-conv)
+
+Δ; Φ; Γ ⊢ M : 𝜏
+
+Δ; Φ; Γ ⊢ M : 𝜐
+
+Δ; Φ; Γ ⊢ M : 𝜏 → 𝜐 Δ; Φ; Γ ⊢ N : 𝜏
+Δ; Φ; Γ ⊢ M N : 𝜐
+
+Δ; Φ; Γ ⊢ M : 𝜋 ⇒ 𝜏
+
+Δ; Φ ⊢ Q : 𝜋
+
+Δ; Φ; Γ ⊢ M [Q] : 𝜏
+
+Δ; Φ; Γ ⊢ M : ∀𝛼 : 𝜅.𝜏
+
+Δ ⊢𝜐 :𝜅
+
+Δ; Φ; Γ ⊢ M [𝜐] : 𝜏 [𝜐/𝛼]
+
+(t-ΞE)
+
+Δ ⊢𝜏 =𝜐 :★
+
+Δ; Φ; Γ ⊢ M : Ξ{𝜉 ⊲ 𝜏 }
+Δ; Φ; Γ ⊢ N : #𝜉
+Δ; Φ; Γ ⊢ M/Ξ N : 𝜏
+
+(t-#I )
+
+Δ⊢𝜁 :𝜅
+Δ; Φ; Γ ⊢ #𝜁 : #𝜁
+
+(Ξ ∈ {Π, Σ})
+
+K :𝜎
+prj : ∀yz : R . y ≲ z ⇒ Πz → Πy
+
+in : ∀f : ★ → ★.f (𝜇f ) → 𝜇f
+
+(++) : ∀xyz : R★ . x ⊙ y ∼ z ⇒ Πx → Πy → Πz
+
+out : ∀f : ★ → ★.𝜇f → (f (𝜇f ))
+
+inj : ∀yz : R★ . y ≲ z ⇒ Σy → Σz
+
+fix : ∀t : ★.(t → t) → t
+
+★
+
+★
+
+(|) : ∀xyz : R , t : ★. x ⊙ y ∼ z ⇒ (Σx → t) → (Σy → t) → (Σz → t)
+syn
+
+(𝜅 )
+
+: ∀f : 𝜅 → ★, z : R𝜅 .#f → (∀l : L, t : 𝜅.{l ⊲ t} ≲ z ⇒ #l → f t) → Π(f z)
+
+ana (𝜅 ) : ∀f : 𝜅 → ★, z : R𝜅 , t : ★.#f → (∀l : L, u : 𝜅.{l ⊲ u} ≲ z ⇒ #l → f u → t) → Σ(f z) → t
+Fig. 4. Typing
+
+variants. These essentially provide the “base cases” of our record and variant system; we will
+construct larger records, or eliminate larger variants, by combining these individual cases.
+Constants. The types of in, out, and fix are standard. The prj operator projects smaller records
+from largers ones. This operator is overloaded in both its input and output types. Given M : Πz, a
+record built following row z, prj M can build any subrecord of M, from the empty record to the full
+subrecord M itself. The usual record selection operator is a special case of our projection operator,
+and is definable in R𝜔𝜇 (§2.6). The (++) operator concatenates records, so long as their types fit
+together. The particulars of the predicates y ≲ z and x ⊙ y ∼ z will be discussed shortly (§2.4).
+The dual operators for variants are inj and (|). The inj operator injects smaller variants into larger
+variants; as with prj, it is overloaded in both its input and output types. The (|) operator combines
+variant eliminators: if f eliminates variants over row x, and g eliminates variants over y, then
+f | g (read “f or g”) eliminates variants built from the combination of x and y. Finally, syn and ana
+provide “label-generic” construction of record and elimination of variants. Intuitively, syn #f M
+builds a record where each field can be built by M, and ana #f M eliminates a variant where each
+case can be handled by M. We will describe these operators in more detail later in this section (§2.7).
+, Vol. 1, No. 1, Article . Publication date: July 2025.
+
+8
+
+Alex Hubers, Apoorv Ingle, Andrew Marmaduke, and J. Garrett Morris
+
+Evidence variables v ∈ V
+
+Indices i, j, k, m, n ∈ N
+
+Index maps p, q ∈ N ⇀ N
+
+Evidence Q ∋ Q ::= v | Q # Q | incl p | plus p q
+| refl≲ | map≲ Q | plusL≲ Q | plusR≲ Q
+| emptyL⊙ | emptyR⊙ | map⊙ Q | complL⊙ Q | complR⊙ Q
+Fig. 5. Syntax: evidence
+
+2.4
+
+Entailment
+
+We describe R𝜔𝜇’s predicates and entailment relation. Predicates play a central role in understanding
+rows in R𝜔𝜇. In types, they capture the structure and manipulation of rows, via containment (≲)
+and combination (⊙) relations. In terms, the proofs of these relations determine the meaning of the
+projection, concatenation, injection, and branching primitives. Proofs of the entailment relation
+are represented in terms by evidence.
+The syntax of evidence is given in Figure 5. The essential data carried by evidence are index
+maps, mapping entries in one row to entries in another. We will write index maps using ↦→, to
+avoid confusion between semantic objects and syntactic 𝜆 definitions, and will write ran(p) for the
+range of an index map. In practice, index maps could be implemented as vectors of indices, rather
+than as functions. As we insist that rows are ordered, index maps will always be monotononic. The
+forms of evidence otherwise correspond directly to the forms of entailment proof.
+The entailment relation is given in Figure 6. We use a witnessed containment judgment p : 𝜌 1 ⊆
+𝜌 2 , denoting that index map p locates the entries of 𝜌 1 in 𝜌 2 . The judgment Δ; Φ ⊢ Q : 𝜋 holds when
+Q is evidence for 𝜋 given assumptions in Φ. The base cases of entailment are for row literals. Rule
+(n-≲) states that one row is contained within another exactly when there is a map from the entries
+of the contained row to entries of the containing row. Rule (n-⊙) states that 𝜌 3 is the combination
+of 𝜌 1 and 𝜌 2 when the entries of each of 𝜌 1 and 𝜌 2 can be mapped to disjoint entries of 𝜌 3 . Rules
+(n-𝜀 ⊙L ,n-𝜀 ⊙R ) make the empty row the unit of combination. These rules are derivable for concrete
+𝜌, and they allow us to derive 𝜀 ≲ 𝜌 for any 𝜌. Rules (n-⊙ ≲L ,n-⊙ ≲R ) describe one direction of the
+relationship between containment and combination: if 𝜌 1 and 𝜌 2 combine to make 𝜌 3 , then each of
+𝜌 1 and 𝜌 2 must be contained in 𝜌 3 . Rules (n-⊙\L ,n-⊙\R ) give the other direction: if 𝜌 1 is contained
+in 𝜌 2 , then there is some row which can be combined with 𝜌 1 to make 𝜌 2 . The remaining rules are
+unsurprising.
+Many of the expected properties of the entailment relation, such as reflexivity and transitivity
+of containment, hold by construction. Others holds by simple inductive arguments. In particular:
+entailment is preserved under substitution, and the ⊙ relation is commutative.
+2.5
+
+Variants and Records
+
+R𝜔𝜇’s primitive operations are quite general, and it may not be immediately apparent how they
+would be used in practice. We will now walk though several relatively simple examples of programming with R𝜔𝜇. The code shown in these sections is as type checked and executed by our
+experimental implementation of R𝜔𝜇, modulo some substitution of mathematical symbols (such as
+∀ and Σ) for keywords (such as forall and Sigma).
+The starting point for work on the Rose type system was Wand’s [35] encoding of multiple
+inheritance using row types. The essence of Wand’s example is expressed in R𝜔𝜇 as:
+wand : ∀ x y z t. x ⊙ y ∼ z, {'l ⊲ t} ≲ z ⇒ Π x → Π y → t
+wand = 𝜆 r s. prj (r ++ s) / #'l
+, Vol. 1, No. 1, Article . Publication date: July 2025.
+
+Abstracting Extensible Recursive Functions
+
+9
+
+p:𝜌 ⊆𝜌
+′
+𝜉 k = 𝜉 p(k)
+
+′
+𝜏k = 𝜏p(k)
+
+p : {𝜉 i ⊲ 𝜏i }i∈0...m ⊆ {𝜉 j′ ⊲ 𝜏j′ }j ∈0...n
+
+(for all k ∈ 0 . . . m)
+
+Δ; Φ ⊢ Q : 𝜋
+(n-ax)
+
+(n-trans)
+
+(n-⊙\L )
+
+(n-⊙)
+
+v:𝜋 ∈ Φ
+Δ; Φ ⊢ v : 𝜋
+
+(n-refl)
+
+Δ; Φ ⊢ Q1 : 𝜌 1 ≲ 𝜌 2
+
+Δ⊢Φ
+Δ; Φ ⊢ refl≲ : 𝜌 ≲ 𝜌
+
+Δ; Φ ⊢ Q2 : 𝜌 2 ≲ 𝜌 3
+
+Δ; Φ ⊢ Q1 # Q2 : 𝜌 1 ≲ 𝜌 3
+Δ; Φ ⊢ Q : 𝜌 1 ≲ 𝜌 2
+
+Δ; Φ ⊢ complL ⊙ Q : 𝜌 2 \ 𝜌 1 ⊙ 𝜌 1 ∼ 𝜌 2
+
+p : {𝜉 i ⊲ 𝜏i }i∈0...m ⊆ {𝜉 k′′ ⊲ 𝜏k′′ }k∈0...n
+
+(n-conv)
+
+(n-⊙\R )
+
+(n-≲)
+
+Δ; Φ ⊢ Q : 𝜋1
+
+Δ; Φ ⊢ Q : 𝜋2
+Δ; Φ ⊢ Q : 𝜌 1 ≲ 𝜌 2
+
+Δ; Φ ⊢ complR ⊙ Q : 𝜌 1 ⊙ 𝜌 2 \ 𝜌 1 ∼ 𝜌 2
+
+p : {𝜉 i ⊲ 𝜏i }i∈0...m ⊆ {𝜉 j′ ⊲ 𝜏j′ }j ∈0...n
+Δ; Φ ⊢ incl p : {𝜉 i ⊲ 𝜏i }i∈0...m ≲ {𝜉 j′ ⊲ 𝜏j′ }j ∈0...n
+
+q : {𝜉 j′ ⊲ 𝜏j′ }j ∈0...n−m ⊆ {𝜉 k′′ ⊲ 𝜏k′′ }k∈0...n
+
+Δ; Φ ⊢ plus p q : {𝜉 i ⊲ 𝜏i }i∈0...m ⊙ {𝜉 j′ ⊲ 𝜏j′ }j ∈0...n−m ∼ {𝜉 k′′ ⊲ 𝜏k′′ }k∈0...n
+(n-𝜀 ⊙L )
+
+(n-≲map)
+
+Δ⊢Φ
+Δ; Φ ⊢ emptyL ⊙ : 𝜀 ⊙ 𝜌 ∼ 𝜌
+
+Δ; Φ ⊢ Q : 𝜌 1 ≲ 𝜌 2
+Δ; Φ ⊢ map≲
+(n-⊙≲ L )
+
+Q : 𝜙★ 𝜌
+
+1
+
+≲ 𝜙★ 𝜌
+
+(n-𝜀 ⊙R )
+
+(n-⊙map)
+2
+
+Δ; Φ ⊢ Q : 𝜌 1 ⊙ 𝜌 2 ∼ 𝜌 3
+Δ; Φ ⊢ plusL≲ Q : 𝜌 1 ≲ 𝜌 3
+
+Δ ⊢ 𝜋1 = 𝜋2
+
+(ran(p) ∩ ran(q) = ∅)
+
+Δ⊢Φ
+Δ; Φ ⊢ emptyR ⊙ : 𝜌 ⊙ 𝜀 ∼ 𝜌
+Δ; Φ ⊢ Q : 𝜌 1 ⊙ 𝜌 2 ∼ 𝜌 3
+
+Δ; Φ ⊢ map ⊙ Q : 𝜙 ★ 𝜌 1 ⊙ 𝜙 ★ 𝜌 2 ∼ 𝜙 ★ 𝜌 3
+
+(n-⊙≲ R )
+
+Δ; Φ ⊢ Q : 𝜌 1 ⊙ 𝜌 2 ∼ 𝜌 3
+Δ; Φ ⊢ plusR≲ Q : 𝜌 2 ≲ 𝜌 3
+
+Fig. 6. Entailment
+
+The term wand is a function that takes two record arguments m and n. It concatenates these records,
+and projects the field labeled 'l from the result. In our concrete syntax, we use initial quote marks
+to distinguish label constants from label variables. The surrounding singleton elimination form
+/ #'l determines the output type of the prj operator. (In our implementation, we overload the /
+and ⊲ symbols to apply to either variants or records.) This operation makes sense if either m or n
+contains an 'l-labeled field. This is captured in the type of wand: wand takes two records, one of
+type Π x and one of type Π y and return a value of type t, so long as (1) the rows x and y can be
+combined to make a row z, and (2) the row z contains an entry with label 'l. Crucially, we do not
+constrain which of x and y originally contained label 'l.
+Records and variants are dual, and so there is a dual version of Wand’s problem in terms of
+variants. It is expressed in R𝜔𝜇 as:
+dnaw : ∀ x y z t u. x ⊙ y ∼ z, {'l ⊲ t} ≲ z ⇒ (Σ x → u) → (Σ y → u) → t → u
+dnaw = 𝜆 f g x. (f | g) (inj (#'l ⊲ x))
+The term dnaw is a function of two variant eliminators f and g and a value x. It combines these
+eliminators, and then passes to the combined eliminator a variant with constructor 'l and value
+x. This operation makes sense so long as either f or g includes constructor 'l among the cases it
+handles. This is captured in its type: dnaw takes two eliminators, one from Σ x to u and one from
+, Vol. 1, No. 1, Article . Publication date: July 2025.
+
+10
+
+Alex Hubers, Apoorv Ingle, Andrew Marmaduke, and J. Garrett Morris
+
+sel : ∀ l t z. {l ⊲ t} ≲ z ⇒
+Π z → #l → t
+sel = 𝜆 r l. prj r / l
+
+rcon : ∀ l f z. {l ⊲ f} ≲ z ⇒
+#l → f (𝜇 (Σ z)) → 𝜇 (Σ z)
+rcon = 𝜆 l x. in (con l x)
+
+con : ∀ l t z. {l ⊲ t} ≲ z ⇒
+#l → t → Σ z
+con = 𝜆 l x. inj (l ⊲ x)
+
+case : ∀ l t u.
+#l → (t → u) → Σ {l ⊲ t} → u
+case = 𝜆 l f x. f (x / l)
+match : ∀ t u. t → (t → u) → u
+match = 𝜆 x f. f x
+
+Fig. 7. Common operations with first-class labels
+
+Σ y to u, and returns a t → u function, so long as the rows x and y can be combined to make z,
+and z contains an entry l ⊲ t.
+
+2.6
+
+First-Class Labels
+
+Reusable coding patterns, such as selecting a single field from a record or constructing a variant
+from a given label, are already apparent in our simple R𝜔𝜇 examples. Hubers and Morris [15]
+extended Rose with support for first-class labels, allowing these patterns to be captured in general.
+Figure 7 shows some useful utility functions with first-class labels.
+The sel and con functions abstract field selection and variant construction. We use singleton
+types #l to make the otherwise-implicit label explicit. In this paper, we will be interested in recursive
+variants, so we also define a recursive variant construction function rcon.
+The case function abstracts a common pattern in defining variant eliminators. For example,
+define a type of Booleans as so:
+type Bool : ★
+type Bool = Σ { 'True ⊲ Unit, 'False ⊲ Unit }
+(Definitions for the Unit, Nat, and List types can be found in Appendix B, included in the extended
+version.) We write the not function by combining individual eliminators for the singleton variants
+Σ { 'True ⊲ Unit } and Σ { 'False ⊲ Unit }:
+not : Bool → Bool
+not = case #'True (con #'False)
+| case #'False (con #'True)
+
+This style is quite pleasant when programming in a points-free style. However, it can become
+cumbersome to read when the scrutinee needs to be provided explicitly. The match function (actually
+just reverse application) makes the code much easier to read:
+not = 𝜆 b. match b
+( case #'True (con #'False)
+| case #'False (con #'True))
+The appeal of the fully generic prj and inj functions may not be apparent, given that we
+
+have immediately wrapped them to provide more familiar field selection and variant construction
+operations. Consider the following function, which applies a modifier function to one field of a
+record:
+modify : ∀ l t u y z1 z2. {'l ⊲ t} ⊙ y ∼ z1, {'l ⊲ u} ⊙ y ∼ z2 ⇒
+#l → (t → u) → Π z1 → Π z2
+modify = 𝜆 l f r. (l ⊲ f (sel l r)) ++ prj r
+This definition makes two uses of prj: in sel l r, prj is used to select a single record field; the
+other use of prj computes the remainder of the record less field l. In many row type systems, these
+, Vol. 1, No. 1, Article . Publication date: July 2025.
+
+Abstracting Extensible Recursive Functions
+
+11
+
+would have to be distinct primitive operations. For us, they are just two uses of the same underlying
+operator.
+2.7
+
+Label-Generic Programming
+
+The operations we have discussed so far all operate on specific labels. Hubers and Morris [15]
+generalize Rose with two label-generic operators. The synthesis operator generates a record with
+arbitrary fields, given a term that can construct a value for any field. The analysis operator eliminates
+a variant with arbitrary constructors, given a term that can eliminate a value for any constructor.
+We will illustrate the use of these operators using our encoding of functors in R𝜔𝜇.
+Many encodings of extensible recursive data types rely on building data types from functors, and
+“tying the knot” of the recursive data type at the last possible moment. Swierstra [33] makes this
+pattern explicit, introducing a (binary) coproduct operator ⊕ to combine functors, and an instance
+that concludes Functor (f ⊕ g) from instances for Functor f and Functor g. In turn, the functor
+structure is used to implement various traversals and eliminations of recursive variants.
+We would like to apply a similar approach in R𝜔𝜇, but with rows of functors rather than binary
+combinations. As with Swierstra’s coproduct, the key feature will be a witness that, if 𝜌 is a row of
+functors, then Σ𝜌 (and Π𝜌) are functorial as well. The challenge is that, while we need to impose
+some structure on the types in 𝜌—namely, that they are functorial—we do not want to limit the
+labels in 𝜌.
+First, we define functoriality. The type Functor f is the the type of the mapping operator for a
+type constructor f:
+type Functor : (★ → ★) → ★
+type Functor = 𝜆f. ∀ a b. (a → b) → f a → f b
+Next, we define the mapping operator fmapS for variants built from functors:
+fmapS : ∀ z : R[★ → ★]. Π (Functor z) → Functor (Σ z)
+fmapS = 𝜆 d. Λ a b. 𝜆 f w.
+ana #(𝜆x. x a) (𝜆 l x. con l (sel d l f x)) w
+Our goal is a value of type Functor (Σ z), that is to say, one of type ∀ a b. (a → b) → (Σ z) a
+→ (Σ z) b. We are relying on our overloading of Σ to apply at higher kinds here: (Σ z) a is the
+variant built from the application of each type operator in z to argument a. Obviously, we need to
+know that all the types in z are functorial themselves. We capture this requirement as the argument
+Π (Functor z). We (implicitly) map type operator Functor over row z. The resulting row contains
+the type of the fmap operator for each type constructor in z. We then construct a record of these
+fmaps.
+Our implementation uses the label-generic variant eliminator ana. We focus on its second
+
+argument, which is the “body” of the eliminator. The type of the body is highly polymorphic; in
+this instance, it has type ∀ l u. {l ⊲ u} ≲ z ⇒ #l → u a → Σ (z b). That is: for an arbitrary
+l ⊲ u in the input row z, we must transform a u a value to a Σ (z b) result. To do so, we need a
+mapping operator for the type u; luckily, the record of mapping operators d must contain just such
+an operator, in field l. The expression sel d l f x selects this mapping operator from d, and then
+applies it to f and x, giving a term of type u b. To get a value of type Σ (z b), we need only reapply
+the constructor l.
+There is one significant unexplained step in this account. The result type Σ (z b) comes from
+the expected type of fmapS itself. However, the input is of type (Σ z) a; how did we get a constraint
+{l ⊲ u} ≲ z instead of something in terms of z$ a (as rule (e-liftΣ ) would suggest)? The answer
+is the provided type operator 𝜆 x. x a, which is applied to the type of the analyzed row. This
+operator aligns the type we need in the body (u a) with the constraint we would like (in terms of
+just u).
+, Vol. 1, No. 1, Article . Publication date: July 2025.
+
+12
+
+Alex Hubers, Apoorv Ingle, Andrew Marmaduke, and J. Garrett Morris
+
+The case for products is dual:
+fmapP : ∀ z : R[★ → ★]. Π (Functor z) → Functor (Π z)
+fmapP = 𝜆 d. Λ a b. 𝜆f r.
+syn #(𝜆x. x b) (𝜆l. sel d l f (sel r l))
+
+The type is constructed similarly, and the same problem arises: How are we to construct a
+record of type Π (z b) when we know nothing about the labels in z? The answer is the labelgeneric record constructor syn. We focus on its second argument. The type is similarly generic:
+∀ l u. {l ⊲ u} ≲ z ⇒ #l → u b. To construct the needed result, we begin by projecting a value
+of type u a from the input record r, and then using the l-labeled mapping function to transform it
+to a value of type u b. Again, the provided type operator 𝜆 x. x b aligns the required result type
+u b with the needed constraint {l ⊲ u} ≲ z.
+2.8
+
+Row Complements
+
+This work extends the existing R𝜔 type system with first-class row complements. To see why,
+we consider another example of label-generic programming.The goal is generic construction of
+equality functions for variant types. The type Eq t describes an equality function for type t:
+type Eq : ★ → ★
+type Eq = 𝜆 t. t → t → Bool
+The eqS function compares arbitrary variants Σ z, so long as we have comparison functions for
+each entry in z:
+eqS : ∀ z : R[★]. Π (Eq z) → Eq (Σ z)
+eqS = 𝜆 d v w. ana #(𝜆 x. x)
+(𝜆 l y. match v
+( case l (𝜆 x. sel d l x y)
+| const False)) w
+The logic, captured in the second argument to ana, is as follows. We are given the constructor l
+and contents y of the variant w. We then branch on v. If v has constructor l and body x, we must
+then compare x and y. We do so using the l-labeled equality function in d. Otherwise, v and w were
+
+built using different constructors, and so must be unequal.
+The challenge here arises in typing the default branch const False. All we know about the type
+Σ z of w and v is that there is some t such that {l ⊲ t} ≲ z. In particular, we do not have a name
+for the “rest” of z. However, const False needs to have type Σ y → Bool, where y is exactly the
+“rest” of z.
+R𝜔 addressed this gap by complicating the type of ana (and syn), replacing the x ≲ z constraint
+with a constraint x ⊙ y ∼ z for a new type parameter y. In addition to being cumbersome, this
+solution does not scale. For example, knowing that x ⊙ y ∼ z and that z ⊙ w ∼ v does not provide
+a solution to x ⊙ ? ∼ v, even though such a row must exist.
+Our solution is to make row complements first class: 𝜌 2 \ 𝜌 1 contains the entries of 𝜌 2 that are
+not in 𝜌 1 . Of course, without knowing anything about the relationship between 𝜌 2 and 𝜌 1 , it is
+difficult to say anything about 𝜌 2 \ 𝜌 1 . However, if we know that 𝜌 1 ≲ 𝜌 2 , then we can do better. In
+particular, rule (n-⊙\R ) allows us to conclude that 𝜌 1 ⊙ (𝜌 2 \ 𝜌 1 ) ∼ 𝜌 2 .
+This addresses the problem in the typing of eqS: we can now give const False the type Σ (z \ {l
+⊲ t}) → Bool. It also addresses the scaling problem that came from replacing x ≲ z predicates
+with x ⊙ y ∼ z. On the one hand, given x ≲ y and y ≲ z, we can conclude x ≲ z; given the latter,
+we also have x ⊙ (z \ x) ∼ z.
+It may be surprising that we allow 𝜌 2 \ 𝜌 1 at all without knowing that 𝜌 1 ≲ 𝜌 2 . Our reasons
+for doing so are several. Attempting to impose such a restriction would make the definitions of
+kinding and predicate formation mutually recursive. Moreover, predicates have evidence; should the
+, Vol. 1, No. 1, Article . Publication date: July 2025.
+
+Abstracting Extensible Recursive Functions
+
+13
+
+evidence used to justify 𝜌 2 \ 𝜌 1 be reflected somehow in the type? Do different justifications of 𝜌 1 ≲
+𝜌 2 somehow distinguish instances of 𝜌 2 \ 𝜌 1 ? Allowing 𝜌 2 \ 𝜌 1 regardless of the relationship between
+𝜌 2 and 𝜌 1 avoids all these problems, and poses no difficult in the definition of the complement.
+3
+
+EXTENSIBLE RECURSIVE FUNCTIONS
+
+3.1
+
+The Extensible Recursion Problem
+
+Invoking Wadler [34], we give the following definition of an extended expression problem:
+The Extended Expression Problem is a new name for an old problem. The goal is to
+define datatypes by cases, where one can combine datatype and combine functions
+over the datatypes, without recompiling existing code, and while retaining static type
+safety. For the concrete example, we take expressions as the data type, begin with
+one case (arithmetic terms) and one function (evaluation), then add two more cases
+(Boolean and functional terms) and one more function (desugaring Boolean terms).
+This section describes our solution to the extended expression problem. We begin with an overview
+of the technical challenges in solving the extended expression problems, introduce extensible
+histomorphisms, a new abstraction of recursive traversals that supports extensibility, and then
+demonstrate our implementations of evaluation and desugaring.
+We structure expressions by:
+type ArithF : R[★ → ★]
+type ArithF = { 'IConst ⊲ Const Nat
+, 'Plus ⊲ (𝜆 t. Pair t t) }
+type BoolF : R[★ → ★]
+type BoolF = { 'BConst ⊲ Const Bool
+, 'If ⊲ (𝜆 t. Triple t t t) }
+
+type LamF : R[★ → ★]
+type LamF = { 'Var ⊲ Const Nat
+, 'Lam ⊲ Id
+, 'App ⊲ (𝜆t. Pair t t) }
+
+Arithmetic expressions include constants and sums. Boolean expressions include constants and
+conditionals. The Pair type is defined as 𝜆 a b. Π { '1 ⊲ a, '2 ⊲ b }, and similarly for Triple.
+Functional expressions include variables, abstractions, and applications. We refer to variables by de
+Bruijn indices; consequently, abstractions need to carry no information other than their body. For
+example, the negation function can be given by:
+notE : ∀ z. LamF ≲ z, BoolF ≲ z ⇒ 𝜇 (Σ z)
+notE = rcon #'Lam (rcon #'If (triple (rcon #'Var zero)
+(rcon #'BConst False)
+(rcon #'BConst True)))
+By giving notE a generic type, we avoid the need to manually inject it into larger expression types.
+
+To illustrated the difficulties in the extended expression problem, consider naïve evaluation
+functions for arithmetic expressions.
+naiveA : 𝜇 (Σ ArithF) → Nat
+naiveA = fix (𝜆 rec exp. match (out exp)
+( case #'IConst id
+| case #'Plus (𝜆 p. add (rec (sel p #'1)) (rec (sel p #'2)))))
+
+and Boolean expressions:
+naiveB : 𝜇 (Σ BoolF) → Bool
+naiveB = fix (𝜆 rec exp. match (out exp)
+( case #'BConst id
+| case #'If (𝜆 t. match (rec (sel t #'1))
+( case #'True (const (rec (sel t #'2)))
+| case #'False (const (rec (sel t #'3)))))))
+, Vol. 1, No. 1, Article . Publication date: July 2025.
+
+14
+
+Alex Hubers, Apoorv Ingle, Andrew Marmaduke, and J. Garrett Morris
+
+To be clear: these are well-typed definitions of big-step evaluation functions for the arithmetic
+and Boolean langauges. We list the reasons it is not immediately possible to write something like
+naiveA | naiveB as an evaluator for the combined arithmetic and Boolean langauges:
+First, the output types do not align. We could (and will) address this by introducing a variant for
+values. In doing so, we will also have to account for recursive calls returning the wrong type of
+value. This adds some incidental complexity, but does not change anything fundamental.
+More significantly, the input types do not align. The outer 𝜇 wrapper is not the problem;
+we could easily adapt naiveA to be of type Σ ArithF (𝜇 (Σ ArithF)) → Nat, and similarly for
+naiveB. The problem is in the recursive instances. Writing ABF for the combination of ArithF and
+BoolF, we have that Σ ArithF (𝜇 (Σ ABF)) ⊙ Σ BoolF (𝜇 (Σ ABF)) ∼ Σ ABF(𝜇 (Σ ABF)), but not that
+Σ ArithF (𝜇 (Σ ArithF)) ⊙ Σ BoolF (𝜇 (Σ BoolF)) ∼ Σ ABF(𝜇 (Σ ABF)), as we would need to combine naiveA and naiveB. In essence, the problem is the recursive calls. The recursive calls in naiveA
+are to naiveA, not to the combined naiveA and naiveB. However, we cannot be sure that the expressions inside an arithmetic expression are only arithmetic expressions; indeed, the notE example
+interleaves terms from the functional and Boolean languages.
+At this point, it might be tempting to suggest a branching operator that can “unfold” fixpoints,
+and refold them with a more general type for recursive calls. At the end of the section, we will
+demonstrate that, even with such a capability, we could not generally combine eliminations of
+recursive variants.
+3.2
+
+Algebras and Extensibility
+
+Our approach to describing extensible recursive functions is to add a layer of abstraction, following
+the well-studied idea of recursion schemes [19, 20]. The simplest recursion scheme is the catamorphism, whose R𝜔𝜇 description is given by:
+type FAlg : (★ → ★) → ★ → ★
+type FAlg = 𝜆 f a. f a → a
+
+cata : ∀ f a. Functor f → FAlg f a → 𝜇 f → a
+cata = 𝜆 map a. fix (𝜆 cata x. a (map cata (out x)))
+
+Catamorphisms are uniquely determined by F-algebras, functions of type f a → a, given a type
+family f and result type a. Intuitively, this consists of one step of a bottom-up fold. A catamorphism
+with type 𝜇 f → a is built from an F-algebra and a mapping function Functor f to access the data.
+F-algebras are innately well-suited to extensibility. An F-algebra for computing the size (i.e.,
+number of constructors) of arithmetic terms is:
+sizeA : FAlg (Σ ArithF) Nat
+sizeA = case #'IConst (𝜆u. one)
+| case #'Plus (𝜆t. succ (add (sel t #'1) (sel t #'2)))
+
+and one for Boolean terms is:
+sizeB : FAlg (Σ BoolF) Nat
+sizeB = case #'BConst (𝜆u. one)
+| case #'If (𝜆t. succ (add (sel t #'1) (add (sel t #'2) (sel t #'3))))
+These are individually straightforward. Expanding their type, we have that sizeB has type Σ BoolF
+Nat → Nat, sizeA has type Σ ArithF → Nat, and so sizeA | sizeB can be given type Σ ABF Nat →
+Nat, just as we would hope.
+
+Unfortunately, not all recursive functions are catamorphic. Evaluating arithmetic expressions is
+naturally catamorphic. Evaluating Boolean expressions can be seen catamorphically, even if it may
+seem odd to preemptively evaluate both branches of the conditional. Evaluating functions, however,
+cannot be viewed catamorphically: evaluating an abstraction should not be defined in terms of
+evaluating its body. To capture functions like big-step evaluation, we need a more expressive
+recursion scheme.
+Our proposed recursion scheme, which we call an extensible histomorphism, is defined by:
+, Vol. 1, No. 1, Article . Publication date: July 2025.
+
+Abstracting Extensible Recursive Functions
+
+15
+
+type Xh : R[★ → ★] → (R[★ → ★] → ★) → ★
+type Xh = 𝜆 z f. ∀ w. z ≲ w ⇒ Σ z (𝜇 (Σ w)) → (𝜇 (Σ w) → f w) → f w
+
+Our most immediate inspiration are Mendler histomorphisms [20], although our final scheme is
+some distance from Mendler’s. An extensible histomorphic algebra Xh z f (henceforth, simply Xh
+algebra) is defined in terms of a row of type constructors z, the cases of the variant to be traversed,
+and an output type function f. These pieces are tied together by:
+
+histo : ∀ z f. (Xh z f) → 𝜇 (Σ z) → f z
+histo = 𝜆 a. fix (𝜆 rec x. a (out x) rec)
+An Xh algebra Xh z f determines a transformation from inputs of type 𝜇 (Σ z) to result of type
+f z. There are three significant components of extensible histomorphisms.
+
+First, rather than either performing the traversal bottom-up, as catamorphisms do, or providing
+unfettered access to recursive subdata, as a normal recursive definition does, recursive subdata
+is given a generic type (here 𝜇 (Σ w) for a fresh type variable w), and can only be manipulated
+through a provided “abstract recursive call” function 𝜇 (Σ w) → f w. This allows the Xh algebra to
+decide when and whether it will make recursive calls, but still abstracts over the structure of those
+calls. Mendler used this idea to guarantee termination. For us, it guarantees that recursive calls will
+remain well-typed as we combine algebras.
+Second, we provide some access to the structure of recursive subdata. Rather than leaving
+w unconstrained, as would be typical for Mendler-style recursion schemes, we provide that z
+is contained in w. This even allows deep pattern matching, as would be needed for small-step
+evaluation, so long as a default for cases outside z can be provided. (The typical approach for
+Mendler-style histomorphisms would be to keep the recursive type fully abstract, say r, but provide
+an “abstract out” function r → Σ w r, but this approach is too limiting to define closures.)
+Third, we allow the output type to vary with the input type. This allows us to describe closures
+(the values produced from the functional language), where the captured expression may use any of
+the expressions in the input type.
+Finally, we need to describe how Xh algebras can be combined. Here is the fully explicit account:
+
+orXh : ∀ x y z f. x ⊙ y ∼ z ⇒ Xh x f → Xh y f → Xh z f
+orXh = 𝜆 a b. Λ w. a [w] | b [w]
+orXh a b is itself an Xh algebra, so it is defined over an abstract row w. We bring that row into scope,
+and then provide it as the abstract row required by a and b. For a, we must then have that x ≲ w, but
+x ≲ z follows from the assumption x ⊙ y ∼ z, and then x ≲ w follows from transitivity. A parallel
+argument holds for b. In practice, our implementation successfully infers the type abstractions and
+applications, so we can combine Xh algebras directly with ( | ).
+
+3.3
+
+Example: Big-step Evaluation
+
+As an example of using extensible histomorphisms, we develop big-step evaluation functions for
+each sublanguage, and combine them to get a big-step evaluation function for the entire language.
+Our big-step functions will take terms to mappings from environments to values. We need several
+auxiliary definitions. The Env type function maps the structure of (recursive) values to environments
+of those values:
+type Env : R[★ → ★] → ★
+type Env = 𝜆z. List (𝜇 (Σ z))
+The as operator will be used to pipeline failure in evaluation, and has something of the flavor of
+
+the monadic bind operator:
+as : ∀ l f z. { l ⊲ f } ≲ z, { 'Err ⊲ (𝜆 w. Unit) } ≲ z ⇒
+#l → 𝜇 (Σ z) → (f (𝜇 (Σ z)) → 𝜇 (Σ z)) → 𝜇 (Σ z)
+as = 𝜆 l w f. match (out w) ( case l f | const (rcon #'Err tt) )
+, Vol. 1, No. 1, Article . Publication date: July 2025.
+
+16
+
+Alex Hubers, Apoorv Ingle, Andrew Marmaduke, and J. Garrett Morris
+
+Now we can define the big-step evaluation function for the arithmetic language. We begin with
+a row ValA which gives the shape of arithmetic values.
+
+type ValA : R[R[★ → ★] → ★ → ★]
+type ValA = { 'Nat ⊲ (𝜆 expr. 𝜆 val. Nat), 'Err ⊲ (𝜆 expr. 𝜆 val. Unit) }
+Each case in ValA takes two parameters. The first is a row giving the shape of expressions. The
+
+second is the recursive parameter. Neither are necessary for arithmetic. The only values we require
+are natural numbers and errors. Evaluation itself is given by an Xh algebra over the ArithF row:
+evalA : ∀ valr. ValA ≲ valr ⇒
+Xh ArithF (𝜆 expr. Env (valr expr) → 𝜇 (Σ (valr expr)))
+evalA = 𝜆 exp rec env.
+match exp
+( case #'IConst (rcon #'Nat)
+| case #'Plus (𝜆 p.
+as #'Nat (rec (sel p #'1) env) (𝜆 i.
+as #'Nat (rec (sel p #'2) env) (𝜆 j.
+rcon #'Nat (add i j)))))
+
+The result type of the histomorphism is a function from environments to values. The structure
+of values itself is also extensible: evalA is defined for any value row valr that contains the ValA
+cases needed for arithmetic. The result of the histomorphism is defined in terms of the full input
+type expr, which contains ArithF but may have many more cases. We use this final expression type
+in constructing values. That is, valr expr may refer to both a value type larger than ValA and an
+expression type larger than ArithF.
+The interesting case of evalA is for addition. Intuitively, we want to recursively evaluate the
+subexpressions of the addition, and then sum the results. The complication is that we cannot be
+sure that the recursive evaluation calls will return natural number values—as evalA is polymorphic
+in the description of values, the results of recursive calls may have more constructors than just
+'Nat and 'Err. We handle these potential failures using the as auxiliary function.
+The big-step function for the Boolean language evalB is structured identically to that for arithmetic, and is given in Appendix C, included in the extended version.
+Next we give the big-step function for the functional language. Values are closures, represented
+as a pair of an environment (that is, a list of values) and an expression:
+type ValL : R[R[★ → ★] → ★ → ★]
+type ValL = { 'Clos ⊲ (𝜆 expr. 𝜆 val. Pair (List val) (𝜇 (Σ expr)))
+, 'Err ⊲ (𝜆 expr. 𝜆 val. Unit) }
+
+Here, at last, we need all the structure we have built up for values. The first component is defined
+in terms of the recursive parameter val. The second component is defined in terms of the structure
+of expressions expr. As in the previous cases, the big-step function itself is a histomorphism from
+LamF expressions to environment to value mappings, where the structure of values must contain
+ValL:
+evalL : ∀ valr. ValL ≲ valr ⇒ Xh LamF (𝜆 expr. Env (valr expr) → 𝜇 (Σ (valr expr)))
+
+In a closure value, then, the environment may contain values other than those described by ValF,
+and the expression itself may contain constructs other than those described by LamF.
+The cases of the evalL function itself should be unsurprising:
+evalL = 𝜆 exp rec env.
+match exp
+( case #'Var (𝜆 x. fromMaybe (rcon #'Err tt) (nth env x))
+| case #'Lam (𝜆 e. rcon #'Clos (pair env e))
+| case #'App (𝜆 p.
+
+, Vol. 1, No. 1, Article . Publication date: July 2025.
+
+Abstracting Extensible Recursive Functions
+
+17
+
+as #'Clos (rec (sel p #'1) env) (𝜆 clos.
+(rec (sel clos #'2)) (cons (rec (sel p #'2) env) (sel clos #'1)))))
+The nth, fromMaybe, and pair functions in the first two cases behave as their names would suggest.
+
+In the third case, we evaluate the function to get a closure, and evaluate the body of the closure in
+a suitably extended environment.
+Finally, we tie the previous functions together to get a big-step function for the entire language.
+Due to limitations in our implementation, we must explicitly define the combined language AllF.
+
+type AllF : R[★ → ★]
+type AllF = { 'BConst ⊲ (𝜆 t. Bool), 'If ⊲ (𝜆 t. Triple t t t)
+, 'IConst ⊲ (𝜆 t. Nat), 'Plus ⊲ (𝜆 t. Pair t t)
+, 'Var ⊲ Const Nat, 'Lam ⊲ Id, 'App ⊲ (𝜆 t. Pair t t) }
+The evaluation function for the combined language is an Xh algebra, just as the evaluation functions
+
+for the individual languages. It requires a value structure that contains the requirements of each of
+its cases, however we can still leave the door open to more extension. The evaluation function is
+defined simply by branching among the smaller evaluation functions:
+eval : ∀ valr. ValA ≲ valr, ValB ≲ valr, ValL ≲ valr ⇒
+Xh AllF (𝜆 expr. Env (valr expr) → 𝜇 (Σ (valr expr)))
+eval = evalA | evalB | evalL
+
+This example demonstrates freely combinable types and freely combinable functions, with
+results that vary with their inputs. The only significant challenge in writing this example was
+correctly describing the structure of value rows, and the polymorphisms over value rows. Otherwise,
+implementing the individual functions was appealingly direct.
+3.4
+
+Example: Desugaring
+
+For a final example of extensible recursive programming, we consider desugaring one of our
+sublanguages into another. Our goal is to desugar the Boolean language into Church-encodings of
+Booleans in the functional language. (Of course, we are at this point relying on our language being
+untyped.) The challenge is that this desugaring should be defined only in terms of the Boolean and
+functional langauges. It should not matter what other language features are included, but Boolean
+expressions must be desugared uniformly throughout.
+We desugar Boolean expressions by:
+desugarB : ∀ z. LamF ≲ z ⇒ Xh BoolF (𝜆 w. 𝜇 (Σ z))
+desugarB = 𝜆 exp rec.
+match exp
+( case #'BConst
+( case #'True (𝜆 u. rcon #'Lam (rcon #'Lam (rcon #'Var one)))
+| case #'False (𝜆 u. rcon #'Lam (rcon #'Lam (rcon #'Var zero))))
+| case #'If (𝜆 t. app (app (rec (fst t)) (rec (snd t))) (rec (thd t))))
+Desugaring is defined as an Xh algebra from BoolF to any expression that that includes LamF. As
+expected, we interpret True as 𝜆x.𝜆y.x, False as 𝜆x.𝜆y.y, and conditionals as application. The app
+
+convenience function handles the mechanics of building application expressions:
+app : ∀ z. LamF ≲ z ⇒ 𝜇 (Σ z) → 𝜇 (Σ z) → 𝜇 (Σ z)
+app = 𝜆 f e. rcon #'App (pair f e)
+one and zero are the expected numerals, and in transforming conditionals we begin by recursively
+
+desugaring the subexpressions.
+We extend desugaring from Boolean to arbitrary expressions:
+ext : ∀ z : R[★ → ★]. Π (Functor z) → Xh z (𝜆w. 𝜇 (Σ z))
+ext = 𝜆 d v rec. in (fmapS d rec v)
+, Vol. 1, No. 1, Article . Publication date: July 2025.
+
+18
+
+Alex Hubers, Apoorv Ingle, Andrew Marmaduke, and J. Garrett Morris
+
+desugar : ∀ y. BoolF ≲ y, LamF ≲ y \ BoolF ⇒
+Π (Functor (y \ BoolF)) → Xh y (𝜆w. 𝜇 (Σ (y \ BoolF)))
+desugar = 𝜆 d. desugarB | ext d
+The type of desugar captures its intended operation: it is an algebra from expressions over y to
+expressions over y \ BoolF. We require that y contain Boolean expressions, for y \ BoolF to be
+meaningful, and that y \ BoolF contain functional expressions, for the desugaring to be meaningful.
+The interesting question is how we will handle the non-BoolF cases of y, given that y is otherwise
+arbitrary. Our solution is given away in the type: we require a record of fmap functions for the
+y \ BoolF cases, with which we can make the required recursive transformations. We extract the
+generic logic to ext, an algebra that does nothing. Essentially, however, it traverses its argument
+
+while doing nothing at each case. Finally, we describe the generic desugaring function by combining
+the logic for Booleans desugarB with the generic traversal ext.
+This example shows a different application of extensibility: modularity. The desugar function
+could be viewed to be complete (although, as written, it could still be further extended.) Nevertheless,
+extensibility has still played two roles. First, it has allowed us to write the function without having
+to fix the remaining cases, or list them in our implementation. More importantly, because the
+function is defined over arbitrary expressions, a user of this function can be sure that it will not
+manipulate any cases other than the BoolF ones, and, because BoolF does not appear in the result,
+that those cases will be completely desugared.
+
+3.5
+
+Not All Functions are Extensible Histomorphisms
+
+We find programming with algebras to be a necessity. Troubles arise when trying to combine
+histomorphisms (of type 𝜇 (Σ z) → f z) rather than their constituent Xh algebras. Consider the
+combination of two variant eliminators f : 𝜇 (Σ x) → a and g : 𝜇 (Σ y) → a into a third at
+type 𝜇 (Σ z) → a, provided x ⊙ y ∼ z. Suppose we even know that the variant we have at type
+𝜇 (Σ z) was built from a label residing in x. After using out to receive data at type z (𝜇 Σ z),
+we can demote it to type x (𝜇 Σ z). But here we are stuck: its subdata is still at the "larger" type
+𝜇 (Σ z), which we cannot possibly demote to type 𝜇 (Σ x). Hence f appears useless to us.
+Alternatively, we might look to "promote" f to handle (by means of a default traversal case) the
+larger type 𝜇 (Σ z). That is, we might hope to extract an extensible histomorphic algebra from
+the shape of f, essentially by identifying and abstracting over any recursive calls in its definition.
+Of course, some subtleties will remain. For example, the programmer writing the evalA and evalB
+functions would still have to make the result type sufficiently polymorphic, but this is no different
+than the problem the programmer faces writing the Xh algebras. The relationship between the input
+and output type of evalF might be difficult to discover automatically, but again one could hope for
+clever techniques to work in most cases.
+The deeper problem with this approach is simply that not all functions over recursive variants need to be extensible histomorphisms. Consider the ext transformation (§3.4). If we erase
+the distinction between extensible histomorphisms and arbitrary functions, the type of ext is
+∀ z : R [★ → ★]. Π (Functor z) → 𝜇 (Σ z) → 𝜇 (Σ z). This type is equally well inhabited
+by const id. However, const id cannot play the role of ext in defining desugar, because it does
+not describe a traversal at all.
+Of course, this is not to say that syntactic sugar could not make writing extensible histomorphisms
+more pleasant, or at least initially more familiar. Whatever their presentation, however, we claim
+that some distinction between extensible histomorpisms and arbitrary functions must remain.
+
+, Vol. 1, No. 1, Article . Publication date: July 2025.
+
+Abstracting Extensible Recursive Functions
+
+19
+
+Type variables 𝛼 ∈ A
+
+Labels ℓ ∈ L
+
+Ground Kinds 𝛾 ::= ★ | L
+Row Literals
+P̂ ∋ 𝜌ˆ ::= {ℓi ⊲ 𝜏ˆi }i∈0...m
+Kinds
+𝜅 ::= 𝛾 | 𝜅 → 𝜅 | R𝜅
+Neutral Types
+n ::= 𝛼 | n 𝜏ˆ
+★
+Normal Types T̂ ∋ ˆ
+𝜏, ˆ𝜐, 𝜙ˆ ::= n | 𝜙ˆ n | 𝜌ˆ | 𝜋ˆ ⇒ 𝜏ˆ | ∀𝛼 : 𝜅.𝜏ˆ | 𝜆𝛼 : 𝜅.𝜏ˆ
+| n ⊲ 𝜏ˆ | ℓ | #𝜏ˆ | 𝜏ˆ \ 𝜏ˆ | Π (★) 𝜏ˆ | Σ (★) 𝜏ˆ
+Δ ⊢nf 𝜏ˆ : 𝜅 Δ ⊢ne n : 𝜅
+
+(knf -ne)
+
+Δ ⊢ne n : 𝛾
+Δ ⊢nf n : 𝛾
+
+(knf -\)
+
+Δ ⊢nf 𝜏ˆi : R𝜅
+
+𝜏ˆ1 ∉ P̂ or 𝜏ˆ2 ∉ P̂
+
+Δ ⊢nf 𝜏ˆ2 \ 𝜏ˆ1 : R𝜅
+
+(knf -⊲)
+
+Δ ⊢ne n : L
+
+Δ ⊢nf 𝜏ˆ : 𝜅
+
+Δ ⊢nf n ⊲ 𝜏ˆ : R𝜅
+
+Fig. 8. Normal type forms
+
+4
+
+METATHEORY
+
+This section outlines the metatheory of R𝜔𝜇, via small-step operational semantics for the type,
+evidence, and term languages. Our metatheory is mechanized in Agda, and the claims of this section
+are annotated with the corresponding points in our mechanized development.
+4.1
+
+Type reduction
+
+We define reduction on types 𝜏 −→ T 𝜏 ′ by directing the type equivalence judgment 𝜀 ⊢ 𝜏 = 𝜏 ′ : 𝜅
+from left to right (with the exception of rule (e-mapid ), which reduces right-to-left). Importantly,
+every type has a normal form, which we exhibit in our mechanization via evaluation, largely
+following the techniques employed by Chapman et al.’s [5] normalization by evaluation of types in
+System F𝜔𝜇.
+The syntax of neutral and normal types is given in Figure 8. We use hats to denote normalized
+sets of syntax, e.g., we write T for the set of well-kinded types and T̂ for the set of well-kinded
+normal types. (As our mechanized semantics is intrinsically typed, it is convenient to consider only
+sets of well-kinded syntax.) When possible and convenient, we use hats on meta-variables (e.g., ˆ𝜐)
+to obviate that we are referring to normal entities. The syntax of predicates 𝜋ˆ containing normal
+types is as expected and omitted.
+Normalization reduces applications and maps except when a variable blocks computation, which
+we represent as a neutral type. A neutral type is either a variable or a spine of applications with a
+variable in head position. We distinguish ground kinds 𝛾 from functional and row kinds, as neutral
+types may only be promoted to normal type at ground kind (rule (knf -ne)): neutral types n at
+functional kind must 𝜂-expand to have an outer-most 𝜆-binding (e.g., to 𝜆x. n x), and neutral types at
+row kind are expanded to an inert map by the identity function (e.g., to (𝜆x.x)★ n). Likewise, repeated
+maps are necessarily composed according to rule (e-map◦ ): For example, 𝜙 1★ (𝜙 2★ n) normalizes
+by letting 𝜙 1 and 𝜙 2 compose into ((𝜙 1 ◦ 𝜙 2 )★ n). By consequence of 𝜂-expansion, records and
+variants need only be formed at kind ★. This means a type such as Π(ℓ ⊲ 𝜆x.x) must reduce to
+𝜆x.Π(ℓ ⊲ x), 𝜂-expanding its binder over the Π. Nested applications of Π and Σ are also "pushed in"
+by rule (e-Ξ). For example, the type Π Σ (ℓ1 ⊲ (ℓ2 ⊲ 𝜏)) has Σ mapped over the outer row, reducing
+to Π(ℓ1 ⊲ Σ(ℓ2 ⊲ 𝜏)).
+The syntax n ⊲ 𝜏ˆ separates singleton rows with variable labels from row literals 𝜌ˆ with literal
+labels; rule (knf -⊲) ensures that n is a well-kinded neutral label. A row is otherwise an inert map
+𝜙 ★ n or the complement of two rows 𝜏ˆ2 \ 𝜏ˆ1 . Observe that the complement of two row literals should
+, Vol. 1, No. 1, Article . Publication date: July 2025.
+
+20
+
+Alex Hubers, Apoorv Ingle, Andrew Marmaduke, and J. Garrett Morris
+
+compute according to rule (e-\); we thus require in the kinding of normal row complements (knf -\)
+that one (or both) rows are not literal so that the computation is indeed inert. The remaining normal
+type syntax does not differ meaningfully from the type syntax; the remaining kinding rules for the
+judgments Δ ⊢nf 𝜏ˆ : 𝜅 and Δ ⊢ne n : 𝜅 do not differ meaningfully from their analogues in Figure 2.
+We carefully define the normal type syntax so that no type 𝜏ˆ ∈ T̂ could reasonably reduce
+further to some other 𝜏 ′ ∈ T̂ . Hence we write 𝜏 ̸−→ T synonymously with 𝜏 ∈ T̂ to indicate that
+𝜏 is well-kinded and has no further reductions. We define a normalization function in Agda to
+materialize this sentiment.
+Theorem 4.1 (Normalization). There exists a normalization function ⇓ : T → T̂ 1 that maps
+well-kinded types to well-kinded normal forms.
+⇓ is realized in Agda intrinsically as a function from derivations of Δ ⊢ 𝜏 : 𝜅 to derivations of
+Δ ⊢nf 𝜏ˆ : 𝜅. Conversely, we witness the inclusion T̂ ⊆ T as an embedding ⇑ : T̂ → T 2 , which
+casts derivations of Δ ⊢nf 𝜏ˆ : 𝜅 back to a derivation of Δ ⊢ 𝜏 : 𝜅; we omit this function and its use
+in the following claims, as it is effectively the identity function (modulo tags).
+The following properties confirm that ⇓ behaves as a normalization function ought to. The
+first property, stability, asserts that normal forms cannot be further normalized. Stability implies
+idempotency and surjectivity.
+Theorem 4.2 (Properties of normalization).
+• (Stability) for all 𝜏ˆ ∈ T̂ , ⇓ 𝜏ˆ = ˆ
+𝜏.3
+• (Idempotency) For all 𝜏 ∈ T , ⇓ (⇓ 𝜏) = ⇓ 𝜏.4
+• (Surjectivity) For all 𝜏ˆ ∈ T̂ , there exists 𝜐 ∈ T such that 𝜏ˆ = ⇓ 𝜐.5
+We now show that ⇓ indeed reduces faithfully according to the equivalence relation Δ ⊢ 𝜏 = 𝜏 : 𝜅.
+Completeness of normalization states that equivalent types normalize to the same form.
+Theorem 4.3 (Completeness). For well-kinded 𝜏, 𝜐 ∈ T at kind 𝜅, If Δ ⊢ 𝜏 = 𝜐 : 𝜅 then ⇓ 𝜏 = ⇓ 𝜐.6
+Soundness of normalization states that every type is equivalent to its normalization.
+Theorem 4.4 (Soundness). For well-kinded 𝜏 ∈ T at kind 𝜅, there exists a derivation that
+Δ ⊢ 𝜏 = ⇓ 𝜏 : 𝜅.7 Equivalently8 , if ⇓ 𝜏 = ⇓ 𝜐, then Δ ⊢ 𝜏 = 𝜐 : 𝜅.9
+Soundness and completeness together imply, as desired, that 𝜏 −→ T 𝜏 ′ iff ⇓ 𝜏 = ⇓ 𝜏 ′ .
+Equivalence of normal types is syntactically decidable which, in conjunction with soundness
+and completeness, is sufficient to show that R𝜔𝜇’s equivalence relation is decidable. Consequently,
+the user has no obligation to provide proofs of equivalence in type and predicate conversion (rules
+(t-conv) and (n-conv)).
+Theorem 4.5 (Decidability). Given well-kinded 𝜏, 𝜐 ∈ T at kind 𝜅, the judgment Δ ⊢ 𝜏 = 𝜐 : 𝜅
+either (i) has a derivation or (ii) has no derivation.10
+The normal type syntax is pleasantly partitioned by kind. Due to 𝜂-expansion of functional
+variables, arrow kinded types are canonically 𝜆-bound. A normal type at kind R𝜅 is either an inert
+map 𝜙ˆ★ n, a variable-labeled row (n ⊲ ˆ
+𝜏), the complement of two rows 𝜏ˆ2 \ 𝜏ˆ1 , or a row literal ˆ
+𝜌.
+The first three cases necessarily have neutral types (recall that at least one of the two rows in a
+Rome.Types.Semantic.NBE:⇓ 2 Rome.Types.Normal.Syntax:⇑ 3 Rome.Types.Theorems.Stability:stability
+5 Rome.Types.Theorems.Stability:surjectivity
+Rome.Types.Theorems.Stability:idempotency
+6 Rome.Types.Theorems.Completeness:completeness
+7 Rome.Types.Theorems.Soundness:soundness
+8 Rome.Types.Theorems.Soundness:Soundness→Completeness −1 ,Completeness −1 →Soundness
+9 Rome.Types.Theorems.Soundness:completeness −1
+10 Rome.Types.Normal.Properties.Decidability:_≡t?_
+1
+
+4
+
+, Vol. 1, No. 1, Article . Publication date: July 2025.
+
+Abstracting Extensible Recursive Functions
+
+21
+
+® | ⟨i ⊲ R⟩
+R ::= · · · | ⟨R⟩
+Ê ∋ V ::= Λ𝛼 : 𝜅.M | Λv : 𝜋 .M | 𝜆x : 𝜏ˆ.M | in V
+| #𝜏ˆ | ⟨V® ⟩ | ⟨i ⊲ V ⟩
+Q̂ ∋ VQ ::= incl p | plus p q
+S ::= K | S [𝜏] | S [VQ ] | S V
+E ::= □ | E N | E [𝜏] | E [Q] | S E
+| E ⊲Ξ N | M ⊲Ξ E | E/Ξ N | M/Ξ E
+Ξ ∈ {Π, Σ}
+| ⟨V1, . . . , Vn, E, R1, . . . , Rm ⟩ | ⟨i ⊲ E⟩
+E Q ::= E Q # Q | VQ # E Q | map≲ E Q | plusL≲ E Q | plusR≲ E Q
+| map⊙ E Q | complL⊙ E Q | complR⊙ E Q
+
+Runtime expressions
+Values
+
+Constant spines
+Evaluation contexts
+
+Δ; Φ; Γ ⊢ R : 𝜏
+(tr-Π)
+
+Δ; Φ; Γ ⊢ Ri : 𝜏i
+® : Π{𝜉 i ⊲ 𝜏i }i∈0...m
+Δ; Φ; Γ ⊢ ⟨R⟩
+
+(tr-Σ)
+
+Δ; Φ; Γ ⊢ R : 𝜏i
+Δ; Φ; Γ ⊢ ⟨i ⊲ R⟩ : Σ{𝜉 j ⊲ 𝜏j }j ∈0...m
+
+Fig. 9. Runtime syntax
+
+complement is not a row literal). Hence rows in empty contexts are canonically literal. Likewise,
+the only types with label kind in empty contexts are label literals; recall that we disallowed the
+formation of Π and Σ at kind RL → L, thereby disallowing non-literal labels such as Δ ⊬ Π𝜖 : L or
+Δ ⊬ Π(ℓ1 ⊲ ℓ2 ) : L.
+Theorem 4.6 (Canonicity). Let 𝜏ˆ ̸−→ T .
+• If Δ ⊢nf 𝜏ˆ : (𝜅 1 → 𝜅 2 ) then 𝜏ˆ = 𝜆𝛼 : 𝜅 1 .ˆ𝜐;11
+• if 𝜖 ⊢nf 𝜏ˆ : R𝜅 then 𝜏ˆ = {ℓi ⊲ 𝜏ˆi }i∈0...m .12
+• If 𝜖 ⊢ 𝜏ˆ : L, then 𝜏ˆ = ℓ.13
+4.2
+
+Runtime Syntax
+
+Figure 9 describes additional syntax to capture evaluation. We extend the grammar of expressions
+® and variants ⟨i ⊲ R⟩. We write R
+® for a vector of terms, and write R
+®i
+with literals for records ⟨R⟩
+th
+for its i entry. These terms have the expected typing rules. Values are abstractions (over types,
+evidence, and terms), singleton constants, and record and variant literals. We assume that constants
+will only appear fully applied, which can be assured with trivial 𝜂-expansion. Evidence values are
+incl p (for containment predicates) and plus p q (for combination predicates). We define evaluation
+contexts for both terms (E) and evidence (E Q ). A spine S is a constant applied to a sequence of
+types, evidence values, or term values, and is used to define contexts with constant applications.
+4.3
+
+Evidence Functions
+
+To define the evaluation of the constants, we need two helper functions on evidence values. We
+describe these function here, and give their implementations in Appendix D, included in the
+extended version. The first is used in interpreting combination evidence plus p q : x ⊙ y ∼ z. In this
+evidence, p is evidence of x’s containment in z, and q is evidence of y’s containment in z. However,
+to implement record concatenation and variant branching, we need a mapping from entries in z
+to entries in either x or y, which we call pick : (N ⇀ N) × (N ⇀ N) × N ⇀ N + N. In practice,
+11
+13
+
+Rome.Types.Normal.Syntax:arrow-canonicity
+Rome.Types.Normal.Syntax:label-canonicity-∅
+
+12
+
+Rome.Types.Normal.Syntax:row-canonicity-∅
+
+, Vol. 1, No. 1, Article . Publication date: July 2025.
+
+22
+
+Alex Hubers, Apoorv Ingle, Andrew Marmaduke, and J. Garrett Morris
+
+(Λ𝛼 : 𝜅.M) [𝜏] −→ M [𝜏/𝛼]
+
+fix f −→ f (fix f )
+
+(𝛽-∀)
+
+′
+
+(Λv : 𝜋 .M) [Q] −→ M [Q/v]
+
+(𝛽-⇒)
+
+E[M] −→ E[M ]
+
+(𝜆x : 𝜏 .M) N −→ M [N /x]
+
+(𝛽-→)
+
+′
+
+out (in V ) −→ V
+
+E[S 𝜏] −→ E[S 𝜏 ]
+
+(𝛿-fix)
+if M −→ M
+
+′
+
+(𝜉)
+
+′
+
+(𝜉 T )
+
+if 𝜏 −→ T 𝜏
+
+(𝛿-𝜇)
+Fig. 10. Reduction: Functions and Recursion
+#ℓ ⊲Σ V −→ ⟨0 ⊲ V ⟩
+
+(𝛿-⊲Σ)
+
+Σ
+
+⟨0 ⊲ V ⟩/ #ℓ −→ V
+inj [ 𝜌ˆy , 𝜌ˆz , incl p] ⟨i ⊲ V ⟩ −→ ⟨p(i) ⊲ V ⟩
+(
+f ⟨j ⊲ V ⟩
+(|) [ 𝜌ˆx , 𝜌ˆy , 𝜌ˆz , plus p q] f g ⟨i ⊲ V ⟩ −→
+g ⟨j ⊲ V ⟩
+
+(𝛿-/Σ)
+(𝛿-inj)
+if pick(p, q, i) = Left j
+if pick(p, q, i) = Right j
+
+ana [𝜙, {ℓj ⊲ 𝜏ˆj }j ∈0...m, ˆ𝜐] #𝜙 V ⟨i ⊲ W ⟩ −→ V [ℓi , 𝜏ˆi , incl (0 ↦→ i)] #ℓi W
+
+(𝛿-|)
+(𝛿-ana)
+
+Fig. 11. Reduction: Variants
+
+and indeed in our mechanized semantics, the pick map is computed in entailment and included
+in combination evidence. The second is a function that computes the “dual” of an evidence value
+incl p : x ≲ z. That is to say: dual : (N ⇀ N) → N ⇀ N computes from p an inclusion map for all
+the entries of z not in the range of p; because inclusion maps must be increasing, this inclusion
+map is unique.
+4.4
+
+Operational Semantics: Functional Terms
+
+Figure 10 gives reduction rules for the functional and recursive terms of R𝜔𝜇, which are standard.
+We depend on substitution for types1415 , terms16 , and evidence17 , which are all defined in an entirely
+standard way. Equation (𝜉 T ) reduces types when they appear as arguments to constants.
+4.5
+
+Operational Semantics: Variants
+
+Figure 11 gives reduction rules for variants. Equation (𝛿-⊲Σ) constructs singleton variants—because
+we know the constructed variant will be a singleton, we can be sure the constructor label is at
+position 0 in its type. Equation (𝛿-/Σ) eliminates singleton variants. The alignment of the label
+ℓ in the type annotation on the variant value and the singleton #ℓ argument is guaranteed for
+well-typed terms.
+Equation (𝛿-inj) injects smaller variants into larger variants; the evidence p determines the
+position of the constructor i in the larger variant. Equation (𝛿-|) implements variant branching. If
+constructor i is entry j in 𝜌 x , the f case is invoked with the new constructor, and similarly for the g
+case. Equation (𝛿-ana) implements analysis. We must invent evidence that {ℓi ⊲ 𝜏i } is contained in
+{ℓj ⊲ 𝜏j }j ∈0...m . But this must always be exactly the index used to construct the final argument to ana.
+In all of these steps, type information is used solely to construct other type annotations, never to
+determine the meaning of terms. The one case where this may seem untrue is the singleton #ℓi on
+the right-hand side of Equation (𝛿-ana), but as #ℓ is a singleton type, this is essentially a unit value.
+14
+16
+
+Rome.Types.Substitution:subk
+Terms.Normal.Substitution:sub
+
+17
+
+15 Rome.Types.Normal.Substitution:sub NF
+k
+Terms.Normal.Substitution:subEnt
+
+, Vol. 1, No. 1, Article . Publication date: July 2025.
+
+Abstracting Extensible Recursive Functions
+
+23
+
+#ℓ ⊲Π V −→ ⟨V ⟩
+
+(𝛿-⊲Π)
+
+Π
+
+⟨V ⟩/ #ℓ −→ V
+
+(𝛿-/Π)
+
+prj [ 𝜌ˆy , 𝜌ˆz , incl p] ⟨V® ⟩ −→ ⟨Vp(i) | i ∈ 0 . . . | 𝜌ˆy |⟩
+*(
++
+V
+if
+pick(p,
+q,
+i)
+=
+Left
+j
+j
+® ⟩ −→
+(++) [ 𝜌ˆx , 𝜌ˆy , 𝜌ˆz , plus p q] ⟨V® ⟩ ⟨W
+i ∈ 0 . . . | 𝜌ˆz |
+Wj if pick(p, q, i) = Right j
+syn [𝜙, {ℓj ⊲ 𝜏ˆj }j ∈0...m ] #𝜙 V −→ ⟨V [ℓi , 𝜏ˆi , incl (0 ↦→ i)] #ℓi | i ∈ 0..m⟩
+
+(𝛿-prj)
+(𝛿-++)
+(𝛿-syn)
+
+Fig. 12. Reduction: Record terms
+
+4.6
+
+Operational Semantics: Records
+
+Figure 12 gives reduction rules for records. Rules (𝛿-⊲Π) and (𝛿-/Π) construct and deconstruct
+singleton records. In the following rules, we use the syntax ⟨Vi | i ∈ 0 . . . m⟩ to denote the record
+⟨V0, V1, . . . , Vm ⟩, and |𝜌 | to denote the size (that is, the number of entries) in 𝜌. As we reduce types
+as arguments to constants, we can always be sure that we have row literals and so that this operator
+is well-defined.
+Equation (𝛿-prj) projects smaller records from larger records; the evidence p finds each field of
+the smaller record in the larger one. Equation (𝛿-++) concatenates records, selecting each field from
+the input records based on the result of the pick function. Equation (𝛿-syn) implements synthesis.
+As with analysis, the index i of each entry in the generated record determines the needed inclusion
+map.
+It might seem like, once again, type information is used only in computing other type information.
+However, this is not quite true. The size of the right-hand side in each of rules (𝛿-prj), (𝛿-++), and
+(𝛿-syn) is determined by one of the input types. For Equation (𝛿-++), the needed size is also the sum
+of the sizes of the input records. For Equation (𝛿-prj), it is the size (i.e., the size of the domain of
+definition) of the evidence. For Equation (𝛿-syn), however, there is seemingly no clue to the size of
+the required record other than the type.
+Our experimental implementation erases all type information before evaluation. This requires
+delaying record synthesis until the size of the synthesized record is determined by another term,
+either a projection or concatenation. We leave formalizing the erased semantics, and proving it
+equivalent to the fully explicit semantics given here, for future work.
+4.7
+
+Evidence
+
+Figure 13 gives reduction rules for evidence. Reflexivity is interpreted as the identity inclusion
+map (Equation (𝛿-refl≲ )). The combination of any row with the empty row is witnessed by the
+identity inclusion and the empty map (rules (𝛿-⊙L⊙ ) and (𝛿-⊙R⊙ )). Transitivity is witnessed by
+composition of the individual maps (Equation (𝛿-#)). Transforming the types in rows does not
+change relationships between the rows (rules (𝛿-map≲ ) and (𝛿-map⊙ )). Rules (𝛿-⊙L≲ ) and (𝛿-⊙R≲ )
+transform evidence for combination into evidence for containment; as we have chosen to represent
+combination with the corresponding containment maps, this is direct. Rules (𝛿-complL⊙ ) and
+(𝛿-complR⊙ ) perform the dual transformation. In each case, we are provided only one of the two
+needed containment maps, and must compute the other. Finally, Equation (𝜉 Q ) normalizes evidence
+in constant applications.
+4.8
+
+Properties
+
+Lemma 4.7 (Substitution).
+, Vol. 1, No. 1, Article . Publication date: July 2025.
+
+24
+
+Alex Hubers, Apoorv Ingle, Andrew Marmaduke, and J. Garrett Morris
+
+refl≲ −→ Q incl (i ↦→ i) (𝛿-refl≲ )
+incl p # incl q −→ Q incl (p ◦ q)
+(𝛿-#)
+
+map≲ (incl p) −→ Q incl p
+
+emptyL ⊙ −→ Q plus ∅ (i ↦→ i)
+emptyR ⊙ −→ Q plus (i ↦→ i) ∅
+
+(𝛿-⊙L ⊙ )
+(𝛿-⊙R ⊙ )
+
+(𝛿-map≲ )
+
+map ⊙ (plus p q) −→ Q plus p q
+
+plusL≲ (plus p q) −→ Q incl p
+
+(𝛿-⊙L≲ )
+
+complL ⊙ (incl q) −→ Q plus (dual(q)) q (𝛿-complL ⊙ )
+
+plusR≲ (plus p q) −→ Q incl q
+
+(𝛿-⊙R≲ )
+
+(𝛿-map ⊙ )
+
+complR ⊙ (incl p) −→ Q plus p (dual(p)) (𝛿-complR ⊙ )
+E[S [E Q [Q]]] −→ E[S [E Q [Q ′ ]]]
+if Q −→ Q Q ′
+(𝜉 Q )
+Fig. 13. Reduction: Evidence
+
+• If Δ, 𝛼 : 𝜅 ′ ⊢ 𝜏 : 𝜅 and Δ ⊢ 𝜐 : 𝜅 ′ , then Δ ⊢ 𝜏 [𝜐/𝛼] : 𝜅 18
+• If Δ, 𝛼 : 𝜅; Ψ ⊢ Q : 𝜋 and Δ ⊢ 𝜏 : 𝜅, then Δ; Ψ[𝜏/𝛼] ⊢ Q[𝜏/𝛼] : 𝜋 [𝜏/𝛼] 19
+• If Δ; Ψ, v : 𝜋 ′ ⊢ Q : 𝜋 and Δ; Ψ ⊢ Q ′ : 𝜋 ′ , then Δ; Ψ ⊢ Q[Q ′ /v] : 𝜋.20
+• If Δ, 𝛼 : 𝜅; Ψ; Γ ⊢ M : 𝜏 and Δ; 𝜐; 𝜅 ⊢ : then Δ; Ψ[𝜐/𝛼]; Γ[𝜐/𝛼] ⊢ M [𝜐/𝛼] : 𝜏 [𝜐/𝛼].21
+• If Δ; Ψ, v : 𝜋; Γ ⊢ M : 𝜏 and Δ; Ψ ⊢ Q : 𝜋, then Δ; Ψ; Γ ⊢ M [Q/v] : 𝜏.22
+• If Δ; Ψ; Γ, x : 𝜐 ⊢ M : 𝜏 and Δ; Ψ; Γ ⊢ N : 𝜐, then Δ; Ψ; Γ ⊢ M [N /x] : 𝜏.23
+Theorem 4.8 (Preservation).
+• If Δ ⊢ 𝜏 : 𝜅 and 𝜏 −→ T 𝜏 ′ , then Δ ⊢ 𝜏 ′ : 𝜅.24
+• If Δ; Φ ⊢ Q : 𝜋 and Q −→ Q Q ′ then Δ; Φ ⊢ Q ′ : 𝜋.25
+• If Δ; Φ; Γ ⊢ M : 𝜏 and M −→ M ′ then Δ; Φ; Γ ⊢ M ′ : 𝜏.26
+Theorem 4.9 (Progress).
+• If 𝜀; 𝜀 ⊢ Q : 𝜋 then either there is some Q ′ such that Q −→ Q Q ′ , or Q ∈ Q̂.27
+• If 𝜀; 𝜀; 𝜀 ⊢ M : 𝜏 then either there is some M ′ such that M −→ M ′ , or M ∈ Ê.28
+5
+
+RELATED WORK
+
+We conclude with a discussion of related and future work. There is a significant literature on row
+types and on extensible data types in general. We highlight the work that is most relevant to R𝜔𝜇.
+Featherweight Ur. The most similar language to R𝜔𝜇 is Featherweight Ur [6]. Ur also supports row
+and record concatenation with first-class labels, enabled by first-class label inequality proofs. Ur is
+based on System F𝜔, and supports mapping type-level operations over rows. In contrast to R𝜔𝜇, Ur
+is focused on recursive records, and their data-driven unfolding. Ur does not share R𝜔𝜇’s focus on
+recursive variants, or on the duality between records and variants.
+Polymorphic variants in OCaml. Extensible recursive variants exist in OCaml [23, 24], as introduced
+(and later formalized [11]) by Garrigue [9]. Rather than using row types, OCaml captures relationships between extensible variant types using subtyping. Similar to the extended expression
+problem, Garrigue [10] uses polymorphic variants to encode modular evaluation. They do not
+explicitly consider mixed return types, such as our evalA | evalB (§3.3), but we have succeeded in
+encoding these examples in OCaml[14]. Due to the lack of first-class labels, label kinds, and row
+kinds, the types of these OCaml analogues lack some precision. Additionally, our first-class label
+combinators (Figure 7) are impossible to express. This has application to recursive programming:
+19 Rome.Types.Substitution:subPred
+Rome.Types.Substitution:_𝛽 k [_]
+k
+21 Terms.Normal.Substitution:_𝛽 ·[_]
+Terms.Normal.Substitution:subEnt
+22 Terms.Normal.Substitution:_𝛽𝜋 [_]
+23 Terms.Normal.Substitution:_𝛽[_]
+24 The
+equiva25 The reduclence relation Rome.Types.Equivalence.Relation:_≡t_ is intrinsically type-preserving
+26 The reduction relation
+tion relation Terms.Normal.Reduction:_=⇒_ is intrinsically type-preserving
+27
+Terms.Normal.Reduction:_–→_ is intrinsically type-preserving
+Terms.Theorems.Progress:entProgress
+28 Terms.Theorems.Progress:progress
+18
+
+20
+
+, Vol. 1, No. 1, Article . Publication date: July 2025.
+
+Abstracting Extensible Recursive Functions
+
+25
+
+consider a higher-order version of dnaw (§2.5), which can be seen as selecting a particular case
+handler from two F-algebras. Quantification of label variables make this type impossible to express
+in OCaml, while the use of branching makes its term impossible to define.
+dnawHO : ∀ x y z t u l. x ⊙ y ∼ z, {l ⊲ t} ≲ z ⇒
+(Σ x u → u) → (Σ y u → u) → #l → t u → u
+dnawHO = 𝜆 f g l x. (f | g) (inj (l ⊲ x))
+
+The differences between our approaches are also illustrated by the desugaring example (§3.4).
+OCaml does not have an analogue of our label-generic abstractions, and so combining generic
+traversals still requires some enumeration of cases. More significantly, however, the result of
+desugaring in OCaml does not have the precision that it does in R𝜔𝜇: our type guarantees that the
+Boolean cases are removed, whereas the result in OCaml permits Boolean cases to still be present.
+Encodings rows. Several encodings of row types have been explored in other type systems, notably
+Haskell’s type classes and type families [3, 16, 21, 25, 33]. These encodings often represent rows as
+specific sequences of types and struggle to capture the full flexibility intended by row typing. As
+an example, coproducts of functors in Swierstra’s [33] encoding must be explicitly right-nested to
+for typeclass instances to resolve—in essence, the encoding fails to capture the commutativity and
+associativity of rows. Hence we advocate for row types as first-class citizens of the type theory.
+Intersection types and the merge operator. Extensible data types can be directly expressed using
+intersection types and the merge operator [8]. Albeit expressive, the merge operator can be a
+difficult beast to tame safely [13, 31]. Our work differs in approach: we advocate for the more
+restricted containment relation on rows 𝜌 1 ≲ 𝜌 2 as opposed to full-fledged subtyping. A comparison
+can be drawn between our complement operator and the type difference operator of Xu et al.’s [36]
+intersection type system, which generalizes record complements to arbitrary type. Again, the two
+differ in approach, as the type difference operator is strictly more general.
+Intrinsic mechanization & normalization by evaluation in Agda. Our metatheoretic results and
+mechanization owe a great debt to Chapman et al. [5], who in turn cite Allais et al. [1], Altenkirch
+and Reus [2] in the design of their intrinsic syntax, normalization algorithm, and metatheory.
+Likewise, we follow Allais et al.’s [1] formalization of lists in finding the correct semantic image
+and normal form of rows. The overall structure of proof that they (and we) employ is otherwise
+standard for normalization by evaluation techniques (c.f. Lindley [18]).
+6
+
+FUTURE WORK
+
+Erasure. Our operational semantics relies on type information in the interpretation of the syn
+primitive. Of course, a more satisfying account would avoid any runtime reliance on types. This
+would be both practically beneficial, as it would guarantee that type information could be erased,
+and semantically preferable, as it would suggest that R𝜔𝜇 could enjoy a parametricity theorem.
+Our experimental implementation does erase type information before execution, relying on a more
+subtle implementation of syn (and of evidence for the complement rules). We hope to formalize this
+erased semantics, and show that it simulates the fully type-annotated semantics presented here.
+Relating semantics. We give an operational semantics of R𝜔𝜇 in Agda, whereas Hubers and Morris
+[15] provide a denotational shallow embedding. Saffrich et al. [32] demonstrates that big-step
+operational semantics and denotational semantics of System F can be related in Agda using a
+step-indexed logical relation. We hope to adopt their technique to characterize a relation between
+the denotational and operational accounts of R𝜔 and R𝜔𝜇.
+, Vol. 1, No. 1, Article . Publication date: July 2025.
+
+26
+
+Alex Hubers, Apoorv Ingle, Andrew Marmaduke, and J. Garrett Morris
+
+DATA AVAILABILITY STATEMENT
+Our Agda mechanization of R𝜔𝜇 is available online [14].
+ACKNOWLEDGMENTS
+REFERENCES
+[1] Guillaume Allais, Conor McBride, and Pierre Boutillier. 2013. New equations for neutral terms: a sound and complete
+decision procedure, formalized. In Proceedings of the 2013 ACM SIGPLAN workshop on Dependently-typed programming,
+DTP@ICFP 2013, Boston, Massachusetts, USA, September 24, 2013, Stephanie Weirich (Ed.). ACM, 13–24. https://doi.org/
+10.1145/2502409.2502411
+[2] Thorsten Altenkirch and Bernhard Reus. 1999. Monadic Presentations of Lambda Terms Using Generalized Inductive
+Types. In Computer Science Logic, Jörg Flum and Mario Rodriguez-Artalejo (Eds.). Springer Berlin Heidelberg, Berlin,
+Heidelberg, 453–468.
+[3] Patrick Bahr. 2014. Composing and decomposing data types: a closed type families implementation of data types à la
+carte. In Proceedings of the 10th ACM SIGPLAN workshop on Generic programming, WGP 2014, Gothenburg, Sweden,
+August 31, 2014, José Pedro Magalhães and Tiark Rompf (Eds.). ACM, 71–82.
+[4] Matthias Blume, Umut A. Acar, and Wonseok Chae. 2006. Extensible programming with first-class cases. In Proceedings
+of the 11th ACM SIGPLAN International Conference on Functional Programming, ICFP 2006, Portland, Oregon, USA,
+September 16-21, 2006, John H. Reppy and Julia L. Lawall (Eds.). ACM, 239–250.
+[5] James Chapman, Roman Kireev, Chad Nester, and Philip Wadler. 2019. System F in Agda, for Fun and Profit. In
+Mathematics of Program Construction - 13th International Conference, MPC 2019, Porto, Portugal, October 7-9, 2019,
+Proceedings (Lecture Notes in Computer Science, Vol. 11825), Graham Hutton (Ed.). Springer, 255–297. https://doi.org/
+10.1007/978-3-030-33636-3_10
+[6] Adam Chlipala. 2010. Ur: statically-typed metaprogramming with type-level record computation. In Proceedings of the
+2010 ACM SIGPLAN Conference on Programming Language Design and Implementation, PLDI 2010, Toronto, Ontario,
+Canada, June 5-10, 2010, Benjamin G. Zorn and Alexander Aiken (Eds.). ACM, 122–133.
+[7] Adam Chlipala. 2015. Ur/Web: A Simple Model for Programming the Web. In Proceedings of the 42nd Annual ACM
+SIGPLAN-SIGACT Symposium on Principles of Programming Languages, POPL 2015, Mumbai, India, January 15-17, 2015,
+Sriram K. Rajamani and David Walker (Eds.). ACM, 153–165. https://doi.org/10.1145/2676726.2677004
+[8] Jana Dunfield. 2012. Elaborating intersection and union types. In ACM SIGPLAN International Conference on Functional
+Programming, ICFP’12, Copenhagen, Denmark, September 9-15, 2012, Peter Thiemann and Robby Bruce Findler (Eds.).
+ACM, 17–28.
+[9] Jacques Garrigue. 1998. Programming with Polymorphic Variants. In ML Workshop. ACM, ass, 0–1.
+[10] Jacques Garrigue. 2000. Code reuse through polymorphic variants. Workshop on Foundations of Software Engineering.
+[11] Jacques Garrigue. 2010. A Certified Implementation of ML with Structural Polymorphism. In Programming Languages
+and Systems - 8th Asian Symposium, APLAS 2010, Shanghai, China, November 28 - December 1, 2010. Proceedings. 360–375.
+https://doi.org/10.1007/978-3-642-17164-2_25
+[12] Robert Harper and Benjamin Pierce. 1991. A Record Calculus Based on Symmetric Concatenation. In Proceedings of
+the 18th ACM SIGPLAN-SIGACT Symposium on Principles of Programming Languages (POPL ’91). ACM, 131–142.
+[13] Xuejing Huang, Jinxu Zhao, and Bruno C. d. S. Oliveira. 2021. Taming the Merge Operator. J. Funct. Program. 31 (2021),
+e28. https://doi.org/10.1017/S0956796821000186
+[14] Alex Hubers, Apoorv Ingle, Andrew Marmaduke, and J. Garrett Morris. 2024. Toward Extensible Recursive Functions—
+Artifact. https://google.com.
+[15] Alex Hubers and J. Garrett Morris. 2023. Generic Programming with Extensible Data Types: Or, Making Ad Hoc
+Extensible Data Types Less Ad Hoc. Proc. ACM Program. Lang. 7, ICFP (2023), 356–384. https://doi.org/10.1145/3607843
+[16] Oleg Kiselyov, Ralf Lämmel, and Keean Schupke. 2004. Strongly typed heterogeneous collections. In Proceedings of
+the ACM SIGPLAN Workshop on Haskell, Haskell 2004, Snowbird, UT, USA, September 22-22, 2004, Henrik Nilsson (Ed.).
+ACM, 96–107.
+[17] Daan Leijen. 2005. Extensible records with scoped labels. In Revised Selected Papers from the Sixth Symposium on Trends
+in Functional Programming, TFP 2005, Tallinn, Estonia, 23-24 September 2005. 179–194.
+[18] Sam Lindley. 2005. Normalisation by Evaluation in the Compilation of Typed Functional Programming Languages. Ph. D.
+Dissertation. The University of Edinburgh.
+[19] Erik Meijer, Maarten M. Fokkinga, and Ross Paterson. 1991. Functional Programming with Bananas, Lenses, Envelopes
+and Barbed Wire. In Functional Programming Languages and Computer Architecture, 5th ACM Conference, Cambridge,
+MA, USA, August 26-30, 1991, Proceedings (Lecture Notes in Computer Science, Vol. 523), John Hughes (Ed.). Springer,
+124–144. https://doi.org/10.1007/3540543961_7
+, Vol. 1, No. 1, Article . Publication date: July 2025.
+
+Abstracting Extensible Recursive Functions
+
+27
+
+[20] Nax Paul Mendler. 1991. Inductive Types and Type Constraints in the Second-Order lambda Calculus. Ann. Pure Appl.
+Log. 51, 1-2 (1991), 159–172.
+[21] J. Garrett Morris. 2015. Variations on variants. In Proceedings of the 8th ACM SIGPLAN Symposium on Haskell (Haskell
+’15), Ben Lippmeier (Ed.). ACM, Vancouver, BC, 71–81.
+[22] J. Garrett Morris and James McKinna. 2019. Abstracting extensible data types: or, rows by any other name. Proc. ACM
+Program. Lang. 3, POPL (2019), 12:1–12:28. https://doi.org/10.1145/3290325
+[23] OCaml. 2025. Extensible Variants. Institut National de Recherche en Informatique et en Automatique. https:
+//ocaml.org/manual/5.3/extensiblevariants.html
+[24] OCaml. 2025. Object types. Institut National de Recherche en Informatique et en Automatique. https://ocaml.org/
+manual/5.3/types.html#sss:typexpr-obj
+[25] Bruno Oliveira, Shin-Cheng Mu, and Shu-Hung You. 2015. Modular reifiable matching: a list-of-functors approach to
+two-level types. In Haskell. ACM, 82–93.
+[26] Gordon D. Plotkin. 1977. LCF Considered as a Programming Language. Theor. Comput. Sci. 5, 3 (1977), 223–255.
+https://doi.org/10.1016/0304-3975(77)90044-5
+[27] François Pottier and Didier Rémy. 2005. The essence of ML type inference. In Advanced Topics in Types and Programming
+Languages, Benjamin C. Pierce (Ed.). The MIT Press.
+[28] Didier Rémy. 1989. Typechecking Records and Variants in a Natural Extension of ML. In Conference Record of the
+Sixteenth Annual ACM Symposium on Principles of Programming Languages, Austin, Texas, USA, January 11-13, 1989.
+ACM Press, 77–88.
+[29] Didier Rémy. 1992. Typing Record Concatenation for Free. In POPL ’92. ACM, Albuquerque, New Mexico, 166–176.
+[30] John C. Reynolds. 1975. User-defined types and procedural data structures as complementary approaches to data
+abstraction. In New Directions in Algorithmic Languages. Institut de recherche d’informatique et d’automatique, Munich.
+[31] Nick Rioux, Xuejing Huang, Bruno C. d. S. Oliveira, and Steve Zdancewic. 2023. A Bowtie for a Beast: Overloading,
+Eta Expansion, and Extensible Data Types in F⊲⊳. Proc. ACM Program. Lang. 7, POPL (2023), 515–543. https:
+//doi.org/10.1145/3571211
+[32] Hannes Saffrich, Peter Thiemann, and Marius Weidner. 2024. Intrinsically Typed Syntax, a Logical Relation, and
+the Scourge of the Transfer Lemma. In Proceedings of the 9th ACM SIGPLAN International Workshop on Type-Driven
+Development. ACM, Milan Italy, 2–15. https://doi.org/10.1145/3678000.3678201
+[33] Wouter Swierstra. 2008. Data types à la carte. J. Funct. Program. 18, 04 (2008), 423–436.
+[34] Philip Wadler. 1998. The Expression Problem. http://homepages.inf.ed.ac.uk/wadler/papers/expression/expression.txt.
+[35] Mitchell Wand. 1987. Complete Type Inference for Simple Objects. In Proceedings of the Symposium on Logic in
+Computer Science (LICS ’87), Ithaca, New York, USA, June 22-25, 1987. IEEE Computer Society, 37–44.
+[36] Han Xu, Xuejing Huang, and Bruno C. d. S. Oliveira. 2023. Making a Type Difference: Subtraction on Intersection Types
+as Generalized Record Operations. Proc. ACM Program. Lang. 7, POPL (2023), 893–920. https://doi.org/10.1145/3571224
+
+, Vol. 1, No. 1, Article . Publication date: July 2025.
+
+28
+
+A
+
+Alex Hubers, Apoorv Ingle, Andrew Marmaduke, and J. Garrett Morris
+
+OMITTED TYPING RULES
+
+Environment formation.
+Δ⊢Φ
+(c-pemp)
+
+(c-pvar)
+
+Δ⊢𝜀
+
+Δ⊢Γ
+
+Δ⊢Φ Δ⊢𝜋
+Δ ⊢ Φ, v : 𝜋
+
+(c-temp)
+
+Δ⊢𝜀
+
+(c-tvar)
+
+Δ⊢Γ Δ⊢𝜏 :★
+Δ ⊢ Γ, x : 𝜏
+
+Type equivalence.
+Δ⊢𝜏 =𝜏 :𝜅
+(e-refl)
+
+(e-𝜂)
+
+Δ⊢𝜏 :𝜅
+Δ⊢𝜏 =𝜏 :𝜅
+
+Δ ⊢ 𝜏1 = 𝜏2 : 𝜅
+Δ ⊢ 𝜏2 = 𝜏1 : 𝜅
+
+Δ ⊢ 𝜙 : 𝜅1 → 𝜅2
+
+(e-𝜉 # )
+
+Δ ⊢ 𝜙 = 𝜆𝛼 : 𝜅 1 .𝜙 𝛼 : 𝜅 1 → 𝜅 2
+
+(e-𝜉 app )
+
+(e-𝜉 ∀ )
+
+Δ ⊢ 𝜏1 = 𝜐 1 : 𝜅 → 𝜅 ′
+
+Δ ⊢ #𝜉 1 = #𝜉 2 : ★
+
+Δ ⊢ 𝜏2 = 𝜐 2 : 𝜅
+
+Δ, 𝛾 : 𝜅 ⊢ 𝜏 [𝛾/𝛼] = 𝜐 [𝛾/𝛽] : ★
+Δ ⊢ ∀𝛼 : 𝜅.𝜏 = ∀𝛽 : 𝜅.𝜐 : ★
+
+(e-𝜉 ≲ )
+
+(e-trans)
+
+Δ ⊢ 𝜉1 = 𝜉2 : 𝜅
+
+Δ ⊢ 𝜏1 𝜏2 = 𝜐 1 𝜐 2 : 𝜅 ′
+
+(e-𝜉 𝜇 )
+
+B
+
+(e-sym)
+
+(e-𝜉 𝜆 )
+
+Δ ⊢ 𝜙1 = 𝜙2 : 𝜅 → 𝜅
+Δ ⊢ 𝜇𝜙 1 = 𝜇𝜙 2 : 𝜅
+Δ ⊢ 𝜏i = 𝜐 i : R𝜅
+Δ ⊢ 𝜏1 ≲ 𝜏2 = 𝜐 1 ≲ 𝜐 2
+
+(e-𝜉 { } )
+
+Δ ⊢ 𝜋 1 = 𝜋 2 Δ ⊢ 𝜏1 = 𝜏2 : ★
+Δ ⊢ 𝜋 1 ⇒ 𝜏1 = 𝜋 2 ⇒ 𝜏2 : ★
+
+Δ ⊢ 𝜉 i = 𝜉 i′ : L
+
+Δ ⊢ Ξ𝜌 1 = Ξ𝜌 2 : 𝜅
+
+(e-𝜉 ⊙ )
+
+(𝛾 fresh for 𝜏, 𝜐)
+
+(Ξ ∈ {Π, Σ})
+
+Δ ⊢ 𝜏i = 𝜐 i : R𝜅
+Δ ⊢ 𝜏1 ⊙ 𝜏2 ∼ 𝜏3 = 𝜐 1 ⊙ 𝜐 2 ∼ 𝜐 3
+
+type Unit : ★
+type Unit = #'Unit
+tt : Unit
+tt = #'Unit
+
+Tuples.
+type Pair : ★ → ★ → ★
+type Pair = 𝜆 t u. Π {'1 ⊲ t, '2 ⊲ u}
+pair : ∀ t u. t → u → Pair t u
+pair = 𝜆x y. (#'1 ⊲ x) ++ (#'2 ⊲ y)
+type Triple : ★ → ★ → ★ → ★
+type Triple = 𝜆 t u v. Π {'1 ⊲ t, '2 ⊲ u, '3 ⊲ v}
+triple : ∀ t u v. t → u → v → Triple t u v
+triple = 𝜆x y z. pair x y ++ (#'3 ⊲ z)
+
+Δ ⊢ 𝜏i = 𝜏i′ : 𝜅
+
+Δ ⊢ {𝜉 i ⊲ 𝜏i }i∈1...n = {𝜉 i′ ⊲ 𝜏i′ }i∈1...n : R𝜅
+
+Δ ⊢ 𝜌 1 = 𝜌 2 : R𝜅
+
+Unit.
+
+, Vol. 1, No. 1, Article . Publication date: July 2025.
+
+(e-𝜉 ⇒ )
+
+Δ ⊢ 𝜆𝛼 : 𝜅.𝜏 = 𝜆𝛽 : 𝜅.𝜐 : 𝜅 → 𝜅 ′
+
+(e-𝜉 Ξ )
+
+Δ ⊢ 𝜏2 = 𝜏3 : 𝜅
+
+Δ ⊢ 𝜏1 = 𝜏3 : 𝜅
+
+Δ, 𝛾 : 𝜅 ⊢ 𝜏 [𝛾/𝛼] = 𝜐 [𝛾/𝛽] : 𝜅 ′
+
+OMITTED DATA TYPE DEFINITIONS
+
+fst = 𝜆x. sel x #'1
+
+Δ ⊢ 𝜏1 = 𝜏2 : 𝜅
+
+Abstracting Extensible Recursive Functions
+
+29
+
+snd = 𝜆x. sel x #'2
+thd = 𝜆x. sel x #'3
+
+Naturals.
+type NatF : ★ → ★
+type NatF = 𝜆n. Σ { 'Zero ⊲ Unit, 'Succ ⊲ n}
+type Nat : ★
+type Nat = 𝜇 NatF
+zero : Nat
+zero = in (inj (#'Zero ⊲ tt))
+succ : Nat → Nat
+succ = 𝜆n. in (inj (#'Succ ⊲ n))
+add : Nat → Nat → Nat
+add = 𝜆m. fix (𝜆add n.
+(case #'Zero (𝜆u. m)
+| case #'Succ (𝜆nn. succ (add nn))) (out n))
+one : Nat
+one = succ zero
+two : Nat
+two = succ one
+three : Nat
+three = add one two
+
+Lists.
+type ListF : ★ → ★ → ★
+type ListF = 𝜆a. Σ { 'Nil ⊲ Const Unit, 'Cons ⊲ (𝜆l. Pair a l) }
+type List : ★ → ★
+type List = 𝜆a. 𝜇 (ListF a)
+nil : ∀ a. List a
+nil = rcon #'Nil tt
+cons : ∀ a. a → List a → List a
+cons = 𝜆hd tl. rcon #'Cons (pair hd tl)
+head : ∀ a. List a → Maybe a
+head = 𝜆l. match (out l)
+( case #'Nil (const Nothing)
+| case #'Cons (o Just fst)
+)
+tail : ∀ a. List a → List a
+, Vol. 1, No. 1, Article . Publication date: July 2025.
+
+30
+
+Alex Hubers, Apoorv Ingle, Andrew Marmaduke, and J. Garrett Morris
+
+tail = 𝜆l. match (out l)
+( case #'Nil (const nil)
+| case #'Cons snd
+)
+nth : ∀ a. List a → Nat → Maybe a
+nth = fix (𝜆f l n.
+match (out n)
+( case #'Zero (const (head l))
+| case #'Succ (f (tail l))
+))
+
+C
+
+OMITTED CODE SAMPLES
+
+Evaluation: Boolean language.
+type ValB : R[R[★ → ★] → ★ → ★]
+type ValB = { 'Bool ⊲ (𝜆 expr. 𝜆 val. Bool), 'Err ⊲ (𝜆 expr. 𝜆 val. Unit) }
+evalB : ∀ valr. ValB ≲ valr ⇒
+Xh BoolF (𝜆 expr. Env (valr expr) → 𝜇 (Σ (valr expr)))
+evalB = 𝜆 exp rec env.
+match exp
+( case #'BConst (rcon #'Bool)
+| case #'If (𝜆 t.
+as #'Bool (rec (sel t #'1) env)
+( case #'True (const (rec (sel t #'2) env))
+| case #'False (const (rec (sel t #'3) env)))))
+
+D
+
+OMITTED EVALUATION DEFINITIONS
+
+The pick function.
+pick : (N ⇀ N) × (N ⇀ N) × N ⇀ N + N
+(
+Left j
+if p(j) = i
+pick(p, q, i) =
+Right j if q(j) = i
+The dual function.
+
+dual : (N ⇀ N) → N ⇀ N
+dual(p, i) = gop (i, 0)
+
+, Vol. 1, No. 1, Article . Publication date: July 2025.
+
+gop : N ⇀ N ⇀ N
+(
+j
+if j ∉ ran(p)
+gop (0, j) =
+gop (0, j + 1) otherwise
+(
+gop (i, j + 1)
+if j ∈ ran(p)
+gop (i, j) =
+gop (i − 1, j + 1) otherwise
+
+

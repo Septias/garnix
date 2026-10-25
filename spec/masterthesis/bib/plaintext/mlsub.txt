@@ -1,0 +1,1981 @@
+Polymorphism, Subtyping, and Type Inference in MLsub
+Alan Mycroft
+
+tifact
+
+OPL *
+* P se * Consi
+
+st
+
+* Complete
+
+eu
+
+* Easy to
+ed
+R
+nt
+
+at e d
+
+Abstract
+
+This scheme is quite strange, in that it demands that whatever we
+pass as the default d be acceptable to the predicate p. But this
+constraint does not arise from the behaviour of the program: at no
+point does our function pass d to p.
+Let’s examine the actual data flow of this function:
+
+We present a type system combining subtyping and ML-style parametric polymorphism. Unlike previous work, our system supports
+type inference and has compact principal types. We demonstrate
+this system in the minimal language MLsub, which types a strict
+superset of core ML programs.
+This is made possible by keeping a strict separation between
+the types used to describe inputs and those used to describe outputs, and extending the classical unification algorithm to handle
+subtyping constraints between these input and output types. Principal types are kept compact by type simplification, which exploits
+deep connections between subtyping and the algebra of regular languages. An implementation is available online.
+
+v
+
+argument to p
+
+d
+
+result
+
+Only by ignoring the orientation of the edges above could we
+conclude that d flows to the argument of p. Indeed, this is exactly
+what ML does: by turning data flow into equality constraints between types, information about the direction of data flow is ignored.
+Since equality is symmetric, data flow is treated as undirected.
+To support subtyping is to care about the direction of data
+flow. With subtyping, a source of data must provide at least the
+guarantees that the destination requires, but is free to provide more.
+The data flow graph of a program gives rise to constraints between types, which can be represented as a constraint graph. Once
+we add subtyping, we must treat the constraint graph as directed
+rather than undirected. This directed constraint graph complicates
+matters: instead of using unification to find connected components
+in the constraint graph, we need to deal with reachability and cycles
+and strong connectivity.
+One way to sidestep these difficulties is to widen the definition
+of “type” to include an explicit constraint graph. This gives the
+notion of a constrained type used in previous work [7, 22], where
+the principal type of an expression is given as a type with an
+attached explicit graph of constraints. For instance, such a system
+might represent the type of select as follows:
+
+Categories and Subject Descriptors D.1.1 [Programming Techniques]: Applicative (Functional) Programming; F.3.3 [Logics
+and Meanings of Programs]: Studies of Program Constructs—Type
+structure
+Keywords Subtyping, Polymorphism, Type Inference, Algebra
+
+1.
+
+e
+
+University of Cambridge, UK
+stephen.dolan@cl.cam.ac.uk
+alan.mycroft@cl.cam.ac.uk
+
+*
+
+t
+en
+
+A EC * E
+* Well Docum v
+
+Ar
+
+alu
+
+Stephen Dolan
+
+Introduction
+
+The Hindley-Milner type system of ML and its descendants is popular and practical, sporting decidable type inference and principal
+types. However, extending the system to handle subtyping while
+preserving these properties has been problematic.
+Subtyping is useful to encode extensible records, polymorphic
+variants, and object-oriented programs, but also allows us to expose
+more polymorphism even in core ML programs that do not use such
+features. For instance, given the definition twice = λf.λx.f (f x),
+ML gives twice (λx.true) the principal type bool → bool, allowing
+only arguments of type bool, while MLsub gives it type > → bool,
+allowing arguments of any type (see Section 2.4 for details).
+Supporting subtyping requires thinking carefully about data
+flow. Consider the select function, which takes three arguments:
+a predicate p, a value v and a default d, and returns the value if the
+predicate holds of it, and the default otherwise:
+
+(α → bool) → α → β → γ | α ≤ γ, β ≤ γ
+Unfortunately, this just moves the burden of dealing with constraint
+graphs onto the programmer. Constrained types are often large, and
+are difficult to compare.
+In his PhD thesis, Pottier1 noticed that constraint graphs can
+be simplified due to the structure of data flow. By keeping a strict
+separation between inputs and outputs, we can always represent
+the constraint graph as a bipartite graph: data flows from inputs
+to outputs. With edges only from inputs to outputs, such graphs
+have no cycles (or even paths of more than one edge), simplifying
+analysis.
+We take this insight a step further, and show that by keeping the
+same religious distinction between input and output we can avoid
+using explicit constraint graphs altogether, giving a much simpler
+type system. In MLsub, select has this type scheme:
+
+select p v d = if (p v) then v else d
+In ML and related languages, select has type scheme
+∀α. (α → bool) → α → α → α
+
+∀α, β. (α → bool) → α → β → (α t β)
+1 The mono-polarity invariant [18, ch. 12]
+
+[Copyright notice will appear here once ’preprint’ option is removed.]
+
+1
+
+2016/11/7
+
+This represents the data flow graph above: the predicate p must
+accept the value v (of type α), but the default d may be of a different
+type β. The output, being of type αtβ, can only be used in contexts
+that accept either an α or a β.
+Our contributions are as follows:
+
+1.2
+
+A vital aspect of this work is to adopt a more algebraic approach to
+the construction of types and the subtyping relation. We distinguish
+two aspects of types: the model of types (the concrete construction
+of types themselves, usually some flavour of syntax tree), and their
+algebra or theory of types (the equations and relations true about
+them).
+Traditionally, we start by picking a model of types, by giving
+them a syntax, and only later do we explore the algebra, by proving
+facts about this syntax. Unfortunately, with subtyping this leads to
+a rather ill-behaved algebra of types. We give an example here, but
+leave detailed discussion of related work to Section 6.
+A standard definition of types with function types, top and
+bottom might start with the following syntax for ground types:
+
+The MLsub type system We extend the ML type system with
+subtyping (Section 2). This amounts to a trivial change to the typing
+rules (the addition of a subtyping rule), but we take some care in
+constructing the lattice of types. The distinction between inputs and
+outputs uses an unusual (but equivalent) formulation of the typing
+rules (Section 3), which simplifies type inference.
+Type inference We show how MLsub preserves the decidability
+and principality of ML type inference (Section 4). As part of this,
+we introduce biunification, a variant of the unification algorithm
+which handles subtype rather than equality constraints.
+
+τ ::= ⊥ | τ → τ | >
+We give these a subtyping order making functions contravariant in
+their domain and covariant in their range, and making ⊥ and >
+the least and greatest types. With this ordering, these types form
+a lattice, so for any two types τ1 , τ2 we have their least upper
+bound τ1 t τ2 and greatest lower bound τ1 u τ2 . We introduce
+type variables α, β, . . . by quantifying over these ground types.
+Despite the succinctness of this definition, these types have a
+remarkably complicated and unwieldy algebra. Pottier gave the
+following example illustrating the incompleteness of a particular
+subtyping algorithm [18, p. 86]. We reuse his example, arguing that
+it demonstrates a flaw in the underlying definition rather than the
+incompleteness of one algorithm:
+
+Type simplification MLsub types have many equivalent representations (e.g. bool t bool t ⊥ is equivalent to just bool), and
+a naive implementation of inference may generate a complicated
+one. Like previous work, we use automata to simplify types (Section 5). Unlike previous work, we do not specify a particular simplification algorithm. Instead, we prove the general theorem that
+two automata represent equivalent types iff they accept equal languages (Section 5.3). This allows any optimisation algorithm from
+the literature on finite automata to be used to simplify types.
+1.1
+
+An Algebraic Approach
+
+Focus of this Paper
+
+(⊥ → >) → ⊥ ≤ (α → ⊥) t α
+
+This paper focuses on the core problem of inferring types for pure
+programs in a minimal ML-style calculus (booleans, records, functions and let). A full-scale programming language requires many
+more features, some of which are described in the first author’s thesis [6], along with proofs of this paper’s results.
+Two important topics not discussed here are deciding subsumption and mutable reference types. Subsumption, written ≤∀ and
+discussed in Section 3.2, describes whether one polymorphic type
+scheme is more general than another. While unnecessary for type
+inference, it is necessary to decide subsumption in order to check
+modules against signatures, or to compare an inferred type scheme
+with a user-provided annotation. Unlike much previous work, the
+algebraic construction of types in MLsub makes subsumption decidable [6, Ch. 8].
+Mutable references are usually typed with invariant parameters
+(neither co- nor contravariant), which would appear to pose a problem for MLsub since inference relies on each type parameter being
+either co- or contravariant. However, the issue is easily solved: the
+reference type can be given two type parameters, a contravariant parameter for what goes in and a covariant parameter for what comes
+out (see e.g. Pottier [18, p.165]). In fact, this encoding gives more
+precise types than invariance [6, Sec. 9.1].
+A prototype implementation of MLsub is available on the first
+author’s website:
+
+(E)
+
+With the above definition of subtyping, (E) holds. We can show
+this by case analysis on α: if α = >, then it holds trivially.
+Otherwise, α ≤ ⊥ → > (the largest function type), and so
+(⊥ → >) → ⊥ ≤ α → ⊥ by contravariance.
+However, this example is rather fragile. Extending the type
+◦
+system with a more general function type τ1 → τ2 (a supertype
+of τ1 → τ2 , say “function that may have side effects”) gives a
+◦
+◦
+counterexample α = (> → ⊥) → ⊥. This counterexample arises
+even though the extension did not affect the subtyping relationship
+between existing types, and only added new ones. Introducing type
+variables by quantification over ground types permits reasoning by
+case analysis on types, which is invalidated by language extensions.
+In order to make an extensible type system, we focus on building a well-behaved algebra of types, rather than choosing for minimality of syntax. Two changes are particularly important: first, we
+add type variables directly to the definition of types, rather than
+first defining ground types and then quantifying over them. This
+disallows case analysis over types, and ensures that the awkward
+example (E) does not hold in MLsub.
+Secondly, and more subtly, we construct types as a distributive
+lattice. Frequently, the lattice of types is constructed such that
+different type constructors have no common subtypes other than
+⊥. That is, given a function type τf and a record type τr , then
+τf u τr = ⊥. While this seems intuitive, it also implies some odd
+relations, such as:
+
+http://www.cl.cam.ac.uk/~sd601/mlsub
+This prototype includes features not discussed here for space
+reasons, such as type definitions, labelled and optional function
+arguments, type annotations, and others. When tested against
+OCaml’s standard List module (with some syntactic changes to
+satisfy our rather primitive parser), the types inferred by MLsub
+were no larger than the types inferred by OCaml, despite being
+more general. For instance, List.map is assigned a type syntactically identical to that assigned by OCaml, but in MLsub may be
+passed a list containing records with different sets of fields, and a
+function that accesses only the common ones.
+
+τf u τr ≤ bool
+This is counterintuitive, and makes type inference more difficult:
+the compiler must accept as a boolean any value used as both
+a function and a record. The vacuous reasoning that justifies it
+(reasoning that the left-hand side is empty, and thus a subtype of
+anything) is not extensible, since adding values which are usable
+both as functions and records falsifies it.
+To preclude such examples, we demand that all subtyping relationships between the meet of two types and another type follow
+
+2
+
+2016/11/7
+
+(VAR -λ)
+(VAR -∀)
+(A BS)
+(A PP)
+(L ET)
+(T RUE)
+(FALSE)
+(I F)
+(C ONS)
+(P ROJ)
+(S UB)
+
+Γ`x:τ
+
+Type environments Γ likewise distinguish let and λ-bound variables, by mapping λ-bound variables to monomorphic types τ , and
+let-bound variables to type schemes ∀~
+α.τ :
+
+Γ(x) = τ
+
+Γ(x̂) = ∀~
+α.τ
+Γ ` x̂ : τ [~τ /~
+α]
+Γ, x : τ1 ` e : τ2
+Γ ` λx.e : τ1 → τ2
+Γ ` e1 : τ1 → τ2 Γ ` e2 : τ1
+Γ ` e1 e2 : τ2
+Γ ` e1 : τ1 Γ, x : ∀~
+α.τ1 ` e2 : τ2
+α not free in Γ
+~
+Γ ` let x̂ = e1 in e2 : τ2
+
+Γ ::=  | Γ, x : τ | Γ, x̂ : ∀~
+α.τ
+The typing rules for MLsub (Fig. 1) are entirely standard: the
+Hindley-Milner calculus, extended with records, booleans and the
+standard subtyping rule. The only novelty here lies in the construction of the monotypes τ .
+2.1
+
+Defining Types
+
+As well as standard boolean, function and record types, MLsub has
+least-upper-bound and greatest-lower-bound type operators (written t and u), and least and greatest types (written ⊥ and >), which
+are needed to assign principal types.
+Due to subtyping, recursive types are also necessary for principality. With the > and ⊥ types, there are expressions typeable in
+MLsub not typeable in ML, for instance:
+
+Γ ` true : bool
+Γ ` false : bool
+Γ ` e1 : bool Γ ` e2 : τ Γ ` e3 : τ
+Γ ` if e1 then e2 else e3 : τ
+Γ ` e1 : τ1 . . . Γ ` en : τn
+Γ ` {`1 = e1 , . . . , `n = en } : {`1 : τ1 , . . . , `n : τn }
+Γ ` e : {` : τ }
+Γ ` e.` : τ
+Γ`e:τ
+τ ≤ τ0
+Γ ` e : τ0
+
+Y (λf.λx.f )
+where Y is the call-by-value Y-combinator. This expression gives
+a function which ignores its argument and returns itself. In MLsub,
+this expression is typeable with any of the types > → >, > →
+(> → >), > → (> → (> → >)), . . . , and the recursive type
+µα.> → α is needed to express its principal type.
+So, we define MLsub types using the following syntax:
+
+Figure 1: MLsub typing rules
+
+τ ::= bool | τ1 → τ2 | {`1 : τ1 , . . . , `n : τn } |
+α|>|⊥|τ tτ |τ uτ
+
+from some property of the first two. Formally,
+
+where α ranges over type variables. Rather than using a syntactic
+list, record types are defined as a partial function from record
+labels to types, making the order of label-type pairs in record types
+irrelevant. Occasionally, we explicitly denote this: {`1 : τ1 , `2 :
+τ2 } is the same as {f } where dom f = {`1 , `2 }, f (`1 ) = τ1 ,
+f (`2 ) = τ2 . We assume the set L of record labels and the set A of
+type variables to be finite, but arbitrary.
+We allow the syntax trees of types to be infinite, except that we
+require that the syntax tree of any type contain no infinite path of
+t, u without an intervening type constructor (bool, →, or { . . . }).
+These syntax trees are quotiented by an equivalent relation making
+t, u, ⊥, > a distributive lattice. Thus, we allow the infinite type:
+
+If τ1 u τ2 ≤ τ3 , then τ10 u τ20 = τ3 for some τ10 ≤ τ3 , τ20 ≤ τ3
+This condition is equivalent to distributivity. Its effect on the type
+system is to require the existence of more types, allowing us to
+distinguish τf u τr from ⊥.
+The construction of types in Section 2.1 follows these principles. We do build an explicit model of types, but we do so by starting from the algebra: types are defined by quotienting syntax by the
+equations of the algebra.
+
+2.
+
+The MLsub Language
+
+Presentations of the Hindley-Milner calculus often limit themselves
+to function types and a base type, since all of the difficulties encountered in type inference arise in this simpler setting. With subtyping, we need a slightly richer type language before we hit the
+difficult cases. So, we include a base type (booleans), functions (so
+that we must handle co- and contravariance in the same type constructor), and records (so that we must handle subtyping between
+type constructors of different arity).
+In all variants of ML, the typing of let-bound and λ-bound
+variables is quite different, allowing polymorphism for let-bound
+variables and allowing the type of λ-bound variables to be inferred
+from their uses. This separation is important in MLsub, so we
+include it in the syntax, distinguishing λ-bound variables x from
+let-bound variables x̂, giving the following:
+
+bool → (bool → (bool → . . . ))
+but not:
+bool t (bool t (bool t . . . ))
+Rather than directly operating on these infinite syntax trees, the
+concrete algorithms of Section 4 operate on polar types (defined in
+Section 3.3), a restricted subset of types which can be represented
+finitely and which suffice for type inference.
+More precisely, we define for each i ∈ N the i-types to be
+terms of the above syntax, in which type constructors (bool, →
+and { . . . }) are nested to a depth of at most i. We define an
+equivalence relation ≡i on i-types as the least relation closed under
+the equations of distributive lattices (Fig. 2, or see e.g. Davey and
+Priestley [5]) and the equations of Fig. 3. The distributive lattice Ti
+is then given by the equivalence classes of ≡i .
+The distributive lattice T of MLsub types is the inverse limit:
+
+e ::= x | λx.e | e1 e2 |
+{`1 = e1 , . . . , `n = en } | e.` |
+true | false | if e1 then e2 else e3 |
+x̂ | let x̂ = e1 in e2
+
+T = lim Ti
+←−
+i
+
+In the record construction syntax { . . . }, the labels `i are drawn
+from some collection L and assumed distinct. We take the order of
+labels to be significant in expressions (so that a simple, deterministic, left-to-right evaluation order can be defined), but insignificant
+in types.
+
+The equations of Fig. 3 imply the usual subtyping rules (co- and
+contravariance for functions, and width and depth subtyping for
+records). They go a little further by directly specifying that e.g. the
+upper bound of two record types has the intersection of their fields.
+We recover a partial order (up to ≡) from this structure by defining
+
+3
+
+2016/11/7
+
+Lemma 1. If α is covariant in τ , then φ(τ 0 ) = τ [τ 0 /α] has a
+least pre-fixed point, written µ+ α.τ , and a greatest post-fixed point
+written µ− α.τ .
+
+τ tτ ≡τ
+
+τ uτ ≡τ
+
+τ1 t τ2 ≡ τ2 t τ1
+
+τ1 u τ2 ≡ τ2 u τ1
+
+τ1 t(τ2 tτ3 ) ≡ (τ1 tτ2 )tτ3
+
+τ1 u(τ2 uτ3 ) ≡ (τ1 uτ2 )uτ3
+
+τ1 t (τ1 u τ2 ) ≡ τ1
+
+τ1 u (τ1 t τ2 ) ≡ τ1
+
+⊥tτ ≡τ
+
+⊥uτ ≡⊥
+
+>tτ ≡>
+
+>uτ ≡τ
+
+µ+ α. α = ⊥
+
+τ1 t (τ2 u τ3 ) ≡ (τ1 t τ2 ) u (τ1 t τ3 )
+
+µ− α. α = >
+
+The µ syntax binds loosely: µ+ α. τ1 → τ2 is µ+ α.(τ1 → τ2 ),
+not (µ+ α.τ1 ) → τ2 . This lemma provides both least pre-fixed and
+greatest post-fixed points, but they need not agree in general: α is
+covariant in α, but:
+
+τ1 u (τ2 t τ3 ) ≡ (τ1 u τ2 ) t (τ1 u τ3 )
+
+To remedy this, we introduce another condition. We say that α is
+guarded in τ if all occurrences of α occur under at least one type
+constructor (that is, are guarded by a function or record type). Note
+that the operators t and u are not, by themselves, sufficient for
+guardedness: α is guarded in ⊥ → α and ⊥ → (α t bool) but not
+in α t bool.
+
+Figure 2: Equations of distributive lattices
+
+(τ1 → τ2 ) t (τ10 → τ20 ) ≡ (τ1 u τ10 ) → (τ2 t τ20 )
+
+Lemma 2. If α is covariant and guarded in τ , then
+
+(τ1 → τ2 ) u (τ10 → τ20 ) ≡ (τ1 t τ10 ) → (τ2 u τ20 )
+
+µ+ α.τ = µ− α.τ
+
+{f } t {g} ≡ {h}
+where dom h = dom f ∩ dom g
+and h(`) = f (`) t g(`)
+
+We write this type as µα.τ . Note that α is vacuously covariant
+and guarded in any τ in which it does not occur, but this causes no
+issues: if α does not appear in τ , then µα.τ = τ .
+At first glance, it seems that the covariance condition reduces
+expressiveness since it excludes, for example, µα.α → α. However, a result of Bekić [2] allows us to find a unique type τ such
+that τ ≡ τ → τ . The trick is to define two types τ1 , τ2 in a mutually recursive fashion:
+
+{f } u {g} ≡ {h}
+where dom h
+= dom f ∪ dom g
+
+f (`) u g(`) if ` ∈ dom f ∩ dom g
+and h(`) = f (`)
+if ` ∈ dom f − dom g
+
+g(`)
+if ` ∈ dom g − dom f
+
+τ1 = τ2 → τ1
+
+Here, τ1 depends on itself in a covariant and guarded way, as does
+τ2 . We can thus introduce well-formed µ-types:
+
+Figure 3: Equations for function and record type constructors
+
+τ1 = µα. τ2 → α
+τ1 ≤ τ2 as τ1 t τ2 ≡ τ2 , or equivalently τ1 ≡ τ1 u τ2 . In this order,
+t gives least-upper-bounds, u gives greatest-lower-bounds, and ⊥
+and > are the least and greatest elements.
+Since L and A are assumed finite, T is a profinite distributive
+lattice (an inverse limit of finite lattices), which is an algebraic
+class with many pleasant properties. For an algebraic derivation of
+this construction, see the first author’s thesis [6, Ch. 3], which also
+contains the technical details of the construction of T .
+2.2
+
+τ1 = µα. (µβ. α → β) → α
+
+2.3
+
+=⇒
+
+Soundness
+
+We equip MLsub with a small-step operational semantics e −→ e0
+(elided for space), which evaluates terms left-to-right using call-byvalue. We carry out a standard soundness proof by proving progress
+and preservation [23], but a wrinkle arises at the point where a standard soundness proof attempts inversion on the subtyping relation.
+Our subtyping relation is not defined by cases, and inversion by
+case analysis is not a meaningful operation. Indeed, given merely
+that τ1 ≤ τ2 → τ3 , it is not the case that τ1 is a function type: we
+could have τ1 = ⊥ or τ1 = (α → β) u α. However, a weaker
+form of inversion does hold in T , when we know the head type
+constructor on both sides of ≤:
+
+µα.τ = τ0
+
+This is not strong enough in the presence of subtyping, since the
+knowledge that τ [τ0 /α] = τ0 is hard to come by. Instead, we need
+a reasoning principle that uses subtyping information:
+τ [τ0 /α] ≤ τ0
+
+τ2 = µβ. (µα. β → α) → β
+
+These types are α-equivalent, so we conclude that τ1 ≡ τ2 , giving
+us a type τ ≡ τ → τ .
+This technique works in general, allowing us to express arbitrary recursive types by encoding them with covariant ones2 —any
+map φ(τ1 , τ2 ) (contravariant in τ1 and covariant in τ2 ) has a fixpoint given by:
+µα. φ(µβ. φ(α, β), α)
+
+The treatment of recursive types in MLsub deserves special comment. Traditionally, a recursive type µα.τ is treated as the unique
+fixed point of a map φ(τ 0 ) = τ [τ 0 /α]. This justifies the αrenaming of the variable bound by µ, as well as giving us the
+following reasoning principle:
+=⇒
+
+τ2 = µβ. τ1 → β
+
+Substitution gives:
+
+Recursive Types
+
+τ [τ0 /α] = τ0
+
+τ2 = τ1 → τ2
+
+µα.τ ≤ τ0
+
+This requires that µα.τ be a least pre-fixed point of the map φ, a
+condition not implied by being the unique fixed point. (For example, the function f (x) = 2x on R has a unique fixed point at 0, but
+no least pre-fixed point).
+The algebraic structure of T allows us to construct least prefixed points. We say that α is covariant in τ if all occurrences of
+α in the syntax of τ are to the left of an even number of →. More
+concisely, α is covariant in τ when the map φ(τ 0 ) = τ [τ 0 /α] is
+monotone.
+
+2 This works in MLsub because positive recursive types (e.g. µα. (α →
+
+⊥) → ⊥) are the unique solutions of their defining equations (e.g. τ =
+(τ → ⊥) → ⊥). Positive recursive types can also be encoded in say,
+System F, but lack uniqueness: τ = (τ → ⊥) → ⊥ has distinct least
+(inductive) and greatest (coinductive) solutions, which prevents the use of
+Bekić’s theorem to find τ where τ = τ → τ . If we try to carry through the
+above construction in System F, we end up defining τ1 inductively and τ2
+coinductively (or vice versa), and cannot then conclude that τ1 = τ2 .
+
+4
+
+2016/11/7
+
+Lemma 3 (Inversion). If τ1 → τ2 ≤ τ10 → τ20 , then τ10 ≤ τ1 and
+τ2 ≤ τ20 .
+If {f } ≤ {g}, then f (`) ≤ g(`) for ` ∈ dom g.
+
+on λ-bound variables, as in the following example.
+
+Happily, this weak inversion principle suffices to carry out the
+standard proof.
+
+If Γ(f ) = α → bool, the type of g is α → α, which cannot be
+generalised because of the dependency on f . The two uses of g
+must then both be at the same type.
+Adding subtyping complicates this further. Suppose Γ(f ) =
+τ0 → bool and τ1 and τ2 are both subtypes of τ0 . In order
+to maintain the let-expansion property that let x = e1 in e2 is
+typeable if e2 [e1 /x] is (again assuming x occurs in e2 ), we must
+allow the above example with g used at types τ1 → τ1 and
+τ2 → τ2 .
+Giving g a monomorphic type does not suffice. We need a type
+like “∀α where α ≤ τ0 . α → α”, but we promised to avoid types
+with constraints. Instead, we reformulate the typing rules to make
+explicit such partially generalised types.
+
+λf. let g = λx.if f x then x else x in (. . . g . . . g . . . )
+
+Theorem 4 (Progress). If ` e : τ then either e is a value, or
+e −→ e0 for some e0 .
+Theorem 5 (Preservation). If ` e : τ and e −→ e0 , then ` e0 : τ .
+2.4
+
+MLsub Subsumes ML
+
+Since the typing rules for MLsub are just those of ML with an extra
+(S UB) rule, any expression typeable in ML is trivially typeable in
+MLsub with the same type. Furthermore, since recursive types can
+be expressed in MLsub (Section 2.2), MLsub also subsumes MLrec
+(ML extended with recursive types). We have the (strict) inclusions:
+ML ⊂ MLrec ⊂ MLsub
+
+3.1
+
+However, some ML expressions can be given a more general type
+in MLsub. Consider the function twice, defined as:
+
+Following Trifonov and Smith [22] and Pottier [18], our reformulated typing rules use the so-called lambda-lifted style. Instead of
+type schemes σ, we use typing schemes [∆]τ , where ∆ is as before a finite map from λ-bound variables to types, and τ is a type.
+Typing schemes have no free type variables: all of their type variables are implicitly generalised, and so we omit the ∀. Every typing
+scheme explicitly carries around its dependencies on λ-bound program variables, rather than relying on a coincidence of type variables (which happens to work for ML, but is trickier with subtyping).
+Thus, in the previous example, g (being defined in terms of the
+λ-bound variable f ) gets the following typing scheme:
+
+λf.λx.f (f x)
+This is typeable in ML with type scheme ∀α. (α → α) → α → α.
+The same type scheme works in MLsub, but the following principal
+type is more general:
+∀α, β. ((α t β) → β) → (α → β)
+This type scheme states that any result of f (of type β) must be
+usable as an input of f (since β ≤ α t β), and that twice f must
+be passed something (of type α) usable as an input of f (since
+α ≤ α t β), but these types need not be identical.
+For instance, in ML, twice (λx.true) has type bool → bool
+since the input type of λx.true is unified with its output type. In
+MLsub, the same expression has type > → bool and may be passed
+anything, since the above type scheme for twice can be instantiated
+by α 7→ >, β 7→ bool, giving
+
+[f : α → β]α → α
+For the reformulated rules, we assume the expression being
+typed has undergone enough α-renaming that bound variables are
+distinct, avoiding issues with shadowing.
+We split the type environment Γ into a monomorphic part ∆
+and a polymorphic part Π, where ∆ maps λ-bound variables to
+monomorphic types and Π maps let-bound variables to typing
+schemes:
+
+(> → bool) → > → bool
+Note that the operator t is instrumental in defining the above
+principal typing scheme for twice. In fact, Hoang and Mitchell
+showed that a type system with subtyping using only ML types
+(i.e. types lacking t and u) cannot express the principal type for
+twice without explicit constraints [11].
+Other expressions are not typeable at all in ML, but are in
+MLsub. For instance, the self-application function λx. xx is not
+typeable in ML while in MLsub it can be given the following
+(principal) type scheme:
+
+∆ ::=  | ∆, x : τ
+Π ::=  | Π, x̂ : [∆]τ
+Writing the ML typing rules in terms of typing schemes leads
+to the rules in Figure 4, with judgements of the form Π e : [∆]τ .
+We write ∆1 u ∆2 to denote that ∆ such that dom ∆ = dom ∆1 ∪
+dom ∆2 , and ∆(x) = ∆1 (x) u ∆2 (x) when both are defined, and
+equal to whichever is defined in other cases.
+Mostly, the translation consists of bringing ∆ to the other side
+of the turnstile, except that the side-condition of the new (S UB)
+rule uses the subsumption relation ≤∀ , combining subtyping and
+instantiation of type variables. In particular, note that if the subtyping relation were trivial (i.e. all ≤ replaced with =), then the
+relation ≤∀ reduces to Hindley-Milner instantiation.
+Unlike previous work in which explicit constraints complicated
+the presentation, the reformulated typing rules can be related directly to the original, ML-style typing rules:
+
+∀α, β. ((α → β) u α) → β
+Applying this function to λx.true gives a term of type bool.
+
+3.
+
+Typing Schemes
+
+Reformulated Typing Rules
+
+In this section, we reformulate the typing rules to more clearly
+separate inputs and outputs, which simplifies type inference.
+The strength of ML is that expressions can be written once and
+re-used at different types using the let construct. For instance, here
+the identity function is bound to g and used twice:
+
+Theorem 6. ` e : τ iff
+
+let g = λx.x in (. . . g . . . g . . . )
+The function g has type scheme ∀α. α → α, and then g can be
+used at distinct types τ1 → τ1 and τ2 → τ2 .
+The tricky part of the ML type system is when the type of a letbound expression cannot be fully generalised because it depends
+
+e : [ ]τ
+
+The proof is by proving a stronger theorem, which works in
+nonempty typing contexts. The proof is straightforward induction,
+although the statement of the theorem is somewhat messy due to
+the need to convert between Γ and Π/∆-style environments.
+
+5
+
+2016/11/7
+
+The first corresponds to the usual ML type scheme ∀α.α → α →
+α, while the second reflects the behaviour of subtyping: the function takes two arguments, possibly of different types, and returns
+something at the upper bound of those types. Superficially, the second appears more general, and indeed
+
+[∆]τ ≤∀ [∆0 ]τ 0 iff dom(∆) ⊆ dom(∆0 )
+and ∆0 (x) ≤ ρ(∆(x)) for all x ∈ dom(∆)
+and ρ(τ ) ≤ τ 0 , for some substitution ρ
+(VAR -Π)
+(VAR -∆)
+(A BS)
+(A PP)
+(L ET)
+(T RUE)
+(FALSE)
+(I F)
+(C ONS)
+(P ROJ)
+(S UB)
+
+Π
+
+x̂ : [∆]τ
+
+Π(x̂) = [∆]τ
+
+[ ]β → γ → (β t γ) ≤∀ [ ]α → α → α
+since we can take β = γ = α. Less obviously, we also have that
+
+Π x : [x : τ ]τ
+Π e : [∆, x : τ ]τ 0
+Π λx. e : [∆]τ → τ 0
+Π e1 : [∆]τ → τ 0 Π e2 : [∆]τ
+Π e1 e2 : [∆]τ 0
+Π e1 : [∆1 ]τ1 Π, x̂ : [∆1 ]τ1 e2 : [∆2 ]τ2
+Π let x̂ = e1 in e2 : [∆1 u ∆2 ]τ2
+Π
+
+[ ]α → α → α ≤∀ [ ]β → γ → (β t γ)
+To show this, we need to instantiate α so that α → α → α becomes
+a subtype of β → γ → (β t γ), and taking α = β t γ suffices.
+The typing scheme [ ]α → α → α describes a function type,
+accepting two inputs and producing one output. In ML, since all
+are labelled α, each of the three values involved must be of the
+same type. On the contrary, the subtyping in MLsub means that
+the two inputs need not be of the same type: for any given choice
+of α, subtyping allows the two inputs to be given at any two
+subtypes of α. Because MLsub tracks data flow (as described in
+the introduction), it only requires a constraint between inputs and
+outputs: the negative uses of α (the two inputs) must both be
+subtypes of the positive uses of α (the output). More succinctly,
+in MLsub, type variables label data flow, a fact exploited in the
+automaton construction of Section 6.4.
+
+true : [ ]bool
+
+Π
+Π
+
+false : [ ]bool
+e1 : [∆]bool Π e2 : [∆]τ Π e3 : [∆]τ
+Π if e1 then e2 else e3 : [∆]τ
+Π e1 : [∆]τ1 . . . Π en : [∆]τn
+Π {`1 = e1 , . . . , `n = en } : [∆]{`1 : τ1 , . . . , `n : τn }
+Π e : [∆]{` : τ }
+Π e.` : [∆]τ
+Π e : [∆]τ
+[∆]τ ≤∀ [∆0 ]τ 0
+Π e : [∆0 ]τ 0
+
+3.3
+
+Figure 4: Reformulated typing rules
+
+3.2
+
+Polar Types
+
+Although our syntax includes all combinations of the lattice operators, the structure of programs does not allow the lattice operations
+t and u to appear arbitrarily. If a program chooses randomly to
+produce either an output of type τ1 or one of type τ2 , the actual
+output type is τ1 t τ2 . Similarly, if a program uses an input in a
+context where a τ1 is required and again in a context where a τ2
+is, then the actual input type is τ1 u τ2 . Generally, t only arises
+when describing outputs, while u only arises when describing inputs. In a similar vein, the least type ⊥ appears only on outputs (of
+non-terminating programs), while the greatest type > appears only
+on inputs (an unused input). Thus, we carve out two subsets of T :
+positive types τ + (which describe outputs) and negative types τ −
+(which describe inputs), defined by the following syntax (in which
+α is required to be covariant and guarded in µα.τ + and µα.τ − ):
+
+Type Variables in MLsub
+
+The reformulated (S UB) rule uses the relation ≤∀ , where [∆]τ ≤∀
+[∆0 ]τ 0 iff there is some substitution ρ making ρ(τ ) a subtype of
+τ 0 , and ρ(∆(x)) a supertype of ∆0 (x) (for x ∈ dom ∆). This
+relation thus combines the two forms of polymorphism in MLsub:
+subtyping and the instantiation of type variables.
+We write inst([∆]τ ) for the instances of [∆]τ , that is, the set
+of [∆0 ]τ 0 such that [∆]τ ≤∀ [∆0 ]τ 0 . The instances of a typing
+scheme describe the ways it can be used, using any combination of
+subtyping and instantiation.
+This subsumption relation is simpler than those of previous
+work. Pottier’s relation ≤∀ requires that, for every ρ0 , there exists some ρ making ρ(τ ) a subtype of ρ0 (τ 0 ) (and conversely for
+∆, ∆0 ). This more complex condition seems more general, but it
+is a consequence of the definition of T (in particular, the treatment
+of type variables as indeterminates rather than quantification over
+ground types) that in the current setting they coincide.
+The presence of subtyping causes type variables to behave differently in MLsub as compared to ML. We say two typing schemes
+[∆1 ]τ1 and [∆2 ]τ2 are equivalent when each subsumes the other.
+In ML two typing schemes are equivalent iff they are syntactically
+equal up to renamings of type variables. Equivalence in MLsub is
+more subtle, since it is possible in MLsub to have two equivalent
+typing schemes with different numbers of type variables.
+An example is the function choose, which takes two (curried)
+arguments and randomly returns one or the other. In MLsub, it can
+be given either of the following two typing schemes:
+
+τ + ::= bool | τ1− → τ2+ | {`1 : τ1+ , . . . , `n : τn+ } |
+α | τ1+ t τ2+ | ⊥ | µα.τ +
+τ − ::= bool | τ1+ → τ2− | {`1 : τ1− , . . . , `n : τn− } |
+α | τ1− u τ2− | > | µα.τ −
+A polar typing scheme is a typing scheme [∆− ]τ + where
+∆− (x) is a negative type for x ∈ dom ∆− and τ + is a positive
+type, while Π is said to be polar if Π(x̂) is polar for all x̂ ∈ dom Π.
+Polar typing schemes are a very restricted subset of the possible
+typing schemes. However, the principality result of the next section
+shows that this subset is large enough to perform type inference: every expression typeable with any typing scheme has a principal typing scheme which is polar. For this reason, the concrete algorithms
+of Section 5 manipulate only polar types and typing schemes.
+
+4.
+
+Type Inference for MLsub
+
+With our reformulated typing rules, the type inference problem is
+to find a principal typing scheme [∆p ]τp given inputs Π, e such that
+Π
+
+[ ]α → α → α
+
+e : [∆]τ iff [∆p ]τp ≤∀ [∆]τ
+
+An advantage of the reformulated rules is that the inputs and outputs of type inference are more clearly delineated, in contrast to
+
+[ ]β → γ → (β t γ)
+
+6
+
+2016/11/7
+
+Milner’s Algorithm W which takes Γ, e and produces substitution
+with which to modify Γ and a type τ .
+If e is closed and has principal typing scheme [ ]τp , then this
+implies (using Theorem 6 and the definition of ≤∀ ) that:
+
+subU (bool = bool) = ∅
+subU (τ1 → τ2 = τ3 → τ4 ) = {τ1 = τ3 , τ2 = τ4 }
+subU ({f } = {g}) = {f (`) = g(`) | ` ∈ D}
+
+` e : τ iff ρ(τp ) ≤ τ for some substitution ρ
+
+where D = dom f = dom g
+
+So, we must construct a function P (Π; e), which for any polar
+typing environment Π and expression e produces a principal typing
+scheme (assuming e is typeable).
+This function is defined by induction on e, and is trivial when e
+is a variable:
+
+U(∅) = []
+U(α = α, C) = U(C)
+
+P (Π; x̂) = Π(x̂)
+
+U(α = τ, C) = U(θα=τ C) ◦ θα=τ
+
+α 6∈ ftv(τ )
+
+U(τ = α, C) = U(θα=τ C) ◦ θα=τ
+
+α 6∈ ftv(τ )
+
+U(c, C) = U(subU (c), C)
+
+P (Π; x) = [x : α]α
+Let-bindings are only slightly more complicated:
+
+Figure 5: The classical unification algorithm (for finite terms)
+
+P (Π; let x̂ = e1 in e2 ) = [∆1 u ∆2 ]τ2
+where [∆1 ]τ1 = P (Π; e1 )
+and [∆2 ]τ2 = P (Π, x̂ : [∆1 ]τ1 )
+
+By the definition of ≤∀ , the instances inst([∆]τ ) of [∆]τ are:
+↑ {ρ([∆]τ ) | ρ a substitution}
+
+Inferring types for introduction forms is also straightforward.
+To infer typing schemes for λ-bindings, we infer a typing scheme
+[∆]τ for the body, and then extract the argument’s type from ∆. To
+this end, we write ∆x for ∆ with x removed from the domain, and
+extend the syntax ∆(x) by using the convention ∆(x) = > for
+x 6∈ dom ∆, so that functions that do not use their argument are
+given types > → τ .
+
+where ↑ is upwards-closure under the subtyping order. We write
+inst([∆]τ | τ1 ≤ τ2 ) for the instances under a constraint, that is:
+↑ {ρ([∆]τ ) | ρ(τ1 ) ≤ ρ(τ2 )}
+The set of possible typing schemes for e1 e2 is:
+↑ {ρ([∆1 u ∆2 ]α) | ρ(τ1 ) ≤ ρ(τ2 ) → ρ(α)}
+To infer a type for e1 e2 we must find a typing scheme [∆]τ
+whose instances are the above. If we can do this, we can define
+P (Π; e1 e2 ) as follows:
+
+P (Π; true) = [ ]bool
+P (Π; false) = [ ]bool
+P (Π; λx.e) = [∆x ](∆(x) → τ )
+
+P (Π; e1 e2 ) = [∆]τ
+where inst([∆]τ ) = inst([∆1 u ∆2 ]α | τ1 ≤ τ2 → α)
+and [∆1 ]τ1 = P (Π; e1 ), [∆2 ]τ2 = P (Π; e2 )
+
+where [∆]τ = P (Π; e)
+#
+"
+l
+P (Π; {`1 = e1 , . . . , `n = en }) =
+∆i {`1 : τ1 , . . . , `n : τn }
+
+The same reasoning can be used for projections and conditionals:
+
+i
+
+P (Π; e.`) = [∆]τ
+where inst([∆]τ ) = inst([∆1 ]α | τ1 ≤ {` : α})
+
+where [∆i ]τi = P (Π; ei )
+The difficult case of type inference is inferring types for elimination forms: application, projection, and if. This mirrors Milner’s
+Algorithm W. Most cases of inference construct a principal typing
+scheme for an expression by gluing together the principal typing
+schemes of its subexpressions, but in the case of an application
+e1 e2 it may be necessary to perform a substitution3 on the principal types of e1 and e2 . For instance, if e1 = λx.x with principal
+typing scheme [ ]α → α and e2 = true, it is necessary to substitute
+bool for α to type the application.
+Specifically, we take [∆1 ]τ1 and [∆2 ]τ2 to be the principal
+typing schemes of e1 and e2 in the environment Γ. Not all instances
+of [∆1 ]τ1 and [∆2 ]τ2 result in e1 e2 being typeable: in the above
+example, the instance [ ]⊥ → ⊥ of [∆1 ]τ1 leaves the expression
+untypeable. Only those instances allowing a subsequent use of the
+(A PP) rule are permitted.
+All type variables in a typing scheme are implicitly universally
+quantified, so without loss of generality we assume that [∆1 ]τ1 and
+[∆2 ]τ2 have no type variables in common. We can thus use a single
+substitution ρ to assign types to the type variables in [∆1 ]τ1 and
+[∆2 ]τ2 . In order for e1 e2 to be typeable, ρ must satisfy:
+
+and [∆1 ]τ1 = P (Π; e)
+P (Π; if e1 then e2 else e3 ) = [∆](τ )
+where inst([∆]τ ) = inst([∆1 u ∆2 u ∆3 ](τ2 t τ3 ) | τ1 ≤ bool)
+and [∆1 ]τ1 = P (Π; e1 )
+[∆2 ]τ2 = P (Π; e2 )
+[∆3 ]τ3 = P (Π; e3 )
+So, to compute principal types, we must find a way of constructing
+[∆]τ such that
+inst([∆]τ ) = inst([∆0 ]τ 0 | C)
+where C is some set of constraints. In general, the generated
+constraints are always of the form τ + ≤ τ − , which intuitively
+represents an attempt to use the output of one expression (of type
+τ + ) in a particular context (requiring type τ − ).
+To construct such [∆]τ , we introduce biunification, a variant of
+standard unification (as used to infer types in ML) that can handle
+subtyping constraints of the form τ + ≤ τ − .
+
+ρ(τ1 ) ≤ ρ(τ2 ) → ρ(α)
+
+4.1
+
+for some fresh variable α.
+
+Unification in ML
+
+Type inference for ML uses unification to eliminate constraints.
+Figure 5 shows Martelli and Montanari’s unification algorithm [15].
+Unification decomposes constraints into a set of atomic constraints, which constrain a type variable to equal a term. An atomic
+
+3 This corresponds to Algorithm W finding a “generic instance”, which in-
+
+volves removing ∀ quantifiers as well as substituting. With typing schemes,
+substitution suffices as we have no ∀ quantifiers to remove.
+
+7
+
+2016/11/7
+
+subB (τ1− → τ1+ ≤ τ2+ → τ2− ) = {τ2+ ≤ τ1− , τ1+ ≤ τ2− }
+
+subU µ (µα.τ1 = τ2 ) = {τ1 [µα.τ1 ] = τ2 }
+subU µ (τ1 = µα.τ2 ) = {τ1 = τ2 [µα.τ2 ]}
+
+subB (bool ≤ bool) = {}
+subB ({f } ≤ {g}) = {f (`) ≤ g(`) | ` ∈ dom g}
+
+subU µ (c) = subU (c)
+
+where dom g ⊆ dom f
+
+U µ (H; ∅) = [ ]
+
+subB (µα.τ + ≤ τ − ) = {τ + [µα.τ + /α] ≤ τ − }
+
+U µ (H; τ1 = τ2 , C) = U µ (C) τ1 = τ2 ∈ H
+
+subB (τ + ≤ µα.τ − ) = {τ + ≤ τ − [µα.τ − /α]}
+
+U µ (H; α = α, C) = U µ (H; C)
+U µ (H; α = τ, C) = U µ (θα=τ H; θα=τ C) ◦ θα=τ
+
+subB (τ1+ t τ2+ ≤ τ − ) = {τ1+ ≤ τ − , τ2+ ≤ τ − }
+
+U µ (H; τ = α, C) = U µ (θα=τ H; θα=τ C) ◦ θα=τ
+
+subB (τ + ≤ τ1− u τ2− ) = {τ + ≤ τ1− , τ + ≤ τ2− }
+subB (⊥ ≤ τ − ) = {}
+
+U µ (H; c, C) = U µ (H, c; subU µ (c), C)
+
+subB (τ + ≤ >) = {}
+Figure 6: The unification algorithm with recursive types
+B(H; ∅) = []
+constraint α = τ is eliminated using the substitution θα=τ which
+replaces all uses of α with τ , an operation classically termed “variable elimination”. When we extend this to subtyping constraints,
+elimination will not always remove a variable, so in this work we
+prefer the term atomic constraint elimination. Atomic constraint
+elimination is trivial in plain unification where we define, for all τ
+and α not free in τ :
+θα=τ = [τ /α]
+θα=τ fails if α is free in τ (the occurs check).
+In MLsub, the presence of subtyping and recursive types make
+atomic constraint elimination more complex.
+4.2
+
+B(H; τ1 ≤ τ2 , C) = B(H; C) τ1 ≤ τ2 ∈ H
+B(H; α ≤ α, C) = B(H; C)
+B(H; α ≤ τ, C) = B(θα≤τ H; θα≤τ C) ◦ θα≤τ
+B(H; τ ≤ α, C) = B(θτ ≤α H; θτ ≤α C) ◦ θτ ≤α
+B(H; c, C) = B(H, c; subB (c), C)
+Figure 7: The biunification algorithm
+
+a bisubstitution which replaces positive occurrences of α with τ +
+and negative occurrences of α with τ − . We also write [τ − /α− ] for
+a bisubstitution which leaves positive occurrences of α unchanged.
+That is, [τ − /α− ] has the same effect as [α/α+ , τ − /α− ], and
+similarly for [τ + /α+ ]. Bisubstitutions always make positive-forpositive and negative-for-negative replacements, so we may apply
+them without violating our syntactic restrictions.
+The biunification algorithm takes as input a set of constraints of
+the form τ + ≤ τ − and produces a bisubstitution. The algorithm is
+shown in Figure 7, and it is instructive to compare it to unification
+with recursive types.
+Note in particular the straightforward definition of subB . By ensuring that constraints are always of the form τ + ≤ τ − , decomposing constraints is made easy. The syntactic restrictions on polar
+types ensure that hard cases like τ1 u τ2 ≤ τ3 do not arise.
+Biunification treats recursive types in the same way as U µ .
+Constraints involving t on the left of ≤ are decomposed into
+several constraints, since τ1 t τ2 ≤ τ3 iff τ1 ≤ τ3 and τ2 ≤ τ3
+by the least-upper-bound property of t. The situation is similar for
+u-constraints on the right. The benefit of the syntactic restrictions
+on polar types is that we need not handle the awkward cases of t
+on the right nor u on the left.
+Atomic constraint elimination θα=τ has been split in two: we
+use bisubstitutions θα≤τ to eliminate upper bounds and θτ ≤α to
+eliminate lower bounds. Their definition is trickier than for plain
+unification, and is explained below.
+
+Extending Unification with Recursive Types
+
+First, we extend the ML unification algorithm with support for recursive types µα.τ , as supported by ML variants such as OCaml
+(Figure 6). To ensure termination, the recursive unification algorithm U µ uses an extra argument H to record previously-visited
+constraints. When processing a constraint c of the form µα.τ1 =
+τ2 , the recursive type µα.τ1 is unrolled and c is added to H so that
+it can be ignored if encountered again.
+Unlike plain unification, this algorithm uses atomic constraint
+elimination θα=τ even when α is free in τ and the occurs check
+fails. We extend the definition of θα=τ to introduce a recursive type
+in this case:
+(
+[τ /α]
+if α not free in τ
+θα=τ =
+[µα.τ /α] otherwise
+Real implementations of this algorithm replace H with a single
+mutable table T , which makes the algorithm more efficient. We use
+this trick in our automata-based implementation in Section 5.6.
+4.3
+
+Extending Unification with Subtyping
+
+Unification cannot be used directly for MLsub, since unification
+uses equality rather than subtyping constraints. In particular, unification treats constraints symmetrically and thus loses information
+about the direction of data flow, which is vital for subtyping. Also,
+our careful distinction between input and output is not observed by
+unification, so the substitution it produces may not respect the syntactic restrictions we place on typing schemes about where positive
+and negative types may occur.
+So, we define a variant of this algorithm which respects the
+direction of data flow (in particular, treats upper and lower bounds
+differently), and preserves our syntactic restrictions. To this end,
+we use bisubstitutions instead of substitutions, which we define
+as substitutions which may assign a different type to positive and
+negative uses of a type variable. We write [τ + /α+ , τ − /α− ] for
+
+4.4
+
+Atomic Constraint Elimination in Biunification
+
+Atomic constraints can be eliminated by using the t and u operators on types. Consider the following type with an atomic constraint, which expresses the type of a function which takes arguments of a type τ0 and returns them unchanged (assuming for now
+that α is not free in τ0 ):
+α → α where α ≤ τ0
+
+8
+
+2016/11/7
+
+That is, the function has type α → α, whenever α is a subtype of
+τ0 . Since α u τ0 is always a subtype of τ0 , we could equivalently
+describe the function as having the following type:
+
+We say that a bisubstitution ξ solves a set of constraints C when,
+for any polar typing scheme [∆− ]τ + ,
+inst([∆− ]τ + | C) = inst(ξ([∆− ]τ + ))
+
+(α u τ0 ) → (α u τ0 )
+
+As we saw above, [τ0 u α/α− ] solves α ≤ τ0 when α is not free
+in τ0 . In general, we have:
+
+However, this violates our syntactic restrictions, since u appears
+in a positive position. The essential insight that lets us eliminate
+atomic constraints in polar types is that the upper bound τ0 on
+the type variable α only affects negative uses of α: the function
+argument must be a τ0 , but the result need not be used as a τ0 .
+So, we encode the constraint on α by replacing only the negative
+occurrences of α with the type τ0 u α, using the bisubstitution
+[τ0 u α/α− ], giving the unconstrained type:
+
+Lemma 7. For any atomic constraint c, θc is stable and solves c.
+Theorem 8. For any set of constraints C of the form τ + ≤ τ − , if
+the algorithm B(∅; C) returns ξ then ξ is stable and solves C.
+Producing bisubstitutions that solve a given set of constraints
+suffices to discharge the side-conditions in Section 4, allowing type
+inference to produce principal types [6].
+However, B(H; C) does not always produce an output bisubstitution. It can fail, upon encountering a constraint such as bool ≤
+> → ⊥ for which subB is not defined. In such cases, we report a
+type error, which is justified by the following theorem:
+
+(α u τ0 ) → α
+Although it may not seem so at first, this is equivalent to the original
+constrained type. The original type can be instantiated with any
+type τ such that τ ≤ τ0 , while the unconstrained type can be
+instantiated with any type τ . For any instance of one, the other has
+an instance which gives a subtype.
+For any instance α 7→ τ (where τ ≤ τ0 ) of the original type,
+we choose an instance α 7→ τ of the unconstrained type, giving:
+
+Theorem 9. If the algorithm B(∅; C) fails, then C is unsatisfiable.
+Of course, these results leave open a third possibility, that
+B(H; C) does not terminate. We leave discussion of termination
+and complexity to Section 5.7, since the arguments are much simpler when expressed in terms of the next section’s automata.
+
+(τ u τ0 ) → τ ≤ τ → τ
+which is true since τ uτ0 = τ . Similarly, for any instance α 7→ τ of
+the unconstrained type, we choose an instance α 7→ τ u τ0 , giving:
+
+5.
+
+(τ u τ0 ) → (τ u τ0 ) ≤ (τ u τ0 ) → τ
+
+This section introduces a compact representation of typing schemes
+as finite automata, as well as an efficient biunification algorithm
+and techniques for simplifying typing schemes to simpler, equivalent ones. This material is not strictly necessary to infer principal
+types, but without it, the inferred types quickly grow large.
+Indeed, a common criticism of type systems with subtyping
+and inference is that they tend to produce large and unwieldy
+types. Systems based on constrained types are particularly prone
+to creating large types: without simplification, many such systems
+produce overly large type schemes [11].
+Various algorithms for simplifying types appear in the literature,
+since many type systems with subtyping are impractical without
+them. Informal connections to standard constructions in automata
+have been made before: the removal of unreachable constraints by
+Eifrig et al. [8] corresponds to removing dead states from a finite
+automaton, while Pottier noted that the canonisation and minimisation algorithms he describes [18] are analogous to determinisation
+of an NFA and minimisation of the resulting DFA.
+Our representation theorem (Section 5.3) generalises these techniques, by putting the connection between automata and subtyping
+on a sound formal footing: two automata represent the same type
+iff they accept equal languages. This allows us to use standard algorithms like removal of dead states, determinisation and minimisation, but also admits more advanced simplification algorithms such
+as those given by Ilie, Navarro and Yu [12] which operate directly
+on NFAs. Due to the representation theorem, any algorithm which
+simplifies standard finite automata also simplifies types.
+
+which holds since τ u τ0 ≤ τ . This construction works in general:
+when α is not free in τ0 , we eliminate the atomic constraint α ≤ τ0
+by applying the bisubstitution [τ0 u α/α− ].
+As before, we handle the cases where α is free in τ by introducing a recursive type. To ensure that the substitution only affects
+uses of α of the correct polarity, we perform the recursion on a
+fresh type variable β, giving:
+(
+[α u τ /α− ]
+if α not free in τ
+θα≤τ =
+[(µβ.α u [β/α− ]τ )/α− ] otherwise (β fresh)
+θτ ≤α is defined dually, as:
+(
+[α t τ /α+ ]
+θτ ≤α =
+[(µβ.α t [β/α+ ]τ )/α+ ]
+4.5
+
+Simplifying Typing Schemes with Automata
+
+if α not free in τ
+otherwise (β fresh)
+
+Correctness of Biunification
+
+To prove the correctness of biunification, we must show that its
+output bisubstitutions are stable and solve the input constraints.
+In standard unification, applying any substitution to a type
+yields an instance of the type. Indeed, this is how “instance” is
+usually defined. However, applying an arbitrary bisubstitution to
+a typing scheme does not always yield an instance of the typing
+scheme, since bisubstitutions may replace positive and negative
+occurrences of a variable with incompatible types. For instance,
+clearly
+[ ]α → α 6≤∀ [ ]> → bool
+and yet the latter can be formed from the former by applying the
+bisubstitution [>/α− , bool/α+ ]. In fact, ξ([∆− ]τ + ) is in general
+an instance of [∆− ]τ + only when ξ(α− ) ≤ ξ(α+ ) for all type
+variables α.
+So, we define a stable bisubstitution as any ξ such that ξ(α− ) ≤
+ξ(α+ ) for all type variables α, and ξ 2 = ξ. The idempotence
+condition is imposed for technical convenience, as it allows us to
+simplify the definition of solving. This is not peculiar to subtyping:
+careful accounts of standard unification prove the same about the
+output of unification algorithms.
+
+5.1
+
+Type Automata
+
+Types are represented by type automata, a slight variant on standard
+non-deterministic finite automata. A type automaton consists of:
+• a finite set Q of states
+• a designated start state q0 ∈ Q
+• a transition table δ ⊆ Q × ΣF × Q.
+• for each state q, a polarity (+ or −) and a set of head construc-
+
+tors H(q).
+
+9
+
+2016/11/7
+
+5.2
+
+q0
+
+q0
+
+The alphabet ΣF contains one symbol for each field of each type
+constructor. ΣF contains the symbols d, r (representing the domain
+and range of function types), and a symbol `i for each record label.
+The transition table δ of a type automaton has the condition that
+d-transitions only connect states of differing polarity, and all other
+transitions connect states of the same polarity. This means that the
+polarity of every state reachable from q is determined by that of q,
+and is in some sense redundant. However, we find it more clear to
+be explicit about state polarities.
+We use f to quantify over transition labels d, r, and write a
+f
+transition from q to q 0 labelled by f as q −
+−
+→ q 0 (this notation
+should not be confused with → as used for function types).
+Standard NFAs label each state as either “accepting” or “nonaccepting”. Instead, a type automaton labels each state q with a
+set of head constructors H(q), drawn from the set consisting of
+type variables, the symbol h→i (representing function types), hbi
+(representing the boolean type) and hLi for any set L of record
+labels ` (representing record types). We maintain the invariant that
+H(q) does not contain both hLi and hL0 i for distinct sets of labels
+L, L0 .
+
+h→i
+hbi
+
+
+
+
+
+hbi
+
+d
+
+d
+α
+
+α
+
+(a) With -transitions
+
+q0
+
+q0
+d−
+
+h→i
+
+d
+
+r+
+
+r
+d+
+
+d
+α
+
+h→i
+
+r
+
+r−
+
+α
+h→i−
+
+h→i+
+
+α+
+
+α−
+q∞
+
+(a) Type automaton
+
+(b) NFA
+
+Figure 9: Type automaton and NFA for µβ. (β → α) → α.
+nect states of unlike polarity and r transitions connect ones of like
+polarity, while the guardedness condition on µ types avoids cycles
+of -transitions.
+As an example, the type automaton for the positive type (α →
+α) t bool is shown in Figure 8, before and after removal of transitions, with negative states drawn shaded and H(q) drawn
+inside the state q. An example with recursive types appears in
+Figure 9a.
+The construction above does not preserve every detail of the
+syntax of types. For instance, α t (⊥ t bool) and bool t α are
+converted to identical automata. As we see in the next section,
+this causes no ambiguity: equivalent automata arise only from
+equivalent types.
+
+{ µα.β t (bool → α), β t (bool → α), β, bool → α, bool }
+The type automaton for a positive type τ0 has one state for
+every subterm τ of τ0 , written q(τ ) by slight abuse of notation.
+The start state q0 is q(τ0 ). The polarity of q(τ ) matches that of τ ,
+H(q(α)) = {α}, H(q(bool)) = {hbi}, H(q(τ1 → τ2 )) = {h→i},
+and H(q({f })) = {hdom f i}. In all other cases, H(q(τ )) = ∅.
+We further abuse notation by defining q(α) = q(µα.τ1 ) for
+every type variable α bound by a recursive type µα.τ1 .
+The type automaton has the following transition table:
+
+5.3
+
+Simplifying Type Automata
+
+
+
+q(τ1 t τ2 ) −→ q(τ1 )
+
+q(τ1 t τ2 ) −→ q(τ2 )
+
+
+
+q(τ1 u τ2 ) −→ q(τ2 )
+
+d
+
+q(τ1 → τ2 ) −→ q(τ2 )
+
+Type automata can be converted to standard NFAs, by labelling
+each transition with the polarity of the state from which it originates, and converting H(q) to a set of transitions (also labelled
+with polarity) to a new accepting state q∞ . For example, Figure 9a
+shows a type automaton, while Figure 9b shows the same automaton after conversion to an NFA. (The full details of this conversion
+can be found in the first author’s thesis [6, Ch. 7]).
+With this conversion of type automata to standard NFAs, we
+now talk about the language accepted by a type automaton. Thus,
+we say that the automaton in Figure 9a accepts the following
+language:
+
+
+
+q(τ1 u τ2 ) −→ q(τ1 )
+
+r
+
+q(τ1 → τ2 ) −→ q(τ1 )
+
+
+q(µα.τ1 ) −→ q(τ1 )
+Finally, we remove -transitions using the standard algorithm.
+For a state q, we define E(q) as the set of states reachable from q
+by following zero or more -transitions, and then set:
+[
+H(q) =
+H(q 0 )
+q 0 ∈E(q)
+0
+
+(b) -transitions removed
+
+Figure 8: Automata construction with -transitions
+
+The simplest way to construct a type automaton from a positive or
+negative type is to first construct a type automaton containing extra
+transitions labelled by , and then to remove these transitions in a
+second pass. This mirrors the standard algorithm for constructing a
+nondeterministic finite automaton from a regular expression.
+The grammar of Section 2.1 gives the syntax of positive and
+negative types. For the purposes of this section, we assume that
+all µ operators in a type bind distinct type variables. The set of
+subterms of a type is the set of types used in its construction,
+including the type itself, but omitting type variables bound by µ.
+For instance, the subterms of µα.β t (bool → α) are:
+
+f
+
+α
+
+r
+
+Constructing Type Automata
+
+
+
+r
+
+α
+
+h→i
+
+00
+
+00
+
+f
+
+q−
+−
+→ q iff ∃q ∈ E(q). q −
+−
+→q
+
+(d+ d− )∗ (d+ (r− α− + h→i− ) + r+ α+ + h→i+ )
+
+0
+
+Now, we state our representation theorem:
+
+To maintain the invariant that H(q) does not contain distinct hLi,
+hL0 i, we replace multiple record symbols with their union or intersection in negative and positive states respectively.
+The syntactic restrictions on positive and negative types are important in ensuring that this process generates a valid type automaton. The positivity and negativity constraints on function types and
+the covariance condition on µ types ensure that d transitions con-
+
+Theorem 10. For types τ1 , τ2 (both positive or both negative)
+represented by automata accepting languages L1 , L2 , we have
+τ1 ≡ τ2 if and only if L1 = L2 .
+Any algorithm for simplifying finite automata may therefore be
+used to simplify type automata. The canonical choice is to convert
+to a deterministic finite automaton using the subset construction
+
+10
+
+2016/11/7
+
+a typing scheme [∆]τ ). The transition table δ retains the polarity
+condition of type automata.
+In a scheme automaton, the head constructors H(q) of a set q
+are similar to those of a type automaton, but do not contain type
+variables. Instead, type variables are represented implicitly as flow
+edges.
+To construct a scheme automaton from a typing scheme [∆]τ ,
+we start by constructing type automata for τ and ∆(x) (for each
+x). The states and transitions of the scheme automata are given by
+the disjoint union of those of the type automata, and the start states
+q0 and qx are the start states of each type automaton.
+For each type variable α, we add flow edges q −
+q + for every q − , q + such that α ∈ H(q − ), α ∈ H(q + ). Having represented
+type variables as flow edges in this way, we remove all type variables from the head constructors H(q). Below, we see a scheme
+automaton for the typing scheme [f : α → β]α → β, with flow
+edges q −
+q + drawn as dashed lines.
+
+and then simplify using Hopcroft’s algorithm. In fact, this describes
+the canonisation and minimisation algorithms of Pottier [18], although in his presentation they were individually proved correct
+for types rather than relying on a general representation theorem.
+5.4
+
+Simplifying Typing Schemes
+
+The simplification techniques of the previous section preserve
+equivalence as types, and can therefore be used to simplify typing schemes by simplifying their component types. However, typing schemes admit more simplifications than those which preserve
+equivalence of their component types.
+Recall that two typing schemes may be equivalent even though
+they have different numbers of type variables, as long as those type
+variables describe the same data flow (Section 3.2). For instance,
+the following two typing schemes for choose are equivalent:
+[ ]α → α → α
+[ ]β → γ → (β t γ)
+More generally, consider a typing scheme
+
+d
+
++
+φ(τ1− , . . . τn− ; τ1+ , . . . τm
+)
+
+qf
+
+q0
+
+→
+
+→
+r
+
+d
+
+r
+
+parameterised by n negative types and m positive ones, where φ
+contains no type variables except via τi− , τj+ . For instance,
+φchoose (τ1− , τ2− ; τ1+ ) = [ ] τ1− → τ2− → τ1+
+An instantiation of φ is d
+a typing scheme formed from φ where τi−
+(1 ≤ i ≤
+n)
+is
+given
+as
+S for some finite set S of type variables
+d
+(taking
+∅
+to
+be
+>),
+while
+τj+ (1 ≤ j ≤ m) is similarly given as
+F
+F
+S (taking ∅ to be ⊥). In this manner, the two typing schemes
+for choose are φchoose (α, α; α) and φchoose (β, γ; β t γ).
+For a given instantiation of φ, we say that there is a flow edge
+i
+j if τi− and τj+ have a type variable in common. The two
+typing schemes for choose both have the same two flow edges:
+1
+1 and 2
+1. This is an instance of a general principle:
+
+Two typing schemes may be represented by the same scheme
+automaton, despite syntactic differences. For instance, the two typing schemes for choose above are represented identically.
+We simplify typing schemes by representing them as scheme
+automata, and then rendering these as a tuple of type automata
+using as few type variables as possible. To do this, we must find an
+assignment of type variables to states that exactly generates the flow
+edges of the scheme automaton. Doing this optimally is the NPcomplete problem of biclique decomposition, but we have found
+that simple heuristics give good results.
+The two typing schemes for choose above are represented by
+the same scheme automaton, since they have the same flow edges.
+To display this to the user, the scheme automaton is converted
+back to type automata and then to a syntactic typing scheme. Our
+conversion heuristic chooses the [ ] α → α → α representation, as
+it involves introducing fewest type variables.
+
+Lemma 11. Any two instantiations of a typing scheme
++
+φ(τ1− , . . . τn− ; τ1+ , . . . τm
+)
+
+with the same flow edges are equivalent.
+Flow edges capture the notion of data flow from the introduction, and provide a means of simplifying typing schemes: relabelling type variables while preserving flow edges preserves typing scheme equivalence, so we can represent typing schemes with
+fewer type variables. Next, we show how this simplification can be
+implemented with scheme automata, which represent flow edges
+directly.
+5.5
+
+5.6
+
+As well as enabling simplification, type and scheme automata are
+useful to efficiently implement type inference. In fact, our implementation uses them throughout: types and typing schemes are always represented as automata, and syntactic types are only used
+for input and output. To this end, we implemented the biunification algorithm of Section 4.3 in terms of scheme automata, which
+turns out to be simpler than the description in terms of syntactic
+types. Our implementation is imperative, and destructively updates
+automata.
+The algorithm B(H; C) takes as input a set of hypotheses H, a
+set of constraints C, and produces as output a bisubstitution. In the
+imperative implementation, the hypotheses and constraints are both
+represented by pairs of states of a scheme automaton. The output
+bisubstitution is not represented explicitly: instead, the scheme
+automaton is mutated. Since the scheme automaton represents H
+and C, mutating it simultaneously applies a bisubstitution to H, C
+and the output.
+For states q1 , q2 of a given scheme automaton (both positive
+or both negative) we define the operation merge(q1 , q2 ) which
+adds the transitions and flow edges of q2 to q1 . More specifically,
+merge(q1 , q2 ) modifies the automaton by adding, for all q10 , q20 , f ,
+
+Scheme Automata
+
+Typing schemes are represented by scheme automata. Scheme automata have a domain D, which is a set of λ-bound variables corresponding to dom(∆) in a typing scheme [∆]τ . A scheme automaton with domain D consists of:
+• a finite set Q of states
+• (multiple) designated start states q0 and qx for x ∈ D
+• a transition table δ ⊆ Q × {d, r} × Q
+• for each state q, a polarity (+ or −) and a set of head construc-
+
+tors H(q)
+• a set of flow edges q −
+
+Biunification of Automata
+
+q+
+
+Instead of a single start state, a scheme automaton has distinguished
+negative states qx for each x ∈ D (corresponding to ∆(x) in a
+typing scheme [∆]τ ), and a positive state q0 (corresponding to τ in
+
+11
+
+2016/11/7
+
+function biunify(q + , q − )
+if (q + , q − ) 6∈ T then
+T ← T ∪ {(q + , q − )}
+if ∃x ∈ H(q + ), y ∈ H(q − ). x 6≤ y then
+fail
++
++
+for q 0 where q −
+q 0 do
+0+
++
+merge(q , q )
+−
+−
+for q 0 where q 0
+q + do
+0−
+−
+merge(q , q )
+−
+
++
+
+−
+
++
+
+d
+
+d
+
+−
+
+6.1
+
+The prototypical example of non-structural subtyping with recursive types is the system of Amadio and Cardelli. Their seminal paper [1] describes ground types t as regular trees over the following
+signature:
+t ::= ⊥ | > | t → t
+Regular trees are trees with at most finitely many distinct subtrees,
+which are exactly the trees representable as finite closed terms
+using a fixpoint operator µ.
+These are equipped with a partial order ≤ which is bounded by
+⊥ and >, where → is covariant in the range and contravariant in
+the domain. This partial order forms a lattice, which satisfies the
+equations of Fig. 3.
+Amadio and Cardelli show that the subtyping order for ground
+types is decidable (while their original algorithm is inefficient,
+Kozen, Palsberg and Schwartzbach [14] later showed how to decide
+subtyping efficiently).
+
++
+
+for q 0 , q 0 where q + −→ q 0 , q − −→ q 0 do
++
+−
+biunify(q 0 , q 0 )
+r
+
++
+
+f
+
+for q 0 , q 0 , f 6= d where q + −→ q 0 , q − −
+−
+→ q0
++
+−
+biunify(q 0 , q 0 )
+
+−
+
+Definition of the Subtyping Relation
+
+do
+
+Figure 10: Biunification algorithm for scheme automata
+
+• transitions q1 −
+−
+→ q20
+−
+→ q10 when q2 −
+
+f
+
+6.2
+
+• flow edges q10
+
+q2 when q10
+
+q1 (if q1 , q2 positive)
+
+• flow edges q1
+
+q20 when q2
+
+q20 (if q1 , q2 negative)
+
+However, combining Amadio and Cardelli’s subtyping with polymorphism proved problematic. The most straightforward way of
+adding type variables to their system is to quantify over ground
+types t. We take type terms τ as given by the following syntax:
+
+f
+
+and by adding the head constructors H(q2 ) to H(q1 ).
+If the state q1 represents an occurrence of a type variable α (i.e.
+α ∈ H(q1 ) in the type automaton representation, or q1 has a flow
+edge in the scheme automaton representation), and q2 represents
+some type τ , then the effect of merge(q1 , q2 ) is to perform the
+atomic constraint elimination θα≤τ or θτ ≤α as per Section 4.4.
+The addition of new transitions by merge may introduce cycles,
+which corresponds to introducing µ-types during atomic constraint
+elimination.
+As earlier, the biunification algorithm operates on constraints
+τ + ≤ τ − , here represented as pairs of states (q1+ , q2− ). Instead
+of threading the argument H through all recursive calls, we use a
+single mutable table T of previously-seen inputs. The biunification
+algorithm for automata is shown in Figure 10.
+5.7
+
+τ ::= ⊥ | > | τ → τ | α
+A ground substitution ρ maps type variables to ground types t, and
+can be used to interpret a type term τ as a ground type ρ(τ ). The
+subtyping relation on type terms is then defined by quantification
+over ground substitutions:
+τ1 ≤ τ2
+
+iff
+
+∀ρ. ρ(τ1 ) ≤ ρ(τ2 )
+
+Handling type variables by quantifying over ground types is a common approach [10, 16, 21, 22], but turns out to have issues. As discussed in Section 1.2, defining type variables by quantifying over
+ground types allows reasoning by case analysis over type variables,
+which makes the polymorphic subtyping relation complex and difficult to decide, as well as non-extensible. These issues are resolved
+by adding type variables directly to the definition of types rather
+than quantifying over ground types.
+Castagna and Xu [4] also introduce type variables by quantifying over ground types. However, they avoid the above issues by
+applying a convexity condition to the definition of ground types,
+which recovers in their system the intuitive idea that type variables
+are related only to themselves.
+The complexities of this approach to type variables come up
+in the well-studied problem of entailment. An entailment problem
+asks whether some constraints imply others, where the constraints
+are often restricted to not include t, u or µ. For instance, the
+example (E) of Section 1.2 can be written as an entailment problem:
+
+Termination and Complexity
+
+Each recursive call to biunify either terminates immediately or adds
+a pair of states not previously present to T . Since there are finitely
+many such states, this must terminate.
+Suppose the input automaton has n states and m transitions.
+There are O(n2 ) possible pairs of states, and therefore O(n2 )
+possible recursive calls to biunify. Since biunify iterates over pairs
+of transitions, the total amount of work is bounded by their number,
+so the worst-case complexity is O((n + m)2 ).
+However, this complexity is difficult to attain. In particular, in
+the common case where the automaton is a tree (that is, there are no
+states reachable by two routes nor cycles), each state can be visited
+only once, giving O(n + m) complexity.
+In practice, the algorithm is sufficiently performant that our
+online demo retypes the input program on each keystroke, without
+noticeable delay.
+
+6.
+
+Type Variables and Polymorphism
+
+α ≤ α → ⊥ |= (⊥ → >) → ⊥ ≤ α
+In the standard formulation where type variables quantify over
+ground types, entailment is not known to be decidable despite much
+research. The full first-order theory was shown undecidable by Su
+et al. [21], and sound but incomplete algorithms for entailment and
+subtyping have been published [18, 22]. We conjecture that some
+of these algorithms may be sound and complete for MLsub, since
+their incompleteness seems to arise from avoiding the sort of caseanalysis necessary to prove (E).
+
+Related Work and Discussion
+
+This work extends a long thread of research into non-structural
+subtyping, some of which we summarize below. This form of subtyping is called non-structural since it admits subtyping relationships between type constructors of different arities (e.g. ⊥ ≤ ⊥ →
+⊥). The alternative, structural subtyping, has been well-studied and
+is easier to deal with (see e.g. Henglein and Rehof [9]), but cannot
+express top or bottom types, or subtyping between records with different sets of fields as used in object-oriented programming.
+
+6.3
+
+Ad-hoc Polymorphism and Overloading
+
+This work integrates ML-style parametric polymorphism with subtyping but does not consider any form ad-hoc polymorphism, in
+which functions are allowed to operate with different behaviours at
+
+12
+
+2016/11/7
+
+different types. For example, ad-hoc polymorphism is necessary to
+allow an overloaded operator +, which is simultaneously addition
+of integers (of type int → int → int) and concatenation of lists (of
+type ∀α.list[α] → list[α] → list[α]).
+Kaes [13] presented a system extending ML, combining parametric polymorphic, subtyping and overloading, and a similar system lifting some of its restrictions was later given by Smith [20].
+However, both systems infer types with an explicit collection
+of constraints, rather than just a type term. With their language
+ML≤ , Bourdoncle and Merz [3] present a language combining ML
+with object-oriented programming, supporting CLOS-style multimethod dispatch, which also infers constrained types.
+6.4
+
+PLAN International Conference on Functional Programming, ICFP
+’11, pages 94–106. ACM, 2011.
+[5] B. A. Davey and H. A. Priestley. Introduction to lattices and order.
+Cambridge University Press, 2002.
+[6] S. Dolan. Algebraic Subtyping. PhD thesis, University of Cambridge,
+2016. To appear.
+[7] J. Eifrig, S. Smith, and V. Trifonov. Type inference for recursively
+constrained types and its application to OOP. Electronic Notes in Theoretical Computer Science, 1:132–153, 1995. MFPS XI, Mathematical Foundations of Programming Semantics, Eleventh Annual Conference.
+[8] J. Eifrig, S. Smith, and V. Trifonov. Sound polymorphic type inference for objects. In Proceedings of the Tenth Annual Conference on
+Object-oriented Programming Systems, Languages, and Applications,
+OOPSLA ’95, pages 169–184. ACM, 1995.
+
+Automata and Simplification
+
+Representing types as automata is a standard technique, which
+has been used to tackle subtyping, entailment and simplification.
+Kozen, Palsberg and Schwartzbach [14] gave an algorithm based on
+automata for efficiently deciding subtyping between ground types
+of Amadio and Cardelli’s system. Henglein and Rehof [10] reduced
+the problem of NFA universality to entailment in the AmadioCardelli system, thus proving it PSPACE-hard. In fact, our representation theorem began life as an attempt to find a sort of converse
+to Henglein and Rehof’s result. Niehren and Priesnitz [17] studied also entailment using a form of finite automata (their cap-set
+automata, explained in detail in Priesnitz’s thesis [19]). Eifrig et
+al. [8], Trifonov and Smith [22], Pottier [18] all use some form of
+automata for simplifying types.
+
+7.
+
+[9] F. Henglein and J. Rehof. The complexity of subtype entailment for
+simple types. In Logic in Computer Science, 1997. LICS’97. Proceedings., 12th Annual IEEE Symposium on, pages 352–361. IEEE, 1997.
+[10] F. Henglein and J. Rehof. Constraint automata and the complexity
+of recursive subtype entailment. In 25th International Colloquium on
+Automata, Languages and Programming, ICALP ’98, pages 616–627.
+Springer Berlin Heidelberg, 1998.
+[11] M. Hoang and J. C. Mitchell. Lower bounds on type inference with
+subtypes. In Proceedings of the 22nd ACM SIGPLAN-SIGACT Symposium on Principles of Programming Languages, POPL ’95, pages
+176–185. ACM, 1995.
+[12] L. Ilie, G. Navarro, and S. Yu. On NFA reductions. In J. Karhumäki,
+H. Maurer, G. Păun, and G. Rozenberg, editors, Theory Is Forever,
+volume 3113 of Lecture Notes in Computer Science, pages 112–124.
+Springer Berlin Heidelberg, 2004.
+
+Conclusion
+
+We have presented MLsub, a minimal language subsuming the
+Hindley-Milner calculus with let-polymorphism integrated seamlessly with subtyping. An implementation is available online.
+We improve on previous work in this area by offering an algorithm to infer compact types (syntactic terms, rather than a term
+and a possibly-large set of constraints), and proving that these are
+principal.
+We provide a general means of simplifying types and typing
+schemes: instead of specifying a particular simplification algorithm, our representation theorem shows that anything from the literature of finite automata and regular languages can be used.
+Languages incorporating ML-style type inference often have
+interesting type system features not present in the core calculus,
+such as advanced module systems, GADTs, typeclasses, etc. We are
+interested in seeing which of these constructs can be implemented
+(or even continue to make sense) in the context of MLsub.
+
+[13] S. Kaes. Type inference in the presence of overloading, subtyping and
+recursive types. In Proceedings of the 1992 ACM Conference on LISP
+and Functional Programming, LFP ’92, pages 193–204. ACM, 1992.
+[14] D. Kozen, J. Palsberg, and M. I. Schwartzbach. Efficient recursive
+subtyping. In Proceedings of the 20th ACM SIGPLAN-SIGACT Symposium on Principles of Programming Languages, POPL ’93, pages
+419–428. ACM, 1993.
+[15] A. Martelli and U. Montanari. An efficient unification algorithm. ACM
+Transactions on Programming Languages and Systems (TOPLAS), 4
+(2):258–282, 1982.
+[16] J. Niehren and T. Priesnitz. Entailment of non-structural subtype constraints. In P. Thiagarajan and R. Yap, editors, Advances in Computing
+Science — ASIAN’99, volume 1742 of Lecture Notes in Computer Science, pages 251–265. Springer Berlin Heidelberg, 1999.
+[17] J. Niehren and T. Priesnitz. Non-structural subtype entailment in automata theory. In N. Kobayashi and B. C. Pierce, editors, Theoretical
+Aspects of Computer Software, volume 2215 of Lecture Notes in Computer Science, pages 360–384. Springer Berlin Heidelberg, 2001.
+
+Acknowledgements Thanks to Leo White for discussions about
+MLsub, particularly on the relationship between the ML-style and
+reformulated rules, to Derek Dreyer for helpful comments about
+the presentation of this paper, and to the anonymous referees. This
+work was funded by Trinity College, Cambridge, and OCaml Labs.
+
+[18] F. Pottier. Type inference in the presence of subtyping: from theory to
+practice. PhD thesis, Université Paris 7, 1998.
+[19] T. Priesnitz. Subtype Satisfiability and Entailment. PhD thesis, Saarland University, 2004.
+
+References
+
+[20] G. S. Smith. Principal type schemes for functional programs with
+overloading and subtyping. Science of Computer Programming, 23
+(2):197–226, 1994.
+
+[1] R. M. Amadio and L. Cardelli. Subtyping recursive types. ACM
+Transactions on Programming Languages and Systems (TOPLAS), 15
+(4), 1993.
+[2] H. Bekič. Definable operations in general algebras, and the theory of
+automata and flowcharts. In C. Jones, editor, Programming Languages
+and Their Definition, volume 177 of Lecture Notes in Computer Science, pages 30–55. Springer Berlin Heidelberg, 1984.
+[3] F. Bourdoncle and S. Merz. Type checking higher-order polymorphic
+multi-methods. In POPL ’97: 24th ACM Symposium on Principles of
+Programming Languages, pages 302–315, Paris, Jan. 1997. ACM.
+[4] G. Castagna and Z. Xu. Set-theoretic foundation of parametric polymorphism and subtyping. In Proceedings of the 16th ACM SIG-
+
+[21] Z. Su, A. Aiken, J. Niehren, T. Priesnitz, and R. Treinen. The firstorder theory of subtyping constraints. In Proceedings of the 29th
+ACM SIGPLAN-SIGACT Symposium on Principles of Programming
+Languages, POPL ’02, pages 203–216. ACM, 2002.
+[22] V. Trifonov and S. Smith. Subtyping constrained types. In R. Cousot
+and D. A. Schmidt, editors, Static Analysis, volume 1145 of Lecture
+Notes in Computer Science, pages 349–365. Springer Berlin Heidelberg, 1996.
+[23] A. K. Wright and M. Felleisen. A syntactic approach to type soundness. Information and computation, 115(1):38–94, 1994.
+
+13
+
+2016/11/7
+
+

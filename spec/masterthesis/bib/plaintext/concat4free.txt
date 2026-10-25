@@ -1,0 +1,946 @@
+Rapports de Recherche
+N 1739
+
+
+UNITE DE RECHERCHE
+INRIA-ROCQUENCOURT
+
+Programme 2
+
+Calcul symbolique, Programmation
+et Genie logiciel
+
+TYPING RECORD
+CONCATENATION FOR FREE
+
+Institut National
+de Recherche
+en Informatique
+et en Automatique
+Domaine de Voluceau
+Rocquencourt
+B.P. 105
+78153 Le Chesnay Cedex
+France
+Tel.:(1)39 63 55 11
+
+Didier Remy
+
+Ao^ut 1992
+
+Typing Record Concatenation for Free
+Didier Remy
+
+
+
+This work was partly supported by research grant NSF IRI86-10617.
+
+1
+
+Typing Record Concatenation for Free
+Abstract
+We show that any functional language with record extension possesses record concatenation for free. We exhibit a translation from the latter into the former. We obtain a type
+system for a language with record concatenation by composing the translation with typechecking in a language with record extension. We apply this method to a version of ML
+with record extension and obtain an extension of ML with either asymmetric or symmetric
+concatenation. The latter extension is simple, exible and has a very ecient type inference
+algorithm in practice. Concatenation together with removal of elds needs one more construct than extension of records. It can be added to the version of ML with record extension.
+However, many typed languages with record cannot type such a construct. The method still
+applies to them, producing type systems for record concatenation without removal of elds.
+Object systems also bene t of the encoding which shows that multiple inheritance does not
+actually require the concatenation of records but only their extension.
+
+Le Typage de la Concatenation des Objets Enregistrements Gratuitement
+Resume
+Nous montrons que tout langage fonctionnel qui possede des enregistrements avec une
+operation d'extension possede gratuitement une operation de concatenation. Nous exhibons
+une traduction de la seconde vers la premiere. Un systeme de types pour un langage possedant
+la concatenation des enregistrements peut ^etre obtenu en composant la traduction avec le
+typage dans un langage ayant une operation d'extension des enregistrements. La methode
+est appliquee a une version de ML avec une operation d'extension des enregistrements et
+permet d'obtenir une extension de ML avec une operation de concatenation symetrique ou
+assymetrique. Le langage obtenu est simple, souple et possede un algorithme de synthese
+de type ecace en pratique. L'operation de concatenation simultanement avec le retrait de
+champs necessitent une operation de plus que l'extension des enregistrements. Celle-ci peut
+^etre ajoutee a la version de ML ci-dessus. Cependant, la plupart des langages types avec
+des enregistrements ne peuvent pas ^etre facilement etendus avec une telle construction. La
+methode est encore applicable, produisant des systemes de typage pour la concatenation mais
+sans le retrait des champs. Les systemes objets bene cient egalement du codage, puisqu'il
+montre que l'heritage multiple ne necessite pas la concatenation des enregistrements et mais
+seulement leur extension.
+
+1
+
+Introduction
+Dictionaries are an imported data abstraction in functional programming languages. They
+are basically partial functions from keys to values. A simple implementation of dictionaries
+is the association list, commonly called A-list . A-lists are lists of pairs, the rst component
+being the key to access the value of the second component. The usual cons and append
+operations provide facilities for extending the domain of an A-list and merging two A-lists
+into one de ned on the union of the domains of the input lists, respectively. Access to a
+given key may fail when the key is not in the domain of the A-list, which cannot be checked
+statically. Records are a highly restricted form of A-lists. Keys may no longer be any values,
+but belong to a distinguished set of atomic values, called labels. All elds of a record must
+be speci ed at creation time. These restrictions make it possible to perform static checks on
+accesses to record elds.
+Then, an important goal in typechecking records, was to allow a record with many elds
+to be used instead of a records with fewer elds. This was rst suggested by Cardelli in the
+language Amber [Car86] using inclusion on monomorphic types.
+Later, Wand [Wan87] used polymorphism instead of a speci c inclusion relation on types.
+He also re-imported the cons operation of A-lists which became the extension of records with
+new elds. Originally, this construction was free (existing elds could be rede ned), but strict
+versions (existing elds could not be rede ned) have been proposed [OB88, JM88] to avoid
+typechecking diculties. Note that cons on A-lists naturally implements free extension.
+Record extension quickly became popular, but many languages still only provide the
+strict version [JM88, Oho90, HP90a]. Finally Wand re-imported the append of A-lists, calling it record concatenation. An important motivation for this is the encoding of multiple
+inheritance [Wan89] in object oriented languages.
+Record concatenation is still considered a challenge, since it is either very restricted
+[HP90a] or leads to combinatorial explosion of typechecking [Wan88]. We propose a general
+approach to concatenation. In fact we claim that concatenation comes for free once record
+extension is provided. We justify this assertion by presenting an encoding of the latter into
+the former. The interest of the encoding is to provide a type system for record concatenation
+by composing the coding with a type system for record extension.
+We introduce the translation in an untyped framework in section 1. In section 2, we apply
+it to an extension of ML for record extension. In the last section we brie y illustrate the
+encoding on a few other languages.
+
+1 Encoding of concatenation
+In this section we describe how concatenation can be encoded with extension. The language with record extension, L, is an extension of the untyped  calculus plus distinguished
+constructs for record expressions:
+M ::= x
+variable
+j  x: M
+abstraction
+jM M
+application
+j fg
+empty record
+j fM with a = M g
+record extension
+j M:a
+record access
+The semantics of records is the usual one. Informally, they are partial functions from labels
+to values. The empty record is de ned nowhere. Accessing a eld of a record is applying
+the record to that eld. It produces an error if the accessed eld is not de ned. The free
+
+1 ENCODING OF CONCATENATION
+
+2
+
+extension of a record with a new eld de nes or rede nes that eld with the new value. The
+strict extension does the same if the eld was unde ned, but produces an error otherwise. In
+an untyped language the free extension is preferred since the more well typed programs, the
+better.
+The concatenation (or merge) operator k takes two records and returns a new record
+composed of all elds de ned in any of its arguments. There are di erent semantics given to
+the merge, when both records de ne the same eld: symmetric concatenation rejects this case
+[HP90b] while asymmetric concatenation takes the value from the last record [Wan89]. We
+will not consider recursive concatenation that would compute the concatenation of common
+elds by recursively concatenating their values.
+The language with record concatenation, Lk is
+M ::= x  x: M M M
+
+fg fa = M g M k M M:a
+
+The language is an extension of L with a construct for concatenation, but record extension has
+been replaced by one- eld records that are more primitive in the presence of concatenation,
+since1 :
+fM with a = N g  M k fa = N g
+Reading this equality from right to left is also interesting: it means that one- eld concatenation can be written with record extension only. It gives the expected semantics of asymmetric
+concatenation when the extension is free and the semantics of symmetric concatenation when
+the extension is strict. We are going to generalize this to a translation from the language Lk
+to the language L.
+
+1.1 The untyped translation
+The following translation works for both asymmetric and symmetric concatenation. We
+arbitrarily choose asymmetric concatenation.
+The extension of elds provides the one- eld concatenation operation:
+ r: (r k fa = M g) =  r: fr with a = M g;
+
+which we write fa = M gy. In fact, we can compute r k s whenever we know exactly the elds
+of s, since
+r k fa1 = M1 ; : : : a = M g  f: : : fr with a1 = M1g : : : with a = M g:
+n
+
+n
+
+n
+
+n
+
+This equivalence could also have been deduced from the decomposition of s into one- eld
+concatenations
+(: : : (r k fa1 = M1g) : : : k fa = M g);
+which is also the composition
+n
+
+n
+
+(fa = M gy  : : : fa1 = M1 gy) r:
+n
+
+We write
+
+n
+
+fa1 = M1 ; : : : a = M gy
+n
+
+n
+
+This is similar to the correspondence between append and cons on A-lists, in this particular case, the
+equality is
+[M ] append r = M cons r.
+1
+
+1.2 The tagged translation
+
+3
+
+for the abstraction of the previous expression over r. More generally we de ne the transformation y on record expressions, called record abstraction, by:
+
+fgy   u: u
+fa = M gy   u: fu with a = M yg
+(M k N )y  N y  M y
+Since any record expression can be decomposed into a combination of the three previous
+forms, the transformation is de ned for all records. It satis es the property
+ry =  u: (u k r):
+
+Thus r is equal to ry fg. If we transform all record expressions in a program, then we have
+to replace the access r:a by (ry fg):a. Actually, it is enough to apply r to a record r0 that
+does not contain the a eld and read the a eld from the result (r r0):a. In a typed language
+this solution will leave more exibility for the type of r. Other constructs of the languages
+simply propagate the translation. Thus the translation is completed by
+(M:a)y  (M yfg):a
+( x: M )y   x: M y
+(M N )y  M y N y
+xy  x
+
+The translation works quite well in an untyped framework. However, the encoding is not
+injective, for instance it identi es the empty record with the identity function. In the next
+section we adapt the translation to a typed framework.
+
+1.2 The tagged translation
+
+In this section we improve the translation so that the encoding becomes injective. The main
+motivation is to prepare the use of the encoding to get a typed version of Lk by pulling
+back the typing rules of a typed version of L. The well typed programs of Lk will be the
+reverse image of the well typed programs of L. The translation should be injective on well
+typed programs. A solution is to tag the encoding of records, so that they become tagged
+abstractions, distinct from other abstractions.
+In fact we replace L by LTag Untag , that is L plus two constants Tag and Untag used
+to tag and untag values. The only reduction involving Tag or Untag is that Untag (Tag M )
+reduces to M . Tag and Untag can be thought as the unique constructor and the unique
+destructor of an abstract data type, respectively. In SML [HMT91] they could be de ned as:
+abstype ( , ) tagged = Tagged of ! with
+val Tag = fn x ) Tagged x
+val Untag = fn Tagged x ) x
+;
+
+end;
+
+Their role is to certify that some functional values are in fact record abstractions, Tag stamps
+them and Untag reads and removes the stamps. Obviously, these constants are not accessible
+in Lk , i.e. they are introduced during the translation only.
+Syntactically the existence of Tag and Untag is not a question, but semantically a model
+of a calculus with record extension might not possess such constants. On the opposite,
+nding a particular model in which the constants Tag and Untag exists might be as dicult
+as nding a direct model for concatenation. Anyhow, we limit our use of the encoding to
+syntactic issues.
+
+1 ENCODING OF CONCATENATION
+
+4
+The tagged translation is:
+
+fgy  Tag ( u: u)
+fa = M gy  Tag ( u: fu with a = M yg)
+(M k N )y  Tag ( u: Untag N y (Untag M y u)))
+(M:a)y  ((Untag M ) fg):a
+It does not modify other constructs:
+( x: M )y   x: M y
+(M N )y  M y N y
+xy  x
+
+We would like to show a property such as: starting with a calculus of record extension, we can
+translate any program of a calculus with record concatenation into the rst calculus enriched
+with constants Tag and Untag using the translation above, and thereby get | in some sense
+| an equivalent program.
+Lk
+
+y
+
+! LfTag Untag g
+!M
+
+Mk
+
+eval
+
+#
+
+;
+
+eval
+
+?
+
+#
+
+  v
+Without any such result, the translation y is no more than a good intuition to understanding
+v
+
+k
+
+record concatenation. In the next section it helps nding a type system for a language with
+concatenation Lk from a typed language with extension L, by translating Lk programs and
+then typing them in L.
+
+1.3 Concatenation with removal of elds
+
+We omitted one construction in the language L: the restriction of elds. We extend both
+languages L and Lk with record restriction:
+M ::= : : : j M n a
+
+Record restriction takes a record and removes the corresponding eld from its domain. As
+for extension of elds, restriction of elds can be free or strict. We consider free restriction
+here. The question is obviously the extension of the transformation y to restriction of elds.
+The guide line is to keep the equality
+(M n a)y =  u: u k (M n a)
+true, since it was true before the introduction of restriction of elds. Actually this equality
+is needed since it is the basis of the translation of the extraction of elds.
+Unfortunately, the attempt
+(M n a)y =  u: (M yu) n a
+does not work: the record u k (M n a) is not equal to (M y u) n a, since if the record u provides
+an a eld, this eld is de ned in the left expression but it is unde ned in the right expression.
+
+5
+In fact u k (M n a) is equal to M y u on all elds but a. On the a eld it is unde ned if u is,
+or de ned with the value of the a eld of u otherwise. This operation cannot be written in
+the language L; we need another construct,
+
+fM but a from N g;
+called combining. From two records M and N , it de nes one that behaves exactly as M on
+all elds but a, and as N on the a eld. This primitive is stronger than ( n a) which could
+be de ned as f but a from fgg.
+Now, the translation of (M n a) can be de ned by
+(M n a)y   u: fM y u but a from ug
+Its tagged version is:
+(M n a)y  Tag ( : fUntag (M y u) but a from ug)
+We call L+ the language L extended with the combining construct. This construct has never
+been introduced in the literature before. If the language L is typed, it may be the case that
+the combining primitive cannot be assigned a correct and decent type in the type system of L
+and L+ might not be a trivial extension of L or even not exist.
+The combining construct is not in Lk and there is no easy way to provide it in an extension
+of Lk . Therefore L but not L+ is a sub-language of Lk.
+
+2 Application to a natural extension of ML
+In this section we apply the translation where L is a version of ML with record extension,
+and we get a language with record concatenation. We rst review the language  taken from
+[Rem90, Rem92c] for record extension. Then we describe in detail two versions of the typed
+language k obtained by pulling back the typing rules of . Last, we discuss the system k
+on its own, and compare it with other existing systems with concatenation.
+
+2.1 An extension of ML for records
+
+The language, called , is taken from [Rem90, Rem92c]. It is an extension of ML, where the
+language of types has been enriched with record types in such a way that record operations
+can be introduced as primitive functions rather than built in constructs. The main properties
+are described in [Rem92c] and proved in [Rem90, Rem92b, Rem92a]. The following summary
+should be sucient for understanding the next sections. The reader is referred to [Rem92c]
+for a more thorough presentation.
+Let L be a nite set of labels. We write a, b and c for labels and L for nite subsets of
+labels. The language of types is informally described by the following grammar (a formal
+description using sorts can be found in [Rem92c]):
+
+j  !  j ;
+ ::=  j abs j a : ' ;  [f g
+' ::=  j abs j pre ( )
+ ::=
+L
+
+L
+
+L
+
+L
+
+a
+
+a 2= L
+
+types
+rows de ning all labels but those in L
+elds
+
+where , , and  are type variables, ,  and  are row variables and  and " are eld
+variables.
+
+6
+
+2 APPLICATION TO A NATURAL EXTENSION OF ML
+
+Intuitively, a row with superscript L describes all elds but those in L, and tells for
+each of them whether it is present with a value of type  (positive information pre ( )) or
+absent (negative information abs ). A template row is either abs or a row variable. It always
+describes an in nite set of elds. The superscripts in row expressions L are nite sets of
+labels. Their main role is to prevent elds from being de ned twice: the type
+
+
+
+
+a :  ; (a : " ;  )
+L
+
+cannot be written for any L. Similarly, all occurrences of the same row variable should be
+preceded by the same set of labels (possibly in a di erent order). The type
+
+
+a:;
+
+L
+
+
+
+
+
+
+
+!  :
+L
+
+cannot be written either, since the row variable  cannot be both in the syntactic class of
+rows not de ning label a and the syntactic class of rows de ning all labels. The superscripts
+are part of the syntax, but we shall omit them whenever they are obvious from context. We
+write a : ; b : ; for a : ; (b : ; ).
+Example 1 The following is a well-formed record type:
+! (a : pre ( ) ; b : pre (num) ; abs )
+Types are equal modulo the following equations:
+ left commutativity, to reorder elds:
+(a :  ; b : " ; ) = (b : " ; a :  ; )
+
+ distributivity, to access absent elds:
+abs = (a : abs ; abs )
+
+Example 2 The record types (a : pre ( ) ; abs ) and (b : abs ; a : pre ( ) ; abs ) are equal.
+Any eld de ned by a template can be extracted from it using substitution if the template
+is a variable or distributivity if it is abs .
+Example 3 In (a : pre ( ) ; abs ) , the template is abs ; its superscript is fag. To read the b
+eld, we replace abs by b : abs ; abs . The original type becomes (a : pre ( ) ; b : abs ; abs ) ,
+and the new template has superscript fa; bg.
+In (a : pre ( ) ; ) , the  variable can be substituted by b : " ; . The type becomes
+(a : pre ( ) ; b : " ; )
+and  is the new template.
+The language of expressions is the core ML language.
+M ::= x j c j  x: M j M M j let x = M in M
+where the constants c include the following primitives operating on records, with their types:
+fg : (abs )
+:a : (a : pre ( ) ; ) !
+f with a = g : (a : abs ; ) ! ! (a : pre ( ) ; )
+n a : (a :  ; ) ! (a : abs ; )
+Primitives for Record Extension ()
+
+2.2 An extension of ML with record concatenation
+
+7
+
+The extension on a eld f with a = g is strict: a eld can only be added to a record r that
+does not already possess this eld. But the restriction of a eld n a is free: it can be applied
+to a record which does not have eld a. Free extension with a eld b is achieved by restriction
+of eld b followed by strict extension with eld b. That is, it is the composition:
+( n a)  (f with a = g) : (a :  ; ) ! ! (a : pre ( ) ; )
+that we abbreviate f with !a = g. In the simplest language, the restriction of elds would
+not be provided, and the extension would be given whether strict or free.
+Typing rules are the same as those of ML but where type equality is taken modulo the
+equations. As in ML, any typeable expression possesses a principal type. We show a few
+examples extracted from [Rem92c] and run on a CAML prototype.
+Records are built all at once as in
+#let car = fname = "Toyota"; age = "old"; registration = 7866g;;
+car : (name : pre (string); registration : pre (num); age : pre (string); abs)
+or from previous records by removing or adding elds:
+#let truck = fcar n age with name = "Blazer"; registration = 6587867567g;;
+truck : (name : pre (string); registration : pre (num); age : abs; abs)
+Fields are accessed as usual with the \dot" operation.
+#let registration x = x.registration;;
+registration : (registration : pre ( ); ) !
+Here, the eld registration must be de ned with a value of type , so the eld registration has
+type pre ( ), and other elds may or may not be de ned; they are grouped in the template
+variable . The return value has type . The function eq below takes two records possessing
+at least a registration eld of the same type2 :
+#let eq x y = equal (registration x) (registration y);;
+eq : (registration : pre ( ); ) !  (registration : pre ( );  ) ! bool
+#eq car truck;;
+it : bool
+
+The identi er \it" is bound to the last toplevel phrase (the prototype types the expressions
+but it does not evaluate them). The two records car and truck do not have the same set of
+elds, but both can still be passed to the function registration.
+
+2.2 An extension of ML with record concatenation
+The language  described in section 2.1 can easily be extended with a combining primitive
+
+f but a from g : (a :  ; ) ! (a : " ; ) ! (a : " ; )
+The extended language is referred to as + . We apply the transformation y with  as L.
+We rst consider the strict version of + , then we show a few examples and we treat the free
+version of + at the end.
+2
+
+For simplicity of examples we assume the existence a polymorphic equality equal.
+
+2 APPLICATION TO A NATURAL EXTENSION OF ML
+
+8
+
+Symmetric concatenation
+
+We encode the language k with symmetric concatenation into the version of + with strict
+extension. We introduce a new type symbol f ) g of arity two, and we assume given the
+two constants:
+Tag : (() ! ( ) ) ! f  )  g;
+Untag : f  )  g ! (() ! ( ) ):
+They are private to the translation.
+A program is typable in k if and only if its translation is typable in Tag Untag (
+extended with Tag and Untag ). However, composing the translation with typechecking in
+Tag Untag is the same as typechecking in k with the following types for primitives:
+fg : f  )  g
+:a : f a : abs ;  ) a : pre ( );  g !
+fa = g : ! f a : abs ;  ) a : pre ( );  g
+na : f a : ;  ) a : ";  g ! f a : 0;  ) a : 0;  g
+k : f ) g ! f ) g ! f ) g
+Primitives for symmetric concatenation (k)
+Thus the translation can be avoided.
+When typing directly in k with the rules above, all record types are written with f ) g
+and the type symbol  can be removed; the grammar for types becomes
+ ::= j  !  j f; ) ;g
+;
+
+;
+
+The type f  )  g should be read \I am a record which given any input row of elds 
+returns the output row  ." The types for the primitives above can be read with the following
+intuition:
+ The empty record returns the input row unchanged.
+ As remarked above (section 1), we encoded the extraction of eld a in M as the extraction of eld a in the application of M to any record that does not contain the a eld.
+Otherwise we would have got the weaker type:
+:a : f abs ) a : pre ( );  g !
+
+Thus, the extraction of the a eld of r takes a record r which, given any row where a
+is absent, produces a row where a is de ned with some value v . The result r:a is this
+value v .
+ A one- eld record extends the input row, de ning one more eld (that should not be
+previously de ned).
+ The removal of eld a from a record M returns a record that acts as M except on the
+eld a where it acts as the empty record.
+ Finally, concatenation composes its arguments.
+It is easy to see that any program in  is also a program in k. First, de ne the extension
+primitive by:
+fM with a = N g  M k fa = N g
+It has type:
+f  ) a : abs ;  g ! ! f  ) a : pre ( );  g
+
+2.2 An extension of ML with record concatenation
+
+9
+
+Check that all the following typing assertions are correct in k :
+
+fg : f abs )  g
+:a : f abs ) a : pre ( );  g !
+f with a = g : f abs ) a : abs ;  g ! ! f abs ) a : pre ( );  g
+n a : f abs ) a : ";  g ! f abs ) a : abs ;  g
+Last, abbreviate f abs :  g as () to conclude that k possesses all the primitives of  with
+all types that  can assign to them. The rest of the language  is core ML and is also in k .
+
+Examples
+We show a few examples processed by a prototype written in CAML [CH89, Wei89]. The
+type inference engine is exactly the one of ; only the primitives have changed. The syntax
+is similar to CAML syntax.
+The type of a one- eld record says that the record cannot be merged with another record
+that also de nes this eld:
+#let a = fa = 1g;;
+a : fa : abs;  ) a : pre (num); g
+Two records r and s can be merged if they do not de ne common elds. For instance, r can
+be merged on the left with fa = 1g if its output row on a is absent.
+#let left r = r jj fa = 1g;;
+left : f ) a : abs;  g ! f ) a : pre (num);  g
+The resulting record modi es its input row as r but on eld a which is added. Similarly, s
+can be merged on the right with a if the input eld a is present (with the adequate type).
+#let right s = fa = 1g jj s;;
+right : fa : pre (num);  )  g ! fa : abs;  )  g
+In particular, s cannot de ne an a eld, otherwise its input eld a would be absent.
+Non overwriting of elds is guaranteed on the left by negative information (absent eld)
+at a positive row occurrence, and on the right by positive information (present eld) at a
+positive row occurrence. Some symmetry is preserved! However writing r jj s instead of s jj r
+in a program sometime matters: one might typecheck while the other does not, though none
+of the programs would overwrite elds. If both typecheck, the type of the result will be the
+same (provided all elds are symmetric).
+Here are a few more examples:
+#let foo = fun r s ! (r jj s).a;;
+foo : fa : abs;  )  g ! f ) a : pre ( ); g !
+This shows the functionality of concatenation on both sides. The result shall have an a eld,
+but what argument will provide it is not speci ed yet.
+#let gee = foo fb = 1g;;
+gee : fb : pre (num); a : abs;  ) a : pre ( );  g !
+Now r must de ne the a eld.
+#gee a;;
+it : num
+
+2 APPLICATION TO A NATURAL EXTENSION OF ML
+
+10
+
+Asymmetric concatenation
+The system  may also provide free extension, with the following primitive:
+f with !a = g : (a :  ; ) ! ! (a : pre ( ) ; )
+This will make concatenation asymmetric:
+f!a = g : ! f a : ;  ) a : pre ( );  g
+For instance, the following example is typeable:
+#let ab = (fun r ! f!a = 1g jj r) f!a = true; !b = 1g;;
+ab : fa : ; b :  ;  ) a : pre (bool); b : pre (num); g
+This shows that asymmetric elds can be rede ned with values of possibly incompatible types.
+The choice between strict and free extension is encoded in the extension primitive, but the
+choice between asymmetric and symmetric concatenation is not encoded in the concatenation
+primitive which is always the composition. It is not concatenation which is symmetric or
+not, but record elds themselves! We can have symmetric and asymmetric elds coexisting
+peacefully.
+#f!a = 1; b = trueg;;
+it : fb : abs; a : ;  ) a : pre (num); b : pre (bool);  g
+Primitives to modify these properties of elds can easily be provided
+symmetric : f a :  ;  ) a : pre ( );  g ! f a : abs ;  ) a : pre ( );  g
+asymmetric : f a :  ;  ) a : pre ( );  g ! f a : ";  ) a : pre ( );  g
+But it is not possible to make all elds of a record symmetric, or asymmetric; this has to be
+done eld by eld.
+We can now better understand why symmetric concatenation is not so symmetric. Both
+left and right functions accept any argument, and one should not expect them to behave the
+same on a record of which some of the elds are asymmetric.
+With asymmetric elds, the following examples reach the limit of ML polymorphism. For
+instance, the function
+a
+
+a
+
+#fun r s ! s.b, r jj s;;
+it : f ) b : abs;  g ! fb : abs;  ) b : pre ( ); g ! * f ) b : pre ( ); g
+does not accept a record r which has a b eld, though the program would still run correctly
+if the b eld of s is asymmetric. This is due to ML polymorphism weakness: the second
+argument is -bound and thus it is not polymorphic. The eld b of s is observed by setting
+its input to abs , which has to be the output eld b of r in r jj s.
+Since s has de nitely a b eld, the concatenation r jj s is equal to the concatenation rnb jj s.
+
+We can rewrite the previous program as
+
+#fun r s ! s.b, (rnb jj s);;
+it : fb : ;  ) b : ; 'g ! fb : abs; ' ) b : pre ( ); g ! * fb : abs;  ) b : pre ( ); g
+which can now be applied to any record r.
+The restriction nb of eld b only changes the type of its arguments but does not modify
+
+it; it is called a retyping function. Many weaknesses of k originating in the restricted
+polymorphism provided by the ML type system can be solved by adding retyping functions.
+They insert type information in the program helping the type inference engine. We will
+describe other ways of solving these examples by strengthening the type inference engine in
+section 2.3.
+
+2.3 Strength and weakness of k
+
+11
+
+2.3 Strength and weakness of k
+
+We compare our language with Wand's proposal [Wan89], and Harper and Pierce's system
+and mention possible extensions.
+
+Comparison with other systems
+There are only a few other systems that implement concatenation. Wand's proposal [Wan89]
+is still more powerful that our system k . For instance
+ r: r:a + (f a : 1 g k r):a
+
+is typable in Wand's system but not in ours. Wand's system polymorphism is carried by
+the concatenation operator, at the cost of bringing in the type system a restricted form of
+conjunctive types and having disjunction of principal types instead of unique principal types.
+In contrast, in our system, polymorphism is carried by records themselves. As mentioned
+above, we can regenerate polymorphism of records by inserting retyping functions. If the
+same restricted form of conjunctive types was brought in our system, then retyping functions
+would be powerful enough to regenerate all elds of a record without having to mention them
+explicitly. This would give back all the power of Wand's system.
+This shows that the additional power of Wand's system comes from conjunctive types.
+Conversely, our system succeeds with only generic polymorphism on examples that needed
+conjunctive types in Wand's system. We are going to explain how this happens.
+Wand's system can be reformulated in system . A simple idea is to type the concatenation operator by introducing an in x type operator k of arity two:
+
+k : () ! () ! ( k )
+But we have to eliminate k operators that might hide type collisions. In the system , we
+entice distributing concatenation on elds with the equations:
+(a :  ; ) k (a : " ; ) = (a :  k " ;  k  )
+The operator k on elds can be de ned by enumerating the triples (; ";  k "). They are all
+triples of the form
+(; abs ; ) or (; pre ( ); pre( )):
+This disjunction in the relation k breaks the principal type property of type inference. Worse,
+disjunctions on di erent elds combine and make the resulting type (conjunction of types)
+explode in size.
+Our system emphasizes that  k " is uniform on : once we know ", we can eliminate the
+conjunction in  k ". A eld a, instead of carrying its type ", carries the function  )  k ".
+For instance, if M has type  , the record fa = M g would have type (a : pre ( ) ; abs ) in .
+On eld a, since " is now pre ( ), the merging  k " is equal to pre ( ). In the template,  is
+abs , and thus  k  is . We deduce the type in k :
+
+f (a :  ) pre ( )); ( ) ) g
+
+i.e.
+
+f (a : ; ) ) (a : pre ( ); ) g:
+
+Another system with type inference was proposed by Ohori and Buneman in [OB88].
+Their concatenation on records is recursive concatenation, which we do not provide. Note
+that they have a very restricted form of recursive concatenation since types in record elds
+must not contain any function type.
+In explicitly typed languages, the only system with concatenation is the one of Harper
+and Pierce [HP90b]; it implements symmetric concatenation. Since their system is explicitly
+
+3 OTHER APPLICATIONS
+
+12
+
+(higher order) typed, we say that typing a k program M succeeds in HP90 if we can nd a
+HP90 program whose erasure (the program obtained by erasing all type information) is M .
+Their system has not free restriction of elds, but we shall ignore this di erence.
+The following k program cannot be typed in HP90:
+#let either r s = (r jj s).a in
+# if true then either fa = 1g fb = 2g else either fb = 2g fa = 1g;;
+it : num
+In the expression (r jj s).a, one has to choose whether r or s is de ning eld a, and thus
+the function either cannot be used with the two alternatives. This breaks the symmetry of
+concatenation.
+Conversely, there are programs that can be typed in HP90 but not in k as a result of
+ML polymorphism restrictions. For instance the function
+#let reverse r s = if true then r jj s else s jj r;;
+reverse : f ) g ! f ) g ! f ) g
+cannot be applied to fa = 1g and fb = 2g in k . In HP90 it would have type
+
+8   8 #   !  ! ( k )
+and could be applied to any two compatible records. It is dicult, though, to tell whether
+the failure comes from a limitation of polymorphism in general, or the inability to quantify
+with constraints, since the two are strongly related. The typability of the previous example
+in k is somehow equivalent to the typability, in core ML, of the function:
+#let reverse r s = if true then r o s else s o r;;
+reverse : ( ! ) ! ( ! ) ! !
+This is too weak a type! Whether a higher order language would give it a much better type is
+not so obvious. Next section provides a better basis for comparison between the two systems.
+
+Limitations and extensions
+Since the type inference engine of k is the same as the one of  (only types of primitives
+have changed), both systems enjoy the same properties. Record polymorphism is provided by
+ML genericity introduced in let bindings. If this is too restrictive, then one should introduce
+type inclusion. One could also have a restricted conjunctive engine as in [Wan89]; however
+this would decrease considerably the eciency of type inference, and the readability of types.
+Allowing recursion on types would also require an extension of the results (though in practice the mechanism is already present). In k , as in , present elds cannot be implicitly
+forgotten, but have to be explicitly removed, unless the structure of elds is enriched with
+ags. All these improvements are discussed in detail in [Rem92c].
+
+3 Other applications
+The transformation can also be applied to other languages, which we illustrate in this section.
+
+3.1 Application to Harper and Pierce's calculus.
+
+The higher order typed language of Harper and Pierce [HP90a] already possesses concatenation, but records are not abstractions. It can still bene t from the encoding. Instead of
+
+3.2 Application to Cardelli and Mitchell's calculus.
+
+13
+
+presenting special constructs for operations on records, we could assume given the following
+primitives in their language:
+fg : f g
+:a : 8  8 #a  (f a : g k ) !
+fa = g : 8  ! f a : g
+na : 8  8 #a  (f a : g k ) ! 
+k : 8   8 #   !  ! ( k )
+
+Primitives for HP90
+
+But the type system is not enough sophisticated to type the primitive f but a from g. Thus
+we apply the translation dropping the removal of elds. Using the encoding, the primitive
+operations on records in the language HP90k have the following types:
+fg : 8   ( ) )
+:a : 8  8 #a  8  #a  ( ) f a : g k  ) !
+fa = g : 8  ! 8 #a  ( ) f a : g k )
+k : 8   8   8   ( ) ) ! ( ) ) ! ( ) )
+
+Primitives for HP90k
+
+We can de ne a function either:
+ :  :   #a:  r : (f g ) ):  s : ( ) f a : g k  ):
+( :a [ ] [f g] [ ] (k [f g] [] [f a : g k  ] r s))
+and apply it to records fa = 1g and fb = 2g in any order. For instance,
+either [num] [f a : num g] [f b : num g] (fa = 1g [f g]) (fb = 2g [f a : num g])
+Remind that this example is not typable in HP90.
+Conversely, the program:
+let reverse r s = if true then r jj s else s jj r in reverse fg fa = 1g, reverse fg fa = 1g;;
+can be typed in HP90, but we conjecture that it cannot be typed in HP90k. In fact its
+typability in HP90k is equivalent to the following term being the erasure of a term of F :
+
+(fun r ! K (r I K) (r K I))
+(fun f g ! (fun x ! f (g x)) or (fun x ! g (f x)))
+where I is fun x ! x and K is fun x y ! x, and or is a constant assumed of type  :
+in F .
+
+! !
+
+To summarize, none of the language HP90 or HP90k would be more powerful than the
+other. Remark that type applications and type abstractions are located in completely di erent
+places, thus a partial translation of explicitly typed terms from HP90k to HP90 can only be
+global.
+A previous language proposed by Harper and Pierce in [HP90a] had no concatenation,
+but shared the same spirit as HP90. The transformation applies to it as well, and results in
+a language with concatenation very closed to HP90k.
+
+3.2 Application to Cardelli and Mitchell's calculus.
+
+Unlike HP90, the language of Cardelli and Mitchell [CM89] does not already provide concatenation of records, but only strict extension. The application of our encoding to CM89
+is not harder than to HP90. The language cannot be easily extended with the combining
+
+3 OTHER APPLICATIONS
+
+14
+
+construct, therefore we skip the removal of elds. Using CM89 types, primitives for records
+operations in CM89k have the following types:
+fg : 8   ( ) )
+:a : 8  8  < hhii n a  8  < hhii n a  ( ) hh k a : ii) !
+fa = g : 8  ! 8  < hhii n a  ( ) hh k a : ii)
+k : 8   8   8   ( ) ) ! ( ) ) ! ( ) )
+
+Primitives for CM89k
+
+We can again de ne the function either:
+ :  :   < hhii n a:  r : (hhii ) ):  s : ( ) hh k a : ii):
+( :a [ ] [hhii] [ ] (k [hhii] [] [hh k a : ii] r s))
+and apply it to the records fa = 1g and fb = 2g:
+either [num] [hha : numii] [hhb : numii] (fa = 1g [hhii]) (fb = 2g [hha : numii])
+
+3.3 Multiple inheritance without record concatenation
+
+Multiple inheritance has been encoded with record concatenation [Wan89]. We have encoded
+record concatenation with record extension. By composition, multiple inheritance can be
+encoded with record extension.
+Given the strengthening of the type inference engine to recursive types, the system k
+would support multiple inheritance as presented in [Wan89]. But multiple inheritance makes
+very little use of concatenation. It is only necessary for building new methods, but objects
+do not need it. Thus it may be worth revisiting the typechecking of multiple inheritance
+of [Wan89] and eliminating the need for concatenation by abstracting methods as we abstracted records.
+The following encoding of multiple inheritance was used by Wand in [Wan89]. The de nition of a class
+!
+! end
+class (~x) inherits P (Q~ )methods a = M
+was encoded as
+!
+!g
+~ ) k fa = M
+ ~x:  self: P (Q
+The creation of objects of that class
+instance C (N~ )
+was the recursive expression
+Y (C (N~ ))
+Sending a method a to an object x was the same as reading the eld x of a. The problem
+with this encoding is that it requires record concatenation. We can easily get read of it, using
+our trick. We encode a class de nition as
+
+!
+
+!
+ ~x:  u:  self: u k P (Q~ ) k fa = M g
+
+i.e.
+
+!
+
+!
+ ~x:  u:  self: fP (Q~ )  u with a = M g
+
+which only requires record extension. Then creating an object of that class becomes
+Y (C (N~ )fg)
+and sending a method is unchanged.
+
+REFERENCES
+
+15
+
+Remarks
+Since removing of elds is not needed here, this section applies to all typed calculi with record
+extension.
+This section uses Wand's conception of inheritance. Objects are carrying their dictionarries.
+Other views of objets do not encode with record operations. This section does not apply to
+them.
+
+Conclusion
+We have described how a functional language with records and record extension automatically
+provides record concatenation. Though records are data, they should be typed as if there were
+abstractions over an input row of elds that they modify. Their behavior can be observed at
+any time by giving them the empty row as input. Concatenation is then composition.
+We have applied the method to a record extension of ML. We have obtained a language
+implementing all operations on records except the recursive merge, allowing type inference
+in a very ecient way in practice.
+The kind of type system that we have obtained seems complementary to Harper and
+Pierce's one. Taking the best of the two systems would be interesting investigation.
+The encoding also helps understanding concatenation. However, the relationship between
+the semantics of a program in the language with concatenation and the semantics of its
+translation need to be investigated closely before claiming that concatenation itself comes for
+free.
+
+Acknowledgments
+I am grateful for interesting discussions with Luca Cardelli, Georges Gonthier, Jean-Jacques
+Levy, Benjamin Pierce and Mitchell Wand, and particularly thankful to Xavier Leroy whose
+comments on the presentation of this article were very helpful.
+
+References
+[Car86]
+
+Luca Cardelli. Amber. In Combinators and Functional Programming Languages,
+volume 242 of Lecture Notes in Computer Science, pages 21{47. Spinger Verlag,
+1986. Proceedings of the 13th Summer School of the LITP.
+[CH89] Guy Cousineau and Gerard Huet. The CAML Primer. BP 105, F-78 153 Le
+Chesnay Cedex, France, 1989.
+[CM89] Luca Cardelli and John C. Mitchell. Operations on records. In Fifth International
+Conference on Mathematical Foundations of Programming Semantics, 1989.
+[HMT91] Robert Harper, Robin Milner, and Mads Tofte. The de nition of Standard ML.
+The MIT Press, 1991.
+[HP90a] Robert W. Harper and Benjamin C. Pierce. Extensible records without subsumption. Technical Report CMU-CS-90-102, Carnegie Mellon University, Pittsburg,
+Pensylvania, February 1990.
+[HP90b] Robert W. Harper and Benjamin C. Pierce. A record calculus based on symmetric
+concatenation. Technical Report CMU-CS-90-157, Carnegie Mellon University,
+Pittsburg, Pensylvania, February 1990.
+
+16
+[JM88]
+
+REFERENCES
+
+Lalita A. Jategaonkar and John C. Mitchell. ML with extended pattern matching
+and subtypes. In Proceedings of the 1988 Conference on LISP and Functional
+Programming, 1988.
+[OB88] Atsushi Ohori and Peter Buneman. Type inference in a database langage. In ACM
+Conference on LISP and Functional Programming, pages 174{183, 1988.
+[Oho90] Atsushi Ohori. Extending ML polymorphism to record structure. Technical report,
+University of Glasgow, 1990.
+[Rem90] Didier Remy. Algebres Tou ues. Application au Typage Polymorphe des Objects
+Enregistrements dans les Langages Fonctionnels. These de doctorat, Universite de
+Paris 7, 1990.
+[Rem91] Didier Remy. Type inference for records in a natural extension of ML. Technical
+Report 1431, Inria-Rocquencourt, May 1991.
+[Rem92a] Didier Remy. Extending ML type system with a sorted equational theory. Technical report, BP 105, F-78 153 Le Chesnay Cedex, BP 105, F-78 153 Le Chesnay
+Cedex, 1992. To appear. Also in [Rem90], chapter 3.
+[Rem92b] Didier Remy. Syntactic theories and the algebra of record terms. Technical report,
+BP 105, F-78 153 Le Chesnay Cedex, BP 105, F-78 153 Le Chesnay Cedex, 1992.
+To appear. Also in [Rem90], chapter 2.
+[Rem92c] Didier Remy. Type inference for records in a natural extension of ML. In Carl A.
+Gunter and John C. Mitchell, editors, Theoretical Aspects Of Object-Oriented Programming. Types, Semantics and Language Design. MIT Press, 1992. To appear.
+Also in [Rem91].
+[Wan87] Mitchell Wand. Complete type inference for simple objects. In Second Symposium
+on Logic In Computer Science, 1987.
+[Wan88] Mitchell Wand. Corrigendum: Complete type inference for simple objects. In
+Third Symposium on Logic In Computer Science, 1988.
+[Wan89] Mitchell Wand. Type inference for record concatenation and multiple inheritance.
+In Fourth Annual Symposium on Logic In Computer Science, pages 92{97, 1989.
+[Wei89] Pierre Weis. The CAML Reference Manual. BP 105, F-78 153 Le Chesnay Cedex,
+France, 1989.
+
+

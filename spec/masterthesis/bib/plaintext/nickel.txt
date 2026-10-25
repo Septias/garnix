@@ -1,0 +1,27 @@
+Nickel sources (fetched 2026-10-25)
+
+== https://nickel-lang.org/user-manual/merging (summary of fetched page)
+"Merge is a **symmetric** operation."
+Fields of equal priority are merged recursively; "If the priorities differ, the value with the highest priority simply erases the other."
+`default` = lowest priority ("can be used to provide a base value, but have it be overridable through merging"); `force` = highest ("can never be overridden").
+Equal-priority, non-mergeable values: error "Merge operands have the same merge priority but they can't be combined." ("Number values can only be merged if they are equal.")
+No left/right-biased override operator is described; `&` is the only merge operator.
+
+== https://nickel-lang.org/user-manual/typing
+"Nickel is gradually typed, meaning you can mix both static typing and dynamic typing."
+"To express such constraints, Nickel features row polymorphism."
+
+== tweag/nickel master: core/src/typecheck/operation.rs (excerpt)
+393-            // Dyn -> Dyn -> Dyn
+394:            PrimOp::Merge(_) => (
+395-                vec![mk_uniftype::dynamic(), mk_uniftype::dynamic()],
+396-                mk_uniftype::dynamic(),
+397-            ),
+398-            // <Md5, Sha1, Sha256, Sha512> -> Str -> Str
+--
+528-            // {_ : a} -> {_ : a} -> {_ : a}
+529:            PrimOp::RecordDisjointMerge => {
+530-                let elt = state.table.fresh_type_uvar(var_level);
+531-                let dict = mk_uniftype::dict(elt.clone());
+532-
+533-                (vec![dict.clone(), dict.clone()], dict)

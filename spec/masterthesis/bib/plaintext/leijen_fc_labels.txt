@@ -1,0 +1,1797 @@
+First-class labels for extensible rows
+Technical report: UU-CS-2004-051
+Daan Leijen
+Institute of Information and Computing Sciences, Utrecht University
+P.O.Box 80.089, 3508 TB Utrecht, The Netherlands
+daan@cs.uu.nl
+
+Abstract
+This paper describes a type system for extensible
+records and variants with first-class labels; labels are
+polymorphic and can be passed as arguments. This increases the expressiveness of conventional record calculi
+significantly, and we show how we can encode intersection types, closed-world overloading, type case, label
+selective calculi, and first-class messages. We formally
+motivate the need for row equality predicates to express
+type constraints in the presence of polymorphic labels.
+This naturally leads to an orthogonal treatment of unrestricted row polymorphism that can be used to express
+first-class patterns.
+Based on the theory of qualified types, we present an
+effective type inference algorithm and efficient compilation method. The type inference algorithm, including
+the discussed extensions, is fully implemented in the
+experimental Morrow compiler.
+1
+
+Introduction
+
+Records and variants provide a convenient way to construct data types. Furthermore, record calculi can be
+used as a foundation for features as objects and module systems. Over the years, many aspects of record
+calculi have been studied, including polymorphic extension, record concatenation, type directed compilation,
+and even label-less calculi.
+The holy grail [6] of polymorphic extensible record
+calculi are first-class labels, where labels are polymorphic and can be passed as arguments. First-class labels
+increase the expressiveness of conventional record calculi significantly, and we will show how we can encode
+many interesting programming idioms, including intersection types, closed-world overloading, type case, label
+selective calculi, and first-class messages.
+One of the earliest works on first-class labels was
+done by Gaster and Jones [5, 4]. They describe a polymorphic type system for extensible records and vari-
+
+ants based on the theory of qualified types. Unfortunately, as we show later in this article, type inference
+for their proposed extension is incomplete. Sulzmann
+acknowledges this problem and describes a record calculus with first-class labels as an instance of HM(X)
+[27, 28, 29], but this calculus is not extensible and lacks
+a general compilation method. Shields and Meijer introduce an intriguing label-less calculus, λtir , where records
+with first-class labels can be encoded with opaque types
+[25, 24]. However, due to general type equality constraints, λtir is a very complicated system. We wanted
+to explore an alternative point in the design space with
+a simpler calculus where labels are explicit; indeed, we
+can express many of the motivating examples of λtir
+without having to work from first principles.
+We base our calculus directly on the original record
+system of Gaster and Jones, with two important technical differences: we introduce row equality predicates
+to express required type constraints in the presence
+of polymorphic labels, and we move the language of
+rows into the predicate language to ensure completeness of type inference. Furthermore, our system is the
+first to naturally describe row polymorphic operations,
+and it completely avoids the complex unification problems, and resulting restriction to non-empty rows, as
+described by Gaster [4]. Being able to use unrestricted
+row polymorphism, we can express first-class extensible
+patterns and views [30].
+We have fully implemented our type inference algorithm, including discussed extensions like row polymorphic operations, in the experimental Morrow compiler
+[12]. Indeed, Morrow can infer all the types of the examples in this paper. However, at the time of writing,
+the code generator for Morrow is not yet complete.
+In our calculus, row terms are no longer part of the
+type language but are only present in the predicate language, to ensure completeness of type inference with
+polymorphic labels. By not folding labels back into
+the language of types, we also reduce the complexity
+of improvement with respect to λtir . Unfortunately, the
+
+improvement algorithm, and thus the test for satisfiability, ambiguity, and entailment, is still exponential.
+However, just like normal type inference, we believe
+that the worst case is unlikely to occur in practical programs. This intuition is largely confirmed by practical
+experience with the Morrow compiler.
+In Section 2 we give an overview of conventional extensible records and variants à la Gaster and Jones [5].
+In Section 3 we extend this calculus with first-class polymorphic labels, and we discuss many interesting examples in the following section. Section 5 discusses firstclass patterns. Section 6 and 7 formally define our calculus, and give the typing rules and an inference algorithm. Section 8 describes simplification and improvement, and discusses complexity issues. We finish with
+a discussion of related work and the conclusion.
+2
+
+(|l1 :: τ1 , ..., ln :: τn |) ≡ (|l1 :: τ1 |...| (|ln :: τn |(||)|)...|)
+(|l1 :: τ1 , ..., ln :: τn |r |) ≡ (|l1 :: τ1 |...| (|ln :: τn | r |)...|)
+The fields of a row are distinguished by their label and
+not by their position, and we consider rows equal up to
+permutation of their fields:
+(|l :: a, m :: b | r |) = (|m :: b, l :: a | r |)
+2.2
+
+For the purposes of this paper, we restrict ourselves to
+rows without duplicate labels. Without this constraint,
+fields can not be addressed unambiguously and, as a
+result, some programs can not be assigned a principal
+type [31]. A particularly elegant approach to enforce
+uniqueness of labels are lacks (or insertion) constraints
+[5, 25]. A predicate (r\l ) restricts r to rows that do not
+contain a label l . In general, a row extension (|l :: a | r |)
+is only valid when the predicate (r\l ) holds. For clarity,
+we always write the lacks constraints explicitly in this
+paper, but a practical system can normally infer them
+from row expressions automatically, which simplifies the
+type signatures a lot.
+
+Records and variants
+
+There are two dual concepts to describe the structure of
+data types: products group data items together, while
+sums describe a choice between alternatives. Here are
+two examples of both operations:
+type Point = Int × Int
+type Event = Char + Point
+
+2.3
+
+Record operations
+
+A record interprets a row as a product of types. The
+empty record is the only ground value with an empty
+record type:
+
+In most programming languages, we can name the components of a product and sum with a label. A labeled
+product is called a record (or struct), while a labeled
+sum is called a variant (or union, or data type). We describe records with curly braces {}, and variants with
+angled brackets hi:
+
+{} :: {}
+Furthermore, there are three basic operations that can
+be performed on records, namely selection, restriction,
+and extension:
+
+type Point = {x :: Int, y :: Int}
+type Event = hkey :: Char , mouse :: Pointi
+
+( .l )
+( − l)
+{l = |
+
+We can see that both records and variants are described
+by a sequence of labeled types, which we call a row. In
+this article, we enclose rows in banana brackets (||). For
+convenience, we leave these out when the row is directly
+enclosed by a record or variant brackets. For example,
+the unabbreviated type of a Point is {(|x ::Int, y ::Int |)}.
+2.1
+
+Lacks contraints
+
+:: ∀r a. (r\l ) ⇒ {l :: a | r } → a
+:: ∀r a. (r\l ) ⇒ {l :: a | r } → {r }
+} :: ∀r a. (r\l ) ⇒ a → {r } → {l :: a | r }
+
+Note that we assume a distfix notation where argument
+positions are written as “ ”. Furthermore, we explicitly
+quantify all types in this paper, but practical systems
+can normally use implicit quantification. The three basic record operations are not arbitrary but based on the
+corresponding primitive operations on products in category theory or logic. Note that all type schemes contain
+a predicate (r\l ) to ensure the validity of row extension.
+For repeated record extension on terms, we apply the
+same abbreviations as for row extension on types. The
+basic operations can be used to implement a number of
+other common operations like update and rename:
+
+Extensible rows
+
+Following Gaster and Jones [5], we consider an extensible row calculus where a row is either empty or an
+extension of a row. The empty row is written as (||) and
+an extension of a row r with a label l and type τ is
+written as (|l :: τ | r |). Here is an example of a row that
+can be used to describe coordinates:
+(|x :: Int | (|y :: Int | (||)|)|)
+
+{l := x | r } ≡ {l = x | r − l }
+{l ← m | r } ≡ {m = r .l | r − l }
+
+To reduce the number of brackets, we use the following
+abbreviations:
+
+2
+
+2.4
+
+Variant operations
+
+Note that we write r [i ] to select the i th field of a memory block. The offset 1 is the evidence for the predicate
+(|age :: Int, name :: String |)\male, that resulted from selecting the male field. It is resolved to 1 as male is
+larger than age but smaller than name. Gaster and
+Jones describe the formal translation from lacks predicates to evidence [5] and we will not repeat that here.
+Note that common transformations like inlining can be
+used to optimize this expression. As such, the calculus combines the flexibility of dynamic offset resolution
+with the efficiency of static offsets.
+It is also straightforward to support efficient variant operations. Variants are represented at runtime by
+tagged values. The evidence for a variant operation is
+not interpreted as an offset but as the value of its tag,
+and it enables constant time matching of variant values.
+
+A variant interprets a row as a sum of types. Dual to
+records, the basic operations are based on the corresponding operations on sums in category theory. The
+primitives consist of the empty variant, injection, embedding, and decomposition:
+hi
+hl = i
+hl | i
+(l ∈ ?
+
+:: hi
+:: ∀r a. (r\l ) ⇒ a → hl :: a | r i
+:: ∀r a. (r\l ) ⇒ hr i → hl :: a | r i
+: ) :: ∀r ab. (r\l ) ⇒ hl :: a | r i → (a → b)
+→ (hr i → b) → b
+
+Concrete implementations can provide special pattern
+matching syntax that use the primitive decomposition
+operator. Here is a short example to demonstrate basic
+record selection and a possible pattern matching syntax:
+showEvent :: Event → String
+showEvent e
+= case e of
+hkey = ci
+→ "key " ++ showChar c
+hmouse = pi → "mouse " ++ showInt p.x
+++ ", " ++ showInt p.y
+test = showEvent hkey = ’a’i
+2.5
+
+3
+
+First class labels
+
+In the previous section, we have described a conventional set of record and variant operations. Labels are
+considered part of the syntax of the language and each
+basic operation was described as a family of functions
+parameterized by the labels. For example, it is not possible to write a general select function:
+select r l = r .l
+
+Implementation
+
+As it stands, the l parameter is unrelated to the constant l label. The function simply selects the constant
+label l , i.e. its type is:
+
+A naı̈ve implementation of records would use a dynamic
+map from labels to values. Unfortunately, this prevents
+constant time access to the components of the record.
+Ohori [18], Gaster and Jones [5], and Shields and Meijer
+[25] represent records as contiguous blocks of memory
+where the type of the record is used to calculate the
+runtime offsets of its fields.
+In the presence of polymorphic extensible rows, the
+offset of a field must sometimes be passed at runtime.
+This seems rather complicated at first, but, in a shining instance of the Curry-Howard isomorphism, runtime
+offsets directly correspond to lacks predicates. That is,
+each lacks predicate is translated to an implicit runtime
+parameter that carries the evidence for that predicate,
+namely an offset into the record. In the general treatment of qualified types, this is just an instance of evidence translation [9]. As an example, we consider the
+following expression:
+
+select :: ∀r ab. (r\l ) ⇒ {l :: a | r } → b → a
+In this article we describe an extension where labels become first-class values that can be passed as arguments.
+On the type level, we introduce a new type constructor
+Lab, where a value of type Lab l is the term representation of a label l . The basic record and variant operations
+are now primitive functions that take a label as an argument. For example, the types of record selection and
+restriction become:
+( . ) :: ∀r l a. (r\l ) ⇒ {l :: a | r } → Lab l → a
+( − ) :: ∀r l a. (r\l ) ⇒ {l :: a | r } → Lab l → {r }
+These functions are now polymorphic in the label l .
+Furthermore, the l parameter to the Lab constructor
+nicely captures the connection between the label value
+and the label type; without it, we can not express the
+necessary typing constraints. A lacks predicate is now
+a binary constraint that takes a row and a label as arguments.
+
+{male = True, age = 31, name = "Daan"}.male
+After evidence translation, the record is represented by
+a contiguous block of memory (31, True, "Daan"), where
+the order is determined by the lexicographical order of
+the labels. The field is selected by passing evidence to
+a general selection function:
+(λev r → r [ev ]) 1 (31, True, "Daan")
+3
+
+3.1
+
+Label constants
+
+f r l m = r .l + r .m
+The type we could give to f using lacks predicates is
+not as general as we would expect, as it restricts the
+labels l and m to be distinct:
+
+With labels as first-class citizens, we can create functions that use labels passed as arguments. For example,
+the zero function creates a record with two zero values
+when given two distinct labels:
+
+f :: ∀r l m. ((|m :: Int | r |)\l , r\m)
+⇒ {l :: Int, m :: Int | r } → Lab m → Lab l → Int
+
+zero :: ∀l m. ((|m :: Int |)\l )
+⇒ Lab l → Lab m → {l :: Int, m :: Int}
+zero l m = {l = 0, m = 0}
+
+Sulzmann acknowledges this problem in his thesis [29]
+where he describes an instantiation of HM(X) [17]
+with first-class labels, called REC l . In this system,
+only record update and selection are label polymorphic;
+record construction is still restricted to constant labels.
+Due to this restriction, has predicates suffice to type all
+operations, and the type of f becomes:
+
+However, to use a function like zero, we need initial
+label constants. We write a constant label type l as
+@l . On the term level, we introduce a family of label
+constructors that are also written as @l :
+@l :: Lab @l
+
+f :: ∀r l m. (l :: Int ∈ r , m :: Int ∈ r )
+⇒ {r } → Lab m → Lab l → Int
+
+The zero function can now be called with specific constant labels:
+
+Unfortunately, as discussed by Sulzmann [29], it is not
+straightforward to extend HM(REC l ) to label polymorphic record extension.
+We will instead use row equality predicates. The
+predicate (r ∼ s) restricts row r and s to equal rows.
+The row equality predicate arises naturally as the most
+general predicate from the row unification rule of Gaster
+and Jones [5]. This rule is approximately:
+
+origin :: {@x :: Int, @y :: Int}
+origin = zero @x @y
+The explicit annotation of label constants quickly becomes a burden as most labels are constant in practice.
+To simplify notation, we use the following constantification rule in Morrow: an identifier that is only used
+in label positions, is regarded as a constant label. An
+identifier is in a label position when it is used as a label
+in a row or as a selector. The constantification rule is
+used for both labels in types and labels in terms. In the
+following example, the l label is a variable, while the i
+label is regarded as a constant label:
+
+(l :: τ ) ∈ s
+r ∼ (s − l)
+(|l :: τ | r|) ∼ s
+As we show later, there is not always a unique unifier
+between rows in the presence of polymorphic labels, and
+row equality predicates can be viewed as a delayed unification. As is apparent from the row unification rule, has
+constraints alone lose information; namely r ∼ (s − l).
+This property is sometimes stated as “has constraints
+encode only positive information”. This is no problem
+when only selection and update are label polymorphic,
+but record extension can not be typed with has predicates alone. In an unpublished report by Sulzmann
+[28], in addition to the has predicate, the distinct predicate is introduced especially to capture the required
+type constraints. In contrast, it is easy to express has
+predicates in terms of row equality:
+
+f :: ∀l . ((|i :: Int |)\l ) ⇒ Lab l → {l :: Int, i :: Int}
+f l = {l = 0, i = 0}
+In Morrow, the quantification is implicit and the lacks
+predicate is inferred from the record expression. The
+type of f can therefore also be written as:
+f :: Lab l → {l :: Int, i :: Int}
+The weakness of constantification is that it is possible to
+invalidate code by adding a binding with an identifier
+that previously only occurred in label positions. We
+have not found this a problem yet in Morrow, but more
+practical experience is needed. Actually, many times
+this is an advantage, as we could redefine a label with
+a simple top-level definition.
+3.2
+
+(l :: a) ∈ r
+
+≡
+
+s\l, (|l :: a | s|) ∼ r
+
+(fresh s)
+
+Morrow uses the above equivalence to allow has predicates as convenient syntactic sugar. However, for clarity, we normally use explicit lacks and row equality
+predicates in this paper. Using row equality predicates,
+we can now assign the following principal type to f :
+
+Equality predicates
+
+First class labels seem an innocent extension at first. Indeed the thesis of Gaster [4] describes first-class labels as
+a straightforward extension of extensible records. However, first-class labels require a new predicate to enjoy
+completeness of type inference. For example, the following program is not typeable in a naı̈ve extension:
+
+f :: ∀r s t l m. (s\l , t\m, r ∼ (|l :: Int | s |),
+r ∼ (|m :: Int | t |))
+⇒ {r } → Lab l → Lab m → Int
+4
+
+Note that we can substitute r with either row to get an
+equivalent type signature:
+
+side, we remark that the type of intBool can also be
+written more conveniently as:
+
+f :: ∀s t l m. (s\l , m\t, (|l :: Int | s |) ∼ (|m :: Int | t |))
+⇒ {l :: Int | s} → Lab l → Lab m → Int
+
+intBool :: ∀l a. ((l :: a) ∈ (|i :: Int, b :: Bool |)) ⇒ a
+
+4
+
+We have not done so yet to illustrate clearly that lacks
+predicates correspond to the runtime evidence. However, in the next sections we will freely use this notation
+as convenient syntactic sugar.
+
+Expressiveness of first-class labels
+
+This section shows that first-class labels do not only get
+rid of families of primitive functions, but also increase
+the expressiveness of our calculus. We assume the definition of a polymorphic label any:
+
+4.2
+
+Using intersection types, we can encode a form of closed
+world type overloading. This view of overloading is
+adopted by many object-oriented languages, for example in Java. It assumes that all definitions for an overloaded identifier are known, and requires that each definition is declared at a distinct type. As an example, we
+show how to overload addition in Morrow. The example
+is adapted from Shields [24] where a similar encoding
+was presented based on λtir . First, we declare a record
+that contains all primitive addition functions:
+
+any :: ∀l . Lab l
+any = ⊥
+With strict semantics, the any label can also be defined
+with an abstract phantom datatype for labels [13]:
+data Lab a = Lab String | Any
+any :: ∀l . Lab l
+any = Any
+
+type PlusRec = {int :: Int → Int → Int,
+float :: Float → Float → Float }
+plusRec :: PlusRec
+plusRec = {int = plusInt, float = plusFloat }
+
+Such definition also gives a straightforward implementation for showing and comparing labels.
+4.1
+
+Overloading
+
+Intersection types
+
+The (+) operator simply selects one of these functions
+using any:
+
+Using the polymorphic any label, we can select an arbitrary field from a record. This can be used to encode
+an intersection type. For example:
+
+(+) :: ∀l a. ((l :: a) ∈ PlusRec)) ⇒ a
+(+) = plusRec.any
+
+intBool :: ∀r l a. (r\l , (|l :: a | r |) ∼
+(|i :: Int, b :: Bool |)) ⇒ a
+intBool = {i = 1, b = True}.any
+
+Addition can now be used at different types:
+ok = (1 + 2, 1.0 + 2.0)
+
+The only possible instances of a are Int or Bool , depending on the context. As such it can be seen equivalent
+to the type Int ∧ Bool in an intersection type discipline
+[19, 22]. Here is an example of the use of intBool :
+
+Just like the previous example, the evidence passed to
+(+) selects the appropiate addition function based on
+the type context. In conventional closed-world overloading, each overloaded definition must be sufficiently
+monomorphic to resolve the overloading statically, but
+this is not necessary in our system. We show an example by Shields [24] where we overload the identifier
+nList over functions that return a list with either one
+or two arguments:
+
+n = if intBool then intBool + 1 else 0
+On first sight, it seems that even though the expression
+type checks, the expression will fail at runtime since any
+is undefined. However, the label values themselves are
+not used by selection at runtime; only the evidence provided by the (r\l ) predicate is used to select the proper
+field. The two occurrences of intBool above each unify
+with a different type, and the predicate (r\l ) is resolved
+to either (|i :: Int |)\b or (|b :: Bool |)\i , corresponding to
+the appropiate offset at runtime. After evidence translation, the example looks like:
+
+nList :: ∀l abc. ((l :: a) ∈ (|one :: b → [b ],
+two :: c → c → [c ]|)) ⇒ a
+nList = {one = λx → [x ], two = λx y → [x , y ]}.any
+Note that we do not experience the simplification limitations described by Shields [24] as we always use explicit labels. Besides closed-world overloading, we also
+have the open-world view of overloading, as adopted by
+Haskell. The type of each definition is required to be
+an instance of a certain type scheme, but the definitions do not have to be in scope at each point of use.
+
+intBool ev = (λi r l → r [i ]) ev (True, 1) any
+n = if (intBool 0) then (intBool 1) + 1 else 0
+The implicit evidence parameter ensures that the correct value is chosen based on the type context. On the
+5
+
+As suggested by Shields [24], we can encode open-world
+overloading using implicit parameters [14], but a full
+discussion is beyond the scope of this paper.
+4.3
+
+tion into a function that takes its arguments in any order. First, we define a record that holds both variants:
+type Perm a b c = {normal :: a → b → c,
+flipped :: b → a → c }
+
+Type case
+
+Next, we define a function that constructs a permutation record from a two-argument function:
+
+Using the same mechanism as with intersection types,
+we can also encode a form of type case. Given a record
+of functions, we select any function and apply it to the
+type case argument:
+
+permRec :: ∀abc. (a → b → c) → Perm a b c
+permRec f = {normal = f , flipped = λx y → f y x }
+Finally, we use any to select either function:
+
+typecase :: ∀r l ab. (r\l ) ⇒ a → {l :: a | r } → b
+typecase x r = (r .any) x
+
+permute :: ∀l abcd . ((l :: d ) ∈ Perm a b c)
+⇒ (a → b → c) → d
+permute f = (permRec f ).any
+
+Note that this differs from the usual notion of type case,
+since the result of the operation can also depend on the
+type of the argument. We shall see in Section 5 how
+we can use row polymorphic operations to enforce that
+all functions return the same result type. The function
+typecase does not perform any runtime checking; the
+evidence for the predicate r\l determines which function
+is selected, which is resolved at compile-time and passed
+at run-time as a fixed offset.
+4.4
+
+Using permute, a function with two arguments of a different type can take them in any order:
+square xs = let pmap = permute map
+in pmap xs (λi → i ∗ i )
+We can also apply permute to a function that takes two
+arguments of equal type. However, when such function
+is used, the type inferencer complains about unresolved
+predicates since the lacks predicate can not be resolved
+unambigiously. This is a weakness of our approach;
+deferring unifications may lead to an expressive system,
+but as a result, errors are also reported late.
+
+Label selective functions
+
+As shown by Sulzmann [28], we can also encode a label
+selective calculus along the lines of Garrigue [3]. In a
+label selective calculus, each function argument is associated with a label. Effectively, the arguments form a
+record, but we can still use curried function application.
+As an example, we create a label selective function lmap
+from the standard map function:
+
+4.6
+
+In object-oriented languages, methods are invoked by
+sending a message. Even though messages are central
+to object-orientation, they are not first-class citizens in
+most object-oriented languages, and most languages resort to dynamic type checks in the presence of polymorphic messages. As a result, there has been a lot of
+research into static type systems for dynamic messages
+[26, 15, 16]. First-class messages can also be viewed as
+first-class labels in a record of functions, and we can
+directly encode the proxy example by Nishimura [16]:
+
+map :: (a → b) → [a ] → [b ]
+map f xs = ...
+lmap :: ∀l mabcd e. ((|m :: e|)\l ,
+(|l :: d , m :: e|) ∼ (|fun :: a → b, list :: [a ]|))
+⇒ (Lab l , d ) → (Lab m, e) → [b ]
+lmap (l , x ) (m, y) = let r = {l = x , m = y}
+in map r .fun r .list
+square xs = lmap (list, xs) (fun, λi → i ∗ i )
+
+type Ftp = (|put :: String → IO (), ...|)
+ftp
+:: {Ftp}
+ftp
+= {put = ...}
+proxy :: ∀r l a. ((l :: a) ∈ r )
+⇒ {new :: r → {send :: Lab l → a}}
+proxy = {new = λobj → {send = λm → obj .m}}
+fproxy :: ∀l a. ((l :: a) ∈ Ftp) ⇒{send :: Lab l → a}
+fproxy = proxy.new ftp
+submit :: IO ()
+submit = fproxy.send @put "paper.ps"
+
+We use label polymorphic record extension here and the
+type of lmap cannot be expressed with has constraints
+alone. Sulzmann [28] specifically introduces the distinct
+predicate to capture the necessary type constraints.
+4.5
+
+First-class messages
+
+Type selective functions
+
+A type selective function determines the rôle of an argument based on its type. In general we can encode
+functions that take arguments of a different type in any
+permutation. As an example, we implement a function permute that transforms any two argument func-
+
+Of course, although we can encode first-class messages,
+we still lack the usual contravariance and subtyping
+
+6
+
+rules associated with object-oriented languages. In our
+calculus, the subtype relation between records is always
+explicit through polymorphic row extension.
+5
+
+This operation can be used to give a principal types
+to two general functions for decomposing variants and
+records:
+case
+:: ∀r a. hr i → {to a r } → a
+recElim :: ∀r a. {r } → hto a r i → a
+
+First-class patterns
+
+The to operator nicely captures that for a case on a variant over row r , we need to provide a function for each
+field in r that transforms the corresponding value into
+a common type a, i.e. a record over the row (to a r )!
+Using the dual type operator from, with the obvious
+definition, we can specify the dual operations for constructing records and variants:
+
+Our basic system can be naturally extended with row
+polymorphic type operations. Using those operations,
+we can express first-class patterns. Instead of introducing special syntax for destructing variants as shown in
+Section 2.4, we just use a normal function case that
+takes a record of functions as the pattern. Based on the
+variant label, the case function applies the corresponding function from the record to the variant value. Here
+is an example in Morrow, where we calculate the sum
+of a list of integers:
+
+varIntro :: ∀r a. a → hfrom a r i → hr i
+recIntro :: ∀r a. a → {from a r } → {r }
+We are are also investigating the use of other type operators, like zip and join, but a full discussion is beyond
+the scope of this article.
+Even though Gaster and Jones describe the to and
+from type operators, they also mention severe technical
+difficulties with unification. When unifying two rows
+to τ r and from τ 0 r 0 , the types τ and τ 0 are not related
+when r (and r 0 ) are empty. To obtain most general
+unifiers, Gaster must restrict the entire record system
+to deal with non-empty rows only [4]. This complicates
+the system greatly. For example, special has constraints
+are added to give a principal type to record selection.
+Furthermore, they lose some of the mathematical elegance as they are no longer able to express the empty
+record and variant.
+Serendipitously, we found that row equality constraints that were introduced to support principal types
+for first-class labels could also express the necessary
+type constraints for row polymorphic operations. As
+we will see during the formal development in Section 6,
+the language of rows is restricted to predicates only,
+and the above unification problem simply becomes a
+deferred predicate: to τ r ∼ from τ 0 r 0 .
+
+newtype List a = List hnil :: { },
+cons :: {hd :: a, tl :: List a}i
+sum :: List Int → Int
+sum (List xs)
+= case xs {nil = λr → 0,
+cons = λr → r .hd + sum r .tl }
+Just like Haskell, Morrow uses a newtype declaration
+to express recursive types. A newtype constructor like
+List only serves as a hint to the type inferencer and has
+no runtime representation. The pattern that we use to
+match on the list variant is just a normal record, and
+patterns become first-class polymorphic and extensible
+entities. As a result, we can express views on data types
+[30]. Here is an example of a function snoc that gives a
+reversed view on lists:
+snoc xs r = case (reverse xs) r
+last xs
+= snoc xs {nil = λr → ⊥,
+cons = λr → r .hd }
+Note that we can implement the case function very efficiently: the tag of the variant corresponds directly to
+the offset in the record! Even though patterns are first
+class, a practical system should probably add syntactic
+sugar to support nested patterns. Conventional pattern
+matching also supports default patterns; this is much
+harder to accomodate in our system as a single default
+pattern represents a family of fields [2].
+Gaster and Jones [5] describe two dual type operations, to and from, to give a principal type to row polymorphic functions such as case. These type operations
+are built into the type inferencer and are treated as keywords in the language. The to operator is recursively
+defined as:
+
+6
+
+Typing rules
+
+This section starts the formal development of our calculus. First the kinds, types and syntax are explained,
+followed by the type rules and inference. We also discuss issues as improvement, satisfiability, simplification,
+and subsumption in more detail.
+Our formal development is based fundamentally on
+the theory of qualified types [8, 9] and higher-order
+polymorphism [11]. The theory of qualified types gives
+us a general framework for constrained type inference,
+while higher-order polymorphism allows us to introduce
+rows and labels as orthogonal language features.
+
+to a (||)
+= (||)
+to a (|l :: b | r |) = (|l :: b → a | to a r |)
+
+7
+
+6.1
+
+Kinds
+
+By definition, the kind of rows r is always row. Furthermore, labels become first-class entities since type
+variables αlab are included in the set of labels. As a
+notational convenience, we write lc for constant labels
+and lα for label variables.
+When we define relations over rows, we denote syntactic label equality by using the same label name. Dually, the relation (l 6= l0 ) holds when two labels are
+syntactically unequal. We also define a relation l 6=c l0
+that only holds when two constant labels are distinct.
+
+A kind system distinguishes between different kinds of
+type constructors and ensures well-formedness of types.
+The set of kinds is defined by the following grammar:
+κ
+
+::=
+|
+|
+|
+
+∗
+row
+lab
+κ → κ0
+
+the kind of value types
+the kind of row types
+the kind of label types
+the kind of type constructors
+
+All terms have types of kind star. The row and lab kinds
+are used for row and label types and only occur at the
+type level. The arrow kind is used for type constructors
+like polymorphic lists.
+6.2
+
+l 6= l0
+
+We assume an initial set of type variables α ∈ A and
+type constants c ∈ C, and we assume that the initial set
+of type constants C includes at least:
+:::
+:::
+:::
+:::
+:::
+
+∗
+∗→∗→∗
+row → ∗
+row → ∗
+lab → ∗
+
+integers
+function space
+record constructor
+variant constructor
+label constructor
+
+(|l :: τ, l0 :: τ 0 | r|) = (|l0 :: τ 0 , l :: τ | r|)
+The membership relation (l :: τ ) ∈ r defines whether a
+particular field (l :: τ ) is an element of row r. Gaster
+[4] defines this relation as:
+
+κ
+
+For each kind κ we have a collection of constructors C
+of kind κ. The set of all constructors is given by the
+following grammar:
+C
+
+κ
+
+τ
+
+κ
+
+::=
+|
+|
+
+c
+ακ
+0
+0
+C κ →κ C κ
+
+type constants
+type variables
+type application
+
+::=
+
+C∗
+
+(mono) types
+
+l0 ∈ C
+
+In constrast to the work of Gaster and Jones [5], we
+need to define this new notion of inequality, as it is
+closed under substitution while syntactic inequality is
+not. This becomes important when proving that our
+entailment relation is closed under substitution; a necessary requirement in the theory of qualified types [8].
+We consider rows equal up to permutation of their
+fields:
+
+Types
+
+Int
+→
+{ }
+h i
+Lab
+
+l∈C
+l 6=c l0
+
+(l :: τ ) ∈ (|l :: τ | r|)
+
+(l :: τ ) ∈ r
+l 6=c l0
+(l :: τ ) ∈ (|l0 :: τ 0 | r|)
+
+Although the relation corresponds to our intuitive notion of membership, it is no longer well-defined with
+respect to row equality. For example, we can derive:
+(c :: τ ) ∈ (|c :: τ, α :: τ 0 |)
+
+The set of value types τ is simply the set of constructors of kind star. Although we explicitly annotated all
+constructors with kinds, this not necessary in practice,
+as they can be inferred from type expressions [11].
+
+but not:
+
+6.3
+
+since label unequality is not defined on label variables,
+i.e. (c 6=c α). A solution is to strengthen the membership relation such that the first property no longer
+holds. First, we define the lacks relation as:
+
+Rows
+
+Notably absent from the constructors and type constants are row expressions such as row extension; only
+row variables are part of the constructors. We will see
+later that row expressions are limited to the set of predicates in order to ensure a sound translation to qualified
+types. The set of row expressions r is defined as:
+ρ
+l
+
+::=
+::=
+|
+
+αrow
+clab
+αlab
+
+row variables
+label constants
+label variables
+
+r
+
+::=
+|
+|
+
+ρ
+(||)
+(|l :: τ | r|)
+
+row variable
+the empty row
+row extension
+
+(c :: τ ) ∈ (|α :: τ 0 , c :: τ |)
+
+l∈
+/ (||)
+
+l∈
+/r
+l 6=c l0
+0
+l∈
+/ (|l :: τ | r|)
+
+The membership relation is now strengthened by requiring that a label no longer occurs in the tail:
+l∈
+/r
+(l :: τ ) ∈ (|l :: τ | r|)
+
+(l :: τ ) ∈ r
+l 6=c l0
+(l :: τ ) ∈ (|l0 :: τ 0 | r|)
+
+A straightforward proof by induction on the rows shows
+that this relation is well-defined with respect to equality
+on rows. Furthermore, it closed under substitution.
+8
+
+The restriction relation (r −l) removes a label l from
+a row r. Just like membership, we strengthen the relation with respect to Gaster and Jones’ original definition to make it well-defined over row equality:
+(|l :: τ | r|) − l
+(|l0 :: τ | r|) − l
+
+=
+=
+
+r
+(|l0 :: τ | r − l|)
+
+if l ∈
+/r
+if l 6=c l0
+
+Gaster proves various properties of these relations [4],
+including a nice law that relates membership and restriction:
+(l :: τ ) ∈ r
+6.4
+
+⇒
+
+r = (|l :: τ | r − l|)
+
+Predicates
+
+Based on the theory of qualified types [9], we will use
+predicates to express necessary type constraints over
+row operations. A predicate π is either a lacks or a row
+equality predicate:
+π
+
+::=
+|
+
+r\l
+r ∼ r0
+
+(taut)
+
+π∈P
+P `` π
+
+(lackEmpty)
+
+P `` (||)\l
+
+(lackTail )
+
+P `` r\l
+l 6=c l0
+P `` (|l0 : τ 0 | r|)\l
+
+(eqEmpty)
+
+P `` (||) ∼ (||)
+
+(eqVar )
+
+P `` ρ ∼ ρ
+
+(eqHead )
+
+(l : τ ) ∈ s
+P `` r ∼ (s − l)
+P `` (|l : τ | r|) ∼ s
+Figure 1: Entailment
+
+induction. Furthermore, we can prove that entailment
+is well-defined with respect to row equality.
+In our calculus, row expressions are only part of the
+predicate language. This means that a practical system
+should view row expressions in types as syntactic sugar;
+indeed, we can view any row expression in a type as
+a row variable that is restricted to be equal to that
+expression:
+
+lacks predicate
+row equality predicate
+
+A lacks predicate (r\l) restricts a row r to rows that
+do not contain a label l. An equality predicate (r ∼ s)
+restricts the rows r and s to be equal (up to permutation).
+Entailment relates two finite set of predicates P and
+Q. A derivation of P `` Q is a proof that when all predicates in the finite set P hold, the predicates Q hold
+too. We can formalize lacks and row equality predicates using the entailment relation defined in Figure 1.
+We write P `` π as a shorthand for P `` {π}. The
+first three entailment rules are standard. Note how the
+rules on lacks predicates nicely correspond to our lacks
+relation defined in the previous section. The last three
+rules handle equality predicates. Rule (eqHead ) is interesting: two non-empty rows are equal if the first field
+of the first row is an element of the second, and when
+the remaining rows without this field are also equal.
+To make our calculus an instance of the theory of
+qualified types, we need to prove that the entailment
+relation is monotone, transitive, and closed under substitution.
+
+. . . {l :: a} . . . ≡ r ∼ (|l :: a|) ⇒ . . . {r} . . .
+6.5
+
+(fresh r)
+
+Qualified types
+
+We use the same structure as in the theory of qualified
+types [8] where we distinguish between qualified types ϕ
+and type schemes σ:
+ϕ
+σ
+
+::=
+::=
+
+τ |π⇒ϕ
+ϕ | ∀α.σ
+
+qualified type
+quantified type or type scheme
+
+The free type variables of a type scheme σ are written
+as ftv(σ). We overload this function on other objects in
+the obvious way. Since the order of the predicates and
+quantified type variables does not matter, we sometimes
+use the following abbreviations:
+∀α1 . . . ∀αn .ϕ
+π1 ⇒ . . . ⇒ πn ⇒ τ
+
+Theorem 1 The instance relation in Figure 1 satisfies:
+
+≡
+≡
+
+∀ α. ϕ
+π⇒τ ≡ P ⇒τ
+
+The term language of our calculus is an implicitly typed
+λ-calculus, extended with constants and let bindings:
+
+• Monotonicity: Q ⊆ P ⇒ P `` Q.
+• Transitivity: P `` Q ∧ Q `` R ⇒ P `` R.
+
+e ::= x | k | e e0 | λx.e | let x = e in e0
+
+• Closure: P `` Q ⇒ SP `` SQ, for any substitution
+S mapping type variables to type expressions.
+
+The constants k should include at least the basic record,
+variant, and label functions. Each constant k is also
+assigned an appropiate (closed) type scheme σk . An
+
+The first two properties are trivial as we use sets for
+predicates. The closure property is proved by laborious
+
+9
+
+P | A ` k : σk
+
+(const)
+
+(x : σ) ∈ A
+P |A ` x : σ
+
+(var )
+
+(→E )
+
+α 6∈ ftv(C)
+
+id
+
+C∼ C
+
+[α7→C]
+
+α ∼
+U
+
+C∼ D
+
+α 6∈ ftv(C)
+
+C
+
+C
+U
+
+[α7→C]
+
+∼
+
+α
+
+0
+
+U C 0 ∼ U D0
+U 0U
+
+C C 0 ∼ D D0
+
+P | A ` e : τ0→ τ
+P | A ` e0 : τ 0
+P | A ` e e0 : τ
+
+Figure 3: Kind preserving unification
+
+0
+
+(→I )
+
+P | A, x : τ ` e : τ
+P | A ` λx.e : τ 0 → τ
+
+(⇒E )
+
+P |A ` e : π ⇒ ϕ
+P `` π
+P |A ` e : ϕ
+
+(⇒I )
+
+P ∪ {π} | A ` e : ϕ
+P |A ` e : π ⇒ ϕ
+
+(∀E )
+
+P | A ` e : ∀α.σ
+P | A ` e : [α 7→ τ ]σ
+
+(∀I )
+
+P |A ` e : σ
+α 6∈ ftv(A) ∪ ftv(P )
+P | A ` e : ∀α.σ
+
+(let)
+
+P |A ` e : σ
+Q | Ax , x : σ ` e0 : τ
+P ∪ Q | A ` let x = e in e0 : τ
+
+7.1
+
+A substitution is an idempotent map from type variables α to constructors C, and which is the identity
+function on all but a finite set of type variables. We
+write the empty substitution as id. A substitution that
+maps a type variable α to a constructor C is written as
+[α 7→ C]. Finally, we write T S for the composition of
+substitution T with S. For the purposes of this article,
+we restrict ourselves to kind preserving substitutions
+where a type variable always maps to a constructor of
+the same kind.
+A substitution S is a unifier of two constructors C
+and C 0 when SC = SC 0 . We call a substitution S of
+two constructors C and C 0 most general when every
+unifier of these constructors can be written as T S for
+some substitution T . As types are represented by simple
+Herbrand terms, we can use standard kind-preserving
+unification [11, 4] as shown in Figure 3. The expression
+U
+τ ∼ τ 0 calculates a most general unifier U for types τ
+and τ 0 .
+
+Figure 2: Typing rules
+assumption A is a finite set of type assignments x : σ
+in which no term variable x occurs more than once.
+A ::= {x1 : σ1 , . . . , xn : σn }
+
+Theorem 2 The unification algorithm in Figure 3 returns a most general unifier when it exists. It fails precisely when no such unifier exists.
+
+Typothesis
+
+A proof of this result is given by Robinson [23]. With
+the given unification algorithm, we can directly use the
+type inference algoritm for qualified types [9] as a type
+inference algorithm for our calculus. For completeness,
+we include the inference algorithm in Figure 4. The type
+inference rules are interpreted as an attribute grammar
+w
+where each judgement of the form P | S | A ` e : τ is a
+semantic rule where the assumption A and expression
+e are inherited, while the predicates P , substitution S,
+and the type τ are synthesized.
+The (let w ) rule uses a generalization function to
+quantify a qualified type. The generalization function
+quantifies over all free variables that are not present in
+the assumption:
+
+We write Ax to denote an assumption A where the
+type assignment for x is removed. We also abbreviate A ∪ {x : σ} as A, x : σ. Figure 2 shows the standard
+typing rules for the theory of qualified types extended
+with the typing rule for constants. A typing judgement
+P | A ` e : σ asserts that expression e has type σ when
+the predicates P are satisfied and the types of the free
+variables are given by the assumption A.
+7
+
+Substitution and unification
+
+Type inference
+
+This section discusses the standard inference algorithm
+by Jones [8] that calculates principal types with respect
+to the typing rules of the previous section. Before showing the algorithm, we first look at substitution and unification.
+
+gen(A, ϕ) = ∀ α.ϕ
+
+where α = ftv(ϕ) − ftv(A)
+
+Jones proves that the given algorithm is both sound and
+complete with respect to the typing rules in Figure 2 [8].
+Theorem 3 The algorithm in Figure 4 calculates a
+10
+
+w
+
+(var )
+
+w
+
+P |S |A ` e : τ
+(→E w )
+
+to ∀s l a. (s\l , r ∼ (l :: a | s)) ⇒ Lab l → a, where r is
+a monomorphic (scoped) type variable.
+The second technical problem arises during unification. With constant labels, we can always find a single
+most general unifier between two rows (if it exists). This
+makes it possible to extend Robinson unification with
+row unification. However, with first-class labels there
+can be many general unifiers. For example:
+
+(x : ∀α.P ⇒ τ ) ∈ A
+fresh( β)
+S = [ α 7→ β]
+w
+SP | ² | A ` x : Sτ
+w
+
+Q | T | SA ` e0 : τ 0
+
+U
+
+Tτ ∼ τ0 → α
+fresh(α)
+w
+U (T P ∪ Q) | U T S | A ` e e0 : U α
+w
+
+(→I w )
+
+(|α :: Int | β|) ∼ (|x :: Int, y :: Int|)
+
+P | S | (Ax , x : α) ` e : τ
+fresh(α)
+w
+P | S | A ` λx.e : Sα → τ
+
+For this expression, there are two unifiers that can not
+be written in terms of each other, namely:
+
+w
+
+(let w )
+
+P |S |A ` e : τ
+σ = gen(SA, P ⇒ τ )
+w
+Q | T | SAx , x : σ ` e0 : τ 0
+w
+Q | T S | A ` let x = e in e0 : τ 0
+
+[α 7→ x, β 7→ (|y :: Int|)] and [α 7→ y, β 7→ (|x :: Int|)]
+The lack of unique most general unifiers has profound
+implications with respect to efficient algorithms for simplifying predicates, and we discuss the unification of
+rows in more detail in the next section.
+
+Figure 4: Type inference algorithm W
+principal type for a given expression e and assumption
+A. It fails precisely when no type exists for e under the
+assumption A.
+7.2
+
+8
+
+Simplification and improvement
+
+By restricting row expressions to predicates, we have
+nicely sidestepped the problem of row unification in
+our calculus. Furthermore, we can use the standard
+inference algorithm for qualified types to infer principal types. Unfortunately, while technically correct, the
+principal types do not take account of satisfiability of
+predicates. As a result, the inferred types are not always as accurate or simple as we may expect. Jones
+describes a refined inference algorithm that takes satisfiability into account [10]. The new algorithm adds two
+new rules: one for simplification and one for improvement of predicates.
+
+Rows as predicates
+
+We made rows part of the predicate language and use
+standard Robinson unification to unify types. This
+means that we have deviated quite a bit from the extensible records of Gaster and Jones. In their system,
+row operations are part of the type language and the
+unification algorithm is extended to deal with row unification. There are two important technical problems
+with this approach in the presence of first-class labels.
+First of all, we would lose completeness of type inference when row extension is structural (i.e. part of
+the type language). Take for example the following definition:
+
+8.1
+
+Simplification
+
+Simplification allows us to replace a set of predicates in
+a type by another set of equivalent predicates. This can
+be used for example to discharge constant predicates.
+For example, the predicate (|x :: Int | r |)\y, can be simplified to the equivalent predicate r\y, when x 6=c y.
+We write P ⇔ Q when P and Q entail each other, i.e.
+P `` Q and Q `` P . The simplification rule is:
+
+f :: ∀r s ab. (s\x , s\y, r ∼ (|x :: a, y :: b | s |))
+⇒ {r } → (a, b)
+f r = let select l = r .l in (select @x , select @y)
+If row extension was part of the type language, the type
+of f could not be inferred. When inferring the type of
+r .l , the record r would unify with {l :: a | s}. When
+generalizing the type of the body of select, namely
+Lab l → a, the type variables l and a are free in the type
+assignment for r in the assumption A. This would prevent generalization of l and a, making select monomorphic in the label argument, which eventually leads to
+rejection of this example.
+In our calculus, the row extension is part of the language of predicates. The expression r .l would not unify
+r with a row, but add a predicate r ∼ (|l :: a | s |) instead. The type of select can now generalize properly
+
+w
+
+P |S |A ` e : τ
+P ⇔Q
+w
+Q|S |A ` e : τ
+The addition of this rule makes the algorithm nondeterministic, but the algorithm is sound as the inferred
+types are equivalent [10]. In practice, we apply this rule
+at generalisation. The rule is also used to detect type
+errors: during simplification, we can detect unsatisfiable
+constraints and emit an appropriate error message.
+11
+
+The algorithm for simplication in Morrow simplifies
+constraints according to the entailment rules in Figure 1. Full simplification of lacks constraints leads to
+constant evidence, while partial simplification of lacks
+constraints introduces a coercion term that possibly increases the passed evidence.
+
+{id}
+
+(||) ∼ (||)
+
+ρ 6∈ ftv(r)
+ρ
+
+{[ρ7→r]}
+
+∼
+
+r
+
+ρ 6∈ ftv(r)
+r
+
+{[ρ7→r]}
+
+∼
+
+ρ
+
+Θ
+
+(l : τ ) ∈ s
+Θ0
+
+Θ00 = {θ0 θ | θ ∈Θ, θr ∼ θs − θl, θ0 ∈Θ0 }
+Θ00
+
+8.2
+
+(|l : τ | r|) ∼ s
+
+Improvement
+
+The improvement rule allows us to apply a substitution
+to the predicates, as long as the substitution does not
+change the satisfiable instances of a type. For example,
+the expression {x = 2}.x has the following principal
+type:
+
+Figure 5: Row unifiers
+
+(insVar )
+
+fresh(β)
+α∈
+/ ftv(τ )
+θ = [α 7→ (|l :: τ | β|)]
+{θ}
+
+(l :: τ ) ∈ α
+
+∀rsa. (s\x, r ∼ (|x :: Int|), r ∼ (|x :: a | s|)) ⇒ a
+Although correct, in a practical system we would rather
+infer the principal satisfiable type. If we would unify
+the rows, we find an improving substitution, namely
+[a 7→ Int, s 7→ (||), r 7→ (|x :: Int|)]. When we apply
+this substitution and use simplification, we get the (expected) principal satisfiable type: Int.
+We write bP cP0 for the set of satisfiable instances of
+a predicate set P with respect to an initial predicate set
+P0 . It is defined as:
+
+Θ0
+
+Θ
+
+(insHead )
+
+(l : τ ) ∼ (l0 : τ 0 )
+(l :: τ )
+
+Θ ∪ Θ0
+
+∈
+
+(l :: τ ) ∈ r
+(|l0 : τ 0 | r|)
+
+Figure 6: Inserters
+8.3
+
+Row unification
+
+Improvement in Morrow depends essentially on row unification. As shown before, rows with label variables do
+not possess a most general unifier. We define a unification algorithm between rows that derives a set of most
+general unifiers. Of course, these unifiers are not ‘most
+general’ in the usual sense, but only most general for a
+fixed permutation of row fields.
+Figure 5 shows the unification algorithm for rows.
+Θ
+The expression r ∼ r0 finds the set Θ of most general
+unifiers between two rows r and r0 . Single substitutions
+are written as θ. Instead of failing when no rule applies,
+we assume that row unification returns the empty set
+∅ when no unification can be found. The first three
+unification rules are standard. The last rule finds all
+inserters of a field in a row, and returns the cartesian
+product of the unifiers of the inserters with the unifiers
+of the row tails.
+The algorithm for finding inserters is defined in Figure 6 and uses the field unification algorithm shown in
+Figure 7. The rule (insVar ) is standard. The rule (insHead ) takes the union between the unifiers of the head
+field and the inserters of the tail. Note that field unification returns either a singleton set or an empty set of
+unifiers.
+Using the unification of rows, we can now define an
+improving function. Figure 8 defines an improving
+function impr(P ) that returns an improving substitution θ for the predicates P . We write P ∼ for the predicates P restricted to equality predicates, and P \ for the
+restriction to lacks predicates. The function unis re-
+
+bP cP0 = {SP | S ∈ Subst, P0 `` SP }
+For the purposes of this article, the initial predicate
+set P0 is empty, and we will not write the subscript
+explicitly. We say that a substitution S improves P if
+bP c = bSP c, and when the free variables in S that do
+not appear in P are ‘fresh’. The inference algorithm is
+extended with the following improvement rule:
+w
+
+P |S |A ` e : τ
+T improves P
+w
+TP |TS |TA ` e : Tτ
+Jones proves that the inference algorithm is still sound
+and complete when the simplification and improvement
+rules are added [10]. However, the completeness of the
+algorithm with respect to the typing rules is now defined
+in terms of principal satisfiable types. The inference
+algorithm will not always find the most general type of
+an expression, but it will find a most general type that
+has satisfiable instances (if it exists).
+Note that it is not a requirement to find optimal improvements, even though it is desirable in practice. This
+provides us with a flexible design space for exploring efficient algorithms for improving row equality predicates.
+We parameterize our inference algorithm with an improving function impr such that impr(P ) improves P
+for any predicate set P . A trivial instance always returns the identity substitution, impr(P ) = id. In the
+next subsection, we discuss a more sophisticated algorithm that is used by Morrow and that finds nearly
+optimal improvements.
+12
+
+equality predicates. Unfortunately, the algorithm is also
+exponential in the number of polymorphic labels! This
+should not come as a surprise: Sulzmann shows that
+even for an weaker system of first-class labels, satisfiability is NP-complete [29]. The worst case of our
+algorithm is formed by a row of n polymorphic labels
+with polymorphic types that is unified with a row of
+constant labels. Each of the n polymorphic labels can
+unify with any of the n constant labels, and we find n!
+total unifiers.
+However, we feel that there are some mitigating factors. First of all, even though it is desirable to find
+‘optimal’ improvements, this is not a requirement of
+the calculus. A practical implementation could resort
+to a more naı̈ve improvement algorithm if the optimal
+one takes too long. Secondly, in practice, the algorithm
+can be made more efficient by doing unambigious insertions first. Morrow first transforms all the equality
+predicates to inserters and performs substitutions until
+there are no more unambigious choices, before resorting
+to a brute-force enumeration of unifiers. Finally, just
+like in normal Hindley-Milner type inference, practical
+experience shows that the worst case does not seem to
+appear in normal programs. Even when it occurs, the
+number of labels tends to be low enough to be able to
+solve the improvement fast. However, experience with
+larger programs is necessary to validate this claim.
+
+θ
+
+τ ∼ τ0
+
+(fieldEq)
+
+{θ}
+
+(l : τ ) ∼ (l : τ 0 )
+θ = [α 7→ l]
+
+(fieldR)
+
+θ0
+
+θτ ∼ θτ 0
+
+{θ0 θ}
+
+(l : τ ) ∼ (α : τ 0 )
+θ = [α 7→ l]
+
+(fieldL)
+
+θ0
+
+θτ ∼ θτ 0
+
+{θ0 θ}
+
+(α : τ ) ∼ (l : τ 0 )
+
+Figure 7: Field unification
+
+(impr )
+
+unis(P ∼ ) = Θ
+single({θ | θ ∈ Θ, P0 `` θP \ }) = θ0
+impr(P ) = θ0
+
+(unis1 )
+
+unis(∅) = {id}
+
+(unis2 )
+
+r ∼ r0
+Θ = {θ θ | θ ∈Θ, unis(θP ) = Θ0 , θ0 ∈Θ0 }
+unis({r ∼ r0 } ∪ P ) = Θ00
+
+Θ
+
+00
+
+0
+
+Figure 8: Improvement
+turns the cartesian product of row equality unifications.
+In the rule (impr ), the set of all row equality unifiers
+Θ is further restricted to those unifiers that satisfy the
+lacks constraints.
+The function single reduces the resulting set of unifiers to a single improving substitution. When the
+unifier set is empty, the predicates are not satisfiable
+and an error message is emitted. When the unifier set
+consists of a single unifier, we can unambigiously improve the predicate set. A possible definition of single
+therefore only succeeds when the choice is unambigious;
+single({θ}) = θ.
+If more than one unifier is returned, there may still
+be improving substitutions. In Morrow, we calculate
+the greatest common unifier of all the substitutions:
+single(Θ) = gcu(Θ). In order to calculate the greatest common unifier efficiently, we need to be careful to
+construct only normalized substitutions during unification. For example, we take the order on type variables
+into account to only produce variable substitutions of
+the form [α 7→ β] instead of [β 7→ α]; However, a full
+discussion is beyond the scope of this paper.
+8.4
+
+9
+
+Related work
+
+Subtyping is one of the earliest approaches to record
+type systems [1, 20]. Predicates include a subtype relation on rows, such that a row r is a subrow of r0 if r
+includes all fields of row r0 . The type of selection is:
+∀r a. (r ⩽ {l :: a}) ⇒ r → a
+Unfortunately, with this approach information about
+the other fields of a row is lost, which makes it hard
+to describe operations like row extension. Cardelli and
+Mitchell [1] especially introduce an overriding operator
+on types to overcome this problem. Wand [31, 32] was
+the first to introduce row variables to capture row subtyping explicitly through parametric polymorphism. In
+his system, the type of selection is:
+∀r a. {l :: a | r } → a
+The calculus does not impose constraints on record extension though, and as a result, not all programs have
+a principal type [31]. Remy [21] extended the work of
+Wand with constrained record operations. His calculus
+contains flags that denote the presence or absence of
+certain fields. The type of selection becomes:
+
+Complexity of improvement
+
+The previous section developed an algorithm to calculate improving substitutions in the presence of row
+
+∀r a. {l :: pre(a) | r } → a
+
+13
+
+The system of Remy does not lead directly to an efficient or simple compilation method though. Ohori [18]
+was the first to present a polymorphic record system
+that had a simple and efficient compilation scheme, but
+it can not handle extensible row operations.
+Gaster and Jones [5, 4] presented a polymorphic
+type system for extensible records and variants that was
+based on the theory of qualified types [8, 9]. This system has a simple and efficient compilation method and
+is implemented as the TREX extension to Hugs.
+Type rules for record concatenation have been proposed too [7, 32], where Sulzmann presents an effective
+type inference method [27]. However, no efficient compilation method for concatenation has been published.
+
+10
+
+Conclusion
+
+We have described a sound and complete system of
+polymorphic extensible records and variants with firstclass labels. We have shown how first-class labels increase expressiveness significantly, and are able to express intersection types, closed-world overloading, and
+type selective functions. The type inference algorithm
+is fully implemented in Morrow [12], including discussed
+extensions such as row polymorphic operations.
+In the future, we expect to try the inferencer on
+larger programs. In particular, we would like to investigate the use of higher-rank types to express first-class
+modulesand we would like to experiment with first-class
+patterns to encode views [30].
+
+First-class labels
+Acknowledgements
+
+Gaster describes first-class labels in his thesis [4] but
+does not introduce predicates beyond lacks predicates.
+As a result, not all programs can be assigned a (principal) type. Sulzmann [29, 28] introduces first-class labels as an instance of HM(X) [17] and his system enjoys
+principal types as it uses has constraints (instead of just
+lacks constraints). Unfortunately, it is not obvious how
+to extend this system with polymorphic row extension,
+as it would prevent resolution of equality predicates [29].
+This is one of the main reasons to base our work on
+the more general theory of qualified types [9] instead,
+which gives us a flexible design space with respect to
+improvement of equality predicates. Another reason is
+that a system based on HM(X) has no general compilation method, whereas we can use standard evidence
+translation.
+Shields and Meijer introduce an extremely expressive row calculus, called λtir , where types themselves are
+used as indices in the rows [25, 24]. The λtir calculus
+is strictly more general than our system; our calculus
+can be encoded in λtir using opaque newtypes to express first-class labels. However, to avoid the exponential behaviour of our improvement algorithm, λtir uses a
+restricted polynomial improvement algorithm. Due to
+the lack of labels, this is more or less essential for λtir as
+there are much more ambigious unifications in practical
+programs. As a result of restricted improvement, λtir
+can not always infer that a given type signature entails
+an inferred type.
+Our work is strongly motivated by λtir , where we
+wanted to develop a simpler calculus based on the theory of qualified types. By using explicit labels that are
+not part of the type language, we explored a useful alternative point in the design space, where we can express many of the motivating examples of λtir while using standard theory.
+
+I would like to thank Bastiaan Heeren, Mark Shields,
+and Frank Atanassow for their valuable comments on
+the draft paper. Furthermore, I thank Andres Löh, Erik
+Meijer, Martijn Schrage, and Arjan van IJzendoorn for
+their remarks and interesting discussions about the design of Morrow.
+References
+[1] L. Cardelli and J. Mitchell. Operations on records.
+Journal of Mathematical Structures in Computer
+Science, 1(1):3–48, Mar. 1991.
+[2] J. Garrigue. Typing deep pattern-matching in presence of polymorphic variants. In Proceedings of the
+JSSST Workshop on Programming and Programming Languages, Mar. 2004.
+[3] J. Garrigue and H. Aı̈t-Kaci. The typed polymorphic label selective calculus. In 21th ACM
+Symp. on Principles of Programming Languages
+(POPL’94), pages 35–47, Portland, OR, Jan. 1994.
+[4] B. R. Gaster. Records, Variants, and Qualified
+Types. PhD thesis, Dept. of Computer Science,
+University of Nottingham, July 1998.
+[5] B. R. Gaster and M. P. Jones. A polymorphic type
+system for extensible records and variants. Technical Report NOTTCS-TR-96-3, Dept. of Computer
+Science, University of Nottingham, 1996.
+[6] T. Gilliam and T. Jones. Monty Python and the
+Holy Grail. By G. Chapman and J. Cleese, 1975.
+[7] R. Harper and B. C. Pierce. A record calculus
+based on symmetric concatenation. In 18th ACM
+Symp. on Principles of Programming Languages
+(POPL’91), pages 131–142, Jan. 1991.
+14
+
+[8] M. P. Jones. A theory of qualified types. In 4th. European Symposium on Programming (ESOP’92),
+volume 582 of Lecture Notes in Computer Science,
+pages 287–306. Springer-Verlag, Feb. 1992.
+
+[21] D. Rémy. Type inference for records in a natural extension of ML. In C. A. Gunter and
+J. C. Mitchell, editors, Theoretical Aspects Of
+Object-Oriented Programming. Types, Semantics
+and Language Design. MIT Press, 1993.
+
+[9] M. P. Jones. Qualified types in Theory and Practice. Distinguished Dissertations in Computer Science. Cambridge University Press, 1994.
+
+[22] J. C. Reynolds. Design of the programming language Forsythe. In P. O’Hearn and R. Tennent,
+editors, ALGOL-like languages, pages 173–233.
+Birkhäuser, 1997.
+
+[10] M. P. Jones. Simplifying and improving qualified
+types. Technical Report YALEU/DCS/RR-1040,
+Dept. of Computer Science, Yale University, 1994.
+
+[23] J. A. Robinson. A machine-oriented logic based
+on the resolution principle. Journal of the ACM,
+12(1):23–41, Jan. 1965.
+
+[11] M. P. Jones. A system of constructor classes: overloading and implicit higher-order polymorphism.
+Journal of Functional Programming, 5(1):1–35,
+Jan. 1995.
+
+[24] M. Shields. Static Types for Dynamic Documents.
+PhD thesis, Oregon Graduate Institute, Feb. 2001.
+
+[12] D. Leijen. Morrow: a row-oriented programming
+language. http://www.cs.uu.nl/∼daan/morrow.
+html, July 2004.
+
+[25] M. Shields and E. Meijer. Type indexed rows.
+In 28th Annual ACM SIGPLAN-SIGACT Symposium on Principles of Programming Languages,
+pages 261–275, London, England, Jan. 2001.
+
+[13] D. Leijen and E. Meijer. Domain specific embedded compilers. In 2nd USENIX Conference on Domain Specific Languages (DSL’99), pages 109–122,
+Austin, Texas, Oct. 1999. Also appeared in ACM
+SIGPLAN Notices 35, 1, (Jan. 2000).
+
+[26] P. Shroff and S. F. Smith. Type inference for firstclass messages with match-functions. In Foundations of Object-Oriented Languages, Jan. 2004.
+[27] M. Sulzmann. Designing record systems. Technical Report YALEU/DCS/RR-1128, Dept. of Computer Science, Yale University, Apr. 1997.
+
+[14] J. Lewis, M. Shields, E. Meijer, and J. Launchbury.
+Implicit parameters: dynamic scoping with static
+types. In 27th ACM Symp. on Principles of Programming Languages (POPL’00), pages 108–118,
+Boston, Massachussets, Jan. 2000.
+
+[28] M. Sulzmann. Type systems for records revisited.
+Unpublished report, June 1998.
+
+[15] M. Müller and S. Nishimura. Type inference for
+first-class messages with feature constraints. International Journal of Foundations of Computer
+Science, 11(1):29– 63, 2000.
+
+[29] M. Sulzmann. A General Framework for Hindley/Milner Type Systems with Constraints. PhD
+thesis, Dept. of Computer Science, Yale University,
+May 2000.
+
+[16] S. Nishimura. Static typing for dynamic messages.
+In 25th ACM Symp. on Principles of Programming
+Languages (POPL’98), pages 266–278, 1998.
+
+[30] P. Wadler. Views: a way for pattern matching
+to cohabit with data abstraction. In 14th ACM
+Symp. on Principles of Programming Languages
+(POPL’87), pages 307–313. ACM Press, 1987.
+
+[17] M. Odersky, M. Sulzmann, and M. Wehr. Type inference with constrained types. Theory and Practice of Object Systems, 5(1):35–55, 1999.
+
+[31] M. Wand. Complete type inference for simple objects. In Proceedings of the 2nd. IEEE Symposium
+on Logic in Computer Science, pages 37–44, 1987.
+Corrigendum in LICS’88, page 132.
+
+[18] A. Ohori. A polymorphic record calculus and its
+compilation. ACM Transactions on Programming
+Languages and Systems, 17(6):844–895, 1995.
+
+[32] M. Wand. Type inference for record concatenation
+and multiple inheritance. Information and Computation, 93:1–15, 1991.
+
+[19] B. C. Pierce. Intersection types and bounded polymorphism. Mathematical Structures in Computer
+Science, 7(2):129–193, Apr. 1997.
+[20] B. C. Pierce and D. N. Turner. Simple type theoretic foundations for object-oriented programming.
+Journal of Functional Programming, 4(2):207–247,
+Apr. 1994.
+15
+
+

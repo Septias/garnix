@@ -1,0 +1,3342 @@
+Typing Records, Maps, and Structs
+GIUSEPPE CASTAGNA, CNRS, Université Paris Cité, France
+Records are finite functions from keys to values. In this work we focus on two main distinct usages of
+records: structs and maps. The former associate different keys to values of different types, they are accessed
+by providing nominal keys, and trying to access a non-existent key yields an error. The latter associate all
+keys to values of the same type, they are accessed by providing expressions that compute a key, and trying
+to access a non-existent key usually yields some default value such as null or nil. Here, we propose a type
+theory that covers both kinds of usage, where record types may associate to different types either single keys
+(as for structs) or sets of keys (as for maps) and where the same record expression can be accessed and used
+both in the struct-like style and in the map-like style we just described. Since we target dynamically-typed
+languages our type theory includes union and intersection types, characterized by a subtyping relation. We
+define the subtyping relation for our record types via a semantic interpretation and derive the decomposition
+rules to decide it, define a backtracking-free subtyping algorithm that we prove to be correct, and provide a
+canonical representation for record types that is used to define various type operators needed to type record
+operations such as selection, concatenation, and field deletion.
+CCS Concepts: • Theory of computation → Type structures; Program analysis; • Software and its engineering → Functional languages.
+Additional Key Words and Phrases: dictionaries, subtyping, union types, intersection types, dynamic languages.
+ACM Reference Format:
+Giuseppe Castagna. 2023. Typing Records, Maps, and Structs. Proc. ACM Program. Lang. 7, ICFP, Article 196
+(August 2023), 45 pages. https://doi.org/10.1145/3607838
+
+1
+
+INTRODUCTION
+
+In 1965, C.A.R. Hoare proposed in a series of papers on “record handling” an extension for a general
+purpose language, there supposed to be ALGOL 60, to manipulate an arbitrary number of records
+each belonging to a limited number of record classes [Hoare 1965, 1966a,b]. Not only the proposal
+was rapidly adopted by ALGOL, but Dahl and Nygaard also adapted it for their language, Simula I,
+yielding the concepts of objects and classes (Simula 67). Ever since then, records have become the
+Swiss Army knife data structure of modern computer languages. They are used for a wide palette of
+purposes such as relations (as in relational databases), maps (a.k.a., associative arrays, dictionaries,
+hashes, lookup tables), modules, objects, configuration files, data serialization. JSON, the de facto
+standard format for data-interchange, is a language formed essentially of records and lists thereof.
+The same holds true for YAML, a different data serialization format used for configuration files.
+In general terms, record values are sets of key and value pairs in which all keys are pairwise
+distinct and are used to access the values they are paired with. In this work, we focus on two
+main distinct usages of records: structs and maps. In a nutshell, the former associate different keys
+to values of different types, they are accessed by providing nominal keys, and trying to access a
+non-existent key yields an error; the latter associate all keys to values of the same type, they are
+accessed by providing expressions that compute a key, and trying to access a non-existent key
+usually yields some default value such as null or nil. More generally, the main differences from a
+
+This work is licensed under a Creative Commons Attribution 4.0 International License.
+© 2023 Copyright held by the owner/author(s).
+2475-1421/2023/8-ART196
+https://doi.org/10.1145/3607838
+
+Proc. ACM Program. Lang., Vol. 7, No. ICFP, Article 196. Publication date: August 2023.
+
+196
+
+196:2
+
+Giuseppe Castagna
+
+programming language point of view can be summarized as follows (though exceptions apply in
+each case):
+Maps:
+- All keys of a single map have the same type and so do the values they are mapped to.
+- It is not necessary to know all the keys at compile time: they can be dynamically discovered.
+- It is sensible to give a default value.
+- Keys may be indexed: it is possible to iterate over them.
+- Keys are values: keys used for map selection can be results of expressions.
+- Accessing a key that is not defined does not yield an error
+- Maps are (often) mutable data structures with mutable components.
+Structs:
+- Different keys in the same structure can be mapped to values of different types.
+- Keys may be restricted to a specific set (e.g., strings, atoms, identifiers, ...).
+- It is necessary to know all the different keys at compile time.
+- Keys do not support indexing.
+- Keys are not necessarily values, they may form a separate set of names.
+- Accessing a key that is not defined yields an error.
+- Structs are (often) immutable data-structures but may have mutable components.
+Besides these linguistic differences, maps and structs may have different implementations, typically,
+hashes or search trees for maps; arrays or contiguous locations for structs.1
+When both are available, the choice to use one or the other depends on the nature of the
+application; in some cases, even for the same application both choices may reasonably apply, and
+the final choice depends on the amount of information that is available about the data to process:
+for instance, to parse JSON we want to use structs if we know the field name and data type of each
+JSON element, while for parsing unknown JSON data we should definitively use maps.
+In some languages, the type used for keys is different between structs and maps (e.g., in Elixir
+[Elixir] struct keys must be atoms—cf. Footnote 7, page 14—, while map keys can be any value, even
+functions; differently, in Hive [Hive] struct keys are not values—just names—, while map keys are
+values of primitive types). Sometimes, a different terminology is used, so the identifiers for fields in
+a struct are usually called “labels”, “field names”, “attribute names”, while for maps the word “key”
+is prevalent. We will use both “labels” and “keys”, privileging the latter when speaking of maps.
+Some languages do not make any syntactic distinction for defining maps and structs (e.g.,
+Lua [Lua], Ballerina [Ballerina]), in other languages they are distinct but tightly related (e.g., in
+Elixir, structs are wrappers around maps providing them with further capabilities), others make
+them completely disjoint (e.g., Go Language [Go], Erlang [Erlang], Swift [Swift]); in the last case
+there is a wealth of blog posts and tutorials about when to use one rather than the other. Many
+languages do not provide them as primitive data types, but rather as libraries or specific classes, in
+which case they lack specific types for them (e.g., Ruby [Ruby] and Scala [Scala] provide classes
+for both structs and maps, F# [F#], JavaScript, Julia [Julia], OCaml [OCaml], and Rust [Rust]
+have primitive objects/records/structs and libraries/classes for maps, while Python and Perl have
+primitive maps/dictionaries/hashes and records/structs are provided by external libraries/classes).
+While it is sensible to have different implementations for maps and structs, it is less justified to
+have different types for them, especially in languages in which the two data structures share the
+same or similar syntax for expressions and the same set of operations (as a matter of fact, both
+are finite functions from keys to values). This is the case for some object-oriented languages in
+1 Typically but not necessarily: for instance, Erlang makes this distinction already for maps according to whether they have
+
+more or less than 32 fields, hashes in the former case and contiguous locations in the latter.
+
+Proc. ACM Program. Lang., Vol. 7, No. ICFP, Article 196. Publication date: August 2023.
+
+Typing Records, Maps, and Structs
+
+196:3
+
+which maps have all the same interface typing different implementations (e.g., in Java); a language
+like Ballerina permits to specify in a record type a default type for unspecified fields (thus mixing
+structs and maps characteristics) while Erlang’s and Elixir’s Typespecs permit mixing in the same
+record type the type specification of single fields (as in structs) and of mappings from key types to
+value types (as in maps) [Elixir; Erlang]. The latter case is the inspiration of our work.
+In this article, we argue that a single (syntactic) representation for both struct and maps is
+possible, and that it can be typed by a unique type constructor that covers both cases. In this case,
+we will speak generically of “record expressions” (or just “records”) as sets of associations between
+keys and values. The corresponding “record types” will be sets of associations from “key-types”
+to types, each key-type being either a single key (as in the types for struct) or a set of keys (as
+in the types for maps). What distinguishes records used as maps from records used as structs is
+the way they are accessed. We distinguish two kinds of accesses: map-like access and struct-like
+access. When using records as maps, it must be possible to compute the key to access a field (i.e.,
+to obtain keys as the result of an expression) and trying to access a key that is not present in the
+record should not produce a run-time error. When using records as structs, fields are accessed
+directly by the nominal key and trying to access a key that is not present in the struct yields an
+error (preferably, a statically-detected one). Of course, it will be possible to use both kinds of access
+on a same record: the different semantics will be reflected by different typing rules for the access
+expressions. Some languages already make this distinction for accesses: for instance in Elixir (but it
+is the same syntax as in JavaScript and in Ballerina) if r is a record expression, key is a nominal
+key, and keyexp an expression that computes a key, then r.key raises an exception if a field with
+key key is not present in the result of r (i.e., struct-like access), while r [keyexp] returns nil if
+the key resulting from keyexp is not present in (the result of) r (i.e., map-like access). Likewise,
+Scala uses the syntax r (key) for struct-like access and r get keyexp for map-like access; however
+Scala also permits the use of generic expressions in the former—as in r (keyexp)—while Elixir has a
+specific access function for this case—i.e., fetch!(r ,keyexp) (cf. Section 4.5).
+Contributions. Per se, defining a type system that encompasses both structs and maps does
+not look like an insurmountable task, and certainly it is not so hard to do it for languages with
+simple or no subtyping relation. The challenge here is that we aim at defining types for dynamic
+languages such as JavaScript, Erlang, or Elixir. As all current attempts demonstrate (e.g., Flow,
+TypeScript, Hack, . . . ) this requires types that include union and intersection type connectives,
+which imply the presence of a sophisticated subtyping relation. Thus, the real challenge we tackle
+here is to define a type system with union, intersection, and record (i.e., struct+map) types. This
+means to show how to define and efficiently decide the subtyping relation for these types, and how
+to type record operations for expressions whose types may be arbitrary combinations of unions
+and intersections of record types. In particular, our technical contributions can be summarized as
+follows: we introduce record types that cover both struct-like and maps-like usages (Section 4);
+we define a new family of functions that we call “quasi K-step functions” (Definition 4.6); we
+define the subtyping relation of our record types by interpreting them as sets of quasi K-step
+functions (Formula (21)), derive from this interpretation the decomposition rules to be used to
+decide the subtyping relation, and prove it correct (Lemma 4.7); we define a backtracking-free
+subtyping algorithm Φ for different variations of our record types (formulas (17–19), and (22)) and
+prove it correct (Theorem 4.5); we introduce and formalize different operations on records such
+as map/struct field selection, record concatenation, and map/struct field deletion and provide a
+canonical representation for record types which is used to define various type operators needed to
+type these record operations (Sections 4.2 and 4.4). Finally, we also study how to extend this theory
+to account for mutation since, in modern languages, records are often also mutable structures, in
+Proc. ACM Program. Lang., Vol. 7, No. ICFP, Article 196. Publication date: August 2023.
+
+196:4
+
+Giuseppe Castagna
+
+which fields can be added removed, and modified; for space reasons this extension is not presented
+in the main text, but the motivated reader will find its presentation in Appendix F.
+We want to conclude this discussion on our contributions, by stressing that we think that the
+interest of this work is less in defining a catch-them-all theory for the different usage of records,
+than in developing some general implementation guidelines that, with minimal adaptions, can
+capture all the aspects outlined above. This is not just a theoretical challenge: at the moment
+of writing the very implementation techniques introduced here are being experimented by the
+development teams of Elixir and Ballerina languages to be included in their compilers.
+Outline. Section 2 gives the background for our presentation—i.e., semantic subtyping [Frisch
+et al. 2008] and the theory of quasi-constant functions [Frisch 2004]—and covers relevant related
+work. Section 3 introduces a simple record calculus where records are typed as structs. Section 4 is
+the core of our contribution: we extend the expressions and types of the previous calculus to deal
+with generic maps; we give a representation of record types as unions of some specific record type
+atoms (§4.1) and use this representation to define type operators used to type various record operations, namely, map and struct selection, map and struct deletion, and record concatenation (§4.2); we
+use the representation to prove the correctness of a backtracking-free subtyping algorithm (§4.3);
+we refine the theory to allow record types to specify maps from specific sets of keys, which in
+particular requires generalizing quasi-constant functions to quasi K-step functions together with the
+corresponding decomposition rule (§4.4); finally, we discuss our design choices and several possible
+variations of the features presented (§4.5). Section 5 discusses related work. Section 6 concludes
+the presentation by a more detailed analysis of the contributions of this work and by describing
+current and future work on the subject. This work includes an appendix containing material that,
+for space constraints, could not be presented in the main text, namely, extra definitions, several
+proofs, and the extension of the theory to account for mutatable data structures (the appendix is
+available on the ACM Digital Library in supplemental material section).
+2
+
+BACKGROUND
+
+In this section we outline the two pillars on which our record system is built. The first is semantic
+subtyping [Frisch et al. 2008], a technique to endow set-theoretic type connectives in a type system.
+The second is the theory of quasi-constant functions [Frisch 2004] that we use to give semantics to
+record expressions and types. The reader can refer to the cited works for more details.
+2.1
+
+Semantic subtyping
+
+Semantic subtyping [Frisch et al. 2002, 2008], [Castagna and Frisch 2005] is a technique to add
+union, intersection, and negation type connectives to a type system so that the types satisfy all
+the commutative and distributive laws we expect from their set-theoretic interpretation. It is a
+general approach on which records types are grafted in next section. The key of the approach is the
+subtyping relation which is defined by giving an interpretation J·K of types as sets and then defining
+𝑡 1 ≤ 𝑡 2 as the inclusion of the interpretations, that is, 𝑡 1 ≤ 𝑡 2 def
+= J𝑡 1 K ⊆ J𝑡 2 K. Intuitively, we can see
+J𝑡K as the set of values that inhabit the type 𝑡 in the language. By interpreting union, intersection,
+and negation as the corresponding operations on sets and by giving appropriate interpretations to
+the other constructors, we ensure that subtyping will satisfy all expected laws.
+2.1.1 Types. Formally, we proceed as follows. We first fix two countable sets: a set C of language
+constants (ranged over by 𝑐) and a set B of basic types (ranged over by 𝑏). For example, we can take
+constants to be Boolean values and integers: C = {true, false, 0, 1, -1, . . . }. B might then contain
+Bool and Int; however, we also assume that, for every constant 𝑐, there is a “singleton” basic type
+Proc. ACM Program. Lang., Vol. 7, No. ICFP, Article 196. Publication date: August 2023.
+
+Typing Records, Maps, and Structs
+
+196:5
+
+which corresponds to that constant alone (for example, a type for true, which will be a subtype of
+Bool). We assume that a function B : B → P (C) assigns to each basic type the set of constants
+of that type and that a function 𝑏 (·) : C → B assigns to each constant 𝑐 a basic type 𝑏𝑐 such that
+B(𝑏𝑐 ) = {𝑐}.
+Definition 2.1 (Types). The set T of types is the set of terms 𝑡 that are coinductively produced by
+𝑡 ::= 𝑏 | 𝑡 × 𝑡 | 𝑡 → 𝑡 | 𝑡 ∨ 𝑡 | ¬𝑡 | 0
+and that satisfy two additional constraints: (1) regularity: the term must have a finite number
+of different sub-terms; (2) contractivity: every infinite branch must contain an infinite number of
+occurrences of the product or arrow type constructors.
+def
+
+def
+
+def
+
+We use the abbreviations 𝑡 1 ∧ 𝑡 2 = ¬(¬𝑡 1 ∨ ¬𝑡 2 ), 𝑡 1 ∖ 𝑡 2 = 𝑡 1 ∧ (¬𝑡 2 ), and 1 = ¬0 (in particular,
+1 is the supertype of all types, sometimes denoted by any or top). We refer to 𝑏, ×, and → as type
+constructors, and to ∨, ¬, ∧, and ∖ as type connectives. As customary, connectives have priority over
+constructors and negation has the highest priority—e.g., ¬𝑠∨𝑡 → 𝑢∧𝑣 denotes ((¬𝑠)∨𝑡) → (𝑢∧𝑣).
+Coinduction accounts for recursive types, and it is coupled with a contractivity condition which
+excludes infinite terms that do not have a meaningful interpretation as types or sets of values: for
+instance, the trees satisfying the equation 𝑡 = 𝑡 ∨ 𝑡 (which gives no information on which values
+are in it) or 𝑡 = ¬𝑡 (which cannot represent any set of values) do not satisfy the contractivity
+condition. Contractivity also gives an induction principle on T that allows us to apply the induction
+hypothesis below type connectives (union and negation), but not below type constructors (product
+and arrow): we use it in Section 2.1.2 in the definition of a relation noted (𝑑 : 𝑡). As a consequence
+of contractivity, types cannot contain infinite unions or intersections. The regularity condition is
+necessary to ensure the decidability of the subtyping relation.
+To define semantic subtyping we must define a type interpretation J.K : T → P (D) which
+interprets types into sets of elements of D for some suitable domain D. To ensure that type
+connectives have a set-theoretic semantics, the definition must satisfy (𝑖) J𝑡 1 ∨𝑡 2 K = J𝑡 1 K∪J𝑡 2 K,
+(𝑖𝑖) J¬𝑡K = D∖J𝑡K, and (𝑖𝑖𝑖) J0K = ∅. Next we must find a domain D in which it is possible to
+give a set-theoretic interpretation of the type constructors and in particular of function spaces.
+Intuitively, if we interpret functions as binary relations on D, then the interpretation of 𝑡 1 →𝑡 2
+should be the set of binary relations in which if the first projection is in (the interpretation of) 𝑡 1 ,
+then the second projection is in (the interpretation of) 𝑡 2 . In other words, J𝑡 1 →𝑡 2 K should denote the
+set P (J𝑡 1 K×J𝑡 2 K), where the over-line denotes set complement.2 But this would imply P (D 2 ) ⊆ D,
+which is impossible for cardinality reasons. Frisch et al. [2008] proved that one obtains the same
+subtyping relation by considering the set of finite approximations of the functions in 𝑡 1 →𝑡 2 . This
+corresponds to replacing P (J𝑡 1 K×J𝑡 2 K) by Pfin (J𝑡 1 K×J𝑡 2 K) where Pfin denotes the restriction of the
+powerset to finite subsets.3 This yields the interpretation that we define next.
+2.1.2 Type interpretation and subtyping relation. The interpretation domain D can be defined
+inductively as the set of terms produced by the following grammar
+𝑑 ::= 𝑐 | (𝑑, 𝑑) | {(𝑑, 𝑑), ..., (𝑑, 𝑑)}
+
+(J𝑡 1 K×J𝑡 2 K ∩ ( D × ( D∪{Ω} ) ) where
+Ω is a constant such that Ω∉D. As explained by Castagna [2023, Section 3.2], Ω is a constant denoting a type-error whose
+purpose is to avoid 1→1 to denote the set of all functions (see Frisch et al. [2008, Section 4.2] for full details). Since Ω does
+not play any role in the interpretation of record types we omit it and use this approximation all the paper long.
+3 Intuitively, this interpretation with finite powersets induces the same subtyping relation as the one induced by generic
+powersets, since P (𝑋 ) ⊆ P (𝑌 ) ⇔ Pfin (𝑋 ) ⊆ Pfin (𝑌 ): see [Frisch et al. 2008] for details.
+2 Strictly speaking, the outermost is the complement w.r.t. D × ( D∪{Ω} ), that is, P
+
+
+
+Proc. ACM Program. Lang., Vol. 7, No. ICFP, Article 196. Publication date: August 2023.
+
+196:6
+
+Giuseppe Castagna
+
+where 𝑐 ∈ C. In other terms, the domain is the solution of D = C + (D×D) + Pfin (D×D). The
+interpretation function is then defined so that it satisfies the following equalities:
+J0K = ∅
+J¬𝑡K = D ∖ J𝑡K
+J𝑡 1 ∨ 𝑡 2 K = J𝑡 1 K ∪ J𝑡 2 K
+J𝑏K = B(𝑏)
+J𝑡 1 × 𝑡 2 K = J𝑡 1 K × J𝑡 2 K
+J𝑡 1 →𝑡 2 K = Pfin (J𝑡 1 K×J𝑡 2 K)
+where, in particular, we interpret function spaces by considering the finite approximations of their
+functions. We cannot take the equations above directly as an inductive definition of J·K because
+types are not defined inductively but coinductively. Therefore, we give a definition which validates
+these equalities and which uses the aforementioned induction principle on types and structural
+induction on D. We define J.K : T →P (D) as J𝑡K = {𝑑 ∈ D | (𝑑 : 𝑡)} where (𝑑 : 𝑡) is the following
+binary predicate defined by induction on the pair (𝑑, 𝑡) ordered lexicographically:
+(𝑐 : 𝑏) = 𝑐 ∈ B(𝑏)
+((𝑑 1, 𝑑 2 ) : 𝑡 1 × 𝑡 2 ) = (𝑑 1 : 𝑡 1 ) and (𝑑 2 : 𝑡 2 )
+({(𝑑 1, 𝑑 1′ ), . . . , (𝑑𝑛 , 𝑑𝑛′ )} : 𝑡 1 → 𝑡 2 ) = ∀𝑖 ∈ {1, . . . , 𝑛}. if (𝑑𝑖 : 𝑡 1 ) then (𝑑𝑖′ : 𝑡 2 )
+(𝑑 : 𝑡 1 ∨ 𝑡 2 ) = (𝑑 : 𝑡 1 ) or (𝑑 : 𝑡 2 )
+(𝑑 : ¬𝑡) = not (𝑑 : 𝑡)
+(𝑑 : 𝑡) = false
+otherwise
+The pair D and J.K is a set-theoretic model of types (see [Frisch et al. 2008, Definition 4.4] for the
+def
+formal definition). It induces the subtyping relation defined as 𝑡 1 ≤ 𝑡 2 ⇐⇒ J𝑡 1 K ⊆ J𝑡 2 K. This
+particular model is called the universal since it induces the best (i.e., largest) possible subtyping
+relation definable by a set-theoretic model (see Frisch et al. [2008, Section 5.3]).
+2.1.3 Subtyping algorithm. The subtyping relation is decidable. Deciding whether 𝑡 1 is a subtype
+of 𝑡 2 is equivalent to deciding whether 𝑡 1 ∧ ¬𝑡 2 is the empty type, insofar as 𝑡 1 ≤ 𝑡 2 ⇔ J𝑡 1 K ⊆
+J𝑡 2 K ⇔ J𝑡 1 K ∩ (D ∖ J𝑡 2 K) ⊆ ∅ ⇔ J𝑡 1 ∧ ¬𝑡 2 K ⊆ ∅ ⇔ 𝑡 1 ∧ ¬𝑡 2 ≤ 0. The subtyping algorithm relies
+on the property that every type can be put into a particular disjunctive normal form, that is, it is
+equivalent to (i.e., it has the same interpretation as) a union of uniform intersections of atoms and
+negations of atoms, where an atom is either a product, an arrow, or a basic type, and intersections
+are uniform when they are composed only of atoms of the same constructor (i.e., all arrows, all
+products, all basic types). To decide 𝑡 1 ≤ 𝑡 2 the system puts 𝑡 1 ∧ ¬𝑡 2 in normal form, that is, it
+transforms it into a union of intersections that have one of the following three forms
+Û
+Û
+Û
+Û
+Û
+Û
+𝑏∧
+¬𝑏 ′
+𝑡 1 ×𝑡 2 ∧
+¬(𝑡 1′ ×𝑡 2′ )
+𝑡 1 →𝑡 2 ∧
+¬(𝑡 1′ →𝑡 2′ ) (1)
+𝑏 ∈𝑃
+
+𝑏 ′ ∈𝑁
+
+𝑡 1 ×𝑡 2 ∈𝑃
+
+𝑡 1′ ×𝑡 2′ ∈𝑁
+
+𝑡 1′ →𝑡 2′ ∈𝑁
+
+𝑡 1 →𝑡 2 ∈𝑃
+
+and checks the emptiness of the union, which is equivalent to checking the emptiness of all
+intersections that compose it. Emptiness for the first form in (1) can be checked directly. The
+emptiness of the other two forms is checked by decomposing them into simpler subtyping problems
+and recording them as hypothesis for coinduction. More precisely, the intersection of products
+in (1) is empty if and only if: 4
+ Û
+ Û
+
+Ü 
+Ü
+′
+′
+′
+∀𝑁 ⊆ 𝑁 .
+𝑡1 ≤
+𝑡1
+or
+𝑡2 ≤
+𝑡2
+(2)
+𝑡 1 ×𝑡 2 ∈𝑃
+
+𝑡 1′ ×𝑡 2′ ∈𝑁 ′
+
+𝑡 1 ×𝑡 2 ∈𝑃
+
+𝑡 1′ ×𝑡 2′ ∈𝑁 ∖𝑁 ′
+
+A similar decomposition for the intersections of arrows can be found in [Frisch et al. 2008, Section
+6.2] (we also recall it in Appendix A) together with the proofs of soundness, correctness, and
+termination of the algorithm (the last follows from the regularity of the types).
+4 To understand the rationale of this transformation the reader can consider the case in which both 𝑃 and 𝑁 contain just
+
+one atom, namely, the case for 𝑡 1×𝑡 2 ≤ 𝑡 1′×𝑡 2′ . There are just two cases to check (𝑁 ′ =∅ and 𝑁 ′ =𝑁 ) and it is not difficult to
+see that the condition above becomes: (𝑡 1 ≤0) or (𝑡 2 ≤0) or (𝑡 1 ≤𝑡 1′ and 𝑡 2 ≤𝑡 2′ ), as expected.
+Proc. ACM Program. Lang., Vol. 7, No. ICFP, Article 196. Publication date: August 2023.
+
+Typing Records, Maps, and Structs
+
+196:7
+
+2.1.4 Implementation. A naive implementation of the decomposition (2) would compute all the
+subsets of 𝑁 and check for each of them the “or” clauses in (2). The problem of such an implementation is that if one of the “or” clauses fails, then this invalidates all the hypotheses we added to
+check it (e.g., to implement coinduction for checking the emptiness of a recursive type, one has to
+add the hypothesis that the type is empty, and then proceed by applying the decomposition to the
+type which, in turn, looks for the emptiness of some subterms or the type, and so on and so forth);
+we thus have to backtrack to the point where the failed hypothesis was added and remove all the
+hypotheses subsequently introduced, before checking the next “or” clause. Frisch [2004] proved
+that this can be avoided by defining a Boolean function Φ as follows
+Φ(𝑡 1, 𝑡 2, ∅) = false
+Φ(𝑡 1, 𝑡 2, 𝑁 ∪{𝑡 1′ ×𝑡 2′ }) = ( (𝑡 1 ≤ 𝑡 1′ ) or Φ(𝑡 1 ∖𝑡 1′ , 𝑡 2, 𝑁 ) ) and ( (𝑡 2 ≤ 𝑡 2′ ) or Φ(𝑡 1, 𝑡 2 ∖𝑡 2′ , 𝑁 ) )
+which clearly does not use backtracking. Φ takes two non-empty types 𝑡 1 and 𝑡 2 and a set of product
+Ô
+atoms 𝑁 and returns whether 𝑡 1 ×𝑡 2 ≤ 𝑡1′ ×𝑡2′ ∈𝑁 𝑡 1′ ×𝑡 2′ . It is then easy to use Φ to implement (2).
+Ó
+Ó
+Ó
+Ó
+Notice that 𝑡1 ×𝑡2 ∈𝑃 𝑡 1 ×𝑡 2 = ( 𝑡1 ×𝑡2 ∈𝑃 𝑡 1 ) × ( 𝑡1 ×𝑡2 ∈𝑃 𝑡 2 ). Let 𝑠𝑖 = 𝑡1 ×𝑡2 ∈𝑃 𝑡𝑖 for 𝑖 = 1, 2. Then
+Û
+Ü
+𝑠 1 ×𝑠 2 ∧
+¬(𝑡 1′ ×𝑡 2′ ) ≤ 0 ⇐⇒ 𝑠 1 ×𝑠 2 ≤
+𝑡 1′ ×𝑡 2′ ⇐⇒ 𝑠 1 ≤ 0 or 𝑠 2 ≤ 0 or Φ(𝑠 1, 𝑠 2, 𝑁 )
+𝑡 1′ ×𝑡 2′ ∈𝑁
+
+𝑡 1′ ×𝑡 2′ ∈𝑁
+
+It is possible to define an analogous Φ-function for arrow atoms. Its definition can be found
+in [Castagna 2020, Sections 4.2, 4.3] together with a detailed description of how Φ-functions work
+and of the data-structures to be used to implement them efficiently. The proof of the correctness of
+their definition can be found in [Frisch 2004, Chapter 7].
+2.2
+
+Quasi-constant functions
+
+From their earliest formalizations (e.g., Hoare [1965, 1966a,b], Cardelli [1984], Bruce and Longo
+[1988]) record values are considered finite mappings from a given set of labels L to values, that is,
+functions that map a finite set of labels {ℓ1, ..., ℓ𝑛 } ⊆ L into values and are undefined on the other
+labels, that is, on L∖{ℓ1, ..., ℓ𝑛 }. In order to simplify the presentation, we depart from this view and
+follow the approach introduced by Alain Frisch in his PhD dissertation [Frisch 2004, Chapter 9]
+which considers record values (and record types) to be functions that are total on L and constant
+on nearly all labels (i.e., on a cofinite subset of L). Frisch calls such functions the quasi-constant
+functions. The idea being that a record value maps nearly all labels to a specific constant (denoting
+undefined) apart from a finite set of labels which are mapped to the values of the language.
+Definition 2.2 ([Frisch 2004]). Let 𝑍 denote some set, a function 𝑟 : L → 𝑍 is quasi-constant if
+there exists 𝑧 ∈ 𝑍 such that the set {ℓ∈L | 𝑟 (ℓ) ≠ 𝑧} is finite; in this case we denote this set by dom(𝑟 )
+(i.e., the domain of 𝑟 ) and the element 𝑧 by def (𝑟 ) (i.e., the default value of 𝑟 ). We use L _ 𝑍 to
+denote the set of quasi-constant functions from L to 𝑍 and the notation {[ℓ1 = 𝑧 1, . . . , ℓ𝑛 = 𝑧𝑛 , = 𝑧]}
+to denote the quasi-constant function 𝑟 : L _ 𝑍 defined by 𝑟 (ℓ𝑖 ) = 𝑧𝑖 for 𝑖 = 1..𝑛 and 𝑟 (ℓ) = 𝑧 for
+ℓ ∈ L∖{ℓ1, . . . , ℓ𝑛 }.
+Although this notation is not univocal (unless we require 𝑧𝑖 ≠ 𝑧 and the ℓ𝑖 ’s to be pairwise
+distinct), this is largely sufficient for the purposes of this work. If (𝑍 ℓ )ℓ ∈ L is a family of subsets of 𝑍
+Î
+indexed by L, we denote by ⊲ ℓ ∈ L 𝑍 ℓ the subset
+Îof L _ 𝑍 formed by all quasi-constant functions
+𝑟 such that 𝑟 (ℓ) ∈ 𝑍 ℓ for all ℓ ∈ L (intuitively, ⊲ ℓ ∈ L 𝑍 ℓ is a “type” of quasi-constant functions).
+2.2.1 Containment. We are going to use quasi-constant functions to embed records in our type
+system. More precisely, we will add to types some quasi-constant functions from labels to types,
+Proc. ACM Program. Lang., Vol. 7, No. ICFP, Article 196. Publication date: August 2023.
+
+196:8
+
+Giuseppe Castagna
+
+which will be interpreted set-theoretically as subsets of L _ D (precisely, of L_D⊥ : see Section 3.2.1). Therefore, we need to extend the subtyping algorithm to check the emptiness of Boolean
+combinations of such sets. For that we need a decomposition formula analogous to what (2) does
+for products. This is given by Lemma 9.1 in [Frisch 2004], which is stated as follows (see the cited
+reference for the proof):
+Lemma 2.3 (Frisch [2004]). Let (𝑋𝑝 )𝑝 ∈𝑃 and (𝑋𝑛 )𝑛∈𝑁
+of elements
+of L _ P (D).
+ beÐtwo families
+
+Ð
+Ñ
+Î
+Î
+𝑋
+(ℓ)
+Let 𝐿 = 𝑖 ∈𝑃 ∪𝑁 dom(𝑋𝑖 ). Then
+⊲
+𝑋
+(ℓ)
+⊆
+⊲
+if
+and
+only if either
+𝑝
+𝑛
+𝑝 ∈𝑃
+ℓ∈L
+𝑛∈𝑁
+ℓ∈L
+Ñ
+}
+def
+(𝑋
+)
+=
+∅,
+or
+for
+every
+map
+𝜄
+:
+𝑁
+→
+𝐿∪{
+𝑝
+𝑝 ∈𝑃
+
+
+
+
+Ù
+Ø
+Ù
+
+
+
+∃ℓ∈L.
+𝑋𝑝 (ℓ) ⊆
+𝑋𝑛 (ℓ)
+or ∃𝑛 ◦ ∈𝑁 . 𝜄 (𝑛 ◦ ) =
+and
+def (𝑋𝑝 ) ≤ def (𝑋𝑛◦ )
+𝑝 ∈𝑃
+
+𝑛∈𝑁 |𝜄 (𝑛)=ℓ
+
+𝑝 ∈𝑃
+
+A detailed explanation of the formula in the statement is given by Castagna [2020, Section 4.5].
+2.2.2 Merge operator. The last ingredient we need to define is a specific operator on quasi-constant
+functions, that we will use to give semantics to record concatenation and field deletion.
+Let 𝑍 denote some set, we endow the set L _ 𝑍 with a merge operator parametric in an element
+of 𝑍 . Given 𝑧 ∈ 𝑍 and 𝑟 1, 𝑟 2 ∈ L _ 𝑍 , the operator 𝑟 1 ⊕𝑧 𝑟 2 returns the quasi-constant function
+𝑟 ∈ L _ 𝑍 such that 𝑟 (ℓ) = 𝑟 1 (ℓ) if 𝑟 1 (ℓ) ≠ 𝑧 and 𝑟 (ℓ) = 𝑟 2 (ℓ) if 𝑟 1 (ℓ) = 𝑧. That is, the 𝑟 1 mappings
+equal to 𝑧 are replaced by the 𝑟 2 ’s corresponding ones.
+3
+
+A SIMPLE STRUCT CALCULUS
+
+In this section we present the basic record calculus, in which records play just the role of structs
+and on which we build the rest of our theory (in particular, records as maps: cf. Section 4). It is
+a lambda-calculus typed with set-theoretic types to which we add some specific quasi-constant
+functions on types and expressions. We also add pattern matching, but we do it just at the end of
+the section so as to focus on records first.
+3.1
+
+Expressions
+
+Let L be a countable set of labels ranged over by ℓ and C a countable set of constants ranged over
+by 𝑐. We consider the set of expressions E ranged over by 𝑒 and the set of values V ranged over by
+𝑣 defined as follows (where 𝐼 is finite):
+Expressions 𝑒 ::= 𝑐 | 𝜆 ∧𝑖 ∈𝐼 𝑡𝑖 →𝑡𝑖 𝑥 .𝑒 | 𝑥 | 𝑒 𝑒 | {ℓ = 𝑒, ... , ℓ = 𝑒} | 𝑒 + 𝑒 | 𝑒.ℓ | 𝑒\ℓ
+Values 𝑣 ::= 𝑐 | 𝜆 ∧𝑖 ∈𝐼 𝑡𝑖 →𝑡𝑖 𝑥 .𝑒 | {ℓ = 𝑣, ... , ℓ = 𝑣}
+This is the functional core of CDuce [Benzaken et al. 2003] where pairs have been replaced by
+records.5 The functional part is a 𝜆-calculus with constants in which 𝜆-abstractions are explicitly
+annotated by their (intersection) type. Record expressions have the form {ℓ1 = 𝑒 1, ... , ℓ𝑛 = 𝑒𝑛 }: they
+are possibly empty finite sets of fields associating pairwise distinct labels to expressions. We use
+𝑒.ℓ to denote (struct-like) field selection, 𝑒\ℓ to denote (struct-like) field deletion, and 𝑒 1 + 𝑒 2 for
+record concatenation with priority given to the fields in 𝑒 2 .
+Let 𝑋 be a set and ⊥ a constant not in 𝑋 , we use the notation 𝑋 ⊥ to denote the set 𝑋 ∪ {⊥}
+and the fact that ⊥ ∉ 𝑋 . In what follows, we use the constant ⊥ to indicate that a field (in a
+record expression, in a record type, or in their interpretations) is undefined. In this sense the
+record expressions defined by the grammar above are just syntactic sugar to denote quasi-constant
+5 As a matter of fact, products and, more generally, tuples expressions and types can be encoded as record expressions and
+
+closed record types (see later on) whose domain is an initial segment of natural numbers.
+
+Proc. ACM Program. Lang., Vol. 7, No. ICFP, Article 196. Publication date: August 2023.
+
+Typing Records, Maps, and Structs
+
+196:9
+
+functions in L _ E⊥ whose default value is ⊥, that is, {ℓ1 = 𝑒 1, ... , ℓ𝑛 = 𝑒𝑛 } is syntactic sugar for
+{[ℓ1 = 𝑒 1, ... , ℓ𝑛 = 𝑒𝑛 , = ⊥]}. The reduction semantics is defined by the following rules
+(𝜆 ∧𝑖 ∈𝐼 𝑡𝑖 →𝑡𝑖 𝑥 .𝑒)𝑣 { 𝑒{𝑣/𝑥 }
+{ℓ1 = 𝑣 1, ... , ℓ𝑛 = 𝑣𝑛 }.ℓ { 𝑣𝑖
+𝑣 1 + 𝑣 2 { 𝑣 2 ⊕⊥ 𝑣 1
+𝑣\ℓ { {[ℓ = ⊥, = 𝑐 ◦ ]}⊕𝑐 ◦ 𝑣
+
+if ℓ ≡ ℓ𝑖
+
+(3)
+(4)
+(5)
+(6)
+
+where 𝑐 ◦ is a constant not in E⊥ (the choice of 𝑐 ◦ is not important as long as it is different from ⊥),
+plus the rules for a leftmost-outermost weak reduction strategy, that is, 𝐸 [𝑒] { 𝐸 [𝑒 ′ ] if 𝑒 { 𝑒 ′ ,
+where 𝐸 ::= [ ] | 𝐸𝑒 | 𝑣𝐸 | 𝐸.ℓ | 𝐸\ℓ | {ℓ1 = 𝑣, ..., ℓ𝑖 = 𝐸, ..., ℓ𝑛 = 𝑒}.
+The reduction in (3) is the classic call-by-value beta reduction. Selection is implemented by
+(4) and it is undefined if ℓ ∉ {ℓ1, ....ℓ𝑛 }. (5) and (6) use the merge operator ⊕𝑧 of Section 2.2.2, to
+define the reductum of concatenations and deletions, respectively. Since merge is defined only for
+quasi-constant functions, then the semantics is undefined if in (5) and (6) either 𝑣, or 𝑣 1 , or 𝑣 2 is not
+a record value. The reductum of (5) is the record value formed by all the fields in 𝑣 2 plus all the
+fields in 𝑣 1 that are undefined in 𝑣 2 . The reductum of (6) is the record value in which the field ℓ is
+undefined and all other fields are as in 𝑣.
+3.2
+
+Types
+
+We consider two kinds of record types, open and closed, formed by two kinds of field types,
+mandatory and optional:
+Types
+Field types
+
+𝑡 ::= 𝑐 | 𝑏 | 𝑡 → 𝑡 | { 𝑓 , . . . , 𝑓 } | {|𝑓 , . . . , 𝑓 |} | 𝑡 ∨ 𝑡 | ¬𝑡 | 0
+𝑓 ::= ℓ = 𝑡 | ℓ ⇒ 𝑡
+
+A field type maps a label into a type. A mandatory field type “ℓ = 𝑡” means that a field for the label
+ℓ must be present and contain a value of type 𝑡. An optional field type “ℓ ⇒ 𝑡” means that if a field
+for the label ℓ is present, then it must contain a value of type 𝑡 (the syntax is inspired by Erlang,
+which uses := and => for mandatory and optional field types, respectively [Erlang, Section 7.2]).
+Similarly to expressions, record types are just syntactic sugar for some specific quasi-constant
+functions in L _ T⊥ . Precisely, consider a record type with field types, 𝑓1 ,...,𝑓𝑛 , where each 𝑓𝑖 is
+either ℓ𝑖 = 𝑡𝑖 or ℓ𝑖 ⇒ 𝑡𝑖 ; then the closed record type {|𝑓1, ..., 𝑓𝑛 |} is syntactic sugar for the quasiconstant function {[ℓ1 = 𝜏1, ..., ℓ𝑛 = 𝜏𝑛 , = ⊥]}, while the open record type { 𝑓1, ..., 𝑓𝑛 } is syntactic
+sugar for the quasi-constant function {[ℓ1 = 𝜏1, ..., ℓ𝑛 = 𝜏𝑛 , = 1∨⊥]} where, in both cases, 𝜏𝑖 = 𝑡𝑖
+if 𝑓𝑖 is mandatory, and 𝜏𝑖 = 𝑡𝑖 ∨ ⊥ if 𝑓𝑖 is optional. In other words, a mandatory field ℓ = 𝑡 states
+that the label ℓ is associated to a value of type 𝑡, while an optional field ℓ ⇒ 𝑡 indicates that either
+the field for ℓ is undefined or it contains a value of type 𝑡; all the other fields are undefined if the
+record is closed, and are either undefined or contain some value (of any type) if the record is open.
+Formally, we just added to our types a new type constructor with new atoms, the record type
+atoms, that are the quasi-constant functions from L to T⊥ whose default value is either ⊥ or 1∨⊥.
+In this section we use 𝑟 to range over these atoms, that is, 𝑟 will denote a quasi-constant function
+in L_T⊥ such that either def (𝑟 ) = ⊥ (i.e., 𝑟 is a closed record type atom) or def(𝑟 ) = 1∨⊥ (i.e., 𝑟
+is an open record type); in Section 4 we will allow also the case def (𝑟 ) = 𝑡∨⊥, for any type 𝑡.
+3.2.1 Subtyping. It is easy to modify the definitions of Section 2.1 for the above types. Since
+records
+Î replace products, then the definition of the interpretation for products is replaced by
+J𝑟 K = ⊲ ℓ ∈ L J𝑟 (ℓ)K ⊆ L _ D⊥ where 𝑟 is a record type atom and J⊥K = {⊥}.
+The universal model for these types uses the interpretation domain D = C+L_D⊥ +Pfin (D×D),
+and we interpret types as sets composed of elements of this domain inductively defined by:
+Proc. ACM Program. Lang., Vol. 7, No. ICFP, Article 196. Publication date: August 2023.
+
+196:10
+
+Giuseppe Castagna
+
+𝑑 ::= 𝑐 | {[ℓ = 𝜕, ..., ℓ = 𝜕, = ⊥]} | {(𝑑, 𝑑), ..., (𝑑, 𝑑)}
+𝜕 ::= 𝑑 | ⊥
+The interpretation uses the binary predicate (𝑑 : 𝑡) definition of Section 2.1.2 where we replace the
+clause for products with:
+
+({[ℓ1 = 𝜕1, ..., ℓ𝑛 = 𝜕𝑛 , = ⊥]}: 𝑟 ) = ∀𝑖∈[1..𝑛] . (𝜕𝑖 : 𝑟 (ℓ𝑖 )) or (𝜕𝑖 = ⊥ and ⊥ ≤ 𝑟 (ℓ𝑖 )) and
+∀ℓ ∈ L∖{ℓ1, ..., ℓ𝑛 } . ⊥ ≤ 𝑟 (ℓ) .
+with 𝑟 ∈ L _ T⊥ . As before every type is equivalent to a union of uniform intersections of atoms
+or their negation, and to decide the emptiness of intersections of record type atoms and their
+negations
+we use Lemma 2.3: just notice that for each atom
+Ó
+Ñ 𝑟 , since def (𝑟 ) is either ⊥ or 1∨⊥, then
+contains
+⊥
+and,
+thus,
+is
+never
+empty
+(i.e.,
+def(𝑟
+)
+𝑟 ∈𝑃
+𝑝 ∈𝑃 def (𝑋𝑝 ) = ∅ in the lemma’s statement
+never holds).
+3.2.2
+
+Typing. Typing the functional part is standard. The algorithmic typing rules are:
+[Const]
+
+∀𝑖 ∈ 𝐼
+[→I]
+
+Γ⊢𝜆
+
+[Var]
+
+Γ ⊢ 𝑐 : 𝑏𝑐
+
+Γ, 𝑥 : 𝑠𝑖 ⊢ 𝑒 : 𝑡𝑖′ ≤ 𝑡𝑖
+
+∧𝑖 ∈𝐼 𝑠𝑖 →𝑡𝑖
+
+𝑥 ∈ dom(Γ)
+
+Γ ⊢ 𝑒1 : 𝑡1
+[→E]
+
+𝑥 .𝑒 : ∧𝑖 ∈𝐼 (𝑠𝑖 → 𝑡𝑖 )
+
+Γ ⊢ 𝑥 : Γ(𝑥)
+
+Γ ⊢ 𝑒2 : 𝑡2 𝑡 ≤ 0 → 1
+1
+𝑡 2 ≤ dom(𝑡 1 )
+Γ ⊢ 𝑒 1𝑒 2 : 𝑡 1 ◦ 𝑡 2
+
+where the operators dom() and ◦ are defined as dom(𝑡) def
+= max{𝑢 | 𝑡 ≤ 𝑢 → 1} and 𝑡 ◦𝑠 def
+= min{𝑢 |
+𝑡 ≤ 𝑠 → 𝑢}. In short, dom(𝑡) is the largest domain of any single arrow that subsumes 𝑡 while 𝑡 ◦ 𝑠 is
+the smallest codomain of any single arrow that subsumes 𝑡 and has domain 𝑠. These operators are
+needed because the type inferred for the function 𝑒 1 in [→E] may be different from a single arrow.
+In general, this type (if smaller than 0→1, that is, the type of all functions) will be a disjunctive
+normal form of arrow atoms for which computing the domain and the result of an application is
+not straightforward (see Castagna [2023, §4.1.2] for a simple explanation and Castagna [2020, §4.4.3
+in the online extended version] for a detailed description on how to compute the ◦ operator). A
+similar problem happens for record operations since the types of the records involved in selection,
+concatenation, and deletion are, in general, disjunctive normal forms of record type atoms. To
+address this problem we define three type operators, one for each operation on records which gives:
+Γ ⊢ 𝑒 : 𝑡 ≤ {}
+
+Γ ⊢ 𝑒 : 𝑡 ≤ { ℓ = 1}
+[Sel]
+
+Γ ⊢ 𝑒.ℓ : 𝑡 .ℓ
+
+[Del]
+
+Γ ⊢ 𝑒\ℓ : 𝑡\ℓ
+
+Γ ⊢ 𝑒 1 : 𝑡 1 ≤ {}
+[Conc]
+
+Γ ⊢ 𝑒 2 : 𝑡 2 ≤ {}
+
+Γ ⊢ 𝑒1 + 𝑒2 : 𝑡1 + 𝑡2
+
+Record operations require expressions to be typed by a subtype of the empty open record {} , which
+is the type of all records;6 furthermore, selection requires the selected field to be defined (i.e., the
+type of 𝑒 must be a subtype of { ℓ = 1} and, thus, cannot map ℓ to ⊥). The selection type operator is
+def
+defined as 𝑡 .ℓ = min{𝑢 | 𝑡 ≤ { ℓ = 𝑢} }; we show in Section 4 how to compute it. The concatenation
+and deletion operators are more complex. To type concatenation and deletion we need to type the
+merge operator of Section 2.2.2. It is easy to define it for record atoms: if 𝑟 1, 𝑟 2 : L_T⊥ , we define
+
+𝑟 2 (ℓ)
+𝑟 2 (ℓ) ∧ 𝑡 ≤ 0
+(𝑟 1 +𝑡 𝑟 2 ) (ℓ) =
+(7)
+(𝑟 2 (ℓ) ∖ 𝑡) ∨ 𝑟 1 (ℓ) otherwise
+It is then easy to see that, 𝑟 1 + 𝑟 2 is defined as 𝑟 1 + ⊥ 𝑟 2 : it returns the record type with all the fields
+surely defined in 𝑟 2 (i.e., those for which 𝑟 2 (ℓ) ∧ ⊥ ≤ 0) and where the other fields have as type the
+union of the type of the field in 𝑟 1 (i.e., 𝑟 1 (ℓ)) and of the non-optional part (if any) of the field in 𝑟 2 (i.e.,
+𝑟 2 (ℓ) ∖ ⊥). For instance, {|𝑎 = Int, 𝑏 = Bool|} + {|𝑎 ⇒ Bool|} = {|𝑎 = Int∨Bool, 𝑏 = Bool|} since
+𝑎 may be undefined on the right hand-side while 𝑏 is undefined in it, and {|𝑎 = Int|} + {} = {𝑎 = 1}
+6We use the shorthand Γ ⊢ 𝑒 : 𝑡 ≤ 𝑡 ′ for a rule with premises Γ ⊢ 𝑒 : 𝑡 and side condition 𝑡 ≤ 𝑡 ′ .
+
+Proc. ACM Program. Lang., Vol. 7, No. ICFP, Article 196. Publication date: August 2023.
+
+Typing Records, Maps, and Structs
+
+196:11
+
+since 𝑎 is surely defined though we cannot know whether its definition is taken from the right
+operand or left one. We postpone the definition of 𝑡 1 +𝑡 𝑡 2 for generic (record) types to Section 4
+where we generalize it for maps. With such a definition the concatenation type operator 𝑡 1 + 𝑡 2 will
+be defined as 𝑡 1 + ⊥ 𝑡 2 while the deletion type operator will be defined as 𝑡\ℓ def
+= 𝑡 +𝑐 ◦ {[ℓ = ⊥, = 𝑐 ◦ ]}
+(with 𝑐 ◦ any constant different from ⊥): that is, at type level, deletion sets the type of the field ℓ to
+⊥ and leaves the type of the other fields unchanged.
+Finally, expressions defining records are typed by the corresponding closed record type:
+Γ ⊢ 𝑒1 : 𝑡1
+[Recd]
+
+···
+
+Γ ⊢ 𝑒𝑛 : 𝑡𝑛
+
+Γ ⊢ {ℓ1 = 𝑒 1, ... , ℓ𝑛 = 𝑒𝑛 } : {|ℓ1 = 𝑡 1, ... , ℓ𝑛 = 𝑡𝑛 |}
+
+3.2.3 Variations. We have seen in the introduction that there exists a lot of variations on the
+semantics of record operations. Since we cannot consider all of them, we just give an example
+of a common one. In our calculus, 𝑒\ℓ works also when ℓ is not defined in 𝑒, but some languages
+(e.g., Elixir) require the field to be present for deletion. It is possible to encode such a discipline
+by a suitable pattern matching (see Section 3.3) or by directly modifying the static and dynamic
+semantics to do so. The modifications in the latter case are really minimal: it suffices to use for the
+typing rule [Del] the same premise as in rule [Sel].
+Also, the generic 𝑡 1 +𝑡 𝑡 2 can be used to type record operations other than concatenations and
+fields deletions. For instance, Frisch [2004, Section 9.5] shows that, given an expression 𝑒 of record
+type 𝑡 and a set of labels 𝐿 = {ℓ1, ..., ℓ𝑛 }, the record obtained by restricting 𝑒 to the fields in 𝐿 is
+typed by 𝑡 +𝑐 ◦ {[ℓ1 = 𝑐 ◦, ..., ℓ𝑛 = 𝑐 ◦, = ⊥]} and the record obtained by deleting in 𝑒 all fields that
+are not of type 𝑡 ′ has type {[ = ⊥]} +¬𝑡 ′ 𝑡.
+3.3
+
+Pattern matching
+
+The calculus defined in this section still misses an essential ingredient, that is, a way to test whether
+a record field is defined or not: without it, optional field types are useless. We could add an ad-hoc
+expression to perform this check, but we prefer to implement it via pattern matching since it is
+more general and it plays an important role for the definition of the types for mutable records
+(omitted in this presentation for space reasons and included for completeness in Appendix F: see in
+particular Section F.3). Thus, we add to our expressions a matching expression formed by one or
+more “|”-separated branches, each composed by a pattern 𝑝 and an expression 𝑒 that is executed
+when the pattern is matched:
+Expressions 𝑒 ::= . . . | match 𝑒 with 𝑝 → 𝑒 | ... |𝑝 → 𝑒
+Patterns 𝑝 ::= 𝑥 | 𝑡 | {ℓ = 𝑝} | (𝑥:=𝑐) | 𝑝∧𝑝 | 𝑝 |𝑝
+with the restriction that 𝑝 1 and 𝑝 2 must have distinct capture variables in 𝑝 1 ∧𝑝 2 and the same
+capture variables in 𝑝 1 |𝑝 2 .
+The expression match 𝑒 with 𝑝 1 → 𝑒 1 | ... |𝑝𝑛 → 𝑒𝑛 evaluates 𝑒 to a value and matches it against
+the patterns 𝑝𝑖 ’s in a left-to-right order. If the pattern 𝑝𝑖 matches the value, then this produces a
+substitution for the capture variables in 𝑝𝑖 that is applied to 𝑒𝑖 before its evaluation. A pattern is
+either a capture variable 𝑥 which matches any value and binds the value to 𝑥; or a type 𝑡, which
+matches any value of type 𝑡 yielding an empty substitution; or the (open) record pattern {ℓ = 𝑝}
+that matches any record value containing at least a field ℓ with a value 𝑣 that matches 𝑝 (whose
+resulting substitution is returned); or the constant pattern (𝑥:=𝑐) which matches any value and
+binds 𝑥 to the constant 𝑐; or the intersection pattern 𝑝 1 ∧𝑝 2 that matches values that match both
+𝑝 1 and 𝑝 2 (and returns the union of the substitutions); or the union pattern 𝑝 1 |𝑝 2 which matches
+values that match either 𝑝 1 or 𝑝 2 testing them in the order.
+Proc. ACM Program. Lang., Vol. 7, No. ICFP, Article 196. Publication date: August 2023.
+
+196:12
+
+Giuseppe Castagna
+
+𝑣/𝑥
+𝑣/𝑡
+𝑣/{ℓ = 𝑝}
+𝑣/(𝑥:=𝑐)
+𝑣/𝑝 1 ∧𝑝 2
+𝑣/𝑝 1 |𝑝 2
+𝑣/𝑝 1 |𝑝 2
+𝑣/𝑝
+
+=
+=
+=
+=
+=
+=
+=
+=
+
+{𝑣/𝑥 }
+{}
+𝜎
+{𝑐/𝑥 }
+𝜎1 ∪ 𝜎2
+𝑣/𝑝 1
+𝑣/𝑝 2
+fail
+
+if ⊢ 𝑣 : 𝑡
+if 𝑣 = {..., ℓ = 𝑣 ′, ...} and 𝑣 ′ /𝑝 = 𝜎
+if 𝑣/𝑝 1 = 𝜎1 and 𝑣/𝑝 2 = 𝜎2
+if 𝑣/𝑝 1 ≠ fail
+if 𝑣/𝑝 1 = fail
+otherwise
+
+Fig. 1. Semantics of patterns
+
+Formally, we define a function (·)/(·) that, given a value 𝑣 and a pattern 𝑝, yields a result 𝑣/𝑝
+which is either fail or a substitution 𝜎 mapping the capture variables in 𝑝 to values (subterms of 𝑣).
+This function is defined in Figure 1. Then, we augment the reduction rules with
+match 𝑣 with 𝑝 1 → 𝑒 1 | ... |𝑝𝑛 → 𝑒𝑛 { 𝑒𝑖 𝜎
+
+if 𝑣/𝑝𝑖 = 𝜎 and 𝑣/𝑝 𝑗 = fail for 𝑗 < 𝑖
+
+and add 𝐸 ::= match 𝐸 with 𝑝 1 → 𝑒 1 | ... |𝑝𝑛 → 𝑒𝑛 to the evaluation contexts. Our patterns are not
+standard, but they allow us to encode a large variety of different patterns. For instance, a more
+common syntax would be 𝑝 ::= | 𝑐 | 𝑥 | {ℓ = 𝑝, ... , ℓ = 𝑝} | 𝑝 as 𝑥 | 𝑝 |𝑝, with wild-cards and
+constants instead of types, with as-patterns “𝑝 as 𝑥” (in OCaml syntax; 𝑥@𝑝 in Haskell) instead
+of conjunction, and with multi-field record patterns. We can encode and 𝑐 as 1 and 𝑏𝑐 ; “𝑝 as 𝑥”
+is equivalent to 𝑝∧𝑥; a multi-field (open) record pattern {ℓ1 = 𝑝 1, ... , ℓ𝑛 = 𝑝𝑛 } is encoded by the
+intersection {ℓ1 = 𝑝 1 }∧ ... ∧ {ℓ𝑛 = 𝑝𝑛 }, while the closed record pattern {|ℓ1 = 𝑝 1, ... , ℓ𝑛 = 𝑝𝑛 |} (i.e.,
+the pattern that matches records having exactly the fields ℓ1 , ... , ℓ𝑛 matching the respective patterns)
+can then be encoded as {ℓ1 = 𝑝 1, ... , ℓ𝑛 = 𝑝𝑛 }∧{|ℓ1 = 1, ... , ℓ𝑛 = 1|}. Given any pattern 𝑝, we can
+define a type *𝑝+ that characterizes exactly the set of values that match the pattern:
+*𝑥+ = 1
+
+*(𝑥:=𝑐)+ = 1
+
+*𝑡+ = 𝑡
+
+*{ℓ = 𝑝}+ = { ℓ = *𝑝+}
+
+*𝑝 1 ∧𝑝 2 + = *𝑝 1 + ∧ * 𝑝 2 +
+
+*𝑝 1 |𝑝 2 + = *𝑝 1 + ∨ * 𝑝 2 +
+
+It can be shown that, for every well-typed value 𝑣 and every pattern 𝑝, we have 𝑣/𝑝 ≠ fail if and
+only if ∅ ⊢ 𝑣 : *𝑝+. This allows us to formalize purely at the level of types, exhaustiveness and
+redundancy checks performed on pattern matching. The typing rule for match is the following.
+Γ ⊢ 𝑒0 : 𝑡0
+
+for 𝑖 = 1..𝑛, either 𝑡𝑖 ≤ 0 or Γ, 𝑡𝑖 /𝑝𝑖 ⊢ 𝑒𝑖 : 𝑡 𝑡 0 ≤ Ô𝑛 *𝑝𝑖 +
+𝑖=1Ô
+𝑡𝑖 = (𝑡 0 ∖ 𝑗 <𝑖 *𝑝 𝑗 +) ∧ *𝑝𝑖 +
+Γ ⊢ match 𝑒 0 with 𝑝 1 → 𝑒 1 | ... |𝑝𝑛 → 𝑒𝑛 : 𝑡
+Ô
+The rule deduces the type 𝑡 0 of the matched expression. The side condition 𝑡 0 ≤ 𝑛𝑖=1 *𝑝𝑖 + ensures
+that the matching is exhaustive, that is, that all the values that can be produced by 𝑒 0 (i.e., the values
+in 𝑡 0 ) are accepted by some pattern. Then it computes the type 𝑡𝑖 that contains all the values that are
+captured by the 𝑖-th branch. These are the values that can be produced by 𝑒 0 (i.e., those in 𝑡 0 ) minus
+Ô
+those that are captured by a preceding branch (i.e., those in 𝑗 <𝑖 *𝑝 𝑗 +) and (intersected those) that
+match 𝑝𝑖 (i.e., those in *𝑝𝑖 +). When 𝑡𝑖 is empty, then the branch is redundant (see Castagna [2023,
+§5.1] for details on the redundancy check) and the typing of 𝑒𝑖 is skipped. Otherwise, 𝑒𝑖 is typed
+under the hypothesis Γ extended with a type environment produced by 𝑡𝑖 /𝑝𝑖 . Given a type 𝑡 and a
+pattern 𝑝 with 𝑡 ≤ * 𝑝+, the operator 𝑡/𝑝 produces the type environment assumed for the variables
+in 𝑝 when a value of type 𝑡 is matched against 𝑝 and the matching succeeds. It is defined as:
+[Match]
+
+𝑡/𝑡 ′ = ∅
+
+𝑡/(𝑥:=𝑐) = 𝑥 : 𝑏𝑐
+
+𝑡/𝑥 = 𝑥 : 𝑡
+
+𝑡/{ℓ = 𝑝} = 𝑡 .ℓ/𝑝
+
+𝑝 1 ∧𝑝 2 = (𝑡/𝑝 1 )∪(𝑡/𝑝 2 )
+𝑡/𝑝 1 |𝑝 2 = ((𝑡 ∧ *𝑝 1 +)/𝑝 1 )∪((𝑡 ∖ *𝑝 1 +)/𝑝 2 )
+
+Proc. ACM Program. Lang., Vol. 7, No. ICFP, Article 196. Publication date: August 2023.
+
+Typing Records, Maps, and Structs
+
+196:13
+
+and satisfies the property that for every 𝑡, 𝑝, and 𝑣, if ∅ ⊢ 𝑣 : 𝑡 and 𝑣/𝑝 = 𝜎, then, for every variable
+𝑥 in 𝑝, the judgment ∅ ⊢ 𝑥𝜎 : (𝑡/𝑝) (𝑥) holds.
+Thanks to pattern matching we can now check whether an optional field with label ℓ is present
+before selecting it, as simply as “match 𝑒 with {ℓ = 1} → ...”. Also, we can capture its content in
+a capture variable 𝑥 and in case of absence give 𝑥 a default value, say, nil by using the constant
+pattern “match 𝑒 with {ℓ = 𝑥}| (𝑥:=nil) → ...”. Also notice that the expression 𝑒.ℓ for selection is
+no longer needed (though, we keep it for convenience) since it can be encoded as “match 𝑒 with {ℓ =
+𝑥} → 𝑥”: for this expression the rule [Match] requires the type 𝑡 of 𝑒 to be a subtype of { ℓ = 1}
+(exhaustiveness condition) and deduces for the expression the type 𝑡 .ℓ, which coincides with the
+rule [Sel]. Likewise, to define the delete operation that requires the presence of the field ℓ to be
+deleted, we no longer need to modify the typing rules as we outlined in Section 3.2.3: it suffices to
+encode it as “match 𝑒 with { ℓ = 1} → 𝑒\ℓ” which returns a static type error if ℓ is not present in 𝑒.
+The type system presented in this section is sound: every well-typed expression either diverges
+or returns a value of the same type (see [Frisch 2004]). It describes records (and, partially, pattern
+matching) as they are currently implemented in the language CDuce.
+4
+
+UNIFYING STRUCTS WITH MAPS
+
+Extending the previous calculus to handle maps, is conceptually simple. First, labels must be
+computable, that is, it must be possible to obtain them as results of expressions: therefore L, the
+set of all labels, must be a subset of V, the set of all values of the language. Second, we must add
+expressions to delete and select labels that are computed by expressions: therefore we supplement
+the expressions 𝑒.ℓ and 𝑒\ℓ for structs with two new expressions 𝑒.[𝑒] and 𝑒\[𝑒] that are map
+oriented. Third, since record concatenations of Section 3.1 cannot compute labels, then we introduce
+the expression 𝑒 1 ← ⟨[𝑒 2 ]=𝑒 3 ⟩ that adds (or updates) the field with label computed by 𝑒 2 and content
+computed by 𝑒 3 to the map computed by 𝑒 1 . Finally, we allow record types—which are quasi-constant
+functions in L_T⊥ —to specify their default value: we add to field types the default field “ ⇒ 𝑡”.
+The rest remains unchanged:
+Expressions 𝑒 ::=
+
+· · · | 𝑒.[𝑒] | 𝑒\[𝑒] | 𝑒 ← ⟨[𝑒]=𝑒⟩
+
+Field Types
+
+··· |
+
+𝑓 ::=
+
+⇒𝑡
+
+The semantics of new expressions of map-selection and map-deletion is defined as follows:
+
+𝑣𝑖
+if ℓ ≡ ℓ𝑖 for some 𝑖 ∈ [1..𝑛]
+{ℓ1 = 𝑣 1, ... , ℓ𝑛 = 𝑣𝑛 }.[ℓ] {
+nil otherwise
+𝑣\[ℓ] { {[ℓ = ⊥, = 𝑐 ◦ ]}⊕𝑐 ◦ 𝑣
+𝑣 ← ⟨[ℓ]=𝑒⟩ { 𝑣 + {ℓ = 𝑒}
+
+(8)
+(9)
+(10)
+
+where nil is a distinguished constant returned when the selected field is undefined (e.g., Ballerina,
+Elixir, and Lua use nil, JavaScript uses undefined, Scala uses None, ...) and the evaluation contexts
+are updated by adding the productions 𝐸 ::= 𝐸.[𝑒] | 𝑣.[𝐸] | 𝐸\[𝑒] | 𝑣\[𝐸] | 𝐸 ← ⟨[𝑒]=𝑒⟩ | 𝑣 ← ⟨[𝐸]=𝑒⟩.
+The default field “ ⇒ 𝑡” defines the type of the fields that are not already specified in a record
+type: for example, { ℓ1 ⇒ 𝑡 1, ℓ2 = 𝑡 2, ⇒ 𝑡 3} specifies that every label different from ℓ1 and ℓ2 is
+mapped to 𝑡 3 . Note that for the default field we used the syntax “⇒” of optional fields since the
+default fields always contain at least ⊥. Thus, {ℓ1 ⇒ 𝑡 1, ℓ2 = 𝑡 2, ⇒ 𝑡 3} denotes the quasi-constant
+function {[ℓ1 = 𝑡 1 ∨⊥, ℓ2 = 𝑡 2, = 𝑡 3 ∨⊥]}. Observe that we no longer need to differentiate between
+open and closed record types, since this difference can be expressed by specifying either “ ⇒ 0”
+(for a closed record type) or “ ⇒ 1” (for an open one) for the default field. As for label selection
+(which can be encoded by matching), we keep for convenience the syntax of both record types (but
+Proc. ACM Program. Lang., Vol. 7, No. ICFP, Article 196. Publication date: August 2023.
+
+196:14
+
+Giuseppe Castagna
+
+use mainly open ones), although this is a source of redundancy since { 𝑓1, ..., 𝑓𝑛 } = { 𝑓1, ... , 𝑓𝑛 , ⇒
+1} = {|𝑓1, ... , 𝑓𝑛 , ⇒ 1|} and {|𝑓1, ... , 𝑓𝑛 |} = {|𝑓1, ... , 𝑓𝑛 , ⇒ 0|} = { 𝑓1, ... , 𝑓𝑛 , ⇒ 0} .
+With this new syntax we can now express the type of maps from labels to, say, integers as
+{ ⇒ Int} (or, equivalently, {| ⇒ Int|}). This syntax covers the simple case of maps whose
+domain is always the whole set of labels. This is compatible with what happens for JavaScript objects
+where the set of labels (i.e., the properties names) is the set of all strings. Likewise, in Ballerina the
+type map<T> is the set of mappings from keys of type string to values of type T: we show later in
+Section 4.4 how to modify the calculus to refine domains. The new syntax also allows us to combine
+structs with maps in the same type, as we showed by the example { ℓ1 ⇒ 𝑡 1, ℓ2 = 𝑡 2, ⇒ 𝑡 3} . Thus,
+for instance, it is easy to express by a type the fact that a specific label is used to determine the
+kind of the map, as in { output = "int", ⇒ Int} ∨ { output = "str", ⇒ String} .
+The interpretation and the subtyping relation for the new types are still the ones given in
+Section 3.2.1: the only difference is that given a record atom 𝑟 ∈ L _ T⊥ , with def (𝑟 ) = 𝑡∨⊥ now
+𝑡 can be any type while, before, 𝑡 could be only 0 or 1 (from now on 𝑟 will range on these newer
+atoms). Typing instead needs important modifications. We require not only that L ⊆ V but also
+that L can be expressed as a type. For simplicity, we suppose L to be a basic type, but equivalently
+we might imagine L to be some type expression (e.g., in Ballerina and JavaScript L = string,
+in Go L = 1∖({} ∨slice∨(0→1)), in Lua L = 1∖(nil∨NaN), in Elixir L = atom for struct-like
+records and, as in Erlang, L = 1 for maps)7 . The typing rules for the new selection and delete
+expressions are similar to the corresponding ones for structs:
+Γ ⊢ 𝑒 1 : 𝑡 1 ≤ {}
+[M-Sel]
+
+Γ ⊢ 𝑒 1 : 𝑡 1 ≤ {}
+
+Γ ⊢ 𝑒2 : 𝑡2 ≤ L
+[M-Del]
+
+Γ ⊢ 𝑒 1 .[𝑒 2 ] : 𝑡 1 .[𝑡 2 ]
+
+Γ ⊢ 𝑒2 : 𝑡2 ≤ L
+
+Γ ⊢ 𝑒 1 \[𝑒 2 ] : 𝑡 1 \[𝑡 2 ]
+
+with the notable difference that they use new type operators for selection and deletion that are
+defined for sets of labels rather than single ones. Likewise, map update uses a specific type operator:
+Γ ⊢ 𝑒 1 : 𝑡 1 ≤ {}
+[M-Upd]
+
+Γ ⊢ 𝑒2 : 𝑡2 ≤ L
+
+Γ ⊢ 𝑒3 : 𝑡3
+
+Γ ⊢ 𝑒 1 ← ⟨[𝑒 2 ]=𝑒 3 ⟩ : 𝑡 1 ← ⟨[𝑡 2 ]=𝑡 3 ⟩
+
+We define all these new type operators in Section 4.2, but first we need to give a suitable representation of our record types.
+4.1
+
+Representation of record types.
+All record types (i.e., all subtypes of {} ) can be represented as disjunctive normal forms of record
+type atoms (see §3.2). This representation is used when deciding subtyping on record types (cf.
+Lemma 2.3). However, to compute the type operators used by the typing rules for record selection,
+deletion, concatenation, and update, disjunctive normal forms are inappropriate because of the
+presence of negated record type atoms in them. It is thus convenient to use a different representation
+based on a generalization of the record type atoms of Section 3.2: in this representation, negation is
+directly integrated in the atoms. To that end we use and adapt some results by Frisch [2004].
+Let 𝜏 range over T⊥ —i.e., the “types” of field contents—while 𝑡 still ranges over T . When working
+with the type of the fields of a record type, all set-theoretic operations are relative to T⊥ . In particular,
+the complement of 𝜏 —denoted by not(𝜏) to distinguish it from type negation “¬”— is performed
+in T⊥ : for instance not(0) = 1∨⊥, not(𝑡) = ¬𝑡∨⊥, and not(⊥) = 1.
+Definition 4.1 (Frisch [2004]). Let 𝐿 = {ℓ1, ... , ℓ𝑛 } ⊂ L be a finite set of labels. If (𝜏ℓ )ℓ ∈𝐿
+is a family of types indexed on 𝐿, 𝑆 is a finite set of types, and 𝑡 0 is a type, we use the notation
+7 In Go slices are descriptors for contiguous segments of arrays; in Elixir atoms are colon-prefixed user-defined constants.
+
+Proc. ACM Program. Lang., Vol. 7, No. ICFP, Article 196. Publication date: August 2023.
+
+Typing Records, Maps, and Structs
+
+196:15
+
+Ô
+⎷(𝜏ℓ )ℓ ∈𝐿 ; 𝑡 0 ; 𝑆 ⌄ to denote the type { ℓ1 = 𝜏ℓ1 , ... , ℓ𝑛 = 𝜏ℓ𝑛 , ⇒ 𝑡 0} ∖ 𝑠 ∈𝑆 { ℓ1 ⇒ 1, ... , ℓ𝑛 ⇒
+1 , ⇒ ¬𝑠} (where, with an abuse of notation, the field “ℓ = 𝑡∨⊥” stands for the field “ℓ ⇒ 𝑡”).
+In practice, every type 𝑠 in 𝑆 adds to the type { ℓ1 = 𝜏ℓ1 , ... , ℓ𝑛 = 𝜏ℓ𝑛 , ⇒ 𝑡 0} a constraint
+interpreted as “... and there exists a label not in 𝐿 whose value is of type 𝑠”. The record types of the
+form ⎷(𝜏ℓ )ℓ ∈𝐿 ; 𝑡 0 ; 𝑆 ⌄ are the building blocks to represent all record types, that is all subtypes of
+{} , as a single union, since they satisfy the following properties (cf. Frisch [2004, §9.1.4]):
+⎷(𝜏ℓ )ℓ ∈𝐿 ; 𝑡 0 ; 𝑆 ⌄ ; 0 ⇔ ∀ℓ ∈ 𝐿, 𝜏ℓ ; 0 and ∀𝑠 ∈ 𝑆, 𝑡 0 ∧ 𝑠 ; 0
+
+⎷(𝜏ℓ )ℓ ∈𝐿 ; 𝑡 0 ; 𝑆 ⌄ ∧ ⎷(𝜏ℓ′ )ℓ ∈𝐿 ; 𝑡 0′ ; 𝑆 ′ ⌄ = ⎷((𝜏ℓ ∧𝜏ℓ′ )ℓ ∈𝐿 ; 𝑡 0 ∧ 𝑡 0′ ; 𝑆 ∪ 𝑆 ′ ⌄
+⎷(𝜏ℓ )ℓ ∈𝐿 ; 𝑡 0 ; 𝑆 ⌄ ∖ ⎷(𝜏ℓ′ )ℓ ∈𝐿 ; 𝑡 0′ ; ∅ ⌄ = ⎷(𝜏ℓ )ℓ ∈𝐿 ; 𝑡 0 ; 𝑆 ∪ {¬𝑡 0′ } ⌄ ∨
+
+Ü
+
+(11)
+(12)
+
+⎷(𝜏ℓℓ0 )ℓ ∈𝐿 ; 𝑡 0 ; 𝑆 ⌄
+
+(13)
+
+ℓ0 ∈𝐿
+
+where 𝜏ℓℓ0 is defined as 𝜏ℓ ∧not(𝜏ℓ′ ) if ℓ = ℓ0 and 𝜏ℓ otherwise.
+Using the last two properties it is not difficult to transform every record type in disjunctive
+normal form into a union of records of the form ⎷(𝜏ℓ )ℓ ∈𝐿 ; 𝑡 0 ; 𝑆 ⌄:
+Theorem 4.2 (Frisch [2004]). Let 𝐿 ∈ Pfin (L) a finite set of labels and 𝑡 a type such that 𝑡 ≤ {}
+𝐿 (𝑡) of types of the form ⎷(𝜏 )
+and dom(𝑡) ⊆ 𝐿. Then there exists a finite set 𝜋rec
+ℓ ℓ ∈𝐿 ; 𝑡 0 ; 𝑆 ⌄ such that
+Ü
+𝑡≃
+⎷(𝜏ℓ )ℓ ∈𝐿 ; 𝑡 0 ; 𝑆 ⌄
+𝐿 (𝑡 )
+⎷(𝜏ℓ )ℓ ∈𝐿 ; 𝑡 0 ; 𝑆 ⌄∈𝜋 rec
+
+Ô Ó
+Ó
+Proof. If 𝑡 ≤ {} , then it is equivalent to 𝑖 ∈𝐼 ( 𝑝 ∈𝑃𝑖 𝑟 𝑝 ∧ 𝑛∈𝑁𝑖 ¬𝑟𝑛 ) where the 𝑟 ’s are record
+type atoms, that is, record types of the form ⎷(𝜏ℓ )ℓ ∈𝐿 ; 𝑡 0 ; ∅ ⌄. By applying (12) we can transform
+Ó
+𝑝 ∈𝑃𝑖 𝑟 𝑝 into a record of the form ⎷(𝜏ℓ )ℓ ∈𝐿 ; 𝑡 0 ; 𝑆Ó⌄. By successively applying (13) to the intersection
+of the record thus obtained and each record in 𝑛∈𝑁𝑖 ¬𝑟𝑛 we obtain the result.
+□
+Hereafter we use R to range over records of the form ⎷(𝜏ℓ )ℓ ∈𝐿 ; 𝑡 0 ; 𝑆 ⌄ and consider them our new
+record type atoms (of which our previous atoms—ranged over by 𝑟 —are just the special case for
+𝑆 = ∅). They can be used for the internal representationÔ
+of record types since, as per Theorem 4.2,
+every subtype of {} is equivalent to a union of the form 𝑖 ∈𝐼 R𝑖 : this property yields definitions for
+type operators that are simpler than with disjunctive normal forms, as we show next.
+4.2
+
+Type operators
+
+Theorem 4.2 allows us to formally define and compute the type operators we used in the typing
+rules. Let us start with 𝑡 .ℓ, the projection of a record type 𝑡 on a single label ℓ.
+Struct-selection. Let ℓ be a label in L, 𝑡 be a type such that 𝑡 ≤ {} , and 𝐿 be a finite set of labels
+such that dom(𝑡) ⊆ 𝐿. Define 𝝅 ℓ (𝑡) = min{𝜏 | 𝑡 ≤ { ℓ = 𝜏} }, that is, the projection on ℓ of 𝑡. Then,
+it is clear that we have
+ Ô
+𝜏ℓ
+if ℓ ∈ 𝐿
+𝐿
+(14)
+𝝅 ℓ (𝑡) = Ô⎷(𝜏𝑚 )𝑚∈𝐿 ; 𝑡0 ; 𝑆 ⌄∈𝜋rec (𝑡 )
+if ℓ ∉ 𝐿
+𝐿 (𝑡 ) 𝑡 0 ∨⊥
+⎷(𝜏𝑚 )𝑚∈𝐿 ; 𝑡 0 ; 𝑆 ⌄∈𝜋rec
+It is straightforward to see that the 𝑡 .ℓ operator we used in the rule [Sel] is defined as 𝝅 ℓ (𝑡) if
+𝝅 ℓ (𝑡) ∧ ⊥ ≃ 0 (i.e., if 𝝅 ℓ (𝑡) is a type, viz., if the field ℓ is defined) and is undefined otherwise, and
+to compute it, it suffices to take 𝐿 = dom(𝑡).
+Map-selection. Regarding the map-selection
+operator 𝑡 .[𝑡 ′ ] used in [M-sel], let 𝑡 ≤ {} and 𝑡 ′ ≤ L
+Ô
+and consider the following union ℓ ∈𝑡 ′ 𝝅 ℓ (𝑡). Notice that even if 𝑡 ′ may be an infinite set of labels
+(e.g., string), it is always possible to express this union as a finite union. This results from two
+properties, Ô
+namely that dom(𝑡) is finite, and that for all ℓ1, ℓ2 ∈ 𝑡 ′ ∖dom(𝑡),
+we have 𝝅 ℓ1 (𝑡) = 𝝅 ℓ2 (𝑡).
+Ô
+Therefore, ℓ ∈𝑡 ′ 𝝅 ℓ (𝑡) is equivalent to the finite union 𝝅 ℓ¯(𝑡) ∨ ℓ ∈dom(𝑡 )∧𝑡 ′ 𝝅 ℓ (𝑡) where ℓ¯ is any
+Proc. ACM Program. Lang., Vol. 7, No. ICFP, Article 196. Publication date: August 2023.
+
+196:16
+
+Giuseppe Castagna
+
+Ô
+Ô
+label inÔ𝑡 ′ ∖dom(𝑡), if any.8 Then 𝑡 .[𝑡 ′ ] is defined as ℓ ∈𝑡 ′ 𝝅 ℓ (𝑡) if ⊥ ∧ ℓ ∈𝑡 ′ 𝝅 ℓ (𝑡) ≃ 0 and as
+nil ∨ ( ℓ ∈𝑡 ′ 𝝅 ℓ (𝑡) ∖ ⊥) otherwise. Also, we may want the type-checker to emit a warning when
+Ô
+Ô
+ℓ ∈𝑡 ′ 𝝅 ℓ (𝑡) ≤ ⊥ (i.e., when the selection will surely yield nil), as well as when 1 ≤
+ℓ ∈𝑡 ′ 𝝅 ℓ (𝑡)
+(i.e., when the selection may spill over the “open” part of the record type 𝑡, whose type is 1∨⊥),
+since both are situations in which, even though the expressions are well-typed (i.e., they cannot
+produce stuck expressions at run-time) they may conceal some problem (selecting a field that is
+surely undefined does not make much sense).
+Map-deletion. Regarding the map-deletion operator 𝑡∖[𝑡 ′ ] used in [M-Del], it just adds ⊥ to all
+the fields whose label is in 𝑡 ′ , since they all may become undefined (though, just one of them will
+actually become undefined: the one for the label computed
+in the delete expression), that is: let
+Ô
+′
+𝑡 ≤ {} with dom(𝑡) ⊆ 𝐿 and 𝑡 ′ ≤ L, then 𝑡∖[𝑡 ′ ] = ⎷(𝜏ℓ )ℓ ∈𝐿 ; 𝑡0 ; 𝑆 ⌄∈𝜋rec
+𝐿 (𝑡 ) ⎷(𝜏 ) ℓ ∈𝐿 ; 𝑡 0 ; 𝑆 ⌄ where
+ℓ
+′
+′
+𝜏ℓ is 𝜏ℓ ∨⊥ if ℓ ∈ 𝐿 ∧ 𝑡 and is 𝜏ℓ otherwise.
+Map-update. The map-update operator 𝑡 ← ⟨[𝑡 1 ]=𝑡 2 ⟩ is very similar to the map-deletion one, but
+it uses 𝑡 2 instead of ⊥ to update the fields (and
+Ô the default 𝑡 0 types),′ that is:′ let 𝑡 ≤ {} with
+′
+dom(𝑡) ⊆ 𝐿 and 𝑡 1 ≤ L, then 𝑡 ← ⟨[𝑡 1 ]=𝑡 2 ⟩ = ⎷(𝜏ℓ )ℓ ∈𝐿 ; 𝑡0 ; 𝑆 ⌄∈𝜋rec
+𝐿 (𝑡 ) ⎷(𝜏 ) ℓ ∈𝐿 ; 𝑡 ; 𝑆 ⌄ where 𝜏 is
+ℓ
+ℓ
+0
+𝜏ℓ ∨𝑡 2 if ℓ ∈ 𝐿 ∧ 𝑡 1 and is 𝜏ℓ otherwise, and 𝑡 0′ is 𝑡 0 ∨ 𝑡 2 if 𝑡 1 ∖ 𝐿 ; 0 and 𝑡 0 otherwise.9
+Record concatenation (and struct-deletion). Finally, it remains to define the 𝑡 1 +𝑡 𝑡 2 operator where
+𝑡 is any type and 𝑡 1 and 𝑡 2 are non-empty subtypes of {} (the operator is undefined if 𝑡 1 or 𝑡 2 is not
+a record type). This operator defines both the record type concatenation operator 𝑡 1 + 𝑡 2 used in
+[Conc] (defined as 𝑡 1 + ⊥ 𝑡 2 ), and the struct deletion operator 𝑡∖ℓ (defined as 𝑡 +𝑐 ◦ ⎷{⊥ℓ } ; 𝑐 0 ; ∅ ⌄).
+Equation (7) defines the concatenation for two atoms, which in the new representation are two
+atoms of the form ⎷(𝜏ℓ )ℓ ∈𝐿 ; 𝑡 0 ; ∅ ⌄. In that specific case the operator is exact, in the sense that it
+yields the type formed by all record values obtained by the concatenation of records of the first
+type with records of the second type. Frisch [2004, Theorem 9.6] proves that, in general, it is not
+possible to give an exact definition for the operator, the problem happening, of course, with types
+⎷(𝜏ℓ )ℓ ∈𝐿 ; 𝑡 0 ; 𝑆 ⌄ in which 𝑆 is not empty. However, it is possible to define a sound approximation
+that is operationally indistinguishable from the exact definition [Frisch 2004, Lemmas 9.12–9.17]:
+just disregard 𝑆 sets.10 Formally, this is obtained by defining the +𝑡 operator on two atoms in the
+new representation as follows:
+⎷(𝜏ℓ1 )ℓ ∈𝐿 ; 𝑡 1 ; 𝑆 1 ⌄ +𝑡 ⎷(𝜏ℓ2 )ℓ ∈𝐿 ; 𝑡 2 ; 𝑆 2 ⌄ = ⎷(𝜏ℓ3 )ℓ ∈𝐿 ; 𝑡 3 ; ∅ ⌄
+
+(15)
+
+where for all ℓ∈𝐿, 𝜏ℓ3 is 𝜏ℓ2 if 𝜏ℓ2 ∧𝑡 ≤ 0 and is (𝜏ℓ2 ∖𝑡)∨𝜏ℓ1 otherwise and, likewise, 𝑡 3 is 𝑡 2 if 𝑡 2 ∧𝑡 ≤ 0 and
+is (𝑡 2 ∖𝑡) ∨ 𝑡 1 otherwise (notice that 𝑆 1 and 𝑆 2 were simply discarded). Finally, for the concatenation
+of two record types, since each type is equivalent to a union of record atoms, this is given by the
+formula
+Ü 
+Ü 
+Ü
+R𝑖 +𝑡
+R𝑗 =
+(R𝑖 +𝑡 R 𝑗 )
+(16)
+𝑖 ∈𝐼
+
+𝑗 ∈𝐽
+
+𝑖 ∈𝐼,𝑗 ∈ 𝐽
+
+Remark 4.3 (Internal representation of records atoms). Transforming any subtype of {}
+into a union of records by applying the proof of Theorem 4.2 to the disjunctive normal form of the
+type is easy. The formulæ above, then, provide an effective definition of the type operators. In the
+8 Here, and in what follows we use the ambiguity that a subtype of L denotes a set of labels and, thus, we mix set-theoretic
+(e.g., ∈) with type-theoretic (e.g., ∧) notations, to lighten the presentation.
+9 For a more precise typing, both map-deletion and map-update (or their corresponding typing rules) should be specialized
+to work as the corresponding struct cases, when the type of the expression computing the label is a singleton type.
+10 The intuition for this property is that, as the definition of 𝝅 (𝑡 ) shows, the 𝑆 constraints do not give any information
+ℓ
+about the value obtained from a selection, which is the only possible observation we can perform on records.
+
+Proc. ACM Program. Lang., Vol. 7, No. ICFP, Article 196. Publication date: August 2023.
+
+Typing Records, Maps, and Structs
+
+196:17
+
+language of Section 3 the exact content of 𝑆 for a type ⎷(𝜏ℓ )ℓ ∈𝐿 ; 𝑡 0 ; 𝑆 ⌄ is not needed: what is needed
+is just to know whether 𝑆 is empty or not in order to apply (11) (since 𝑡 0 is either ⊥ or 1∨⊥, then for a
+non-empty type, by (13), the only possible non-empty type 𝑠 in 𝑆 is 1). So the internal representation
+of record type atoms can use just a simple Boolean to flag if 𝑆 is non-empty (and another for 𝑡 0 )
+and the type pretty printer will display in the list of fields “ (+ others)” for the types in which this
+flag is on. This is no longer true for maps since the full information of 𝑆 is needed to check that, say,
+{| ⇒ Int|} ∖ {| ⇒ Int ∨ Bool|} = ⎷{} ; Int ∨ ⊥ ; {¬Int ∧ ¬Bool)} ⌄ is empty.
+The system presented in this section subsumes the one of Section 3 and preserves its metatheoretic properties. In particular, soundness of the type system can be proved by a routine extension
+of the inductive proof of the soundness of the system of Section 3 (see Appendix B).
+4.3
+
+Implementation of the Subtyping Algorithm
+
+The formulas in Section 4.2 give an effective definition of the type operators used in the typing rules.
+To complete the description of how typing can be implemented, it still remains to describe how to
+implement subtyping for our new record types. Lemma 2.3 describes the formal decomposition
+one has to perform to check subtyping for a disjunctive normal form of records (i.e., a union of
+intersections of record atoms or their negations). But in order to implement this check we have to
+define for the formula in the lemma’s statement, a (backtrack free) Φ function that is analogous to
+the Φ function we gave in Section 2.1.4 for the product decomposition formula (2).
+Since the implementation of the subtyping algorithm manipulates directly types in disjunctive
+normal form (see Castagna [2020, §4.3]) we define Φ to work on them (the transformation into
+a union of record atoms described by Theorem 4.2 must be applied only to compute record type
+Ó
+Ó
+operators). More precisely, we need Φ to decide whether R∈𝑃 R ∧ R∈𝑁 ¬R is empty, where the
+R’s in 𝑃∪𝑁 are of the form ⎷(𝜏ℓ )ℓ ∈𝐿 ; 𝑡 ; ∅ ⌄. Thanks to (12), we can move the first intersection
+inside the records and consider it as a unique record R◦ . Then we have
+Ü
+R◦ ≤
+R
+⇐⇒
+(R◦ ≤ 0) or Φ(R◦, 𝑁 )
+(17)
+R∈𝑁
+
+with Φ(R◦, 𝑁 ) defined as:
+Φ(R◦, ∅)
+
+=
+
+false
+
+Φ(R◦, 𝑁 ∪ {R})
+
+=
+
+( def (R◦ ) ≤ def (R) and
+∀ℓ ∈ 𝐿 . (R◦ (ℓ) ≤ R(ℓ) or Φ(R◦ ∧ {ℓ : not(R(ℓ))}}, 𝑁 ))
+) or ( def (R◦ ) ̸ ≤ def (R) and Φ(R◦, 𝑁 ) )
+
+(18)
+
+Ð
+where 𝐿 = R∈𝑁 ∪{R◦ } dom(R).
+Notice that in the second clause of (18) the two propositions that form the “or” are mutually
+exclusive. Therefore, this clause can be equivalently expressed in a programming-oriented way as
+Φ(R◦, 𝑁 ∪ {R})
+
+= if def (R◦ ) ≤ def (R)
+then ∀ℓ ∈ 𝐿 . ( R◦ (ℓ) ≤ R(ℓ) or Φ(R◦ ∧ { ℓ : not(R(ℓ))}, 𝑁 ) )
+else Φ(R◦, 𝑁 )
+
+(19)
+
+This definition of Φ works both in the case we have structs (i.e., when def (R) is either 1∨⊥ or ⊥)
+and more generally in the case for maps (i.e., when def (R) is 𝑡∨⊥ for some type 𝑡).11
+To prove the correctness of (17) we use the representation and properties introduced in the
+previous section. In particular, by property (13) it is easy to prove the following lemma
+11 Just a caveat. The intersection of two “pure” maps—e.g. {
+
+⇒ Int} and {
+
+⇒ String} —is never empty since it always
+
+contains at least the empty record expression {}.
+Proc. ACM Program. Lang., Vol. 7, No. ICFP, Article 196. Publication date: August 2023.
+
+196:18
+
+Giuseppe Castagna
+
+Lemma 4.4. Let ⎷(𝜏ℓ )ℓ ∈𝐿 ; 𝑡 0 ; 𝑆 ⌄ ; 0 and 𝑁 be a set of types of the form ⎷(𝜏ℓ′ )ℓ ∈𝐿 ; 𝑡 0′ ; ∅ ⌄, then
+Ü
+Ü
+⎷(𝜏ℓ )ℓ ∈𝐿 ; 𝑡 0 ; 𝑆 ⌄ ≤
+𝑡
+⇐⇒
+⎷(𝜏ℓ )ℓ ∈𝐿 ; 𝑡 0 ; ∅ ⌄ ≤
+𝑡
+𝑡 ∈𝑁
+
+𝑡 ∈𝑁
+
+Proof. Since ⎷(𝜏ℓ )ℓ ∈𝐿 ; 𝑡 0 ; 𝑆 ⌄ ≤ ⎷(𝜏ℓ )ℓ ∈𝐿 ; 𝑡 0 ; ∅ ⌄, then the right to left implication is
+obvious. The converse implication is proved by induction on the cardinality of 𝑁 . The case for
+|𝑁 | = 0 is immediate since both containment relations are false. The inductive case follows from
+the application of property (13) and the induction hypothesis.
+The previous lemma plays a key role to prove the correctness of (17):
+Theorem 4.5. Let 𝑁 be a set of types of the form ⎷(𝜏ℓ′ )ℓ ∈𝐿 ; 𝑡 0′ ; ∅ ⌄. Then
+Ü
+⎷(𝜏ℓ )ℓ ∈𝐿 ; 𝑡 0 ; 𝑆 ⌄ ≤
+𝑡
+⇐⇒
+(⎷(𝜏ℓ )ℓ ∈𝐿 ; 𝑡 0 ; 𝑆 ⌄ ≤ 0) or Φ(⎷(𝜏ℓ )ℓ ∈𝐿 ; 𝑡 0 ; 𝑆 ⌄, 𝑁 )
+𝑡 ∈𝑁
+
+Proof. If ⎷(𝜏ℓ )ℓ ∈𝐿 ; 𝑡 0 ; 𝑆 ⌄ is empty then the result holds. Otherwise, we proceed by induction
+on the size of 𝑁 .
+Ô
+If 𝑁 is empty then Φ(⎷(𝜏ℓ )ℓ ∈𝐿 ; 𝑡 0 ; 𝑆 ⌄, 𝑁 ) = false and 𝑡 ∈𝑁 𝑡 ≤ 0. Therefore, as stated by
+definition (18), the left-hand side of the statement holds if and only if ⎷(𝜏ℓ )ℓ ∈𝐿 ; 𝑡 0 ; 𝑆 ⌄ ≤ 0
+If 𝑁 = 𝑁 ′ ∪ {⎷(𝜏ℓ′ )ℓ ∈𝐿 ; 𝑡 0′ ; ∅ ⌄}, then we apply the definition (18) where R◦ = ⎷(𝜏ℓ )ℓ ∈𝐿 ; 𝑡 0 ; 𝑆 ⌄
+and R = ⎷(𝜏ℓ′ )ℓ ∈𝐿 ; 𝑡 0′ ; ∅ ⌄. By (13) the left-hand side of the theorem’s statement is equivalent to
+Ü
+Ü
+⎷(𝜏ℓ )ℓ ∈𝐿 ; 𝑡 0 ; 𝑆 ∪ {¬𝑡 0′ } ⌄ ∨
+⎷(𝜏ℓℓ0 )ℓ ∈𝐿 ; 𝑡 0 ; 𝑆 ⌄ ≤
+𝑡
+(20)
+𝑡 ∈𝑁 ′
+
+ℓ0 ∈𝐿
+
+where for each ℓ0 ∈ 𝐿 the type ⎷(𝜏ℓℓ0 )ℓ ∈𝐿 ; 𝑡 0 ; 𝑆 ⌄ is equivalent to R◦ ∧ { ℓ0 : not(R(ℓ0 ))} , with R
+and R◦ defined as just above formula (20).
+A union of types is smaller than a type if and only if every summand of the union is smaller than
+that type, so we are going to prove it by applying the induction hypothesis on 𝑁 ′ .
+Let us examine the first summand of the left-hand side of (20) and check whether
+Ü
+⎷(𝜏ℓ )ℓ ∈𝐿 ; 𝑡 0 ; 𝑆 ∪ {¬𝑡 0′ } ⌄ ≤
+𝑡
+𝑡 ∈𝑁 ′
+
+By induction hypothesis this holds if and only if either (𝑖) ⎷(𝜏ℓ )ℓ ∈𝐿 ; 𝑡 0 ; 𝑆 ∪ {¬𝑡 0′ } ⌄ is empty or
+(𝑖𝑖) Φ(⎷(𝜏ℓ )ℓ ∈𝐿 ; 𝑡 0 ; 𝑆 ∪ {¬𝑡 0′ } ⌄, 𝑁 ′ ). For the (𝑖) case, since ⎷(𝜏ℓ )ℓ ∈𝐿 ; 𝑡 0 ; 𝑆 ⌄ is not empty, then
+by (11) the type is empty only if 𝑡 0 ∧ ¬𝑡 0′ is empty, that is def(R◦ ) ≤ def(R). If def (R◦ ) ≰ def (R),
+then we are in case (𝑖𝑖) and have to check Φ(⎷(𝜏ℓ )ℓ ∈𝐿 ; 𝑡 0 ; 𝑆 ∪ {¬𝑡 0′ } ⌄, 𝑁 ′ ) which by Lemma 4.4 is
+equivalent to Φ(⎷(𝜏ℓ )ℓ ∈𝐿 ; 𝑡 0 ; ∅ ⌄, 𝑁 ′ ) and thus to Φ(R◦, 𝑁 ′ ).
+For the other summands we have to prove for every ℓ0 ∈ 𝐿 that
+Ü
+⎷(𝜏ℓℓ0 )ℓ ∈𝐿 ; 𝑡 0 ; 𝑆 ⌄ ≤
+𝑡
+𝑡 ∈𝑁 ′
+
+By induction hypothesis this is equivalent to proving that either (𝑖) the left-hand side is empty,
+that is, that 𝜏ℓℓ00 is empty, that is—by the definition of 𝜏ℓℓ00 —, R◦ (ℓ0 ) ≤ R(ℓ0 ), or (𝑖𝑖) proving the truth
+of Φ(⎷(𝜏ℓℓ0 )ℓ ∈𝐿 ; 𝑡 0 ; 𝑆 ⌄, 𝑁 ′ ), that is, of Φ(R◦ ∧ { ℓ0 : not(R(ℓ0 ))}, 𝑁 ′ )
+Summing up, we have proved by induction that if ⎷(𝜏ℓ )ℓ ∈𝐿 ; 𝑡 0 ; 𝑆 ⌄ is not empty then (20) is
+equivalent to checking both these two proposition disjunctions:
+(1) (def (R◦ ) ≤ def (R)) or (def (R◦ ) ≰ def (R) and Φ(R◦, 𝑁 ′ ))
+(2) ∀ℓ0 ∈ 𝐿 . ( (R◦ (ℓ0 ) ≤ R(ℓ0 )) or Φ(R◦ ∧ {ℓ0 : not(R(ℓ0 ))}}, 𝑁 ′ ) )
+Proc. ACM Program. Lang., Vol. 7, No. ICFP, Article 196. Publication date: August 2023.
+
+Typing Records, Maps, and Structs
+
+196:19
+
+′
+To conclude notice
+Ô that if (def (R◦ ) ≰ def (R)Ôand Φ(R◦, 𝑁 )) holds, then by induction hypothesis
+we have R◦ ≤ 𝑡 ∈𝑁 ′ 𝑡 and, a fortiori, R◦ ≤ 𝑡 ∈𝑁 ′ ∪{R} 𝑡. It is therefore useless to check the other
+proposition (2) above, which thus must be checked only when def(R◦ ) ≤ def (R). This yields
+
+( def(R◦ ) ≰ def(R) and Φ(R◦, 𝑁 ′ ) )
+or ( def(R◦ ) ≤ def (R) and (∀ℓ0 ∈ 𝐿 . (R◦ (ℓ0 ) ≤ R(ℓ0 ) or Φ(R◦ ∧ { ℓ0 : not(R(ℓ0 ))}, 𝑁 ′ ))
+that is (modulo renaming) the second clause in (18), which proves the theorem.
+
+□
+
+4.4 Erlang-style maps
+In the first part of this section we defined a very simple case of maps whose domain was always
+the set of all labels. This suits languages in which record keys are of a specific and limited type
+(e.g., strings for Ballerina’s maps and JavaScript’s objects, integers and strings for PHP). However,
+there exist more refined type-systems that allow a larger range of keys in maps, and for which it
+makes sense to specify the domain of the maps. For instance, in Go the syntax map[int]string
+denotes the type of maps from strings to integers, which is the same as Scala’s Map[Int,String]
+and Swift’s [Int: String]. We want to extend the previous system so that it is possible to restrict
+the domain of the maps and still be able to combine them with single field declarations as in
+{|input = "int", Int ⇒ Int|} ∨ {|input = "str", String ⇒ Int|} which is a slightly modified
+version of the type we defined at the beginning of Section 4, except we replaced the wildcard “ ”
+with a domain type. Let us call this union type S. The idea that the (mandatory) field input in the
+records of type S is used as a flag to specify the kind of map the record contains. It becomes then
+possible to deduce the type S→(integer|nil) for the following function (in pseudo-syntax):
+function foo(x : S) =
+match x with
+| { input = "int" } -> x.[42]
+| _ -> x.["42"]
+
+The match expression checks whether the field input contains the string "int" and if so it deduces
+that x maps integers to integers, otherwise it deduces that it maps strings to integers. Since the
+union S is formed by closed record types, trying to select in x anything that is not an integer in the
+first branch and that is not a string in the second branch would yield a static type error.
+In some languages, like Erlang and Elixir, it is possible to define the union type above. For
+instance, in Elixir Typespec’s syntax [Elixir] the type S can be defined as follows:12
+%{input: "str", optional(string)=>integer} | %{input: "int", optional(integer)=>integer}.
+
+However, such types are not actually used (apart from for documentation): Dialyzer [Lindahl and
+Sagonas 2004], the current default static analysis tool for Erlang and Elixir ignores them, since it
+does not even blink when the function foo above is given type S→(function()) which states
+that the result of foo is a function.
+Erlang and Elixir allow specifying map types from any type to any type. Thus, it is possible
+to define fine-grained map types such as %{1..* =>integer, *..0 => boolean} which maps
+positive integers to integers and negative ones to Boolean values (n..m is Elixir notation for the
+interval between 𝑛 and 𝑚 where * is the symbol for infinite). Since there is no constraint on the
+domain of the map, it is possible to define maps in which different fields have overlapping domains,
+such as %{1..* => integer, *..5 => boolean}. In case of overlap Typespec states that the leftmost
+field has the priority. Clearly this is not compatible with the theory we defined so far (and, more
+generally, with the semantic subtyping approach) which disregards the order of the fields. If we
+take the declaration face-value and read it at the light of the interpretation we gave so far, the type
+12 In Typespec, record types are prefixed by % and are closed (open ones need to specify optional(any)=>any), while basic
+
+types are suffixed with open-closed parentheses—e.g., integer(), string()—: we omitted the latter to enhance readability.
+Proc. ACM Program. Lang., Vol. 7, No. ICFP, Article 196. Publication date: August 2023.
+
+196:20
+
+Giuseppe Castagna
+
+%{1..* => integer, *..5 => boolean} must be interpreted as the set of records where every field
+labeled by a number larger than 1 is either undefined or associated to an integer value, and every
+field labeled a number smaller than 5 is ever undefined or associated to a Boolean value. Thus, in
+these records every field labeled by a number between 1 and 5 must be undefined, since otherwise
+it should be associated to a value that is both an integer and a Boolean, which is impossible. In
+other words the type above is equivalent to %{6..* => integer, *..0 => boolean, 1..4 => none}
+(none is Typespec’s empty type). We think that an unbridled use of the domains of maps could be
+a source of confusion (practical examples of this kind of confusion are discussed in Section 5 on
+related work). Therefore, we propose to forbid any overlapping between domains in the same map,
+still preserving the possibility for a domain to overlap with single labels, as it was the case with the
+maps defined so far. For instance, a type such as the above will be forbidden, but it will be possible
+to define the type { 1 = Int, 2 ⇒ Bool, Int ⇒ String} whose records have a mandatory field 1 of
+type integer, an optional field 2 of type boolean, and map any integer other than 1 and 2 to a string
+(since it is an open record type, these records may contain other fields for non-integer labels). In
+other words, we want to allow a record type to specify several fields of the form 𝑡 ⇒ 𝑡, provided
+that the domains that are not singleton have pairwise empty intersections. However, enforcing
+distinct domains to have empty intersections is not straightforward. Even if we require that for
+each record type atom the domains of its fields do not overlap, this is not enough since the overlap
+may take place when we compare, intersect, or union different record types. For instance, simple
+maps with just one field definition such as { 1..∗ ⇒ Int} and { ∗..5 ⇒ Bool} obviously satisfy the
+condition, but their intersection is the type { 1..∗ ⇒ Int, ∗..5 ⇒ Bool} , that is, the very type that
+we discussed as being problematic since it has overlapping domains. To avoid this problem we
+propose to restrict the domains of maps to be drawn from a predefined fixed set of key-types that
+are mutually non overlapping. In practice, this amounts to modify the definition of fields as follows:
+Fields
+Key Types
+
+𝑓
+𝑘
+
+::= ℓ = 𝑡 | ℓ ⇒ 𝑡 | 𝑘 ⇒ 𝑡
+::= Int | Bool | String | 1×1 | 0→1 | {} |
+
+where ℓ denotes a value of type L. For the sake of simplicity, we used in the definition of key-types
+only three basic types (Int, Bool, and String) but in practice each language will choose some specific
+basic types (e.g., in Elixir key-types will also include atom(), the type of all atoms, but only String
+in JavaScript). For the sake of the example we also added 1×1 the type of all pairs (introduced in
+Section 2.1). What does matter is that all the key-types (different from ) are pairwise disjoint and
+that their union is equivalent to L, that is it covers all the admitted record labels.13 In the case
+above if we suppose that we specified in the key-types all basic types, then we also have that the
+union of all key-types is equivalent to 1 (i.e., all values can be used as keys for maps, as in Erlang).
+As we already hinted, if a field of the form 𝑘 ⇒ 𝑡 is present in a record type, it means that the
+records of that type must map every value in 𝑘 other than those already defined in the record type to
+a value of type 𝑡 or to be undefined. The presence of a field ⇒ 𝑡 in a record type means that the
+records of that type map any value of L not already specified by a field or a key-type in the type to
+a value of type 𝑡 or to be undefined. For instance, the record value {1 = true, 2 = 42} has many
+possible types among which { 1 = Bool, Int ⇒ Int} , { Int ⇒ Bool, 2 = Int} , { Int ⇒ Int∨Bool, ⇒
+String} ; however it has neither type { Int ⇒ Int} —since 1 is mapped to a Boolean—, nor type
+{ Int ⇒ Bool, Int ⇒ Int} , since all fields must have non-overlapping left-hand sides.
+The approach we propose allows maps from any value (to any value). It is less flexible than
+Erlang’s unrestricted approach since, for instance, we cannot define maps from pairs of integers, but
+13 Since the union of all key-types is equivalent to L, the presence of “
+
+” among them constitutes just a convenient syntactic
+sugar. We could require that the union of all key types is just contained in L: in that case the presence of “ ” would be
+necessary. Here we preferred to consider only the first case since it yields simpler definitions and simpler proofs.
+
+Proc. ACM Program. Lang., Vol. 7, No. ICFP, Article 196. Publication date: August 2023.
+
+Typing Records, Maps, and Structs
+
+196:21
+
+only maps from pairs of values: { 1×1 ⇒ Int} but not { Int×Int ⇒ Int} (see however Section 4.5 on
+design choices). But it has two important advantages: first, it greatly simplifies the definition and
+decision procedure of the subtyping relation since, as we show next, we can reuse all the definitions,
+formulas, and algorithms defined so far for records with just minimal modifications; second and
+foremost, it eliminates a bunch of ambiguities that overlapping domains would surely generate.
+In order to account for these new map types, we have to switch from quasi-constant functions to
+the more general quasi K-step functions: these are step functions14 that are constants on a predefined
+finite partition K of the domain apart from on a finite set of elements.
+In the previous sections, we interpreted record atoms into quasi-constant functions of the form
+{[ℓ1 = 𝜏1, ..., ℓ𝑛 = 𝜏𝑛 , = 𝜏𝑤 ]} where the 𝜏𝑖 ’s are of the form 𝑡 or 𝑡∨⊥. The idea now is that the new
+record atoms of this section will be interpreted in quasi K-step functions of the form:
+{[ℓ1 = 𝜏1, ...ℓ𝑛 = 𝜏𝑛 , bool = 𝜏1′ , int = 𝜏2′ , string = 𝜏3′ , prod = 𝜏4′ , arrow = 𝜏5′ , recd = 𝜏6′ ]}
+denoting the quasi K-step function that maps ℓ𝑖 to 𝜏𝑖 and the key-types Bool, Int, String, etc., in the
+respective 𝜏𝑖′ ’s. In other words, the “ ” field for the default value that in quasi-constant functions covered all the keys in L not specified in a type, is in quasi K-step functions partitioned into the various
+key-types (6 in our example, forming our K), whose union yields L. For instance, an open record type
+such as { "a" = Int, String ⇒ Bool} —which maps the string "a" into integers, any other string into
+Boolean values, and does not set any constraint on the remaining keys—, denotes the quasi K-step
+function {["a" = Int, bool =1∨⊥, int =1∨⊥, string =Bool∨⊥, prod =1∨⊥, arrow =1∨⊥, recd =1∨⊥]},
+|} denotes the quasi K-step funcwhile its closed record type counterpart {|"a" = Int, String ⇒ Bool|}
+tion {["a" = Int, bool =⊥, int =⊥, string =Bool∨⊥, prod =⊥, arrow =⊥, recd =⊥]}. In both cases notice
+that records of these types map all strings to Boolean values or undefined, except "a" which must be
+mapped to an integer. As before the wild-card “ ” key-type, denotes all the other keys not specified in
+the record type, but here it is just some syntactic sugar to avoid repeating the fields: e.g., { ⇒ Int}
+is equivalent to { Int ⇒ Int, Bool ⇒ Int, String ⇒ Int, 1×1 ⇒ Int, 0→1 ⇒ Int, {} ⇒ Int} .15
+Extending the previous theory to account for quasi K-step functions requires minimal modifications. The main difference is that the default value function def(R) now becomes a family of types
+indexed over the set of key-types K = {bool, int, string, prod, arrow, recd}. Formally,
+Definition 4.6 (Quasi K-step function). Ð
+Let L denote a set of keys, and K a finite partition of
+L (i.e., all 𝑘 ∈ K are pairwise disjoint and L = 𝑘 ∈ K 𝑘). Let 𝑍 denote some set, a function 𝑟 : L → 𝑍
+is a quasi K-step function, if for all 𝑘 ∈ K there exists 𝑧𝑘 ∈ 𝑍 such that the set {ℓ ∈ 𝑘 | 𝑟 (ℓ) ≠ 𝑧𝑘 } is
+finite; we denote by dom(𝑟 ) the union of all these finite sets, and by def (𝑟 )𝑘 the element 𝑧𝑘 . We use
+K
+L _ 𝑍 to denote the set of quasi K-step functions from L to 𝑍 .
+
+′ ]} to denote
+If K = {𝑘 1, ..., 𝑘𝑚 } we use the notation {[ℓ1 = 𝑧 1, . . . , ℓ𝑛 = 𝑧𝑛 , 𝑘 1 = 𝑧 1′ , . . . , 𝑘𝑚 = 𝑧𝑚
+K
+the quasi K-step function 𝑟 : L _ 𝑍 defined by 𝑟 (ℓ𝑖 ) = 𝑧𝑖 for 𝑖 = 1..𝑛 and 𝑟 (ℓ) = 𝑧 ′𝑗 for
+ℓ ∈ 𝑘 𝑗 ∖{ℓ1, . . . , ℓ𝑛 } and 𝑗 = 1..𝑚. The universal model for Erlang-style maps is the same as the
+one defined in Section 3.2.1 and so is the definition of the binary predicate (𝑑 : 𝑡), with the only
+K
+difference that we have 𝑟 ∈ L _ T⊥ (instead of 𝑟 ∈ L _ T⊥ ) in the following clause:
+
+({[ℓ1 = 𝜕1, ..., ℓ𝑛 = 𝜕𝑛 , = ⊥]}: 𝑟 ) = ∀𝑖∈[1..𝑛] . (𝜕𝑖 : 𝑟 (ℓ𝑖 )) or (𝜕𝑖 = ⊥ and ⊥ ≤ 𝑟 (ℓ𝑖 )) and
+(21)
+∀ℓ ∈ L∖{ℓ1, ..., ℓ𝑛 } . ⊥ ≤ 𝑟 (ℓ) .
+Î
+K
+If (𝑍 ℓ )ℓ ∈ L is a family of subsets of 𝑍 indexed by L, we denote by K ℓ ∈ L 𝑍 ℓ the subset of L _ 𝑍
+formed by all quasi K-step functions 𝑟 such that 𝑟 (ℓ) ∈ 𝑍 ℓ for all ℓ ∈ L. Without loss of generality,
+14 A step function is a piecewise constant function having only finitely many pieces.
+15We could also use union on key-types to avoid repetition: e.g., { Int∨Bool ⇒ Int} for { Int ⇒ Int, Bool ⇒ Int} .
+
+Proc. ACM Program. Lang., Vol. 7, No. ICFP, Article 196. Publication date: August 2023.
+
+196:22
+
+Giuseppe Castagna
+
+we just consider the case in which K contains only infinite sets (since every finite key-type can be
+dealt by directly specifying the type of each of its key). Under this hypothesis Lemma 2.3 becomes:
+K
+
+Lemma 4.7 (Map Containment). Let (𝑋𝑝 )𝑝 ∈𝑃 and (𝑋𝑛 ) 
+of L _
+𝑛∈𝑁 be two families of elements
+
+Ð
+Ñ
+Î
+Ð
+Î
+P (D). Let 𝐿 = 𝑖 ∈𝑃 ∪𝑁 dom(𝑋𝑖 ). Then
+K
+𝑋
+(ℓ)
+⊆
+K
+𝑋
+(ℓ)
+if
+and
+only if
+𝑝 ∈𝑃
+ℓ∈L 𝑝
+𝑛∈𝑁
+ℓ∈L 𝑛
+Ñ
+either 𝑝 ∈𝑃 def (𝑋𝑝 ) = ∅, or for every map 𝜄 : 𝑁 → 𝐿 ∪ K
+
+
+
+
+Ù
+Ø
+Ù
+
+
+
+∃ℓ∈L.
+𝑋𝑝 (ℓ) ⊆
+𝑋𝑛 (ℓ) or ∃𝑛 ◦ ∈𝑁 , 𝑘∈K. 𝜄 (𝑛 ◦ ) = 𝑘 and
+def (𝑋𝑝 )𝑘 ≤ def (𝑋𝑛◦ )𝑘
+𝑝 ∈𝑃
+
+𝑛∈𝑁 |𝜄 (𝑛)=ℓ
+
+𝑝 ∈𝑃
+
+Proof. See Appendix C.1
+
+□
+
+The reader who went through the proof in Appendix C.1 will have noticed that the hypothesis that
+every key-type 𝑘 is infinite is actually used. This means that the case of a field such as Bool ⇒ Int
+must be checked by considering it as syntactic sugar for two fields true ⇒ Int and false ⇒ Int.
+Checking the emptiness of an intersection of the new record atoms and their negation requires
+checking the default values component-wise. In particular, to verify the containment of the new
+maps it suffices to change the definition of (19) into
+Φ(R◦, 𝑁 ∪ {R})
+
+= if ∀𝑘 ∈ K . (def (R◦ ))𝑘 ≤ (def(R))𝑘
+then ∀ℓ ∈ 𝐿 . ( R◦ (ℓ) ≤ R(ℓ) or Φ(R◦ ∧ { ℓ : not(R(ℓ))}, 𝑁 ) )
+else Φ(R◦, 𝑁 )
+
+(22)
+
+Finally, we have to define the type operators for these new maps. Again, we have to make minimal modifications with respect to Section 4.1 and 4.2. We can use the same notation for record
+atoms as in Definition 4.1, that is, ⎷(𝜏ℓ )ℓ ∈𝐿 ; 𝑡 0 ; 𝑆 ⌄ but with the restriction that 𝑡 0 and the
+types in 𝑆 are tuples whose arity is the cardinality of K. In particular, if K = {𝑘 1, ..., 𝑘𝑛 }, then
+⎷(𝜏ℓ )ℓ ∈𝐿 ; (𝑡 1 ×...×𝑡𝑛 ) ; ∅ ⌄ represents the record { ℓ1 = 𝜏ℓ1 , ... , ℓ𝑛 = 𝜏ℓ𝑛 , 𝑘 1 ⇒ 𝑡 1, ..., 𝑘𝑛 ⇒ 𝑡𝑛 } while
+for ⎷(𝜏ℓ )ℓ ∈𝐿 ; (𝑡 1 ×...×𝑡𝑛 ) ; 𝑆 ⌄ every (𝑠 1 ×...×𝑠𝑛 ) in 𝑆 adds to the type above the constraint “... and
+there exists a key-type 𝑘𝑖 and a label ℓ in 𝑘𝑖 ∖ 𝐿 that is mapped into a value of type ¬𝑠𝑖 ” (since, a
+tuple is in the negation of a tuple type, if one of its projections does so). Properties (11–13) and
+Theorem 4.2, continue to hold, and so do Lemma 4.4 and Theorem 4.5: it suffices to specialize their
+proofs to the case in which the default type and the types in the 𝑆’s sets of the atoms are all tuples
+of the same arity. In particular, Theorem 4.5 proves the correctness of (22), since this formula is the
+specialization of (19) when the default type is a tuple.
+Regarding type operators, we have to change the definition of label projection as follows
+ Ô
+𝜏ℓ
+if ℓ ∈ 𝐿
+𝐿
+𝝅 ℓ (𝑡) = Ô⎷(𝜏𝑚 )𝑚∈𝐿 ; 𝑡0 ; 𝑆 ⌄∈𝜋rec (𝑡 )
+(23)
+𝜋
+(𝑡
+)∨⊥
+if
+ℓ ∈ (𝑘𝑖 ∖ 𝐿)
+𝐿
+𝑖
+0
+⎷(𝜏𝑚 )𝑚∈𝐿 ; 𝑡 0 ; 𝑆 ⌄∈𝜋rec (𝑡 )
+where 𝜋𝑖 denotes tuple projection. As before, 𝑡 .ℓ is 𝝅 ℓ (𝑡) if 𝝅 ℓ (𝑡) ∧⊥ ≃ 0 and is undefined otherwise.
+Notice that the definition is well-given, since the 𝑘𝑖 ’s key-types partition the set of labels and if
+ℓ ∉ 𝐿, then there exists one and only one 𝑘𝑖 such that ℓ ∈ (𝑘𝑖 ∖ 𝐿).
+Ô
+Regarding map-selection, again, as before we have that 𝑡 .[𝑡 ′ ] is defined as ℓ ∈𝑡 ′ 𝝅 ℓ (𝑡) if ⊥ ∧
+Ô
+Ô
+𝝅 (𝑡) ≃ 0 and as nil ∨ ( ℓ ∈𝑡 ′ 𝝅 ℓ (𝑡) ∖ ⊥) otherwise. The only difference is that to express
+Ôℓ ∈𝑡 ′ ℓ
+𝝅
+′
+ℓ (𝑡) as a finite union we have to pick a random label ℓ¯𝑖 not in 𝐿 for each key-type 𝑘𝑖 .
+ℓ ∈𝑡
+Finally, while map-deletion does not change (the operator does not use the 𝑡 0 parts), the mapupdate operator must update Ô
+the 𝑡 0 parts component-wise, that is: let 𝑡 ≤ {} with dom(𝑡) ⊆ 𝐿 and
+′
+′
+′
+′
+𝑡 ′ ≤ L, then 𝑡 ← ⟨[𝑡 ′ ]=𝑡 ′′ ⟩ = ⎷(𝜏ℓ )ℓ ∈𝐿 ; (𝑡1 ×...×𝑡𝑛 ) ; 𝑆 ⌄∈𝜋rec
+𝐿 (𝑡 ) ⎷(𝜏 ) ℓ ∈𝐿 ; (𝑡 ×...×𝑡𝑛 ) ; 𝑆 ⌄ where 𝜏 is
+ℓ
+ℓ
+1
+′′
+′
+′
+′′
+′
+𝜏ℓ ∨𝑡 if ℓ ∈ 𝐿 ∧ 𝑡 and is 𝜏ℓ otherwise, and for 𝑖 = 1..𝑛 the type 𝑡𝑖 is 𝑡𝑖 ∨ 𝑡 if 𝑡 ∧ 𝑘𝑖 ; 0 and 𝑡𝑖
+otherwise. Likewise, for the concatenation type operator we can apply the same formula as before,
+Proc. ACM Program. Lang., Vol. 7, No. ICFP, Article 196. Publication date: August 2023.
+
+Typing Records, Maps, and Structs
+
+196:23
+
+that is (15), but where the set-theoretic operations to compute 𝑡 3 are intended to be performed on
+tuples and computed component-wise.
+4.5
+
+Design and variations
+
+The decision of restricting the domains of maps to a predefined set of key-types is both a design
+and an implementation choice. It is possible to define a theory for maps with overlapping domains,
+but in that case, there would not be any difference between record types and an intersection
+of function types whose codomain may contain an undefined value. Indeed, when comparing
+two records, we would have to compare mappings with possibly partially overlapping domains,
+which would require the level of sophistication used to compare intersections of arrow types. For
+example, the type %{1..* => integer, *..0 => boolean} would be akin to the function type
+([1..∗] → Int∨⊥) ∧ ( [∗..0] → Bool∨⊥), while its open record type counterpart would correspond
+to ([1..∗] → Int∨⊥) ∧ ( [∗..0] → Bool∨⊥) ∧ (¬Int → 1∨⊥), yielding all the possible ambiguities
+we already pointed out (see also Section 5 on related work for examples of such ambiguities in
+real-world languages). The advantage of our choice is not only that it avoids all such ambiguities,
+but also that it yields a compact representation of records types (i.e., as unions of atoms of the form
+⎷(𝜏ℓ )ℓ ∈𝐿 ; (𝑡 1 ×...×𝑡𝑛 ) ; 𝑆 ⌄: see also Remark 4.3), an intuitive implementation of type operators
+for records, and a simple and efficient backtracking-free subtyping algorithm, via the function Φ
+defined in (22). Last but not least, this solution provides a solid starting point for future work: in
+particular, it does not seem conceptually difficult to extend this system with row polymorphism
+(though, the technical development looks hard: see Section 6) by adding to the representation of
+record types of Theorem 4.2 information about row variables; instead, we do not have a clue about
+how this extension could be done if record types were generic intersections of arrow types.
+The price to pay is lesser freedom than the one permitted by Erlang’s Typespec syntax for maps
+(but freedom that, as far as we know, is used only for documentation purposes, rather than for
+performing precise type analysis) and less precise typing of maps resulting to fewer staticallydetected errors—but, without hindering soundness. For instance, in the formulation given in this
+section it is not possible to specify that the keys of a given map are, say, only pairs of integers:
+statically, we can just enforce that all keys are pairs of values (of any type) and using a pair of
+strings is accepted, even if it will always return nil. That said, the theory leaves a lot of margin for
+variations.
+Key-types partitions. To apply Lemma 4.7 on map containment, we need the set of keys to
+be partitioned into a finite number of infinite key-types. This partition must be the same for
+the whole program, but nothing prevents us to use different partitions in different programs.
+Therefore, this partitioning can be user-defined. Of course, this raises modularity concerns when
+combining programs with different partitions. But again, this is a problem of language design and
+implementation, not of types. For instance, at the moment of writing we are studying with the
+development team of Elixir the possibility of having user-defined partitions for maps whose keys
+are tuples. The idea is that the programmer will be allowed to declare the tuple key-types used in
+her/his program (e.g., pairs of integers, triplets of a string and two integers,...). Record type atoms
+will store in their tuple component a binary tree (instead of a single default type) that represents
+the finite partition of the tuple space, and when composing two different programs the subtyping
+algorithm will merge the two corresponding trees to compute the meet of the two partitions (finite
+partitions form a complete lattice). Once this will be achieved, then we will study how to make
+the system infer this partition, without the need for the programmer to declare them, thus making
+their use transparent.
+Proc. ACM Program. Lang., Vol. 7, No. ICFP, Article 196. Publication date: August 2023.
+
+196:24
+
+Giuseppe Castagna
+
+Default values. Another obvious variation that our theory can account for are record expressions
+with a default value (which is a feature of Ballerina’s records). For instance, one could allow the
+program to initialize the constant part of a record expression, by using the syntax {ℓ1 = 𝑒 1, ...ℓ𝑛 =
+𝑒𝑛 , _ = 𝑒}. It would then be possible to relax the constraint that fields for (infinite) key-types must be
+optional—e.g., {"uno" = 1, "due" = 2, = 0} is a map of type { String = Int} (notice the mandatory
+field in the type). The selection of a string key for a record of this type will then have type Int (rather
+than nil∨Int) and we should modify the map-selection operator 𝑡 .[𝑡 ′ ] to be undefined when the
+projection contains ⊥. To obtain the same behavior as before it will suffice to initialize all maps to
+{_ = nil}. If we are working with quasi K-step functions, then record expressions could also specify
+default values just for some specific key-types, such as in {"uno" = 1, "due" = 2, String = 0}.
+Access primitives. Our theory can account for access primitives other than those defined at the
+beginning of Section 4. This is the case, for instance, of Elixir’s fetch!(e1 ,e2 ) which returns the
+value associated to the key returned by e2 in the field of the map returned by e1 and raises an error if
+there is no such a field. We see that fetch!() performs a selection that lies between the struct-like
+access of 𝑒. and the map-like access of 𝑒.[ ]: as in map-like accesses the key may be the result of an
+expression; as in struct-like accesses if the key is absent, then it yields a run-time error. Likewise, the
+typing of fetch!() is half-way between the two typing disciplines: as a struct-like access it yields a
+static type error if e2 may return a key which is always undefined; as a map-like access it accepts a
+selection if e2 will always return a key that may be undefined. For instance, if 𝑒 1 : {|Int ⇒ String|}
+and 𝑒 2 : 1, then 𝑒 1 .3 is ill typed, 𝑒 1 .[3] and 𝑒 1 .[𝑒 2 ] have both type String∨nil, fetch!(𝑒 1, 3) has
+type String, fetch!(𝑒 1, 𝑒 2 ) is ill-typed, 𝑒 1 .["3"] returns a warning, and fetch!(𝑒 1, "3") is ill-typed.
+The rationale of such a typing discipline is that a typical use of fetch!() in Elixir is to access
+maps from references to process identifiers (both being unique internal identifiers) used to monitor
+processes: when a process dies, a message with a reference is received and the programmer knows
+that this reference must be present in the map, thought it is impossible to statically ensure it; the
+absence of such a reference pinpoints a bug in the implementation of monitoring which must thus
+raise a run-time error (and not just result in nil); however, trying to access such maps with a key
+other than a reference is an error that must be captured at compile time. It is a simple exercise to
+use the label projection type operator to define a fetch type operator implementing this discipline.
+Selection primitives. Finally, we may want to devise a different type discipline for the selection
+operations we already defined. Consider again 𝑒 1 : {|Int ⇒ String|}: we have seen that if 𝑒 2 : 1, then
+𝑒 1 .[𝑒 2 ] has type String∨nil. This is sound, since whatever 𝑒 2 returns, the result of the selection
+will be either a string (i.e., 𝑒 2 returns an integer key defined in the result of 𝑒 1 ) or nil (in all
+other cases). A warning is issued only if the type of 𝑒 2 is contained in ¬Int (since the selection
+will have type nil, that is, it will always return nil). However, we may want to implement a
+stricter type discipline for map selection and raise an error (or issue a warning) whenever the
+type of 𝑒 2 is not completely contained in Int. Again, this can be obtained by a straightforward
+modification of the 𝑡 .[𝑡 ′ ] operator in terms of the projection operator given in (23), namely: 𝑡 .[𝑡 ′ ]
+Ô
+Ô
+Ô
+is defined as ℓ ∈𝑡 ′ 𝝅 ℓ (𝑡) if ⊥ ∧ ℓ ∈𝑡 ′ 𝝅 ℓ (𝑡) ≃ 0; else as nil ∨ ( ℓ ∈𝑡 ′ 𝝅 ℓ (𝑡) ∖ ⊥) if ∀𝑘 ∈ K and
+∀ℓ ∈ (𝑘∧𝑡 ′ )∖dom(𝑡), 𝝅 ℓ (𝑡) ≰ ⊥; and undefined otherwise.16 Likewise, we can modify the second
+constraint into ∀𝑘 ∈ K and ∀ℓ ∈ (𝑘∧𝑡 ′ )∖dom(𝑡), 1 ≰ 𝝅 ℓ (𝑡) ≰ ⊥ if we want to impose the same
+stricter discipline on open maps, too.
+In this section, we presented some examples of variations that are possible in our framework; a
+few more were discussed in the previous sections, but many others are possible. This same variety
+16 Once again, we do not need to check all the labels in (𝑘∧𝑡 ′ )∖dom(𝑡 ), a single one will suffice.
+
+Proc. ACM Program. Lang., Vol. 7, No. ICFP, Article 196. Publication date: August 2023.
+
+Typing Records, Maps, and Structs
+
+196:25
+
+can be found among the different definitions and implementations of records to be found in actual
+programming languages. The common denominator of all these variations and the core of our
+presentation is the interpretation of record values and record types as quasi K-step functions and
+sets thereof, together with the various definitions this interpretation yields: the decomposition
+of disjunctive normal forms of record types (Lemma 4.7), the backtracking-free implementation
+of record subtyping (function Φ and Theorem 4.5), the compact representation of record type
+atoms inducing a simple definition of record type projection and concatenation (Theorem 4.2,
+and formulas (14), (23), (15), and (16)). The definition of typing rules for the various variations we
+discussed and of the type-operators they use play a secondary role, and they are an accessory to
+the presentation of the characteristics of the type interpretation and of the variety it permits.
+5
+
+RELATED WORK
+
+It is impossible in the remaining space to give an even approximated overview of the literature
+on records and record types. Thus, we limit to list what we consider some important milestone,
+acknowledging that the list is far from being complete.
+We already recalled in the introduction that records were first proposed in 1965 by C.A.R. Hoare in
+a series of papers on “record handling” whose adoption in Simula 67 yielded the concepts of objects
+and classes. Cardelli [1984] introduced the basic notions of record types, as intended nowadays,
+and the formal study of subtyping. Then, Wand [1987] introduced the concept of row-variables
+to solve the type inference problem for records. His system was later refined and shown to have
+principal types in [Jategaonkar and Mitchell 1988; Rémy 1989; Wand 1989] thus providing a flexible
+integration of record types and Hindley-Milner type systems. Another important milestone is the
+work on operations on records by Cardelli and Mitchell [1990] who describe a second-order type
+system that incorporates extensible records. They give up type inference and principal typing but
+gain in expressiveness: their work opens up the design space of operations on records (e.g., field
+extraction, deletion, extension, update, akin to the operations we used here) and row-variables
+fall out naturally from second-order type variables. They also identify static typing of record
+concatenation as a particularly difficult problem because of label conflicts. Pottier [2000], building
+on the work by Rémy [1995], types record concatenation by solving subtyping constraint systems
+in which the type “Abs” for undefined fields is separated from all other types, akin to what we did
+here by considering the (disjoint) union 𝑡 ∨ ⊥; this union in [Pottier 2000] is denoted by Either 𝑡
+and is (meta-theoretically) equivalent to Abs ∨ Pre 𝑡. A categorical model for records (and bounded
+polymorphism) was given by Bruce and Longo [1988] whose approach unifies the mathematical
+understanding of polymorphic, dependent, and record types. In particular, they interpret records
+as indexed products in a PER model, formalizing the idea that record types may be viewed as
+dependent types. Interestingly, they stress that a key point of their semantics is its “set-theoretic”
+flavor. The view of records as dependent types was put into practice by Chlipala [2010] who
+introduces first-class type-level keys and records, making it possible to write record-manipulating
+metaprograms and build domain specific languages (e.g., for the development of web applications).
+The types for records in all the cited works cover only the struct usage scenario and not the one
+for maps (according to the terminology we adopted in this work). Furthermore, none considers
+either union or intersection types. The only work that studies records with set-theoretic types
+and semantic subtyping is Frisch’s PhD thesis [Frisch 2004], which our work is built upon. Frisch
+[2004] interprets records as quasi-constant functions and uses the interpretation to define the
+subtyping relation and the decomposition rule to decide it, and to type the calculus with structs we
+presented in Section 3. We conservatively extended his work to uniformly type both structs and
+maps, including what we called the Erlang-style maps. For the latter, we conservatively extended
+both the theory of quasi-constant functions (needed to define the subtyping relation) and the
+Proc. ACM Program. Lang., Vol. 7, No. ICFP, Article 196. Publication date: August 2023.
+
+196:26
+
+Giuseppe Castagna
+
+internal representation of records types (needed to define and compute the type operators used
+in the typing rules). We also formalized for records the backtracking free algorithm—obtained by
+adapting the one for product subtyping defined by Frisch [2004]—and proved it sound and complete.
+TypeScript and Flow are two popular static type systems on the top of JavaScript that use unions,
+intersections, and records types. They use a syntactic approach to subtyping and account for
+mutability, which yields a subtyping relation different from the one studied here, therefore our
+algorithms do not directly apply to them. Their languages of types can express the mix of structs
+and maps in a limited form. For instance, Flow introduces “indexer properties” to type objects with
+fields whose keys are not statically known, as exemplified by the listings below:
+type A = { a: string, [string]: number, ... };
+type B = { b: number,
+3
+[c: [string,number]]: number, ... };
+4 type C = { [string]:string, ... };
+5 const x : A = { a: "ok", b: 42 };
+6 const y : A = { a: 42, b: "ok" };
+// error
+
+1
+
+2
+
+const z : B = { b: 3, e: "ok" };
+const u : A & C = { a: "ok", b: 3 }
+9 const w : A & C = { a: "ok" }
+10 function f(x: A & C) {
+11
+x.e++; x.e=3; x.e="ok"
+12 }
+7
+
+8
+
+// error
+// error
+// error
+
+The type A (line 1) types records in which label a is mapped to a string and any other label (by
+default all labels are strings) is mapped to a number: this is shown by the definition of x (line 5)
+which type-checks; trying to associate a to a value that is not a string or b to a value that is not
+a number yields a static type error (line 6). Contrary to our approach, indexer properties are not
+restricted to a finite set of key-types: this is shown by type B which maps both the label b (line 2)
+and pairs of string and numbers (line 3) to numbers.17 To avoid overlapping key-types, Flow allows
+at most one indexer property in a record type, a restriction absent in our system. Indexer properties
+work fine in simple cases, but problems arise when types are composed. The notation “...” in the
+listing (lines 1 and 3) indicates that the record types are open, but this is overridden by the presence
+of an indexer, as shown by the definition of z (line 7), which is statically rejected: since B is open,
+then any key other than b or a string-number pair should be allowed to have any type, but Flow
+motivates its rejection by the fact that e is not of type [string,number]; if we remove the indexer
+(line 3) from the definition of B, then z type-checks. Furthermore, the ambiguity of overlapping
+key-types can be reintroduced by using an intersection such as A & C, which ambiguously requires
+labels other than a to be mapped both to numbers and to strings. Flow does not permit to build
+a value of this type: the definition of u (line 8) fails since 3 is not of type string as required by C;
+more surprisingly also w (line 9) also fails, apparently because not compatible with the indexer in C,
+which suggests that indexers are not really optional fields. However, Flow allows a type like A & C
+to be used contravariantly, with a rather unclear semantics, as the function f (lines 10-12) shows:
+the function type-checks (even though no arguments can be defined for it); the two assignments
+in its body suggest that the type checker consider x.e to be of type number|string, thus that it
+approximated the intersection of the two indexers by their union; however, this is contradicted by
+the expression x.e++ which types only if x.e is of type number; even stranger, if we replace x.e++
+by x.e.length (which works only for strings), then it is rejected because the type-checker expects e
+to be a number as specified in A, thus giving a priority to A over C in the intersection. These examples
+show the kind of ambiguities that the system we presented in Section 4.4 is designed to avoid.
+Typescript uses a much stricter approach, closer to the one in Section 4.4. It uses the same
+syntax as Flow’s indexer properties (there, called indexed signatures) but it imposes two important
+restrictions: first, as in our approach, only types from a predefined finite set of types (i.e., string,
+number, symbol, or unions of their literals) can be used as key-types; second, if single fields are
+present, then their type must refine the indexer type. So while the type A (line 1) will be rejected
+17 The c prefixing the tuple type is an optional name used for documentation.
+
+Proc. ACM Program. Lang., Vol. 7, No. ICFP, Article 196. Publication date: August 2023.
+
+Typing Records, Maps, and Structs
+
+196:27
+
+because declaring a to be of type string is not compatible with the indexer, a type such as { a: string,
+[string]: number|string } will be accepted. Indexers can be repeated, but they must obey the same
+refinement rules as for single fields. TypeScript provides syntactic sugar for record types with only
+one indexer: type C (line 4) can be equivalently written as Record<string,string>. Our approach is
+more general, since it imposes no restriction on the types of single fields or of multiple indexers.
+Luau [Luau], a gradually typed language by Roblox that recently adopted semantic subtyping [Jeffrey 2022], uses the same solution as Flow, with more or less the same syntax but lesser problems
+and clearer semantics: as Flow, it forbids both multiple indexers and the creation of values in the
+intersection A & C (with clearer error messages); it also type-checks a function f with a parameter x
+of type A & C (line 10); however, in the body of such a function an expression like x.e is (correctly)
+given type number&string, which is why expressions such as x.e++ and x.e.length type check,
+while any assignment to x.e is statically flagged as a type error. Another language whose type
+system was inspired by semantic subtyping is Julia [Julia], but it provides only struct record types,
+while maps are handled by a separate Dict collection. A formalization of Julia type system is given
+by [Zappa Nardelli et al. 2018] but it does not cover record types.
+Typed Clojure [Bonnaire-Sergeant et al. 2016] is an optional type system with union types and
+struct-like record types which essentially behave as the records of Section 3 (without the operations
+of concatenation and deletion). The interest of the work is that records are combined with multiple
+dispatching and occurrence typing. While the former can be partially simulated by functions with
+intersection types and pattern matching (as in Section 3.3), full-fledged occurrence typing for
+semantic subtyping requires more sophisticated techniques introduced by Castagna et al. [2022].
+Finally, quite recently Xu et al. [2023] proposed a calculus with unions and intersection where
+records are built and typed by a merge operator which can be seen as a generalization to all types
+of our record type merge operator of Section 2.2.2. The generalization allows the authors to encode
+a variety of operations on traits and a rich set of record operators but, as for all formal studies we
+cited above, their work covers only the records-as-structs usage scenario.
+6
+
+CONCLUSION
+
+The motivation of this work comes from our recent and ongoing collaborations with the development teams of two languages, Elixir and Ballerina, aiming at defining new type systems based on
+semantic subtyping to be implemented in their compilers. In both cases, an important amount of
+time was and is being spent on record types. Although the two languages are quite different, both
+needed to type single records uniformly both as maps and as structs in the way presented here. For
+this, the typing of records as implemented by the language CDuce and which is based on the theory
+of quasi-constant functions by Frisch [2004, Section 9.1] was not enough, and we had to extend and
+generalize both the theory and the algorithmic aspects of quasi-constant functions, by devising
+the quasi K-step functions we introduced here. For the sake of the presentation, in this article we
+recalled some results on records by Frisch [2004], such as the decomposition law of Lemma 2.3, the
+properties (11-13), Definition 4.1, and Theorem 4.2: in those cases the original work is explicitly
+cited; in all the other cases the results presented here are new. In particular, the function Φ for the
+subtyping algorithm of Section 4.3 is a high-level formal specification and a generalization of what
+happens in the (highly-optimized) code of the CDuce compiler, and that was never formalized;
+the proof of its correctness (Theorem 4.5), thus, is a new result. Also, obviously, everything that
+concerns maps (as opposed to structs) is original to this work: the definitions of the type operators
+for map-like operations; the generalization of quasi-constant functions into quasi K-step functions;
+the derivation of the corresponding decomposition law stated in Lemma 4.7, which generalizes
+Lemma 2.3; the generalization of the Φ function to work with quasi K-step functions, and the fact
+that the latter are defined so that they preserve all the previous meta-theoretic properties.
+Proc. ACM Program. Lang., Vol. 7, No. ICFP, Article 196. Publication date: August 2023.
+
+196:28
+
+Giuseppe Castagna
+
+The work presented here lays the foundation to type-check records in Ballerina, Elixir, and, we
+hope, other languages, but both for Ballerina and Elixir, the problem of typing records goes well
+beyond what we presented here.
+For Ballerina, we had to formalize the fact that record fields in Ballerina may be mutable. The
+challenging part was that the design principles of Ballerina require the subtyping relation to satisfy
+properties at first sight counterintuitive to a functional programmer (immutable pointers can be
+used where mutable ones are expected, reference types are covariant, pattern matching disregards
+mutability) and this yielded an original and intriguing theory for records with mutable fields that
+space constraints did not allow us to present here: the curious reader can find it in Appendix F.
+For Elixir, apart from the conundrum of adapting types to its parser (meta-programming in Elixir
+heavily restricts the possible syntactic choices for types), an important challenge was to take into
+account the pervasive use of guards, which determine the types of functions and case expressions
+and whose analysis must be adapted to our record types (see [Castagna et al. 2023]).
+Another challenge for Elixir is polymorphism, without which libraries cannot be typed in any
+sensible and practical way. While it is possible to graft on Elixir the polymorphic types defined
+for semantic subtyping by Castagna et al. [2015, 2014], this is not enough to type even simple
+record operations. We leave the reader as an exercise to understand why a definition as simple
+as 𝜆𝑥 .𝜆𝑦.(𝑥 + {ℓ = 𝑦}) cannot be given type ∀𝛼, 𝛽 . (𝛼 ∧ {} ) → 𝛽 → (𝛼 ∧ { ℓ = 𝛽} ). This would
+be unsound (see Appendix E) and the only way we see to type this function—while preserving
+the type of all fields of its arguments—is to use row polymorphism [Rémy 1989; Wand 1989] and
+to type it as ∀𝛼, 𝛽 . {𝛼} → 𝛽 → { ℓ = 𝛽, 𝛼} where 𝛼 is a row variable. This is the reason why
+we are currently studying how to combine semantic subtyping and row polymorphism, which is
+particularly challenging: polymorphism is added to semantic subtyping by giving a set-theoretic
+interpretation of types parametric in the interpretation of their type variables and requiring that
+subtyping holds for all possible interpretations of the variables [Castagna and Xu 2011]. But this is
+hard with row variables because the meaning of substitutions depends on the context in which they
+are applied. For example, if we instantiate a variable 𝛼 by the row “ ⇒ Bool”, then the instantiation
+will have different meanings if we consider, say {𝛼} or { ℓ = Int, 𝛼} , since the instance of the latter
+will require ℓ to be defined and mapped to an integer, while in the instance of the former ℓ is either
+undefined or bound to a Boolean. Still some intriguing work to cut out.
+ACKNOWLEDGMENTS
+This research is issued from the author’s collaboration with the Ballerina and Elixir development
+teams. I am particularly indebted to José Valim (designer, main developer, and omnipotent wizard of
+Elixir) and James Clark (who is supervising the design and implementation of the next generation
+Ballerina type system) for the long discussions and exchanges we had on record types. I am grateful
+to Loïc Peyrot who made an extensive reading of an earlier version of this work and spotted a
+couple of errors that are now fixed. The presentation benefited from important feedback provided
+by Daniele Varacca, Guillaume Duboc, and Mickaël Laurent.
+This work is dedicated, on the occasion of his retirement, to Kim Bruce whose paper on records,
+inheritance, and bounded quantification [Bruce and Longo 1988] was one of the first scientific
+papers I ever read. I am indebted to Kim for all his feedback, encouragement, discussions at the
+dawn of my career, but in particular because when I was just starting my PhD., during a visit to
+Williams College to see Prof. Bruce, he made me discover both the beauty and richness of the
+theory of records (and its application to objects) and how delicious falafels are (the latter with
+the complicity of his wife Fatma). I still have fond memories of that visit, and since I am not sure
+whether an essay on falafels written by me would be appreciated, I opted to write on records,
+hoping to have more success. Thanks Kim.
+Proc. ACM Program. Lang., Vol. 7, No. ICFP, Article 196. Publication date: August 2023.
+
+Typing Records, Maps, and Structs
+
+196:29
+
+REFERENCES
+Ballerina. Ballerina Language Specification. https://ballerina.io/learn/ballerina-specifications/
+Véronique Benzaken, Giuseppe Castagna, and Alain Frisch. 2003. CDuce: an XML-Centric General-Purpose Language. In
+ICFP ’03, 8th ACM International Conference on Functional Programming. ACM Press, Uppsala, Sweden, 51–63.
+Ambrose Bonnaire-Sergeant, Rowan Davies, and Sam Tobin-Hochstadt. 2016. Practical Optional Types for Clojure. In
+Programming Languages and Systems - 25th European Symposium on Programming (ESOP) (Lecture Notes in Computer
+Science, Vol. 9632), Peter Thiemann (Ed.). Springer, 68–94. https://doi.org/10.1007/978-3-662-49498-1_4
+Kim B. Bruce and Giuseppe Longo. 1988. A Modest Model of Records, Inheritance and Bounded Quantification. In
+Proceedings of the Third Annual Symposium on Logic in Computer Science (LICS ’88). IEEE Computer Society, 38–50.
+https://doi.org/10.1109/LICS.1988.5099
+Luca Cardelli. 1984. A Semantics of Multiple Inheritance. In Semantics of Data Types (Lecture Notes in Computer Science,
+Vol. 173). Springer, 51–67. https://doi.org/10.1007/3-540-13346-1_2
+Luca Cardelli and John C. Mitchell. 1990. Operations on Records. In Proceedings of the Fifth International Conference on
+Mathematical Foundations of Programming Semantics (New Orleans, Louisiana, USA). Springer-Verlag, Berlin, Heidelberg,
+22–52. https://doi.org/10.1007/BFb0040253
+Giuseppe Castagna. 2020. Covariance and Controvariance: a fresh look at an old issue (a primer in advanced type systems
+for learning functional programmers). Logical Methods in Computer Science 16, 1 (2020), 15:1–15:58. https://doi.org/10.
+23638/LMCS-16(1:15)2020 Corrected and extended version available at https://www.irif.fr/~gc/papers/covcon-again.pdf.
+Giuseppe Castagna. 2023. Programming with union, intersection, and negation types. In The French School of Programming,
+Bertrand Meyer (Ed.). Springer. ISBN 978-3-031-34517-3. Preprint at arXiv:2111.03354.
+Giuseppe Castagna, Guillaume Duboc, and José Valim. 2023. The Design Principles of the Elixir Type System. Technical
+Report. Arxiv. arXiv:2306.06391 [cs.PL]
+Giuseppe Castagna and Alain Frisch. 2005. A gentle introduction to semantic subtyping. In Proceedings of PPDP ’05, the 7th
+ACM SIGPLAN International Symposium on Principles and Practice of Declarative Programming, pages 198-208, ACM Press
+(full version) and ICALP ’05, 32nd International Colloquium on Automata, Languages and Programming, Lecture Notes in
+Computer Science n. 3580, pages 30-34, Springer (summary). Lisboa, Portugal. https://doi.org/10.1145/1069774.1069793
+Joint ICALP-PPDP keynote talk.
+Giuseppe Castagna, Mickaël Laurent, Kim Nguyen, and Matthew Lutze. 2022. On Type-Cases, Union Elimination, and
+Occurrence Typing. Proc. ACM Program. Lang. 6, POPL, Article 13 (Jan. 2022), 31 pages. https://doi.org/10.1145/3498674
+Giuseppe Castagna, Kim Nguyen, Zhiwu Xu, and Pietro Abate. 2015. Polymorphic functions with set-theoretic types. Part 2:
+local type inference and type reconstruction. In Proceedings of the 42nd Annual ACM SIGPLAN Symposium on Principles
+of Programming Languages (POPL ’15). 289–302. https://doi.org/10.1145/2676726.2676991
+Giuseppe Castagna, Kim Nguyen, Zhiwu Xu, Hyeonseung Im, Sergueï Lenglet, and Luca Padovani. 2014. Polymorphic
+Functions with Set-Theoretic Types. Part 1: Syntax, Semantics, and Evaluation. In Proceedings of the 41st Annual ACM
+SIGPLAN Symposium on Principles of Programming Languages (POPL ’14). 5–17. https://doi.org/10.1145/2676726.2676991
+Giuseppe Castagna and Zhiwu Xu. 2011. Set-theoretic Foundation of Parametric Polymorphism and Subtyping. In ICFP ’11:
+16th ACM-SIGPLAN International Conference on Functional Programming. 94–106. https://doi.org/10.1145/2034773.2034788
+Adam Chlipala. 2010. Ur: Statically-Typed Metaprogramming with Type-Level Record Computation. In Proceedings of the
+31st ACM SIGPLAN Conference on Programming Language Design and Implementation (Toronto, Ontario, Canada) (PLDI
+’10). Association for Computing Machinery, New York, NY, USA, 122–133. https://doi.org/10.1145/1806596.1806612
+Elixir. Elixir Typespecs. https://hexdocs.pm/elixir/typespecs.html
+Erlang. Erlang Reference Manual User’s Guide. Ericsson AB. https://www.erlang.org/doc/reference_manual/users_guide.html
+F#. F# documentation. https://learn.microsoft.com/en-us/dotnet/fsharp/
+Alain Frisch. 2004. Théorie, conception et réalisation d’un langage de programmation adapté à XML. Ph. D. Dissertation.
+Université Paris Diderot. http://www.cduce.org/papers/frisch_phd.pdf
+Alain Frisch, Giuseppe Castagna, and Véronique Benzaken. 2002. Semantic Subtyping. In LICS ’02, 17th Annual IEEE
+Symposium on Logic in Computer Science. IEEE Computer Society Press, 137–146. https://doi.org/10.1109/LICS.2002.
+1029823
+Alain Frisch, Giuseppe Castagna, and Véronique Benzaken. 2008. Semantic subtyping: dealing set-theoretically with
+function, union, intersection, and negation types. Journal of the ACM 55, 4 (Sept. 2008), 19:1–19:64. https://doi.org/10.
+1145/1391289.1391293
+Go. The Go Programming Language Specification. https://go.dev/ref/spec
+Hive. Apache Hive Language Manual. https://cwiki.apache.org/confluence/display/Hive/LanguageManual
+C. A. R. Hoare. 1965. Record Handling. ALGOL Bull. 21 (nov 1965), 39–69.
+C. A. R. Hoare. 1966a. Further Thoughts on Record Handling. ALGOL Bull. 23 (mar 1966), 5–11.
+C. A. R. Hoare. 1966b. Record Handling. Lecture Notes, NATO Summer School.
+
+Proc. ACM Program. Lang., Vol. 7, No. ICFP, Article 196. Publication date: August 2023.
+
+196:30
+
+Giuseppe Castagna
+
+Lalita Jategaonkar and John Mitchell. 1988. ML with Extended Pattern Matching and Subtypes. In Proceedings of the 1988
+ACM Conference on LISP and Functional Programming (Snowbird, Utah, USA) (LFP ’88). Association for Computing
+Machinery, New York, NY, USA, 198–211. https://doi.org/10.1145/62678.62702
+Alan Jeffrey. 2022. Semantic Subtyping in Luau. Blog post. https://blog.roblox.com/2022/11/semantic-subtyping-luau
+Accessed on May 6th 2023.
+Julia. Julia Documentation. https://docs.julialang.org/
+Tobias Lindahl and Konstantinos Sagonas. 2004. Detecting Software Defects in Telecom Applications Through Lightweight
+Static Analysis: A War Story. In Programming Languages and Systems: Second Asian Symposium, APLAS 2004, Taipei,
+Taiwan, November 4-6, 2004. Proceedings (Lecture Notes in Computer Science, Vol. 3302), Wei-Ngan Chin (Ed.). Springer,
+91–106.
+Lua. Lua Reference Manual. https://www.lua.org/manual
+Luau. Luau. https://luau-lang.org/
+OCaml. Learn OCaml. https://ocaml.org/docs
+François Pottier. 2000. A Versatile Constraint-Based Type Inference System. Nordic J. of Computing 7, 4 (dec 2000), 312–347.
+Didier Rémy. 1989. Type Checking Records and Variants in a Natural Extension of ML. In Proceedings of the 16th ACM
+SIGPLAN-SIGACT Symposium on Principles of Programming Languages (Austin, Texas, USA) (POPL ’89). Association for
+Computing Machinery, New York, NY, USA, 77–88. https://doi.org/10.1145/75277.75284
+Didier Rémy. 1995. A case study of typechecking with constrained types: Typing record concatenation. (August 1995).
+Presented at the workshop on Advances in types for computer science at the Newton Institute, Cambridge, UK.
+Ruby. What is Ruby? https://ruby-doc.org/3.2.1
+Rust. The Rust Reference. https://doc.rust-lang.org/stable/reference/
+Scala. The Scala Programming Language. https://docs.scala-lang.org/
+Swift. The Swift Programming Language Book. https://www.swift.org/documentation/
+Mitchell Wand. 1987. Complete Type Inference for Simple Objects. In Proceedings of the Symposium on Logic in Computer
+Science (LICS ’87), Ithaca, New York, USA, June 22-25, 1987. IEEE Computer Society, 37–44.
+Mitch Wand. 1989. Type inference for record concatenation and multiple inheritance. In [1989] Proceedings. Fourth Annual
+Symposium on Logic in Computer Science. 92–97. https://doi.org/10.1109/LICS.1989.39162
+Han Xu, Xuejing Huang, and Bruno C. d. S. Oliveira. 2023. Making a Type Difference: Subtraction on Intersection
+Types as Generalized Record Operations. Proc. ACM Program. Lang. 7, POPL, Article 31 (jan 2023), 28 pages. https:
+//doi.org/10.1145/3571224
+Francesco Zappa Nardelli, Julia Belyakova, Artem Pelenitsyn, Benjamin Chung, Jeff Bezanson, and Jan Vitek. 2018. Julia
+Subtyping: A Rational Reconstruction. Proc. ACM Program. Lang. 2, OOPSLA, Article 113 (oct 2018), 27 pages. https:
+//doi.org/10.1145/3276483
+
+Proc. ACM Program. Lang., Vol. 7, No. ICFP, Article 196. Publication date: August 2023.
+
+Typing Records, Maps, and Structs
+
+196:31
+
+APPENDIX
+A
+
+SUBTYPING DECOMPOSITION FOR ARROWS
+
+The
+in (1) is empty if and only if there exists 𝑡 1′ →𝑡 2′ ∈ 𝑁 such that 𝑡 1′ ≤
+Ô intersection of arrows
+′
+𝑡 1 →𝑡 2 ∈𝑃 𝑡 1 and for all 𝑃 ⊊ 𝑃 (notice that the containment relation is strict)
+!
+!
+Ü
+Û
+′
+′
+𝑡1 ≤
+𝑡 1 or
+𝑡2 ≤ 𝑡2
+(24)
+𝑡 1 →𝑡 2 ∈𝑃 ′
+
+𝑡 1 →𝑡 2 ∈𝑃 ∖𝑃 ′
+
+The correctness of this decomposition is proved by Frisch [2004, Section 4.4].
+B
+
+TYPE SOUNDNESS
+
+The type soundness of the system in Section 4 can be proved by a routine extension of the inductive
+proofs of type preservation and progress of the system of Section 3.
+Type preservation is proved by induction on the derivation of the type of the reducendum (cf.
+[Frisch et al. 2008, Theorem 5.1]) and a case analysis on the last applied rule. Let us outline how
+to extend the proof for the new selection operation introduced in Section 4. If we have that the
+derivation of Γ ⊢ 𝑒 : 𝑡 ends by [M-Sel] and 𝑒 { 𝑒 ′ , then we can deduce that Γ ⊢ 𝑒 ′ : 𝑡:
+• if 𝑒 ′ is obtained from 𝑒 as a context reduction, then the thesis follows from the induction
+hypothesis and the monotony of the type projection operator 𝝅 ℓ ( ) and thus of the mapselection type operator .[ ];
+• if 𝑒 ′ is obtained by (8), then 𝑒 ≡ {ℓ1 = 𝑣 1, ... , ℓ𝑛 = 𝑣𝑛 }.[ℓ ′ ] and 𝑒 ′ ≡ 𝑣𝑘 if ℓ ′ ≡ ℓ𝑘 for some
+𝑘 ∈ [1..𝑛] and 𝑒 ′ ≡ nil otherwise. Since 𝑒 is well typed, then Γ ⊢ {ℓ1 = 𝑣 1, ... , ℓ𝑛 = 𝑣𝑛 } : 𝑡 1 ,
+Γ ⊢ ℓ ′ : 𝑡 2 , and 𝑡 = 𝑡 1 .[𝑡 2 ]. By inversion, we have that 𝑣𝑖 : 𝝅 ℓ𝑖 (𝑡 1 ) for 𝑖 = 1..𝑛 and that 𝝅 ℓ (𝑡 1 ) is
+Ô
+either ⊥ or ⊥∨1 for ℓ ∈ L∖{ℓ1, ..., ℓ𝑛 }. Since ℓ ′ : 𝑡 2 , then 𝝅 ℓ ′ (𝑡 1 ) ≤ ℓ ∈𝑡2 𝝅 ℓ (𝑡 1 ). By definition
+Ô
+of 𝑡 1 .[𝑡 2 ], if ℓ ′ ∈ L∖{ℓ1, ..., ℓ𝑛 }, then ⊥ ≤ ℓ ∈𝑡2 𝝅 ℓ (𝑡 1 ) Ô
+and therefore nil ≤ 𝑡 and the thesis
+follows from 𝑒 ′ ≡ nil. Otherwise 𝑒 ′ ≡ 𝑣𝑘 : 𝝅 ℓ𝑘 (𝑡 1 ) ≤ ( ℓ ∈𝑡2 𝝅 ℓ (𝑡 1 ) ∖ ⊥) ≤ 𝑡.
+For progress, we prove that if 𝑒 is closed and ⊢ 𝑒 : 𝑡 then either 𝑒 is a value or it can be reduced. The
+proof is an extension of the proof of [Frisch et al. 2008, Theorem 5.12] and is done by induction on
+the derivation of ⊢ 𝑒 : 𝑡. The cases for the rules [M-Sel] and [M-Del] are both straightforward and
+follow the pattern of the rule for pair projection in the proof of [Frisch et al. 2008, Theorem 5.12].
+C
+
+MAP CONTAINMENT
+
+C.1
+
+Proof of Lemma 4.7
+
+We consider two cases. If the cardinality of K is 1, then it means that K = { }, that is, K is the
+singleton that contains only the wildcard that represents L. In this case it is immediate to see that
+the statement of the Lemma coincides with the one of Lemma 2.3 and hence it holds.
+If the cardinality of K is strictly greater than 1 then we have K = {𝑘 1, ..., 𝑘𝑚 } with 𝑚 > 1. We
+𝑐
+can see a quasi K-step function 𝑟 : L → 𝑍 on K as a finite product. Let 𝐿 _ 𝑍 denote the set of
+constant functions from 𝐿 to 𝑍 , that is the set of all functions 𝑓 : 𝐿 → 𝑍 , such that 𝑓 (ℓ) = 𝑓 (ℓ ′ )
+K
+for all ℓ, ℓ ′ ∈ 𝐿. A quasi K-step function 𝑟 in L _ 𝑍 can then be identified as an element of the
+following product
+Ö
+𝑐
+𝑐
+(
+𝑍 ) × ((𝑘 1 ∖dom(𝑟 )) _ 𝑍 ) × ... × ((𝑘𝑚 ∖dom(𝑟 )) _ 𝑍 )
+ℓ ∈dom(𝑟 )
+
+′
+′
+For
+Î instance the function {[ℓ1 = 𝑧 1, . . . , ℓ𝑛 = 𝑧𝑛 , 𝑘 1 = 𝑧 1, . . . , 𝑘𝑚 = 𝑧𝑚 ]} corresponds to the product
+( ℓ ∈ {ℓ1,...,ℓ𝑛 } 𝑓 (ℓ)) × 𝑟 1 × ... × 𝑟𝑚 where 𝑓 (ℓ𝑖 ) = 𝑧𝑖 (for 𝑖 = 1..𝑛) and 𝑟𝑖 is the constant function that
+
+Proc. ACM Program. Lang., Vol. 7, No. ICFP, Article 196. Publication date: August 2023.
+
+196:32
+
+Giuseppe Castagna
+
+maps all labels in 𝑘𝑖 ∖{ℓ1, ..., ℓ𝑛 } into 𝑧𝑖′ . Notice that this holds true for any quasi K-step function
+whose domain is contained in {ℓ1, ..., ℓ𝑛 }. In other words, given a finite set 𝐿 ⊂ L every quasi K-step
+K
+function 𝑟 : L _ 𝑍 for which dom(𝑟 ) ⊆ 𝐿 holds, can be identified to an element of the product
+Ö
+𝑐
+𝑐
+(
+𝑍 ) × ((𝑘 1 ∖𝐿) _ 𝑍 ) × ... × ((𝑘𝑚 ∖𝐿) _ 𝑍 )
+ℓ ∈𝐿
+
+We have thus reduced the problem of inclusion in the statement of the lemma to the problem
+of inclusion between an intersection and a union of finite Cartesian products of the form above.
+Formula (2) solves the problem for products of arity 2, by considering all partitions of the set 𝑁
+over the two projections of the products (𝑁 ′ for the first and 𝑁 ∖𝑁 ′ for the second). The formula in
+the statement of the lemma generalizes formula (2) to products of arity 𝑛 (where 𝑛 is the cardinality
+of 𝐿 ∪ K) by considering all partitions of 𝑁 over the set 𝐿 ∪ K (i.e., all mappings 𝜄 in 𝑁 → (𝐿 ∪ K):
+see Appendix D for an explanation). For the first components of the product, it applies the same
+check as in (2), which yields the
+
+
+Ù
+Ø
+
+∃ℓ∈L.
+𝑋𝑝 (ℓ) ⊆
+𝑋𝑛 (ℓ)
+𝑝 ∈𝑃
+
+𝑛∈𝑁 |𝜄 (𝑛)=ℓ
+
+part of the formula. For the last 𝑚 components it applies a different formula which checks the
+inclusion between an intersection and a union of function spaces all with the same domain; in
+particular, for a given 𝜄 it checks whether there exists 𝑘 ∈ K such that
+Ù
+Ø
+((𝑘∖𝐿) → def(𝑋𝑝 )𝑘 ) ⊆
+((𝑘∖𝐿) → def(𝑋𝑛 )𝑘 )
+𝑝 ∈𝑃
+
+𝑛∈𝑁 𝑗
+
+where 𝑁𝑘 = {𝑛∈𝑁 | 𝜄 (𝑛) = 𝑘 }. We can thus apply the decomposition rule for arrows as defined
+by Frisch et al. [2008, Section 6.2] (i.e., formula (24) in Appendix A) which, since in this case all the
+arrows have the same domain 𝑘∖𝐿, becomes:
+Ø
+©
+ª
+© Ù
+ª
+∃𝑛 ◦ ∈ 𝑁𝑘 . ∀𝑃 ′ ⊊ 𝑃 . ­ (𝑘∖𝐿) ⊆
+(𝑘∖𝐿) ® or def(𝑋𝑝 )𝑘 ⊆ def(𝑋𝑛◦ )𝑘 ®
+′
+𝑝 ∈𝑃 ′
+«
+¬
+«𝑝 ∈𝑃 ∖𝑃
+¬
+Ð
+Also notice that the left-hand side of the or’s above all have the form (𝑘∖𝐿) ⊆ 𝑝 ∈𝑃 ′ (𝑘∖𝐿), which
+always holds except when 𝑃 ′ = ∅, for which the containment is false (since it is equivalent to
+requiring 𝑘∖𝐿 to be empty which is impossible since 𝑘 is infinite and 𝐿 is always finite). Thus, in
+the formulaÑ
+above what needs to be checked is only the right-hand side of the or for 𝑃 ′ = ∅, that is,
+∃𝑛 ◦ ∈ 𝑁𝑘 . 𝑝 ∈𝑃 def(𝑋𝑝 )𝑘 ⊆ def(𝑋𝑛◦ )𝑘 which, by the definition of 𝑁𝑘 , yields the second part of
+the formula of the statement, that is:
+
+
+Ù
+
+
+∃𝑛 ◦ ∈𝑁 , 𝑘∈K. 𝜄 (𝑛 ◦ ) = 𝑘 and
+def(𝑋𝑝 )𝑘 ≤ def(𝑋𝑛◦ )𝑘
+𝑝 ∈𝑃
+
+D
+
+TUPLE SUBTYPING
+
+In this section we are going to show how to generalize the subtyping decomposition (2) for the case
+of tuples. Let us first show how it works with triplets. In particular, we want to determine when
+Û
+Û
+(𝑠 1 , 𝑠 2 , 𝑠 3 ) ∧
+¬(𝑡 1 , 𝑡 2 , 𝑡 3 )
+(25)
+(𝑠 1 , 𝑠 2 , 𝑠 3 ) ∈𝑃
+
+(𝑡 1 , 𝑡 2 , 𝑡 3 ) ∈𝑁
+
+is empty. The generalization of formula (2) is then defined as follows. The type in (25) is empty if
+and only if:
+Proc. ACM Program. Lang., Vol. 7, No. ICFP, Article 196. Publication date: August 2023.
+
+Typing Records, Maps, and Structs
+
+196:33
+
+For all pairwise disjoint (and possibly empty) sets 𝑁 1, 𝑁 2, 𝑁 3 such that 𝑁 1 ∪ 𝑁 2 ∪ 𝑁 3 = 𝑁
+!
+!
+!
+Û
+Ü
+Û
+Ü
+Û
+Ü
+𝑠2 ≤
+𝑡 2 or
+𝑠3 ≤
+𝑡 3 (26)
+𝑠1 ≤
+𝑡 1 or
+(𝑠 1 , 𝑠 2 , 𝑠 3 ) ∈𝑃
+
+(𝑡 1 , 𝑡 2 , 𝑡 3 ) ∈𝑁 1
+
+(𝑠 1 , 𝑠 2 , 𝑠 3 ) ∈𝑃
+
+(𝑡 1 , 𝑡 2 , 𝑡 3 ) ∈𝑁 2
+
+(𝑠 1 , 𝑠 2 , 𝑠 3 ) ∈𝑃
+
+(𝑡 1 , 𝑡 2 , 𝑡 3 ) ∈𝑁 3
+
+holds. Why? In a nutshell because
+¬(𝑡 1 , 𝑡 2 , 𝑡 3 ) ∧ (1 , 1, 1) = (¬𝑡 1 , 1, 1) ∨ (1 , ¬𝑡 2 , 1) ∨ (1 , 1, ¬𝑡 3 )
+
+(27)
+
+and therefore
+Û
+
+¬(𝑡 1 , 𝑡 2 , 𝑡 3 )
+
+(28)
+
+(𝑡 1 , 𝑡 2 , 𝑡 3 ) ∈𝑁
+
+becomes an intersection of the union of three different sets: we distribute intersections over unions
+and factorize the summands that have 1 in the same position. More precisely, we just consider
+the case in which 𝑃 is not empty (otherwise the emptiness of (26) cannot hold) and that all 𝑠𝑖 ’s
+are not empty (otherwise the emptiness of (26) is trivial). Since we are intersecting the negated
+products with at least one product then we can also consider just their product parts, whence the
+intersection with (1 , 1, 1) in (27).
+We want to expand (28) into a union by distributing intersections over the unions shown in (27).
+For that it may be simpler to think of intersections as multiplications and unions as sums. We are
+thus trying to expand a multiplication of the form
+Ö
+(𝑎𝑖 + 𝑏𝑖 + 𝑐𝑖 )
+𝑖 ∈𝑁
+
+where 𝑎, 𝑏 and 𝑐 have the form (¬𝑡 1 , 1, 1), (1 , ¬𝑡 2 , 1), and (1 , 1, ¬𝑡 3 ) respectively.
+Now if the cardinality of 𝑁 is, say 2, we have
+(𝑎 1 + 𝑏 1 + 𝑐 1 ) (𝑎 2 + 𝑏 2 + 𝑐 2 ) = 𝑎 1𝑎 2 + 𝑎 1𝑏 2 + 𝑎 1𝑐 2 + 𝑏 1𝑎 2 + 𝑏 1𝑏 2 + 𝑏 1𝑐 2 + 𝑐 1𝑎 2 + 𝑐 1𝑏 2 + 𝑐 1𝑐 2
+That is, it is the sum of all products of 2 factors obtained by choosing either 𝑎 1 or 𝑏 1 or 𝑐 1 for the
+first and 𝑎 2 or 𝑏 2 or 𝑐 2 for the second. Since we are working with positive numbers we have that
+the sum is zero if and only if all products are zero, that is, for all mapping ℎ : 1, 2 → {𝑎, 𝑏, 𝑐} we
+must have ℎ(1)1ℎ(2)2 = 0. If the cardinality of 𝑁 is more than 2, say 𝑛, then we will obtain a sum
+of products of 𝑛 factors, obtained by picking some summand in each sum in 𝑁 . That is, if 𝑛 is the
+cardinality of 𝑁
+Ö
+∑︁
+(𝑎𝑖 + 𝑏𝑖 + 𝑐𝑖 ) =
+ℎ(1)1 · ... · ℎ(𝑛)𝑛
+𝑖 ∈𝑁
+
+ℎ:{1..𝑛}→{𝑎,𝑏,𝑐 }
+
+In other words we considered all partitions of 𝑁 in three sets (that in formula (26) we called
+𝑁 1, 𝑁 2, 𝑁 3 ) which tell for each element in 𝑁 whether to take as factor the first, second, or third
+summand of the element.
+In the specific case we are considering, the set in which a triple (𝑡 1 , 𝑡 2 , 𝑡 3 ) of 𝑁 is mapped into,
+tells us whether we have to take as factor (¬𝑡 1 , 1, 1), (1 , ¬𝑡 2 , 1), or (1 , 1, ¬𝑡 3 ). And clearly
+this multiplication (intersection) can be further simplified into a single set-theoretic product by
+intersecting the factors component-wise. That is, in our case the elements of the sum (union) will
+be of the following form:
+!
+Û
+Û
+Û
+¬𝑡 1 ,
+¬𝑡 2 ,
+¬𝑡 3
+(𝑡 1 , 𝑡 2 , 𝑡 3 ) ∈𝑁 1
+
+(𝑡 1 , 𝑡 2 , 𝑡 3 ) ∈𝑁 2
+
+(𝑡 1 , 𝑡 2 , 𝑡 3 ) ∈𝑁 3
+
+Proc. ACM Program. Lang., Vol. 7, No. ICFP, Article 196. Publication date: August 2023.
+
+196:34
+
+Giuseppe Castagna
+
+therefore we have that (28) is equivalent to
+!
+Ü
+
+Û
+
+∀𝑁 1 ,𝑁 2 ,𝑁 3 partition of 𝑁
+
+(𝑡 1 , 𝑡 2 , 𝑡 3 ) ∈𝑁 1
+
+From this and from the observation that
+Û
+(𝑠 1 , 𝑠 2 , 𝑠 3 ) = (
+(𝑠 1 , 𝑠 2 , 𝑠 3 ) ∈𝑃
+
+¬𝑡 1
+
+Û
+
+Û
+
+,
+
+¬𝑡 2
+
+(𝑡 1 , 𝑡 2 , 𝑡 3 ) ∈𝑁 2
+
+Û
+
+𝑠1 ,
+
+(𝑠 1 , 𝑠 2 , 𝑠 3 ) ∈𝑃
+
+𝑠2 ,
+
+(𝑠 1 , 𝑠 2 , 𝑠 3 ) ∈𝑃
+
+Û
+
+,
+
+¬𝑡 3
+
+(29)
+
+(𝑡 1 , 𝑡 2 , 𝑡 3 ) ∈𝑁 3
+
+Û
+
+𝑠3
+(𝑠 1 , 𝑠 2 , 𝑠 3 ) ∈𝑃
+
+)
+
+it is easy to deduce (26) (just distribute the outer intersection over the union (29) and check
+emptiness component-wise).
+Finally, notice that what the formula (26) does is to generate all possible partitions of 𝑁 into
+three sets.
+Considering all possible partitions of 𝑁 into three sets is equivalent to consider all possible (total)
+functions from 𝑁 to {1, 2, 3}.
+So an equivalent way to write (26) is the following:
+For all ℎ : 𝑁 → {1, 2, 3}
+Û
+Ü
+Û
+Ü
+Û
+Ü
+©
+ª
+©
+ª
+©
+ª
+𝑠1 ≤
+𝑡 1 ® or 𝑠2 ≤
+𝑡 2 ® or 𝑠3 ≤
+𝑡 3 ® (30)
+«(𝑠1 , 𝑠2 , 𝑠3 ) ∈𝑃 ℎ ( (𝑡1 , 𝑡2 , 𝑡3 ) )=1¬
+«(𝑠1 , 𝑠2 , 𝑠3 ) ∈𝑃 ℎ ( (𝑡1 , 𝑡2 , 𝑡3 ) )=2¬
+«(𝑠1 , 𝑠2 , 𝑠3 ) ∈𝑃 ℎ ( (𝑡1 , 𝑡2 , 𝑡3 ) )=3¬
+holds (where the unions are on all (𝑡 1 , 𝑡 2 , 𝑡 3 ) such that ℎ( (𝑡 1 , 𝑡 2 , 𝑡 3 )) = 𝑖 for 𝑖 = 1, 2, 3 ... sorry for
+the ugly abbreviation).
+And again equivalently:
+For all ℎ : 𝑁 → {1, 2, 3}, there exists 𝑖 ∈ {1, 2, 3} such that:
+Û
+Ü
+©
+ª
+𝑠𝑖 ≤
+𝑡𝑖 ®
+«(𝑠1 , 𝑠2 , 𝑠3 ) ∈𝑃 ℎ ( (𝑡1 , 𝑡2 , 𝑡3 ) )=𝑖¬
+
+(31)
+
+holds.
+Now it is very easy to generalize the last formulation to the case of tuples of 𝑛 arity. We have that
+Û
+
+(𝑠 1 , ..., 𝑠𝑛 ) ∧
+
+(𝑠 1 , ..., 𝑠𝑛 ) ∈𝑃
+
+Û
+
+¬(𝑡 1 , ..., 𝑡𝑛 )
+
+(32)
+
+(𝑡 1 , ..., 𝑡𝑛 ) ∈𝑁
+
+is empty if and only if for all ℎ : 𝑁 → [1..𝑛], there exists 𝑖 ∈ [1..𝑛] such that:
+Û
+Ü
+©
+ª
+𝑠𝑖 ≤
+𝑡𝑖 ®
+«(𝑠1 , ..., 𝑠𝑛 ) ∈𝑃 ℎ ( (𝑡1 , ..., 𝑡𝑛 ) )=𝑖¬
+
+(33)
+
+holds.
+E
+
+SOLUTION TO THE EXERCISE IN SECTION 6
+Typing 𝜆𝑥 .𝜆𝑦.(𝑥 + {ℓ = 𝑦}) by ∀𝛼, 𝛽 . (𝛼 ∧ {}) → 𝛽 → (𝛼 ∧ {ℓ = 𝛽}}) is unsound. If the function
+had this type, then the following application (𝜆𝑥 .𝜆𝑦.(𝑥 + {ℓ = 𝑦})) {ℓ = 42} true could be typed by
+instantiating 𝛼 to {ℓ = Int}} and 𝛽 to Bool. In this way, we would have deduced that the application
+has type {ℓ = Int}} ∧ {ℓ = Bool}}, that is, 0. Therefore, we would have deduced that the result of
+the application, {ℓ = 42}, has type 0 and thus, by subsumption, any possible type.
+Proc. ACM Program. Lang., Vol. 7, No. ICFP, Article 196. Publication date: August 2023.
+
+Typing Records, Maps, and Structs
+
+F
+
+196:35
+
+MUTATION
+
+Records and mutations are often intertwined, especially in dynamic languages. In JavaScript, for
+instance, every field is highly mutable: it can be added, modified, erased. Some languages introduce
+a more controlled way of mutating: in Ballerina, lists and records are by default mutable but only
+within certain limits established by the type statically declared for them (fields can be declared
+to be readonly and there are ways to transform mutable fields into readonly ones and viceversa);
+in Julia, it is exactly the opposite since records (i.e., composite types) are immutable by default
+(even if their fields can contain mutable values) but they can be declared mutable. Some functional
+languages introduce mutation via records: in OCaml a value of type ref int is a record with a
+field contents that contains an integer, that is, a record of type {contents: int}; in CDuce a
+value of type ref int is also a record, but with two fields instead, get (to read the location) and
+set (to write the location), that is a record of type {set: int -> (), get: () -> int}, since
+this directly enforces the classic invariant subtyping relation for reference types (see below).
+In this section we define a unified theory of mutable locations that encompasses such different
+type discipline as those defined for OCaml/CDuce references and those for Ballerina locations,
+and then embed them in the record/map theory of the previous sections to type the structures of
+Ballerina and similar languages. In particular, we define a unique framework in which we will be
+able to interpret both the classic invariant mutable reference types that can be found in Rust or
+CDuce and the mutable record types of Ballerina. These constitute two extreme points in the design
+space for subtyping mutable locations. On one end of this design spectrum, invariant references
+form a stricter discipline with stronger static safety guarantees, but they break subtyping insofar
+as invariance is the only possible subtyping relation. On the other end of the spectrum there is
+Ballerina, whose design principles require the subtyping relation to satisfy properties at first sight
+counter-intuitive for a functional programmer (immutable pointers can be used where mutable
+ones are expected, reference types are covariant, pattern matching disregards mutability). We will
+see the details of it later on.
+
+F.1
+
+A theory of locations
+
+The most general way to implement the ideas above is to add locations. Here we develop a general
+theory of locations and then show how to use it to interpret Ballerina’s mutable structures and
+classic invariant reference types.
+We imagine a notion of location as a cell containing a value 𝑣 and which comes with two sets:
+a set 𝑋 1 of values that can be read from it, and a set 𝑋 2 of values that can be written to it. These
+two sets are used to drive the semantics of writes into the cell. We can for instance design the
+operational semantics such that if we try to write a value 𝑣 in it, it simply discards it if 𝑣 ∉ 𝑋 1 ; if
+𝑣 ∉ 𝑋 2 , then either we can make the runtime raise an exception (as in Ballerina or the JVM) or
+design the type system so that it statically ensures that such a situation will never happen (as in
+languages with invariant reference types like Rust or CDuce). When 𝑋 2 = ∅, then the location is
+readonly: we can read values from it but we cannot write any. The need of the two distinct sets is
+to avoid the paradoxes explained by Frisch et al. [2008, Appendix A].
+If we interpret values as elements of a certain domain D, then a location is interpreted as a
+triple (𝑑, 𝑋 1, 𝑋 2 ) ∈ D × P (D) × P (D). Next we define some types to capture some specific sets
+of locations. In what follows, we distinguish two different kinds of types: the classic invariant
+reference types (as formalized by Frisch et al. [2008, Appendix A.2]) and Ballerina’s structures
+components (i.e., the content of Ballerina tuples, arrays, maps, records, and tables). In Ballerina,
+we will consider location types of the form loc(𝑡, 𝑏) where 𝑡 is a type and 𝑏 is a flag set to 1 for
+
+Proc. ACM Program. Lang., Vol. 7, No. ICFP, Article 196. Publication date: August 2023.
+
+196:36
+
+Giuseppe Castagna
+
+mutable locations and set to 0 for readonly locations. For classic invariant reference types we will
+use ref (𝑡).
+Let 𝑋 ⊆ D, we define the following operators that return a subset of D × P (D) × P (D):
+ref (𝑋 ) = {(𝑑, 𝑋 1, 𝑋 2 ) | 𝑑 ∈ 𝑋 1 ⊆ 𝑋 ⊆ 𝑋 2 }
+loc(𝑋, 1) = {(𝑑, 𝑋 1, 𝑋 2 ) | 𝑑 ∈ 𝑋, 𝑋 1 ∪ 𝑋 2 ⊆ 𝑋 }
+loc(𝑋, 0) = {(𝑑, ∅, ∅) | 𝑑 ∈ 𝑋 }
+Intuitively, we would like to define the interpretation of types so that Jref (𝑡)K = ref (J𝑡K) and
+Jloc(𝑡, 𝑏)K = loc(J𝑡K, 𝑏). However, as it is the case for function spaces, for cardinality reasons it is
+not possible to have D ⊆ D×P (D)×P (D). Thus, we proceed as for function spaces and define a
+second interpretation E(.), called the extensional interpretation, and say that an interpretation is
+a model if and only if for all types 𝑡 we have J𝑡K = ∅ ⇐⇒ E(𝑡) = ∅ (see [Frisch et al. 2008] for
+details).
+The extensional interpretations of types loc(𝑡, 𝑏) and ref (𝑡) are respectively defined as:
+E(ref (𝑡)) = ref (J𝑡K)
+E(loc(𝑡, 𝑏)) = loc(J𝑡K, 𝑏)
+We use 1loc to denote the type of all locations, that is the type whose interpretation is J1loc K =
+D × P (D) × P (D). As usual, every type that contains only locations—i.e., every subtype of
+1loc —can be expressed as a disjunctive normal form, that is, a union of intersections of loc(. , .)
+atoms (respectively, ref (.) atoms) and of their negations. Determining subtyping then is equivalent
+to determining the emptiness of the intersections that form the union of a disjunctive normal form.
+The way to compute this is given by the two following lemmas:
+Lemma F.1 ([Frisch et al. 2008]). Let (𝑋𝑖 )𝑖 ∈𝑃 and (𝑌 𝑗 ) 𝑗 ∈𝑁 be two families of subsets of D. Then:
+Ù
+Ø
+ref(𝑋𝑖 ) ⊆
+ref(𝑌 𝑗 )
+𝑖 ∈𝑃
+
+𝑗 ∈𝑁
+
+⇐⇒
+!
+Ù
+
+𝑋𝑖 = ∅ or ∃𝑗 ∈ 𝑁 .
+
+𝑖 ∈𝑃
+
+!
+Ù
+𝑖 ∈𝑃
+
+𝑋𝑖 ⊆ 𝑌 𝑗 ⊆
+
+Ø
+
+𝑋𝑖
+
+𝑖 ∈𝑃
+
+Proof. The ⇐ implication is straightforward. For the opposite direction, we assume that
+Ð
+Ñ
+Ñ
+Ð
+𝑋 . We pick
+𝑗 ∈𝑁 ref (𝑌 𝑗 ) and 𝑖 ∈𝑃 𝑋𝑖 ≠ ∅. We define 𝑍 1 as 𝑖 ∈𝑃 𝑋𝑖 and 𝑍 2 as 𝑖 ∈𝑃
+Ñ 𝑖
+an element 𝑑 from 𝑍 1 , which is Ð
+not empty by hypothesis. The triple (𝑑, 𝑍 1, 𝑍 2 ) is in 𝑖 ∈𝑃 ref (𝑋𝑖 ),
+and thus, by hypothesis, also in 𝑗 ∈𝑁 ref (𝑌 𝑗 ). This gives a 𝑗 such that (𝑑, 𝑍 1, 𝑍 2 ) is in ref (𝑌 𝑗 ) and
+the rest of the proof follows easily.
+□
+Ñ
+
+𝑖 ∈𝑃 ref (𝑋𝑖 ) ⊆
+
+It is easy to see that for the above interpretation we have ref (𝑡 1 ) ≤ ref (𝑡 2 ) ⇔ (𝑡 1 ≤ 0) or (𝑡 1 ≃
+𝑡 2 ): the interpretation generalizes the classic invariant subtyping for reference types to type system
+with empty type.18
+Lemma F.2. (𝑋𝑖 )𝑖 ∈𝑃 and (𝑏𝑖 )𝑖 ∈𝑃 be two families of subsets of D and of 0 or 1, respectively. Then:
+Ù
+Ñ
+loc(𝑋𝑖 , 𝑏𝑖 ) ≃ loc( 𝑖 ∈𝑃 𝑋𝑖 , min𝑖 ∈𝑃 𝑏𝑖 )
+𝑖 ∈𝑃
+18 Formally, ref (𝑡 )
+1
+
+≤ ref (𝑡 2 ) ⇔ Jref (𝑡 1 )K ⊆ Jref (𝑡 2 )K ⇔ Jref (𝑡 1 )∧¬ref (𝑡 2 )K = ∅ ⇔ E(ref (𝑡 1 )∧¬ref (𝑡 2 ) ) =
+∅ ⇔ E(ref (𝑡 1 ) ) ∩ ( D∖E(ref (𝑡 2 ) ) ) = ∅ ⇔ ref (J𝑡 1 K) ∩ ( D∖ref (J𝑡 2 K) ) = ∅ ⇔ ref (J𝑡 1 K) ⊆ ref (J𝑡 2 K) ⇔ (J𝑡 1 K =
+∅) or (J𝑡 1 K = J𝑡 2 K) ⇔ (𝑡 1 ≤ 0) or (𝑡 1 ≃ 𝑡 2 ).
+Proc. ACM Program. Lang., Vol. 7, No. ICFP, Article 196. Publication date: August 2023.
+
+Typing Records, Maps, and Structs
+
+196:37
+
+Proof. Straightforward.
+Lemma F.3. Let (𝑋𝑖 )𝑖 ∈𝑃 and (𝑌 𝑗 ) 𝑗 ∈𝑁 be two families of subsets of D and (𝑏𝑖 )𝑖 ∈𝑃 and (𝑏 ′𝑗 ) 𝑗 ∈𝑁 two
+families of flags with value in {0, 1}. Then:
+Ù
+
+loc(𝑋𝑖 , 𝑏𝑖 ) ⊆
+
+𝑖 ∈𝑃
+
+Ø
+
+loc(𝑌 𝑗 , 𝑏 ′𝑗 )
+
+𝑗 ∈𝑁
+
+⇐⇒ !
+!
+!
+Ù
+Ù
+Ø
+Ù
+′
+𝑋𝑖 = ∅ or min 𝑏𝑖 = 0 and
+𝑋𝑖 ⊆
+𝑌 𝑗 or ∃𝑗 ∈ 𝑁 .
+𝑋𝑖 ⊆ 𝑌 𝑗 and 𝑏 𝑗 = 1
+𝑖 ∈𝑃
+
+𝑖 ∈𝑃
+
+𝑖 ∈𝑃
+
+𝑗 ∈𝑁
+
+𝑖 ∈𝑃
+
+Proof. The ⇐ implication is straightforward.
+Ñ
+For the opposite direction, it is immediate to deduce from Lemma F.2 that 𝑖 ∈𝑃 𝑋𝑖 = ∅ imÑ
+Ñ
+plies 𝑖 ∈𝑃 loc(𝑋𝑖 , 𝑏𝑖 ) Ñ= ∅ and, thus, the result. Therefore, we assume that 𝑖 ∈𝑃 loc(𝑋𝑖 , 𝑏𝑖 ) ⊆
+Ð
+′
+two cases.
+𝑗 ∈𝑁 loc(𝑌 𝑗 , 𝑏 𝑗 ) and 𝑖 ∈𝑃 𝑋𝑖 ≠ ∅. By Lemma F.2 we can distinguish
+Ñ
+Either min𝑖 ∈𝑃 𝑏𝑖 = 0, in which case we know that all elements of 𝑖 ∈𝑃 loc(𝑋𝑖 , 𝑏𝑖 ) have the form
+Ñ
+Ð
+(𝑑, ∅, ∅) with 𝑑 ∈ 𝑖 ∈𝑃 𝑋𝑖 . By hypothesis (𝑑, ∅, ∅) ∈ 𝑗 ∈𝑁 loc(𝑌 𝑗 , 𝑏 ′𝑗 ). Now it is easy to see that an
+element of the form (𝑑, ∅, ∅) belongs to loc(𝑌 𝑗 , 𝑏 ′𝑗 ) if and only if 𝑑 ∈ 𝑌 𝑗 . Therefore, we deduce that
+Ñ
+Ñ
+Ð
+for every 𝑑 ∈ 𝑖 ∈𝑃 𝑋𝑖 there exists 𝑗 ∈ 𝑁 such that 𝑑 ∈ 𝑌 𝑗 and we conclude that 𝑖 ∈𝑃 𝑋𝑖 ⊆ 𝑗 ∈𝑁 𝑌 𝑗 .
+Ñ
+Or min𝑖 ∈𝑃 𝑏𝑖 = 1. In that case we define 𝑍 as 𝑖 ∈𝑃Ñ𝑋𝑖 and pick an element 𝑑 from 𝑍 which is not
+empty
+Ð by hypothesis. Then the triple (𝑑, 𝑍, 𝑍 ) is in 𝑖 ∈𝑃 loc(𝑋𝑖 , 𝑏𝑖 ), and thus, by hypothesis, also
+in 𝑗 ∈𝑁 loc(𝑌 𝑗 , 𝑏 ′𝑗 ) which gives a 𝑗 such that (𝑑, 𝑍, 𝑍 ) is in loc(𝑌 𝑗 , 𝑏 ′𝑗 ), with 𝑏 ′𝑗 = 1 since 𝑍 is not
+empty.
+□
+As before, it is easy to see that by the lemma above we have 𝑡 1 ≤ 𝑡 2 ⇔ loc(𝑡 1, 0) ≤ loc(𝑡 2, 0) ⇔
+loc(𝑡 1, 0) ≤ loc(𝑡 2, 1) ⇔ loc(𝑡 1, 1) ≤ loc(𝑡 2, 1). Therefore, in Ballerina, locations are covariant and
+readonly locations can be used where writable ones are expected. Both facts may seem at first
+surprising, but we explain their rationale in Section F.1.1. More generally we have, loc(𝑡 1, 𝑏 1 ) ≤
+loc(𝑡 2, 𝑏 2 ) ⇔ (𝑡 1 ≤ 0) or (𝑡 1 ≤ 𝑡 2 and 𝑏 1 ≤ 𝑏 2 ).
+To handle locations we extend our calculus with the following constructions:
+𝑒 ::= . . . | !𝑒 | (𝑒 := 𝑒) | cell𝑡1,𝑡2 𝑒
+𝑣 ::= . . . | cell𝑡1,𝑡2 𝑣
+The expressions !𝑒 and (𝑒 := 𝑒) are for dereferencing and assignment, while cell𝑡1,𝑡2 𝑒 is an
+expression that defines a cell that contains the value resulting from the evaluation of 𝑒 and that
+declares to return values of type 𝑡 1 for reading and to accept values of type 𝑡 2 for writing. The
+intuition for the corresponding cell value is the one that we explained before, that is, the value
+cell𝑡1,𝑡2 𝑣 is a cell in that contains a value 𝑣, which refuses write operations of values not in 𝑡 2 , and
+which silently discards writes of values not in 𝑡 1 . The expression !𝑒 returns the value stored in
+the cell returned by 𝑒; the expression 𝑒 1 := 𝑒 2 stores the value returned by 𝑒 2 in the cell cell𝑡1,𝑡2 𝑣
+returned by 𝑒 2 provided that this value is both of type 𝑡 1 (otherwise it silently discards it), and of
+type 𝑡 2 (otherwise its semantics is undefined). This is formalized by the following definition of
+the operational semantics, which rewrites a pair formed by an expression 𝑒 and a store 𝜍 (i.e., a
+mapping from memory locations—ranged over by 𝜇— to values) into a new pair and where we use
+Proc. ACM Program. Lang., Vol. 7, No. ICFP, Article 196. Publication date: August 2023.
+
+196:38
+
+Giuseppe Castagna
+
+() as result for assignments:
+cell𝑡1,𝑡2 𝑣; 𝜍
+
+{
+
+𝜇; 𝜍 {𝜇 ↦→ cell𝑡1,𝑡2 𝑣 }
+
+!𝜇; 𝜍
+
+{
+
+𝑣; 𝜍
+
+𝜇 := 𝑣; 𝜍
+
+{
+
+(); 𝜍 {𝜇 ↦→ cell𝑡1,𝑡2 𝑣 }
+
+if 𝜍 (𝜇) = cell𝑡1,𝑡2 𝑣 ′ and 𝑣 : 𝑡 1 ∨ 𝑡 2
+
+𝜇 := 𝑣; 𝜍
+
+{
+
+(); 𝜍
+
+if 𝜍 (𝜇) = cell𝑡1,𝑡2 𝑣 ′ and 𝑣 : 𝑡 2 ∖ 𝑡 1
+
+with 𝜇 ∉ dom(𝜍)
+if 𝜍 (𝜇) = cell𝑡1,𝑡2 𝑣
+
+Notice that the semantics of writing a value 𝑣 into a cell cell𝑡1,𝑡2 𝑣 ′ is undefined when 𝑣 is not of
+type 𝑡 2 . In general, it should be the task of the type system to statically ensure that such a situation
+cannot happen, but in Ballerina this is accepted: the validity of each write is dynamically checked,
+and any violation generates an error, that is, roughly:
+𝜇 := 𝑣; 𝜍
+
+if 𝜍 (𝜇) = cell𝑡1,𝑡2 𝑣 ′ and 𝑣 : ¬𝑡 2
+
+error; 𝜍
+
+{
+
+The semantic intuition underlying the definition of the new values is that, if 𝑣 denotes some
+element 𝑑, then cell𝑡1,𝑡2 𝑣 denotes the element (𝑑, J𝑡 1 K, J𝑡 2 K).
+The definition of the typing rules depends on the kind of locations we are working with.
+Let us start with the classic reference types. The first problem to solve is to define the typing of
+the cell expressions. Intuitively, we would like to have the following rule:
+Γ ⊢ 𝑒 : 𝑡1
+
+𝑡1 ≤ 𝑡 ≤ 𝑡2
+
+Γ ⊢ cell𝑡1,𝑡2 𝑒 : ref (𝑡)
+that is, the expression 𝑒 must return a value that is in the “read-type” 𝑡 1 , in which case the expression
+can be considered to be of type ref (𝑡) as long as we have 𝑡 1 ≤ 𝑡 ≤ 𝑡 2 . This rule allows the system
+to deduce for the same expression different reference types (i.e., all reference types whose type is
+included between the type for reads and the type for writes of the cell expression). The intersection
+rule, then deduces for the expression the intersection of the different types. In semantic subtyping
+the intersection rule is not included in the system: it is an admissible rule, thanks to the fact that
+intersections are accounted for in introduction rules (notably, when typing 𝜆-abstractions). Not
+only: the theoretical framework also wants that the expression cell𝑡1,𝑡2 𝑒 has type ref (𝑡) if and only
+if 𝑡 1 ≤ 𝑡 ≤ 𝑡 2 ; otherwise, following the semantic subtyping approach with function types, it should
+have type ¬ref (𝑡). As a consequence, in order to preserve the admissibility of the intersection rule,
+the rule for cells with classic reference types is:
+Γ ⊢ 𝑒 : 𝑡1
+
+∀𝑖 = 1..𝑛. 𝑡 1 ≤ 𝑠𝑖 ≤ 𝑡 2
+
+∀𝑗 = 1..𝑚. ¬(𝑡 1 ≤ 𝑠 ′𝑗 ≤ 𝑡 2 )
+
+Γ ⊢ cell𝑡1,𝑡2 𝑒 : ∧𝑖=1..𝑛 ref (𝑠𝑖 ) ∧ ∧ 𝑗=1..𝑚 ¬ref (𝑠 ′𝑗 )
+The interest of this rule is mainly theoretical (i.e., it is needed to ensure that the model of values is
+a model, that is, that for every value ⊢ 𝑣 : 𝑡 ⇐⇒ ⊬ 𝑣 : ¬𝑡: see [Frisch et al. 2008, Theorem 5.5]). We
+give its practical version later in the section.
+The rules for dereferencing and assignment are, instead, much simpler. They are the classic rules
+that are used in practice, that is:
+Γ ⊢ 𝑒 : ref (𝑡)
+
+Γ ⊢ 𝑒 1 : ref (𝑡)
+
+Γ ⊢!𝑒 : 𝑡
+
+Γ ⊢ 𝑒2 : 𝑡
+
+Γ ⊢ (𝑒 1 := 𝑒 2 ) : ()
+
+For the case of Ballerina’s location types, we proceed as we did for the classic reference types and
+follow semantic intuition to define two rules for cells that take into account whether the location is
+readonly or not
+Γ ⊢𝑒 :𝑡
+𝑡1 ∨ 𝑡2 ≤ 𝑡
+Γ ⊢𝑒 :𝑡
+𝑡1 ∨ 𝑡2 ≤ 0
+Γ ⊢ cell𝑡1,𝑡2 𝑒 : loc(𝑡, 1)
+
+Γ ⊢ cell𝑡1,𝑡2 𝑒 : loc(𝑡, 0)
+
+Proc. ACM Program. Lang., Vol. 7, No. ICFP, Article 196. Publication date: August 2023.
+
+Typing Records, Maps, and Structs
+
+196:39
+
+Once more it is possible to deduce different types for the same expression and therefore the two rules
+above should be synthesized into a unique rule that preserves the admissibility of the intersection
+rule and allows the system to deduce negated location types. Unfortunately, contrary to the case
+with ref () types, it is not possible to derive the negative part of such a rule by negating the two
+rules above: this would correspond to deduce that an expression 𝑒 does not have a given type 𝑡.
+The consequence of this fact is only of theoretical interest: we do not know whether the model of
+values is a set-theoretic model. In practice, however, the two rules above are not only sufficient, but
+even too general, and they should be restricted as we show below.
+The rules for dereferencing and for assignment are almost the same as for classic reference types,
+the only difference being that assignments are permitted only for writable locations:
+Γ ⊢ 𝑒 : loc(𝑡, 𝑏)
+
+Γ ⊢ 𝑒 1 : loc(𝑡, 1)
+
+Γ ⊢!𝑒 : 𝑡
+
+Γ ⊢ 𝑒2 : 𝑡
+
+Γ ⊢ (𝑒 1 := 𝑒 2 ) : ()
+
+However, if working in the language Ballerina there will not be explicit deref and update operations
+as the above, since deref and updates are embedded directly in the operations of record read and
+update:
+Γ ⊢ 𝑒 : { ℓ = loc(𝑡, 𝑏)}
+Γ ⊢ 𝑒 1 : { ℓ = loc(𝑡, 1)} Γ ⊢ 𝑒 2 : 𝑡
+Γ ⊢ 𝑒.ℓ : 𝑡
+
+Γ ⊢ (𝑒 1 .ℓ = 𝑒 2 ) : ()
+
+that is, reading the field ℓ of a record requires that the record contains at least a field for it (the
+expression is typed by an open record), and returns the corresponding type; likewise for update,
+with the further constraint that the corresponding field must be a writable location. Similar rules
+must be defined for tuples, arrays, maps, and lists, since in Ballerina their elements are locations.
+Even though in Ballerina locations appear as subcomponents of particular structures, the advantage of defining a type system by using explicit location types instead of embedding them directly
+in the type of the structures at issue such as record types, is that one can use for subtyping record
+types directly the formula (19) as is. The only difference will be that records (and tuples and array
+...) map labels into location types, that is, into unions of intersections of loc(. , .) atoms and their
+negations.
+We just established the theoretical framework to subtype and type-check location expressions.
+To avoid the paradoxes pointed out by Frisch et al. [2008, Appendix A] these come equipped with
+two distinct read and write types which are checked at run-time to silently discard values used in
+assignments or even to fail. Now, it is clear that in a practical setting we do not want assignments
+to silently discard the passed values, therefore in practice we only allow cells in which both types
+coincide, so that writing a forbidden value or writing a silently discarded one will have exactly the
+same effect. This corresponds to restricting the syntax of a programming language so that only cell
+expressions of the form cell𝑡,𝑡 𝑒 are permitted. Under such a restriction the typing rules for cells
+specialize as follows:
+Γ ⊢𝑒 :𝑡
+
+Γ ⊢𝑒 :𝑡
+Γ ⊢ cell𝑡,𝑡 𝑒 : ref (𝑡)
+
+𝑠 ≤𝑡
+
+Γ ⊢ cell𝑠,𝑠 𝑒 : loc(𝑡, 1)
+
+Γ ⊢𝑒 :𝑡
+Γ ⊢ cell0,0𝑒 : loc(𝑡, 0)
+
+Implementation-wise the duplication of the types in a cell expression becomes useless, and therefore
+in practice cell expressions will be a pair formed by an expression and just the type of allowed
+writes, e.g., cell𝑡 𝑒 rather than cell𝑡,𝑡 𝑒, with cell0𝑒 denoting readonly cells.
+F.1.1 Rationale. The rationale of the two kinds of types is easy to explain. The use of ref (.) types
+corresponds to the one that can be found in a statically-typed functional languages, where the type
+system must ensure that there will be no stuck expression and, therefore, that all read and write
+Proc. ACM Program. Lang., Vol. 7, No. ICFP, Article 196. Publication date: August 2023.
+
+196:40
+
+Giuseppe Castagna
+
+operations will be well-typed. This yields to a generalization of the classic invariant subtyping rule
+for reference types, since, as we already noticed: ref (𝑡 1 ) ≤ ref (𝑡 2 ) ⇔ (𝑡 1 ≤ 0) or (𝑡 1 ≃ 𝑡 2 ).
+The aims of the types of Ballerina are different and essentially twofold. The first point is that, for
+its use-cases Ballerina needs covariant subtyping for mutable types, even though this may cause
+run-time exceptions for write operations. But this is ok since in Ballerina philosophy, only reads are
+safe—the type system statically ensures that every read operation returns only values of the expected
+type—while writes are checked at runtime and can raise exceptions. As we have already seen, our
+interpretation of loc(. , .) is covariant on the type component, since loc(𝑡 1, 𝑏 1 ) ≤ loc(𝑡 2, 𝑏 2 ) ⇔
+(𝑡 1 ≤ 0) or (𝑡 1 ≤ 𝑡 2 and 𝑏 1 ≤ 𝑏 2 ). The second reason is that Ballerina uses concurrency and for that
+it is useful to guarantee that some data structures shared by different threads cannot be mutated, so
+as to avoid the use of locks to access them. For that Ballerina relies on a specific basic type readonly
+that is used to intersect other types to ensure that the values of the intersection cannot be mutated.
+If a function parameter is declared as readonly, that means that the caller is guaranteeing that the
+value it passed as an argument can never be mutated: thus we want to disallow read-and-write
+data to be used where readonly data is expected, or this would disrupt this guarantee. Ballerina
+requires locations to satisfy two further properties. First it must be possible to use readonly data
+structures where their read-and-write counterpart is expected: as a matter of fact in both cases
+write may fail at run-time, either because the value to be written is not compatible with the type
+expected by the cell (write of a read-and-write cell) or because no value can be written in the cell
+(write of a read-only cell). Thus, in this framework a read-only cell is exactly a read-and-write cell
+writable with values of the empty type.19 This is the meaning of the covariance of the writable
+bits 𝑏 1 and 𝑏 2 in the example above. Second, from an operational point of view read-only cells
+are indistinguishable from their unboxed counterpart: it is impossible to write a program that
+distinguishes whether the values it is using are stored in a readonly cell or not. Therefore, we want
+that read-only types satisfy the same subtyping relations as the types they box. In particular, we
+want the following equality to hold:
+loc(𝑡 1, 0) ∨ loc(𝑡 2, 0)
+
+≃
+
+loc(𝑡 1 ∨𝑡 2, 0)
+
+so that it is not possible to distinguish the union of the values of two types from the union of the
+readonly locations containing the values of these two types. This is guaranteed by our interpretation.
+Notice instead that for read-and-write value while
+loc(𝑡 1, 1) ∨ loc(𝑡 2, 1)
+
+≤
+
+loc(𝑡 1 ∨𝑡 2, 1)
+
+holds, the converse in general does not: for instance, 𝑣 = cellInt∨Bool,Int∨Bool 42 is in loc(Int∨Bool, 1)
+but not in loc(Int, 1)∨loc(Bool, 1); if we in 𝑣 first an integer value then a Boolean one, both
+operations will be successful while for values in loc(Int∨Bool, 1) one of the two must fail.
+In practice, in our system we do not need to add the readonly type of Ballerina, since this can
+be encoded as the recursive type which is the union of all basic types, all functions, and all tuples
+and record with readonly subcomponents.
+type 𝑋 = 1basic ∨ (loc(𝑋, 0) × loc(𝑋, 0)) ∨ { ⇒ loc(𝑋, 0)} ∨ 0 → 1
+In Ballerina syntax this roughly corresponds to:20
+19 More pragmatically, mutability is the default behavior in Ballerina, and the language designers did not want to require the
+
+programmer to write specific functions for data that may happen to be read-only so that, unless this is necessary to ensure
+specific properties (such as immutability of shared data), all functions are written for mutable data.
+20 Keywords are in boldface. In particular readonly is the keyword Ballerina uses to declare a subcomponent of a structure
+(e.g., a record field) to be readonly, while readonly is the name of the type that is being defined.
+Proc. ACM Program. Lang., Vol. 7, No. ICFP, Article 196. Publication date: August 2023.
+
+Typing Records, Maps, and Structs
+
+196:41
+
+type X = () | int | boolean | string | float | decimal
+| empty -> any
+| [ (readonly X...) ]
+| { (readonly X...) }
+type readonly = X
+(keywords are in boldface) the last summand of the definition of X meaning records with only
+readonly optional fields that include readonly values (Ballerina uses the syntax “...” to denote
+open record types). In other terms, all fields are declared readonly and are optional fields whose
+content is the recursion variable for readonly types. Likewise for tuples.
+F.1.2 Universal model. To define a universal model it suffices to use the same technique as for
+function spaces and consider finite powersets for Ballerina locations and cofinite powersets for
+classic invariant references. That is.
+loc(𝑋, 1) = {(𝑑, 𝑋 1, 𝑋 2 ) | 𝑑 ∈ 𝑋, 𝑋 1 ∪ 𝑋 2 ⊆ 𝑋 }
+
+⊆
+
+D × Pfin (D) × Pfin (D)
+
+loc(𝑋, 0) = {(𝑑, ∅, ∅) | 𝑑 ∈ 𝑋 }
+
+⊆
+
+D × Pfin (D) × Pfin (D)
+
+⊆
+
+D × Pfin (D) × Pcofin (D)
+
+ref (𝑋 ) = {(𝑑, 𝑋 1, 𝑋 2 ) | 𝑑 ∈ 𝑋 1 ⊆ 𝑋 ⊆ 𝑋 2 }
+
+As before the elements of D—which now is defined as D = B + D×D + Pfin (D×DΩ ) + (L _
+D⊥ ) + (D×Pfin (D)×(Pfin (D)∪Pcofin (D)))—can be defined inductively, by adding the production
+(𝑑, {𝑑 1, ..., 𝑑𝑚 }, {𝑑 1, ...., 𝑑𝑛 }) to model Ballerina locations and (𝑑, {𝑑 1, ..., 𝑑𝑚 }, D∖{𝑑 1, ...., 𝑑𝑛 }) for
+invariant reference types.
+The definition of the predicate (𝑑 : 𝑡) is extended as follows:
+( (𝑑, {𝑑 1, ..., 𝑑𝑚 }, D∖{𝑑 1′ , ...., 𝑑𝑛′ }) : ref (𝑡) ) = (𝑑 : 𝑡) ∧ ∀𝑖.(𝑑𝑖 : 𝑡) ∧ ∀𝑗 .¬(𝑑 ′𝑗 : 𝑡)
+( (𝑑, {𝑑 1, ..., 𝑑𝑚 }, {𝑑𝑚+1, ...., 𝑑𝑚+𝑛 }) : loc(𝑡, 1) ) = (𝑑 : 𝑡) ∧ ∀𝑖.(𝑑𝑖 : 𝑡)
+( (𝑑, {}, {}) : loc(𝑡, 0) ) = (𝑑 : 𝑡)
+From a formal point of view this means that in this model we have two distinct kind of locations,
+those typed by ref (.) and those typed by loc(. , .). This however is needed just for defining the
+subtyping relation and thus is it not a problem to use the same values for both types, which makes
+it possible to use in a same language both kinds of location types used to classify the same set of
+values.
+Although in the formal system we just presented, cells with loc-types are first class values, in
+a practical setting it is better to avoid such a scenario, for the simple reason that, as we already
+pointed out, it is not possible to observationally distinguish (i.e, to find a context that tells apart)
+a readonly location containing some value 𝑣 from the value 𝑣 itself. So in a practical setting one
+should avoid this confusion, either by boxing all values into locations (i.e., all the values used in the
+language are stored in locations), or to limit the use of locations as subcomponents of particular
+structures (i.e., all elements of records, tuples, list, ... are locations). The latter approach corresponds
+to considering the following model (without the cofinite part): D = B+D×D+Pfin (D×DΩ )+(L _
+(D×Pfin (D)×Pfin (D))⊥ ). In words, records map labels either to locations or to the undefined value,
+and locations are used only for records. This is the approach followed by the language Ballerina
+with a small caveat that we are going to explain in the next subsection.
+F.2
+
+Records with erasable fields
+
+The theory of locations we presented so far, works for records values whose domain is fixed: if we
+have a record value with a mutable location field, then all we can do is to modify the content of
+Proc. ACM Program. Lang., Vol. 7, No. ICFP, Article 196. Publication date: August 2023.
+
+196:42
+
+Giuseppe Castagna
+
+the field according to its static type, but we cannot erase that field, even if at the moment of the
+creation of that value the field was declared to be optional. Likewise, we cannot add to a record
+value an absent field even if that field was declared as optional. These two operations would require
+the system to allow the program to write a location in a field that is ⊥ and to write ⊥ in a filed
+that contains a location. But all a program can do is to write in a location a value that is in the
+“write-type” associated to the location.
+We want to modify the interpretation of record types and record values so that this becomes
+possible. That is, whenever a record field is declared mutable (read and write) and optional, then it
+means that this field can be not only mutated, but also erased if present and added if absent.
+Recall that we write 𝑋 ⊥ for 𝑋 ∪ {⊥} with ⊥ ∉ 𝑋 . Without mutable types, record values are
+interpreted as quasi-constant functions that map labels into either an element of the domain or
+into ⊥, that is (L _ D⊥ ).
+Simply adding locations to D, that is defining it as D = B + D×D + Pfin (D×DΩ ) + (L _
+D⊥ ) + (D×Pfin (D)×Pfin (D)) is not a solution good enough, since we would have a system that
+would mix values of different types that are in practice indistinguishable one for the other, as it is
+the case for values of type loc(𝑡, 0) and those of type 𝑡. This is why in the previous subsection we
+suggested limiting the use of locations as the codomain of quasi-finite functions. This corresponds
+to interpreting record values as quasi constant functions in (L _ (D×Pfin (D)×Pfin (D))⊥ ). In
+words, a record value is a map that associates each label either to a location or to ⊥.
+If we want to allow the possibility for records to add and delete mutable optional fields, then
+the required modification is straightforward, since it suffices to interpret records into locations
+that contain either a value or ⊥, that is a function in (L _ (D⊥ ×Pfin (D⊥ )×Pfin (D⊥ ))). The
+difference is that while in the previous interpretation a label was mapped either to ⊥ or to a location
+containing some value, here a label always mapped to a location, that either contains ⊥ or it
+contains some value. In this setting a record value in which the key 𝑘 is undefined corresponds to a
+quasi-constant function that maps the key 𝑘 into a location containing ⊥. In practice this means
+that the empty open record type {} is now interpreted as {[_ = loc(1∨⊥, 1)]}, while the closed
+one {||} is {[_ = loc(⊥, 0)]}. The interesting part is the interpretation of records with optional
+fields: for instance {|ℓ ⇒ Int|} is interpreted as {[ℓ = loc(Int∨⊥, 1), _ = loc(⊥, 0)]}, and a record
+in which the location associated to ℓ contains the value ⊥ means that the field ℓ is absent. It now
+becomes possible for record values of type {|ℓ ⇒ Int|} to add the field ℓ even if it is absent (just,
+write an integer in its location), and to delete the field ℓ even when it is present (just, write ⊥ in it).
+When computing the various set-theoretic operations (in particular complement) on the content of
+locations, one must take into account that the interpretation domain is 1 ∨ ⊥ rather than just 1.
+From the language point of view there are some modifications, too, because in this setting the
+addition and removal of fields are now side effects and must be typed accordingly: namely, we must
+check that whenever we add or remove a field from a record expression, the field is declared as
+optional in the type of the record expression.
+F.3
+
+Matching values
+
+The last modification we are going to describe is the addition of a new type to allow precise typing
+of pattern matching expressions as they are implemented in Ballerina.
+In Ballerina the matching expression looks only at the content of the locations that form a record
+value, but at not at their mutability. A pattern such as { x = int ...} (written in Ballerina’s
+syntax) matches every record value in which the field x is defined and contains an integer value,
+whatever its mutability status is. In other terms, this pattern matches a record value {𝑥 = 𝑣 } for
+some very different definitions of 𝑣, e.g. 𝑣 = cell0,0 42 (the location contains an integer and it is
+readonly) 𝑣 = cellInt,Int 42 (the location contains an integer, now and after any possible mutation),
+Proc. ACM Program. Lang., Vol. 7, No. ICFP, Article 196. Publication date: August 2023.
+
+Typing Records, Maps, and Structs
+
+196:43
+
+and 𝑣 = cell1,1 42 (the location contains an integer now but this may not be true after a mutation,
+since its read-write type permits to assign any value to the location). Therefore, in the case where
+the field of the value contains a writable mutation, the fact that the match succeeded does not imply
+that the matched value is of type { x = int ...}: values of this type are values for which the type
+system statically ensures that a selection of the field x always returns an integer for every possible
+mutations (e.g., the first two definitions of 𝑣 above); instead the pattern { x = int ...} matches
+also values in which the field x is a location that currently contains an integer but for which the
+type system does not ensure that it will always contain integers, since by some later mutation the
+field x could be updated with a value different from an integer (e.g., the third definition of 𝑣).
+This is a design choice of Ballerina justified by the fact that when a program is processing untyped
+input (e.g., from an HTTP request with a body of application/json), the program will receive the
+input as a value of type json. This kind of input is processed by the matching expression. We do
+not want to make that input to be immutable, since we want to allow the program to transform the
+JSON code by directly mutating it instead of generating a local copy (particularly, in a gateway
+scenario). Even if it was immutable, we would not want users to have to declare the type as readonly
+in order to get the right result: unsophisticated users are not expected to know about readonly
+types. Processing the input—i.e., using a match expression on that input—needs just to consider the
+value part of the mutable cells, which explains the semantics of the pattern { x = int ...} we
+described above. In order to take into account mutability—i.e., the type of the input—a different
+operator called “is” is provided: the programmer has the possibility to match only values whose
+type “is” { x = int ...}.
+In order to capture in a type the set of values accepted by record patterns as the above, we extend
+the types for location with a new “∞” flag:
+loc(𝑋, 0) = {(𝑑, ∅, ∅) | 𝑑 ∈ 𝑋 }
+loc(𝑋, 1) = {(𝑑, 𝑋 1, 𝑋 2 ) | 𝑑 ∈ 𝑋, 𝑋 1 ∪ 𝑋 2 ⊆ 𝑋 }
+loc(𝑋, ∞) = {(𝑑, 𝑋 1, 𝑋 2 ) | 𝑑 ∈ 𝑋, 𝑋 1 ∪ 𝑋 2 ⊆ D}
+As before E(loc(𝑡, 𝑏)) = loc(J𝑡K, 𝑏), so that our interpretation will validate the equation Jloc(𝑡, 𝑏)K =
+loc(J𝑡K, 𝑏). Thus, a value of type loc(𝑡, ∞) is a location that contains a value of type 𝑡 whatever its
+write and read types are.
+The modifications to make to the theory in order to include this new type are really minimal.
+The typing rules must be modified to account for the existence of this new type in particular we
+have:
+Γ ⊢𝑒 :𝑡
+
+Γ ⊢𝑒 :𝑡
+Γ ⊢ cell𝑡1,𝑡2 𝑒 : loc(𝑡, ∞)
+
+𝑡1 ∨ 𝑡2 ≤ 𝑡
+
+Γ ⊢ cell𝑡1,𝑡2 𝑒 : loc(𝑡, 1)
+
+Γ ⊢𝑒 :𝑡
+
+𝑡1 ∨ 𝑡2 ≤ 0
+
+Γ ⊢ cell𝑡1,𝑡2 𝑒 : loc(𝑡, 0)
+
+while for reads and writes we have
+Γ ⊢ 𝑒 : { ℓ = loc(𝑡, 𝑏)} 𝑏 ≤ 1
+
+Γ ⊢ 𝑒 : { ℓ = loc(𝑡, ∞)}
+
+Γ ⊢ 𝑒.ℓ : 𝑡
+
+Γ ⊢ 𝑒.ℓ : 1
+
+Γ ⊢ 𝑒 1 : { ℓ = loc(𝑡, 1)}
+
+Γ ⊢ 𝑒2 : 𝑡
+
+Γ ⊢ (𝑒 1 .ℓ = 𝑒 2 ) : ()
+
+Γ ⊢ 𝑒 1 : { ℓ = loc(𝑡, ∞)}
+
+Γ ⊢ 𝑒2 : 𝑡 ′
+
+Γ ⊢ (𝑒 1 .ℓ = 𝑒 2 ) : ()
+
+where the order on the read/write flags is 0 ≤ 1 ≤ ∞. The rules for locations with the ∞ flag state
+that reading such a location will return some value (of generic type 1) and that values of any type
+can be assigned to them.
+Lemma F.2 holds as it is, without any modification to its statement.
+Proc. ACM Program. Lang., Vol. 7, No. ICFP, Article 196. Publication date: August 2023.
+
+196:44
+
+Giuseppe Castagna
+
+Regarding Lemma F.3, we have to extend it to take into account the types of the form loc(𝑡, ∞).
+The extension is straightforward and it consists of adding two more clauses to cover the case when
+min𝑖 ∈𝑃 𝑏𝑖 = ∞, and slightly modifying the third clause in the statement, that is.
+Lemma F.4. Let (𝑋𝑖 )𝑖 ∈𝑃 and (𝑌 𝑗 ) 𝑗 ∈𝑁 be two families of subsets of D and (𝑏𝑖 )𝑖 ∈𝑃 and (𝑏 ′𝑗 ) 𝑗 ∈𝑁 two
+families of flags with value in {0, 1, ∞}. Then:
+Ù
+Ø
+loc(𝑋𝑖 , 𝑏𝑖 ) ⊆
+loc(𝑌 𝑗 , 𝑏 ′𝑗 )
+𝑖 ∈𝑃
+
+𝑗 ∈𝑁
+
+⇐⇒ !
+!
+Ù
+Ù
+Ø
+Ù
+𝑋𝑖 = ∅ or min 𝑏𝑖 = 0 and
+𝑋𝑖 ⊆
+𝑌 𝑗 or ∃𝑗 ∈ 𝑁 .
+𝑋𝑖 ⊆ 𝑌 𝑗 and 𝑏 ′𝑗 ≥ 1 or
+!
+
+𝑖 ∈𝑃
+
+𝑖 ∈𝑃
+
+
+
+𝑖 ∈𝑃
+
+𝑗 ∈𝑁
+
+𝑖 ∈𝑃
+
+
+
+Ø
+©Ù
+ª
+∃𝑗 ∈ 𝑁 . 𝑌 𝑗 = D and 𝑏 ′𝑗 = 1 or ­ 𝑋𝑖 ⊆
+𝑌𝑗 ®
+′
+{ 𝑗 ∈𝑁 |𝑏 𝑗 =∞} ¬
+«𝑖 ∈𝑃
+
+Proof. The proof for the cases when min𝑖 ∈𝑃 𝑏𝑖 is either 0 or 1 are essentially the same as in the
+proof of Lemma F.3. In this proof there remains a further case to examine, that is when min𝑖 ∈𝑃 𝑏𝑖 is
+∞. The last two clauses in the statement of the lemma cover theÑcase when min𝑖 ∈𝑃 𝑏𝑖 = ∞, that
+is when 𝑏𝑖 = ∞ for all 𝑖 ∈ 𝑃. In that case it is easy to see that 𝑖 ∈𝑃 loc(𝑋𝑖 , 𝑏𝑖 ) is the set of all
+Ñ
+triplets (𝑑, 𝑋 1, 𝑋 2 ) such that 𝑑 ∈ 𝑖 ∈𝑃 𝑋𝑖 where 𝑋 1 and 𝑋 2 are any subsets of D. If we assume that
+Ñ
+Ð
+Ñ
+, 𝑏 ′ ), then this in particular implies that for all 𝑑 ∈ 𝑖 ∈𝑃 𝑋𝑖 we have
+𝑖 ∈𝑃 loc(𝑋𝑖 , 𝑏𝑖 ) ⊆
+𝑗 ∈𝑁 loc(𝑌
+Ð𝑗 𝑗
+that (𝑑, D, D) must belong to 𝑗 ∈𝑁 loc(𝑌 𝑗 , 𝑏 ′𝑗 ). Now, given a set of triplets loc(𝑋, 𝑏) there are only
+two possible cases for (𝑑, D, D) to belong to loc(𝑋, 𝑏): either (𝑖) 𝑋 = D and 𝑏 ≥ 1, since then for
+both 𝑏 = 1 and 𝑏 = ∞ we have that (𝑑, D, D) belongs
+to loc(𝑋, 𝑏) or (𝑖𝑖) we have that 𝑑 ∈ 𝑋 and
+Ð
+𝑏 = ∞. In the first case (𝑑, D, D) belonging to 𝑗 ∈𝑁 loc(𝑌 𝑗 , 𝑏 ′𝑗 ) implies that there exists 𝑗 ∈ 𝑁
+such that 𝑌 𝑗 = D and 𝑏 ′𝑗 = 1 (which is covered by the fourth clause) or 𝑏 ′𝑗 = ∞ (which is covered
+Ñ
+by the last clause). In the second case the same hypothesis yields
+that for Ð
+every 𝑑 ∈ 𝑖 ∈𝑃 𝑋𝑖 there
+Ñ
+exists a 𝑗 ∈ 𝑁 such that 𝑑 ∈ 𝑌 𝑗 and 𝑏 ′𝑗 = ∞, which implies that 𝑖 ∈𝑃 𝑋𝑖 ⊆ { 𝑗 ∈𝑁 |𝑏 ′𝑗 =∞} 𝑌 𝑗 (covered
+by the last clause). We have obtained the result.
+□
+In summary the proof of the lemma above tells us that to check the containment given in the
+Ñ
+statement we need first to compute the intersection 𝑖 ∈𝑃 𝑋𝑖 and check whether it is empty. If
+such is not the case, then we compute min𝑖 ∈𝑃 𝑏𝑖 and according to the result we apply one of the
+following cases:
+Ñ
+Ð
+(1) if min𝑖 ∈𝑃 𝑏𝑖 = 0, then we check whether 𝑖 ∈𝑃 𝑋𝑖 ⊆ 𝑗 ∈𝑁 𝑌 𝑗 ;
+Ñ
+(2) if min𝑖 ∈𝑃 𝑏𝑖 = 1, then we check whether there exists 𝑗 ∈ 𝑁 such that 𝑏 ′𝑗 ≥ 1 and 𝑖 ∈𝑃 𝑋𝑖 ⊆ 𝑌 𝑗
+(3) if min𝑖 ∈𝑃 𝑏𝑖 = ∞, then we check whether there exists a 𝑗 ∈ 𝑁 such that 𝑏 ′𝑗 = 1 and 𝑌 𝑗 = D
+Ñ
+and, if not, we check whether 𝑖 ∈𝑃 𝑋𝑖 is contained in the union of all 𝑌 𝑗 such that 𝑏 ′𝑗 = ∞.
+Finally, it is straightforward to transpose this to deciding subtyping for locations: it suffices to
+replace the sets 𝑋 ’s and 𝑌 ’s with (the interpretation of) the types and substitute for each use of D
+either 1 or, if we are in the case of erasable field discussed in Section F.2, 1 ∨ ⊥.
+Thanks to this extension, we can reuse the technique to type pattern matching that we described in
+Section 3.3 with minimal changes. Accounting for the Ballerina’s semantics of record patterns does
+not require any significant modification to the definitions given in Section 3.3: the only definition
+that needs to be modified is the one of accepted type of a pattern, so that it reflects Ballerina’s
+semantics of pattern matching. In particular, we want the accepted type of the pattern { x = int
+...} to be the type {𝑥 = loc(Int, ∞)}}. More generally, we will have *{ℓ = 𝑝}+ = {ℓ = loc(*𝑝+, ∞)}}.
+Proc. ACM Program. Lang., Vol. 7, No. ICFP, Article 196. Publication date: August 2023.
+
+Typing Records, Maps, and Structs
+
+196:45
+
+Received 2023-03-01; accepted 2023-06-27
+
+Proc. ACM Program. Lang., Vol. 7, No. ICFP, Article 196. Publication date: August 2023.
+
+
