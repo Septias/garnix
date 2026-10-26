@@ -73,6 +73,7 @@ A lookup can advance further into a row as soon as a blocking row variable α is
 
 #proof[By induction on ρ: every row shape matches exactly one rule.]
 
+// PROF: The reason is not left-precedence: a definite derivation never reaches a variable (as the proof says). Explain once how the operand reversal turns right-precedence (abstract) into left lookup.
 Lookup has left-precedence, so a definite result can never be changed by a substitution; only unknown types ? can be refined:
 
 #lemma(name: [Stability under substitution], lean: "lookup_applySubst")[
@@ -104,6 +105,7 @@ Lookup has left-precedence, so a definite result can never be changed by a subst
 The order of fields in a record carries no meaning: the records `{ a = 1; b = 2; }` and `{ b = 2; a = 1; }` behave identically, so their rows $(a: τ | b: τ′)$ and $(b: τ′ | a: τ)$ should be equivalent. Row equivalence ≈ permits this by allowing shadowing-preserving reordering of fields using controlled swaps of fields. @row-equivalence gives the rules for the symmetric, transitive and associative relation with the left and right unit ε. ≈-comm forbids the swapping of equal labels as that would change shadowing behaviour, and ≈-rcd and ≈-fn lift ≈ to types. The base types, ★ and type variables are equivalent only to themselves, and ≈ is a congruence below records and arrows. ≈-ext handles singular fields and ≈-conc the concatenation of two rows.
 
 
+// PROF: Cite Diekert/Mazurkiewicz (Book of Traces); the normal form (lexicographic/Foata) and cancellativity are known results.
 === Row Equivalence Is a Trace Monoid <trace-monoid>
 By ≈-comm, equal labels cannot be swapped and there is no rule to move a label in front of a row variable because that would change shadowing behaviour similarly. Row variables then cut rows into segments where permutation is allowed, delimited by row-variable barriers that cannot be crossed. This opens a new perspective on rows: A row is a word over an alphabet with two components: fields $(l: T)$ and row-variables α. Two letters may swap when they are fields with distinct labels; a row-variable commutes with nothing, and neither do two fields with the same label. Rows modulo ≈ together with the unit ε then form a partially commutative monoid, also called a _trace monoid_.
 
@@ -207,8 +209,10 @@ Unification uses both of these properties: The normal form is used to process ro
 
 The typing rules extend the Hindley-Milner system @damas_milner with records, concatenation and the unknown type ★. Most of them are standard. T-cons types each constant at its designated base type $b_c$ and T-var takes a type from the type environment, possibly instantiating type schemes using the instantiation relation from @instantiation. T-eq relates two types under row equivalence @row-equivalence and the two T-λ-∗ rules introduce and eliminate functions. T-rec, T-ξ-empty and T-ξ-field type record literals field by field and T-conc combines them; the concatenation of record bodies is handled equally by T-ξ-conc.
 
+// PROF: Garbled: "and it can be uninhabited when two different definitions for δ exist".
 T-let differs from its Hindley-Milner counterpart, because its schemes may carry stumps. Instead of generalizing a type of e₁, it binds x to a scheme σ and constrains σ by three premises. The first premise $Γ ⊢ σ "ok"$ uses the sorting rules to make σ well-sorted. This way, every lookup happens on a row and every result variable δ is a type the scheme quantifies over. The second premise ensures that every instance of σ is a typing of e₁, so x may be used at any of them. We call this _instance-closed_. The third makes σ _inhabited_, meaning it has at least one instance. Without inhabitation, `let x = (3 4) in 5` would get a type while being stuck and it can be uninhabited when two different definitions for δ exist. The last premise types e₂ with x bound to σ.
 
+// PROF: Laziness justifies T-sel-⊥, but the semantics is CBV for beta and let. Typing at star breaks composition (sec-goals overlay); a bottom type for definite absence stays sound up to lookup errors and composes.
 Our record calculus admits three lookup rules (T-sel, T-sel-★ and T-sel-⊥) for the three possible outcomes of the lookup judgement. T-sel is standard and selects a definite type but T-sel-★ and T-sel-⊥ are new. Nix is a lazy language and a faulty record lookup might never be evaluated. This is why T-sel-⊥ types a definitely failing lookup at ★ which might seem nonsensical at first. The _soft-typing_ approach of MiniNix is permissive in record-selection and we discuss later \@[gradual] in which situations this rule can be removed. T-sel-★ is the sensible version that types an unknown lookup result at the unknown type. Finally, T-★-intro blurs any concrete type into the unknown.
 
 #example(name: [Two ways to type a selection at ★])[
@@ -286,4 +290,5 @@ Without stumps (Q = ε), our instantiation is plain Hindley-Milner instantiation
 )
 #semantics <semantics>
 
+// PROF: CBV: (x: c) ({}.l) errors here but not in Nix. Make beta/let lazy or state the mismatch explicitly.
 @semantics gives the call-by-value small-step reduction → of the mechanization. The definitions are entirely standard with one subtlety: a record literal is a value and its fields are only evaluated when they are selected. NixLang is a lot more complicated, as Broekhoff and Krebbers @verified show by giving a small-step semantics based on delayed substitution that faithfully tracks the overwriting behaviour of `with e₁; e₂` and laziness in records, let-statements and operators, but in this thesis, we concern ourselves with type inference and limit the operational semantics to a bare minimum. $ξ(l)$ denotes the leftmost binding of l in ξ, so selection agrees with ↓, and E-conc places the right operand first, as T-conc does. The judgement $e ↯$ is a _lookup error_: a selection reaches a record literal that lacks the selected label. @sec-fc-labels extends this with another error case.

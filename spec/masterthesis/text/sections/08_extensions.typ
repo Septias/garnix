@@ -5,6 +5,7 @@
 = Extensions Towards NixLang <sec-extensions>
 
 == First-Class Labels <sec-fc-labels>
+// PROF: String keys give star (T-sel-dyn-b, T-rcd-dyn-b), so r // { ${n} = v; } with a computed string is rejected: the dominant Nix idiom.
 NixLang computes labels at run time. A field is selected by an arbitrary string expression, `x.${name}`, and a record literal may bind a computed label, `{ ${name} = v; }`. The introductory example of @sec-motivation is of the first kind, and the second is how the builtins and the module system construct records from lists of names. This section extends MiniNix by both forms. Type safety, the soundness of unification and inference and the termination of both carry over, and so does ★: a dynamic selection that is never decided becomes ★, exactly as a static one does.
 
 #let fc_syntax = figure(
@@ -142,6 +143,7 @@ and both are instance-closed (`selDynQ_instance_closed`, `rcdDynQ_instance_close
 
 === Unification
 
+// PROF: U-key-pin is used in the text but missing from the figure.
 #let fc_unif = figure(
   caption: [Unification of keys and of keyed fields, extending @unification-ty.],
   flexbox(
@@ -227,6 +229,7 @@ Concatenation and computed labels interact as NixLang programmers expect. In `((
 
 === Costs
 
+// PROF: "about two thirds are stuck": give the method (generator, sizes, sample) or delete.
 The extension has three costs. Labels and strings are separate: a label literal has the rigid type $⌊l⌋$ and cannot be used as a string, and a value used both as a key and as a string clashes. A key of base type is typed at ★ only when its type is known at the selection; a key that becomes a string later, as in `(a: {l = c}.${a}) c`, is rejected by U-clash. Keyed fields are barriers, so beyond the single-field case of U-key-pin a keyed field against a literal field and two keyed fields under different unknown keys are stuck. On randomly generated row problems with keys, about two thirds are stuck. And a spent promise blocked on its key is not materialized, which leaves inference incomplete on programs the declarative system types. The first cost follows from giving labels singleton types, the second from the absence of negative information about keys, and the third from the absence of top-level qualified types.
 
 == Lacks-Predicates

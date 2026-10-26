@@ -14,6 +14,7 @@ We prove type safety up to lookup errors for the declarative system in the synta
   If $∅ ⊢ e : τ$ and $e → e′$, then $∅ ⊢ e′ : τ$.
 ] <thm-preservation>
 
+// PROF: T-star-intro is unrestricted, so star's origin is not always a lookup. Star is rigid and has no eliminators, so it is not "propagated".
 Progress holds only up to lookup errors because some lookups might be typed as ★ and we cannot guarantee non-failure over this fragment. We only admit uncertainty in lookups and propagate it through the type system, so ★ is not an arbitrary failure type and its origin can always be explained.
 
 
@@ -21,6 +22,7 @@ Progress holds only up to lookup errors because some lookups might be typed as �
 
 Solving a row-variable never loses a typing.
 
+// PROF: "has an image for each scheme in Γ" is unclear.
 #lemma(name: [Type substitution], lean: "qtyped_applySubst")[
   Let θ be a substitution that has an image for each scheme in Γ. If $Γ ⊢ e : τ$, then $θ Γ ⊢ e : θ τ$.
 ] <lem-subst>
@@ -78,4 +80,5 @@ Discharge pins δ to the lookup's verdict, so ${ε} → {ε}$ is excluded. One b
   $
 ] <cor-strict>
 
+// PROF: Forced only relative to this system (star-typings from T-sel-⊥/T-sel-star must be covered). P&X has a principal plain type for x: x.l.
 Qualified schemes are thus forced, not chosen.

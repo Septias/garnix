@@ -28,6 +28,7 @@ In the Wand ambiguity, every variable may carry the field, and no choice subsume
 
 All three are reported as #u_stuck: no move applies, and any move would prefer one unifier to another. Negative information narrows the choice. If a lacks-predicate states that β has no l-field, the Wand ambiguity $(α | β) scripts(≐)_r (l: 𝓫)$ has the single unifier $[α ≔ (l: 𝓫), β ≔ ε]$. For the two-sided problem and the shift, a lacks-predicate on α excludes the unifiers that give α an l-field, but it leaves those that give α fields of other labels, such as $α ≔ (m: 𝓫)$ next to $α ≔ ε$. These remain incomparable as long as no field crosses a row-variable, so lacks-predicates resolve the two problems only together with a row equivalence in which a variable commutes with the fields of the labels it lacks (@sec-extensions).
 
+// PROF: Inference has no rule that places star at a stuck problem; specify it.
 What is shown is a limit of principal solutions over scoped rows, not of typing: a program whose inference is stuck may still be typed by placing ★ where the problem sits.
 
 == The Price of Forced Moves <incompleteness-forced>

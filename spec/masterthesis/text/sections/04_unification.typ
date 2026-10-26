@@ -21,9 +21,11 @@
 
 Next, we present our unification algorithm, based upon the declarative system. It consists of two judgements, one for types: $τ₁ ≐ τ₂ ⇝ v$ and one for rows: $s₁ scripts(≐)_r s₂ ⇝ v$ that call each other mutually recursively. @unification-helpers lists the verdicts of unification and shows how spines are formed. A spine s of a row ρ, denoted $s = ⌈ρ⌉$, represents a row as a list of atoms $a ::= l: τ | α$, obtained by flattening the concatenation tree. For example, $((l: 𝓫 | ε) | (α | m: 𝓫))$ and $(l: 𝓫 | (α | (m: 𝓫 | ε)))$ both have the spine $⟨l: 𝓫, α, m: 𝓫⟩$.
 
+// PROF: The occurs check is about recursive types, not recursive bindings. Overlays/lib.fix need recursive types anyway.
 A verdict is either a solution θ or one of four refusals. #u_clash is emitted when two structures clash definitionally and #u_occurs when a recursive loop is encountered. NixLang allows recursiveness in records and let-bindings, but to keep the presentation simple, we do not permit it in MiniNix. #u_stuck is emitted when no more moves apply and carries the Wand ambiguity. #u_fuel is emitted when the fuel is depleted.
 
 == Type Unification
+// PROF: U-clash names both a type rule and a row rule. U-var-refl-* is cancellation, not reflexivity.
 #let unification_ty = figure(
   caption: "Unification of types.",
   flexbox(
@@ -343,6 +345,7 @@ A field facing only variables on the other side has no partner, but it may have 
   In $(l: 𝓫 | α) scripts(≐)_r (m: 𝓫 | β)$ with $l ≠ m$, the spines are $⟨l: 𝓫, α⟩$ and $⟨m: 𝓫, β⟩$. Neither leading field has a partner in the other side's leading window, both sides have variables, and neither side is a lone variable. The right side, however, has no l-field and the single variable β, which occurs nowhere else: β is the sole host of $l: 𝓫$. U-host binds $β ≔ (l: 𝓫 | β′)$ and continues with $⟨α⟩ scripts(≐)_r ⟨m: 𝓫, β′⟩$, which U-var-solve closes with $α ≔ (m: 𝓫 | β′)$. The solution $[β ≔ (l: 𝓫 | β′), α ≔ (m: 𝓫 | β′)]$ is a most general unifier.
 ] <ex-unif-host>
 
+// PROF: No fuel is a mechanization artifact; explain it or state termination without fuel.
 == Unification Metatheory <unification-metatheory>
 
 #theorem(

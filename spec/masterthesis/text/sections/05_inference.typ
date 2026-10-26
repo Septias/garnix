@@ -10,6 +10,7 @@
 
 = Inference <inference>
 
+// PROF: Not "one respect": generalization, saturation, materialization and finalization also differ from W.
 The inference algorithm is a judgement $Γ; S ⊢ e ⇒ τ; S′$ that takes a _solver state_ S and returns the updated state S', which the premise receives in turn. Our algorithm differs from algorithm W in one respect: Instead of guessing the value of an unknown lookup, we park it in a _stump_. A stump is syntactically similar to the lookup relation ⟨ρ.l ↓ r⟩ itself and stored in the state until a substitution lets lookup advance further in the row, possibly solving it. At the end of inference, every pending stump is typed as ★. This way, unification is only ever called on equations between types and never sees a field demand it has to solve. // giving it the properties we want…
 
 
@@ -171,6 +172,7 @@ A-var instantiates a qualified scheme with fresh variables of the binder's sort.
 
 A-let is given in a separate figure: @generalization shows let-generalization. The choice of which variables are generalized is delegated to a function $"gen"_(Γ, S)$. The rule itself only infers $e₁$, binds the scheme and continues with $e₂$. The stumps are partitioned into two groups: One group goes into the scheme and one into the solver state. $Δ_q$ is the list of stumps that are blocked on the let's variables $macron(α)$ and go into the scheme as its qualifiers Q. $Δ_Γ = Δ₁ \\ Δ$ are the remaining stumps that go into solver state.
 
+// PROF: "the side condition of HM(X)": it is plain HM.
 Four conditions make a choice admissible. The generalized variables must be fresh for the environment, which here consists of Γ together with the stumps that stay parked; this is the side condition of [HM(X)](add quote), and it ensures that a parked stump reads the same at every instance. $Δ_q$ may contain only stumps parked while inferring $e₁$, since a stump of an outer binding that is captured by the scheme would never be finalized. This condition does not follow from the others: in `{a = x: x.l; b = let y = c in c}` the stump of field a is blocked on a variable that neither Γ nor any remaining stump mentions, so the remaining three conditions admit its generalization into the scheme of y.
 
 Every variable in a generalized stump's result must itself be generalized, since otherwise each instance would pin a variable of the environment. Finally, the scheme must be inhabited, as the declarative T-let requires through $∃ τ₁. σ ≥ τ₁$. A stump whose result is still a variable is harmless, since its result can be sent to ★ while its lookup stays blocked. A stump whose result has been spent on a non-variable type must instead hit at some instance. The algorithm does not decide this property but checks a sufficient syntactic condition, written $Δ_q$ fillable at $S₁$: every spent stump has a literal label, all stumps on its blocker have literal labels, a stump that shares its label is [spent](not yet introduced) as well and its result agrees with the first once every type variable is replaced by ★, and no spent blocker occurs in a spent result. Under this condition the instance that sends the generalized type variables to ★ and extends each blocker by the fields its spent stumps demand discharges every stump of $Δ_q$. The admissible choices are closed under union, so a greatest one exists (`greatestAlpha_spec` in Lean) and is computed by deleting variables until nothing more is deleted. A failing condition therefore does not make the binding monomorphic; it removes the offending variables and whatever they drag along.
@@ -286,10 +288,12 @@ As an example, consider `let f = x: x.l in f {l = c}`. For the bound term, A-λ-
 // meta: explain the phases and why they need to be done this way
 $scripts(↝)^*$ replays a whole list of stumps. K-park parks a stump that is still blocked. [An instantiated stump cannot be filed under a variable that does not actually block it](from old text). Saturation $#st_sat$ steps only on _stale_ stumps whose recorded blocker no longer blocks. It stops as soon as the state is quiescent.
 
+// PROF: Fixed vocabulary: stump/pending lookup/promise/field demand/qualifier. "Promise" is never defined.
 Finalization resolves any open ? in two phases after inference. A parked stump is _spent_ if its result has already been used at a type that is neither a variable nor ★, as in @ex-spent. The first phase, $scripts(#st_mat)^*$, materializes every spent stump by F-hit; it skips the stumps that are not spent and those that the saturation of an earlier step has already discharged. The second phase, $scripts(#st_fin)^*$, forces every stump still parked to ★ by F-★.
 
 The order of the phases is forced. F-★ cannot finalize a spent stump: its equation $δ ≐ ★$ clashes, since ★ is rigid. F-hit instead extends the blocking row-variable [with the demanded field](is this the only thing that can be forced? No ordinary types?), $α ≔ (l: δ | α′)$, and the saturation of $#st_solve$ wakes the stump, whose lookup now hits, together with every other stump that waited on α. These may hit as well, advance to α′, or stay blocked further along, so the set of stumps that F-★ must handle is known only after materialization. Running F-★ first would be unsound: a stump with label l forced to ★ on α would afterwards hit, once a spent stump on the same α and the same l is materialized, while its selection keeps the type ★.
 
+// PROF: Finalization at top level gives star to every unspent selection of a nixpkgs file (each is a top-level function): the dominant case gets the weak typing.
 Materialization is the one step of the algorithm that places a field into a row-variable. It is not a forced move: the field could as well be supplied further along the row, and the typing it produces is one of several. It is sound, since the result is a declarative typing, and it happens after inference proper, where no further equation depends on the choice. Neither phase runs at a `let` boundary. Stumps that were generalized by A-let live in their scheme and are discharged per use, and a stump blocked on a variable of Γ may still be answered by an application further out. The remaining $?$ of @sec-motivation become ★ here and nowhere else.
 
 #example(name: [Waking, re-parking and finalizing])[
@@ -310,6 +314,7 @@ Materialization is the one step of the algorithm that places a field into a row-
   Saturation admits no infinite run, and for every term e the entry point $⊢ e ⇒ τ; S′$ returns a verdict.
 ] <thm-infer-term>
 
+// PROF: No rule consumes a Stuck verdict; the behaviour on Stuck is unspecified, but G3 relies on it.
 #theorem(name: [Soundness of inference], lean: "runSound, run_typed")[
   If $⊢ e ⇒ τ; S′$, then $∅ ⊢ e : ⟦S′⟧τ$.
 ] <thm-infer-sound>
