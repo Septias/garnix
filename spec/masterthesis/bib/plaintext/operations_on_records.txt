@@ -1,0 +1,2830 @@
+Operations on Records
+Luca Cardelli
+
+John C. Mitchell
+
+Digital Equipment Corporation
+Systems Research Center
+
+Department of Computer Science
+Stanford University
+
+Abstract
+We define a simple collection of operations for creating and manipulating record
+structures, where records are intended as finite associations of values to labels. A
+second-order type system over these operations supports both subtyping and
+polymorphism. We provide typechecking algorithms and limited semantic models.
+Our approach unifies and extends previous notions of records, bounded
+quantification, record extension, and parametrization by row-variables. The general aim
+is to provide foundations for concepts found in object-oriented languages, within a
+framework based on typed lambda-calculus.
+
+Appears in: Theoretical Aspects of Object-Oriente Programming, C.Gunter, J.C.Mitchell Eds. MIT Press, 1994.
+Appears in: Mathematical Structures in Computer Science, vol 1, pp. 3-48, 1991
+SRC Research Report 48, August 25, 1989. Revised October 22, 1993.
+© Digital Equipment Corporation 1989,1993.
+This work may not be copied or reproduced in whole or in part for any commercial purpose. Permission to copy in whole or in part
+without payment of fee is granted for nonprofit educational and research purposes provided that all such whole or partial copies
+include the following: a notice that such copying is by permission of the Systems Research Center of Digital Equipment Corporation
+in Palo Alto, California; an acknowledgment of the authors and individuals contributors to the work; and all applicable portions of the
+copyright notice. Copying, reproducing, or republishing for any other purpose shall require a license with payment of fee to the
+Systems Research Center. All rights reserved.
+
+Page 1
+
+1. Introduction
+Object-oriented programming is based on record structures (called objects) intended
+as named collections of values (attributes) and functions (methods). Collections of
+objects form classes. A subclass relation is defined on classes with the intention that
+methods work “appropriately” on all members belonging to the subclasses of a given
+class. This property is important in software engineering because it permits after-the-fact
+extensions of systems by subclasses, without requiring modifications to the systems
+themselves.
+The first object-oriented language, Simula67, and most of the more recent ones (see
+references) are typed by using simple extensions of the type rules for Pascal-like
+languages. These extensions mainly involve a notion of subtyping. In addition to
+subtyping, we are interested here in more powerful type systems that smoothly
+incorporate parametric polymorphism.
+Type systems for record structures have recently received much attention. They
+provide foundations for typing in object-oriented languages, data base languages, and
+their extensions. In [Cardelli 1988] the basic notions of record types, as intended here,
+were defined in the context of a first-order type system for fixed-size records. Then Wand
+[Wand 1987] introduced the concept of row-variables while trying to solve the type
+inference problem for records; this led to a system with extensible records and limited
+second-order typing. His system was later refined and shown to have principal types in
+[Jategaonkar, Mitchell 1988] [Rémy 1989], and again in [Wand 1989]. The resulting
+system provides a flexible integration of record types and Milner-style type inference
+[Milner 1978].
+Meanwhile [Cardelli, Wegner 1985] defined a full second-order extension of the
+system with fixed-size records, based on techniques from [Mitchell 1984]. In that system,
+a program can work polymorphically over all the subtypes B of a given record type A,
+and it can preserve the “unknown” fields (the ones in B but not in A) of record parameters
+from input to output. However, some natural functions are not expressible. For example,
+by the nature of fixed-size records there is no way to add a field to a record and preserve
+all its unknown fields. Less obviously, a function that updates a record field, in the purely
+applicative sense of making a modified copy of it, is forced to remove all the unknown
+fields from the result. Imperative update also requires a careful typing analysis.
+In this paper we describe a second-order type system that incorporates extensible
+records and solves the problem of expressing the natural functions mentioned above. We
+believe this second-order approach makes the presentation of record types more natural.
+The general idea is to extend a standard second-order (or even higher-order) type system
+with a notion of subtyping at all types. Record types are then introduced as specialized
+type constructions with some specialized subtyping rules. These new constructions
+interact well with the rest of the system. For example, row-variables fall out naturally
+Page 2
+
+from second-order type variables, and contravariance of function spaces and universal
+quantifiers mixes well with record subtyping.
+In moving to second-order typing we give up the principal type property of weaker
+type systems, in exchange for some additional expressiveness. But most importantly for
+us, we gain some perspective on the space of possible operations on records and record
+types, unencumbered (at least temporarily) by questions about type inference. Since it is
+not clear yet where the bounds of expressiveness may lie, this perspective should prove
+useful for comparisons and further understanding.
+The first part of the paper is informal and introduces the main concepts and problems
+by means of examples. Then we formalize our intuitions by a collection of type rules. We
+give a normalization procedure for record types, and we show soundness of the rules with
+respect to a simple semantics for the pure calculus of records. Finally, we discuss
+applications and extensions of the basic calculus.
+
+2. Informal development
+Before looking at a formal system, we describe informally the desired operations on
+records and we justify the rules that are expected to hold. The final formal system is
+rather subtle, so these explanations should be useful in understanding it.
+We also give simple examples of how records and their operations can be used in the
+context of object-oriented languages.
+
+2.1 Record values
+A record value is intended to represent, in some intuitive semantic sense, a finite map
+from labels to values where the values may belong to different types. Syntactically, a
+record value is a collection of fields, where each field is a labeled value. To capture the
+notion of a map, the labels in a given record must be distinct. Hence the labels can be
+used to identify the fields, and the fields can be taken to be unordered. This is the notation
+we use:
+Üá
+
+the empty record.
+
+Üx=3, y=trueá
+
+a record with two fields, labeled x and y,
+equivalent to Üy=true, x=3á.
+
+There are three basic operations on record values.
+¢ Extension Ür | x=aá ; adds a field of label x and value a to a record r, provided a field of
+label x is not already present. (This condition will be enforced statically.) We write
+Ür | x=a| y=bá for ÜÜr| x=aá| y=bá.
+¢ Restriction r\ x ; removes the field of label x, if any, from the record r. We write r\ xy
+for r\ x\ y.
+Page 3
+
+¢ Extraction r.x ; extracts the value corresponding to the label x from the record r,
+provided a field having that label is present. (This condition will be enforced statically.)
+We have chosen these three operations because they seem to be the fundamental
+constituents of more complex operations. An alternative, considered in [Wand 1987],
+would be to replace extension and restriction by a single operation that either modifies or
+adds a field of label x, depending on whether another field of label x is already present. In
+our system, the extension operation is not required to check whether a new field is
+already present in a record: its absence is guaranteed statically. The restriction operation
+has the task of removing unwanted fields and fulfilling that guarantee. This separation of
+tasks has advantages for efficiency, and for static error detection since fields cannot be
+overwritten unintentionally by extension alone. Based on a comparison between the
+systems of [Wand 1987] and [Jategaonkar, Mitchell 1988], it also seems possible that a
+reasonable fragment of our language will have a practical type inference algorithm.
+Here are some simple examples. The symbol óïñ (value equivalence) means that two
+expressions denote the same value.
+ÜÜá | x=3á
+ÜÜx=3á | y=trueá
+Üx=3, y=trueá\ y
+Üx=3, y=trueá\ z
+Üx=3, y=trueá.x
+
+óïñ
+óïñ
+óïñ
+óïñ
+óïñ
+
+ÜÜx=3á | x=4á
+Üx=3á.y
+
+Üx=3á
+Üx=3, y=trueá
+Üx=3á
+Üx=3, y=trueá
+3
+
+extension
+restriction
+
+(cancelling y)
+(no effect)
+
+extraction
+
+invalid extension
+invalid extraction
+
+Some useful derived operators can be defined in terms of the ones above.
+¢ Renaming r[xóïôy] =def Ür\ x | y=r.xá: changes the name of a record field.
+¢ Overriding Ür óïô x=aá =def Ür\ x | x=aá: if x is present in r, overriding replaces its value
+with one of a possibly unrelated type, otherwise extends r (compare with [Wand 1989]).
+Given adequate type restrictions, this can be seen as an updating operator, or a method
+overriding operator. We write Ür óïô x=a óïô y=bá for ÜÜr óïô x=aá óïô y=bá.
+Obviously, all records can be constructed from the empty record using extension
+operations. In fact, in the formal presentation of the calculus, we regard the syntax for a
+record of many fields as an abbreviation for iterated extensions of the empty record, e.g.:
+Üx=3á
+Üx=3, y=trueá
+
+=def
+=def
+
+ÜÜá | x=3á
+ÜÜÜá| x=3á | y=trueá
+
+This definition allows us to express the fundamental properties of records in terms of
+combinations of simple operators of fixed arity, as opposed to n-ary operators. Hence, we
+
+Page 4
+
+never have to use schemas with ellipses, such as Üx 1=a 1 , ..., xn=a n á, in our formal
+treatment.
+Since r\ x óïñ r whenever r lacks a field of label x, we can formulate the definition
+above using any of the following expressions:
+ÜÜá | x=3 |y=trueá óïñ ÜÜÜá\x | x=3á\y | y=trueá óïñ ÜÜá óïô x=3 óïô y=trueá
+The latter forms match better a similar definition for record types, given in the next
+section.
+
+2.2 Record types
+In describing operations on record values we made positive assumptions of the form
+“a field of label x must occur in record r” and negative assumptions of the form “a field
+of label x must not occur in record r”.
+These constraints will be verified statically by embedding them in a type system,
+hence record types will convey both positive and negative information. Positive
+information describes the fields that members of a record type must have. (Members may
+have additional fields.) Negative information describes the fields the members of that
+type must not have. (Members may lack additional fields.)
+Note that both positive and negative information expresses constraints, hence
+increasing either kind of information will lead to smaller sets of values. The smallest
+amount of information is expressed by the record type with no fields, äã, which therefore
+denotes the collection of all records, since all records have at least no fields and lack at
+least no fields. This type is called the total record type.
+äã
+
+the type of all records.
+Contains, e.g.: Üá, Üx=3á.
+
+äã\ x
+
+the type of all records which lack fields of
+label x. E.g.: Üá, Üy=trueá, but not Üx=3á.
+
+äx:Int, y:Boolã
+
+the type of all records which have at least fields
+of labels x and y, with values of types Int and
+Bool. E.g.: Üx=3, y=trueá, Üx=3, y=true, z="str"á,
+but not Üx=3, y=4á, Üx=3á.
+
+äx:Intã\ y
+
+the type of all records which have at least a field
+of label x and type Int, and no field of label y.
+E.g. Üx=3, z="str"á, but not Üx=3, y=trueá.
+
+Hence a record type is characterized by a finite collection of (positive) type fields (i.e.
+labeled types) and negative type fields (i.e. labels)1. We often simply say “fields” for
+1In this section we consider only ground record types, i.e., those containing no record type variables.
+Page 5
+
+“type fields”. The positive fields must have distinct labels and are unordered. Negative
+fields are also unordered. We have assumed so far that types are normalized so that
+positive and negative labels are distinct, otherwise positive and negative fields may
+cancel, as described shortly.
+As with record values, we have three basic operations on record types.
+¢ Extension äR |x:Aã : This type denotes the collection obtained from R by adding x fields
+with values in A in all possible ways (provided that none of the elements of R has x
+fields). More precisely, this is the collection of those records Ür | x=aá such that r is in R
+and a is in A, provided that a positive type field x is not already present in R. (This
+condition will be enforced statically.) We sometimes write äR | x:A | y:Bã for ääR| x:Aã | y:Bã.
+¢ Restriction R\x : this type denotes the collection obtained from R by removing the field
+x (if any) from all its elements. More precisely, this is the collection of those records r\ x
+such that r is in R. We write R\xy for R\ x\y.
+¢ Extraction R.x : this type denotes the type associated with label x in R, provided R has
+such a positive field. (This condition will be enforced statically.)
+Again, derived operators can be defined in terms of the ones above.
+¢ Renaming R[xóïôy] =def äR\ x | y=R.xã: changes the name of a record type field.
+¢ Overriding äR óïô x:A ã = def äR\ x | x:Aã: if a type field x is present in R, overriding
+replaces it with a field x of type A, otherwise extends R. Given adequate type restrictions,
+this can be used to override a method type in a class signature (i.e. record type) with a
+more specialized one, to produce a subclass signature.
+The crucial formal difference between these operators on types and the similar ones
+on values is that type restrictions do not cancel as easily, for example: äã\ y ≠ äã, äx:Aã\y
+≠ äx:Aã, etc., since äã\ y is a smaller set than äã. As a consequence, one must always make
+a type restriction before making a type extension, as can be seen in the examples below,
+because the extension operator needs proof that the extension label is missing. The
+symbol óïñ (type equivalence) means also that two type expressions denote the same type.
+ääã\ x | x:Intã
+ääx:Intã\y |y:Boolã
+äx:Int, y:Boolã\ y
+äx:Int, y:Boolã\ z
+äx:Int, y:Boolã.x
+ääã | x:Intã
+ääx:Intã| x:Intã
+äx:Intã.y
+
+óïñ
+óïñ
+óïñ
+óïñ
+óïñ
+
+äx:Intã
+äx:Int, y:Boolã
+äx:Intã\ y
+äx:Int, y:Boolã\ z
+Int
+
+extension
+restriction
+
+(cancelling y)
+(no effect on x,y)
+
+extraction
+
+invalid extension
+invalid extension
+invalid extraction
+
+It helps to read these examples in terms of the collections they represent. For
+example, the first example for restriction says that if we take the collection of records that
+Page 6
+
+have x and y (and possibly more) fields, and remove the y field from all the elements in
+the collection, then we obtain the collection of records that have an x field (and possibly
+more fields) but no y field. In particular, we do not obtain the collection of records that
+have x and possibly more fields, because those would include y.
+The way positive and negative information is formally manipulated is easier to
+understand if we regard record types as abbreviations, as we did for record values, e.g.:
+äx:Intã
+äx:Int, y:Boolã
+
+=def
+=def
+
+ääã\ x | x:Intã
+äääã\ x| x:Intã\ y| y:Boolã
+
+Then, when considering äy:Boolã\ y we actually have the expansion ääã\ y| y:Boolã\ y. If we
+allow the outside positive and negative y labels to cancel, we are still left with äã\ y. In
+other words, the inner y restriction reminds us that y fields have been eliminated.
+Remark. It is deceptive to think that every record in äR | x:Aã has at least the fields
+of some record in R (i.e., that äR | x:Aã has “more type fields” than R), since
+äR | x:Aã is not necessarily contained in R. For example, if R=äã\x the two
+collections are incomparable.
+Based on this example, one might then think that äR\ x |x:Aã has more type
+fields than R, and this is indeed true for R=äã. However, in general this fails; for
+example R=äã\ x makes the collections incomparable, and R=ääã\ x |x:Aã causes the
+two collections to have the same fields.
+It is also deceptive to think that R\ x has fewer type fields than R, since R is in
+general not contained in R\ x. This containment is true for R=äã\ x, but false for
+R=äã where the opposite is true, and R =ääã\ x| x:Aã makes the two collections
+incomparable.
+These observations might appear to conflict with our previous assertion that
+positive and negative information always makes things smaller. The assertion is
+true for normalized record types, but not for arbitrary applications of operators
+which may later cancel out. We shall study the normalization process in a later
+section.
+
+2.3 Record value variables
+Now that we have a first understanding of record types, we can introduce record value
+variables which are declared to have some record type. For example, r:äã\y means that r
+must not have a field y, and r:äx:Aã means that r must have a field x of type A. The wellformed record expressions can now be formulated more precisely:
+Ür | x=aá
+r\ x
+r.x
+
+where r:äã\ x
+where r:äã
+where r:äx:Aã for some A
+Page 7
+
+Record value variables can now be used to write function abstractions. Here we have
+a function that increments a field of a record, and adds another field to it:
+let f(r: äx:Intã\ y) : äx:Int, y:Intã =
+Ür óïô x=r.x+1 | y=0á
+This function requires an argument with a field x and no field y; it has type:
+f : äx:Intã\ y îïñ äx:Int, y:Intã
+and can be used as follows:
+f(Üx=3á)
+f(Üx=3, z=trueá)
+
+óïñ
+óïñ
+
+Üx=4, y=0á : äx:Int, y:Intã
+Üx=4, y=0, z=trueá : äx:Int, y:Intã
+
+The first application uses the non-trivial fact that Üx=3á : äx:Intã\ y. We could also have
+matched the parameter type precisely by f(Üx=3á\ y), which is of course equivalent. The
+second application is noticeable for several reasons. First, it uses the non-trivial fact that
+Üx=3, z=trueá : ä x :Intã\ y. Second, the “extra” field z is preserved in the result value,
+because of the way f is defined. Third, the “extra” field z is not preserved in the result
+type, because f has a fixed result type; we shall come back to this problem.
+Remark. An alternative syntactic notation, along the lines of [Jategaonkar,
+Mitchell 1988], could use pattern matching of record parameters:
+let f(Ürr\y | x=rxá) : äx:Int, y:Intã =
+Ürr | x=rx+1 | y=0á
+Here the actual parameter must match the shape of a record with a field x and a
+collection of remaining components that lack y. The variables rr and rx are bound
+to the appropriate components and then used in the body of f, where rr acquires
+the assumption that it does not contain either x or y fields. There are some nontrivial details to pattern matching in the presence of subtyping. Since our main
+objective is to illustrate the fundamental ideas, we choose the simpler syntax.
+
+2.4 Record type variables
+In the previous section we introduced record value variables, and we used record
+types to impose restrictions on the values which could be bound to such variables. Now
+we want to introduce record type variables in order to write programs that are
+polymorphic over a collection of record types. We similarly need to express restrictions
+on the admissible types that these variables can be bound to; these restrictions are written
+as subtype specifications.
+
+Page 8
+
+To write subtype specifications, we use a predicate A<:B meaning that A is a subtype
+of B: in other words, every value of A is also a value of B. The typing rule based on this
+condition is called subsumption, and will play a central role in the formal system.
+Using subtype assumptions, we can better formulate the restrictions on the record
+type operators:
+äR | x:Aã
+R\ x
+R.x
+
+where R <: äã\x
+where R <: äã
+where R <: äx:Aã for some A
+
+We may now write a polymorphic version of the function f of the previous section:
+let f(R<:äx:Intã\y)(r:R) : äR| y:Intã =
+Ür óïô x=r.x+1 | y=0á
+This function expects first a type parameter R which must be a subtype of äx:Intã\y, and
+then an actual value parameter of type R. An example application is:
+f(äx:Int, z:Boolã\ y)(Üx=3, z=trueá) óïñ
+Üx=4, y=0, z=trueá : äx:Int, y:Int, z:Boolã
+First, note that R is bound to äx:Int, z:Boolã\ y, which is a subtype of äx:Intã\y as required.
+Second, Üx=3, z=trueá has type äx:Int, z:Boolã\ y as required. Third, the result type,
+obtained by instantiating R, is ääx:Int, z:Boolã\ y |y:Intã, which is the same as äx:Int, y:Int,
+z:Boolã by definition. Finally, note that the “extra” field z has not been forgotten in the
+result type this time, because all the “extra” fields are carried over from input to output
+type by the type variable R. This is the advantage of writing f in polymorphic style.
+What is the type of f then? We cannot write this type with simple function arrows,
+because we have a free variable R to bind. Moreover, we want to mark the precise
+location where this binding occurs, because this permits more types to be expressed.
+Hence, we use an explicit bounded universal quantifier:
+f : Ó(R<:äx:Intã\ y) R îïñ äR | y:Intã
+This reads rather naturally: “for all types R which are subtypes of äx:Intã\ y, f is a function
+from R to äR| y:Intã”. (The scope of a quantifier extends to the right as much as possible.)
+Remark. Notice that we have freedom in the typing of the polymorphic function
+f; for example, we could have chosen the typing:
+let f(R<:äã\x y)(r:äR | x:Intã) : äR| x:Int | y:Intã =
+Ür óïô x=r.x+1 | y=0á
+f(äz:Boolã\ x y)(Üx=3, z=trueá) : äx:Int, y:Int, z:Boolã
+
+Page 9
+
+This typing turns out to be incomparable with the previous one; in general we do
+not seem to have a “best” way of typing an expression. However, we have not
+studied this aspect of the system carefully.
+
+2.5 Subtype hierarchies
+Our operations on record types and record values make it easy to define new types
+and values by reusing previously defined types and values.
+For example, we want to express the subtype hierarchy shown in the diagram below,
+where various entities can have a combination of coordinates x and y, radius r, and color
+c.
+First, we could define each type independently:
+let Point = äx:Real, y:Realã
+let ColorPoint = äx:Real, y:Real, c:Colorã
+let Disc = äx:Real, y:Real, r:Realã
+let ColorDisc = äx:Real, y:Real, r:Real, c:Colorã
+But these explicit definitions do not scale up easily to large hierarchies; it is much
+more convenient to define each type in terms of previous ones, e.g:
+let Point = äx:Real, y:Realã
+let ColorPoint = äPoint óïô c:Colorã
+let Disc = äPoint óïô r:Realã
+let ColorDisc = äColorPoint óïô r:Realã
+Note that äPoint | c:Colorã would not be well-formed here, since members of Point may
+have a c label. In section 4.3 we shall examine another way of defining this hierarchy, for
+example deriving Point from ColorPoint by “retracting” the c field.
+Point
+xy
+
+ColorPoint
+xyc
+
+Disc
+xyr
+
+ColorDisc
+xyrc
+Similarly, record values can be defined by reusing available values:
+let p:Point = Üx=3, y=4á
+let cp:ColorPoint = Üp óïô c=greená
+Page 10
+
+let cd:ColorDisc = Ücp óïô r=1á
+let d:Disc = cd\ c
+We should notice here that the subtyping relation depends only on the structure of the
+types, and not on how the types are named or constructed. Similarly, record values belong
+to record types uniquely based on their structure, independently of how they are declared
+or constructed.
+Another observation, which we already made in a more abstract context, is that
+Point\ r <: Point since Point does not contain r, but Point\ y is incomparable with Point
+since Point requires y:Int while Point\ y forbids it.
+
+2.6 The update problem
+The type system for records we have described in the previous sections was initially
+motivated by a single example which involves typing an update function. Here updating
+is intended in the functional sense of creating a copy of a record with a modified field,
+but the discussion is also relevant to imperative updating.
+The problem is to define a function that updates a field of a record and returns the
+new record; the type of this function should be such that when an argument of the
+function has a subtype of the expected input type, the result has a related subtype. That is,
+no type information regarding additional fields should be lost in updating. (We have
+already seen that bounded quantification can be useful in this respect.)
+It is pretty clear what the body of such a function should look like; for example for an
+input r and a boolean field b which has to be negated, we would write:
+Ür óïô b=not(r.b)á
+
+(an abbreviation for Ür\ b | b=not(r.b)á )
+
+The overriding operator here preserves the additional fields of r.
+One might expect the following typing, which seems to preserve subtype information
+as desired:
+let update(R<:äb:Boolã)(r:R): R =
+Ür óïô b=not(r.b)á
+In words, we expect update to be a function from R to R, for any subtype R of äb:Boolã.
+But this typing is not derivable from our rules and, worse, it is semantically unsound. To
+see this, assume we have a type True <: Bool with unique element true, as follows2:
+true : True <: Bool
+not : Bool îïñ Bool
+
+(alternatively, not : Ó(A<:Bool)AîïñBool)
+
+update(äb:Trueã)(Üb=trueá) óïñ Üb=falseá : äb:Trueã
+2Although the singleton type True may seem artificial, this argument can be reformulated with any proper inclusion between two
+types.
+Page 11
+
+This use of update produces an obviously incorrect result type. In general, a function with
+result type R has a fixed range; it cannot restrict its output to an arbitrary subtype of R,
+even when this subtype is given as a parameter.
+To avoid this problem, we must update the result type as well as the result. The
+correct typing comes naturally from typechecking the body of update according to the
+rules for each construct involved; note how the shape of the result type matches the shape
+of the body of the function:
+let update(R<:äb:Boolã)(r:R): äRóïôb:Boolã =
+Ür óïô b=not(r.b)á
+update(äb:Trueã)(Üb=trueá) óïñ
+Üb=falseá : (ääb:Trueãóïôb:Boolã óïñ äb:Boolã)
+The outcome is that the overriding operator on types, which involves manipulation of
+negative information, is necessary to express the type of update functions. Bounded
+quantification by itself is not sufficient.
+The type Ó(B<:A) B îïñ B turns out to contain only the identity function on A in many
+natural semantic models, such as [Bruce, Longo 1990]. For example take A=Int and let
+the subranges [n..m] be subtypes of Int. Then any function of type Ó(B<:Int) B îïñ B can
+be instantiated to [n..n] îïñ [n..n], hence it must be the identity on [n..n] for any n, and
+hence the identity over all of Int.
+A further complication manifests itself when updating acts deep in a structure,
+because then we have to preserve type information with subtyping occurring at multiple
+levels. Here is the body of a function that negates the s.a.b field of a record s of type
+äa:äb:Boolãã :
+Üsóïôa=Üs.aóïôb=not(s.a.b)áá
+The following is a correct typing which does not lose information on subtypes (simpler
+typings would). Here we need to introduce an additional type parameter in order to use
+two type variables in the result type and to avoid two possible ways of losing type
+information:
+let deepUpdate(R<:äb:Boolã)(S<:äa:Rã)(s:S): äSóïôa:äRóïôb:Boolãã =
+Üsóïôa=Üs.aóïôb=not(s.a.b)áá
+Of course this is rather clumsy; we need one additional type parameter for each additional
+depth level of updating. Fortunately, we can avoid the extra type parameters by using
+extraction types S.a. Again, the following typing comes naturally from typechecking the
+body of deepUpdate according to the rules for each construct:
+let deepUpdate(S<:äa:äb:Boolãã)(s:S): äSóïôa:äS.aóïôb:Boolãã =
+Page 12
+
+Üsóïôa=Üs.aóïôb=not(s.a.b)áá
+The output type is still complex (it could be inferred) but the input is more natural. Here
+is a use of this function:
+deepUpdate(äa:äb:True, c:Cã, d:Dã)(Üa=Üb=true, c=vá, d=wá) óïñ
+Üa=Üb=false, c=vá, d=wá : äa:äb:Bool, c:Cã, d:Dã
+Here we have provided an argument type that is a subtype of äa:äb:Boolãã in “all possible
+ways”.
+Finally, we should remark that the complexity of the update problem seems to
+manifests itself only in the functional case, while simpler solutions are available in the
+imperative case. Simpler type systems for records, such as the one in [Cardelli, Wegner
+1985], may be adequate for imperative languages when properly extended with
+imperative constructs, as sketched below.
+The imperative updating operator := has the additional constraint that the new record
+should have the same type as the old record, since intuitively updating is done “in place”.
+This requirement produces something very similar to the typing we have initially shown
+to be unsound. Here assignable fields are identified by var:
+let update(R<:ävar b:Boolã)(r:R): R =
+r.b := not(r.b)
+Soundness is then recovered by requiring that assignable fields be both covariant and
+contravariant. Hence, True <: Bool does not imply ävar b:Trueã <: ävar b:Boolã, thereby
+blocking the counterexamples to soundness.
+Imperative update, with the natural requirement of not changing the type of a record,
+leads to simpler typing. However, this approach does not completely solve the problem
+we have discussed in this section. Imperative update alone does not provide the
+functionality of polymorphically extending existing records; when this is added, all the
+problems discussed above about functional update resurface.
+
+3. Formal development
+Now that we have acquired some intuitions, we can discuss the formal type inference
+rules in detail. We first define judgment forms and environment structures. Then we look
+at inference rules individually, and we analyze their properties. Finally, we provide a settheoretical semantics for the pure calculus of records.
+
+3.1 Judgments and inferences
+A judgment is an inductively defined predicate between environments, value terms,
+and type terms. The following judgments are used in formalizing our system:
+Page 13
+
+∫ E env
+
+E is an environment
+
+E ∫ A type
+E ∫ A <: B
+E∫a: A
+
+A is a type
+A is a subtype of B
+a has type A
+
+E ∫ A óïñ B
+E ∫ a óïñ b : A
+
+equivalent types
+equivalent values of type A
+
+The formal system is given by a set of inference rules below, each expressed as a
+finite set of antecedent judgments and side conditions (above a horizontal line) and a
+single conclusion judgment (below the line). Most inference rules are actually rule
+schemas, where meta-variables must be instantiated to obtain concrete inferences. For
+typographical reasons, we write the side conditions for these schemas as part of the
+antecedent.
+
+3.2 Environments
+An environment E is a finite sequence of (a) unconstrained type variables, (b) type
+variables constrained to be subtypes of a given type, and (c) value variables associated
+with their type.
+We use dom(E) for the set of type and value variables defined in an environment.
+(ENV1)
+
+(ENV2)
+
+(ENV3)
+
+(ENV4)
+
+————
+∫  env
+
+XÌdom(E)
+—————
+∫ E, X env
+
+E ∫ A type XÌdom(E)
+——————————–
+∫ E, X<:A env
+
+E ∫ A type xÌdom(E)
+——————————–
+∫ E, x:A env
+
+Hence, a legal environment is obtained by starting with the empty environment  and
+extending it with a finite set of assumptions for type and value variables. Note that the
+assumptions involve distinct variables; we could perhaps allow multiple assumptions
+(e.g.,  , X<:A, X<:B) but this would push us into the more general discipline of
+conjunctive types.
+Assumptions about variables can then be extracted from well-formed environments:
+(VAR1)
+
+(VAR2)
+
+(VAR3)
+
+∫ E,X,E' env
+———————
+E,X,E' ∫ X type
+
+∫ E,X<:A,E' env
+————————–
+E,X<:A,E' ∫ X type
+
+∫ E,X<:A,E' env
+∫ E,x:A,E' env
+————————
+——————–
+E,X<:A,E' ∫ X<:A
+E,x:A,E' ∫ x:A
+
+(VAR4)
+
+All legal inferences take place in (well-formed) environments. All judgments are
+recursively defined in terms of other judgments. For example, above we have used the
+typing judgment E ∫ A type in constructing environments; vice versa, well-formed
+environments are involved in constructing types.
+We now consider the remaining judgments in turn.
+
+Page 14
+
+3.3 Record type formation
+The following collection of rules determines when record types are well-formed.
+There is some interdependence between this section and the following ones, since
+equivalence rules have assumptions that involve subtyping, which is discussed later.
+Fortunately, these assumptions are fairly simple, so a full understanding of the subtype
+relation is not required at this point.
+(F1)
+
+(F2)
+
+(F3)
+
+(F4)
+
+∫ E env
+—————
+E ∫ äã type
+
+E ∫ R<:äã\x E ∫ A type
+———————————
+E ∫ äR | x:Aã type
+
+E ∫ R<:äã
+——————
+E ∫ R\ x type
+
+E ∫ R<:äS |x:Aã<:äã
+—————————
+E ∫ R.x type
+
+As shown above, and already discussed informally, the legal record types are: the
+type of all records, äã; a record type variable X, (because of (VAR2) in the previous
+section); an extension äR | x:Aã of a record type R, provided R does not have x; and a
+restriction R\ x of a record type R. Moreover, extracting a component R.x of a record type
+R that has a label x, produces a legal type.
+In general, if R does not have x, then R will be a subtype of the type äã\x of all records
+without x. This explains the hypothesis of rule (F2) . In rule (F4) we use R<:äS | x:Aã to
+guarantee that every record in R has an x field.
+
+3.4 Record type equivalence
+When are two record types equivalent? We discuss here the formal rules for
+answering such a question. Type equivalence, as a relation, is reflexive (over well-formed
+expressions), symmetric, and transitive; it is denoted by the symbol óïñ. Substituting two
+equivalent types in a third type should produce an equivalent result; this is called the
+congruence property, and requires a number of rules to be fully formalized (these are
+listed in section 3.7). We now consider, by cases, the equivalence of extended, restricted
+and extracted record types.
+Two extended record types are equivalent if we can reorder their fields to make them
+identical (or, recursively, equivalent). This simple fact is expressed by the following rule.
+A number of applications of this rule, and of the congruence property, may be necessary
+to adequately reorder the fields of a record type.
+(TE1)
+
+E ∫ R<:äã\xy E ∫ A,B type x≠y
+——————————————
+E ∫ ääR |x:Aã| y:Bã óïñ ääR |y:Bã| x:Aã
+Similarly, we can reorder restrictions. Moreover, a double restriction R\xx reduces to R\x.
+This fact is expressed in slightly more general form below, since the assumption that R
+does not have x is sufficient to deduce that R\ x is the same as R:
+Page 15
+
+(TE2)
+
+(TE3)
+
+E ∫ R<:äã\x
+——————
+E ∫ R\ x óïñ R
+
+E ∫ R<:äã
+————————
+E ∫ R\ xy óïñ R\ yx
+
+The most interesting rules concern the distribution of restriction over extension. An
+outside restriction and inner extension of the same variable can cancel each other.
+Otherwise, a restriction can be pushed inside or outside of an extension of a different
+variable.
+(TE5)
+
+(TE6)
+
+E ∫ R<:äã\x E ∫ A type
+———————————
+E ∫ äR | x:Aã\ x óïñ R
+
+E ∫ R<:äã\x E ∫ A type x≠y
+——————————————
+E ∫ äR | x:Aã\ y óïñ äR\ y| x:Aã
+
+Note however that in a situation like äR\ x |x:Aã no cancellation or swap can occur. The
+inner restriction may be needed to guarantee that the extension is sensible, and so neither
+is redundant.
+Finally, a record extraction is equivalent to the extracted type:
+(TE7)
+
+(TE8)
+
+E ∫ R<:äã\x E ∫ A type
+——————————
+E ∫ äR | x:Aã.x óïñ A
+
+E————————————————
+∫ R<:äS |y:Bã\x<:äã E ∫ A type x≠y
+E ∫ äR | x:Aã.y óïñ R.y
+
+(TE4)
+
+E——————————
+∫ R<:äS |y:Bã<:äã x≠y
+E ∫ R\ x.y óïñ R.y
+These equivalence rules can be given a direction and interpreted as rewrite rules
+producing a normal form for record types; normalization is investigated in a later section.
+
+3.5 Record subtyping
+We have seen that subtyping is central to the notion of abstracting over record type
+variables, and we have intuitively justified some of the valid subtype assertions. In this
+section we take a more rigorous look at the subtype relation.
+Subtyping should at least be a pre-order: a reflexive and transitive relation. Given a
+substitutive type equivalence relation óïñ, such as the one discussed in the previous
+section, we require:
+(G1)
+
+(G2)
+
+E ∫ A óïñ B
+—————
+E ∫ A <: B
+
+E ∫ A <: B E ∫ B <: C
+——————————
+E ∫ A <: C
+
+Reflexivity is a special case of (G1).
+Page 16
+
+It would be natural to require subtyping to be anti-symmetric, hence obtaining a
+partial order. A reasonable semantics of subtyping will in fact construct such a partial
+order. However, it might be too strong to require anti-symmetry as a type rule. In some
+systems anti-symmetry may introduce obscure ways of proving type equivalence, while
+in other systems it may be provable from the other rules. Moreover, anti-symmetry does
+not seem very useful for typechecking, hence we do not include it.
+The basic intuition about subtyping is that it behaves much like the subset relation;
+this is expressed by the subsumption rule, which claims that if A<:B and a is an element
+of A, then a is also an element of B.
+(G3)
+
+E ∫ a:A E ∫ A <: B
+—————————
+E∫a: B
+We feel strongly that subsumption should be included in the type system, since this rule
+gives object-oriented programming much of its flavor. One should not be satisfied, for
+programming purposes, with emulating subsumption by explicit coercions. The latter
+technique is interesting and adequate for providing semantics to a language with
+subsumption [Breazu-Tannen, et al. 1989] [Curien, Ghelli 1992], but even then it would
+seem more satisfactory to exhibit a model that satisfies subsumption directly.
+Combining (G1) and (G3) we obtain another standard type rule:
+E ∫ a:A E ∫ A óïñ B
+—————————
+E∫a: B
+This rule is normally taken as primitive, but here it is derived.
+We are now ready to talk about subtyping between record types. It helps if we break
+this problem into pieces and ask what are the subtypes of: (1) the total record type äã, (2)
+an extended record type äR | x:Aã, (3) a restricted record type R\x, and (4) a record type
+extraction R.x.
+Case (1). Every record type should be a subtype of the total record type. Hence, we
+have three subcases: (1a) the total record type is of course a subtype of itself, and this is
+simply a consequence of (G1) ; (1b) any well-formed extended record type is a subtype of
+äã; and (1c) any well-formed restricted record type is a subtype of äã. Hence we have the
+following rules corresponding to 1b and 1c respectively:
+(S1)
+
+(S2)
+
+E ∫ R<:äã\x E ∫ A type
+———————————
+E ∫ äR | x:Aã <: äã
+
+E ∫ R<:äã
+——————
+E ∫ R\ x <: äã
+
+Page 17
+
+Case (2). A subtype of an extended record type will be another extended record type,
+provided all respective components are in the subtype relation:
+(S3)
+
+E ∫ R<:S<:äã\x E ∫ A<:B
+————————————
+E ∫ äR | x:Aã <: äS |x:Bã
+The condition A<:B says that we can produce a subtype by weakening the type of a given
+field. The condition R<:S tells us that we can produce a subtype either (a) by weakening
+other fields inductively, because of (S3) itself, or (b) by requiring the presence of
+additional components, because of (S1), or (c) by requiring the absence of additional
+components, for example y, because from (S2) we are able to derive äã\ yx <: äã\ x.
+Case (3). The subtype rule for restricted types is semantically straightforward: if
+every r in R occurs in S, then every r\ x in R\ x occurs in S\ x:
+(S4)
+
+E ∫ R<:S<:äã
+——————
+E ∫R\ x <: S\ x
+Remark. Although this rule looks innocent, it hides some interesting subtlety in
+its assumption. Let us analyze R<:S by cases.
+The cases when R and S are themselves restrictions (either of x or of some
+other variable) are straightforward. Similarly simple are the cases when R and S
+are matching extensions, both of them either containing or not containing an x
+field.
+Suppose however that R has a positive x field and S does not, for example
+R=äT | x:Aã and S=T. In that case, if we had R<:S we would erroneously conclude
+that R\ x = äT | x:Aã\ x óïñ T <: T\ x = S\ x (which is false for T=äã).
+Fortunately there was a flaw in this argument; the assumption for (S4) requires
+R = äT |x:A ã <: T = S, but this is false (for T=äã\ x). Note also that taking
+R=äT\ x | x:Aã and S=T leads to a similar contradiction for T=äã\x.
+A legal instance of the assumption is R = ääã\ x | x:Aã <: äã = S, from which we
+conclude that R\ x = ääã\x | x:Aã\ x óïñ äã\ x <: äã\x = S\ x, which is correct.
+Case (4). We have to consider the subtypes of record type extractions; that is
+situations of the form R.x <: T.x, or more generally R.x <: A under an assumption R <:
+äS | x:Bã. If R can be converted to the form R=äR'| x:Aã, then the extraction R.x simplifies
+and no special rule is required to deduce R.x<:A. But if R is a type variable, for example,
+the following rule is necessary:
+(S5)
+
+E ∫ R<:äS |x:Aã<:äã
+————————
+E ∫ R.x <: A
+Page 18
+
+This says that if R has an x field of type A, then R.x is a subtype of A (and possibly equal
+to A).
+Finally, there is a another subtyping rule that we must consider. If every record r in R
+has an x field, then any such r is described also by the type äR\x | x:R.xã, since r\ x is
+described by R\x and the x field of r is described by R.x. Therefore we have the
+following inclusion:
+(S6)
+
+E ∫ R<:äS |x:Aã<:äã
+————————–
+E ∫ R <: äR\ x| x:R.xã
+The inverse inclusion is not necessarily valid, although it might seem natural to require it
+as we shall see later.
+The rule (S6) can be used in the following derivation, which provides a “symmetrical”
+version of (S5) as a derived rule:
+
+(S6)
+(G2)
+(S5)
+
+E
+∫ R<:S<:äT | x:Aã<:äã
+—————————–
+E
+∫ S<:äS\ x| x:S.xã
+———————–
+E
+∫ R<:äS\ x | x:S.xã
+———————–
+E ∫ R.x <: S.x
+
+In absence of (S6), the derived rule above would have to be taken as primitive, replacing
+(S5).
+
+3.6 Record typing and equivalence
+Now that we have seen the rules for type equivalence and subtyping, the rules for
+record values follow rather naturally. The only subtle point is about the empty record. We
+must be able to assign it a type which lacks any given set of labels. This is obtained by
+repeatedly applying the following two rules:
+(I1)
+
+(I2)
+
+∫ E env
+———————
+E ∫ Üá\ x1..xn : äã
+
+E ∫ Üá\ x1
+..xn : R<:äã
+—————————
+E ∫ Üá\ x1..xn : R\ y
+
+The remaining constructions on record values are typed by the corresponding
+constructions on record types, given the appropriate assumptions:
+(I3)
+
+(E1)
+
+(E2)
+
+E ∫ r:R<:äã\x E ∫ a:A
+——————————–
+E ∫ Ür| x=aá : äR |x:Aã
+
+E ∫ r:R<:äã
+——————
+E ∫ r\ x : R\ x
+
+E ∫ r:äR | x:Aã<:äã
+————————
+E ∫ r.x : A
+
+Page 19
+
+As we did in the previous section, we can use the rule (S6) to derive a “symmetrical”
+version of (I2):
+
+(S6)
+(G3)
+(E2)
+
+E
+∫ r:R<:äS |x:Aã<:äã
+—————————
+E
+∫ R<:äR\ x| x:R.xã
+————————
+E
+∫ r:äR\ x |x:R.xã
+———————
+E ∫ r.x : R.x
+
+Finally, we have to examine the rules for record value equivalence. These rules are
+formally very similar to the ones already discussed for record type equivalence; record
+extensions can be permuted, record components can be extracted, and restrictions can be
+permuted and pushed inside extensions, sometimes cancelling each other.
+The main formal difference between these and the rules for types is that we equate
+Üá\ x óïñ Ü á. Hence, restriction can always be completely eliminated from variable-free
+records.
+Because of the formal similarity we omit a detailed discussion; the complete set of
+rules for our type system follows in the next section.
+
+3.7 Type rules
+We can now summarize and complete the rules for record types and values, along
+with selected auxiliary rules. These rules are designed to be immersed in a second-order
+λ-calculus with bounded quantification (see [Cardelli, Wegner 1985]), and possibly with
+recursive values and types.
+We only list the names of the rules that have already been discussed.
+Environments
+(ENV1)...(ENV4), (VAR1)...(VAR4)
+
+General properties of <: and óïñ
+(G1)...(G3)
+(G4)
+
+(G5)
+
+E ∫ A óïñ B
+—————
+E ∫ B óïñ A
+
+E
+∫ A óïñ B E ∫ B óïñ C
+——————————
+E ∫ A óïñ C
+
+(G6)
+
+(G7)
+
+E ∫ a óïñ b : A
+——————
+E ∫ b óïñ a : A
+
+E
+∫ a óïñ b : A E ∫ b óïñ c : A
+————————————
+E ∫ a óïñ c : A
+
+Formation
+(F1)...(F4)
+
+Page 20
+
+Subtyping
+(S1)...(S6)
+
+Introduction/Elimination
+(I1)...(I3), (E1), (E2)
+
+Type Congruence
+(TC1)
+
+(TC2)
+
+(TC3)
+
+∫ E env
+—————
+E ∫ äã óïñ äã
+
+E ∫ X type
+—————
+E ∫ X óïñ X
+
+E ∫ R óïñ S <: äã\ x E ∫ A óïñ B
+——————————————
+E ∫ äR | x:Aã óïñ äS | x:Bã
+
+(TC4)
+
+(TC5)
+
+E ∫ R óïñ S <: äã
+———————
+E ∫ R\ x óïñ S\ x
+
+E ∫ R óïñ S <: äT| x:Aã<:äã
+————————————
+E ∫ R.x óïñ S.x
+
+Type Equivalence
+(TE1)...(TE8)
+
+Value Congruence
+(VC1a)
+
+(VC2)
+
+(VC3)
+
+∫ E env
+——————
+E ∫ Üá óïñ Üá : äã
+
+E∫x :A
+——————
+E ∫ x óïñ x : A
+
+E ∫ r óïñ s : R<:äã\x E ∫ a óïñ b : A
+———————————————–
+E ∫ Ür| x=aá óïñ Üs| x=bá : äR | x:Aã
+
+(VC4)
+
+(VC5)
+
+E ∫ r óïñ s : R<:äã
+—————————
+E ∫ r\ x óïñ s\ x : R\x
+
+E ∫ r óïñ s : R<:äS |x:Aã<:äã
+————————————
+E ∫ r.x óïñ s.x : R.x
+
+Value Equivalence
+(VE1)
+
+(VE2)
+
+E ∫ r:R<:äã\xy E ∫ a:A E ∫ b:B x≠y
+————————————————————–
+E ∫ ÜÜr | x=aá | y=bá óïñ ÜÜr| y=bá| x=aá : ääR |x:Aã | y:Bã
+
+∫ E env
+———————
+E ∫ Üá\ x óïñ Üá : äã
+
+(VE3)
+
+(VE4)
+
+(VE5)
+
+E ∫ r:R<:äã\x
+———————
+E ∫ r\ x óïñ r : R
+
+E ∫ r:R<:äã
+—————————–
+E ∫ r\ xy óïñ r\ yx : R\ xy
+
+E ∫ r:äR | x:Aã<:äã x≠y
+——————————
+E ∫ r\ y.x óïñ r.x : A
+
+(VE6)
+
+(VE7)
+
+E ∫ r:R<:äã\x E ∫ a:A
+——————————–
+E ∫ Ür| x=aá\x óïñ r : R
+
+E ∫ r:R<:äã\x E ∫ a:A x≠y
+———————————————
+E ∫ Ür| x=aá\y óïñ Ür\ y| x=aá : äR| x:Aã\ y
+
+Page 21
+
+(VE8)
+
+(VE9)
+
+E ∫ r:R<:äã\x E ∫ a:A
+——————————–
+E ∫ Ür| x=aá.x óïñ a : A
+
+E ∫ r:äR | y:Bã\ x<:äã E ∫ a:A x≠y
+———————————————
+E ∫ Ür| x=aá.y óïñ r.y : B
+
+(VE10)
+
+E ∫ r:R<:äS |x:Aã<:äã
+——————————
+E ∫ r óïñ Ür\ x| x=r.xá : R
+Special rules
+In the following sections we discuss the rules (VC1b) and (TE9) below; these are valid
+only with respect to particular semantic interpretations.
+(VC1b)
+
+(TE9)
+
+E
+∫ r:äã E ∫ s:äã
+———————–
+E ∫ r óïñ s : äã
+
+E ∫ R<:äS |x:Aã<:äã
+—————————
+E ∫ R óïñ äR\ x |x:R.xã
+
+In presence of (TE9), the rule (S6) is redundant, and the rules (TC5) and (VC5) are implied by
+the simpler (TC5b) and (VC5b) below.
+(TC5b)
+
+(VC5b)
+
+E ∫ R óïñ äS | x:Aã<:äã
+——————————
+E ∫ R.x óïñ A
+
+E ∫ r óïñ s : äR | x:Aã<:äã
+———————————
+E ∫ r.x óïñ s.x : A
+
+Properties
+Lemma 3.7.1:
+(1) If E ∫ A type, then ∫ E env.
+(2) If E ∫ A <: B, then ∫ E env.
+Proof
+Simple simultaneous induction on derivations, with (F1) as the base case.
+M
+Lemma 3.7.2:
+(1) If E ∫ A óïñ B, then E ∫ A type and E ∫ B type.
+(2) If E ∫ A <: B, then E ∫ A type and E ∫ B type.
+Proof
+Show (1) and (2) simultaneously by induction on derivations. The hardest case is
+(TE1). The next hardest is (TE8). All the others are substantially simpler. We prove
+(TE1) below and leave the remaining cases to the reader.
+To prove (1) for (TE1), we assume E ∫ R<:äã\ xy and E ∫ A,B type. Using (S2)
+and (S4) we may derive E ∫ äã\ xy<:äã\ x and so by transitivity and (F2) we have E ∫
+äR | x:Aã type. The next goal is to show that äR |x:Aã is a subtype of äã\ y. Using (S2)
+and (S4) we have E ∫ R<:äã\ y by transitivity, and so by (TE2), E ∫ R \ y óïñ R. The
+type congruence rules give E ∫ äR | x:Aã óïñ äR\y | x:Aã. By (TE6) and transitivity we
+Page 22
+
+now have E ∫ äR | x:Aã óïñ äR | x:Aã\y. From (S1) and the original hypotheses, it is
+easy to show E ∫ äR |x:Aã <: äã and so by (S4), E ∫ äR | x:Aã\ y <: äã\ y. This allows
+us to derive E ∫ äR | x:A ã <: ä ã\ y, from which we may finally obtain E ∫
+ääR | x:Aã | y:Bã type.
+The proof of E ∫ ääR |y:Bã | x:Aã type is similar.
+M
+Sample derivations
+We show the main steps of some derivations that can be carried out in this system,
+assuming rules for typing basic constants.
+The first example simply builds a record of two fields, with its natural type.
+——–
+(I1)
+Üá
+: äã
+————
+——–
+(E1)
+Üá\
+x
+:
+äã\
+x
+(const)
+3 : Int
+————————————
+(I3)
+ÜÜá\
+x | x=3á : ääã\ x |x:Intã
+———————————
+————–
+(E1)
+ÜÜá\
+x
+|
+x=3á\
+y
+:
+ääã\
+x
+|
+x:Intã\
+y
+(const)
+true : Bool
+——————————————————————–
+(I3)
+ÜÜÜá\
+x |x=3á\ y |y=trueá : äääã\ x| x:Intã\ y| y:Boolã
+——————————————————
+(def)
+Üx=3, y=trueá : äx:Int, y:Boolã
+Next, we derive a non-trivial type inclusion. To construct record types of different
+lengths on the two sides of <:, we start with the basic asymmetry of (S1) and we build up
+symmetrically from there (there is no more direct way).
+———–
+(G1)
+äã
+<: äã
+—————
+(S4)
+äã\
+x <: äã\ x
+——————–
+(S1)
+ääã\ x | x:Intã <: äã
+————————
+—————–
+(S4)
+ääã\
+x
+|
+x:Intã\
+y
+<:
+äã\
+y
+(G1)
+Bool <: Bool
+————————————————————–
+(S3)
+äääã\ x| x:Intã\ y| y:Boolã <: ääã\ y |y:Boolã
+——————————————–––
+(def)
+äx:Int, y:Boolã <: äy:Boolã
+Now we show that a given record lacks a given label. This time the key rule is (I2).
+Some type equivalence rules are used to rearrange the type into a standard form.
+——–
+(I1)
+Üá
+: äã
+———–
+————
+(I2)
+Üá
+: äã\ y
+(S2)
+äã\
+y <: äã
+—————
+—————–
+——–
+(E1)
+Üá\
+x
+:
+äã\
+y\
+x
+(S4)
+äã\
+y\
+x
+<:
+äã\
+x
+(const)
+3 : Int
+———————————————————————–
+(I3)
+ÜÜá\
+x | x=3á : ääã\ y\x | x:Intã
+—————————–
+(TE3,TC3,G1,G3) ÜÜá\ x | x=3á : ääã\ x\ y | x:Intã
+—————————–
+(TE6,G1,G3)
+ÜÜá\ x | x=3á : ääã\ x |x:Intã\y
+—————————–
+Page 23
+
+(def)
+
+Üx=3á : äx:Intã\y
+
+Finally, we show that by removing a label we obtain a subtype. The basic asymmetry
+here is provided by (S2).
+———–
+(G1)
+äã
+<: äã
+————
+(S2)
+äã\
+y <: äã
+—————–
+————
+(S4)
+äã\
+y\
+x
+<:
+äã\
+x
+(G1)
+Int <: Int
+——————————————–
+(S3)
+ääã\ y\ x| x:Intã <: ääã\ x |x:Intã
+———————————–
+(TE3,TC2,G1,G2) ääã\ x\ y | x:Intã <: ääã\ x | x:Intã
+———————————–
+(TE6,G1,G2)
+ääã\ x | x:Intã\y <: ääã\ x |x:Intã
+———————————–
+(def)
+äx:Intã\ y <: äx:Intã
+
+3.8 Semantics of the pure calculus of records
+Our stated intent is to define a second-order type system for record structures.
+However, models of such a system are rather complex, and outside the scope of this
+paper.
+In this section we provide a simple set-theoretical model of the pure calculus of
+records, without any additional functional or polymorphic structure. The intent here is to
+show the plausibility of the inference rules for records, by proving their soundness with
+respect to a natural model.
+This model is natural because it embodies the strong set-theoretical intuitions of
+subtyping seen as a subset relation, and of records seen as finite tuples. Although this
+model does not extend to more complex language features, it exhibits the kind of simpleminded but (usually) sound reasoning that guides the design and implementation of
+object-oriented languages.
+Syntax
+We start with the language implied by the type rules of section 3.7. Since no basic
+non-record values are expressible in this calculus, we must make some arbitrary choices
+to get started. To this end, we will consider an extension of the pure calculus with any
+collection G1 , G2 , ... of basic (ground) type symbols and an arbitrary collection of
+subtype relations G i <: G j between them. To incorporate these new symbols into the
+calculus, we add the following two rules (which preserve lemmas 3.7.1 and 3.7.2):
+∫ E env
+—————
+E ∫ Gi type
+
+∫ E env
+—————
+E ∫ Gi <: Gj
+
+(as appropriate)
+
+For simplicity, we do not introduce value constants; instead we work with environments
+containing assumptions of the form k : Gi .
+Page 24
+
+We will now construct a model of the extended calculus.
+Semantic domains
+In the following, we rely largely on context to distinguish between syntactic
+expressions and semantic expressions, and we often identify terms with their denotations.
+We start by choosing some fixed set of labels L, and a collection of sets G1 , G2 , ...
+corresponding to the type symbols G1 , G 2 , ... such that G i ⊆ G j if G i <: Gj is a
+subtyping axiom.
+For simplicity, we assume that no element of any Gi is a finite partial function on L
+(i.e. a record, as we shall see shortly). This assumption is useful when we define the
+subtype relations of sections 3.9 and 3.10.
+Since äã serves as a type of all records, we will need some value space closed under
+record formation. This property may be accomplished by regarding records as finite
+functions from L to values, and using ranked values with rank < ω. We use A îïÕfin B for
+the set of partial functions from A to B with finite domain, f(x)¶ to indicate that the partial
+function f is undefined at x, and f(x)ß to indicate that f is defined at x.
+Define set R i of records of rank i, and set Vi of values of rank i, as follows:
+= R i ∪ Vi
+= L îïÕfin Vi+1
+
+V0
+R0
+
+= êj Gj
+= L îïÕfin V0
+
+Vi+1
+R i+1
+
+R
+V
+
+= êi < ω R i
+= êi < ω Vi
+
+the set of records
+the set of values
+
+The essential properties of this construction are summarized by the relationship:
+R = (L îïÕfin V ) ⊆ V
+It is clear by construction that R i ⊆ Vi+1 and so R ⊆ V. To see that R = L îïÕfinV, we first
+show that L îïÕfinV ⊆ R . If r Ï L îïÕfinV , then since dom(r) is finite there is some i with
+range(r) ⊆ Vi ; hence r Ï R i ⊆ R . The converse follows from the fact that if rÏR , then r Ï
+R i = (L îïÕfinVi ) ⊆ L îïÕfinV.
+We now summarize the notation used to describe the semantic interpretation of
+syntactic constants and operators:
+
+
+=
+
+λyÏL. ¶
+
+r-x
+
+=def
+
+λyÏL. if y=x then ¶ else r(y)
+provided rÏR and xÏL
+
+r[x=a]
+
+=def
+
+λyÏL. if y=x then a else r(y)
+provided rÏR , xÏL, aÏV, and xÌdom(r).
+
+Page 25
+
+r(x)
+
+is well-defined,
+provided rÏR , xÏL, and xÏdom(r).
+
+Lemma 3.8.1:
+(1) The empty record  is an element of R .
+(2) For any rÏR we have r-xÏR .
+(3) If rÏR is not defined on x, then for any aÏV we have r[x=a]ÏR .
+(4) If rÏR is defined on x, then r(x)ÏV.
+Proof
+(1) The empty function is a finite function.
+(2) If rÏR then r-x remains a finite partial function in R .
+(3) Suppose rÏR with x Ì dom(r), and aÏV.
+Then r[x=a] is well-defined (is a function) and belongs to R .
+(4) If rÏR = L îïÕfinV and r(x) is defined then r(x) Ï V.
+M
+Types and type operations
+Types are interpreted as subsets of our global value set; hence we have a type of all
+values, and a type of all records. Subtyping is interpreted as set inclusion.
+We introduce the following notation for operations on record types:
+R-x
+
+=def
+
+{r-x | rÏR}
+if R ⊆ R
+
+R[x:A]
+
+=def
+
+{r[x=a] | rÏR, aÏA}
+if R ⊆ R -x (R undefined on x) and A ⊆ V
+
+R(x)
+
+=def
+
+{r(x) | rÏR}
+if R ⊆ S[x:A] for some S ⊆ R and A ⊆ V
+
+Lemma 3.8.2:
+Under the conditions stated above, the sets R-x and R[x:A] are subsets
+of R , and the sets R(x) are subsets of V.
+Proof
+(1) If R ⊆ R , then R-x = {r-x | rÏR} ⊆ R , by 3.8.1.
+(2) If R ⊆ R -x, then R is a set of functions rÏ L îïÕfinV with x Ì dom(r).
+Hence for any A ⊆ V, R[x:A] = {r[x=a] | rÏR, aÏA} ⊆ R , by 3.8.1.
+(3) If R ⊆ S[x:A], then for any rÏR, rÏS[x:A] = {s[x=a] | sÏS, aÏA};
+so that r(x)ÏA. Hence R(x) = {r(x) | rÏR} ⊆ A ⊆ V.
+M
+
+Page 26
+
+Interpretation of judgments
+An assignment ρ is a partial map from type variables to subsets of V, and from
+ordinary variables to elements of V. We say that an assignment ρ satisfies an environment
+E if the following conditions are satisfied:
+then ρ(X) ⊆ V
+then ρ(X) ⊆ Aρ ⊆ V
+then ρ(x) Ï Aρ ⊆ V
+
+If X in E,
+If X <: A in E,
+If x : A in E,
+
+where A ρ is the type defined by A under the assignment ρ. Similarly, by aρ we indicate
+the value of a term a under an assignment ρ for its free variables.
+The judgments of our system are interpreted as follows.
+∫ E env
+
+1
+
+E ∫ A type
+E ∫ A <: B
+E ∫ A óïñ B
+E∫a: A
+E ∫ a óïñ b : A
+
+1
+1
+1
+1
+1
+
+for every initial segment E',X<:A or E',x:A of E,
+if ρ satisfies E' then Aρ ⊆ V.
+Aρ ⊆ V, for every ρ satisfying E.
+Aρ ⊆ Bρ ⊆ V, for every ρ satisfying E.
+Aρ = Bρ ⊆ V, for every ρ satisfying E.
+aρ Ï Aρ ⊆ V, for every ρ satisfying E.
+aρ = bρ Ï Aρ ⊆ V, for every ρ satisfying E.
+
+Type and value expressions are interpreted using:
+äã
+R\ x
+äR | x:Aã
+R.x
+
+1
+1
+1
+1
+
+R
+R-x
+R[x:A]
+R(x)
+
+Üá
+r\ x
+Ür | x=aá
+r.x
+
+1
+1
+1
+1
+
+
+r-x
+r[x=a]
+r(x)
+
+Soundness
+Finally, we can show that this semantics satisfies the type rules. More precisely, we
+consider the system S1 consisting of all the rules listed in section 3.7, except for the
+special rules (VC1b) and (TE9).
+Theorem 3.8.3 (soundness):
+The inference rules of system S1 are sound with respect to the
+interpretation of judgments given in this section.
+Proof
+See appendix.
+M
+Page 27
+
+3.9 A construction giving R = äR\x | x:R.xãã
+The type equivalence rule below seems very natural semantically. It also simplifies
+the types associated with the override operation, and has application to extensional
+models studied in the next section.
+(TE9)
+
+E ∫ R<:äS |x:Aã<:äã
+—————————–
+E ∫ R óïñ äR\ x | x:R.xã
+In the simple model described in section 3.8, it is easy to see that if R ⊆ äx:Aã, then,
+as required by (S6):
+R ⊆ äR\ x |x:R.xã
+The reason is that every record r in R has an x component r(x) Ï R(x), and remaining
+components r-x in R-x. However, it is not necessarily true that every combination of r-x
+from R-x and r(x) from R(x) occur together in a single record in R. For example, the set of
+records:
+R = {Üx=1, y=trueá, Üx=0, y=falseá}
+is clearly a subset of äx:Intã. However, R ≠ äR\ x |x:R.xã since the records Üx=1, y=falseá
+and Üx=0, y=trueá do not appear in R. In category-theoretic terms, the equation R =
+äR\ x | x:R.xã says that R is the product of R\x and R.x.
+In this section we present a variant of the construction of section 3.8 in which rule
+(TE9) is sound. Since we are ultimately interested in polymorphism and bounded
+quantification, we construct a model with R = äR\ x| x:R.xã for every semantic type R with
+R.x defined. The construction uses the same collection of values as before, but allows
+only certain subsets of V as types. In this way we eliminate sets of records which violate
+(TE9).
+We use a value space satisfying:
+R
+
+= (L îïÕfin V ) ⊆ V
+
+constructed as in section 3.8. Then for each natural number i, we define the collection Ti
+of subsets of V which we wish to consider types of stage i. At the first stage, we may
+select any subsets of V, provided we include the given ground types Gj . For definiteness,
+let us take:
+T0 = {G1 , G2 , ... }
+
+Page 28
+
+We now define record types over preceding types. At each stage we take all record
+types defined by a finite set of labeled component types, and a finite set of absent labels.
+Each component type must belong to the preceding stage.
+This construction may be clarified using an auxiliary definition. Suppose P: L îïÕfin Ti
+is a finite partial function from labels to types at stage i, and N ⊆ fin L is a finite set of
+labels disjoint from the domain of P. Then the set R P,N of records with components
+present according to P and components absent according to N is defined by:
+RP,N = {rÏR | ÓxÏL. (P(x)ß ⊃ r(x)ÏP(x)) ∧ (xÏN ⊃ r(x)¶)}
+We define the set of record types at stage i+1 to be the set of all R P,N for suitable
+“present” function P and “absent” set N:
+Ti+1 = {RP,N | P: L îïÕfin Ti ∧ N ⊆fin L ∧ dom(P) ∩ N = } ∪ Ti
+Note that R = R, belongs to every Ti+1.
+The collection T of all types is defined by:
+T = êi < ω Ti
+As we have defined T, the set V of all values is not a type. However, it is possible to
+include V in T0 if desired.
+It is natural to consider any set of records RP,N with P: L îïÕfin T and N ⊆ fin L, as a
+“record type” over V. Define RT to be the collection of all record types:
+RT
+
+=def {RP,N | P: L îïÕfin T , N ⊆ fin L, and dom(P)∩N = }
+
+Note that R, = êRT , so RT has a maximal element. We may show that T is precisely
+the union of T0 and the record types over V ; that is T = T0 ∪ RT.
+Lemma 3.9.1:
+If P: L îïÕfin T and N ⊆fin L with dom(P)∩N = , then RP,N Ï T.
+That is, RT ⊆T.
+Proof
+Suppose P: L îïÕfin T and N ⊆fin L. Since the domain of P is finite,
+there is some i with P: L îïÕfin Ti . Hence, RP,N Ï Ti+1 ⊆ T.
+M
+In this model we will interpret all judgments as before, except that type variables and
+type expressions must denote elements of T. Since we consider only elements of T as
+types, we define the relation A ⊆: B (A semantic subtype of B) as:
+A ⊆: B iff A ⊆ B and A,B Ï T
+
+Page 29
+
+By the simplifying assumption in section 3.9 that no ground type contains records, we
+know that every subtype of R will be an element of RT. If we had not made this
+assumption, then we might have some subtype of R which “accidentally” could cause
+(TE9) to fail.
+We may show that for any non-empty R Ï RT, a function P and set N with R = R P,N
+are determined uniquely.
+Lemma 3.9.2:
+Let R Ï RT be non-empty. Then R = RP,N where:
+dom(P) = {xÏL | ÓrÏR. r(x)ß},
+N = {xÏL | ÓrÏR. r(x)¶}, and
+P(x) = R(x) for all xÏdom(P)
+Proof
+Suppose R Ï RT is non-empty and let r0ÏR.
+We know that R = RP,N for some P,N.
+(1) By construction of R P,N we have ÓrÏR. dom(P) ⊆ dom(r).
+Moreover, if ÓrÏR. r(x)ß, then xÏdom(P), since xÌdom(P) implies
+r0-xÏR and (r0-x)(x)¶. Consider the function f defined by:
+f(x) = r0(x) if ÓrÏR. r(x)ß, and ¶ otherwise
+This function belongs to R, and dom(f) = {xÏL | ÓrÏR. r(x)ß} ⊆ dom(P).
+Hence dom(P) =dom(f) = {xÏL | ÓrÏR. r(x)ß}.
+(2) By construction of R P,N we have ÓrÏR. N ⊆ ¶(r) =def {xÏL | r(x)¶}.
+Moreover, if ÓrÏR. r(x)¶, then xÏN (since xÌN implies either r0(x)ß
+or (r0[x=a])(x)ß for an appropriately chosen r0[x=a]ÏR).
+Choose rx from Rx =def {rÏR | r(x)ß} whenever Rx ≠ , and define:
+g(x) = ¶ if ÓrÏR. r(x)¶, and rx(x) otherwise
+This function belongs to R and ¶(g) = {xÏL | ÓrÏR. r(x)¶} ⊆ N.
+Hence, N = ¶(g) = {xÏL | ÓrÏR. r(x)¶}.
+(3) Assume xÏdom(P).
+R(x) = RP,N(x) = {r(x) | rÏR , ÓyÏL. r(y)ÏP(y)} (since xÌN)
+= {r(x) | rÏR , r(x)ÏP(x)} = {aÏV | aÏP(x)} = P(x)
+M
+This allows us to write each non-empty record type R Ï R T as R P,N without
+ambiguity. The lemma also demonstrates that whenever R(x) is defined, R(x) = RP,N(x) =
+P(x) Ï T is a type.
+It is now straightforward to show that the record types are closed under restriction (Rx) and extension (R[x:B]):
+
+Page 30
+
+Lemma 3.9.3:
+If R = RP,N is any record type, then R-x = RP',N', where
+P' = P - {<x÷ïñP(x)>} if P(x)ß, and P otherwise.
+N' = N ∪ {x}
+Proof
+Straightforward.
+M
+Lemma 3.9.4:
+If R = RP,N with xÏN, and BÏ T, then R[x:B] = RP',N' , with:
+P' = P ∪ {<x÷ïñB>}
+N' = N-{x}
+Proof
+By definition, R[x:B] = {r[x=b] | rÏR, bÏB}. It is easy to check
+that every r[x=b] belongs to RP',N' and conversely.
+M
+The semantic subtyping relation on record types R ⊆: R' is now determined by the
+present and absent information.
+Lemma 3.9.5:
+RP,N ⊆: RP',N' iff
+ÓxÏdom(P'). P(x)ß ∧ P(x) ⊆: P'(x)
+N' ⊆ N
+Proof
+Assume RP,N ⊆: RP',N'.
+It is easy to check that N' ⊆ N by the definition of RP,N.
+Similarly, if P'(x)ß then we must have P(x)ß ∧ P(x) ⊆ P'(x).
+By definition P(x) and P'(x) are types.
+The converse is straightforward.
+M
+Since the point of this model construction is to give R = (R-x)[x:R(x)] for every record
+type R with R(x)ß, we must also prove this equation. Given the preceding lemmas, the
+proof is almost immediate.
+Lemma 3.9.6:
+Let R Ï RT be a record type with r(x)ß for all rÏR.
+Then R = (R-x)[x:R(x)].
+Proof
+We know R = RP,N for some finite function P and finite set N.
+By preceding lemmas, we also have:
+R-x = RP',N'
+Page 31
+
+(R-x)[x:R(x)] = RP",N"
+with P' = P - {<x÷ïñR(x)>}, N' = N ∪ {x}
+and P" = P' ∪ {<x÷ïñR(x)>}, N" = N' - {x}.
+Since P" = P and N" = N, it follows that R = (R-x)[x:R(x)].
+M
+Finally, we have the soundness theorem. System S2 is system S1 of Theorem 3.8.3
+plus the rule (TE9).
+Theorem 3.9.7 (soundness):
+The inference rules of system S2 are sound with respect to the
+interpretation of judgments given above.
+Proof
+See appendix.
+M
+
+3.10 An extensional model construction
+The following inference rule gives us an extensional equality between records:
+(VC1b)
+
+E
+∫ r:äã E ∫ s:äã
+———————–
+E ∫ r óïñ s : äã
+The intuitive reason for adopting this rule is that if r and s both belong to äã, then r
+and s are indistinguishable. In fact, assume r and s differ at some label x. We cannot use
+r.x or s.x to distinguish them since neither is well-typed; if we use r\ x or s\ x then we
+simply remove the difference.
+In addition to giving us more equations between records of type äã, rule (VC1b) implies
+the following extensionality property: for any r,s : äx1:A1 , ... , xk:Ak ã, we have r óïñ s :
+äx1:A1 , ... , xk:Ak ã iff r.xióïñs.xi : A i for i = 1...k. The straightforward proof of this uses
+r\ x1...xk óïñ s\ x1...xk : äã and the value congruence rules.
+Recall that in the previous models a record type was simply a set of records, and
+equality of records was independent of the type. Therefore, any two distinct records
+would be unequal elements of äã, causing (VC1b) to fail.
+In this section, we will construct a model of the pure record calculus satisfying (TE9)
+and (VC1b). It will be clear from the construction that (TE9) is essential; we do not know
+how to construct an extensional model satisfying (VC1b) without requiring that record
+types satisfy R = äR\x | x:R.xã. The main use of (TE9) lies in showing that if R is a record
+type with extensional equality, then both R-x and R(x), when defined, are extensional
+record types.
+We begin with a value space V satisfying:
+Page 32
+
+R
+
+= (L îïÕfin V ) ⊆ V
+
+constructed as in section 3.8, and define types as certain partial equivalence relations
+(abbreviated PER's) over V (see [Longo, Moggi 1991]). A PER is a binary relation which
+is symmetric and transitive, but not necessarily reflexive. An element of a type is defined
+as an equivalence class of values in the PER.
+Subtyping is based on set containment of partial equivalence relations, as in [Bruce,
+Longo 1990], except that we consider only certain PER's as types.
+The type of all records äã is interpreted by the PER R ×R . This type has only one
+element since there is a single equivalence class in R ×R : while äã contains all records,
+all records are equivalent in äã (hence (VC1b) holds).
+The three operations on record types are defined as follows:
+¢
+
+If R is a PER on R with r(x)¶ for every record rRr, and A is a PER
+on V, then R[x:A] is the relation on R given by:
+r R[x:A] s
+
+iff
+
+r-x R s-x and r(x) A s(x)
+
+In writing r(x) A s(x) we imply that r(x)ß and s(x)ß.
+¢
+
+If R is a PER on R , we define the relation R-x by:
+R-x =def {<r-x, s-x> | rRs}
+
+¢
+
+If R is a PER on R , with r(x)ß whenever rRr, we define the
+relation R(x) by:
+R(x) =def {<r(x), s(x)> | rRs}
+
+It is easy to show that under the hypotheses above, R[x:A] is a partial equivalence
+relation on R . However, R-x and R(x) are not necessarily transitive. This will not cause
+any problems, as it turns out, since by restricting the class of record types to some
+collection satisfying (TE9), R-x and R(x) are guaranteed to be types (and hence PER's).
+The types over V will be defined in stages, as before. We begin with some collection:
+T0 = {E1 , E2 , ... }
+of partial equivalence relations over V that do not relate any records to themselves. A
+typical choice would be to begin with the identity relations on the ground types G1 , G2 ,
+... .
+Given any finite partial map P from L to PER's over V and a set N ⊆fin L disjoint from
+the the domain of P, we define the PER RP,N over R by:
+r RP,N s iff ÓxÏL. (P(x)ß ⊃ r(x) P(x) s(x)) ∧ (xÏN ⊃ r(x)¶∧ s(x)¶)
+
+Page 33
+
+Note the similarity to R P,N for subsets of V ; if we represent a subset S⊆V by the PER
+(S×S) ⊆ (V ×V ), the two definitions coincide. It is easy to see that if each P(x) is a PER,
+then so is R P,N.
+Following the earlier definition of record types in stages, we define:
+Ti+1 = {RP,N | P:L îïÕfinTi ∧ N⊆finL ∧ dom(P)∩N = } ∪ Ti
+and let:
+T = êi < ω Ti
+This construction has much the same character as the previous non-extensional one,
+although we have the added complication of establishing that R-x and R (x) (when
+defined) are PER's whenever RÏT. Since every RÏT is easily seen to be a PER, we will do
+this by showing R-xÏT and R(x)ÏT.
+It is easy to prove Lemma 3.9.1 for this model, showing that we need not consider
+stages of the construction in later arguments.
+Lemma 3.10.1:
+If P: L îïÕfin T and N ⊆fin L with dom(P)∩N = , then RP,N Ï T.
+Define the collection of all record types by RT = {RP,N}.
+Subtyping is interpreted as before, with:
+A ⊆: B iff A ⊆ B and A,B Ï T
+We now use present functions and absent sets to show that for every R Ï RT, we have
+R-xÏT and R(x)ÏT if r(x)ß for every rRr.
+Lemma 3.10.2:
+If R Ï RT , then R-xÏT .
+If R Ï RT with r(x)ß whenever rRr, then R(x)ÏT .
+Proof
+The lemma is trivial if R= , hence we assume R≠ .
+(1) Let R=RP,N. Then R-x = RP',N' with P' = P - {<x÷ïñP(x)>} and
+N' = N ∪ {x}. To see this, suppose r R-x s. Then there must
+be records r',s'ÏR with r'Rs' and r=r'-x, s=s'-x.
+Since P'(y)ß ⊃ r(y) P(y) s(y) and yÏN' ⊃ r(y)¶ ∧ s(y)¶,
+it follows that r RP',N' s.
+To show the converse, we assume r RP',N' s and note that since
+R≠ , there must be some bÏV with b P(x) b. It is easy to see
+that r[x=b] R s[x=b], and so r R-x s.
+(2) We now assume r(x)ß whenever rRr. Since R=RP,N , we have
+P(x)ÏT. It remains to show that R(x)=P(x). If a R(x) b,
+then there exist r and s with rRs and a=r(x), b=s(x).
+Page 34
+
+By definition of RP,N it follows that a P(x) b.
+For the converse, we assume a P(x) b; since R≠ , there exist
+r and s with r RP,N s and r(x)=a, s(x)=b. Hence a R(x) b.
+M
+Lemma 3.10.3:
+If R Ï RT with r(x)¶ whenever rRr, and BÏT, then R[x:B]ÏT .
+Proof
+The lemma is trivial if R= . Otherwise, we let R=RP,N and show that
+R[x:B]=RP',N' with P' = P ∪ {<x÷ïñB>} and N' = N-{x}.
+This is straightforward.
+M
+It is now an easy matter to show analogs of Lemma 3.9.2 and Lemma 3.9.6. These
+conclude the basic properties of the construction. System S3 is system S1 of Theorem
+3.8.3 plus the rules (TE9) and (VC1b).
+Theorem 3.10.4 (soundness):
+The inference rules of system S3 are sound for the PER model
+construction.
+Proof
+See appendix.
+M
+
+3.11 The update operator
+Extensional models are useful to characterize a natural form of record update, here
+denoted by r.x :- a for functional update. The discussion is also relevant to the typing of
+imperative update, r.x := a, although our models do not directly capture side-effects.
+The functional update operator cannot be introduced by a simple definition. We want:
+r.x :- a
+
+=def
+
+Ür\ x | x=aá
+
+but only provided that r.x exists, and that r.x :- a does not modify the type of the x field.
+Sufficient assumptions are that r:R<:äã and a:R.x; then we can derive the following
+typing:
+
+(E1)
+(I1)
+(def)
+
+E
+∫ r:R<:äã
+——————
+E ∫ r\ x : R\ x
+E ∫ a:R.x
+———————————–
+E
+∫ Ür\ x| x=aá : äR\x | x:R.xã
+——————————–
+E ∫ r.x :- a : äR\x |x:R.xã
+
+Page 35
+
+This is not quite satisfactory, because we would expect the result type to be R,
+meaning that the type of a record is not modified by updating one of its fields (with a
+value of the correct type).
+Fortunately, by using (TE9) (äR\ x |x:R.xãóïñR) we can derive the expected type rule:
+(UPD)
+
+E ∫ r:R<:äã E ∫ a:R.x
+——————————
+E ∫ r.x :- a : R
+This seems to be a compelling reason for adopting (TE9), because of its impact on such an
+important operator as updating.
+Note that the (UPD) rule is very strong; it applies even when R is a variable. From it we
+can derive a perhaps more natural but less general rule:
+(UPD')
+
+E ∫ r:äR | x:Aã<:äã E ∫ a:A
+————————————
+E ∫ r.x :- a : äR| x:Aã
+Remark. Here we might be tempted to weaken the assumption to E ∫ a:A'<:A,
+and strengthen the conclusion to E ∫ r.x :- a : ä R |x:A'ã. This is valid but
+undesirable, since we might then be unable to update the x field again with its
+original contents.
+The strong (UPD) rule would not be expressible without R.x types; the following
+apparently natural variation is unsound:
+E ∫ r:R<:äS |x:Aã E ∫ a:A
+———————————
+E ∫ r.x :- a : R
+For example, take A=Bool, R=äx:Trueã, and r=Üx=trueá; then from r.x:Bool and false:Bool
+we can derive r.x:-false : äx:Trueã.
+
+3.12 Normalization and decidability
+Even though the basic ideas behind the record calculus are relatively simple, the
+formal system has quite a few rules. As a consequence, it is not easy to see, by inspection,
+how we could determine whether a supposed type A is well-formed, or whether a record
+expression has type R.
+In this section, we show that all of the basic properties of the calculus are decidable,
+using relatively natural algorithms. In the process, we show that every type expression
+has a unique normal form (modulo permuting the order of fields) and every typable
+record expression has a principal type in each suitable environment.
+
+Page 36
+
+The first properties we consider are deciding whether a supposed environment E is
+well-formed and whether a given A is a well-formed type expression in E. A quick glance
+at the formation rules shows that in order to determine whether a type is well-formed we
+must be able to decide the following apparently simple properties; assuming E ∫ R type is
+derivable, we want to know whether E ∫ R<:äã\ x and whether there exist S and A such
+that E ∫ R<:äS |x:Aã. Therefore, we consider these first. Once we develop a simple
+method for these, it is easy to check whether a type or environment is well-formed.
+For each derivable E ∫ R type, we define a labeled tree Tree(E ∫ R type) with:
+edges:
+vertices:
+
+labeled by field names
+labeled by finite sets of field names
+
+If v is a vertex in Tree(E ∫ R type), we call the finite set of field names at v the absent set
+at v.
+Intuitively, if p = x1x2 ... xk is a path from the root of Tree(E ∫ R type) and N = {y1, y2,
+..., yl} is the absent set of the vertex designated by this path, then:
+E ∫ (..(R.x1).x2 ... ).xk type
+E ∫ (..(R.x1).x2 ... ).xk <: äã\ y1y2 ... yl
+A convenient notational shorthand is to write R.p for (..(R.x1).x 2 ... ).xk, where p is the
+path p = x1x2 ... xk . If p = ε is the empty path, then we may write R.ε for R. If e is an edge
+leading from the root of a tree to the root of some subtree, we call e a root edge.
+We define Tree(E ∫ R type) by induction on the length of E. If E has length 0 then R
+must be the type constant äã. In this case, we define:
+Tree( ∫ äã type) = single node with empty absent set.
+For context E = E',X<:A we use induction on the form of type expressions:
+Tree(E ∫ Y type) = Tree(E' ∫ Y type) for Y ≠ X
+Tree(E ∫ X type) = Tree(E' ∫ A type)
+Tree(E ∫ äS | x:Bã type) is obtained from
+T = Tree(E ∫ S type) and T' = Tree(E ∫ B type)
+by making T' a subtree of the root of T along a root edge
+labelled x, and removing x from the absent set of the
+root of T (if there).
+Tree(E ∫ S\ x type) is obtained from Tree(E ∫ S type)
+by deleting the subtree along the root edge labeled x (if there), and
+adding x to the absent set of the root.
+
+Page 37
+
+Tree(E ∫ S.x type) is the subtree of Tree(E ∫ S type)
+located along the root edge labeled x.
+For context E = E',X the definition of Tree(E ∫ R type) is the same as above, except for
+the following case:
+Tree(E,X ∫ X type) = empty tree.
+For context E = E',x:A we let:
+Tree(E ∫ R type) = Tree(E' ∫ R type)
+This concludes the definition.
+In the clauses defining Tree(E ∫ äS | x:Bã type) and Tree(E ∫ S.x type), we have
+assumed certain properties of Tree(E ∫ S type). These are justified by the following
+lemma.
+Lemma 3.12.1:
+Suppose E ∫ R type and let T = Tree(E ∫ R type).
+(1) If p is a path in T, then E ∫ R.p type.
+(2) If x is in the absent set of T at position p, then E ∫ R.p <: äã\x.
+Proof
+By induction on the derivation of T.
+Case  ∫ äã type. Trivial.
+Cases E',X<:A ∫ Y type and E',X ∫ Y type with Y≠X.
+Induction hypothesis and the property that if E ∫ J for
+any judgment J, and E,E' env, then E,E' ∫ J.
+Case E',X<:A ∫ X type.
+By induction hypothesis E' ∫ A.p type and E' ∫ A.p <: äã\ x.
+The conclusion follows by repeated use of (F4) and (S6), and
+transitivity of <: .
+Case E',X ∫ X type. Vacuous.
+Cases E',X<:A ∫ äS | y:Bã type and E',X ∫ äS | y:Bã type.
+Case p = ε. (1) is trivial.
+(2) by induction hypothesis E ∫ S <: äã\ x for x in
+the absent set of T (x≠y). Hence, E ∫ äS | y:Bã <: äã\ x.
+Case p = yp'. Use (TE7) and induction hypothesis for E ∫ B type.
+Otherwise. Use (TE8) and induction hypothesis for E ∫ R type.
+Case E',X<:A ∫ S\ y type and E',X ∫ S\ y type.
+Case p = ε. Two subcases:
+Case x=y. Since E ∫ S\ y type must follow from (F3), we must
+have E ∫ S <: äã. The result follows by (S4).
+Page 38
+
+Case x≠y. Then x must be in the absent set for Tree(E ∫ S type)
+and so E ∫ S <: äã\ x. By (S4), E ∫ S\ y <: äã\ xy, and we
+know that äã\xy <: äã\x.
+Case p ≠ ε. Then p must be a path in Tree(E ∫ S type) not beginning
+with y. It follows from the induction hypothesis that
+E ∫ S<: äT| z:Aã for z≠y the first symbol of p. By (TE4), we have
+E ∫ S.z óïñ S\ y.z, and the lemma follows by the congruence rules.
+Cases E',X<:A ∫ S.y type and E',X ∫ S.y type.
+Straightforward from induction hypothesis.
+Case E',x:A ∫ R type. By induction hypothesis.
+M
+The preceding lemma shows that the path and absent information provided by Tree(E
+∫ R type) is “sound” with respect to the proof rules of the calculus. Since the proof rules
+are sound with respect to our semantics, it follows that the assertions of the form E ∫
+R<:äã\ x and ÔS,A. E ∫ R<:äS | x:Aã determined from Tree(E ∫ R type) are semantically
+sound.
+We may also show that the assertions are semantically complete. It follows from the
+preceding lemma that the proof rules are also semantically complete for deducing
+assertions of the form: (1) E ∫ R<:äã\x, and (2) if there exists S and A with R<:äS | x:Aã in
+every assignment satisfying E, then E ∫ R<:äS'| x:A'ã for some S' and A'.
+Lemma 3.12.2:
+Suppose E ∫ R type and let T = Tree(E ∫ R type).
+There is a semantic model M and assignment ρ such that:
+(1) If p is a sequence of labels which is not a path in T, then there
+is some record r in Rρ with r.p undefined.
+(2) If p is a path in T with x absent from every record in (R.p)ρ ,
+then x is in the absent set of T at the vertex located at p.
+Proof
+We may use the model constructed in section 3.8 using a single
+ground type G=N, for example. For each environment E, we define
+an assignment ρE such that whenever E ∫ R type, there is some rÏR
+with r.pß iff p is a path in Tree(E ∫ R type). (This is straightforward.)
+It is easy to verify that for any vertex v in any Tree(E ∫ R type), if x is in
+the absent set at v, then there is no child along any edge labeled x.
+This and (1) imply part (2) of the lemma.
+M
+By constructing trees of absent sets, it is relatively easy to decide whether a purported
+environment or type expression is well-formed. The basic idea is simply to check whether
+∫ E env or E ∫ R type by reading the environment and formation rules backwards. This
+Page 39
+
+gives us mutually recursive procedures which rely on Tree(E ∫ R type) in checking the
+hypotheses of (F2) and (F4).
+Theorem 3.12.3:
+Given environment E and expression A, there are mutually
+recursive procedures which decide whether ∫ E env and E ∫ A type.
+The next problems to consider are, given well-formed types E ∫ A type and E ∫ B
+type, whether E ∫ AóïñB or E ∫ A<:B. Since type equality may be used to prove subtyping
+assertions, both depend on our choice of type equality rules. For definiteness, let us
+assume we have (TE9). Similar results seem to hold without (TE9), but we have not checked
+the details.
+If E ∫ R type, then it is evident that by directing type equality rules, we may rewrite R
+to one of the following “normal” forms:
+(1)
+(2)
+(3)
+(4)
+
+äã
+X (a type variable)
+where R0 is either äã or a type variable.
+(..(R0.x1) ... .xi)\y1 ... yj
+äR0\x1 ... xi |y1:A1 ... yj:Ajã
+where, considering T = Tree(E ∫ R type):
+¢ R0 is either äã or a type variable;
+¢ y1 ... yj are exactly the labels on the root edges of T;
+¢ {y1 ... yj} ⊆ {x1 ... xi};
+¢ {x1 ... xi} - {y1 ... yj} is the absent set at the root of T;
+¢ A1 ... Aj are also in normal form.
+
+In the semantics of section 3.9, the meaning of a type expression of form (4) is a
+record type R P,N, where N={x 1 ... xi} - {y 1 ... yj}, dom(P) = {y 1 ... yj}, and P(y n) is the
+meaning of A n . Since we may construct models in which no type is empty, and
+assignments in which each type variable denotes a different type, we may show that two
+type expressions are provably and semantically equal iff they have the same normal
+forms, modulo differences in the order of field names and component types. By lemma
+3.9.5, we may also see that, semantically:
+äR0\x1 ... xi |y1:A1 ... yj:Ajã ⊆: äS0\u1 ... uk | v1:B1 ... vl:Blã
+iff
+¢ ({u1 ... uk } - {v1 ... vl}) ⊆ ({x1 ... xi} - {y1 ... yj})
+¢ {v1 ... vl} ⊆ {y1 ... yj}
+¢ if vm = yn then Am ⊆ Bn
+This property allows us to decide semantic subtyping by normalizing type expressions,
+comparing outer-most forms, and recursively examining corresponding component types.
+Since all of the steps of the algorithm correspond to derivations in the proof system,
+completeness of the proof rules (for type equality or subtyping assertions) follows.
+Page 40
+
+Theorem 3.12.4:
+Given E ∫ A type and E ∫ B type, there are straightforward algorithms
+to determine whether E ∫ AóïñB or E ∫ A<:B. Moreover, the proof rules
+are semantically complete for deducing type equality and subtype
+assertions.
+The final algorithmic problem is, given E ∫ R type and an expression r, determine
+whether E ∫ r:R.
+Since we can decide whether one type is a subtype of another, it suffices to compute a
+minimal type S with E ∫ r:S and check whether E ∫ S<:R.
+However, most record expressions do not have a minimal type. This stems from the
+fact that for any sequence x 1 ... xk of labels, we have Üá : äã\x1 ... xk , and we can always
+obtain a smaller type by adding more labels. To get around this problem, we use type
+schemas that contain sequence variables. We show that each typable record expression r
+has a scheme S such that every type for r is a supertype of some instance of S. This
+allows us to test whether a record expression has any given type. We use l, l1 , ... for
+sequence variables in schemas.
+If S is any scheme with sequence variable l, then we say E ∫ S type if E ∫ S' type for
+every S' obtained by replacing l with a sequence of labels (including the empty sequence).
+If E ∫ S type, then a useful algorithm is MakeAbsent(x,S) which attempts to compute a
+substitution instance S' (possibly containing sequence variables) such that E ∫ S'<:äã\ x. If
+such an instance exists, MakeAbsent(x,S) returns the smallest one. If no instance exists,
+the algorithm fails. (Algorithm MakeAbsent uses an extension of Tree(E ∫ R type) to
+schemas; details are straighforward and omitted.)
+Using MakeAbsent, we may compute a principal type schema PTS(E,r), for any wellformed environment E and expression r, as follows:
+PTS(E, Üá) = äã\l
+(where l is a fresh sequence variable)
+PTS(E, x) = E(x)
+PTS(E, r.x) = PTS(E, r).x if defined, else fail
+PTS(E, r\ x) = PTS(E, r)\ x
+PTS(E, Ür| x=aá) = äMakeAbsent(x, PTS(E, r)) | x:PTS(E, a)ã
+Theorem 3.12.5:
+Given ∫ E env and an expression r, if E ∫ r:R then PTS(E,r) succeeds,
+producing S with E ∫ S'<:R for some instance S' of S. Otherwise,
+PTS(E,r) fails. Furthermore, given S = PTS(E,r) and E ∫ R type, it is
+easy to compute the smallest instance S' of S such that if any instance
+is a subtype of R, then E ∫ S'<:R.
+This concludes our investigation of decidability properties. We leave extensions of
+these properties to functions and polymorphism for further work.
+Page 41
+
+4. Applications and extensions
+One might ask why we should go to the trouble of defining the subtle extension and
+restriction operators, instead of adopting the override operator as a primitive, as in [Wand
+1989]. In particular, our explicit handling of negative information seems to introduce
+much complexity.
+One answer is that negative information seems necessary to a proper understanding of
+the override operator. For example, the notion of absent fields is critical to Rémy's
+account of overriding in [Rémy 1989]. Hence, it seems worthwhile to investigate
+negative information as formalized by a separate operator.
+A more pragmatic answer is that overriding really performs two different actions in
+different situations; it either extends a record or updates it. From a methodological point
+of view, a single override operator is rather undesirable because it may silently destroy
+information. A separate extension operator is preferable, because a type error occurs if we
+attempt to use it to destroy an existing field. A separate update operator is also preferable,
+because normally we do not want to update a field with a value of a totally different type.
+Hence, in a programming language we would probably want to replace the override
+operator by two separate operators: one for extension, which we have, and one for
+updating, discussed in section 3.11. The restriction operator could still be used when we
+really intend to delete a field.
+Admittedly, restriction is still ambiguous, because it may or may not remove a field,
+depending on whether the field is actually present. It is however possible to define a safe
+restriction operator which produces a type error if the restricted field is not present.
+Unfortunately, we could not find a way of completely eliminating the need for general
+restriction (at least on types); this operator seems necessary to express crucial wellformedness conditions.
+This said, we are now ready to investigate some useful derived operators.
+
+4.1 The override operator
+The override operator Ür óïô x=aá = def Ür\ x | x=aá is certainly very natural, in fact we
+have used it almost exclusively in our examples. The derived type rules for this operator,
+described below, are also very simple, especially if we consider the subsystem with only
+overriding and extraction. The rules mixing overriding with restriction are still rather
+interesting.
+We recall the definition of the override operator:
+Ür óïô x=aá
+äRóïôx:Aã
+
+Page 42
+
+=def
+=def
+
+Ür\ x | x=aá
+äR\ x | x:Aã
+
+The following rules are all simply derivable from the rules for our basic operators (we
+assume (TE9)); with these, extension need not be a primitive.
+Formation
+E ∫ R<:äã E ∫ A type
+——————————
+E ∫ äRóïôx:Aã type
+
+E ∫ R<:äSóïôx:Aã<:äã
+—————————––
+E ∫ R.x type
+
+Subtyping
+E ∫ R<:äã E ∫ A type
+——————————
+E ∫ äRóïôx:Aã <: äã
+
+E ∫ R<:S<:äã E ∫ A<:B
+———————————
+E ∫ äRóïôx:Aã <: äSóïôx:Bã
+
+E ∫ R<:äSóïôx:Aã<:äã
+—————————–
+E ∫ R.x <: A
+
+E ∫ R<:äSóïôx:Aã<:äã
+——————————
+E ∫ R <: äRóïôx:R.xã
+
+Introduction/Elimination
+E ∫ r:R<:äã E ∫ a:A
+——————————
+E ∫ Üróïôx=aá : äRóïôx:Aã
+
+E ∫ r:äRóïôx:Aã<:äã
+—————————
+E ∫ r.x : A
+
+Type Congruence
+E ∫ R óïñ S <: äã E ∫ A óïñ B
+—————————————
+E ∫ äRóïôx:Aã óïñ äSóïôx:Bã
+
+E ∫ R óïñ äSóïôx:Aã<:äã
+——————————
+E ∫ R.x óïñ A
+
+Type Equivalence
+E ∫ R<:äã E ∫ A,B type x≠y
+——————————————————
+E ∫ ääRóïôx:Aãóïôy:Bã óïñ ääRóïôy:Bãóïôx:Aã
+E ∫ R<:äã E ∫ A type
+——————————–
+E ∫ äRóïôx:Aã\x óïñ R\x
+E ∫ R<:äã E ∫ A type
+——————————
+E ∫ äRóïôx:Aã.x óïñ A
+
+E ∫ R<:äSóïôx:Aã<:äã
+—————————–
+E ∫ R óïñ äRóïôx:R.xã
+
+E ∫ R<:äã E ∫ A type x≠y
+——————————————
+E ∫ äRóïôx:Aã\y óïñ äR\yóïôx:Aã
+E ∫ R<:äSóïôy:Bã<:äã E ∫ A type x≠y
+——————————————————
+E ∫ äRóïôx:Aã.y óïñ R.y
+
+Value Congruence
+E ∫ r óïñ s : R<:äã E ∫ a óïñ b : A
+————————————————
+E ∫ Üróïôx=aá óïñ Üsóïôx=bá : äRóïôx:Aã
+
+E ∫ r óïñ s : äRóïôx:Aã<:äã
+———————————
+E ∫ r.x óïñ s.x : A
+
+Value Equivalence
+E ∫ r:R<:äã E ∫ a:A E ∫ b:B x≠y
+————————————————————————
+E ∫ÜÜróïôx=aáóïôy=bá óïñ ÜÜróïôy=báóïôx=aá : ääRóïôx:Aãóïôy:Bã
+Page 43
+
+E ∫ r:R<:äã E ∫ a:A
+———————————
+E ∫ Üróïôx=aá\x óïñ r\ x : R\x
+
+E ∫ r:R<:äã E ∫ a:A x≠y
+—————————————————–
+E ∫ Üróïôx=aá\y óïñ Ür\ yóïôx=aá : äRóïôx:Aã\y
+
+E ∫ r:R<:äã E ∫ a:A
+—————————–
+E ∫ Üróïôx=aá.x óïñ a : A
+
+E ∫ r:äRóïôy:Bã<:äã E ∫ a:A x≠y
+———————————————
+E ∫ Üróïôx=aá.y óïñ r.y : B
+
+E ∫ r:äRóïôx:Aã<:äã x≠y
+———————————
+E ∫ r\ y.x óïñ r.x : A
+
+E ∫ r:R<:äSóïôx:Aã<:äã
+—————————–
+E ∫ r óïñ Üróïôx=r.xá : R
+
+4.2 The rename operator
+We may consider a rename operator, that shows another interesting use of R.x types.
+r[xóïôy]
+R[xóïôy]
+
+=def
+=def
+
+Ür\ x | y=r.xá
+äR\ x | y:R.xã
+
+The rules for this operator are easily derived. The only interesting questions are whether
+renaming with an identical variable produces an equivalent value or type:
+r[xóïôx]
+R[xóïôx]
+
+óïñ r
+óïñ R
+
+?
+?
+
+These equivalences are derivable for arbitrary r and R, by using:
+(VE10)
+
+(TE9)
+
+E ∫ r:R<:äS |x:Aã<:äã
+——————————
+E ∫ r óïñ Ür\ x| x=r.xá : R
+
+E ∫ R<:äS |x:Aã<:äã
+—————————–
+E ∫ R óïñ äR\x | x:R.xã
+
+Recall that (VE10) is satisfied in all our models, but (TE9) only holds in the latter two.
+These are similar to the surjective pairing rules in λ-calculus. An alternative, not
+involving surjective pairing, is to axiomatize the renaming operators independently.
+
+4.3 The retraction operator: forgetting information
+We have seen that even negative information should be considered as “additional”
+information. So, one might ask whether there is any way to retract information, both
+positive and negative. This would seem to be more a convenience than a necessity, since
+one could avoid introducing information in the first place, rather then retracting it later.
+However, it is still interesting to investigate the possibilities.
+We have not been able to formulate operators that independently retract positive and
+negative information, but we can describe an operator that retracts all information about a
+given label in a type. This operator works purely on type information; there is no
+corresponding operator on values.
+
+Page 44
+
+The retraction operator, R~x, means “forget everything about x in record type R”; the
+following rules enforce the cancellation of all the x information in R.
+Formation/Subtyping
+E ∫ R<:äã
+—————–
+E ∫ R~x type
+
+E ∫ R<:S<:äã
+——————–
+E ∫ R~x <: S~x
+
+E ∫ R<:äã
+—————–
+E ∫ R <: R~x
+
+Type Equivalence
+∫ E env
+——————–
+E ∫ äã~x óïñ äã
+
+E ∫ R<:äã
+———————–
+E ∫ R~xx óïñ R~x
+
+E ∫ R<:äã
+————————
+E ∫ R\ x~x óïñ R~x
+E ∫ R<:äã\x E ∫ A type
+———————————
+E ∫ äR | x:Aã~x óïñ R~x
+
+E ∫ R<:äã
+————————
+E ∫ R~xy óïñ R~yx
+
+E ∫ R<:äã x≠y
+—————————–
+E ∫ R\ x~y óïñ R~y\x
+E ∫ R<:äã\x E ∫ A type x≠y
+——————————————
+E ∫ äR | x:Aã~y óïñ äR~y| x:Aã
+
+The main consequences for values involve the rule R <: R ~ x together with the
+subsumption rule: if r:R, then we are allowed to forget some information about r and
+conclude r:R~x.
+Here are some interesting inferences:
+E
+∫ R<:äã
+——————–
+E
+∫ R~x<: äã~x
+——————–
+E ∫ R~x<: äã
+
+E
+∫ R<:äã
+—————
+E
+∫ r:R
+E ∫ R <: R~x
+—————————–
+E ∫ r : R~x
+
+E
+∫r:R
+—————
+E ∫ r\ x : R\ x
+——————
+E ∫ r\ x : R\ x~x
+——————
+E ∫ r\ x : R~x
+
+E ∫ r : R <: äã\x E ∫ a : A
+———————————
+E ∫ Ür| x=aá : äR |x:Aã
+—————————–
+E
+∫ Ür| x=aá : äR |x:Aã~x
+—————————–
+E ∫ Ür| x=aá : R~x
+
+The conclusion r\ x : R~x above seems to say that restriction on values can be seen as a
+retraction operator, as well as a restriction operator.
+Going back to a previous example from section 2.5, we can see the usefulness of the
+retraction operator for defining hierarchies in “inverse” order:
+let ColorDisc = äx:Real, y:Real, r:Real, c:Colorã
+let ColorPoint = ColorDisc~r
+let Disc = ColorDisc~c
+let Point = ColorPoint~c
+Note that the restriction operator would not produce the desired results.
+Page 45
+
+4.4 The concatenation operator
+Concatenation is a prime candidate for a primitive operator for a calculus of records.
+Unfortunately this operator is very difficult to handle; so difficult that we have instead
+chosen extension and restriction as our primitive notions. Here we discuss the main
+problems.
+Type hierarchies are naturally expressed by a concatenation operator R ∏ S on types;
+for example we would like to define:
+let ColorDisc = ColorPoint ∏ Disc
+Given a corresponding operator of values, r ∏ s of type R ∏ S for r:R and s:S, we would
+like to guarantee that if we can derive r ∏ s : R ∏ S then there is a succesful and
+unambiguous way to execute r ∏ s at run-time.
+Under these conditions, we can see that concatenation is in fundamental conflict with
+the subsumption rule. Consider the function:
+let f1(X<:äx:Intã)(Y<:äy:Boolã)(r:X)(s:Y) : X ∏ Y = r ∏ s
+f1(äx:Int, z:Intã)(äy:Bool, z:Boolã)(Üx=3, z=4á)(Üx=3, z=trueá) óïñ ? : ?
+There is no explicit conflict in the definition of f1, so it should typecheck. But when
+f1 is used as above, we have to decide which z field to produce, both in the result type and
+in the result value. A popular choice is to have X ∏ Y perform a left-to-right (or right-toleft) overriding of common fields; similarly for r ∏ s at run-time. However, run-time
+overriding can run into difficulties:
+let f2(r:äx:Intã)(s:äy:Boolã) : äx:Int, y:Boolã = r ∏ s
+f2(Üx=3, y=4á)(Üy=true, x=falseá) óïñ ?
+Let us assume here that, whatever definition we give to ∏, it satisfies the equation:
+äx:Intã ∏ äy:Boolã = äx:Int, y:Boolã; then f2 is well-typed. Could we use run-time
+overriding in the invocation of f2 above? According to the result type of f2, the left x
+should override the right x, while the right y should override the left y, so monodirectional
+overriding will not work.
+An option here is to give a run-time error, but this seems to defeat the purpose of
+typechecking r ∏ s. Another option might be to compile special code for r ∏ s, according to
+the types of r and s, so as to pick the x field from r and the y field from s, and to do
+overriding on the additional fields (to deal with the polymorphic case, below). This idea
+however runs into further difficulties:
+f1(äx:Int, y:Int, z:Intã)(äy:Bool, x:Bool, z:Boolã)
+(Üx=3, y=4, z=4á)(Üy=true, x=false, z=trueá) óïñ ? : ?
+
+Page 46
+
+If X ∏ Y is computed by overriding, here, we get the wrong result. Making X ∏ Y
+compatible with the behavior of r ∏ s above, would require violating some basic rules,
+such as the beta-conversion rules for type parameters.
+Because of all these difficulties, we should now feel compelled to define R ∏ S only
+when R and S are disjoint: that is when any field present in an element of R is absent from
+every element of S, and vice versa. Unfortunately, there is no way to axiomatize this
+notion without drastically changing our type system: any two record types R and S have a
+non-empty intersection, and an element of this intersection can be exhibited via the
+subsumption rule.
+
+5. Conclusions
+We have investigated a theory of record operations in presence of type variables and
+subtyping. The intent is to embed this record calculus in a polymorphic λ-calculus, thus
+providing a full second-order theory of record structures and their types. Although we
+have not investigated the type inference problem for this calculus, we have provided
+typechecking and subtyping algorithms. We have also presented several models of the
+basic record calculus; a full second-order model is left for future work.
+The result is a very flexible system for typing programs that manipulate records. In
+particular, polymorphism and subtyping are incorporated in full generality. We expect
+that this theory will be useful in analyzing fundamental aspects of object-oriented
+programming.
+
+Acknowledgements
+We would like to acknowledge G. Longo and E. Moggi, for several clarifying
+discussions.
+
+Page 47
+
+Appendix
+This appendix contains soundness proofs for the semantic interpretations given in the
+paper.
+Semantics of the pure calculus of records
+System S1 consists of all the rules listed in section 3.7, except for the special rules
+(VC1b) and (TE9).
+Theorem 3.8.3 (soundness):
+The inference rules of systems S1 are sound with respect to the
+interpretation of judgments given in section 3.8.
+Proof
+By induction on the length of the derivation of the judgments.
+Environments
+(ENV1). Vacuously true.
+(ENV2). Vacuously true.
+(ENV3). By hypothesis, E ∫ A type and so Aρ ⊆ V for any ρ satisfying E.
+Moreover, E is well-formed by lemma 3.7.1, hence E,X<:A is also
+well-formed.
+(ENV4). Similar to (ENV3).
+Variables
+(VAR1) . If ρ satisfies E,X,E', then by definition ρ(X) ⊆ V.
+(VAR2) . If ∫ E,X<:A,E' env, then for any ρ satisfying E we have Aρ ⊆ V.
+Thus any ρ satisfying E,X<:A,E' must yield ρ(X) ⊆ Aρ ⊆ V.
+(VAR3) . Similar to (VAR2).
+(VAR4) . If ∫ E,x:A,E' env, then for any ρ satisfying E we have ρ(x) Ï Aρ
+⊆ V. Thus any ρ satisfying E,x:A,E' must yield ρ(x) Ï A ρ ⊆ V.
+General
+(G1) . If, for every ρ satisfying E, Aρ=Bρ ⊆ V then Aρ ⊆ Bρ.
+(G2) . By transitivity of subset.
+(G3) . If, for every ρ satisfying E, aρÏAρ and Aρ ⊆ Bρ then aρÏBρ.
+(G4) . By symmetry of equality.
+(G5) . By transitivity of equality.
+(G6) . If, for every ρ satisfying E, aρ=bρ Ï Aρ then bρ=aρ Ï Aρ.
+(G7) . If, for every ρ satisfying E, aρ=bρ Ï Aρ and bρ=cρ Ï Aρ
+then aρ=cρ Ï Aρ.
+
+Page 48
+
+Formation
+(F1). R ⊆ V
+(F2). If, for every ρ satisfying E, R ρ ⊆ R -x and Aρ ⊆ V
+then Rρ[x:Aρ] ⊆ R ⊆ V, by Lemma 3.8.2.
+(F3). If R ρ ⊆ R , then Rρ-x ⊆ R ⊆ V, by Lemma 3.8.2.
+(F4). If R ρ ⊆ Sρ[x:Aρ] ⊆ R , then Aρ ⊆ V; hence Rρ(x) ⊆ V by Lemma 3.8.2.
+Subtyping
+(S1). If, for every ρ satisfying E, Rρ ⊆ R -x, then Rρ is a set of finite
+functions r Ï L îïÕfinV with x Ì dom(r). For each such r, and any
+a Ï A ρ ⊆ V, we have r[x=a] Ï L îïÕfinV. Thus Rρ[x:Aρ] ⊆ R .
+(S2). If Rρ ⊆ R , then Rρ-x ⊆ Rρ ⊆ R .
+(S3). Suppose Rρ ⊆ Sρ ⊆ R -x and Aρ ⊆ Bρ ⊆ V. Let rÏRρ[x:Aρ].
+This means ÔsÏRρ with r = s[x=a]. Since sÏSρ and Aρ ⊆ Bρ,
+we have s[x=a] Ï Sρ[x:Bρ]. Hence Rρ[x:Aρ] ⊆ Sρ[x:Bρ].
+(S4). Suppose Rρ ⊆ Sρ ⊆ R . If r'ÏRρ-x, then r' = r-x for some rÏR ρ.
+Since rÏSρ, it follows that r' = r-x Ï Sρ-x.
+(S5). Suppose Rρ ⊆ Sρ[x:Aρ] ⊆ R , then for any rÏRρ, rÏSρ[x:Aρ] = {s[x=a] |
+sÏSρ, aÏAρ}; so that r(x)ÏAρ. Hence Rρ(x) = {r(x) | rÏRρ} ⊆ Aρ.
+(S6). Suppose Rρ ⊆ Sρ[x:Aρ] ⊆ R , then for any rÏRρ, rÏSρ[x:A], so that
+r=s[x=a] for some sÏSρ and aÏAρ. We have a=r(x)ÏR ρ(x), and
+s=r-xÏRρ-x, hence r=(r-x)[x=r(x)]Ï(Rρ-x)[x:Rρ(x)]. It follows that
+Rρ⊆(Rρ-x)[x:Rρ(x)].
+Introduction
+(I1).  Ï R ⊆ V.
+(I2). If, for every ρ satisfying E, the empty function  Ï Rρ ⊆ R ,
+then  =  -x1..xn Ï Rρ-y ⊆ R .
+(I3). If r ρÏRρ with x Ì dom(rρ) and aρÏAρ, then rρ[x=aρ] is well-defined,
+by Lemma 3.8.1, and belongs to Rρ[x:Aρ] ⊆ R , by Lemma 3.8.2.
+Elimination
+(E1) . If, for every ρ satisfying E, rρÏRρ ⊆ R , then x Ì dom(rρ-x).
+Hence rρ-x Ï Rρ-x ⊆ R , by Lemma 3.8.2.
+(E2) . If rρÏRρ[x:Aρ] ⊆ R , then Aρ ⊆ V, and rρ is a record with rρ(x)ÏAρ.
+Type congruence
+(TC1). R =R ⊆ V.
+(TC2). For every ρ satisfying E, X ρ =Xρ ⊆ V.
+(TC3). Suppose Rρ=Sρ, Sρ ⊆ R -x, and Aρ=Bρ ⊆ V.
+Then Rρ[x:Aρ] = Sρ[x:Bρ] ⊆ R ⊆ V.
+(TC4). Suppose Rρ=Sρ ⊆ R , then Rρ-x=Sρ-x ⊆ R ⊆ V.
+Page 49
+
+(TC5). Suppose Rρ=Sρ ⊆
+
+Tρ[x:Aρ] ⊆ R .
+Then both Rρ and Sρ are sets of functions r with x Ì dom(r).
+Hence Rρ(x) = {r(x) | rÏRρ} = {r(x) | rÏSρ} = Sρ(x) ⊆ V.
+
+Type equivalence
+(TE1). Suppose, for every ρ satisfying E, Rρ ⊆ (R -x)-y, A ρ,Bρ ⊆ V,
+and x,y Ï L. For each rÏRρ, x,y Ì dom(r). Then,
+Rρ[x:Aρ][y:Bρ] =
+{s[y=b] | sÏ{r[x=a] | rÏRρ, aÏAρ}, bÏBρ} =
+{r[x=a][y=b] | rÏRρ,aÏAρ,bÏBρ} = {r[y=b][x=a] | rÏR ρ,bÏBρ,aÏAρ}=
+{s[x=a] | sÏ{r[y=b] | rÏRρ, bÏBρ}, aÏAρ} =
+Rρ[y:Bρ][x:Aρ] ⊆ R ⊆ V.
+(TE2). If Rρ ⊆ R -x, then Rρ is a set of r with x Ì dom(r). Hence Rρ-x = Rρ.
+(TE3). If Rρ ⊆ R then (Rρ-x)-y = (Rρ-y)-x.
+(TE4). Suppose Rρ ⊆ Sρ[y:Bρ] ⊆ R and x≠y.
+For each rÏRρ, y Ì dom(r). Then,
+(Rρ-x)(y) =
+{s(y) | sÏ{r-x | rÏRρ}} = {(r-x)(y) | rÏRρ} = {r(y) | rÏRρ} =
+Rρ(y) ⊆ V.
+(TE5). Suppose Rρ ⊆ R -x and Aρ ⊆ V.
+Then Rρ[x:Aρ] = {r[x=a] | rÏRρ, aÏAρ}.
+So (Rρ[x:Aρ])-x = {r | rÏRρ} = Rρ.
+(TE6). Suppose Rρ ⊆ R -x, Aρ ⊆ V, and x≠y. Then,
+(Rρ[x:Aρ])-y =
+{(r[x=a])-y | rÏRρ, aÏAρ} = {(r-y)[x=a] | rÏRρ, aÏAρ} =
+(Rρ-y)[x:Aρ] ⊆ R ⊆ V.
+(TE7). Suppose Rρ ⊆ R -x and Aρ ⊆ V.
+Then Rρ[x:Aρ] = {r[x=a] | rÏRρ, aÏAρ}.
+Hence (Rρ[x:Aρ])(x) = {(r[x=a])(x) | rÏRρ, aÏAρ} = Aρ ⊆ V.
+(TE8). Suppose Rρ ⊆ Sρ[y:Bρ]-x ⊆ R , Aρ ⊆ V, and x≠y. Then,
+(Rρ[x:Aρ])(y) = {(r[x=a])(y) | rÏRρ, aÏAρ} = {r(y) | rÏRρ} = Rρ(y) ⊆ V.
+Value congruence
+(TC1). = ⊆ R
+(TC2). If, for every ρ satisfying E, ρ(x) Ï Aρ ⊆ V, then ρ(x)=ρ(x) Ï Aρ.
+(TC3). Suppose r ρ=sρ Ï Rρ ⊆ R -x and aρ=bρ Ï Aρ ⊆ V.
+Then x Ì dom(rρ)∪dom(sρ). Hence rρ[x=aρ] = sρ[x=bρ] Ï R ρ[x:Aρ] ⊆ R ,
+by case (I3).
+(TC4). Suppose r ρ=sρ Ï Rρ ⊆ R . Then rρ-x=s ρ-x Ï Rρ-x ⊆ R , by case (E1).
+
+Page 50
+
+rρ=sρ Ï Rρ ⊆ Sρ[x:Aρ] ⊆ R .
+Then Rρ ⊆ (Rρ-x)[x:Rρ(x)] (by case (S6)), and rρ,sρ Ï (R ρ-x)[x:Rρ(x)].
+Hence, by case (E2), rρ(x)=sρ(x) Ï Rρ(x) ⊆ V.
+
+(TC5). Suppose
+
+Value equivalence
+(VE1). Suppose, for every ρ satisfying E, rρÏRρ ⊆ R -x-y, aρÏAρ ⊆ V,
+bρÏBρ ⊆ V, and x≠y. Then, x,y Ì dom(rρ), and
+rρ[x=aρ][y=bρ] = rρ[y=bρ][x=aρ] Ï R ρ[x:Aρ][y:Bρ] ⊆ R .
+(VE2).  -x =  Ï R .
+(VE3). Suppose r ρÏRρ ⊆ R -x. Since x Ì dom(r ρ), r ρ-x = r ρ.
+(VE4). Suppose r ρÏRρ ⊆ R . (rρ-x)-y = (rρ-y)-x Ï (Rρ-x)-y ⊆ R .
+(VE5). Suppose r ρÏRρ[x:Aρ] ⊆ R and x≠y.
+Then x Ï dom(rρ) and rρ-y.x = rρ.x Ï Aρ ⊆ V.
+(VE6). Suppose r ρÏRρ ⊆ R -x and aρÏAρ ⊆ V.
+Then x Ì dom(rρ) and rρ[x=aρ]-x = rρ.
+(VE7). Suppose r ρÏRρ ⊆ R -x, aρÏAρ ⊆ V and x≠y.
+Then x Ì dom(rρ) and (rρ[x=aρ])-y = (rρ-y)[x=aρ] Ï (R ρ[x:Aρ])-y ⊆ R .
+(VE8). Suppose r ρÏRρ ⊆ R -x, and aρÏAρ ⊆ V.
+Then x Ì dom(rρ) and (rρ[x=aρ])(x) = aρ.
+(VE9). Suppose r ρÏRρ[y:Bρ]-x ⊆ R , aρÏAρ ⊆ V and x≠y.
+Then Bρ ⊆ V, x Ì dom(rρ), y Ï dom(rρ), and (rρ[x=aρ])(y) = rρ(y) Ï Bρ.
+(VE10). Suppose r ρÏRρ ⊆ Sρ[x:Aρ] ⊆ R .
+Then rρÏSρ[x:Aρ], so that rρ=s[x=a] for some sÏSρ and aÏAρ.
+We have a=rρ(x)ÏRρ(x), and s=rρ-xÏRρ-x, hence rρ=(rρ-x)[x=rρ(x)],
+which is well-formed (is a member of (R ρ-x)[x:Rρ(x)]).
+M
+A construction giving R = äR\ x | x:R.xã
+System S2 is system S1 of Theorem 3.8.3 plus the rule (TE9).
+Theorem 3.9.7 (soundness):
+The inference rules of system S2 are sound with respect to the
+interpretation of judgments given in section 3.9.
+Proof
+The proof follows the general pattern of Theorem 3.8.3. The main new
+properties that are needed are proved as lemmas in section 3.9.
+In particular, (TE9) follows from Lemma 3.9.6. The formation rules
+come from Lemmas 3.9.2, 3.9.3, 3.9.4, and 3.9.5.
+M
+
+Page 51
+
+An extensional model construction
+System S3 is system S1 of Theorem 3.8.3 plus the rules (TE9) and (VC1b).
+Theorem 3.10.4 (soundness):
+The inference rules of system S3 are sound for the PER model
+construction given in section 3.10.
+Proof
+The proof follows the general pattern of Theorem 3.8.3, using the lemmas
+proved in section 3.10
+M
+
+Page 52
+
+References
+[Breazu-Tannen, et al. 1989] V. Breazu-Tannen, T. Coquand, C. Gunter, and A. Scedrov.
+Inheritance and explicit coercion. Proc. 4th Annual IEEE Symposium on Logic in
+Computer Science.
+[Bruce, Longo 1990] K.B. Bruce and G. Longo, A modest model of records,
+inheritance and bounded quantification, Information and Computation.
+Information and Computation 87(1/2), 196-240.
+[Bruce, Meyer, Mitchell 1990] K.B. Bruce, A.R. Meyer, and J.C. Mitchell, The
+semantics of second order lambda calculus. Information and Computation 85(1),
+76-134.
+[Cardelli 1988] L. Cardelli, A semantics of multiple inheritance. Information and
+Computation 76, 138-164.
+[Cardelli, et al. 1989] L. Cardelli, J. Donahue, L. Glassman, M. Jordan, B. Kalsow, and
+G. Nelson. Modula-3 report (revised). Research Report n.52. DEC Systems
+Research Center.
+[Cardelli, Wegner 1985] L. Cardelli and P. Wegner, On understanding types, data
+abstraction and polymorphism. Computing Surveys 17(4), 471-522.
+[Curien, Ghelli 1992] P.-L. Curien and G. Ghelli, Coherence of subsumption,
+minimum typing and type-checking in F≤ . Mathematical Structures in Computer
+Science 2(1), 55-91.
+[Dahl, Nygaard 1966] O. Dahl and K. Nygaard, Simula, an Algol-based simulation
+language. Communications of the ACM 9, 671-678.
+[Girard 1971] J.-Y. Girard. Une extension de l'interprétation de Gödel à l'analyse, et
+son application à l'élimination des coupures dans l'analyse et la théorie des types.
+Proc. Second Scandinavian Logic Symposium. North-Holland.
+[Girard 1972] J.-Y. Girard. Interprétation fonctionelle et élimination des coupures
+dans l'arithmétique d'ordre supérieur. Thèse de doctorat d'état, University of Paris.
+[Jategaonkar, Mitchell 1988] L.A. Jategaonkar and J.C. Mitchell. ML with extended
+pattern matching and subtypes. ACM Conference on Lisp and Functional
+Programming.
+[Longo, Moggi 1991] G. Longo and E. Moggi, Constructive natural deduction and its
+‘ω-set’ interpretation. Mathematical Structures in Computer Science 1(2).
+[Meyer 1988] B. Meyer, Object-oriented software construction. Prentice Hall.
+[Milner 1978] R. Milner, A theory of type polymorphism in programming. Journal of
+Computer and System Sciences 17, 348-375.
+[Mitchell 1984] J.C. Mitchell. Coercion and type inference. Proc. 11th Annual ACM
+Symposium on Principles of Programming Languages.
+[Mitchell 1986] J.C. Mitchell. A type inference approach to reduction properties and
+semantics of polymorphic expressions (summary). Proc. Symposium on Lisp and
+Functional Programming.
+[Mitchell 1990] J.C. Mitchell, Type systems for programming languages. In Handbook
+of Theoretical Computer Science, J. van Leeuwen, ed. North Holland. 365-458.
+[Ohori, Buneman 1988] A. Ohori and P. Buneman. Type inference in a database
+programming language. Proc. ACM Conference on LISP and Functional
+Programming.
+[Ohori, Buneman, Breazu-Tannen 1988] A. Ohori, P. Buneman, and V. Breazu-Tannen.
+Database programming in Machiavelli - a polymorphic languaage with static
+type inference. Report MS-CIS-88-103. University of Pennsylvania, Computer and
+Information Science Dept.
+Page 53
+
+[Rémy 1989] D. Rémy. Typechecking records and variants in a natural extension of
+ML. Proc. 16th Annual ACM Symposium on Principles of Programming Languages.
+[Reynolds 1974] J.C. Reynolds. Towards a theory of type structure. Proc. Colloquium
+sur la programmation. Lecture Notes in Computer Science 19. Springer-Verlag.
+[Schaffert, et al. 1986] C. Schaffert, T. Cooper, B. Bullis, M. Kilian, and C. Wilpolt. An
+introduction to Trellis/Owl. Proc. ACM Conference on Object Oriented
+Programming Systems, Languages, and Applications.
+[Stroustrup 1986] B. Stroustrup, The C++ programming language. Addison-Wesley.
+[Wand 1987] M. Wand. Complete type inference for simple objects. Proc. 2nd Annual
+IEEE Symposium on Logic in Computer Science.
+[Wand 1989] M. Wand. Type inference for record concatenation and multiple
+inheritance. Proc. 4th Annual IEEE Symposium on Logic in Computer Science.
+
+Page 54
+
+

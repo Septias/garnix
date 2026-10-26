@@ -1,0 +1,1359 @@
+A Polymorphic Type System for Extensible Records and Variants
+Benedict R. Gaster and Mark P. Jones
+Technical report NOTTCS-TR-96-3, November 1996
+Department of Computer Science, University of Nottingham,
+University Park, Nottingham NG7 2RD, England.
+{brg,mpj}@cs.nott.ac.uk
+
+Abstract
+Records and variants provide flexible ways to construct
+datatypes, but the restrictions imposed by practical
+type systems can prevent them from being used in flexible ways. These limitations are often the result of concerns about efficiency or type inference, or of the difficulty in providing accurate types for key operations.
+This paper describes a new type system that remedies these problems: it supports extensible records and
+variants, with a full complement of polymorphic operations on each; and it offers an effective type inference algorithm and a simple compilation method. It is a practical system that can be understood and implemented
+as a natural extension of languages like Standard ML
+and Haskell. In an area that has already received a
+great deal of attention from the research community,
+the type system described here is the first to combine
+all of these features in a practical framework.
+One important aspect of this work is the emphasis
+that it places on the use of rows in the construction of
+record and variant types. As a result, with only small
+extensions of the core type system, we are able to introduce new, powerful operations on records using features
+such as row polymorphism and first-class labels.
+
+1
+
+Introduction
+
+Products and sums play fundamental roles in the construction of datatypes: products describe grouping of
+data items, while sums express choices between alternatives. For example, we might represent a date as a
+product, with three integer components specifying the
+day, month, and year:
+Date = Int × Int × Int.
+For a simple example of a sum, consider the type of
+input events to a window system, with one alternative
+indicating that a character has been entered on the key-
+
+board, and another indicating a mouse click at a particular point on the screen:
+Event = Char + Point.
+These definitions are adequate, but they are not particularly easy to work with in practice. For example, it
+is easy to confuse datatype components when they are
+accessed by their position within a product or sum, and
+programs written in this way can be hard to maintain.
+To avoid these problems, many programming languages allow the components of products, and the alternatives of sums, to be identified using names drawn
+from some given set of labels. Labelled products are
+more commonly known as records or structs, while labelled sums are perhaps better known as variants or
+unions. For example, the Date and Event datatypes
+described above might be defined more attractively as:
+Date = Rec {|day:Int, month:Int, year :Int|}
+Event = Var {|key:Char , mouse:Point|}.
+This notation captures a common feature in the construction of record and variant types, using rows of the
+form {|l1 :τ1 , . . . , ln :τn |} to describe mappings that associate a type τi with each of the (distinct) labels li .
+Record types are obtained by preceding rows with the
+symbol Rec. Variant types are constructed using Var .
+For example, if r = {|l1 :τ1 , . . . , ln :τn |} and e1 ,. . . ,en have
+types τ1 ,. . . ,τn , respectively, then we can form a record
+(l1 = e1 , . . . , ln = en ) of type Rec r , or distinct variants, hl1 = e1 i, . . . , hln = en i, each of type Var r . Thus,
+(day = 25, month = 12, year = 1996) and hkey = 0 a 0 i
+represent values of type Date and Event, respectively.
+
+1.1
+
+Polymorphism and extensibility
+
+Unfortunately, practical languages are often less flexible in the operations that they provide to manipulate
+records and variants. For example, many languages—
+from C to Standard ML (SML)—will only allow the programmer to select the l component, r .l , from a record r
+
+if the type of r is uniquely determined at compile-time1 .
+These languages do not support polymorphic operations
+on records—such as a general selector function ( .l ) that
+will extract a value from any record that has an l field.
+A further weakness in many of these languages is that
+they provide no real support for extensibility; there are
+no general operators for adding a field, removing a field,
+renaming a field, or replacing a field (possibly with a
+value of a different type) in a record value.
+There have been many previous attempts to design
+type systems for records and variants that support polymorphism and extensibility. Such work is important,
+not just in its own right, but also in its application to
+the study of object-oriented or database programming
+languages where these facilities seem particularly useful. We will summarize the key features of some of these
+earlier systems here before describing our own proposal.
+
+selection operator ( .l ) has type:
+∀α.∀r .Rec {|l : α | r |} → α.
+However, the operations and types in Wand’s system
+are unchecked; for example, extending a row with an l
+field may either add a completely new field, or replace
+an existing field labelled with l . As a result, some programs do not have principal types [27].
+
+Flags: Rémy has developed a flexible treatment for
+extensible records and variants in a natural extension of
+ML [23]. A key feature of his system is the use of flags
+to encode both positive and negative information—that
+is, to indicate which fields must be present, and which
+must be absent. Again, a concept of row variables is
+used to deal with other fields whose presence or absence
+is not significant in a particular situation. For example,
+the selection operator has type:
+
+Subtyping: Subtyping is one of the most widely used
+techniques for building type systems for records and
+variants [3, 5, 4, 21]. We can define a subtyping relation
+by specifying that a row r1 is a subrow of r2 , written
+r1 ≤ r2 , if r1 contains all the fields of r2 , and possibly
+more. The intuition here is that, for example, a record
+of type Rec r1 could be used in any context where a
+value of type Rec r2 is expected, and conversely, that a
+variant of type Var r2 can be substituted in any context
+where a value of type Var r1 is required. In particular,
+the selection operator ( .l ) can be treated as a function
+of type:
+∀α.∀r ≤ {|l :α|}.Rec r → α.
+
+∀α.∀r .Rec {|l : pre(α) | r |} → α,
+where pre(α) is a flag indicating the presence of a field
+of type α, and r is a row variable representing the rest
+of the record. Intuitively, records in Rémy’s system
+are represented by tuples with a slot for each possible
+label. The type system prevents access to undefined
+components, but does not lead directly to a simple and
+efficient implementation.
+
+Predicates: Harper and Pierce [8, 7] studied type
+systems for extensible records using predicates on types
+to capture information about presence or absence of
+fields, and to restrict attention to checked operations.
+For example, writing r1 #r2 for the assertion that the
+rows r1 and r2 have disjoint sets of labels, the selection
+operator operator ( .l ) has type:
+
+This operation is implemented, at least conceptually,
+by coercing from Rec r to a known type—the singleton
+Rec {|l :α|}—and then extracting the required field. One
+weakness of this approach is that information about the
+other fields in the record is lost, so it is harder to describe operations like record extension. For example,
+observing that bounded quantification is not by itself
+sufficient, Cardelli and Mitchell [5] used an overriding
+operator on types to overcome this problem.
+
+∀α.∀r .(r #{|l : α|}) ⇒ Rec (r k {|l : α|}) → α,
+where r1 k r2 is the row obtained by merging r1 and r2 ,
+and is only defined if r1 #r2 . Harper and Pierce’s work
+does not deal with variants, type inference, or compilation, and does not provide an operational interpretation
+of predicates. However, their approach to record typing
+was one of the motivating examples in Jones’ work on
+qualified types [11] where a general framework for type
+inference and compilation was developed, including a
+type system for records as a special case. One of the
+achievements of the present paper is to refine and extend that work to a practical system, avoiding problems
+such as the lack of most general unifiers in Jones’ full
+system—the result of including record restriction in the
+type language.
+
+Row extension: Motivated by studies of objectoriented programming, Wand [26] introduced the concept of row variables to allow incremental construction
+of record and variant types. For example, a record of
+type Rec {|l : τ | r |} has all of the fields of a record of
+type Rec r , together with a field l of type τ . Wand
+did not discuss compilation, but his approach supports
+both polymorphism and extensibility. For example, the
+1
+In implementations using boxed representations for values, only
+the set of labels in r is needed; the actual component types are not
+required.
+
+2
+
+Kinds: Ohori [18] described a type system that ex-
+
+2
+
+tends SML with polymorphic operations on both records
+and variants. Significantly, Ohori also presented a simple and effective compilation method: input programs
+are translated into a target language that adds extra parameters to specify field offsets. In fact, the end result
+is much the same as that suggested by Jones’ work on
+qualified types, even though the two approaches were
+developed independently. But Ohori’s work differs substantially from other systems in its use of a kind system;
+this allows variables ranging over record types to be annotated with a specification of the fields that they are
+expected to contain. For example, the selection operator operator ( .l ) has type:
+
+Both record and variant types are defined in terms of
+rows, and these are constructed by extension, starting
+from the empty row, {||}. It is convenient to introduce
+abbreviations for rows obtained in this way:
+{|l1 :τ1 , . . . , ln :τn | r |} = {|l1 :τ1 | . . . {|ln :τn | r |} . . . |}
+{|l1 :τ1 , . . . , ln :τn |}
+= {|l1 :τ1 , . . . , ln :τn | {||}|}.
+Note, however, that we treat rows, and hence record or
+variant types, as equals if they include the same fields,
+regardless of the order in which those fields are listed.
+
+2.1
+
+∀α.∀r {|l:α|} .Rec r → α.
+
+Basic operations
+
+Intuitively, a record of type Rec {|l : α | r |} is like a pair
+whose first component is a value of type α, and whose
+second component is a record of type Rec r . This motivates our choice of basic operations on records, which
+correspond directly to the two projections and the pairing constructor for products in category theory or logic.
+There is, however, one complication; we do not allow repeated uses of any label within a particular row, so the
+expression {|l : α | r |} is only valid if l does not appear
+in r . This is reflected by prefixing each of the types below with a predicate (r \l ), pronounced “r lacks l ”, that
+restricts instantiation of r to rows without an l field:
+
+The main limitation of Ohori’s type system is its lack
+of support for extensibility.
+
+1.2
+
+Overview
+
+This paper
+
+The type system described in this paper combines many
+of the ideas that have been used in previous work into a
+practical type system for implicitly typed languages like
+SML [16] and Haskell [20]. In particular, it supports
+polymorphism and extensibility, records and variants,
+type inference, and compilation. The type system is
+an application of qualified types, extended to deal with
+a general concept of rows. Positive information about
+the fields in a given row is captured in the type language using row extension, while negative information
+is reflected by the use of predicates.
+The most obvious benefit of this approach is that
+we can adapt results and properties from the general
+framework of qualified types—such as the type inference algorithm and the compilation method—without
+having to go back to first principles. The result is a considerable simplification of both the overall presentation
+and of specific proofs. Another important advantage of
+this approach is that it guarantees compatibility with
+other applications of qualified types. For example, our
+type system can be used—and indeed, has already been
+used in our prototype implementation—in conjunction
+with the type class mechanisms of Haskell.
+The remaining sections of this paper are as follows.
+Section 2 provides a general overview of our new type
+system, with a more detailed formal presentation in Section 3. This is followed by discussions of type inference
+in Section 4 and compilation in Section 5. With some
+small extensions to the core system, Section 6 shows
+how our framework can be used to support some new,
+powerful operations on records and variants using row
+polymorphism and labels as first-class values. Finally,
+Section 7 concludes with pointers to further work.
+
+• Selection: to extract the value of a field l :2
+( .l ) :: (r \l ) ⇒ Rec {|l : α | r |} → α.
+• Restriction: to remove a field labelled l :
+( − l ) :: (r \l ) ⇒ Rec {|l : α | r |} → Rec r .
+• Extension: to add a field l to an existing record:
+(l = | ) :: (r \l ) ⇒ α → Rec r → Rec {|l : α | r |}.
+We can use these basic operations to implement a number of additional operators, including:
+• Update/replace: to update the value in a particular field, possibly with a value of a different type:
+(l := | )
+
+::
+
+(r \l ) ⇒ α → Rec {|l : β | r |}
+→ Rec {|l : α | r |}
+(l := x | r ) = (l = x | r − l )
+
+2
+To simplify the notation, we assume implicit universal quantification over free type variables. For example, the full type of the
+selection operator is ∀r .∀α.(r \l) ⇒ Rec {|l : α | r |} → α.
+
+3
+
+the most frequently used basic operation. A naive approach would be to represent a record by an association
+list, pairing labels with values. This would allow simple
+implementations for each of the basic operations, with
+the type system providing a guarantee that the search
+for any given labelled field would not fail. A major disadvantage is that it does not allow constant time access
+to record components.
+To avoid these problems, we will assume instead that
+a record value is represented by a contiguous block of
+memory that contains a value for each individual field.
+To select a particular component r .l from a record r ,
+we need to know the offset of the l field in the block of
+memory representing r . Languages without polymorphic selection will usually only allow an expression of
+the form r .l if the offset value, and hence the structure
+or even the full type of r , is known at compile-time.
+However, it is not actually necessary to know the
+position of every field at compile-time; instead, we can
+treat unknown offsets as implicit parameters whose values will be supplied at run-time when the full types of
+the records concerned are known. This is essentially
+the compilation method that was used by Ohori [18],
+and also suggested, independently, by Jones [11]. If
+we forget about typing issues for a moment and assume that records are implemented as arrays or tuples, then the ( .l ) operator can be implemented by a
+function λi .λr .r [i ], using the extra parameter i to supply the offset of l in r . For example, the expression:
+(day = 25, month = 12, year = 1996).day can be implemented by compiling it to:
+
+• Renaming: to change the label attached to a particular field:
+[l ← m]
+
+::
+
+(r \l , r \m) ⇒ Rec {|l : α | r |}
+→ Rec {|m : α | r |}
+r [l ← m] = (m = r .l | r − l )
+The empty record, (), plays an important role as the
+only proper value of type Rec {||}. Again, it is convenient
+to introduce abbreviations for the construction of record
+values by repeated extension:
+(l1 =e1 , . . . , ln =en | r ) = (l1 =e1 | . . . (ln =en | r ) . . .)
+(l1 =e1 , . . . , ln =en )
+= (l1 =e1 , . . . , ln =en | ())
+We can specify the basic operations on variants in a similar way. Again, they correspond closely to the standard
+operations on sums in category theory or logic:
+• Injection: to tag a value with the label l :
+hl = i :: (r \l ) ⇒ α → Var {|l : α | r |}.
+• Embedding: to embed a value in a variant type
+that also allows for a new label, l :
+hl | i :: (r \l ) ⇒ Var r → Var {|l : α | r |}.
+• Decomposition: to act on the value in a variant,
+according to whether or not it is labelled with l :
+(l ∈ ? : ) :: (r \l ) ⇒ Var {|l : α | r |}
+→ (α → β)
+→ (Var r → β)
+→ β.
+
+(λi .λr .r [i ]) 0 (25, 12, 1996)
+which evaluates to 25, as expected. Of course, there are
+run-time overheads in calculating and passing offset values as extra parameters. However, an attractive feature
+of our system is that these costs are only incurred when
+the extra flexibility of polymorphic selection is required.
+Each predicate (r \l ) in the type of a function signals
+the need for an extra run-time parameter to specify the
+offset at which a field labelled l would be inserted into
+a record of type Rec r . Obviously, the same offset can
+also be used to locate or remove the l field from a record
+of type Rec {|l : α | r |}, or treated as ordinal numbers to
+access and tag values in a variant. So, this one extra
+piece of information is all that we need to implement
+the basic operations.
+Operations like record extension and restriction will,
+in general, be implemented by copying. Optimizations
+can be used to combine multiple extensions or restrictions of records, avoiding unnecessary allocation and
+initialization of intermediate values. For example, a
+compiler can generate code that will allocate and initialize the storage for a record (x = 1, y = 2, z = 3) in
+
+The empty variant, hi, is the only value of type Var {||}.
+More sophisticated language constructs, for example, pattern matching facilities, or record update, are
+easily described using the operations listed here. In addition, we expect that practical implementations will
+use, but not display predicates implied by the context
+in which they appear. For example, all of the types
+above include a row {|l : α | r |} that is only valid if r \l ;
+so displaying this predicate is, in some sense, redundant. However, as we will see in the next section, this
+predicate plays a central role in the implementation of
+the basic operations.
+
+2.2
+
+Implementation details
+
+Our next task is to explain how the data structures and
+operations described above can be implemented. We
+will focus on the treatment of records and, in particular,
+the implementation of selection, ( .l), which is probably
+4
+
+morphism and overloading. In the current application, we use constraints to capture assumptions
+about the occurrences of labels within rows.
+
+a single step, rather than a sequence of three individual allocations and extensions as a naive interpretation
+might suggest.
+The typechecker gathers and simplifies the predicates generated by each use of an operator on records or
+variants. For example, if today is a value of type Date,
+then an expression like today.month will generate a single constraint, {|day : Int, year : Int|}\month. Predicates like this, involving rows whose structure is known
+at compile-time, are easily discharged by calculating the
+appropriate offset value. Obviously, a compiler can use
+this information to produce efficient code by inlining
+and specializing the selector function, ( .month).
+Predicates that are not discharged within a section
+of code will, instead, be reflected in the type assigned
+to it. For example, there is nothing in the following
+definition to indicate the full type of d :
+newYear d
+
+• A higher-order version of the Hindley-Milner type
+system [9, 15, 6], originally introduced in the study
+of constructor classes [12]. Amongst other things,
+this provides a simple way to introduce the new
+constructs for rows, records, and variants without
+the need for special, ad-hoc syntax.
+We split the presentation into sections: kinds (Section 3.1), types and constructors (Section 3.2), predicates (Section 3.3), and typing rules (Section 3.4).
+
+3.1
+
+One of the most important aspects of the work described here is the use of a kind system to distinguish
+between different kinds of type constructor. Formally,
+the set of kinds is specified by the following grammar:
+
+= d .day = 1 ∧ d .month = 1,
+
+so the inferred type will be:
+
+κ ::= ∗
+the kind of all types
+| row
+the kind of all rows
+| κ1 → κ2 function kinds
+
+(r \day, r \month) ⇒
+Rec {|day : Int, month : Int | r |} → Bool .
+We would not expect this definition to have been accepted at all by a compiler for SML which requires the
+set of labels in a record to be uniquely determined by
+‘program context’. But the meaning of this phrase is
+defined only loosely by an informal note in the definition of SML [16]. Now, with the ideas used in this
+paper, there is a way to make this precise: a definition is only acceptable in SML if the inferred type does
+not contain any predicates. For programs written with
+these restrictions, a language based on our type system
+should offer the same levels of performance as SML.
+It is possible that our more general treatment of
+record operations could result in compiled programs
+that are littered with unwanted offset parameters; experience with our prototype implementations will help
+to substantiate or dismiss these concerns. In any case,
+there are simple steps that can be taken to avoid such
+problems. For example, a compiler might reject any
+definition with an inferred type containing predicates,
+unless an explicit type signature has been given to signal the programmer’s acceptance. This is closely related
+to the monomorphism restriction in Haskell [20] and to
+proposals for a value restriction in SML [29, 13].
+
+3
+
+Kinds
+
+Intuitively, the kind κ1 → κ2 represents constructors
+that take something of kind κ1 and return something of
+kind κ2 . The row kind is new to the system presented
+here and was not part of the type system used in the
+development of constructor classes.
+
+3.2
+
+Types and constructors
+
+For each kind κ, we have a collection of constructors
+C κ (including variables ακ ) of kind κ:
+C κ ::=
+|
+|
+τ
+::=
+
+χκ
+ακ
+0
+0
+C κ →κ C κ
+C∗
+
+constants
+variables
+applications
+types
+
+The usual collection of types, represented here by the
+symbol τ , is just the constructors of kind ∗. For the purposes of this paper, we assume that the set of constant
+constructors includes at least the following, writing χ::κ
+to indicate the kind κ associated with each constant χ:
+→
+{||}
+{|l : | |}
+Rec
+Var
+
+Formal presentation
+
+This section provides a formal presentation of our type
+system, based on two particular ingredients:
+
+::
+::
+::
+::
+::
+
+∗→∗→∗
+row
+∗ → row → row
+row → ∗
+row → ∗
+
+function space
+empty row
+extension, for each l
+record construction
+variant construction
+
+For example:
+
+• The theory of qualified types [11], which provides
+a general framework for describing restricted poly-
+
+• The result of applying the function space constructor → to two types τ and τ 0 is the type of functions
+5
+
+from τ to τ 0 , and is written as τ → τ 0 in more conventional notation.
+
+example, is only valid if the row r does not contain a
+field labelled with l .
+One way to achieve this is to use a more sophisticated
+kind system, with sets of labels, L, as kinds instead of
+the single row kind. For example, rows with field labels
+l1 ,. . . ln can be represented by the kind L = {l1 , . . . , ln };
+this is essentially the approach adopted by Ohori [18].
+Unfortunately, this becomes much more complicated if
+we try to extend it to deal with extensible rows. In
+particular, we would need to assign whole families of
+kinds, indexed by label sets, L, to some of the constructor constants introduced in the previous section:
+
+• The result of applying the Rec constant to the
+empty row {||} of kind row is the type Rec {||} of
+kind ∗.
+• The result of applying an extension constructor
+{|l : | |} to a type τ and a row r is a row, usually
+written as {|l :τ | r |}, obtained by extending r with a
+field labelled l of type τ . Note that we include an
+extension constructor for each different label l . To
+avoid problems later, we will also need to prohibit
+partial application of extension constructors.
+
+{|l : | |}
+Rec, Var
+
+The kind system is used to ensure that type expressions
+are well-formed. While it is sometimes convenient to annotate individual constructors with their kinds, there is
+no need in practice for a programmer to supply these
+annotations. Instead, they can be calculated automatically using a simple kind inference process [12].
+We consider two rows to be equivalent if they include
+the same fields, regardless of the order in which they are
+listed. This is described formally by the equation:
+
+The alternative that we adopt in this paper is based
+on the theory of qualified types [11], using predicates to
+capture any side conditions that are required to ensure
+that a given type expression is valid. In fact, only a
+single form of predicate is needed for this purpose:
+π ::= C row \l
+
+and extends in the obvious way to an equality on arbitrary constructors.
+For the purposes of later sections, we define a membership relation, (l : τ )∈r , to describe when a particular
+field (l : τ ) appears in a row r :
+(l : τ )∈{|l : τ | r |}
+
+(l : τ )∈{|l 0 : τ 0 | r |}
+
+P ∪ {π} `` π
+
+0
+
+(l 6= l )
+
+l 6= l 0
+
+P `` {|l 0 : τ | r |}\l
+
+P `` {||}\l
+
+tion of P `` π from these rules can be understood as
+a proof that, if all of the predicates in the set P hold,
+then so does π. It is easy to prove that the relation ``
+is well-defined with respect to equality of constructors.
+
+= r
+= {|l 0 : τ | r − l |}.
+
+It is easy to prove that these operations are well-defined
+with respect to the equality on constructors, and to
+confirm intuitions about their interpretation by showing
+that, if (l : τ )∈r , then r = {|l : τ | r − l |}.
+
+3.3
+
+P `` r \l
+
+Figure 1: Predicate entailment for rows.
+
+and a restriction operation, r − l , that returns the row
+obtained from r by deleting the field labelled l :
+{|l : τ | r |} − l
+{|l 0 : τ | r |} − l
+
+predicates
+
+Intuitively, the predicate r \l can be read as an assertion that the row r does not contain an l field. More
+precisely, we explain the meaning of predicates using
+the entailment relation defined in Figure 1. A deriva-
+
+{|l :τ, l 0 :τ 0 | r |} = {|l 0 :τ 0 , l :τ | r |},
+
+(l : τ )∈r
+
+:: ∗ → L → (L ∪ {l }) l 6∈ L
+:: L → ∗
+
+3.4
+
+Typing rules
+
+Following Damas and Milner [6], we distinguish between
+the simple types, τ , described above, and type schemes,
+σ, described by the grammar below:
+
+Predicates
+
+σ ::= ρ | ∀α.ρ
+ρ ::= τ | π ⇒ τ
+
+The syntax for rows allows examples like {|l : τ, l : τ 0 |}
+where a single label appears in more than one field.
+While this might be useful in some applications, it is not
+appropriate for work with records or variants where we
+allow at most one field with any given label. Clearly,
+some additional mechanisms are needed to enable us
+to specify that a type of the form Rec {|l : τ | r |}, for
+
+type schemes
+qualified types
+
+Restrictions on the instantiation of universal quantifiers, and hence on polymorphism, are described by encoding the required constraints as a set of predicates,
+P , in a qualified type of the form P ⇒ τ . The set of
+free type variables in a object X is written as TV (X ).
+6
+
+The term language is just core-ML, an implicitly
+typed λ-calculus, extended with constants and a let
+construct, and described by the following grammar:
+E
+
+feature is the introduction of inserters in Section 4.1 to
+account for non-trivial equalities between row expressions during unification.
+
+::= x | c | E F | λx .E | let x = E in F
+
+4.1
+
+We assume that the set of constants c includes the operations and values required for manipulating records
+and variants as described in Section 2, and that each
+constant c is assigned a closed type scheme, σc .
+The typing rules are presented in Figure 2. A judgement of the form P | A ` E : σ represents an assertion
+that, if the predicates in P hold, then the term E has
+type σ, using assumptions in A to provide types for free
+variables. These are just the standard rules for qualified
+
+(const)
+
+id
+
+(id )
+
+C ∼C
+
+[C /α]
+α ∼ C 
+
+(x : σ) ∈ A
+(bind )
+
+P |A ` x : σ
+0
+
+(→I )
+
+Unification is a standard tool in type inference, and is
+used, for example, to ensure that the formal and actual
+parameters of a function have the same type. Formally,
+a substitution3 S is a unifier of constructors C , C 0 ∈ C κ
+if SC = SC 0 , and is a most general unifier of C and C 0
+if every unifier of these two constructors can be written
+in the form RS , for some substitution R.
+The rules in Figure 3 provide an algorithm for cal-
+
+P | A ` c : σc
+
+(var )
+(→E )
+
+Unification and insertion
+
+P |A ` E : τ → τ
+
+P |A ` F : τ
+
+[C /α]
+
+C ∼ α
+
+0
+
+(apply)
+
+P | Ax , x : τ 0 ` E : τ
+
+C ∼C 0
+
+U 0U
+
+I
+
+(⇒E )
+(⇒I )
+
+(let)
+
+P `` π
+
+(row )
+
+U
+
+Ir ∼(Ir 0 − l )
+UI
+
+P ∪ {π} | A ` E : ρ
+P |A ` E : π ⇒ ρ
+
+Figure 3: Kind-preserving unification.
+
+P | A ` E : ∀α.σ
+
+culating unifiers, writing C ∼C 0 for the assertion that
+U is a unifier of the constructors C , C 0 ∈ C κ . The
+first three rules are standard [25], and are even suitable for unifying two row expressions that list exactly
+the same components with exactly the same ordering in
+each. But the fourth rule, (row ), is needed to deal with
+the more general problems of row unification.
+To understand how this rule works, consider the task
+of unifying two rows {|l : τ | r |} and {|l 0 : τ 0 | r 0 |}, where l ,l 0
+are distinct labels, and r ,r 0 are distinct row variables.
+Our goal is to find a substitution S such that:
+
+U
+
+P | A ` E : [τ /α]σ
+P |A ` E : σ
+
+α 6∈ TV (A) ∪ TV (P )
+
+P | A ` E : ∀α.σ
+P |A ` E : σ
+
+Q | Ax , x : σ ` F : τ
+
+P , Q | A ` (let x = E in F ) : τ
+Figure 2: Typing rules.
+
+types [11], extending the rules of Damas and Milner [6]
+to account for the use of predicates. Note that uses of
+the symbols τ , ρ, and σ in these rules is particularly
+important in restricting their application to particular
+classes of types or type schemes.
+
+4
+
+(l : τ )∈r 0
+
+{|l : τ | r |} ∼ r 0
+
+P |A ` E : ρ
+
+(∀E )
+(∀I )
+
+UD ∼ UD 0
+
+CD ∼ C 0 D 0
+
+P | A ` λx .E : τ 0 → τ
+P |A ` E : π ⇒ ρ
+
+α 6∈ TV (C )
+
+U0
+
+U
+
+P | A ` EF : τ
+
+
+
+{|l : S τ | Sr |} = S {|l : τ | r |}
+= S {|l 0 : τ 0 | r 0 |}
+= {|l 0 : S τ 0 | Sr 0 |}.
+Clearly, the row on the left includes an (l : S τ ) field,
+while the last row on the right includes an (l 0 : S τ 0 )
+field. If these two types are to be equal, then we must
+
+Type Inference
+
+3
+For the purposes of this paper, we restrict our attention to kindpreserving substitutions; that is, to substitutions that map variables
+α ∈ C κ to constructors of the corresponding kind, κ.
+
+This section provides a formal presentation of a type inference algorithm for our system. The most important
+7
+
+choose the substitution S so that it will ‘insert’ the missing fields into the two rows r 0 and r , respectively. In
+this particular case, assuming that r , r 0 6∈ TV (τ, τ 0 ),
+then we can choose:
+
+(var )W
+
+(x : ∀αi .P ⇒ τ ) ∈ A βi new
+W
+
+[βi /αi ]P | A ` x : [βi /αi ]τ
+
+S = [{|l 0 : τ 0 | r 00 |}/r , {|l : τ | r 00 |}/r 0 ]
+
+W
+
+P | TA ` E : τ
+
+00
+
+where r is a new type variable.
+More generally, we will say that a substitution S is
+an inserter of (l : τ ) into r ∈ C row if (l : S τ ) ∈ Sr . S
+is a most general inserter of (l : τ ) into r if every such
+inserter can be written in the form RS , for some substitution R. The rules in Figure 4 define an algorithm for
+
+(→E )
+
+T 0τ ∼ τ 0 → α
+
+α new
+
+0
+
+W
+
+W
+
+0
+
+U (T P ∪ Q) | UT TA ` EF : U α
+W
+
+(→I )W
+
+calculating inserters, writing (l : τ )∈r for the assertion
+that I is an inserter of (l : τ ) into r ∈ C row . Note that
+
+P | T (Ax , x : α) ` E : τ
+
+P | TA ` λx .E : T α → τ
+W
+
+0
+
+0
+
+∈
+
+I
+
+(inTail )
+
+(l : τ )∈r
+
+0
+
+r , r 6∈ TV (τ ), r new
+
+(let)
+
+W
+
+l 6= l 0
+
+α new
+
+W
+
+P | TA ` E : τ
+(inVar ) (l : τ )
+
+W
+
+U
+
+I
+
+[{|l:τ|r |}/r ]
+
+Q | T 0 TA ` F : τ 0
+
+σ = Gen(TA, P ⇒ τ )
+
+0
+
+P | T (TAx , x : σ) ` F : τ 0
+W
+
+P 0 | T 0 TA ` (let x = E in F ) : τ 0
+W
+
+Figure 5: Type inference algorithm W.
+
+I
+
+(l : τ )∈{|l 0 : τ | r |}
+to calculate the generalization of a qualified type ρ with
+respect to a type assignment A. This is defined as:
+
+U
+
+(inHead )
+
+τ ∼τ 0
+U
+
+(l : τ )∈{|l : τ | r |}
+
+Gen(A, ρ) = ∀αi .ρ, where {αi } = TV (ρ)\TV (A).
+The type inference algorithm is both sound and complete with respect to the original typing rules.
+
+Figure 4: Kind-preserving insertion.
+
+Theorem 2 The algorithm described by the rules in
+Figure 5 can be used to calculate a principal type for
+a given term E under assumptions A. The algorithm
+fails precisely when there is no typing for E under A.
+
+the last rule here, (inHead ), makes use of the unification algorithm in Figure 3, so the two algorithms are
+mutually recursive. The important properties of the
+two algorithms—both soundness and completeness—
+are captured in the following result:
+
+5
+
+Theorem 1 The unification (insertion) algorithm defined by the rules in Figure 3 (Figure 4) calculates mostgeneral unifiers (inserters) whenever they exist. The algorithm fails precisely when no unifier (inserter) exists.
+
+4.2
+
+Compilation
+
+Previously, we have described informally how programs
+involving operations on records and variants can be
+compiled and executed using a language that adds extra
+parameters to supply appropriate offsets. This section
+shows how this process can be formalized, including the
+calculation of offset values.
+
+A type inference algorithm
+
+Given the unification algorithm described in the previous section, we can use the type inference algorithm
+for qualified types [11] as a type inference algorithm for
+the type system presented in this paper. For completeness, we include a definition of the algorithm using the
+rules in Figure 5. Following Rémy [23], these rules can
+be understood as an attribute grammar; in each typW
+ing judgement P | TA ` E : τ , the type assignment
+A and the term E are inherited attributes, while the
+predicate assignment P , type τ , and substitution T are
+synthesized. The (let)W rule uses an auxiliary function
+
+5.1
+
+Compilation by translation
+
+In the general treatment of qualified types [11], programs are compiled by translating them into a language
+that adds extra parameters to supply evidence for predicates appearing in the types of the values concerned.
+The whole process can be described by extending the
+typing rules to use judgements of the form:
+P |A ` E ; E0 : σ
+8
+
+which include both the original source term E and a
+possible translation, E 0 . A further change here is the
+switch from predicate sets to predicate assignments; the
+symbol P used above represents a set of pairs (v : π)
+in which no variable v appears twice. Each variable v
+corresponds to an extra parameter that will be added
+during compilation; v can be used whenever evidence
+for the corresponding predicate π is required in E 0 .
+In the current setting, predicates are expressions of
+the form (r \l ) whose evidence is the offset in r at which
+a field labelled l would be inserted. The calculation of
+evidence is described by the rules in Figure 6, which
+
+This tells us that we need to supply suitable evidence
+e in the translation of any program whose type is qualified by a predicate π. The second rule is analogous to
+function abstraction, and allows us to move constraints
+from the predicate assignment P into the inferred type:
+P ∪ {v : π} | A ` E ; E 0 : ρ
+P | A ` E ; λv .E 0 : π ⇒ ρ
+These two rules are direct extensions of (⇒E ) and (⇒I )
+in Figure 2, and combined with simple extensions of the
+other rules there, we can construct a translation for any
+term in the source calculus.
+
+P ∪ {v : π} `` v : π
+P `` e : (r \l )
+P `` m : ({|l 0 : τ | r |}\l )
+
+6
+(
+m=
+
+e,
+
+The type system that we have described in the previous
+sections offers a flexible, but fairly conventional set of
+operations on records and variants. In this section we
+consider two extensions to the original system. Section
+6.1 describes a generalization of the record and variant
+operations to include, amongst others, first-class extensible case statements. Section 6.2 shows how the system
+can be modified to allow labels to be treated as firstclass values.
+
+l < l0
+
+e + 1, l 0 < l
+
+P `` 0 : ({||}\l )
+Figure 6: Predicate entailment for rows with evidence.
+are direct extensions of the earlier rules for predicate
+entailment that were given in Figure 1. Intuitively, a
+derivation of P `` e : π tells us that we can use e as
+evidence for the predicate π in any environment where
+the assumptions in P are valid. The second rule is the
+most interesting and tells us how to find the position at
+which a label l should be inserted in a row {|l 0 : τ | r |}:
+
+6.1
+
+Row polymorphism
+
+Working with a general notion of rows has provided us
+with an elegant way to deal with the common structure
+in record and variant types. However, we have not seen
+any compelling examples in the previous sections where
+it was essential to consider rows separately from records
+and variants; we could have just defined completely independent sets of record and variant types.
+However, there are some applications in which the
+ability to separate rows from records and variants offers
+significant benefits. To illustrate this, consider again
+the basic operations that were discussed in Section 2.
+For example, if we generalize the rules in category theory or logic for decomposing a sum to deal with n-ary
+sums, then we obtain the following rule:
+
+• If l comes before l 0 in the total ordering, <, on
+labels, then the required offset will be the same as
+the offset e of l in r .
+• But, if l 0 comes before l , then we need to use an
+offset of e + 1 to account for the insertion of l 0 .
+In general, these rules calculate offsets that are either a
+fixed natural number, or a fixed offset from one of the
+variables in P . For simplicity, we have assumed a boxed
+representation in which all record components occupy
+the same amount of storage. It is actually quite easy to
+allow for varying component sizes by replacing e + 1 in
+the calculation above with e + size(τ ).
+For reasons of space, we omit the complete description of translation from this paper, and restrict ourselves instead to describing the two rules that account
+for the use and introduction of offset parameters. The
+first of these is a variation on function application:
+P |A ` E ; E0 : π ⇒ ρ
+
+Extensions
+
+A1 → C . . . An → C
+.
+A1 + . . . + An → C
+In terms of records and variants, this rule provides a
+method for decomposing a variant—represented by the
+sum A1 + . . . + An in the conclusion—using a record
+of functions—represented by the hypotheses Ai → C .
+This suggests a general operation for variant elimination:
+
+P `` e : π
+
+plusElim :: ∀α.∀r .Rec (to α r ) → Var r → α.
+
+0
+
+P |A ` E ; E e : ρ
+9
+
+The to τ r construct used here is defined as follows:
+
+kind system that distinguishes between empty and nonempty rows. We leave further investigation of this topic
+to future work.
+
+to τ {||}
+= {||}
+to τ {|l : τ 0 | r |} = {|l : τ 0 → τ | to τ r |}.
+This behaves like a particular kind of map operation on
+rows, replacing each component type τ 0 in r with a type
+of the form τ 0 → τ .
+For an example of where such an operation may
+prove useful, consider the type of integer lists that can
+be obtained as a fixpoint of the following functor [14]:
+data L l
+
+6.2
+
+In previous sections of the paper, we have considered
+the labels used to refer to fields as part of the basic
+syntax of our language. As a result, we had to describe
+selection from a record using a family of functions:
+( .l ) :: (r \l ) ⇒ Rec {|l : α | r |} → α,
+
+= L (Var {|nil : Rec {||},
+cons : Rec {|tl : l , hd : Int|}|})
+
+with one function for each choice of label l . A more
+attractive approach might be to allow primitive operations on records and variants to be parameterized over
+labels. We can extend the type system described in previous sections to accomplish this, treating selection, for
+example, as a single function of type:
+
+The sum of a list of integers can be calculated using a
+general catamorphism:
+cata (λ(L v ).plusElim (nil = λ().0,
+cons = λr .r .hd + r .tl ) v ).
+From this example, it is clear that plusElim is an alternative to the case construct of languages like Haskell
+and SML. However, unlike these languages, it is not a
+builtin part of the syntax; instead, it allows us to treat
+case constructs as first-class, extensible values.
+In a similar way, we can adapt the other rules for
+constructing sums, and for decomposing or constructing
+products, to functions involving records and variants.
+The full set of operations are specified by the following
+type signatures4 :
+plusElim
+plusIntro
+prodElim
+prodIntro
+
+::
+::
+::
+::
+
+First-class labels
+
+( . ) :: (r \l ) ⇒ Rec {|l : α | r |} → Label l → α,
+This requires an extension of the kind system in Section 3.1 with a new kind lab, and also a new type constant Label of kind lab → ∗. Intuitively, each type of
+the form Label l contains a unique label value. The
+l parameter is important because it establishes a connection between types and label values; a nullary Label
+type would not have provided any way for us to express the necessary typing constraints. We can also dispense with the family of extension constructors defined
+in Section 3.2, replacing them with a single constructor
+constant:
+
+∀α.∀r .Rec (to α r ) → Var r → α
+∀α.∀r .Var (from α r ) → α → Var r
+∀α.∀r .Var (to α r ) → Rec r → α
+∀α.∀r .Rec (from α r ) → α → Rec r
+
+{| : | |} :: lab → ∗ → row → row .
+
+Given our earlier representations for records and variants, it is easy to implement each of these operations as
+builtin primitives.
+One technical difficulty that we face with this approach is in extending the treatment of unification to
+deal with uses of the from and to constructs. This turns
+out to be straightforward, except for potential complications caused by the presence of empty rows. For example, in unifying two rows to t r and to t 0 r 0 , we cannot
+simply unify t with t 0 ; if r , and hence r 0 , is empty, then
+there is no direct relationship between t and t 0 . More
+precisely, to obtain most general unifiers for from and
+to constructs, we need to restrict ourselves to work with
+non-empty rows. There are several alternatives to consider here. For example, the obvious approach would
+be to banish the empty row from our original type system. A more satisfactory solution might be to adopt a
+
+Finally, we need to generalize the lacks predicate from
+Section 3.3 to a two place relation r \l which takes both
+a row r and a label l of kind lab. This can be defined
+in much the same way as before, and has the same interpretation as an offset value in the underlying implementation.
+We can generalize the other basic operations on records
+and variants in a similar way. For example, the expression λx .λy.(y = 2, x = 3), which involves two uses of
+extension, will be assigned the type:
+{|x : Int|}\y ⇒
+Label x → Label y → Rec {|x : Int, y : Int|}.
+To our knowledge, this is the first work—in either implicitly or explicitly typed record and variant calculi—
+to consider a type system in which labels can be treated
+as first-class values. This increases the expressiveness
+of our system quite dramatically, and we already have
+some interesting applications for these new features.
+
+4
+The from α r construct used in the types of plusIntro and
+prodIntro is defined as an obvious dual to the to α r construct that
+we used previously.
+
+10
+
+semantics. Journal of Functional Programming,
+4(2):127–206, April 1994.
+
+However, it remains to see how well this will work in
+practice, and what its implications for language design
+might be; we leave these topics to future work.
+
+7
+
+[3] L. Cardelli. A semantics of multiple inheritance. In
+G. Kahn, D. MacQueen, and G. Plotkin, editors,
+Semantics of Data Types, volume 173 of Lecture
+Notes in Computer Science, pages 51–67. SpringerVerlag, 1984. Full version in Information and Computation 76(2/3):138–164, 1988.
+
+Conclusion
+
+We have described a flexible, polymorphic type system for extensible records and variants with an effective type inference algorithm and compilation method.
+Prototype implementations have been written in SML
+and Haskell, and a implementation of records has been
+added to Hugs, an implementation of Haskell 1.3. Our
+experience to date shows that these implementations
+works well in practice. There are a number of areas for
+further work:
+Object systems. Another potential application for
+rows would be in a type system for object-oriented programming. For example, a constructor Obj of kind
+row → ∗ might be used to describe objects with a given
+row of methods [17, 22, 1, 10, 21, 2].
+More sophisticated basic operations. Our type system does not support record append [28, 24] or the
+database join that was one of the original motivations
+for Ohori’s work [19]. One approach would be to adopt
+the ideas of Harper and Pierce [7], choosing an appropriate form of evidence for the (r1 #r2 ) predicates described in Section 1.1.
+A new approach to datatypes. Languages like SML
+and Haskell already provide facilities for defining new
+datatypes and these overlap to some extent with the
+mechanisms described in this paper. Unifying and combining these different approaches would obviously be
+useful, with a long term goal of developing a general
+framework for extensible datatypes.
+
+[4] L. Cardelli. Extensible records in a pure calculus of
+subtyping. Research report 81, DEC Systems Research Center, Jan. 1992. Also in Carl A. Gunter
+and John C. Mitchell, editors, Theoretical Aspects
+of Object-Oriented Programming: Types, Semantics, and Language Design (MIT Press, 1994).
+[5] L. Cardelli and J. Mitchell. Operations on records.
+Mathematical Structures in Computer Science, 1:3–
+48, 1991. Also in Carl A. Gunter and John C.
+Mitchell, editors, Theoretical Aspects of ObjectOriented Programming: Types, Semantics, and
+Language Design (MIT Press, 1994); available as
+DEC Systems Research Center Research Report
+#48, August, 1989, and in the proceedings of
+MFPS ’89, Springer LNCS volume 442.
+[6] L. Damas and R. Milner. Principal type schemes
+for functional programs. In Proceedings of the 9th
+ACM Symposium on Principles of Programming
+Languages, pages 207–212, 1982.
+[7] R. Harper and B. Pierce. A record calculus based
+on symmetric concatenation. In Proceedings of
+the 18th Annual ACM Symposium on Principles of
+Programming Languages, Orlando FL, pages 131–
+142. ACM, Jan. 1991. Extended version available
+as Carnegie Mellon Technical Report CMU-CS-90157.
+
+Acknowledgements
+
+[8] R. W. Harper and B. C. Pierce. Extensible records
+without subsumption. Technical Report CMU-CS90-102, School of Computer Science, Carnegie Mellon University, Feburary 1990.
+
+This work was supported in part by an EPSRC studentship 9530 6293. We would also like to thank our
+colleagues, Colin Taylor and Graham Hutton, in the
+functional programming group at Nottingham, for the
+valuable contributions that they have made to the work
+described in this paper.
+
+[9] J. R. Hindley. The principal type scheme of an
+object in combinatory logic. Transactions of the
+American Mathematical Society, 146:29–60, December 1969.
+
+References
+
+[10] M. Hofmann and B. Pierce. A unifying typetheoretic framework for objects. Journal of Functional Programming, 1995. Previous versions appeared in the Symposium on Theoretical Aspects
+of Computer Science, 1994, (pages 251–262) and,
+under the title “An Abstract View of Objects and
+Subtyping (Preliminary Report),” as University of
+
+[1] M. Abadi and L. Cardelli. A semantics of object
+types. In In Proceedings of the 9th Symposium on
+Logic in Computer Science, pages 332–341, July
+1994.
+[2] K. B. Bruce. A paradigmatic object-oriented programming language: Design, static typing and
+11
+
+Edinburgh, LFCS technical report ECS-LFCS-92226, 1992.
+
+1993, and as University of Edinburgh technical report ECS-LFCS-92-225, under the title “ObjectOriented Programming Without Recursive Types”.
+
+[11] M. P. Jones. Qualified Types Theory and Practice.
+Distinguished Dissertations in Computer Science.
+Cambridge University Press, 1994.
+
+[22] D. Rémy. Programming objects with ML-ART: An
+extension to ML with abstract and record types. In
+M. Hagiya and J. C. Mitchell, editors, Theoretical
+Aspects of Computer Software, volume 789 of Lecture Notes in Computer Science, pages 321–346.
+Springer-Verlag, April 1994.
+
+[12] M. P. Jones. A system of constructor classes: overloading and implicit higher-order polymorphism.
+Journal of Functional Programming, 5(1):1–35,
+Jan. 1995. An earlier version appeared in Proc.
+FPCA 1993.
+
+[23] D. Rémy. Type inference for records in a natural extension of ML. In C. A. Gunter and
+J. C. Mitchell, editors, Theoretical Aspects of
+Object-Oriented Programming: Type, Semantics,
+and Language Design, Foundations of Computing
+Series. MIT Press, 1994. Early version appeared
+in Sixteenth Annual Symposium on Principles of
+Programming Languages. Austin, Texas, January
+1989.
+
+[13] X. Leroy. Polymorphism by name for references
+and continuations. In Principles of Programming
+Languages, pages 220–231. ACM press, 1993.
+[14] E. Meijer and G. Hutton. Bananas in space: Extending fold and unfold to exponential types. In
+Proc. 7th International Conference on Functional
+Programming and Computer Architecture. ACM
+Press, San Diego, California, June 1995.
+
+[24] D. Rémy. Typing record concatenation for free.
+In C. A. Gunter and J. C. Mitchell, editors, Theoretical Aspects Of Object-Oriented Programming.
+Types, Semantics and Language Design, Foundations of Computing Series. MIT Press, 1994.
+
+[15] R. Milner. A theory of type polymorphism in programming. Journal of Computer and System Sciences, 17:348–375, August 1978.
+[16] R. Milner, M. Tofte, and R. Harper. The definition
+of Standard ML. The MIT Press, 1990.
+
+[25] J. A. Robinson. A machine-oriented logic based
+on the resolution principle. Journal of the Association for Computing and Machinery, 12(1):23–41,
+January 1965.
+
+[17] J. C. Mitchell, F. Honsell, and K. Fisher. A lambda
+calculus of objects and method specialization. In
+1993 IEEE Symposium on Logic in Computer Science, June 1993.
+
+[26] M. Wand. Complete type inference for simple objects. In Proceedings of the IEEE Symposium on
+Logic in Computer Science, Ithaca, NY, June 1987.
+
+[18] A. Ohori. A polymorphic record calculus and its
+compilation. ACM Transactions on Programming
+Languages and Systems, 17(6):844–895, Nov. 1995.
+Preliminary version in Proceedings of ACM Symposium on Principles of Programming Languages,
+1992, under the title, A compilation method for
+ML-style polymorphic record calculi.
+
+[27] M. Wand. Corrigendum: Complete type inference
+for simple objects. In Proceedings of the IEEE Symposium on Logic in Computer Science, 1988.
+[28] M. Wand. Type inference for record concatenation
+and multiple inheritance. Information and Computation, (93):1–15, 1991. Preliminary version appeared in Proc. 4th IEEE Symposium on Logic in
+Computer Science, 1989, 92–97.
+
+[19] A. Ohori and P. Buneman. Type inference in a
+database programming language. In Proceddings
+of the ACM Conference on LISP and Functional
+Programming, pages 174–183. ACM, 1988.
+
+[29] A. Wright. Simple imperative polymorphism. Lisp
+and Symbolic Computation, 8(4):343–356, December 1995.
+
+[20] J. Peterson and K. Hammond. Report on the Programming Language Haskell, A Non-strict, Purely
+Functional Language (Version 1.3). Technical Report YALEU/DCS/RR-1106, Yale University, Department of Computer Science, May 1996.
+[21] B. C. Pierce and D. N. Turner. Simple typetheoretic foundations for object-oriented programming. Journal of Functional Programming,
+4(2):207–247, Apr. 1994. A preliminary version appeared in Principles of Programming Languages,
+12
+
+
