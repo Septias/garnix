@@ -240,7 +240,7 @@ T-sel-★, T-sel-⊥ and T-★-intro place ★ where a more informative type may
 )
 #instantiation <instantiation>
 
-@instantiation defines the instance relation $σ ≥ τ$, used by T-var. The first premise of I-inst makes θ respect the sorts and the second is a _discharge_. A discharge $θ ⊨ q$ replays every stump at the instance: the lookup is performed on θρ, and θδ is pinned to its verdict such that both coincide. The replay allows derivations up to ≈ by D-hit, D-⊥ and D-?, and requiring ≈ rather than equality in D-hit loses nothing: [T-eq closes every set of instances under ≈, and hta is all that inference can guarantee when it discharges the stumps of one instance in turn.](what does this mean? Simplify)
+@instantiation defines the instance relation $σ ≥ τ$, used by T-var. The first premise of I-inst makes θ respect the sorts and the second is a _discharge_. A discharge $θ ⊨ q$ replays every stump at the instance: the lookup is performed on θρ, and θδ is pinned to its verdict such that both coincide. The replay allows derivations up to ≈ by D-hit, D-⊥ and D-\?, and requiring ≈ rather than equality in D-hit loses nothing: [T-eq closes every set of instances under ≈, and that is all that inference can guarantee when it discharges the stumps of one instance in turn.](what does this mean? Simplify)
 
 #example(name: [Instances of selQ])[
   Consider $"selQ" = ∀(β: "Row", δ: "Type"). ⟨β.l ↓ δ⟩ ⇒ {β} → δ$.

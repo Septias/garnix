@@ -14,7 +14,7 @@ We prove type safety up to lookup errors for the declarative system in the synta
   If $∅ ⊢ e : τ$ and $e → e′$, then $∅ ⊢ e′ : τ$.
 ] <thm-preservation>
 
-Progress holds only up to lookup errors because some lookups might be typed as ★ and we can not guarantee non-failure over this fragment. We only admit uncertainty in lookups and propagate it through the typesystem, so ★ is not an arbitrary failure type and its origin can always be explained.
+Progress holds only up to lookup errors because some lookups might be typed as ★ and we cannot guarantee non-failure over this fragment. We only admit uncertainty in lookups and propagate it through the type system, so ★ is not an arbitrary failure type and its origin can always be explained.
 
 
 == Refinement and the Rigidity of ★ <refinement>
