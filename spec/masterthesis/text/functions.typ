@@ -27,9 +27,13 @@
     counter(figure.where(kind: thm_kind)).update(0)
     it
   }
-  #show figure.where(kind: thm_kind): it => block(width: 100%, breakable: true, align(left)[
-    *#it.supplement #it.counter.display(it.numbering)*#if it.caption != none [ (#it.caption.body)]. #h(0.3em)#it.body
-  ])
+  #show figure.where(kind: thm_kind): it => block(
+    width: 100%,
+    breakable: true,
+    align(left)[
+      *#it.supplement #it.counter.display(it.numbering)*#if it.caption != none [ (#it.caption.body)]. #h(0.3em)#it.body
+    ],
+  )
   #doc
 ]
 
@@ -37,7 +41,11 @@
 // Theorem-like blocks are figures of one shared kind, numbered per chapter
 // (Definition 4.1, Theorem 4.2, …) and referenceable with @label.
 
-#let mathenv(supplement, italic: true) = (name: none, lean: none, body) => figure(
+#let mathenv(supplement, italic: true) = (
+  name: none,
+  lean: none,
+  body,
+) => figure(
   kind: thm_kind,
   supplement: supplement,
   placement: none,
@@ -145,12 +153,35 @@
 
 
 #let _to_seq(x) = if type(x) == array { x } else { (x,) }
+
+// Rule names inside a derivation must not be turned into references to themselves.
+#let _in_rule = state("in-rule", false)
+
+#let rule_refs(body) = {
+  show regex(
+    "(?:\b[A-Z]!?|↯|≈)-[\p{L}\p{N}★∗⊥?!-]*[\p{L}\p{N}★∗⊥?]",
+  ): it => context {
+    let named(sel) = query(sel).filter(m => m.value == it.text)
+    let target = named(selector(<derived-rule>).before(here())).last(
+      default: none,
+    )
+    if target == none { target = named(<derived-rule>).first(default: none) }
+    if _in_rule.get() or target == none { it } else {
+      box(link(target.location(), smallcaps(it.text)))
+    }
+  }
+  body
+}
+
 #let derive(name, prem, conclusion) = {
   // An empty premise row would collapse; an invisible strut keeps its height.
-  let prems = if _to_seq(prem).len() == 0 { (box(width: 0pt, hide($α$)),) } else { _to_seq(prem) }
+  let prems = if _to_seq(prem).len() == 0 {
+    (box(width: 0pt, hide($α$)),)
+  } else { _to_seq(prem) }
   let concl = _to_seq(conclusion)
 
   [
+    #_in_rule.update(true)
     #table(
       stroke: none,
       inset: (x: 0pt, y: 5pt),
@@ -161,6 +192,8 @@
       table.hline(),
       table.cell(inset: (y: 10pt), concl.join(" ")),
     )
+    #_in_rule.update(false)
+    #metadata(name)<derived-rule>
   ]
 }
 
