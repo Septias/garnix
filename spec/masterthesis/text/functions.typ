@@ -18,7 +18,11 @@
   #set heading(numbering: "1.")
   #show ref: set text(fill: link_color)
   #show link: set text(fill: link_color)
-  #show cite: set text(fill: link_color)
+  #show cite: it => {
+    set text(fill: black)
+    show regex("\d+"): set text(fill: link_color)
+    it
+  }
   #set par(justify: true)
   #set text(12pt)
   #set page(margin: (x: 2cm, y: 2cm))
