@@ -113,7 +113,7 @@
   rc-y,
   rc-n,
 
-  rc-pa[Ohori '95 @ohori1995polymorphic],
+  rc-pa[Ohori '95 @ohori],
   rc-n,
   rc-y,
   rc-n,
@@ -333,7 +333,7 @@
   rc-n,
   rc-n,
 
-  rc-pa[Ohori '95 @ohori1995polymorphic],
+  rc-pa[Ohori '95 @ohori],
   rc-nt[kinded quant.],
   rc-y,
   rc-y,
