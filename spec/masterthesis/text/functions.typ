@@ -7,6 +7,7 @@
 #let red = oklch(42.1%, 0.095, 57.708deg);
 #let zink_700 = oklch(44.2%, 0.017, 285.786deg)
 #let zink_900 = oklch(21%, 0.006, 285.885deg)
+#let link_color = rgb("#781C7D")
 
 
 // ------------ Template
@@ -15,9 +16,9 @@
 
 #let template(doc) = [
   #set heading(numbering: "1.")
-  #show ref: set text(fill: rgb("#781C7D"))
-  #show link: set text(fill: rgb("#005596"))
-  #show cite: set text(fill: black)
+  #show ref: set text(fill: link_color)
+  #show link: set text(fill: link_color)
+  #show cite: set text(fill: link_color)
   #set par(justify: true)
   #set text(12pt)
   #set page(margin: (x: 2cm, y: 2cm))
