@@ -3,11 +3,11 @@
 
 = Incompleteness <incompleteness>
 
-The algorithm is sound but not complete. This section collects the places where it gives up, in decreasing order of inevitability. The first family is a limit of the row theory, the second a price paid for forced moves, the third a limit of the inference algorithm on top.
+The algorithm is sound but not complete and this section collects the different places where it gives up. The reasons are threefold: The wand ambiguity poses a situation in which no algorithm can be complete, the second class is the price for forced moves and the third class collects all cases in which our inference algorithm is limmited.
 
 == Irreducible Problems <incompleteness-irreducible>
 
-Some row equations have no most general unifier, and no algorithm that returns a single unifier can solve them. Most general is meant relative to the variables of the problem, as in @thm-unif-mgu.
+The wand ambiguity is our prime example of undecidability and it the first case for which row unification can not find a single, most general unifier. We also show two more situations:
 
 #proposition(
   name: [Irreducible problems],
@@ -18,7 +18,7 @@ Some row equations have no most general unifier, and no algorithm that returns a
   + (_Shift._) $(α | l: 𝓫) scripts(≐)_r (l: 𝓫 | α)$ has no finite complete set of unifiers.
 ] <prop-irreducible>
 
-In the Wand ambiguity, every variable may carry the field, and no choice subsumes the others. The two-sided problem is the same deadlock at both ends of the spine. The shift has a unifier for every number of l-fields in α, so returning several answers does not help either.
+The wand ambiguity $(α | β) scripts(≐)_r (l: 𝓫)$ describes a situation in which a single label constraint can not be allocated to a definite row variable. Every variable $α_i$ may carry the field and no choice subsumes the other. In this situation, many unifiers are possible, one for every row variable, and none of them is most-general. Every algorithm that decides this problem has to backtrack and test the candidates. The two sided problem is a variant of it
 
 #example(name: [Unifiers of the irreducible problems])[
   - The Wand ambiguity $(α | β) scripts(≐)_r (l: 𝓫)$ has the unifiers $[α ≔ (l: 𝓫), β ≔ ε]$ and $[α ≔ ε, β ≔ (l: 𝓫)]$. Both are ground and they differ, so neither is an instance of the other. A most general unifier would have to be more general than both, but it cannot leave α and β open: $[α ≔ γ, β ≔ γ′]$ and every other substitution that maps α or β to a row containing a variable is no unifier, since a variable on the left would have to face a variable on the right. Nor can it send both to ε, since $(ε | ε) ≈ ε$ and ε lacks the field. So it places the single field in one of the two variables and is no more general than the unifier that places it in the other.
