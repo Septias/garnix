@@ -43,6 +43,7 @@
 ]
 
 #show: template
+#show: rule_refs
 #set figure(placement: auto)
 #set raw(lang: "nix")
 

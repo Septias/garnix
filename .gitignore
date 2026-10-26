@@ -3,3 +3,4 @@
 specification/_build
 .aider*
 /spec/masterthesis/lean/plfa/
+/spec/masterthesis/tmp.md
