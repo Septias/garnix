@@ -4,12 +4,14 @@
 -- Run with  `lake env lean NixSuite.lean`  (not in the library globs).
 --
 -- ## Translation
--- - `a // b`            → `b ‖ a`              (Nix: right wins; ‖: left wins)
--- - `e.p₁.….pₙ or d`    → `((e ‖ {p₁ = {}}).p₁ … ‖ {pₙ = d}).pₙ`
+-- - `a // b`            → `a ‖ b`              (both: right wins; E-conc / T-conc
+--                                               put the right operand first)
+-- - `e.p₁.….pₙ or d`    → `({pₙ = d} ‖ … ({p₁ = {}} ‖ e).p₁ …).pₙ`
+--                         (defaults on the LEFT, so e wins where it has the field)
 -- - `a.b.c = v`         → nested records, siblings merged
 -- - `"${"s"}"` as a key  → the label `s`;  a string bound to a variable and used
 --                         as a key → `lab s` and `selDyn` / `rcdDyn`
--- - `{x, y ? d}@s: e`   → `λs. let x = s.x in let y = (s ‖ {y = d}).y in e`
+-- - `{x, y ? d}@s: e`   → `λs. let x = s.x in let y = ({y = d} ‖ s).y in e`
 --                         (open and closed patterns coincide: rows are open)
 -- - non-recursive `rec {…}` / `let {… body}` → nested `let`s, then the record
 -- - MacroNix (Builtins.lean): `if`, `assert`, `e ? l`, list literals, `++`,
@@ -32,7 +34,7 @@
 --                     binds, hole := `bc`       bool                true    ✓
 -- scope-1/2/3/7       shadowing, rec, inherit   int ×4              3 1 4 1 ✓
 -- let, new-let        string `+`                string              str     ✓
--- patterns            @-patterns, defaults,     string              str     ✓
+-- patterns            @-patterns, defaults,     clash               str     ✗ (5)
 --                     h at two row shapes
 -- empty-args          `{}:` pattern             string              str     ✓
 -- inherit-from        [ a b merged ]            clash               list    ✗ (4)
@@ -59,6 +61,16 @@
 --     refined to `bool` once the hole computes `bc`.
 -- (4) Lists are homogeneous; the element types int and {inner: …} clash.
 --     Declaratively `[★]` via T-★-intro (R2).
+-- (5) `h = {x ? "foo", y ? x, z ? args.x}@args: x + y + z`, called at `{x = …}`
+--     and at s3. Until 2026-10-27 `upd`/`orE`/`pat` put the default on the
+--     WINNING side of ‖, so every default lookup hit at once and this row read
+--     ✓. With the default on the losing side, the lookups block on the row of
+--     args and park as stumps. One call of h types; two calls clash, so A-let
+--     does not generalize the row of args. Minimal trigger: a spent lookup of x
+--     next to `z ? args.x` (h with only one of `x ? …` / `z ? args.x`, or with
+--     an unused x, types). Presumably `LetSpent` (Infer.lean:819: stumps on one
+--     blocker with one label must be spent alike), not confirmed. Incompleteness
+--     of A-let, not a type error.
 
 import InferFnTerm
 import Builtins
@@ -120,17 +132,17 @@ def app (f : E) (as : List E) : E := as.foldl .app f
 def lets (bs : List (String × E)) (e : E) : E := bs.foldr (fun (x, e₁) e₂ => .letE x e₁ e₂) e
 def sels (e : E) (ls : List String) : E := ls.foldl .sel e
 /-- `a // b` -/
-def upd (a b : E) : E := .cat b a
+def upd (a b : E) : E := .cat a b
 /-- `e.p₁.….pₙ or d` -/
 def orE (e : E) : List String → E → E
   | [],      _ => e
-  | [l],     d => .sel (.cat e (rcd [(l, d)])) l
-  | l :: ls, d => orE (.sel (.cat e (rcd [(l, rcd [])])) l) ls d
+  | [l],     d => .sel (.cat (rcd [(l, d)]) e) l
+  | l :: ls, d => orE (.sel (.cat (rcd [(l, rcd [])]) e) l) ls d
 /-- `{x, y ? d, …}@s: e` -/
 def pat (s : String) (fs : List (String × Option E)) (e : E) : E :=
   .lam s (lets (fs.map fun
     | (x, none)   => (x, .sel (v s) x)
-    | (x, some d) => (x, .sel (.cat (v s) (rcd [(x, d)])) x)) e)
+    | (x, some d) => (x, .sel (.cat (rcd [(x, d)]) (v s)) x)) e)
 /-- string `+` and `"${a}${b}"` -/
 def cat (es : List E) : E := match es with
   | [] => str
@@ -255,7 +267,7 @@ def patterns : E := lets
        , .app (v "h") (rcd [("x", str)]), .app (v "h") s3
        , .app (v "j") (rcd [("x", str), ("y", str), ("z", str), ("bla", str), ("foo", str)]) ])
 #guard run patterns
-  = "string"
+  = "fail: clash"
 
 ------------------------------------------------------------- empty-args --------
 #guard run (app (pat "e" [] (pat "s" [("x", none), ("y", none)] (cat [v "x", v "y"])))
