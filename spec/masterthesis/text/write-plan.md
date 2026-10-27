@@ -28,7 +28,6 @@ Use academic style. It can sound fancy from time to time, but needs to keep a mo
 
 ## Problems
 - T-sel-⊥: remedied by the reason for lazyness
-  - removeable?
 - Every label must count: Forced by ≈?
 - Currently no eliminators: Deffered to further work
 - Incompleteness:
@@ -36,24 +35,23 @@ Use academic style. It can sound fancy from time to time, but needs to keep a mo
   - Let: Not practical to solve
   - Inference: What exactly…?
   - Fc-labels: would neet top-level schemes
-- No subtyping: This is anyways hard!
 
 
 ## Automated checks
-- [x] Go over the references and verify every claim against other papers by dowloading the source into plaintext/ and checking it.
-- [ ] You are a professor in PL, go over the thesis text and critique it's claims and wording based on your expertise. 
+- [ ] You are a professor in PL, go over the thesis text and critique it's claims and wording based on your expertise.
+- [ ] Go over the thesis text and mark every place where wording is loose in a sense, that the terminalogy is not suited for the claim.
+- I have to check whether the syntax is ambiguous or bad in all places (representation is not verified)
 
 
 ## Clearup
 - We have closed terms
 - No top-level schemes
-- The use of our trace-monoid
+- The use of the trace-monoid
 
 
 ## Sessions
 - Add a section that admits our eliminator-problem and forces gradual typing
-- Explain why we force same number of l-labels in both sides
-- Explain quisence better
+- Explain quiesence better
 
 
 ## Todos
@@ -63,27 +61,15 @@ Use academic style. It can sound fancy from time to time, but needs to keep a mo
 
 
 ## Fragen
-- Maybe make Precision a headline definition
 - Where should I define the spine? Once in the beginning? I now have multiple definitions…
-  - also define the window
-
-
-## Final Polishing
-- Lemma and definitions should go to a new page instead of breaking
-
-
-## Related Work: open checks
-- [ ] Soft typing: verify "Cartwright and Fagan accept every program and insert run-time checks" against @soft_typing and @practical_soft_typing (ACM paywall, add PDFs to bib/plaintext/)
-- [ ] AC-unification NP-complete: verify against Kapur-Narendran @ac_unification (Springer paywall)
-- [ ] Sulzmann @designing_record_systems (Yale RR-1128): check what the report actually provides; Leijen says it gives "an effective type inference method"
-- [ ] Wells @undecidable and Jones @qualified_types: not checked against the source
-- [ ] TypeScript @typescript and Flow @flow: claim about unsound `any` rests on general knowledge
-- [ ] Own claim, no source: "NixLang programs cannot be instrumented, so there are no casts, no blame, and no runtime monitoring" (still marked check!)
+  - Also define the window
 
 
 # Section-State
 - [f] 00_Introduction
+  - Fix the claims
 - [f] 01_Overview
+  - Fix the claims
 - [x] 02_Declarative (22.10)
   - [f] Syntax
   - [f] Lookup ↓
@@ -99,16 +85,24 @@ Use academic style. It can sound fancy from time to time, but needs to keep a mo
   - [f] Prelims
   - [f] Types ≐
   - [ ] Rows ≐ᵣ
+    - Explain the semantic
   - [ ] Examples
   - [f] Metatheory
 - [~] Inference
+  - Needs introduction to different solver states
   - [~] State
-- [ ] Incompleteness (25.10)
-- [ ] FC-Labels (25.10)
-- [ ] Discussion (28.10)
-- [ ] Related Work (29.10)
-- [ ] Conclusion (29.10)
-
+- [f] Mechanization
+- [ ] Incompleteness (27.10)
+- [x] FC-Labels
+  - Good in general
+  - Boring sections need 
+- [x] Discussion (28.10)
+  - I say is good from content
+- [x] Related Work (28.10)
+  - Needs precision in first part
+  - Others are good I beg 
+  - More focus on 
+- [ ] Conclusion (28.10)
 
 
 ## Misc
