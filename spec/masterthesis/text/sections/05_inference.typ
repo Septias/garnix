@@ -10,8 +10,7 @@
 
 = Inference <inference>
 
-// PROF: Not "one respect": generalization, saturation, materialization and finalization also differ from W.
-The inference algorithm is a judgement $Γ; S ⊢ e ⇒ τ; S′$ that takes a _solver state_ S and returns the updated state S', which the premise receives in turn. Our algorithm differs from algorithm W in one respect: Instead of guessing the value of an unknown lookup, we park it in a _stump_. A stump is syntactically similar to the lookup relation ⟨ρ.l ↓ r⟩ itself and stored in the state until a substitution lets lookup advance further in the row, possibly solving it. At the end of inference, every pending stump is typed as ★. This way, unification is only ever called on equations between types and never sees a field demand it has to solve. // giving it the properties we want…
+The inference algorithm is a judgement $Γ; S ⊢ e ⇒ τ; S′$ that takes a _solver state_ S and returns the updated state S', which the premise receives in turn. Our biggest deviation from algorithm W is the usage of stumps: Instead of guessing the value of an unknown lookup, we park it in a _stump_. A stump is syntactically similar to the lookup relation ⟨ρ.l ↓ r⟩ itself and stored in the state until a substitution lets lookup advance further in the row, possibly solving it. At the end of inference, every pending stump is typed as ★. This way, unification is only ever called on equations between types and never sees a field demand it has to solve. // giving it the properties we want…
 
 
 #let solver_state = figure(
@@ -29,9 +28,6 @@ The inference algorithm is a judgement $Γ; S ⊢ e ⇒ τ; S′$ that takes a _
       #flexbox(
         $#type_name("Park a stump") S #st_park q$,
         $#type_name("Drop stumps") S #st_drop Δ′$,
-        $#type_name("Draw a name") "fresh" α: κ$,
-        $#type_name("Sort of a name") S(α)$,
-        $#type_name("Stumps of") S_i #h(0.3em) Δ_i$,
       )
     ],
     subbox(caption: "Judgements")[
@@ -49,7 +45,7 @@ The inference algorithm is a judgement $Γ; S ⊢ e ⇒ τ; S′$ that takes a _
 )
 #solver_state <solver-state>
 
-The solver state @solver-state consists of three parts: A sort-respecting substitution θ, a list Δ of parked stumps and a record $macron(κ)$ of the sorts at which each name was drawn. ⟦S⟧τ applies the substitution of S to τ, $S(α)$ reads the sort of α from $macron(κ)$, and [$Δ_i$ denotes the parked stumps of $S_i$](isn't this syntax weird?). A parked stump $⟨α ⊳ ρ.l ↓ δ⟩$ is a lookup of l in ρ whose result is represented by the fresh variable δ, annotated with a row-variable α that blocks it. When a new row variable is written, the algorithm checks every stump that is blocked on it and tries to solve it again, writing the result into δ. The implementation additionally reports a warning for every ★ that inference commits; we omit this bookkeeping from the rules.
+The solver state @solver-state consists of three parts: A sort-respecting substitution θ, a list Δ of parked stumps and a record $macron(κ)$ of the sorts at which each name was drawn. ⟦S⟧τ applies the substitution of S to τ, $S(α)$ reads the sort of α from $macron(κ)$, and $Δ_i$ denotes the parked stumps of $S_i$. A parked stump $⟨α ⊳ ρ.l ↓ δ⟩$ is a lookup of l in ρ whose result is represented by the fresh variable δ, annotated with a row-variable α that blocks it. When a new row variable is written, the algorithm checks every stump that is blocked on it and tries to solve it again, writing the result into δ. The implementation additionally reports a warning for every ★ that inference commits.
 
 // The unifier draws its fresh names from the state's supply, advanced past the variables of the problem and those θ binds, so a name drawn by U-host is new to both and θ stays applied.
 The state is kept under one invariant, _quiescence_. Quiescence demands that every stump in Δ is genuinely blocked on its recorded variable α. Every written solution can break this condition so a new judgement is needed that rolls all stumps to completion or blockage after every move. The judgement $S ⊢ τ ≐ τ' ⇝ S'$ runs the unifier of @unification and writes its solution into the state and the judgement $S ⊢ τ ≐ τ′ #st_solve S′$ does so and _saturates_ afterwards. Saturation is the process of re-examining all unblocked stumps until the state is quiescent again.

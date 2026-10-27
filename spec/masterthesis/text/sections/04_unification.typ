@@ -7,47 +7,48 @@
 
 = Unification <unification>
 
-#figure(
-  caption: "Spines and verdicts",
+// The paragraphs of this section are unexpected
+Next, we present our unification algorithm, based upon the declarative system. It consists of two judgements, one for types: $τ₁ ≐ τ₂ ⇝ v$ and one for rows: $s₁ scripts(≐)_r s₂ ⇝ v$ that call each other mutually recursive. @unification-ty lists the verdicts of unification and shows how spines are formed. A spine s of a row ρ, denoted $s = ⌈ρ⌉$, represents a row as a list of atoms $a ::= l: τ | α$, obtained by flattening the concatenation tree. For example, $((l: 𝓫 | ε) | (α | m: 𝓫))$ and $(l: 𝓫 | (α | (m: 𝓫 | ε)))$ both have the spine $⟨l: 𝓫, α, m: 𝓫⟩$.
+
+A verdict is either a solution θ or one of four refusals. #u_clash is emitted when two structures clash definitionally and #u_occurs when a recursive type is encountered. NixLang allows recursiveness in records and let-bindings, but to keep the presentation simple, we do not permit it in MiniNix. #u_stuck is emitted when no more moves apply and carries the Wand ambiguity. #u_fuel is emitted when the fuel is depleted.
+
+// U-clash names both a type rule and a row rule. U-var-refl-* is cancellation, not reflexivity.
+#let unification_ty = figure(
+  caption: "Spines, verdicts and unification of types.",
   box(width: 100%, stack(
     spacing: 18pt,
-    $
-         #type_name("Atom") a & ::= l: τ | α \
-        #type_name("Spine") s & ::= ⟨⟩ | a · s \
-      #type_name("Verdict") v & ::= θ | #u_clash | #u_occurs | #u_stuck | #u_fuel \
-    $,
+    subbox(caption: "Spines")[
+      $
+        #type_name("Atom") a ::= l: τ | α #h(3em) #type_name("Spine") s ::= ⟨⟩ | a · s
+      $
+    ],
+    subbox(caption: "Type Unification")[
+      #flexbox(
+        derive("U-refl", (), $α ≐ α ⇝ ∅$),
+        derive("U-bind", ($τ ≠ α$, $α ∉ "ftv"(τ)$), $α ≐ τ ⇝ [α ≔ τ]$),
+        derive("U-occurs", ($τ ≠ α$, $α ∈ "ftv"(τ)$), $α ≐ τ ⇝ #u_occurs$),
+        derive("U-base", ($𝓫 = 𝓫′$,), $𝓫 ≐ 𝓫′ ⇝ ∅$),
+        derive("U-base-clash", ($𝓫 ≠ 𝓫′$,), $𝓫 ≐ 𝓫′ ⇝ #u_clash$),
+        derive("U-clash", ($"head"(τ₁) ≠ "head"(τ₂)$,), $τ₁ ≐ τ₂ ⇝ #u_clash$),
+        derive("U-★", (), $★ ≐ ★ ⇝ ∅$),
+        derive(
+          "U-fn",
+          ($τ₁ ≐ τ₁′ ⇝ θ₁$, $θ₁ τ₂ ≐ θ₁ τ₂′ ⇝ θ₂$),
+          $(τ₁ -> τ₂) ≐ (τ₁′ -> τ₂′) ⇝ θ₂ ∘ θ₁$,
+        ),
+        derive("U-rcd", ($⌈ρ₁⌉ scripts(≐)_r ⌈ρ₂⌉ ⇝ θ$,), ${ρ₁} ≐ {ρ₂} ⇝ θ$),
+      )
+    ],
+    subbox(caption: "Verdicts")[
+      $
+        #type_name("Verdict") v ::= θ | #u_clash | #u_occurs | #u_stuck | #u_fuel
+      $
+    ],
   )),
-)<unification-helpers>
-
-Next, we present our unification algorithm, based upon the declarative system. It consists of two judgements, one for types: $τ₁ ≐ τ₂ ⇝ v$ and one for rows: $s₁ scripts(≐)_r s₂ ⇝ v$ that call each other mutually recursively. @unification-helpers lists the verdicts of unification and shows how spines are formed. A spine s of a row ρ, denoted $s = ⌈ρ⌉$, represents a row as a list of atoms $a ::= l: τ | α$, obtained by flattening the concatenation tree. For example, $((l: 𝓫 | ε) | (α | m: 𝓫))$ and $(l: 𝓫 | (α | (m: 𝓫 | ε)))$ both have the spine $⟨l: 𝓫, α, m: 𝓫⟩$.
-
-// PROF: The occurs check is about recursive types, not recursive bindings. Overlays/lib.fix need recursive types anyway.
-A verdict is either a solution θ or one of four refusals. #u_clash is emitted when two structures clash definitionally and #u_occurs when a recursive loop is encountered. NixLang allows recursiveness in records and let-bindings, but to keep the presentation simple, we do not permit it in MiniNix. #u_stuck is emitted when no more moves apply and carries the Wand ambiguity. #u_fuel is emitted when the fuel is depleted.
-
-== Type Unification
-// PROF: U-clash names both a type rule and a row rule. U-var-refl-* is cancellation, not reflexivity.
-#let unification_ty = figure(
-  caption: "Unification of types.",
-  flexbox(
-    derive("U-refl", (), $α ≐ α ⇝ ∅$),
-    derive("U-bind", ($τ ≠ α$, $α ∉ "ftv"(τ)$), $α ≐ τ ⇝ [α ≔ τ]$),
-    derive("U-occurs", ($τ ≠ α$, $α ∈ "ftv"(τ)$), $α ≐ τ ⇝ #u_occurs$),
-    derive("U-base", ($𝓫 = 𝓫′$,), $𝓫 ≐ 𝓫′ ⇝ ∅$),
-    derive("U-base-clash", ($𝓫 ≠ 𝓫′$,), $𝓫 ≐ 𝓫′ ⇝ #u_clash$),
-    derive("U-clash", ($"head"(τ₁) ≠ "head"(τ₂)$,), $τ₁ ≐ τ₂ ⇝ #u_clash$),
-    derive("U-★", (), $★ ≐ ★ ⇝ ∅$),
-    derive(
-      "U-fn",
-      ($τ₁ ≐ τ₁′ ⇝ θ₁$, $θ₁ τ₂ ≐ θ₁ τ₂′ ⇝ θ₂$),
-      $(τ₁ -> τ₂) ≐ (τ₁′ -> τ₂′) ⇝ θ₂ ∘ θ₁$,
-    ),
-    derive("U-rcd", ($⌈ρ₁⌉ scripts(≐)_r ⌈ρ₂⌉ ⇝ θ$,), ${ρ₁} ≐ {ρ₂} ⇝ θ$),
-  ),
 )
 #unification_ty <unification-ty>
 
-@unification-ty shows the type unification rules of the algorithmic system. Unification is given an equation and hopefully returns a substitution θ that makes both sides equal. U-refl is the trivial base case and U-bind solves a simple equation by substitution. Unifying the same base-type is a no-op (U-base) and different base-types result in a clash (U-base-clash). We also emit a clash when the head-level constructor (a function, record, …) clashes.
-U-occurs is the previously mentioned recursive check that prevents endless cycles. The unknown type is _rigid_ meaning, it does not spread and get absorbed into any other type; it only unifies with itself by U-★. U-fn unifies functions and U-rcd hands off unification to record-unification on spines.
+@unification-ty shows the type unification rules of the algorithmic system. Every statement is an equation and unification returns tries to return a substition θ that makes both sides equal. U-refl is the trivial base case and U-bind solves a simple equation by substitution, but only when α is not a free type variable of τ. This case is handled by U-occurs to prevent endless cycles. Unifying the same base-type is a no-op (U-base) and different base-types result in a clash by U-base-clash. Two unequal head-level constructors (functions, records, …) also result in a clash. The unknown type is _rigid_ meaning, it does not spread and get absorbed into any other type; it only unifies with itself by U-★. Finally, U-fn unifies functions and U-rcd hands off unification to row unification on spines.
 
 == Row Unification
 
@@ -86,7 +87,8 @@ U-occurs is the previously mentioned recursive check that prevents endless cycle
   table.cell(align: center + horizon)[#mark],
 )
 
-// todo: are the reverse arrows correct everywhere?
+// are the reverse arrows correct everywhere?
+// two figures for row unification is too redundant
 #let unification_cascade = figure(
   kind: image,
   caption: "The order in which the row-moves are tried.",
@@ -219,10 +221,11 @@ The row pass is a deterministic cascade of forced moves, tried one after another
 
 // Row unification preserves the solution set of the problem and never chooses among alternatives. I.e. it never backtracks and stays first-order.
 
-The first two exhaustion rules unify something with an empty row ⟨⟩. An empty row immediately forces the other side to be empty likewise and might result in a clash or substitution, depending on whether the other side can be made empty. The following cancel moves use the trace-monoid property of rows: A row variable α can be canceled on either side of the problem and the algorithm recurses on the residual problem.
+The first two exhaustion rules unify [something](wording) with an empty row ⟨⟩. An empty row immediately forces the other side to be empty likewise and might result in a clash or substitution, depending on whether the other side can [be made empty](wording). The following cancel moves use the trace-monoid property of rows: A row variable α can be canceled on either side of the problem and the algorithm recurses on the residual problem.
 
-The solving rules fire when one side is a lone variable α. U-var-collapse handles the case when the same variable is found on the other side, surrounded only by other type variables. This is best explained by an example: The following row ⟨γ, α, β⟩ is solved by sending every type variable but α to ε [γ → ε, β → ε]. Both sides are then equal. A repeated occurrence forces α to ε as well. U-var-solve simply binds α to the other sides value if α is not contained and can form no cycle. $"rv"(α)$ looks for a variable at any depth and not only the spine. Finally, U-var-occurs reports a cycle if it exists.
+The solving rules fire when one side is a lone variable α. U-var-collapse fires when the same variable is found on the other side, surrounded only by other type variables. This is best explained by an example: The following row ⟨γ, α, β⟩ is solved by sending every type variable but α to ε [γ → ε, β → ε]. Both sides are then equal. A repeated occurrence forces α to ε as well. U-var-solve simply binds α to the other sides value if α is not contained and can form no cycle. $"rv"(α)$ looks for a variable at any depth and not only the spine. Finally, U-var-occurs reports a cycle if it exists.
 
+// explain the trace monoid structure and adimt that it does not really fit Nix' syntax
 [The three matching moves differ in how far they may look for a partner. A _window_ is a maximal var-free segment at one end of a spine: U-field-L and U-field-R pair a field only inside it, because a row-variable in between could be instantiated to a colliding field and the pairing would be a guess about shadowing. In $⟨m: 𝓫, l: 𝓫, α, l: 𝓫′⟩$ the leading window is $⟨m: 𝓫, l: 𝓫⟩$ and the trailing window is $⟨l: 𝓫′⟩$. A leading $l: τ$ on the other side is paired with $l: 𝓫$. Against $⟨m: 𝓫, α, l: 𝓫′⟩$ it has no partner in the leading window, and pairing it with $l: 𝓫′$ would assume that α carries no l. U-ground lifts that restriction by counting: if one side [has no variables at all and some label occurs equally often and positively on both sides](explain this), then the other side's variables cannot carry that label, the pairing is positional, and it is again forced.](todo)
 
 A field facing only variables on the other side has no partner, but it may have a host. U-host fires on a leading field $l: τ$ when the other side has a _sole host_ β for it: β is the first variable of that side, the side has no l-field and no keyed field, every other variable of the side occurs in τ and so cannot carry the field without containing itself, and β occurs nowhere else in the problem, neither in τ, nor in the rest of the first side, nor in a payload of its own side. Every unifier then places the field at the front of β, so the move is forced. It binds $β ≔ (l: τ | β′)$ for a fresh β′ and continues with the rest of both sides. Since β occurs once, renaming it to β′ on the spine is the same as applying the binding to the whole problem, and the solution stays applied. U-host is stated for the leading end only; its mirror at the trailing end is reported as stuck (@incompleteness-forced). A field demand of a lookup still never enters a row-variable during unification. The only place where it does is the materialization of spent promises at finalization (@inference), after unification has run. Finally U-clash is a global projection check rather than a per-window one, and U-stuck reports a terminal configuration.

@@ -15,7 +15,7 @@ We prove type safety up to lookup errors for the declarative system in the synta
 ] <thm-preservation>
 
 // PROF: T-star-intro is unrestricted, so star's origin is not always a lookup. Star is rigid and has no eliminators, so it is not "propagated".
-Progress holds only up to lookup errors because some lookups might be typed as ★ and we cannot guarantee non-failure over this fragment. We only admit uncertainty in lookups and propagate it through the type system, so ★ is not an arbitrary failure type and its origin can always be explained.
+Progress holds only up to lookup errors because some lookups might be typed as ★ and we cannot guarantee non-failure over this fragment. We only admit uncertainty in lookups. // ★ is not an arbitrary failure type and its origin can always be explained.
 
 
 == Refinement and the Rigidity of ★ <refinement>

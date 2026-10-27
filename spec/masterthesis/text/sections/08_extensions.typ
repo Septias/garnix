@@ -154,7 +154,6 @@ and both are instance-closed. The first scheme defers the lookup until both the 
 
 === Unification
 
-// PROF: U-key-pin is used in the text but missing from the figure.
 #let fc_unif = figure(
   caption: [Unification of keys and of keyed fields, extending @unification-ty.],
   flexbox(
@@ -172,6 +171,11 @@ and both are instance-closed. The first scheme defers the lookup until both the 
       ($τ ≐ τ′ ⇝ θ$, $θ t₁ scripts(≐)_r θ t₂ ⇝ θ′$),
       $t₁ · (\${α}: τ) scripts(≐)_r t₂ · (\${α}: τ′) ⇝ θ′ ∘ θ$,
     ),
+    derive(
+      "U-key-pin",
+      ($"key"(f) = k ≠ α$, $[α ≔ k](\${α}: τ) scripts(≐)_r [α ≔ k] f ⇝ θ$),
+      $(\${α}: τ) scripts(≐)_r f ⇝ θ ∘ [α ≔ k]$,
+    ),
   ),
 )
 #fc_unif <fc-unification>
@@ -182,7 +186,7 @@ A singleton type is rigid and nullary, like a base type, and the key pass of @fc
 On rows, the moves of @unification-cascade treat a keyed field as a barrier. U-ε-clash fires on a keyed field as on any field, since the empty spine has no field of any key. U-clash and U-ground count only literal fields and require the other side to be barrier-free, so that $(l: τ) scripts(≐)_r (\${α}: τ′)$ is not a clash: $[α ≔ l]$ solves it. [An occurrence of a variable next to a keyed field is reported as stuck rather than as an occurs failure](explain). U-host does not fire on a side with a keyed field, since its key may become the label of the field to be hosted. Two new moves handle keyed fields.
 
 
-U-key-L and U-key-R cancel two keyed fields under the same variable key at the front or the back of both spines and unify their types. They are restricted to the ends of the spines, since a literal field in front of $\${α}: τ$ may carry the label that α becomes. Both moves are forced. U-key-pin applies when each side consists of a single field, at least one of them keyed, under different keys. A one-field row is equivalent to another only under the same key, so every unifier identifies the two keys, and the move binds the variable key to the other key and runs the problem again, where U-key or U-field then pairs the fields.
+U-key-L and U-key-R cancel two keyed fields under the same variable key at the front or the back of both spines and unify their types. They are restricted to the ends of the spines, since a literal field in front of $\${α}: τ$ may carry the label that α becomes. Both moves are forced. U-key-pin applies when each side consists of a single field, at least one of them keyed, under different keys. A one-field row is equivalent to another only under the same key, so every unifier identifies the two keys, and the move binds the variable key to the other key and runs the problem again, where U-key-L or U-field-L then pairs the fields. Here f is a single field and key(f) is its label or its key. U-key-pin is tried in both directions.
 
 
 It solves $(l: τ) scripts(≐)_r (\${α}: τ′)$ with $[α ≔ l]$ and $(\${α}: τ) scripts(≐)_r (\${β}: τ′)$ with $[α ≔ β]$, which is most general since $[α ≔ l, β ≔ l] = [β ≔ l] ∘ [α ≔ β]$. [Beyond a single field the binding is no longer forced, and keyed fields under different unknown keys stay stuck.](explain) $(\${α}: 𝓫 | m: 𝓫) scripts(≐)_r (m: 𝓫 | \${β}: 𝓫)$ is solved by $[α ≔ l, β ≔ l]$ for every label l, but not by $[α ≔ β]$, since m cannot cross the barrier, and these unifiers have no common generalization. The metatheory of @unification-metatheory holds as stated: success is most general, clash and occurs are sound, and the algorithm terminates. U-key-pin does not shrink the problem, but it always binds a variable, so the residual has fewer variables.
