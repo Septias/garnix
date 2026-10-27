@@ -13,9 +13,9 @@ The wand ambiguity is our prime example of undecidability and it the first case 
   name: [Irreducible problems],
   lean: "vars_vs_field_no_mgu_on, two_sided_no_mgu_on, shift_no_finite_complete_set",
 )[
-  + (_Wand ambiguity._) For pairwise distinct $α₁, …, α_n$ with $n ≥ 2$, $(α₁ | … | α_n) scripts(≐)_r (l: 𝓫)$ has no most general unifier.
-  + (_Two-sided._) $(α | l: 𝓫) scripts(≐)_r (l: 𝓫 | β)$ has no most general unifier.
-  + (_Shift._) $(α | l: 𝓫) scripts(≐)_r (l: 𝓫 | α)$ has no finite complete set of unifiers.
+  + _(Wand ambiguity)_ For pairwise distinct $α₁, …, α_n$ with $n ≥ 2$, $(α₁ | … | α_n) scripts(≐)_r (l: 𝓫)$ has no most general unifier.
+  + _(Two-sided)_ $(α | l: 𝓫) scripts(≐)_r (l: 𝓫 | β)$ has no most general unifier.
+  + _(Shift)_ $(α | l: 𝓫) scripts(≐)_r (l: 𝓫 | α)$ has no finite complete set of unifiers.
 ] <prop-irreducible>
 
 The wand ambiguity $(α | β) scripts(≐)_r (l: 𝓫)$ describes a situation in which a single label constraint can not be allocated to a definite row variable. Every variable $α_i$ may carry the field and no choice subsumes the other. In this situation, many unifiers are possible, one for every row variable, and none of them is most-general. Every algorithm that decides this problem has to backtrack and test the candidates. The two sided problem is a variant of it

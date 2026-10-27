@@ -112,7 +112,7 @@ The order of fields in a record carries no meaning: the records `{ a = 1; b = 2;
 
 // PROF: Cite Diekert/Mazurkiewicz (Book of Traces); the normal form (lexicographic/Foata) and cancellativity are known results.
 // Move this section into an explanation for the trace monoid? Should it be a headliner?
-=== Row Equivalence is a Trace Monoid <trace-monoid>
+=== Row Equivalence as a Trace Monoid <trace-monoid>
 By ≈-comm, equal labels cannot be swapped and there is no rule to move a label in front of a row variable because that would change shadowing behaviour similarly. Row variables then cut rows into segments where permutation is allowed, delimited by row-variable barriers that cannot be crossed. This opens a new perspective on rows: A row is a word over an alphabet with two components: fields $(l: T)$ and row-variables α. Two letters may swap when they are fields with distinct labels; a row-variable commutes with nothing, and neither do two fields with the same label. Rows modulo ≈ together with the unit ε then form a partially commutative monoid, also called a _trace monoid_.
 
 This has two consequences. First, ≈ is decidable and has a normal form.

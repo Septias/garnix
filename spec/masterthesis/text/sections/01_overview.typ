@@ -13,8 +13,6 @@ Chau and Parreaux @simple_boolean allow extension by a single, statically known 
 
 Paszke and Xie @extensible_tabular combine scoped and first-class labels in a sound calculus and give a unification-based inference algorithm for it. We base our work on theirs and use the same ingredients: Records {ρ} are formed from rows ρ, and record concatenation is merely the concatenation of them: {ρ | ρ'}. We also admit an equivalence relation but depart from their work in two ways: We admit an unknown type ★ to form a total system (G3) and eliminate the tail-rule of their calculus.
 
-== Our Position <our-position>
-
 A field selection e.l in [ordinary type systems](more precision?) is elaborated into a field constraint and given to unification. Unification then solves the row constraint by assigning the label to the row variable, deciding its origin on the spot. This is the point where previously discussed type systems either backtrack, solve modulo associativity and commutativity, or defer to an unspecified entailment relation.
 
 We take another route and delay the assignment as long as possible by recording field demands on type schemes. This way, row unification and field demands are different judgements and unification never has to guess a label into a row.

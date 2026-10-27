@@ -38,7 +38,7 @@ For `x: ({l = c} ‖ x).l` with $x : {β}$, the typing ${β} → ★$ is carried
 @lem-rigid drives the principality result below and reappears as the rigidity of ★ in unification (@unification-ty).
 
 
-== Principality Forces Qualified Schemes <principality>
+== Principality and Qualified Schemes <principality>
 
 #definition(name: [Principal scheme])[
   A scheme σ is _principal_ for e in Γ if
