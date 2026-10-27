@@ -9,7 +9,8 @@
 - A Semantics of Multiple Inheritance - Luca Cardelli ← Introduction of records?
 - Complete type inference for simple objects (WA 1988) ← Rows
 - A record calculus based on symmetric concatenation (HA&PI 1990)
-- Typeinference for records in a natural extension of ML (RE 1901) ← Rows??
+- Typeinference for records in a natural extension of ML (RE 1991) ← Rows??
+- Type Inference for record concatenation and multiple inheritance (RE 1991) ← Rows??
 - Typing record concatenation for free (RE 1992)
 - A polymorphic type system for extensible records and variants (GA & JO 1996) ← lacks
 - First class labels for extensible rows (LE 2004)
