@@ -254,12 +254,3 @@ Concatenation and computed labels interact as NixLang programmers expect. In `((
 === Costs
 
 The extension has three costs. Labels and strings are separate: a label literal has the rigid type $⌊l⌋$ and cannot be used as a string, and a value used both as a key and as a string clashes. A key of base type is typed at ★ only when its type is known at the selection; a key that becomes a string later, as in `(a: {l = c}.${a}) c`, is rejected by U-clash. Keyed fields are barriers, so beyond the single-field case of U-key-pin a keyed field against a literal field and two keyed fields under different unknown keys are stuck. A spent promise blocked on its key is not materialized, which leaves inference incomplete on programs the declarative system types. The first cost follows from giving labels singleton types, the second from the absence of negative information about keys, and the third from the absence of top-level qualified types.
-
-== Lacks-Predicates
-todo
-
-== Patterns, `with` and `inherit`
-todo
-
-== Occurrence Typing
-todo
