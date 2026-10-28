@@ -7,6 +7,8 @@
 = Unification <unification>
 
 // The paragraphs of this section are unexpected
+// TODO(structure): outcome-first opening (F): what row unification achieves (forced moves only; mgu on success, sound clash/occurs, stuck where a choice would be needed), then the two judgements. Your sentence, moved here from the row-pass prose:
+// Row unification preserves the solution set of the problem and never chooses among alternatives. I.e. it never backtracks and stays first-order.
 Next, we present our unification algorithm, based upon the declarative system. It consists of two judgements, one for types: $τ₁ ≐ τ₂ ⇝ v$ and one for rows: $s₁ scripts(≐)_r s₂ ⇝ v$ that call each other mutually recursive. @unification-ty lists the verdicts of unification and shows how spines are formed. A spine s of a row ρ, denoted $s = ⌈ρ⌉$, represents a row as a list of atoms $a ::= l: τ | α$, obtained by flattening the concatenation tree. For example, $((l: 𝓫 | ε) | (α | m: 𝓫))$ and $(l: 𝓫 | (α | (m: 𝓫 | ε)))$ both have the spine $⟨l: 𝓫, α, m: 𝓫⟩$.
 
 A verdict is either a solution θ or one of three refusals. #u_clash is emitted when two structures clash definitionally and #u_occurs when a recursive type is encountered. NixLang allows recursiveness in records and let-bindings, but to keep the presentation simple, we do not permit it in MiniNix. #u_stuck is emitted when no more moves apply and carries the Wand ambiguity.
@@ -47,6 +49,26 @@ A verdict is either a solution θ or one of three refusals. #u_clash is emitted 
 #unification_ty <unification-ty>
 
 @unification-ty shows the type unification rules of the algorithmic system. Every statement is an equation and unification returns tries to return a substition θ that makes both sides equal. U-refl is the trivial base case and U-bind solves a simple equation by substitution, but only when α is not a free type variable of τ. This case is handled by U-occurs to prevent endless cycles. Unifying the same base-type is a no-op (U-base) and different base-types result in a clash by U-base-clash. Two unequal head-level constructors (functions, records, …) also result in a clash. The unknown type is _rigid_ meaning, it does not spread and get absorbed into any other type; it only unifies with itself by U-★. Finally, U-fn unifies functions and U-rcd hands off unification to row unification on spines.
+
+// TODO(structure): moved here from 02 (I). Rename to "Spines and Windows"; move the spine definition (opening paragraph) and the window and |s|_l definitions (matching-moves paragraph below) into it; admit that ≈ keeps shadowed fields, unlike Nix's set-like records. Its last sentence now points to its own chapter.
+== Row Equivalence as a Trace Monoid <trace-monoid>
+By ≈-comm, equal labels cannot be swapped and there is no rule to move a label in front of a row variable because that would change shadowing behaviour similarly. Row variables then cut rows into segments where permutation is allowed, delimited by row-variable barriers that cannot be crossed. This opens a new perspective on rows: A row is a word over an alphabet with two components: fields $(l: T)$ and row-variables α. Two letters may swap when they are fields with distinct labels; a row-variable commutes with nothing, and neither do two fields with the same label. Rows modulo ≈ together with the unit ε then form a partially commutative monoid, also called a _trace monoid_ @book_of_traces. Two standard results of trace theory carry over to rows, and the Lean names point to their mechanization. First, ≈ is decidable and has a normal form.
+
+#theorem(name: [Characterization of ≈], lean: "rowEquiv_iff_char")[
+  $ρ₁ ≈ ρ₂$ if and only if ρ₁ and ρ₂ have the same sequence of row-variables and, for every label l and every var-free segment, the subsequences of fields labelled l agree pointwise up to ≈.
+] <thm-char>
+
+Sorting each var-free segment stably by label yields a normal form, the lexicographic normal form of trace theory. For example, $(m: 𝓫 | l: 𝓫 | α | l: 𝓫′ | m: 𝓫)$ splits into the segments $(m: 𝓫 | l: 𝓫)$ and $(l: 𝓫′ | m: 𝓫)$ around α, and its representative is $(l: 𝓫 | m: 𝓫 | α | l: 𝓫′ | m: 𝓫)$: the first segment is reordered, and no field crosses α. Second, the monoid is cancellative, as every trace monoid is.
+
+#lemma(
+  name: [Cancellativity],
+  lean: "RowEquiv.cancel_cat_left, RowEquiv.cancel_cat_right",
+)[
+  If $(ρ | ρ₁) ≈ (ρ | ρ₂)$ or $(ρ₁ | ρ) ≈ (ρ₂ | ρ)$, then $ρ₁ ≈ ρ₂$.
+] <lem-cancel>
+
+Unification uses both of these properties: The normal form is used to process rows from both sides and cancellativity allows cancelling a common prefix or suffix (@unification).
+
 
 == Row Unification
 
@@ -216,8 +238,6 @@ A verdict is either a solution θ or one of three refusals. #u_clash is emitted 
 #unification_cascade <unification-cascade>
 
 The row pass is a deterministic cascade of forced moves, tried one after another. Its rules are given in @unification-cascade which is read top-to-bottom. If no rule applies, stuck is the verdict.
-
-// Row unification preserves the solution set of the problem and never chooses among alternatives. I.e. it never backtracks and stays first-order.
 
 The first two exhaustion rules, U-ε-var and U-ε-clash, handle a problem with an empty side ⟨⟩. If the other side has only variables, U-ε-var sends each of them to ε; if it has a field, U-ε-clash reports a clash. The following cancel moves use the trace-monoid property of rows: A row variable α can be canceled on either side of the problem and the algorithm recurses on the residual problem.
 

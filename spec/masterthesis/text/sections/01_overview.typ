@@ -10,6 +10,7 @@ Many existing record calculi are ruled out by the design goals G1-G4. Calculi wi
 
 Chau and Parreaux @simple_boolean allow extension by a single, statically known field but disallow the concatenation of two arbitrary records. Other type systems like HM(X) @hmx and Rose defer the tricky decision of field attribution and leave it unanswered. HM(X) has principal and first-order type inference, but the constraint solver is a parameter. Rose @rose decides row predicates during unification but leaves the underlying row theory unspecified. New work by the same authors @another_inference describes approaches for type inference but does not give an efficient, applicable algorithm. Set-theoretic types @frisch_semantic @castagna2023programming rest on a subtyping relation with a worst-case exponential decision procedure. None of these systems meets all our goals at once.
 
+// TODO(structure): introduce P&X once here as the reference system and name three differences (K): their search rule decides the field origin at the selection, we park a stump; ★ makes the system total; lookup is separate from unification. Absorb the next two paragraphs ("ordinary type systems", "another route").
 Paszke and Xie @extensible_tabular combine scoped and first-class labels in a sound calculus and give a unification-based inference algorithm for it. We base our work on theirs and use the same ingredients: Records {ρ} are formed from rows ρ, and record concatenation is merely the concatenation of them: {ρ | ρ'}. We also admit an equivalence relation but depart from their work in two ways: We admit an unknown type ★ to form a total system (G3) and eliminate the tail-rule of their calculus.
 
 A field selection e.l in [ordinary type systems](more precision?) is elaborated into a field constraint and given to unification. Unification then solves the row constraint by assigning the label to the row variable, deciding its origin on the spot. This is the point where previously discussed type systems either backtrack, solve modulo associativity and commutativity, or defer to an unspecified entailment relation.
@@ -34,6 +35,7 @@ $
   #b[let] f = (x: x.l) #b[in] { a = (f {l = {m = c}}).m; b = f {} } quad : quad {a: 𝓫_c | b: ★}
 $
 
+// TODO(structure): the P&X remark at the end of this paragraph ("This also shows the difference…") belongs to the P&X paragraph in Background (K).
 The first use forces f to be a record, and the second one applies f to a record without l. No plain scheme covers both these types, and @principality shows that this forces qualified schemes. This also shows the difference to our approach: The search rule of Paszke and Xie forces a label decision, and unification has to attribute it to the row variable. In their type system, the selector types at ${(l: δ | ρ)} → δ$.
 
 

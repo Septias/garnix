@@ -20,6 +20,12 @@ Progress holds only up to lookup errors because some lookups might be typed as �
 
 == Refinement and the Rigidity of ★ <refinement>
 
+T-sel-★, T-sel-⊥ and T-★-intro place ★ where a more informative type may also be derivable. The following order compares typings by how much of this information they keep.
+
+#definition(name: [Precision])[
+  The _precision order_ ⊑ is the least preorder on types that has ★ as top element and is a congruence for → and for the field types of rows. It is covariant in both positions of →: it measures information content and is not a subtyping relation. We write $τ ≼ τ′$ when $τ ≈ τ″ ⊑ τ′$ for some τ″.
+] <def-precision>
+
 Solving a row-variable never loses a typing. The statement needs schemes to follow the substitution: θ _maps schemes_ if every well-formed scheme σ₀ has a well-formed scheme σ₀′ whose instances are exactly the images θτ of the instances τ of σ₀. θΓ replaces every scheme of Γ by such an image.
 
 #lemma(name: [Type substitution], lean: "qtyped_applySubst, SchemeImage")[

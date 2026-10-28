@@ -14,6 +14,8 @@
 The inference algorithm is a judgement $Γ; S ⊢ e ⇒ τ; S′$ that takes a _solver state_ S and returns the updated state S', which the premise receives in turn. Our biggest deviation from algorithm W is the usage of stumps: Instead of guessing the value of an unknown lookup, we park it in a _stump_. A stump is syntactically similar to the lookup relation ⟨ρ.l ↓ r⟩ itself and stored in the state until a substitution lets lookup advance further in the row, possibly solving it. At the end of inference, every pending stump is typed as ★. This way, unification is only ever called on equations between types and never sees a field demand it has to solve. // giving it the properties we want…
 
 
+// TODO(structure): outcome-first opening above (F): the pipeline (infer, solve, saturate, wake; then materialize, finalize), why this order (see "The order of the phases is forced" in Wake-Up and Finalization), and that the result is a declarative typing.
+// TODO(structure): heading "== Solver State" here (J). Define all vocabulary in it: stump, parked, blocker, stale, quiescent, saturation, spent. "Spent" is defined in Wake-Up and Finalization but already used in A-let.
 #let solver_state = figure(
   caption: "Solver state and the judgements of inference.",
   box(width: 100%, stack(
