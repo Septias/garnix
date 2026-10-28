@@ -167,6 +167,14 @@ TODO
 - Blur only under selection: still incomplete — `λg. {a = g ({x={l=c}}.x); b = g ({x={m=c}}.x)}` clashes
 - Fix A — completeness against the blur-free fragment (★ only from lookup verdicts)
 - Fix B — join on clash: `τ ≲ α` edges, α ≔ ★ on clashing lower bounds; rigidity of ★ rejects eliminations; principal only on definite clash (unify-vs-★ choice stays open)
+- Not vacuous (2026-10-28): the rule has a premise and ★ has no eliminator; qProgress/qPreservation hold with qUnk in the relation. A `★ → β` parameter only accepts functions that ignore their argument
+- Joining breaks principality without a clash: `g: x: {a = g x; b = g {l=c}}` runs to `({l:𝓫} → α) → {l:𝓫} → …` but also types at `(★ → 𝓫) → 𝓫 → …`; no scheme covers both (paper argument). Fix B never fires there; applied to `(y: c) c` it clashes
+- MacroNix: `1 == true` types only via α ≔ ★, then atomEq = none → primFail. delta_prog will need cross-shape `==` = false
+- Barely load-bearing: inference never builds qUnk (runSound lands blur-free; qtyped_sel_star is unused). The 𝓫-key preservation arms are dead (a label value never types at a base type), so 08_extensions.typ:144 is wrong. Real use: lem-subst (QSubst.lean:443/466), since a `?` can hit after substitution
+- No middle ground: the smallest blur that keeps lem-subst (blur at selections) already joins distinct types. Without the rule, substitution goes through qualified schemes (top-level schemes)
+- The real Nix problem is the missing join: `map (p: p.name) [ {name="a"; x=0;} {name="b";} ]` clashes (checked) and is rejected declaratively with or without the rule (★ cannot be selected). Lists of packages, mkMerge, optionalAttrs. NixSuite (1) and (4)
+- Gradual consistency fixes ★'s rigidity, not joins (int ≁ {}). With ★ chosen implicitly (T-★-intro, or ★ as a λ-domain) it becomes vacuous: `(x: x 4) 3` types and gets stuck. Fix A is a prerequisite
+- Any join at if/lists brings subsumption back for preservation: `(λg. (λu. {a = g u; b = g (if false then 1 else {})}) (if true then 1 else {}))` steps to `g 1` with g : ★ → β
 
 
 ## Findings
