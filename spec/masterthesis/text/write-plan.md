@@ -27,42 +27,38 @@ Use academic style. It can sound fancy from time to time, but needs to keep a mo
 
 
 ## Problems
-- T-sel-⊥: remedied by the reason for lazyness
 - Every label must count: Forced by ≈?
 - Currently no eliminators: Deffered to further work
+- T-sel-⊥: remedied by the reason for lazyness
 - Incompleteness:
   - Wand: unsolvable
   - Let: Not practical to solve
   - Inference: What exactly…?
-  - Fc-labels: would neet top-level schemes
+  - Fc-labels: would need top-level schemes
 
 
 ## Automated checks
 - [ ] You are a professor in PL, go over the thesis text and critique it's claims and wording based on your expertise.
 - [ ] Go over the thesis text and mark every place where wording is loose in a sense, that the terminalogy is not suited for the claim.
-- I have to check whether the syntax is ambiguous or bad in all places (representation is not verified)
 
 
-## Clearup
-- We have closed terms
-- No top-level schemes
-- The use of the trace-monoid
+## Admitting
+- Gradual typing für usability 
+- Use of the wrong semantic for row equality
 
 
-## Sessions
-- Add a section that admits our eliminator-problem and forces gradual typing
-- Explain quiesence better
+## Open fixes
+- Add ⊥ type and take its use out of ★
+- Top-level schemes
 
 
-## Todos
-- Better Syntax for key comparison
-- Align order of rules in text and figures
+## Sections
+- Section about trace monoid and its properties
 - Maybe add a section that shows the order (solve, saturate, wake, materialize, finalize)
 
 
-## Fragen
-- Where should I define the spine? Once in the beginning? I now have multiple definitions…
-  - Also define the window
+## Final Cleanup
+- I have to check whether the syntax is ambiguous or bad in all places (representation is not verified)
 
 
 # Section-State
@@ -103,7 +99,3 @@ Use academic style. It can sound fancy from time to time, but needs to keep a mo
   - Others are good I beg 
   - More focus on 
 - [ ] Conclusion (28.10)
-
-
-## Misc
-Comment-Pattern:  \[[^\]]*\]\([^)]*\)
