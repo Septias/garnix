@@ -1,37 +1,12 @@
 
-## Across chapters
-  - [ ] **Forced Define "forced", claim determinism** .
-  - `00:62`, `01:18`, `01:53` say "every move is forced / never guesses / first-order", but `05:294` says "Materialization … is not a forced move".
-  - F-hit emits {α} ≐ {l: δ | α′}, which contradicts `05:167` "No equation mentioning l is ever emitted".
-  - Define it once: P ⇒θ P′ is forced if U(P) = {θ′∘θ | θ′ ∈ U(P′)} on vars(P). Openings F (`04:10`, `05:17`) use the word, so define it before them.
-  - "First-order" is the wrong word, since all HM unification is first-order. You mean "no disjunctive constraints, no search".
-  - `10:37` "our position is dual [to HM(X)]" undersells the overlap: stumps are qualified-type predicates and Δ is a constraint store; F-★ is Jones's defaulting and F-hit is improvement (Jones 1995). Claim determinism, not duality. This also answers the daily "Should we note qualified types?" (`@qualified_types` is cited at `10:33`).
-
-## Abstract (`thesis.typ`)
-
-- [x] `thesis:40` "Type safety" is unqualified, and the theorem is weak [cr A4] → qualify it (progress up to lookup errors). The corollary that makes it informative goes in 03 (→ S5).
-- [x] `thesis:39` "trivial operation" → "primitive". `thesis:40` "novel type system for Nix" → "for a core calculus of Nix" [cr C].
-- [ ] `thesis:39` "once b is instantiated": b is a λ-bound term variable → "once the row of b is known" [cr C].
-- [ ] `thesis:40` "marks the places the analysis cannot decide" → ★.
 
 ## 00 Introduction
 
 - [~] **E1 G3** [cf E; cr A11]. `00:22` → "The analysis rejects a program only for a definite type error; a lookup it cannot decide is typed at ★." The current "report uncertainty instead of failing" contradicts the fact that a stuck verdict rejects the program. "Totality" is a misnomer. The slogan "never reject working code" is success typing (Lindahl & Sagonas 2006); it is in the bib as `success_typing` but never cited. ★ buys permissiveness only for values that are never eliminated. Measure 09 against the new G3. ("soft" → E2 in 10.)
 
-- [ ] **optionalAttrs** [cr A11]. The third motivating idiom (optionalAttrs, a conditional) is rejected even declaratively. Since nixpkgs is analysed from one root, this affects all of nixpkgs. Say it in the intro, not only at `09:32`.
 
-- [ ] **C8 Contribution 1** [cf C8] `00:62` still claims normal form and cancellativity as ours; they are now presented as known trace-monoid results → "We represent rows as a trace monoid…". Also: name which P&X tail mechanism you replace (→ K); "never guesses" (→ Forced).
-
-- [ ] `00:65` "no algorithm that returns a single unifier" → "a single most general unifier" [cr A7]. Contribution 4 `00:65-66` "classify" → C6.
 - [ ] `00:69` "principal … forced" needs the qualifier → S7.
-- [x] `00:14` "formal treatment is limited to …" is wrong if Hufschmitt's 2017 work on typing Nix holds (→ Related work, 10) [cr B].
-- [x] `00:16` says P&X combine asymmetric concatenation with first-class labels; `10:28` says set-or-replace is out of reach for them. Make them agree [cr B].
-- [ ] `00:25` "admits no static type" is too strong, since it gets ★ [cr C].
-- [ ] `00:33` `any` → ★.
-- [ ] `00:53` [cr C]: "they are type variables" → "their types are row variables"; "first discovered" → "first described"; mark "Wand ambiguity" as your coinage; "one of the most frequent operations" needs a count of `//` in nixpkgs.
-- [ ] `00:55` [cf S5; cr C]: uses MiniNix before introducing it; "total records" is undefined; "constrained way" must be narrowed (→ S5).
-- [ ] Footnote counts nixpkgs 26.05, but the bib cites 25.11 (`bib/nix.bib:110`) [cr C].
-- [ ] **L Roadmap** `00:67` [cf L]: map concepts to chapters.
+
 
 ## 01 Overview
 
