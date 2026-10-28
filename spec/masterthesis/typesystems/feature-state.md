@@ -170,11 +170,14 @@ TODO
 - Not vacuous (2026-10-28): the rule has a premise and ★ has no eliminator; qProgress/qPreservation hold with qUnk in the relation. A `★ → β` parameter only accepts functions that ignore their argument
 - Joining breaks principality without a clash: `g: x: {a = g x; b = g {l=c}}` runs to `({l:𝓫} → α) → {l:𝓫} → …` but also types at `(★ → 𝓫) → 𝓫 → …`; no scheme covers both (paper argument). Fix B never fires there; applied to `(y: c) c` it clashes
 - MacroNix: `1 == true` types only via α ≔ ★, then atomEq = none → primFail. delta_prog will need cross-shape `==` = false
-- Barely load-bearing: inference never builds qUnk (runSound lands blur-free; qtyped_sel_star is unused). The 𝓫-key preservation arms are dead (a label value never types at a base type), so 08_extensions.typ:144 is wrong. Real use: lem-subst (QSubst.lean:443/466), since a `?` can hit after substitution
+- Barely load-bearing: inference never builds qUnk (runSound lands blur-free; qtyped_sel_star is unused). The 𝓫-key preservation arms are dead (a label value never types at a base type), so 08_extensions.typ:144 is wrong. Real use: lem-subst (QSubst.lean:443/466), since a `?` can hit after substitution. qtyped_applySubst itself has no consumer (only the Axioms guard)
 - No middle ground: the smallest blur that keeps lem-subst (blur at selections) already joins distinct types. Without the rule, substitution goes through qualified schemes (top-level schemes)
 - The real Nix problem is the missing join: `map (p: p.name) [ {name="a"; x=0;} {name="b";} ]` clashes (checked) and is rejected declaratively with or without the rule (★ cannot be selected). Lists of packages, mkMerge, optionalAttrs. NixSuite (1) and (4)
 - Gradual consistency fixes ★'s rigidity, not joins (int ≁ {}). With ★ chosen implicitly (T-★-intro, or ★ as a λ-domain) it becomes vacuous: `(x: x 4) 3` types and gets stuck. Fix A is a prerequisite
 - Any join at if/lists brings subsumption back for preservation: `(λg. (λu. {a = g u; b = g (if false then 1 else {})}) (if true then 1 else {}))` steps to `g 1` with g : ★ → β
+- Forcing survives removal: no_plain uses T-sel and T-sel-⊥ typings only; selQ_instance_closed (Qualified.lean:308) and qtyped_two_use (:1047) build no qUnk; qUnk/tUnk appear only as inversion arms. Coverage could drop from ≼ to ≈ (unchecked). Without the rule, `∀β. {β} → ★` is not instance-closed (instance `{(l:c)} → ★`), so plain schemes lose soundness, not only principality
+- ⊥ plan (analysis/bottom-type.md, B): T-sel-⊥ at any τ makes `{ε} → {ε}` a typing, so no_plain_principal_scheme and l1_rejects_two_use (selEx_dom_empty_res) need a new mix: the hit instance re-pointed, or the `?` witness `{β} → ★`. Forcing then rests on `?` alone
+- ⊥ as a declarative type breaks selQ_principal: T-λ-I picks `x : ⊥`, T-⊥-elim gives `x: x.l : ⊥ → τ`, which no record-domain instance covers. Mirror of the ★ gap: `y: [y + 1, y.a] : ⊥ → [int]` types, inference clashes. `⊥ ⊑ τ` (fn covariant) makes `⊥ → ⊥` a ≼-cover of every `τ → τ` for `x: x`. Fix: no ⊥ type, T-sel-⊥ concludes any τ (`undefined : ∀α. α`)
 
 
 ## Findings
