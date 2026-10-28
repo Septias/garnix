@@ -3,16 +3,14 @@
 #let u_clash = text(font: "Libertinus Serif", smallcaps("Clash"))
 #let u_occurs = text(font: "Libertinus Serif", smallcaps("Occurs"))
 #let u_stuck = text(font: "Libertinus Serif", smallcaps("Stuck"))
-#let u_fuel = text(font: "Libertinus Serif", smallcaps("No fuel"))
 
 = Unification <unification>
 
 // The paragraphs of this section are unexpected
 Next, we present our unification algorithm, based upon the declarative system. It consists of two judgements, one for types: $τ₁ ≐ τ₂ ⇝ v$ and one for rows: $s₁ scripts(≐)_r s₂ ⇝ v$ that call each other mutually recursive. @unification-ty lists the verdicts of unification and shows how spines are formed. A spine s of a row ρ, denoted $s = ⌈ρ⌉$, represents a row as a list of atoms $a ::= l: τ | α$, obtained by flattening the concatenation tree. For example, $((l: 𝓫 | ε) | (α | m: 𝓫))$ and $(l: 𝓫 | (α | (m: 𝓫 | ε)))$ both have the spine $⟨l: 𝓫, α, m: 𝓫⟩$.
 
-A verdict is either a solution θ or one of four refusals. #u_clash is emitted when two structures clash definitionally and #u_occurs when a recursive type is encountered. NixLang allows recursiveness in records and let-bindings, but to keep the presentation simple, we do not permit it in MiniNix. #u_stuck is emitted when no more moves apply and carries the Wand ambiguity. #u_fuel is emitted when the fuel is depleted.
+A verdict is either a solution θ or one of three refusals. #u_clash is emitted when two structures clash definitionally and #u_occurs when a recursive type is encountered. NixLang allows recursiveness in records and let-bindings, but to keep the presentation simple, we do not permit it in MiniNix. #u_stuck is emitted when no more moves apply and carries the Wand ambiguity.
 
-// U-clash names both a type rule and a row rule. U-var-refl-* is cancellation, not reflexivity.
 #let unification_ty = figure(
   caption: "Spines, verdicts and unification of types.",
   box(width: 100%, stack(
@@ -41,7 +39,7 @@ A verdict is either a solution θ or one of four refusals. #u_clash is emitted w
     ],
     subbox(caption: "Verdicts")[
       $
-        #type_name("Verdict") v ::= θ | #u_clash | #u_occurs | #u_stuck | #u_fuel
+        #type_name("Verdict") v ::= θ | #u_clash | #u_occurs | #u_stuck
       $
     ],
   )),
@@ -124,13 +122,13 @@ A verdict is either a solution θ or one of four refusals. #u_clash is emitted w
 
       u_phase("cancel", u_band.cancel, 2),
       ..u_step(
-        "U-var-refl-L",
+        "U-cancel-L",
         $α · t₁ scripts(≐)_r α · t₂$,
         [cancel, recurse on $t₁, t₂$],
         u_go,
       ),
       ..u_step(
-        "U-var-refl-R",
+        "U-cancel-R",
         $t₁ · α scripts(≐)_r t₂ · α$,
         [cancel, recurse on $t₁, t₂$],
         u_go,
@@ -184,7 +182,7 @@ A verdict is either a solution θ or one of four refusals. #u_clash is emitted w
 
       u_phase("clash", u_band.give, 1),
       ..u_step(
-        "U-clash",
+        "U-row-clash",
         [some $l$ with $|s₁|_l > |s₂|_l$ and $s₂$ var-free],
         u_clash,
         u_no,
@@ -228,7 +226,7 @@ The solving rules fire when one side is a lone variable α. U-var-collapse fires
 // explain the trace monoid structure and adimt that it does not really fit Nix' syntax
 [The three matching moves differ in how far they may look for a partner. A _window_ is a maximal var-free segment at one end of a spine: U-field-L and U-field-R pair a field only inside it, because a row-variable in between could be instantiated to a colliding field and the pairing would be a guess about shadowing. In $⟨m: 𝓫, l: 𝓫, α, l: 𝓫′⟩$ the leading window is $⟨m: 𝓫, l: 𝓫⟩$ and the trailing window is $⟨l: 𝓫′⟩$. A leading $l: τ$ on the other side is paired with $l: 𝓫$. Against $⟨m: 𝓫, α, l: 𝓫′⟩$ it has no partner in the leading window, and pairing it with $l: 𝓫′$ would assume that α carries no l. U-ground lifts that restriction by counting. A var-free side fixes the number $|s|_l$ of l-fields. If both sides have the same positive number, the variables of the other side cannot carry an l without breaking the count, so the i-th l-field on one side pairs with the i-th on the other, and the pairing is again forced.](todo)
 
-A field facing only variables on the other side has no partner, but it may have a host. U-host fires on a leading field $l: τ$ when the other side has a _sole host_ β for it: β is the first variable of that side, the side has no l-field and no keyed field, every other variable of the side occurs in τ and so cannot carry the field without containing itself, and β occurs nowhere else in the problem, neither in τ, nor in the rest of the first side, nor in a payload of its own side. Every unifier then places the field at the front of β, so the move is forced. It binds $β ≔ (l: τ | β′)$ for a fresh β′ and continues with the rest of both sides. Since β occurs once, renaming it to β′ on the spine is the same as applying the binding to the whole problem, and the solution stays applied. U-host is stated for the leading end only; its mirror at the trailing end is reported as stuck (@incompleteness-forced). A field demand of a lookup still never enters a row-variable during unification. The only place where it does is the materialization of spent promises at finalization (@inference), after unification has run. Finally U-clash is a global projection check rather than a per-window one, and U-stuck reports a terminal configuration.
+A field facing only variables on the other side has no partner, but it may have a host. U-host fires on a leading field $l: τ$ when the other side has a _sole host_ β for it: β is the first variable of that side, the side has no l-field and no keyed field, every other variable of the side occurs in τ and so cannot carry the field without containing itself, and β occurs nowhere else in the problem, neither in τ, nor in the rest of the first side, nor in a payload of its own side. Every unifier then places the field at the front of β, so the move is forced. It binds $β ≔ (l: τ | β′)$ for a fresh β′ and continues with the rest of both sides. Since β occurs once, renaming it to β′ on the spine is the same as applying the binding to the whole problem, and the solution stays applied. U-host is stated for the leading end only; its mirror at the trailing end is reported as stuck (@incompleteness-forced). A field demand of a lookup still never enters a row-variable during unification. The only place where it does is the materialization of spent promises at finalization (@inference), after unification has run. Finally U-row-clash is a global projection check rather than a per-window one, and U-stuck reports a terminal configuration.
 
 #let unification_row = figure(
   caption: "Unification of rows, on spines.",
@@ -248,12 +246,12 @@ A field facing only variables on the other side has no partner, but it may have 
       ),
       derive("U-ε-clash", ($(l: τ) ∈ s$,), $⟨⟩ scripts(≐)_r s ⇝ #u_clash$),
       derive(
-        "U-var-refl-L",
+        "U-cancel-L",
         ($t₁ scripts(≐)_r t₂ ⇝ θ$,),
         $α · t₁ scripts(≐)_r α · t₂ ⇝ θ$,
       ),
       derive(
-        "U-var-refl-R",
+        "U-cancel-R",
         ($t₁ scripts(≐)_r t₂ ⇝ θ$,),
         $t₁ · α scripts(≐)_r t₂ · α ⇝ θ$,
       ),
@@ -302,7 +300,7 @@ A field facing only variables on the other side has no partner, but it may have 
         $s₁ scripts(≐)_r s₂ ⇝ θ′ ∘ θ$,
       ),
       derive(
-        "U-clash",
+        "U-row-clash",
         ($|s₁|_l > |s₂|_l$, $"vars"(s₂) = ⟨⟩$),
         $s₁ scripts(≐)_r s₂ ⇝ #u_clash$,
       ),
@@ -325,7 +323,7 @@ A field facing only variables on the other side has no partner, but it may have 
 )
 #unification_row <unification-row>
 
-@unification-row states the moves as rules. The order is fixed by @unification-cascade, and U-var-collapse, U-var-solve, U-var-occurs, U-field-L, U-field-R, U-ground and U-host are tried in both directions. U-ε-var, U-ε-clash and U-clash are symmetric as stated.
+@unification-row states the moves as rules. The order is fixed by @unification-cascade, and U-var-collapse, U-var-solve, U-var-occurs, U-field-L, U-field-R, U-ground and U-host are tried in both directions. U-ε-var, U-ε-clash and U-row-clash are symmetric as stated.
 
 #example(name: [Matching, then solving])[
   In $⟨l: γ, α⟩ scripts(≐)_r ⟨l: 𝓫, m: 𝓫⟩$ no side is empty, no variable is shared at an end, and neither side is a lone variable. The leading $l: γ$ finds the partner $l: 𝓫$ in the leading window of the right side, so U-field-L emits $γ ≐ 𝓫 ⇝ [γ ≔ 𝓫]$ and continues with $⟨α⟩ scripts(≐)_r ⟨m: 𝓫⟩$. Now α is a lone variable, and U-var-solve returns $[α ≔ ⟨m: 𝓫⟩]$. The solution is $[γ ≔ 𝓫, α ≔ (m: 𝓫)]$.
@@ -336,25 +334,24 @@ A field facing only variables on the other side has no partner, but it may have 
 ] <ex-unif-ground>
 
 #example(name: [Cancelling a shared tail])[
-  For $l ≠ m$, the problem $(l: 𝓫 | α) scripts(≐)_r (m: 𝓫 | α)$ has spines that both end in α. U-var-refl-R cancels it and leaves $⟨l: 𝓫⟩ scripts(≐)_r ⟨m: 𝓫⟩$, where no field finds a partner and U-clash fires, since $|⟨l: 𝓫⟩|_l = 1 > 0$ and the right side is var-free. By @lem-cancel the cancellation loses no unifier, so the clash is sound. Paszke and Xie @extensible_tabular need a side condition on the shared tail to reach the same verdict.
+  For $l ≠ m$, the problem $(l: 𝓫 | α) scripts(≐)_r (m: 𝓫 | α)$ has spines that both end in α. U-cancel-R cancels it and leaves $⟨l: 𝓫⟩ scripts(≐)_r ⟨m: 𝓫⟩$, where no field finds a partner and U-row-clash fires, since $|⟨l: 𝓫⟩|_l = 1 > 0$ and the right side is var-free. By @lem-cancel the cancellation loses no unifier, so the clash is sound. Paszke and Xie @extensible_tabular need a side condition on the shared tail to reach the same verdict.
 ] <ex-unif-cancel>
 
 #example(name: [A stuck problem])[
-  In $⟨α, β⟩ scripts(≐)_r ⟨l: 𝓫⟩$ no move fires. The left side has no field and no lone variable, the field $l: 𝓫$ has no partner in the empty windows of the left side, U-ground needs a positive count on both sides, and U-clash needs the side with fewer l-fields to be var-free. The verdict is #u_stuck. This is the Wand ambiguity, which has no most general unifier (@prop-irreducible).
+  In $⟨α, β⟩ scripts(≐)_r ⟨l: 𝓫⟩$ no move fires. The left side has no field and no lone variable, the field $l: 𝓫$ has no partner in the empty windows of the left side, U-ground needs a positive count on both sides, and U-row-clash needs the side with fewer l-fields to be var-free. The verdict is #u_stuck. This is the Wand ambiguity, which has no most general unifier (@prop-irreducible).
 ] <ex-unif-stuck>
 
 #example(name: [A forced host], lean: "host_forced, crossfield_success")[
   In $(l: 𝓫 | α) scripts(≐)_r (m: 𝓫 | β)$ with $l ≠ m$, the spines are $⟨l: 𝓫, α⟩$ and $⟨m: 𝓫, β⟩$. Neither leading field has a partner in the other side's leading window, both sides have variables, and neither side is a lone variable. The right side, however, has no l-field and the single variable β, which occurs nowhere else: β is the sole host of $l: 𝓫$. U-host binds $β ≔ (l: 𝓫 | β′)$ and continues with $⟨α⟩ scripts(≐)_r ⟨m: 𝓫, β′⟩$, which U-var-solve closes with $α ≔ (m: 𝓫 | β′)$. The solution $[β ≔ (l: 𝓫 | β′), α ≔ (m: 𝓫 | β′)]$ is a most general unifier.
 ] <ex-unif-host>
 
-// PROF: No fuel is a mechanization artifact; explain it or state termination without fuel.
 == Unification Metatheory <unification-metatheory>
 
 #theorem(
   name: [Termination],
   lean: "unifyRowM_terminates, unifyM_fuel_mono, unifyM_draws",
 )[
-  For all rows ρ₁ and ρ₂ there is a budget at which $⌈ρ₁⌉ scripts(≐)_r ⌈ρ₂⌉$ returns a verdict other than #u_fuel, and every larger budget returns the same verdict.
+  For all rows ρ₁ and ρ₂, $⌈ρ₁⌉ scripts(≐)_r ⌈ρ₂⌉$ terminates with a verdict.
 ] <thm-unif-term>
 
 The measure is lexicographic in the number of distinct variables of the problem and its size. A cancellation or a pairing returns parts of its input. A move that first solves a type equation and applies the solution to the residual may enlarge the residual, but it removes the variables it bound, and it draws fewer fresh names than it binds variables, so the residual has fewer distinct variables. U-host trades β for β′ and drops a field, which keeps the count and lowers the size. On its own, U-host draws one name for one bound variable; the bound is strict nevertheless, because its residual is never solved without binding a variable, as β′ occurs on one side of it only. The argument requires the drawn names to be new, which holds since the supply starts above the variables of the problem.

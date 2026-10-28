@@ -47,7 +47,6 @@ The inference algorithm is a judgement $Γ; S ⊢ e ⇒ τ; S′$ that takes a _
 
 The solver state @solver-state consists of three parts: A sort-respecting substitution θ, a list Δ of parked stumps and a record $macron(κ)$ of the sorts at which each name was drawn. ⟦S⟧τ applies the substitution of S to τ, $S(α)$ reads the sort of α from $macron(κ)$, and $Δ_i$ denotes the parked stumps of $S_i$. A parked stump $⟨α ⊳ ρ.l ↓ δ⟩$ is a lookup of l in ρ whose result is represented by the fresh variable δ, annotated with a row-variable α that blocks it. When a new row variable is written, the algorithm checks every stump that is blocked on it and tries to solve it again, writing the result into δ. The implementation additionally reports a warning for every ★ that inference commits.
 
-// The unifier draws its fresh names from the state's supply, advanced past the variables of the problem and those θ binds, so a name drawn by U-host is new to both and θ stays applied.
 The state is kept under one invariant, _quiescence_. Quiescence demands that every stump in Δ is genuinely blocked on its recorded variable α. Every written solution can break this condition so a new judgement is needed that rolls all stumps to completion or blockage after every move. The judgement $S ⊢ τ ≐ τ' ⇝ S'$ runs the unifier of @unification and writes its solution into the state and the judgement $S ⊢ τ ≐ τ′ #st_solve S′$ does so and _saturates_ afterwards. Saturation is the process of re-examining all unblocked stumps until the state is quiescent again.
 
 == Inference Rules

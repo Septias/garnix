@@ -20,11 +20,10 @@ Progress holds only up to lookup errors because some lookups might be typed as �
 
 == Refinement and the Rigidity of ★ <refinement>
 
-Solving a row-variable never loses a typing.
+Solving a row-variable never loses a typing. The statement needs schemes to follow the substitution: θ _maps schemes_ if every well-formed scheme σ₀ has a well-formed scheme σ₀′ whose instances are exactly the images θτ of the instances τ of σ₀. θΓ replaces every scheme of Γ by such an image.
 
-// PROF: "has an image for each scheme in Γ" is unclear.
-#lemma(name: [Type substitution], lean: "qtyped_applySubst")[
-  Let θ be a substitution that has an image for each scheme in Γ. If $Γ ⊢ e : τ$, then $θ Γ ⊢ e : θ τ$.
+#lemma(name: [Type substitution], lean: "qtyped_applySubst, SchemeImage")[
+  Let θ map schemes. If $Γ ⊢ e : τ$, then $θ Γ ⊢ e : θ τ$.
 ] <lem-subst>
 
 It may, however, admit a more precise one in the sense of @def-precision. By @lookup-metatheory, definite lookups survive θ, while a $?$ re-resolves against the substituted row and can become definite.
@@ -81,4 +80,4 @@ Discharge pins δ to the lookup's verdict, so ${ε} → {ε}$ is excluded. One b
 ] <cor-strict>
 
 // PROF: Forced only relative to this system (star-typings from T-sel-⊥/T-sel-star must be covered). P&X has a principal plain type for x: x.l.
-Qualified schemes are thus forced, not chosen.
+Qualified schemes are thus forced in our system, not chosen.

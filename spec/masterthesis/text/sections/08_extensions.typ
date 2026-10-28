@@ -58,7 +58,7 @@ NixLang computes labels that can be used to index records or bind variables at r
 
 @fc-lookup generalizes the lookup relation from labels to keys. Two keys are equal when they are the same label literal or variable, distinct when the labels are different and undecided otherways. Just as for rows, the definite answer are stable under substitution so the lookup stays deterministic and total. A new source of $?$ appears for a field whose key cannot yet be compared. The lookup of l in $(\${γ}: τ)$ may hit or miss depending on the label γ becomes, and a lookup under a variable key α may hit any literal field.
 
-// The variable that blocks a $?$ is accordingly no longer always a row-variable. It is the row-variable at which the search stopped, the variable key of the lookup, or the variable key of a field, and inference must wake a stump when any of these is solved.
+The variable that blocks a $?$ is accordingly no longer always a row-variable. It is the row-variable at which the search stopped, the variable key of the lookup, or the variable key of a field, and inference must wake a stump when any of these is solved.
 
 
 
@@ -183,7 +183,7 @@ and both are instance-closed. The first scheme defers the lookup until both the 
 A singleton type is rigid and nullary, like a base type, and the key pass of @fc-unification is flat: two labels unify when they are equal and clash otherwise, and a label variable is bound to the other key. A key is atomic, so U-key-bind needs no occurs check. $⌊k⌋$ against any other head clashes by U-clash.
 
 
-On rows, the moves of @unification-cascade treat a keyed field as a barrier. U-ε-clash fires on a keyed field as on any field, since the empty spine has no field of any key. U-clash and U-ground count only literal fields and require the other side to be barrier-free, so that $(l: τ) scripts(≐)_r (\${α}: τ′)$ is not a clash: $[α ≔ l]$ solves it. [An occurrence of a variable next to a keyed field is reported as stuck rather than as an occurs failure](explain). U-host does not fire on a side with a keyed field, since its key may become the label of the field to be hosted. Two new moves handle keyed fields.
+On rows, the moves of @unification-cascade treat a keyed field as a barrier. U-ε-clash fires on a keyed field as on any field, since the empty spine has no field of any key. U-row-clash and U-ground count only literal fields and require the other side to be barrier-free, so that $(l: τ) scripts(≐)_r (\${α}: τ′)$ is not a clash: $[α ≔ l]$ solves it. An occurrence of a variable next to a keyed field is reported as stuck rather than as an occurs failure, since the soundness proof of U-var-occurs counts literal fields and does not extend to keys. U-host does not fire on a side with a keyed field, since its key may become the label of the field to be hosted. Two new moves handle keyed fields.
 
 
 U-key-L and U-key-R cancel two keyed fields under the same variable key at the front or the back of both spines and unify their types. They are restricted to the ends of the spines, since a literal field in front of $\${α}: τ$ may carry the label that α becomes. Both moves are forced. U-key-pin applies when each side consists of a single field, at least one of them keyed, under different keys. A one-field row is equivalent to another only under the same key, so every unifier identifies the two keys, and the move binds the variable key to the other key and runs the problem again, where U-key-L or U-field-L then pairs the fields. Here f is a single field and key(f) is its label or its key. U-key-pin is tried in both directions.
@@ -253,8 +253,7 @@ Concatenation and computed labels interact as NixLang programmers expect. In `((
 
 === Costs
 
-// PROF: "about two thirds are stuck": give the method (generator, sizes, sample) or delete.
-The extension has three costs. Labels and strings are separate: a label literal has the rigid type $⌊l⌋$ and cannot be used as a string, and a value used both as a key and as a string clashes. A key of base type is typed at ★ only when its type is known at the selection; a key that becomes a string later, as in `(a: {l = c}.${a}) c`, is rejected by U-clash. Keyed fields are barriers, so beyond the single-field case of U-key-pin a keyed field against a literal field and two keyed fields under different unknown keys are stuck. a spent promise blocked on its key is not materialized, which leaves inference incomplete on programs the declarative system types. The first cost follows from giving labels singleton types, the second from the absence of negative information about keys, and the third from the absence of top-level qualified types.
+The extension has three costs. Labels and strings are separate: a label literal has the rigid type $⌊l⌋$ and cannot be used as a string, and a value used both as a key and as a string clashes. A key of base type is typed at ★ only when its type is known at the selection; a key that becomes a string later, as in `(a: {l = c}.${a}) c`, is rejected by U-clash. Keyed fields are barriers, so beyond the single-field case of U-key-pin a keyed field against a literal field and two keyed fields under different unknown keys are stuck. A spent promise blocked on its key is not materialized, which leaves inference incomplete on programs the declarative system types. The first cost follows from giving labels singleton types, the second from the absence of negative information about keys, and the third from the absence of top-level qualified types.
 
 == Lacks-Predicates
 todo
