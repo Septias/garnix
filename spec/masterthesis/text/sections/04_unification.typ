@@ -203,7 +203,7 @@ A verdict is either a solution θ or one of four refusals. #u_clash is emitted w
       ..u_step(
         "U-stuck",
         [no move above fires],
-        u_stuck + [ — Wand ambiguity],
+        u_stuck + [ (Wand ambiguity)],
         u_no,
       ),
     ),
@@ -221,12 +221,12 @@ The row pass is a deterministic cascade of forced moves, tried one after another
 
 // Row unification preserves the solution set of the problem and never chooses among alternatives. I.e. it never backtracks and stays first-order.
 
-The first two exhaustion rules unify [something](wording) with an empty row ⟨⟩. An empty row immediately forces the other side to be empty likewise and might result in a clash or substitution, depending on whether the other side can [be made empty](wording). The following cancel moves use the trace-monoid property of rows: A row variable α can be canceled on either side of the problem and the algorithm recurses on the residual problem.
+The first two exhaustion rules, U-ε-var and U-ε-clash, handle a problem with an empty side ⟨⟩. If the other side has only variables, U-ε-var sends each of them to ε; if it has a field, U-ε-clash reports a clash. The following cancel moves use the trace-monoid property of rows: A row variable α can be canceled on either side of the problem and the algorithm recurses on the residual problem.
 
 The solving rules fire when one side is a lone variable α. U-var-collapse fires when the same variable is found on the other side, surrounded only by other type variables. This is best explained by an example: The following row ⟨γ, α, β⟩ is solved by sending every type variable but α to ε [γ → ε, β → ε]. Both sides are then equal. A repeated occurrence forces α to ε as well. U-var-solve simply binds α to the other sides value if α is not contained and can form no cycle. $"rv"(α)$ looks for a variable at any depth and not only the spine. Finally, U-var-occurs reports a cycle if it exists.
 
 // explain the trace monoid structure and adimt that it does not really fit Nix' syntax
-[The three matching moves differ in how far they may look for a partner. A _window_ is a maximal var-free segment at one end of a spine: U-field-L and U-field-R pair a field only inside it, because a row-variable in between could be instantiated to a colliding field and the pairing would be a guess about shadowing. In $⟨m: 𝓫, l: 𝓫, α, l: 𝓫′⟩$ the leading window is $⟨m: 𝓫, l: 𝓫⟩$ and the trailing window is $⟨l: 𝓫′⟩$. A leading $l: τ$ on the other side is paired with $l: 𝓫$. Against $⟨m: 𝓫, α, l: 𝓫′⟩$ it has no partner in the leading window, and pairing it with $l: 𝓫′$ would assume that α carries no l. U-ground lifts that restriction by counting: if one side [has no variables at all and some label occurs equally often and positively on both sides](explain this), then the other side's variables cannot carry that label, the pairing is positional, and it is again forced.](todo)
+[The three matching moves differ in how far they may look for a partner. A _window_ is a maximal var-free segment at one end of a spine: U-field-L and U-field-R pair a field only inside it, because a row-variable in between could be instantiated to a colliding field and the pairing would be a guess about shadowing. In $⟨m: 𝓫, l: 𝓫, α, l: 𝓫′⟩$ the leading window is $⟨m: 𝓫, l: 𝓫⟩$ and the trailing window is $⟨l: 𝓫′⟩$. A leading $l: τ$ on the other side is paired with $l: 𝓫$. Against $⟨m: 𝓫, α, l: 𝓫′⟩$ it has no partner in the leading window, and pairing it with $l: 𝓫′$ would assume that α carries no l. U-ground lifts that restriction by counting. A var-free side fixes the number $|s|_l$ of l-fields. If both sides have the same positive number, the variables of the other side cannot carry an l without breaking the count, so the i-th l-field on one side pairs with the i-th on the other, and the pairing is again forced.](todo)
 
 A field facing only variables on the other side has no partner, but it may have a host. U-host fires on a leading field $l: τ$ when the other side has a _sole host_ β for it: β is the first variable of that side, the side has no l-field and no keyed field, every other variable of the side occurs in τ and so cannot carry the field without containing itself, and β occurs nowhere else in the problem, neither in τ, nor in the rest of the first side, nor in a payload of its own side. Every unifier then places the field at the front of β, so the move is forced. It binds $β ≔ (l: τ | β′)$ for a fresh β′ and continues with the rest of both sides. Since β occurs once, renaming it to β′ on the spine is the same as applying the binding to the whole problem, and the solution stays applied. U-host is stated for the leading end only; its mirror at the trailing end is reported as stuck (@incompleteness-forced). A field demand of a lookup still never enters a row-variable during unification. The only place where it does is the materialization of spent promises at finalization (@inference), after unification has run. Finally U-clash is a global projection check rather than a per-window one, and U-stuck reports a terminal configuration.
 
@@ -335,9 +335,8 @@ A field facing only variables on the other side has no partner, but it may have 
   In $⟨α, l: γ, β⟩ scripts(≐)_r ⟨l: 𝓫⟩$ both windows of the left side are empty, since the spine begins and ends with a variable, so neither U-field-L nor U-field-R applies. The right side, however, is var-free and $|s₁|_l = |s₂|_l = 1$. Whatever α and β become, they cannot carry an l without making the counts differ, so U-ground pairs the two l-fields and emits $γ ≐ 𝓫$. The residual $⟨α, β⟩ scripts(≐)_r ⟨⟩$ is solved by U-ε-var with $[α ≔ ε, β ≔ ε]$.
 ] <ex-unif-ground>
 
-// meta: why does this use l₁ an l₂ instead of l and m?
 #example(name: [Cancelling a shared tail])[
-  For $l₁ ≠ l₂$, the problem $(l₁: 𝓫 | α) scripts(≐)_r (l₂: 𝓫 | α)$ has spines that both end in α. U-var-refl-R cancels it and leaves $⟨l₁: 𝓫⟩ scripts(≐)_r ⟨l₂: 𝓫⟩$, where no field finds a partner and U-clash fires, since $|⟨l₁: 𝓫⟩|_(l₁) = 1 > 0$ and the right side is var-free. By @lem-cancel the cancellation loses no unifier, so the clash is sound. Paszke and Xie @extensible_tabular need a side condition on the shared tail to reach the same verdict.
+  For $l ≠ m$, the problem $(l: 𝓫 | α) scripts(≐)_r (m: 𝓫 | α)$ has spines that both end in α. U-var-refl-R cancels it and leaves $⟨l: 𝓫⟩ scripts(≐)_r ⟨m: 𝓫⟩$, where no field finds a partner and U-clash fires, since $|⟨l: 𝓫⟩|_l = 1 > 0$ and the right side is var-free. By @lem-cancel the cancellation loses no unifier, so the clash is sound. Paszke and Xie @extensible_tabular need a side condition on the shared tail to reach the same verdict.
 ] <ex-unif-cancel>
 
 #example(name: [A stuck problem])[
