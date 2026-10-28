@@ -1,7 +1,7 @@
 #import "./functions.typ": *
 #set document(
   title: "A Records Calculus with Asymmetric Concatenation for Nix",
-  description: "Master thesis about a Soft-Typing Records Calculus with Asymmetric Concatenation for Nix",
+  description: "Master thesis about a Records Calculus with Asymmetric Concatenation for Nix",
   author: "Sebastian Klähn",
   keywords: ("Nix", "Type inference", "Laziness", "Records"),
 )
