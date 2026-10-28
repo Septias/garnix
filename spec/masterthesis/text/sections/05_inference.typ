@@ -1,4 +1,5 @@
 #import "../functions.typ": *
+#import "04_unification.typ": u_clash, u_occurs, u_stuck
 
 #let st_park = $⊎$
 #let st_drop = $∖$
@@ -47,7 +48,7 @@ The inference algorithm is a judgement $Γ; S ⊢ e ⇒ τ; S′$ that takes a _
 
 The solver state @solver-state consists of three parts: A sort-respecting substitution θ, a list Δ of parked stumps and a record $macron(κ)$ of the sorts at which each name was drawn. ⟦S⟧τ applies the substitution of S to τ, $S(α)$ reads the sort of α from $macron(κ)$, and $Δ_i$ denotes the parked stumps of $S_i$. A parked stump $⟨α ⊳ ρ.l ↓ δ⟩$ is a lookup of l in ρ whose result is represented by the fresh variable δ, annotated with a row-variable α that blocks it. When a new row variable is written, the algorithm checks every stump that is blocked on it and tries to solve it again, writing the result into δ. The implementation additionally reports a warning for every ★ that inference commits.
 
-The state is kept under one invariant, _quiescence_. Quiescence demands that every stump in Δ is genuinely blocked on its recorded variable α. Every written solution can break this condition so a new judgement is needed that rolls all stumps to completion or blockage after every move. The judgement $S ⊢ τ ≐ τ' ⇝ S'$ runs the unifier of @unification and writes its solution into the state and the judgement $S ⊢ τ ≐ τ′ #st_solve S′$ does so and _saturates_ afterwards. Saturation is the process of re-examining all unblocked stumps until the state is quiescent again.
+The state is kept under one invariant, _quiescence_. Quiescence demands that every stump in Δ is genuinely blocked on its recorded variable α. Every written solution can break this condition so a new judgement is needed that rolls all stumps to completion or blockage after every move. The judgement $S ⊢ τ ≐ τ' ⇝ S'$ runs the unifier of @unification and writes its solution into the state. Only a successful unification has a rule: a #u_clash, #u_occurs or #u_stuck verdict has no derivation, so inference rejects the program. The judgement $S ⊢ τ ≐ τ′ #st_solve S′$ does so and _saturates_ afterwards. Saturation is the process of re-examining all unblocked stumps until the state is quiescent again.
 
 == Inference Rules
 
@@ -308,7 +309,6 @@ Materialization is the one step of the algorithm that places a field into a row-
   Saturation admits no infinite run, and for every term e the entry point $⊢ e ⇒ τ; S′$ returns a verdict.
 ] <thm-infer-term>
 
-// PROF: No rule consumes a Stuck verdict; the behaviour on Stuck is unspecified, but G3 relies on it.
 #theorem(name: [Soundness of inference], lean: "runSound, run_typed")[
   If $⊢ e ⇒ τ; S′$, then $∅ ⊢ e : ⟦S′⟧τ$.
 ] <thm-infer-sound>
