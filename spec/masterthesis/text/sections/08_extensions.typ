@@ -7,7 +7,7 @@
 == First-Class Labels <sec-fc-labels>
 // PROF: String keys give star (T-sel-dyn-b, T-rcd-dyn-b), so r // { ${n} = v; } with a computed string is rejected: the dominant Nix idiom.
 
-NixLang computes labels that can be used to index records or bind variables at runtime. The expression `x.${}` selects an arbitrary string expression, and the expression `{ ${name} = v; }` binds a value to a label that is result of an arbitrary expression. First class labels fit naturally in our system: Shadowing inside a row can not be decided after label variable so it behaves identically to a row-variable. In fact, in the following section we generalize these two types of variables to _barriers_ afer which shadowing is unclear. The comparison of label variables also benefits from our addition of the unknown type: If two variables can not be decided to be equal or not, the unknown type can be used to type the expression.
+NixLang computes labels that can be used to index records or bind fields at runtime. The expression `x.${e}` selects the field named by an arbitrary string expression e, and the expression `{ ${name} = v; }` binds a value to a label that is the result of an arbitrary expression. First-class labels fit naturally in our system: Shadowing inside a row cannot be decided after a label variable so it behaves identically to a row-variable. In fact, in the following section we generalize these two types of variables to _barriers_ after which shadowing is unclear. The comparison of label variables also benefits from our addition of the unknown type: If two variables cannot be decided to be equal or not, the unknown type can be used to type the expression.
 
 
 #let fc_syntax = figure(
@@ -56,7 +56,7 @@ NixLang computes labels that can be used to index records or bind variables at r
 )
 #fc_lookup <fc-lookup>
 
-@fc-lookup generalizes the lookup relation from labels to keys. Two keys are equal when they are the same label literal or variable, distinct when the labels are different and undecided otherways. Just as for rows, the definite answer are stable under substitution so the lookup stays deterministic and total. A new source of $?$ appears for a field whose key cannot yet be compared. The lookup of l in $(\${γ}: τ)$ may hit or miss depending on the label γ becomes, and a lookup under a variable key α may hit any literal field.
+@fc-lookup generalizes the lookup relation from labels to keys. Two keys are equal when they are the same label literal or variable, distinct when the labels are different and undecided otherwise. Just as for rows, the definite answers are stable under substitution so the lookup stays deterministic and total. A new source of $?$ appears for a field whose key cannot yet be compared. The lookup of l in $(\${γ}: τ)$ may hit or miss depending on the label γ becomes, and a lookup under a variable key α may hit any literal field.
 
 The variable that blocks a $?$ is accordingly no longer always a row-variable. It is the row-variable at which the search stopped, the variable key of the lookup, or the variable key of a field, and inference must wake a stump when any of these is solved.
 
@@ -137,7 +137,7 @@ A keyed field is congruent only under the same key, and a keyed field with a lit
 )
 #fc_typing <fc-typing>
 
-@fc-typing gives the typing rules and the reduction. The three rules for dynamic selection are those of static selection with the label replaced by the key of₂'s type, and T-rcd-dyn records the key e₁ in a keyed field. T-sel-dyn-𝓫 and T-rcd-dyn-𝓫 answer a key of base type with ★. Discharge (@instantiation) replays a keyed stump with the keyed lookup: θ is applied to both the row and the key, $(θ ρ).(θ k) ↓ r$, and the verdict pins δ exactly as for a static stump.
+@fc-typing gives the typing rules and the reduction. The three rules for dynamic selection are those of static selection with the label replaced by the key of e₂'s type, and T-rcd-dyn records the key e₁ in a keyed field. T-sel-dyn-𝓫 and T-rcd-dyn-𝓫 answer a key of base type with ★. Discharge (@instantiation) replays a keyed stump with the keyed lookup: θ is applied to both the row and the key, $(θ ρ).(θ k) ↓ r$, and the verdict pins δ exactly as for a static stump.
 
 The evaluation contexts evaluate the record before the key, and E-sel-dyn then selects the leftmost binding of the label, as E-sel of @semantics does for a static one. A dynamic record evaluates its key but leaves the field unevaluated, as a record literal does. A missing label and a key that is not a label are both lookup errors.
 

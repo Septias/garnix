@@ -127,7 +127,7 @@ A lookup can advance further into a row as soon as a blocking row variable α is
   For every row ρ and label l there is exactly one lookup result r with $ρ.l ↓ r$.
 ] <lem-lookup-det>
 
-#proof[By induction on ρ: every row shape matches exactly one rule.]
+#proof[By induction on ρ: the shape of ρ, the comparison of the labels and, for a concatenation, the result for ρ₁ select exactly one rule.]
 
 A definite derivation never uses L-var, so no substitution can change its result; only the unknown result ? can be refined:
 
@@ -135,7 +135,7 @@ A definite derivation never uses L-var, so no substitution can change its result
   If $ρ.l ↓ r$ and $r ≠ #h(0.2em) ?$, then $(θ ρ).l ↓ θ r$ for every substitution θ.
 ] <lem-lookup-stable>
 
-#proof[By induction on the derivation of $ρ.l ↓ r$. A definite derivation never uses L-var, so it never reaches a row-variable, and θ acts on no part of the row it inspects.]
+#proof[By induction on the derivation of $ρ.l ↓ r$. A definite derivation never uses L-var, so it never reaches a row-variable, and θ changes no label it inspects.]
 
 
 == Row Equivalence
