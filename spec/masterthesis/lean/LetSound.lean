@@ -408,7 +408,7 @@ def UnownedLet (B C : Type) [DecidableEq B] (constTy : Sig B C) : Prop :=
     Infer constTy Γ S e₁ τ₁ S₁ →
     (∀ α ∈ ᾱ, α ∉ letEnvFtv Γ S₁ (letG S₁ ᾱ)) →
     (∀ p ∈ letQ S₁ ᾱ, ∀ δ ∈ (p.stump.res.applySubst S₁.subst).ftv, δ ∈ ᾱ) →
-    LetSpent S₁ (letQ S₁ ᾱ) →
+    LetSpent S₁ ᾱ (letQ S₁ ᾱ) →
     Infer constTy (Γ.bindScheme x (letScheme S₁ ᾱ (letQ S₁ ᾱ) τ₁))
       { S₁ with parked := letG S₁ ᾱ } e₂ τ₂ S₂ →
     Infer constTy Γ S (.letE x e₁ e₂) τ₂ S₂

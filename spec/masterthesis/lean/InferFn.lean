@@ -492,8 +492,8 @@ theorem keyGuessF_sound {n : Nat} {S : SolverState B} {κ : TyVar} :
 
 /-- the key variables the witness guesses, each with its candidates: the
 variable key of a stump on a spent stump's blocker (the spent stump itself
-included). First a label no program writes, then the literal labels of the
-stump's row, for a lookup that has to hit. -/
+included). First `${κ}`, the label `LetSpent` reads κ as anyway, then the
+literal labels of the stump's row, for a lookup that has to hit. -/
 def guessTargets (S : SolverState B) : List (TyVar × List Label) :=
   let spent := S.parked.filter fun p => !(p.stump.res.applySubst S.subst).isVar
   S.parked.filterMap fun p =>
@@ -939,7 +939,7 @@ def runF (constTy : Sig B C) (n : Nat) (e : Expr C) : IRes (QScheme B × SolverS
   let r ← inferF constTy n QCtx.empty runStart e
   let S₂ ← mergeAllF n r.2
   let S₃ ← witnessF n S₂
-  if LetSpent S₃ S₃.parked then
+  if LetSpent S₃ (letCand S₃ r.1) S₃.parked then
     pure (letScheme S₂ (letCand S₂ r.1) S₂.parked r.1, S₂)
   else .fail "spent promise without witness"
 

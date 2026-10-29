@@ -1024,6 +1024,17 @@ info: 'MinimalCalculus.satStep_wf' depends on axioms: [propext, Classical.choice
 /-- info: 'MinimalCalculus.LetAdmissible.union' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in #print axioms LetAdmissible.union
 
+-- M9: a spent stump under a generalized key variable is fillable (the witness
+-- reads the key as the label `${κ}`); fillability only grows with ᾱ, which is
+-- what keeps admissible choices closed under union
+/-- info: 'MinimalCalculus.Parked.fillable_mono' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in #print axioms Parked.fillable_mono
+
+/--
+info: 'MinimalCalculus.lookupV_blocked_fill' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms lookupV_blocked_fill
+
 /--
 info: 'MinimalCalculus.greatestAlpha_spec' depends on axioms: [propext, Classical.choice, Quot.sound]
 -/
@@ -1086,6 +1097,11 @@ info: 'MinimalCalculus.InferRuns.spentA_inst_fill' depends on axioms: [propext, 
 info: 'MinimalCalculus.InferRuns.keyEx_typed' depends on axioms: [propext, Classical.choice, Quot.sound]
 -/
 #guard_msgs in #print axioms InferRuns.keyEx_typed
+
+/--
+info: 'MinimalCalculus.InferRuns.keyLetEx_typed' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms InferRuns.keyLetEx_typed
 
 /--
 info: 'MinimalCalculus.runF_eq_run' depends on axioms: [propext, Classical.choice, Quot.sound]

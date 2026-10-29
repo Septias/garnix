@@ -598,9 +598,10 @@ theorem Merges.quiescent {B : Type} [DecidableEq B] {S S' : SolverState B} :
 -- the change never reaches a reported type, so all it owes is that a witness
 -- there is a witness of the answer (`inhabited_of_ext`, Finalization.lean). Any
 -- equation, solved and saturated, will do. `runF` makes two kinds:
--- * a KEY GUESS κ ≔ ℓ. A spent stump with a variable key, `r: a: (r.${a}) c`,
---   cannot be filled, since no field is named by a variable; after the guess it
---   asks for ℓ, and `LetSpent` fills its row with ℓ.
+-- * a KEY GUESS κ ≔ ℓ. `LetSpent` reads a key variable on a row blocker as the
+--   label `${κ}` by itself; what it cannot meet is a spent stump blocked on its
+--   own key over a literal record, `a: ({foo = y: y}.${a}) c`, which needs κ to
+--   be one of the record's labels. The guess supplies it.
 -- * a WITNESS MERGE of two stumps on one blocker with one key. Unlike M-merge
 --   it is not forced (the rows may differ before the blocker), but the filled
 --   blocker answers both lookups with one field, so the witness needs it.
@@ -706,9 +707,11 @@ def letScheme {B : Type} (S₁ : SolverState B) (ᾱ : List TyVar) (Δq : List (
   ⟨ᾱ, Δq.map (fun p => (⟨p.stump.row.applySubst S₁.subst, p.stump.label.applySubst S₁.subst,
       p.stump.res.applySubst S₁.subst⟩ : Stump B)), τ₁.applySubst S₁.subst⟩
 
-/-- a spent stump can be met by filling its blocker as a ROW: its key is a label,
-and the blocker is not a key variable of the row — a label lookup blocked on a
-`${γ}` field waits on γ, and no row extension decides it. -/
+/-- a spent stump can be met by filling its blocker as a ROW: its key is a label
+or a generalized key variable other than the blocker (the witness then reads it
+as the label `${κ}`, `Key.keyName`), and the blocker is not a key variable of
+the row — a label lookup blocked on a `${γ}` field waits on γ, and no row
+extension decides it. -/
 def Key.isLit : Key → Bool
   | .lit _ => true
   | .var _ => false
@@ -716,14 +719,34 @@ def Key.isLit : Key → Bool
 theorem Key.exists_of_isLit {k : Key} (h : k.isLit = true) : ∃ l, k = .lit l := by
   cases k <;> simp_all [Key.isLit]
 
-def Parked.fillable {B : Type} (S : SolverState B) (p : Parked B) : Bool :=
-  (p.stump.label.applySubst S.subst).isLit &&
+/-- the key a fillable stump may have: a label, or a variable of ᾱ other than
+the blocker -/
+def Key.fillKey (ᾱ : List TyVar) (β : TyVar) : Key → Bool
+  | .lit _ => true
+  | .var κ => decide (κ ∈ ᾱ) && decide (κ ≠ β)
+
+def Parked.fillable {B : Type} (S : SolverState B) (ᾱ : List TyVar) (p : Parked B) : Bool :=
+  (p.stump.label.applySubst S.subst).fillKey ᾱ p.blocker &&
     !((p.stump.row.applySubst S.subst).sortedFtv.contains (.lab, p.blocker))
 
-theorem Parked.fillable_iff {B : Type} {S : SolverState B} {p : Parked B} :
-    p.fillable S = true ↔ (p.stump.label.applySubst S.subst).isLit = true ∧
+theorem Key.fillKey_iff {ᾱ : List TyVar} {β : TyVar} {k : Key} :
+    k.fillKey ᾱ β = true ↔ (∃ l, k = .lit l) ∨ (∃ κ, k = .var κ ∧ κ ∈ ᾱ ∧ κ ≠ β) := by
+  cases k <;> simp [Key.fillKey]
+
+theorem Parked.fillable_iff {B : Type} {S : SolverState B} {ᾱ : List TyVar} {p : Parked B} :
+    p.fillable S ᾱ = true ↔ (p.stump.label.applySubst S.subst).fillKey ᾱ p.blocker = true ∧
       (.lab, p.blocker) ∉ (p.stump.row.applySubst S.subst).sortedFtv := by
   simp [Parked.fillable]
+
+/-- ⊢  a stump fillable for ᾱ is fillable for any larger ᾱ′. -/
+theorem Parked.fillable_mono {B : Type} {S : SolverState B} {ᾱ ᾱ' : List TyVar}
+    {p : Parked B} (h : p.fillable S ᾱ = true) (hs : ∀ α ∈ ᾱ, α ∈ ᾱ') :
+    p.fillable S ᾱ' = true := by
+  rw [Parked.fillable_iff, Key.fillKey_iff] at h ⊢
+  refine ⟨?_, h.2⟩
+  rcases h.1 with h | ⟨κ, hk, hκ, hne⟩
+  · exact .inl h
+  · exact .inr ⟨κ, hk, hs κ hκ, hne⟩
 
 /-- every type variable to ★; rows and keys stay -/
 def TySubst.starTy {B : Type} : TySubst B := ⟨fun _ => .unk, fun γ => .var γ, fun x => .var x⟩
@@ -746,25 +769,29 @@ theorem Parked.spentAlike_refl {B : Type} {S₁ : SolverState B} {p : Parked B}
   ⟨h, rfl⟩
 
 /-- A spent result can be met at some instance, by extending its blocker row
-with the field (`LetResults.inhabited`, LetCase.lean): its key is literal,
-every stump on the same blocker is literally keyed and, if it has its key, is
-spent alike (`Parked.spentAlike`), and no spent stump's blocker occurs in it. A sufficient, syntactic test for the
-inhabitation of the scheme (`∃ τ₁. σ ≥ τ₁`, the T-let premise); unlike the
-property itself it is closed under union (`LetAdmissible.union`). -/
-def LetSpent {B : Type} (S₁ : SolverState B) (Δq : List (Parked B)) : Prop :=
+with the field (`LetResults.inhabited`, LetCase.lean): it is fillable, every
+stump on the same blocker is fillable and, if it asks the same field name
+(`Key.keyName`), is spent alike (`Parked.spentAlike`); a key variable on the
+blocker blocks no stump of Δq (the witness reads it as a label, and a stump
+waiting on it would resolve); and no spent stump's blocker occurs in a spent
+result. A sufficient, syntactic test for the inhabitation of the scheme
+(`∃ τ₁. σ ≥ τ₁`, the T-let premise); unlike the property itself it is closed
+under union (`LetAdmissible.union`). -/
+def LetSpent {B : Type} (S₁ : SolverState B) (ᾱ : List TyVar) (Δq : List (Parked B)) : Prop :=
   ∀ p ∈ Δq, (p.stump.res.applySubst S₁.subst).isVar = false →
-      p.fillable S₁ = true ∧
+      p.fillable S₁ ᾱ = true ∧
       (∀ q ∈ Δq, q.blocker = p.blocker →
-        q.fillable S₁ = true ∧
-        (q.stump.label.applySubst S₁.subst = p.stump.label.applySubst S₁.subst →
-          q.spentAlike S₁ p)) ∧
+        q.fillable S₁ ᾱ = true ∧
+        ((q.stump.label.applySubst S₁.subst).keyName =
+            (p.stump.label.applySubst S₁.subst).keyName → q.spentAlike S₁ p) ∧
+        (∀ r ∈ Δq, q.stump.label.applySubst S₁.subst ≠ .var r.blocker)) ∧
       (∀ q ∈ Δq, (q.stump.res.applySubst S₁.subst).isVar = false →
         q.blocker ∉ (p.stump.res.applySubst S₁.subst).ftv)
 
 set_option synthInstance.maxSize 512 in
 set_option synthInstance.maxHeartbeats 200000 in
-instance {B : Type} [DecidableEq B] {S : SolverState B} {Δ : List (Parked B)} :
-    Decidable (LetSpent S Δ) := by
+instance {B : Type} [DecidableEq B] {S : SolverState B} {ᾱ : List TyVar} {Δ : List (Parked B)} :
+    Decidable (LetSpent S ᾱ Δ) := by
   unfold LetSpent; infer_instance
 
 /-- A-let's premise on the generalized RESULTS, read at S₁ (`QScheme.WF` and
@@ -772,7 +799,7 @@ the inhabitation of the scheme): each is a type over ᾱ — a variable, or a ty
 a promise was spent on — and the spent ones can be met (`LetSpent`). -/
 def LetResults {B : Type} (S₁ : SolverState B) (ᾱ : List TyVar) (Δq : List (Parked B)) :
     Prop :=
-  (∀ p ∈ Δq, ∀ δ ∈ (p.stump.res.applySubst S₁.subst).ftv, δ ∈ ᾱ) ∧ LetSpent S₁ Δq
+  (∀ p ∈ Δq, ∀ δ ∈ (p.stump.res.applySubst S₁.subst).ftv, δ ∈ ᾱ) ∧ LetSpent S₁ ᾱ Δq
 
 --------------------- A-let'S CHOICE OF ᾱ -------------------------------------
 
@@ -848,7 +875,7 @@ structure LetAdmissible {B : Type} (Γ : QCtx B) (S S₁ : SolverState B) (ᾱ :
   fresh : ∀ α ∈ ᾱ, α ∉ letEnvFtv Γ S₁ (letG S₁ ᾱ)
   own   : ∀ p ∈ letQ S₁ ᾱ, ∀ q ∈ S.parked, p.stump ≠ q.stump
   res   : ∀ p ∈ letQ S₁ ᾱ, ∀ δ ∈ (p.stump.res.applySubst S₁.subst).ftv, δ ∈ ᾱ
-  spent : LetSpent S₁ (letQ S₁ ᾱ)
+  spent : LetSpent S₁ ᾱ (letQ S₁ ᾱ)
 
 theorem mem_letEnvFtv {B : Type} {Γ : QCtx B} {S₁ : SolverState B} {Δ : List (Parked B)}
     {α : TyVar} :
@@ -1268,7 +1295,7 @@ S₃ = S₂. -/
 def Run {B C : Type} [DecidableEq B] (constTy : Sig B C) (e : Expr C) (σ : QScheme B) : Prop :=
   ∃ τ S₁ S₂ S₃, Infer constTy QCtx.empty ⟨Sol.nil, [], [], ⟨1⟩, []⟩ e τ S₁ ∧
     Merges S₁ S₂ ∧ σ = letScheme S₂ (letCand S₂ τ) S₂.parked τ ∧
-    Guesses S₂ S₃ ∧ LetSpent S₃ S₃.parked
+    Guesses S₂ S₃ ∧ LetSpent S₃ (letCand S₃ τ) S₃.parked
 
 /-- **Algorithm soundness, top-level schemes**: every instance of the answer
 types the program, and the answer has one (conjuncts 1 and 2 of

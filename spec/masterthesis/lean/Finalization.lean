@@ -130,8 +130,9 @@ theorem QScheme.readAt_id (sc : QScheme B) : sc.readAt (TySubst.id B) id = sc :=
 /-- ⊢  **the top-level scheme has an instance** when `LetSpent` holds:
 `LetResults.inhabited` at the identity reading. Every blocker and every result
 variable is bound, since ᾱ is all of ftv. -/
-theorem top_inhabited {S : SolverState B} (q : S.Quiescent) (hsp : LetSpent S S.parked)
-    (τ : Ty B) : ∃ τ', (letScheme S (letCand S τ) S.parked τ).Inst τ' := by
+theorem top_inhabited {S : SolverState B} (q : S.Quiescent) (τ : Ty B)
+    (hsp : LetSpent S (letCand S τ) S.parked) :
+    ∃ τ', (letScheme S (letCand S τ) S.parked τ).Inst τ' := by
   obtain ⟨τ', h⟩ := LetResults.inhabited τ
     ⟨fun p hp δ hδ => mem_letCand_parked hp (.inr (.inl hδ)), hsp⟩
     (fun p hp => (q p hp).mem_ftv.elim (fun h => mem_letCand_parked hp (.inl h))
@@ -148,8 +149,7 @@ theorem top_inhabited {S : SolverState B} (q : S.Quiescent) (hsp : LetSpent S S.
 stumps, an instance χ′ of the scheme read at S′ gives one of the scheme read at
 S: χ′ ∘ ⟦S′⟧ on S's variables. A stump of S still parked at S′ discharges by χ′;
 one that S′'s saturation discharged holds at every substitution that satisfies
-S′. So the search for a witness may change the state at will, as the key guess
-does. -/
+S′. So the search for a witness may change the state at will (`Guesses`). -/
 theorem inhabited_of_ext {S S' : SolverState B} (hc : S.sol.Clean) (hk : S.KeepsS S')
     (hx : S.Ext S') (hc' : S'.sol.Clean) (τ : Ty B)
     (h : ∃ τ', (letScheme S' (letCand S' τ) S'.parked τ).Inst τ') :
@@ -205,7 +205,7 @@ theorem runSound {C : Type} {constTy : Sig B C} : RunSound B C constTy := by
   · ---------------------------------------------- the scheme has an instance
     obtain ⟨k₂₃, -, x₂₃, -⟩ := hkg.keeps c₂
     exact inhabited_of_ext c₂ k₂₃ x₂₃ (hkg.keeps c₂).2.1 τ
-      (top_inhabited (hkg.quiescent q₂) hsp τ)
+      (top_inhabited (hkg.quiescent q₂) τ hsp)
 
 --------------------- ≈-EQUAL HITS ON ONE RESULT ------------------------------
 -- Two constraints on the SAME result variable whose lookups find ≈-equal but

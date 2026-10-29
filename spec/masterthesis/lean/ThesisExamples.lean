@@ -752,10 +752,11 @@ example : Unifies (sub [("β", row [rv "β'", f "l" b]), ("α", row [rv "β'", f
 -- …yet [β ≔ (l: 𝓫), α ≔ ε] is a most general unifier
 example := stuck_masks_mgu
 
--- Partially generalized lets. A spent stump blocked on its key is not
--- generalized: `let f = r: a: r.${a} c` binds f monomorphically …
+-- Generalized lets. A spent stump under a key variable is generalized with its
+-- key (M9: the witness reads κ as the label `${κ}`): `let f = r: a: r.${a} c`
+-- binds f polymorphically, nothing stays in Δ_Γ …
 #guard schemeOf (lam "r" (lam "a" (app (sd (v "r") (v "a")) c))) =
-  ("∀. ({ρ1} → (⌊κ2⌋ → α3))", 1)
+  ("∀#1,#2,#3. ⟨ρ1.κ2 ↓ (𝓫 → α3)⟩ ⇒ ({ρ1} → (⌊κ2⌋ → α3))", 0)
 -- … while nested selection `let g = x: (x.l).m` is generalized
 #guard schemeOf (lam "x" (sel (sel (v "x") "l") "m")) =
   ("∀#1,#2,#3. ⟨ρ3.m ↓ α2⟩, ⟨ρ1.l ↓ {ρ3}⟩ ⇒ ({ρ1} → α2)", 0)

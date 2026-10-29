@@ -223,6 +223,27 @@ theorem lookup_blocked_fill {ρ : Row B} {l : Label} {β : TyVar}
   -- a key blocker is a label variable of the row: excluded
   | dunk => exact absurd (by simp [Row.sortedFtv, Key.sortedFtv]) hk
 
+/-- ⊢  a lookup under a key VARIABLE κ, blocked on a row variable β ≠ κ, with β
+filled: the key read as any label l finds what the fill has for l. Before β the
+row is hollow (a label variable is never apart from a field), so nothing there
+can answer. -/
+theorem lookupV_blocked_fill {ρ : Row B} {κ β : TyVar}
+    (h : LookupBlockedQ ρ (.var κ) β) (hne : β ≠ κ) (θ : TySubst B)
+    {fs : List (Label × Ty B)} {γ : TyVar} (hβ : θ.row β = fillRow fs γ) (l : Label) :
+    Lookup (ρ.applySubst θ) l (fillRes fs l) := by
+  generalize hk : (Key.var κ : Key) = k at h
+  induction h with
+  | varFree =>
+      show Lookup (θ.row _) _ _
+      rw [hβ]; exact lookup_fillRow γ _ fs
+  | sunk => injection hk with hk; exact absurd hk.symm hne
+  | dunkQ _ => injection hk with hk; exact absurd hk.symm hne
+  | dunkF => cases hk
+  | catSkip ha _ ih =>
+      subst hk
+      exact .catSkip ((LookupV.hollow ha rfl).applySubst θ |>.lookup l) (ih hne hβ rfl)
+  | catUnk _ ih => exact lookup_cat_left (ih hne hβ hk) (fillRes_ne_absent _ _)
+
 theorem lookup_some_mem {l : Label} {τ : Ty B} :
     ∀ {fs : List (Label × Ty B)}, fs.lookup l = some τ → (l, τ) ∈ fs
   | [], h => by simp [List.lookup] at h
@@ -259,9 +280,10 @@ binders renamed by an injective f: an unspent result is sent to ★ (its lookup
 stays blocked); a spent one is met by filling its blocker with the field, as
 the old top level did (F-hit). The field holds the result with the unspent ones
 already at ★, so a variable shared between a spent and an unspent result is no
-obstacle.
-`hav` is all the proof needs of the renaming: σ sends no free key variable of a
-stump to a binder's new name. -/
+obstacle. A key VARIABLE κ on a filled blocker is read as the label `${κ}`
+(`Key.keyName`), which is the name its field is filed under; `LetSpent` makes
+sure no stump waits on such a κ. `hav` is all the proof needs of the renaming:
+σ sends no free key variable of a stump to a binder's new name. -/
 theorem LetResults.inhabited {S₁ : SolverState B} {ᾱ : List TyVar} {Δq : List (Parked B)}
     (τ₁ : Ty B) (hres : LetResults S₁ ᾱ Δq) (hbq : ∀ p ∈ Δq, p.blocker ∈ ᾱ)
     (hblk : ∀ p ∈ Δq, LookupBlockedQ (p.stump.row.applySubst S₁.subst)
@@ -280,28 +302,106 @@ theorem LetResults.inhabited {S₁ : SolverState B} {ᾱ : List TyVar} {Δq : Li
     fun p hp => Ty.ftv_rename _ (hrd p hp)
   let rd : Parked B → Ty B := fun p =>
     (p.stump.res.applySubst S₁.subst).applySubst (readSub σ ᾱ f)
+  ------------------------------------------------ the keys read as labels
+  -- a stump is on a FILLED blocker when a spent stump waits on the same variable
+  let onFilled : Parked B → Bool := fun q =>
+    Δq.any (fun p => !(p.stump.res.applySubst S₁.subst).isVar && decide (p.blocker = q.blocker))
+  have onFilled_iff : ∀ {q : Parked B}, onFilled q = true ↔
+      ∃ p ∈ Δq, (p.stump.res.applySubst S₁.subst).isVar = false ∧ p.blocker = q.blocker := by
+    intro q; simp [onFilled, List.any_eq_true]
+  let keyG : List TyVar := Δq.filterMap fun q =>
+    match q.stump.label.applySubst S₁.subst with
+    | .var κ => if onFilled q then some κ else none
+    | .lit _ => none
+  have mem_keyG : ∀ {κ : TyVar}, κ ∈ keyG → ∃ q ∈ Δq, onFilled q = true ∧
+      q.stump.label.applySubst S₁.subst = .var κ := by
+    intro κ h
+    obtain ⟨q, hq, he⟩ := List.mem_filterMap.mp h
+    split at he
+    · next κ' hl =>
+      split at he
+      · next ho => injection he with he; exact ⟨q, hq, ho, by rw [hl, he]⟩
+      · cases he
+    · cases he
+  -- a key on a filled blocker is fillable, so it is generalized
+  have keyG_sub : ∀ κ ∈ keyG, κ ∈ ᾱ := by
+    intro κ h
+    obtain ⟨q, hq, ho, hl⟩ := mem_keyG h
+    obtain ⟨p, hp, hps, hpb⟩ := onFilled_iff.mp ho
+    have hf := ((hres.2 p hp hps).2.1 q hq hpb.symm).1
+    rcases Key.fillKey_iff.mp (Parked.fillable_iff.mp hf).1 with ⟨l, hk⟩ | ⟨κ', hk, hκ', -⟩
+    · rw [hl] at hk; cases hk
+    · rw [hl] at hk; injection hk with hk; exact hk ▸ hκ'
+  let χL : TyVar → Key := fun x =>
+    match keyG.find? (fun κ => f κ == x) with
+    | some κ => .lit (Key.keyName (.var κ))
+    | none => .var x
+  have χL_in : ∀ κ ∈ keyG, χL (f κ) = .lit (Key.keyName (.var κ)) := by
+    intro κ hκ
+    show (match keyG.find? (fun κ' => f κ' == f κ) with
+      | some κ' => Key.lit (Key.keyName (.var κ')) | none => .var (f κ)) = _
+    cases h : keyG.find? (fun κ' => f κ' == f κ) with
+    | none => exact absurd (List.find?_eq_none.mp h κ hκ) (by simp)
+    | some κ' =>
+        have he := List.find?_some h
+        simp only [beq_iff_eq] at he
+        have := hinj _ (keyG_sub _ (List.mem_of_find?_eq_some h)) _ (keyG_sub _ hκ) he
+        subst this; rfl
+  have χL_out : ∀ x, x ∉ keyG.map f → χL x = .var x := by
+    intro x hx
+    show (match keyG.find? (fun κ => f κ == x) with
+      | some κ => Key.lit (Key.keyName (.var κ)) | none => .var x) = _
+    cases h : keyG.find? (fun κ => f κ == x) with
+    | none => rfl
+    | some κ =>
+        exfalso; apply hx
+        have he := List.find?_some h
+        simp only [beq_iff_eq] at he
+        exact List.mem_map.mpr ⟨κ, List.mem_of_find?_eq_some h, he⟩
+  -- a renamed binder outside keyG is no key read as a label
+  have notG : ∀ γ ∈ ᾱ, γ ∉ keyG → f γ ∉ keyG.map f := by
+    intro γ hγ hn hm
+    obtain ⟨κ, hκ, he⟩ := List.mem_map.mp hm
+    exact hn (hinj _ (keyG_sub κ hκ) _ hγ he ▸ hκ)
+  have outG : ∀ x, x ∉ ᾱ.map f → x ∉ keyG.map f := by
+    intro x hx hm
+    obtain ⟨κ, hκ, rfl⟩ := List.mem_map.mp hm
+    exact hx (List.mem_map_of_mem (keyG_sub κ hκ))
+  ------------------------------------------------ the witness
   let χR : TySubst B :=
-    ⟨fun β => if β ∈ ᾱ.map f then .unk else .var β, fun γ => .var γ, fun x => .var x⟩
+    ⟨fun β => if β ∈ ᾱ.map f then .unk else .var β, fun γ => .var γ, χL⟩
   let fills : TyVar → List (Label × Ty B) := fun γ =>
     (Δq.filter (fun p => !(p.stump.res.applySubst S₁.subst).isVar && decide (f p.blocker = γ))).map
       (fun p => ((p.stump.label.applySubst S₁.subst).keyName, (rd p).applySubst χR))
   let χ₀ : TySubst B :=
-    ⟨χR.ty, fun γ => fillRow (fills γ) γ, fun x => .var x⟩
-  -- a generalized result under χR is its ★-image, renamed
+    ⟨χR.ty, fun γ => fillRow (fills γ) γ, χL⟩
+  let χLs : TySubst B := ⟨fun x => .var x, fun x => .var x, χL⟩
+  -- a generalized result under χR is its ★-image, renamed, with keys read
   have hstar : ∀ p ∈ Δq, (rd p).applySubst χR =
-      ((p.stump.res.applySubst S₁.subst).applySubst TySubst.starTy).applySubst
-        (readSub σ ᾱ f) := by
+      (((p.stump.res.applySubst S₁.subst).applySubst TySubst.starTy).applySubst
+        (readSub σ ᾱ f)).applySubst χLs := by
     have key : ∀ τ : Ty B, (∀ α ∈ τ.ftv, α ∈ ᾱ) →
         (τ.applySubst (readSub σ ᾱ f)).applySubst χR =
-          (τ.applySubst TySubst.starTy).applySubst (readSub σ ᾱ f) := by
+          ((τ.applySubst TySubst.starTy).applySubst (readSub σ ᾱ f)).applySubst χLs := by
       intro τ hτ
-      rw [Ty.applySubst_applySubst, Ty.applySubst_applySubst]
+      rw [Ty.applySubst_applySubst, Ty.applySubst_applySubst, Ty.applySubst_applySubst]
       apply Ty.applySubst_congr
       intro α hα
       have hαᾱ := hτ α hα
-      simp [TySubst.comp, readSub, hαᾱ, TySubst.starTy, χR, Ty.applySubst, Row.applySubst,
-        Key.applySubst, List.mem_map_of_mem hαᾱ]
-      exact ⟨α, hαᾱ, rfl⟩
+      have hm : f α ∈ ᾱ.map f := List.mem_map_of_mem hαᾱ
+      refine ⟨?_, ?_, ?_⟩
+      · show ((readSub σ ᾱ f).ty α).applySubst χR =
+          (((TySubst.starTy (B := B)).ty α).applySubst (readSub σ ᾱ f)).applySubst χLs
+        simp only [readSub, if_pos hαᾱ, TySubst.starTy, Ty.applySubst]
+        exact if_pos hm
+      · show ((readSub σ ᾱ f).row α).applySubst χR =
+          (((TySubst.starTy (B := B)).row α).applySubst (readSub σ ᾱ f)).applySubst χLs
+        simp only [readSub, if_pos hαᾱ, TySubst.starTy, Row.applySubst]
+        rfl
+      · show ((readSub σ ᾱ f).lab α).applySubst χR =
+          (((TySubst.starTy (B := B)).lab α).applySubst (readSub σ ᾱ f)).applySubst χLs
+        simp only [readSub, if_pos hαᾱ, TySubst.starTy, Key.applySubst_var]
+        rfl
     exact fun p hp => key _ (hres.1 p hp)
   have mem_fills : ∀ {γ lt}, lt ∈ fills γ → ∃ q ∈ Δq,
       (q.stump.res.applySubst S₁.subst).isVar = false ∧ f q.blocker = γ ∧
@@ -311,17 +411,50 @@ theorem LetResults.inhabited {S₁ : SolverState B} {ᾱ : List TyVar} {Δq : Li
     obtain ⟨hq, hc⟩ := List.mem_filter.mp hq
     simp only [Bool.and_eq_true, Bool.not_eq_true', decide_eq_true_eq] at hc
     exact ⟨q, hq, hc.1, hc.2, rfl⟩
-  -- a filled blocker is some spent stump's, and names a key it has
+  -- a filled blocker is some spent stump's, and names the field it asks
   have fill_key : ∀ p ∈ Δq, ∀ {l τ}, (fills (f p.blocker)).lookup l = some τ → ∃ q ∈ Δq,
       (q.stump.res.applySubst S₁.subst).isVar = false ∧ q.blocker = p.blocker ∧
-      q.stump.label.applySubst S₁.subst = .lit l ∧ τ = (rd q).applySubst χR := by
+      (q.stump.label.applySubst S₁.subst).keyName = l ∧ τ = (rd q).applySubst χR := by
     intro p hp l τ h
     obtain ⟨q, hq, hqs, hqb, he⟩ := mem_fills (lookup_some_mem h)
     have hqb' : q.blocker = p.blocker := hinj _ (hbq q hq) _ (hbq p hp) hqb
-    obtain ⟨l', hl'⟩ := Key.exists_of_isLit (Parked.fillable_iff.mp (hres.2 q hq hqs).1).1
-    simp only [Prod.mk.injEq, hl', Key.keyName] at he
-    exact ⟨q, hq, hqs, hqb', by rw [hl', he.1], he.2⟩
-  refine ⟨_, χ₀, ⟨fun β hβ => ?_, fun β hβ => ?_, fun _ _ => rfl⟩, fun st hst => ?_, rfl⟩
+    simp only [Prod.mk.injEq] at he
+    exact ⟨q, hq, hqs, hqb', he.1.symm, he.2⟩
+  have hblkrow : ∀ p ∈ Δq, (χ₀.comp (readSub σ ᾱ f)).row p.blocker
+      = fillRow (fills (f p.blocker)) (f p.blocker) := by
+    intro p hp
+    show ((readSub σ ᾱ f).row p.blocker).applySubst χ₀ = _
+    simp only [readSub, if_pos (hbq p hp), Row.applySubst]; rfl
+  -- on a filled blocker, the witness reads a stump's key as the field it names …
+  have hkey : ∀ p ∈ Δq, onFilled p = true →
+      (p.stump.label.applySubst S₁.subst).applySubst (χ₀.comp (readSub σ ᾱ f)) =
+        .lit (p.stump.label.applySubst S₁.subst).keyName := by
+    intro p hp ho
+    obtain ⟨q, hq, hqs, hqb⟩ := onFilled_iff.mp ho
+    have hf := ((hres.2 q hq hqs).2.1 p hp hqb.symm).1
+    rcases Key.fillKey_iff.mp (Parked.fillable_iff.mp hf).1 with ⟨l, hk⟩ | ⟨κ, hk, hκ, -⟩
+    · rw [hk]; rfl
+    · have hκG : κ ∈ keyG :=
+        List.mem_filterMap.mpr ⟨p, hp, by simp only [hk]; rw [if_pos ho]⟩
+      rw [hk]
+      show ((readSub σ ᾱ f).lab κ).applySubst χ₀ = _
+      simp only [readSub, if_pos hκ, Key.applySubst_var]
+      exact χL_in κ hκG
+  -- … and its lookup finds what the fill has for that name
+  have hlook : ∀ p ∈ Δq, onFilled p = true →
+      Lookup ((p.stump.row.applySubst S₁.subst).applySubst (χ₀.comp (readSub σ ᾱ f)))
+        (p.stump.label.applySubst S₁.subst).keyName
+        (fillRes (fills (f p.blocker)) (p.stump.label.applySubst S₁.subst).keyName) := by
+    intro p hp ho
+    obtain ⟨q, hq, hqs, hqb⟩ := onFilled_iff.mp ho
+    obtain ⟨hk, hnk⟩ := Parked.fillable_iff.mp ((hres.2 q hq hqs).2.1 p hp hqb.symm).1
+    have hq₁ := hblk p hp
+    rcases Key.fillKey_iff.mp hk with ⟨l, hl⟩ | ⟨κ, hl, -, hne⟩
+    · rw [hl] at hq₁ ⊢
+      exact lookup_blocked_fill hq₁.toLit (χ₀.comp (readSub σ ᾱ f)) (hblkrow p hp) hnk
+    · rw [hl] at hq₁ ⊢
+      exact lookupV_blocked_fill hq₁ (Ne.symm hne) _ (hblkrow p hp) _
+  refine ⟨_, χ₀, ⟨fun β hβ => ?_, fun β hβ => ?_, fun β hβ => ?_⟩, fun st hst => ?_, rfl⟩
   · exact if_neg hβ
   · have : fills β = [] := by
       rcases h : fills β with _ | ⟨lt, _⟩
@@ -330,6 +463,7 @@ theorem LetResults.inhabited {S₁ : SolverState B} {ᾱ : List TyVar} {Δq : Li
         exact absurd (hqb ▸ List.mem_map_of_mem (hbq q hq)) hβ
     show fillRow (fills β) β = _
     rw [this]; rfl
+  · exact χL_out β (outG β hβ)
   · obtain ⟨st₀, hst₀, rfl⟩ := List.mem_map.mp hst
     obtain ⟨p, hp, rfl⟩ := List.mem_map.mp hst₀
     -- the read constraint under χ₀ is the S₁-reading under χ₀ ∘ readSub
@@ -339,33 +473,27 @@ theorem LetResults.inhabited {S₁ : SolverState B} {ᾱ : List TyVar} {Δq : Li
           (((p.stump.label.applySubst S₁.subst).applySubst (readSub σ ᾱ f)).applySubst χ₀) r := by
       intro r h
       rw [Row.applySubst_applySubst, Key.applySubst_applySubst]; exact h
-    have hblkrow : (χ₀.comp (readSub σ ᾱ f)).row p.blocker
-        = fillRow (fills (f p.blocker)) (f p.blocker) := by
-      show ((readSub σ ᾱ f).row p.blocker).applySubst χ₀ = _
-      simp only [readSub, if_pos (hbq p hp), Row.applySubst]; rfl
     have hq₁ := hblk p hp
     cases hsp : (p.stump.res.applySubst S₁.subst).isVar
     · ---------------- SPENT: the filled blocker makes the lookup hit
-      obtain ⟨hfil, hsame, hbl⟩ := hres.2 p hp hsp
-      obtain ⟨hlab, hnk⟩ := Parked.fillable_iff.mp hfil
-      obtain ⟨l, hl⟩ := Key.exists_of_isLit hlab
-      rw [hl] at hq₁
-      have hlit : LookupBlocked (p.stump.row.applySubst S₁.subst) l p.blocker :=
-        hq₁.toLit
-      have hfind := lookup_blocked_fill hlit (χ₀.comp (readSub σ ᾱ f)) hblkrow hnk
-      have hmem : (l, (rd p).applySubst χR) ∈ fills (f p.blocker) :=
-        List.mem_map.mpr ⟨p, List.mem_filter.mpr ⟨hp, by simp [hsp]⟩, by simp [hl, Key.keyName]⟩
-      have hfound : fillRes (fills (f p.blocker)) l = .found ((rd p).applySubst χR) := by
+      obtain ⟨-, hsame, hbl⟩ := hres.2 p hp hsp
+      have ho : onFilled p = true := onFilled_iff.mpr ⟨p, hp, hsp, rfl⟩
+      have hfind := hlook p hp ho
+      have hmem : ((p.stump.label.applySubst S₁.subst).keyName, (rd p).applySubst χR) ∈
+          fills (f p.blocker) :=
+        List.mem_map.mpr ⟨p, List.mem_filter.mpr ⟨hp, by simp [hsp]⟩, rfl⟩
+      have hfound : fillRes (fills (f p.blocker)) (p.stump.label.applySubst S₁.subst).keyName =
+          .found ((rd p).applySubst χR) := by
         unfold fillRes
-        cases hlk' : (fills (f p.blocker)).lookup l with
+        cases hlk' : (fills (f p.blocker)).lookup (p.stump.label.applySubst S₁.subst).keyName with
         | none => exact absurd hlk' (lookup_none_of_mem hmem)
         | some τ =>
             obtain ⟨q, hq, -, hqb, hql, rfl⟩ := fill_key p hp hlk'
-            have hqp := ((hsame q hq hqb).2 (hql.trans hl.symm)).2
+            have hqp := ((hsame q hq hqb).2.1 hql).2
             rw [hstar q hq, hstar p hp, hqp]
       rw [hfound] at hfind
       refine .hit (τ := (rd p).applySubst χR) (hlk _ ?_) (.of_eq ?_)
-      · rw [hl]; exact LookupQ.lab_iff.mpr hfind
+      · rw [hkey p hp ho]; exact LookupQ.lab_iff.mpr hfind
       · -- χ₀ is χR on the result: no spent blocker in it
         apply Ty.applySubst_congr
         intro α hα
@@ -382,7 +510,7 @@ theorem LetResults.inhabited {S₁ : SolverState B} {ᾱ : List TyVar} {Δq : Li
             exact absurd (hqδ ▸ hδ) (hbl q hq hqs)
         show fillRow (fills (f δ)) (f δ) = _
         rw [this]; rfl
-    · ---------------- UNSPENT: the result goes to ★, the lookup stays blocked
+    · ---------------- UNSPENT: the result goes to ★, the lookup stays undecided
       obtain ⟨δ, hδe⟩ := Ty.exists_of_isVar hsp
       have hδα : δ ∈ ᾱ := hres.1 p hp δ (by rw [hδe]; simp [Ty.ftv])
       have hin : f δ ∈ ᾱ.map f := List.mem_map_of_mem hδα
@@ -400,54 +528,63 @@ theorem LetResults.inhabited {S₁ : SolverState B} {ᾱ : List TyVar} {Δq : Li
           rcases List.mem_append.mp h with h | h
           · exact .inl (Key.mem_ftv_of_mem_sortedFtv _ h)
           · exact .inr (Row.mem_ftv_of_mem_sortedFtv _ h)
+        -- the blocker is no key read as a label: no stump waits on such a key
+        have hbG : p.blocker ∉ keyG := by
+          intro hκ
+          obtain ⟨q, hq, ho, hl⟩ := mem_keyG hκ
+          obtain ⟨p', hp', hp's, hp'b⟩ := onFilled_iff.mp ho
+          exact ((hres.2 p' hp' hp's).2.1 q hq hp'b.symm).2.2 p hp hl
         have hu := lookupQ_blocked_subst hq₁ (χ₀.comp (readSub σ ᾱ f)) ?_ ?_
         · exact .unk (hlk _ hu) hδres
         · intro _
-          exact ⟨f p.blocker, by rw [hblkrow, hfe]; rfl⟩
-        · -- the blocker keeps its fresh name (χ₀ is the identity on labels) …
+          exact ⟨f p.blocker, by rw [hblkrow p hp, hfe]; rfl⟩
+        · -- the blocker keeps its fresh name …
           intro _
           refine ⟨f p.blocker, ?_, fun γ hγ he => ?_⟩
           · show ((readSub σ ᾱ f).lab p.blocker).applySubst χ₀ = _
             simp only [readSub, if_pos (hbq p hp), Key.applySubst_var]
-            rfl
+            exact χL_out _ (notG _ (hbq p hp) hbG)
           · -- … and nothing else in key position is sent to it
             change ((readSub σ ᾱ f).lab γ).applySubst χ₀ = _ at he
             by_cases hγα : γ ∈ ᾱ
             · simp only [readSub, if_pos hγα, Key.applySubst_var] at he
-              injection he with he
-              exact hinj _ hγα _ (hbq p hp) he
+              by_cases hγG : γ ∈ keyG
+              · rw [show χ₀.lab (f γ) = _ from χL_in γ hγG] at he; cases he
+              · rw [show χ₀.lab (f γ) = _ from χL_out _ (notG γ hγα hγG)] at he
+                injection he with he
+                exact hinj _ hγα _ (hbq p hp) he
             · simp only [readSub, if_neg hγα] at he
-              have hm : f p.blocker ∈ (σ.lab γ).ftv := by
-                cases hs : σ.lab γ with
-                | var x =>
-                    rw [hs] at he
-                    simp only [Key.applySubst_var] at he
-                    injection he with he; subst he; simp [Key.ftv]
-                | lit _ => rw [hs] at he; cases he
-              exact absurd (List.mem_map_of_mem (hbq p hp)) (hav p hp γ (hftv hγ) hγα _ hm)
-      · -- the blocker is filled by a spent stump: p's key is literal, and names
-        -- none of the fields (a field for it would be p itself, spent)
+              cases hs : σ.lab γ with
+              | var x =>
+                  rw [hs] at he
+                  simp only [Key.applySubst_var] at he
+                  have hx : x ∉ ᾱ.map f :=
+                    hav p hp γ (hftv hγ) hγα x (by simp [hs, Key.ftv])
+                  rw [show χ₀.lab x = _ from χL_out x (outG x hx)] at he
+                  injection he with he; subst he
+                  exact absurd (List.mem_map_of_mem (hbq p hp)) hx
+              | lit _ => rw [hs] at he; cases he
+      · -- the blocker is filled by a spent stump: p names none of its fields (a
+        -- field for it would make p spent alike)
         obtain ⟨lt, hlt⟩ := List.exists_mem_of_ne_nil _ hfe
         obtain ⟨q, hq, hqs, hqb, -⟩ := mem_fills hlt
         have hqb' : q.blocker = p.blocker := hinj _ (hbq q hq) _ (hbq p hp) hqb
-        obtain ⟨l, hl⟩ := Key.exists_of_isLit (Parked.fillable_iff.mp ((hres.2 q hq hqs).2.1 p hp hqb'.symm).1).1
-        rw [hl] at hq₁
-        have hlit : LookupBlocked (p.stump.row.applySubst S₁.subst) l p.blocker :=
-          hq₁.toLit
-        have hfind := lookup_blocked_fill hlit (χ₀.comp (readSub σ ᾱ f)) hblkrow
-          (Parked.fillable_iff.mp ((hres.2 q hq hqs).2.1 p hp hqb'.symm).1).2
-        have hnone : fillRes (fills (f p.blocker)) l = .unknown := by
+        have ho : onFilled p = true := onFilled_iff.mpr ⟨q, hq, hqs, hqb'⟩
+        have hfind := hlook p hp ho
+        have hnone : fillRes (fills (f p.blocker)) (p.stump.label.applySubst S₁.subst).keyName =
+            .unknown := by
           unfold fillRes
-          cases hlk' : (fills (f p.blocker)).lookup l with
+          cases hlk' : (fills (f p.blocker)).lookup (p.stump.label.applySubst S₁.subst).keyName with
           | none => rfl
           | some τ =>
               exfalso
               obtain ⟨q', hq', hq's, hq'b, hq'l, -⟩ := fill_key p hp hlk'
-              have hpq := (((hres.2 q' hq' hq's).2.1 p hp hq'b.symm).2 (hl.trans hq'l.symm)).1
+              have hpq := (((hres.2 q' hq' hq's).2.1 p hp hq'b.symm).2.1 hq'l.symm).1
               rw [hpq] at hsp; exact Bool.noConfusion hsp
         rw [hnone] at hfind
         refine .unk (hlk _ ?_) hδres
-        rw [hl]; exact LookupQ.lab_iff.mpr hfind
+        rw [hkey p hp ho]; exact LookupQ.lab_iff.mpr hfind
+
 --------------------- THE CASE -------------------------------------------------
 
 /-- ⊢  **the A-let case.** -/

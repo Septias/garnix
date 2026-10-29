@@ -190,9 +190,9 @@ def sd (e₁ e₂ : E) : E := .selDyn e₁ e₂
 -- supplying a base-typed key later clashes (the conflict is not definite yet)
 #guard run (.app (.lam "a" (sd (rec1 "foo" c) (v "a"))) c) = "fail: clash"
 
--- the spent promise through the second door: its key is a variable, so no row
--- can be filled with it. The answer keeps the constraint; the witness guesses
--- the key (`Guesses`, `keyEx_typed` below). The old entry failed here
+-- the spent promise through the second door: its key is a variable. The answer
+-- keeps the constraint; its witness reads the key as the label `${κ}` and fills
+-- the row with it (`keyEx_typed` below). The old entry failed here
 #guard run (.lam "r" (.lam "a" (.app (sd (v "r") (v "a")) c)))
   = "⟨r3.${k4} ↓ (𝓫 → t6)⟩ ⇒ ({r3} → (⌊k4⌋ → t6))"
 
@@ -249,20 +249,22 @@ def upd : E := .lam "n" (.lam "r" (.cat (v "r") (rd (v "n") c)))
 #guard run (.lam "x" (.lam "f" (rec2 "p" (.app (.sel (v "x") "l") c) "q" (.app (v "f") (.sel (v "x") "l")))))
   = "⟨r6.l ↓ (𝓫 → t5)⟩, ⟨r6 | ε.l ↓ (𝓫 → t5)⟩ ⇒ ({r6 | ε} → (((𝓫 → t5) → t8) → {p: t5 | q: t8}))"
 -- THE WITNESS SEARCH (`Guesses`): not forced, so only inside the witness. Rows
--- that differ before the blocker get a witness merge; a variable key on a spent
--- stump's blocker gets a key guess; and a guess that must hit a literal record
--- tries the record's labels
+-- that differ before the blocker get a witness merge, and a key that must hit a
+-- literal record gets a key guess among the record's labels. A variable key on
+-- a spent stump's row blocker needs neither: `LetSpent` reads it as `${κ}`
 #guard run (.lam "x" (rec2 "p" (.app (.sel (.cat (rec1 "m" c) (v "x")) "l") c) "q" (.sel (v "x") "l")))
   = "⟨r7.l ↓ t8⟩, ⟨r7 | ε | m: 𝓫 | ε.l ↓ (𝓫 → t6)⟩ ⇒ ({r7 | ε} → {p: t6 | q: t8})"
 #guard run (.lam "x" (.lam "a" (rec2 "p" (.app (.sel (v "x") "l") c) "q" (sd (v "x") (v "a")))))
   = "⟨r6.${k7} ↓ t8⟩, ⟨r6 | ε.l ↓ (𝓫 → t5)⟩ ⇒ ({r6 | ε} → (⌊k7⌋ → {p: t5 | q: t8}))"
 #guard run (.lam "a" (.app (sd (rec1 "foo" (.lam "y" (v "y"))) (v "a")) c))
   = "⟨foo: (t2 → t2) | ε.${k4} ↓ (𝓫 → t6)⟩ ⇒ (⌊k4⌋ → t6)"
--- …but A-let has no key guess: f stays monomorphic, and two uses clash (06)
+-- …and A-let generalizes a spent stump under a key variable too (M9): the
+-- witness reads κ as the label `${κ}` and fills the row with it, so f is
+-- polymorphic and its two uses, at two keys, both hit
 #guard run (.letE "f" (.lam "r" (.lam "a" (.app (sd (v "r") (v "a")) c)))
     (rec2 "p" (.app (.app (v "f") (rec1 "foo" (.lam "y" (v "y")))) (L "foo"))
           "q" (.app (.app (v "f") (rec1 "bar" (.lam "y" c))) (L "bar"))))
-  = "fail: clash"
+  = "{p: 𝓫 | q: 𝓫}"
 
 -- TOP-LEVEL SCHEMES (plans/top-level-schemes.md). The witnesses below are
 -- about what `runF` answers: `decide` runs it in the kernel. Every instance
@@ -421,8 +423,9 @@ theorem spentA_inst_fill :
    rfl⟩
 
 -- ## the spent promise under a variable key, r: a: (r.${a}) c. The old entry
--- failed ("spent promise", above). The answer keeps the stump; the witness
--- guesses the key (`Guesses`), and `{foo: 𝓫 → 𝓫} → ⌊foo⌋ → 𝓫` is an instance.
+-- failed ("spent promise", above). The answer keeps the stump; `LetSpent` reads
+-- the key as the label `${κ}` for its witness, and `{foo: 𝓫 → 𝓫} → ⌊foo⌋ → 𝓫`
+-- is an instance.
 def keyEx : E := .lam "r" (.lam "a" (.app (sd (v "r") (v "a")) c))
 
 def keyA : QScheme Unit :=
@@ -448,6 +451,23 @@ theorem keyA_inst : keyA.Inst (.fn (.rcd (.sing "foo" (.fn b b))) (.fn (.lab (.l
 theorem keyEx_typed :
     QTyped σU QCtx.empty keyEx (.fn (.rcd (.sing "foo" (.fn b b))) (.fn (.lab (.lit "foo")) b)) :=
   (answerQ_sound keyEx_answerQ).1 _ keyA_inst
+
+-- ## …and under a let (M9): f is generalized with its key variable, which the
+-- witness reads as the label `${κ}`, so two uses at two keys both hit
+def keyLetEx : E :=
+  .letE "f" (.lam "r" (.lam "a" (.app (sd (v "r") (v "a")) c)))
+    (rec2 "p" (.app (.app (v "f") (rec1 "foo" (.lam "y" (v "y")))) (L "foo"))
+          "q" (.app (.app (v "f") (rec1 "bar" (.lam "y" c))) (L "bar")))
+
+theorem keyLetEx_answerQ :
+    answerQ keyLetEx = some ⟨[], [], .rcd (.cat (.sing "p" b) (.sing "q" b))⟩ := by decide +kernel
+
+theorem keyLetEx_typed :
+    QTyped σU QCtx.empty keyLetEx (.rcd (.cat (.sing "p" b) (.sing "q" b))) :=
+  (answerQ_sound keyLetEx_answerQ).1 _ <| by
+    refine ⟨TySubst.id _, ⟨fun _ _ => rfl, fun _ _ => rfl, fun _ _ => rfl⟩, ?_, ?_⟩
+    · intro s hs; exact absurd hs List.not_mem_nil
+    · exact Ty.applySubst_id _
 
 end InferRuns
 end MinimalCalculus
