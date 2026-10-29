@@ -3,11 +3,11 @@
 
 = Incompleteness <incompleteness>
 
-The algorithm is sound but not complete and this section collects the different places where it gives up. The reasons are threefold: The wand ambiguity poses a situation in which no algorithm can be complete, the second class is the price for forced moves and the third class collects all cases in which our inference algorithm is limited.
+The algorithm is sound but not complete. This section collects the places we know of where it rejects a program that the declarative system types, or returns a less general type than the declarative system admits. They fall into three groups: problems without a most general unifier, problems that have one but are not solved by forced moves, and limits of the inference algorithm itself. We do not prove that these groups are exhaustive.
 
 == Irreducible Problems <incompleteness-irreducible>
 
-The wand ambiguity is our prime example of undecidability and it is the first case for which row unification cannot find a single, most general unifier. We also show two more situations:
+The Wand ambiguity is the prime example of a unification problem without a most general unifier. It has a finite complete set of unifiers, but no single unifier covers the others. Two more problems lack a most general unifier as well:
 
 #proposition(
   name: [Irreducible problems],
@@ -18,7 +18,7 @@ The wand ambiguity is our prime example of undecidability and it is the first ca
   + _(Shift)_ $(α | l: 𝓫) scripts(≐)_r (l: 𝓫 | α)$ has no finite complete set of unifiers.
 ] <prop-irreducible>
 
-The wand ambiguity $(α | β) scripts(≐)_r (l: 𝓫)$ describes a situation in which a single label constraint cannot be allocated to a definite row variable. Every variable $α_i$ may carry the field and no choice subsumes the other. In this situation, many unifiers are possible, one for every row variable, and none of them is most-general. Every algorithm that decides this problem has to backtrack and test the candidates. The two sided problem is a variant of it
+The wand ambiguity $(α | β) scripts(≐)_r (l: 𝓫)$ describes a situation in which a single field cannot be allocated to a definite row variable. Either variable may carry the field and neither choice subsumes the other. There is one unifier for every row variable, and none of them is most general. An algorithm must therefore either search among the candidates or carry the complete set, as Wand does @wand_complete. The two-sided problem is a variant with the field on both sides: the two fields can be partners with both variables empty, or each variable can carry an l-field of its own. The shift is the two-sided problem with $β = α$.
 
 #example(name: [Unifiers of the irreducible problems])[
   - The Wand ambiguity $(α | β) scripts(≐)_r (l: 𝓫)$ has the unifiers $[α ≔ (l: 𝓫), β ≔ ε]$ and $[α ≔ ε, β ≔ (l: 𝓫)]$. Both are ground and they differ, so neither is an instance of the other. A most general unifier would have to be more general than both, but it cannot leave α and β open: $[α ≔ γ, β ≔ γ′]$ and every other substitution that maps α or β to a row containing a variable is no unifier, since a variable on the left would have to face a variable on the right. Nor can it send both to ε, since $(ε | ε) ≈ ε$ and ε lacks the field. So it places the single field in one of the two variables and is no more general than the unifier that places it in the other.
@@ -26,7 +26,7 @@ The wand ambiguity $(α | β) scripts(≐)_r (l: 𝓫)$ describes a situation in
   - The shift $(α | l: 𝓫) scripts(≐)_r (l: 𝓫 | α)$ is unified by $[α ≔ (l: 𝓫)^n]$ for every $n ≥ 0$, where $(l: 𝓫)^n$ is the row of n copies of the field. Each unifier in a finite set fixes the number of l-fields in α, so no finite set covers all of them.
 ] <ex-irreducible>
 
-All three are reported as #u_stuck: no move applies, and any move would prefer one unifier to another. Negative information @remy_typechecking narrows the choice. If a lacks-predicate states that β has no l-field, the Wand ambiguity $(α | β) scripts(≐)_r (l: 𝓫)$ has the single unifier $[α ≔ (l: 𝓫), β ≔ ε]$. For the two-sided problem and the shift, a lacks-predicate on α excludes the unifiers that give α an l-field, but it leaves those that give α fields of other labels, such as $α ≔ (m: 𝓫)$ next to $α ≔ ε$. These remain incomparable as long as no field crosses a row-variable, so lacks-predicates resolve the two problems only together with a row equivalence in which a variable commutes with the fields of the labels it lacks (@sec-extensions).
+All three are reported as #u_stuck: no move applies, and any move would prefer one unifier to another.
 
 What is shown is a limit of principal solutions over scoped rows, not of typing: a typing needs only some unifier, not a most general one. Inference nevertheless rejects a program at a stuck verdict, since only a successful unification has a rule. Typing the problem at ★ instead is not sound, since ★ on the result of an application leaves the equation between the argument and the domain unsolved (@sec-gradual).
 
@@ -50,7 +50,7 @@ The remaining limits lie in the inference algorithm rather than in unification.
 
 === Partially Generalized Lets
 
-A-let generalizes the greatest admissible $macron(α)$. A variable that violates one of the conditions stays monomorphic, together with everything it drags along, and a second use at another record may then clash. Two of the conditions are inherent to let-polymorphism. Freshness for Γ and for the stumps that stay parked is the side condition of Hindley-Milner generalization, and a stump of an outer binding may not be captured, since it would never be finalized. The fillability test of A-let (@generalization), which checks that every spent stump can be answered at some instance, is not inherent. It is a syntactic approximation of inhabitation and rejects two kinds of spent stumps: those blocked on their key, as in `let f = r: a: r.${a} c`, and spent results that differ in more than their type variables. Nested selection such as `let g = x: (x.l).m`, record literals in a spent result and the same field spent twice on one row pass the test and are generalized.
+A-let generalizes the greatest admissible $macron(α)$. A variable that violates one of the conditions stays monomorphic, together with everything it drags along, and a second use at another record may then clash. Only freshness is inherent to let-polymorphism: freshness for Γ and for the stumps that stay parked is the side condition of Hindley-Milner generalization. The other conditions concern stumps and are specific to our algorithm. A stump of an outer binding may not be captured, since it would never be finalized, and the fillability test of A-let (@generalization) checks that every spent stump can be answered at some instance. The test is a syntactic approximation of inhabitation and rejects two kinds of spent stumps: those blocked on their key, as in `let f = r: a: r.${a} c` with first-class labels (@sec-fc-labels), and spent results that differ in more than their type variables. Nested selection such as `let g = x: (x.l).m`, record literals in a spent result and the same field spent twice on one row pass the test and are generalized.
 
 // TODO(structure): rename with the vocabulary pass (J): "Spent Stumps Blocked on a Key".
 === Spent Promises Blocked on a Key
@@ -63,4 +63,4 @@ The declarative system may replace any type by ★, so it types programs on whic
 $
   #raw("g: { a = g {l = c}; b = g {m = c}; }") quad : quad (★ → 𝓫) → {a: 𝓫 | b: 𝓫}
 $
-is typed by sending the parameter type of g to ★, while inference unifies the two argument records and clashes. Every stuck witness above becomes typable in the same way. A clash therefore certifies the absence of a unifier, but not the absence of a typing. T-★-intro acts as subsumption into a top type, and ★ is the join of any two distinct types, whereas unification only computes common instances. Closing the gap requires either inference that joins incompatible lower bounds at ★ or a completeness statement restricted to typings without T-★-intro.
+is typed by sending the parameter type of g to ★, while inference unifies the two argument records and clashes. Every stuck witness above becomes typable in the same way. A clash therefore certifies the absence of a unifier, but not the absence of a typing. T-★-intro acts as subsumption into a top type, and ★ is the join of any two types with different head constructors, whereas unification only computes common instances. Inference that joins incompatible lower bounds at ★ would remove the clash, but not the gap. In `g: x: { a = g x; b = g {l = c}; }` inference never clashes: it fixes x to ${l: 𝓫_c}$, while the declarative system sends the domain of g to ★ and types x at any type. A successful run can therefore return a type that is not principal, and a completeness statement has to be restricted to typings without T-★-intro.

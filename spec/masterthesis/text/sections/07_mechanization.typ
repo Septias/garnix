@@ -1,5 +1,7 @@
 #import "../functions.typ": *
 
+// extend this section a bit
+
 = Mechanization <sec-mechanization>
 The metatheory of this thesis is mechanized in Lean 4, sorry-free and not using axioms beyond `propext`, `Quot.sound` and `Classical.choice`. The development started with MiniNix and first-class labels but has been extended with routine features such as booleans, conditionals, lists and builtins, to form a calculus we call MacroNix. We give a short overview of this work in @app-macronix.
 
