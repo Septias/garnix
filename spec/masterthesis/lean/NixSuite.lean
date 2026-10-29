@@ -99,8 +99,15 @@ def rowS : Row String → String
   | .dsing q τ => "${" ++ keyS q ++ "}: " ++ tyS τ
 end
 
-def verdict : IRes (Ty String × SolverState String) → String
-  | .ok (τ, S) => tyS (τ.applySubst S.subst)
+-- a run's answer prints as `Q ⇒ τ` (every variable bound, the ∀ implicit);
+-- Q = ∅ prints as the plain type
+def stumpS (st : Stump String) : String :=
+  "⟨" ++ rowS st.row ++ "." ++ keyS st.label ++ " ↓ " ++ tyS st.res ++ "⟩"
+
+def verdict : IRes (QScheme String × SolverState String) → String
+  | .ok (σ, _) =>
+      (if σ.constraints.isEmpty then "" else
+         String.intercalate ", " (σ.constraints.map stumpS) ++ " ⇒ ") ++ tyS σ.body
   | .fail m    => "fail: " ++ m
   | .oof       => "out of fuel"
 
@@ -225,7 +232,7 @@ def dynBare (binds : Bool) : E := lets [("aString", .lab "a"), ("bString", .lab 
 #guard run (dynBare false)
   = "{hasAttrs: {_1: {a: {b: null}} | _2: ⌊a⌋} | selectAttrs: bool | selectOrAttrs: bool | recBinds: bool | multiAttrs: bool}"
 #guard run (.lam "h" (dynBare true))
-  = "((⌊b⌋ → ⌊k20⌋) → {hasAttrs: {_1: {a: {b: null}} | _2: ⌊a⌋} | selectAttrs: bool | selectOrAttrs: bool | recBinds: bool | multiAttrs: bool | binds: ★})"
+  = "⟨${k20}: bool | ε.bc ↓ t24⟩ ⇒ ((⌊b⌋ → ⌊k20⌋) → {hasAttrs: {_1: {a: {b: null}} | _2: ⌊a⌋} | selectAttrs: bool | selectOrAttrs: bool | recBinds: bool | multiAttrs: bool | binds: t24})"
 #guard run (.app (.lam "h" (dynBare true)) (.lam "z" (.lab "bc")))
   = "{hasAttrs: {_1: {a: {b: null}} | _2: ⌊a⌋} | selectAttrs: bool | selectOrAttrs: bool | recBinds: bool | multiAttrs: bool | binds: bool}"
 

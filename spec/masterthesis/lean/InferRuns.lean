@@ -1,6 +1,6 @@
 -- `runF` ON PROGRAMS. Executable regressions for the inference function: each
--- `#guard` pins what a run answers, read under its final substitution. Every
--- `ok` here is a declarative typing by `runF_typed`.
+-- `#guard` pins the scheme a run answers. Every instance of an `ok` here is a
+-- declarative typing, and there is one (`runF_typed`).
 
 import InferFnTerm
 
@@ -28,11 +28,6 @@ def rowS : Row Unit → String
   | .dsing q τ => "${" ++ keyS q ++ "}: " ++ tyS τ
 end
 
-def verdict : IRes (Ty Unit × SolverState Unit) → String
-  | .ok (τ, S) => tyS (τ.applySubst S.subst)
-  | .fail m    => "fail: " ++ m
-  | .oof       => "out of fuel"
-
 abbrev E := Expr Unit
 def v (x : String) : E := .var x
 def c : E := .con ()
@@ -40,10 +35,8 @@ def rec1 (l : String) (e : E) : E := .rcd (.field l e)
 def rec2 (l₁ : String) (e₁ : E) (l₂ : String) (e₂ : E) : E :=
   .rcd (.cat (.field l₁ e₁) (.field l₂ e₂))
 
-def run (e : E) : String := verdict (runF (Sig.plain fun _ => ()) 50 e)
-
--- a top-level scheme prints as `Q ⇒ τ`: at the top level every variable is
--- bound, so the ∀ is left implicit, and Q = ∅ prints as the plain type
+-- a run's answer prints as `Q ⇒ τ`: at the top level every variable is bound,
+-- so the ∀ is left implicit, and Q = ∅ prints as the plain type
 def keyDS : Key → String
   | .lit l => l
   | .var α => "${k" ++ toString α.length ++ "}"
@@ -55,21 +48,22 @@ def schemeS (σ : QScheme Unit) : String :=
   (if σ.constraints.isEmpty then "" else
      String.intercalate ", " (σ.constraints.map stumpS) ++ " ⇒ ") ++ tyS σ.body
 
-def verdictQ : IRes (QScheme Unit × SolverState Unit) → String
+def verdict : IRes (QScheme Unit × SolverState Unit) → String
   | .ok (σ, _) => schemeS σ
   | .fail m    => "fail: " ++ m
   | .oof       => "out of fuel"
 
-def runQ (e : E) : String := verdictQ (runQF (Sig.plain fun _ => ()) 50 e)
+def run (e : E) : String := verdict (runF (Sig.plain fun _ => ()) 50 e)
 
--- λx. x.l — the stump finalizes: the lookup stays `?`, the result is ★
-#guard run (.lam "x" (.sel (v "x") "l")) = "({r2} → ★)"
+-- λx. x.l — the stump stays in the answer: the lookup is `?`, so its result is
+-- whatever an instance's row makes it (`runF_selEx_principal`, below)
+#guard run (.lam "x" (.sel (v "x") "l")) = "⟨r2.l ↓ t3⟩ ⇒ ({r2} → t3)"
 -- …and applied, the promise is kept: found at 𝓫, absent at ★
 #guard run (.app (.lam "x" (.sel (v "x") "l")) (rec1 "l" c)) = "𝓫"
 #guard run (.app (.lam "x" (.sel (v "x") "l")) (.rcd .empty)) = "★"
 
--- refinement: ({l = c} ‖ x).l cannot look past x …
-#guard run (.lam "x" (.sel (.cat (rec1 "l" c) (v "x")) "l")) = "({r3} → ★)"
+-- refinement: ({l = c} ‖ x).l cannot look past x, so the answer asks x first …
+#guard run (.lam "x" (.sel (.cat (rec1 "l" c) (v "x")) "l")) = "⟨r3 | l: 𝓫 | ε.l ↓ t5⟩ ⇒ ({r3} → t5)"
 -- … until x is instantiated
 #guard run (.app (.lam "x" (.sel (.cat (rec1 "l" c) (v "x")) "l")) (.rcd .empty)) = "𝓫"
 
@@ -87,19 +81,21 @@ def runQ (e : E) : String := verdictQ (runQF (Sig.plain fun _ => ()) 50 e)
 #guard run (.lam "w" (.letE "f"
     (.sel (rec2 "b" (.lam "x" (.sel (v "x") "l")) "a" (.sel (v "w") "m")) "b")
     (rec2 "p" (.app (v "f") (rec1 "l" c)) "q" (.app (v "f") (.rcd .empty)))))
-  = "({r5} → {p: 𝓫 | q: ★})"
+  = "⟨r5.m ↓ t6⟩ ⇒ ({r5} → {p: 𝓫 | q: ★})"
 
--- the spent promise (`spentEx_declarative`): A-app writes δ ≔ t2 → t5, so F-★
--- cannot fire — MATERIALIZATION extends x's row with the field instead
--- (`Materialize`). The trailing ε is the unifier's spine form, ≈-invisible.
+-- the spent promise (`spentEx_declarative`): A-app writes δ ≔ t2 → t5, and
+-- the answer keeps the constraint on the arrow. The old entry put the field into
+-- x's row (F-hit), which is the fill instance (`spentA_inst_fill`, below).
 #guard run (.lam "x" (.lam "y" (.app (.sel (v "x") "l") (v "y"))))
-  = "({l: (t2 → t5) | r6 | ε} → (t2 → t5))"
--- …the materialized row stays open: a second, unspent selection on it is F-★'s
+  = "⟨r3.l ↓ (t2 → t5)⟩ ⇒ ({r3} → (t2 → t5))"
+-- …a second, unspent selection on the row is a second constraint. The trailing
+-- ε is the unifier's spine form, ≈-invisible
 #guard run (.lam "x" (rec2 "p" (.app (.sel (v "x") "l") c) "q" (.sel (v "x") "m")))
-  = "({l: (𝓫 → t4) | r7 | ε | ε} → {p: t4 | q: ★})"
--- …and a second selection of the SAME field wakes and hits what was materialized
+  = "⟨r5.m ↓ t6⟩, ⟨r5 | ε.l ↓ (𝓫 → t4)⟩ ⇒ ({r5 | ε} → {p: t4 | q: t6})"
+-- …and a second selection of the SAME field is merged with the first (M-merge,
+-- `merge_forced`): one lookup, one result
 #guard run (.lam "x" (rec2 "p" (.app (.sel (v "x") "l") c) "q" (.app (.sel (v "x") "l") c)))
-  = "({l: (𝓫 → t7) | r8 | ε | ε} → {p: t7 | q: t7})"
+  = "⟨r5.l ↓ (𝓫 → t4)⟩, ⟨r5 | ε.l ↓ (𝓫 → t4)⟩ ⇒ ({r5 | ε} → {p: t4 | q: t4})"
 
 -- a spent promise under a let is GENERALIZED: f stays polymorphic in x's row
 -- (it used to be forced monomorphic, and the second use clashed)
@@ -167,8 +163,8 @@ def L (l : String) : E := .lab l
 def sd (e₁ e₂ : E) : E := .selDyn e₁ e₂
 
 -- the headline λa. λx. x.(a): a stump blocked on the record's row, keyed by a
--- label variable; at the top level it finalizes at ★ …
-#guard run (.lam "a" (.lam "x" (sd (v "x") (v "a")))) = "(⌊k4⌋ → ({r3} → ★))"
+-- label variable; at the top level it stays a constraint …
+#guard run (.lam "a" (.lam "x" (sd (v "x") (v "a")))) = "⟨r3.${k4} ↓ t5⟩ ⇒ (⌊k4⌋ → ({r3} → t5))"
 -- … and let-bound it is a qualified scheme, used at two keys: found, and absent
 #guard run (.letE "get" (.lam "a" (.lam "x" (sd (v "x") (v "a"))))
     (rec2 "p" (.app (.app (v "get") (L "foo")) (rec1 "foo" c))
@@ -179,7 +175,7 @@ def sd (e₁ e₂ : E) : E := .selDyn e₁ e₂
 -- LABEL REFINEMENT: the record is literal, only the key is unknown, so the stump
 -- is blocked on the KEY (L-?-lab); applying the function solves the key, and
 -- wake-up — which judges staleness by the keyed lookup — finds the field
-#guard run (.lam "a" (sd (rec2 "foo" c "bar" (.rcd .empty)) (v "a"))) = "(⌊k3⌋ → ★)"
+#guard run (.lam "a" (sd (rec2 "foo" c "bar" (.rcd .empty)) (v "a"))) = "⟨foo: 𝓫 | bar: {ε} | ε.${k3} ↓ t4⟩ ⇒ (⌊k3⌋ → t4)"
 #guard run (.app (.lam "a" (sd (rec2 "foo" c "bar" (.rcd .empty)) (v "a"))) (L "foo"))
   = "𝓫"
 #guard run (.app (.lam "a" (sd (rec2 "foo" c "bar" (.rcd .empty)) (v "a"))) (L "baz"))
@@ -194,22 +190,23 @@ def sd (e₁ e₂ : E) : E := .selDyn e₁ e₂
 -- supplying a base-typed key later clashes (the conflict is not definite yet)
 #guard run (.app (.lam "a" (sd (rec1 "foo" c) (v "a"))) c) = "fail: clash"
 
--- the spent promise through the second door: blocked on its KEY, so there is no
--- row to extend and materialization does not apply — still incomplete
+-- the spent promise through the second door: its key is a variable, so no row
+-- can be filled with it. The answer keeps the constraint; the witness guesses
+-- the key (`Guesses`, `keyEx_typed` below). The old entry failed here
 #guard run (.lam "r" (.lam "a" (.app (sd (v "r") (v "a")) c)))
-  = "fail: spent promise: a stump's result is no longer a variable"
+  = "⟨r3.${k4} ↓ (𝓫 → t6)⟩ ⇒ ({r3} → (⌊k4⌋ → t6))"
 
 -- a key that is itself an unresolved selection; the key's field is forced to a
--- label, so F-★ never touches it …
+-- label, a spent result …
 #guard run (.lam "r" (.lam "k" (sd (v "r") (.sel (v "k") "name"))))
-  = "({r3} → ({name: ⌊k6⌋ | r8 | ε} → ★))"
+  = "⟨r3.${k6} ↓ t7⟩, ⟨r4.name ↓ ⌊k6⌋⟩ ⇒ ({r3} → ({r4} → t7))"
 -- … and under a let it is generalized (it used to be held back by the
 -- independence premise's key clause: the key IS another stump's result)
 #guard run (.letE "f" (.lam "r" (.lam "k" (sd (v "r") (.sel (v "k") "name")))) (v "f"))
-  = "({r8} → ({name: ⌊k11⌋ | r12 | ε} → ★))"
+  = "⟨r9.name ↓ ⌊k11⌋⟩, ⟨r8.${k11} ↓ t10⟩ ⇒ ({r8} → ({r9} → t10))"
 -- no KeySafe: a key blocked on a row variable stays a label variable
 #guard run (.lam "r" (rec1 "x" (sd (rec1 "x" c) (.sel (v "r") "a"))))
-  = "({a: ⌊k5⌋ | r7 | ε} → {x: ★})"
+  = "⟨x: 𝓫 | ε.${k5} ↓ t6⟩, ⟨r3.a ↓ ⌊k5⌋⟩ ⇒ ({r3} → {x: t6})"
 
 -- DYNAMIC CONSTRUCTION (phase B). `{${a} = v}` keys its field by the key's
 -- label variable; the headline infers exactly `rcdDynQ`
@@ -222,7 +219,7 @@ def mk : E := .lam "a" (.lam "v" (rd (v "a") (v "v")))
     "q" (.sel (.app (.app (v "mk") (L "bar")) (.rcd .empty)) "bar"))) = "{p: 𝓫 | q: {ε}}"
 -- the same key variable finds its own field; a literal one is blocked on it
 #guard run (.lam "a" (sd (rd (v "a") c) (v "a"))) = "(⌊k4⌋ → 𝓫)"
-#guard run (.lam "a" (.sel (rd (v "a") c) "foo")) = "(⌊k2⌋ → ★)"
+#guard run (.lam "a" (.sel (rd (v "a") c) "foo")) = "⟨${k2}: 𝓫 | ε.foo ↓ t4⟩ ⇒ (⌊k2⌋ → t4)"
 #guard run (.app (.lam "a" (.sel (rd (v "a") c) "foo")) (L "foo")) = "𝓫"
 -- `r // { ${n} = v }`: the update, which shadows an old field of that name
 def upd : E := .lam "n" (.lam "r" (.cat (v "r") (rd (v "n") c)))
@@ -235,12 +232,12 @@ def upd : E := .lam "n" (.lam "r" (.cat (v "r") (rd (v "n") c)))
 #guard run (rd c c) = "★"
 -- … which has no eliminator: selecting from it clashes (★ ≐ {r})
 #guard run (.sel (rd c c) "foo") = "fail: clash"
-#guard run (.lam "a" (rd (.sel (v "a") "k") c)) = "({k: ⌊k4⌋ | r5 | ε} → {${k4}: 𝓫})"
+#guard run (.lam "a" (rd (.sel (v "a") "k") c)) = "⟨r2.k ↓ ⌊k4⌋⟩ ⇒ ({r2} → {${k4}: 𝓫})"
 
 
 -- TOP-LEVEL SCHEMES (plans/top-level-schemes.md). The witnesses below are
--- about what `runQF` answers: `decide` runs it in the kernel. Every instance
--- of such an answer types its program (`answerQ_sound`, from `runQSound`).
+-- about what `runF` answers: `decide` runs it in the kernel. Every instance
+-- of such an answer types its program (`answerQ_sound`, from `runSound`).
 
 deriving instance DecidableEq for QScheme
 
@@ -248,7 +245,7 @@ def σU : Sig Unit Unit := Sig.plain fun _ => ()
 
 /-- the scheme a run answers, if it answers one -/
 def answerQ (e : E) : Option (QScheme Unit) :=
-  match runQF σU 50 e with
+  match runF σU 50 e with
   | .ok (σ, _) => some σ
   | _ => none
 
@@ -256,7 +253,7 @@ theorem answerQ_sound {e : E} {σ : QScheme Unit} (h : answerQ e = some σ) :
     (∀ τ, σ.Inst τ → QTyped σU QCtx.empty e τ) ∧ ∃ τ, σ.Inst τ := by
   unfold answerQ at h
   split at h
-  · next σ' S hr => cases h; exact runQF_typed hr
+  · next σ' S hr => cases h; exact runF_typed hr
   · cases h
 
 /-- ⊢  an instance of σ read off one of σ′ that every constraint and the body
@@ -315,7 +312,7 @@ theorem selA_inst_iff (τ : Ty Unit) : selA.Inst τ ↔ (selQ Unit).Inst τ := b
 /-- ⊢  **the first principal answer of the algorithm**: what a run answers for
 λx. x.l is a principal scheme for it. The old entry answered `{β} → ★`, which
 `no_plain_principal_scheme` says no plain scheme improves on. -/
-theorem runQF_selEx_principal :
+theorem runF_selEx_principal :
     ∃ σ, answerQ (selEx Unit) = some σ ∧ QScheme.Principal σU QCtx.empty (selEx Unit) σ := by
   refine ⟨selA, selEx_answerQ, ?_⟩
   obtain ⟨h₁, h₂, h₃⟩ := selQ_principal (B := Unit) σU

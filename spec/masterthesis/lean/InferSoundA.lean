@@ -1210,8 +1210,8 @@ theorem inferSound_of_let {B C : Type} [DecidableEq B] {constTy : Sig B C}
 
 --------------------- …AND WHERE IT JOINS -------------------------------------
 /-- ⊢  **the join**: a run from nothing whose parked stumps all hold at σ is a
-plain L2 typing at σ. The `hfin` premise is what finalization supplies (F-★ at
-⟦S′⟧ — `Finalizes.holds`).
+plain L2 typing at σ. The `hfin` premise is what the top level supplies: σ is
+an instance of the answer, at which every constraint discharges (`runSound`).
 No transport along χ is left: `QTypedA.weaken` did the cashing-in. -/
 theorem runSoundA_of {B C : Type} [DecidableEq B] {constTy : Sig B C}
     (hs : InferSound B C constTy)

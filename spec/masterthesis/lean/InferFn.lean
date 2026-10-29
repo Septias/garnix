@@ -379,109 +379,6 @@ theorem wakesF_sound {n : Nat} : ∀ {S S' : SolverState B} {sts : List (Stump B
           obtain ⟨hm, hw⟩ := wakesF_sound hrec
           exact ⟨by simp [hm], .cons (wakeF_sound hw₁) hw⟩
 
---------------------- FINALIZATION ---------------------------------------------
-
-/-- F-★ on one stump, computed. A spent promise fails here. -/
-def finalizeF (n : Nat) (S : SolverState B) (p : Parked B) : IRes (SolverState B) := do
-  if p ∉ S.parked then .fail "finalize: stump no longer parked" else
-  match ← lookupQF (p.stump.row.applySubst S.subst)
-      (p.stump.label.applySubst S.subst) with
-  | .blocked α =>
-      if α = p.blocker then do
-        let S' ← (solveTyF n S p.stump.res .unk).withMsg
-          "spent promise: a stump's result is no longer a variable"
-        pure ({ S' with parked := S'.parked.filter (·.stump != p.stump) }.flag
-          (p.stump.label.applySubst S.subst).keyName)
-      else .fail "finalize: stale blocker"
-  | _ => .fail "finalize: lookup resolved"
-
-theorem finalizeF_sound {n : Nat} {S S' : SolverState B} {p : Parked B}
-    (h : finalizeF n S p = .ok S') : Finalize S p S' := by
-  simp only [finalizeF] at h
-  split at h
-  · cases h
-  · rename_i hm
-    simp only [IRes.bind_eq_ok] at h
-    obtain ⟨r, hr, h⟩ := h
-    cases r with
-    | blocked α =>
-        simp only at h
-        split at h
-        · rename_i he
-          simp only [IRes.bind_eq_ok, IRes.withMsg_eq_ok, IRes.pure_eq_ok] at h
-          obtain ⟨S₁, hs, rfl⟩ := h
-          exact .star (Decidable.of_not_not hm) (he ▸ lookupQF_sound hr) (solveTyF_sound hs)
-        · cases h
-    | found τ => cases h
-    | absent => cases h
-
---------------------- MATERIALIZATION -----------------------------------------
-
-/-- `Ty.Spent`, computed. -/
-def Ty.isSpent : Ty B → Bool
-  | .var _ => false
-  | .unk   => false
-  | _      => true
-
-theorem Ty.spent_of_isSpent {τ : Ty B} (h : τ.isSpent = true) : τ.Spent := by
-  cases τ <;> first | exact trivial | simp [Ty.isSpent] at h
-
-/-- F-hit on one stump, computed: a spent promise with a literal key, blocked on
-its row, has that row extended so the lookup hits. Anything else is left for
-F-★ — which is where a key-blocked spent promise still fails. -/
-def materializeF (n : Nat) (S : SolverState B) (p : Parked B) : IRes (SolverState B) :=
-  if p ∈ S.parked ∧ (p.stump.res.applySubst S.subst).isSpent = true then
-    match p.stump.label.applySubst S.subst with
-    | .lit l => do
-        match ← lookupQF (p.stump.row.applySubst S.subst) (.lit l) with
-        | .blocked α =>
-            if α = p.blocker then
-              solveTySatF n (S.draw .row).2 (.rcd (.var p.blocker))
-                (.rcd (.cat (.sing l p.stump.res) (.var (S.draw .row).1)))
-            else pure S
-        | _ => pure S
-    | _ => pure S
-  else pure S
-
-theorem materializeF_sound {n : Nat} {S S' : SolverState B} {p : Parked B}
-    (h : materializeF n S p = .ok S') : S' = S ∨ Materialize S p S' := by
-  unfold materializeF at h
-  split at h
-  · next hc =>
-    split at h
-    · next l hl =>
-      simp only [IRes.bind_eq_ok] at h
-      obtain ⟨r, hr, h⟩ := h
-      cases r with
-      | blocked α =>
-          simp only at h
-          split at h
-          · next he =>
-            subst he
-            exact .inr (.hit hc.1 (Ty.spent_of_isSpent hc.2) hl (lookupQF_sound hr) rfl
-              (solveTySatF_sound h))
-          · simp only [IRes.pure_eq_ok] at h; exact .inl h.symm
-      | found τ => simp only [IRes.pure_eq_ok] at h; exact .inl h.symm
-      | absent => simp only [IRes.pure_eq_ok] at h; exact .inl h.symm
-    · simp only [IRes.pure_eq_ok] at h; exact .inl h.symm
-  · simp only [IRes.pure_eq_ok] at h; exact .inl h.symm
-
-def materializesF (n : Nat) : SolverState B → List (Parked B) → IRes (SolverState B)
-  | S, [] => .ok S
-  | S, p :: ps => do
-      let S₁ ← materializeF n S p
-      materializesF n S₁ ps
-
-theorem materializesF_sound {n : Nat} : ∀ {S S' : SolverState B} {ps : List (Parked B)},
-    materializesF n S ps = .ok S' → Materializes S ps S'
-  | S, S', [], h => by simp only [materializesF, IRes.ok.injEq] at h; subst h; exact .nil
-  | S, S', p :: ps, h => by
-      simp only [materializesF, IRes.bind_eq_ok] at h
-      obtain ⟨S₁, h₁, h₂⟩ := h
-      rcases materializeF_sound h₁ with rfl | hm
-      · exact .skip (materializesF_sound h₂)
-      · exact .cons hm (materializesF_sound h₂)
-
 --------------------- THE FORCED MERGE -----------------------------------------
 
 /-- p and q ask one lookup at S (`Merge`'s premises) and their results still
@@ -633,20 +530,6 @@ theorem witnessF_sound {n : Nat} {S S' : SolverState B} (h : witnessF n S = .ok 
   simp only [witnessF, IRes.bind_eq_ok] at h
   obtain ⟨S₁, h₁, h₂⟩ := h
   exact (keyGuessesF_sound h₁).trans (pairsF_guesses h₂)
-
-def finalizesF (n : Nat) : SolverState B → List (Parked B) → IRes (SolverState B)
-  | S, [] => .ok S
-  | S, p :: ps => do
-      let S₁ ← finalizeF n S p
-      finalizesF n S₁ ps
-
-theorem finalizesF_sound {n : Nat} : ∀ {S S' : SolverState B} {ps : List (Parked B)},
-    finalizesF n S ps = .ok S' → Finalizes S ps S'
-  | S, S', [], h => by simp only [finalizesF, IRes.ok.injEq] at h; subst h; exact .nil
-  | S, S', p :: ps, h => by
-      simp only [finalizesF, IRes.bind_eq_ok] at h
-      obtain ⟨S₁, h₁, h₂⟩ := h
-      exact .cons (finalizeF_sound h₁) (finalizesF_sound h₂)
 
 --------------------- A-var ----------------------------------------------------
 
@@ -1046,24 +929,11 @@ end
 /-- the state every run starts in -/
 def runStart : SolverState B := ⟨Sol.nil, [], [], ⟨1⟩, []⟩
 
-/-- a run, computed: infer from nothing, materialize the spent promises, then
-finalize every stump still parked -/
-def runF (constTy : Sig B C) (n : Nat) (e : Expr C) : IRes (Ty B × SolverState B) := do
-  let r ← inferF constTy n QCtx.empty runStart e
-  let S₂ ← materializesF n r.2 r.2.parked
-  let S' ← finalizesF n S₂ S₂.parked
-  pure (r.1, S')
-
-set_option synthInstance.maxSize 512 in
-set_option synthInstance.maxHeartbeats 200000 in
-instance {S : SolverState B} {Δ : List (Parked B)} : Decidable (LetSpent S Δ) := by
-  unfold LetSpent; infer_instance
-
 /-- a run that answers a SCHEME (plans/top-level-schemes.md): infer from
 nothing, merge what asks one lookup, then generalize like A-let with Γ = ∅.
 Nothing is decided: a spent promise stays a constraint, and the run fails only
 when `LetSpent` finds no instance of the scheme -/
-def runQF (constTy : Sig B C) (n : Nat) (e : Expr C) : IRes (QScheme B × SolverState B) := do
+def runF (constTy : Sig B C) (n : Nat) (e : Expr C) : IRes (QScheme B × SolverState B) := do
   let r ← inferF constTy n QCtx.empty runStart e
   let S₂ ← mergeAllF n r.2
   let S₃ ← witnessF n S₂
@@ -1071,10 +941,10 @@ def runQF (constTy : Sig B C) (n : Nat) (e : Expr C) : IRes (QScheme B × Solver
     pure (letScheme S₂ (letCand S₂ r.1) S₂.parked r.1, S₂)
   else .fail "spent promise without witness"
 
-/-- ⊢  every answer of `runQF` is a `RunQ`. -/
-theorem runQF_sound {constTy : Sig B C} {n : Nat} {e : Expr C} {σ : QScheme B}
-    {S : SolverState B} (h : runQF constTy n e = .ok (σ, S)) : RunQ constTy e σ := by
-  simp only [runQF, IRes.bind_eq_ok] at h
+/-- ⊢  every answer of `runF` is a `Run`. -/
+theorem runF_sound {constTy : Sig B C} {n : Nat} {e : Expr C} {σ : QScheme B}
+    {S : SolverState B} (h : runF constTy n e = .ok (σ, S)) : Run constTy e σ := by
+  simp only [runF, IRes.bind_eq_ok] at h
   obtain ⟨⟨τ, S₁⟩, h₁, S₂, h₂, S₃, h₃, h⟩ := h
   split at h
   · next hs =>
@@ -1082,25 +952,11 @@ theorem runQF_sound {constTy : Sig B C} {n : Nat} {e : Expr C} {σ : QScheme B}
     exact ⟨τ, S₁, S₂, S₃, inferF_sound h₁, mergeAllF_sound h₂, h.1.symm, witnessF_sound h₃, hs⟩
   · cases h
 
-/-- ⊢  **what `runQF` answers is sound**: every instance types the program, and
+/-- ⊢  **what `runF` answers is sound**: every instance types the program, and
 there is one. -/
-theorem runQF_typed {constTy : Sig B C} {n : Nat} {e : Expr C} {σ : QScheme B}
-    {S : SolverState B} (h : runQF constTy n e = .ok (σ, S)) :
+theorem runF_typed {constTy : Sig B C} {n : Nat} {e : Expr C} {σ : QScheme B}
+    {S : SolverState B} (h : runF constTy n e = .ok (σ, S)) :
     (∀ τ, σ.Inst τ → QTyped constTy QCtx.empty e τ) ∧ ∃ τ, σ.Inst τ :=
-  runQSound e σ (runQF_sound h)
-
-/-- ⊢  every answer of `runF` is a `Run`. -/
-theorem runF_sound {constTy : Sig B C} {n : Nat} {e : Expr C} {τ : Ty B}
-    {S' : SolverState B} (h : runF constTy n e = .ok (τ, S')) : Run constTy e τ S' := by
-  simp only [runF, IRes.bind_eq_ok, IRes.pure_eq_ok, Prod.mk.injEq] at h
-  obtain ⟨⟨τ₁, S₁⟩, h₁, S₂, h₂, S₃, h₃, rfl, rfl⟩ := h
-  exact ⟨S₁, S₂, inferF_sound h₁, materializesF_sound h₂, finalizesF_sound h₃⟩
-
-/-- ⊢  **what `runF` answers is declaratively typed**, at the type it reports
-read under its own final substitution. -/
-theorem runF_typed {constTy : Sig B C} {n : Nat} {e : Expr C} {τ : Ty B}
-    {S' : SolverState B} (h : runF constTy n e = .ok (τ, S')) :
-    QTyped constTy QCtx.empty e (τ.applySubst S'.subst) :=
-  runSound e τ S' (runF_sound h)
+  runSound e σ (runF_sound h)
 
 end MinimalCalculus

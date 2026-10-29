@@ -166,7 +166,7 @@ theorem Ty.isVar_rename {θ : TySubst B} {g : TyVar → TyVar} (τ : Ty B)
 
 --------------------- FILLING A BLOCKER ----------------------------------------
 -- The witness that a let scheme has an instance meets each SPENT constraint by
--- extending its blocker with the field — materialization, inside a proof.
+-- extending its blocker with the field, inside a proof.
 
 /-- the fields `fs`, in order, then the variable γ. -/
 def fillRow (fs : List (Label × Ty B)) (γ : TyVar) : Row B :=
@@ -257,8 +257,9 @@ theorem Ty.exists_of_isVar {τ : Ty B} (h : τ.isVar = true) : ∃ δ, τ = .var
 /-- ⊢  **a let scheme has an instance** (T-let's premise), read under σ with its
 binders renamed by an injective f: an unspent result is sent to ★ (its lookup
 stays blocked); a spent one is met by filling its blocker with the field, as
-`Materialize` does. The field holds the result with the unspent ones already at
-★, so a variable shared between a spent and an unspent result is no obstacle.
+the old top level did (F-hit). The field holds the result with the unspent ones
+already at ★, so a variable shared between a spent and an unspent result is no
+obstacle.
 `hav` is all the proof needs of the renaming: σ sends no free key variable of a
 stump to a binder's new name. -/
 theorem LetResults.inhabited {S₁ : SolverState B} {ᾱ : List TyVar} {Δq : List (Parked B)}
@@ -638,7 +639,7 @@ theorem inferSound {C : Type} {constTy : Sig B C} : InferSound B C constTy :=
 
 /-- ⊢  a run from nothing, at any σ that absorbs and satisfies the state
 inference ends in, is a plain L2 typing — given that the stumps still parked
-hold at σ, which is finalization's job (`Finalizes.holds`). -/
+hold at σ, which an instance of the answer supplies (`runSound`). -/
 theorem runSoundA {C : Type} {constTy : Sig B C}
     {e : Expr C} {τ : Ty B} {S₁ : SolverState B}
     (h : Infer constTy QCtx.empty ⟨Sol.nil, [], [], ⟨1⟩, []⟩ e τ S₁)

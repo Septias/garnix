@@ -234,15 +234,22 @@ end
 
 def σ0 : Sig Unit Unit := Sig.plain fun _ => ()
 
-/-- the Entry rule: type under the final substitution, and the warnings W -/
-def run (e : InferRuns.E) : String × List Label :=
-  match runF σ0 50 e with
-  | .ok (τ, S) => let τ' := τ.applySubst S.subst; (tyC τ'.ftv.eraseDups τ', S.flags)
-  | .fail m => ("fail: " ++ m, [])
-  | .oof => ("out of fuel", [])
-
 def stumpC (L : List TyVar) (st : Stump Unit) : String :=
   "⟨" ++ rowC L st.row ++ "." ++ keyC L st.label ++ " ↓ " ++ tyC L st.res ++ "⟩"
+
+/-- the Entry rule: the scheme a run answers, printed `Q ⇒ τ` (every variable is
+bound, so the ∀ is left implicit; Q = ∅ prints as the plain type), and the
+warnings W -/
+def run (e : InferRuns.E) : String × List Label :=
+  match runF σ0 50 e with
+  | .ok (σ, S) =>
+      let L := (σ.body.ftv ++ σ.constraints.flatMap
+                  (fun st => st.row.ftv ++ st.label.ftv ++ st.res.ftv)).eraseDups
+      ((if σ.constraints.isEmpty then "" else
+          String.intercalate ", " (σ.constraints.map (stumpC L)) ++ " ⇒ ") ++ tyC L σ.body,
+       S.flags)
+  | .fail m => ("fail: " ++ m, [])
+  | .oof => ("out of fuel", [])
 
 def schemeC (σ : QScheme Unit) : String :=
   let L := (σ.body.ftv ++ σ.constraints.flatMap
@@ -260,7 +267,7 @@ def schemeOf (e₁ : InferRuns.E) : String × Nat :=
       (schemeC (letScheme S₁ ᾱ (letQ S₁ ᾱ) τ), (letG S₁ ᾱ).length)
   | _ => ("fail", 0)
 
-/-- inference proper, before finalization: the type and the parked stumps,
+/-- inference proper, before the merge: the type and the parked stumps,
 each with its blocker, read under the state's substitution -/
 def parkedOf (e : InferRuns.E) : String × List String :=
   match inferF σ0 50 QCtx.empty runStart e with
@@ -365,7 +372,7 @@ def timeEx : MacroNix.E :=
   .selDyn (.rcd (.field "1759190400" (int 1))) (call .toString [int 1759190400])
 
 #guard (match runF sig 50 timeEx with
-        | .ok (τ, S) => τ.applySubst S.subst == .unk && !S.flags.isEmpty
+        | .ok (σ, S) => σ.body == .unk && σ.constraints.isEmpty && !S.flags.isEmpty
         | _ => false)
 
 -- §9 G3: the same program extended by one selection has no type: ★ cannot be
@@ -373,9 +380,10 @@ def timeEx : MacroNix.E :=
 #guard (match runF sig 50 (.sel timeEx "m") with | .fail "clash" => true | _ => false)
 end intro
 
--- Wand's program `a: b: (a ‖ b).l` (§1, §2): the lookup is undecided, a run
--- finalizes it to ★ with a warning
-#guard run (lam "a" (lam "b" (sel (cat (v "a") (v "b")) "l"))) = ("({ρ1} → ({ρ2} → ★))", ["l"])
+-- Wand's program `a: b: (a ‖ b).l` (§1, §2): the lookup is undecided, and the
+-- answer keeps it as a constraint, in the shape of Rose's principal type (§10).
+-- The old `{ρ1} → {ρ2} → ★` with a warning is its D-? instance
+#guard run (lam "a" (lam "b" (sel (cat (v "a") (v "b")) "l"))) = ("⟨ρ2 | ρ1 | ε.l ↓ α3⟩ ⇒ ({ρ1} → ({ρ2} → α3))", [])
 
 ------------------------------------------------------------------------------
 -- # §2 Our Position
@@ -580,7 +588,7 @@ example : QTyped σ0 QCtx.empty refineEx (.fn (.rcd .empty) b) :=
     (qvar (by simp [QCtx.bindTy, QCtx.bindScheme, QCtx.lookup]))) (.catSkip .emp .hit))
 example : TyPrec (.fn (.rcd .empty) b : T) (.fn (.rcd .empty) .unk) := .fn (.refl _) (.unk _)
 -- inference agrees: open, the lookup stays ?; at x = {}, it hits
-#guard run refineEx = ("({ρ1} → ★)", ["l"])
+#guard run refineEx = ("⟨ρ1 | l: 𝓫 | ε.l ↓ α2⟩ ⇒ ({ρ1} → α2)", [])
 #guard run (app refineEx emp) = ("𝓫", [])
 
 -- Rigidity of ★, Theorem "No plain scheme is principal", Theorem "Qualified
@@ -674,8 +682,8 @@ example : Unifies (sub [("β", row [f "l" b, rv "β'"]), ("α", row [f "m" b, rv
 -- After inference the stump is filed under ρ_r, the row of r (K-repark) …
 def reparkEx : E := lam "r" (app (lam "x" (sel (v "x") "l")) (cat (v "r") (rec1 "m" c)))
 #guard parkedOf reparkEx = ("({ρ1} → α2)", ["ρ1 ⊳ ⟨m: 𝓫 | ρ1 | ε.l ↓ α2⟩"])
--- … and finalization pins δ to ★ by F-★, with a warning
-#guard run reparkEx = ("({ρ1} → ★)", ["l"])
+-- … and the answer keeps it; the old `{ρ_r} → ★` is its D-? instance
+#guard run reparkEx = ("⟨m: 𝓫 | ρ1 | ε.l ↓ α2⟩ ⇒ ({ρ1} → α2)", [])
 
 -- Example "Why quiescence matters": g generalizes to
 --   ∀(ρ_r: Row, δ: Type). ⟨(m: 𝓫_c | ρ_r).l ↓ δ⟩ ⇒ {ρ_r} → δ
@@ -687,8 +695,9 @@ def reparkEx : E := lam "r" (app (lam "x" (sel (v "x") "l")) (cat (v "r") (rec1 
 -- and A-app spends its promise on 𝓫_c → γ …
 def spentEx' : E := lam "x" (app (sel (v "x") "l") c)
 #guard parkedOf spentEx' = ("({ρ1} → α2)", ["ρ1 ⊳ ⟨ρ1.l ↓ (𝓫 → α2)⟩"])
--- … F-hit materializes it: {l: 𝓫_c → γ | ρ′} → γ, without a warning
-#guard run spentEx' = ("({l: (𝓫 → α1) | ρ2 | ε} → α1)", [])
+-- … and the answer keeps the constraint; F-hit's {l: 𝓫_c → γ | ρ′} → γ is its
+-- fill instance (`InferRuns.spentA_inst_fill`)
+#guard run spentEx' = ("⟨ρ1.l ↓ (𝓫 → α2)⟩ ⇒ ({ρ1} → α2)", [])
 
 ------------------------------------------------------------------------------
 -- # §7 Incompleteness
@@ -809,17 +818,19 @@ example : ¬ Unifies (sub [] [("α", .var "β")])
 -- # §9 Discussion: the idioms of the introduction
 ------------------------------------------------------------------------------
 
--- Overlay: α → {hello: {ρ₁} | ρ₂} → {hello: {meta: {broken: 𝓫} | ρ₁}}
+-- Overlay: ⟨ρ₂.hello ↓ {ρ₁}⟩ ⇒ α → {ρ₂} → {hello: {meta: {broken: 𝓫} | ρ₁}}; the
+-- old α → {hello: {ρ₁} | ρ₂} → … is its fill instance
 def overlay : E :=
   lam "self" (lam "super" (rec1 "hello" (cat (sel (v "super") "hello") (rec1 "meta" (rec1 "broken" c)))))
-#guard run overlay = ("(α1 → ({hello: {ρ2} | ρ3 | ε} → {hello: {meta: {broken: 𝓫} | ε | ρ2}}))", [])
+#guard run overlay = ("⟨ρ2.hello ↓ {ρ3}⟩ ⇒ (α1 → ({ρ2} → {hello: {meta: {broken: 𝓫} | ε | ρ3}}))", [])
 
--- Override: ({buildInputs: β | ρ} → γ) → (★ → β) → {ρ} → γ, with a warning
+-- Override: ⟨ρ.buildInputs ↓ δ⟩ ⇒ ({buildInputs: β | ρ} → γ) → (δ → β) → {ρ} → γ;
+-- the old (★ → β), with a warning, is its D-? instance
 def override : E :=
   lam "mk" (lam "app" (lam "args" (app (v "mk")
     (cat (v "args") (rec1 "buildInputs" (app (v "app") (sel (v "args") "buildInputs")))))))
 #guard run override =
-  ("(({buildInputs: α1 | ε | ρ2} → α3) → ((★ → α1) → ({ρ2 | ε} → α3)))", ["buildInputs"])
+  ("⟨ρ2 | ε.buildInputs ↓ α4⟩ ⇒ (({buildInputs: α1 | ε | ρ2} → α3) → ((α4 → α1) → ({ρ2 | ε} → α3)))", [])
 
 -- Conditional extension: (α → {NIX_LDFLAGS: 𝓫} → {ρ}) → α → {ρ | pname: 𝓫}
 def condExt : E :=

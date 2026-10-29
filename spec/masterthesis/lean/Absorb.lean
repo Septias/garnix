@@ -42,15 +42,6 @@ theorem SolveTySat.clean {S S' : SolverState B} {τ τ' : Ty B} :
     SolveTySat S τ τ' S' → S.sol.Clean → S'.sol.Clean
   | ⟨_, hs, hsat⟩, hc => hsat.clean (hs.clean hc)
 
-theorem Finalize.clean {S S' : SolverState B} {p : Parked B} :
-    Finalize S p S' → S.sol.Clean → S'.sol.Clean
-  | .star _ _ hs, hc => hs.clean hc
-
-theorem Finalizes.clean {S S' : SolverState B} {ps : List (Parked B)} :
-    Finalizes S ps S' → S.sol.Clean → S'.sol.Clean
-  | .nil, hc => hc
-  | .cons hf hfs, hc => Finalizes.clean hfs (hf.clean hc)
-
 private theorem draw_sol' {S S₀ : SolverState B} {α : TyVar} {κ : Kind}
     (h : (α, S₀) = S.draw κ) : S₀.sol = S.sol := by
   have h2 : S₀ = (S.draw κ).2 := congrArg Prod.snd h
