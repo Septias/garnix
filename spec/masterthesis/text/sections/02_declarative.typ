@@ -1,10 +1,10 @@
 #import "../functions.typ": *
 
-#let meta = [
-  - add a proper introduction to the qualified schemes
-]
 
 = The Declarative Calculus <declarative>
+
+This section discusses MinNix' declarative calculus. We start by giving the syntax of terms and types and show the typing rules up-front. They are mostly standard and we discuss their specialties in the following sections.
+
 
 #let syntax = figure(
   caption: "The syntax of MiniNix.",
@@ -35,12 +35,9 @@
 )
 #syntax <syntax>
 
-// small overview?
-// Kinds not mentioned
-// Concat syntax not mentioned
-// It feels a bit all over the place
+@syntax gives the syntax of terms and types. We extend the standard λ-calculus with records ${ξ}$, asymmetric concatenation $(e₁ ‖ e₂)$ and let-polymorphism. Functions are written $(x: e)$ to mirror the syntax of NixLang and we assume a set 𝓒 of constants $c$ and a finite set 𝓑 of base types $𝓫$, together with a total mapping $c ↦ 𝓫_c$ that assigns each constant its base type. The unknown type ★ types expressions the analysis cannot decide. Record literals ${ξ}$ and record types ${ρ}$ are similar in their structure: Both are formed as inductive trees from an empty base, the binding of a single label and concatenation. MiniNix has two kinds Type and Row which will be explained in @sorting.
 
-@syntax gives the syntax of terms and types. We extend the standard λ-calculus with records, asymmetric concatenation and let-polymorphism. Functions are written $(x: e)$ to mirror the syntax of NixLang and we assume a set 𝓒 of constants $c$ and a finite set 𝓑 of base types $b$, together with a total mapping $c ↦ 𝓫_c$ that assigns each constant its base type. The unknown type ★ types expressions the analysis cannot decide and acts as a fallback for the algorithmic implementation. Record literals ${ξ}$ and record types ${ρ}$ are similar in their structure: Both are formed as inductive trees from an empty base, the binding of a single label and concatenation.
+// Explain the usage of stumps here?
 
 == Typing Rules
 #let declarative = figure(
@@ -86,19 +83,17 @@
 )
 #declarative <declarative-rules>
 
-// TODO(structure): bridging sentence: the rules use four judgements defined in the following sections: ↓ (@row-lookup), ≈ (@row-equivalence), sorts (@sorting) and ≥ (@instantiation).
-The typing rules extend the Hindley-Milner system @damas_milner with records, concatenation and the unknown type ★. Most of them are standard. T-cons types each constant at its designated base type $b_c$ and T-var takes a type from the type environment, possibly instantiating type schemes using the instantiation relation from @instantiation. T-eq relates two types under row equivalence @row-equivalence and the two T-λ-∗ rules introduce and eliminate functions. T-rec, T-ξ-empty and T-ξ-field type record literals field by field and T-conc combines them; the concatenation of record bodies is handled equally by T-ξ-conc. T-conc writes ${ρ₂ | ρ₁}$, so the right precedence of ‖ becomes the left precedence of lookup.
+The typing rules extend the Hindley-Milner system @damas_milner with records, concatenation and the unknown type ★. T-cons types each constant at its designated base type $b_c$ and T-var takes a type from the type environment, possibly instantiating type schemes using the instantiation relation from @instantiation. T-eq relates two types under row equivalence @row-equivalence and the two T-λ-∗ rules introduce and eliminate functions. T-rec, T-ξ-empty and T-ξ-field type record literals field by field and T-conc combines them; the concatenation of record bodies is handled equally by T-ξ-conc.
 
-T-let differs from its Hindley-Milner counterpart, because its schemes may carry stumps. Instead of generalizing a type of e₁, it binds x to a scheme σ and constrains σ by three premises. The first premise $Γ ⊢ σ "ok"$ guarantees well-sortedness (@sorting). The second premise ensures that every instance of σ is a typing of e₁, so x may be used at any of them. We call this _instance-closed_. The third makes σ _inhabited_, meaning it has at least one instance. Without inhabitation, `let x = (3 4) in 5` would get a type while being stuck and it can be uninhabited when two different definitions for δ exist. The last premise types e₂ with x bound to σ.
+T-let differs from Hindley-Milner, because its schemes may carry stumps. Instead of generalizing a type of e₁, it binds x to a scheme σ and constrains σ by three premises. The first premise $Γ ⊢ σ "ok"$ guarantees well-sortedness using the sorting rules @sorting. The second premise ensures that every instance of σ is a typing of e₁, so x may be used at any of them. We call this _instance-closed_. The third makes σ _inhabited_, meaning it has at least one instance. Without inhabitation, [`let x = (3 4) in 5`](evaluates to 5 lule) would get a type while being stuck and it can be uninhabited when two different definitions for δ exist. The last premise types e₂ with x bound to σ.
 
-Our record calculus admits three lookup rules (T-sel, T-sel-★ and T-sel-⊥) for the three possible outcomes of the lookup judgement. T-sel is standard and selects a definite type but T-sel-★ and T-sel-⊥ are new. Nix is a lazy language and a faulty record lookup might never be evaluated. This is why T-sel-⊥ types a definitely failing lookup at ★ which might seem nonsensical at first. The _soft-typing_ approach of MiniNix is permissive in record-selection and we discuss later in which situations this rule can be removed (@sec-gradual). T-sel-★ is the sensible version that types an unknown lookup result at the unknown type. Finally, T-★-intro blurs any concrete type into the unknown.
+Our record calculus admits three lookup rules (T-sel, T-sel-★ and T-sel-⊥) for the three possible outcomes of the lookup judgement. T-sel is standard and selects a definite type but T-sel-★ and T-sel-⊥ are new. Nix is a lazy language and a faulty record lookup might never be evaluated. This is why T-sel-⊥ types a definitely failing lookup at ★ which might seem nonsensical at first. T-sel-★ is the sensible version that types an unknown lookup result at the unknown type. Finally, T-★-intro blurs any concrete type into the unknown. // such that it acts as a top type?
 
 #example(name: [Two ways to type a selection at ★])[
   The selection `{}.l` has type ★ by T-sel-⊥, since $ε.l ↓ ⊥$, and it evaluates to a lookup error by ↯-sel. In a context with $β: "Row"$, the selector `x: x.l` has type ${β} → ★$ by T-sel-★, since $β.l ↓ #h(0.2em) ?$. Applied to `{l = c}` it evaluates to c, applied to `{}` to a lookup error. Both selections receive ★, but T-sel-⊥ marks a selection that fails whenever it is evaluated, while T-sel-★ marks one whose outcome the row does not yet determine.
 ] <ex-sel-star>
 
 
-// TODO(structure): open by naming T-sel, which consults the lookup.
 == Row Lookup
 #let row_lookup = figure(
   caption: "Row lookup.",
@@ -122,9 +117,8 @@ Our record calculus admits three lookup rules (T-sel, T-sel-★ and T-sel-⊥) f
 )
 #row_lookup <row-lookup>
 
-The structure of row types is traversed by a dedicated lookup judgement ⟨ρ.l ↓ r⟩ read as "the lookup of label $l$ in row $ρ$ has result $r$" with $r := τ | ⊥ | #h(0.2em) ?$. The judgement answers with either a definite type τ, definite absence ⊥ or the unknown marker ? when a row variable renders shadowing unclear. L-ε, L-hit and L-miss form the base cases for row-var free lookups and L-var returns the unknown marker when a row variable is encountered. The concatenation rules #smallcaps("L-conc-∗") bubble up a definite result and preserve the left-precedence semantics of asymmetric concatenation.
+A row type is traversed by a dedicated lookup judgement ⟨ρ.l ↓ r⟩ read as "the lookup of label $l$ in row $ρ$ has result $r$" with $r := τ | ⊥ | #h(0.2em) ?$. The judgement answers with either a definite type τ, definite absence ⊥ or the unknown marker ? when a row variable renders shadowing unclear. L-ε, L-hit and L-miss form the base cases for row-var free lookups and L-var returns the unknown marker when a row variable is encountered. The concatenation rules #smallcaps("L-conc-∗") bubble up a definite result and preserve the right-precedence semantics of asymmetric concatenation.
 
-// A reader already has this in mind from the introduction
 A lookup can advance further into a row as soon as a blocking row variable α is solved by ρ' during unification $α := ρ'$. An unknown lookup-result $?$ can then become definite if the "unlocked" row behind it contains the searched label or it blocks again on a later row variable. The addition of an unknown result makes our lookup relation total:
 
 === Properties of the Lookup Relation <lookup-metatheory>
@@ -144,7 +138,6 @@ A definite derivation never uses L-var, so no substitution can change its result
 #proof[By induction on the derivation of $ρ.l ↓ r$. A definite derivation never uses L-var, so it never reaches a row-variable, and θ acts on no part of the row it inspects.]
 
 
-// TODO(structure): open by naming T-eq and D-hit, which use ≈.
 == Row Equivalence
 #let row_equivalence = figure(
   caption: "Row equivalence.",
@@ -164,17 +157,16 @@ A definite derivation never uses L-var, so no substitution can change its result
 )
 #row_equivalence <row-equivalence>
 
-The order of fields in a record carries no meaning: the records `{ a = 1; b = 2; }` and `{ b = 2; a = 1; }` behave identically, so their rows $(a: τ | b: τ′)$ and $(b: τ′ | a: τ)$ should be equivalent. Row equivalence ≈ permits this by allowing shadowing-preserving reordering of fields using controlled swaps of fields. @row-equivalence defines ≈ as the least congruence that makes concatenation associative with unit ε and that swaps adjacent fields with distinct labels (≈-comm). ≈-comm forbids the swapping of equal labels as that would change shadowing behaviour, and ≈-rcd and ≈-fn lift ≈ to types. The base types, ★ and type variables are equivalent only to themselves, and ≈ is a congruence below records and arrows. ≈-ext handles singular fields and ≈-conc the concatenation of two rows.
+The order of fields in a record carries no meaning: the records `{ a = 1; b = 2; }` and `{ b = 2; a = 1; }` behave identically, so their rows $(a: τ | b: τ′)$ and $(b: τ′ | a: τ)$ should be equivalent. Row equivalence ≈ permits this by allowing shadowing-preserving reordering of fields using controlled swaps of fields. @row-equivalence defines ≈ as the least congruence that makes concatenation associative with unit ε and that swaps adjacent fields with distinct labels (≈-comm). The base types, ★ and type variables are equivalent only to themselves, and ≈ is a congruence below records and arrows (≈-rcd and ≈-fn). ≈-ext handles singular fields and ≈-conc the concatenation of two rows.
 
 
-// TODO(structure): open by naming the rules that use sorts (T-λ-I, `σ ok` in T-let).
 == Sorts
 #let sorting = figure(
   caption: "Sorting.",
   flexbox(
-    derive("S-var", ($α: "Type" ∈ Γ$,), $Γ ⊢ α: "Type"$),
     derive("S-base", (), $Γ ⊢ 𝓫: "Type"$),
     derive("S-★", (), $Γ ⊢ ★: "Type"$),
+    derive("S-var", ($α: "Type" ∈ Γ$,), $Γ ⊢ α: "Type"$),
     derive(
       "S-fn",
       ($Γ ⊢ τ₁: "Type"$, $Γ ⊢ τ₂: "Type"$),
@@ -201,12 +193,12 @@ The order of fields in a record carries no meaning: the records `{ a = 1; b = 2;
 )
 #sorting <sorting>
 
-@sorting gives the sorting rules of our calculus. We only differentiate between `Type` and `Row`. Sorts are needed only for variables: every other type or row is recognisable by its form, but a variable can stand for either, so Γ records its sort. The first three rules sort the base types and S-fn types functions by recursing into the domain and codomain. S-rcd shows how a row constitutes a type by placing it between braces, S-ρ-var is the equivalent of S-var for rows and S-ε, S-field and S-conc sort rows. First-class labels add a `Label` sort and change nothing else about the discipline (@sec-fc-labels).
+@sorting gives the sorting rules of our calculus. We only differentiate between `Type` and `Row`. Sorts are needed only for variables: every other type or row is recognisable by its form, but a variable can stand for either, so Γ records its sort. The first two rules sort the base, S-var the variables and S-fn types functions by recursing into the domain and codomain. S-rcd shows how a row constitutes a type by placing it between braces, S-ρ-var is the equivalent of S-var for rows and S-ε, S-field and S-conc sort rows. S-scheme guarantees well-formedness of type schemes with two premises: The first fixes the parameters' sorts and the second premise fixes the sorts in stumps. The result δ of a stump is sorted under the parameters $macron(α)$ alone, so it mentions no variable of Γ. First-class labels add a `Label` sort and change nothing else about the discipline (@sec-fc-labels).
 
 
-// TODO(structure): rename to "Qualified Schemes" (G); open by naming T-var and T-let, which use ≥. Collect here what T-let now explains as well: instance-closure and inhabitation, incl. `let x = (3 4) in 5`.
-== Instantiation
-Polymorphism is stratified into a scheme σ that quantifies only over monotypes and rows to keep instantiation predicative and inference decidable. We depart from standard Hindley-Milner schemes by using constraints: Every scheme is _qualified_ by a list Q of pending lookups ⟨ρ.l ↓ δ⟩ called _stumps_ . A stump ⟨ρ.l ↓ δ⟩ names the result of the lookup by δ, which mentions only quantified variables of the scheme and is usually one of them. S-scheme guarantees well-formedness of type schemes with two premises: The first fixes the parameters' sorts and the second premise fixes the sorts in stumps. The result δ of a stump is sorted under the parameters $macron(α)$ alone, so it mentions no variable of Γ.
+== Qualified Schemes <qualified-schemes>
+// move this up?
+Polymorphism is stratified into a scheme σ that quantifies only over monotypes and rows to keep instantiation predicative and inference decidable. We depart from standard Hindley-Milner schemes by using constraints: Every scheme is _qualified_ by a list Q of pending lookups ⟨ρ.l ↓ δ⟩ called _stumps_. A stump ⟨ρ.l ↓ δ⟩ names the result of the lookup by δ, which mentions only quantified variables of the scheme and is usually one of them.
 
 #let instantiation = figure(
   caption: "Instantiation.",
@@ -226,7 +218,7 @@ Polymorphism is stratified into a scheme σ that quantifies only over monotypes 
 )
 #instantiation <instantiation>
 
-@instantiation defines the instance relation $σ ≥ τ$, used by T-var. The first premise of I-inst makes θ respect the sorts and the second is a _discharge_. A discharge $θ ⊨ q$ replays every stump at the instance: the lookup is performed on θρ, and θδ is pinned to its verdict such that both coincide. The replay allows derivations up to ≈ by D-hit, D-⊥ and D-\?. D-hit asks for $θ δ ≈ τ$ rather than equality. This loses nothing, since T-eq closes every typing under ≈.
+@instantiation defines the instance relation $σ ≥ τ$, used by T-var. The first premise of I-inst makes θ respect the sorts and the second is a _discharge_. [A discharge $θ ⊨ q$ replays every stump at the instance: the lookup is performed on θρ, and θδ is pinned to its verdict such that both coincide. The replay allows derivations up to ≈ by D-hit, D-⊥ and D-\?. D-hit asks for $θ δ ≈ τ$ rather than equality. This loses nothing, since T-eq closes every typing under ≈.](give some more motivation here)
 
 #example(name: [Instances of selQ])[
   Consider $"selQ" = ∀(β: "Row", δ: "Type"). ⟨β.l ↓ δ⟩ ⇒ {β} → δ$.
@@ -273,4 +265,4 @@ Without stumps (Q = ε), our instantiation is plain Hindley-Milner instantiation
 )
 #semantics <semantics>
 
-@semantics gives the call-by-value small-step reduction → of the mechanization. The definitions are entirely standard with one subtlety: a record literal is a value and its fields are only evaluated when they are selected. NixLang is a lot more complicated, as Broekhoff and Krebbers @verified show by giving a small-step semantics based on delayed substitution that faithfully tracks the overwriting behaviour of `with e₁; e₂` and laziness in records, let-statements and operators, but in this thesis, we concern ourselves with type inference and limit the operational semantics to a bare minimum. $ξ(l)$ denotes the leftmost binding of l in ξ, so selection agrees with ↓, and E-conc places the right operand first, as T-conc does. The judgement $e ↯$ is a _lookup error_: a selection reaches a record literal that lacks the selected label. @sec-fc-labels extends this with another error case.
+@semantics gives the call-by-value small-step reduction of the mechanization. The definitions are entirely standard with one subtlety: a record literal is a value and its fields are only evaluated when they are selected. NixLang is a lot more complicated, as Broekhoff and Krebbers @verified show by giving a small-step semantics based on delayed substitution that faithfully tracks the overwriting behaviour of `with e₁; e₂` and laziness in records, let-statements and operators. In this thesis, we concern ourselves with type inference and limit the operational semantics to a bare minimum. $ξ(l)$ denotes the leftmost binding of l in ξ, so selection agrees with ↓, and E-conc places the right operand first, as T-conc does. The judgement $e ↯$ is a _lookup error_: a selection reaches a record literal that lacks the selected label. First-class labels extends this with another error case (@sec-fc-labels).
