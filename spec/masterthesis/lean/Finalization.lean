@@ -385,6 +385,85 @@ theorem runSound {C : Type} {constTy : Sig B C} : RunSound B C constTy := by
     rwa [hqs] at this
   · exact Stump.dischargeEquiv_iff_holds.mp hd
 
+--------------------- RunQSound ------------------------------------------------
+-- Every instance: an instance χ of the scheme read at S₂ is the substitution
+-- χ ∘ ⟦S₂⟧, which absorbs S₂ and so every state before it. A stump parked at
+-- the end of inference either is still parked after the merge, and its
+-- constraint discharges at χ, or the merge's saturation discharged it.
+-- One instance: `LetResults.inhabited` at the identity reading, which renames
+-- nothing because nothing outside the scheme shares its names.
+
+/-- ⊢  χ ∘ ⟦S⟧ absorbs a clean S. -/
+theorem Absorbs.comp {χ : TySubst B} {S : SolverState B} (hc : S.sol.Clean) :
+    Absorbs (χ.comp S.subst) S := by
+  intro α
+  obtain ⟨hi₁, hi₂, hi₃⟩ := SolverState.idem hc α
+  refine ⟨?_, ?_, ?_⟩
+  · show (S.subst.ty α).applySubst (χ.comp S.subst) = (S.subst.ty α).applySubst χ
+    rw [← Ty.applySubst_applySubst, hi₁]
+  · show (S.subst.row α).applySubst (χ.comp S.subst) = (S.subst.row α).applySubst χ
+    rw [← Row.applySubst_applySubst, hi₂]
+  · show (S.subst.lab α).applySubst (χ.comp S.subst) = (S.subst.lab α).applySubst χ
+    rw [← Key.applySubst_applySubst, hi₃]
+
+/-- ⊢  a stump read at S, then at χ, is the stump at χ ∘ ⟦S⟧. -/
+theorem Stump.at_read (χ : TySubst B) (S : SolverState B) (st : Stump B) :
+    Stump.at χ ⟨st.row.applySubst S.subst, st.label.applySubst S.subst,
+      st.res.applySubst S.subst⟩ = st.at (χ.comp S.subst) := by
+  simp only [Stump.at, Row.applySubst_applySubst, Key.applySubst_applySubst,
+    Ty.applySubst_applySubst]
+
+/-- ⊢  read under the identity, with its binders kept, a scheme is itself. -/
+theorem QScheme.readAt_id (sc : QScheme B) : sc.readAt (TySubst.id B) id = sc := by
+  have h : readSub (TySubst.id B) sc.vars id = TySubst.id B := by
+    simp only [readSub, TySubst.id, id, ite_self]
+  obtain ⟨vs, cs, b⟩ := sc
+  simp only [QScheme.readAt, h, Ty.applySubst_id, Row.applySubst_id, Key.applySubst_id,
+    List.map_id_fun, id_eq]
+  congr 1
+  conv => rhs; rw [← List.map_id cs]
+  rfl
+
+/-- ⊢  **ALGORITHM SOUNDNESS, TOP-LEVEL SCHEMES — `RunQSound`.** Every instance
+of the scheme a run answers types the program in the empty context, and the
+scheme has an instance. -/
+theorem runQSound {C : Type} {constTy : Sig B C} : RunQSound B C constTy := by
+  rintro e σ ⟨τ, S₁, S₂, hinf, hmer, hsp, rfl⟩
+  have c₁ := Infer.clean hinf Sol.clean_nil
+  obtain ⟨k₁₂, c₂, x₁₂, -⟩ := hmer.keeps c₁
+  have q₂ : S₂.Quiescent := hmer.quiescent (Infer.quiescent_of_nil hinf rfl)
+  refine ⟨fun τ' ⟨χ, _, hdis, hbody⟩ => ?_, ?_⟩
+  · ---------------------------------------------- every instance types e
+    have hab₂ : Absorbs (χ.comp S₂.subst) S₂ := Absorbs.comp c₂
+    have hab₁ := hab₂.back x₁₂ c₁
+    have ht := runSoundA hinf hab₁ (hab₁.sat c₁) (fun p hp => ?_)
+    · rw [← Ty.applySubst_applySubst] at ht
+      exact hbody ▸ ht
+    · rcases k₁₂ _ (hab₂.sat c₂) p hp with ⟨q, hq, hqs⟩ | hd
+      · rw [← hqs, ← Stump.at_read]
+        exact Stump.dischargeEquiv_iff_holds.mp (hdis _ (List.mem_map.mpr ⟨q, hq, rfl⟩))
+      · exact Stump.dischargeEquiv_iff_holds.mp hd
+  · ---------------------------------------------- the scheme has an instance
+    have hcand : ∀ p ∈ S₂.parked, ∀ α, α ∈ (p.stump.row.applySubst S₂.subst).ftv ∨
+        α ∈ (p.stump.res.applySubst S₂.subst).ftv ∨
+        α ∈ (p.stump.label.applySubst S₂.subst).ftv → α ∈ letCand S₂ τ := by
+      intro p hp α h
+      unfold letCand
+      rw [List.mem_eraseDups]
+      refine List.mem_append_right _ (List.mem_flatMap.mpr ⟨p, hp, ?_⟩)
+      rcases h with h | h | h <;> simp [h]
+    obtain ⟨τ', h⟩ := LetResults.inhabited τ
+      ⟨fun p hp δ hδ => hcand p hp δ (.inr (.inl hδ)), hsp⟩
+      (fun p hp => (q₂ p hp).mem_ftv.elim (fun h => hcand p hp _ (.inl h))
+        (fun h => hcand p hp _ (.inr (.inr h))))
+      q₂ (TySubst.id B) id (fun _ _ _ _ h => h)
+      (fun p hp γ hγ hn β hβ hm => by
+        simp only [TySubst.id, Key.ftv, List.mem_singleton] at hβ
+        subst hβ
+        exact hn (by simpa using hm))
+    rw [QScheme.readAt_id] at h
+    exact ⟨τ', h⟩
+
 --------------------- ≈-EQUAL HITS ON ONE RESULT ------------------------------
 -- Two constraints on the SAME result variable whose lookups find ≈-equal but
 -- syntactically different types. With an exact D-hit no instance existed (δ

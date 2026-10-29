@@ -953,16 +953,39 @@ def runF (constTy : Sig B C) (n : Nat) (e : Expr C) : IRes (Ty B × SolverState 
   let S' ← finalizesF n S₂ S₂.parked
   pure (r.1, S')
 
+set_option synthInstance.maxSize 512 in
+set_option synthInstance.maxHeartbeats 200000 in
+instance {S : SolverState B} {Δ : List (Parked B)} : Decidable (LetSpent S Δ) := by
+  unfold LetSpent; infer_instance
+
 /-- a run that answers a SCHEME (plans/top-level-schemes.md): infer from
-nothing, then generalize like A-let with Γ = ∅. Nothing is decided: a spent
-promise stays a constraint, and the run fails only when `LetSpent` finds no
-instance of the scheme -/
+nothing, merge what asks one lookup, then generalize like A-let with Γ = ∅.
+Nothing is decided: a spent promise stays a constraint, and the run fails only
+when `LetSpent` finds no instance of the scheme -/
 def runQF (constTy : Sig B C) (n : Nat) (e : Expr C) : IRes (QScheme B × SolverState B) := do
   let r ← inferF constTy n QCtx.empty runStart e
   let S₂ ← mergeAllF n r.2
-  if (letG S₂ (greatestAlpha QCtx.empty runStart S₂ r.1)).isEmpty then
+  if LetSpent S₂ S₂.parked then
     pure (letScheme S₂ (letCand S₂ r.1) S₂.parked r.1, S₂)
   else .fail "spent promise without witness"
+
+/-- ⊢  every answer of `runQF` is a `RunQ`. -/
+theorem runQF_sound {constTy : Sig B C} {n : Nat} {e : Expr C} {σ : QScheme B}
+    {S : SolverState B} (h : runQF constTy n e = .ok (σ, S)) : RunQ constTy e σ := by
+  simp only [runQF, IRes.bind_eq_ok] at h
+  obtain ⟨⟨τ, S₁⟩, h₁, S₂, h₂, h⟩ := h
+  split at h
+  · next hs =>
+    simp only [IRes.pure_eq_ok, Prod.mk.injEq] at h
+    exact ⟨τ, S₁, S₂, inferF_sound h₁, mergesF_sound h₂, hs, h.1.symm⟩
+  · cases h
+
+/-- ⊢  **what `runQF` answers is sound**: every instance types the program, and
+there is one. -/
+theorem runQF_typed {constTy : Sig B C} {n : Nat} {e : Expr C} {σ : QScheme B}
+    {S : SolverState B} (h : runQF constTy n e = .ok (σ, S)) :
+    (∀ τ, σ.Inst τ → QTyped constTy QCtx.empty e τ) ∧ ∃ τ, σ.Inst τ :=
+  runQSound e σ (runQF_sound h)
 
 /-- ⊢  every answer of `runF` is a `Run`. -/
 theorem runF_sound {constTy : Sig B C} {n : Nat} {e : Expr C} {τ : Ty B}

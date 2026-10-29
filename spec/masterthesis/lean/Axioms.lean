@@ -1032,6 +1032,26 @@ info: 'MinimalCalculus.runSound' depends on axioms: [propext, Classical.choice, 
 -/
 #guard_msgs in #print axioms runSound
 
+-- Top-level schemes (plans/top-level-schemes.md): the forced merge, the
+-- inhabitation witness shared with A-let, and soundness at every instance
+/-- info: 'MinimalCalculus.merge_forced' depends on axioms: [propext] -/
+#guard_msgs in #print axioms merge_forced
+
+/--
+info: 'MinimalCalculus.Merges.keeps' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms Merges.keeps
+
+/--
+info: 'MinimalCalculus.LetResults.inhabited' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms LetResults.inhabited
+
+/--
+info: 'MinimalCalculus.runQSound' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms runQSound
+
 -- Two ≈-equal hits on one result variable: instantiable (no χ-correction).
 /--
 info: 'MinimalCalculus.icSc_inst' depends on axioms: [propext]
@@ -1096,6 +1116,16 @@ info: 'MinimalCalculus.inferF_terminates' depends on axioms: [propext, Classical
 info: 'MinimalCalculus.runF_terminates' depends on axioms: [propext, Classical.choice, Quot.sound]
 -/
 #guard_msgs in #print axioms runF_terminates
+
+/--
+info: 'MinimalCalculus.runQF_typed' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms runQF_typed
+
+/--
+info: 'MinimalCalculus.runQF_terminates' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms runQF_terminates
 
 /--
 info: 'MinimalCalculus.runF_eq_run' depends on axioms: [propext, Classical.choice, Quot.sound]

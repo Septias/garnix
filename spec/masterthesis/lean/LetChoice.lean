@@ -269,12 +269,7 @@ theorem letPrune_spec [DecidableEq B] (Γ : QCtx B) (S S₁ : SolverState B) (�
         (Nat.le_antisymm (List.length_filter_le _ _) (Nat.not_lt.mp hge))
       simpa [hbad] using hall α hα
 
-/-- ftv(⟦S₁⟧τ₁, ⟦S₁⟧Δ₁): what A-let chooses ᾱ from. A variable outside it
-would be generalized vacuously. -/
-def letCand (S₁ : SolverState B) (τ₁ : Ty B) : List TyVar :=
-  ((τ₁.applySubst S₁.subst).ftv ++ S₁.parked.flatMap (fun p =>
-    (p.stump.row.applySubst S₁.subst).ftv ++ (p.stump.res.applySubst S₁.subst).ftv ++
-      (p.stump.label.applySubst S₁.subst).ftv)).eraseDups
+-- `letCand` lives in Infer.lean, next to `letQ`: the top level (`RunQ`) uses it.
 
 /-- the ᾱ a function should choose at A-let: gen_{Γ,S}(S₁, τ₁) -/
 def greatestAlpha [DecidableEq B] (Γ : QCtx B) (S S₁ : SolverState B) (τ₁ : Ty B) :

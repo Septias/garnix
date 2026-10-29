@@ -866,6 +866,13 @@ def LetResults {B : Type} (S₁ : SolverState B) (ᾱ : List TyVar) (Δq : List 
 
 --------------------- A-let'S CHOICE OF ᾱ -------------------------------------
 
+/-- ftv(⟦S₁⟧τ₁, ⟦S₁⟧Δ₁): what A-let chooses ᾱ from. A variable outside it
+would be generalized vacuously. -/
+def letCand {B : Type} (S₁ : SolverState B) (τ₁ : Ty B) : List TyVar :=
+  ((τ₁.applySubst S₁.subst).ftv ++ S₁.parked.flatMap (fun p =>
+    (p.stump.row.applySubst S₁.subst).ftv ++ (p.stump.res.applySubst S₁.subst).ftv ++
+      (p.stump.label.applySubst S₁.subst).ftv)).eraseDups
+
 /-- Δ_q for a choice ᾱ: the stumps blocked on a generalized variable. -/
 def letQ {B : Type} (S₁ : SolverState B) (ᾱ : List TyVar) : List (Parked B) :=
   S₁.parked.filter (fun p => decide (p.blocker ∈ ᾱ))
@@ -1345,6 +1352,39 @@ PROVED: `runSound` (Finalization.lean). -/
 def RunSound (B C : Type) [DecidableEq B] (constTy : Sig B C) : Prop :=
   ∀ (e : Expr C) (τ : Ty B) (S' : SolverState B), Run constTy e τ S' →
     QTyped constTy QCtx.empty e (τ.applySubst S'.subst)
+
+
+--------------------- THE TOP LEVEL ANSWERS A SCHEME -------------------------
+-- plans/top-level-schemes.md. `Run` decides at the end: F-hit puts a spent
+-- field into its blocker, F-★ sends every undecided result to ★. Both pick ONE
+-- instance of the scheme A-let would have kept, and neither pick is forced.
+-- `RunQ` keeps the scheme instead: the forced merge, then generalization like
+-- A-let with Γ = ∅. With Γ = ∅ and a start state that parks nothing, A-let's
+-- admissibility is free except for `LetSpent`, the inhabitation test.
+
+/-- ⊢  a blocker is a variable of the row or of the key it blocks. -/
+theorem LookupBlockedQ.mem_ftv {B : Type} {ρ : Row B} {k : Key} {β : TyVar} :
+    LookupBlockedQ ρ k β → β ∈ ρ.ftv ∨ β ∈ k.ftv
+  | .varFree => .inl (by simp [Row.ftv])
+  | .sunk => .inr (by simp [Key.ftv])
+  | .dunkQ _ => .inr (by simp [Key.ftv])
+  | .dunkF => .inl (by simp [Row.ftv, Key.ftv])
+  | .catSkip _ h => (LookupBlockedQ.mem_ftv h).imp (fun h => by simp [Row.ftv, h]) id
+  | .catUnk h => (LookupBlockedQ.mem_ftv h).imp (fun h => by simp [Row.ftv, h]) id
+
+/-- `⊢ e ⇒ σ` — inference from nothing, the forced merge, and the scheme read at
+the merged state with every variable bound. -/
+def RunQ {B C : Type} [DecidableEq B] (constTy : Sig B C) (e : Expr C) (σ : QScheme B) : Prop :=
+  ∃ τ S₁ S₂, Infer constTy QCtx.empty ⟨Sol.nil, [], [], ⟨1⟩, []⟩ e τ S₁ ∧
+    Merges S₁ S₂ ∧ LetSpent S₂ S₂.parked ∧
+    σ = letScheme S₂ (letCand S₂ τ) S₂.parked τ
+
+/-- **Algorithm soundness, top-level schemes**: every instance of the answer
+types the program, and the answer has one (conjuncts 1 and 2 of
+`QScheme.Principal`). PROVED: `runQSound` (Finalization.lean). -/
+def RunQSound (B C : Type) [DecidableEq B] (constTy : Sig B C) : Prop :=
+  ∀ (e : Expr C) (σ : QScheme B), RunQ constTy e σ →
+    (∀ τ, σ.Inst τ → QTyped constTy QCtx.empty e τ) ∧ ∃ τ, σ.Inst τ
 
 
 --------------------- …AND IT RUNS -------------------------------------------

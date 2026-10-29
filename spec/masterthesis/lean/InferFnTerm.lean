@@ -1016,6 +1016,76 @@ theorem runF_terminates (constTy : Sig B C) (e : Expr C) : ∃ n, runF constTy n
           (Infer.clean (inferF_sound h) Sol.clean_nil)))
         (fun _ => Stable.const _) (fun _ _ _ => Settles.pure _)))
 
+--------------------- THE TOP LEVEL ANSWERS A SCHEME -----------------------------
+
+theorem Stable.orElse {α : Type} {x : Nat → IRes α} (hx : Stable x) (d : α) :
+    Stable (fun m => (x m).orElse d) := by
+  intro m m' hle h
+  simp only at h ⊢
+  cases hxm : x m with
+  | oof => rw [hxm] at h; exact absurd rfl h
+  | fail _ => rw [hx m m' hle (by rw [hxm]; simp), hxm]
+  | ok a => rw [hx m m' hle (by rw [hxm]; simp), hxm]
+
+theorem Settles.orElse {α : Type} {x : Nat → IRes α} (hx : Settles x) (d : α) :
+    Settles (fun m => (x m).orElse d) := by
+  obtain ⟨n, h⟩ := hx
+  refine ⟨n, ?_⟩
+  cases hxn : x n with
+  | oof => exact absurd hxn h
+  | fail _ => simp [hxn, IRes.orElse]
+  | ok a => simp [hxn, IRes.orElse]
+
+theorem mergeF_stable (S : SolverState B) (st₁ st₂ : Stump B) :
+    Stable (fun m => mergeF m S st₁ st₂) := by
+  unfold mergeF
+  split
+  · split
+    · exact Stable.orElse (solveTySatF_stable _ _ _) _
+    · exact Stable.const _
+  · exact Stable.const _
+
+theorem mergeF_settles {S : SolverState B} (hc : S.sol.Clean) (st₁ st₂ : Stump B) :
+    Settles (fun m => mergeF m S st₁ st₂) := by
+  unfold mergeF
+  split
+  · split
+    · exact Settles.orElse (solveTySatF_settles hc _ _) _
+    · exact Settles.pure _
+  · exact Settles.pure _
+
+theorem mergesF_stable : ∀ (ps : List (Stump B × Stump B)) (S : SolverState B),
+    Stable (fun m => mergesF m S ps)
+  | [], S => by simp only [mergesF]; exact Stable.const _
+  | (st₁, st₂) :: ps, S => by
+      simp only [mergesF]
+      exact Stable.bind (mergeF_stable _ _ _) (fun S₁ => mergesF_stable ps S₁)
+
+theorem mergesF_settles : ∀ (ps : List (Stump B × Stump B)) {S : SolverState B}, S.sol.Clean →
+    Settles (fun m => mergesF m S ps)
+  | [], S, _ => by simp only [mergesF]; exact ⟨0, fun h => nomatch h⟩
+  | (st₁, st₂) :: ps, S, hc => by
+      simp only [mergesF]
+      exact Settles.bind (mergeF_stable _ _ _) (mergeF_settles hc _ _)
+        (fun S₁ => mergesF_stable ps S₁)
+        (fun S₁ _ h => mergesF_settles ps ((mergeF_sound h).keeps hc).2.1)
+
+theorem runQF_stable (constTy : Sig B C) (e : Expr C) : Stable (fun m => runQF constTy m e) := by
+  unfold runQF
+  exact Stable.bind (inferF_stable constTy _ _ e) (fun r =>
+    Stable.bind (mergesF_stable _ _) (fun _ => Stable.const _))
+
+/-- ⊢  **A RUN TERMINATES, top-level schemes**: every program gets a verdict at
+some fuel. -/
+theorem runQF_terminates (constTy : Sig B C) (e : Expr C) : ∃ n, runQF constTy n e ≠ .oof := by
+  unfold runQF
+  exact Settles.bind (inferF_stable constTy _ _ e) (inferF_settles constTy _ _ e Sol.clean_nil)
+    (fun r => Stable.bind (mergesF_stable _ _) (fun _ => Stable.const _))
+    (fun r _ h => Settles.bind (mergesF_stable _ _)
+      (mergesF_settles _ (Infer.clean (inferF_sound h) Sol.clean_nil))
+      (fun _ => Stable.const _)
+      (fun _ _ _ => ⟨0, by split <;> exact fun h => nomatch h⟩))
+
 --------------------- THE TOTAL FUNCTION ---------------------------------------
 
 /-- **inference as a total function**: the verdict at any fuel that suffices.
