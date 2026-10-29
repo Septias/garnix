@@ -33,7 +33,9 @@ Use academic style. It can sound fancy from time to time, but needs to keep a mo
 - Incompleteness:
   - Wand: unsolvable
   - Let: Not practical to solve
-  - Inference: What exactly…?
+  - Inference:
+    - Generalization at lets
+    - Unrestricted T-★-intro: ?
   - Fc-labels: would need top-level schemes
 
 
@@ -47,55 +49,50 @@ Use academic style. It can sound fancy from time to time, but needs to keep a mo
 - Use of the wrong semantic for row equality
 
 
-## Open fixes
-- Add ⊥ type and take its use out of ★
-- Top-level schemes
-
-
-## Sections
-- Section about trace monoid and its properties
-- Maybe add a section that shows the order (solve, saturate, wake, materialize, finalize)
-
-
 ## Final Cleanup
-- I have to check whether the syntax is ambiguous or bad in all places (representation is not verified)
+- Check the syntax whether it is ambiguous
+- Check the claims for references
 
 
 # Section-State
-- [f] 00_Introduction
-  - Fix the claims
-- [f] 01_Overview
-  - Fix the claims
-- [x] 02_Declarative (22.10)
-  - [f] Syntax
-  - [f] Lookup ↓
-  - [f] Row equivalence
-  - [f] Trace Monoid
-  - [f] Sorts
-  - [f] Typing
-  - [x] ⊑-relation
+- [x] Introduction
+- [x] Overview
+- [ ] Declarative
+  - [ ] Introduction: Stumps
+  - [x] Syntax
+  - [x] Typing
+  - [x] Lookup ↓
+  - [x] Row equivalence
+  - [x] Sorts
   - [x] Instantiation
   - [x] Semantics
 - [x] Metatheory
-- [x] Unification
-  - [f] Prelims
-  - [f] Types ≐
-  - [ ] Rows ≐ᵣ
-    - Explain the semantic
+- [ ] Unification
+  - [x] Types ≐
+  - [ ] Trace Monoid
+  - [x] Rows ≐ᵣ
   - [ ] Examples
-  - [f] Metatheory
-- [~] Inference
-  - Needs introduction to different solver states
-  - [~] State
-- [f] Mechanization
-- [ ] Incompleteness (27.10)
-- [x] FC-Labels
-  - Good in general
-  - Boring sections need 
-- [x] Discussion (28.10)
-  - I say is good from content
-- [x] Related Work (28.10)
-  - Needs precision in first part
-  - Others are good I beg 
-  - More focus on 
-- [ ] Conclusion (28.10)
+  - [ ] Metatheory
+- [ ] Inference
+  - [ ] State
+  - [ ] Rules
+  - [ ] Let-Generalization
+  - [ ] Wake, Replay, Saturate
+  - [ ] Finalization, Materialization
+- [ ] Mechanization
+- [ ] Incompleteness
+  - [ ] Unsolvable
+  - [ ] Forced Moves
+  - [ ] Inference
+- [ ] FC-Labels
+  - [ ] Keyed Lookup
+  - [ ] Row Equivalence & Spines
+  - [ ] Typing
+  - [ ] Unification
+  - [ ] Inference 
+- [ ] Discussion
+  - [ ] Idioms
+  - [ ] Design Goals
+  - [ ] Outlook
+- [ ] Related Work
+- [ ] Conclusion
