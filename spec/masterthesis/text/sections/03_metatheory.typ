@@ -14,11 +14,10 @@ We prove type safety up to lookup errors for the declarative system in the synta
   If $∅ ⊢ e : τ$ and $e → e′$, then $∅ ⊢ e′ : τ$.
 ] <thm-preservation>
 
-// PROF: T-star-intro is unrestricted, so star's origin is not always a lookup. Star is rigid and has no eliminators, so it is not "propagated".
-Progress holds only up to lookup errors because some lookups might be typed as ★ and we cannot guarantee non-failure over this fragment. We only admit uncertainty in lookups. // ★ is not an arbitrary failure type and its origin can always be explained.
+Progress holds only up to lookup errors because some lookups might be typed as ★ and we cannot guarantee non-failure over this fragment.
 
-
-== Refinement and the Rigidity of ★ <refinement>
+// a derivation without T-sel-★/T-sel-⊥ never produces ↯
+== Refinement and the Maximality of ★ <refinement>
 
 T-sel-★, T-sel-⊥ and T-★-intro place ★ where a more informative type may also be derivable. The following order compares typings by how much of this information they keep.
 
@@ -36,14 +35,14 @@ It may, however, admit a more precise one in the sense of @def-precision. By @lo
 
 For `x: ({l = c} ‖ x).l` with $x : {β}$, the typing ${β} → ★$ is carried to ${ε} → ★$ under $[β ≔ ε]$ by @lem-subst, and ${ε} → 𝓫_c ⊑ {ε} → ★$ becomes derivable as well, since the lookup now hits. Conversely, ★ is never sharpened.
 
-#lemma(name: [Rigidity of ★], lean: "finalized_no_blur")[
+#lemma(name: [Maximality of ★], lean: "finalized_no_blur")[
   Let $τ₀ ≠ ★$. There is no substitution θ with $θ({β} → ★) ⊑ {(l: τ₀)} → τ₀$.
-] <lem-rigid>
+] <lem-star-max>
 
-@lem-rigid drives the principality result below and reappears as the rigidity of ★ in unification (@unification-ty).
+@lem-star-max is used in the proof of @thm-no-plain.
 
 
-== Principality and Qualified Schemes <principality>
+== Principality of `x: x.l` and Qualified Schemes <principality>
 
 #definition(name: [Principal scheme])[
   A scheme σ is _principal_ for e in Γ if
@@ -62,7 +61,7 @@ The three conjuncts are instance-closure, inhabitation and coverage: every insta
 ] <thm-no-plain>
 
 #proof[
-  Both instances are typings, so a scheme covering them must have a quantified variable as its result, since ${ε}$ and ★ are rigid. Sending that variable to ${ε}$ in the substitution of the second instance leaves the argument at ${ε}$ and yields the instance ${ε} → {ε}$, which is not a typing. Choosing ★ as result does not help, by @lem-rigid.
+  Both instances are typings, so a scheme covering them must have a quantified variable as its result, since ${ε}$ and ★ are distinct closed types. Sending that variable to ${ε}$ in the substitution of the second instance leaves the argument at ${ε}$ and yields the instance ${ε} → {ε}$, which is not a typing. Choosing ★ as result does not help, by @lem-star-max.
 ]
 
 A qualified scheme is principal. Let
@@ -85,5 +84,4 @@ Discharge pins δ to the lookup's verdict, so ${ε} → {ε}$ is excluded. One b
   $
 ] <cor-strict>
 
-// PROF: Forced only relative to this system (star-typings from T-sel-⊥/T-sel-star must be covered). P&X has a principal plain type for x: x.l.
 Qualified schemes are thus forced in our system, not chosen.
