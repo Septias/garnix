@@ -4,43 +4,21 @@
 
 - [~] **E1 G3** [cf E; cr A11]. `00:22` → "The analysis rejects a program only for a definite type error; a lookup it cannot decide is typed at ★." The current "report uncertainty instead of failing" contradicts the fact that a stuck verdict rejects the program. "Totality" is a misnomer. The slogan "never reject working code" is success typing (Lindahl & Sagonas 2006); it is in the bib as `success_typing` but never cited. ★ buys permissiveness only for values that are never eliminated. Measure 09 against the new G3. ("soft" → E2 in 10.)
 
-
-- [ ] `00:69` "principal … forced" needs the qualifier → S7.
-
-
-## 01 Overview
-
 - [ ] **K P&X once** [cf K; cr B]: `01:13` (absorbs the `01:16` placeholder `[…](more precision?)`), `01:38`.
   - P&X have two different "tail" mechanisms: the declarative tail check ▶* on instantiation (their Fig. 7), and the [Δ₂]ρ = [Δ₁]ρ condition in (Rfield), which is Leijen's termination condition. Name which one you replace (`00:62`, `01:14`, `04:357`).
-  - Their unification also gets stuck without an mgu, and they prove success ⇒ mgu (their Thm 3.7). Those are not differences. Your differences are the absence of LUtail (no guessing) and cancellation.
-- [ ] `01:9` "without absence information" lumps semantic subtyping in, but Castagna's records have absent/optional fields (as `10:43` says) [cr B].
-- [ ] `01:11` @another_inference is Morris alone (ICFP 2026), about first-class implicit polymorphism, and it does give an algorithm. "Same authors … no applicable algorithm" is wrong [cr B].
-- [ ] `01:11` "Rose decides row predicates during unification … row theory unspecified" contradicts `10:33-35` (deferred to entailment; parametric, with simple and scoped instances) [cr B].
-- [ ] `01:11` uses the exponential worst case against set-theoretic types, while `09:55` admits you inherit HM's (Mairson 1990). Drop it or make it a practical argument [cr B].
-- [ ] `01:12` "None of these systems meets all our goals": neither does MiniNix (`09:40`) [cr B].
-- [ ] `01:18`, `01:53` forced / never guesses → Forced. `01:28` "lazy position" → Laziness (02).
-- [ ] **L Overview comments** [cf L]: your comments `01:26`, `01:30`, `01:31`.
+
 
 ## 02 Declarative
 
-- [ ] **H Declarative structure** [cf H] (order done: Syntax → Typing → Lookup → ≈ → Sorts → Instantiation → Semantics): bridging sentence `02:86`; section openings `02:98`, `02:144`, `02:167`; Syntax paragraph (your comments `02:35-38`); cut the paragraph at `02:124`?
-- [ ] **G Qualified Schemes** `02:204` [cf G]: rename Instantiation, open by naming T-var and T-let, collect the inhabitation reasoning that T-let also explains (your comment `02:235`).
-- [ ] **Laziness** [cr A10]. Laziness motivates the rules, but the semantics is call-by-value.
-  - `02:273` uses CBV with lazy fields, yet `02:91` and `01:28` justify T-sel-⊥ by "lazy position". In your own semantics `(x: c) ({}.l)` errors.
-  - `02:89` justifies inhabitation with `let x = (3 4) in 5` "being stuck". In Nix that program evaluates to 5.
-  - (`04:14` recursive bindings → 04.)
-- [ ] `02:40` "acts as a fallback for the algorithmic implementation" must be narrowed → S5.
-- [ ] **E2** `02:91` "_soft-typing_ approach": drop "soft" (→ E2 in 10).
-- [ ] `02:91` cross-ref to @sec-gradual about removing T-sel-⊥ points nowhere → B.
-- [ ] Small precision errors [cr C]:
+-  In your own semantics `(x: c) ({}.l)` errors.
+- [ ] Small precision errors:
   - `02:133` "every row shape matches exactly one rule": concatenation matches three.
   - `02:141` "θ acts on no part of the row it inspects": it acts on field types.
-  - `02:201` "first three rules sort the base types": S-var sorts variables.
-- [ ] Notation: b/𝓫 (`02:40`) [cr C].
+
 
 ## 03 Metatheory
 
-- [ ] **S5 Origin of ★ and what safety says** [cf S5; cr A4].
+- [ ] **S5 Origin of ★ and what safety says**.
   - `03:17-18` "We only admit uncertainty in lookups" (+ PROF), `00:55` "constrained way" and `02:40` "fallback for the algorithmic implementation" are true of inference but false of ⊢: T-★-intro is unrestricted, adds declarative typings, and inference never uses it.
   - → `03:18`: "★ arises from T-sel-★, T-sel-⊥ and T-★-intro. Since ★ has no elimination form, a typed program can only go wrong at a selection." Narrow 00 and 02 accordingly.
   - Progress allows ↯ for every program, and nothing ties a lookup error to a ★-typed selection. Add the cheap corollary that backs the new sentence: a derivation without T-sel-★/T-sel-⊥ never produces ↯.
@@ -56,7 +34,8 @@
 
 ## 04 Unification
 
-- [ ] **F Opening** `04:10` [cf F]: outcome-first opening (with your moved sentence). Uses "forced" → Forced.
+- [ ] Adjust mentioning of "forced"
+
 - [ ] **I Spines and Windows** `04:53` [cf I]: rename the moved trace-monoid section, move spine and window definitions into it, admit the mismatch with Nix (your comment `04:246`, also the `04:247` placeholder). One row-unification figure instead of two (your comment `04:111`).
 - [ ] `04:110` your comment: are the reverse arrows correct everywhere? [cf]
 - [ ] `04:12` "based upon the declarative system" → based on ≈; "mutually recursive" → "mutually recursively" [cr C].
