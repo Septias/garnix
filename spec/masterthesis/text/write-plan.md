@@ -1,7 +1,7 @@
 
 
 # Style
-Use academic style. It can sound fancy from time to time, but needs to keep a monotonous tone. We are presenting results and not a sales pitch. Could use some more mathematical slang, even though it should be well understandable. The rule descriptions are generally good.
+Use academic style. It can sound fancy from time to time, but needs to keep a monotonous tone. We are presenting results and not a sales pitch. Could use some more mathematical slang, even though it should be well understandable. The rule descriptions are generally good. Comments are left in the form `//` before a paragraph or inline using this syntax: [text](comment). 
 
 
 ## Rules

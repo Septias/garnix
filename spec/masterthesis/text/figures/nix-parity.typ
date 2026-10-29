@@ -52,7 +52,7 @@
     np-gr[Builtins],
     np-f[`add` `sub` `mul` `div`], np-y, np-r[on `int`; `div` fails on 0],
     np-f[`lessThan`, `<=`], np-p, np-r[on `int` only],
-    np-f[`==`], np-p, np-r[atomic values only; fails on records, functions, non-empty lists],
+    np-f[`==`], np-p, np-r[atomic values only; fails on records, functions, non-empty lists and mixed atoms (`1 == true`)],
     np-f[`head` `tail` `elemAt` `length`], np-y, np-r[`head`, `tail` and `elemAt` fail out of range],
     np-f[`map` `filter` `foldl'` `++`], np-y, np-r[],
     np-f[`toString`], np-p, np-r[on `int` only],
