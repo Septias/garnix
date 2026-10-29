@@ -1,7 +1,7 @@
 
 - *Head Rigidity*: The head-constructor does not change (functions stay functions)
 - *Inversion*: Invert a typing judgement to learn more about the premise type
-- *Frozen*: A position finalized to ★ that no substitution can refine again
+- *Frozen*: A position typed at ★ that no substitution can refine again
 - *Blurring*: Weakening a definite type to ★ (T-★-intro)
 - *Context Conversion*: Typing sees the context only through lookups
 - *⊑-rigidity*: τ′ ⊑ τ and τ ≠ ★ implies τ′ and τ share their head constructor; ★ sits only below itself
@@ -13,7 +13,6 @@
 - *Stump*: A parked selection ⟨blocker α, ρ.l ↓ δ⟩ — the lookup waits until α gets solved
 - *Blocker*: The row-variable a stuck lookup is waiting on
 - *Wake-up*: Re-running a stump's lookup when unification solves its blocker
-- *Finalization*: End of inference; surviving stumps resolve δ ≔ ★ (the algorithmic moment of T-sel-★)
 - *Qualified scheme*: ∀ᾱ. Q ⇒ τ — a scheme carrying its pending lookups as constraints (L2)
 - *Refinement*: A lookup result improving (? → τ or ⊥) once instantiation unblocks it; only ? can improve, definite results are final
 - *Scoped rows*: Duplicate labels stay in the row; lookup resolves them with left-precedence
@@ -25,5 +24,4 @@
 - *↯*: Lookup error — a selection reached a record literal without the label; the residual-risk disjunct of progress
 - *Soft typing*: Programs keep their untyped semantics; ★ marks where the analysis gave up, warnings say why
 - *Instance-Closed T-let*: ∀ τ₁ ≤ σ. Γ ⊢ e₁: τ₁
-- *Spent stump*: A stump that needs to be materialized
-- *Materialization*: The process of inserting a pre-found type
+- *Spent stump*: A stump whose result is already used at a type that is neither a variable nor ★; an instance must make its lookup hit
