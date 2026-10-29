@@ -199,7 +199,8 @@ x: σ ∈ Γ   σ ≥ τ
 ------------------------- D-?
 θ ⊢ ⟨ρ.l ↓ δ⟩
 // Declaratively a still-unknown lookup stays blurred; algorithmically this
-// case RE-PARKS instead, and only finalization commits ★.
+// case RE-PARKS instead. A stump still ? at the end stays a constraint of the
+// answer, and D-? is the instance that commits ★.
 
 
 == Row-Lookup
@@ -360,8 +361,8 @@ head(τ₁) ≠ head(τ₂)
 - No rule pushes a lookup's field demand into a var: lookups park as stumps,
   so *during inference the algorithm never guesses a field into a variable*.
   U-host places a field from the other side of the equation, and only into a
-  sole, forced host. F-hit places a lookup's field, at finalization, and only
-  for a spent promise
+  sole, forced host. Not even at the end: the answer keeps a spent stump as a
+  constraint, and only the inhabitation witness fills its blocker
 
 
 s field-free   vars(s) = β̄
@@ -523,14 +524,17 @@ fresh α: Type   Γ·(x: α); S ⊢ e ⇒ τ; S′
 Γ; S ⊢ (ξ₁ | ξ₂) ⇒ (ρ₁ | ρ₂); S₂
 
 
-Γ; S ⊢ e₁ ⇒ τ₁; S₁   κ̄ = S₁(ᾱ)   Δ₁ ~ Δ_q ⊎ Δ_Γ   ᾱ ∩ ftv(⟦S₁⟧Γ) = ∅   ᾱ ∩ dom(S₁) = ∅
+Γ; S ⊢ e₁ ⇒ τ₁; S₀   S₀ ⊢ Δ₀ ⇝ₘ\* S₁   κ̄ = S₁(ᾱ)   Δ₁ ~ Δ_q ⊎ Δ_Γ   ᾱ ∩ ftv(⟦S₁⟧Γ) = ∅   ᾱ ∩ dom(S₁) = ∅
 Δ_q ∩ Δ = ∅   results(Δ_q) at S₁ ok over ᾱ   ᾱ ∩ ftv(⟦S₁⟧Δ_Γ) = ∅   Δ_q independent at S₁
 Γ·(x: ∀(ᾱ: κ̄). ⟦S₁⟧Δ_q ⇒ ⟦S₁⟧τ₁); S₁ ∖ Δ_q ⊢ e₂ ⇒ τ₂; S₂
 --------------------------------------------------------------------------------------------- A-let
 Γ; S ⊢ let x = e₁ in e₂ ⇒ τ₂; S₂
 // Δ_q are the stumps whose blocker lands in ᾱ, Δ_Γ the rest.
-// Surviving stumps of Δ_Γ are NOT finalized here — they outlive the boundary.
+// Surviving stumps of Δ_Γ are NOT discharged here — they outlive the boundary.
 // Every premise past the first is one that soundness or completeness turned out to need
+// - S₀ ⊢ Δ₀ ⇝ₘ\* S₁: the forced merge (M-merge, below) before ᾱ is chosen. A field
+//   selected once spent and once unspent, `let f = x: {p = (x.l) c; q = x.l}`,
+//   is generalized only after it
 // - κ̄ = S₁(ᾱ): kinds are read off the DRAW, not off Γ — ᾱ is disjoint from Γ,
 //   so Γ(ᾱ) was never writable. Every generalized binder is one inference
 //   invented at a known sort (A-var's draw records one, see there)
@@ -540,7 +544,7 @@ fresh α: Type   Γ·(x: α); S ⊢ e ⇒ τ; S′
 //   MISSING and `λy. let z = y in z` inferred a → b
 // - ᾱ ∩ dom(S₁) = ∅: nothing already solved is generalized
 // - Δ_q ∩ Δ = ∅: Δ_q is e₁'s OWN. Without it `{a = λx. x.l, b = let y = c in c}`
-//   files a's stump under y's unused scheme and nothing ever finalizes it
+//   files a's stump under y's unused scheme and nothing ever discharges it
 // - results ok at S₁: each generalized stump's result, read at S₁, is a LINEAR
 //   PATTERN over ᾱ — a variable, or the type a spent promise was spent on, with
 //   records only as {β} and no variable twice — and distinct stumps share no
@@ -549,7 +553,7 @@ fresh α: Type   Γ·(x: α); S ⊢ e ⇒ τ; S′
 //   re-choice of variables undoes). Reading at S₁, not raw, accepts
 //   `let h = λy. g y`, where A-app aliases δ ≔ β
 //   A SPENT result must also be met at some instance (T-let's ∃ τ₁), by
-//   extending its blocker with the field as F-hit does: its key is literal,
+//   extending its blocker with the field (the witness, below): its key is literal,
 //   every stump on the same blocker is literally keyed and is it if it has its
 //   key, and no spent stump's blocker occurs in a spent result
 // - ᾱ ∩ ftv(⟦S₁⟧Δ_Γ) = ∅: what stays parked reads the same at every instance
@@ -564,13 +568,12 @@ fresh α: Type   Γ·(x: α); S ⊢ e ⇒ τ; S′
 // to guess.
 
 
-== Wake-up and Finalization
+== Wake-up, Merge and Witness
 - (S ⊢ q ↝ S′) wakes one stump
 - ↝\* its list closure,
 - (S ⊢ Δ ↝! S′) runs it to quiescence
-- (S ⊢ q ⇓ₘ S′) materializes a spent one, (⇓ₘ\*) its list closure
-- (S ⊢ q ⇓ S′) finalizes one
-- (⇓\* its list closure).
+- (S ⊢ Δ ⇝ₘ S′) merges two stumps that ask one lookup, (⇝ₘ\*) any number of merges
+- (S ⊢ ⇝ᵍ S′) is one step of the witness search, (⇝ᵍ\*) any number of steps
 
 
 (⟦S⟧ρ).l ↓ τ′   S ⊢ δ ≐ τ′ ⇝ S′
@@ -616,53 +619,43 @@ S ⊢ Δ ↝! S′
 // after ≐ and ↝\* respectively.
 
 
-⟨α ⊳ ρ.l ↓ δ⟩ ∈ Δ   ⟦S⟧δ spent   (⟦S⟧ρ).l ↓ ? on α   fresh ρ′: Row   S ⊢ {α} ≐ {l: δ | ρ′} ⇝! S′
------------------------------------------------------------------------------------------------- F-hit
-S ⊢ ⟨α ⊳ ρ.l ↓ δ⟩ ⇓ₘ S′
-// ⟦S⟧δ is SPENT when it is neither a variable nor ★: F-★'s δ ≐ ★ would clash.
-// `λx y. (x.l) y` spends δ ≔ α_y -> β, yet it IS typeable, at
-// {(l: 𝓫 -> 𝓫)} -> 𝓫 -> 𝓫. The lookup waits on α, which nothing has committed,
-// so extending α with the field makes it HIT; saturation then wakes the stump
-// itself (K-hit, δ ≐ δ) and everything else waiting on α.
-// A key-blocked stump (e₁.(e₂) with the key never known) has no row to extend
-// and stays a spent promise: incompleteness.
+⟨α ⊳ ρ.l ↓ δ⟩, ⟨α′ ⊳ ρ′.l′ ↓ δ′⟩ ∈ Δ   ⟦S⟧ρ ≈ₛ ⟦S⟧ρ′   ⟦S⟧l = ⟦S⟧l′   S ⊢ δ ≐ δ′ ⇝! S′
+------------------------------------------------------------------------------------------ M-merge
+S ⊢ Δ ⇝ₘ S′
+// ≈ₛ: one spine. The two stumps ask ONE lookup, so every instance that
+// discharges both sends δ and δ′ to ≈-equal types (`merge_forced`): the move is
+// forced. Both stumps stay parked. `x: {p = (x.l) c; q = x.l}` parks
+// ⟨ρ.l ↓ 𝓫 → β⟩ and ⟨ρ.l ↓ δ⟩; after the merge both are spent alike, which is
+// what LetSpent needs. A merge whose equation fails is not taken.
 
 
------------- M-nil
-S ⊢ ∅ ⇓ₘ\* S
-
-
-S ⊢ q ⇓ₘ S₁   S₁ ⊢ Δ′ ⇓ₘ\* S′
------------------------------- M-cons
-S ⊢ (q, Δ′) ⇓ₘ\* S′
-
-
-S ⊢ Δ′ ⇓ₘ\* S′
--------------------- M-skip
-S ⊢ (q, Δ′) ⇓ₘ\* S′
-// q is not spent, or an earlier step's saturation already discharged it
-
-
-⟨α ⊳ ρ.l ↓ δ⟩ ∈ Δ   (⟦S⟧ρ).l ↓ ? on α   S ⊢ δ ≐ ★ ⇝ S′
--------------------------------------------------------- F-★
-S ⊢ ⟨α ⊳ ρ.l ↓ δ⟩ ⇓ (S′ ∖ ⟨ρ.l ↓ δ⟩) +W
-
-
------------ F-nil
-S ⊢ ∅ ⇓\* S
-
-
-S ⊢ ⟨α ⊳ ρ.l ↓ δ⟩ ⇓ S₁   S₁ ⊢ Δ′ ⇓\* S′
---------------------------------------- F-cons
-S ⊢ (⟨α ⊳ ρ.l ↓ δ⟩, Δ′) ⇓\* S′
+S ⊢ τ ≐ τ′ ⇝! S′
+------------------ G-solve
+S ⊢ ⇝ᵍ S′
+// The witness search runs on a SCRATCH COPY of the state and only decides
+// whether the answer has an instance: any extension that passes LetSpent
+// witnesses the scheme read before it (`inhabited_of_ext`). So any equation
+// will do, and nothing in it is forced. runF makes two kinds:
+// - a key guess κ ≐ ℓ, for a variable key on a spent stump's blocker
+//   (`r: a: (r.${a}) c`): first a label no program writes, then the literal
+//   labels of the stump's row
+// - a witness merge of two stumps on one blocker with one key, whose rows may
+//   differ before the blocker (`x: {p = (({m = c} ‖ x).l) c; q = x.l}`)
 
 
 == Entry
-Toplevel (⊢ e ⇒ τ; S′)
+Toplevel (⊢ e ⇒ σ)
 
-∅; (id, ∅, ∅) ⊢ e ⇒ τ; S₁   S₁ ⊢ Δ₁ ⇓ₘ\* S₂   S₂ ⊢ Δ₂ ⇓\* S′
---------------------------------------------------------------- Entry
-⊢ e ⇒ τ; S′
+∅; (id, ∅, ∅) ⊢ e ⇒ τ; S₁   S₁ ⊢ Δ₁ ⇝ₘ\* S₂   S₂ ⊢ ⇝ᵍ\* S₃   LetSpent(S₃)
+-------------------------------------------------------------------------- Entry
+⊢ e ⇒ ∀ᾱ. ⟦S₂⟧Δ₂ ⇒ ⟦S₂⟧τ          ᾱ = ftv(⟦S₂⟧τ, ⟦S₂⟧Δ₂)
+// The top level generalizes like A-let with Γ = ∅: everything is bound, Δ_Γ is
+// empty, and of A-let's premises only LetSpent is left (the inhabitation test).
+// Nothing is decided: a stump still ? is a constraint, D-? is the instance that
+// reads it as ★, and a spent stump keeps its constraint (the old F-hit answer is
+// the fill instance). `runSound`: every instance types e, and σ has one.
+// `x: x.l` answers selQ, which is principal (`runF_selEx_principal`).
+// W comes only from K-⊥ and A-sel-dyn-𝓫.
 
 
 == Precision
@@ -1016,18 +1009,18 @@ fresh κ: Label   S₃ ⊢ τ₂ ≐ ⌊κ⌋ ⇝! S₄   (⟦S₄⟧r).(⟦S₄
 // so (λa. {foo = c}.(a)) c clashes at the application
 
 
-=== Wake-up, let, finalization
+=== Wake-up, merge, let
 - K-rules and saturation are unchanged, over keyed lookups: solving a key wakes
   the stumps blocked on it (λa. {foo = c, bar = ε}.(a) applied to 'foo hits)
-- F-hit materializes only a stump with a literal key blocked on its row; a
-  key-blocked spent stump stays a spent promise
-- F-★ never binds a label variable: it solves δ ≐ ★ with a solution whose row
-  and label parts are empty. Key blockers survive it untouched, so phase A's
-  KeySafe premise is gone
-- A-let: a generalized spent stump must be fillable, i.e. literally keyed with
-  a blocker that is not a label variable of its row; nothing else in key
-  position may reach a key blocker (KeyFresh); what stays parked must not
-  mention ᾱ in row, key or result
+- A spent stump with a variable key is kept in the answer; the witness guesses
+  the key (G-solve), so `r: a: (r.${a}) c` answers ⟨ρ.(κ) ↓ 𝓫 → β⟩ ⇒ {ρ} → ⌊κ⌋ → β
+- A-let: a generalized spent stump must be fillable: keyed by a label or by a
+  variable κ of ᾱ other than its blocker, with a blocker that is not a label
+  variable of its row. The witness reads κ as the label \${κ}, so no stump may
+  wait on a key of a filled blocker, and stumps on one blocker whose field names
+  agree must be spent alike. Nothing else in key position may reach a key
+  blocker (KeyFresh); what stays parked must not mention ᾱ in row, key or
+  result. `let f = r: a: r.${a} c` is polymorphic
 
 
 === Headlines
@@ -1044,4 +1037,6 @@ fresh κ: Label   S₃ ⊢ τ₂ ≐ ⌊κ⌋ ⇝! S₄   (⟦S₄⟧r).(⟦S₄
 - Keyed fields are barriers: beyond one field each (U-key-pin), (foo: τ) ≐ᵣ
   (\${α}: τ′) and different unknown keys are stuck (keyed Fuzz universe: 67%
   stuck, measured before U-key-pin)
-- A key-blocked spent promise is not materialized (incompleteness)
+- A spent promise blocked on its own key over a literal record,
+  `a: ({foo = y: y}.${a}) c`, is answered at the top level (the witness guesses
+  a label of the record) but keeps a let monomorphic
