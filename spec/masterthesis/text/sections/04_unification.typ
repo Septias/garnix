@@ -6,9 +6,9 @@
 
 = Unification <unification>
 
-// The paragraphs of this section are unexpected
 // TODO(structure): outcome-first opening (F): what row unification achieves (forced moves only; mgu on success, sound clash/occurs, stuck where a choice would be needed), then the two judgements. Your sentence, moved here from the row-pass prose:
 // Row unification preserves the solution set of the problem and never chooses among alternatives. I.e. it never backtracks and stays first-order.
+
 Next, we present our unification algorithm, based upon the declarative system. It consists of two judgements, one for types: $τ₁ ≐ τ₂ ⇝ v$ and one for rows: $s₁ scripts(≐)_r s₂ ⇝ v$ that call each other mutually recursive. @unification-ty lists the verdicts of unification and shows how spines are formed. A spine s of a row ρ, denoted $s = ⌈ρ⌉$, represents a row as a list of atoms $a ::= l: τ | α$, obtained by flattening the concatenation tree. For example, $((l: 𝓫 | ε) | (α | m: 𝓫))$ and $(l: 𝓫 | (α | (m: 𝓫 | ε)))$ both have the spine $⟨l: 𝓫, α, m: 𝓫⟩$.
 
 A verdict is either a solution θ or one of three refusals. #u_clash is emitted when two structures clash definitionally and #u_occurs when a recursive type is encountered. NixLang allows recursiveness in records and let-bindings, but to keep the presentation simple, we do not permit it in MiniNix. #u_stuck is emitted when no more moves apply and carries the Wand ambiguity.
@@ -17,9 +17,10 @@ A verdict is either a solution θ or one of three refusals. #u_clash is emitted 
   caption: "Spines, verdicts and unification of types.",
   box(width: 100%, stack(
     spacing: 18pt,
-    subbox(caption: "Spines")[
+    subbox(caption: "Spines & Verdicts")[
       $
-        #type_name("Atom") a ::= l: τ | α #h(3em) #type_name("Spine") s ::= ⟨⟩ | a · s
+        #type_name("Atom") a ::= l: τ | α #h(3em) #type_name("Spine") s ::= ⟨⟩ | a · s \
+        #type_name("Verdict") v ::= θ | #u_clash | #u_occurs | #u_stuck
       $
     ],
     subbox(caption: "Type Unification")[
@@ -38,11 +39,6 @@ A verdict is either a solution θ or one of three refusals. #u_clash is emitted 
         ),
         derive("U-rcd", ($⌈ρ₁⌉ scripts(≐)_r ⌈ρ₂⌉ ⇝ θ$,), ${ρ₁} ≐ {ρ₂} ⇝ θ$),
       )
-    ],
-    subbox(caption: "Verdicts")[
-      $
-        #type_name("Verdict") v ::= θ | #u_clash | #u_occurs | #u_stuck
-      $
     ],
   )),
 )
