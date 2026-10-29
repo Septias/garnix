@@ -1,6 +1,6 @@
 # Top-Level Schemes
 
-Branch `feat/top-level-schemes`, worktree `~/coding/garnix-wt/top-level-schemes`. Status (2026-10-29): M0-M9 done, M10 spec done, text open.
+Branch `feat/top-level-schemes`, worktree `~/coding/garnix-wt/top-level-schemes`. Status (2026-10-29): done, merged into main (`80960ec`). After M10, Finalization.lean became RunSound.lean, `fStarEx` became `staleEx`, `mergeAllF`/`witnessF` became `mergesF`/`guessesF`; the names below are the ones at planning time.
 State reports: `typesystems/feature-state.md` § Idea: Top-level schemes (main).
 Spec: `typesystems/mini-nix.typ` (main). No draft file; the thesis passages are listed under Text.
 
