@@ -272,7 +272,7 @@ theorem letAlias_infers_guarded :
     Infer (B := Unit) (C := Unit) (Sig.plain fun _ => ()) QCtx.empty
       ⟨Sol.nil, [], [], ⟨1⟩, []⟩ laE (.fn (.var laA) (.var laA)) laS := by
   refine Infer.lam (S₀ := laS) rfl ?_
-  refine Infer.letE (ᾱ := []) la_var_y
+  refine Infer.letE (ᾱ := []) la_var_y (.refl _)
     ⟨fun _ h => (nomatch h), fun _ hp => absurd (mem_letQ.mp hp).2 List.not_mem_nil,
      fun _ hp => absurd (mem_letQ.mp hp).2 List.not_mem_nil,
      fun _ hp => absurd (mem_letQ.mp hp).2 List.not_mem_nil⟩ ?_

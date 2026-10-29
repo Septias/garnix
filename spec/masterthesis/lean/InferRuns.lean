@@ -235,6 +235,35 @@ def upd : E := .lam "n" (.lam "r" (.cat (v "r") (rd (v "n") c)))
 #guard run (.lam "a" (rd (.sel (v "a") "k") c)) = "⟨r2.k ↓ ⌊k4⌋⟩ ⇒ ({r2} → {${k4}: 𝓫})"
 
 
+-- THE FORCED MERGE (M-merge, `merge_forced`): a field selected once spent and
+-- once unspent asks one lookup twice, so the results are unified. Without it
+-- `LetSpent` rejects the scheme: at the top level, and under a let, where the
+-- two uses below used to clash (f was monomorphic)
+#guard run (.lam "x" (rec2 "p" (.app (.sel (v "x") "l") c) "q" (.sel (v "x") "l")))
+  = "⟨r5.l ↓ (𝓫 → t4)⟩, ⟨r5 | ε.l ↓ (𝓫 → t4)⟩ ⇒ ({r5 | ε} → {p: t4 | q: (𝓫 → t4)})"
+#guard run (.letE "f" (.lam "x" (rec2 "p" (.app (.sel (v "x") "l") c) "q" (.sel (v "x") "l")))
+    (rec2 "a" (.app (v "f") (rec1 "l" (.lam "z" (v "z"))))
+          "b" (.app (v "f") (rec2 "l" (.lam "z" (v "z")) "m" c))))
+  = "{a: {p: 𝓫 | q: (𝓫 → 𝓫)} | b: {p: 𝓫 | q: (𝓫 → 𝓫)}}"
+-- …the unspent result may also be spent on a different shape
+#guard run (.lam "x" (.lam "f" (rec2 "p" (.app (.sel (v "x") "l") c) "q" (.app (v "f") (.sel (v "x") "l")))))
+  = "⟨r6.l ↓ (𝓫 → t5)⟩, ⟨r6 | ε.l ↓ (𝓫 → t5)⟩ ⇒ ({r6 | ε} → (((𝓫 → t5) → t8) → {p: t5 | q: t8}))"
+-- THE WITNESS SEARCH (`Guesses`): not forced, so only inside the witness. Rows
+-- that differ before the blocker get a witness merge; a variable key on a spent
+-- stump's blocker gets a key guess; and a guess that must hit a literal record
+-- tries the record's labels
+#guard run (.lam "x" (rec2 "p" (.app (.sel (.cat (rec1 "m" c) (v "x")) "l") c) "q" (.sel (v "x") "l")))
+  = "⟨r7.l ↓ t8⟩, ⟨r7 | ε | m: 𝓫 | ε.l ↓ (𝓫 → t6)⟩ ⇒ ({r7 | ε} → {p: t6 | q: t8})"
+#guard run (.lam "x" (.lam "a" (rec2 "p" (.app (.sel (v "x") "l") c) "q" (sd (v "x") (v "a")))))
+  = "⟨r6.${k7} ↓ t8⟩, ⟨r6 | ε.l ↓ (𝓫 → t5)⟩ ⇒ ({r6 | ε} → (⌊k7⌋ → {p: t5 | q: t8}))"
+#guard run (.lam "a" (.app (sd (rec1 "foo" (.lam "y" (v "y"))) (v "a")) c))
+  = "⟨foo: (t2 → t2) | ε.${k4} ↓ (𝓫 → t6)⟩ ⇒ (⌊k4⌋ → t6)"
+-- …but A-let has no key guess: f stays monomorphic, and two uses clash (06)
+#guard run (.letE "f" (.lam "r" (.lam "a" (.app (sd (v "r") (v "a")) c)))
+    (rec2 "p" (.app (.app (v "f") (rec1 "foo" (.lam "y" (v "y")))) (L "foo"))
+          "q" (.app (.app (v "f") (rec1 "bar" (.lam "y" c))) (L "bar"))))
+  = "fail: clash"
+
 -- TOP-LEVEL SCHEMES (plans/top-level-schemes.md). The witnesses below are
 -- about what `runF` answers: `decide` runs it in the kernel. Every instance
 -- of such an answer types its program (`answerQ_sound`, from `runSound`).

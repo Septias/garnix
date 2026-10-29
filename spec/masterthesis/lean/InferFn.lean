@@ -685,9 +685,10 @@ def inferF (constTy : Sig B C) (n : Nat) :
       pure (.rcd r.1, r.2)
   | Γ, S, .letE x e₁ e₂ => do
       let r₁ ← inferF constTy n Γ S e₁
-      let ᾱ := greatestAlpha Γ S r₁.2 r₁.1
-      inferF constTy n (Γ.bindScheme x (letScheme r₁.2 ᾱ (letQ r₁.2 ᾱ) r₁.1))
-        { r₁.2 with parked := letG r₁.2 ᾱ } e₂
+      let S₁ ← mergeAllF n r₁.2
+      let ᾱ := greatestAlpha Γ S S₁ r₁.1
+      inferF constTy n (Γ.bindScheme x (letScheme S₁ ᾱ (letQ S₁ ᾱ) r₁.1))
+        { S₁ with parked := letG S₁ ᾱ } e₂
   -- MacroNix
   | Γ, S, .prim p es =>
       match constTy.prim p with
@@ -846,8 +847,9 @@ theorem inferF_sound {constTy : Sig B C} {n : Nat} :
       exact .rcd (inferRecF_sound hb)
   | Γ, S, S', .letE x e₁ e₂, τ, h => by
       simp only [inferF, IRes.bind_eq_ok] at h
-      obtain ⟨⟨τ₁, S₁⟩, h₁, h₂⟩ := h
-      exact .letE (inferF_sound h₁) (greatestAlpha_spec Γ S S₁ τ₁).1 (inferF_sound h₂)
+      obtain ⟨⟨τ₁, S₁⟩, h₁, S₁', hm, h₂⟩ := h
+      exact .letE (inferF_sound h₁) (mergeAllF_sound hm) (greatestAlpha_spec Γ S S₁' τ₁).1
+        (inferF_sound h₂)
   | Γ, S, S', .prim p es, τ, h => by
       simp only [inferF] at h
       split at h

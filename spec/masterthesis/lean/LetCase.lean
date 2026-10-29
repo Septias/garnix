@@ -452,7 +452,7 @@ theorem LetResults.inhabited {S₁ : SolverState B} {ᾱ : List TyVar} {Δq : Li
 
 /-- ⊢  **the A-let case.** -/
 theorem letCase {C : Type} {constTy : Sig B C} : LetCase B C constTy := by
-  intro Γ S S₁ S₂ x e₁ e₂ τ₁ τ₂ ᾱ h₁ hA h₂ hΓ hc hq IH₁ IH₂ σ hab hσ Γ' hr
+  intro Γ S S₀ S₁ S₂ x e₁ e₂ τ₁ τ₂ ᾱ h₀ hm hA h₂ hΓ hc hq IH₀ IH₂ σ hab hσ Γ' hr
   -- Δ_q, Δ_Γ and the conditions on ᾱ, in the form the proof reads them
   generalize hQ : letQ S₁ ᾱ = Δq at h₂ IH₂
   generalize hG : letG S₁ ᾱ = Δγ at h₂ IH₂
@@ -462,8 +462,9 @@ theorem letCase {C : Type} {constTy : Sig B C} : LetCase B C constTy := by
   have hres : LetResults S₁ ᾱ Δq := hQ ▸ hA.results
   have hdis : ∀ α ∈ ᾱ, ∀ p ∈ Δγ, _ := fun α hα p hp => hA.dis α hα p (hG ▸ hp)
   -- the state e₁ ends in
-  have c₁ := Infer.clean h₁ hc
-  have q₁ := Infer.quiescent h₁ hq
+  have c₀ := Infer.clean h₀ hc
+  have c₁ := hm.clean c₀
+  have q₁ := hm.quiescent (Infer.quiescent h₀ hq)
   have k₂ := Infer.keeps h₂
   have x₁₂ : S₁.Ext S₂ := (SolverState.Ext.of_sol_eq (S := S₁)
     (S' := { S₁ with parked := Δγ }) rfl).trans (Infer.ext h₂)
@@ -566,7 +567,8 @@ theorem letCase {C : Type} {constTy : Sig B C} : LetCase B C constTy := by
         exact List.mem_append_left _ (List.mem_append_right _
           (List.mem_flatMap.mpr ⟨st, hst, List.mem_append_right _ hα⟩))
       · exact List.mem_append_right _ hα⟩
-    have ih := IH₁ σ₁ hab₁' (hab₁'.sat c₁) Γ' hr₁
+    have hab₀' : Absorbs σ₁ S₀ := hab₁'.back hm.ext c₀
+    have ih := IH₀ σ₁ hab₀' (hab₀'.sat c₀) Γ' hr₁
     -- the type e₁ gets is the read body at χ
     have hty : τ₁.applySubst σ₁ = sc'.body.applySubst χ := by
       show τ₁.applySubst (ρ.comp S₁.subst)
@@ -574,7 +576,12 @@ theorem letCase {C : Type} {constTy : Sig B C} : LetCase B C constTy := by
       rw [Ty.applySubst_applySubst, Ty.applySubst_applySubst]
     rw [hty] at ih
     refine ih.weaken (fun a ha => ?_)
-    obtain ⟨p, hp, rfl⟩ := List.mem_map.mp ha
+    obtain ⟨p₀, hp₀, rfl⟩ := List.mem_map.mp ha
+    -- a stump of e₁ survives the merge as itself, or the merge discharged it
+    rcases hm.keepsS σ₁ (hab₁'.sat c₁) p₀ hp₀ with ⟨p, hp, hps⟩ | hd
+    rotate_left
+    · exact .inr (Stump.dischargeEquiv_iff_holds.mp hd)
+    rw [← hps]
     replace hp := hsplit.mem_iff.mp hp
     rcases List.mem_append.mp hp with hp | hp
     · -- a generalized stump: it IS the read constraint at χ

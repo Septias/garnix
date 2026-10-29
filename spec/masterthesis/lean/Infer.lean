@@ -1077,14 +1077,18 @@ inductive Infer {B C : Type} [DecidableEq B] (constTy : Sig B C) :
   -- A-let. The Δ-split is a least FIXPOINT on paper; as a relation it is enough
   -- to REQUIRE the split's defining equations, which is precisely what a
   -- relation buys over a function here.
-  | letE {Γ : QCtx B} {S S₁ S₂ : SolverState B} {x : Var} {e₁ e₂ : Expr C}
+  | letE {Γ : QCtx B} {S S₁ S₁' S₂ : SolverState B} {x : Var} {e₁ e₂ : Expr C}
       {τ₁ τ₂ : Ty B} {ᾱ : List TyVar} :
       Infer constTy Γ S e₁ τ₁ S₁ →
-      -- ᾱ = gen_{Γ,S}(S₁, τ₁): any admissible choice. Which one a function
+      -- M-merge: stumps that ask one lookup get one result. Forced
+      -- (`merge_forced`), and what `LetSpent` needs of a field selected once
+      -- spent and once unspent.
+      Merges S₁ S₁' →
+      -- ᾱ = gen_{Γ,S}(S₁′, τ₁): any admissible choice. Which one a function
       -- takes, the greatest, is `greatestAlpha` (LetChoice.lean).
-      LetAdmissible Γ S S₁ ᾱ →
-      Infer constTy (Γ.bindScheme x (letScheme S₁ ᾱ (letQ S₁ ᾱ) τ₁))
-        { S₁ with parked := letG S₁ ᾱ } e₂ τ₂ S₂ →
+      LetAdmissible Γ S S₁' ᾱ →
+      Infer constTy (Γ.bindScheme x (letScheme S₁' ᾱ (letQ S₁' ᾱ) τ₁))
+        { S₁' with parked := letG S₁' ᾱ } e₂ τ₂ S₂ →
       Infer constTy Γ S (.letE x e₁ e₂) τ₂ S₂
   -- MacroNix.
   -- A-prim: an instance of the builtin's type, the arguments left to right,
@@ -1333,6 +1337,11 @@ theorem SolveTySat.supply {B : Type} [DecidableEq B] {S S' : SolverState B}
     {τ τ' : Ty B} : SolveTySat S τ τ' S' → S.supply.next ≤ S'.supply.next
   | ⟨_, hs, hsat⟩ => Nat.le_trans hs.supply hsat.supply
 
+theorem Merges.supply {B : Type} [DecidableEq B] {S S' : SolverState B} :
+    Merges S S' → S.supply.next ≤ S'.supply.next
+  | .refl _ => Nat.le_refl _
+  | .step (.merge _ _ _ _ hs) hms => Nat.le_trans hs.supply hms.supply
+
 theorem WakesSat.supply {B : Type} [DecidableEq B] {S S' : SolverState B}
     {ps : List (Parked B)} : WakesSat S ps S' → S.supply.next ≤ S'.supply.next
   | ⟨_, hw, hsat⟩ => Nat.le_trans hw.supply hsat.supply
@@ -1377,6 +1386,11 @@ theorem Saturate.kinds {B : Type} [DecidableEq B] {S S' : SolverState B} :
 theorem SolveTySat.kinds {B : Type} [DecidableEq B] {S S' : SolverState B}
     {τ τ' : Ty B} : SolveTySat S τ τ' S' → S'.kinds = S.kinds
   | ⟨_, hs, hsat⟩ => (hsat.kinds).trans hs.kinds
+
+theorem Merges.kinds {B : Type} [DecidableEq B] {S S' : SolverState B} :
+    Merges S S' → S'.kinds = S.kinds
+  | .refl _ => rfl
+  | .step (.merge _ _ _ _ hs) hms => hms.kinds.trans hs.kinds
 
 theorem WakesSat.kinds {B : Type} [DecidableEq B] {S S' : SolverState B}
     {ps : List (Parked B)} : WakesSat S ps S' → S'.kinds = S.kinds
@@ -1464,10 +1478,11 @@ theorem Infer.kinds_mono {B C : Type} [DecidableEq B] {constTy : Sig B C}
       simp only [SolverState.flag]
       exact Infer.kinds_mono h₂
   | .rcd hb => InferRec.kinds_mono hb
-  | .letE h₁ _ h₂ => by
+  | .letE (S₁ := S₁) (S₁' := S₁') h₁ hm _ h₂ => by
       have i₁ := Infer.kinds_mono h₁
       have i₂ := Infer.kinds_mono h₂
-      exact List.IsSuffix.trans i₁ i₂
+      have i₃ : S₁.kinds <:+ S₁'.kinds := hm.kinds ▸ List.suffix_refl _
+      exact List.IsSuffix.trans i₁ (List.IsSuffix.trans i₃ i₂)
   | .prim (K := K) _ _ ha hd hs => by
       refine List.IsSuffix.trans (List.suffix_append K _) ?_
       refine List.IsSuffix.trans (InferArgs.kinds_mono ha) ?_
@@ -1626,10 +1641,10 @@ theorem Infer.supply_mono {B C : Type} [DecidableEq B] {constTy : Sig B C}
       simp only [SolverState.flag]
       omega
   | .rcd hb => InferRec.supply_mono hb
-  | .letE h₁ _ h₂ => by
+  | .letE h₁ hm _ h₂ => by
       have i₁ := Infer.supply_mono h₁
       have i₂ := Infer.supply_mono h₂
-      exact Nat.le_trans i₁ i₂
+      exact Nat.le_trans i₁ (Nat.le_trans hm.supply i₂)
   | .prim _ hle ha hd hs => by
       have i₁ := InferArgs.supply_mono ha
       have hd' := draw_eq hd
@@ -1728,6 +1743,11 @@ theorem SolveTySat.satMono {B : Type} [DecidableEq B] {S S' : SolverState B}
     {τ τ' : Ty B} : SolveTySat S τ τ' S' → S.SatMono S'
   | ⟨_, hs, hsat⟩ => hs.satMono.trans hsat.satMono
 
+theorem Merges.satMono {B : Type} [DecidableEq B] {S S' : SolverState B} :
+    Merges S S' → S.SatMono S'
+  | .refl _ => SolverState.SatMono.refl _
+  | .step (.merge _ _ _ _ hs) hms => hs.satMono.trans hms.satMono
+
 theorem WakesSat.satMono {B : Type} [DecidableEq B] {S S' : SolverState B}
     {ps : List (Parked B)} : WakesSat S ps S' → S.SatMono S'
   | ⟨_, hw, hsat⟩ => hw.satMono.trans hsat.satMono
@@ -1800,8 +1820,8 @@ theorem Infer.sat_mono {B C : Type} [DecidableEq B] {constTy : Sig B C}
       ((Infer.sat_mono h₁).trans (Infer.sat_mono h₂)).trans
         (SolverState.SatMono.of_sol_eq rfl)
   | .rcd hb => InferRec.sat_mono hb
-  | .letE h₁ _ h₂ => by
-      refine (Infer.sat_mono h₁).trans ?_
+  | .letE h₁ hm _ h₂ => by
+      refine (Infer.sat_mono h₁).trans (hm.satMono.trans ?_)
       intro σ hσ
       exact Infer.sat_mono h₂ σ hσ
   | .prim _ _ ha hd hs =>
@@ -1922,8 +1942,8 @@ theorem Infer.quiescent {B C : Type} [DecidableEq B] {constTy : Sig B C}
   | .lam hd hb, hq => Infer.quiescent hb (hq.draw hd)
   | .rcd hb, hq => InferRec.quiescent hb hq
   -- A-let: the body runs at Δ_Γ, a SUBLIST of the quiescent Δ₁
-  | .letE h₁ _ h₂, hq => by
-      refine Infer.quiescent h₂ ((Infer.quiescent h₁ hq).restrict ?_)
+  | .letE h₁ hm _ h₂, hq => by
+      refine Infer.quiescent h₂ ((hm.quiescent (Infer.quiescent h₁ hq)).restrict ?_)
       intro p hp; exact (mem_letG.mp hp).1
   | .prim _ _ _ _ hs, _ => hs.quiescent
   | .bool _, hq => hq
