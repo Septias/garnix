@@ -5,9 +5,6 @@
 # Feat: Negative information
 Plan: plans/negative-information.md. Branch feat/negative-info.
 
-## Open (for you)
-- Q3 Phase C (keyed commuting under `κ ≠ m`) before or after occurrence typing?
-
 
 # Feat: Gradual Typing
 Plan: plans/gradual.md. Branch feat/gradual.
@@ -82,17 +79,6 @@ TODO
 - algorithmic.lean: Root of the formal algorithmic system with unification
 - In the bib/plaintext folder there is the plaintext version of relevant literature
 
-## Problems
-> Problems found during mechanized proving and their proposed solutions
-### Key-blocked spent promise  (open, deliberately kept)
-- Only bites when the key is never supplied: applied, `(λr. λa. r.(a) c) {k = λz.z} ⌊k⌋` runs to `𝓫`
-- No row to extend: the lookup waits on the KEY, so `Materialize` does not apply
-- Declaratively typeable (`a : ⌊foo⌋`, `r : {foo: 𝓫 → β}`), so this is incompleteness, not a rejection
-- Fix A — guess the key: F-key binds `α ≔ ⌊ℓ_fresh⌋`, then materialize; small, `runSound` carries over; answer valid but non-principal (made-up label in the type)
-- Fix B — qualified top-level type: `Run` reports `∀. ⟨ρ.(α) ↓ 𝓫 → β⟩ ⇒ {ρ} → α → β`; principal (top level = `let main = e in main`), but `Run`/`RunSound`/`runF` and printed answers change; soundness becomes "every instance is typed"
-- Guessing is fine inside a proof (inhabitation witness), not in a reported type → B preferred when taken up
-- Same idea would extend A-let to key-blocked spent stumps (inhabitation: key ↦ fresh label, then `fillRow`)
-
 
 ## Headliners
  ⊢ₗ₁ = `Typed`, ⊢ = `QTyped`.
@@ -125,13 +111,15 @@ TODO
   - unifyRowM_terminates / unifyTyM_terminates: ∃ fuel, ≐ᵣ / ≐ ≠ outOfFuel
   - stuck_masks_mgu, terminalNoMgu_false: stuck ⇏ no mgu, terminal ⇏ no mgu
 
-**Inference**  Γ; S ⊢ e ⇒ τ; S′
+**Inference**  Γ; S ⊢ e ⇒ τ; S′, entry ⊢ e ⇒ σ
 - inferSound: Γ; S ⊢ e ⇒ τ; S′ → SchemesWF Γ → Clean S → Quiescent S →
   ∀σ, σ absorbs S′ → σ ⊨ S′ → ∀Γ', Γ ⇝_σ Γ' → parked(S′)σ; Γ' ⊢ₐ e : τσ
-- runSound: Run e τ S′ → ∅ ⊢ e : τ⟦S′⟧
+- runSound: Run e σ → (∀τ ≤ σ, ∅ ⊢ e : τ) ∧ (∃τ, τ ≤ σ)
+- merge_forced: two stumps asking one lookup get ≈-equal results at every θ discharging both
+- runF_selEx_principal: the answer for λx.x.l is principal
 - runF_terminates: ∃ n, runF n e ≠ oof
 - runF_eq_run:     runF n e ≠ oof → runF n e = run e
-- run_typed:       run e = ok (τ, S′) → ∅ ⊢ e : τ⟦S′⟧
+- run_typed:       run e = ok (σ, S) → (∀τ ≤ σ, ∅ ⊢ e : τ) ∧ (∃τ, τ ≤ σ)
 
 
 ## Incompleteness
@@ -144,40 +132,20 @@ TODO
 - `stuck_masks_mgu`: stuck payload equation propagates before the residual pins β
   - Fix: defer the stuck equation, retry after the residual
 
-**Spent promise** — 
-- key-blocked spent stump never given its key, `λr. λa. r.(a) c` ⇒ no run
-  - Fix: guess the key (non-principal) or qualified top-level type
-
 **A-let premises**
-- `Infer.letE` = Infer e₁ + `LetAdmissible Γ S S₁ ᾱ` + Infer e₂; Δ_q/Δ_Γ = `letQ`/`letG`
+- `Infer.letE` = Infer e₁ + `Merges S₁ S₁′` + `LetAdmissible Γ S S₁′ ᾱ` + Infer e₂; Δ_q/Δ_Γ = `letQ`/`letG`
 - Admissible: `fresh` (ᾱ ∩ ftv⟦S₁⟧(Γ, Δ_Γ) = ∅), `own`, `res` (results ⊆ ᾱ), `spent` (`LetSpent`)
 - A failing condition prunes the offending variables (`greatestAlpha`), not the whole let
-- Still lost: key-blocked spent stump; same-key spent results that differ beyond type variables (`LetSpent` is syntactic)
+- Still lost: spent results on one field that differ beyond type variables and that the merge does not identify (two rows: `let f = x: {p = (({m = c} ‖ x).l) c; q = x.l}` used twice clashes; the entry accepts it through a witness merge)
 - Justified: Γ-mentioned (HM), Δ_Γ-mentioned, outer stump capture (`own`)
 - `own` is NOT derivable from fresh + res + spent: `runSound_false_unowned_let` (LetSound.lean)
-- Open: key-blocked spent stump at the let (key ↦ fresh label, then fill); semantic inhabitation not union-closed in general (D-? breaks under later substitution)
+- Done (2026-10-29, syntactic): a key-blocked spent stump at the let, its key variable read as `${κ}`. Semantic inhabitation still has no union-closure proof (D-? breaks under later substitution)
 
 **Unrestricted T-★-intro**
-- `λg. {a = g {l=c}; b = g {m=c}}` : `(★ → 𝓫) → {a:𝓫 | b:𝓫}`, `run` = clash
-- Same trick types every stuck witness above (`f : ★ → 𝓫`)
-- "clash is soundness" holds for ≐, not for inference
-- Cause: T-★-intro = subsumption into a top; ★ joins any two types, ≐ only computes common instances
-- Kept deliberately; thesis argues it as incompleteness
-- Restrict to selection results: breaks `qPreservation` — blurred `{a=⌊l⌋}.a` steps to `⌊l⌋` (Qualified.lean:1260/1268)
-- Blur only under selection: still incomplete — `λg. {a = g ({x={l=c}}.x); b = g ({x={m=c}}.x)}` clashes
-- Fix A — completeness against the blur-free fragment (★ only from lookup verdicts)
-- Fix B — join on clash: `τ ≲ α` edges, α ≔ ★ on clashing lower bounds; rigidity of ★ rejects eliminations; principal only on definite clash (unify-vs-★ choice stays open)
-- Not vacuous (2026-10-28): the rule has a premise and ★ has no eliminator; qProgress/qPreservation hold with qUnk in the relation. A `★ → β` parameter only accepts functions that ignore their argument
-- Joining breaks principality without a clash: `g: x: {a = g x; b = g {l=c}}` runs to `({l:𝓫} → α) → {l:𝓫} → …` but also types at `(★ → 𝓫) → 𝓫 → …`; no scheme covers both (paper argument). Fix B never fires there; applied to `(y: c) c` it clashes
-- MacroNix: `1 == true` types only via α ≔ ★, then atomEq = none → primFail. delta_prog will need cross-shape `==` = false
-- Barely load-bearing: inference never builds qUnk (runSound lands blur-free; qtyped_sel_star is unused). The 𝓫-key preservation arms are dead (a label value never types at a base type), so 08_extensions.typ:144 is wrong. Real use: lem-subst (QSubst.lean:443/466), since a `?` can hit after substitution. qtyped_applySubst itself has no consumer (only the Axioms guard)
-- No middle ground: the smallest blur that keeps lem-subst (blur at selections) already joins distinct types. Without the rule, substitution goes through qualified schemes (top-level schemes)
-- The real Nix problem is the missing join: `map (p: p.name) [ {name="a"; x=0;} {name="b";} ]` clashes (checked) and is rejected declaratively with or without the rule (★ cannot be selected). Lists of packages, mkMerge, optionalAttrs. NixSuite (1) and (4)
-- Gradual consistency fixes ★'s rigidity, not joins (int ≁ {}). With ★ chosen implicitly (T-★-intro, or ★ as a λ-domain) it becomes vacuous: `(x: x 4) 3` types and gets stuck. Fix A is a prerequisite
-- Any join at if/lists brings subsumption back for preservation: `(λg. (λu. {a = g u; b = g (if false then 1 else {})}) (if true then 1 else {}))` steps to `g 1` with g : ★ → β
-- Forcing survives removal: no_plain uses T-sel and T-sel-⊥ typings only; selQ_instance_closed (Qualified.lean:308) and qtyped_two_use (:1047) build no qUnk; qUnk/tUnk appear only as inversion arms. Coverage could drop from ≼ to ≈ (unchecked). Without the rule, `∀β. {β} → ★` is not instance-closed (instance `{(l:c)} → ★`), so plain schemes lose soundness, not only principality
-- ⊥ plan (analysis/bottom-type.md, B): T-sel-⊥ at any τ makes `{ε} → {ε}` a typing, so no_plain_principal_scheme and l1_rejects_two_use (selEx_dom_empty_res) need a new mix: the hit instance re-pointed, or the `?` witness `{β} → ★`. Forcing then rests on `?` alone
-- ⊥ as a declarative type breaks selQ_principal: T-λ-I picks `x : ⊥`, T-⊥-elim gives `x: x.l : ⊥ → τ`, which no record-domain instance covers. Mirror of the ★ gap: `y: [y + 1, y.a] : ⊥ → [int]` types, inference clashes. `⊥ ⊑ τ` (fn covariant) makes `⊥ → ⊥` a ≼-cover of every `τ → τ` for `x: x`. Fix: no ⊥ type, T-sel-⊥ concludes any τ (`undefined : ∀α. α`)
+- Gap: T-★-intro is subsumption into a top, so ★ joins any two types while ≐ only finds common instances. `λg. {a = g {l=c}; b = g {m=c}}` types at `(★ → 𝓫) → {a:𝓫 | b:𝓫}` but clashes, and every stuck witness types the same way: a clash certifies "no unifier", not "no typing"
+- Kept: inference never builds qUnk; the rule's one real use is lem-subst (a `?` can hit after substitution), and without it `∀β. {β} → ★` is unsound as a plain scheme. Restricting it to selections breaks qPreservation or still joins types. Not vacuous (★ has no eliminator), and the forcing of qualified schemes does not use it
+- Fixes: state completeness for the blur-free fragment (A); joining at a clash (B) does not restore principality, since `g: x: {a = g x; b = g {l=c}}` has no covering scheme
+- The real Nix gap is the missing join (lists of packages, optionalAttrs, `map (p: p.name) […]`), rejected declaratively too. Gradual consistency fixes ★'s rigidity, not joins, and an implicitly chosen ★ makes typing vacuous (`(x: x 4) 3`). ⊥ instead: analysis/bottom-type.md
 
 
 ## Findings
