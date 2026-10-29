@@ -237,5 +237,191 @@ def upd : E := .lam "n" (.lam "r" (.cat (v "r") (rd (v "n") c)))
 #guard run (.sel (rd c c) "foo") = "fail: clash"
 #guard run (.lam "a" (rd (.sel (v "a") "k") c)) = "({k: ⌊k4⌋ | r5 | ε} → {${k4}: 𝓫})"
 
+
+-- TOP-LEVEL SCHEMES (plans/top-level-schemes.md). The witnesses below are
+-- about what `runQF` answers: `decide` runs it in the kernel. Every instance
+-- of such an answer types its program (`answerQ_sound`, from `runQSound`).
+
+deriving instance DecidableEq for QScheme
+
+def σU : Sig Unit Unit := Sig.plain fun _ => ()
+
+/-- the scheme a run answers, if it answers one -/
+def answerQ (e : E) : Option (QScheme Unit) :=
+  match runQF σU 50 e with
+  | .ok (σ, _) => some σ
+  | _ => none
+
+theorem answerQ_sound {e : E} {σ : QScheme Unit} (h : answerQ e = some σ) :
+    (∀ τ, σ.Inst τ → QTyped σU QCtx.empty e τ) ∧ ∃ τ, σ.Inst τ := by
+  unfold answerQ at h
+  split at h
+  · next σ' S hr => cases h; exact runQF_typed hr
+  · cases h
+
+/-- ⊢  an instance of σ read off one of σ′ that every constraint and the body
+agree with. Used to move instances between schemes that differ in the names of
+their binders. -/
+theorem QScheme.Inst.of_reading {σ σ' : QScheme Unit} {θ θ' : TySubst Unit} {τ : Ty Unit}
+    (hfix : θ'.FixedOutside σ'.vars)
+    (hc : ∀ s' ∈ σ'.constraints, ∃ s ∈ σ.constraints, s'.at θ' = s.at θ)
+    (hb : σ'.body.applySubst θ' = σ.body.applySubst θ)
+    (hd : ∀ s ∈ σ.constraints, s.Discharge θ) (he : σ.body.applySubst θ = τ) :
+    σ'.Inst τ := by
+  refine ⟨θ', hfix, fun s' hs' => ?_, hb.trans he⟩
+  obtain ⟨s, hs, hat⟩ := hc s' hs'
+  exact Stump.dischargeEquiv_iff_holds.mpr (hat ▸ Stump.dischargeEquiv_iff_holds.mp (hd s hs))
+
+def b : Ty Unit := .base ()
+
+-- ## λx. x.l answers selQ, up to the names of its binders: principal
+def selA : QScheme Unit :=
+  ⟨["aa", "aaa"], [⟨.var "aa", .lit "l", .var "aaa"⟩], .fn (.rcd (.var "aa")) (.var "aaa")⟩
+
+theorem selEx_answerQ : answerQ (selEx Unit) = some selA := by decide
+
+/-- the renaming aa ↦ β, aaa ↦ δ, and back, applied to an instance -/
+def selRen (θ : TySubst Unit) (r d r' d' : TyVar) : TySubst Unit :=
+  ⟨fun x => if x = d' then θ.ty d else .var x, fun x => if x = r' then θ.row r else .var x,
+   fun x => .var x⟩
+
+theorem selA_inst_iff (τ : Ty Unit) : selA.Inst τ ↔ (selQ Unit).Inst τ := by
+  constructor
+  · rintro ⟨θ, -, hd, he⟩
+    refine QScheme.Inst.of_reading (θ := θ) (θ' := selRen θ "aa" "aaa" "β" "δ")
+      ⟨fun α h => ?_, fun α h => ?_, fun _ _ => rfl⟩ (fun s' hs' => ?_) ?_ hd he
+    · have : α ≠ "δ" := fun e => h (by simp [selQ, e])
+      simp [selRen, this]
+    · have : α ≠ "β" := fun e => h (by simp [selQ, e])
+      simp [selRen, this]
+    · simp only [selQ, List.mem_singleton] at hs'
+      subst hs'
+      exact ⟨_, List.mem_singleton_self _, by simp [Stump.at, selRen, selA, Row.applySubst,
+        Ty.applySubst, Key.applySubst]⟩
+    · simp [selQ, selA, selRen, Ty.applySubst, Row.applySubst]
+  · rintro ⟨θ, -, hd, he⟩
+    refine QScheme.Inst.of_reading (θ := θ) (θ' := selRen θ "β" "δ" "aa" "aaa")
+      ⟨fun α h => ?_, fun α h => ?_, fun _ _ => rfl⟩ (fun s' hs' => ?_) ?_ hd he
+    · have : α ≠ "aaa" := fun e => h (by simp [selA, e])
+      simp [selRen, this]
+    · have : α ≠ "aa" := fun e => h (by simp [selA, e])
+      simp [selRen, this]
+    · simp only [selA, List.mem_singleton] at hs'
+      subst hs'
+      exact ⟨_, List.mem_singleton_self _, by simp [Stump.at, selRen, selQ, Row.applySubst,
+        Ty.applySubst, Key.applySubst]⟩
+    · simp [selQ, selA, selRen, Ty.applySubst, Row.applySubst]
+
+/-- ⊢  **the first principal answer of the algorithm**: what a run answers for
+λx. x.l is a principal scheme for it. The old entry answered `{β} → ★`, which
+`no_plain_principal_scheme` says no plain scheme improves on. -/
+theorem runQF_selEx_principal :
+    ∃ σ, answerQ (selEx Unit) = some σ ∧ QScheme.Principal σU QCtx.empty (selEx Unit) σ := by
+  refine ⟨selA, selEx_answerQ, ?_⟩
+  obtain ⟨h₁, h₂, h₃⟩ := selQ_principal (B := Unit) σU
+  refine ⟨fun τ h => h₁ τ ((selA_inst_iff τ).mp h), ?_, fun τ h => ?_⟩
+  · obtain ⟨τ, h⟩ := h₂; exact ⟨τ, (selA_inst_iff τ).mpr h⟩
+  · obtain ⟨τ', hi, hp⟩ := h₃ τ h; exact ⟨τ', (selA_inst_iff τ').mpr hi, hp⟩
+
+/-- ⊢  …and the old answer `{β} → ★` is its D-? instance. -/
+theorem selA_inst_star : selA.Inst (.fn (.rcd (.var "β")) .unk) :=
+  ⟨⟨fun x => if x = "aaa" then .unk else .var x, fun x => if x = "aa" then .var "β" else .var x,
+     fun x => .var x⟩,
+   ⟨fun α h => if_neg (fun e => h (by simp [selA, e])),
+    fun α h => if_neg (fun e => h (by simp [selA, e])), fun _ _ => rfl⟩,
+   fun st hst => by
+     simp only [selA, List.mem_singleton] at hst
+     subst hst
+     exact .unk (lookupQF_sound (r := .blocked "β") rfl).toLookupQ rfl,
+   rfl⟩
+
+-- ## the F-hit witness: x: (({l = y: y} ‖ x).l) c. The old entry put the field
+-- into x's row and answered `{l: 𝓫 → α | ρ} → α`, which `{ε} → 𝓫` (the field
+-- comes from the literal) is not an instance of. Both are instances now.
+def fhitEx : E := .lam "x" (.app (.sel (.cat (rec1 "l" (.lam "y" (v "y"))) (v "x")) "l") c)
+
+def fhitA : QScheme Unit :=
+  ⟨["aaaa", "aaaaaaa", "aa"],
+   [⟨.cat (.var "aaaa") (.cat (.sing "l" (.fn (.var "aa") (.var "aa"))) .empty), .lit "l",
+     .fn b (.var "aaaaaaa")⟩],
+   .fn (.rcd (.var "aaaa")) (.var "aaaaaaa")⟩
+
+theorem fhitEx_answerQ : answerQ fhitEx = some fhitA := by decide
+
+/-- the field supplied by x: the old answer -/
+theorem fhitA_inst_row :
+    fhitA.Inst (.fn (.rcd (.cat (.sing "l" (.fn b (.var "α"))) (.var "ρ"))) (.var "α")) :=
+  ⟨⟨fun x => if x = "aaaaaaa" then .var "α" else .var x,
+    fun x => if x = "aaaa" then .cat (.sing "l" (.fn b (.var "α"))) (.var "ρ") else .var x,
+    fun x => .var x⟩,
+   ⟨fun α h => if_neg (fun e => h (by simp [fhitA, e])),
+    fun α h => if_neg (fun e => h (by simp [fhitA, e])), fun _ _ => rfl⟩,
+   fun st hst => by
+     simp only [fhitA, List.mem_singleton] at hst
+     subst hst
+     exact .hit (lookupQF_sound (r := .found (.fn b (.var "α"))) rfl) (.refl _),
+   rfl⟩
+
+/-- the field supplied by the literal: what the old answer missed -/
+theorem fhitA_inst_lit : fhitA.Inst (.fn (.rcd .empty) b) :=
+  ⟨⟨fun x => if x = "aaaaaaa" ∨ x = "aa" then b else .var x,
+    fun x => if x = "aaaa" then .empty else .var x, fun x => .var x⟩,
+   ⟨fun α h => if_neg (fun e => h (by rcases e with e | e <;> simp [fhitA, e])),
+    fun α h => if_neg (fun e => h (by simp [fhitA, e])), fun _ _ => rfl⟩,
+   fun st hst => by
+     simp only [fhitA, List.mem_singleton] at hst
+     subst hst
+     exact .hit (lookupQF_sound (r := .found (.fn b b)) rfl) (.refl _),
+   rfl⟩
+
+-- ## the spent promise x: (x.l) c: the old answer (F-hit) is the fill instance
+def spentA : QScheme Unit :=
+  ⟨["aa", "aaaa"], [⟨.var "aa", .lit "l", .fn b (.var "aaaa")⟩], .fn (.rcd (.var "aa")) (.var "aaaa")⟩
+
+theorem spentEx_answerQ : answerQ (.lam "x" (.app (.sel (v "x") "l") c)) = some spentA := by
+  decide
+
+theorem spentA_inst_fill :
+    spentA.Inst (.fn (.rcd (.cat (.sing "l" (.fn b (.var "α"))) (.var "ρ"))) (.var "α")) :=
+  ⟨⟨fun x => if x = "aaaa" then .var "α" else .var x,
+    fun x => if x = "aa" then .cat (.sing "l" (.fn b (.var "α"))) (.var "ρ") else .var x,
+    fun x => .var x⟩,
+   ⟨fun α h => if_neg (fun e => h (by simp [spentA, e])),
+    fun α h => if_neg (fun e => h (by simp [spentA, e])), fun _ _ => rfl⟩,
+   fun st hst => by
+     simp only [spentA, List.mem_singleton] at hst
+     subst hst
+     exact .hit (lookupQF_sound (r := .found (.fn b (.var "α"))) rfl) (.refl _),
+   rfl⟩
+
+-- ## the spent promise under a variable key, r: a: (r.${a}) c. The old entry
+-- failed ("spent promise", above). The answer keeps the stump; the witness
+-- guesses the key (`Guesses`), and `{foo: 𝓫 → 𝓫} → ⌊foo⌋ → 𝓫` is an instance.
+def keyEx : E := .lam "r" (.lam "a" (.app (sd (v "r") (v "a")) c))
+
+def keyA : QScheme Unit :=
+  ⟨["aaa", "aaaa", "aaaaaa"], [⟨.var "aaa", .var "aaaa", .fn b (.var "aaaaaa")⟩],
+   .fn (.rcd (.var "aaa")) (.fn (.lab (.var "aaaa")) (.var "aaaaaa"))⟩
+
+theorem keyEx_answerQ : answerQ keyEx = some keyA := by decide
+
+theorem keyA_inst : keyA.Inst (.fn (.rcd (.sing "foo" (.fn b b))) (.fn (.lab (.lit "foo")) b)) :=
+  ⟨⟨fun x => if x = "aaaaaa" then b else .var x,
+    fun x => if x = "aaa" then .sing "foo" (.fn b b) else .var x,
+    fun x => if x = "aaaa" then .lit "foo" else .var x⟩,
+   ⟨fun α h => if_neg (fun e => h (by simp [keyA, e])),
+    fun α h => if_neg (fun e => h (by simp [keyA, e])),
+    fun α h => if_neg (fun e => h (by simp [keyA, e]))⟩,
+   fun st hst => by
+     simp only [keyA, List.mem_singleton] at hst
+     subst hst
+     exact .hit (lookupQF_sound (r := .found (.fn b b)) rfl) (.refl _),
+   rfl⟩
+
+/-- ⊢  …so the program has that type, which the old entry could not show. -/
+theorem keyEx_typed :
+    QTyped σU QCtx.empty keyEx (.fn (.rcd (.sing "foo" (.fn b b))) (.fn (.lab (.lit "foo")) b)) :=
+  (answerQ_sound keyEx_answerQ).1 _ keyA_inst
+
 end InferRuns
 end MinimalCalculus

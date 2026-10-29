@@ -74,6 +74,17 @@ theorem IRes.orElse_eq_ok {α : Type} {x : IRes α} {d a : α} (h : x.orElse d =
     x = .ok a ∨ a = d := by
   cases x <;> simp_all [IRes.orElse]
 
+/-- try `x`; on a failure, `y` -/
+def IRes.orTry {α : Type} (x y : IRes α) : IRes α :=
+  match x with
+  | .ok a   => .ok a
+  | .fail _ => y
+  | .oof    => .oof
+
+theorem IRes.orTry_eq_ok {α : Type} {x y : IRes α} {a : α} (h : x.orTry y = .ok a) :
+    x = .ok a ∨ y = .ok a := by
+  cases x <;> simp_all [IRes.orTry]
+
 --------------------- LOOKUP ---------------------------------------------------
 -- One keyed lookup, structural: with L-α gone there is no solution to chase, so
 -- no fuel and no way to fail — the `IRes` is only there so lookups compose with
@@ -480,58 +491,148 @@ def Parked.mergeable (S : SolverState B) (p q : Parked B) : Bool :=
   decide (p.stump.label.applySubst S.subst = q.stump.label.applySubst S.subst) &&
   !decide (p.stump.res.applySubst S.subst = q.stump.res.applySubst S.subst)
 
-/-- M-merge on one pair of stumps, computed. A stump is found by its STUMP, not
-its blocker: an earlier merge's saturation may have re-parked it. A failed
-equation skips the pair. -/
-def mergeF (n : Nat) (S : SolverState B) (st₁ st₂ : Stump B) : IRes (SolverState B) :=
+/-- p and q wait on one blocker for one key, and their results still differ:
+the witness merge (`Guess`), not forced -/
+def Parked.alike (S : SolverState B) (p q : Parked B) : Bool :=
+  decide (p.blocker = q.blocker) &&
+  decide (p.stump.label.applySubst S.subst = q.stump.label.applySubst S.subst) &&
+  !decide (p.stump.res.applySubst S.subst = q.stump.res.applySubst S.subst)
+
+/-- unify the results of one pair of stumps if the test `t` passes, computed. A
+stump is found by its STUMP, not its blocker: an earlier step's saturation may
+have re-parked it. A failed equation skips the pair. -/
+def pairF (t : SolverState B → Parked B → Parked B → Bool) (n : Nat) (S : SolverState B)
+    (st₁ st₂ : Stump B) : IRes (SolverState B) :=
   match S.parked.find? (·.stump == st₁), S.parked.find? (·.stump == st₂) with
   | some p, some q =>
-      if p.mergeable S q then (solveTySatF n S p.stump.res q.stump.res).orElse S
+      if t S p q then (solveTySatF n S p.stump.res q.stump.res).orElse S
       else pure S
   | _, _ => pure S
 
-theorem mergeF_sound {n : Nat} {S S' : SolverState B} {st₁ st₂ : Stump B}
-    (h : mergeF n S st₁ st₂ = .ok S') : Merges S S' := by
-  unfold mergeF at h
+theorem pairF_spec {t : SolverState B → Parked B → Parked B → Bool} {n : Nat}
+    {S S' : SolverState B} {st₁ st₂ : Stump B} (h : pairF t n S st₁ st₂ = .ok S') :
+    S' = S ∨ ∃ p ∈ S.parked, ∃ q ∈ S.parked, t S p q = true ∧
+      SolveTySat S p.stump.res q.stump.res S' := by
+  unfold pairF at h
   split at h
   · next p q hp hq =>
     split at h
     · next hm =>
       rcases IRes.orElse_eq_ok h with h | rfl
-      · simp only [Parked.mergeable, Bool.and_eq_true, decide_eq_true_eq] at hm
-        exact .step (.merge (List.mem_of_find?_eq_some hp) (List.mem_of_find?_eq_some hq)
-          hm.1.1 hm.1.2 (solveTySatF_sound h)) (.refl _)
-      · exact .refl _
-    · simp only [IRes.pure_eq_ok] at h; subst h; exact .refl _
-  · simp only [IRes.pure_eq_ok] at h; subst h; exact .refl _
+      · exact .inr ⟨p, List.mem_of_find?_eq_some hp, q, List.mem_of_find?_eq_some hq, hm,
+          solveTySatF_sound h⟩
+      · exact .inl rfl
+    · simp only [IRes.pure_eq_ok] at h; exact .inl h.symm
+  · simp only [IRes.pure_eq_ok] at h; exact .inl h.symm
 
 /-- the pairs of a list, each once, in order -/
 def pairsOf {α : Type} : List α → List (α × α)
   | [] => []
   | a :: as => as.map (a, ·) ++ pairsOf as
 
-def mergesF (n : Nat) : SolverState B → List (Stump B × Stump B) → IRes (SolverState B)
+def pairsF (t : SolverState B → Parked B → Parked B → Bool) (n : Nat) :
+    SolverState B → List (Stump B × Stump B) → IRes (SolverState B)
   | S, [] => .ok S
   | S, (st₁, st₂) :: ps => do
-      let S₁ ← mergeF n S st₁ st₂
-      mergesF n S₁ ps
+      let S₁ ← pairF t n S st₁ st₂
+      pairsF t n S₁ ps
 
 theorem Merges.trans {S₁ S₂ S₃ : SolverState B} :
     Merges S₁ S₂ → Merges S₂ S₃ → Merges S₁ S₃
   | .refl _, h => h
   | .step hm hms, h => .step hm (Merges.trans hms h)
 
-theorem mergesF_sound {n : Nat} : ∀ {S S' : SolverState B} {ps : List (Stump B × Stump B)},
-    mergesF n S ps = .ok S' → Merges S S'
-  | S, S', [], h => by simp only [mergesF, IRes.ok.injEq] at h; subst h; exact .refl _
+/-- ⊢  with the test `mergeable`, every step is an M-merge. -/
+theorem pairsF_merges {n : Nat} : ∀ {S S' : SolverState B} {ps : List (Stump B × Stump B)},
+    pairsF Parked.mergeable n S ps = .ok S' → Merges S S'
+  | S, S', [], h => by simp only [pairsF, IRes.ok.injEq] at h; subst h; exact .refl _
   | S, S', (st₁, st₂) :: ps, h => by
-      simp only [mergesF, IRes.bind_eq_ok] at h
+      simp only [pairsF, IRes.bind_eq_ok] at h
       obtain ⟨S₁, h₁, h₂⟩ := h
-      exact (mergeF_sound h₁).trans (mergesF_sound h₂)
+      refine Merges.trans ?_ (pairsF_merges h₂)
+      rcases pairF_spec h₁ with rfl | ⟨p, hp, q, hq, hm, hs⟩
+      · exact .refl _
+      · simp only [Parked.mergeable, Bool.and_eq_true, decide_eq_true_eq] at hm
+        exact .step (.merge hp hq hm.1.1 hm.1.2 hs) (.refl _)
+
+/-- ⊢  with any test, every step is a step of the witness search. -/
+theorem pairsF_guesses {t : SolverState B → Parked B → Parked B → Bool} {n : Nat} :
+    ∀ {S S' : SolverState B} {ps : List (Stump B × Stump B)},
+      pairsF t n S ps = .ok S' → Guesses S S'
+  | S, S', [], h => by simp only [pairsF, IRes.ok.injEq] at h; subst h; exact .refl _
+  | S, S', (st₁, st₂) :: ps, h => by
+      simp only [pairsF, IRes.bind_eq_ok] at h
+      obtain ⟨S₁, h₁, h₂⟩ := h
+      refine Guesses.trans ?_ (pairsF_guesses h₂)
+      rcases pairF_spec h₁ with rfl | ⟨_, _, _, _, _, hs⟩
+      · exact .refl _
+      · exact .step (.solve hs) (.refl _)
 
 /-- the merge phase: every pair of stumps parked at S, once -/
 def mergeAllF (n : Nat) (S : SolverState B) : IRes (SolverState B) :=
-  mergesF n S (pairsOf (S.parked.map (·.stump)))
+  pairsF Parked.mergeable n S (pairsOf (S.parked.map (·.stump)))
+
+theorem mergeAllF_sound {n : Nat} {S S' : SolverState B} (h : mergeAllF n S = .ok S') :
+    Merges S S' :=
+  pairsF_merges h
+
+--------------------- THE WITNESS SEARCH ---------------------------------------
+
+/-- K-guess for one key variable, computed: the first candidate label whose
+equation goes through; none, if none does. -/
+def keyGuessF (n : Nat) (S : SolverState B) (κ : TyVar) : List Label → IRes (SolverState B)
+  | [] => pure S
+  | l :: ls => (solveTySatF n S (.lab (.var κ)) (.lab (.lit l))).orTry (keyGuessF n S κ ls)
+
+theorem keyGuessF_sound {n : Nat} {S : SolverState B} {κ : TyVar} :
+    ∀ {ls : List Label} {S' : SolverState B}, keyGuessF n S κ ls = .ok S' → Guesses S S'
+  | [], S', h => by simp only [keyGuessF, IRes.pure_eq_ok] at h; subst h; exact .refl _
+  | l :: ls, S', h => by
+      simp only [keyGuessF] at h
+      rcases IRes.orTry_eq_ok h with h | h
+      · exact .step (.solve (solveTySatF_sound h)) (.refl _)
+      · exact keyGuessF_sound h
+
+/-- the key variables the witness guesses, each with its candidates: the
+variable key of a stump on a spent stump's blocker (the spent stump itself
+included). First a label no program writes, then the literal labels of the
+stump's row, for a lookup that has to hit. -/
+def guessTargets (S : SolverState B) : List (TyVar × List Label) :=
+  let spent := S.parked.filter fun p => !(p.stump.res.applySubst S.subst).isVar
+  S.parked.filterMap fun p =>
+    match p.stump.label.applySubst S.subst with
+    | .var κ =>
+        if spent.any (·.blocker == p.blocker) then
+          some (κ, Key.keyName (.var κ) :: (p.stump.row.applySubst S.subst).toSpine.filterMap
+            (fun | .field l _ => some l | _ => none))
+        else none
+    | .lit _ => none
+
+def keyGuessesF (n : Nat) : SolverState B → List (TyVar × List Label) → IRes (SolverState B)
+  | S, [] => .ok S
+  | S, (κ, ls) :: ts => do
+      let S₁ ← keyGuessF n S κ ls
+      keyGuessesF n S₁ ts
+
+theorem keyGuessesF_sound {n : Nat} :
+    ∀ {S S' : SolverState B} {ts : List (TyVar × List Label)},
+      keyGuessesF n S ts = .ok S' → Guesses S S'
+  | S, S', [], h => by simp only [keyGuessesF, IRes.ok.injEq] at h; subst h; exact .refl _
+  | S, S', (κ, ls) :: ts, h => by
+      simp only [keyGuessesF, IRes.bind_eq_ok] at h
+      obtain ⟨S₁, h₁, h₂⟩ := h
+      exact (keyGuessF_sound h₁).trans (keyGuessesF_sound h₂)
+
+/-- the witness search: guess the keys, then the witness merge on every pair -/
+def witnessF (n : Nat) (S : SolverState B) : IRes (SolverState B) := do
+  let S₁ ← keyGuessesF n S (guessTargets S)
+  pairsF Parked.alike n S₁ (pairsOf (S₁.parked.map (·.stump)))
+
+theorem witnessF_sound {n : Nat} {S S' : SolverState B} (h : witnessF n S = .ok S') :
+    Guesses S S' := by
+  simp only [witnessF, IRes.bind_eq_ok] at h
+  obtain ⟨S₁, h₁, h₂⟩ := h
+  exact (keyGuessesF_sound h₁).trans (pairsF_guesses h₂)
 
 def finalizesF (n : Nat) : SolverState B → List (Parked B) → IRes (SolverState B)
   | S, [] => .ok S
@@ -965,7 +1066,8 @@ when `LetSpent` finds no instance of the scheme -/
 def runQF (constTy : Sig B C) (n : Nat) (e : Expr C) : IRes (QScheme B × SolverState B) := do
   let r ← inferF constTy n QCtx.empty runStart e
   let S₂ ← mergeAllF n r.2
-  if LetSpent S₂ S₂.parked then
+  let S₃ ← witnessF n S₂
+  if LetSpent S₃ S₃.parked then
     pure (letScheme S₂ (letCand S₂ r.1) S₂.parked r.1, S₂)
   else .fail "spent promise without witness"
 
@@ -973,11 +1075,11 @@ def runQF (constTy : Sig B C) (n : Nat) (e : Expr C) : IRes (QScheme B × Solver
 theorem runQF_sound {constTy : Sig B C} {n : Nat} {e : Expr C} {σ : QScheme B}
     {S : SolverState B} (h : runQF constTy n e = .ok (σ, S)) : RunQ constTy e σ := by
   simp only [runQF, IRes.bind_eq_ok] at h
-  obtain ⟨⟨τ, S₁⟩, h₁, S₂, h₂, h⟩ := h
+  obtain ⟨⟨τ, S₁⟩, h₁, S₂, h₂, S₃, h₃, h⟩ := h
   split at h
   · next hs =>
     simp only [IRes.pure_eq_ok, Prod.mk.injEq] at h
-    exact ⟨τ, S₁, S₂, inferF_sound h₁, mergesF_sound h₂, hs, h.1.symm⟩
+    exact ⟨τ, S₁, S₂, S₃, inferF_sound h₁, mergeAllF_sound h₂, h.1.symm, witnessF_sound h₃, hs⟩
   · cases h
 
 /-- ⊢  **what `runQF` answers is sound**: every instance types the program, and

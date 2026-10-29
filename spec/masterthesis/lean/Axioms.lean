@@ -18,6 +18,7 @@ import Finalization
 import FreshNames
 import LetChoice
 import InferFnTerm
+import InferRuns
 import MacroConservative
 import Builtins
 import RowUnify.UnifType
@@ -1052,6 +1053,14 @@ info: 'MinimalCalculus.runQSound' depends on axioms: [propext, Classical.choice,
 -/
 #guard_msgs in #print axioms runQSound
 
+/-- info: 'MinimalCalculus.inhabited_of_ext' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in #print axioms inhabited_of_ext
+
+/--
+info: 'MinimalCalculus.Guesses.keeps' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms Guesses.keeps
+
 -- Two ≈-equal hits on one result variable: instantiable (no χ-correction).
 /--
 info: 'MinimalCalculus.icSc_inst' depends on axioms: [propext]
@@ -1126,6 +1135,39 @@ info: 'MinimalCalculus.runQF_typed' depends on axioms: [propext, Classical.choic
 info: 'MinimalCalculus.runQF_terminates' depends on axioms: [propext, Classical.choice, Quot.sound]
 -/
 #guard_msgs in #print axioms runQF_terminates
+
+-- What the algorithm answers, run in the kernel (InferRuns.lean): λx. x.l gets a
+-- principal scheme; the old answers are instances; the F-hit witness has both
+-- typings; the spent promise under a variable key gets a scheme and a typing.
+/--
+info: 'MinimalCalculus.InferRuns.runQF_selEx_principal' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms InferRuns.runQF_selEx_principal
+
+/--
+info: 'MinimalCalculus.InferRuns.selA_inst_star' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms InferRuns.selA_inst_star
+
+/--
+info: 'MinimalCalculus.InferRuns.fhitA_inst_row' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms InferRuns.fhitA_inst_row
+
+/--
+info: 'MinimalCalculus.InferRuns.fhitA_inst_lit' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms InferRuns.fhitA_inst_lit
+
+/--
+info: 'MinimalCalculus.InferRuns.spentA_inst_fill' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms InferRuns.spentA_inst_fill
+
+/--
+info: 'MinimalCalculus.InferRuns.keyEx_typed' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in #print axioms InferRuns.keyEx_typed
 
 /--
 info: 'MinimalCalculus.runF_eq_run' depends on axioms: [propext, Classical.choice, Quot.sound]

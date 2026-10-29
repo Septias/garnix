@@ -723,7 +723,42 @@ theorem Merges.quiescent {B : Type} [DecidableEq B] {S S' : SolverState B} :
   | .refl _, h => h
   | .step (.merge _ _ _ _ hs) hms, _ => Merges.quiescent hms hs.quiescent
 
+--------------------- THE WITNESS SEARCH --------------------------------------
+-- The answer is read at the merged state. Whether it has an instance is checked
+-- (`LetSpent`) at a SCRATCH COPY of that state, which may be changed at will:
+-- the change never reaches a reported type, so all it owes is that a witness
+-- there is a witness of the answer (`inhabited_of_ext`, Finalization.lean). Any
+-- equation, solved and saturated, will do. `runQF` makes two kinds:
+-- * a KEY GUESS κ ≔ ℓ. A spent stump with a variable key, `r: a: (r.${a}) c`,
+--   cannot be filled, since no field is named by a variable; after the guess it
+--   asks for ℓ, and `LetSpent` fills its row with ℓ.
+-- * a WITNESS MERGE of two stumps on one blocker with one key. Unlike M-merge
+--   it is not forced (the rows may differ before the blocker), but the filled
+--   blocker answers both lookups with one field, so the witness needs it.
 
+/-- one step of the witness search: an equation, solved and saturated. -/
+inductive Guess {B : Type} [DecidableEq B] : SolverState B → SolverState B → Prop where
+  | solve {S S' : SolverState B} {τ τ' : Ty B} : SolveTySat S τ τ' S' → Guess S S'
+
+/-- the witness search: any number of steps. -/
+inductive Guesses {B : Type} [DecidableEq B] : SolverState B → SolverState B → Prop where
+  | refl (S : SolverState B) : Guesses S S
+  | step {S S₁ S₂ : SolverState B} : Guess S S₁ → Guesses S₁ S₂ → Guesses S S₂
+
+theorem Guesses.quiescent {B : Type} [DecidableEq B] {S S' : SolverState B} :
+    Guesses S S' → S.Quiescent → S'.Quiescent
+  | .refl _, h => h
+  | .step (.solve hs) hgs, _ => Guesses.quiescent hgs hs.quiescent
+
+theorem Guesses.trans {B : Type} [DecidableEq B] {S₁ S₂ S₃ : SolverState B} :
+    Guesses S₁ S₂ → Guesses S₂ S₃ → Guesses S₁ S₃
+  | .refl _, h => h
+  | .step hg hgs, h => .step hg (Guesses.trans hgs h)
+
+theorem Guesses.of_merges {B : Type} [DecidableEq B] {S S' : SolverState B} :
+    Merges S S' → Guesses S S'
+  | .refl _ => .refl _
+  | .step (.merge _ _ _ _ hs) hms => .step (.solve hs) (Guesses.of_merges hms)
 
 --------------------- INSTANTIATION AT A-var ---------------------------------
 -- `x: ∀(ᾱ: κ̄). Q ⇒ τ ∈ Γ   fresh β̄: κ̄   S ⊢ Q[β̄/ᾱ] ↝* S′`.
@@ -872,6 +907,18 @@ def letCand {B : Type} (S₁ : SolverState B) (τ₁ : Ty B) : List TyVar :=
   ((τ₁.applySubst S₁.subst).ftv ++ S₁.parked.flatMap (fun p =>
     (p.stump.row.applySubst S₁.subst).ftv ++ (p.stump.res.applySubst S₁.subst).ftv ++
       (p.stump.label.applySubst S₁.subst).ftv)).eraseDups
+
+theorem mem_letCand_body {B : Type} {S₁ : SolverState B} {τ₁ : Ty B} {α : TyVar}
+    (h : α ∈ (τ₁.applySubst S₁.subst).ftv) : α ∈ letCand S₁ τ₁ := by
+  unfold letCand; rw [List.mem_eraseDups]; exact List.mem_append_left _ h
+
+theorem mem_letCand_parked {B : Type} {S₁ : SolverState B} {τ₁ : Ty B} {p : Parked B}
+    (hp : p ∈ S₁.parked) {α : TyVar}
+    (h : α ∈ (p.stump.row.applySubst S₁.subst).ftv ∨ α ∈ (p.stump.res.applySubst S₁.subst).ftv ∨
+      α ∈ (p.stump.label.applySubst S₁.subst).ftv) : α ∈ letCand S₁ τ₁ := by
+  unfold letCand; rw [List.mem_eraseDups]
+  refine List.mem_append_right _ (List.mem_flatMap.mpr ⟨p, hp, ?_⟩)
+  rcases h with h | h | h <;> simp [h]
 
 /-- Δ_q for a choice ᾱ: the stumps blocked on a generalized variable. -/
 def letQ {B : Type} (S₁ : SolverState B) (ᾱ : List TyVar) : List (Parked B) :=
@@ -1373,11 +1420,13 @@ theorem LookupBlockedQ.mem_ftv {B : Type} {ρ : Row B} {k : Key} {β : TyVar} :
   | .catUnk h => (LookupBlockedQ.mem_ftv h).imp (fun h => by simp [Row.ftv, h]) id
 
 /-- `⊢ e ⇒ σ` — inference from nothing, the forced merge, and the scheme read at
-the merged state with every variable bound. -/
+the merged state with every variable bound. `LetSpent` is checked at S₃, a
+scratch copy of S₂ after the witness search (`Guesses`); with nothing to guess,
+S₃ = S₂. -/
 def RunQ {B C : Type} [DecidableEq B] (constTy : Sig B C) (e : Expr C) (σ : QScheme B) : Prop :=
-  ∃ τ S₁ S₂, Infer constTy QCtx.empty ⟨Sol.nil, [], [], ⟨1⟩, []⟩ e τ S₁ ∧
-    Merges S₁ S₂ ∧ LetSpent S₂ S₂.parked ∧
-    σ = letScheme S₂ (letCand S₂ τ) S₂.parked τ
+  ∃ τ S₁ S₂ S₃, Infer constTy QCtx.empty ⟨Sol.nil, [], [], ⟨1⟩, []⟩ e τ S₁ ∧
+    Merges S₁ S₂ ∧ σ = letScheme S₂ (letCand S₂ τ) S₂.parked τ ∧
+    Guesses S₂ S₃ ∧ LetSpent S₃ S₃.parked
 
 /-- **Algorithm soundness, top-level schemes**: every instance of the answer
 types the program, and the answer has one (conjuncts 1 and 2 of

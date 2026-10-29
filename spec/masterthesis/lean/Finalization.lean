@@ -325,6 +325,16 @@ theorem Merges.keeps {S S' : SolverState B} :
       obtain ⟨k₂, c₂, x₂, m₂⟩ := Merges.keeps hms c₁
       exact ⟨k₁.trans k₂ m₂, c₂, x₁.trans x₂, m₁.trans m₂⟩
 
+/-- ⊢  …and so does the witness search: every step is an equation plus
+saturation. -/
+theorem Guesses.keeps {S S' : SolverState B} :
+    Guesses S S' → S.sol.Clean →
+      S.KeepsS S' ∧ S'.sol.Clean ∧ S.Ext S' ∧ S.SatMono S'
+  | .refl _, hc => ⟨.refl _, hc, .refl _, .refl _⟩
+  | .step (.solve hs) hgs, hc => by
+      obtain ⟨k₂, c₂, x₂, m₂⟩ := Guesses.keeps hgs (hs.clean hc)
+      exact ⟨hs.keeps.trans k₂ m₂, c₂, hs.ext.trans x₂, hs.satMono.trans m₂⟩
+
 /-- ⊢  **the merge is forced.** Two stumps with one spine and one key ask one
 lookup, so every θ that discharges both sends their results to ≈-equal types:
 `LookupQ` respects ≈ and is deterministic, D-hit holds up to ≈, and D-⊥ and D-?
@@ -424,11 +434,67 @@ theorem QScheme.readAt_id (sc : QScheme B) : sc.readAt (TySubst.id B) id = sc :=
   conv => rhs; rw [← List.map_id cs]
   rfl
 
+/-- ⊢  **the top-level scheme has an instance** when `LetSpent` holds:
+`LetResults.inhabited` at the identity reading. Every blocker and every result
+variable is bound, since ᾱ is all of ftv. -/
+theorem top_inhabited {S : SolverState B} (q : S.Quiescent) (hsp : LetSpent S S.parked)
+    (τ : Ty B) : ∃ τ', (letScheme S (letCand S τ) S.parked τ).Inst τ' := by
+  obtain ⟨τ', h⟩ := LetResults.inhabited τ
+    ⟨fun p hp δ hδ => mem_letCand_parked hp (.inr (.inl hδ)), hsp⟩
+    (fun p hp => (q p hp).mem_ftv.elim (fun h => mem_letCand_parked hp (.inl h))
+      (fun h => mem_letCand_parked hp (.inr (.inr h))))
+    q (TySubst.id B) id (fun _ _ _ _ h => h)
+    (fun p hp γ hγ hn β hβ hm => by
+      simp only [TySubst.id, Key.ftv, List.mem_singleton] at hβ
+      subst hβ
+      exact hn (by simpa using hm))
+  rw [QScheme.readAt_id] at h
+  exact ⟨τ', h⟩
+
+/-- ⊢  **a witness at an extension is a witness.** If S′ extends S, keeping its
+stumps, an instance χ′ of the scheme read at S′ gives one of the scheme read at
+S: χ′ ∘ ⟦S′⟧ on S's variables. A stump of S still parked at S′ discharges by χ′;
+one that S′'s saturation discharged holds at every substitution that satisfies
+S′. So the search for a witness may change the state at will, as the key guess
+does. -/
+theorem inhabited_of_ext {S S' : SolverState B} (hc : S.sol.Clean) (hk : S.KeepsS S')
+    (hx : S.Ext S') (hc' : S'.sol.Clean) (τ : Ty B)
+    (h : ∃ τ', (letScheme S' (letCand S' τ) S'.parked τ).Inst τ') :
+    ∃ τ', (letScheme S (letCand S τ) S.parked τ).Inst τ' := by
+  obtain ⟨-, χ', -, hdis, -⟩ := h
+  have hab' : Absorbs (χ'.comp S'.subst) S' := Absorbs.comp hc'
+  have hab : Absorbs (χ'.comp S'.subst) S := hab'.back hx hc
+  let σ' := χ'.comp S'.subst
+  let χ : TySubst B :=
+    ⟨fun α => if α ∈ letCand S τ then σ'.ty α else .var α,
+     fun α => if α ∈ letCand S τ then σ'.row α else .var α,
+     fun α => if α ∈ letCand S τ then σ'.lab α else .var α⟩
+  have hag : ∀ α ∈ letCand S τ, χ.ty α = σ'.ty α ∧ χ.row α = σ'.row α ∧ χ.lab α = σ'.lab α :=
+    fun α h => by simp [χ, h]
+  refine ⟨(τ.applySubst S.subst).applySubst χ, χ,
+    ⟨fun α h => if_neg h, fun α h => if_neg h, fun α h => if_neg h⟩, fun st hst => ?_, rfl⟩
+  obtain ⟨p, hp, rfl⟩ := List.mem_map.mp hst
+  rw [Stump.dischargeEquiv_iff_holds]
+  have e : Stump.at χ ⟨p.stump.row.applySubst S.subst, p.stump.label.applySubst S.subst,
+      p.stump.res.applySubst S.subst⟩ = p.stump.at σ' := by
+    simp only [Stump.at]
+    congr 1
+    · rw [Row.applySubst_congr _ (fun α hα => hag α (mem_letCand_parked hp (.inl hα))), hab.row]
+    · rw [Key.applySubst_congr _ (fun α hα =>
+        (hag α (mem_letCand_parked hp (.inr (.inr hα)))).2.2), hab.key]
+    · rw [Ty.applySubst_congr _ (fun α hα => hag α (mem_letCand_parked hp (.inr (.inl hα)))),
+        hab.ty]
+  rw [e]
+  rcases hk σ' (hab'.sat hc') p hp with ⟨q, hq, hqs⟩ | hd
+  · rw [← hqs, ← Stump.at_read]
+    exact Stump.dischargeEquiv_iff_holds.mp (hdis _ (List.mem_map.mpr ⟨q, hq, rfl⟩))
+  · exact Stump.dischargeEquiv_iff_holds.mp hd
+
 /-- ⊢  **ALGORITHM SOUNDNESS, TOP-LEVEL SCHEMES — `RunQSound`.** Every instance
 of the scheme a run answers types the program in the empty context, and the
 scheme has an instance. -/
 theorem runQSound {C : Type} {constTy : Sig B C} : RunQSound B C constTy := by
-  rintro e σ ⟨τ, S₁, S₂, hinf, hmer, hsp, rfl⟩
+  rintro e σ ⟨τ, S₁, S₂, S₃, hinf, hmer, rfl, hkg, hsp⟩
   have c₁ := Infer.clean hinf Sol.clean_nil
   obtain ⟨k₁₂, c₂, x₁₂, -⟩ := hmer.keeps c₁
   have q₂ : S₂.Quiescent := hmer.quiescent (Infer.quiescent_of_nil hinf rfl)
@@ -444,25 +510,9 @@ theorem runQSound {C : Type} {constTy : Sig B C} : RunQSound B C constTy := by
         exact Stump.dischargeEquiv_iff_holds.mp (hdis _ (List.mem_map.mpr ⟨q, hq, rfl⟩))
       · exact Stump.dischargeEquiv_iff_holds.mp hd
   · ---------------------------------------------- the scheme has an instance
-    have hcand : ∀ p ∈ S₂.parked, ∀ α, α ∈ (p.stump.row.applySubst S₂.subst).ftv ∨
-        α ∈ (p.stump.res.applySubst S₂.subst).ftv ∨
-        α ∈ (p.stump.label.applySubst S₂.subst).ftv → α ∈ letCand S₂ τ := by
-      intro p hp α h
-      unfold letCand
-      rw [List.mem_eraseDups]
-      refine List.mem_append_right _ (List.mem_flatMap.mpr ⟨p, hp, ?_⟩)
-      rcases h with h | h | h <;> simp [h]
-    obtain ⟨τ', h⟩ := LetResults.inhabited τ
-      ⟨fun p hp δ hδ => hcand p hp δ (.inr (.inl hδ)), hsp⟩
-      (fun p hp => (q₂ p hp).mem_ftv.elim (fun h => hcand p hp _ (.inl h))
-        (fun h => hcand p hp _ (.inr (.inr h))))
-      q₂ (TySubst.id B) id (fun _ _ _ _ h => h)
-      (fun p hp γ hγ hn β hβ hm => by
-        simp only [TySubst.id, Key.ftv, List.mem_singleton] at hβ
-        subst hβ
-        exact hn (by simpa using hm))
-    rw [QScheme.readAt_id] at h
-    exact ⟨τ', h⟩
+    obtain ⟨k₂₃, -, x₂₃, -⟩ := hkg.keeps c₂
+    exact inhabited_of_ext c₂ k₂₃ x₂₃ (hkg.keeps c₂).2.1 τ
+      (top_inhabited (hkg.quiescent q₂) hsp τ)
 
 --------------------- ≈-EQUAL HITS ON ONE RESULT ------------------------------
 -- Two constraints on the SAME result variable whose lookups find ≈-equal but
