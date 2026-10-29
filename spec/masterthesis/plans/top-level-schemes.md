@@ -1,6 +1,6 @@
 # Top-Level Schemes
 
-Branch `feat/top-level-schemes`, worktree `~/coding/garnix-wt/top-level-schemes` (not created yet).
+Branch `feat/top-level-schemes`, worktree `~/coding/garnix-wt/top-level-schemes`. Status (2026-10-29): M0-M9 done, M10 spec done, text open.
 State reports: `typesystems/feature-state.md` § Idea: Top-level schemes (main).
 Spec: `typesystems/mini-nix.typ` (main). No draft file; the thesis passages are listed under Text.
 
@@ -112,8 +112,8 @@ Row 1 would be rejected under D1 without a fix. The Nix shape is common: `pkgs.l
 - M6 witnesses: `runF_selEx_principal` (answer ≅ selQ, `Principal` transported along the renaming), F-hit witness (both instances), `spentEx` (fill instance), `{β} → ★` as the D-? instance
 - M7 switch `Run := RunQ`; delete `Materialize(s)`, `Finalize(s)`, their F-functions and lemmas; update consumers (Files); green, no sorry
 - M8 merge at A-let: a premise of `Infer.letE` on S₁, before ᾱ is chosen (about ten proofs case on `letE`; `letCase` carries the merged state via `Merges.keeps`). The D5 table's row 2 stops clashing
-- M9 only if union closure holds: key guess at A-let. First prove that "a witness exists after the key guess in a copy" is closed under union (`LetAdmissible.union`); if not, stop and report. Then `let f = r: a: r.${a} c` generalizes
-- M10 spec `mini-nix.typ`, then the thesis passages with the user (read `text/write-plan.md` first)
+- M9 (done, syntactic: `LetSpent` reads a key variable of ᾱ as the label `${κ}`) only if union closure holds: key guess at A-let. First prove that "a witness exists after the key guess in a copy" is closed under union (`LetAdmissible.union`); if not, stop and report. Then `let f = r: a: r.${a} c` generalizes
+- M10 spec `mini-nix.typ` (done: M-merge, G-solve, Entry), then the thesis passages with the user (read `text/write-plan.md` first)
 
 
 # Files

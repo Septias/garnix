@@ -18,31 +18,13 @@
 
 ## 03 Metatheory
 
-- [ ] **S5 Origin of ★ and what safety says**.
-  - `03:17-18` "We only admit uncertainty in lookups" (+ PROF), `00:55` "constrained way" and `02:40` "fallback for the algorithmic implementation" are true of inference but false of ⊢: T-★-intro is unrestricted, adds declarative typings, and inference never uses it.
-  - → `03:18`: "★ arises from T-sel-★, T-sel-⊥ and T-★-intro. Since ★ has no elimination form, a typed program can only go wrong at a selection." Narrow 00 and 02 accordingly.
-  - Progress allows ↯ for every program, and nothing ties a lookup error to a ★-typed selection. Add the cheap corollary that backs the new sentence: a derivation without T-sel-★/T-sel-⊥ never produces ↯.
-- [ ] **S7 Principality is forced by T-sel-⊥** [cf S7; cr A2].
-  - `03:88-89` "forced in our system": add the P&X contrast → "…since the ★-typings of T-sel-⊥ and T-sel-★ must be covered. Paszke and Xie have the principal plain type {(l: δ | ρ)} → δ for `x: x.l`, because they reject {ε} → ★."
-  - `00:69` and `11:6` need the qualifier "given that definite misses are typed at ★".
-  - Say that the definition of "principal" is non-standard (coverage up to ≼, instance closure, inhabitation) and relate it to Damas-Milner.
-  - It is a result about one term, not a principal-types theorem for the system.
-- [ ] **W9 Coverage** `03:55` (also a placeholder) [cf W9; cr C] → "Coverage cannot ask that every typing is an instance. T-★-intro also types `x: x.l` at ★, and T-eq at every ≈-variant, but no instance of selQ is ★. Coverage therefore asks only for an instance that is at least as precise."
-- [ ] **Subst Discharge is not closed under substitution** [cr A3]. D-? pins δ to ★. A later θ′ can make the lookup hit, and the instance is gone. Jones's qualified types require entailment to be closed under substitution; this is the real reason @lem-subst needs "θ maps schemes". Say this, and say which θ satisfy the hypothesis. Otherwise @lem-subst rests on an assumption that is never discharged.
 - [ ] `03:26` precision order ⊑: cite gradual precision (Siek et al. 2015, already in the bib) [cr B].
-- [ ] `03:39`, `03:43`, `03:65` "rigid" and @lem-rigid "drives" → ★.
+- [ ] **Subst Discharge is not closed under substitution** [cr A3]. D-? pins δ to ★. A later θ′ can make the lookup hit, and the instance is gone. Jones's qualified types require entailment to be closed under substitution; this is the real reason @lem-subst needs "θ maps schemes". Say this, and say which θ satisfy the hypothesis. Otherwise @lem-subst rests on an assumption that is never discharged.
+
 
 ## 04 Unification
 
-- [ ] Adjust mentioning of "forced"
-
-- [ ] **I Spines and Windows** `04:53` [cf I]: rename the moved trace-monoid section, move spine and window definitions into it, admit the mismatch with Nix (your comment `04:246`, also the `04:247` placeholder). One row-unification figure instead of two (your comment `04:111`).
-- [ ] `04:110` your comment: are the reverse arrows correct everywhere? [cf]
-- [ ] `04:12` "based upon the declarative system" → based on ≈; "mutually recursive" → "mutually recursively" [cr C].
-- [ ] `04:14` "clash definitionally" → "head constructors differ". `04:14` also conflates recursive bindings with recursive types: the occurs check is about μ-types, and monomorphic letrec needs none [cr A10, C].
-- [ ] `04:51` "returns tries to return a substition" [cr C]. "Rigid" → ★.
-- [ ] Notation [cr C]: (l: T) (`04:55`); rv(α) → rv(s) (`04:244`).
-- [ ] `04:357` tail mechanism → K.
+- [ ] Blocked: Adjust mentioning of "forced"
 
 ## 05 Inference
 
