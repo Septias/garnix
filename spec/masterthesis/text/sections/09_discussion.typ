@@ -4,24 +4,24 @@
 
 == The Idioms of the Introduction <sec-idioms>
 
-We return to the three idioms of @nix-idioms. The types below are the results of the inference algorithm of @inference, computed by the Lean implementation, with variables renamed. The programs are adapted slightly: free names become parameters (mk, opt, cond), literals are written c, the overlay updates hello instead of copying foo into fields, and the override applies a parameter app where @nix-idioms appends `++ [ extra ]`.
+We return to the three idioms of @nix-idioms. The types below are the results of the inference algorithm of @inference, computed by the Lean implementation, with variables renamed. Every variable of an answer is bound, and the ∀ is left implicit. The programs are adapted slightly: free names become parameters (mk, opt, cond), literals are written c, the overlay updates hello instead of copying foo into fields, and the override applies a parameter app where @nix-idioms appends `++ [ extra ]`.
 
 
 #example(name: [Overlay])[
   $
     #raw("self: super: { hello = super.hello // { meta = { broken = c; }; }; }") \
-    quad : quad α → {"hello": {ρ₁} | ρ₂} → {"hello": {"meta": {"broken": 𝓫} | ρ₁}}
+    quad : quad ⟨ρ₂."hello" ↓ {ρ₁}⟩ ⇒ α → {ρ₂} → {"hello": {"meta": {"broken": 𝓫} | ρ₁}}
   $
-  The selection `super.hello` parks a stump on the row of super, and the concatenation spends its promise on a record ${ρ₁}$. Finalization materializes the field $"hello": {ρ₁}$ in the row of super. The result is faithful to the semantics of `//`: the new meta shadows any meta of `super.hello`, and every other field of `super.hello` survives in ρ₁.
+  The selection `super.hello` parks a stump on the row of super, and the concatenation spends its promise on a record ${ρ₁}$. The stump stays a qualifier of the answer. The instance that places the field $"hello": {ρ₁}$ in the row of super is the typing $α → {"hello": {ρ₁} | ρ₂} → {"hello": {"meta": {"broken": 𝓫} | ρ₁}}$. The result is faithful to the semantics of `//`: the new meta shadows any meta of `super.hello`, and every other field of `super.hello` survives in ρ₁.
 ] <ex-idiom-overlay>
 
 // PROF: Every nixpkgs file is a top-level function like this; say so in the intro.
 #example(name: [Override])[
   $
     #raw("mk: app: args: mk (args // { buildInputs = app args.buildInputs; })") \
-    quad : quad ({"buildInputs": β | ρ} → γ) → (★ → β) → {ρ} → γ
+    quad : quad ⟨ρ."buildInputs" ↓ δ⟩ ⇒ ({"buildInputs": β | ρ} → γ) → (δ → β) → {ρ} → γ
   $
-  The argument handed to mk carries the new buildInputs in front of the row of args, so it shadows the old one. The selection `args.buildInputs` cannot be answered, since the row of args is open, and it is unspent, since app accepts any argument. Finalization therefore pins it to ★, and the domain of app becomes ★. The type ★ → β leaves app little freedom: since ★ has no elimination form, app can only ignore its argument or pass it on, as `y: y` does at β = ★. Passing `xs: xs ++ [ extra ]` as app clashes, since ★ cannot be appended. Under a `let` the stump would instead travel into the scheme and be answered at each use, as in @principality.
+  The argument handed to mk carries the new buildInputs in front of the row of args, so it shadows the old one. The selection `args.buildInputs` cannot be answered, since the row of args is open, and it is unspent, since app accepts any argument. The stump therefore stays a qualifier of the answer, and the domain of app is its result δ, which each use answers from the record it passes as args. At a use whose args has no buildInputs, δ is ★, and the type ★ → β leaves app little freedom: since ★ has no elimination form, app can only ignore its argument or pass it on, as `y: y` does at β = ★. Passing `xs: xs ++ [ extra ]` as app then clashes, since ★ cannot be appended.
 ] <ex-idiom-override>
 
 #example(name: [Conditional extension])[
@@ -44,7 +44,7 @@ _G1 (No source changes)._ Inference requires no annotations. Every construct of 
 _G2 (No semantic change)._ The analysis is purely static. It inserts no casts and does not instrument the program, so evaluation is unchanged, and the goal is met by construction. The price is carried by the metatheory: progress holds only up to lookup errors ↯ (@type-safety), which the analysis cannot prevent. In MacroNix, an error is also a failed assertion or a failing builtin, such as `head []` or a division by zero.
 
 
-_G3 (Totality)._ This goal is met in part. Uncertainty that originates in a lookup is absorbed: a selection that cannot be answered is typed at ★, and inference defers it rather than failing. Nothing is guaranteed about the value of such a selection, but since ★ has no elimination form, no typed code consumes it. A program that runs is nevertheless rejected in three situations, and in a fourth with first-class labels. First, ★ has no elimination form and no typing rule converts it to another type, so a program that applies ★, selects from it or concatenates it has no typing, even in the declarative system. The motivating example, extended by one selection,
+_G3 (Totality)._ This goal is met in part. Uncertainty that originates in a lookup is absorbed: inference defers a selection that cannot be answered rather than failing, keeps it as a qualifier of the answer, and a use that leaves it unanswered types it at ★. Nothing is guaranteed about the value of such a selection, but since ★ has no elimination form, no typed code consumes it. A program that runs is nevertheless rejected in three situations, and in a fourth with first-class labels. First, ★ has no elimination form and no typing rule converts it to another type, so a program that applies ★, selects from it or concatenates it has no typing, even in the declarative system. The motivating example, extended by one selection,
 
 ```nix
 { "1759190400" = { m = 1; }; }.${toString builtins.currentTime}.m
@@ -52,7 +52,7 @@ _G3 (Totality)._ This goal is met in part. Uncertainty that originates in a look
 
 receives no type, since the dynamic selection under a string key yields ★ by T-sel-dyn-𝓫 (@fc-typing) and ★ cannot be selected from. Second, inference reports a clash on some programs that the declarative system types (@incompleteness-inference), since a clash certifies the absence of a unifier, not the absence of a typing. Third, inference rejects every stuck row equation. Uncertainty that originates in an equation is not absorbed, since the equation lies between an argument and the domain of the function that consumes it (@sec-gradual). Fourth, a key that is used as a label before it is known to be a string is a type error (@sec-fc-labels). The conditional of MacroNix adds instances of the first two situations, since it unifies its branches. For a record as with an integer field z and no field a, `if as ? a then as.a else as.z` clashes: the definite miss `as.a` has type ★ by T-sel-⊥, and ★ does not unify with `int`. The declarative system types it at ★ by T-★-intro on the else branch. The conditional extension of @ex-idiom-cond has no typing at all.
 
-_G4 (Efficient inference)._ The algorithm is designed for this goal but not yet measured against it. Inference stays first-order and never backtracks: there is no constraint solver and no search over alternative typings. Row unification works modulo ≈, but every move of the row pass is forced, and a parked stump is re-examined only when its blocker is solved. These are structural reasons to expect the analysis to scale. Termination is proved, but no complexity bound. Since the algorithm extends Hindley-Milner inference, it inherits its exponential worst case, and the analysis has not yet been run on nixpkgs.
+_G4 (Efficient inference)._ The algorithm is designed for this goal but not yet measured against it. Inference stays first-order and never backtracks over typings: there is no constraint solver and no search over alternative typings. The inhabitation check of the entry point may try several labels for a key, but only to find a witness, and it never changes the answer (@inference). Row unification works modulo ≈, but every move of the row pass is forced, and a parked stump is re-examined only when its blocker is solved. These are structural reasons to expect the analysis to scale. Termination is proved, but no complexity bound. Since the algorithm extends Hindley-Milner inference, it inherits its exponential worst case, and the analysis has not yet been run on nixpkgs.
 
 // TODO(structure): admissions (daily 28.10): ★ has no eliminators; ≈ keeps shadowed fields, unlike Nix's set-like records, and the faithful relation is not cancellative. Here, after Incompleteness, or in the Conclusion.
 == Outlook: Towards Gradual Typing <sec-gradual>

@@ -72,7 +72,7 @@ $ "selQ" quad = quad ∀(β: "Row", δ: "Type"). #h(0.3em) ⟨β.l ↓ δ⟩ ⇒
   selQ is principal for `x: x.l` in the empty context. Moreover, selQ is greatest among the schemes whose instances are all typings of `x: x.l`: every instance τ of such a scheme is matched by an instance τ′ of selQ with $τ′ ≼ τ$.
 ] <thm-selq>
 
-Discharge pins δ to the lookup's verdict, so ${ε} → {ε}$ is excluded. One binding then serves incompatible uses.
+Discharge pins δ to the lookup's verdict, so ${ε} → {ε}$ is excluded. One binding then serves incompatible uses. The inference algorithm of @inference answers `x: x.l` with a scheme that has the instances of selQ, so its answer is principal (`runF_selEx_principal` in Lean).
 
 #corollary(
   name: [Qualified schemes type strictly more],

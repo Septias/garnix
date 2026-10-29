@@ -194,7 +194,7 @@ It solves $(l: τ) scripts(≐)_r (\${α}: τ′)$ with $[α ≔ l]$ and $(\${α
 === Inference
 
 #let fc_infer = figure(
-  caption: [Algorithmic rules for first-class labels, extending @inference-rules. A-sel-dyn-⊥ and A-sel-dyn-★ share the premises of A-sel-dyn.],
+  caption: [Algorithmic rules for first-class labels, extending @inference-rules. A-sel-dyn-⊥ and A-sel-dyn-\? share the premises of A-sel-dyn.],
   flexbox(
     derive("A-lab", (), $Γ; S ⊢ \"l\" ⇒ ⌊l⌋; S$),
     derive(
@@ -212,7 +212,7 @@ It solves $(l: τ) scripts(≐)_r (\${α}: τ′)$ with $[α ≔ l]$ and $(\${α
       $Γ; S ⊢ e₁.\${e₂} ⇒ ★; S₄$,
     ),
     derive(
-      "A-sel-dyn-★",
+      "A-sel-dyn-?",
       ($…$, $(⟦S₄⟧ρ).(⟦S₄⟧ℓ) ↓ #h(0.2em) ? "on" α$, $"fresh" δ: "Type"$),
       $Γ; S ⊢ e₁.\${e₂} ⇒ δ; S₄ #st_park ⟨α ⊳ ρ.ℓ ↓ δ⟩$,
     ),
@@ -243,14 +243,14 @@ It solves $(l: τ) scripts(≐)_r (\${α}: τ′)$ with $[α ≔ l]$ and $(\${α
 )
 #fc_infer <fc-inference>
 
-@fc-inference gives the algorithmic rules. Dynamic selection follows A-sel, A-sel-⊥ and A-sel-★ of @inference-rules. The key is unified with the singleton type of a fresh label variable ℓ, and the keyed lookup is asked about the row and the key as solved so far. When it answers $?$, the stump is parked on its blocker, which may now be a label variable: in `a: {l = c; m = {}}.${a}` the stump waits on the key and not on a row. A-rcd-dyn performs no lookup and parks nothing. It is shaped like A-λ-E: the key is unified with $⌊ℓ⌋$ for a fresh ℓ, and the keyed field records ℓ.
+@fc-inference gives the algorithmic rules. Dynamic selection follows A-sel, A-sel-⊥ and A-sel-\? of @inference-rules. The key is unified with the singleton type of a fresh label variable ℓ, and the keyed lookup is asked about the row and the key as solved so far. When it answers $?$, the stump is parked on its blocker, which may now be a label variable: in `a: {l = c; m = {}}.${a}` the stump waits on the key and not on a row. A-rcd-dyn performs no lookup and parks nothing. It is shaped like A-λ-E: the key is unified with $⌊ℓ⌋$ for a fresh ℓ, and the keyed field records ℓ.
 
 Wake-up and saturation are unchanged over keyed lookups, so solving a key wakes the stumps blocked on it: applying the selector above to $\"l\"$ solves ℓ, and the stump hits. A-sel-dyn-𝓫 and A-rcd-dyn-𝓫 apply when the key's type is already a base type under the current solution. They answer ★ instead of unifying 𝓫 with $⌊ℓ⌋$. The test is deliberately restricted to a definite base type. A key whose type is still a variable is unified with $⌊ℓ⌋$ as before, so in `(a: {l = c}.${a}) c` the key becomes a label at the selection and the application clashes. Answering ★ for every lookup keyed by such a variable once the conflict appears would be sound by the same rules, but the result would depend on the order in which the two uses of the key are met.
 
-Finalization needs no new premise. F-★ solves the promised δ with ★ and never binds a label variable, so the blockers of other stumps survive it untouched and no key ever becomes ★. A-let generalizes keyed stumps under the side conditions of @generalization, read over rows, keys and results. A spent promise is materialized only when its key is a literal label and it is blocked on its row. A spent promise blocked on its key has no row to extend, and it remains unanswered (@incompleteness-inference).
+The entry point needs no new premise. A keyed stump that is still pending stays a qualifier of the answer, so no key ever becomes ★. A-let generalizes keyed stumps under the side conditions of @generalization, read over rows, keys and results; the fillability test reads a key variable ℓ of the binding as the label `${ℓ}`. A spent stump blocked on its key therefore keeps its qualifier: `r: a: (r.${a}) c` answers $∀ρ ℓ β. ⟨ρ.ℓ ↓ 𝓫 → β⟩ ⇒ {ρ} → ⌊ℓ⌋ → β$, and `let f = r: a: r.${a} c` generalizes f to the same scheme.
 
 Concatenation and computed labels interact as NixLang programmers expect. In `((n: r: r // { ${n} = c; }) "x" { x = {}; }).x`, the keyed field is placed in front of the row of r by T-conc, the application solves the key to x, and the selection yields $𝓫_c$: the computed field shadows the older one.
 
 === Costs
 
-The extension has three costs. Labels and strings are separate: a label literal has the singleton type $⌊l⌋$ and cannot be used as a string, and a value used both as a key and as a string clashes. A key of base type is typed at ★ only when its type is known at the selection; a key that becomes a string later, as in `(a: {l = c}.${a}) c`, is rejected by U-clash. Keyed fields are barriers, so beyond the single-field case of U-key-pin a keyed field against a literal field and two keyed fields under different unknown keys are stuck. A spent promise blocked on its key is not materialized, which leaves inference incomplete on programs the declarative system types. The first cost follows from giving labels singleton types, the second from the absence of negative information about keys, and the third from the absence of top-level qualified types.
+The extension has two costs. Labels and strings are separate: a label literal has the singleton type $⌊l⌋$ and cannot be used as a string, and a value used both as a key and as a string clashes. A key of base type is typed at ★ only when its type is known at the selection; a key that becomes a string later, as in `(a: {l = c}.${a}) c`, is rejected by U-clash. Keyed fields are barriers, so beyond the single-field case of U-key-pin a keyed field against a literal field and two keyed fields under different unknown keys are stuck. The first cost follows from giving labels singleton types, and the second from the absence of negative information about keys.
