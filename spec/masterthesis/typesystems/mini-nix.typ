@@ -524,8 +524,8 @@ fresh α: Type   Γ·(x: α); S ⊢ e ⇒ τ; S′
 Γ; S ⊢ (ξ₁ | ξ₂) ⇒ (ρ₁ | ρ₂); S₂
 
 
-Γ; S ⊢ e₁ ⇒ τ₁; S₀   S₀ ⊢ Δ₀ ⇝ₘ\* S₁   κ̄ = S₁(ᾱ)   Δ₁ ~ Δ_q ⊎ Δ_Γ   ᾱ ∩ ftv(⟦S₁⟧Γ) = ∅   ᾱ ∩ dom(S₁) = ∅
-Δ_q ∩ Δ = ∅   results(Δ_q) at S₁ ok over ᾱ   ᾱ ∩ ftv(⟦S₁⟧Δ_Γ) = ∅   Δ_q independent at S₁
+Γ; S ⊢ e₁ ⇒ τ₁; S₀   S₀ ⊢ Δ₀ ⇝ₘ\* S₁   κ̄ = S₁(ᾱ)   Δ₁ ~ Δ_q ⊎ Δ_Γ   ᾱ ∩ ftv(⟦S₁⟧(Γ, Δ_Γ)) = ∅
+Δ_q ∩ Δ = ∅   ftv(⟦S₁⟧results(Δ_q)) ⊆ ᾱ   Δ_q fillable at S₁
 Γ·(x: ∀(ᾱ: κ̄). ⟦S₁⟧Δ_q ⇒ ⟦S₁⟧τ₁); S₁ ∖ Δ_q ⊢ e₂ ⇒ τ₂; S₂
 --------------------------------------------------------------------------------------------- A-let
 Γ; S ⊢ let x = e₁ in e₂ ⇒ τ₂; S₂
@@ -540,26 +540,25 @@ fresh α: Type   Γ·(x: α); S ⊢ e ⇒ τ; S′
 //   invented at a known sort (A-var's draw records one, see there)
 // - Δ₁ ~ Δ_q ⊎ Δ_Γ: a PARTITION up to order. Δ₁ is ordered by parking time, and
 //   a prefix split could not generalize a stump parked after a Γ-stump
-// - ᾱ ∩ ftv(⟦S₁⟧Γ) = ∅, per variable of Γ and at both sorts: Γ-freshness was
-//   MISSING and `λy. let z = y in z` inferred a → b
-// - ᾱ ∩ dom(S₁) = ∅: nothing already solved is generalized
-// - Δ_q ∩ Δ = ∅: Δ_q is e₁'s OWN. Without it `{a = λx. x.l, b = let y = c in c}`
+// - ᾱ ∩ ftv(⟦S₁⟧(Γ, Δ_Γ)) = ∅ (`fresh`), per variable and at both sorts. Γ's
+//   half was once MISSING and `λy. let z = y in z` inferred a → b; Δ_Γ's half
+//   makes what stays parked read the same at every instance
+// - Nothing solved is generalized, with no premise: a solved variable occurs in
+//   nothing read at S₁
+// - Δ_q ∩ Δ = ∅ (`own`): Δ_q is e₁'s OWN. Without it `{a = λx. x.l, b = let y = c in c}`
 //   files a's stump under y's unused scheme and nothing ever discharges it
-// - results ok at S₁: each generalized stump's result, read at S₁, is a LINEAR
-//   PATTERN over ᾱ — a variable, or the type a spent promise was spent on, with
-//   records only as {β} and no variable twice — and distinct stumps share no
-//   result variable. A pattern lets an instance be corrected to meet each
-//   lookup's answer EXACTLY (≈ could reorder a record literal, which no
-//   re-choice of variables undoes). Reading at S₁, not raw, accepts
-//   `let h = λy. g y`, where A-app aliases δ ≔ β
-//   A SPENT result must also be met at some instance (T-let's ∃ τ₁), by
-//   extending its blocker with the field (the witness, below): its key is literal,
-//   every stump on the same blocker is literally keyed and is it if it has its
-//   key, and no spent stump's blocker occurs in a spent result
-// - ᾱ ∩ ftv(⟦S₁⟧Δ_Γ) = ∅: what stays parked reads the same at every instance
-// - independent: no generalized stump's row or key, read at S₁, mentions a
-//   variable of another's result. Then an instance's constraints discharge one
-//   at a time. Nested selection `λx. (x.l).m` fails it: monomorphic let
+// - ftv(⟦S₁⟧results(Δ_q)) ⊆ ᾱ (`res`): a result, read at S₁, mentions only
+//   generalized variables, or each instance would pin a variable of the
+//   environment. Reading at S₁, not raw, accepts `let h = λy. g y`, where A-app
+//   aliases δ ≔ β
+// - Δ_q fillable at S₁ (`spent`, `LetSpent`): a SPENT result must be met at some
+//   instance (T-let's ∃ τ₁), by extending its blocker with the field (the
+//   witness, `LetResults.inhabited`). Every spent stump and every stump on its
+//   blocker has a literal key or a key variable of ᾱ other than the blocker,
+//   which the witness reads as the label ${κ}; a stump on that blocker with the
+//   same field name is spent alike (equal once type variables are ★); no stump
+//   of Δ_q waits on a key variable of a filled blocker; no spent blocker occurs
+//   in a spent result. Nested selection `λx. (x.l).m` passes
 //
 // ᾱ is CANONICAL (`greatestAlpha_spec`, lean/LetChoice.lean): admissible choices
 // are closed under union, so a GREATEST one exists, and `greatestAlpha` computes
@@ -938,7 +937,7 @@ f₁ ≐ᵣ f₂ ⇝ θ′ ∘ θ
 
 Γ ⊢ e₁: ⌊k⌋   Γ ⊢ e₂: τ
 -------------------------------- T-rcd-dyn
-Γ ⊢ { ${e₁} = e₂ }: {${k}: τ }
+Γ ⊢ { \${e₁} = e₂ }: {\${k}: τ }
 
 
 Γ ⊢ e₁: {ρ}   Γ ⊢ e₂: 𝓫
@@ -948,7 +947,7 @@ f₁ ≐ᵣ f₂ ⇝ θ′ ∘ θ
 
 Γ ⊢ e₁: 𝓫   Γ ⊢ e₂: τ
 --------------------------- T-rcd-dyn-𝓫
-Γ ⊢ { ${e₁} = e₂ }: ★
+Γ ⊢ { \${e₁} = e₂ }: ★
 // A computed key (a string in NixLang) answers ★. No type mentions the key,
 // so the Label sort stays free of ★
 
@@ -993,7 +992,7 @@ fresh κ: Label   S₃ ⊢ τ₂ ≐ ⌊κ⌋ ⇝! S₄   (⟦S₄⟧r).(⟦S₄
 
 Γ; S ⊢ e₁ ⇒ τ₁; S₁   Γ; S₁ ⊢ e₂ ⇒ τ₂; S₂   fresh κ: Label   S₂ ⊢ τ₁ ≐ ⌊κ⌋ ⇝! S₃
 ------------------------------------------------------------------------------------ A-rcd-dyn
-Γ; S ⊢ { ${e₁} = e₂ } ⇒ {${κ}: τ₂ }; S₃
+Γ; S ⊢ { \${e₁} = e₂ } ⇒ {\${κ}: τ₂ }; S₃
 // No lookup, so nothing parks. Shaped like A-app
 
 
@@ -1004,7 +1003,7 @@ fresh κ: Label   S₃ ⊢ τ₂ ≐ ⌊κ⌋ ⇝! S₄   (⟦S₄⟧r).(⟦S₄
 
 Γ; S ⊢ e₁ ⇒ τ₁; S₁   Γ; S₁ ⊢ e₂ ⇒ τ₂; S₂   ⟦S₂⟧τ₁ = 𝓫
 --------------------------------------------------------- A-rcd-dyn-𝓫
-Γ; S ⊢ { ${e₁} = e₂ } ⇒ ★; S₂ +W
+Γ; S ⊢ { \${e₁} = e₂ } ⇒ ★; S₂ +W
 // Only a DEFINITE base type: a key still typed by a variable is forced to ⌊κ⌋,
 // so (λa. {foo = c}.(a)) c clashes at the application
 
