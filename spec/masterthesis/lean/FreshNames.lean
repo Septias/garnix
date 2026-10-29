@@ -182,7 +182,7 @@ theorem nameReuse_shared_res :
       nrFinal.parked.map (·.stump.label) = [.lit "m", .lit "l"] :=
   ⟨rfl, rfl⟩
 
-/-- ⊢  **settling either one retired both** while K-hit, K-⊥, K-repark and F-★
+/-- ⊢  **settling either one retired both** while K-hit, K-⊥, K-repark and the old F-★
 filtered on `stump.res`. -/
 theorem nameReuse_filter_drops_both :
     nrFinal.parked.filter (·.stump.res != .var (n 6)) = [] := by

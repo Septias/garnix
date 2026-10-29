@@ -6,7 +6,7 @@
 --
 --   `inferSound`  (InferSoundA.lean + LetCase.lean) — the mutual induction,
 --                  over `QTypedA`, with parked stumps as typed assumptions;
---   `runSound`  (Finalization.lean).
+--   `runSound`  (RunSound.lean).
 --
 -- What stays here is what that proof still USES or what is a finding in its own
 -- right:
@@ -15,7 +15,7 @@
 --     `Wakes.dischargeEquiv`), which ParkedInv.lean consumes;
 --   * the plain-`QTyped` case lemmas, as the congruence and equation cases read
 --     without assumptions;
---   * the saturation witnesses (`fStarEx_*`) and the spent-promise witnesses
+--   * the saturation witnesses (`staleEx_*`) and the spent-promise witnesses
 --     (`spentEx_*`);
 --   * `QTypedC` / `InferSoundC`, only because `inferSoundC_false` refutes them.
 --
@@ -469,7 +469,7 @@ theorem infer_sound_var_step {B C : Type} {constTy : Sig B C} {Γ' : QCtx B}
 --     (λx. {a = x.l}) {l = c}
 --
 -- Inside the λ this is `selEx_infers` verbatim; the application then solves
--- `r ≔ (l: 𝓫)` through the arrow equation. That state is `fsS` below, and at it
+-- `r ≔ (l: 𝓫)` through the arrow equation. That state is `slS` below, and at it
 -- the lookup LANDS while the stump still says "blocked". The old F-★ sent δ to ★
 -- there, and the program came out `{a: ★}` where the declarative system says
 -- `{a: 𝓫}`.
@@ -477,135 +477,135 @@ theorem infer_sound_var_step {B C : Type} {constTy : Sig B C} {Γ' : QCtx B}
 -- WHAT CHANGED (Stage 1): `SolveTySat` / `WakesSat` — solve, then wake what the
 -- solution staled — replace bare `SolveTy` / `Wakes` in the A-rules, and
 -- `Infer.quiescent` proves every reachable state `SolverState.Quiescent`. So
--- `fStarEx_infers` below runs the same program to a state where the stump is
--- DISCHARGED at 𝓫, and `fStarEx_not_quiescent` names what was wrong with the old
+-- `staleEx_infers` below runs the same program to a state where the stump is
+-- DISCHARGED at 𝓫, and `staleEx_not_quiescent` names what was wrong with the old
 -- state.
 
-private def fStarEx : Expr Unit :=
+private def staleEx : Expr Unit :=
   .app (.lam "x" (.rcd (.field "a" (.sel (.var "x") "l"))))
        (.rcd (.field "l" (.con ())))
 
 -- the four names the run draws, in the order it draws them: the λ-binder, the
 -- record's row variable, the selection's result δ, and A-app's β.
-private def fsA : TyVar := natName 1
-private def fsR : TyVar := natName 2
-private def fsD : TyVar := natName 3
-private def fsB : TyVar := natName 4
+private def slA : TyVar := natName 1
+private def slR : TyVar := natName 2
+private def slD : TyVar := natName 3
+private def slB : TyVar := natName 4
 
-private def fsId : TySubst Unit := ⟨fun x => .var x, fun x => .var x, fun x => .var x⟩
+private def slId : TySubst Unit := ⟨fun x => .var x, fun x => .var x, fun x => .var x⟩
 
-private def fsS0 : SolverState Unit := ⟨Sol.nil, [], [], ⟨1⟩, []⟩
-private def fsSlam : SolverState Unit := ⟨Sol.nil, [], [], ⟨2⟩, [(fsA, .ty)]⟩
-private def fsSr : SolverState Unit := ⟨Sol.nil, [], [], ⟨3⟩, [(fsR, .row), (fsA, .ty)]⟩
-private def fsSol1 : Sol Unit := ⟨[(fsA, .rcd (.var fsR))], [], []⟩
-private def fsS2 : SolverState Unit := ⟨fsSol1, [], [], ⟨3⟩, [(fsR, .row), (fsA, .ty)]⟩
-private def fsS2' : SolverState Unit :=
-  ⟨fsSol1, [], [], ⟨4⟩, [(fsD, .ty), (fsR, .row), (fsA, .ty)]⟩
+private def slS0 : SolverState Unit := ⟨Sol.nil, [], [], ⟨1⟩, []⟩
+private def slSlam : SolverState Unit := ⟨Sol.nil, [], [], ⟨2⟩, [(slA, .ty)]⟩
+private def slSr : SolverState Unit := ⟨Sol.nil, [], [], ⟨3⟩, [(slR, .row), (slA, .ty)]⟩
+private def slSol1 : Sol Unit := ⟨[(slA, .rcd (.var slR))], [], []⟩
+private def slS2 : SolverState Unit := ⟨slSol1, [], [], ⟨3⟩, [(slR, .row), (slA, .ty)]⟩
+private def slS2' : SolverState Unit :=
+  ⟨slSol1, [], [], ⟨4⟩, [(slD, .ty), (slR, .row), (slA, .ty)]⟩
 
 /-- the stump A-sel-? parks: blocked on the record's row variable, writing δ. -/
-private def fsP : Parked Unit := ⟨fsR, ⟨.var fsR, .lit "l", .var fsD⟩⟩
+private def slP : Parked Unit := ⟨slR, ⟨.var slR, .lit "l", .var slD⟩⟩
 
-private def fsSp : SolverState Unit :=
-  ⟨fsSol1, [fsP], [], ⟨4⟩, [(fsD, .ty), (fsR, .row), (fsA, .ty)]⟩
-private def fsSb : SolverState Unit :=
-  ⟨fsSol1, [fsP], [], ⟨5⟩, [(fsB, .ty), (fsD, .ty), (fsR, .row), (fsA, .ty)]⟩
+private def slSp : SolverState Unit :=
+  ⟨slSol1, [slP], [], ⟨4⟩, [(slD, .ty), (slR, .row), (slA, .ty)]⟩
+private def slSb : SolverState Unit :=
+  ⟨slSol1, [slP], [], ⟨5⟩, [(slB, .ty), (slD, .ty), (slR, .row), (slA, .ty)]⟩
 
 /-- what A-app's arrow equation solves: β at the result record, and — the point
 — the stump's BLOCKER, at the row sort. -/
-private def fsApp : Sol Unit :=
-  ⟨[(fsB, .rcd (.sing "a" (.var fsD)))], [(fsR, .cat (.sing "l" (.base ())) .empty)], []⟩
+private def slApp : Sol Unit :=
+  ⟨[(slB, .rcd (.sing "a" (.var slD)))], [(slR, .cat (.sing "l" (.base ())) .empty)], []⟩
 
 /-- the state the equation leaves behind: blocker solved, stump still parked.
 Before saturation was wired into the A-rules this is where the run ENDED, which
 is what made the stale blocker reachable. -/
-private def fsS : SolverState Unit := fsSb.extend fsApp ⟨5⟩
+private def slS : SolverState Unit := slSb.extend slApp ⟨5⟩
 
 /-- ⊢  the lookup lands, on the substituted row — which is now the ONLY form
 there is, and the form `Wake` and `Quiescent` read it in. The
-companion `fStarEx_lands`, which stated the same landing "in ⟦S⟧ read as a
-context" via `Lookup.var`, has no counterpart: `.var fsR` on its own is `?`. -/
-theorem fStarEx_lands' :
-    Lookup ((Row.var fsR).applySubst fsS.subst) "l" (.found (.base ())) :=
+companion `staleEx_lands`, which stated the same landing "in ⟦S⟧ read as a
+context" via `Lookup.var`, has no counterpart: `.var slR` on its own is `?`. -/
+theorem staleEx_lands' :
+    Lookup ((Row.var slR).applySubst slS.subst) "l" (.found (.base ())) :=
   .catHit .hit
 
 /-- ⊢  **the state is not quiescent** — the stump's recorded blocker does not
 block its lookup any more. This is the staleness `Saturate` steps on, and the
 invariant `plans/inference-gap-analysis.md` §B says nothing enforced. -/
-theorem fStarEx_not_blocked :
-    ¬ LookupBlockedQ (fsP.stump.row.applySubst fsS.subst)
-        (fsP.stump.label.applySubst fsS.subst) fsP.blocker := by
+theorem staleEx_not_blocked :
+    ¬ LookupBlockedQ (slP.stump.row.applySubst slS.subst)
+        (slP.stump.label.applySubst slS.subst) slP.blocker := by
   intro hb
-  exact absurd (lookup_det (LookupQ.lab_iff.mp hb.toLookupQ) fStarEx_lands') (by simp)
+  exact absurd (lookup_det (LookupQ.lab_iff.mp hb.toLookupQ) staleEx_lands') (by simp)
 
-theorem fStarEx_not_quiescent : ¬ fsS.Quiescent := by
+theorem staleEx_not_quiescent : ¬ slS.Quiescent := by
   intro hq
-  exact fStarEx_not_blocked (hq fsP (by simp [fsS, fsSb, SolverState.extend]))
+  exact staleEx_not_blocked (hq slP (by simp [slS, slSb, SolverState.extend]))
 
 /-- what K-hit writes once saturation runs: δ ≔ 𝓫, the stump discharged and
 dropped from Δ. -/
-private def fsHit : Sol Unit := ⟨[(fsD, .base ())], [], []⟩
-private def fsSfix : SolverState Unit :=
-  { fsS.extend fsHit ⟨5⟩ with
-      parked := (fsS.extend fsHit ⟨5⟩).parked.filter (·.stump != fsP.stump) }
+private def slHit : Sol Unit := ⟨[(slD, .base ())], [], []⟩
+private def slSfix : SolverState Unit :=
+  { slS.extend slHit ⟨5⟩ with
+      parked := (slS.extend slHit ⟨5⟩).parked.filter (·.stump != slP.stump) }
 
 /-- ⊢  **the run, with saturation in the rules.** The same closed program goes
 through `Infer`, and A-app's equation no longer leaves a stale stump behind: the
 `Saturate` step the rule now carries wakes it with K-hit, on the strength of
-`fStarEx_not_blocked`. -/
-theorem fStarEx_infers :
-    Infer (B := Unit) (C := Unit) (Sig.plain fun _ => ()) QCtx.empty fsS0 fStarEx (.var fsB)
-      fsSfix := by
-  refine Infer.app (S₁ := fsSp) (S₂ := fsSp) (S₂' := fsSb)
-    (τ₁ := .fn (.var fsA) (.rcd (.sing "a" (.var fsD))))
+`staleEx_not_blocked`. -/
+theorem staleEx_infers :
+    Infer (B := Unit) (C := Unit) (Sig.plain fun _ => ()) QCtx.empty slS0 staleEx (.var slB)
+      slSfix := by
+  refine Infer.app (S₁ := slSp) (S₂ := slSp) (S₂' := slSb)
+    (τ₁ := .fn (.var slA) (.rcd (.sing "a" (.var slD))))
     (τ₂ := .rcd (.sing "l" (.base ()))) ?_ ?_ rfl ?_
-  · refine Infer.lam (S₀ := fsSlam) rfl (Infer.rcd (InferRec.field ?_))
-    refine Infer.selUnk (τ := .var fsA) (S₁ := fsSlam) (S₁' := fsSr) (S₂ := fsS2)
-      (S₂' := fsS2') (r := fsR) (α := fsR) (δ := fsD) ?_ rfl ?_ ?_ rfl
+  · refine Infer.lam (S₀ := slSlam) rfl (Infer.rcd (InferRec.field ?_))
+    refine Infer.selUnk (τ := .var slA) (S₁ := slSlam) (S₁' := slSr) (S₂ := slS2)
+      (S₂' := slS2') (r := slR) (α := slR) (δ := slD) ?_ rfl ?_ ?_ rfl
     · exact Infer.var_mono rfl
         ⟨_, .nil, .done (SolverState.Quiescent.nil rfl)⟩
-    · exact ⟨_, ⟨5, fsSol1, ⟨3⟩, rfl, rfl⟩, .done (SolverState.Quiescent.nil rfl)⟩
+    · exact ⟨_, ⟨5, slSol1, ⟨3⟩, rfl, rfl⟩, .done (SolverState.Quiescent.nil rfl)⟩
     · exact .varFree
   · exact Infer.rcd (InferRec.field Infer.con)
-  · exact ⟨fsS, ⟨20, fsApp, ⟨5⟩, rfl, rfl⟩,
-      .step (p := fsP) (by simp [fsS, fsSb, SolverState.extend]) fStarEx_not_blocked
-        (Wake.hit (τ := .base ()) (LookupQ.lab_iff.mpr fStarEx_lands') ⟨5, fsHit, ⟨5⟩, rfl, rfl⟩)
+  · exact ⟨slS, ⟨20, slApp, ⟨5⟩, rfl, rfl⟩,
+      .step (p := slP) (by simp [slS, slSb, SolverState.extend]) staleEx_not_blocked
+        (Wake.hit (τ := .base ()) (LookupQ.lab_iff.mpr staleEx_lands') ⟨5, slHit, ⟨5⟩, rfl, rfl⟩)
         (.done (SolverState.Quiescent.nil rfl))⟩
 
 /-- ⊢  **and the refinement survives.** Δ is empty — the stump discharged, so
 the answer has no constraint — and the program's type reads
 `{a: 𝓫}` under the final solution, which is exactly what the declarative system
-gives it (`fStarEx_declarative`). The saturation step is what
+gives it (`staleEx_declarative`). The saturation step is what
 turns A-sel-?'s promise into the type the lookup found. -/
-theorem fStarEx_recovers :
-    fsSfix.parked = [] ∧
-      (Ty.var fsB).applySubst fsSfix.subst = .rcd (.sing "a" (.base ())) :=
+theorem staleEx_recovers :
+    slSfix.parked = [] ∧
+      (Ty.var slB).applySubst slSfix.subst = .rcd (.sing "a" (.base ())) :=
   ⟨rfl, rfl⟩
 
 /-- ⊢  what the stale state looked like: the stump still parked, its blocker
 SOLVED. Kept as the shape `Saturate` exists to rule out. -/
-theorem fStarEx_stale_blocker :
-    fsS.parked = [fsP] ∧
-      fsS.subst.row fsP.blocker = .cat (.sing "l" (.base ())) .empty :=
+theorem staleEx_stale_blocker :
+    slS.parked = [slP] ∧
+      slS.subst.row slP.blocker = .cat (.sing "l" (.base ())) .empty :=
   ⟨rfl, rfl⟩
 
 /-- ⊢  **the run, end to end.** The refinement example runs to an EMPTY Δ —
 saturation discharged the stump at 𝓫 — so the answer is the plain type
 `{a: 𝓫}`. -/
-theorem fStarEx_runs :
-    Run (B := Unit) (C := Unit) (Sig.plain fun _ => ()) fStarEx
+theorem staleEx_runs :
+    Run (B := Unit) (C := Unit) (Sig.plain fun _ => ()) staleEx
       ⟨[], [], .rcd (.sing "a" (.base ()))⟩ :=
-  ⟨_, fsSfix, fsSfix, fsSfix, fStarEx_infers, .refl _, rfl, .refl _, by decide⟩
+  ⟨_, slSfix, slSfix, slSfix, staleEx_infers, .refl _, rfl, .refl _, by decide⟩
 
 /-- ⊢  **the refinement, in types**: the declarative system gives the closed
-program `{a: 𝓫}`, which is what the run answers (`fStarEx_recovers`). -/
-theorem fStarEx_declarative :
-    QTyped (B := Unit) (C := Unit) (Sig.plain fun _ => ()) QCtx.empty fStarEx
+program `{a: 𝓫}`, which is what the run answers (`staleEx_recovers`). -/
+theorem staleEx_declarative :
+    QTyped (B := Unit) (C := Unit) (Sig.plain fun _ => ()) QCtx.empty staleEx
         (.rcd (.sing "a" (.base ()))) := by
   refine QTyped.qApp (τ₁ := .rcd (.sing "l" (.base ()))) ?_ ?_
   · refine QTyped.qLam (QTyped.qRcd (QTypedBody.field ?_))
     refine QTyped.qSel (ρ := .sing "l" (.base ())) ?_ .hit
     exact QTyped.qVar (σ := ⟨[], [], .rcd (.sing "l" (.base ()))⟩) rfl
-      ⟨fsId, ⟨fun _ _ => rfl, fun _ _ => rfl, fun _ _ => rfl⟩,
+      ⟨slId, ⟨fun _ _ => rfl, fun _ _ => rfl, fun _ _ => rfl⟩,
        (fun s hs => absurd hs List.not_mem_nil), rfl⟩
   · exact QTyped.qRcd (QTypedBody.field QTyped.qCon)
 
@@ -697,10 +697,10 @@ theorem spentEx_declarative :
   refine QTyped.qLam (QTyped.qLam (QTyped.qApp (τ₁ := .base ()) ?_ ?_))
   · refine QTyped.qSel (ρ := .sing "l" (.fn (.base ()) (.base ()))) ?_ .hit
     exact QTyped.qVar (σ := ⟨[], [], .rcd (.sing "l" (.fn (.base ()) (.base ())))⟩) rfl
-      ⟨fsId, ⟨fun _ _ => rfl, fun _ _ => rfl, fun _ _ => rfl⟩,
+      ⟨slId, ⟨fun _ _ => rfl, fun _ _ => rfl, fun _ _ => rfl⟩,
        (fun s hs => absurd hs List.not_mem_nil), rfl⟩
   · exact QTyped.qVar (σ := ⟨[], [], .base ()⟩) rfl
-      ⟨fsId, ⟨fun _ _ => rfl, fun _ _ => rfl, fun _ _ => rfl⟩,
+      ⟨slId, ⟨fun _ _ => rfl, fun _ _ => rfl, fun _ _ => rfl⟩,
        (fun s hs => absurd hs List.not_mem_nil), rfl⟩
 
 --------------------- WHAT A PARKED STUMP MEANS, AS A JUDGEMENT ---------------

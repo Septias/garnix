@@ -258,7 +258,7 @@ def upd : E := .lam "n" (.lam "r" (.cat (v "r") (rd (v "n") c)))
   = "⟨r6.${k7} ↓ t8⟩, ⟨r6 | ε.l ↓ (𝓫 → t5)⟩ ⇒ ({r6 | ε} → (⌊k7⌋ → {p: t5 | q: t8}))"
 #guard run (.lam "a" (.app (sd (rec1 "foo" (.lam "y" (v "y"))) (v "a")) c))
   = "⟨foo: (t2 → t2) | ε.${k4} ↓ (𝓫 → t6)⟩ ⇒ (⌊k4⌋ → t6)"
--- …and A-let generalizes a spent stump under a key variable too (M9): the
+-- …and A-let generalizes a spent stump under a key variable too: the
 -- witness reads κ as the label `${κ}` and fills the row with it, so f is
 -- polymorphic and its two uses, at two keys, both hit
 #guard run (.letE "f" (.lam "r" (.lam "a" (.app (sd (v "r") (v "a")) c)))
@@ -452,7 +452,7 @@ theorem keyEx_typed :
     QTyped σU QCtx.empty keyEx (.fn (.rcd (.sing "foo" (.fn b b))) (.fn (.lab (.lit "foo")) b)) :=
   (answerQ_sound keyEx_answerQ).1 _ keyA_inst
 
--- ## …and under a let (M9): f is generalized with its key variable, which the
+-- ## …and under a let: f is generalized with its key variable, which the
 -- witness reads as the label `${κ}`, so two uses at two keys both hit
 def keyLetEx : E :=
   .letE "f" (.lam "r" (.lam "a" (.app (sd (v "r") (v "a")) c)))

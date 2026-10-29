@@ -678,7 +678,7 @@ example : Unifies (sub [("β", row [f "l" b, rv "β'"]), ("α", row [f "m" b, rv
        | _ => false)
   | _ => false)
 
--- Example "Waking, re-parking and finalizing": `r: (x: x.l) (r ‖ {m = c})`.
+-- Example "Waking and re-parking": `r: (x: x.l) (r ‖ {m = c})`.
 -- After inference the stump is filed under ρ_r, the row of r (K-repark) …
 def reparkEx : E := lam "r" (app (lam "x" (sel (v "x") "l")) (cat (v "r") (rec1 "m" c)))
 #guard parkedOf reparkEx = ("({ρ1} → α2)", ["ρ1 ⊳ ⟨m: 𝓫 | ρ1 | ε.l ↓ α2⟩"])
@@ -753,7 +753,7 @@ example : Unifies (sub [("β", row [rv "β'", f "l" b]), ("α", row [rv "β'", f
 example := stuck_masks_mgu
 
 -- Generalized lets. A spent stump under a key variable is generalized with its
--- key (M9: the witness reads κ as the label `${κ}`): `let f = r: a: r.${a} c`
+-- key (the witness reads κ as the label `${κ}`): `let f = r: a: r.${a} c`
 -- binds f polymorphically, nothing stays in Δ_Γ …
 #guard schemeOf (lam "r" (lam "a" (app (sd (v "r") (v "a")) c))) =
   ("∀#1,#2,#3. ⟨ρ1.κ2 ↓ (𝓫 → α3)⟩ ⇒ ({ρ1} → (⌊κ2⌋ → α3))", 0)

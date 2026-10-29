@@ -68,8 +68,9 @@
 --     args and park as stumps. One call of h types; two calls clash, so A-let
 --     does not generalize the row of args. Minimal trigger: a spent lookup of x
 --     next to `z ? args.x` (h with only one of `x ? …` / `z ? args.x`, or with
---     an unused x, types). Presumably `LetSpent` (Infer.lean:819: stumps on one
---     blocker with one label must be spent alike), not confirmed. Incompleteness
+--     an unused x, types). Presumably `LetSpent` (stumps on one blocker with one
+--     field name must be spent alike, and the forced merge only identifies
+--     stumps on one spine), not confirmed. Incompleteness
 --     of A-let, not a type error.
 
 import InferFnTerm

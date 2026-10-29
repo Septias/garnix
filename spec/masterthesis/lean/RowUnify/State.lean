@@ -90,7 +90,7 @@ namespace MinimalCalculus
 
 ---------------------------- ⟦S⟧ AS A CONTEXT ----------------------------------
 
--- The variables S binds, at either sort (one namespace, minimal.lean:649).
+-- The variables S binds, at either sort (one namespace, `TyVar`, minimal.lean).
 def Sol.dom {B : Type} (s : Sol B) : List TyVar :=
   s.ty.map Prod.fst ++ s.row.map Prod.fst ++ s.lab.map Prod.fst
 

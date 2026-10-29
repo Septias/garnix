@@ -14,7 +14,7 @@ import InferSound
 import LetSound
 import InferSoundA
 import LetCase
-import Finalization
+import RunSound
 import FreshNames
 import LetChoice
 import InferFnTerm
@@ -654,7 +654,7 @@ info: 'MinimalCalculus.SolverState.Quiescent.wake_no_commit' depends on axioms: 
 
 -- ## THE TOP-LEVEL ENTRY JUDGEMENT  (Infer.lean)
 -- §B's last ✘ row, now a definition — and not an empty one. `λx. x.l` runs to
--- the scheme `∀β δ. ⟨β.l ↓ δ⟩ ⇒ {β} → δ`. `fStarEx_runs` is the complementary
+-- the scheme `∀β δ. ⟨β.l ↓ δ⟩ ⇒ {β} → δ`. `staleEx_runs` is the complementary
 -- shape, where saturation has already discharged the stump and the answer is a
 -- plain type.
 /-- info: 'MinimalCalculus.selEx_runs' depends on axioms: [propext] -/
@@ -667,7 +667,7 @@ info: 'MinimalCalculus.SolverState.Quiescent.wake_no_commit' depends on axioms: 
 -- lists as absent. It is now MAINTAINED: the A-rules take `SolveTySat` /
 -- `WakesSat` (solve, then wake what the solution staled) in place of bare
 -- `SolveTy` / `Wakes`, and every reachable state satisfies it. Before that
--- change this theorem was false, and `fStarEx_stale_blocker` below is the
+-- change this theorem was false, and `staleEx_stale_blocker` below is the
 -- counterexample.
 /-- info: 'MinimalCalculus.Infer.quiescent' depends on axioms: [propext] -/
 #guard_msgs in #print axioms Infer.quiescent
@@ -689,26 +689,26 @@ info: 'MinimalCalculus.SolverState.Quiescent.wake_no_commit' depends on axioms: 
 -- blocker — A-app's arrow equation writes `r ≔ (l: 𝓫)`, and `Infer.var` is the
 -- only rule that runs wake-up — so the final state carries a stump whose lookup
 -- LANDS. Guarding the chain: the run, the stale blocker, the regression.
-/-- info: 'MinimalCalculus.fStarEx_infers' depends on axioms: [propext] -/
-#guard_msgs in #print axioms fStarEx_infers
+/-- info: 'MinimalCalculus.staleEx_infers' depends on axioms: [propext] -/
+#guard_msgs in #print axioms staleEx_infers
 
-/-- info: 'MinimalCalculus.fStarEx_stale_blocker' does not depend on any axioms -/
-#guard_msgs in #print axioms fStarEx_stale_blocker
+/-- info: 'MinimalCalculus.staleEx_stale_blocker' does not depend on any axioms -/
+#guard_msgs in #print axioms staleEx_stale_blocker
 
-/-- info: 'MinimalCalculus.fStarEx_not_quiescent' depends on axioms: [propext] -/
-#guard_msgs in #print axioms fStarEx_not_quiescent
+/-- info: 'MinimalCalculus.staleEx_not_quiescent' depends on axioms: [propext] -/
+#guard_msgs in #print axioms staleEx_not_quiescent
 
 -- and the regression that says saturation FIXED it: the same closed program now
 -- runs to an empty Δ with the refinement intact, `{a: 𝓫}` — the declarative
 -- answer, not the `{a: ★}` the old F-★ made of the stale state.
-/-- info: 'MinimalCalculus.fStarEx_recovers' does not depend on any axioms -/
-#guard_msgs in #print axioms fStarEx_recovers
+/-- info: 'MinimalCalculus.staleEx_recovers' does not depend on any axioms -/
+#guard_msgs in #print axioms staleEx_recovers
 
-/-- info: 'MinimalCalculus.fStarEx_runs' depends on axioms: [propext] -/
-#guard_msgs in #print axioms fStarEx_runs
+/-- info: 'MinimalCalculus.staleEx_runs' depends on axioms: [propext] -/
+#guard_msgs in #print axioms staleEx_runs
 
-/-- info: 'MinimalCalculus.fStarEx_declarative' does not depend on any axioms -/
-#guard_msgs in #print axioms fStarEx_declarative
+/-- info: 'MinimalCalculus.staleEx_declarative' does not depend on any axioms -/
+#guard_msgs in #print axioms staleEx_declarative
 
 -- `? on α`: the blocker of an unknown lookup, which A-sel-? and K-repark both
 -- need and `Lookup` does not record. Sound, complete and deterministic.
@@ -956,7 +956,7 @@ info: 'MinimalCalculus.inferSound' depends on axioms: [propext, Classical.choice
 -/
 #guard_msgs in #print axioms inferSound
 
--- ## RunSound (Finalization.lean): every instance of the answer types the
+-- ## RunSound (RunSound.lean): every instance of the answer types the
 -- program, and the answer has one
 /--
 info: 'MinimalCalculus.runSound' depends on axioms: [propext, Classical.choice, Quot.sound]
@@ -1024,7 +1024,7 @@ info: 'MinimalCalculus.satStep_wf' depends on axioms: [propext, Classical.choice
 /-- info: 'MinimalCalculus.LetAdmissible.union' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in #print axioms LetAdmissible.union
 
--- M9: a spent stump under a generalized key variable is fillable (the witness
+-- A spent stump under a generalized key variable is fillable (the witness
 -- reads the key as the label `${κ}`); fillability only grows with ᾱ, which is
 -- what keeps admissible choices closed under union
 /-- info: 'MinimalCalculus.Parked.fillable_mono' depends on axioms: [propext, Quot.sound] -/
@@ -1114,7 +1114,7 @@ info: 'MinimalCalculus.run_typed' depends on axioms: [propext, Classical.choice,
 #guard_msgs in #print axioms run_typed
 
 
--- ## FC-LABELS  (LabelLookup.lean, Qualified.lean, LetCase.lean, Finalization.lean)
+-- ## FC-LABELS  (LabelLookup.lean, Qualified.lean, LetCase.lean, RunSound.lean)
 -- The keyed lookup and its metatheory, the headline scheme of λa. λx. x.(a), and
 -- the two facts the old top level and A-let needed of a key-blocked stump.
 

@@ -19,7 +19,7 @@
 --   * A-let — `greatestAlpha` (LetChoice.lean), the greatest admissible ᾱ.
 
 import LetChoice
-import Finalization
+import RunSound
 
 namespace MinimalCalculus
 
@@ -466,10 +466,10 @@ theorem pairsF_guesses {t : SolverState B → Parked B → Parked B → Bool} {n
       · exact .step (.solve hs) (.refl _)
 
 /-- the merge phase: every pair of stumps parked at S, once -/
-def mergeAllF (n : Nat) (S : SolverState B) : IRes (SolverState B) :=
+def mergesF (n : Nat) (S : SolverState B) : IRes (SolverState B) :=
   pairsF Parked.mergeable n S (pairsOf (S.parked.map (·.stump)))
 
-theorem mergeAllF_sound {n : Nat} {S S' : SolverState B} (h : mergeAllF n S = .ok S') :
+theorem mergesF_sound {n : Nat} {S S' : SolverState B} (h : mergesF n S = .ok S') :
     Merges S S' :=
   pairsF_merges h
 
@@ -521,13 +521,13 @@ theorem keyGuessesF_sound {n : Nat} :
       exact (keyGuessF_sound h₁).trans (keyGuessesF_sound h₂)
 
 /-- the witness search: guess the keys, then the witness merge on every pair -/
-def witnessF (n : Nat) (S : SolverState B) : IRes (SolverState B) := do
+def guessesF (n : Nat) (S : SolverState B) : IRes (SolverState B) := do
   let S₁ ← keyGuessesF n S (guessTargets S)
   pairsF Parked.alike n S₁ (pairsOf (S₁.parked.map (·.stump)))
 
-theorem witnessF_sound {n : Nat} {S S' : SolverState B} (h : witnessF n S = .ok S') :
+theorem guessesF_sound {n : Nat} {S S' : SolverState B} (h : guessesF n S = .ok S') :
     Guesses S S' := by
-  simp only [witnessF, IRes.bind_eq_ok] at h
+  simp only [guessesF, IRes.bind_eq_ok] at h
   obtain ⟨S₁, h₁, h₂⟩ := h
   exact (keyGuessesF_sound h₁).trans (pairsF_guesses h₂)
 
@@ -685,7 +685,7 @@ def inferF (constTy : Sig B C) (n : Nat) :
       pure (.rcd r.1, r.2)
   | Γ, S, .letE x e₁ e₂ => do
       let r₁ ← inferF constTy n Γ S e₁
-      let S₁ ← mergeAllF n r₁.2
+      let S₁ ← mergesF n r₁.2
       let ᾱ := greatestAlpha Γ S S₁ r₁.1
       inferF constTy n (Γ.bindScheme x (letScheme S₁ ᾱ (letQ S₁ ᾱ) r₁.1))
         { S₁ with parked := letG S₁ ᾱ } e₂
@@ -848,7 +848,7 @@ theorem inferF_sound {constTy : Sig B C} {n : Nat} :
   | Γ, S, S', .letE x e₁ e₂, τ, h => by
       simp only [inferF, IRes.bind_eq_ok] at h
       obtain ⟨⟨τ₁, S₁⟩, h₁, S₁', hm, h₂⟩ := h
-      exact .letE (inferF_sound h₁) (mergeAllF_sound hm) (greatestAlpha_spec Γ S S₁' τ₁).1
+      exact .letE (inferF_sound h₁) (mergesF_sound hm) (greatestAlpha_spec Γ S S₁' τ₁).1
         (inferF_sound h₂)
   | Γ, S, S', .prim p es, τ, h => by
       simp only [inferF] at h
@@ -937,8 +937,8 @@ Nothing is decided: a spent promise stays a constraint, and the run fails only
 when `LetSpent` finds no instance of the scheme -/
 def runF (constTy : Sig B C) (n : Nat) (e : Expr C) : IRes (QScheme B × SolverState B) := do
   let r ← inferF constTy n QCtx.empty runStart e
-  let S₂ ← mergeAllF n r.2
-  let S₃ ← witnessF n S₂
+  let S₂ ← mergesF n r.2
+  let S₃ ← guessesF n S₂
   if LetSpent S₃ (letCand S₃ r.1) S₃.parked then
     pure (letScheme S₂ (letCand S₂ r.1) S₂.parked r.1, S₂)
   else .fail "spent promise without witness"
@@ -951,7 +951,7 @@ theorem runF_sound {constTy : Sig B C} {n : Nat} {e : Expr C} {σ : QScheme B}
   split at h
   · next hs =>
     simp only [IRes.pure_eq_ok, Prod.mk.injEq] at h
-    exact ⟨τ, S₁, S₂, S₃, inferF_sound h₁, mergeAllF_sound h₂, h.1.symm, witnessF_sound h₃, hs⟩
+    exact ⟨τ, S₁, S₂, S₃, inferF_sound h₁, mergesF_sound h₂, h.1.symm, guessesF_sound h₃, hs⟩
   · cases h
 
 /-- ⊢  **what `runF` answers is sound**: every instance types the program, and

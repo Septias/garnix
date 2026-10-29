@@ -441,7 +441,7 @@ inductive Wakes {B : Type} [DecidableEq B] :
 --------------------- THE STATE INVARIANT, AND SATURATION ---------------------
 -- `plans/inference-gap-analysis.md` §B lists "every stump in Δ genuinely blocked
 -- on its recorded blocker under ⟦S⟧" among the invariants that nothing yet
--- states, let alone maintains. `fStarEx_stale_blocker` (InferSound.lean) shows
+-- states, let alone maintains. `staleEx_stale_blocker` (InferSound.lean) shows
 -- what its absence costs: A-app's arrow equation can solve a parked stump's
 -- BLOCKER, `Infer.var` is the only rule that runs wake-up, and the stump then
 -- sits in Δ with a stale annotation, waiting on a variable that is no longer
@@ -566,7 +566,7 @@ theorem SolverState.Quiescent.wake_no_commit {B : Type} [DecidableEq B]
 -- Two parked stumps can ask the SAME lookup: `x: {p = (x.l) c; q = x.l}` parks
 -- ⟨ρ.l ↓ 𝓫 → β⟩ and ⟨ρ.l ↓ δ⟩. At every instance one lookup has one answer, so
 -- every instance that discharges both sends their results to ≈-equal types
--- (`merge_forced`, Finalization.lean). Unifying the results is then a forced
+-- (`merge_forced`, RunSound.lean). Unifying the results is then a forced
 -- move, and it is what `LetSpent` needs: after it, the unspent stump is spent
 -- alike (`Parked.spentAlike`).
 
@@ -596,7 +596,7 @@ theorem Merges.quiescent {B : Type} [DecidableEq B] {S S' : SolverState B} :
 -- The answer is read at the merged state. Whether it has an instance is checked
 -- (`LetSpent`) at a SCRATCH COPY of that state, which may be changed at will:
 -- the change never reaches a reported type, so all it owes is that a witness
--- there is a witness of the answer (`inhabited_of_ext`, Finalization.lean). Any
+-- there is a witness of the answer (`inhabited_of_ext`, RunSound.lean). Any
 -- equation, solved and saturated, will do. `runF` makes two kinds:
 -- * a KEY GUESS κ ≔ ℓ. `LetSpent` reads a key variable on a row blocker as the
 --   label `${κ}` by itself; what it cannot meet is a spent stump blocked on its
@@ -1299,7 +1299,7 @@ def Run {B C : Type} [DecidableEq B] (constTy : Sig B C) (e : Expr C) (σ : QSch
 
 /-- **Algorithm soundness, top-level schemes**: every instance of the answer
 types the program, and the answer has one (conjuncts 1 and 2 of
-`QScheme.Principal`). PROVED: `runSound` (Finalization.lean). -/
+`QScheme.Principal`). PROVED: `runSound` (RunSound.lean). -/
 def RunSound (B C : Type) [DecidableEq B] (constTy : Sig B C) : Prop :=
   ∀ (e : Expr C) (σ : QScheme B), Run constTy e σ →
     (∀ τ, σ.Inst τ → QTyped constTy QCtx.empty e τ) ∧ ∃ τ, σ.Inst τ
@@ -1885,7 +1885,7 @@ end
 
 --------------------- EVERY REACHABLE STATE IS QUIESCENT ----------------------
 -- The invariant, earned. Before the A-rules took `SolveTySat` / `WakesSat` this
--- was FALSE, and `fStarEx_stale_blocker` (InferSound.lean) is the counterexample:
+-- was FALSE, and `staleEx_stale_blocker` (InferSound.lean) is the counterexample:
 -- A-app solved a parked stump's blocker and nothing re-checked. Now every rule
 -- that writes a solution ends in a saturation, so the conclusion is
 -- unconditional at exactly those rules — `SolveTySat.quiescent` — and the

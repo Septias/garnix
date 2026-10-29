@@ -58,7 +58,7 @@ inductive Expr (Const : Type) : Type where
 -- Label variables are a SORT of their own, like row variables: ⌊α⌋ is
 -- `.lab (.var α)`, a substitution sends α to a KEY (`TySubst.lab`), never to a
 -- type. So a key is always a label or a label variable — there is no junk key,
--- and nothing (unification, F-★, instantiation) can make a key ★ or 𝓫.
+-- and nothing (unification, instantiation) can make a key ★ or 𝓫.
 -- ⌊l⌋ is rigid and nullary, exactly like 𝓫.
 -- ρ := ε | α | l: τ | ${k}: τ | (ρ₁ | ρ₂)
 -- `${k}: τ` (FC-labels phase B) is a field whose label is only known through

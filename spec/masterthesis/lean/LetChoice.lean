@@ -307,7 +307,7 @@ theorem letPrune_spec [DecidableEq B] (Γ : QCtx B) (S S₁ : SolverState B) (�
         (Nat.le_antisymm (List.length_filter_le _ _) (Nat.not_lt.mp hge))
       simpa [hbad] using hall α hα
 
--- `letCand` lives in Infer.lean, next to `letQ`: the top level (`RunQ`) uses it.
+-- `letCand` lives in Infer.lean, next to `letQ`: the top level (`Run`) uses it.
 
 /-- the ᾱ a function should choose at A-let: gen_{Γ,S}(S₁, τ₁) -/
 def greatestAlpha [DecidableEq B] (Γ : QCtx B) (S S₁ : SolverState B) (τ₁ : Ty B) :

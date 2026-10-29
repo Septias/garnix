@@ -11,8 +11,8 @@
 --     a scratch copy of S₂ (`Guesses`) and carried back (`inhabited_of_ext`).
 --
 -- The merge is forced (`merge_forced`): two stumps that ask one lookup get
--- ≈-equal results at every instance that discharges both. The file keeps its
--- name from when the top level finalized (F-★, F-hit); the lakefile names it.
+-- ≈-equal results at every instance that discharges both.
+-- (The file was Finalization.lean while the top level still finalized.)
 
 import LetCase
 

@@ -533,11 +533,11 @@ theorem pairsF_settles (t : SolverState B → Parked B → Parked B → Bool) :
           · exact hc
           · exact hs.clean hc))
 
-theorem mergeAllF_stable (S : SolverState B) : Stable (fun m => mergeAllF m S) :=
+theorem mergesF_stable (S : SolverState B) : Stable (fun m => mergesF m S) :=
   pairsF_stable _ _ _
 
-theorem mergeAllF_settles {S : SolverState B} (hc : S.sol.Clean) :
-    Settles (fun m => mergeAllF m S) :=
+theorem mergesF_settles {S : SolverState B} (hc : S.sol.Clean) :
+    Settles (fun m => mergesF m S) :=
   pairsF_settles _ _ hc
 
 --------------------- INFERENCE ------------------------------------------------
@@ -605,7 +605,7 @@ theorem inferF_stable (constTy : Sig B C) :
   | Γ, S, .letE x e₁ e₂ => by
       simp only [inferF]
       exact Stable.bind (inferF_stable constTy _ _ e₁) (fun r₁ =>
-        Stable.bind (mergeAllF_stable _) (fun _ => inferF_stable constTy _ _ e₂))
+        Stable.bind (mergesF_stable _) (fun _ => inferF_stable constTy _ _ e₂))
   | Γ, S, .prim p es => by
       cases hp : constTy.prim p with
       | none => simp only [inferF, hp]; exact Stable.const _
@@ -829,12 +829,12 @@ theorem inferF_settles (constTy : Sig B C) :
   | Γ, S, .letE x e₁ e₂, hc => by
       simp only [inferF]
       exact Settles.bind (inferF_stable constTy _ _ e₁) (inferF_settles constTy _ _ e₁ hc)
-        (fun r₁ => Stable.bind (mergeAllF_stable _) (fun _ => inferF_stable constTy _ _ e₂))
+        (fun r₁ => Stable.bind (mergesF_stable _) (fun _ => inferF_stable constTy _ _ e₂))
         (fun r₁ _ h₁ => by
           have c₁ : r₁.2.sol.Clean := Infer.clean (inferF_sound h₁) hc
-          exact Settles.bind (mergeAllF_stable _) (mergeAllF_settles c₁)
+          exact Settles.bind (mergesF_stable _) (mergesF_settles c₁)
             (fun _ => inferF_stable constTy _ _ e₂)
-            (fun _ _ hm => inferF_settles constTy _ _ e₂ ((mergeAllF_sound hm).clean c₁)))
+            (fun _ _ hm => inferF_settles constTy _ _ e₂ ((mergesF_sound hm).clean c₁)))
   | Γ, S, .prim p es, hc => by
       cases hp : constTy.prim p with
       | none => simp only [inferF, hp]; exact Settles.fail _
@@ -995,13 +995,13 @@ theorem keyGuessesF_settles : ∀ (ts : List (TyVar × List Label)) {S : SolverS
         (fun S₁ => keyGuessesF_stable ts S₁)
         (fun S₁ _ h => keyGuessesF_settles ts ((keyGuessF_sound h).keeps hc).2.1)
 
-theorem witnessF_stable (S : SolverState B) : Stable (fun m => witnessF m S) := by
-  unfold witnessF
+theorem guessesF_stable (S : SolverState B) : Stable (fun m => guessesF m S) := by
+  unfold guessesF
   exact Stable.bind (keyGuessesF_stable _ _) (fun S₁ => pairsF_stable _ _ S₁)
 
-theorem witnessF_settles {S : SolverState B} (hc : S.sol.Clean) :
-    Settles (fun m => witnessF m S) := by
-  unfold witnessF
+theorem guessesF_settles {S : SolverState B} (hc : S.sol.Clean) :
+    Settles (fun m => guessesF m S) := by
+  unfold guessesF
   exact Settles.bind (keyGuessesF_stable _ _) (keyGuessesF_settles _ hc)
     (fun S₁ => pairsF_stable _ _ S₁)
     (fun S₁ _ h => pairsF_settles _ _ ((keyGuessesF_sound h).keeps hc).2.1)
@@ -1009,21 +1009,21 @@ theorem witnessF_settles {S : SolverState B} (hc : S.sol.Clean) :
 theorem runF_stable (constTy : Sig B C) (e : Expr C) : Stable (fun m => runF constTy m e) := by
   unfold runF
   exact Stable.bind (inferF_stable constTy _ _ e) (fun r =>
-    Stable.bind (mergeAllF_stable _) (fun _ =>
-      Stable.bind (witnessF_stable _) (fun _ => Stable.const _)))
+    Stable.bind (mergesF_stable _) (fun _ =>
+      Stable.bind (guessesF_stable _) (fun _ => Stable.const _)))
 
 /-- ⊢  **A RUN TERMINATES**: every program gets a verdict at some fuel. -/
 theorem runF_terminates (constTy : Sig B C) (e : Expr C) : ∃ n, runF constTy n e ≠ .oof := by
   unfold runF
   exact Settles.bind (inferF_stable constTy _ _ e) (inferF_settles constTy _ _ e Sol.clean_nil)
-    (fun r => Stable.bind (mergeAllF_stable _) (fun _ =>
-      Stable.bind (witnessF_stable _) (fun _ => Stable.const _)))
+    (fun r => Stable.bind (mergesF_stable _) (fun _ =>
+      Stable.bind (guessesF_stable _) (fun _ => Stable.const _)))
     (fun r _ h => by
       have c₁ := Infer.clean (inferF_sound h) Sol.clean_nil
-      exact Settles.bind (mergeAllF_stable _) (mergeAllF_settles c₁)
-        (fun _ => Stable.bind (witnessF_stable _) (fun _ => Stable.const _))
-        (fun S₂ _ h₂ => Settles.bind (witnessF_stable _)
-          (witnessF_settles ((mergeAllF_sound h₂).keeps c₁).2.1)
+      exact Settles.bind (mergesF_stable _) (mergesF_settles c₁)
+        (fun _ => Stable.bind (guessesF_stable _) (fun _ => Stable.const _))
+        (fun S₂ _ h₂ => Settles.bind (guessesF_stable _)
+          (guessesF_settles ((mergesF_sound h₂).keeps c₁).2.1)
           (fun _ => Stable.const _)
           (fun _ _ _ => ⟨0, by split <;> exact fun h => nomatch h⟩)))
 
