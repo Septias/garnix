@@ -6,7 +6,7 @@
 --
 --   `inferSound`  (InferSoundA.lean + LetCase.lean) — the mutual induction,
 --                  over `QTypedA`, with parked stumps as typed assumptions;
---   `Finalizes.holds`, `runSound`  (Finalization.lean).
+--   `runSound`  (RunSound.lean).
 --
 -- What stays here is what that proof still USES or what is a finding in its own
 -- right:
@@ -15,16 +15,18 @@
 --     `Wakes.dischargeEquiv`), which ParkedInv.lean consumes;
 --   * the plain-`QTyped` case lemmas, as the congruence and equation cases read
 --     without assumptions;
---   * the F-★ witnesses (`fStarEx_*`, `finalize_star_no_discharge`) and the
---     spent-promise witnesses (`spentEx_*`);
+--   * the saturation witnesses (`staleEx_*`) and the spent-promise witnesses
+--     (`spentEx_*`);
 --   * `QTypedC` / `InferSoundC`, only because `inferSoundC_false` refutes them.
 --
 -- Removed as superseded (2026-09-26): `QTypedCDischarge` (never proved; the
 -- `runSound_of_inferSoundC_nil`
 -- (its hypothesis is refuted), `Finalize.dischargeEquiv` and its `hfix` side
--- condition (now `Finalize.holds`, where the condition is PROVED at ⟦S′⟧), and
--- `QScheme.ResWF` / `InstStumps.pairwise` (now the stump-keyed filters —
--- `Infer.keeps`, ParkedInv.lean).
+-- condition, and `QScheme.ResWF` / `InstStumps.pairwise` (now the stump-keyed filters —
+-- `Infer.keeps`, ParkedInv.lean). F-★ itself, and the refutations that shaped
+-- its premise (`FinalizeUnguarded`, `finalize_star_no_discharge`), went with the
+-- top-level schemes (2026-10-29, plans/top-level-schemes.md): a run's answer
+-- keeps what is parked, so nothing is finalized.
 --
 -- ## Where the row environment goes
 -- Nowhere: there is no row environment. A context binds term variables only,
@@ -342,8 +344,8 @@ theorem infer_sound_selUnk_step {B C : Type} [DecidableEq B] {constTy : Sig B C}
 --   * K-repark corresponds to NOTHING. D-? commits to ★ at once; K-repark
 --     commits to nothing and re-parks with a new blocker. So the honest
 --     conclusion is a disjunction: a step either discharges the constraint or
---     leaves it parked WITH ITS STUMP INTACT, for a later step or for
---     finalization to settle.
+--     leaves it parked WITH ITS STUMP INTACT, for a later step or for the
+--     answer to keep.
 
 /-- ⊢  **K is D**, one step: a wake-up step either DISCHARGES its constraint
 (up to ≈ on the hit payload) or re-parks it with the same stump. -/
@@ -384,8 +386,8 @@ theorem Wake.dischargeEquiv {B : Type} [DecidableEq B] {S S₁ : SolverState B}
 -- So the run-level statement carries a DISTINCTNESS hypothesis on the list being
 -- submitted, and nothing else. Its conclusion is the step's, with the parked
 -- alternative now read at the run's final state: every constraint submitted to
--- wake-up is either discharged, or still parked when the run ends — where
--- finalization takes over, and where F-★'s missing premise bites.
+-- wake-up is either discharged, or still parked when the run ends — where the
+-- answer keeps it as a constraint.
 
 /-- ⊢  a wake-up step leaves every OTHER parked constraint where it was. -/
 theorem Wake.parked_preserved {B : Type} [DecidableEq B] {S S₁ : SolverState B}
@@ -457,386 +459,169 @@ theorem infer_sound_var_step {B C : Type} {constTy : Sig B C} {Γ' : QCtx B}
     QTyped constTy Γ' (.var x) τ :=
   .qEq (.qVar hl ⟨χ, hfix, hdis, rfl⟩) hbody
 
---------------------- WHY F-★ CARRIES ITS PREMISE -----------------------------
--- `Finalize.star` (Infer.lean) now carries `LookupBlocked`. It did not, and this
--- section is the reason — kept checkable, which takes one extra definition: a
--- FIXED rule makes its own counterexample unstateable, so the counterexample has
--- to name the rule it refutes. `FinalizeUnguarded` below IS the old rule, and
--- `Finalize.toUnguarded` says the shipped one is strictly stronger.
---
--- As it stood, `Finalize.star` read
---
---     S ⊢ δ ≐ ★ ⇝ S′
---     ─────────────────────────
---     S ⊢ ⟨α ⊳ ρ.l ↓ δ⟩ ⇓ S′[δ]
---
--- with NO premise about the lookup. `Stump.Discharge` offers ★ only under
--- `D-⊥` (the lookup is `⊥`) or `D-?` (it is still `?`); there is no rule
--- pinning δ to ★ when the lookup LANDS. So F-★ can commit a stump to ★ in a
--- configuration the declarative system cannot read at all — and it is not a
--- corner of the proof, it is the rule. Compare `Wake.abs`, which carries its
--- `Lookup … .absent`, and `Wake.hit`, which carries its `Lookup … (.found τ)`:
--- every OTHER rule that touches a stump's result variable says what the lookup
--- did first.
---
--- The witness is as small as it gets: a stump on the LITERAL row `(l: 𝓫)`,
--- whose lookup lands at every context and under every substitution. F-★ fires
--- on it anyway — nothing in the rule looks — and the resulting state forces
--- σδ = ★ while the lookup says `𝓫`. Not even `Discharge`, the ≈-relaxed
--- version, survives that: ★ has no ≈-congruence rule, so `★ ≈ 𝓫` is false too.
---
--- THE FIX, now in place, is the premise its siblings have — `LookupBlocked` on
--- the row it is finalizing, which is also exactly the hypothesis A-sel-? already
--- establishes when it parks the stump. `finalize_star_guarded_cannot_fire` below
--- is the other half of each refutation: at the very state where the unguarded
--- rule misfires, the guarded one has no derivation at all.
-
-/-- **F-★ as it was**: no premise about the lookup. Every refutation in this
-section is a statement about THIS relation, which is why it outlives the fix. -/
-inductive FinalizeUnguarded {B : Type} [DecidableEq B] :
-    SolverState B → Parked B → SolverState B → Prop where
-  | star {S S' : SolverState B} {p : Parked B} :
-      SolveTy S p.stump.res .unk S' →
-      FinalizeUnguarded S p
-        ({ S' with parked := S'.parked.filter (·.stump != p.stump) }.flag
-          (p.stump.label.applySubst S.subst).keyName)
-
-/-- ⊢  the shipped rule is strictly stronger: it fires only where the unguarded
-one did, and `finalize_star_guarded_cannot_fire` shows the inclusion is proper. -/
-theorem Finalize.toUnguarded {B : Type} [DecidableEq B] {S S' : SolverState B}
-    {p : Parked B} : Finalize S p S' → FinalizeUnguarded S p S'
-  | .star _ _ hs => .star hs
-
-/-- a stump on a LITERAL row: its lookup lands at every context, under every
-substitution. Nothing about it is blocked, and the unguarded rule does not care. -/
-private def fStar_p : Parked Unit := ⟨"a", ⟨.sing "l" (.base ()), .lit "l", .var "d"⟩⟩
-
-private def fStar_S : SolverState Unit :=
-  { sol := Sol.nil, parked := [fStar_p], flags := [], supply := ⟨0⟩ }
-
-/-- the equation F-★ emits, run: `δ ≐ ★` binds δ, at any fuel and any supply. -/
-example : unifyTyF (B := Unit) ⟨0⟩ 0 (.var "d") .unk
-    = .success ⟨[("d", (.unk : Ty Unit))], [], []⟩ ⟨0⟩ := rfl
-
-/-- ⊢  **the unguarded F-★ can fire where nothing discharges.** There is a state,
-a parked stump and a finalization step whose result NO substitution satisfying it
-can discharge — not even up to ≈. -/
-theorem finalize_star_no_discharge :
-    ∃ (S S'' : SolverState Unit) (p : Parked Unit),
-      FinalizeUnguarded S p S'' ∧
-      ∀ (Γ' : Ctx Unit) (σ : TySubst Unit), Sol.Sat σ S''.sol →
-        ¬ p.stump.Discharge σ := by
-  have hfin : FinalizeUnguarded fStar_S fStar_p _ :=
-    FinalizeUnguarded.star (S' := fStar_S.extend ⟨[("d", .unk)], [], []⟩ ⟨2⟩)
-      ⟨0, ⟨[("d", .unk)], [], []⟩, ⟨2⟩, rfl, rfl⟩
-  refine ⟨fStar_S, _, fStar_p, hfin, ?_⟩
-  intro Γ' σ hsat hdis
-  simp only [fStar_p] at hdis
-  -- the finalized state binds δ to ★, so every σ satisfying it sends δ to ★
-  have hd : σ.ty "d" = (.unk : Ty Unit) :=
-    (TyEquiv.unk_inv_both (hsat.1 ("d", .unk) List.mem_cons_self)).2 rfl
-  -- …while the lookup on a literal row lands, at every context and every σ
-  have hlit : Lookup ((.sing "l" (.base ())) : Row Unit) "l"
-      (.found (.base ())) := .hit
-  cases hdis with
-  | hit hlk hty =>
-      have hτ := lookup_det (LookupQ.lab_iff.mp hlk) hlit
-      injection hτ with hτ
-      simp only [Ty.applySubst] at hty; rw [hd, hτ] at hty
-      exact absurd (TyEquiv.unk_inv hty) (by simp)
-  | abs hlk _ => exact absurd (lookup_det (LookupQ.lab_iff.mp hlk) hlit) (by simp)
-  | unk hlk _ => exact absurd (lookup_det (LookupQ.lab_iff.mp hlk) hlit) (by simp)
-
-/-- ⊢  **and the guarded rule cannot fire there.** A `sing` row has no
-`LookupBlocked` derivation at all — the relation is built from `L-α-free` and the
-`cat`/`var` chases, and a literal field is never "don't know" — so the premise
-rules this state out outright. The inclusion `Finalize ⊆ FinalizeUnguarded` is
-therefore proper, and this is what the premise BUYS. -/
-theorem finalize_star_guarded_cannot_fire :
-    ¬ ∃ S', Finalize fStar_S fStar_p S' := by
-  rintro ⟨S', h⟩
-  cases h with
-  | star _ hb _ =>
-      cases hb
-
---------------------- …AND THE CONFIGURATION WAS REACHABLE --------------------
--- The witness above is hand-built, so a reader may fairly ask whether any state
--- inference actually PRODUCES looks like it: A-sel-? parks `.var r`, never a
--- literal row, and at the moment of parking the lookup is blocked BY
--- CONSTRUCTION — that is `LookupBlocked`, the rule's own premise. The answer was
--- that it did not STAY blocked and nothing re-checked. `Infer.var` used to be
--- the only rule that ran wake-up, so every other rule that writes a solution —
--- A-app, A-conc, A-sel, A-let — could solve a parked stump's BLOCKER and leave
--- the stump in Δ with a stale annotation. "Wake-up fires when a solution α ≔ ρ
--- is written, and only for stumps blocked on α" (algorithmic.typ) was the
--- invariant; the rules did not maintain it. No exotic state was needed to see
--- it: the thesis' own refinement example, closed, was a witness.
+--------------------- A STALE BLOCKER, AND SATURATION -------------------------
+-- A-sel-? parks a stump blocked by construction. It did not STAY blocked, and
+-- nothing re-checked: `Infer.var` used to be the only rule that ran wake-up, so
+-- A-app, A-conc, A-sel and A-let could solve a parked stump's BLOCKER and leave
+-- it in Δ with a stale annotation. The thesis' own refinement example, closed,
+-- was a witness:
 --
 --     (λx. {a = x.l}) {l = c}
 --
--- Inside the λ this is `selEx_infers` verbatim — `α ≐ {r}` binds α at the TYPE
--- sort, `r` stays unsolved at the ROW sort, A-sel-? parks `⟨r ⊳ r.l ↓ δ⟩`. The
--- application then solves `r ≔ (l: 𝓫)` through the arrow equation. That state is
--- `fsS` below, and at it the lookup LANDS while the stump still says "blocked":
--- K-hit and F-★ both fire and commit δ to different types, F-★'s answer
--- discharges nowhere, and the program's type comes out `{a: ★}` where the
--- declarative system says `{a: 𝓫}`.
+-- Inside the λ this is `selEx_infers` verbatim; the application then solves
+-- `r ≔ (l: 𝓫)` through the arrow equation. That state is `slS` below, and at it
+-- the lookup LANDS while the stump still says "blocked". The old F-★ sent δ to ★
+-- there, and the program came out `{a: ★}` where the declarative system says
+-- `{a: 𝓫}`.
 --
 -- WHAT CHANGED (Stage 1): `SolveTySat` / `WakesSat` — solve, then wake what the
 -- solution staled — replace bare `SolveTy` / `Wakes` in the A-rules, and
--- `Infer.quiescent` proves every reachable state now satisfies
--- `SolverState.Quiescent`. So `fStarEx_infers` below runs the same program to a
--- state where the stump is DISCHARGED at 𝓫 and the answer is the declarative
--- one. `fsS` itself is still a legal solver state, and F-★ still misfires on it
--- — the rule is still missing the premise its siblings carry — but a RUN no
--- longer hands it one. The two halves of the fix are therefore:
---   * saturation in the rules, which is what makes the configuration
---     unreachable (this section's `fStarEx_infers` is the regression that says
---     so, and `fStarEx_not_quiescent` names what was wrong with the old state);
---   * F-★'s own `LookupBlocked` premise, which is still owed. After Stage 1 it
---     is IMPLIED by quiescence, so it can be carried either as a premise on the
---     rule or as a `Quiescent` hypothesis on the finalization pass — but it has
---     to be somewhere, because the soundness lemma needs the fact in hand, and
---     because nothing stops `Finalize` from being applied at a state no run
---     produced.
+-- `Infer.quiescent` proves every reachable state `SolverState.Quiescent`. So
+-- `staleEx_infers` below runs the same program to a state where the stump is
+-- DISCHARGED at 𝓫, and `staleEx_not_quiescent` names what was wrong with the old
+-- state.
 
-private def fStarEx : Expr Unit :=
+private def staleEx : Expr Unit :=
   .app (.lam "x" (.rcd (.field "a" (.sel (.var "x") "l"))))
        (.rcd (.field "l" (.con ())))
 
 -- the four names the run draws, in the order it draws them: the λ-binder, the
 -- record's row variable, the selection's result δ, and A-app's β.
-private def fsA : TyVar := natName 1
-private def fsR : TyVar := natName 2
-private def fsD : TyVar := natName 3
-private def fsB : TyVar := natName 4
+private def slA : TyVar := natName 1
+private def slR : TyVar := natName 2
+private def slD : TyVar := natName 3
+private def slB : TyVar := natName 4
 
-private def fsId : TySubst Unit := ⟨fun x => .var x, fun x => .var x, fun x => .var x⟩
+private def slId : TySubst Unit := ⟨fun x => .var x, fun x => .var x, fun x => .var x⟩
 
-private def fsS0 : SolverState Unit := ⟨Sol.nil, [], [], ⟨1⟩, []⟩
-private def fsSlam : SolverState Unit := ⟨Sol.nil, [], [], ⟨2⟩, [(fsA, .ty)]⟩
-private def fsSr : SolverState Unit := ⟨Sol.nil, [], [], ⟨3⟩, [(fsR, .row), (fsA, .ty)]⟩
-private def fsSol1 : Sol Unit := ⟨[(fsA, .rcd (.var fsR))], [], []⟩
-private def fsS2 : SolverState Unit := ⟨fsSol1, [], [], ⟨3⟩, [(fsR, .row), (fsA, .ty)]⟩
-private def fsS2' : SolverState Unit :=
-  ⟨fsSol1, [], [], ⟨4⟩, [(fsD, .ty), (fsR, .row), (fsA, .ty)]⟩
+private def slS0 : SolverState Unit := ⟨Sol.nil, [], [], ⟨1⟩, []⟩
+private def slSlam : SolverState Unit := ⟨Sol.nil, [], [], ⟨2⟩, [(slA, .ty)]⟩
+private def slSr : SolverState Unit := ⟨Sol.nil, [], [], ⟨3⟩, [(slR, .row), (slA, .ty)]⟩
+private def slSol1 : Sol Unit := ⟨[(slA, .rcd (.var slR))], [], []⟩
+private def slS2 : SolverState Unit := ⟨slSol1, [], [], ⟨3⟩, [(slR, .row), (slA, .ty)]⟩
+private def slS2' : SolverState Unit :=
+  ⟨slSol1, [], [], ⟨4⟩, [(slD, .ty), (slR, .row), (slA, .ty)]⟩
 
 /-- the stump A-sel-? parks: blocked on the record's row variable, writing δ. -/
-private def fsP : Parked Unit := ⟨fsR, ⟨.var fsR, .lit "l", .var fsD⟩⟩
+private def slP : Parked Unit := ⟨slR, ⟨.var slR, .lit "l", .var slD⟩⟩
 
-private def fsSp : SolverState Unit :=
-  ⟨fsSol1, [fsP], [], ⟨4⟩, [(fsD, .ty), (fsR, .row), (fsA, .ty)]⟩
-private def fsSb : SolverState Unit :=
-  ⟨fsSol1, [fsP], [], ⟨5⟩, [(fsB, .ty), (fsD, .ty), (fsR, .row), (fsA, .ty)]⟩
+private def slSp : SolverState Unit :=
+  ⟨slSol1, [slP], [], ⟨4⟩, [(slD, .ty), (slR, .row), (slA, .ty)]⟩
+private def slSb : SolverState Unit :=
+  ⟨slSol1, [slP], [], ⟨5⟩, [(slB, .ty), (slD, .ty), (slR, .row), (slA, .ty)]⟩
 
 /-- what A-app's arrow equation solves: β at the result record, and — the point
 — the stump's BLOCKER, at the row sort. -/
-private def fsApp : Sol Unit :=
-  ⟨[(fsB, .rcd (.sing "a" (.var fsD)))], [(fsR, .cat (.sing "l" (.base ())) .empty)], []⟩
+private def slApp : Sol Unit :=
+  ⟨[(slB, .rcd (.sing "a" (.var slD)))], [(slR, .cat (.sing "l" (.base ())) .empty)], []⟩
 
 /-- the state the equation leaves behind: blocker solved, stump still parked.
 Before saturation was wired into the A-rules this is where the run ENDED, which
-is what made the F-★ defect reachable. It is still a legal state, so it is still
-where the rules below disagree. -/
-private def fsS : SolverState Unit := fsSb.extend fsApp ⟨5⟩
+is what made the stale blocker reachable. -/
+private def slS : SolverState Unit := slSb.extend slApp ⟨5⟩
 
 /-- ⊢  the lookup lands, on the substituted row — which is now the ONLY form
-there is, and the form `Wake`, `Finalize` and `Quiescent` all read it in. The
-companion `fStarEx_lands`, which stated the same landing "in ⟦S⟧ read as a
-context" via `Lookup.var`, has no counterpart: `.var fsR` on its own is `?`. -/
-theorem fStarEx_lands' :
-    Lookup ((Row.var fsR).applySubst fsS.subst) "l" (.found (.base ())) :=
+there is, and the form `Wake` and `Quiescent` read it in. The
+companion `staleEx_lands`, which stated the same landing "in ⟦S⟧ read as a
+context" via `Lookup.var`, has no counterpart: `.var slR` on its own is `?`. -/
+theorem staleEx_lands' :
+    Lookup ((Row.var slR).applySubst slS.subst) "l" (.found (.base ())) :=
   .catHit .hit
 
 /-- ⊢  **the state is not quiescent** — the stump's recorded blocker does not
 block its lookup any more. This is the staleness `Saturate` steps on, and the
 invariant `plans/inference-gap-analysis.md` §B says nothing enforced. -/
-theorem fStarEx_not_blocked :
-    ¬ LookupBlockedQ (fsP.stump.row.applySubst fsS.subst)
-        (fsP.stump.label.applySubst fsS.subst) fsP.blocker := by
+theorem staleEx_not_blocked :
+    ¬ LookupBlockedQ (slP.stump.row.applySubst slS.subst)
+        (slP.stump.label.applySubst slS.subst) slP.blocker := by
   intro hb
-  exact absurd (lookup_det (LookupQ.lab_iff.mp hb.toLookupQ) fStarEx_lands') (by simp)
+  exact absurd (lookup_det (LookupQ.lab_iff.mp hb.toLookupQ) staleEx_lands') (by simp)
 
-theorem fStarEx_not_quiescent : ¬ fsS.Quiescent := by
+theorem staleEx_not_quiescent : ¬ slS.Quiescent := by
   intro hq
-  exact fStarEx_not_blocked (hq fsP (by simp [fsS, fsSb, SolverState.extend]))
+  exact staleEx_not_blocked (hq slP (by simp [slS, slSb, SolverState.extend]))
 
 /-- what K-hit writes once saturation runs: δ ≔ 𝓫, the stump discharged and
 dropped from Δ. -/
-private def fsHit : Sol Unit := ⟨[(fsD, .base ())], [], []⟩
-private def fsSfix : SolverState Unit :=
-  { fsS.extend fsHit ⟨5⟩ with
-      parked := (fsS.extend fsHit ⟨5⟩).parked.filter (·.stump != fsP.stump) }
+private def slHit : Sol Unit := ⟨[(slD, .base ())], [], []⟩
+private def slSfix : SolverState Unit :=
+  { slS.extend slHit ⟨5⟩ with
+      parked := (slS.extend slHit ⟨5⟩).parked.filter (·.stump != slP.stump) }
 
 /-- ⊢  **the run, with saturation in the rules.** The same closed program goes
 through `Infer`, and A-app's equation no longer leaves a stale stump behind: the
 `Saturate` step the rule now carries wakes it with K-hit, on the strength of
-`fStarEx_not_blocked`. -/
-theorem fStarEx_infers :
-    Infer (B := Unit) (C := Unit) (Sig.plain fun _ => ()) QCtx.empty fsS0 fStarEx (.var fsB)
-      fsSfix := by
-  refine Infer.app (S₁ := fsSp) (S₂ := fsSp) (S₂' := fsSb)
-    (τ₁ := .fn (.var fsA) (.rcd (.sing "a" (.var fsD))))
+`staleEx_not_blocked`. -/
+theorem staleEx_infers :
+    Infer (B := Unit) (C := Unit) (Sig.plain fun _ => ()) QCtx.empty slS0 staleEx (.var slB)
+      slSfix := by
+  refine Infer.app (S₁ := slSp) (S₂ := slSp) (S₂' := slSb)
+    (τ₁ := .fn (.var slA) (.rcd (.sing "a" (.var slD))))
     (τ₂ := .rcd (.sing "l" (.base ()))) ?_ ?_ rfl ?_
-  · refine Infer.lam (S₀ := fsSlam) rfl (Infer.rcd (InferRec.field ?_))
-    refine Infer.selUnk (τ := .var fsA) (S₁ := fsSlam) (S₁' := fsSr) (S₂ := fsS2)
-      (S₂' := fsS2') (r := fsR) (α := fsR) (δ := fsD) ?_ rfl ?_ ?_ rfl
+  · refine Infer.lam (S₀ := slSlam) rfl (Infer.rcd (InferRec.field ?_))
+    refine Infer.selUnk (τ := .var slA) (S₁ := slSlam) (S₁' := slSr) (S₂ := slS2)
+      (S₂' := slS2') (r := slR) (α := slR) (δ := slD) ?_ rfl ?_ ?_ rfl
     · exact Infer.var_mono rfl
         ⟨_, .nil, .done (SolverState.Quiescent.nil rfl)⟩
-    · exact ⟨_, ⟨5, fsSol1, ⟨3⟩, rfl, rfl⟩, .done (SolverState.Quiescent.nil rfl)⟩
+    · exact ⟨_, ⟨5, slSol1, ⟨3⟩, rfl, rfl⟩, .done (SolverState.Quiescent.nil rfl)⟩
     · exact .varFree
   · exact Infer.rcd (InferRec.field Infer.con)
-  · exact ⟨fsS, ⟨20, fsApp, ⟨5⟩, rfl, rfl⟩,
-      .step (p := fsP) (by simp [fsS, fsSb, SolverState.extend]) fStarEx_not_blocked
-        (Wake.hit (τ := .base ()) (LookupQ.lab_iff.mpr fStarEx_lands') ⟨5, fsHit, ⟨5⟩, rfl, rfl⟩)
+  · exact ⟨slS, ⟨20, slApp, ⟨5⟩, rfl, rfl⟩,
+      .step (p := slP) (by simp [slS, slSb, SolverState.extend]) staleEx_not_blocked
+        (Wake.hit (τ := .base ()) (LookupQ.lab_iff.mpr staleEx_lands') ⟨5, slHit, ⟨5⟩, rfl, rfl⟩)
         (.done (SolverState.Quiescent.nil rfl))⟩
 
 /-- ⊢  **and the refinement survives.** Δ is empty — the stump discharged, so
-there is nothing left for finalization to blur — and the program's type reads
+the answer has no constraint — and the program's type reads
 `{a: 𝓫}` under the final solution, which is exactly what the declarative system
-gives it (`fStarEx_refinement_lost`, first conjunct). The saturation step is what
+gives it (`staleEx_declarative`). The saturation step is what
 turns A-sel-?'s promise into the type the lookup found. -/
-theorem fStarEx_recovers :
-    fsSfix.parked = [] ∧
-      (Ty.var fsB).applySubst fsSfix.subst = .rcd (.sing "a" (.base ())) :=
+theorem staleEx_recovers :
+    slSfix.parked = [] ∧
+      (Ty.var slB).applySubst slSfix.subst = .rcd (.sing "a" (.base ())) :=
   ⟨rfl, rfl⟩
 
 /-- ⊢  what the stale state looked like: the stump still parked, its blocker
 SOLVED. Kept as the shape `Saturate` exists to rule out. -/
-theorem fStarEx_stale_blocker :
-    fsS.parked = [fsP] ∧
-      fsS.subst.row fsP.blocker = .cat (.sing "l" (.base ())) .empty :=
+theorem staleEx_stale_blocker :
+    slS.parked = [slP] ∧
+      slS.subst.row slP.blocker = .cat (.sing "l" (.base ())) .empty :=
   ⟨rfl, rfl⟩
 
-/-- what F-★ emits at that state, and the state it produces. -/
-private def fsStar : Sol Unit := ⟨[(fsD, .unk)], [], []⟩
-private def fsS' : SolverState Unit :=
-  ({ fsS.extend fsStar ⟨5⟩ with
-       parked := (fsS.extend fsStar ⟨5⟩).parked.filter (·.stump != fsP.stump) }).flag "l"
+/-- ⊢  **the run, end to end.** The refinement example runs to an EMPTY Δ —
+saturation discharged the stump at 𝓫 — so the answer is the plain type
+`{a: 𝓫}`. -/
+theorem staleEx_runs :
+    Run (B := Unit) (C := Unit) (Sig.plain fun _ => ()) staleEx
+      ⟨[], [], .rcd (.sing "a" (.base ()))⟩ :=
+  ⟨_, slSfix, slSfix, slSfix, staleEx_infers, .refl _, rfl, .refl _, by decide⟩
 
-/-- ⊢  **why determinism was false.** From that state K-hit and the UNGUARDED F-★
-both fire on the same stump and commit δ to different types — `𝓫` and `★`. The
-"the final θ, W and τ do not depend on the wake-up order" claim
-(algorithmic.typ) does not survive a rule that ignores the lookup. -/
-theorem fStar_wake_star_disagree :
-    ∃ Shit Sstar : SolverState Unit,
-      Wake fsS fsP Shit ∧ FinalizeUnguarded fsS fsP Sstar ∧
-      Shit.subst.ty fsD = .base () ∧ Sstar.subst.ty fsD = .unk :=
-  ⟨_, _, Wake.hit (τ := .base ()) (LookupQ.lab_iff.mpr fStarEx_lands')
-      ⟨5, fsHit, ⟨5⟩, rfl, rfl⟩,
-    FinalizeUnguarded.star (S' := fsS.extend fsStar ⟨5⟩)
-      ⟨5, fsStar, ⟨5⟩, rfl, rfl⟩, rfl, rfl⟩
-
-/-- ⊢  **both halves of the fix, at one state.** The unguarded rule fires here;
-the shipped one cannot, because the lookup lands and `LookupBlocked` fails
-(`fStarEx_not_blocked`). Saturation removes the state from any RUN
-(`Infer.quiescent`); the premise removes it from the RULE. Neither alone does
-both: saturation leaves `Finalize` applicable at hand-built states, and the
-premise alone would have left the run stuck here with no finalization step. -/
-theorem fStar_guarded_cannot_fire : ¬ ∃ S', Finalize fsS fsP S' := by
-  rintro ⟨S', h⟩
-  cases h with
-  | star _ hb _ => exact fStarEx_not_blocked hb
-
-/-- ⊢  …and the unguarded rule's step, which the refutation below is about. -/
-theorem fStarEx_finalizes_unguarded : FinalizeUnguarded fsS fsP fsS' :=
-  FinalizeUnguarded.star (S' := fsS.extend fsStar ⟨5⟩) ⟨5, fsStar, ⟨5⟩, rfl, rfl⟩
-
-/-- ⊢  **and what it produces discharges nowhere** — `finalize_star_no_discharge`
-again, at a state with a VARIABLE row rather than a literal one, so the lookup has
-to be transported along σ: every σ satisfying the finalized state sends `r` to a
-row ≈-equal to `(l: 𝓫)`, and ≈ moves neither the label nor the payload, so the
-lookup lands on 𝓫 under every such σ while F-★ has pinned δ to ★. -/
-theorem fStar_reachable_no_discharge (Γ' : Ctx Unit)
-    (σ : TySubst Unit) (hsat : Sol.Sat σ fsS'.sol) :
-    ¬ fsP.stump.Discharge σ := by
-  have hsat' : Sol.Sat σ (fsStar.comp fsS.sol) := hsat
-  obtain ⟨hS, hst⟩ := Sol.Sat.comp_inv hsat'
-  -- finalization wrote δ ≔ ★, so every σ satisfying it sends δ to ★
-  have hd : σ.ty fsD = (.unk : Ty Unit) :=
-    (TyEquiv.unk_inv_both (hst.1 (fsD, .unk) List.mem_cons_self)).2 rfl
-  -- …while the lookup lands on 𝓫, under every σ satisfying the state
-  obtain ⟨r', hl', he'⟩ :=
-    Sol.lookup_sat hS fStarEx_lands' (by intro h; cases h)
-  intro hdis
-  have hres : fsP.stump.res = .var fsD := rfl
-  cases hdis with
-  | hit hlk hty =>
-      cases he' with
-      | found hb =>
-          have heq := lookup_det hl' (LookupQ.lab_iff.mp hlk)
-          injection heq with heq
-          subst heq
-          rw [hres] at hty; change σ.ty fsD ≈ₜ _ at hty; rw [hd] at hty
-          rw [TyEquiv.unk_inv hty] at hb
-          exact absurd ((TyEquiv.unk_inv_both hb).2 rfl) (by simp [Ty.applySubst])
-  | abs hlk _ => cases he' with | found _ => exact absurd (lookup_det hl' (LookupQ.lab_iff.mp hlk)) (by simp)
-  | unk hlk _ => cases he' with | found _ => exact absurd (lookup_det hl' (LookupQ.lab_iff.mp hlk)) (by simp)
-
-/-- ⊢  **the other shape a run can have: nothing left to finalize.** The
-refinement example runs to an EMPTY Δ — saturation discharged the stump at 𝓫 — so
-`Finalizes` is `.nil` and F-★ never fires. Compare `selEx_runs` (Infer.lean),
-where it does fire: the difference is whether anything ever resolved the blocker,
-which is the whole content of A-sel-?'s promise. -/
-theorem fStarEx_runs :
-    Run (B := Unit) (C := Unit) (Sig.plain fun _ => ()) fStarEx (.var fsB) fsSfix :=
-  ⟨fsSfix, fsSfix, fStarEx_infers, .nil, .nil⟩
-
-/-- ⊢  **the refinement, in types.** The declarative system gives the closed
-program `{a: 𝓫}`; finalizing the stale state answers `{a: ★}`, strictly blurrier —
-and by `finalized_no_blur` (minimal.lean) such a ★ is never sharpened back, so it
-is the answer and not a recoverable imprecision. `fStarEx_recovers` is the same
-program under the saturating rules, landing on the first of these. -/
-theorem fStarEx_refinement_lost :
-    QTyped (B := Unit) (C := Unit) (Sig.plain fun _ => ()) QCtx.empty fStarEx
-        (.rcd (.sing "a" (.base ()))) ∧
-      (Ty.var fsB).applySubst fsS'.subst = .rcd (.sing "a" .unk) ∧
-      TyPrec (.rcd (.sing "a" (.base ()))) (.rcd (.sing "a" (.unk : Ty Unit))) ∧
-      (Ty.rcd (.sing "a" (.base ())) : Ty Unit) ≠ .rcd (.sing "a" .unk) := by
-  refine ⟨?_, rfl, .rcd (.sing (.unk _)), by simp⟩
+/-- ⊢  **the refinement, in types**: the declarative system gives the closed
+program `{a: 𝓫}`, which is what the run answers (`staleEx_recovers`). -/
+theorem staleEx_declarative :
+    QTyped (B := Unit) (C := Unit) (Sig.plain fun _ => ()) QCtx.empty staleEx
+        (.rcd (.sing "a" (.base ()))) := by
   refine QTyped.qApp (τ₁ := .rcd (.sing "l" (.base ()))) ?_ ?_
   · refine QTyped.qLam (QTyped.qRcd (QTypedBody.field ?_))
     refine QTyped.qSel (ρ := .sing "l" (.base ())) ?_ .hit
     exact QTyped.qVar (σ := ⟨[], [], .rcd (.sing "l" (.base ()))⟩) rfl
-      ⟨fsId, ⟨fun _ _ => rfl, fun _ _ => rfl, fun _ _ => rfl⟩,
+      ⟨slId, ⟨fun _ _ => rfl, fun _ _ => rfl, fun _ _ => rfl⟩,
        (fun s hs => absurd hs List.not_mem_nil), rfl⟩
   · exact QTyped.qRcd (QTypedBody.field QTyped.qCon)
 
---------------------- …AND IT IS REACHABLE, AND IT IS INCOMPLETENESS ----------
--- `no_finalize_of_spent` (Infer.lean) is a verdict about a state. This is a RUN
--- that reaches one, and the news is worse than "the algorithm rejects what the
--- declarative system rejects":
---
+--------------------- THE SPENT PROMISE, RUN ----------------------------------
 --     λx. λy. (x.l) y
 --
 -- A-sel-? parks ⟨r ⊳ r.l ↓ δ⟩ and answers δ; A-app then emits `δ ≐ (α_y → β)`,
 -- which SUCCEEDS — δ is an unsolved variable, which is exactly what A-sel-?
--- returned it for. The state is perfectly well formed at the end: quiescent, the
--- stump still blocked on an unsolved row variable, nothing stale. And it cannot
--- be finalized, so `Run` has no answer for this program.
+-- returned it for. The state is well formed at the end: quiescent, the stump
+-- still blocked on an unsolved row variable, nothing stale. ★ cannot answer the
+-- stump any more, and the program IS declaratively typeable, at
+-- `{(l: 𝓫 → 𝓫)} → 𝓫 → 𝓫` (`spentEx_declarative`).
 --
--- Yet the program IS declaratively typeable, at `{(l: 𝓫 → 𝓫)} → 𝓫 → 𝓫`
--- (`spentEx_declarative`). So this is INCOMPLETENESS, not a justified rejection —
--- and it is not the ★-elimination gap of `plans/inference-gap-analysis.md` §D
--- either, because no ★ is ever formed here. The algorithm commits `x` to `{r}`
--- with `r` abstract and never guesses a concrete row, so the only way it could
--- answer is to CARRY the constraint `⟨r.l ↓ (α_y → β)⟩`.
---
--- TAKEN (2026-09-27): `Stump.res : Ty B`, so a spent promise is still a stump,
--- and finalization MATERIALIZES it before F-★ (`Materialize`, Infer.lean): the
--- lookup is blocked on r, nothing has committed r, so `r ≔ (l : α_y → β | r′)`
--- makes it hit. The run now answers `{l: t2 → t5 | r6} → t2 → t5` (InferRuns),
--- an instance-mate of `spentEx_declarative`'s typing, and `runSound` covers it.
--- The witnesses below still stand: they are about the F-★ STEP, which still
--- cannot fire on a spent stump — materialization is what runs instead.
---
--- A-let generalizes a spent stump too (2026-09-28): `QScheme.WF` asks only that
--- a result mention binders, and `LetResults` that its blocker can be filled to
--- witness an instance (the linear-pattern premise went with the χ-correction,
--- 2026-10-03). What those premises exclude falls back to a monomorphic let.
---
--- Still open: a spent promise blocked on its KEY (`λr. λa. r.(a) c`) has no row
--- to extend and still fails.
+-- The old entry materialized the field (`r ≔ (l : α_y → β | r′)`), a choice. The
+-- answer now keeps the constraint: `⟨r.l ↓ (α_y → β)⟩ ⇒ {r} → α_y → β`
+-- (InferRuns), and the materialized type is one of its instances.
 
 private def spentEx : Expr Unit :=
   .lam "x" (.lam "y" (.app (.sel (.var "x") "l") (.var "y")))
@@ -901,20 +686,10 @@ theorem spentEx_infers :
       ⟨_, .nil, .done spentEx_quiescent_parked⟩
   · exact ⟨spS, ⟨5, spApp, ⟨6⟩, rfl, rfl⟩, .done spentEx_quiescent⟩
 
-/-- ⊢  **the promise is spent**: the state has written an arrow into δ. -/
-theorem spentEx_spent : (spP.stump.res.applySubst spS.subst).Spent := trivial
-
-/-- ⊢  **so the run cannot be finished.** F-★ has no derivation at this stump, and
-it is the only stump there is: `Run` has no answer for the program. -/
-theorem spentEx_cannot_finalize : ¬ ∃ S', Finalize spS spP S' :=
-  no_finalize_of_spent spentEx_spent
-
 theorem spentEx_still_parked : spS.parked = [spP] := rfl
 
-/-- ⊢  **and the program is declaratively typeable**, at `{(l: 𝓫 → 𝓫)} → 𝓫 → 𝓫`.
-So the hard error above is the algorithm's incompleteness, not the declarative
-system's rejection — the gap is that a stump's result position holds a VARIABLE,
-so the constraint the answer would need (`⟨r.l ↓ (α → β)⟩`) cannot be written. -/
+/-- ⊢  **and the program is declaratively typeable**, at `{(l: 𝓫 → 𝓫)} → 𝓫 → 𝓫`,
+an instance of the answer's scheme. -/
 theorem spentEx_declarative :
     QTyped (B := Unit) (C := Unit) (Sig.plain fun _ => ()) QCtx.empty spentEx
       (.fn (.rcd (.sing "l" (.fn (.base ()) (.base ()))))
@@ -922,10 +697,10 @@ theorem spentEx_declarative :
   refine QTyped.qLam (QTyped.qLam (QTyped.qApp (τ₁ := .base ()) ?_ ?_))
   · refine QTyped.qSel (ρ := .sing "l" (.fn (.base ()) (.base ()))) ?_ .hit
     exact QTyped.qVar (σ := ⟨[], [], .rcd (.sing "l" (.fn (.base ()) (.base ())))⟩) rfl
-      ⟨fsId, ⟨fun _ _ => rfl, fun _ _ => rfl, fun _ _ => rfl⟩,
+      ⟨slId, ⟨fun _ _ => rfl, fun _ _ => rfl, fun _ _ => rfl⟩,
        (fun s hs => absurd hs List.not_mem_nil), rfl⟩
   · exact QTyped.qVar (σ := ⟨[], [], .base ()⟩) rfl
-      ⟨fsId, ⟨fun _ _ => rfl, fun _ _ => rfl, fun _ _ => rfl⟩,
+      ⟨slId, ⟨fun _ _ => rfl, fun _ _ => rfl, fun _ _ => rfl⟩,
        (fun s hs => absurd hs List.not_mem_nil), rfl⟩
 
 --------------------- WHAT A PARKED STUMP MEANS, AS A JUDGEMENT ---------------

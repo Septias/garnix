@@ -61,7 +61,7 @@ theorem solveVarM_ne_clash {B : Type} {S : Supply} {s₁ s₂ : List (Atom B)} :
 
 
 -- ≐ dispatches on the head constructors: every MISMATCH is refuted here once
--- and for all (≈ₜ never changes a head, minimal.lean:163ff), and only the two
+-- and for all (≈ₜ never changes a head, `TyEquiv.fn_inv_both` and its siblings, minimal.lean), and only the two
 -- recursive pairs are handed back to the caller.
 theorem tyClash_dispatch {B : Type} [DecidableEq B] {S : Supply} {fuel : Nat}
     {τ τ' : Ty B} {θ : TySubst B}

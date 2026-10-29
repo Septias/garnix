@@ -98,7 +98,8 @@ def QScheme.Avoiding {B : Type} (σ : QScheme B) (θ : TySubst B) : Prop :=
 --   D-⊥      r = ⊥    ⟹  θδ = ★      (T-sel-⊥; W-flag on the algo side)
 --   D-?      r = ?    ⟹  θδ = ★      (T-sel-★: still-unknown stays blurred;
 --                                     algorithmically this case re-parks
---                                     instead — only finalization commits ★)
+--                                     instead, and the stump stays a
+--                                     qualifier of the answer)
 
 theorem TyEquiv.of_eq {B : Type} {τ₁ τ₂ : Ty B} (h : τ₁ = τ₂) : TyEquiv τ₁ τ₂ :=
   h ▸ .refl _
@@ -213,7 +214,7 @@ theorem Stump.Discharge.applySubst_of_definite {B : Type}
   | unk hl _ => exact absurd hl hdef
 
 -- Collapse of a lookup result into the discharged type: found τ ↦ τ, both
--- ⊥ and ? ↦ ★. The ?-arm is the declarative face of *finalization*.
+-- ⊥ and ? ↦ ★. The ?-arm (D-?) is what an instance reads for a lookup it leaves undecided.
 def LookupRes.collapse {B : Type} : LookupRes B → Ty B
   | .found τ => τ
   | .absent  => .unk
@@ -582,8 +583,8 @@ mutual
     -- NO Γ-instance, and then the instance-closed premise says nothing at all
     -- about e₁ — `let x = (3 4) in 5` would type while being stuck, and progress
     -- would be false. Plain schemes satisfy it by Scheme.Inst.self; the solver
-    -- satisfies it by construction (a parked stump discharges at ★ if nothing
-    -- better), so this is the declarative shadow of "stumps always finalize".
+    -- checks it at A-let and at the entry (`LetSpent`, `LetResults.inhabited`: an
+    -- unspent stump discharges at ★, a spent one by filling its blocker).
     | qLet : σ.WF →
              (∀ τ₁, QScheme.Inst σ τ₁ → QTyped constTy Γ e₁ τ₁) →
              (∃ τ₁, QScheme.Inst σ τ₁) →
@@ -2075,7 +2076,7 @@ private def parkQ (B : Type) : QScheme B :=
 private def solveAlpha {B : Type} (b : B) : TySubst B :=
   ⟨(.var ·), fun γ => if γ == "α" then .sing "l" (.base b) else .var γ, (.var ·)⟩
 
--- With α free the lookup is ? and discharge can only finalize at ★.
+-- With α free the lookup is ? and discharge can only read it as ★ (D-?).
 -- ⊢  parkQ ≥ τ  ⟹  τ = ★
 private theorem parkQ_inst_free {B : Type} {τ : Ty B}
     (h : QScheme.Inst (parkQ B) τ) : τ = .unk := by

@@ -39,17 +39,20 @@ theorem LetAdmissible.nil {Γ : QCtx B} {S S₁ : SolverState B} :
 theorem LetAdmissible.spent' {Γ : QCtx B} {S S₁ : SolverState B} {ᾱ : List TyVar}
     (h : LetAdmissible Γ S S₁ ᾱ) :
     ∀ p ∈ S₁.parked, p.blocker ∈ ᾱ → (p.stump.res.applySubst S₁.subst).isVar = false →
-      (p.fillable S₁) = true ∧
+      (p.fillable S₁ ᾱ) = true ∧
       (∀ q ∈ S₁.parked, q.blocker = p.blocker →
-        (q.fillable S₁) = true ∧
-        (q.stump.label.applySubst S₁.subst = p.stump.label.applySubst S₁.subst →
-          q.spentAlike S₁ p)) ∧
+        (q.fillable S₁ ᾱ) = true ∧
+        ((q.stump.label.applySubst S₁.subst).keyName =
+            (p.stump.label.applySubst S₁.subst).keyName → q.spentAlike S₁ p) ∧
+        (∀ r ∈ S₁.parked, r.blocker ∈ ᾱ →
+          q.stump.label.applySubst S₁.subst ≠ .var r.blocker)) ∧
       (∀ q ∈ S₁.parked, q.blocker ∈ ᾱ → (q.stump.res.applySubst S₁.subst).isVar = false →
         q.blocker ∉ (p.stump.res.applySubst S₁.subst).ftv) := by
   intro p hp hb hsp
   obtain ⟨a, b, c⟩ := h.spent p (mem_letQ.mpr ⟨hp, hb⟩) hsp
-  exact ⟨a, fun q hq hqb => b q (mem_letQ.mpr ⟨hq, hqb ▸ hb⟩) hqb,
-    fun q hq hqb => c q (mem_letQ.mpr ⟨hq, hqb⟩)⟩
+  refine ⟨a, fun q hq hqb => ?_, fun q hq hqb => c q (mem_letQ.mpr ⟨hq, hqb⟩)⟩
+  obtain ⟨x, y, z⟩ := b q (mem_letQ.mpr ⟨hq, hqb ▸ hb⟩) hqb
+  exact ⟨x, y, fun r hr hrb => z r (mem_letQ.mpr ⟨hr, hrb⟩)⟩
 
 /-- ⊢  admissibility from its conditions, stated over Δ₁ and membership in ᾱ -/
 theorem LetAdmissible.of_parts {Γ : QCtx B} {S S₁ : SolverState B} {ᾱ : List TyVar}
@@ -59,11 +62,13 @@ theorem LetAdmissible.of_parts {Γ : QCtx B} {S S₁ : SolverState B} {ᾱ : Lis
     (res : ∀ p ∈ S₁.parked, p.blocker ∈ ᾱ →
       ∀ δ ∈ (p.stump.res.applySubst S₁.subst).ftv, δ ∈ ᾱ)
     (spent : ∀ p ∈ S₁.parked, p.blocker ∈ ᾱ → (p.stump.res.applySubst S₁.subst).isVar = false →
-      (p.fillable S₁) = true ∧
+      (p.fillable S₁ ᾱ) = true ∧
       (∀ q ∈ S₁.parked, q.blocker = p.blocker →
-        (q.fillable S₁) = true ∧
-        (q.stump.label.applySubst S₁.subst = p.stump.label.applySubst S₁.subst →
-          q.spentAlike S₁ p)) ∧
+        (q.fillable S₁ ᾱ) = true ∧
+        ((q.stump.label.applySubst S₁.subst).keyName =
+            (p.stump.label.applySubst S₁.subst).keyName → q.spentAlike S₁ p) ∧
+        (∀ r ∈ S₁.parked, r.blocker ∈ ᾱ →
+          q.stump.label.applySubst S₁.subst ≠ .var r.blocker)) ∧
       (∀ q ∈ S₁.parked, q.blocker ∈ ᾱ → (q.stump.res.applySubst S₁.subst).isVar = false →
         q.blocker ∉ (p.stump.res.applySubst S₁.subst).ftv))
     (dis : ∀ α ∈ ᾱ, ∀ p ∈ S₁.parked, p.blocker ∉ ᾱ →
@@ -76,30 +81,42 @@ theorem LetAdmissible.of_parts {Γ : QCtx B} {S S₁ : SolverState B} {ᾱ : Lis
     fun p hp => res p (mem_letQ.mp hp).1 (mem_letQ.mp hp).2,
     fun p hp hsp => ?_⟩
   obtain ⟨a, b, c⟩ := spent p (mem_letQ.mp hp).1 (mem_letQ.mp hp).2 hsp
-  exact ⟨a, fun q hq => b q (mem_letQ.mp hq).1,
-    fun q hq => c q (mem_letQ.mp hq).1 (mem_letQ.mp hq).2⟩
+  refine ⟨a, fun q hq hqb => ?_, fun q hq => c q (mem_letQ.mp hq).1 (mem_letQ.mp hq).2⟩
+  obtain ⟨x, y, z⟩ := b q (mem_letQ.mp hq).1 hqb
+  exact ⟨x, y, fun r hr => z r (mem_letQ.mp hr).1 (mem_letQ.mp hr).2⟩
 
 /-- ⊢  **admissible choices are closed under union.** -/
 theorem LetAdmissible.union {Γ : QCtx B} {S S₁ : SolverState B} {ᾱ₁ ᾱ₂ : List TyVar}
     (h₁ : LetAdmissible Γ S S₁ ᾱ₁) (h₂ : LetAdmissible Γ S S₁ ᾱ₂) :
     LetAdmissible Γ S S₁ (ᾱ₁ ++ ᾱ₂) := by
   -- a spent stump's conditions, from ITS side: whatever shares its blocker is on
-  -- that side too, and a blocker from the other side is no variable of its result
-  have sideSpent : ∀ {ᾱ ᾱ' : List TyVar}, LetAdmissible Γ S S₁ ᾱ →
+  -- that side too, a key variable there is one of that side's, and a blocker
+  -- from the other side is no variable of its result
+  have sideSpent : ∀ {ᾱ ᾱ' : List TyVar}, (∀ α ∈ ᾱ, α ∈ ᾱ') → LetAdmissible Γ S S₁ ᾱ →
       ∀ p ∈ S₁.parked, p.blocker ∈ ᾱ → (p.stump.res.applySubst S₁.subst).isVar = false →
-      (p.fillable S₁) = true ∧
+      (p.fillable S₁ ᾱ') = true ∧
       (∀ q ∈ S₁.parked, q.blocker = p.blocker →
-        (q.fillable S₁) = true ∧
-        (q.stump.label.applySubst S₁.subst = p.stump.label.applySubst S₁.subst →
-          q.spentAlike S₁ p)) ∧
+        (q.fillable S₁ ᾱ') = true ∧
+        ((q.stump.label.applySubst S₁.subst).keyName =
+            (p.stump.label.applySubst S₁.subst).keyName → q.spentAlike S₁ p) ∧
+        (∀ r ∈ S₁.parked, r.blocker ∈ ᾱ' →
+          q.stump.label.applySubst S₁.subst ≠ .var r.blocker)) ∧
       (∀ q ∈ S₁.parked, q.blocker ∈ ᾱ' → (q.stump.res.applySubst S₁.subst).isVar = false →
         q.blocker ∉ (p.stump.res.applySubst S₁.subst).ftv) := by
-    intro ᾱ ᾱ' hj p hp hpb hsp
+    intro ᾱ ᾱ' hsub hj p hp hpb hsp
     obtain ⟨hl, hsame, hbl⟩ := hj.spent' p hp hpb hsp
-    refine ⟨hl, hsame, fun q hq _ hqs hm => ?_⟩
-    by_cases hqb : q.blocker ∈ ᾱ
-    · exact hbl q hq hqb hqs hm
-    · exact hqb (hj.res p (mem_letQ.mpr ⟨hp, hpb⟩) _ hm)
+    refine ⟨Parked.fillable_mono hl hsub, fun q hq hqb => ?_, fun q hq _ hqs hm => ?_⟩
+    · obtain ⟨hqf, hqa, hqr⟩ := hsame q hq hqb
+      refine ⟨Parked.fillable_mono hqf hsub, hqa, fun r hr _ he => ?_⟩
+      by_cases hrb : r.blocker ∈ ᾱ
+      · exact hqr r hr hrb he
+      · -- q's key variable is one of ᾱ, so r's blocker would be too
+        rcases Key.fillKey_iff.mp (Parked.fillable_iff.mp hqf).1 with ⟨l, hk⟩ | ⟨κ, hk, hκ, -⟩
+        · rw [hk] at he; cases he
+        · rw [hk] at he; injection he with he; exact hrb (he ▸ hκ)
+    · by_cases hqb : q.blocker ∈ ᾱ
+      · exact hbl q hq hqb hqs hm
+      · exact hqb (hj.res p (mem_letQ.mpr ⟨hp, hpb⟩) _ hm)
   refine LetAdmissible.of_parts ?_ ?_ ?_ ?_ ?_
   · intro α hα
     rcases List.mem_append.mp hα with h | h
@@ -115,8 +132,8 @@ theorem LetAdmissible.union {Γ : QCtx B} {S S₁ : SolverState B} {ᾱ₁ ᾱ�
     · exact fun δ hδ => List.mem_append_right _ (h₂.res p (mem_letQ.mpr ⟨hp, h⟩) δ hδ)
   · intro p hp hb hsp
     rcases List.mem_append.mp hb with h | h
-    · exact sideSpent (ᾱ' := ᾱ₁ ++ ᾱ₂) h₁ p hp h hsp
-    · exact sideSpent (ᾱ' := ᾱ₁ ++ ᾱ₂) h₂ p hp h hsp
+    · exact sideSpent (ᾱ' := ᾱ₁ ++ ᾱ₂) (fun _ h => List.mem_append_left _ h) h₁ p hp h hsp
+    · exact sideSpent (ᾱ' := ᾱ₁ ++ ᾱ₂) (fun _ h => List.mem_append_right _ h) h₂ p hp h hsp
   · intro α hα p hp hb
     have hb₁ : p.blocker ∉ ᾱ₁ := fun h => hb (List.mem_append_left _ h)
     have hb₂ : p.blocker ∉ ᾱ₂ := fun h => hb (List.mem_append_right _ h)
@@ -135,7 +152,11 @@ theorem LetAdmissible.congr {Γ : QCtx B} {S S₁ : SolverState B} {ᾱ ᾱ' : L
     (fun α hα p hp hb => h.dis α ((he α).mpr hα) p
       (mem_letG.mpr ⟨hp, fun h' => hb ((he _).mp h')⟩))
   obtain ⟨a, b, c⟩ := h.spent' p hp ((he _).mpr hb) hsp
-  exact ⟨a, b, fun q hq hqb => c q hq ((he _).mpr hqb)⟩
+  refine ⟨Parked.fillable_mono a (fun α h => (he α).mp h), fun q hq hqb => ?_,
+    fun q hq hqb => c q hq ((he _).mpr hqb)⟩
+  obtain ⟨x, y, z⟩ := b q hq hqb
+  exact ⟨Parked.fillable_mono x (fun α h => (he α).mp h), y,
+    fun r hr hrb => z r hr ((he _).mpr hrb)⟩
 
 --------------------- THE GREATEST ᾱ, COMPUTED --------------------------------
 
@@ -154,10 +175,11 @@ def LetBad (Γ : QCtx B) (S S₁ : SolverState B) (ᾱ : List TyVar) (α : TyVar
       α ∈ (p.stump.label.applySubst S₁.subst).ftv)) ∨
   -- a spent stump blocked on α cannot be met by extending α
   (∃ p ∈ S₁.parked, p.blocker = α ∧ (p.stump.res.applySubst S₁.subst).isVar = false ∧
-     ((p.fillable S₁) = false ∨
-      ∃ q ∈ S₁.parked, q.blocker = α ∧ ((q.fillable S₁) = false ∨
-        (q.stump.label.applySubst S₁.subst = p.stump.label.applySubst S₁.subst ∧
-         ¬ q.spentAlike S₁ p)))) ∨
+     ((p.fillable S₁ ᾱ) = false ∨
+      ∃ q ∈ S₁.parked, q.blocker = α ∧ ((q.fillable S₁ ᾱ) = false ∨
+        ((q.stump.label.applySubst S₁.subst).keyName =
+            (p.stump.label.applySubst S₁.subst).keyName ∧ ¬ q.spentAlike S₁ p) ∨
+        ∃ r ∈ S₁.parked, r.blocker ∈ ᾱ ∧ q.stump.label.applySubst S₁.subst = .var r.blocker))) ∨
   -- a spent stump blocked on α has α inside a spent result
   (∃ q ∈ S₁.parked, q.blocker = α ∧ (q.stump.res.applySubst S₁.subst).isVar = false ∧
      ∃ p ∈ S₁.parked, (p.stump.res.applySubst S₁.subst).isVar = false ∧
@@ -190,10 +212,22 @@ theorem LetBad.excluded {Γ : QCtx B} {S S₁ : SolverState B} {ᾱ ᾱ' : List 
     · exact hg.2.1 h
     · exact hg.2.2 h
   · obtain ⟨hl, hsame, -⟩ := hA.spent' p hp hα hsp
-    rcases h with h | ⟨q, hq, hqb, h | ⟨he, hne⟩⟩
-    · rw [hl] at h; exact Bool.noConfusion h
-    · rw [(hsame q hq hqb).1] at h; exact Bool.noConfusion h
-    · exact hne ((hsame q hq hqb).2 he)
+    -- fillable at the smaller ᾱ′ means fillable at ᾱ
+    have hmono : ∀ {q : Parked B}, q.fillable S₁ ᾱ = false → q.fillable S₁ ᾱ' = false :=
+      fun {q} h => by
+        cases hq' : q.fillable S₁ ᾱ' with
+        | false => rfl
+        | true => rw [Parked.fillable_mono hq' hsub] at h; exact Bool.noConfusion h
+    rcases h with h | ⟨q, hq, hqb, h | ⟨he, hne⟩ | ⟨r, hr, -, hre⟩⟩
+    · have := hmono h; rw [hl] at this; exact Bool.noConfusion this
+    · have := hmono h; rw [(hsame q hq hqb).1] at this; exact Bool.noConfusion this
+    · exact hne ((hsame q hq hqb).2.1 he)
+    · -- q's key variable is r's blocker, and q fillable at ᾱ′ puts it in ᾱ′
+      obtain ⟨hqf, -, hqr⟩ := hsame q hq hqb
+      rcases Key.fillKey_iff.mp (Parked.fillable_iff.mp hqf).1 with ⟨l, hk⟩ | ⟨κ, hk, hκ, -⟩
+      · rw [hk] at hre; cases hre
+      · rw [hk] at hre; injection hre with hre
+        exact hqr r hr (hre ▸ hκ) (by rw [hk, hre])
   · by_cases hpb : p.blocker ∈ ᾱ'
     · exact (hA.spent' p hp hpb hps).2.2 q hq hα hqs hm
     · exact (hA.dis _ hα p (mem_letG.mpr ⟨hp, hpb⟩)).2.1 hm
@@ -214,20 +248,24 @@ theorem LetAdmissible.of_no_bad {Γ : QCtx B} {S S₁ : SolverState B} {ᾱ : Li
   · exact b2 p hp hb (.inr ⟨q, hq, he⟩)
   · exact fun δ hδ => Classical.byContradiction fun hn =>
         b2 p hp hb (.inl ⟨δ, hδ, hn⟩)
-  · have b4 : ¬ ((p.fillable S₁) = false ∨
+  · have b4 : ¬ ((p.fillable S₁ ᾱ) = false ∨
         ∃ q ∈ S₁.parked, q.blocker = p.blocker ∧
-          ((q.fillable S₁) = false ∨
-           (q.stump.label.applySubst S₁.subst = p.stump.label.applySubst S₁.subst ∧
-            ¬ q.spentAlike S₁ p))) :=
+          ((q.fillable S₁ ᾱ) = false ∨
+           ((q.stump.label.applySubst S₁.subst).keyName =
+              (p.stump.label.applySubst S₁.subst).keyName ∧ ¬ q.spentAlike S₁ p) ∨
+           ∃ r ∈ S₁.parked, r.blocker ∈ ᾱ ∧
+             q.stump.label.applySubst S₁.subst = .var r.blocker)) :=
       fun hn => h _ hb (.inr (.inr (.inr (.inl ⟨p, hp, rfl, hsp, hn⟩))))
-    refine ⟨?_, fun q hq hqb => ⟨?_, fun he => ?_⟩, fun q hq hqb hqs hm => ?_⟩
-    · cases hc : (p.fillable S₁)
+    refine ⟨?_, fun q hq hqb => ⟨?_, fun he => ?_, fun r hr hrb he => ?_⟩,
+      fun q hq hqb hqs hm => ?_⟩
+    · cases hc : (p.fillable S₁ ᾱ)
       · exact absurd (.inl hc) b4
       · rfl
-    · cases hc : (q.fillable S₁)
+    · cases hc : (q.fillable S₁ ᾱ)
       · exact absurd (.inr ⟨q, hq, hqb, .inl hc⟩) b4
       · rfl
-    · exact Classical.byContradiction fun hn => b4 (.inr ⟨q, hq, hqb, .inr ⟨he, hn⟩⟩)
+    · exact Classical.byContradiction fun hn => b4 (.inr ⟨q, hq, hqb, .inr (.inl ⟨he, hn⟩)⟩)
+    · exact b4 (.inr ⟨q, hq, hqb, .inr (.inr ⟨r, hr, hrb, he⟩)⟩)
     · exact h _ hqb (.inr (.inr (.inr (.inr ⟨q, hq, rfl, hqs, p, hp, hsp, hm⟩))))
   · refine ⟨fun hm => ?_, fun hm => ?_, fun hm => ?_⟩
     · exact h α hα (.inr (.inr (.inl ⟨p, hp, hb, .inl hm⟩)))
@@ -269,12 +307,7 @@ theorem letPrune_spec [DecidableEq B] (Γ : QCtx B) (S S₁ : SolverState B) (�
         (Nat.le_antisymm (List.length_filter_le _ _) (Nat.not_lt.mp hge))
       simpa [hbad] using hall α hα
 
-/-- ftv(⟦S₁⟧τ₁, ⟦S₁⟧Δ₁): what A-let chooses ᾱ from. A variable outside it
-would be generalized vacuously. -/
-def letCand (S₁ : SolverState B) (τ₁ : Ty B) : List TyVar :=
-  ((τ₁.applySubst S₁.subst).ftv ++ S₁.parked.flatMap (fun p =>
-    (p.stump.row.applySubst S₁.subst).ftv ++ (p.stump.res.applySubst S₁.subst).ftv ++
-      (p.stump.label.applySubst S₁.subst).ftv)).eraseDups
+-- `letCand` lives in Infer.lean, next to `letQ`: the top level (`Run`) uses it.
 
 /-- the ᾱ a function should choose at A-let: gen_{Γ,S}(S₁, τ₁) -/
 def greatestAlpha [DecidableEq B] (Γ : QCtx B) (S S₁ : SolverState B) (τ₁ : Ty B) :

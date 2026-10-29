@@ -705,15 +705,16 @@ def VarCase (B C : Type) [DecidableEq B] (constTy : Sig B C) : Prop :=
 
 /-- the A-let case, given both induction hypotheses. -/
 def LetCase (B C : Type) [DecidableEq B] (constTy : Sig B C) : Prop :=
-  ∀ {Γ : QCtx B} {S S₁ S₂ : SolverState B} {x : Var} {e₁ e₂ : Expr C}
+  ∀ {Γ : QCtx B} {S S₁ S₁' S₂ : SolverState B} {x : Var} {e₁ e₂ : Expr C}
     {τ₁ τ₂ : Ty B} {ᾱ : List TyVar},
     Infer constTy Γ S e₁ τ₁ S₁ →
-    LetAdmissible Γ S S₁ ᾱ →
-    Infer constTy (Γ.bindScheme x (letScheme S₁ ᾱ (letQ S₁ ᾱ) τ₁))
-      { S₁ with parked := letG S₁ ᾱ } e₂ τ₂ S₂ →
+    Merges S₁ S₁' →
+    LetAdmissible Γ S S₁' ᾱ →
+    Infer constTy (Γ.bindScheme x (letScheme S₁' ᾱ (letQ S₁' ᾱ) τ₁))
+      { S₁' with parked := letG S₁' ᾱ } e₂ τ₂ S₂ →
     Γ.SchemesWF → S.sol.Clean → S.Quiescent →
     SoundAt constTy Γ e₁ τ₁ S₁ →
-    SoundAt constTy (Γ.bindScheme x (letScheme S₁ ᾱ (letQ S₁ ᾱ) τ₁)) e₂ τ₂ S₂ →
+    SoundAt constTy (Γ.bindScheme x (letScheme S₁' ᾱ (letQ S₁' ᾱ) τ₁)) e₂ τ₂ S₂ →
     SoundAt constTy Γ (.letE x e₁ e₂) τ₂ S₂
 
 /-- ⊢  the let scheme is well formed: `LetResults` is exactly `QScheme.WF` read
@@ -1064,13 +1065,13 @@ theorem inferSound_of {B C : Type} [DecidableEq B] {constTy : Sig B C}
       exact .assumeDyn (.qEq ih₁ (hsolve.unifies_sat hσ₂')) (.qEq ih₂ hkey) List.mem_cons_self
   | _, _, _, _, _, .rcd hb, hΓ, hc, hq => fun σ hab hσ Γ' hr =>
       .qRcd (inferRecSound_of hvar hlet hb hΓ hc hq σ hab hσ Γ' hr)
-  | _, _, _, _, _, .letE (S₁ := S₁) (ᾱ := ᾱ) (x := x) (τ₁ := τ₁) h₁ hA h₂,
+  | _, _, _, _, _, .letE (S₁' := S₁') (ᾱ := ᾱ) (x := x) (τ₁ := τ₁) h₁ hm hA h₂,
       hΓ, hc, hq => by
       have hΓ' := letScheme_wf (x := x) (τ₁ := τ₁) hΓ hA.results
-      have c₁ := Infer.clean h₁ hc
-      have q₁ : ({ S₁ with parked := letG S₁ ᾱ } : SolverState B).Quiescent :=
-        quiescent_sub (Infer.quiescent h₁ hq) (fun p hp => (mem_letG.mp hp).1)
-      exact hlet h₁ hA h₂ hΓ hc hq
+      have c₁ := hm.clean (Infer.clean h₁ hc)
+      have q₁ : ({ S₁' with parked := letG S₁' ᾱ } : SolverState B).Quiescent :=
+        quiescent_sub (hm.quiescent (Infer.quiescent h₁ hq)) (fun p hp => (mem_letG.mp hp).1)
+      exact hlet h₁ hm hA h₂ hΓ hc hq
         (inferSound_of hvar hlet h₁ hΓ hc hq) (inferSound_of hvar hlet h₂ hΓ' c₁ q₁)
   | _, _, _, _, _, .bool hb, _, _, _ => fun _ _ _ _ _ => .qBool hb
   | _, _, _, _, _, .nil _, _, _, _ => fun _ _ _ _ _ => .qNil
@@ -1210,8 +1211,8 @@ theorem inferSound_of_let {B C : Type} [DecidableEq B] {constTy : Sig B C}
 
 --------------------- …AND WHERE IT JOINS -------------------------------------
 /-- ⊢  **the join**: a run from nothing whose parked stumps all hold at σ is a
-plain L2 typing at σ. The `hfin` premise is what finalization supplies (F-★ at
-⟦S′⟧ — `Finalizes.holds`).
+plain L2 typing at σ. The `hfin` premise is what the top level supplies: σ is
+an instance of the answer, at which every constraint discharges (`runSound`).
 No transport along χ is left: `QTypedA.weaken` did the cashing-in. -/
 theorem runSoundA_of {B C : Type} [DecidableEq B] {constTy : Sig B C}
     (hs : InferSound B C constTy)

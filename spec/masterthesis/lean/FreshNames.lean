@@ -157,7 +157,7 @@ theorem nameReuse_infers_unguarded (hu : UnguardedVar Unit Unit (Sig.plain fun _
     Infer (B := Unit) (C := Unit) (Sig.plain fun _ => ()) QCtx.empty ⟨Sol.nil, [], [], ⟨1⟩, []⟩
       nrE nrTy nrFinal := by
   refine Infer.letE (τ₁ := .fn (.var (n 1)) (.var (n 3))) (S₁ := nrS1)
-    (ᾱ := [n 2, n 3]) selEx_infers ⟨?_, fun _ _ _ h => (nomatch h), fun p hp => ?_,
+    (ᾱ := [n 2, n 3]) selEx_infers (.refl _) ⟨?_, fun _ _ _ h => (nomatch h), fun p hp => ?_,
       fun p hp hsp => ?_⟩ ?_
   · intro α hα
     simp only [List.mem_cons, List.not_mem_nil, or_false] at hα
@@ -182,7 +182,7 @@ theorem nameReuse_shared_res :
       nrFinal.parked.map (·.stump.label) = [.lit "m", .lit "l"] :=
   ⟨rfl, rfl⟩
 
-/-- ⊢  **settling either one retired both** while K-hit, K-⊥, K-repark and F-★
+/-- ⊢  **settling either one retired both** while K-hit, K-⊥, K-repark and the old F-★
 filtered on `stump.res`. -/
 theorem nameReuse_filter_drops_both :
     nrFinal.parked.filter (·.stump.res != .var (n 6)) = [] := by

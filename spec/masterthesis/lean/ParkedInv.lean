@@ -85,6 +85,10 @@ theorem SolveTySat.keeps {S S' : SolverState B} {τ τ' : Ty B} :
     SolveTySat S τ τ' S' → S.KeepsS S'
   | ⟨_, hs, hsat⟩ => hs.keepsS.trans hsat.keeps hsat.satMono
 
+theorem Merges.keepsS {S S' : SolverState B} : Merges S S' → S.KeepsS S'
+  | .refl _ => .refl _
+  | .step (.merge _ _ _ _ hs) hms => hs.keeps.trans (Merges.keepsS hms) hms.satMono
+
 --------------------- CONTEXTS -------------------------------------------------
 
 theorem QCtx.SchemesWF.bindScheme {Γ : QCtx B} (h : Γ.SchemesWF) (x : Var)
@@ -214,12 +218,12 @@ theorem Infer.keeps {C : Type} {constTy : Sig B C} :
         (kc.trans (hsk.keeps.trans (kb.trans kp mp) (mb.trans mp)) mt) mk) m₂)
         (hs.satMono.trans m₂)) (ma.trans (hs.satMono.trans m₂))
   | _, _, _, _, _, .rcd hb => InferRec.keeps hb
-  | _, _, _, _, _, .letE (S₁ := S₁) (ᾱ := ᾱ) h₁ hA h₂ => by
-      have k₁ := Infer.keeps h₁
+  | _, _, _, _, _, .letE (S₁' := S₁') (ᾱ := ᾱ) h₁ hm hA h₂ => by
+      have k₁ := (Infer.keeps h₁).trans hm.keepsS hm.satMono
       have k₂ := Infer.keeps h₂
       intro σ hσ p hp
       rcases k₁ σ (Infer.sat_mono h₂ σ hσ) p hp with ⟨q, hq, hqs⟩ | hd
-      · replace hq := (letSplit S₁ ᾱ).mem_iff.mp hq
+      · replace hq := (letSplit S₁' ᾱ).mem_iff.mp hq
         rcases List.mem_append.mp hq with hq | hq
         · exact absurd hqs (hA.own q hq p hp)
         · rcases k₂ σ hσ q hq with ⟨q', hq', hq's⟩ | hd'

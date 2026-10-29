@@ -514,7 +514,7 @@ infix:50 " ≗ " => SubstEquiv
 
 -- ## Solutions at both sorts
 -- Row bindings, plus the type bindings the driver solves on the spot. One
--- shared TyVar namespace (minimal.lean:649), so a variable bound by the type
+-- shared TyVar namespace (`TyVar`, minimal.lean), so a variable bound by the type
 -- pass is readable by the row pass.
 structure Sol (B : Type) where
   ty  : List (TyVar × Ty B)
@@ -553,7 +553,7 @@ def Sol.Sat {B : Type} (θ : TySubst B) (s : Sol B) : Prop :=
 
 -- ## Composing solutions
 -- s₂.comp s₁ — first s₁, then s₂ — the Sol-level image of TySubst.comp
--- (minimal.lean:1669): push s₂ through s₁'s bindings, then keep s₂'s own.
+-- (minimal.lean): push s₂ through s₁'s bindings, then keep s₂'s own.
 def Sol.comp {B : Type} (s₂ s₁ : Sol B) : Sol B :=
   ⟨s₁.ty.map  (fun p => (p.1, p.2.applySubst s₂.toSubst)) ++ s₂.ty,
    s₁.row.map (fun p => (p.1, p.2.applySubst s₂.toSubst)) ++ s₂.row,
@@ -584,7 +584,7 @@ def UResM.seq {B : Type} : UResM B → (TySubst B → Supply → UResM B) → UR
   | r, _ => r
 
 -- ## Unification at the type sort
--- The ≐ counterpart of Unifies (RowEquiv.lean:543); EqsSat is exactly a list
+-- The ≐ counterpart of `Unifies` (RowEquiv.lean); EqsSat is exactly a list
 -- of these.
 def TyUnifies {B : Type} (θ : TySubst B) (τ τ' : Ty B) : Prop :=
   TyEquiv (τ.applySubst θ) (τ'.applySubst θ)

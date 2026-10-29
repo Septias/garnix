@@ -618,7 +618,7 @@ def report (U : Universe) (cap : Nat) : IO Unit := do
   IO.println ""
 
 ---------------------------------- UNIVERSES ----------------------------------
--- Row variables and type variables share ONE namespace (minimal.lean:649), so a
+-- Row variables and type variables share ONE namespace (`TyVar`, minimal.lean), so a
 -- payload `.var "a"` alongside a spine atom `.var "a"` is the cross-sort
 -- aliasing that makes solve-and-apply feed U-expand — the exact mechanism that
 -- killed the lexicographic measure. Both universes below contain it.

@@ -68,8 +68,9 @@
 --     args and park as stumps. One call of h types; two calls clash, so A-let
 --     does not generalize the row of args. Minimal trigger: a spent lookup of x
 --     next to `z ? args.x` (h with only one of `x ? …` / `z ? args.x`, or with
---     an unused x, types). Presumably `LetSpent` (Infer.lean:819: stumps on one
---     blocker with one label must be spent alike), not confirmed. Incompleteness
+--     an unused x, types). Presumably `LetSpent` (stumps on one blocker with one
+--     field name must be spent alike, and the forced merge only identifies
+--     stumps on one spine), not confirmed. Incompleteness
 --     of A-let, not a type error.
 
 import InferFnTerm
@@ -99,8 +100,15 @@ def rowS : Row String → String
   | .dsing q τ => "${" ++ keyS q ++ "}: " ++ tyS τ
 end
 
-def verdict : IRes (Ty String × SolverState String) → String
-  | .ok (τ, S) => tyS (τ.applySubst S.subst)
+-- a run's answer prints as `Q ⇒ τ` (every variable bound, the ∀ implicit);
+-- Q = ∅ prints as the plain type
+def stumpS (st : Stump String) : String :=
+  "⟨" ++ rowS st.row ++ "." ++ keyS st.label ++ " ↓ " ++ tyS st.res ++ "⟩"
+
+def verdict : IRes (QScheme String × SolverState String) → String
+  | .ok (σ, _) =>
+      (if σ.constraints.isEmpty then "" else
+         String.intercalate ", " (σ.constraints.map stumpS) ++ " ⇒ ") ++ tyS σ.body
   | .fail m    => "fail: " ++ m
   | .oof       => "out of fuel"
 
@@ -225,7 +233,7 @@ def dynBare (binds : Bool) : E := lets [("aString", .lab "a"), ("bString", .lab 
 #guard run (dynBare false)
   = "{hasAttrs: {_1: {a: {b: null}} | _2: ⌊a⌋} | selectAttrs: bool | selectOrAttrs: bool | recBinds: bool | multiAttrs: bool}"
 #guard run (.lam "h" (dynBare true))
-  = "((⌊b⌋ → ⌊k20⌋) → {hasAttrs: {_1: {a: {b: null}} | _2: ⌊a⌋} | selectAttrs: bool | selectOrAttrs: bool | recBinds: bool | multiAttrs: bool | binds: ★})"
+  = "⟨${k20}: bool | ε.bc ↓ t24⟩ ⇒ ((⌊b⌋ → ⌊k20⌋) → {hasAttrs: {_1: {a: {b: null}} | _2: ⌊a⌋} | selectAttrs: bool | selectOrAttrs: bool | recBinds: bool | multiAttrs: bool | binds: t24})"
 #guard run (.app (.lam "h" (dynBare true)) (.lam "z" (.lab "bc")))
   = "{hasAttrs: {_1: {a: {b: null}} | _2: ⌊a⌋} | selectAttrs: bool | selectOrAttrs: bool | recBinds: bool | multiAttrs: bool | binds: bool}"
 

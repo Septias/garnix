@@ -234,6 +234,18 @@ private theorem la_var_z :
     (fun _ _ => ⟨2, Nat.le_refl _, by decide, rfl⟩) (by decide) (κs := [.ty]) rfl rfl
     ⟨_, .nil, .done (SolverState.Quiescent.nil rfl)⟩
 
+/-- a run whose inference leaves nothing parked answers a plain type, and the
+identity is an instance of it: what `RunSound` then says of the program. -/
+private theorem runSound_plain {e : Expr Unit} {τ : Ty Unit} {S₁ : SolverState Unit}
+    (h : RunSound Unit Unit (Sig.plain fun _ => ()))
+    (hinf : Infer (Sig.plain fun _ => ()) QCtx.empty ⟨Sol.nil, [], [], ⟨1⟩, []⟩ e τ S₁)
+    (hp : S₁.parked = []) :
+    QTyped (Sig.plain fun _ => ()) QCtx.empty e (τ.applySubst S₁.subst) :=
+  (h e _ ⟨τ, S₁, S₁, S₁, hinf, .refl _, rfl, .refl _,
+    fun p hq => absurd (hp ▸ hq) List.not_mem_nil⟩).1 _
+    ⟨TySubst.id _, ⟨fun _ _ => rfl, fun _ _ => rfl, fun _ _ => rfl⟩,
+     fun s hs => by simp [letScheme, hp] at hs, Ty.applySubst_id _⟩
+
 /-- ⊢  **`RunSound` fails against the unguarded A-let.** Any inference relation
 closed under A-let without the Γ-freshness premise runs `λy. let z = y in z` to
 `a → b`, and `letAlias_not_typed` says no declarative derivation agrees. -/
@@ -246,7 +258,7 @@ theorem runSound_false_unguarded_let (hu : UnguardedLet Unit Unit (Sig.plain fun
     exact hu (Δq := []) (Δγ := []) (ᾱ := [laA]) (κs := [.ty]) la_var_y
       (by show [laA].map laS.kinds.lookup = [some Kind.ty]; simp [KEnv.lookup, laS])
       rfl (fun _ h => nomatch h) (fun _ h => nomatch h) la_var_z
-  exact letAlias_not_typed laA_ne_laB (h _ _ _ ⟨laS3, laS3, hinf, Materializes.refl _ _, .nil⟩)
+  exact letAlias_not_typed laA_ne_laB (runSound_plain h hinf rfl)
 
 /-- ⊢  **…and the premise is exactly what the witness violates**: the generalized
 `a` is y's type, a variable of Γ that ⟦S₁⟧ leaves in place. -/
@@ -260,7 +272,7 @@ theorem letAlias_infers_guarded :
     Infer (B := Unit) (C := Unit) (Sig.plain fun _ => ()) QCtx.empty
       ⟨Sol.nil, [], [], ⟨1⟩, []⟩ laE (.fn (.var laA) (.var laA)) laS := by
   refine Infer.lam (S₀ := laS) rfl ?_
-  refine Infer.letE (ᾱ := []) la_var_y
+  refine Infer.letE (ᾱ := []) la_var_y (.refl _)
     ⟨fun _ h => (nomatch h), fun _ hp => absurd (mem_letQ.mp hp).2 List.not_mem_nil,
      fun _ hp => absurd (mem_letQ.mp hp).2 List.not_mem_nil,
      fun _ hp => absurd (mem_letQ.mp hp).2 List.not_mem_nil⟩ ?_
@@ -303,7 +315,7 @@ theorem inferSoundC_false : ¬ InferSoundC Unit Unit (Sig.plain fun _ => ()) := 
 -- so ᾱ = [2] passes the Γ-freshness premise. A-let then files every stump
 -- blocked in ᾱ under the scheme of y — including field a's, which has nothing to
 -- do with y. y is never used, the stump is gone from the state, nothing ever
--- finalizes it, and the run ends with `a : {2} → 3` and 3 unconstrained.
+-- discharges it, and the run ends with `a : {2} → 3` and 3 unconstrained.
 -- Declaratively x.l at a free row is `?`, so its only typing is ★.
 
 private def lcS1 : SolverState Unit :=
@@ -382,10 +394,10 @@ theorem letCapture_infers_unguarded (hu : UnguardedLet Unit Unit (Sig.plain fun 
     (fun _ h => nomatch h) .con
 
 /-- ⊢  **`RunSound` fails against it.** Field a's stump was generalized into a
-scheme nobody instantiates, so no finalization ever commits its answer. -/
+scheme nobody instantiates, so nothing ever commits its answer. -/
 theorem runSound_false_let_captures (hu : UnguardedLet Unit Unit (Sig.plain fun _ => ())) :
     ¬ RunSound Unit Unit (Sig.plain fun _ => ()) := fun h =>
-  letCapture_not_typed (h _ _ _ ⟨lcS2, lcS2, letCapture_infers_unguarded hu, Materializes.refl _ _, .nil⟩)
+  letCapture_not_typed (runSound_plain h (letCapture_infers_unguarded hu) rfl)
 
 /-- A-let without its ownership premise, but with the other three conditions of
 `LetAdmissible`: freshness for Γ and Δ_Γ, results generalized, spent results
@@ -396,7 +408,7 @@ def UnownedLet (B C : Type) [DecidableEq B] (constTy : Sig B C) : Prop :=
     Infer constTy Γ S e₁ τ₁ S₁ →
     (∀ α ∈ ᾱ, α ∉ letEnvFtv Γ S₁ (letG S₁ ᾱ)) →
     (∀ p ∈ letQ S₁ ᾱ, ∀ δ ∈ (p.stump.res.applySubst S₁.subst).ftv, δ ∈ ᾱ) →
-    LetSpent S₁ (letQ S₁ ᾱ) →
+    LetSpent S₁ ᾱ (letQ S₁ ᾱ) →
     Infer constTy (Γ.bindScheme x (letScheme S₁ ᾱ (letQ S₁ ᾱ) τ₁))
       { S₁ with parked := letG S₁ ᾱ } e₂ τ₂ S₂ →
     Infer constTy Γ S (.letE x e₁ e₂) τ₂ S₂
@@ -431,7 +443,7 @@ theorem runSound_false_unowned_let (hu : UnownedLet Unit Unit (Sig.plain fun _ =
       simp only [lcS1, List.mem_cons, List.not_mem_nil, or_false] at hp
       subst hp
       exact absurd hsp (by decide)
-  exact letCapture_not_typed (h _ _ _ ⟨lcS2, lcS2, hinf, Materializes.refl _ _, .nil⟩)
+  exact letCapture_not_typed (runSound_plain h hinf rfl)
 
 /-- ⊢  the witness violates the new ownership premise: y's let is entered at
 `lcS1` (e₁ is a constant, so it is also S₁), and Δ_q = `lcS1.parked` — the stump

@@ -345,7 +345,7 @@ theorem Supply.fresh_ne (S : Supply) : S.fresh.1 ≠ S.fresh.2.fresh.1 := fun h 
 
 -- ## Free variables of a spine
 -- The avoid-set of a row problem. Field types count: the namespace is shared
--- (minimal.lean:649), so a fresh row-var must dodge type-var occurrences too.
+-- (`TyVar`, minimal.lean), so a fresh row-var must dodge type-var occurrences too.
 -- ⊢  sFtv s = (ofSpine s).ftv       (so the spine- and row-level notions agree)
 theorem sFtv_ofSpine {B : Type} : (s : List (Atom B)) → sFtv s = (ofSpine s).ftv
   | [] => rfl
@@ -731,7 +731,7 @@ theorem host_proj {B : Type} {θ : TySubst B} {β : TyVar} {l : Label} :
 --        ⟹   ∃ σ ρ'.  θτ ≈ₜ σ  ∧  θβ ≈ᵣ (l:σ | ρ')
 -- The host must expand with an l-field IN FRONT: index 0 says nothing precedes
 -- it but fields, and those all carry other labels, so ≈-comm bubbles it out
--- (spine_extract, RowEquiv.lean:243). This is the maximality argument that
+-- (`spine_extract`, RowEquiv.lean). This is the maximality argument that
 -- proof-state.md carries by hand for crossfield.
 -- ⊢  proj_l ps ≈ₚ qs with ps starting at index 0   ⟹   so does qs
 theorem ProjEquiv.head_zero {B : Type} {τ : Ty B} {ps qs : List (Nat × Ty B)}
@@ -811,7 +811,7 @@ theorem proj_head_zero_var {B : Type} {θ : TySubst B} {l : Label} {σ : Ty B}
 --        ⟹   ∃ σ ρ'.  θτ ≈ₜ σ  ∧  θβ ≈ᵣ (l:σ | ρ')
 -- The host must expand with an l-field IN FRONT: index 0 says nothing precedes
 -- it but fields, and those all carry other labels, so ≈-comm bubbles it out
--- (spine_extract, RowEquiv.lean:243). This is the maximality argument that
+-- (`spine_extract`, RowEquiv.lean). This is the maximality argument that
 -- proof-state.md currently carries BY HAND for crossfield.
 --
 -- The candidate the head names need not be β a priori — but every OTHER
