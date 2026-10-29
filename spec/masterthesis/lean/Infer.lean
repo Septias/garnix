@@ -693,6 +693,37 @@ theorem Materializes.refl {B : Type} [DecidableEq B] (S : SolverState B) :
   | _ :: ps => .skip (Materializes.refl S ps)
 
 
+--------------------- THE FORCED MERGE ----------------------------------------
+-- Two parked stumps can ask the SAME lookup: `x: {p = (x.l) c; q = x.l}` parks
+-- ⟨ρ.l ↓ 𝓫 → β⟩ and ⟨ρ.l ↓ δ⟩. At every instance one lookup has one answer, so
+-- every instance that discharges both sends their results to ≈-equal types
+-- (`merge_forced`, Finalization.lean). Unifying the results is then a forced
+-- move, and it is what `LetSpent` needs: after it, the unspent stump is spent
+-- alike (`Parked.spentAlike`).
+
+/-- `S ⊢ Δ ⇝ₘ S′` — M-merge: two parked stumps with one spine and one key at S
+have their results unified. Both stay parked; saturation wakes what the equation
+staled. -/
+inductive Merge {B : Type} [DecidableEq B] : SolverState B → SolverState B → Prop where
+  | merge {S S' : SolverState B} {p q : Parked B} :
+      p ∈ S.parked → q ∈ S.parked →
+      (p.stump.row.applySubst S.subst).toSpine = (q.stump.row.applySubst S.subst).toSpine →
+      p.stump.label.applySubst S.subst = q.stump.label.applySubst S.subst →
+      SolveTySat S p.stump.res q.stump.res S' →
+      Merge S S'
+
+/-- `S ⊢ Δ ⇝ₘ* S′` — any number of merges. A merge whose equation fails is not
+taken, so merging never makes a run fail. -/
+inductive Merges {B : Type} [DecidableEq B] : SolverState B → SolverState B → Prop where
+  | refl (S : SolverState B) : Merges S S
+  | step {S S₁ S₂ : SolverState B} : Merge S S₁ → Merges S₁ S₂ → Merges S S₂
+
+theorem Merges.quiescent {B : Type} [DecidableEq B] {S S' : SolverState B} :
+    Merges S S' → S.Quiescent → S'.Quiescent
+  | .refl _, h => h
+  | .step (.merge _ _ _ _ hs) hms, _ => Merges.quiescent hms hs.quiescent
+
+
 
 --------------------- INSTANTIATION AT A-var ---------------------------------
 -- `x: ∀(ᾱ: κ̄). Q ⇒ τ ∈ Γ   fresh β̄: κ̄   S ⊢ Q[β̄/ᾱ] ↝* S′`.

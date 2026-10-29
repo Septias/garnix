@@ -42,6 +42,26 @@ def rec2 (l₁ : String) (e₁ : E) (l₂ : String) (e₂ : E) : E :=
 
 def run (e : E) : String := verdict (runF (Sig.plain fun _ => ()) 50 e)
 
+-- a top-level scheme prints as `Q ⇒ τ`: at the top level every variable is
+-- bound, so the ∀ is left implicit, and Q = ∅ prints as the plain type
+def keyDS : Key → String
+  | .lit l => l
+  | .var α => "${k" ++ toString α.length ++ "}"
+
+def stumpS (st : Stump Unit) : String :=
+  "⟨" ++ rowS st.row ++ "." ++ keyDS st.label ++ " ↓ " ++ tyS st.res ++ "⟩"
+
+def schemeS (σ : QScheme Unit) : String :=
+  (if σ.constraints.isEmpty then "" else
+     String.intercalate ", " (σ.constraints.map stumpS) ++ " ⇒ ") ++ tyS σ.body
+
+def verdictQ : IRes (QScheme Unit × SolverState Unit) → String
+  | .ok (σ, _) => schemeS σ
+  | .fail m    => "fail: " ++ m
+  | .oof       => "out of fuel"
+
+def runQ (e : E) : String := verdictQ (runQF (Sig.plain fun _ => ()) 50 e)
+
 -- λx. x.l — the stump finalizes: the lookup stays `?`, the result is ★
 #guard run (.lam "x" (.sel (v "x") "l")) = "({r2} → ★)"
 -- …and applied, the promise is kept: found at 𝓫, absent at ★

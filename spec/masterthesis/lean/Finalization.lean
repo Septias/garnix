@@ -305,6 +305,63 @@ theorem Materializes.keeps {S S' : SolverState B} {ps : List (Parked B)} :
       obtain ⟨k₂, c₂, x₂, m₂⟩ := Materializes.keeps hms c₁
       exact ⟨k₁.trans k₂ m₂, c₂, x₁.trans x₂, m₁.trans m₂⟩
 
+--------------------- THE MERGE KEEPS, AND IS FORCED ---------------------------
+-- M-merge is an equation plus saturation, like F-hit, and inherits `KeepsS`
+-- the same way.
+
+/-- ⊢  one merge keeps every stump and cleanliness, and extends. -/
+theorem Merge.keeps {S S' : SolverState B} (hm : Merge S S') (hc : S.sol.Clean) :
+    S.KeepsS S' ∧ S'.sol.Clean ∧ S.Ext S' ∧ S.SatMono S' := by
+  cases hm with
+  | merge _ _ _ _ hs => exact ⟨hs.keeps, hs.clean hc, hs.ext, hs.satMono⟩
+
+/-- ⊢  …and so do any number of them. -/
+theorem Merges.keeps {S S' : SolverState B} :
+    Merges S S' → S.sol.Clean →
+      S.KeepsS S' ∧ S'.sol.Clean ∧ S.Ext S' ∧ S.SatMono S'
+  | .refl _, hc => ⟨.refl _, hc, .refl _, .refl _⟩
+  | .step hm hms, hc => by
+      obtain ⟨k₁, c₁, x₁, m₁⟩ := hm.keeps hc
+      obtain ⟨k₂, c₂, x₂, m₂⟩ := Merges.keeps hms c₁
+      exact ⟨k₁.trans k₂ m₂, c₂, x₁.trans x₂, m₁.trans m₂⟩
+
+/-- ⊢  **the merge is forced.** Two stumps with one spine and one key ask one
+lookup, so every θ that discharges both sends their results to ≈-equal types:
+`LookupQ` respects ≈ and is deterministic, D-hit holds up to ≈, and D-⊥ and D-?
+both give ★. M-merge applies this to the stumps read at the state. -/
+theorem merge_forced {st₁ st₂ : Stump B} (hrow : st₁.row.toSpine = st₂.row.toSpine)
+    (hkey : st₁.label = st₂.label) {θ : TySubst B}
+    (h₁ : st₁.Discharge θ) (h₂ : st₂.Discharge θ) :
+    TyEquiv (st₁.res.applySubst θ) (st₂.res.applySubst θ) := by
+  have he : RowEquiv (st₁.row.applySubst θ) (st₂.row.applySubst θ) :=
+    RowEquiv.applySubst θ ((Row.toSpine_equiv st₁.row).trans
+      (hrow ▸ (Row.toSpine_equiv st₂.row).symm))
+  -- st₁'s lookup, carried to st₂'s row
+  have carry : ∀ {r}, LookupQ (st₁.row.applySubst θ) (st₁.label.applySubst θ) r →
+      ∀ {r₂}, LookupQ (st₂.row.applySubst θ) (st₂.label.applySubst θ) r₂ → ResEquiv r r₂ := by
+    intro r hl r₂ hl₂
+    obtain ⟨r', hl', hr'⟩ := LookupQ.equiv he hl
+    rw [hkey] at hl'
+    exact (LookupQ.det hl' hl₂) ▸ hr'
+  cases h₁ with
+  | hit hl₁ e₁ =>
+      cases h₂ with
+      | hit hl₂ e₂ =>
+          cases carry hl₁ hl₂ with
+          | found e => exact e₁.trans (e.trans e₂.symm)
+      | abs hl₂ _ => cases carry hl₁ hl₂
+      | unk hl₂ _ => cases carry hl₁ hl₂
+  | abs hl₁ e₁ =>
+      cases h₂ with
+      | hit hl₂ _ => cases carry hl₁ hl₂
+      | abs _ e₂ => rw [e₁, e₂]; exact .refl _
+      | unk hl₂ _ => cases carry hl₁ hl₂
+  | unk hl₁ e₁ =>
+      cases h₂ with
+      | hit hl₂ _ => cases carry hl₁ hl₂
+      | abs hl₂ _ => cases carry hl₁ hl₂
+      | unk _ e₂ => rw [e₁, e₂]; exact .refl _
+
 --------------------- RunSound -------------------------------------------------
 
 /-- ⊢  **ALGORITHM SOUNDNESS — `RunSound`.** A run from nothing — inference,
