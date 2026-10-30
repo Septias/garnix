@@ -14,7 +14,6 @@ NixLang programs establish absence routinely: `?`-guards, `removeAttrs`, closed 
 - the unification wand (incompleteness.md kind 1) solved by a forced move
 - a faithful desugaring of mixed literals (`{ a = …; ${n} = …; }` ⇒ `n ≠ a`) instead of the current shadowing divergence
 - the foundation for occurrence typing (`if x ? l` refines the else-branch with `x ⊬ l`), attribute patterns
-- in the thesis: the Lacks-Predicates section of @sec-extensions (currently `todo`) as a mechanized result
 
 Negative information does not fix everything. With context-free ≈, the Levi, swap and shift cases (incompleteness.md kinds 2-4) stay stuck. 06_incompleteness.typ:29 already says so.
 
@@ -131,7 +130,7 @@ Negative information does not fix everything. With context-free ≈, the Levi, s
 - R2 keyed fields `${κ}`: binding κ can turn a field into l. propagate emits `κ ≠ l`, never succeeds blindly
 - R3 definite types past a lacking variable: sound only via instantiation side condition and `QTypedN.applySubst`; discharge at application is D6
 - R4 stump wake-up on Π growth adds a second trigger; re-check termination (Π over finite labels × vars, monotone ⇒ bounded)
-- R5 Levi claim: done in 06_incompleteness.typ:29. Keep it that way in § Lacks-Predicates
+- R5 Levi claim: done in 06_incompleteness.typ:29
 - R6 RowUnify is ~13k lines. Phase A avoids it; Phase B is one arm. No Phase C before B is green
 - R7 Supply must avoid `ftv Π`, else `σ =_{ftv ρ₁ρ₂} σ′` loses atom variables
 - R8 oracle arm churns every leg (≈ U-host size). At most 3 attempts per leg, then report
