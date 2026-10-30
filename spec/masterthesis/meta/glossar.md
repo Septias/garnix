@@ -1,5 +1,6 @@
 
-- *Head Rigidity*: The head-constructor does not change (functions stay functions)
+## Proofs
+- *Head Rigidity*: The head constructor does not change (functions stay functions)
 - *Inversion*: Invert a typing judgement to learn more about the premise type
 - *Frozen*: A position typed at ★ that no substitution can refine again
 - *Blurring*: Weakening a definite type to ★ (T-★-intro)
@@ -10,18 +11,38 @@
 - *Factorization*: An alignment of one row's atoms against the other's (Levi-style); a unifier is one, two distinct ones mean no mgu
 - *Cancellative*: a | ρ₁ ≈ a | ρ₂ implies ρ₁ ≈ ρ₂ (and from the right) — shared atoms strip off either end
 - *mgu*: Most general unifier
-- *Stump*: A parked selection ⟨blocker α, ρ.l ↓ δ⟩ — the lookup waits until α gets solved
-- *Blocker*: The row-variable a stuck lookup is waiting on
+
+
+## Stumps
+- *Stump*: A lookup ⟨ρ.l ↓ δ⟩ carried by a qualified scheme; δ names its result. Instantiation discharges it (D-hit, D-⊥, D-?)
+- *Spent stump*: A stump whose result is already used at a type that is neither a variable nor ★; an instance must make its lookup hit. Never "promise"
+- *Parked stump*: A stump in the solver state, ⟨α ⊳ ρ.l ↓ δ⟩, filed under its blocker α
+- *Blocker*: The variable a parked stump waits on: a row or label variable
+- *Pending lookup*: Informal word for a stump; only in the introduction, the overview, the conclusion and the definition of stumps
 - *Wake-up*: Re-running a stump's lookup when unification solves its blocker
-- *Qualified scheme*: ∀ᾱ. Q ⇒ τ — a scheme carrying its pending lookups as constraints (L2)
-- *Refinement*: A lookup result improving (? → τ or ⊥) once instantiation unblocks it; only ? can improve, definite results are final
-- *Scoped rows*: Duplicate labels stay in the row; lookup resolves them with left-precedence
-- *Spine*: A row normalized mod assoc/units to a flat atom sequence
-- *Segment*: A var-free run of a spine; distinct labels commute inside it, nothing crosses a var
-- *Window*: The leading (or trailing) segment — where unification may match fields
-- *Stuck*: Unification failure where solutions exist but no mgu does (Wand ambiguity: two abstract concatenations must align)
-- *Trichotomy*: ≐ᵣ ends in exactly one of success + mgu, clash (no unifier), or stuck (no unique mgu)
-- *↯*: Lookup error — a selection reached a record literal without the label; the residual-risk disjunct of progress
-- *Soft typing*: Programs keep their untyped semantics; ★ marks where the analysis gave up, warnings say why
 - *Instance-Closed T-let*: ∀ τ₁ ≤ σ. Γ ⊢ e₁: τ₁
-- *Spent stump*: A stump whose result is already used at a type that is neither a variable nor ★; an instance must make its lookup hit
+- *↯*: Lookup error;  residual-risk disjunct of progress
+- *Stuck*: Verdict of ≐ᵣ when no move applies. Conservative: the problem may still have an mgu (`stuck_masks_mgu`). The Wand equation is the prime example
+
+
+## Scheme
+- *Qualified Scheme*: A scheme carrying its pending lookups as constraints
+- *Qualifier*: The role of a stump in a scheme ("stays a qualifier of the answer"), not a separate object
+- *Refinement*: A lookup result improving (? → τ or ⊥) once instantiation unblocks it; only ? can improve, definite results are final
+
+
+## Spine
+- *Spine*: A row normalized mod assoc/units to a flat atom sequence
+- *Segment*: A var-free part in a spine; distinct labels commute inside it, nothing crosses a var
+- *Window*: The leading (or trailing) segment of a spine
+
+
+## Misc
+- *Wand ambiguity*: The lookup in `a: b: (a ‖ b).l`: it answers ? because the field may come from either operand. Handled by stumps
+- *Wand equation*: (α₁ | … | αₙ) ≐ᵣ (l: 𝓫) with n ≥ 2: it has unifiers but no mgu and is reported stuck. Never called "Wand ambiguity"
+- *Soft typing*: Programs keep their untyped semantics; ★ marks where the analysis gave up, warnings say why
+- *Key*: A label l or a label variable α
+- *Keyed field*: A row field ${k}: τ whose label is a key
+- *Unknown type ★*: The type of what the analysis cannot decide; no elimination form, unifies only with itself
+- *Field demand*: What other row systems hand to unification for a selection; used only to contrast with our lookup relation
+- *Scoped labels*: Duplicate labels stay in the row; lookup takes the leftmost occurrence, and ‖ puts its right operand first, so the right operand wins
