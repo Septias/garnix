@@ -60,7 +60,6 @@
 #include "sections/08_mechanization.typ"
 #include "sections/09_discussion.typ"
 #include "sections/10_related-work.typ"
-#include "sections/11_conclusion.typ"
 
 
 // -------------- Bibliography ----------------
@@ -74,7 +73,7 @@
 #show: appendix
 #show figure: set block(breakable: true)
 
-#include "sections/12_appendices.typ"
+#include "sections/11_appendices.typ"
 
 #page[
   #text(size: 15pt)[*Declaration*]

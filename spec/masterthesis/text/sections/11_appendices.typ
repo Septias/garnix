@@ -3,7 +3,7 @@
 
 = MacroNix <app-macronix>
 
-The Lean development extends MiniNix beyond the first-class labels of @sec-fc-labels by the constructs of NixLang whose typing is routine: booleans, conditionals, assertions, the attribute test `e ? l`, homogeneous lists and a set of builtins. We call the extension MacroNix. It adds no idea to the type system, and the thesis does not present it beyond this appendix; its purpose is that the mechanized results hold for a language closer to NixLang, and that the test programs of @sec-idioms and of the Nix test suite can be stated without encoding.
+The Lean development extends MiniNix beyond the first-class labels of @sec-fc-labels by the constructs of NixLang whose typing is routine: booleans, conditionals, assertions, the attribute test `e ? l`, homogeneous lists and a set of builtins. We call the extension MacroNix. Its purpose is that the mechanized results hold for a language closer to NixLang, and that the test programs of @sec-idioms and of the Nix test suite can be stated without encoding.
 
 $
   e & ::= dots | p #h(0.2em) e_1 dots e_n | #b[true] | #b[false] | #b[if] e #b[then] e_1 #b[else] e_2 | #b[assert] e_1 ; e_2 | [] | e_1 :: e_2 | e #h(0.2em) ? #h(0.2em) l \
