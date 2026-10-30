@@ -31,7 +31,7 @@
     np-f[Functions, application], np-y, np-r[call-by-value application],
     np-f[`let` (non-recursive)], np-y, np-r[let-polymorphism with qualified schemes],
     np-f[`let { …; body = e; }` (deprecated)], np-p, np-r[desugared to nested `let`s],
-    np-f[Record literals, selection `e.l`], np-y, np-r[scoped rows, three-way lookup],
+    np-f[Record literals, selection `e.l`], np-y, np-r[scoped labels, three-way lookup],
     np-f[Nested keys `a.b.c = v`], np-p, np-r[desugared to nested records],
     np-f[Update `a // b`], np-y, np-r[asymmetric concatenation ‖],
     np-f[Dynamic keys `${e}`], np-y, np-r[first-class labels; string-typed keys answer ★],

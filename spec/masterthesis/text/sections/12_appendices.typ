@@ -20,7 +20,7 @@ A builtin p is applied to all of its arguments; a partial application is written
   name: [MacroNix metatheory],
   lean: "qProgress, qPreservation, inferSound, runF_terminates",
 )[
-  For every sound signature, progress up to errors and preservation hold, where an error is now also a failed assertion or a failing builtin. Inference is sound and terminates, and every leg of the unification trichotomy carries the list case.
+  For every sound signature, progress up to errors and preservation hold, where an error is now also a failed assertion or a failing builtin. Inference is sound and terminates, and the unification theorems of @unification-metatheory carry the list case.
 ]
 
 #theorem(name: [Conservativity], lean: "qtyped_mini_iff, runF_mini, Step.mini")[

@@ -1,5 +1,11 @@
 #import "../functions.typ": *
 
+#let meta = [
+  - This section should have my personal touch to it
+  - The structure I'm not sure about
+]
+
+
 = Conclusion
 
 // Goal type asymmetric record conc and fc-labels
@@ -16,4 +22,4 @@ The aim of this thesis was to type asymmetric record concatenation, the operatio
 
 The resulting calculus, MiniNix, is type-safe up to lookup errors, and progress and preservation are mechanized in Lean. Since a definite miss is typed at ★, principality for `x: x.l` forces schemes to carry their pending lookups: no plain scheme is principal for it, while a qualified one is, and one binding then serves uses that no plain scheme can serve together. Row unification operates on spines, makes only forced moves and returns a most general unifier when it succeeds; the inference algorithm built on it parks unanswered lookups as stumps, terminates and answers schemes whose instances are declarative typings; for `x: x.l` the answer is principal. The places where the algorithm gives up that we know of fall into three groups: row equations without a most general unifier, stops that are the price of forced moves, and limits of inference itself. Whether the three groups are exhaustive is open.
 
-Measured against the design goals of @sec-motivation, MiniNix requires no source changes and leaves evaluation untouched, but it reaches totality only in part and has not yet been measured on nixpkgs (@sec-goals). The path towards NixLang is correspondingly twofold. The remaining constructs of the language (patterns, `with`, `inherit` and the builtins) must be covered, with presence flags in the style of Rémy @remy_typechecking or lacks-predicates @gaster_jones as the most promising source of the negative information that scoped rows lack. And ★ must become usable rather than merely recorded. A gradual reading of the unknown type without casts is one candidate, but it has to restrict where inference may choose ★: with ★ chosen implicitly, `(x: x 4) 3` types and gets stuck.
+Measured against the design goals of @sec-motivation, MiniNix requires no source changes and leaves evaluation untouched, but it reaches totality only in part and has not yet been measured on nixpkgs (@sec-goals). The path towards NixLang is correspondingly twofold. The remaining constructs of the language (patterns, `with`, `inherit` and the builtins) must be covered, with presence flags in the style of Rémy @remy_typechecking or lacks-predicates @gaster_jones as the most promising source of the negative information that rows with scoped labels lack. And ★ must become usable rather than merely recorded. A gradual reading of the unknown type without casts is one candidate, but it has to restrict where inference may choose ★: with ★ chosen implicitly, `(x: x 4) 3` types and gets stuck.

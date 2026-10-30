@@ -3,7 +3,7 @@
 
 = The Declarative Calculus <declarative>
 
-This section discusses MinNix' declarative calculus. We start by giving the syntax of terms and types and show the typing rules up-front. They are mostly standard and we discuss their specialties in the following sections.
+This section discusses MiniNix's declarative calculus. We start by giving the syntax of terms and types and show the typing rules up-front. They are mostly standard and we discuss their specialties in the following sections.
 
 
 #let syntax = figure(
@@ -35,7 +35,7 @@ This section discusses MinNix' declarative calculus. We start by giving the synt
 )
 #syntax <syntax>
 
-@syntax gives the syntax of terms and types. We extend the standard λ-calculus with records ${ξ}$, asymmetric concatenation $(e₁ ‖ e₂)$ and let-polymorphism. Functions are written $(x: e)$ to mirror the syntax of NixLang and we assume a set 𝓒 of constants $c$ and a finite set 𝓑 of base types $𝓫$, together with a total mapping $c ↦ 𝓫_c$ that assigns each constant its base type. The unknown type ★ types expressions the analysis cannot decide. Record literals ${ξ}$ and record types ${ρ}$ are similar in their structure: Both are formed as inductive trees from an empty base, the binding of a single label and concatenation. MiniNix has two kinds Type and Row which will be explained in @sorting.
+@syntax gives the syntax of terms and types. We extend the standard λ-calculus with records ${ξ}$, asymmetric concatenation $(e₁ ‖ e₂)$ and let-polymorphism. Functions are written $(x: e)$ to mirror the syntax of NixLang and we assume a set 𝓒 of constants $c$ and a finite set 𝓑 of base types $𝓫$, together with a total mapping $c ↦ 𝓫_c$ that assigns each constant its base type. The unknown type ★ types expressions the analysis cannot decide. Record literals ${ξ}$ and record types ${ρ}$ are similar in their structure: Both are formed as inductive trees from an empty base, the binding of a single label and concatenation. MiniNix has two sorts Type and Row which will be explained in @sorting.
 
 // Explain the usage of stumps here?
 
@@ -87,7 +87,7 @@ The typing rules extend the Hindley-Milner system @damas_milner with records, co
 
 T-let differs from Hindley-Milner, because its schemes may carry stumps. Instead of generalizing a type of e₁, it binds x to a scheme σ and constrains σ by three premises. The first premise $Γ ⊢ σ "ok"$ guarantees well-sortedness using the sorting rules @sorting. The second premise ensures that every instance of σ is a typing of e₁, so x may be used at any of them. We call this _instance-closed_. The third makes σ _inhabited_, meaning it has at least one instance. Without inhabitation, [`let x = (3 4) in 5`](evaluates to 5 lule) would get a type while being stuck and it can be uninhabited when two different definitions for δ exist. The last premise types e₂ with x bound to σ.
 
-Our record calculus admits three lookup rules (T-sel, T-sel-★ and T-sel-⊥) for the three possible outcomes of the lookup judgement. T-sel is standard and selects a definite type but T-sel-★ and T-sel-⊥ are new. Nix is a lazy language and a faulty record lookup might never be evaluated. This is why T-sel-⊥ types a definitely failing lookup at ★ which might seem nonsensical at first. T-sel-★ is the sensible version that types an unknown lookup result at the unknown type. Finally, T-★-intro blurs any concrete type into the unknown. // such that it acts as a top type?
+Our record calculus admits three lookup rules (T-sel, T-sel-★ and T-sel-⊥) for the three possible outcomes of the lookup judgement. T-sel is standard and selects a definite type but T-sel-★ and T-sel-⊥ are new. [Nix is a lazy language and a faulty record lookup might never be evaluated.](cbv-semantic) This is why T-sel-⊥ types a definitely failing lookup at ★ which might seem nonsensical at first. T-sel-★ is the sensible version that types an unknown lookup result at the unknown type. Finally, T-★-intro blurs any concrete type into the unknown. // such that it acts as a top type?
 
 #example(name: [Two ways to type a selection at ★])[
   The selection `{}.l` has type ★ by T-sel-⊥, since $ε.l ↓ ⊥$, and it evaluates to a lookup error by ↯-sel. In a context with $β: "Row"$, the selector `x: x.l` has type ${β} → ★$ by T-sel-★, since $β.l ↓ #h(0.2em) ?$. Applied to `{l = c}` it evaluates to c, applied to `{}` to a lookup error. Both selections receive ★, but T-sel-⊥ marks a selection that fails whenever it is evaluated, while T-sel-★ marks one whose outcome the row does not yet determine.

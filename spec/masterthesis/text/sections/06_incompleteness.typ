@@ -13,7 +13,7 @@ The Wand ambiguity is the prime example of a unification problem without a most 
   name: [Irreducible problems],
   lean: "vars_vs_field_no_mgu_on, two_sided_no_mgu_on, shift_no_finite_complete_set",
 )[
-  + _(Wand ambiguity)_ For pairwise distinct $α₁, …, α_n$ with $n ≥ 2$, $(α₁ | … | α_n) scripts(≐)_r (l: 𝓫)$ has no most general unifier.
+  + _(Wand equation)_ For pairwise distinct $α₁, …, α_n$ with $n ≥ 2$, $(α₁ | … | α_n) scripts(≐)_r (l: 𝓫)$ has no most general unifier.
   + _(Two-sided)_ $(α | l: 𝓫) scripts(≐)_r (l: 𝓫 | β)$ has no most general unifier.
   + _(Shift)_ $(α | l: 𝓫) scripts(≐)_r (l: 𝓫 | α)$ has no finite complete set of unifiers.
 ] <prop-irreducible>
@@ -28,7 +28,7 @@ The wand ambiguity $(α | β) scripts(≐)_r (l: 𝓫)$ describes a situation in
 
 All three are reported as #u_stuck: no move applies, and any move would prefer one unifier to another.
 
-What is shown is a limit of principal solutions over scoped rows, not of typing: a typing needs only some unifier, not a most general one. Inference nevertheless rejects a program at a stuck verdict, since only a successful unification has a rule. Typing the problem at ★ instead is not sound, since ★ on the result of an application leaves the equation between the argument and the domain unsolved (@sec-gradual).
+What is shown is a limit of principal solutions over rows with scoped labels, not of typing: a typing needs only some unifier, not a most general one. Inference nevertheless rejects a program at a stuck verdict, since only a successful unification has a rule. Typing the problem at ★ instead is not sound, since ★ on the result of an application leaves the equation between the argument and the domain unsolved (@sec-gradual).
 
 == The Price of Forced Moves <incompleteness-forced>
 

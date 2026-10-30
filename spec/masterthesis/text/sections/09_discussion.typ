@@ -12,7 +12,7 @@ We return to the three idioms of @nix-idioms. The types below are the results of
     #raw("self: super: { hello = super.hello // { meta = { broken = c; }; }; }") \
     quad : quad ⟨ρ₂."hello" ↓ {ρ₁}⟩ ⇒ α → {ρ₂} → {"hello": {"meta": {"broken": 𝓫} | ρ₁}}
   $
-  The selection `super.hello` parks a stump on the row of super, and the concatenation spends its promise on a record ${ρ₁}$. The stump stays a qualifier of the answer. The instance that places the field $"hello": {ρ₁}$ in the row of super is the typing $α → {"hello": {ρ₁} | ρ₂} → {"hello": {"meta": {"broken": 𝓫} | ρ₁}}$. The result is faithful to the semantics of `//`: the new meta shadows any meta of `super.hello`, and every other field of `super.hello` survives in ρ₁.
+  The selection `super.hello` parks a stump on the row of super, and the concatenation spends the stump on a record ${ρ₁}$. The stump stays a qualifier of the answer. The instance that places the field $"hello": {ρ₁}$ in the row of super is the typing $α → {"hello": {ρ₁} | ρ₂} → {"hello": {"meta": {"broken": 𝓫} | ρ₁}}$. The result is faithful to the semantics of `//`: the new meta shadows any meta of `super.hello`, and every other field of `super.hello` survives in ρ₁.
 ] <ex-idiom-overlay>
 
 // PROF: Every nixpkgs file is a top-level function like this; say so in the intro.
@@ -33,7 +33,7 @@ We return to the three idioms of @nix-idioms. The types below are the results of
 ] <ex-idiom-cond>
 
 // PROF: Here T-sel-⊥'s laziness motivation fails in composition; a bottom type would type it.
-Applied to concrete package sets, the overlay shows both sides of G3. Applied to `{}` and `{ hello = { pname = c; }; }`, it types at ${"hello": {"meta": {"broken": 𝓫} | "pname": 𝓫}}$. Applied to `{}` and `{}`, inference reports a clash: the lookup of hello misses, so the promised result is pinned to ★, but the concatenation has already used it as a record. The declarative system rejects the program as well, since ★ cannot be concatenated (@sec-goals). The program nevertheless evaluates without error, because the field hello is never selected.
+Applied to concrete package sets, the overlay shows both sides of G3. Applied to `{}` and `{ hello = { pname = c; }; }`, it types at ${"hello": {"meta": {"broken": 𝓫} | "pname": 𝓫}}$. Applied to `{}` and `{}`, inference reports a clash: the lookup of hello misses, so the result of the stump is pinned to ★, but the concatenation has already used it as a record. The declarative system rejects the program as well, since ★ cannot be concatenated (@sec-goals). The program nevertheless evaluates without error, because the field hello is never selected.
 
 == Design Goals Revisited <sec-goals>
 

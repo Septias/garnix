@@ -30,7 +30,7 @@ NixLang computes labels that can be used to index records or bind fields at runt
 )
 #fc_syntax <fc-syntax>
 
-@fc-syntax gives the syntax extension. A label can now be a value, written as a string literal $\"l\"$, as in Nixlang and are used in the record syntax. From now on, a record can be indexed by the `${e₁}` syntax of Nix and the dynamic record ${ \${e₁} = e₂ }$ binds the field named by e₁. We abstract over labels and call it key: A key $k$ can either be a discrete label $l$, or a label variable $α$, which has the new sort `Label`. Keys occur in two places: in the singleton type $⌊k⌋$ and in the _keyed field_ $\${k}: τ$ of a row, whose label is not yet known. Stumps are keyed as well, $⟨ρ.k ↓ δ⟩$, so that a scheme can defer a lookup under a key it abstracts over.
+@fc-syntax gives the syntax extension. A label can now be a value, written as a string literal $\"l\"$, as in NixLang and are used in the record syntax. From now on, a record can be indexed by the `${e₁}` syntax of Nix and the dynamic record ${ \${e₁} = e₂ }$ binds the field named by e₁. We abstract over labels and call it key: A key $k$ can either be a discrete label $l$, or a label variable $α$, which has the new sort `Label`. Keys occur in two places: in the singleton type $⌊k⌋$ and in the _keyed field_ $\${k}: τ$ of a row, whose label is not yet known. Stumps are keyed as well, $⟨ρ.k ↓ δ⟩$, so that a scheme can defer a lookup under a key it abstracts over.
 
 == Keyed Lookup
 
@@ -200,28 +200,28 @@ It solves $(l: τ) scripts(≐)_r (\${α}: τ′)$ with $[α ≔ l]$ and $(\${α
       stack(
         spacing: 8pt,
         $Γ; S ⊢ e₁ ⇒ τ₁; S₁ #h(2em) "fresh" ρ: "Row" #h(2em) S₁ ⊢ τ₁ ≐ {ρ} #st_solve S₂ #h(2em) Γ; S₂ ⊢ e₂ ⇒ τ₂; S₃$,
-        $"fresh" ℓ: "Label" #h(2em) S₃ ⊢ τ₂ ≐ ⌊ℓ⌋ #st_solve S₄ #h(2em) (⟦S₄⟧ρ).(⟦S₄⟧ℓ) ↓ τ′$,
+        $"fresh" β: "Label" #h(2em) S₃ ⊢ τ₂ ≐ ⌊β⌋ #st_solve S₄ #h(2em) (⟦S₄⟧ρ).(⟦S₄⟧β) ↓ τ′$,
       ),
       $Γ; S ⊢ e₁.\${e₂} ⇒ τ′; S₄$,
     ),
     derive(
       "A-sel-dyn-⊥",
-      ($…$, $(⟦S₄⟧ρ).(⟦S₄⟧ℓ) ↓ ⊥$),
+      ($…$, $(⟦S₄⟧ρ).(⟦S₄⟧β) ↓ ⊥$),
       $Γ; S ⊢ e₁.\${e₂} ⇒ ★; S₄$,
     ),
     derive(
       "A-sel-dyn-?",
-      ($…$, $(⟦S₄⟧ρ).(⟦S₄⟧ℓ) ↓ #h(0.2em) ? "on" α$, $"fresh" δ: "Type"$),
-      $Γ; S ⊢ e₁.\${e₂} ⇒ δ; S₄ #st_park ⟨α ⊳ ρ.ℓ ↓ δ⟩$,
+      ($…$, $(⟦S₄⟧ρ).(⟦S₄⟧β) ↓ #h(0.2em) ? "on" α$, $"fresh" δ: "Type"$),
+      $Γ; S ⊢ e₁.\${e₂} ⇒ δ; S₄ #st_park ⟨α ⊳ ρ.β ↓ δ⟩$,
     ),
     derive(
       "A-rcd-dyn",
       stack(
         spacing: 8pt,
         $Γ; S ⊢ e₁ ⇒ τ₁; S₁ #h(2em) Γ; S₁ ⊢ e₂ ⇒ τ₂; S₂$,
-        $"fresh" ℓ: "Label" #h(2em) S₂ ⊢ τ₁ ≐ ⌊ℓ⌋ #st_solve S₃$,
+        $"fresh" β: "Label" #h(2em) S₂ ⊢ τ₁ ≐ ⌊β⌋ #st_solve S₃$,
       ),
-      $Γ; S ⊢ { \${e₁} = e₂ } ⇒ { \${ℓ}: τ₂ }; S₃$,
+      $Γ; S ⊢ { \${e₁} = e₂ } ⇒ { \${β}: τ₂ }; S₃$,
     ),
     derive(
       "A-sel-dyn-𝓫",
@@ -241,11 +241,11 @@ It solves $(l: τ) scripts(≐)_r (\${α}: τ′)$ with $[α ≔ l]$ and $(\${α
 )
 #fc_infer <fc-inference>
 
-@fc-inference gives the algorithmic rules. Dynamic selection follows A-sel, A-sel-⊥ and A-sel-\? of @inference-rules. The key is unified with the singleton type of a fresh label variable ℓ, and the keyed lookup is asked about the row and the key as solved so far. When it answers $?$, the stump is parked on its blocker, which may now be a label variable: in `a: {l = c; m = {}}.${a}` the stump waits on the key and not on a row. A-rcd-dyn performs no lookup and parks nothing. It is shaped like A-λ-E: the key is unified with $⌊ℓ⌋$ for a fresh ℓ, and the keyed field records ℓ.
+@fc-inference gives the algorithmic rules. Dynamic selection follows A-sel, A-sel-⊥ and A-sel-\? of @inference-rules. The key is unified with the singleton type of a fresh label variable β, and the keyed lookup is asked about the row and the key as solved so far. When it answers $?$, the stump is parked on its blocker, which may now be a label variable: in `a: {l = c; m = {}}.${a}` the stump waits on the key and not on a row. A-rcd-dyn performs no lookup and parks nothing. It is shaped like A-λ-E: the key is unified with $⌊β⌋$ for a fresh β, and the keyed field records β.
 
-Wake-up and saturation are unchanged over keyed lookups, so solving a key wakes the stumps blocked on it: applying the selector above to $\"l\"$ solves ℓ, and the stump hits. A-sel-dyn-𝓫 and A-rcd-dyn-𝓫 apply when the key's type is already a base type under the current solution. They answer ★ instead of unifying 𝓫 with $⌊ℓ⌋$. The test is deliberately restricted to a definite base type. A key whose type is still a variable is unified with $⌊ℓ⌋$ as before, so in `(a: {l = c}.${a}) c` the key becomes a label at the selection and the application clashes. Answering ★ for every lookup keyed by such a variable once the conflict appears would be sound by the same rules, but the result would depend on the order in which the two uses of the key are met.
+Wake-up and saturation are unchanged over keyed lookups, so solving a key wakes the stumps blocked on it: applying the selector above to $\"l\"$ solves β, and the stump hits. A-sel-dyn-𝓫 and A-rcd-dyn-𝓫 apply when the key's type is already a base type under the current solution. They answer ★ instead of unifying 𝓫 with $⌊β⌋$. The test is deliberately restricted to a definite base type. A key whose type is still a variable is unified with $⌊β⌋$ as before, so in `(a: {l = c}.${a}) c` the key becomes a label at the selection and the application clashes. Answering ★ for every lookup keyed by such a variable once the conflict appears would be sound by the same rules, but the result would depend on the order in which the two uses of the key are met.
 
-The entry point needs no new premise. A keyed stump that is still pending stays a qualifier of the answer, so no key ever becomes ★. A-let generalizes keyed stumps under the side conditions of @generalization, read over rows, keys and results; the fillability test reads a key variable ℓ of the binding as the label `${ℓ}`. A spent stump blocked on its key therefore keeps its qualifier: `r: a: (r.${a}) c` answers $∀ρ ℓ β. ⟨ρ.ℓ ↓ 𝓫 → β⟩ ⇒ {ρ} → ⌊ℓ⌋ → β$, and `let f = r: a: r.${a} c` generalizes f to the same scheme.
+The entry point needs no new premise. A keyed stump that is still pending stays a qualifier of the answer, so no key ever becomes ★. A-let generalizes keyed stumps under the side conditions of @generalization, read over rows, keys and results; the fillability test reads a label variable α of the binding as the label `${α}`. A spent stump blocked on its key therefore keeps its qualifier: `r: a: (r.${a}) c` answers $∀(ρ: "Row", α: "Label", β: "Type"). ⟨ρ.α ↓ 𝓫 → β⟩ ⇒ {ρ} → ⌊α⌋ → β$, and `let f = r: a: r.${a} c` generalizes f to the same scheme.
 
 Concatenation and computed labels interact as NixLang programmers expect. In `((n: r: r // { ${n} = c; }) "x" { x = {}; }).x`, the keyed field is placed in front of the row of r by T-conc, the application solves the key to x, and the selection yields $𝓫_c$: the computed field shadows the older one.
 
