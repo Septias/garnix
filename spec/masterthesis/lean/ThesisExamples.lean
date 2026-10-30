@@ -816,33 +816,100 @@ example : ¬ Unifies (sub [] [("α", .var "β")])
   not_equiv_proj "m" (by decide)
 
 ------------------------------------------------------------------------------
--- # §9 Discussion: the idioms of the introduction
+-- # §9 Discussion: the idioms of the introduction, in MacroNix
 ------------------------------------------------------------------------------
 
--- Overlay: ⟨ρ₂.hello ↓ {ρ₁}⟩ ⇒ α → {ρ₂} → {hello: {meta: {broken: 𝓫} | ρ₁}}; the
--- old α → {hello: {ρ₁} | ρ₂} → … is its fill instance
-def overlay : E :=
-  lam "self" (lam "super" (rec1 "hello" (cat (sel (v "super") "hello") (rec1 "meta" (rec1 "broken" c)))))
-#guard run overlay = ("⟨ρ2.hello ↓ {ρ3}⟩ ⇒ (α1 → ({ρ2} → {hello: {meta: {broken: 𝓫} | ε | ρ3}}))", [])
+section idioms
+open MacroNix
 
--- Override: ⟨ρ.buildInputs ↓ δ⟩ ⇒ ({buildInputs: β | ρ} → γ) → (δ → β) → {ρ} → γ;
--- the old (★ → β), with a warning, is its D-? instance
-def override : E :=
-  lam "mk" (lam "app" (lam "args" (app (v "mk")
-    (cat (v "args") (rec1 "buildInputs" (app (v "app") (sel (v "args") "buildInputs")))))))
-#guard run override =
-  ("⟨ρ2 | ε.buildInputs ↓ α4⟩ ⇒ (({buildInputs: α1 | ε | ρ2} → α3) → ((α4 → α1) → ({ρ2 | ε} → α3)))", [])
+-- MacroNix answers print as `run`'s do, with the base types named
+mutual
+def tyM (L : List TyVar) : Ty String → String
+  | .var α    => "α" ++ toString (L.idxOf α + 1)
+  | .base b   => b
+  | .lab k    => "⌊" ++ keyC L k ++ "⌋"
+  | .unk      => "★"
+  | .fn τ₁ τ₂ => "(" ++ tyM L τ₁ ++ " → " ++ tyM L τ₂ ++ ")"
+  | .rcd ρ    => "{" ++ rowM L ρ ++ "}"
+  | .list τ   => "[" ++ tyM L τ ++ "]"
+def rowM (L : List TyVar) : Row String → String
+  | .empty     => "ε"
+  | .var α     => "ρ" ++ toString (L.idxOf α + 1)
+  | .sing l τ  => l ++ ": " ++ tyM L τ
+  | .cat ρ₁ ρ₂ => rowM L ρ₁ ++ " | " ++ rowM L ρ₂
+  | .dsing q τ => "${" ++ keyC L q ++ "}: " ++ tyM L τ
+end
 
--- Conditional extension: (α → {NIX_LDFLAGS: 𝓫} → {ρ}) → α → {ρ | pname: 𝓫}
-def condExt : E :=
-  lam "opt" (lam "cond" (cat (rec1 "pname" c) (app (app (v "opt") (v "cond")) (rec1 "NIX_LDFLAGS" c))))
-#guard run condExt = ("((α1 → ({NIX_LDFLAGS: 𝓫} → {ρ2})) → (α1 → {ρ2 | pname: 𝓫 | ε}))", [])
+def stumpM (L : List TyVar) (st : Stump String) : String :=
+  "⟨" ++ rowM L st.row ++ "." ++ keyC L st.label ++ " ↓ " ++ tyM L st.res ++ "⟩"
 
--- The overlay applied to `{}` and `{ hello = { pname = c; }; }` …
-#guard run (app (app overlay emp) (rec1 "hello" (rec1 "pname" c))) =
-  ("{hello: {meta: {broken: 𝓫} | ε | pname: 𝓫 | ε}}", [])
+/-- `run` at the MacroNix signature -/
+def runM (e : MacroNix.E) : String × List Label :=
+  match runF sig 50 e with
+  | .ok (σ, S) =>
+      let L := (σ.body.ftv ++ σ.constraints.flatMap
+                  (fun st => st.row.ftv ++ st.label.ftv ++ st.res.ftv)).eraseDups
+      ((if σ.constraints.isEmpty then "" else
+          String.intercalate ", " (σ.constraints.map (stumpM L)) ++ " ⇒ ") ++ tyM L σ.body,
+       S.flags)
+  | .fail m => ("fail: " ++ m, [])
+  | .oof => ("out of fuel", [])
+
+def mv (x : String) : MacroNix.E := .var x
+def ms (s : String) : MacroNix.E := .con (.str s)
+def mrec : List (String × MacroNix.E) → MacroNix.E
+  | []      => .rcd .empty
+  | [(l, e)] => .rcd (.field l e)
+  | (l, e) :: bs => match mrec bs with
+      | .rcd b => .rcd (.cat (.field l e) b)
+      | r      => r
+def mlam (xs : List String) (e : MacroNix.E) : MacroNix.E := xs.foldr .lam e
+def mapp (f : MacroNix.E) (as : List MacroNix.E) : MacroNix.E := as.foldl .app f
+
+-- Overlay: `self: super: { fields = super.foo // { meta = { broken = false; }; }; }`
+def overlay : MacroNix.E := mlam ["self", "super"]
+  (mrec [("fields", .cat (.sel (mv "super") "foo") (mrec [("meta", mrec [("broken", .bool false)])]))])
+#guard runM overlay = ("⟨ρ2.foo ↓ {ρ3}⟩ ⇒ (α1 → ({ρ2} → {fields: {meta: {broken: bool} | ε | ρ3}}))", [])
+-- … applied to `{}` and `{ foo = { pname = "hello"; }; }` …
+#guard runM (mapp overlay [mrec [], mrec [("foo", mrec [("pname", ms "hello")])]]) =
+  ("{fields: {meta: {broken: bool} | ε | pname: string | ε}}", [])
 -- … and to `{}` and `{}`: a clash
-#guard run (app (app overlay emp) emp) = ("fail: clash", [])
+#guard runM (mapp overlay [mrec [], mrec []]) = ("fail: clash", [])
+
+-- Override: `mkDerivation: extra: args:
+--   mkDerivation (args // { buildInputs = args.buildInputs ++ [ extra ]; })`
+def override : MacroNix.E := mlam ["mkDerivation", "extra", "args"] (.app (mv "mkDerivation")
+  (.cat (mv "args") (mrec [("buildInputs",
+    call .concat [.sel (mv "args") "buildInputs", .cons (mv "extra") .nil])])))
+#guard runM override =
+  ("⟨ρ2 | ε.buildInputs ↓ [α1]⟩ ⇒ (({buildInputs: [α1] | ε | ρ2} → α3) → (α1 → ({ρ2 | ε} → α3)))", [])
+-- … used at an args with buildInputs …
+#guard runM (mapp override [mlam ["x"] (mv "x"), int 1, mrec [("buildInputs", .cons (int 0) .nil)]]) =
+  ("{buildInputs: [int] | ε | buildInputs: [int] | ε}", [])
+-- … and at one without: the spent stump misses, a clash
+#guard runM (mapp override [mlam ["x"] (mv "x"), int 1, mrec [("pname", ms "hello")]]) =
+  ("fail: clash", [])
+
+-- Conditional extension:
+-- `lib: stdenv: { pname = "hello"; } // lib.optionalAttrs stdenv.isDarwin { NIX_LDFLAGS = "-liconv"; }`
+def condExt : MacroNix.E := mlam ["lib", "stdenv"]
+  (.cat (mrec [("pname", ms "hello")])
+    (mapp (.sel (mv "lib") "optionalAttrs") [.sel (mv "stdenv") "isDarwin", mrec [("NIX_LDFLAGS", ms "-liconv")]]))
+#guard runM condExt =
+  ("⟨ρ2.isDarwin ↓ α4⟩, ⟨ρ1.optionalAttrs ↓ (α4 → ({NIX_LDFLAGS: string} → {ρ3}))⟩ ⇒ " ++
+   "({ρ1} → ({ρ2} → {ρ3 | pname: string | ε}))", [])
+-- a later lookup of pname answers ?
+#guard runM (mlam ["lib", "stdenv"] (.sel (mapp condExt [mv "lib", mv "stdenv"]) "pname")) =
+  ("⟨ρ4 | pname: string | ε.pname ↓ α3⟩, ⟨ρ2.isDarwin ↓ α5⟩, " ++
+   "⟨ρ1.optionalAttrs ↓ (α5 → ({NIX_LDFLAGS: string} → {ρ4}))⟩ ⇒ ({ρ1} → ({ρ2} → α3))", [])
+-- nixpkgs' `optionalAttrs = cond: as: if cond then as else {}` types at bool → {} → {} …
+def optionalAttrs : MacroNix.E := mlam ["cond", "as"] (.ite (mv "cond") (mv "as") (mrec []))
+#guard runM optionalAttrs = ("(bool → ({ε} → {ε}))", [])
+-- … so the program applied to a lib with it clashes
+#guard runM (mapp condExt [mrec [("optionalAttrs", optionalAttrs)], mrec [("isDarwin", .bool true)]]) =
+  ("fail: clash", [])
+
+end idioms
 
 ------------------------------------------------------------------------------
 -- # Appendix: MacroNix
