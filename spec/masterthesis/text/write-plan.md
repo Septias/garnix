@@ -55,9 +55,9 @@ Use academic style. It can sound fancy from time to time, but needs to keep a mo
 
 
 # Section-State
-- [x] Introduction
-- [x] Overview
-- [ ] Declarative
+- [x] 00 Introduction
+- [x] 01 Overview
+- [ ] 02 Declarative
   - [ ] Introduction: Stumps
   - [x] Syntax
   - [x] Typing
@@ -66,33 +66,48 @@ Use academic style. It can sound fancy from time to time, but needs to keep a mo
   - [x] Sorts
   - [x] Instantiation
   - [x] Semantics
-- [x] Metatheory
-- [ ] Unification
+- [x] 03 Metatheory
+- [ ] 04 Unification
   - [x] Types ≐
   - [ ] Trace Monoid
   - [x] Rows ≐ᵣ
   - [ ] Examples
   - [ ] Metatheory
-- [ ] Inference
+- [ ] 05 Inference
   - [ ] State
   - [ ] Rules
   - [ ] Let-Generalization
   - [ ] Wake, Replay, Saturate
   - [ ] Finalization, Materialization
-- [ ] Mechanization
-- [ ] Incompleteness
+- [ ] 06 Incompleteness
   - [ ] Unsolvable
   - [ ] Forced Moves
   - [ ] Inference
-- [ ] FC-Labels
+- [ ] 07 FC-Labels
   - [ ] Keyed Lookup
   - [ ] Row Equivalence & Spines
   - [ ] Typing
   - [ ] Unification
   - [ ] Inference 
-- [ ] Discussion
+- [x] 08 Mechanization
+- [ ] 09 Discussion
   - [ ] Idioms
   - [ ] Design Goals
   - [ ] Outlook
-- [ ] Related Work
-- [ ] Conclusion
+- [ ] 10 Related Work
+  - [ ] Old Work
+  - [ ] FC-Labels
+  - [ ] Expressive Row Theories
+  - [ ] Subtyping Based
+  - [ ] Set Theoretic
+  - [ ] Gradual and Soft
+  - [ ] NixLang
+- [ ] 11 Conclusion
+- [ ] 12 Appendix
+
+
+## Session Times
+
+- [ ] Related Work (1 Day)
+- [ ] Integrate Feedback (1 Day)
+- [ ] Final Cleanup (Day)

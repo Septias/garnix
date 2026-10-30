@@ -1,7 +1,18 @@
 #import "../functions.typ": *
 
 = Conclusion
-The aim of this thesis was to type asymmetric record concatenation, the operation at the centre of NixLang, without annotations and without changing the meaning of a single program. Its canonical obstacle, `a: b: (a ‖ b).l`, admits no principal typing in a row calculus that must decide where the field comes from. We have taken the decision out of the calculus. Scoped rows make concatenation a total juxtaposition of rows, a lookup relation answers a field demand with a type, with definite absence or with _don't know_, a pending answer is kept as a qualifier that is decided by evaluating the lookup at each use, and an answer that never arrives is read at a use as the unknown type ★.
+
+// Goal type asymmetric record conc and fc-labels
+// We created a row calculus for Nix
+// It adds the unkown type and stumps to schemes
+// Stumps are forced by principality constraints
+// We then use the same language for parked stumps
+// We notice that row unification can be made forced in a trace monoid
+// But that only under ≈ which is _not_ the right semantic for Nix
+// This is enabled by stumps
+// We then extended to fc-labels and macro-nix
+
+The aim of this thesis was to type asymmetric record concatenation, the operation at the centre of NixLang, without annotations and without changing the meaning of a single program. Its canonical obstacle, `a: b: (a ‖ b).l`, admits no principal typing in a row calculus that must decide where the field comes from. We have taken the decision out of the calculus. Scoped labels make concatenation a total juxtaposition of rows, a lookup relation answers a field demand with a type, with definite absence or with _don't know_, a pending answer is kept as a qualifier that is decided by evaluating the lookup at each use, and an answer that never arrives is read at a use as the unknown type ★.
 
 The resulting calculus, MiniNix, is type-safe up to lookup errors, and progress and preservation are mechanized in Lean. Since a definite miss is typed at ★, principality for `x: x.l` forces schemes to carry their pending lookups: no plain scheme is principal for it, while a qualified one is, and one binding then serves uses that no plain scheme can serve together. Row unification operates on spines, makes only forced moves and returns a most general unifier when it succeeds; the inference algorithm built on it parks unanswered lookups as stumps, terminates and answers schemes whose instances are declarative typings; for `x: x.l` the answer is principal. The places where the algorithm gives up that we know of fall into three groups: row equations without a most general unifier, stops that are the price of forced moves, and limits of inference itself. Whether the three groups are exhaustive is open.
 

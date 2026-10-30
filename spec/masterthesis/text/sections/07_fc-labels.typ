@@ -2,9 +2,7 @@
 #import "04_unification.typ": u_clash
 #import "05_inference.typ": st_park, st_solve
 
-= Extensions Towards NixLang <sec-extensions>
-
-== First-Class Labels <sec-fc-labels>
+= First-Class Labels <sec-fc-labels>
 // PROF: String keys give star (T-sel-dyn-b, T-rcd-dyn-b), so r // { ${n} = v; } with a computed string is rejected: the dominant Nix idiom.
 
 NixLang computes labels that can be used to index records or bind fields at runtime. The expression `x.${e}` selects the field named by an arbitrary string expression e, and the expression `{ ${name} = v; }` binds a value to a label that is the result of an arbitrary expression. First-class labels fit naturally in our system: Shadowing inside a row cannot be decided after a label variable so it behaves identically to a row-variable. In fact, in the following section we generalize these two types of variables to _barriers_ after which shadowing is unclear. The comparison of label variables also benefits from our addition of the unknown type: If two variables cannot be decided to be equal or not, the unknown type can be used to type the expression.
@@ -34,7 +32,7 @@ NixLang computes labels that can be used to index records or bind fields at runt
 
 @fc-syntax gives the syntax extension. A label can now be a value, written as a string literal $\"l\"$, as in Nixlang and are used in the record syntax. From now on, a record can be indexed by the `${e₁}` syntax of Nix and the dynamic record ${ \${e₁} = e₂ }$ binds the field named by e₁. We abstract over labels and call it key: A key $k$ can either be a discrete label $l$, or a label variable $α$, which has the new sort `Label`. Keys occur in two places: in the singleton type $⌊k⌋$ and in the _keyed field_ $\${k}: τ$ of a row, whose label is not yet known. Stumps are keyed as well, $⟨ρ.k ↓ δ⟩$, so that a scheme can defer a lookup under a key it abstracts over.
 
-=== Keyed Lookup
+== Keyed Lookup
 
 #let fc_lookup = figure(
   caption: [Key comparison and keyed lookup. The rules L-ε, L-var and the three concatenation rules of @row-lookup carry over with k in place of l.],
@@ -62,7 +60,7 @@ The variable that blocks a $?$ is accordingly no longer always a row-variable. I
 
 
 
-=== Row Equivalence and Spines
+== Row Equivalence and Spines
 
 #let fc_equiv = figure(
   caption: [Row equivalence for keyed fields, extending @row-equivalence.],
@@ -76,7 +74,7 @@ The variable that blocks a $?$ is accordingly no longer always a row-variable. I
 A keyed field is congruent only under the same key, and a keyed field with a literal key is the literal field (@fc-equiv). ≈-comm is not extended to preserve shadowing. Spines acquire a third atom, $a ::= l: τ | α | \${α}: τ$, where a literal key is normalized to a field, and the monoid remains cancellative on both sides.
 
 
-=== Typing and Evaluation
+== Typing and Evaluation
 
 #let fc_typing = figure(
   caption: "Typing rules and reduction for first-class labels.",
@@ -152,7 +150,7 @@ $
 
 and both are instance-closed. The first scheme defers the lookup until both the key and the row are known, so that one binding answers a definite type at a use whose record has the field and ★ at a use whose record lacks it.
 
-=== Unification
+== Unification
 
 #let fc_unif = figure(
   caption: [Unification of keys and of keyed fields, extending @unification-ty.],
@@ -191,7 +189,7 @@ U-key-L and U-key-R cancel two keyed fields under the same variable key at the f
 
 It solves $(l: τ) scripts(≐)_r (\${α}: τ′)$ with $[α ≔ l]$ and $(\${α}: τ) scripts(≐)_r (\${β}: τ′)$ with $[α ≔ β]$, which is most general since $[α ≔ l, β ≔ l] = [β ≔ l] ∘ [α ≔ β]$. For more than one field, the binding is no longer forced. $(\${α}: 𝓫 | m: 𝓫) scripts(≐)_r (m: 𝓫 | \${β}: 𝓫)$ is solved by $[α ≔ l, β ≔ l]$ for every label l, but not by $[α ≔ β]$, since m cannot cross the barrier, and these unifiers have no common generalization. U-key-pin is therefore restricted to single fields, and keyed fields under different unknown keys stay stuck. The metatheory of @unification-metatheory holds as stated: success is most general, clash and occurs are sound, and the algorithm terminates. U-key-pin does not shrink the problem, but it always binds a variable, so the residual has fewer variables.
 
-=== Inference
+== Inference
 
 #let fc_infer = figure(
   caption: [Algorithmic rules for first-class labels, extending @inference-rules. A-sel-dyn-⊥ and A-sel-dyn-\? share the premises of A-sel-dyn.],
@@ -251,6 +249,6 @@ The entry point needs no new premise. A keyed stump that is still pending stays 
 
 Concatenation and computed labels interact as NixLang programmers expect. In `((n: r: r // { ${n} = c; }) "x" { x = {}; }).x`, the keyed field is placed in front of the row of r by T-conc, the application solves the key to x, and the selection yields $𝓫_c$: the computed field shadows the older one.
 
-=== Costs
+== Costs
 
 The extension has two costs. Labels and strings are separate: a label literal has the singleton type $⌊l⌋$ and cannot be used as a string, and a value used both as a key and as a string clashes. A key of base type is typed at ★ only when its type is known at the selection; a key that becomes a string later, as in `(a: {l = c}.${a}) c`, is rejected by U-clash. Keyed fields are barriers, so beyond the single-field case of U-key-pin a keyed field against a literal field and two keyed fields under different unknown keys are stuck. The first cost follows from giving labels singleton types, and the second from the absence of negative information about keys.
