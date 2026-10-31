@@ -827,12 +827,15 @@ example : ¬ Unifies (sub [] [("α", .var "β")])
 #guard run (app (app (lam "s" (lam "p" (sel (sd (v "p") (v "s")) "default"))) (L "x86"))
     (rec1 "x86" (rec1 "default" c))) = ("𝓫", [])
 
--- A stump is decided while its blocker stays unsolved: it waits on κ, the key
--- of a, and `g a` binds the field's key (that of b) to κ. Saturation re-runs
--- the lookup (`staleF`), so the stump is not missed. (M1 pin, plans/fc-labels.md)
-#guard run (lam "a" (lam "b" (lam "g" (.rcd (.cat (.field "p" (sd (rd (v "b") c) (v "a")))
-    (.cat (.field "q" (app (v "g") (v "b"))) (.field "r" (app (v "g") (v "a"))))))))) =
-  ("(⌊κ1⌋ → (⌊κ1⌋ → ((⌊κ1⌋ → α2) → {p: 𝓫 | q: α2 | r: α2})))", [])
+-- `g a` binds the field's key (that of b) to κ, the key of a. Before
+-- feat/fc-labels M2 the lookup then hit by κ ≡ κ while its blocker κ stayed
+-- unsolved; now a variable key decides nothing, the stump stays a qualifier,
+-- and only solving the blocker can change a lookup again
+def staleProbe : E := lam "a" (lam "b" (lam "g" (.rcd (.cat (.field "p" (sd (rd (v "b") c) (v "a")))
+    (.cat (.field "q" (app (v "g") (v "b"))) (.field "r" (app (v "g") (v "a"))))))))
+#guard run staleProbe =
+  ("⟨${κ1}: 𝓫 | ε.κ1 ↓ α3⟩ ⇒ (⌊κ1⌋ → (⌊κ1⌋ → ((⌊κ1⌋ → α2) → {p: α3 | q: α2 | r: α2})))", [])
+#guard run (app (app (app staleProbe (L "x")) (L "x")) (lam "z" c)) = ("{p: 𝓫 | q: 𝓫 | r: 𝓫}", [])
 
 ------------------------------------------------------------------------------
 -- # §9 Discussion: the idioms of the introduction, in MacroNix

@@ -377,10 +377,10 @@ theorem unify_lab_var_lit :
 theorem unify_lab_vs_base_clash :
     unifyTyM (B := Unit) 20 (.lab (.var "α")) uB = .clash := rfl
 
--- ⊢  (${α}: τ).α ↓ τ, and it stays found under α ↦ l (the key comparison is
---    stable: `Key.cmp_applySubst`)
+-- ⊢  (${α}: τ).α ↓ ?: a variable key decides nothing, not even against
+--    itself (feat/fc-labels M2), and a literal instance hits
 theorem lookup_key_self :
-    LookupQ (.dsing (.var "α") uB : Row Unit) (.var "α") (.found uB) := .dhit rfl
+    LookupQ (.dsing (.var "α") uB : Row Unit) (.var "α") .unknown := .dunk rfl
 theorem lookup_key_self_subst :
     LookupQ (.dsing (.lit "l") uB : Row Unit) (.lit "l") (.found uB) := .dhit rfl
 

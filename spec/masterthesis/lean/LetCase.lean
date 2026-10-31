@@ -80,13 +80,7 @@ theorem lookupQ_blocked_subst {ρ : Row B} {q : Key} {β : TyVar}
       obtain ⟨β', hβ', hf⟩ := hkey (by simp [Key.sortedFtv])
       show LookupQ (.dsing _ _) (θ.lab α) _
       rw [hβ']
-      refine .dunk (Key.cmp_var_ne ?_)
-      cases q' with
-      | var γ =>
-          intro he
-          have hγ := hf γ (by simp [Key.sortedFtv, Row.sortedFtv]) he
-          subst hγ; simp at hcmp
-      | lit _ => intro he; cases he
+      exact .dunk Key.cmp_var
   | @dunkF l τ γ =>
       intro _ hkey
       obtain ⟨β', hβ', -⟩ := hkey (by simp [Key.sortedFtv, Row.sortedFtv])

@@ -63,10 +63,7 @@ theorem Key.cmp_symm_eq : (c d : Key) → c.cmp d = .eq → d.cmp c = .eq
       simp only [Key.cmp] at h ⊢; split at h
       · subst l; simp
       · cases h
-  | .var α, .var β, h => by
-      simp only [Key.cmp] at h ⊢; split at h
-      · subst α; simp
-      · cases h
+  | .var _, .var _, h => nomatch h
   | .lit _, .var _, h => nomatch h
   | .var _, .lit _, h => nomatch h
 
@@ -82,14 +79,12 @@ theorem Key.cmp_undec_lit {k : Key} {l : Label}
   | var α => exact ⟨α, rfl⟩
   | lit l' => simp only [Key.cmp_lit_lit] at h; split at h <;> cases h
 
--- a label variable is undecided against everything but itself
-theorem Key.cmp_var_ne {x : Key} {β : TyVar} (h : x ≠ .var β) :
-    Key.cmp (.var β) x = .undec := by
-  cases x with
-  | var γ =>
-      simp only [Key.cmp]
-      rw [if_neg (fun he => h (by rw [he]))]
-  | lit _ => rfl
+-- a label variable is undecided against everything, itself included
+theorem Key.cmp_var {x : Key} {β : TyVar} : Key.cmp (.var β) x = .undec := by
+  cases x <;> rfl
+
+theorem Key.cmp_var_ne {x : Key} {β : TyVar} (_ : x ≠ .var β) :
+    Key.cmp (.var β) x = .undec := Key.cmp_var
 
 
 ------------------------------ BASIC METATHEORY --------------------------------
@@ -382,7 +377,6 @@ theorem LookupV.hollow {ρ : Row B} {α : TyVar}
       subst hk
       rename_i q _
       cases q <;> simp [Key.cmp] at h
-      split at h <;> cases h
   | catSkip _ _ ih₁ ih₂ => exact .cat (ih₁ rfl hk) (ih₂ hr hk)
   | _ => cases hr
 

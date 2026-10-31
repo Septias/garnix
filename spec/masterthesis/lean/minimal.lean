@@ -385,11 +385,14 @@ end Ctx
 -- A keyed field `${k}: τ` is compared against a lookup key:
 --
 --   l / l       eq iff same label, else apart
---   α / α       eq
---   otherwise   undec                   (a label variable against anything else)
+--   otherwise   undec                   (a label variable decides nothing,
+--                                        not even against itself)
 --
--- eq and apart are stable under substitution (labels are rigid, and one
--- variable goes to one key). undec is where `?` lives.
+-- Only two literals decide, so eq and apart are stable under EVERY
+-- substitution (labels are rigid). undec is where `?` lives. A variable is
+-- undecided against itself because the key it stands for need not be a label
+-- the analysis knows (feat/fc-labels: a computed string), and a decided
+-- `α ≡ α` would not survive that substitution.
 
 inductive KeyRel : Type where
   | eq | apart | undec
@@ -400,14 +403,18 @@ def Key.cmp : Key → Key → KeyRel
   | .lit l, .lit l' => if l = l' then .eq else .apart
   | .lit _, .var _  => .undec
   | .var _, .lit _  => .undec
-  | .var α, .var β  => if α = β then .eq else .undec
+  | .var _, .var _  => .undec
 
 @[simp] theorem Key.cmp_lit_lit (l l' : Label) :
     Key.cmp (.lit l) (.lit l') = if l = l' then .eq else .apart := rfl
 
-@[simp] theorem Key.cmp_self : (k : Key) → k.cmp k = .eq
-  | .lit _ => by simp [Key.cmp]
-  | .var _ => by simp [Key.cmp]
+@[simp] theorem Key.cmp_self_lit (l : Label) : (Key.lit l).cmp (.lit l) = .eq := by
+  simp [Key.cmp]
+
+-- ⊢  a decided comparison is between two literals
+theorem Key.cmp_decided_lit {k q : Key} (h : Key.cmp k q ≠ .undec) :
+    ∃ l l', k = .lit l ∧ q = .lit l' := by
+  cases k <;> cases q <;> simp [Key.cmp] at h ⊢
 
 -- a literal key is undecided only against a label variable
 theorem Key.cmp_lit_undec {l : Label} {q : Key}
@@ -923,11 +930,7 @@ theorem Key.cmp_applySubst {B : Type} (θ : TySubst B) {k q : Key} {c : KeyRel}
   | var α =>
       cases q with
       | lit _ => subst h; exact absurd rfl hc
-      | var β =>
-          simp only [Key.cmp] at h
-          split at h
-          · subst h; subst β; exact Key.cmp_self _
-          · subst h; exact absurd rfl hc
+      | var β => subst h; exact absurd rfl hc
 
 -- Substitution acts on lookup results pointwise (definite ones, see below).
 def LookupRes.applySubst {B : Type} (θ : TySubst B) : LookupRes B → LookupRes B

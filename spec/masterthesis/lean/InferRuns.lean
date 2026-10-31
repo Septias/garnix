@@ -217,8 +217,11 @@ def mk : E := .lam "a" (.lam "v" (rd (v "a") (v "v")))
 #guard run (.sel (.app (.app mk (L "foo")) c) "foo") = "𝓫"
 #guard run (.letE "mk" mk (rec2 "p" (.sel (.app (.app (v "mk") (L "foo")) c) "foo")
     "q" (.sel (.app (.app (v "mk") (L "bar")) (.rcd .empty)) "bar"))) = "{p: 𝓫 | q: {ε}}"
--- the same key variable finds its own field; a literal one is blocked on it
-#guard run (.lam "a" (sd (rd (v "a") c) (v "a"))) = "(⌊k4⌋ → 𝓫)"
+-- a key variable decides nothing, not even against its own field: the lookup
+-- is a stump on the key (feat/fc-labels M2), which hits at every literal
+-- instance; a literal key is blocked on the field's key variable as well
+#guard run (.lam "a" (sd (rd (v "a") c) (v "a"))) = "⟨${k4}: 𝓫 | ε.${k4} ↓ t5⟩ ⇒ (⌊k4⌋ → t5)"
+#guard run (.app (.lam "a" (sd (rd (v "a") c) (v "a"))) (L "foo")) = "𝓫"
 #guard run (.lam "a" (.sel (rd (v "a") c) "foo")) = "⟨${k2}: 𝓫 | ε.foo ↓ t4⟩ ⇒ (⌊k2⌋ → t4)"
 #guard run (.app (.lam "a" (.sel (rd (v "a") c) "foo")) (L "foo")) = "𝓫"
 -- `r // { ${n} = v }`: the update, which shadows an old field of that name
