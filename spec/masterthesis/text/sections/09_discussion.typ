@@ -1,70 +1,85 @@
 #import "../functions.typ": *
 
-= Discussion <sec-discussion>
+= Discussion and Conclusion <sec-discussion>
+
 
 == The Idioms of the Introduction <sec-idioms>
 
-We return to the three idioms of @nix-idioms. The types below are the results of the inference algorithm of @inference, computed by the Lean implementation, with variables renamed. Every variable of an answer is bound, and the ∀ is left implicit. The programs are adapted slightly: free names become parameters (mk, opt, cond), literals are written c, the overlay updates hello instead of copying foo into fields, and the override applies a parameter app where @nix-idioms appends `++ [ extra ]`.
+We return to the three next expressions from the introduction @nix-idioms and conduct a case study on their typing. The types below are result of the Lean implementation of the inference algorithm from @inference on MacroNix (@app-macronix), which extends MiniNix by booleans, lists and builtins such as `++`. The programs are only adapted slightly to fit the algorithm by turing free names into parameters.
 
 
 #example(name: [Overlay])[
   $
-    #raw("self: super: { hello = super.hello // { meta = { broken = c; }; }; }") \
-    quad : quad ⟨ρ₂."hello" ↓ {ρ₁}⟩ ⇒ α → {ρ₂} → {"hello": {"meta": {"broken": 𝓫} | ρ₁}}
+    #raw("self: super: { fields = super.foo // { meta = { broken = false; }; }; }") \
+    quad : quad ⟨ρ₂."foo" ↓ {ρ₁}⟩ ⇒ α → {ρ₂} → {"fields": {"meta": {"broken": "bool"} | ρ₁}}
   $
-  The selection `super.hello` parks a stump on the row of super, and the concatenation spends the stump on a record ${ρ₁}$. The stump stays a qualifier of the answer. The instance that places the field $"hello": {ρ₁}$ in the row of super is the typing $α → {"hello": {ρ₁} | ρ₂} → {"hello": {"meta": {"broken": 𝓫} | ρ₁}}$. The result is faithful to the semantics of `//`: the new meta shadows any meta of `super.hello`, and every other field of `super.hello` survives in ρ₁.
+  The selection `super.foo` parks a stump on the row of super, and the concatenation spends the stump on a record ${ρ₁}$. The stump stays a qualifier of the answer. The instance that places the field $"foo": {ρ₁}$ in the row of super is the typing $α → {"foo": {ρ₁} | ρ₂} → {"fields": {"meta": {"broken": "bool"} | ρ₁}}$. The result is faithful to the semantics of `//`: the new meta shadows any meta of `super.foo`, and every other field of `super.foo` survives in ρ₁.
 ] <ex-idiom-overlay>
 
-// PROF: Every nixpkgs file is a top-level function like this; say so in the intro.
+
 #example(name: [Override])[
   $
-    #raw("mk: app: args: mk (args // { buildInputs = app args.buildInputs; })") \
-    quad : quad ⟨ρ."buildInputs" ↓ δ⟩ ⇒ ({"buildInputs": β | ρ} → γ) → (δ → β) → {ρ} → γ
+    & #raw("mkDerivation: extra: args:") \
+    & quad #raw("mkDerivation (args // { buildInputs = args.buildInputs ++ [ extra ]; })") \
+    & quad : quad ⟨ρ."buildInputs" ↓ [α]⟩ ⇒ ({"buildInputs": [α] | ρ} → β) → α → {ρ} → β
   $
-  The argument handed to mk carries the new buildInputs in front of the row of args, so it shadows the old one. The selection `args.buildInputs` cannot be answered, since the row of args is open, and it is unspent, since app accepts any argument. The stump therefore stays a qualifier of the answer, and the domain of app is its result δ, which each use answers from the record it passes as args. At a use whose args has no buildInputs, δ is ★, and the type ★ → β leaves app little freedom: since ★ has no elimination form, app can only ignore its argument or pass it on, as `y: y` does at β = ★. Passing `xs: xs ++ [ extra ]` as app then clashes, since ★ cannot be appended.
+  The argument handed to mkDerivation carries the new buildInputs in front of the row of args, so it shadows the old one. The selection `args.buildInputs` cannot be answered, since the row of args is open, and it is spent, since `++` uses its result at the list type $[α]$. The stump therefore stays a qualifier of the answer, and its result shares α with the type of extra. Since the stump is spent, every instance must make its lookup hit. At a use whose args has no buildInputs, the lookup misses, its result is ★, and inference reports a clash, since ★ cannot be appended.
 ] <ex-idiom-override>
 
 #example(name: [Conditional extension])[
   $
-    #raw("opt: cond: { pname = c; } // opt cond { NIX_LDFLAGS = c; }") \
-    quad : quad (α → {"NIX_LDFLAGS": 𝓫} → {ρ}) → α → {ρ | "pname": 𝓫}
+    & #raw("lib: stdenv: { pname = \"hello\"; }") \
+    & quad #raw("// lib.optionalAttrs stdenv.isDarwin { NIX_LDFLAGS = \"-liconv\"; }") \
+    & quad : quad ⟨ρ₂."isDarwin" ↓ α⟩, ⟨ρ₁."optionalAttrs" ↓ (α → {"NIX_LDFLAGS": "string"} → {ρ₃})⟩ \
+    & quad quad quad ⇒ {ρ₁} → {ρ₂} → {ρ₃ | "pname": "string"}
   $
-  The result keeps pname behind the row ρ returned by opt, since that row may carry a pname of its own. A later lookup of pname answers $?$ until opt is known, which is exactly the Wand ambiguity of @sec-motivation. In nixpkgs, opt is `lib.optionalAttrs`, whose body is a conditional, and MacroNix (@app-macronix) rejects the conditional form `{ pname = c; } // (if cond then { NIX_LDFLAGS = c; } else {})`. Inference unifies the branches ${"NIX_LDFLAGS": 𝓫}$ and ${}$ and clashes. The declarative system rejects it as well: the only common type of the branches is ★, and ★ cannot be concatenated.
+  Both selections park a stump, and the stump on the row of lib is spent, since its result is applied. The result keeps pname behind the row ρ₃ returned by `lib.optionalAttrs`, since that row may carry a pname of its own. A later lookup of pname answers $?$ until lib is known, which is exactly the Wand ambiguity of @sec-motivation. In nixpkgs, `lib.optionalAttrs` is `cond: as: if cond then as else {}`, and MacroNix rejects the program at a lib with this field. Inference unifies the branches of the conditional and types optionalAttrs at $"bool" → {} → {}$, which clashes with ${"NIX_LDFLAGS": "string"}$. [The declarative system rejects it as well: the only common type of the branches is ★, and ★ cannot be concatenated.](explain the consequences here)
 ] <ex-idiom-cond>
 
 // PROF: Here T-sel-⊥'s laziness motivation fails in composition; a bottom type would type it.
-Applied to concrete package sets, the overlay shows both sides of G3. Applied to `{}` and `{ hello = { pname = c; }; }`, it types at ${"hello": {"meta": {"broken": 𝓫} | "pname": 𝓫}}$. Applied to `{}` and `{}`, inference reports a clash: the lookup of hello misses, so the result of the stump is pinned to ★, but the concatenation has already used it as a record. The declarative system rejects the program as well, since ★ cannot be concatenated (@sec-goals). The program nevertheless evaluates without error, because the field hello is never selected.
+Applied to concrete package sets, the overlay shows both sides of G3. Applied to `{}` and `{ foo = { pname = "hello"; }; }`, it types at ${"fields": {"meta": {"broken": "bool"} | "pname": "string"}}$. Applied to `{}` and `{}`, inference reports a clash: the lookup of foo misses, so the result of the stump is pinned to ★, but the concatenation has already used it as a record. The declarative system rejects the program as well, since ★ cannot be concatenated . The program nevertheless evaluates without error, because `fields` is never selected.
 
 == Design Goals Revisited <sec-goals>
 
-@sec-motivation stated four design goals for a type system for NixLang. MiniNix meets G2 by construction and the other three in part. This section records how far it reaches each of them.
 
-_G1 (No source changes)._ Inference requires no annotations. Every construct of MiniNix is typed without input from the programmer, and uncertainty is recorded as ★ rather than demanded as a lacks-predicate or a disjointness witness. The goal is thus met for MiniNix, but not yet for NixLang. MacroNix (@app-macronix) adds booleans, conditionals, lists and a set of builtins, and patterns, `inherit` and `or` desugar into it (@fig-nix-parity). Of 21 programs from the Nix test suite, translated by hand, 17 type in agreement with their evaluation. The four exceptions are a conditional whose branches have incompatible types, a list whose elements have different types, `or` applied to a non-record, and a function with pattern defaults that is used at two record shapes but not generalized by A-let (@incompleteness-inference). `with`, recursive records, recursive `let` and the builtins that enumerate or remove labels remain uncovered, and nixpkgs can be analysed verbatim only once they are covered.
+_G1 (No source changes)._ Every construct of MiniNix is typed annotation free because inference can explicitly mark its boundaries using the unknown type ★. The goal is thus met for MiniNix, but not for NixLang. @app-macronix extends MiniNix with trivial features such as base-types and trivial operators, but features like pattern matching, recursive records and lets, and tricky builtins remain uncovered. Nixpkgs can only be analysed verbatime once they are covered.
 
-_G2 (No semantic change)._ The analysis is purely static. It inserts no casts and does not instrument the program, so evaluation is unchanged, and the goal is met by construction. The price is carried by the metatheory: progress holds only up to lookup errors ↯ (@type-safety), which the analysis cannot prevent. In MacroNix, an error is also a failed assertion or a failing builtin, such as `head []` or a division by zero.
+_G2 (No semantic change)._ The analysis is purely static. It inserts no casts and does not instrument the program, so evaluation is unchanged, and the goal is met by construction. The price is carried by the metatheory: progress holds only up to lookup errors ↯ (@type-safety), which the analysis cannot prevent.
 
 
-_G3 (Totality)._ This goal is met in part. Uncertainty that originates in a lookup is absorbed: inference defers a selection that cannot be answered rather than failing, keeps it as a qualifier of the answer, and a use that leaves it unanswered types it at ★. Nothing is guaranteed about the value of such a selection, but since ★ has no elimination form, no typed code consumes it. A program that runs is nevertheless rejected in three situations, and in a fourth with first-class labels. First, ★ has no elimination form and no typing rule converts it to another type, so a program that applies ★, selects from it or concatenates it has no typing, even in the declarative system. The motivating example, extended by one selection,
+_G3 (Totality)._ This goal is met in part. Uncertainty that originates from undecidable lookups are deferred and kept as qualifiers. A use that leaves them unanswered is typed at ★. There are still reasons for rejection: First, ★ has no eliminators so, for example, a program that selects from it has no typing. Second, inference reports a clash on some programs the declarative system types (@incompleteness-inference). Third, inference rejects every stuck row equation. Fourth, a key that is used as a label before it is known to be a string is a type error (@sec-fc-labels).
 
-```nix
-{ "1759190400" = { m = 1; }; }.${toString builtins.currentTime}.m
-```
+_G4 (Efficient inference)._ THe algorithm is designed with efficiency in mind but not yet measured. Inference stays first-corder and never backtracks over typings. [The constraints in Q are very simple and solve linearly?]. The inhabitation check of the entry point may try several labels for a key, but only to find a witness, and it never changes the answer (@inference). Row unification works modulo ≈, but every move of the row pass is forced, and a parked stump is re-examined only when its blocker is solved. Termination has been proven but the given reasons are structural and no complexity bound is given. Since the algorithm extends Hindley-Milner inference, its runtim is worst-case exponential in pathological cases.
 
-receives no type, since the dynamic selection under a string key yields ★ by T-sel-dyn-𝓫 (@fc-typing) and ★ cannot be selected from. Second, inference reports a clash on some programs that the declarative system types (@incompleteness-inference), since a clash certifies the absence of a unifier, not the absence of a typing. Third, inference rejects every stuck row equation. Uncertainty that originates in an equation is not absorbed, since the equation lies between an argument and the domain of the function that consumes it (@sec-gradual). Fourth, a key that is used as a label before it is known to be a string is a type error (@sec-fc-labels). The conditional of MacroNix adds instances of the first two situations, since it unifies its branches. For a record as with an integer field z and no field a, `if as ? a then as.a else as.z` clashes: the definite miss `as.a` has type ★ by T-sel-⊥, and ★ does not unify with `int`. The declarative system types it at ★ by T-★-intro on the else branch. The conditional extension of @ex-idiom-cond has no typing at all.
 
-_G4 (Efficient inference)._ The algorithm is designed for this goal but not yet measured against it. Inference stays first-order and never backtracks over typings: there is no constraint solver and no search over alternative typings. The inhabitation check of the entry point may try several labels for a key, but only to find a witness, and it never changes the answer (@inference). Row unification works modulo ≈, but every move of the row pass is forced, and a parked stump is re-examined only when its blocker is solved. These are structural reasons to expect the analysis to scale. Termination is proved, but no complexity bound. Since the algorithm extends Hindley-Milner inference, it inherits its exponential worst case, and the analysis has not yet been run on nixpkgs.
+== Outlook <sec-gradual>
 
-// TODO(structure): admissions (daily 28.10): ★ has no eliminators; ≈ keeps shadowed fields, unlike Nix's set-like records, and the faithful relation is not cancellative. Here, after Incompleteness, or in the Conclusion.
-== Outlook: Towards Gradual Typing <sec-gradual>
+Our error type ★ has a central problem: It has no eleminators such that using it easily leads to [death](wording). [When we add eliminators… everything breaks, so we need gradual typing](wording). A type in ★ has to be converted into a proper type, usually by casts. Sekiyama and Igarashi @gradual_extensible_rows show that consistency extends to extensible rows. `(x: x 4) 3` would type and get stuck. The casts of gradual systems may force types in lazy evaluation, so one would need the lazy version \@thiemann_cite
 
-The remaining gap in G3 has a common cause. ★ is introduced by the lookup relation and by T-★-intro, but it is never consumed, so every use of an unknown value demands a type that ★ cannot supply. Gradual typing @gradual_siek resolves the same situation by replacing type equality with _consistency_, under which the dynamic type is compatible with every type. Reading ★ as the dynamic type would give it elimination forms, so that a ★ could be applied, selected from and concatenated. Sekiyama and Igarashi @gradual_extensible_rows show that consistency extends to extensible rows. Consistency does not join incompatible uses, however: it relates ★ to every type, but two static types such as `int` and `{}` stay inconsistent. The conditional of MacroNix on branches of incompatible types is therefore not completed by consistency alone. It would need inference to choose ★ itself, as T-★-intro does declaratively, and with ★ chosen implicitly the analysis becomes vacuous: `(x: x 4) 3` would type and get stuck. The conditional extension needs more: a dynamic row, since ${"NIX_LDFLAGS": 𝓫}$ and ${}$ must join at a record type that may contain the field, and only a record can be concatenated.
+// There is no general principality theorem to preserve: @principality settles principality only for `x: x.l`.
+// - Note negative info here
+// - Note occurrence typig
+// - Note that ifs usually need a union then
 
-A stuck row equation is a second instance of the same cause. Inference cannot type the application at ★, since the equation lies between an argument and the domain of the function it is passed to, and ★ on the result of the application leaves it unsolved. In
 
-```nix
-((g: a: b: { p = g { l = y: y; }; q = g (a // b); }) (x: x.l c) { l = c; } {}).q
-```
+== Conclusion
 
-the first use fixes the domain of g to a record whose field l is a function, and the second use leaves the equation of that record with ${β | α}$ stuck, which is the Wand ambiguity. Typing `q` at ★ and dropping the equation would accept the arguments `{ l = c; }` and `{}`, and evaluation reaches `c c` in the body of g, where `x.l` has a function type and not ★. With elimination forms for ★, the domain of g could be ★ instead, and the failure would occur at an elimination of ★, where a gradual safety theorem accounts for it.
+// Goal type asymmetric record conc and fc-labels
+// We created a row calculus for Nix
+// It adds the unkown type and stumps to schemes
+// Stumps are forced by principality constraints
+// We then use the same language for parked stumps
+// We notice that row unification can be made forced in a trace monoid
+// But that only under ≈ which is _not_ the right semantic for Nix
+// This is enabled by stumps
+// We then extended to fc-labels and macro-nix
 
-Two obstacles distinguish this setting from the usual one. First, gradual type systems insert casts at the boundary between static and dynamic code, and they rely on these casts for their safety theorem and for the gradual guarantee @gradual_criteria. G2 forbids instrumentation, so a gradual extension of MiniNix would be gradual in its static discipline only. Its safety theorem would acquire a further disjunct for failures at the eliminations of ★, in the same way that ↯ records lookup errors today. Second, the proof of @thm-no-plain uses that ★ is never sharpened (@lem-star-max). A ★ that is consistent with every type can be sharpened, so the result would have to be established anew. There is no general principality theorem to preserve: @principality settles principality only for `x: x.l`.
+The aim of this thesis was to type asymmetric record concatenation, the operation at the centre of NixLang, without annotations and without changing the meaning of a single program. Its canonical obstacle, `a: b: (a ‖ b).l`, admits no principal typing in a row calculus that must decide where the field comes from. We have taken the decision out of the calculus. Scoped labels make concatenation a total juxtaposition of rows, a lookup relation answers a field demand with a type, with definite absence or with _don't know_, a pending answer is kept as a qualifier that is decided by evaluating the lookup at each use, and an answer that never arrives is read at a use as the unknown type ★.
+
+The resulting calculus, MiniNix, is type-safe up to lookup errors, and progress and preservation are mechanized in Lean. Since a definite miss is typed at ★, principality for `x: x.l` forces schemes to carry their pending lookups: no plain scheme is principal for it, while a qualified one is, and one binding then serves uses that no plain scheme can serve together. Row unification operates on spines, makes only forced moves and returns a most general unifier when it succeeds; the inference algorithm built on it parks unanswered lookups as stumps, terminates and answers schemes whose instances are declarative typings; for `x: x.l` the answer is principal. The places where the algorithm gives up that we know of fall into three groups: row equations without a most general unifier, stops that are the price of forced moves, and limits of inference itself. Whether the three groups are exhaustive is open.
+
+And ★ must become usable rather than merely recorded. A gradual reading of the unknown type without casts is one candidate, but it has to restrict where inference may choose ★: with ★ chosen implicitly, `(x: x 4) 3` types and gets stuck.
+
+
+-----
+We only reached our design goals partly. MiniNix requires no source changes and also forces no semantic changes. Totality is only reached in part, but an extension with gradual typing is seen as a promising direction.
