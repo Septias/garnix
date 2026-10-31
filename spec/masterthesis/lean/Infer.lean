@@ -329,6 +329,44 @@ theorem LookupBlockedQ.toLit {B : Type} {ρ : Row B} {l : Label} {β : TyVar}
   | catSkip ha _ ih => subst hk; exact .catSkip (LookupQ.lab_iff.mp ha) (ih rfl)
   | catUnk _ ih => exact .catUnk (ih hk)
 
+/-- a DEFINITE key type: a literal's singleton or ⌊★⌋, no variable left -/
+def Ty.defKey {B : Type} : Ty B → Option Key
+  | .lab (.lit l) => some (.lit l)
+  | .lab .unk     => some .unk
+  | _             => none
+
+theorem Ty.defKey_eq_some {B : Type} {τ : Ty B} {k : Key} (h : τ.defKey = some k) :
+    τ = .lab k := by
+  unfold Ty.defKey at h
+  split at h <;> first | (cases h; rfl) | cases h
+
+/-- two key types that are definite and different: unification would clash, and
+the join is ⌊★⌋ (A-if-join) -/
+def Ty.keyApart {B : Type} (τ₁ τ₂ : Ty B) : Bool :=
+  match τ₁.defKey, τ₂.defKey with
+  | some k₁, some k₂ => k₁ != k₂
+  | _, _ => false
+
+theorem Ty.keyApart_lab {B : Type} {τ₁ τ₂ : Ty B} (h : Ty.keyApart τ₁ τ₂ = true) :
+    (∃ k, τ₁ = .lab k) ∧ (∃ k, τ₂ = .lab k) := by
+  unfold Ty.keyApart at h
+  split at h
+  · rename_i k₁ k₂ h₁ h₂
+    exact ⟨⟨k₁, Ty.defKey_eq_some h₁⟩, ⟨k₂, Ty.defKey_eq_some h₂⟩⟩
+  · cases h
+
+/-- a literal's singleton type: a string literal in a list (A-cons-str) -/
+def Ty.isLitLab {B : Type} : Ty B → Bool
+  | .lab (.lit _) => true
+  | _             => false
+
+theorem Ty.isLitLab_eq {B : Type} {τ : Ty B} (h : τ.isLitLab = true) :
+    ∃ l, τ = .lab (.lit l) := by
+  unfold Ty.isLitLab at h
+  split at h
+  · exact ⟨_, rfl⟩
+  · cases h
+
 /-- the name a W-flag records for a key: the label itself when it is known. -/
 def Key.keyName : Key → Label
   | .lit l => l
@@ -1230,6 +1268,16 @@ inductive Infer {B C : Type} [DecidableEq B] (constTy : Sig B C) :
       Infer constTy Γ S₂ e₁ τ₁ S₃ → Infer constTy Γ S₃ e₂ τ₂ S₄ →
       SolveTySat S₄ τ₁ τ₂ S₅ →
       Infer constTy Γ S (.ite e e₁ e₂) τ₁ S₅
+  -- A-if-join (feat/fc-labels M5): two branches at DIFFERENT definite keys (two
+  -- literals, or a literal and ★) would clash; both are strings, and the join is
+  -- ⌊★⌋. No equation is solved
+  | iteJoin {Γ : QCtx B} {S S₁ S₂ S₃ S₄ : SolverState B} {e e₁ e₂ : Expr C}
+      {τ τ₁ τ₂ : Ty B} {bb : B} :
+      constTy.boolB = some bb →
+      Infer constTy Γ S e τ S₁ → SolveTySat S₁ τ (.base bb) S₂ →
+      Infer constTy Γ S₂ e₁ τ₁ S₃ → Infer constTy Γ S₃ e₂ τ₂ S₄ →
+      Ty.keyApart (τ₁.applySubst S₄.subst) (τ₂.applySubst S₄.subst) = true →
+      Infer constTy Γ S (.ite e e₁ e₂) (.lab .unk) S₄
   -- A-assert
   | asrt {Γ : QCtx B} {S S₁ S₂ S₃ : SolverState B} {e e₂ : Expr C}
       {τ τ₂ : Ty B} {bb : B} :
@@ -1246,6 +1294,13 @@ inductive Infer {B C : Type} [DecidableEq B] (constTy : Sig B C) :
       Infer constTy Γ S e₁ τ₁ S₁ → Infer constTy Γ S₁ e₂ τ₂ S₂ →
       SolveTySat S₂ τ₂ (.list τ₁) S₃ →
       Infer constTy Γ S (.cons e₁ e₂) (.list τ₁) S₃
+  -- A-cons-str (feat/fc-labels M5): a string literal in a list is a string: the
+  -- list is one of ⌊★⌋, so literals of different labels share it
+  | consStr {Γ : QCtx B} {S S₁ S₂ S₃ : SolverState B} {e₁ e₂ : Expr C} {τ₁ τ₂ : Ty B} :
+      Infer constTy Γ S e₁ τ₁ S₁ → (τ₁.applySubst S₁.subst).isLitLab = true →
+      Infer constTy Γ S₁ e₂ τ₂ S₂ →
+      SolveTySat S₂ τ₂ (.list (.lab .unk)) S₃ →
+      Infer constTy Γ S (.cons e₁ e₂) (.list (.lab .unk)) S₃
   -- A-has: the subject is a record, the answer a boolean
   | has {Γ : QCtx B} {S S₁ S₁' S₂ : SolverState B} {e : Expr C} {τ : Ty B}
       {l : Label} {r : TyVar} {bb : B} :
@@ -1595,11 +1650,18 @@ theorem Infer.kinds_mono {B C : Type} [DecidableEq B] {constTy : Sig B C}
       have a := Infer.kinds_mono h; have b := Infer.kinds_mono h₁
       have c := Infer.kinds_mono h₂
       rw [hs₂.kinds]; rw [hs₁.kinds] at b; exact a.trans (b.trans c)
+  | .iteJoin _ h hs₁ h₁ h₂ _ => by
+      have a := Infer.kinds_mono h; have b := Infer.kinds_mono h₁
+      have c := Infer.kinds_mono h₂
+      rw [hs₁.kinds] at b; exact a.trans (b.trans c)
   | .asrt _ h hs h₂ => by
       have a := Infer.kinds_mono h; have b := Infer.kinds_mono h₂
       rw [hs.kinds] at b; exact a.trans b
   | .nil hd => by rw [draw_kind_eq hd]; exact List.suffix_cons _ _
   | .cons h₁ h₂ hs => by
+      have a := Infer.kinds_mono h₁; have b := Infer.kinds_mono h₂
+      rw [hs.kinds]; exact a.trans b
+  | .consStr h₁ _ h₂ hs => by
       have a := Infer.kinds_mono h₁; have b := Infer.kinds_mono h₂
       rw [hs.kinds]; exact a.trans b
   | .has _ h hd hs => by
@@ -1746,12 +1808,20 @@ theorem Infer.supply_mono {B C : Type} [DecidableEq B] {constTy : Sig B C}
       have c := Infer.supply_mono h₁; have d := Infer.supply_mono h₂
       have e := hs₂.supply
       omega
+  | .iteJoin _ h hs₁ h₁ h₂ _ => by
+      have a := Infer.supply_mono h; have b := hs₁.supply
+      have c := Infer.supply_mono h₁; have d := Infer.supply_mono h₂
+      omega
   | .asrt _ h hs h₂ => by
       have a := Infer.supply_mono h; have b := hs.supply
       have c := Infer.supply_mono h₂
       omega
   | .nil hd => by have := draw_eq hd; omega
   | .cons h₁ h₂ hs => by
+      have a := Infer.supply_mono h₁; have b := Infer.supply_mono h₂
+      have c := hs.supply
+      omega
+  | .consStr h₁ _ h₂ hs => by
       have a := Infer.supply_mono h₁; have b := Infer.supply_mono h₂
       have c := hs.supply
       omega
@@ -1912,10 +1982,15 @@ theorem Infer.sat_mono {B C : Type} [DecidableEq B] {constTy : Sig B C}
   | .ite _ h hs₁ h₁ h₂ hs₂ =>
       (Infer.sat_mono h).trans (hs₁.satMono.trans ((Infer.sat_mono h₁).trans
         ((Infer.sat_mono h₂).trans hs₂.satMono)))
+  | .iteJoin _ h hs₁ h₁ h₂ _ =>
+      (Infer.sat_mono h).trans (hs₁.satMono.trans ((Infer.sat_mono h₁).trans
+        (Infer.sat_mono h₂)))
   | .asrt _ h hs h₂ =>
       (Infer.sat_mono h).trans (hs.satMono.trans (Infer.sat_mono h₂))
   | .nil hd => SolverState.SatMono.of_sol_eq (draw_sol hd)
   | .cons h₁ h₂ hs =>
+      (Infer.sat_mono h₁).trans ((Infer.sat_mono h₂).trans hs.satMono)
+  | .consStr h₁ _ h₂ hs =>
       (Infer.sat_mono h₁).trans ((Infer.sat_mono h₂).trans hs.satMono)
   | .has _ h hd hs =>
       (Infer.sat_mono h).trans
@@ -2027,9 +2102,12 @@ theorem Infer.quiescent {B C : Type} [DecidableEq B] {constTy : Sig B C}
   | .prim _ _ _ _ hs, _ => hs.quiescent
   | .bool _, hq => hq
   | .ite _ _ _ _ _ hs₂, _ => hs₂.quiescent
+  | .iteJoin _ _ hs₁ h₁ h₂ _, _ =>
+      Infer.quiescent h₂ (Infer.quiescent h₁ hs₁.quiescent)
   | .asrt _ _ hs h₂, _ => Infer.quiescent h₂ hs.quiescent
   | .nil hd, hq => hq.draw hd
   | .cons _ _ hs, _ => hs.quiescent
+  | .consStr _ _ _ hs, _ => hs.quiescent
   | .has _ _ _ hs, _ => hs.quiescent
 
 theorem InferRec.quiescent {B C : Type} [DecidableEq B] {constTy : Sig B C}

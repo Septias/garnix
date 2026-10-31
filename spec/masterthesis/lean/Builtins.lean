@@ -7,8 +7,9 @@
 -- (feat/fc-labels): a string literal is the label value `.lab s`, and the type
 -- of a string whose content is not tracked is ⌊★⌋. `+` on strings and string
 -- interpolation are `strcat`. `==` compares ATOMIC
--- values only (constants, booleans, labels, the empty list) and fails on
--- records, functions and non-empty lists (plans/macronix.md Q3). A builtin's
+-- values only (constants, booleans, labels, the empty list; atoms of different
+-- kinds are unequal, as in Nix) and fails on records, functions and non-empty
+-- lists (plans/macronix.md Q3). A builtin's
 -- δ fires only at its exact arity; a partial application is an eta-expansion.
 
 import Qualified
@@ -43,7 +44,7 @@ def tB : T := .var "b"
 def Op.ty : Op → T
   | .add | .sub | .mul | .div => .fn tInt (.fn tInt tInt)
   | .lt | .le                 => .fn tInt (.fn tInt tBool)
-  | .eq                       => .fn tA (.fn tA tBool)
+  | .eq                       => .fn tA (.fn tB tBool)
   | .not                      => .fn tBool tBool
   | .concat                   => .fn (.list tA) (.fn (.list tA) (.list tA))
   | .head                     => .fn (.list tA) tA
@@ -60,7 +61,14 @@ def Op.ty : Op → T
 def int (n : Int) : E := .con (.int n)
 def call (o : Op) (es : List E) : E := .prim (.op o) es
 
-/-- `==` on atomic values -/
+/-- an atomic value: what `==` compares -/
+def isAtom : E → Bool
+  | .con _ | .bool _ | .lab _ | .nil => true
+  | _ => false
+
+/-- `==` on atomic values. Atoms of different kinds are unequal, as in Nix
+(`1 == true` is false), which is what lets `==` take two types (feat/fc-labels:
+a key compared with a string literal) -/
 def atomEq : E → E → Option Bool
   | .con c, .con d   => some (c == d)
   | .bool a, .bool b => some (a == b)
@@ -68,7 +76,7 @@ def atomEq : E → E → Option Bool
   | .nil, .nil       => some true
   | .nil, .cons _ _  => some false
   | .cons _ _, .nil  => some false
-  | _, _             => none
+  | v, w             => if isAtom v && isAtom w then some false else none
 
 /-- δ, on argument VALUES; `none` is a run-time failure. One match per builtin,
 so each case of `delta_pres` splits only its own arms. -/
@@ -243,7 +251,7 @@ theorem pres_eq : Pres .eq := by
   simp only [Op.delta] at hδ
   split at hδ
   · obtain ⟨τ₁, τ₂, rfl, -, -⟩ := args2 ha
-    simp only [Op.ty, tA, tBool, Ty.applySubst, Ty.arrows, Ty.fn.injEq] at hi
+    simp only [Op.ty, tA, tB, tBool, Ty.applySubst, Ty.arrows, Ty.fn.injEq] at hi
     obtain ⟨-, -, rfl⟩ := hi
     obtain ⟨b, -, rfl⟩ := Option.map_eq_some_iff.mp hδ
     exact qbool _

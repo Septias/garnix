@@ -736,8 +736,12 @@ def inferF (constTy : Sig B C) (n : Nat) :
           let S₂ ← solveTySatF n r.2 r.1 (.base bb)
           let r₁ ← inferF constTy n Γ S₂ e₁
           let r₂ ← inferF constTy n Γ r₁.2 e₂
-          let S₅ ← solveTySatF n r₂.2 r₁.1 r₂.1
-          pure (r₁.1, S₅)
+          -- A-if-join: two different definite keys are strings, joined at ⌊★⌋
+          if Ty.keyApart (r₁.1.applySubst r₂.2.subst) (r₂.1.applySubst r₂.2.subst) then
+            pure (.lab .unk, r₂.2)
+          else do
+            let S₅ ← solveTySatF n r₂.2 r₁.1 r₂.1
+            pure (r₁.1, S₅)
   | Γ, S, .asrt e e₂ =>
       match constTy.boolB with
       | none => .fail "no booleans"
@@ -748,9 +752,15 @@ def inferF (constTy : Sig B C) (n : Nat) :
   | _, S, .nil => .ok (.list (.var (S.draw .ty).1), (S.draw .ty).2)
   | Γ, S, .cons e₁ e₂ => do
       let r₁ ← inferF constTy n Γ S e₁
-      let r₂ ← inferF constTy n Γ r₁.2 e₂
-      let S₃ ← solveTySatF n r₂.2 r₂.1 (.list r₁.1)
-      pure (.list r₁.1, S₃)
+      -- A-cons-str: a string literal in a list makes it a list of ⌊★⌋
+      if (r₁.1.applySubst r₁.2.subst).isLitLab then do
+        let r₂ ← inferF constTy n Γ r₁.2 e₂
+        let S₃ ← solveTySatF n r₂.2 r₂.1 (.list (.lab .unk))
+        pure (.list (.lab .unk), S₃)
+      else do
+        let r₂ ← inferF constTy n Γ r₁.2 e₂
+        let S₃ ← solveTySatF n r₂.2 r₂.1 (.list r₁.1)
+        pure (.list r₁.1, S₃)
   | Γ, S, .has e _ =>
       match constTy.boolB with
       | none => .fail "no booleans"
@@ -890,10 +900,18 @@ theorem inferF_sound {constTy : Sig B C} {n : Nat} :
       split at h
       · cases h
       · rename_i bb hb
-        simp only [IRes.bind_eq_ok, IRes.pure_eq_ok, Prod.mk.injEq] at h
-        obtain ⟨⟨τ₀, S₁⟩, h₀, S₂, hs₁, ⟨τ₁, S₃⟩, h₁, ⟨τ₂, S₄⟩, h₂, S₅, hs₂, rfl, rfl⟩ := h
-        exact .ite hb (inferF_sound h₀) (solveTySatF_sound hs₁) (inferF_sound h₁)
-          (inferF_sound h₂) (solveTySatF_sound hs₂)
+        simp only [IRes.bind_eq_ok] at h
+        obtain ⟨⟨τ₀, S₁⟩, h₀, S₂, hs₁, ⟨τ₁, S₃⟩, h₁, ⟨τ₂, S₄⟩, h₂, h⟩ := h
+        split at h
+        · rename_i hj
+          simp only [IRes.pure_eq_ok, Prod.mk.injEq] at h
+          obtain ⟨rfl, rfl⟩ := h
+          exact .iteJoin hb (inferF_sound h₀) (solveTySatF_sound hs₁) (inferF_sound h₁)
+            (inferF_sound h₂) hj
+        · simp only [IRes.bind_eq_ok, IRes.pure_eq_ok, Prod.mk.injEq] at h
+          obtain ⟨S₅, hs₂, rfl, rfl⟩ := h
+          exact .ite hb (inferF_sound h₀) (solveTySatF_sound hs₁) (inferF_sound h₁)
+            (inferF_sound h₂) (solveTySatF_sound hs₂)
   | Γ, S, S', .asrt e e₂, τ, h => by
       simp only [inferF] at h
       split at h
@@ -906,9 +924,16 @@ theorem inferF_sound {constTy : Sig B C} {n : Nat} :
       simp only [inferF, IRes.ok.injEq, Prod.mk.injEq] at h
       obtain ⟨rfl, rfl⟩ := h; exact .nil rfl
   | Γ, S, S', .cons e₁ e₂, τ, h => by
-      simp only [inferF, IRes.bind_eq_ok, IRes.pure_eq_ok, Prod.mk.injEq] at h
-      obtain ⟨⟨τ₁, S₁⟩, h₁, ⟨τ₂, S₂⟩, h₂, S₃, hs, rfl, rfl⟩ := h
-      exact .cons (inferF_sound h₁) (inferF_sound h₂) (solveTySatF_sound hs)
+      simp only [inferF, IRes.bind_eq_ok] at h
+      obtain ⟨⟨τ₁, S₁⟩, h₁, h⟩ := h
+      split at h
+      · rename_i hl
+        simp only [IRes.bind_eq_ok, IRes.pure_eq_ok, Prod.mk.injEq] at h
+        obtain ⟨⟨τ₂, S₂⟩, h₂, S₃, hs, rfl, rfl⟩ := h
+        exact .consStr (inferF_sound h₁) hl (inferF_sound h₂) (solveTySatF_sound hs)
+      · simp only [IRes.bind_eq_ok, IRes.pure_eq_ok, Prod.mk.injEq] at h
+        obtain ⟨⟨τ₂, S₂⟩, h₂, S₃, hs, rfl, rfl⟩ := h
+        exact .cons (inferF_sound h₁) (inferF_sound h₂) (solveTySatF_sound hs)
   | Γ, S, S', .has e l, τ, h => by
       simp only [inferF] at h
       split at h

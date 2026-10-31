@@ -25,7 +25,7 @@
 -- ## Results                                    runF                .exp    agrees
 -- attrs               whole program             clash               987     ✗ (1)
 --                     (the taken branch)        int                 987     ✓
--- attrs3              if + interpolation        clash               str     ✗ (6)
+-- attrs3              if + interpolation        ⌊★⌋                 str     ✓
 -- attrs5 e1–e6        or-chains, incl. a        int ⌊⌋ int int      ✓       ✓
 --                     missing intermediate      ⌊⌋ ⌊⌋
 -- attrs5 e7           `(123).bla or …`          clash               "xyzzy" ✗ (2)
@@ -40,7 +40,7 @@
 -- empty-args          `{}:` pattern             ⌊★⌋                 str     ✓
 -- inherit-from        [ a b merged ]            clash               list    ✗ (4)
 --                     (as a tuple)              {_1: int | …}       —       ✓
--- if                  != , nested if            clash               3       ✗ (6)
+-- if                  != , nested if            int                 3       ✓
 -- concat              ++ ++                     [int]               list    ✓
 -- logic               assert ! && || ->         int                 1       ✓
 -- map                 map, foldl' (+) ""        clash               str     ✗ (6)
@@ -73,11 +73,11 @@
 --     field name must be spent alike, and the forced merge only identifies
 --     stumps on one spine), not confirmed. Incompleteness
 --     of A-let, not a type error.
--- (6) feat/fc-labels M4a: a string literal has its singleton type ⌊l⌋, a
---     computed string ⌊★⌋, and the two meet in one position: the branches of
---     the `if` (attrs3), `==`'s α → α → bool (if), the `""` accumulator of
---     foldl' (map). Declaratively typable (T-lab-blur on the literal). The
---     literal join is plans/fc-labels.md M5.
+-- (6) feat/fc-labels: a string literal has its singleton type ⌊l⌋, a computed
+--     string ⌊★⌋. Branches of an `if` (A-if-join), list elements (A-cons-str)
+--     and `==` (α → β → bool) take both; the `""` accumulator of foldl' meets
+--     the strcat result in a function argument, where nothing joins: a clash.
+--     Declaratively typable (T-lab-blur on the literal); an accepted cost.
 
 import InferFnTerm
 import Builtins
@@ -195,7 +195,7 @@ def config : E := rcd
   , ("hostName", str)
   , ("a", deep.tail.foldr (fun l e => rcd [(l, e)]) str)
   , ("foo", rcd [("a", str), ("b", rcd [("c", str)])]) ]
--- M4a: the branches are ⌊★⌋ (a strcat) and ⌊⌋ (a literal) (literal join, M5)
+-- the branches are ⌊★⌋ (a strcat) and ⌊⌋ (a literal): A-if-join (feat/fc-labels M5)
 #guard run (lets [("config", config)] (.ite (sels (v "config") ["services", "sshd", "enable"])
   (cat [ str, toStr (sels (v "config") ["services", "sshd", "port"]), str
        , toStr (sels (v "config") ["services", "httpd", "port"]), str
@@ -203,7 +203,7 @@ def config : E := rcd
        , sels (v "config") deep, sels (v "config") ["foo", "a"]
        , sels (v "config") ["foo", "b", "c"] ])
   str))
-  = "fail: clash"
+  = "⌊★⌋"
 
 ---------------------------------------------------------------- attrs5 --------
 def as5 : E := rcd [("x", rcd [("y", rcd [("z", int)])]), ("a", rcd [("b", rcd [("c", int)])])]
@@ -304,9 +304,9 @@ def inheritFrom (asList : Bool) : E :=
 
 ------------------------------------------------------- new: if, lists, logic ---
 -- eval-okay-if:  if "foo" != "f" + "oo" then 1 else if false then 2 else 3    → 3
--- M4a: `==` is α → α → bool, and ⌊⌋ meets the strcat result ⌊★⌋ (`==`, M5)
+-- `==` is α → β → bool (feat/fc-labels M5): ⌊⌋ and the strcat result ⌊★⌋ compare
 #guard run (.ite (not (eq str (cat [str, str]))) int (.ite ff int int))
-  = "fail: clash"
+  = "int"
 -- eval-okay-concat:  [1 2 3] ++ [4 5 6] ++ [7 8 9]                     → [ 1 … 9 ]
 #guard run (append (lst [int, int, int]) (append (lst [int, int, int]) (lst [int, int, int])))
   = "[int]"
@@ -314,7 +314,8 @@ def inheritFrom (asList : Bool) : E :=
 #guard run (.asrt (impl (and (not ff) (or tt ff)) tt) int)
   = "int"
 -- eval-okay-map:  concat (map (x: x + "bar") [ "foo" "bla" "xyzzy" ])   (lib's concat = foldl' (+) "")
--- M4a: the accumulator "" is the label ⌊⌋, the strcat result is ⌊★⌋ (literal join, M5)
+-- the accumulator "" is the label ⌊⌋, the strcat result ⌊★⌋: no join reaches a
+-- function's argument (accepted cost, feat/fc-labels M5)
 #guard run (call .foldl [lam ["a", "b"] (cat [v "a", v "b"]), str,
   call .map [.lam "x" (cat [v "x", str]), lst [str, str, str]]])
   = "fail: clash"

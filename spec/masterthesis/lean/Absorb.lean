@@ -91,9 +91,12 @@ theorem Infer.clean {C : Type} {constTy : Sig B C} :
   | _, _, _, _, _, .bool _, hc => hc
   | _, _, _, _, _, .ite _ h hs₁ h₁ h₂ hs₂, hc =>
       hs₂.clean (Infer.clean h₂ (Infer.clean h₁ (hs₁.clean (Infer.clean h hc))))
+  | _, _, _, _, _, .iteJoin _ h hs₁ h₁ h₂ _, hc =>
+      Infer.clean h₂ (Infer.clean h₁ (hs₁.clean (Infer.clean h hc)))
   | _, _, _, _, _, .asrt _ h hs h₂, hc => Infer.clean h₂ (hs.clean (Infer.clean h hc))
   | _, _, _, _, _, .nil hd, hc => (draw_sol' hd) ▸ hc
   | _, _, _, _, _, .cons h₁ h₂ hs, hc => hs.clean (Infer.clean h₂ (Infer.clean h₁ hc))
+  | _, _, _, _, _, .consStr h₁ _ h₂ hs, hc => hs.clean (Infer.clean h₂ (Infer.clean h₁ hc))
   | _, _, _, _, _, .has _ h hd hs, hc => hs.clean ((draw_sol' hd) ▸ Infer.clean h hc)
 
 theorem InferRec.clean {C : Type} {constTy : Sig B C} :
@@ -270,9 +273,12 @@ theorem Infer.ext {C : Type} {constTy : Sig B C} :
   | _, _, _, _, _, .bool _ => .refl _
   | _, _, _, _, _, .ite _ h hs₁ h₁ h₂ hs₂ =>
       (Infer.ext h).trans (hs₁.ext.trans ((Infer.ext h₁).trans ((Infer.ext h₂).trans hs₂.ext)))
+  | _, _, _, _, _, .iteJoin _ h hs₁ h₁ h₂ _ =>
+      (Infer.ext h).trans (hs₁.ext.trans ((Infer.ext h₁).trans (Infer.ext h₂)))
   | _, _, _, _, _, .asrt _ h hs h₂ => (Infer.ext h).trans (hs.ext.trans (Infer.ext h₂))
   | _, _, _, _, _, .nil hd => draw_ext hd
   | _, _, _, _, _, .cons h₁ h₂ hs => (Infer.ext h₁).trans ((Infer.ext h₂).trans hs.ext)
+  | _, _, _, _, _, .consStr h₁ _ h₂ hs => (Infer.ext h₁).trans ((Infer.ext h₂).trans hs.ext)
   | _, _, _, _, _, .has _ h hd hs => (Infer.ext h).trans ((draw_ext hd).trans hs.ext)
 
 theorem InferRec.ext {C : Type} {constTy : Sig B C} :

@@ -1001,6 +1001,22 @@ example := macroSig_ok
 -- stump on it wakes opaque and answers ★ (it was a clash)
 #guard runM (.app (mlam ["a"] (.selDyn (mrec [("l", int 1)]) (mv "a"))) (call .toString [int 1])) =
   ("★", ["${★}"])
+
+-- Literals of different labels meet (feat/fc-labels M5). A list with a string
+-- literal is a list of strings (A-cons-str) …
+#guard runM (.cons (ms "a") (.cons (ms "b") .nil)) = ("[⌊★⌋]", [])
+-- … the branches of an `if` at different definite keys join at ⌊★⌋ (A-if-join) …
+#guard runM (mlam ["c"] (.ite (mv "c") (ms "a") (ms "b"))) = ("(bool → ⌊★⌋)", [])
+#guard runM (mlam ["c"] (.ite (mv "c") (ms "a") (call .toString [int 1]))) = ("(bool → ⌊★⌋)", [])
+-- … `==` takes two types, so a key compared with a literal stays a key …
+#guard runM (mlam ["system", "pkgs"] (mrec [("isDarwin", call .eq [mv "system", ms "x86_64-darwin"]),
+  ("pkg", .selDyn (mv "pkgs") (mv "system"))])) =
+  ("⟨ρ2.κ1 ↓ α3⟩ ⇒ (⌊κ1⌋ → ({ρ2} → {isDarwin: bool | pkg: α3}))", [])
+-- … and atoms of different kinds are unequal
+#guard runM (call .eq [int 1, .bool true]) = ("bool", [])
+-- the foldl' accumulator "" still clashes with the strcat result (accepted cost)
+#guard runM (call .foldl [mlam ["a", "b"] (call .strcat [mv "a", mv "b"]), ms "",
+  .cons (ms "x") .nil]) = ("fail: clash", [])
 end macronix
 
 end ThesisExamples
