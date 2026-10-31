@@ -39,6 +39,12 @@ Use academic style. It can sound fancy from time to time, but needs to keep a mo
   - Fc-labels: would need top-level schemes
 
 
+## Fixes
+- Selecting a string key
+- MacroNix should only be mentioned for running the idioms
+- Is ↯key okay?
+
+
 ## Automated checks
 - [ ] You are a professor in PL, go over the thesis text and critique it's claims and wording based on your expertise.
 - [ ] Go over the thesis text and mark every place where wording is loose in a sense, that the terminalogy is not suited for the claim.
@@ -78,36 +84,39 @@ Use academic style. It can sound fancy from time to time, but needs to keep a mo
   - [ ] Rules
   - [ ] Let-Generalization
   - [ ] Wake, Replay, Saturate
-  - [ ] Finalization, Materialization
+  - [ ] Merge
+
+  
 - [ ] 06 Incompleteness
   - [ ] Unsolvable
   - [ ] Forced Moves
   - [ ] Inference
 - [ ] 07 FC-Labels
-  - [ ] Keyed Lookup
-  - [ ] Row Equivalence & Spines
-  - [ ] Typing
+  - [x] Keyed Lookup
+  - [x] Row Equivalence & Spines
   - [ ] Unification
+  - [ ] Typing
   - [ ] Inference 
 - [x] 08 Mechanization
 - [ ] 09 Discussion
   - [ ] Idioms
-  - [ ] Design Goals
-  - [ ] Outlook
+  - [x] Design Goals
+  - [~] Outlook
+  - [~] 11 Conclusion
 - [ ] 10 Related Work
   - [ ] Old Work
-  - [ ] FC-Labels
+  - [~] FC-Labels
   - [ ] Expressive Row Theories
-  - [ ] Subtyping Based
-  - [ ] Set Theoretic
-  - [ ] Gradual and Soft
-  - [ ] NixLang
-- [ ] 11 Conclusion
+  - [x] Subtyping Based
+  - [x] Set Theoretic
+  - [~] Gradual and Soft
+  - [x] NixLang
 - [ ] 12 Appendix
 
 
 ## Session Times
 
+- [ ] Explanations (1 Day)
 - [ ] Related Work (1 Day)
 - [ ] Integrate Feedback (1 Day)
-- [ ] Final Cleanup (Day)
+- [ ] Final Cleanup (1 Day)
