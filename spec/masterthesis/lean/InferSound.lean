@@ -775,6 +775,7 @@ mutual
     | qUnk : QTypedC constTy Δ Γ e τ → QTypedC constTy Δ Γ e .unk
     | qRcd : QTypedCBody constTy Δ Γ b ρ → QTypedC constTy Δ Γ (.rcd b) (.rcd ρ)
     | qLab : QTypedC constTy Δ Γ (.lab l) (.lab (.lit l))
+    | qLabBlur : QTypedC constTy Δ Γ e (.lab k) → QTypedC constTy Δ Γ e (.lab .unk)
     | qSelDyn : QTypedC constTy Δ Γ e₁ (.rcd ρ) → QTypedC constTy Δ Γ e₂ (.lab q) →
                 LookupQ ρ q (.found τ) → QTypedC constTy Δ Γ (.selDyn e₁ e₂) τ
     | qSelDynUnk : QTypedC constTy Δ Γ e₁ (.rcd ρ) → QTypedC constTy Δ Γ e₂ (.lab q) →
@@ -809,6 +810,8 @@ mutual
     | empty : QTypedCBody constTy Δ Γ .empty .empty
     | field : QTypedC constTy Δ Γ e τ →
               QTypedCBody constTy Δ Γ (.field l e) (.sing l τ)
+    | fieldU : QTypedC constTy Δ Γ e τ →
+               QTypedCBody constTy Δ Γ (.field l e) (.dsing .unk τ)
     | cat : QTypedCBody constTy Δ Γ b₁ ρ₁ → QTypedCBody constTy Δ Γ b₂ ρ₂ →
             QTypedCBody constTy Δ Γ (.cat b₁ b₂) (.cat ρ₁ ρ₂)
 
@@ -826,6 +829,7 @@ mutual
     | .qCon           => .qCon
     | .qVar hl hi     => .qVar hl hi
     | .qEq h he       => .qEq h.toC he
+    | .qLabBlur h     => .qLabBlur h.toC
     | .qLam h         => .qLam h.toC
     | .qApp h₁ h₂     => .qApp h₁.toC h₂.toC
     | .qLet hwf hi hin hb => .qLet hwf (fun τ₁ h => (hi τ₁ h).toC) hin hb.toC
@@ -855,6 +859,7 @@ mutual
       QTypedBody constTy Γ b ρ → QTypedCBody constTy Δ Γ b ρ
     | .empty      => .empty
     | .field h    => .field h.toC
+    | .fieldU h   => .fieldU h.toC
     | .cat h₁ h₂  => .cat h₁.toC h₂.toC
 
   theorem QTypedArgs.toC {B C : Type} {constTy : Sig B C} {Δ : List (Stump B)}
@@ -873,6 +878,7 @@ mutual
     | .qCon           => .qCon
     | .qVar hl hi     => .qVar hl hi
     | .qEq h he       => .qEq h.toQTyped he
+    | .qLabBlur h     => .qLabBlur h.toQTyped
     | .qLam h         => .qLam h.toQTyped
     | .qApp h₁ h₂     => .qApp h₁.toQTyped h₂.toQTyped
     | .qLet hwf hi hin hb => .qLet hwf (fun τ₁ h => (hi τ₁ h).toQTyped) hin hb.toQTyped
@@ -903,6 +909,7 @@ mutual
       QTypedCBody constTy [] Γ b ρ → QTypedBody constTy Γ b ρ
     | .empty      => .empty
     | .field h    => .field h.toQTyped
+    | .fieldU h   => .fieldU h.toQTyped
     | .cat h₁ h₂  => .cat h₁.toQTyped h₂.toQTyped
 
   theorem QTypedCArgs.toQTyped {B C : Type} {constTy : Sig B C} {Γ : QCtx B}

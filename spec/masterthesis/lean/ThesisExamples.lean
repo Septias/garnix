@@ -377,6 +377,15 @@ def timeEx : MacroNix.E :=
         | .ok (σ, S) => σ.body == .unk && σ.constraints.isEmpty && !S.flags.isEmpty
         | _ => false)
 
+-- …and it EVALUATES as in Nix (feat/fc-labels M4a: a string is a label):
+-- `toString` yields the label "1759190400", and the selection under it finds the
+-- field. (Before, toString yielded a string constant that no key position took,
+-- so the program always reached ↯.)
+example : Step sig.delta (call .toString [int 1759190400]) (.lab "1759190400") :=
+  .primDelta (vs := [int 1759190400]) (by simp only [List.mem_singleton]; rintro _ rfl; exact .con) rfl
+example : Step sig.delta (.selDyn (.rcd (.field "1759190400" (int 1))) (.lab "1759190400")) (int 1) :=
+  .selDynVal rfl
+
 -- §9 G3: the same program extended by one selection has no type: ★ cannot be
 -- selected from
 #guard (match runF sig 50 (.sel timeEx "m") with | .fail "clash" => true | _ => false)
@@ -881,7 +890,7 @@ def runM (e : MacroNix.E) : String × List Label :=
   | .oof => ("out of fuel", [])
 
 def mv (x : String) : MacroNix.E := .var x
-def ms (s : String) : MacroNix.E := .con (.str s)
+def ms (s : String) : MacroNix.E := .lab s
 def mrec : List (String × MacroNix.E) → MacroNix.E
   | []      => .rcd .empty
   | [(l, e)] => .rcd (.field l e)
@@ -903,10 +912,10 @@ def metaUpd : MacroNix.E :=
   ("⟨ρ1 | ε | meta: {ε} | ε.meta ↓ {ρ2}⟩ ⇒ ({ρ1 | ε} → {meta: {broken: bool | ε | ρ2} | ε | ρ1})", [])
 -- … at a package with meta …
 #guard runM (.app metaUpd (mrec [("pname", ms "hello"), ("meta", mrec [("description", ms "hi")])])) =
-  ("{meta: {broken: bool | ε | description: string | ε} | ε | pname: string | meta: {description: string} | ε}", [])
+  ("{meta: {broken: bool | ε | description: ⌊hi⌋ | ε} | ε | pname: ⌊hello⌋ | meta: {description: ⌊hi⌋} | ε}", [])
 -- … and at one without: the lookup reaches the default
 #guard runM (.app metaUpd (mrec [("pname", ms "hello")])) =
-  ("{meta: {broken: bool | ε | ε} | ε | pname: string | ε}", [])
+  ("{meta: {broken: bool | ε | ε} | ε | pname: ⌊hello⌋ | ε}", [])
 -- without the default, `drv: drv // { meta = drv.meta // { broken = false; }; }` clashes there
 def metaUpdNoOr : MacroNix.E :=
   mlam ["drv"] (.cat (mv "drv") (mrec [("meta", .cat (.sel (mv "drv") "meta") unbroken)]))
@@ -932,12 +941,12 @@ def override : MacroNix.E := mlam ["mkDerivation", "extra", "args"] (.app (mv "m
   ("{buildInputs: [int] | ε | buildInputs: [int] | ε}", [])
 -- … and at one without: the lookup reaches the default
 #guard runM (mapp override [mlam ["x"] (mv "x"), int 1, mrec [("pname", ms "hello")]]) =
-  ("{buildInputs: [int] | ε | pname: string | ε}", [])
+  ("{buildInputs: [int] | ε | pname: ⌊hello⌋ | ε}", [])
 -- one binding serves both uses
 #guard runM (.letE "f" override (mrec [
     ("a", mapp (mv "f") [mlam ["x"] (mv "x"), int 1, mrec [("buildInputs", .cons (int 0) .nil)]]),
     ("b", mapp (mv "f") [mlam ["x"] (mv "x"), int 1, mrec [("pname", ms "hello")]])])) =
-  ("{a: {buildInputs: [int] | ε | buildInputs: [int] | ε} | b: {buildInputs: [int] | ε | pname: string | ε}}", [])
+  ("{a: {buildInputs: [int] | ε | buildInputs: [int] | ε} | b: {buildInputs: [int] | ε | pname: ⌊hello⌋ | ε}}", [])
 -- without the default, `args.buildInputs ++ [ extra ]`: the spent stump misses, a clash
 def overrideNoOr : MacroNix.E := mlam ["mkDerivation", "extra", "args"] (.app (mv "mkDerivation")
   (.cat (mv "args") (mrec [("buildInputs",
@@ -951,12 +960,12 @@ def condExt : MacroNix.E := mlam ["lib", "stdenv"]
   (.cat (mrec [("pname", ms "hello")])
     (mapp (.sel (mv "lib") "optionalAttrs") [.sel (mv "stdenv") "isDarwin", mrec [("NIX_LDFLAGS", ms "-liconv")]]))
 #guard runM condExt =
-  ("⟨ρ2.isDarwin ↓ α4⟩, ⟨ρ1.optionalAttrs ↓ (α4 → ({NIX_LDFLAGS: string} → {ρ3}))⟩ ⇒ " ++
-   "({ρ1} → ({ρ2} → {ρ3 | pname: string | ε}))", [])
+  ("⟨ρ2.isDarwin ↓ α4⟩, ⟨ρ1.optionalAttrs ↓ (α4 → ({NIX_LDFLAGS: ⌊-liconv⌋} → {ρ3}))⟩ ⇒ " ++
+   "({ρ1} → ({ρ2} → {ρ3 | pname: ⌊hello⌋ | ε}))", [])
 -- a later lookup of pname answers ?
 #guard runM (mlam ["lib", "stdenv"] (.sel (mapp condExt [mv "lib", mv "stdenv"]) "pname")) =
-  ("⟨ρ4 | pname: string | ε.pname ↓ α3⟩, ⟨ρ2.isDarwin ↓ α5⟩, " ++
-   "⟨ρ1.optionalAttrs ↓ (α5 → ({NIX_LDFLAGS: string} → {ρ4}))⟩ ⇒ ({ρ1} → ({ρ2} → α3))", [])
+  ("⟨ρ4 | pname: ⌊hello⌋ | ε.pname ↓ α3⟩, ⟨ρ2.isDarwin ↓ α5⟩, " ++
+   "⟨ρ1.optionalAttrs ↓ (α5 → ({NIX_LDFLAGS: ⌊-liconv⌋} → {ρ4}))⟩ ⇒ ({ρ1} → ({ρ2} → α3))", [])
 -- nixpkgs' `optionalAttrs = cond: as: if cond then as else {}` types at bool → {} → {} …
 def optionalAttrs : MacroNix.E := mlam ["cond", "as"] (.ite (mv "cond") (mv "as") (mrec []))
 #guard runM optionalAttrs = ("(bool → ({ε} → {ε}))", [])
@@ -975,20 +984,22 @@ end idioms
 section macronix
 open MacroNix
 #guard (match runF sig 50
-    (.cat (.rcd (.field "pname" (.con (.str "hello"))))
-          (.ite (.bool true) (.rcd (.field "NIX_LDFLAGS" (.con (.str "-liconv")))) (.rcd .empty))) with
+    (.cat (.rcd (.field "pname" (.lab "hello")))
+          (.ite (.bool true) (.rcd (.field "NIX_LDFLAGS" (.lab "-liconv"))) (.rcd .empty))) with
   | .fail "clash" => true | _ => false)
 example := macroSig_ok
 
--- String keys today (M1 pins, plans/fc-labels.md; M4 moves all three):
--- `r: r // { ${toString 1} = 1; }` clashes, since T-rcd-dyn-𝓫 gives ★ …
+-- String keys (feat/fc-labels M4a): a string is a label of type ⌊★⌋.
+-- `r: r // { ${toString 1} = 1; }` types: the computed field is `${★}: int`,
+-- in front of r's row (it was a clash while T-rcd-dyn-𝓫 gave ★) …
 #guard runM (mlam ["r"] (.cat (mv "r") (.rcdDyn (call .toString [int 1]) (int 1)))) =
-  ("fail: clash", [])
+  ("({ρ1} → {${★}: int | ε | ρ1})", [])
 -- … `{}.${3}` is ★ by A-sel-dyn-𝓫, though only a string can be a key …
 #guard runM (.selDyn (mrec []) (int 3)) = ("★", ["${𝓫}"])
--- … and a key committed to a label at the selection clashes with a string
+-- … and a key variable that later becomes a computed string is bound to ★: the
+-- stump on it wakes opaque and answers ★ (it was a clash)
 #guard runM (.app (mlam ["a"] (.selDyn (mrec [("l", int 1)]) (mv "a"))) (call .toString [int 1])) =
-  ("fail: clash", [])
+  ("★", ["${★}"])
 end macronix
 
 end ThesisExamples

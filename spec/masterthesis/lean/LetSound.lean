@@ -46,17 +46,25 @@ theorem TyEquiv.var_inv {B : Type} {α : TyVar} {σ : Ty B}
 theorem qtyped_var_inv {B C : Type} {constTy : Sig B C} :
     {Γ : QCtx B} → {e : Expr C} → {τ : Ty B} → QTyped constTy Γ e τ →
     ∀ {x : Var} {σ : QScheme B}, e = .var x → Γ.lookup x = some σ →
-    τ = .unk ∨ ∃ τ', QScheme.Inst σ τ' ∧ TyEquiv τ' τ
+    τ = .unk ∨ (∃ τ', QScheme.Inst σ τ' ∧ TyEquiv τ' τ) ∨
+      (τ = .lab .unk ∧ ∃ τ' k, QScheme.Inst σ τ' ∧ TyEquiv τ' (.lab k))
   | _, _, _, .qVar h hi => fun he hx => by
       cases he
       rw [h] at hx
       cases Option.some.inj hx
-      exact .inr ⟨_, hi, .refl _⟩
+      exact .inr (.inl ⟨_, hi, .refl _⟩)
   | _, _, _, .qEq h heq => fun he hx =>
       match qtyped_var_inv h he hx with
       | .inl hu => .inl (hu ▸ heq).unk_inv
-      | .inr ⟨τ', hi, ht⟩ => .inr ⟨τ', hi, ht.trans heq⟩
+      | .inr (.inl ⟨τ', hi, ht⟩) => .inr (.inl ⟨τ', hi, ht.trans heq⟩)
+      | .inr (.inr ⟨hb, rest⟩) => .inr (.inr ⟨(hb ▸ heq).lab_inv, rest⟩)
   | _, _, _, .qUnk _ => fun _ _ => .inl rfl
+  -- a blurred label: the instance it blurs is a label type
+  | _, _, _, .qLabBlur h => fun he hx =>
+      match qtyped_var_inv h he hx with
+      | .inl hu => nomatch hu
+      | .inr (.inl ⟨τ', hi, ht⟩) => .inr (.inr ⟨rfl, τ', _, hi, ht⟩)
+      | .inr (.inr ⟨_, rest⟩) => .inr (.inr ⟨rfl, rest⟩)
   | _, _, _, .qCon => fun he _ => nomatch he
   | _, _, _, .qLam _ => fun he _ => nomatch he
   | _, _, _, .qApp _ _ => fun he _ => nomatch he
@@ -84,31 +92,45 @@ theorem qtyped_var_inv {B C : Type} {constTy : Sig B C} :
 -- ⊢  …at a MONOTYPE binding that instance is the binding itself
 theorem qtyped_var_mono_inv {B C : Type} {constTy : Sig B C} {Γ : QCtx B}
     {x : Var} {τ₀ τ : Ty B} (h : QTyped constTy Γ (.var x) τ)
-    (hx : Γ.lookup x = some ⟨[], [], τ₀⟩) : τ = .unk ∨ TyEquiv τ₀ τ :=
+    (hx : Γ.lookup x = some ⟨[], [], τ₀⟩) :
+    τ = .unk ∨ TyEquiv τ₀ τ ∨ (τ = .lab .unk ∧ ∃ k, TyEquiv τ₀ (.lab k)) :=
   match qtyped_var_inv h rfl hx with
   | .inl hu => .inl hu
-  | .inr ⟨_, hi, ht⟩ => .inr (inst_mono_eq hi ▸ ht)
+  | .inr (.inl ⟨_, hi, ht⟩) => .inr (.inl (inst_mono_eq hi ▸ ht))
+  | .inr (.inr ⟨hb, _, k, hi, ht⟩) => .inr (.inr ⟨hb, k, inst_mono_eq hi ▸ ht⟩)
 
 -- ⊢  `let z = y in z` at a monotype y is typed exactly like y: whatever scheme
 --    qLet picks, the body's instance of it is one the premise had to type y at
 theorem qtyped_let_alias_inv {B C : Type} {constTy : Sig B C} :
     {Γ : QCtx B} → {e : Expr C} → {τ : Ty B} → QTyped constTy Γ e τ →
     ∀ {y z : Var} {τ₀ : Ty B}, e = .letE z (.var y) (.var z) →
-    Γ.lookup y = some ⟨[], [], τ₀⟩ → τ = .unk ∨ TyEquiv τ₀ τ
+    Γ.lookup y = some ⟨[], [], τ₀⟩ →
+    τ = .unk ∨ TyEquiv τ₀ τ ∨ (τ = .lab .unk ∧ ∃ k, TyEquiv τ₀ (.lab k))
   | _, _, _, .qLet (σ := σ₀) _ hinst _ hbody => fun he hy => by
       cases he
       have hz : ∀ (Γ' : QCtx B) (w : Var), (Γ'.bindScheme w σ₀).lookup w = some σ₀ :=
         fun Γ' w => by rw [QCtx.lookup_bindScheme]; simp
-      rcases qtyped_var_inv hbody rfl (hz _ _) with hu | ⟨τ', hi, ht⟩
+      rcases qtyped_var_inv hbody rfl (hz _ _) with hu | ⟨τ', hi, ht⟩ | ⟨hb, τ', k, hi, ht⟩
       · exact .inl hu
-      · rcases qtyped_var_mono_inv (hinst τ' hi) hy with hu | h₀
+      · rcases qtyped_var_mono_inv (hinst τ' hi) hy with hu | h₀ | ⟨hb', k', h₀⟩
         · subst hu; exact .inl ht.unk_inv
-        · exact .inr (h₀.trans ht)
+        · exact .inr (.inl (h₀.trans ht))
+        · subst hb'; exact .inr (.inr ⟨TyEquiv.lab_inv ht, k', h₀⟩)
+      · rcases qtyped_var_mono_inv (hinst τ' hi) hy with hu | h₀ | ⟨hb', k', h₀⟩
+        · subst hu; exact nomatch ht.unk_inv
+        · exact .inr (.inr ⟨hb, k, h₀.trans ht⟩)
+        · exact .inr (.inr ⟨hb, k', h₀⟩)
   | _, _, _, .qEq h heq => fun he hy =>
       match qtyped_let_alias_inv h he hy with
       | .inl hu => .inl (hu ▸ heq).unk_inv
-      | .inr ht => .inr (ht.trans heq)
+      | .inr (.inl ht) => .inr (.inl (ht.trans heq))
+      | .inr (.inr ⟨hb, k, h₀⟩) => .inr (.inr ⟨(hb ▸ heq).lab_inv, k, h₀⟩)
   | _, _, _, .qUnk _ => fun _ _ => .inl rfl
+  | _, _, _, .qLabBlur h => fun he hy =>
+      match qtyped_let_alias_inv h he hy with
+      | .inl hu => nomatch hu
+      | .inr (.inl h₀) => .inr (.inr ⟨rfl, _, h₀⟩)
+      | .inr (.inr ⟨_, k, h₀⟩) => .inr (.inr ⟨rfl, k, h₀⟩)
   | _, _, _, .qCon => fun he _ => nomatch he
   | _, _, _, .qVar _ _ => fun he _ => nomatch he
   | _, _, _, .qLam _ => fun he _ => nomatch he
@@ -169,11 +191,12 @@ theorem letAlias_not_typed {α β : TyVar} (hne : α ≠ β) :
   · obtain ⟨σ₁, σ₂, heq, h₁, h₂⟩ := hfn.fn_inv
     cases heq
     rcases qtyped_let_alias_inv (τ₀ := τ₁) hb rfl
-        (by rw [QCtx.bindTy, QCtx.lookup_bindScheme]; simp) with hu | h₀
+        (by rw [QCtx.bindTy, QCtx.lookup_bindScheme]; simp) with hu | h₀ | ⟨hb, _, _⟩
     · subst hu; exact nomatch h₂.unk_inv
     · -- a ≈ τ₁ ≈ τ₂ ≈ b
       have := (h₁.symm.trans (h₀.trans h₂)).var_inv
       cases this; exact hne rfl
+    · subst hb; exact nomatch h₂.lab_inv
   · exact nomatch hu
 
 /-- A-let as it stood: `Infer.letE` without its generalization premise. Stated as
@@ -302,9 +325,10 @@ theorem inferSoundC_false : ¬ InferSoundC Unit Unit (Sig.plain fun _ => ()) := 
   have ht := (h laΓ laS laS (.var "y") (.var laA) la_var_y laSub hsat
     (fun _ hp => nomatch hp)).toQTyped
   have hl : (laS.applyCtx laΓ).lookup "y" = some ⟨[], [], .var laA⟩ := rfl
-  rcases qtyped_var_mono_inv ht hl with hu | he
+  rcases qtyped_var_mono_inv ht hl with hu | he | ⟨hb, _⟩
   · exact nomatch hu
   · exact nomatch he.var_inv
+  · exact nomatch hb
 
 --------------------- 3. GENERALIZING AN OUTER STUMP AWAY ---------------------
 --
@@ -378,6 +402,13 @@ theorem letCapture_not_typed :
             subst this
             cases hres with
             | found ht => exact selEx_not_var_result hea ht
+        -- a blurred field `${★}` answers `?` where the type's field a hits
+        | fieldU _ =>
+            obtain ⟨r₂, hl₂, hres⟩ :=
+              lookup_equiv hre (show Lookup _ "a" .unknown from .catUnk (.dunk rfl))
+            have := lookup_det hl₂ (.catHit .hit)
+            subst this
+            cases hres
   · exact nomatch hu
 
 /-- ⊢  **…and inference, as A-let stood, runs to it.** -/

@@ -2671,6 +2671,8 @@ mutual
   inductive TyPrec {B : Type} : Ty B → Ty B → Prop where
     | refl (τ : Ty B) : TyPrec τ τ
     | unk  (τ : Ty B) : TyPrec τ .unk
+    -- ⌊★⌋ is less precise than every key's singleton (T-lab-blur)
+    | lab  {k : Key} : TyPrec (.lab k) (.lab .unk)
     | fn   : TyPrec τ₁ τ₁' → TyPrec τ₂ τ₂' →
              TyPrec (.fn τ₁ τ₂) (.fn τ₁' τ₂')
     | rcd  : RowPrec ρ ρ' → TyPrec (.rcd ρ) (.rcd ρ')
@@ -2750,6 +2752,7 @@ theorem TyPrec.trans {B : Type} : {τ₁ τ₂ τ₃ : Ty B} →
     TyPrec τ₁ τ₂ → TyPrec τ₂ τ₃ → TyPrec τ₁ τ₃
   | _, _, _, h₁, .refl _   => h₁
   | _, _, _, _,  .unk _    => .unk _
+  | _, _, _, h₁, .lab      => by cases h₁ <;> exact .lab
   | _, _, _, h₁, .fn ha hb => by
       obtain ⟨_, _, rfl, hp, hq⟩ := TyPrec.fn_inv h₁
       exact .fn (TyPrec.trans hp ha) (TyPrec.trans hq hb)

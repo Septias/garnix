@@ -129,6 +129,18 @@ theorem Key.cmp_var_ne {x : Key} {β : TyVar} (_ : x ≠ .var β) :
 theorem LookupQ.var_iff {ρ : Row B} {α : TyVar} {r : LookupRes B} :
     LookupQ ρ (.var α) r ↔ LookupV ρ α r := Iff.rfl
 
+-- ⊢  ★ never hits: no comparison with it decides
+theorem LookupQ.unk_not_found {ρ : Row B} {τ : Ty B} (h : LookupQ ρ .unk (.found τ)) :
+    False := by
+  generalize hk : Key.unk = k at h
+  generalize hr : (LookupRes.found τ) = r at h
+  induction h with
+  | hit h => subst hk; simp [Key.cmp] at h
+  | dhit h => subst hk; simp [Key.cmp] at h
+  | catHit _ ih => exact ih hk hr
+  | catSkip _ _ _ ih => exact ih hk hr
+  | _ => cases hr
+
 theorem LookupQ.det {ρ : Row B} {q : Key} {r₁ r₂ : LookupRes B}
     (h₁ : LookupQ ρ q r₁) (h₂ : LookupQ ρ q r₂) : r₁ = r₂ := by
   induction h₁ generalizing r₂ with

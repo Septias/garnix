@@ -449,6 +449,7 @@ theorem qtyped_applySubst {B C : Type} {constTy : Sig B C}
       simp only [Ty.applySubst] at ih ⊢
       exact .qSelAbs ih (lookup_applySubst (r := .absent) σ hlk (by intro hc; cases hc))
   | _, _, _, _, .qUnk h, hm => .qUnk (qtyped_applySubst him h hm)
+  | _, _, _, _, .qLabBlur h, hm => .qLabBlur (qtyped_applySubst him h hm)
   | _, _, _, _, .qRcd h, hm => .qRcd (qtypedBody_applySubst him h hm)
   | _, _, _, _, .qLab, _ => .qLab
   | _, _, _, _, .qSelDyn h₁ h₂ hlk, hm =>
@@ -494,6 +495,7 @@ theorem qtypedBody_applySubst {B C : Type} {constTy : Sig B C}
     QTypedBody constTy Γ' ξ (ρ.applySubst σ)
   | _, _, _, _, .empty, _ => .empty
   | _, _, _, _, .field h, hm => .field (qtyped_applySubst him h hm)
+  | _, _, _, _, .fieldU h, hm => .fieldU (qtyped_applySubst him h hm)
   | _, _, _, _, .cat h₁ h₂, hm =>
       .cat (qtypedBody_applySubst him h₁ hm) (qtypedBody_applySubst him h₂ hm)
 
