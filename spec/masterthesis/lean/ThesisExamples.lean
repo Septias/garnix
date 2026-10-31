@@ -866,28 +866,58 @@ def mrec : List (String × MacroNix.E) → MacroNix.E
 def mlam (xs : List String) (e : MacroNix.E) : MacroNix.E := xs.foldr .lam e
 def mapp (f : MacroNix.E) (as : List MacroNix.E) : MacroNix.E := as.foldl .app f
 
--- Overlay: `self: super: { fields = super.foo // { meta = { broken = false; }; }; }`
-def overlay : MacroNix.E := mlam ["self", "super"]
-  (mrec [("fields", .cat (.sel (mv "super") "foo") (mrec [("meta", mrec [("broken", .bool false)])]))])
-#guard runM overlay = ("⟨ρ2.foo ↓ {ρ3}⟩ ⇒ (α1 → ({ρ2} → {fields: {meta: {broken: bool} | ε | ρ3}}))", [])
--- … applied to `{}` and `{ foo = { pname = "hello"; }; }` …
-#guard runM (mapp overlay [mrec [], mrec [("foo", mrec [("pname", ms "hello")])]]) =
-  ("{fields: {meta: {broken: bool} | ε | pname: string | ε}}", [])
--- … and to `{}` and `{}`: a clash
-#guard runM (mapp overlay [mrec [], mrec []]) = ("fail: clash", [])
+/-- `e.l or d`, derived as in NixSuite.lean: `({l = d} ‖ e).l` -/
+def mor (e : MacroNix.E) (l : String) (d : MacroNix.E) : MacroNix.E := .sel (.cat (mrec [(l, d)]) e) l
+def unbroken : MacroNix.E := mrec [("broken", .bool false)]
+
+-- Meta update, lib/meta.nix (addMetaAttrs, fallback branch) at `{ broken = false; }`:
+-- `drv: drv // { meta = (drv.meta or { }) // { broken = false; }; }`
+def metaUpd : MacroNix.E :=
+  mlam ["drv"] (.cat (mv "drv") (mrec [("meta", .cat (mor (mv "drv") "meta" (mrec [])) unbroken)]))
+#guard runM metaUpd =
+  ("⟨ρ1 | ε | meta: {ε} | ε.meta ↓ {ρ2}⟩ ⇒ ({ρ1 | ε} → {meta: {broken: bool | ε | ρ2} | ε | ρ1})", [])
+-- … at a package with meta …
+#guard runM (.app metaUpd (mrec [("pname", ms "hello"), ("meta", mrec [("description", ms "hi")])])) =
+  ("{meta: {broken: bool | ε | description: string | ε} | ε | pname: string | meta: {description: string} | ε}", [])
+-- … and at one without: the lookup reaches the default
+#guard runM (.app metaUpd (mrec [("pname", ms "hello")])) =
+  ("{meta: {broken: bool | ε | ε} | ε | pname: string | ε}", [])
+-- without the default, `drv: drv // { meta = drv.meta // { broken = false; }; }` clashes there
+def metaUpdNoOr : MacroNix.E :=
+  mlam ["drv"] (.cat (mv "drv") (mrec [("meta", .cat (.sel (mv "drv") "meta") unbroken)]))
+#guard runM metaUpdNoOr = ("⟨ρ1 | ε.meta ↓ {ρ2}⟩ ⇒ ({ρ1 | ε} → {meta: {broken: bool | ε | ρ2} | ε | ρ1})", [])
+#guard runM (.app metaUpdNoOr (mrec [("pname", ms "hello")])) = ("fail: clash", [])
+-- The overlay form `self: super: { foo = super.foo // { meta = super.foo.meta // …; }; }`
+-- fails the fillability test: the blocker of the meta stump occurs in the spent
+-- result of the foo stump (LetSpent, last clause)
+#guard runM (mlam ["self", "super"] (mrec [("foo", .cat (.sel (mv "super") "foo")
+    (mrec [("meta", .cat (.sel (.sel (mv "super") "foo") "meta") unbroken)]))])) =
+  ("fail: spent promise without witness", [])
 
 -- Override: `mkDerivation: extra: args:
---   mkDerivation (args // { buildInputs = args.buildInputs ++ [ extra ]; })`
+--   mkDerivation (args // { buildInputs = (args.buildInputs or [ ]) ++ [ extra ]; })`
 def override : MacroNix.E := mlam ["mkDerivation", "extra", "args"] (.app (mv "mkDerivation")
   (.cat (mv "args") (mrec [("buildInputs",
-    call .concat [.sel (mv "args") "buildInputs", .cons (mv "extra") .nil])])))
+    call .concat [mor (mv "args") "buildInputs" .nil, .cons (mv "extra") .nil])])))
 #guard runM override =
-  ("⟨ρ2 | ε.buildInputs ↓ [α1]⟩ ⇒ (({buildInputs: [α1] | ε | ρ2} → α3) → (α1 → ({ρ2 | ε} → α3)))", [])
+  ("⟨ρ2 | ε | buildInputs: [α4] | ε.buildInputs ↓ [α1]⟩ ⇒ " ++
+   "(({buildInputs: [α1] | ε | ρ2} → α3) → (α1 → ({ρ2 | ε} → α3)))", [])
 -- … used at an args with buildInputs …
 #guard runM (mapp override [mlam ["x"] (mv "x"), int 1, mrec [("buildInputs", .cons (int 0) .nil)]]) =
   ("{buildInputs: [int] | ε | buildInputs: [int] | ε}", [])
--- … and at one without: the spent stump misses, a clash
+-- … and at one without: the lookup reaches the default
 #guard runM (mapp override [mlam ["x"] (mv "x"), int 1, mrec [("pname", ms "hello")]]) =
+  ("{buildInputs: [int] | ε | pname: string | ε}", [])
+-- one binding serves both uses
+#guard runM (.letE "f" override (mrec [
+    ("a", mapp (mv "f") [mlam ["x"] (mv "x"), int 1, mrec [("buildInputs", .cons (int 0) .nil)]]),
+    ("b", mapp (mv "f") [mlam ["x"] (mv "x"), int 1, mrec [("pname", ms "hello")]])])) =
+  ("{a: {buildInputs: [int] | ε | buildInputs: [int] | ε} | b: {buildInputs: [int] | ε | pname: string | ε}}", [])
+-- without the default, `args.buildInputs ++ [ extra ]`: the spent stump misses, a clash
+def overrideNoOr : MacroNix.E := mlam ["mkDerivation", "extra", "args"] (.app (mv "mkDerivation")
+  (.cat (mv "args") (mrec [("buildInputs",
+    call .concat [.sel (mv "args") "buildInputs", .cons (mv "extra") .nil])])))
+#guard runM (mapp overrideNoOr [mlam ["x"] (mv "x"), int 1, mrec [("pname", ms "hello")]]) =
   ("fail: clash", [])
 
 -- Conditional extension:

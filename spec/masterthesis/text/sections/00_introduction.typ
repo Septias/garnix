@@ -38,11 +38,11 @@ This program uses dynamic lookups and the impure `builtins.currentTime` function
 #figure(
   caption: [Three examples of Nix code that needs asymmetric concatenation.],
   box(width: 100%, align(left, ```nix
-  # 1. An overlay extends and overrides existing fields of a package.
-  self: super: { fields = super.foo // { meta = { broken = false; }; }; }
+  # 1. A package is marked unbroken; the rest of its meta survives.
+  drv: drv // { meta = (drv.meta or { }) // { broken = false; }; }
 
   # 2. In a derivation, fields are overridden with extra fields.
-  mkDerivation (args // { buildInputs = args.buildInputs ++ [ extra ]; })
+  mkDerivation (args // { buildInputs = (args.buildInputs or [ ]) ++ [ extra ]; })
 
   # 3. A conditional build based on the host-platform.
   { pname = "hello"; } // lib.optionalAttrs stdenv.isDarwin { NIX_LDFLAGS = "-liconv"; }
