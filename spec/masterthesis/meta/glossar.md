@@ -29,6 +29,7 @@
 - *Qualified Scheme*: A scheme carrying its pending lookups as constraints
 - *Qualifier*: The role of a stump in a scheme ("stays a qualifier of the answer"), not a separate object
 - *Refinement*: A lookup result improving (? → τ or ⊥) once instantiation unblocks it; only ? can improve, definite results are final
+- *Fillability test*: The syntactic check of A-let and the entry point that a scheme is inhabited: the instance that sends the generalized type-variables to ★ and fills each blocker with the fields its spent stumps demand discharges every stump. Sufficient, not complete: the spent chain `x: x.l.m // {}` is inhabited but fails it. *Fillable*: passes the test
 
 
 ## Spine
