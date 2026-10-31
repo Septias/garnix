@@ -3,9 +3,8 @@
 #import "05_inference.typ": st_park, st_solve
 
 = First-Class Labels <sec-fc-labels>
-// PROF: String keys give star (T-sel-dyn-b, T-rcd-dyn-b), so r // { ${n} = v; } with a computed string is rejected: the dominant Nix idiom.
 
-NixLang computes labels that can be used to index records or bind fields at runtime. The expression `x.${e}` selects the field named by an arbitrary string expression e, and the expression `{ ${name} = v; }` binds a value to a label that is the result of an arbitrary expression. First-class labels fit naturally in our system: Shadowing inside a row cannot be decided after a label variable so it behaves identically to a row-variable. In fact, in the following section we generalize these two types of variables to _barriers_ after which shadowing is unclear. The comparison of label variables also benefits from our addition of the unknown type: If two variables cannot be decided to be equal or not, the unknown type can be used to type the expression.
+Labels can be computed in NixLang. The expression `x.${e}` selects the field named by an arbitrary string expression e, and the expression `{ ${e} = v; }` binds a value to a label that is the result of an expression $e$. First-class labels fit naturally in our system: Label variables go into rows and and shadow similarly to a row-variable. In fact, in the following section we generalize these two types of variables to _barriers_ after which shadowing is unclear. The comparison of label variables also benefits from our addition of the unknown type: If two variables cannot be decided to be equal or not, the unknown type can be used to type the expression and the same mechanism apply: deferred lookup and qualified schemes.
 
 
 #let fc_syntax = figure(
@@ -30,7 +29,7 @@ NixLang computes labels that can be used to index records or bind fields at runt
 )
 #fc_syntax <fc-syntax>
 
-@fc-syntax gives the syntax extension. A label can now be a value, written as a string literal $\"l\"$, as in NixLang and are used in the record syntax. From now on, a record can be indexed by the `${e₁}` syntax of Nix and the dynamic record ${ \${e₁} = e₂ }$ binds the field named by e₁. We abstract over labels and call it key: A key $k$ can either be a discrete label $l$, or a label variable $α$, which has the new sort `Label`. Keys occur in two places: in the singleton type $⌊k⌋$ and in the _keyed field_ $\${k}: τ$ of a row, whose label is not yet known. Stumps are keyed as well, $⟨ρ.k ↓ δ⟩$, so that a scheme can defer a lookup under a key it abstracts over.
+@fc-syntax gives the syntax extension. A label can now be a string literal $\"l\"$. Records can be indexed by arbitrary expressions e and and the dynamic record ${ \${e₁} = e₂ }$ binds the field named by e₁. We abstract over labels and call it a key. A key $k$ can either be a discrete label $l$, or a label variable $α$, which has the new sort `Label`. Keys occur in two places: in the singleton type $⌊k⌋$ that describes the key $k$ and in the _keyed field_ $\${k}: τ$ of a row, whose label is not yet known. Stumps are keyed as well, $⟨ρ.k ↓ δ⟩$, so that a scheme can defer a lookup under a key it abstracts over.
 
 == Keyed Lookup
 
@@ -54,7 +53,7 @@ NixLang computes labels that can be used to index records or bind fields at runt
 )
 #fc_lookup <fc-lookup>
 
-@fc-lookup generalizes the lookup relation from labels to keys. Two keys are equal when they are the same label literal or variable, distinct when the labels are different and undecided otherwise. Just as for rows, the definite answers are stable under substitution so the lookup stays deterministic and total. A new source of $?$ appears for a field whose key cannot yet be compared. The lookup of l in $(\${γ}: τ)$ may hit or miss depending on the label γ becomes, and a lookup under a variable key α may hit any literal field.
+@fc-lookup generalizes the lookup relation from labels to keys. Two keys are equal when they are the same label literal or variable, distinct when the labels are different and undecided otherwise. Just as for rows, the definite answers are stable under substitution so the lookup stays deterministic and total. A new source of $?$ appears for a field whose key cannot yet be compared. The lookup of l in $(\${γ}: τ)$ may hit or miss depending on the label γ becomes, [and a lookup under a variable key α may hit any literal field](add visual example).
 
 The variable that blocks a $?$ is accordingly no longer always a row-variable. It is the row-variable at which the search stopped, the variable key of the lookup, or the variable key of a field, and inference must wake a stump when any of these is solved.
 
@@ -135,11 +134,11 @@ A keyed field is congruent only under the same key, and a keyed field with a lit
 )
 #fc_typing <fc-typing>
 
-@fc-typing gives the typing rules and the reduction. The three rules for dynamic selection are those of static selection with the label replaced by the key of e₂'s type, and T-rcd-dyn records the key e₁ in a keyed field. T-sel-dyn-𝓫 and T-rcd-dyn-𝓫 answer a key of base type with ★. Discharge (@instantiation) replays a keyed stump with the keyed lookup: θ is applied to both the row and the key, $(θ ρ).(θ k) ↓ r$, and the verdict pins δ exactly as for a static stump.
+@fc-typing gives the typing rules and the reduction. The three rules for dynamic selection are those of static selection with the label replaced by the key of e₂'s type, and T-rcd-dyn records the key e₁ in a keyed field. T-sel-dyn-𝓫 and T-rcd-dyn-𝓫 answer a key of base type with ★ [](name T-sel-⊥ here as equivalent). Discharge (@instantiation) replays a keyed stump with the keyed lookup: θ is applied to both the row and the key, $(θ ρ).(θ k) ↓ r$, and the verdict pins δ exactly as for a static stump.
 
-The evaluation contexts evaluate the record before the key, and E-sel-dyn then selects the leftmost binding of the label, as E-sel of @semantics does for a static one. A dynamic record evaluates its key but leaves the field unevaluated, as a record literal does. A missing label and a key that is not a label are both lookup errors.
+The evaluation contexts evaluate the record before the key, and E-sel-dyn then selects the leftmost binding of the label, as E-sel of @semantics does for a static one. A dynamic record evaluates its key but leaves the field unevaluated, as a record literal does. A missing label and a key that is not a label are both [lookup errors](why lookup error?).
 
-Progress up to ↯ and preservation hold for MiniNix with first-class labels. Under T-rcd-dyn, the new case of preservation is E-rcd-dyn. Before the step, T-rcd-dyn types ${ \${\"l\"} = e }$ at ${\${l}: τ}$, since the key $\"l\"$ has type $⌊l⌋$. After the step, the literal record ${ l = e }$ has type ${l: τ}$, and ≈-dlab with T-eq identifies the two types. Under the two 𝓫-rules the redex has type ★, and the field value or the literal record it steps to has some type, which T-★-intro weakens to ★. These two cases rely on T-★-intro being unrestricted.
+Progress up to ↯ and preservation hold for MiniNix with first-class labels. Under T-rcd-dyn, the new case of preservation is E-rcd-dyn. Before the step, T-rcd-dyn types ${ \${\"l\"} = e }$ at ${\${l}: τ}$, since the key $\"l\"$ has type $⌊l⌋$. After the step, the literal record ${ l = e }$ has type ${l: τ}$, and ≈-dlab with T-eq identifies the two types. Under the two 𝓫-rules the redex has type ★, and the field value or the literal record it steps to has some type, which T-★-intro weakens to ★.
 
 Qualified schemes abstract over keys as they do over rows. The dynamic selector and the dynamic record constructor have the schemes
 
@@ -155,10 +154,10 @@ and both are instance-closed. The first scheme defers the lookup until both the 
 #let fc_unif = figure(
   caption: [Unification of keys and of keyed fields, extending @unification-ty.],
   flexbox(
-    derive("U-key-refl", (), $⌊α⌋ ≐ ⌊α⌋ ⇝ ∅$),
+    derive("U-key-refl", (), $⌊α⌋ ≐ ⌊α⌋ ⇝ ∅$), // can this be removed, do we have it syntactically already?
     derive("U-lab", ($l = l′$,), $⌊l⌋ ≐ ⌊l′⌋ ⇝ ∅$),
     derive("U-lab-clash", ($l ≠ l′$,), $⌊l⌋ ≐ ⌊l′⌋ ⇝ #u_clash$),
-    derive("U-key-bind", ($k ≠ α$,), $⌊α⌋ ≐ ⌊k⌋ ⇝ [α ≔ k]$),
+    derive("U-key-bind", ($k ≠ α$,), $⌊α⌋ ≐ ⌊k⌋ ⇝ [α ≔ k]$), // correct? key can be a α aswell
     derive(
       "U-key-L",
       ($τ ≐ τ′ ⇝ θ$, $θ t₁ scripts(≐)_r θ t₂ ⇝ θ′$),
@@ -178,12 +177,15 @@ and both are instance-closed. The first scheme defers the lookup until both the 
 )
 #fc_unif <fc-unification>
 
+// explain the figure better, with direct rules
 A singleton type is a nullary constructor, like a base type, and the key pass of @fc-unification is flat: two labels unify when they are equal and clash otherwise, and a label variable is bound to the other key. A key is atomic, so U-key-bind needs no occurs check. $⌊k⌋$ against any other head clashes by U-clash.
 
 
-On rows, the moves of @unification-cascade treat a keyed field as a barrier. U-ε-clash fires on a keyed field as on any field, since the empty spine has no field of any key. U-row-clash and U-ground count only literal fields and require the other side to be barrier-free, so that $(l: τ) scripts(≐)_r (\${α}: τ′)$ is not a clash: $[α ≔ l]$ solves it. An occurrence of a variable next to a keyed field is reported as stuck rather than as an occurs failure, since the soundness proof of U-var-occurs counts literal fields and does not extend to keys. U-host does not fire on a side with a keyed field, since its key may become the label of the field to be hosted. Two new moves handle keyed fields.
+// this stands a bit alone
+On rows, the moves of @unification-cascade treat a keyed field as a barrier. U-ε-clash fires on a keyed field as on any field, since the empty spine has no field of any key. U-row-clash and U-ground count only literal fields and require the other side to be barrier-free, so that $(l: τ) scripts(≐)_r (\${α}: τ′)$ is not a clash: $[α ≔ l]$ solves it. [An occurrence of a variable next to a keyed field is reported as stuck rather than as an occurs failure, since the soundness proof of U-var-occurs counts literal fields and does not extend to keys.](explain this) U-host does not fire on a side with a keyed field, since its key may become the label of the field to be hosted. Two new moves handle keyed fields.
 
 
+// check
 U-key-L and U-key-R cancel two keyed fields under the same variable key at the front or the back of both spines and unify their types. They are restricted to the ends of the spines, since a literal field in front of $\${α}: τ$ may carry the label that α becomes. Both moves are forced. U-key-pin applies when each side consists of a single field, at least one of them keyed, under different keys. A one-field row is equivalent to another only under the same key, so every unifier identifies the two keys, and the move binds the variable key to the other key and runs the problem again, where U-key-L or U-field-L then pairs the fields. Here f is a single field and key(f) is its label or its key. U-key-pin is tried in both directions.
 
 

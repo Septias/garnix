@@ -1,9 +1,11 @@
 #import "../functions.typ": *
 
 
+// say here that all proves are AI-generated?
+
 = Mechanization <sec-mechanization>
 
-The metatheory and all examples of this thesis are mechanized in Lean 4, sorry-free and not using axioms beyond `propext`, `Quot.sound` and `Classical.choice`. The development started with MiniNix and first-class labels but has been extended with routine features such as booleans, [conditionals](routine is hard, when conditionals break our system), lists and builtins, to form a calculus we call MacroNix. We give a short overview of this work in @app-macronix.
+The metatheory and all examples of this thesis are mechanized in Lean 4, sorry-free and not using axioms beyond `propext`, `Quot.sound` and `Classical.choice`. The development started with MiniNix and first-class labels but has been extended with routine features such as booleans, conditionals, lists and builtins, to form a calculus we call MacroNix. We give a short overview of this work in @app-macronix.
 
 The development consists of about 35,000 lines of Lean code in 41 files, with 1,339 theorems and 545 definitions. It is run on Lean 4.31.0 and built without libraries: Neither Mathlib nor Batteries is used. Row unification takes the largest share of the development with 13,700 lines, followed by inference with 9,300 and the declarative calculus with 8,200. MacroNix adds another 700 lines. 3,000 lines check the development itself and include the axiom-guards, a fuzzer, and regression-checks.
 
