@@ -190,6 +190,7 @@ def rowN : R → String
 def keyN : Key → String
   | .lit l => l
   | .var α => α
+  | .unk   => "★"
 end
 
 def solN (s : Sol Unit) : String :=
@@ -229,6 +230,7 @@ def rowC (L : List TyVar) : R → String
 def keyC (L : List TyVar) : Key → String
   | .lit l => l
   | .var α => "κ" ++ toString (L.idxOf α + 1)
+  | .unk   => "★"
 end
 
 def σ0 : Sig Unit Unit := Sig.plain fun _ => ()
@@ -301,6 +303,7 @@ theorem sProj_nil {B : Type} {l : Label} :
       exact sProj_nil s h.2
   | .var _ :: s, h => by simp only [sProj, sProj_nil s h, List.map_nil]
   | .dfield _ _ :: s, h => by simp only [sProj, sProj_nil s h, List.map_nil]
+  | .ufield _ :: s, h => by simp only [sProj, sProj_nil s h, List.map_nil]
 
 def charB {B : Type} [DecidableEq B] (ρ₁ ρ₂ : Row B) : Bool :=
   decide (sBarSeq ρ₁.toSpine = sBarSeq ρ₂.toSpine) &&

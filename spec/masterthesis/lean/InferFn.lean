@@ -96,22 +96,24 @@ inductive LOut (B : Type) where
   | found   : Ty B → LOut B
   | absent  : LOut B
   | blocked : TyVar → LOut B
+  | opq     : LOut B               -- an opaque `?`: nothing to wait on (★)
 
 /-- what an answer asserts of a keyed lookup -/
 def LOut.HoldsQ (ρ : Row B) (q : Key) : LOut B → Prop
   | .found τ   => LookupQ ρ q (.found τ)
   | .absent    => LookupQ ρ q .absent
   | .blocked α => LookupBlockedQ ρ q α
+  | .opq       => LookupOpaqueQ ρ q
 
-/-- the blocker of an undecided comparison of lookup key k with field key q:
-the lookup key when it is a label variable (`dunkQ`, `sunk`), the field key
-otherwise (`dunkF`). Two literals always compare, so the last arm is never
-reached. -/
-def keyBlocker (k q : Key) : TyVar :=
+/-- an undecided comparison of lookup key k with field key q: blocked on the
+lookup key when it is a label variable (`dunkQ`, `sunk`), on the field key when
+that is one (`dunkF`); with ★ on either side nothing can decide it. Two literals
+always compare, so they never reach this. -/
+def keyUndec (k q : Key) : LOut B :=
   match k, q with
-  | .var α, _ => α
-  | .lit _, .var γ => γ
-  | .lit _, .lit _ => ""
+  | .var α, _ => .blocked α
+  | .lit _, .var γ => .blocked γ
+  | _, _ => .opq
 
 /-- `ρ.k ↓ r`, computed -/
 def lookupQF : Row B → Key → IRes (LOut B)
@@ -121,17 +123,18 @@ def lookupQF : Row B → Key → IRes (LOut B)
       match Key.cmp k (.lit l) with
       | .eq    => .ok (.found τ)
       | .apart => .ok .absent
-      | .undec => .ok (.blocked (keyBlocker k (.lit l)))
+      | .undec => .ok (keyUndec k (.lit l))
   | .dsing q τ, k =>
       match Key.cmp k q with
       | .eq    => .ok (.found τ)
       | .apart => .ok .absent
-      | .undec => .ok (.blocked (keyBlocker k q))
+      | .undec => .ok (keyUndec k q)
   | .cat ρ₁ ρ₂, k =>
       match lookupQF ρ₁ k with
       | .ok (.found τ)   => .ok (.found τ)
       | .ok .absent      => lookupQF ρ₂ k
       | .ok (.blocked α) => .ok (.blocked α)
+      | .ok .opq         => .ok .opq
       | .fail m          => .fail m
       | .oof             => .oof
 
@@ -148,8 +151,10 @@ theorem lookupQF_sound :
       · rename_i he; cases h; exact .hit he
       · rename_i he; cases h; exact .miss he
       · rename_i he; cases h
-        obtain ⟨α, rfl⟩ := Key.cmp_undec_lit he
-        exact .sunk
+        cases k with
+        | var α => exact .sunk
+        | unk => exact .sunk
+        | lit l' => simp only [Key.cmp_lit_lit] at he; split at he <;> cases he
   | .dsing q τ, k, r, h => by
       simp only [lookupQF] at h
       split at h
@@ -158,9 +163,11 @@ theorem lookupQF_sound :
       · rename_i he; cases h
         cases k with
         | var α => exact .dunkQ he
+        | unk => exact .dunkU
         | lit l =>
-            obtain ⟨γ, rfl⟩ := Key.cmp_lit_undec he
-            exact .dunkF
+            rcases Key.cmp_lit_undec he with ⟨γ, rfl⟩ | rfl
+            · exact .dunkF
+            · exact .dunkF
   | .cat ρ₁ ρ₂, k, r, h => by
       simp only [lookupQF] at h
       split at h
@@ -171,7 +178,9 @@ theorem lookupQF_sound :
         | found τ => exact .catSkip (lookupQF_sound h₁) ih₂
         | absent => exact .catSkip (lookupQF_sound h₁) ih₂
         | blocked β => exact .catSkip (lookupQF_sound h₁) ih₂
+        | opq => exact .catSkip (lookupQF_sound h₁) ih₂
       · rename_i α h₁; cases h; exact .catUnk (lookupQF_sound h₁)
+      · rename_i h₁; cases h; exact .catUnk (lookupQF_sound h₁)
       · cases h
       · cases h
 
@@ -184,6 +193,7 @@ theorem LOut.not_blockedQ {ρ : Row B} {q : Key} {r : LOut B} {β : TyVar}
   | found τ => exact absurd (h.det hb.toLookupQ) (by simp)
   | absent => exact absurd (h.det hb.toLookupQ) (by simp)
   | blocked α => exact hne (by rw [LookupBlockedQ.det h hb])
+  | opq => exact h.not_blocked hb
 
 --------------------- EQUATIONS ------------------------------------------------
 
@@ -217,6 +227,10 @@ def wakeF (n : Nat) (S : SolverState B) (p : Parked B) : IRes (SolverState B) :=
       let S' ← solveTyF n S p.stump.res .unk
       pure ({ S' with parked := S'.parked.filter (·.stump != p.stump) }.flag
         (p.stump.label.applySubst S.subst).keyName)
+  | .opq =>
+      let S' ← solveTyF n S p.stump.res .unk
+      pure ({ S' with parked := S'.parked.filter (·.stump != p.stump) }.flag
+        (p.stump.label.applySubst S.subst).keyName)
   | .blocked α' =>
       pure (({ S with parked := S.parked.filter (·.stump != p.stump) }).park
         ⟨α', p.stump⟩)
@@ -234,7 +248,11 @@ theorem wakeF_sound {n : Nat} {S S' : SolverState B} {p : Parked B}
   | absent =>
       simp only [IRes.bind_eq_ok, IRes.pure_eq_ok] at h
       obtain ⟨S₁, hs, rfl⟩ := h
-      exact .abs hH (solveTyF_sound hs)
+      exact .abs (.inl hH) (solveTyF_sound hs)
+  | opq =>
+      simp only [IRes.bind_eq_ok, IRes.pure_eq_ok] at h
+      obtain ⟨S₁, hs, rfl⟩ := h
+      exact .abs (.inr hH) (solveTyF_sound hs)
   | blocked α =>
       simp only [IRes.pure_eq_ok] at h
       subst h; exact .repark hH
@@ -267,6 +285,7 @@ theorem staleF_none {n : Nat} {S : SolverState B} :
           · simp at h
       | found τ => simp at h
       | absent => simp at h
+      | opq => simp at h
 
 theorem staleF_some {n : Nat} {S : SolverState B} {p : Parked B} :
     ∀ {ps : List (Parked B)}, staleF n S ps = .ok (some p) →
@@ -292,6 +311,9 @@ theorem staleF_some {n : Nat} {S : SolverState B} {p : Parked B} :
       | absent =>
           simp only [IRes.pure_eq_ok, Option.some.injEq] at h; subst h
           exact ⟨List.mem_cons_self, LOut.not_blockedQ (r := .absent) hH (by simp)⟩
+      | opq =>
+          simp only [IRes.pure_eq_ok, Option.some.injEq] at h; subst h
+          exact ⟨List.mem_cons_self, LOut.not_blockedQ (r := .opq) hH (by simp)⟩
 
 /-- `S ⊢ ↝! S′`, computed: wake the first stale stump until none is -/
 def saturateF : Nat → SolverState B → IRes (SolverState B)
@@ -372,6 +394,13 @@ theorem wakesF_sound {n : Nat} : ∀ {S S' : SolverState B} {sts : List (Stump B
           obtain ⟨hm, hw⟩ := wakesF_sound hrec
           exact ⟨by simp [hm], .cons (wakeF_sound hw₁) hw⟩
       | absent =>
+          simp only [IRes.bind_eq_ok, IRes.pure_eq_ok] at h
+          obtain ⟨S₁, hw₁, ⟨ps', S''⟩, hrec, he⟩ := h
+          simp only [Prod.mk.injEq] at he
+          obtain ⟨rfl, rfl⟩ := he
+          obtain ⟨hm, hw⟩ := wakesF_sound hrec
+          exact ⟨by simp [hm], .cons (wakeF_sound hw₁) hw⟩
+      | opq =>
           simp only [IRes.bind_eq_ok, IRes.pure_eq_ok] at h
           obtain ⟨S₁, hw₁, ⟨ps', S''⟩, hrec, he⟩ := h
           simp only [Prod.mk.injEq] at he
@@ -504,6 +533,7 @@ def guessTargets (S : SolverState B) : List (TyVar × List Label) :=
             (fun | .field l _ => some l | _ => none))
         else none
     | .lit _ => none
+    | .unk => none
 
 def keyGuessesF (n : Nat) : SolverState B → List (TyVar × List Label) → IRes (SolverState B)
   | S, [] => .ok S
@@ -660,6 +690,7 @@ def inferF (constTy : Sig B C) (n : Nat) :
       match ← lookupQF ((Row.var rv).applySubst S₂.subst) (.lit l) with
       | .found τ' => pure (τ', S₂)
       | .absent   => pure (.unk, S₂.flag l)
+      | .opq      => pure (.unk, S₂.flag l)
       | .blocked α =>
           pure (.var (S₂.draw .ty).1,
             (S₂.draw .ty).2.park ⟨α, ⟨.var rv, .lit l, .var (S₂.draw .ty).1⟩⟩)
@@ -677,6 +708,7 @@ def inferF (constTy : Sig B C) (n : Nat) :
         match ← lookupQF ((Row.var rv).applySubst S₄.subst) ((Key.var κ).applySubst S₄.subst) with
         | .found τ' => pure (τ', S₄)
         | .absent   => pure (.unk, S₄.flag ((Key.var κ).applySubst S₄.subst).keyName)
+        | .opq      => pure (.unk, S₄.flag ((Key.var κ).applySubst S₄.subst).keyName)
         | .blocked α =>
             pure (.var (S₄.draw .ty).1,
               (S₄.draw .ty).2.park ⟨α, ⟨.var rv, .var κ, .var (S₄.draw .ty).1⟩⟩)
@@ -804,7 +836,11 @@ theorem inferF_sound {constTy : Sig B C} {n : Nat} :
       | absent =>
           simp only [IRes.pure_eq_ok, Prod.mk.injEq] at h
           obtain ⟨rfl, rfl⟩ := h
-          exact .selAbs (inferF_sound h₁) rfl (solveTySatF_sound h₂) (LookupQ.lab_iff.mp hH)
+          exact .selAbs (inferF_sound h₁) rfl (solveTySatF_sound h₂) (.inl hH)
+      | opq =>
+          simp only [IRes.pure_eq_ok, Prod.mk.injEq] at h
+          obtain ⟨rfl, rfl⟩ := h
+          exact .selAbs (inferF_sound h₁) rfl (solveTySatF_sound h₂) (.inr hH)
       | blocked α =>
           simp only [IRes.pure_eq_ok, Prod.mk.injEq] at h
           obtain ⟨rfl, rfl⟩ := h
@@ -835,7 +871,12 @@ theorem inferF_sound {constTy : Sig B C} {n : Nat} :
           simp only [IRes.pure_eq_ok, Prod.mk.injEq] at h
           obtain ⟨rfl, rfl⟩ := h
           exact .selDynAbs (inferF_sound h₁) rfl (solveTySatF_sound h₂) (inferF_sound h₃) rfl
-            (solveTySatF_sound h₄) hH
+            (solveTySatF_sound h₄) (.inl hH)
+      | opq =>
+          simp only [IRes.pure_eq_ok, Prod.mk.injEq] at h
+          obtain ⟨rfl, rfl⟩ := h
+          exact .selDynAbs (inferF_sound h₁) rfl (solveTySatF_sound h₂) (inferF_sound h₃) rfl
+            (solveTySatF_sound h₄) (.inr hH)
       | blocked α =>
           simp only [IRes.pure_eq_ok, Prod.mk.injEq] at h
           obtain ⟨rfl, rfl⟩ := h

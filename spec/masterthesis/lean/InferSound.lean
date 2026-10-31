@@ -164,6 +164,24 @@ theorem Sol.lookupQ_sat {B : Type} {s : Sol B} {σ : TySubst B}
   rw [Key.applySubst_sat_eq hsat q] at h'
   exact LookupQ.equiv (Row.applySubst_sat_equiv hsat ρ) h'
 
+/-- ⊢  …and a DEAD lookup (a miss, or an opaque `?`) is a miss or a `?` under
+every σ the state satisfies: opaque is stable under substitution, and `?` is
+≈-invariant. Either way the result is ★. -/
+theorem Sol.deadQ_sat {B : Type} {s : Sol B} {σ : TySubst B}
+    (hsat : Sol.Sat σ s) {ρ : Row B} {q : Key}
+    (h : LookupDeadQ (ρ.applySubst s.toSubst) (q.applySubst s.toSubst)) :
+    LookupQ (ρ.applySubst σ) (q.applySubst σ) .absent ∨
+      LookupQ (ρ.applySubst σ) (q.applySubst σ) .unknown := by
+  rcases h with h | h
+  · obtain ⟨r₁, hl₁, he₁⟩ := Sol.lookupQ_sat hsat h (by intro hh; cases hh)
+    cases he₁ with
+    | absent => exact .inl hl₁
+  · have h' := (h.applySubst σ).toLookupQ
+    rw [Key.applySubst_sat_eq hsat q] at h'
+    obtain ⟨r₁, hl₁, he₁⟩ := LookupQ.equiv (Row.applySubst_sat_equiv hsat ρ) h'
+    cases he₁ with
+    | unknown => exact .inr hl₁
+
 --------------------- SELECTION FROM A RECORD ALWAYS TYPES AT ★ ---------------
 -- A record-typed subject can always have a field selected off it at ★, whatever
 -- the lookup says: the three T-sel rules between them cover `found`, `⊥` and
@@ -286,14 +304,14 @@ theorem infer_sound_selAbs_step {B C : Type} [DecidableEq B] {constTy : Sig B C}
     {e : Expr C} {τ : Ty B} {l : Label} {r : TyVar}
     (h : QTyped constTy Γ' e (τ.applySubst σ))
     (hs : SolveTy S₁' τ (.rcd (.var r)) S₂)
-    (hlk : Lookup ((Row.var r).applySubst S₂.subst) l .absent)
+    (hlk : LookupDeadQ ((Row.var r).applySubst S₂.subst) (.lit l))
     (hsat : Sol.Sat σ S₂.sol) :
     QTyped constTy Γ' (.sel e l) ((Ty.unk : Ty B).applySubst σ) := by
   have hrcd : QTyped constTy Γ' e ((Ty.rcd (.var r)).applySubst σ) :=
     .qEq h (hs.unifies_sat hsat)
-  obtain ⟨r'', hl'', he''⟩ := Sol.lookup_sat hsat hlk (by intro hh; cases hh)
-  cases he'' with
-  | absent => exact .qSelAbs hrcd hl''
+  rcases Sol.deadQ_sat (q := .lit l) hsat hlk with hl'' | hl''
+  · exact .qSelAbs hrcd (LookupQ.lab_iff.mp hl'')
+  · exact .qSelUnk hrcd (LookupQ.lab_iff.mp hl'')
 
 --------------------- WHAT A PARKED STUMP HAS TO MEAN -------------------------
 -- A-sel-? is the case `proof-state.md` calls a DESIGN question rather than a
@@ -368,9 +386,9 @@ theorem Wake.dischargeEquiv {B : Type} [DecidableEq B] {S S₁ : SolverState B}
   | .abs hlk hs, hsat => by
       have hS : Sol.Sat σ _ := SolveTy.satMono hs σ hsat
       have hδ := SolveTy.unifies_sat hs hsat
-      obtain ⟨r₁, hl₁, he₁⟩ := Sol.lookupQ_sat hS hlk (by intro hh; cases hh)
-      cases he₁ with
-      | absent => exact .inl (.abs hl₁ ((TyEquiv.unk_inv_both hδ).2 rfl))
+      rcases Sol.deadQ_sat hS hlk with hl₁ | hl₁
+      · exact .inl (.abs hl₁ ((TyEquiv.unk_inv_both hδ).2 rfl))
+      · exact .inl (.unk hl₁ ((TyEquiv.unk_inv_both hδ).2 rfl))
   -- K-repark is NOTHING: the blocker moved, the stump did not.
   | .repark _, _ =>
       .inr ⟨{ blocker := _, stump := p.stump }, List.mem_cons_self, rfl⟩

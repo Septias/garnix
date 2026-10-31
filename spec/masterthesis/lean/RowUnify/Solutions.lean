@@ -66,6 +66,7 @@ theorem Key.applySubst_substEquiv {B : Type} {θ₁ θ₂ : TySubst B} (h : θ�
     (k : Key) → k.applySubst θ₁ = k.applySubst θ₂
   | .lit _ => rfl
   | .var α => h.2.2 α
+  | .unk => rfl
 
 -- THE CONGRUENCE. Structural, at both sorts at once (types contain rows).
 -- ⊢  θ₁ ≗ θ₂   ⟹   τ.applySubst θ₁ ≈ₜ τ.applySubst θ₂
@@ -217,6 +218,7 @@ theorem sApplySubst_equiv {B : Type} (θ : TySubst B) :
         (.cat (Row.toSpine_equiv (θ.row α)).symm (sApplySubst_equiv θ s))
   | .dfield o τ :: s =>
       (ofSpine_cons_ofKey _ _ _).trans (.cat (.refl _) (sApplySubst_equiv θ s))
+  | .ufield _ :: s => .cat (.refl _) (sApplySubst_equiv θ s)
 
 -- ## THE BRIDGE
 -- Unifying the σ-substituted problem = unifying the original under θ ∘ σ.
@@ -353,6 +355,8 @@ theorem sFtv_ofSpine {B : Type} : (s : List (Atom B)) → sFtv s = (ofSpine s).f
   | .var α :: s => by simp only [sFtv, ofSpine, Row.ftv, sFtv_ofSpine s]; rfl
   | .dfield α τ :: s => by
       simp only [sFtv, ofSpine, Row.ftv, Key.ftv, sFtv_ofSpine s]
+  | .ufield τ :: s => by
+      simp only [sFtv, ofSpine, Row.ftv, Key.ftv, sFtv_ofSpine s, List.nil_append]
 
 theorem sFtv_append {B : Type} :
     (s t : List (Atom B)) → sFtv (s ++ t) = sFtv s ++ sFtv t
@@ -361,6 +365,8 @@ theorem sFtv_append {B : Type} :
       simp only [List.cons_append, sFtv, sFtv_append s t, List.append_assoc]
   | .var _ :: s, t => by simp only [List.cons_append, sFtv, sFtv_append s t]
   | .dfield _ _ :: s, t => by
+      simp only [List.cons_append, sFtv, sFtv_append s t, List.append_assoc]
+  | .ufield _ :: s, t => by
       simp only [List.cons_append, sFtv, sFtv_append s t, List.append_assoc]
 
 theorem sFtv_cons {B : Type} (a : Atom B) (s : List (Atom B)) :
@@ -488,6 +494,18 @@ theorem removeField_ftv {B : Type} {l : Label} :
           refine ⟨fun x hx => List.mem_append_right _ (hτ hx), fun x hx => ?_⟩
           simp only [sFtv, List.mem_append] at hx ⊢
           exact hx.imp id (fun hh => hs hh)
+  | .ufield σ :: t, τ, s', h => by
+      simp only [removeField] at h
+      revert h
+      cases hw : removeField l t with
+      | none => intro h; cases h
+      | some p =>
+          intro h
+          obtain ⟨hτ, hs⟩ := removeField_ftv t hw
+          cases h
+          refine ⟨fun x hx => List.mem_append_right _ (hτ hx), fun x hx => ?_⟩
+          simp only [sFtv, List.mem_append] at hx ⊢
+          exact hx.imp id (fun hh => hs hh)
   | .var β :: t, τ, s', h => by
       simp only [removeField] at h
       revert h
@@ -573,6 +591,20 @@ theorem matchL_ftv {B : Type} {s₁ s₂ : List (Atom B)} {τ τ' : Ty B}
           simp only [sFtv]
           exact ⟨fun _ hx => by simp [hx], fun _ hx => by simp [hx],
                  fun _ hx => by simp [hx], fun _ hx => by simp [hx]⟩
+  | .ufield σ :: u₁ =>
+      cases s₂ with
+      | nil => simp [matchL] at h
+      | cons a u₂ =>
+          cases a with
+          | ufield σ' =>
+              simp only [matchL, Option.some.injEq, Prod.mk.injEq] at h
+              obtain ⟨rfl, rfl, rfl, rfl⟩ := h
+              simp only [sFtv]
+              exact ⟨fun _ hx => by simp [hx], fun _ hx => by simp [hx],
+                     fun _ hx => by simp [hx], fun _ hx => by simp [hx]⟩
+          | field _ _ => simp [matchL] at h
+          | var _ => simp [matchL] at h
+          | dfield _ _ => simp [matchL] at h
 
 theorem groundMatchAux_ftv {B : Type} {s₁ s₂ : List (Atom B)} :
     (ls : List Label) → {τ τ' : Ty B} → {t₁ t₂ : List (Atom B)} →
@@ -637,6 +669,9 @@ theorem sProj_nil_of_count_zero {B : Type} (l : Label) :
   | .dfield _ _ :: s, h => by
       simp only [sFieldCount] at h
       simp only [sProj, sProj_nil_of_count_zero l s h, List.map_nil]
+  | .ufield _ :: s, h => by
+      simp only [sFieldCount] at h
+      simp only [sProj, sProj_nil_of_count_zero l s h, List.map_nil]
   | .field l' _ :: s, h => by
       simp only [sFieldCount] at h
       by_cases hl : l' = l
@@ -687,6 +722,10 @@ theorem sVarSeq_singleton_split {B : Type} {β : TyVar} :
       simp only [sVarSeq] at h
       obtain ⟨w, v, rfl, hw, hv⟩ := sVarSeq_singleton_split s h
       exact ⟨.dfield o τ :: w, v, rfl, by simpa only [sVarSeq] using hw, hv⟩
+  | .ufield τ :: s, h => by
+      simp only [sVarSeq] at h
+      obtain ⟨w, v, rfl, hw, hv⟩ := sVarSeq_singleton_split s h
+      exact ⟨.ufield τ :: w, v, rfl, by simpa only [sVarSeq] using hw, hv⟩
   | .var γ :: s, h => by
       simp only [sVarSeq] at h
       injection h with hγ hs
@@ -875,6 +914,7 @@ theorem renameVar_length {B : Type} (β β' : TyVar) :
   | .var _ :: s => congrArg (· + 1) (renameVar_length β β' s)
   | .field _ _ :: s => congrArg (· + 1) (renameVar_length β β' s)
   | .dfield _ _ :: s => congrArg (· + 1) (renameVar_length β β' s)
+  | .ufield _ :: s => congrArg (· + 1) (renameVar_length β β' s)
 
 theorem renameVar_varFree {B : Type} (β β' : TyVar) :
     (s : List (Atom B)) → sVarSeq s = [] → renameVar β β' s = s
@@ -883,6 +923,8 @@ theorem renameVar_varFree {B : Type} (β β' : TyVar) :
   | .field _ _ :: s, h =>
       congrArg _ (renameVar_varFree β β' s (by simpa only [sVarSeq] using h))
   | .dfield _ _ :: s, h =>
+      congrArg _ (renameVar_varFree β β' s (by simpa only [sVarSeq] using h))
+  | .ufield _ :: s, h =>
       congrArg _ (renameVar_varFree β β' s (by simpa only [sVarSeq] using h))
 
 -- …and the version the multi-variable host shape needs: the OTHER variables of
@@ -898,6 +940,8 @@ theorem renameVar_not_mem {B : Type} (β β' : TyVar) :
   | .field _ _ :: s, h =>
       congrArg _ (renameVar_not_mem β β' s (by simpa only [sVarSeq] using h))
   | .dfield _ _ :: s, h =>
+      congrArg _ (renameVar_not_mem β β' s (by simpa only [sVarSeq] using h))
+  | .ufield _ :: s, h =>
       congrArg _ (renameVar_not_mem β β' s (by simpa only [sVarSeq] using h))
 
 -- (U-EXPAND'S LEFT-END METATHEORY WAS HERE. What survives above —
@@ -919,6 +963,9 @@ theorem mem_sFtv_of_mem_sVarSeq {B : Type} {α : TyVar} :
       simp only [sVarSeq] at h
       exact List.mem_append_right _ (mem_sFtv_of_mem_sVarSeq s h)
   | .dfield _ _ :: s, h => by
+      simp only [sVarSeq] at h
+      exact List.mem_append_right _ (mem_sFtv_of_mem_sVarSeq s h)
+  | .ufield _ :: s, h => by
       simp only [sVarSeq] at h
       exact List.mem_append_right _ (mem_sFtv_of_mem_sVarSeq s h)
 
@@ -1160,6 +1207,14 @@ theorem sFtv_renameVar {B : Type} (β β' : TyVar) :
       simp only [sFtv, List.mem_cons, List.mem_append]
       rcases hx with hx | hx
       · exact .inr (.inl (by simpa using hx))
+      · rcases List.mem_cons.mp (sFtv_renameVar β β' s x hx) with h' | h'
+        · exact .inl h'
+        · exact .inr (.inr h')
+  | .ufield τ :: s, x, hx => by
+      simp only [renameVar, sFtv, List.mem_append] at hx
+      simp only [sFtv, List.mem_cons, List.mem_append]
+      rcases hx with hx | hx
+      · exact .inr (.inl hx)
       · rcases List.mem_cons.mp (sFtv_renameVar β β' s x hx) with h' | h'
         · exact .inl h'
         · exact .inr (.inr h')

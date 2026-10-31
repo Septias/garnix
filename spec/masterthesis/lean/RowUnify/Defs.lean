@@ -55,6 +55,7 @@ def sHasVar {B : Type} : List (Atom B) → Bool
   | [] => false
   | .var _ :: _ => true
   | .dfield _ _ :: _ => true
+  | .ufield _ :: _ => true
   | .field _ _ :: s => sHasVar s
 
 def sFieldCount {B : Type} (l : Label) : List (Atom B) → Nat
@@ -62,17 +63,20 @@ def sFieldCount {B : Type} (l : Label) : List (Atom B) → Nat
   | .field l' _ :: s => (if l' = l then 1 else 0) + sFieldCount l s
   | .var _ :: s => sFieldCount l s
   | .dfield _ _ :: s => sFieldCount l s
+  | .ufield _ :: s => sFieldCount l s
 
 def sLabels {B : Type} : List (Atom B) → List Label
   | [] => []
   | .field l _ :: s => l :: sLabels s
   | .var _ :: s => sLabels s
   | .dfield _ _ :: s => sLabels s
+  | .ufield _ :: s => sLabels s
 
 -- does the spine carry a keyed field?
 def sHasKey {B : Type} : List (Atom B) → Bool
   | [] => false
   | .dfield _ _ :: _ => true
+  | .ufield _ :: _ => true
   | .field _ _ :: s => sHasKey s
   | .var _ :: s => sHasKey s
 
@@ -91,6 +95,7 @@ def allVarsEmpty {B : Type} : List (Atom B) → Option (List (TyVar × Row B))
   | .var α :: s => (allVarsEmpty s).map ((α, Row.empty) :: ·)
   | .field _ _ :: _ => none
   | .dfield _ _ :: _ => none
+  | .ufield _ :: _ => none
 
 -- U-var-refl at the left end.
 def stripL {B : Type} : List (Atom B) → List (Atom B) →
@@ -111,6 +116,7 @@ def windowExtract {B : Type} (l : Label) :
   | [] => none
   | .var _ :: _ => none
   | .dfield _ _ :: _ => none
+  | .ufield _ :: _ => none
   | .field l' τ :: s =>
       if l' = l then some (τ, s)
       else match windowExtract l s with
@@ -137,6 +143,7 @@ def matchL {B : Type} : List (Atom B) → List (Atom B) →
       match keyExtract α s₂ with
       | some (τ', s₂') => some (τ, τ', t₁, s₂')
       | none => none
+  | .ufield τ :: t₁, .ufield τ' :: s₂' => some (τ, τ', t₁, s₂')
   | _, _ => none
 
 -- … and at the right end.
@@ -158,6 +165,10 @@ def removeField {B : Type} (l : Label) :
   | .dfield o σ :: s =>
       match removeField l s with
       | some (τ, s') => some (τ, .dfield o σ :: s')
+      | none => none
+  | .ufield σ :: s =>
+      match removeField l s with
+      | some (τ, s') => some (τ, .ufield σ :: s')
       | none => none
   | .field l' τ :: s =>
       if l' = l then some (τ, s)
@@ -189,6 +200,8 @@ def keyPin {B : Type} : List (Atom B) → List (Atom B) → Option (TyVar × Key
   | [.dfield α _], [.dfield β _] => if α = β then none else some (α, .var β)
   | [.dfield α _], [.field l _]  => some (α, .lit l)
   | [.field l _],  [.dfield α _] => some (α, .lit l)
+  | [.dfield α _], [.ufield _]   => some (α, .unk)
+  | [.ufield _],   [.dfield α _] => some (α, .unk)
   | _, _ => none
 
 -- ## U-expand: unique-host variable expansion
@@ -212,6 +225,7 @@ def sFtv {B : Type} : List (Atom B) → List TyVar
   | .field _ τ :: s => τ.ftv ++ sFtv s
   | .var α :: s     => α :: sFtv s
   | .dfield α τ :: s => [α] ++ τ.ftv ++ sFtv s
+  | .ufield τ :: s => τ.ftv ++ sFtv s
 
 -- The names this problem may invent: strictly longer than everything in it.
 def localSupply {B : Type} (s₁ s₂ : List (Atom B)) : Supply :=
@@ -235,6 +249,7 @@ def renameVar {B : Type} (β β' : TyVar) : List (Atom B) → List (Atom B)
   | .var γ :: s => (if γ = β then Atom.var β' else Atom.var γ) :: renameVar β β' s
   | .field l τ :: s => .field l τ :: renameVar β β' s
   | .dfield o τ :: s => .dfield o τ :: renameVar β β' s
+  | .ufield τ :: s => .ufield τ :: renameVar β β' s
 
 -- Row-variables occurring ANYWHERE, at any depth.
 mutual
@@ -599,6 +614,7 @@ def sApplySubst {B : Type} (θ : TySubst B) : List (Atom B) → List (Atom B)
   | .var α :: s     => (θ.row α).toSpine ++ sApplySubst θ s
   | .dfield α τ :: s =>
       Atom.ofKey (θ.lab α) (τ.applySubst θ) :: sApplySubst θ s
+  | .ufield τ :: s => .ufield (τ.applySubst θ) :: sApplySubst θ s
 
 -- ## The supply
 /-- The invariant: every name `S` can still produce is longer than everything
@@ -659,7 +675,11 @@ def bindLab {B : Type} (S : Supply) (α : TyVar) (k : Key) : UResM B :=
 def unifyKey {B : Type} (S : Supply) : Key → Key → UResM B
   | .var α, k => bindLab S α k
   | .lit l, .var α => bindLab S α (.lit l)
+  | .unk, .var α => bindLab S α .unk
   | .lit l, .lit l' => if l = l' then .success .nil S else .clash
+  | .unk, .unk => .success .nil S
+  | .unk, .lit _ => .clash
+  | .lit _, .unk => .clash
 
 -- ## The ε-collapse solution
 -- Every spine variable to ε, except one the caller asks to KEEP. `none` on a
@@ -671,6 +691,7 @@ def epsCollapse {B : Type} (keep : Option TyVar) :
                           (fun σ => if keep = some γ then σ else (γ, Row.empty) :: σ)
   | .field _ _ :: _  => none
   | .dfield _ _ :: _ => none
+  | .ufield _ :: _   => none
 
 -- ## …and WHICH collapse an all-variable occurrence calls for
 -- α ≐ᵣ [γ₁ … γₙ] with α on that spine k ≥ 1 times. The ≈-characterization reads

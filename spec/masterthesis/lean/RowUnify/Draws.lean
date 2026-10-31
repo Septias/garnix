@@ -279,6 +279,8 @@ theorem mem_sVarSeq_renameVar {B : Type} {β β' : TyVar} :
       simp only [sVarSeq, renameVar] at h ⊢; exact mem_sVarSeq_renameVar s h
   | .dfield _ _ :: s, h => by
       simp only [sVarSeq, renameVar] at h ⊢; exact mem_sVarSeq_renameVar s h
+  | .ufield _ :: s, h => by
+      simp only [sVarSeq, renameVar] at h ⊢; exact mem_sVarSeq_renameVar s h
 
 -- ⊢  U-HOST'S CASE, either orientation (the residual call is on (x, y))
 theorem host_draws {B : Type} [DecidableEq B] {fuel : Nat}

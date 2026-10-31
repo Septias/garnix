@@ -25,6 +25,9 @@ theorem ofSpine_toSpine {B : Type} : (s : List (Atom B)) → (ofSpine s).toSpine
   | .dfield α τ :: s => by
       simp only [ofSpine, Row.toSpine, List.singleton_append, Atom.ofKey]
       exact congrArg (_ :: ·) (ofSpine_toSpine s)
+  | .ufield τ :: s => by
+      simp only [ofSpine, Row.toSpine, List.singleton_append, Atom.ofKey]
+      exact congrArg (_ :: ·) (ofSpine_toSpine s)
 
 -- l-field count distributes over spine append.
 -- ⊢  count_l(s₁ ++ s₂) = count_l(s₁) + count_l(s₂)
@@ -40,6 +43,9 @@ theorem sFieldCount_append {B : Type} (l : Label) : (s₁ s₂ : List (Atom B)) 
   | .dfield _ _ :: s₁, s₂ => by
       simp only [List.cons_append, sFieldCount]
       rw [sFieldCount_append l s₁ s₂]
+  | .ufield _ :: s₁, s₂ => by
+      simp only [List.cons_append, sFieldCount]
+      rw [sFieldCount_append l s₁ s₂]
 
 -- (sProj l s).length = sFieldCount l s (projection list length = concrete count).
 -- ⊢  |proj_l(s)| = count_l(s)
@@ -52,6 +58,8 @@ private theorem sProj_length_eq_sFieldCount {B : Type} (l : Label) : (s : List (
   | .var _ :: s => by
       simp only [sProj, sFieldCount, List.length_map, sProj_length_eq_sFieldCount l s]
   | .dfield _ _ :: s => by
+      simp only [sProj, sFieldCount, List.length_map, sProj_length_eq_sFieldCount l s]
+  | .ufield _ :: s => by
       simp only [sProj, sFieldCount, List.length_map, sProj_length_eq_sFieldCount l s]
 
 -- ProjEquiv preserves list length.
@@ -76,6 +84,7 @@ theorem sHasVar_false_iff {B : Type} : (s : List (Atom B)) →
   | [] => ⟨fun _ => rfl, fun _ => rfl⟩
   | .var _ :: _ => by simp [sHasVar, sBarSeq]
   | .dfield _ _ :: _ => by simp [sHasVar, sBarSeq]
+  | .ufield _ :: _ => by simp [sHasVar, sBarSeq]
   | .field _ _ :: s => by simp [sHasVar, sBarSeq, sHasVar_false_iff s]
 
 -- …and a barrier-free spine has no var at all
@@ -639,6 +648,7 @@ theorem rowEquiv_empty_of_no_vars_no_fields {B : Type} {ρ : Row B}
           | field _ _ => exact ih hs
           | var _ => nomatch hs
           | dfield _ _ => nomatch hs
+          | ufield _ => nomatch hs
     rw [e _ hv]; exact .nil
 
 -- The occurs violation, seen through the payload.
@@ -922,12 +932,14 @@ theorem sBarSeq_nil_of {B : Type} : (s : List (Atom B)) →
   | [], _, _ => ⟨rfl, rfl⟩
   | .var _ :: _, hv, _ => nomatch hv
   | .dfield _ _ :: _, _, hk => by simp [sHasKey] at hk
+  | .ufield _ :: _, _, hk => by simp [sHasKey] at hk
   | .field _ _ :: s, hv, hk => sBarSeq_nil_of s hv hk
 
 theorem sHasKey_append {B : Type} : (s₁ s₂ : List (Atom B)) →
     sHasKey (s₁ ++ s₂) = (sHasKey s₁ || sHasKey s₂)
   | [], _ => by simp [sHasKey]
   | .dfield _ _ :: _, _ => by simp [sHasKey]
+  | .ufield _ :: _, _ => by simp [sHasKey]
   | .field _ _ :: s₁, s₂ => by simp [sHasKey, sHasKey_append s₁ s₂]
   | .var _ :: s₁, s₂ => by simp [sHasKey, sHasKey_append s₁ s₂]
 
@@ -969,6 +981,7 @@ theorem varsEmpty_forces_applySubst_empty {B : Type} (σ : TySubst B) :
       cases q with
       | lit l => have := hf l; simp [Row.toSpine, Atom.ofKey, sFieldCount] at this
       | var _ => simp [Row.toSpine, Atom.ofKey, sHasKey] at hk
+      | unk => simp [Row.toSpine, Atom.ofKey, sHasKey] at hk
   | .cat R₁ R₂, hv, hk, hf => by
       simp only [Row.applySubst]
       have hv1 : ∀ v ∈ sVarSeq R₁.toSpine, RowEquiv (σ.row v) Row.empty := fun v hm =>
@@ -1202,6 +1215,7 @@ def sFieldAtoms {B : Type} : List (Atom B) → Nat
   | .field _ _ :: s => sFieldAtoms s + 1
   | .var _ :: s => sFieldAtoms s
   | .dfield _ _ :: s => sFieldAtoms s + 1
+  | .ufield _ :: s => sFieldAtoms s + 1
 
 -- ⊢  fields(s₁ ++ s₂) = fields(s₁) + fields(s₂)
 theorem sFieldAtoms_append {B : Type} : (s₁ s₂ : List (Atom B)) →
@@ -1212,6 +1226,8 @@ theorem sFieldAtoms_append {B : Type} : (s₁ s₂ : List (Atom B)) →
   | .var _ :: s₁, s₂ => by
       simp only [List.cons_append, sFieldAtoms, sFieldAtoms_append s₁ s₂]
   | .dfield _ _ :: s₁, s₂ => by
+      simp only [List.cons_append, sFieldAtoms, sFieldAtoms_append s₁ s₂]; omega
+  | .ufield _ :: s₁, s₂ => by
       simp only [List.cons_append, sFieldAtoms, sFieldAtoms_append s₁ s₂]; omega
 
 -- ⊢  fields([ofKey q τ]) = 1
@@ -1757,6 +1773,9 @@ theorem sVarSeq_sub_sFtv {B : Type} : (s : List (Atom B)) → ∀ γ ∈ sVarSeq
   | .dfield _ _ :: s, γ, h => by
       simp only [sVarSeq] at h
       exact List.mem_append_right _ (sVarSeq_sub_sFtv s γ h)
+  | .ufield _ :: s, γ, h => by
+      simp only [sVarSeq] at h
+      exact List.mem_append_right _ (sVarSeq_sub_sFtv s γ h)
   | .var δ :: s, γ, h => by
       simp only [sVarSeq, List.mem_cons] at h
       rcases h with rfl | h
@@ -2081,6 +2100,7 @@ theorem epsCollapse_none_fieldAtoms {B : Type} {keep : Option TyVar} :
   | [], h => by simp [epsCollapse] at h
   | .field _ _ :: _, _ => by simp [sFieldAtoms]
   | .dfield _ _ :: _, _ => by simp [sFieldAtoms]
+  | .ufield _ :: _, _ => by simp [sFieldAtoms]
   | .var _ :: s, h => by
       simp only [epsCollapse, Option.map_eq_none_iff] at h
       simpa only [sFieldAtoms] using epsCollapse_none_fieldAtoms s h
@@ -2170,6 +2190,7 @@ theorem allVarsEmpty_none_field {B : Type} :
       show 0 < (if l = l then 1 else 0) + sFieldCount l s
       rw [if_pos rfl]; omega⟩
   | .dfield _ _ :: _, _ => .inr rfl
+  | .ufield _ :: _, _ => .inr rfl
   | .var _ :: s, h => by
       cases hs : allVarsEmpty s with
       | some σ => simp [allVarsEmpty, hs] at h

@@ -724,6 +724,26 @@ info: 'MinimalCalculus.SolverState.Quiescent.wake_no_commit' depends on axioms: 
 /-- info: 'MinimalCalculus.Lookup.unknown_blocked' depends on axioms: [propext] -/
 #guard_msgs in #print axioms Lookup.unknown_blocked
 
+-- The unknown key ★ (feat/fc-labels M3). A comparison with ★ never decides, so
+-- a `?` whose first undecided comparison involves ★ is OPAQUE: no instance
+-- decides it, inference answers ★ on the spot, and every σ the state satisfies
+-- reads it as a miss or a `?` again.
+/-- info: 'MinimalCalculus.LookupQ.unknown_blocked' depends on axioms: [propext] -/
+#guard_msgs in #print axioms LookupQ.unknown_blocked
+
+/-- info: 'MinimalCalculus.LookupOpaqueQ.applySubst' depends on axioms: [propext] -/
+#guard_msgs in #print axioms LookupOpaqueQ.applySubst
+
+/-- info: 'MinimalCalculus.LookupOpaqueQ.not_blocked' depends on axioms: [propext] -/
+#guard_msgs in #print axioms LookupOpaqueQ.not_blocked
+
+/-- info: 'MinimalCalculus.Sol.deadQ_sat' depends on axioms: [propext] -/
+#guard_msgs in #print axioms Sol.deadQ_sat
+
+-- ★ is a barrier: two ★-keyed fields at the head cancel (U-key-L for ★)
+/-- info: 'MinimalCalculus.RowEquiv.ufield_cancel_left' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in #print axioms RowEquiv.ufield_cancel_left
+
 /-- info: 'MinimalCalculus.LookupBlocked.det' depends on axioms: [propext] -/
 #guard_msgs in #print axioms LookupBlocked.det
 

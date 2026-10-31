@@ -49,6 +49,7 @@ theorem solveVarM_ne_clash {B : Type} {S : Supply} {s₁ s₂ : List (Atom B)} :
     cases a with
     | field _ _ => simp [solveVarM] at h
     | dfield _ _ => simp [solveVarM] at h
+    | ufield _ => simp [solveVarM] at h
     | var α =>
       cases r with
       | cons _ _ => simp [solveVarM] at h

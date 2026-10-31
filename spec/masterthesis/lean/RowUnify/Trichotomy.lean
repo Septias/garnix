@@ -155,7 +155,8 @@ theorem terminal_leading_shape {B : Type} {S : Supply} {a b : Atom B}
     (∃ l τ β, a = .field l τ ∧ b = .var β) ∨
     (∃ l τ l' τ', a = .field l τ ∧ b = .field l' τ' ∧ l ≠ l' ∧
       windowExtract l (b :: s₂) = none ∧ windowExtract l' (a :: s₁) = none) ∨
-    (∃ o τ, a = .dfield o τ) ∨ (∃ o τ, b = .dfield o τ) :=
+    (∃ o τ, a = .dfield o τ) ∨ (∃ o τ, b = .dfield o τ) ∨
+    (∃ τ, a = .ufield τ) ∨ (∃ τ, b = .ufield τ) :=
   stuck_leading_shape ht.hstripL ht.hmatchL₁ ht.hmatchL₂
 
 

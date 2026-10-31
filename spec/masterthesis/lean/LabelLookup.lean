@@ -72,11 +72,12 @@ theorem Key.cmp_eq_cases {k q : Key} (h : Key.cmp k q = .eq) : k = q := by
   cases k <;> cases q <;> simp only [Key.cmp] at h <;> (try split at h) <;>
     first | (subst_vars; rfl) | cases h
 
--- a key undecided against a literal is a label variable
+-- a key undecided against a literal is a label variable or ★
 theorem Key.cmp_undec_lit {k : Key} {l : Label}
-    (h : Key.cmp k (.lit l) = .undec) : ∃ α, k = .var α := by
+    (h : Key.cmp k (.lit l) = .undec) : (∃ α, k = .var α) ∨ k = .unk := by
   cases k with
-  | var α => exact ⟨α, rfl⟩
+  | var α => exact .inl ⟨α, rfl⟩
+  | unk => exact .inr rfl
   | lit l' => simp only [Key.cmp_lit_lit] at h; split at h <;> cases h
 
 -- a label variable is undecided against everything, itself included
@@ -251,6 +252,7 @@ private theorem keyCmp_two_labs {k : Key} {l₁ l₂ : Label} (hne : l₁ ≠ l�
         · cases h
       · constructor <;> intro h <;> split at h <;> cases h
   | var α => simp [Key.cmp]
+  | unk => simp [Key.cmp]
 
 private theorem lookupQ_comm_fwd {l₁ l₂ : Label} {τ₁ τ₂ : Ty B} (hne : l₁ ≠ l₂) :
     LookupQ (.cat (.sing l₁ τ₁) (.sing l₂ τ₂)) k r →

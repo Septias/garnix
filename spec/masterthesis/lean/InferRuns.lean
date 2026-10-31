@@ -10,6 +10,7 @@ namespace InferRuns
 def keyS : Key → String
   | .lit l => l
   | .var α => "k" ++ toString α.length
+  | .unk   => "★"
 
 mutual
 def tyS : Ty Unit → String
@@ -40,6 +41,7 @@ def rec2 (l₁ : String) (e₁ : E) (l₂ : String) (e₂ : E) : E :=
 def keyDS : Key → String
   | .lit l => l
   | .var α => "${k" ++ toString α.length ++ "}"
+  | .unk   => "${★}"
 
 def stumpS (st : Stump Unit) : String :=
   "⟨" ++ rowS st.row ++ "." ++ keyDS st.label ++ " ↓ " ++ tyS st.res ++ "⟩"

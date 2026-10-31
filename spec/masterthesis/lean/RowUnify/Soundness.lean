@@ -44,6 +44,7 @@ theorem solveVarM_reflect {B : Type} {θ : TySubst B} {S : Supply}
     cases a₁ with
     | field _ _ => simp [solveVarM] at hsolve
     | dfield _ _ => simp [solveVarM] at hsolve
+    | ufield _ => simp [solveVarM] at hsolve
     | var α =>
       cases r₁ with
       | cons _ _ => simp [solveVarM] at hsolve
@@ -90,9 +91,15 @@ theorem unifyKey_supply {B : Type} {S : Supply} {k₁ k₂ : Key} {s : Sol B}
     {S' : Supply} (h : unifyKey S k₁ k₂ = .success s S') : S' = S := by
   cases k₁ with
   | var α => exact (bindLab_cases h).1
+  | unk =>
+      cases k₂ with
+      | var α => exact (bindLab_cases h).1
+      | unk => simp only [unifyKey, UResM.success.injEq] at h; exact h.2.symm
+      | lit _ => simp [unifyKey] at h
   | lit l =>
       cases k₂ with
       | var α => exact (bindLab_cases h).1
+      | unk => simp [unifyKey] at h
       | lit l' =>
           simp only [unifyKey] at h
           split at h
@@ -104,9 +111,15 @@ theorem unifyKey_cases {B : Type} (S : Supply) (k₁ k₂ : Key) :
     (∃ s S', unifyKey (B := B) S k₁ k₂ = .success s S') ∨ unifyKey (B := B) S k₁ k₂ = .clash := by
   cases k₁ with
   | var α => left; simp only [unifyKey, bindLab]; split <;> exact ⟨_, _, rfl⟩
+  | unk =>
+      cases k₂ with
+      | var α => left; simp only [unifyKey, bindLab]; split <;> exact ⟨_, _, rfl⟩
+      | unk => exact .inl ⟨_, _, rfl⟩
+      | lit _ => exact .inr rfl
   | lit l =>
       cases k₂ with
       | var α => left; simp only [unifyKey, bindLab]; split <;> exact ⟨_, _, rfl⟩
+      | unk => exact .inr rfl
       | lit l' =>
           simp only [unifyKey]
           split
@@ -125,9 +138,15 @@ theorem unifyKey_sound {B : Type} {θ : TySubst B} {S : Supply} {k₁ k₂ : Key
     (hsat : Sol.Sat θ s) : k₁.applySubst θ = k₂.applySubst θ := by
   cases k₁ with
   | var α => exact bindLab_sound h hsat
+  | unk =>
+      cases k₂ with
+      | var α => exact (bindLab_sound h hsat).symm
+      | unk => rfl
+      | lit _ => simp [unifyKey] at h
   | lit l =>
       cases k₂ with
       | var α => exact (bindLab_sound h hsat).symm
+      | unk => simp [unifyKey] at h
       | lit l' =>
           simp only [unifyKey] at h
           split at h
@@ -705,6 +724,7 @@ theorem Key.ftv_applySubst {B : Type} (θ : TySubst B) : (k : Key) →
     ∀ γ, γ ∈ (k.applySubst θ).ftv → ∃ α, α ∈ k.ftv ∧ γ ∈ (θ.lab α).ftv
   | .lit _ => fun _ h => by simp [Key.ftv] at h
   | .var α => fun _ h => ⟨α, by simp [Key.ftv], h⟩
+  | .unk => fun _ h => by simp [Key.ftv, Key.applySubst] at h
 
 mutual
 theorem Ty.ftv_applySubst {B : Type} (θ : TySubst B) : (τ : Ty B) →
@@ -781,6 +801,11 @@ theorem sFtv_sApplySubst {B : Type} (θ : TySubst B) : (t : List (Atom B)) →
       · exact ⟨α, List.mem_cons_self, .inr (.inl (mem_sFtv_toSpine _ γ h))⟩
       · obtain ⟨β, hβ, hγ⟩ := sFtv_sApplySubst θ t γ h
         exact ⟨β, List.mem_cons_of_mem _ hβ, hγ⟩
+  | .ufield τ :: t => fun γ h => by
+      simp only [sApplySubst, sFtv, List.mem_append] at h ⊢
+      rcases h with h | h
+      · obtain ⟨α, hα, hγ⟩ := Ty.ftv_applySubst θ τ γ h; exact ⟨α, .inl hα, hγ⟩
+      · obtain ⟨α, hα, hγ⟩ := sFtv_sApplySubst θ t γ h; exact ⟨α, .inr hα, hγ⟩
   | .dfield o τ :: t => fun γ h => by
       simp only [sApplySubst] at h
       rw [sFtv_cons] at h

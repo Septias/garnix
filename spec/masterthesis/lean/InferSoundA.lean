@@ -527,6 +527,7 @@ private theorem readInst_agree {B : Type} {vs : List TyVar} {f : TyVar → TyVar
       rw [(hκ α hα).2.2]
       cases hk : σ.lab α with
       | lit _ => rfl
+      | unk => rfl
       | var γ => exact (fix γ (hvl γ (by simp [hk, Key.ftv]))).2.2
 
 /-- ⊢  **every instance of the scheme that agrees with σ off its binders is an
@@ -890,10 +891,9 @@ theorem inferSound_of {B C : Type} [DecidableEq B] {constTy : Sig B C}
       have ih := K.lift hσ hr (inferSound_of hvar hlet h₁ hΓ hc hq σ
         (hab.back x₁ c₁) hσ₁ Γ' hr)
       have hrcd := QTypedA.qEq ih (hsolve.unifies_sat hσ₂')
-      obtain ⟨r'', hl'', he''⟩ :=
-        Sol.lookup_sat hσ hlk (by intro hh; cases hh)
-      cases he'' with
-      | absent => exact .qSelAbs hrcd hl''
+      rcases Sol.deadQ_sat (q := .lit _) hσ hlk with hl'' | hl''
+      · exact .qSelAbs hrcd (LookupQ.lab_iff.mp hl'')
+      · exact .qSelUnk hrcd (LookupQ.lab_iff.mp hl'')
   | _, _, _, _, _, .selUnk (S₂ := S₂) (S₂' := S₂d) (l := l) (r := r) (α := α) (δ := δ)
       h₁ hd hs _ hd₂, hΓ, hc, hq => fun σ hab hσ Γ' hr => by
       obtain ⟨ka, ma, -, -, -⟩ := draw_keeps hd
@@ -988,11 +988,9 @@ theorem inferSound_of {B C : Type} [DecidableEq B] {constTy : Sig B C}
       have hkey := hsolveK.unifies_sat (hsatK.satMono σ hσ)
       have ih₂' := QTypedA.qEq ih₂ hkey
       have hrcd := QTypedA.qEq ih₁ (hsolve.unifies_sat hσ₂')
-      obtain ⟨r'', hl'', he''⟩ :=
-        Sol.lookupQ_sat hσ hlk (by intro hh; cases hh)
-      have hl₃ := hl''
-      cases he'' with
-      | absent => exact .qSelDynAbs hrcd ih₂' hl₃
+      rcases Sol.deadQ_sat hσ hlk with hl₃ | hl₃
+      · exact .qSelDynAbs hrcd ih₂' hl₃
+      · exact .qSelDynUnk hrcd ih₂' hl₃
   -- A-sel-dyn-𝓫: A-sel-dyn's record half; the key's type is 𝓫 under ⟦S₃⟧,
   -- hence ≈ 𝓫 under σ, and T-sel-dyn-𝓫 answers ★
   | _, _, _, _, _, .selDynBase (S₃ := S₃) (τ₂ := τ₂) h₁ hd hs h₂ hbase, hΓ, hc, hq =>

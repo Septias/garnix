@@ -151,6 +151,7 @@ private theorem comp_agree {B : Type} {vs : List TyVar} {θ σ : TySubst B}
       show _ = σ.lab α
       cases hk : σ.lab α with
       | lit _ => rfl
+      | unk => rfl
       | var γ =>
           have := hvl γ (by simp [hk, Key.ftv])
           simp [instSub, this]

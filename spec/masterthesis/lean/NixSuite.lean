@@ -82,6 +82,7 @@ namespace NixSuite
 def keyS : Key → String
   | .lit l => l
   | .var α => "k" ++ toString α.length
+  | .unk   => "★"
 
 mutual
 def tyS : Ty String → String

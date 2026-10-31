@@ -68,23 +68,97 @@ theorem LookupBlocked.toLookup {B : Type} {ρ : Row B} {l : Label}
   | .catUnk hb       => .catUnk hb.toLookup
   | .dunk            => .dunk rfl
 
--- ⊢  …and COMPLETE: an unknown lookup always has a blocker to name
--- Together these say `? on α` is a faithful reading of `?` — the algorithm
--- never has to invent a blocker, and never fails to find one.
+--------------------- ? WITH NOTHING TO WAIT ON: THE OPAQUE LOOKUP -------------
+-- A comparison with the unknown key ★ never decides: ★ is not a variable, so no
+-- substitution replaces it. A lookup whose first undecided comparison has ★ on
+-- one side therefore answers `?` at every instance. Inference reads it like a
+-- definite miss: the result is ★ on the spot, and no stump is parked. A
+-- VARIABLE key is never opaque: it blocks on itself even against `${★}`.
+
+/-- `ρ.k ↓ ?` that no instance decides: ★ meets a field, or a literal key meets
+`${★}`, after definite misses only. -/
+inductive LookupOpaqueQ {B : Type} : Row B → Key → Prop where
+  | sunk {l : Label} {τ : Ty B} : LookupOpaqueQ (.sing l τ) .unk
+  | dunkU {q : Key} {τ : Ty B} : LookupOpaqueQ (.dsing q τ) .unk
+  | dunkF {l : Label} {τ : Ty B} : LookupOpaqueQ (.dsing .unk τ) (.lit l)
+  | catSkip {ρ₁ ρ₂ : Row B} {k : Key} :
+      LookupQ ρ₁ k .absent → LookupOpaqueQ ρ₂ k → LookupOpaqueQ (.cat ρ₁ ρ₂) k
+  | catUnk {ρ₁ ρ₂ : Row B} {k : Key} :
+      LookupOpaqueQ ρ₁ k → LookupOpaqueQ (.cat ρ₁ ρ₂) k
+
+-- ⊢  an opaque lookup is an unknown one
+theorem LookupOpaqueQ.toLookupQ {B : Type} {ρ : Row B} {k : Key} :
+    LookupOpaqueQ ρ k → LookupQ ρ k .unknown
+  | .sunk => .sunk rfl
+  | .dunkU => .dunk rfl
+  | .dunkF => .dunk rfl
+  | .catSkip ha hb => .catSkip ha hb.toLookupQ
+  | .catUnk hb => .catUnk hb.toLookupQ
+
+-- ⊢  …and it stays opaque under every substitution: ★ and literals are fixed,
+--    and the misses before it are definite
+theorem LookupOpaqueQ.applySubst {B : Type} (θ : TySubst B) {ρ : Row B} {k : Key}
+    (h : LookupOpaqueQ ρ k) : LookupOpaqueQ (ρ.applySubst θ) (k.applySubst θ) := by
+  induction h with
+  | sunk => exact .sunk
+  | dunkU => exact .dunkU
+  | dunkF => exact .dunkF
+  | catSkip ha _ ih => exact .catSkip (LookupQ.applySubst θ ha (by intro h; cases h)) ih
+  | catUnk _ ih => exact .catUnk ih
+
+-- ⊢  a variable key is never opaque
+theorem LookupOpaqueQ.not_var {B : Type} {ρ : Row B} {α : TyVar}
+    (h : LookupOpaqueQ ρ (.var α)) : False := by
+  generalize hk : Key.var α = k at h
+  induction h with
+  | sunk => cases hk
+  | dunkU => cases hk
+  | dunkF => cases hk
+  | catSkip _ _ ih => exact ih hk
+  | catUnk _ ih => exact ih hk
+
+/-- the lookup can only ever answer ★: a definite miss, or an opaque `?` -/
+def LookupDeadQ {B : Type} (ρ : Row B) (k : Key) : Prop :=
+  LookupQ ρ k .absent ∨ LookupOpaqueQ ρ k
+
+-- ⊢  a dead lookup stays dead under every substitution
+theorem LookupDeadQ.applySubst {B : Type} (θ : TySubst B) {ρ : Row B} {k : Key}
+    (h : LookupDeadQ ρ k) : LookupDeadQ (ρ.applySubst θ) (k.applySubst θ) :=
+  h.imp (fun h => LookupQ.applySubst θ h (by intro h; cases h)) (·.applySubst θ)
+
+-- ⊢  …and never hits
+theorem LookupDeadQ.not_found {B : Type} {ρ : Row B} {k : Key} {τ : Ty B}
+    (h : LookupDeadQ ρ k) (hf : LookupQ ρ k (.found τ)) : False := by
+  rcases h with h | h
+  · exact absurd (h.det hf) (by simp)
+  · exact absurd (h.toLookupQ.det hf) (by simp)
+
+-- ⊢  …and COMPLETE: an unknown lookup has a blocker to name, unless it is opaque.
+-- Together these say `? on α` and opaque `?` are a faithful reading of `?` — the
+-- algorithm never has to invent a blocker.
 theorem Lookup.unknown_blocked {B : Type} {ρ : Row B} {l : Label}
-    (h : Lookup ρ l .unknown) : ∃ α, LookupBlocked ρ l α := by
+    (h : Lookup ρ l .unknown) : (∃ α, LookupBlocked ρ l α) ∨ LookupOpaqueQ ρ (.lit l) := by
   generalize hr : (LookupRes.unknown : LookupRes B) = r at h
   induction h with
   | emp => exact absurd hr (by simp)
   | hit => exact absurd hr (by simp)
   | miss _ => exact absurd hr (by simp)
-  | varFree => exact ⟨_, .varFree⟩
+  | varFree => exact .inl ⟨_, .varFree⟩
   | catHit _ => exact absurd hr (by simp)
-  | catSkip ha _ _ ihb => obtain ⟨β, hb⟩ := ihb hr; exact ⟨β, .catSkip ha hb⟩
-  | catUnk _ ih => obtain ⟨β, hb⟩ := ih rfl; exact ⟨β, .catUnk hb⟩
+  | catSkip ha _ _ ihb =>
+      rcases ihb hr with ⟨β, hb⟩ | ho
+      · exact .inl ⟨β, .catSkip ha hb⟩
+      · exact .inr (.catSkip (LookupQ.lab_iff.mpr ha) ho)
+  | catUnk _ ih =>
+      rcases ih rfl with ⟨β, hb⟩ | ho
+      · exact .inl ⟨β, .catUnk hb⟩
+      · exact .inr (.catUnk ho)
   | dhit _ => exact absurd hr (by simp)
   | dmiss _ => exact absurd hr (by simp)
-  | dunk h => obtain ⟨γ, rfl⟩ := Key.cmp_lit_undec h; exact ⟨γ, .dunk⟩
+  | dunk h =>
+      rcases Key.cmp_lit_undec h with ⟨γ, rfl⟩ | rfl
+      · exact .inl ⟨γ, .dunk⟩
+      · exact .inr .dunkF
 
 -- ⊢  the blocker is UNIQUE — `lookup_det`'s image for `? on α`, and what makes
 --    "the stump is blocked on α" well defined rather than a choice
@@ -152,31 +226,67 @@ theorem LookupBlockedQ.toLookupQ {B : Type} {ρ : Row B} {q : Key}
 theorem LookupVBlocked.toLookupV {B : Type} {ρ : Row B} {α β : TyVar}
     (h : LookupVBlocked ρ α β) : LookupV ρ α .unknown := h.toLookupQ
 
--- ⊢  complete: an unknown keyed lookup always names its blocker
+-- ⊢  complete: an unknown keyed lookup names its blocker, unless it is opaque
 theorem LookupQ.unknown_blocked {B : Type} {ρ : Row B} {q : Key}
-    (h : LookupQ ρ q .unknown) : ∃ β, LookupBlockedQ ρ q β := by
+    (h : LookupQ ρ q .unknown) : (∃ β, LookupBlockedQ ρ q β) ∨ LookupOpaqueQ ρ q := by
   generalize hr : (LookupRes.unknown : LookupRes B) = r at h
   induction h with
   | emp => exact absurd hr (by simp)
   | hit _ => exact absurd hr (by simp)
   | miss _ => exact absurd hr (by simp)
-  | sunk h => obtain ⟨α, rfl⟩ := Key.cmp_undec_lit h; exact ⟨α, .sunk⟩
-  | varFree => exact ⟨_, .varFree⟩
+  | sunk h =>
+      rcases Key.cmp_undec_lit h with ⟨α, rfl⟩ | rfl
+      · exact .inl ⟨α, .sunk⟩
+      · exact .inr .sunk
+  | varFree => exact .inl ⟨_, .varFree⟩
   | catHit _ => exact absurd hr (by simp)
-  | catSkip ha _ _ ihb => obtain ⟨β, hb⟩ := ihb hr; exact ⟨β, .catSkip ha hb⟩
-  | catUnk _ ih => obtain ⟨β, hb⟩ := ih rfl; exact ⟨β, .catUnk hb⟩
+  | catSkip ha _ _ ihb =>
+      rcases ihb hr with ⟨β, hb⟩ | ho
+      · exact .inl ⟨β, .catSkip ha hb⟩
+      · exact .inr (.catSkip ha ho)
+  | catUnk _ ih =>
+      rcases ih rfl with ⟨β, hb⟩ | ho
+      · exact .inl ⟨β, .catUnk hb⟩
+      · exact .inr (.catUnk ho)
   | dhit _ => exact absurd hr (by simp)
   | dmiss _ => exact absurd hr (by simp)
   | @dunk k q τ h =>
       cases k with
-      | var α => exact ⟨α, .dunkQ h⟩
+      | var α => exact .inl ⟨α, .dunkQ h⟩
+      | unk => exact .inr .dunkU
       | lit l =>
-          obtain ⟨γ, rfl⟩ := Key.cmp_lit_undec h
-          exact ⟨γ, .dunkF⟩
+          rcases Key.cmp_lit_undec h with ⟨γ, rfl⟩ | rfl
+          · exact .inl ⟨γ, .dunkF⟩
+          · exact .inr .dunkF
 
 theorem LookupV.unknown_blocked {B : Type} {ρ : Row B} {α : TyVar}
-    (h : LookupV ρ α .unknown) : ∃ β, LookupVBlocked ρ α β :=
-  LookupQ.unknown_blocked h
+    (h : LookupV ρ α .unknown) : ∃ β, LookupVBlocked ρ α β := by
+  rcases LookupQ.unknown_blocked h with hb | ho
+  · exact hb
+  · exact ho.not_var.elim
+
+-- ⊢  an opaque lookup has no blocker
+theorem LookupOpaqueQ.not_blocked {B : Type} {ρ : Row B} {k : Key} {β : TyVar}
+    (h : LookupOpaqueQ ρ k) (hb : LookupBlockedQ ρ k β) : False := by
+  induction h generalizing β with
+  | sunk => cases hb
+  | dunkU => cases hb
+  | dunkF => cases hb
+  | catSkip ha _ ih =>
+      cases hb with
+      | catSkip _ hb' => exact ih hb'
+      | catUnk hb' => exact absurd (ha.det hb'.toLookupQ) (by simp)
+  | catUnk ho ih =>
+      cases hb with
+      | catSkip ha' _ => exact absurd (ho.toLookupQ.det ha') (by simp)
+      | catUnk hb' => exact ih hb'
+
+-- ⊢  a dead lookup is not blocked
+theorem LookupDeadQ.not_blocked {B : Type} {ρ : Row B} {k : Key} {β : TyVar}
+    (h : LookupDeadQ ρ k) (hb : LookupBlockedQ ρ k β) : False := by
+  rcases h with h | h
+  · exact absurd (h.det hb.toLookupQ) (by simp)
+  · exact h.not_blocked hb
 
 -- ⊢  the blocker is UNIQUE
 theorem LookupBlockedQ.det {B : Type} {ρ : Row B} {q : Key}
@@ -223,6 +333,7 @@ theorem LookupBlockedQ.toLit {B : Type} {ρ : Row B} {l : Label} {β : TyVar}
 def Key.keyName : Key → Label
   | .lit l => l
   | .var α => "${" ++ α ++ "}"
+  | .unk   => "${★}"
 
 /-- the name a W-flag records for a base-typed (non-label) key. -/
 def Key.baseName : Label := "${𝓫}"
@@ -413,9 +524,10 @@ inductive Wake {B : Type} [DecidableEq B] :
       LookupQ (p.stump.row.applySubst S.subst) (p.stump.label.applySubst S.subst) (.found τ) →
       SolveTy S p.stump.res τ S' →
       Wake S p { S' with parked := S'.parked.filter (·.stump != p.stump) }
-  -- K-⊥: definite absence, so δ becomes ★ and W records the site
+  -- K-⊥: definite absence (or an opaque `?`, K-opaque), so δ becomes ★ and W
+  -- records the site
   | abs {S S' : SolverState B} {p : Parked B} :
-      LookupQ (p.stump.row.applySubst S.subst) (p.stump.label.applySubst S.subst) .absent →
+      LookupDeadQ (p.stump.row.applySubst S.subst) (p.stump.label.applySubst S.subst) →
       SolveTy S p.stump.res .unk S' →
       Wake S p
         ({ S' with parked := S'.parked.filter (·.stump != p.stump) }.flag
@@ -548,7 +660,7 @@ theorem SolverState.Quiescent.wake_no_commit {B : Type} [DecidableEq B]
   have hb := hq p hp
   cases hw with
   | hit hl _  => exact absurd (hl.det hb.toLookupQ) (by simp)
-  | abs hl _  => exact absurd (hl.det hb.toLookupQ) (by simp)
+  | abs hl _  => exact (hl.not_blocked hb).elim
   | repark _  => rfl
 
 
@@ -715,6 +827,7 @@ extension decides it. -/
 def Key.isLit : Key → Bool
   | .lit _ => true
   | .var _ => false
+  | .unk   => false
 
 theorem Key.exists_of_isLit {k : Key} (h : k.isLit = true) : ∃ l, k = .lit l := by
   cases k <;> simp_all [Key.isLit]
@@ -724,6 +837,7 @@ the blocker -/
 def Key.fillKey (ᾱ : List TyVar) (β : TyVar) : Key → Bool
   | .lit _ => true
   | .var κ => decide (κ ∈ ᾱ) && decide (κ ≠ β)
+  | .unk   => false
 
 def Parked.fillable {B : Type} (S : SolverState B) (ᾱ : List TyVar) (p : Parked B) : Bool :=
   (p.stump.label.applySubst S.subst).fillKey ᾱ p.blocker &&
@@ -1018,7 +1132,7 @@ inductive Infer {B C : Type} [DecidableEq B] (constTy : Sig B C) :
       Infer constTy Γ S e τ S₁ →
       (r, S₁') = S₁.draw .row →
       SolveTySat S₁' τ (.rcd (.var r)) S₂ →
-      Lookup ((Row.var r).applySubst S₂.subst) l .absent →
+      LookupDeadQ ((Row.var r).applySubst S₂.subst) (.lit l) →
       Infer constTy Γ S (.sel e l) .unk (S₂.flag l)
   -- A-sel-?: NOT ★. The stump-var δ keeps the position writable, so a later
   -- refinement can still fill it in — (x: x.l) must not freeze at {β} → ★
@@ -1057,7 +1171,7 @@ inductive Infer {B C : Type} [DecidableEq B] (constTy : Sig B C) :
       Infer constTy Γ S₂ e₂ τ₂ S₃ →
       (κ, S₃') = S₃.draw .lab →
       SolveTySat S₃' τ₂ (.lab (.var κ)) S₄ →
-      LookupQ ((Row.var r).applySubst S₄.subst) ((Key.var κ).applySubst S₄.subst) .absent →
+      LookupDeadQ ((Row.var r).applySubst S₄.subst) ((Key.var κ).applySubst S₄.subst) →
       Infer constTy Γ S (.selDyn e₁ e₂) .unk
         (S₄.flag ((Key.var κ).applySubst S₄.subst).keyName)
   | selDynUnk {Γ : QCtx B} {S S₁ S₁' S₂ S₃ S₃' S₄ S₄' : SolverState B} {e₁ e₂ : Expr C}

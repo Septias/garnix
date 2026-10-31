@@ -68,11 +68,14 @@ inductive Expr (Const : Type) : Type where
 inductive Key : Type where
   | lit : Label → Key          -- l
   | var : TyVar → Key          -- α, a label variable
+  | unk : Key                  -- ★, a key the analysis does not know (a computed
+                               -- string): it decides nothing and nothing replaces it
   deriving DecidableEq, Repr
 
 def Key.ftv : Key → List TyVar
   | .lit _ => []
   | .var α => [α]
+  | .unk   => []
 
 mutual
   inductive Ty (B : Type) : Type where
@@ -402,8 +405,9 @@ inductive KeyRel : Type where
 def Key.cmp : Key → Key → KeyRel
   | .lit l, .lit l' => if l = l' then .eq else .apart
   | .lit _, .var _  => .undec
-  | .var _, .lit _  => .undec
-  | .var _, .var _  => .undec
+  | .lit _, .unk    => .undec
+  | .var _, _       => .undec
+  | .unk, _         => .undec
 
 @[simp] theorem Key.cmp_lit_lit (l l' : Label) :
     Key.cmp (.lit l) (.lit l') = if l = l' then .eq else .apart := rfl
@@ -416,11 +420,12 @@ theorem Key.cmp_decided_lit {k q : Key} (h : Key.cmp k q ≠ .undec) :
     ∃ l l', k = .lit l ∧ q = .lit l' := by
   cases k <;> cases q <;> simp [Key.cmp] at h ⊢
 
--- a literal key is undecided only against a label variable
+-- a literal key is undecided only against a label variable or ★
 theorem Key.cmp_lit_undec {l : Label} {q : Key}
-    (h : Key.cmp (.lit l) q = .undec) : ∃ α, q = .var α := by
+    (h : Key.cmp (.lit l) q = .undec) : (∃ α, q = .var α) ∨ q = .unk := by
   cases q with
-  | var α => exact ⟨α, rfl⟩
+  | var α => exact .inl ⟨α, rfl⟩
+  | unk => exact .inr rfl
   | lit l' => simp only [Key.cmp_lit_lit] at h; split at h <;> cases h
 
 inductive LookupRes (B : Type) : Type where
@@ -782,7 +787,7 @@ theorem Lookup.not_unknown_of_spineVarFree {B : Type} {ρ : Row B}
       | catUnk h₁    => exact ih₁ h₁
   | dsing =>
       cases h with
-      | dunk h => obtain ⟨α, h⟩ := Key.cmp_lit_undec h; cases h
+      | dunk h => rcases Key.cmp_lit_undec h with ⟨α, h⟩ | h <;> cases h
 
 
 ------------------------------ TYPE SUBSTITUTION -------------------------------
@@ -801,12 +806,16 @@ structure TySubst (B : Type) where
 def Key.applySubst {B : Type} (θ : TySubst B) : Key → Key
   | .lit l => .lit l
   | .var α => θ.lab α
+  | .unk   => .unk
 
 @[simp] theorem Key.applySubst_lit {B : Type} (θ : TySubst B) (l : Label) :
     (Key.lit l).applySubst θ = .lit l := rfl
 
 @[simp] theorem Key.applySubst_var {B : Type} (θ : TySubst B) (α : TyVar) :
     (Key.var α).applySubst θ = θ.lab α := rfl
+
+@[simp] theorem Key.applySubst_unk {B : Type} (θ : TySubst B) :
+    Key.unk.applySubst θ = .unk := rfl
 
 mutual
   def Ty.applySubst {B : Type} (θ : TySubst B) : Ty B → Ty B
@@ -831,6 +840,7 @@ def TySubst.id (B : Type) : TySubst B := ⟨(.var ·), (.var ·), (.var ·)⟩
 theorem Key.applySubst_id {B : Type} : (k : Key) → k.applySubst (TySubst.id B) = k
   | .lit _ => rfl
   | .var _ => rfl
+  | .unk   => rfl
 
 mutual
   theorem Ty.applySubst_id {B : Type} :
@@ -927,10 +937,9 @@ theorem Key.cmp_applySubst {B : Type} (θ : TySubst B) {k q : Key} {c : KeyRel}
       cases q with
       | lit l' => exact h
       | var _ => subst h; exact absurd rfl hc
-  | var α =>
-      cases q with
-      | lit _ => subst h; exact absurd rfl hc
-      | var β => subst h; exact absurd rfl hc
+      | unk => subst h; exact absurd rfl hc
+  | var _ => subst h; exact absurd rfl hc
+  | unk => subst h; exact absurd rfl hc
 
 -- Substitution acts on lookup results pointwise (definite ones, see below).
 def LookupRes.applySubst {B : Type} (θ : TySubst B) : LookupRes B → LookupRes B
@@ -1011,6 +1020,7 @@ theorem Key.applySubst_fixed {B : Type} {θ : TySubst B}
     (hl : ∀ α, θ.lab α = .var α) : (k : Key) → k.applySubst θ = k
   | .lit _ => rfl
   | .var α => hl α
+  | .unk   => rfl
 
 mutual
   theorem Ty.applySubst_fixed {B : Type} {θ : TySubst B}
@@ -2045,11 +2055,13 @@ theorem Key.applySubst_applySubst {B : Type} (θ₁ θ₂ : TySubst B) :
     (k : Key) → (k.applySubst θ₁).applySubst θ₂ = k.applySubst (θ₂.comp θ₁)
   | .lit _ => rfl
   | .var _ => rfl
+  | .unk   => rfl
 
 theorem Key.applySubst_congr {B : Type} {θ₁ θ₂ : TySubst B} :
     (k : Key) → (∀ α ∈ k.ftv, θ₁.lab α = θ₂.lab α) → k.applySubst θ₁ = k.applySubst θ₂
   | .lit _, _ => rfl
   | .var α, h => h α (by simp [Key.ftv])
+  | .unk, _ => rfl
 
 mutual
   theorem Ty.applySubst_applySubst {B : Type} (θ₁ θ₂ : TySubst B) :
@@ -2339,6 +2351,7 @@ private theorem renameScheme_core {B : Type} (θ : TySubst B) (σ : Scheme B)
         have h3 : (θ.lab α).applySubst (bwdSub prs θ₁ χ) = θ.lab α := by
           cases hk : θ.lab α with
           | lit _ => rfl
+          | unk => rfl
           | var γ =>
               have := hsndNone γ (himgLab α hα γ (by simp [hk, Key.ftv]))
               simp [bwdSub, this]
@@ -2382,6 +2395,7 @@ private theorem renameScheme_core {B : Type} (θ : TySubst B) (σ : Scheme B)
         have h3 : (θ.lab α).applySubst θ₂ = θ.lab α := by
           cases hk : θ.lab α with
           | lit _ => rfl
+          | unk => rfl
           | var γ =>
               exact hfx2Lab γ (hsndNotMem γ (himgLab α hα γ (by simp [hk, Key.ftv])))
         refine ⟨?_, ?_, ?_⟩
