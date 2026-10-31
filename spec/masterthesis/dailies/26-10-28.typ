@@ -1,6 +1,7 @@
 
-./26-10-29.typ
+./26-10-27.typ
 14 Tage
+./26-10-29.typ
 
 == Todo
 - [x] Check the T-★-intro thingy
