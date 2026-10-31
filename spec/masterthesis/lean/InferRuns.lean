@@ -185,9 +185,9 @@ def sd (e₁ e₂ : E) : E := .selDyn e₁ e₂
 
 -- a literal key through the dynamic door is the static selection …
 #guard run (sd (rec1 "foo" c) (L "foo")) = "𝓫"
--- … and a key of BASE type (a computed string) answers ★ (A-sel-dyn-𝓫): the
--- intro's `{…}.${toString t}`
-#guard run (sd (rec1 "foo" c) c) = "★"
+-- … and a key of BASE type is no key: it clashes against ⌊κ⌋ (a computed string
+-- is a label of type ⌊★⌋, so there is no other key type; feat/fc-labels M4b)
+#guard run (sd (rec1 "foo" c) c) = "fail: clash"
 -- only a DEFINITE base type: a key variable is still forced to a label first, so
 -- supplying a base-typed key later clashes (the conflict is not definite yet)
 #guard run (.app (.lam "a" (sd (rec1 "foo" c) (v "a"))) c) = "fail: clash"
@@ -233,9 +233,8 @@ def upd : E := .lam "n" (.lam "r" (.cat (v "r") (rd (v "n") c)))
 -- two records under one unknown key flow into one function (U-key)
 #guard run (.lam "a" (.lam "f" (rec2 "p" (.app (v "f") (rd (v "a") c))
     "q" (.app (v "f") (rd (v "a") c))))) = "(⌊k5⌋ → (({${k5}: 𝓫} → t6) → {p: t6 | q: t6}))"
--- a key of base type makes the record ★ (A-rcd-dyn-𝓫) …
-#guard run (rd c c) = "★"
--- … which has no eliminator: selecting from it clashes (★ ≐ {r})
+-- a key of base type clashes, in a construction as in a selection
+#guard run (rd c c) = "fail: clash"
 #guard run (.sel (rd c c) "foo") = "fail: clash"
 #guard run (.lam "a" (rd (.sel (v "a") "k") c)) = "⟨r2.k ↓ ⌊k4⌋⟩ ⇒ ({r2} → {${k4}: 𝓫})"
 

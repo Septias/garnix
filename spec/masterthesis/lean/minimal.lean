@@ -1681,17 +1681,13 @@ inductive Err {C : Type} (δ : Delta C) : Expr C → Prop where
   | catLeft  : Err δ e₁ → Err δ (.cat e₁ e₂)
   | catRight : Value e₁ → Err δ e₂ → Err δ (.cat e₁ e₂)
   | letBind  : Err δ e₁ → Err δ (.letE x e₁ e₂)
-  -- a dynamic selection errs where a static one does, and also on a key that is
-  -- not a label (L-junk's run-time face)
+  -- a dynamic selection errs where a static one does. A key that is not a label
+  -- is no error: it has no typing (feat/fc-labels; strings are labels)
   | selDynAbsent {b : RecBody (Expr C)} {l : Label} :
       RecBody.lookup l b = none → Err δ (.selDyn (.rcd b) (.lab l))
-  | selDynKey {b : RecBody (Expr C)} {v : Expr C} :
-      Value v → (∀ l, v ≠ .lab l) → Err δ (.selDyn (.rcd b) v)
   | selDynL  : Err δ e₁ → Err δ (.selDyn e₁ e₂)
   | selDynR  : Value e₁ → Err δ e₂ → Err δ (.selDyn e₁ e₂)
-  -- a dynamic construction errs on a key that is not a label
-  | rcdDynKeyBad {v : Expr C} :
-      Value v → (∀ l, v ≠ .lab l) → Err δ (.rcdDyn v e₂)
+  -- a dynamic construction errs where its key does
   | rcdDynKey : Err δ e₁ → Err δ (.rcdDyn e₁ e₂)
   -- MacroNix: a failed assertion, a builtin that fails (δ = none)
   | asrtFail {e₂ : Expr C} : Err δ (.asrt (.bool false) e₂)

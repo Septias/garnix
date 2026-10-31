@@ -470,10 +470,6 @@ theorem qtyped_applySubst {B C : Type} {constTy : Sig B C}
       | unknown => exact .qSelDynUnk h₁' h₂' hr
   | _, _, _, _, .qRcdDyn h₁ h₂, hm =>
       .qRcdDyn (qtyped_applySubst him h₁ hm) (qtyped_applySubst him h₂ hm)
-  | _, _, _, _, .qSelDynBase h₁ h₂, hm =>
-      .qSelDynBase (qtyped_applySubst him h₁ hm) (qtyped_applySubst him h₂ hm)
-  | _, _, _, _, .qRcdDynBase h₁ h₂, hm =>
-      .qRcdDynBase (qtyped_applySubst him h₁ hm) (qtyped_applySubst him h₂ hm)
   | _, _, _, _, .qPrim hp hi ha, hm =>
       .qPrim hp (by rw [← Ty.applySubst_applySubst, hi, Ty.arrows_applySubst])
         (qtypedArgs_applySubst him ha hm)

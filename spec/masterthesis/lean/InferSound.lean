@@ -784,10 +784,6 @@ mutual
                    LookupQ ρ q .absent → QTypedC constTy Δ Γ (.selDyn e₁ e₂) .unk
     | qRcdDyn : QTypedC constTy Δ Γ e₁ (.lab q) → QTypedC constTy Δ Γ e₂ τ →
                 QTypedC constTy Δ Γ (.rcdDyn e₁ e₂) (.rcd (.dsing q τ))
-    | qSelDynBase : QTypedC constTy Δ Γ e₁ (.rcd ρ) → QTypedC constTy Δ Γ e₂ (.base b) →
-                    QTypedC constTy Δ Γ (.selDyn e₁ e₂) .unk
-    | qRcdDynBase : QTypedC constTy Δ Γ e₁ (.base b) → QTypedC constTy Δ Γ e₂ τ →
-                    QTypedC constTy Δ Γ (.rcdDyn e₁ e₂) .unk
     -- MacroNix
     | qPrim : constTy.prim p = some τp → τp.applySubst θ = Ty.arrows τs τ →
               QTypedCArgs constTy Δ Γ es τs → QTypedC constTy Δ Γ (.prim p es) τ
@@ -844,8 +840,6 @@ mutual
     | .qSelDynUnk h₁ h₂ hl => .qSelDynUnk h₁.toC h₂.toC hl
     | .qSelDynAbs h₁ h₂ hl => .qSelDynAbs h₁.toC h₂.toC hl
     | .qRcdDyn h₁ h₂       => .qRcdDyn h₁.toC h₂.toC
-    | .qSelDynBase h₁ h₂   => .qSelDynBase h₁.toC h₂.toC
-    | .qRcdDynBase h₁ h₂   => .qRcdDynBase h₁.toC h₂.toC
     | .qPrim hp hi ha => .qPrim hp hi ha.toC
     | .qBool hb => .qBool hb
     | .qIte hb h h₁ h₂ => .qIte hb h.toC h₁.toC h₂.toC
@@ -893,8 +887,6 @@ mutual
     | .qSelDynUnk h₁ h₂ hl => .qSelDynUnk h₁.toQTyped h₂.toQTyped hl
     | .qSelDynAbs h₁ h₂ hl => .qSelDynAbs h₁.toQTyped h₂.toQTyped hl
     | .qRcdDyn h₁ h₂       => .qRcdDyn h₁.toQTyped h₂.toQTyped
-    | .qSelDynBase h₁ h₂   => .qSelDynBase h₁.toQTyped h₂.toQTyped
-    | .qRcdDynBase h₁ h₂   => .qRcdDynBase h₁.toQTyped h₂.toQTyped
     | .qPrim hp hi ha => .qPrim hp hi ha.toQTyped
     | .qBool hb => .qBool hb
     | .qIte hb h h₁ h₂ => .qIte hb h.toQTyped h₁.toQTyped h₂.toQTyped

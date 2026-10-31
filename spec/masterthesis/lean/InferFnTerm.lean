@@ -587,9 +587,7 @@ theorem inferF_stable (constTy : Sig B C) :
       simp only [inferF]
       refine Stable.bind (inferF_stable constTy _ _ e₁) (fun r₁ =>
         Stable.bind (inferF_stable constTy _ _ e₂) (fun r₂ => ?_))
-      cases (r₁.1.applySubst r₂.2.subst).asBase with
-      | some _ => exact Stable.const _
-      | none => exact Stable.bind (solveTySatF_stable _ _ _) (fun _ => Stable.const _)
+      exact Stable.bind (solveTySatF_stable _ _ _) (fun _ => Stable.const _)
   | Γ, S, .cat e₁ e₂ => by
       simp only [inferF]
       exact Stable.bind (inferF_stable constTy _ _ e₁) (fun r₁ =>
@@ -612,16 +610,13 @@ theorem inferF_stable (constTy : Sig B C) :
       refine Stable.bind (inferF_stable constTy _ _ e₁) (fun r₁ =>
         Stable.bind (solveTySatF_stable _ _ _) (fun S₂ =>
           Stable.bind (inferF_stable constTy _ _ e₂) (fun r₂ => ?_)))
-      cases (r₂.1.applySubst r₂.2.subst).asBase with
-      | some _ => exact Stable.const _
-      | none =>
-        refine Stable.bind (solveTySatF_stable _ _ _) (fun S₄ =>
-          Stable.bind (lookupQF_stable _ _) (fun o => ?_))
-        cases o with
-        | found τ => exact Stable.const _
-        | absent => exact Stable.const _
-        | opq => exact Stable.const _
-        | blocked β => exact Stable.const _
+      refine Stable.bind (solveTySatF_stable _ _ _) (fun S₄ =>
+        Stable.bind (lookupQF_stable _ _) (fun o => ?_))
+      cases o with
+      | found τ => exact Stable.const _
+      | absent => exact Stable.const _
+      | opq => exact Stable.const _
+      | blocked β => exact Stable.const _
   | Γ, S, .rcd ξ => by
       simp only [inferF]
       exact Stable.bind (inferRecF_stable constTy _ _ ξ) (fun _ => Stable.const _)
@@ -717,22 +712,15 @@ theorem inferF_settles (constTy : Sig B C) :
       refine Settles.bind (inferF_stable constTy _ _ e₁) (inferF_settles constTy _ _ e₁ hc)
         (fun r₁ => Stable.bind (inferF_stable constTy _ _ e₂) (fun r₂ => ?_))
         (fun r₁ _ h₁ => ?_)
-      · cases (r₁.1.applySubst r₂.2.subst).asBase with
-        | some _ => exact Stable.const _
-        | none => exact Stable.bind (solveTySatF_stable _ _ _) (fun _ => Stable.const _)
+      · exact Stable.bind (solveTySatF_stable _ _ _) (fun _ => Stable.const _)
       have c₁ : r₁.2.sol.Clean := Infer.clean (inferF_sound h₁) hc
       refine Settles.bind (inferF_stable constTy _ _ e₂) (inferF_settles constTy _ _ e₂ c₁)
         (fun r₂ => ?_) (fun r₂ _ h₂ => ?_)
-      · cases (r₁.1.applySubst r₂.2.subst).asBase with
-        | some _ => exact Stable.const _
-        | none => exact Stable.bind (solveTySatF_stable _ _ _) (fun _ => Stable.const _)
+      · exact Stable.bind (solveTySatF_stable _ _ _) (fun _ => Stable.const _)
       have c₂ : r₂.2.sol.Clean := Infer.clean (inferF_sound h₂) c₁
-      cases (r₁.1.applySubst r₂.2.subst).asBase with
-      | some _ => exact Settles.pure _
-      | none =>
-        exact Settles.bind (solveTySatF_stable _ _ _)
-          (solveTySatF_settles (S := (r₂.2.draw .lab).2) c₂ _ _)
-          (fun _ => Stable.const _) (fun _ _ _ => Settles.pure _)
+      exact Settles.bind (solveTySatF_stable _ _ _)
+        (solveTySatF_settles (S := (r₂.2.draw .lab).2) c₂ _ _)
+        (fun _ => Stable.const _) (fun _ _ _ => Settles.pure _)
   | Γ, S, .cat e₁ e₂, hc => by
       simp only [inferF]
       refine Settles.bind (inferF_stable constTy _ _ e₁) (inferF_settles constTy _ _ e₁ hc)
@@ -793,68 +781,56 @@ theorem inferF_settles (constTy : Sig B C) :
         (fun r₁ => Stable.bind (solveTySatF_stable _ _ _) (fun S₂ =>
           Stable.bind (inferF_stable constTy _ _ e₂) (fun r₂ => ?_)))
         (fun r₁ _ h₁ => ?_)
-      · cases (r₂.1.applySubst r₂.2.subst).asBase with
-        | some _ => exact Stable.const _
-        | none =>
-          refine Stable.bind (solveTySatF_stable _ _ _) (fun S₄ =>
-            Stable.bind (lookupQF_stable _ _) (fun o => ?_))
-          cases o with
-          | found τ => exact Stable.const _
-          | absent => exact Stable.const _
-          | opq => exact Stable.const _
-          | blocked β => exact Stable.const _
+      · refine Stable.bind (solveTySatF_stable _ _ _) (fun S₄ =>
+          Stable.bind (lookupQF_stable _ _) (fun o => ?_))
+        cases o with
+        | found τ => exact Stable.const _
+        | absent => exact Stable.const _
+        | opq => exact Stable.const _
+        | blocked β => exact Stable.const _
       have c₁ : r₁.2.sol.Clean := Infer.clean (inferF_sound h₁) hc
       refine Settles.bind (solveTySatF_stable _ _ _)
         (solveTySatF_settles (S := (r₁.2.draw .row).2) c₁ _ _)
         (fun S₂ => Stable.bind (inferF_stable constTy _ _ e₂) (fun r₂ => ?_)) (fun S₂ _ h₂ => ?_)
-      · cases (r₂.1.applySubst r₂.2.subst).asBase with
-        | some _ => exact Stable.const _
-        | none =>
-          refine Stable.bind (solveTySatF_stable _ _ _) (fun S₄ =>
-            Stable.bind (lookupQF_stable _ _) (fun o => ?_))
-          cases o with
-          | found τ => exact Stable.const _
-          | absent => exact Stable.const _
-          | opq => exact Stable.const _
-          | blocked β => exact Stable.const _
+      · refine Stable.bind (solveTySatF_stable _ _ _) (fun S₄ =>
+          Stable.bind (lookupQF_stable _ _) (fun o => ?_))
+        cases o with
+        | found τ => exact Stable.const _
+        | absent => exact Stable.const _
+        | opq => exact Stable.const _
+        | blocked β => exact Stable.const _
       have c₂ : S₂.sol.Clean := (solveTySatF_sound h₂).clean c₁
       refine Settles.bind (inferF_stable constTy _ _ e₂) (inferF_settles constTy _ _ e₂ c₂)
         (fun r₂ => ?_) (fun r₂ _ h₃ => ?_)
-      · cases (r₂.1.applySubst r₂.2.subst).asBase with
-        | some _ => exact Stable.const _
-        | none =>
-          refine Stable.bind (solveTySatF_stable _ _ _) (fun S₄ =>
-            Stable.bind (lookupQF_stable _ _) (fun o => ?_))
-          cases o with
-          | found τ => exact Stable.const _
-          | absent => exact Stable.const _
-          | opq => exact Stable.const _
-          | blocked β => exact Stable.const _
+      · refine Stable.bind (solveTySatF_stable _ _ _) (fun S₄ =>
+          Stable.bind (lookupQF_stable _ _) (fun o => ?_))
+        cases o with
+        | found τ => exact Stable.const _
+        | absent => exact Stable.const _
+        | opq => exact Stable.const _
+        | blocked β => exact Stable.const _
       have c₃ : r₂.2.sol.Clean := Infer.clean (inferF_sound h₃) c₂
-      cases (r₂.1.applySubst r₂.2.subst).asBase with
-      | some _ => exact Settles.pure _
-      | none =>
-        refine Settles.bind (solveTySatF_stable _ _ _)
-          (solveTySatF_settles (S := (r₂.2.draw .lab).2) c₃ _ _)
-          (fun S₄ => Stable.bind (lookupQF_stable _ _) (fun o => ?_)) (fun S₄ _ _ => ?_)
-        · cases o with
-          | found τ => exact Stable.const _
-          | absent => exact Stable.const _
-          | opq => exact Stable.const _
-          | blocked β => exact Stable.const _
-        refine Settles.bind (lookupQF_stable _ _)
-          (lookupQF_settles _ _)
-          (fun o => ?_) (fun o _ _ => ?_)
-        · cases o with
-          | found τ => exact Stable.const _
-          | absent => exact Stable.const _
-          | opq => exact Stable.const _
-          | blocked β => exact Stable.const _
-        · cases o with
-          | found τ => exact Settles.pure _
-          | absent => exact Settles.pure _
-          | opq => exact Settles.pure _
-          | blocked β => exact Settles.pure _
+      refine Settles.bind (solveTySatF_stable _ _ _)
+        (solveTySatF_settles (S := (r₂.2.draw .lab).2) c₃ _ _)
+        (fun S₄ => Stable.bind (lookupQF_stable _ _) (fun o => ?_)) (fun S₄ _ _ => ?_)
+      · cases o with
+        | found τ => exact Stable.const _
+        | absent => exact Stable.const _
+        | opq => exact Stable.const _
+        | blocked β => exact Stable.const _
+      refine Settles.bind (lookupQF_stable _ _)
+        (lookupQF_settles _ _)
+        (fun o => ?_) (fun o _ _ => ?_)
+      · cases o with
+        | found τ => exact Stable.const _
+        | absent => exact Stable.const _
+        | opq => exact Stable.const _
+        | blocked β => exact Stable.const _
+      · cases o with
+        | found τ => exact Settles.pure _
+        | absent => exact Settles.pure _
+        | opq => exact Settles.pure _
+        | blocked β => exact Settles.pure _
   | Γ, S, .rcd ξ, hc => by
       simp only [inferF]
       exact Settles.bind (inferRecF_stable constTy _ _ ξ) (inferRecF_settles constTy _ _ ξ hc)

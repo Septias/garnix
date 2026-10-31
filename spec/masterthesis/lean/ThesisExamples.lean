@@ -367,7 +367,8 @@ def δ0 : Delta Unit := σ0.delta
 
 -- `{ "1759190400" = 1; }.${toString builtins.currentTime}`: a dynamic selection
 -- under a key of base type (MacroNix: `toString` yields a string) is typed ★,
--- with a warning, by A-sel-dyn-𝓫. `builtins.currentTime` is an int here.
+-- with a warning: `toString` yields ⌊★⌋, the key variable is bound to ★, and the
+-- lookup is opaque. `builtins.currentTime` is an int here.
 section intro
 open MacroNix
 def timeEx : MacroNix.E :=
@@ -991,11 +992,11 @@ example := macroSig_ok
 
 -- String keys (feat/fc-labels M4a): a string is a label of type ⌊★⌋.
 -- `r: r // { ${toString 1} = 1; }` types: the computed field is `${★}: int`,
--- in front of r's row (it was a clash while T-rcd-dyn-𝓫 gave ★) …
+-- in front of r's row (it was a clash while a base-typed key gave ★) …
 #guard runM (mlam ["r"] (.cat (mv "r") (.rcdDyn (call .toString [int 1]) (int 1)))) =
   ("({ρ1} → {${★}: int | ε | ρ1})", [])
--- … `{}.${3}` is ★ by A-sel-dyn-𝓫, though only a string can be a key …
-#guard runM (.selDyn (mrec []) (int 3)) = ("★", ["${𝓫}"])
+-- … `{}.${3}` is rejected: an int is no key (it was ★ by A-sel-dyn-𝓫) …
+#guard runM (.selDyn (mrec []) (int 3)) = ("fail: clash", [])
 -- … and a key variable that later becomes a computed string is bound to ★: the
 -- stump on it wakes opaque and answers ★ (it was a clash)
 #guard runM (.app (mlam ["a"] (.selDyn (mrec [("l", int 1)]) (mv "a"))) (call .toString [int 1])) =

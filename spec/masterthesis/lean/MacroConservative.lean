@@ -63,10 +63,6 @@ theorem QTyped.sig_mini {sig sig' : Sig B C} (hcon : sig'.con = sig.con) :
       .qSelDynAbs (QTyped.sig_mini hcon h₁ hm.1) (QTyped.sig_mini hcon h₂ hm.2) hl
   | _, _, _, .qRcdDyn h₁ h₂, hm =>
       .qRcdDyn (QTyped.sig_mini hcon h₁ hm.1) (QTyped.sig_mini hcon h₂ hm.2)
-  | _, _, _, .qSelDynBase h₁ h₂, hm =>
-      .qSelDynBase (QTyped.sig_mini hcon h₁ hm.1) (QTyped.sig_mini hcon h₂ hm.2)
-  | _, _, _, .qRcdDynBase h₁ h₂, hm =>
-      .qRcdDynBase (QTyped.sig_mini hcon h₁ hm.1) (QTyped.sig_mini hcon h₂ hm.2)
   | _, _, _, .qPrim _ _ _, hm => hm.elim
   | _, _, _, .qBool _, hm => hm.elim
   | _, _, _, .qIte _ _ _ _, hm => hm.elim

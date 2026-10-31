@@ -617,13 +617,6 @@ mutual
     -- a dynamic construction: a LABEL-typed key ⌊q⌋ keys the field `${q}: τ`
     | qRcdDyn : QTyped constTy Γ e₁ (.lab q) → QTyped constTy Γ e₂ τ →
                 QTyped constTy Γ (.rcdDyn e₁ e₂) (.rcd (.dsing q τ))
-    -- T-sel-dyn-𝓫 / T-rcd-dyn-𝓫: a key of BASE type (a computed string, in
-    -- NixLang) is not rejected but answered at ★. No keyed field mentions the
-    -- key, so the sort stays clean; preservation leans on unrestricted qUnk
-    | qSelDynBase : QTyped constTy Γ e₁ (.rcd ρ) → QTyped constTy Γ e₂ (.base b) →
-                    QTyped constTy Γ (.selDyn e₁ e₂) .unk
-    | qRcdDynBase : QTyped constTy Γ e₁ (.base b) → QTyped constTy Γ e₂ τ →
-                    QTyped constTy Γ (.rcdDyn e₁ e₂) .unk
     -- MacroNix. A builtin is used at an instance of its type (all of whose
     -- variables are generic), saturated.
     | qPrim : constTy.prim p = some τp → τp.applySubst θ = Ty.arrows τs τ →
@@ -740,10 +733,6 @@ private theorem qtyped_inv_aux {B C : Type} {constTy : Sig B C} :
       ⟨(fun h => nomatch h), (fun h => nomatch h), (fun h => nomatch h)⟩
   | _, _, _, .qRcdDyn _ _ =>
       ⟨(fun h => nomatch h), (fun h => nomatch h), (fun h => nomatch h)⟩
-  | _, _, _, .qSelDynBase _ _ =>
-      ⟨(fun h => nomatch h), (fun h => nomatch h), (fun h => nomatch h)⟩
-  | _, _, _, .qRcdDynBase _ _ =>
-      ⟨(fun h => nomatch h), (fun h => nomatch h), (fun h => nomatch h)⟩
   | _, _, _, .qRcd h =>
       ⟨(fun hc => nomatch hc), (fun hl => nomatch hl),
        (fun hr => by cases hr; exact ⟨_, .inl (.refl _), h⟩)⟩
@@ -842,8 +831,6 @@ private theorem qtyped_bool_inv_aux {B C : Type} {constTy : Sig B C} {b : Bool} 
   | _, _, _, .qSelDynUnk _ _ _, he => nomatch he
   | _, _, _, .qSelDynAbs _ _ _, he => nomatch he
   | _, _, _, .qRcdDyn _ _, he => nomatch he
-  | _, _, _, .qSelDynBase _ _, he => nomatch he
-  | _, _, _, .qRcdDynBase _ _, he => nomatch he
   | _, _, _, .qPrim _ _ _, he => nomatch he
   | _, _, _, .qIte _ _ _ _, he => nomatch he
   | _, _, _, .qAsrt _ _ _, he => nomatch he
@@ -884,8 +871,6 @@ private theorem qtyped_nil_inv_aux {B C : Type} {constTy : Sig B C} :
   | _, _, _, .qSelDynUnk _ _ _, he => nomatch he
   | _, _, _, .qSelDynAbs _ _ _, he => nomatch he
   | _, _, _, .qRcdDyn _ _, he => nomatch he
-  | _, _, _, .qSelDynBase _ _, he => nomatch he
-  | _, _, _, .qRcdDynBase _ _, he => nomatch he
   | _, _, _, .qPrim _ _ _, he => nomatch he
   | _, _, _, .qBool _, he => nomatch he
   | _, _, _, .qIte _ _ _ _, he => nomatch he
@@ -929,8 +914,6 @@ private theorem qtyped_cons_inv_aux {B C : Type} {constTy : Sig B C} {e₁ e₂ 
   | _, _, _, .qSelDynUnk _ _ _, he => nomatch he
   | _, _, _, .qSelDynAbs _ _ _, he => nomatch he
   | _, _, _, .qRcdDyn _ _, he => nomatch he
-  | _, _, _, .qSelDynBase _ _, he => nomatch he
-  | _, _, _, .qRcdDynBase _ _, he => nomatch he
   | _, _, _, .qPrim _ _ _, he => nomatch he
   | _, _, _, .qBool _, he => nomatch he
   | _, _, _, .qIte _ _ _ _, he => nomatch he
@@ -1203,10 +1186,6 @@ theorem qtyped_sub {B C : Type} {constTy : Sig B C} :
       .qSelDynAbs (qtyped_sub hs h₁) (qtyped_sub hs h₂) hl
   | _, _, _, _, hs, .qRcdDyn h₁ h₂ =>
       .qRcdDyn (qtyped_sub hs h₁) (qtyped_sub hs h₂)
-  | _, _, _, _, hs, .qSelDynBase h₁ h₂ =>
-      .qSelDynBase (qtyped_sub hs h₁) (qtyped_sub hs h₂)
-  | _, _, _, _, hs, .qRcdDynBase h₁ h₂ =>
-      .qRcdDynBase (qtyped_sub hs h₁) (qtyped_sub hs h₂)
   | _, _, _, _, hs, .qPrim hp hi ha => .qPrim hp hi (qtypedArgs_sub hs ha)
   | _, _, _, _, _,  .qBool hb      => .qBool hb
   | _, _, _, _, hs, .qIte hb h h₁ h₂ =>
@@ -1292,10 +1271,6 @@ private theorem qsubst_aux {B C : Type} {constTy : Sig B C} :
         hl
   | _, _, _, .qRcdDyn h₁ h₂, _, _, _, _, hsub, hv =>
       .qRcdDyn (qsubst_aux h₁ hsub hv) (qsubst_aux h₂ hsub hv)
-  | _, _, _, .qSelDynBase h₁ h₂, _, _, _, _, hsub, hv =>
-      .qSelDynBase (qsubst_aux h₁ hsub hv) (qsubst_aux h₂ hsub hv)
-  | _, _, _, .qRcdDynBase h₁ h₂, _, _, _, _, hsub, hv =>
-      .qRcdDynBase (qsubst_aux h₁ hsub hv) (qsubst_aux h₂ hsub hv)
   | _, _, _, .qPrim hp hi ha, _, _, _, _, hsub, hv =>
       .qPrim hp hi (qsubstArgs_aux ha hsub hv)
   | _, _, _, .qBool hb, _, _, _, _, _, _ => .qBool hb
@@ -1591,18 +1566,6 @@ private theorem qpreservation_aux {B C : Type} {constTy : Sig B C} (hok : SigOK 
             exact .qRcd (.fieldU h₂)
   -- a base-typed key: the selection lands on a field value or ↯, the
   -- construction on `{l = e₂}`; either way typed at something, then blurred
-  | _, _, _, .qSelDynBase h₁ h₂, hΓ, _ => fun hs => by
-      cases hs with
-      | selDynL s => exact .qSelDynBase (qpreservation_aux hok h₁ hΓ s) h₂
-      | selDynR _ s => exact .qSelDynBase h₁ (qpreservation_aux hok h₂ hΓ s)
-      | @selDynVal b l _ hbl =>
-          obtain ⟨ρ', -, hb⟩ := qtyped_rcd_inv h₁
-          obtain ⟨_, _, hte⟩ := QTypedBody.lookup_some hb hbl
-          exact .qUnk hte
-  | _, _, _, .qRcdDynBase h₁ h₂, hΓ, _ => fun hs => by
-      cases hs with
-      | rcdDynKey s => exact .qRcdDynBase (qpreservation_aux hok h₁ hΓ s) h₂
-      | rcdDynVal => exact .qUnk (.qRcd (.field h₂))
   | _, _, _, .qLet hwf h₁ hne h₂, hΓ, _ => fun hs => by
       cases hs with
       | letCong s =>
@@ -1681,18 +1644,47 @@ private theorem qsel_rcd_progress {C : Type} {δ : Delta C} (b : RecBody (Expr C
 
 -- …and so does a dynamic one on a record literal and a VALUE key, whatever its
 -- type: a label steps or misses, anything else is not a label and errs.
-private theorem qselDyn_rcd_progress {C : Type} {δ : Delta C} (b : RecBody (Expr C)) {v : Expr C}
-    (hv : Value v) : Progress δ (.selDyn (.rcd b) v) := by
-  by_cases hl : ∃ l, v = .lab l
-  · obtain ⟨l, rfl⟩ := hl
-    cases hbl : RecBody.lookup l b with
-    | some e' => exact .step (.selDynVal hbl)
-    | none    => exact .err (.selDynAbsent hbl)
-  · exact .err (.selDynKey hv (fun l he => hl ⟨l, he⟩))
+-- a key VALUE is a label: no other value inhabits a label type (feat/fc-labels:
+-- with the 𝓫-key rules gone, a key has no other type)
+theorem qcanonical_lab {B C : Type} {constTy : Sig B C} {Γ : QCtx B} {v : Expr C} {q : Key}
+    (hv : Value v) (ht : QTyped constTy Γ v (.lab q)) : ∃ l, v = .lab l := by
+  cases hv with
+  | con =>
+      rcases qtyped_con_inv ht with he | hu
+      · cases he.base_inv
+      · cases hu
+  | lam =>
+      obtain ⟨τ₁, τ₂, he | hu, -⟩ := qtyped_lam_inv ht
+      · obtain ⟨_, _, hσ, -⟩ := he.fn_inv; cases hσ
+      · cases hu
+  | rcd =>
+      obtain ⟨ρ, he | hu, -⟩ := qtyped_rcd_inv ht
+      · obtain ⟨_, hσ, -⟩ := he.rcd_inv; cases hσ
+      · cases hu
+  | lab => exact ⟨_, rfl⟩
+  | bool =>
+      rcases qtyped_bool_inv ht with ⟨_, -, he⟩ | hu
+      · cases he.base_inv
+      · cases hu
+  | nil =>
+      rcases qtyped_nil_inv ht with ⟨_, he⟩ | hu
+      · obtain ⟨_, hσ, -⟩ := he.list_inv; cases hσ
+      · cases hu
+  | cons =>
+      obtain ⟨_, he | hu, -, -⟩ := qtyped_cons_inv ht
+      · obtain ⟨_, hσ, -⟩ := he.list_inv; cases hσ
+      · cases hu
+
+private theorem qselDyn_rcd_progress {C : Type} {δ : Delta C} (b : RecBody (Expr C))
+    {l : Label} : Progress δ (.selDyn (.rcd b) (.lab l)) := by
+  cases hbl : RecBody.lookup l b with
+  | some e' => exact .step (.selDynVal hbl)
+  | none    => exact .err (.selDynAbsent hbl)
 
 private def qselDyn_progress {C : Type} {δ : Delta C} {e₁ e₂ : Expr C}
     (p₁ : Progress δ e₁) (p₂ : Progress δ e₂)
-    (hrcd : Value e₁ → ∃ b, e₁ = .rcd b) : Progress δ (.selDyn e₁ e₂) :=
+    (hrcd : Value e₁ → ∃ b, e₁ = .rcd b) (hlab : Value e₂ → ∃ l, e₂ = .lab l) :
+    Progress δ (.selDyn e₁ e₂) :=
   match p₁ with
   | .step s => .step (.selDynL s)
   | .err er => .err (.selDynL er)
@@ -1702,19 +1694,19 @@ private def qselDyn_progress {C : Type} {δ : Delta C} {e₁ e₂ : Expr C}
       | .err er => .err (.selDynR v₁ er)
       | .done v₂ => by
           obtain ⟨b, rfl⟩ := hrcd v₁
-          exact qselDyn_rcd_progress b v₂
+          obtain ⟨l, rfl⟩ := hlab v₂
+          exact qselDyn_rcd_progress b
 
--- a dynamic construction steps its key, then builds the record or errs on a
--- key that is not a label
-private def qrcdDyn_progress {C : Type} {δ : Delta C} {e₁ e₂ : Expr C} (p₁ : Progress δ e₁) :
-    Progress δ (.rcdDyn e₁ e₂) :=
+-- a dynamic construction steps its key, then builds the record: a typed key
+-- value is a label
+private def qrcdDyn_progress {C : Type} {δ : Delta C} {e₁ e₂ : Expr C} (p₁ : Progress δ e₁)
+    (hlab : Value e₁ → ∃ l, e₁ = .lab l) : Progress δ (.rcdDyn e₁ e₂) :=
   match p₁ with
   | .step s => .step (.rcdDynKey s)
   | .err er => .err (.rcdDynKey er)
   | .done v₁ => by
-      by_cases hl : ∃ l, e₁ = .lab l
-      · obtain ⟨l, rfl⟩ := hl; exact .step .rcdDynVal
-      · exact .err (.rcdDynKeyBad v₁ (fun l he => hl ⟨l, he⟩))
+      obtain ⟨l, rfl⟩ := hlab v₁
+      exact .step .rcdDynVal
 
 -- a boolean VALUE is a literal: constants never inhabit the boolean type
 theorem qcanonical_bool {B C : Type} {constTy : Sig B C} (hok : SigOK constTy) {Γ : QCtx B}
@@ -1853,14 +1845,14 @@ def qprogress {B C : Type} {constTy : Sig B C} (hok : SigOK constTy) {Γ : QCtx 
   | .qLab => .done .lab
   | .qSelDyn h₁ h₂ _ => qselDyn_progress (qprogress hok hΓ h₁) (qprogress hok hΓ h₂)
       (fun v => let ⟨b, _, he, _⟩ := qcanonical_rcd v h₁; ⟨b, he⟩)
+      (fun v => qcanonical_lab v h₂)
   | .qSelDynUnk h₁ h₂ _ => qselDyn_progress (qprogress hok hΓ h₁) (qprogress hok hΓ h₂)
       (fun v => let ⟨b, _, he, _⟩ := qcanonical_rcd v h₁; ⟨b, he⟩)
+      (fun v => qcanonical_lab v h₂)
   | .qSelDynAbs h₁ h₂ _ => qselDyn_progress (qprogress hok hΓ h₁) (qprogress hok hΓ h₂)
       (fun v => let ⟨b, _, he, _⟩ := qcanonical_rcd v h₁; ⟨b, he⟩)
-  | .qRcdDyn h₁ _ => qrcdDyn_progress (qprogress hok hΓ h₁)
-  | .qSelDynBase h₁ h₂ => qselDyn_progress (qprogress hok hΓ h₁) (qprogress hok hΓ h₂)
-      (fun v => let ⟨b, _, he, _⟩ := qcanonical_rcd v h₁; ⟨b, he⟩)
-  | .qRcdDynBase h₁ _ => qrcdDyn_progress (qprogress hok hΓ h₁)
+      (fun v => qcanonical_lab v h₂)
+  | .qRcdDyn h₁ _ => qrcdDyn_progress (qprogress hok hΓ h₁) (fun v => qcanonical_lab v h₁)
   -- MacroNix
   | .qBool _ => .done .bool
   | .qNil => .done .nil
@@ -2063,10 +2055,6 @@ theorem qtyped_cov {B C : Type} {constTy : Sig B C} :
       .qSelDynAbs (qtyped_cov hs h₁) (qtyped_cov hs h₂) hl
   | _, _, _, _, hs, .qRcdDyn h₁ h₂ =>
       .qRcdDyn (qtyped_cov hs h₁) (qtyped_cov hs h₂)
-  | _, _, _, _, hs, .qSelDynBase h₁ h₂ =>
-      .qSelDynBase (qtyped_cov hs h₁) (qtyped_cov hs h₂)
-  | _, _, _, _, hs, .qRcdDynBase h₁ h₂ =>
-      .qRcdDynBase (qtyped_cov hs h₁) (qtyped_cov hs h₂)
   | _, _, _, _, hs, .qPrim hp hi ha => .qPrim hp hi (qtypedArgs_cov hs ha)
   | _, _, _, _, hs, .qBool hb => .qBool hb
   | _, _, _, _, hs, .qIte hb h h₁ h₂ => .qIte hb (qtyped_cov hs h) (qtyped_cov hs h₁) (qtyped_cov hs h₂)
@@ -2477,8 +2465,6 @@ private theorem qvar_inst_inv {B C : Type} {constTy : Sig B C} :
   | _, _, _, .qSelDynUnk _ _ _ => fun he _ => nomatch he
   | _, _, _, .qSelDynAbs _ _ _ => fun he _ => nomatch he
   | _, _, _, .qRcdDyn _ _ => fun he _ => nomatch he
-  | _, _, _, .qSelDynBase _ _ => fun he _ => nomatch he
-  | _, _, _, .qRcdDynBase _ _ => fun he _ => nomatch he
   | _, _, _, .qPrim _ _ _ => fun he _ => nomatch he
   | _, _, _, .qBool _ => fun he _ => nomatch he
   | _, _, _, .qIte _ _ _ _ => fun he _ => nomatch he
@@ -2534,8 +2520,6 @@ theorem qsel_var_inv {B C : Type} {constTy : Sig B C} :
   | _, _, _, .qSelDynUnk _ _ _ => fun he _ => nomatch he
   | _, _, _, .qSelDynAbs _ _ _ => fun he _ => nomatch he
   | _, _, _, .qRcdDyn _ _ => fun he _ => nomatch he
-  | _, _, _, .qSelDynBase _ _ => fun he _ => nomatch he
-  | _, _, _, .qRcdDynBase _ _ => fun he _ => nomatch he
   | _, _, _, .qPrim _ _ _ => fun he _ => nomatch he
   | _, _, _, .qBool _ => fun he _ => nomatch he
   | _, _, _, .qIte _ _ _ _ => fun he _ => nomatch he

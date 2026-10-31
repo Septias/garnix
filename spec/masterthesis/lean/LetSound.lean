@@ -79,8 +79,6 @@ theorem qtyped_var_inv {B C : Type} {constTy : Sig B C} :
   | _, _, _, .qSelDynUnk _ _ _ => fun he _ => nomatch he
   | _, _, _, .qSelDynAbs _ _ _ => fun he _ => nomatch he
   | _, _, _, .qRcdDyn _ _ => fun he _ => nomatch he
-  | _, _, _, .qSelDynBase _ _ => fun he _ => nomatch he
-  | _, _, _, .qRcdDynBase _ _ => fun he _ => nomatch he
   | _, _, _, .qPrim _ _ _ => fun he _ => nomatch he
   | _, _, _, .qBool _ => fun he _ => nomatch he
   | _, _, _, .qIte _ _ _ _ => fun he _ => nomatch he
@@ -145,8 +143,6 @@ theorem qtyped_let_alias_inv {B C : Type} {constTy : Sig B C} :
   | _, _, _, .qSelDynUnk _ _ _ => fun he _ => nomatch he
   | _, _, _, .qSelDynAbs _ _ _ => fun he _ => nomatch he
   | _, _, _, .qRcdDyn _ _ => fun he _ => nomatch he
-  | _, _, _, .qSelDynBase _ _ => fun he _ => nomatch he
-  | _, _, _, .qRcdDynBase _ _ => fun he _ => nomatch he
   | _, _, _, .qPrim _ _ _ => fun he _ => nomatch he
   | _, _, _, .qBool _ => fun he _ => nomatch he
   | _, _, _, .qIte _ _ _ _ => fun he _ => nomatch he

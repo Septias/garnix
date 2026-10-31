@@ -740,6 +740,14 @@ info: 'MinimalCalculus.SolverState.Quiescent.wake_no_commit' depends on axioms: 
 /-- info: 'MinimalCalculus.Sol.deadQ_sat' depends on axioms: [propext] -/
 #guard_msgs in #print axioms Sol.deadQ_sat
 
+-- strings are labels (feat/fc-labels M4): a key value is a label, so a key
+-- position never reaches a non-label at run time; and ★ never hits
+/-- info: 'MinimalCalculus.qcanonical_lab' does not depend on any axioms -/
+#guard_msgs in #print axioms qcanonical_lab
+
+/-- info: 'MinimalCalculus.LookupQ.unk_not_found' depends on axioms: [propext] -/
+#guard_msgs in #print axioms LookupQ.unk_not_found
+
 -- ★ is a barrier: two ★-keyed fields at the head cancel (U-key-L for ★)
 /-- info: 'MinimalCalculus.RowEquiv.ufield_cancel_left' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in #print axioms RowEquiv.ufield_cancel_left
