@@ -703,10 +703,9 @@ def solveVarM {B : Type} (S : Supply) :
       some (match collapseSol α s₂ with
             | some σ => .success (Sol.ofRow σ) S
             | none =>
-              -- a keyed field on the spine: occurs would need a key-aware
-              -- counting argument, and stuck rejects just the same
-              if (Row.allRowVars (ofSpine s₂)).contains α then
-                (if sHasKey s₂ then .stuck else .occurs)
+              -- a keyed field pins the occurrence like a literal one: the
+              -- count of field atoms ignores keys (`occurs_anyField_no_unifier`)
+              if (Row.allRowVars (ofSpine s₂)).contains α then .occurs
               else .success (Sol.ofRow [(α, ofSpine s₂)]) S)
   | _, _ => none
 

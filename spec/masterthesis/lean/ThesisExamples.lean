@@ -96,7 +96,6 @@ def traceRow {B : Type} [DecidableEq B] :
       let solveName (s₁ s₂ : List (Atom B)) (r : UResM B) : String :=
         match r, s₁ with
         | .occurs, _ => "U-var-occurs"
-        | .stuck, _ => "U-var-stuck"
         | _, [.var α] => if (collapseSol α s₂).isSome then "U-var-collapse" else "U-var-solve"
         | _, _ => "U-var-solve"
       match solveVarM S s₁ s₂ with
@@ -815,6 +814,26 @@ example : ¬ Unifies (sub [] [("α", .var "β")])
     (row [.dsing (.var "α") b, f "m" b]) (row [f "m" b, .dsing (.var "β") b]) :=
   not_equiv_proj "m" (by decide)
 
+-- An occurrence next to a keyed field is an occurs failure, as next to a
+-- literal one: the count of field atoms ignores keys (`occurs_anyField_no_unifier`)
+#guard tr (.var "α") (row [.var "β", .var "α", .dsing (.var "κ") b, .var "γ"]) =
+  (["U-var-occurs"], "Occurs")
+
+-- The flake idiom `system: pkgs: pkgs.${system}.default`: a keyed stump spent
+-- on a record, and a second stump behind it …
+#guard run (lam "s" (lam "p" (sel (sd (v "p") (v "s")) "default"))) =
+  ("⟨ρ4.default ↓ α3⟩, ⟨ρ2.κ1 ↓ {ρ4}⟩ ⇒ (⌊κ1⌋ → ({ρ2} → α3))", [])
+-- … at a label and a record with that system
+#guard run (app (app (lam "s" (lam "p" (sel (sd (v "p") (v "s")) "default"))) (L "x86"))
+    (rec1 "x86" (rec1 "default" c))) = ("𝓫", [])
+
+-- A stump is decided while its blocker stays unsolved: it waits on κ, the key
+-- of a, and `g a` binds the field's key (that of b) to κ. Saturation re-runs
+-- the lookup (`staleF`), so the stump is not missed. (M1 pin, plans/fc-labels.md)
+#guard run (lam "a" (lam "b" (lam "g" (.rcd (.cat (.field "p" (sd (rd (v "b") c) (v "a")))
+    (.cat (.field "q" (app (v "g") (v "b"))) (.field "r" (app (v "g") (v "a"))))))))) =
+  ("(⌊κ1⌋ → (⌊κ1⌋ → ((⌊κ1⌋ → α2) → {p: 𝓫 | q: α2 | r: α2})))", [])
+
 ------------------------------------------------------------------------------
 -- # §9 Discussion: the idioms of the introduction, in MacroNix
 ------------------------------------------------------------------------------
@@ -954,6 +973,16 @@ open MacroNix
           (.ite (.bool true) (.rcd (.field "NIX_LDFLAGS" (.con (.str "-liconv")))) (.rcd .empty))) with
   | .fail "clash" => true | _ => false)
 example := macroSig_ok
+
+-- String keys today (M1 pins, plans/fc-labels.md; M4 moves all three):
+-- `r: r // { ${toString 1} = 1; }` clashes, since T-rcd-dyn-𝓫 gives ★ …
+#guard runM (mlam ["r"] (.cat (mv "r") (.rcdDyn (call .toString [int 1]) (int 1)))) =
+  ("fail: clash", [])
+-- … `{}.${3}` is ★ by A-sel-dyn-𝓫, though only a string can be a key …
+#guard runM (.selDyn (mrec []) (int 3)) = ("★", ["${𝓫}"])
+-- … and a key committed to a label at the selection clashes with a string
+#guard runM (.app (mlam ["a"] (.selDyn (mrec [("l", int 1)]) (mv "a"))) (call .toString [int 1])) =
+  ("fail: clash", [])
 end macronix
 
 end ThesisExamples

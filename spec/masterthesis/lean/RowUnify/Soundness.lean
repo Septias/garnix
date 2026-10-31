@@ -58,7 +58,7 @@ theorem solveVarM_reflect {B : Type} {θ : TySubst B} {S : Supply}
             exact RowEquiv.unitR.trans
               (collapseSol_reflect hc (fun p hp => hsat.2.1 p hp))
         · split at hsolve
-          · split at hsolve <;> (try split at hsolve) <;> simp at hsolve
+          · (try split at hsolve) <;> (try split at hsolve) <;> simp at hsolve
           · simp only [Option.some.injEq, UResM.success.injEq] at hsolve
             obtain ⟨rfl, -⟩ := hsolve
             have hbind := hsat.2.1 (α, ofSpine s₂) List.mem_cons_self
@@ -157,7 +157,7 @@ private theorem solveVarM_supply {B : Type} {S : Supply}
       · simp only [Option.some.injEq, UResM.success.injEq] at h
         obtain ⟨-, rfl⟩ := h; exact Nat.le_refl _
       · split at h
-        · split at h <;> (try split at h) <;> simp at h
+        · (try split at h) <;> (try split at h) <;> simp at h
         · simp only [Option.some.injEq, UResM.success.injEq] at h
           obtain ⟨-, rfl⟩ := h; exact Nat.le_refl _
   | .var _ :: _ :: _ => simp [solveVarM] at h

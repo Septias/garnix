@@ -771,7 +771,7 @@ theorem Sol.good_solveVarM {B : Type} {S : Supply} {s₁ s₂ : List (Atom B)}
             obtain ⟨h₁, -, h₃⟩ := epsCollapse_mem s₂ he p hp
             exact ⟨List.mem_append_right _ (sVarSeq_mem_sSorted s₂ h₁), h₃⟩
         · split at h
-          · split at h <;> (try split at h) <;> simp at h
+          · (try split at h) <;> (try split at h) <;> simp at h
           · next hocc =>
             simp only [Option.some.injEq, UResM.success.injEq] at h
             obtain ⟨rfl, rfl⟩ := h

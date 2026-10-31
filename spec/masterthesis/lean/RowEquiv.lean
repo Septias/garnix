@@ -493,6 +493,25 @@ theorem rowEquiv_iff_char {B : Type} {ρ₁ ρ₂ : Row B} :
     ρ₁ ≈ᵣ ρ₂ ↔ Row.Char ρ₁ ρ₂ :=
   ⟨RowEquiv.char, RowEquiv.ofChar⟩
 
+-- ## ≈-comm read over keys: two keyed fields swap when their keys are APART
+-- Only two distinct literals are apart, and a literal key is the literal field
+-- (dsingLab), so this is ≈-comm itself. A keyed field under a non-literal key
+-- is apart from nothing and therefore a barrier.
+-- ⊢  k₁ # k₂   ⟹   (${k₁}: τ₁ | ${k₂}: τ₂) ≈ᵣ (${k₂}: τ₂ | ${k₁}: τ₁)
+theorem RowEquiv.comm_keys {B : Type} {k₁ k₂ : Key} {τ₁ τ₂ : Ty B}
+    (h : Key.cmp k₁ k₂ = .apart) :
+    RowEquiv (.cat (.dsing k₁ τ₁) (.dsing k₂ τ₂)) (.cat (.dsing k₂ τ₂) (.dsing k₁ τ₁)) := by
+  cases k₁ with
+  | var _ => cases k₂ <;> simp [Key.cmp] at h <;> split at h <;> cases h
+  | lit l₁ =>
+      cases k₂ with
+      | var _ => simp [Key.cmp] at h
+      | lit l₂ =>
+          have hne : l₁ ≠ l₂ := by
+            intro he; subst he; simp [Key.cmp] at h
+          exact (RowEquiv.cat .dsingLab .dsingLab).trans
+            ((RowEquiv.comm hne).trans (RowEquiv.cat RowEquiv.dsingLab.symm RowEquiv.dsingLab.symm))
+
 -- ## Cancellativity of shared end-vars
 -- The trace-monoid fact ≐ᵣ's U-var-refl rests on: stripping a shared var off
 -- either end is sound (trivially, by ≈-congruence) AND complete (below) —

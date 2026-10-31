@@ -1192,6 +1192,99 @@ theorem occurs_field_no_unifier {B : Type} {α : TyVar} {s₂ : List (Atom B)}
   rw [ofSpine_toSpine] at hlb
   omega
 
+-- ## The same count over EVERY field atom, literal or keyed
+-- A keyed field ${κ}: τ is one field whatever κ becomes (`Atom.ofKey` gives a
+-- literal field or a keyed one, never zero or two), so the number of field
+-- atoms is a ≈-invariant that substitution can only raise. This is the count
+-- the occurs check needs once a keyed field is on the spine.
+def sFieldAtoms {B : Type} : List (Atom B) → Nat
+  | [] => 0
+  | .field _ _ :: s => sFieldAtoms s + 1
+  | .var _ :: s => sFieldAtoms s
+  | .dfield _ _ :: s => sFieldAtoms s + 1
+
+-- ⊢  fields(s₁ ++ s₂) = fields(s₁) + fields(s₂)
+theorem sFieldAtoms_append {B : Type} : (s₁ s₂ : List (Atom B)) →
+    sFieldAtoms (s₁ ++ s₂) = sFieldAtoms s₁ + sFieldAtoms s₂
+  | [], _ => by simp [sFieldAtoms]
+  | .field _ _ :: s₁, s₂ => by
+      simp only [List.cons_append, sFieldAtoms, sFieldAtoms_append s₁ s₂]; omega
+  | .var _ :: s₁, s₂ => by
+      simp only [List.cons_append, sFieldAtoms, sFieldAtoms_append s₁ s₂]
+  | .dfield _ _ :: s₁, s₂ => by
+      simp only [List.cons_append, sFieldAtoms, sFieldAtoms_append s₁ s₂]; omega
+
+-- ⊢  fields([ofKey q τ]) = 1
+theorem sFieldAtoms_ofKey {B : Type} (q : Key) (τ : Ty B) :
+    sFieldAtoms [Atom.ofKey q τ] = 1 := by
+  cases q <;> rfl
+
+-- ⊢  ρ₁ ≈ᵣ ρ₂   ⟹   fields(spine ρ₁) = fields(spine ρ₂)
+theorem RowEquiv.fieldAtoms_eq {B : Type} : {ρ₁ ρ₂ : Row B} → ρ₁ ≈ᵣ ρ₂ →
+    sFieldAtoms ρ₁.toSpine = sFieldAtoms ρ₂.toSpine
+  | _, _, .refl _ => rfl
+  | _, _, .symm h => (RowEquiv.fieldAtoms_eq h).symm
+  | _, _, .trans h₁ h₂ => (RowEquiv.fieldAtoms_eq h₁).trans (RowEquiv.fieldAtoms_eq h₂)
+  | _, _, .sing _ => rfl
+  | _, _, .cat h₁ h₂ => by
+      simp only [Row.toSpine, sFieldAtoms_append, RowEquiv.fieldAtoms_eq h₁,
+        RowEquiv.fieldAtoms_eq h₂]
+  | _, _, .assoc => by simp only [Row.toSpine, List.append_assoc]
+  | _, _, .unitL => by simp [Row.toSpine]
+  | _, _, .unitR => by simp [Row.toSpine]
+  | _, _, .comm _ => by simp [Row.toSpine, sFieldAtoms]
+  | _, _, .dsing _ => by simp only [Row.toSpine, sFieldAtoms_ofKey]
+  | _, _, .dsingLab => by simp [Row.toSpine, Atom.ofKey, sFieldAtoms]
+
+-- ⊢  fields(spine ρ) ≤ fields(spine (θρ))
+theorem sFieldAtoms_applySubst_le {B : Type} (θ : TySubst B) :
+    (ρ : Row B) → sFieldAtoms ρ.toSpine ≤ sFieldAtoms (ρ.applySubst θ).toSpine
+  | .empty => Nat.le_refl _
+  | .var _ => Nat.zero_le _
+  | .sing _ _ => by simp [Row.applySubst, Row.toSpine, sFieldAtoms]
+  | .dsing _ _ => by simp only [Row.applySubst, Row.toSpine, sFieldAtoms_ofKey]; exact Nat.le_refl _
+  | .cat ρ₁ ρ₂ => by
+      simp only [Row.applySubst, Row.toSpine, sFieldAtoms_append]
+      have h₁ := sFieldAtoms_applySubst_le θ ρ₁
+      have h₂ := sFieldAtoms_applySubst_le θ ρ₂
+      omega
+
+-- ⊢  α ∈ vars(spine ρ)   ⟹   fields(spine ρ) + fields(spine (θα)) ≤ fields(spine (θρ))
+theorem fieldAtoms_var_lower {B : Type} (θ : TySubst B) (α : TyVar) :
+    (ρ : Row B) → α ∈ sVarSeq ρ.toSpine →
+    sFieldAtoms ρ.toSpine + sFieldAtoms (θ.row α).toSpine
+      ≤ sFieldAtoms (ρ.applySubst θ).toSpine
+  | .empty, h => by simp [Row.toSpine, sVarSeq] at h
+  | .sing _ _, h => by simp [Row.toSpine, sVarSeq] at h
+  | .dsing q _, h => by cases q <;> simp [Row.toSpine, Atom.ofKey, sVarSeq] at h
+  | .var β, h => by
+      simp only [Row.toSpine, sVarSeq, List.mem_singleton] at h
+      subst h; simp [Row.applySubst, Row.toSpine, sFieldAtoms]
+  | .cat ρ₁ ρ₂, h => by
+      simp only [Row.applySubst, Row.toSpine, sFieldAtoms_append, sVarSeq_append,
+        List.mem_append] at h ⊢
+      rcases h with h | h
+      · have ih := fieldAtoms_var_lower θ α ρ₁ h
+        have hle := sFieldAtoms_applySubst_le θ ρ₂
+        omega
+      · have ih := fieldAtoms_var_lower θ α ρ₂ h
+        have hle := sFieldAtoms_applySubst_le θ ρ₁
+        omega
+
+-- The occurs case with ANY field on the spine, keyed ones included: θα would
+-- have to hold its own field atoms and, inside θ(s₂), at least one more.
+-- ⊢  α ∈ vars s₂,  0 < fields s₂   ⟹   ¬ ∃ θ. θ ⊨ α ≐ᵣ ofSpine s₂
+theorem occurs_anyField_no_unifier {B : Type} {α : TyVar} {s₂ : List (Atom B)}
+    (hmem : α ∈ sVarSeq s₂) (hfield : 0 < sFieldAtoms s₂) :
+    ¬ ∃ θ : TySubst B, Unifies θ (.var α) (ofSpine s₂) := by
+  rintro ⟨θ, hu⟩
+  unfold Unifies at hu
+  have hfc := RowEquiv.fieldAtoms_eq hu
+  simp only [Row.applySubst] at hfc
+  have hlb := fieldAtoms_var_lower θ α (ofSpine s₂) (by rw [ofSpine_toSpine]; exact hmem)
+  rw [ofSpine_toSpine] at hlb
+  omega
+
 -- The all-variable interior occurrence α ≐ᵣ (β | α | γ) IS unifiable — take
 -- β,γ ↦ ε. It used to be reported occurs; it is now the ε-collapse rule's
 -- smallest instance (the algorithm's verdict on it is
@@ -1972,19 +2065,25 @@ theorem bindTy_occurs_no_unifier {B : Type} {S : Supply} {α : TyVar} {τ : Ty B
 theorem solveVarM_occurs_inv {B : Type} {S : Supply}
     {α : TyVar} {s₂ : List (Atom B)}
     (h : solveVarM S [Atom.var α] s₂ = some .occurs) :
-    collapseSol α s₂ = none ∧ α ∈ Row.allRowVars (ofSpine s₂) ∧ sHasKey s₂ = false := by
+    collapseSol α s₂ = none ∧ α ∈ Row.allRowVars (ofSpine s₂) := by
   rw [solveVarM] at h
   cases hc : collapseSol α s₂ with
   | some σ => rw [hc] at h; exact absurd h (by simp)
   | none =>
       rw [hc] at h
       by_cases hg : (Row.allRowVars (ofSpine s₂)).contains α = true
-      · rw [if_pos hg] at h
-        refine ⟨rfl, List.mem_of_elem_eq_true hg, ?_⟩
-        cases hk : sHasKey s₂ with
-        | false => rfl
-        | true => rw [hk] at h; exact absurd h (by simp)
+      · exact ⟨rfl, List.mem_of_elem_eq_true hg⟩
       · rw [if_neg hg] at h; simp at h
+
+-- ⊢  the ε-collapse refuses only because a field atom, literal or keyed, is there
+theorem epsCollapse_none_fieldAtoms {B : Type} {keep : Option TyVar} :
+    (s : List (Atom B)) → epsCollapse keep s = none → 0 < sFieldAtoms s
+  | [], h => by simp [epsCollapse] at h
+  | .field _ _ :: _, _ => by simp [sFieldAtoms]
+  | .dfield _ _ :: _, _ => by simp [sFieldAtoms]
+  | .var _ :: s, h => by
+      simp only [epsCollapse, Option.map_eq_none_iff] at h
+      simpa only [sFieldAtoms] using epsCollapse_none_fieldAtoms s h
 
 -- ## U-var-solve: the case analysis CLOSES on a local occurrence
 -- The occurrence the guard rejects is one of three, and the ε-collapse rule has
@@ -2002,14 +2101,13 @@ theorem solveVarM_occurs_no_unifier {B : Type} {S : Supply}
     {α : TyVar} {s₂ : List (Atom B)}
     (h : solveVarM S [Atom.var α] s₂ = some .occurs) :
     ¬ ∃ θ : TySubst B, Unifies θ (.var α) (ofSpine s₂) := by
-  rcases allRowVars_split (ofSpine s₂) (solveVarM_occurs_inv h).2.1 with hspine | hdeep
-  · -- on the spine: the collapse rule declined, so a FIELD is present
+  rcases allRowVars_split (ofSpine s₂) (solveVarM_occurs_inv h).2 with hspine | hdeep
+  · -- on the spine: the collapse rule declined, so a FIELD (of any key) is present
     rw [ofSpine_toSpine] at hspine
     have hnone : collapseSol α s₂ = none := (solveVarM_occurs_inv h).1
     unfold collapseSol at hnone
     rw [if_pos (List.elem_eq_true_of_mem hspine)] at hnone
-    obtain ⟨l, hl⟩ := epsCollapse_none s₂ hnone (solveVarM_occurs_inv h).2.2
-    exact occurs_field_no_unifier hspine hl
+    exact occurs_anyField_no_unifier hspine (epsCollapse_none_fieldAtoms s₂ hnone)
   · exact deep_occurs_no_unifier hdeep
 
 

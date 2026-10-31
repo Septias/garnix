@@ -56,7 +56,7 @@ theorem solveVarM_ne_clash {B : Type} {S : Supply} {s₁ s₂ : List (Atom B)} :
         simp only [solveVarM] at h
         split at h
         · simp at h
-        · split at h <;> (try split at h) <;> simp at h
+        · (try split at h) <;> (try split at h) <;> simp at h
 
 
 

@@ -190,7 +190,7 @@ theorem solveVarM_bounded {B : Type} {S : Supply} {s₁ s₂ : List (Atom B)}
             obtain ⟨h₁, h₂⟩ := collapseSol_below hc p hp
             exact ⟨hV (List.mem_append_right _ h₁), by rw [h₂]; simp [Row.ftv]⟩
         · split at h
-          · split at h <;> (try split at h) <;> simp at h
+          · (try split at h) <;> (try split at h) <;> simp at h
           · simp only [Option.some.injEq, UResM.success.injEq] at h
             obtain ⟨rfl, rfl⟩ := h
             refine ⟨V, fun _ hx => hx, hS, SolBelow_ofRow (fun p hp => ?_)⟩
@@ -920,7 +920,7 @@ theorem solveVarM_complete {B : Type} {θ : TySubst B} {S : Supply}
             exact Sol.Sat_ofRow.mpr
               (collapseSol_complete hc (RowEquiv.unitR.symm.trans hu))
         · split at hsolve
-          · split at hsolve <;> (try split at hsolve) <;> simp at hsolve
+          · (try split at hsolve) <;> (try split at hsolve) <;> simp at hsolve
           · simp only [Option.some.injEq, UResM.success.injEq] at hsolve
             obtain ⟨rfl, -⟩ := hsolve
             refine Sol.Sat_ofRow.mpr (fun p hp => ?_)

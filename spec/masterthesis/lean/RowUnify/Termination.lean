@@ -314,7 +314,7 @@ theorem solveVarM_ne_oof {B : Type} {S : Supply} {s₁ s₂ : List (Atom B)} {r 
       split
       · simp
       · split
-        · split <;> simp
+        · simp
         · simp
 
 theorem mono_ty_eq {B : Type} [DecidableEq B] {S : Supply} {f F : Nat} {τ τ' : Ty B}

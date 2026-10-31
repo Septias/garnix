@@ -70,6 +70,15 @@ info: 'MinimalCalculus.solveVarM_occurs_no_unifier' depends on axioms: [propext,
 -/
 #guard_msgs in #print axioms solveVarM_occurs_no_unifier
 
+-- the counting core it rests on: field atoms of ANY key (feat/fc-labels M1;
+-- the occurrence next to a keyed field used to be reported stuck)
+/-- info: 'MinimalCalculus.occurs_anyField_no_unifier' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in #print axioms occurs_anyField_no_unifier
+
+-- ≈-comm over keys: two keyed fields swap when their keys are apart
+/-- info: 'MinimalCalculus.RowEquiv.comm_keys' depends on axioms: [propext] -/
+#guard_msgs in #print axioms RowEquiv.comm_keys
+
 -- (`solveVarM_occurs_no_unifier_nil` was guarded here. Stage 1b made the
 -- guard above unconditional, so the Θ = [] special case is gone.)
 
