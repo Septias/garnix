@@ -54,11 +54,12 @@ inductive Expr (Const : Type) : Type where
 ---------------------------------- TYPES ------------------------------------------
 
 -- τ := α | 𝓫 | ★ | τ → τ | { ρ } | ⌊k⌋
--- k := l | α                     (keys: a label, or a LABEL variable)
+-- k := l | α | ★                 (keys: a label, a LABEL variable, the unknown key)
 -- Label variables are a SORT of their own, like row variables: ⌊α⌋ is
 -- `.lab (.var α)`, a substitution sends α to a KEY (`TySubst.lab`), never to a
--- type. So a key is always a label or a label variable — there is no junk key,
--- and nothing (unification, instantiation) can make a key ★ or 𝓫.
+-- type. So a key is always a label, a label variable or the unknown key ★ (a
+-- string the analysis does not track, feat/fc-labels); nothing makes a key 𝓫,
+-- and ⌊★⌋ is a label type, not the unknown type ★.
 -- ⌊l⌋ is rigid and nullary, exactly like 𝓫.
 -- ρ := ε | α | l: τ | ${k}: τ | (ρ₁ | ρ₂)
 -- `${k}: τ` (FC-labels phase B) is a field whose label is only known through

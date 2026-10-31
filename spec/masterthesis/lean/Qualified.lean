@@ -640,7 +640,7 @@ mutual
     | empty : QTypedBody constTy Γ .empty .empty
     | field : QTyped constTy Γ e τ →
               QTypedBody constTy Γ (.field l e) (.sing l τ)
-    -- T-field-blur (feat/fc-labels): a field may forget its label. No lookup
+    -- T-ξ-blur (feat/fc-labels): a field may forget its label. No lookup
     -- reads through `${★}`, so this claims nothing about the field; it types
     -- the record a string-keyed dynamic record steps to
     | fieldU : QTyped constTy Γ e τ →
@@ -1353,7 +1353,7 @@ theorem qsubst_preserves_typing
 -- spine-var-free rows, so their lookups are never ? (mirrors the minimal twins).
 
 -- (`QTypedBody.spineVarFree` lived here: a record value's row has no barrier, so
--- its lookups are never `?`. A field typed under ★ (T-field-blur) is a barrier,
+-- its lookups are never `?`. A field typed under ★ (T-ξ-blur) is a barrier,
 -- so a value's lookup can be `?` now; preservation of T-sel-★ types the field it
 -- steps to and blurs it, as T-sel-dyn-★ always did.)
 
@@ -1561,7 +1561,7 @@ private theorem qpreservation_aux {B C : Type} {constTy : Sig B C} (hok : SigOK 
           · cases he.lab_inv
             exact .qEq (.qRcd (.field h₂)) (.rcd (RowEquiv.symm .dsingLab))
           · cases hu
-          -- a blurred key: the field forgets its label (T-field-blur)
+          -- a blurred key: the field forgets its label (T-ξ-blur)
           · cases hkb
             exact .qRcd (.fieldU h₂)
   -- a base-typed key: the selection lands on a field value or ↯, the

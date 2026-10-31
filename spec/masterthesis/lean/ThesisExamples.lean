@@ -789,6 +789,14 @@ example : QTyped σ0 QCtx.empty starIntroEx
 -- # §8 First-Class Labels
 ------------------------------------------------------------------------------
 
+-- Keyed lookup. (m: 𝓫).α ↓ ? waits on the key α, (${γ}: 𝓫 | l: 𝓫′).l ↓ ? on γ …
+example : LookupBlockedQ (f "m" b) (.var "α") "α" := .sunk
+example : LookupBlockedQ (.cat (.dsing (.var "γ") b) (f "l" (tv "τ'"))) (.lit "l") "γ" :=
+  .catUnk .dunkF
+-- … and a comparison with ★ never decides: both lookups are opaque
+example : LookupOpaqueQ (.cat (.dsing .unk b) (f "l" (tv "τ'"))) (.lit "l") := .catUnk .dunkF
+example : LookupOpaqueQ (f "l" b) .unk := .sunk
+
 -- The schemes of the dynamic selector and the dynamic record constructor
 #guard schemeOf (lam "a" (lam "x" (sd (v "x") (v "a")))) =
   ("∀#1,#2,#3. ⟨ρ2.κ1 ↓ α3⟩ ⇒ (⌊κ1⌋ → ({ρ2} → α3))", 0)
@@ -805,6 +813,26 @@ example : QTyped σ0 QCtx.empty starIntroEx
 -- application clashes
 #guard run (app (lam "a" (sd (rec1 "l" c) (v "a"))) c) = ("fail: clash", [])
 
+-- A spent stump under a key variable keeps its qualifier; it is blocked on
+-- the row, and the witness reads the key as the label `${κ}`
+#guard parkedOf (lam "r" (lam "a" (app (sd (v "r") (v "a")) c))) =
+  ("({ρ1} → (⌊κ2⌋ → α3))", ["ρ1 ⊳ ⟨ρ1.κ2 ↓ (𝓫 → α3)⟩"])
+
+-- Costs. An unknown key has no identity: `a: {${a} = c}.${a}` keeps its
+-- stump, which hits at every literal instance …
+#guard run (lam "a" (sd (rd (v "a") c) (v "a"))) = ("⟨${κ1}: 𝓫 | ε.κ1 ↓ α2⟩ ⇒ (⌊κ1⌋ → α2)", [])
+#guard run (app (lam "a" (sd (rd (v "a") c) (v "a"))) (L "x")) = ("𝓫", [])
+-- … and two literals meet only by T-lab-blur, which inference does not apply:
+-- `f: {a = f "x"; b = f "y"}` clashes, but types at (⌊★⌋ → 𝓫) → {a: 𝓫 | b: 𝓫}
+def litJoinEx : E := lam "f" (rec2 "a" (app (v "f") (L "x")) "b" (app (v "f") (L "y")))
+#guard run litJoinEx = ("fail: clash", [])
+example : QTyped σ0 QCtx.empty litJoinEx
+    (.fn (.fn (.lab .unk) b) (.rcd (.cat (.sing "a" b) (.sing "b" b)))) := by
+  have hg : QTyped σ0 (QCtx.empty.bindTy "f" (.fn (.lab .unk) b)) (v "f") (.fn (.lab .unk) b) :=
+    qvar (by simp [QCtx.bindTy, QCtx.bindScheme, QCtx.lookup])
+  exact .qLam (.qRcd (.cat (.field (.qApp hg (.qLabBlur .qLab)))
+                           (.field (.qApp hg (.qLabBlur .qLab)))))
+
 -- `((n: r: r // { ${n} = c; }) "x" { x = {}; }).x`: the computed field shadows
 #guard run (sel (app (app (lam "n" (lam "r" (cat (v "r") (rd (v "n") c)))) (L "x")) (rec1 "x" emp)) "x")
   = ("𝓫", [])
@@ -815,6 +843,14 @@ example : QTyped σ0 QCtx.empty starIntroEx
 -- … and (${α}: τ) ≐ᵣ (${β}: τ′) with [α ≔ β]
 #guard tr (.dsing (.var "α") (tv "τ")) (.dsing (.var "β") (tv "τ'")) =
   (["U-key-pin", "U-lab", "U-field-L", "U-bind", "U-ε-var"], "[τ ≔ τ', α ≔ β]")
+-- … and (${α}: τ) ≐ᵣ (${★}: τ′) with [α ≔ ★]
+#guard tr (.dsing (.var "α") (tv "τ")) (.dsing .unk (tv "τ'")) =
+  (["U-key-pin", "U-lab", "U-field-L", "U-bind", "U-ε-var"], "[τ ≔ τ', α ≔ ★]")
+-- (l: τ) ≐ᵣ (${★}: τ′) has no unifier, but no move sees it
+#guard tr (f "l" (tv "τ")) (.dsing .unk (tv "τ'")) = (["U-stuck"], "Stuck")
+-- a leading keyed field pairs with a keyed field under the same key (U-field-L)
+#guard tr (row [.dsing (.var "α") (tv "τ"), rv "ρ"]) (row [.dsing (.var "α") b, rv "σ"]) =
+  (["U-field-L", "U-bind", "U-var-solve"], "[τ ≔ 𝓫, ρ ≔ (σ | ε)]")
 -- U-ε-clash fires on a keyed field
 #guard tr .empty (.dsing (.var "α") b) = (["U-ε-clash"], "Clash")
 -- (${α}: 𝓫 | m: 𝓫) ≐ᵣ (m: 𝓫 | ${β}: 𝓫) is stuck; [α ≔ l, β ≔ l] solves it …
@@ -997,6 +1033,12 @@ example := macroSig_ok
   ("({ρ1} → {${★}: int | ε | ρ1})", [])
 -- … `{}.${3}` is rejected: an int is no key (it was ★ by A-sel-dyn-𝓫) …
 #guard runM (.selDyn (mrec []) (int 3)) = ("fail: clash", [])
+-- … a field under ★ shadows, and a selection through it is opaque …
+#guard runM (mlam ["r"] (.sel (.cat (mv "r") (.rcdDyn (call .toString [int 1]) (int 1))) "x")) =
+  ("({ρ1} → ★)", ["x"])
+-- … and an unknown key selects nothing, even from the record it built
+#guard runM (.letE "k" (call .toString [int 1]) (.selDyn (.rcdDyn (mv "k") (int 1)) (mv "k"))) =
+  ("★", ["${★}"])
 -- … and a key variable that later becomes a computed string is bound to ★: the
 -- stump on it wakes opaque and answers ★ (it was a clash)
 #guard runM (.app (mlam ["a"] (.selDyn (mrec [("l", int 1)]) (mv "a"))) (call .toString [int 1])) =

@@ -1176,6 +1176,10 @@ info: 'MinimalCalculus.RowEquiv.dsing_cancel_left' depends on axioms: [propext, 
 /-- info: 'MinimalCalculus.LookupQ.det' depends on axioms: [propext] -/
 #guard_msgs in #print axioms LookupQ.det
 
+-- static selection is keyed selection at a literal key (07, T-sel-dyn)
+/-- info: 'MinimalCalculus.LookupQ.lab_iff' depends on axioms: [propext] -/
+#guard_msgs in #print axioms LookupQ.lab_iff
+
 -- (`LookupQ.mono` — stability under extending the row-solutions — went with
 -- L-α; its substitution form is `LookupQ.applySubst`, guarded below.)
 
