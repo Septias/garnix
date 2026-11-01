@@ -33,6 +33,7 @@ Finally, we add a polymorphic type $σ$ that quantifies over monotypes and rows 
                 #type_name("Row") ρ & ::= ε | α | l: τ | (ρ₁ | ρ₂) \
         #type_name("Constraints") Q & ::= ε | Q, ⟨ρ.l ↓ δ⟩ \
         #type_name("Type Scheme") σ & ::= ∀(macron(α): macron(κ)). Q ⇒ τ | τ \
+        #type_name("Type Environment") Γ & ::= ∅ | Γ · (x: σ) | Γ · (α: κ) \
       $
     ],
   )),
@@ -40,60 +41,40 @@ Finally, we add a polymorphic type $σ$ that quantifies over monotypes and rows 
 #syntax <syntax>
 
 
-== Typing Rules
-#let declarative = figure(
-  caption: "Declarative typing rules.",
+== Sorts
+#let sorting = figure(
+  caption: "Sorting.",
   flexbox(
-    derive("T-cons", (), $Γ ⊢ c: 𝓫_c$),
-    derive("T-var", ($x: σ ∈ Γ$, $σ ≥ τ$), $Γ ⊢ x: τ$),
-    derive("T-eq", ($Γ ⊢ e: τ₁$, $τ₁ ≈ τ₂$), $Γ ⊢ e: τ₂$),
+    derive("S-base", (), $Γ ⊢ 𝓫: "Type"$),
+    derive("S-★", (), $Γ ⊢ ★: "Type"$),
+    derive("S-var", ($α: "Type" ∈ Γ$,), $Γ ⊢ α: "Type"$),
     derive(
-      "T-λ-I",
-      ($Γ ⊢ τ₁: "Type"$, $Γ · (x: τ₁) ⊢ e: τ₂$),
-      $Γ ⊢ (x: e): τ₁ -> τ₂$,
+      "S-fn",
+      ($Γ ⊢ τ₁: "Type"$, $Γ ⊢ τ₂: "Type"$),
+      $Γ ⊢ τ₁ -> τ₂: "Type"$,
     ),
-    derive("T-λ-E", ($Γ ⊢ e₁: τ₁ -> τ₂$, $Γ ⊢ e₂: τ₁$), $Γ ⊢ e₁e₂: τ₂$),
-    derive("T-rec", ($Γ ⊢ ξ: ρ$,), $Γ ⊢ { ξ }: { ρ }$),
-    derive("T-ξ-empty", (), $Γ ⊢ ε: ε$),
-    derive("T-ξ-field", ($Γ ⊢ e: τ$,), $Γ ⊢ (l = e): (l: τ)$),
+    derive("S-rcd", ($Γ ⊢ ρ: "Row"$,), $Γ ⊢ {ρ}: "Type"$),
+    derive("S-ρ-var", ($α: "Row" ∈ Γ$,), $Γ ⊢ α: "Row"$),
+    derive("S-ε", (), $Γ ⊢ ε: "Row"$),
+    derive("S-field", ($Γ ⊢ τ: "Type"$,), $Γ ⊢ (l: τ): "Row"$),
     derive(
-      "T-conc",
-      ($Γ ⊢ e₁: {ρ₁}$, $Γ ⊢ e₂: {ρ₂}$),
-      $Γ ⊢ e₁ ‖ e₂: { ρ₂ | ρ₁ }$,
-    ),
-    derive(
-      "T-ξ-conc",
-      ($Γ ⊢ ξ₁: ρ₁$, $Γ ⊢ ξ₂: ρ₂$),
-      $Γ ⊢ (ξ₁ | ξ₂): (ρ₁ | ρ₂)$,
+      "S-conc",
+      ($Γ ⊢ ρ₁: "Row"$, $Γ ⊢ ρ₂: "Row"$),
+      $Γ ⊢ (ρ₁ | ρ₂): "Row"$,
     ),
     derive(
-      "T-let",
+      "S-scheme",
       (
-        $Γ ⊢ σ #h(3pt) "ok"$,
-        $∀τ₁. #h(0.3em) σ ≥ τ₁ ⟹ Γ ⊢ e₁: τ₁$,
-        $∃τ₁. #h(0.3em) σ ≥ τ₁$,
-        $Γ · (x: σ) ⊢ e₂: τ₂$,
+        $Γ · (macron(α): macron(κ)) ⊢ τ: "Type"$,
+        $∀⟨ρ.l ↓ δ⟩ ∈ Q. #h(0.3em) Γ · (macron(α): macron(κ)) ⊢ ρ: "Row" and (macron(α): macron(κ)) ⊢ δ: "Type"$,
       ),
-      $Γ ⊢ #b[let] x = e₁ #b[in] e₂: τ₂$,
+      $Γ ⊢ (∀(macron(α): macron(κ)). Q ⇒ τ) #h(3pt) "ok"$,
     ),
-    derive("T-sel", ($Γ ⊢ e: {ρ}$, $ρ.l ↓ τ$), $Γ ⊢ e.l: τ$),
-    derive("T-sel-★", ($Γ ⊢ e: {ρ}$, $ρ.l ↓ #h(0.2em) ?$), $Γ ⊢ e.l: ★$),
-    derive("T-sel-⊥", ($Γ ⊢ e: {ρ}$, $ρ.l ↓ ⊥$), $Γ ⊢ e.l: ★$),
-    derive("T-★-intro", ($Γ ⊢ e: τ$,), $Γ ⊢ e: ★$),
   ),
 )
-#declarative <declarative-rules>
+#sorting <sorting>
 
-@declarative-rules gives the typing rules. T-cons types each constant at its designated base type $b_c$ and T-var reads a type from the type environment, possibly instantiating type schemes using the instantiation relation from @instantiation. T-eq relates two types under row equivalence @row-equivalence and the two T-λ-∗ rules introduce and eliminate functions. T-rec, T-ξ-empty and T-ξ-field type record literals field by field and T-conc combines them; the concatenation of record bodies is handled equally by T-ξ-conc.
-
-T-let differs from Hindley-Milner, because its schemes may carry stumps. Instead of generalizing a type of e₁, it binds x to a scheme σ and constrains σ by three premises. The first premise $Γ ⊢ σ "ok"$ guarantees well-sortedness using the sorting rules @sorting. The second premise ensures that every instance of σ is a typing of e₁, so x may be used at any of them. We call this _instance-closed_. The third makes σ _inhabited_, meaning it has at least one instance. Without inhabitation, [`let x = (3 4) in 5`](evaluates to 5 lule) would get a type while being stuck and it can be uninhabited when two different definitions for δ exist. The last premise types e₂ with x bound to σ.
-
-Our record calculus admits three lookup rules (T-sel, T-sel-★ and T-sel-⊥) for the three possible outcomes of the lookup judgement. T-sel is standard and selects a definite type but T-sel-★ and T-sel-⊥ are new. [Nix is a lazy language and a faulty record lookup might never be evaluated.](cbv-semantic) This is why T-sel-⊥ types a definitely failing lookup at ★ which might seem nonsensical at first. T-sel-★ is the sensible version that types an unknown lookup result at the unknown type. Finally, T-★-intro blurs any concrete type into the unknown.
-
-
-// #example(name: [Two ways to type a selection at ★])[
-//   The selection `{}.l` has type ★ by T-sel-⊥, since $ε.l ↓ ⊥$, and it evaluates to a lookup error by ↯-sel. In a context with $β: "Row"$, the selector `x: x.l` has type ${β} → ★$ by T-sel-★, since $β.l ↓ #h(0.2em) ?$. Applied to `{l = c}` it evaluates to c, applied to `{}` to a lookup error. Both selections receive ★, but T-sel-⊥ marks a selection that fails whenever it is evaluated, while T-sel-★ marks one whose outcome the row does not yet determine.
-// ] <ex-sel-star>
+@sorting gives the sorting rules of our calculus. We only differentiate between `Type` and `Row`. Sorts are needed only for variables: every other type or row is recognisable by its form, but a variable can stand for either, so Γ records its sort. The first two rules sort the base, S-var the variables and S-fn types functions by recursing into the domain and codomain. S-rcd shows how a row constitutes a type by placing it between braces, S-ρ-var is the equivalent of S-var for rows and S-ε, S-field and S-conc sort rows. S-scheme guarantees well-formedness of type schemes with two premises: The first fixes the parameters' sorts and the second premise fixes the sorts in stumps. The result δ of a stump is sorted under the parameters $macron(α)$ alone, so it mentions no variable of Γ. First-class labels add a `Label` sort and change nothing else about the discipline (@sec-fc-labels).
 
 
 == Row Lookup
@@ -162,42 +143,6 @@ A definite derivation never uses L-var, so no substitution can change its result
 The order of fields in a record carries no meaning: the records `{ a = 1; b = 2; }` and `{ b = 2; a = 1; }` behave identically, so their rows $(a: τ | b: τ′)$ and $(b: τ′ | a: τ)$ should be equivalent. Row equivalence ≈ permits this by allowing shadowing-preserving reordering of fields using controlled swaps of fields. @row-equivalence defines ≈ as the least congruence that makes concatenation associative with unit ε and that swaps adjacent fields with distinct labels (≈-comm). The base types, ★ and type variables are equivalent only to themselves, and ≈ is a congruence below records and arrows (≈-rcd and ≈-fn). ≈-ext handles singular fields and ≈-conc the concatenation of two rows.
 
 
-== Sorts
-#let sorting = figure(
-  caption: "Sorting.",
-  flexbox(
-    derive("S-base", (), $Γ ⊢ 𝓫: "Type"$),
-    derive("S-★", (), $Γ ⊢ ★: "Type"$),
-    derive("S-var", ($α: "Type" ∈ Γ$,), $Γ ⊢ α: "Type"$),
-    derive(
-      "S-fn",
-      ($Γ ⊢ τ₁: "Type"$, $Γ ⊢ τ₂: "Type"$),
-      $Γ ⊢ τ₁ -> τ₂: "Type"$,
-    ),
-    derive("S-rcd", ($Γ ⊢ ρ: "Row"$,), $Γ ⊢ {ρ}: "Type"$),
-    derive("S-ρ-var", ($α: "Row" ∈ Γ$,), $Γ ⊢ α: "Row"$),
-    derive("S-ε", (), $Γ ⊢ ε: "Row"$),
-    derive("S-field", ($Γ ⊢ τ: "Type"$,), $Γ ⊢ (l: τ): "Row"$),
-    derive(
-      "S-conc",
-      ($Γ ⊢ ρ₁: "Row"$, $Γ ⊢ ρ₂: "Row"$),
-      $Γ ⊢ (ρ₁ | ρ₂): "Row"$,
-    ),
-    derive(
-      "S-scheme",
-      (
-        $Γ · (macron(α): macron(κ)) ⊢ τ: "Type"$,
-        $∀⟨ρ.l ↓ δ⟩ ∈ Q. #h(0.3em) Γ · (macron(α): macron(κ)) ⊢ ρ: "Row" and (macron(α): macron(κ)) ⊢ δ: "Type"$,
-      ),
-      $Γ ⊢ (∀(macron(α): macron(κ)). Q ⇒ τ) #h(3pt) "ok"$,
-    ),
-  ),
-)
-#sorting <sorting>
-
-@sorting gives the sorting rules of our calculus. We only differentiate between `Type` and `Row`. Sorts are needed only for variables: every other type or row is recognisable by its form, but a variable can stand for either, so Γ records its sort. The first two rules sort the base, S-var the variables and S-fn types functions by recursing into the domain and codomain. S-rcd shows how a row constitutes a type by placing it between braces, S-ρ-var is the equivalent of S-var for rows and S-ε, S-field and S-conc sort rows. S-scheme guarantees well-formedness of type schemes with two premises: The first fixes the parameters' sorts and the second premise fixes the sorts in stumps. The result δ of a stump is sorted under the parameters $macron(α)$ alone, so it mentions no variable of Γ. First-class labels add a `Label` sort and change nothing else about the discipline (@sec-fc-labels).
-
-
 == Qualified Schemes <qualified-schemes>
 #let instantiation = figure(
   caption: "Instantiation.",
@@ -231,6 +176,62 @@ Without stumps (Q = ε), our instantiation is plain Hindley-Milner instantiation
 #example(name: [An uninhabited scheme])[
   The scheme $∀(δ: "Type"). ⟨(l: 𝓫).l ↓ δ⟩, ⟨ε.l ↓ δ⟩ ⇒ δ$ is well-sorted but has no instance. The first stump hits, so D-hit demands $θ δ ≈ 𝓫$. The second misses, so D-⊥ demands $θ δ = ★$. Since ★ is equivalent only to itself, no θ satisfies both.
 ] <ex-uninhabited>
+
+
+== Typing Rules
+#let declarative = figure(
+  caption: "Declarative typing rules.",
+  flexbox(
+    derive("T-cons", (), $Γ ⊢ c: 𝓫_c$),
+    derive("T-var", ($x: σ ∈ Γ$, $σ ≥ τ$), $Γ ⊢ x: τ$),
+    derive("T-eq", ($Γ ⊢ e: τ₁$, $τ₁ ≈ τ₂$), $Γ ⊢ e: τ₂$),
+    derive(
+      "T-λ-I",
+      ($Γ ⊢ τ₁: "Type"$, $Γ · (x: τ₁) ⊢ e: τ₂$),
+      $Γ ⊢ (x: e): τ₁ -> τ₂$,
+    ),
+    derive("T-λ-E", ($Γ ⊢ e₁: τ₁ -> τ₂$, $Γ ⊢ e₂: τ₁$), $Γ ⊢ e₁e₂: τ₂$),
+    derive("T-rec", ($Γ ⊢ ξ: ρ$,), $Γ ⊢ { ξ }: { ρ }$),
+    derive("T-ξ-empty", (), $Γ ⊢ ε: ε$),
+    derive("T-ξ-field", ($Γ ⊢ e: τ$,), $Γ ⊢ (l = e): (l: τ)$),
+    derive(
+      "T-conc",
+      ($Γ ⊢ e₁: {ρ₁}$, $Γ ⊢ e₂: {ρ₂}$),
+      $Γ ⊢ e₁ ‖ e₂: { ρ₂ | ρ₁ }$,
+    ),
+    derive(
+      "T-ξ-conc",
+      ($Γ ⊢ ξ₁: ρ₁$, $Γ ⊢ ξ₂: ρ₂$),
+      $Γ ⊢ (ξ₁ | ξ₂): (ρ₁ | ρ₂)$,
+    ),
+    derive(
+      "T-let",
+      (
+        $Γ ⊢ σ #h(3pt) "ok"$,
+        $∀τ₁. #h(0.3em) σ ≥ τ₁ ⟹ Γ ⊢ e₁: τ₁$,
+        $∃τ₁. #h(0.3em) σ ≥ τ₁$,
+        $Γ · (x: σ) ⊢ e₂: τ₂$,
+      ),
+      $Γ ⊢ #b[let] x = e₁ #b[in] e₂: τ₂$,
+    ),
+    derive("T-sel", ($Γ ⊢ e: {ρ}$, $ρ.l ↓ τ$), $Γ ⊢ e.l: τ$),
+    derive("T-sel-★", ($Γ ⊢ e: {ρ}$, $ρ.l ↓ #h(0.2em) ?$), $Γ ⊢ e.l: ★$),
+    derive("T-sel-⊥", ($Γ ⊢ e: {ρ}$, $ρ.l ↓ ⊥$), $Γ ⊢ e.l: ★$),
+    derive("T-★-intro", ($Γ ⊢ e: τ$,), $Γ ⊢ e: ★$),
+  ),
+)
+#declarative <declarative-rules>
+
+@declarative-rules gives the typing rules. T-cons types each constant at its designated base type $b_c$ and T-var reads a type from the type environment, possibly instantiating type schemes using the instantiation relation from @instantiation. T-eq relates two types under row equivalence @row-equivalence and the two T-λ-∗ rules introduce and eliminate functions. T-rec, T-ξ-empty and T-ξ-field type record literals field by field and T-conc combines them; the concatenation of record bodies is handled equally by T-ξ-conc.
+
+T-let differs from Hindley-Milner, because its schemes may carry stumps. Instead of generalizing a type of e₁, it binds x to a scheme σ and constrains σ by three premises. The first premise $Γ ⊢ σ "ok"$ guarantees well-sortedness using the sorting rules @sorting. The second premise ensures that every instance of σ is a typing of e₁, so x may be used at any of them. We call this _instance-closed_. The third makes σ _inhabited_, meaning it has at least one instance. Without inhabitation, [`let x = (3 4) in 5`](evaluates to 5 lule) would get a type while being stuck and it can be uninhabited when two different definitions for δ exist. The last premise types e₂ with x bound to σ.
+
+Our record calculus admits three lookup rules (T-sel, T-sel-★ and T-sel-⊥) for the three possible outcomes of the lookup judgement. T-sel is standard and selects a definite type but T-sel-★ and T-sel-⊥ are new. [Nix is a lazy language and a faulty record lookup might never be evaluated.](cbv-semantic) This is why T-sel-⊥ types a definitely failing lookup at ★ which might seem nonsensical at first. T-sel-★ is the sensible version that types an unknown lookup result at the unknown type. Finally, T-★-intro blurs any concrete type into the unknown.
+
+
+// #example(name: [Two ways to type a selection at ★])[
+//   The selection `{}.l` has type ★ by T-sel-⊥, since $ε.l ↓ ⊥$, and it evaluates to a lookup error by ↯-sel. In a context with $β: "Row"$, the selector `x: x.l` has type ${β} → ★$ by T-sel-★, since $β.l ↓ #h(0.2em) ?$. Applied to `{l = c}` it evaluates to c, applied to `{}` to a lookup error. Both selections receive ★, but T-sel-⊥ marks a selection that fails whenever it is evaluated, while T-sel-★ marks one whose outcome the row does not yet determine.
+// ] <ex-sel-star>
 
 
 == Operational Semantics
