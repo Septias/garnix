@@ -19,6 +19,8 @@
 - *Parked stump*: A stump in the solver state, ⟨α ⊳ ρ.l ↓ δ⟩, filed under its blocker α
 - *Blocker*: The variable a parked stump waits on: a row or label variable
 - *Pending lookup*: Informal word for a stump; only in the introduction, the overview, the conclusion and the definition of stumps
+- *Stale*: A parked stump whose lookup is no longer ? on its recorded blocker
+- *Quiescent*: A solver state with no stale stump
 - *Wake-up*: Re-running a stump's lookup when unification solves its blocker
 - *Instance-Closed T-let*: ∀ τ₁ ≤ σ. Γ ⊢ e₁: τ₁
 - *↯*: Lookup error;  residual-risk disjunct of progress
