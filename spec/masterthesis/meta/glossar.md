@@ -22,8 +22,7 @@
 - *Wake-up*: Re-running a stump's lookup when unification solves its blocker
 - *Instance-Closed T-let*: ∀ τ₁ ≤ σ. Γ ⊢ e₁: τ₁
 - *↯*: Lookup error;  residual-risk disjunct of progress
-- *Stuck*: Verdict of ≐ᵣ when no move applies. Conservative: the problem may still have an mgu (`stuck_masks_mgu`). The Wand equation is the prime example
-
+- *Stuck*: Verdict of ≐ᵣ when no move applies. Is conversative.
 
 ## Scheme
 - *Qualified Scheme*: A scheme carrying its pending lookups as constraints
@@ -39,8 +38,9 @@
 
 
 ## Misc
-- *Wand ambiguity*: The lookup in `a: b: (a ‖ b).l`: it answers ? because the field may come from either operand. Handled by stumps
-- *Wand equation*: (α₁ | … | αₙ) ≐ᵣ (l: 𝓫) with n ≥ 2: it has unifiers but no mgu and is reported stuck. Never called "Wand ambiguity"
+- *Wand ambiguity*: The lookup in `a: b: (a ‖ b).l`: it answers ? because the field may come from either operand. Handled by stumps. Use when not generalized.
+- *Wand equation*: (α₁ | … | αₙ) ≐ᵣ (l: 𝓫) with n ≥ 2: it has unifiers but no mgu and is reported stuck.
+- *Forced move*: A move of row unification that preserves the set of unifiers on the variables of the problem
 - *Soft typing*: Programs keep their untyped semantics; ★ marks where the analysis gave up, warnings say why
 - *Key*: A label l or a label variable α
 - *Keyed field*: A row field ${k}: τ whose label is a key
