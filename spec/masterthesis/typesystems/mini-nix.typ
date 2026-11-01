@@ -116,7 +116,7 @@ x: σ ∈ Γ   σ ≥ τ
 Γ ⊢ e₁e₂: τ₂
 
 
-Γ ⊢ σ ok   (∀ τ₁. σ ≥ τ₁ ⟹ Γ ⊢ e₁: τ₁)   (∃ τ₁. σ ≥ τ₁)   Γ·(x: σ) ⊢ e₂: τ₂
+Γ ⊢ σ ok   (∀ τ₁. σ ≥ τ₁ ⟹ Γ ⊢ e₁: τ₁)   Γ·(x: σ) ⊢ e₂: τ₂
 ------------------------------------------------------------------------------------ T-let
 Γ ⊢ let x = e₁ in e₂: τ₂
 
@@ -525,7 +525,7 @@ fresh α: Type   Γ·(x: α); S ⊢ e ⇒ τ; S′
 
 
 Γ; S ⊢ e₁ ⇒ τ₁; S₀   S₀ ⊢ Δ₀ ⇝ₘ\* S₁   κ̄ = S₁(ᾱ)   Δ₁ ~ Δ_q ⊎ Δ_Γ   ᾱ ∩ ftv(⟦S₁⟧(Γ, Δ_Γ)) = ∅
-Δ_q ∩ Δ = ∅   ftv(⟦S₁⟧results(Δ_q)) ⊆ ᾱ   Δ_q fillable at S₁
+Δ_q ∩ Δ = ∅   ftv(⟦S₁⟧results(Δ_q)) ⊆ ᾱ
 Γ·(x: ∀(ᾱ: κ̄). ⟦S₁⟧Δ_q ⇒ ⟦S₁⟧τ₁); S₁ ∖ Δ_q ⊢ e₂ ⇒ τ₂; S₂
 --------------------------------------------------------------------------------------------- A-let
 Γ; S ⊢ let x = e₁ in e₂ ⇒ τ₂; S₂
@@ -551,12 +551,14 @@ fresh α: Type   Γ·(x: α); S ⊢ e ⇒ τ; S′
 //   generalized variables, or each instance would pin a variable of the
 //   environment. Reading at S₁, not raw, accepts `let h = λy. g y`, where A-app
 //   aliases δ ≔ β
-// - Δ_q fillable at S₁ (`spent`, `LetSpent`): a SPENT result must be met at some
-//   instance (T-let's ∃ τ₁), by extending its blocker with the field (the
+// - Inhabitation is no condition of A-let: T-let has no ∃ τ₁, since `let` is lazy.
+//   The entry tests it (`LetSpent`): a SPENT result must be met at some
+//   instance, by extending its blocker with the field (the
 //   witness, `LetResults.inhabited`). Every spent stump and every stump on its
 //   blocker has a literal key or a key variable of ᾱ other than the blocker,
 //   which the witness reads as the label ${κ}; a stump on that blocker with the
-//   same field name is spent alike (equal once type variables are ★); no stump
+//   same field name is spent alike (equal up to ε and associativity once type
+//   variables are ★); no stump
 //   of Δ_q waits on a key variable of a filled blocker; no spent blocker occurs
 //   in a spent result. Nested selection `λx. (x.l).m` passes
 //
@@ -649,7 +651,7 @@ Toplevel (⊢ e ⇒ σ)
 -------------------------------------------------------------------------- Entry
 ⊢ e ⇒ ∀ᾱ. ⟦S₂⟧Δ₂ ⇒ ⟦S₂⟧τ          ᾱ = ftv(⟦S₂⟧τ, ⟦S₂⟧Δ₂)
 // The top level generalizes like A-let with Γ = ∅: everything is bound, Δ_Γ is
-// empty, and of A-let's premises only LetSpent is left (the inhabitation test).
+// empty, and A-let's conditions hold. It adds LetSpent (the inhabitation test).
 // Nothing is decided: a stump still ? is a constraint, D-? is the instance that
 // reads it as ★, and a spent stump keeps its constraint (the old F-hit answer is
 // the fill instance). `runSound`: every instance types e, and σ has one.
@@ -1013,7 +1015,7 @@ fresh κ: Label   S₃ ⊢ τ₂ ≐ ⌊κ⌋ ⇝! S₄   (⟦S₄⟧r).(⟦S₄
   the stumps blocked on it (λa. {foo = c, bar = ε}.(a) applied to 'foo hits)
 - A spent stump with a variable key is kept in the answer; the witness guesses
   the key (G-solve), so `r: a: (r.${a}) c` answers ⟨ρ.(κ) ↓ 𝓫 → β⟩ ⇒ {ρ} → ⌊κ⌋ → β
-- A-let: a generalized spent stump must be fillable: keyed by a label or by a
+- Entry: a spent stump must be fillable: keyed by a label or by a
   variable κ of ᾱ other than its blocker, with a blocker that is not a label
   variable of its row. The witness reads κ as the label \${κ}, so no stump may
   wait on a key of a filled blocker, and stumps on one blocker whose field names
