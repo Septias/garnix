@@ -3,8 +3,11 @@
 
 = The Declarative Calculus <declarative>
 
-This section discusses MiniNix's declarative calculus. We start by giving the syntax of terms and types and show the typing rules up-front. They are mostly standard and we discuss their specialties in the following sections.
+Next, we show MiniNix, our declarative calculus. @syntax gives the syntax of terms and types. A term can be a constacnt $c$ from a set of constants $𝓒$, a variables $x$, a function definition $(x: e)$, or function eliminition $e₁e₂$. We extend the λ-calculus with records and their operations: A record ${ξ}$ consists of a record body $ξ$ between braces and we add the two operations lookups $e.l$ and record concatenation $(e₁ ‖ e₂)$. We use standart let-bindings without multiple definitions and their recursion behaviour of NixLang to simplify the presentation.
 
+The syntax of types follows. Type variables $α ∈ 𝓐$ are standard and we assume a finite set 𝓑 of base types $𝓫$, together with a total mapping $c ↦ 𝓫_c$ that assigns each constant its base type.The unknown type ★  sits at the top of the type hirarchy and types definitely absent fields. A record type ${ρ}$ is similar to a syntactic record ${ξ}$ since both are formed as inductive trees from an empty base, the binding of a single label and concatenation. A record type also allows row variables $α$ as element, so two sorts `Type` and `Row` are needed to distinguish between type- and row-variables.
+
+Finally, we add a polymorphic type $σ$ that quantifies over monotypes and rows and hosts a set $Q$ of constraints. Each constraint hosts a pending lookup and we call it a _stump_. A _stump_ is the first ingredient of our approach and is used to describe lookups. A  _stump_ ⟨ρ.l ↓ δ⟩ consists of the lookup label $l$ and the row $ρ$ on which the lookup got stuck. The type variable $δ$ is a placeholder for the type the lookup will eventually turn into (if successfull).
 
 #let syntax = figure(
   caption: "The syntax of MiniNix.",
@@ -13,12 +16,13 @@ This section discusses MiniNix's declarative calculus. We start by giving the sy
     align(center, flexbox(
       $#type_name("Labels") l ∈ 𝓛$,
       $#type_name("Variables") x ∈ 𝓧$,
+      $#type_name("Typ and Row Variables") α ∈ 𝓐$,
       $#type_name("Base types") 𝓫 ∈ 𝓑$,
       $#type_name("Constants") c ∈ 𝓒$,
     )),
     subbox(caption: "Terms")[
       $
-        #type_name("Term") e & ::= c | x | (x: e) | e₁e₂ | (e₁ ‖ e₂) | e.l | { ξ } | #b[let] x = e₁ #b[in] e₂ \
+        #type_name("Term") e & ::= c | x | (x: e) | e₁e₂ | { ξ } | (e₁ ‖ e₂) | e.l | #b[let] x = e₁ #b[in] e₂ \
         #type_name("Record Body") ξ & ::= ε | l = e | (ξ₁ | ξ₂) \
       $
     ],
@@ -35,9 +39,6 @@ This section discusses MiniNix's declarative calculus. We start by giving the sy
 )
 #syntax <syntax>
 
-@syntax gives the syntax of terms and types. We extend the standard λ-calculus with records ${ξ}$, asymmetric concatenation $(e₁ ‖ e₂)$ and let-polymorphism. Functions are written $(x: e)$ to mirror the syntax of NixLang and we assume a set 𝓒 of constants $c$ and a finite set 𝓑 of base types $𝓫$, together with a total mapping $c ↦ 𝓫_c$ that assigns each constant its base type. The unknown type ★ types expressions the analysis cannot decide. Record literals ${ξ}$ and record types ${ρ}$ are similar in their structure: Both are formed as inductive trees from an empty base, the binding of a single label and concatenation. MiniNix has two sorts Type and Row which will be explained in @sorting.
-
-// Explain the usage of stumps here?
 
 == Typing Rules
 #let declarative = figure(
@@ -83,15 +84,16 @@ This section discusses MiniNix's declarative calculus. We start by giving the sy
 )
 #declarative <declarative-rules>
 
-The typing rules extend the Hindley-Milner system @damas_milner with records, concatenation and the unknown type ★. T-cons types each constant at its designated base type $b_c$ and T-var takes a type from the type environment, possibly instantiating type schemes using the instantiation relation from @instantiation. T-eq relates two types under row equivalence @row-equivalence and the two T-λ-∗ rules introduce and eliminate functions. T-rec, T-ξ-empty and T-ξ-field type record literals field by field and T-conc combines them; the concatenation of record bodies is handled equally by T-ξ-conc.
+@declarative-rules gives the typing rules. T-cons types each constant at its designated base type $b_c$ and T-var reads a type from the type environment, possibly instantiating type schemes using the instantiation relation from @instantiation. T-eq relates two types under row equivalence @row-equivalence and the two T-λ-∗ rules introduce and eliminate functions. T-rec, T-ξ-empty and T-ξ-field type record literals field by field and T-conc combines them; the concatenation of record bodies is handled equally by T-ξ-conc.
 
 T-let differs from Hindley-Milner, because its schemes may carry stumps. Instead of generalizing a type of e₁, it binds x to a scheme σ and constrains σ by three premises. The first premise $Γ ⊢ σ "ok"$ guarantees well-sortedness using the sorting rules @sorting. The second premise ensures that every instance of σ is a typing of e₁, so x may be used at any of them. We call this _instance-closed_. The third makes σ _inhabited_, meaning it has at least one instance. Without inhabitation, [`let x = (3 4) in 5`](evaluates to 5 lule) would get a type while being stuck and it can be uninhabited when two different definitions for δ exist. The last premise types e₂ with x bound to σ.
 
-Our record calculus admits three lookup rules (T-sel, T-sel-★ and T-sel-⊥) for the three possible outcomes of the lookup judgement. T-sel is standard and selects a definite type but T-sel-★ and T-sel-⊥ are new. [Nix is a lazy language and a faulty record lookup might never be evaluated.](cbv-semantic) This is why T-sel-⊥ types a definitely failing lookup at ★ which might seem nonsensical at first. T-sel-★ is the sensible version that types an unknown lookup result at the unknown type. Finally, T-★-intro blurs any concrete type into the unknown. // such that it acts as a top type?
+Our record calculus admits three lookup rules (T-sel, T-sel-★ and T-sel-⊥) for the three possible outcomes of the lookup judgement. T-sel is standard and selects a definite type but T-sel-★ and T-sel-⊥ are new. [Nix is a lazy language and a faulty record lookup might never be evaluated.](cbv-semantic) This is why T-sel-⊥ types a definitely failing lookup at ★ which might seem nonsensical at first. T-sel-★ is the sensible version that types an unknown lookup result at the unknown type. Finally, T-★-intro blurs any concrete type into the unknown.
 
-#example(name: [Two ways to type a selection at ★])[
-  The selection `{}.l` has type ★ by T-sel-⊥, since $ε.l ↓ ⊥$, and it evaluates to a lookup error by ↯-sel. In a context with $β: "Row"$, the selector `x: x.l` has type ${β} → ★$ by T-sel-★, since $β.l ↓ #h(0.2em) ?$. Applied to `{l = c}` it evaluates to c, applied to `{}` to a lookup error. Both selections receive ★, but T-sel-⊥ marks a selection that fails whenever it is evaluated, while T-sel-★ marks one whose outcome the row does not yet determine.
-] <ex-sel-star>
+
+// #example(name: [Two ways to type a selection at ★])[
+//   The selection `{}.l` has type ★ by T-sel-⊥, since $ε.l ↓ ⊥$, and it evaluates to a lookup error by ↯-sel. In a context with $β: "Row"$, the selector `x: x.l` has type ${β} → ★$ by T-sel-★, since $β.l ↓ #h(0.2em) ?$. Applied to `{l = c}` it evaluates to c, applied to `{}` to a lookup error. Both selections receive ★, but T-sel-⊥ marks a selection that fails whenever it is evaluated, while T-sel-★ marks one whose outcome the row does not yet determine.
+// ] <ex-sel-star>
 
 
 == Row Lookup
@@ -197,9 +199,6 @@ The order of fields in a record carries no meaning: the records `{ a = 1; b = 2;
 
 
 == Qualified Schemes <qualified-schemes>
-// move this up?
-Polymorphism is stratified into a scheme σ that quantifies only over monotypes and rows to keep instantiation predicative and inference decidable. We depart from standard Hindley-Milner schemes by using constraints: Every scheme is _qualified_ by a list Q of pending lookups ⟨ρ.l ↓ δ⟩ called _stumps_. A stump ⟨ρ.l ↓ δ⟩ names the result of the lookup by δ, which mentions only quantified variables of the scheme and is usually one of them.
-
 #let instantiation = figure(
   caption: "Instantiation.",
   flexbox(
@@ -227,7 +226,6 @@ Polymorphism is stratified into a scheme σ that quantifies only over monotypes 
   - $θ = [β ≔ ε, δ ≔ {ε}]$ violates D-⊥, which demands $θ δ = ★$. Hence ${ε} → {ε}$ is not an instance, although it is an instance of the plain scheme $∀(β: "Row", δ: "Type"). {β} → δ$.
 ] <ex-selq-inst>
 
-// Now this reasoning lives in two places, here and during rule-explanation
 Without stumps (Q = ε), our instantiation is plain Hindley-Milner instantiation, but with qualified schemes, a scheme can be uninhabited because two stumps may pin the same δ to different verdicts. This is why T-let demands inhabitation explicitly.
 
 #example(name: [An uninhabited scheme])[
