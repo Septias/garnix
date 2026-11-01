@@ -1,5 +1,106 @@
 #import "../functions.typ": *
 #import "../figures/nix-parity.typ": nix-parity
+#import "04_unification.typ": u_clash, u_occurs, u_stuck
+
+= Row Unification Rules <app-row-rules>
+
+@unification-row states the moves as rules. The order is fixed by @unification-cascade. Every move except the two cancel moves and U-stuck is tried in both directions.
+
+#let unification_row = figure(
+  caption: "Unification of rows, on spines.",
+  stack(
+    spacing: 15pt,
+    align(center, flexbox(
+      $#type_name("Leading window") "win"_l (s) = (τ, s′)$,
+      $#type_name("Trailing window") "win"^R_l (s) = (τ, s′)$,
+      $#type_name("Anywhere") "rem"_l (s) = (τ, s′)$,
+      $#type_name("Sole host") "host"_l (τ, t, s) = β$,
+    )),
+    flexbox(
+      derive(
+        "U-ε-var",
+        ($s$ + [ field-free], $"vars"(s) = overline(β)$),
+        $⟨⟩ scripts(≐)_r s ⇝ [overline(β) ≔ ε]$,
+      ),
+      derive("U-ε-clash", ($(l: τ) ∈ s$,), $⟨⟩ scripts(≐)_r s ⇝ #u_clash$),
+      derive(
+        "U-cancel-L",
+        ($t₁ scripts(≐)_r t₂ ⇝ θ$,),
+        $α · t₁ scripts(≐)_r α · t₂ ⇝ θ$,
+      ),
+      derive(
+        "U-cancel-R",
+        ($t₁ scripts(≐)_r t₂ ⇝ θ$,),
+        $t₁ · α scripts(≐)_r t₂ · α ⇝ θ$,
+      ),
+      derive(
+        "U-var-collapse",
+        (
+          $s$ + [ field-free],
+          $α ∈ "vars"(s)$,
+          $overline(β) = cases("vars"(s) ∖ α & "if" α "occurs once in" s, "vars"(s) & "otherwise")$,
+        ),
+        $α scripts(≐)_r s ⇝ [overline(β) ≔ ε]$,
+      ),
+      derive("U-var-solve", ($α ∉ "rv"(s)$,), $α scripts(≐)_r s ⇝ [α ≔ s]$),
+      derive(
+        "U-var-occurs",
+        ($α ∈ "rv"(s)$,),
+        $α scripts(≐)_r s ⇝ #u_occurs$,
+      ),
+      derive(
+        "U-field-L",
+        (
+          $"win"_l (s₂) = (τ′, t₂)$,
+          $τ ≐ τ′ ⇝ θ$,
+          $θ t₁ scripts(≐)_r θ t₂ ⇝ θ′$,
+        ),
+        $(l: τ) · t₁ scripts(≐)_r s₂ ⇝ θ′ ∘ θ$,
+      ),
+      derive(
+        "U-field-R",
+        (
+          $"win"^R_l (s₂) = (τ′, t₂)$,
+          $τ ≐ τ′ ⇝ θ$,
+          $θ t₁ scripts(≐)_r θ t₂ ⇝ θ′$,
+        ),
+        $t₁ · (l: τ) scripts(≐)_r s₂ ⇝ θ′ ∘ θ$,
+      ),
+      derive(
+        "U-ground",
+        (
+          $"vars"(s₂) = ⟨⟩$,
+          $|s₁|_l = |s₂|_l > 0$,
+          $"rem"_l (s_i) = (τ_i, t_i)$,
+          $τ₁ ≐ τ₂ ⇝ θ$,
+          $θ t₁ scripts(≐)_r θ t₂ ⇝ θ′$,
+        ),
+        $s₁ scripts(≐)_r s₂ ⇝ θ′ ∘ θ$,
+      ),
+      derive(
+        "U-row-clash",
+        ($|s₁|_l > |s₂|_l$, $"vars"(s₂) = ⟨⟩$),
+        $s₁ scripts(≐)_r s₂ ⇝ #u_clash$,
+      ),
+      derive(
+        "U-host",
+        (
+          $"host"_l (τ, t₁, s₂) = β$,
+          $β′ "fresh"$,
+          $t₁ scripts(≐)_r s₂[β′\/β] ⇝ θ$,
+        ),
+        $(l: τ) · t₁ scripts(≐)_r s₂ ⇝ θ ∘ [β ≔ (l: τ | β′)]$,
+      ),
+      derive(
+        "U-stuck",
+        ([no rule above applies],),
+        $s₁ scripts(≐)_r s₂ ⇝ #u_stuck$,
+      ),
+    ),
+  ),
+)
+#unification_row <unification-row>
+
 
 = MacroNix <app-macronix>
 
