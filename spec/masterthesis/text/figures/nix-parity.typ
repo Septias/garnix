@@ -35,7 +35,7 @@
     np-f[Nested keys `a.b.c = v`], np-p, np-r[desugared to nested records],
     np-f[Update `a // b`], np-y, np-r[asymmetric concatenation ‖],
     np-f[Dynamic keys `${e}`], np-y, np-r[first-class labels; string-typed keys answer ★],
-    np-f[`e.l or d`], np-p, np-r[derived as `(e ‖ {l = d}).l`; clashes on a non-record `e`],
+    np-f[`e.l or d`], np-p, np-r[derived as `({l = d} ‖ e).l`; clashes on a non-record `e`],
     np-f[`e ? l`], np-p, np-r[literal label only; refines nothing],
     np-f[`e ? a.b`], np-p, np-r[literal path desugared to nested `?` and `&&`; dynamic segments not in place],
     np-f[`inherit`, `inherit (e)`], np-p, np-r[desugared to bindings and selections],
