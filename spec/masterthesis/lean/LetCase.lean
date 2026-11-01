@@ -1,6 +1,6 @@
 -- THE A-let CASE, AND WITH IT `InferSound`.
 --
--- qLet asks for three things, and each has its own argument:
+-- qLet asks for two things, and each has its own argument:
 --
 --   * the BODY — e₂'s induction hypothesis at the same σ, in Γ′ extended by the
 --     let scheme READ under σ (binders renamed fresh, `SchemeRead`);
@@ -8,11 +8,13 @@
 --     at χ, assuming the constraints at χ. This is generalization: e₁'s
 --     induction hypothesis at σ₁ = (χ ∘ readSub) ∘ ⟦S₁⟧, which is the instance on
 --     ᾱ and agrees with σ everywhere Γ and Δ_Γ can see — exactly, because σ
---     ABSORBS ⟦S₁⟧ and the binder names are fresh for σ's reach;
---   * INHABITATION — one instance whose constraints discharge exactly: every
---     generalized stump is blocked on a generalized row variable, so with the
---     binders left in place each lookup is `?`, and sending every result
---     variable to ★ is D-? for all of them at once.
+--     ABSORBS ⟦S₁⟧ and the binder names are fresh for σ's reach.
+--
+-- `LetResults.inhabited` is the entry's business (`top_inhabited`, RunSound.lean):
+-- one instance whose constraints discharge exactly. Every generalized stump is
+-- blocked on a generalized row variable, so with the binders left in place each
+-- lookup is `?`, and sending every result variable to ★ is D-? for all of them
+-- at once.
 
 import InferSoundA
 
@@ -592,20 +594,16 @@ theorem letCase {C : Type} {constTy : Sig B C} : LetCase B C constTy := by
   generalize hQ : letQ S₁ ᾱ = Δq at h₂ IH₂
   generalize hG : letG S₁ ᾱ = Δγ at h₂ IH₂
   have hsplit : S₁.parked.Perm (Δq ++ Δγ) := hQ ▸ hG ▸ letSplit S₁ ᾱ
-  have hbq : ∀ p ∈ Δq, p.blocker ∈ ᾱ := fun p hp => (mem_letQ.mp (hQ ▸ hp)).2
   have hfresh := hA.gfresh
   have hres : LetResults S₁ ᾱ Δq := hQ ▸ hA.results
   have hdis : ∀ α ∈ ᾱ, ∀ p ∈ Δγ, _ := fun α hα p hp => hA.dis α hα p (hG ▸ hp)
   -- the state e₁ ends in
   have c₀ := Infer.clean h₀ hc
   have c₁ := hm.clean c₀
-  have q₁ := hm.quiescent (Infer.quiescent h₀ hq)
   have k₂ := Infer.keeps h₂
   have x₁₂ : S₁.Ext S₂ := (SolverState.Ext.of_sol_eq (S := S₁)
     (S' := { S₁ with parked := Δγ }) rfl).trans (Infer.ext h₂)
   have hab₁ : Absorbs σ S₁ := hab.back x₁₂ c₁
-  have hΔq : ∀ p ∈ Δq, p ∈ S₁.parked := fun p hp => by
-    exact hsplit.mem_iff.mpr <| List.mem_append_left _ hp
   have hΔγ : ∀ p ∈ Δγ, p ∈ S₁.parked := fun p hp => by
     exact hsplit.mem_iff.mpr <| List.mem_append_right _ hp
   -- fresh binder names, avoiding everything σ can reach from what stays outside
@@ -627,7 +625,7 @@ theorem letCase {C : Type} {constTy : Sig B C} : LetCase B C constTy := by
   have hrdftv : ∀ p ∈ Δq, ((p.stump.res.applySubst S₁.subst).applySubst (readSub σ ᾱ f)).ftv
       = (p.stump.res.applySubst S₁.subst).ftv.map f :=
     fun p hp => Ty.ftv_rename _ (hrd p hp)
-  refine .qLet (σ := sc') ?_ ?_ ?_ (IH₂ σ hab hσ _ (hr.bindScheme x hread))
+  refine .qLet (σ := sc') ?_ ?_ (IH₂ σ hab hσ _ (hr.bindScheme x hread))
   · ------------------------------------------------ the read scheme is well-formed
     intro st hst δ hδ
     obtain ⟨st₀, hst₀, rfl⟩ := List.mem_map.mp hst
@@ -761,15 +759,6 @@ theorem letCase {C : Type} {constTy : Sig B C} : LetCase B C constTy := by
       rcases k₂ σ hσ p hp with ⟨q, hq', hqs⟩ | hd
       · exact .inl (List.mem_append_right _ (List.mem_map.mpr ⟨q, hq', by rw [hqs]⟩))
       · exact .inr (Stump.dischargeEquiv_iff_holds.mp hd)
-  · ------------------------------------------------ inhabitation
-    refine LetResults.inhabited τ₁ hres hbq (fun p hp => q₁ p (hΔq p hp)) σ f hinj
-      (fun p hp γ hγ _ β hβ => (havL γ ?_).2.2 β hβ)
-    -- a variable of p's row or key is one the fresh names avoid
-    rcases hγ with h | h
-    · exact List.mem_append_left _ (List.mem_append_left _ (List.mem_append_left _
-        (List.mem_flatMap.mpr ⟨_, List.mem_map.mpr ⟨p, hp, rfl⟩, List.mem_append_right _ h⟩)))
-    · exact List.mem_append_left _ (List.mem_append_left _ (List.mem_append_left _
-        (List.mem_flatMap.mpr ⟨_, List.mem_map.mpr ⟨p, hp, rfl⟩, List.mem_append_left _ h⟩)))
 
 --------------------- …AND THE STATEMENT ---------------------------------------
 

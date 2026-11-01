@@ -419,13 +419,11 @@ theorem qtyped_applySubst {B C : Type} {constTy : Sig B C}
       .qLam (qtyped_applySubst him h (hm.bindTy _ _))
   | _, _, _, _, .qApp h₁ h₂, hm =>
       .qApp (qtyped_applySubst him h₁ hm) (qtyped_applySubst him h₂ hm)
-  | _, _, _, _, .qLet (σ := σ₀) hwf hinst hinh hbody, hm => by
+  | _, _, _, _, .qLet (σ := σ₀) hwf hinst hbody, hm => by
       obtain ⟨σ₀', hwf', hc⟩ := him σ₀ hwf
-      refine .qLet (σ := σ₀') hwf' (fun τ₁' hi => ?_) ?_ ?_
+      refine .qLet (σ := σ₀') hwf' (fun τ₁' hi => ?_) ?_
       · obtain ⟨τ₁, hi₁, rfl⟩ := hc.2 _ hi
         exact qtyped_applySubst him (hinst τ₁ hi₁) hm
-      · obtain ⟨τ₁, hi₁⟩ := hinh
-        exact ⟨_, hc.1 _ hi₁⟩
       · exact qtyped_applySubst him hbody (hm.bindScheme _ hc)
   | _, _, _, _, .qCat h₁ h₂, hm =>
       .qCat (qtyped_applySubst him h₁ hm) (qtyped_applySubst him h₂ hm)

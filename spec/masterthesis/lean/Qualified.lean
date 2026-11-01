@@ -441,8 +441,7 @@ theorem QScheme.covered_mono {B : Type} {τ₁ : Ty B}
     exact h
 
 -- ⊴ IS BLIND TO VACUITY: a scheme with no Γ-instance sits below everything.
--- This is qLet's inhabitation premise seen from the order side — generality
--- alone cannot rule out a scheme that promises nothing, which is why
+-- Generality alone cannot rule out a scheme that promises nothing, which is why
 -- Principal (below) carries inhabitation as a separate conjunct.
 -- ⊢  (¬ ∃ τ. σ ≥ τ)  ⟹  σ ⊴ σ'     (for EVERY σ')
 theorem QScheme.coveredAt_of_uninhabited {B : Type}
@@ -579,14 +578,11 @@ mutual
     | qApp : QTyped constTy Γ e₁ (.fn τ₁ τ₂) → QTyped constTy Γ e₂ τ₁ →
              QTyped constTy Γ (.app e₁ e₂) τ₂
     -- ∀ τ₁ ≥ σ.  Γ ⊢ e₁ : τ₁     (instance-closed over DISCHARGED instances)
-    -- The INHABITATION premise makes e₁ have a typing. Safety does not need it:
-    -- `let` is lazy, so a binding that no instance lets e₂ use is never forced.
-    -- Plain schemes satisfy it by Scheme.Inst.self; the solver checks it at A-let
-    -- and at the entry (`LetSpent`, `LetResults.inhabited`: an unspent stump
-    -- discharges at ★, a spent one by filling its blocker).
+    -- With Q ≠ ∅ a scheme can have NO instance. The premise then says nothing
+    -- about e₁, but nothing can go wrong: T-var finds no instance for x, so e₂
+    -- does not mention x, and `let` is lazy, so e₁ is never forced.
     | qLet : σ.WF →
              (∀ τ₁, QScheme.Inst σ τ₁ → QTyped constTy Γ e₁ τ₁) →
-             (∃ τ₁, QScheme.Inst σ τ₁) →
              QTyped constTy (Γ.bindScheme x σ) e₂ τ₂ →
              QTyped constTy Γ (.letE x e₁ e₂) τ₂
     | qCat : QTyped constTy Γ e₁ (.rcd ρ₁) → QTyped constTy Γ e₂ (.rcd ρ₂) →
@@ -720,7 +716,7 @@ private theorem qtyped_inv_aux {B C : Type} {constTy : Sig B C} :
       ⟨(fun h => nomatch h), (fun h => nomatch h), (fun h => nomatch h)⟩
   | _, _, _, .qSelAbs _ _ =>
       ⟨(fun h => nomatch h), (fun h => nomatch h), (fun h => nomatch h)⟩
-  | _, _, _, .qLet _ _ _ _ =>
+  | _, _, _, .qLet _ _ _ =>
       ⟨(fun h => nomatch h), (fun h => nomatch h), (fun h => nomatch h)⟩
   | _, _, _, .qLab =>
       ⟨(fun h => nomatch h), (fun h => nomatch h), (fun h => nomatch h)⟩
@@ -785,7 +781,7 @@ private theorem qtyped_lab_inv_aux {B C : Type} {constTy : Sig B C} {l : Label} 
   | _, _, _, .qVar _ _, he => nomatch he
   | _, _, _, .qLam _, he => nomatch he
   | _, _, _, .qApp _ _, he => nomatch he
-  | _, _, _, .qLet _ _ _ _, he => nomatch he
+  | _, _, _, .qLet _ _ _, he => nomatch he
   | _, _, _, .qCat _ _, he => nomatch he
   | _, _, _, .qSel _ _, he => nomatch he
   | _, _, _, .qSelUnk _ _, he => nomatch he
@@ -819,7 +815,7 @@ private theorem qtyped_bool_inv_aux {B C : Type} {constTy : Sig B C} {b : Bool} 
   | _, _, _, .qVar _ _, he => nomatch he
   | _, _, _, .qLam _, he => nomatch he
   | _, _, _, .qApp _ _, he => nomatch he
-  | _, _, _, .qLet _ _ _ _, he => nomatch he
+  | _, _, _, .qLet _ _ _, he => nomatch he
   | _, _, _, .qCat _ _, he => nomatch he
   | _, _, _, .qSel _ _, he => nomatch he
   | _, _, _, .qSelUnk _ _, he => nomatch he
@@ -859,7 +855,7 @@ private theorem qtyped_nil_inv_aux {B C : Type} {constTy : Sig B C} :
   | _, _, _, .qVar _ _, he => nomatch he
   | _, _, _, .qLam _, he => nomatch he
   | _, _, _, .qApp _ _, he => nomatch he
-  | _, _, _, .qLet _ _ _ _, he => nomatch he
+  | _, _, _, .qLet _ _ _, he => nomatch he
   | _, _, _, .qCat _ _, he => nomatch he
   | _, _, _, .qSel _ _, he => nomatch he
   | _, _, _, .qSelUnk _ _, he => nomatch he
@@ -902,7 +898,7 @@ private theorem qtyped_cons_inv_aux {B C : Type} {constTy : Sig B C} {e₁ e₂ 
   | _, _, _, .qVar _ _, he => nomatch he
   | _, _, _, .qLam _, he => nomatch he
   | _, _, _, .qApp _ _, he => nomatch he
-  | _, _, _, .qLet _ _ _ _, he => nomatch he
+  | _, _, _, .qLet _ _ _, he => nomatch he
   | _, _, _, .qCat _ _, he => nomatch he
   | _, _, _, .qSel _ _, he => nomatch he
   | _, _, _, .qSelUnk _ _, he => nomatch he
@@ -1029,7 +1025,6 @@ theorem Typed.toQ {B C : Type} {constTy : Sig B C} :
   | _, _, _, .tLet hprem hbody =>
       .qLet (by simp [QScheme.WF, Scheme.toQ])
             (fun τ₁ hq => Typed.toQ (hprem τ₁ (QScheme.inst_toQ.mp hq)))
-            ⟨_, QScheme.inst_toQ.mpr (Scheme.Inst.self _)⟩
             (Typed.toQ hbody)
   | _, _, _, .tCat h₁ h₂ => .qCat (Typed.toQ h₁) (Typed.toQ h₂)
   | _, _, _, .tSel h hl =>
@@ -1071,7 +1066,7 @@ theorem qtyped_two_use {B C : Type} (constTy : Sig B C) (c : C) :
           (.field "a" (.app (.var "f") (.rcd (.field "l" (.con c)))))
           (.field "b" (.app (.var "f") (.rcd .empty))))))
       (.rcd (.cat (.sing "a" (.base (constTy c))) (.sing "b" .unk))) := by
-  refine .qLet (σ := selQ B) (by simp [QScheme.WF, selQ, Ty.ftv]) (fun τ₁ hq => ?_) ⟨_, selQ_inst_absent⟩ ?_
+  refine .qLet (σ := selQ B) (by simp [QScheme.WF, selQ, Ty.ftv]) (fun τ₁ hq => ?_) ?_
   · exact (selQ_instance_closed constTy Ctx.empty τ₁ hq).toQ
   · refine .qRcd (.cat (.field ?_) (.field ?_))
     · exact .qApp
@@ -1170,10 +1165,9 @@ theorem qtyped_sub {B C : Type} {constTy : Sig B C} :
   | _, _, _, _, hs, .qSelAbs h hl =>
       .qSelAbs (qtyped_sub hs h) hl
   | _, _, _, _, hs, .qUnk h       => .qUnk (qtyped_sub hs h)
-  | _, _, _, _, hs, .qLet hwf h₁ hne h₂   =>
+  | _, _, _, _, hs, .qLet hwf h₁ h₂   =>
       .qLet hwf (fun τ' hi =>
               qtyped_sub hs (h₁ τ' hi))
-            hne
             (qtyped_sub (hs.bindScheme _ _) h₂)
   | _, _, _, _, hs, .qRcd h       => .qRcd (qtypedBody_sub hs h)
   | _, _, _, _, _,  .qLab         => .qLab
@@ -1282,14 +1276,13 @@ private theorem qsubst_aux {B C : Type} {constTy : Sig B C} :
       .qCons (qsubst_aux h₁ hsub hv) (qsubst_aux h₂ hsub hv)
   | _, _, _, .qHas hb h, _, _, _, _, hsub, hv =>
       .qHas hb (qsubst_aux h hsub hv)
-  | _, .letE y e₁ e₂, _, .qLet hwf h₁ hne h₂, _, x, _, _, hsub, hv => by
+  | _, .letE y e₁ e₂, _, .qLet hwf h₁ h₂, _, x, _, _, hsub, hv => by
       simp only [subst]
       cases hxy : (x == y)
       · simp only [Bool.false_eq_true, if_false]
         exact .qLet hwf
           (fun τ' hi =>
             qsubst_aux (h₁ τ' hi) hsub hv)
-          hne
           (qsubst_aux h₂
             ((hsub.bindScheme _ _).trans
               (QCtx.Sub.exchange _ (by simpa using hxy) _ _)) hv)
@@ -1297,7 +1290,6 @@ private theorem qsubst_aux {B C : Type} {constTy : Sig B C} :
         exact .qLet hwf
           (fun τ' hi =>
             qsubst_aux (h₁ τ' hi) hsub hv)
-          hne
           (qtyped_sub ((eq_of_beq hxy) ▸ hsub.shadowed _) h₂)
   | _, _, _, .qRcd h, _, _, _, _, hsub, hv =>
       .qRcd (qsubstBody_aux h hsub hv)
@@ -1564,7 +1556,7 @@ private theorem qpreservation_aux {B C : Type} {constTy : Sig B C} (hok : SigOK 
             exact .qRcd (.fieldU h₂)
   -- a base-typed key: the selection lands on a field value or ↯, the
   -- construction on `{l = e₂}`; either way typed at something, then blurred
-  | _, _, _, .qLet hwf h₁ hne h₂, hΓ, _ => fun hs => by
+  | _, _, _, .qLet _ h₁ h₂, hΓ, _ => fun hs => by
       cases hs with
       | letBeta =>
           subst hΓ
@@ -1822,7 +1814,7 @@ def qprogress {B C : Type} {constTy : Sig B C} (hok : SigOK constTy) {Γ : QCtx 
       | .done v => by
           obtain ⟨b, ρ', rfl, -, -⟩ := qcanonical_rcd v he
           exact qsel_rcd_progress b _
-  | .qLet _ _ _ _ => .step .letBeta
+  | .qLet _ _ _ => .step .letBeta
   | .qLab => .done .lab
   | .qSelDyn h₁ h₂ _ => qselDyn_progress (qprogress hok hΓ h₁) (qprogress hok hΓ h₂)
       (fun v => let ⟨b, _, he, _⟩ := qcanonical_rcd v h₁; ⟨b, he⟩)
@@ -2021,10 +2013,9 @@ theorem qtyped_cov {B C : Type} {constTy : Sig B C} :
   | _, _, _, _, hs, .qSelAbs h hl =>
       .qSelAbs (qtyped_cov hs h) hl
   | _, _, _, _, hs, .qUnk h       => .qUnk (qtyped_cov hs h)
-  | _, _, _, _, hs, .qLet hwf h₁ hne h₂ =>
+  | _, _, _, _, hs, .qLet hwf h₁ h₂ =>
       .qLet hwf (fun τ' hi =>
               qtyped_cov hs (h₁ τ' hi))
-            hne
             (qtyped_cov (hs.bindScheme _ _) h₂)
   | _, _, _, _, hs, .qRcd h       => .qRcd (qtypedBody_cov hs h)
   | _, _, _, _, _,  .qLab         => .qLab
@@ -2439,7 +2430,7 @@ private theorem qvar_inst_inv {B C : Type} {constTy : Sig B C} :
   | _, _, _, .qSel _ _ => fun he _ => nomatch he
   | _, _, _, .qSelUnk _ _ => fun he _ => nomatch he
   | _, _, _, .qSelAbs _ _ => fun he _ => nomatch he
-  | _, _, _, .qLet _ _ _ _ => fun he _ => nomatch he
+  | _, _, _, .qLet _ _ _ => fun he _ => nomatch he
   | _, _, _, .qRcd _ => fun he _ => nomatch he
   | _, _, _, .qLab => fun he _ => nomatch he
   | _, _, _, .qSelDyn _ _ _ => fun he _ => nomatch he
@@ -2494,7 +2485,7 @@ theorem qsel_var_inv {B C : Type} {constTy : Sig B C} :
   | _, _, _, .qLam _ => fun he _ => nomatch he
   | _, _, _, .qApp _ _ => fun he _ => nomatch he
   | _, _, _, .qCat _ _ => fun he _ => nomatch he
-  | _, _, _, .qLet _ _ _ _ => fun he _ => nomatch he
+  | _, _, _, .qLet _ _ _ => fun he _ => nomatch he
   | _, _, _, .qRcd _ => fun he _ => nomatch he
   | _, _, _, .qLab => fun he _ => nomatch he
   | _, _, _, .qSelDyn _ _ _ => fun he _ => nomatch he

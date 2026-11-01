@@ -419,8 +419,7 @@ def twoUse : E :=
 -- the declarative typing of exactly this program: f at selQ, used at
 -- {(l: {(m: 𝓫)})} → {(m: 𝓫)} and at {ε} → ★
 theorem twoUse_typed : QTyped σ0 QCtx.empty twoUse (.rcd (.cat (.sing "a" b) (.sing "b" .unk))) := by
-  refine .qLet (σ := selQ Unit) (by simp [QScheme.WF, selQ, Ty.ftv]) (fun τ₁ hq => ?_)
-    ⟨_, selQ_inst_absent⟩ ?_
+  refine .qLet (σ := selQ Unit) (by simp [QScheme.WF, selQ, Ty.ftv]) (fun τ₁ hq => ?_) ?_
   · exact (selQ_instance_closed σ0 Ctx.empty τ₁ hq).toQ
   · refine .qRcd (.cat (.field ?_) (.field ?_))
     · exact .qSel (.qApp (.qVar (by simp [QCtx.lookup_bindScheme])
@@ -497,8 +496,7 @@ example : QTyped σ0 QCtx.empty (app (lam "x" c) (sel emp "l")) b :=
   .qApp (.qLam .qCon) (.qSelAbs (.qRcd .empty) .emp)
 example : QTyped σ0 QCtx.empty (.letE "x" (sel emp "l") c) b :=
   .qLet (σ := ⟨[], [], .unk⟩) (by simp [QScheme.WF])
-    (fun _ hi => inst_mono_eq hi ▸ .qSelAbs (.qRcd .empty) .emp)
-    ⟨_, QScheme.inst_toQ.mpr (Scheme.Inst.self ⟨[], _⟩)⟩ .qCon
+    (fun _ hi => inst_mono_eq hi ▸ .qSelAbs (.qRcd .empty) .emp) .qCon
 #guard run (app (lam "x" c) (sel emp "l")) = ("𝓫", ["l"])
 #guard run (.letE "x" (sel emp "l") c) = ("𝓫", ["l"])
 
@@ -560,17 +558,16 @@ theorem uninhabited_no_instance : ¬ ∃ τ, QScheme.Inst uninhabited τ := by
       cases hl
 
 -- `let x = (3 4) in 5` (constants for 3, 4, 5): bound to the uninhabited scheme,
--- every premise of T-let but inhabitation holds — instance-closure vacuously —
--- …
-def stuckLet : E := .letE "x" (app c c) c
+-- every premise of T-let holds, instance-closure vacuously …
+def deadLet : E := .letE "x" (app c c) c
 
-example : uninhabited.WF ∧
-    (∀ τ₁, QScheme.Inst uninhabited τ₁ → QTyped σ0 QCtx.empty (app c c) τ₁) ∧
-    QTyped σ0 (QCtx.empty.bindScheme "x" uninhabited) c b :=
-  ⟨uninhabited_wf, fun τ₁ h => absurd ⟨τ₁, h⟩ uninhabited_no_instance, .qCon⟩
+theorem deadLet_typed : QTyped σ0 QCtx.empty deadLet b :=
+  .qLet uninhabited_wf (fun τ₁ h => absurd ⟨τ₁, h⟩ uninhabited_no_instance) .qCon
 
 -- … and the program evaluates to 5: the binding is never forced …
-example : Step δ0 stuckLet c := .letBeta
+example : Step δ0 deadLet c := .letBeta
+-- … inference rejects it, since A-let infers the binding whether x is used or not …
+#guard run deadLet = ("fail: clash", [])
 
 -- `3 4` has no typing: a constant has no arrow type
 private theorem conApp_false {B C : Type} {constTy : Sig B C} {c₁ c₂ : C} :
@@ -585,7 +582,7 @@ private theorem conApp_false {B C : Type} {constTy : Sig B C} {c₁ c₂ : C} :
       · cases heq.base_inv
       · cases hu
   | _, _, _, .qCon, he | _, _, _, .qVar _ _, he | _, _, _, .qLam _, he
-  | _, _, _, .qLet _ _ _ _, he | _, _, _, .qCat _ _, he | _, _, _, .qSel _ _, he
+  | _, _, _, .qLet _ _ _, he | _, _, _, .qCat _ _, he | _, _, _, .qSel _ _, he
   | _, _, _, .qSelUnk _ _, he | _, _, _, .qSelAbs _ _, he | _, _, _, .qRcd _, he
   | _, _, _, .qLab, he | _, _, _, .qSelDyn _ _ _, he | _, _, _, .qSelDynUnk _ _ _, he
   | _, _, _, .qSelDynAbs _ _ _, he | _, _, _, .qRcdDyn _ _, he
@@ -593,16 +590,16 @@ private theorem conApp_false {B C : Type} {constTy : Sig B C} {c₁ c₂ : C} :
   | _, _, _, .qAsrt _ _ _, he | _, _, _, .qNil, he | _, _, _, .qCons _ _, he
   | _, _, _, .qHas _ _, he => nomatch he
 
--- the inhabitation premise gives the binding of a let a typing
-private theorem let_bound {B C : Type} {constTy : Sig B C} {x : Var} {e₁ e₂ : Expr C} :
+-- T-λ-E types its argument
+private theorem app_arg {B C : Type} {constTy : Sig B C} {e₁ e₂ : Expr C} :
     {Γ : QCtx B} → {e : Expr C} → {τ : Ty B} → QTyped constTy Γ e τ →
-    e = .letE x e₁ e₂ → ∃ τ₁, QTyped constTy Γ e₁ τ₁
-  | _, _, _, .qEq h _, he => let_bound h he
-  | _, _, _, .qUnk h, he => let_bound h he
-  | _, _, _, .qLabBlur h, he => let_bound h he
-  | _, _, _, .qLet _ h₁ ⟨τ₁, hi⟩ _, he => by cases he; exact ⟨τ₁, h₁ τ₁ hi⟩
+    e = .app e₁ e₂ → ∃ τ₂, QTyped constTy Γ e₂ τ₂
+  | _, _, _, .qEq h _, he => app_arg h he
+  | _, _, _, .qUnk h, he => app_arg h he
+  | _, _, _, .qLabBlur h, he => app_arg h he
+  | _, _, _, .qApp _ h₂, he => by cases he; exact ⟨_, h₂⟩
   | _, _, _, .qCon, he | _, _, _, .qVar _ _, he | _, _, _, .qLam _, he
-  | _, _, _, .qApp _ _, he | _, _, _, .qCat _ _, he | _, _, _, .qSel _ _, he
+  | _, _, _, .qLet _ _ _, he | _, _, _, .qCat _ _, he | _, _, _, .qSel _ _, he
   | _, _, _, .qSelUnk _ _, he | _, _, _, .qSelAbs _ _, he | _, _, _, .qRcd _, he
   | _, _, _, .qLab, he | _, _, _, .qSelDyn _ _ _, he | _, _, _, .qSelDynUnk _ _ _, he
   | _, _, _, .qSelDynAbs _ _ _, he | _, _, _, .qRcdDyn _ _, he
@@ -610,13 +607,14 @@ private theorem let_bound {B C : Type} {constTy : Sig B C} {x : Var} {e₁ e₂ 
   | _, _, _, .qAsrt _ _ _, he | _, _, _, .qNil, he | _, _, _, .qCons _ _, he
   | _, _, _, .qHas _ _, he => nomatch he
 
--- … so with the inhabitation premise it has no typing …
-example : ¬ ∃ τ, QTyped σ0 QCtx.empty stuckLet τ := by
+-- … and `(x: 5) (3 4)`, which also evaluates to 5, has no typing: only an
+-- uninhabited let leaves a term untyped
+example : Step δ0 (app (lam "x" c) (app c c)) c := .beta
+example : ¬ ∃ τ, QTyped σ0 QCtx.empty (app (lam "x" c) (app c c)) τ := by
   rintro ⟨τ, h⟩
-  obtain ⟨τ₁, h₁⟩ := let_bound h rfl
-  exact conApp_false h₁ rfl
--- … and inference rejects it
-#guard run stuckLet = ("fail: clash", [])
+  obtain ⟨τ₂, h₂⟩ := app_arg h rfl
+  exact conApp_false h₂ rfl
+#guard run (app (lam "x" c) (app c c)) = ("fail: clash", [])
 
 ------------------------------------------------------------------------------
 -- # §4 Metatheory

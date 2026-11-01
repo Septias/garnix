@@ -44,8 +44,8 @@ theorem QTyped.sig_mini {sig sig' : Sig B C} (hcon : sig'.con = sig.con) :
   | _, _, _, .qLam h, hm => .qLam (QTyped.sig_mini hcon h hm)
   | _, _, _, .qApp h₁ h₂, hm =>
       .qApp (QTyped.sig_mini hcon h₁ hm.1) (QTyped.sig_mini hcon h₂ hm.2)
-  | _, _, _, .qLet hwf h₁ hne h₂, hm =>
-      .qLet hwf (fun τ' hi => QTyped.sig_mini hcon (h₁ τ' hi) hm.1) hne
+  | _, _, _, .qLet hwf h₁ h₂, hm =>
+      .qLet hwf (fun τ' hi => QTyped.sig_mini hcon (h₁ τ' hi) hm.1)
         (QTyped.sig_mini hcon h₂ hm.2)
   | _, _, _, .qCat h₁ h₂, hm =>
       .qCat (QTyped.sig_mini hcon h₁ hm.1) (QTyped.sig_mini hcon h₂ hm.2)

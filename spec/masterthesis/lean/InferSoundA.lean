@@ -56,7 +56,6 @@ mutual
              (∀ χ : TySubst B, χ.FixedOutside σ.vars →
                QTypedA constTy (σ.constraints.map (Stump.at χ) ++ Δ) Γ e₁
                  (σ.body.applySubst χ)) →
-             (∃ τ₁, QScheme.Inst σ τ₁) →
              QTypedA constTy Δ (Γ.bindScheme x σ) e₂ τ₂ →
              QTypedA constTy Δ Γ (.letE x e₁ e₂) τ₂
     | qCat : QTypedA constTy Δ Γ e₁ (.rcd ρ₁) → QTypedA constTy Δ Γ e₂ (.rcd ρ₂) →
@@ -157,14 +156,14 @@ mutual
     | _, _, _, _, _, .qLam h, hΔ => .qLam (QTypedA.weaken h hΔ)
     | _, _, _, _, _, .qApp h₁ h₂, hΔ =>
         .qApp (QTypedA.weaken h₁ hΔ) (QTypedA.weaken h₂ hΔ)
-    | _, _, _, _, _, .qLet hcs hi hin hb, hΔ =>
+    | _, _, _, _, _, .qLet hcs hi hb, hΔ =>
         .qLet hcs (fun χ hfix => QTypedA.weaken (hi χ hfix) (fun a ha =>
             match List.mem_append.mp ha with
             | .inl hc => .inl (List.mem_append_left _ hc)
             | .inr hd => match hΔ a hd with
               | .inl hm => .inl (List.mem_append_right _ hm)
               | .inr hh => .inr hh))
-          hin (QTypedA.weaken hb hΔ)
+          (QTypedA.weaken hb hΔ)
     | _, _, _, _, _, .qCat h₁ h₂, hΔ =>
         .qCat (QTypedA.weaken h₁ hΔ) (QTypedA.weaken h₂ hΔ)
     | _, _, _, _, _, .qSel h hl, hΔ => .qSel (QTypedA.weaken h hΔ) hl
@@ -246,7 +245,7 @@ mutual
     | _, _, _, _, .qLam h, hΔ => .qLam (QTypedA.toQTyped h hΔ)
     | _, _, _, _, .qApp h₁ h₂, hΔ =>
         .qApp (QTypedA.toQTyped h₁ hΔ) (QTypedA.toQTyped h₂ hΔ)
-    | _, _, _, _, .qLet hcs hi hin hb, hΔ =>
+    | _, _, _, _, .qLet hcs hi hb, hΔ =>
         .qLet hcs (fun τ₁ ⟨χ, hfix, hdis, hbody⟩ => hbody ▸
             QTypedA.toQTyped (hi χ hfix) (fun a ha =>
               match List.mem_append.mp ha with
@@ -254,7 +253,7 @@ mutual
                   obtain ⟨st, hst, rfl⟩ := List.mem_map.mp hc
                   exact Stump.dischargeEquiv_iff_holds.mp (hdis st hst)
               | .inr hd => hΔ a hd))
-          hin (QTypedA.toQTyped hb hΔ)
+          (QTypedA.toQTyped hb hΔ)
     | _, _, _, _, .qCat h₁ h₂, hΔ =>
         .qCat (QTypedA.toQTyped h₁ hΔ) (QTypedA.toQTyped h₂ hΔ)
     | _, _, _, _, .qSel h hl, hΔ => .qSel (QTypedA.toQTyped h hΔ) hl

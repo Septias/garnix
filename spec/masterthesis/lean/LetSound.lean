@@ -68,7 +68,7 @@ theorem qtyped_var_inv {B C : Type} {constTy : Sig B C} :
   | _, _, _, .qCon => fun he _ => nomatch he
   | _, _, _, .qLam _ => fun he _ => nomatch he
   | _, _, _, .qApp _ _ => fun he _ => nomatch he
-  | _, _, _, .qLet _ _ _ _ => fun he _ => nomatch he
+  | _, _, _, .qLet _ _ _ => fun he _ => nomatch he
   | _, _, _, .qCat _ _ => fun he _ => nomatch he
   | _, _, _, .qSel _ _ => fun he _ => nomatch he
   | _, _, _, .qSelUnk _ _ => fun he _ => nomatch he
@@ -104,7 +104,7 @@ theorem qtyped_let_alias_inv {B C : Type} {constTy : Sig B C} :
     ∀ {y z : Var} {τ₀ : Ty B}, e = .letE z (.var y) (.var z) →
     Γ.lookup y = some ⟨[], [], τ₀⟩ →
     τ = .unk ∨ TyEquiv τ₀ τ ∨ (τ = .lab .unk ∧ ∃ k, TyEquiv τ₀ (.lab k))
-  | _, _, _, .qLet (σ := σ₀) _ hinst _ hbody => fun he hy => by
+  | _, _, _, .qLet (σ := σ₀) _ hinst hbody => fun he hy => by
       cases he
       have hz : ∀ (Γ' : QCtx B) (w : Var), (Γ'.bindScheme w σ₀).lookup w = some σ₀ :=
         fun Γ' w => by rw [QCtx.lookup_bindScheme]; simp
