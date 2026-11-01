@@ -2,7 +2,7 @@
 #import "04_unification.typ": u_clash
 #import "05_inference.typ": st_park, st_solve
 
-= First-Class Labels <sec-fc-labels>
+= First-Class Labels <fc-labels>
 
 Labels can be computed in NixLang. The expression `x.${e}` selects the field named by an arbitrary string expression e, and the expression `{ ${e} = v; }` binds a value to a label that is the result of an expression $e$. First-class labels fit naturally in our system: Label variables go into rows and and shadow similarly to a row-variable. In fact, in the following section we generalize these two types of variables to _barriers_ after which shadowing is unclear. The comparison of label variables also benefits from our addition of the unknown type: If two variables cannot be decided to be equal or not, the unknown type can be used to type the expression and the same mechanism apply: deferred lookup and qualified schemes.
 
