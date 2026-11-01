@@ -477,10 +477,30 @@ example : QTyped σ0 QCtx.empty (lam "x" (sel (v "x") "l")) (.fn (.rcd (.var "β
   .qLam (.qSelUnk (qvar (τ := .rcd (.var "β")) (by simp [QCtx.bindTy, QCtx.bindScheme, QCtx.lookup])) .varFree)
 -- applied to `{l = c}` it evaluates to c …
 example : ∃ e', Step δ0 (app (lam "x" (sel (v "x") "l")) (rec1 "l" c)) e' ∧ Step δ0 e' c :=
-  ⟨_, .beta .rcd, .selVal rfl⟩
+  ⟨_, .beta, .selVal rfl⟩
 -- … applied to `{}` to a lookup error
 example : ∃ e', Step δ0 (app (lam "x" (sel (v "x") "l")) emp) e' ∧ Err δ0 e' :=
-  ⟨_, .beta .rcd, .selAbsent rfl⟩
+  ⟨_, .beta, .selAbsent rfl⟩
+
+-- Arguments and let-bindings are as lazy as fields: `(x: c) ({}.l)` and
+-- `let x = {}.l in c` evaluate to c and never reach the failing lookup …
+example : Step δ0 (app (lam "x" c) (sel emp "l")) c := .beta
+example : Step δ0 (.letE "x" (sel emp "l") c) c := .letBeta
+example : ¬ Err δ0 (app (lam "x" c) (sel emp "l")) := by
+  intro h
+  simp only [app, lam, c] at h
+  cases h with
+  | appFun h => cases h
+example : ¬ Err δ0 (.letE "x" (sel emp "l") c) := nofun
+-- … and both are typed, the failing lookup at ★ by T-sel-⊥
+example : QTyped σ0 QCtx.empty (app (lam "x" c) (sel emp "l")) b :=
+  .qApp (.qLam .qCon) (.qSelAbs (.qRcd .empty) .emp)
+example : QTyped σ0 QCtx.empty (.letE "x" (sel emp "l") c) b :=
+  .qLet (σ := ⟨[], [], .unk⟩) (by simp [QScheme.WF])
+    (fun _ hi => inst_mono_eq hi ▸ .qSelAbs (.qRcd .empty) .emp)
+    ⟨_, QScheme.inst_toQ.mpr (Scheme.Inst.self ⟨[], _⟩)⟩ .qCon
+#guard run (app (lam "x" c) (sel emp "l")) = ("𝓫", ["l"])
+#guard run (.letE "x" (sel emp "l") c) = ("𝓫", ["l"])
 
 -- T-sel-⊥ is needed for programs that never fail: `{a = {}.l; b = c}.b`
 -- evaluates to c, and it is typed only because field a is typed (at ★)
@@ -549,32 +569,52 @@ example : uninhabited.WF ∧
     QTyped σ0 (QCtx.empty.bindScheme "x" uninhabited) c b :=
   ⟨uninhabited_wf, fun τ₁ h => absurd ⟨τ₁, h⟩ uninhabited_no_instance, .qCon⟩
 
--- … yet the program is stuck: no value, no step, no lookup error
-theorem stuckLet_stuck : ¬ Value stuckLet ∧ (¬ ∃ e', Step δ0 stuckLet e') ∧ ¬ Err δ0 stuckLet := by
-  refine ⟨?_, ?_, ?_⟩
-  · intro h; simp only [stuckLet] at h; cases h
-  · rintro ⟨e', h⟩
-    simp only [stuckLet, app, InferRuns.c] at h
-    cases h with
-    | letCong h => cases h with
-      | appFun h => cases h
-      | appArg _ h => cases h
-    | letBeta hv => cases hv
-  · intro h
-    simp only [stuckLet, app, InferRuns.c] at h
-    cases h with
-    | letBind h => cases h with
-      | appFun h => cases h
-      | appArg _ h => cases h
+-- … and the program evaluates to 5: the binding is never forced …
+example : Step δ0 stuckLet c := .letBeta
 
--- … so with the inhabitation premise it has no typing (by progress) …
+-- `3 4` has no typing: a constant has no arrow type
+private theorem conApp_false {B C : Type} {constTy : Sig B C} {c₁ c₂ : C} :
+    {Γ : QCtx B} → {e : Expr C} → {τ : Ty B} → QTyped constTy Γ e τ →
+    e = .app (.con c₁) (.con c₂) → False
+  | _, _, _, .qEq h _, he => conApp_false h he
+  | _, _, _, .qUnk h, he => conApp_false h he
+  | _, _, _, .qLabBlur h, he => conApp_false h he
+  | _, _, _, .qApp h₁ _, he => by
+      cases he
+      rcases qtyped_con_inv h₁ with heq | hu
+      · cases heq.base_inv
+      · cases hu
+  | _, _, _, .qCon, he | _, _, _, .qVar _ _, he | _, _, _, .qLam _, he
+  | _, _, _, .qLet _ _ _ _, he | _, _, _, .qCat _ _, he | _, _, _, .qSel _ _, he
+  | _, _, _, .qSelUnk _ _, he | _, _, _, .qSelAbs _ _, he | _, _, _, .qRcd _, he
+  | _, _, _, .qLab, he | _, _, _, .qSelDyn _ _ _, he | _, _, _, .qSelDynUnk _ _ _, he
+  | _, _, _, .qSelDynAbs _ _ _, he | _, _, _, .qRcdDyn _ _, he
+  | _, _, _, .qPrim _ _ _, he | _, _, _, .qBool _, he | _, _, _, .qIte _ _ _ _, he
+  | _, _, _, .qAsrt _ _ _, he | _, _, _, .qNil, he | _, _, _, .qCons _ _, he
+  | _, _, _, .qHas _ _, he => nomatch he
+
+-- the inhabitation premise gives the binding of a let a typing
+private theorem let_bound {B C : Type} {constTy : Sig B C} {x : Var} {e₁ e₂ : Expr C} :
+    {Γ : QCtx B} → {e : Expr C} → {τ : Ty B} → QTyped constTy Γ e τ →
+    e = .letE x e₁ e₂ → ∃ τ₁, QTyped constTy Γ e₁ τ₁
+  | _, _, _, .qEq h _, he => let_bound h he
+  | _, _, _, .qUnk h, he => let_bound h he
+  | _, _, _, .qLabBlur h, he => let_bound h he
+  | _, _, _, .qLet _ h₁ ⟨τ₁, hi⟩ _, he => by cases he; exact ⟨τ₁, h₁ τ₁ hi⟩
+  | _, _, _, .qCon, he | _, _, _, .qVar _ _, he | _, _, _, .qLam _, he
+  | _, _, _, .qApp _ _, he | _, _, _, .qCat _ _, he | _, _, _, .qSel _ _, he
+  | _, _, _, .qSelUnk _ _, he | _, _, _, .qSelAbs _ _, he | _, _, _, .qRcd _, he
+  | _, _, _, .qLab, he | _, _, _, .qSelDyn _ _ _, he | _, _, _, .qSelDynUnk _ _ _, he
+  | _, _, _, .qSelDynAbs _ _ _, he | _, _, _, .qRcdDyn _ _, he
+  | _, _, _, .qPrim _ _ _, he | _, _, _, .qBool _, he | _, _, _, .qIte _ _ _ _, he
+  | _, _, _, .qAsrt _ _ _, he | _, _, _, .qNil, he | _, _, _, .qCons _ _, he
+  | _, _, _, .qHas _ _, he => nomatch he
+
+-- … so with the inhabitation premise it has no typing …
 example : ¬ ∃ τ, QTyped σ0 QCtx.empty stuckLet τ := by
   rintro ⟨τ, h⟩
-  obtain ⟨hv, hs, he⟩ := stuckLet_stuck
-  cases qProgress σ0 (SigOK.plain _) _ _ h with
-  | step h => exact hs ⟨_, h⟩
-  | done h => exact hv h
-  | err h => exact he h
+  obtain ⟨τ₁, h₁⟩ := let_bound h rfl
+  exact conApp_false h₁ rfl
 -- … and inference rejects it
 #guard run stuckLet = ("fail: clash", [])
 

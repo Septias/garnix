@@ -194,11 +194,9 @@ theorem RecBody.IsMini.lookup {l : Label} :
 δ, to a MiniNix term. -/
 theorem Step.mini {δ δ' : Delta C} :
     {e e' : Expr C} → Step δ e e' → e.IsMini → Step δ' e e' ∧ e'.IsMini
-  | _, _, .beta hv, hm => ⟨.beta hv, Expr.IsMini.subst hm.2 _ hm.1⟩
+  | _, _, .beta, hm => ⟨.beta, Expr.IsMini.subst hm.2 _ hm.1⟩
   | _, _, .appFun s, hm =>
       let ⟨s', h'⟩ := Step.mini s hm.1; ⟨.appFun s', h', hm.2⟩
-  | _, _, .appArg v s, hm =>
-      let ⟨s', h'⟩ := Step.mini s hm.2; ⟨.appArg v s', hm.1, h'⟩
   | _, _, .selStep s, hm => let ⟨s', h'⟩ := Step.mini s hm; ⟨.selStep s', h'⟩
   | _, _, .selVal hl, hm => ⟨.selVal hl, RecBody.IsMini.lookup hm hl⟩
   | _, _, .catLeft s, hm =>
@@ -206,9 +204,7 @@ theorem Step.mini {δ δ' : Delta C} :
   | _, _, .catRight v s, hm =>
       let ⟨s', h'⟩ := Step.mini s hm.2; ⟨.catRight v s', hm.1, h'⟩
   | _, _, .catVal, hm => ⟨.catVal, hm.2, hm.1⟩
-  | _, _, .letCong s, hm =>
-      let ⟨s', h'⟩ := Step.mini s hm.1; ⟨.letCong s', h', hm.2⟩
-  | _, _, .letBeta hv, hm => ⟨.letBeta hv, Expr.IsMini.subst hm.1 _ hm.2⟩
+  | _, _, .letBeta, hm => ⟨.letBeta, Expr.IsMini.subst hm.1 _ hm.2⟩
   | _, _, .selDynL s, hm =>
       let ⟨s', h'⟩ := Step.mini s hm.1; ⟨.selDynL s', h', hm.2⟩
   | _, _, .selDynR v s, hm =>

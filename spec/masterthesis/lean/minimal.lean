@@ -1468,8 +1468,9 @@ end
 
 
 --------------------------------- VALUES --------------------------------------
--- Lazy semantics: a record is a value at the constructor level (WHNF).
--- Fields are unevaluated thunks and are forced only on projection.
+-- Call-by-name: a value is a term in weak head normal form. A record is a value
+-- at the constructor level, its fields are forced only on projection; arguments
+-- and let-bindings are substituted unevaluated (`Step.beta`, `Step.letBeta`).
 
 inductive Value {C : Type} : Expr C → Prop where
   | con {c : C}                : Value (.con c)
@@ -1591,16 +1592,12 @@ theorem canonical_rcd {B C : Type} {constTy : C → B} {Γ : Ctx B} {v : Expr C}
 abbrev Delta (C : Type) := C → List (Expr C) → Option (Expr C)
 
 inductive Step {C : Type} (δ : Delta C) : Expr C → Expr C → Prop where
-  | beta {x : Var} {e v : Expr C} :
-      Value v →
-      Step δ (.app (.lam x e) v) (subst x v e)
+  -- Call-by-name: the argument is substituted unevaluated.
+  | beta {x : Var} {e e₂ : Expr C} :
+      Step δ (.app (.lam x e) e₂) (subst x e₂ e)
   | appFun {e₁ e₁' e₂ : Expr C} :
       Step δ e₁ e₁' →
       Step δ (.app e₁ e₂) (.app e₁' e₂)
-  | appArg {e₁ e₂ e₂' : Expr C} :
-      Value e₁ →
-      Step δ e₂ e₂' →
-      Step δ (.app e₁ e₂) (.app e₁ e₂')
   | selStep {e e' : Expr C} {l : Label} :
       Step δ e e' →
       Step δ (.sel e l) (.sel e' l)
@@ -1618,13 +1615,9 @@ inductive Step {C : Type} (δ : Delta C) : Expr C → Expr C → Prop where
   -- Right-preference: e₂'s fields go to the front (mirrors T-conc's {ρ₂ | ρ₁}).
   | catVal {b₁ b₂ : RecBody (Expr C)} :
       Step δ (.cat (.rcd b₁) (.rcd b₂)) (.rcd (.cat b₂ b₁))
-  -- CBV let, mirroring beta: evaluate the binding, then substitute.
-  | letCong {x : Var} {e₁ e₁' e₂ : Expr C} :
-      Step δ e₁ e₁' →
-      Step δ (.letE x e₁ e₂) (.letE x e₁' e₂)
-  | letBeta {x : Var} {v e : Expr C} :
-      Value v →
-      Step δ (.letE x v e) (subst x v e)
+  -- let, mirroring beta: the binding is substituted unevaluated.
+  | letBeta {x : Var} {e₁ e : Expr C} :
+      Step δ (.letE x e₁ e) (subst x e₁ e)
   -- dynamic selection: the record first, then the key, then the lookup
   | selDynL {e₁ e₁' e₂ : Expr C} :
       Step δ e₁ e₁' →
@@ -1677,11 +1670,9 @@ inductive Err {C : Type} (δ : Delta C) : Expr C → Prop where
   | selAbsent {b : RecBody (Expr C)} {l : Label} :
       RecBody.lookup l b = none → Err δ (.sel (.rcd b) l)
   | appFun   : Err δ e₁ → Err δ (.app e₁ e₂)
-  | appArg   : Value e₁ → Err δ e₂ → Err δ (.app e₁ e₂)
   | sel      : Err δ e → Err δ (.sel e l)
   | catLeft  : Err δ e₁ → Err δ (.cat e₁ e₂)
   | catRight : Value e₁ → Err δ e₂ → Err δ (.cat e₁ e₂)
-  | letBind  : Err δ e₁ → Err δ (.letE x e₁ e₂)
   -- a dynamic selection errs where a static one does. A key that is not a label
   -- is no error: it has no typing (feat/fc-labels; strings are labels)
   | selDynAbsent {b : RecBody (Expr C)} {l : Label} :
@@ -1720,17 +1711,13 @@ def progress {B C : Type} {constTy : C → B} {δ : Delta C} {Γ : Ctx B} {e : E
   | .tEq h _     => progress hΓ h
   | .tLam _      => .done .lam
   | .tRcd _      => .done .rcd
-  | .tApp h₁ h₂  =>
+  | .tApp h₁ _   =>
       match progress hΓ h₁ with
       | .step s  => .step (.appFun s)
       | .err er  => .err (.appFun er)
-      | .done v₁ =>
-          match progress hΓ h₂ with
-          | .step s  => .step (.appArg v₁ s)
-          | .err er  => .err (.appArg v₁ er)
-          | .done v₂ => by
-              obtain ⟨x, e₀, rfl⟩ := canonical_fn v₁ h₁
-              exact .step (.beta v₂)
+      | .done v₁ => by
+          obtain ⟨x, e₀, rfl⟩ := canonical_fn v₁ h₁
+          exact .step .beta
   | .tCat h₁ h₂  =>
       match progress hΓ h₁ with
       | .step s  => .step (.catLeft s)
@@ -1771,13 +1758,7 @@ def progress {B C : Type} {constTy : C → B} {δ : Delta C} {Γ : Ctx B} {e : E
           obtain ⟨b, ρ', rfl, -, -⟩ := canonical_rcd v he
           exact sel_rcd_progress b _
   | .tUnk h => progress hΓ h
-  -- The binding is typeable at (at least) the scheme's own body — enough to
-  -- drive it to a value, an error, or a step.
-  | .tLet h₁ _ =>
-      match progress hΓ (h₁ _ (Scheme.Inst.self _)) with
-      | .step s  => .step (.letCong s)
-      | .err er  => .err (.letBind er)
-      | .done v₁ => .step (.letBeta v₁)
+  | .tLet _ _ => .step .letBeta
 
 
 ---------------------------------- PRESERVATION ---------------------------------
@@ -1786,9 +1767,10 @@ def progress {B C : Type} {constTy : C → B} {δ : Delta C} {Γ : Ctx B} {e : E
 --   If Γ, x:σ ⊢ e : τ₂  and  ⊢ v : τ' for *every* instance τ' of σ
 --   (v closed over Γ's row-solutions), then  Γ ⊢ e[x:=v] : τ₂
 --
--- v must be *closed*: with named binders, pushing an open v under a λ could
--- capture its free variables. Closed v suffices for preservation of closed
--- programs (β and let-β only fire at ∅), and dodges all renaming machinery.
+-- v need not be a value, but it must be *closed*: with named binders, pushing an
+-- open v under a λ could capture its free variables. Closed v suffices for
+-- preservation of closed programs (β and let-β only fire at ∅, and evaluation
+-- never goes under a binder), and dodges all renaming machinery.
 --
 -- The all-instances hypothesis is exactly what T-let's instance-closed
 -- premise provides at let-β; each use site of x picks its instance and grabs
@@ -1914,8 +1896,7 @@ private theorem preservation_aux {B C : Type} {constTy : C → B} {δ : Delta C}
   | _, _, _, .tApp h₁ h₂, hΓ, _ => fun hs => by
       cases hs with
       | appFun s     => exact .tApp (preservation_aux h₁ hΓ s) h₂
-      | appArg v s   => exact .tApp h₁ (preservation_aux h₂ hΓ s)
-      | beta hval =>
+      | beta =>
           subst hΓ
           obtain ⟨σ₁, σ₂, heq | hu, hbody⟩ := typed_lam_inv h₁
           · obtain ⟨τ₁', τ₂', hfn, he₁, he₂⟩ := heq.fn_inv
@@ -1983,9 +1964,7 @@ private theorem preservation_aux {B C : Type} {constTy : C → B} {δ : Delta C}
       .tUnk (preservation_aux h hΓ hs)
   | _, _, _, .tLet h₁ h₂, hΓ, _ => fun hs => by
       cases hs with
-      | letCong s =>
-          exact .tLet (fun τ' hi => preservation_aux (h₁ τ' hi) hΓ s) h₂
-      | letBeta hval =>
+      | letBeta =>
           -- let-β: the instance-closed premise is exactly the all-instances
           -- hypothesis of the polymorphic substitution lemma
           subst hΓ

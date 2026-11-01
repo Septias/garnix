@@ -579,12 +579,11 @@ mutual
     | qApp : QTyped constTy Γ e₁ (.fn τ₁ τ₂) → QTyped constTy Γ e₂ τ₁ →
              QTyped constTy Γ (.app e₁ e₂) τ₂
     -- ∀ τ₁ ≥ σ.  Γ ⊢ e₁ : τ₁     (instance-closed over DISCHARGED instances)
-    -- The INHABITATION premise is not bureaucracy: with Q ≠ ∅ a scheme can have
-    -- NO Γ-instance, and then the instance-closed premise says nothing at all
-    -- about e₁ — `let x = (3 4) in 5` would type while being stuck, and progress
-    -- would be false. Plain schemes satisfy it by Scheme.Inst.self; the solver
-    -- checks it at A-let and at the entry (`LetSpent`, `LetResults.inhabited`: an
-    -- unspent stump discharges at ★, a spent one by filling its blocker).
+    -- The INHABITATION premise makes e₁ have a typing. Safety does not need it:
+    -- `let` is lazy, so a binding that no instance lets e₂ use is never forced.
+    -- Plain schemes satisfy it by Scheme.Inst.self; the solver checks it at A-let
+    -- and at the entry (`LetSpent`, `LetResults.inhabited`: an unspent stump
+    -- discharges at ★, a spent one by filling its blocker).
     | qLet : σ.WF →
              (∀ τ₁, QScheme.Inst σ τ₁ → QTyped constTy Γ e₁ τ₁) →
              (∃ τ₁, QScheme.Inst σ τ₁) →
@@ -1450,8 +1449,7 @@ private theorem qpreservation_aux {B C : Type} {constTy : Sig B C} (hok : SigOK 
   | _, _, _, .qApp h₁ h₂, hΓ, _ => fun hs => by
       cases hs with
       | appFun s     => exact .qApp (qpreservation_aux hok h₁ hΓ s) h₂
-      | appArg v s   => exact .qApp h₁ (qpreservation_aux hok h₂ hΓ s)
-      | beta hval =>
+      | beta =>
           subst hΓ
           obtain ⟨σ₁, σ₂, heq | hu, hbody⟩ := qtyped_lam_inv h₁
           · obtain ⟨τ₁', τ₂', hfn, he₁, he₂⟩ := heq.fn_inv
@@ -1568,9 +1566,7 @@ private theorem qpreservation_aux {B C : Type} {constTy : Sig B C} (hok : SigOK 
   -- construction on `{l = e₂}`; either way typed at something, then blurred
   | _, _, _, .qLet hwf h₁ hne h₂, hΓ, _ => fun hs => by
       cases hs with
-      | letCong s =>
-          exact .qLet hwf (fun τ' hi => qpreservation_aux hok (h₁ τ' hi) hΓ s) hne h₂
-      | letBeta hval =>
+      | letBeta =>
           subst hΓ
           exact qsubst_scheme_preserves_typing _ _ _ _ _ _ _
             (fun τ' hi => h₁ τ' hi) h₂
@@ -1623,16 +1619,11 @@ end
 --========================= L2 METATHEORY: PROGRESS ==========================--
 --   If ⊢_Q e : τ  then  e ∈ Value  ∨  (∃ e', e → e')  ∨  e ↯
 -- Step/Value/Err/Progress are reused verbatim from minimal — only the typing
--- relation changed — so this tracks `progress` rule-for-rule. Two differences,
--- both real:
+-- relation changed — so this tracks `progress` rule-for-rule. One difference:
 --   * the context must be empty, exactly as in L1. This used to read "only
 --     tyEnv must be empty — Γ's ROW-solutions stay available, because L2
 --     lookups (qSel*) read them"; qSel* read nothing but the row, so the
 --     difference has closed.
---   * the qLet case consumes the INHABITATION premise instead of
---     Scheme.Inst.self. With Q ≠ ∅ a scheme need not instantiate at all, and a
---     vacuous one would let `let x = e₁ in e₂` type without saying anything
---     about e₁ — which is exactly where progress would break.
 
 -- Selecting on a record literal always progresses: hit steps, miss errors.
 -- (minimal's twin is private; the L2 development needs its own copy.)
@@ -1785,17 +1776,13 @@ def qprogress {B C : Type} {constTy : Sig B C} (hok : SigOK constTy) {Γ : QCtx 
   | .qRcd _       => .done .rcd
   | .qUnk h       => qprogress hok hΓ h
   | .qLabBlur h   => qprogress hok hΓ h
-  | .qApp h₁ h₂   =>
+  | .qApp h₁ _    =>
       match qprogress hok hΓ h₁ with
       | .step s  => .step (.appFun s)
       | .err er  => .err (.appFun er)
-      | .done v₁ =>
-          match qprogress hok hΓ h₂ with
-          | .step s  => .step (.appArg v₁ s)
-          | .err er  => .err (.appArg v₁ er)
-          | .done v₂ => by
-              obtain ⟨x, e₀, rfl⟩ := qcanonical_fn v₁ h₁
-              exact .step (.beta v₂)
+      | .done v₁ => by
+          obtain ⟨x, e₀, rfl⟩ := qcanonical_fn v₁ h₁
+          exact .step .beta
   | .qCat h₁ h₂   =>
       match qprogress hok hΓ h₁ with
       | .step s  => .step (.catLeft s)
@@ -1835,13 +1822,7 @@ def qprogress {B C : Type} {constTy : Sig B C} (hok : SigOK constTy) {Γ : QCtx 
       | .done v => by
           obtain ⟨b, ρ', rfl, -, -⟩ := qcanonical_rcd v he
           exact qsel_rcd_progress b _
-  -- the inhabitation premise picks ONE discharged instance; the binding types
-  -- there, which is all progress needs to drive it to a value, error or step
-  | .qLet hwf h₁ hne h₂ =>
-      match qprogress hok hΓ (h₁ _ hne.choose_spec) with
-      | .step s  => .step (.letCong s)
-      | .err er  => .err (.letBind er)
-      | .done v₁ => .step (.letBeta v₁)
+  | .qLet _ _ _ _ => .step .letBeta
   | .qLab => .done .lab
   | .qSelDyn h₁ h₂ _ => qselDyn_progress (qprogress hok hΓ h₁) (qprogress hok hΓ h₂)
       (fun v => let ⟨b, _, he, _⟩ := qcanonical_rcd v h₁; ⟨b, he⟩)
