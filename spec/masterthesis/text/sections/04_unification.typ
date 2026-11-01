@@ -6,11 +6,34 @@
 
 = Unification <unification>
 
-// TODO(structure): outcome-first opening (F): what row unification achieves (forced moves only; mgu on success, sound clash/occurs, stuck where a choice would be needed), then the two judgements. Your sentence, moved here from the row-pass prose:
-// Row unification preserves the solution set of the problem and never chooses among alternatives. I.e. it never backtracks and stays first-order.
+Next, we present our unification algorithm. It consists of two judgements, one for types: $τ₁ ≐ τ₂ ⇝ v$ and one for rows: $s₁ scripts(≐)_r s₂ ⇝ v$ that call each other mutually recursively. @unification-ty lists the verdicts of unification and shows how spines are formed.
 
-Next, we present our unification algorithm. It consists of two judgements, one for types: $τ₁ ≐ τ₂ ⇝ v$ and one for rows: $s₁ scripts(≐)_r s₂ ⇝ v$ that call each other mutually recursively. @unification-ty lists the verdicts of unification and shows how spines are formed. A spine s of a row ρ, denoted $s = ⌈ρ⌉$, represents a row as a list of atoms $a ::= l: τ | α$, obtained by flattening the concatenation tree. For example, $((l: 𝓫 | ε) | (α | m: 𝓫))$ and $(l: 𝓫 | (α | (m: 𝓫 | ε)))$ both have the spine $⟨l: 𝓫, α, m: 𝓫⟩$.
+// TODO(structure): admit that ≈ keeps shadowed fields, unlike Nix's set-like records. The last sentence of this section points to its own chapter.
+== Spines and Windows <trace-monoid>
+// full sentence of why a spine and why it is nice?
+A spine s of a row ρ, denoted $s = ⌈ρ⌉$, represents a row as a list of atoms $a ::= l: τ | α$, obtained by flattening the concatenation tree. For example, $((l: 𝓫 | ε) | (α | m: 𝓫))$ and $(l: 𝓫 | (α | (m: 𝓫 | ε)))$ both have the spine $⟨l: 𝓫, α, m: 𝓫⟩$.
 
+A _window_ is a maximal var-free segment at one end of a spine: in $⟨m: 𝓫, l: 𝓫, α, l: 𝓫′⟩$ the leading window is $⟨m: 𝓫, l: 𝓫⟩$ and the trailing window is $⟨l: 𝓫′⟩$. $|s|_l$ denotes the number of l-fields of s.
+
+By ≈-comm, equal labels cannot be swapped and there is no rule to move a label in front of a row variable because that would change shadowing behaviour similarly. Row variables then cut rows into segments where permutation is allowed, delimited by row-variable barriers that cannot be crossed. This opens a new perspective on rows: A row is a word over an alphabet with two components: fields $(l: τ)$ and row-variables α. Two letters may swap when they are fields with distinct labels; a row-variable commutes with nothing, and neither do two fields with the same label. Rows modulo ≈ together with the unit ε then form a partially commutative monoid, also called a _trace monoid_ @book_of_traces. Two standard results of trace theory carry over to rows, and the Lean names point to their mechanization. First, ≈ is decidable and has a normal form.
+
+#theorem(name: [Characterization of ≈], lean: "rowEquiv_iff_char")[
+  $ρ₁ ≈ ρ₂$ if and only if ρ₁ and ρ₂ have the same sequence of row-variables and, for every label l and every var-free segment, the subsequences of fields labelled l agree pointwise up to ≈.
+] <thm-char>
+
+Sorting each var-free segment stably by label yields a normal form, the lexicographic normal form of trace theory. For example, $(m: 𝓫 | l: 𝓫 | α | l: 𝓫′ | m: 𝓫)$ splits into the segments $(m: 𝓫 | l: 𝓫)$ and $(l: 𝓫′ | m: 𝓫)$ around α, and its representative is $(l: 𝓫 | m: 𝓫 | α | l: 𝓫′ | m: 𝓫)$: the first segment is reordered, and no field crosses α. Second, the monoid is cancellative, as every trace monoid is.
+
+#lemma(
+  name: [Cancellativity],
+  lean: "RowEquiv.cancel_cat_left, RowEquiv.cancel_cat_right",
+)[
+  If $(ρ | ρ₁) ≈ (ρ | ρ₂)$ or $(ρ₁ | ρ) ≈ (ρ₂ | ρ)$, then $ρ₁ ≈ ρ₂$.
+] <lem-cancel>
+
+Unification uses both of these properties: The normal form is used to process rows from both sides and cancellativity allows cancelling a common prefix or suffix (@unification).
+
+
+== Type Unification
 A verdict is either a solution θ or one of three refusals. #u_clash is emitted when two head constructors differ and #u_occurs when a variable occurs in the type it is equated with, so that a solution would need a recursive type. MiniNix has no recursive types. #u_stuck is emitted when no more moves apply and carries the Wand ambiguity.
 
 #let unification_ty = figure(
@@ -45,25 +68,6 @@ A verdict is either a solution θ or one of three refusals. #u_clash is emitted 
 #unification_ty <unification-ty>
 
 @unification-ty shows the type unification rules of the algorithmic system. Every statement is an equation and unification tries to return a substition θ that makes both sides equal. U-refl is the trivial base case and U-bind solves a simple equation by substitution, but only when α is not a free type variable of τ. This case is handled by U-occurs to prevent endless cycles. Unifying the same base-type is a no-op (U-base) and different base-types result in a clash by U-base-clash. Two unequal head-level constructors (functions, records, …) also result in a clash. ★ is a nullary constructor like a base type: it unifies only with itself (U-★) and clashes with every other head. Unlike the dynamic type of gradual typing, it is not consistent with every type. Finally, U-fn unifies functions and U-rcd hands off unification to row unification on spines.
-
-// TODO(structure): moved here from 02 (I). Rename to "Spines and Windows"; move the spine definition (opening paragraph) and the window and |s|_l definitions (matching-moves paragraph below) into it; admit that ≈ keeps shadowed fields, unlike Nix's set-like records. Its last sentence now points to its own chapter.
-== Row Equivalence as a Trace Monoid <trace-monoid>
-By ≈-comm, equal labels cannot be swapped and there is no rule to move a label in front of a row variable because that would change shadowing behaviour similarly. Row variables then cut rows into segments where permutation is allowed, delimited by row-variable barriers that cannot be crossed. This opens a new perspective on rows: A row is a word over an alphabet with two components: fields $(l: τ)$ and row-variables α. Two letters may swap when they are fields with distinct labels; a row-variable commutes with nothing, and neither do two fields with the same label. Rows modulo ≈ together with the unit ε then form a partially commutative monoid, also called a _trace monoid_ @book_of_traces. Two standard results of trace theory carry over to rows, and the Lean names point to their mechanization. First, ≈ is decidable and has a normal form.
-
-#theorem(name: [Characterization of ≈], lean: "rowEquiv_iff_char")[
-  $ρ₁ ≈ ρ₂$ if and only if ρ₁ and ρ₂ have the same sequence of row-variables and, for every label l and every var-free segment, the subsequences of fields labelled l agree pointwise up to ≈.
-] <thm-char>
-
-Sorting each var-free segment stably by label yields a normal form, the lexicographic normal form of trace theory. For example, $(m: 𝓫 | l: 𝓫 | α | l: 𝓫′ | m: 𝓫)$ splits into the segments $(m: 𝓫 | l: 𝓫)$ and $(l: 𝓫′ | m: 𝓫)$ around α, and its representative is $(l: 𝓫 | m: 𝓫 | α | l: 𝓫′ | m: 𝓫)$: the first segment is reordered, and no field crosses α. Second, the monoid is cancellative, as every trace monoid is.
-
-#lemma(
-  name: [Cancellativity],
-  lean: "RowEquiv.cancel_cat_left, RowEquiv.cancel_cat_right",
-)[
-  If $(ρ | ρ₁) ≈ (ρ | ρ₂)$ or $(ρ₁ | ρ) ≈ (ρ₂ | ρ)$, then $ρ₁ ≈ ρ₂$.
-] <lem-cancel>
-
-Unification uses both of these properties: The normal form is used to process rows from both sides and cancellativity allows cancelling a common prefix or suffix (@unification).
 
 
 == Row Unification
@@ -104,7 +108,6 @@ Unification uses both of these properties: The normal form is used to process ro
 )
 
 // are the reverse arrows correct everywhere?
-// two figures for row unification is too redundant
 #let unification_cascade = figure(
   kind: image,
   caption: "The order in which the row-moves are tried.",
@@ -233,113 +236,16 @@ Unification uses both of these properties: The normal form is used to process ro
 )
 #unification_cascade <unification-cascade>
 
-The row pass is a deterministic cascade of forced moves, tried one after another. Its rules are given in @unification-cascade which is read top-to-bottom. If no rule applies, stuck is the verdict.
+The row pass is a deterministic cascade of forced moves, tried one after another. Its rules are given in @unification-cascade which is read top-to-bottom. If no rule applies, stuck is the verdict. @app-row-rules states the moves as inference rules.
 
 The first two exhaustion rules, U-ε-var and U-ε-clash, handle a problem with an empty side ⟨⟩. If the other side has only variables, U-ε-var sends each of them to ε; if it has a field, U-ε-clash reports a clash. The following cancel moves use the trace-monoid property of rows: A row variable α can be canceled on either side of the problem and the algorithm recurses on the residual problem.
 
 The solving rules fire when one side is a lone variable α. U-var-collapse fires when the same variable is found on the other side, surrounded only by other type variables. This is best explained by an example: The following row ⟨γ, α, β⟩ is solved by sending every type variable but α to ε [γ ≔ ε, β ≔ ε]. Both sides are then equal. A repeated occurrence forces α to ε as well. U-var-solve simply binds α to the other sides value if α is not contained and can form no cycle. $"rv"(s)$ looks for a variable at any depth and not only the spine. Finally, U-var-occurs reports a cycle if it exists.
 
 // explain the trace monoid structure and adimt that it does not really fit Nix' syntax
-[The three matching moves differ in how far they may look for a partner. A _window_ is a maximal var-free segment at one end of a spine: U-field-L and U-field-R pair a field only inside it, because a row-variable in between could be instantiated to a colliding field and the pairing would be a guess about shadowing. In $⟨m: 𝓫, l: 𝓫, α, l: 𝓫′⟩$ the leading window is $⟨m: 𝓫, l: 𝓫⟩$ and the trailing window is $⟨l: 𝓫′⟩$. A leading $l: τ$ on the other side is paired with $l: 𝓫$. Against $⟨m: 𝓫, α, l: 𝓫′⟩$ it has no partner in the leading window, and pairing it with $l: 𝓫′$ would assume that α carries no l. U-ground lifts that restriction by counting. A var-free side fixes the number $|s|_l$ of l-fields. If both sides have the same positive number, the variables of the other side cannot carry an l without breaking the count, so the i-th l-field on one side pairs with the i-th on the other, and the pairing is again forced.](todo)
+[The three matching moves differ in how far they may look for a partner. U-field-L and U-field-R pair a field only inside a window, because a row-variable in between could be instantiated to a colliding field and the pairing would be a guess about shadowing. Against $⟨m: 𝓫, l: 𝓫, α, l: 𝓫′⟩$, a leading $l: τ$ is paired with $l: 𝓫$. Against $⟨m: 𝓫, α, l: 𝓫′⟩$ it has no partner in the leading window, and pairing it with $l: 𝓫′$ would assume that α carries no l. U-ground lifts that restriction by counting. A var-free side fixes $|s|_l$. If both sides have the same positive number, the variables of the other side cannot carry an l without breaking the count, so the i-th l-field on one side pairs with the i-th on the other, and the pairing is again forced.](todo)
 
 A field facing only variables on the other side has no partner, but it may have a host. U-host fires on a leading field $l: τ$ when the other side has a _sole host_ β for it: β is the first variable of that side, the side has no l-field and no keyed field, every other variable of the side occurs in τ and so cannot carry the field without containing itself, and β occurs nowhere else in the problem, neither in τ, nor in the rest of the first side, nor in a payload of its own side. Every unifier then places the field at the front of β, so the move is forced. It binds $β ≔ (l: τ | β′)$ for a fresh β′ and continues with the rest of both sides. Since β occurs once, renaming it to β′ on the spine is the same as applying the binding to the whole problem, and the solution stays applied. U-host is stated for the leading end only; its mirror at the trailing end is reported as stuck (@incompleteness-forced). A field demand of a lookup still never enters a row-variable during unification. Finally U-row-clash is a global projection check rather than a per-window one, and U-stuck reports a terminal configuration.
-
-#let unification_row = figure(
-  caption: "Unification of rows, on spines.",
-  stack(
-    spacing: 15pt,
-    align(center, flexbox(
-      $#type_name("Leading window") "win"_l (s) = (τ, s′)$,
-      $#type_name("Trailing window") "win"^R_l (s) = (τ, s′)$,
-      $#type_name("Anywhere") "rem"_l (s) = (τ, s′)$,
-      $#type_name("Sole host") "host"_l (τ, t, s) = β$,
-    )),
-    flexbox(
-      derive(
-        "U-ε-var",
-        ($s$ + [ field-free], $"vars"(s) = overline(β)$),
-        $⟨⟩ scripts(≐)_r s ⇝ [overline(β) ≔ ε]$,
-      ),
-      derive("U-ε-clash", ($(l: τ) ∈ s$,), $⟨⟩ scripts(≐)_r s ⇝ #u_clash$),
-      derive(
-        "U-cancel-L",
-        ($t₁ scripts(≐)_r t₂ ⇝ θ$,),
-        $α · t₁ scripts(≐)_r α · t₂ ⇝ θ$,
-      ),
-      derive(
-        "U-cancel-R",
-        ($t₁ scripts(≐)_r t₂ ⇝ θ$,),
-        $t₁ · α scripts(≐)_r t₂ · α ⇝ θ$,
-      ),
-      derive(
-        "U-var-collapse",
-        (
-          $s$ + [ field-free],
-          $α ∈ "vars"(s)$,
-          $overline(β) = cases("vars"(s) ∖ α & "if" α "occurs once in" s, "vars"(s) & "otherwise")$,
-        ),
-        $α scripts(≐)_r s ⇝ [overline(β) ≔ ε]$,
-      ),
-      derive("U-var-solve", ($α ∉ "rv"(s)$,), $α scripts(≐)_r s ⇝ [α ≔ s]$),
-      derive(
-        "U-var-occurs",
-        ($α ∈ "rv"(s)$,),
-        $α scripts(≐)_r s ⇝ #u_occurs$,
-      ),
-      derive(
-        "U-field-L",
-        (
-          $"win"_l (s₂) = (τ′, t₂)$,
-          $τ ≐ τ′ ⇝ θ$,
-          $θ t₁ scripts(≐)_r θ t₂ ⇝ θ′$,
-        ),
-        $(l: τ) · t₁ scripts(≐)_r s₂ ⇝ θ′ ∘ θ$,
-      ),
-      derive(
-        "U-field-R",
-        (
-          $"win"^R_l (s₂) = (τ′, t₂)$,
-          $τ ≐ τ′ ⇝ θ$,
-          $θ t₁ scripts(≐)_r θ t₂ ⇝ θ′$,
-        ),
-        $t₁ · (l: τ) scripts(≐)_r s₂ ⇝ θ′ ∘ θ$,
-      ),
-      derive(
-        "U-ground",
-        (
-          $"vars"(s₂) = ⟨⟩$,
-          $|s₁|_l = |s₂|_l > 0$,
-          $"rem"_l (s_i) = (τ_i, t_i)$,
-          $τ₁ ≐ τ₂ ⇝ θ$,
-          $θ t₁ scripts(≐)_r θ t₂ ⇝ θ′$,
-        ),
-        $s₁ scripts(≐)_r s₂ ⇝ θ′ ∘ θ$,
-      ),
-      derive(
-        "U-row-clash",
-        ($|s₁|_l > |s₂|_l$, $"vars"(s₂) = ⟨⟩$),
-        $s₁ scripts(≐)_r s₂ ⇝ #u_clash$,
-      ),
-      derive(
-        "U-host",
-        (
-          $"host"_l (τ, t₁, s₂) = β$,
-          $β′ "fresh"$,
-          $t₁ scripts(≐)_r s₂[β′\/β] ⇝ θ$,
-        ),
-        $(l: τ) · t₁ scripts(≐)_r s₂ ⇝ θ ∘ [β ≔ (l: τ | β′)]$,
-      ),
-      derive(
-        "U-stuck",
-        ([no rule above applies],),
-        $s₁ scripts(≐)_r s₂ ⇝ #u_stuck$,
-      ),
-    ),
-  ),
-)
-#unification_row <unification-row>
-
-@unification-row states the moves as rules. The order is fixed by @unification-cascade, and U-var-collapse, U-var-solve, U-var-occurs, U-field-L, U-field-R, U-ground and U-host are tried in both directions. U-ε-var, U-ε-clash and U-row-clash are symmetric as stated.
 
 #example(name: [Matching, then solving])[
   In $⟨l: γ, α⟩ scripts(≐)_r ⟨l: 𝓫, m: 𝓫⟩$ no side is empty, no variable is shared at an end, and neither side is a lone variable. The leading $l: γ$ finds the partner $l: 𝓫$ in the leading window of the right side, so U-field-L emits $γ ≐ 𝓫 ⇝ [γ ≔ 𝓫]$ and continues with $⟨α⟩ scripts(≐)_r ⟨m: 𝓫⟩$. Now α is a lone variable, and U-var-solve returns $[α ≔ ⟨m: 𝓫⟩]$. The solution is $[γ ≔ 𝓫, α ≔ (m: 𝓫)]$.
