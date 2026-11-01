@@ -1,10 +1,12 @@
 
 
-# Style
-Use academic style. It can sound fancy from time to time, but needs to keep a monotonous tone. We are presenting results and not a sales pitch. Could use some more mathematical slang, even though it should be well understandable. The rule descriptions are generally good. Comments are left in the form `//` before a paragraph or inline using this syntax: [text](comment). 
+# Rules
+When writing thesis text, use academic style. It can sound fancy from time to time, but needs to keep a monotonous tone. We are presenting results and not a sales pitch. Could use some more mathematical slang, even though it should be well understandable. The rule descriptions are generally good. Comments are left in the form `//` before a paragraph or inline using this syntax: [text](comment). You can fix citation and reference errors without my intervening.
+
+The development of MacroNix is just for test purposes, don't mention it too often.
 
 
-## Rules
+## Style
 - Put the subject in front
   - No extraordinary prose
 - Repeat the noune
@@ -32,17 +34,10 @@ Use academic style. It can sound fancy from time to time, but needs to keep a mo
 - T-sel-⊥: remedied by the reason for lazyness
 - Incompleteness:
   - Wand: unsolvable
-  - Let: Not practical to solve
-  - Inference:
+  - Forced Moves: Good reasons
+  - Inference: Good reasons
     - Generalization at lets
-    - Unrestricted T-★-intro: ?
-  - Fc-labels: would need top-level schemes
-
-
-## Fixes
-- Selecting a string key
-- MacroNix should only be mentioned for running the idioms
-- Is ↯key okay?
+    - Unrestricted T-★-intro
 
 
 ## Automated checks
@@ -51,7 +46,7 @@ Use academic style. It can sound fancy from time to time, but needs to keep a mo
 
 
 ## Admitting
-- Gradual typing für usability 
+- Gradual typing for usability 
 - Use of the wrong semantic for row equality
 
 
@@ -61,24 +56,23 @@ Use academic style. It can sound fancy from time to time, but needs to keep a mo
 
 
 # Section-State
-- [x] 00 Introduction
-- [x] 01 Overview
-- [ ] 02 Declarative
-  - [ ] Introduction: Stumps
-  - [x] Syntax
-  - [x] Typing
-  - [x] Lookup ↓
-  - [x] Row equivalence
-  - [x] Sorts
-  - [x] Instantiation
-  - [x] Semantics
-- [x] 03 Metatheory
-- [ ] 04 Unification
-  - [x] Types ≐
-  - [ ] Trace Monoid
-  - [x] Rows ≐ᵣ
-  - [ ] Examples
-  - [ ] Metatheory
+- [f] 00 Introduction
+- [f] 01 Overview
+- [f] 02 Declarative
+  - [f] Syntax
+  - [f] Typing
+  - [f] Lookup ↓
+  - [f] Row equivalence
+  - [f] Sorts
+  - [f] Instantiation
+  - [ ] Semantics
+- [f] 03 Metatheory
+- [f] 04 Unification
+  - [f] Trace Monoid
+  - [f] Types ≐
+  - [f] Rows ≐ᵣ
+  - [f] Examples
+  - [f] Metatheory
 - [ ] 05 Inference
   - [ ] State
   - [ ] Rules
@@ -86,37 +80,38 @@ Use academic style. It can sound fancy from time to time, but needs to keep a mo
   - [ ] Wake, Replay, Saturate
   - [ ] Merge
 
-  
-- [ ] 06 Incompleteness
-  - [ ] Unsolvable
-  - [ ] Forced Moves
-  - [ ] Inference
+**Done on DI**
+
+- [x] 06 Incompleteness
+  - [x] Unsolvable
+  - [x] Forced Moves
+  - [x] Inference
 - [ ] 07 FC-Labels
-  - [x] Keyed Lookup
-  - [x] Row Equivalence & Spines
+  - [ ] Keyed Lookup
+  - [ ] Row Equivalence & Barriers
+  - [ ] Typing and Evaluation
   - [ ] Unification
-  - [ ] Typing
-  - [ ] Inference 
+  - [ ] Inference
+  - [ ] Costs
 - [x] 08 Mechanization
 - [ ] 09 Discussion
-  - [ ] Idioms
+  - [x] Idioms
   - [x] Design Goals
   - [~] Outlook
   - [~] 11 Conclusion
 - [ ] 10 Related Work
   - [ ] Old Work
-  - [~] FC-Labels
+  - [ ] FC-Labels
   - [ ] Expressive Row Theories
-  - [x] Subtyping Based
-  - [x] Set Theoretic
-  - [~] Gradual and Soft
+  - [ ] Subtyping Based
+  - [ ] Set Theoretic
+  - [x] Gradual and Soft
   - [x] NixLang
 - [ ] 12 Appendix
 
 
-## Session Times
-
-- [ ] Explanations (1 Day)
-- [ ] Related Work (1 Day)
-- [ ] Integrate Feedback (1 Day)
-- [ ] Final Cleanup (1 Day)
+## Zeitplan
+- FC-labels morgen lesen, grobe Schitzer finden (So)
+- Danach Declarative, Unification und Inferenz finalisieren (So + Mo)
+- FC-Labels finalisieren (Di)
+- Mit Thiemann quatschen (Mi)
