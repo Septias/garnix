@@ -616,6 +616,20 @@ example : ¬ ∃ τ, QTyped σ0 QCtx.empty (app (lam "x" c) (app c c)) τ := by
   exact conApp_false h₂ rfl
 #guard run (app (lam "x" c) (app c c)) = ("fail: clash", [])
 
+-- A-let does not test inhabitation. A binding that fails the fillability test
+-- (a spent blocker inside a spent result) is generalized, and unused costs nothing …
+#guard run (.letE "f" (lam "x" (app (sel (v "x") "l") (sel (sel (v "x") "l") "m"))) c)
+  = ("𝓫", [])
+-- … spent results on two different rows generalize, so two uses type …
+#guard (run (.letE "f"
+    (lam "x" (rec2 "p" (app (sel (.cat (rec1 "m" c) (v "x")) "l") c) "q" (sel (v "x") "l")))
+    (rec2 "a" (app (v "f") (rec1 "l" (lam "z" (v "z"))))
+          "b" (app (v "f") (rec2 "l" (lam "z" (v "z")) "m" c))))).1.startsWith "fail" == false
+-- … and the entry's test reads results up to ε (`Ty.flat`): M-merge leaves {ρ}
+-- and {ρ | ε}, once for each use
+#guard (run (lam "y" (.letE "f" (lam "x" (sel (sel (v "x") "l") "m"))
+    (rec2 "a" (app (v "f") (v "y")) "b" (app (v "f") (v "y")))))).1.startsWith "fail" == false
+
 ------------------------------------------------------------------------------
 -- # §4 Metatheory
 ------------------------------------------------------------------------------

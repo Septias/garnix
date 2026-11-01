@@ -708,16 +708,16 @@ def LetCase (B C : Type) [DecidableEq B] (constTy : Sig B C) : Prop :=
     SoundAt constTy (Γ.bindScheme x (letScheme S₁' ᾱ (letQ S₁' ᾱ) τ₁)) e₂ τ₂ S₂ →
     SoundAt constTy Γ (.letE x e₁ e₂) τ₂ S₂
 
-/-- ⊢  the let scheme is well formed: `LetResults` is exactly `QScheme.WF` read
-off the generalized stumps. -/
+/-- ⊢  the let scheme is well formed: generalized results are exactly
+`QScheme.WF` read off the generalized stumps. -/
 theorem letScheme_wf {B : Type} [DecidableEq B] {Γ : QCtx B} {S₁ : SolverState B}
     {x : Var} {τ₁ : Ty B} {Δq : List (Parked B)} {ᾱ : List TyVar}
-    (hΓ : Γ.SchemesWF) (hres : LetResults S₁ ᾱ Δq) :
+    (hΓ : Γ.SchemesWF) (hres : ∀ p ∈ Δq, ∀ δ ∈ (p.stump.res.applySubst S₁.subst).ftv, δ ∈ ᾱ) :
     (Γ.bindScheme x (letScheme S₁ ᾱ Δq τ₁)).SchemesWF := by
   refine hΓ.bindScheme x ?_
   intro st hst
   obtain ⟨p, hp, rfl⟩ := List.mem_map.mp hst
-  exact hres.1 p hp
+  exact hres p hp
 
 private theorem draw_eqs {B : Type} {S S₀ : SolverState B} {α : TyVar} {κ : Kind}
     (h : (α, S₀) = S.draw κ) : S₀.sol = S.sol ∧ S₀.parked = S.parked := by
@@ -1014,7 +1014,7 @@ theorem inferSound_of {B C : Type} [DecidableEq B] {constTy : Sig B C}
       .qRcd (inferRecSound_of hvar hlet hb hΓ hc hq σ hab hσ Γ' hr)
   | _, _, _, _, _, .letE (S₁' := S₁') (ᾱ := ᾱ) (x := x) (τ₁ := τ₁) h₁ hm hA h₂,
       hΓ, hc, hq => by
-      have hΓ' := letScheme_wf (x := x) (τ₁ := τ₁) hΓ hA.results
+      have hΓ' := letScheme_wf (x := x) (τ₁ := τ₁) hΓ hA.res
       have c₁ := hm.clean (Infer.clean h₁ hc)
       have q₁ : ({ S₁' with parked := letG S₁' ᾱ } : SolverState B).Quiescent :=
         quiescent_sub (hm.quiescent (Infer.quiescent h₁ hq)) (fun p hp => (mem_letG.mp hp).1)

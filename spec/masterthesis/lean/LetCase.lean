@@ -481,17 +481,20 @@ theorem LetResults.inhabited {S₁ : SolverState B} {ᾱ : List TyVar} {Δq : Li
       have hmem : ((p.stump.label.applySubst S₁.subst).keyName, (rd p).applySubst χR) ∈
           fills (f p.blocker) :=
         List.mem_map.mpr ⟨p, List.mem_filter.mpr ⟨hp, by simp [hsp]⟩, rfl⟩
-      have hfound : fillRes (fills (f p.blocker)) (p.stump.label.applySubst S₁.subst).keyName =
-          .found ((rd p).applySubst χR) := by
+      -- the field may be that of another stump spent alike: ≈, as D-hit allows
+      obtain ⟨τq, hfound, hτq⟩ : ∃ τq,
+          fillRes (fills (f p.blocker)) (p.stump.label.applySubst S₁.subst).keyName =
+            .found τq ∧ TyEquiv ((rd p).applySubst χR) τq := by
         unfold fillRes
         cases hlk' : (fills (f p.blocker)).lookup (p.stump.label.applySubst S₁.subst).keyName with
         | none => exact absurd hlk' (lookup_none_of_mem hmem)
         | some τ =>
             obtain ⟨q, hq, -, hqb, hql, rfl⟩ := fill_key p hp hlk'
-            have hqp := ((hsame q hq hqb).2.1 hql).2
-            rw [hstar q hq, hstar p hp, hqp]
+            refine ⟨_, rfl, ?_⟩
+            rw [hstar q hq, hstar p hp]
+            exact TyEquiv.applySubst _ (TyEquiv.applySubst _ ((hsame q hq hqb).2.1 hql).equiv.symm)
       rw [hfound] at hfind
-      refine .hit (τ := (rd p).applySubst χR) (hlk _ ?_) (.of_eq ?_)
+      refine .hit (τ := τq) (hlk _ ?_) (TyEquiv.trans (.of_eq ?_) hτq)
       · rw [hkey p hp ho]; exact LookupQ.lab_iff.mpr hfind
       · -- χ₀ is χR on the result: no spent blocker in it
         apply Ty.applySubst_congr
@@ -595,7 +598,7 @@ theorem letCase {C : Type} {constTy : Sig B C} : LetCase B C constTy := by
   generalize hG : letG S₁ ᾱ = Δγ at h₂ IH₂
   have hsplit : S₁.parked.Perm (Δq ++ Δγ) := hQ ▸ hG ▸ letSplit S₁ ᾱ
   have hfresh := hA.gfresh
-  have hres : LetResults S₁ ᾱ Δq := hQ ▸ hA.results
+  have hres : ∀ p ∈ Δq, ∀ δ ∈ (p.stump.res.applySubst S₁.subst).ftv, δ ∈ ᾱ := hQ ▸ hA.res
   have hdis : ∀ α ∈ ᾱ, ∀ p ∈ Δγ, _ := fun α hα p hp => hA.dis α hα p (hG ▸ hp)
   -- the state e₁ ends in
   have c₀ := Infer.clean h₀ hc
@@ -621,7 +624,7 @@ theorem letCase {C : Type} {constTy : Sig B C} : LetCase B C constTy := by
   have hrd : ∀ p ∈ Δq, ∀ α ∈ (p.stump.res.applySubst S₁.subst).ftv,
       (readSub σ ᾱ f).ty α = .var (f α) ∧ (readSub σ ᾱ f).row α = .var (f α) ∧
         (readSub σ ᾱ f).lab α = .var (f α) :=
-    fun p hp α hα => by simp [readSub, hres.1 p hp α hα]
+    fun p hp α hα => by simp [readSub, hres p hp α hα]
   have hrdftv : ∀ p ∈ Δq, ((p.stump.res.applySubst S₁.subst).applySubst (readSub σ ᾱ f)).ftv
       = (p.stump.res.applySubst S₁.subst).ftv.map f :=
     fun p hp => Ty.ftv_rename _ (hrd p hp)
@@ -633,7 +636,7 @@ theorem letCase {C : Type} {constTy : Sig B C} : LetCase B C constTy := by
     change δ ∈ ((p.stump.res.applySubst S₁.subst).applySubst (readSub σ ᾱ f)).ftv at hδ
     rw [hrdftv p hp] at hδ
     obtain ⟨α, hα, rfl⟩ := List.mem_map.mp hδ
-    exact List.mem_map_of_mem (hres.1 p hp α hα)
+    exact List.mem_map_of_mem (hres p hp α hα)
   · ------------------------------------------------ the instances
     intro χ hχ
     let ρ : TySubst B := χ.comp (readSub σ ᾱ f)

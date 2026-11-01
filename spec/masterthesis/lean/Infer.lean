@@ -879,18 +879,62 @@ theorem Parked.fillable_iff {B : Type} {S : SolverState B} {ᾱ : List TyVar} {p
       (.lab, p.blocker) ∉ (p.stump.row.applySubst S.subst).sortedFtv := by
   simp [Parked.fillable]
 
-/-- ⊢  a stump fillable for ᾱ is fillable for any larger ᾱ′. -/
-theorem Parked.fillable_mono {B : Type} {S : SolverState B} {ᾱ ᾱ' : List TyVar}
-    {p : Parked B} (h : p.fillable S ᾱ = true) (hs : ∀ α ∈ ᾱ, α ∈ ᾱ') :
-    p.fillable S ᾱ' = true := by
-  rw [Parked.fillable_iff, Key.fillKey_iff] at h ⊢
-  refine ⟨?_, h.2⟩
-  rcases h.1 with h | ⟨κ, hk, hκ, hne⟩
-  · exact .inl h
-  · exact .inr ⟨κ, hk, hs κ hκ, hne⟩
-
 /-- every type variable to ★; rows and keys stay -/
 def TySubst.starTy {B : Type} : TySubst B := ⟨fun _ => .unk, fun γ => .var γ, fun x => .var x⟩
+
+/-- ρ₁ | ρ₂ with ε dropped and `cat` nested to the right -/
+def Row.flatCat {B : Type} : Row B → Row B → Row B
+  | .empty, ρ => ρ
+  | .cat ρ₁ ρ₂, ρ => .cat ρ₁ (Row.flatCat ρ₂ ρ)
+  | ρ₁, .empty => ρ₁
+  | ρ₁, ρ => .cat ρ₁ ρ
+
+/-- ⊢  flatCat only uses unit and associativity. -/
+theorem Row.flatCat_equiv {B : Type} : (ρ₁ ρ₂ : Row B) → RowEquiv (.cat ρ₁ ρ₂) (Row.flatCat ρ₁ ρ₂)
+  | .empty, _ => .unitL
+  | .cat ρ₁ ρ₂, ρ => RowEquiv.assoc.trans (.cat (.refl _) (Row.flatCat_equiv ρ₂ ρ))
+  | .var _, ρ | .sing _ _, ρ | .dsing _ _, ρ => by
+      cases ρ <;> simp only [Row.flatCat] <;> first | exact .unitR | exact .refl _
+
+mutual
+  /-- a type in the unifier's spine form up to its ε: no ε and right-nested `cat`,
+  at every depth. It keeps the order of the fields, so it does not see ≈-comm. -/
+  def Ty.flat {B : Type} : Ty B → Ty B
+    | .var α => .var α
+    | .base b => .base b
+    | .unk => .unk
+    | .fn τ₁ τ₂ => .fn τ₁.flat τ₂.flat
+    | .rcd ρ => .rcd ρ.flat
+    | .lab k => .lab k
+    | .list τ => .list τ.flat
+
+  def Row.flat {B : Type} : Row B → Row B
+    | .empty => .empty
+    | .var α => .var α
+    | .sing l τ => .sing l τ.flat
+    | .dsing k τ => .dsing k τ.flat
+    | .cat ρ₁ ρ₂ => Row.flatCat ρ₁.flat ρ₂.flat
+end
+
+mutual
+  /-- ⊢  a type is ≈ to its flat form. -/
+  theorem Ty.flat_equiv {B : Type} : (τ : Ty B) → TyEquiv τ τ.flat
+    | .var _ => .refl _
+    | .base _ => .refl _
+    | .unk => .refl _
+    | .fn τ₁ τ₂ => .fn (Ty.flat_equiv τ₁) (Ty.flat_equiv τ₂)
+    | .rcd ρ => .rcd (Row.flat_equiv ρ)
+    | .lab _ => .refl _
+    | .list τ => .list (Ty.flat_equiv τ)
+
+  theorem Row.flat_equiv {B : Type} : (ρ : Row B) → RowEquiv ρ ρ.flat
+    | .empty => .refl _
+    | .var _ => .refl _
+    | .sing _ τ => .sing (Ty.flat_equiv τ)
+    | .dsing _ τ => .dsing (Ty.flat_equiv τ)
+    | .cat ρ₁ ρ₂ =>
+        (RowEquiv.cat (Row.flat_equiv ρ₁) (Row.flat_equiv ρ₂)).trans (Row.flatCat_equiv _ _)
+end
 
 /-- q demands the same field as the spent p, and agrees with it once every type
 variable is sent to ★: q is spent too, and the two results differ only in type
@@ -898,8 +942,8 @@ variables. One field then answers both, at the instance that sends the
 generalized type variables to ★. -/
 def Parked.spentAlike {B : Type} (S₁ : SolverState B) (q p : Parked B) : Prop :=
   (q.stump.res.applySubst S₁.subst).isVar = false ∧
-    (q.stump.res.applySubst S₁.subst).applySubst TySubst.starTy =
-      (p.stump.res.applySubst S₁.subst).applySubst TySubst.starTy
+    ((q.stump.res.applySubst S₁.subst).applySubst TySubst.starTy).flat =
+      ((p.stump.res.applySubst S₁.subst).applySubst TySubst.starTy).flat
 
 instance {B : Type} [DecidableEq B] {S₁ : SolverState B} {q p : Parked B} :
     Decidable (q.spentAlike S₁ p) := by
@@ -909,15 +953,21 @@ theorem Parked.spentAlike_refl {B : Type} {S₁ : SolverState B} {p : Parked B}
     (h : (p.stump.res.applySubst S₁.subst).isVar = false) : p.spentAlike S₁ p :=
   ⟨h, rfl⟩
 
+/-- ⊢  results spent alike are ≈ at ★, which is all D-hit asks of one field. -/
+theorem Parked.spentAlike.equiv {B : Type} {S₁ : SolverState B} {q p : Parked B}
+    (h : q.spentAlike S₁ p) :
+    TyEquiv ((q.stump.res.applySubst S₁.subst).applySubst TySubst.starTy)
+      ((p.stump.res.applySubst S₁.subst).applySubst TySubst.starTy) :=
+  (Ty.flat_equiv _).trans (h.2 ▸ (Ty.flat_equiv _).symm)
+
 /-- A spent result can be met at some instance, by extending its blocker row
 with the field (`LetResults.inhabited`, LetCase.lean): it is fillable, every
 stump on the same blocker is fillable and, if it asks the same field name
 (`Key.keyName`), is spent alike (`Parked.spentAlike`); a key variable on the
 blocker blocks no stump of Δq (the witness reads it as a label, and a stump
 waiting on it would resolve); and no spent stump's blocker occurs in a spent
-result. A sufficient, syntactic test for the inhabitation of the scheme
-(`∃ τ₁. σ ≥ τ₁`, the T-let premise); unlike the property itself it is closed
-under union (`LetAdmissible.union`). -/
+result. A sufficient, syntactic test that the answer of a run is inhabited
+(`∃ τ₁. σ ≥ τ₁`, the second conjunct of `RunSound`). -/
 def LetSpent {B : Type} (S₁ : SolverState B) (ᾱ : List TyVar) (Δq : List (Parked B)) : Prop :=
   ∀ p ∈ Δq, (p.stump.res.applySubst S₁.subst).isVar = false →
       p.fillable S₁ ᾱ = true ∧
@@ -935,9 +985,9 @@ instance {B : Type} [DecidableEq B] {S : SolverState B} {ᾱ : List TyVar} {Δ :
     Decidable (LetSpent S ᾱ Δ) := by
   unfold LetSpent; infer_instance
 
-/-- A-let's premise on the generalized RESULTS, read at S₁ (`QScheme.WF` and
-the inhabitation of the scheme): each is a type over ᾱ — a variable, or a type
-a promise was spent on — and the spent ones can be met (`LetSpent`). -/
+/-- The generalized RESULTS of an answer, read at S₁ (`QScheme.WF` and the
+inhabitation of the scheme): each is a type over ᾱ — a variable, or a type a
+promise was spent on — and the spent ones can be met (`LetSpent`). -/
 def LetResults {B : Type} (S₁ : SolverState B) (ᾱ : List TyVar) (Δq : List (Parked B)) :
     Prop :=
   (∀ p ∈ Δq, ∀ δ ∈ (p.stump.res.applySubst S₁.subst).ftv, δ ∈ ᾱ) ∧ LetSpent S₁ ᾱ Δq
@@ -998,7 +1048,7 @@ def letEnvFtv {B : Type} (Γ : QCtx B) (S₁ : SolverState B) (Δ : List (Parked
       (p.stump.label.applySubst S₁.subst).ftv)
 
 /-- ᾱ is an admissible choice at A-let (`gen` in the thesis): Δ_q and Δ_Γ are
-determined by ᾱ (`letQ`, `letG`), and four conditions remain.
+determined by ᾱ (`letQ`, `letG`), and three conditions remain.
 * `fresh`: ᾱ ∩ ftv(⟦S₁⟧(Γ, Δ_Γ)) = ∅ — the HM(X) side condition. Γ's half was
   once MISSING, and `runSound_false_unguarded_let` (LetSound.lean) is what it
   cost: `λy. let z = y in z` inferred `a → b`. Δ_Γ's half makes what stays
@@ -1007,16 +1057,15 @@ determined by ᾱ (`letQ`, `letG`), and four conditions remain.
   the scheme, or nothing ever discharges it (`runSound_false_let_captures`).
 * `res`: each generalized result, read at S₁, is generalized with it
   (`QScheme.WF`).
-* `spent`: the spent results can be met (`LetSpent`, inhabitation).
 Neither the sorts of ᾱ nor "nothing solved is generalized" are premises: the
 scheme carries no sorts, and a solved variable does not occur in anything read
-at S₁. -/
+at S₁. Nor is inhabitation: T-let does not ask for it. A use of x at an instance
+that does not exist fails at the use, and an unused x is never forced. -/
 structure LetAdmissible {B : Type} (Γ : QCtx B) (S S₁ : SolverState B) (ᾱ : List TyVar) :
     Prop where
   fresh : ∀ α ∈ ᾱ, α ∉ letEnvFtv Γ S₁ (letG S₁ ᾱ)
   own   : ∀ p ∈ letQ S₁ ᾱ, ∀ q ∈ S.parked, p.stump ≠ q.stump
   res   : ∀ p ∈ letQ S₁ ᾱ, ∀ δ ∈ (p.stump.res.applySubst S₁.subst).ftv, δ ∈ ᾱ
-  spent : LetSpent S₁ ᾱ (letQ S₁ ᾱ)
 
 theorem mem_letEnvFtv {B : Type} {Γ : QCtx B} {S₁ : SolverState B} {Δ : List (Parked B)}
     {α : TyVar} :
@@ -1068,11 +1117,6 @@ theorem LetAdmissible.fresh_of {B : Type} {Γ : QCtx B} {S₁ : SolverState B}
   · exact (hd α hα p hp).1 h
   · exact (hd α hα p hp).2.1 h
   · exact (hd α hα p hp).2.2 h
-
-/-- ⊢  `res` and `spent` together are `LetResults` at Δ_q. -/
-theorem LetAdmissible.results {B : Type} {Γ : QCtx B} {S S₁ : SolverState B}
-    {ᾱ : List TyVar} (h : LetAdmissible Γ S S₁ ᾱ) : LetResults S₁ ᾱ (letQ S₁ ᾱ) :=
-  ⟨h.res, h.spent⟩
 
 /-- ⊢  an unsolved result reads as itself -/
 theorem SolverState.subst_ty_of_not_dom {B : Type} {S : SolverState B} {δ : TyVar}
@@ -1233,8 +1277,7 @@ inductive Infer {B C : Type} [DecidableEq B] (constTy : Sig B C) :
       {τ₁ τ₂ : Ty B} {ᾱ : List TyVar} :
       Infer constTy Γ S e₁ τ₁ S₁ →
       -- M-merge: stumps that ask one lookup get one result. Forced
-      -- (`merge_forced`), and what `LetSpent` needs of a field selected once
-      -- spent and once unspent.
+      -- (`merge_forced`).
       Merges S₁ S₁' →
       -- ᾱ = gen_{Γ,S}(S₁′, τ₁): any admissible choice. Which one a function
       -- takes, the greatest, is `greatestAlpha` (LetChoice.lean).
@@ -1414,8 +1457,9 @@ theorem selEx_infers :
 -- The entry used to decide at this point: F-hit put a spent field into its
 -- blocker, F-★ sent every undecided result to ★. Both picked ONE instance of
 -- this scheme, and neither pick was forced. With Γ = ∅ and a start state that
--- parks nothing, A-let's admissibility is free except for `LetSpent`, the
--- inhabitation test.
+-- parks nothing, A-let's admissibility is free. The entry adds `LetSpent`, the
+-- inhabitation test: an answer without an instance would say nothing about the
+-- program, unlike a let, whose unused binding is never forced.
 --
 -- The initial supply is ⟨1⟩, not ⟨0⟩: `natName 0` is the empty string, so
 -- starting at 1 keeps every invented name non-empty.

@@ -1061,11 +1061,10 @@ info: 'MinimalCalculus.satStep_wf' depends on axioms: [propext, Classical.choice
 /-- info: 'MinimalCalculus.LetAdmissible.union' depends on axioms: [propext, Quot.sound] -/
 #guard_msgs in #print axioms LetAdmissible.union
 
--- A spent stump under a generalized key variable is fillable (the witness
--- reads the key as the label `${κ}`); fillability only grows with ᾱ, which is
--- what keeps admissible choices closed under union
-/-- info: 'MinimalCalculus.Parked.fillable_mono' depends on axioms: [propext, Quot.sound] -/
-#guard_msgs in #print axioms Parked.fillable_mono
+-- The entry's fillability test reads spent results up to ε and associativity:
+-- what it calls alike is ≈, which is all D-hit asks of one field
+/-- info: 'MinimalCalculus.Parked.spentAlike.equiv' depends on axioms: [propext] -/
+#guard_msgs in #print axioms Parked.spentAlike.equiv
 
 /--
 info: 'MinimalCalculus.lookupV_blocked_fill' depends on axioms: [propext, Classical.choice, Quot.sound]

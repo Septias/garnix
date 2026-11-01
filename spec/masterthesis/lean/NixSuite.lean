@@ -12,7 +12,9 @@
 -- - `"${"s"}"` as a key  → the label `s`;  a string bound to a variable and used
 --                         as a key → `lab s` and `selDyn` / `rcdDyn`
 -- - `{x, y ? d}@s: e`   → `λs. let x = s.x in let y = ({y = d} ‖ s).y in e`
---                         (open and closed patterns coincide: rows are open)
+--                         (open and closed patterns coincide: rows are open;
+--                         `let` is lazy, so a missing field fails at its first
+--                         use, not at entry as in Nix)
 -- - non-recursive `rec {…}` / `let {… body}` → nested `let`s, then the record
 -- - MacroNix (Builtins.lean): `if`, `assert`, `e ? l`, list literals, `++`,
 --   `+ - * /`, `== != < …`, `! && || ->`, string `+` and interpolation
@@ -35,7 +37,7 @@
 --                     binds, hole := `bc`       bool                true    ✓
 -- scope-1/2/3/7       shadowing, rec, inherit   int ×4              3 1 4 1 ✓
 -- let, new-let        string `+`                ⌊★⌋                 str     ✓
--- patterns            @-patterns, defaults,     clash               str     ✗ (5)
+-- patterns            @-patterns, defaults,     ⌊★⌋                 str     ✓ (5)
 --                     h at two row shapes
 -- empty-args          `{}:` pattern             ⌊★⌋                 str     ✓
 -- inherit-from        [ a b merged ]            clash               list    ✗ (4)
@@ -66,13 +68,10 @@
 --     and at s3. Until 2026-10-27 `upd`/`orE`/`pat` put the default on the
 --     WINNING side of ‖, so every default lookup hit at once and this row read
 --     ✓. With the default on the losing side, the lookups block on the row of
---     args and park as stumps. One call of h types; two calls clash, so A-let
---     does not generalize the row of args. Minimal trigger: a spent lookup of x
---     next to `z ? args.x` (h with only one of `x ? …` / `z ? args.x`, or with
---     an unused x, types). Presumably `LetSpent` (stumps on one blocker with one
---     field name must be spent alike, and the forced merge only identifies
---     stumps on one spine), not confirmed. Incompleteness
---     of A-let, not a type error.
+--     args and park as stumps. Two calls clashed while A-let tested `LetSpent`,
+--     which kept the row of args monomorphic (a spent lookup of x next to
+--     `z ? args.x`). A-let no longer tests it (feat/lazy-semantics), so h is
+--     generalized and each call answers on its own.
 -- (6) feat/fc-labels: a string literal has its singleton type ⌊l⌋, a computed
 --     string ⌊★⌋. Branches of an `if` (A-if-join), list elements (A-cons-str)
 --     and `==` (α → β → bool) take both; the `""` accumulator of foldl' meets
@@ -283,7 +282,7 @@ def patterns : E := lets
        , .app (v "h") (rcd [("x", str)]), .app (v "h") s3
        , .app (v "j") (rcd [("x", str), ("y", str), ("z", str), ("bla", str), ("foo", str)]) ])
 #guard run patterns
-  = "fail: clash"
+  = "⌊★⌋"
 
 ------------------------------------------------------------- empty-args --------
 #guard run (app (pat "e" [] (pat "s" [("x", none), ("y", none)] (cat [v "x", v "y"])))

@@ -293,7 +293,6 @@ theorem letAlias_infers_guarded :
   refine Infer.lam (S₀ := laS) rfl ?_
   refine Infer.letE (ᾱ := []) la_var_y (.refl _)
     ⟨fun _ h => (nomatch h), fun _ hp => absurd (mem_letQ.mp hp).2 List.not_mem_nil,
-     fun _ hp => absurd (mem_letQ.mp hp).2 List.not_mem_nil,
      fun _ hp => absurd (mem_letQ.mp hp).2 List.not_mem_nil⟩ ?_
   exact Infer.var_mono
     (by rw [QCtx.lookup_bindScheme]; simp; rfl)
@@ -426,16 +425,14 @@ theorem runSound_false_let_captures (hu : UnguardedLet Unit Unit (Sig.plain fun 
     ¬ RunSound Unit Unit (Sig.plain fun _ => ()) := fun h =>
   letCapture_not_typed (runSound_plain h (letCapture_infers_unguarded hu) rfl)
 
-/-- A-let without its ownership premise, but with the other three conditions of
-`LetAdmissible`: freshness for Γ and Δ_Γ, results generalized, spent results
-fillable. -/
+/-- A-let without its ownership premise, but with the other two conditions of
+`LetAdmissible`: freshness for Γ and Δ_Γ, results generalized. -/
 def UnownedLet (B C : Type) [DecidableEq B] (constTy : Sig B C) : Prop :=
   ∀ {Γ : QCtx B} {S S₁ S₂ : SolverState B} {x : Var} {e₁ e₂ : Expr C}
     {τ₁ τ₂ : Ty B} {ᾱ : List TyVar},
     Infer constTy Γ S e₁ τ₁ S₁ →
     (∀ α ∈ ᾱ, α ∉ letEnvFtv Γ S₁ (letG S₁ ᾱ)) →
     (∀ p ∈ letQ S₁ ᾱ, ∀ δ ∈ (p.stump.res.applySubst S₁.subst).ftv, δ ∈ ᾱ) →
-    LetSpent S₁ ᾱ (letQ S₁ ᾱ) →
     Infer constTy (Γ.bindScheme x (letScheme S₁ ᾱ (letQ S₁ ᾱ) τ₁))
       { S₁ with parked := letG S₁ ᾱ } e₂ τ₂ S₂ →
     Infer constTy Γ S (.letE x e₁ e₂) τ₂ S₂
@@ -456,7 +453,7 @@ theorem runSound_false_unowned_let (hu : UnownedLet Unit Unit (Sig.plain fun _ =
     have hS : ({ lcS1 with parked := letG lcS1 [natName 2, natName 3] } : SolverState Unit)
         = lcS2 := by rw [hG]; rfl
     rw [← hS]
-    refine hu (S₁ := lcS1) (ᾱ := [natName 2, natName 3]) .con ?_ ?_ ?_ .con
+    refine hu (S₁ := lcS1) (ᾱ := [natName 2, natName 3]) .con ?_ ?_ .con
     · intro α _
       have hE : letEnvFtv (B := Unit) QCtx.empty lcS1 [] = [] := by decide
       rw [hG, hE]; exact List.not_mem_nil
@@ -465,11 +462,6 @@ theorem runSound_false_unowned_let (hu : UnownedLet Unit Unit (Sig.plain fun _ =
       simp only [lcS1, List.mem_cons, List.not_mem_nil, or_false] at hp
       subst hp
       revert δ; decide
-    · intro p hp hsp
-      replace hp := (mem_letQ.mp hp).1
-      simp only [lcS1, List.mem_cons, List.not_mem_nil, or_false] at hp
-      subst hp
-      exact absurd hsp (by decide)
   exact letCapture_not_typed (runSound_plain h hinf rfl)
 
 /-- ⊢  the witness violates the new ownership premise: y's let is entered at
