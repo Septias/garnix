@@ -5,7 +5,7 @@
 
 == The Idioms of the Introduction <sec-idioms>
 
-We return to the three next expressions from the introduction @nix-idioms and conduct a case study on their typing. The types below are result of the Lean implementation of the inference algorithm from @inference on MacroNix (@app-macronix), which extends MiniNix by booleans, lists and builtins such as `++`. The programs are only adapted slightly to fit the algorithm by turing free names into parameters.
+We return to the three expressions from the introduction @nix-idioms and conduct a case study on their typing. The types below are result of the Lean implementation of the inference algorithm from @inference on MacroNix (@app-macronix), which extends MiniNix by booleans, lists and a limmited set of builtins. The programs are only adapted slightly to fit the algorithm by turing free names into parameters.
 
 
 #example(name: [Meta update])[
