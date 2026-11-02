@@ -4,7 +4,7 @@
 
 = First-Class Labels <fc-labels>
 
-Labels can be computed in NixLang. The expression `x.${e}` selects the field named by an arbitrary string expression e, and the expression `{ ${e} = v; }` binds a value to a label that is the result of an expression $e$. First-class labels fit naturally in our system: Label variables go into rows and and shadow similarly to a row-variable. In fact, in the following section we generalize these two types of variables to _barriers_ after which shadowing is unclear. The comparison of label variables also benefits from our addition of the unknown type: If two variables cannot be decided to be equal or not, the unknown type can be used to type the expression and the same mechanism apply: deferred lookup and qualified schemes.
+In NixLang, the expression `x.${e}` selects the field named by an arbitrary string expression e, and the expression `{ ${e} = v; }` likewise binds a value to a label that is the result of an expression $e$. Labels are thus first-class inhabitants of the language and they fit naturally in our system: A label can becom a variable in a row and and shadows similarly to a row-variable. In fact, we generalize both into _barriers_ after which shadowing is unclear. The unknown type extends similarly: If two variables cannot be decided to be equal or not, the unknown type can be used to type the expression. Both deferred lookup and qualified schemes naturally translate in this manner.
 
 
 #let fc_syntax = figure(
@@ -19,7 +19,7 @@ Labels can be computed in NixLang. The expression `x.${e}` selects the field nam
     subbox(caption: "Types")[
       $
                #type_name("Sort") κ & ::= "Type" | "Row" | "Label" \
-                #type_name("Key") k & ::= l | α \
+                #type_name("Key") k & ::= l | α | ∗ \
                #type_name("Type") τ & ::= … | ⌊k⌋ \
                 #type_name("Row") ρ & ::= … | \${k}: τ \
         #type_name("Constraints") Q & ::= ε | Q, ⟨ρ.k ↓ δ⟩ \
@@ -29,37 +29,48 @@ Labels can be computed in NixLang. The expression `x.${e}` selects the field nam
 )
 #fc_syntax <fc-syntax>
 
-@fc-syntax gives the syntax extension. A label can now be a string literal $\"l\"$. Records can be indexed by arbitrary expressions e and and the dynamic record ${ \${e₁} = e₂ }$ binds the field named by e₁. We abstract over labels and call it a key. A key $k$ can either be a discrete label $l$, or a label variable $α$, which has the new sort `Label`. Keys occur in two places: in the singleton type $⌊k⌋$ that describes the key $k$ and in the _keyed field_ $\${k}: τ$ of a row, whose label is not yet known. Stumps are keyed as well, $⟨ρ.k ↓ δ⟩$, so that a scheme can defer a lookup under a key it abstracts over.
+@fc-syntax gives the syntax extension for first-class labels. The term $\"l\"$ is a string literal and a value. Records can be indexed and extended by arbitrary expressions, just like the introduction showed. We abstract over labels and call the result a _key_. A key $k$ is a label $l$, a label variable $α$ (of label-sort), or the _unknown key_ ∗. The unknown key stands for a string whose content the analysis does not track, for example the result of a builtin that computes a string.
+
+Keys occur in two places: in the singleton type $⌊k⌋$ that describes the key $k$ and in the _keyed field_ $\${k}: τ$ of a row whose label is not known yet. In nix, every string is a label and we do the same: A trackable string is of type $⌊l⌋$ and an untrackable one of $⌊∗⌋$. The unknown key $⌊∗⌋$ is a label type and can be used as a key [but will be turned into ★]?. Stumps also abstract over keys $⟨ρ.k ↓ δ⟩$, so that a scheme can defer a lookup under a key.
 
 == Keyed Lookup
 
 #let fc_lookup = figure(
-  caption: [Key comparison and keyed lookup. The rules L-ε, L-var and the three concatenation rules of @row-lookup carry over with k in place of l.],
+  // why is this comment here instead of in the text?
+  caption: [Key comparison and keyed lookup. A literal field $l: τ$ is read as $\${l}: τ$.],
   stack(
     spacing: 15pt,
     align(
       center,
-      $#type_name("Key comparison") l ≡ l quad α ≡ α quad l class("relation", \#) l′ "if" l ≠ l′ quad k ≟ k′ "otherwise"$,
+      $#type_name("Key comparison") l ≡ l quad l class("relation", \#) l′ "if" l ≠ l′ quad k ≟ k′ "otherwise"$,
     ),
     flexbox(
-      derive("L-hit", ($k ≡ l$,), $(l: τ).k ↓ τ$),
-      derive("L-miss", ($k class("relation", \#) l$,), $(l: τ).k ↓ ⊥$),
-      derive("L-key-?", ($k ≟ l$,), $(l: τ).k ↓ #h(0.2em) ?$),
-      derive("L-dhit", ($k ≡ k′$,), $(\${k′}: τ).k ↓ τ$),
-      derive("L-dmiss", ($k class("relation", \#) k′$,), $(\${k′}: τ).k ↓ ⊥$),
-      derive("L-d?", ($k ≟ k′$,), $(\${k′}: τ).k ↓ #h(0.2em) ?$),
+      derive("L-hit", ($k ≡ k′$,), $(\${k′}: τ).k ↓ τ$),
+      derive("L-miss", ($k class("relation", \#) k′$,), $(\${k′}: τ).k ↓ ⊥$),
+      derive("L-?", ($k ≟ k′$,), $(\${k′}: τ).k ↓ #h(0.2em) ?$),
     ),
   ),
 )
 #fc_lookup <fc-lookup>
 
-@fc-lookup generalizes the lookup relation from labels to keys. Two keys are equal when they are the same label literal or variable, distinct when the labels are different and undecided otherwise. Just as for rows, the definite answers are stable under substitution so the lookup stays deterministic and total. A new source of $?$ appears for a field whose key cannot yet be compared. The lookup of l in $(\${γ}: τ)$ may hit or miss depending on the label γ becomes, [and a lookup under a variable key α may hit any literal field](add visual example).
+// three new words for what?
+@fc-lookup generalizes the lookup relation from labels to keys. The key comparison has three outcomes. Two keys are _equal_, $k ≡ k′$, when they are the same literal, and _apart_, $k class("relation", \#) k′$, when they are different literals. Every other pair is _undecided_, $k ≟ k′$. On two literals, L-hit and L-miss are the rules of @row-lookup, and L-\? is a new source of ?. A label variable is undecided even against itself. Stability forces this choice: an instance may send α to ∗, and ∗ is undecided against itself, since two strings of unknown content need not be equal. Only two literals decide a comparison, and no substitution changes a literal, so the keyed lookup keeps the properties of @lookup-metatheory. The rules L-ε, L-var and the three concatenation rules of @row-lookup carry over with k in place of l.
 
-The variable that blocks a $?$ is accordingly no longer always a row-variable. It is the row-variable at which the search stopped, the variable key of the lookup, or the variable key of a field, and inference must wake a stump when any of these is solved.
+#lemma(
+  name: [Keyed lookup],
+  lean: "LookupQ.det, LookupQ.total, LookupQ.applySubst",
+)[
+  For every row ρ and key k there is exactly one lookup result r with $ρ.k ↓ r$. If $r ≠ #h(0.2em) ?$, then $(θ ρ).(θ k) ↓ θ r$ for every substitution θ.
+] <lem-keyed-lookup>
+
+#proof[As for @lem-lookup-det and @lem-lookup-stable. A definite derivation compares only literals, and θ fixes every literal.]
+
+An undecided comparison blocks the lookup, and the variable that blocks it is no longer always a row-variable. The lookup $(m: 𝓫).α ↓ #h(0.2em) ?$ is blocked on the key α, which may become m. The lookup $(\${γ}: 𝓫 | l: 𝓫′).l ↓ #h(0.2em) ?$ is blocked on γ: the field $l: 𝓫′$ behind the keyed field is out of reach until γ is known, since γ may become l. The _blocker_ of a $?$ is the row-variable at which the search stopped or, at an undecided comparison, the lookup key if it is a variable and the key of the field otherwise.
+
+A comparison of ∗ with a literal or with ∗ is undecided at every instance, since ∗ is no variable and no substitution replaces it. A lookup that stops at such a comparison is _opaque_. The lookups $(l: 𝓫).class("normal", ∗) ↓ #h(0.2em) ?$ and $(\${∗}: 𝓫 | l: 𝓫′).l ↓ #h(0.2em) ?$ are opaque and stay $?$ under every substitution (`LookupOpaqueQ.applySubst` in Lean). An opaque lookup has no blocker, and inference answers it like a miss (@sec-fc-inference).
 
 
-
-== Row Equivalence and Spines
+== Row Equivalence and Barriers
 
 #let fc_equiv = figure(
   caption: [Row equivalence for keyed fields, extending @row-equivalence.],
@@ -70,7 +81,9 @@ The variable that blocks a $?$ is accordingly no longer always a row-variable. I
 )
 #fc_equiv <fc-equiv>
 
-A keyed field is congruent only under the same key, and a keyed field with a literal key is the literal field (@fc-equiv). ≈-comm is not extended to preserve shadowing. Spines acquire a third atom, $a ::= l: τ | α | \${α}: τ$, where a literal key is normalized to a field, and the monoid remains cancellative on both sides.
+Row equivalence extends to keyed fields by two rules (@fc-equiv). ≈-dfield is congruence under one key, and ≈-dlab identifies a keyed field under a literal with the literal field. ≈-comm needs no extension. Its premise $l₁ ≠ l₂$ is apartness, and only literals are apart, so two keyed fields under apart keys swap by ≈-dlab and ≈-comm (`RowEquiv.comm_keys`). A keyed field under a label variable or under ∗ commutes with nothing: a field in front of $\${α}: τ$ may carry the label that α becomes, and swapping the two fields would change which of them a lookup finds. Such a keyed field behaves like a row-variable, and we call both a _barrier_.
+
+The trace monoid of @trace-monoid carries over with barriers in place of row-variables. Spines acquire a third atom, $a ::= l: τ | α | \${k}: τ$ with k not a literal, since a keyed field under a literal is normalized to a literal field. A segment is a barrier-free part of a spine, and @thm-char reads: $ρ₁ ≈ ρ₂$ if and only if both rows have the same sequence of barriers, where two keyed barriers are the same when their keys are equal and their field types are equivalent, and the fields of every label agree pointwise up to ≈ in every segment (`rowEquiv_iff_char`). The monoid remains cancellative on both sides (@lem-cancel).
 
 
 == Typing and Evaluation
@@ -82,6 +95,7 @@ A keyed field is congruent only under the same key, and a keyed field with a lit
     subbox(caption: "Typing")[
       #flexbox(
         derive("T-lab", (), $Γ ⊢ \"l\": ⌊l⌋$),
+        derive("T-lab-blur", ($Γ ⊢ e: ⌊k⌋$,), $Γ ⊢ e: ⌊∗⌋$),
         derive(
           "T-sel-dyn",
           ($Γ ⊢ e₁: {ρ}$, $Γ ⊢ e₂: ⌊k⌋$, $ρ.k ↓ τ$),
@@ -102,16 +116,7 @@ A keyed field is congruent only under the same key, and a keyed field with a lit
           ($Γ ⊢ e₁: ⌊k⌋$, $Γ ⊢ e₂: τ$),
           $Γ ⊢ { \${e₁} = e₂ }: { \${k}: τ }$,
         ),
-        derive(
-          "T-sel-dyn-𝓫",
-          ($Γ ⊢ e₁: {ρ}$, $Γ ⊢ e₂: 𝓫$),
-          $Γ ⊢ e₁.\${e₂}: ★$,
-        ),
-        derive(
-          "T-rcd-dyn-𝓫",
-          ($Γ ⊢ e₁: 𝓫$, $Γ ⊢ e₂: τ$),
-          $Γ ⊢ { \${e₁} = e₂ }: ★$,
-        ),
+        derive("T-ξ-blur", ($Γ ⊢ e: τ$,), $Γ ⊢ (l = e): (\${∗}: τ)$),
       )
     ],
     subbox(caption: "Reduction")[
@@ -123,27 +128,22 @@ A keyed field is congruent only under the same key, and a keyed field with a lit
         derive("E-sel-dyn", ($ξ(l) = e$,), ${ξ}.\${\"l\"} → e$),
         derive("E-rcd-dyn", (), ${ \${\"l\"} = e } → { l = e }$),
         derive("↯-sel-dyn", ($ξ(l) "undefined"$,), ${ξ}.\${\"l\"} ↯$),
-        derive(
-          "↯-key",
-          ($v ≠ \"l\" "for all" l$,),
-          ${ξ}.\${v} ↯ quad { \${v} = e } ↯$,
-        ),
       )
     ],
   )),
 )
 #fc_typing <fc-typing>
 
-@fc-typing gives the typing rules and the reduction. The three rules for dynamic selection are those of static selection with the label replaced by the key of e₂'s type, and T-rcd-dyn records the key e₁ in a keyed field. T-sel-dyn-𝓫 and T-rcd-dyn-𝓫 answer a key of base type with ★ [](name T-sel-⊥ here as equivalent). Discharge (@instantiation) replays a keyed stump with the keyed lookup: θ is applied to both the row and the key, $(θ ρ).(θ k) ↓ r$, and the verdict pins δ exactly as for a static stump.
+@fc-typing gives the typing rules and the reduction. The three rules for dynamic selection are those of static selection with the label replaced by the key of e₂'s type, and static selection is their special case at a literal key. T-lab types $\"l\"$ at $⌊l⌋$, and the keyed lookup under a literal is the lookup of @row-lookup (`LookupQ.lab_iff`). T-sel-dyn, T-sel-dyn-★ and T-sel-dyn-⊥ applied to $e.\${\"l\"}$ thus have the premises and conclusions of T-sel, T-sel-★ and T-sel-⊥ applied to $e.l$. T-rcd-dyn records the key of e₁ in a keyed field.
 
-The evaluation contexts evaluate the record before the key, and E-sel-dyn then selects the leftmost binding of the label, as E-sel of @semantics does for a static one. A dynamic record evaluates its key but leaves the field unevaluated, as a record literal does. A missing label and a key that is not a label are both [lookup errors](why lookup error?).
+T-lab-blur and T-ξ-blur forget information, like T-★-intro. T-lab-blur forgets the content of a string, and T-ξ-blur forgets the label of a field. Both conclude at a fixed form, $⌊∗⌋$ and $\${∗}: τ$, and nothing reads through ∗: a lookup that meets $\${∗}: τ$ is opaque, so a blurred field is never hit and never missed. The two rules make strings usable. T-lab-blur lets a literal stand where an arbitrary string is expected, for example as the argument of a function of type $⌊∗⌋ → τ$, and it types the literal that a builtin computes at $⌊∗⌋$ again. T-ξ-blur keeps E-rcd-dyn type-preserving. E-rcd-dyn steps ${ \${\"l\"} = e }$ to the literal record ${ l = e }$, and when the key has type $⌊∗⌋$, the redex has type ${\${∗}: τ}$, which T-ξ-blur gives to the literal record as well. The inference rules of MiniNix never blur.
 
-Progress up to ↯ and preservation hold for MiniNix with first-class labels. Under T-rcd-dyn, the new case of preservation is E-rcd-dyn. Before the step, T-rcd-dyn types ${ \${\"l\"} = e }$ at ${\${l}: τ}$, since the key $\"l\"$ has type $⌊l⌋$. After the step, the literal record ${ l = e }$ has type ${l: τ}$, and ≈-dlab with T-eq identifies the two types. Under the two 𝓫-rules the redex has type ★, and the field value or the literal record it steps to has some type, which T-★-intro weakens to ★.
+The evaluation contexts evaluate the record before the key, and E-sel-dyn then selects the leftmost binding of the label, as E-sel of @semantics does for a static one. A dynamic record evaluates its key but leaves the field unevaluated, as a record literal does. Progress up to ↯ and preservation (@thm-progress, @thm-preservation) hold for MiniNix with first-class labels. A key needs no error of its own. A value of type $⌊k⌋$ is a label literal (`qcanonical_lab`), so a well-typed selection never meets a key that is not a label, and the only error of dynamic selection is a missing label, as for static selection. A term such as `{}.${c}` has no typing, since c has a base type and no rule types a key of base type. NixLang reports an error for such a key at run time.
 
-Qualified schemes abstract over keys as they do over rows. The dynamic selector and the dynamic record constructor have the schemes
+Qualified schemes abstract over keys as they do over rows. Discharge (@instantiation) replays a keyed stump with the keyed lookup: θ is applied to both the row and the key, $(θ ρ).(θ k) ↓ r$, and the verdict pins θδ exactly as for a static stump. An opaque verdict is a $?$, so D-\? sends θδ to ★. The dynamic selector and the dynamic record constructor have the schemes
 
 $
-  #raw("a: x: x.${a}") & quad : quad ∀(α: "Label", β: "Row", δ: "Type"). #h(0.3em) ⟨β.α ↓ δ⟩ ⇒ ⌊α⌋ → {β} → δ \
+  #raw("a: x: x.${a}") & quad : quad ∀(α: "Label", ρ: "Row", δ: "Type"). #h(0.3em) ⟨ρ.α ↓ δ⟩ ⇒ ⌊α⌋ → {ρ} → δ \
   #raw("a: v: { ${a} = v; }") & quad : quad ∀(α: "Label", δ: "Type"). #h(0.3em) ⌊α⌋ → δ → { \${α}: δ }
 $
 
@@ -152,49 +152,34 @@ and both are instance-closed. The first scheme defers the lookup until both the 
 == Unification
 
 #let fc_unif = figure(
-  caption: [Unification of keys and of keyed fields, extending @unification-ty.],
+  caption: [Unification of keys and of keyed fields, extending @unification-ty and @unification-cascade.],
   flexbox(
-    derive("U-key-refl", (), $⌊α⌋ ≐ ⌊α⌋ ⇝ ∅$), // can this be removed, do we have it syntactically already?
     derive("U-lab", ($l = l′$,), $⌊l⌋ ≐ ⌊l′⌋ ⇝ ∅$),
     derive("U-lab-clash", ($l ≠ l′$,), $⌊l⌋ ≐ ⌊l′⌋ ⇝ #u_clash$),
-    derive("U-key-bind", ($k ≠ α$,), $⌊α⌋ ≐ ⌊k⌋ ⇝ [α ≔ k]$), // correct? key can be a α aswell
-    derive(
-      "U-key-L",
-      ($τ ≐ τ′ ⇝ θ$, $θ t₁ scripts(≐)_r θ t₂ ⇝ θ′$),
-      $(\${α}: τ) · t₁ scripts(≐)_r (\${α}: τ′) · t₂ ⇝ θ′ ∘ θ$,
-    ),
-    derive(
-      "U-key-R",
-      ($τ ≐ τ′ ⇝ θ$, $θ t₁ scripts(≐)_r θ t₂ ⇝ θ′$),
-      $t₁ · (\${α}: τ) scripts(≐)_r t₂ · (\${α}: τ′) ⇝ θ′ ∘ θ$,
-    ),
+    derive("U-key-∗", (), $⌊∗⌋ ≐ ⌊∗⌋ ⇝ ∅$),
+    derive("U-key-∗-clash", (), $⌊∗⌋ ≐ ⌊l⌋ ⇝ #u_clash$),
+    derive("U-key-bind", (), $⌊α⌋ ≐ ⌊k⌋ ⇝ [α ≔ k]$),
     derive(
       "U-key-pin",
-      ($"key"(f) = k ≠ α$, $[α ≔ k](\${α}: τ) scripts(≐)_r [α ≔ k] f ⇝ θ$),
-      $(\${α}: τ) scripts(≐)_r f ⇝ θ ∘ [α ≔ k]$,
+      ($"key"(f) = k ≠ α$, $[α ≔ k]⟨\${α}: τ⟩ scripts(≐)_r [α ≔ k]⟨f⟩ ⇝ θ$),
+      $⟨\${α}: τ⟩ scripts(≐)_r ⟨f⟩ ⇝ θ ∘ [α ≔ k]$,
     ),
   ),
 )
 #fc_unif <fc-unification>
 
-// explain the figure better, with direct rules
-A singleton type is a nullary constructor, like a base type, and the key pass of @fc-unification is flat: two labels unify when they are equal and clash otherwise, and a label variable is bound to the other key. A key is atomic, so U-key-bind needs no occurs check. $⌊k⌋$ against any other head clashes by U-clash.
+Key unification is flat (@fc-unification). Two literals unify when they are equal and clash otherwise, as two base types do. The unknown key behaves as one more constant: it unifies with itself and clashes with every literal. The clash is sound, since no substitution makes ∗ a label. A label variable binds to any key, including ∗ and another label variable. A key has no subterms, so U-key-bind needs no occurs check, and its instance $k = α$ is the identity $[α ≔ α] = ∅$. A singleton type against any other head clashes by U-clash, and so does $⌊∗⌋$ against ★. U-key-∗-clash and U-key-bind are used in both directions.
 
+On rows, every move of @unification-cascade that asks whether a side is free of row-variables asks whether it is free of barriers. U-ground and U-row-clash count literal fields and require the other side to be barrier-free, so $(l: τ) scripts(≐)_r (\${α}: τ′)$ is not a clash: $[α ≔ l]$ solves it. U-ε-clash fires on a keyed field as on any field, since the empty spine has no field under any key. U-host requires the host side to be free of keyed fields, since the key of such a field may become the hosted label. U-field-L and U-field-R pair a leading or trailing field with a field in the window of the other side, and a window ends at the first barrier. A keyed barrier pairs only with a keyed field under the same key at the same end of the other side, since no field may cross it, and the move unifies their types. An occurrence of a variable next to a keyed field is an occurs failure, as next to a literal field: the proof of U-var-occurs counts all field atoms, whatever their key (`occurs_anyField_no_unifier`).
 
-// this stands a bit alone
-On rows, the moves of @unification-cascade treat a keyed field as a barrier. U-ε-clash fires on a keyed field as on any field, since the empty spine has no field of any key. U-row-clash and U-ground count only literal fields and require the other side to be barrier-free, so that $(l: τ) scripts(≐)_r (\${α}: τ′)$ is not a clash: $[α ≔ l]$ solves it. [An occurrence of a variable next to a keyed field is reported as stuck rather than as an occurs failure, since the soundness proof of U-var-occurs counts literal fields and does not extend to keys.](explain this) U-host does not fire on a side with a keyed field, since its key may become the label of the field to be hosted. Two new moves handle keyed fields.
+U-key-pin is the one new move. It applies when each side consists of a single field, at least one of them keyed, under different keys. A one-field row is equivalent to another only under the same key, so every unifier identifies the two keys. The move binds the variable key to the other key and runs the problem again, where U-field-L then pairs the fields. Here f is a single field, key(f) is its label or its key, and U-key-pin is tried in both directions. It solves $⟨l: τ⟩ scripts(≐)_r ⟨\${α}: τ′⟩$ with $[α ≔ l]$ and $⟨\${α}: τ⟩ scripts(≐)_r ⟨\${β}: τ′⟩$ with $[α ≔ β]$, which is most general since $[α ≔ l, β ≔ l] = [β ≔ l] ∘ [α ≔ β]$. Against $\${∗}: τ′$, it binds α to ∗.
 
+For more than one field, the binding is no longer forced. $(\${α}: 𝓫 | m: 𝓫) scripts(≐)_r (m: 𝓫 | \${β}: 𝓫)$ is solved by $[α ≔ l, β ≔ l]$ for every label l, but not by $[α ≔ β]$, since m cannot cross the barrier, and these unifiers have no common generalization. U-key-pin is therefore restricted to single fields, and keyed fields under different keys stay stuck. A literal field against a field under ∗, $⟨l: τ⟩ scripts(≐)_r ⟨\${∗}: τ′⟩$, has no unifier, but no move detects this, and the verdict is stuck. The metatheory of @unification-metatheory holds as stated: success is most general, clash and occurs are sound, and the algorithm terminates. U-key-pin does not shrink the problem, but it always binds a variable, so the residual has fewer variables.
 
-// check
-U-key-L and U-key-R cancel two keyed fields under the same variable key at the front or the back of both spines and unify their types. They are restricted to the ends of the spines, since a literal field in front of $\${α}: τ$ may carry the label that α becomes. Both moves are forced. U-key-pin applies when each side consists of a single field, at least one of them keyed, under different keys. A one-field row is equivalent to another only under the same key, so every unifier identifies the two keys, and the move binds the variable key to the other key and runs the problem again, where U-key-L or U-field-L then pairs the fields. Here f is a single field and key(f) is its label or its key. U-key-pin is tried in both directions.
-
-
-It solves $(l: τ) scripts(≐)_r (\${α}: τ′)$ with $[α ≔ l]$ and $(\${α}: τ) scripts(≐)_r (\${β}: τ′)$ with $[α ≔ β]$, which is most general since $[α ≔ l, β ≔ l] = [β ≔ l] ∘ [α ≔ β]$. For more than one field, the binding is no longer forced. $(\${α}: 𝓫 | m: 𝓫) scripts(≐)_r (m: 𝓫 | \${β}: 𝓫)$ is solved by $[α ≔ l, β ≔ l]$ for every label l, but not by $[α ≔ β]$, since m cannot cross the barrier, and these unifiers have no common generalization. U-key-pin is therefore restricted to single fields, and keyed fields under different unknown keys stay stuck. The metatheory of @unification-metatheory holds as stated: success is most general, clash and occurs are sound, and the algorithm terminates. U-key-pin does not shrink the problem, but it always binds a variable, so the residual has fewer variables.
-
-== Inference
+== Inference <sec-fc-inference>
 
 #let fc_infer = figure(
-  caption: [Algorithmic rules for first-class labels, extending @inference-rules. A-sel-dyn-⊥ and A-sel-dyn-\? share the premises of A-sel-dyn.],
+  caption: [Algorithmic rules for first-class labels, extending @inference-rules. A-sel-dyn-⊥ and A-sel-dyn-\? share the premises of A-sel-dyn. K-⊥ of @wakeup also fires on an opaque lookup.],
   flexbox(
     derive("A-lab", (), $Γ; S ⊢ \"l\" ⇒ ⌊l⌋; S$),
     derive(
@@ -208,7 +193,7 @@ It solves $(l: τ) scripts(≐)_r (\${α}: τ′)$ with $[α ≔ l]$ and $(\${α
     ),
     derive(
       "A-sel-dyn-⊥",
-      ($…$, $(⟦S₄⟧ρ).(⟦S₄⟧β) ↓ ⊥$),
+      ($…$, $(⟦S₄⟧ρ).(⟦S₄⟧β) ↓ ⊥ "or opaque"$),
       $Γ; S ⊢ e₁.\${e₂} ⇒ ★; S₄$,
     ),
     derive(
@@ -225,32 +210,24 @@ It solves $(l: τ) scripts(≐)_r (\${α}: τ′)$ with $[α ≔ l]$ and $(\${α
       ),
       $Γ; S ⊢ { \${e₁} = e₂ } ⇒ { \${β}: τ₂ }; S₃$,
     ),
-    derive(
-      "A-sel-dyn-𝓫",
-      stack(
-        spacing: 8pt,
-        $Γ; S ⊢ e₁ ⇒ τ₁; S₁ #h(2em) "fresh" ρ: "Row" #h(2em) S₁ ⊢ τ₁ ≐ {ρ} #st_solve S₂$,
-        $Γ; S₂ ⊢ e₂ ⇒ τ₂; S₃ #h(2em) ⟦S₃⟧τ₂ = 𝓫$,
-      ),
-      $Γ; S ⊢ e₁.\${e₂} ⇒ ★; S₃$,
-    ),
-    derive(
-      "A-rcd-dyn-𝓫",
-      ($Γ; S ⊢ e₁ ⇒ τ₁; S₁$, $Γ; S₁ ⊢ e₂ ⇒ τ₂; S₂$, $⟦S₂⟧τ₁ = 𝓫$),
-      $Γ; S ⊢ { \${e₁} = e₂ } ⇒ ★; S₂$,
-    ),
   ),
 )
 #fc_infer <fc-inference>
 
-@fc-inference gives the algorithmic rules. Dynamic selection follows A-sel, A-sel-⊥ and A-sel-\? of @inference-rules. The key is unified with the singleton type of a fresh label variable β, and the keyed lookup is asked about the row and the key as solved so far. When it answers $?$, the stump is parked on its blocker, which may now be a label variable: in `a: {l = c; m = {}}.${a}` the stump waits on the key and not on a row. A-rcd-dyn performs no lookup and parks nothing. It is shaped like A-λ-E: the key is unified with $⌊β⌋$ for a fresh β, and the keyed field records β.
+@fc-inference gives the algorithmic rules. Dynamic selection follows A-sel, A-sel-⊥ and A-sel-\? of @inference-rules. The key is unified with the singleton type of a fresh label variable β, and the keyed lookup is asked about the row and the key as solved so far. An opaque lookup is answered like a miss: no instance decides it, so A-sel-dyn-⊥ answers ★ at once and parks nothing. When the lookup answers a $?$ that is not opaque, the stump is parked on its blocker, which may now be a label variable: in `a: {l = c; m = {}}.${a}` the stump waits on the key and not on a row. A-rcd-dyn performs no lookup and parks nothing. It is shaped like A-λ-E: the key is unified with $⌊β⌋$ for a fresh β, and the keyed field records β.
 
-Wake-up and saturation are unchanged over keyed lookups, so solving a key wakes the stumps blocked on it: applying the selector above to $\"l\"$ solves β, and the stump hits. A-sel-dyn-𝓫 and A-rcd-dyn-𝓫 apply when the key's type is already a base type under the current solution. They answer ★ instead of unifying 𝓫 with $⌊β⌋$. The test is deliberately restricted to a definite base type. A key whose type is still a variable is unified with $⌊β⌋$ as before, so in `(a: {l = c}.${a}) c` the key becomes a label at the selection and the application clashes. Answering ★ for every lookup keyed by such a variable once the conflict appears would be sound by the same rules, but the result would depend on the order in which the two uses of the key are met.
+Wake-up and saturation are unchanged over keyed lookups. An undecided comparison changes only when its blocker is solved, since the blocker is the only variable whose solution can change it. A stump is therefore stale exactly when its blocker is solved, as for rows. Applying the selector above to $\"l\"$ solves β, and the stump hits. When a key variable is bound to ∗ instead, for example by an argument that a builtin has computed, the stump wakes opaque, and K-⊥ answers ★ with a warning.
 
-The entry point needs no new premise. A keyed stump that is still pending stays a qualifier of the answer, so no key ever becomes ★. A-let generalizes keyed stumps under the side conditions of @generalization, read over rows, keys and results; the fillability test reads a label variable α of the binding as the label `${α}`. A spent stump blocked on its key therefore keeps its qualifier: `r: a: (r.${a}) c` answers $∀(ρ: "Row", α: "Label", β: "Type"). ⟨ρ.α ↓ 𝓫 → β⟩ ⇒ {ρ} → ⌊α⌋ → β$, and `let f = r: a: r.${a} c` generalizes f to the same scheme.
+The entry point needs no new premise. A keyed stump that is still pending stays a qualifier of the answer. A-let generalizes keyed stumps under the side conditions of @generalization, read over rows, keys and results. The fillability test of @fillability reads a label variable α of the binding as a fresh literal, written `${α}`, and a stump under ∗ is never fillable, since no instance makes its lookup hit. The test therefore gains conditions on keys. Every spent stump and every stump on its blocker has a literal label or a label variable of $macron(α)$ other than the blocker, and its row does not use the blocker as a key. Two stumps on one blocker count as asking the same label when their field names agree. No stump of $Δ_q$ waits on a label variable of a filled blocker. At the entry point, the bounded search also tries, for a spent stump whose key is a variable α, the label `${α}` and then the literal labels of the stump's row. A spent stump under a key variable therefore keeps its qualifier. In `r: a: (r.${a}) c`, the stump is blocked on the row of r and spent on a function, and the program answers $∀(ρ: "Row", α: "Label", δ: "Type"). ⟨ρ.α ↓ 𝓫_c → δ⟩ ⇒ {ρ} → ⌊α⌋ → δ$. `let f = r: a: r.${a} c` generalizes f to the same scheme.
 
-Concatenation and computed labels interact as NixLang programmers expect. In `((n: r: r // { ${n} = c; }) "x" { x = {}; }).x`, the keyed field is placed in front of the row of r by T-conc, the application solves the key to x, and the selection yields $𝓫_c$: the computed field shadows the older one.
+Concatenation and computed labels interact as NixLang programmers expect. In `((n: r: r // { ${n} = c; }) "x" { x = {}; }).x`, the keyed field is placed in front of the row of r by T-conc, the application solves the key to x, and the selection yields $𝓫_c$: the computed field shadows the older one. A field under ∗ shadows as well, but no lookup passes it. A selection of x from `r // { ${s} = c; }` with s of type $⌊∗⌋$ meets $\${∗}$ first and is opaque, so it answers ★.
 
 == Costs
 
-The extension has two costs. Labels and strings are separate: a label literal has the singleton type $⌊l⌋$ and cannot be used as a string, and a value used both as a key and as a string clashes. A key of base type is typed at ★ only when its type is known at the selection; a key that becomes a string later, as in `(a: {l = c}.${a}) c`, is rejected by U-clash. Keyed fields are barriers, so beyond the single-field case of U-key-pin a keyed field against a literal field and two keyed fields under different unknown keys are stuck. The first cost follows from giving labels singleton types, and the second from the absence of negative information about keys.
+The extension has four costs. First, unknown keys have no identity. In `a: {${a} = c}.${a}`, the lookup compares α with itself and stays undecided, so the program answers $∀(α: "Label", δ: "Type"). ⟨(\${α}: 𝓫_c).α ↓ δ⟩ ⇒ ⌊α⌋ → δ$. The stump hits at every literal instance but not at ∗, and a string of unknown content selects nothing, not even from the record it has built. Identity is the price of stability, since $α ≡ α$ would become $∗ ≟ ∗$ at the instance $[α ≔ ∗]$.
+
+Second, two different literals meet only by T-lab-blur, which inference does not apply. `f: { a = f "x"; b = f "y"; }` clashes, although the declarative system types it at $(⌊∗⌋ → 𝓫) → {a: 𝓫 | b: 𝓫}$. This is the incompleteness of T-★-intro (@incompleteness-inference) at the level of keys.
+
+Third, keyed fields are barriers. Beyond the single-field case of U-key-pin, a keyed field against a literal field and two keyed fields under different keys are stuck, and a lookup stops at every keyed barrier. Both follow from the absence of negative information about keys: the knowledge $α ≠ l$ would let $l: τ$ cross $\${α}: τ′$.
+
+Fourth, the unknown key is coarse. A key that is one of several literals, such as the platform in a conditional, is typed at $⌊∗⌋$, and every lookup under it is opaque. An opaque selection answers ★, and ★ has no elimination form, so a selection from its result is rejected. A type for finite sets of labels between $⌊l⌋$ and $⌊∗⌋$ would let such lookups decide when every label of the set agrees.
