@@ -15,13 +15,11 @@
   - Mostly fine now I guess
 - Should we note the things we don't handle yet?
   - Recursiveness, …
-- What are spent-chains?
 
 
 == FC-Labels
 - Should we add a new unknown key symbol instead of reusing ★?
-  - Just use ∗
-- Why is it not shown in the types extension?
+  - Use ∗
 - Explain, whether any of the costs can be remedied?
 - How are the equality checks conducted (≡, \#, ?=)
 - The section has the problem, that it references back all the time
