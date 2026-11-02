@@ -34,7 +34,7 @@ The extension is very benign: It only adds a key comparison and one move of row 
 Keys occur in two places: in the singleton type $⌊k⌋$ that describes the key $k$ and in the _keyed field_ $\${k}: τ$ of a row whose label is not known yet. In nix, every string is a label and we do the same: A trackable string is of type $⌊l⌋$ and an untrackable one of $⌊∗⌋$. Both can be used to index a record but only one gives a definite answer. Stumps also abstract over keys $⟨ρ.k ↓ δ⟩$, so that a scheme can defer a lookup under a key.
 
 // add reason why two ∗ can not be compared and two blur rules are needed
-We introduce the extension by examples from the introduction and @app-fc-labels gives the complete rules.
+We introduce the extension by examples from the introduction and @app-fc-labels gives the remaining rules.
 
 == A Three-Valued Comparison
 
@@ -57,7 +57,7 @@ We introduce the extension by examples from the introduction and @app-fc-labels 
 
 @fc-lookup gives the only new judgement. The three outcomes of the key comparison are the three verdicts of the lookup relation of @row-lookup: two literals are equal or apart, and every other pair is undecided. A label variable is undecided even against itself. Stability forces this choice: an instance may send α to ∗, and ∗ is undecided against itself, since two strings of unknown content need not be equal.
 
-An undecided comparison answers $?$ exactly as a row-variable does, and a keyed field under a non-literal key behaves like a row-variable. A field in front of $\${α}: τ$ may carry the label that α becomes, so swapping the two fields would change which of them a lookup finds. Spines and segments of @trace-monoid carry over with barriers in place of row-variables, and so does @thm-char. Only the variable that blocks a lookup changes: the _blocker_ of a $?$ may now be a label variable.
+An undecided comparison answers $?$ exactly as a row-variable does, and a keyed field under a non-literal key behaves like a row-variable. We call both a _barrier_. A field in front of $\${α}: τ$ may carry the label that α becomes, so swapping the two fields would change which of them a lookup finds. Spines and segments of @trace-monoid carry over with barriers in place of row-variables, and so does @thm-char. Only the variable that blocks a lookup changes: the _blocker_ of a $?$ may now be a label variable.
 
 == Selection under a Key
 
@@ -154,7 +154,7 @@ unify $(\${α}: 𝓫 | m: 𝓫)$ with $(m: 𝓫 | \${β}: 𝓫)$. Every label l 
 
 == Metatheory
 
-Progress up to lookup errors, preservation, the unification theorems of @unification-metatheory, and soundness and termination of inference all hold for MiniNix with first-class labels (`qProgress`, `qPreservation`, `inferSound`, `runF_terminates`). A value of type $⌊k⌋$ is a label literal, so a well-typed selection never meets a key that is not a label, and the only error of dynamic selection is a missing label.
+Progress up to lookup errors, preservation, the unification theorems of @unification-metatheory, and soundness and termination of inference all hold for MiniNix with first-class labels (`qProgress`, `qPreservation`, `inferSound`, `runF_terminates`). A value of type $⌊k⌋$ is a label literal, so a well-typed selection never meets a key that is not a label, and the only error of dynamic selection is a missing label. @app-fc-labels states the lemmas on keyed lookup and row equivalence and the argument for U-key-pin.
 
 == Costs
 
