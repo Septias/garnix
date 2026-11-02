@@ -876,6 +876,32 @@ example : ¬ Unifies (sub [] [("α", .var "β")])
 #guard run (app (app (lam "s" (lam "p" (sel (sd (v "p") (v "s")) "default"))) (L "x86"))
     (rec1 "x86" (rec1 "default" c))) = ("𝓫", [])
 
+-- One selector, two answers: `let g = a: x: x.${a} in {p = g "l" {l = c}; q = g "m" {l = c}}`
+#guard run (.letE "g" (lam "a" (lam "x" (sd (v "x") (v "a"))))
+    (rec2 "p" (app (app (v "g") (L "l")) (rec1 "l" c))
+          "q" (app (app (v "g") (L "m")) (rec1 "l" c)))) = ("{p: 𝓫 | q: ★}", ["m"])
+
+-- The Wand ambiguity under a key: `n: r: (r ‖ {${n} = c}).l` waits on the key …
+def keyedWand : E := lam "n" (lam "r" (sel (cat (v "r") (rd (v "n") c)) "l"))
+#guard run keyedWand = ("⟨${κ1}: 𝓫 | ρ2 | ε.l ↓ α3⟩ ⇒ (⌊κ1⌋ → ({ρ2} → α3))", [])
+#guard parkedOf keyedWand = ("(⌊κ1⌋ → ({ρ2} → α3))", ["ρ1 ⊳ ⟨${κ1}: 𝓫 | ρ2 | ε.l ↓ α3⟩"])
+-- … hits the keyed field at "l", whatever the row …
+#guard run (app keyedWand (L "l")) = ("({ρ1} → 𝓫)", [])
+-- … and at "m" the blocker migrates to the row, …
+#guard run (app keyedWand (L "m")) = ("⟨${m}: 𝓫 | ρ1 | ε.l ↓ α2⟩ ⇒ ({ρ1} → α2)", [])
+-- … which then hits or misses
+#guard run (app (app keyedWand (L "m")) (rec1 "l" emp)) = ("{ε}", [])
+#guard run (app (app keyedWand (L "m")) emp) = ("★", ["l"])
+
+-- Unification pins a key: `f: a: {p = f {${a} = c}; q = f {l = c}}`
+#guard run (lam "f" (lam "a" (rec2 "p" (app (v "f") (rd (v "a") c)) "q" (app (v "f") (rec1 "l" c))))) =
+  ("(({${l}: 𝓫} → α1) → (⌊l⌋ → {p: α1 | q: α1}))", [])
+-- … and beyond a single field the program is stuck:
+-- `f: a: b: {p = f ({m = c} ‖ {${a} = c}); q = f ({${b} = c} ‖ {m = c})}`
+#guard run (lam "f" (lam "a" (lam "b" (rec2
+    "p" (app (v "f") (cat (rec1 "m" c) (rd (v "a") c)))
+    "q" (app (v "f") (cat (rd (v "b") c) (rec1 "m" c))))))) = ("fail: stuck", [])
+
 -- `g a` binds the field's key (that of b) to κ, the key of a. Before
 -- feat/fc-labels M2 the lookup then hit by κ ≡ κ while its blocker κ stayed
 -- unsolved; now a variable key decides nothing, the stump stays a qualifier,
@@ -1059,6 +1085,20 @@ example := macroSig_ok
 -- the foldl' accumulator "" still clashes with the strcat result (accepted cost)
 #guard runM (call .foldl [mlam ["a", "b"] (call .strcat [mv "a", mv "b"]), ms "",
   .cons (ms "x") .nil]) = ("fail: clash", [])
+-- §9 Outlook. `e ? l` refines nothing: `x: if x ? l then x.l else 0` spends its stump on int …
+def guardEx : MacroNix.E := mlam ["x"] (.ite (.has (mv "x") "l") (.sel (mv "x") "l") (int 0))
+#guard runM guardEx = ("⟨ρ1.l ↓ int⟩ ⇒ ({ρ1 | ε} → int)", [])
+-- … so the application to `{}` clashes
+#guard runM (.app guardEx (mrec [])) = ("fail: clash", [])
+
+-- §8 The unknown key. A computed key decides nothing, even at a record with l …
+#guard runM (.app (.app (mlam ["n", "r"] (.sel (.cat (mv "r") (.rcdDyn (mv "n") (int 1))) "l"))
+    (call .toString [int 1])) (mrec [("l", mrec [])])) = ("★", ["l"])
+-- … and a barrier under ★ hides only what lies behind it
+#guard runM (.sel (.cat (.rcdDyn (call .toString [int 1]) (int 1)) (mrec [("l", ms "x")])) "l") =
+  ("⌊x⌋", [])
+#guard runM (.sel (.cat (mrec [("l", ms "x")]) (.rcdDyn (call .toString [int 1]) (int 1))) "l") =
+  ("★", ["l"])
 end macronix
 
 end ThesisExamples
