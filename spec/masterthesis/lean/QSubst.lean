@@ -151,6 +151,7 @@ private theorem comp_agree {B : Type} {vs : List TyVar} {θ σ : TySubst B}
       show _ = σ.lab α
       cases hk : σ.lab α with
       | lit _ => rfl
+      | unk => rfl
       | var γ =>
           have := hvl γ (by simp [hk, Key.ftv])
           simp [instSub, this]
@@ -448,6 +449,7 @@ theorem qtyped_applySubst {B C : Type} {constTy : Sig B C}
       simp only [Ty.applySubst] at ih ⊢
       exact .qSelAbs ih (lookup_applySubst (r := .absent) σ hlk (by intro hc; cases hc))
   | _, _, _, _, .qUnk h, hm => .qUnk (qtyped_applySubst him h hm)
+  | _, _, _, _, .qLabBlur h, hm => .qLabBlur (qtyped_applySubst him h hm)
   | _, _, _, _, .qRcd h, hm => .qRcd (qtypedBody_applySubst him h hm)
   | _, _, _, _, .qLab, _ => .qLab
   | _, _, _, _, .qSelDyn h₁ h₂ hlk, hm =>
@@ -468,10 +470,6 @@ theorem qtyped_applySubst {B C : Type} {constTy : Sig B C}
       | unknown => exact .qSelDynUnk h₁' h₂' hr
   | _, _, _, _, .qRcdDyn h₁ h₂, hm =>
       .qRcdDyn (qtyped_applySubst him h₁ hm) (qtyped_applySubst him h₂ hm)
-  | _, _, _, _, .qSelDynBase h₁ h₂, hm =>
-      .qSelDynBase (qtyped_applySubst him h₁ hm) (qtyped_applySubst him h₂ hm)
-  | _, _, _, _, .qRcdDynBase h₁ h₂, hm =>
-      .qRcdDynBase (qtyped_applySubst him h₁ hm) (qtyped_applySubst him h₂ hm)
   | _, _, _, _, .qPrim hp hi ha, hm =>
       .qPrim hp (by rw [← Ty.applySubst_applySubst, hi, Ty.arrows_applySubst])
         (qtypedArgs_applySubst him ha hm)
@@ -493,6 +491,7 @@ theorem qtypedBody_applySubst {B C : Type} {constTy : Sig B C}
     QTypedBody constTy Γ' ξ (ρ.applySubst σ)
   | _, _, _, _, .empty, _ => .empty
   | _, _, _, _, .field h, hm => .field (qtyped_applySubst him h hm)
+  | _, _, _, _, .fieldU h, hm => .fieldU (qtyped_applySubst him h hm)
   | _, _, _, _, .cat h₁ h₂, hm =>
       .cat (qtypedBody_applySubst him h₁ hm) (qtypedBody_applySubst him h₂ hm)
 

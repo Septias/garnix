@@ -68,23 +68,97 @@ theorem LookupBlocked.toLookup {B : Type} {ρ : Row B} {l : Label}
   | .catUnk hb       => .catUnk hb.toLookup
   | .dunk            => .dunk rfl
 
--- ⊢  …and COMPLETE: an unknown lookup always has a blocker to name
--- Together these say `? on α` is a faithful reading of `?` — the algorithm
--- never has to invent a blocker, and never fails to find one.
+--------------------- ? WITH NOTHING TO WAIT ON: THE OPAQUE LOOKUP -------------
+-- A comparison with the unknown key ★ never decides: ★ is not a variable, so no
+-- substitution replaces it. A lookup whose first undecided comparison has ★ on
+-- one side therefore answers `?` at every instance. Inference reads it like a
+-- definite miss: the result is ★ on the spot, and no stump is parked. A
+-- VARIABLE key is never opaque: it blocks on itself even against `${★}`.
+
+/-- `ρ.k ↓ ?` that no instance decides: ★ meets a field, or a literal key meets
+`${★}`, after definite misses only. -/
+inductive LookupOpaqueQ {B : Type} : Row B → Key → Prop where
+  | sunk {l : Label} {τ : Ty B} : LookupOpaqueQ (.sing l τ) .unk
+  | dunkU {q : Key} {τ : Ty B} : LookupOpaqueQ (.dsing q τ) .unk
+  | dunkF {l : Label} {τ : Ty B} : LookupOpaqueQ (.dsing .unk τ) (.lit l)
+  | catSkip {ρ₁ ρ₂ : Row B} {k : Key} :
+      LookupQ ρ₁ k .absent → LookupOpaqueQ ρ₂ k → LookupOpaqueQ (.cat ρ₁ ρ₂) k
+  | catUnk {ρ₁ ρ₂ : Row B} {k : Key} :
+      LookupOpaqueQ ρ₁ k → LookupOpaqueQ (.cat ρ₁ ρ₂) k
+
+-- ⊢  an opaque lookup is an unknown one
+theorem LookupOpaqueQ.toLookupQ {B : Type} {ρ : Row B} {k : Key} :
+    LookupOpaqueQ ρ k → LookupQ ρ k .unknown
+  | .sunk => .sunk rfl
+  | .dunkU => .dunk rfl
+  | .dunkF => .dunk rfl
+  | .catSkip ha hb => .catSkip ha hb.toLookupQ
+  | .catUnk hb => .catUnk hb.toLookupQ
+
+-- ⊢  …and it stays opaque under every substitution: ★ and literals are fixed,
+--    and the misses before it are definite
+theorem LookupOpaqueQ.applySubst {B : Type} (θ : TySubst B) {ρ : Row B} {k : Key}
+    (h : LookupOpaqueQ ρ k) : LookupOpaqueQ (ρ.applySubst θ) (k.applySubst θ) := by
+  induction h with
+  | sunk => exact .sunk
+  | dunkU => exact .dunkU
+  | dunkF => exact .dunkF
+  | catSkip ha _ ih => exact .catSkip (LookupQ.applySubst θ ha (by intro h; cases h)) ih
+  | catUnk _ ih => exact .catUnk ih
+
+-- ⊢  a variable key is never opaque
+theorem LookupOpaqueQ.not_var {B : Type} {ρ : Row B} {α : TyVar}
+    (h : LookupOpaqueQ ρ (.var α)) : False := by
+  generalize hk : Key.var α = k at h
+  induction h with
+  | sunk => cases hk
+  | dunkU => cases hk
+  | dunkF => cases hk
+  | catSkip _ _ ih => exact ih hk
+  | catUnk _ ih => exact ih hk
+
+/-- the lookup can only ever answer ★: a definite miss, or an opaque `?` -/
+def LookupDeadQ {B : Type} (ρ : Row B) (k : Key) : Prop :=
+  LookupQ ρ k .absent ∨ LookupOpaqueQ ρ k
+
+-- ⊢  a dead lookup stays dead under every substitution
+theorem LookupDeadQ.applySubst {B : Type} (θ : TySubst B) {ρ : Row B} {k : Key}
+    (h : LookupDeadQ ρ k) : LookupDeadQ (ρ.applySubst θ) (k.applySubst θ) :=
+  h.imp (fun h => LookupQ.applySubst θ h (by intro h; cases h)) (·.applySubst θ)
+
+-- ⊢  …and never hits
+theorem LookupDeadQ.not_found {B : Type} {ρ : Row B} {k : Key} {τ : Ty B}
+    (h : LookupDeadQ ρ k) (hf : LookupQ ρ k (.found τ)) : False := by
+  rcases h with h | h
+  · exact absurd (h.det hf) (by simp)
+  · exact absurd (h.toLookupQ.det hf) (by simp)
+
+-- ⊢  …and COMPLETE: an unknown lookup has a blocker to name, unless it is opaque.
+-- Together these say `? on α` and opaque `?` are a faithful reading of `?` — the
+-- algorithm never has to invent a blocker.
 theorem Lookup.unknown_blocked {B : Type} {ρ : Row B} {l : Label}
-    (h : Lookup ρ l .unknown) : ∃ α, LookupBlocked ρ l α := by
+    (h : Lookup ρ l .unknown) : (∃ α, LookupBlocked ρ l α) ∨ LookupOpaqueQ ρ (.lit l) := by
   generalize hr : (LookupRes.unknown : LookupRes B) = r at h
   induction h with
   | emp => exact absurd hr (by simp)
   | hit => exact absurd hr (by simp)
   | miss _ => exact absurd hr (by simp)
-  | varFree => exact ⟨_, .varFree⟩
+  | varFree => exact .inl ⟨_, .varFree⟩
   | catHit _ => exact absurd hr (by simp)
-  | catSkip ha _ _ ihb => obtain ⟨β, hb⟩ := ihb hr; exact ⟨β, .catSkip ha hb⟩
-  | catUnk _ ih => obtain ⟨β, hb⟩ := ih rfl; exact ⟨β, .catUnk hb⟩
+  | catSkip ha _ _ ihb =>
+      rcases ihb hr with ⟨β, hb⟩ | ho
+      · exact .inl ⟨β, .catSkip ha hb⟩
+      · exact .inr (.catSkip (LookupQ.lab_iff.mpr ha) ho)
+  | catUnk _ ih =>
+      rcases ih rfl with ⟨β, hb⟩ | ho
+      · exact .inl ⟨β, .catUnk hb⟩
+      · exact .inr (.catUnk ho)
   | dhit _ => exact absurd hr (by simp)
   | dmiss _ => exact absurd hr (by simp)
-  | dunk h => obtain ⟨γ, rfl⟩ := Key.cmp_lit_undec h; exact ⟨γ, .dunk⟩
+  | dunk h =>
+      rcases Key.cmp_lit_undec h with ⟨γ, rfl⟩ | rfl
+      · exact .inl ⟨γ, .dunk⟩
+      · exact .inr .dunkF
 
 -- ⊢  the blocker is UNIQUE — `lookup_det`'s image for `? on α`, and what makes
 --    "the stump is blocked on α" well defined rather than a choice
@@ -152,31 +226,67 @@ theorem LookupBlockedQ.toLookupQ {B : Type} {ρ : Row B} {q : Key}
 theorem LookupVBlocked.toLookupV {B : Type} {ρ : Row B} {α β : TyVar}
     (h : LookupVBlocked ρ α β) : LookupV ρ α .unknown := h.toLookupQ
 
--- ⊢  complete: an unknown keyed lookup always names its blocker
+-- ⊢  complete: an unknown keyed lookup names its blocker, unless it is opaque
 theorem LookupQ.unknown_blocked {B : Type} {ρ : Row B} {q : Key}
-    (h : LookupQ ρ q .unknown) : ∃ β, LookupBlockedQ ρ q β := by
+    (h : LookupQ ρ q .unknown) : (∃ β, LookupBlockedQ ρ q β) ∨ LookupOpaqueQ ρ q := by
   generalize hr : (LookupRes.unknown : LookupRes B) = r at h
   induction h with
   | emp => exact absurd hr (by simp)
   | hit _ => exact absurd hr (by simp)
   | miss _ => exact absurd hr (by simp)
-  | sunk h => obtain ⟨α, rfl⟩ := Key.cmp_undec_lit h; exact ⟨α, .sunk⟩
-  | varFree => exact ⟨_, .varFree⟩
+  | sunk h =>
+      rcases Key.cmp_undec_lit h with ⟨α, rfl⟩ | rfl
+      · exact .inl ⟨α, .sunk⟩
+      · exact .inr .sunk
+  | varFree => exact .inl ⟨_, .varFree⟩
   | catHit _ => exact absurd hr (by simp)
-  | catSkip ha _ _ ihb => obtain ⟨β, hb⟩ := ihb hr; exact ⟨β, .catSkip ha hb⟩
-  | catUnk _ ih => obtain ⟨β, hb⟩ := ih rfl; exact ⟨β, .catUnk hb⟩
+  | catSkip ha _ _ ihb =>
+      rcases ihb hr with ⟨β, hb⟩ | ho
+      · exact .inl ⟨β, .catSkip ha hb⟩
+      · exact .inr (.catSkip ha ho)
+  | catUnk _ ih =>
+      rcases ih rfl with ⟨β, hb⟩ | ho
+      · exact .inl ⟨β, .catUnk hb⟩
+      · exact .inr (.catUnk ho)
   | dhit _ => exact absurd hr (by simp)
   | dmiss _ => exact absurd hr (by simp)
   | @dunk k q τ h =>
       cases k with
-      | var α => exact ⟨α, .dunkQ h⟩
+      | var α => exact .inl ⟨α, .dunkQ h⟩
+      | unk => exact .inr .dunkU
       | lit l =>
-          obtain ⟨γ, rfl⟩ := Key.cmp_lit_undec h
-          exact ⟨γ, .dunkF⟩
+          rcases Key.cmp_lit_undec h with ⟨γ, rfl⟩ | rfl
+          · exact .inl ⟨γ, .dunkF⟩
+          · exact .inr .dunkF
 
 theorem LookupV.unknown_blocked {B : Type} {ρ : Row B} {α : TyVar}
-    (h : LookupV ρ α .unknown) : ∃ β, LookupVBlocked ρ α β :=
-  LookupQ.unknown_blocked h
+    (h : LookupV ρ α .unknown) : ∃ β, LookupVBlocked ρ α β := by
+  rcases LookupQ.unknown_blocked h with hb | ho
+  · exact hb
+  · exact ho.not_var.elim
+
+-- ⊢  an opaque lookup has no blocker
+theorem LookupOpaqueQ.not_blocked {B : Type} {ρ : Row B} {k : Key} {β : TyVar}
+    (h : LookupOpaqueQ ρ k) (hb : LookupBlockedQ ρ k β) : False := by
+  induction h generalizing β with
+  | sunk => cases hb
+  | dunkU => cases hb
+  | dunkF => cases hb
+  | catSkip ha _ ih =>
+      cases hb with
+      | catSkip _ hb' => exact ih hb'
+      | catUnk hb' => exact absurd (ha.det hb'.toLookupQ) (by simp)
+  | catUnk ho ih =>
+      cases hb with
+      | catSkip ha' _ => exact absurd (ho.toLookupQ.det ha') (by simp)
+      | catUnk hb' => exact ih hb'
+
+-- ⊢  a dead lookup is not blocked
+theorem LookupDeadQ.not_blocked {B : Type} {ρ : Row B} {k : Key} {β : TyVar}
+    (h : LookupDeadQ ρ k) (hb : LookupBlockedQ ρ k β) : False := by
+  rcases h with h | h
+  · exact absurd (h.det hb.toLookupQ) (by simp)
+  · exact h.not_blocked hb
 
 -- ⊢  the blocker is UNIQUE
 theorem LookupBlockedQ.det {B : Type} {ρ : Row B} {q : Key}
@@ -219,22 +329,50 @@ theorem LookupBlockedQ.toLit {B : Type} {ρ : Row B} {l : Label} {β : TyVar}
   | catSkip ha _ ih => subst hk; exact .catSkip (LookupQ.lab_iff.mp ha) (ih rfl)
   | catUnk _ ih => exact .catUnk (ih hk)
 
+/-- a DEFINITE key type: a literal's singleton or ⌊★⌋, no variable left -/
+def Ty.defKey {B : Type} : Ty B → Option Key
+  | .lab (.lit l) => some (.lit l)
+  | .lab .unk     => some .unk
+  | _             => none
+
+theorem Ty.defKey_eq_some {B : Type} {τ : Ty B} {k : Key} (h : τ.defKey = some k) :
+    τ = .lab k := by
+  unfold Ty.defKey at h
+  split at h <;> first | (cases h; rfl) | cases h
+
+/-- two key types that are definite and different: unification would clash, and
+the join is ⌊★⌋ (A-if-join) -/
+def Ty.keyApart {B : Type} (τ₁ τ₂ : Ty B) : Bool :=
+  match τ₁.defKey, τ₂.defKey with
+  | some k₁, some k₂ => k₁ != k₂
+  | _, _ => false
+
+theorem Ty.keyApart_lab {B : Type} {τ₁ τ₂ : Ty B} (h : Ty.keyApart τ₁ τ₂ = true) :
+    (∃ k, τ₁ = .lab k) ∧ (∃ k, τ₂ = .lab k) := by
+  unfold Ty.keyApart at h
+  split at h
+  · rename_i k₁ k₂ h₁ h₂
+    exact ⟨⟨k₁, Ty.defKey_eq_some h₁⟩, ⟨k₂, Ty.defKey_eq_some h₂⟩⟩
+  · cases h
+
+/-- a literal's singleton type: a string literal in a list (A-cons-str) -/
+def Ty.isLitLab {B : Type} : Ty B → Bool
+  | .lab (.lit _) => true
+  | _             => false
+
+theorem Ty.isLitLab_eq {B : Type} {τ : Ty B} (h : τ.isLitLab = true) :
+    ∃ l, τ = .lab (.lit l) := by
+  unfold Ty.isLitLab at h
+  split at h
+  · exact ⟨_, rfl⟩
+  · cases h
+
 /-- the name a W-flag records for a key: the label itself when it is known. -/
 def Key.keyName : Key → Label
   | .lit l => l
   | .var α => "${" ++ α ++ "}"
+  | .unk   => "${★}"
 
-/-- the name a W-flag records for a base-typed (non-label) key. -/
-def Key.baseName : Label := "${𝓫}"
-
-/-- a type's base, when it is one: the test A-sel-dyn-𝓫 / A-rcd-dyn-𝓫 run. -/
-def Ty.asBase {B : Type} : Ty B → Option B
-  | .base b => some b
-  | _       => none
-
-theorem Ty.asBase_eq_some {B : Type} {τ : Ty B} {b : B} (h : τ.asBase = some b) :
-    τ = .base b := by
-  cases τ <;> simp_all [Ty.asBase]
 
 
 --------------------- THE SOLVER STATE  S := (θ, Δ, W) ------------------------
@@ -413,9 +551,10 @@ inductive Wake {B : Type} [DecidableEq B] :
       LookupQ (p.stump.row.applySubst S.subst) (p.stump.label.applySubst S.subst) (.found τ) →
       SolveTy S p.stump.res τ S' →
       Wake S p { S' with parked := S'.parked.filter (·.stump != p.stump) }
-  -- K-⊥: definite absence, so δ becomes ★ and W records the site
+  -- K-⊥: definite absence (or an opaque `?`, K-opaque), so δ becomes ★ and W
+  -- records the site
   | abs {S S' : SolverState B} {p : Parked B} :
-      LookupQ (p.stump.row.applySubst S.subst) (p.stump.label.applySubst S.subst) .absent →
+      LookupDeadQ (p.stump.row.applySubst S.subst) (p.stump.label.applySubst S.subst) →
       SolveTy S p.stump.res .unk S' →
       Wake S p
         ({ S' with parked := S'.parked.filter (·.stump != p.stump) }.flag
@@ -548,7 +687,7 @@ theorem SolverState.Quiescent.wake_no_commit {B : Type} [DecidableEq B]
   have hb := hq p hp
   cases hw with
   | hit hl _  => exact absurd (hl.det hb.toLookupQ) (by simp)
-  | abs hl _  => exact absurd (hl.det hb.toLookupQ) (by simp)
+  | abs hl _  => exact (hl.not_blocked hb).elim
   | repark _  => rfl
 
 
@@ -715,6 +854,7 @@ extension decides it. -/
 def Key.isLit : Key → Bool
   | .lit _ => true
   | .var _ => false
+  | .unk   => false
 
 theorem Key.exists_of_isLit {k : Key} (h : k.isLit = true) : ∃ l, k = .lit l := by
   cases k <;> simp_all [Key.isLit]
@@ -724,6 +864,7 @@ the blocker -/
 def Key.fillKey (ᾱ : List TyVar) (β : TyVar) : Key → Bool
   | .lit _ => true
   | .var κ => decide (κ ∈ ᾱ) && decide (κ ≠ β)
+  | .unk   => false
 
 def Parked.fillable {B : Type} (S : SolverState B) (ᾱ : List TyVar) (p : Parked B) : Bool :=
   (p.stump.label.applySubst S.subst).fillKey ᾱ p.blocker &&
@@ -1018,7 +1159,7 @@ inductive Infer {B C : Type} [DecidableEq B] (constTy : Sig B C) :
       Infer constTy Γ S e τ S₁ →
       (r, S₁') = S₁.draw .row →
       SolveTySat S₁' τ (.rcd (.var r)) S₂ →
-      Lookup ((Row.var r).applySubst S₂.subst) l .absent →
+      LookupDeadQ ((Row.var r).applySubst S₂.subst) (.lit l) →
       Infer constTy Γ S (.sel e l) .unk (S₂.flag l)
   -- A-sel-?: NOT ★. The stump-var δ keeps the position writable, so a later
   -- refinement can still fill it in — (x: x.l) must not freeze at {β} → ★
@@ -1035,9 +1176,10 @@ inductive Infer {B C : Type} [DecidableEq B] (constTy : Sig B C) :
   | lab {Γ : QCtx B} {S : SolverState B} {l : Label} :
       Infer constTy Γ S (.lab l) (.lab (.lit l)) S
   -- A-sel-dyn. The record first (forced to `{r}`), then the key, whose type is
-  -- forced to ⌊κ⌋ for a fresh LABEL variable κ (a key whose type is not yet a
-  -- base type: there is no junk key; a definite 𝓫 takes A-sel-dyn-𝓫). The lookup is keyed by κ read under ⟦S⟧, and its three
-  -- verdicts are A-sel's, A-sel-⊥'s and A-sel-?'s
+  -- forced to ⌊κ⌋ for a fresh LABEL variable κ (there is no junk key: a key of
+  -- any other type clashes, and a computed string is ⌊★⌋, so κ ≔ ★). The lookup
+  -- is keyed by κ read under ⟦S⟧, and its verdicts are A-sel's, A-sel-⊥'s (a
+  -- miss, or an opaque `?`) and A-sel-?'s
   | selDyn {Γ : QCtx B} {S S₁ S₁' S₂ S₃ S₃' S₄ : SolverState B} {e₁ e₂ : Expr C}
       {τ₁ τ₂ τ' : Ty B} {r κ : TyVar} :
       Infer constTy Γ S e₁ τ₁ S₁ →
@@ -1057,7 +1199,7 @@ inductive Infer {B C : Type} [DecidableEq B] (constTy : Sig B C) :
       Infer constTy Γ S₂ e₂ τ₂ S₃ →
       (κ, S₃') = S₃.draw .lab →
       SolveTySat S₃' τ₂ (.lab (.var κ)) S₄ →
-      LookupQ ((Row.var r).applySubst S₄.subst) ((Key.var κ).applySubst S₄.subst) .absent →
+      LookupDeadQ ((Row.var r).applySubst S₄.subst) ((Key.var κ).applySubst S₄.subst) →
       Infer constTy Γ S (.selDyn e₁ e₂) .unk
         (S₄.flag ((Key.var κ).applySubst S₄.subst).keyName)
   | selDynUnk {Γ : QCtx B} {S S₁ S₁' S₂ S₃ S₃' S₄ S₄' : SolverState B} {e₁ e₂ : Expr C}
@@ -1073,30 +1215,13 @@ inductive Infer {B C : Type} [DecidableEq B] (constTy : Sig B C) :
       Infer constTy Γ S (.selDyn e₁ e₂) (.var δ)
         (S₄'.park ⟨α, ⟨.var r, .var κ, .var δ⟩⟩)
   -- A-rcd-dyn. Both halves first, then the key's type is forced to ⌊κ⌋ for a
-  -- fresh LABEL variable κ, which keys the field (unless A-rcd-dyn-𝓫 fired). No
-  -- lookup, so nothing parks
+  -- fresh LABEL variable κ, which keys the field. No lookup, so nothing parks
   | rcdDyn {Γ : QCtx B} {S S₁ S₂ S₂' S₃ : SolverState B} {e₁ e₂ : Expr C}
       {τ₁ τ₂ : Ty B} {κ : TyVar} :
       Infer constTy Γ S e₁ τ₁ S₁ → Infer constTy Γ S₁ e₂ τ₂ S₂ →
       (κ, S₂') = S₂.draw .lab →
       SolveTySat S₂' τ₁ (.lab (.var κ)) S₃ →
       Infer constTy Γ S (.rcdDyn e₁ e₂) (.rcd (.dsing (.var κ) τ₂)) S₃
-  -- A-sel-dyn-𝓫 / A-rcd-dyn-𝓫. A key whose type is already a BASE type under ⟦S⟧
-  -- answers ★ with a W-flag instead of clashing against ⌊κ⌋. Only a DEFINITE
-  -- base type takes this arm: an unsolved key variable is still forced to ⌊κ⌋
-  | selDynBase {Γ : QCtx B} {S S₁ S₁' S₂ S₃ : SolverState B} {e₁ e₂ : Expr C}
-      {τ₁ τ₂ : Ty B} {r : TyVar} {b : B} :
-      Infer constTy Γ S e₁ τ₁ S₁ →
-      (r, S₁') = S₁.draw .row →
-      SolveTySat S₁' τ₁ (.rcd (.var r)) S₂ →
-      Infer constTy Γ S₂ e₂ τ₂ S₃ →
-      τ₂.applySubst S₃.subst = .base b →
-      Infer constTy Γ S (.selDyn e₁ e₂) .unk (S₃.flag Key.baseName)
-  | rcdDynBase {Γ : QCtx B} {S S₁ S₂ : SolverState B} {e₁ e₂ : Expr C}
-      {τ₁ τ₂ : Ty B} {b : B} :
-      Infer constTy Γ S e₁ τ₁ S₁ → Infer constTy Γ S₁ e₂ τ₂ S₂ →
-      τ₁.applySubst S₂.subst = .base b →
-      Infer constTy Γ S (.rcdDyn e₁ e₂) .unk (S₂.flag Key.baseName)
   -- A-rec
   | rcd {Γ : QCtx B} {S S' : SolverState B} {ξ : RecBody (Expr C)} {ρ : Row B} :
       InferRec constTy Γ S ξ ρ S' →
@@ -1143,6 +1268,16 @@ inductive Infer {B C : Type} [DecidableEq B] (constTy : Sig B C) :
       Infer constTy Γ S₂ e₁ τ₁ S₃ → Infer constTy Γ S₃ e₂ τ₂ S₄ →
       SolveTySat S₄ τ₁ τ₂ S₅ →
       Infer constTy Γ S (.ite e e₁ e₂) τ₁ S₅
+  -- A-if-join (feat/fc-labels M5): two branches at DIFFERENT definite keys (two
+  -- literals, or a literal and ★) would clash; both are strings, and the join is
+  -- ⌊★⌋. No equation is solved
+  | iteJoin {Γ : QCtx B} {S S₁ S₂ S₃ S₄ : SolverState B} {e e₁ e₂ : Expr C}
+      {τ τ₁ τ₂ : Ty B} {bb : B} :
+      constTy.boolB = some bb →
+      Infer constTy Γ S e τ S₁ → SolveTySat S₁ τ (.base bb) S₂ →
+      Infer constTy Γ S₂ e₁ τ₁ S₃ → Infer constTy Γ S₃ e₂ τ₂ S₄ →
+      Ty.keyApart (τ₁.applySubst S₄.subst) (τ₂.applySubst S₄.subst) = true →
+      Infer constTy Γ S (.ite e e₁ e₂) (.lab .unk) S₄
   -- A-assert
   | asrt {Γ : QCtx B} {S S₁ S₂ S₃ : SolverState B} {e e₂ : Expr C}
       {τ τ₂ : Ty B} {bb : B} :
@@ -1159,6 +1294,13 @@ inductive Infer {B C : Type} [DecidableEq B] (constTy : Sig B C) :
       Infer constTy Γ S e₁ τ₁ S₁ → Infer constTy Γ S₁ e₂ τ₂ S₂ →
       SolveTySat S₂ τ₂ (.list τ₁) S₃ →
       Infer constTy Γ S (.cons e₁ e₂) (.list τ₁) S₃
+  -- A-cons-str (feat/fc-labels M5): a string literal in a list is a string: the
+  -- list is one of ⌊★⌋, so literals of different labels share it
+  | consStr {Γ : QCtx B} {S S₁ S₂ S₃ : SolverState B} {e₁ e₂ : Expr C} {τ₁ τ₂ : Ty B} :
+      Infer constTy Γ S e₁ τ₁ S₁ → (τ₁.applySubst S₁.subst).isLitLab = true →
+      Infer constTy Γ S₁ e₂ τ₂ S₂ →
+      SolveTySat S₂ τ₂ (.list (.lab .unk)) S₃ →
+      Infer constTy Γ S (.cons e₁ e₂) (.list (.lab .unk)) S₃
   -- A-has: the subject is a record, the answer a boolean
   | has {Γ : QCtx B} {S S₁ S₁' S₂ : SolverState B} {e : Expr C} {τ : Ty B}
       {l : Label} {r : TyVar} {bb : B} :
@@ -1493,17 +1635,6 @@ theorem Infer.kinds_mono {B C : Type} [DecidableEq B] {constTy : Sig B C}
       refine List.IsSuffix.trans ?_ (List.suffix_cons _ _)
       refine List.IsSuffix.trans ?_ (Infer.kinds_mono h₂)
       rw [hs.kinds, draw_kind_eq hd]; exact List.suffix_cons _ _
-  | .selDynBase h₁ hd hs h₂ _ => by
-      refine List.IsSuffix.trans (Infer.kinds_mono h₁) ?_
-      show _ <:+ (SolverState.flag _ _).kinds
-      simp only [SolverState.flag]
-      refine List.IsSuffix.trans ?_ (Infer.kinds_mono h₂)
-      rw [hs.kinds, draw_kind_eq hd]; exact List.suffix_cons _ _
-  | .rcdDynBase h₁ h₂ _ => by
-      refine List.IsSuffix.trans (Infer.kinds_mono h₁) ?_
-      show _ <:+ (SolverState.flag _ _).kinds
-      simp only [SolverState.flag]
-      exact Infer.kinds_mono h₂
   | .rcd hb => InferRec.kinds_mono hb
   | .letE (S₁ := S₁) (S₁' := S₁') h₁ hm _ h₂ => by
       have i₁ := Infer.kinds_mono h₁
@@ -1519,11 +1650,18 @@ theorem Infer.kinds_mono {B C : Type} [DecidableEq B] {constTy : Sig B C}
       have a := Infer.kinds_mono h; have b := Infer.kinds_mono h₁
       have c := Infer.kinds_mono h₂
       rw [hs₂.kinds]; rw [hs₁.kinds] at b; exact a.trans (b.trans c)
+  | .iteJoin _ h hs₁ h₁ h₂ _ => by
+      have a := Infer.kinds_mono h; have b := Infer.kinds_mono h₁
+      have c := Infer.kinds_mono h₂
+      rw [hs₁.kinds] at b; exact a.trans (b.trans c)
   | .asrt _ h hs h₂ => by
       have a := Infer.kinds_mono h; have b := Infer.kinds_mono h₂
       rw [hs.kinds] at b; exact a.trans b
   | .nil hd => by rw [draw_kind_eq hd]; exact List.suffix_cons _ _
   | .cons h₁ h₂ hs => by
+      have a := Infer.kinds_mono h₁; have b := Infer.kinds_mono h₂
+      rw [hs.kinds]; exact a.trans b
+  | .consStr h₁ _ h₂ hs => by
       have a := Infer.kinds_mono h₁; have b := Infer.kinds_mono h₂
       rw [hs.kinds]; exact a.trans b
   | .has _ h hd hs => by
@@ -1653,20 +1791,6 @@ theorem Infer.supply_mono {B C : Type} [DecidableEq B] {constTy : Sig B C}
       show _ ≤ (SolverState.park _ _).supply.next
       simp only [SolverState.park]
       omega
-  | .selDynBase h₁ hd hs h₂ _ => by
-      have i₁ := Infer.supply_mono h₁
-      have i₂ := Infer.supply_mono h₂
-      have hd' := draw_eq hd
-      have j := hs.supply
-      show _ ≤ (SolverState.flag _ _).supply.next
-      simp only [SolverState.flag]
-      omega
-  | .rcdDynBase h₁ h₂ _ => by
-      have i₁ := Infer.supply_mono h₁
-      have i₂ := Infer.supply_mono h₂
-      show _ ≤ (SolverState.flag _ _).supply.next
-      simp only [SolverState.flag]
-      omega
   | .rcd hb => InferRec.supply_mono hb
   | .letE h₁ hm _ h₂ => by
       have i₁ := Infer.supply_mono h₁
@@ -1684,12 +1808,20 @@ theorem Infer.supply_mono {B C : Type} [DecidableEq B] {constTy : Sig B C}
       have c := Infer.supply_mono h₁; have d := Infer.supply_mono h₂
       have e := hs₂.supply
       omega
+  | .iteJoin _ h hs₁ h₁ h₂ _ => by
+      have a := Infer.supply_mono h; have b := hs₁.supply
+      have c := Infer.supply_mono h₁; have d := Infer.supply_mono h₂
+      omega
   | .asrt _ h hs h₂ => by
       have a := Infer.supply_mono h; have b := hs.supply
       have c := Infer.supply_mono h₂
       omega
   | .nil hd => by have := draw_eq hd; omega
   | .cons h₁ h₂ hs => by
+      have a := Infer.supply_mono h₁; have b := Infer.supply_mono h₂
+      have c := hs.supply
+      omega
+  | .consStr h₁ _ h₂ hs => by
       have a := Infer.supply_mono h₁; have b := Infer.supply_mono h₂
       have c := hs.supply
       omega
@@ -1838,14 +1970,6 @@ theorem Infer.sat_mono {B C : Type} [DecidableEq B] {constTy : Sig B C}
               (hsk.satMono.trans
                 ((SolverState.SatMono.of_sol_eq (draw_sol hd₂)).trans
                   (SolverState.SatMono.of_sol_eq rfl)))))))
-  | .selDynBase h₁ hd hs h₂ _ =>
-      (Infer.sat_mono h₁).trans
-        ((SolverState.SatMono.of_sol_eq (draw_sol hd)).trans
-          (hs.satMono.trans ((Infer.sat_mono h₂).trans
-            (SolverState.SatMono.of_sol_eq rfl))))
-  | .rcdDynBase h₁ h₂ _ =>
-      ((Infer.sat_mono h₁).trans (Infer.sat_mono h₂)).trans
-        (SolverState.SatMono.of_sol_eq rfl)
   | .rcd hb => InferRec.sat_mono hb
   | .letE h₁ hm _ h₂ => by
       refine (Infer.sat_mono h₁).trans (hm.satMono.trans ?_)
@@ -1858,10 +1982,15 @@ theorem Infer.sat_mono {B C : Type} [DecidableEq B] {constTy : Sig B C}
   | .ite _ h hs₁ h₁ h₂ hs₂ =>
       (Infer.sat_mono h).trans (hs₁.satMono.trans ((Infer.sat_mono h₁).trans
         ((Infer.sat_mono h₂).trans hs₂.satMono)))
+  | .iteJoin _ h hs₁ h₁ h₂ _ =>
+      (Infer.sat_mono h).trans (hs₁.satMono.trans ((Infer.sat_mono h₁).trans
+        (Infer.sat_mono h₂)))
   | .asrt _ h hs h₂ =>
       (Infer.sat_mono h).trans (hs.satMono.trans (Infer.sat_mono h₂))
   | .nil hd => SolverState.SatMono.of_sol_eq (draw_sol hd)
   | .cons h₁ h₂ hs =>
+      (Infer.sat_mono h₁).trans ((Infer.sat_mono h₂).trans hs.satMono)
+  | .consStr h₁ _ h₂ hs =>
       (Infer.sat_mono h₁).trans ((Infer.sat_mono h₂).trans hs.satMono)
   | .has _ h hd hs =>
       (Infer.sat_mono h).trans
@@ -1963,8 +2092,6 @@ theorem Infer.quiescent {B C : Type} [DecidableEq B] {constTy : Sig B C}
   | .selDynAbs _ _ _ _ _ hsk _, _ => hsk.quiescent.flag _
   | .selDynUnk _ _ _ _ _ hsk hb hd₂, _ =>
       SolverState.Quiescent.park_draw (draw_sol hd₂) (draw_parked hd₂) hsk.quiescent hb
-  | .selDynBase _ _ hs h₂ _, _ => (Infer.quiescent h₂ hs.quiescent).flag _
-  | .rcdDynBase h₁ h₂ _, hq => (Infer.quiescent h₂ (Infer.quiescent h₁ hq)).flag _
   -- …and the rules that do not write carry it through
   | .lam hd hb, hq => Infer.quiescent hb (hq.draw hd)
   | .rcd hb, hq => InferRec.quiescent hb hq
@@ -1975,9 +2102,12 @@ theorem Infer.quiescent {B C : Type} [DecidableEq B] {constTy : Sig B C}
   | .prim _ _ _ _ hs, _ => hs.quiescent
   | .bool _, hq => hq
   | .ite _ _ _ _ _ hs₂, _ => hs₂.quiescent
+  | .iteJoin _ _ hs₁ h₁ h₂ _, _ =>
+      Infer.quiescent h₂ (Infer.quiescent h₁ hs₁.quiescent)
   | .asrt _ _ hs h₂, _ => Infer.quiescent h₂ hs.quiescent
   | .nil hd, hq => hq.draw hd
   | .cons _ _ hs, _ => hs.quiescent
+  | .consStr _ _ _ hs, _ => hs.quiescent
   | .has _ _ _ hs, _ => hs.quiescent
 
 theorem InferRec.quiescent {B C : Type} [DecidableEq B] {constTy : Sig B C}

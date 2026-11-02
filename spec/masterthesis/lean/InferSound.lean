@@ -164,6 +164,24 @@ theorem Sol.lookupQ_sat {B : Type} {s : Sol B} {σ : TySubst B}
   rw [Key.applySubst_sat_eq hsat q] at h'
   exact LookupQ.equiv (Row.applySubst_sat_equiv hsat ρ) h'
 
+/-- ⊢  …and a DEAD lookup (a miss, or an opaque `?`) is a miss or a `?` under
+every σ the state satisfies: opaque is stable under substitution, and `?` is
+≈-invariant. Either way the result is ★. -/
+theorem Sol.deadQ_sat {B : Type} {s : Sol B} {σ : TySubst B}
+    (hsat : Sol.Sat σ s) {ρ : Row B} {q : Key}
+    (h : LookupDeadQ (ρ.applySubst s.toSubst) (q.applySubst s.toSubst)) :
+    LookupQ (ρ.applySubst σ) (q.applySubst σ) .absent ∨
+      LookupQ (ρ.applySubst σ) (q.applySubst σ) .unknown := by
+  rcases h with h | h
+  · obtain ⟨r₁, hl₁, he₁⟩ := Sol.lookupQ_sat hsat h (by intro hh; cases hh)
+    cases he₁ with
+    | absent => exact .inl hl₁
+  · have h' := (h.applySubst σ).toLookupQ
+    rw [Key.applySubst_sat_eq hsat q] at h'
+    obtain ⟨r₁, hl₁, he₁⟩ := LookupQ.equiv (Row.applySubst_sat_equiv hsat ρ) h'
+    cases he₁ with
+    | unknown => exact .inr hl₁
+
 --------------------- SELECTION FROM A RECORD ALWAYS TYPES AT ★ ---------------
 -- A record-typed subject can always have a field selected off it at ★, whatever
 -- the lookup says: the three T-sel rules between them cover `found`, `⊥` and
@@ -286,14 +304,14 @@ theorem infer_sound_selAbs_step {B C : Type} [DecidableEq B] {constTy : Sig B C}
     {e : Expr C} {τ : Ty B} {l : Label} {r : TyVar}
     (h : QTyped constTy Γ' e (τ.applySubst σ))
     (hs : SolveTy S₁' τ (.rcd (.var r)) S₂)
-    (hlk : Lookup ((Row.var r).applySubst S₂.subst) l .absent)
+    (hlk : LookupDeadQ ((Row.var r).applySubst S₂.subst) (.lit l))
     (hsat : Sol.Sat σ S₂.sol) :
     QTyped constTy Γ' (.sel e l) ((Ty.unk : Ty B).applySubst σ) := by
   have hrcd : QTyped constTy Γ' e ((Ty.rcd (.var r)).applySubst σ) :=
     .qEq h (hs.unifies_sat hsat)
-  obtain ⟨r'', hl'', he''⟩ := Sol.lookup_sat hsat hlk (by intro hh; cases hh)
-  cases he'' with
-  | absent => exact .qSelAbs hrcd hl''
+  rcases Sol.deadQ_sat (q := .lit l) hsat hlk with hl'' | hl''
+  · exact .qSelAbs hrcd (LookupQ.lab_iff.mp hl'')
+  · exact .qSelUnk hrcd (LookupQ.lab_iff.mp hl'')
 
 --------------------- WHAT A PARKED STUMP HAS TO MEAN -------------------------
 -- A-sel-? is the case `proof-state.md` calls a DESIGN question rather than a
@@ -368,9 +386,9 @@ theorem Wake.dischargeEquiv {B : Type} [DecidableEq B] {S S₁ : SolverState B}
   | .abs hlk hs, hsat => by
       have hS : Sol.Sat σ _ := SolveTy.satMono hs σ hsat
       have hδ := SolveTy.unifies_sat hs hsat
-      obtain ⟨r₁, hl₁, he₁⟩ := Sol.lookupQ_sat hS hlk (by intro hh; cases hh)
-      cases he₁ with
-      | absent => exact .inl (.abs hl₁ ((TyEquiv.unk_inv_both hδ).2 rfl))
+      rcases Sol.deadQ_sat hS hlk with hl₁ | hl₁
+      · exact .inl (.abs hl₁ ((TyEquiv.unk_inv_both hδ).2 rfl))
+      · exact .inl (.unk hl₁ ((TyEquiv.unk_inv_both hδ).2 rfl))
   -- K-repark is NOTHING: the blocker moved, the stump did not.
   | .repark _, _ =>
       .inr ⟨{ blocker := _, stump := p.stump }, List.mem_cons_self, rfl⟩
@@ -757,6 +775,7 @@ mutual
     | qUnk : QTypedC constTy Δ Γ e τ → QTypedC constTy Δ Γ e .unk
     | qRcd : QTypedCBody constTy Δ Γ b ρ → QTypedC constTy Δ Γ (.rcd b) (.rcd ρ)
     | qLab : QTypedC constTy Δ Γ (.lab l) (.lab (.lit l))
+    | qLabBlur : QTypedC constTy Δ Γ e (.lab k) → QTypedC constTy Δ Γ e (.lab .unk)
     | qSelDyn : QTypedC constTy Δ Γ e₁ (.rcd ρ) → QTypedC constTy Δ Γ e₂ (.lab q) →
                 LookupQ ρ q (.found τ) → QTypedC constTy Δ Γ (.selDyn e₁ e₂) τ
     | qSelDynUnk : QTypedC constTy Δ Γ e₁ (.rcd ρ) → QTypedC constTy Δ Γ e₂ (.lab q) →
@@ -765,10 +784,6 @@ mutual
                    LookupQ ρ q .absent → QTypedC constTy Δ Γ (.selDyn e₁ e₂) .unk
     | qRcdDyn : QTypedC constTy Δ Γ e₁ (.lab q) → QTypedC constTy Δ Γ e₂ τ →
                 QTypedC constTy Δ Γ (.rcdDyn e₁ e₂) (.rcd (.dsing q τ))
-    | qSelDynBase : QTypedC constTy Δ Γ e₁ (.rcd ρ) → QTypedC constTy Δ Γ e₂ (.base b) →
-                    QTypedC constTy Δ Γ (.selDyn e₁ e₂) .unk
-    | qRcdDynBase : QTypedC constTy Δ Γ e₁ (.base b) → QTypedC constTy Δ Γ e₂ τ →
-                    QTypedC constTy Δ Γ (.rcdDyn e₁ e₂) .unk
     -- MacroNix
     | qPrim : constTy.prim p = some τp → τp.applySubst θ = Ty.arrows τs τ →
               QTypedCArgs constTy Δ Γ es τs → QTypedC constTy Δ Γ (.prim p es) τ
@@ -791,6 +806,8 @@ mutual
     | empty : QTypedCBody constTy Δ Γ .empty .empty
     | field : QTypedC constTy Δ Γ e τ →
               QTypedCBody constTy Δ Γ (.field l e) (.sing l τ)
+    | fieldU : QTypedC constTy Δ Γ e τ →
+               QTypedCBody constTy Δ Γ (.field l e) (.dsing .unk τ)
     | cat : QTypedCBody constTy Δ Γ b₁ ρ₁ → QTypedCBody constTy Δ Γ b₂ ρ₂ →
             QTypedCBody constTy Δ Γ (.cat b₁ b₂) (.cat ρ₁ ρ₂)
 
@@ -808,6 +825,7 @@ mutual
     | .qCon           => .qCon
     | .qVar hl hi     => .qVar hl hi
     | .qEq h he       => .qEq h.toC he
+    | .qLabBlur h     => .qLabBlur h.toC
     | .qLam h         => .qLam h.toC
     | .qApp h₁ h₂     => .qApp h₁.toC h₂.toC
     | .qLet hwf hi hin hb => .qLet hwf (fun τ₁ h => (hi τ₁ h).toC) hin hb.toC
@@ -822,8 +840,6 @@ mutual
     | .qSelDynUnk h₁ h₂ hl => .qSelDynUnk h₁.toC h₂.toC hl
     | .qSelDynAbs h₁ h₂ hl => .qSelDynAbs h₁.toC h₂.toC hl
     | .qRcdDyn h₁ h₂       => .qRcdDyn h₁.toC h₂.toC
-    | .qSelDynBase h₁ h₂   => .qSelDynBase h₁.toC h₂.toC
-    | .qRcdDynBase h₁ h₂   => .qRcdDynBase h₁.toC h₂.toC
     | .qPrim hp hi ha => .qPrim hp hi ha.toC
     | .qBool hb => .qBool hb
     | .qIte hb h h₁ h₂ => .qIte hb h.toC h₁.toC h₂.toC
@@ -837,6 +853,7 @@ mutual
       QTypedBody constTy Γ b ρ → QTypedCBody constTy Δ Γ b ρ
     | .empty      => .empty
     | .field h    => .field h.toC
+    | .fieldU h   => .fieldU h.toC
     | .cat h₁ h₂  => .cat h₁.toC h₂.toC
 
   theorem QTypedArgs.toC {B C : Type} {constTy : Sig B C} {Δ : List (Stump B)}
@@ -855,6 +872,7 @@ mutual
     | .qCon           => .qCon
     | .qVar hl hi     => .qVar hl hi
     | .qEq h he       => .qEq h.toQTyped he
+    | .qLabBlur h     => .qLabBlur h.toQTyped
     | .qLam h         => .qLam h.toQTyped
     | .qApp h₁ h₂     => .qApp h₁.toQTyped h₂.toQTyped
     | .qLet hwf hi hin hb => .qLet hwf (fun τ₁ h => (hi τ₁ h).toQTyped) hin hb.toQTyped
@@ -869,8 +887,6 @@ mutual
     | .qSelDynUnk h₁ h₂ hl => .qSelDynUnk h₁.toQTyped h₂.toQTyped hl
     | .qSelDynAbs h₁ h₂ hl => .qSelDynAbs h₁.toQTyped h₂.toQTyped hl
     | .qRcdDyn h₁ h₂       => .qRcdDyn h₁.toQTyped h₂.toQTyped
-    | .qSelDynBase h₁ h₂   => .qSelDynBase h₁.toQTyped h₂.toQTyped
-    | .qRcdDynBase h₁ h₂   => .qRcdDynBase h₁.toQTyped h₂.toQTyped
     | .qPrim hp hi ha => .qPrim hp hi ha.toQTyped
     | .qBool hb => .qBool hb
     | .qIte hb h h₁ h₂ => .qIte hb h.toQTyped h₁.toQTyped h₂.toQTyped
@@ -885,6 +901,7 @@ mutual
       QTypedCBody constTy [] Γ b ρ → QTypedBody constTy Γ b ρ
     | .empty      => .empty
     | .field h    => .field h.toQTyped
+    | .fieldU h   => .fieldU h.toQTyped
     | .cat h₁ h₂  => .cat h₁.toQTyped h₂.toQTyped
 
   theorem QTypedCArgs.toQTyped {B C : Type} {constTy : Sig B C} {Γ : QCtx B}

@@ -151,10 +151,19 @@ theorem unifyKey_bounded {B : Type} {S : Supply} {k₁ k₂ : Key} {s : Sol B}
   | var α =>
       exact hb (hV (List.mem_append_left _ (by simp [Key.ftv])))
         (fun _ hx => hV (List.mem_append_right _ hx)) h
+  | unk =>
+      cases k₂ with
+      | var α =>
+          exact hb (hV (List.mem_append_right _ (by simp [Key.ftv]))) (by simp [Key.ftv]) h
+      | unk =>
+          simp only [unifyKey, UResM.success.injEq] at h; obtain ⟨rfl, rfl⟩ := h
+          exact ⟨V, fun _ hx => hx, hS, SolBelow.nil V⟩
+      | lit _ => simp [unifyKey] at h
   | lit l =>
       cases k₂ with
       | var α =>
           exact hb (hV (List.mem_append_right _ (by simp [Key.ftv]))) (by simp [Key.ftv]) h
+      | unk => simp [unifyKey] at h
       | lit l' =>
           simp only [unifyKey] at h
           split at h
@@ -175,6 +184,7 @@ theorem solveVarM_bounded {B : Type} {S : Supply} {s₁ s₂ : List (Atom B)}
     cases a₁ with
     | field _ _ => simp [solveVarM] at h
     | dfield _ _ => simp [solveVarM] at h
+    | ufield _ => simp [solveVarM] at h
     | var α =>
       cases r₁ with
       | cons _ _ => simp [solveVarM] at h
@@ -190,7 +200,7 @@ theorem solveVarM_bounded {B : Type} {S : Supply} {s₁ s₂ : List (Atom B)}
             obtain ⟨h₁, h₂⟩ := collapseSol_below hc p hp
             exact ⟨hV (List.mem_append_right _ h₁), by rw [h₂]; simp [Row.ftv]⟩
         · split at h
-          · split at h <;> (try split at h) <;> simp at h
+          · (try split at h) <;> (try split at h) <;> simp at h
           · simp only [Option.some.injEq, UResM.success.injEq] at h
             obtain ⟨rfl, rfl⟩ := h
             refine ⟨V, fun _ hx => hx, hS, SolBelow_ofRow (fun p hp => ?_)⟩
@@ -795,9 +805,16 @@ theorem lab_arm_complete {B : Type} [DecidableEq B] {θ : TySubst B} {l l' : Key
       exact hk
   cases l with
   | var α => exact hb he h
+  | unk =>
+      cases l' with
+      | var α => exact hb he.symm h
+      | unk =>
+          simp only [unifyKey, UResM.success.injEq] at h; obtain ⟨rfl, -⟩ := h; exact Sol.Sat_nil
+      | lit _ => simp [unifyKey] at h
   | lit m =>
       cases l' with
       | var α => exact hb he.symm h
+      | unk => simp [unifyKey] at h
       | lit m' =>
           simp only [unifyKey] at h
           split at h
@@ -905,6 +922,7 @@ theorem solveVarM_complete {B : Type} {θ : TySubst B} {S : Supply}
     cases a₁ with
     | field _ _ => simp [solveVarM] at hsolve
     | dfield _ _ => simp [solveVarM] at hsolve
+    | ufield _ => simp [solveVarM] at hsolve
     | var α =>
       cases r₁ with
       | cons _ _ => simp [solveVarM] at hsolve
@@ -920,7 +938,7 @@ theorem solveVarM_complete {B : Type} {θ : TySubst B} {S : Supply}
             exact Sol.Sat_ofRow.mpr
               (collapseSol_complete hc (RowEquiv.unitR.symm.trans hu))
         · split at hsolve
-          · split at hsolve <;> (try split at hsolve) <;> simp at hsolve
+          · (try split at hsolve) <;> (try split at hsolve) <;> simp at hsolve
           · simp only [Option.some.injEq, UResM.success.injEq] at hsolve
             obtain ⟨rfl, -⟩ := hsolve
             refine Sol.Sat_ofRow.mpr (fun p hp => ?_)

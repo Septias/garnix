@@ -377,10 +377,10 @@ theorem unify_lab_var_lit :
 theorem unify_lab_vs_base_clash :
     unifyTyM (B := Unit) 20 (.lab (.var "α")) uB = .clash := rfl
 
--- ⊢  (${α}: τ).α ↓ τ, and it stays found under α ↦ l (the key comparison is
---    stable: `Key.cmp_applySubst`)
+-- ⊢  (${α}: τ).α ↓ ?: a variable key decides nothing, not even against
+--    itself (feat/fc-labels M2), and a literal instance hits
 theorem lookup_key_self :
-    LookupQ (.dsing (.var "α") uB : Row Unit) (.var "α") (.found uB) := .dhit rfl
+    LookupQ (.dsing (.var "α") uB : Row Unit) (.var "α") .unknown := .dunk rfl
 theorem lookup_key_self_subst :
     LookupQ (.dsing (.lit "l") uB : Row Unit) (.lit "l") (.found uB) := .dhit rfl
 
@@ -405,6 +405,49 @@ theorem unify_diff_key_pins :
 theorem unify_diff_key_ctx_stuck :
     unifyRowM (B := Unit) 20 (.cat (.dsing (.var "α") uB) (.sing "m" uB))
       (.cat (.sing "m" uB) (.dsing (.var "β") uB)) = .stuck := rfl
+
+-- ## FC-LABELS: the unknown key ★ (feat/fc-labels M3)
+
+-- ⊢  a label variable binds to ★ …
+theorem unify_lab_var_unk :
+    unifyTyM (B := Unit) 20 (.lab (.var "α")) (.lab .unk) =
+      .success ⟨[], [], [("α", .unk)]⟩ ⟨2⟩ := rfl
+
+-- ⊢  … but ★ is no label: ⌊★⌋ ≐ ⌊l⌋ clashes, and ⌊★⌋ ≐ ⌊★⌋ is vacuous
+theorem unify_unk_lit_clash :
+    unifyTyM (B := Unit) 20 (.lab .unk) (.lab (.lit "l")) = .clash := rfl
+theorem unify_unk_unk :
+    ∃ S, unifyTyM (B := Unit) 20 (.lab .unk) (.lab .unk) = .success ⟨[], [], []⟩ S := ⟨_, rfl⟩
+
+-- ⊢  two ★-keyed fields cancel and unify their payloads (U-key-L) …
+theorem unify_unk_fields :
+    unifyRowM (B := Unit) 20 (.dsing .unk (.var "t")) (.dsing .unk uB) =
+      .success ⟨[("t", uB)], [], []⟩ ⟨2⟩ := rfl
+
+-- ⊢  … at the tail as well, behind distinct row variables (U-key-R)
+theorem unify_unk_fields_tail :
+    ∃ s S, unifyRowM (B := Unit) 20 (.cat (.var "r") (.dsing .unk (.var "t")))
+      (.cat (.var "q") (.dsing .unk uB)) = .success s S := ⟨_, _, rfl⟩
+
+-- ⊢  a keyed field meets a ★-keyed one alone: U-key-pin binds α ≔ ★
+theorem unify_key_vs_unk_pins :
+    ∃ s S, unifyRowM (B := Unit) 20 (.dsing (.var "α") uB) (.dsing .unk uB) = .success s S :=
+  ⟨_, _, rfl⟩
+
+-- ⊢  the empty row has no field under ★ either
+theorem unify_empty_vs_unk_clash :
+    unifyRowM (B := Unit) 20 .empty (.dsing .unk uB) = .clash := rfl
+
+-- ⊢  a literal field against a ★-keyed one has no unifier, but no move sees it:
+--    stuck (sound, conservative)
+theorem unify_lit_vs_unk_stuck :
+    unifyRowM (B := Unit) 20 (.sing "l" uB) (.dsing .unk uB) = .stuck := rfl
+
+-- ⊢  a lookup under ★, or through ${★}, decides nothing at any instance
+theorem lookup_unk_key : LookupQ (.sing "l" uB : Row Unit) .unk .unknown := .sunk rfl
+theorem lookup_through_unk :
+    LookupQ (.cat (.dsing .unk uB) (.sing "l" uB) : Row Unit) (.lit "l") .unknown :=
+  .catUnk (.dunk rfl)
 
 -- MacroNix lists. [a] ≐ [𝓫] decomposes to a ≐ 𝓫.
 -- ⊢  unifyTyM [a] [𝓫]  =  success a ↦ 𝓫

@@ -80,13 +80,7 @@ theorem lookupQ_blocked_subst {ρ : Row B} {q : Key} {β : TyVar}
       obtain ⟨β', hβ', hf⟩ := hkey (by simp [Key.sortedFtv])
       show LookupQ (.dsing _ _) (θ.lab α) _
       rw [hβ']
-      refine .dunk (Key.cmp_var_ne ?_)
-      cases q' with
-      | var γ =>
-          intro he
-          have hγ := hf γ (by simp [Key.sortedFtv, Row.sortedFtv]) he
-          subst hγ; simp at hcmp
-      | lit _ => intro he; cases he
+      exact .dunk Key.cmp_var
   | @dunkF l τ γ =>
       intro _ hkey
       obtain ⟨β', hβ', -⟩ := hkey (by simp [Key.sortedFtv, Row.sortedFtv])
@@ -121,6 +115,7 @@ theorem Key.ftv_rename {θ : TySubst B} {g : TyVar → TyVar} : (k : Key) →
     (∀ α ∈ k.ftv, θ.lab α = .var (g α)) → (k.applySubst θ).ftv = k.ftv.map g
   | .lit _, _ => rfl
   | .var α, h => by simp [(h α (by simp [Key.ftv])), Key.ftv]
+  | .unk, _ => rfl
 
 mutual
   theorem Ty.ftv_rename {θ : TySubst B} {g : TyVar → TyVar} : (τ : Ty B) →
@@ -313,6 +308,7 @@ theorem LetResults.inhabited {S₁ : SolverState B} {ᾱ : List TyVar} {Δq : Li
     match q.stump.label.applySubst S₁.subst with
     | .var κ => if onFilled q then some κ else none
     | .lit _ => none
+    | .unk => none
   have mem_keyG : ∀ {κ : TyVar}, κ ∈ keyG → ∃ q ∈ Δq, onFilled q = true ∧
       q.stump.label.applySubst S₁.subst = .var κ := by
     intro κ h
@@ -322,6 +318,7 @@ theorem LetResults.inhabited {S₁ : SolverState B} {ᾱ : List TyVar} {Δq : Li
       split at he
       · next ho => injection he with he; exact ⟨q, hq, ho, by rw [hl, he]⟩
       · cases he
+    · cases he
     · cases he
   -- a key on a filled blocker is fillable, so it is generalized
   have keyG_sub : ∀ κ ∈ keyG, κ ∈ ᾱ := by
@@ -564,6 +561,7 @@ theorem LetResults.inhabited {S₁ : SolverState B} {ᾱ : List TyVar} {Δq : Li
                   injection he with he; subst he
                   exact absurd (List.mem_map_of_mem (hbq p hp)) hx
               | lit _ => rw [hs] at he; cases he
+              | unk => rw [hs] at he; cases he
       · -- the blocker is filled by a spent stump: p names none of its fields (a
         -- field for it would make p spent alike)
         obtain ⟨lt, hlt⟩ := List.exists_mem_of_ne_nil _ hfe
@@ -660,6 +658,7 @@ theorem letCase {C : Type} {constTy : Sig B C} : LetCase B C constTy := by
         simp only [readSub, if_neg hn]
         cases hk : σ.lab β with
         | lit _ => rfl
+        | unk => rfl
         | var γ => exact (fx γ (hvl γ (by simp [hk, Key.ftv]))).2.2
     -- so σ₁ is σ on Γ's variables …
     have hΓag : ∀ β ∈ Γ.ftv, σ₁.ty β = σ.ty β ∧ σ₁.row β = σ.row β ∧ σ₁.lab β = σ.lab β := by

@@ -175,15 +175,6 @@ theorem Infer.keeps {C : Type} {constTy : Sig B C} :
         (S := S₂'.park ⟨α, ⟨Row.var r, .lit l, .var δ⟩⟩) (S' := S₂') rfl
       exact (Infer.keeps h₁).trans (ka.trans (hs.keeps.trans (kb.trans kp mp) (mb.trans mp))
         (hs.satMono.trans (mb.trans mp))) (ma.trans (hs.satMono.trans (mb.trans mp)))
-  | _, _, _, _, _, .selDynBase h₁ hd hs h₂ _ => by
-      obtain ⟨ka, ma, -⟩ := draw_keeps hd
-      have m₂ := Infer.sat_mono h₂
-      have r := (Infer.keeps h₁).trans (ka.trans (hs.keeps.trans (Infer.keeps h₂) m₂)
-        (hs.satMono.trans m₂)) (ma.trans (hs.satMono.trans m₂))
-      exact r
-  | _, _, _, _, _, .rcdDynBase h₁ h₂ _ => by
-      have r := (Infer.keeps h₁).trans (Infer.keeps h₂) (Infer.sat_mono h₂)
-      exact r
   | _, _, _, _, _, .lab => .refl _
   | _, _, _, _, _, .selDyn h₁ hd hs h₂ hdk hsk _ => by
       obtain ⟨ka, ma, -⟩ := draw_keeps hd
@@ -244,11 +235,20 @@ theorem Infer.keeps {C : Type} {constTy : Sig B C} :
       have m₂ := hs₁.satMono.trans m₃
       exact (Infer.keeps h).trans (hs₁.keeps.trans ((Infer.keeps h₁).trans
         ((Infer.keeps h₂).trans hs₂.keeps m₅) m₄) m₃) m₂
+  | _, _, _, _, _, .iteJoin _ h hs₁ h₁ h₂ _ => by
+      have m₄ := Infer.sat_mono h₂
+      have m₃ := (Infer.sat_mono h₁).trans m₄
+      have m₂ := hs₁.satMono.trans m₃
+      exact (Infer.keeps h).trans (hs₁.keeps.trans ((Infer.keeps h₁).trans
+        (Infer.keeps h₂) m₄) m₃) m₂
   | _, _, _, _, _, .asrt _ h hs h₂ => by
       have m₃ := Infer.sat_mono h₂
       exact (Infer.keeps h).trans (hs.keeps.trans (Infer.keeps h₂) m₃) (hs.satMono.trans m₃)
   | _, _, _, _, _, .nil hd => (draw_keeps hd).1
   | _, _, _, _, _, .cons h₁ h₂ hs =>
+      (Infer.keeps h₁).trans ((Infer.keeps h₂).trans hs.keeps hs.satMono)
+        ((Infer.sat_mono h₂).trans hs.satMono)
+  | _, _, _, _, _, .consStr h₁ _ h₂ hs =>
       (Infer.keeps h₁).trans ((Infer.keeps h₂).trans hs.keeps hs.satMono)
         ((Infer.sat_mono h₂).trans hs.satMono)
   | _, _, _, _, _, .has _ h hd hs => by

@@ -40,6 +40,7 @@ theorem QTyped.sig_mini {sig sig' : Sig B C} (hcon : sig'.con = sig.con) :
       rw [hcon] at h; exact h
   | _, _, _, .qVar hl hi, _ => .qVar hl hi
   | _, _, _, .qEq h he, hm => .qEq (QTyped.sig_mini hcon h hm) he
+  | _, _, _, .qLabBlur h, hm => .qLabBlur (QTyped.sig_mini hcon h hm)
   | _, _, _, .qLam h, hm => .qLam (QTyped.sig_mini hcon h hm)
   | _, _, _, .qApp h₁ h₂, hm =>
       .qApp (QTyped.sig_mini hcon h₁ hm.1) (QTyped.sig_mini hcon h₂ hm.2)
@@ -62,10 +63,6 @@ theorem QTyped.sig_mini {sig sig' : Sig B C} (hcon : sig'.con = sig.con) :
       .qSelDynAbs (QTyped.sig_mini hcon h₁ hm.1) (QTyped.sig_mini hcon h₂ hm.2) hl
   | _, _, _, .qRcdDyn h₁ h₂, hm =>
       .qRcdDyn (QTyped.sig_mini hcon h₁ hm.1) (QTyped.sig_mini hcon h₂ hm.2)
-  | _, _, _, .qSelDynBase h₁ h₂, hm =>
-      .qSelDynBase (QTyped.sig_mini hcon h₁ hm.1) (QTyped.sig_mini hcon h₂ hm.2)
-  | _, _, _, .qRcdDynBase h₁ h₂, hm =>
-      .qRcdDynBase (QTyped.sig_mini hcon h₁ hm.1) (QTyped.sig_mini hcon h₂ hm.2)
   | _, _, _, .qPrim _ _ _, hm => hm.elim
   | _, _, _, .qBool _, hm => hm.elim
   | _, _, _, .qIte _ _ _ _, hm => hm.elim
@@ -79,6 +76,7 @@ theorem QTypedBody.sig_mini {sig sig' : Sig B C} (hcon : sig'.con = sig.con) :
     QTypedBody sig Γ b ρ → b.IsMini → QTypedBody sig' Γ b ρ
   | _, _, _, .empty, _ => .empty
   | _, _, _, .field h, hm => .field (QTyped.sig_mini hcon h hm)
+  | _, _, _, .fieldU h, hm => .fieldU (QTyped.sig_mini hcon h hm)
   | _, _, _, .cat h₁ h₂, hm =>
       .cat (QTypedBody.sig_mini hcon h₁ hm.1) (QTypedBody.sig_mini hcon h₂ hm.2)
 end

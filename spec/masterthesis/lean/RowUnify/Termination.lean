@@ -58,6 +58,7 @@ def spineSize {B : Type} : List (Atom B) → Nat
   | .field _ τ :: s => 1 + τ.usize + spineSize s
   | .var _ :: s     => 1 + spineSize s
   | .dfield _ τ :: s => 1 + τ.usize + spineSize s
+  | .ufield τ :: s => 1 + τ.usize + spineSize s
 
 theorem spineSize_append {B : Type} :
     (s t : List (Atom B)) → spineSize (s ++ t) = spineSize s + spineSize t
@@ -67,6 +68,8 @@ theorem spineSize_append {B : Type} :
   | .var _ :: s, t => by
       simp only [List.cons_append, spineSize, spineSize_append s t]; omega
   | .dfield _ τ :: s, t => by
+      simp only [List.cons_append, spineSize, spineSize_append s t]; omega
+  | .ufield τ :: s, t => by
       simp only [List.cons_append, spineSize, spineSize_append s t]; omega
 
 theorem spineSize_toSpine {B : Type} : (ρ : Row B) → spineSize ρ.toSpine = ρ.usize
@@ -86,6 +89,8 @@ theorem spineSize_reverse {B : Type} : (s : List (Atom B)) →
   | .var _ :: s => by
       simp only [List.reverse_cons, spineSize_append, spineSize_reverse s, spineSize]; omega
   | .dfield _ τ :: s => by
+      simp only [List.reverse_cons, spineSize_append, spineSize_reverse s, spineSize]; omega
+  | .ufield τ :: s => by
       simp only [List.reverse_cons, spineSize_append, spineSize_reverse s, spineSize]; omega
 
 ------------------------- THE DETECTORS SHRINK THE PROBLEM ---------------------
@@ -160,6 +165,16 @@ theorem removeField_size {B : Type} {l : Label} :
           have e := removeField_size t hw
           cases h
           simp only [spineSize]; omega
+  | .ufield σ :: t, τ, s', h => by
+      simp only [removeField] at h
+      revert h
+      cases hw : removeField l t with
+      | none => intro h; cases h
+      | some p =>
+          intro h
+          have e := removeField_size t hw
+          cases h
+          simp only [spineSize]; omega
   | .field l' τ' :: t, τ, s', h => by
       simp only [removeField] at h
       by_cases hl : l' = l
@@ -208,6 +223,18 @@ theorem matchL_size {B : Type} {s₁ s₂ : List (Atom B)} {τ τ' : Ty B}
           cases h
           rw [keyExtract_inv hw]
           exact ⟨by simp only [spineSize]; omega, by simp only [spineSize]; omega⟩
+  | .ufield σ :: u₁ =>
+      cases s₂ with
+      | nil => simp [matchL] at h
+      | cons a u₂ =>
+          cases a with
+          | ufield σ' =>
+              simp only [matchL, Option.some.injEq, Prod.mk.injEq] at h
+              obtain ⟨rfl, rfl, rfl, rfl⟩ := h
+              exact ⟨by simp only [spineSize]; omega, by simp only [spineSize]; omega⟩
+          | field _ _ => simp [matchL] at h
+          | var _ => simp [matchL] at h
+          | dfield _ _ => simp [matchL] at h
 
 theorem matchR_size {B : Type} {s₁ s₂ : List (Atom B)} {τ τ' : Ty B}
     {t₁ t₂ : List (Atom B)} (h : matchR s₁ s₂ = some (τ, τ', t₁, t₂)) :
@@ -282,6 +309,9 @@ theorem sApplySubst_fixed {B : Type} {θ : TySubst B} (ht : ∀ α, θ.ty α = .
   | .dfield o τ :: t => by
       simp only [sApplySubst, Ty.applySubst_fixed_sorted τ (fun α _ => ht α) (fun α _ => hr α)
         (fun α _ => hl α), sApplySubst_fixed ht hr hl t, hl o, Atom.ofKey]
+  | .ufield τ :: t => by
+      simp only [sApplySubst, Ty.applySubst_fixed_sorted τ (fun α _ => ht α) (fun α _ => hr α)
+        (fun α _ => hl α), sApplySubst_fixed ht hr hl t]
 
 ------------------------- VERDICTS THAT ARE NOT `outOfFuel` --------------------
 
@@ -314,7 +344,7 @@ theorem solveVarM_ne_oof {B : Type} {S : Supply} {s₁ s₂ : List (Atom B)} {r 
       split
       · simp
       · split
-        · split <;> simp
+        · simp
         · simp
 
 theorem mono_ty_eq {B : Type} [DecidableEq B] {S : Supply} {f F : Nat} {τ τ' : Ty B}
@@ -442,6 +472,16 @@ theorem keyPin_facts {B : Type} {s₁ s₂ : List (Atom B)} {α : TyVar} {k : Ke
     obtain ⟨rfl, rfl⟩ := h
     have := pos τ; have := pos τ'
     exact ⟨fun e => (by cases e), (by simp [spineSize]; omega)⟩
+  next a τ τ' =>
+    simp only [Option.some.injEq, Prod.mk.injEq] at h
+    obtain ⟨rfl, rfl⟩ := h
+    have := pos τ; have := pos τ'
+    exact ⟨fun e => (by cases e), (by simp [spineSize]; omega)⟩
+  next τ a τ' =>
+    simp only [Option.some.injEq, Prod.mk.injEq] at h
+    obtain ⟨rfl, rfl⟩ := h
+    have := pos τ; have := pos τ'
+    exact ⟨fun e => (by cases e), (by simp [spineSize]; omega)⟩
   next => cases h
 
 theorem keyPin_binds {B : Type} [DecidableEq B] {S S₁ : Supply} {f : Nat} {α : TyVar}
@@ -511,6 +551,7 @@ theorem spineSize_renameVar {B : Type} (β β' : TyVar) :
       split <;> simp only [spineSize, spineSize_renameVar β β' s]
   | .field _ _ :: s => by simp only [renameVar, spineSize, spineSize_renameVar β β' s]
   | .dfield _ _ :: s => by simp only [renameVar, spineSize, spineSize_renameVar β β' s]
+  | .ufield _ :: s => by simp only [renameVar, spineSize, spineSize_renameVar β β' s]
 
 -- ⊢  U-HOST'S RESIDUAL: below the advanced supply, no more variables (β′ for
 --    β), and a field fewer

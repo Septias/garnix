@@ -31,6 +31,7 @@ theorem stripL_inv {B : Type} {s₁ s₂ t₁ t₂ : List (Atom B)} :
     cases a₁ with
     | field _ _ => simp [stripL]
     | dfield _ _ => simp [stripL]
+    | ufield _ => simp [stripL]
     | var α =>
       cases s₂ with
       | nil => simp [stripL]
@@ -38,6 +39,7 @@ theorem stripL_inv {B : Type} {s₁ s₂ t₁ t₂ : List (Atom B)} :
         cases a₂ with
         | field _ _ => simp [stripL]
         | dfield _ _ => simp [stripL]
+        | ufield _ => simp [stripL]
         | var β =>
           intro h
           simp only [stripL] at h
@@ -129,12 +131,26 @@ theorem windowExtract_equiv {B : Type} (l : Label) :
 theorem matchL_inv {B : Type} {s₁ s₂ t₁ t₂ : List (Atom B)} {τ τ' : Ty B} :
     matchL s₁ s₂ = some (τ, τ', t₁, t₂) →
     (∃ l, s₁ = .field l τ :: t₁ ∧ windowExtract l s₂ = some (τ', t₂)) ∨
-    (∃ α, s₁ = .dfield α τ :: t₁ ∧ s₂ = .dfield α τ' :: t₂) := by
+    (∃ α, s₁ = .dfield α τ :: t₁ ∧ s₂ = .dfield α τ' :: t₂) ∨
+    (s₁ = .ufield τ :: t₁ ∧ s₂ = .ufield τ' :: t₂) := by
   cases s₁ with
   | nil => simp [matchL]
   | cons a₁ r₁ =>
     cases a₁ with
     | var α => simp [matchL]
+    | ufield τ₀ =>
+      cases s₂ with
+      | nil => simp [matchL]
+      | cons a₂ r₂ =>
+        cases a₂ with
+        | ufield τ₁ =>
+          intro h
+          simp only [matchL, Option.some.injEq, Prod.mk.injEq] at h
+          obtain ⟨rfl, rfl, rfl, rfl⟩ := h
+          exact .inr (.inr ⟨rfl, rfl⟩)
+        | field _ _ => simp [matchL]
+        | var _ => simp [matchL]
+        | dfield _ _ => simp [matchL]
     | dfield α τ₀ =>
       intro h
       simp only [matchL] at h
@@ -142,7 +158,7 @@ theorem matchL_inv {B : Type} {s₁ s₂ t₁ t₂ : List (Atom B)} {τ τ' : Ty
       · rename_i τ'' s₂' hke
         simp only [Option.some.injEq, Prod.mk.injEq] at h
         obtain ⟨rfl, rfl, rfl, rfl⟩ := h
-        exact .inr ⟨α, rfl, keyExtract_inv hke⟩
+        exact .inr (.inl ⟨α, rfl, keyExtract_inv hke⟩)
       · simp at h
     | field l τ₀ =>
       intro h
@@ -162,12 +178,14 @@ theorem matchL_reflect {B : Type} {θ : TySubst B} {s₁ s₂ t₁ t₂ : List (
     (heq : TyEquiv (τ.applySubst θ) (τ'.applySubst θ))
     (hrec : RowEquiv ((ofSpine t₁).applySubst θ) ((ofSpine t₂).applySubst θ)) :
     RowEquiv ((ofSpine s₁).applySubst θ) ((ofSpine s₂).applySubst θ) := by
-  rcases matchL_inv hmatch with ⟨l, rfl, hwe⟩ | ⟨α, rfl, rfl⟩
+  rcases matchL_inv hmatch with ⟨l, rfl, hwe⟩ | ⟨α, rfl, rfl⟩ | ⟨rfl, rfl⟩
   · have hw := RowEquiv.applySubst θ (windowExtract_equiv l s₂ hwe)
     simp only [ofSpine_field_cons, Row.applySubst]
     refine RowEquiv.trans ?_ hw.symm
     simp only [Row.applySubst]
     exact RowEquiv.cat (.sing heq) hrec
+  · simp only [ofSpine, Row.applySubst]
+    exact RowEquiv.cat (.dsing heq) hrec
   · simp only [ofSpine, Row.applySubst]
     exact RowEquiv.cat (.dsing heq) hrec
 
@@ -182,6 +200,7 @@ theorem allVarsEmpty_sound {B : Type} {θ : TySubst B} :
       simp only [allVarsEmpty, Option.some.injEq] at hσ; subst hσ; exact .refl _
   | .field _ _ :: _, _, hσ, _ => by simp [allVarsEmpty] at hσ
   | .dfield _ _ :: _, _, hσ, _ => by simp [allVarsEmpty] at hσ
+  | .ufield _ :: _, _, hσ, _ => by simp [allVarsEmpty] at hσ
   | .var α :: s, σ, hσ, hsol => by
       simp only [allVarsEmpty] at hσ
       cases hs : allVarsEmpty s with
@@ -208,6 +227,7 @@ theorem allVarsEmpty_complete {B : Type} {θ : TySubst B} :
       intro p hp; simp at hp
   | .field _ _ :: _, _, hσ, _ => by simp [allVarsEmpty] at hσ
   | .dfield _ _ :: _, _, hσ, _ => by simp [allVarsEmpty] at hσ
+  | .ufield _ :: _, _, hσ, _ => by simp [allVarsEmpty] at hσ
   | .var α :: s, σ, hσ, hu => by
       simp only [allVarsEmpty] at hσ
       cases hs : allVarsEmpty s with
@@ -277,6 +297,11 @@ theorem ofSpine_reverse_equiv {B : Type} : (as : List (Atom B)) →
       refine (ofSpine_append t.reverse [Atom.dfield o τ]).trans ?_
       simp only [ofSpine, revRow]
       exact RowEquiv.cat (ofSpine_reverse_equiv t) RowEquiv.unitR
+  | .ufield τ :: t => by
+      rw [List.reverse_cons]
+      refine (ofSpine_append t.reverse [Atom.ufield τ]).trans ?_
+      simp only [ofSpine, revRow]
+      exact RowEquiv.cat (ofSpine_reverse_equiv t) RowEquiv.unitR
 
 -- U-field (right): the trailing-end mirror of matchL. matchR runs windowExtract
 -- on the REVERSED spines, so the matched field sits in the trailing var-free
@@ -307,6 +332,16 @@ theorem ofSpine_key_snoc {B : Type} {s u : List (Atom B)} {α : TyVar} {τ : Ty 
   exact (ofSpine_append u.reverse [Atom.dfield α τ]).trans
     (RowEquiv.cat (.refl _) RowEquiv.unitR)
 
+-- …and the same for a ★-keyed field
+theorem ofSpine_ukey_snoc {B : Type} {s u : List (Atom B)} {τ : Ty B}
+    (h : s.reverse = .ufield τ :: u) :
+    RowEquiv (ofSpine s) (.cat (ofSpine u.reverse) (.dsing .unk τ)) := by
+  have hs : s = u.reverse ++ [Atom.ufield τ] := by
+    rw [← List.reverse_reverse s, h]; simp
+  rw [hs]
+  exact (ofSpine_append u.reverse [Atom.ufield τ]).trans
+    (RowEquiv.cat (.refl _) RowEquiv.unitR)
+
 -- ⊢  matchR s₁ s₂ = some (τ,τ',t₁,t₂),  θτ ≈ θτ',  θ(ofSpine t₁) ≈ᵣ θ(ofSpine t₂)
 --        ⟹   θ(ofSpine s₁) ≈ᵣ θ(ofSpine s₂)      (trailing-field mirror)
 theorem matchR_reflect {B : Type} {θ : TySubst B} {s₁ s₂ t₁ t₂ : List (Atom B)}
@@ -325,7 +360,7 @@ theorem matchR_reflect {B : Type} {θ : TySubst B} {s₁ s₂ t₁ t₂ : List (
     -- matchR returns (τa, τb, u₁.reverse, u₂.reverse); pin the theorem vars.
     simp only [Option.some.injEq, Prod.mk.injEq] at hmatch
     obtain ⟨rfl, rfl, rfl, rfl⟩ := hmatch
-    rcases matchL_inv hml with ⟨l, hrev, hwe⟩ | ⟨α, hrev₁, hrev₂⟩
+    rcases matchL_inv hml with ⟨l, hrev, hwe⟩ | ⟨α, hrev₁, hrev₂⟩ | ⟨hrev₁, hrev₂⟩
     · -- hrev : s₁.reverse = field l τa :: u₁ ; so s₁ = u₁.reverse ++ [field l τa]
       have hs₁ : s₁ = u₁.reverse ++ [Atom.field l τa] := by
         rw [← List.reverse_reverse s₁, hrev]; simp
@@ -342,6 +377,11 @@ theorem matchR_reflect {B : Type} {θ : TySubst B} {s₁ s₂ t₁ t₂ : List (
       exact RowEquiv.cat hrec (.sing heq)
     · have e₁ := RowEquiv.applySubst θ (ofSpine_key_snoc hrev₁)
       have e₂ := RowEquiv.applySubst θ (ofSpine_key_snoc hrev₂)
+      simp only [Row.applySubst] at e₁ e₂
+      refine e₁.trans (RowEquiv.trans ?_ e₂.symm)
+      exact RowEquiv.cat hrec (.dsing heq)
+    · have e₁ := RowEquiv.applySubst θ (ofSpine_ukey_snoc hrev₁)
+      have e₂ := RowEquiv.applySubst θ (ofSpine_ukey_snoc hrev₂)
       simp only [Row.applySubst] at e₁ e₂
       refine e₁.trans (RowEquiv.trans ?_ e₂.symm)
       exact RowEquiv.cat hrec (.dsing heq)
@@ -441,10 +481,12 @@ theorem matchL_reflect_fwd {B : Type} {θ : TySubst B} {s₁ s₂ t₁ t₂ : Li
     (hu : RowEquiv ((ofSpine s₁).applySubst θ) ((ofSpine s₂).applySubst θ)) :
     TyEquiv (τ.applySubst θ) (τ'.applySubst θ) ∧
     RowEquiv ((ofSpine t₁).applySubst θ) ((ofSpine t₂).applySubst θ) := by
-  rcases matchL_inv hmatch with ⟨l, rfl, hwe⟩ | ⟨α, rfl, rfl⟩
+  rcases matchL_inv hmatch with ⟨l, rfl, hwe⟩ | ⟨α, rfl, rfl⟩ | ⟨rfl, rfl⟩
   · have hs₂ := RowEquiv.applySubst θ (windowExtract_equiv l s₂ hwe)
     simp only [ofSpine, Row.applySubst] at hu hs₂
     exact (hu.trans hs₂).field_cancel_left
+  · simp only [ofSpine, Row.applySubst] at hu
+    exact hu.dsing_cancel_left
   · simp only [ofSpine, Row.applySubst] at hu
     exact hu.dsing_cancel_left
 
@@ -464,7 +506,7 @@ theorem matchR_reflect_fwd {B : Type} {θ : TySubst B} {s₁ s₂ t₁ t₂ : Li
     obtain ⟨τa, τb, u₁, u₂⟩ := p
     simp only [Option.some.injEq, Prod.mk.injEq] at hmatch
     obtain ⟨rfl, rfl, rfl, rfl⟩ := hmatch
-    rcases matchL_inv hml with ⟨l, hrev, hwe⟩ | ⟨α, hrev₁, hrev₂⟩
+    rcases matchL_inv hml with ⟨l, hrev, hwe⟩ | ⟨α, hrev₁, hrev₂⟩ | ⟨hrev₁, hrev₂⟩
     · have hs₁ : s₁ = u₁.reverse ++ [Atom.field l τa] := by
         rw [← List.reverse_reverse s₁, hrev]; simp
       have hs₂equiv := windowExtract_reverse_equiv l s₂ hwe
@@ -478,6 +520,10 @@ theorem matchR_reflect_fwd {B : Type} {θ : TySubst B} {s₁ s₂ t₁ t₂ : Li
       exact (e₁.symm.trans (hu.trans e₂)).field_cancel_right
     · have e₁ := RowEquiv.applySubst θ (ofSpine_key_snoc hrev₁)
       have e₂ := RowEquiv.applySubst θ (ofSpine_key_snoc hrev₂)
+      simp only [Row.applySubst] at e₁ e₂
+      exact (e₁.symm.trans (hu.trans e₂)).dsing_cancel_right
+    · have e₁ := RowEquiv.applySubst θ (ofSpine_ukey_snoc hrev₁)
+      have e₂ := RowEquiv.applySubst θ (ofSpine_ukey_snoc hrev₂)
       simp only [Row.applySubst] at e₁ e₂
       exact (e₁.symm.trans (hu.trans e₂)).dsing_cancel_right
 
@@ -497,13 +543,20 @@ theorem RowEquiv.dsing_single_key {B : Type} {k₁ k₂ : Key} {τ₁ τ₂ : Ty
           · simp [Row.toSpine, Atom.ofKey, sProj, e] at h'
             cases h'
       | var β => simp [Row.toSpine, Atom.ofKey, sBarSeq] at hv
+      | unk => simp [Row.toSpine, Atom.ofKey, sBarSeq] at hv
   | var α =>
       cases k₂ with
       | lit l' => simp [Row.toSpine, Atom.ofKey, sBarSeq] at hv
+      | unk => simp [Row.toSpine, Atom.ofKey, sBarSeq] at hv
       | var β =>
           simp only [Row.toSpine, Atom.ofKey, sBarSeq, List.append_nil,
             List.cons.injEq, Barrier.key.injEq, and_true] at hv
           rw [hv]
+  | unk =>
+      cases k₂ with
+      | lit l' => simp [Row.toSpine, Atom.ofKey, sBarSeq] at hv
+      | var β => simp [Row.toSpine, Atom.ofKey, sBarSeq] at hv
+      | unk => rfl
 
 -- ⊢  keyPin s₁ s₂ = some (α, k),  θ ⊨ ofSpine s₁ ≐ᵣ ofSpine s₂   ⟹   θα = θk
 --    Every unifier binds the key: the move is forced.
@@ -533,6 +586,16 @@ theorem keyPin_forced {B : Type} {θ : TySubst B} {s₁ s₂ : List (Atom B)}
       simp only [ofSpine, Row.applySubst] at hu
       exact (RowEquiv.dsing_single_key
         ((RowEquiv.cat RowEquiv.dsingLab (.refl _)).trans hu)).symm
+    next a τ τ' =>
+      simp only [Option.some.injEq, Prod.mk.injEq] at hk
+      obtain ⟨rfl, rfl⟩ := hk
+      simp only [ofSpine, Row.applySubst] at hu
+      exact RowEquiv.dsing_single_key hu
+    next τ a τ' =>
+      simp only [Option.some.injEq, Prod.mk.injEq] at hk
+      obtain ⟨rfl, rfl⟩ := hk
+      simp only [ofSpine, Row.applySubst] at hu
+      exact (RowEquiv.dsing_single_key hu).symm
     next => cases hk
   unfold TyUnifies
   simp only [Ty.applySubst, Key.applySubst_var, key]
@@ -561,6 +624,22 @@ theorem keyPin_ftv {B : Type} {s₁ s₂ : List (Atom B)} {α : TyVar} {k : Key}
     · simp [sFtv]
     · simp at hx
   next l τ a τ' =>
+    simp only [Option.some.injEq, Prod.mk.injEq] at h
+    obtain ⟨rfl, rfl⟩ := h
+    intro x hx
+    simp only [Ty.ftv, Key.ftv, List.mem_append, List.mem_singleton] at hx
+    rcases hx with rfl | hx
+    · simp [sFtv]
+    · simp at hx
+  next a τ τ' =>
+    simp only [Option.some.injEq, Prod.mk.injEq] at h
+    obtain ⟨rfl, rfl⟩ := h
+    intro x hx
+    simp only [Ty.ftv, Key.ftv, List.mem_append, List.mem_singleton] at hx
+    rcases hx with rfl | hx
+    · simp [sFtv]
+    · simp at hx
+  next τ a τ' =>
     simp only [Option.some.injEq, Prod.mk.injEq] at h
     obtain ⟨rfl, rfl⟩ := h
     intro x hx
@@ -609,11 +688,14 @@ theorem field_comm_lfree {B : Type} (l : Label) (τ : Ty B) :
 /-- a spine's KEYED atoms all become literal fields with labels other than l
 under θ (the keyed half of U-ground's side condition). -/
 def KeysLit {B : Type} (θ : TySubst B) (l : Label) (s : List (Atom B)) : Prop :=
-  ∀ o τ, Atom.dfield o τ ∈ s → ∃ l', θ.lab o = .lit l' ∧ l' ≠ l
+  (∀ o τ, Atom.dfield o τ ∈ s → ∃ l', θ.lab o = .lit l' ∧ l' ≠ l) ∧
+  -- ★ never becomes a literal, so the spine carries no ★-keyed field
+  ∀ τ, Atom.ufield τ ∉ s
 
 theorem KeysLit.tail {B : Type} {θ : TySubst B} {l : Label} {a : Atom B}
     {s : List (Atom B)} (h : KeysLit θ l (a :: s)) : KeysLit θ l s :=
-  fun o τ hm => h o τ (List.mem_cons_of_mem _ hm)
+  ⟨fun o τ hm => h.1 o τ (List.mem_cons_of_mem _ hm),
+   fun τ hm => h.2 τ (List.mem_cons_of_mem _ hm)⟩
 
 -- removeField pulls the matched l-field to the front — UNDER θ, provided every
 -- variable of the spine is barrier-free and l-free under θ, and every keyed
@@ -661,7 +743,7 @@ theorem removeField_equiv_of {B : Type} {θ : TySubst B} (l : Label) :
       · rename_i τ'' s'' hrem
         simp only [Option.some.injEq, Prod.mk.injEq] at h
         obtain ⟨rfl, rfl⟩ := h
-        obtain ⟨l', hk, hl'⟩ := hkeys o σ List.mem_cons_self
+        obtain ⟨l', hk, hl'⟩ := hkeys.1 o σ List.mem_cons_self
         have hvars' : ∀ β ∈ sVarSeq s,
             sBarSeq (θ.row β).toSpine = [] ∧ sFieldCount l (θ.row β).toSpine = 0 :=
           fun β hβ => hvars β (by simp only [sVarSeq]; exact hβ)
@@ -677,6 +759,7 @@ theorem removeField_equiv_of {B : Type} {θ : TySubst B} (l : Label) :
               (RowEquiv.assoc.trans
                 (RowEquiv.cat (.refl _) (RowEquiv.cat RowEquiv.dsingLab.symm (.refl _))))))
       · simp at h
+  | .ufield σ :: _, _, _, _, _, hkeys => absurd List.mem_cons_self (hkeys.2 σ)
   | .var β :: s, τ, t, h, hvars, hkeys => by
       simp only [removeField] at h
       split at h
@@ -717,6 +800,14 @@ theorem removeField_sVarSeq {B : Type} (l : Label) :
           simp only [sVarSeq]; exact removeField_sVarSeq l s hrem
         · simp at h
   | .dfield o σ :: s, τ, t, h => by
+      simp only [removeField] at h
+      split at h
+      · rename_i τ'' s'' hrem
+        simp only [Option.some.injEq, Prod.mk.injEq] at h
+        obtain ⟨rfl, rfl⟩ := h
+        simp only [sVarSeq]; exact removeField_sVarSeq l s hrem
+      · simp at h
+  | .ufield σ :: s, τ, t, h => by
       simp only [removeField] at h
       split at h
       · rename_i τ'' s'' hrem
@@ -767,6 +858,18 @@ theorem removeField_sBarSeq {B : Type} (l : Label) :
         · rw [hm]; exact List.mem_cons_self
         · exact List.mem_cons_of_mem _ (h₂ o σ hm)
       · simp at h
+  | .ufield σ₀ :: s, τ, t, h => by
+      simp only [removeField] at h
+      split at h
+      · rename_i τ'' s'' hrem
+        simp only [Option.some.injEq, Prod.mk.injEq] at h
+        obtain ⟨rfl, rfl⟩ := h
+        obtain ⟨h₁, h₂⟩ := removeField_sBarSeq l s hrem
+        refine ⟨by simp only [sBarSeq]; rw [h₁], fun o σ hm => ?_⟩
+        rcases List.mem_cons.mp hm with hm | hm
+        · cases hm
+        · exact List.mem_cons_of_mem _ (h₂ o σ hm)
+      · simp at h
   | .var β :: s, τ, t, h => by
       simp only [removeField] at h
       split at h
@@ -803,6 +906,15 @@ theorem removeField_sFieldCount {B : Type} (l : Label) :
           omega
         · simp at h
   | .dfield o σ :: s, τ, t, h => by
+      simp only [removeField] at h
+      split at h
+      · rename_i τ'' s'' hrem
+        simp only [Option.some.injEq, Prod.mk.injEq] at h
+        obtain ⟨rfl, rfl⟩ := h
+        simp only [sFieldCount]
+        rw [removeField_sFieldCount l s hrem]
+      · simp at h
+  | .ufield σ :: s, τ, t, h => by
       simp only [removeField] at h
       split at h
       · rename_i τ'' s'' hrem
@@ -855,6 +967,8 @@ theorem allBars_rigid_of {B : Type} {θ : TySubst B} :
           rcases List.mem_cons.mp hm with hm | hm
           · cases hm; exact hlit
           · exact h₂ o σ hm⟩
+  | .ufield σ₀ :: s, h => by
+      simp [ofSpine, Row.applySubst, Row.toSpine, Key.applySubst, Atom.ofKey, sBarSeq] at h
   | .var γ :: s, h => by
       simp only [ofSpine_var_cons, Row.applySubst, Row.toSpine, sBarSeq_append] at h
       obtain ⟨hγ, hs⟩ := List.append_eq_nil_iff.mp h
@@ -909,6 +1023,17 @@ theorem allVars_lfree_of {B : Type} {θ : TySubst B} (l : Label) :
         rw [hq] at hkey0
         simp [Atom.ofKey, sFieldCount] at hkey0
       · exact h₂ o σ hm
+  | .ufield σ₀ :: s, h => by
+      have hsp : ((ofSpine (Atom.ufield σ₀ :: s)).applySubst θ).toSpine =
+          Atom.ufield (σ₀.applySubst θ) :: ((ofSpine s).applySubst θ).toSpine := rfl
+      rw [hsp] at h
+      simp only [sFieldCount] at h
+      obtain ⟨h₁, h₂⟩ := allVars_lfree_of l s h
+      exact ⟨fun β hβ => h₁ β (by simpa [sVarSeq] using hβ),
+        fun o σ hm => by
+          rcases List.mem_cons.mp hm with hm | hm
+          · cases hm
+          · exact h₂ o σ hm⟩
   | .var γ :: s, h => by
       simp only [ofSpine_var_cons, Row.applySubst, Row.toSpine, sFieldCount_append,
         sFieldCount] at h
@@ -928,10 +1053,48 @@ theorem allVars_lfree_of {B : Type} {θ : TySubst B} (l : Label) :
 -- the two together are U-ground's keyed side condition
 theorem keysLit_of {B : Type} {θ : TySubst B} {l : Label} {s : List (Atom B)}
     (h₁ : ∀ o τ, Atom.dfield o τ ∈ s → ∃ l', θ.lab o = .lit l')
-    (h₂ : ∀ o τ, Atom.dfield o τ ∈ s → θ.lab o ≠ .lit l) :
-    KeysLit θ l s := fun o τ hm => by
+    (h₂ : ∀ o τ, Atom.dfield o τ ∈ s → θ.lab o ≠ .lit l)
+    (h₃ : ∀ τ, Atom.ufield τ ∉ s) :
+    KeysLit θ l s := ⟨fun o τ hm => by
   obtain ⟨l', hl'⟩ := h₁ o τ hm
-  exact ⟨l', hl', fun h => h₂ o τ hm (h ▸ hl')⟩
+  exact ⟨l', hl', fun h => h₂ o τ hm (h ▸ hl')⟩, h₃⟩
+
+-- a barrier-free spine has no ★-keyed field
+theorem sBarSeq_nil_noUKey {B : Type} : (s : List (Atom B)) → sBarSeq s = [] →
+    ∀ τ, Atom.ufield τ ∉ s
+  | [], _, _, hm => by cases hm
+  | .var _ :: _, h, _, _ => nomatch h
+  | .dfield _ _ :: _, h, _, _ => nomatch h
+  | .ufield _ :: _, h, _, _ => nomatch h
+  | .field _ _ :: t, h, τ, hm => by
+      rcases List.mem_cons.mp hm with hm | hm
+      · cases hm
+      · exact sBarSeq_nil_noUKey t h τ hm
+
+-- ★ survives every substitution, so a barrier-free image has no ★-keyed field
+theorem noUKey_of_image_barSeq_nil {B : Type} {θ : TySubst B} :
+    (s : List (Atom B)) → sBarSeq ((ofSpine s).applySubst θ).toSpine = [] →
+    ∀ τ, Atom.ufield τ ∉ s
+  | [], _, _, hm => by cases hm
+  | .field l σ :: s, h, τ, hm => by
+      simp only [ofSpine_field_cons, Row.applySubst, Row.toSpine, sBarSeq_append,
+        sBarSeq, List.nil_append] at h
+      rcases List.mem_cons.mp hm with hm | hm
+      · cases hm
+      · exact noUKey_of_image_barSeq_nil s h τ hm
+  | .dfield o σ :: s, h, τ, hm => by
+      simp only [ofSpine, Row.applySubst, Row.toSpine, sBarSeq_append,
+        List.append_eq_nil_iff] at h
+      rcases List.mem_cons.mp hm with hm | hm
+      · cases hm
+      · exact noUKey_of_image_barSeq_nil s h.2 τ hm
+  | .ufield σ :: s, h, τ, hm => by
+      simp [ofSpine, Row.applySubst, Row.toSpine, Key.applySubst, Atom.ofKey, sBarSeq] at h
+  | .var γ :: s, h, τ, hm => by
+      simp only [ofSpine_var_cons, Row.applySubst, Row.toSpine, sBarSeq_append] at h
+      rcases List.mem_cons.mp hm with hm | hm
+      · cases hm
+      · exact noUKey_of_image_barSeq_nil s (List.append_eq_nil_iff.mp h).2 τ hm
 
 -- ## U-ground: inversion + the reflection lemma
 -- ⊢  groundMatchAux s₁ s₂ ls = some (τ,τ',t₁,t₂)   ⟹   ∃ l.
@@ -981,6 +1144,7 @@ theorem sBarSeq_nil_noKey' {B : Type} : (s : List (Atom B)) → sBarSeq s = [] �
   | [], _ => ⟨fun _ _ hm => (by cases hm), rfl⟩
   | .var _ :: _, h => nomatch h
   | .dfield _ _ :: _, h => nomatch h
+  | .ufield _ :: _, h => nomatch h
   | .field _ _ :: t, h =>
       have ih := sBarSeq_nil_noKey' t h
       ⟨fun o τ hm => (by
@@ -1022,6 +1186,16 @@ theorem removeField_keys {B : Type} (l : Label) :
         · rw [hm]; exact List.mem_cons_self
         · exact List.mem_cons_of_mem _ (removeField_keys l r hrem o σ hm)
       · simp at h
+  | .ufield σ₀ :: r, τ, t, h, o, σ, hm => by
+      simp only [removeField] at h
+      split at h
+      · rename_i τ'' s'' hrem
+        simp only [Option.some.injEq, Prod.mk.injEq] at h
+        obtain ⟨rfl, rfl⟩ := h
+        rcases List.mem_cons.mp hm with hm | hm
+        · cases hm
+        · exact List.mem_cons_of_mem _ (removeField_keys l r hrem o σ hm)
+      · simp at h
   | .var β :: r, τ, t, h, o, σ, hm => by
       simp only [removeField] at h
       split at h
@@ -1031,6 +1205,58 @@ theorem removeField_keys {B : Type} (l : Label) :
         rcases List.mem_cons.mp hm with hm | hm
         · cases hm
         · exact List.mem_cons_of_mem _ (removeField_keys l r hrem o σ hm)
+      · simp at h
+
+-- removeField keeps every ★-keyed atom
+theorem removeField_ukeys {B : Type} (l : Label) :
+    (s : List (Atom B)) → {τ : Ty B} → {t : List (Atom B)} →
+    removeField l s = some (τ, t) → ∀ σ, Atom.ufield σ ∈ s → Atom.ufield σ ∈ t
+  | [], _, _, h, _, _ => by simp [removeField] at h
+  | .field l' τ₀ :: r, τ, t, h, σ, hm => by
+      simp only [removeField] at h
+      split at h
+      · simp only [Option.some.injEq, Prod.mk.injEq] at h
+        obtain ⟨rfl, rfl⟩ := h
+        rcases List.mem_cons.mp hm with hm | hm
+        · cases hm
+        · exact hm
+      · split at h
+        · rename_i τ'' s'' hrem
+          simp only [Option.some.injEq, Prod.mk.injEq] at h
+          obtain ⟨rfl, rfl⟩ := h
+          rcases List.mem_cons.mp hm with hm | hm
+          · cases hm
+          · exact List.mem_cons_of_mem _ (removeField_ukeys l r hrem σ hm)
+        · simp at h
+  | .dfield o₀ σ₀ :: r, τ, t, h, σ, hm => by
+      simp only [removeField] at h
+      split at h
+      · rename_i τ'' s'' hrem
+        simp only [Option.some.injEq, Prod.mk.injEq] at h
+        obtain ⟨rfl, rfl⟩ := h
+        rcases List.mem_cons.mp hm with hm | hm
+        · cases hm
+        · exact List.mem_cons_of_mem _ (removeField_ukeys l r hrem σ hm)
+      · simp at h
+  | .ufield σ₀ :: r, τ, t, h, σ, hm => by
+      simp only [removeField] at h
+      split at h
+      · rename_i τ'' s'' hrem
+        simp only [Option.some.injEq, Prod.mk.injEq] at h
+        obtain ⟨rfl, rfl⟩ := h
+        rcases List.mem_cons.mp hm with hm | hm
+        · rw [hm]; exact List.mem_cons_self
+        · exact List.mem_cons_of_mem _ (removeField_ukeys l r hrem σ hm)
+      · simp at h
+  | .var β :: r, τ, t, h, σ, hm => by
+      simp only [removeField] at h
+      split at h
+      · rename_i τ'' s'' hrem
+        simp only [Option.some.injEq, Prod.mk.injEq] at h
+        obtain ⟨rfl, rfl⟩ := h
+        rcases List.mem_cons.mp hm with hm | hm
+        · cases hm
+        · exact List.mem_cons_of_mem _ (removeField_ukeys l r hrem σ hm)
       · simp at h
 
 -- U-ground reflection: the paired l-field bubbles out of BOTH sides. The ground
@@ -1052,7 +1278,7 @@ theorem groundMatch_reflect {B : Type} {θ : TySubst B} {s₁ s₂ t₁ t₂ : L
   have hs₂equiv : RowEquiv ((ofSpine s₂).applySubst θ)
       (.cat (.sing l (τ'.applySubst θ)) ((ofSpine t₂).applySubst θ)) :=
     removeField_equiv_of l s₂ hr₂ (fun β hβ => by simp [hs₂nk.2] at hβ)
-      (fun o σ hm => absurd hm (hs₂nk.1 o σ))
+      ⟨fun o σ hm => absurd hm (hs₂nk.1 o σ), sBarSeq_nil_noUKey s₂ hs₂bars⟩
   have ht₂bars : sBarSeq t₂ = [] := by rw [(removeField_sBarSeq l s₂ hr₂).1]; exact hs₂bars
   have ht₂vf : (ofSpine t₂).SpineVarFree :=
     spineVarFree_of_barSeq_nil _ (by rw [ofSpine_toSpine]; exact ht₂bars)
@@ -1076,7 +1302,9 @@ theorem groundMatch_reflect {B : Type} {θ : TySubst B} {s₁ s₂ t₁ t₂ : L
       (fun β hβ => ⟨hrig β (by rw [hvars₁]; exact hβ),
                     hlfree β (by rw [hvars₁]; exact hβ)⟩)
       (keysLit_of (fun o σ hm => hlit o σ (hkeys₁ o σ hm))
-                  (fun o σ hm => hnotl o σ (hkeys₁ o σ hm)))
+                  (fun o σ hm => hnotl o σ (hkeys₁ o σ hm))
+                  (fun σ hm => noUKey_of_image_barSeq_nil t₁ hb₁nil σ
+                    (removeField_ukeys l s₁ hr₁ σ hm)))
   exact hs₁equiv.trans ((RowEquiv.cat (.sing heq) hrec).trans hs₂equiv.symm)
 
 -- U-ground FORWARD: a unifier of the original ground-match pins the field types
@@ -1097,7 +1325,7 @@ theorem groundMatch_reflect_fwd {B : Type} {θ : TySubst B}
   have hs₂equiv : RowEquiv ((ofSpine s₂).applySubst θ)
       (.cat (.sing l (τ'.applySubst θ)) ((ofSpine t₂).applySubst θ)) :=
     removeField_equiv_of l s₂ hr₂ (fun β hβ => by simp [hs₂nk.2] at hβ)
-      (fun o σ hm => absurd hm (hs₂nk.1 o σ))
+      ⟨fun o σ hm => absurd hm (hs₂nk.1 o σ), sBarSeq_nil_noUKey s₂ hs₂bars⟩
   have hs₂vf : (ofSpine s₂).SpineVarFree :=
     spineVarFree_of_barSeq_nil _ (by rw [ofSpine_toSpine]; exact hs₂bars)
   have hb₁nil : sBarSeq ((ofSpine s₁).applySubst θ).toSpine = [] := by
@@ -1112,7 +1340,7 @@ theorem groundMatch_reflect_fwd {B : Type} {θ : TySubst B}
   have hs₁equiv : RowEquiv ((ofSpine s₁).applySubst θ)
       (.cat (.sing l (τ.applySubst θ)) ((ofSpine t₁).applySubst θ)) :=
     removeField_equiv_of l s₁ hr₁ (fun β hβ => ⟨hrig β hβ, hlfree β hβ⟩)
-      (keysLit_of hlit hnotl)
+      (keysLit_of hlit hnotl (noUKey_of_image_barSeq_nil s₁ hb₁nil))
   exact (hs₁equiv.symm.trans (hu.trans hs₂equiv)).field_cancel_left
 
 -- ## Eq-emitting moves reflect no-mgu (the augmented-witness case of the lift)
@@ -1251,6 +1479,13 @@ theorem removeField_isSome_of_pos {B : Type} (l : Label) :
       cases hr : removeField l s with
       | none => rw [hr] at ih; simp at ih
       | some p => simp
+  | .ufield σ :: s, h => by
+      simp only [sFieldCount] at h
+      simp only [removeField]
+      have ih := removeField_isSome_of_pos l s h
+      cases hr : removeField l s with
+      | none => rw [hr] at ih; simp at ih
+      | some p => simp
   | .field l' τ :: s, h => by
       simp only [removeField]
       by_cases hl : l' = l
@@ -1313,6 +1548,7 @@ theorem stuck_not_both_ground {B : Type} {a : Atom B} {s₁ s₂ : List (Atom B)
   cases a with
   | var α => simp [sHasVar] at hv₁
   | dfield _ _ => simp [sHasVar] at hv₁
+  | ufield _ => simp [sHasVar] at hv₁
   | field l₀ τ =>
     have hpos : 0 < sFieldCount l₀ (Atom.field l₀ τ :: s₁) := by simp [sFieldCount]; omega
     have hmem₁ : l₀ ∈ sLabels (Atom.field l₀ τ :: s₁) := by simp [sLabels]
@@ -1342,12 +1578,16 @@ theorem stuck_leading_shape {B : Type} {a b : Atom B} {s₁ s₂ : List (Atom B)
     (∃ l τ l' τ', a = .field l τ ∧ b = .field l' τ' ∧ l ≠ l' ∧
       windowExtract l (b :: s₂) = none ∧ windowExtract l' (a :: s₁) = none) ∨
     -- FC-labels phase B: a leading KEYED field is a barrier no move acts on
-    (∃ o τ, a = .dfield o τ) ∨ (∃ o τ, b = .dfield o τ) := by
+    (∃ o τ, a = .dfield o τ) ∨ (∃ o τ, b = .dfield o τ) ∨
+    -- …and so is a leading ★-keyed field
+    (∃ τ, a = .ufield τ) ∨ (∃ τ, b = .ufield τ) := by
   cases a with
   | dfield o τ => exact Or.inr (Or.inr (Or.inr (Or.inr (Or.inl ⟨o, τ, rfl⟩))))
+  | ufield τ => exact Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inl ⟨τ, rfl⟩))))))
   | var α =>
     cases b with
-    | dfield o τ => exact Or.inr (Or.inr (Or.inr (Or.inr (Or.inr ⟨o, τ, rfl⟩))))
+    | dfield o τ => exact Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inl ⟨o, τ, rfl⟩)))))
+    | ufield τ => exact Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr ⟨τ, rfl⟩))))))
     | var β =>
       -- stripL would fire on equal leading vars, so α ≠ β.
       refine Or.inl ⟨α, β, rfl, rfl, ?_⟩
@@ -1355,7 +1595,8 @@ theorem stuck_leading_shape {B : Type} {a b : Atom B} {s₁ s₂ : List (Atom B)
     | field l' τ' => exact Or.inr (Or.inl ⟨α, l', τ', rfl, rfl⟩)
   | field l τ =>
     cases b with
-    | dfield o τ' => exact Or.inr (Or.inr (Or.inr (Or.inr (Or.inr ⟨o, τ', rfl⟩))))
+    | dfield o τ' => exact Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inl ⟨o, τ', rfl⟩)))))
+    | ufield τ' => exact Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr ⟨τ', rfl⟩))))))
     | var β => exact Or.inr (Or.inr (Or.inl ⟨l, τ, β, rfl, rfl⟩))
     | field l' τ' =>
       refine Or.inr (Or.inr (Or.inr (Or.inl ⟨l, τ, l', τ', rfl, rfl, ?_, ?_, ?_⟩)))

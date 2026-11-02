@@ -33,11 +33,13 @@ inductive Atom (B : Type) : Type where
   | field  : Label → Ty B → Atom B
   | var    : TyVar → Atom B
   | dfield : TyVar → Ty B → Atom B
+  | ufield : Ty B → Atom B          -- ${★}: τ, a field under the unknown key
 
 /-- the spine atom of a keyed field. -/
 def Atom.ofKey {B : Type} : Key → Ty B → Atom B
   | .lit l, τ => .field l τ
   | .var α, τ => .dfield α τ
+  | .unk,   τ => .ufield τ
 
 def Row.toSpine {B : Type} : Row B → List (Atom B)
   | .empty     => []
@@ -52,11 +54,13 @@ def ofSpine {B : Type} : List (Atom B) → Row B
   | .field l τ :: s  => .cat (.sing l τ) (ofSpine s)
   | .var α :: s      => .cat (.var α) (ofSpine s)
   | .dfield α τ :: s => .cat (.dsing (.var α) τ) (ofSpine s)
+  | .ufield τ :: s   => .cat (.dsing .unk τ) (ofSpine s)
 
 -- A barrier's identity: a var, or a key (its field type is tracked apart).
 inductive Barrier (B : Type) : Type where
   | var : TyVar → Barrier B
   | key : TyVar → Barrier B
+  | ukey : Barrier B                -- the unknown key ★
 
 -- Invariant 1: the barrier sequence.
 def sBarSeq {B : Type} : List (Atom B) → List (Barrier B)
@@ -64,6 +68,7 @@ def sBarSeq {B : Type} : List (Atom B) → List (Barrier B)
   | .field _ _ :: s  => sBarSeq s
   | .var α :: s      => .var α :: sBarSeq s
   | .dfield o _ :: s => .key o :: sBarSeq s
+  | .ufield _ :: s   => .ukey :: sBarSeq s
 
 -- The var sequence (keys skipped) — what the unifier's var bookkeeping reads.
 def sVarSeq {B : Type} : List (Atom B) → List TyVar
@@ -71,6 +76,7 @@ def sVarSeq {B : Type} : List (Atom B) → List TyVar
   | .field _ _ :: s  => sVarSeq s
   | .var α :: s      => α :: sVarSeq s
   | .dfield _ _ :: s => sVarSeq s
+  | .ufield _ :: s   => sVarSeq s
 
 -- Invariant 2: the l-projection — (segment index, type) per l-field, in order.
 def sProj {B : Type} (l : Label) : List (Atom B) → List (Nat × Ty B)
@@ -78,6 +84,7 @@ def sProj {B : Type} (l : Label) : List (Atom B) → List (Nat × Ty B)
   | .field l' τ :: s => if l' = l then (0, τ) :: sProj l s else sProj l s
   | .var _ :: s      => (sProj l s).map (fun p => (p.1 + 1, p.2))
   | .dfield _ _ :: s => (sProj l s).map (fun p => (p.1 + 1, p.2))
+  | .ufield _ :: s   => (sProj l s).map (fun p => (p.1 + 1, p.2))
 
 -- Invariant 3: the keyed fields' types, in order.
 def sDProj {B : Type} : List (Atom B) → List (Nat × Ty B)
@@ -85,6 +92,7 @@ def sDProj {B : Type} : List (Atom B) → List (Nat × Ty B)
   | .field _ _ :: s  => sDProj s
   | .var _ :: s      => sDProj s
   | .dfield _ τ :: s => (0, τ) :: sDProj s
+  | .ufield τ :: s   => (0, τ) :: sDProj s
 
 -- ⊢  vars(s₁ ++ s₂) = vars(s₁) ++ vars(s₂)
 theorem sVarSeq_append {B : Type} : (s₁ s₂ : List (Atom B)) →
@@ -93,6 +101,7 @@ theorem sVarSeq_append {B : Type} : (s₁ s₂ : List (Atom B)) →
   | .field _ _ :: s₁, s₂ => sVarSeq_append s₁ s₂
   | .var _ :: s₁, s₂ => congrArg (_ :: ·) (sVarSeq_append s₁ s₂)
   | .dfield _ _ :: s₁, s₂ => sVarSeq_append s₁ s₂
+  | .ufield _ :: s₁, s₂ => sVarSeq_append s₁ s₂
 
 -- ⊢  bars(s₁ ++ s₂) = bars(s₁) ++ bars(s₂)
 theorem sBarSeq_append {B : Type} : (s₁ s₂ : List (Atom B)) →
@@ -101,6 +110,7 @@ theorem sBarSeq_append {B : Type} : (s₁ s₂ : List (Atom B)) →
   | .field _ _ :: s₁, s₂ => sBarSeq_append s₁ s₂
   | .var _ :: s₁, s₂ => congrArg (_ :: ·) (sBarSeq_append s₁ s₂)
   | .dfield _ _ :: s₁, s₂ => congrArg (_ :: ·) (sBarSeq_append s₁ s₂)
+  | .ufield _ :: s₁, s₂ => congrArg (_ :: ·) (sBarSeq_append s₁ s₂)
 
 theorem sDProj_append {B : Type} : (s₁ s₂ : List (Atom B)) →
     sDProj (s₁ ++ s₂) = sDProj s₁ ++ sDProj s₂
@@ -108,12 +118,14 @@ theorem sDProj_append {B : Type} : (s₁ s₂ : List (Atom B)) →
   | .field _ _ :: s₁, s₂ => sDProj_append s₁ s₂
   | .var _ :: s₁, s₂ => sDProj_append s₁ s₂
   | .dfield _ _ :: s₁, s₂ => congrArg (_ :: ·) (sDProj_append s₁ s₂)
+  | .ufield _ :: s₁, s₂ => congrArg (_ :: ·) (sDProj_append s₁ s₂)
 
 -- The var sequence is read off the barrier sequence.
 def Barrier.vars {B : Type} : List (Barrier B) → List TyVar
   | [] => []
   | .var α :: bs => α :: Barrier.vars bs
   | .key _ :: bs => Barrier.vars bs
+  | .ukey :: bs => Barrier.vars bs
 
 theorem sVarSeq_eq_vars {B : Type} : (s : List (Atom B)) →
     sVarSeq s = Barrier.vars (sBarSeq s)
@@ -121,6 +133,7 @@ theorem sVarSeq_eq_vars {B : Type} : (s : List (Atom B)) →
   | .field _ _ :: s => sVarSeq_eq_vars s
   | .var _ :: s => congrArg (_ :: ·) (sVarSeq_eq_vars s)
   | .dfield _ _ :: s => sVarSeq_eq_vars s
+  | .ufield _ :: s => sVarSeq_eq_vars s
 
 -- ⊢  proj_l(s₁ ++ s₂) = proj_l(s₁) ++ map(·+|bars s₁|) proj_l(s₂)
 theorem sProj_append {B : Type} (l : Label) : (s₁ s₂ : List (Atom B)) →
@@ -134,6 +147,9 @@ theorem sProj_append {B : Type} (l : Label) : (s₁ s₂ : List (Atom B)) →
       simp [sProj, sBarSeq, sProj_append l s₁ s₂, List.map_map,
             Function.comp, Nat.add_assoc]
   | .dfield _ _ :: s₁, s₂ => by
+      simp [sProj, sBarSeq, sProj_append l s₁ s₂, List.map_map,
+            Function.comp, Nat.add_assoc]
+  | .ufield _ :: s₁, s₂ => by
       simp [sProj, sBarSeq, sProj_append l s₁ s₂, List.map_map,
             Function.comp, Nat.add_assoc]
 
@@ -291,6 +307,7 @@ theorem RowEquiv.char {B : Type} : {ρ₁ ρ₂ : Row B} → ρ₁ ≈ᵣ ρ₂ 
   | .dsing q τ₁, .dsing _ τ₂, .dsing hty => by
       cases q with
       | var _ => exact ⟨rfl, fun _ => .nil, .cons rfl hty .nil⟩
+      | unk => exact ⟨rfl, fun _ => .nil, .cons rfl hty .nil⟩
       | lit l =>
           refine ⟨rfl, fun l' => ?_, .nil⟩
           by_cases h : l = l'
@@ -312,6 +329,8 @@ theorem ofSpine_append {B : Type} : (s₁ s₂ : List (Atom B)) →
       (RowEquiv.cat (.refl _) (ofSpine_append s₁ s₂)).trans RowEquiv.assoc.symm
   | .dfield _ _ :: s₁, s₂ =>
       (RowEquiv.cat (.refl _) (ofSpine_append s₁ s₂)).trans RowEquiv.assoc.symm
+  | .ufield _ :: s₁, s₂ =>
+      (RowEquiv.cat (.refl _) (ofSpine_append s₁ s₂)).trans RowEquiv.assoc.symm
 
 -- ⊢  ${q}: τ ≈ᵣ ofSpine [ofKey q τ]
 theorem ofKey_equiv {B : Type} (q : Key) (τ : Ty B) :
@@ -319,6 +338,7 @@ theorem ofKey_equiv {B : Type} (q : Key) (τ : Ty B) :
   cases q with
   | lit l => exact RowEquiv.dsingLab.trans RowEquiv.unitR.symm
   | var α => exact RowEquiv.unitR.symm
+  | unk => exact RowEquiv.unitR.symm
 
 -- ⊢  ofSpine (ofKey q τ :: s) ≈ᵣ (${q}: τ | ofSpine s)
 theorem ofSpine_cons_ofKey {B : Type} (q : Key) (τ : Ty B) (s : List (Atom B)) :
@@ -326,6 +346,7 @@ theorem ofSpine_cons_ofKey {B : Type} (q : Key) (τ : Ty B) (s : List (Atom B)) 
   cases q with
   | lit l => exact .cat RowEquiv.dsingLab.symm (.refl _)
   | var α => exact .refl _
+  | unk => exact .refl _
 
 -- ⊢  ρ ≈ᵣ ofSpine(spine ρ)      (every row ≈ its refolded spine)
 theorem Row.toSpine_equiv {B : Type} : (ρ : Row B) → RowEquiv ρ (ofSpine ρ.toSpine)
@@ -359,6 +380,9 @@ theorem spine_extract {B : Type} {τ : Ty B} {rest : List (Nat × Ty B)} :
       simp only [sProj] at h
       exact (map_shift_ne_zero_head h).elim
   | .dfield _ _ :: s', l, h => by
+      simp only [sProj] at h
+      exact (map_shift_ne_zero_head h).elim
+  | .ufield _ :: s', l, h => by
       simp only [sProj] at h
       exact (map_shift_ne_zero_head h).elim
   | .field l₀ τ₀ :: s', l, h => by
@@ -395,6 +419,7 @@ theorem spine_nil_of {B : Type} : (s : List (Atom B)) →
   | [], _, _ => rfl
   | .var _ :: _, hv, _ => nomatch hv
   | .dfield _ _ :: _, hv, _ => nomatch hv
+  | .ufield _ :: _, hv, _ => nomatch hv
   | .field l _ :: _, _, hp => by have := hp l; simp [sProj] at this
 
 -- ## Completeness: the invariants pin the spine up to ≈
@@ -432,6 +457,7 @@ theorem char_complete {B : Type} :
               exact .cat (.refl _)
                 (char_complete t₁ t₂ hv' (fun l => (hp l).unshift) hd)
           | dfield _ _ => simp [sBarSeq] at hv
+          | ufield _ => simp [sBarSeq] at hv
   | .dfield q τ :: t₁, s₂, hv, hp, hd => by
       cases s₂ with
       | nil => simp [sBarSeq] at hv
@@ -447,6 +473,28 @@ theorem char_complete {B : Type} :
               injection hv with hqq hv'
               injection hqq with hqq
               subst hqq
+              simp only [sDProj] at hd
+              obtain ⟨_, _, heq, hty, hd'⟩ := hd.cons_inv
+              injection heq with hhd htl
+              injection hhd with _ hτ'
+              subst hτ'; subst htl
+              exact .cat (.dsing hty)
+                (char_complete t₁ t₂ hv' (fun l => (hp l).unshift) hd')
+          | ufield _ => simp [sBarSeq] at hv
+  | .ufield τ :: t₁, s₂, hv, hp, hd => by
+      cases s₂ with
+      | nil => simp [sBarSeq] at hv
+      | cons a t₂ =>
+          cases a with
+          | field l' τ' =>
+              have h := hp l'
+              simp [sProj] at h
+              exact absurd h (ProjEquiv.no_zero_head _)
+          | var β => simp [sBarSeq] at hv
+          | dfield _ _ => simp [sBarSeq] at hv
+          | ufield τ' =>
+              simp only [sBarSeq] at hv
+              injection hv with _ hv'
               simp only [sDProj] at hd
               obtain ⟨_, _, heq, hty, hd'⟩ := hd.cons_inv
               injection heq with hhd htl
@@ -492,6 +540,27 @@ theorem RowEquiv.ofChar {B : Type} {ρ₁ ρ₂ : Row B} (h : Row.Char ρ₁ ρ�
 theorem rowEquiv_iff_char {B : Type} {ρ₁ ρ₂ : Row B} :
     ρ₁ ≈ᵣ ρ₂ ↔ Row.Char ρ₁ ρ₂ :=
   ⟨RowEquiv.char, RowEquiv.ofChar⟩
+
+-- ## ≈-comm read over keys: two keyed fields swap when their keys are APART
+-- Only two distinct literals are apart, and a literal key is the literal field
+-- (dsingLab), so this is ≈-comm itself. A keyed field under a non-literal key
+-- is apart from nothing and therefore a barrier.
+-- ⊢  k₁ # k₂   ⟹   (${k₁}: τ₁ | ${k₂}: τ₂) ≈ᵣ (${k₂}: τ₂ | ${k₁}: τ₁)
+theorem RowEquiv.comm_keys {B : Type} {k₁ k₂ : Key} {τ₁ τ₂ : Ty B}
+    (h : Key.cmp k₁ k₂ = .apart) :
+    RowEquiv (.cat (.dsing k₁ τ₁) (.dsing k₂ τ₂)) (.cat (.dsing k₂ τ₂) (.dsing k₁ τ₁)) := by
+  cases k₁ with
+  | var _ => simp [Key.cmp] at h
+  | unk => simp [Key.cmp] at h
+  | lit l₁ =>
+      cases k₂ with
+      | var _ => simp [Key.cmp] at h
+      | unk => simp [Key.cmp] at h
+      | lit l₂ =>
+          have hne : l₁ ≠ l₂ := by
+            intro he; subst he; simp [Key.cmp] at h
+          exact (RowEquiv.cat .dsingLab .dsingLab).trans
+            ((RowEquiv.comm hne).trans (RowEquiv.cat RowEquiv.dsingLab.symm RowEquiv.dsingLab.symm))
 
 -- ## Cancellativity of shared end-vars
 -- The trace-monoid fact ≐ᵣ's U-var-refl rests on: stripping a shared var off
@@ -665,6 +734,25 @@ theorem RowEquiv.dfield_cancel_left {B : Type} {α : TyVar} {τ₁ τ₂ : Ty B}
     simp only [Row.toSpine, Atom.ofKey, List.cons_append, List.nil_append, sProj] at h'
     exact h'.unshift
 
+-- ## …and under the unknown key: ★ is a barrier like a variable key
+-- ⊢  (${★}:τ₁ | R₁) ≈ᵣ (${★}:τ₂ | R₂)   ⟹   τ₁ ≈ₜ τ₂  ∧  R₁ ≈ᵣ R₂
+theorem RowEquiv.ufield_cancel_left {B : Type} {τ₁ τ₂ : Ty B}
+    {R₁ R₂ : Row B}
+    (h : RowEquiv (.cat (.dsing .unk τ₁) R₁) (.cat (.dsing .unk τ₂) R₂)) :
+    TyEquiv τ₁ τ₂ ∧ RowEquiv R₁ R₂ := by
+  obtain ⟨hv, hp, hd⟩ := h.char
+  simp only [Row.toSpine, Atom.ofKey, List.cons_append, List.nil_append, sBarSeq] at hv
+  simp only [Row.toSpine, Atom.ofKey, List.cons_append, List.nil_append, sDProj] at hd
+  obtain ⟨τ', rest, heq, hty, hrest⟩ := hd.cons_inv
+  injection heq with hhd htl
+  injection hhd with _ hτ'
+  subst hτ'; subst htl
+  refine ⟨hty, RowEquiv.ofChar ⟨?_, fun l => ?_, hrest⟩⟩
+  · injection hv
+  · have h' := hp l
+    simp only [Row.toSpine, Atom.ofKey, List.cons_append, List.nil_append, sProj] at h'
+    exact h'.unshift
+
 -- …at any key: a literal key is a literal field (`dsingLab`)
 -- ⊢  (${k}:τ₁ | R₁) ≈ᵣ (${k}:τ₂ | R₂)   ⟹   τ₁ ≈ₜ τ₂  ∧  R₁ ≈ᵣ R₂
 theorem RowEquiv.dsing_cancel_left {B : Type} {k : Key} {τ₁ τ₂ : Ty B}
@@ -673,6 +761,7 @@ theorem RowEquiv.dsing_cancel_left {B : Type} {k : Key} {τ₁ τ₂ : Ty B}
     TyEquiv τ₁ τ₂ ∧ RowEquiv R₁ R₂ := by
   cases k with
   | var α => exact h.dfield_cancel_left
+  | unk => exact h.ufield_cancel_left
   | lit l =>
       exact ((RowEquiv.cat RowEquiv.dsingLab.symm (.refl _)).trans
         (h.trans (RowEquiv.cat RowEquiv.dsingLab (.refl _)))).field_cancel_left
@@ -740,6 +829,7 @@ theorem ground_char {B : Type} {ρ₁ ρ₂ : Row B}
               | field _ _ => exact ih hs
               | var _ => nomatch hs
               | dfield _ _ => nomatch hs
+              | ufield _ => nomatch hs
         rw [e _ h₁, e _ h₂]; exact .nil⟩⟩
 
 -- ## The two ≐ᵣ regression examples, mechanized

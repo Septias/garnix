@@ -42,11 +42,13 @@ def sSorted {B : Type} : List (Atom B) → List (Srt × TyVar)
   | .field _ τ :: s => Ty.sortedFtv τ ++ sSorted s
   | .var α :: s     => (.row, α) :: sSorted s
   | .dfield o τ :: s => [(.lab, o)] ++ Ty.sortedFtv τ ++ sSorted s
+  | .ufield τ :: s => Ty.sortedFtv τ ++ sSorted s
 
 def Atom.sorted {B : Type} : Atom B → List (Srt × TyVar)
   | .field _ τ => Ty.sortedFtv τ
   | .var α     => [(.row, α)]
   | .dfield o τ => [(.lab, o)] ++ Ty.sortedFtv τ
+  | .ufield τ => Ty.sortedFtv τ
 
 theorem mem_sSorted {B : Type} {x : Srt × TyVar} :
     (s : List (Atom B)) → (x ∈ sSorted s ↔ ∃ a ∈ s, x ∈ a.sorted)
@@ -58,6 +60,9 @@ theorem mem_sSorted {B : Type} {x : Srt × TyVar} :
       simp only [sSorted, List.mem_cons, mem_sSorted s, exists_eq_or_imp,
         Atom.sorted, List.not_mem_nil, or_false]
   | .dfield o τ :: s => by
+      simp only [sSorted, List.mem_append, mem_sSorted s, List.mem_cons,
+        exists_eq_or_imp, Atom.sorted]
+  | .ufield τ :: s => by
       simp only [sSorted, List.mem_append, mem_sSorted s, List.mem_cons,
         exists_eq_or_imp, Atom.sorted]
 
@@ -75,21 +80,27 @@ theorem sSorted_of_dfield {B : Type} {s : List (Atom B)} {α : TyVar} {τ : Ty B
     (h : .dfield α τ ∈ s) : Ty.sortedFtv τ ⊆ sSorted s := fun x hx =>
   (mem_sSorted s).mpr ⟨.dfield α τ, h, by simp [Atom.sorted, hx]⟩
 
-/-- `τ` is the payload of some field of `s`, literal or keyed. -/
+theorem sSorted_of_ufield {B : Type} {s : List (Atom B)} {τ : Ty B}
+    (h : .ufield τ ∈ s) : Ty.sortedFtv τ ⊆ sSorted s := fun x hx =>
+  (mem_sSorted s).mpr ⟨.ufield τ, h, hx⟩
+
+/-- `τ` is the payload of some field of `s`, literal, keyed or under ★. -/
 def PayIn {B : Type} (τ : Ty B) (s : List (Atom B)) : Prop :=
-  (∃ l, .field l τ ∈ s) ∨ (∃ α, .dfield α τ ∈ s)
+  (∃ l, .field l τ ∈ s) ∨ (∃ α, .dfield α τ ∈ s) ∨ .ufield τ ∈ s
 
 theorem PayIn.sorted_sub {B : Type} {τ : Ty B} {s : List (Atom B)} (h : PayIn τ s) :
     Ty.sortedFtv τ ⊆ sSorted s := by
-  rcases h with ⟨_, h⟩ | ⟨_, h⟩
+  rcases h with ⟨_, h⟩ | ⟨_, h⟩ | h
   · exact sSorted_of_field h
   · exact sSorted_of_dfield h
+  · exact sSorted_of_ufield h
 
 theorem PayIn.reverse {B : Type} {τ : Ty B} {s : List (Atom B)} (h : PayIn τ s.reverse) :
     PayIn τ s := by
-  rcases h with ⟨l, h⟩ | ⟨α, h⟩
+  rcases h with ⟨l, h⟩ | ⟨α, h⟩ | h
   · exact .inl ⟨l, List.mem_reverse.mp h⟩
-  · exact .inr ⟨α, List.mem_reverse.mp h⟩
+  · exact .inr (.inl ⟨α, List.mem_reverse.mp h⟩)
+  · exact .inr (.inr (List.mem_reverse.mp h))
 
 theorem sSorted_append {B : Type} :
     (s t : List (Atom B)) → sSorted (s ++ t) = sSorted s ++ sSorted t
@@ -98,6 +109,8 @@ theorem sSorted_append {B : Type} :
       simp only [List.cons_append, sSorted, sSorted_append s t, List.append_assoc]
   | .var _ :: s, t => by simp only [List.cons_append, sSorted, sSorted_append s t]
   | .dfield _ τ :: s, t => by
+      simp only [List.cons_append, sSorted, sSorted_append s t, List.append_assoc]
+  | .ufield τ :: s, t => by
       simp only [List.cons_append, sSorted, sSorted_append s t, List.append_assoc]
 
 -- ⊢  a spine's tagged variables are its row's (a junk key's are forgotten)
@@ -127,6 +140,9 @@ theorem sortedFtv_ofSpine {B : Type} : (s : List (Atom B)) →
   | .dfield _ τ :: s => by
       simp only [ofSpine, Row.sortedFtv, sortedFtv_ofSpine s, sSorted, List.append_assoc]
       rfl
+  | .ufield τ :: s => by
+      simp only [ofSpine, Row.sortedFtv, sortedFtv_ofSpine s, sSorted, Key.sortedFtv,
+        List.nil_append]
 
 theorem sVarSeq_mem_sSorted {B : Type} {γ : TyVar} :
     (s : List (Atom B)) → γ ∈ sVarSeq s → (.row, γ) ∈ sSorted s
@@ -135,6 +151,9 @@ theorem sVarSeq_mem_sSorted {B : Type} {γ : TyVar} :
       simp only [sVarSeq] at h
       exact List.mem_append_right _ (sVarSeq_mem_sSorted s h)
   | .dfield _ _ :: s, h => by
+      simp only [sVarSeq] at h
+      exact List.mem_append_right _ (sVarSeq_mem_sSorted s h)
+  | .ufield _ :: s, h => by
       simp only [sVarSeq] at h
       exact List.mem_append_right _ (sVarSeq_mem_sSorted s h)
   | .var δ :: s, h => by
@@ -161,6 +180,13 @@ theorem mem_sSorted_sApplySubst {B : Type} {θ : TySubst B} {x : Srt × TyVar} :
       · exact ⟨(.row, α), List.mem_cons_self, sSorted_toSpine _ _ h⟩
       · obtain ⟨y, hy, hx⟩ := mem_sSorted_sApplySubst t h
         exact ⟨y, List.mem_cons_of_mem _ hy, hx⟩
+  | .ufield τ :: t, h => by
+      simp only [sApplySubst, sSorted, List.mem_append] at h
+      rcases h with h | h
+      · obtain ⟨y, hy, hx⟩ := Ty.mem_sortedFtv_applySubst τ h
+        exact ⟨y, List.mem_append_left _ hy, hx⟩
+      · obtain ⟨y, hy, hx⟩ := mem_sSorted_sApplySubst t h
+        exact ⟨y, List.mem_append_right _ hy, hx⟩
   | .dfield o τ :: t, h => by
       simp only [sApplySubst] at h
       rw [show sSorted (Atom.ofKey (θ.lab o) (τ.applySubst θ) ::
@@ -261,6 +287,19 @@ theorem removeField_atoms {B : Type} {l : Label} :
           rcases List.mem_cons.mp ha with rfl | ha
           · exact List.mem_cons_self
           · exact List.mem_cons_of_mem _ (hs a ha)
+  | .ufield σ :: t, τ, s', h => by
+      simp only [removeField] at h
+      revert h
+      cases hw : removeField l t with
+      | none => intro h; cases h
+      | some p =>
+          intro h
+          obtain ⟨⟨l'', hτ⟩, hs⟩ := removeField_atoms t hw
+          cases h
+          refine ⟨⟨l'', List.mem_cons_of_mem _ hτ⟩, fun a ha => ?_⟩
+          rcases List.mem_cons.mp ha with rfl | ha
+          · exact List.mem_cons_self
+          · exact List.mem_cons_of_mem _ (hs a ha)
   | .field l' τ' :: t, τ, s', h => by
       simp only [removeField] at h
       by_cases hl : l' = l
@@ -309,8 +348,21 @@ theorem matchL_atoms {B : Type} {s₁ s₂ : List (Atom B)} {τ τ' : Ty B}
           intro h
           cases h
           rw [keyExtract_inv hw]
-          exact ⟨.inr ⟨α, List.mem_cons_self⟩, fun _ ha => List.mem_cons_of_mem _ ha,
-                 .inr ⟨α, List.mem_cons_self⟩, fun _ ha => List.mem_cons_of_mem _ ha⟩
+          exact ⟨.inr (.inl ⟨α, List.mem_cons_self⟩), fun _ ha => List.mem_cons_of_mem _ ha,
+                 .inr (.inl ⟨α, List.mem_cons_self⟩), fun _ ha => List.mem_cons_of_mem _ ha⟩
+  | .ufield σ :: u₁ =>
+      cases s₂ with
+      | nil => simp [matchL] at h
+      | cons a u₂ =>
+          cases a with
+          | ufield σ' =>
+              simp only [matchL, Option.some.injEq, Prod.mk.injEq] at h
+              obtain ⟨rfl, rfl, rfl, rfl⟩ := h
+              exact ⟨.inr (.inr List.mem_cons_self), fun _ ha => List.mem_cons_of_mem _ ha,
+                     .inr (.inr List.mem_cons_self), fun _ ha => List.mem_cons_of_mem _ ha⟩
+          | field _ _ => simp [matchL] at h
+          | var _ => simp [matchL] at h
+          | dfield _ _ => simp [matchL] at h
 
 theorem matchR_atoms {B : Type} {s₁ s₂ : List (Atom B)} {τ τ' : Ty B}
     {t₁ t₂ : List (Atom B)} (h : matchR s₁ s₂ = some (τ, τ', t₁, t₂)) :
@@ -405,6 +457,22 @@ theorem keyPin_sorted {B : Type} {s₁ s₂ : List (Atom B)} {α : TyVar} {k : K
     · simp [sSorted]
     · simp at hx
   next l τ a τ' =>
+    simp only [Option.some.injEq, Prod.mk.injEq] at h
+    obtain ⟨rfl, rfl⟩ := h
+    intro x hx
+    simp only [Ty.sortedFtv, Key.sortedFtv, List.mem_append, List.mem_singleton] at hx
+    rcases hx with rfl | hx
+    · simp [sSorted]
+    · simp at hx
+  next a τ τ' =>
+    simp only [Option.some.injEq, Prod.mk.injEq] at h
+    obtain ⟨rfl, rfl⟩ := h
+    intro x hx
+    simp only [Ty.sortedFtv, Key.sortedFtv, List.mem_append, List.mem_singleton] at hx
+    rcases hx with rfl | hx
+    · simp [sSorted]
+    · simp at hx
+  next τ a τ' =>
     simp only [Option.some.injEq, Prod.mk.injEq] at h
     obtain ⟨rfl, rfl⟩ := h
     intro x hx
@@ -757,6 +825,7 @@ theorem Sol.good_solveVarM {B : Type} {S : Supply} {s₁ s₂ : List (Atom B)}
     cases a₁ with
     | field _ _ => simp [solveVarM] at h
     | dfield _ _ => simp [solveVarM] at h
+    | ufield _ => simp [solveVarM] at h
     | var α =>
       cases r₁ with
       | cons _ _ => simp [solveVarM] at h
@@ -771,7 +840,7 @@ theorem Sol.good_solveVarM {B : Type} {S : Supply} {s₁ s₂ : List (Atom B)}
             obtain ⟨h₁, -, h₃⟩ := epsCollapse_mem s₂ he p hp
             exact ⟨List.mem_append_right _ (sVarSeq_mem_sSorted s₂ h₁), h₃⟩
         · split at h
-          · split at h <;> (try split at h) <;> simp at h
+          · (try split at h) <;> (try split at h) <;> simp at h
           · next hocc =>
             simp only [Option.some.injEq, UResM.success.injEq] at h
             obtain ⟨rfl, rfl⟩ := h
@@ -820,6 +889,7 @@ theorem Sol.good_unifyKey {B : Type} {S : Supply} {k₁ k₂ : Key} {s : Sol B}
         rw [hdom x hd] at hx
         cases k with
         | lit _ => simp [Key.sortedFtv] at hx
+        | unk => simp [Key.sortedFtv] at hx
         | var β =>
             simp [Key.sortedFtv] at hx
             exact hne (by rw [hx])
@@ -827,11 +897,21 @@ theorem Sol.good_unifyKey {B : Type} {S : Supply} {k₁ k₂ : Key} {s : Sol B}
   | var α =>
       exact hb (List.mem_append_left _ (by simp [Key.sortedFtv]))
         (fun _ hx => List.mem_append_right _ hx) h
+  | unk =>
+      cases k₂ with
+      | var α =>
+          exact hb (List.mem_append_right _ (by simp [Key.sortedFtv]))
+            (by simp [Key.sortedFtv]) h
+      | unk =>
+          simp only [unifyKey, UResM.success.injEq] at h; obtain ⟨rfl, rfl⟩ := h
+          exact Sol.good_nil _
+      | lit _ => simp [unifyKey] at h
   | lit l =>
       cases k₂ with
       | var α =>
           exact hb (List.mem_append_right _ (by simp [Key.sortedFtv]))
             (by simp [Key.sortedFtv]) h
+      | unk => simp [unifyKey] at h
       | lit l' =>
           simp only [unifyKey] at h
           split at h
@@ -978,6 +1058,13 @@ theorem sSorted_renameVar {B : Type} (β β' : TyVar) {x : Srt × TyVar} :
       · rcases sSorted_renameVar β β' s h with h' | h'
         · exact .inl h'
         · exact .inr (.inr h')
+  | .ufield τ :: s, h => by
+      simp only [renameVar, sSorted, List.mem_append] at h ⊢
+      rcases h with h | h
+      · exact .inr (.inl h)
+      · rcases sSorted_renameVar β β' s h with h' | h'
+        · exact .inl h'
+        · exact .inr (.inr h')
 
 theorem mem_allRowVars_of_sSorted {B : Type} {α : TyVar} {s : List (Atom B)}
     (h : (.row, α) ∈ sSorted s) : α ∈ Row.allRowVars (ofSpine s) :=
@@ -1016,6 +1103,17 @@ theorem renameVar_sole {B : Type} {β β' : TyVar} (hne : β ≠ β') :
         · exact hg (Prod.mk.inj h).2.symm
         · exact renameVar_sole hne s hm' hc' h
   | .field _ τ :: s, hm, hc, h => by
+      simp only [ofSpine, Row.allRowVars, List.count_append] at hc
+      simp only [sVarSeq] at hm
+      have hpos : 0 < (Row.allRowVars (ofSpine s)).count β :=
+        List.count_pos_iff.mpr (mem_allRowVars_of_sSorted (sVarSeq_mem_sSorted s hm))
+      simp only [renameVar, sSorted, List.mem_append] at h
+      rcases h with h | h
+      · have : 0 < (Ty.allRowVars τ).count β :=
+          List.count_pos_iff.mpr (Ty.mem_allRowVars_of_sortedFtv τ h)
+        omega
+      · exact renameVar_sole hne s hm (by omega) h
+  | .ufield τ :: s, hm, hc, h => by
       simp only [ofSpine, Row.allRowVars, List.count_append] at hc
       simp only [sVarSeq] at hm
       have hpos : 0 < (Row.allRowVars (ofSpine s)).count β :=

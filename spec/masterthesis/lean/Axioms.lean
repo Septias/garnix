@@ -70,6 +70,15 @@ info: 'MinimalCalculus.solveVarM_occurs_no_unifier' depends on axioms: [propext,
 -/
 #guard_msgs in #print axioms solveVarM_occurs_no_unifier
 
+-- the counting core it rests on: field atoms of ANY key (feat/fc-labels M1;
+-- the occurrence next to a keyed field used to be reported stuck)
+/-- info: 'MinimalCalculus.occurs_anyField_no_unifier' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in #print axioms occurs_anyField_no_unifier
+
+-- ≈-comm over keys: two keyed fields swap when their keys are apart
+/-- info: 'MinimalCalculus.RowEquiv.comm_keys' depends on axioms: [propext] -/
+#guard_msgs in #print axioms RowEquiv.comm_keys
+
 -- (`solveVarM_occurs_no_unifier_nil` was guarded here. Stage 1b made the
 -- guard above unconditional, so the Θ = [] special case is gone.)
 
@@ -715,6 +724,34 @@ info: 'MinimalCalculus.SolverState.Quiescent.wake_no_commit' depends on axioms: 
 /-- info: 'MinimalCalculus.Lookup.unknown_blocked' depends on axioms: [propext] -/
 #guard_msgs in #print axioms Lookup.unknown_blocked
 
+-- The unknown key ★ (feat/fc-labels M3). A comparison with ★ never decides, so
+-- a `?` whose first undecided comparison involves ★ is OPAQUE: no instance
+-- decides it, inference answers ★ on the spot, and every σ the state satisfies
+-- reads it as a miss or a `?` again.
+/-- info: 'MinimalCalculus.LookupQ.unknown_blocked' depends on axioms: [propext] -/
+#guard_msgs in #print axioms LookupQ.unknown_blocked
+
+/-- info: 'MinimalCalculus.LookupOpaqueQ.applySubst' depends on axioms: [propext] -/
+#guard_msgs in #print axioms LookupOpaqueQ.applySubst
+
+/-- info: 'MinimalCalculus.LookupOpaqueQ.not_blocked' depends on axioms: [propext] -/
+#guard_msgs in #print axioms LookupOpaqueQ.not_blocked
+
+/-- info: 'MinimalCalculus.Sol.deadQ_sat' depends on axioms: [propext] -/
+#guard_msgs in #print axioms Sol.deadQ_sat
+
+-- strings are labels (feat/fc-labels M4): a key value is a label, so a key
+-- position never reaches a non-label at run time; and ★ never hits
+/-- info: 'MinimalCalculus.qcanonical_lab' does not depend on any axioms -/
+#guard_msgs in #print axioms qcanonical_lab
+
+/-- info: 'MinimalCalculus.LookupQ.unk_not_found' depends on axioms: [propext] -/
+#guard_msgs in #print axioms LookupQ.unk_not_found
+
+-- ★ is a barrier: two ★-keyed fields at the head cancel (U-key-L for ★)
+/-- info: 'MinimalCalculus.RowEquiv.ufield_cancel_left' depends on axioms: [propext, Quot.sound] -/
+#guard_msgs in #print axioms RowEquiv.ufield_cancel_left
+
 /-- info: 'MinimalCalculus.LookupBlocked.det' depends on axioms: [propext] -/
 #guard_msgs in #print axioms LookupBlocked.det
 
@@ -1138,6 +1175,10 @@ info: 'MinimalCalculus.RowEquiv.dsing_cancel_left' depends on axioms: [propext, 
 -- (propext since Phase B: the rules compare keys through `Ty.keyCmp`.)
 /-- info: 'MinimalCalculus.LookupQ.det' depends on axioms: [propext] -/
 #guard_msgs in #print axioms LookupQ.det
+
+-- static selection is keyed selection at a literal key (07, T-sel-dyn)
+/-- info: 'MinimalCalculus.LookupQ.lab_iff' depends on axioms: [propext] -/
+#guard_msgs in #print axioms LookupQ.lab_iff
 
 -- (`LookupQ.mono` — stability under extending the row-solutions — went with
 -- L-α; its substitution form is `LookupQ.applySubst`, guarded below.)

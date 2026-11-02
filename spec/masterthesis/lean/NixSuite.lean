@@ -19,30 +19,31 @@
 --   (`strcat`), `toString`, `map`, `filter`, `foldl'`, `elemAt`, `head`
 -- - still OPAQUE (a tuple of the operands): `? ${dynamic}.path`, and a
 --   heterogeneous list where the comparison with `[ ]` is wanted
--- Constants: `int`, `string`, `null`; booleans are literals.
+-- Constants: `int`, `null`; a string is a label (feat/fc-labels: `"s"` is `.lab s`,
+-- of type ⌊s⌋, and a computed string has type ⌊★⌋); booleans are literals.
 --
 -- ## Results                                    runF                .exp    agrees
 -- attrs               whole program             clash               987     ✗ (1)
 --                     (the taken branch)        int                 987     ✓
--- attrs3              if + interpolation        string              str     ✓
--- attrs5 e1–e6        or-chains, incl. a        int string int int  ✓       ✓
---                     missing intermediate      string string
+-- attrs3              if + interpolation        ⌊★⌋                 str     ✓
+-- attrs5 e1–e6        or-chains, incl. a        int ⌊⌋ int int      ✓       ✓
+--                     missing intermediate      ⌊⌋ ⌊⌋
 -- attrs5 e7           `(123).bla or …`          clash               "xyzzy" ✗ (2)
 -- dynamic-attrs-2     literal / ⌊l⌋ keys        bool / bool         true    ✓
 -- dynamic-attrs-bare  5 of 6 fields             bool (hasAttrs opaque) true  ✓
 --                     binds, open hole          ★                   true    ✓ (3)
 --                     binds, hole := `bc`       bool                true    ✓
 -- scope-1/2/3/7       shadowing, rec, inherit   int ×4              3 1 4 1 ✓
--- let, new-let        string `+`                string              str     ✓
+-- let, new-let        string `+`                ⌊★⌋                 str     ✓
 -- patterns            @-patterns, defaults,     clash               str     ✗ (5)
 --                     h at two row shapes
--- empty-args          `{}:` pattern             string              str     ✓
+-- empty-args          `{}:` pattern             ⌊★⌋                 str     ✓
 -- inherit-from        [ a b merged ]            clash               list    ✗ (4)
 --                     (as a tuple)              {_1: int | …}       —       ✓
 -- if                  != , nested if            int                 3       ✓
 -- concat              ++ ++                     [int]               list    ✓
 -- logic               assert ! && || ->         int                 1       ✓
--- map                 map, foldl' (+) ""        string              str     ✓
+-- map                 map, foldl' (+) ""        clash               str     ✗ (6)
 -- filter              filter, / * ==            [int]               list    ✓
 -- foldlStrict         foldl' (+) 0              int                 500500  ✓
 -- elem (elemAt part)  elemAt                    int                 30      ✓
@@ -72,6 +73,11 @@
 --     field name must be spent alike, and the forced merge only identifies
 --     stumps on one spine), not confirmed. Incompleteness
 --     of A-let, not a type error.
+-- (6) feat/fc-labels: a string literal has its singleton type ⌊l⌋, a computed
+--     string ⌊★⌋. Branches of an `if` (A-if-join), list elements (A-cons-str)
+--     and `==` (α → β → bool) take both; the `""` accumulator of foldl' meets
+--     the strcat result in a function argument, where nothing joins: a clash.
+--     Declaratively typable (T-lab-blur on the literal); an accepted cost.
 
 import InferFnTerm
 import Builtins
@@ -82,6 +88,7 @@ namespace NixSuite
 def keyS : Key → String
   | .lit l => l
   | .var α => "k" ++ toString α.length
+  | .unk   => "★"
 
 mutual
 def tyS : Ty String → String
@@ -119,7 +126,7 @@ def run (e : E) : String := verdict (runF sig 1000 e)
 
 def v (x : String) : E := .var x
 def int : E := .con (.int 0)
-def str : E := .con (.str "")
+def str : E := .lab ""
 def tt : E := .bool true
 def ff : E := .bool false
 def null : E := .con .null
@@ -188,6 +195,7 @@ def config : E := rcd
   , ("hostName", str)
   , ("a", deep.tail.foldr (fun l e => rcd [(l, e)]) str)
   , ("foo", rcd [("a", str), ("b", rcd [("c", str)])]) ]
+-- the branches are ⌊★⌋ (a strcat) and ⌊⌋ (a literal): A-if-join (feat/fc-labels M5)
 #guard run (lets [("config", config)] (.ite (sels (v "config") ["services", "sshd", "enable"])
   (cat [ str, toStr (sels (v "config") ["services", "sshd", "port"]), str
        , toStr (sels (v "config") ["services", "httpd", "port"]), str
@@ -195,7 +203,7 @@ def config : E := rcd
        , sels (v "config") deep, sels (v "config") ["foo", "a"]
        , sels (v "config") ["foo", "b", "c"] ])
   str))
-  = "string"
+  = "⌊★⌋"
 
 ---------------------------------------------------------------- attrs5 --------
 def as5 : E := rcd [("x", rcd [("y", rcd [("z", int)])]), ("a", rcd [("b", rcd [("c", int)])])]
@@ -209,7 +217,7 @@ def attrs5 (e7 : Bool) : E := lets [("as", as5), ("bs", bs5)] (rcd (
   , ("e6", orE (v "as") ["x", "y", "bla"] (orE (v "bs") ["bar", "foo"] str)) ]
   ++ if e7 then [("e7", orE int ["bla"] (orE null ["foo"] str))] else []))
 #guard run (attrs5 false)
-  = "{e1: int | e2: string | e3: int | e4: int | e5: string | e6: string}"
+  = "{e1: int | e2: ⌊⌋ | e3: int | e4: int | e5: ⌊⌋ | e6: ⌊⌋}"
 #guard run (attrs5 true)
   = "fail: clash"
 
@@ -256,11 +264,11 @@ def dynBare (binds : Bool) : E := lets [("aString", .lab "a"), ("bString", .lab 
 -------------------------------------------------------------- let / new-let ----
 -- let { x = "foo"; y = "bar"; body = x + y; }                         → "foobar"
 #guard run (lets [("x", str), ("y", str)] (cat [v "x", v "y"]))
-  = "string"
+  = "⌊★⌋"
 -- let f = z: let x = "foo"; y = "bar"; body = 1; in z + x + y; arg = "xyzzy"; in f arg
 #guard run (lets [("f", .lam "z" (lets [("x", str), ("y", str), ("body", int)]
     (cat [v "z", v "x", v "y"]))), ("arg", str)] (.app (v "f") (v "arg")))
-  = "string"
+  = "⌊★⌋"
 
 --------------------------------------------------------------- patterns --------
 def xyz : List (String × Option E) := [("x", none), ("y", none), ("z", none)]
@@ -280,7 +288,7 @@ def patterns : E := lets
 ------------------------------------------------------------- empty-args --------
 #guard run (app (pat "e" [] (pat "s" [("x", none), ("y", none)] (cat [v "x", v "y"])))
   [rcd [], rcd [("x", str), ("y", str)]])
-  = "string"
+  = "⌊★⌋"
 
 ----------------------------------------------------------- inherit-from --------
 -- in [ a b merged ]: a HETEROGENEOUS list (int, int, record) — clashes (R2)
@@ -296,6 +304,7 @@ def inheritFrom (asList : Bool) : E :=
 
 ------------------------------------------------------- new: if, lists, logic ---
 -- eval-okay-if:  if "foo" != "f" + "oo" then 1 else if false then 2 else 3    → 3
+-- `==` is α → β → bool (feat/fc-labels M5): ⌊⌋ and the strcat result ⌊★⌋ compare
 #guard run (.ite (not (eq str (cat [str, str]))) int (.ite ff int int))
   = "int"
 -- eval-okay-concat:  [1 2 3] ++ [4 5 6] ++ [7 8 9]                     → [ 1 … 9 ]
@@ -305,9 +314,11 @@ def inheritFrom (asList : Bool) : E :=
 #guard run (.asrt (impl (and (not ff) (or tt ff)) tt) int)
   = "int"
 -- eval-okay-map:  concat (map (x: x + "bar") [ "foo" "bla" "xyzzy" ])   (lib's concat = foldl' (+) "")
+-- the accumulator "" is the label ⌊⌋, the strcat result ⌊★⌋: no join reaches a
+-- function's argument (accepted cost, feat/fc-labels M5)
 #guard run (call .foldl [lam ["a", "b"] (cat [v "a", v "b"]), str,
   call .map [.lam "x" (cat [v "x", str]), lst [str, str, str]]])
-  = "string"
+  = "fail: clash"
 -- eval-okay-filter:  builtins.filter (x: x / 2 * 2 == x) [ 0 … ]   (range unrolled)
 #guard run (call .filter [.lam "x" (eq (call .mul [call .div [v "x", int], int]) (v "x")),
   lst [int, int, int]])

@@ -226,7 +226,7 @@ theorem solveVarM_supply_eq {B : Type} {S : Supply} {u₁ u₂ : List (Atom B)} 
       split at h
       · simp only [Option.some.injEq, UResM.success.injEq] at h; exact h.2.symm
       · split at h
-        · split at h <;> (try split at h) <;> simp at h
+        · (try split at h) <;> (try split at h) <;> simp at h
         · simp only [Option.some.injEq, UResM.success.injEq] at h; exact h.2.symm
   | .var _ :: _ :: _ => simp [solveVarM] at h
 
@@ -278,6 +278,8 @@ theorem mem_sVarSeq_renameVar {B : Type} {β β' : TyVar} :
   | .field _ _ :: s, h => by
       simp only [sVarSeq, renameVar] at h ⊢; exact mem_sVarSeq_renameVar s h
   | .dfield _ _ :: s, h => by
+      simp only [sVarSeq, renameVar] at h ⊢; exact mem_sVarSeq_renameVar s h
+  | .ufield _ :: s, h => by
       simp only [sVarSeq, renameVar] at h ⊢; exact mem_sVarSeq_renameVar s h
 
 -- ⊢  U-HOST'S CASE, either orientation (the residual call is on (x, y))

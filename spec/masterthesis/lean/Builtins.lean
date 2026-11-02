@@ -1,12 +1,15 @@
--- THE MACRONIX SIGNATURE. Constants (ints, strings, null), the builtins with
+-- THE MACRONIX SIGNATURE. Constants (ints, null), the builtins with
 -- their types and δ-rules, and `macroSig_ok`: δ preserves types, so qProgress
 -- and qPreservation hold for MacroNix programs.
 --
 -- Booleans are the literals `Expr.bool`; `&&`, `||`, `!=`, `>` and `>=` are
--- derived (`if`, `!`, `==`, `<` with swapped arguments). `+` on strings and
--- string interpolation are `strcat`. `==` compares ATOMIC
--- values only (constants, booleans, labels, the empty list) and fails on
--- records, functions and non-empty lists (plans/macronix.md Q3). A builtin's
+-- derived (`if`, `!`, `==`, `<` with swapped arguments). A string IS a label
+-- (feat/fc-labels): a string literal is the label value `.lab s`, and the type
+-- of a string whose content is not tracked is ⌊★⌋. `+` on strings and string
+-- interpolation are `strcat`. `==` compares ATOMIC
+-- values only (constants, booleans, labels, the empty list; atoms of different
+-- kinds are unequal, as in Nix) and fails on records, functions and non-empty
+-- lists (plans/macronix.md Q3). A builtin's
 -- δ fires only at its exact arity; a partial application is an eta-expansion.
 
 import Qualified
@@ -22,7 +25,6 @@ inductive Op where
 
 inductive MConst where
   | int (n : Int)
-  | str (s : String)
   | null
   | op (o : Op)
   deriving DecidableEq, Repr
@@ -31,7 +33,9 @@ abbrev E := Expr MConst
 abbrev T := Ty String
 
 def tInt : T := .base "int"
-def tStr : T := .base "string"
+def tStr : T := .lab .unk
+def tK₁ : T := .lab (.var "k")
+def tK₂ : T := .lab (.var "k'")
 def tBool : T := .base "bool"
 def tA : T := .var "a"
 def tB : T := .var "b"
@@ -40,7 +44,7 @@ def tB : T := .var "b"
 def Op.ty : Op → T
   | .add | .sub | .mul | .div => .fn tInt (.fn tInt tInt)
   | .lt | .le                 => .fn tInt (.fn tInt tBool)
-  | .eq                       => .fn tA (.fn tA tBool)
+  | .eq                       => .fn tA (.fn tB tBool)
   | .not                      => .fn tBool tBool
   | .concat                   => .fn (.list tA) (.fn (.list tA) (.list tA))
   | .head                     => .fn (.list tA) tA
@@ -52,12 +56,19 @@ def Op.ty : Op → T
   | .foldl                    => .fn (.fn tB (.fn tA tB)) (.fn tB (.fn (.list tA) tB))
   | .toString                 => .fn tInt tStr
   | .isAttrs                  => .fn tA tBool
-  | .strcat                   => .fn tStr (.fn tStr tStr)
+  | .strcat                   => .fn tK₁ (.fn tK₂ tStr)
 
 def int (n : Int) : E := .con (.int n)
 def call (o : Op) (es : List E) : E := .prim (.op o) es
 
-/-- `==` on atomic values -/
+/-- an atomic value: what `==` compares -/
+def isAtom : E → Bool
+  | .con _ | .bool _ | .lab _ | .nil => true
+  | _ => false
+
+/-- `==` on atomic values. Atoms of different kinds are unequal, as in Nix
+(`1 == true` is false), which is what lets `==` take two types (feat/fc-labels:
+a key compared with a string literal) -/
 def atomEq : E → E → Option Bool
   | .con c, .con d   => some (c == d)
   | .bool a, .bool b => some (a == b)
@@ -65,7 +76,7 @@ def atomEq : E → E → Option Bool
   | .nil, .nil       => some true
   | .nil, .cons _ _  => some false
   | .cons _ _, .nil  => some false
-  | _, _             => none
+  | v, w             => if isAtom v && isAtom w then some false else none
 
 /-- δ, on argument VALUES; `none` is a run-time failure. One match per builtin,
 so each case of `delta_pres` splits only its own arms. -/
@@ -108,19 +119,18 @@ def Op.delta : Op → List E → Option E
       | [_, z, .nil] => some z
       | [f, z, .cons e es] => some (call .foldl [f, .app (.app f z) e, es])
       | _ => none
-  | .toString => fun | [.con (.int n)] => some (.con (.str (ToString.toString n))) | _ => none
+  | .toString => fun | [.con (.int n)] => some (.lab (ToString.toString n)) | _ => none
   | .isAttrs => fun
       | [.rcd _] => some (.bool true)
       | [_] => some (.bool false)
       | _ => none
   -- `+` on strings, and string interpolation
   | .strcat => fun
-      | [.con (.str a), .con (.str b)] => some (.con (.str (a ++ b)))
+      | [.lab a, .lab b] => some (.lab (a ++ b))
       | _ => none
 
 def MConst.ty : MConst → String
   | .int _ => "int"
-  | .str _ => "string"
   | .null  => "null"
   | .op _  => "builtin"
 
@@ -241,7 +251,7 @@ theorem pres_eq : Pres .eq := by
   simp only [Op.delta] at hδ
   split at hδ
   · obtain ⟨τ₁, τ₂, rfl, -, -⟩ := args2 ha
-    simp only [Op.ty, tA, tBool, Ty.applySubst, Ty.arrows, Ty.fn.injEq] at hi
+    simp only [Op.ty, tA, tB, tBool, Ty.applySubst, Ty.arrows, Ty.fn.injEq] at hi
     obtain ⟨-, -, rfl⟩ := hi
     obtain ⟨b, -, rfl⟩ := Option.map_eq_some_iff.mp hδ
     exact qbool _
@@ -384,9 +394,11 @@ theorem pres_toString : Pres .toString := by
   simp only [Op.delta] at hδ
   split at hδ
   · obtain ⟨τ₁, rfl, -⟩ := args1 ha
-    simp only [Op.ty, tInt, tStr, Ty.applySubst, Ty.arrows, Ty.fn.injEq] at hi
+    simp only [Op.ty, tInt, tStr, Ty.applySubst, Key.applySubst, Ty.arrows,
+      Ty.fn.injEq] at hi
     obtain ⟨-, rfl⟩ := hi
-    cases hδ; exact .qCon
+    -- the printed number is a label, blurred to ⌊★⌋
+    cases hδ; exact .qLabBlur .qLab
   · cases hδ
 
 theorem pres_isAttrs : Pres .isAttrs := by
@@ -403,9 +415,10 @@ theorem pres_strcat : Pres .strcat := by
   simp only [Op.delta] at hδ
   split at hδ
   · obtain ⟨τ₁, τ₂, rfl, -, -⟩ := args2 ha
-    simp only [Op.ty, tStr, Ty.applySubst, Ty.arrows, Ty.fn.injEq] at hi
+    simp only [Op.ty, tStr, tK₁, tK₂, Ty.applySubst, Key.applySubst, Ty.arrows,
+      Ty.fn.injEq] at hi
     obtain ⟨-, -, rfl⟩ := hi
-    cases hδ; exact .qCon
+    cases hδ; exact .qLabBlur .qLab
   · cases hδ
 
 theorem Op.pres : (o : Op) → Pres o
@@ -425,7 +438,7 @@ theorem macroSig_ok : SigOK sig where
     cases c <;> simp [sig, MConst.ty]
   delta_pres {p} {_} {_} {_} {_} {_} {_} hp hi _ ha hδ := by
     cases p with
-    | int _ | str _ | null => cases hp
+    | int _ | null => cases hp
     | op o =>
         simp only [sig, Option.some.injEq] at hp
         subst hp

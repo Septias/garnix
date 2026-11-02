@@ -10,6 +10,7 @@ namespace InferRuns
 def keyS : Key → String
   | .lit l => l
   | .var α => "k" ++ toString α.length
+  | .unk   => "★"
 
 mutual
 def tyS : Ty Unit → String
@@ -40,6 +41,7 @@ def rec2 (l₁ : String) (e₁ : E) (l₂ : String) (e₂ : E) : E :=
 def keyDS : Key → String
   | .lit l => l
   | .var α => "${k" ++ toString α.length ++ "}"
+  | .unk   => "${★}"
 
 def stumpS (st : Stump Unit) : String :=
   "⟨" ++ rowS st.row ++ "." ++ keyDS st.label ++ " ↓ " ++ tyS st.res ++ "⟩"
@@ -183,9 +185,9 @@ def sd (e₁ e₂ : E) : E := .selDyn e₁ e₂
 
 -- a literal key through the dynamic door is the static selection …
 #guard run (sd (rec1 "foo" c) (L "foo")) = "𝓫"
--- … and a key of BASE type (a computed string) answers ★ (A-sel-dyn-𝓫): the
--- intro's `{…}.${toString t}`
-#guard run (sd (rec1 "foo" c) c) = "★"
+-- … and a key of BASE type is no key: it clashes against ⌊κ⌋ (a computed string
+-- is a label of type ⌊★⌋, so there is no other key type; feat/fc-labels M4b)
+#guard run (sd (rec1 "foo" c) c) = "fail: clash"
 -- only a DEFINITE base type: a key variable is still forced to a label first, so
 -- supplying a base-typed key later clashes (the conflict is not definite yet)
 #guard run (.app (.lam "a" (sd (rec1 "foo" c) (v "a"))) c) = "fail: clash"
@@ -217,8 +219,11 @@ def mk : E := .lam "a" (.lam "v" (rd (v "a") (v "v")))
 #guard run (.sel (.app (.app mk (L "foo")) c) "foo") = "𝓫"
 #guard run (.letE "mk" mk (rec2 "p" (.sel (.app (.app (v "mk") (L "foo")) c) "foo")
     "q" (.sel (.app (.app (v "mk") (L "bar")) (.rcd .empty)) "bar"))) = "{p: 𝓫 | q: {ε}}"
--- the same key variable finds its own field; a literal one is blocked on it
-#guard run (.lam "a" (sd (rd (v "a") c) (v "a"))) = "(⌊k4⌋ → 𝓫)"
+-- a key variable decides nothing, not even against its own field: the lookup
+-- is a stump on the key (feat/fc-labels M2), which hits at every literal
+-- instance; a literal key is blocked on the field's key variable as well
+#guard run (.lam "a" (sd (rd (v "a") c) (v "a"))) = "⟨${k4}: 𝓫 | ε.${k4} ↓ t5⟩ ⇒ (⌊k4⌋ → t5)"
+#guard run (.app (.lam "a" (sd (rd (v "a") c) (v "a"))) (L "foo")) = "𝓫"
 #guard run (.lam "a" (.sel (rd (v "a") c) "foo")) = "⟨${k2}: 𝓫 | ε.foo ↓ t4⟩ ⇒ (⌊k2⌋ → t4)"
 #guard run (.app (.lam "a" (.sel (rd (v "a") c) "foo")) (L "foo")) = "𝓫"
 -- `r // { ${n} = v }`: the update, which shadows an old field of that name
@@ -228,9 +233,8 @@ def upd : E := .lam "n" (.lam "r" (.cat (v "r") (rd (v "n") c)))
 -- two records under one unknown key flow into one function (U-key)
 #guard run (.lam "a" (.lam "f" (rec2 "p" (.app (v "f") (rd (v "a") c))
     "q" (.app (v "f") (rd (v "a") c))))) = "(⌊k5⌋ → (({${k5}: 𝓫} → t6) → {p: t6 | q: t6}))"
--- a key of base type makes the record ★ (A-rcd-dyn-𝓫) …
-#guard run (rd c c) = "★"
--- … which has no eliminator: selecting from it clashes (★ ≐ {r})
+-- a key of base type clashes, in a construction as in a selection
+#guard run (rd c c) = "fail: clash"
 #guard run (.sel (rd c c) "foo") = "fail: clash"
 #guard run (.lam "a" (rd (.sel (v "a") "k") c)) = "⟨r2.k ↓ ⌊k4⌋⟩ ⇒ ({r2} → {${k4}: 𝓫})"
 

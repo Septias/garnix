@@ -77,6 +77,7 @@ abbrev Spine := List (Atom Unit)
 def keyStr : Key → String
   | .lit l => l
   | .var α => α
+  | .unk   => "★"
 
 mutual
 def tyStr : Ty Unit → String
@@ -99,6 +100,7 @@ end
 def atomStr : Atom Unit → String
   | .field l τ  => l ++ ":" ++ tyStr τ
   | .dfield α τ => "${" ++ α ++ "}:" ++ tyStr τ
+  | .ufield τ   => "${★}:" ++ tyStr τ
   | .var α      => α
 
 def spineStr (s : Spine) : String :=
@@ -388,6 +390,7 @@ def atomSize : Atom Unit → Nat
   | .var _     => 1
   | .field _ τ => 1 + tySize τ
   | .dfield _ τ => 1 + tySize τ
+  | .ufield τ => 1 + tySize τ
 
 def sSize (s : Spine) : Nat := (s.map atomSize).foldl (· + ·) 0
 
@@ -846,6 +849,7 @@ def soleHost (l : Label) (τ : Ty Unit) (t₁ s₂ : Spine) : Option TyVar :=
       let payloadVars := s₂.flatMap fun
         | .field _ σ => Ty.allRowVars σ
         | .dfield _ σ => Ty.allRowVars σ
+        | .ufield σ => Ty.allRowVars σ
         | .var _ => []
       if sFieldCount l s₂ == 0 && !sHasKey s₂ && !τv.contains β &&
          rest.all τv.contains &&
@@ -1013,6 +1017,7 @@ partial def canonRow (ρ : Row Unit) : String :=
   let bars := (sBarSeq s).map fun
     | .var α => "v" ++ α
     | .key o => "k" ++ o
+    | .ukey => "k★"
   let labels := (s.filterMap fun
     | .field l _ => some l
     | _ => none).eraseDups.mergeSort (fun a b => decide (a < b))

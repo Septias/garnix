@@ -255,6 +255,7 @@ theorem Sol.closes_toSubst_of_applied {B : Type} {s : Sol B} (h : s.Applied) :
 def Key.sortedFtv : Key → List (Srt × TyVar)
   | .lit _ => []
   | .var α => [(.lab, α)]
+  | .unk   => []
 
 mutual
 def Ty.sortedFtv {B : Type} : Ty B → List (Srt × TyVar)
@@ -285,6 +286,7 @@ theorem Key.mem_sortedFtv_applySubst {B : Type} {θ : TySubst B} {x : Srt × TyV
     ∃ y ∈ Key.sortedFtv k, x ∈ θ.ftvAt y
   | .lit _, h => by simp [Key.sortedFtv] at h
   | .var α, h => ⟨(.lab, α), by simp [Key.sortedFtv], h⟩
+  | .unk, h => by simp [Key.sortedFtv, Key.applySubst] at h
 
 -- ⊢ every occurrence of the substituted term comes from one of the subject's,
 --   through what θ puts there
@@ -347,6 +349,7 @@ theorem Key.applySubst_fixed_sorted {B : Type} {θ : TySubst B} :
     k.applySubst θ = k
   | .lit _, _ => rfl
   | .var α, hl => hl α (by simp [Key.sortedFtv])
+  | .unk, _ => rfl
 
 theorem Ty.applySubst_fixed_sorted {B : Type} {θ : TySubst B} :
     (τ : Ty B) →
@@ -741,6 +744,7 @@ theorem Sol.closes_closure {B : Type} {s : Sol B} (hR : s.Ranked) :
 theorem Key.mem_ftv_of_mem_sortedFtv {b : Srt} {α : TyVar} :
     (k : Key) → (b, α) ∈ Key.sortedFtv k → α ∈ k.ftv
   | .lit _, h => by simp [Key.sortedFtv] at h
+  | .unk, h => by simp [Key.sortedFtv] at h
   | .var β, h => by
       simp only [Key.sortedFtv, List.mem_singleton, Prod.mk.injEq] at h
       simp [Key.ftv, h.2]
@@ -905,6 +909,7 @@ theorem Sol.applied_of_noCapture {B : Type} {s : Sol B} (h : s.NoCapture) :
       obtain ⟨α, k⟩ := p
       cases k with
       | lit _ => rfl
+      | unk => rfl
       | var γ => exact (Sol.toSubst_fixed (h.2.2 _ hp γ (by simp [Key.ftv]))).2.2⟩
 
 -- ⊢  …and a legal solver state.  The rank is constant: `NoCapture` says no

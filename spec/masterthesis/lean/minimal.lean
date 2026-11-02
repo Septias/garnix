@@ -54,11 +54,12 @@ inductive Expr (Const : Type) : Type where
 ---------------------------------- TYPES ------------------------------------------
 
 -- τ := α | 𝓫 | ★ | τ → τ | { ρ } | ⌊k⌋
--- k := l | α                     (keys: a label, or a LABEL variable)
+-- k := l | α | ★                 (keys: a label, a LABEL variable, the unknown key)
 -- Label variables are a SORT of their own, like row variables: ⌊α⌋ is
 -- `.lab (.var α)`, a substitution sends α to a KEY (`TySubst.lab`), never to a
--- type. So a key is always a label or a label variable — there is no junk key,
--- and nothing (unification, instantiation) can make a key ★ or 𝓫.
+-- type. So a key is always a label, a label variable or the unknown key ★ (a
+-- string the analysis does not track, feat/fc-labels); nothing makes a key 𝓫,
+-- and ⌊★⌋ is a label type, not the unknown type ★.
 -- ⌊l⌋ is rigid and nullary, exactly like 𝓫.
 -- ρ := ε | α | l: τ | ${k}: τ | (ρ₁ | ρ₂)
 -- `${k}: τ` (FC-labels phase B) is a field whose label is only known through
@@ -68,11 +69,14 @@ inductive Expr (Const : Type) : Type where
 inductive Key : Type where
   | lit : Label → Key          -- l
   | var : TyVar → Key          -- α, a label variable
+  | unk : Key                  -- ★, a key the analysis does not know (a computed
+                               -- string): it decides nothing and nothing replaces it
   deriving DecidableEq, Repr
 
 def Key.ftv : Key → List TyVar
   | .lit _ => []
   | .var α => [α]
+  | .unk   => []
 
 mutual
   inductive Ty (B : Type) : Type where
@@ -385,11 +389,14 @@ end Ctx
 -- A keyed field `${k}: τ` is compared against a lookup key:
 --
 --   l / l       eq iff same label, else apart
---   α / α       eq
---   otherwise   undec                   (a label variable against anything else)
+--   otherwise   undec                   (a label variable decides nothing,
+--                                        not even against itself)
 --
--- eq and apart are stable under substitution (labels are rigid, and one
--- variable goes to one key). undec is where `?` lives.
+-- Only two literals decide, so eq and apart are stable under EVERY
+-- substitution (labels are rigid). undec is where `?` lives. A variable is
+-- undecided against itself because the key it stands for need not be a label
+-- the analysis knows (feat/fc-labels: a computed string), and a decided
+-- `α ≡ α` would not survive that substitution.
 
 inductive KeyRel : Type where
   | eq | apart | undec
@@ -399,21 +406,27 @@ inductive KeyRel : Type where
 def Key.cmp : Key → Key → KeyRel
   | .lit l, .lit l' => if l = l' then .eq else .apart
   | .lit _, .var _  => .undec
-  | .var _, .lit _  => .undec
-  | .var α, .var β  => if α = β then .eq else .undec
+  | .lit _, .unk    => .undec
+  | .var _, _       => .undec
+  | .unk, _         => .undec
 
 @[simp] theorem Key.cmp_lit_lit (l l' : Label) :
     Key.cmp (.lit l) (.lit l') = if l = l' then .eq else .apart := rfl
 
-@[simp] theorem Key.cmp_self : (k : Key) → k.cmp k = .eq
-  | .lit _ => by simp [Key.cmp]
-  | .var _ => by simp [Key.cmp]
+@[simp] theorem Key.cmp_self_lit (l : Label) : (Key.lit l).cmp (.lit l) = .eq := by
+  simp [Key.cmp]
 
--- a literal key is undecided only against a label variable
+-- ⊢  a decided comparison is between two literals
+theorem Key.cmp_decided_lit {k q : Key} (h : Key.cmp k q ≠ .undec) :
+    ∃ l l', k = .lit l ∧ q = .lit l' := by
+  cases k <;> cases q <;> simp [Key.cmp] at h ⊢
+
+-- a literal key is undecided only against a label variable or ★
 theorem Key.cmp_lit_undec {l : Label} {q : Key}
-    (h : Key.cmp (.lit l) q = .undec) : ∃ α, q = .var α := by
+    (h : Key.cmp (.lit l) q = .undec) : (∃ α, q = .var α) ∨ q = .unk := by
   cases q with
-  | var α => exact ⟨α, rfl⟩
+  | var α => exact .inl ⟨α, rfl⟩
+  | unk => exact .inr rfl
   | lit l' => simp only [Key.cmp_lit_lit] at h; split at h <;> cases h
 
 inductive LookupRes (B : Type) : Type where
@@ -775,7 +788,7 @@ theorem Lookup.not_unknown_of_spineVarFree {B : Type} {ρ : Row B}
       | catUnk h₁    => exact ih₁ h₁
   | dsing =>
       cases h with
-      | dunk h => obtain ⟨α, h⟩ := Key.cmp_lit_undec h; cases h
+      | dunk h => rcases Key.cmp_lit_undec h with ⟨α, h⟩ | h <;> cases h
 
 
 ------------------------------ TYPE SUBSTITUTION -------------------------------
@@ -794,12 +807,16 @@ structure TySubst (B : Type) where
 def Key.applySubst {B : Type} (θ : TySubst B) : Key → Key
   | .lit l => .lit l
   | .var α => θ.lab α
+  | .unk   => .unk
 
 @[simp] theorem Key.applySubst_lit {B : Type} (θ : TySubst B) (l : Label) :
     (Key.lit l).applySubst θ = .lit l := rfl
 
 @[simp] theorem Key.applySubst_var {B : Type} (θ : TySubst B) (α : TyVar) :
     (Key.var α).applySubst θ = θ.lab α := rfl
+
+@[simp] theorem Key.applySubst_unk {B : Type} (θ : TySubst B) :
+    Key.unk.applySubst θ = .unk := rfl
 
 mutual
   def Ty.applySubst {B : Type} (θ : TySubst B) : Ty B → Ty B
@@ -824,6 +841,7 @@ def TySubst.id (B : Type) : TySubst B := ⟨(.var ·), (.var ·), (.var ·)⟩
 theorem Key.applySubst_id {B : Type} : (k : Key) → k.applySubst (TySubst.id B) = k
   | .lit _ => rfl
   | .var _ => rfl
+  | .unk   => rfl
 
 mutual
   theorem Ty.applySubst_id {B : Type} :
@@ -920,14 +938,9 @@ theorem Key.cmp_applySubst {B : Type} (θ : TySubst B) {k q : Key} {c : KeyRel}
       cases q with
       | lit l' => exact h
       | var _ => subst h; exact absurd rfl hc
-  | var α =>
-      cases q with
-      | lit _ => subst h; exact absurd rfl hc
-      | var β =>
-          simp only [Key.cmp] at h
-          split at h
-          · subst h; subst β; exact Key.cmp_self _
-          · subst h; exact absurd rfl hc
+      | unk => subst h; exact absurd rfl hc
+  | var _ => subst h; exact absurd rfl hc
+  | unk => subst h; exact absurd rfl hc
 
 -- Substitution acts on lookup results pointwise (definite ones, see below).
 def LookupRes.applySubst {B : Type} (θ : TySubst B) : LookupRes B → LookupRes B
@@ -1008,6 +1021,7 @@ theorem Key.applySubst_fixed {B : Type} {θ : TySubst B}
     (hl : ∀ α, θ.lab α = .var α) : (k : Key) → k.applySubst θ = k
   | .lit _ => rfl
   | .var α => hl α
+  | .unk   => rfl
 
 mutual
   theorem Ty.applySubst_fixed {B : Type} {θ : TySubst B}
@@ -1668,17 +1682,13 @@ inductive Err {C : Type} (δ : Delta C) : Expr C → Prop where
   | catLeft  : Err δ e₁ → Err δ (.cat e₁ e₂)
   | catRight : Value e₁ → Err δ e₂ → Err δ (.cat e₁ e₂)
   | letBind  : Err δ e₁ → Err δ (.letE x e₁ e₂)
-  -- a dynamic selection errs where a static one does, and also on a key that is
-  -- not a label (L-junk's run-time face)
+  -- a dynamic selection errs where a static one does. A key that is not a label
+  -- is no error: it has no typing (feat/fc-labels; strings are labels)
   | selDynAbsent {b : RecBody (Expr C)} {l : Label} :
       RecBody.lookup l b = none → Err δ (.selDyn (.rcd b) (.lab l))
-  | selDynKey {b : RecBody (Expr C)} {v : Expr C} :
-      Value v → (∀ l, v ≠ .lab l) → Err δ (.selDyn (.rcd b) v)
   | selDynL  : Err δ e₁ → Err δ (.selDyn e₁ e₂)
   | selDynR  : Value e₁ → Err δ e₂ → Err δ (.selDyn e₁ e₂)
-  -- a dynamic construction errs on a key that is not a label
-  | rcdDynKeyBad {v : Expr C} :
-      Value v → (∀ l, v ≠ .lab l) → Err δ (.rcdDyn v e₂)
+  -- a dynamic construction errs where its key does
   | rcdDynKey : Err δ e₁ → Err δ (.rcdDyn e₁ e₂)
   -- MacroNix: a failed assertion, a builtin that fails (δ = none)
   | asrtFail {e₂ : Expr C} : Err δ (.asrt (.bool false) e₂)
@@ -2042,11 +2052,13 @@ theorem Key.applySubst_applySubst {B : Type} (θ₁ θ₂ : TySubst B) :
     (k : Key) → (k.applySubst θ₁).applySubst θ₂ = k.applySubst (θ₂.comp θ₁)
   | .lit _ => rfl
   | .var _ => rfl
+  | .unk   => rfl
 
 theorem Key.applySubst_congr {B : Type} {θ₁ θ₂ : TySubst B} :
     (k : Key) → (∀ α ∈ k.ftv, θ₁.lab α = θ₂.lab α) → k.applySubst θ₁ = k.applySubst θ₂
   | .lit _, _ => rfl
   | .var α, h => h α (by simp [Key.ftv])
+  | .unk, _ => rfl
 
 mutual
   theorem Ty.applySubst_applySubst {B : Type} (θ₁ θ₂ : TySubst B) :
@@ -2336,6 +2348,7 @@ private theorem renameScheme_core {B : Type} (θ : TySubst B) (σ : Scheme B)
         have h3 : (θ.lab α).applySubst (bwdSub prs θ₁ χ) = θ.lab α := by
           cases hk : θ.lab α with
           | lit _ => rfl
+          | unk => rfl
           | var γ =>
               have := hsndNone γ (himgLab α hα γ (by simp [hk, Key.ftv]))
               simp [bwdSub, this]
@@ -2379,6 +2392,7 @@ private theorem renameScheme_core {B : Type} (θ : TySubst B) (σ : Scheme B)
         have h3 : (θ.lab α).applySubst θ₂ = θ.lab α := by
           cases hk : θ.lab α with
           | lit _ => rfl
+          | unk => rfl
           | var γ =>
               exact hfx2Lab γ (hsndNotMem γ (himgLab α hα γ (by simp [hk, Key.ftv])))
         refine ⟨?_, ?_, ?_⟩
@@ -2654,6 +2668,8 @@ mutual
   inductive TyPrec {B : Type} : Ty B → Ty B → Prop where
     | refl (τ : Ty B) : TyPrec τ τ
     | unk  (τ : Ty B) : TyPrec τ .unk
+    -- ⌊★⌋ is less precise than every key's singleton (T-lab-blur)
+    | lab  {k : Key} : TyPrec (.lab k) (.lab .unk)
     | fn   : TyPrec τ₁ τ₁' → TyPrec τ₂ τ₂' →
              TyPrec (.fn τ₁ τ₂) (.fn τ₁' τ₂')
     | rcd  : RowPrec ρ ρ' → TyPrec (.rcd ρ) (.rcd ρ')
@@ -2733,6 +2749,7 @@ theorem TyPrec.trans {B : Type} : {τ₁ τ₂ τ₃ : Ty B} →
     TyPrec τ₁ τ₂ → TyPrec τ₂ τ₃ → TyPrec τ₁ τ₃
   | _, _, _, h₁, .refl _   => h₁
   | _, _, _, _,  .unk _    => .unk _
+  | _, _, _, h₁, .lab      => by cases h₁ <;> exact .lab
   | _, _, _, h₁, .fn ha hb => by
       obtain ⟨_, _, rfl, hp, hq⟩ := TyPrec.fn_inv h₁
       exact .fn (TyPrec.trans hp ha) (TyPrec.trans hq hb)

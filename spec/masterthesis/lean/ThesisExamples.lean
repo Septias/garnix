@@ -96,7 +96,6 @@ def traceRow {B : Type} [DecidableEq B] :
       let solveName (s₁ s₂ : List (Atom B)) (r : UResM B) : String :=
         match r, s₁ with
         | .occurs, _ => "U-var-occurs"
-        | .stuck, _ => "U-var-stuck"
         | _, [.var α] => if (collapseSol α s₂).isSome then "U-var-collapse" else "U-var-solve"
         | _, _ => "U-var-solve"
       match solveVarM S s₁ s₂ with
@@ -191,6 +190,7 @@ def rowN : R → String
 def keyN : Key → String
   | .lit l => l
   | .var α => α
+  | .unk   => "★"
 end
 
 def solN (s : Sol Unit) : String :=
@@ -230,6 +230,7 @@ def rowC (L : List TyVar) : R → String
 def keyC (L : List TyVar) : Key → String
   | .lit l => l
   | .var α => "κ" ++ toString (L.idxOf α + 1)
+  | .unk   => "★"
 end
 
 def σ0 : Sig Unit Unit := Sig.plain fun _ => ()
@@ -302,6 +303,7 @@ theorem sProj_nil {B : Type} {l : Label} :
       exact sProj_nil s h.2
   | .var _ :: s, h => by simp only [sProj, sProj_nil s h, List.map_nil]
   | .dfield _ _ :: s, h => by simp only [sProj, sProj_nil s h, List.map_nil]
+  | .ufield _ :: s, h => by simp only [sProj, sProj_nil s h, List.map_nil]
 
 def charB {B : Type} [DecidableEq B] (ρ₁ ρ₂ : Row B) : Bool :=
   decide (sBarSeq ρ₁.toSpine = sBarSeq ρ₂.toSpine) &&
@@ -365,7 +367,8 @@ def δ0 : Delta Unit := σ0.delta
 
 -- `{ "1759190400" = 1; }.${toString builtins.currentTime}`: a dynamic selection
 -- under a key of base type (MacroNix: `toString` yields a string) is typed ★,
--- with a warning, by A-sel-dyn-𝓫. `builtins.currentTime` is an int here.
+-- with a warning: `toString` yields ⌊★⌋, the key variable is bound to ★, and the
+-- lookup is opaque. `builtins.currentTime` is an int here.
 section intro
 open MacroNix
 def timeEx : MacroNix.E :=
@@ -374,6 +377,15 @@ def timeEx : MacroNix.E :=
 #guard (match runF sig 50 timeEx with
         | .ok (σ, S) => σ.body == .unk && σ.constraints.isEmpty && !S.flags.isEmpty
         | _ => false)
+
+-- …and it EVALUATES as in Nix (feat/fc-labels M4a: a string is a label):
+-- `toString` yields the label "1759190400", and the selection under it finds the
+-- field. (Before, toString yielded a string constant that no key position took,
+-- so the program always reached ↯.)
+example : Step sig.delta (call .toString [int 1759190400]) (.lab "1759190400") :=
+  .primDelta (vs := [int 1759190400]) (by simp only [List.mem_singleton]; rintro _ rfl; exact .con) rfl
+example : Step sig.delta (.selDyn (.rcd (.field "1759190400" (int 1))) (.lab "1759190400")) (int 1) :=
+  .selDynVal rfl
 
 -- §9 G3: the same program extended by one selection has no type: ★ cannot be
 -- selected from
@@ -777,6 +789,14 @@ example : QTyped σ0 QCtx.empty starIntroEx
 -- # §8 First-Class Labels
 ------------------------------------------------------------------------------
 
+-- Keyed lookup. (m: 𝓫).α ↓ ? waits on the key α, (${γ}: 𝓫 | l: 𝓫′).l ↓ ? on γ …
+example : LookupBlockedQ (f "m" b) (.var "α") "α" := .sunk
+example : LookupBlockedQ (.cat (.dsing (.var "γ") b) (f "l" (tv "τ'"))) (.lit "l") "γ" :=
+  .catUnk .dunkF
+-- … and a comparison with ★ never decides: both lookups are opaque
+example : LookupOpaqueQ (.cat (.dsing .unk b) (f "l" (tv "τ'"))) (.lit "l") := .catUnk .dunkF
+example : LookupOpaqueQ (f "l" b) .unk := .sunk
+
 -- The schemes of the dynamic selector and the dynamic record constructor
 #guard schemeOf (lam "a" (lam "x" (sd (v "x") (v "a")))) =
   ("∀#1,#2,#3. ⟨ρ2.κ1 ↓ α3⟩ ⇒ (⌊κ1⌋ → ({ρ2} → α3))", 0)
@@ -793,6 +813,26 @@ example : QTyped σ0 QCtx.empty starIntroEx
 -- application clashes
 #guard run (app (lam "a" (sd (rec1 "l" c) (v "a"))) c) = ("fail: clash", [])
 
+-- A spent stump under a key variable keeps its qualifier; it is blocked on
+-- the row, and the witness reads the key as the label `${κ}`
+#guard parkedOf (lam "r" (lam "a" (app (sd (v "r") (v "a")) c))) =
+  ("({ρ1} → (⌊κ2⌋ → α3))", ["ρ1 ⊳ ⟨ρ1.κ2 ↓ (𝓫 → α3)⟩"])
+
+-- Costs. An unknown key has no identity: `a: {${a} = c}.${a}` keeps its
+-- stump, which hits at every literal instance …
+#guard run (lam "a" (sd (rd (v "a") c) (v "a"))) = ("⟨${κ1}: 𝓫 | ε.κ1 ↓ α2⟩ ⇒ (⌊κ1⌋ → α2)", [])
+#guard run (app (lam "a" (sd (rd (v "a") c) (v "a"))) (L "x")) = ("𝓫", [])
+-- … and two literals meet only by T-lab-blur, which inference does not apply:
+-- `f: {a = f "x"; b = f "y"}` clashes, but types at (⌊★⌋ → 𝓫) → {a: 𝓫 | b: 𝓫}
+def litJoinEx : E := lam "f" (rec2 "a" (app (v "f") (L "x")) "b" (app (v "f") (L "y")))
+#guard run litJoinEx = ("fail: clash", [])
+example : QTyped σ0 QCtx.empty litJoinEx
+    (.fn (.fn (.lab .unk) b) (.rcd (.cat (.sing "a" b) (.sing "b" b)))) := by
+  have hg : QTyped σ0 (QCtx.empty.bindTy "f" (.fn (.lab .unk) b)) (v "f") (.fn (.lab .unk) b) :=
+    qvar (by simp [QCtx.bindTy, QCtx.bindScheme, QCtx.lookup])
+  exact .qLam (.qRcd (.cat (.field (.qApp hg (.qLabBlur .qLab)))
+                           (.field (.qApp hg (.qLabBlur .qLab)))))
+
 -- `((n: r: r // { ${n} = c; }) "x" { x = {}; }).x`: the computed field shadows
 #guard run (sel (app (app (lam "n" (lam "r" (cat (v "r") (rd (v "n") c)))) (L "x")) (rec1 "x" emp)) "x")
   = ("𝓫", [])
@@ -803,6 +843,14 @@ example : QTyped σ0 QCtx.empty starIntroEx
 -- … and (${α}: τ) ≐ᵣ (${β}: τ′) with [α ≔ β]
 #guard tr (.dsing (.var "α") (tv "τ")) (.dsing (.var "β") (tv "τ'")) =
   (["U-key-pin", "U-lab", "U-field-L", "U-bind", "U-ε-var"], "[τ ≔ τ', α ≔ β]")
+-- … and (${α}: τ) ≐ᵣ (${★}: τ′) with [α ≔ ★]
+#guard tr (.dsing (.var "α") (tv "τ")) (.dsing .unk (tv "τ'")) =
+  (["U-key-pin", "U-lab", "U-field-L", "U-bind", "U-ε-var"], "[τ ≔ τ', α ≔ ★]")
+-- (l: τ) ≐ᵣ (${★}: τ′) has no unifier, but no move sees it
+#guard tr (f "l" (tv "τ")) (.dsing .unk (tv "τ'")) = (["U-stuck"], "Stuck")
+-- a leading keyed field pairs with a keyed field under the same key (U-field-L)
+#guard tr (row [.dsing (.var "α") (tv "τ"), rv "ρ"]) (row [.dsing (.var "α") b, rv "σ"]) =
+  (["U-field-L", "U-bind", "U-var-solve"], "[τ ≔ 𝓫, ρ ≔ (σ | ε)]")
 -- U-ε-clash fires on a keyed field
 #guard tr .empty (.dsing (.var "α") b) = (["U-ε-clash"], "Clash")
 -- (${α}: 𝓫 | m: 𝓫) ≐ᵣ (m: 𝓫 | ${β}: 𝓫) is stuck; [α ≔ l, β ≔ l] solves it …
@@ -814,6 +862,29 @@ example : Unifies (sub [] [("α", .lit "l"), ("β", .lit "l")])
 example : ¬ Unifies (sub [] [("α", .var "β")])
     (row [.dsing (.var "α") b, f "m" b]) (row [f "m" b, .dsing (.var "β") b]) :=
   not_equiv_proj "m" (by decide)
+
+-- An occurrence next to a keyed field is an occurs failure, as next to a
+-- literal one: the count of field atoms ignores keys (`occurs_anyField_no_unifier`)
+#guard tr (.var "α") (row [.var "β", .var "α", .dsing (.var "κ") b, .var "γ"]) =
+  (["U-var-occurs"], "Occurs")
+
+-- The flake idiom `system: pkgs: pkgs.${system}.default`: a keyed stump spent
+-- on a record, and a second stump behind it …
+#guard run (lam "s" (lam "p" (sel (sd (v "p") (v "s")) "default"))) =
+  ("⟨ρ4.default ↓ α3⟩, ⟨ρ2.κ1 ↓ {ρ4}⟩ ⇒ (⌊κ1⌋ → ({ρ2} → α3))", [])
+-- … at a label and a record with that system
+#guard run (app (app (lam "s" (lam "p" (sel (sd (v "p") (v "s")) "default"))) (L "x86"))
+    (rec1 "x86" (rec1 "default" c))) = ("𝓫", [])
+
+-- `g a` binds the field's key (that of b) to κ, the key of a. Before
+-- feat/fc-labels M2 the lookup then hit by κ ≡ κ while its blocker κ stayed
+-- unsolved; now a variable key decides nothing, the stump stays a qualifier,
+-- and only solving the blocker can change a lookup again
+def staleProbe : E := lam "a" (lam "b" (lam "g" (.rcd (.cat (.field "p" (sd (rd (v "b") c) (v "a")))
+    (.cat (.field "q" (app (v "g") (v "b"))) (.field "r" (app (v "g") (v "a"))))))))
+#guard run staleProbe =
+  ("⟨${κ1}: 𝓫 | ε.κ1 ↓ α3⟩ ⇒ (⌊κ1⌋ → (⌊κ1⌋ → ((⌊κ1⌋ → α2) → {p: α3 | q: α2 | r: α2})))", [])
+#guard run (app (app (app staleProbe (L "x")) (L "x")) (lam "z" c)) = ("{p: 𝓫 | q: 𝓫 | r: 𝓫}", [])
 
 ------------------------------------------------------------------------------
 -- # §9 Discussion: the idioms of the introduction, in MacroNix
@@ -856,7 +927,7 @@ def runM (e : MacroNix.E) : String × List Label :=
   | .oof => ("out of fuel", [])
 
 def mv (x : String) : MacroNix.E := .var x
-def ms (s : String) : MacroNix.E := .con (.str s)
+def ms (s : String) : MacroNix.E := .lab s
 def mrec : List (String × MacroNix.E) → MacroNix.E
   | []      => .rcd .empty
   | [(l, e)] => .rcd (.field l e)
@@ -878,10 +949,10 @@ def metaUpd : MacroNix.E :=
   ("⟨ρ1 | ε | meta: {ε} | ε.meta ↓ {ρ2}⟩ ⇒ ({ρ1 | ε} → {meta: {broken: bool | ε | ρ2} | ε | ρ1})", [])
 -- … at a package with meta …
 #guard runM (.app metaUpd (mrec [("pname", ms "hello"), ("meta", mrec [("description", ms "hi")])])) =
-  ("{meta: {broken: bool | ε | description: string | ε} | ε | pname: string | meta: {description: string} | ε}", [])
+  ("{meta: {broken: bool | ε | description: ⌊hi⌋ | ε} | ε | pname: ⌊hello⌋ | meta: {description: ⌊hi⌋} | ε}", [])
 -- … and at one without: the lookup reaches the default
 #guard runM (.app metaUpd (mrec [("pname", ms "hello")])) =
-  ("{meta: {broken: bool | ε | ε} | ε | pname: string | ε}", [])
+  ("{meta: {broken: bool | ε | ε} | ε | pname: ⌊hello⌋ | ε}", [])
 -- without the default, `drv: drv // { meta = drv.meta // { broken = false; }; }` clashes there
 def metaUpdNoOr : MacroNix.E :=
   mlam ["drv"] (.cat (mv "drv") (mrec [("meta", .cat (.sel (mv "drv") "meta") unbroken)]))
@@ -907,12 +978,12 @@ def override : MacroNix.E := mlam ["mkDerivation", "extra", "args"] (.app (mv "m
   ("{buildInputs: [int] | ε | buildInputs: [int] | ε}", [])
 -- … and at one without: the lookup reaches the default
 #guard runM (mapp override [mlam ["x"] (mv "x"), int 1, mrec [("pname", ms "hello")]]) =
-  ("{buildInputs: [int] | ε | pname: string | ε}", [])
+  ("{buildInputs: [int] | ε | pname: ⌊hello⌋ | ε}", [])
 -- one binding serves both uses
 #guard runM (.letE "f" override (mrec [
     ("a", mapp (mv "f") [mlam ["x"] (mv "x"), int 1, mrec [("buildInputs", .cons (int 0) .nil)]]),
     ("b", mapp (mv "f") [mlam ["x"] (mv "x"), int 1, mrec [("pname", ms "hello")]])])) =
-  ("{a: {buildInputs: [int] | ε | buildInputs: [int] | ε} | b: {buildInputs: [int] | ε | pname: string | ε}}", [])
+  ("{a: {buildInputs: [int] | ε | buildInputs: [int] | ε} | b: {buildInputs: [int] | ε | pname: ⌊hello⌋ | ε}}", [])
 -- without the default, `args.buildInputs ++ [ extra ]`: the spent stump misses, a clash
 def overrideNoOr : MacroNix.E := mlam ["mkDerivation", "extra", "args"] (.app (mv "mkDerivation")
   (.cat (mv "args") (mrec [("buildInputs",
@@ -926,12 +997,12 @@ def condExt : MacroNix.E := mlam ["lib", "stdenv"]
   (.cat (mrec [("pname", ms "hello")])
     (mapp (.sel (mv "lib") "optionalAttrs") [.sel (mv "stdenv") "isDarwin", mrec [("NIX_LDFLAGS", ms "-liconv")]]))
 #guard runM condExt =
-  ("⟨ρ2.isDarwin ↓ α4⟩, ⟨ρ1.optionalAttrs ↓ (α4 → ({NIX_LDFLAGS: string} → {ρ3}))⟩ ⇒ " ++
-   "({ρ1} → ({ρ2} → {ρ3 | pname: string | ε}))", [])
+  ("⟨ρ2.isDarwin ↓ α4⟩, ⟨ρ1.optionalAttrs ↓ (α4 → ({NIX_LDFLAGS: ⌊-liconv⌋} → {ρ3}))⟩ ⇒ " ++
+   "({ρ1} → ({ρ2} → {ρ3 | pname: ⌊hello⌋ | ε}))", [])
 -- a later lookup of pname answers ?
 #guard runM (mlam ["lib", "stdenv"] (.sel (mapp condExt [mv "lib", mv "stdenv"]) "pname")) =
-  ("⟨ρ4 | pname: string | ε.pname ↓ α3⟩, ⟨ρ2.isDarwin ↓ α5⟩, " ++
-   "⟨ρ1.optionalAttrs ↓ (α5 → ({NIX_LDFLAGS: string} → {ρ4}))⟩ ⇒ ({ρ1} → ({ρ2} → α3))", [])
+  ("⟨ρ4 | pname: ⌊hello⌋ | ε.pname ↓ α3⟩, ⟨ρ2.isDarwin ↓ α5⟩, " ++
+   "⟨ρ1.optionalAttrs ↓ (α5 → ({NIX_LDFLAGS: ⌊-liconv⌋} → {ρ4}))⟩ ⇒ ({ρ1} → ({ρ2} → α3))", [])
 -- nixpkgs' `optionalAttrs = cond: as: if cond then as else {}` types at bool → {} → {} …
 def optionalAttrs : MacroNix.E := mlam ["cond", "as"] (.ite (mv "cond") (mv "as") (mrec []))
 #guard runM optionalAttrs = ("(bool → ({ε} → {ε}))", [])
@@ -950,10 +1021,44 @@ end idioms
 section macronix
 open MacroNix
 #guard (match runF sig 50
-    (.cat (.rcd (.field "pname" (.con (.str "hello"))))
-          (.ite (.bool true) (.rcd (.field "NIX_LDFLAGS" (.con (.str "-liconv")))) (.rcd .empty))) with
+    (.cat (.rcd (.field "pname" (.lab "hello")))
+          (.ite (.bool true) (.rcd (.field "NIX_LDFLAGS" (.lab "-liconv"))) (.rcd .empty))) with
   | .fail "clash" => true | _ => false)
 example := macroSig_ok
+
+-- String keys (feat/fc-labels M4a): a string is a label of type ⌊★⌋.
+-- `r: r // { ${toString 1} = 1; }` types: the computed field is `${★}: int`,
+-- in front of r's row (it was a clash while a base-typed key gave ★) …
+#guard runM (mlam ["r"] (.cat (mv "r") (.rcdDyn (call .toString [int 1]) (int 1)))) =
+  ("({ρ1} → {${★}: int | ε | ρ1})", [])
+-- … `{}.${3}` is rejected: an int is no key (it was ★ by A-sel-dyn-𝓫) …
+#guard runM (.selDyn (mrec []) (int 3)) = ("fail: clash", [])
+-- … a field under ★ shadows, and a selection through it is opaque …
+#guard runM (mlam ["r"] (.sel (.cat (mv "r") (.rcdDyn (call .toString [int 1]) (int 1))) "x")) =
+  ("({ρ1} → ★)", ["x"])
+-- … and an unknown key selects nothing, even from the record it built
+#guard runM (.letE "k" (call .toString [int 1]) (.selDyn (.rcdDyn (mv "k") (int 1)) (mv "k"))) =
+  ("★", ["${★}"])
+-- … and a key variable that later becomes a computed string is bound to ★: the
+-- stump on it wakes opaque and answers ★ (it was a clash)
+#guard runM (.app (mlam ["a"] (.selDyn (mrec [("l", int 1)]) (mv "a"))) (call .toString [int 1])) =
+  ("★", ["${★}"])
+
+-- Literals of different labels meet (feat/fc-labels M5). A list with a string
+-- literal is a list of strings (A-cons-str) …
+#guard runM (.cons (ms "a") (.cons (ms "b") .nil)) = ("[⌊★⌋]", [])
+-- … the branches of an `if` at different definite keys join at ⌊★⌋ (A-if-join) …
+#guard runM (mlam ["c"] (.ite (mv "c") (ms "a") (ms "b"))) = ("(bool → ⌊★⌋)", [])
+#guard runM (mlam ["c"] (.ite (mv "c") (ms "a") (call .toString [int 1]))) = ("(bool → ⌊★⌋)", [])
+-- … `==` takes two types, so a key compared with a literal stays a key …
+#guard runM (mlam ["system", "pkgs"] (mrec [("isDarwin", call .eq [mv "system", ms "x86_64-darwin"]),
+  ("pkg", .selDyn (mv "pkgs") (mv "system"))])) =
+  ("⟨ρ2.κ1 ↓ α3⟩ ⇒ (⌊κ1⌋ → ({ρ2} → {isDarwin: bool | pkg: α3}))", [])
+-- … and atoms of different kinds are unequal
+#guard runM (call .eq [int 1, .bool true]) = ("bool", [])
+-- the foldl' accumulator "" still clashes with the strcat result (accepted cost)
+#guard runM (call .foldl [mlam ["a", "b"] (call .strcat [mv "a", mv "b"]), ms "",
+  .cons (ms "x") .nil]) = ("fail: clash", [])
 end macronix
 
 end ThesisExamples
