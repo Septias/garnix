@@ -40,19 +40,18 @@ The development of MacroNix is just for test purposes, don't mention it too ofte
     - Unrestricted T-★-intro
 
 
-## Automated checks
-- [ ] You are a professor in PL, go over the thesis text and critique it's claims and wording based on your expertise.
-- [ ] Go over the thesis text and mark every place where wording is loose in a sense, that the terminalogy is not suited for the claim.
-
-
 ## Admitting
-- Gradual typing for usability 
+- Gradual typing for usability
 - Use of the wrong semantic for row equality
 
 
 ## Final Cleanup
 - Check the syntax whether it is ambiguous
 - Check the claims for references
+- [ ] You are a professor in PL, go over the thesis text and critique it's claims and wording based on your expertise.
+- [ ] Go over the thesis text and mark every place where wording is loose in a sense, that the terminalogy is not suited for the claim.
+- [ ] Check all claims made in related work against the paper sources in plaintext/
+- [ ] Check rigidness of presentation
 
 
 # Section-State
@@ -65,7 +64,7 @@ The development of MacroNix is just for test purposes, don't mention it too ofte
   - [f] Row equivalence
   - [f] Sorts
   - [f] Instantiation
-  - [ ] Semantics
+  - [f] Semantics
 - [f] 03 Metatheory
 - [f] 04 Unification
   - [f] Trace Monoid
@@ -73,45 +72,38 @@ The development of MacroNix is just for test purposes, don't mention it too ofte
   - [f] Rows ≐ᵣ
   - [f] Examples
   - [f] Metatheory
-- [ ] 05 Inference
-  - [ ] State
-  - [ ] Rules
-  - [ ] Let-Generalization
-  - [ ] Wake, Replay, Saturate
-  - [ ] Merge
-
-**Done on DI**
-
-- [x] 06 Incompleteness
-  - [x] Unsolvable
-  - [x] Forced Moves
-  - [x] Inference
-- [ ] 07 FC-Labels
-  - [ ] Keyed Lookup
-  - [ ] Row Equivalence & Barriers
-  - [ ] Typing and Evaluation
-  - [ ] Unification
-  - [ ] Inference
-  - [ ] Costs
-- [x] 08 Mechanization
-- [ ] 09 Discussion
-  - [x] Idioms
-  - [x] Design Goals
-  - [~] Outlook
-  - [~] 11 Conclusion
-- [ ] 10 Related Work
-  - [ ] Old Work
-  - [ ] FC-Labels
-  - [ ] Expressive Row Theories
-  - [ ] Subtyping Based
-  - [ ] Set Theoretic
-  - [x] Gradual and Soft
-  - [x] NixLang
-- [ ] 12 Appendix
-
-
-## Zeitplan
-- FC-labels morgen lesen, grobe Schitzer finden (So)
-- Danach Declarative, Unification und Inferenz finalisieren (So + Mo)
-- FC-Labels finalisieren (Di)
-- Mit Thiemann quatschen (Mi)
+- [f] 05 Inference
+  - [f] State
+  - [f] Wakeup and Saturation
+  - [f] Inference
+  - [f] Let-Generalization
+  - [f] Entry Point
+  - [f] Metatheory
+- [f] 06 Incompleteness
+  - [f] Unsolvable
+  - [f] Forced Moves
+  - [f] Inference
+- [f] 07 FC-Labels
+  - [f] Introduction
+  - [f] Syntax
+  - [f] Examples
+  - [f] Metatheory
+- [f] 08 Mechanization
+- [f] 09 Discussion
+  - [f] Idioms
+  - [f] Design Goals
+  - [ ] Outlook
+  - [f] Conclusion
+- [f] 10 Related Work
+  - [f] Old Work
+  - [f] FC-Labels
+  - [f] Expressive Row Theories
+  - [f] Subtyping Based
+  - [f] Set Theoretic
+  - [f] Gradual and Soft
+  - [f] NixLang
+- [f] 12 Appendix
+  - [f] Row Unification
+  - [f] Replay
+  - [f] FC Labels
+  - [f] MacroNix
