@@ -33,7 +33,6 @@ The extension is small: its only new judgement is a key comparison, and row unif
 
 Keys occur in two places: in the singleton type $⌊k⌋$, which describes the key $k$, and in the _keyed field_ $\${k}: τ$ of a row, whose label may be unknown. In NixLang, every string is a label, and MiniNix follows this: a tracked string has type $⌊l⌋$, and an untracked string has type $⌊∗⌋$. Both can index a record, but only the first can find a field. Stumps also abstract over keys, as in $⟨ρ.k ↓ δ⟩$, so that a scheme can defer a lookup under a key.
 
-// add reason why two ∗ can not be compared and two blur rules are needed
 We introduce this extension by examples from the introduction and @app-fc-labels gives the full set of rules.
 
 == A Three-Valued Comparison
@@ -69,9 +68,8 @@ $
 
 The scheme defers the lookup until both the key and the row are known. A use replays the stump, so one binding answers differently at different uses:
 
-// spacing is weird here when rendered
 $
-  #b[let] g = (a: x: x.\${a}) #b[in] { p = g \"l\" {l = c}; q = g \"m\" {l = c} } quad : quad {p: 𝓫 | q: ★}
+  #raw("let g = (a: x: x.${a}) in { p = g \"l\" {l = c}; q = g \"m\" {l = c}; }") quad : quad {p: 𝓫 | q: ★}
 $
 
 The first use hits and the second one misses, which is the behaviour of the selector in @sec-overview. The verdict now depends on the key as well as on the record.

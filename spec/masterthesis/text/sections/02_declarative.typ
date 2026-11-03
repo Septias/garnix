@@ -178,7 +178,7 @@ A type scheme $σ$ quantifies over type- and row-variables and carries a set $Q$
   - $θ = [β ≔ ε, δ ≔ {ε}]$ violates D-⊥, which demands $θ δ = ★$. Hence ${ε} → {ε}$ is not an instance, which is correct.
 ] <ex-selq-inst>
 
-Without stumps (Q = ε), I-inst is plain Hindley-Milner instantiation. With stumps, a scheme can be uninhabited: in $∀(δ: "Type"). ⟨(l: 𝓫).l ↓ δ⟩, ⟨ε.l ↓ δ⟩ ⇒ δ$, the first stump hits and D-hit demands $θ δ ≈ 𝓫$, while the second misses and D-⊥ demands $θ δ = ★$. Since ★ is equivalent only to itself, no θ satisfies both. [This is why T-let demands inhabitation explicitly.](preceeds its definition)
+Without stumps (Q = ε), I-inst is plain Hindley-Milner instantiation. With stumps, a scheme can be uninhabited: in $∀(δ: "Type"). ⟨(l: 𝓫).l ↓ δ⟩, ⟨ε.l ↓ δ⟩ ⇒ δ$, the first stump hits and D-hit demands $θ δ ≈ 𝓫$, while the second misses and D-⊥ demands $θ δ = ★$. Since ★ is equivalent only to itself, no θ satisfies both. T-let, defined below, therefore demands inhabitation explicitly.
 
 
 == Typing Rules

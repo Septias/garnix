@@ -1,8 +1,6 @@
 #import "../functions.typ": *
 
 
-// say here that all proves are AI-generated?
-
 = Mechanization <sec-mechanization>
 
 The metatheory and all examples of this thesis are mechanized in Lean 4, sorry-free and not using axioms beyond `propext`, `Quot.sound` and `Classical.choice`. The development started with MiniNix and first-class labels but has been extended with routine features such as booleans, conditionals, lists and builtins, to form a calculus we call MacroNix. We give a short overview of this work in @app-macronix.

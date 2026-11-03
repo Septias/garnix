@@ -212,7 +212,6 @@ A-var is the counterpart of A-let: it instantiates a qualified scheme with fresh
 
 Four conditions make a choice of $macron(α)$ admissible. They are the four lines of $"gen"_(Γ, S)$ in @generalization.
 
-// are those really the first 4 conditions?
 + _Freshness._ The generalized variables must be fresh for the environment, which here consists of Γ together with the stumps that stay parked. This is the side condition of Hindley-Milner generalization @damas_milner. It ensures that a parked stump reads the same at every instance.
 + _Own stumps._ $Δ_q$ may contain only stumps parked while inferring $e₁$, since a stump of an outer binding that is captured by the scheme would never be discharged. This condition does not follow from the others: in `{a = x: x.l; b = let y = c in c}` the stump of field a is blocked on a variable that neither Γ nor any remaining stump mentions, so the other three conditions admit its generalization into the scheme of y.
 + _Closed results._ Every variable in a generalized stump's result must itself be generalized, since otherwise each instance would pin a variable of the environment.
