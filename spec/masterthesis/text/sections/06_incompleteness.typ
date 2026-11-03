@@ -45,7 +45,7 @@ The remaining limits lie in the inference algorithm rather than in unification.
 A-let generalizes the greatest admissible $macron(α)$. A variable that violates one of the conditions stays monomorphic, together with everything it drags along, and a second use at another record may then clash. The fillability test of A-let is a syntactic approximation of inhabitation and rejects spent results on one field that differ in more than their type variables and that the merge does not identify, as in `let f = x: {p = (({m = c} ‖ x).l) c; q = x.l}`, which selects l on two different rows.
 
 // todo: explain this more thoroughly
-Nested selection such as `let g = x: (x.l).m`, record literals in a spent result, the same field spent twice on one row, a field selected once spent and once unspent on one row, and a spent stump blocked on a key of the binding, as in `let f = r: a: r.${a} c` with first-class labels (@fc-labels), pass the test and are generalized.
+Nested selection such as `let g = x: (x.l).m`, record literals in a spent result, the same field spent twice on one row, a field selected once spent and once unspent on one row, and a spent stump under a key of the binding, as in `let f = r: a: r.${a} c` with first-class labels (@fc-labels), pass the test and are generalized.
 
 
 === Unrestricted T-★-intro

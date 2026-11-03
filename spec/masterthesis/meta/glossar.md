@@ -44,8 +44,12 @@
 - *Wand equation*: (α₁ | … | αₙ) ≐ᵣ (l: 𝓫) with n ≥ 2: it has unifiers but no mgu and is reported stuck.
 - *Forced move*: A move of row unification that preserves the set of unifiers on the variables of the problem
 - *Soft typing*: Programs keep their untyped semantics; ★ marks where the analysis gave up, warnings say why
-- *Key*: A label l or a label variable α
+- *Key*: A label l, a label variable α or the unknown key ∗
+- *Unknown key ∗*: A string whose content the analysis does not track; no substitution replaces it
 - *Keyed field*: A row field ${k}: τ whose label is a key
+- *Key comparison*: Three-valued: equal for one literal, apart for two different literals, undecided for every other pair, even α against itself
+- *Barrier*: A row-variable or a keyed field under a non-literal key; a lookup stops there and answers ?
+- *Opaque lookup*: A lookup undecided at every instance, because it compares with ∗; it has no blocker, and inference answers it with ★
 - *Unknown type ★*: The type of what the analysis cannot decide; no elimination form, unifies only with itself
 - *Field demand*: What other row systems hand to unification for a selection; used only to contrast with our lookup relation
 - *Scoped labels*: Duplicate labels stay in the row; lookup takes the leftmost occurrence, and ‖ puts its right operand first, so the right operand wins
