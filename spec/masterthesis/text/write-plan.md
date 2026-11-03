@@ -46,10 +46,7 @@ The development of MacroNix is just for test purposes, don't mention it too ofte
 
 
 ## Final Cleanup
-- Check the syntax whether it is ambiguous
-- Check the claims for references
 - [ ] You are a professor in PL, go over the thesis text and critique it's claims and wording based on your expertise.
-- [ ] Go over the thesis text and mark every place where wording is loose in a sense, that the terminalogy is not suited for the claim.
 - [ ] Check all claims made in related work against the paper sources in plaintext/
 - [ ] Check rigidness of presentation
 
