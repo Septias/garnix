@@ -14,9 +14,9 @@ We prove type safety up to lookup errors in the syntactic style of Wright and Fe
   If $∅ ⊢ e : τ$ and $e → e′$, then $∅ ⊢ e′ : τ$.
 ] <thm-preservation>
 
-Progress holds only up to lookup errors because some lookups might be typed as ★ and we cannot guarantee non-failure over this fragment.
+Progress holds only up to lookup errors because some lookups might be typed as ★ and we cannot guarantee non-failure over this fragment. //[A derivation without T-sel-★/T-sel-⊥ never produces ↯.](needs to be proven still I reckon)
 
-// a derivation without T-sel-★/T-sel-⊥ never produces ↯
+
 == Precision <refinement>
 
 T-sel-★, T-sel-⊥ and T-★-intro place ★ where a more informative type may also be derivable. The following order compares typings by how much of this information they keep.
@@ -58,4 +58,4 @@ $ "selQ" quad = quad ∀(β: "Row", δ: "Type"). #h(0.3em) ⟨β.l ↓ δ⟩ ⇒
   selQ is principal for `x: x.l` in the empty context. Moreover, selQ is greatest among the schemes whose instances are all typings of `x: x.l`: every instance τ of such a scheme is matched by an instance τ′ of selQ with $τ′ ≼ τ$.
 ] <thm-selq>
 
-Discharge pins δ to the lookup's verdict, so ${ε} → {ε}$ is excluded. One binding then serves incompatible uses. The inference algorithm of @inference answers `x: x.l` with a scheme that has the instances of selQ, so its answer is principal (`runF_selEx_principal` in Lean).
+Discharge pins δ to the lookup's verdict, so ${ε} → {ε}$ is excluded. One binding then serves incompatible uses. The inference algorithm of @inference answers `x: x.l` with a scheme that has the instances of selQ, so its answer is principal.

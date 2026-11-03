@@ -3,9 +3,9 @@
 
 = First-Class Labels <fc-labels>
 
-In NixLang, the expression `x.${e}` selects the field named by an arbitrary string expression e, and the expression `{ ${e} = v; }` binds a value to the label that e computes. Labels are thus first-class values that can be computed. This section extends MiniNix with first-class labels and shows how the approach for row variables naturally translates to label variables. A field under an unknown label acts like a row-variable: a lookup cannot pass it, since the field may carry the sought label. We call both forms a _barrier_. A lookup that stops at a barrier answers $?$, a stump defers the lookup, and each instance answers the stump. An answer that never arrives is ★.
+In NixLang, the expression `x.${e}` selects the field named by an arbitrary string expression e, and the expression `{ ${e} = v; }` binds a value to the label that e computes. Labels are thus first-class values. This section extends MiniNix with first-class labels and carries the treatment of row-variables over: A field under an unknown label behaves just like a row-variable. Shadow behaviour is unclear, a lookup cannot pass it and a selection has to park. We put both row and label variables under the term _barrier_ and the same mechanism of qualified schemes and parking translate.
 
-The extension is very benign: It only adds a key comparison and one move of row unification. The other rules only need simple adjustements, mostly to swap an explicit label for a _key_.
+The extension is small: its only new judgement is a key comparison, and row unification gains one move. The remaining rules are new cases for keys and labels or minor adjustments of existing rules, mostly replaceming the  explicit label by a _key_.
 
 #let fc_syntax = figure(
   caption: [Syntax of first-class labels, as an extension of @syntax.],
@@ -29,12 +29,12 @@ The extension is very benign: It only adds a key comparison and one move of row 
 )
 #fc_syntax <fc-syntax>
 
-@fc-syntax gives the syntax extension for first-class labels. The term $\"l\"$ is a string literal and a value. Records can be indexed and extended by arbitrary expressions, just like the introduction showed. We abstract over labels and call the result a _key_. A key $k$ is a label $l$, a label variable $α$ (of label-sort), or the _unknown key_ ∗. The unknown key stands for a string whose content the analysis does not track, for example the result of a builtin that computes a string.
+@fc-syntax gives the syntax of the extension. The term $\"l\"$ is a string literal and a value. Records can be indexed and extended by arbitrary expressions, as the introduction showed. We abstract over labels by _keys_. A key $k$ is a label $l$, a label variable $α$ of sort Label, or the _unknown key_ ∗. The unknown key stands for a string whose content the analysis does not track, for example the result of a builtin that computes a string.
 
-Keys occur in two places: in the singleton type $⌊k⌋$ that describes the key $k$ and in the _keyed field_ $\${k}: τ$ of a row whose label is not known yet. In nix, every string is a label and we do the same: A trackable string is of type $⌊l⌋$ and an untrackable one of $⌊∗⌋$. Both can be used to index a record but only one gives a definite answer. Stumps also abstract over keys $⟨ρ.k ↓ δ⟩$, so that a scheme can defer a lookup under a key.
+Keys occur in two places: in the singleton type $⌊k⌋$, which describes the key $k$, and in the _keyed field_ $\${k}: τ$ of a row, whose label may be unknown. In NixLang, every string is a label, and MiniNix follows this: a tracked string has type $⌊l⌋$, and an untracked string has type $⌊∗⌋$. Both can index a record, but only the first can find a field. Stumps also abstract over keys, as in $⟨ρ.k ↓ δ⟩$, so that a scheme can defer a lookup under a key.
 
 // add reason why two ∗ can not be compared and two blur rules are needed
-We introduce the extension by examples from the introduction and @app-fc-labels gives the remaining rules.
+We introduce this extension by examples from the introduction and @app-fc-labels gives the full set of rules.
 
 == A Three-Valued Comparison
 
@@ -57,7 +57,7 @@ We introduce the extension by examples from the introduction and @app-fc-labels 
 
 @fc-lookup gives the only new judgement. The three outcomes of the key comparison are the three verdicts of the lookup relation of @row-lookup: two literals are equal or apart, and every other pair is undecided. A label variable is undecided even against itself. Stability forces this choice: an instance may send α to ∗, and ∗ is undecided against itself, since two strings of unknown content need not be equal.
 
-An undecided comparison answers $?$ exactly as a row-variable does, and a keyed field under a non-literal key behaves like a row-variable. We call both a _barrier_. A field in front of $\${α}: τ$ may carry the label that α becomes, so swapping the two fields would change which of them a lookup finds. Spines and segments of @trace-monoid carry over with barriers in place of row-variables, and so does @thm-char. Only the variable that blocks a lookup changes: the _blocker_ of a $?$ may now be a label variable.
+An undecided comparison answers $?$ exactly as a row-variable does, and a keyed field under a non-literal key behaves like a row-variable. A field in front of $\${α}: τ$ may carry the label that α becomes, so swapping the two fields would change which of them a lookup finds. Spines and segments of @trace-monoid carry over with barriers in place of row-variables, and so does @thm-char. Only the variable that blocks a lookup changes: the _blocker_ of a $?$ may now be a label variable.
 
 == Selection under a Key
 
@@ -158,7 +158,7 @@ Progress up to lookup errors, preservation, the unification theorems of @unifica
 
 == Costs
 
-The extension has rough edges. First, unknown keys have no identity. In `a: {${a} = c}.${a}`, the lookup compares α with itself and stays undecided, so the program answers $∀(α: "Label", δ: "Type"). ⟨(\${α}: 𝓫_c).α ↓ δ⟩ ⇒ ⌊α⌋ → δ$. The stump hits at every literal instance but not at ∗, and a string of unknown content selects nothing, not even from the record it has built. Identity is the price of stability, since $α ≡ α$ would become $∗ ≟ ∗$ at the instance $[α ≔ ∗]$.
+The extension has costs. First, unknown keys have no identity. In `a: {${a} = c}.${a}`, the lookup compares α with itself and stays undecided, so the program answers $∀(α: "Label", δ: "Type"). ⟨(\${α}: 𝓫_c).α ↓ δ⟩ ⇒ ⌊α⌋ → δ$. The stump hits at every literal instance but not at ∗, and a string of unknown content selects nothing, not even from the record it has built. Identity is the price of stability, since $α ≡ α$ would become $∗ ≟ ∗$ at the instance $[α ≔ ∗]$.
 
 Second, two different literals meet only by T-lab-blur, which inference does not apply. `f: { a = f "x"; b = f "y"; }` clashes, although the declarative system types it at $(⌊∗⌋ → 𝓫) → {a: 𝓫 | b: 𝓫}$. This is the incompleteness of T-★-intro (@incompleteness-inference) at the level of keys.
 

@@ -8,7 +8,7 @@ The inference algorithm is sound but not complete. This section describes where 
 
 == Irreducible Problems <incompleteness-irreducible>
 
-The Wand ambiguity is the prime example of a unification problem without a most general unifier. It has a finite complete set of unifiers, one for every origin of the field, but no single unifier covers the others. Two more problems lack a most general unifier too:
+The Wand ambiguity is the prime example of a unification problem without a most general unifier. It has a finite complete set of unifiers, one for every origin of the field, but no single unifier covers the others. Two more problems lack a most general unifier aswell:
 
 #proposition(
   name: [Irreducible problems],
