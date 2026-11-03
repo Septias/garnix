@@ -12,6 +12,13 @@ related:
 
 # Findings
 
+## `gradual.typ` ≃ᵣ against Sekiyama-Igarashi (2026-11-03)
+Status: open. Nothing changed in `lean/` or `text/`. Brute force on paper rules, not proved: labels {l, m}, flat field types, rows of length ≤ 3 with at most two ★ᵣ, ★ᵣ filled with at most 3 atoms.
+- Their Lemma 4.2 (inversion, which makes ≃ syntax-directed) fails with mid-row ★ᵣ: `(l:𝓫) ≃ᵣ (★ᵣ | l:𝓫)` holds by CE-★ᵣ-R, but CE-field-L goes through SP-★ᵣ and leaves `⟨⟩ ≃ᵣ (★ᵣ | l:𝓫)`, which fails. 2656 pairs. A checker has to backtrack over rule order.
+- `gradual.typ:282` (≃ iff common ⊑-lower bound) fails right to left: `(★ᵣ | l:𝓫)` and `(★ᵣ | m:𝓫)` share the lower bound `(l:𝓫 | m:𝓫)` but are not ≃ᵣ. 2826 pairs. Both rows arise from `{x = 1} // args`.
+- Holds in the same range: reflexive, symmetric, left to right of `gradual.typ:282`. On tail-only rows, their own syntax, rules and lower bounds agree exactly and inversion holds.
+- `gradual.typ:28` says call-by-name application and let; `Step.beta` (`lean/minimal.lean:1594`) is call-by-value.
+
 ## Replay at A-var and saturation (2026-11-02)
 Status: open. Nothing changed in `lean/` or `text/`; the replay claim is tested, not proved.
 
