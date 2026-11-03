@@ -67,7 +67,7 @@
     np-f[Floats, paths, `<nixpkgs>`, URIs], np-n, np-r[further base types and their coercions],
     np-f[Optional fields, `if c then {a = 1;} else {}`], np-n, np-r[rejected declaratively; needs a dynamic row ★ᵣ (Gradual)],
     np-f[Heterogeneous lists], np-n, np-r[`[★]` declaratively, clash algorithmically (Gradual)],
-    np-f[`is*` predicates, `typeOf`], np-n, np-r[typable as `α → bool`; useful only with occurrence typing],
+    np-f[`is*` predicates, `typeOf`], np-n, np-r[typable as `γ → bool`; useful only with occurrence typing],
     np-f[`elem` `all` `any` `concatMap` `genList` `sort` `concatLists`], np-n, np-r[routine, not added],
     np-f[String builtins (`substring`, `replaceStrings`, `match`, …)], np-n, np-r[routine, not added],
     np-f[`attrNames` `attrValues` `mapAttrs` `listToAttrs` `catAttrs`], np-n, np-r[need label lists or type connectives],
