@@ -5,7 +5,7 @@
 
 In NixLang, the expression `x.${e}` selects the field named by an arbitrary string expression e, and the expression `{ ${e} = v; }` binds a value to the label that e computes. Labels are thus first-class values. This section extends MiniNix with first-class labels and carries the treatment of row-variables over: A field under an unknown label behaves just like a row-variable. Shadow behaviour is unclear, a lookup cannot pass it and a selection has to park. We put both row and label variables under the term _barrier_ and the same mechanism of qualified schemes and parking translate.
 
-The extension is small: its only new judgement is a key comparison, and row unification gains one move. The remaining rules are new cases for keys and labels or minor adjustments of existing rules, mostly replaceming the  explicit label by a _key_.
+The extension is small: its only new judgement is a key comparison, and row unification gains one move. The remaining rules are new cases for keys and labels or minor adjustments of existing rules, mostly replacing the explicit label by a _key_.
 
 #let fc_syntax = figure(
   caption: [Syntax of first-class labels, as an extension of @syntax.],

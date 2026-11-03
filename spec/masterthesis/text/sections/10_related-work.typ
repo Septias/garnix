@@ -13,7 +13,7 @@
 
   == Things
   - @symm_concat: Not expressive enough
-  - @conlat4muiltiinher: No principaled types, no inference, shows Wand-ambiguity
+  - @conlat4muiltiinher: No principled types, no inference, shows Wand-ambiguity
   - @ohori: too restricted
   - @xie2020row:
   - @concat4free: removed
@@ -35,7 +35,7 @@ _Scoped labels and unification._ MiniNix builds on the scoped labels of Leijen @
 MiniNix is closer to Rose than to the classic calculi. Stumps are predicates in the sense of qualified types @qualified_types, and the solver state is a constraint store. The two systems differ in strategy. MiniNix decides a stump only by evaluating its lookup. Row unification makes only forced moves and reports a stuck verdict where a choice would be needed. A use that would need a disjunction types the lookup at ★. MiniNix thus gives up precision in exchange for a solver without search.
 
 
-_Gradual and soft typing._ Gradual typing @gradual_siek @gradual_criteria inserts runtime casts at the boundary between typed and untyped code, with blame tracking @cantblamethis @blame_for_all. Sekiyama and Igarashi @gradual_extensible_rows instantiate gradual typing for extensible rows with a dynamic row type, the system closest in spirit to our ★-typed rows. The dynamic row type is backed by casts that check at run time, whereas ★ has no runtime counterpart, because casts would change evaluation (G2). To combine theirs an our work with non-forcing cast in the fashion of @[thiemann](cite) is an interesting direction of further work.
+_Gradual and soft typing._ Gradual typing @gradual_siek @gradual_criteria inserts runtime casts at the boundary between typed and untyped code, with blame tracking @cantblamethis @blame_for_all. Sekiyama and Igarashi @gradual_extensible_rows instantiate gradual typing for extensible rows with a dynamic row type, the system closest in spirit to our ★-typed rows. The dynamic row type is backed by casts that check at run time, whereas ★ has no runtime counterpart, because casts would change evaluation (G2). To combine theirs and our work with non-forcing cast in the fashion of @[thiemann](cite) is an interesting direction of further work.
 
 Our system is a _soft_ typing system in the tradition of Cartwright and Fagan @soft_typing @practical_soft_typing and the "static where possible, dynamic when needed" school @coldwar: every program keeps its untyped semantics, ★ marks the places the analysis gave up, and the metatheory states the residual risk as the ↯-disjunct of progress (@type-safety). We use the term in a narrower sense. Cartwright and Fagan accept every program and insert run-time checks where the analysis fails. Our system inserts no checks and can reject programs, at a clash or at an elimination of ★ (@sec-goals). Both analyses take the untyped semantics as the reference and report what they cannot decide.
 
