@@ -307,4 +307,4 @@ The concrete signature of the development provides integers and `null` as consta
 
 #nix-parity <fig-nix-parity>
 
-One limitation is new. Since the branches of a conditional are unified, a conditional whose branches have different record types is rejected, as in the conditional extension of @sec-idioms written with `if` instead of a parameter. The declarative system rejects it as well: the only common type of `{a = 1;}` and `{}` is ★, which cannot be concatenated. Rows cannot express that a field may be present.
+One limitation is new. Since the branches of a conditional are unified, a conditional whose branches have different record types is rejected, as in the conditional extension of @sec-idioms written with `if` instead of a parameter. The declarative system rejects it as well: the only common type of `{a = 1}` and `{}` is ★, which cannot be concatenated. Rows cannot express that a field may be present.

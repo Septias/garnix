@@ -69,7 +69,7 @@ $
 The scheme defers the lookup until both the key and the row are known. A use replays the stump, so one binding answers differently at different uses:
 
 $
-  #raw("let g = (a: x: x.${a}) in { p = g \"l\" {l = c}; q = g \"m\" {l = c}; }") quad : quad {p: 𝓫 | q: ★}
+  #raw("let g = (a: x: x.${a}) in {p = g \"l\" {l = c} | q = g \"m\" {l = c}}") quad : quad {p: 𝓫 | q: ★}
 $
 
 The first use hits and the second one misses, which is the behaviour of the selector in @sec-overview. The verdict now depends on the key as well as on the record.
@@ -80,11 +80,11 @@ $
   ∀(κ: "Label", ρ₁, ρ₂: "Row", δ: "Type"). #h(0.3em) ⟨ρ₁.κ ↓ {ρ₂}⟩, ⟨ρ₂."default" ↓ δ⟩ ⇒ ⌊κ⌋ → {ρ₁} → δ.
 $
 
-The first stump is spent, since its result is selected from. Applied to `"x86"` and `{ x86 = { default = c; }; }`, both stumps hit, and the application has type 𝓫.
+The first stump is spent, since its result is selected from. Applied to `"x86"` and `{x86 = {default = c}}`, both stumps hit, and the application has type 𝓫.
 
 == The Wand Ambiguity under a Key
 
-Concatenation with a computed field combines the Wand ambiguity with first-class labels. The function `n: r: (r ‖ { ${n} = c; }).l` overrides a field under an unknown name and then reads l. Given $n: ⌊κ⌋$ and $r: {ρ}$, the concatenation has type ${\${κ}: 𝓫 | ρ}$. The lookup of l stops at the barrier and answers $?$, since κ may become l. The answer is recorded like every other pending lookup:
+Concatenation with a computed field combines the Wand ambiguity with first-class labels. The function `n: r: (r ‖ {${n} = c}).l` overrides a field under an unknown name and then reads l. Given $n: ⌊κ⌋$ and $r: {ρ}$, the concatenation has type ${\${κ}: 𝓫 | ρ}$. The lookup of l stops at the barrier and answers $?$, since κ may become l. The answer is recorded like every other pending lookup:
 
 $
   ∀(κ: "Label", ρ: "Row", δ: "Type"). #h(0.3em) ⟨(\${κ}: 𝓫 | ρ).l ↓ δ⟩ ⇒ ⌊κ⌋ → {ρ} → δ
@@ -93,7 +93,7 @@ $
 The structure is the one of the scheme in @sec-overview, with κ in place of the row-variable β. @fc-instances lists its uses.
 
 #figure(
-  caption: [Instances of `n: r: (r ‖ { ${n} = c; }).l`.],
+  caption: [Instances of `n: r: (r ‖ {${n} = c}).l`.],
   table(
     columns: (auto, auto, auto),
     align: left,
@@ -103,9 +103,9 @@ The structure is the one of the scheme in @sec-overview, with κ in place of the
     table.hline(),
     [`"l"`], [${ρ} → 𝓫$], [hits the keyed field],
     [`"m"`], [$⟨(m: 𝓫 | ρ).l ↓ δ⟩ ⇒ {ρ} → δ$], [$?$, now blocked on ρ],
-    [`"m"`, `{ l = {}; }`], [${ε}$], [hits the field of r],
-    [`"m"`, `{ }`], [★], [misses],
-    [`toString 1`, `{ l = {}; }`], [★], [$?$ at every instance],
+    [`"m"`, `{l = {}}`], [${ε}$], [hits the field of r],
+    [`"m"`, `{}`], [★], [misses],
+    [`toString 1`, `{l = {}}`], [★], [$?$ at every instance],
     table.hline(),
   ),
 ) <fc-instances>
@@ -118,7 +118,7 @@ The instance at `"l"` no longer depends on the row: the keyed field shadows ever
   A comparison of ∗ with a literal or with ∗ is undecided at every instance, since ∗ is no variable and no substitution replaces it. A lookup that stops at such a comparison is _opaque_. An opaque lookup has no blocker and nothing can answer it later, so inference answers it like a miss. The time program of the introduction is the smallest example:
 
   $
-    #raw("{ \"1759190400\" = 1; }.${toString builtins.currentTime}") quad : quad ★
+    #raw("{\"1759190400\" = 1}.${toString builtins.currentTime}") quad : quad ★
   $
 
   The program types at ★ with a warning and evaluates as in NixLang. This is the role of ★ in G3: the analysis gives up on the selection, and the program is not rejected. ★ has no eliminators, so a further selection from the result clashes.
@@ -126,8 +126,8 @@ The instance at `"l"` no longer depends on the row: the keyed field shadows ever
   A barrier under ∗ hides only what lies behind it. Scoped labels keep the order of the fields, so a lookup that hits in front of the barrier stays definite:
 
   $
-    #raw("({ ${toString 1} = 1; } ‖ { l = \"x\"; }).l") & quad : quad ⌊x⌋ \
-    #raw("({ l = \"x\"; } ‖ { ${toString 1} = 1; }).l") & quad : quad ★
+    #raw("({${toString 1} = 1} ‖ {l = \"x\"}).l") & quad : quad ⌊x⌋ \
+    #raw("({l = \"x\"} ‖ {${toString 1} = 1}).l") & quad : quad ★
   $
 
   In the first program the literal field is the right operand and shadows the computed field at every instance. In the second program the computed field may shadow l, and its name is never known. Both answers are faithful to the semantics of `//`.
@@ -138,14 +138,14 @@ The instance at `"l"` no longer depends on the row: the keyed field shadows ever
 Row unification needs one new move. A one-field row is equivalent to another one-field row only under the same key, so every unifier identifies the two keys. U-key-pin binds the key variable accordingly:
 
 $
-  #raw("f: a: { p = f { ${a} = c; }; q = f { l = c; }; }") \
+  #raw("f: a: {p = f {${a} = c} | q = f {l = c}}") \
   : quad ({l: 𝓫} → δ) → ⌊l⌋ → {p: δ | q: δ}
 $
 
 The two calls unify $(\${α}: 𝓫)$ with $(l: 𝓫)$, and the key of a is pinned to l. Beyond a single field the binding is no longer forced. The two calls of
 
 $
-  #raw("f: a: b: { p = f ({ m = c; } ‖ { ${a} = c; }); q = f ({ ${b} = c; } ‖ { m = c; }); }")
+  #raw("f: a: b: {p = f ({m = c} ‖ {${a} = c}) | q = f ({${b} = c} ‖ {m = c})}")
 $
 
 unify $(\${α}: 𝓫 | m: 𝓫)$ with $(m: 𝓫 | \${β}: 𝓫)$. Every label l yields the unifier $[α ≔ l, β ≔ l]$, while $[α ≔ β]$ is no unifier, since m cannot cross the barrier. These unifiers have no common generalization, and the problem is reported as #u_stuck. The problem has the shape of the two-sided problem of @incompleteness-irreducible, with keyed fields as the barriers on opposite ends.
@@ -158,7 +158,7 @@ Progress up to lookup errors, preservation, the unification theorems of @unifica
 
 The extension has costs. First, unknown keys have no identity. In `a: {${a} = c}.${a}`, the lookup compares α with itself and stays undecided, so the program answers $∀(α: "Label", δ: "Type"). ⟨(\${α}: 𝓫_c).α ↓ δ⟩ ⇒ ⌊α⌋ → δ$. The stump hits at every literal instance but not at ∗, and a string of unknown content selects nothing, not even from the record it has built. Identity is the price of stability, since $α ≡ α$ would become $∗ ≟ ∗$ at the instance $[α ≔ ∗]$.
 
-Second, two different literals meet only by T-lab-blur, which inference does not apply. `f: { a = f "x"; b = f "y"; }` clashes, although the declarative system types it at $(⌊∗⌋ → 𝓫) → {a: 𝓫 | b: 𝓫}$. This is the incompleteness of T-★-intro (@incompleteness-inference) at the level of keys.
+Second, two different literals meet only by T-lab-blur, which inference does not apply. `f: {a = f "x" | b = f "y"}` clashes, although the declarative system types it at $(⌊∗⌋ → 𝓫) → {a: 𝓫 | b: 𝓫}$. This is the incompleteness of T-★-intro (@incompleteness-inference) at the level of keys.
 
 // the following two are too advanced:
 // Third, keyed fields are barriers. Beyond the single-field case of U-key-pin, a keyed field against a literal field and two keyed fields under different keys are stuck, and a lookup stops at every keyed barrier. Both follow from the absence of negative information about keys: the knowledge $α ≠ l$ would let $l: τ$ cross $\${α}: τ′$.
