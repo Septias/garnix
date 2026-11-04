@@ -129,7 +129,7 @@ This appendix collects the rules and lemmas of the first-class labels extension 
 
 == Keyed Lookup
 
-The rules L-ε, L-var and the three concatenation rules of @row-lookup carry over to @fc-lookup with k in place of l. On two literals, L-hit and L-miss are the rules of @row-lookup, and L-\? is a new source of ?.
+The rules L-ε, L-var and the three concatenation rules of @row-lookup carry over to @fc-lookup with k in place of l. L-hit and L-miss are the rules of @row-lookup under a literal key, and L-\? is a new source of ?.
 
 #lemma(
   name: [Keyed lookup],
@@ -153,7 +153,7 @@ The rules L-ε, L-var and the three concatenation rules of @row-lookup carry ove
 
 Row equivalence extends to keyed fields by two rules (@fc-equiv). ≈-dfield is congruence under one key. ≈-dlab identifies a keyed field under a literal with the literal field. ≈-comm needs no extension: its premise $l₁ ≠ l₂$ is apartness, and only literals are apart. A keyed barrier therefore commutes with nothing, not even with a field under the same label variable: both fields carry the same label at every instance, and the left one wins.
 
-The trace monoid of @trace-monoid carries over with barriers in place of row-variables. Spines acquire two atoms, $a ::= l: τ | α | \${β}: τ | \${∗}: τ$. A keyed field under a literal needs no atom, since ≈-dlab normalizes it to a literal field. A segment is a barrier-free part of a spine, and @thm-char reads: $ρ₁ ≈ ρ₂$ if and only if both rows have the same sequence of barriers, where two keyed barriers are the same when their keys are equal and their field types are equivalent, and the fields of every label agree pointwise up to ≈ in every segment (`rowEquiv_iff_char`). The monoid remains cancellative on both sides (@lem-cancel).
+The trace monoid of @trace-monoid carries over with barriers in place of row-variables. Spines acquire two atoms, $a ::= l: τ | β | \${α}: τ | \${∗}: τ$. A keyed field under a literal needs no atom, since ≈-dlab normalizes it to a literal field. A segment is a barrier-free part of a spine, and @thm-char reads: $ρ₁ ≈ ρ₂$ if and only if both rows have the same sequence of barriers, where two keyed barriers are the same when their keys are equal and their field types are equivalent, and the fields of every label agree pointwise up to ≈ in every segment (`rowEquiv_iff_char`). The monoid remains cancellative on both sides (@lem-cancel).
 
 
 == Typing and Evaluation
@@ -215,25 +215,27 @@ The evaluation rules reduce the key to a string literal and then proceed as for 
 #let fc_unif = figure(
   caption: [Unification of keys and of keyed fields, extending @unification-ty and @unification-cascade.],
   flexbox(
-    derive("U-lab", ($l = l′$,), $⌊l⌋ ≐ ⌊l′⌋ ⇝ ∅$),
-    derive("U-lab-clash", ($l ≠ l′$,), $⌊l⌋ ≐ ⌊l′⌋ ⇝ #u_clash$),
-    derive("U-key-∗", (), $⌊∗⌋ ≐ ⌊∗⌋ ⇝ ∅$),
-    derive("U-key-∗-clash", (), $⌊∗⌋ ≐ ⌊l⌋ ⇝ #u_clash$),
-    derive("U-key-bind", (), $⌊α⌋ ≐ ⌊k⌋ ⇝ [α ≔ k]$),
+    derive("U-key-refl", (), $⌊k⌋ ≐ ⌊k⌋ ⇝ ∅$),
+    derive("U-key-bind", ($k ≠ α$,), $⌊α⌋ ≐ ⌊k⌋ ⇝ [α ≔ k]$),
+    derive(
+      "U-key-clash",
+      ($k, k′ "not variables"$, $k ≠ k′$),
+      $⌊k⌋ ≐ ⌊k′⌋ ⇝ #u_clash$,
+    ),
     derive(
       "U-key-pin",
-      ($"key"(f) = k ≠ α$, $[α ≔ k]⟨\${α}: τ⟩ scripts(≐)_r [α ≔ k]⟨f⟩ ⇝ θ$),
-      $⟨\${α}: τ⟩ scripts(≐)_r ⟨f⟩ ⇝ θ ∘ [α ≔ k]$,
+      ($k ≠ α$, $[α ≔ k]τ ≐ [α ≔ k]τ′ ⇝ θ$),
+      $⟨\${α}: τ⟩ scripts(≐)_r ⟨\${k}: τ′⟩ ⇝ θ ∘ [α ≔ k]$,
     ),
   ),
 )
 #fc_unif <fc-unification>
 
-@fc-unification extends unification with the rules for keys. U-lab and U-lab-clash compare two literals. The key ∗ is rigid: it unifies with itself (U-key-∗) and with a variable (U-key-bind), and $⌊∗⌋$ clashes with $⌊l⌋$ (U-key-∗-clash). U-key-pin is the one new move on rows.
+@fc-unification extends unification with the rules for keys. Equal keys unify (U-key-refl), a variable binds to any other key (U-key-bind), also with the sides exchanged, and two different keys that are not variables clash (U-key-clash). The key ∗ is therefore rigid: it unifies with itself and with a variable, and $⌊∗⌋$ clashes with $⌊l⌋$. U-key-pin is the one new move on rows.
 
-U-key-pin applies when each side consists of a single field under different keys and at least one key is a variable. A one-field row is equivalent to another only under the same key, so every unifier identifies the two keys. The move binds the variable to the other key and runs the problem again, where both fields now have the same key. Here f is a single field, and key(f) is its label or its key. U-key-pin is tried in both directions. It solves $⟨l: τ⟩ scripts(≐)_r ⟨\${α}: τ′⟩$ with $[α ≔ l]$ and $⟨\${α}: τ⟩ scripts(≐)_r ⟨\${β}: τ′⟩$ with $[α ≔ β]$. The second solution is most general, since $[α ≔ l, β ≔ l] = [β ≔ l] ∘ [α ≔ β]$. Against $\${∗}: τ′$, the move binds α to ∗.
+U-key-pin applies when each side consists of a single field under different keys and at least one key is a variable. A one-field row is equivalent to another only under the same key, so every unifier identifies the two keys. The move binds the variable to the other key and unifies the field types under this binding, since α may occur in them. U-key-pin is tried in both directions. It solves $⟨l: τ⟩ scripts(≐)_r ⟨\${α}: τ′⟩$ with $[α ≔ l]$ and $⟨\${α}: τ⟩ scripts(≐)_r ⟨\${β}: τ′⟩$ with $[α ≔ β]$. The second solution is most general, since $[α ≔ l, β ≔ l] = [β ≔ l] ∘ [α ≔ β]$. Against $\${∗}: τ′$, the move binds α to ∗.
 
-For more than one field, the binding is not forced (@fc-labels), so keyed fields under different keys stay stuck. A literal field against a field under ∗, $⟨l: τ⟩ scripts(≐)_r ⟨\${∗}: τ′⟩$, has no unifier, but no move detects this, and the verdict is stuck. The metatheory of @unification-metatheory holds as stated: success is most general, clash and occurs are sound, and the algorithm terminates. U-key-pin does not shrink the problem, but it always binds a variable, so the residual has fewer variables.
+For more than one field, the binding is not forced (@fc-labels), so keyed fields under different keys stay stuck. A literal field against a field under ∗, $⟨l: τ⟩ scripts(≐)_r ⟨\${∗}: τ′⟩$, has no unifier, but no move detects this, and the verdict is stuck. The metatheory of @unification-metatheory holds as stated: success is most general, clash and occurs are sound, and the algorithm terminates. U-key-pin always binds a variable, so the residual has fewer variables.
 
 == Inference <sec-fc-inference>
 
@@ -245,35 +247,35 @@ For more than one field, the binding is not forced (@fc-labels), so keyed fields
       "A-sel-dyn",
       stack(
         spacing: 8pt,
-        $Γ; S ⊢ e₁ ⇒ τ₁; S₁ #h(2em) "fresh" ρ: "Row" #h(2em) S₁ ⊢ τ₁ ≐ {ρ} #st_solve S₂ #h(2em) Γ; S₂ ⊢ e₂ ⇒ τ₂; S₃$,
-        $"fresh" β: "Label" #h(2em) S₃ ⊢ τ₂ ≐ ⌊β⌋ #st_solve S₄ #h(2em) (⟦S₄⟧ρ).(⟦S₄⟧β) ↓ τ′$,
+        $Γ; S ⊢ e₁ ⇒ τ₁; S₁ #h(2em) "fresh" β: "Row" #h(2em) S₁ ⊢ τ₁ ≐ {β} #st_solve S₂ #h(2em) Γ; S₂ ⊢ e₂ ⇒ τ₂; S₃$,
+        $"fresh" α: "Label" #h(2em) S₃ ⊢ τ₂ ≐ ⌊α⌋ #st_solve S₄ #h(2em) (⟦S₄⟧β).(⟦S₄⟧α) ↓ τ′$,
       ),
       $Γ; S ⊢ e₁.\${e₂} ⇒ τ′; S₄$,
     ),
     derive(
       "A-sel-dyn-⊥",
-      ($…$, $(⟦S₄⟧ρ).(⟦S₄⟧β) ↓ ⊥ "or opaque"$),
+      ($…$, $(⟦S₄⟧β).(⟦S₄⟧α) ↓ ⊥ "or opaque"$),
       $Γ; S ⊢ e₁.\${e₂} ⇒ ★; S₄$,
     ),
     derive(
       "A-sel-dyn-?",
-      ($…$, $(⟦S₄⟧ρ).(⟦S₄⟧β) ↓ #h(0.2em) ? "on" α$, $"fresh" δ: "Type"$),
-      $Γ; S ⊢ e₁.\${e₂} ⇒ δ; S₄ #st_park ⟨α ⊳ ρ.β ↓ δ⟩$,
+      ($…$, $(⟦S₄⟧β).(⟦S₄⟧α) ↓ #h(0.2em) ? "on" γ$, $"fresh" δ: "Type"$),
+      $Γ; S ⊢ e₁.\${e₂} ⇒ δ; S₄ #st_park ⟨γ ⊳ β.α ↓ δ⟩$,
     ),
     derive(
       "A-rcd-dyn",
       stack(
         spacing: 8pt,
         $Γ; S ⊢ e₁ ⇒ τ₁; S₁ #h(2em) Γ; S₁ ⊢ e₂ ⇒ τ₂; S₂$,
-        $"fresh" β: "Label" #h(2em) S₂ ⊢ τ₁ ≐ ⌊β⌋ #st_solve S₃$,
+        $"fresh" α: "Label" #h(2em) S₂ ⊢ τ₁ ≐ ⌊α⌋ #st_solve S₃$,
       ),
-      $Γ; S ⊢ { \${e₁} = e₂ } ⇒ { \${β}: τ₂ }; S₃$,
+      $Γ; S ⊢ { \${e₁} = e₂ } ⇒ { \${α}: τ₂ }; S₃$,
     ),
   ),
 )
 #fc_infer <fc-inference>
 
-@fc-inference gives the algorithmic rules. Dynamic selection follows A-sel, A-sel-⊥ and A-sel-\? of @inference-rules: the key is unified with $⌊β⌋$ for a fresh label variable β, and the keyed lookup runs on the row and the key as solved so far. A-sel-dyn-⊥ also answers an opaque lookup with ★, since no instance decides it. A-sel-dyn-\? parks the stump on its blocker, which may be a label variable. A-rcd-dyn performs no lookup and parks nothing, and the keyed field records β.
+@fc-inference gives the algorithmic rules. Dynamic selection follows A-sel, A-sel-⊥ and A-sel-\? of @inference-rules: the key is unified with $⌊α⌋$ for a fresh label variable α, and the keyed lookup runs on the row and the key as solved so far. A-sel-dyn-⊥ also answers an opaque lookup with ★, since no instance decides it. A-sel-dyn-\? parks the stump on its blocker, which may be a label variable. A-rcd-dyn performs no lookup and parks nothing, and the keyed field records α.
 
 = MacroNix <app-macronix>
 
