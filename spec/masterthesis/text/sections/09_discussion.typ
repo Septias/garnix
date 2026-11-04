@@ -2,43 +2,41 @@
 
 = Discussion and Conclusion <sec-discussion>
 
+We now show our type inference algorithm in action on real Nix snippets. We then revisit the design goals stated in @sec-motivation, give an outlook for further work and the path to full type inference for NixLang and finally conclude the thesis.
 
 == The Idioms of the Introduction <sec-idioms>
 
-We return to the three expressions from the introduction @nix-idioms and conduct a case study on their typing to. The types below are result of the Lean implementation of the inference algorithm from @inference on MacroNix (@app-macronix), which extends MiniNix by booleans, lists and a limited set of builtins. The programs are only adapted slightly to fit the algorithm by turning free names into parameters.
+We return to the three expressions from the introduction @nix-idioms and conduct a case study on their typing to. The types below are result of the Lean implementation of the inference algorithm from @inference on MacroNix (@app-macronix), which extends MiniNix by booleans, lists and a limited set of builtins. The programs are only adapted slightly: they are written in the syntax of MacroNix, and free names are turned into parameters.
 
 
 #example(name: [Meta update])[
   $
-    #raw("drv: drv // { meta = (drv.meta or { }) // { broken = false; }; }") \
+    #raw("drv: drv ‖ {meta = (drv.meta or {}) ‖ {broken = false}}") \
     quad : quad ⟨(ρ₁ | "meta": {ε})."meta" ↓ {ρ₂}⟩ ⇒ {ρ₁} → {"meta": {"broken": "bool" | ρ₂} | ρ₁}
   $
-  MacroNix derives `drv.meta or { }` as the selection of meta from `{ meta = { }; } ‖ drv` (@fig-nix-parity). Its lookup stops on the row of drv and parks a stump, and the concatenation with `{ broken = false; }` spends the stump on a record ${ρ₂}$. The stump stays a qualifier of the answer, but its lookup can no longer miss: at a drv with meta it hits that field, and at a drv without meta it reaches the default and answers ${ε}$. The result is faithful to the semantics of `//`: the new broken shadows any broken of the old meta, every other field of the old meta survives in ρ₂, and every other field of drv survives in ρ₁.
+  MacroNix derives `drv.meta or {}` as the selection of meta from `{meta = {}} ‖ drv` (@fig-nix-parity). Its lookup stops on the row of drv and parks a stump, and the concatenation with `{broken = false}` spends the stump on a record ${ρ₂}$. The stump stays a qualifier of the answer, but its lookup can no longer miss: at a drv with meta it hits that field, and at a drv without meta it reaches the default and answers ${ε}$. The result is faithful to the semantics of `//`: the new broken shadows any broken of the old meta, every other field of the old meta survives in ρ₂, and every other field of drv survives in ρ₁.
 ] <ex-idiom-meta>
 
 
 #example(name: [Override])[
   $
     & #raw("mkDerivation: extra: args:") \
-    & quad #raw("mkDerivation (args // {") \
-    & quad quad #raw("buildInputs = (args.buildInputs or [ ]) ++ [ extra ]; })") \
+    & quad #raw("mkDerivation (args ‖ {") \
+    & quad quad #raw("buildInputs = (args.buildInputs or []) ++ (extra :: [])})") \
     & quad : quad ⟨(ρ | "buildInputs": [γ])."buildInputs" ↓ [α]⟩ \
     & quad quad quad ⇒ ({"buildInputs": [α] | ρ} → β) → α → {ρ} → β
   $
-  The argument handed to mkDerivation carries the new buildInputs in front of the row of args, so it shadows the old one. The selection `args.buildInputs or [ ]` looks up buildInputs in the row of `{ buildInputs = [ ]; } ‖ args`, where γ is the element type of the empty default. The lookup stops on the row of args, and `++` spends the stump at the list type $[α]$, so its result shares α with the type of extra. The default makes the lookup total: at an args with buildInputs it hits that field, and at an args without it reaches the default. One binding of the function therefore serves both uses. Without the default, the lookup at an args without buildInputs misses, its result is ★, and inference reports a clash, since ★ cannot be appended.
+  The argument handed to mkDerivation carries the new buildInputs in front of the row of args, so it shadows the old one. The selection `args.buildInputs or []` looks up buildInputs in the row of `{buildInputs = []} ‖ args`, where γ is the element type of the empty default. The lookup stops on the row of args, and `++` spends the stump at the list type $[α]$, so its result shares α with the type of extra. The default makes the lookup total: at an args with buildInputs it hits that field, and at an args without it reaches the default. One binding of the function therefore serves both uses. Without the default, the lookup at an args without buildInputs misses, its result is ★, and inference reports a clash, since ★ cannot be appended.
 ] <ex-idiom-override>
 
 #example(name: [Conditional extension])[
   $
-    & #raw("lib: stdenv: { pname = \"hello\"; }") \
-    & quad #raw("// lib.optionalAttrs stdenv.isDarwin { NIX_LDFLAGS = \"-liconv\"; }") \
+    & #raw("lib: stdenv: {pname = \"hello\"}") \
+    & quad #raw("‖ lib.optionalAttrs stdenv.isDarwin {NIX_LDFLAGS = \"-liconv\"}") \
     & quad : quad ⟨ρ₂."isDarwin" ↓ α⟩, ⟨ρ₁."optionalAttrs" ↓ (α → {"NIX_LDFLAGS": "string"} → {ρ₃})⟩ \
     & quad quad quad ⇒ {ρ₁} → {ρ₂} → {ρ₃ | "pname": "string"}
   $
-  Both selections park a stump, and the stump on the row of lib is spent, since its result is applied. The result keeps pname behind the row ρ₃ returned by `lib.optionalAttrs`, since that row may carry a pname of its own. A later lookup of pname answers $?$ until lib is known, which is exactly the Wand ambiguity of @sec-motivation. In nixpkgs, `lib.optionalAttrs` is `cond: as: if cond then as else {}`, and MacroNix rejects the program at a lib with this field. Inference unifies the branches of the conditional and types optionalAttrs at $"bool" → {} → {}$, which clashes with ${"NIX_LDFLAGS": "string"}$. [The declarative system rejects it as well: the only common type of the branches is ★, and ★ cannot be concatenated.](explain the consequences here)
-] <ex-idiom-cond>
-
-Applied to `{ pname = "hello"; }`, the meta update types at ${"meta": {"broken": "bool"} | "pname": "string"}$, since the lookup of meta reaches the default. Without the default, `drv: drv // { meta = drv.meta // { broken = false; }; }` shows the other side of G3. Applied to the same package, inference reports a clash: the lookup of meta misses, so the result of the stump is pinned to ★, but the concatenation has already used it as a record. The declarative system rejects the program as well, since ★ cannot be concatenated. The program nevertheless evaluates without error, because meta is never selected. In both idioms, the default of `or` turns a possible miss into a definite answer.
+  Both selections park a stump, and the stump on the row of lib is spent, since its result is applied. The result keeps pname behind the row ρ₃ returned by `lib.optionalAttrs`, since that row may carry a pname of its own. A later lookup of pname answers $?$ until lib is known, which is exactly the Wand ambiguity of @sec-motivation. In nixpkgs, `lib.optionalAttrs` is `cond: as: if cond then as else {}`, and MacroNix rejects the program at a lib with this field. Inference unifies the branches of the conditional and types optionalAttrs at $"bool" → {} → {}$, which clashes with ${"NIX_LDFLAGS": "string"}$. ] <ex-idiom-cond>
 
 
 == Design Goals Revisited <sec-goals>
