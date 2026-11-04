@@ -9,7 +9,7 @@
 - How close do I want to use the given semantic?
   - The semantic is cbv, we can just note that it should be lazy.
 - How should we integrate MacroNix
-  - Use Macronix only for examples
+  - Use MacroNix only for examples
   - Both conditionals and lists need union basically
 
 
@@ -20,8 +20,7 @@
 
 == Todo
 - [x] Replace `scoped rows` by `scoped labels`
-- Note our "instance-closed" version of let
-- Understand the both incompletenesses fully
+- [x] Understand the both incompletenesses fully
 
 
 == Claude Prompts

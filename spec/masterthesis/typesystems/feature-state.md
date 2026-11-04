@@ -2,16 +2,13 @@
 - Fix T-let
 
 
-# Feat: Negative information
-Plan: plans/negative-information.md. Branch feat/negative-info.
+# Feat: First-class labels
+Plan: plans/fc-labels.md. Branch feat/fc-labels, worktree ~/coding/garnix-wt/fc-labels.
 
-
-# Feat: Gradual Typing
-Plan: plans/gradual.md. Branch feat/gradual.
-
+# Feat: Lazy semantics
+Plan: plans/lazy-semantics.md. Branch feat/lazy-semantics, worktree ~/coding/garnix-wt/lazy-semantics, based on feat/fc-labels (ebe4166).
 
 # Feat: Macro-Nix
-Plan: plans/macronix.md. Branch feat/macronix.
 
 ## Todo
 - Check Nix examples against MacroNix
@@ -61,15 +58,6 @@ Plan: plans/macronix.md. Branch feat/macronix.
   - (c) ★ᵣ in Gradual: `{a: int} ⊔ {} = {★ᵣ}`, idiom types at `{★ᵣ | pname: string}`; only option that recovers it
   - (d) occurrence typing on `e ? l` (Negative Information S3): `as ? a` only (then-branch dead)
 
-
-## Claude Prompts
-- [x] Create an overview for feature parity with real nix → text/figures/nix-parity.typ, in the MacroNix appendix
-  - Sections: language features, builtins
-  - Section for things not yet in place (because of implementation or whatever)
-
-
-# Feat: Recursive Types
-TODO
 
 # Base-System
 ## Related Files
@@ -134,11 +122,10 @@ TODO
 
 **A-let premises**
 - `Infer.letE` = Infer e₁ + `Merges S₁ S₁′` + `LetAdmissible Γ S S₁′ ᾱ` + Infer e₂; Δ_q/Δ_Γ = `letQ`/`letG`
-- Admissible: `fresh` (ᾱ ∩ ftv⟦S₁⟧(Γ, Δ_Γ) = ∅), `own`, `res` (results ⊆ ᾱ), `spent` (`LetSpent`)
+- Admissible: `fresh` (ᾱ ∩ ftv⟦S₁⟧(Γ, Δ_Γ) = ∅), `own`, `res` (results ⊆ ᾱ). No inhabitation test since feat/lazy-semantics; only the entry runs `LetSpent`
 - A failing condition prunes the offending variables (`greatestAlpha`), not the whole let
-- Still lost: spent results on one field that differ beyond type variables and that the merge does not identify (two rows: `let f = x: {p = (({m = c} ‖ x).l) c; q = x.l}` used twice clashes; the entry accepts it through a witness merge)
 - Justified: Γ-mentioned (HM), Δ_Γ-mentioned, outer stump capture (`own`)
-- `own` is NOT derivable from fresh + res + spent: `runSound_false_unowned_let` (LetSound.lean)
+- `own` is NOT derivable from fresh + res: `runSound_false_unowned_let` (LetSound.lean)
 - Done (2026-10-29, syntactic): a key-blocked spent stump at the let, its key variable read as `${κ}`. Semantic inhabitation still has no union-closure proof (D-? breaks under later substitution)
 
 **Unrestricted T-★-intro**

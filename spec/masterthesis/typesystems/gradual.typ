@@ -25,8 +25,8 @@ Q := ∅ | q, Q
 
 
 == Runtime
-- Base: L2 runtime (lean/minimal.lean, Step / Value / Err): CBV application and
-  let, lazy record fields, right-preferring concat
+- Base: L2 runtime (lean/minimal.lean, Step / Value / Err): call-by-name
+  application and let, lazy record fields, right-preferring concat
 - New: wrong-tag eliminations are errors ↯tag, not stuck terms. Nix checks the
   tag of every eliminator operand itself:
   `(1).a`, `1 2`, `{} // 1` all raise a defined error (checked with nix eval)

@@ -168,6 +168,7 @@ T0-T3 and T6 can start once M2 is green. T4, T5 and T7 follow M4.
 - **Main:**
   - `text/sections/07_fc-labels.typ`, plus `00`, `05`, `09`, `11`
   - `text/figures/nix-parity.typ`, `meta/glossar.md`, `fixes.md`
+  - `typesystems/mini-nix.typ` (§ First-class labels)
   - `plans/fc-labels.md`, `typesystems/feature-state.md`, `typesystems/proof-state.md`
 - **Reuse:**
   - `LookupQ.lab_iff` (static = literal key)

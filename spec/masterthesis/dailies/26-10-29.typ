@@ -13,8 +13,8 @@
   - Materializate and Finalize just close the program with a guess
 - Soft typing: True errors don't fail but only give a warning!
 - Would "★ only has lookup errors" be a better framing? I'm not sure
-  - pro: Closer error-case
-  - con: Less programs typable?
+  - Pro: Closer error-case
+  - Con: Less programs typable?
 - How does ★ fuck with principality?
   - I think because T-★-intro it becomes an order
   - Under this order, we need to prove it

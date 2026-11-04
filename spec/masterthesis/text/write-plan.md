@@ -1,10 +1,12 @@
 
 
-# Style
-Use academic style. It can sound fancy from time to time, but needs to keep a monotonous tone. We are presenting results and not a sales pitch. Could use some more mathematical slang, even though it should be well understandable. The rule descriptions are generally good. Comments are left in the form `//` before a paragraph or inline using this syntax: [text](comment). 
+# Rules
+When writing thesis text, use academic style. It can sound fancy from time to time, but needs to keep a monotonous tone. We are presenting results and not a sales pitch. Could use some more mathematical slang, even though it should be well understandable. The rule descriptions are generally good. Comments are left in the form `//` before a paragraph or inline using this syntax: [text](comment). You can fix citation and reference errors without my intervening.
+
+The development of MacroNix is just for test purposes, don't mention it too often.
 
 
-## Rules
+## Style
 - Put the subject in front
   - No extraordinary prose
 - Repeat the noune
@@ -32,91 +34,73 @@ Use academic style. It can sound fancy from time to time, but needs to keep a mo
 - T-sel-⊥: remedied by the reason for lazyness
 - Incompleteness:
   - Wand: unsolvable
-  - Let: Not practical to solve
-  - Inference:
+  - Forced Moves: Good reasons
+  - Inference: Good reasons
     - Generalization at lets
-    - Unrestricted T-★-intro: ?
-  - Fc-labels: would need top-level schemes
-
-
-## Fixes
-- Selecting a string key
-- MacroNix should only be mentioned for running the idioms
-- Is ↯key okay?
-
-
-## Automated checks
-- [ ] You are a professor in PL, go over the thesis text and critique it's claims and wording based on your expertise.
-- [ ] Go over the thesis text and mark every place where wording is loose in a sense, that the terminalogy is not suited for the claim.
+    - Unrestricted T-★-intro
 
 
 ## Admitting
-- Gradual typing für usability 
+- Gradual typing for usability
 - Use of the wrong semantic for row equality
 
 
 ## Final Cleanup
-- Check the syntax whether it is ambiguous
-- Check the claims for references
+- [ ] You are a professor in PL, go over the thesis text and critique it's claims and wording based on your expertise.
+- [ ] Check all claims made in related work against the paper sources in plaintext/
+- [ ] Check rigidness of presentation
 
 
 # Section-State
-- [x] 00 Introduction
-- [x] 01 Overview
-- [ ] 02 Declarative
-  - [ ] Introduction: Stumps
-  - [x] Syntax
-  - [x] Typing
-  - [x] Lookup ↓
-  - [x] Row equivalence
-  - [x] Sorts
-  - [x] Instantiation
-  - [x] Semantics
-- [x] 03 Metatheory
-- [ ] 04 Unification
-  - [x] Types ≐
-  - [ ] Trace Monoid
-  - [x] Rows ≐ᵣ
-  - [ ] Examples
-  - [ ] Metatheory
-- [ ] 05 Inference
-  - [ ] State
-  - [ ] Rules
-  - [ ] Let-Generalization
-  - [ ] Wake, Replay, Saturate
-  - [ ] Merge
-
-  
-- [ ] 06 Incompleteness
-  - [ ] Unsolvable
-  - [ ] Forced Moves
-  - [ ] Inference
-- [ ] 07 FC-Labels
-  - [x] Keyed Lookup
-  - [x] Row Equivalence & Spines
-  - [ ] Unification
-  - [ ] Typing
-  - [ ] Inference 
-- [x] 08 Mechanization
-- [ ] 09 Discussion
-  - [ ] Idioms
-  - [x] Design Goals
-  - [~] Outlook
-  - [~] 11 Conclusion
-- [ ] 10 Related Work
-  - [ ] Old Work
-  - [~] FC-Labels
-  - [ ] Expressive Row Theories
-  - [x] Subtyping Based
-  - [x] Set Theoretic
-  - [~] Gradual and Soft
-  - [x] NixLang
-- [ ] 12 Appendix
-
-
-## Session Times
-
-- [ ] Explanations (1 Day)
-- [ ] Related Work (1 Day)
-- [ ] Integrate Feedback (1 Day)
-- [ ] Final Cleanup (1 Day)
+- [f] 00 Introduction
+- [f] 01 Overview
+- [f] 02 Declarative
+  - [f] Syntax
+  - [f] Typing
+  - [f] Lookup ↓
+  - [f] Row equivalence
+  - [f] Sorts
+  - [f] Instantiation
+  - [f] Semantics
+- [f] 03 Metatheory
+- [f] 04 Unification
+  - [f] Trace Monoid
+  - [f] Types ≐
+  - [f] Rows ≐ᵣ
+  - [f] Examples
+  - [f] Metatheory
+- [f] 05 Inference
+  - [f] State
+  - [f] Wakeup and Saturation
+  - [f] Inference
+  - [f] Let-Generalization
+  - [f] Entry Point
+  - [f] Metatheory
+- [f] 06 Incompleteness
+  - [f] Unsolvable
+  - [f] Forced Moves
+  - [f] Inference
+- [f] 07 FC-Labels
+  - [f] Introduction
+  - [f] Syntax
+  - [f] Examples
+  - [f] Metatheory
+- [f] 08 Mechanization
+- [f] 09 Discussion
+  - [f] Idioms
+  - [f] Design Goals
+  - [ ] Outlook
+  - [f] Conclusion
+- [f] 10 Related Work
+  - [f] Old Work
+  - [f] FC-Labels
+  - [f] Expressive Row Theories
+  - [f] Subtyping Based
+  - [f] Set Theoretic
+  - [f] Gradual and Soft
+  - [f] NixLang
+- [f] 12 Appendix
+  - [f] Row Unification
+  - [f] Replay
+  - [f] FC Labels
+  - [f] MacroNix

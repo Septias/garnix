@@ -7,7 +7,7 @@ e := c | x  | (x: e)  | e₁e₂ | (e₁ ‖ e₂) | e.l | { ξ } | let x = e₁
 | 'l | e₁.(e₂) | { \${e₁} = e₂ }
 ξ := ε | l = e | (ξ₁ | ξ₂)
 
-k := l | α
+k := l | α | ★
 τ := α | 𝓫 | ★ | τ -> τ | { ρ } | ⌊k⌋
 ρ := ε | α | l: τ | \${k}: τ | (ρ₁ | ρ₂)
 κ := Type | Row | Label
@@ -116,7 +116,7 @@ x: σ ∈ Γ   σ ≥ τ
 Γ ⊢ e₁e₂: τ₂
 
 
-Γ ⊢ σ ok   (∀ τ₁. σ ≥ τ₁ ⟹ Γ ⊢ e₁: τ₁)   (∃ τ₁. σ ≥ τ₁)   Γ·(x: σ) ⊢ e₂: τ₂
+Γ ⊢ σ ok   (∀ τ₁. σ ≥ τ₁ ⟹ Γ ⊢ e₁: τ₁)   Γ·(x: σ) ⊢ e₂: τ₂
 ------------------------------------------------------------------------------------ T-let
 Γ ⊢ let x = e₁ in e₂: τ₂
 
@@ -525,7 +525,7 @@ fresh α: Type   Γ·(x: α); S ⊢ e ⇒ τ; S′
 
 
 Γ; S ⊢ e₁ ⇒ τ₁; S₀   S₀ ⊢ Δ₀ ⇝ₘ\* S₁   κ̄ = S₁(ᾱ)   Δ₁ ~ Δ_q ⊎ Δ_Γ   ᾱ ∩ ftv(⟦S₁⟧(Γ, Δ_Γ)) = ∅
-Δ_q ∩ Δ = ∅   ftv(⟦S₁⟧results(Δ_q)) ⊆ ᾱ   Δ_q fillable at S₁
+Δ_q ∩ Δ = ∅   ftv(⟦S₁⟧results(Δ_q)) ⊆ ᾱ
 Γ·(x: ∀(ᾱ: κ̄). ⟦S₁⟧Δ_q ⇒ ⟦S₁⟧τ₁); S₁ ∖ Δ_q ⊢ e₂ ⇒ τ₂; S₂
 --------------------------------------------------------------------------------------------- A-let
 Γ; S ⊢ let x = e₁ in e₂ ⇒ τ₂; S₂
@@ -551,12 +551,14 @@ fresh α: Type   Γ·(x: α); S ⊢ e ⇒ τ; S′
 //   generalized variables, or each instance would pin a variable of the
 //   environment. Reading at S₁, not raw, accepts `let h = λy. g y`, where A-app
 //   aliases δ ≔ β
-// - Δ_q fillable at S₁ (`spent`, `LetSpent`): a SPENT result must be met at some
-//   instance (T-let's ∃ τ₁), by extending its blocker with the field (the
+// - Inhabitation is no condition of A-let: T-let has no ∃ τ₁, since `let` is lazy.
+//   The entry tests it (`LetSpent`): a SPENT result must be met at some
+//   instance, by extending its blocker with the field (the
 //   witness, `LetResults.inhabited`). Every spent stump and every stump on its
 //   blocker has a literal key or a key variable of ᾱ other than the blocker,
 //   which the witness reads as the label ${κ}; a stump on that blocker with the
-//   same field name is spent alike (equal once type variables are ★); no stump
+//   same field name is spent alike (equal up to ε and associativity once type
+//   variables are ★); no stump
 //   of Δ_q waits on a key variable of a filled blocker; no spent blocker occurs
 //   in a spent result. Nested selection `λx. (x.l).m` passes
 //
@@ -649,12 +651,12 @@ Toplevel (⊢ e ⇒ σ)
 -------------------------------------------------------------------------- Entry
 ⊢ e ⇒ ∀ᾱ. ⟦S₂⟧Δ₂ ⇒ ⟦S₂⟧τ          ᾱ = ftv(⟦S₂⟧τ, ⟦S₂⟧Δ₂)
 // The top level generalizes like A-let with Γ = ∅: everything is bound, Δ_Γ is
-// empty, and of A-let's premises only LetSpent is left (the inhabitation test).
+// empty, and A-let's conditions hold. It adds LetSpent (the inhabitation test).
 // Nothing is decided: a stump still ? is a constraint, D-? is the instance that
 // reads it as ★, and a spent stump keeps its constraint (the old F-hit answer is
 // the fill instance). `runSound`: every instance types e, and σ has one.
 // `x: x.l` answers selQ, which is principal (`runF_selEx_principal`).
-// W comes only from K-⊥ and A-sel-dyn-𝓫.
+// W comes only from K-⊥, A-sel-⊥ and A-sel-dyn-⊥.
 
 
 == Precision
@@ -715,10 +717,13 @@ r ⊑ᵣ ?
 
 == First-class labels
 - Labels are values ('l) with singleton types ⌊l⌋
-- *Keys are their own sort*: a key k is a label l or a label variable α: Label.
-  Substitutions have three components (Type, Row, Label), and θα for α: Label is
-  again a key.
-- ⌊l⌋ is rigid and nullary, like 𝓫
+- *Keys are their own sort*: a key k is a label l, a label variable α: Label or
+  the unknown key ★. Substitutions have three components (Type, Row, Label), and
+  θα for α: Label is again a key, possibly ★. No substitution replaces ★.
+- A string is a label at run time: ⌊★⌋ is the type of a string whose content the
+  analysis does not track, ⌊l⌋ the singleton type of the string l
+- ⌊l⌋ and ⌊★⌋ are rigid and nullary, like 𝓫. ⌊★⌋ is a label type, not the
+  unknown type ★: a key position takes it, and it clashes with ★
 
 === Sorts
 
@@ -729,6 +734,10 @@ r ⊑ᵣ ?
 
 -------------- S-key-lit
 Γ ⊢ l: Label
+
+
+-------------- S-key-★
+Γ ⊢ ★: Label
 
 
 Γ ⊢ k: Label
@@ -742,16 +751,26 @@ r ⊑ᵣ ?
 
 
 === Key comparison k ⋈ k′ ∈ {=, ≠, ?}
-- = for the same label or the same label variable, ≠ for distinct labels, ? otherwise.
-- Both = and ≠ are stable under substitution, otherwise ?
+- Only two literals decide (`Key.cmp`, `Key.cmp_decided_lit`): = for the same
+  label, ≠ for distinct labels, ? otherwise
+- α ⋈ α = ? and ★ ⋈ ★ = ?. Stability forces this: an instance may send α to ★,
+  and two strings of unknown content need not be equal
+- Both = and ≠ are stable under substitution, since no substitution changes a
+  literal
 
 
 === Keyed lookup ρ.k ↓ r
 - Generalizes ρ.l ↓ r from labels to keys
+- Six field rules, as in Lean. The thesis (07) reads l: τ as \${l}: τ and folds
+  them into L-hit, L-miss and L-?
 
 
-ε.k ↓ ⊥  k ⋈ l = =
-------------------- LQ-hit
+-------- LQ-ε
+ε.k ↓ ⊥
+
+
+k ⋈ l = =
+-------------- LQ-hit
 (l: τ).k ↓ τ
 
 
@@ -834,6 +853,39 @@ k ⋈ k′ = ?
 (ρ₁ | ρ₂).k ↓ ? on β
 
 
+=== Opaque lookups  ρ.k opaque
+- A ? that no instance decides, so it has no blocker: the lookup stopped at ★
+  against a literal or against ★ (`LookupOpaqueQ`)
+- α against \${★} is not opaque: it is blocked on α (B-dkey), and becomes opaque
+  once α is a literal or ★. ★ against a row-variable is blocked on it (B-var)
+
+---------------- O-sunk
+(l: τ).★ opaque
+
+
+-------------------- O-dkey
+(\${k′}: τ).★ opaque
+
+
+-------------------- O-dfield
+(\${★}: τ).l opaque
+
+
+ρ₁.k ↓ ⊥    ρ₂.k opaque
+------------------------ O-skip
+(ρ₁ | ρ₂).k opaque
+
+
+ρ₁.k opaque
+-------------------- O-conc
+(ρ₁ | ρ₂).k opaque
+
+
+- An opaque lookup answers ? (`LookupOpaqueQ.toLookupQ`) and stays opaque under
+  every substitution (`LookupOpaqueQ.applySubst`). "⊥ or opaque" is
+  `LookupDeadQ`; the executable answers `.opq` (`LOut`)
+
+
 === Row equivalence
 - A keyed field is congruent only under the same key, and a literal key is the
 literal field. Substitution does not normalize \${l}: τ to l: τ; ≈ does
@@ -848,9 +900,13 @@ literal field. Substitution does not normalize \${l}: τ to l: τ; ≈ does
 (\${l}: τ) ≈ (l: τ)
 
 
+- ≈-comm needs no extension: only literals are apart, and two keyed fields under
+  apart keys swap by ≈-dlab and ≈-comm (`RowEquiv.comm_keys`)
+
+
 === Spines with keyed fields
-- a := l: τ | α |\${α}: τ (a literal key normalizes to a field)
-- A keyed field is a barrier, like a var: it may become ANY label, so a field cannot commute past it (it might be the same label and shadow it)
+- a := l: τ | α | \${α}: τ | \${★}: τ (a literal key normalizes to a field)
+- A keyed field under α or ★ is a *barrier*, like a var. Under α it may become ANY label, so a field cannot commute past it (it might be the same label and shadow it). Under ★ no lookup passes it
 - ≈-characterization (`rowEquiv_iff_char`), now three-way:
 - the same barrier sequence (vars and keys, in order)
 - per label, the (segment index, type) lists agree pointwise; segments are separated by barriers
@@ -859,11 +915,8 @@ literal field. Substitution does not normalize \${l}: τ to l: τ; ≈ does
 
 
 === Unification
-- The label pass is one rule over keys, flat like 𝓫
+- The label pass is flat over keys, like 𝓫 (`unifyKey`)
 
-
---------------- U-key-refl
-⌊α⌋ ≐ ⌊α⌋ ⇝ ∅
 
 l = l′
 ---------------- U-lab
@@ -873,40 +926,54 @@ l ≠ l′
 -------------------- U-lab-clash
 ⌊l⌋ ≐ ⌊l′⌋ ⇝ clash
 
-k ≠ α
+
+--------------- U-key-★
+⌊★⌋ ≐ ⌊★⌋ ⇝ ∅
+
+
+-------------------- U-key-★-clash
+⌊★⌋ ≐ ⌊l⌋ ⇝ clash
+// Sound: no substitution makes ★ a label. Both directions.
+
+
 ----------------------- U-key-bind
 ⌊α⌋ ≐ ⌊k⌋ ⇝ [α ≔ k]
+// k is l, β or ★. k = α is the identity [α ≔ α] = ∅, so no U-key-refl.
 // α: Label, so this binds the LABEL component; no occurs check is needed.
-// ⌊k⌋ against any other head clashes (U-clash)
+// Both directions. ⌊k⌋ against any other head clashes (U-clash), ⌊★⌋ against ★ too
 - α ≐ {\${α}: σ} is NOT an occurrence: the key α is a label variable, the other
 α a type variable
 - Row side, changes to the moves above:
 - U-ε-clash also fires on a keyed field: ⟨⟩ has no field of any key
-- U-var-occurs: an occurrence next to a keyed field is `stuck`, not occurs
-(a key-aware counting argument would be needed; stuck rejects just the same)
+- U-var-occurs counts every field atom, whatever its key
+(`occurs_anyField_no_unifier`): an occurrence next to a keyed field is occurs
 - U-clash and U-ground treat keyed fields as barriers, so
-(foo: τ) ≐ᵣ (\${α}: τ′) is stuck, not clash (α ≔ foo solves it)
+(foo: τ) ≐ᵣ (\${α}: τ′) is not a clash (U-key-pin solves it with α ≔ foo)
+- (foo: τ) ≐ᵣ (\${★}: τ′) has no unifier, but no move detects it: stuck
+(`unify_lit_vs_unk_stuck`; sound, conservative)
+- U-field-L and U-field-R read over keyed barriers, for k = α or ★:
 
 
 τ ≐ τ′ ⇝ θ   θt₁ ≐ᵣ θt₂ ⇝ θ′
-------------------------------------------- U-key-L
-(\${α}: τ)·t₁ ≐ᵣ (\${α}: τ′)·t₂ ⇝ θ′ ∘ θ
+------------------------------------------- U-field-L (keyed)
+(\${k}: τ)·t₁ ≐ᵣ (\${k}: τ′)·t₂ ⇝ θ′ ∘ θ
 
 
 τ ≐ τ′ ⇝ θ   θt₁ ≐ᵣ θt₂ ⇝ θ′
-------------------------------------------- U-key-R
-t₁·(\${α}: τ) ≐ᵣ t₂·(\${α}: τ′) ⇝ θ′ ∘ θ
-// Only at the very ends: a field before ${α} could be the label α becomes.
+------------------------------------------- U-field-R (keyed)
+t₁·(\${k}: τ) ≐ᵣ t₂·(\${k}: τ′) ⇝ θ′ ∘ θ
+// Only at the very ends: a field before ${α} could be the label α becomes, and
+// no window reaches past a barrier.
 // Complete by cancellation (`RowEquiv.dsing_cancel_left/right`): the barrier
-// sequences share key α, the keyed projections start with τ and τ′.
+// sequences share key k, the keyed projections start with τ and τ′.
 
 
 ⌊α⌋ ≐ ⌊k⌋ ⇝ θ   θ(f₁) ≐ᵣ θ(f₂) ⇝ θ′
 ---------------------------------------- U-key-pin
 f₁ ≐ᵣ f₂ ⇝ θ′ ∘ θ
 // f₁, f₂ ONE field each, at least one keyed (\${α}), under different keys;
-// k the other key (β or l). Forced (`keyPin_forced`): one-field rows are ≈
-// only under the same key. Re-runs the same spines, now U-key / U-field.
+// k the other key (β, l or ★). Forced (`keyPin_forced`): one-field rows are ≈
+// only under the same key. Re-runs the same spines, now U-field.
 // Terminates: the stage binds, so the residual has one variable less.
 // ${α}: τ ≐ᵣ ${β}: τ′ ⇝ [α ≔ β] ∘ mgu(τ, τ′), most general since
 // [α, β ≔ l] = [β ≔ l] ∘ [α ≔ β]. Beyond one field: stuck, and forced.
@@ -918,6 +985,14 @@ f₁ ≐ᵣ f₂ ⇝ θ′ ∘ θ
 
 ------------ T-lab
 Γ ⊢ 'l: ⌊l⌋
+
+
+Γ ⊢ e: ⌊k⌋
+------------ T-lab-blur
+Γ ⊢ e: ⌊★⌋
+// `qLabBlur`. Forgets the content of a string, like T-★-intro: it concludes at
+// one fixed type, and nothing eliminates ⌊★⌋ but a key position, where ★ decides
+// nothing. A literal stands where a string is expected (a function ⌊★⌋ -> τ).
 
 
 Γ ⊢ e₁: {ρ}   Γ ⊢ e₂: ⌊k⌋   ρ.k ↓ τ
@@ -940,20 +1015,17 @@ f₁ ≐ᵣ f₂ ⇝ θ′ ∘ θ
 Γ ⊢ { \${e₁} = e₂ }: {\${k}: τ }
 
 
-Γ ⊢ e₁: {ρ}   Γ ⊢ e₂: 𝓫
-------------------------- T-sel-dyn-𝓫
-Γ ⊢ e₁.(e₂): ★
+Γ ⊢ e: τ
+------------------------- T-ξ-blur
+Γ ⊢ (l = e): (\${★}: τ)
+// `QTypedBody.fieldU`. Forgets the label of a field. No lookup reads through
+// ${★}, so this claims nothing about the field; it types the record that a
+// dynamic record under a key of type ⌊★⌋ steps to.
 
 
-Γ ⊢ e₁: 𝓫   Γ ⊢ e₂: τ
---------------------------- T-rcd-dyn-𝓫
-Γ ⊢ { \${e₁} = e₂ }: ★
-// A computed key (a string in NixLang) answers ★. No type mentions the key,
-// so the Label sort stays free of ★
-
-
+- No rule types a key at a base type: a key of base type has no typing
 - Discharge replays keyed stumps with the keyed lookup: θ ⊢ ⟨ρ.k ↓ δ⟩ reads
-  (θρ).(θk) ↓ r, arms as D-hit / D-⊥ / D-?
+  (θρ).(θk) ↓ r, arms as D-hit / D-⊥ / D-?. An opaque verdict is a ?, so D-? applies
 
 
 === Runtime
@@ -961,10 +1033,10 @@ f₁ ≐ᵣ f₂ ⇝ θ′ ∘ θ
   (rcd b).('l) steps like (rcd b).l
 - { \${e₁} = e₂ }: the key is evaluated, the field stays a thunk (lazy, like a
   record literal): {\${'l} = e } ⟶ { l = e }
-- ↯ on a missing label and on a key that is not a label, for both forms
-- qProgress / qPreservation hold; T-rcd-dyn's preservation case is ≈-dlab;
-  the 𝓫-rules' cases retype the reduct and blur it with T-★-intro (needs
-  T-★-intro unrestricted)
+- ↯ only on a missing label. A key has no error of its own: a value of type ⌊k⌋
+  is a label (`qcanonical_lab`)
+- qProgress / qPreservation hold; T-rcd-dyn's preservation case is ≈-dlab under a
+  literal key and T-ξ-blur under ⌊★⌋
 
 
 === Algorithmic
@@ -979,9 +1051,11 @@ fresh κ: Label   S₃ ⊢ τ₂ ≐ ⌊κ⌋ ⇝! S₄   (⟦S₄⟧r).(⟦S₄
 Γ; S ⊢ e₁.(e₂) ⇒ τ′; S₄
 
 
-…   (⟦S₄⟧r).(⟦S₄⟧κ) ↓ ⊥
+…   (⟦S₄⟧r).(⟦S₄⟧κ) ↓ ⊥ or opaque
 ------------------------------------------ A-sel-dyn-⊥
 Γ; S ⊢ e₁.(e₂) ⇒ ★; S₄ +W
+// No instance decides an opaque lookup, so it is answered like a miss
+// (`LookupDeadQ`). A-sel-⊥ and K-⊥ read "⊥ or opaque" as well.
 
 
 …   (⟦S₄⟧r).(⟦S₄⟧κ) ↓ ? on α   fresh δ: Type
@@ -996,26 +1070,24 @@ fresh κ: Label   S₃ ⊢ τ₂ ≐ ⌊κ⌋ ⇝! S₄   (⟦S₄⟧r).(⟦S₄
 // No lookup, so nothing parks. Shaped like A-app
 
 
-Γ; S ⊢ e₁ ⇒ τ₁; S₁   fresh r: Row   S₁ ⊢ τ₁ ≐ {r} ⇝! S₂   Γ; S₂ ⊢ e₂ ⇒ τ₂; S₃   ⟦S₃⟧τ₂ = 𝓫
------------------------------------------------------------------------------------------------- A-sel-dyn-𝓫
-Γ; S ⊢ e₁.(e₂) ⇒ ★; S₃ +W
-
-
-Γ; S ⊢ e₁ ⇒ τ₁; S₁   Γ; S₁ ⊢ e₂ ⇒ τ₂; S₂   ⟦S₂⟧τ₁ = 𝓫
---------------------------------------------------------- A-rcd-dyn-𝓫
-Γ; S ⊢ { \${e₁} = e₂ } ⇒ ★; S₂ +W
-// Only a DEFINITE base type: a key still typed by a variable is forced to ⌊κ⌋,
-// so (λa. {foo = c}.(a)) c clashes at the application
+- A key of base type clashes against ⌊κ⌋: {}.(c), and (λa. {foo = c}.(a)) c at
+  the application. A key of type ⌊★⌋ binds κ ≔ ★
 
 
 === Wake-up, merge, let
 - K-rules and saturation are unchanged, over keyed lookups: solving a key wakes
   the stumps blocked on it (λa. {foo = c, bar = ε}.(a) applied to 'foo hits)
+- A lookup changes only when its blocker is solved: the blocker is the only
+  variable whose solution can change the undecided comparison. So stale means
+  blocker solved, as for rows
+- A stump whose key is bound to ★ wakes opaque once its search meets a field,
+  and K-⊥ answers ★ with W
 - A spent stump with a variable key is kept in the answer; the witness guesses
   the key (G-solve), so `r: a: (r.${a}) c` answers ⟨ρ.(κ) ↓ 𝓫 → β⟩ ⇒ {ρ} → ⌊κ⌋ → β
-- A-let: a generalized spent stump must be fillable: keyed by a label or by a
+- Entry: a spent stump must be fillable: keyed by a label or by a
   variable κ of ᾱ other than its blocker, with a blocker that is not a label
-  variable of its row. The witness reads κ as the label \${κ}, so no stump may
+  variable of its row. A stump under ★ is never fillable (`Key.fillKey`): no
+  instance makes it hit. The witness reads κ as the label \${κ}, so no stump may
   wait on a key of a filled blocker, and stumps on one blocker whose field names
   agree must be spent alike. Nothing else in key position may reach a key
   blocker (KeyFresh); what stays parked must not mention ᾱ in row, key or
@@ -1028,14 +1100,26 @@ fresh κ: Label   S₃ ⊢ τ₂ ≐ ⌊κ⌋ ⇝! S₄   (⟦S₄⟧r).(⟦S₄
 - λa. λv. {\${a} = v} :: ∀(α: Label)(δ: Type). ⌊α⌋ -> δ -> {\${α}: δ}
   (`rcdDynQ_instance_closed`); runF infers exactly this
 - r // {${n} = v} shadows an older n: (λn. λr. r ‖ {${n} = c}) 'x {x = {}} .x ⇒ 𝓫
+- Flake idiom λs. λp. (p.(s)).default :: ⟨ρ.α ↓ {ρ′}⟩, ⟨ρ′.default ↓ δ⟩ ⇒ ⌊α⌋ -> {ρ} -> δ;
+  applied to 'x86 and {x86 = {default = c}} ⇒ 𝓫
+- With a computed string (MacroNix): λr. r ‖ {\${toString 1} = 1} :: {ρ} -> {\${★}: int | ρ},
+  and a selection of x through it answers ★ with W
 
 
 === Costs
-- Labels are not strings: a key of base type is ★ only when known at the
-  selection; (λa. {foo = c}.(a)) c clashes
+- Unknown keys have no identity: a: {\${a} = c}.(a) keeps the stump
+  ⟨(\${α}: 𝓫).α ↓ δ⟩, which hits at every literal instance but not at ★. The price
+  of stability: α ⋈ α = = would turn into ★ ⋈ ★ = ? at [α ≔ ★]
+- Two different literals meet only by T-lab-blur, which inference does not apply:
+  f: {a = f 'x; b = f 'y} clashes, and types at (⌊★⌋ -> 𝓫) -> {a: 𝓫 | b: 𝓫}. The
+  incompleteness of T-★-intro at the level of keys
 - Keyed fields are barriers: beyond one field each (U-key-pin), (foo: τ) ≐ᵣ
   (\${α}: τ′) and different unknown keys are stuck (keyed Fuzz universe: 67%
-  stuck, measured before U-key-pin)
-- A spent promise blocked on its own key over a literal record,
+  stuck, measured before U-key-pin), and a lookup stops at every keyed barrier.
+  Negative information about keys is missing
+- The unknown key is coarse: a key that is one of several literals is ⌊★⌋, every
+  lookup under it is opaque, and ★ has no elimination form, so a selection from
+  the result is rejected. Finite label sets between ⌊l⌋ and ⌊★⌋ are future work
+- A spent stump blocked on its own key over a literal record,
   `a: ({foo = y: y}.${a}) c`, is answered at the top level (the witness guesses
   a label of the record) but keeps a let monomorphic

@@ -19,11 +19,12 @@
 - *Parked stump*: A stump in the solver state, ⟨α ⊳ ρ.l ↓ δ⟩, filed under its blocker α
 - *Blocker*: The variable a parked stump waits on: a row or label variable
 - *Pending lookup*: Informal word for a stump; only in the introduction, the overview, the conclusion and the definition of stumps
+- *Stale*: A parked stump whose lookup is no longer ? on its recorded blocker
+- *Quiescent*: A solver state with no stale stump
 - *Wake-up*: Re-running a stump's lookup when unification solves its blocker
 - *Instance-Closed T-let*: ∀ τ₁ ≤ σ. Γ ⊢ e₁: τ₁
 - *↯*: Lookup error;  residual-risk disjunct of progress
-- *Stuck*: Verdict of ≐ᵣ when no move applies. Conservative: the problem may still have an mgu (`stuck_masks_mgu`). The Wand equation is the prime example
-
+- *Stuck*: Verdict of ≐ᵣ when no move applies. Is conversative.
 
 ## Scheme
 - *Qualified Scheme*: A scheme carrying its pending lookups as constraints
@@ -39,11 +40,16 @@
 
 
 ## Misc
-- *Wand ambiguity*: The lookup in `a: b: (a ‖ b).l`: it answers ? because the field may come from either operand. Handled by stumps
-- *Wand equation*: (α₁ | … | αₙ) ≐ᵣ (l: 𝓫) with n ≥ 2: it has unifiers but no mgu and is reported stuck. Never called "Wand ambiguity"
+- *Wand ambiguity*: The lookup in `a: b: (a ‖ b).l`: it answers ? because the field may come from either operand. Handled by stumps. Use when not generalized.
+- *Wand equation*: (α₁ | … | αₙ) ≐ᵣ (l: 𝓫) with n ≥ 2: it has unifiers but no mgu and is reported stuck.
+- *Forced move*: A move of row unification that preserves the set of unifiers on the variables of the problem
 - *Soft typing*: Programs keep their untyped semantics; ★ marks where the analysis gave up, warnings say why
-- *Key*: A label l or a label variable α
+- *Key*: A label l, a label variable α or the unknown key ∗
+- *Unknown key ∗*: A string whose content the analysis does not track; no substitution replaces it
 - *Keyed field*: A row field ${k}: τ whose label is a key
+- *Key comparison*: Three-valued: equal for one literal, apart for two different literals, undecided for every other pair, even α against itself
+- *Barrier*: A row-variable or a keyed field under a non-literal key; a lookup stops there and answers ?
+- *Opaque lookup*: A lookup undecided at every instance, because it compares with ∗; it has no blocker, and inference answers it with ★
 - *Unknown type ★*: The type of what the analysis cannot decide; no elimination form, unifies only with itself
 - *Field demand*: What other row systems hand to unification for a selection; used only to contrast with our lookup relation
 - *Scoped labels*: Duplicate labels stay in the row; lookup takes the leftmost occurrence, and ‖ puts its right operand first, so the right operand wins
