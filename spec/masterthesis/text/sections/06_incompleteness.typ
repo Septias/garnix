@@ -8,7 +8,7 @@ The inference algorithm is sound but not complete. This section describes where 
 
 == Irreducible Problems <incompleteness-irreducible>
 
-The Wand ambiguity is the prime example of a unification problem without a most general unifier. It has a finite complete set of unifiers, one for every origin of the field, but no single unifier covers the others. Two more problems lack a most general unifier as well:
+The Wand ambiguity is the prime example of a unification problem without a most general unifier. It has a finite complete set of unifiers, one for every origin of the field, but no single unifier covers the others. Two more problems lack a most general unifier too:
 
 #proposition(
   name: [Irreducible problems],
@@ -42,10 +42,18 @@ The remaining limits lie in the inference algorithm rather than in unification.
 
 === Partially Generalized Lets
 
-A-let generalizes the greatest admissible $macron(α)$. A variable that violates one of the conditions stays monomorphic, together with everything it drags along, and a second use at another record may then clash. The fillability test of A-let is a syntactic approximation of inhabitation and rejects spent results on one field that differ in more than their type variables and that the merge does not identify, as in `let f = x: {p = (({m = c} ‖ x).l) c | q = x.l}`, which selects l on two different rows.
+A-let generalizes the greatest admissible $macron(α)$. A variable that violates one of the conditions stays monomorphic, together with everything it drags along, and a second use at another record may then clash.
+
+=== Dead Bindings
+
+T-let constrains e₁ only through the instances of σ. If σ has no instance, e₁ is unconstrained: `let x = c c in c` is typed at $𝓫_c$ and evaluates to c, since E-let discards the binding. A-let infers e₁ whether x is used or not, so inference reports a clash. A completeness statement has to exclude such bindings. An argument differs: `(x: c) (c c)` evaluates to c as well, but T-λ-E types its argument, so the declarative system rejects the program too.
+
+=== Fillability Test
+
+The fillability test of the entry point is a syntactic approximation of inhabitation. It rejects a blocker of a spent stump in the result of a spent stump, as in the overlay form `self: super: {foo = super.foo ‖ {meta = super.foo.meta ‖ {broken = false}}}`, whose scheme is inhabited. The blocker of the meta stump occurs in the spent result of the foo stump, so the second clause fails.
 
 // todo: explain this more thoroughly
-Nested selection such as `let g = x: (x.l).m`, record literals in a spent result, the same field spent twice on one row, a field selected once spent and once unspent on one row, and a spent stump under a key of the binding, as in `let f = r: a: r.${a} c` with first-class labels (@fc-labels), pass the test and are generalized.
+Nested selection such as `x: (x.l).m`, record literals in a spent result, the same field spent twice on one row, a field selected once spent and once unspent on one row, and a spent stump under a key of the binding, as in `r: a: r.${a} c` with first-class labels (@fc-labels), pass the test.
 
 
 === Unrestricted T-★-intro

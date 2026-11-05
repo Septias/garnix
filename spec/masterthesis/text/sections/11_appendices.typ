@@ -286,7 +286,7 @@ $
   τ & ::= dots | [τ]
 $
 
-A builtin p is applied to all of its arguments; a partial application is written as a λ-abstraction. Lists are homogeneous, and the cell $e_1 :: e_2$ is lazy, as a record field is. The derived forms of NixLang, `&&`, `||`, `!=` and `e.l or d`, are abbreviations.
+A builtin p is applied to all of its arguments and, unlike a λ-abstraction, forces them; a partial application is written as a λ-abstraction. Lists are homogeneous, and the cell $e_1 :: e_2$ is lazy, as a record field is. The derived forms of NixLang, `&&`, `||`, `!=` and `e.l or d`, are abbreviations.
 
 *Signature.* The constants and builtins are given by a signature Σ: the base type of each constant, an optional base type `bool` of the literals, the type of each builtin, whose free variables are all generic, and a reduction δ of each builtin on argument values, which may fail. MiniNix is the signature without booleans and builtins. A signature is _sound_ if no constant has type `bool` and δ preserves types: whenever the arguments $overline(v)$ have the types $overline(τ)$ and an instance of the builtin's type is $overline(τ) -> τ$, the result of $δ(p, overline(v))$ has type τ. Soundness constrains δ only where it succeeds: a builtin may fail on well-typed arguments, as `head []` does, and progress counts such a failure as an error. A signature whose builtins fail on every argument is therefore sound as well.
 

@@ -190,17 +190,14 @@ As in @declarative-rules, three selection rules cover the three verdicts of the 
         "gen"_(Γ, S)(S₁, τ₁) &= "the greatest" macron(α) ⊆ "ftv"(⟦S₁⟧τ₁, ⟦S₁⟧Δ₁) "such that" \
         & #h(1em) macron(α) ∩ "ftv"(⟦S₁⟧(Γ, Δ_Γ)) = ∅ \
         & #h(1em) Δ_q ∩ Δ = ∅ \
-        & #h(1em) "ftv"(⟦S₁⟧"results"(Δ_q)) ⊆ macron(α) \
-        & #h(1em) Δ_q "fillable at" S₁
+        & #h(1em) "ftv"(⟦S₁⟧"results"(Δ_q)) ⊆ macron(α)
       $,
     ),
   ),
 )
 #generalization <generalization>
 
-@generalization gives A-let. The rule infers $e₁$, merges the parked stumps by M-merge ($#st_merges$, @merging), binds the scheme and continues with $e₂$. The choice of the generalized variables $macron(α)$ is delegated to the function $"gen"_(Γ, S)$ that partitions the stumps. $Δ_q$ is the list of stumps blocked on a variable of $macron(α)$, and these stumps go into the scheme as its qualifiers Q. $Δ_Γ = Δ₁ #st_drop Δ_q$ are the remaining stumps, which stay in the solver state.
-
-The partition relies on quiescence. A stump filed under a solved variable would not be blocked on a variable of $macron(α)$, so it would stay in $Δ_Γ$ and the variables of its lookup could not be generalized. Quiescence guarantees that the blocker A-let reads is the variable the lookup actually waits on.
+@generalization gives A-let. The rule infers $e₁$, merges the parked stumps by M-merge ($#st_merges$, @merging), binds the scheme and continues with $e₂$. The choice of the generalized variables $macron(α)$ is delegated to the function $"gen"_(Γ, S)$ that partitions the stumps. $Δ_q$ is the list of stumps blocked on a variable of $macron(α)$, and these stumps go into the scheme as its qualifiers Q. $Δ_Γ = Δ₁ #st_drop Δ_q$ are the remaining stumps, which stay in the solver state. The partition relies on quiescence. A stump filed under a solved variable would not be blocked on a variable of $macron(α)$, so it would stay in $Δ_Γ$ and the variables of its lookup could not be generalized. Quiescence guarantees that the blocker A-let reads is the variable the lookup actually waits on.
 
 A-var is the counterpart of A-let: it instantiates a qualified scheme with fresh variables at the sorts of its binders and replays the instantiated stumps by $scripts(↝)^(*!)$. A scheme stump carries no blocker, so the replay $scripts(↝)^*$ computes one: it answers the stumps that the instance already decides and parks the others under the variables that block them (@app-replay). Saturation $#st_sat$ follows the replay, since a replayed stump whose result is already solved can write a row solution and make a stump stale that the replay has already parked. Each use of a let-bound variable replays its own copy of the stumps.
 
@@ -208,49 +205,13 @@ A-var is the counterpart of A-let: it instantiates a qualified scheme with fresh
   Consider `let f = x: x.l in f {l = c}`. For the bound term, A-λ-I gives x a fresh γ, and A-sel-\? unifies γ with ${β}$ for a fresh β, finds that $β.l$ answers $?$ on β, and parks $⟨β ⊳ β.l ↓ δ⟩$ with a fresh δ. The bound term has type ${β} → δ$. Since γ is solved, $macron(α) = β, δ$. The single stump moves into the scheme, and nothing stays parked. f is bound to $∀(β: "Row", δ: "Type"). ⟨β.l ↓ δ⟩ ⇒ {β} → δ$, which is selQ of @principality. At the use, A-var instantiates the scheme with fresh β′ and δ′ and replays the stump, which is still blocked and is parked on β′. A-λ-E then solves $β′ ≔ (l: 𝓫_c)$ and identifies δ′ with the result variable. Saturation finds the stump stale, K-hit re-asks the lookup, which now hits, and the result is unified with $𝓫_c$.
 ] <ex-let-selection>
 
-=== Admissible Choices
-
-Four conditions make a choice of $macron(α)$ admissible. They are the four lines of $"gen"_(Γ, S)$ in @generalization.
+Three conditions make a choice of $macron(α)$ admissible. They are the three lines of $"gen"_(Γ, S)$ in @generalization.
 
 + _Freshness._ The generalized variables must be fresh for the environment, which here consists of Γ together with the stumps that stay parked. This is the side condition of Hindley-Milner generalization @damas_milner. It ensures that a parked stump reads the same at every instance.
-+ _Own stumps._ $Δ_q$ may contain only stumps parked while inferring $e₁$, since a stump of an outer binding that is captured by the scheme would never be discharged. This condition does not follow from the others: in `{a = x: x.l | b = let y = c in c}` the stump of field a is blocked on a variable that neither Γ nor any remaining stump mentions, so the other three conditions admit its generalization into the scheme of y.
++ _Own stumps._ $Δ_q$ may contain only stumps parked while inferring $e₁$, since a stump of an outer binding that is captured by the scheme would never be discharged. This condition does not follow from the others: in `{a = x: x.l | b = let y = c in c}` the stump of field a is blocked on a variable that neither Γ nor any remaining stump mentions, so the other two conditions admit its generalization into the scheme of y.
 + _Closed results._ Every variable in a generalized stump's result must itself be generalized, since otherwise each instance would pin a variable of the environment.
-+ _Inhabitation._ The scheme must be inhabited, as the declarative T-let requires through $∃ τ₁. σ ≥ τ₁$. The algorithm checks the sufficient condition of @fillability.
 
 The admissible choices are closed under union, so a greatest one exists (`greatestAlpha_spec` in Lean). The algorithm computes it by deleting variables until nothing more is deleted. A failing condition therefore does not make the binding monomorphic: it removes the offending variables and whatever they drag along.
-
-=== Fillability <fillability>
-
-A stump whose result is still a variable is harmless: its result can be sent to ★ while its lookup stays blocked. A spent stump must instead hit at some instance, since D-\? and D-⊥ demand ★ for its result. The algorithm does not decide this property but checks a sufficient syntactic condition. $Δ_q$ is _fillable_ at $S₁$ if every spent stump p of $Δ_q$ satisfies two clauses:
-
-+ Every stump of $Δ_q$ on the blocker of p with the same label is spent as well, and its result agrees with the result of p once every type-variable is replaced by ★.
-+ No blocker of a spent stump occurs in the result of p.
-
-Under this condition the instance that sends the generalized type-variables to ★ and extends each blocker by the fields its spent stumps demand discharges every stump of $Δ_q$. The test is not complete (@incompleteness-inference).
-
-#example(name: [A spent stump])[
-  In `x: (x.l) c`, A-sel-\? parks $⟨β ⊳ β.l ↓ δ⟩$, and A-λ-E unifies δ with $𝓫_c → γ$ for a fresh γ. The stump is spent: D-\? and D-⊥ would demand ★ for a result that is already $𝓫_c → γ$, so an instance must make the lookup hit. The program answers $∀(β: "Row", γ: "Type"). ⟨β.l ↓ 𝓫_c → γ⟩ ⇒ {β} → γ$. The instance that extends β by the field $l: 𝓫_c → γ$ discharges the stump by D-hit, so the scheme is inhabited, and this instance is the typing ${l: 𝓫_c → γ | β′} → γ$.
-] <ex-spent>
-
-=== Merging Stumps <merging>
-
-#let merge_rule = figure(
-  caption: "Merging two stumps.",
-  flexbox(
-    derive(
-      "M-merge",
-      (
-        $⟨α ⊳ ρ.l ↓ δ⟩, ⟨α′ ⊳ ρ′.l ↓ δ′⟩ ∈ Δ$,
-        $⌈⟦S⟧ρ⌉ = ⌈⟦S⟧ρ′⌉$,
-        $S ⊢ δ ≐ δ′ #st_solve S′$,
-      ),
-      $S ⊢ Δ #st_merge S′$,
-    ),
-  ),
-)
-#merge_rule <merge-rule>
-
-A field selected twice on one row parks two stumps. In `x: {p = (x.l) c | q = x.l}` only the first stump is spent, so the first clause of the fillability test fails. M-merge (@merge-rule) repairs this case. The rule unifies the results of two parked stumps that ask the same lookup: their rows have one spine under the current solution and their labels agree. The move is forced. At every instance that discharges both stumps, the two lookups are one lookup and return one verdict, so the instance identifies the two results up to ≈. A-let and the entry point run this phase before they read the stumps. The algorithm tries every pair once and skips a pair whose equation fails.
 
 == Entry Point
 
@@ -279,7 +240,40 @@ A field selected twice on one row parks two stumps. In `x: {p = (x.l) c | q = x.
 
 The entry point @entry runs inference from the empty state, merges the stumps that ask the same lookup by M-merge, and generalizes like A-let with Γ = ∅. Every free variable of the type and of the parked stumps is generalized, no stump stays outside the scheme, and the answer is the scheme σ. Nothing is decided at the entry point: a stump that is still pending is a qualifier of σ, and an instance reads it as ★ by D-\? when its lookup stays undecided. In the algorithm itself, ★ arises only where a lookup misses (A-sel-⊥, K-⊥).
 
-Of the conditions of A-let, only inhabitation is left: Γ is empty, and the start state parks no stump of an outer binding. The premise σ inhabited at $S₂$ is the fillability test of A-let, run on a scratch copy of $S₂$ in which a bounded search may first solve further equations. The search unifies the results of two stumps on one blocker with one label whose rows differ before the blocker. The answer σ is read at $S₂$, before the search, so the search never changes it, and any outcome is sound: an instance for an extension of $S₂$ is an instance of σ. The search is greedy, and if the test still fails, inference rejects the program. A-let runs the same test without the search, so `x: {p = (({m = c} ‖ x).l) c | q = x.l}` is accepted at the entry point but stays monomorphic under a binding (@incompleteness-inference).
+The conditions of A-let hold trivially: Γ is empty, and the start state parks no stump of an outer binding. The entry point adds one test that A-let does not run, since an answer without an instance would say nothing about the program. The premise σ inhabited at $S₂$ is the fillability test of @fillability, run on a scratch copy of $S₂$ in which a bounded search may first solve further equations. The search unifies the results of two stumps on one blocker with one label whose rows differ before the blocker. The answer σ is read at $S₂$, before the search, so the search never changes it, and any outcome is sound: an instance for an extension of $S₂$ is an instance of σ. The search is greedy, and if the test still fails, inference rejects the program (@incompleteness-inference). The search accepts `x: {p = (({m = c} ‖ x).l) c | q = x.l}`, which selects l on two different rows.
+
+=== Fillability <fillability>
+
+A stump whose result is still a variable is harmless: its result can be sent to ★ while its lookup stays blocked. A spent stump must instead hit at some instance, since D-\? and D-⊥ demand ★ for its result. The algorithm does not decide this property but checks a sufficient syntactic condition. $Δ₂$ is _fillable_ at $S₂$ if every spent stump p of $Δ₂$ satisfies two clauses:
+
++ Every stump of $Δ₂$ on the blocker of p with the same label is spent as well, and its result agrees with the result of p up to ε and associativity once every type-variable is replaced by ★.
++ No blocker of a spent stump occurs in the result of p.
+
+Under this condition the instance that sends the generalized type-variables to ★ and extends each blocker by the fields its spent stumps demand discharges every stump of $Δ₂$. The test is not complete (@incompleteness-inference).
+
+#example(name: [A spent stump])[
+  In `x: (x.l) c`, A-sel-\? parks $⟨β ⊳ β.l ↓ δ⟩$, and A-λ-E unifies δ with $𝓫_c → γ$ for a fresh γ. The stump is spent: D-\? and D-⊥ would demand ★ for a result that is already $𝓫_c → γ$, so an instance must make the lookup hit. The program answers $∀(β: "Row", γ: "Type"). ⟨β.l ↓ 𝓫_c → γ⟩ ⇒ {β} → γ$. The instance that extends β by the field $l: 𝓫_c → γ$ discharges the stump by D-hit, so the scheme is inhabited, and this instance is the typing ${l: 𝓫_c → γ | β′} → γ$.
+] <ex-spent>
+
+=== Merging Stumps <merging>
+
+#let merge_rule = figure(
+  caption: "Merging two stumps.",
+  flexbox(
+    derive(
+      "M-merge",
+      (
+        $⟨α ⊳ ρ.l ↓ δ⟩, ⟨α′ ⊳ ρ′.l ↓ δ′⟩ ∈ Δ$,
+        $⌈⟦S⟧ρ⌉ = ⌈⟦S⟧ρ′⌉$,
+        $S ⊢ δ ≐ δ′ #st_solve S′$,
+      ),
+      $S ⊢ Δ #st_merge S′$,
+    ),
+  ),
+)
+#merge_rule <merge-rule>
+
+A field selected twice on one row parks two stumps. In `x: {p = (x.l) c | q = x.l}` only the first stump is spent, so the first clause of the fillability test fails. M-merge (@merge-rule) repairs this case. The rule unifies the results of two parked stumps that ask the same lookup: their rows have one spine under the current solution and their labels agree. The move is forced. At every instance that discharges both stumps, the two lookups are one lookup and return one verdict, so the instance identifies the two results up to ≈. A-let and the entry point run this phase before they read the stumps. At A-let no test depends on the merge, but the move is forced and loses no instance. The algorithm tries every pair once and skips a pair whose equation fails.
 
 == Inference Metatheory <inference-metatheory>
 
