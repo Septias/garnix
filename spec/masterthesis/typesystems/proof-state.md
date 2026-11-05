@@ -12,12 +12,19 @@ related:
 
 # Findings
 
+## Lazy integration audit (2026-11-04)
+Status: open. Nothing changed in `lean/` or `text/`; the wording proposals are in the chat of that day. Scratch runs, not added to the repo.
+- A-let's `Merges` is not observable. Without it (`mergesF` dropped from the let arm of `inferF`), the proofs still go through with `.refl`, and no guard flips in `InferRuns`, `Regressions`, `Refutations`, `ThesisExamples`, `NixSuite`. On 1,492,884 generated MiniNix programs no answer goes from typed to failing or back. 6 differ: 2 in the failure message, 4 in where ε sits.
+- `x: let f = z: (z ‖ x).l in {a = f {l = c} | b = f {m = c}}` answers `fail: clash` and is declaratively typed at `{l: 𝓫} → {a: 𝓫 | b: 𝓫}` without T-★-intro (scratch proof at f = `∀β. {β} → 𝓫`, standard axioms only). So "completeness for the blur-free fragment" (fix A under Unrestricted T-★-intro in feature-state) does not hold as it stands: the freshness condition still loses this program.
+- `x: x.l.m ‖ {}` and the overlay form fail the entry test. Under a let they are generalized: unused they cost nothing, and at concrete records two uses of the overlay form are typed.
+- Broekhoff and Krebbers say (§1, Limitations) that they use call-by-name like Dolstra, while Nix shares, and that this is not lazy enough for cycle detection in recursive attributes. Relevant once recursion is added.
+
 ## `gradual.typ` ≃ᵣ against Sekiyama-Igarashi (2026-11-03)
 Status: open. Nothing changed in `lean/` or `text/`. Brute force on paper rules, not proved: labels {l, m}, flat field types, rows of length ≤ 3 with at most two ★ᵣ, ★ᵣ filled with at most 3 atoms.
 - Their Lemma 4.2 (inversion, which makes ≃ syntax-directed) fails with mid-row ★ᵣ: `(l:𝓫) ≃ᵣ (★ᵣ | l:𝓫)` holds by CE-★ᵣ-R, but CE-field-L goes through SP-★ᵣ and leaves `⟨⟩ ≃ᵣ (★ᵣ | l:𝓫)`, which fails. 2656 pairs. A checker has to backtrack over rule order.
 - `gradual.typ:282` (≃ iff common ⊑-lower bound) fails right to left: `(★ᵣ | l:𝓫)` and `(★ᵣ | m:𝓫)` share the lower bound `(l:𝓫 | m:𝓫)` but are not ≃ᵣ. 2826 pairs. Both rows arise from `{x = 1} // args`.
 - Holds in the same range: reflexive, symmetric, left to right of `gradual.typ:282`. On tail-only rows, their own syntax, rules and lower bounds agree exactly and inversion holds.
-- `gradual.typ:28` says call-by-name application and let; `Step.beta` (`lean/minimal.lean:1594`) is call-by-value.
+- `gradual.typ:28` says call-by-name application and let. Resolved: `Step.beta` is call-by-name since feat/lazy-semantics was merged (2026-11-04).
 
 ## Replay at A-var and saturation (2026-11-02)
 Status: open. Nothing changed in `lean/` or `text/`; the replay claim is tested, not proved.

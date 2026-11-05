@@ -135,6 +135,8 @@ After M4:
 # Outcome (2026-11-01)
 M0 to M3 are done; details in `typesystems/feature-state.md`. M4 is not: the thesis edits were reverted at the user's request, and thesis text changes only on their go. One change against this plan: M3 hit its stop rule (6 programs lost), and the user chose to make `Parked.spentAlike` compare `Ty.flat` forms. Result: 1404 generated programs, typed 676 to 748, none lost.
 
+Update (2026-11-04): merged into main, and M4 done on the user's go. The text edits are uncommitted.
+
 
 # Risks
 - **Guard flips cannot be predicted without running.** A-let generalizes more, so answers can gain stump copies at use sites, and the entry test could fail where a monomorphic stump once passed. This is what the M3 stop rule is for.

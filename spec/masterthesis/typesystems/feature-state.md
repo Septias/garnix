@@ -7,6 +7,7 @@ Plan: plans/fc-labels.md. Branch feat/fc-labels, worktree ~/coding/garnix-wt/fc-
 
 # Feat: Lazy semantics
 Plan: plans/lazy-semantics.md. Branch feat/lazy-semantics, worktree ~/coding/garnix-wt/lazy-semantics, based on feat/fc-labels (ebe4166).
+Merged into main 2026-11-04 (16839ea): build, NixSuite and fuzz green, no guard flips from main's new guards. Thesis text integrated on main, uncommitted.
 
 # Feat: Macro-Nix
 
