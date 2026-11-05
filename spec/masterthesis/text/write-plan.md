@@ -49,58 +49,25 @@ The development of MacroNix is just for test purposes, don't mention it too ofte
 - [ ] You are a professor in PL, go over the thesis text and critique it's claims and wording based on your expertise.
 - [ ] Check all claims made in related work against the paper sources in plaintext/
 - [ ] Check rigidness of presentation
+- [ ] Go over the thesis text and fix all spelling errors.
 
 
 # Section-State
-- [f] 00 Introduction
-- [f] 01 Overview
-- [f] 02 Declarative
-  - [f] Syntax
-  - [f] Typing
-  - [f] Lookup ↓
-  - [f] Row equivalence
-  - [f] Sorts
-  - [f] Instantiation
-  - [f] Semantics
-- [f] 03 Metatheory
-- [f] 04 Unification
-  - [f] Trace Monoid
-  - [f] Types ≐
-  - [f] Rows ≐ᵣ
-  - [f] Examples
-  - [f] Metatheory
-- [f] 05 Inference
-  - [f] State
-  - [f] Wakeup and Saturation
-  - [f] Inference
-  - [f] Let-Generalization
-  - [f] Entry Point
-  - [f] Metatheory
-- [f] 06 Incompleteness
-  - [f] Unsolvable
-  - [f] Forced Moves
-  - [f] Inference
-- [f] 07 FC-Labels
-  - [f] Introduction
-  - [f] Syntax
-  - [f] Examples
-  - [f] Metatheory
-- [f] 08 Mechanization
-- [f] 09 Discussion
-  - [f] Idioms
-  - [f] Design Goals
-  - [ ] Outlook
-  - [f] Conclusion
-- [f] 10 Related Work
-  - [f] Old Work
-  - [f] FC-Labels
-  - [f] Expressive Row Theories
-  - [f] Subtyping Based
-  - [f] Set Theoretic
-  - [f] Gradual and Soft
-  - [f] NixLang
-- [f] 12 Appendix
-  - [f] Row Unification
-  - [f] Replay
-  - [f] FC Labels
-  - [f] MacroNix
+- [x] 00 Introduction
+- [x] 01 Overview
+- [x] 02 Declarative
+- [x] 03 Metatheory
+- [x] 04 Unification
+- [ ] 05 Inference
+  - [ ] Let generalization?
+  - [ ] Fillability
+  - [ ] Merge
+  - [ ] Entry Point
+- [ ] 06 Incompleteness
+  - [ ] Unsolvable
+  - [ ] Inference
+- [ ] 07 FC-Labels
+- [x] 08 Mechanization
+- [x] 09 Discussion
+- [x] 10 Related Work
+- [x] 12 Appendix
