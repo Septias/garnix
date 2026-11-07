@@ -122,8 +122,8 @@ Merged into main 2026-11-04 (16839ea): build, NixSuite and fuzz green, no guard 
   - Fix: defer the stuck equation, retry after the residual
 
 **A-let premises**
-- `Infer.letE` = Infer e₁ + `Merges S₁ S₁′` + `LetAdmissible Γ S S₁′ ᾱ` + Infer e₂; Δ_q/Δ_Γ = `letQ`/`letG`
-- Admissible: `fresh` (ᾱ ∩ ftv⟦S₁⟧(Γ, Δ_Γ) = ∅), `own`, `res` (results ⊆ ᾱ). No inhabitation test since feat/lazy-semantics; only the entry runs `LetSpent`
+- `Infer.letE` = Infer e₁ + `LetAdmissible Γ S S₁ ᾱ` + Infer e₂; Δ_q/Δ_Γ = `letQ`/`letG`. No merge since 2026-11-06 (only the entry merges)
+- Admissible: `fresh` (ᾱ ∩ ftv⟦S₁⟧(Γ, Δ_Γ) = ∅), `own`, `res` (results ⊆ ᾱ). No inhabitation test since feat/lazy-semantics; only the entry runs `LetSpent`, which accepts spent chains without a cycle since 2026-11-06 (`chainsRanked`)
 - A failing condition prunes the offending variables (`greatestAlpha`), not the whole let
 - Justified: Γ-mentioned (HM), Δ_Γ-mentioned, outer stump capture (`own`)
 - `own` is NOT derivable from fresh + res: `runSound_false_unowned_let` (LetSound.lean)

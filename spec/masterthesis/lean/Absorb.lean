@@ -84,8 +84,8 @@ theorem Infer.clean {C : Type} {constTy : Sig B C} :
       (draw_sol' hd₂) ▸ hsk.clean ((draw_sol' hdk) ▸
         Infer.clean h₂ (hs.clean ((draw_sol' hd) ▸ Infer.clean h₁ hc)))
   | _, _, _, _, _, .rcd hb, hc => InferRec.clean hb hc
-  | _, _, _, _, _, .letE h₁ hm _ h₂, hc => by
-      have := hm.clean (Infer.clean h₁ hc)
+  | _, _, _, _, _, .letE h₁ _ h₂, hc => by
+      have := Infer.clean h₁ hc
       exact Infer.clean h₂ this
   | _, _, _, _, _, .prim _ _ ha hd hs, hc => hs.clean ((draw_sol' hd) ▸ InferArgs.clean ha hc)
   | _, _, _, _, _, .bool _, hc => hc
@@ -265,9 +265,9 @@ theorem Infer.ext {C : Type} {constTy : Sig B C} :
         ((Infer.ext h₂).trans ((draw_ext hdk).trans (hsk.ext.trans
           ((draw_ext hd₂).trans (.of_sol_eq rfl)))))))
   | _, _, _, _, _, .rcd hb => InferRec.ext hb
-  | _, _, _, _, _, .letE (S₁' := S₁') (ᾱ := ᾱ) h₁ hm _ h₂ =>
-      (Infer.ext h₁).trans (hm.ext.trans ((SolverState.Ext.of_sol_eq (S := S₁')
-        (S' := { S₁' with parked := letG S₁' ᾱ }) rfl).trans (Infer.ext h₂)))
+  | _, _, _, _, _, .letE (S₁ := S₁) (ᾱ := ᾱ) h₁ _ h₂ =>
+      (Infer.ext h₁).trans ((SolverState.Ext.of_sol_eq (S := S₁)
+        (S' := { S₁ with parked := letG S₁ ᾱ }) rfl).trans (Infer.ext h₂))
   | _, _, _, _, _, .prim _ _ ha hd hs =>
       (SolverState.Ext.of_sol_eq rfl).trans ((InferArgs.ext ha).trans ((draw_ext hd).trans hs.ext))
   | _, _, _, _, _, .bool _ => .refl _

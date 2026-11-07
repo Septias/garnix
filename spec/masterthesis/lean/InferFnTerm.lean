@@ -634,8 +634,7 @@ theorem inferF_stable (constTy : Sig B C) :
       exact Stable.bind (inferRecF_stable constTy _ _ ξ) (fun _ => Stable.const _)
   | Γ, S, .letE x e₁ e₂ => by
       simp only [inferF]
-      exact Stable.bind (inferF_stable constTy _ _ e₁) (fun r₁ =>
-        Stable.bind (mergesF_stable _) (fun _ => inferF_stable constTy _ _ e₂))
+      exact Stable.bind (inferF_stable constTy _ _ e₁) (fun r₁ => inferF_stable constTy _ _ e₂)
   | Γ, S, .prim p es => by
       cases hp : constTy.prim p with
       | none => simp only [inferF, hp]; exact Stable.const _
@@ -852,12 +851,10 @@ theorem inferF_settles (constTy : Sig B C) :
   | Γ, S, .letE x e₁ e₂, hc => by
       simp only [inferF]
       exact Settles.bind (inferF_stable constTy _ _ e₁) (inferF_settles constTy _ _ e₁ hc)
-        (fun r₁ => Stable.bind (mergesF_stable _) (fun _ => inferF_stable constTy _ _ e₂))
+        (fun r₁ => inferF_stable constTy _ _ e₂)
         (fun r₁ _ h₁ => by
           have c₁ : r₁.2.sol.Clean := Infer.clean (inferF_sound h₁) hc
-          exact Settles.bind (mergesF_stable _) (mergesF_settles c₁)
-            (fun _ => inferF_stable constTy _ _ e₂)
-            (fun _ _ hm => inferF_settles constTy _ _ e₂ ((mergesF_sound hm).clean c₁)))
+          exact inferF_settles constTy _ _ e₂ c₁)
   | Γ, S, .prim p es, hc => by
       cases hp : constTy.prim p with
       | none => simp only [inferF, hp]; exact Settles.fail _

@@ -524,7 +524,7 @@ fresh α: Type   Γ·(x: α); S ⊢ e ⇒ τ; S′
 Γ; S ⊢ (ξ₁ | ξ₂) ⇒ (ρ₁ | ρ₂); S₂
 
 
-Γ; S ⊢ e₁ ⇒ τ₁; S₀   S₀ ⊢ Δ₀ ⇝ₘ\* S₁   κ̄ = S₁(ᾱ)   Δ₁ ~ Δ_q ⊎ Δ_Γ   ᾱ ∩ ftv(⟦S₁⟧(Γ, Δ_Γ)) = ∅
+Γ; S ⊢ e₁ ⇒ τ₁; S₁   κ̄ = S₁(ᾱ)   Δ₁ ~ Δ_q ⊎ Δ_Γ   ᾱ ∩ ftv(⟦S₁⟧(Γ, Δ_Γ)) = ∅
 Δ_q ∩ Δ = ∅   ftv(⟦S₁⟧results(Δ_q)) ⊆ ᾱ
 Γ·(x: ∀(ᾱ: κ̄). ⟦S₁⟧Δ_q ⇒ ⟦S₁⟧τ₁); S₁ ∖ Δ_q ⊢ e₂ ⇒ τ₂; S₂
 --------------------------------------------------------------------------------------------- A-let
@@ -532,9 +532,9 @@ fresh α: Type   Γ·(x: α); S ⊢ e ⇒ τ; S′
 // Δ_q are the stumps whose blocker lands in ᾱ, Δ_Γ the rest.
 // Surviving stumps of Δ_Γ are NOT discharged here — they outlive the boundary.
 // Every premise past the first is one that soundness or completeness turned out to need
-// - S₀ ⊢ Δ₀ ⇝ₘ\* S₁: the forced merge (M-merge, below) before ᾱ is chosen. A field
-//   selected once spent and once unspent, `let f = x: {p = (x.l) c; q = x.l}`,
-//   is generalized only after it
+// - No M-merge (dropped 2026-11-06): no condition of A-let reads it. Two stumps
+//   that ask one lookup, `let f = x: {p = (x.l) c; q = x.l}`, are generalized
+//   apart; they meet again at every use, or at the entry, which merges
 // - κ̄ = S₁(ᾱ): kinds are read off the DRAW, not off Γ — ᾱ is disjoint from Γ,
 //   so Γ(ᾱ) was never writable. Every generalized binder is one inference
 //   invented at a known sort (A-var's draw records one, see there)
@@ -559,8 +559,11 @@ fresh α: Type   Γ·(x: α); S ⊢ e ⇒ τ; S′
 //   which the witness reads as the label ${κ}; a stump on that blocker with the
 //   same field name is spent alike (equal up to ε and associativity once type
 //   variables are ★); no stump
-//   of Δ_q waits on a key variable of a filled blocker; no spent blocker occurs
-//   in a spent result. Nested selection `λx. (x.l).m` passes
+//   of Δ_q waits on a key variable of a filled blocker; a spent blocker in a
+//   spent result ranks below that result's blocker (`spentRank`): the spent
+//   chains have no cycle, and the witness fills them from the far end
+//   (`fillIter`, 2026-11-06). Nested selection `λx. (x.l).m` passes, so do the
+//   chain `λx. x.l.m ‖ {}` and the overlay form; the cycle `λx. (x.l) x` fails
 //
 // ᾱ is CANONICAL (`greatestAlpha_spec`, lean/LetChoice.lean): admissible choices
 // are closed under union, so a GREATEST one exists, and `greatestAlpha` computes

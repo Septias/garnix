@@ -960,24 +960,117 @@ theorem Parked.spentAlike.equiv {B : Type} {S₁ : SolverState B} {q p : Parked 
       ((p.stump.res.applySubst S₁.subst).applySubst TySubst.starTy) :=
   (Ty.flat_equiv _).trans (h.2 ▸ (Ty.flat_equiv _).symm)
 
+/-- The steps β ⇝ β′ of the SPENT CHAINS of Δ at S₁: a spent stump on β has β′,
+the blocker of a spent stump, in its result. `x: x.l.m ‖ {}` has ρ_x ⇝ ρ_{x.l}. -/
+def spentSteps {B : Type} (S₁ : SolverState B) (Δ : List (Parked B)) : List (TyVar × TyVar) :=
+  Δ.flatMap fun p =>
+    if (p.stump.res.applySubst S₁.subst).isVar = false then
+      Δ.filterMap fun q =>
+        if (q.stump.res.applySubst S₁.subst).isVar = false ∧
+            q.blocker ∈ (p.stump.res.applySubst S₁.subst).ftv then
+          some (p.blocker, q.blocker)
+        else none
+    else []
+
+/-- One round of ranking: β ranks one above every β′ with β ⇝ β′, read in the
+table t of the previous round. -/
+def rankStep (E : List (TyVar × TyVar)) (t : List (TyVar × Nat)) (β : TyVar) : Nat :=
+  (E.filterMap fun e => if e.1 = β then some ((t.lookup e.2).getD 0 + 1) else none).foldr max 0
+
+/-- n rounds of `rankStep`, tabulated over the nodes bs: a round reads the table
+of the previous one, so it costs one pass and not one per path. -/
+def rankTab (E : List (TyVar × TyVar)) (bs : List TyVar) : Nat → List (TyVar × Nat)
+  | 0 => []
+  | n+1 =>
+      let t := rankTab E bs n
+      bs.map fun β => (β, rankStep E t β)
+
+/-- The ranks of the blockers of Δ at S₁ after |Δ| rounds: the longest chain
+from β, or |Δ| where that is longer. -/
+def spentTab {B : Type} (S₁ : SolverState B) (Δ : List (Parked B)) : List (TyVar × Nat) :=
+  rankTab (spentSteps S₁ Δ) ((spentSteps S₁ Δ).map Prod.fst).eraseDups Δ.length
+
+def spentRank {B : Type} (S₁ : SolverState B) (Δ : List (Parked B)) (β : TyVar) : Nat :=
+  ((spentTab S₁ Δ).lookup β).getD 0
+
+/-- The spent chains of Δ have no cycle: the rank falls along every step ⇝. A
+cycle keeps its ranks at |Δ|, so the test fails exactly on a cycle. The table
+is built once. -/
+def chainsRanked {B : Type} (S₁ : SolverState B) (Δ : List (Parked B)) : Bool :=
+  let t := spentTab S₁ Δ
+  (spentSteps S₁ Δ).all fun e => decide ((t.lookup e.2).getD 0 < (t.lookup e.1).getD 0)
+
+theorem foldr_max_le {l : List Nat} {k : Nat} (h : ∀ x ∈ l, x ≤ k) : l.foldr max 0 ≤ k := by
+  induction l with
+  | nil => exact Nat.zero_le _
+  | cons x l ih =>
+      exact Nat.max_le.mpr ⟨h x List.mem_cons_self, ih (fun y hy => h y (List.mem_cons_of_mem _ hy))⟩
+
+theorem lookup_getD_le {l : List (TyVar × Nat)} {k : Nat} (h : ∀ x ∈ l, x.2 ≤ k) (β : TyVar) :
+    (l.lookup β).getD 0 ≤ k := by
+  induction l with
+  | nil => exact Nat.zero_le _
+  | cons x l ih =>
+      obtain ⟨γ, v⟩ := x
+      simp only [List.lookup]
+      split
+      · exact h _ List.mem_cons_self
+      · exact ih (fun y hy => h y (List.mem_cons_of_mem _ hy))
+
+theorem rankStep_le (E : List (TyVar × TyVar)) {t : List (TyVar × Nat)} {k : Nat}
+    (ht : ∀ x ∈ t, x.2 ≤ k) (β : TyVar) : rankStep E t β ≤ k + 1 := by
+  unfold rankStep
+  apply foldr_max_le
+  intro x hx
+  obtain ⟨e, -, he⟩ := List.mem_filterMap.mp hx
+  split at he
+  · injection he with he; subst he
+    exact Nat.succ_le_succ (lookup_getD_le ht e.2)
+  · cases he
+
+theorem rankTab_le (E : List (TyVar × TyVar)) (bs : List TyVar) :
+    ∀ n, ∀ x ∈ rankTab E bs n, x.2 ≤ n
+  | 0, _, hx => absurd hx List.not_mem_nil
+  | n+1, x, hx => by
+      obtain ⟨β, -, rfl⟩ := List.mem_map.mp hx
+      exact rankStep_le E (rankTab_le E bs n) β
+
+theorem spentRank_le {B : Type} (S₁ : SolverState B) (Δ : List (Parked B)) (β : TyVar) :
+    spentRank S₁ Δ β ≤ Δ.length :=
+  lookup_getD_le (rankTab_le _ _ _) β
+
+/-- ⊢  along a step of a spent chain, the rank falls. -/
+theorem chainsRanked_step {B : Type} {S₁ : SolverState B} {Δ : List (Parked B)}
+    (h : chainsRanked S₁ Δ = true) {p q : Parked B} (hp : p ∈ Δ)
+    (hps : (p.stump.res.applySubst S₁.subst).isVar = false) (hq : q ∈ Δ)
+    (hqs : (q.stump.res.applySubst S₁.subst).isVar = false)
+    (hm : q.blocker ∈ (p.stump.res.applySubst S₁.subst).ftv) :
+    spentRank S₁ Δ q.blocker < spentRank S₁ Δ p.blocker := by
+  have he : (p.blocker, q.blocker) ∈ spentSteps S₁ Δ := by
+    refine List.mem_flatMap.mpr ⟨p, hp, ?_⟩
+    rw [if_pos hps]
+    exact List.mem_filterMap.mpr ⟨q, hq, by rw [if_pos ⟨hqs, hm⟩]⟩
+  unfold chainsRanked at h
+  exact of_decide_eq_true (List.all_eq_true.mp h _ he)
+
 /-- A spent result can be met at some instance, by extending its blocker row
 with the field (`LetResults.inhabited`, LetCase.lean): it is fillable, every
 stump on the same blocker is fillable and, if it asks the same field name
 (`Key.keyName`), is spent alike (`Parked.spentAlike`); a key variable on the
 blocker blocks no stump of Δq (the witness reads it as a label, and a stump
-waiting on it would resolve); and no spent stump's blocker occurs in a spent
-result. A sufficient, syntactic test that the answer of a run is inhabited
+waiting on it would resolve). Across stumps, the spent chains have no cycle
+(`chainsRanked`), and the witness fills them from the far end. A
+sufficient, syntactic test that the answer of a run is inhabited
 (`∃ τ₁. σ ≥ τ₁`, the second conjunct of `RunSound`). -/
 def LetSpent {B : Type} (S₁ : SolverState B) (ᾱ : List TyVar) (Δq : List (Parked B)) : Prop :=
-  ∀ p ∈ Δq, (p.stump.res.applySubst S₁.subst).isVar = false →
+  (∀ p ∈ Δq, (p.stump.res.applySubst S₁.subst).isVar = false →
       p.fillable S₁ ᾱ = true ∧
       (∀ q ∈ Δq, q.blocker = p.blocker →
         q.fillable S₁ ᾱ = true ∧
         ((q.stump.label.applySubst S₁.subst).keyName =
             (p.stump.label.applySubst S₁.subst).keyName → q.spentAlike S₁ p) ∧
-        (∀ r ∈ Δq, q.stump.label.applySubst S₁.subst ≠ .var r.blocker)) ∧
-      (∀ q ∈ Δq, (q.stump.res.applySubst S₁.subst).isVar = false →
-        q.blocker ∉ (p.stump.res.applySubst S₁.subst).ftv)
+        (∀ r ∈ Δq, q.stump.label.applySubst S₁.subst ≠ .var r.blocker))) ∧
+  chainsRanked S₁ Δq = true
 
 set_option synthInstance.maxSize 512 in
 set_option synthInstance.maxHeartbeats 200000 in
@@ -1273,17 +1366,16 @@ inductive Infer {B C : Type} [DecidableEq B] (constTy : Sig B C) :
   -- A-let. The Δ-split is a least FIXPOINT on paper; as a relation it is enough
   -- to REQUIRE the split's defining equations, which is precisely what a
   -- relation buys over a function here.
-  | letE {Γ : QCtx B} {S S₁ S₁' S₂ : SolverState B} {x : Var} {e₁ e₂ : Expr C}
+  | letE {Γ : QCtx B} {S S₁ S₂ : SolverState B} {x : Var} {e₁ e₂ : Expr C}
       {τ₁ τ₂ : Ty B} {ᾱ : List TyVar} :
       Infer constTy Γ S e₁ τ₁ S₁ →
-      -- M-merge: stumps that ask one lookup get one result. Forced
-      -- (`merge_forced`).
-      Merges S₁ S₁' →
-      -- ᾱ = gen_{Γ,S}(S₁′, τ₁): any admissible choice. Which one a function
+      -- No M-merge: no test of A-let reads it. The stumps it would join meet
+      -- again at every use, or at the entry, which merges.
+      -- ᾱ = gen_{Γ,S}(S₁, τ₁): any admissible choice. Which one a function
       -- takes, the greatest, is `greatestAlpha` (LetChoice.lean).
-      LetAdmissible Γ S S₁' ᾱ →
-      Infer constTy (Γ.bindScheme x (letScheme S₁' ᾱ (letQ S₁' ᾱ) τ₁))
-        { S₁' with parked := letG S₁' ᾱ } e₂ τ₂ S₂ →
+      LetAdmissible Γ S S₁ ᾱ →
+      Infer constTy (Γ.bindScheme x (letScheme S₁ ᾱ (letQ S₁ ᾱ) τ₁))
+        { S₁ with parked := letG S₁ ᾱ } e₂ τ₂ S₂ →
       Infer constTy Γ S (.letE x e₁ e₂) τ₂ S₂
   -- MacroNix.
   -- A-prim: an instance of the builtin's type, the arguments left to right,
@@ -1680,11 +1772,10 @@ theorem Infer.kinds_mono {B C : Type} [DecidableEq B] {constTy : Sig B C}
       refine List.IsSuffix.trans ?_ (Infer.kinds_mono h₂)
       rw [hs.kinds, draw_kind_eq hd]; exact List.suffix_cons _ _
   | .rcd hb => InferRec.kinds_mono hb
-  | .letE (S₁ := S₁) (S₁' := S₁') h₁ hm _ h₂ => by
+  | .letE h₁ _ h₂ => by
       have i₁ := Infer.kinds_mono h₁
       have i₂ := Infer.kinds_mono h₂
-      have i₃ : S₁.kinds <:+ S₁'.kinds := hm.kinds ▸ List.suffix_refl _
-      exact List.IsSuffix.trans i₁ (List.IsSuffix.trans i₃ i₂)
+      exact List.IsSuffix.trans i₁ i₂
   | .prim (K := K) _ _ ha hd hs => by
       refine List.IsSuffix.trans (List.suffix_append K _) ?_
       refine List.IsSuffix.trans (InferArgs.kinds_mono ha) ?_
@@ -1836,10 +1927,10 @@ theorem Infer.supply_mono {B C : Type} [DecidableEq B] {constTy : Sig B C}
       simp only [SolverState.park]
       omega
   | .rcd hb => InferRec.supply_mono hb
-  | .letE h₁ hm _ h₂ => by
+  | .letE h₁ _ h₂ => by
       have i₁ := Infer.supply_mono h₁
       have i₂ := Infer.supply_mono h₂
-      exact Nat.le_trans i₁ (Nat.le_trans hm.supply i₂)
+      exact Nat.le_trans i₁ i₂
   | .prim _ hle ha hd hs => by
       have i₁ := InferArgs.supply_mono ha
       have hd' := draw_eq hd
@@ -2015,8 +2106,8 @@ theorem Infer.sat_mono {B C : Type} [DecidableEq B] {constTy : Sig B C}
                 ((SolverState.SatMono.of_sol_eq (draw_sol hd₂)).trans
                   (SolverState.SatMono.of_sol_eq rfl)))))))
   | .rcd hb => InferRec.sat_mono hb
-  | .letE h₁ hm _ h₂ => by
-      refine (Infer.sat_mono h₁).trans (hm.satMono.trans ?_)
+  | .letE h₁ _ h₂ => by
+      refine (Infer.sat_mono h₁).trans ?_
       intro σ hσ
       exact Infer.sat_mono h₂ σ hσ
   | .prim _ _ ha hd hs =>
@@ -2140,8 +2231,8 @@ theorem Infer.quiescent {B C : Type} [DecidableEq B] {constTy : Sig B C}
   | .lam hd hb, hq => Infer.quiescent hb (hq.draw hd)
   | .rcd hb, hq => InferRec.quiescent hb hq
   -- A-let: the body runs at Δ_Γ, a SUBLIST of the quiescent Δ₁
-  | .letE h₁ hm _ h₂, hq => by
-      refine Infer.quiescent h₂ ((hm.quiescent (Infer.quiescent h₁ hq)).restrict ?_)
+  | .letE h₁ _ h₂, hq => by
+      refine Infer.quiescent h₂ ((Infer.quiescent h₁ hq).restrict ?_)
       intro p hp; exact (mem_letG.mp hp).1
   | .prim _ _ _ _ hs, _ => hs.quiescent
   | .bool _, hq => hq

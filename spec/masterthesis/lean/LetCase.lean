@@ -272,12 +272,31 @@ theorem Ty.exists_of_isVar {τ : Ty B} (h : τ.isVar = true) : ∃ δ, τ = .var
 
 --------------------- INHABITATION ----------------------------------------------
 
+/-- n rounds of filling: round n+1 extends each blocker γ by the fields `fs`
+asks of it, typed at round n. A spent chain is filled from its far end. -/
+def fillIter (base : TySubst B) (fs : TySubst B → TyVar → List (Label × Ty B)) :
+    Nat → TySubst B
+  | 0 => base
+  | n+1 => ⟨base.ty, fun γ => fillRow (fs (fillIter base fs n) γ) γ, base.lab⟩
+
+theorem fillIter_ty (base : TySubst B) (fs : TySubst B → TyVar → List (Label × Ty B)) :
+    ∀ n, (fillIter base fs n).ty = base.ty
+  | 0 => rfl
+  | _+1 => rfl
+
+theorem fillIter_lab (base : TySubst B) (fs : TySubst B → TyVar → List (Label × Ty B)) :
+    ∀ n, (fillIter base fs n).lab = base.lab
+  | 0 => rfl
+  | _+1 => rfl
+
 /-- ⊢  **a let scheme has an instance** (T-let's premise), read under σ with its
 binders renamed by an injective f: an unspent result is sent to ★ (its lookup
 stays blocked); a spent one is met by filling its blocker with the field, as
 the old top level did (F-hit). The field holds the result with the unspent ones
 already at ★, so a variable shared between a spent and an unspent result is no
-obstacle. A key VARIABLE κ on a filled blocker is read as the label `${κ}`
+obstacle. A spent result may mention the blocker of another spent stump (a
+spent chain); the fields are typed after |Δq| rounds of filling (`fillIter`),
+which settle every spent result because the chains are ranked (`spentRank`). A key VARIABLE κ on a filled blocker is read as the label `${κ}`
 (`Key.keyName`), which is the name its field is filed under; `LetSpent` makes
 sure no stump waits on such a κ. `hav` is all the proof needs of the renaming:
 σ sends no free key variable of a stump to a binder's new name. -/
@@ -327,7 +346,7 @@ theorem LetResults.inhabited {S₁ : SolverState B} {ᾱ : List TyVar} {Δq : Li
     intro κ h
     obtain ⟨q, hq, ho, hl⟩ := mem_keyG h
     obtain ⟨p, hp, hps, hpb⟩ := onFilled_iff.mp ho
-    have hf := ((hres.2 p hp hps).2.1 q hq hpb.symm).1
+    have hf := ((hres.2.1 p hp hps).2 q hq hpb.symm).1
     rcases Key.fillKey_iff.mp (Parked.fillable_iff.mp hf).1 with ⟨l, hk⟩ | ⟨κ', hk, hκ', -⟩
     · rw [hl] at hk; cases hk
     · rw [hl] at hk; injection hk with hk; exact hk ▸ hκ'
@@ -369,19 +388,23 @@ theorem LetResults.inhabited {S₁ : SolverState B} {ᾱ : List TyVar} {Δq : Li
   ------------------------------------------------ the witness
   let χR : TySubst B :=
     ⟨fun β => if β ∈ ᾱ.map f then .unk else .var β, fun γ => .var γ, χL⟩
-  let fills : TyVar → List (Label × Ty B) := fun γ =>
+  -- one round of filling, at θ: each blocker gets the fields its spent stumps ask
+  let fsOf : TySubst B → TyVar → List (Label × Ty B) := fun θ γ =>
     (Δq.filter (fun p => !(p.stump.res.applySubst S₁.subst).isVar && decide (f p.blocker = γ))).map
-      (fun p => ((p.stump.label.applySubst S₁.subst).keyName, (rd p).applySubst χR))
+      (fun p => ((p.stump.label.applySubst S₁.subst).keyName, (rd p).applySubst θ))
+  let χn : Nat → TySubst B := fillIter χR fsOf
+  let Θ : TySubst B := χn Δq.length
+  let fills : TyVar → List (Label × Ty B) := fsOf Θ
+  -- the witness is round |Δq| + 1
   let χ₀ : TySubst B :=
     ⟨χR.ty, fun γ => fillRow (fills γ) γ, χL⟩
-  let χLs : TySubst B := ⟨fun x => .var x, fun x => .var x, χL⟩
   -- a generalized result under χR is its ★-image, renamed, with keys read
-  have hstar : ∀ p ∈ Δq, (rd p).applySubst χR =
+  have hstar : ∀ p ∈ Δq, (rd p).applySubst Θ =
       (((p.stump.res.applySubst S₁.subst).applySubst TySubst.starTy).applySubst
-        (readSub σ ᾱ f)).applySubst χLs := by
+        (readSub σ ᾱ f)).applySubst Θ := by
     have key : ∀ τ : Ty B, (∀ α ∈ τ.ftv, α ∈ ᾱ) →
-        (τ.applySubst (readSub σ ᾱ f)).applySubst χR =
-          ((τ.applySubst TySubst.starTy).applySubst (readSub σ ᾱ f)).applySubst χLs := by
+        (τ.applySubst (readSub σ ᾱ f)).applySubst Θ =
+          ((τ.applySubst TySubst.starTy).applySubst (readSub σ ᾱ f)).applySubst Θ := by
       intro τ hτ
       rw [Ty.applySubst_applySubst, Ty.applySubst_applySubst, Ty.applySubst_applySubst]
       apply Ty.applySubst_congr
@@ -389,22 +412,22 @@ theorem LetResults.inhabited {S₁ : SolverState B} {ᾱ : List TyVar} {Δq : Li
       have hαᾱ := hτ α hα
       have hm : f α ∈ ᾱ.map f := List.mem_map_of_mem hαᾱ
       refine ⟨?_, ?_, ?_⟩
-      · show ((readSub σ ᾱ f).ty α).applySubst χR =
-          (((TySubst.starTy (B := B)).ty α).applySubst (readSub σ ᾱ f)).applySubst χLs
+      · show ((readSub σ ᾱ f).ty α).applySubst Θ =
+          (((TySubst.starTy (B := B)).ty α).applySubst (readSub σ ᾱ f)).applySubst Θ
         simp only [readSub, if_pos hαᾱ, TySubst.starTy, Ty.applySubst]
+        show (fillIter χR fsOf Δq.length).ty (f α) = .unk
+        rw [fillIter_ty]
         exact if_pos hm
-      · show ((readSub σ ᾱ f).row α).applySubst χR =
-          (((TySubst.starTy (B := B)).row α).applySubst (readSub σ ᾱ f)).applySubst χLs
+      · show ((readSub σ ᾱ f).row α).applySubst Θ =
+          (((TySubst.starTy (B := B)).row α).applySubst (readSub σ ᾱ f)).applySubst Θ
         simp only [readSub, if_pos hαᾱ, TySubst.starTy, Row.applySubst]
-        rfl
-      · show ((readSub σ ᾱ f).lab α).applySubst χR =
-          (((TySubst.starTy (B := B)).lab α).applySubst (readSub σ ᾱ f)).applySubst χLs
+      · show ((readSub σ ᾱ f).lab α).applySubst Θ =
+          (((TySubst.starTy (B := B)).lab α).applySubst (readSub σ ᾱ f)).applySubst Θ
         simp only [readSub, if_pos hαᾱ, TySubst.starTy, Key.applySubst_var]
-        rfl
     exact fun p hp => key _ (hres.1 p hp)
   have mem_fills : ∀ {γ lt}, lt ∈ fills γ → ∃ q ∈ Δq,
       (q.stump.res.applySubst S₁.subst).isVar = false ∧ f q.blocker = γ ∧
-      lt = ((q.stump.label.applySubst S₁.subst).keyName, (rd q).applySubst χR) := by
+      lt = ((q.stump.label.applySubst S₁.subst).keyName, (rd q).applySubst Θ) := by
     intro γ lt h
     obtain ⟨q, hq, rfl⟩ := List.mem_map.mp h
     obtain ⟨hq, hc⟩ := List.mem_filter.mp hq
@@ -413,12 +436,68 @@ theorem LetResults.inhabited {S₁ : SolverState B} {ᾱ : List TyVar} {Δq : Li
   -- a filled blocker is some spent stump's, and names the field it asks
   have fill_key : ∀ p ∈ Δq, ∀ {l τ}, (fills (f p.blocker)).lookup l = some τ → ∃ q ∈ Δq,
       (q.stump.res.applySubst S₁.subst).isVar = false ∧ q.blocker = p.blocker ∧
-      (q.stump.label.applySubst S₁.subst).keyName = l ∧ τ = (rd q).applySubst χR := by
+      (q.stump.label.applySubst S₁.subst).keyName = l ∧ τ = (rd q).applySubst Θ := by
     intro p hp l τ h
     obtain ⟨q, hq, hqs, hqb, he⟩ := mem_fills (lookup_some_mem h)
     have hqb' : q.blocker = p.blocker := hinj _ (hbq q hq) _ (hbq p hp) hqb
     simp only [Prod.mk.injEq] at he
     exact ⟨q, hq, hqs, hqb', he.1.symm, he.2⟩
+  ------------------------------------------------ the rounds settle
+  -- a spent blocker in a spent result ranks below the result's blocker, so a
+  -- round adds nothing to a blocker of rank < n, nor to a result of rank ≤ n
+  let rank : TyVar → Nat := spentRank S₁ Δq
+  have hfill0 : ∀ m, ∀ δ ∈ ᾱ, (∀ q ∈ Δq, (q.stump.res.applySubst S₁.subst).isVar = false →
+      q.blocker ≠ δ) → (χn m).row (f δ) = .var (f δ) := by
+    intro m δ hδ hno
+    cases m with
+    | zero => rfl
+    | succ m =>
+        show fillRow (fsOf (χn m) (f δ)) (f δ) = _
+        have : fsOf (χn m) (f δ) = [] := by
+          rcases h : fsOf (χn m) (f δ) with _ | ⟨lt, _⟩
+          · rfl
+          · exfalso
+            obtain ⟨q, hq, -⟩ :=
+              List.mem_map.mp (h ▸ List.mem_cons_self : lt ∈ fsOf (χn m) (f δ))
+            obtain ⟨hq, hc⟩ := List.mem_filter.mp hq
+            simp only [Bool.and_eq_true, Bool.not_eq_true', decide_eq_true_eq] at hc
+            exact hno q hq hc.1 (hinj _ (hbq q hq) _ hδ hc.2)
+        rw [this]; rfl
+  have hres_step : ∀ n, (∀ β ∈ ᾱ, rank β < n → (χn n).row (f β) = (χn (n+1)).row (f β)) →
+      ∀ p ∈ Δq, (p.stump.res.applySubst S₁.subst).isVar = false → rank p.blocker ≤ n →
+      (rd p).applySubst (χn n) = (rd p).applySubst (χn (n+1)) := by
+    intro n hH p hp hps hpn
+    apply Ty.applySubst_congr
+    intro α hα
+    change α ∈ (rd p).ftv at hα
+    rw [hrdftv p hp] at hα
+    obtain ⟨δ, hδ, rfl⟩ := List.mem_map.mp hα
+    have hδα := hres.1 p hp δ hδ
+    refine ⟨by rw [fillIter_ty, fillIter_ty], ?_, by rw [fillIter_lab, fillIter_lab]⟩
+    by_cases hf : ∃ q ∈ Δq, (q.stump.res.applySubst S₁.subst).isVar = false ∧ q.blocker = δ
+    · obtain ⟨q, hq, hqs, rfl⟩ := hf
+      exact hH _ hδα (Nat.lt_of_lt_of_le (chainsRanked_step hres.2.2 hp hps hq hqs hδ) hpn)
+    · have hno : ∀ q ∈ Δq, (q.stump.res.applySubst S₁.subst).isVar = false → q.blocker ≠ δ :=
+        fun q hq hqs he => hf ⟨q, hq, hqs, he⟩
+      rw [hfill0 n δ hδα hno, hfill0 (n+1) δ hδα hno]
+  have hrow_step : ∀ n, ∀ β ∈ ᾱ, rank β < n → (χn n).row (f β) = (χn (n+1)).row (f β) := by
+    intro n
+    induction n with
+    | zero => intro β _ h; exact absurd h (Nat.not_lt_zero _)
+    | succ n ih =>
+        intro β hβ hlt
+        show fillRow (fsOf (χn n) (f β)) (f β) = fillRow (fsOf (χn (n+1)) (f β)) (f β)
+        congr 1
+        apply List.map_congr_left
+        intro q hq
+        obtain ⟨hq, hc⟩ := List.mem_filter.mp hq
+        simp only [Bool.and_eq_true, Bool.not_eq_true', decide_eq_true_eq] at hc
+        have hqb : q.blocker = β := hinj _ (hbq q hq) _ hβ hc.2
+        have hle : rank q.blocker ≤ n := by rw [hqb]; exact Nat.le_of_lt_succ hlt
+        exact congrArg (Prod.mk _) (hres_step n ih q hq hc.1 hle)
+  have hsettle : ∀ p ∈ Δq, (p.stump.res.applySubst S₁.subst).isVar = false →
+      (rd p).applySubst Θ = (rd p).applySubst χ₀ :=
+    fun p hp hps => hres_step _ (hrow_step _) p hp hps (spentRank_le S₁ Δq _)
   have hblkrow : ∀ p ∈ Δq, (χ₀.comp (readSub σ ᾱ f)).row p.blocker
       = fillRow (fills (f p.blocker)) (f p.blocker) := by
     intro p hp
@@ -430,7 +509,7 @@ theorem LetResults.inhabited {S₁ : SolverState B} {ᾱ : List TyVar} {Δq : Li
         .lit (p.stump.label.applySubst S₁.subst).keyName := by
     intro p hp ho
     obtain ⟨q, hq, hqs, hqb⟩ := onFilled_iff.mp ho
-    have hf := ((hres.2 q hq hqs).2.1 p hp hqb.symm).1
+    have hf := ((hres.2.1 q hq hqs).2 p hp hqb.symm).1
     rcases Key.fillKey_iff.mp (Parked.fillable_iff.mp hf).1 with ⟨l, hk⟩ | ⟨κ, hk, hκ, -⟩
     · rw [hk]; rfl
     · have hκG : κ ∈ keyG :=
@@ -446,7 +525,7 @@ theorem LetResults.inhabited {S₁ : SolverState B} {ᾱ : List TyVar} {Δq : Li
         (fillRes (fills (f p.blocker)) (p.stump.label.applySubst S₁.subst).keyName) := by
     intro p hp ho
     obtain ⟨q, hq, hqs, hqb⟩ := onFilled_iff.mp ho
-    obtain ⟨hk, hnk⟩ := Parked.fillable_iff.mp ((hres.2 q hq hqs).2.1 p hp hqb.symm).1
+    obtain ⟨hk, hnk⟩ := Parked.fillable_iff.mp ((hres.2.1 q hq hqs).2 p hp hqb.symm).1
     have hq₁ := hblk p hp
     rcases Key.fillKey_iff.mp hk with ⟨l, hl⟩ | ⟨κ, hl, -, hne⟩
     · rw [hl] at hq₁ ⊢
@@ -475,16 +554,16 @@ theorem LetResults.inhabited {S₁ : SolverState B} {ᾱ : List TyVar} {Δq : Li
     have hq₁ := hblk p hp
     cases hsp : (p.stump.res.applySubst S₁.subst).isVar
     · ---------------- SPENT: the filled blocker makes the lookup hit
-      obtain ⟨-, hsame, hbl⟩ := hres.2 p hp hsp
+      obtain ⟨-, hsame⟩ := hres.2.1 p hp hsp
       have ho : onFilled p = true := onFilled_iff.mpr ⟨p, hp, hsp, rfl⟩
       have hfind := hlook p hp ho
-      have hmem : ((p.stump.label.applySubst S₁.subst).keyName, (rd p).applySubst χR) ∈
+      have hmem : ((p.stump.label.applySubst S₁.subst).keyName, (rd p).applySubst Θ) ∈
           fills (f p.blocker) :=
         List.mem_map.mpr ⟨p, List.mem_filter.mpr ⟨hp, by simp [hsp]⟩, rfl⟩
       -- the field may be that of another stump spent alike: ≈, as D-hit allows
       obtain ⟨τq, hfound, hτq⟩ : ∃ τq,
           fillRes (fills (f p.blocker)) (p.stump.label.applySubst S₁.subst).keyName =
-            .found τq ∧ TyEquiv ((rd p).applySubst χR) τq := by
+            .found τq ∧ TyEquiv ((rd p).applySubst Θ) τq := by
         unfold fillRes
         cases hlk' : (fills (f p.blocker)).lookup (p.stump.label.applySubst S₁.subst).keyName with
         | none => exact absurd hlk' (lookup_none_of_mem hmem)
@@ -496,22 +575,8 @@ theorem LetResults.inhabited {S₁ : SolverState B} {ᾱ : List TyVar} {Δq : Li
       rw [hfound] at hfind
       refine .hit (τ := τq) (hlk _ ?_) (TyEquiv.trans (.of_eq ?_) hτq)
       · rw [hkey p hp ho]; exact LookupQ.lab_iff.mpr hfind
-      · -- χ₀ is χR on the result: no spent blocker in it
-        apply Ty.applySubst_congr
-        intro α hα
-        change α ∈ (rd p).ftv at hα
-        rw [hrdftv p hp] at hα
-        obtain ⟨δ, hδ, rfl⟩ := List.mem_map.mp hα
-        have hδα := hres.1 p hp δ hδ
-        refine ⟨rfl, ?_, rfl⟩
-        have : fills (f δ) = [] := by
-          rcases h : fills (f δ) with _ | ⟨lt, _⟩
-          · rfl
-          · obtain ⟨q, hq, hqs, hqb, -⟩ := mem_fills (h ▸ List.mem_cons_self : lt ∈ fills (f δ))
-            have hqδ := hinj _ (hbq q hq) _ hδα hqb
-            exact absurd (hqδ ▸ hδ) (hbl q hq hqs)
-        show fillRow (fills (f δ)) (f δ) = _
-        rw [this]; rfl
+      · -- the witness is Θ on the result: |Δq| rounds settle it
+        exact (hsettle p hp hsp).symm
     · ---------------- UNSPENT: the result goes to ★, the lookup stays undecided
       obtain ⟨δ, hδe⟩ := Ty.exists_of_isVar hsp
       have hδα : δ ∈ ᾱ := hres.1 p hp δ (by rw [hδe]; simp [Ty.ftv])
@@ -535,7 +600,7 @@ theorem LetResults.inhabited {S₁ : SolverState B} {ᾱ : List TyVar} {Δq : Li
           intro hκ
           obtain ⟨q, hq, ho, hl⟩ := mem_keyG hκ
           obtain ⟨p', hp', hp's, hp'b⟩ := onFilled_iff.mp ho
-          exact ((hres.2 p' hp' hp's).2.1 q hq hp'b.symm).2.2 p hp hl
+          exact ((hres.2.1 p' hp' hp's).2 q hq hp'b.symm).2.2 p hp hl
         have hu := lookupQ_blocked_subst hq₁ (χ₀.comp (readSub σ ᾱ f)) ?_ ?_
         · exact .unk (hlk _ hu) hδres
         · intro _
@@ -582,7 +647,7 @@ theorem LetResults.inhabited {S₁ : SolverState B} {ᾱ : List TyVar} {Δq : Li
           | some τ =>
               exfalso
               obtain ⟨q', hq', hq's, hq'b, hq'l, -⟩ := fill_key p hp hlk'
-              have hpq := (((hres.2 q' hq' hq's).2.1 p hp hq'b.symm).2.1 hq'l.symm).1
+              have hpq := (((hres.2.1 q' hq' hq's).2 p hp hq'b.symm).2.1 hq'l.symm).1
               rw [hpq] at hsp; exact Bool.noConfusion hsp
         rw [hnone] at hfind
         refine .unk (hlk _ ?_) hδres
@@ -592,7 +657,7 @@ theorem LetResults.inhabited {S₁ : SolverState B} {ᾱ : List TyVar} {Δq : Li
 
 /-- ⊢  **the A-let case.** -/
 theorem letCase {C : Type} {constTy : Sig B C} : LetCase B C constTy := by
-  intro Γ S S₀ S₁ S₂ x e₁ e₂ τ₁ τ₂ ᾱ h₀ hm hA h₂ hΓ hc hq IH₀ IH₂ σ hab hσ Γ' hr
+  intro Γ S S₁ S₂ x e₁ e₂ τ₁ τ₂ ᾱ h₀ hA h₂ hΓ hc hq IH₀ IH₂ σ hab hσ Γ' hr
   -- Δ_q, Δ_Γ and the conditions on ᾱ, in the form the proof reads them
   generalize hQ : letQ S₁ ᾱ = Δq at h₂ IH₂
   generalize hG : letG S₁ ᾱ = Δγ at h₂ IH₂
@@ -601,8 +666,7 @@ theorem letCase {C : Type} {constTy : Sig B C} : LetCase B C constTy := by
   have hres : ∀ p ∈ Δq, ∀ δ ∈ (p.stump.res.applySubst S₁.subst).ftv, δ ∈ ᾱ := hQ ▸ hA.res
   have hdis : ∀ α ∈ ᾱ, ∀ p ∈ Δγ, _ := fun α hα p hp => hA.dis α hα p (hG ▸ hp)
   -- the state e₁ ends in
-  have c₀ := Infer.clean h₀ hc
-  have c₁ := hm.clean c₀
+  have c₁ := Infer.clean h₀ hc
   have k₂ := Infer.keeps h₂
   have x₁₂ : S₁.Ext S₂ := (SolverState.Ext.of_sol_eq (S := S₁)
     (S' := { S₁ with parked := Δγ }) rfl).trans (Infer.ext h₂)
@@ -704,8 +768,7 @@ theorem letCase {C : Type} {constTy : Sig B C} : LetCase B C constTy := by
         exact List.mem_append_left _ (List.mem_append_right _
           (List.mem_flatMap.mpr ⟨st, hst, List.mem_append_right _ hα⟩))
       · exact List.mem_append_right _ hα⟩
-    have hab₀' : Absorbs σ₁ S₀ := hab₁'.back hm.ext c₀
-    have ih := IH₀ σ₁ hab₀' (hab₀'.sat c₀) Γ' hr₁
+    have ih := IH₀ σ₁ hab₁' (hab₁'.sat c₁) Γ' hr₁
     -- the type e₁ gets is the read body at χ
     have hty : τ₁.applySubst σ₁ = sc'.body.applySubst χ := by
       show τ₁.applySubst (ρ.comp S₁.subst)
@@ -713,12 +776,7 @@ theorem letCase {C : Type} {constTy : Sig B C} : LetCase B C constTy := by
       rw [Ty.applySubst_applySubst, Ty.applySubst_applySubst]
     rw [hty] at ih
     refine ih.weaken (fun a ha => ?_)
-    obtain ⟨p₀, hp₀, rfl⟩ := List.mem_map.mp ha
-    -- a stump of e₁ survives the merge as itself, or the merge discharged it
-    rcases hm.keepsS σ₁ (hab₁'.sat c₁) p₀ hp₀ with ⟨p, hp, hps⟩ | hd
-    rotate_left
-    · exact .inr (Stump.dischargeEquiv_iff_holds.mp hd)
-    rw [← hps]
+    obtain ⟨p, hp, rfl⟩ := List.mem_map.mp ha
     replace hp := hsplit.mem_iff.mp hp
     rcases List.mem_append.mp hp with hp | hp
     · -- a generalized stump: it IS the read constraint at χ

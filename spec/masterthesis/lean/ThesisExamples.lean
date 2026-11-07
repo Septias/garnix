@@ -1037,10 +1037,25 @@ def metaUpdNoOr : MacroNix.E :=
 #guard runM metaUpdNoOr = ("⟨ρ1 | ε.meta ↓ {ρ2}⟩ ⇒ ({ρ1 | ε} → {meta: {broken: bool | ε | ρ2} | ε | ρ1})", [])
 #guard runM (.app metaUpdNoOr (mrec [("pname", ms "hello")])) = ("fail: clash", [])
 -- The overlay form `self: super: { foo = super.foo // { meta = super.foo.meta // …; }; }`
--- fails the fillability test: the blocker of the meta stump occurs in the spent
--- result of the foo stump (LetSpent, last clause)
-#guard runM (mlam ["self", "super"] (mrec [("foo", .cat (.sel (mv "super") "foo")
-    (mrec [("meta", .cat (.sel (.sel (mv "super") "foo") "meta") unbroken)]))])) =
+-- is a spent chain: the blocker of the meta stump occurs in the spent result of
+-- the foo stump. It passes the fillability test, since the chain has no cycle
+-- (LetSpent, last clause): the witness fills ρ4 first, then ρ2 …
+def overlay : MacroNix.E := mlam ["self", "super"] (mrec [("foo", .cat (.sel (mv "super") "foo")
+    (mrec [("meta", .cat (.sel (.sel (mv "super") "foo") "meta") unbroken)]))])
+#guard runM overlay =
+  ("⟨ρ4 | ε.meta ↓ {ρ3}⟩, ⟨ρ2.foo ↓ {ρ4 | ε}⟩, ⟨ρ2 | ε.foo ↓ {ρ4}⟩ ⇒ " ++
+   "(α1 → ({ρ2 | ε} → {foo: {meta: {broken: bool | ε | ρ3} | ε | ρ4}}))", [])
+-- … and at a concrete super it is typed
+#guard runM (mapp overlay [mrec [], mrec [("foo", mrec [("meta", mrec [("description", ms "hi")])])]]) =
+  ("{foo: {meta: {broken: bool | ε | description: ⌊hi⌋ | ε} | ε | meta: {description: ⌊hi⌋} | ε}}", [])
+-- The shortest spent chain `x: x.l.m // {}` passes, a chain of three as well …
+#guard runM (mlam ["x"] (.cat (.sel (.sel (mv "x") "l") "m") (mrec []))) =
+  ("⟨ρ3.m ↓ {ρ2}⟩, ⟨ρ1.l ↓ {ρ3}⟩ ⇒ ({ρ1} → {ε | ρ2})", [])
+#guard runM (mlam ["x"] (.cat (.sel (.sel (.sel (mv "x") "l") "m") "n") (mrec []))) =
+  ("⟨ρ3.n ↓ {ρ2}⟩, ⟨ρ4.m ↓ {ρ3}⟩, ⟨ρ1.l ↓ {ρ4}⟩ ⇒ ({ρ1} → {ε | ρ2})", [])
+-- … while a cycle has no instance: in `x: (x.l) x` the blocker of the l stump
+-- occurs in its own spent result
+#guard runM (mlam ["x"] (.app (.sel (mv "x") "l") (mv "x"))) =
   ("fail: spent promise without witness", [])
 
 -- Override: `mkDerivation: extra: args:

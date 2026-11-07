@@ -261,7 +261,7 @@ private theorem runSound_plain {e : Expr Unit} {τ : Ty Unit} {S₁ : SolverStat
     (hp : S₁.parked = []) :
     QTyped (Sig.plain fun _ => ()) QCtx.empty e (τ.applySubst S₁.subst) :=
   (h e _ ⟨τ, S₁, S₁, S₁, hinf, .refl _, rfl, .refl _,
-    fun p hq => absurd (hp ▸ hq) List.not_mem_nil⟩).1 _
+    ⟨fun p hq => absurd (hp ▸ hq) List.not_mem_nil, by rw [hp]; rfl⟩⟩).1 _
     ⟨TySubst.id _, ⟨fun _ _ => rfl, fun _ _ => rfl, fun _ _ => rfl⟩,
      fun s hs => by simp [letScheme, hp] at hs, Ty.applySubst_id _⟩
 
@@ -291,7 +291,7 @@ theorem letAlias_infers_guarded :
     Infer (B := Unit) (C := Unit) (Sig.plain fun _ => ()) QCtx.empty
       ⟨Sol.nil, [], [], ⟨1⟩, []⟩ laE (.fn (.var laA) (.var laA)) laS := by
   refine Infer.lam (S₀ := laS) rfl ?_
-  refine Infer.letE (ᾱ := []) la_var_y (.refl _)
+  refine Infer.letE (ᾱ := []) la_var_y
     ⟨fun _ h => (nomatch h), fun _ hp => absurd (mem_letQ.mp hp).2 List.not_mem_nil,
      fun _ hp => absurd (mem_letQ.mp hp).2 List.not_mem_nil⟩ ?_
   exact Infer.var_mono

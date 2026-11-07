@@ -12,11 +12,19 @@ related:
 
 # Findings
 
+## A-let without merge, fillability with spent chains (2026-11-06)
+Status: done in `lean/`, uncommitted on main. Thesis text not changed (05, 06, glossar still describe the old test; see the chat of that day).
+- A-let: the `Merges` premise of `Infer.letE` and the `mergesF` call in `inferF` are gone. The entry still merges (fillability clause 1 needs it).
+- Fillability: clause 2 ("no spent blocker in a spent result") is replaced by `chainsRanked` (`lean/Infer.lean`): the steps β ⇝ β′ (`spentSteps`, a spent stump on β has the blocker β′ of a spent stump in its result) have no cycle, checked by a rank table built once per test (`spentTab`, |Δ| rounds). The witness of `LetResults.inhabited` (`lean/LetCase.lean`) is now round |Δ|+1 of `fillIter`; |Δ| rounds settle every spent result because the rank falls along every step.
+- Build green, Axioms guards unchanged (standard axioms only), NixSuite green. One guard flipped as intended: the overlay form (`ThesisExamples.lean`) is now accepted and typed at a concrete `super`. New guards: `x: x.l.m ‖ {}`, a chain of three, and the cycle `x: (x.l) x` (rejected).
+- Enumeration (all closed MiniNix programs up to size 8, labels l, m; scratch script, not in the repo): 3,955,789 programs, 13,308 differ from the old test, all `fail: spent promise without witness` → typed. Nothing goes from typed to failing, no typed answer changes. The shortest new acceptance is `x: x.l.l.l`. The 380 rejections left at size ≤ 7 are cycles (`x: x.l x`) or uninhabited (`x: x.l x.l`).
+- Cost: a first version recomputed the ranks per edge and took 92 s on eight chains through one record; now under a second for twelve.
+
 ## Lazy integration audit (2026-11-04)
 Status: open. Nothing changed in `lean/` or `text/`; the wording proposals are in the chat of that day. Scratch runs, not added to the repo.
-- A-let's `Merges` is not observable. Without it (`mergesF` dropped from the let arm of `inferF`), the proofs still go through with `.refl`, and no guard flips in `InferRuns`, `Regressions`, `Refutations`, `ThesisExamples`, `NixSuite`. On 1,492,884 generated MiniNix programs no answer goes from typed to failing or back. 6 differ: 2 in the failure message, 4 in where ε sits.
+- Done 2026-11-06 (see above). A-let's `Merges` is not observable. Without it (`mergesF` dropped from the let arm of `inferF`), the proofs still go through with `.refl`, and no guard flips in `InferRuns`, `Regressions`, `Refutations`, `ThesisExamples`, `NixSuite`. On 1,492,884 generated MiniNix programs no answer goes from typed to failing or back. 6 differ: 2 in the failure message, 4 in where ε sits.
 - `x: let f = z: (z ‖ x).l in {a = f {l = c} | b = f {m = c}}` answers `fail: clash` and is declaratively typed at `{l: 𝓫} → {a: 𝓫 | b: 𝓫}` without T-★-intro (scratch proof at f = `∀β. {β} → 𝓫`, standard axioms only). So "completeness for the blur-free fragment" (fix A under Unrestricted T-★-intro in feature-state) does not hold as it stands: the freshness condition still loses this program.
-- `x: x.l.m ‖ {}` and the overlay form fail the entry test. Under a let they are generalized: unused they cost nothing, and at concrete records two uses of the overlay form are typed.
+- Outdated 2026-11-06: both now pass. `x: x.l.m ‖ {}` and the overlay form fail the entry test. Under a let they are generalized: unused they cost nothing, and at concrete records two uses of the overlay form are typed.
 - Broekhoff and Krebbers say (§1, Limitations) that they use call-by-name like Dolstra, while Nix shares, and that this is not lazy enough for cycle detection in recursive attributes. Relevant once recursion is added.
 
 ## `gradual.typ` ≃ᵣ against Sekiyama-Igarashi (2026-11-03)
