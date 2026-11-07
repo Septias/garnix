@@ -51,7 +51,7 @@ The syntax extension is given in @fc-syntax. Expressions gain a new constructor 
 
 
 == First-Class Labels by Example
-We continue introducing the extension through examples. The full set of rules, including row equivalence, the typing and reduction rules, key unification and the algorithmic rules, is given in @app-fc-labels. The following three examples show how first-class labels allow to type the generic selector, how first-class labels act as barriers in the wand ambiguity and the effect of untracked strings, typed at ⌊∗⌋.
+We continue introducing the extension through examples. The full set of rules, including row equivalence, the typing and reduction rules, key unification and the algorithmic rules, is given in @app-fc-labels. The following three examples show how first-class labels allow us to type the generic selector, how first-class labels act as barriers in the Wand ambiguity and the effect of untracked strings, typed at ⌊∗⌋.
 
 The dynamic selector is the program `x: x.l` with its label abstracted to a label-variable. It takes a label and a record as arguments and returns the named field from the given record. Our system types it as:
 
@@ -67,7 +67,7 @@ $
 
 For `x.${a}`, the lookup of α in β answers $?$ on β, so A-sel-\? parks $⟨β ⊳ β.α ↓ δ′⟩$ and returns δ′. The selection of l then unifies δ′ with ${γ}$ for a fresh γ, which spends the first stump, and parks $⟨γ ⊳ γ.l ↓ δ⟩$ on the row of its result.
 
-Next, we look at the wand-ambiguity with first class labels: the function `n: r: (r ‖ {${n} = c}).l` overrides a field under a computed name and then reads l. Given $n: ⌊α⌋$ and $r: {β}$, the concatenation has type ${\${α}: 𝓫_c | β}$. The lookup of l stops at the barrier and answers $?$, since α may become l. The answer is recorded like every other pending lookup:
+Next, we look at the Wand ambiguity with first-class labels: the function `n: r: (r ‖ {${n} = c}).l` overrides a field under a computed name and then reads l. Given $n: ⌊α⌋$ and $r: {β}$, the concatenation has type ${\${α}: 𝓫_c | β}$. The lookup of l stops at the barrier and answers $?$, since α may become l. The answer is recorded like every other pending lookup:
 
 $
   ∀(α: "Label", β: "Row", δ: "Type"). #h(0.3em) ⟨(\${α}: 𝓫_c | β).l ↓ δ⟩ ⇒ ⌊α⌋ → {β} → δ

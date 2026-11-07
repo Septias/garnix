@@ -82,13 +82,13 @@
     np-f[Lists `[e₁ … eₙ]`],
     np-p,
 
-    np-r[homogeneous `[τ]`; mixed lists only at `[★]`], np-f[Laziness], np-p,
-    np-r[fields, list cells, arguments and `let` lazy; no sharing; builtins force their arguments],
+    np-r[homogeneous `[τ]`; mixed lists only at `[★]`; lazy cons cells, where Nix lists are arrays with a strict spine], np-f[Laziness], np-p,
+    np-r[fields, list cells, arguments and `let` lazy; no sharing; builtins force all their arguments, Nix builtins only those they inspect],
 
     np-gr[Builtins], np-f[`add` `sub` `mul` `div`], np-y,
     np-r[on `int`; `div` fails on 0], np-f[`lessThan`, `<=`], np-p,
     np-r[on `int` only], np-f[`==`], np-p,
-    np-r[atomic values only; fails on records, functions, non-empty lists and mixed atoms (`1 == true`)],
+    np-r[atomic values only; mixed atoms are unequal (`1 == true` is false); fails on records, non-empty lists and functions, where Nix compares records and lists structurally],
     np-f[`head` `tail` `elemAt` `length`],
     np-y,
 

@@ -46,10 +46,17 @@ The development of MacroNix is just for test purposes, don't mention it too ofte
 
 
 ## Final Cleanup
-- [ ] You are a professor in PL, go over the thesis text and critique it's claims and wording based on your expertise.
-- [ ] Check all claims made in related work against the paper sources in plaintext/
-- [ ] Check rigidness of presentation
-- [ ] Go over the thesis text and fix all spelling errors.
+- [x] Make a pass over the thesis text and check for wording that is ambiguous in PL
+- [x] Check all claims made in related work against the paper sources in plaintext/
+- [x] You are a professor in PL, go over the thesis text and critique it's claims and wording based on your expertise.
+- [x] Check rigidness of presentation. Is the wording correct and is everything defined?
+- [x] Go over the thesis text and fix all spelling errors
+- [x] Mechanization gives stats for the mechanization, update them
+
+
+### Non Ai
+- [ ] Inhaltsverzeichniss und Seitenzahlen
+- [x] Go over the heading structure
 
 
 # Section-State
@@ -59,14 +66,9 @@ The development of MacroNix is just for test purposes, don't mention it too ofte
 - [x] 03 Metatheory
 - [x] 04 Unification
 - [ ] 05 Inference
-  - [ ] Let generalization?
-  - [ ] Fillability
-  - [ ] Merge
   - [ ] Entry Point
-- [ ] 06 Incompleteness
-  - [ ] Unsolvable
-  - [ ] Inference
-- [ ] 07 FC-Labels
+- [x] 06 Incompleteness
+- [x] 07 FC-Labels
 - [x] 08 Mechanization
 - [x] 09 Discussion
 - [x] 10 Related Work

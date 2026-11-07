@@ -1,12 +1,12 @@
 #import "./functions.typ": *
 #set document(
-  title: "A Records Calculus with Asymmetric Concatenation for Nix",
+  title: "A Record Calculus with Asymmetric Concatenation for Nix",
   description: "Master thesis about a Records Calculus with Asymmetric Concatenation for Nix",
   author: "Sebastian Klähn",
   keywords: ("Nix", "Type inference", "Laziness", "Records"),
 )
 
-#let title = [A Records Calculus with Asymmetric Concatenation for Nix]
+#let title = [A Record Calculus with Asymmetric Concatenation for Nix]
 
 #page(footer: align(
   center,
@@ -36,7 +36,7 @@
     #set par(justify: true)
     #pad(x: 15pt, top: 10pt, bottom: 20pt)[
       = Abstract
-      Asymmetric record concatenation with right-precedence is a _set-or-replace operation_ that, given two records, extends the fields of the first record with every unique field of the second and overwrites fields that collide. This operation is a primitive operation in the Nix programming language and admits a canonical example that has no principal type in a row calculus that must decide where a field comes from: the expression `a: b: (a ‖ b).l` concatenates two records of unknown shape, and because of field-precedence and shadowing behaviour, whether l is taken from a or from b is only known once b is known.
+      Asymmetric record concatenation with right-precedence is a _set-or-replace operation_ that, given two records, extends the fields of the first record with every field of the second and overwrites fields that collide. This operation is a primitive operation in the Nix programming language and admits a canonical example that has no principal type in a row calculus that must decide where a field comes from: the expression `a: b: (a ‖ b).l` concatenates two records of unknown shape, and because of field-precedence and shadowing behaviour, whether l is taken from a or from b is only known once b is known.
       We propose a novel type system for a core calculus of Nix, based upon the work of Paszke and Xie with scoped labels, row-variables, asymmetric record concatenation, let-polymorphism, first-class labels, row equivalence and an unknown type ★. We mechanically prove _type safety_ with progress up to lookup errors of the declarative system with qualified types in Lean, together with soundness and termination of an incomplete, unification-based inference algorithm.
     ]
   ]

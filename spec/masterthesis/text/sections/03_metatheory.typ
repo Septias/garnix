@@ -44,7 +44,7 @@ The three conjuncts are instance-closure, inhabitation and coverage: every insta
   name: [No plain scheme is principal],
   lean: "no_plain_principal_scheme",
 )[
-  There is no plain scheme σ whose instances are all typings of `x: x.l` and which has both ${(l: {ε})} → {ε}$ and ${ε} → ★$ as instances. In particular, no plain scheme is principal for `x: x.l`.
+  There is no plain scheme σ whose instances are all typings of `x: x.l` and which has both ${l: {ε}} → {ε}$ and ${ε} → ★$ as instances. In particular, no plain scheme is principal for `x: x.l`.
 ] <thm-no-plain>
 
 #proof[

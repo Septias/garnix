@@ -113,7 +113,7 @@ A lookup can advance further into a row as soon as a blocking row variable α is
 A definite derivation never uses L-var, so no substitution can change its result; only the undecided result ? can be refined:
 
 #lemma(name: [Stability under substitution], lean: "lookup_applySubst")[
-  If $ρ.l ↓ r$ and $r ≠ #h(0.2em) ?$, then $(θ ρ).l ↓ θ r$ for every substitution θ.
+  If $ρ.l ↓ r$ and $r ≠ #h(0.2em) ?$, then $(θ ρ).l ↓ θ r$ for every substitution θ, where $θ ⊥ = ⊥$.
 ] <lem-lookup-stable>
 
 #proof[By induction on the derivation of $ρ.l ↓ r$. A definite derivation never uses L-var, so it never reaches a row-variable, and θ changes no label it inspects.]
@@ -149,7 +149,7 @@ The order of fields with distinct labels carries no meaning: both `{a = 1 | b = 
 
 == Qualified Schemes <qualified-schemes>
 
-A type scheme σ quantifies over type- and row-variables and carries a set $Q$ of constraints. Each constraint is a pending lookup, which we call a _stump_. A stump $⟨ρ.l ↓ δ⟩$ consists of the row ρ on which the lookup is blocked, the label l and the type-variable δ that names the result. Stumps are needed because the type of a selection depends on the row through the lookup relation, and no type constructor expresses this dependency. The selector `x: x.l` has the typings ${(l: {ε})} → {ε}$ and ${ε} → ★$. A plain scheme with both instances needs a variable as its result type, and then it also admits ${ε} → {ε}$, which is no typing (@thm-no-plain). A stump ties the result to the lookup: every instance performs the lookup and fixes δ to its result (@instantiation).
+A type scheme σ quantifies over type- and row-variables and carries a set $Q$ of constraints. Each constraint is a pending lookup, which we call a _stump_. A stump $⟨ρ.l ↓ δ⟩$ consists of the row ρ on which the lookup is blocked, the label l and the type-variable δ that names the result. Stumps are needed because the type of a selection depends on the row through the lookup relation, and no type constructor expresses this dependency. The selector `x: x.l` has the typings ${l: {ε}} → {ε}$ and ${ε} → ★$. A plain scheme with both instances needs a variable as its result type, and then it also admits ${ε} → {ε}$, which is no typing (@thm-no-plain). A stump ties the result to the lookup: every instance performs the lookup and fixes δ to its result (@instantiation).
 
 #let instantiation = figure(
   caption: "Instantiation.",
@@ -176,7 +176,7 @@ Without stumps (Q = ε), I-inst is plain Hindley-Milner instantiation. With stum
 
 #example(name: [Instances of selQ])[
   Consider $"selQ" = ∀(β: "Row", δ: "Type"). ⟨β.l ↓ δ⟩ ⇒ {β} → δ$.
-  - $θ = [β ≔ (l: 𝓫), δ ≔ 𝓫]$ discharges the stump by D-hit, since $(l: 𝓫).l ↓ 𝓫$, so ${(l: 𝓫)} → 𝓫$ is an instance.
+  - $θ = [β ≔ (l: 𝓫), δ ≔ 𝓫]$ discharges the stump by D-hit, since $(l: 𝓫).l ↓ 𝓫$, so ${l: 𝓫} → 𝓫$ is an instance.
   - $θ = [β ≔ ε, δ ≔ ★]$ discharges it by D-⊥, since $ε.l ↓ ⊥$, so ${ε} → ★$ is an instance.
   - $θ = [β ≔ ε, δ ≔ {ε}]$ violates D-⊥, which demands $θ δ = ★$. Hence ${ε} → {ε}$ is not an instance, which is correct.
 ] <ex-selq-inst>

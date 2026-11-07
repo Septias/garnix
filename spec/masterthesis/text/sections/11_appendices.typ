@@ -84,7 +84,7 @@ U-ground uses $"rem"_l (s) = (τ, s′)$, which takes the first l-field anywhere
       (
         $"host"_l (τ, t₁, s₂) = β$,
         $β′ "fresh"$,
-        $t₁ scripts(≐)_r s₂[β′\/β] ⇝ θ$,
+        $t₁ scripts(≐)_r [β ≔ β′]s₂ ⇝ θ$,
       ),
       $(l: τ) · t₁ scripts(≐)_r s₂ ⇝ θ ∘ [β ≔ (l: τ | β′)]$,
     ),

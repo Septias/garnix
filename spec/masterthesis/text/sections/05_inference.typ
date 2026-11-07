@@ -95,9 +95,9 @@ The saturation judgement $#st_sat$ works on the state until it is quiescent agai
       (
         $x: ∀(macron(α): macron(κ)). Q ⇒ τ ∈ Γ$,
         $"fresh" macron(β): macron(κ)$,
-        $S ⊢ Q[macron(β)\/macron(α)] scripts(↝)^(*!) S′$,
+        $S ⊢ [macron(α) ≔ macron(β)]Q scripts(↝)^(*!) S′$,
       ),
-      $Γ; S ⊢ x ⇒ τ[macron(β)\/macron(α)]; S′$,
+      $Γ; S ⊢ x ⇒ [macron(α) ≔ macron(β)]τ; S′$,
     ),
     derive(
       "A-λ-I",
@@ -201,7 +201,7 @@ As in @declarative-rules, three selection rules cover the three verdicts of the 
 )
 #generalization <generalization>
 
-@generalization gives A-let. The rule infers $e₁$, binds the scheme and continues with $e₂$. The choice of the generalized variables $macron(α)$ is delegated to the function $"gen"_(Γ, S₁)$ that partitions the stumps into two groups. $Δ_q$ is the list of stumps blocked on a variable of the scheme, and these stumps go into the scheme as its qualifiers Q. $Δ_Γ = Δ₂ #st_drop Δ_q$ are the remaining stumps, which stay in the solver state. The partition relies on quiescence because otherwise, a stump might be blocked on a solved variable and not on one of $macron(α)$. It would then stay in $Δ_Γ$ and the result variable would not be generalized.
+@generalization gives A-let. The rule infers $e₁$, binds the scheme and continues with $e₂$. The choice of the generalized variables $macron(α)$ is delegated to the function $"gen"_(Γ, S₁)$ that partitions the stumps into two groups. $Δ_q$ is the list of stumps blocked on a variable of the scheme, and these stumps go into the scheme as its qualifiers Q, read as constraints without their blockers. $Δ_Γ = Δ₂ #st_drop Δ_q$ are the remaining stumps, which stay in the solver state. The partition relies on quiescence because otherwise, a stump might be blocked on a solved variable and not on one of $macron(α)$. It would then stay in $Δ_Γ$ and the result variable would not be generalized.
 
 The three lines in $"gen"_(Γ, S₁)$ make a choice of $macron(α)$ admissible. The first condition ensures that all variables are fresh for the environment which consists of Γ together with the stumps that stay parked. It is the same condition as in Hindley-Milner generalization @damas_milner. The second condition makes sure that all stump results (δ) are themselves generalized as they are part of the stumps. The last condition ensures that $Δ_q$ only contains stumps parked while inferring $e₁$ because a stump parked before $e₁$ would otherwise never be instantiated.
 
@@ -222,7 +222,7 @@ The algorithm computes the set of variables by deleting those that don't hold th
       derive(
         "Entry",
         (
-          $∅; (id, ∅, ∅) ⊢ e ⇒ τ; S₁$,
+          $∅; (∅, ∅, ∅) ⊢ e ⇒ τ; S₁$,
           $S₁ ⊢ Δ₁ #st_merges S₂$,
           $S₂ "fillable"$,
         ),
@@ -268,7 +268,7 @@ In `x: {p = (x.l) c | q = x.l}` only the first stump is spent, so the first cond
 == Inference Metatheory <inference-metatheory>
 
 #theorem(name: [Termination of inference], lean: "runF_terminates, satStep_wf")[
-  Saturation admits no infinite run, and for every term e the entry point $⊢ e ⇒ σ$ returns a verdict.
+  Saturation admits no infinite run, and the function `runF` that implements the entry point terminates on every term.
 ] <thm-infer-term>
 
 #theorem(name: [Soundness of inference], lean: "runSound, run_typed")[
