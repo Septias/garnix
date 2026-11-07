@@ -2,7 +2,7 @@
 
 = Discussion and Conclusion <sec-discussion>
 
-We now show our type inference algorithm in action on the code snippets from the introduction. We then revisit the design goals stated in @sec-motivation, give an outlook for further work and the path towards full type inference for NixLang and finally conclude the thesis.
+We now show our type inference algorithm in action on the code snippets from the introduction. We then revisit the design goals stated in @sec-motivation, give an outlook for further work and the path towards full type inference for NixLang.
 
 == The Idioms of the Introduction <sec-idioms>
 
@@ -60,10 +60,3 @@ The known remedy is gradual typing. Nix provides dynamic tests for primitives (`
 Our core calculus MiniNix does not include some hard-to-type features of NixLang. Mutually recursive lets and recursion are tricky, but ML-style inference has a standard treatment for them: a recursive binding is monomorphic inside its own definition and generalized after it, so we expect their addition to be benign. The faithful typing of conditionals and lists however, could be tricky without subtyping. Subtyping based systems with the full suite of type connectives (union, intersection and negation) have a natural representation for both which MiniNix lacks. Conditionals, for example, need a union of both branches to be faithful to their semantics but MacroNix can only infer a single type so both branches have to match – a real gap from NixLang. Patterns, in contrast, map onto rows: an open pattern `{a, ...}` types its argument at ${a: τ | ρ}$, and only closed patterns need absence information. On the bright side, negative information, could be encoded as a constraint $⟨ρ.l ↓ ⊥⟩$ and might be a promising direction to narrow the Wand ambiguity.
 
 Finally, our row equivalence is not faithful to the semantics of Nix. We applied the semantics of Leijen @extensible_recs and Paszke & Xie @extensible_tabular, but in their record systems, single labels can be peeled off the row, revealing shadowed occurrences. Nix only provides the builtin `removeAttrs`, which removes all occurrences. Our relation is finer in that it tells more rows apart, and the coarser relation of Nix would not lead to a cancellative trace monoid that unification can use for forced moves. The relation, however, does not equate ${l: τ | l: τ'}$ and ${l: τ}$, a common application in Nix. We have experimented with normalization (the removal of shadowed label occurrences), which works for clean rows, but we are unsure how this approach interacts with row- and label-variables.
-
-== Conclusion
-
-The aim of this thesis was to type asymmetric record concatenation and first-class labels, the operations at the centre of NixLang, without annotations and without changing the meaning of a single program. Its canonical obstacle, `a: b: (a ‖ b).l`, admits no principal type in a row calculus that must decide where the field comes from. We have taken the decision out of the calculus. Scoped labels make concatenation a total juxtaposition of rows, a lookup relation answers a selection with a type, with definite absence or with _don't know_, a pending answer is kept as a qualifier that is decided by re-running the lookup at each use, and an answer that never arrives is turned into the unknown type.
-
-The resulting calculus, MiniNix, is type-safe up to lookup errors, and progress and preservation are mechanized in Lean. Row unification operates on spines, makes only forced moves and returns a most general unifier when it succeeds. The inference algorithm built on it parks unanswered lookups as stumps, terminates and answers schemes whose instances are declarative typings. We analysed the shortcomings of the algorithm and gave an outlook on how to overcome some of them. We now place our work into the literature.
-
