@@ -26,7 +26,7 @@ For example, in `r: (x: x.l) (r ‖ {m = c})` the selection `x.l` parks a stump 
 )
 #solver_state <solver-state>
 
-The inference judgement $Γ; S ⊢ e ⇒ τ; S′$ takes a _solver state_ $S$ and returns the updated state $S′$. The solver state $S$, given in @solver-state, consists of a sort-respecting substitution $θ$, a list $Δ$ of parked stumps and a record $macron(κ)$ of the sorts at which each name was drawn. $⟦S⟧τ$ applies the substitution of $S$ to $τ$, $S(α)$ reads the sort of $α$ from $macron(κ)$, and $Δ_i$ denotes the parked stumps of $S_i$. $S #st_park q$ parks a stump, and $S #st_drop Δ′$ drops stumps. A parked stump $⟨α ⊳ ρ.l ↓ δ⟩$ is a lookup of $l$ in $ρ$ with result variable $δ$ and blocker $α$. We call a stump _stale_ when a substitution has solved its _recorded blocker_ ($α$ is outdated) and this happens when unification solves type variables. A _parked lookup_ leaves the fresh type-variable $δ$ in its place, and unification may solve $δ$ while the stump stays parked. We call a stump whose result variable $δ$ was used by unification a _spent stump_, but only  when $δ$ has been solved to a type that is neither a variable nor ★ (@ex-spent).
+The inference judgement $Γ; S ⊢ e ⇒ τ; S′$ takes a _solver state_ $S$ and returns the updated state $S′$. The solver state $S$, given in @solver-state, consists of a sort-respecting substitution $θ$, a list $Δ$ of parked stumps and a record $macron(κ)$ of the sorts at which each name was drawn. $⟦S⟧τ$ applies the substitution of $S$ to $τ$, $S(α)$ reads the sort of $α$ from $macron(κ)$, and $Δ_i$ denotes the parked stumps of $S_i$. $S #st_park q$ parks a stump, and $S #st_drop Δ′$ drops stumps. A parked stump $⟨α ⊳ ρ.l ↓ δ⟩$ is a lookup of $l$ in $ρ$ with result variable $δ$ and blocker $α$. We call a stump _stale_ when a substitution has solved its _recorded blocker_ ($α$ is outdated) and this happens when unification solves type variables. A _parked lookup_ leaves the fresh type-variable $δ$ in its place, and unification may solve $δ$ while the stump stays parked. We call a stump whose result variable $δ$ was used by unification a _spent stump_, but only when $δ$ has been solved to a type that is neither a variable nor ★.
 
 The state is kept under one invariant, _quiescence_. Quiescence demands that every stump in Δ is genuinely blocked on its recorded variable α. Every written solution can break this condition, so an auxiliary judgement re-runs the stale lookups, a process we call _saturation_. Saturation uses _wake-up_ as a subroutine, a judgement that re-runs the lookup on stumps.
 
@@ -160,9 +160,9 @@ The saturation judgement $#st_sat$ works on the state until it is quiescent agai
 )
 #inference <inference-rules>
 
-@inference-rules gives the syntax-directed version of the declarative rules from @declarative-rules. T-★-intro has no counterpart, since the algorithm never discards a type and T-eq has none either, since row unification already works up to ≈. A-var and the algorithmic counterpart of T-let follow together in @let-generalization. A-cons and A-λ-I are standard. A-rec and the A-ξ rules thread the state through a record body and build its row. A-λ-E and A-conc draw fresh variables for the shape their premises demand and give the resulting equations to $#st_solve$.
+@inference-rules gives the syntax-directed version of the declarative rules from @declarative-rules. T-★-intro has no counterpart, since the algorithm never discards a type and T-eq has none either, since row unification already works up to ≈. A-var and the algorithmic counterpart of T-let follow together in @let-generalization. A-cons and A-λ-I are standard. A-rec and the A-ξ rules thread the state through a record body and build its row. A-λ-E and A-conc draw fresh variables for the shape their premises demand and give the resulting equations to $#st_solve$. The judgement $S ⊢ τ ≐ τ' ⇝ S'$ runs the unifier of @unification and writes its solution into the state and $S ⊢ τ ≐ τ′ #st_solve S′$ does the same and _saturates_ afterwards.
 
-The judgement $S ⊢ τ ≐ τ' ⇝ S'$ runs the unifier of @unification and writes its solution into the state and $S ⊢ τ ≐ τ′ #st_solve S′$ does the same and _saturates_ afterwards.
+A-var instantiates a qualified scheme with fresh variables at the sorts of its binders and replays the instantiated stumps by $scripts(↝)^(*!)$. A scheme stump carries no blocker, so the replay $scripts(↝)^*$ computes one: it answers the stumps that the instance already decides and parks the others under the variables that block them (@app-replay). Saturation $#st_sat$ follows the replay, since a replayed stump whose result is already solved can write a row solution and make a stump stale that the replay has already parked.
 
 As in @declarative-rules, three selection rules cover the three verdicts of the lookup judgement. Each rule infers a type for $e$, unifies it with ${β}$ for a fresh row-variable β and runs the lookup on the solved row $⟦S₂⟧β$. A-sel and A-sel-⊥ use the verdict directly. A-sel-\? is where the stump mechanism enters. Its premise $(⟦S₂⟧β).l ↓ #h(0.2em) ? "on" α$ states that the lookup answers $?$ and names its blocker $α$. The rule does not commit ★, but returns a fresh type-variable δ as a placeholder for the result and parks the stump under $α$.
 
@@ -189,29 +189,24 @@ As in @declarative-rules, three selection rules cover the three verdicts of the 
         Δ_q &= {p ∈ Δ₁ | "blocker"(p) ∈ macron(α)} #h(3em) Δ_Γ = Δ₁ #st_drop Δ_q \
         "gen"_(Γ, S)(S₁, τ₁) &= "the greatest" macron(α) ⊆ "ftv"(⟦S₁⟧τ₁, ⟦S₁⟧Δ₁) "such that" \
         & #h(1em) macron(α) ∩ "ftv"(⟦S₁⟧(Γ, Δ_Γ)) = ∅ \
+        & #h(1em) "ftv"(⟦S₁⟧"results"(Δ_q)) ⊆ macron(α) \
         & #h(1em) Δ_q ∩ Δ = ∅ \
-        & #h(1em) "ftv"(⟦S₁⟧"results"(Δ_q)) ⊆ macron(α)
       $,
     ),
   ),
 )
 #generalization <generalization>
 
-@generalization gives A-let. The rule infers $e₁$, merges the parked stumps by M-merge ($#st_merges$, @merging), binds the scheme and continues with $e₂$. The choice of the generalized variables $macron(α)$ is delegated to the function $"gen"_(Γ, S)$ that partitions the stumps. $Δ_q$ is the list of stumps blocked on a variable of $macron(α)$, and these stumps go into the scheme as its qualifiers Q. $Δ_Γ = Δ₁ #st_drop Δ_q$ are the remaining stumps, which stay in the solver state. The partition relies on quiescence. A stump filed under a solved variable would not be blocked on a variable of $macron(α)$, so it would stay in $Δ_Γ$ and the variables of its lookup could not be generalized. Quiescence guarantees that the blocker A-let reads is the variable the lookup actually waits on.
+@generalization gives A-let. The rule infers $e₁$ binds the scheme and continues with $e₂$. The choice of the generalized variables $macron(α)$ is delegated to the function $"gen"_(Γ, S)$ that partitions the stumps. $Δ_q$ is the list of stumps blocked on a variable of $macron(α)$, and these stumps go into the scheme as its qualifiers Q. $Δ_Γ = Δ₁ #st_drop Δ_q$ are the remaining stumps, which stay in the solver state. The partition relies on quiescence because otherwise, a stump might be blocked on a solved variable and not on one of $macron(α)$. It would then stay in $Δ_Γ$ and the lookup variable would not be generalized.
 
-A-var is the counterpart of A-let: it instantiates a qualified scheme with fresh variables at the sorts of its binders and replays the instantiated stumps by $scripts(↝)^(*!)$. A scheme stump carries no blocker, so the replay $scripts(↝)^*$ computes one: it answers the stumps that the instance already decides and parks the others under the variables that block them (@app-replay). Saturation $#st_sat$ follows the replay, since a replayed stump whose result is already solved can write a row solution and make a stump stale that the replay has already parked. Each use of a let-bound variable replays its own copy of the stumps.
+The tree lines in $"gen"_(Γ, S)$ make a choice of $macron(α)$ admissible. The first codition ensures that all variables are fresh for the environment which consists of Γ together with the stumps that stay parked. It is the same condition as in Hindley-Milner generalization @damas_milner and ensures that stumps stay independent. The second condition makes sure that all stump results are itself generalized as they are part of the stumps. The last condition ensures that $Δ_q$ only contains stumps parked while inferring $e₁$ because a stump that is captured from the outside would otherwise never be instantiated.
+
+The algorithm computes the set of variables by deleting those that don't hold the statements so a failing condition never makes the binding monomorphic completely monomorphic but only parts of it.
 
 #example(name: [Generalizing a selection])[
   Consider `let f = x: x.l in f {l = c}`. For the bound term, A-λ-I gives x a fresh γ, and A-sel-\? unifies γ with ${β}$ for a fresh β, finds that $β.l$ answers $?$ on β, and parks $⟨β ⊳ β.l ↓ δ⟩$ with a fresh δ. The bound term has type ${β} → δ$. Since γ is solved, $macron(α) = β, δ$. The single stump moves into the scheme, and nothing stays parked. f is bound to $∀(β: "Row", δ: "Type"). ⟨β.l ↓ δ⟩ ⇒ {β} → δ$, which is selQ of @principality. At the use, A-var instantiates the scheme with fresh β′ and δ′ and replays the stump, which is still blocked and is parked on β′. A-λ-E then solves $β′ ≔ (l: 𝓫_c)$ and identifies δ′ with the result variable. Saturation finds the stump stale, K-hit re-asks the lookup, which now hits, and the result is unified with $𝓫_c$.
 ] <ex-let-selection>
 
-Three conditions make a choice of $macron(α)$ admissible. They are the three lines of $"gen"_(Γ, S)$ in @generalization.
-
-+ _Freshness._ The generalized variables must be fresh for the environment, which here consists of Γ together with the stumps that stay parked. This is the side condition of Hindley-Milner generalization @damas_milner. It ensures that a parked stump reads the same at every instance.
-+ _Own stumps._ $Δ_q$ may contain only stumps parked while inferring $e₁$, since a stump of an outer binding that is captured by the scheme would never be discharged. This condition does not follow from the others: in `{a = x: x.l | b = let y = c in c}` the stump of field a is blocked on a variable that neither Γ nor any remaining stump mentions, so the other two conditions admit its generalization into the scheme of y.
-+ _Closed results._ Every variable in a generalized stump's result must itself be generalized, since otherwise each instance would pin a variable of the environment.
-
-The admissible choices are closed under union, so a greatest one exists (`greatestAlpha_spec` in Lean). The algorithm computes it by deleting variables until nothing more is deleted. A failing condition therefore does not make the binding monomorphic: it removes the offending variables and whatever they drag along.
 
 == Entry Point
 
@@ -238,24 +233,12 @@ The admissible choices are closed under union, so a greatest one exists (`greate
 )
 #entry <entry>
 
-The entry point @entry runs inference from the empty state, merges the stumps that ask the same lookup by M-merge, and generalizes like A-let with Γ = ∅. Every free variable of the type and of the parked stumps is generalized, no stump stays outside the scheme, and the answer is the scheme σ. Nothing is decided at the entry point: a stump that is still pending is a qualifier of σ, and an instance reads it as ★ by D-\? when its lookup stays undecided. In the algorithm itself, ★ arises only where a lookup misses (A-sel-⊥, K-⊥).
-
-The conditions of A-let hold trivially: Γ is empty, and the start state parks no stump of an outer binding. The entry point adds one test that A-let does not run, since an answer without an instance would say nothing about the program. The premise σ inhabited at $S₂$ is the fillability test of @fillability, run on a scratch copy of $S₂$ in which a bounded search may first solve further equations. The search unifies the results of two stumps on one blocker with one label whose rows differ before the blocker. The answer σ is read at $S₂$, before the search, so the search never changes it, and any outcome is sound: an instance for an extension of $S₂$ is an instance of σ. The search is greedy, and if the test still fails, inference rejects the program (@incompleteness-inference). The search accepts `x: {p = (({m = c} ‖ x).l) c | q = x.l}`, which selects l on two different rows.
-
-=== Fillability <fillability>
-
-A stump whose result is still a variable is harmless: its result can be sent to ★ while its lookup stays blocked. A spent stump must instead hit at some instance, since D-\? and D-⊥ demand ★ for its result. The algorithm does not decide this property but checks a sufficient syntactic condition. $Δ₂$ is _fillable_ at $S₂$ if every spent stump p of $Δ₂$ satisfies two clauses:
+The entry point is given in @entry and runs inference from the empty state and returns a top-level scheme with all pending lookups. Recording the stumps in a scheme instead of turning them into ★ is a choice between limited types and simple annotations. In nix, however, it is common to export a single function from a file so keeping its schemes is the sensible choice. But the entry judgement has to make sure to return a solution that is sensible i.e. a qualified scheme that can be inhabited. The premise σ inhabited at $S₂$ is a the syntactic fillability test that checks the structure of stumps, their blockers and return variables δ. It has the following two conditions:
 
 + Every stump of $Δ₂$ on the blocker of p with the same label is spent as well, and its result agrees with the result of p up to ε and associativity once every type-variable is replaced by ★.
 + No blocker of a spent stump occurs in the result of p.
 
-Under this condition the instance that sends the generalized type-variables to ★ and extends each blocker by the fields its spent stumps demand discharges every stump of $Δ₂$. The test is not complete (@incompleteness-inference).
-
-#example(name: [A spent stump])[
-  In `x: (x.l) c`, A-sel-\? parks $⟨β ⊳ β.l ↓ δ⟩$, and A-λ-E unifies δ with $𝓫_c → γ$ for a fresh γ. The stump is spent: D-\? and D-⊥ would demand ★ for a result that is already $𝓫_c → γ$, so an instance must make the lookup hit. The program answers $∀(β: "Row", γ: "Type"). ⟨β.l ↓ 𝓫_c → γ⟩ ⇒ {β} → γ$. The instance that extends β by the field $l: 𝓫_c → γ$ discharges the stump by D-hit, so the scheme is inhabited, and this instance is the typing ${l: 𝓫_c → γ | β′} → γ$.
-] <ex-spent>
-
-=== Merging Stumps <merging>
+The first condition verifies that the headlevel constructors (functions, records, etc.) have the right shape and the second condition ensures that stumps are independent. A single pass can then fill all stumps at once. The statement $S₁ ⊢ Δ₁ #st_merges S₂$ is a stricter test on the shape of stumps.
 
 #let merge_rule = figure(
   caption: "Merging two stumps.",
@@ -273,7 +256,11 @@ Under this condition the instance that sends the generalized type-variables to �
 )
 #merge_rule <merge-rule>
 
-A field selected twice on one row parks two stumps. In `x: {p = (x.l) c | q = x.l}` only the first stump is spent, so the first clause of the fillability test fails. M-merge (@merge-rule) repairs this case. The rule unifies the results of two parked stumps that ask the same lookup: their rows have one spine under the current solution and their labels agree. The move is forced. At every instance that discharges both stumps, the two lookups are one lookup and return one verdict, so the instance identifies the two results up to ≈. A-let and the entry point run this phase before they read the stumps. At A-let no test depends on the merge, but the move is forced and loses no instance. The algorithm tries every pair once and skips a pair whose equation fails.
+The rule M-merg checks that two similar lookup of a row are spent alike. It is not possible to use the same variable as a function and record, it can only be one. In `x: {p = (x.l) c | q = x.l}` only the first stump is spent, so the first clause of the fillability test fails. M-merge (@merge-rule) repairs this case. The rule unifies the results of two parked stumps that ask the same lookup.
+
+// #example(name: [A spent stump])[
+//   In `x: (x.l) c`, A-sel-\? parks $⟨β ⊳ β.l ↓ δ⟩$, and A-λ-E unifies δ with $𝓫_c → γ$ for a fresh γ. The stump is spent: D-\? and D-⊥ would demand ★ for a result that is already $𝓫_c → γ$, so an instance must make the lookup hit. The program answers $∀(β: "Row", γ: "Type"). ⟨β.l ↓ 𝓫_c → γ⟩ ⇒ {β} → γ$. The instance that extends β by the field $l: 𝓫_c → γ$ discharges the stump by D-hit, so the scheme is inhabited, and this instance is the typing ${l: 𝓫_c → γ | β′} → γ$.
+// ] <ex-spent>
 
 == Inference Metatheory <inference-metatheory>
 

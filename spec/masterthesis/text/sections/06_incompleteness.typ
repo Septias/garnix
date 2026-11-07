@@ -8,7 +8,7 @@ The inference algorithm is sound but not complete. This section describes where 
 
 == Irreducible Problems <incompleteness-irreducible>
 
-The Wand ambiguity is the prime example of a unification problem without a most general unifier. It has a finite complete set of unifiers, one for every origin of the field, but no single unifier covers the others. Two more problems lack a most general unifier too:
+The Wand ambiguity is our running example of a unification problem without a most general unifier. A single unifier can attribute the field to both sides and no unifier is more general than the other. There is two more problems with this structure:
 
 #proposition(
   name: [Irreducible problems],
@@ -19,20 +19,16 @@ The Wand ambiguity is the prime example of a unification problem without a most 
   + _(Shift)_ $(α | l: 𝓫) scripts(≐)_r (l: 𝓫 | α)$ has no finite complete set of unifiers.
 ] <prop-irreducible>
 
-The Wand ambiguity $(α | β) scripts(≐)_r (l: 𝓫)$ has the unifiers $[α ≔ (l: 𝓫), β ≔ ε]$ and $[α ≔ ε, β ≔ (l: 𝓫)]$: the field comes from either operand, and neither choice is an instance of the other. The two-sided problem $(α | l: 𝓫) scripts(≐)_r (l: 𝓫 | β)$ has the unifiers $[α ≔ ε, β ≔ ε]$ and $[α ≔ (l: 𝓫 | γ), β ≔ (γ | l: 𝓫)]$: α holds either no l-field or at least one, and no unifier leaves this open. The shift $(α | l: 𝓫) scripts(≐)_r (l: 𝓫 | α)$ is the two-sided problem with $β = α$. It has the unifier $[α ≔ (l: 𝓫)^n]$ for every $n ≥ 0$, where $(l: 𝓫)^n$ is the row of n copies of the field, and each of these unifiers fixes the number of copies.
+The Wand ambiguity $(α | β) scripts(≐)_r (l: 𝓫)$ has the unifiers $[α ≔ (l: 𝓫), β ≔ ε]$ and $[α ≔ ε, β ≔ (l: 𝓫)]$: the field comes from either operand, and neither one is more general than the other. The two-sided problem is similar: $(α | l: 𝓫) scripts(≐)_r (l: 𝓫 | β)$ has the unifiers $[α ≔ ε, β ≔ ε]$ and $[α ≔ (l: 𝓫 | γ), β ≔ (γ | l: 𝓫)]$ where α holds either no l-field or at least one. None is more general than the other. The shift problem $(α | l: 𝓫) scripts(≐)_r (l: 𝓫 | α)$ is the two-sided problem with $β = α$. This problem has the unifier $[α ≔ (l: 𝓫)^n]$ for every $n ≥ 0$, where $(l: 𝓫)^n$ is the row of n copies of the field. Every choice of n gives a new unifier so this problem does not even have a finite set of unifiers.
 
-All three are reported as #u_stuck: no move applies, and any move would prefer one unifier to another. Inference cannot answer ★ for an application with a stuck equation, since a ★ at the result does not discharge the equation: T-★-intro blurs a finished typing, and T-λ-E still demands that argument and parameter agree. Without the equation, `f: a: b: {p = f {l = z: z} | q = f (a ‖ b)}` would accept the arguments `x: (x.l) c`, `{l = c}` and `{}`, for which q evaluates to `c c`, neither a value nor a lookup error. The declarative system types this program only by sending the parameter type of f to ★ (@incompleteness-inference), a choice that inference would have to make at the binder of f.
+All three are reported as #u_stuck because no forcing move applies and stuck is the fallback. We can also not use ★in this situation because a stuck unifier leaves the inference equation unanswered. Two completely unrelated terms could then be equated which leaves a reduct which is not a value and where no moves apply. It is also not a lookup error so progress fails.
 
 == Solvable Stuck Problems <incompleteness-forced>
 
-We identify two stuck problems that do have a most general unifier:
+We identify two stuck problems that do have a most general unifier but it is not found by unification:
 
-- The _mirrored crossfield_ problem $(α | l: 𝓫) scripts(≐)_r (β | m: 𝓫)$ has the most general unifier $[β ≔ (β′ | l: 𝓫), α ≔ (β′ | m: 𝓫)]$, the trailing-end image of @ex-unif-host. U-host is stated for the leading end only, so the problem is stuck. We tried several measures, but could not prove termination for the version with both ends.
-- A stuck equation between the types of two paired fields is reported before the remaining row equation solves the variable it depends on, which masks an existing solution (@prop-masks). Deferring the stuck equation and letting the residual run first would solve this instance, but it abandons the discipline of @unification that every emitted equation is discharged, fatal or stuck on the spot. Whether the resulting algorithm is confluent is open.
-
-#proposition(name: [Stuck masks an mgu], lean: "stuck_masks_mgu")[
-  The problem $(k: {β | α} | β) scripts(≐)_r (k: {l: 𝓫} | l: 𝓫)$ is stuck, but $[β ≔ (l: 𝓫), α ≔ ε]$ is a most general unifier.
-] <prop-masks>
+- The _mirrored crossfield_ problem $(α | l: 𝓫) scripts(≐)_r (β | m: 𝓫)$ has the most general unifier $[β ≔ (β′ | l: 𝓫), α ≔ (β′ | m: 𝓫)]$, the trailing-end image of @ex-unif-host. U-host is stated for the leading end only, so the problem is reported as stuck. We tried several measures with both sides added, but could not prove termination for it.
+- The unification algorithm reports stuck for a unification problem before emitted unification problems are solved in the recursive call. The problem $(k: {β | α} | β) scripts(≐)_r (k: {l: 𝓫} | l: 𝓫)$ has the unifier $[β ≔ (l: 𝓫), α ≔ ε]$ which can be found by noticing that unification of the two k-fields forces $β = (l: 𝓫)$. Deferring the stuck equation and letting the residual run first would solve this instance, but whether the resulting algorithm is confluent is not clear.
 
 Stuck is therefore conservative: it does not imply that no most general unifier exists.
 
@@ -40,26 +36,7 @@ Stuck is therefore conservative: it does not imply that no most general unifier 
 
 The remaining limits lie in the inference algorithm rather than in unification.
 
-=== Partially Generalized Lets
-
-A-let generalizes the greatest admissible $macron(α)$. A variable that violates one of the conditions stays monomorphic, together with everything it drags along, and a second use at another record may then clash.
-
-=== Dead Bindings
-
-T-let constrains e₁ only through the instances of σ. If σ has no instance, e₁ is unconstrained: `let x = c c in c` is typed at $𝓫_c$ and evaluates to c, since E-let discards the binding. A-let infers e₁ whether x is used or not, so inference reports a clash. A completeness statement has to exclude such bindings. An argument differs: `(x: c) (c c)` evaluates to c as well, but T-λ-E types its argument, so the declarative system rejects the program too.
-
-=== Fillability Test
-
-The fillability test of the entry point is a syntactic approximation of inhabitation. It rejects a blocker of a spent stump in the result of a spent stump, as in the overlay form `self: super: {foo = super.foo ‖ {meta = super.foo.meta ‖ {broken = false}}}`, whose scheme is inhabited. The blocker of the meta stump occurs in the spent result of the foo stump, so the second clause fails.
-
-// todo: explain this more thoroughly
-Nested selection such as `x: (x.l).m`, record literals in a spent result, the same field spent twice on one row, a field selected once spent and once unspent on one row, and a spent stump under a key of the binding, as in `r: a: r.${a} c` with first-class labels (@fc-labels), pass the test.
-
-
-=== Unrestricted T-★-intro
-
-The declarative system may replace any type by ★, so it types programs on which the algorithm clashes. The program
-$
-  #raw("g: {a = g {l = c} | b = g {m = c}}") quad : quad (★ → 𝓫) → {a: 𝓫 | b: 𝓫}
-$
-is typed by sending the parameter type of g to ★, while inference unifies the two argument records and clashes. T-★-intro acts as subsumption into a top type, and ★ is the join of any two types with different head constructors, whereas unification only computes common instances. A successful run can therefore return a scheme that is not principal, and a completeness statement has to be restricted to typings without T-★-intro.
+- *Partially Generalized Lets* A-let generalizes the greatest admissible $macron(α)$. A variable that violates one of the conditions stays monomorphic, together with everything it drags along, and a second use at another record may then clash.
+- *Dead Bindings* T-let constrains e₁ only through the instances of σ. If σ has no instance, e₁ is unconstrained: `let x = c c in c` is typed at $𝓫_c$ and evaluates to c, since E-let discards the binding. A-let infers e₁ whether x is used or not, so inference reports a clash. A completeness statement has to exclude such bindings.
+- *Fillability Test* The fillability test of the entry point is a syntactic approximation of inhabitation. It rejects a blocker of a spent stump in the result of a spent stump, as in the overlay form `self: super: {foo = super.foo ‖ {meta = super.foo.meta ‖ {broken = false}}}`, whose scheme is inhabited. The blocker of the meta stump occurs in the spent result of the foo stump, so the second clause fails. Nested selection such as `x: (x.l).m`, record literals in a spent result, the same field spent twice on one row, a field selected once spent and once unspent on one row, and a spent stump under a key of the binding, as in `r: a: r.${a} c` with first-class labels (@fc-labels), pass the test.
+- *Unrestricted T-★-intro* The declarative system may replace any type by ★, so it types programs on which the algorithm clashes. The program $#raw("g: {a = g {l = c} | b = g {m = c}}") quad : quad (★ → 𝓫) → {a: 𝓫 | b: 𝓫}$ is typed by sending the parameter type of g to ★, while inference unifies the two argument records and clashes. T-★-intro acts as subsumption into a top type, and ★ is the join of any two types with different head constructors, whereas unification only computes common instances. A successful run can therefore return a scheme that is not principal, and a completeness statement has to be restricted to typings without T-★-intro.
