@@ -3,11 +3,9 @@
 
 = The Declarative Calculus <declarative>
 
-// ai
-MiniNix adds records to a λ-calculus with constants (@syntax). A record literal ${ξ}$ encloses a record body $ξ$, built from the empty body ε, a single bindings $l = e$ and body concatenation $(ξ₁ | ξ₂)$. Body concatenation joins the bindings of one literal, whereas asymmetric record concatenation $(e₁ ‖ e₂)$ combines two records and corresponds to `//` in NixLang. Let-bindings are simplified: unlike in NixLang, each binds a single variable and is not recursive.
+MiniNix adds records and let-bindings to a λ-calculus with constants (@syntax). A record literal ${ξ}$ wraps a _record body_ ξ with braces. The record body is built from the empty body ε, single labels $l = e$ and the concatenation thereof $(ξ₁ | ξ₂)$. A body may bind the same label multiple times and selecton $e.l$ takes the leftmost occurrence (@semantics). MiniNix has two concatenation forms, one for the bindings of one literal $(ξ₁ | ξ₂)$ and asymmetric record concatenation $(e₁ ‖ e₂)$ which combines two records and correpesonds to `//` in NixLang. A let-binding binds a single vairable and is not recursive, unlike in NixLang(@outlook)
 
-// ai
-A type is a variable $α ∈ 𝓐$, a base type $𝓫$ from a finite set 𝓑, the unknown type ★, a function type or a record type ${ρ}$. A total mapping $c ↦ 𝓫_c$ assigns each constant its base type. The unknown type ★ is the type of what the analysis cannot decide. A record type ${ρ}$ encloses a row $ρ$, which is built like a record body from the empty row ε, single fields $l: τ$ and concatenation, and may contain variables as well. Variables from 𝓐 thus stand for types or rows, and the two sorts `Type` and `Row` tell type-variables and row-variables apart (@sorting). A type environment Γ assigns type schemes σ (@qualified-schemes) to term variables and sorts to type- and row-variables, and $Γ · (x: σ)$ extends Γ by a single binding.
+Types describe terms, and rows describe record bodies. A type is a variable α, a base type 𝓫 from a finite set 𝓑, the unknown type ★, a function type $τ → τ′$ or a record type ${ρ}$. A total mapping $c ↦ 𝓫_c$ assigns each constant its base type. The unknown type ★ is the type of what the analysis cannot decide. It has no elimination form, so a term of type ★ can be passed around but not consumed. A record type ${ρ}$ encloses a row ρ, which mirrors a record body: It is built from the empty row ε, a single field $l: τ$, the concatenation $(ρ₁ | ρ₂)$ of two rows, or a variable α. Types and rows draw their variables from one set 𝓐, and the sorts `Type` and `Row` tell type-variables and row-variables apart (@sorting). Constraints Q and type schemes σ follow in @qualified-schemes. A type environment Γ assigns type schemes to term variables and sorts to type- and row-variables, and $Γ · (x: σ)$ and $Γ · (α: κ)$ extend Γ by single bindings.
 
 #let syntax = figure(
   caption: "The syntax of MiniNix.",
@@ -149,11 +147,9 @@ The order of fields in a record carries no meaning: both `{a = 1 | b = 2}` and `
 #proof[By induction on the derivation of $ρ₁ ≈ ρ₂$, for both directions at once, since ≈-symm swaps them. In the case ≈-comm, $l₁ ≠ l₂$ ensures that at most one of the two fields carries l.]
 
 
-== Qualified Schemes and Instantiation <qualified-schemes>
+== Qualified Schemes <qualified-schemes>
 
-A type scheme $σ$ quantifies over type- and row-variables and carries a set $Q$ of constraints. Each constraint is a pending lookup, which we call a _stump_. A stump ⟨ρ.l ↓ δ⟩ consists of the lookup label $l$ and the row $ρ$ on which the lookup got stuck, and the type-variable $δ$ names the result. [Stumps are needed because the result of a selection depends on the row it acts upon](needs a better reason).
-
-// Stumps are predicates in the sense of qualified types @qualified_types, but no entailment relation decides them: instantiation evaluates their lookup.
+A type scheme σ quantifies over type- and row-variables and carries a set $Q$ of constraints. Each constraint is a pending lookup, which we call a _stump_. A stump $⟨ρ.l ↓ δ⟩$ consists of the row ρ on which the lookup got stuck, the label l and the type-variable δ that names the result. Stumps are needed because the type of a selection depends on the row through the lookup relation, and no type constructor expresses this dependency. The selector `x: x.l` has the typings ${(l: {ε})} → {ε}$ and ${ε} → ★$. A plain scheme with both instances needs a variable as its result type, and then it also admits ${ε} → {ε}$, which is no typing (@thm-no-plain). A stump ties the result to the lookup: every instance performs the lookup and fixes δ to its result (@instantiation).
 
 #let instantiation = figure(
   caption: "Instantiation.",
@@ -178,7 +174,6 @@ A type scheme $σ$ quantifies over type- and row-variables and carries a set $Q$
 
 Without stumps (Q = ε), I-inst is plain Hindley-Milner instantiation. With stumps, a scheme can be uninhabited: in $∀(δ: "Type"). ⟨(l: 𝓫).l ↓ δ⟩, ⟨ε.l ↓ δ⟩ ⇒ δ$, the first stump hits and D-hit demands $θ δ ≈ 𝓫$, while the second misses and D-⊥ demands $θ δ = ★$. Since ★ is equivalent only to itself, no θ satisfies both.
 
-// Either explain why {ε} → {ε} should be no typing or remove it
 #example(name: [Instances of selQ])[
   Consider $"selQ" = ∀(β: "Row", δ: "Type"). ⟨β.l ↓ δ⟩ ⇒ {β} → δ$.
   - $θ = [β ≔ (l: 𝓫), δ ≔ 𝓫]$ discharges the stump by D-hit, since $(l: 𝓫).l ↓ 𝓫$, so ${(l: 𝓫)} → 𝓫$ is an instance.
@@ -233,7 +228,7 @@ Without stumps (Q = ε), I-inst is plain Hindley-Milner instantiation. With stum
 Most rules of @declarative-rules are standard for a λ-calculus with records. T-conc differs only in that it places the right operand first, so its fields shadow those of the left operand under our lookup relation. T-var instantiates a type scheme using the instantiation relation from @instantiation, and T-eq closes typing under row equivalence (@row-equivalence).
 
 // ai
-T-let departs from Hindley-Milner, which types e₁ once and generalizes the resulting typing. This cannot yield the scheme selQ of `x: x.l` (@ex-selq-inst). Its body ${β} → δ$ is no typing of `x: x.l`: the lookup of l in β answers $?$, so T-sel-★ forces the result ★. T-let therefore takes σ as given and constrains it directly. The first premise guarantees well-sortedness (@sorting). The second makes σ _instance-closed_: every instance of σ is a typing of e₁, so x may be used at any of them. In Hindley-Milner, instance-closure follows from the typing of e₁ by the substitution lemma. T-let states it as a premise instead. The last premise types e₂ with x bound to σ.
+T-let departs from Hindley-Milner, which types e₁ once and generalizes the resulting typing. This cannot yield the scheme selQ of `x: x.l` (@ex-selq-inst). Its body ${β} → δ$ is no typing of `x: x.l`: the lookup of l in β answers $?$, so T-sel-★ forces the result ★. T-let therefore takes σ as given and constrains it directly. The first premise guarantees well-sortedness (@sorting). The second makes σ _instance-closed_, meaning every instance of σ is a typing of e₁, so x may be used at any of them. In Hindley-Milner, instance-closure follows from the typing of e₁ by the substitution lemma. T-let states it as a premise instead. The last premise types e₂ with x bound to σ.
 
 Three selection rules cover the three results of the lookup judgement. T-sel is standard: it types a selection at the definite type that the lookup finds. T-sel-⊥ types a selection that definitely fails at ★: NixLang is lazy, so the selection may never be evaluated, and rejecting the program would reject working code. T-sel-★ types a selection with an unknown result at the unknown type and T-★-intro blurs any type to ★.
 

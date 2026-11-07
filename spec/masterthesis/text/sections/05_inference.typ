@@ -32,7 +32,9 @@ A _parked stump_ $⟨α ⊳ ρ.l ↓ δ⟩$ is a lookup of $l$ in $ρ$ with resu
 
 The state is kept under one invariant, _quiescence_. Quiescence demands that every stump in Δ is genuinely blocked on its recorded variable α. Every written solution can break this condition, so an auxiliary judgement re-runs the stale lookups, a process we call _saturation_. Saturation uses _wake-up_ as a subroutine, a judgement that re-runs the lookup on stumps.
 
-// maybe give an example that runs through some wording again?
+#example(name: [Stale stumps and saturation])[
+  In `r: (x: x.l) (r ‖ {m = c})`, the selection parks $⟨β ⊳ β.l ↓ δ⟩$ with recorded blocker β. The application solves $β ≔ (m: 𝓫_c | β_r)$, and the stump becomes stale: its lookup is no longer blocked on β. Saturation wakes it, the lookup skips m and blocks on $β_r$, and the stump is parked again under $β_r$. No stump is stale afterwards, so the state is quiescent. The result δ is never solved, so the stump is not spent.
+]
 
 == Wake-Up and Saturation
 
@@ -235,7 +237,7 @@ The algorithm computes the set of variables by deleting those that don't hold th
 )
 #entry <entry>
 
-The entry point is given in @entry, runs inference from the empty state and returns a top-level scheme with all its stumps attached. Instead of record the stumps, we could also simplify them using ★ but returning a scheme keeps strictly more information and is a better choice for NixLang with many exported functions. The scheme σ is read at $S₁$. The last two premises check that σ has an instance and work on a copy $S₂$ of $S₁$: the copy only extends $S₁$, so a witness at $S₂$ is a witness of σ, and no change to the copy reaches σ. The copy first merges stumps by M-merge and then passes the _fillability test_, a syntactic check of the stumps, their blockers and their results δ. Its conditions are:
+The entry point is given in @entry, runs inference from the empty state and returns a top-level scheme with all its stumps attached. Instead of recording the stumps, we could also simplify them using ★ but returning a scheme keeps strictly more information and is a better choice for NixLang with many exported functions. The scheme σ is read at $S₁$. The last two premises check that σ has an instance and work on a copy $S₂$ of $S₁$: the copy only extends $S₁$, so a witness at $S₂$ is a witness of σ, and no change to the copy reaches σ. The copy first merges stumps by M-merge and then passes the _fillability test_, a syntactic check of the stumps, their blockers and their results δ. Its conditions are:
 
 + For every spent stump p of $Δ₂$, every stump of $Δ₂$ on the blocker of p with the label of p is spent as well, and its result agrees with the result of p up to ε and associativity once every type-variable is replaced by ★.
 + No blocker reaches itself along ≻, where $β ≻ β′$ holds when a spent stump on β has β′, the blocker of a spent stump, in its result.
