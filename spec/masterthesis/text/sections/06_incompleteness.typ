@@ -8,7 +8,7 @@ The inference algorithm is sound but not complete. This section describes where 
 
 == Irreducible Problems <incompleteness-irreducible>
 
-The Wand ambiguity is our running example of a unification problem with no most general unifier. The field accessed in $a: b: (a ‖ b).l$ can be attributed to $a$ or $b$ but no choice is more general than the other. There is two more problems with this structure:
+The Wand ambiguity is our running example of a unification problem with no most general unifier. The field accessed in $a: b: (a ‖ b).l$ can be attributed to $a$ or $b$ but no choice is more general than the other. There are two more problems with this structure:
 
 #proposition(
   name: [Irreducible problems],
@@ -19,16 +19,16 @@ The Wand ambiguity is our running example of a unification problem with no most 
   + _(Shift)_ $(α | l: 𝓫) scripts(≐)_r (l: 𝓫 | α)$ has no finite complete set of unifiers.
 ] <prop-irreducible>
 
-The unification problem of the Wand ambiguity $(α | β) scripts(≐)_r (l: 𝓫)$ has the unifiers $[α ≔ (l: 𝓫), β ≔ ε]$ and $[α ≔ ε, β ≔ (l: 𝓫)]$. The field comes from either operan but no choice is more general than the other. The two-sided problem $(α | l: 𝓫) scripts(≐)_r (l: 𝓫 | β)$ splits by whether α holds an l-field. If it does, $[α ≔ (l: 𝓫 | γ), β ≔ (γ | l: 𝓫)]$ covers every unifier. If it does not, α and β are the same row without l and without row-variables, such as ε or $(m: 𝓫)$, since a row-variable cannot swap past the field l. No unifier of one case is an instance of the other. The shift problem $(α | l: 𝓫) scripts(≐)_r (l: 𝓫 | α)$ is the two-sided problem with $β = α$. This problem has the unifier $[α ≔ (l: 𝓫)^n]$ for every $n ≥ 0$, where $(l: 𝓫)^n$ is the row of n copies of the field. Each unifier fixes the number of l-fields, so no finite set of unifiers is complete.
+The unification problem of the Wand ambiguity $(α | β) scripts(≐)_r (l: 𝓫)$ has the unifiers $[α ≔ (l: 𝓫), β ≔ ε]$ and $[α ≔ ε, β ≔ (l: 𝓫)]$. The field comes from either operand but no choice is more general than the other. The two-sided problem $(α | l: 𝓫) scripts(≐)_r (l: 𝓫 | β)$ splits by whether α holds an l-field. If it does, $[α ≔ (l: 𝓫 | γ), β ≔ (γ | l: 𝓫)]$ covers every unifier. If it does not, α and β are the same row without l and without row-variables, such as ε or $(m: 𝓫)$, since a row-variable cannot swap past the field l. No unifier of one case is an instance of the other. The shift problem $(α | l: 𝓫) scripts(≐)_r (l: 𝓫 | α)$ is the two-sided problem with $β = α$. This problem has the unifier $[α ≔ (l: 𝓫)^n]$ for every $n ≥ 0$, where $(l: 𝓫)^n$ is the row of n copies of the field. Each unifier fixes the number of l-fields, so no finite set of unifiers is complete.
 
-All three are reported as #u_stuck because no forcing move applies and stuck is the fallback. We can also not use ★ to type the expression because a stuck unifier leaves the inference equation unanswered.
+All three are reported as #u_stuck because no forced move applies and stuck is the fallback. We can also not use ★ to type the expression because a stuck verdict leaves the inference equation unanswered.
 
 == Solvable Stuck Problems <incompleteness-forced>
 
 We identify two stuck problems with a most general unifier the algorithm does not find:
 
 - The problem $(α | l: 𝓫) scripts(≐)_r (β | m: 𝓫)$ has the most general unifier $[β ≔ (β′ | l: 𝓫), α ≔ (β′ | m: 𝓫)]$, the trailing-end image of @ex-unif-host. U-host is stated for the leading end only, so the problem is reported as stuck. We tried several measures with both sides added, but could not prove termination for it.
-- The problem $(k: {β | α} | β) scripts(≐)_r (k: {l: 𝓫} | l: 𝓫)$ has the unifier $[β ≔ (l: 𝓫), α ≔ ε]$ which can be found by noticing that unification of the two k-fields forces $β = (l: 𝓫)$. It is however not found by our algorithm because the problem is reported as stuck. Deferring the stuck row-equation and letting the residual run type unification run first would solve this instance, but whether the resulting algorithm is confluent is not clear.
+- The problem $(k: {β | α} | β) scripts(≐)_r (k: {l: 𝓫} | l: 𝓫)$ has the unifier $[β ≔ (l: 𝓫), α ≔ ε]$ which can be found by noticing that unification of the two k-fields determines $β = (l: 𝓫)$. It is however not found by our algorithm because the problem is reported as stuck. Deferring the stuck row-equation and letting the residual type unification run first would solve this instance, but whether the resulting algorithm is confluent is not clear.
 
 Stuck is therefore conservative: it does not imply that no most general unifier exists.
 
