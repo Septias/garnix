@@ -20,13 +20,13 @@ For example, in `r: (x: x.l) (r ‖ {m = c})` the selection `x.l` parks a stump 
 #let solver_state = figure(
   caption: "The solver state.",
   $
-     #type_name("Solver state") S & ::= (θ, Δ, macron(κ)) \
+     #type_name("Solver state") S & ::= (θ, Δ, K) \
     #type_name("Parked stumps") Δ & ::= ∅ | ⟨α ⊳ ρ.l ↓ δ⟩, Δ \
   $,
 )
 #solver_state <solver-state>
 
-The inference judgement $Γ; S ⊢ e ⇒ τ; S′$ takes a _solver state_ $S$ and returns the updated state $S′$. The solver state $S$, given in @solver-state, consists of a sort-respecting substitution $θ$, a list $Δ$ of parked stumps and a map $macron(κ)$ of the sorts at which each name was drawn. $⟦S⟧τ$ applies the substitution of $S$ to $τ$, $S(α)$ reads the sort of $α$ from $macron(κ)$, and $Δ_i$ denotes the parked stumps of $S_i$. $S #st_park q$ parks a stump, and $S #st_drop Δ′$ drops stumps.
+The inference judgement $Γ; S ⊢ e ⇒ τ; S′$ takes a _solver state_ $S$ and returns the updated state $S′$. The solver state $S$, given in @solver-state, consists of a sort-respecting substitution $θ$, a list $Δ$ of parked stumps and a map $K$ of the sorts at which each name was drawn. $⟦S⟧τ$ applies the substitution of $S$ to $τ$, $S(α)$ reads the sort of $α$ from $K$, and $Δ_i$ denotes the parked stumps of $S_i$. $S #st_park q$ parks a stump, and $S #st_drop Δ′$ drops stumps.
 
 A _parked stump_ $⟨α ⊳ ρ.l ↓ δ⟩$ is a lookup of $l$ in $ρ$ with result variable $δ$ and blocker $α$. We call a stump _stale_ when a substitution has solved its _recorded blocker_ ($α$ is outdated) and this happens when unification solves type variables. A parked stump leaves the fresh type-variable $δ$ in its place, and unification may solve $δ$ while the stump stays parked. We call a stump whose result variable $δ$ was used by unification a _spent stump_, but only when $δ$ has been solved to a type that is neither a variable nor ★.
 

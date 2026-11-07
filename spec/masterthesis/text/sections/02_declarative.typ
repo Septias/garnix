@@ -27,7 +27,7 @@ Types describe terms, and rows describe record bodies. A type is a variable α, 
     subbox(caption: "Types")[
       $
                     #type_name("Sort") κ & ::= "Type" | "Row" \
-                    #type_name("Type") τ & ::= α | 𝓫 | ★ | τ -> τ | { ρ } \
+                    #type_name("Type") τ, δ & ::= α | 𝓫 | ★ | τ -> τ | { ρ } \
                      #type_name("Row") ρ & ::= ε | α | l: τ | (ρ₁ | ρ₂) \
              #type_name("Constraints") Q & ::= ε | Q, ⟨ρ.l ↓ δ⟩ \
              #type_name("Type Scheme") σ & ::= ∀(macron(α): macron(κ)). Q ⇒ τ | τ \
@@ -149,7 +149,7 @@ The order of fields with distinct labels carries no meaning: both `{a = 1 | b = 
 
 == Qualified Schemes <qualified-schemes>
 
-A type scheme σ quantifies over type- and row-variables and carries a set $Q$ of constraints. Each constraint is a pending lookup, which we call a _stump_. A stump $⟨ρ.l ↓ δ⟩$ consists of the row ρ on which the lookup is blocked, the label l and the type-variable δ that names the result. Stumps are needed because the type of a selection depends on the row through the lookup relation, and no type constructor expresses this dependency. The selector `x: x.l` has the typings ${l: {ε}} → {ε}$ and ${ε} → ★$. A plain scheme with both instances needs a variable as its result type, and then it also admits ${ε} → {ε}$, which is no typing (@thm-no-plain). A stump ties the result to the lookup: every instance performs the lookup and fixes δ to its result (@instantiation).
+A type scheme σ quantifies over type- and row-variables and carries a set $Q$ of constraints. Each constraint is a pending lookup, which we call a _stump_. A stump $⟨ρ.l ↓ δ⟩$ consists of the row ρ on which the lookup is blocked, the label l and the type δ that names the result. When inference parks a stump, δ is a fresh type-variable that unification may solve later (@inference). Stumps are needed because the type of a selection depends on the row through the lookup relation, and no type constructor expresses this dependency. The selector `x: x.l` has the typings ${l: {ε}} → {ε}$ and ${ε} → ★$. A plain scheme with both instances needs a variable as its result type, and then it also admits ${ε} → {ε}$, which is no typing (@thm-no-plain). A stump ties the result to the lookup: every instance performs the lookup and fixes δ to its result (@instantiation).
 
 #let instantiation = figure(
   caption: "Instantiation.",
