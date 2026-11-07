@@ -85,10 +85,6 @@ theorem SolveTySat.keeps {S S' : SolverState B} {τ τ' : Ty B} :
     SolveTySat S τ τ' S' → S.KeepsS S'
   | ⟨_, hs, hsat⟩ => hs.keepsS.trans hsat.keeps hsat.satMono
 
-theorem Merges.keepsS {S S' : SolverState B} : Merges S S' → S.KeepsS S'
-  | .refl _ => .refl _
-  | .step (.merge _ _ _ _ hs) hms => hs.keeps.trans (Merges.keepsS hms) hms.satMono
-
 --------------------- CONTEXTS -------------------------------------------------
 
 theorem QCtx.SchemesWF.bindScheme {Γ : QCtx B} (h : Γ.SchemesWF) (x : Var)

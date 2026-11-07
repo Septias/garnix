@@ -94,10 +94,11 @@ def run (e : E) : String := verdict (runF (Sig.plain fun _ => ()) 50 e)
 -- ε is the unifier's spine form, ≈-invisible
 #guard run (.lam "x" (rec2 "p" (.app (.sel (v "x") "l") c) "q" (.sel (v "x") "m")))
   = "⟨r5.m ↓ t6⟩, ⟨r5 | ε.l ↓ (𝓫 → t4)⟩ ⇒ ({r5 | ε} → {p: t4 | q: t6})"
--- …and a second selection of the SAME field is merged with the first (M-merge,
--- `merge_forced`): one lookup, one result
+-- …and a second selection of the SAME field keeps its own result: the answer
+-- is read before the witness search, which merges the two only in its scratch
+-- copy. One lookup, ≈-equal results at every instance (`merge_forced`)
 #guard run (.lam "x" (rec2 "p" (.app (.sel (v "x") "l") c) "q" (.app (.sel (v "x") "l") c)))
-  = "⟨r5.l ↓ (𝓫 → t4)⟩, ⟨r5 | ε.l ↓ (𝓫 → t4)⟩ ⇒ ({r5 | ε} → {p: t4 | q: t4})"
+  = "⟨r5.l ↓ (𝓫 → t7)⟩, ⟨r5 | ε.l ↓ (𝓫 → t4)⟩ ⇒ ({r5 | ε} → {p: t4 | q: t7})"
 
 -- a spent promise under a let is GENERALIZED: f stays polymorphic in x's row
 -- (it used to be forced monomorphic, and the second use clashed)
@@ -239,19 +240,20 @@ def upd : E := .lam "n" (.lam "r" (.cat (v "r") (rd (v "n") c)))
 #guard run (.lam "a" (rd (.sel (v "a") "k") c)) = "⟨r2.k ↓ ⌊k4⌋⟩ ⇒ ({r2} → {${k4}: 𝓫})"
 
 
--- THE FORCED MERGE (M-merge, `merge_forced`): a field selected once spent and
--- once unspent asks one lookup twice, so the results are unified. Without it
--- `LetSpent` rejects the scheme: at the top level, and under a let, where the
--- two uses below used to clash (f was monomorphic)
+-- THE WITNESS MERGE on one lookup (`merge_forced`): a field selected once spent
+-- and once unspent asks one lookup twice. The witness search unifies the
+-- results in its scratch copy; without it `LetSpent` rejects the scheme. The
+-- answer keeps both results; under a let, the two uses below used to clash
+-- (f was monomorphic)
 #guard run (.lam "x" (rec2 "p" (.app (.sel (v "x") "l") c) "q" (.sel (v "x") "l")))
-  = "⟨r5.l ↓ (𝓫 → t4)⟩, ⟨r5 | ε.l ↓ (𝓫 → t4)⟩ ⇒ ({r5 | ε} → {p: t4 | q: (𝓫 → t4)})"
+  = "⟨r5.l ↓ t6⟩, ⟨r5 | ε.l ↓ (𝓫 → t4)⟩ ⇒ ({r5 | ε} → {p: t4 | q: t6})"
 #guard run (.letE "f" (.lam "x" (rec2 "p" (.app (.sel (v "x") "l") c) "q" (.sel (v "x") "l")))
     (rec2 "a" (.app (v "f") (rec1 "l" (.lam "z" (v "z"))))
           "b" (.app (v "f") (rec2 "l" (.lam "z" (v "z")) "m" c))))
   = "{a: {p: 𝓫 | q: (𝓫 → 𝓫)} | b: {p: 𝓫 | q: (𝓫 → 𝓫)}}"
 -- …the unspent result may also be spent on a different shape
 #guard run (.lam "x" (.lam "f" (rec2 "p" (.app (.sel (v "x") "l") c) "q" (.app (v "f") (.sel (v "x") "l")))))
-  = "⟨r6.l ↓ (𝓫 → t5)⟩, ⟨r6 | ε.l ↓ (𝓫 → t5)⟩ ⇒ ({r6 | ε} → (((𝓫 → t5) → t8) → {p: t5 | q: t8}))"
+  = "⟨r6.l ↓ t7⟩, ⟨r6 | ε.l ↓ (𝓫 → t5)⟩ ⇒ ({r6 | ε} → ((t7 → t8) → {p: t5 | q: t8}))"
 -- THE WITNESS SEARCH (`Guesses`): not forced, so only inside the witness. Rows
 -- that differ before the blocker get a witness merge, and a key that must hit a
 -- literal record gets a key guess among the record's labels. A variable key on

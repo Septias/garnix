@@ -508,7 +508,7 @@ theorem varF_settles {Γ : QCtx B} {S : SolverState B} (hc : S.sol.Clean) (σ : 
     · simp only [if_pos hfr, if_neg hk]; exact Settles.fail _
   · simp only [if_neg hfr]; exact Settles.fail _
 
---------------------- THE FORCED MERGE -----------------------------------------
+--------------------- PAIRS OF STUMPS ------------------------------------------
 
 theorem Stable.orElse {α : Type} {x : Nat → IRes α} (hx : Stable x) (d : α) :
     Stable (fun m => (x m).orElse d) := by
@@ -565,13 +565,6 @@ theorem pairsF_settles (t : SolverState B → Parked B → Parked B → Bool) :
           rcases pairF_spec h with rfl | ⟨_, _, _, _, _, hs⟩
           · exact hc
           · exact hs.clean hc))
-
-theorem mergesF_stable (S : SolverState B) : Stable (fun m => mergesF m S) :=
-  pairsF_stable _ _ _
-
-theorem mergesF_settles {S : SolverState B} (hc : S.sol.Clean) :
-    Settles (fun m => mergesF m S) :=
-  pairsF_settles _ _ hc
 
 --------------------- INFERENCE ------------------------------------------------
 
@@ -1021,37 +1014,50 @@ theorem keyGuessesF_settles : ∀ (ts : List (TyVar × List Label)) {S : SolverS
         (fun S₁ => keyGuessesF_stable ts S₁)
         (fun S₁ _ h => keyGuessesF_settles ts ((keyGuessF_sound h).keeps hc).2.1)
 
+theorem alikePassesF_stable : ∀ (k : Nat) (S : SolverState B),
+    Stable (fun m => alikePassesF m k S)
+  | 0, S => by simp only [alikePassesF]; exact Stable.const _
+  | k+1, S => by
+      simp only [alikePassesF]
+      exact Stable.bind (pairsF_stable _ _ _) (fun S₁ =>
+        Stable.ite _ (Stable.const _) (alikePassesF_stable k S₁))
+
+theorem alikePassesF_settles : ∀ (k : Nat) {S : SolverState B}, S.sol.Clean →
+    Settles (fun m => alikePassesF m k S)
+  | 0, S, _ => by simp only [alikePassesF]; exact Settles.pure _
+  | k+1, S, hc => by
+      simp only [alikePassesF]
+      exact Settles.bind (pairsF_stable _ _ _) (pairsF_settles _ _ hc)
+        (fun S₁ => Stable.ite _ (Stable.const _) (alikePassesF_stable k S₁))
+        (fun S₁ _ h => Settles.ite _ (Settles.pure _)
+          (alikePassesF_settles k ((pairsF_guesses h).keeps hc).2.1))
+
 theorem guessesF_stable (S : SolverState B) : Stable (fun m => guessesF m S) := by
   unfold guessesF
-  exact Stable.bind (keyGuessesF_stable _ _) (fun S₁ => pairsF_stable _ _ S₁)
+  exact Stable.bind (keyGuessesF_stable _ _) (fun S₁ => alikePassesF_stable _ S₁)
 
 theorem guessesF_settles {S : SolverState B} (hc : S.sol.Clean) :
     Settles (fun m => guessesF m S) := by
   unfold guessesF
   exact Settles.bind (keyGuessesF_stable _ _) (keyGuessesF_settles _ hc)
-    (fun S₁ => pairsF_stable _ _ S₁)
-    (fun S₁ _ h => pairsF_settles _ _ ((keyGuessesF_sound h).keeps hc).2.1)
+    (fun S₁ => alikePassesF_stable _ S₁)
+    (fun S₁ _ h => alikePassesF_settles _ ((keyGuessesF_sound h).keeps hc).2.1)
 
 theorem runF_stable (constTy : Sig B C) (e : Expr C) : Stable (fun m => runF constTy m e) := by
   unfold runF
   exact Stable.bind (inferF_stable constTy _ _ e) (fun r =>
-    Stable.bind (mergesF_stable _) (fun _ =>
-      Stable.bind (guessesF_stable _) (fun _ => Stable.const _)))
+    Stable.bind (guessesF_stable _) (fun _ => Stable.const _))
 
 /-- ⊢  **A RUN TERMINATES**: every program gets a verdict at some fuel. -/
 theorem runF_terminates (constTy : Sig B C) (e : Expr C) : ∃ n, runF constTy n e ≠ .oof := by
   unfold runF
   exact Settles.bind (inferF_stable constTy _ _ e) (inferF_settles constTy _ _ e Sol.clean_nil)
-    (fun r => Stable.bind (mergesF_stable _) (fun _ =>
-      Stable.bind (guessesF_stable _) (fun _ => Stable.const _)))
+    (fun r => Stable.bind (guessesF_stable _) (fun _ => Stable.const _))
     (fun r _ h => by
       have c₁ := Infer.clean (inferF_sound h) Sol.clean_nil
-      exact Settles.bind (mergesF_stable _) (mergesF_settles c₁)
-        (fun _ => Stable.bind (guessesF_stable _) (fun _ => Stable.const _))
-        (fun S₂ _ h₂ => Settles.bind (guessesF_stable _)
-          (guessesF_settles ((mergesF_sound h₂).keeps c₁).2.1)
-          (fun _ => Stable.const _)
-          (fun _ _ _ => ⟨0, by split <;> exact fun h => nomatch h⟩)))
+      exact Settles.bind (guessesF_stable _) (guessesF_settles c₁)
+        (fun _ => Stable.const _)
+        (fun _ _ _ => ⟨0, by split <;> exact fun h => nomatch h⟩))
 
 --------------------- THE TOTAL FUNCTION ---------------------------------------
 

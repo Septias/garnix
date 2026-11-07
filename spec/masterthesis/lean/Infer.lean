@@ -701,49 +701,26 @@ theorem SolverState.Quiescent.wake_no_commit {B : Type} [DecidableEq B]
 -- proof only; the answer keeps the stump.
 
 
---------------------- THE FORCED MERGE ----------------------------------------
--- Two parked stumps can ask the SAME lookup: `x: {p = (x.l) c; q = x.l}` parks
--- ⟨ρ.l ↓ 𝓫 → β⟩ and ⟨ρ.l ↓ δ⟩. At every instance one lookup has one answer, so
--- every instance that discharges both sends their results to ≈-equal types
--- (`merge_forced`, RunSound.lean). Unifying the results is then a forced
--- move, and it is what `LetSpent` needs: after it, the unspent stump is spent
--- alike (`Parked.spentAlike`).
-
-/-- `S ⊢ Δ ⇝ₘ S′` — M-merge: two parked stumps with one spine and one key at S
-have their results unified. Both stay parked; saturation wakes what the equation
-staled. -/
-inductive Merge {B : Type} [DecidableEq B] : SolverState B → SolverState B → Prop where
-  | merge {S S' : SolverState B} {p q : Parked B} :
-      p ∈ S.parked → q ∈ S.parked →
-      (p.stump.row.applySubst S.subst).toSpine = (q.stump.row.applySubst S.subst).toSpine →
-      p.stump.label.applySubst S.subst = q.stump.label.applySubst S.subst →
-      SolveTySat S p.stump.res q.stump.res S' →
-      Merge S S'
-
-/-- `S ⊢ Δ ⇝ₘ* S′` — any number of merges. A merge whose equation fails is not
-taken, so merging never makes a run fail. -/
-inductive Merges {B : Type} [DecidableEq B] : SolverState B → SolverState B → Prop where
-  | refl (S : SolverState B) : Merges S S
-  | step {S S₁ S₂ : SolverState B} : Merge S S₁ → Merges S₁ S₂ → Merges S S₂
-
-theorem Merges.quiescent {B : Type} [DecidableEq B] {S S' : SolverState B} :
-    Merges S S' → S.Quiescent → S'.Quiescent
-  | .refl _, h => h
-  | .step (.merge _ _ _ _ hs) hms, _ => Merges.quiescent hms hs.quiescent
-
 --------------------- THE WITNESS SEARCH --------------------------------------
--- The answer is read at the merged state. Whether it has an instance is checked
--- (`LetSpent`) at a SCRATCH COPY of that state, which may be changed at will:
--- the change never reaches a reported type, so all it owes is that a witness
--- there is a witness of the answer (`inhabited_of_ext`, RunSound.lean). Any
--- equation, solved and saturated, will do. `runF` makes two kinds:
+-- The answer is read at the state inference ends in. Whether it has an instance
+-- is checked (`LetSpent`) at a SCRATCH COPY of that state, which may be changed
+-- at will: the change never reaches a reported type, so all it owes is that a
+-- witness there is a witness of the answer (`inhabited_of_ext`, RunSound.lean).
+-- Any equation, solved and saturated, will do. `runF` makes two kinds:
 -- * a KEY GUESS κ ≔ ℓ. `LetSpent` reads a key variable on a row blocker as the
 --   label `${κ}` by itself; what it cannot meet is a spent stump blocked on its
 --   own key over a literal record, `a: ({foo = y: y}.${a}) c`, which needs κ to
 --   be one of the record's labels. The guess supplies it.
--- * a WITNESS MERGE of two stumps on one blocker with one key. Unlike M-merge
---   it is not forced (the rows may differ before the blocker), but the filled
---   blocker answers both lookups with one field, so the witness needs it.
+-- * a WITNESS MERGE of two stumps on one blocker with one key: their results
+--   are unified, since the filled blocker answers both lookups with one field.
+--   It is what `LetSpent` needs of `x: {p = (x.l) c; q = x.l}`, which parks
+--   ⟨ρ.l ↓ 𝓫 → β⟩ and ⟨ρ.l ↓ δ⟩: after it, the unspent stump is spent alike
+--   (`Parked.spentAlike`). Two stumps that ask ONE lookup (one spine, one key)
+--   wait on one blocker, and for them the merge is forced (`merge_forced`,
+--   RunSound.lean); in general it is not, since the rows may differ before the
+--   blocker. A merge can put two further stumps on one blocker
+--   (`x: x.l.m ‖ x.l.m`), so `runF` repeats the merges until a pass changes
+--   nothing.
 
 /-- one step of the witness search: an equation, solved and saturated. -/
 inductive Guess {B : Type} [DecidableEq B] : SolverState B → SolverState B → Prop where
@@ -763,11 +740,6 @@ theorem Guesses.trans {B : Type} [DecidableEq B] {S₁ S₂ S₃ : SolverState B
     Guesses S₁ S₂ → Guesses S₂ S₃ → Guesses S₁ S₃
   | .refl _, h => h
   | .step hg hgs, h => .step hg (Guesses.trans hgs h)
-
-theorem Guesses.of_merges {B : Type} [DecidableEq B] {S S' : SolverState B} :
-    Merges S S' → Guesses S S'
-  | .refl _ => .refl _
-  | .step (.merge _ _ _ _ hs) hms => .step (.solve hs) (Guesses.of_merges hms)
 
 --------------------- INSTANTIATION AT A-var ---------------------------------
 -- `x: ∀(ᾱ: κ̄). Q ⇒ τ ∈ Γ   fresh β̄: κ̄   S ⊢ Q[β̄/ᾱ] ↝* S′`.
@@ -1369,8 +1341,8 @@ inductive Infer {B C : Type} [DecidableEq B] (constTy : Sig B C) :
   | letE {Γ : QCtx B} {S S₁ S₂ : SolverState B} {x : Var} {e₁ e₂ : Expr C}
       {τ₁ τ₂ : Ty B} {ᾱ : List TyVar} :
       Infer constTy Γ S e₁ τ₁ S₁ →
-      -- No M-merge: no test of A-let reads it. The stumps it would join meet
-      -- again at every use, or at the entry, which merges.
+      -- No merge: no test of A-let reads it. Two stumps that ask one lookup
+      -- meet again at every use, or in the entry's witness search.
       -- ᾱ = gen_{Γ,S}(S₁, τ₁): any admissible choice. Which one a function
       -- takes, the greatest, is `greatestAlpha` (LetChoice.lean).
       LetAdmissible Γ S S₁ ᾱ →
@@ -1544,8 +1516,8 @@ theorem selEx_infers :
 -- what replaced each piece.
 
 --------------------- THE TOP-LEVEL ENTRY JUDGEMENT ---------------------------
--- Run inference from the empty state, merge the stumps that ask one lookup, and
--- answer the scheme A-let would build with Γ = ∅ (plans/top-level-schemes.md).
+-- Run inference from the empty state and answer the scheme A-let would build
+-- with Γ = ∅ (plans/top-level-schemes.md).
 -- The entry used to decide at this point: F-hit put a spent field into its
 -- blocker, F-★ sent every undecided result to ★. Both picked ONE instance of
 -- this scheme, and neither pick was forced. With Γ = ∅ and a start state that
@@ -1566,14 +1538,14 @@ theorem LookupBlockedQ.mem_ftv {B : Type} {ρ : Row B} {k : Key} {β : TyVar} :
   | .catSkip _ h => (LookupBlockedQ.mem_ftv h).imp (fun h => by simp [Row.ftv, h]) id
   | .catUnk h => (LookupBlockedQ.mem_ftv h).imp (fun h => by simp [Row.ftv, h]) id
 
-/-- `⊢ e ⇒ σ` — inference from nothing, the forced merge, and the scheme read at
-the merged state with every variable bound. `LetSpent` is checked at S₃, a
-scratch copy of S₂ after the witness search (`Guesses`); with nothing to guess,
-S₃ = S₂. -/
+/-- `⊢ e ⇒ σ` — inference from nothing and the scheme read at the state it ends
+in, with every variable bound. `LetSpent` is checked at S₂, a scratch copy of
+S₁ after the witness search (`Guesses`), which merges the stumps that wait on
+one blocker for one key; with nothing to guess or merge, S₂ = S₁. -/
 def Run {B C : Type} [DecidableEq B] (constTy : Sig B C) (e : Expr C) (σ : QScheme B) : Prop :=
-  ∃ τ S₁ S₂ S₃, Infer constTy QCtx.empty ⟨Sol.nil, [], [], ⟨1⟩, []⟩ e τ S₁ ∧
-    Merges S₁ S₂ ∧ σ = letScheme S₂ (letCand S₂ τ) S₂.parked τ ∧
-    Guesses S₂ S₃ ∧ LetSpent S₃ (letCand S₃ τ) S₃.parked
+  ∃ τ S₁ S₂, Infer constTy QCtx.empty ⟨Sol.nil, [], [], ⟨1⟩, []⟩ e τ S₁ ∧
+    σ = letScheme S₁ (letCand S₁ τ) S₁.parked τ ∧
+    Guesses S₁ S₂ ∧ LetSpent S₂ (letCand S₂ τ) S₂.parked
 
 /-- **Algorithm soundness, top-level schemes**: every instance of the answer
 types the program, and the answer has one (conjuncts 1 and 2 of
@@ -1597,7 +1569,7 @@ theorem selEx_runs :
     Run (B := Unit) (C := Unit) (Sig.plain fun _ => ()) (selEx Unit)
       ⟨[natName 2, natName 3], [⟨.var (natName 2), .lit "l", .var (natName 3)⟩],
        .fn (.rcd (.var (natName 2))) (.var (natName 3))⟩ :=
-  ⟨_, selExS1, selExS1, selExS1, selEx_infers, .refl _, rfl, .refl _, by decide⟩
+  ⟨_, selExS1, selExS1, selEx_infers, rfl, .refl _, by decide⟩
 
 
 --------------------- THE SUPPLY ONLY ADVANCES -------------------------------
@@ -1641,11 +1613,6 @@ theorem Saturate.supply {B : Type} [DecidableEq B] {S S' : SolverState B} :
 theorem SolveTySat.supply {B : Type} [DecidableEq B] {S S' : SolverState B}
     {τ τ' : Ty B} : SolveTySat S τ τ' S' → S.supply.next ≤ S'.supply.next
   | ⟨_, hs, hsat⟩ => Nat.le_trans hs.supply hsat.supply
-
-theorem Merges.supply {B : Type} [DecidableEq B] {S S' : SolverState B} :
-    Merges S S' → S.supply.next ≤ S'.supply.next
-  | .refl _ => Nat.le_refl _
-  | .step (.merge _ _ _ _ hs) hms => Nat.le_trans hs.supply hms.supply
 
 theorem WakesSat.supply {B : Type} [DecidableEq B] {S S' : SolverState B}
     {ps : List (Parked B)} : WakesSat S ps S' → S.supply.next ≤ S'.supply.next
@@ -1691,11 +1658,6 @@ theorem Saturate.kinds {B : Type} [DecidableEq B] {S S' : SolverState B} :
 theorem SolveTySat.kinds {B : Type} [DecidableEq B] {S S' : SolverState B}
     {τ τ' : Ty B} : SolveTySat S τ τ' S' → S'.kinds = S.kinds
   | ⟨_, hs, hsat⟩ => (hsat.kinds).trans hs.kinds
-
-theorem Merges.kinds {B : Type} [DecidableEq B] {S S' : SolverState B} :
-    Merges S S' → S'.kinds = S.kinds
-  | .refl _ => rfl
-  | .step (.merge _ _ _ _ hs) hms => hms.kinds.trans hs.kinds
 
 theorem WakesSat.kinds {B : Type} [DecidableEq B] {S S' : SolverState B}
     {ps : List (Parked B)} : WakesSat S ps S' → S'.kinds = S.kinds
@@ -2036,11 +1998,6 @@ theorem Saturate.satMono {B : Type} [DecidableEq B] {S S' : SolverState B} :
 theorem SolveTySat.satMono {B : Type} [DecidableEq B] {S S' : SolverState B}
     {τ τ' : Ty B} : SolveTySat S τ τ' S' → S.SatMono S'
   | ⟨_, hs, hsat⟩ => hs.satMono.trans hsat.satMono
-
-theorem Merges.satMono {B : Type} [DecidableEq B] {S S' : SolverState B} :
-    Merges S S' → S.SatMono S'
-  | .refl _ => SolverState.SatMono.refl _
-  | .step (.merge _ _ _ _ hs) hms => hs.satMono.trans hms.satMono
 
 theorem WakesSat.satMono {B : Type} [DecidableEq B] {S S' : SolverState B}
     {ps : List (Parked B)} : WakesSat S ps S' → S.SatMono S'

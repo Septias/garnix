@@ -42,10 +42,6 @@ theorem SolveTySat.clean {S S' : SolverState B} {τ τ' : Ty B} :
     SolveTySat S τ τ' S' → S.sol.Clean → S'.sol.Clean
   | ⟨_, hs, hsat⟩, hc => hsat.clean (hs.clean hc)
 
-theorem Merges.clean {S S' : SolverState B} : Merges S S' → S.sol.Clean → S'.sol.Clean
-  | .refl _, hc => hc
-  | .step (.merge _ _ _ _ hs) hms, hc => Merges.clean hms (hs.clean hc)
-
 private theorem draw_sol' {S S₀ : SolverState B} {α : TyVar} {κ : Kind}
     (h : (α, S₀) = S.draw κ) : S₀.sol = S.sol := by
   have h2 : S₀ = (S.draw κ).2 := congrArg Prod.snd h
@@ -222,10 +218,6 @@ theorem Saturate.ext {S S' : SolverState B} : Saturate S S' → S.Ext S'
 theorem SolveTySat.ext {S S' : SolverState B} {τ τ' : Ty B} :
     SolveTySat S τ τ' S' → S.Ext S'
   | ⟨_, hs, hsat⟩ => hs.ext.trans hsat.ext
-
-theorem Merges.ext {S S' : SolverState B} : Merges S S' → S.Ext S'
-  | .refl _ => .refl _
-  | .step (.merge _ _ _ _ hs) hms => hs.ext.trans (Merges.ext hms)
 
 theorem draw_ext {S S₀ : SolverState B} {α : TyVar} {κ : Kind}
     (h : (α, S₀) = S.draw κ) : S.Ext S₀ := .of_sol_eq (draw_sol' h)

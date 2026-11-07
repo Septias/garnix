@@ -625,7 +625,7 @@ example : ¬ ∃ τ, QTyped σ0 QCtx.empty (app (lam "x" c) (app c c)) τ := by
     (lam "x" (rec2 "p" (app (sel (.cat (rec1 "m" c) (v "x")) "l") c) "q" (sel (v "x") "l")))
     (rec2 "a" (app (v "f") (rec1 "l" (lam "z" (v "z"))))
           "b" (app (v "f") (rec2 "l" (lam "z" (v "z")) "m" c))))).1.startsWith "fail" == false
--- … and the entry's test reads results up to ε (`Ty.flat`): M-merge leaves {ρ}
+-- … and the entry's test reads results up to ε (`Ty.flat`): the witness merge leaves {ρ}
 -- and {ρ | ε}, once for each use
 #guard (run (lam "y" (.letE "f" (lam "x" (sel (sel (v "x") "l") "m"))
     (rec2 "a" (app (v "f") (v "y")) "b" (app (v "f") (v "y")))))).1.startsWith "fail" == false
@@ -1043,7 +1043,7 @@ def metaUpdNoOr : MacroNix.E :=
 def overlay : MacroNix.E := mlam ["self", "super"] (mrec [("foo", .cat (.sel (mv "super") "foo")
     (mrec [("meta", .cat (.sel (.sel (mv "super") "foo") "meta") unbroken)]))])
 #guard runM overlay =
-  ("⟨ρ4 | ε.meta ↓ {ρ3}⟩, ⟨ρ2.foo ↓ {ρ4 | ε}⟩, ⟨ρ2 | ε.foo ↓ {ρ4}⟩ ⇒ " ++
+  ("⟨ρ5.meta ↓ {ρ3}⟩, ⟨ρ2.foo ↓ {ρ5}⟩, ⟨ρ2 | ε.foo ↓ {ρ4}⟩ ⇒ " ++
    "(α1 → ({ρ2 | ε} → {foo: {meta: {broken: bool | ε | ρ3} | ε | ρ4}}))", [])
 -- … and at a concrete super it is typed
 #guard runM (mapp overlay [mrec [], mrec [("foo", mrec [("meta", mrec [("description", ms "hi")])])]]) =
@@ -1057,6 +1057,17 @@ def overlay : MacroNix.E := mlam ["self", "super"] (mrec [("foo", .cat (.sel (mv
 -- occurs in its own spent result
 #guard runM (mlam ["x"] (.app (.sel (mv "x") "l") (mv "x"))) =
   ("fail: spent promise without witness", [])
+-- The same path twice: merging the two l stumps puts the two m stumps on one
+-- blocker, and only a later pass of the witness merge sees them. The passes
+-- repeat until one binds nothing, so the depth of the path does not matter
+def twicePath (ls : List String) : MacroNix.E :=
+  let p := ls.foldl (fun e l => .sel e l) (mv "x")
+  mlam ["x"] (.cat p p)
+#guard runM (twicePath ["l", "m"]) =
+  ("⟨ρ4.m ↓ {ρ2}⟩, ⟨ρ1.l ↓ {ρ4}⟩, ⟨ρ1 | ε.l ↓ {ρ5}⟩, ⟨ρ5.m ↓ {ρ3}⟩ ⇒ ({ρ1 | ε} → {ρ2 | ρ3})", [])
+#guard runM (twicePath ["l", "m", "n", "k"]) =
+  ("⟨ρ4.k ↓ {ρ2}⟩, ⟨ρ5.n ↓ {ρ4}⟩, ⟨ρ6.m ↓ {ρ5}⟩, ⟨ρ1.l ↓ {ρ6}⟩, ⟨ρ1 | ε.l ↓ {ρ7}⟩, " ++
+   "⟨ρ8.k ↓ {ρ3}⟩, ⟨ρ9.n ↓ {ρ8}⟩, ⟨ρ7.m ↓ {ρ9}⟩ ⇒ ({ρ1 | ε} → {ρ2 | ρ3})", [])
 
 -- Override: `mkDerivation: extra: args:
 --   mkDerivation (args // { buildInputs = (args.buildInputs or [ ]) ++ [ extra ]; })`

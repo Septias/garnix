@@ -260,7 +260,7 @@ private theorem runSound_plain {e : Expr Unit} {τ : Ty Unit} {S₁ : SolverStat
     (hinf : Infer (Sig.plain fun _ => ()) QCtx.empty ⟨Sol.nil, [], [], ⟨1⟩, []⟩ e τ S₁)
     (hp : S₁.parked = []) :
     QTyped (Sig.plain fun _ => ()) QCtx.empty e (τ.applySubst S₁.subst) :=
-  (h e _ ⟨τ, S₁, S₁, S₁, hinf, .refl _, rfl, .refl _,
+  (h e _ ⟨τ, S₁, S₁, hinf, rfl, .refl _,
     ⟨fun p hq => absurd (hp ▸ hq) List.not_mem_nil, by rw [hp]; rfl⟩⟩).1 _
     ⟨TySubst.id _, ⟨fun _ _ => rfl, fun _ _ => rfl, fun _ _ => rfl⟩,
      fun s hs => by simp [letScheme, hp] at hs, Ty.applySubst_id _⟩

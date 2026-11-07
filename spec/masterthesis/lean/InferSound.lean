@@ -612,7 +612,7 @@ saturation discharged the stump at 𝓫 — so the answer is the plain type
 theorem staleEx_runs :
     Run (B := Unit) (C := Unit) (Sig.plain fun _ => ()) staleEx
       ⟨[], [], .rcd (.sing "a" (.base ()))⟩ :=
-  ⟨_, slSfix, slSfix, slSfix, staleEx_infers, .refl _, rfl, .refl _, by decide⟩
+  ⟨_, slSfix, slSfix, staleEx_infers, rfl, .refl _, by decide⟩
 
 /-- ⊢  **the refinement, in types**: the declarative system gives the closed
 program `{a: 𝓫}`, which is what the run answers (`staleEx_recovers`). -/

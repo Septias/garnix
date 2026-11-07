@@ -1000,15 +1000,10 @@ info: 'MinimalCalculus.runSound' depends on axioms: [propext, Classical.choice, 
 -/
 #guard_msgs in #print axioms runSound
 
--- Top-level schemes (plans/top-level-schemes.md): the forced merge, the
+-- Top-level schemes (plans/top-level-schemes.md): one lookup, one result, the
 -- inhabitation witness shared with A-let, and soundness at every instance
 /-- info: 'MinimalCalculus.merge_forced' depends on axioms: [propext] -/
 #guard_msgs in #print axioms merge_forced
-
-/--
-info: 'MinimalCalculus.Merges.keeps' depends on axioms: [propext, Classical.choice, Quot.sound]
--/
-#guard_msgs in #print axioms Merges.keeps
 
 /--
 info: 'MinimalCalculus.LetResults.inhabited' depends on axioms: [propext, Classical.choice, Quot.sound]

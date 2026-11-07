@@ -1,17 +1,17 @@
 -- THE TOP LEVEL, AND `RunSound` — PROVED.
 --
--- A run answers the scheme read at the merged state (`Run`, Infer.lean). Two
--- things are owed: every instance types the program, and there is one.
+-- A run answers the scheme read at the state inference ends in (`Run`,
+-- Infer.lean). Two things are owed: every instance types the program, and
+-- there is one.
 --
---   * an instance χ is the substitution χ ∘ ⟦S₂⟧, which absorbs S₂ and every
---     state before it. A stump still parked after the merge discharges at χ;
---     one the merge's saturation discharged holds at every σ that satisfies S₂
---     (`Merges.keeps`). `runSoundA` (LetCase.lean) does the rest.
+--   * an instance χ is the substitution χ ∘ ⟦S₁⟧, which absorbs S₁.
+--     `runSoundA` (LetCase.lean) does the rest.
 --   * the instance is `LetResults.inhabited` at the identity reading, found at
---     a scratch copy of S₂ (`Guesses`) and carried back (`inhabited_of_ext`).
+--     a scratch copy of S₁ (`Guesses`) and carried back (`inhabited_of_ext`).
 --
--- The merge is forced (`merge_forced`): two stumps that ask one lookup get
--- ≈-equal results at every instance that discharges both.
+-- Two stumps that ask one lookup get ≈-equal results at every instance that
+-- discharges both (`merge_forced`), so the witness search loses nothing by
+-- merging them.
 -- (The file was Finalization.lean while the top level still finalized.)
 
 import LetCase
@@ -20,29 +20,13 @@ namespace MinimalCalculus
 
 variable {B : Type} [DecidableEq B]
 
---------------------- THE MERGE KEEPS, AND IS FORCED ---------------------------
--- M-merge is an equation plus saturation, and inherits `KeepsS` from
--- `SolveTySat`: every stump parked before it is still parked after it, or
+--------------------- THE WITNESS SEARCH KEEPS --------------------------------
+-- A step of the search is an equation plus saturation, and inherits `KeepsS`
+-- from `SolveTySat`: every stump parked before it is still parked after it, or
 -- discharged under any σ satisfying the state it ends in.
 
-/-- ⊢  one merge keeps every stump and cleanliness, and extends. -/
-theorem Merge.keeps {S S' : SolverState B} (hm : Merge S S') (hc : S.sol.Clean) :
-    S.KeepsS S' ∧ S'.sol.Clean ∧ S.Ext S' ∧ S.SatMono S' := by
-  cases hm with
-  | merge _ _ _ _ hs => exact ⟨hs.keeps, hs.clean hc, hs.ext, hs.satMono⟩
-
-/-- ⊢  …and so do any number of them. -/
-theorem Merges.keeps {S S' : SolverState B} :
-    Merges S S' → S.sol.Clean →
-      S.KeepsS S' ∧ S'.sol.Clean ∧ S.Ext S' ∧ S.SatMono S'
-  | .refl _, hc => ⟨.refl _, hc, .refl _, .refl _⟩
-  | .step hm hms, hc => by
-      obtain ⟨k₁, c₁, x₁, m₁⟩ := hm.keeps hc
-      obtain ⟨k₂, c₂, x₂, m₂⟩ := Merges.keeps hms c₁
-      exact ⟨k₁.trans k₂ m₂, c₂, x₁.trans x₂, m₁.trans m₂⟩
-
-/-- ⊢  …and so does the witness search: every step is an equation plus
-saturation. -/
+/-- ⊢  the witness search keeps every stump and cleanliness, and extends:
+every step is an equation plus saturation. -/
 theorem Guesses.keeps {S S' : SolverState B} :
     Guesses S S' → S.sol.Clean →
       S.KeepsS S' ∧ S'.sol.Clean ∧ S.Ext S' ∧ S.SatMono S'
@@ -54,7 +38,7 @@ theorem Guesses.keeps {S S' : SolverState B} :
 /-- ⊢  **the merge is forced.** Two stumps with one spine and one key ask one
 lookup, so every θ that discharges both sends their results to ≈-equal types:
 `LookupQ` respects ≈ and is deterministic, D-hit holds up to ≈, and D-⊥ and D-?
-both give ★. M-merge applies this to the stumps read at the state. -/
+both give ★. The witness merge applies this to the stumps read at the state. -/
 theorem merge_forced {st₁ st₂ : Stump B} (hrow : st₁.row.toSpine = st₂.row.toSpine)
     (hkey : st₁.label = st₂.label) {θ : TySubst B}
     (h₁ : st₁.Discharge θ) (h₂ : st₂.Discharge θ) :
@@ -89,10 +73,9 @@ theorem merge_forced {st₁ st₂ : Stump B} (hrow : st₁.row.toSpine = st₂.r
       | unk _ e₂ => rw [e₁, e₂]; exact .refl _
 
 --------------------- RunSound -------------------------------------------------
--- Every instance: an instance χ of the scheme read at S₂ is the substitution
--- χ ∘ ⟦S₂⟧, which absorbs S₂ and so every state before it. A stump parked at
--- the end of inference either is still parked after the merge, and its
--- constraint discharges at χ, or the merge's saturation discharged it.
+-- Every instance: an instance χ of the scheme read at S₁ is the substitution
+-- χ ∘ ⟦S₁⟧, which absorbs S₁. A stump parked at the end of inference is a
+-- constraint of the scheme and discharges at χ.
 -- One instance: `LetResults.inhabited` at the identity reading, which renames
 -- nothing because nothing outside the scheme shares its names.
 
@@ -187,25 +170,20 @@ theorem inhabited_of_ext {S S' : SolverState B} (hc : S.sol.Clean) (hk : S.Keeps
 of the scheme a run answers types the program in the empty context, and the
 scheme has an instance. -/
 theorem runSound {C : Type} {constTy : Sig B C} : RunSound B C constTy := by
-  rintro e σ ⟨τ, S₁, S₂, S₃, hinf, hmer, rfl, hkg, hsp⟩
+  rintro e σ ⟨τ, S₁, S₂, hinf, rfl, hkg, hsp⟩
   have c₁ := Infer.clean hinf Sol.clean_nil
-  obtain ⟨k₁₂, c₂, x₁₂, -⟩ := hmer.keeps c₁
-  have q₂ : S₂.Quiescent := hmer.quiescent (Infer.quiescent_of_nil hinf rfl)
+  have q₁ : S₁.Quiescent := Infer.quiescent_of_nil hinf rfl
   refine ⟨fun τ' ⟨χ, _, hdis, hbody⟩ => ?_, ?_⟩
   · ---------------------------------------------- every instance types e
-    have hab₂ : Absorbs (χ.comp S₂.subst) S₂ := Absorbs.comp c₂
-    have hab₁ := hab₂.back x₁₂ c₁
+    have hab₁ : Absorbs (χ.comp S₁.subst) S₁ := Absorbs.comp c₁
     have ht := runSoundA hinf hab₁ (hab₁.sat c₁) (fun p hp => ?_)
     · rw [← Ty.applySubst_applySubst] at ht
       exact hbody ▸ ht
-    · rcases k₁₂ _ (hab₂.sat c₂) p hp with ⟨q, hq, hqs⟩ | hd
-      · rw [← hqs, ← Stump.at_read]
-        exact Stump.dischargeEquiv_iff_holds.mp (hdis _ (List.mem_map.mpr ⟨q, hq, rfl⟩))
-      · exact Stump.dischargeEquiv_iff_holds.mp hd
+    · rw [← Stump.at_read]
+      exact Stump.dischargeEquiv_iff_holds.mp (hdis _ (List.mem_map.mpr ⟨p, hp, rfl⟩))
   · ---------------------------------------------- the scheme has an instance
-    obtain ⟨k₂₃, -, x₂₃, -⟩ := hkg.keeps c₂
-    exact inhabited_of_ext c₂ k₂₃ x₂₃ (hkg.keeps c₂).2.1 τ
-      (top_inhabited (hkg.quiescent q₂) τ hsp)
+    obtain ⟨k₁₂, c₂, x₁₂, -⟩ := hkg.keeps c₁
+    exact inhabited_of_ext c₁ k₁₂ x₁₂ c₂ τ (top_inhabited (hkg.quiescent q₁) τ hsp)
 
 --------------------- ≈-EQUAL HITS ON ONE RESULT ------------------------------
 -- Two constraints on the SAME result variable whose lookups find ≈-equal but
