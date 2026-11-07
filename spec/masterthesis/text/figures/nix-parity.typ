@@ -28,7 +28,7 @@
     table.header([*Feature*], [*MacroNix*], [*Remark*]),
 
     np-gr[Language features], np-f[Functions, application], np-y,
-    np-r[call-by-value application], np-f[`let` (non-recursive)], np-y,
+    np-r[call-by-name application], np-f[`let` (non-recursive)], np-y,
     np-r[let-polymorphism with qualified schemes],
     np-f[`let { …; body = e; }` (deprecated)],
     np-p,
@@ -57,7 +57,7 @@
     np-f[Patterns `{x, y ? d, ...}@s:`],
     np-p,
 
-    np-r[desugared; every pattern is open, as rows are],
+    np-r[desugared; every pattern is open, as rows are; a missing field fails at its first use, not at entry],
     np-f[`true`, `false`, `if`, `assert`],
     np-y,
 
@@ -83,7 +83,7 @@
     np-p,
 
     np-r[homogeneous `[τ]`; mixed lists only at `[★]`], np-f[Laziness], np-p,
-    np-r[record fields and list cells lazy, application strict],
+    np-r[fields, list cells, arguments and `let` lazy; no sharing; builtins force their arguments],
 
     np-gr[Builtins], np-f[`add` `sub` `mul` `div`], np-y,
     np-r[on `int`; `div` fails on 0], np-f[`lessThan`, `<=`], np-p,
