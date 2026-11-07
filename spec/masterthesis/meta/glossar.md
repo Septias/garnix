@@ -14,7 +14,7 @@
 
 
 ## Stumps
-- *Stump*: A lookup ⟨ρ.l ↓ δ⟩ carried by a qualified scheme; δ names its result. Instantiation discharges it (D-hit, D-⊥, D-?)
+- *Stump*: A lookup ⟨ρ.l ↓ δ⟩ carried by a qualified scheme; the type δ names its result and starts as a fresh type-variable when inference parks the stump. Instantiation discharges it (D-hit, D-⊥, D-?)
 - *Spent stump*: A stump whose result is already used at a type that is neither a variable nor ★; an instance must make its lookup hit. Never "promise"
 - *Parked stump*: A stump in the solver state, ⟨α ⊳ ρ.l ↓ δ⟩, filed under its blocker α
 - *Blocker*: The variable a parked stump waits on: a row or label variable
