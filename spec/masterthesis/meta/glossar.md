@@ -18,6 +18,8 @@
 - *Spent stump*: A stump whose result is already used at a type that is neither a variable nor ★; an instance must make its lookup hit. Never "promise"
 - *Parked stump*: A stump in the solver state, ⟨α ⊳ ρ.l ↓ δ⟩, filed under its blocker α
 - *Blocker*: The variable a parked stump waits on: a row or label variable
+- *Merge* (M-merge): Unifying the results of two stumps on one blocker with one label; only the fillability test merges, on its copy. A merge can put two further stumps on one blocker (`x: x.l.m // x.l.m`), hence the repetition
+- *Spent chain*: Spent stumps where the blocker of each occurs in the result of the one before (β ≻ β′): `x: x.l.m // {}`. The witness fills it from the far end
 - *Pending lookup*: Informal word for a stump; only in the introduction, the overview, the conclusion and the definition of stumps
 - *Stale*: A parked stump whose lookup is no longer ? on its recorded blocker
 - *Quiescent*: A solver state with no stale stump
@@ -30,7 +32,7 @@
 - *Qualified Scheme*: A scheme carrying its pending lookups as constraints
 - *Qualifier*: The role of a stump in a scheme ("stays a qualifier of the answer"), not a separate object
 - *Refinement*: A lookup result improving (? → τ or ⊥) once instantiation unblocks it; only ? can improve, definite results are final
-- *Fillability test*: The syntactic check of the entry point that the answer is inhabited; A-let does not run it: the instance that sends the generalized type-variables to ★ and fills each blocker with the fields its spent stumps demand discharges every stump. Sufficient, not complete: the spent chain `x: x.l.m // {}` is inhabited but fails it. *Fillable*: passes the test
+- *Fillability test*: The syntactic check of the entry point that the answer is inhabited; A-let does not run it. It runs on a copy of the state and first merges (M-merge) until no merge changes the state, so the merges never reach the answer. Then the instance that sends the generalized type-variables to ★ and fills each blocker with the fields its spent stumps demand discharges every stump. Sufficient, completeness open: it accepts the spent chain `x: x.l.m // {}` and rejects a spent chain that returns to its first blocker, `x: (x.l) x`, which has no instance. *Fillable*: passes the test
 
 
 ## Spine
