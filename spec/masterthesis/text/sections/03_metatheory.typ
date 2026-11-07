@@ -25,6 +25,7 @@ T-sel-★, T-sel-⊥ and T-★-intro place ★ where a more informative type may
   The _precision order_ ⊑ @gradual_criteria is the least preorder on types that has ★ as top element and is a congruence for → and for the field types of rows. It is covariant in both positions of →: it measures information content and is not a subtyping relation. We write $τ ≼ τ′$ when $τ ≈ τ″ ⊑ τ′$ for some τ″.
 ] <def-precision>
 
+// why would you want to derive {} → ★? It is less precise than the previous one. The example does not really click
 A more precise row can make a more precise typing derivable. For `x: ({l = c} ‖ x).l`, the domain ${β}$ only admits the result ★, since the lookup answers $?$. At the domain ${ε}$ the lookup hits, and ${ε} → 𝓫_c ⊑ {ε} → ★$ is derivable. By contrast, a ★ in a scheme stays: $θ ★ = ★$ for every substitution θ, and ★ sits ⊑-below only itself.
 
 

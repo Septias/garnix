@@ -5,21 +5,21 @@
 #let u_stuck = text(font: "Libertinus Serif", smallcaps("Stuck"))
 
 = Unification <unification>
-Unification is the core of type inference: given two types, it seeks a substitution that equates them. We split unification into two judgements, one for types $τ₁ ≐ τ₂ ⇝ v$, and one for rows $s₁ scripts(≐)_r s₂ ⇝ v$ that solves row-equations up to ≈. Row unification is where we differ from other type systems: a selection never reaches it as a field demand, because the lookup relation answers selections separately. This has immediate consequences for row unification: every move is forced and no backtracking is needed (G4:efficiency). The algorithm never chooses among alternatives, and where no forced move applies, it reports stuck instead of guessing. We prove that a returned solution is most general, and a clash or occurs failure means that no unifier exists in @unification-metatheory.
+Unification is the core of type inference: given two types, it seeks a substitution that equates them. We split unification into two judgements, one for types $τ₁ ≐ τ₂ ⇝ v$, and one for rows $s₁ scripts(≐)_r s₂ ⇝ v$ that solves row-equations up to ≈. Row unification is where we differ from other type systems. A selection never reaches it as a field demand, because the lookup relation answers selections separately. Every move of row unification is therefore forced, and no backtracking is needed (G4:efficiency). The algorithm never chooses among alternatives, and where no forced move applies, it reports stuck instead of guessing. We prove that a returned solution is most general, and a clash or occurs failure means that no unifier exists in @unification-metatheory.
 
 
 == Spines and Windows <trace-monoid>
-For row unification, we look at the shape of rows and notice a concise representation for them: A lookup searches from left to right and stops on row-variables because shadowing behaviour is unclear after this point. Row-variables thus act as boundaries that no labels can cross. The depth-first reading of a row then flatten a row: A maximal sequence of consecutive concrete bindings forms a segment which is delimited by row-variable.
+For row unification, we look at the shape of rows and notice a simpler representation for them. A lookup searches from left to right and stops on row-variables because shadowing behaviour is unclear after this point. Row-variables thus act as boundaries that no labels can cross because they could shadow fields that the row-variable contains. The depth-first reading of the lookup relation then flattens a row. The row is read from start to end like lookup would and collected into  maximal sequence of consecutive concrete bindings,  delimited by row-variable.
 
-We call this representation a _spine_: the spine $s = ⌈ρ⌉$ of a row ρ is the list of its atoms ($a ::= l: τ | α$ and $s ::= ⟨⟩ | a · s$), obtained by flattening the concatenation tree and dropping ε. For example, $((l: 𝓫 | ε) | (α | m: 𝓫))$ and $(l: 𝓫 | (α | (m: 𝓫 | ε)))$ both have the spine $⟨l: 𝓫, α, m: 𝓫⟩$. A _window_ is the segment either of a spine: in $⟨m: 𝓫, l: 𝓫, α, l: 𝓫′⟩$ the leading window is $⟨m: 𝓫, l: 𝓫⟩$ and the trailing window is $⟨l: 𝓫′⟩$. $|s|_l$ denotes the number of l-fields of s.
+We call this representation a _spine_: the spine $s = ⌈ρ⌉$ of a row ρ is the list of its atoms ($a ::= l: τ | α$ and $s ::= ⟨⟩ | a · s$), obtained by flattening the concatenation tree and dropping ε. For example, $((l: 𝓫 | ε) | (α | m: 𝓫))$ and $(l: 𝓫 | (α | (m: 𝓫 | ε)))$ both have the spine $⟨l: 𝓫, α, m: 𝓫⟩$. A _window_ is the segment at either end of a spine: in $⟨m: 𝓫, l: 𝓫, α, l: 𝓫′⟩$ the leading window is $⟨m: 𝓫, l: 𝓫⟩$ and the trailing window is $⟨l: 𝓫′⟩$. $|s|_l$ denotes the number of l-fields of s.
 
-A row is thus a word over an alphabet of fields $(l: τ)$ and row-variables α, in which two letters commute exactly when they are fields with distinct labels. Rows modulo ≈ with the unit ε form a partially commutative monoid, also called a _trace monoid_ @book_of_traces. Two standard results of trace theory then carry over to rows and from there into unification. First, ≈ is decidable and has a normal form.
+A row is thus a word over an alphabet of fields $(l: τ)$ and row-variables α, in which two letters commute exactly when they are fields with distinct labels. Rows modulo ≈ with the unit ε then form a partially commutative monoid, also called a _trace monoid_ @book_of_traces. Two standard results of trace theory carry over to rows and from there into unification. First, ≈ is decidable and has a normal form.
 
 #theorem(name: [Characterization of ≈], lean: "rowEquiv_iff_char")[
   $ρ₁ ≈ ρ₂$ if and only if ρ₁ and ρ₂ have the same sequence of row-variables and, for every label l and every var-free segment, the subsequences of fields labelled l agree pointwise up to ≈.
 ] <thm-char>
 
-Sorting each var-free segment stably by label yields a normal form, the lexicographic normal form of trace theory. For example, $(m: 𝓫 | l: 𝓫 | α | l: 𝓫′ | m: 𝓫)$ splits into the segments $(m: 𝓫 | l: 𝓫)$ and $(l: 𝓫′ | m: 𝓫)$ around α, and its representative is $(l: 𝓫 | m: 𝓫 | α | l: 𝓫′ | m: 𝓫)$: the first segment is reordered, and no field crosses α. Second, the monoid is cancellative, as every trace monoid is.
+Sorting each var-free segment stably by label yields a normal form, the lexicographic normal form of trace theory. For example, $(m: 𝓫 | l: 𝓫 | α | l: 𝓫′ | m: 𝓫)$ splits into the segments $(m: 𝓫 | l: 𝓫)$ and $(l: 𝓫′ | m: 𝓫)$ around α, and its representative is $(l: 𝓫 | m: 𝓫 | α | l: 𝓫′ | m: 𝓫)$. The first segment is reordered, and no field crosses α. Second, the monoid is cancellative.
 
 #lemma(
   name: [Cancellativity],
@@ -28,13 +28,12 @@ Sorting each var-free segment stably by label yields a normal form, the lexicogr
   If $(ρ | ρ₁) ≈ (ρ | ρ₂)$ or $(ρ₁ | ρ) ≈ (ρ₂ | ρ)$, then $ρ₁ ≈ ρ₂$.
 ] <lem-cancel>
 
-This reading of rows unveils the benefit that it makes several moves of row unification forced. The outermost l-field of a window can be swapped to the end of the spine, which licenses U-field-L and U-field-R, and cancellativity licenses the cancel moves.
+This reading of rows unveils the benefit that the structure of rows make several moves of row unification forced. The outermost l-field of a window can be swapped to the end of the spine, which licenses U-field-L and U-field-R, and cancellativity licenses the cancel moves.
 
-This structure has a cost: ≈ keeps shadowed fields. $(l: 𝓫 | l: 𝓫′) ≉ (l: 𝓫)$, although no program observes the shadowed field. For instance, `{l = c}` and `{l = d} ‖ {l = c}` behave identically, but their rows are not equivalent. NixLang records are finite maps, so the faithful relation identifies a row with its shadow-free part. That relation, however, is not cancellative: it identifies $(l: 𝓫 | l: τ)$ and $(l: 𝓫 | l: τ′)$ for all τ and τ′, while $(l: τ)$ and $(l: τ′)$ stay apart. The cancel moves would then lose unifiers: under it, $α ≔ (l: 𝓫)$ unifies $(α | l: τ)$ and $(α | l: τ′)$ for all τ and τ′, while U-cancel-L reduces the problem to $τ ≐ τ′$. We therefore keep ≈ and accept that it is finer than the records of NixLang.
-
+This structure, however, also has a cost: ≈ keeps shadowed fields and is not faithful to the semantics of NixLang. $(l: 𝓫 | l: 𝓫′) ≉ (l: 𝓫)$, although no program observes the shadowed field. For instance, `{l = c}` and `{l = d} ‖ {l = c}` behave identically, but their rows are not equivalent. This limmitation is discussed in @outlook.
 
 == Type Unification
-We start with presenting type unification. Unification either returns a solution θ or one of three refusals. #u_clash reports that two head constructors differ or that a field has no possible partner. #u_occurs reports that a variable occurs in the type or row it is equated with, so a solution would need a recursive type, which MiniNix does not have. #u_stuck reports that no move applies and the Wand ambiguity is the prime example (@ex-unif-stuck) of this error class. A refusal of a premise is also the verdict of the conclusion.
+We start with presenting type unification. Unification either returns a solution θ or one of three refusals. #u_clash reports that two head constructors differ or that a field has no possible partner. #u_occurs reports that a variable occurs in the type or row it is equated with, so a solution would need a recursive type, which MiniNix does not have. #u_stuck reports that no move applies and the Wand ambiguity is the prime example (@ex-unif-stuck) of this error class.
 
 #let unification_ty = figure(
   caption: "Verdicts and unification of types.",
@@ -277,7 +276,7 @@ A field without a partner may still have a host. U-host fires on a leading field
   Type and row unification terminate on all inputs with a unique verdict.
 ] <thm-unif-term>
 
-#proof[By a lexicographic measure: the number of distinct variables of the problem, then its size. A cancellation or a pairing returns parts of its input. A move that first solves a type equation and applies the solution to the residual may enlarge the residual, but it removes the variables it bound, and it draws fewer fresh names than it binds variables, so the residual has fewer distinct variables. U-host trades β for β′ and drops a field, which keeps the count and lowers the size. The argument requires the drawn names to be new, which holds since the supply starts above the variables of the problem.]
+#proof[By a lexicographic measure over the number of distinct variables of the problem, and then its size. A cancellation or a pairing returns parts of its input. A move that first solves a type equation and applies the solution to the residual may enlarge the residual, but it removes the variables it bound, and it draws fewer fresh names than it binds variables, so the residual has fewer distinct variables. U-host trades β for β′ and drops a field, which keeps the count and lowers the size. The argument requires the drawn names to be new, which holds since the supply starts above the variables of the problem.]
 
 A substitution θ _unifies_ ρ₁ and ρ₂ if $θ ρ₁ ≈ θ ρ₂$. It _factors through_ a solution Θ if $θ α ≈ θ(Θ α)$ for every binding of Θ, that is, if θ and $θ ∘ Θ$ agree up to ≈.
 

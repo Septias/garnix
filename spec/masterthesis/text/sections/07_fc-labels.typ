@@ -3,9 +3,9 @@
 
 = First-Class Labels <fc-labels>
 
-In NixLang, the expression `x.${e}` selects the field named by an arbitrary string expression `e`, and the expression `{ ${e} = v; }` binds a value to the label that `e` computes. Labels are thus first-class values. This section extends MiniNix with first-class labels and carries over the techniques developed in earlier chapters: A field under an unknown label behaves just like a row-variable. Shadow behaviour is unclear, a lookup cannot pass it and a selection has to park. We generalize both row and label-variables to _barriers_ and the same mechanism of qualified schemes and parking translate.
+In NixLang, the expression `x.${e}` selects the field named by an arbitrary string expression `e`, and the expression `{ ${e} = v; }` binds a value to the label that `e` computes. Labels are thus first-class values. This section extends MiniNix with first-class labels and carries over the techniques developed in earlier chapters. A field under an unknown label behaves just like a row-variable: shadow behaviour is unclear, a lookup cannot pass it and a selection has to park. We generalize both row and label-variables to _barriers_ and the same mechanism of qualified schemes and parking translate.
 
-The extension is small: Lookup gains three new rules for keyed fields, and row unification gains one move. The remaining changes are new cases for keys and labels or minor adjustments of existing rules, mostly replacing the explicit label by a _key_.
+The extension is only small: Lookup gains three new rules for keyed fields, and row unification gains one new move. The remaining changes are new cases for keys and labels or minor adjustments of existing rules, mostly replacing the explicit label by a _key_.
 
 #let fc_syntax = figure(
   caption: [Syntax of first-class labels, as an extension of @syntax.],
@@ -29,7 +29,7 @@ The extension is small: Lookup gains three new rules for keyed fields, and row u
 )
 #fc_syntax <fc-syntax>
 
-The syntax extension is given in @fc-syntax. Expressions gain a new constructor for string literals and records the two expressions to select a dynamic field or bind a value to a computed name that were shown in the introduction. A label can be one of three things: A conceret label $l$, a label variable $α$ of the now sort `Label` or the _unknown key_ ∗. The unknown key is needed for strings the analysis can not track, for example the result of a builtin that returns a string . A key can occur in two places: as the singleton type $⌊k⌋$ that describes a label directly or as part of _keyed field_ $\${k}: τ$ of a row, whose label may not be known. Stumps also abstract over keys, as in $⟨ρ.k ↓ δ⟩$, so that a scheme can defer a lookup under a key.
+The syntax extension is given in @fc-syntax. Expressions gain a new constructor for string literals and records the two expressions to select a dynamic field or bind a value to a computed name that were shown in the introduction. A label can be one of three things: A conceret label $l$, a label variable $α$ of the now sort `Label` or the _unknown key_ $∗$. The unknown key is needed for strings the analysis can not track, for example the result of a builtin. A key can occur in two places: as the singleton type $⌊k⌋$ that describes a label directly or as part of _keyed field_ $\${k}: τ$ of a row, whose label may not be known. Stumps also abstract over keys, as in $⟨ρ.k ↓ δ⟩$, so that a scheme can defer a lookup under a key.
 
 == Keyed Lookup
 
@@ -47,7 +47,7 @@ The syntax extension is given in @fc-syntax. Expressions gain a new constructor 
 )
 #fc_lookup <fc-lookup>
 
-@fc-lookup gives the lookup under a key. Its three rules correspond to the three verdicts of the lookup relation of @row-lookup. Two conceret literals compare equal or apart but every other pair is undecided. Even a label variable is undecided against itself because it may be sent to ∗ and two unknown keys can describe completely different strings. Spines and segments of @trace-monoid carry over with barriers in place of row-variables, and so does @thm-char. Only the variable that blocks a lookup changes: the _blocker_ of a $?$ may now be a label variable.
+@fc-lookup gives the lookup under a key. Its three rules correspond to the three verdicts of the lookup relation of @row-lookup. Two conceret literals compare equal or apart but every other pair is undecided. Even a label variable is undecided against itself because it may be sent to $∗$ and two unknown keys can describe completely different strings. Spines and segments of @trace-monoid carry over with barriers in place of row-variables, and so does @thm-char. Only the variable that blocks a lookup changes: the _blocker_ of a $?$ may now be a label variable aswell.
 
 
 == First-Class Labels by Example
@@ -59,14 +59,15 @@ $
   #raw("a: x: x.${a}") quad : quad ∀(α: "Label", β: "Row", δ: "Type"). #h(0.3em) ⟨β.α ↓ δ⟩ ⇒ ⌊α⌋ → {β} → δ
 $
 
-The scheme is the most general type of the program up to T-★-intro: the label, the row and the result are all variables, and the stump is the only constraint that relates them. A use replays the stump under its label and row, so one binding can answer differently at different uses. Stumps also chain under a key: The function `system: pkgs: pkgs.${system}.default` selects from the result of a keyed selection and has the scheme
+The scheme is the most general type of the program up to T-★-intro. The label, the row and the result are all variables, and the stump is the only constraint that relates them. We also show an example of how stumps can be chained. The following program selects from the result of a keyed selection:
 $
-  ∀(α: "Label", β, γ: "Row", δ: "Type"). #h(0.3em) ⟨β.α ↓ {γ}⟩, ⟨γ."default" ↓ δ⟩ ⇒ ⌊α⌋ → {β} → δ.
+  #raw("a: x: x.${a}.l") quad : quad & ∀(α: "Label", β, γ: "Row", δ: "Type"). \
+  & quad ⟨β.α ↓ {γ}⟩, ⟨γ.l ↓ δ⟩ ⇒ ⌊α⌋ → {β} → δ
 $
 
-The first stump is spent at the record type ${γ}$, since its result is selected from.
+For `x.${a}`, the lookup of α in β answers $?$ on β, so A-sel-\? parks $⟨β ⊳ β.α ↓ δ′⟩$ and returns δ′. The selection of l then unifies δ′ with ${γ}$ for a fresh γ, which spends the first stump, and parks $⟨γ ⊳ γ.l ↓ δ⟩$ on the row of its result.
 
-Next, now look at the wand-ambiguity in fc-labels form: the function `n: r: (r ‖ {${n} = c}).l` overrides a field under an unknown name and then reads l. Given $n: ⌊α⌋$ and $r: {β}$, the concatenation has type ${\${α}: 𝓫_c | β}$. The lookup of l stops at the barrier and answers $?$, since α may become l. The answer is recorded like every other pending lookup:
+Next, we look at the wand-ambiguity with first class labels: the function `n: r: (r ‖ {${n} = c}).l` overrides a field under an unknown name and then reads l. Given $n: ⌊α⌋$ and $r: {β}$, the concatenation has type ${\${α}: 𝓫_c | β}$. The lookup of l stops at the barrier and answers $?$, since α may become l. The answer is recorded like every other pending lookup:
 
 $
   ∀(α: "Label", β: "Row", δ: "Type"). #h(0.3em) ⟨(\${α}: 𝓫_c | β).l ↓ δ⟩ ⇒ ⌊α⌋ → {β} → δ
@@ -74,14 +75,14 @@ $
 
 In this example, a label variable becomes the blocker. Wake-up and generalization read a stump through its blocker, whatever its sort.
 
-// reword
-A comparison of ∗ with a literal or with ∗ is undecided at every instance, since ∗ is no variable and no substitution replaces it. A lookup that stops at such a comparison is _opaque_. An opaque lookup has no blocker and nothing can answer it later, so inference answers it like a miss. The time program of the introduction types exactly like this:
+// todo: reword
+A comparison of $∗$ with a literal or with $∗$ is undecided at every instance because $∗$ is no variable and no substitution replaces it. A lookup whith such a label is not tracked by our system so the only option is to type it using the unknown type. The time program of the introduction types exactly like this because the `toString` builtin is untrackable:
 
 $
   #raw("{\"1759190400\" = 1}.${toString builtins.currentTime}") quad : quad ★
 $
 
-The program types at ★ with a warning and evaluates as in NixLang. This is the role of ★ in G3: the analysis gives up on the selection, and the program is not rejected. ★ has no eliminators, so a further selection from the result clashes.
+This is the role of ★ in G3: the analysis gives up on the selection, and the program is not rejected. ★ has no eliminators, so a further selection from the result clashes.
 
 == Unification
 
