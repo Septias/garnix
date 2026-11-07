@@ -25,7 +25,8 @@
   }
   #set par(justify: true)
   #set text(12pt)
-  #set page(margin: (x: 2cm, y: 2cm))
+  #set page(margin: (x: 2cm, y: 2cm), numbering: "1")
+  #counter(page).update(1)
   // #show figure: set block(breakable: true)
   #show heading.where(level: 1): it => {
     counter(figure.where(kind: thm_kind)).update(0)
