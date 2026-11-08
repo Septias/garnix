@@ -54,19 +54,13 @@ The development of MacroNix is just for test purposes, don't mention it too ofte
 - [x] Mechanization gives stats for the mechanization, update them
 
 
-### Non Ai
-- [ ] Inhaltsverzeichniss und Seitenzahlen
-- [x] Go over the heading structure
-
-
 # Section-State
 - [x] 00 Introduction
 - [x] 01 Overview
 - [x] 02 Declarative
 - [x] 03 Metatheory
 - [x] 04 Unification
-- [ ] 05 Inference
-  - [ ] Entry Point
+- [x] 05 Inference
 - [x] 06 Incompleteness
 - [x] 07 FC-Labels
 - [x] 08 Mechanization

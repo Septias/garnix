@@ -237,35 +237,47 @@ The algorithm computes the set of variables by deleting those that don't hold th
 )
 #entry <entry>
 
-The entry point is given in @entry, runs inference from the empty state and returns a top-level scheme with all its stumps attached. Instead of recording the stumps, we could also simplify them using ★ but returning a scheme keeps strictly more information and is a better choice for NixLang with many exported functions. The scheme σ is read at $S₁$. The last two premises check that σ has an instance and work on a copy $S₂$ of $S₁$: the copy only extends $S₁$, so a witness at $S₂$ is a witness of σ, and no change to the copy reaches σ. The copy first merges stumps by M-merge and then passes the _fillability test_, a syntactic check of the stumps, their blockers and their results δ. Its conditions are:
+The entry point is given in @entry. It runs inference from the empty state and returns a top-level scheme with all its stumps attached, similar to A-let. For soundness, the entry point must check that σ has an instance (@thm-infer-sound), and we use a sufficient syntactic check for this condition. A spent stump already has a result assigned to it that is neither a variable nor ★. The lookup must then hit and the instance must put a field into its blocker that has the needed type. The fillability test checks whether this is possible by building one instance and checking two conditions on it. It replaces every type-variable with ★ and adds the fields fixed by spent stumps in front of their blockers. This way, every spent stump gets the result it expects.
 
-+ For every spent stump p of $Δ₂$, every stump of $Δ₂$ on the blocker of p with the label of p is spent as well, and its result agrees with the result of p up to ε and associativity once every type-variable is replaced by ★.
-+ No blocker reaches itself along ≻, where $β ≻ β′$ holds when a spent stump on β has β′, the blocker of a spent stump, in its result.
+Two things can go wrong in this assignment. Given a spent stump $⟨α ⊳ ρ.l ↓ δ⟩$, every other stump with the same blocker and lookup label must be spent as well, and the results have to coincide. The reasoning is that the blocker provides the label in one case so it also has to answer it for the other case. Since it is the same blocker variable, it has to be the same result. Second, a field type can mention another blocker, so the blockers have to be filled in order, and a cycle admits no order. We write $β ≻ β′$ when a spent stump on β has β′, the blocker of a spent stump, in its result. In `x: (x.l) x`, the l-stump on the row ρ of x is spent at ${ρ} → γ$, so $ρ ≻ ρ$. The row ρ would then contain a field whose type contains ρ itself, which needs a recursive type.
 
-The first condition lets one field answer every lookup of its label on a blocker: the witness sends every type-variable to ★, and the results then coincide. The second condition orders the blockers. A sequence of steps ≻ is a _spent chain_. In `x: x.l.m ‖ {}` the spent l-stump on the row ρ of x has the result ${ρ′}$, and ρ′ is the blocker of the spent m-stump, so $ρ ≻ ρ′$. The witness fills a spent chain from its far end: it extends ρ′ by the field $m: {ρ″}$ first and then ρ by $l: {m: {ρ″} | ρ′}$. A spent chain that returns to its first blocker admits no such order, and its scheme has no instance. In `x: (x.l) x` the result ${ρ} → γ$ of the l-stump contains its own blocker ρ, so the row ρ would contain a field whose type contains ρ itself.
-
-#let merge_rule = figure(
-  caption: "Merging two stumps.",
+#let fill_rules = figure(
+  caption: "Merging stumps",
   flexbox(
-    derive(
-      "M-merge",
-      (
-        $⟨α ⊳ ρ.l ↓ δ⟩, ⟨α ⊳ ρ′.l ↓ δ′⟩ ∈ Δ$,
-        $S ⊢ δ ≐ δ′ #st_solve S′$,
-      ),
-      $S ⊢ Δ #st_merge S′$,
-    ),
+    // derive(
+    //   "F-fill",
+    //   stack(
+    //     spacing: 8pt,
+    //     $⟨α ⊳ ρ.l ↓ δ⟩ ∈ Δ "spent", ⟨α ⊳ ρ′.l ↓ δ′⟩ ∈ Δ ⟹ ⟨α ⊳ ρ′.l ↓ δ′⟩ "spent" and (⟦S⟧δ)^★ ≡ (⟦S⟧δ′)^★$,
+    //     $≻ "has no cycle"$,
+    //   ),
+    //   $S "fillable"$,
+    // ),
   ),
 )
-#merge_rule <merge-rule>
+#fill_rules <fill-rules>
 
-In `x: {p = (x.l) c | q = x.l}` only the first stump is spent, so the first condition of the fillability test fails. M-merge (@merge-rule) repairs this case. The rule unifies the results of two parked stumps that wait on the same blocker for the same label: the witness extends the blocker by one field, and this field answers both lookups. A merge can put two further stumps on one blocker. In `x: x.l.m ‖ x.l.m` the two m-stumps share a blocker only after the two l-stumps are merged, so the copy merges until no merge changes it. The merges run on the copy and do not reach σ. The answer to `x: {p = (x.l) c | q = x.l}` therefore keeps two results for the one lookup, and both agree at every instance, since one lookup has one answer. A-let does not merge either: no condition of A-let depends on the merge, and a use of the binding replays both stumps.
+$
+  #derive(
+    "M-merge",
+    ($⟨α ⊳ ρ.l ↓ δ⟩, ⟨α ⊳ ρ′.l ↓ δ′⟩ ∈ Δ$, $S ⊢ δ ≐ δ′ #st_solve S′$),
+    $S ⊢ Δ #st_merge S′$,
+  ),
+$
+
+M-merge is used to prepare the first condition. It is applied iteratively, unifying the results of stumps with the same lookup label and blocker. // F-fill then checks both conditions. Here $τ^★$ replaces every type-variable of τ by ★, and ≡ compares types up to ε and associativity. The second condition orders the blockers, checking for any cycles.
 
 // #example(name: [A spent stump])[
 //   In `x: (x.l) c`, A-sel-\? parks $⟨β ⊳ β.l ↓ δ⟩$, and A-λ-E unifies δ with $𝓫_c → γ$ for a fresh γ. The stump is spent: D-\? and D-⊥ would demand ★ for a result that is already $𝓫_c → γ$, so an instance must make the lookup hit. The program answers $∀(β: "Row", γ: "Type"). ⟨β.l ↓ 𝓫_c → γ⟩ ⇒ {β} → γ$. The instance that extends β by the field $l: 𝓫_c → γ$ discharges the stump by D-hit, so the scheme is inhabited, and this instance is the typing ${l: 𝓫_c → γ | β′} → γ$.
 // ] <ex-spent>
 
 == Inference Metatheory <inference-metatheory>
+
+#lemma(name: [Fillability implies inhabitation], lean: "LetResults.inhabited")[
+  If $S₂$ is fillable, then the witness discharges every stump of $S₂$, and σ has an instance.
+] <lem-fillable>
+
+#proof[A spent stump finds the field of its label, and by the first condition its result agrees with the field type, so D-hit applies. A stump that is not spent finds no field for its label, also by the first condition. Its lookup still stops at the blocker, and its result is ★, so D-\? applies. The second condition makes the field types well-defined. Since $S₂$ extends $S₁$, a witness at $S₂$ is also a witness of σ.]
 
 #theorem(name: [Termination of inference], lean: "runF_terminates, satStep_wf")[
   Saturation admits no infinite run, and the function `runF` that implements the entry point terminates on every term.
