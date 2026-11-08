@@ -7,9 +7,9 @@
 
 @unification-row states the moves as rules. The order is fixed by @unification-cascade. Every move except the two cancel moves and U-stuck is tried in both directions.
 
-U-field-L and U-field-R extract their partner with a window function. $"win"_l (s) = (τ, s′)$ states that τ is the type of the first l-field in the leading window of s and that s′ is s without this field. $"win"_l (s)$ is undefined if the leading window has no l-field. $"win"^R_l$ is the mirror image: it takes the last l-field in the trailing window.
+U-field-L and U-field-R extract their partner with a window function. $"win"_l (s) = (τ, s′)$ states that $τ$ is the type of the first $l$-field in the leading window of $s$ and that $s′$ is $s$ without this field. $"win"_l (s)$ is undefined if the leading window has no $l$-field. $"win"^R_l$ is the mirror image: it takes the last $l$-field in the trailing window.
 
-U-ground uses $"rem"_l (s) = (τ, s′)$, which takes the first l-field anywhere in s and may therefore pass variables. U-host uses $"host"_l (τ, t, s) = β$, which states that β is the sole host in s of the field $l: τ$ with the rest t of the first side, as defined in @unification.
+U-ground uses $"rem"_l (s) = (τ, s′)$, which takes the first $l$-field anywhere in $s$ and may therefore pass variables. U-host uses $"host"_l (τ, t, s) = β$, which states that $β$ is the sole host in $s$ of the field $l: τ$ with the rest $t$ of the first side, as defined in @unification.
 
 #let unification_row = figure(
   caption: "Unification of rows, on spines.",
@@ -129,16 +129,16 @@ This appendix collects the rules and lemmas of the first-class labels extension 
 
 == Keyed Lookup
 
-The rules L-ε, L-var and the three concatenation rules of @row-lookup carry over to @fc-lookup with k in place of l. L-hit and L-miss are the rules of @row-lookup under a literal key, and L-\? is a new source of ?.
+The rules L-ε, L-var and the three concatenation rules of @row-lookup carry over to @fc-lookup with $k$ in place of $l$. L-hit and L-miss are the rules of @row-lookup under a literal key, and L-\? is a new source of $?$.
 
 #lemma(
   name: [Keyed lookup],
   lean: "LookupQ.det, LookupQ.total, LookupQ.applySubst",
 )[
-  For every row ρ and key k there is exactly one lookup result r with $ρ.k ↓ r$. If $r ≠ #h(0.2em) ?$, then $(θ ρ).(θ k) ↓ θ r$ for every substitution θ.
+  For every row $ρ$ and key $k$ there is exactly one lookup result $r$ with $ρ.k ↓ r$. If $r ≠ #h(0.2em) ?$, then $(θ ρ).(θ k) ↓ θ r$ for every substitution $θ$.
 ] <lem-keyed-lookup>
 
-#proof[As for @lem-lookup-det and @lem-lookup-stable. A definite derivation compares only literals, and θ fixes every literal.]
+#proof[As for @lem-lookup-det and @lem-lookup-stable. A definite derivation compares only literals, and $θ$ fixes every literal.]
 
 == Row Equivalence and Barriers
 
@@ -153,7 +153,7 @@ The rules L-ε, L-var and the three concatenation rules of @row-lookup carry ove
 
 Row equivalence extends to keyed fields by two rules (@fc-equiv). ≈-dfield is congruence under one key. ≈-dlab identifies a keyed field under a literal with the literal field. ≈-comm needs no extension: its premise $l₁ ≠ l₂$ is apartness, and only literals are apart. A keyed barrier therefore commutes with nothing, not even with a field under the same label variable: both fields carry the same label at every instance, and the left one wins.
 
-The trace monoid of @trace-monoid carries over with barriers in place of row-variables. Spines acquire two atoms, $a ::= l: τ | β | \${α}: τ | \${∗}: τ$. A keyed field under a literal needs no atom, since ≈-dlab normalizes it to a literal field. A segment is a barrier-free part of a spine, and @thm-char reads: $ρ₁ ≈ ρ₂$ if and only if both rows have the same sequence of barriers, where two keyed barriers are the same when their keys are equal and their field types are equivalent, and the fields of every label agree pointwise up to ≈ in every segment (`rowEquiv_iff_char`). The monoid remains cancellative on both sides (@lem-cancel).
+The trace monoid of @trace-monoid carries over with barriers in place of row-variables. Spines acquire two atoms, $a ::= l: τ | β | \${α}: τ | \${∗}: τ$. A keyed field under a literal needs no atom, since ≈-dlab normalizes it to a literal field. A segment is a barrier-free part of a spine, and @thm-char reads: $ρ₁ ≈ ρ₂$ if and only if both rows have the same sequence of barriers, where two keyed barriers are the same when their keys are equal and their field types are equivalent, and the fields of every label agree pointwise up to $≈$ in every segment (`rowEquiv_iff_char`). The monoid remains cancellative on both sides (@lem-cancel).
 
 
 == Typing and Evaluation
@@ -204,9 +204,9 @@ The trace monoid of @trace-monoid carries over with barriers in place of row-var
 )
 #fc_typing <fc-typing>
 
-@fc-typing gives the typing rules and the reduction. T-lab types $\"l\"$ at $⌊l⌋$. The three rules for dynamic selection are the rules of static selection with a key k in place of the label l, where e₂ provides k. T-rcd-dyn records the key of e₁ in a keyed field.
+@fc-typing gives the typing rules and the reduction. T-lab types $\"l\"$ at $⌊l⌋$. The three rules for dynamic selection are the rules of static selection with a key $k$ in place of the label $l$, where $e₂$ provides $k$. T-rcd-dyn records the key of $e₁$ in a keyed field.
 
-T-lab-blur and T-ξ-blur forget information, like T-★-intro. T-lab-blur lets a literal stand where an arbitrary string is expected, for example as the argument of a function of type $⌊∗⌋ → τ$. T-ξ-blur moves a field under the key ∗. The inference rules never blur.
+T-lab-blur and T-ξ-blur forget information, like T-★-intro. T-lab-blur lets a literal stand where an arbitrary string is expected, for example as the argument of a function of type $⌊∗⌋ → τ$. T-ξ-blur moves a field under the key $∗$. The inference rules never blur.
 
 The evaluation rules reduce the key to a string literal and then proceed as for a static label. ↯-sel-dyn is the lookup error of a selection under an absent label.
 
@@ -231,11 +231,11 @@ The evaluation rules reduce the key to a string literal and then proceed as for 
 )
 #fc_unif <fc-unification>
 
-@fc-unification extends unification with the rules for keys. Equal keys unify (U-key-refl), a variable binds to any other key (U-key-bind), also with the sides exchanged, and two different keys that are not variables clash (U-key-clash). The key ∗ is therefore rigid: it unifies with itself and with a variable, and $⌊∗⌋$ clashes with $⌊l⌋$. U-key-pin is the one new move on rows.
+@fc-unification extends unification with the rules for keys. Equal keys unify (U-key-refl), a variable binds to any other key (U-key-bind), also with the sides exchanged, and two different keys that are not variables clash (U-key-clash). The key $∗$ is therefore rigid: it unifies with itself and with a variable, and $⌊∗⌋$ clashes with $⌊l⌋$. U-key-pin is the one new move on rows.
 
-U-key-pin applies when each side consists of a single field under different keys and at least one key is a variable. A one-field row is equivalent to another only under the same key, so every unifier identifies the two keys. The move binds the variable to the other key and unifies the field types under this binding, since α may occur in them. U-key-pin is tried in both directions. It solves $⟨l: τ⟩ scripts(≐)_r ⟨\${α}: τ′⟩$ with $[α ≔ l]$ and $⟨\${α}: τ⟩ scripts(≐)_r ⟨\${β}: τ′⟩$ with $[α ≔ β]$. The second solution is most general, since $[α ≔ l, β ≔ l] = [β ≔ l] ∘ [α ≔ β]$. Against $\${∗}: τ′$, the move binds α to ∗.
+U-key-pin applies when each side consists of a single field under different keys and at least one key is a variable. A one-field row is equivalent to another only under the same key, so every unifier identifies the two keys. The move binds the variable to the other key and unifies the field types under this binding, since $α$ may occur in them. U-key-pin is tried in both directions. It solves $⟨l: τ⟩ scripts(≐)_r ⟨\${α}: τ′⟩$ with $[α ≔ l]$ and $⟨\${α}: τ⟩ scripts(≐)_r ⟨\${β}: τ′⟩$ with $[α ≔ β]$. The second solution is most general, since $[α ≔ l, β ≔ l] = [β ≔ l] ∘ [α ≔ β]$. Against $\${∗}: τ′$, the move binds $α$ to $∗$.
 
-For more than one field, the binding is not forced (@fc-labels), so keyed fields under different keys stay stuck. A literal field against a field under ∗, $⟨l: τ⟩ scripts(≐)_r ⟨\${∗}: τ′⟩$, has no unifier, but no move detects this, and the verdict is stuck. The metatheory of @unification-metatheory holds as stated: success is most general, clash and occurs are sound, and the algorithm terminates. U-key-pin always binds a variable, so the residual has fewer variables.
+For more than one field, the binding is not forced (@fc-labels), so keyed fields under different keys stay stuck. A literal field against a field under $∗$, $⟨l: τ⟩ scripts(≐)_r ⟨\${∗}: τ′⟩$, has no unifier, but no move detects this, and the verdict is stuck. The metatheory of @unification-metatheory holds as stated: success is most general, clash and occurs are sound, and the algorithm terminates. U-key-pin always binds a variable, so the residual has fewer variables.
 
 == Inference <sec-fc-inference>
 
@@ -275,22 +275,22 @@ For more than one field, the binding is not forced (@fc-labels), so keyed fields
 )
 #fc_infer <fc-inference>
 
-@fc-inference gives the algorithmic rules. Dynamic selection follows A-sel, A-sel-⊥ and A-sel-\? of @inference-rules: the key is unified with $⌊α⌋$ for a fresh label variable α, and the keyed lookup runs on the row and the key as solved so far. A-sel-dyn-⊥ also answers an opaque lookup with ★, since no instance decides it. A-sel-dyn-\? parks the stump on its blocker, which may be a label variable. A-rcd-dyn performs no lookup and parks nothing, and the keyed field records α.
+@fc-inference gives the algorithmic rules. Dynamic selection follows A-sel, A-sel-⊥ and A-sel-\? of @inference-rules: the key is unified with $⌊α⌋$ for a fresh label variable $α$, and the keyed lookup runs on the row and the key as solved so far. A-sel-dyn-⊥ also answers an opaque lookup with ★, since no instance decides it. A-sel-dyn-\? parks the stump on its blocker, which may be a label variable. A-rcd-dyn performs no lookup and parks nothing, and the keyed field records $α$.
 
 = MacroNix <app-macronix>
 
-The Lean development extends MiniNix beyond the first-class labels of @fc-labels by the constructs of NixLang whose typing is routine: booleans, conditionals, assertions, the attribute test `e ? l`, homogeneous lists and a set of builtins. We call the extension MacroNix. Its purpose is that the mechanized results hold for a language closer to NixLang, and that the test programs of @sec-idioms and of the Nix test suite can be stated without encoding.
+The Lean development extends MiniNix beyond the first-class labels of @fc-labels by the constructs of NixLang whose typing is routine: booleans, conditionals, assertions, the attribute test $e #h(0.2em) ? #h(0.2em) l$, homogeneous lists and a set of builtins. We call the extension MacroNix. Its purpose is that the mechanized results hold for a language closer to NixLang, and that the test programs of @sec-idioms and of the Nix test suite can be stated without encoding.
 
 $
   e & ::= dots | p #h(0.2em) e_1 dots e_n | #b[true] | #b[false] | #b[if] e #b[then] e_1 #b[else] e_2 | #b[assert] e_1 ; e_2 | [] | e_1 :: e_2 | e #h(0.2em) ? #h(0.2em) l \
   τ & ::= dots | [τ]
 $
 
-A builtin p is applied to all of its arguments and, unlike a λ-abstraction, forces them; a partial application is written as a λ-abstraction. Lists are homogeneous, and the cell $e_1 :: e_2$ is lazy, as a record field is. The derived forms of NixLang, `&&`, `||`, `!=` and `e.l or d`, are abbreviations.
+A builtin $p$ is applied to all of its arguments and, unlike a λ-abstraction, forces them; a partial application is written as a λ-abstraction. Lists are homogeneous, and the cell $e_1 :: e_2$ is lazy, as a record field is. The derived forms of NixLang, `&&`, `||`, `!=` and `e.l or d`, are abbreviations.
 
-*Signature.* The constants and builtins are given by a signature Σ: the base type of each constant, an optional base type `bool` of the literals, the type of each builtin, whose free variables are all generic, and a reduction δ of each builtin on argument values, which may fail. MiniNix is the signature without booleans and builtins. A signature is _sound_ if no constant has type `bool` and δ preserves types: whenever the arguments $overline(v)$ have the types $overline(τ)$ and an instance of the builtin's type is $overline(τ) -> τ$, the result of $δ(p, overline(v))$ has type τ. Soundness constrains δ only where it succeeds: a builtin may fail on well-typed arguments, as `head []` does, and progress counts such a failure as an error. A signature whose builtins fail on every argument is therefore sound as well.
+*Signature.* The constants and builtins are given by a signature $Σ$: the base type of each constant, an optional base type $"bool"$ of the literals, the type of each builtin, whose free variables are all generic, and a reduction $δ$ of each builtin on argument values, which may fail. MiniNix is the signature without booleans and builtins. A signature is _sound_ if no constant has type $"bool"$ and $δ$ preserves types: whenever the arguments $overline(v)$ have the types $overline(τ)$ and an instance of the builtin's type is $overline(τ) -> τ$, the result of $δ(p, overline(v))$ has type $τ$. Soundness constrains $δ$ only where it succeeds: a builtin may fail on well-typed arguments, as `head []` does, and progress counts such a failure as an error. A signature whose builtins fail on every argument is therefore sound as well.
 
-*Rules.* The typing rules are the standard ones. A builtin is typed at an instance of its type, a conditional and an assertion require a condition of type `bool`, a conditional types both branches at a common type, and `e ? l` requires a record and has type `bool`. Unification decomposes $[τ_1] ≐ [τ_2]$ to $τ_1 ≐ τ_2$, and the inference rules are those of algorithm W, with the condition unified with `bool` and the branches with each other. Key types are joined in two places without unification: branches under two different definite keys join at $⌊∗⌋$ (A-if-join), and a list cell whose head is a string literal has type $[⌊∗⌋]$ (A-cons-str).
+*Rules.* The typing rules are the standard ones. A builtin is typed at an instance of its type, a conditional and an assertion require a condition of type $"bool"$, a conditional types both branches at a common type, and $e #h(0.2em) ? #h(0.2em) l$ requires a record and has type $"bool"$. Unification decomposes $[τ_1] ≐ [τ_2]$ to $τ_1 ≐ τ_2$, and the inference rules are those of algorithm W, with the condition unified with $"bool"$ and the branches with each other. Key types are joined in two places without unification: branches under two different definite keys join at $⌊∗⌋$ (A-if-join), and a list cell whose head is a string literal has type $[⌊∗⌋]$ (A-cons-str).
 
 #theorem(
   name: [MacroNix metatheory],

@@ -39,12 +39,12 @@
 
     np-r[scoped labels, three-way lookup], np-f[Nested keys `a.b.c = v`], np-p,
     np-r[desugared to nested records], np-f[Update `a // b`], np-y,
-    np-r[asymmetric concatenation ‖], np-f[Dynamic keys `${e}`], np-y,
+    np-r[asymmetric concatenation $‖$], np-f[Dynamic keys `${e}`], np-y,
     np-r[first-class labels; string-typed keys answer ★],
     np-f[`e.l or d`],
     np-p,
 
-    np-r[derived as `({l = d} ‖ e).l`; clashes on a non-record `e`],
+    np-r[derived as $({l = d} ‖ e).l$; clashes on a non-record $e$],
     np-f[`e ? l`],
     np-p,
 
@@ -70,7 +70,7 @@
     np-p,
 
     np-r[derived as application], np-f[Integers, strings, `null`], np-y,
-    np-r[base types `int`, `string`, `null`],
+    np-r[base types $"int"$, $"string"$, $"null"$],
     np-f[String interpolation, string `+`],
     np-p,
 
@@ -82,12 +82,12 @@
     np-f[Lists `[e₁ … eₙ]`],
     np-p,
 
-    np-r[homogeneous `[τ]`; mixed lists only at `[★]`; lazy cons cells, where Nix lists are arrays with a strict spine], np-f[Laziness], np-p,
+    np-r[homogeneous $[τ]$; mixed lists only at $[★]$; lazy cons cells, where Nix lists are arrays with a strict spine], np-f[Laziness], np-p,
     np-r[fields, list cells, arguments and `let` lazy; no sharing; builtins force all their arguments, Nix builtins only those they inspect],
 
     np-gr[Builtins], np-f[`add` `sub` `mul` `div`], np-y,
-    np-r[on `int`; `div` fails on 0], np-f[`lessThan`, `<=`], np-p,
-    np-r[on `int` only], np-f[`==`], np-p,
+    np-r[on $"int"$; `div` fails on 0], np-f[`lessThan`, `<=`], np-p,
+    np-r[on $"int"$ only], np-f[`==`], np-p,
     np-r[atomic values only; mixed atoms are unequal (`1 == true` is false); fails on records, non-empty lists and functions, where Nix compares records and lists structurally],
     np-f[`head` `tail` `elemAt` `length`],
     np-y,
@@ -97,7 +97,7 @@
     np-y,
 
     np-r[], np-f[`toString`], np-p,
-    np-r[on `int` only], np-f[`isAttrs`], np-y,
+    np-r[on $"int"$ only], np-f[`isAttrs`], np-y,
     np-r[], np-f[`hasAttr` `getAttr`], np-p,
     np-r[as `e ? l` and dynamic selection],
 
@@ -119,15 +119,15 @@
     np-f[Optional fields, `if c then {a = 1;} else {}`],
     np-n,
 
-    np-r[rejected declaratively; needs a dynamic row ★ᵣ (Gradual)],
+    np-r[rejected declaratively; needs a dynamic row $★_r$ (Gradual)],
     np-f[Heterogeneous lists],
     np-n,
 
-    np-r[`[★]` declaratively, clash algorithmically],
+    np-r[$[★]$ declaratively, clash algorithmically],
     np-f[`is*` predicates, `typeOf`],
     np-n,
 
-    np-r[typable as `γ → bool`; good for occurrence typing],
+    np-r[typable as $γ → "bool"$; good for occurrence typing],
     np-f[`elem` `all` `any` `concatMap` `genList` `sort` `concatLists`],
     np-n,
 

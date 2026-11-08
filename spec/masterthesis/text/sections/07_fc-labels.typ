@@ -3,7 +3,7 @@
 
 = First-Class Labels <fc-labels>
 
-In NixLang, the expression `x.${e}` selects the field named by an arbitrary string expression `e`, and the expression `{ ${e} = v; }` binds a value to the label that `e` computes. Labels are thus first-class values. This section extends MiniNix with first-class labels and carries over the techniques developed in earlier chapters. A field under a non-literal key behaves just like a row-variable: shadow behaviour is unclear, a lookup cannot pass it and a selection has to park. We generalize both row and label-variables to _barriers_ and the same mechanism of qualified schemes and parking translates.
+In NixLang, the expression `x.${e}` selects the field named by an arbitrary string expression `e`, and the expression `{${e} = v;}` binds a value to the label that `e` computes. Labels are thus first-class values. This section extends MiniNix with first-class labels and carries over the techniques developed in earlier chapters. A field under a non-literal key behaves just like a row-variable: shadow behaviour is unclear, a lookup cannot pass it and a selection has to park. We generalize both row and label-variables to _barriers_ and the same mechanism of qualified schemes and parking translates.
 
 The extension is only small: Lookup gains three new rules for keyed fields, and row unification gains one new move. The remaining changes are new cases for keys and labels or minor adjustments of existing rules, mostly replacing the explicit label by a _key_.
 
@@ -29,7 +29,7 @@ The extension is only small: Lookup gains three new rules for keyed fields, and 
 )
 #fc_syntax <fc-syntax>
 
-The syntax extension is given in @fc-syntax. Expressions gain a new constructor for string literals and records the two expressions to select a dynamic field or bind a value to a computed name that were shown in the introduction. A key can be one of three things: A concrete label $l$, a label variable $α$ of the now sort `Label` or the _unknown key_ $∗$. The unknown key is needed for strings the analysis can not track, for example the result of a builtin. A key can occur in two places: as the singleton type $⌊k⌋$ that describes a label directly or as part of _keyed field_ $\${k}: τ$ of a row, whose label may not be known. Stumps also abstract over keys, as in $⟨ρ.k ↓ δ⟩$, so that a scheme can defer a lookup under a key.
+The syntax extension is given in @fc-syntax. Expressions gain a new constructor for string literals and records the two expressions to select a dynamic field or bind a value to a computed name that were shown in the introduction. A key can be one of three things: A concrete label $l$, a label variable $α$ of the now sort $"Label"$ or the _unknown key_ $∗$. The unknown key is needed for strings the analysis can not track, for example the result of a builtin. A key can occur in two places: as the singleton type $⌊k⌋$ that describes a label directly or as part of _keyed field_ $\${k}: τ$ of a row, whose label may not be known. Stumps also abstract over keys, as in $⟨ρ.k ↓ δ⟩$, so that a scheme can defer a lookup under a key.
 
 == Keyed Lookup
 
@@ -51,9 +51,9 @@ The syntax extension is given in @fc-syntax. Expressions gain a new constructor 
 
 
 == First-Class Labels by Example
-We continue introducing the extension through examples. The full set of rules, including row equivalence, the typing and reduction rules, key unification and the algorithmic rules, is given in @app-fc-labels. The following three examples show how first-class labels allow us to type the generic selector, how first-class labels act as barriers in the Wand ambiguity and the effect of untracked strings, typed at ⌊∗⌋.
+We continue introducing the extension through examples. The full set of rules, including row equivalence, the typing and reduction rules, key unification and the algorithmic rules, is given in @app-fc-labels. The following three examples show how first-class labels allow us to type the generic selector, how first-class labels act as barriers in the Wand ambiguity and the effect of untracked strings, typed at $⌊∗⌋$.
 
-The dynamic selector is the program `x: x.l` with its label abstracted to a label-variable. It takes a label and a record as arguments and returns the named field from the given record. Our system types it as:
+The dynamic selector is the program $x: x.l$ with its label abstracted to a label-variable. It takes a label and a record as arguments and returns the named field from the given record. Our system types it as:
 
 $
   #raw("a: x: x.${a}") quad : quad ∀(α: "Label", β: "Row", δ: "Type"). #h(0.3em) ⟨β.α ↓ δ⟩ ⇒ ⌊α⌋ → {β} → δ
@@ -65,9 +65,9 @@ $
   & quad ⟨β.α ↓ {γ}⟩, ⟨γ.l ↓ δ⟩ ⇒ ⌊α⌋ → {β} → δ
 $
 
-For `x.${a}`, the lookup of α in β answers $?$ on β, so A-sel-\? parks $⟨β ⊳ β.α ↓ δ′⟩$ and returns δ′. The selection of l then unifies δ′ with ${γ}$ for a fresh γ, which spends the first stump, and parks $⟨γ ⊳ γ.l ↓ δ⟩$ on the row of its result.
+For $x.\${a}$, the lookup of $α$ in $β$ answers $?$ on $β$, so A-sel-\? parks $⟨β ⊳ β.α ↓ δ′⟩$ and returns $δ′$. The selection of $l$ then unifies $δ′$ with ${γ}$ for a fresh $γ$, which spends the first stump, and parks $⟨γ ⊳ γ.l ↓ δ⟩$ on the row of its result.
 
-Next, we look at the Wand ambiguity with first-class labels: the function `n: r: (r ‖ {${n} = c}).l` overrides a field under a computed name and then reads l. Given $n: ⌊α⌋$ and $r: {β}$, the concatenation has type ${\${α}: 𝓫_c | β}$. The lookup of l stops at the barrier and answers $?$, since α may become l. The answer is recorded like every other pending lookup:
+Next, we look at the Wand ambiguity with first-class labels: the function $n: r: (r ‖ {\${n} = c}).l$ overrides a field under a computed name and then reads $l$. Given $n: ⌊α⌋$ and $r: {β}$, the concatenation has type ${\${α}: 𝓫_c | β}$. The lookup of $l$ stops at the barrier and answers $?$, since $α$ may become $l$. The answer is recorded like every other pending lookup:
 
 $
   ∀(α: "Label", β: "Row", δ: "Type"). #h(0.3em) ⟨(\${α}: 𝓫_c | β).l ↓ δ⟩ ⇒ ⌊α⌋ → {β} → δ
@@ -75,14 +75,12 @@ $
 
 In this example, a label variable becomes the blocker. Wake-up and generalization read a stump through its blocker, whatever its sort.
 
-// todo: reword
-A comparison of $∗$ with a literal or with $∗$ is undecided at every instance because $∗$ is no variable and no substitution replaces it. A lookup with such a label is not tracked by our system so the only option is to type it using the unknown type. The time program of the introduction types exactly like this because the `toString` builtin is untrackable:
-
+A comparison of $∗$ with anything is always undecided. A lookup with such a label is not tracked by our system so the only option is to type it using the unknown type and this shows in the introductory example.
 $
   #raw("{\"1759190400\" = 1}.${toString builtins.currentTime}") quad : quad ★
 $
 
-This is the role of ★ in G3: the analysis gives up on the selection, and the program is not rejected. ★ has no eliminators, so a further selection from the result clashes.
+The builtin `toString` is not tracked by our system so the whole program types as unknown. This is the role of ★ in G3: the analysis gives up on the selection, and the program is not rejected but typed at ★. The unknown type has no eliminators, so a further selection from the result clashes.
 
 == Unification
 
