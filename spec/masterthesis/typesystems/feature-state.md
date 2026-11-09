@@ -5,23 +5,13 @@
 # Feat: First-class labels
 Plan: plans/fc-labels.md. Branch feat/fc-labels, worktree ~/coding/garnix-wt/fc-labels.
 
-# Feat: Lazy semantics
-Plan: plans/lazy-semantics.md. Branch feat/lazy-semantics, worktree ~/coding/garnix-wt/lazy-semantics, based on feat/fc-labels (ebe4166).
-Merged into main 2026-11-04 (16839ea): build, NixSuite and fuzz green, no guard flips from main's new guards. Thesis text integrated on main, uncommitted.
-
 # Feat: Macro-Nix
-
-## Todo
-- Check Nix examples against MacroNix
 
 
 ## Fragen
 - Was sind die Delta-regeln?
-- Wie sind builtins implementiert?
 - Warum sind fails in Err gewandert?
   - Ist das um Progress zu cheaten?
-- `==` on atomic values only!!
-- Bool als tt und ff?
 - What is prim?
 - How do builtins work if I rebind-them?
 
@@ -42,23 +32,6 @@ Merged into main 2026-11-04 (16839ea): build, NixSuite and fuzz green, no guard 
   - lists: `==` on heads `&&` `==` on tails, `[]` against `::` is `false`
   - functions: fail (as Nix)
 - Fields stay lazy, forced only by the comparison
-
-### Q4: differing `if` branches (open)
-- A-if unifies the branches (`τ₁ ≐ τ₂`), A-cons the list elements: HM rule, fails without a common instance
-- Incompleteness (declaratively typable, inference clashes):
-  - `if as ? a then as.a else as.z`: ★ (definite miss) vs `int`; declaratively at ★
-  - `[1 {}]`: `int` vs `{}`; declaratively at `[★]`
-  - same root as Unrestricted T-★-intro: ★ joins any two types, ≐ only finds common instances
-- Inexpressible (rejected declaratively too):
-  - `{pname = "p";} // (if c then {a = 1;} else {})`, the conditional-extension idiom
-  - only common type of `{a = 1;}` and `{}` is ★, and ★ cannot be concatenated
-  - rows cannot say "a may be there"
-- Options:
-  - (a) keep the clash: sound, simple, documented. Current, recommended
-  - (b) join at ★ in A-if / A-cons (+ warning): completes `as ? a` and `[1 {}]`, not the idiom; changes L2 inference
-  - (c) ★ᵣ in Gradual: `{a: int} ⊔ {} = {★ᵣ}`, idiom types at `{★ᵣ | pname: string}`; only option that recovers it
-  - (d) occurrence typing on `e ? l` (Negative Information S3): `as ? a` only (then-branch dead)
-
 
 # Base-System
 ## Related Files
@@ -120,31 +93,14 @@ Merged into main 2026-11-04 (16839ea): build, NixSuite and fuzz green, no guard 
 **Stuck with an mgu**
 - `stuck_masks_mgu`: stuck payload equation propagates before the residual pins β
   - Fix: defer the stuck equation, retry after the residual
+- another one here
 
 **A-let premises**
-- `Infer.letE` = Infer e₁ + `LetAdmissible Γ S S₁ ᾱ` + Infer e₂; Δ_q/Δ_Γ = `letQ`/`letG`. No merge since 2026-11-06 (only the entry merges)
-- Admissible: `fresh` (ᾱ ∩ ftv⟦S₁⟧(Γ, Δ_Γ) = ∅), `own`, `res` (results ⊆ ᾱ). No inhabitation test since feat/lazy-semantics; only the entry runs `LetSpent`, which accepts spent chains without a cycle since 2026-11-06 (`chainsRanked`)
-- A failing condition prunes the offending variables (`greatestAlpha`), not the whole let
-- Justified: Γ-mentioned (HM), Δ_Γ-mentioned, outer stump capture (`own`)
-- `own` is NOT derivable from fresh + res: `runSound_false_unowned_let` (LetSound.lean)
-- Done (2026-10-29, syntactic): a key-blocked spent stump at the let, its key variable read as `${κ}`. Semantic inhabitation still has no union-closure proof (D-? breaks under later substitution)
-
+- only greatest admissible α
+ 
 **Unrestricted T-★-intro**
 - Gap: T-★-intro is subsumption into a top, so ★ joins any two types while ≐ only finds common instances. `λg. {a = g {l=c}; b = g {m=c}}` types at `(★ → 𝓫) → {a:𝓫 | b:𝓫}` but clashes, and every stuck witness types the same way: a clash certifies "no unifier", not "no typing"
-- Kept: inference never builds qUnk; the rule's one real use is lem-subst (a `?` can hit after substitution), and without it `∀β. {β} → ★` is unsound as a plain scheme. Restricting it to selections breaks qPreservation or still joins types. Not vacuous (★ has no eliminator), and the forcing of qualified schemes does not use it
-- Fixes: state completeness for the blur-free fragment (A); joining at a clash (B) does not restore principality, since `g: x: {a = g x; b = g {l=c}}` has no covering scheme
-- The real Nix gap is the missing join (lists of packages, optionalAttrs, `map (p: p.name) […]`), rejected declaratively too. Gradual consistency fixes ★'s rigidity, not joins, and an implicitly chosen ★ makes typing vacuous (`(x: x 4) 3`). ⊥ instead: analysis/bottom-type.md
-
 
 ## Findings
 - Eliminators for ★ can not be added without _gradual typing_ because otherwise progress and preservation die
 - ≈ is intensional: counts include shadowed l-fields (2026-10-16)
-  - `Row.Char` compares the full `sProj l` (every l-field, shadowed or not), so `sFieldCount` over all fields is right for U-clash / U-ground
-  - Leading-only counting is unsound: `⟨α, l:𝓫, β⟩ ≐ᵣ ⟨l:Int, l:𝓫⟩` would clash, but `α ≔ (l:Int), β ≔ ε` unifies (real verdict: stuck)
-  - Dead fields (any l right of an earlier l, across vars) are unobservable: no restriction, E-conc only appends; observational ≅ ⊋ ≈
-  - Cost: `[ base (base // {name = "y";}) ]` clashes ((name:S) vs (name:S | name:S)); `defaults // overrides` is the common Nix idiom
-  - Shift witness `(l:𝓫)^k` (06_incompleteness.typ:21,26, UnifType.lean) is an artefact of ≈; under ≅ all k ≥ 1 collapse. Non-finitary likely survives via other labels (`offSub`), unproven
-  - ≅ is not cancellative: `(l:Int | α) ≐ (l:Int)` has unifiers ε and (l:τ) for every τ, so no mgu; U-field / U-ground / lem-cancel need cancellation → keep ≈
-  - Conjecture: ≈ is the coarsest lookup-respecting cancellative congruence (unproven)
-  - Todo text: say in 02 (~l.104) that ≈ keeps shadowed fields and why; fix shift prose; fill "(explain this)" at 04_unification.typ:228
-  - Idea (untested, not in Lean): drop dead fields at T-conc; needs ≅ in declarative T-eq, recheck preservation

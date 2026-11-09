@@ -534,7 +534,7 @@ fresh α: Type   Γ·(x: α); S ⊢ e ⇒ τ; S′
 // Every premise past the first is one that soundness or completeness turned out to need
 // - No M-merge (dropped 2026-11-06): no condition of A-let reads it. Two stumps
 //   that ask one lookup, `let f = x: {p = (x.l) c; q = x.l}`, are generalized
-//   apart; they meet again at every use, or at the entry, which merges
+//   apart; they meet again at every use, or in the entry's witness search
 // - κ̄ = S₁(ᾱ): kinds are read off the DRAW, not off Γ — ᾱ is disjoint from Γ,
 //   so Γ(ᾱ) was never writable. Every generalized binder is one inference
 //   invented at a known sort (A-var's draw records one, see there)
@@ -572,11 +572,10 @@ fresh α: Type   Γ·(x: α); S ⊢ e ⇒ τ; S′
 // to guess.
 
 
-== Wake-up, Merge and Witness
+== Wake-up and Witness
 - (S ⊢ q ↝ S′) wakes one stump
 - ↝\* its list closure,
 - (S ⊢ Δ ↝! S′) runs it to quiescence
-- (S ⊢ Δ ⇝ₘ S′) merges two stumps that ask one lookup, (⇝ₘ\*) any number of merges
 - (S ⊢ ⇝ᵍ S′) is one step of the witness search, (⇝ᵍ\*) any number of steps
 
 
@@ -623,16 +622,6 @@ S ⊢ Δ ↝! S′
 // after ≐ and ↝\* respectively.
 
 
-⟨α ⊳ ρ.l ↓ δ⟩, ⟨α′ ⊳ ρ′.l′ ↓ δ′⟩ ∈ Δ   ⟦S⟧ρ ≈ₛ ⟦S⟧ρ′   ⟦S⟧l = ⟦S⟧l′   S ⊢ δ ≐ δ′ ⇝! S′
------------------------------------------------------------------------------------------- M-merge
-S ⊢ Δ ⇝ₘ S′
-// ≈ₛ: one spine. The two stumps ask ONE lookup, so every instance that
-// discharges both sends δ and δ′ to ≈-equal types (`merge_forced`): the move is
-// forced. Both stumps stay parked. `x: {p = (x.l) c; q = x.l}` parks
-// ⟨ρ.l ↓ 𝓫 → β⟩ and ⟨ρ.l ↓ δ⟩; after the merge both are spent alike, which is
-// what LetSpent needs. A merge whose equation fails is not taken.
-
-
 S ⊢ τ ≐ τ′ ⇝! S′
 ------------------ G-solve
 S ⊢ ⇝ᵍ S′
@@ -644,15 +633,22 @@ S ⊢ ⇝ᵍ S′
 //   (`r: a: (r.${a}) c`): first a label no program writes, then the literal
 //   labels of the stump's row
 // - a witness merge of two stumps on one blocker with one key, whose rows may
-//   differ before the blocker (`x: {p = (({m = c} ‖ x).l) c; q = x.l}`)
+//   differ before the blocker (`x: {p = (({m = c} ‖ x).l) c; q = x.l}`). Two
+//   stumps that ask ONE lookup are a special case, and for them the merge is
+//   forced (`merge_forced`): `x: {p = (x.l) c; q = x.l}` parks ⟨ρ.l ↓ 𝓫 → β⟩
+//   and ⟨ρ.l ↓ δ⟩, and after the merge both are spent alike, which is what
+//   LetSpent needs. A merge whose equation fails is not taken. The merges run
+//   pass after pass until a pass binds nothing (at most |Δ|+1 passes): a merge
+//   can put two further stumps on one blocker (`x: x.l.m ‖ x.l.m`). Since
+//   2026-11-07 the entry has no merge phase of its own
 
 
 == Entry
 Toplevel (⊢ e ⇒ σ)
 
-∅; (id, ∅, ∅) ⊢ e ⇒ τ; S₁   S₁ ⊢ Δ₁ ⇝ₘ\* S₂   S₂ ⊢ ⇝ᵍ\* S₃   LetSpent(S₃)
--------------------------------------------------------------------------- Entry
-⊢ e ⇒ ∀ᾱ. ⟦S₂⟧Δ₂ ⇒ ⟦S₂⟧τ          ᾱ = ftv(⟦S₂⟧τ, ⟦S₂⟧Δ₂)
+∅; (id, ∅, ∅) ⊢ e ⇒ τ; S₁   S₁ ⊢ ⇝ᵍ\* S₂   LetSpent(S₂)
+-------------------------------------------------------- Entry
+⊢ e ⇒ ∀ᾱ. ⟦S₁⟧Δ₁ ⇒ ⟦S₁⟧τ          ᾱ = ftv(⟦S₁⟧τ, ⟦S₁⟧Δ₁)
 // The top level generalizes like A-let with Γ = ∅: everything is bound, Δ_Γ is
 // empty, and A-let's conditions hold. It adds LetSpent (the inhabitation test).
 // Nothing is decided: a stump still ? is a constraint, D-? is the instance that
