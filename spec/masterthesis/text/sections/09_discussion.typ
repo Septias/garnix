@@ -1,6 +1,6 @@
 #import "../functions.typ": *
 
-= Discussion and Conclusion <sec-discussion>
+= Discussion <sec-discussion>
 
 We now show our type inference algorithm in action on the code snippets from the introduction. We then revisit the design goals stated in @sec-motivation, give an outlook for further work and the path towards full type inference for NixLang.
 

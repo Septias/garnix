@@ -58,12 +58,12 @@ The development of MacroNix is just for test purposes, don't mention it too ofte
 - [x] 00 Introduction
 - [x] 01 Overview
 - [x] 02 Declarative
-- [x] 03 Metatheory
-- [x] 04 Unification
-- [x] 05 Inference
-- [x] 06 Incompleteness
-- [x] 07 FC-Labels
-- [x] 08 Mechanization
-- [x] 09 Discussion
+- [f] 03 Metatheory
+- [f] 04 Unification
+- [f] 05 Inference
+- [f] 06 Incompleteness
+- [f] 07 FC-Labels
+- [f] 08 Mechanization
+- [f] 09 Discussion
 - [x] 10 Related Work
 - [x] 12 Appendix
