@@ -77,7 +77,7 @@
 #page[
   #text(size: 15pt)[*AI Usage Declaration*]
 
-  The university advises students to find a reasonable use of AI and does not condemn it in general. The author therefore used generative AI models for the text, the proofs and the planning of this thesis, in a collaborative manner and with the supervisor's agreement. The design decisions were fully made or controlled by a human, but Claude Opus 5.5, Claude Fable and Claude Sonnet generate the Lean proofs and theorems with only little supervision. Claude Opus 5.5 then helped to draft and structure the thesis text and polished the final wording, but every section underwent many human passes to make wording and reasoning precise. Only some example and proof descriptions are fully generated.
+  The university advises students to find a reasonable use of AI and does not condemn it in general. The author therefore used generative AI models for the text, the proofs and the planning of this thesis, in a collaborative manner and with the supervisor's agreement. The design decisions were fully made or controlled by a human, but Claude Opus 5.5, Claude Fable and Claude Sonnet generated the Lean proofs and theorems with only little supervision. Claude Opus 5.5 then helped to draft and structure the thesis text and polished the final wording, but every section underwent many human passes to make wording and reasoning precise. Only some example and proof descriptions are fully generated.
 
   #text(size: 15pt)[*Declaration*]
 
@@ -93,7 +93,7 @@
       rows: 0.3cm,
       columns: 1fr,
       gutter: 7pt,
-      "Freiburg den 11.11.2026",
+      "Freiburg, den 11.11.2026",
       grid.hline(),
       [
         #v(7pt)

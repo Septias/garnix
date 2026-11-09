@@ -3,9 +3,9 @@
 
 = First-Class Labels <fc-labels>
 
-In NixLang, the expression `x.${e}` selects the field named by an arbitrary string expression `e`, and the expression `{${e} = v;}` binds a value to the label that `e` computes. Labels are thus first-class values. This section extends MiniNix with first-class labels and carries over the techniques developed in earlier chapters. A field under a non-literal key behaves just like a row-variable: shadow behaviour is unclear, a lookup cannot pass it and a selection has to park. We generalize both row and label-variables to _barriers_ and the same mechanism of qualified schemes and parking translates.
+In NixLang, the expression `x.${e}` selects the field named by an arbitrary string expression `e`, and the expression `{${e} = v;}` binds a value to the label that `e` computes. Labels are thus first-class values. This section extends MiniNix with first-class labels and carries over the techniques developed in earlier chapters. A field under a non-literal key behaves just like a row-variable: shadowing behaviour is unclear, a lookup cannot pass it and a selection has to park. We generalize both row and label-variables to _barriers_ and the same mechanism of qualified schemes and parking translates.
 
-The extension is only small: Lookup gains three new rules for keyed fields, and row unification gains one new move. The remaining changes are new cases for keys and labels or minor adjustments of existing rules, mostly replacing the explicit label by a _key_.
+The extension is small: Lookup gains three new rules for keyed fields, and row unification gains one new move. The remaining changes are new cases for keys and labels or minor adjustments of existing rules, mostly replacing the explicit label by a _key_.
 
 #let fc_syntax = figure(
   caption: [Syntax of first-class labels, as an extension of @syntax.],
@@ -29,7 +29,7 @@ The extension is only small: Lookup gains three new rules for keyed fields, and 
 )
 #fc_syntax <fc-syntax>
 
-The syntax extension is given in @fc-syntax. Expressions gain a new constructor for string literals and records the two expressions to select a dynamic field or bind a value to a computed name that were shown in the introduction. A key can be one of three things: A concrete label $l$, a label variable $α$ of the now sort $"Label"$ or the _unknown key_ $∗$. The unknown key is needed for strings the analysis can not track, for example the result of a builtin. A key can occur in two places: as the singleton type $⌊k⌋$ that describes a label directly or as part of _keyed field_ $\${k}: τ$ of a row, whose label may not be known. Stumps also abstract over keys, as in $⟨ρ.k ↓ δ⟩$, so that a scheme can defer a lookup under a key.
+The syntax extension is given in @fc-syntax. Expressions gain a new constructor for string literals and the two expressions, shown in the introduction, that select a dynamic field or bind a value to a computed name. A key can be one of three things: A concrete label $l$, a label variable $α$ of the new sort $"Label"$ or the _unknown key_ $∗$. The unknown key is needed for strings the analysis cannot track, for example the result of a builtin. A key can occur in two places: as the singleton type $⌊k⌋$ that describes a label directly or as part of a _keyed field_ $\${k}: τ$ of a row, whose label may not be known. Stumps also abstract over keys, as in $⟨ρ.k ↓ δ⟩$, so that a scheme can defer a lookup under a key.
 
 == Keyed Lookup
 
@@ -75,7 +75,7 @@ $
 
 In this example, a label variable becomes the blocker. Wake-up and generalization read a stump through its blocker, whatever its sort.
 
-A comparison of $∗$ with anything is always undecided. A lookup with such a label is not tracked by our system so the only option is to type it using the unknown type and this shows in the introductory example.
+A comparison of $∗$ with anything is always undecided. A lookup with such a label is not tracked by our system, so the only option is to type it using the unknown type, as the introductory example shows.
 $
   #raw("{\"1759190400\" = 1}.${toString builtins.currentTime}") quad : quad ★
 $

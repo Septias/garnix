@@ -5,7 +5,7 @@
 #let u_stuck = text(font: "Libertinus Serif", smallcaps("Stuck"))
 
 = Unification <unification>
-Unification is the core of type inference: given two types, it seeks a substitution that equates them. We split unification into two judgements, one for types $τ₁ ≐ τ₂ ⇝ v$, and one for rows $s₁ scripts(≐)_r s₂ ⇝ v$ that solves row-equations up to $≈$. Row unification is where we differ from other type systems. The inference algorithm delays lookups in stumps @inference so unification never receives field demands. Every move of row unification is therefore forced, and no backtracking is needed (G4:efficiency). Where no move applies, the algorithm reports stuck instead of guessing. We prove that a returned solution is most general, and a clash or occurs failure means that no unifier exists in @unification-metatheory.
+Unification is the core of type inference: given two types, it seeks a substitution that equates them. We split unification into two judgements, one for types $τ₁ ≐ τ₂ ⇝ v$, and one for rows $s₁ scripts(≐)_r s₂ ⇝ v$ that solves row-equations up to $≈$. Row unification is where we differ from other type systems. The inference algorithm delays lookups in stumps (@inference), so unification never receives field demands. Every move of row unification is therefore forced, and no backtracking is needed (G4:efficiency). Where no move applies, the algorithm reports stuck instead of guessing. In @unification-metatheory, we prove that a returned solution is most general and that a clash or occurs failure means that no unifier exists.
 
 
 == Spines and Windows <trace-monoid>
@@ -33,7 +33,7 @@ This reading of rows unveils the benefit that the structure of rows makes severa
 This structure, however, also has a cost: $≈$ keeps shadowed fields and is not faithful to the semantics of NixLang. $(l: 𝓫 | l: 𝓫′) ≉ (l: 𝓫)$, although no program observes the shadowed field. This limitation is discussed in @outlook.
 
 == Type Unification
-We start with presenting type unification. Unification either returns a solution $θ$ or one of three refusals. #u_clash reports that two head constructors differ or that a field has no possible partner. #u_occurs reports that a variable occurs in the type or row it is equated with, so a solution would need a recursive type, which MiniNix does not have. #u_stuck reports that no move applies and the Wand ambiguity is the prime example (@ex-unif-stuck) of this error class.
+We start by presenting type unification. Unification either returns a solution $θ$ or one of three refusals. #u_clash reports that two head constructors differ or that a field has no possible partner. #u_occurs reports that a variable occurs in the type or row it is equated with, so a solution would need a recursive type, which MiniNix does not have. #u_stuck reports that no move applies, and the Wand ambiguity is the prime example (@ex-unif-stuck) of this error class.
 
 #let unification_ty = figure(
   caption: "Verdicts and unification of types.",
