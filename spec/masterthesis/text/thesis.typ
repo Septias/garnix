@@ -46,6 +46,11 @@
 #show: rule_refs
 #set figure(placement: auto)
 
+// -------------- Contents -------------------
+// Only headings after the frontpage, so the abstract stays out.
+#page(numbering: none, context outline(target: selector(heading).after(here()), depth: 2))
+#counter(page).update(1)
+
 // -------------- Sections -------------------
 
 #include "sections/00_introduction.typ"
