@@ -100,7 +100,7 @@ Sorting (@sorting) ensures that type-variables and row-variables only occur wher
 
 Selection is typed by the lookup judgement $ρ.l ↓ r$ (@row-lookup), read as "the lookup of label $l$ in row $ρ$ has result $r$". The result is a definite type $τ$, definite absence $⊥$, or the undecided result $?$ when the lookup reaches a row-variable before it finds $l$. L-ε, L-hit and L-miss form the base cases for row-var free lookups and L-var returns the undecided result $?$ when a row variable is encountered. The concatenation rules #smallcaps("L-conc-∗") bubble up a definite result and search the left operand first. Together with T-conc, which places the right operand of $‖$ first, this gives the right-precedence of concatenation.
 
-A lookup can advance further into a row as soon as a blocking row variable $α$ is solved by substitution. An undecided lookup result $?$ can then become definite if the "unlocked" row behind it contains the searched label or it blocks again on a later row variable. The addition of an undecided result makes our lookup relation total.
+A lookup can advance further into a row as soon as a blocking row variable $α$ is solved by substitution. An undecided lookup result $?$ can then become definite if the _unlocked_ row behind it contains the searched label or it blocks again on a later row variable. The addition of an undecided result makes our lookup relation total.
 
 === Properties of the Lookup Relation <lookup-metatheory>
 
@@ -169,7 +169,7 @@ A type scheme $σ$ quantifies over type- and row-variables and carries a set $Q$
 )
 #instantiation <instantiation>
 
-@instantiation defines the instance relation $σ ≥ τ$, used by T-var. The first premise of I-inst requires $θ$ to map each parameter $α_i$ to a type or row of sort $κ_i$, and the second _discharges_ every stump at the instance. A discharge $θ ⊨ ⟨ρ.l ↓ δ⟩$ performs the lookup on $θ ρ$ and fixes $θ δ$ as the selection rules would: D-hit corresponds to T-sel, D-⊥ to T-sel-⊥ and D-\? to T-sel-★. An instance thus gives a selection the type it would receive if it were typed at $θ ρ$ directly. D-hit asks for $θ δ ≈ τ$ rather than equality to accept more typings, but this is okay because T-eq closes every typing under $≈$.
+@instantiation defines the instance relation $σ ≥ τ$, used by T-var. The first premise of I-inst requires $θ$ to map each parameter $α_i$ to a type or row of sort $κ_i$, and the second _discharges_ every stump at the instance. A discharge $θ ⊨ ⟨ρ.l ↓ δ⟩$ performs the lookup on $θ ρ$ and fixes $θ δ$ as the selection rules would: D-hit corresponds to T-sel, D-⊥ to T-sel-⊥ and D-\? to T-sel-★. An instance thus gives a selection the type it would receive if it were typed at $θ ρ$ directly. D-hit asks for $θ δ ≈ τ$ rather than equality to accept more typings, which is sound because T-eq closes every typing under $≈$.
 
 Without stumps ($Q = ε$), I-inst is plain Hindley-Milner instantiation. With stumps, a scheme can be uninhabited, that is, have no instance: in $∀(δ: "Type"). ⟨(l: 𝓫).l ↓ δ⟩, ⟨ε.l ↓ δ⟩ ⇒ δ$, the first stump hits and D-hit demands $θ δ ≈ 𝓫$, while the second misses and D-⊥ demands $θ δ = ★$. Since ★ is equivalent only to itself, no $θ$ satisfies both.
 

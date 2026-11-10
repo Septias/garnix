@@ -29,7 +29,7 @@ The extension is small: Lookup gains three new rules for keyed fields, and row u
 )
 #fc_syntax <fc-syntax>
 
-The syntax extension is given in @fc-syntax. Expressions gain a new constructor for string literals and the two expressions, shown in the introduction, that select a dynamic field or bind a value to a computed name. A key can be one of three things: A concrete label $l$, a label variable $α$ of the new sort $"Label"$ or the _unknown key_ $∗$. The unknown key is needed for strings the analysis cannot track, for example the result of a builtin. A key can occur in two places: as the singleton type $⌊k⌋$ that describes a label directly or as part of a _keyed field_ $\${k}: τ$ of a row, whose label may not be known. Stumps also abstract over keys, as in $⟨ρ.k ↓ δ⟩$, so that a scheme can defer a lookup under a key.
+The syntax extension for first-class labels is given in @fc-syntax. Expressions gain a new constructor for string literals and the two expressions, shown in the introduction, that select a dynamic field or bind a value to a computed name. A key can be one of three forms: A concrete label $l$, a label variable $α$ of the new sort $"Label"$ or the _unknown key_ $∗$. The unknown key is needed for strings the analysis cannot track, for example the result of a builtin. A key can occur in two places: as the singleton type $⌊k⌋$ that describes a label directly or as part of a _keyed field_ $\${k}: τ$ of a row, whose label may not be known. Stumps also abstract over keys, as in $⟨ρ.k ↓ δ⟩$, so that a scheme can defer a lookup under a key.
 
 == Keyed Lookup
 
@@ -75,7 +75,7 @@ $
 
 In this example, a label variable becomes the blocker. Wake-up and generalization read a stump through its blocker, whatever its sort.
 
-A comparison of $∗$ with anything is always undecided. A lookup with such a label is not tracked by our system, so the only option is to type it using the unknown type, as the introductory example shows.
+A comparison of $∗$ with anything is always undecided. A lookup with such a label is not tracked by our system, so the only option is to type it using the unknown type, as the introductory example shows:
 $
   #raw("{\"1759190400\" = 1}.${toString builtins.currentTime}") quad : quad ★
 $
@@ -95,4 +95,4 @@ Row unification needs one new move. A one-field row is equivalent to another one
 
 == Metatheory
 
-Progress up to lookup errors, preservation, the unification theorems of @unification-metatheory, and soundness and termination of inference all hold for MiniNix with first-class labels (`qProgress`, `qPreservation`, `inferSound`, `runF_terminates`). A value of type $⌊k⌋$ is a label literal, so a well-typed selection never meets a key that is not a label, and the only error of dynamic selection is a missing label. @app-fc-labels states the lemmas on keyed lookup and row equivalence and the argument for U-key-pin.
+Progress up to lookup errors, preservation, the unification theorems of @unification-metatheory, and soundness and termination of inference all hold for MiniNix with first-class labels (`qProgress`, `qPreservation`, `inferSound`, `runF_terminates`). @app-fc-labels states the lemmas on keyed lookup and row equivalence.

@@ -3,12 +3,12 @@
 
 = Incompleteness <incompleteness>
 
-The inference algorithm is sound but not complete. This section describes where it rejects a program that the declarative system types. The cases fall into three groups: problems without a most general unifier, stuck problems that have one but unification does not find it, and limits of the inference algorithm itself.
+The inference algorithm is sound but not complete. This section describes where it rejects a program that the declarative system types. The cases fall into three groups: problems without a most general unifier, stuck problems that have one that unification does not find, and limits of the inference algorithm itself.
 
 
 == Irreducible Problems <incompleteness-irreducible>
 
-The Wand ambiguity is our running example of a unification problem with no most general unifier. The field accessed in $a: b: (a ‖ b).l$ can be attributed to $a$ or $b$ but no choice is more general than the other. There are two more problems with this structure:
+The Wand ambiguity is our running example of a unification problem with no single most general unifier. The field accessed in $a: b: (a ‖ b).l$ can be attributed to $a$ or $b$ but no choice is more general than the other and only a set of unfiers can describe it. There are two more problems with this structure:
 
 #proposition(
   name: [Irreducible problems],
@@ -21,7 +21,7 @@ The Wand ambiguity is our running example of a unification problem with no most 
 
 The unification problem of the Wand ambiguity $(α | β) scripts(≐)_r (l: 𝓫)$ has the unifiers $[α ≔ (l: 𝓫), β ≔ ε]$ and $[α ≔ ε, β ≔ (l: 𝓫)]$. The field comes from either operand but no choice is more general than the other. The two-sided problem $(α | l: 𝓫) scripts(≐)_r (l: 𝓫 | β)$ splits by whether $α$ holds an $l$-field. If it does, $[α ≔ (l: 𝓫 | γ), β ≔ (γ | l: 𝓫)]$ covers every unifier. If it does not, $α$ and $β$ are the same row without $l$ and without row-variables, such as $ε$ or $(m: 𝓫)$, since a row-variable cannot swap past the field $l$. No unifier of one case is an instance of the other. The shift problem $(α | l: 𝓫) scripts(≐)_r (l: 𝓫 | α)$ is the two-sided problem with $β = α$. Its unifiers send $α$ to the rows without row-variables whose $l$-fields all have type $𝓫$, such as $(m: 𝓫)$ or $(l: 𝓫)^n$ for every $n ≥ 0$, where $(l: 𝓫)^n$ is the row of $n$ copies of the field. Each unifier fixes the number of $l$-fields, so no finite set of unifiers is complete.
 
-All three are reported as #u_stuck because no forced move applies and stuck is the fallback. Nor can we use ★ to type the expression, because a stuck verdict leaves the inference equation unanswered.
+All three are reported as #u_stuck because no forced move applies and stuck is the fallback. We can not use ★ to type the expression, because a stuck verdict leaves the inference equation unanswered.
 
 == Solvable Stuck Problems <incompleteness-forced>
 

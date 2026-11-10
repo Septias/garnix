@@ -80,7 +80,7 @@ The state is kept under one invariant, _quiescence_. Quiescence demands that eve
 )
 #wakeup <wakeup>
 
-@wakeup gives the judgements for wake-ups and saturation. The judgement $S ⊢ ⟨α ⊳ ρ.l ↓ δ⟩ #st_wake S′$ wakes a single stump and re-checks the lookup. The three rules match the three verdicts of a lookup. K-hit applies when the lookup hits a definite type: it drops the stump and unifies $δ$ with the found type. K-⊥ drops the stump and pins $δ$ to ★. K-repark moves the stump to the new blocker $α′$. The stability lemma of @lookup-metatheory makes this sound because a definite lookup never changes, even after further substitutions.
+@wakeup gives the judgements for wake-ups and saturation. The judgement $S ⊢ ⟨α ⊳ ρ.l ↓ δ⟩ #st_wake S′$ wakes a single stump and re-checks the lookup. The three rules match the three verdicts of a lookup. K-hit applies when the lookup hits a definite type: it drops the stump and unifies $δ$ with the found type. K-⊥ drops the stump and pins $δ$ to ★. K-repark moves the stump to the new blocker $α′$. Its premise $(⟦S₂⟧β).l ↓ ⊥ "on" α$ states that the lookup answers $⊥$ and names its blocker $α$. The stability lemma of @lookup-metatheory makes this sound because a definite lookup never changes, even after further substitutions.
 
 The saturation judgement $#st_sat$ works on the state until it is quiescent again: it picks a stale stump from $Δ$ and runs wake-up $#st_wake$ on it. The first two premises of K!-step select a parked stump whose lookup is no longer blocked on the recorded blocker $α$. The lookup may still block on another variable, and then K-repark applies. The third premise wakes the stump, and the fourth continues on the new state. K!-done ends a run when no more stale stumps exist.
 
@@ -168,7 +168,7 @@ The saturation judgement $#st_sat$ works on the state until it is quiescent agai
 
 A-var instantiates a qualified scheme with fresh variables at the sorts of its binders and replays the instantiated stumps by $scripts(↝)^(*!)$. A scheme stump carries no blocker, so the replay $scripts(↝)^*$ computes one: it answers the stumps that the instance already decides and parks the others under the variables that block them. The definition for this judgement is deferred to @app-replay. Saturation $#st_sat$ follows the replay, since a replayed stump whose result is already solved can write a row solution and make a stump stale that the replay has already parked.
 
-As in @declarative-rules, three selection rules cover the three verdicts of the lookup judgement. Each rule infers a type for $e$, unifies it with ${β}$ for a fresh row-variable $β$ and runs the lookup on the solved row $⟦S₂⟧β$. A-sel and A-sel-⊥ use the verdict directly but A-sel-\? is where the stump mechanism enters. Its premise $(⟦S₂⟧β).l ↓ #h(0.2em) ? "on" α$ states that the lookup answers $?$ and names its blocker $α$. The rule does not commit ★, but returns a fresh type-variable $δ$ as a placeholder for the result and parks the stump under $α$.
+As in @declarative-rules, three selection rules cover the three verdicts of the lookup judgement. Each rule infers a type for $e$, unifies it with ${β}$ for a fresh row-variable $β$ and runs the lookup on the solved row $⟦S₂⟧β$. A-sel and A-sel-⊥ use the lookup verdict directly but A-sel-\? is where the stump mechanism enters. The rule does not commit ★, but returns a fresh type-variable $δ$ as a placeholder for the result and parks the stump under $α$.
 
 == Let-Generalization <let-generalization>
 
@@ -237,25 +237,9 @@ The algorithm computes the set of variables by deleting those that do not satisf
 )
 #entry <entry>
 
-The entry point is given in @entry. It runs inference from the empty state and returns a top-level scheme with all its stumps attached, similar to A-let. For soundness, the entry point must check that $σ$ has an instance (@thm-infer-sound), and we use a sufficient syntactic check for this condition. A spent stump already has a result assigned to it that is neither a variable nor ★. The lookup must then hit and the instance must put a field into its blocker that has the needed type. The fillability test checks whether this is possible by building one instance and checking two conditions on it. It replaces every type-variable with ★ and adds the fields fixed by spent stumps in front of their blockers. This way, every spent stump gets the result it expects.
+The entry point is given in @entry. It runs inference from the empty state and returns a top-level scheme with all its stumps attached, similar to A-let. For soundness, the entry point must check that $σ$ has an instance (@thm-infer-sound), and we use a sufficient syntactic check for this condition. A spent stump already has a result assigned to it that is neither a variable nor ★. The lookup must then hit and the instance must put a field into its blocker that has the needed type. The fillability test ($S₂ "fillable"$) checks whether this is possible by building one instance and checking two conditions on it. It replaces every type-variable with ★ and adds the fields fixed by spent stumps in front of their blockers. This way, every spent stump gets the result it expects.
 
-Two things can go wrong in this assignment. Given a spent stump $⟨α ⊳ ρ.l ↓ δ⟩$, every other stump with the same blocker and lookup label must be spent as well, and the results have to coincide. The reasoning is that the blocker provides the label in one case, so it also has to answer it for the other case. Since it is the same blocker variable, it has to be the same result. Second, a field type can mention another blocker, so the blockers have to be filled in order, and a cycle admits no order. We write $β ≻ β′$ when a spent stump on $β$ has $β′$, the blocker of a spent stump, in its result. In $x: (x.l) x$, the $l$-stump on the row $ρ$ of $x$ is spent at ${ρ} → γ$, so $ρ ≻ ρ$. The row $ρ$ would then contain a field whose type contains $ρ$ itself, which needs a recursive type.
-
-// #let fill_rules = figure(
-//   caption: "Merging stumps",
-//   flexbox(
-//     // derive(
-//     //   "F-fill",
-//     //   stack(
-//     //     spacing: 8pt,
-//     //     $⟨α ⊳ ρ.l ↓ δ⟩ ∈ Δ "spent", ⟨α ⊳ ρ′.l ↓ δ′⟩ ∈ Δ ⟹ ⟨α ⊳ ρ′.l ↓ δ′⟩ "spent" and (⟦S⟧δ)^★ ≡ (⟦S⟧δ′)^★$,
-//     //     $≻ "has no cycle"$,
-//     //   ),
-//     //   $S "fillable"$,
-//     // ),
-//   ),
-// )
-// #fill_rules <fill-rules>
+Two things can go wrong in this assignment. Given a spent stump $⟨α ⊳ ρ.l ↓ δ⟩$, every other stump with the same blocker and lookup label must be spent as well, and the results have to coincide. The reasoning is that the blocker provides the label in one case, so it also has to answer it for the other case. Since it is the same blocker variable, it is the same result. Second, a field type can mention another blocker, so the blockers have to be filled in order, and a cycle may form but admits no order. We write $β ≻ β′$ when a spent stump on $β$ has $β′$, the blocker of a spent stump, in its result. In $x: (x.l) x$, the $l$-stump on the row $ρ$ of $x$ is spent at ${ρ} → γ$, so $ρ ≻ ρ$. The row $ρ$ would then contain a field whose type contains $ρ$ itself, which needs a recursive type.
 
 $
   #derive(
@@ -265,11 +249,13 @@ $
   )
 $
 
-M-merge is used to prepare the first condition. It is applied iteratively, unifying the results of stumps with the same lookup label and blocker. // F-fill then checks both conditions. Here $τ^★$ replaces every type-variable of τ by ★, and ≡ compares types up to ε and associativity. The second condition orders the blockers, checking for any cycles.
+M-merge is used to prepare the first condition. It is applied iteratively, unifying the results of stumps with the same lookup label and blocker.
 
-// #example(name: [A spent stump])[
-//   In `x: (x.l) c`, A-sel-\? parks $⟨β ⊳ β.l ↓ δ⟩$, and A-λ-E unifies δ with $𝓫_c → γ$ for a fresh γ. The stump is spent: D-\? and D-⊥ would demand ★ for a result that is already $𝓫_c → γ$, so an instance must make the lookup hit. The program answers $∀(β: "Row", γ: "Type"). ⟨β.l ↓ 𝓫_c → γ⟩ ⇒ {β} → γ$. The instance that extends β by the field $l: 𝓫_c → γ$ discharges the stump by D-hit, so the scheme is inhabited, and this instance is the typing ${l: 𝓫_c → γ | β′} → γ$.
-// ] <ex-spent>
+#definition(name: [Fillable])[
+  $S₂$ is _fillable_ if (1) for any two stumps $⟨α ⊳ ρ.l ↓ δ⟩, ⟨α ⊳ ρ′.l ↓ δ′⟩ ∈ Δ₂$ of which the first is spent, the second is spent as well and $(⟦S₂⟧δ)^★ ≡ (⟦S₂⟧δ′)^★$, and (2) $≻$ has no cycle. Here $τ^★$ replaces every type-variable of $τ$ by ★, and $≡$ compares types up to $ε$ and associativity.
+] <def-fillable>
+
+The witness sends every generalized type-variable to ★ and extends every blocker $β$ of a spent stump to $(l: τ | β)$, one field per label $l$ of its spent stumps with their common result $τ$, and it fills $β′$ before $β$ whenever $β ≻ β′$.
 
 == Inference Metatheory <inference-metatheory>
 
