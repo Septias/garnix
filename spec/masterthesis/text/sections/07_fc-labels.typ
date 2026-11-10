@@ -51,31 +51,31 @@ The syntax extension for first-class labels is given in @fc-syntax. Expressions 
 
 
 == First-Class Labels by Example
-We continue introducing the extension through examples. The full set of rules, including row equivalence, the typing and reduction rules, key unification and the algorithmic rules, is given in @app-fc-labels. The following three examples show how first-class labels allow us to type the generic selector, how first-class labels act as barriers in the Wand ambiguity and the effect of untracked strings, typed at $⌊∗⌋$.
+We continue introducing the extension through examples. The full set of rules, including row equivalence, the typing and reduction rules, key unification and the algorithmic rules, is given in @app-fc-labels. The following three examples show how first-class labels type the dynamic selector, how they act as barriers in the Wand ambiguity and what effect untracked strings, typed at $⌊∗⌋$, have.
 
-The dynamic selector is the program $x: x.l$ with its label abstracted to a label-variable. It takes a label and a record as arguments and returns the named field from the given record. Our system types it as:
+The dynamic selector is the program $x: x.l$ with its label abstracted to a label variable. It takes a label and a record as arguments and returns the named field from the given record. Our system types it as:
 
 $
   #raw("a: x: x.${a}") quad : quad ∀(α: "Label", β: "Row", δ: "Type"). #h(0.3em) ⟨β.α ↓ δ⟩ ⇒ ⌊α⌋ → {β} → δ
 $
 
-The scheme is the most general type of the program up to T-★-intro. The label, the row and the result are all variables, and the stump is the only constraint that relates them. We also show an example of how stumps can be chained. The following program selects from the result of a keyed selection:
+The scheme is the most general type of the program up to T-★-intro. The label, the row and the result are all variables, and the stump is the only constraint that relates them. The following example shows how stumps are chained:
 $
   #raw("a: x: x.${a}.l") quad : quad & ∀(α: "Label", β, γ: "Row", δ: "Type"). \
   & quad ⟨β.α ↓ {γ}⟩, ⟨γ.l ↓ δ⟩ ⇒ ⌊α⌋ → {β} → δ
 $
 
-For $x.\${a}$, the lookup of $α$ in $β$ answers $?$ on $β$, so A-sel-\? parks $⟨β ⊳ β.α ↓ δ′⟩$ and returns $δ′$. The selection of $l$ then unifies $δ′$ with ${γ}$ for a fresh $γ$, which spends the first stump, and parks $⟨γ ⊳ γ.l ↓ δ⟩$ on the row of its result.
+For $x.\${a}$, the lookup of $α$ in $β$ answers $?$ on $β$, so A-sel-dyn-\? parks $⟨β ⊳ β.α ↓ δ′⟩$ and returns $δ′$. The selection of $l$ then unifies $δ′$ with ${γ}$ for a fresh $γ$, which spends the first stump. It parks the second stump $⟨γ ⊳ γ.l ↓ δ⟩$ on $γ$, the row of the first result.
 
-Next, we look at the Wand ambiguity with first-class labels: the function $n: r: (r ‖ {\${n} = c}).l$ overrides a field under a computed name and then reads $l$. Given $n: ⌊α⌋$ and $r: {β}$, the concatenation has type ${\${α}: 𝓫_c | β}$. The lookup of $l$ stops at the barrier and answers $?$, since $α$ may become $l$. The answer is recorded like every other pending lookup:
+First-class labels give rise to a variant of the Wand ambiguity: the function $n: r: (r ‖ {\${n} = c}).l$ overrides a field under a computed name and then reads $l$. Given $n: ⌊α⌋$ and $r: {β}$, the concatenation has type ${\${α}: 𝓫_c | β}$. The lookup of $l$ stops at the barrier and answers $?$, since $α$ may become $l$. Like every other undecided lookup, it is recorded as a stump:
 
 $
   ∀(α: "Label", β: "Row", δ: "Type"). #h(0.3em) ⟨(\${α}: 𝓫_c | β).l ↓ δ⟩ ⇒ ⌊α⌋ → {β} → δ
 $
 
-In this example, a label variable becomes the blocker. Wake-up and generalization read a stump through its blocker, whatever its sort.
+Here, the blocker is the label variable $α$. Wake-up and generalization need no change for this, since both read a stump through its blocker, whatever its sort.
 
-A comparison of $∗$ with anything is always undecided. A lookup with such a label is not tracked by our system, so the only option is to type it using the unknown type, as the introductory example shows:
+Finally, a string that our system does not track is typed at the unknown key $∗$, and a comparison of $∗$ with anything is always undecided. A lookup under such a key cannot be tracked, so the lookup stays undecided:
 $
   #raw("{\"1759190400\" = 1}.${toString builtins.currentTime}") quad : quad ★
 $
