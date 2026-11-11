@@ -55,9 +55,9 @@ The development of MacroNix is just for test purposes, don't mention it too ofte
 
 
 # Section-State
-- [x] 00 Introduction
-- [x] 01 Overview
-- [x] 02 Declarative
+- [f] 00 Introduction
+- [f] 01 Overview
+- [f] 02 Declarative
 - [f] 03 Metatheory
 - [f] 04 Unification
 - [f] 05 Inference
@@ -65,5 +65,5 @@ The development of MacroNix is just for test purposes, don't mention it too ofte
 - [f] 07 FC-Labels
 - [f] 08 Mechanization
 - [f] 09 Discussion
-- [x] 10 Related Work
-- [x] 12 Appendix
+- [f] 10 Related Work
+- [f] 12 Appendix
