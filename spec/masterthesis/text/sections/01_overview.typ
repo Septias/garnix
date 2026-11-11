@@ -29,10 +29,10 @@ $
 The first use requires the result of $f$ to be a record, and the second one applies $f$ to a record without $l$. It is used at two different types, depending on the instantiation of the row-variable.
 
 == The Wand Ambiguity
-The Wand ambiguity $a: b: (a ‖ b).l$ is handled by the same mechanism. Given $a : {α}$ and $b : {β}$, concatenation yields ${β | α}$ and lookup stops on the row-variable $β$ with an undecided result $?$. Again, whether the field comes from $b$ or $a$ depends on whether $β$ contains $l$. A plain type can only record this as ${α} → {β} → ★$ but MiniNix records it with the following type scheme:
+The Wand ambiguity $a: b: (a ‖ b).l$ is handled by the same mechanism. Given $a : {α}$ and $b : {β}$, concatenation yields ${β | α}$ and lookup stops on the row-variable $β$ with an undecided result $?$. Again, whether the field comes from $b$ or $a$ depends on whether $β$ contains $l$. A plain type can only record this as ${α} → {β} → ★$, but MiniNix records it with the following type scheme:
 
 $ f : ∀(α, β: "Row", δ: "Type"). #h(0.3em) ⟨(β | α).l ↓ δ⟩ ⇒ {α} → {β} → δ $
 
 The type gains a qualifier $⟨(β | α).l ↓ δ⟩$ that describes the undecided lookup. It contains the resulting row of the Wand ambiguity $(β | α)$, the accessed field $l$ and a placeholder return type $δ$ that is also the result of the function. On every use, the lookup is replayed and answered based on the instantiation of variables. In this case, $f {l = c₁} {}$ looks up $(ε | l: 𝓫_(c₁)).l$ and yields $𝓫_(c₁)$ whereas $f {l = c₁} {l = c₂}$ yields $𝓫_(c₂)$ because the right operand shadows, and $f {} {}$ yields ★.
 
-The consequence of our inference approach is that selections do not have to be resolved by unification. A lookup that cannot be answered yet is deferred and either answered later when a lookup on a record with more instantiated type variables reaches further into the record, or kept as a qualifier and read as ★ at a use that leaves it unanswered. As a result, inference stays first-order and never backtracks because every move is forced.
+The consequence of our inference approach is that selections do not have to be resolved by unification. A lookup that cannot be answered yet is deferred and either answered later when a lookup on a record with more instantiated type-variables reaches further into the record, or kept as a qualifier and read as ★ at a use that leaves it unanswered. As a result, inference stays first-order and never backtracks because every move is forced.
